@@ -1,0 +1,7 @@
+{
+  "name": "fxf_s5b_roll",
+  "from": "fxf_s19_power_tab",
+  "doc": "Stands in for saves/field_re/s5b_roll_f2280.state, its own provenance from the recipe-made Power Tab state: --teleport 91 8 8 0 (method jmp, 200 frames) into the endings' staff roll (scene 05B), then 2280 frames: 30 frames before its E1 exit to 05C.",
+  "steps": [["teleport", 91, 8, 8, 0, 200, "jmp"], ["pad", "0:2280"]],
+  "expect": {"loc": "0x05B"}
+}

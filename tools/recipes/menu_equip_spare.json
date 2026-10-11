@@ -1,0 +1,11 @@
+{
+  "name": "menu_equip_spare",
+  "from": "menu_shop",
+  "doc": "Stands in for saves/eq_spare.state where the generators need it (a bag holding gear Crono can wear, so A on a gear row opens the candidate list instead of the C2/9C8D empty-list buzz): at the fair merchant Crono buys one BronzeHelm (7D, 200 G -> 200 G left), leaves the shop and the merchant's line, and stands free under the tent. eq_spare's own bag (02 03 05 5B 5C 7C 95 96, 600 A.D.) is not reproduced; the Equip chrome does not depend on it.",
+  "steps": [
+    ["pad", "0:10,100:2,0:150,100:2,0:40,20:2,0:20,100:2,0:40,100:2,0:40"],
+    ["pad", "1:2,0:40,1:2,0:40,1:2,0:80"],
+    ["pad", "0:60,100:2,0:60"]
+  ],
+  "expect": {"loc": "0x005", "wram": {"0x2401": "0x7D", "0x2501": "0x01", "0x2C53": "0xC8", "0x2C54": "0x00"}}
+}

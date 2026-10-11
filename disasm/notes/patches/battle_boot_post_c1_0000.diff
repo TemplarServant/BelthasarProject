@@ -1,0 +1,136 @@
+diff --git a/src/battle.c b/src/battle.c
+index 21549b1..edcc784 100644
+--- a/src/battle.c
++++ b/src/battle.c
+@@ -21370,6 +21370,7 @@ static int battleRuleNmiOnHold(void) {
+   static int v = -1; if (v < 0) { const char* e = getenv("CT_ORACLE_NMION_HOLD"); v = !(e && *e == '0'); } return v;
+ }
+ static int battleBootBandArm(const CtBattleHost* h) {
++  if (h->bootPostPending) return 0x7FFF;                           // C1/0000 not reached yet: nothing armed
+   if (battleRuleNmiOnHold()) return h->bootApuFrames > 0 ? 2 + h->bootApuFrames + 3 + 1 : CT_BHUD_ARM_FRAME - 11;
+   return h->bootApuFrames > 0 ? 1 + h->bootApuFrames + 18 : CT_BHUD_ARM_FRAME;
+ }
+@@ -21463,7 +21464,7 @@ static int battleBootIntro(const CtBattleHost* h) {
+ // whose upload is priced (bootApuFrames) keeps the module's frames as before -- its arm is not the pinned one.
+ int CtBattleRenderClock(const CtBattleHost* h) {
+   if (!h) return 0;
+-  if (h->renderFramesAbs || h->bootApuFrames > 0) return h->frames;   // (a seed rendered at a chosen frame: no boot ran)
++  if (h->renderFramesAbs || h->bootApuFrames > 0 || h->bootPostPending) return h->frames;   // (a seed rendered at a chosen frame: no boot ran)
+   return h->frames + CT_BHUD_ARM_FRAME - battleBootBandArm(h);
+ }
+ // C1/8461, THE ATB'S HANDLER (C1/B92D[12]), run by the dispatch (battleStatusDispatch) on $B186 bit 0 -- after the status
+diff --git a/src/battle.h b/src/battle.h
+index 33cb91e..0cc1245 100644
+--- a/src/battle.h
++++ b/src/battle.h
+@@ -493,6 +493,7 @@ typedef struct CtBattleHost {
+                              //   (0 = idle, so a host zeroed without CtBattleBegin -- the mover sweeps -- is idle too)
+   int fxTeardownLong;        // ...and its path: 1 = the full one (CD/0473-0494), 0 = $99D2 bit 7 / $CD07 skip to CD/0497
+   int fxTeardownRuns;        // teardowns run this battle (the battle-end trace prints it)
++  int bootPostPending;       // 1 from the module's start until the host posts C0/1BAB's JSL on C1/0000's frame (the rule)
+   int bootApuFrames;         // frames the field's C0/1BAB post (JSL C7:0004) cost: the boot's first wait, before its 18 setup passes
+   int renderFramesAbs;       // a host that never ran a boot (field.c's WRAM render host): its frames ARE the render clock
+   int sndStall;              // THE RULE (CtBattleSoundSink.postRule): frames the main thread still sits in a JSL C7/0004 the
+diff --git a/src/field.c b/src/field.c
+index a68677a..2d16c8a 100644
+--- a/src/field.c
++++ b/src/field.c
+@@ -4242,6 +4242,36 @@ static void fieldBattleSndPost(CtAudio* a, uint8_t* bs, const char* site, int en
+   if (tr) { int fr = 0, el = 0; long long mc = CtAudioLastPostRaster(a, &fr, &el, NULL);
+             fprintf(stderr, "[snd] field %s priced: %lld master cycles, %d NMI(s) crossed, returns on line %d\n", site, mc, fr, el); }
+ }
++// C0/1BAB's post, the battle's sample set or song (C0/1BCE `14` / C0/1BDF `70`) -- the boot's first wait; returns the NMIs
++// its JSL crossed (bootApuFrames).
++static int fieldBattleBootPost(CtAudio* audio, CtScene* vm) {
++  g_battleSndFrames = 0;
++  // THE LINE THE BOOT'S JSL STARTS ON. C1/0000's prologue runs from the frame's start (the consumer C0/1770 is the
++  // main loop's first leg, C0/18D9) to C0/1BAB's `JSL $C7:0004` -- MEASURED at vPos 142 on the cartridge's two demo
++  // battles (`--hookpc 1BAB`: the 0AD at f47 of build/_z_0ad_1700.state, the 087 at f12 of the f7325 state) -- and the
++  // loader's price (13 NMIs for the `70 01` set) is counted from there. Without it the clock kept the line of the
++  // VM's LAST sound post, whichever op that was, and the price drifted by a frame with the field's own timing.
++  if (audio) CtAudioSetPostLine(audio, 142);
++  // ...AND ITS BACKGROUND IS THE BATTLE'S. C1/0000 has set the battle's NMI up before C0/1BAB's JSL, so the frames the
++  // upload spans carry the battle NMI + its DMA and the battle's eight HDMA channels, not the field's (the cycle-tag
++  // probe, gato_wait `CT_HOOK_CYCLES=1 --hookpc C709E5`: the post f222 on the field's 11.8k NMI, then from f224 nmi
++  // 26-30k + dma 4-10k, hdma 17.9k -- LD_BG[1]). Priced on the field's block the song's upload came out 55 NMIs,
++  // 1.35M cycles short of the cartridge's 59 (f222 -> C7:0196's clear at f281).
++  // (Under the rule only, CT_ORACLE_NMION_HOLD=1, during the migration: the old boot's 18 setup frames were fitted
++  // over the field block's short price -- battle.c battleBootBandArm.)
++  { const char* e = getenv("CT_ORACLE_NMION_HOLD"); if (audio && !(e && *e == '0')) CtAudioSetEngineMode(audio, 1); }
++  { uint8_t* bs = CtSceneMem7E(vm);
++    if (!(bs[0x2A1F] & 0x40)) {                  // C0/1BB7 LDA $7E2A1F / BIT #40 / BNE
++      bs[0x1E10] = 0xFF;                         // C0/1BBF -- the driver normalises FF -> 1
++      bs[0x1E01] = bs[0x01FA];                   //   at C7/04D0 (measured); $01FA = the battle
++      bs[0x1E00] = 0x14;                         //   song id, seeded $45 by C0/0C58
++      fieldBattleSndPost(audio, bs, "C0/1BCE", 1);      // C0/1BCE JSL $C7:0004
++    } else {
++      bs[0x1E01] = 0x01; bs[0x1E00] = 0x70;      // C0/1BD5-1BDC
++      fieldBattleSndPost(audio, bs, "C0/1BDF", 1);      // C0/1BDF JSL $C7:0004
++    } }
++  return (int)g_battleSndFrames;
++}
+ // ---- the TITLE SEQUENCE's own mailbox ($7E:34AB / $7E:34C2, title_intro.md §6.6) -----------------
+ // The overlay stages into the same $7E:1E00 the field and the battle use -- it is one mailbox, and
+ // ⭐ $1E03 is PERSISTENT RAM (audio_commands.md §10.4): $34AB writes only $1E01/$1E02 and $34D5 only
+@@ -9871,6 +9901,7 @@ int main(int argc, char** argv) {
+   int battleReturnWait = -1;  // under the rule: which of the chain's five C0/00EB this frame ends in (0 = the ack's), else -1
+   int fieldIrqPreFlip = 0;    // this frame's line-211 IRQ came before its main thread's C0/00DE flip (see the return chain)
+   int battleExitPoll = 0;     // the module is in CD/0428-0436's SPC poll (CtBattleExitPoll), before CD/043E's chain
++  int battleBootPostAt = -1;  // the rule: the host frame C1/0000 posts C0/1BAB's JSL (the entry + 2)
+   int battleTailLeft = 0;     // frames of the module's exit tail still to run before the ack (CD/043E's upload + CD/0444)
+   // THE RESET (C0:FF00 -> FD:C000 -> C0/000E), taken by the attract's demo battle on a button (battle.c
+   // battleDemoAbortFrame). coldResetHold: the field frame loop is
+@@ -15724,6 +15755,10 @@ int main(int argc, char** argv) {
+     //  ROM's op 0xB0 runs it; the song-upload / copy freezes gate it there exactly as they gate the runner)
+     if (f.vm) {                                          // the $0117 transfer consumer (ROM C0/1770-18D6):
+       int ran = 0;                                       // inert unless the event VM set $0117 (op 0xD8/0xE5)
++      if (battlePhase && battleBootPostAt >= 0 && frameNo >= battleBootPostAt) {
++        battleBootPostAt = -1;                           // C0/18A7 `JSL C1:0000` -> C0/1BAB (see the entry)
++        liveHost.bootApuFrames = fieldBattleBootPost(audio, f.vm); liveHost.bootPostPending = 0;
++      }
+       if (battlePhase) {
+         // ---- subsequent battle frame: field FROZEN above, compose still runs below. Advance the live
+         // host ONE module frame; battleEndReq = F8 (C1/8357 controller-2 debug instant-end). SDL_QUIT
+@@ -15937,34 +15972,16 @@ int main(int argc, char** argv) {
+           // ct_vm.c's D8 handler). bit6 SET takes C0/1BD5 instead: `70 01`, the battle SFX set with NO
+           // battle song (C7/08E3) -- the attract's demo battle keeps song $18 playing. Oracle,
+           // build/_loc0AD.state: f142 `$1E01 = 01` by C0/1BDA, `$1E00 = 70` by C0/1BDF.
+-          g_battleSndFrames = 0;
+-          // THE LINE THE BOOT'S JSL STARTS ON. C1/0000's prologue runs from the frame's start (the consumer C0/1770 is the
+-          // main loop's first leg, C0/18D9) to C0/1BAB's `JSL $C7:0004` -- MEASURED at vPos 142 on the cartridge's two demo
+-          // battles (`--hookpc 1BAB`: the 0AD at f47 of build/_z_0ad_1700.state, the 087 at f12 of the f7325 state) -- and the
+-          // loader's price (13 NMIs for the `70 01` set) is counted from there. Without it the clock kept the line of the
+-          // VM's LAST sound post, whichever op that was, and the price drifted by a frame with the field's own timing.
+-          if (audio) CtAudioSetPostLine(audio, 142);
+-          // ...AND ITS BACKGROUND IS THE BATTLE'S. C1/0000 has set the battle's NMI up before C0/1BAB's JSL, so the frames the
+-          // upload spans carry the battle NMI + its DMA and the battle's eight HDMA channels, not the field's (the cycle-tag
+-          // probe, gato_wait `CT_HOOK_CYCLES=1 --hookpc C709E5`: the post f222 on the field's 11.8k NMI, then from f224 nmi
+-          // 26-30k + dma 4-10k, hdma 17.9k -- LD_BG[1]). Priced on the field's block the song's upload came out 55 NMIs,
+-          // 1.35M cycles short of the cartridge's 59 (f222 -> C7:0196's clear at f281).
+-          // (Under the rule only, CT_ORACLE_NMION_HOLD=1, during the migration: the old boot's 18 setup frames were fitted
+-          // over the field block's short price -- battle.c battleBootBandArm.)
+-          { const char* e = getenv("CT_ORACLE_NMION_HOLD"); if (audio && !(e && *e == '0')) CtAudioSetEngineMode(audio, 1); }
+-          { uint8_t* bs = CtSceneMem7E(f.vm);
+-            if (!(bs[0x2A1F] & 0x40)) {                  // C0/1BB7 LDA $7E2A1F / BIT #40 / BNE
+-              bs[0x1E10] = 0xFF;                         // C0/1BBF -- the driver normalises FF -> 1
+-              bs[0x1E01] = bs[0x01FA];                   //   at C7/04D0 (measured); $01FA = the battle
+-              bs[0x1E00] = 0x14;                         //   song id, seeded $45 by C0/0C58
+-              fieldBattleSndPost(audio, bs, "C0/1BCE", 1);      // C0/1BCE JSL $C7:0004
+-            } else {
+-              bs[0x1E01] = 0x01; bs[0x1E00] = 0x70;      // C0/1BD5-1BDC
+-              fieldBattleSndPost(audio, bs, "C0/1BDF", 1);      // C0/1BDF JSL $C7:0004
+-            } }
++          // UNDER THE RULE THE POST IS C1/0000's, TWO FRAMES ON. The consumer C0/177D (this frame) loops on `$38` with a wait,
++          // C0/1790-1797 waits again, C0/179A's transition dispatch returns, and C0/188C (C0/024C, C0/2C41, C0/00DE) waits
++          // once more before C0/18A7 `JSL C1:0000` -> C0/1BAB. MEASURED, the rule's cartridge (battle_ab's gato_wait with
++          // enemy 07, --cputrace): C0/177D f219, C0/179A f220, C0/188C f221, C0/1BCE's JSL f222 line 228 (it returns f275).
++          // The boot's arm already counts them (battleBootBandArm's `2 + apu + 3 + 1`); the port posted on the entry's
++          // frame, so its SPC took the song two frames early.
++          if (fieldRuleNmiOnHold()) { battleBootPostAt = frameNo + 2; liveHost.bootPostPending = 1; liveHost.bootApuFrames = 0; }
++          else liveHost.bootApuFrames = fieldBattleBootPost(audio, f.vm);
+           // THE BOOT'S FIRST WAIT is that JSL (sequence_table.md 11.10): the cartridge's C1/0000 runs at `70`+2 and its
+           // eighteen setup passes only after C7/0004 returns -- 13 frames for the demo's `70 01` sample set, ~55 for a song.
+-          liveHost.bootApuFrames = (int)g_battleSndFrames;
+           // Arm mode-entry isolation: a held A at entry must be released before the first command edge;
+           // prevBattleA=1 makes the current hold a NON-edge, battleAReleased=0 blocks until A goes up.
+           battleAReleased = 0; prevBattleA = 1; prevBattleU = 0; prevBattleD = 0; prevBattleB = 0;

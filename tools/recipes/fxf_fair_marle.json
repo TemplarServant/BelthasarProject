@@ -1,0 +1,7 @@
+{
+  "name": "fxf_fair_marle",
+  "from": "marle_joins",
+  "doc": "With Marle following (marle_joins), Crono walks down the upper plaza's stairs into the fair (loc 005) through the real exit, so the loader places Marle (menu_shop's first leg, cut where the lead stands at the arrival): the base of the fair fixtures with the two-member party, storyline 8, 400 G.",
+  "steps": [["pad", "41:16,21:64,11:16,0:80"]],
+  "expect": {"loc": "0x005", "wram": {"0x2981": "0x01", "0x10000": "0x08"}}
+}

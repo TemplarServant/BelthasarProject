@@ -1,0 +1,290 @@
+{
+  "doc": "The menu, field and overworld files made from the ROM and the recipes (same schema as manifest.json; tools/setup.py reads every tools/gen/manifest*.json). \"stage\": \"assets\" marks a generator whose output is an oracle capture under saves/ that assets/extract_assets.py packs into ct_assets.dat: tools/setup.py runs those before the extraction, and --check rebuilds ct_assets.dat from them and compares it with the root's.",
+  "generators": [
+    {
+      "out": [
+        "saves/ow_w0.live.wram",
+        "saves/ow_w0.intro.wram",
+        "saves/ow_w0.live.wram.bak",
+        "saves/ow_w0.live.vram",
+        "saves/ow_w1.live.wram",
+        "saves/ow_w1.live.vram",
+        "saves/ow_w2.live.wram",
+        "saves/ow_w2.live.vram",
+        "saves/ow_w3.live.wram",
+        "saves/ow_w3.live.vram",
+        "saves/ow_w4.live.wram",
+        "saves/ow_w4.live.vram",
+        "saves/ow_w5.live.wram",
+        "saves/ow_w5.live.vram",
+        "saves/ow_w6.live.wram",
+        "saves/ow_w6.live.vram",
+        "saves/ow_w7.live.wram",
+        "saves/ow_w7.live.vram"
+      ],
+      "cmd": [
+        "tools/gen/ow_world.py"
+      ],
+      "recipes": [
+        "ow_intro_pan",
+        "ow_nav_w0"
+      ],
+      "stage": "assets",
+      "status": "power-on",
+      "compare": "ct_assets.dat",
+      "compare_doc": "T_WORLD (17) / T_WORLDINTROSEED (27): every section ct_assets.dat packs from these files is byte-identical to the private build. The 8 .vram files are byte-identical; the 10 full-WRAM dumps are not and cannot be, in bytes pack_world never reads: ow_w0.live/.intro.wram (from start_scene.state, a snes9x capture) differ in 3569 bytes = the play clock $0400-$0403 and RAM the game never wrote ($55 power-on fill and the owner's session leftovers, $0508-$06FB and $7F:1B44-$7F:5055); ow_w0.live.wram.bak and ow_w1-7.live.wram differ in 29-37 bytes ($4B, a $0500 table, stack garbage $06CD-$06FB, digit tiles $2C2F/$2F68). So --check prints DIFFERS for those 10 while ct_assets.dat is identical. --capture regenerates all 18 byte for byte from start_scene.state + saves/ow_w0.state."
+    },
+    {
+      "out": [
+        "saves/ow_crono.spr",
+        "saves/ow_gulls.spr",
+        "saves/ow_boat.spr",
+        "saves/ow_balloons.spr"
+      ],
+      "cmd": [
+        "tools/gen/ow_sprites.py"
+      ],
+      "recipes": [
+        "ow_nav_w0",
+        "ow_intro_pan"
+      ],
+      "stage": "assets",
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "saves/ct_window.bin"
+      ],
+      "cmd": [
+        "tools/gen/ct_window.py"
+      ],
+      "recipes": [
+        "name_mom_box"
+      ],
+      "status": "power-on",
+      "stage": "assets"
+    },
+    {
+      "out": [
+        "saves/ct_namewin.bin"
+      ],
+      "cmd": [
+        "tools/gen/ct_namewin.py"
+      ],
+      "recipes": [
+        "name_lucca"
+      ],
+      "status": "power-on",
+      "stage": "assets"
+    },
+    {
+      "out": [
+        "saves/ct_namemsg.bin"
+      ],
+      "cmd": [
+        "tools/gen/ct_namemsg.py"
+      ],
+      "recipes": [
+        "name_crono"
+      ],
+      "status": "power-on",
+      "stage": "assets"
+    },
+    {
+      "out": [
+        "src/data/ct_ng_pan.h"
+      ],
+      "cmd": [
+        "tools/gen/ct_ng_pan.py"
+      ],
+      "recipes": [
+        "ow_intro_pan"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/ow_gullmap.h"
+      ],
+      "cmd": [
+        "tools/gen/ow_gullmap.py"
+      ],
+      "recipes": [
+        "ow_nav_w0"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/ow_era_placard.h"
+      ],
+      "cmd": [
+        "tools/gen/ow_era_placard.py"
+      ],
+      "recipes": [
+        "ow_nav_w0",
+        "com_jogo_salvo"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/dlg_cursor.h"
+      ],
+      "cmd": [
+        "tools/gen/dlg_cursor.py"
+      ],
+      "recipes": [
+        "truce_market"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_loader.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_loader.py"
+      ],
+      "recipes": [
+        "name_saved"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_chrome.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_chrome.py"
+      ],
+      "recipes": [
+        "menu_open_gato2",
+        "grupo_3_mapa",
+        "ow_w0",
+        "menu_equip_spare"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_saveform.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_saveform.py"
+      ],
+      "recipes": [
+        "menu_open_gato2"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_shop.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_shop.py"
+      ],
+      "recipes": [
+        "menu_shop"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_configgrid.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_configgrid.py"
+      ],
+      "recipes": [
+        "menu_open_gato2"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_icons.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_icons.py"
+      ],
+      "recipes": [
+        "menu_open_gato2"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_itemdetail.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_itemdetail.py"
+      ],
+      "recipes": [
+        "menu_open_gato2"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_tech.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_tech.py"
+      ],
+      "recipes": [
+        "menu_open_gato2"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_arrow.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_arrow.py"
+      ],
+      "recipes": [
+        "menu_open_gato2"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_opt0.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_opt0.py"
+      ],
+      "recipes": [
+        "menu_open_gato2"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_itemoverlay.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_itemoverlay.py"
+      ],
+      "recipes": [
+        "grupo_3_mapa"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/menu_itemuse.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_itemuse.py"
+      ],
+      "recipes": [
+        "menu_open_gato2"
+      ],
+      "status": "power-on"
+    }
+  ]
+}

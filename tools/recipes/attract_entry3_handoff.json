@@ -1,0 +1,6 @@
+{
+  "name": "attract_entry3_handoff",
+  "doc": "The attract from power-on, 17 frames before sequence entry 3 ($0384 = 63) enters C3:0000 (f8793 under the rule, $0386 = E4; its JML $C0:0000 at f9092). src/xlat/seq_c3.c traces entry 3 and its A-press aborts from here.",
+  "steps": [["power_on", 8776]],
+  "expect": {"loc": "0x06B", "wram": {"0x0386": "0xE4"}}
+}

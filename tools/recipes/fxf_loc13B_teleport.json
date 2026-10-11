@@ -1,0 +1,7 @@
+{
+  "name": "fxf_loc13B_teleport",
+  "from": "grupo_3_mapa",
+  "doc": "Stands in for saves/field_re/loc13B_teleport_lake.state (its own provenance, --teleport 315 2 8 0 from a three-member party state) from the recipe-made Cathedral hall after the Diablos fight (grupo_3_mapa: Crono, Frog, Lucca, storyline 15): the ROM's own loader (method jmp, 240 frames) -- loc 13B, the chest room, the party at tile (2,8).",
+  "steps": [["teleport", 315, 2, 8, 0, 240, "jmp"]],
+  "expect": {"loc": "0x13B", "wram": {"0x10000": "0x15"}}
+}

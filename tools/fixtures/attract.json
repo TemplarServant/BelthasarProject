@@ -1,0 +1,29 @@
+{
+  "doc": "The attract demo's fixtures: power-on recipes (tools/recipes/attract_*.json, fxa_*.json). The pads count frames from fxa_attract_cena_inicial (power-on + 2159 frames under the rule); each was found as the frame whose WRAM is nearest the capture it stands in for (the captures were cut in real time from the owner's snes9x capture, so no frame of the rule's run equals them byte for byte).",
+  "fixtures": [
+    {"path": "saves/attract_demo_battle_f1850.state", "recipe": "fxa_attract_cena_inicial", "pad": "0:1829", "kind": "state",
+     "doc": "the attract's demo battle at loc 0AD, 8 frames before the X-Strike ($A013 rises at f8 and falls at f259 under the rule, as from the capture)"},
+    {"path": "saves/attract_demo_battle_pre.lakewram", "recipe": "fxa_attract_cena_inicial", "pad": "0:1731", "kind": "lakewram",
+     "doc": "loc 0AD's field WRAM just before the demo battle boots (the port's --scene 173 --loadwram seed)"},
+    {"path": "saves/attract_flea_entrance_pre.lakewram", "recipe": "fxa_attract_cena_inicial", "pad": "0:1536", "kind": "lakewram",
+     "doc": "loc 0AD's field WRAM before Flea's entrance and the op-88 fade"},
+    {"path": "saves/attract_07d_field_f4320.state", "recipe": "fxa_attract_cena_inicial", "pad": "0:4249", "kind": "state",
+     "doc": "the attract's loc 07D on the field, before its battle (the sorcerer's placement)"},
+    {"path": "saves/attract_07d_battle_f4540.state", "recipe": "fxa_attract_cena_inicial", "pad": "0:4451", "kind": "state",
+     "doc": "the attract's loc 07D battle (Frog Squash)"},
+    {"path": "saves/attract_2300ad_f5800.state", "recipe": "fxa_attract_cena_inicial", "pad": "0:5672", "kind": "state",
+     "doc": "the attract before the 2300 A.D. overworld (1F2) goes live, at the 0E6 leg"},
+    {"path": "saves/attract_race_handoff_f6150.state", "recipe": "attract_race_handoff", "kind": "state",
+     "doc": "loc 1B1, 5 frames before the field hands the motorcycle race ($0384 = 60) to C3:0000"},
+    {"path": "saves/attract_race_handoff_boot8300.state", "recipe": "fxa_attract_race_handoff_boot", "kind": "state",
+     "doc": "loc 1B1, 2 frames before the race's handoff: the frame whose real-time run reaches C3:0000 at the hardware phase the port's stage opener models (see the recipe)"},
+    {"path": "saves/attract_race_f6300.state", "recipe": "fxa_attract_cena_inicial", "pad": "0:6166", "kind": "state",
+     "doc": "the motorcycle race running (sequence entry 0, $0384 = 60)"},
+    {"path": "saves/attract_entry3_handoff_f6750.state", "recipe": "attract_entry3_handoff", "kind": "state",
+     "doc": "loc 06B, 17 frames before sequence entry 3 ($0384 = 63) enters C3:0000"},
+    {"path": "saves/attract_087_ice_f7700.state", "recipe": "fxa_attract_cena_inicial", "pad": "0:7535", "kind": "state",
+     "doc": "the attract's loc 087 battle against Zombor, inside the Ice Sword ($A013 falls at f174 under the rule, as from the capture)"},
+    {"path": "saves/attract_zombor_pre.lakewram", "recipe": "fxa_attract_cena_inicial", "pad": "0:7193", "kind": "lakewram",
+     "doc": "loc 087's field WRAM before the Zombor battle (the port's --scene 135 --loadwram seed)"}
+  ]
+}

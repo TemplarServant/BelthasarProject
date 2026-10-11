@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene8_demo",
+  "from": "telepod_show",
+  "doc": "Stands in for DEMO8_mvfix.state (a capture of the Telepod demo, loc 008, storyline 0A): gate_to_600's first leg (Crono talks to Lucca, steps on the left pod) and 1200 frames of its second: Crono (obj 3) on the left pod at his script's 04BE, Marle out of the party (reserve), Taban (obj 10) at 0590 -- the WRAM frame nearest the reference's (f2288 of the drive).",
+  "steps": [["pad", "(100:2,0:40)*8,10:30,40:40,10:20,0:60,(100:2,0:40)*10,40:24,10:30,0:60,10:2,0:4,100:2,0:60,(100:2,0:40)*20,80:25,10:40,0:60,(100:2,0:40)*5,100:2,0:23"]],
+  "expect": {"loc": "0x008", "wram": {"0x10000": "0x0A", "0x1186": "0xBE", "0x1187": "0x04"}}
+}

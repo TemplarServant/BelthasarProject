@@ -1,0 +1,10 @@
+{
+  "name": "gato_front",
+  "from": "marle_joins",
+  "doc": "From the upper plaza (loc 1B7) Crono and Marle go down the west stairs, along the lower walkway and up the west side to the plaza's west exit, into GATO's exhibit (loc 006); Crono stops in front of GATO, facing him, at (134,164) with Marle beside him at (148,165). The base of the GATO links.",
+  "steps": [
+    ["pad", "41:80,21:48,41:48,11:16,81:16,41:16,11:64,41:48,11:16,41:32,11:16"],
+    ["pad", "0:90,10:58,40:18,0:10,10:1,0:20"]
+  ],
+  "expect": {"loc": "0x006", "wram": {"0x2980": "0x00", "0x2981": "0x01", "0x1802": "0x60", "0x1803": "0x08", "0x1882": "0x4F", "0x1883": "0x0A"}}
+}

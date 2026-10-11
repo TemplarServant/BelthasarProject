@@ -1,0 +1,7 @@
+{
+  "name": "fxf_bedslide",
+  "from": "fxf_loc002_intro_curtain",
+  "doc": "Stands in for bedslide.state (the owner's capture of the opening's bed slide): from the opening's curtain (fxf_loc002_intro_curtain) A every 12 frames through Mom's wake-up talk, 761 frames: storyline 0, Crono (obj 1) out of bed with his script before its `AB` anime (the WRAM frame nearest the reference's).",
+  "steps": [["pad", "(100:2,0:10)*63,100:2,0:3"]],
+  "expect": {"loc": "0x002", "wram": {"0x10000": "0x00"}}
+}

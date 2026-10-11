@@ -1,0 +1,7 @@
+{
+  "name": "fxf_manor_tutor",
+  "from": "truce_market",
+  "doc": "The Truce mayor's manor upstairs (loc 00E), storyline 3: the ROM's own loader (--teleport 14 37 10 0, method jmp, 240 frames) from the recipe-made Truce market puts Crono at tile (37,10) facing up, below the battle tutor (obj 11, tile 37,9) -- where the owner's capture of the tutorial started (ct_debug_011, 'the tutor obj11 -> loc 0FE').",
+  "steps": [["teleport", 14, 37, 10, 0, 240, "jmp"]],
+  "expect": {"loc": "0x00E", "wram": {"0x10000": "0x03", "0x011F": "0x01"}}
+}

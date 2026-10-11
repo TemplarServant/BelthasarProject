@@ -1,0 +1,27 @@
+{
+  "name": "fx_a_marle_joins",
+  "from": "fx_a_fair_pendant",
+  "doc": "marle_joins's steps in the game started after the attract demo (fx_a_newgame): Crono walks back to Marle and gives her the pendant; she asks to walk around with him (Sure.), the naming screen (the default name Marle, Start), and she joins the party ($2980 = 00 01, storyline 8). Crono free on the upper plaza (loc 1B7) with Marle following.",
+  "steps": [
+    [
+      "pad",
+      "20:20,40:46,0:2,20:50,40:27,0:2"
+    ],
+    [
+      "pad",
+      "40:2,0:4,100:2,0:40,(100:2,0:40)*15,(100:2,0:40)*2,0:60"
+    ],
+    [
+      "pad",
+      "8:2,0:60,(100:2,0:40)*3,(100:2,0:40)*6"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1B7",
+    "wram": {
+      "0x2980": "0x00",
+      "0x2981": "0x01",
+      "0x10000": "0x08"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "name_lucca",
+  "from": "name_home_stairs",
+  "doc": "Stands in for saves/luccaname.state: home_downstairs's walk (its steps 1-2 = name_home_stairs, step 3 stopped before the Start): Mom's talk, and Lucca's naming screen is up with the default name, nothing pressed yet.",
+  "steps": [["pad", "0:120,21:40,0:60,(100:2,0:40)*3,0:80"]],
+  "expect": {"loc": "0x001"}
+}

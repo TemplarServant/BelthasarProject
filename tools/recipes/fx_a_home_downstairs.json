@@ -1,0 +1,27 @@
+{
+  "name": "fx_a_home_downstairs",
+  "from": "fx_a_bedroom",
+  "doc": "home_downstairs's steps in the game started after the attract demo (fx_a_newgame): Crono walks down from his bedroom (loc 002) to the ground floor (loc 001); Mom's talk and Lucca's naming screen (the default name, Start). Ends with Crono free at the foot of the stairs, 400 G (the allowance not taken yet).",
+  "steps": [
+    [
+      "pad",
+      "0:300"
+    ],
+    [
+      "pad",
+      "21:16,41:16,21:16,81:16,41:16,81:16,11:16,41:16,81:32,21:16,41:32,21:16,81:16,21:16,81:16,21:16,11:16,81:48,11:16"
+    ],
+    [
+      "pad",
+      "0:120,21:40,0:60,(100:2,0:40)*3,0:80,8:2,0:60,(100:2,0:40)*8,0:1"
+    ]
+  ],
+  "expect": {
+    "loc": "0x001",
+    "wram": {
+      "0x2C53": "0x90",
+      "0x2C54": "0x01",
+      "0x011F": "0x01"
+    }
+  }
+}

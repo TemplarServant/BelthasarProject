@@ -1,0 +1,373 @@
+{
+  "doc": "The battle fixtures: GATO's fight (fx_gato_*), Guardia Forest's fights (fx_forest_*), the Cathedral's three-member party (fx_party3_*) -- recipes from power-on, plus the owner's documented WRAM pokes for the synthetic variants (env PEEK_POKE on a 0-frame peek of the base recipe).",
+  "fixtures": [
+    {
+      "path": "saves/battle_re/gato_t0.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00"
+      },
+      "kind": "wram",
+      "doc": "The suite's GATO seed: the last frame before GATO's song sequence (f145 after his last box). The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/gato_t0.raw",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "100:20,0:40,100:20,0:40,100:20,0:5",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00"
+      },
+      "kind": "peek",
+      "doc": "fx_gato_t0's frame as an oracle --peek dump (the framebuffer, and its .wram/.vram/.oam sidecars): the same 145 frames run from fx_a_battle_gato_press_action, its clock set to the capture's 145 frames earlier."
+    },
+    {
+      "path": "gato_press_action.state",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00"
+      },
+      "kind": "rawstate",
+      "doc": "The field before GATO's fight, on his song's last box (one more A boots the battle; its loop's first iterations on the reference's frames). The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/gato_t0.state",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00"
+      },
+      "kind": "rawstate",
+      "doc": "The oracle savestate of the GATO seed (vmdiff's GATO approach). The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/gato_cyclone.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2837=80"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with Cyclone learned by Crono ($2837 bit 7) -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_ice.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2838=20"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with Ice learned by Marle ($2838 bit 5) -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_solo.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2981=80"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with party seat 1 emptied ($2981 = 80): Crono alone -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_rng86.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,29AD=86"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with the persistent RNG cursor $29AD = 86 -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_fastmarle.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,265D=10,2688=10"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with Marle's speed raised to 0x10 (her sheet $265D and $2688) -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_deadmarle.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2653=00,266D=80"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with Marle dead (status $266D bit 7, HP 0) -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/heal_cure.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=C6,2501=02,266D=61,266E=04,266F=0F"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with a Heal in bag slot 1 ($2401 = C6, x2) and Marle's status bytes +0x1D..1F = 61 04 0F -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/revive.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=C7,2501=02,2653=00,266D=80"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with a Revive in bag slot 1 ($2401 = C7, x2) and Marle dead -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_item_used.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=BD,2603=0F"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with a Tonic in bag slot 1 ($2401 = BD) and Crono on 15 HP -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_cyc_mp1.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2607=01,2837=80"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with Cyclone learned and Crono on 1 MP -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_item.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=BD,2402=C6,2403=C8,2501=03,2502=02,2503=01,2603=0F"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with items BD x3, C6 x2, C8 x1 in bag slots 1-3 and Crono on 15 HP -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_item_cap.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=BD,2402=C6,2403=C8,2501=03,2502=02,2503=01,2603=28"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with the gato_item bag with Crono on 40 HP -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_t0_techitem.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=BD,2402=C6,2403=C8,2501=03,2502=02,2503=01,2837=80"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with the gato_item bag and Cyclone learned -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/ether_restore.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=C0,2501=03,2657=01"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with an Ether x3 in bag slot 1 ($2401 = C0) and Marle on 1 MP -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/ether_cap.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=C0,2501=03,2657=08"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with an Ether x3 in bag slot 1 and Marle on 8 MP -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_elixir.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=35,0401=39,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2401=C3,2501=03,2653=0A,2657=01"
+      },
+      "kind": "wram",
+      "doc": "fx_gato_t0 with an Elixir x3 in bag slot 1 ($2401 = C3), Marle on 10 HP and 1 MP -- the private file's own pokes on gato_t0, applied to the recipe-made seed."
+    },
+    {
+      "path": "saves/battle_re/gato_wait.lakewram",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2990=84"
+      },
+      "kind": "lakewram",
+      "doc": "gato_wait.state's WRAM as the oracle has it on load, wrapped for ct_field --loadwram. The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/gato_cyclone.state",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2837=80"
+      },
+      "kind": "rawstate",
+      "doc": "The field before GATO's fight with Cyclone learned by Crono ($2837 = 80; the capture is gato_press_action.state with that byte). The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/gato_wait_lucca.lakewram",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,26A7=63,26A9=63,2832=08,2839=FF,2980=02,2981=80,2990=84"
+      },
+      "kind": "lakewram",
+      "doc": "gato_wait with Lucca alone in the party ($2980-81 = 02 80), her techs learned and 99 MP -- the capture's own pokes. The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/gato_inbattle.state",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "100:8,0:574",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00"
+      },
+      "kind": "rawstate",
+      "doc": "GATO's fight under way, Crono's and Marle's command menus up: the last A of his song boots the battle and 574 frames run (the play clock reads the capture's). The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/gato_target.raw.wram",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "100:8,0:574,0:600,100:2,0:20,100:2,0:200",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00"
+      },
+      "kind": "wram",
+      "doc": "gato_inbattle with the target picker up ($960A = 1): 600 frames, A on Att., A again (the capture's own drive). The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/gato_t2.raw.wram",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "100:20,0:40,100:20,0:40,100:20,0:40,100:20,0:82",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00"
+      },
+      "kind": "wram",
+      "doc": "The GATO fight's staging: the reference's input (A 20 of every 60 frames) run 282 frames from his last box, past the battle's boot (the frame nearest the capture). The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/fx_lightning2_c920.state",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "100:8,0:632,20:2,0:10,100:2,0:10,20:2,0:10,20:2,0:10,20:2,0:10,20:2,0:10,100:2,0:10,100:2,0:194",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2990=84,2607=63,2608=00,2609=63,260A=00,2830=08,2837=FF,2980=00,2981=80,2982=80"
+      },
+      "kind": "state",
+      "doc": "tools/battle_ab.py tech 0 4's arena (gato_wait with the party made char 0 alone, every tech learned, 99 MP) driven 920 frames: Crono's Lightning 2, 10 frames before its colour ramp. The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/fx_frog_heal_c975.state",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "100:8,0:632,20:2,0:10,100:2,0:10,20:2,0:10,20:2,0:10,20:2,0:10,100:2,0:10,100:2,0:261",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2990=84,2747=63,2748=00,2749=63,274A=00,2834=08,283B=FF,2980=04,2981=80,2982=80"
+      },
+      "kind": "state",
+      "doc": "tools/battle_ab.py tech 4 3's arena (gato_wait with the party made char 4 alone, every tech learned, 99 MP) driven 975 frames: Frog's Heal, 10 frames before its OBJ colour math. The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/forest_holdleft_pre.state",
+      "recipe": "fx_forest_holdleft",
+      "kind": "rawstate",
+      "doc": "Crono (and Marle in line behind him) in Guardia Forest a few steps right of the Hetakes' ambush; holding Left walks into it."
+    },
+    {
+      "path": "saves/battle_re/forest_seek_pre.raw.wram",
+      "recipe": "fx_forest_holdleft",
+      "pad": "0:3,40:30,0:20",
+      "kind": "wram",
+      "doc": "fx_forest_holdleft after 3 frames still, 30 of Left and 20 still (the capture's own drive is the last 50; the 3 put the field objects' 4-frame counters $1001/$1003 on the capture's phase, from which the port's pre-battle camera glide arms)."
+    },
+    {
+      "path": "saves/battle_re/forest_pre.raw.wram",
+      "recipe": "fx_forest_pre",
+      "kind": "wram",
+      "doc": "The suite's forest seed: the ambush staged, the battle not booted."
+    },
+    {
+      "path": "saves/battle_re/forest_pre_wrapped.lakewram",
+      "recipe": "fx_forest_pre",
+      "kind": "lakewram",
+      "doc": "fx_forest_pre's WRAM for ct_field --loadwram."
+    },
+    {
+      "path": "saves/battle_re/forest_teardown.lakewram",
+      "recipe": "fx_forest_pre",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "122D=01"
+      },
+      "kind": "lakewram",
+      "doc": "fx_forest_pre with $122D = 01 -- the private file's own pokes on forest_pre."
+    },
+    {
+      "path": "saves/battle_re/forest_cyclone.raw.wram",
+      "recipe": "fx_forest_pre",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "2837=80"
+      },
+      "kind": "wram",
+      "doc": "fx_forest_pre with Cyclone learned by Crono ($2837 bit 7) -- the private file's own pokes on forest_pre."
+    },
+    {
+      "path": "saves/battle_re/forest_slot3.raw.wram",
+      "recipe": "fx_forest_pre",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0D2E=68"
+      },
+      "kind": "wram",
+      "doc": "fx_forest_pre with $0D2E = 68 -- the private file's own pokes on forest_pre."
+    },
+    {
+      "path": "saves/battle_re/forest_stale_deadflag.raw.wram",
+      "recipe": "fx_forest_pre",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "5FCA=81,604A=C3,60CA=87"
+      },
+      "kind": "wram",
+      "doc": "fx_forest_pre with the dead bit 7 set in three enemy records' +0x1D ($5FCA, $604A, $60CA) -- the private file's own pokes on forest_pre."
+    },
+    {
+      "path": "saves/battle_re/forest_battle_3hetake.state",
+      "recipe": "fx_forest_holdleft",
+      "pad": "40:331",
+      "kind": "rawstate",
+      "doc": "The three Hetakes' fight just booted: Left held 331 frames from fx_forest_holdleft (157 after the staging, as the capture)."
+    },
+    {
+      "path": "saves/battle_re/bat3_lake.state",
+      "recipe": "fx_forest_bat3",
+      "kind": "rawstate",
+      "doc": "The three Hetakes' fight under way."
+    },
+    {
+      "path": "saves/battle_re/bat3crit.state",
+      "recipe": "fx_forest_bat3",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "5E72=FF"
+      },
+      "kind": "rawstate",
+      "doc": "fx_forest_bat3 with Crono's crit rate $5E72 = FF -- the private file's own poke on bat3_lake."
+    }
+  ]
+}

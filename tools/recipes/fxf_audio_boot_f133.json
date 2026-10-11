@@ -1,0 +1,5 @@
+{
+  "name": "fxf_audio_boot_f133",
+  "doc": "Stands in for saves/audio_boot_f133.state: the cartridge from power-on for 133 frames, the frame its cold-boot load of song $30 completes ($1E05 $30 -> $E0).",
+  "steps": [["power_on", 133]]
+}

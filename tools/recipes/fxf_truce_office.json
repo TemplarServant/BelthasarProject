@@ -1,0 +1,26 @@
+{
+  "name": "fxf_truce_office",
+  "from": "truce_market",
+  "doc": "The Truce ticket office (loc 012) at storyline 3 with 600 G: the ROM's own loader (--teleport 18 7 58 0, method jmp, 240 frames) from the recipe-made 1000 A.D. overworld by Truce (truce_market), so the office is entered from the world ($0105 = 01F0) as in the ferry references; Crono walks up to the counter below the clerk (obj 8). NOT YET USED: A at the counter where the ferry captures stood starts no talk with the clerk on this state (nor on one entered from the world map), so saves/ferry_re/* stay the captures for now.",
+  "steps": [
+    [
+      "teleport",
+      18,
+      7,
+      58,
+      0,
+      240,
+      "jmp"
+    ],
+    [
+      "pad",
+      "10:20,0:30"
+    ]
+  ],
+  "expect": {
+    "loc": "0x012",
+    "wram": {
+      "0x10000": "0x03"
+    }
+  }
+}

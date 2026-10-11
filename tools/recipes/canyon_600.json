@@ -1,0 +1,13 @@
+{
+  "name": "canyon_600",
+  "from": "gate_to_600",
+  "doc": "Truce Canyon, 600 A.D.: Crono gets up by the Gate (loc 071), walks west and wins the Blue Imp ambush (A mashed), into loc 070: up the east ladder, over the bridge, a second ambush (Blue Imps, won), across the plateau, down the west ladder and out of the canyon's south edge onto the 600 A.D. overworld (loc 1F1).",
+  "steps": [
+    ["pad", "(100:2,0:40)*10,41:30,0:60,51:50,0:100"],
+    ["pad", "(100:2,0:10)*60,((100:2,0:10)*20)*5"],
+    ["pad", "41:80,11:16,0:100,41:16,11:80,11:16,41:64,11:16,41:40,0:60"],
+    ["pad", "(100:2,0:10)*100"],
+    ["pad", "21:32,41:16,21:64,81:16,21:32,81:16,41:16,11:48,21:16,41:48,21:80,11:16,21:112,81:80,21:48,11:16,0:120,0:60"]
+  ],
+  "expect": {"loc": "0x1F1", "wram": {"0x10000": "0x0C"}}
+}

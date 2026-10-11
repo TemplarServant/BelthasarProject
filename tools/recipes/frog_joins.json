@@ -1,0 +1,12 @@
+{
+  "name": "frog_joins",
+  "from": "cathedral_entry",
+  "doc": "In the Cathedral (loc 081) Crono walks up the nave to the altar and checks the glint below it (Marle's hairpin, obj 15); the nuns turn into Naga-ettes (battle D8 92 80, won by mashing A -- Crono and Lucca end it near 17 HP), Frog bursts in, 'Go with the frog.', his naming screen (the default name Frog, Start) and he joins: $2980 = 00 02 04 01 (Crono, Lucca, Frog; Marle held), storyline 12 -> 15. Crono free before the altar.",
+  "steps": [
+    ["pad", "10:100,0:60,10:150,0:60,10:60,0:60,20:2,0:4,100:2,0:60"],
+    ["pad", "((100:2,0:20)*15)*32"],
+    ["pad", "(100:2,0:30)*59,0:30,0:60,100:2,0:60,(100:2,0:30)*6,0:60"],
+    ["pad", "8:2,0:90,((100:2,0:30)*4)*4"]
+  ],
+  "expect": {"loc": "0x081", "wram": {"0x10000": "0x15", "0x2980": "0x00", "0x2981": "0x02", "0x2982": "0x04", "0x2983": "0x01"}}
+}

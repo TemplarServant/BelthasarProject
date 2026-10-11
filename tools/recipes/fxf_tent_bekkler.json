@@ -1,0 +1,7 @@
+{
+  "name": "fxf_tent_bekkler",
+  "from": "fxf_tent_keeper",
+  "doc": "The Tent of Horrors (loc 1B2) with Marle following: from the keeper's spot (fxf_tent_keeper) Crono walks into the tent by its door (the tools/walkto.py route the references were made with), settles 200 frames, talks to Bekkler (right, up, A) and A's through his texts: the frame before his game's choice box, where the references poked the silver points ($7F021A).",
+  "steps": [["pad", "20:16,10:16,80:16,10:80,20:16,80:48,10:48,0:200,80:8,10:50,0:6,100:2,0:300,(100:2,0:60)*3,100:2,0:100"]],
+  "expect": {"loc": "0x1B2", "wram": {"0x2981": "0x01"}}
+}

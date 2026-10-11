@@ -1,0 +1,14 @@
+{
+  "name": "fx_a_bedroom",
+  "from": "fx_a_newgame",
+  "doc": "bedroom after the attract demo: from fx_a_newgame the rest of the bedroom drive (src/harness_drive.c's script after its first B: Active, the default name, the opening, A through the intro) -- Crono free in his bedroom.",
+  "steps": [
+    [
+      "pad",
+      "100:6,0:120,8:6,0:60,8:6,0:2400,100:6,0:60,100:6,0:60,100:6,0:360,100:6,0:300,100:6,0:300,100:6,0:60,100:6,0:300,100:6,0:600,(100:6,0:14)*22"
+    ]
+  ],
+  "expect": {
+    "loc": "0x002"
+  }
+}

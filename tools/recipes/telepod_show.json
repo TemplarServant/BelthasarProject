@@ -1,0 +1,7 @@
+{
+  "name": "telepod_show",
+  "from": "fair_candy",
+  "doc": "Crono and Marle climb the north stairs of loc 1B7 to Lucca's Telepod show (loc 008); Taban's opening line is on screen.",
+  "steps": [["pad", "21:8,41:60,11:60,81:24,11:100,0:100"]],
+  "expect": {"loc": "0x008", "wram": {"0x2981": "0x01"}}
+}

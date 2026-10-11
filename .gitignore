@@ -1,0 +1,105 @@
+# Original ROM and extracted assets are NOT distributed — supply your own dump.
+*.sfc
+*.smc
+*.srm
+*.dat
+dump.bin
+
+# Build output
+/build/
+
+# Vendored upstream clone (the core is copied into snes/)
+/_vendor_*/
+
+# Downloaded SDL2 dev libs for the viewer (auto-fetched, not distributed)
+/third_party/SDL2/
+/third_party/imgui/
+/third_party/vulkan/
+
+# Execution traces are large and regenerable (ct.exe --trace > ...)
+disasm/boot_trace*.txt
+
+# Extracted dialogue dump (ROM-derived / copyrighted)
+disasm/notes/ct_dialogue*.txt
+
+# Extracted/rendered ROM-derived artifacts (copyrighted) — regenerable
+*.bmp
+disasm/notes/*.png
+disasm/notes/*.raw
+disasm/notes/*.bin
+disasm/notes/*.wram
+*.wram
+disasm/notes/atlas/
+
+# Editor / OS
+.vs/
+*.user
+*.obj
+*.exe
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# Temp CTViewer source downloads
+_*.rs
+disasm/notes/cvm*.txt
+disasm/notes/pvm*.txt
+
+# Trace-driven disassembly artifacts (ROM-derived, regenerable from the trace pipeline)
+disasm/*trace*.txt
+disasm/notes/*.asm
+disasm/_*
+disasm/notes/oam_*.asm
+disasm/notes/*.state
+# Scratch/temp files (incl. workflow-agent trace excerpts) anywhere starting with underscore
+/_*
+_*.txt
+_*.asm
+
+# ROM-derived savestates/captures (regenerate via ct.exe --navworld)
+saves/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Root-level capture/probe debris (oracle workflows dump savestates, WRAM/VRAM/
+# OAM captures, framebuffer dumps and probe text into the repo ROOT).
+# All patterns are ROOT-ANCHORED (leading /) so files in subdirectories are NOT
+# hidden. NOTE on tracked files (gitignore never affects already-tracked files):
+#   tools/_*.py probes that are tracked stay tracked despite tools/_*.
+/*.state
+/*.bin
+/*.oam
+/*.vram
+/*.raw
+/*.png
+/SHOT*
+/watchwrite.txt
+/scratch_*.txt
+/regress_*.txt
+/build_out*.txt
+/tbop.log
+/SDL2.dll
+/arquivos_criados/
+/build_out.txt
+/gthi_raw.txt
+/fresh_planes.txt
+/mvf_*.txt
+/labels.json
+# leftover one-off probe text/json outputs at root (specific names on purpose —
+# NOT a blanket /*.txt, so intentional new root .txt files still show up)
+/obj*.txt
+/out.txt
+/our_curva.txt
+/p7080.txt
+/planevals.txt
+/s439pos.txt
+/s5pos.txt
+/trk8.txt
+/wdbg.txt
+/order.json
+# one-off probe scripts (underscore convention); tracked ones (tools/owbpal0.py)
+# remain tracked — gitignore does not untrack
+tools/_*
+# agent worktrees + session scratch
+.claude/worktrees/
+/scratchpad/

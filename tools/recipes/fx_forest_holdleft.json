@@ -1,0 +1,7 @@
+{
+  "name": "fx_forest_holdleft",
+  "from": "fx_a_forest_entry",
+  "doc": "Stands in for saves/battle_re/forest_holdleft_pre.state, the root of the suite's Guardia Forest fights: in Guardia Forest (loc 013) Crono walks north-west as battle_forest_3hetake does, up to the lane left of which the second group of 'mushroom' bushes hides the three Hetakes, then a step right and back left so that Marle closes up behind him in line: Crono stands at (0970, 267F) facing left with Marle at (0A60, 267F), the capture's positions. Holding Left from here walks into the ambush (the staging C0/0430 at f171, the battle's boot at f223).",
+  "steps": [["pad", "11:32,41:16,11:16,41:16,11:32,41:48,21:40,41:20,0:4,11:4,80:8,40:17,0:20"]],
+  "expect": {"loc": "0x013", "wram": {"0x2980": "0x00", "0x2981": "0x01", "0x1804": "0x70", "0x1805": "0x09", "0x1884": "0x7F", "0x1885": "0x26", "0x1806": "0x60", "0x1807": "0x0A", "0x1886": "0x7F", "0x1887": "0x26"}}
+}

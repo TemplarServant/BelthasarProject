@@ -1,0 +1,5 @@
+{
+  "name": "attract_boot",
+  "doc": "Power-on plus one frame: where a trace of the whole attract demo starts (src/xlat/hdma_fd.c traces 13600 frames from here: the HDMA table builder FD/C2C1 as the demo calls it, two loops of the demo).",
+  "steps": [["power_on", 1]]
+}

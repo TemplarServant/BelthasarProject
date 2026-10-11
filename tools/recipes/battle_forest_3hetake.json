@@ -1,0 +1,7 @@
+{
+  "name": "battle_forest_3hetake",
+  "from": "forest_entry",
+  "doc": "forest_battle_3hetake for the battle bakes: the same walk north-west in Guardia Forest (loc 013), but the ambush is sprung by stepping up and walking LEFT into the trigger (not down into the lowest bush), so Crono stands where the reference's Crono stood ($1D0C/$1D23 = A0/47, Marle 7F/90; the down approach leaves him 8 px lower at A0/4F). 335 frames later the battle's own counters are the reference's ($0027 = 1E, $00A4/A5 = 01/33, both command menus up); what still differs is a few counters the reference's real-time boot left ($A112, $A4EF: the Hetakes' palette glow is 7 frames off in phase -- a lag-frame offset of the reference's boot that the rule's oracle does not have).",
+  "steps": [["pad", "11:32,41:16,11:16,41:16,11:32,41:48,21:40,41:20,0:4,11:4,40:40,0:335"]],
+  "expect": {"loc": "0x013", "wram": {"0x2981": "0x01", "0x2C00": "0x80", "0x1D0C": "0xA0", "0x1D23": "0x47", "0x0027": "0x1E"}}
+}

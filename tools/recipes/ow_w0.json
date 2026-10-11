@@ -1,0 +1,7 @@
+{
+  "name": "ow_w0",
+  "from": "home_allowance",
+  "doc": "Stands in for saves/ow_w0.state: Crono leaves his house by the front door onto the 1000 A.D. overworld (loc 1F0), alone, 600 G; the map settles. Story flags equal the reference's.",
+  "steps": [["pad", "21:16,41:16,21:16,81:16,0:200"]],
+  "expect": {"loc": "0x1F0", "wram": {"0x2C53": "0x58", "0x2C54": "0x02", "0x10140": "0x03"}}
+}

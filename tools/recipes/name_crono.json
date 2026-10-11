@@ -1,0 +1,7 @@
+{
+  "name": "name_crono",
+  "from": "atb_vram",
+  "doc": "Stands in for saves/crononame.state: from atb_vram A takes Active ($2990 84 -> C4) and opens the new game's Crono naming screen, the 'Enter a name, then push the Start Button.' box over the keyboard, nothing typed yet; 120 frames settle it (the box crop is the same from 40 to 300). WRAM differs from the reference in 26 bytes (frame counters).",
+  "steps": [["pad", "100:2,0:120"]],
+  "expect": {"loc": "0x000", "wram": {"0x2990": "0xC4"}}
+}

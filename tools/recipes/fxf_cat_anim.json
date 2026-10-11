@@ -1,0 +1,7 @@
+{
+  "name": "fxf_cat_anim",
+  "from": "fxf_loc002_intro_curtain",
+  "doc": "Stands in for saves/cat_anim.state (the owner's capture of the cat in the wake-up cutscene): from the opening's curtain (fxf_loc002_intro_curtain) A every 12 frames through Mom's talk, 877 frames: storyline 0, the cat (obj 9) parked on its held pose before its anime-once and walk, on the reference's timeline: the AB arms 7 frames later and the walk starts at f27, as from the reference (873 frames is the WRAM frame nearest it, but its cat runs 4 frames later).",
+  "steps": [["pad", "(100:2,0:10)*72,100:2,0:11"]],
+  "expect": {"loc": "0x002", "wram": {"0x10000": "0x00"}}
+}

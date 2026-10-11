@@ -1,0 +1,7 @@
+{
+  "name": "forest_battle_3hetake",
+  "from": "forest_entry",
+  "doc": "Stands in for saves/battle_re/forest_battle_3hetake.state: in Guardia Forest (loc 013) Crono walks north-west to the second group of 'mushroom' bushes (objects 21-23, the scene's var $0B -> obj 1's D8 02 00) and walks into the lowest one; the three Hetake jump out and the battle starts. 300 frames later Crono's command menu is up (Marle's not yet), HP 70/65 as the reference.",
+  "steps": [["pad", "11:32,41:16,11:16,41:16,11:32,41:48,21:48,41:16,0:2,21:20,0:300"]],
+  "expect": {"loc": "0x013", "wram": {"0x2981": "0x01", "0x2C00": "0x80"}}
+}

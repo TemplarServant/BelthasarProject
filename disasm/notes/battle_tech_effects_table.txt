@@ -1,0 +1,843 @@
+techfx_table.txt -- Chrono Trigger (USA) PC techs 01-74: per-tech EFFECT table, generated from the ROM by
+techfx/gen_table.py (companion of re_techfx.md; every column is a ROM byte, the decode is cited in re_techfx.md).
+
+COLUMNS (per tech):
+  id name | chars = CC/249F[(CC/1BEB[id*11]+0)&7F * 3] participants (effect k is run AS participant k)
+  MP      = participant k pays CC/253B[ CC/1BEB[id*11+5+k] & 7F ]  (C1/CB48/CB61/CB7A)
+  grp     = CC/1ACB[id*2] -> $9EE4 -> $960D; handler = C1/1FF8[grp & 7F] (bit7 = PC-side cursor, C1/1F9D)
+  shp     = CC/1ACC[id*2] & 3F -> $9EE5 low bits (consumer not traced)
+  +0 +1   = record bytes: +0 bit7 magic-learn gate (C1/F482); +1 bit6 -> $AE4D|=20 nomiss, bit5 -> $AE4D|=10 noDE87
+            (C1/D593-D5B0 + D629), &7 -> C1/EB68 display sum (C1/D732); +1 bit7 has no long-absolute reader
+  elem    = +3 -> $B190 (C1/D6A4); read only by routine 10 C1/EF39: bit7->res +3F, 6->+40, 5->+41, 4->+42
+  anim    = CD/45A6[id*7][0] -> $9877 (C1/45AA)
+  effK    = CC/213F[+5+k] 12-byte header (C1/D5EF), or SKIP when bit7 (C1/D5D4 -> D71E = next effect, MP only)
+            B2CC = CC/1BEB[+8+k] -> CC/2A05[B2CC*3] = (routine,$1C,$1E) through C1/FA61 (C1/EB1C via DCAD's EA6F)
+  needs   = mechanism tags (legend below); port = what src/battle.c lacks for this tech's EFFECT (not its pixels)
+
+TAGS: K0 heal D221 | K1 cure/revive D23E | K2 status D267 | K6 charm D3BF | K8 multi-hit D431 | T1/T3/T5/T6 = E0F5
+  formula type | HITROLL = C1/DC64 roll (effective $AE4D bit5 clear) | DE87 = header+10 vs enemy +0x19 gate ($AE4D
+  bit4 clear) | WPNFX = $AE4E bit7 -> weapon's own CC/2A05 effect (C1/EA7D) | rN = C1/FA61 routine N | Gxx = target
+  handler | DBAAcatN = C1/DBAA category N | SKIPCONT = a bit7 effect before a real one | COMBO = >1 damaging
+  participant | MENUCOMBO = dual/triple menu listing.
+PORTED set used for "core PORTED": T1 T3 T6 G07 G08 G12 r2 r10 r11 COMBO. DE87/WPNFX are listed as gates inert vs
+  GATO (+0x19 = 00; Wood Sword +0x47 = 00). Cross-cutting gaps (DCAD tail, E65F, victim order, E575...) are NOT in
+  the per-tech tag lists -- see re_techfx.md section 9.
+
+==================== SUMMARY (one line per tech) ====================
+01 Cyclone      MP Crono:2                grp=12  Crono:t1 p10 d3E
+02 Slash        MP Crono:2                grp=0B  Crono:t3 p10 d3C r10
+03 Lightning    MP Crono:2                grp=07  Crono:t3 p12 d3C r10
+04 Spincut      MP Crono:4                grp=07  Crono:t1 p16 d3E
+05 Lightning2   MP Crono:8                grp=08  Crono:t3 p14 d3C r10
+06 Life         MP Crono:10               grp=03  Crono:REVIVE+CURE+HEAL p10
+07 Confuse      MP Crono:12               grp=07  Crono:x4 t1 p29 d3E r2 x1/4
+08 Luminaire    MP Crono:20               grp=08  Crono:t3 p50 d3C r10
+09 Aura         MP Marle:1                grp=80  Marle:HEAL p5
+0A Provoke      MP Marle:1                grp=07  Marle:STAT c1 m04
+0B Ice          MP Marle:2                grp=07  Marle:t3 p11 d3C r10
+0C Cure         MP Marle:2                grp=80  Marle:HEAL p14
+0D Haste        MP Marle:6                grp=00  Marle:STAT c3 m80
+0E Ice 2        MP Marle:8                grp=08  Marle:t3 p14 d3C r10
+0F Cure 2       MP Marle:5                grp=80  Marle:HEAL p24
+10 Life 2       MP Marle:15               grp=03  Marle:REVIVE+CURE+HEAL pFULL
+11 Flame Toss   MP Lucca:1                grp=0C  Lucca:t3 p6 d3C r10
+12 Hypno Wave   MP Lucca:1                grp=08  Lucca:STAT c1 m02
+13 Fire         MP Lucca:2                grp=07  Lucca:t3 p11 d3C r10
+14 Napalm       MP Lucca:3                grp=12  Lucca:t3 p12 d3C r10
+15 Protect      MP Lucca:6                grp=00  Lucca:STAT c4 m04
+16 Fire 2       MP Lucca:8                grp=08  Lucca:t3 p14 d3C r10
+17 Mega Bomb    MP Lucca:15               grp=12  Lucca:t3 p32 d3C r10
+18 Flare        MP Lucca:20               grp=08  Lucca:t3 p42 d3C r10
+19 RocketPunch  MP Robo:1                 grp=07  Robo:t1 p11 d3E
+1A Cure Beam    MP Robo:2                 grp=80  Robo:HEAL p14
+1B Laser Spin   MP Robo:3                 grp=08  Robo:t3 p10 d3C r10
+1C Robo Tackle  MP Robo:4                 grp=07  Robo:t5 p21 d3E
+1D Heal Beam    MP Robo:3                 grp=81  Robo:HEAL p10
+1E Uzzi Punch   MP Robo:12                grp=07  Robo:t1 p25 d3E
+1F Area Bomb    MP Robo:14                grp=11  Robo:t3 p30 d3C r10
+20 Shock        MP Robo:17                grp=08  Robo:t3 p40 d3C r10
+21 Slurp        MP Frog:1                 grp=80  Frog:HEAL p5
+22 Slurp Cut    MP Frog:2                 grp=07  Frog:t1 p11 d3E
+23 Water        MP Frog:2                 grp=07  Frog:t3 p11 d3C r10
+24 Heal         MP Frog:2                 grp=81  Frog:HEAL p6
+25 Leap Slash   MP Frog:4                 grp=07  Frog:t1 p18 d3E
+26 Water 2      MP Frog:8                 grp=08  Frog:t3 p14 d3C r10
+27 Cure 2       MP Frog:5                 grp=80  Frog:HEAL p24
+28 Frog Squash  MP Frog:15                grp=08  Frog:t6 p10 d3E
+29 Kiss         MP Ayla:1                 grp=80  Ayla:CURE+HEAL p14
+2A Rollo Kick   MP Ayla:2                 grp=07  Ayla:t5 p14 d3E
+2B Cat Attack   MP Ayla:3                 grp=07  Ayla:t5 p20 d3E
+2C Rock Throw   MP Ayla:4                 grp=07  Ayla:t5 p30 d3E
+2D Charm        MP Ayla:4                 grp=07  Ayla:CHARM 70 r12
+2E Tail Spin    MP Ayla:10                grp=11  Ayla:t3 p40 d3C
+2F Dino Tail    MP Ayla:15                grp=08  Ayla:t6 p9 d3E
+30 Triple Kick  MP Ayla:20                grp=07  Ayla:x3 t5 p37 d3E r2 x1/3
+31 Lightning2   MP Magus:8                grp=08  Magus:t3 p18 d3C r10
+32 Ice 2        MP Magus:8                grp=08  Magus:t3 p18 d3C r10
+33 Fire 2       MP Magus:8                grp=08  Magus:t3 p18 d3C r10
+34 Dark Bomb    MP Magus:8                grp=12  Magus:t3 p25 d3C r10
+35 Magic Wall   MP Magus:8                grp=00  Magus:STAT c4 m40
+36 Dark Mist    MP Magus:10               grp=08  Magus:t3 p25 d3C r10
+37 Black Hole   MP Magus:15               grp=1B  Magus:t3 p2 d3C r18
+38 DarkMatter   MP Magus:20               grp=08  Magus:t3 p38 d3C r10
+39 Aura Whirl   MP Marle:1 Crono:2        grp=81  Marle:HEAL p5
+3A Ice Sword    MP Crono:4 Marle:2        grp=07  Crono:t1 p16 d3E r11 x5/4+element | Marle:t3 p11 d3C r11 x5/4+element
+3B Ice Sword 2  MP Crono:12 Marle:8       grp=12  Crono:t1 p29 d3E r10 | Marle:t3 p14 d3C r10
+3C Fire Whirl   MP Crono:2 Lucca:1        grp=12  Crono:t1 p10 d3E r10 | Lucca:t3 p6 d3C r10
+3D Fire Sword   MP Crono:4 Lucca:2        grp=07  Crono:t1 p16 d3E r11 x5/4+element | Lucca:t3 p11 d3C r11 x5/4+element
+3E FireSword 2  MP Crono:12 Lucca:8       grp=12  Crono:t1 p29 d3E r10 | Lucca:t3 p14 d3C r10
+3F Rocket Roll  MP Crono:2 Robo:3         grp=08  Robo:t3 p10 d3C r11 x6/4+element
+40 Max Cyclone  MP Robo:3 Crono:4         grp=13  Crono:t1 p16 d3E r2 x8/4
+41 Super Volt   MP Crono:8 Robo:17        grp=08  Crono:t3 p14 d3C r11 x5/4+element | Robo:t3 p40 d3C r11 x5/4+element
+42 X Strike     MP Crono:2 Frog:2         grp=07  Crono:t1 p10 d3E r2 x5/4 | Frog:t1 p11 d3E r2 x5/4
+43 SwordStream  MP Frog:2 Crono:4         grp=07  Frog:t3 p11 d3C r11 x5/4+element | Crono:t1 p16 d3E r11 x5/4+element
+44 Spire        MP Frog:4 Crono:8         grp=07  Frog:t1 p18 d3E r10 | Crono:t3 p14 d3C r11 x8/4+element
+45 Drill Kick   MP Ayla:2 Crono:2         grp=07  Ayla:t5 p14 d3E r2 x7/4
+46 Volt Bite    MP Ayla:3 Crono:2         grp=07  Ayla:t5 p20 d3E r11 x8/4+element
+47 Falcon Hit   MP Ayla:4 Crono:4         grp=0F  Crono:t1 p16 d3E r2 x8/4
+48 Antipode     MP Marle:2 Lucca:2        grp=12  Marle:t3 p11 d3C r10 | Lucca:t3 p11 d3C r10
+49 Antipode 2   MP Marle:8 Lucca:8        grp=12  Marle:t3 p14 d3C r11 x6/4+element | Lucca:t3 p14 d3C r11 x6/4+element
+4A Antipode 3   MP Marle:8 Lucca:20       grp=08  Marle:t3 p14 d3C r11 x5/4+element | Lucca:t3 p42 d3C r11 x5/4+element
+4B Aura Beam    MP Marle:1 Robo:2         grp=81  Marle:HEAL p5
+4C Ice Tackle   MP Robo:4 Marle:2         grp=07  Robo:t5 p21 d3E r11 x6/4+element | Marle:t3 p11 d3C r11 x6/4+element
+4D Cure Touch   MP Marle:5 Robo:3         grp=81  Marle:HEAL p24
+4E Ice Water    MP Frog:2 Marle:2         grp=08  Frog:t3 p11 d3C r10 | Marle:t3 p11 d3C r10
+4F Glacier      MP Frog:8 Marle:8         grp=07  Frog:t3 p14 d3C r11 x6/4+element | Marle:t3 p14 d3C r11 x6/4+element
+50 Double Cure  MP Marle:5 Frog:5         grp=81  Marle:CURE+HEAL pFULL
+51 Twin Charm   MP Ayla:4 Marle:1         grp=07  Ayla:CHARM 80 r12
+52 Ice Toss     MP Ayla:4 Marle:2         grp=12  Ayla:t5 p30 d3E r10 | Marle:t3 p11 d3C r10
+53 Cube Toss    MP Ayla:4 Marle:8         grp=12  Ayla:t5 p30 d3E r11 x5/4+element | Marle:t3 p14 d3C r11 x5/4+element
+54 Fire Punch   MP Robo:1 Lucca:2         grp=12  Robo:t1 p11 d3E r10 | Lucca:t3 p11 d3C r10
+55 Fire Tackle  MP Robo:4 Lucca:8         grp=07  Robo:t5 p21 d3E r11 x6/4+element | Lucca:t3 p14 d3C r11 x6/4+element
+56 DoublevBomb  MP Lucca:15 Robo:14       grp=13  Lucca:t3 p32 d3C r11 x6/4+element | Robo:t3 p30 d3C r11 x6/4+element
+57 Flame Kick   MP Ayla:2 Lucca:2         grp=07  Ayla:t5 p14 d3E r11 x5/4+element | Lucca:t3 p11 d3C r11 x5/4+element
+58 Fire Whirl   MP Ayla:10 Lucca:8        grp=08  Ayla:t3 p40 d3C r11 x6/4+element | Lucca:t3 p14 d3C r11 x6/4+element
+59 Blaze Kick   MP Ayla:20 Lucca:8        grp=07  Ayla:t5 p37 d3E r11 x5/4+element | Lucca:t3 p14 d3C r11 x5/4+element
+5A Blade Toss   MP Robo:3 Frog:2          grp=0D  Frog:t1 p11 d3E r2 x8/4
+5B Bubble Snap  MP Robo:4 Frog:2          grp=07  Robo:t5 p21 d3E r2 x8/4
+5C Cure Wave    MP Frog:5 Robo:3          grp=81  Frog:HEAL p24
+5D Boogie       MP Ayla:4 Robo:4          grp=08  Ayla:STAT c1 m80
+5E Spin Kick    MP Ayla:2 Robo:3          grp=07  Ayla:t5 p14 d3E r2 x8/4
+5F Beast Toss   MP Ayla:4 Robo:12         grp=07  Ayla:t5 p30 d3E r2 x5/4 | Robo:t1 p25 d3E r2 x5/4
+60 Slurp Kiss   MP Frog:1 Ayla:1          grp=81  Ayla:CURE+HEAL p28
+61 Bubble Hit   MP Ayla:2 Frog:2          grp=07  Ayla:t5 p14 d3E r2 x8/4
+62 Drop Kick    MP Frog:4 Ayla:20         grp=07  Frog:t1 p18 d3E r2 x6/4 | Ayla:t5 p37 d3E
+63 Red Pin      MP Frog:4 Lucca:2         grp=07  Frog:t1 p18 d3E r11 x5/4+element | Lucca:t3 p11 d3C r11 x5/4+element
+64 Line Bomb    MP Frog:4 Lucca:15        grp=0F  Lucca:t3 p32 d3C r10
+65 Frog Flare   MP Frog:15 Lucca:20       grp=08  Frog:t6 p10 d3E r11 x5/4+element | Lucca:t3 p42 d3C r11 x5/4+element
+66 Delta Force  MP Crono:8 Marle:8 Lucca:8 grp=08  Crono:t3 p14 d3C r11 x5/4+element | Marle:t3 p14 d3C r11 x5/4+element | Lucca:t3 p14 d3C r11 x5/4+element
+67 Lifeline     MP Marle:15 Crono:15 Robo:3 grp=01  Marle:STAT c5 m80
+68 Arc Impulse  MP Crono:4 Frog:4 Marle:8 grp=07  Crono:t1 p16 d3E r11 x5/4+element | Frog:t1 p18 d3E r11 x5/4+element | Marle:t3 p14 d3C r11 x5/4+element
+69 Final Kick   MP Ayla:20 Crono:8 Marle:8 grp=07  Ayla:t5 p37 d3E r11 x5/4+element | Crono:t3 p14 d3C r11 x5/4+element | Marle:t3 p14 d3C r11 x5/4+element
+6A Fire Zone    MP Robo:4 Crono:4 Lucca:8 grp=13  Crono:t1 p16 d3E r11 x8/4+element | Lucca:t3 p14 d3C r11 x5/4+element
+6B Delta Storm  MP Crono:8 Lucca:8 Frog:8 grp=08  Crono:t3 p14 d3C r11 x5/4+element | Lucca:t3 p14 d3C r11 x5/4+element | Frog:t3 p14 d3C r11 x5/4+element
+6C GatlingKick  MP Ayla:20 Crono:8 Lucca:8 grp=07  Ayla:t5 p37 d3E r11 x5/4+element | Crono:t3 p14 d3C r11 x5/4+element | Lucca:t3 p14 d3C r11 x5/4+element
+6D Triple Raid  MP Crono:2 Robo:4 Frog:2  grp=07  Crono:t1 p10 d3E r2 x5/4 | Robo:t5 p21 d3E r2 x5/4 | Frog:t1 p11 d3E r2 x5/4
+6E Twister      MP Crono:2 Robo:3 Ayla:10 grp=08  Crono:t1 p10 d3E r11 x6/4+element | Robo:t3 p10 d3C r11 x6/4+element | Ayla:t3 p40 d3C r11 x6/4+element
+6F 3D Attack    MP Ayla:20 Crono:2 Frog:2 grp=07  Ayla:t5 p37 d3E r2 x5/4 | Crono:t1 p10 d3E r2 x5/4 | Frog:t1 p11 d3E r2 x5/4
+70 DarkEternal  MP Marle:8 Lucca:8 Magus:20 grp=08  Marle:t3 p14 d3C r11 x5/4+element | Lucca:t3 p14 d3C r11 x5/4+element | Magus:t3 p38 d3C r11 x5/4+element
+71 Omega Flare  MP Lucca:20 Robo:3 Magus:8 grp=08  Lucca:t3 p42 d3C r11 x5/4+element | Robo:t3 p10 d3C r11 x5/4+element | Magus:t3 p25 d3C r11 x5/4+element
+72 Spin Strike  MP Frog:4 Robo:4 Ayla:15  grp=07  Frog:t1 p18 d3E r2 x4/1
+73 PoyozoDance  MP Marle:1 Lucca:1 Ayla:10 grp=08  Ayla:t3 p40 d3C r8
+74 Grand Dream  MP Frog:15 Marle:15 Robo:3 grp=08  Frog:t6 p24 d3E
+
+==================== PORT STATUS PER TECH (missing mechanisms) ====================
+01 Cyclone      HITROLL
+02 Slash        G0B
+03 Lightning    core PORTED
+04 Spincut      HITROLL
+05 Lightning2   core PORTED
+06 Life         G03 K1
+07 Confuse      HITROLL K8
+08 Luminaire    core PORTED
+09 Aura         G80 K0
+0A Provoke      DBAAcat1 K2
+0B Ice          core PORTED
+0C Cure         G80 K0
+0D Haste        DBAAcat3 G00 K2
+0E Ice 2        core PORTED
+0F Cure 2       G80 K0
+10 Life 2       G03 K1
+11 Flame Toss   G0C
+12 Hypno Wave   DBAAcat1 K2
+13 Fire         core PORTED
+14 Napalm       HITROLL
+15 Protect      DBAAcat4 G00 K2
+16 Fire 2       core PORTED
+17 Mega Bomb    HITROLL
+18 Flare        core PORTED
+19 RocketPunch  HITROLL
+1A Cure Beam    G80 K0
+1B Laser Spin   core PORTED
+1C Robo Tackle  HITROLL T5
+1D Heal Beam    G81 K0
+1E Uzzi Punch   HITROLL
+1F Area Bomb    G11
+20 Shock        core PORTED
+21 Slurp        G80 K0
+22 Slurp Cut    core PORTED
+23 Water        core PORTED
+24 Heal         G81 K0
+25 Leap Slash   HITROLL
+26 Water 2      core PORTED
+27 Cure 2       G80 K0
+28 Frog Squash  core PORTED
+29 Kiss         G80 K1
+2A Rollo Kick   HITROLL T5
+2B Cat Attack   HITROLL T5
+2C Rock Throw   HITROLL T5
+2D Charm        K6 r12
+2E Tail Spin    G11
+2F Dino Tail    core PORTED
+30 Triple Kick  HITROLL K8 T5
+31 Lightning2   core PORTED
+32 Ice 2        core PORTED
+33 Fire 2       core PORTED
+34 Dark Bomb    core PORTED
+35 Magic Wall   DBAAcat4 G00 K2
+36 Dark Mist    core PORTED
+37 Black Hole   G1B r18
+38 DarkMatter   core PORTED
+39 Aura Whirl   G81 K0 MENUCOMBO
+3A Ice Sword    MENUCOMBO
+3B Ice Sword 2  MENUCOMBO
+3C Fire Whirl   MENUCOMBO
+3D Fire Sword   MENUCOMBO
+3E FireSword 2  MENUCOMBO
+3F Rocket Roll  MENUCOMBO SKIPCONT
+40 Max Cyclone  G13 MENUCOMBO SKIPCONT
+41 Super Volt   MENUCOMBO
+42 X Strike     MENUCOMBO
+43 SwordStream  MENUCOMBO
+44 Spire        MENUCOMBO
+45 Drill Kick   MENUCOMBO T5
+46 Volt Bite    MENUCOMBO T5
+47 Falcon Hit   G0F MENUCOMBO SKIPCONT
+48 Antipode     MENUCOMBO
+49 Antipode 2   MENUCOMBO
+4A Antipode 3   MENUCOMBO
+4B Aura Beam    G81 K0 MENUCOMBO
+4C Ice Tackle   MENUCOMBO T5
+4D Cure Touch   G81 K0 MENUCOMBO
+4E Ice Water    MENUCOMBO
+4F Glacier      MENUCOMBO
+50 Double Cure  G81 K1 MENUCOMBO
+51 Twin Charm   K6 MENUCOMBO r12
+52 Ice Toss     MENUCOMBO T5
+53 Cube Toss    MENUCOMBO T5
+54 Fire Punch   MENUCOMBO
+55 Fire Tackle  MENUCOMBO T5
+56 DoublevBomb  G13 MENUCOMBO
+57 Flame Kick   MENUCOMBO T5
+58 Fire Whirl   MENUCOMBO
+59 Blaze Kick   MENUCOMBO T5
+5A Blade Toss   G0D MENUCOMBO SKIPCONT
+5B Bubble Snap  MENUCOMBO T5
+5C Cure Wave    G81 K0 MENUCOMBO
+5D Boogie       DBAAcat1 K2 MENUCOMBO
+5E Spin Kick    MENUCOMBO T5
+5F Beast Toss   MENUCOMBO T5
+60 Slurp Kiss   G81 K1 MENUCOMBO SKIPCONT
+61 Bubble Hit   MENUCOMBO T5
+62 Drop Kick    MENUCOMBO T5
+63 Red Pin      MENUCOMBO
+64 Line Bomb    G0F MENUCOMBO SKIPCONT
+65 Frog Flare   MENUCOMBO
+66 Delta Force  MENUCOMBO
+67 Lifeline     DBAAcat5 G01 K2 MENUCOMBO
+68 Arc Impulse  MENUCOMBO
+69 Final Kick   MENUCOMBO T5
+6A Fire Zone    G13 MENUCOMBO SKIPCONT
+6B Delta Storm  MENUCOMBO
+6C GatlingKick  MENUCOMBO T5
+6D Triple Raid  MENUCOMBO T5
+6E Twister      MENUCOMBO
+6F 3D Attack    MENUCOMBO T5
+70 DarkEternal  MENUCOMBO
+71 Omega Flare  MENUCOMBO
+72 Spin Strike  MENUCOMBO
+73 PoyozoDance  MENUCOMBO SKIPCONT r8
+74 Grand Dream  MENUCOMBO
+
+==================== MECHANISM -> TECHS (count = distinct techs) ====================
+T3          61  02 03 05 08 0B 0E 11 13 14 16 17 18 1B 1F 20 23 26 2E 31 32 33 34 36 37 38 3A 3B 3C 3D 3E 3F 41 43 44 48 49 4A 4C 4E 4F 52 53 54 55 56 57 58 59 63 64 65 66 68 69 6A 6B 6C 6E 70 71 73
+MENUCOMBO   60  39 3A 3B 3C 3D 3E 3F 40 41 42 43 44 45 46 47 48 49 4A 4B 4C 4D 4E 4F 50 51 52 53 54 55 56 57 58 59 5A 5B 5C 5D 5E 5F 60 61 62 63 64 65 66 67 68 69 6A 6B 6C 6D 6E 6F 70 71 72 73 74
+G07         42  03 04 07 0A 0B 13 19 1C 1E 22 23 25 2A 2B 2C 2D 30 3A 3D 42 43 44 45 46 4C 4F 51 55 57 59 5B 5E 5F 61 62 63 68 69 6C 6D 6F 72
+COMBO       38  3A 3B 3C 3D 3E 41 42 43 44 48 49 4A 4C 4E 4F 52 53 54 55 56 57 58 59 5F 62 63 65 66 68 69 6A 6B 6C 6D 6E 6F 70 71
+r10         32  02 03 05 08 0B 0E 11 13 14 16 17 18 1B 1F 20 23 26 31 32 33 34 36 38 3B 3C 3E 44 48 4E 52 54 64
+G08         30  05 08 0E 12 16 18 1B 20 26 28 2F 31 32 33 36 38 3F 41 4A 4E 58 5D 65 66 6B 6E 70 71 73 74
+T1          28  01 04 07 19 1E 22 25 3A 3B 3C 3D 3E 40 42 43 44 47 54 5A 5F 62 63 68 6A 6D 6E 6F 72
+DE87        28  01 04 07 19 1C 1E 22 25 28 2A 2B 2C 2F 30 40 42 45 46 47 5A 5B 5E 5F 61 62 6D 6F 72
+r11         28  3A 3D 3F 41 43 44 46 49 4A 4C 4F 53 55 56 57 58 59 63 65 66 68 69 6A 6B 6C 6E 70 71
+WPNFX       25  01 04 07 19 1E 22 25 3A 3C 3D 40 42 43 44 47 54 5F 62 63 68 6A 6D 6E 6F 72
+T5          22  1C 2A 2B 2C 30 45 46 4C 52 53 55 57 59 5B 5E 5F 61 62 69 6C 6D 6F
+r2          15  07 30 40 42 45 47 5A 5B 5E 5F 61 62 6D 6F 72
+HITROLL     13  01 04 07 14 17 19 1C 1E 25 2A 2B 2C 30
+G12         12  01 14 17 34 3B 3C 3E 48 49 52 53 54
+K0          12  09 0C 0F 1A 1D 21 24 27 39 4B 4D 5C
+G81          8  1D 24 39 4B 4D 50 5C 60
+SKIPCONT     8  3F 40 47 5A 60 64 6A 73
+G80          7  09 0C 0F 1A 21 27 29
+K2           7  0A 0D 12 15 35 5D 67
+K1           5  06 10 29 50 60
+T6           4  28 2F 65 74
+DBAAcat1     3  0A 12 5D
+G00          3  0D 15 35
+G13          3  40 56 6A
+G03          2  06 10
+K8           2  07 30
+DBAAcat4     2  15 35
+G11          2  1F 2E
+K6           2  2D 51
+r12          2  2D 51
+G0F          2  47 64
+G0B          1  02
+DBAAcat3     1  0D
+G0C          1  11
+G1B          1  37
+r18          1  37
+G0D          1  5A
+G01          1  67
+DBAAcat5     1  67
+r8           1  73
+
+==================== FULL DECODE ====================
+01 Cyclone       chars=Crono              MP=Crono:2                    grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=00 +1=00[] +3 elem=04(none) anim$9877=01
+     eff0 Crono  hdr CC/213F[01] = 03 00 00 3A 3B 01 3E 80 80 0A 04 00 | DMG t1 melee E0FF pow=10 def=3E AE4D=80 AE4E=80 +10=04 +11=00
+     needs: DE87 G12 HITROLL T1 WPNFX
+     port : MISSING HITROLL  (+inert-vs-GATO gates: DE87 WPNFX)
+02 Slash         chars=Crono              MP=Crono:2                    grp=0B C1/2169 beam caster->primary (C1/25A3 w=2 $9608=0)  shp=01  +0=00 +1=00[] +3 elem=82(bit7(res +3F)) anim$9877=02
+     eff0 Crono  hdr CC/213F[02] = 03 00 00 00 00 03 3C 70 00 0A 00 00 | DMG t3 magic E203 pow=10 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G0B T3 r10
+     port : MISSING G0B
+03 Lightning     chars=Crono              MP=Crono:2                    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=80 +1=00[] +3 elem=82(bit7(res +3F)) anim$9877=03
+     eff0 Crono  hdr CC/213F[03] = 03 00 00 00 00 03 3C 70 00 0C 00 00 | DMG t3 magic E203 pow=12 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G07 T3 r10
+     port : core PORTED
+04 Spincut       chars=Crono              MP=Crono:4                    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=00 +1=00[] +3 elem=04(none) anim$9877=04
+     eff0 Crono  hdr CC/213F[04] = 03 00 00 3A 3B 01 3E 80 80 10 04 80 | DMG t1 melee E0FF pow=16 def=3E AE4D=80 AE4E=80 +10=04 +11=80
+     needs: DE87 G07 HITROLL T1 WPNFX
+     port : MISSING HITROLL  (+inert-vs-GATO gates: DE87 WPNFX)
+05 Lightning2    chars=Crono              MP=Crono:8                    grp=08 C1/20B6 all enemies  shp=00  +0=80 +1=00[] +3 elem=82(bit7(res +3F)) anim$9877=05
+     eff0 Crono  hdr CC/213F[05] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+06 Life          chars=Crono              MP=Crono:10                   grp=03 C1/20E0 one DEAD PC  shp=00  +0=80 +1=00[] +3 elem=00(none) anim$9877=06
+     eff0 Crono  hdr CC/213F[06] = 01 CA 80 00 00 00 00 A0 00 00 00 00 | CURE+REVIVE+HEAL pow=10 sel=80
+     needs: G03 K1
+     port : MISSING G03 K1
+07 Confuse       chars=Crono              MP=Crono:12                   grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=00 +1=00[] +3 elem=04(none) anim$9877=07
+     eff0 Crono  hdr CC/213F[07] = 08 04 00 3A 3B 01 3E 80 80 1D 04 00 | MULTI hits=4 DMG t1 melee E0FF pow=29 def=3E AE4D=80 AE4E=80 +10=04 +11=00  | B2CC=14 r2 x1/4
+     needs: DE87 G07 HITROLL K8 T1 WPNFX r2
+     port : MISSING HITROLL K8  (+inert-vs-GATO gates: DE87 WPNFX)
+08 Luminaire     chars=Crono              MP=Crono:20                   grp=08 C1/20B6 all enemies  shp=00  +0=80 +1=00[] +3 elem=82(bit7(res +3F)) anim$9877=08
+     eff0 Crono  hdr CC/213F[08] = 03 00 00 00 00 03 3C 70 00 32 00 00 | DMG t3 magic E203 pow=50 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+09 Aura          chars=Marle              MP=Marle:1                    grp=80 C1/203A one alive PC (cursor, PC-side flag)  shp=00  +0=01 +1=00[] +3 elem=00(none) anim$9877=09
+     eff0 Marle  hdr CC/213F[09] = 00 05 80 00 00 00 00 00 00 00 00 00 | HEAL pow=5 sel=80
+     needs: G80 K0
+     port : MISSING G80 K0
+0A Provoke       chars=Marle              MP=Marle:1                    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=01 +1=00[] +3 elem=02(none) anim$9877=0A
+     eff0 Marle  hdr CC/213F[0A] = 02 01 04 00 00 50 00 50 00 00 00 00 | STATUS cat1 mask04 acc=80+MAG/0 AE4D=50
+     needs: DBAAcat1 G07 K2
+     port : MISSING DBAAcat1 K2
+0B Ice           chars=Marle              MP=Marle:2                    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=81 +1=00[] +3 elem=22(bit5(res +41)) anim$9877=0C
+     eff0 Marle  hdr CC/213F[0B] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G07 T3 r10
+     port : core PORTED
+0C Cure          chars=Marle              MP=Marle:2                    grp=80 C1/203A one alive PC (cursor, PC-side flag)  shp=00  +0=81 +1=00[] +3 elem=00(none) anim$9877=0B
+     eff0 Marle  hdr CC/213F[0C] = 00 0E 80 00 00 00 00 00 00 00 00 00 | HEAL pow=14 sel=80
+     needs: G80 K0
+     port : MISSING G80 K0
+0D Haste         chars=Marle              MP=Marle:6                    grp=00 C1/203A one alive PC (cursor)  shp=00  +0=81 +1=00[] +3 elem=00(none) anim$9877=0D
+     eff0 Marle  hdr CC/213F[0D] = 02 03 80 00 00 00 00 70 00 00 00 00 | STATUS cat3 mask80 no-roll AE4D=70
+     needs: DBAAcat3 G00 K2
+     port : MISSING DBAAcat3 G00 K2
+0E Ice 2         chars=Marle              MP=Marle:8                    grp=08 C1/20B6 all enemies  shp=00  +0=81 +1=00[] +3 elem=22(bit5(res +41)) anim$9877=0F
+     eff0 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+0F Cure 2        chars=Marle              MP=Marle:5                    grp=80 C1/203A one alive PC (cursor, PC-side flag)  shp=00  +0=81 +1=00[] +3 elem=00(none) anim$9877=0E
+     eff0 Marle  hdr CC/213F[0F] = 00 18 80 00 00 00 00 00 00 00 00 00 | HEAL pow=24 sel=80
+     needs: G80 K0
+     port : MISSING G80 K0
+10 Life 2        chars=Marle              MP=Marle:15                   grp=03 C1/20E0 one DEAD PC  shp=00  +0=81 +1=00[] +3 elem=00(none) anim$9877=10
+     eff0 Marle  hdr CC/213F[10] = 01 CF 80 00 00 00 00 80 00 00 00 00 | CURE+REVIVE+HEAL pow=FULL sel=80
+     needs: G03 K1
+     port : MISSING G03 K1
+11 Flame Toss    chars=Lucca              MP=Lucca:1                    grp=0C C1/2203 beam caster->primary (C1/25A3 w=2 $9608=1)  shp=05  +0=02 +1=00[] +3 elem=12(bit4(res +42)) anim$9877=11
+     eff0 Lucca  hdr CC/213F[11] = 03 00 00 00 00 03 3C 70 00 06 00 00 | DMG t3 magic E203 pow=6 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G0C T3 r10
+     port : MISSING G0C
+12 Hypno Wave    chars=Lucca              MP=Lucca:1                    grp=08 C1/20B6 all enemies  shp=00  +0=02 +1=00[] +3 elem=02(none) anim$9877=12
+     eff0 Lucca  hdr CC/213F[12] = 02 01 02 00 00 3C 0A 50 00 00 00 00 | STATUS cat1 mask02 acc=60+MAG/10 AE4D=50
+     needs: DBAAcat1 G08 K2
+     port : MISSING DBAAcat1 K2
+13 Fire          chars=Lucca              MP=Lucca:2                    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=82 +1=00[] +3 elem=12(bit4(res +42)) anim$9877=13
+     eff0 Lucca  hdr CC/213F[13] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G07 T3 r10
+     port : core PORTED
+14 Napalm        chars=Lucca              MP=Lucca:3                    grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=82 +1=00[] +3 elem=12(bit4(res +42)) anim$9877=14
+     eff0 Lucca  hdr CC/213F[14] = 03 00 00 3A 3B 03 3C 50 00 0C 00 80 | DMG t3 magic E203 pow=12 def=3C AE4D=50 AE4E=00 +10=00 +11=80  | B2CC=07 r10 element
+     needs: G12 HITROLL T3 r10
+     port : MISSING HITROLL
+15 Protect       chars=Lucca              MP=Lucca:6                    grp=00 C1/203A one alive PC (cursor)  shp=00  +0=82 +1=00[] +3 elem=00(none) anim$9877=15
+     eff0 Lucca  hdr CC/213F[15] = 02 04 04 00 00 00 00 70 00 00 00 00 | STATUS cat4 mask04 no-roll AE4D=70
+     needs: DBAAcat4 G00 K2
+     port : MISSING DBAAcat4 G00 K2
+16 Fire 2        chars=Lucca              MP=Lucca:8                    grp=08 C1/20B6 all enemies  shp=00  +0=82 +1=00[] +3 elem=12(bit4(res +42)) anim$9877=16
+     eff0 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+17 Mega Bomb     chars=Lucca              MP=Lucca:15                   grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=82 +1=00[] +3 elem=12(bit4(res +42)) anim$9877=17
+     eff0 Lucca  hdr CC/213F[17] = 03 00 00 3A 3B 03 3C 50 00 20 00 80 | DMG t3 magic E203 pow=32 def=3C AE4D=50 AE4E=00 +10=00 +11=80  | B2CC=07 r10 element
+     needs: G12 HITROLL T3 r10
+     port : MISSING HITROLL
+18 Flare         chars=Lucca              MP=Lucca:20                   grp=08 C1/20B6 all enemies  shp=00  +0=82 +1=00[] +3 elem=12(bit4(res +42)) anim$9877=18
+     eff0 Lucca  hdr CC/213F[18] = 03 00 00 00 00 03 3C 70 00 2A 00 00 | DMG t3 magic E203 pow=42 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+19 RocketPunch   chars=Robo               MP=Robo:1                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=03 +1=00[] +3 elem=04(none) anim$9877=19
+     eff0 Robo   hdr CC/213F[19] = 03 00 00 3A 3B 01 3E 80 80 0B 04 80 | DMG t1 melee E0FF pow=11 def=3E AE4D=80 AE4E=80 +10=04 +11=80
+     needs: DE87 G07 HITROLL T1 WPNFX
+     port : MISSING HITROLL  (+inert-vs-GATO gates: DE87 WPNFX)
+1A Cure Beam     chars=Robo               MP=Robo:2                     grp=80 C1/203A one alive PC (cursor, PC-side flag)  shp=00  +0=03 +1=00[] +3 elem=00(none) anim$9877=1A
+     eff0 Robo   hdr CC/213F[1A] = 00 0E 80 00 00 00 00 00 00 00 00 00 | HEAL pow=14 sel=80
+     needs: G80 K0
+     port : MISSING G80 K0
+1B Laser Spin    chars=Robo               MP=Robo:3                     grp=08 C1/20B6 all enemies  shp=00  +0=03 +1=00[] +3 elem=42(bit6(res +40)) anim$9877=1C
+     eff0 Robo   hdr CC/213F[1B] = 03 00 00 00 00 03 3C 70 00 0A 00 00 | DMG t3 magic E203 pow=10 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+1C Robo Tackle   chars=Robo               MP=Robo:4                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=03 +1=00[] +3 elem=04(none) anim$9877=1B
+     eff0 Robo   hdr CC/213F[1C] = 03 00 00 3A 3B 05 3E 80 00 15 04 80 | DMG t5 E2DA pow=21 def=3E AE4D=80 AE4E=00 +10=04 +11=80
+     needs: DE87 G07 HITROLL T5
+     port : MISSING HITROLL T5  (+inert-vs-GATO gates: DE87)
+1D Heal Beam     chars=Robo               MP=Robo:3                     grp=81 C1/209A all alive PCs (PC-side flag)  shp=00  +0=03 +1=00[] +3 elem=00(none) anim$9877=1D
+     eff0 Robo   hdr CC/213F[1D] = 00 0A 80 00 00 00 00 00 00 00 00 00 | HEAL pow=10 sel=80
+     needs: G81 K0
+     port : MISSING G81 K0
+1E Uzzi Punch    chars=Robo               MP=Robo:12                    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=03 +1=00[] +3 elem=04(none) anim$9877=1E
+     eff0 Robo   hdr CC/213F[1E] = 03 00 00 3A 3B 01 3E 80 80 19 04 80 | DMG t1 melee E0FF pow=25 def=3E AE4D=80 AE4E=80 +10=04 +11=80
+     needs: DE87 G07 HITROLL T1 WPNFX
+     port : MISSING HITROLL  (+inert-vs-GATO gates: DE87 WPNFX)
+1F Area Bomb     chars=Robo               MP=Robo:14                    grp=11 C1/224B radius^2 0x10 around CASTER (C1/2701)  shp=02  +0=03 +1=00[] +3 elem=12(bit4(res +42)) anim$9877=1F
+     eff0 Robo   hdr CC/213F[1F] = 03 00 00 00 00 03 3C 70 00 1E 00 00 | DMG t3 magic E203 pow=30 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G11 T3 r10
+     port : MISSING G11
+20 Shock         chars=Robo               MP=Robo:17                    grp=08 C1/20B6 all enemies  shp=00  +0=03 +1=00[] +3 elem=82(bit7(res +3F)) anim$9877=20
+     eff0 Robo   hdr CC/213F[20] = 03 00 00 00 00 03 3C 70 00 28 00 00 | DMG t3 magic E203 pow=40 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+21 Slurp         chars=Frog               MP=Frog:1                     grp=80 C1/203A one alive PC (cursor, PC-side flag)  shp=00  +0=04 +1=00[] +3 elem=00(none) anim$9877=21
+     eff0 Frog   hdr CC/213F[21] = 00 05 80 00 00 00 00 00 00 00 00 00 | HEAL pow=5 sel=80
+     needs: G80 K0
+     port : MISSING G80 K0
+22 Slurp Cut     chars=Frog               MP=Frog:2                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=04 +1=00[] +3 elem=04(none) anim$9877=22
+     eff0 Frog   hdr CC/213F[22] = 03 00 00 00 00 01 3E A0 80 0B 24 C0 | DMG t1 melee E0FF pow=11 def=3E AE4D=A0 AE4E=80 +10=24 +11=C0
+     needs: DE87 G07 T1 WPNFX
+     port : core PORTED  (+inert-vs-GATO gates: DE87 WPNFX)
+23 Water         chars=Frog               MP=Frog:2                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=84 +1=00[] +3 elem=22(bit5(res +41)) anim$9877=23
+     eff0 Frog   hdr CC/213F[23] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G07 T3 r10
+     port : core PORTED
+24 Heal          chars=Frog               MP=Frog:2                     grp=81 C1/209A all alive PCs (PC-side flag)  shp=00  +0=84 +1=00[] +3 elem=00(none) anim$9877=24
+     eff0 Frog   hdr CC/213F[24] = 00 06 80 00 00 00 00 00 00 00 00 00 | HEAL pow=6 sel=80
+     needs: G81 K0
+     port : MISSING G81 K0
+25 Leap Slash    chars=Frog               MP=Frog:4                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=04 +1=00[] +3 elem=04(none) anim$9877=25
+     eff0 Frog   hdr CC/213F[25] = 03 00 00 3A 3B 01 3E 80 80 12 04 80 | DMG t1 melee E0FF pow=18 def=3E AE4D=80 AE4E=80 +10=04 +11=80
+     needs: DE87 G07 HITROLL T1 WPNFX
+     port : MISSING HITROLL  (+inert-vs-GATO gates: DE87 WPNFX)
+26 Water 2       chars=Frog               MP=Frog:8                     grp=08 C1/20B6 all enemies  shp=00  +0=84 +1=00[] +3 elem=22(bit5(res +41)) anim$9877=26
+     eff0 Frog   hdr CC/213F[26] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+27 Cure 2        chars=Frog               MP=Frog:5                     grp=80 C1/203A one alive PC (cursor, PC-side flag)  shp=00  +0=84 +1=00[] +3 elem=00(none) anim$9877=27
+     eff0 Frog   hdr CC/213F[27] = 00 18 80 00 00 00 00 00 00 00 00 00 | HEAL pow=24 sel=80
+     needs: G80 K0
+     port : MISSING G80 K0
+28 Frog Squash   chars=Frog               MP=Frog:15                    grp=08 C1/20B6 all enemies  shp=00  +0=04 +1=00[] +3 elem=04(none) anim$9877=28
+     eff0 Frog   hdr CC/213F[28] = 03 00 00 00 00 06 3E 60 00 0A 04 00 | DMG t6 HP-deficit E36D pow=10 def=3E AE4D=60 AE4E=00 +10=04 +11=00
+     needs: DE87 G08 T6
+     port : core PORTED  (+inert-vs-GATO gates: DE87)
+29 Kiss          chars=Ayla               MP=Ayla:1                     grp=80 C1/203A one alive PC (cursor, PC-side flag)  shp=00  +0=05 +1=00[] +3 elem=00(none) anim$9877=29
+     eff0 Ayla   hdr CC/213F[29] = 01 4E 80 00 00 00 00 A0 00 00 00 00 | CURE+HEAL pow=14 sel=80
+     needs: G80 K1
+     port : MISSING G80 K1
+2A Rollo Kick    chars=Ayla               MP=Ayla:2                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=05 +1=00[] +3 elem=04(none) anim$9877=2A
+     eff0 Ayla   hdr CC/213F[2A] = 03 00 00 3A 3B 05 3E 80 00 0E 04 80 | DMG t5 E2DA pow=14 def=3E AE4D=80 AE4E=00 +10=04 +11=80
+     needs: DE87 G07 HITROLL T5
+     port : MISSING HITROLL T5  (+inert-vs-GATO gates: DE87)
+2B Cat Attack    chars=Ayla               MP=Ayla:3                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=05 +1=00[] +3 elem=04(none) anim$9877=2B
+     eff0 Ayla   hdr CC/213F[2B] = 03 00 00 3A 3B 05 3E 80 00 14 04 00 | DMG t5 E2DA pow=20 def=3E AE4D=80 AE4E=00 +10=04 +11=00
+     needs: DE87 G07 HITROLL T5
+     port : MISSING HITROLL T5  (+inert-vs-GATO gates: DE87)
+2C Rock Throw    chars=Ayla               MP=Ayla:4                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=05 +1=00[] +3 elem=04(none) anim$9877=2C
+     eff0 Ayla   hdr CC/213F[2C] = 03 00 00 3A 3B 05 3E 80 00 1E 46 C0 | DMG t5 E2DA pow=30 def=3E AE4D=80 AE4E=00 +10=46 +11=C0
+     needs: DE87 G07 HITROLL T5
+     port : MISSING HITROLL T5  (+inert-vs-GATO gates: DE87)
+2D Charm         chars=Ayla               MP=Ayla:4                     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=05 +1=00[] +3 elem=02(none) anim$9877=2D
+     eff0 Ayla   hdr CC/213F[2D] = 06 46 00 00 00 00 00 80 00 00 00 80 | CHARM chance=70 AE4D=80  | B2CC=0F r12 rand<80 charm-else-drop
+     needs: G07 K6 r12
+     port : MISSING K6 r12
+2E Tail Spin     chars=Ayla               MP=Ayla:10                    grp=11 C1/224B radius^2 0x10 around CASTER (C1/2701)  shp=02  +0=05 +1=00[] +3 elem=02(none) anim$9877=2F
+     eff0 Ayla   hdr CC/213F[2E] = 03 00 00 00 00 03 3C 70 00 28 00 00 | DMG t3 magic E203 pow=40 def=3C AE4D=70 AE4E=00 +10=00 +11=00
+     needs: G11 T3
+     port : MISSING G11
+2F Dino Tail     chars=Ayla               MP=Ayla:15                    grp=08 C1/20B6 all enemies  shp=00  +0=05 +1=00[] +3 elem=04(none) anim$9877=30
+     eff0 Ayla   hdr CC/213F[2F] = 03 00 00 00 00 06 3E A0 00 09 04 00 | DMG t6 HP-deficit E36D pow=9 def=3E AE4D=A0 AE4E=00 +10=04 +11=00
+     needs: DE87 G08 T6
+     port : core PORTED  (+inert-vs-GATO gates: DE87)
+30 Triple Kick   chars=Ayla               MP=Ayla:20                    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=05 +1=00[] +3 elem=04(none) anim$9877=2E
+     eff0 Ayla   hdr CC/213F[30] = 08 03 00 3A 3B 05 3E 80 00 25 04 00 | MULTI hits=3 DMG t5 E2DA pow=37 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=13 r2 x1/3
+     needs: DE87 G07 HITROLL K8 T5 r2
+     port : MISSING HITROLL K8 T5  (+inert-vs-GATO gates: DE87)
+31 Lightning2    chars=Magus              MP=Magus:8                    grp=08 C1/20B6 all enemies  shp=00  +0=06 +1=00[] +3 elem=82(bit7(res +3F)) anim$9877=31
+     eff0 Magus  hdr CC/213F[31] = 03 00 00 00 00 03 3C 70 00 12 00 00 | DMG t3 magic E203 pow=18 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+32 Ice 2         chars=Magus              MP=Magus:8                    grp=08 C1/20B6 all enemies  shp=00  +0=06 +1=00[] +3 elem=22(bit5(res +41)) anim$9877=35
+     eff0 Magus  hdr CC/213F[32] = 03 00 00 00 00 03 3C 70 00 12 00 00 | DMG t3 magic E203 pow=18 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+33 Fire 2        chars=Magus              MP=Magus:8                    grp=08 C1/20B6 all enemies  shp=00  +0=06 +1=00[] +3 elem=12(bit4(res +42)) anim$9877=33
+     eff0 Magus  hdr CC/213F[33] = 03 00 00 00 00 03 3C 70 00 12 00 00 | DMG t3 magic E203 pow=18 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+34 Dark Bomb     chars=Magus              MP=Magus:8                    grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=06 +1=00[] +3 elem=42(bit6(res +40)) anim$9877=34
+     eff0 Magus  hdr CC/213F[34] = 03 00 00 00 00 03 3C 70 00 19 00 00 | DMG t3 magic E203 pow=25 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G12 T3 r10
+     port : core PORTED
+35 Magic Wall    chars=Magus              MP=Magus:8                    grp=00 C1/203A one alive PC (cursor)  shp=00  +0=06 +1=00[] +3 elem=00(none) anim$9877=36
+     eff0 Magus  hdr CC/213F[35] = 02 04 40 00 00 00 00 70 00 00 00 00 | STATUS cat4 mask40 no-roll AE4D=70
+     needs: DBAAcat4 G00 K2
+     port : MISSING DBAAcat4 G00 K2
+36 Dark Mist     chars=Magus              MP=Magus:10                   grp=08 C1/20B6 all enemies  shp=00  +0=06 +1=00[] +3 elem=42(bit6(res +40)) anim$9877=32
+     eff0 Magus  hdr CC/213F[36] = 03 00 00 00 00 03 3C 70 00 19 00 00 | DMG t3 magic E203 pow=25 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+37 Black Hole    chars=Magus              MP=Magus:15                   grp=1B C1/22D3 radius^2 0x19 around MAGUS seat (C1/2701)  shp=0A  +0=06 +1=00[] +3 elem=02(none) anim$9877=37
+     eff0 Magus  hdr CC/213F[37] = 03 00 00 00 00 03 3C 70 00 02 00 00 | DMG t3 magic E203 pow=2 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=24 r18 kill rand<=40 (else dmg 0)
+     needs: G1B T3 r18
+     port : MISSING G1B r18
+38 DarkMatter    chars=Magus              MP=Magus:20                   grp=08 C1/20B6 all enemies  shp=00  +0=06 +1=00[] +3 elem=42(bit6(res +40)) anim$9877=38
+     eff0 Magus  hdr CC/213F[38] = 03 00 00 00 00 03 3C 70 00 26 00 00 | DMG t3 magic E203 pow=38 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: G08 T3 r10
+     port : core PORTED
+39 Aura Whirl    chars=Marle+Crono        MP=Marle:1 Crono:2            grp=81 C1/209A all alive PCs (PC-side flag)  shp=00  +0=25 +1=00[] +3 elem=00(none) anim$9877=39
+     eff0 Marle  hdr CC/213F[09] = 00 05 80 00 00 00 00 00 00 00 00 00 | HEAL pow=5 sel=80
+     eff1 Crono  SKIP (bit7; MP idx 01)  B2CC=00
+     needs: G81 K0 MENUCOMBO
+     port : MISSING G81 K0 MENUCOMBO
+3A Ice Sword     chars=Crono+Marle        MP=Crono:4 Marle:2            grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=07 +1=61[nomiss,noDE87,sum1] +3 elem=22(bit5(res +41)) anim$9877=3A
+     eff0 Crono  hdr CC/213F[04] = 03 00 00 3A 3B 01 3E 80 80 10 04 80 | DMG t1 melee E0FF pow=16 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=08 r11 x5/4+element
+     eff1 Marle  hdr CC/213F[0B] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T1 T3 WPNFX r11
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+3B Ice Sword 2   chars=Crono+Marle        MP=Crono:12 Marle:8           grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=07 +1=61[nomiss,noDE87,sum1] +3 elem=22(bit5(res +41)) anim$9877=3B
+     eff0 Crono  hdr CC/213F[3C] = 03 00 00 3A 3B 01 3E 80 00 1D 04 00 | DMG t1 melee E0FF pow=29 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=07 r10 element
+     eff1 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: COMBO G12 MENUCOMBO T1 T3 r10
+     port : MISSING MENUCOMBO
+3C Fire Whirl    chars=Crono+Lucca        MP=Crono:2 Lucca:1            grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=08 +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=3C
+     eff0 Crono  hdr CC/213F[01] = 03 00 00 3A 3B 01 3E 80 80 0A 04 00 | DMG t1 melee E0FF pow=10 def=3E AE4D=80 AE4E=80 +10=04 +11=00  | B2CC=07 r10 element
+     eff1 Lucca  hdr CC/213F[11] = 03 00 00 00 00 03 3C 70 00 06 00 00 | DMG t3 magic E203 pow=6 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: COMBO G12 MENUCOMBO T1 T3 WPNFX r10
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+3D Fire Sword    chars=Crono+Lucca        MP=Crono:4 Lucca:2            grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=08 +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=3D
+     eff0 Crono  hdr CC/213F[04] = 03 00 00 3A 3B 01 3E 80 80 10 04 80 | DMG t1 melee E0FF pow=16 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=08 r11 x5/4+element
+     eff1 Lucca  hdr CC/213F[13] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T1 T3 WPNFX r11
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+3E FireSword 2   chars=Crono+Lucca        MP=Crono:12 Lucca:8           grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=08 +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=3E
+     eff0 Crono  hdr CC/213F[3C] = 03 00 00 3A 3B 01 3E 80 00 1D 04 00 | DMG t1 melee E0FF pow=29 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=07 r10 element
+     eff1 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: COMBO G12 MENUCOMBO T1 T3 r10
+     port : MISSING MENUCOMBO
+3F Rocket Roll   chars=Crono+Robo         MP=Crono:2 Robo:3             grp=08 C1/20B6 all enemies  shp=00  +0=09 +1=61[nomiss,noDE87,sum1] +3 elem=42(bit6(res +40)) anim$9877=3F
+     eff0 Crono  SKIP (bit7; MP idx 01)  B2CC=00
+     eff1 Robo   hdr CC/213F[1B] = 03 00 00 00 00 03 3C 70 00 0A 00 00 | DMG t3 magic E203 pow=10 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     needs: G08 MENUCOMBO SKIPCONT T3 r11
+     port : MISSING MENUCOMBO SKIPCONT
+40 Max Cyclone   chars=Robo+Crono         MP=Robo:3 Crono:4             grp=13 C1/22A4 radius^2 0x10 around ROBO seat (C1/2701)  shp=02  +0=31 +1=41[nomiss,sum1] +3 elem=04(none) anim$9877=40
+     eff0 Robo   SKIP (bit7; MP idx 1B)  B2CC=00
+     eff1 Crono  hdr CC/213F[04] = 03 00 00 3A 3B 01 3E 80 80 10 04 80 | DMG t1 melee E0FF pow=16 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=06 r2 x8/4
+     needs: DE87 G13 MENUCOMBO SKIPCONT T1 WPNFX r2
+     port : MISSING G13 MENUCOMBO SKIPCONT  (+inert-vs-GATO gates: DE87 WPNFX)
+41 Super Volt    chars=Crono+Robo         MP=Crono:8 Robo:17            grp=08 C1/20B6 all enemies  shp=00  +0=09 +1=71[nomiss,noDE87,sum1] +3 elem=82(bit7(res +3F)) anim$9877=41
+     eff0 Crono  hdr CC/213F[05] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Robo   hdr CC/213F[20] = 03 00 00 00 00 03 3C 70 00 28 00 00 | DMG t3 magic E203 pow=40 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G08 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+42 X Strike      chars=Crono+Frog         MP=Crono:2 Frog:2             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=0A +1=41[nomiss,sum1] +3 elem=04(none) anim$9877=42
+     eff0 Crono  hdr CC/213F[01] = 03 00 00 3A 3B 01 3E 80 80 0A 04 00 | DMG t1 melee E0FF pow=10 def=3E AE4D=80 AE4E=80 +10=04 +11=00  | B2CC=03 r2 x5/4
+     eff1 Frog   hdr CC/213F[40] = 03 00 00 3A 3B 01 3E 80 00 0B 04 00 | DMG t1 melee E0FF pow=11 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=03 r2 x5/4
+     needs: COMBO DE87 G07 MENUCOMBO T1 WPNFX r2
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: DE87 WPNFX)
+43 SwordStream   chars=Frog+Crono         MP=Frog:2 Crono:4             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=27 +1=61[nomiss,noDE87,sum1] +3 elem=22(bit5(res +41)) anim$9877=43
+     eff0 Frog   hdr CC/213F[23] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Crono  hdr CC/213F[04] = 03 00 00 3A 3B 01 3E 80 80 10 04 80 | DMG t1 melee E0FF pow=16 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T1 T3 WPNFX r11
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+44 Spire         chars=Frog+Crono         MP=Frog:4 Crono:8             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=27 +1=61[nomiss,noDE87,sum1] +3 elem=82(bit7(res +3F)) anim$9877=44
+     eff0 Frog   hdr CC/213F[25] = 03 00 00 3A 3B 01 3E 80 80 12 04 80 | DMG t1 melee E0FF pow=18 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=07 r10 element
+     eff1 Crono  hdr CC/213F[05] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=0B r11 x8/4+element
+     needs: COMBO G07 MENUCOMBO T1 T3 WPNFX r10 r11
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+45 Drill Kick    chars=Ayla+Crono         MP=Ayla:2 Crono:2             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=28 +1=41[nomiss,sum1] +3 elem=04(none) anim$9877=45
+     eff0 Ayla   hdr CC/213F[2A] = 03 00 00 3A 3B 05 3E 80 00 0E 04 80 | DMG t5 E2DA pow=14 def=3E AE4D=80 AE4E=00 +10=04 +11=80  | B2CC=05 r2 x7/4
+     eff1 Crono  SKIP (bit7; MP idx 01)  B2CC=00
+     needs: DE87 G07 MENUCOMBO T5 r2
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87)
+46 Volt Bite     chars=Ayla+Crono         MP=Ayla:3 Crono:2             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=28 +1=40[nomiss] +3 elem=82(bit7(res +3F)) anim$9877=46
+     eff0 Ayla   hdr CC/213F[2B] = 03 00 00 3A 3B 05 3E 80 00 14 04 00 | DMG t5 E2DA pow=20 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=0B r11 x8/4+element
+     eff1 Crono  SKIP (bit7; MP idx 03)  B2CC=00
+     needs: DE87 G07 MENUCOMBO T5 r11
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87)
+47 Falcon Hit    chars=Ayla+Crono         MP=Ayla:4 Crono:4             grp=0F C1/22F5 band: enemies with |Y-Yprim|<=0x20 (C1/2332)  shp=0B  +0=28 +1=41[nomiss,sum1] +3 elem=04(none) anim$9877=47
+     eff0 Ayla   SKIP (bit7; MP idx 2C)  B2CC=00
+     eff1 Crono  hdr CC/213F[04] = 03 00 00 3A 3B 01 3E 80 80 10 04 80 | DMG t1 melee E0FF pow=16 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=06 r2 x8/4
+     needs: DE87 G0F MENUCOMBO SKIPCONT T1 WPNFX r2
+     port : MISSING G0F MENUCOMBO SKIPCONT  (+inert-vs-GATO gates: DE87 WPNFX)
+48 Antipode      chars=Marle+Lucca        MP=Marle:2 Lucca:2            grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=0C +1=61[nomiss,noDE87,sum1] +3 elem=42(bit6(res +40)) anim$9877=48
+     eff0 Marle  hdr CC/213F[0B] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     eff1 Lucca  hdr CC/213F[13] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: COMBO G12 MENUCOMBO T3 r10
+     port : MISSING MENUCOMBO
+49 Antipode 2    chars=Marle+Lucca        MP=Marle:8 Lucca:8            grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=0C +1=61[nomiss,noDE87,sum1] +3 elem=42(bit6(res +40)) anim$9877=49
+     eff0 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     eff1 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     needs: COMBO G12 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+4A Antipode 3    chars=Marle+Lucca        MP=Marle:8 Lucca:20           grp=08 C1/20B6 all enemies  shp=00  +0=0C +1=61[nomiss,noDE87,sum1] +3 elem=42(bit6(res +40)) anim$9877=4A
+     eff0 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Lucca  hdr CC/213F[18] = 03 00 00 00 00 03 3C 70 00 2A 00 00 | DMG t3 magic E203 pow=42 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G08 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+4B Aura Beam     chars=Marle+Robo         MP=Marle:1 Robo:2             grp=81 C1/209A all alive PCs (PC-side flag)  shp=00  +0=0D +1=00[] +3 elem=00(none) anim$9877=4B
+     eff0 Marle  hdr CC/213F[09] = 00 05 80 00 00 00 00 00 00 00 00 00 | HEAL pow=5 sel=80
+     eff1 Robo   SKIP (bit7; MP idx 1A)  B2CC=00
+     needs: G81 K0 MENUCOMBO
+     port : MISSING G81 K0 MENUCOMBO
+4C Ice Tackle    chars=Robo+Marle         MP=Robo:4 Marle:2             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=29 +1=61[nomiss,noDE87,sum1] +3 elem=22(bit5(res +41)) anim$9877=4C
+     eff0 Robo   hdr CC/213F[1C] = 03 00 00 3A 3B 05 3E 80 00 15 04 80 | DMG t5 E2DA pow=21 def=3E AE4D=80 AE4E=00 +10=04 +11=80  | B2CC=09 r11 x6/4+element
+     eff1 Marle  hdr CC/213F[0B] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     needs: COMBO G07 MENUCOMBO T3 T5 r11
+     port : MISSING MENUCOMBO T5
+4D Cure Touch    chars=Marle+Robo         MP=Marle:5 Robo:3             grp=81 C1/209A all alive PCs (PC-side flag)  shp=00  +0=0D +1=00[] +3 elem=00(none) anim$9877=4D
+     eff0 Marle  hdr CC/213F[0F] = 00 18 80 00 00 00 00 00 00 00 00 00 | HEAL pow=24 sel=80
+     eff1 Robo   SKIP (bit7; MP idx 1D)  B2CC=00
+     needs: G81 K0 MENUCOMBO
+     port : MISSING G81 K0 MENUCOMBO
+4E Ice Water     chars=Frog+Marle         MP=Frog:2 Marle:2             grp=08 C1/20B6 all enemies  shp=00  +0=2A +1=61[nomiss,noDE87,sum1] +3 elem=22(bit5(res +41)) anim$9877=4E
+     eff0 Frog   hdr CC/213F[23] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     eff1 Marle  hdr CC/213F[0B] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: COMBO G08 MENUCOMBO T3 r10
+     port : MISSING MENUCOMBO
+4F Glacier       chars=Frog+Marle         MP=Frog:8 Marle:8             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=2A +1=61[nomiss,noDE87,sum1] +3 elem=22(bit5(res +41)) anim$9877=4F
+     eff0 Frog   hdr CC/213F[26] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     eff1 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     needs: COMBO G07 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+50 Double Cure   chars=Marle+Frog         MP=Marle:5 Frog:5             grp=81 C1/209A all alive PCs (PC-side flag)  shp=00  +0=0E +1=60[nomiss,noDE87] +3 elem=00(none) anim$9877=50
+     eff0 Marle  hdr CC/213F[41] = 01 4F 80 00 00 00 00 A0 00 00 00 00 | CURE+HEAL pow=FULL sel=80
+     eff1 Frog   SKIP (bit7; MP idx 27)  B2CC=00
+     needs: G81 K1 MENUCOMBO
+     port : MISSING G81 K1 MENUCOMBO
+51 Twin Charm    chars=Ayla+Marle         MP=Ayla:4 Marle:1             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=2B +1=40[nomiss] +3 elem=02(none) anim$9877=51
+     eff0 Ayla   hdr CC/213F[43] = 06 50 00 00 00 00 00 80 00 00 00 80 | CHARM chance=80 AE4D=80  | B2CC=10 r12 rand<100 charm-else-drop
+     eff1 Marle  SKIP (bit7; MP idx 0A)  B2CC=00
+     needs: G07 K6 MENUCOMBO r12
+     port : MISSING K6 MENUCOMBO r12
+52 Ice Toss      chars=Ayla+Marle         MP=Ayla:4 Marle:2             grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=2B +1=61[nomiss,noDE87,sum1] +3 elem=22(bit5(res +41)) anim$9877=52
+     eff0 Ayla   hdr CC/213F[2C] = 03 00 00 3A 3B 05 3E 80 00 1E 46 C0 | DMG t5 E2DA pow=30 def=3E AE4D=80 AE4E=00 +10=46 +11=C0  | B2CC=07 r10 element
+     eff1 Marle  hdr CC/213F[0B] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: COMBO G12 MENUCOMBO T3 T5 r10
+     port : MISSING MENUCOMBO T5
+53 Cube Toss     chars=Ayla+Marle         MP=Ayla:4 Marle:8             grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=2B +1=61[nomiss,noDE87,sum1] +3 elem=22(bit5(res +41)) anim$9877=53
+     eff0 Ayla   hdr CC/213F[2C] = 03 00 00 3A 3B 05 3E 80 00 1E 46 C0 | DMG t5 E2DA pow=30 def=3E AE4D=80 AE4E=00 +10=46 +11=C0  | B2CC=08 r11 x5/4+element
+     eff1 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G12 MENUCOMBO T3 T5 r11
+     port : MISSING MENUCOMBO T5
+54 Fire Punch    chars=Robo+Lucca         MP=Robo:1 Lucca:2             grp=12 C1/225F radius^2 0x09 around PRIMARY (C1/2701)  shp=03  +0=2C +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=54
+     eff0 Robo   hdr CC/213F[19] = 03 00 00 3A 3B 01 3E 80 80 0B 04 80 | DMG t1 melee E0FF pow=11 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=07 r10 element
+     eff1 Lucca  hdr CC/213F[13] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=07 r10 element
+     needs: COMBO G12 MENUCOMBO T1 T3 WPNFX r10
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+55 Fire Tackle   chars=Robo+Lucca         MP=Robo:4 Lucca:8             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=2C +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=55
+     eff0 Robo   hdr CC/213F[1C] = 03 00 00 3A 3B 05 3E 80 00 15 04 80 | DMG t5 E2DA pow=21 def=3E AE4D=80 AE4E=00 +10=04 +11=80  | B2CC=09 r11 x6/4+element
+     eff1 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     needs: COMBO G07 MENUCOMBO T3 T5 r11
+     port : MISSING MENUCOMBO T5
+56 DoublevBomb   chars=Lucca+Robo         MP=Lucca:15 Robo:14           grp=13 C1/22A4 radius^2 0x10 around ROBO seat (C1/2701)  shp=06  +0=10 +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=56
+     eff0 Lucca  hdr CC/213F[17] = 03 00 00 3A 3B 03 3C 50 00 20 00 80 | DMG t3 magic E203 pow=32 def=3C AE4D=50 AE4E=00 +10=00 +11=80  | B2CC=09 r11 x6/4+element
+     eff1 Robo   hdr CC/213F[1F] = 03 00 00 00 00 03 3C 70 00 1E 00 00 | DMG t3 magic E203 pow=30 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     needs: COMBO G13 MENUCOMBO T3 r11
+     port : MISSING G13 MENUCOMBO
+57 Flame Kick    chars=Ayla+Lucca         MP=Ayla:2 Lucca:2             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=2D +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=57
+     eff0 Ayla   hdr CC/213F[2A] = 03 00 00 3A 3B 05 3E 80 00 0E 04 80 | DMG t5 E2DA pow=14 def=3E AE4D=80 AE4E=00 +10=04 +11=80  | B2CC=08 r11 x5/4+element
+     eff1 Lucca  hdr CC/213F[13] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T3 T5 r11
+     port : MISSING MENUCOMBO T5
+58 Fire Whirl    chars=Ayla+Lucca         MP=Ayla:10 Lucca:8            grp=08 C1/20B6 all enemies  shp=00  +0=2D +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=59
+     eff0 Ayla   hdr CC/213F[2E] = 03 00 00 00 00 03 3C 70 00 28 00 00 | DMG t3 magic E203 pow=40 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     eff1 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     needs: COMBO G08 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+59 Blaze Kick    chars=Ayla+Lucca         MP=Ayla:20 Lucca:8            grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=2D +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=58
+     eff0 Ayla   hdr CC/213F[3D] = 03 00 00 3A 3B 05 3E 80 00 25 04 00 | DMG t5 E2DA pow=37 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T3 T5 r11
+     port : MISSING MENUCOMBO T5
+5A Blade Toss    chars=Robo+Frog          MP=Robo:3 Frog:2              grp=0D C1/21AF beam Robo-seat->primary (C1/25A3 w=2 $9608=0)  shp=01  +0=12 +1=41[nomiss,sum1] +3 elem=04(none) anim$9877=5A
+     eff0 Robo   SKIP (bit7; MP idx 1B)  B2CC=00
+     eff1 Frog   hdr CC/213F[40] = 03 00 00 3A 3B 01 3E 80 00 0B 04 00 | DMG t1 melee E0FF pow=11 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=06 r2 x8/4
+     needs: DE87 G0D MENUCOMBO SKIPCONT T1 r2
+     port : MISSING G0D MENUCOMBO SKIPCONT  (+inert-vs-GATO gates: DE87)
+5B Bubble Snap   chars=Robo+Frog          MP=Robo:4 Frog:2              grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=12 +1=41[nomiss,sum1] +3 elem=04(none) anim$9877=5B
+     eff0 Robo   hdr CC/213F[1C] = 03 00 00 3A 3B 05 3E 80 00 15 04 80 | DMG t5 E2DA pow=21 def=3E AE4D=80 AE4E=00 +10=04 +11=80  | B2CC=06 r2 x8/4
+     eff1 Frog   SKIP (bit7; MP idx 23)  B2CC=00
+     needs: DE87 G07 MENUCOMBO T5 r2
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87)
+5C Cure Wave     chars=Frog+Robo          MP=Frog:5 Robo:3              grp=81 C1/209A all alive PCs (PC-side flag)  shp=00  +0=2E +1=00[] +3 elem=00(none) anim$9877=5C
+     eff0 Frog   hdr CC/213F[27] = 00 18 80 00 00 00 00 00 00 00 00 00 | HEAL pow=24 sel=80
+     eff1 Robo   SKIP (bit7; MP idx 1D)  B2CC=00
+     needs: G81 K0 MENUCOMBO
+     port : MISSING G81 K0 MENUCOMBO
+5D Boogie        chars=Ayla+Robo          MP=Ayla:4 Robo:4              grp=08 C1/20B6 all enemies  shp=00  +0=2F +1=00[] +3 elem=02(none) anim$9877=5D
+     eff0 Ayla   hdr CC/213F[3F] = 02 01 80 00 00 50 00 50 00 00 00 00 | STATUS cat1 mask80 acc=80+MAG/0 AE4D=50
+     eff1 Robo   SKIP (bit7; MP idx 1C)  B2CC=00
+     needs: DBAAcat1 G08 K2 MENUCOMBO
+     port : MISSING DBAAcat1 K2 MENUCOMBO
+5E Spin Kick     chars=Ayla+Robo          MP=Ayla:2 Robo:3              grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=2F +1=41[nomiss,sum1] +3 elem=04(none) anim$9877=5E
+     eff0 Ayla   hdr CC/213F[2A] = 03 00 00 3A 3B 05 3E 80 00 0E 04 80 | DMG t5 E2DA pow=14 def=3E AE4D=80 AE4E=00 +10=04 +11=80  | B2CC=06 r2 x8/4
+     eff1 Robo   SKIP (bit7; MP idx 1B)  B2CC=00
+     needs: DE87 G07 MENUCOMBO T5 r2
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87)
+5F Beast Toss    chars=Ayla+Robo          MP=Ayla:4 Robo:12             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=2F +1=C1[nomiss,sum1,bit7(no reader)] +3 elem=04(none) anim$9877=5F
+     eff0 Ayla   hdr CC/213F[2C] = 03 00 00 3A 3B 05 3E 80 00 1E 46 C0 | DMG t5 E2DA pow=30 def=3E AE4D=80 AE4E=00 +10=46 +11=C0  | B2CC=03 r2 x5/4
+     eff1 Robo   hdr CC/213F[1E] = 03 00 00 3A 3B 01 3E 80 80 19 04 80 | DMG t1 melee E0FF pow=25 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=03 r2 x5/4
+     needs: COMBO DE87 G07 MENUCOMBO T1 T5 WPNFX r2
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87 WPNFX)
+60 Slurp Kiss    chars=Frog+Ayla          MP=Frog:1 Ayla:1              grp=81 C1/209A all alive PCs (PC-side flag)  shp=00  +0=14 +1=41[nomiss,sum1] +3 elem=00(none) anim$9877=60
+     eff0 Frog   SKIP (bit7; MP idx 21)  B2CC=00
+     eff1 Ayla   hdr CC/213F[44] = 01 5C 80 00 00 00 00 A0 00 00 00 00 | CURE+HEAL pow=28 sel=80
+     needs: G81 K1 MENUCOMBO SKIPCONT
+     port : MISSING G81 K1 MENUCOMBO SKIPCONT
+61 Bubble Hit    chars=Ayla+Frog          MP=Ayla:2 Frog:2              grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=30 +1=41[nomiss,sum1] +3 elem=04(none) anim$9877=61
+     eff0 Ayla   hdr CC/213F[2A] = 03 00 00 3A 3B 05 3E 80 00 0E 04 80 | DMG t5 E2DA pow=14 def=3E AE4D=80 AE4E=00 +10=04 +11=80  | B2CC=06 r2 x8/4
+     eff1 Frog   SKIP (bit7; MP idx 23)  B2CC=00
+     needs: DE87 G07 MENUCOMBO T5 r2
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87)
+62 Drop Kick     chars=Frog+Ayla          MP=Frog:4 Ayla:20             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=14 +1=C1[nomiss,sum1,bit7(no reader)] +3 elem=04(none) anim$9877=62
+     eff0 Frog   hdr CC/213F[25] = 03 00 00 3A 3B 01 3E 80 80 12 04 80 | DMG t1 melee E0FF pow=18 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=04 r2 x6/4
+     eff1 Ayla   hdr CC/213F[3D] = 03 00 00 3A 3B 05 3E 80 00 25 04 00 | DMG t5 E2DA pow=37 def=3E AE4D=80 AE4E=00 +10=04 +11=00
+     needs: COMBO DE87 G07 MENUCOMBO T1 T5 WPNFX r2
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87 WPNFX)
+63 Red Pin       chars=Frog+Lucca         MP=Frog:4 Lucca:2             grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=15 +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=6D
+     eff0 Frog   hdr CC/213F[25] = 03 00 00 3A 3B 01 3E 80 80 12 04 80 | DMG t1 melee E0FF pow=18 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=08 r11 x5/4+element
+     eff1 Lucca  hdr CC/213F[13] = 03 00 00 00 00 03 3C 70 00 0B 00 00 | DMG t3 magic E203 pow=11 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T1 T3 WPNFX r11
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+64 Line Bomb     chars=Frog+Lucca         MP=Frog:4 Lucca:15            grp=0F C1/22F5 band: enemies with |Y-Yprim|<=0x20 (C1/2332)  shp=0B  +0=15 +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=6E
+     eff0 Frog   SKIP (bit7; MP idx 25)  B2CC=00
+     eff1 Lucca  hdr CC/213F[17] = 03 00 00 3A 3B 03 3C 50 00 20 00 80 | DMG t3 magic E203 pow=32 def=3C AE4D=50 AE4E=00 +10=00 +11=80  | B2CC=07 r10 element
+     needs: G0F MENUCOMBO SKIPCONT T3 r10
+     port : MISSING G0F MENUCOMBO SKIPCONT
+65 Frog Flare    chars=Frog+Lucca         MP=Frog:15 Lucca:20           grp=08 C1/20B6 all enemies  shp=00  +0=15 +1=61[nomiss,noDE87,sum1] +3 elem=12(bit4(res +42)) anim$9877=6F
+     eff0 Frog   hdr CC/213F[28] = 03 00 00 00 00 06 3E 60 00 0A 04 00 | DMG t6 HP-deficit E36D pow=10 def=3E AE4D=60 AE4E=00 +10=04 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Lucca  hdr CC/213F[18] = 03 00 00 00 00 03 3C 70 00 2A 00 00 | DMG t3 magic E203 pow=42 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G08 MENUCOMBO T3 T6 r11
+     port : MISSING MENUCOMBO
+66 Delta Force   chars=Crono+Marle+Lucca  MP=Crono:8 Marle:8 Lucca:8    grp=08 C1/20B6 all enemies  shp=00  +0=16 +1=62[nomiss,noDE87,sum2] +3 elem=42(bit6(res +40)) anim$9877=63
+     eff0 Crono  hdr CC/213F[05] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff2 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G08 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+67 Lifeline      chars=Marle+Crono+Robo   MP=Marle:15 Crono:15 Robo:3   grp=01 C1/209A all alive PCs  shp=00  +0=17 +1=00[] +3 elem=00(none) anim$9877=64
+     eff0 Marle  hdr CC/213F[3E] = 02 05 80 00 00 00 00 70 00 00 00 00 | STATUS cat5 mask80 no-roll AE4D=70
+     eff1 Crono  SKIP (bit7; MP idx 10)  B2CC=00
+     eff2 Robo   SKIP (bit7; MP idx 1B)  B2CC=00
+     needs: DBAAcat5 G01 K2 MENUCOMBO
+     port : MISSING DBAAcat5 G01 K2 MENUCOMBO
+68 Arc Impulse   chars=Crono+Frog+Marle   MP=Crono:4 Frog:4 Marle:8     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=18 +1=62[nomiss,noDE87,sum2] +3 elem=22(bit5(res +41)) anim$9877=65
+     eff0 Crono  hdr CC/213F[04] = 03 00 00 3A 3B 01 3E 80 80 10 04 80 | DMG t1 melee E0FF pow=16 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=08 r11 x5/4+element
+     eff1 Frog   hdr CC/213F[25] = 03 00 00 3A 3B 01 3E 80 80 12 04 80 | DMG t1 melee E0FF pow=18 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=08 r11 x5/4+element
+     eff2 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T1 T3 WPNFX r11
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+69 Final Kick    chars=Ayla+Crono+Marle   MP=Ayla:20 Crono:8 Marle:8    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=19 +1=62[nomiss,noDE87,sum2] +3 elem=42(bit6(res +40)) anim$9877=66
+     eff0 Ayla   hdr CC/213F[3D] = 03 00 00 3A 3B 05 3E 80 00 25 04 00 | DMG t5 E2DA pow=37 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Crono  hdr CC/213F[05] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff2 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T3 T5 r11
+     port : MISSING MENUCOMBO T5
+6A Fire Zone     chars=Robo+Crono+Lucca   MP=Robo:4 Crono:4 Lucca:8     grp=13 C1/22A4 radius^2 0x10 around ROBO seat (C1/2701)  shp=02  +0=1A +1=62[nomiss,noDE87,sum2] +3 elem=12(bit4(res +42)) anim$9877=67
+     eff0 Robo   SKIP (bit7; MP idx 1C)  B2CC=00
+     eff1 Crono  hdr CC/213F[04] = 03 00 00 3A 3B 01 3E 80 80 10 04 80 | DMG t1 melee E0FF pow=16 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=0B r11 x8/4+element
+     eff2 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G13 MENUCOMBO SKIPCONT T1 T3 WPNFX r11
+     port : MISSING G13 MENUCOMBO SKIPCONT  (+inert-vs-GATO gates: WPNFX)
+6B Delta Storm   chars=Crono+Lucca+Frog   MP=Crono:8 Lucca:8 Frog:8     grp=08 C1/20B6 all enemies  shp=00  +0=1B +1=62[nomiss,noDE87,sum2] +3 elem=42(bit6(res +40)) anim$9877=68
+     eff0 Crono  hdr CC/213F[05] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff2 Frog   hdr CC/213F[26] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G08 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+6C GatlingKick   chars=Ayla+Crono+Lucca   MP=Ayla:20 Crono:8 Lucca:8    grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=1C +1=62[nomiss,noDE87,sum2] +3 elem=42(bit6(res +40)) anim$9877=69
+     eff0 Ayla   hdr CC/213F[3D] = 03 00 00 3A 3B 05 3E 80 00 25 04 00 | DMG t5 E2DA pow=37 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Crono  hdr CC/213F[05] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff2 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G07 MENUCOMBO T3 T5 r11
+     port : MISSING MENUCOMBO T5
+6D Triple Raid   chars=Crono+Robo+Frog    MP=Crono:2 Robo:4 Frog:2      grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=1D +1=C2[nomiss,sum2,bit7(no reader)] +3 elem=04(none) anim$9877=6A
+     eff0 Crono  hdr CC/213F[01] = 03 00 00 3A 3B 01 3E 80 80 0A 04 00 | DMG t1 melee E0FF pow=10 def=3E AE4D=80 AE4E=80 +10=04 +11=00  | B2CC=03 r2 x5/4
+     eff1 Robo   hdr CC/213F[1C] = 03 00 00 3A 3B 05 3E 80 00 15 04 80 | DMG t5 E2DA pow=21 def=3E AE4D=80 AE4E=00 +10=04 +11=80  | B2CC=03 r2 x5/4
+     eff2 Frog   hdr CC/213F[40] = 03 00 00 3A 3B 01 3E 80 00 0B 04 00 | DMG t1 melee E0FF pow=11 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=03 r2 x5/4
+     needs: COMBO DE87 G07 MENUCOMBO T1 T5 WPNFX r2
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87 WPNFX)
+6E Twister       chars=Crono+Robo+Ayla    MP=Crono:2 Robo:3 Ayla:10     grp=08 C1/20B6 all enemies  shp=00  +0=1E +1=63[nomiss,noDE87,sum3] +3 elem=42(bit6(res +40)) anim$9877=6B
+     eff0 Crono  hdr CC/213F[01] = 03 00 00 3A 3B 01 3E 80 80 0A 04 00 | DMG t1 melee E0FF pow=10 def=3E AE4D=80 AE4E=80 +10=04 +11=00  | B2CC=09 r11 x6/4+element
+     eff1 Robo   hdr CC/213F[1B] = 03 00 00 00 00 03 3C 70 00 0A 00 00 | DMG t3 magic E203 pow=10 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     eff2 Ayla   hdr CC/213F[2E] = 03 00 00 00 00 03 3C 70 00 28 00 00 | DMG t3 magic E203 pow=40 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=09 r11 x6/4+element
+     needs: COMBO G08 MENUCOMBO T1 T3 WPNFX r11
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: WPNFX)
+6F 3D Attack     chars=Ayla+Crono+Frog    MP=Ayla:20 Crono:2 Frog:2     grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=1F +1=C2[nomiss,sum2,bit7(no reader)] +3 elem=04(none) anim$9877=6C
+     eff0 Ayla   hdr CC/213F[3D] = 03 00 00 3A 3B 05 3E 80 00 25 04 00 | DMG t5 E2DA pow=37 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=03 r2 x5/4
+     eff1 Crono  hdr CC/213F[01] = 03 00 00 3A 3B 01 3E 80 80 0A 04 00 | DMG t1 melee E0FF pow=10 def=3E AE4D=80 AE4E=80 +10=04 +11=00  | B2CC=03 r2 x5/4
+     eff2 Frog   hdr CC/213F[40] = 03 00 00 3A 3B 01 3E 80 00 0B 04 00 | DMG t1 melee E0FF pow=11 def=3E AE4D=80 AE4E=00 +10=04 +11=00  | B2CC=03 r2 x5/4
+     needs: COMBO DE87 G07 MENUCOMBO T1 T5 WPNFX r2
+     port : MISSING MENUCOMBO T5  (+inert-vs-GATO gates: DE87 WPNFX)
+70 DarkEternal   chars=Marle+Lucca+Magus  MP=Marle:8 Lucca:8 Magus:20   grp=08 C1/20B6 all enemies  shp=00  +0=20 +1=62[nomiss,noDE87,sum2] +3 elem=42(bit6(res +40)) anim$9877=70
+     eff0 Marle  hdr CC/213F[0E] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Lucca  hdr CC/213F[16] = 03 00 00 00 00 03 3C 70 00 0E 00 00 | DMG t3 magic E203 pow=14 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff2 Magus  hdr CC/213F[38] = 03 00 00 00 00 03 3C 70 00 26 00 00 | DMG t3 magic E203 pow=38 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G08 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+71 Omega Flare   chars=Lucca+Robo+Magus   MP=Lucca:20 Robo:3 Magus:8    grp=08 C1/20B6 all enemies  shp=00  +0=21 +1=62[nomiss,noDE87,sum2] +3 elem=42(bit6(res +40)) anim$9877=71
+     eff0 Lucca  hdr CC/213F[18] = 03 00 00 00 00 03 3C 70 00 2A 00 00 | DMG t3 magic E203 pow=42 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff1 Robo   hdr CC/213F[1B] = 03 00 00 00 00 03 3C 70 00 0A 00 00 | DMG t3 magic E203 pow=10 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     eff2 Magus  hdr CC/213F[34] = 03 00 00 00 00 03 3C 70 00 19 00 00 | DMG t3 magic E203 pow=25 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=08 r11 x5/4+element
+     needs: COMBO G08 MENUCOMBO T3 r11
+     port : MISSING MENUCOMBO
+72 Spin Strike   chars=Frog+Robo+Ayla     MP=Frog:4 Robo:4 Ayla:15      grp=07 C1/20A9 one enemy (cursor)  shp=00  +0=22 +1=C2[nomiss,sum2,bit7(no reader)] +3 elem=04(none) anim$9877=72
+     eff0 Frog   hdr CC/213F[25] = 03 00 00 3A 3B 01 3E 80 80 12 04 80 | DMG t1 melee E0FF pow=18 def=3E AE4D=80 AE4E=80 +10=04 +11=80  | B2CC=34 r2 x4/1
+     eff1 Robo   SKIP (bit7; MP idx 1C)  B2CC=00
+     eff2 Ayla   SKIP (bit7; MP idx 2F)  B2CC=00
+     needs: DE87 G07 MENUCOMBO T1 WPNFX r2
+     port : MISSING MENUCOMBO  (+inert-vs-GATO gates: DE87 WPNFX)
+73 PoyozoDance   chars=Marle+Lucca+Ayla   MP=Marle:1 Lucca:1 Ayla:10    grp=08 C1/20B6 all enemies  shp=00  +0=23 +1=62[nomiss,noDE87,sum2] +3 elem=02(none) anim$9877=73
+     eff0 Marle  SKIP (bit7; MP idx 0A)  B2CC=00
+     eff1 Lucca  SKIP (bit7; MP idx 12)  B2CC=00
+     eff2 Ayla   hdr CC/213F[2E] = 03 00 00 00 00 03 3C 70 00 28 00 00 | DMG t3 magic E203 pow=40 def=3C AE4D=70 AE4E=00 +10=00 +11=00  | B2CC=2E r8 rand<=80 -> +1E|=04
+     needs: G08 MENUCOMBO SKIPCONT T3 r8
+     port : MISSING MENUCOMBO SKIPCONT r8
+74 Grand Dream   chars=Frog+Marle+Robo    MP=Frog:15 Marle:15 Robo:3    grp=08 C1/20B6 all enemies  shp=00  +0=24 +1=42[nomiss,sum2] +3 elem=04(none) anim$9877=74
+     eff0 Frog   hdr CC/213F[42] = 03 00 00 00 00 06 3E B0 00 18 00 00 | DMG t6 HP-deficit E36D pow=24 def=3E AE4D=B0 AE4E=00 +10=00 +11=00
+     eff1 Marle  SKIP (bit7; MP idx 10)  B2CC=00
+     eff2 Robo   SKIP (bit7; MP idx 1D)  B2CC=00
+     needs: G08 MENUCOMBO T6
+     port : MISSING MENUCOMBO

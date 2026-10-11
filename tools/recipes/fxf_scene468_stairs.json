@@ -1,0 +1,26 @@
+{
+  "name": "fxf_scene468_stairs",
+  "from": "queen_vanishes",
+  "doc": "Stands in for saves/field_re/scene468_stairs_to_120.state (a teleport into the east tower's last flight with storyline 10): the ROM's own loader (--teleport 468 8 39 2, method jmp, 240 frames) from the Queen's chamber after Marle vanished (queen_vanishes, storyline 10) -- loc 1D4, Crono at tile (8,39) facing left above the flight's exit to the castle's main floor, where Lucca waits. NOT YET USED: field-door-list-vs-logical-oracle's load leg differs on 27 frames [f20-f46] from it instead of the capture's 26 [f20-f45] (the cartridge's NMI-off loads cost one frame more from this state; the port's load clock does not follow), so saves/field_re/scene468_stairs_to_120.* stay the capture for now; the other four checks pass on it unchanged.",
+  "steps": [
+    [
+      "teleport",
+      468,
+      8,
+      39,
+      2,
+      240,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1D4",
+    "wram": {
+      "0x10000": "0x10",
+      "0x1802": "0x80",
+      "0x1803": "0x08",
+      "0x1882": "0xFF",
+      "0x1883": "0x27"
+    }
+  }
+}

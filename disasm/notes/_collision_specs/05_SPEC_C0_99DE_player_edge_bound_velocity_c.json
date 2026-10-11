@@ -1,0 +1,53 @@
+{
+ "routine": "C0/99DE player edge/bound velocity clamp (+ leaf subs C0/9A1F down, C0/9A3D up, C0/9A60 right, C0/9A7E left). DP = $1D00.",
+ "summary": "C0/99DE is the second velocity clamp in the player-controller body (runs at C0/884F right after the 9175 screen-edge clamp, before 91AC accel and 93E1 integration). It looks at the two signed 8-bit velocity ACCUMULATORS $1D2E (X) and $1D30 (Y); for each non-zero axis it derives a tile-magnitude mag = abs(vel) >> 4 (so vel = +/-0x10 -> mag 1, +/-0x20 -> mag 2) and calls the directional leaf sub for that sign (X+ -> 9A60 right, X- -> 9A7E left, Y+ -> 9A1F down, Y- -> 9A3D up). Each leaf returns CARRY=blocked; on blocked the dispatcher zeroes that accumulator (STZ $2E / STZ $30). The leaf decides blocked by three nested cases against the map-edge bound for that direction: (1) the half-tile foot position $0A/$0C/$0E/$10 (>>1 = tile) is PAST the bound $1A/$1B/$1C/$1D -> blocked; (2) the foot is exactly AT the bound tile -> a sub-tile crossing test (positive dir: subtile $93/$96 + mag >= 0x10; negative dir: subtile - mag < 0) decides whether this step would cross the tile edge; (3) the foot is still INSIDE the bound -> an on-screen-position fallback compares the player's on-screen coord $0A00,X/$0A80,X against the screen-center thresholds 0x80 (X) / 0x88 (Y). The net effect: the velocity accumulator is forced to 0 the moment the player would step off the active map's clamped rectangle.",
+ "dp": "$1D00 (set by LDA #$1D00;TCD at C0/8826 in the controller body C0/881E; every \"$XX\" operand = $7E:1DXX). Absolute operands $0197/$0A00,X/$0A80,X are literal $7E addresses, NOT dp-relative. Accumulator math runs in 8-bit A / 8-bit X (the body did SEP just before; X is set 8-bit at 8845 around the ALT path but 99DE itself only uses X via LDX $0197 with $0197 being a 1-byte actor index, so high X is don't-care for the $0A00,X index). The prop-fetch sub 9AA1 (NOT part of this cluster, shown only for context) flips to 16-bit for the AND $1E mask.",
+ "cPseudocode": "/* (full pseudocode above; field repeated to satisfy schema) */",
+ "wramReads": [
+  "$1D2E (dp $2E) = signed 8-bit X velocity ACCUMULATOR (read at 99DE; negated/shifted to mag)",
+  "$1D30 (dp $30) = signed 8-bit Y velocity ACCUMULATOR (read at 99FF)",
+  "$1D0A (dp $0A) = X-axis LEFT foot position in HALF-tile units (>>1 gives tile); set in C0/7506 region as leftbound*2 then walked by C0/948D-9491 DEC / C0/945D INC; used by 9A80 (left)",
+  "$1D0C (dp $0C) = X-axis RIGHT foot position in HALF-tile units; used by 9A62 (right)",
+  "$1D0E (dp $0E) = Y-axis UP foot position in HALF-tile units; set in C0/7563 region; walked by C0/94EF/94FD DEC, C0/94BF/94CD INC; used by 9A3F (up)",
+  "$1D10 (dp $10) = Y-axis DOWN foot position in HALF-tile units; used by 9A21 (down)",
+  "$1D1A (dp $1A) = LEFT map-edge bound, TILE units (from scene map header byte $F6000A = h[10]; 0x80 sentinel = no bound); compared in 9A85",
+  "$1D1B (dp $1B) = RIGHT map-edge bound, tile units (header $F6000C = h[12]); compared in 9A65",
+  "$1D1C (dp $1C) = UP map-edge bound, tile units (header $F6000B = h[11]); compared in 9A44",
+  "$1D1D (dp $1D) = DOWN map-edge bound, tile units (header $F6000D = h[13]); compared in 9A24",
+  "$1D93 (dp $93) = X SUB-TILE position within current tile, 0..0x0F (low nibble of world X); written by the position-walk C0/9476/94A6; read in 9A6B (right) and 9A8D (left)",
+  "$1D96 (dp $96) = Y SUB-TILE position 0..0x0F; written C0/94D8/9508; read in 9A2A (down) and 9A4C (up)",
+  "$0197 (absolute $7E0197) = player/leader ACTOR INDEX (1 byte); loaded to X for the on-screen-coord lookups",
+  "$0A00,X (absolute $7E0A00 + actor) = actor ON-SCREEN X pixel; compared vs 0x80 in 9A75/9A99",
+  "$0A80,X (absolute $7E0A80 + actor) = actor ON-SCREEN Y pixel; compared vs 0x88 in 9A39/9A58"
+ ],
+ "wramWrites": [
+  "$1D2E (dp $2E) := 0 when the right (9A60) or left (9A7E) sub returns carry=blocked (99ED / 99FD STZ $2E)",
+  "$1D30 (dp $30) := 0 when the down (9A1F) or up (9A3D) sub returns carry=blocked (9A0E / 9A1C STZ $30)",
+  "$1D52 (dp $52) := scratch: holds mag for right/down subs (9A60/9A1F STA $52), or pos>>1 for left/up subs (9A83/9A42 STA $52)",
+  "$1D54 (dp $54) := scratch: holds mag for left/up subs (9A7E/9A3D STA $54)"
+ ],
+ "romTables": [
+  "scene map header @ $F60000 + scene*14 (long bank $F6): byte $0A=left bound, $0B=up bound, $0C=right bound, $0D=down bound (all tile units); 0x80 = no-clamp sentinel. Confirmed against assets/engine.py line 678-681 (h[10..13]) and the setup at C0/7480 (STA $1A/$1C/$1B/$1D from $F6000A/B/C/D,X). The clamp routine 99DE itself reads NO ROM table; the only ROM tables in the surrounding collision core (slope tables $C09BF5/$C09C0B/$C09C21) belong to the shape decoder, not to 99DE."
+ ],
+ "entryPoints": [
+  "C0/99DE -> dispatcher entry (called from controller body C0/884F, and indirectly the ALT/auto-walk paths via the same body)",
+  "C0/9A1F -> leaf: DOWN (Y+) bound test, A=mag",
+  "C0/9A3D -> leaf: UP (Y-) bound test, A=mag",
+  "C0/9A60 -> leaf: RIGHT (X+) bound test, A=mag",
+  "C0/9A7E -> leaf: LEFT (X-) bound test, A=mag"
+ ],
+ "callsOut": [
+  "C0/9A60 (JSR from 99E8) -> right leaf",
+  "C0/9A7E (JSR from 99F8) -> left leaf",
+  "C0/9A1F (JSR from 9A09) -> down leaf",
+  "C0/9A3D (JSR from 9A17) -> up leaf",
+  "(no JSR/JSL/BRL leaves the cluster; the four leaves RTS back to the dispatcher which RTSs to C0/884F)"
+ ],
+ "uncertainties": [
+  "BLOCKED-vs-FREE high-level meaning of the on-screen-coord fallback (case 3): mechanically, RIGHT (9A75) returns carry = (0x80 >= screenX) = (screenX <= 0x80), and LEFT (9A99) returns carry = (screenX >= 0x80); DOWN uses 0x88 with (screenY <= 0x88), UP uses (screenY >= 0x88). Taken literally with 'carry=blocked', RIGHT would zero the X-velocity whenever the player is on the LEFT half of the screen (screenX<=0x80) while the foot is still inside the right bound. That reads counter-intuitively for 'free to scroll'. Two possibilities the VERIFIER must resolve with a live oracle trace at a map edge: (a) my carry polarity for the screen-fallback is inverted relative to intent, or (b) $0A/$0C and the bounds are camera-relative such that screenX<=0x80 genuinely means 'camera cannot scroll right -> player pinned -> further right blocked'. I could NOT confirm empirically: in disasm/boot_trace_play.txt the four leaf subs NEVER execute (99DE ran 68x but always took the $2E==0 / $30==0 BEQ at 99E0/9A01 -> the player was never moving toward a clamped edge in that capture).",
+  "Y-axis FALL-THROUGH at 9A0E->9A10: after a blocked DOWN result the code STZ $30 then FALLS INTO the UP branch (no BRA), re-deriving a magnitude from the now-stale A (= original vy) and calling 9A3D too. I reproduced the exact control flow in the pseudocode, but I have NOT proven this is harmless for all vy (it is harmless for the only observed values +/-0x10/0x20 because the foot can sit at only one of the up/down bounds at once, so the second leaf returns free). Verifier should confirm with a frame where vy>0 AND the down bound is hit.",
+  "$1D0A/$0C (and $0E/$10) being a PAIR of half-tile foot positions vs a single value: I inferred 'two foot points' from the C0/7506 setup (leftbound*2 -> $0A, a separate +0x20-ish term -> $0C) and from 9A62 using $0C (right) while 9A80 uses $0A (left). The exact geometric meaning of the pair (which is the leading edge vs trailing edge of the player's collision box) is not pinned to the bit; the 7506 region disassembled with the disassembler de-syncing on its 16-bit immediates, so the precise *2/+offset arithmetic that builds $0A/$0C/$0E/$10 should be re-decoded in forced 16-bit-A mode before porting (I read it structurally, not instruction-exact).",
+  "The sub-tile crossing test sign width: positive-dir test is unsigned ((subtile+mag) >= 0x10 via CMP), negative-dir test is signed ((int8)(subtile-mag) >= 0 via BPL on the SBC result). subtile is 0..0x0F and mag is 1..2 so neither overflows 8 bits in practice; confirmed against the C0/9476 walk which keeps $93/$96 in 0..0x0F. Flagging only because a malformed mag (vel magnitude > 0x2F, giving mag>=3) is theoretically possible from the accel path 91AC and was not bounded-checked here.",
+  "Whether 99DE can see a velocity the 9175 clamp already zeroed: 9175 writes $32/$33 (APPLIED) and does NOT modify $2E/$30, so 99DE still sees the raw accumulator. The two clamps are independent (9175 = actor-collision $5B86 edge test feeding $32/$33; 99DE = map-rect test zeroing $2E/$30). Confirmed by inspection of 9175 (only STZ $32/$33 + STA $32/$33), but the interplay (does a later stage re-read $32/$33 or $2E/$30?) belongs to 91AC/93E1 and is out of this cluster's scope."
+ ]
+}

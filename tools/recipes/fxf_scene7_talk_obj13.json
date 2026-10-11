@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene7_talk_obj13",
+  "from": "fair_entrance",
+  "doc": "Stands in for saves/field_re/scene7_talk_obj13.state (made as --teleport 7 9 14 0 from a fair capture with storyline 3): the same teleport (method jmp, 240 frames) from the fair's south entrance (fair_entrance, storyline 3, 400 G) -- loc 007, Crono at tile (9,14) facing up, below the talker obj13 ('Catchy rhythm!...').",
+  "steps": [["teleport", 7, 9, 14, 0, 240, "jmp"]],
+  "expect": {"loc": "0x007", "wram": {"0x10000": "0x03", "0x011F": "0x01"}}
+}

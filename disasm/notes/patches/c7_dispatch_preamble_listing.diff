@@ -1,0 +1,145 @@
+diff --git a/src/audio.c b/src/audio.c
+index 7e27800..68a3789 100644
+--- a/src/audio.c
++++ b/src/audio.c
+@@ -1038,29 +1038,60 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
+   g_sndUnits = g_sndBytes = g_sndBlocks = 0; g_sndSpcCycles = 0; g_sndSettleCycles = 0; g_sndMovedBytes = 0;
+   int nsong = CtAudioSongCount(a);
+   if (songId < 0 || songId >= nsong) return -1;                 // $C7:01A5 CMP $C70AE9 / BCS -> drop
+-  ldRun(18 + I_LDA_DP + 30 + I_BR_NT + I_JSR + 250 + I_RTS + I_JSR + 276 + I_RTS + 2 * I_LDA_DP);   // $01A1-$01B3: SEP, LDA $01, CMP $C70AE9, BCS, JSR C7/0734 (the exception scan, 1 entry), JSR C7/0A39 (the record: 14 instructions), LDA/STA $05
++  sndMark("load", 0x01A1);
++  ldRun(I_SEP + I_LDA_DP + I_LONGX_ROM8 + I_BR_NT + I_JSR);   // 01A1 SEP / LDA $01 / CMP $C70AE9 / BCS / JSR C7/0734
+ 
+   // ---- $C7:0734: the song-exception scan, then bit2 for cmd >= $14 ------------------------
+   // Implemented as the SCAN, not as "inert": rom[$C7:0AD8] happens to start with $FF on this ROM so
+   // the list terminates immediately, but a port that hardcoded that would be encoding an accident.
+-  for (long p = 0x70AD8; p < a->romLen; p++) {
+-    if (a->rom[p] & 0x80) break;                                // bit7 = end of list
+-    if (a->rom[p] == (uint8_t)songId) { SM8(m, 0x1E00, M8(m, 0x1E00) | 4); break; }
++  // `PHP / SEP / LDA $00 / CMP #14 / BCS ->074D` -- a command >= $14 sets bit 2 without the scan; else `LDX #0000`, then per
++  // entry `LDA $C70AD8,X / BMI ->0753 / CMP $01 / BEQ ->074D / INX / BRA`; 074D `LDA #04 / ORA $00 / STA $00`; PLP / RTS.
++  ldRun(I_PHP + I_SEP + I_LDA_DP + I_IMM8);
++  if (cmd >= 0x14) { ldRun(I_BR_T + I_IMM8 + 2 * I_LDA_DP); SM8(m, 0x1E00, M8(m, 0x1E00) | 4); }
++  else {
++    ldRun(I_BR_NT + I_IMM16);
++    for (long p = 0x70AD8; p < a->romLen; p++) {
++      ldRun(I_LONGX_ROM8);
++      if (a->rom[p] & 0x80) { ldRun(I_BR_T); break; }           // bit7 = end of list
++      ldRun(I_BR_NT + I_LDA_DP);
++      if (a->rom[p] == (uint8_t)songId) { ldRun(I_BR_T + I_IMM8 + 2 * I_LDA_DP); SM8(m, 0x1E00, M8(m, 0x1E00) | 4); break; }
++      ldRun(I_BR_NT + I_IMPL + I_BR_T);
++    }
+   }
+-  if (cmd >= 0x14) SM8(m, 0x1E00, M8(m, 0x1E00) | 4);
++  ldRun(I_PLP + I_RTS + I_JSR);                                 // 0753 PLP / RTS, 01AE JSR C7/0A39
+ 
+   // ---- $C7:0A39: the record, the ECHO-DELAY switch, the port block, the token seed, the abort --
+   int edl = 0, scalar = 0;
+   CtAudioSongRecord(a, songId, &edl, &scalar);
+   SM8(m, 0x1E02, scalar);
+   SM8(m, 0x1E03, edl);
+-  ldRun(I_LDA_DP + I_BR_NT);                                    // $0A53 CMP $F0 / $0A55 BEQ
++  // 0A39 PHP / REP / LDA $01 / AND #007F / ASL / TAX / SEP / LDA $C7241E,X / STA $02 / LDA $C7241D,X / AND #0F / STA $03,
++  // 0A53 CMP $F0 / BEQ
++  ldRun(I_PHP + I_SEP + I_LDA_DP16 + I_IMM16 + 2 * I_IMPL + I_SEP + 2 * (I_LONGX_ROM8 + I_LDA_DP) + I_IMM8 + I_LDA_DP);
+   if (edl != (int)M8(m, 0x1EF0)) {                              // $0A53 CMP $F0 -- BEFORE the port block
+-    ldRun(I_JSR + 60 + 240 + I_RTS);                            // $0A57 JSR C7/09FD: the ESA rewrite, then the cull's slot walk (C7/0A12)
++    // 0A55 BEQ not taken / 0A57 JSR C7/09FD: PHP / SEP / STA $F0 / ASL x3 / EOR #FF / INC / CLC / ADC #F1 / STA $F2 /
++    // JSR C7/0A12 -- the cull: PHP / SEP / LDX #0000, per slot `LDA $63,X / BEQ ->0A37 / CMP $F2 / BCS ->0A29 / INX INX /
++    // CPX #0020 / BNE` (BRA ->0A37 after the last); 0A29 `LDA #00`, then per BYTE from X `STA $20,X / STA $40,X / STA $62,X
++    // / INX / CPX #0020 / BNE`; 0A37 PLP / RTS -- and 0A10 PLP / RTS.
++    ldRun(I_BR_NT + I_JSR + I_PHP + I_SEP + I_LDA_DP + 3 * I_IMPL + I_IMM8 + 2 * I_IMPL + I_IMM8 + I_LDA_DP + I_JSR);
+     SM8(m, 0x1EF0, edl);
+     SM8(m, 0x1EF2, (0xF1 - edl * 8) & 0xFF);                    // ESA page; buffer = [ESA*$100,$F100)
+-    sndCull(m);                                                 // $09FD -> $0A12
+-  }
++    ldRun(I_PHP + I_SEP + I_IMM16);
++    { unsigned esa = M8(m, 0x1EF2); int x = 0;
++      for (;;) {
++        ldRun(I_LDA_DPX);
++        uint8_t hi = M8(m, 0x1E63 + x);
++        if (!hi) { ldRun(I_BR_T); break; }
++        ldRun(I_BR_NT + I_LDA_DP);
++        if (hi >= esa) { ldRun(I_BR_T + I_IMM8 + (0x20 - x) * (3 * I_LDA_DPX + I_IMPL + I_IMM16 + I_BR_T) - I_BR_T + I_BR_NT); break; }
++        x += 2; ldRun(I_BR_NT + 2 * I_IMPL + I_IMM16);
++        if (x >= 0x20) { ldRun(I_BR_NT + I_BR_T); break; }
++        ldRun(I_BR_T);
++      } }
++    ldRun(2 * (I_PLP + I_RTS));                                 // 0A37 PLP / RTS, 0A10 PLP / RTS
++    sndCull(m);                                                 // $09FD -> $0A12 (the clears themselves)
++  } else ldRun(I_BR_T);                                         // 0A55 BEQ ->0A5A
++  sndMark("post", 0x0A5A);
+   for (int attempt = 0; ; attempt++) {                          // $0A5A, resent unboundedly on timeout
+     ldRun(I_LDA_DP + I_STA_BB); Wc(a, 3, M8(m, 0x1E03));        // 0A5A LDA $03 / 0A5C STA $2143
+     ldRun(I_LDA_DP + I_STA_BB); Wc(a, 2, M8(m, 0x1E02));        // 0A5F / 0A61
+@@ -1073,6 +1104,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
+     if (ok || attempt > (ld.active ? 255 : 16)) break;          // the ROM's loop is unbounded; the clocked one allows ~16 frames
+     ldRun(I_BR_T);                                              // 0A79 BRA ->0A5A
+   }
++  sndMark("ack", 0x0A7B);
+   ldRun(I_IMPL + I_IMM8 + I_LDA_DP + I_LDA_BB);                 // 0A7B INC A / AND #7F / STA $84 / 0A80 LDA $2141 (then BPL)
+   SM8(m, 0x1E84, (uint8_t)((M8(m, 0x1E00) + 1) & 0x7F));        // $0A7B THE TOKEN SEED
+   if (Rc(a, 1) & 0x80) {                                        // $0A80 the driver refused the song
+@@ -1088,9 +1120,11 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
+     SM8(m, 0x1E00, 0);                                          // $1E05 is deliberately NOT set
+     return 0;
+   }
++  ldRun(I_BR_T + I_PLP + I_RTS + 2 * I_LDA_DP);                 // 0A83 BPL ->0A96 / PLP / RTS, 01B1 LDA $01 / STA $05
+   SM8(m, 0x1E05, (unsigned)songId);                             // $01B3 -- BUSY, and the id register
+ 
+   // ---- $C7:01B5-$0375: the instrument-set DIFF ---------------------------------------------
++  sndMark("diff", 0x01B5);
+   // Charged instruction by instruction as the port walks the same tables the ROM does (the loops are
+   // the same shape): the resident search is what makes this phase cost -- measured 20 lines (~27k
+   // cycles) on the scene-8 pendant load (`--hookpc C701B5` line 17 -> `C7025A` line 37), up to 16 x 16
+@@ -1187,6 +1221,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
+   }
+ 
+   // ---- $C7:037B-$03C6: the DSP sample DIRECTORY, staged at $1F80 then pushed to ARAM $1E80 --------
++  sndMark("dir", 0x037B);
+   // `REP / LDA #1F80 / STA $12 / LDX #0000`; per song slot X: `LDA $1F00,X / BEQ ->03C8` (the first empty slot ENDS the
+   // build), the resident search `LDY #0000 / CMP $1E20,Y / BEQ / INY INY / CPY #0040 / BNE` (32 words: the ids AND the
+   // lengths after them), found -> 039E the slot's start `$1E60,Y` and start + the loop offset `$C70BA4 + (id-1)*2`; not
+@@ -1518,8 +1553,32 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
+     } }
+   if (!ldStartRule(a))                                 // (the rule: from where the SPC and the CPU's last wait stand)
+     ldStart(a->engineMode, a->postLine);               // the JSL begins: the clock runs until the RTL
+-  ldRun(ld.ifast ? 740 - 54 : 740);                    // JSL 54 (the caller's: free under the rule) + C7/0004 JMP 18 + the $0140 prologue 264 (PHB PHD PHP REP REP PHA PHX PHY SEP LDA PHA PLB) + $0150-$0173 dispatch 404 (LDX PHX PLD SEP ... JMP ($0AD9,X))
+   uint8_t cmd = mb[0x00];
++  // THE DISPATCH, by the command's path (the cartridge's --cputrace, enemy B9's exit: C7/0004 at v226 h1206, C7/0157 at
++  // v227 h222 -- 380 -- and C7/01A1 at h528 -- 686 for a song command): the JSL 54 (the caller's -- free under the rule),
++  // C7/0004 `JMP $0140` 18 and the prologue C7/0140-0155 362 (PHB PHD PHP REP REP PHA PHX PHY SEP LDA #00 PHA PLB LDX
++  // #1E00 PHX PLD SEP), then C7/0157 `LDA $05 / BPL ->0192` / `LDA $00 / BEQ ->0192` / `BMI ->017A` (>= $80: `JMP C7/061C`)
++  // / `CMP #10 / BCC ->0192` / `CMP #18 / BCS ->0176` / C7/0169-0173 the $0AD9 table (AND ASL XBA LDA PHA XBA PHA PLX
++  // `JMP ($0AD9,X)` 182) | C7/0176 `CMP #30 / BCS / JMP 061C` | 017D `CMP #40 / BCS / JMP 071D` | 0184 `CMP #70 / BNE /
++  // JMP 08E3` | 018B `CMP #71 / BNE / JMP 0755`.
++  { long d = (ld.ifast ? 0 : 54) + 18 + 362 + I_LDA_DP;
++    if (!(mb[0x05] & 0x80)) d += I_BR_T;
++    else { d += I_BR_NT + I_LDA_DP;
++      if (cmd == 0x00) d += I_BR_T;
++      else { d += I_BR_NT;
++        if (cmd & 0x80) d += I_BR_T + 18;
++        else { d += I_BR_NT + I_IMM8;
++          if (cmd < 0x10) d += I_BR_T;
++          else { d += I_BR_NT + I_IMM8;
++            if (cmd < 0x18) d += I_BR_NT + 2 * I_IMM8 + I_XBA + I_IMM8 + I_PHP + I_XBA + I_PHP + I_PLX16 + 36;
++            else { d += I_BR_T + I_IMM8;
++              if (cmd < 0x30) d += I_BR_NT + 18;
++              else { d += I_BR_T + I_IMM8;
++                if (cmd < 0x40) d += I_BR_NT + 18;
++                else { d += I_BR_T + I_IMM8;
++                  if (cmd == 0x70) d += I_BR_NT + 18;
++                  else d += I_BR_T + I_IMM8 + (cmd == 0x71 ? I_BR_NT + 18 : I_BR_T); } } } } } } }
++    ldRun(d); }
+   // The two early tests BRANCH TO THE COMMON EXIT, they do not return before it: C7/0157
+   // `LDA $05 / BPL ->0192` and C7/015B `LDA $00 / BEQ ->0192`, and $0192 is the `STZ $00`
+   // teardown. Ours used to `return 0` ahead of the clear at the bottom of this function, so a
+@@ -1549,7 +1608,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
+   else if (cmd == 0x71)        rc = -1;                // $018B -> $C7:0755:  NOT DERIVED
+   else                         rc = 0;                 // falls to $0192
+   mb[0x00] = 0x00;                                     // $C7:0192 — STZ $1E00 on every exit
+-  ldRun(296);                                          // $0192-$01A0: the epilogue's pulls and the RTL
++  ldRun(I_SEP + I_LDA_DP + 2 * I_SEP + 3 * I_PLX16 + I_PLP + I_PLX16 + I_PLP + 42);   // $0192 SEP / STZ $00 / REP / REP / PLY PLX PLA (16) / PLP / PLD / PLB / RTL = 304
+   ldCatch(a);                                          // the SPC is level with the CPU at the RTL
+   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
+   if (ldTrace() && ld.polls) { fprintf(stderr, "[ldtrace] polls per token:"); for (int k = 0; k <= 64; k++) if (ldHist[k]) fprintf(stderr, " %d:%ld", k, ldHist[k]);

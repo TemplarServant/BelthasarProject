@@ -1,0 +1,30 @@
+{
+  "name": "field_telepod_gate",
+  "from": "telepod_show",
+  "doc": "Stands in for saves/field_re/scene8_gate_cutscene.state (src/xlat/gwarp_fd.c's traces): gate_to_600's first three legs (Crono teleported by the left pod, Marle's pendant opens the Gate and she vanishes, storyline 0C), then Crono walks up, left, right and up onto the left pod (obj11): the frame before the touch registers ($011F 1 -> 0 on the next one). Under the cutscene's A mash its timeline is the reference's frame for frame (the window rises on its f249, the warp's trace translates to the same program); one stretch with the main loop parked ($0152 = 0) runs 39 frames here and 38 from the reference, so the double-buffered HDMA builder ($53 bit 0) is on the other parity when the window opens.",
+  "steps": [
+    [
+      "pad",
+      "(100:2,0:40)*8,10:30,40:40,10:20,0:60,(100:2,0:40)*10,40:24,10:30,0:60,10:2,0:4,100:2,0:60"
+    ],
+    [
+      "pad",
+      "(100:2,0:40)*20,80:25,10:40,0:60,(100:2,0:40)*30"
+    ],
+    [
+      "pad",
+      "20:48,40:16,20:16,40:48,20:16,20:2,0:4,100:2,0:60,(100:2,0:40)*20,(100:2,0:40)*25,(100:2,0:40)*25,(100:2,0:40)*15,(100:2,0:40)*20,(100:2,0:40)*20"
+    ],
+    [
+      "pad",
+      "10:31,40:64,80:25,10:19"
+    ]
+  ],
+  "expect": {
+    "loc": "0x008",
+    "wram": {
+      "0x10000": "0x0C",
+      "0x2981": "0x80"
+    }
+  }
+}

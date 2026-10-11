@@ -1,0 +1,6 @@
+{
+  "name": "attract_wipe_16e",
+  "doc": "The attract from power-on, 2 frames before the field's window wipe in 16E (C3:000E -> C3/01E4, the opening curtain; under the rule its 32 calls run f2734-f2765). src/xlat/wipe_c3.c traces 34 frames from here.",
+  "steps": [["power_on", 2732]],
+  "expect": {"loc": "0x16E"}
+}

@@ -1,0 +1,7 @@
+{
+  "name": "fxf_s5_bell_marle",
+  "from": "fxf_fair_marle",
+  "doc": "Stands in for saves/field_re/s5_bell_marle.state: from the fair's stairs (fxf_fair_marle) Crono walks down and back up (96 frames each way, so the party ring's head ends on the reference's 2F), down and west past the tents to Leene's Bell (a tools/walkto.py route), then in from the east onto the bell's talk tile (left 25, down 15) and stands 4 frames: Crono at the reference's exact position ($1802/$1882 = 0570/25EF) facing down, Marle following from the north-east as in the reference (3 px further on: the pad has been idle 4 frames, which the oracle's pad latch needs to equal a seed's).",
+  "steps": [["pad", "20:96,10:96,20:144,40:32,20:64,40:32,20:32,40:32,20:16,40:64,10:16,40:32,20:32,40:48,10:16,40:32,10:32,40:16,10:16,20:20,80:40,40:25,20:15,0:4"]],
+  "expect": {"loc": "0x005", "wram": {"0x2981": "0x01", "0x1802": "0x70", "0x1803": "0x05", "0x1882": "0xEF", "0x1883": "0x25", "0x01AB": "0x2F"}}
+}

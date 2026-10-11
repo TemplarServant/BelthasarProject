@@ -1,0 +1,22 @@
+{
+  "name": "fxf_s434_decision",
+  "from": "truce_market",
+  "doc": "Stands in for saves/field_re/s434_decision_lake.state, its own provenance from the recipe-made Truce market: the ROM's own loader (--teleport 434 8 8 0, method jmp, 240 frames) puts Crono in the Tent of Horrors (loc 1B2) at tile (8,8) facing up, one step below Bekkler's tile (storyline 3, 600 G). NOT YET USED: lockstep-decision-box-s434-clean diverges on it at f582 (obj10's 4-frame idle loop sits one frame earlier against obj11's dialogue end than in the capture, so its next box opens at f582 on the cartridge and f583 in the port), so saves/field_re/s434_decision* stay the capture for now.",
+  "steps": [
+    [
+      "teleport",
+      434,
+      8,
+      8,
+      0,
+      240,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1B2",
+    "wram": {
+      "0x10000": "0x03"
+    }
+  }
+}

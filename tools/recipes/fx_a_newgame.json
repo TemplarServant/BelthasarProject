@@ -1,0 +1,21 @@
+{
+  "name": "fx_a_newgame",
+  "doc": "atb_vram after the attract demo: power-on, the title and the whole attract demo once (its last fight, the ice battle in 087, f9361-f9946; the title again at f10853), then B at f11301 -- the new game's Battle Mode prompt. The demo's fights leave their battle records in WRAM ($29B0-$2A92, the layer shadows $2C56-$2C59) exactly where a player who watched it before starting finds them; the suite's captures from the owner's own game (GATO, Guardia Forest) carry them.",
+  "steps": [
+    [
+      "power_on",
+      1
+    ],
+    [
+      "pad",
+      "0:11300,1:6,0:180"
+    ]
+  ],
+  "expect": {
+    "loc": "0x000",
+    "wram": {
+      "0x2990": "0x84",
+      "0x29C4": "0xB3"
+    }
+  }
+}

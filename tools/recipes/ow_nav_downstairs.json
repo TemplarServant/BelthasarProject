@@ -1,0 +1,7 @@
+{
+  "name": "ow_nav_downstairs",
+  "from": "bedroom",
+  "doc": "Stands in for saves/ow_w0.state.chk, the checkpoint ct.exe --navworld saved 45 frames after it walked Crono down from his bedroom (loc 002 -> 001) on the way to the original overworld capture; the downstairs objects equal it byte for byte. Two things of the bedroom outlive the load and are matched: Crono WALKS (no B) down-right into the staircase, so the bedroom's obj1 walk animation is left at $1600 = 03 07 / $1680 = 01 03 (both survive into the overworld's dead object blocks); and he reaches the stairs on the reference's play clock ($0400-$0403), because the location load seeds the RNG cursor $01F8 from its frame byte (C0/0C70 `LDA $0400 / STA $F8`) and the downstairs cat (obj9) wanders on that cursor. Not matched (70 bytes), none of them read downstairs: $0108 (the exit's tile, 0F against 0E), objects 16-19's leftover $1001 bytes, a $0500 table and four OAM rows (+3 / +5), stack garbage and the sprite-frame buffers $7F:3AC6-3BFF.",
+  "steps": [["pad", "0:240,21:16,41:16,21:16,81:16,41:16,81:16,11:16,41:16,81:32,21:16,41:32,21:16,81:16,21:16,81:16,21:16,11:16,0:43,10:2,A0:90,0:12"]],
+  "expect": {"loc": "0x001", "wram": {"0x1F8": "0x3C", "0x1602": "0x03", "0x1603": "0x07", "0x1682": "0x01", "0x1683": "0x03"}}
+}

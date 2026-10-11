@@ -1,0 +1,7 @@
+{
+  "name": "fxf_loc07B_seated",
+  "from": "castle_600",
+  "doc": "Stands in for saves/field_re/loc07B_soldiers_seated.state (made by --teleport 123 12 16 1 with storyline 0F flags): the same teleport (method jmp, 300 frames) from Guardia Castle's entrance hall at storyline 0F (castle_600) -- loc 07B, the soldiers' mess, the two seated soldiers (obj17/obj18, `8E 12`).",
+  "steps": [["teleport", 123, 12, 16, 1, 300, "jmp"]],
+  "expect": {"loc": "0x07B", "wram": {"0x10000": "0x0F"}}
+}

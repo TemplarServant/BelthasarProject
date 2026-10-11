@@ -1,0 +1,9 @@
+{
+  "name": "home_allowance",
+  "from": "home_downstairs",
+  "doc": "From home_downstairs: Crono talks to Mom again for his 200 G allowance ($7F0140 bit1, gold 400 -> 600). Ends with Crono free beside Mom near the front door.",
+  "steps": [
+    ["pad", "21:30,0:4,41:6,0:4,100:2,0:40,(100:2,0:40)*4"]
+  ],
+  "expect": {"loc": "0x001", "wram": {"0x2C53": "0x58", "0x2C54": "0x02", "0x10140": "0x03"}}
+}

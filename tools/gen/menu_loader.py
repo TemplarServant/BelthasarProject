@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+r"""src/data/menu_loader.h -- everything the LOAD screen (menu mode 0, screen 0x0E, ROM handler C2/E60B) is drawn from.
+
+The screen only exists when the cart holds a save: the boot SRAM scan C2/8D6A writes $7F0061 = 2, and scene 0's boot
+script then reaches its second `C8 41` (0x00CE) instead of the mode-0 shell's new-game short circuit. So:
+
+  1. a battery image with a game the ROM ITSELF saved -- by default the cart RAM of recipe name_saved (the party of
+     com_jogo_salvo saves in slot 1 on the 600 A.D. overworld), the last 8192 bytes of its CTLS payload;
+  2. power-on with that battery (CT_ORACLE_SRAM) for 1 frame (before C0/0057's `LDA #09 / JSL $C2:8004` runs the scan);
+  3. run to the title, press START, let the load screen build, dump VRAM + WRAM + CGRAM.
+
+Emitted:
+  * ctMenuChromeLoaderTM   the BG2 tilemap, ALL 32x64 of it (word 0x6000 + the second screen at
+                           +0x400 words), because this screen is scrolled per scanline -- see below
+  * ctMenuLoaderBand       the BG2VOFS ($2110) HDMA bands, read out of $7E:9080
+  * ctMenuChromeLoaderPal  this screen's own CGRAM rows 0-7 -- it does NOT share the X-menu's
+  * ctLoaderChapThr/Chapter, ctLoaderEraOf/Era   the two ROM string tables the rows show
+
+WHAT OF THE SAVE REACHES THE FILE (measured: this capture against one with saves/field_re/colsave3.srm, slot 1 saved
+by Crono alone in window colour 3): (a) the selected slot's WINDOW COLOUR -- the slot-1 bar's tiles in the tilemap
+(0x700.. for colour 0, 0x73C.. for colour 3; src/menu.c, $0D79) and CGRAM row 1 (entries 8-15 of ctMenuChromeLoaderPal
+row 1); (b) its PARTY -- the summary window shows the slot's three members, each face with its own sixteen colours
+($FF:CC84 + charId * 0x20) in CGRAM rows 4/5/6 (ctMenuChromeLoaderPal rows 4-6). So the file wants slot 1 saved in
+colour 0 by Crono, Lucca and Frog (ids 0, 2, 4) -- the party of the owner's save the header was first made from
+(saves/ct_real_save.srm, lifted out of the owner's saves/com_jogo_salvo.state), which recipe name_saved reproduces.
+Nothing else of the save (names, levels, gold, time, place, the chapter title) is in the file: the rows' text is drawn
+by the engine from the ROM tables emitted below.
+
+The screen reuses the SAME chrome TILES as every other menu screen (0x300-0x313 slot buttons + 0x3DC-0x3EF window
+9-slice) -- the generator REFUSES to emit if a tile outside that set appears.
+
+    python tools/gen/menu_loader.py [--srm battery.srm | --state S] [--out src/data/menu_loader.h]
+
+Port of tools/gen_menuloader.py (which spliced saves/ct_real_save.srm into a 1-frame boot state; the same capture).
+"""
+import argparse, os, subprocess, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ctgen import CT, ROM, ROOT, recipe, peek, scratch  # noqa: E402
+
+ap = argparse.ArgumentParser()
+ap.add_argument('--srm', help='a battery image (8192 bytes), e.g. saves/ct_real_save.srm')
+ap.add_argument('--state', help='a state whose cart RAM holds the save (default: recipe name_saved)')
+ap.add_argument('--out', default='src/data/menu_loader.h')
+ap.add_argument('--plain', action='store_true', help='run the title and the load screen without the rule')
+A = ap.parse_args()
+RULE = not A.plain
+OUT = A.out
+SRM = scratch('nm_loader.srm')
+if A.srm:
+    srm = open(A.srm, 'rb').read()
+else:
+    d = open(A.state or recipe('name_saved'), 'rb').read()
+    srm = d[-8192:]                                # cart_handleState is the CTLS payload's last block: the battery
+assert len(srm) == 8192, len(srm)
+if (srm[0x1FF8] | srm[0x1FF9] << 8) != 0xE41B:
+    sys.exit('menu_loader: the battery holds no game in slot 1 (signature %02X%02X, expected E41B)'
+             % (srm[0x1FF9], srm[0x1FF8]))
+open(SRM, 'wb').write(srm)
+BOOT = scratch('nm_loader_boot')
+env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_ORACLE_SRAM=SRM,
+           PEEK_SAVE=BOOT + '.state')
+if os.path.exists(BOOT + '.state'):
+    os.remove(BOOT + '.state')
+subprocess.run([CT, ROM, '--fb', BOOT + '.raw', '--frames', '1'], cwd=ROOT, env=env, capture_output=True)
+if not os.path.exists(BOOT + '.state'):
+    sys.exit('menu_loader: the power-on wrote no state')
+
+# 1600f = the title screen settled; START (LakeSnes serial bit 0x08) then 150f for the build.
+TMP = peek(BOOT + '.state', scratch('nm_loader'), '0:1600,8:6,0:150', rule=RULE)
+vram = open(TMP + '.raw.vram', 'rb').read()
+oam  = open(TMP + '.raw.oam', 'rb').read()      # --peek's .oam dump is OAM + highOAM + CGRAM
+wram = open(TMP + '.raw.wram', 'rb').read()
+
+
+def word(i):
+    o = 0x6000 * 2 + i * 2
+    return vram[o] | (vram[o + 1] << 8)
+
+
+# ⭐ THE MAP IS 32x64 AND THE SCREEN IS SCROLLED PER SCANLINE.  --ppuregs reports BG2 higher=1 (two
+# 32x32 screens, the second at map base + 0x400 WORDS) and vS=503 -- but 503 is only what the
+# register happens to hold at the frame boundary.  --hdma shows the vertical scroll is HDMA'd in
+# three bands, and ⚠ $2110 is BG2VOFS ($2112 is BG3VOFS; getting that pairing wrong is what made the
+# first bake miss the screen's top row entirely).  So the line a scanline shows is
+# (y + VOFS) & 0x1FF, and the SAME three button blocks are shown FOUR times.
+cells = [word(i) for i in range(32 * 64)]
+bad = sorted({c & 0x3FF for c in cells} - ({0} | set(range(0x300, 0x3F0))))
+if bad:
+    sys.exit("REFUSING: load screen uses chrome tiles outside the baked 0x300..0x3EF set: %s"
+             % ' '.join('%03X' % t for t in bad))
+
+# the BG2VOFS HDMA table, straight out of WRAM: [count][lo][hi] per entry, 0 terminates
+ent, o = [], 0x9080
+while wram[o]:
+    ent.append((wram[o], wram[o + 1] | (wram[o + 2] << 8)))
+    o += 3
+if [c for c, _ in ent] != [40, 96, 80]:
+    sys.exit("REFUSING: BG2VOFS HDMA line counts are %s, not the 40/96/80 this bake was derived "
+             "against -- re-derive the bands before emitting." % [c for c, _ in ent])
+
+with open(OUT, 'w', encoding='utf-8') as f:
+    f.write('// menu_loader.h - the LOAD screen (menu mode 0, screen 0x0E, ROM handler C2/E60B;\n'
+            '// builder C2/E7C3).  GENERATED by tools/gen_menuloader.py from the oracle\'s own VRAM,\n'
+            '// CGRAM and HDMA tables on a boot whose cart carries saves/ct_real_save.srm -- a game the\n'
+            '// ROM itself saved.  Same chrome TILE SET as every other menu screen (the generator\n'
+            '// refuses to emit if a tile outside 0x300..0x3EF appears) but its OWN CGRAM: the slot\n'
+            '// buttons carry tilemap palettes 1/2/3, and those rows differ from the X-menu\'s.\n'
+            '//\n'
+            '// ⭐ AND ITS OWN PER-SCANLINE SCROLL.  This screen is NOT a flat tilemap: BG2VOFS ($2110)\n'
+            '// is HDMA\'d in three bands, so the same three button blocks in the map are shown FOUR\n'
+            '// times -- band 1 puts the SECOND screen\'s rows 1-4 up as the "New Game" bar, band 2 puts\n'
+            '// first-screen rows 2-5 / 6-9 / 10-13 underneath it as the three save slots, and band 3\n'
+            '// puts rows 16-25 (the two bottom windows) below those.  Replaying the plane flat gives\n'
+            '// three bars and no New Game row; see CtMenuChromeLoader.\n'
+            '#ifndef CT_MENU_LOADER_H\n#define CT_MENU_LOADER_H\n#include <stdint.h>\n\n'
+            '#define CT_MENU_LOADER_TMH 64\n'
+            'static const uint16_t ctMenuChromeLoaderTM[32*CT_MENU_LOADER_TMH] = {\n')
+    for r in range(64):
+        f.write("  " + " ".join("0x%04X," % cells[r * 32 + c] for c in range(32)) + "\n")
+    f.write("};\n\n")
+
+    f.write("// The BG2VOFS ($2110) HDMA bands, read out of the oracle's own table at $7E:9080:\n"
+            "//   %s\n" % " | ".join("%d lines @ 0x%04X" % e for e in ent) +
+            "// The map line a scanline shows is (y + vofs) & 0x1FF over the 32x64 map above.\n"
+            "#define CT_MENU_LOADER_NBAND %d\n" % len(ent) +
+            "static const struct { short y0, y1; unsigned short vofs; }\n"
+            "ctMenuLoaderBand[CT_MENU_LOADER_NBAND] = {\n")
+    y0 = 0
+    for c, v in ent:
+        f.write("  { %3d, %3d, 0x%04X },\n" % (y0, y0 + c - 1, v))
+        y0 += c
+    f.write("};\n\n")
+
+    # ---- the screen's own BG palettes ------------------------------------------------------------
+    cg = oam[1056:1568]
+    conv = lambda v: (v << 3) | (v >> 2)
+    f.write("static const uint8_t ctMenuChromeLoaderPal[8][16][3] = {\n")
+    for row in range(8):
+        cells8 = []
+        for i in range(16):
+            o = (row * 16 + i) * 2
+            w = cg[o] | (cg[o + 1] << 8)
+            cells8.append("{%d,%d,%d}" % (conv(w & 31), conv((w >> 5) & 31), conv((w >> 10) & 31)))
+        f.write("  {" + ",".join(cells8) + "},\n")
+    f.write("};\n\n")
+
+    rom = open(ROM, 'rb').read()
+    # ---- the two 16x16 SPRITE-ISH bits this screen draws that are not font ---------------------
+    # (1) THE PARTY FACE ICONS, BG1 tiles 0x1E0-0x1E3 / 0x1E8-0x1EB / 0x1F0-0x1F3 at cols 15-16 of the
+    # party window's three rows.  They are NOT generated: the four 4bpp tiles of each are stored RAW
+    # in the ROM and the party's three were located by searching this capture's VRAM for them --
+    # Crono (id 0) at $FF:E55C, Lucca (id 2) at $FF:E65C, Frog (id 4) at $FF:E75C, i.e.
+    #     $FF:E55C + charId * 0x80,  four tiles in reading order (tl, tr, bl, br).
+    # Decoding all eight slots of that table renders seven clean mugshots (Crono, Marle, Lucca, Robo,
+    # Frog, Ayla, Magus) and garbage at index 7, so the table is exactly seven entries long.
+    # (2) THE BIG SLOT NUMERALS, BG3 tiles 001/002+011/012, 003/004+013/014, 005/006+015/016 -- these
+    # are NOT in the ROM raw (the ROM builds them), so they are baked from this screen's own BG3 CHR.
+    # Both carry tilemap palette 4; resolved to RGB here through this screen's CGRAM so the engine
+    # blits them directly (they still take the row's colour math, which the caller applies).
+    def rgb4(prow, idx):                       # 4bpp: 16 colours per palette row
+        o = (prow * 16 + idx) * 2
+        c = cg[o] | (cg[o + 1] << 8)
+        return (conv(c & 31), conv((c >> 5) & 31), conv((c >> 10) & 31))
+
+    def rgb2(prow, idx):                       # 2bpp (BG3): 4 colours per palette row
+        o = (prow * 4 + idx) * 2
+        c = cg[o] | (cg[o + 1] << 8)
+        return (conv(c & 31), conv((c >> 5) & 31), conv((c >> 10) & 31))
+
+    # ⭐ EACH SLOT'S ICON CARRIES ITS OWN CGRAM ROW -- the three party rows' tilemap cells read
+    # pal 4 / 5 / 6, i.e. the palette belongs to the CHARACTER, not to the screen. Located the same
+    # way as the tiles, by searching the ROM for this capture's CGRAM rows 4/5/6:
+    #     Crono id 0 -> $FF:CC84,  Lucca id 2 -> $FF:CCC4,  Frog id 4 -> $FF:CD04
+    # = $FF:CC84 + charId * 0x20, sixteen BGR555 entries. Resolving all seven through row 4 (the
+    # first thing that looks right, because Crono IS row 4) renders the right FACES in wrong colours.
+    ICON_BASE, ICON_PAL = 0x3FE55C, 0x3FCC84
+    f.write("// The seven party FACE ICONS the summary window draws (BG1 tiles 0x1E0.. at cols 15-16).\n"
+            "// Four 4bpp tiles each, stored RAW in the ROM at $FF:E55C + charId * 0x80 in reading order\n"
+            "// (tl, tr, bl, br), with a SIXTEEN-COLOUR PALETTE OF ITS OWN at $FF:CC84 + charId * 0x20 --\n"
+            "// the three party rows' tilemap cells carry CGRAM rows 4/5/6, one per character. Both were\n"
+            "// located by searching the ROM for this screen's own VRAM tiles and CGRAM rows; index 7 of\n"
+            "// the tile table is garbage, so it holds exactly the seven playable characters.\n"
+            "// Index 0 is transparent and is emitted as the sentinel below.\n"
+            "#define CT_LOADER_ICON_TRANSPARENT 0x01000000u\n"
+            "static const uint32_t ctLoaderIcon[7][16][16] = {\n")
+    for cid in range(7):
+        f.write("  { /* charId %d */\n" % cid)
+        ipal = []
+        for i in range(16):
+            o = ICON_PAL + cid * 0x20 + i * 2
+            c = rom[o] | (rom[o + 1] << 8)
+            ipal.append((conv(c & 31), conv((c >> 5) & 31), conv((c >> 10) & 31)))
+        px = [[0] * 16 for _ in range(16)]
+        for t in range(4):
+            b = ICON_BASE + cid * 0x80 + t * 32
+            ox, oy = (t % 2) * 8, (t // 2) * 8
+            for r in range(8):
+                p0, p1 = rom[b + r * 2], rom[b + r * 2 + 1]
+                p2, p3 = rom[b + 16 + r * 2], rom[b + 16 + r * 2 + 1]
+                for x in range(8):
+                    bit = 7 - x
+                    px[oy + r][ox + x] = (((p0 >> bit) & 1) | (((p1 >> bit) & 1) << 1) |
+                                          (((p2 >> bit) & 1) << 2) | (((p3 >> bit) & 1) << 3))
+        for r in range(16):
+            cells16 = []
+            for x in range(16):
+                v = px[r][x]
+                cells16.append("0x01000000u" if v == 0 else "0x%02X%02X%02Xu" % ipal[v])
+            f.write("    {" + ",".join(cells16) + "},\n")
+        f.write("  },\n")
+    f.write("};\n\n")
+
+    # The VWF strings (the slot descriptions and the era) are BG3 cells with tilemap palette 4, and
+    # BG3 is 2bpp -- four colours at CGRAM 16..19. Emitted so the engine draws them in the ROM's tone.
+    f.write("// The tone the BG3 VWF strings are drawn in: this screen's CGRAM row 4, 2bpp.\n"
+            "static const uint8_t ctLoaderVwfTone[4][3] = {\n")
+    for i2 in range(4):
+        f.write("  {%d,%d,%d},\n" % rgb2(4, i2))
+    f.write("};\n\n")
+
+    NUMT = [(0x001, 0x002, 0x011, 0x012), (0x003, 0x004, 0x013, 0x014), (0x005, 0x006, 0x015, 0x016)]
+    f.write("// The three BIG SLOT NUMERALS (BG3 tiles 001/002+011/012, 003/004+013/014,\n"
+            "// 005/006+015/016 at cols 3-4 of each slot row).  The ROM BUILDS these -- they are not in\n"
+            "// the ROM raw -- so they are baked from this screen's own BG3 CHR (word 0x7000, 2bpp),\n"
+            "// resolved through CGRAM row 4, the palette their tilemap cells carry.\n"
+            "static const uint32_t ctLoaderNumeral[3][16][16] = {\n")
+    for k, tl in enumerate(NUMT):
+        f.write("  { /* slot %d */\n" % (k + 1))
+        px = [[0] * 16 for _ in range(16)]
+        for t, tn in enumerate(tl):
+            ox, oy = (t % 2) * 8, (t // 2) * 8
+            base = (0x7000 + tn * 8) * 2
+            for r in range(8):
+                p0, p1 = vram[base + r * 2], vram[base + r * 2 + 1]
+                for x in range(8):
+                    bit = 7 - x
+                    px[oy + r][ox + x] = ((p0 >> bit) & 1) | (((p1 >> bit) & 1) << 1)
+        for r in range(16):
+            cells16 = []
+            for x in range(16):
+                v = px[r][x]
+                cells16.append("0x01000000u" if v == 0 else "0x%02X%02X%02Xu" % rgb2(4, v))
+            f.write("    {" + ",".join(cells16) + "},\n")
+        f.write("  },\n")
+    f.write("};\n\n")
+
+    # ---- the two ROM string tables the screen shows, baked (the menu module is ROM-free) ----------
+
+    def cstr(ptr, bank=0x3F0000):
+        o, s = bank | ptr, []
+        while rom[o]:
+            s.append(rom[o]); o += 1
+        return bytes(s)
+
+    # assets/text.py parse_character, verbatim for the printable subset (the engine font has no
+    # glyph for the music note / heart / infinity, and neither of these two tables uses them).
+    PUNCT = {0xDE: '!', 0xDF: '?', 0xE0: '/', 0xE1: '"', 0xE2: '"', 0xE3: ':', 0xE4: '&',
+             0xE5: '(', 0xE6: ')', 0xE7: "'", 0xE8: '.', 0xE9: ',', 0xEA: '=', 0xEB: '-',
+             0xEC: '+', 0xED: '%', 0xEF: ' ', 0xF3: '#'}
+
+    def mapped(b):
+        out = []
+        for c in b:
+            if   0xA0 <= c <= 0xB9: out.append(chr(ord('A') + c - 0xA0))
+            elif 0xBA <= c <= 0xD3: out.append(chr(ord('a') + c - 0xBA))
+            elif 0xD4 <= c <= 0xDD: out.append(chr(ord('0') + c - 0xD4))
+            else:                   out.append(PUNCT.get(c, ' '))
+        # ⭐ VERBATIM, leading spaces included. The ROM does NOT centre these strings -- the pen
+        # starts at the block's left edge and the string's OWN leading spaces position it:
+        #   '  The Queen is Gone'  2 spaces * 4px -> ink at x8   (measured 8)
+        #   '          No data'   10 spaces * 4px -> ink at x40  (measured 40)
+        #   'Middle Ages'          none            -> ink at x0   (measured 0)
+        # Stripping them and centring on a tile fits those three points by accident and is wrong.
+        return ''.join(out).rstrip()
+
+    thr = rom[0x3FD024:0x3FD024 + 26]                       # C2/D27F  CMP $FFD024,X
+    f.write("// C2/D266-D288, the SAVE-SLOT CHAPTER TITLE.  The slot's storyline byte (slot+0x0603 =\n"
+            "// the first byte of record 4, $7F:0000) is walked DOWN the 26-entry threshold table at\n"
+            "// $FF:D024 (`LDX #1A / DEX / CMP $FFD024,X / BCC`), and the surviving X indexes the\n"
+            "// 27-pointer string table at $FF:D03E (C2/D2A0 `LDX #D03E / STX $020D`; index 26 = the\n"
+            "// EMPTY-slot arm C2/D28D `LDA #1A`).\n"
+            "#define CT_LOADER_CHAPTERS 27\n"
+            "static const uint8_t ctLoaderChapThr[26] = { %s };\n"
+            % ', '.join('0x%02X' % b for b in thr))
+    f.write("static const char* const ctLoaderChapter[CT_LOADER_CHAPTERS] = {\n")
+    for k in range(27):
+        p = rom[0x3FD03E + 2 * k] | (rom[0x3FD03E + 2 * k + 1] << 8)
+        f.write('  "%s",\n' % mapped(cstr(p)).replace('"', '\\"'))
+    f.write("};\n\n")
+
+    # the ERA name: C2/D3AD `LDA $98C2 / LSR A / TAX / LDA $FFD296,X / BCC +4 / LSR x4 / AND #0F`
+    era_nib = bytearray(512)
+    for loc in range(512):
+        b = rom[0x3FD296 + (loc >> 1)]
+        era_nib[loc] = (b >> 4) if (loc & 1) else (b & 0x0F)
+    f.write("// C2/D3AD-D3DC, the ERA name.  `LDA $98C2 / LSR A / TAX / LDA $FFD296,X` then, when the\n"
+            "// location id was ODD (the carry the LSR left), four more LSRs -- i.e. ONE NIBBLE PER\n"
+            "// LOCATION in the table at $FF:D296, low nibble first -- and the nibble indexes the\n"
+            "// 8-pointer string table at $FF:D396 (C2/D3D4 `LDX #D396 / STX $020D`).\n"
+            "static const uint8_t ctLoaderEraOf[512] = {\n")
+    for r in range(0, 512, 16):
+        f.write("  " + " ".join("%d," % era_nib[r + c] for c in range(16)) + "\n")
+    f.write("};\n")
+    f.write("static const char* const ctLoaderEra[8] = {\n")
+    for k in range(8):
+        p = rom[0x3FD396 + 2 * k] | (rom[0x3FD396 + 2 * k + 1] << 8)
+        f.write('  "%s",\n' % mapped(cstr(p)).replace('"', '\\"'))
+    f.write("};\n#endif\n")
+print("wrote", OUT, "(%d map rows, %d bands)" % (64, len(ent)))

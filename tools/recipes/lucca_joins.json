@@ -1,0 +1,11 @@
+{
+  "name": "lucca_joins",
+  "from": "queen_vanishes",
+  "doc": "Crono leaves the Queen's chamber, back through the hall and the east tower down to the castle's main floor (loc 078); Lucca arrives ('Crono!'), the explanation scene (loc 06C and back) and she joins ($2980 = 00 02 80 01, storyline 10 -> 12). Crono free at the east tower's door in loc 078.",
+  "steps": [
+    ["pad", "21:40,81:32,21:100,0:30,41:16,21:110,0:10"],
+    ["pad", "11:16,81:80,11:96,81:16,11:32,41:16,11:16,0:60,41:20,0:60,41:20,0:60,41:20,0:100"],
+    ["pad", "21:30,0:60,((100:2,0:40)*10)*11"]
+  ],
+  "expect": {"loc": "0x078", "wram": {"0x10000": "0x12", "0x2981": "0x02"}}
+}

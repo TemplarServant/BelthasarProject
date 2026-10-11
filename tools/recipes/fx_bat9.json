@@ -1,0 +1,10 @@
+{
+  "name": "fx_bat9",
+  "from": "cathedral_hall",
+  "doc": "Stands in for saves/battle_re/bat9_lake.state (the Diablos fight in the Cathedral's inner hall, loc 082, Crono's command menu up): bat9_lake's walk into the ambush, from cathedral_hall with the party the owner's game brought there poked in first -- the sheet bytes that game's own fights left (Crono 34/83 HP, 2 MP and his experience bytes, Lucca 48/75 HP, Marle's HP), the bag (Pendant, Heal), 925 G, the persistent RNG cursor $29AD = 86 and the play clock (8:42:12, so that it reads the capture's 8:42:18 here). A recipe cannot replay that history; everything else is played.",
+  "steps": [
+    ["poke", "2603=22,2604=00,2607=02,2608=00,2613=3A,2616=0F,262B=02,262C=00,262D=4E,2663=2A,26A3=30,26A4=00,2401=00,2402=C6,2501=00,2502=01,2C53=9D,2C54=03,29AD=86,0400=37,0401=0C,0402=02,0403=04,0404=08,0405=00"],
+    ["pad", "10:16,41:60,0:20,0:300"]
+  ],
+  "expect": {"loc": "0x082", "wram": {"0x2982": "0x04", "0x29AD": "0x86", "0x2C53": "0x9D", "0x0400": "0x2C", "0x0401": "0x12"}}
+}

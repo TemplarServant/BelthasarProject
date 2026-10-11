@@ -1,0 +1,12 @@
+{
+  "name": "gate_to_600",
+  "from": "telepod_show",
+  "doc": "The Telepod: Crono talks to Lucca, steps on the left pod and is teleported; Marle tries it, her pendant opens the Gate and she vanishes (storyline 0A -> 0C); Crono steps on the left pod again, Lucca sends him through the Gate: 600 A.D., Truce Canyon (loc 071), Crono alone by the Gate.",
+  "steps": [
+    ["pad", "(100:2,0:40)*8,10:30,40:40,10:20,0:60,(100:2,0:40)*10,40:24,10:30,0:60,10:2,0:4,100:2,0:60"],
+    ["pad", "(100:2,0:40)*20,80:25,10:40,0:60,(100:2,0:40)*30"],
+    ["pad", "20:48,40:16,20:16,40:48,20:16,20:2,0:4,100:2,0:60,(100:2,0:40)*20,(100:2,0:40)*25,(100:2,0:40)*25,(100:2,0:40)*15,(100:2,0:40)*20,(100:2,0:40)*20"],
+    ["pad", "10:31,40:64,80:25,10:40,0:60,(100:2,0:40)*20,(100:2,0:40)*30,(100:2,0:40)*30"]
+  ],
+  "expect": {"loc": "0x071", "wram": {"0x10000": "0x0C"}}
+}

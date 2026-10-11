@@ -1,0 +1,11 @@
+{
+  "name": "fair_entrance",
+  "from": "home_downstairs",
+  "doc": "Crono leaves his house without the allowance (400 G, as the GATO references have), walks north on the 1000 A.D. overworld to Leene Square and enters the Millennial Fair (loc 005, its south entrance).",
+  "steps": [
+    ["pad", "21:48,41:16,21:16,81:16,0:200"],
+    ["pad", "10:16,40:16,10:16,40:16,10:32,80:16,10:16"],
+    ["pad", "100:2,0:150"]
+  ],
+  "expect": {"loc": "0x005", "wram": {"0x2C53": "0x90", "0x2C54": "0x01"}}
+}

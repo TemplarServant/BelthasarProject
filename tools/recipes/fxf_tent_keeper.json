@@ -1,0 +1,7 @@
+{
+  "name": "fxf_tent_keeper",
+  "from": "marle_joins",
+  "doc": "Stands in for saves/field_re/tent_keeper_lake.state: the ROM's own loader (--teleport 5 41 31 0, method jmp) from the upper plaza with Marle following (marle_joins) puts Crono and Marle on the fair's tile (41,31) facing up, below the Tent of Horrors' keeper -- the reference's position, its stacked party and its $0105 = B7 (it came from the plaza the same way).",
+  "steps": [["teleport", 5, 41, 31, 0, 200, "jmp"]],
+  "expect": {"loc": "0x005", "wram": {"0x2981": "0x01", "0x1802": "0x80", "0x1803": "0x29", "0x1882": "0xFF", "0x1883": "0x1F"}}
+}

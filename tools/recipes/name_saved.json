@@ -1,0 +1,7 @@
+{
+  "name": "name_saved",
+  "from": "com_jogo_salvo",
+  "doc": "Stands in for saves/ct_real_save.srm (the owner's battery, lifted out of saves/com_jogo_salvo.state): on the 600 A.D. overworld the party (Crono, Lucca, Frog) opens the X menu, walks the ribbon right five times to Save (the sixth icon), and saves in the empty slot 1 ('The Queen is Gone', Middle Ages); the cart RAM (the CTLS payload's last 8192 bytes) then holds slot 1 with signature E41B. Window colour 0. Slots 2-3 are erased with 00 here and FF in the owner's cart, which nothing generated from it reads.",
+  "steps": [["pad", "200:2,0:60,(80:2,0:10)*5,0:10,100:2,0:60,100:2,0:120"]],
+  "expect": {"loc": "0x1F1"}
+}

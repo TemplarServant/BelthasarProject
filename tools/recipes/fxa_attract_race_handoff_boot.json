@@ -1,0 +1,7 @@
+{
+  "name": "fxa_attract_race_handoff_boot",
+  "from": "fxa_attract_cena_inicial",
+  "doc": "Stands in for saves/attract_race_handoff_boot8300.state (made in real time from power-on: loc 1B1, a few frames before the first race handoff): the attract under the rule 2 frames before the field hands the motorcycle race ($0384 = 60) to C3:0000. Run in real time from here (ct.exe --xlatcmp's oracle), the cartridge reaches C3:0000 at v=239 h=590 cyc%8=6, the hardware phase the port's stage opener CtXlatStageOpen models (the earlier frames of this leg arrive at h=596-622).",
+  "steps": [["pad", "0:6022"]],
+  "expect": {"loc": "0x1B1", "wram": {"0x0384": "0x61"}}
+}

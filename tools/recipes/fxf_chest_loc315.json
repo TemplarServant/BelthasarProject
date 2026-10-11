@@ -1,0 +1,7 @@
+{
+  "name": "fxf_chest_loc315",
+  "from": "queen_vanishes",
+  "doc": "Stands in for saves/field_re/chest_loc315_below.lakewram (storyline 10): the ROM's own loader (--teleport 315 2 8 0, method jmp, 240 frames) from the Queen's chamber after Marle vanished (queen_vanishes) -- loc 13B, Crono at tile (2,8) facing up, below the MegaElixir chest at (2,7).",
+  "steps": [["teleport", 315, 2, 8, 0, 240, "jmp"]],
+  "expect": {"loc": "0x13B", "wram": {"0x10000": "0x10"}}
+}

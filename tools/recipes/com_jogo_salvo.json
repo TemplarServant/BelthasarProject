@@ -1,0 +1,11 @@
+{
+  "name": "com_jogo_salvo",
+  "from": "grupo_3_mapa",
+  "doc": "Stands in for saves/com_jogo_salvo.state (and the place of saves/eq_spare.state): the party (Crono, Lucca, Frog) walks back out of the Cathedral (loc 082 -> 081 -> the south door) onto the 600 A.D. overworld (loc 1F1, $0105 = 081) and stops at the reference's spot (232,336). Storyline 15. eq_spare's inventory (02 03 05 5B 5C 7C 95 96 at the same 1105 G) is not reproduced: no purchase path gives it.",
+  "steps": [
+    ["pad", "20:32,80:112,20:16,10:16,0:90"],
+    ["pad", "20:368,40:16,20:16,10:16,0:120"],
+    ["pad", "20:64,80:32,0:30"]
+  ],
+  "expect": {"loc": "0x1F1", "wram": {"0x0283": "0xE8", "0x0285": "0x50", "0x0286": "0x01", "0x0105": "0x81", "0x2982": "0x04"}}
+}

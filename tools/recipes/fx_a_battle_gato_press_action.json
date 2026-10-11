@@ -1,0 +1,23 @@
+{
+  "name": "fx_a_battle_gato_press_action",
+  "from": "fx_a_battle_gato_front",
+  "doc": "battle_gato_press_action's steps in the game started after the attract demo (fx_a_newgame): gato_press_action for the battle bakes: Crono talks to GATO and his song runs to its last box, as gato_press_action, from battle_gato_front (Marle at (137,164), the overworld's sparkle in OBJ tiles 0x05/0x15). The last wait is 99 frames so that one more A (`100:8,...`) boots the battle on the reference's frames: the battle loop's first iterations ($0027) at f376, f379, f382, f385, f387 from this state, as from gato_press_action.state (the battle's NMI-off boot crosses frames by its phase).",
+  "steps": [
+    [
+      "pad",
+      "100:20,0:40,0:99"
+    ]
+  ],
+  "expect": {
+    "loc": "0x006",
+    "wram": {
+      "0x2980": "0x00",
+      "0x2981": "0x01",
+      "0x2990": "0xC4",
+      "0x1802": "0x60",
+      "0x1803": "0x08",
+      "0x1804": "0x90",
+      "0x1805": "0x08"
+    }
+  }
+}

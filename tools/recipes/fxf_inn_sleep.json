@@ -1,0 +1,7 @@
+{
+  "name": "fxf_inn_sleep",
+  "from": "gato_front",
+  "doc": "Stands in for saves/field_re/inn_sleep_10f.state, by its own provenance from a recipe-made loc-6 state with Marle (gato_front, storyline 8): --teleport 12 51 21 0 (120 frames: the Truce inn's counter, loc 00C), the keeper's five stores poked as his script makes them ($7F0152 bit 0, the way back $7F0166/68/6A/6C = loc 00C, tile 38,08, facing 1), then his E0's destination --teleport 271 8 8 1, 34 frames (the reference took 40 from its own base; 34 puts obj0 at the same point of its count: the way back, the beds and the wake walk on the reference's frames).",
+  "steps": [["teleport", 12, 51, 21, 0, 120, "jmp"], ["poke", "7F0152=01,7F0166=0C,7F0168=38,7F016A=08,7F016C=01"], ["teleport", 271, 8, 8, 1, 34, "jmp"]],
+  "expect": {"loc": "0x10F", "wram": {"0x2981": "0x01", "0x10152": "0x01"}}
+}

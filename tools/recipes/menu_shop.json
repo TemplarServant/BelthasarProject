@@ -1,0 +1,10 @@
+{
+  "name": "menu_shop",
+  "from": "marle_joins",
+  "doc": "Stands in for saves/field_re/shop90_lake.state: with Marle following, Crono goes down to the Millennial Fair (loc 005), past the fountain to the left tent, and stands under the fair merchant (obj 16, activate C8 90 = shop $10) facing up, at the reference's spot (312,527). 400 G, storyline 8, party 00 01. A opens the shop (screen $0C).",
+  "steps": [
+    ["pad", "41:16,21:64,11:16,0:80,21:40,41:40,21:40,0:30"],
+    ["pad", "41:35,20:11,10:2,0:20"]
+  ],
+  "expect": {"loc": "0x005", "wram": {"0x1802": "0x80", "0x1803": "0x13", "0x1882": "0xFF", "0x1883": "0x20", "0x2981": "0x01"}}
+}

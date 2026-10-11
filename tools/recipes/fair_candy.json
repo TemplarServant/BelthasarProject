@@ -1,0 +1,14 @@
+{
+  "name": "fair_candy",
+  "from": "marle_joins",
+  "doc": "With Marle: down to the fair (loc 005), the girl by the fountain says Lucca's show is ready ($7F0055 bit7: the twins on the north stairs of loc 1B7 go away); back up to 1B7 and toward the north stairs, Marle's candy stop (walk away twice: 'Give me a second', 'no need to drag me'; then she buys it) and she follows again. Crono by the candy stand.",
+  "steps": [
+    ["pad", "41:16,21:64,11:16,0:80,21:70,0:2,80:30,20:36,0:2"],
+    ["pad", "40:2,0:4,100:2,0:60,(100:2,0:40)*6,(100:2,0:40)*3"],
+    ["pad", "11:32,41:16,11:96,0:60,11:100,81:30,11:60,41:50,11:80,0:2"],
+    ["pad", "21:8,41:50,11:100,0:30,81:20,11:80,0:80,(100:2,0:40)*3,0:200"],
+    ["pad", "41:8,21:8,41:60,11:30,81:30,11:80,0:60,(100:2,0:40)*4,0:100,21:40,0:60,(100:2,0:40)*4,0:60"],
+    ["pad", "41:30,11:80,0:60,(100:2,0:40)*8,0:60"]
+  ],
+  "expect": {"loc": "0x1B7", "wram": {"0x2981": "0x01", "0x10055": "0xB2"}}
+}

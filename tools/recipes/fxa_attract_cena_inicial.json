@@ -1,0 +1,7 @@
+{
+  "name": "fxa_attract_cena_inicial",
+  "from": "attract_boot",
+  "doc": "Stands in for saves/attract_cena_inicial.state: the attract from power-on under the rule at the moment the owner's capture holds -- the title intro over, loc 1B1 fading in ($0119 = 04, the play clock $0400 = 1F, $0384 = 02). Its WRAM equals the capture's but for the power-on fill (snes9x's 55 in bytes nothing has written) and stack garbage; its sound RAM is the attract's own (the capture's was spliced from another moment).",
+  "steps": [["pad", "0:2158"]],
+  "expect": {"loc": "0x1B1", "wram": {"0x0119": "0x04", "0x0400": "0x1F", "0x0384": "0x02"}}
+}

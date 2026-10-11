@@ -1,0 +1,7 @@
+{
+  "name": "truce_market",
+  "from": "ow_w0",
+  "doc": "Stands in for saves/truce_market.state: on the 1000 A.D. overworld Crono walks west to the Truce Market's entry cell (the walk of --checkowentry), presses A and enters the market (loc 011), alone, 600 G, standing at the door (352,719) -- the reference's position and story flags.",
+  "steps": [["pad", "0:30,40:72,20:8,40:8,20:16,40:16,20:40,10:40,80:8,40:8,0:30,100:2,0:150"]],
+  "expect": {"loc": "0x011", "wram": {"0x2C53": "0x58", "0x2C54": "0x02", "0x1802": "0x00", "0x1803": "0x16", "0x1883": "0x2C"}}
+}

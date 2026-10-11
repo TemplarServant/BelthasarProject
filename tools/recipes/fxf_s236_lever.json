@@ -1,0 +1,7 @@
+{
+  "name": "fxf_s236_lever",
+  "from": "truce_market",
+  "doc": "Stands in for saves/field_re/s236_lever.state, its own provenance from the recipe-made Truce market: the ROM's own loader (--teleport 236 24 36 0, method jmp, 300 frames) puts Crono in loc 0EC under the lever (obj 9, tile 24,35) facing up.",
+  "steps": [["teleport", 236, 24, 36, 0, 300, "jmp"]],
+  "expect": {"loc": "0x0EC", "wram": {"0x011F": "0x01"}}
+}

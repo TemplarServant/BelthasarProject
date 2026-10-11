@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene434_tent",
+  "from": "fxf_scene7_talk_obj13",
+  "doc": "Stands in for saves/field_re/scene434_tent.lakewram, its own provenance (--teleport 434 8 11 0 from the scene-7 state) from the recipe-made scene 7 (method jmp, 240 frames): the Tent of Horrors (loc 1B2), Crono at its door tile, storyline 3.",
+  "steps": [["teleport", 434, 8, 11, 0, 240, "jmp"]],
+  "expect": {"loc": "0x1B2", "wram": {"0x10000": "0x03"}}
+}

@@ -1,0 +1,7 @@
+{
+  "name": "fxf_s49_chest_walk",
+  "from": "fxf_s19_power_tab",
+  "doc": "Stands in for saves/field_re/s49_chest_walk.state, its own provenance from the recipe-made Power Tab state: --teleport 49 12 38 0 (method jmp, 120 frames) -- loc 031, the lead below the chest at (12,37) facing up.",
+  "steps": [["teleport", 49, 12, 38, 0, 120, "jmp"]],
+  "expect": {"loc": "0x031"}
+}

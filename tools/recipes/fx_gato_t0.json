@@ -1,0 +1,7 @@
+{
+  "name": "fx_gato_t0",
+  "from": "fx_a_battle_gato_press_action",
+  "doc": "Stands in for saves/gato_t0.state and saves/battle_re/gato_t0.raw.wram (the suite's GATO seed): from GATO's last box (fx_a_battle_gato_press_action: battle_gato_press_action after the attract demo, the reference's gato_press_action.state) the reference's own input (A held 20 of every 60 frames) runs 145 frames: the box closes and this is the last frame before GATO's song sequence; the play clock $0400 moves 2 s 25 f, as from the reference to its capture, and the text-box bytes $0126-$0135 are the capture's.",
+  "steps": [["pad", "100:20,0:40,100:20,0:40,100:20,0:5"]],
+  "expect": {"loc": "0x006", "wram": {"0x2980": "0x00", "0x2981": "0x01", "0x2990": "0xC4", "0x1111": "0x92", "0x0127": "0x00"}}
+}

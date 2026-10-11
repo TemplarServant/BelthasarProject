@@ -1,0 +1,9 @@
+{
+  "name": "name_home_stairs",
+  "from": "bedroom",
+  "doc": "home_downstairs's first two steps verbatim: Crono walks out of his bedroom (loc 002) and down the stairs; the next location is still loading (the screen black). The common parent of name_mom_box and name_lucca.",
+  "steps": [
+    ["pad", "0:300"],
+    ["pad", "21:16,41:16,21:16,81:16,41:16,81:16,11:16,41:16,81:32,21:16,41:32,21:16,81:16,21:16,81:16,21:16,11:16,81:48,11:16"]
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "bedroom",
+  "doc": "Power-on, NEW GAME with the default name, the opening, Crono free in his bedroom (loc 0x0E? see expect).",
+  "steps": [["boot_to_bedroom"]],
+  "expect": {"loc": "0x002"}
+}

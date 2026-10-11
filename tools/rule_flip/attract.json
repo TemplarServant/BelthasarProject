@@ -1,0 +1,1288 @@
+{
+  "boot-natural-blank-cart": {
+    "expect": [
+      "boot: SRAM scan (C2/8D6A) -> $7F0061=0 (blank cart)",
+      "changeloc: scene 0 -> 433",
+      "sequence: op-0xFF 02 -> JML $C3:0000 ($0384=2)",
+      "title-intro: swing frame 0 drawn 256x224 fnv32=55039252",
+      "sequence: START -> $7F0060=1, reboot into loc 1B1",
+      "sequence: $7E:34C2 fade done ($038D 0F->00, 15 frames) -> $7E:0000=1, reboot",
+      "changeloc: scene 433 -> 0",
+      "loader: blank cart -> C2/956E wipe, $7F0061=1, reboot (C2/832F)",
+      "nopc: visit 4 scene 0 ($0197 = 80 sentinel) draws no player, 0 non-black px",
+      "nopc: visit 5 scene 0 ($0197 = 80 sentinel) draws no player, 0 non-black px",
+      "atbselcfg: row=0 2990=C4 bit6=SET"
+    ],
+    "evidence": "PASS as is -- passes unchanged under the switches (the triage's CONTENT flag came from pin lines that are a subset of the expect lines; every expect line is printed under the rule on the final binary). The boot's SRAM scan, the title's swing frame 0 and the blank-cart loader come before any song load the rule prices."
+  },
+  "title-sequence-sound-reaches-driver": {
+    "expect": [
+      "mailtrace   TITLE staged $1E00=10 30 FF FF",
+      "mailtrace   TITLE staged $1E00=81 40 00 06",
+      "mailtrace   TITLE staged $1E00=F0 40 00 06",
+      "mailtrace   TITLE posted -> $1E00=00 (00 = the driver consumed it)",
+      "sequence: $7E:34C2 fade done ($038D 0F->00, 15 frames) -> $7E:0000=1, reboot",
+      "title-sound: 13 post(s), $2143 wait 6 frame(s)",
+      "mailtrace   TITLE staged $1E00=85 00 00 05",
+      "mailtrace   TITLE staged $1E00=F2 01 00 05",
+      "mailtrace   TITLE staged $1E00=81 00 FF 05",
+      "mailtrace   TITLE staged $1E00=85 00 00 06",
+      "mailtrace   TITLE staged $1E00=F2 01 00 06",
+      "mailtrace   TITLE staged $1E00=81 00 FF 06"
+    ],
+    "evidence": "PASS as is -- passes unchanged under the switches (the triage's CONTENT flag came from pin lines that are a subset of the expect lines; every expect line is printed under the rule on the final binary). The title's mailbox staging (13 posts, the `10 30` post, the $2143 wait of 6 frames) is the same under the rule: the title's own JSL C7/0004 ($7E:3775) is bank C7, real on both sides."
+  },
+  "boot-natural-load-a-save": {
+    "expect": [
+      "boot: SRAM scan (C2/8D6A) -> $7F0061=2 (cart holds a save)",
+      "loader: screen $0E open, 1 slot(s), cursor row 0",
+      "loader: row 0 drawn 256x224 fnv32=E22C51EE",
+      "loader: row 3 drawn 256x224 fnv32=0862506C",
+      "loader: Up row 0 -> 3",
+      "loader: Up row 3 -> 0",
+      "loader: Down row 0 -> 3",
+      "loader: Down row 3 -> 0",
+      "loader: LOAD slot 0 -> 2100 bytes unpacked (FF/FAA3), loc=1F1",
+      "loader: fade-out 8 frames (C2/83CA, -2 per frame) -> blank",
+      "reboot: JML C0:0000 -> loc 1F1 tile(29,42) bits01 [from a save]",
+      "selftest-ow: world 1",
+      "mover(232,336)"
+    ],
+    "evidence": "PASS as is -- passes unchanged under the switches (the triage's CONTENT flag came from pin lines that are a subset of the expect lines; every expect line is printed under the rule on the final binary). The loader screen, its cursor and the load of slot 0 into loc 1F1 are unchanged."
+  },
+  "ow-bg3-2300ad-ash-drift-and-wave-vs-oracle": {
+    "expect": [
+      "owcam t101 $24=FE9E $2A=00CC",
+      "owbg3line t101 phase=0190 FE9E FF45 FE9E FF44 FE9E FF42 FE9E FF41"
+    ],
+    "evidence": "PASS as is -- every expect line is printed under the switches: the owbg3line lines count world ticks (t101) from the 1F2 world's entry, not attract frames, and the run's stop (CT_SHOTS_AT=7978) is past t101 on both clocks."
+  },
+  "ow-world1-colour-math": {
+    "expect": [
+      "overworld entry: scene 112 -> world 1 at (440,216) ngIntro=0 f26",
+      "selftest-ow: world 1 cam(312,104) mover(440,216) f300 cgadsub=04 fnv32=13EDD1E3 menu=0 $027C=01"
+    ],
+    "evidence": "Port-only pin, the frame hash alone moves (cam(312,104) mover(440,216) cgadsub=04 $027C=01 and the entry at f26 unchanged). The rule's f300 is pixel-identical to the valve's f301 (0 / 57344 px; f300 vs f300 differ in 15942): the world-1 load window is 42 black frames for 43 (`loadcost: world 1 -- 14872360 cycles + 0 DMA = 42 black frame(s) at f27`) -- field.c fieldRuleNmiOnHold's world entry (C2/23CC turns the NMI on; the first NMI's C2/0A5A/0A8D tilemap build is NMI-on CPU work the rule holds; the rule's oracle: every world leg one frame shorter), so the mist's animator is one tick further at f300."
+  },
+  "ow-attract-flyover-leg-vs-oracle": {
+    "expect": [
+      "overworld entry: scene 433 -> world 5 at (72,72) ngIntro=0 f2135",
+      "ow-op05: C2/1100 -> loc 16E tile(16,23) flags=0 ret=1F5/(83,58)",
+      "ow-op05: C2/1100 -> loc 1B1 tile(0,0) flags=0 ret=1F7/(84,55)",
+      "nopc: visit 3 scene 366 ($0197 = 80 sentinel) draws no player, 57344 non-black px",
+      "sequence: op-0xFF 61 -> JML $C3:0000 ($0384=97) = sequence-table entry 1, and the overlay's machine plays it.",
+      "reboot: JML C0:0000 -> loc 01C tile(9,9) bits01",
+      "loctrace: -> loc 1F5 tile(9,9) facing=1 style=0",
+      "loctrace: -> loc 01C tile(9,9) facing=1 style=1",
+      "loctrace: -> loc 01B tile(8,8) facing=0 style=0",
+      "loctrace: -> loc 112 tile(8,13) facing=1 style=1",
+      "loctrace: -> loc 0DB tile(7,28) facing=1 style=0",
+      "loctrace: -> loc 1F7 tile(0,0) facing=0 style=0",
+      "loctrace: -> loc 0A5 tile(7,32) facing=0 style=1",
+      "overworld entry: scene 219 -> world 7 at (0,0) ngIntro=0 f4521",
+      "ow-op05-cam: $20=0251 $22=0217 $26=0150 $28=0150",
+      "ow-op05-cam: $20=0222 $22=0222 $26=013A $28=013A",
+      "reboot: op 0xDF/0xE1 at the vblank -> $0100=0AD, $0105=01B"
+    ],
+    "evidence": "The chain of locations (every loctrace / ow-op05 / ow-op05-cam / nopc / reboot line) is unchanged; only the two overworld entries' frames move: world 5 f2105 -> f2135 (+30), world 7 f4492 -> f4521 (+29). Vehicle S (plain --selftest): the hub's song post (`10 18`, C0/1B8B) was never priced in an unpaced selftest (no SPC: field.c 'there the price stays uncharged'); under the rule the port's SPC runs in every run (field.c ruleSpc) and the post costs its SPC time, 30 NMIs -- the rule's cartridge's first `10 18` takes 30 vblanks (oracle_logical_frames.md sec. 7) -- and world 5's load is one frame shorter (fieldRuleNmiOnHold, C2/0A5A held): +29 at world 7. The plain and the audio selftest vehicles are one vehicle under the rule (identical thumbnails on every frame to f11400)."
+  },
+  "attract-bg-scene28-vs-oracle": {
+    "expect": [
+      "attract-bg-cmp: port f2877 vs oracle f830 rows 0-70 -> 17920 / 17920 identical",
+      "attract-bg-cmp: port f2877 vs oracle f830 rows 160-224 -> 16384 / 16384 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_bg_cmp.py",
+      "2877",
+      "830",
+      "0",
+      "70",
+      "160",
+      "224"
+    ],
+    "evidence": "Vehicle S +29 at loc 01C (the hub's `10 18` priced, +30; world 5's load -1). Port f2877 vs the same real-cartridge f830: 17920 / 17920 and 16384 / 16384 identical, as f2848 on the valve (the rule's f2877 thumbnail is the valve's f2848)."
+  },
+  "attract-fade-rate-01B-vs-oracle": {
+    "expect": [
+      "attract-bg-cmp: port f3450 vs oracle f1384 rows 0-208 -> 53248 / 53248 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_bg_cmp.py",
+      "3450",
+      "1384",
+      "0",
+      "208"
+    ],
+    "evidence": "Vehicle S +29 at loc 01B. Port f3450 vs real-cartridge f1384 rows 0-208: 53248 / 53248 identical (the same fade level the valve's f3421 had)."
+  },
+  "attract-flyover-frame-vs-oracle": {
+    "expect": [
+      "attract-bg-cmp: port f2274 vs oracle f206 rows 2-222 -> 56320 / 56320 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_bg_cmp.py",
+      "2274",
+      "206",
+      "2",
+      "222"
+    ],
+    "evidence": "Vehicle S +29 inside the 1F5 flyover. Port f2274 vs real-cartridge f206 rows 2-222: 56320 / 56320 identical."
+  },
+  "attract-world7-colour-math-vs-oracle": {
+    "expect": [
+      "attract-bg-cmp: port f4672 vs oracle f3076 rows 0-224 -> 57344 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_bg_cmp.py",
+      "4672",
+      "3076",
+      "0",
+      "224"
+    ],
+    "evidence": "Vehicle S +28 at 1F7 (+30 the hub's song, -1 each for the 1F5 and 1F7 worlds' loads). Port f4672 vs real-cartridge f3076: 57344 / 57344 identical."
+  },
+  "attract-1b0-vortex-bg2-vs-oracle": {
+    "expect": [
+      "attract-bg-cmp: port f8722 vs oracle f8455 rows 0-224 -> 57344 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_bg_cmp.py",
+      "8722",
+      "8455",
+      "0",
+      "224"
+    ],
+    "evidence": "Vehicle S +26 at 1B0 (+30, the 1F5/1F7/1F2/1F3 world loads -1 each). Port f8722 vs real-cartridge f8455: 57344 / 57344 identical."
+  },
+  "attract-0a5-halfcamera-bg2-vs-oracle": {
+    "expect": [
+      "attract-bg-cmp: port f5569 vs oracle f3979 rows 0-224 -> 56654 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_bg_cmp.py",
+      "5569",
+      "3979",
+      "0",
+      "224"
+    ],
+    "evidence": "Vehicle S +28 at 0A5. Port f5569 vs real-cartridge f3979: 56654 / 57344 identical -- the valve's own count (this camera's known residual, unchanged)."
+  },
+  "attract-01b-placement-priority-pair-vs-cartridge": {
+    "expect": [
+      "[objrow@f3290] [objrow 13] 0F80=8002 1100=0400 1180=0586 1200=7F00 1280=40AC 1300=DD 1380=50D2 1400=780C 1480=1C00 1500=904F 1580=30B6 0D00=80 0C00=2030 1C80=03 1A81=01 1B01=01 1000=0403 1080=8080 1C00=07"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_DUMPOBJROW": "13",
+      "CT_DUMPOBJROW_AT": "3290",
+      "CT_SHOTS": "build/_pp01b",
+      "CT_SHOTS_AT": "3295",
+      "CT_SHOTS_EXIT": "1"
+    },
+    "pin": [
+      "^\\[objrow@f3290\\] "
+    ],
+    "evidence": "Vehicle L -1 after the 1F5 world's load (C2/0A5A held). The objrow dump at f3290 is the valve's f3291 line byte for byte (the two runs' thumbnails are identical from f2177 to f4189 at -1)."
+  },
+  "attract-1b0-cockpit-pcs-behind-console-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f10307 vs oracle f8402 box (0,0)-(256,224) -> 57344 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "8402",
+      "10307",
+      "0",
+      "0",
+      "256",
+      "224",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L -84 at 1B0 (the three fights' boots, tails and returns under the rule; the worlds -1 each). Port f10307 vs real-cartridge f8402: 57344 / 57344 identical (the rule's f10307 thumbnail is the valve's f10391)."
+  },
+  "attract-1f7-no-lead-sprite-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f4979 vs oracle f2975 box (96,80)-(152,120) -> 2240 / 2240 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "2975",
+      "4979",
+      "96",
+      "80",
+      "152",
+      "120",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L -25 at 1F7. Port f4979 vs real-cartridge f2975: 2240 / 2240 identical."
+  },
+  "attract-087-ice-crystal-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f9713 vs oracle f7800 box (88,8)-(168,136) -> 10137 / 10240 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "7800",
+      "9713",
+      "88",
+      "8",
+      "168",
+      "136",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L -73 inside the 087 fight (the rule's f9713 thumbnail is the valve's f9786). Port f9713 vs real-cartridge f7800: 10137 / 10240 identical, the valve's own count."
+  },
+  "attract-1f7-lavos-fragments-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f5124 vs oracle f3120 box (0,0)-(256,224) -> 57344 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "3120",
+      "5124",
+      "0",
+      "0",
+      "256",
+      "224",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L -25 at 1F7. Port f5124 vs real-cartridge f3120: 57344 / 57344 identical."
+  },
+  "attract-1f0-epoch-departure-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f10638 vs oracle f8732 box (0,0)-(256,224) -> 57344 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "8732",
+      "10638",
+      "0",
+      "0",
+      "256",
+      "224",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L -85 at 1F0. Port f10638 vs real-cartridge f8732: 57344 / 57344 identical."
+  },
+  "attract-1f0-epoch-return-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f10746 vs oracle f8840 box (0,0)-(256,224) -> 57344 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "8840",
+      "10746",
+      "0",
+      "0",
+      "256",
+      "224",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L -85 at 1F0. Port f10746 vs real-cartridge f8840: 57344 / 57344 identical."
+  },
+  "attract-07d-field-objects-take-the-battle-pose-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f7154 vs oracle f5180 box (0,140)-(64,196) -> 3584 / 3584 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "5180",
+      "7154",
+      "0",
+      "140",
+      "64",
+      "196",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L: the rule's f7154 thumbnail is the valve's f7200 (the port's 07D fight 46 frames shorter by then: its boot under the rule, the return's five C0/00EB waits). Port f7154 vs real-cartridge f5180 box (0,140)-(64,196): 3584 / 3584 identical."
+  },
+  "attract-0e6-robots-snap-onto-their-tile-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f7673 vs oracle f5731 box (0,32)-(240,192) -> 38400 / 38400 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "5731",
+      "7673",
+      "0",
+      "32",
+      "240",
+      "192",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L -59 at 0E6. Port f7673 vs real-cartridge f5731: 38400 / 38400 identical."
+  },
+  "attract-07d-lead-keeps-the-battle-pose-until-the-drain-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f7155 vs oracle f5212 box (104,120)-(152,168) -> 2304 / 2304 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "5212",
+      "7155",
+      "104",
+      "120",
+      "152",
+      "168",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L: the rule's f7155 thumbnail is the valve's f7210 (the lead still in the battle pose after the 07D's ack, before the drain). Port f7155 vs real-cartridge f5212 box (104,120)-(152,168): 2304 / 2304 identical."
+  },
+  "attract-0e6-sprite-depth-is-the-rom-draw-list-vs-rule-cartridge": {
+    "expect": [
+      "frame-region-cmp: port f7530 vs oracle f7619 box (0,0)-(256,224) -> 57344 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "boot",
+      "7619",
+      "7530",
+      "0",
+      "0",
+      "256",
+      "224",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Both sides move: this check compares against the rule's cartridge from power-on (`boot`, CT_ORACLE_LOGICAL/VIRTUAL_BEAM + the switches), whose 0E6 visit is 68 frames earlier under the infinitely fast CPU (thumbnails of the logical and the IFAST oracle from power-on: f7687 -> f7619, identical pictures), and the port's -59 (vehicle L). Port f7530 vs rule-cartridge f7619: 57344 / 57344 identical (Robo in front of obj11 -- the ROM's draw list). The port's -59 against the oracle's -68 is the 07D fight: the valve's port ran it 9 frames SHORTER than the logical oracle ($0119 0F -> 00: port 942, cartridge 951 -- the memory's open '07D fight 10 f short'), the rule's port runs it exactly as long as the rule cartridge (908 = 908)."
+  },
+  "attract-07d-frog-squash-bg3-priority-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f7006 vs oracle f5042 box (60,138)-(190,169) -> 4030 / 4030 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "5042",
+      "7006",
+      "60",
+      "138",
+      "190",
+      "169",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L inside the 07D fight (the boot under the rule). Searched every port frame f6975-f7030 against the same real-cartridge f5042: f7006 is the one identical frame, 4030 / 4030 (its neighbours 932-990 and 763-82) -- the valve's f7047 count."
+  },
+  "attract-07d-frog-squash-eyes-vs-oracle": {
+    "expect": [
+      "fx-sprite-cmp: sheets (VRAM $0C00-$17FF) 6144 / 6144 identical",
+      "fx-sprite-cmp: frame table ($4500 $A05B $5D00 $A07B $987A-$9886) 6333 / 6333 identical",
+      "fx-sprite-cmp: port f7006 vs oracle f5042: cloud (OAM 4-19) 16 sprites, visible pixels 882 / 882 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_fx_sprite_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "5042",
+      "7006",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "The same frame as attract-07d-frog-squash-bg3-priority (f7047 -> f7006, the one f6975-f7030 frame identical to real-cartridge f5042 in that box). The cloud's 16 sprites: 882 / 882 visible pixels identical; sheets 6144 / 6144 and the frame table 6333 / 6333 as before."
+  },
+  "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f7113 vs oracle f5158 box (0,100)-(256,200) -> 25600 / 25600 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "5158",
+      "7113",
+      "0",
+      "100",
+      "256",
+      "200",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "evidence": "Vehicle L -47 at the end of the 07D fight (the identical thumbnails at f7150-f7153 -> f7103-f7106). Port f7113 vs real-cartridge f5158 box (0,100)-(256,200): 25600 / 25600 identical (the held Frog Squash pose spans f7093..f7130+ under the rule, all identical)."
+  },
+  "attract-world5-fade-objects-vs-oracle": {
+    "expect": [
+      "owfade: f2174 $1C=80 $1D=00 $1BF6=00",
+      "owfade: f2175 $1C=00 $1D=0F $1BF6=01",
+      "owfade: f2176 $1C=00 $1D=0F $1BF6=00",
+      "owfade: f2388 $1C=00 $1D=0F $1BF6=02",
+      "owfade: f2389 $1C=00 $1D=0E $1BF6=02",
+      "owfade: f2390 $1C=00 $1D=0D $1BF6=02",
+      "owfade: f2391 $1C=00 $1D=0C $1BF6=02",
+      "owfade: f2392 $1C=00 $1D=0B $1BF6=02",
+      "owfade: f2393 $1C=00 $1D=0A $1BF6=02",
+      "owfade: f2394 $1C=00 $1D=09 $1BF6=02",
+      "owfade: f2395 $1C=00 $1D=08 $1BF6=02",
+      "owfade: f2396 $1C=00 $1D=07 $1BF6=02",
+      "owfade: f2397 $1C=00 $1D=06 $1BF6=02",
+      "owfade: f2398 $1C=00 $1D=05 $1BF6=02",
+      "owfade: f2399 $1C=00 $1D=04 $1BF6=02",
+      "owfade: f2400 $1C=00 $1D=03 $1BF6=02",
+      "owfade: f2401 $1C=00 $1D=02 $1BF6=02",
+      "owfade: f2402 $1C=00 $1D=01 $1BF6=02",
+      "owfade: f2403 $1C=80 $1D=00 $1BF6=00",
+      "loadcost: world 5 -- 13212266 cycles + 0 DMA = 38 black frame(s) at f2136"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "2414"
+    ],
+    "evidence": "Vehicle S: the hub's `10 18` now priced (+30, the rule's cartridge's 30 vblanks), world 5's window 38 black frames for 39 (fieldRuleNmiOnHold: the first NMI's C2/0A5A build held -- the rule's oracle's world legs are one frame shorter). The fade objects' bytes are frame for frame the valve's: `29 00`'s cut at f2174/2175/2176 (was 2145-2147) and `28 01`'s fifteen steps f2388..f2403 (was 2359..2374); --frames +29 so the fade-out is inside the run."
+  },
+  "ow-location-entry-fade-vs-oracle": {
+    "expect": [
+      "owfade: f189 $1C=00 $1D=0F $1BF6=02",
+      "owfade: f190 $1C=00 $1D=0E $1BF6=02",
+      "owfade: f191 $1C=00 $1D=0D $1BF6=02",
+      "owfade: f192 $1C=00 $1D=0C $1BF6=02",
+      "owfade: f193 $1C=00 $1D=0B $1BF6=02",
+      "owfade: f194 $1C=00 $1D=0A $1BF6=02",
+      "owfade: f195 $1C=00 $1D=09 $1BF6=02",
+      "owfade: f196 $1C=00 $1D=08 $1BF6=02",
+      "owfade: f197 $1C=00 $1D=07 $1BF6=02",
+      "owfade: f198 $1C=00 $1D=06 $1BF6=02",
+      "owfade: f199 $1C=00 $1D=05 $1BF6=02",
+      "owfade: f200 $1C=00 $1D=04 $1BF6=02",
+      "owfade: f201 $1C=00 $1D=03 $1BF6=02",
+      "owfade: f202 $1C=00 $1D=02 $1BF6=02",
+      "owfade: f203 $1C=00 $1D=01 $1BF6=02",
+      "owfade: f204 $1C=80 $1D=00 $1BF6=00",
+      "ow-entry: C2/2470 -> loc 011 tile(22,44) flags=4 ret=1F0/(45,38) $027C=03",
+      "loadcost: scene 17 -- 12680912 cycles + 228520 DMA + 16368 on the loader clock = 38 black frame(s) at f207",
+      "owfade: f45 $1C=80 $1D=00 $1BF6=01",
+      "owfade: f47 $1C=00 $1D=01 $1BF6=01",
+      "owfade: f49 $1C=00 $1D=02 $1BF6=01",
+      "owfade: f51 $1C=00 $1D=03 $1BF6=01",
+      "owfade: f53 $1C=00 $1D=04 $1BF6=01",
+      "owfade: f55 $1C=00 $1D=05 $1BF6=01",
+      "owfade: f57 $1C=00 $1D=06 $1BF6=01",
+      "owfade: f59 $1C=00 $1D=07 $1BF6=01",
+      "owfade: f61 $1C=00 $1D=08 $1BF6=01",
+      "owfade: f63 $1C=00 $1D=09 $1BF6=01",
+      "owfade: f65 $1C=00 $1D=0A $1BF6=01",
+      "owfade: f67 $1C=00 $1D=0B $1BF6=01",
+      "owfade: f69 $1C=00 $1D=0C $1BF6=01",
+      "owfade: f71 $1C=00 $1D=0D $1BF6=01",
+      "owfade: f73 $1C=00 $1D=0E $1BF6=01",
+      "owfade: f75 $1C=00 $1D=0F $1BF6=00"
+    ],
+    "pin": [
+      "^owfade: f(189|19[0-9]|20[0-4]) ",
+      "^ow-entry: ",
+      "^loadcost: scene 17 ",
+      "^owfade: f(4[5-9]|[5-7][0-9]) "
+    ],
+    "evidence": "--worldtest: the world-0 window is 43 black frames for 44 (fieldRuleNmiOnHold's world entry, the C2/0A5A build held; the rule's oracle: the Truce market's world C2/23D2 at f85 for f86), so every line moves -1 with the same shape: the `29 02` fade-in f45..f75 (was f46..f76), the press's fade-out f189..f204, the change and the scene-17 load at f207 -- the offsets from the press (what is graded against the oracle) unchanged. The load line gains `+ 16368 on the loader clock`: under the rule the port's SPC runs in a selftest too and C0/1B8B's song JSL inside the load is priced (12 lines of wall time, no extra frame: 38 black frames as before). The stale first pin (f157-f172, from before the 2026-09-29 +33) is replaced by the window the expect lines are in."
+  },
+  "attract-window-wipe-flow-vs-oracle": {
+    "expect": [
+      "wipe: t299 op FF 94 $0139=00 $0350=00 $0351=00 $0153=01 frz=0 ldf=0",
+      "wipe: t335 op FF 93 $0139=00 $0350=00 $0351=00 $0153=00 frz=0 ldf=0",
+      "wipe: t331 op FF 94 complete $0119=00 $0128=DF",
+      "wipe: t367 op FF 93 complete $0119=0F $0128=5F"
+    ],
+    "evidence": "Vehicle S: the wipe's VM ticks t269/t301 (FF 94 and its completion) and t305/t337 (FF 93) are t299/t331/t335/t367 -- +30, the hub's song load's 30 NMIs ahead of loc 01C (the world leg's load is not VM ticks). Every byte of each line is the valve's ($0139/$0350/$0351/$0153/$0119/$0128), the 32-tick wipes unchanged."
+  },
+  "attract-2300ad-fade-in-after-credits-init": {
+    "expect": [
+      "owfade: f6725 $1C=80 $1D=00 $1BF6=01",
+      "owfade: f6726 $1C=00 $1D=01 $1BF6=01",
+      "owfade: f6727 $1C=00 $1D=02 $1BF6=01",
+      "owfade: f6728 $1C=00 $1D=03 $1BF6=01",
+      "owfade: f6729 $1C=00 $1D=04 $1BF6=01",
+      "owfade: f6730 $1C=00 $1D=05 $1BF6=01",
+      "owfade: f6731 $1C=00 $1D=06 $1BF6=01",
+      "owfade: f6732 $1C=00 $1D=07 $1BF6=01",
+      "owfade: f6733 $1C=00 $1D=08 $1BF6=01",
+      "owfade: f6734 $1C=00 $1D=09 $1BF6=01",
+      "owfade: f6735 $1C=00 $1D=0A $1BF6=01",
+      "owfade: f6736 $1C=00 $1D=0B $1BF6=01",
+      "owfade: f6737 $1C=00 $1D=0C $1BF6=01",
+      "owfade: f6738 $1C=00 $1D=0D $1BF6=01",
+      "owfade: f6739 $1C=00 $1D=0E $1BF6=01",
+      "owfade: f6740 $1C=00 $1D=0F $1BF6=00"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "6774"
+    ],
+    "pin": [
+      "^owfade: f67(2[5-9]|3[0-9]|40) "
+    ],
+    "evidence": "Vehicle S +27 at the 1F2 world (+30, the 1F5/1F7/1F2 worlds' loads -1 each). The `29 01` fade-in after the credits' init: $1BF6 = 01 and $1D 00 -> 0F one step a frame, f6725..f6740 (was f6698..f6713) -- the same 16 lines; --frames +27."
+  },
+  "attract-palette-rows-vs-oracle": {
+    "expect": [
+      "owfade: f8314 $1C=80 $1D=00 $1BF6=01",
+      "owfade: f8315 $1C=00 $1D=01 $1BF6=01",
+      "owpal: f8316 row 4 = 41F3 2800 3420 3C80 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
+      "owpal: f8318 row 3 = 41F3 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 00B7 00F7 0137 0157",
+      "owpal: f8324 row 4 = 0240 3420 3C80 2800 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
+      "owpal: f8326 row 3 = 0240 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 00F7 0137 0157 00B7",
+      "owpal: f8332 row 4 = 0004 3C80 2800 3420 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
+      "owpal: f8334 row 3 = 0004 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 0137 0157 00B7 00F7",
+      "owpal: f9096 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 0CE7 2BDF 12BB 0D2D 0C63 73BD 56D6 4272",
+      "owpal: f9097 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 10E7 2BDF 12BB 112D 1084 73BD 56D6 4272",
+      "owpal: f9098 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 14E7 2BDF 16BB 152D 14A5 73BD 56D6 4272",
+      "owpal: f9099 row 8 = 0000 18C6 294A 6B5A 3E32 3A0F 2DCC 1928 18E7 2BDF 1ABB 192D 18C6 73BD 56D6 4272",
+      "owpal: f9100 row 8 = 0000 1CE7 294A 6B5A 3E32 3A0F 2DCC 1D28 1CE7 2BDF 1EBB 1D2D 1CE7 73BD 56D6 4272",
+      "owpal: f9101 row 8 = 0000 2108 294A 6B5A 3E32 3A0F 2DCC 2128 2108 2BDF 22BB 212D 2108 73BD 56D6 4272",
+      "owpal: f9102 row 8 = 0000 2529 294A 6B5A 3E32 3A0F 2DCC 2529 2529 2BDF 26BB 252D 2529 73BD 56D6 4272",
+      "owpal: f9103 row 8 = 0000 294A 294A 6B5A 3E32 3A0F 2DCC 294A 294A 2BDF 2ABB 294D 294A 73BD 56D6 4272",
+      "owpal: f9104 row 8 = 0000 2D6B 2D6B 6B5A 3E32 3A0F 2DCC 2D6B 2D6B 2FDF 2EBB 2D6D 2D6B 73BD 56D6 4272",
+      "owpal: f9105 row 8 = 0000 318C 318C 6B5A 3E32 3A0F 31CC 318C 318C 33DF 32BB 318D 318C 73BD 56D6 4272",
+      "owpal: f9106 row 8 = 0000 35AD 35AD 6B5A 3E32 3A0F 35CD 35AD 35AD 37DF 36BB 35AD 35AD 73BD 56D6 4272",
+      "owpal: f9107 row 8 = 0000 39CE 39CE 6B5A 3E32 3A0F 39CE 39CE 39CE 3BDF 3ABB 39CE 39CE 73BD 56D6 4272",
+      "owpal: f9108 row 8 = 0000 3DEF 3DEF 6B5A 3E32 3E0F 3DEF 3DEF 3DEF 3FDF 3EBB 3DEF 3DEF 73BD 56D6 4272",
+      "owpal: f9109 row 8 = 0000 4210 4210 6B5A 4232 4210 4210 4210 4210 43DF 42BB 4210 4210 73BD 56D6 4272",
+      "owpal: f9110 row 8 = 0000 4631 4631 6B5A 4632 4631 4631 4631 4631 47DF 46BB 4631 4631 73BD 56D6 4672",
+      "owpal: f9111 row 8 = 0000 4A52 4A52 6B5A 4A52 4A52 4A52 4A52 4A52 4BDF 4ABB 4A52 4A52 73BD 56D6 4A72",
+      "owpal: f9112 row 8 = 0000 4E73 4E73 6B5A 4E73 4E73 4E73 4E73 4E73 4FDF 4EBB 4E73 4E73 73BD 56D6 4E73",
+      "owpal: f9113 row 8 = 0000 5294 5294 6B5A 5294 5294 5294 5294 5294 53DF 52BB 5294 5294 73BD 56D6 5294",
+      "owpal: f9114 row 8 = 0000 56B5 56B5 6B5A 56B5 56B5 56B5 56B5 56B5 57DF 56BB 56B5 56B5 73BD 56D6 56B5",
+      "owpal: f9115 row 8 = 0000 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "9159"
+    ],
+    "pin": [
+      "^owfade: f831[45] ",
+      "^owpal: f83(16|18|24|26|32|34) row [34] ",
+      "^owpal: f9(09[6-9]|10[0-9]|11[0-5]) row 8 "
+    ],
+    "evidence": "Vehicle S: +26 at 1F3 (65 M B.C.), +25 at 1F0 (1000 A.D.) -- the hub's song +30 and the worlds' loads -1 each. Every colour of every row is the valve's: 1F3's rows 3/4 cycle at f8316/8318/8324/8326/8332/8334 (was f8290..f8308), 1F0's row 8 fades to white in the same 20 steps f9096..f9115 (was f9071..f9090); --frames +25."
+  },
+  "attract-0db-lead-walk-camera-pan-vs-oracle": {
+    "expect": [
+      "CAMINFO f4454 $1D0A=0000 $1D0E=001F $1D93=00 $1D96=09 $1D87=0000 $1D89=FFF9 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4455 $1D0A=0000 $1D0E=001E $1D93=00 $1D96=02 $1D87=0000 $1D89=FFF2 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4456 $1D0A=0000 $1D0E=001D $1D93=00 $1D96=0B $1D87=0000 $1D89=FFEB $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4457 $1D0A=0000 $1D0E=001C $1D93=00 $1D96=04 $1D87=0000 $1D89=FFE4 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4458 $1D0A=0000 $1D0E=001B $1D93=00 $1D96=0D $1D87=0000 $1D89=FFDD $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4459 $1D0A=0000 $1D0E=001A $1D93=00 $1D96=06 $1D87=0000 $1D89=FFD6 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4460 $1D0A=0000 $1D0E=0019 $1D93=00 $1D96=0F $1D87=0000 $1D89=FFCF $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4461 $1D0A=0000 $1D0E=0019 $1D93=00 $1D96=08 $1D87=0000 $1D89=FFC8 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4462 $1D0A=0000 $1D0E=0018 $1D93=00 $1D96=01 $1D87=0000 $1D89=FFC1 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4463 $1D0A=0000 $1D0E=0017 $1D93=00 $1D96=0A $1D87=0000 $1D89=FFBA $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4464 $1D0A=0000 $1D0E=0016 $1D93=00 $1D96=03 $1D87=0000 $1D89=FFB3 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4465 $1D0A=0000 $1D0E=0015 $1D93=00 $1D96=0C $1D87=0000 $1D89=FFAC $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4466 $1D0A=0000 $1D0E=0014 $1D93=00 $1D96=05 $1D87=0000 $1D89=FFA5 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4467 $1D0A=0000 $1D0E=0013 $1D93=00 $1D96=0E $1D87=0000 $1D89=FF9E $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4468 $1D0A=0000 $1D0E=0012 $1D93=00 $1D96=07 $1D87=0000 $1D89=FF97 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4469 $1D0A=0000 $1D0E=0012 $1D93=00 $1D96=00 $1D87=0000 $1D89=FF90 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4470 $1D0A=0000 $1D0E=0011 $1D93=00 $1D96=09 $1D87=0000 $1D89=FF89 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4471 $1D0A=0000 $1D0E=0010 $1D93=00 $1D96=02 $1D87=0000 $1D89=FF82 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4472 $1D0A=0000 $1D0E=000F $1D93=00 $1D96=0B $1D87=0000 $1D89=FF7B $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4473 $1D0A=0000 $1D0E=000E $1D93=00 $1D96=04 $1D87=0000 $1D89=FF74 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4474 $1D0A=0000 $1D0E=000D $1D93=00 $1D96=0D $1D87=0000 $1D89=FF6D $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4475 $1D0A=0000 $1D0E=000C $1D93=00 $1D96=06 $1D87=0000 $1D89=FF66 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00",
+      "CAMINFO f4476 $1D0A=0000 $1D0E=000B $1D93=00 $1D96=0F $1D87=0000 $1D89=FF5F $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "4478"
+    ],
+    "pin": [
+      "^CAMINFO f44(5[4-9]|6[0-9]|7[0-6]) "
+    ],
+    "evidence": "Vehicle S +29 at 0DB. The camera pan behind the lead's walk, $1D0E 1F -> 0B and $1D96/$1D89 step for step, is the valve's at f4454..f4476 (was f4425..f4447); --frames +29."
+  },
+  "attract-112-drift-duration-vs-oracle": {
+    "expect": [
+      "CAMINFO f4256 $1D0A=0000 $1D0E=0035 $1D93=00 $1D96=08 $1D87=0000 $1D89=0158 $1D8B=0000 $1D8D=0158 $1D8F=0000 $1D91=0158 $1D35=00 $1D36=00",
+      "CAMINFO f4257 $1D0A=0000 $1D0E=0035 $1D93=00 $1D96=0A $1D87=0000 $1D89=015A $1D8B=0000 $1D8D=015A $1D8F=0000 $1D91=015A $1D35=00 $1D36=00",
+      "CAMINFO f4258 $1D0A=0000 $1D0E=0035 $1D93=00 $1D96=0C $1D87=0000 $1D89=015C $1D8B=0000 $1D8D=015C $1D8F=0000 $1D91=015C $1D35=00 $1D36=00",
+      "CAMINFO f4259 $1D0A=0000 $1D0E=0035 $1D93=00 $1D96=0E $1D87=0000 $1D89=015E $1D8B=0000 $1D8D=015E $1D8F=0000 $1D91=015E $1D35=00 $1D36=00",
+      "CAMINFO f4260 $1D0A=0000 $1D0E=0036 $1D93=00 $1D96=00 $1D87=0000 $1D89=0160 $1D8B=0000 $1D8D=0160 $1D8F=0000 $1D91=0160 $1D35=00 $1D36=00",
+      "CAMINFO f4261 $1D0A=0000 $1D0E=0036 $1D93=00 $1D96=00 $1D87=0000 $1D89=0160 $1D8B=0000 $1D8D=0160 $1D8F=0000 $1D91=0160 $1D35=00 $1D36=00",
+      "CAMINFO f4262 $1D0A=0000 $1D0E=0036 $1D93=00 $1D96=00 $1D87=0000 $1D89=0160 $1D8B=0000 $1D8D=0160 $1D8F=0000 $1D91=0160 $1D35=00 $1D36=00",
+      "CAMINFO f4263 $1D0A=0000 $1D0E=0036 $1D93=00 $1D96=00 $1D87=0000 $1D89=0160 $1D8B=0000 $1D8D=0160 $1D8F=0000 $1D91=0160 $1D35=00 $1D36=00",
+      "CAMINFO f4264 $1D0A=0000 $1D0E=0036 $1D93=00 $1D96=00 $1D87=0000 $1D89=0160 $1D8B=0000 $1D8D=0160 $1D8F=0000 $1D91=0160 $1D35=00 $1D36=00",
+      "CAMINFO f4265 $1D0A=0000 $1D0E=0036 $1D93=00 $1D96=00 $1D87=0000 $1D89=0160 $1D8B=0000 $1D8D=0160 $1D8F=0000 $1D91=0160 $1D35=00 $1D36=00",
+      "CAMINFO f4266 $1D0A=0000 $1D0E=0036 $1D93=00 $1D96=00 $1D87=0000 $1D89=0160 $1D8B=0000 $1D8D=0160 $1D8F=0000 $1D91=0160 $1D35=00 $1D36=00"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "4267"
+    ],
+    "pin": [
+      "^CAMINFO f42(5[6-9]|6[0-6]) "
+    ],
+    "evidence": "Vehicle S +29 at 112. The drift's last steps and its stop ($1D89/$1D8D/$1D91 0158 -> 0160, then held) are the valve's at f4256..f4266 (was f4227..f4237); --frames +29."
+  },
+  "attract-credits-opening-cost-vs-oracle": {
+    "expect": [
+      "sequence: entry 1 opening at f3932 -- 5728360 cycles of C3/0557 + 49152 DMA + 267940 setup = 17 black frame(s)",
+      "seqbri: f3949 $038D=01",
+      "seqbri: f3950 $038D=02",
+      "seqbri: f3951 $038D=03",
+      "seqbri: f3952 $038D=04",
+      "seqbri: f3953 $038D=05",
+      "seqbri: f3954 $038D=06",
+      "seqbri: f3955 $038D=07",
+      "seqbri: f3956 $038D=08",
+      "seqbri: f3957 $038D=09",
+      "seqbri: f3958 $038D=0A",
+      "seqbri: f3959 $038D=0B",
+      "seqbri: f3960 $038D=0C",
+      "seqbri: f3961 $038D=0D",
+      "seqbri: f3962 $038D=0E",
+      "seqbri: f3963 $038D=0F",
+      "seqbri: f4039 $038D=0E",
+      "seqbri: f4040 $038D=0D",
+      "seqbri: f4041 $038D=0C",
+      "seqbri: f4042 $038D=0B",
+      "seqbri: f4043 $038D=0A",
+      "seqbri: f4044 $038D=09",
+      "seqbri: f4045 $038D=08",
+      "seqbri: f4046 $038D=07",
+      "seqbri: f4047 $038D=06",
+      "seqbri: f4048 $038D=05",
+      "seqbri: f4049 $038D=04",
+      "seqbri: f4050 $038D=03",
+      "seqbri: f4051 $038D=02",
+      "seqbri: f4052 $038D=01",
+      "seqbri: f4053 $038D=00"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "4075"
+    ],
+    "pin": [
+      "^sequence: entry 1 opening at f3932 "
+    ],
+    "evidence": "Vehicle S +29 (the hub's song +30, world 5 -1). The credits' opening still costs 17 black frames (5728360 cycles of C3/0557 + 49152 DMA + 267940 setup -- NMI-off work, the phase-0 rule unchanged) and $038D climbs 01..0F and falls 0E..00 on the same relative frames: opening f3932, f3949..f3963, f4039..f4053 (was f3903, f3920..f3934, f4010..f4024); --frames +29."
+  },
+  "attract-play-clock-ticks-on-every-nmi-latch": {
+    "expect": [
+      "fmemmon f2057 loc=1B1  0400=0600*  0100=B101  0117=00",
+      "fmemmon f2135 loc=1F5  0400=1201*  0100=F501*  0117=80",
+      "fmemmon f2406 loc=16E  0400=0B05*  0100=6E01*  0117=80",
+      "fmemmon f3807 loc=0AD  0400=2B18*  0100=AD00  0117=21*",
+      "fmemmon f3809 loc=0AD  0400=001F*  0100=AD00  0117=00*"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "3820"
+    ],
+    "evidence": "The graded counts are the cartridge's on both clocks: the world leg 1F5 ticks 233 from its entry (1 s 18 f, f2135) to 16E (5 s 11 f, f2406) -- valve 48 f -> 4 s 41 f, 233 -- and the 0AD fight 377 from its trigger ($0117 = 21: 24 s 43 f, f3807) to the ack (31 s 0 f, f3809) -- valve 24 s 13 f -> 30 s 30 f, 377; the cartridge's 233 and 377 (the check's note). The absolute values move by 30 ticks: under the rule the hub's `10 18` (C0/1B8B) costs its 30 NMIs in this selftest too (the port's SPC runs; the cartridge's first `10 18` is 30 vblanks), and each of those NMIs latches the pad and ticks the clock (C0/EC15 -> C2/84D2 -> C2/85AE). Vehicle S: +30 at 1F5's entry, +29 at 0AD; --frames +30 so the fight is inside the run."
+  },
+  "attract-ow-abort-to-title": {
+    "expect": [
+      "ow-op05: C2/1100 -> loc 1B1 tile(0,0) flags=1 ret=1F5/(93,58)",
+      "title-sound: 26 post(s), $2143 wait 0 frame(s)"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "4473",
+      "--walkscript",
+      "n:2307,a:1,n:2200"
+    ],
+    "evidence": "The A press moves with its leg: vehicle S +29 inside the 1F5 flyover (n:2278 -> n:2307). The Epoch returns to 1F5 from the same camera, ret=1F5/(93,58) (the unmoved press read (96,58): three columns later in the pan), and the title replays with its 26 posts; --frames +29."
+  },
+  "attract-race-abort-to-title": {
+    "expect": [
+      "sequence: entry 0 program exited (JML $C0:0000) after 188 frames -> reboot"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "7445"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_FORCE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_HOLDBTN": "80@7187:10"
+    },
+    "evidence": "The press moves with the race's hand-off: this vehicle (selftest with the audio lockstep) hands the race over 4 frames earlier under the rule (f7033 for f7037: exits f7456 after 424 frames for f7461 after 425), so 80@7191 -> 80@7187 is the same stage frame 154. The program exits after 188 frames -- and the rule's cartridge from saves/attract_race_handoff_rule_f8247.state with the press at the same stage frame (`--btnscript 0:173,80:10,0:200`, CT_ORACLE_LOGICAL/VIRTUAL_BEAM + the three switches) reaches C0:0000 at f207 = hand-off f19 + 188, unchanged by the infinitely fast CPU."
+  },
+  "attract-race-abort-silent-host": {
+    "expect": [
+      "sequence: entry 0 program exited (JML $C0:0000) after 188 frames -> reboot"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "7474"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_HOLDBTN": "80@7186:10"
+    },
+    "evidence": "The silent host (plain selftest) hands the race over 28 frames later under the rule (f7033 for f7005: the hub's `10 18` now priced, the worlds -1 each), so 80@7158 -> 80@7186 is the same stage frame 153 (f7185-f7187 all give 188). The program exits after 188 frames, the cartridge's under the rule (attract-race-abort-to-title)."
+  },
+  "attract-ff-own-fade-before-the-jump-vs-logical-oracle": {
+    "expect": [
+      "fmemmon f5340 loc=1B1  0100=B101  0119=0C*",
+      "fmemmon f5341 loc=0A5  0100=A500*  0119=0C",
+      "fmemmon f5342 loc=0A5  0100=A500  0119=0B*",
+      "fmemmon f5353 loc=0A5  0100=A500  0119=00*",
+      "sequence: entry 1 opening at f5355 ",
+      "fmemmon f7258 loc=1B1  0100=B101  0119=0F*",
+      "fmemmon f7260 loc=0E6  0100=E600*  0119=0E*",
+      "fmemmon f7274 loc=0E6  0100=E600  0119=00*",
+      "sequence: entry 1 opening at f7276 "
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_FIELD_MEMMON": "0100:2,0119:1",
+      "CT_SHOTS": "build/_fffade",
+      "CT_SHOTS_AT": "7279",
+      "CT_SHOTS_EXIT": "1"
+    },
+    "pin": [
+      "^fmemmon f(534[0-9]|535[0-3]|72(5[89]|6[0-9]|7[0-4])) ",
+      "^sequence: entry 1 opening at f(5355|7276) "
+    ],
+    "evidence": "The op FF's own fade is the valve's frame for frame relative to the op: 0A5 -- $0119 0C on the op's frame (f5340), the jump's frame (f5341, $0100 = A500), 0B .. 00 at +12 (f5353), the opening at +14 (f5355); 0E6 -- 0F at f7258, the jump at f7260 (0E), 00 at f7274, the opening f7276. Vehicle L: -25 at the 0A5 hub, -59 at the 0E6 hub. Graded against the rule's cartridge from power-on ($0100/$0119 events, ct.exe --monitor --from boot under the switches, against the port's CT_FIELD_MEMMON): the 0A5 hub's op lands at the same offset from the cartridge's as on the valve (port-cart -87 both); at 0E6 the port moved 9 frames less than the logical->rule oracle (-59 / -68) because the valve's port ran the 07D fight 9 frames SHORT against the logical oracle ($0119 0F -> 00: port 942, cartridge 951) and the rule's port runs it exactly (908 = 908). CT_SHOTS_AT 7338 -> 7279 (the opening + 3, as before)."
+  },
+  "attract-count-after-load-16e-vs-logical-oracle": {
+    "expect": [
+      "fmemmon f2407 loc=16E  0100=6E01  1000=0400040004000400*  1D24=000000000000",
+      "fmemmon f2424 loc=16E  0100=6E01  1000=0404040402020404*  1D24=00F000F000F0*"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_FIELD_MEMMON": "0100:2,1000:8,1D24:6",
+      "CT_SHOTS": "build/_cnt16e",
+      "CT_SHOTS_AT": "2429",
+      "CT_SHOTS_EXIT": "1"
+    },
+    "pin": [
+      "^fmemmon f2407 ",
+      "^fmemmon f2424 "
+    ],
+    "evidence": "Vehicle L -1 after the 1F5 world's load (C2/0A5A held). 16E's first queue build visits every object ($1000 = 04 00 x4 on the load's frame f2407) and the countdowns read 04 04 04 04 02 02 04 04 with $1D24 = 00F0 x3 at f2424 -- the valve's bytes one frame earlier. Graded against the rule's cartridge from power-on ($0100/$0119 events, ct.exe --monitor --from boot under the switches, against the port's CT_FIELD_MEMMON): 16E's entry at port-cart -86 on both clocks (the logical oracle's 16E is one frame earlier under the rule too: c2493 -> c2492)."
+  },
+  "attract-kill-revive-and-pc-arms-112-vs-logical-oracle": {
+    "expect": [
+      "fmemmon f4492 loc=112  1000=0404010104000101010104000201040004040201040402010404040004040404*  0B80=0C16808080020806808080808080808080808080808080808080808080808080800C80808080*  0D00=00000800000028002000000088010000*  1700=00000000000040002000000020030000*"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_FIELD_MEMMON": "1000:20,0B80:26,0D00:10,1700:10",
+      "CT_SHOTS": "build/_kill112",
+      "CT_SHOTS_AT": "4496",
+      "CT_SHOTS_EXIT": "1"
+    },
+    "pin": [
+      "^fmemmon f4492 "
+    ],
+    "evidence": "Vehicle L -24 after the 0AD fight. The kill/revive and the follower PC arms ($0B80/$0D00/$1700/$1000 stores, every '*' as on the valve) on f4492 (was f4516). Graded against the rule's cartridge from power-on ($0100/$0119 events, ct.exe --monitor --from boot under the switches, against the port's CT_FIELD_MEMMON): the 0AD fight + return and 112's entry move -24 on both sides (port f4363 -> f4339, cartridge c4452 -> c4428): the rule's port runs the 0AD fight and its return exactly as long as the rule's cartridge ($0119 0F -> 00: 741 = 741; the valve's port ran it one frame longer than the logical oracle, 764 / 763)."
+  },
+  "attract-party-leave-visit-vs-logical-oracle": {
+    "expect": [
+      "fmemmon f2107 loc=1B1  0100=B101  2980=000182*",
+      "fmemmon f2111 loc=1B1  0100=B101  2980=008282*",
+      "fmemmon f2135 loc=1F5  0100=F501*  2980=008282",
+      "fmemmon f4331 loc=0AD  0100=AD00  2980=000384*",
+      "fmemmon f4335 loc=0AD  0100=AD00  2980=000302*"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_FIELD_MEMMON": "0100:2,2980:3",
+      "CT_SHOTS": "build/_leavechk",
+      "CT_SHOTS_AT": "4342",
+      "CT_SHOTS_EXIT": "1"
+    },
+    "evidence": "Vehicle L -24 at the 0AD fight's end (the boot under the rule, the tail, the return's five C0/00EB waits). $2980 reads 000384 then 000302 four frames later -- the valve's lines at f4331/f4335 (was f4355/f4359), the hub's leave at f4339. Graded against the rule's cartridge from power-on ($0100/$0119 events, ct.exe --monitor --from boot under the switches, against the port's CT_FIELD_MEMMON): -24 at the 0AD's end on both sides (port f4351 -> f4327, cartridge c4440 -> c4416). CT_SHOTS_AT 4366 -> 4342."
+  },
+  "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle": {
+    "expect": [
+      "fmemmon f4213 loc=0AD  1D8B=8605C302*  0117=00*"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_FIELD_MEMMON": "1D8B:4,0117:1",
+      "CT_SHOTS": "build/_chktail",
+      "CT_SHOTS_AT": "4221",
+      "CT_SHOTS_EXIT": "1"
+    },
+    "evidence": "The ack's frame and the stash it restores both move, and both are the RULE cartridge's: from the f1385 state of saves/attract_cena_inicial.state under the switches (--monitor 7E1D8B:4,7E0117:1 --writer) the cartridge acks ($0117 = 00, C0:18BD) with $1D8B = 8605/C302 (C0:9585) and drifts 8805C402, 8A05C502 .. one step a frame after it; the port acks at f4213 with 8605C302 and drifts 8805C402 at f4214 .. -- byte for byte. The valve's line pinned the real cartridge's ack value A805D402 (c4322): the rule's tail is shorter (the fight's boot 2+apu+3+1, C0/1BE6's `70 00` upload on the SPC's time from the last wait), so 17 fewer drift steps before the ack, on both sides. CT_SHOTS_AT 4240 -> 4221 (ack + 8, as before)."
+  },
+  "attract-flea-entrance-vs-oracle": {
+    "expect": [
+      "attract-flea-cmp: port f3716 vs cartridge f50 -> Flea box 0 / 1656 px differ",
+      "attract-flea-cmp: throne box 0 px differ"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_flea_cmp.py",
+      "3716",
+      "50"
+    ],
+    "evidence": "Vehicle S +29 at 0AD (the hub's `10 18` priced, world 5 -1); the tool takes the port frame as argv (its default 3687 is the valve's). Port f3716 vs cartridge f50 of saves/attract_loc0AD_flea.state: Flea box 0 / 1656 px differ, throne box 0 px -- the valve's result."
+  },
+  "attract-entry3-stage-picture-vs-oracle": {
+    "expect": [
+      "entry3-vram: tiles $2000-$4F7F -> 12160 / 12160 words identical",
+      "entry3-vram: bg1 map $6000-$67FF -> 2017 / 2048 words identical",
+      "entry3-vram: bg2 map $6800-$6FFF -> 2048 / 2048 words identical",
+      "entry3-vram: bg3 map $7000-$77FF -> 2016 / 2048 words identical",
+      "entry3-cgram: 256 / 256 colours identical, per row 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16",
+      "entry3-picture: port f8852 vs cartridge +151 whole -> 57344 / 57344 identical, mean abs diff 0.00",
+      "entry3-frames: port f8719..f8852 vs cartridge +18..+151 -> 134 / 134 stage frames identical (thumbnails)"
+    ],
+    "argv": [
+      "python",
+      "tools/entry3_stage_cmp.py",
+      "8852"
+    ],
+    "evidence": "Vehicle L -60 at entry 3's hand-off (f8719 for f8779). entry3_stage_cmp at port f8852 (= hand-off + 133, as f8912 was): the whole picture 57344 / 57344 identical to the cartridge's +151 (mean abs diff 0.00), mountains and sky bands identical, entry3-frames f8719..f8852 vs +18..+151: 134 / 134 stage frames identical -- the valve's result. (This tool's cartridge side is the committed entry-3 hand-off state, not the rule's power-on -- see attract-entry3-stage-every-frame-under-the-rule for the stage under the rule, which diverges only from +38.)"
+  },
+  "attract-0ad-battle-boot-exit-return-vs-oracle": {
+    "expect": [
+      "battlesfx f17 battle-start id=08 pan=80 (CD/04FD)",
+      "flee f377 exit-sound ctr=0 cd=0 flags=B0 msg=FF box=00 dwell=0",
+      "flee f379 hud-close-arm ctr=0 cd=0 flags=B0 msg=FF box=00 dwell=0",
+      "flee f392 module-exit ctr=0 cd=0 flags=B0 msg=FF box=00 dwell=0",
+      "battle-return: loc 0AD -- acked at f4213 after 11 of C0/1BE6's upload + 1 in the battle's tail; C0/0304's reload held, its five C0/00EB waits = the ack's frame + 4 frame(s) held",
+      "battletrace f96 demo-commit-tech cur=-1 A013=0 9609=0 95DB=0 99E0=00/99E1=40 $95DC=0 q[0..0] AFAB(c0,m0,g255) 9F22(c48,m48) cronoHP=800 marleHP=800 gatoHP=1 pcAtk=0 enAtk=0 9877=00 AE93=00 AEE3=01,00,04 span=0 anim(ptr=CD/0000 parsed=0 strike=0 showdmg=0 pause=0 play=0) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFFFF",
+      "shotluma: f4339 loc=112 field mean=0",
+      "shotluma: f4340 loc=112 field mean=0",
+      "shotluma: f4341 loc=112 field mean=0",
+      "shotluma: f4342 loc=112 field mean=0",
+      "shotluma: f4343 loc=112 field mean=0",
+      "shotluma: f4344 loc=112 field mean=0",
+      "shotluma: f4345 loc=112 field mean=0",
+      "shotluma: f4346 loc=112 field mean=0",
+      "shotluma: f4347 loc=112 field mean=0",
+      "shotluma: f4348 loc=112 field mean=0",
+      "shotluma: f4349 loc=112 field mean=0",
+      "shotluma: f4350 loc=112 field mean=0",
+      "shotluma: f4351 loc=112 field mean=0",
+      "shotluma: f4352 loc=112 field mean=0",
+      "shotluma: f4353 loc=112 field mean=0",
+      "shotluma: f4354 loc=112 field mean=0",
+      "shotluma: f4355 loc=112 field mean=0",
+      "shotluma: f4356 loc=112 field mean=0",
+      "shotluma: f4357 loc=112 field mean=0",
+      "shotluma: f4358 loc=112 field mean=0",
+      "shotluma: f4359 loc=112 field mean=0",
+      "shotluma: f4360 loc=112 field mean=0",
+      "battle-fx-teardown runs=0"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_BATTLE_TRACE": "1",
+      "CT_SHOTS_LUMA": "1",
+      "CT_SHOTS": "build/_chk0ad",
+      "CT_SHOTS_AT": "4386",
+      "CT_SHOTS_EXIT": "1"
+    },
+    "pin": [
+      "^battlesfx f\\d+ battle-start ",
+      "^flee f\\d+ (exit-sound|hud-close-arm|module-exit)",
+      "^battle-return: loc 0AD -- acked at f\\d+ ",
+      "^battletrace f\\d+ demo-commit-tech",
+      "^shotluma: f\\d+ loc=112 field mean=0$",
+      "^battle-fx-teardown runs="
+    ],
+    "evidence": "THE 0AD FIGHT UNDER THE RULE, graded against the rule's cartridge (saves/attract_cena_inicial.state under the three switches, --monitor/--hookpc from its f1385 state; the port's CT_FIELD_MEMMON/CT_BATTLE_TRACE): the trigger ($0117 = 21, C0:3AA8) cartridge f353 / port f3807; C1/0000 and the boot's `70 01` post in ONE frame on the cartridge (f357, both at v228 h162 -- the CPU free from the field NMI's pad wait to C0/1BDF's JSL), 12 NMIs; #08 (CD/04FD) cartridge f372 = trigger + 19, port battle f17 = field f3826 = trigger + 19; the exit's C0/1BE6 f747 and the ack (C0:18BD) f759 = trigger + 406, port ack f4213 = trigger + 406 with the same restored stash ($1D8B 8605/C302); the 112 leg follows 24 frames earlier on both sides (c4452 -> c4428 from power-on, port f4363 -> f4339). Inside the fight every line moves by the boot alone: battle frames -14 (the valve's boot 1 + apu + 18 against the rule's 2 + apu + 3 + 1, apu 13 -> 12). The return line is the rule's text (field.c: C0/0304's reload is NMI-on work, held; what is left are its five C0/00EB waits) -- its old pin regex matched the valve's priced line only. 112's 22 black frames f4339..f4360 (were f4363..f4384); CT_SHOTS_AT 4410 -> 4386."
+  },
+  "attract-0ad-battle-turn-machinery-vs-oracle": {
+    "expect": [
+      "battlesfx f17 battle-start id=08 pan=80 (CD/04FD)",
+      "memmon f1 rel=-1  B185=00*  B03A=0101010000000001000000*  AFAB=FFFFFFFFFFFFFFFFFFFFFF*  B163=00020701FFFFFFFFFFFFFF*",
+      "memmon f94 rel=-1  B185=00  B03A=0101010000000001000000  AFAB=010101FFFFFFFFFFFFFFFF*  B163=01090604020A0508000703*",
+      "memmon f96 rel=-1  B185=01*  B03A=8181810000000001000000*  AFAB=000000FFFFFFFFFEFFFFFF*  B163=01090604020A0508000703",
+      "memmon f350 rel=-1  B185=01  B03A=0181010000000001000000*  AFAB=48005CFFFFFFFFFEFFFFFF*  B163=01090604020A0508000703",
+      "memmon f352 rel=-1  B185=01  B03A=0181010000000001000000  AFAB=47005BFFFFFFFFFDFFFFFF*  B163=01090604020A0508000703",
+      "techtrace f96 demo-commit-tech 95DB=0 95DC=0 9609=0 960D=00 9EE3=00000000000000 A02A=4 9877=00 AE93=00 A013=0 curMP=80 gatoHP=1 dmg=0 span=0 techId=0",
+      "techtrace f99 pc-act-tech   95DB=0 95DC=0 9609=0 960D=00 9EE3=00000000000000 A02A=4 9877=42 AE93=42 A013=1 curMP=78 gatoHP=1 dmg=271 span=264 techId=66",
+      "enemycells slot4 id=9F type=1 pose=00 foot=(120,111) (78,3F)=80 (68,3F)=82 (78,4F)=84 (68,4F)=86 (58,4F)=88 (78,5F)=8A (68,5F)=8C (58,5F)=8E",
+      "enemycells slot4 id=9F type=1 pose=0F foot=(120,111) (79,3F)=80 (69,3F)=82 (79,4F)=84 (69,4F)=86 (58,4F)=88 (79,5F)=8A (69,5F)=8C (58,5F)=8E",
+      "enemycells slot4 id=9F type=1 pose=04 foot=(120,111) (7D,45)=80 (6D,45)=82 (7D,55)=84 (6D,55)=86 (58,4F)=88 (7D,65)=8A (6D,65)=8C (58,5F)=8E",
+      "idlewalk f95 grp=0 order=0,1,2",
+      "zorder f175: 2(front) 0(177) 2(144) 1(144) 7(111)",
+      "zorder f180: 0(front) 2(front) 0(177) 1(144) 2(136) 7(111)",
+      "zorder f306: 2(front) 0(177) 2(144) 1(144) 7(111)",
+      "zorder f311: 0(177) 1(144) 2(144) 7(111)"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_BATTLE_TRACE": "1",
+      "CT_BATTLE_CELLTRACE": "1",
+      "CT_BATTLE_MEMMON": "B185:1,B03A:B,AFAB:B,B163:B",
+      "CT_SHOTS": "build/_chk0adtm",
+      "CT_SHOTS_AT": "4286",
+      "CT_SHOTS_EXIT": "1",
+      "CT_BATTLE_WALKTRACE": "1",
+      "CT_BATTLE_ZTRACE": "1"
+    },
+    "pin": [
+      "^battlesfx f\\d+ battle-start ",
+      "^memmon f\\d+ ",
+      "^techtrace f\\d+ demo-commit-tech ",
+      "^techtrace f\\d+ pc-act-tech ",
+      "^enemycells slot4 id=9F ",
+      "^idlewalk f(9[0-9]|10[0-9]) ",
+      "^zorder f(175|180|306|311): "
+    ],
+    "evidence": "THE 0AD FIGHT UNDER THE RULE, graded against the rule's cartridge (saves/attract_cena_inicial.state under the three switches, --monitor/--hookpc from its f1385 state; the port's CT_FIELD_MEMMON/CT_BATTLE_TRACE): the trigger ($0117 = 21, C0:3AA8) cartridge f353 / port f3807; C1/0000 and the boot's `70 01` post in ONE frame on the cartridge (f357, both at v228 h162 -- the CPU free from the field NMI's pad wait to C0/1BDF's JSL), 12 NMIs; #08 (CD/04FD) cartridge f372 = trigger + 19, port battle f17 = field f3826 = trigger + 19; the exit's C0/1BE6 f747 and the ack (C0:18BD) f759 = trigger + 406, port ack f4213 = trigger + 406 with the same restored stash ($1D8B 8605/C302); the 112 leg follows 24 frames earlier on both sides (c4452 -> c4428 from power-on, port f4363 -> f4339). Inside the fight every line moves by the boot alone: battle frames -14 (the valve's boot 1 + apu + 18 against the rule's 2 + apu + 3 + 1, apu 13 -> 12). The turn machinery is the valve's byte for byte, 14 battle frames earlier: $B185/$B03A/$AFAB/$B163 at f94/f96/f350/f352 (were f108/f110/f364/f366), the demo's tech commit f96 and Crono's act f99, the idle walk f95, the z-order lines f175/f180/f306/f311 (were f189/f194/f320/f325, the same orders and Y's); Flea's cells unchanged. CT_SHOTS_AT 4310 -> 4286 (the 0AD's end -24)."
+  },
+  "attract-battle-abort-reset": {
+    "expect": [
+      "shotluma: f3877 loc=0AD field mean=32",
+      "shotluma: f3907 loc=0AD field mean=17",
+      "reset: C0/0053 JSL C7:0000 re-uploaded the driver on the running SPC: 7423254 master cycles, 20 frame(s)",
+      "reset: CF/E702 JML C0:FF00 -> C0/000E cold init at f3914 ($BB00 reached 0): WRAM cleared, $7F0061=0, reboot into loc 000",
+      "reboot: JML C0:0000 -> loc 000 tile(0,0) bits00",
+      "shotluma: f3939 loc=000 field mean=0",
+      "shotluma: f3940 loc=000 field mean=0",
+      "shotluma: f3969 loc=000 field mean=0",
+      "shotluma: f3970 loc=1B1 field mean=0"
+    ],
+    "evidence": "The press (80@3899) still lands inside the 0AD fight and the reset is the valve's frame for frame: the fight's luma 32 at f3877, the cold init (CF/E702 -> C0/000E) at f3914, loc 000 at f3939/f3940 and 1B1 at f3970 = reset + 56, the cartridge's. Two values move with the fight's own clock: the rule's 0AD fight begins one frame earlier (f3809: the 1F5 world's load), so the press is battle frame 90 and the fading frame f3907 shows the starfield one drift step on (mean 17, the value this line held before the 2026-09-28 drift fix moved the nebula); and C0/0053's `JSL C7:0000` re-upload runs on the SPC the song left (bank C7 real on both sides), 7423254 master cycles for 7410054 -- still 20 frames, the cartridge's."
+  },
+  "attract-07d-frog-squash-colours-vs-oracle": {
+    "expect": [
+      "frame-region-cmp: port f6824 vs oracle f4755 box (48,57)-(208,134) -> 12320 / 12320 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/frame_region_cmp.py",
+      "saves/attract_cena_inicial.state",
+      "4755",
+      "6824",
+      "48",
+      "57",
+      "208",
+      "134",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433"
+    ],
+    "env": {
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_ORACLE_LOGICAL": "1",
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "The reference becomes the rule's cartridge: under the line-64 cut the Frog Squash's per-line wave lands on line 64 on both sides, so against the REAL cartridge no port frame matches any more (best f6814: 10501 / 12320, the valve's pair read 10530). Against the rule's cartridge (CT_ORACLE_LOGICAL/VIRTUAL_BEAM with the switches) the port's Frog Squash is exact: port f6824 vs cartridge f4755 box (48,57)-(208,134) 12320 / 12320, and f6829 vs f4760 too (the neighbours 1313-3492) -- f4755 is the frame the 2026-09-30 two-switch migration found for this moment."
+  },
+  "attract-087-ice-sword-afterimage-vs-oracle": {
+    "expect": [
+      "afterimage: port f9580 vs cart c7658 box (40,0)-(110,130): 9100 / 9100 identical",
+      "afterimage: port f9586 vs cart c7664 box (40,0)-(110,130): 9100 / 9100 identical",
+      "afterimage: port f9592 vs cart c7670 box (40,0)-(110,130): 9100 / 9100 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_afterimage_cmp.py",
+      "9580:7658,9586:7664,9592:7670"
+    ],
+    "evidence": "Vehicle L -73 inside the 087 fight; tools/attract_afterimage_cmp.py takes the pairs as argv now (its default is the valve's). Each port frame is the one whole-search best in its window (f9570-9612) against the same cartridge frame: 9100 / 9100 identical, the valve's result."
+  },
+  "attract-anim-drain-bats-and-legs-vs-cartridge": {
+    "expect": [
+      "anim-drain: 0A5 bat obj15: cart c3543-c3999 poses 00/01/02 changes 79 longest 9 | port p5547-p5999 poses 00/01/02 changes 82 longest 8",
+      "anim-drain: 0A5 bat obj16: cart c3543-c3999 poses 00/01/02 changes 79 longest 9 | port p5547-p5999 poses 00/01/02 changes 82 longest 8",
+      "anim-drain: 0A5 bat obj17: cart c3543-c3999 poses 00/01/02 changes 78 longest 10 | port p5547-p5999 poses 00/01/02 changes 79 longest 8",
+      "anim-drain: 0A5 bat obj18: cart c3543-c3999 poses 00/01/02 changes 77 longest 10 | port p5547-p5999 poses 00/01/02 changes 78 longest 8",
+      "anim-drain: 0A5 bat obj19: cart c3543-c3999 poses 00/01/02 changes 77 longest 11 | port p5547-p5999 poses 00/01/02 changes 78 longest 8",
+      "anim-drain: 0A5 bat obj20: cart c3543-c3999 poses 00/01/02 changes 76 longest 10 | port p5547-p5999 poses 00/01/02 changes 78 longest 8",
+      "anim-drain: 0A5 bat obj21: cart c3543-c3999 poses 00/01/02 changes 76 longest 10 | port p5547-p5999 poses 00/01/02 changes 78 longest 8",
+      "anim-drain: 0A5 bat obj22: cart c3543-c3999 poses 00/01/02 changes 75 longest 10 | port p5547-p5999 poses 00/01/02 changes 78 longest 8",
+      "anim-drain: 0A5 bats: 8 / 8 fly through the cartridge's poses, none holding one longer than its longest (11)",
+      "anim-drain: 087 legs from the torso's pose 02: cart c7189 02 01 02 00 01 00 02 01 00 | port p9143 01 02 01 00 01 00 02 01 00",
+      "anim-drain: 087 legs port f9206 vs cart c7254 box (64,60)-(152,130): 6160 / 6160 identical",
+      "anim-drain: 087 legs port f9222 vs cart c7270 box (64,60)-(152,130): 6160 / 6160 identical",
+      "anim-drain: 087 legs port f9246 vs cart c7294 box (64,60)-(152,130): 6160 / 6160 identical",
+      "anim-drain: 087 legs port f9262 vs cart c7310 box (64,60)-(152,130): 6160 / 6160 identical",
+      "anim-drain: 087 legs port f9278 vs cart c7326 box (64,60)-(152,130): 6160 / 6160 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_anim_drain_cmp.py",
+      "-60"
+    ],
+    "evidence": "Vehicle L: the bats' 0A5 window -25 (p5547-p5999, found by the tool itself), Zombor's legs -60 at 087 (tools/attract_anim_drain_cmp.py takes the port shift as argv; its default 0 is the valve's). Every graded value is the valve's: the eight bats' poses / changes / longest holds, the legs' pose sequence (port p9143, the same nine poses against the cartridge's c7189) and the legs' box 6160 / 6160 at the five pairs."
+  },
+  "attract-07d-field-palette-after-demo-battle": {
+    "expect": [
+      "07d-palette: BG rows 0-7 (colours 1-15) 120/120 identical",
+      "07d-palette: the glow, colours 24-31 8/8 identical",
+      "07d-palette: OBJ rows 0/4 colours 0-3 (ShowDamage) 8/8 identical",
+      "07d-palette: OBJ rows 2/3 colours 13-15 (CC/EF16) 6/6 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_07d_palette_cmp.py",
+      "7179"
+    ],
+    "evidence": "Vehicle L -59 after the 07D fight (the rule's f7179 thumbnail is the valve's f7238); the tool takes the port's dump frame as argv. The field's page after the Frog Squash against the same cartridge f5228: BG rows 120/120, the glow 8/8, ShowDamage's OBJ colours 8/8, CC/EF16's 6/6 -- the valve's result."
+  },
+  "attract-battle-colours-entry-and-tech-vs-oracle": {
+    "expect": [
+      "battle-colours: 07D before the tech, port f6603 vs cart c4630 box (0,0)-(256,224): 57329 / 57344 identical",
+      "battle-colours: 07D mid-tech, port f6679 vs cart c4700 box (0,0)-(256,224): 57329 / 57344 identical",
+      "battle-colours: 07D mid-tech, port f6763 vs cart c4800 box (0,0)-(256,224): 57329 / 57344 identical",
+      "battle-colours: 07D effect load, faded, port f6627 vs cart c4648 box (0,0)-(256,224): 57329 / 57344 identical",
+      "battle-colours: 087 Ice Sword darken, port f9430 vs cart c7505 box (0,0)-(256,224): 57173 / 57344 identical",
+      "battle-colours: 07D after the tech, port f7100 vs cart c5145 box (0,0)-(256,224): 57341 / 57344 identical",
+      "battle-colours: 07D after the tech, port f7108 vs cart c5153 box (0,0)-(256,224): 57341 / 57344 identical",
+      "battle-colours: 087 after the tech, port f9797 vs cart c7889 box (0,0)-(256,224): 57173 / 57344 identical",
+      "battle-colours: 087 after the tech, port f9805 vs cart c7897 box (0,0)-(256,224): 57167 / 57344 identical"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_battle_colour_cmp.py",
+      "3809,6603,6679,6763,6627,9430,7100,7108,9797,9805"
+    ],
+    "evidence": "The port frames move with the fights under the rule (the tool takes them as argv; its defaults are the valve's): for each real-cartridge frame the port window was searched whole (one port run, every frame) and the best frame taken (the earliest of a tie, the 07D pair after the tech 8 apart as on the valve): every count is the valve's or better -- 07D before / mid / mid / load 57329 (valve 57213 / 57213 / 57185 / 57329), after the tech 57341 (valve 56279: the rule's fight ends exactly as the cartridge's, 908 = 908 frames from $0119 0F to 00, where the valve's ran 9 short), 087 57173 / 57173 / 57167 (valve 57173 / 57167 / 57167). The 0AD entry's PCs 1056 / 1056 at f3809 (vehicle -1) are unpinned as before. Cross-check against the rule's cartridge inside the 07D fight: port f6628 = cartridge f4560 and f6760 = f4690 pixel for pixel (57344)."
+  },
+  "attract-sound-stays-with-the-picture": {
+    "expect": [
+      "audio-latency: out360 534 samples behind the song loads (1.0 frames)",
+      "audio-latency: out8040 536 samples behind the song loads (1.0 frames)",
+      "audio-latency: out8640 537 samples behind the song loads (1.0 frames)",
+      "audio-latency: out9120 534 samples behind the song loads (1.0 frames)",
+      "audio-latency: out10680 534 samples behind the song loads (1.0 frames)",
+      "audio-latency: the two stages (out8100-9025): at most 637 samples (1.2 frames)",
+      "audio-latency: the whole demo (out60-10732): at most 650 samples (1.2 frames)"
+    ],
+    "argv": [
+      "python",
+      "tools/attract_audio_latency.py",
+      "360,8040,8640,9120,10680",
+      "8100-9025",
+      "10732"
+    ],
+    "evidence": "Port-only (the output FIFO's backlog). The sample points move with the attract's clock -- the stages 60 frames earlier, the demo's end 85 (vehicle L; the FIFO trace's 60-frame grid: 8100 -> 8040, 8700 -> 8640, 9180 -> 9120, 10800 -> 10680, the stages' window 8160-9085 -> 8100-9025, the end 10817 -> 10732) -- so the tool takes them as argv (its defaults are the valve's). At the same moments the backlog is the valve's within 3 samples (534 / 536 / 537 / 534 / 534 against 537 / 536 / 537 / 536 / 537), the stages' worst 637 (valve 636), the whole demo's worst 650 (valve 673), nothing lost. (At the valve's unmoved points the rule's run read 587 and 637: those frames are inside the race and entry 3's hand-off now, where a stage runs ahead by a fraction of a frame by design.)"
+  },
+  "attract-title-tick-with-its-pendulum-vs-cartridge": {
+    "status": "NOT RESOLVED",
+    "measured": [
+      "title-sync: cartridge, the title after the demo: tick c9144, picture c9147 -> tick - picture = -3",
+      "title-sync: port title 1 (opened f5): tick f48, picture f50 -> tick - picture = -2",
+      "title-sync: port title 2 (opened f10999): tick f11022, picture f11023 -> tick - picture = -1"
+    ],
+    "evidence": "NOT RESOLVED. The port's second title's first pendulum tick lands one frame later against its picture under the rule (-1; the valve's -2), while the cartridge's is -3 on both clocks (the real one in this tool, and the rule's: from saves/attract_cena_inicial.state at f8650 under the switches, tick +317 / first lit frame +320). The setup's own price is the same on both port clocks (CT_MAILTRACE: the `10 30` post 16 NMIs, the $2143 spin 6, hold 22 -- the picture does not move), so the tick's frame is the port SPC's phase at the post: where song $18 stands after the demo, i.e. the attract's cumulative leg residuals (the port's legs against the rule's cartridge: 1F5 world +4, 112 -4, 1F7 world +3, the race +4, the credits +3, 1B0 -5 ...). Not a mechanism of the title."
+  },
+  "attract-race-stage-every-frame-under-the-rule": {
+    "expect": [
+      "stage-rule-cmp: race port f8102..f8525 vs cartridge +19..+442 under the rule -> 63 / 424 frames identical, differ at +74 +75 +76 +77 +78 +79 +80 +81 +82 +83 +84 +85 +86 +87 +88 +89 ..."
+    ],
+    "evidence": "Both sides move and the comparison is the valve's: the race (seq entry 0) is 424 frames under the infinitely fast CPU on the cartridge (the rule's power-on state, its hand-off at f19, exit +442) and in the port (hand-off f8102, 60 frames earlier with its leg; `program exited after 424 frames`); the same 63 frames identical and the first difference at +74 as before (the race's open residual, sequence_table.md 11.13 (e))."
+  },
+  "attract-seed-history-vs-cartridge": {
+    "expect": [
+      "seed-history: 403/403 calls equal ($0386, $0008, caller X) from power-on to cartridge f8842; first divergence: none"
+    ],
+    "evidence": "Both sides under the rule from power-on: every C3/02DD call equal ($0386, $0008, the caller's X) -- 403 of 403 in the tool's --frames 8900 window, whose last call is now the cartridge's f8842 (the rule's attract reaches more of its calls within the window: the demo is ~70 frames shorter by then on the cartridge's own clock)."
+  },
+  "ow-ferry-both-ways-vs-rule-cartridge": {
+    "expect": [
+      "ferry truce: -> loc 038 (cartridge 038): overworld 1790 frames, 0 differ; lit->fade c1714 p1714",
+      "ferry porre: -> loc 012 (cartridge 012): overworld 2046 frames, 0 differ; lit->fade c1970 p1970"
+    ],
+    "evidence": "Both crossings, port against the rule's cartridge: every overworld frame identical (0 differ) and the lit->fade frames unchanged (c1714 p1714, c1970 p1970); the world visits are one frame shorter on BOTH sides (1790 / 2046 for 1791 / 2047) -- the world entry's first NMI build C2/0A5A held (fieldRuleNmiOnHold on the port, the rule's oracle)."
+  },
+  "boot-load-save-sound-sequence": {
+    "expect": [
+      "menusfx-menu: loader prelude 5 -> 70/00, 18/FF, 19/FF, 82/01, 83/01 (C2/8096, unthrottled)",
+      "loader: screen $0E open, 1 slot(s), cursor row 0",
+      "menusfx: cmd=18 id=00 pan=80 posted (throttle $0D76 -> 3)",
+      "menusfx-loader: stereo -> cmd=F3 param=00 (C2/E694)",
+      "loader: LOAD slot 0 -> 2100 bytes unpacked (FF/FAA3), loc=1F1",
+      "audiosilence: f400-1399 sounding 986/1000 frames, longest silent run 3"
+    ],
+    "evidence": "Port-only (the sound of a loaded save, f400-1399). The same music, one frame earlier against the window: under the rule the --boot path's scene-0 load is at f182 for f183 (the title's post priced on the port's SPC, +160952 for +141856 on the loader clock) and world 1's window is 42 black frames for 43 (fieldRuleNmiOnHold), so one more sounding frame falls inside f400-1399 (986 / 1000, the longest silence still 3). The menu sounds and the loader lines are unchanged."
+  },
+  "attract-0ad-hud-close-no-blink-vs-oracle": {
+    "status": "NOT RESOLVED",
+    "measured": [
+      "frame-region-cmp: port f4215 vs oracle f2170 box (0,8)-(256,56) -> 10618 / 12288 identical",
+      "(rule's cartridge, CT_ORACLE_LOGICAL/VIRTUAL_BEAM) port f4201..f4206 = cartridge f2134..f2139: 12288 / 12288; port f4198 / f4199 / f4200 vs f2131 / f2132 / f2133: 10752 / 11264 / 11776"
+    ],
+    "evidence": "NOT RESOLVED. The subject holds (the strip closes to two lines and then none -- no whole-strip frame), but under the rule the band's close runs one frame behind the rule's cartridge: with the starfield aligned (pictures port = cartridge + 2067, 12288 / 12288 at f4201..4206) the port shows 4 / 2 lines where the cartridge shows 2 / none (rows 31-32 at f4200 vs f2133). The exit's WRAM, aligned on the action's end ($A013 -> 00: cartridge f704 of the f1385 state, C1:41BD; port battle f350): CD/0516's `$CE16 = 1` cartridge +26 / port +27, the arm `$CA1E = 8017` +28 / +29, the close's end and the 0E request +40 / +41, the 08 request +41 / +42 -- one frame late from CD/0516 on -- and then the port posts C0/1BE6's `70 00` on that same frame (+42) where the ROM waits twice more (CD/0415's CD/3E7D, then CD/0418 installs the tail NMI D1/F4C0 and CD/044A waits) and posts at +43. Against the trigger the port's action also ends one frame late (+352 / +351), so the ack lands exact (trigger + 406 on both) through three compensating one-frame residuals: the action's end (the turn machinery), the exit's `5 +` before CD/0516 (battle.c fleeStage 2, a count measured on the logical oracle), and the two missing waits (fleeStage 3 returns on CD/040D's frame). They are the battle exit's structure, shared by every fight -- for the battle family."
+  },
+  "attract-07d-field-anim-under-the-battle-vs-logical-oracle": {
+    "status": "NOT RESOLVED",
+    "measured": [
+      "battle-field-anim: entry tile steps 61 frame(s): same",
+      "battle-field-anim: tail tile steps 17 frame(s): DIFFER at +3 (cartridge f7228 0, port f7140 1)",
+      "battle-field-anim: tail $7C 17 frame(s): DIFFER at +3 (cartridge f7228 even/held, port f7140 odd/moved)"
+    ],
+    "evidence": "PARTLY FIXED (the entry), the tail NOT RESOLVED. ENTRY, fixed (field.c, gated on the rule's infinitely fast CPU): the module's tick 1 is still the field's frame (C0/1895-18A4, its NMI and its V-IRQ C0/ECCC) and C0:18A4's $0153 flip -- free CPU after the frame's last wait -- now lands before line 211, so the field's IRQ steps the tiles that frame (cartridge from power-on under the switches: f6584 `$0153 = 01 (C0:18A4)` and `$051D = 53 (FD:E03F)`; the logical oracle's C0:18A4 ran past line 211 and stepped nothing); the port ran the battle's IRQ model there ($7C = 0, no step). Now all 61 entry frames are the cartridge's. TAIL: the port's last fight NMI ($7C++) is the `70 00` post's frame (f7140, $7C = 83, odd -> the tail's IRQ steps the tiles every frame) where the cartridge's last is the frame before (f770 of the 07D state: $7C = 82, even, held): the ROM installs the tail NMI D1/F4C0 (CD/0418) and waits a frame (CD/044A) before CD/043E's post -- the port posts on its module exit's frame and runs that frame's NMI as the fight's. The post -> ack is 13 on both sides and the ack exact; the same exit structure as attract-0ad-hud-close-no-blink-vs-oracle (CD/03E3 -> 0415 -> 0418 -> 044A -> 043E), to be derived with the battle family."
+  },
+  "attract-entry3-stage-every-frame-under-the-rule": {
+    "status": "NOT RESOLVED",
+    "measured": [
+      "stage-rule-cmp: entry3 port f8719..f9016 vs cartridge +18..+315 under the rule -> 45 / 298 frames identical, differ at +38 +39 +40 ..."
+    ],
+    "evidence": "NOT RESOLVED as a check line, but the stage's content is exact: aligned one frame earlier (port f8718+k against the cartridge's +18+k) all 298 / 298 stage frames are identical, and the stage is 298 frames on both sides (+18..+315; the port's `exited after 298 frames`). The first 20 stage frames are black on both sides, so the one-frame offset is invisible until +38. The SAME port stage is identical at offset 0 to the cartridge's run under the same switches from the committed rule state (attract-entry3-stage-picture-vs-oracle: entry3-frames +18..+151 134 / 134) -- the two cartridge runs (from that state, and from the state stage_rule_cmp makes at power-on under the switches) put the same stage one frame apart, so the offset is in the cartridge's hand-off history, not in the stage. The task's lead -- the period-3 counter $0584 (02 cartridge, 01 port) -- is real (FD/E39C's records 5-11, ticked by the title's task $7E:37FA = JSL FD/FFF7 every title frame, which src/title_intro.c runs as a no-op, and by the port's cold --scene 433 start) but does NOT move the stage: handing the port's stage the cartridge's whole 128 KB WRAM at C3:0000 (ct.exe --xlatentries with the new CT_XLATENTRIES_WRAM dump), its SPC state, or its hand-off clock (v228 h360 cyc6) each left 45 / 298 with the same frames differing. Open: which part of the power-on run's state (the PPU, the timers, the logical frame's phase hold at C0/0B4E -- the IFAST runs report `1 phase hold, 4116-4138 cycles` at the hand-off) delays its stage by one frame."
+  },
+  "attract-entry3-abort-to-title": {
+    "status": "NOT RESOLVED",
+    "measured": [
+      "sequence: entry 3 program exited (JML $C0:0000) after 282 frames -> reboot   (press 80@7898, the same stage frame 249 as the valve's 80@7903)",
+      "sequence: entry 3 program exited (JML $C0:0000) after 283 frames -> reboot   (press 80@7899)"
+    ],
+    "evidence": "NOT RESOLVED (it rides on the entry-3 hand-off above). With the press on the same stage frame as the valve's (stage hand-off f7649 for f7654 in this vehicle: 80@7898) the stage exits after 282 frames; the rule's cartridge from its hand-off state with the press on that stage frame (--btnscript 0:267,80:10) reaches C0:0000 at its f299 = hand-off + 281. Port and cartridge are one frame apart in the same direction as the hand-off's frame (attract-entry3-stage-every-frame-under-the-rule); 80@7899 reproduces the pinned 283 but that is a press moved to fit, not a derivation."
+  }
+}

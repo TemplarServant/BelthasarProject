@@ -1,0 +1,7 @@
+{
+  "name": "ow_nav_w0",
+  "from": "ow_nav_downstairs",
+  "doc": "Stands in for saves/ow_w0.state, the original interactive 1000 A.D. overworld capture (ct.exe --navworld from its checkpoint saves/ow_w0.state.chk): the pad --navworld played from that checkpoint, recorded with CT_ORACLE_PADLOG -- its lead-slot probe, Mom's talk and Lucca's naming screen (A, Start), the 200 G allowance, out of the front door -- then the overworld settles. Under the rule the world load ends 4 frames sooner than on the plain oracle that made the capture, so the settle is 236 frames where --navworld ran 240: the ambient object blocks $0B30-$1B30 (the house's leftovers in the dead blocks included) then equal the capture byte for byte. The rest of the WRAM differs in 35 bytes, values 2-3 apart ($4B, a $0500 table at stride 12, two 5-byte runs of digit tiles at $2C2F/$2F68; not traced, likely the 4 frames the rule takes off the world load) and stack garbage ($06CF-$06FB); pack_world reads none of them.",
+  "steps": [["pad", "0:204,20:40,0:24,10:40,60:83,(20:2,0:2,100:2,0:22,60:10)*3,A0:53,(20:2,0:2,100:2,0:22,A0:10)*5,20:2,0:2,8:2,0:22,60:10,(20:2,0:2,100:2,0:22,60:10)*5,20:2,0:2,8:2,0:22,60:10,20:2,0:2,100:2,0:22,60:10,20:2,0:2,100:2,0:22,60:55,(20:2,0:2,100:2,0:22,60:10)*3,20:2,0:2,100:2,0:22,60:137,20:8,60:25,20:9,A0:131,0:236"]],
+  "expect": {"loc": "0x1F0", "wram": {"0x2C53": "0x58", "0x2C54": "0x02", "0x10140": "0x03", "0xD84": "0xB8", "0xD85": "0x01", "0xD88": "0x18", "0xD89": "0x01"}}
+}

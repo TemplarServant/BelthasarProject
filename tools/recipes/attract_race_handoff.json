@@ -1,0 +1,6 @@
+{
+  "name": "attract_race_handoff",
+  "doc": "The attract from power-on, 5 frames before the field hands the motorcycle race ($0384 = 60) to C3:0000 (f8182 under the rule, $0386 = 7B; the race's JML $C0:0000 at f8607). src/xlat/seq_c3.c traces the race and its A-press aborts from here.",
+  "steps": [["power_on", 8177]],
+  "expect": {"loc": "0x1B1", "wram": {"0x0386": "0x7B"}}
+}

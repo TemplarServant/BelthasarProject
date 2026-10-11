@@ -1,0 +1,7 @@
+{
+  "name": "gato_front_wait",
+  "from": "menu_open_gato2",
+  "doc": "From the X menu in front of GATO: Config (Right x3, A), down to Battle Mode, A switches Active -> Wait, B twice back to the field ($2990 C4 -> 84). Crono still at (134,164) facing GATO.",
+  "steps": [["pad", "(80:2,0:10)*3,100:2,0:60,20:2,0:20,100:2,0:20,1:2,0:30,1:2,0:60"]],
+  "expect": {"loc": "0x006", "wram": {"0x2990": "0x84", "0x1802": "0x60", "0x1803": "0x08"}}
+}

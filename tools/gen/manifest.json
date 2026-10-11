@@ -1,0 +1,177 @@
+{
+  "doc": "Every file the build needs that is made from the ROM, and how. tools/setup.py runs them in order from the repository root with the ROM at Chrono_Trigger_USA_SNES.sfc. 'cmd' is the generator; 'stdout' means its output is redirected into the first 'out'; 'recipes' are the oracle states (tools/recipes/) it needs, built first; 'status' says where it stands: 'rom' reads only the ROM, 'power-on' runs the oracle from power-on, 'capture' still needs a state that is not a recipe yet ('needs', the moment each is in 'needs_doc'; tools/setup.py reports it and the build cannot finish without it). 'proof_doc' (an entry once made from a capture): what the recipe-made file changed against the capture-made one and why each change is right. The src/xlat/*.c entries are tools/gen/xlat_all.py, one translated program each.",
+  "generators": [
+    {
+      "out": [
+        "src/data/battle_trig.h"
+      ],
+      "cmd": [
+        "tools/gen/battle_trig.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/menu_desc.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_desc.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/menu_romdata.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_romdata.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/menu_wingrad.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_wingrad.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/menu_equip.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_equip.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/menu_techrom.h"
+      ],
+      "cmd": [
+        "tools/gen/menu_techrom.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/ow_anim.h"
+      ],
+      "cmd": [
+        "tools/gen/ow_anim.py"
+      ],
+      "stdout": true,
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/ct_regroup.h"
+      ],
+      "cmd": [
+        "tools/gen/ct_regroup.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/animeng_e3_pc.h",
+        "src/data/animeng_sheet_pc.h",
+        "src/data/animeng_e4_pc.h"
+      ],
+      "cmd": [
+        "tools/gen/animeng_pc.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
+        "src/data/title_intro.h"
+      ],
+      "cmd": [
+        "tools/gen/title_intro.py"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/data/seq_credits.h"
+      ],
+      "cmd": [
+        "tools/gen/seq_credits.py"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/xlat/seq_c3.c"
+      ],
+      "cmd": [
+        "tools/gen/xlat_all.py",
+        "seq_c3"
+      ],
+      "recipes": [
+        "attract_race_handoff",
+        "attract_entry3_handoff"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/xlat/wipe_c3.c"
+      ],
+      "cmd": [
+        "tools/gen/xlat_all.py",
+        "wipe_c3"
+      ],
+      "recipes": [
+        "attract_wipe_16e",
+        "attract_wipe_01c"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/xlat/owwin_c6.c"
+      ],
+      "cmd": [
+        "tools/gen/xlat_all.py",
+        "owwin_c6"
+      ],
+      "recipes": [
+        "attract_ow_window"
+      ],
+      "status": "power-on"
+    },
+    {
+      "out": [
+        "src/xlat/gwarp_fd.c"
+      ],
+      "cmd": [
+        "tools/gen/xlat_all.py",
+        "gwarp_fd"
+      ],
+      "status": "power-on",
+      "recipes": [
+        "field_telepod_gate"
+      ]
+    },
+    {
+      "out": [
+        "src/xlat/hdma_fd.c"
+      ],
+      "cmd": [
+        "tools/gen/xlat_all.py",
+        "hdma_fd"
+      ],
+      "recipes": [
+        "attract_boot",
+        "gato_wait",
+        "field_telepod_gate"
+      ],
+      "status": "power-on",
+      "proof_doc": "Made from the recipes since 2026-10-11. The Telepod cutscene's start (400 frames with A every 30 for 165 frames: the $0126 = 1 builders FD/C995 and FD/CD0C) runs from the recipe field_telepod_gate, which gwarp_fd uses too, in place of the capture saves/field_re/scene8_gate_cutscene.state; GATO's fight (the $0126 = 2 builders FD/CFCF and FD/D27E) from gato_wait and the attract from attract_boot as before. The recipe runs the capture's timeline frame for frame except one stretch with the main loop parked ($0152 = 0) that lasts 39 frames on the rule's cartridge and 38 in the real-time capture, so the message window opens on the other parity of the double-buffered builder ($53 bit 0, FD/C2C1): FD/C99A runs and FD/CD11 does not. Against the old file only those two lines' [static] comment marks moved (C99A lost its mark, CD11 took one); the code, the 1681 instructions and their counts are the same."
+    }
+  ]
+}

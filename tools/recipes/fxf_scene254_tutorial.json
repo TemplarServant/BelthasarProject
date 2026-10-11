@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene254_tutorial",
+  "from": "fxf_manor_tutor",
+  "doc": "Stands in for saves/field_re/scene254_tutorial.state: below the battle tutor in the Truce mayor's manor (fxf_manor_tutor) Crono talks to him, takes 'Yes' and the combat tutorial loads (loc 0FE, f133); 251 frames in, its first box is typing (the box machine $0129 = 06, obj13 at BA06): from here the box waits at f30, an A at f91 closes it at f102 and obj13 moves on at f103 -- the reference's own timeline frame for frame.",
+  "steps": [["pad", "100:2,0:100,100:2,0:147"]],
+  "expect": {"loc": "0x0FE", "wram": {"0x0129": "0x06", "0x119A": "0xBA", "0x119B": "0x06"}}
+}

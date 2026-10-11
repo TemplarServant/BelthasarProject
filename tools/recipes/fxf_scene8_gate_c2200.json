@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene8_gate_c2200",
+  "from": "field_telepod_gate",
+  "doc": "Stands in for saves/field_re/scene8_gate_c2200.state: from the pendant touch (field_telepod_gate, the stand-in for scene8_gate_cutscene.state) the cutscene's A mash (A for 3 frames every 30 after 15) cut at 2200 frames, as the reference was made: 97 frames before the Telepod's DD 71.",
+  "steps": [["pad", "0:15,(100:3,0:27)*72,100:3,0:22"]],
+  "expect": {"loc": "0x008", "wram": {"0x10000": "0x0C"}}
+}

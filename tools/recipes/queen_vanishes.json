@@ -1,0 +1,12 @@
+{
+  "name": "queen_vanishes",
+  "from": "castle_600",
+  "doc": "Guardia Castle 600 A.D.: Crono climbs the east tower (loc 1D4, three floors) to the royal floor (loc 07A), passes the guard ('The Queen awaits'), enters the Queen's chamber and talks to 'Queen Leene' -- Marle, who vanishes (storyline 0F -> 10). Crono alone in the chamber.",
+  "steps": [
+    ["pad", "11:240,81:32,21:16,81:32,11:160,81:16,11:16,0:60,81:20,0:60,81:20,0:60,81:20,0:80"],
+    ["pad", "21:40,0:20,41:16,21:50,0:10,20:2,0:4,100:2,0:60,100:2,0:60,21:40,0:10,0:60,21:20,41:120,0:10"],
+    ["pad", "80:58,10:60,0:60,10:60,0:60,10:60,0:60,10:40,40:32,10:40,0:30"],
+    ["pad", "10:2,0:4,100:2,0:60,(100:2,0:40)*20,(100:2,0:40)*30,((100:2,0:40)*10)*3,0:120"]
+  ],
+  "expect": {"loc": "0x07A", "wram": {"0x10000": "0x10"}}
+}

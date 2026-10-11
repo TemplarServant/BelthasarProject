@@ -1,0 +1,7 @@
+{
+  "name": "fx_party3_field",
+  "from": "fx_bat9",
+  "doc": "Stands in for saves/battle_re/party3_field.state/.lakewram (the suite's three-member party in the field): from the Diablos fight in the Cathedral's inner hall (fx_bat9) A is mashed (8 frames held of every 20, 115 times) until the fight is won, then 300 frames: the field resumes in loc 082 with Crono, Lucca and Frog, control back ($011F = 01) -- the capture's own recipe (its regress_inputs entry). Crono 26/96 and Lucca 39/88 at level 3, Frog 120/128, 1105 G, the bag Pendant + Heal (the capture: 25, 40, 128).",
+  "steps": [["pad", "(100:8,0:12)*115,0:300"]],
+  "expect": {"loc": "0x082", "wram": {"0x2980": "0x00", "0x2981": "0x02", "0x2982": "0x04", "0x011F": "0x01", "0x2C53": "0x51", "0x2C54": "0x04"}}
+}

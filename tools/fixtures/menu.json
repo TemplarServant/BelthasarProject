@@ -1,0 +1,29 @@
+{
+  "doc": "The menu and overworld fixtures: the overworld, the Truce market, the fair shop, battery saves and the Equip screen's sheets (tools/recipes/ow_w0.json, truce_market.json, menu_shop.json, name_saved.json, grupo_3_mapa.json, com_jogo_salvo.json, fxm_*.json).",
+  "fixtures": [
+    {"path": "saves/ow_w0.state", "recipe": "ow_w0", "kind": "state",
+     "doc": "the 1000 A.D. overworld (loc 1F0) right outside Crono's house, alone, 600 G, the map settled"},
+    {"path": "saves/field_re/ow_w0.lakewram", "recipe": "ow_w0", "kind": "lakewram",
+     "doc": "saves/ow_w0.state's WRAM, the port's --loadwram seed"},
+    {"path": "saves/truce_market.state", "recipe": "truce_market", "kind": "state",
+     "doc": "the Truce Market (loc 011), Crono alone at the door, 600 G"},
+    {"path": "saves/field_re/shop90_lake.state", "recipe": "menu_shop", "kind": "state",
+     "doc": "the Millennial Fair (loc 005), Crono under the fair merchant (shop $10) facing up, Marle following, 400 G"},
+    {"path": "saves/field_re/shop90.lakewram", "recipe": "menu_shop", "kind": "lakewram",
+     "doc": "saves/field_re/shop90_lake.state's WRAM, the port's --loadwram seed"},
+    {"path": "saves/ct_real_save.srm", "recipe": "name_saved", "kind": "srm",
+     "doc": "a battery holding one game saved in slot 1 on the 600 A.D. overworld (Crono, Lucca, Frog; 'The Queen is Gone'), colour 0"},
+    {"path": "saves/field_re/colsave3.srm", "recipe": "fxm_colsave3", "kind": "srm",
+     "doc": "a battery holding one game saved in slot 1 on the 1000 A.D. overworld in window colour 3"},
+    {"path": "saves/grupo_3_mapa.state", "recipe": "grupo_3_mapa", "kind": "state",
+     "doc": "the Cathedral's inner hall (loc 082) after the Diablos fight, Crono, Lucca and Frog on the carpet, free roam"},
+    {"path": "saves/menu_equip_sheets.raw.wram", "recipe": "com_jogo_salvo", "kind": "wram",
+     "env": {"PEEK_POKE": "2402=02,2403=03,2404=05,2405=5B,2406=5C,2407=7C,2408=95,2409=96,2502=01,2503=01,2504=01,2505=01,2506=01,2507=01,2508=01,2509=01"},
+     "pad": "0:20,200:2,0:60,100:2,0:40,100:2,0:60,100:2,0:70",
+     "doc": "the ROM's own Equip screen (X, A, A, A: the candidate list) on the 600 A.D. overworld with eq_spare's bag (02 03 05 5B 5C 7C 95 96, one each) poked in, so C2/916E / C2/9137's derived block sits in every char sheet at +0x36..+0x40"},
+    {"path": "saves/menu_equip_thirdeye.raw.wram", "recipe": "com_jogo_salvo", "kind": "wram",
+     "env": {"PEEK_POKE": "2402=02,2403=03,2404=05,2405=5B,2406=5C,2407=7C,2408=95,2409=96,2502=01,2503=01,2504=01,2505=01,2506=01,2507=01,2508=01,2509=01,262A=A8"},
+     "pad": "0:20,200:2,0:60,100:2,0:40,100:2,0:60,100:2,0:70",
+     "doc": "the same Equip screen with Crono wearing the Third Eye ($7E:2600+0x2A = A8), so the ROM recomputes his derived block with it (C2/9142's Evade doubling)"}
+  ]
+}

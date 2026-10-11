@@ -1,0 +1,7 @@
+{
+  "name": "fxf_im_so_sorry",
+  "from": "fair_entrance",
+  "doc": "Stands in for im_so_sorry.state (the owner's capture inside the bump cutscene, loc 1B7, storyline 3): fair_pendant's first legs (north through the fair to the upper plaza, where Marle runs into Crono at f585), then A every 42 frames: 1100 frames, Crono (obj 1) at his script's 04E6 and Marle (obj 3) at 0641, mid-cutscene before storyline 6. The reference's Crono had bumped one tile to the east and was at 04E6 while Marle was still at 063A; the recipe's walk reaches the plaza a tile to the west, so the two scripts run a few ops apart (the nearest reachable moment of the same cutscene).",
+  "steps": [["pad", "11:40,0:2,11:48,41:16,11:48,81:16,11:48,81:16,21:32,11:16,11:80,0:100,11:60,0:60,40:20,0:60,(100:2,0:40)*10,0:18"]],
+  "expect": {"loc": "0x1B7", "wram": {"0x10000": "0x03", "0x1182": "0xE6", "0x1183": "0x04"}}
+}

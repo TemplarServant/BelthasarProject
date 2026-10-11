@@ -1,0 +1,13 @@
+{
+  "name": "castle_600",
+  "from": "canyon_600",
+  "doc": "600 A.D.: Crono walks the overworld to Guardia Forest (loc 077, south entry), wins the forest ambush, leaves by the north edge and enters Guardia Castle (loc 078); the guards' challenge and 'Queen Leene' (Marle) vouching for him (storyline 0C -> 0F). Crono free in the entrance hall.",
+  "steps": [
+    ["pad", "20:16,40:16,20:16,40:16,20:16,40:48,20:16,40:16,20:16,40:16,20:16,40:32,10:16,40:48,20:16,40:16,20:16,80:16,10:48,80:16,10:8,0:4,100:2,0:150"],
+    ["pad", "11:112,81:80,11:32,81:64,21:16,11:16,41:16,21:16,81:16,11:16,11:40,0:60"],
+    ["pad", "((100:2,0:10)*20)*13"],
+    ["pad", "11:32,41:48,11:16,41:48,11:16,21:16,41:16,21:16,41:32,11:16,41:16,11:16,41:16,11:16,81:16,11:16,41:16,11:16,41:16,11:16,41:16,11:80,81:64,11:64,0:120"],
+    ["pad", "10:48,0:4,100:2,0:200,(100:2,0:40)*20,(100:2,0:40)*30"]
+  ],
+  "expect": {"loc": "0x078", "wram": {"0x10000": "0x0F"}}
+}

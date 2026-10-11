@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene8_taban_moving",
+  "from": "telepod_show",
+  "doc": "Stands in for saves/field_re/scene8_taban_moving.state (the owner's capture of Taban running his MOVETO in the Telepod scene, storyline 0A): gate_to_600's first two legs and 4145 frames of its third (Marle's pendant opens the Gate, the A mash through the scene): f7458 of the drive, Taban (obj 10) on op 0x96 at ip 05FB at exactly the reference's position ($1814 = 05F4, $1894 = 07C3).",
+  "steps": [["pad", "(100:2,0:40)*8,10:30,40:40,10:20,0:60,(100:2,0:40)*10,40:24,10:30,0:60,10:2,0:4,100:2,0:60,(100:2,0:40)*20,80:25,10:40,0:60,(100:2,0:40)*30,20:48,40:16,20:16,40:48,20:16,20:2,0:4,100:2,0:60,(100:2,0:40)*93,100:2,0:25"]],
+  "expect": {"loc": "0x008", "wram": {"0x10000": "0x0A", "0x1194": "0xFB", "0x1195": "0x05", "0x1814": "0xF4", "0x1815": "0x05", "0x1894": "0xC3", "0x1895": "0x07"}}
+}

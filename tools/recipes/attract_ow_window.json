@@ -1,0 +1,6 @@
+{
+  "name": "attract_ow_window",
+  "doc": "The attract from power-on, 6 frames before the world-5 flyover's window object installs (op 4E: C6/E241 at f2260 under the rule, C6/E27E every frame after). src/xlat/owwin_c6.c traces 120 frames from here.",
+  "steps": [["power_on", 2254]],
+  "expect": {"loc": "0x1F5"}
+}

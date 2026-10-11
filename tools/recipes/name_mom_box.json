@@ -1,0 +1,7 @@
+{
+  "name": "name_mom_box",
+  "from": "name_home_stairs",
+  "doc": "From name_home_stairs, home_downstairs's third step cut at its 154th frame: on the ground floor (loc 001) Mom's first dialogue box is fully open at the TOP of the screen (screen y 8..87) and the typewriter has drawn its first character (BG3). The source of saves/ct_window.bin (tools/gen/ct_window.py, BG1 isolated).",
+  "steps": [["pad", "0:120,21:34"]],
+  "expect": {"loc": "0x001"}
+}

@@ -1,0 +1,7 @@
+{
+  "name": "menu_open_gato2",
+  "from": "gato_front",
+  "doc": "Stands in for saves/menu_open_gato2.state: in front of GATO (loc 006) Crono opens the X menu (Crono's sheet, the icon row, 400 G). The reference's play clock reads 08:28; this one's is shorter.",
+  "steps": [["pad", "200:2,0:60"]],
+  "expect": {"loc": "0x006", "wram": {"0x2981": "0x01"}}
+}

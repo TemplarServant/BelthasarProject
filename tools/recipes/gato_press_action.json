@@ -1,0 +1,7 @@
+{
+  "name": "gato_press_action",
+  "from": "gato_front",
+  "doc": "Stands in for gato_press_action.state (main checkout root): Crono talks to GATO and his song runs to its last box ('...And earn 15 Silver Points'); one more A (`100:8,0:300`) boots the battle, as from the reference. Loc 006, Crono (134,164) as the reference, Marle at (148,165) (the reference: (137,164)), 400 G, Active mode ($2990 = C4).",
+  "steps": [["pad", "100:20,0:40,0:100"]],
+  "expect": {"loc": "0x006", "wram": {"0x2980": "0x00", "0x2981": "0x01", "0x2990": "0xC4", "0x1802": "0x60", "0x1803": "0x08"}}
+}

@@ -1,0 +1,7 @@
+{
+  "name": "fxm_colsave3",
+  "from": "ow_w0",
+  "doc": "Stands in for saves/field_re/colsave3.srm (the battery after tools/menu_audit_cmp.py's owsavecol drive on the 1000 A.D. overworld): X, R x3 to Config, A, Down, Right to cell 6, A, Right x3 to window colour 3, B, B, R x2 to Save, A (the save screen), A on the empty slot 1 (saved), B, B. The cart RAM (the CTLS payload's last 8192 bytes) then holds slot 1 in colour 3 ($0591 = A3) with signature E41B.",
+  "steps": [["pad", "0:80,200:2,0:48,80:2,0:8,80:2,0:8,80:2,0:28,100:2,0:28,20:2,0:23,80:2,0:23,100:2,0:23,80:2,0:18,80:2,0:18,80:2,0:23,1:2,0:23,1:2,0:33,80:2,0:8,80:2,0:38,100:2,0:58,100:2,0:118,1:2,0:38,1:2,0:38"]],
+  "expect": {"loc": "0x1F0"}
+}

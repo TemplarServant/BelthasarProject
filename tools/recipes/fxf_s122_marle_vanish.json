@@ -1,0 +1,7 @@
+{
+  "name": "fxf_s122_marle_vanish",
+  "from": "castle_600",
+  "doc": "Stands in for saves/field_re/s122_marle_vanish_port.lakewram (the owner's F5 capture in the Queen's chamber): queen_vanishes's walk up the east tower into the chamber and its A every 42 frames, 60 presses, then 50 frames: Marle's box 'Help me, Crono! I'm scared!!!' (obj 23 at @0544, `BB 22`) typed and waiting ($0129 = 07), storyline 0F, before she vanishes.",
+  "steps": [["pad", "11:240,81:32,21:16,81:32,11:160,81:16,11:16,0:60,81:20,0:60,81:20,0:60,81:20,0:80"], ["pad", "21:40,0:20,41:16,21:50,0:10,20:2,0:4,100:2,0:60,100:2,0:60,21:40,0:10,0:60,21:20,41:120,0:10"], ["pad", "80:58,10:60,0:60,10:60,0:60,10:60,0:60,10:40,40:32,10:40,0:30"], ["pad", "10:2,0:4,100:2,0:60,(100:2,0:40)*60,0:50"]],
+  "expect": {"loc": "0x07A", "wram": {"0x10000": "0x0F", "0x0129": "0x07", "0x11AE": "0xA4", "0x11AF": "0x08"}}
+}

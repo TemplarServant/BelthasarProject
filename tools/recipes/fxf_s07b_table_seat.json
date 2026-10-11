@@ -1,0 +1,7 @@
+{
+  "name": "fxf_s07b_table_seat",
+  "from": "castle_600",
+  "doc": "Stands in for saves/field_re/s07b_table_seat.state, its own provenance (--teleport 123 11 14 0 with storyline 0F flags, then 0:5,10:35,40:68,20:1,0:3) from Guardia Castle's entrance hall at storyline 0F (castle_600, Crono alone): loc 07B, Crono at the soldiers' table.",
+  "steps": [["teleport", 123, 11, 14, 0, 300, "jmp"], ["pad", "0:5,10:35,40:68,20:1,0:3"]],
+  "expect": {"loc": "0x07B", "wram": {"0x10000": "0x0F", "0x011F": "0x01"}}
+}

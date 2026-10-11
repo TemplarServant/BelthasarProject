@@ -1,0 +1,7 @@
+{
+  "name": "fxf_loc002_intro_curtain",
+  "from": "ow_intro_pan",
+  "doc": "Stands in for saves/field_re/loc002_intro_curtain.state: from the new game's overworld pan (ow_intro_pan, the stand-in for start_scene.state) 1540 frames of nothing (the pan, loc 271's wake-up text), then A every 12 frames 65 times: loc 002 in the opening, Mom about to open the curtain (obj10's idle loop, ip 0761).",
+  "steps": [["pad", "0:1540,(100:2,0:10)*65"]],
+  "expect": {"loc": "0x002"}
+}

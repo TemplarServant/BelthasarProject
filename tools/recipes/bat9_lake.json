@@ -1,0 +1,7 @@
+{
+  "name": "bat9_lake",
+  "from": "cathedral_hall",
+  "doc": "Stands in for saves/battle_re/bat9_lake.state: on the inner hall's carpet (loc 082) the Diablos ambush the party (Crono, Lucca, Frog); 300 frames later the battle is on with Crono's command menu up, as the reference's picture. (HP lower than the reference's: Crono 17, Lucca 16.)",
+  "steps": [["pad", "10:16,41:60,0:20,0:300"]],
+  "expect": {"loc": "0x082", "wram": {"0x2982": "0x04", "0x011F": "0x00"}}
+}

@@ -1,0 +1,11 @@
+{
+  "name": "cathedral_hall",
+  "from": "frog_joins",
+  "doc": "Crono checks the organ (obj 13: the hidden door by the altar opens, $7F00FF bit4) and the party goes through it into the Cathedral's inner hall (loc 082), arriving at (864,735).",
+  "steps": [
+    ["pad", "10:48,40:32,10:16,40:48,80:16,10:4,0:4,100:2,0:60"],
+    ["pad", "((100:2,0:30)*2)*17"],
+    ["pad", "80:32,10:32,80:80,20:32,80:32,10:48,0:90"]
+  ],
+  "expect": {"loc": "0x082", "wram": {"0x10000": "0x15", "0x100FF": "0x10", "0x2982": "0x04"}}
+}

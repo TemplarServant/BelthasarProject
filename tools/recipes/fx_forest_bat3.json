@@ -1,0 +1,7 @@
+{
+  "name": "fx_forest_bat3",
+  "from": "fx_forest_holdleft",
+  "doc": "Stands in for saves/battle_re/bat3_lake.state: the three Hetakes' fight in Guardia Forest under way -- from fx_forest_holdleft Left held 345 frames (the staging at f174, the boot at f226; the capture's distance from its own staging).",
+  "steps": [["pad", "40:345"]],
+  "expect": {"loc": "0x013", "wram": {"0x2C00": "0x80", "0x29C4": "0x5E"}}
+}

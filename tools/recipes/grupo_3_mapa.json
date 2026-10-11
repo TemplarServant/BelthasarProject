@@ -1,0 +1,7 @@
+{
+  "name": "grupo_3_mapa",
+  "from": "bat9_lake",
+  "doc": "Stands in for saves/grupo_3_mapa.state: the Diablos fight is won by mashing A (+180 G, Crono levels up), then the party steps up-right on the hall's carpet: Crono (741,704), Lucca (726,704), Frog (711,704) -- the reference's positions exactly. Loc 082, storyline 15, party 00 02 04 01. (Gold 1035 vs the reference's 1105; Crono's HP 9/96.)",
+  "steps": [["pad", "((100:2,0:10)*20)*10,10:15,80:55,0:20"]],
+  "expect": {"loc": "0x082", "wram": {"0x1802": "0x50", "0x1803": "0x2E", "0x1883": "0x2C", "0x2983": "0x01"}}
+}

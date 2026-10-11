@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene8_taban_moving2",
+  "from": "field_telepod_gate",
+  "doc": "Stands in for saves/field_re/scene8_taban_moving2.state (the owner's capture of Taban's second MOVETO, in the Gate cutscene, storyline 0C): from the pendant touch (field_telepod_gate) the cutscene's A mash (A for 3 frames every 30 after 15) for 797 frames: Taban (obj 10) at ip 05E1 at exactly the reference's position ($1814 = 0786, $1894 = 0749), obj 11 at 0648.",
+  "steps": [["pad", "0:15,(100:3,0:27)*26,100:2"]],
+  "expect": {"loc": "0x008", "wram": {"0x10000": "0x0C", "0x1194": "0xE1", "0x1195": "0x05", "0x1814": "0x86", "0x1815": "0x07", "0x1894": "0x49", "0x1895": "0x07"}}
+}

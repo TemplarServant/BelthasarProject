@@ -1,0 +1,66 @@
+{
+ "routine": "C0/5B95 actor-vs-actor 1-tile-ahead collision (+ edge clamps C0/5B63-5B8C)",
+ "summary": "C0/5B95 is the move-command \"movability\" test. It returns carry=BLOCKED if any solid, alive, non-self active actor lies within one 16px tile (<$0100 sub-pixels) on BOTH axes and on the mover's facing side. It is gated off by ($1C80,$6D & 0x02): clear -> CLC RTS (movable), which is why it is dormant for the field NPCs in the trace. When enabled it scans the active-actor list ($7F2000 count, X stepped by 2), filters candidates by $0F00,X (alive), $1100,X bit7 (dead), self (CPX $6D), and $1B01,X bit0 (solid), then runs a facing-indexed bounding-box overlap test via JSR ($5BF2,X) using the 4-pointer table {$5BFA,$5C20,$5C47,$5C6D} selected by facing $1600,X. Carry CLEAR = movable, carry SET = blocked. Caller C0/5129 (opcode 0xA0) does a single $EE+=0x30 heading nudge on blocked (no retry loop) then always issues the step.",
+ "dp": "$0100 for the 5B95 cluster (verified: $D9->$01D9, $E9->$01E9, $EA->$01EA, $C7->$01C7). The four edge clamps 5B63-5B8C run with DP=$1D00 as invoked from C0/9175 (so $32->$1D32, $2E->$1D2E, etc.).",
+ "cPseudocode": "see field 'cPseudocode' above",
+ "wramReads": [
+  "$7E:006D ($6D) = mover actor index (0x80-strided)",
+  "$7E:0F00+X = actor alive/occupied flag (BNE => active)",
+  "$7E:1C80+X bit1 (0x02) = enable actor-vs-actor collision gate (clear => stub-movable)",
+  "$7E:1600+X = facing 0-3 (doubled into jump-table index)",
+  "$7E:1800+X (16-bit) = actor world X position",
+  "$7E:1880+X (16-bit) = actor world Y position",
+  "$7F:2000 = active-actor count (X = count*2 for the scan)",
+  "$7E:1100+X bit7 = actor dead/inactive (BMI => skip)",
+  "$7E:1B01+X bit0 (0x01) = actor solid flag (clear => skip)",
+  "$7E:01C7 = saved Y register",
+  "$7E:01D9 = facing*2 jump-table word index",
+  "$7E:01DB/$01DD = saved mover X/Y (16-bit) for the SBC",
+  "$7E:01E9 = current candidate actor index",
+  "$7E:00EB ($EB) = sign-tested at 5B8D (returns carry from bit7)",
+  "$7E:0197 = player actor index X for the edge clamps",
+  "$7E:1801+X = posX (8-bit) for edge clamps",
+  "$7E:1881+X = posY (8-bit) for edge clamps",
+  "$7E:1D1A = LEFT bound",
+  "$7E:1D1B = RIGHT bound",
+  "$7E:1D1C = UP bound (used as +1 on the vel<0 path)",
+  "$7E:1D1D = DOWN bound (used as +1 on the vel>0 path)",
+  "$7E:1D2E/$1D2A=X vel, $7E:1D30=Y vel (sign chooses which clamp, in 9175)"
+ ],
+ "wramWrites": [
+  "$7E:01EA = cleared at entry (STZ $EA); not re-read on this path",
+  "$7E:01C7 = Y saved at entry, restored before every RTS",
+  "$7E:01D9 = facing*2 table index",
+  "$7E:01DB/$01DC = mover X low/high",
+  "$7E:01DD/$01DE = mover Y low/high",
+  "$7E:01E9 = candidate index (saved across the box-test call)",
+  "$7E:01D9 (in edge clamps, DP=$1D00 => $01D9) used as scratch by 5B63/5B79 to hold bound+1",
+  "$7E:1D32/$1D33 (9175 outputs) written with vel only when NOT blocked"
+ ],
+ "uncertainties": [
+  "BYTE-EXACT HAZARD: the first 16-bit SBC in each box handler ($5BFA/$5C20/$5C47/$5C6D) runs with carry UNINITIALIZED (no SEC/CLC precedes it). The carry-in from JSR($5BF2,X) must be modeled, not assumed set. Verify carry state at handler entry against a real trace.",
+  "The $7F2000-driven scan uses an X stepped by 2 (DEX DEX) and stops at X==0, distinct from the 0x80-strided per-actor index used everywhere else. Confirm the active-list slot layout/stride before porting (is $0F00,X here indexed by the same X as the per-actor tables, i.e. does count*2 land on valid slots?).",
+  "src/player.c BUG 1 (line 26): edgeLeft uses 'posX == $1D1A'; ROM(5B86) is '$1D1A >= posX'. Differs whenever posX < $1D1A.",
+  "src/player.c BUG 2 (lines 28-29 + 48): the Y-axis bodies are swapped vs ROM dispatch. ROM 9175 calls 5B71 for Y vel<0 (UP) and 5B63 for Y vel>0 (DOWN); player.c labels edgeUp=5B63/edgeDown=5B71 and dispatches vel<0->edgeUp, so it runs the wrong body for each Y sign.",
+  "src/player.c BUG 3 (lines 28-29): Y bounds mismatched. UP path must use ($1D1C+1) with comparison (($1D1C+1)>=posY); DOWN path must use ($1D1D+1) with (posY>=($1D1D+1)). player.c has $1D1D on the up label and $1D1C on the down label, both with the down-style comparison. Only edgeRight (5B79) currently matches ROM exactly.",
+  "Bound role naming: by ROM USAGE $1D1C=up, $1D1D=down (the MEMORY header's left/right/up/down order is consistent in name, but player.c bound them to the wrong velocity sign).",
+  "Because $1C80 bit1 is OFF in every available trace, the actor box-test math (the 4 handlers) is UNTESTED by the oracle. A scenario with bit1 set is needed to validate box0..box3 and the EOR #$FFFF (one's-complement, not negate) |delta|<$0100 logic.",
+  "5B8D-5B94 (LDA $EB; BPL CLC RTS / SEC RTS) is a small sign-of-$EB predicate adjacent to the cluster; its caller/role was not pinned in this pass."
+ ],
+ "entryPoints": [
+  "C0/5B95 -> actor-vs-actor collision (carry=blocked), called from C0/5129 (opcode 0xA0 step-issue)",
+  "C0/5B63 -> edge clamp DOWN body (blocked iff posY >= (u8)($1D1D+1)); called from C0/91A2 (Y vel>0)",
+  "C0/5B71 -> edge clamp UP body (blocked iff (u8)($1D1C+1) >= posY); called from C0/919B (Y vel<0)",
+  "C0/5B79 -> edge clamp RIGHT body (blocked iff posX >= $1D1B); called from C0/918C (X vel>0)",
+  "C0/5B86 -> edge clamp LEFT body (blocked iff $1D1A >= posX); called from C0/9185 (X vel<0)",
+  "C0/5B8D -> sign-of-$EB predicate (BPL->CLC RTS, else SEC RTS)",
+  "C0/5BFA/5C20/5C47/5C6D -> the 4 facing box-test handlers (via JSR ($5BF2,X))"
+ ],
+ "romTables": [
+  "C0/5BF2: FA 5B 20 5C 47 5C 6D 5C = little-endian pointers {$5BFA,$5C20,$5C47,$5C6D}, the 4 box-test handlers indexed by ($1600,X facing)*2"
+ ],
+ "callsOut": [
+  "C0/5129 is the CALLER (BCC clear else $EE += 0x30)",
+  "JSR ($5BF2,X) -> $5BFA/$5C20/$5C47/$5C6D (internal box handlers)"
+ ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "gato_inbattle",
+  "from": "gato_press_action",
+  "doc": "Stands in for saves/gato_inbattle.state: the last A of GATO's song boots the battle (Active mode); 500 frames later both Crono's and Marle's command menus are up (Att./Tech/Item), $2C00.. as the reference's.",
+  "steps": [["pad", "100:8,0:500"]],
+  "expect": {"loc": "0x006", "wram": {"0x2C00": "0x82", "0x2C03": "0x81", "0x2C08": "0x01"}}
+}

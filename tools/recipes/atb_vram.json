@@ -1,0 +1,9 @@
+{
+  "name": "atb_vram",
+  "doc": "Stands in for saves/battle_re/atb_vram.state: power-on, the title, B -- the new game's Battle Mode prompt (loc 000), the cursor on ACTIVE, nothing chosen yet ($2990 = 84 as the reference; choosing Active writes C4). The boot_to_bedroom drive's first steps (its next A takes Active and opens Crono's naming screen).",
+  "steps": [
+    ["power_on", 1],
+    ["pad", "0:239,1:6,0:180"]
+  ],
+  "expect": {"loc": "0x000", "wram": {"0x2990": "0x84"}}
+}

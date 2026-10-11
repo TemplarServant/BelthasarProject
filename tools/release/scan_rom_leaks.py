@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+r"""Scan a tree for copyrighted bytes before it is published: nothing from the ROM may ship.
+
+    python tools/release/scan_rom_leaks.py <dir> [--rom ROM] [--corpus FILE ...] [--window 24]
+
+The corpora are the ROM itself (always; verified) plus any FILE given with --corpus -- the extracted ct_assets.dat (the
+ROM's data decompressed) and the private bakes (src/data/*.h, savestates) are the useful ones, since decompressed
+graphics never appear in the ROM's raw bytes. Every file under <dir> is read:
+
+  * a binary file (a NUL byte, or not UTF-8) is a finding by itself unless it is on the allowlist below, and its bytes
+    are searched too;
+  * a text file has its byte runs pulled out -- C/Python arrays (0x12, 0x34 ...), 16-bit word arrays (0x1234, read
+    little-endian), assembler bytes ($12,$34), hex dumps ("12 34 56 ..."), long hex strings and base64 blobs -- and each
+    run is searched.
+
+A run is a leak when a window of --window bytes of it (at least 8 distinct values: a table of zeros is not content)
+occurs in a corpus. Prints one line per leak and exits 1 if any, 0 when the tree is clean:
+
+    leak: src/data/title_intro.h:12  1536 bytes == ROM at 0x3F2A10
+    clean: 812 files, 1,204 byte runs searched against 3 corpora (4.0 MB ROM + 18.2 MB more)
+"""
+import argparse
+import base64
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from ctlib import rom as romlib  # noqa: E402
+
+BINARY_OK = ()                                   # binary files the public tree may carry (none today)
+KNOWN_OK = {                                     # (path, text on the line) that match, and why they are not the game's
+    ('snes/dsp.c', 'gaussValues'): "the S-DSP's gaussian interpolation table: the console's hardware (LakeSnes, MIT), not the "
+                        "game; a smooth ramp also occurs in the extracted assets",
+    ('disasm/notes/battle_hud_names_blink.md', '// Crono'): "the seven default character names in the game's text "
+                                                     "encoding (Crono, Marle, ...): names, not the game's content",
+    ('tools/regress_checks.json', '"names: f5 loc=000 $2C23='): "a check's expected output: the default names in the game's text encoding",
+}
+SKIP_DIRS = {'.git', '__pycache__'}
+
+HEX_LIT = re.compile(r'0[xX]([0-9A-Fa-f]{1,4})\b')
+ASM_BYTE = re.compile(r'\$([0-9A-Fa-f]{2})\b')
+DUMP_RUN = re.compile(r'(?:\b[0-9A-Fa-f]{2}\b[ \t]+){7,}\b[0-9A-Fa-f]{2}\b')
+HEX_STR = re.compile(r'\b(?:[0-9A-Fa-f]{2}){24,}\b')
+B64_STR = re.compile(r'[A-Za-z0-9+/]{64,}={0,2}')
+
+
+def runs_from_text(text):
+    """(line, bytes) runs found in a text file."""
+    out = []
+    lines = text.split('\n')
+    cur, cur_line, words = [], 0, False
+
+    def flush():
+        nonlocal cur
+        if len(cur) >= 8:
+            out.append((cur_line, bytes(cur)))
+        cur = []
+
+    for n, line in enumerate(lines, 1):
+        lits = HEX_LIT.findall(line)
+        if lits:                                 # a C/Python array row continues the run across lines
+            if not cur:
+                cur_line = n
+                words = all(len(v) > 2 for v in lits)
+            for v in lits:
+                x = int(v, 16)
+                if words or x > 0xFF:
+                    cur += [x & 0xFF, x >> 8 & 0xFF]
+                else:
+                    cur.append(x)
+        else:
+            flush()
+        b = ASM_BYTE.findall(line)
+        if len(b) >= 8:
+            out.append((n, bytes(int(v, 16) for v in b)))
+        for m in DUMP_RUN.finditer(line):
+            out.append((n, bytes(int(v, 16) for v in m.group(0).split())))
+        for m in HEX_STR.finditer(line):
+            out.append((n, bytes.fromhex(m.group(0))))
+        for m in B64_STR.finditer(line):
+            try:
+                out.append((n, base64.b64decode(m.group(0), validate=True)))
+            except Exception:
+                pass
+    flush()
+    return out
+
+
+def find_leak(data, corpora, w):
+    """(corpus name, offset, window start) of the first content window of `data` found in a corpus, else None."""
+    step = max(1, w // 2)
+    for i in range(0, max(1, len(data) - w + 1), step):
+        win = data[i:i + w]
+        if len(win) < w or len(set(win)) < 8:
+            continue
+        for name, blob in corpora:
+            off = blob.find(win)
+            if off >= 0:
+                return name, off, i
+    return None
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('dir')
+    ap.add_argument('--rom')
+    ap.add_argument('--corpus', action='append', default=[])
+    ap.add_argument('--window', type=int, default=24)
+    a = ap.parse_args()
+
+    corpora = [('ROM', romlib.load(a.rom))]
+    for c in a.corpus:
+        if os.path.isdir(c):
+            for root, _, files in os.walk(c):
+                for f in files:
+                    p = os.path.join(root, f)
+                    data = open(p, 'rb').read()
+                    try:                         # a baked header: its arrays are the corpus, not its text
+                        data = b''.join(r for _, r in runs_from_text(data.decode('utf-8'))) or data
+                    except UnicodeDecodeError:
+                        pass
+                    corpora.append((os.path.relpath(p, c), data))
+        else:
+            corpora.append((os.path.basename(c), open(c, 'rb').read()))
+
+    leaks = nfiles = nruns = 0
+    for root, dirs, files in os.walk(a.dir):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for f in files:
+            p = os.path.join(root, f)
+            rel = os.path.relpath(p, a.dir).replace('\\', '/')
+            data = open(p, 'rb').read()
+            nfiles += 1
+            text = None
+            if b'\0' not in data:
+                try:
+                    text = data.decode('utf-8')
+                except UnicodeDecodeError:          # a Latin-1 comment is still text; control bytes are not
+                    t = data.decode('latin-1')
+                    if not any(c < ' ' and c not in '\t\r\n\f' for c in t):
+                        text = t
+            lines = (text or '').split(chr(10))
+            if text is not None:
+                runs = runs_from_text(text)
+            else:
+                if rel not in BINARY_OK:
+                    print('binary: %s  %d bytes (not on the allowlist)' % (rel, len(data)))
+                    leaks += 1
+                runs = [(0, data)]
+            for line, run in runs:
+                nruns += 1
+                hit = find_leak(run, corpora, a.window)
+                ok = any(rel == kp and line and ks in "".join(lines[max(0, line - 2):line]) for kp, ks in KNOWN_OK)
+                if hit and not ok:
+                    leaks += 1
+                    print('leak: %s:%d  %d-byte run, a window at +%d == %s at 0x%X'
+                          % (rel, line, len(run), hit[2], hit[0], hit[1]))
+    more = sum(len(b) for _, b in corpora[1:])
+    if leaks:
+        print('NOT CLEAN: %d finding(s) in %d files' % (leaks, nfiles))
+        return 1
+    print('clean: %d files, %d byte runs searched against %d corpora (%.1f MB ROM + %.1f MB more)'
+          % (nfiles, nruns, len(corpora), len(corpora[0][1]) / 2**20, more / 2**20))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

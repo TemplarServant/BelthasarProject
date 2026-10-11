@@ -1,0 +1,45 @@
+{
+ "routine": "C0/9AA1, C0/9AC8, C0/9AD3 (+ common tail C0/9AB2) — field tile-property fetch + off-map solid early-out",
+ "summary": "This cluster reads the three de-interleaved tile-property \"planes\" for one map cell. The cell INDEX is `(16-bit tentative position word) AND $1D1E/$1D1F` (the precomputed cell mask), used as X into four parallel 0x40-byte-per-row WRAM planes. 9AA1 and 9AC8 are identical except 9AA1 first checks the off-map sentinel plane $7E70C0,X via BMI: if bit7 is CLEAR it returns immediately with CARRY SET (= off-map, treat as SOLID) without touching the output bytes; if bit7 is SET it falls through to load the bytes. 9AC8 skips that check and always falls through to the common tail at 9AB2. The common tail 9AB2 stores byte0=$7E30C0,X→$1D58, byte1=$7E7000,X→$1D5A, byte2=$7E7040,X→$1D5C, then returns CARRY CLEAR (in-bounds). 9AD3 is a separate routine (the shape-decode prologue, not a fetch): it zeroes the collision-result scratch ($1D5E,$1D60,$1D6A,$1D6C,$1D6E) and starts shape decode by computing $1D56=$1D68>>2; it is always called right after a fetch.",
+ "dp": "$1D00 (D=$1D00 in all callers: player body sets it at C0/881E; the conveyor/plane re-entry C0/9DDE sets `LDA #$1D00; TCD` at 9DE1). So dp operand $XX = WRAM $7E:1DXX.",
+ "cPseudocode": "/* ============================================================\n * INPUTS (DP=$1D00, i.e. $7E:1DXX):\n *   A on entry = 16-bit \"cell source\" position word (low byte = X pixel pos,\n *                high byte = Y pixel pos of the point probed).\n *   $1D1E/$1D1F (16-bit) = CELL MASK; (pos_word AND mask) = linear byte index\n *                into the 0x40-stride property planes (= tile_y*0x40 + tile_x,\n *                with the per-axis bounds folded in).\n * OUTPUTS:\n *   carry: SET = off-map / SOLID; CLEAR = in-bounds (bytes loaded).\n *   $1D58 = prop byte0 (shape = (byte0&0xFC)>>2; bit0/bit1 = actor-block flags)\n *   $1D5A = prop byte1 (byte1&0x10 = DOOR; conveyor source at apply 9C5C)\n *   $1D5C = prop byte2 (byte2&3 = z-plane; &4 IGNORE_Z; &8 INVERTED;\n *           &0x20 Z_NEUTRAL; &0x40 SPRITE_FRONT_BOTTOM)\n *   X (16-bit) = the computed cell index (left in X on return)\n * PLANES (absolute long WRAM despite $7E; X is 16-bit absolute index):\n *   $7E70C0[i] off-map SENTINEL (bit7 CLEAR => off-map); $7E30C0 byte0;\n *   $7E7000 byte1; $7E7040 byte2.\n * ============================================================ */\n\n/* ---- C0/9AA1 : fetch WITH off-map sentinel early-out ---- */\nbool prop_fetch_checked(uint16_t pos_word /* the 16-bit A on entry */)\n{\n    /* 9AA1 REP #$10 ; 9AA3 REP #$20  -> X & A 16-bit */\n    uint16_t idx = pos_word & DP16(0x1E);      /* 9AA5 AND $1E (vs $1D1E/$1D1F) */\n    /* 9AA7 SEP #$20  -> A 8-bit (X stays 16-bit) */\n    uint16_t X = idx;                          /* 9AA9 TAX */\n\n    uint8_t sentinel = WRAM8(0x7E70C0 + X);    /* 9AAA LDA $7E70C0,X (8-bit) */\n    if (sentinel & 0x80) {                      /* 9AAE BMI $9AB2 : branch taken iff bit7 SET */\n        return prop_fetch_tail(X);             /* -> tail, returns false (carry clear) */\n    }\n    /* 9AB0 SEC ; 9AB1 RTS */\n    return true;                               /* CARRY SET = off-map / SOLID */\n}\n\n/* ---- C0/9AB2 : common tail (load 3 prop bytes, carry clear) ---- */\nbool prop_fetch_tail(uint16_t X /* 16-bit cell index */)\n{\n    DP8(0x58) = WRAM8(0x7E30C0 + X);           /* 9AB2/9AB6  byte0 */\n    DP8(0x5A) = WRAM8(0x7E7000 + X);           /* 9AB8/9ABC  byte1 */\n    DP8(0x5C) = WRAM8(0x7E7040 + X);           /* 9ABE/9AC2  byte2 */\n    /* 9AC4 SEP #$10 (X->8-bit) ; 9AC6 CLC */\n    return false;                              /* 9AC7 RTS, CARRY CLEAR */\n}\n\n/* ---- C0/9AC8 : fetch WITHOUT sentinel check (always loads) ---- */\nbool prop_fetch_unchecked(uint16_t pos_word)\n{\n    /* 9AC8 REP #$10 ; 9ACA REP #$20 */\n    uint16_t idx = pos_word & DP16(0x1E);      /* 9ACC AND $1E */\n    /* 9ACE SEP #$20 */\n    uint16_t X = idx;                          /* 9AD0 TAX */\n    return prop_fetch_tail(X);                 /* 9AD1 BRA $9AB2 */\n}\n\n/* ---- C0/9AD3 : shape-decode prologue (NOT a fetch) ---- */\nvoid collision_result_init_and_shape_head(void)\n{\n    DP8(0x5E) = 0;   /* 9AD3 one-way scratch */\n    DP8(0x60) = 0;   /* 9AD5 shape-index scratch */\n    DP8(0x6A) = 0;   /* 9AD7 z-plane out */\n    DP8(0x6C) = 0;   /* 9AD9 IGNORE_Z out */\n    DP8(0x6E) = 0;   /* 9ADB sprite-prio out */\n    DP8(0x56) = DP8(0x68) >> 2;   /* 9ADD/9ADF/9AE0/9AE1: $1D56 = ($1D68>>2) sub-tile Y */\n    /* 9AE3 LDA $58 ... falls into shape decode (shape=(byte0&0xFC)>>2) */\n}",
+ "wramReads": [
+  "$7E70C0,X (8-bit) @9AAA — off-map SENTINEL plane; bit7 CLEAR => off-map => carry SET (SOLID); bit7 SET => valid cell, load bytes",
+  "$7E30C0,X (8-bit) @9AB2 — tile property BYTE0 plane (collision shape = (byte0&0xFC)>>2; bit0/bit1 = actor-blocking flags)",
+  "$7E7000,X (8-bit) @9AB8 — tile property BYTE1 plane (byte1&0x10 = DOOR; conveyor source at apply C0/9C5C)",
+  "$7E7040,X (8-bit) @9ABE — tile property BYTE2 plane (byte2&3 = z-plane; &4 IGNORE_Z; &8 INVERTED; &0x20 Z_NEUTRAL; &0x40 SPRITE_FRONT_BOTTOM)",
+  "$1D1E/$1D1F (16-bit) @9AA5/9ACC — CELL MASK; (pos_word AND mask) = linear byte index into the 0x40-stride planes. Precomputed at scene/map load (outside this cluster, not under DP=$1D00).",
+  "$1D68 (8-bit) @9ADD — Y-position high byte of tentative position; >>2 -> $1D56 sub-tile Y (9AD3 head)",
+  "A on entry — 16-bit cell-source position word. Callers 8AA4/9C8D build it (LDA $68 16-bit then SEP; LDA $67 8-bit) => A = ($1D69<<8)|$1D67; caller 9DEA uses $0102/$0103 (location/scroll anchor) instead."
+ ],
+ "wramWrites": [
+  "$1D58 = byte0 (9AB6, carry-clear path only)",
+  "$1D5A = byte1 (9ABC, carry-clear path only)",
+  "$1D5C = byte2 (9AC2, carry-clear path only)",
+  "$1D5E = 0 (9AD3, one-way scratch)",
+  "$1D60 = 0 (9AD5, shape-index scratch)",
+  "$1D6A = 0 (9AD7, z-plane out)",
+  "$1D6C = 0 (9AD9, IGNORE_Z out)",
+  "$1D6E = 0 (9ADB, sprite-prio out)",
+  "$1D56 = $1D68>>2 (9AE1, sub-tile Y for slope/shape eval)"
+ ],
+ "entryPoints": [
+  "C0/9AA1 -> prop_fetch CHECKED: AND mask, TAX, check $7E70C0 sentinel; bit7 clear => carry SET (SOLID); else load 3 bytes + carry CLEAR",
+  "C0/9AB2 -> common TAIL: load byte0/1/2 into $1D58/$1D5A/$1D5C, SEP #$10, carry CLEAR",
+  "C0/9AC8 -> prop_fetch UNCHECKED: AND mask, TAX, BRA tail (no sentinel check, always carry CLEAR)",
+  "C0/9AD3 -> collision-result init + shape-decode head (clears $5E/$60/$6A/$6C/$6E, sets $56=$68>>2); NOT a property fetch"
+ ],
+ "callsOut": [
+  "none — no JSR/JSL/BRL leaves this cluster; 9AA1/9AC8 RTS, 9AD3 falls through into the in-bank shape decoder at 9AE3 (same routine body)"
+ ],
+ "romTables": [
+  "No ROM tables read by 9AA1/9AC8/9AB2/9AD3 themselves. The shape decoder that 9AD3 flows into reads slope tables (outside this cluster) starting ~9AF9/9B08: C0/9BF5 = 82 02 02 82 81 01 01 81 83 03 03 83 81 01 01 81 83 03 03 83 82 02 ; C0/9C0B = 3D 03 03 3D 7D 03 C3 3D 3E 23 03 1D 3D C3 03 7D 1E 03 23 3D 3D 03 ; C0/9C21 = 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00"
+ ],
+ "uncertainties": [
+  "SENTINEL POLARITY (CRITICAL): 9AAE opcode is `30 02` = BMI $9AB2, branching when N(bit7) is SET to the byte-loading tail (carry CLEAR = in-bounds). So $7E70C0[i] bit7==1 means VALID cell; bit7==0 means OFF-MAP => SEC at 9AB0 => carry SET => SOLID. This is the OPPOSITE of the CLAUDE.md hint ('bit7 early-out = off-map SOLID, carry set'). Carry is only set on the bit7-CLEAR fall-through. Verifier must confirm live $7E70C0 plane content to pin which value flags off-map. (Read directly from the opcode.)",
+  "A.high on entry: callers do `LDA $68` (16-bit -> A=$1D68|$1D69) then `SEP #$20; LDA $67` (8-bit, overwrites only A.low). So A.high = $1D69, A.low = $1D67, giving cell-source word = ($1D69<<8)|$1D67. The 9DEA path: `LDA $0102` (16-bit) then SEP => A.high=$0103, A.low=$0102. Earlier note said high=$1D68/$1D66; re-verify exact byte indices ($1D67/$1D69 vs $1D66/$1D68) against the mask layout.",
+  "CELL MASK $1D1E/$1D1F construction is upstream (scene/map load, different DP) and was not found in bank C0 under DP=$1D00; treated as opaque input. Confirm its bit pattern (expected: low byte masked to tile_x within 0x3F, high byte to tile_y row stride of 0x40) so that (pos AND mask) == tile_y*0x40 + tile_x. This is the key unknown for matching the Python tile-index model (ty*cw+tx) to the ROM's fixed 0x40 stride.",
+  "9AD3 is grouped here per the focus list but is functionally the shape-decoder prologue, not a fetch. It is always invoked immediately after a fetch (8AAC, 9C90, 9DF5) and reads the just-fetched $1D58 and $1D68. Port it as part of the shape-decode routine (9AD3-9BF4) rather than the fetch.",
+  "X width: REP #$10 at 9AA1/9AC8 makes X 16-bit for the plane indexing; SEP #$10 at 9AC4 restores 8-bit X before RTS. The $7E:30C0/7000/7040/70C0 loads are long (absolute WRAM) so indexing is independent of DP. Confirmed from opcodes."
+ ]
+}

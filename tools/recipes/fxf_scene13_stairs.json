@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene13_stairs",
+  "from": "fxf_bedslide",
+  "doc": "Stands in for the state saves/scene13_stairs.wram was made from: the ROM's own loader (--teleport 13 13 29 3, method jmp, 200 frames) from the bed slide places the lead in loc 00D at tile (13,29), one tile left of the slope's foot -- the reference's own provenance, from the recipe-made bed slide.",
+  "steps": [["teleport", 13, 13, 29, 3, 200, "jmp"]],
+  "expect": {"loc": "0x00D"}
+}

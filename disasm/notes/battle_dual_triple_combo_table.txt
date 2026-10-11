@@ -1,0 +1,61 @@
+39 Aura Whirl   grp=25 [Marle+Crono] meta=25 00 40 00 00 09 81 80 00 00 00  1ACB=81 1ACC=00(&3F=00) eff=09 81 80 mp=[1, 2, 0] mp_self=0
+3A Ice Sword    grp=07 [Crono+Marle] meta=07 61 40 22 00 04 0B 80 08 08 00  1ACB=07 1ACC=00(&3F=00) eff=04 0B 80 mp=[4, 2, 0] mp_self=0
+3B Ice Sword 2  grp=07 [Crono+Marle] meta=07 61 40 22 00 3C 0E 80 07 07 00  1ACB=12 1ACC=03(&3F=03) eff=3C 0E 80 mp=[12, 8, 0] mp_self=0
+3C Fire Whirl   grp=08 [Crono+Lucca] meta=08 61 40 12 00 01 11 80 07 07 00  1ACB=12 1ACC=03(&3F=03) eff=01 11 80 mp=[2, 1, 0] mp_self=12
+3D Fire Sword   grp=08 [Crono+Lucca] meta=08 61 40 12 00 04 13 80 08 08 00  1ACB=07 1ACC=00(&3F=00) eff=04 13 80 mp=[4, 2, 0] mp_self=20
+3E FireSword 2  grp=08 [Crono+Lucca] meta=08 61 40 12 00 3C 16 80 07 07 00  1ACB=12 1ACC=03(&3F=03) eff=3C 16 80 mp=[12, 8, 0] mp_self=15
+3F Rocket Roll  grp=09 [Crono+Robo] meta=09 61 40 42 00 81 1B 80 00 09 00  1ACB=08 1ACC=00(&3F=00) eff=81 1B 80 mp=[2, 3, 0] mp_self=4
+40 Max Cyclone  grp=31 [Robo+Crono] meta=31 41 40 04 00 9B 04 80 00 06 00  1ACB=13 1ACC=02(&3F=02) eff=9B 04 80 mp=[3, 4, 0] mp_self=2
+41 Super Volt   grp=09 [Crono+Robo] meta=09 71 40 82 00 05 20 80 08 08 00  1ACB=08 1ACC=00(&3F=00) eff=05 20 80 mp=[8, 17, 0] mp_self=5
+42 X Strike     grp=0A [Crono+Frog] meta=0A 41 40 04 00 01 40 80 03 03 00  1ACB=07 1ACC=00(&3F=00) eff=01 40 80 mp=[2, 2, 0] mp_self=15
+43 SwordStream  grp=27 [Frog+Crono] meta=27 61 40 22 00 23 04 80 08 08 00  1ACB=07 1ACC=00(&3F=00) eff=23 04 80 mp=[2, 4, 0] mp_self=4
+44 Spire        grp=27 [Frog+Crono] meta=27 61 40 82 00 25 05 80 07 0B 00  1ACB=07 1ACC=00(&3F=00) eff=25 05 80 mp=[4, 8, 0] mp_self=1
+45 Drill Kick   grp=28 [Ayla+Crono] meta=28 41 40 04 00 2A 81 80 05 00 00  1ACB=07 1ACC=00(&3F=00) eff=2A 81 80 mp=[2, 2, 0] mp_self=255
+46 Volt Bite    grp=28 [Ayla+Crono] meta=28 40 40 82 00 2B 83 80 0B 00 00  1ACB=07 1ACC=00(&3F=00) eff=2B 83 80 mp=[3, 2, 0] mp_self=255
+47 Falcon Hit   grp=28 [Ayla+Crono] meta=28 41 40 04 00 AC 04 80 00 06 00  1ACB=0F 1ACC=0B(&3F=0B) eff=AC 04 80 mp=[4, 4, 0] mp_self=255
+48 Antipode     grp=0C [Marle+Lucca] meta=0C 61 40 42 00 0B 13 80 07 07 00  1ACB=12 1ACC=03(&3F=03) eff=0B 13 80 mp=[2, 2, 0] mp_self=117
+49 Antipode 2   grp=0C [Marle+Lucca] meta=0C 61 40 42 00 0E 16 80 09 09 00  1ACB=12 1ACC=03(&3F=03) eff=0E 16 80 mp=[8, 8, 0] mp_self=118
+4A Antipode 3   grp=0C [Marle+Lucca] meta=0C 61 40 42 00 0E 18 80 08 08 00  1ACB=08 1ACC=00(&3F=00) eff=0E 18 80 mp=[8, 20, 0] mp_self=119
+4B Aura Beam    grp=0D [Marle+Robo] meta=0D 00 40 00 00 09 9A 80 00 00 00  1ACB=81 1ACC=00(&3F=00) eff=09 9A 80 mp=[1, 2, 0] mp_self=120
+4C Ice Tackle   grp=29 [Robo+Marle] meta=29 61 40 22 00 1C 0B 80 09 09 00  1ACB=07 1ACC=00(&3F=00) eff=1C 0B 80 mp=[4, 2, 0] mp_self=121
+4D Cure Touch   grp=0D [Marle+Robo] meta=0D 00 40 00 00 0F 9D 80 00 00 00  1ACB=81 1ACC=00(&3F=00) eff=0F 9D 80 mp=[5, 3, 0] mp_self=122
+4E Ice Water    grp=2A [Frog+Marle] meta=2A 61 40 22 00 23 0B 80 07 07 00  1ACB=08 1ACC=00(&3F=00) eff=23 0B 80 mp=[2, 2, 0] mp_self=123
+4F Glacier      grp=2A [Frog+Marle] meta=2A 61 40 22 00 26 0E 80 09 09 00  1ACB=07 1ACC=00(&3F=00) eff=26 0E 80 mp=[8, 8, 0] mp_self=10
+50 Double Cure  grp=0E [Marle+Frog] meta=0E 60 40 00 00 41 A7 80 00 00 00  1ACB=81 1ACC=00(&3F=00) eff=41 A7 80 mp=[5, 5, 0] mp_self=13
+51 Twin Charm   grp=2B [Ayla+Marle] meta=2B 40 40 02 00 43 8A 80 10 00 00  1ACB=07 1ACC=00(&3F=00) eff=43 8A 80 mp=[4, 1, 0] mp_self=21
+52 Ice Toss     grp=2B [Ayla+Marle] meta=2B 61 40 22 00 2C 0B 80 07 07 00  1ACB=12 1ACC=03(&3F=03) eff=2C 0B 80 mp=[4, 2, 0] mp_self=15
+53 Cube Toss    grp=2B [Ayla+Marle] meta=2B 61 40 22 00 2C 0E 80 08 08 00  1ACB=12 1ACC=03(&3F=03) eff=2C 0E 80 mp=[4, 8, 0] mp_self=48
+54 Fire Punch   grp=2C [Robo+Lucca] meta=2C 61 40 12 00 19 13 80 07 07 00  1ACB=12 1ACC=03(&3F=03) eff=19 13 80 mp=[1, 2, 0] mp_self=21
+55 Fire Tackle  grp=2C [Robo+Lucca] meta=2C 61 40 12 00 1C 16 80 09 09 00  1ACB=07 1ACC=00(&3F=00) eff=1C 16 80 mp=[4, 8, 0] mp_self=99
+56 DoublevBomb  grp=10 [Lucca+Robo] meta=10 61 40 12 00 17 1F 80 09 09 00  1ACB=13 1ACC=06(&3F=06) eff=17 1F 80 mp=[15, 14, 0] mp_self=10
+57 Flame Kick   grp=2D [Ayla+Lucca] meta=2D 61 40 12 00 2A 13 80 08 08 00  1ACB=07 1ACC=00(&3F=00) eff=2A 13 80 mp=[2, 2, 0] mp_self=12
+58 Fire Whirl   grp=2D [Ayla+Lucca] meta=2D 61 40 12 00 2E 16 80 09 09 00  1ACB=08 1ACC=00(&3F=00) eff=2E 16 80 mp=[10, 8, 0] mp_self=11
+59 Blaze Kick   grp=2D [Ayla+Lucca] meta=2D 61 40 12 00 3D 16 80 08 08 00  1ACB=07 1ACC=00(&3F=00) eff=3D 16 80 mp=[20, 8, 0] mp_self=23
+5A Blade Toss   grp=12 [Robo+Frog] meta=12 41 40 04 00 9B 40 80 00 06 00  1ACB=0D 1ACC=01(&3F=01) eff=9B 40 80 mp=[3, 2, 0] mp_self=14
+5B Bubble Snap  grp=12 [Robo+Frog] meta=12 41 40 04 00 1C A3 80 06 00 00  1ACB=07 1ACC=00(&3F=00) eff=1C A3 80 mp=[4, 2, 0] mp_self=99
+5C Cure Wave    grp=2E [Frog+Robo] meta=2E 00 40 00 00 27 9D 80 00 00 00  1ACB=81 1ACC=00(&3F=00) eff=27 9D 80 mp=[5, 3, 0] mp_self=18
+5D Boogie       grp=2F [Ayla+Robo] meta=2F 00 40 02 00 3F 9C 80 00 00 00  1ACB=08 1ACC=00(&3F=00) eff=3F 9C 80 mp=[4, 4, 0] mp_self=255
+5E Spin Kick    grp=2F [Ayla+Robo] meta=2F 41 40 04 00 2A 9B 80 06 00 00  1ACB=07 1ACC=00(&3F=00) eff=2A 9B 80 mp=[2, 3, 0] mp_self=0
+5F Beast Toss   grp=2F [Ayla+Robo] meta=2F C1 40 04 00 2C 1E 80 03 03 00  1ACB=07 1ACC=00(&3F=00) eff=2C 1E 80 mp=[4, 12, 0] mp_self=12
+60 Slurp Kiss   grp=14 [Frog+Ayla] meta=14 41 40 00 00 A1 44 80 00 00 00  1ACB=81 1ACC=00(&3F=00) eff=A1 44 80 mp=[1, 1, 0] mp_self=13
+61 Bubble Hit   grp=30 [Ayla+Frog] meta=30 41 40 04 00 2A A3 80 06 00 00  1ACB=07 1ACC=00(&3F=00) eff=2A A3 80 mp=[2, 2, 0] mp_self=24
+62 Drop Kick    grp=14 [Frog+Ayla] meta=14 C1 40 04 00 25 3D 80 04 00 00  1ACB=07 1ACC=00(&3F=00) eff=25 3D 80 mp=[4, 20, 0] mp_self=15
+63 Red Pin      grp=15 [Frog+Lucca] meta=15 61 40 12 00 25 13 80 08 08 00  1ACB=07 1ACC=00(&3F=00) eff=25 13 80 mp=[4, 2, 0] mp_self=32
+64 Line Bomb    grp=15 [Frog+Lucca] meta=15 61 40 12 00 A5 17 80 00 07 00  1ACB=0F 1ACC=0B(&3F=0B) eff=A5 17 80 mp=[4, 15, 0] mp_self=16
+65 Frog Flare   grp=15 [Frog+Lucca] meta=15 61 40 12 00 28 18 80 08 08 00  1ACB=08 1ACC=00(&3F=00) eff=28 18 80 mp=[15, 20, 0] mp_self=99
+66 Delta Force  grp=16 [Crono+Marle+Lucca] meta=16 62 40 42 00 05 0E 16 08 08 08  1ACB=08 1ACC=00(&3F=00) eff=05 0E 16 mp=[8, 8, 8] mp_self=18
+67 Lifeline     grp=17 [Marle+Crono+Robo] meta=17 00 40 00 00 3E 90 9B 00 00 00  1ACB=01 1ACC=00(&3F=00) eff=3E 90 9B mp=[15, 15, 3] mp_self=7
+68 Arc Impulse  grp=18 [Crono+Frog+Marle] meta=18 62 40 22 00 04 25 0E 08 08 08  1ACB=07 1ACC=00(&3F=00) eff=04 25 0E mp=[4, 4, 8] mp_self=10
+69 Final Kick   grp=19 [Ayla+Crono+Marle] meta=19 62 40 42 00 3D 05 0E 08 08 08  1ACB=07 1ACC=00(&3F=00) eff=3D 05 0E mp=[20, 8, 8] mp_self=16
+6A Fire Zone    grp=1A [Robo+Crono+Lucca] meta=1A 62 40 12 00 9C 04 16 00 0B 08  1ACB=13 1ACC=02(&3F=02) eff=9C 04 16 mp=[4, 4, 8] mp_self=15
+6B Delta Storm  grp=1B [Crono+Lucca+Frog] meta=1B 62 40 42 00 05 16 26 08 08 08  1ACB=08 1ACC=00(&3F=00) eff=05 16 26 mp=[8, 8, 8] mp_self=99
+6C GatlingKick  grp=1C [Ayla+Crono+Lucca] meta=1C 62 40 42 00 3D 05 16 08 08 08  1ACB=07 1ACC=00(&3F=00) eff=3D 05 16 mp=[20, 8, 8] mp_self=20
+6D Triple Raid  grp=1D [Crono+Robo+Frog] meta=1D C2 40 04 00 01 1C 40 03 03 03  1ACB=07 1ACC=00(&3F=00) eff=01 1C 40 mp=[2, 4, 2] mp_self=255
+6E Twister      grp=1E [Crono+Robo+Ayla] meta=1E 63 40 42 00 01 1B 2E 09 09 09  1ACB=08 1ACC=00(&3F=00) eff=01 1B 2E mp=[2, 3, 10] mp_self=0
+6F 3D Attack    grp=1F [Ayla+Crono+Frog] meta=1F C2 40 04 00 3D 01 40 03 03 03  1ACB=07 1ACC=00(&3F=00) eff=3D 01 40 mp=[20, 2, 2] mp_self=10
+70 DarkEternal  grp=20 [Marle+Lucca+Magus] meta=20 62 40 42 00 0E 16 38 08 08 08  1ACB=08 1ACC=00(&3F=00) eff=0E 16 38 mp=[8, 8, 20] mp_self=12
+71 Omega Flare  grp=21 [Lucca+Robo+Magus] meta=21 62 40 42 00 18 1B 34 08 08 08  1ACB=08 1ACC=00(&3F=00) eff=18 1B 34 mp=[20, 3, 8] mp_self=21
+72 Spin Strike  grp=22 [Frog+Robo+Ayla] meta=22 C2 40 04 00 25 9C AF 34 00 00  1ACB=07 1ACC=00(&3F=00) eff=25 9C AF mp=[4, 4, 15] mp_self=14
+73 PoyozoDance  grp=23 [Marle+Lucca+Ayla] meta=23 62 40 02 00 8A 92 2E 00 00 2E  1ACB=08 1ACC=00(&3F=00) eff=8A 92 2E mp=[1, 1, 10] mp_self=29
+74 Grand Dream  grp=24 [Frog+Marle+Robo] meta=24 42 40 04 00 42 90 9D 00 00 00  1ACB=08 1ACC=00(&3F=00) eff=42 90 9D mp=[15, 15, 3] mp_self=19
+75 {00}{00}{12}{03}{0B}{01}{07}{00}{07}{00}{08} grp=00 [Crono] meta=00 00 80 04 00 3A 80 80 01 00 00  1ACB=00 1ACC=80(&3F=00) eff=3A 80 80 mp=[0, 0, 0] mp_self=99

@@ -1,0 +1,7 @@
+{
+  "name": "fxf_tech_double",
+  "from": "com_jogo_salvo",
+  "doc": "Stands in for saves/tech_double.state, by its own provenance (a splice of com_jogo_salvo.state) from the recipe-made com_jogo_salvo: party $2980-$2982 = 00 01 02 (Crono, Marle, Lucca); Marle knows Aura ($2838 = 80) and the Crono+Marle pair Aura Whirl ($283E = 80); Marle at 20/20 MP ($2657, $2659); Crono wounded ($2603 = 10) -- a dual tech list reachable in the X menu.",
+  "steps": [["poke", "7E2980=00,7E2981=01,7E2982=02,7E2838=80,7E283E=80,7E2657=20,7E2659=20,7E2603=10"]],
+  "expect": {"loc": "0x1F1", "wram": {"0x2981": "0x01", "0x2982": "0x02"}}
+}

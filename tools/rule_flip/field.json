@@ -1,0 +1,632 @@
+{
+  "vmdiff-cathedral-face-op-ends-the-visit": {
+    "expect": [
+      "  seed fidelity (frame 0): 0 divergence(s) (clean)",
+      "  CLEAN: no scheduler divergence over 900 frames"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "field-loc271-bell-init-sound": {
+    "expect": [
+      "cmd=18 p1=3F p2=80",
+      "cmd=81 p1=00 p2=20",
+      "cmd=81 p1=70 p2=FF",
+      "cmd=10 p1=12 p2=FF"
+    ],
+    "evidence": "Passes unchanged under the three switches on the final binary: its expect lines are substrings of what the pin regexes now print (the triage listed the pinned lines' grown tails, not a change). The four loc-271 init posts (18 3F 80, 81 00 20, 81 70 FF, 10 12 FF) are the same; its pin regex `^\\[snd\\] blen=2075` matches nothing with or without the switches (stale pin, not this migration's)."
+  },
+  "harness-play-goal-and-failure": {
+    "expect": [
+      "play: f0 goto (22,6) from (24,8)",
+      "goto (22,6) OK in",
+      "goto (0,0) FAILED -- stuck at"
+    ],
+    "evidence": "Passes unchanged under the three switches on the final binary: its expect lines are substrings of what the pin regexes now print (the triage listed the pinned lines' grown tails, not a change). The --play harness still reaches (22,6) and reports goto (0,0) FAILED; its pin regexes name goto (24,10), which this check's argv never drives (stale pins, not this migration's)."
+  },
+  "camera-reenter-scene5": {
+    "expect": [
+      "selftest: scene 5 naming=-1 name='', 8 NPCs, player (344,511) cam(208,368) f0 topF=1 botF=0, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=0 fgpx=148336 fgskip=117 -> 256x224 fnv32=67C099F9"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "1",
+      "--reentertest",
+      "5",
+      "--tframes",
+      "194"
+    ],
+    "evidence": "Same picture, 54 frames later: the door into scene 5 now prices its song post `10 1E` (C0/1B8B, inside the NMI-off load) on the rule's loader clock -- `+ 19186024 on the loader clock = 103 black frame(s)` against 49 (a `--scene 1` start has a cold driver; the base run has no SPC). The main loop resumes at f136 instead of f82, so --tframes 140 showed the room 4 frames after the ramp (fnv F60AEAC7, fgpx 148203); --tframes 194 prints the old line exactly (cam(208,368), fgpx 148336, fnv32=67C099F9; 193 / 195 differ). The camera re-centre it grades is unchanged."
+  },
+  "field-scene2-curtain-activate": {
+    "expect": [
+      "[act f16] player(394,104) face=0 -> hit=10. candidates:",
+      "selftest: irqblank rows211-223=black row210=drawn",
+      "selftest: iris on=0 state=0 $013A-$013D=00 00 00 00 rows -1..-1 widest 0..-1",
+      "selftest: scene 2 naming=-1 name='', 3 NPCs, player (394,104) cam(256,16) f0 topF=0 botF=0, textbox=0 idx=6 choice=0 sel=0 page=0/1 reveal=33 fgpx=643953 fgskip=0 -> 256x224 fnv32=A2E3762A",
+      "selftest: playeranim $1D34=00 mode=00 af=3 lead$1600=00"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "2",
+      "--at",
+      "394",
+      "104",
+      "--selftest",
+      "build/_curtain.raw",
+      "--frames",
+      "144",
+      "--play",
+      "wait:6; u:10; a:1; wait:99"
+    ],
+    "evidence": "Same activation and the same picture, one auto-advance period later. The `--scene 2` cold start's song `10 0F EC 0F` crosses 17 NMIs on the port's SPC under the rule (CT_AUDIO_RULETRACE; none in the base run), so the VM is suspended 17 frames: Mom's text request moves f61 -> f78 (CT_TBOPDBG). The A at f16 still hits obj10 (`hit=10`, the curtain). TB_AUTOADV advances a finished box on frameNo % 24 == 23, so the advance moves one grid step, f119 -> f143: the rule's f144 prints the base f120 line exactly (textbox=0 = the unparking box, reveal=33, fnv32=A2E3762A) and f145 = the base f121 (fnv 37C725E4); f130-f143 are the same picture with the box still waiting (textbox=1)."
+  },
+  "field-chest-preopened-after-door": {
+    "expect": [
+      "chestload: loc 26 record 0 tile 251E opened render bumped",
+      "chestload: loc 26 record 0 tile 251E opened wram FE -> FF",
+      "selftest: scene 26 naming=-1 name='' [flags], 0 NPCs, player (488,623) cam(352,480) f0 topF=1 botF=1, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=0 fgpx=802153 fgskip=0 -> 256x224 fnv32=ABEBD1DA"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "21",
+      "--at",
+      "904",
+      "575",
+      "--loadflags",
+      "saves/field_re/chest26_opened.flags",
+      "--selftest",
+      "build/_chest26door.raw",
+      "--frames",
+      "128"
+    ],
+    "evidence": "Same room, same pre-opened chest (both chestload lines unchanged), 8 frames later: loc 26's load prices its song post `10 0C` (C0/1B8B) on the rule's loader clock, `+ 2747096 on the loader clock = 46 black frame(s)` against 38, so the main loop resumes at f80 instead of f72. --frames 128 prints the base f120 line exactly (fgpx 802153, fnv32=ABEBD1DA; f127-f129 are that static picture)."
+  },
+  "vmdiff-scene254-textbox-unpark": {
+    "expect": [
+      "script vs $7F2000 image: identical (0 byte diffs)",
+      "seed fidelity (frame 0): 0 divergence(s) (clean)",
+      "liveness: oracle ip-steps=50 ours=44 over 460 frames",
+      "CLEAN: no scheduler divergence over 460 frames"
+    ],
+    "evidence": "Passes unchanged under the three switches on the final binary: its expect lines are substrings of what the pin regexes now print (the triage listed the pinned lines' grown tails, not a change). The lockstep (real-time oracle, no CT_ORACLE_LOGICAL in its env) stays CLEAN over 460 frames, liveness 50 / 44."
+  },
+  "field-menu-overworld-open": {
+    "expect": [
+      "menusfx-menu-gates: ow=1 loc=01F0 $027C=05 savept=0 saveCanOpen=1 formCanOpen=0",
+      "menusfx-menu: phase=2 screen=6 opt=5",
+      "menusfx-menu: menu prelude 5 -> 70/00, 18/FF, 19/FF, 82/01, 83/01 (C2/8096, unthrottled)"
+    ],
+    "evidence": "Passes unchanged under the three switches on the final binary: its expect lines are substrings of what the pin regexes now print (the triage listed the pinned lines' grown tails, not a change)."
+  },
+  "field-menu-overworld-resume": {
+    "expect": [
+      "selftest-ow: world 0 cam(312,168) mover(440,280) f357 cgadsub=44 fnv32=789F81B8 menu=0 $027C=01"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "1",
+      "--at",
+      "176",
+      "216",
+      "--selftest",
+      "build/_owmenu2.raw",
+      "--frames",
+      "357",
+      "--play",
+      "d:8; wait:90; m:1; r:16; w:42; b:1; wait:120"
+    ],
+    "evidence": "Same picture one frame earlier: the world's load window is 44 -> 43 frames under the rule (field.c, fieldRuleNmiOnHold: the first NMI's C2/0A5A tilemap build is held, not a real-time frame; the rule's oracle measured one frame shorter on every world entry -- the attract's 1F5/1F7/1F2/1F3/1F0 and the Truce market's C2/23D2 f86 -> f85). --frames 357 prints the base f358 picture (fnv32=789F81B8; the rule's f358 is 78A92462, f356 10209A7C). Same proposal as the attract family's."
+  },
+  "field-menu-config-toggle-and-pack": {
+    "expect": [
+      "menucfg: cell=0 sub=1 work=010000000104000001010400 packed=8CA001",
+      "menusfx-menu: config-stereo -> cmd=F3 param=01 posted (C2/C028, unthrottled)",
+      "menusfx-menu: config-blip -> cmd=18 id=00 pan=80 posted"
+    ],
+    "evidence": "Passes unchanged under the three switches on the final binary: its expect lines are substrings of what the pin regexes now print (the triage listed the pinned lines' grown tails, not a change)."
+  },
+  "field-menu-tech-tabs": {
+    "expect": [
+      "menusfx-menu: tech-tab -> cmd=18 id=00 pan=80 posted",
+      "menusfx-menu: tech-list-empty -> cmd=18 id=01 pan=80 posted",
+      "menusfx-menu: phase=2 screen=3 opt=2 sub=0",
+      "menutech: char=0 tab=0 row=0 scroll=0 n=1 [01:2d]"
+    ],
+    "evidence": "Passes unchanged under the three switches on the final binary: its expect lines are substrings of what the pin regexes now print (the triage listed the pinned lines' grown tails, not a change)."
+  },
+  "shop-screens-vs-oracle": {
+    "expect": [
+      "shop-screen-cmp: main oracle f104 port f102 -> 0 px differ",
+      "shop-screen-cmp: main-arrow oracle f112 port f110 -> 0 px differ",
+      "shop-screen-cmp: buy-list-marle oracle f181 port f179 -> 0 px differ",
+      "shop-screen-cmp: buy-list oracle f190 port f188 -> 0 px differ",
+      "shop-screen-cmp: buy-list-pose oracle f200 port f198 -> 0 px differ",
+      "shop-screen-cmp: buy-qty oracle f240 port f238 -> 0 px differ",
+      "shop-screen-cmp: bought oracle f275 port f273 -> 0 px differ",
+      "shop-screen-cmp: sell-list oracle f370 port f368 -> 0 px differ",
+      "shop-screen-cmp: sell-qty oracle f410 port f408 -> 0 px differ",
+      "shop-screen-cmp: sold oracle f450 port f448 -> 0 px differ",
+      "shop-screen-cmp: shop11-description oracle f190 port f188 -> 0 px differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "menu-shell-open-close-vs-logical-oracle": {
+    "expect": [
+      "menu-shell: x-menu f3-f127: 0 frame(s) differ",
+      "menu-shell: shop f9-f62: 0 frame(s) differ",
+      "menu-shell: shop-close f428-f499: 0 frame(s) differ",
+      "menu-shell: ow-menu f78-f356: 0 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot). (Without it the shop's oracle never leaves the field: level 15 on every frame of the shop / shop-close drives.)"
+  },
+  "shop-equip-mode-vs-oracle": {
+    "expect": [
+      "shop-equip-cmp: equip mode f50-f501: 0 of 452 frame(s) differ",
+      "shop-equip-cmp: buy list after it f502-f575: frames that differ []",
+      "shop-equip-cmp: bag $2400-$25FF: 0 byte(s) differ",
+      "shop-equip-cmp: Crono sheet $2600-$264F: 0 byte(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "vmdiff-scene8-gate-cutscene": {
+    "expect": [
+      "  seed fidelity (frame 0): 0 divergence(s) (clean)",
+      "  [snd] JSL $C7:0004 from line 12: 0 frame(s) lost, returns on line 75",
+      "  [snd] JSL $C7:0004 from line 12: 38 frame(s) lost, returns on line 223",
+      "  liveness: oracle ip-steps=420 ours=42 over 1500 frames",
+      "  CLEAN: no scheduler divergence over 1500 frames"
+    ],
+    "pin": [
+      "seed fidelity \\(frame 0\\):",
+      "^  \\[snd\\] JSL \\$C7:0004 from line 12: 0 frame\\(s\\) lost, returns on line 75",
+      "^  \\[snd\\] JSL \\$C7:0004 from line 12: 38 frame",
+      "^  liveness: ",
+      "^  CLEAN: |^  >>> FIRST divergence"
+    ],
+    "evidence": "Its env_rule already runs the oracle under the rule (LOGICAL + virtual beam); the lockstep stays CLEAN over 1500 frames. The graded port-side [snd] lines moved with the rule's clock (src/audio.c, C7 on the listing from the CPU's last wait, the field V-IRQ's line-211 H-blank wait): `EA 00` returns on line 75 (was 116) and `EA 18` loses 38 frames returning on line 223 (was 39, line 168). The rule's oracle, measured here with --hookpc from the same state and btnscript: JSL C0/3C43 at f146 line 228 -> C0/3C47 f147 line 69 (no frame lost), and JSL at f154 line 228 (frame 155) -> C0/3C47 at f193 line 219: 38 frames lost, the port's count; the line residual (223 vs 219, 75 vs 69) is the transfer's own poll count, inside the frame. Liveness 419 -> 420 is the oracle's own ip-steps (its upload one frame shorter, the loop's tail no longer overrunning the NMI). Pins re-aimed at the new lines."
+  },
+  "field-newgame-mom-wakeup-text": {
+    "expect": [
+      "[tbop] f659 obj8 @030A op=BB str=6 $0129=00 latch=00 -> REQUEST",
+      "[tbop] f664 obj8 @030A op=BB str=6 $0129=05 latch=01 -> PARK (box up)",
+      "[tbop] f669 obj8 @030A op=BB str=6 $0129=05 latch=01 -> PARK (box up)",
+      "[tbop] f674 obj8 @030A op=BB str=6 $0129=06 latch=01 -> PARK (box up)",
+      "[tbop] f679 obj8 @030A op=BB str=6 $0129=06 latch=01 -> PARK (box up)",
+      "[tbop] f684 obj8 @030A op=BB str=6 $0129=06 latch=01 -> PARK (box up)",
+      "[tbop] f689 obj8 @030A op=BB str=6 $0129=06 latch=01 -> PARK (box up)",
+      "[tbop] f694 obj8 @030A op=BB str=6 $0129=06 latch=01 -> PARK (box up)",
+      "[tbop] f699 obj8 @030A op=BB str=6 $0129=06 latch=01 -> PARK (box up)",
+      "fieldshot: f2338 camx=256 camy=16 fnv=C415A504"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--newgame",
+      "--selftest",
+      "--frames",
+      "2348"
+    ],
+    "env": {
+      "CT_FIELDSHOT_AT": "2338"
+    },
+    "pin": [
+      "^\\[tbop\\] f\\d+ obj8 @030A ",
+      "^fieldshot: f2338 "
+    ],
+    "evidence": "The same wake-up, 64 frames later, and now the cartridge's timing. Three moves: the world 0 window 44 -> 43 (-1, the held C2/0A5A build); in loc 271 obj10's text C1 (ip 0704) is followed by `EB 20 00` (C0/3C4C: posts 81 20 00, 82 00, 83 00) and op ED (ip 0709, C0/3CBC: wait until $2141 == 0), which now waits on the port's own SPC run one frame per frame: 98 VM ticks (426..523) for 49 in the base run (+49), and the rule's cartridge from saves/crononame.state (A, Start, A every 30 frames; --monitor $0100/$1194/$0129) holds obj10 at ip 0869 (= 0709 + 0x160, its C1 at 0864 = 0704 + 0x160) from f2088 to f2186: 98 frames; and in loc 2 the song `10 0F EC 0F` crosses 16 NMIs (+16): the port's loc-change -> Mom's box is 109 frames (changeloc f2185, $0129 = 01 at f2294) against the base's 93, and the rule's cartridge's is 109 ($0100 = 0002 at f2251, $0129 = 01 at f2360). The tbop lines are VM ticks (+65 = 49 + 16), the same $0129 sequence 00/05/05/06x6; the shot at f2274 + 64 = f2338 is the base f2274 picture (fnv C415A504; f2337 / f2339 differ). CT_FIELDSHOT ends the run, so its frame moves in env."
+  },
+  "field-scene8-gate-warp-flow": {
+    "expect": [
+      "gatewarp: op-0xFF 80 -> FD/DA00, $0119=00 + 113 setup + 767 loop, then reboot into loc 071",
+      "gatewarp: op-0xFF 80 ran 880 frames -> JML C0:0000",
+      "reboot: JML C0:0000 -> loc 071 tile(8,7) bits01",
+      "selftest: scene 113 naming=-1 name='' [flags], 3 NPCs, player (136,176) cam(0,0) f0 topF=1 botF=1, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=68 fgpx=32906 fgskip=3 -> 256x224 fnv32=1F8E6191"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "8",
+      "--loadflags",
+      "saves/field_re/telepod_entry09.flags",
+      "--walkscript",
+      "i:110,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29,a:1,i:29",
+      "--selftest",
+      "--frames",
+      "3644"
+    ],
+    "evidence": "Same warp, same reboot, same arrival picture 44 frames later. The `--scene 8` cold start's gate song `10 18 C8 06` crosses 40 NMIs on the port's SPC under the rule (none in the base run), the walkscript's fixed 30-frame A grid re-quantizes the dialog after it, and the translated warp takes over at f2517 (was f2473): 880 frames, JML C0:0000, loc 071 tile(8,7) unchanged. --frames 3644 prints the base f3600 selftest line exactly (player (136,176), fgskip=3, fnv32=1F8E6191; 3643 / 3645 differ). (tools/gate_arrival_cmp.py reads this argv; it only lengthens its port run.)"
+  },
+  "field-scene8-gate-portal-draws-inside-window": {
+    "expect": [
+      "[iris f1890] window rows 38..71 widest 118..152 $0139=01 $013C=12 occl cut=1904 win=968 drawn=968",
+      "[iris f1920] window rows 24..85 widest 104..166 $0139=00 $013C=20 occl cut=0 win=2872 drawn=2872",
+      "[iris f2190] window rows 24..85 widest 104..166 $0139=00 $013C=20 occl cut=0 win=2872 drawn=2872"
+    ],
+    "pin": [
+      "^\\[iris f1890\\] ",
+      "^\\[iris f1920\\] ",
+      "^\\[iris f2190\\] "
+    ],
+    "evidence": "The iris opens 32 frames later (the cold start's `10 18` at 40 NMIs, the A grid's quantization): per frame (CT_FIELD_MEMMON $0139/$013C) the rule's ramp $013C = 01..20 runs f1873-f1904 for the base's f1841-f1872, byte for byte. CT_ACTDBG samples the window every 30 frames, so the grid now meets ramp step $12 (f1890) instead of $14 (f1860): with a temporary per-frame trace (not committed) the rule's f1890 line is the base's f1858 line exactly and the rule's f1892 the base's f1860 (the old pinned line). The graded property holds at the new sample: mid-ramp the priority-0 swirl is cut outside the window (cut=1904) and drawn inside it (drawn = win = 968); f1920 is the old f1890 line (open, cut=0) and f2190 is unchanged."
+  },
+  "field-gate-lead-pc-obeys-its-priority-byte": {
+    "expect": [
+      "[pcprio f2019] $0F80=00 occl=1 win=1 vis=1",
+      "[pcprio f2412] $0F80=00 occl=1 win=1 vis=0",
+      "[pcprio f2413] $0F80=00 occl=1 win=0 vis=0",
+      "[pcprio f3429] $0F80=00 occl=1 win=0 vis=0",
+      "[pcprio f3466] $0F80=00 occl=1 win=1 vis=0",
+      "[pcprio f3467] $0F80=00 occl=1 win=1 vis=1",
+      "[pcprio f3502] $0F80=33 occl=0 win=1 vis=1",
+      "[pcprio f3650] $0F80=33 occl=0 win=0 vis=1"
+    ],
+    "pin": [
+      "^\\[pcprio f2019\\] ",
+      "^\\[pcprio f241[23]\\] ",
+      "^\\[pcprio f3429\\] ",
+      "^\\[pcprio f346[67]\\] ",
+      "^\\[pcprio f3502\\] ",
+      "^\\[pcprio f3650\\] "
+    ],
+    "evidence": "The same round trip of the lead's priority byte, every transition in the same order with the same $0F80/occl/win/vis, at +32 (the gate's open: f1987 -> f2019, the iris ramp +32 byte for byte) and +44 (from the next dialog on: f2368/9 -> f2412/3, the arrival f3385 -> f3429, f3422/3 -> f3466/7, f3458 -> f3502, f3606 -> f3650). The single cause is the `--scene 8` cold start's gate song `10 18 C8 06`, 40 NMIs on the port's SPC under the rule (none in the base run); the drive's fixed 30-frame A presses (and TB_AUTOADV's 24-frame grid) re-quantize each dialog advance after it (the text requests move +40, +44, +60 .. +68, +48, +32: CT_TBOPDBG), which is why the shift is not one number. Pins re-aimed at every expect line (the old ones named f2367 / f3421, which never printed)."
+  },
+  "field-layer-scroll-parallax-vs-oracle": {
+    "expect": [
+      "md=90 D0 F0 off2=(-112,-113) off3=(-112,-116)",
+      "md=90 D0 F0 off2=(-112,-152) off3=(-112,-272)",
+      "selftest: scene 366 naming=-1 name='', -1 NPCs, player (248,255) cam(112,112) f1 topF=0 botF=0, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=0 fgpx=0 fgskip=0 -> 256x224 fnv32=5FABA66C"
+    ],
+    "evidence": "Passes unchanged under the three switches on the final binary: its expect lines are substrings of what the pin regexes now print (the triage listed the pinned lines' grown tails, not a change)."
+  },
+  "field-layer-scroll-drift-vs-oracle": {
+    "expect": [
+      "md=10 56 00 off2=(2,-255) off3=(0,0)",
+      "md=10 56 00 off2=(80,-216) off3=(0,0)"
+    ],
+    "evidence": "Passes unchanged under the three switches on the final binary: its expect lines are substrings of what the pin regexes now print (the triage listed the pinned lines' grown tails, not a change)."
+  },
+  "field-lead-script-placement-01B-vs-oracle": {
+    "expect": [
+      "wrampeek: f3260 $1804 = 93 07",
+      "wrampeek: f3260 $1884 = 6A 16"
+    ],
+    "argv": [
+      "python",
+      "tools/wram_peek.py",
+      "3260",
+      "1804:2,1884:2",
+      "--",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest"
+    ],
+    "pin": [
+      "^wrampeek: f3260 \\$1804",
+      "^wrampeek: f3260 \\$1884"
+    ],
+    "evidence": "The attract (`--scene 433 --selftest`) moves +30 from its first song `10 18` (the port's SPC now prices it at 30 NMIs, the rule's IFAST cartridge's own count at attract_cena_inicial f1; the base run had no SPC) and -1 at the 1F5 world's load (44-class window one frame shorter, as the rule's cartridge): +29 through loc 01B (entered f3138 -> f3167). At f3260 the lead's $1804 / $1884 are the old oracle-pinned values (93 07 / 6A 16)."
+  },
+  "field-scroll-mask-entry-camera-1b0": {
+    "expect": [
+      "CAMINFO f8589 $1D0A=0000 $1D0E=0026 $1D93=00 $1D96=00 $1D87=0000 $1D89=0000 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=02 $1D36=00"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "8590"
+    ],
+    "pin": [
+      "^CAMINFO f8589 "
+    ],
+    "evidence": "Same entry camera ($1D0E = 0026, $1D35 = 02) 26 frames later: the attract's selftest timeline is +30 from its first `10 18` (the rule cartridge's 30) and one frame shorter at each world load (1F5, 1F7, 1F2, 1F3: -4), so loc 1B0's change moves f8552 -> f8578 and its entry's CAMINFO f8563 -> f8589 (f8586-f8591 print the same bytes)."
+  },
+  "load-ramp-gate-011e-at-entry": {
+    "expect": [
+      "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f2836",
+      "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f3507",
+      "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f4084",
+      "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f5095",
+      "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f6365",
+      "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f8010"
+    ],
+    "evidence": "The same six $011E skips (locs 01C, 0AD, 112, 0A5, 0E6, 087), at the attract's shifted frames: +30 from the first `10 18` (the port's SPC now prices it at 30 NMIs = the rule's IFAST cartridge's 30; the base run had no SPC), -1 at each world load (the held C2/0A5A build, the rule's cartridge one frame shorter on every world leg): +29 for f2807/f3478/f4055 (after 1F5), +28 for f5067/f6337 (after 1F7), +27 for f7983 (after 1F2). Every other load line of the run moves by the same vehicle (side by side: same scenes, same cycle counts, same black-frame counts but the worlds' -1)."
+  },
+  "field-wipe-first-frame-not-lit": {
+    "expect": [
+      "shotluma: f2836 loc=01C field mean=0",
+      "shotluma: f2837 loc=01C field mean=0",
+      "shotluma: f2838 loc=01C field mean=4",
+      "shotluma: f2839 loc=01C field mean=6"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "2841"
+    ],
+    "pin": [
+      "^shotluma: f283[6-9] loc=01C"
+    ],
+    "evidence": "The 01C curtain's first frames, 29 frames later (the attract vehicle: +30 from the first `10 18` priced like the rule's cartridge, -1 at 1F5's world load): the luma sequence f2829-f2840 under the rule is the base's f2800-f2811 value for value (0 .. 0, 0, 0, 4, 6, 8)."
+  },
+  "field-wipe-close-leaves-the-window-standing": {
+    "expect": [
+      "shotluma: f2672 loc=16E field mean=3",
+      "shotluma: f2673 loc=16E field mean=1",
+      "shotluma: f2674 loc=16E field mean=0",
+      "shotluma: f2675 loc=16E field mean=0",
+      "shotluma: f2676 loc=16E field mean=0",
+      "shotluma: f2677 loc=16E field mean=0",
+      "shotluma: f2678 loc=16E field mean=0",
+      "shotluma: f2679 loc=16E field mean=0",
+      "wipemask: $0350=00 $0139=00 $7F1522=17 $013C=03 $0119=00 $0351=00 $0153=00 $0386=7C 17C8=FF,FF,FF 18A8=FF,FF,FF -> masked l=0 r=255"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "2684"
+    ],
+    "pin": [
+      "^shotluma: f267[2-9] loc=16E"
+    ],
+    "evidence": "The 16E closing wipe, 29 frames later (the attract vehicle): side by side the rule's f2672-f2683 shotluma and wipemask lines are the base's f2643-f2654 byte for byte ($0351 1A..1F, the standing window, the 01C load's black), the closing wipe's mask line unchanged. At the old --frames 2655 the run ended mid-scene, before the close."
+  },
+  "field-wipe-virtual-beam-walk": {
+    "expect": [
+      "wipemask: $0350=01 $0139=03 $7F1522=17 $013C=03 $0119=0F $0351=01 $0153=01 $0386=60 17C8=08,0B,0B 18A8=00,00,00 -> masked l=0 r=8",
+      "wipemask: $0350=01 $0139=03 $7F1522=17 $013C=03 $0119=0F $0351=08 $0153=00 $0386=7B 17C8=41,42,43 18A8=49,4C,4E -> masked l=0 r=73",
+      "wipemask: $0350=01 $0139=03 $7F1522=17 $013C=03 $0119=0F $0351=10 $0153=00 $0386=4B 17C8=8C,94,95 18A8=94,9D,9E -> masked l=0 r=148",
+      "wipemask: $0350=01 $0139=03 $7F1522=17 $013C=03 $0119=0F $0351=18 $0153=00 $0386=01 17C8=D3,DA,E6 18A8=DE,E4,EF -> masked l=0 r=222",
+      "wipemask: $0350=01 $0139=03 $7F1522=17 $013C=03 $0119=0F $0351=1F $0153=01 $0386=7C 17C8=FF,FF,FF 18A8=FF,FF,FF -> masked l=0 r=255",
+      "wipemask: $0350=02 $0139=03 $7F1522=17 $013C=01 $0119=0F $0351=01 $0153=00 $0386=C4 17C8=F6,F5,F4 18A8=00,00,00 -> masked l=0 r=237",
+      "wipemask: $0350=02 $0139=03 $7F1522=17 $013C=01 $0119=0F $0351=08 $0153=01 $0386=45 17C8=B6,B3,B1 18A8=AB,AA,A6 -> masked l=0 r=160",
+      "wipemask: $0350=02 $0139=03 $7F1522=17 $013C=01 $0119=0F $0351=10 $0153=01 $0386=05 17C8=5E,61,5F 18A8=54,57,54 -> masked l=0 r=73",
+      "wipemask: $0350=02 $0139=03 $7F1522=17 $013C=01 $0119=0F $0351=18 $0153=01 $0386=FC 17C8=0D,0E,0E 18A8=02,03,03 -> masked l=0 r=0",
+      "wipemask: $0350=02 $0139=03 $7F1522=17 $013C=01 $0119=0F $0351=1F $0153=00 $0386=F5 17C8=00,00,00 18A8=00,00,00 -> masked l=0 r=0"
+    ],
+    "argv": [
+      "build/ct_field.exe",
+      "--assets",
+      "ct_assets.dat",
+      "--scene",
+      "433",
+      "--selftest",
+      "--frames",
+      "2882"
+    ],
+    "evidence": "Content-only lines; the run window moves with the attract vehicle (+29 at 16E/01C). With --frames 2882 the rule's whole wipemask trace (191 lines: both curtains' $0351 steps, $0386 seeds, 17C8/18A8 edges) is identical to the base's with --frames 2853; at the old 2853 it stopped before the 01C opening's last three steps."
+  },
+  "menu-window-colour-field-textbox-vs-oracle": {
+    "expect": [
+      "menu-audit: tbcolour f20-f330: 0 of 311 frame(s) differ",
+      "menu-audit: ram $2991:1 oracle a3 port a3 -> same",
+      "menu-audit: tbframe f500 -> 0 of 5600 px differ",
+      "menu-audit: tbframe f560 -> 0 of 5600 px differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "menu-boot-loader-slot-colours-vs-oracle": {
+    "expect": [
+      "boot-loader: colsave3 screen $0E $0D79=03 00 00 -- port vs cartridge 57344 / 57344 identical"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "menu-shop-buy-list-scrollbar-slide-page-vs-oracle": {
+    "expect": [
+      "menu-audit: shopscroll f150-f610: 0 of 461 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "menu-shop-sell-list-scrollbar-slide-page-vs-oracle": {
+    "expect": [
+      "menu-audit: shopsell f150-f620: 0 of 471 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "menu-shop-equip-list-scrollbar-slide-vs-oracle": {
+    "expect": [
+      "menu-audit: shopeqscroll f150-f650: 0 of 501 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "menu-naming-boot-selector-vs-oracle": {
+    "expect": [
+      "naming-cmp: boot f212-f640: 0 of 429 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot). Parks: the rule's cartridge f217, port f240 (D = -24), 0 of 429 frames differ."
+  },
+  "menu-naming-boot-confirm-in-fade-vs-oracle": {
+    "expect": [
+      "naming-cmp: bootfast f212-f330: 0 of 119 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "menu-naming-marle-direct-vs-oracle": {
+    "expect": [
+      "naming-cmp: marle f579-f722: 0 of 144 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot). Parks: cartridge f564, port f663 (D = -100), 0 of 144 frames differ."
+  },
+  "menu-open-slot-scan-cycles-vs-oracle": {
+    "expect": [
+      "menu-init: colsave3 slots 0000 8080 8080: D156 1737858 / model 1737858, stretch 6174016 = 17.798 F -> S0 = C+17",
+      "menu-init: ct_real_save slots 0000 8080 8080: D156 1649078 / model 1649078, stretch 6085224 = 17.542 F -> S0 = C+17",
+      "menu-init: triple slots 0000 0000 0000: D156 2311074 / model 2311074, stretch 6747232 = 19.451 F -> S0 = C+19",
+      "menu-init: badsum slots 0000 4040 8080: D156 1856026 / model 1856026, stretch 6292184 = 18.139 F -> S0 = C+18",
+      "menu-init: mixed slots 0000 8080 0000: D156 1935686 / model 1935686, stretch 6371840 = 18.369 F -> S0 = C+18"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the boot reaches loc 0's `C8 41` again. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot). Then the graded numbers are unchanged -- D156 = the port's model on all five batteries, S0 = C+17/17/19/18/18 -- and the oracle's own measured stretch (C0/0B5D -> C2/8087, non-refresh) is 4 cycles longer on every battery. Located by diffing the two --cputrace legs instruction by instruction (colsave3, default vs the switches): one step differs, C2/94EE `STA $420B` (the init chain's channel-0 DMA) -> C2/94F1, 534798 vs 534802 master cycles, begun at line 1234 h 68 vs line 960 h 1228 -- the DMA's start-up alignment at another master-clock phase (section 9's open 'DMA legs' sync'); the five sound posts' C7 legs (1098 / 3786 / 8962 / 7688 / 4110) are identical. The stretch is the rule cartridge's own measurement; nothing the port prices moved."
+  },
+  "field-reload-cost-vs-oracle": {
+    "expect": [
+      "reload: p3 loc 082 (x): pass 1728455 / 1728472 (-17), total 13245429 / 13245448 (-19): 39 / 39 frames",
+      "reload: shop loc 005 (c8): pass 1924523 / 1924502 (+21), total 12552271 / 12552248 (+23): 37 / 37 frames",
+      "reload: walk loc 082 (x): pass 1672453 / 1672476 (-23), total 13189427 / 13189458 (-31): 38 / 38 frames"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "field-door-list-vs-logical-oracle": {
+    "expect": [
+      "door-list: reload list f0-f160: 0 frame(s) differ",
+      "door-list: reload cells f0-f160: 81 frame(s) differ [f21-f101]",
+      "door-list: reload end list 2935 cells F3F5/F7F9/FBFD cartridge",
+      "door-list: reload end list 2935 cells F3F5/F7F9/FBFD port",
+      "door-list: reload end -> same",
+      "door-list: reload port 0 append(s), C0/28E1 at f69 reload list 2935 reopened 1",
+      "door-list: reload cartridge C0/28C0 0 visit(s), C0/28E1 1 visit(s)",
+      "door-list: walk list f0-f290: 0 frame(s) differ",
+      "door-list: walk cells f0-f290: 85 frame(s) differ [f147-f231]",
+      "door-list: walk end list 2935 cells F3F5/F7F9/FBFD cartridge",
+      "door-list: walk end list 2935 cells F3F5/F7F9/FBFD port",
+      "door-list: walk end -> same",
+      "door-list: walk port 4 append(s), C0/28E1 at f199 reload list 2935 reopened 1",
+      "door-list: walk cartridge C0/28C0 4 visit(s), C0/28E1 1 visit(s)",
+      "door-list: load list f0-f195: 26 frame(s) differ [f20-f45]",
+      "door-list: load end list - cartridge",
+      "door-list: load end list - port",
+      "door-list: load end -> same",
+      "door-list: load port 0 append(s), C0/28E1 at f20 load list - reopened 0; f87 load list - reopened 0; f154 load list - reopened 0",
+      "door-list: load cartridge C0/28C0 0 visit(s), C0/28E1 3 visit(s)"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "menu-resume-fade-in-vs-oracle": {
+    "expect": [
+      "menu-resume: stand f108-f124: max 353 px differ",
+      "menu-resume: walk f121-f137: max 187 px differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "field-e5-copy-service-vs-logical-oracle": {
+    "expect": [
+      "e5-copy: curtain wram f0-f116: 0 frame(s) differ",
+      "e5-copy: curtain copies f74 f85 cartridge",
+      "e5-copy: curtain held f75-f76, f86-f89 cartridge",
+      "e5-copy: curtain copies f74 f85 port",
+      "e5-copy: curtain held f75-f76, f86-f89 port",
+      "e5-copy: curtain picture f5-f113: 0 frame(s) differ",
+      "e5-copy: intro wram f0-f60: 0 frame(s) differ",
+      "e5-copy: intro copies f20 f33 cartridge",
+      "e5-copy: intro held f21-f24, f34-f35 cartridge",
+      "e5-copy: intro copies f20 f33 port",
+      "e5-copy: intro held f21-f24, f34-f35 port",
+      "e5-copy: intro picture f0-f57: 0 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "field-e4-visit-end-vs-logical-oracle": {
+    "expect": [
+      "e4-visit: lever wram f0-f240: 0 frame(s) differ",
+      "e4-visit: lever e4-end f95 f199 cartridge",
+      "e4-visit: lever control-on f99 f203 cartridge",
+      "e4-visit: lever copies f16 f56 f95 f120 f160 f199 cartridge",
+      "e4-visit: lever e4-end f95 f199 port",
+      "e4-visit: lever control-on f99 f203 port",
+      "e4-visit: lever copies f16 f56 f95 f120 f160 f199 port"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "field-nmi-tilemap-holds-cgram-vs-logical-oracle": {
+    "expect": [
+      "nmi-cgram: lever no-cgram f17-f19, f57-f59, f121-f123, f161-f163 cartridge",
+      "nmi-cgram: lever no-cgram f17-f19, f57-f59, f121-f123, f161-f163 port",
+      "nmi-cgram: lever page-held f18 f19 f57 f58 f122 f123 f161 f162 f163 cartridge",
+      "nmi-cgram: lever picture f0-f238: 0 frame(s) differ"
+    ],
+    "env_rule": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot)."
+  },
+  "field-gate-arrival-vs-rule-cartridge": {
+    "expect": [
+      "gate-arrival: warp +2499, arrival +2498; 300 frames from the lit c931: 0 differ, max 0 px, 0 px in all"
+    ],
+    "evidence": "The content is unchanged: 300 frames from the rule cartridge's first lit loc-071 frame c931, 0 differ, 0 px. Only the port-frame offsets moved, +2455/+2454 -> +2499/+2498 (+44): the port's drive is field-scene8-gate-warp-flow's `--scene 8` cold start, whose gate song `10 18 C8 06` now crosses 40 NMIs on the port's own SPC under the rule clock (CT_AUDIO_RULETRACE; the base run has no SPC and charges none), and the walkscript's fixed 30-frame A grid quantizes the dialog's advances after it, so the warp takes over at f2517 (was f2473). The arrival stays W - 1 as before."
+  }
+}

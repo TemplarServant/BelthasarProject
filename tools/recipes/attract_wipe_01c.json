@@ -1,0 +1,6 @@
+{
+  "name": "attract_wipe_01c",
+  "doc": "The attract from power-on, 2 frames before the window wipe in 01C (C3:000E -> C3/01E4; under the rule its 32 calls run f2926-f2957). src/xlat/wipe_c3.c traces 34 frames from here.",
+  "steps": [["power_on", 2924]],
+  "expect": {"loc": "0x01C"}
+}

@@ -1,0 +1,189 @@
+#!/usr/bin/env python
+# GENERATOR (gitignored) for the Stage-3 PC pose-engine baked data (Crono + Marle).
+# Emits three TRACKED headers from the ROM ONLY (no WRAM dump needed -- the PC sheets live in ROM):
+#   src/data/animeng_e3_pc.h     -- Crono/Marle E3 assembly records (positions + cell-words), sparse (used indices)
+#   src/data/animeng_sheet_pc.h  -- Crono/Marle sprite sheets (sparse: only the srcTiles the used records gather)
+#   src/data/animeng_e4_pc.h     -- the resolved pose selections (idle cycle, attack ladder, foot origins)
+#
+# Provenance / how it was derived (all this session, oracle build/ct.exe + ROM):
+#   * Crono E3 base = LIVE $1C78[0] = $DC27B0 (builder_dossier's "DC/27D0" folded the +0x20 position offset,
+#     the same phantom-base artifact ADDENDUM 1 fixed for GATO). Marle E3 base = LIVE $1C78[3] = $DC9AD8
+#     (the builder dossier left Marle OPEN -- derived here from her live pointer).
+#   * PC sheets = LIVE $1C57[0]=$D272C0 (Crono) / $1C57[3]=$D40000 (Marle): PC sprites are UNCOMPRESSED IN ROM
+#     (unlike GATO's WRAM-decompressed sheet), so they bake straight from the ROM -- no interim fixture.
+#   * record layout = [16 x 16-bit CELL-WORDS +0x00][4 signed (dx,dy) +0x20], stride 0x28 (4-cell PC form of
+#     ADDENDUM 1: cell-words FIRST, positions after). raster: word i -> VRAM tile vt0 + (i%8) + 0x10*(i//8).
+#   * idle cycle / attack ladder = the LIVE $9907[pc]/$967B sequences (gato_press_action Crono-active idle;
+#     crono_normal_ready driven attack). Foot origins = LIVE $1D0C/$1D23 (Crono idle (134,144)/strike (134,128);
+#     Marle (176,111)) -- cross-validated: gather(idx) == the live VRAM byte-exact (Crono idle 10/10 + strike
+#     9/9; Marle idle 11/11) AND the E3 (dx,dy) == the retired bake cells (ctBattleStanceObj / ctCronoIdleAdd /
+#     ctBattleAnimKf A1-A6 / ctMarleAtkKf), so each bake is reproduced 1:1.
+import os
+HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
+ROM = open(os.path.join(ROOT, "Chrono_Trigger_USA_SNES.sfc"), "rb").read()
+def foff(bank, addr): return ((bank - 0xC0) << 16) | addr
+def sext(b): return b - 256 if b >= 0x80 else b
+STRIDE = 0x28
+
+# Per-PC config. `used` = every E3 index the engine will select (idle + attack), sorted.
+PC = {
+ # 0xD5 / 0x53 / 0x54 = the CRIT double-slash ladder assemblies (battle_anim_polish2.md ITEM 4 §4.1:
+ # 0xD5 leap/windup, 0x53 second-slash raise, 0x54 second-slash STRIKE); 0x50/0x51/0x52/0x8B/0x47/0xC6/0xC7
+ # already served the normal swing + idle, so the crit reuses them and ADDS these three.
+ "Crono": dict(base=foff(0xDC, 0x27B0), sheet=foff(0xD2, 0x72C0), vt0=0x08,
+               used=[0x20, 0x41, 0x47, 0x4F, 0x50, 0x51, 0x52, 0x53, 0x54, 0x8B, 0xC6, 0xC7, 0xD5]),
+ # 0x5B = the SONG-TARGET FLINCH assembly (battle_gato_polish.md ITEM 3 §3.2/§3.3: $9907[1] flips 0xDA->0x5B
+ # through the song effect window; the corpus §4.1 hurt-reaction pose, VRAM tiles 22/20/26/24). ADDED to
+ # ctAnimengE3Marle so the song render can draw the targeted PC's flinch (§3.3 fix b). Crono's react id is
+ # un-derived (OPEN) -> not baked (mandate: not fabricated).
+ "Marle": dict(base=foff(0xDC, 0x9AD8), sheet=foff(0xD4, 0x0000), vt0=0x20,
+               used=[0x37, 0x5B, 0x8C, 0x8D, 0xD9, 0xDA]),
+ # LUCCA (charId 2): E3 base = LIVE $1C78[1] = $DC4E70 (stable across bat8/bat9), sheet = LIVE $1C57[1] =
+ # $D36B40 (bank D3, UNCOMPRESSED IN ROM like Crono -- battle_3pc_lucca_frog.md §1.1). `used` = the idle
+ # holds {0x31 bat8/facing0, 0x39 bat9/formation-variant} + her CAPTURED attack ladder (§1.5, bat8 drive:
+ # 31->EC->3D->05->23->2A->A8->A9->AA->08). vt0=0x08 (internal win-buffer base; each blit re-gathers so the
+ # window is self-contained -- distinct from the real per-combatant VRAM slot, which the port does not model).
+ "Lucca": dict(base=foff(0xDC, 0x4E70), sheet=foff(0xD3, 0x6B40), vt0=0x08,
+               used=[0x05, 0x08, 0x23, 0x2A, 0x31, 0x39, 0x3D, 0xA8, 0xA9, 0xAA, 0xEC]),
+ # FROG (charId 4): E3 base = LIVE $1C78[2] = $DC7490, sheet = LIVE $1C57[2] = $D30000 (bank D3, UNCOMPRESSED
+ # -- §1.1). `used` = his single held idle 0x3B (bat9; §1.4). His attack pose ladder is O1 (un-captured: bat9's
+ # Diablos pre-empted the target-select window) -> NOT baked (mandate: not fabricated). His normal $9877=0x08
+ # is table-derived (CD/4007[4], consumed by battle.c, not an E3 index).
+ "Frog":  dict(base=foff(0xDC, 0x7490), sheet=foff(0xD3, 0x0000), vt0=0x20,
+               used=[0x3B]),
+}
+PCS = ("Crono", "Marle", "Lucca", "Frog")   # bake order (Crono/Marle unchanged -> byte-identical headers)
+def rec(base, n): o = base + n*STRIDE; return ROM[o:o+STRIDE]
+def positions(r): return [(sext(r[0x20+2*i]), sext(r[0x20+2*i+1])) for i in range(4)]
+def cellwords(r): return [r[2*i] | (r[2*i+1] << 8) for i in range(16)]
+
+def collect_srcs(cfg):
+    srcs = set()
+    for n in cfg["used"]:
+        for w in cellwords(rec(cfg["base"], n)):
+            s = w & 0x07FF
+            if s: srcs.add(s)
+    return sorted(srcs)
+
+def w_e3():
+    o = ["// GENERATED by tools/gen/animeng_pc.py -- do not edit.",
+         "// PC (Crono/Marle) E3 sprite-ASSEMBLY records. Crono base $DC27B0 (live $1C78[0]); Marle base $DC9AD8",
+         "// (live $1C78[3]). stride 0x28; record = [16 x 16-bit CELL-WORDS +0x00][4 signed (dx,dy) +0x20]",
+         "//   (the 4-cell PC form of ADDENDUM 1). cell-word = srcTile[0:10] | Hflip[bit14]; word 0 = blank.",
+         "//   raster: word i -> VRAM tile vt0 + (i%8) + 0x10*(i//8) (Crono/Lucca vt0=0x08, Marle/Frog vt0=0x20).",
+         "//   tile order for the 4 (dx,dy): base vt0 + {0,2,4,6}. Lucca base $DC4E70 / Frog base $DC7490 (both",
+         "//   bank-DC, stride 0x28, UNCOMPRESSED sheets in bank D3 -- battle_3pc_lucca_frog.md §1.1).",
+         "#ifndef CT_ANIMENG_E3_PC_H", "#define CT_ANIMENG_E3_PC_H", "#include <stdint.h>", "",
+         "typedef struct { int8_t dx, dy; } CtAnimengPcPos;              // OAM cell offset from the live foot",
+         "typedef struct { uint8_t idx; CtAnimengPcPos pos[4]; uint16_t cw[16]; } CtAnimengPcRec;  // sparse", ""]
+    for who in PCS:
+        cfg = PC[who]
+        o.append("#define CT_ANIMENG_E3_%s_N %d" % (who.upper(), len(cfg["used"])))
+        o.append("static const CtAnimengPcRec ctAnimengE3%s[CT_ANIMENG_E3_%s_N] = {" % (who, who.upper()))
+        for n in cfg["used"]:
+            r = rec(cfg["base"], n); ps = positions(r); cw = cellwords(r)
+            pos = ' '.join("{%d,%d}," % (dx, dy) for dx, dy in ps)
+            cws = ' '.join("0x%04X," % w for w in cw)
+            o.append("  { 0x%02X, { %s }, { %s } }," % (n, pos, cws))
+        o += ["};", ""]
+    o += ["#endif", ""]
+    return '\n'.join(o)
+
+def w_sheet():
+    o = ["// GENERATED by tools/gen/animeng_pc.py -- do not edit.",
+         "// PC sprite SHEETS baked STRAIGHT FROM ROM (PC sprites are uncompressed: Crono sheet $D272C0 =",
+         "// live $1C57[0]; Marle sheet $D40000 = live $1C57[3]) -- so NO interim WRAM fixture (unlike GATO).",
+         "// Sparse: only the srcTiles the used E3 records gather. 8x8 4bpp (0x20 B); flip cells bit-reverse",
+         "// at RUNTIME (the cell-word's bit14), so these are the RAW (unflipped) sheet bytes.",
+         "#ifndef CT_ANIMENG_SHEET_PC_H", "#define CT_ANIMENG_SHEET_PC_H", "#include <stdint.h>", "",
+         "typedef struct { uint16_t src; uint8_t px[32]; } CtAnimengPcSheetTile;  // sorted by src -> lookup", ""]
+    for who in PCS:
+        cfg = PC[who]; srcs = collect_srcs(cfg)
+        o.append("#define CT_ANIMENG_SHEET_%s_N %d" % (who.upper(), len(srcs)))
+        o.append("static const CtAnimengPcSheetTile ctAnimengSheet%s[CT_ANIMENG_SHEET_%s_N] = {" % (who, who.upper()))
+        for s in srcs:
+            b = ROM[cfg["sheet"]+s*0x20 : cfg["sheet"]+s*0x20+0x20]
+            o.append("  { 0x%03X, {%s} }," % (s, ','.join("0x%02X" % x for x in b)))
+        o += ["};", ""]
+    o += ["#endif", ""]
+    return '\n'.join(o)
+
+def w_e4():
+    o = ["// GENERATED by tools/gen/animeng_pc.py -- do not edit.",
+         "// PC resolved pose SELECTIONS = the LIVE $9907[pc]/$967B sequences (gato_press_action idle;",
+         "// crono_normal_ready driven attack) + foot origins ($1D0C/$1D23). facing/cursor timing is the O7",
+         "// interim (no render pin exercises the active bob: a MASH = a WAITING PC = the static stance).",
+         "#ifndef CT_ANIMENG_E4_PC_H", "#define CT_ANIMENG_E4_PC_H", "#include <stdint.h>", "",
+         "// ---- foot origins (the compose base $1D0C+cmb / $1D23+cmb; the E3 (dx,dy) add to this) ----",
+         "#define CT_ANIMENG_CRONO_FOOT_X 134",
+         "#define CT_ANIMENG_CRONO_FOOT_Y 144   // idle/home foot (live-read; == the STANCE anchor)",
+         "#define CT_ANIMENG_CRONO_ATK_FOOT_Y 128 // strike/arrival foot (live-read; A4 lands here, mvOff==0)",
+         "#define CT_ANIMENG_MARLE_FOOT_X 176",
+         "#define CT_ANIMENG_MARLE_FOOT_Y 111   // Marle is a WAITING PC -> a single static pose (no bob)",
+         "",
+         "// ---- Crono IDLE bob: the E3 index per bob STATE (retires ctCronoIdleAdd; timing stays on the",
+         "// oracle-captured ctCronoIdleBob.state sequence). state 0=rest 1=down 2=side(==stance).",
+         "// live cursor cycle [C6,4F,C7,4F] = states [2,1,0,1]; C6==the settled STANCE (waiting PC).",
+         "static const uint8_t ctAnimengCronoIdleByState[3] = { 0xC7, 0x4F, 0xC6 };",
+         "#define CT_ANIMENG_CRONO_STANCE 0xC6   // the settled/waiting pose (== ctBattleStanceObj Crono)",
+         "",
+         "// ---- Crono ATTACK ladder: pose 0..5 (A1_approach..A6_settle, battleSkeleton's fxAtkPose) -> E3 idx.",
+         "// LIVE $967B: 0x20(A1) 0x41(A2) 0x50(A3) 0x51->0x52(A4 strike, 2f) 0x8B(A5) 0x47(A6). The pose is",
+         "// FOOT-RELATIVE -- the mover (pcAtkMvOff) owns ALL travel (live foot 144->128->144), NO capture",
+         "// travel is embedded, so the single-base teleport rebase is DELETED.",
+         "static const uint8_t ctAnimengCronoAtkByPose[6] = { 0x20, 0x41, 0x50, 0x51, 0x8B, 0x47 };",
+         "#define CT_ANIMENG_CRONO_ATK_STRIKE2 0x52  // A4 second strike frame (the sword-arc advance)",
+         "",
+         "// ---- Crono CRIT ($9877=0x01, span 177) DEDICATED 8-pose ladder driven by rel-to-dispatch",
+         "// (battle_anim_polish2.md ITEM 4 §4.1): a DOUBLE slash. FIRST slash 0x50->0x51(Flash A rel+50)->0x52,",
+         "// SECOND slash 0x53->0x54(Flash B rel+91, held ~32f), then recover 0x8B/0x47, then idle-bob 0xC6.",
+         "// {relStart,idx}: pick the LAST step whose relStart <= rel. rel<23 = idle 0xC7 (pre-leap hold).",
+         "typedef struct { uint8_t relStart, idx; } CtAnimengCritStep;",
+         "#define CT_ANIMENG_CRONO_CRIT_N 10",
+         "static const CtAnimengCritStep ctAnimengCronoCrit[CT_ANIMENG_CRONO_CRIT_N] = {",
+         "  {   0, 0xC7 },  // idle hold (pre-leap)",
+         "  {  23, 0xD5 },  // leap / windup",
+         "  {  33, 0x50 },  // first slash raise",
+         "  {  48, 0x51 },  // first slash STRIKE   <- Flash A rel+50",
+         "  {  62, 0x52 },  // first slash follow-through",
+         "  {  74, 0x53 },  // second slash raise",
+         "  {  89, 0x54 },  // second slash STRIKE  <- Flash B rel+91 (held ~32f)",
+         "  { 121, 0x8B },  // recover",
+         "  { 132, 0x47 },  // recover",
+         "  { 149, 0xC6 },  // idle bob (return)",
+         "};",
+         "",
+         "// ---- Marle: static WAITING pose + the crossbow ATTACK ladder (planted, no lunge -- corpus MA.2).",
+         "// LIVE-position-matched (MA1_aim 0x37 / MA2_raise 0x8C / MA3_fire 0x8D / MA4_recover 0xD9), all at",
+         "// her home foot (176,111); byte-exact vs ctMarleAtkKf. Idle 0xDA (waiting == the static stance).",
+         "#define CT_ANIMENG_MARLE_STANCE 0xDA",
+         "// battle_gato_polish.md ITEM 3 (§3.2/§3.3): the SONG-TARGET FLINCH assembly. When an enemy's song",
+         "// targets Marle her $9907 flips 0xDA(idle)->0x5B(flinch) and HOLDS it through the effect window",
+         "// (rel 42-236). Rendered by the song path in field.c (battleSongFlinchPose). Crono's react id is OPEN.",
+         "#define CT_ANIMENG_MARLE_FLINCH 0x5B",
+         "static const uint8_t ctAnimengMarleAtkByPose[4] = { 0x37, 0x8C, 0x8D, 0xD9 };  // MA1..MA4",
+         "",
+         "// ---- LUCCA (charId 2): a SINGLE held idle pose (no bob) -- LIVE $9907[1] was static 0x31 across 180f",
+         "// in bat8 (facing0) and static 0x39 across bat9 (same facing $96DE=0, different formation). Both baked;",
+         "// the port's stance uses 0x31 (the bat8/check-1 value). battle_3pc_lucca_frog.md §1.4.",
+         "#define CT_ANIMENG_LUCCA_STANCE 0x31       // bat8 idle (the primary; check field-battle-bat8-lucca-idle)",
+         "#define CT_ANIMENG_LUCCA_STANCE_ALT 0x39   // bat9 formation-variant idle (same facing, held)",
+         "// LUCCA ATTACK ladder = the LIVE $9907[1] sequence captured driving her bat8 physical ($9877=0x05,",
+         "// $8E rewrites 9A/80/02/0D): 31(idle)->EC->3D->05->23->2A->A8->A9->AA->08. The 8 windup->strike->recover",
+         "// assemblies (idle 0x31 + settle 0x08 are the stance/return). Per-frame timing (rel->step) is O-interim",
+         "// (the sequence is pinned; the dwell law is the residual, like Crono's ctAnimengCronoAtkByPose). §1.5.",
+         "#define CT_ANIMENG_LUCCA_ATK_N 8",
+         "static const uint8_t ctAnimengLuccaAtkLadder[CT_ANIMENG_LUCCA_ATK_N] = {",
+         "  0xEC, 0x3D, 0x05, 0x23, 0x2A, 0xA8, 0xA9, 0xAA };",
+         "",
+         "// ---- FROG (charId 4): a SINGLE held idle pose 0x3B -- LIVE $9907[2] static across bat9 (240f; §1.4).",
+         "// His ATTACK pose ladder is O1 (un-captured -- bat9's Diablos animation pre-empted the target-select",
+         "// window) -> NOT baked (mandate: not fabricated). His normal selector $9877=0x08 is table-derived.",
+         "#define CT_ANIMENG_FROG_STANCE 0x3B",
+         "", "#endif", ""]
+    return '\n'.join(o)
+
+for fn, txt in [("animeng_e3_pc.h", w_e3()), ("animeng_sheet_pc.h", w_sheet()), ("animeng_e4_pc.h", w_e4())]:
+    p = os.path.join(ROOT, "src", "data", fn)
+    open(p, "w").write(txt)
+    print("wrote %s (%d bytes)" % (p, len(txt)))

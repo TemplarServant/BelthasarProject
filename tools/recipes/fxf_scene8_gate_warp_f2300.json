@@ -1,0 +1,7 @@
+{
+  "name": "fxf_scene8_gate_warp_f2300",
+  "from": "field_telepod_gate",
+  "doc": "Stands in for saves/field_re/scene8_gate_warp_f2300.state: from the pendant touch (field_telepod_gate, the stand-in for scene8_gate_cutscene.state) the cutscene's A mash (A for 3 frames every 30 after 15) cut at 2300 frames, as the reference was made: the gate warp's JML $FD:FFF1 comes at its f17.",
+  "steps": [["pad", "0:15,(100:3,0:27)*76,100:3,0:2"]],
+  "expect": {"loc": "0x071"}
+}

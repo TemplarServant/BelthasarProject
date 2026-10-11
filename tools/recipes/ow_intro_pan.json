@@ -1,0 +1,7 @@
+{
+  "name": "ow_intro_pan",
+  "from": "atb_vram",
+  "doc": "Stands in for start_scene.state (the owner's snes9x capture of the new game's 1000 A.D. overworld pan, loc 1F0): from the Battle Mode prompt, A (Active), Start twice at Crono's naming screen (the default name), then the pan runs 104 frames -- the frame before the capture's, because the capture was taken mid-frame: its first oracle frame completes that frame without ticking the objects or the play clock. So `--monitor` from here reads the capture's camera at f0 ($20 = 0178, $26 = 014B, cells $E3 = 2F, $E7 = 29) and its loc $10F request at f1533, and `--peek ... 0:1` gives the capture's object blocks ($0B30-$1B30, the flock + fair spawner master pc=06CD) byte for byte. The rest of the WRAM differs only where the capture is not the game: the play clock ($0400-$0403) and the RAM the game never wrote (snes9x powers on with $55 fill, the oracle with zeros).",
+  "steps": [["pad", "100:6,0:120,8:6,0:60,8:6,0:104"]],
+  "expect": {"loc": "0x1F0", "wram": {"0x20": "0x78", "0x21": "0x01", "0x26": "0x4B", "0x27": "0x01", "0xE3": "0x2F", "0xE7": "0x29"}}
+}

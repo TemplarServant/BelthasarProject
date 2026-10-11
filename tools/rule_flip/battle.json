@@ -1,0 +1,1372 @@
+{
+  "field-battlehud-gato": {
+    "expect": [
+      "battlehud: fnv=662D28DA phase=0",
+      "battletest: PASS (staging 18/18, stats OK (Gato HP 76), points 0F)"
+    ],
+    "env": {
+      "CT_BATTLE_DEBUGEND": "89",
+      "CT_BATTLESHOT": "build/bhud_check_p0.raw",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. The HUD shot is the run's last frame (CT_BATTLE_DEBUGEND), fixed in module frames: 100 -> 89 is the same moment of the band's ramp and the old fnv 662D28DA comes back unchanged (at DEBUGEND 100 the rule's run shows the HUD 11 frames further on: 5C2437AD)."
+  },
+  "field-battle-lowhp-blink-white": {
+    "expect": [
+      "battleshot: f229 fnv=1C1278A4"
+    ],
+    "pin": [
+      "^battleshot: f229 fnv="
+    ],
+    "env": {
+      "CT_BATTLE_CRONOHP": "5",
+      "CT_BATTLE_SCRIPT": "n:600",
+      "CT_BATTLESHOT_HUD": "1",
+      "CT_BATTLESHOT_AT": "229",
+      "CT_BATTLESHOT": "build/blink_white.raw",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. The shot / window is a FIXED module frame, so it moves with the fight (-11) to stay the same moment; with it the old picture comes back byte-identical (same fnv). f229 under the rule = the old f240: render clock 240, (240/12)&1 = 0, the WHITE phase, fnv 1C1278A4 unchanged (pairs with -grey's 61677BEF: the toggle still graded)."
+  },
+  "field-battle-lowhp-blink-grey": {
+    "expect": [
+      "battleshot: f217 fnv=61677BEF"
+    ],
+    "env": {
+      "CT_BATTLE_CRONOHP": "5",
+      "CT_BATTLE_SCRIPT": "n:600",
+      "CT_BATTLESHOT_HUD": "1",
+      "CT_BATTLESHOT_AT": "217",
+      "CT_BATTLESHOT": "build/blink_grey.raw",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. The shot / window is a FIXED module frame, so it moves with the fight (-11) to stay the same moment; with it the old picture comes back byte-identical (same fnv). f217 under the rule = the old f228: render clock 228, the GREY phase, fnv 61677BEF unchanged (still differs from -white's)."
+  },
+  "field-battle-victory-hold": {
+    "expect": [
+      "battleshot: f1715 fnv=B69CA23C",
+      "battleshot: on end-teardown#1+104 fnv=B69CA23C",
+      "battleshot: anchor 'end-teardown'#1 fired f1611, shooting f1715 (+104)"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. Anchored shot (end-teardown#1+104): the anchor fires at f1611 (was f1622) and the picture is the old one, fnv B69CA23C. Before CtBattleRenderClock it was C2001C2C: the only difference (1157 px, x118-172 y64-119) was GATO's frozen death pose -- his pose cursor ran on the module's frame, 11 frames out of step with his fight (the battle traces are identical, -11, 64/64 lines)."
+  },
+  "field-battle-gato-walk": {
+    "expect": [
+      "battletrace f212 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=70 marleHP=65 gatoHP=76 pcAtk=0 enAtk=0 9877=00 AE93=00 AEE3=01,00,05 span=0 anim(ptr=CD/0000 parsed=0 strike=0 showdmg=0 pause=0 play=0) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f783 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=61 marleHP=65 gatoHP=76 pcAtk=0 enAtk=1 9877=31 AE93=10 AEE3=02,10,06 span=153 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f1313 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=61 marleHP=64 gatoHP=76 pcAtk=0 enAtk=2 9877=10 AE93=00 AEE3=01,00,05 span=299 anim(ptr=CD/9EDA parsed=1 strike=0 showdmg=1 pause=32 play=11) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f1884 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=61 marleHP=55 gatoHP=76 pcAtk=0 enAtk=3 9877=31 AE93=10 AEE3=02,10,06 span=153 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f2414 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=60 marleHP=55 gatoHP=76 pcAtk=0 enAtk=4 9877=10 AE93=00 AEE3=01,00,05 span=299 anim(ptr=CD/9EDA parsed=1 strike=0 showdmg=1 pause=32 play=11) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f2984 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=51 marleHP=55 gatoHP=76 pcAtk=0 enAtk=5 9877=31 AE93=10 AEE3=02,10,06 span=152 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f3562 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=50 marleHP=55 gatoHP=76 pcAtk=0 enAtk=6 9877=10 AE93=00 AEE3=01,00,05 span=299 anim(ptr=CD/9EDA parsed=1 strike=0 showdmg=1 pause=32 play=11) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f214 enemy-arrive  cur=0 A013=1 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=70 marleHP=65 gatoHP=76 pcAtk=0 enAtk=0 9877=31 AE93=00 AEE3=01,00,05 span=157 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f785 enemy-arrive  cur=0 A013=1 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=61 marleHP=65 gatoHP=76 pcAtk=0 enAtk=1 9877=10 AE93=10 AEE3=02,10,06 span=311 anim(ptr=CD/9EDA parsed=1 strike=0 showdmg=1 pause=32 play=11) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f1315 enemy-arrive  cur=0 A013=1 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=61 marleHP=64 gatoHP=76 pcAtk=0 enAtk=2 9877=31 AE93=00 AEE3=01,00,05 span=157 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f1886 enemy-arrive  cur=0 A013=1 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=61 marleHP=55 gatoHP=76 pcAtk=0 enAtk=3 9877=10 AE93=10 AEE3=02,10,06 span=311 anim(ptr=CD/9EDA parsed=1 strike=0 showdmg=1 pause=32 play=11) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f2416 enemy-arrive  cur=0 A013=1 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=60 marleHP=55 gatoHP=76 pcAtk=0 enAtk=4 9877=31 AE93=00 AEE3=01,00,05 span=157 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f2986 enemy-arrive  cur=0 A013=1 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=51 marleHP=55 gatoHP=76 pcAtk=0 enAtk=5 9877=10 AE93=10 AEE3=02,10,06 span=311 anim(ptr=CD/9EDA parsed=1 strike=0 showdmg=1 pause=32 play=11) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f3564 enemy-arrive  cur=0 A013=1 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=50 marleHP=55 gatoHP=76 pcAtk=0 enAtk=6 9877=31 AE93=00 AEE3=01,00,05 span=157 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battlemove f173 slot3 cmb6 mode1 ph1 live=(136,111) tgt=(134,144)",
+      "battlemove f1130 slot3 cmb6 mode1 ph1 live=(135,85) tgt=(176,111)",
+      "battlemove f1162 slot3 cmb6 mode1 ph1 live=(141,88) tgt=(176,111)",
+      "battlemove f1226 slot3 cmb6 mode1 ph1 live=(148,91) tgt=(176,111)",
+      "battlemove f2215 slot3 cmb6 mode1 ph1 live=(115,111) tgt=(134,147)",
+      "battlemove f2247 slot3 cmb6 mode1 ph1 live=(112,104) tgt=(134,147)",
+      "battlemove f2279 slot3 cmb6 mode1 ph1 live=(115,111) tgt=(134,147)",
+      "battlemove f2311 slot3 cmb6 mode1 ph1 live=(118,118) tgt=(134,147)",
+      "battlemove f3331 slot3 cmb6 mode1 ph1 live=(102,94) tgt=(179,112)",
+      "battlemove f3363 slot3 cmb6 mode1 ph1 live=(109,95) tgt=(179,112)",
+      "battlemove f3395 slot3 cmb6 mode1 ph1 live=(116,96) tgt=(179,112)",
+      "battlemove f3427 slot3 cmb6 mode1 ph1 live=(123,98) tgt=(179,112)",
+      "battlemove f3459 slot3 cmb6 mode1 ph1 live=(130,99) tgt=(179,112)",
+      "battlemove f3491 slot3 cmb6 mode1 ph1 live=(137,100) tgt=(179,112)",
+      "battlemove f3523 slot3 cmb6 mode1 ph1 live=(144,101) tgt=(179,112)",
+      "battlemove f392 slot3 cmb6 mode6 ph1 live=(136,118) tgt=(134,147)",
+      "battlemove f456 slot3 cmb6 mode6 ph1 live=(135,125) tgt=(134,147)",
+      "battlemove f488 slot3 cmb6 mode6 ph1 live=(128,124) tgt=(134,147)",
+      "battlemove f520 slot3 cmb6 mode6 ph1 live=(128,116) tgt=(134,147)",
+      "battlemove f552 slot3 cmb6 mode6 ph1 live=(128,108) tgt=(134,147)",
+      "battlemove f584 slot3 cmb6 mode6 ph1 live=(128,100) tgt=(134,147)",
+      "battlemove f616 slot3 cmb6 mode6 ph1 live=(128,92) tgt=(134,147)",
+      "battlemove f680 slot3 cmb6 mode6 ph1 live=(128,85) tgt=(134,147)",
+      "battlemove f1509 slot3 cmb6 mode6 ph1 live=(148,98) tgt=(179,112)",
+      "battlemove f1573 slot3 cmb6 mode6 ph1 live=(148,105) tgt=(179,112)",
+      "battlemove f1605 slot3 cmb6 mode6 ph1 live=(147,112) tgt=(179,112)",
+      "battlemove f1637 slot3 cmb6 mode6 ph1 live=(139,112) tgt=(179,112)",
+      "battlemove f1669 slot3 cmb6 mode6 ph1 live=(131,112) tgt=(179,112)",
+      "battlemove f1701 slot3 cmb6 mode6 ph1 live=(123,112) tgt=(179,112)",
+      "battlemove f2593 slot3 cmb6 mode6 ph1 live=(121,123) tgt=(134,147)",
+      "battlemove f2625 slot3 cmb6 mode6 ph1 live=(117,115) tgt=(134,147)",
+      "battlemove f2657 slot3 cmb6 mode6 ph1 live=(112,108) tgt=(134,147)",
+      "battlemove f2689 slot3 cmb6 mode6 ph1 live=(108,100) tgt=(134,147)",
+      "battlemove f2721 slot3 cmb6 mode6 ph1 live=(104,94) tgt=(134,147)",
+      "battlemove f2753 slot3 cmb6 mode6 ph1 live=(106,100) tgt=(134,147)",
+      "battlemove f3741 slot3 cmb6 mode6 ph1 live=(150,101) tgt=(179,112)",
+      "battlemove f3773 slot3 cmb6 mode6 ph1 live=(142,98) tgt=(179,112)",
+      "battlemove f3805 slot3 cmb6 mode6 ph1 live=(135,97) tgt=(179,112)",
+      "battlemove f3837 slot3 cmb6 mode6 ph1 live=(141,97) tgt=(179,112)",
+      "battlemove f3869 slot3 cmb6 mode6 ph1 live=(133,95) tgt=(179,112)",
+      "battlemove f3901 slot3 cmb6 mode6 ph1 live=(125,92) tgt=(179,112)",
+      "battlemove f3933 slot3 cmb6 mode6 ph1 live=(118,90) tgt=(179,112)",
+      "battlemove f3965 slot3 cmb6 mode6 ph1 live=(124,91) tgt=(179,112)"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). Measured: every old line is printed under the switches with its port frames moved by -11, nothing else changed. (57 lines; the run's fixed length now reaches one more mover step, f3997, which is not pinned.)"
+  },
+  "field-battle-sched-a4-cadence": {
+    "expect": [
+      "schedwrap f143 A4=0",
+      "schedwrap f151 A4=0",
+      "schedwrap f159 A4=0",
+      "schedwrap f167 A4=0",
+      "schedwrap f175 A4=0",
+      "schedwrap f183 A4=0",
+      "schedwrap f191 A4=0",
+      "schedwrap f199 A4=0",
+      "schedwrap f207 A4=0",
+      "schedwrap f215 A4=0",
+      "schedwrap f223 A4=0",
+      "schedwrap f231 A4=0",
+      "schedwrap f418 A4=0",
+      "schedwrap f426 A4=0",
+      "schedwrap f638 A4=0",
+      "schedwrap f646 A4=0",
+      "schedwrap f654 A4=0",
+      "schedwrap f662 A4=0",
+      "schedwrap f670 A4=0",
+      "schedwrap f678 A4=0",
+      "schedwrap f686 A4=0",
+      "schedwrap f694 A4=0",
+      "schedwrap f702 A4=0",
+      "schedwrap f710 A4=0",
+      "schedwrap f718 A4=0",
+      "schedwrap f726 A4=0",
+      "schedwrap f734 A4=0",
+      "schedwrap f742 A4=0",
+      "schedwrap f750 A4=0",
+      "schedwrap f758 A4=0",
+      "schedwrap f766 A4=0",
+      "schedwrap f774 A4=0",
+      "schedwrap f782 A4=0",
+      "schedwrap f790 A4=0",
+      "schedwrap f798 A4=0",
+      "schedwrap f806 A4=0",
+      "schedwrap f814 A4=0",
+      "schedwrap f822 A4=0",
+      "schedwrap f830 A4=0",
+      "schedwrap f838 A4=0",
+      "schedwrap f846 A4=0",
+      "schedwrap f854 A4=0",
+      "schedwrap f1052 A4=0",
+      "schedwrap f1251 A4=0",
+      "schedwrap f1453 A4=0",
+      "schedwrap f1461 A4=0",
+      "schedwrap f1469 A4=0",
+      "schedwrap f1477 A4=0",
+      "schedwrap f1485 A4=0",
+      "schedwrap f1493 A4=0",
+      "schedwrap f1501 A4=0",
+      "schedwrap f1509 A4=0",
+      "schedwrap f1517 A4=0",
+      "schedwrap f1525 A4=0",
+      "schedwrap f1533 A4=0",
+      "schedwrap f1541 A4=0",
+      "schedwrap f1549 A4=0",
+      "schedwrap f1557 A4=0",
+      "schedwrap f1565 A4=0",
+      "schedwrap f1573 A4=0",
+      "schedwrap f1581 A4=0",
+      "schedwrap f1589 A4=0",
+      "schedwrap f1597 A4=0",
+      "schedwrap f1605 A4=0",
+      "schedwrap f1613 A4=0",
+      "schedwrap f1621 A4=0",
+      "schedwrap f1629 A4=0",
+      "schedwrap f1637 A4=0",
+      "schedwrap f1645 A4=0",
+      "schedwrap f1653 A4=0",
+      "schedwrap f1661 A4=0",
+      "schedwrap f1669 A4=0",
+      "schedwrap f1677 A4=0",
+      "schedwrap f1874 A4=0",
+      "schedwrap f1882 A4=0",
+      "schedwrap f1890 A4=0",
+      "schedwrap f1898 A4=0",
+      "schedwrap f1906 A4=0",
+      "schedwrap f1914 A4=0",
+      "schedwrap f1922 A4=0",
+      "schedwrap f1930 A4=0",
+      "schedwrap f1938 A4=0",
+      "schedwrap f1946 A4=0",
+      "schedwrap f1954 A4=0",
+      "schedwrap f1962 A4=0",
+      "schedwrap f1970 A4=0",
+      "schedwrap f1978 A4=0",
+      "schedwrap f1986 A4=0",
+      "schedwrap f1994 A4=0",
+      "schedwrap f2002 A4=0",
+      "schedwrap f2010 A4=0",
+      "schedwrap f2018 A4=0",
+      "schedwrap f2026 A4=0",
+      "schedwrap f2034 A4=0",
+      "schedwrap f2042 A4=0",
+      "schedwrap f2050 A4=0",
+      "schedwrap f2058 A4=0",
+      "schedwrap f2066 A4=0",
+      "schedwrap f2074 A4=0",
+      "schedwrap f2082 A4=0",
+      "schedwrap f2090 A4=0",
+      "schedwrap f2098 A4=0",
+      "schedwrap f2296 A4=0",
+      "schedwrap f2493 A4=0",
+      "schedwrap f2695 A4=0",
+      "schedwrap f2703 A4=0",
+      "schedwrap f2711 A4=0",
+      "schedwrap f2719 A4=0",
+      "schedwrap f2727 A4=0",
+      "schedwrap f2735 A4=0",
+      "schedwrap f2743 A4=0",
+      "schedwrap f2751 A4=0",
+      "schedwrap f2759 A4=0",
+      "schedwrap f2767 A4=0",
+      "schedwrap f2775 A4=0",
+      "schedwrap f2783 A4=0",
+      "schedwrap f2791 A4=0",
+      "schedwrap f2799 A4=0",
+      "schedwrap f2807 A4=0",
+      "schedwrap f2815 A4=0",
+      "schedwrap f2823 A4=0",
+      "schedwrap f2831 A4=0",
+      "schedwrap f2839 A4=0",
+      "schedwrap f2847 A4=0",
+      "schedwrap f2855 A4=0",
+      "schedwrap f2863 A4=0",
+      "schedwrap f2871 A4=0",
+      "schedwrap f2879 A4=0",
+      "schedwrap f2887 A4=0",
+      "schedwrap f2895 A4=0",
+      "schedwrap f2903 A4=0",
+      "schedwrap f2911 A4=0",
+      "schedwrap f3110 A4=0",
+      "schedwrap f3308 A4=0",
+      "schedwrap f3316 A4=0",
+      "schedwrap f3324 A4=0",
+      "schedwrap f3332 A4=0",
+      "schedwrap f3340 A4=0",
+      "schedwrap f3348 A4=0",
+      "schedwrap f3356 A4=0",
+      "schedwrap f3364 A4=0",
+      "schedwrap f3372 A4=0",
+      "schedwrap f3380 A4=0",
+      "schedwrap f3388 A4=0",
+      "schedwrap f3396 A4=0",
+      "schedwrap f3404 A4=0",
+      "schedwrap f3412 A4=0",
+      "schedwrap f3420 A4=0",
+      "schedwrap f3428 A4=0",
+      "schedwrap f3436 A4=0",
+      "schedwrap f3444 A4=0",
+      "schedwrap f3452 A4=0",
+      "schedwrap f3460 A4=0",
+      "schedwrap f3468 A4=0",
+      "schedwrap f3476 A4=0",
+      "schedwrap f3484 A4=0",
+      "schedwrap f3492 A4=0",
+      "schedwrap f3500 A4=0",
+      "schedwrap f3508 A4=0",
+      "schedwrap f3516 A4=0",
+      "schedwrap f3524 A4=0",
+      "schedwrap f3532 A4=0",
+      "schedwrap f3759 A4=0",
+      "schedwrap f3767 A4=0",
+      "schedwrap f3946 A4=0",
+      "schedwrap f3954 A4=0",
+      "schedwrap f3962 A4=0",
+      "schedwrap f3970 A4=0",
+      "schedwrap f3978 A4=0",
+      "schedwrap f3986 A4=0"
+    ],
+    "evidence": "The forest fixture (forest_pre, scene 19): its pinned boot moves -11 like GATO's (battleBootBandArm) and the $A4 group scheduler's 170 wraps all print at -11 with the same 7,7,6 cadence (one more wrap, f3994, enters the run's fixed length; not pinned). Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step)."
+  },
+  "field-battle-entrance-initial-pose": {
+    "expect": [
+      "pcladder f69 seat=0 cid=0 win=$30 face=0 poses=38,39,3A,4F,FF,00,00,00 dwells=5,5,5,5,0,0,0,0",
+      "pcladder f69 seat=1 cid=1 win=$30 face=2 poses=34,35,36,37,FF,00,00,00 dwells=5,5,5,5,0,0,0,0",
+      "pcladderpub f71 seat=0 win=30 cur=0 pose=38",
+      "pcladderpub f73 seat=1 win=30 cur=0 pose=34",
+      "pcladderpub f81 seat=0 win=30 cur=1 pose=39",
+      "pcladderpub f83 seat=1 win=30 cur=1 pose=35",
+      "pcblit f8 seat1 cid1 pose=02 foot=(176,111) cells=(169,63)(169,79)(169,111)(169,95)",
+      "pcblit f8 seat0 cid0 pose=03 foot=(134,144) cells=(126,96)(126,112)(126,144)(126,128)",
+      "pcblit f83 seat1 cid1 pose=35 foot=(176,111) cells=(187,79)(171,79)(187,95)(171,95)",
+      "pcblit f83 seat0 cid0 pose=39 foot=(134,144) cells=(126,120)(126,152)(126,136)(126,106)"
+    ],
+    "env": {
+      "CT_BATTLE_SCRIPT": "n:400",
+      "CT_BATTLE_PCBLITTRACE": "1",
+      "CT_BATTLE_WALKTRACE": "1",
+      "CT_BATTLE_TRACE": "1",
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_BATTLESHOT": "build/ent_initial.raw",
+      "CT_BATTLESHOT_AT": "8",
+      "CT_BATTLE_DEBUGEND": "83"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The boot's first publish (pcblit f8: Crono 03, Marle 02, before the arm) is unchanged at f8; the copier's ladder and its publishes come 11 frames sooner (pcladder f80 -> f69, pub f82/84/92/94 -> f71/73/81/83). The run ends at a fixed module frame (DEBUGEND 94 -> 83, the same moment) and its last blit is the old one, 39 / 35."
+  },
+  "field-battle-entrance-ladder-hold": {
+    "expect": [
+      "pcladderpub f71 seat=0 win=30 cur=0 pose=38",
+      "pcladderpub f73 seat=1 win=30 cur=0 pose=34",
+      "pcladderpub f81 seat=0 win=30 cur=1 pose=39",
+      "pcladderpub f83 seat=1 win=30 cur=1 pose=35",
+      "pcladderpub f91 seat=0 win=30 cur=2 pose=3A",
+      "pcladderpub f93 seat=1 win=30 cur=2 pose=36",
+      "pcladderpub f101 seat=0 win=30 cur=3 pose=4F",
+      "pcladderpub f103 seat=1 win=30 cur=3 pose=37",
+      "pcblit f105 seat1 cid1 pose=37 foot=(176,111) cells=(170,79)(170,111)(170,95)(154,87)",
+      "pcblit f105 seat0 cid0 pose=4F foot=(134,144) cells=(126,120)(110,116)(126,136)(126,107)",
+      "pcblit f179 seat1 cid1 pose=DA foot=(176,111) cells=(167,63)(164,79)(180,78)(164,95)",
+      "pcwalk f151 seat=1 win=03 idx=1 pose=DA prev=37 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f159 seat=0 win=03 idx=3 pose=4F prev=C7 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f167 seat=0 win=03 idx=0 pose=C6 prev=4F pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f175 seat=0 win=03 idx=1 pose=4F prev=C6 pub=1 chg=1 tmr=1 aim=0 up=1"
+    ],
+    "pin": [
+      "^pcladderpub f\\d+ ",
+      "^pcblit f\\d+ seat\\d ",
+      "^pcwalk f(149|1[5-6]\\d|17[0-8]) seat=\\d .* chg=1 "
+    ],
+    "env": {
+      "CT_BATTLE_SCRIPT": "n:400",
+      "CT_BATTLE_PCBLITTRACE": "1",
+      "CT_BATTLE_WALKTRACE": "1",
+      "CT_BATTLE_TRACE": "1",
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_BATTLESHOT": "build/ent_hold.raw",
+      "CT_BATTLESHOT_AT": "105",
+      "CT_BATTLE_DEBUGEND": "179"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The shot (116 -> 105), the run's end (190 -> 179) and the pcwalk window (f160-189 -> f149-178) are fixed module frames, moved with the fight; every old line comes back at -11: the four publishes, the held 4F/37 at the shot, the walk's first publishes."
+  },
+  "field-battle-cantflee-box": {
+    "expect": [
+      "flee f189 hold ctr=0 cd=0 flags=92 msg=FF box=00 dwell=0",
+      "flee f190 cantflee-post ctr=0 cd=0 flags=92 msg=75 box=01 dwell=0",
+      "flee f205 box-open ctr=1 cd=0 flags=92 msg=75 box=00 dwell=160",
+      "flee f249 release ctr=4 cd=0 flags=92 msg=75 box=00 dwell=117",
+      "flee f365 box-close ctr=4 cd=0 flags=92 msg=75 box=00 dwell=0",
+      "pcwalk f191 seat=0 win=2B idx=0 pose=07 prev=C7 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f199 seat=1 win=2B idx=0 pose=19 prev=DA pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcblit f219 seat1 cid1 pose=19 foot=(176,111) cells=(167,79)(168,63)(169,95)(153,95)",
+      "pcblit f219 seat0 cid0 pose=07 foot=(134,144) cells=(123,96)(126,112)(142,128)(126,128)",
+      "pcblit f389 seat1 cid1 pose=DA foot=(176,111) cells=(167,63)(164,79)(180,78)(164,95)",
+      "pcblit f389 seat0 cid0 pose=C7 foot=(134,147) cells=(126,124)(110,118)(126,139)(126,111)",
+      "battleshot: f219 fnv=BA77192C"
+    ],
+    "env": {
+      "CT_BATTLE_TRACE": "1",
+      "CT_BATTLE_WALKTRACE": "1",
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_HOLDBTN": "30@189:60",
+      "CT_BATTLE_SCRIPT": "n:600",
+      "CT_BATTLE_PCBLITTRACE": "1",
+      "CT_BATTLESHOT": "build/cantflee.raw",
+      "CT_BATTLESHOT_AT": "219",
+      "CT_BATTLE_DEBUGEND": "389",
+      "CT_BATTLESHOT_RESULTS": "1"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. CT_HOLDBTN (L+R from battle frame 200), the shot (230) and the end (400) are fixed module frames: moved -11 they press and look at the same moments of the fight and every old line returns at -11, the shot's fnv BA77192C included. (Left at 200 the hold starts 11 frames later into the fight: the counter meets the post a frame later and the walk's window publish another pose -- the input's timing, not the machine's.)"
+  },
+  "field-battle-flee-counter-forest": {
+    "expect": [
+      "flee f189 hold ctr=0 cd=0 flags=02 msg=FF box=00 dwell=0",
+      "flee f688 threshold ctr=120 cd=1 flags=02 msg=FF box=00 dwell=0",
+      "flee f689 flee-trigger ctr=121 cd=2 flags=02 msg=FF box=00 dwell=0",
+      "flee f689 ranaway-post ctr=121 cd=2 flags=02 msg=FF box=00 dwell=0",
+      "flee f692 ranaway-open ctr=124 cd=5 flags=02 msg=FF box=00 dwell=0",
+      "flee f768 ranaway-close ctr=200 cd=81 flags=02 msg=FF box=00 dwell=0",
+      "flee f784 run-off-dispatch ctr=216 cd=97 flags=02 msg=FF box=00 dwell=0",
+      "flee f993 run-off-end ctr=218 cd=99 flags=02 msg=FF box=00 dwell=0",
+      "flee f998 exit-sound ctr=223 cd=104 flags=02 msg=FF box=00 dwell=0",
+      "flee f1015 hud-close-arm ctr=240 cd=121 flags=02 msg=FF box=00 dwell=0",
+      "flee f1027 hud-closed ctr=252 cd=133 flags=02 msg=FF box=00 dwell=0",
+      "flee f1028 module-exit ctr=253 cd=134 flags=02 msg=FF box=00 dwell=0",
+      "pcwalk f191 seat=0 win=2B idx=0 pose=15 prev=C9 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f199 seat=1 win=2B idx=0 pose=13 prev=DD pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f418 seat=0 win=2B idx=0 pose=15 prev=C8 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f638 seat=0 win=2B idx=0 pose=15 prev=C8 pub=1 chg=1 tmr=1 aim=0 up=1"
+    ],
+    "env": {
+      "CT_BATTLE_TRACE": "1",
+      "CT_BATTLE_WALKTRACE": "1",
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_HOLDBTN": "30@189:900",
+      "CT_BATTLE_SCRIPT": "n:1400"
+    },
+    "evidence": "The forest fixture's boot moves -11 (battleBootBandArm). CT_HOLDBTN starts the L+R hold at a fixed battle frame; moved -11 with the fight (200 -> 189) the counter climbs, freezes through the Hetake's action and fires exactly as before: every old line at -11 (threshold ctr=120 f688, trigger ctr=121 f689, ran-away f689-f768, run-off f784-f993, exit f1028). Left at 200 the hold began 11 frames later into the fight and the trigger landed in the same frame as the threshold (ctr=120) -- the input's phase against the 2-frame iteration, not the counter. Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step)."
+  },
+  "field-battle-flee-objfade": {
+    "expect": [
+      "battleshot: f890 fnv=ADFBE29F",
+      "battleshot: on run-off-open#1+60 fnv=ADFBE29F",
+      "battleshot: anchor 'run-off-open'#1 fired f830, shooting f890 (+60)",
+      "fleeobj f885 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=F7 lim=00 k=247",
+      "fleeobj f886 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=F7 lim=00 k=247",
+      "fleeobj f887 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=EF lim=00 k=239",
+      "fleeobj f888 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=EF lim=00 k=239",
+      "fleeobj f889 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=E7 lim=00 k=231",
+      "fleeobj f890 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=E7 lim=00 k=231",
+      "fleeobj f891 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=DF lim=00 k=223",
+      "fleeobj f892 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=DF lim=00 k=223",
+      "fleeobj f893 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=D7 lim=00 k=215",
+      "fleeobj f894 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=D7 lim=00 k=215",
+      "fleeobj f895 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=CF lim=00 k=207",
+      "fleeobj f896 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=CF lim=00 k=207",
+      "fleeobj f897 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=C7 lim=00 k=199",
+      "fleeobj f898 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=C7 lim=00 k=199",
+      "fleeobj f899 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=BF lim=00 k=191",
+      "fleeobj f900 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=BF lim=00 k=191",
+      "fleeobj f901 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=B7 lim=00 k=183",
+      "fleeobj f902 rec=$05A4 mode=50 dst=10 cnt=70 step=08 acc=B7 lim=00 k=183",
+      "fleeobj f903 rec=$0598 mode=50 dst=90 cnt=30 step=08 acc=AF lim=00 k=175"
+    ],
+    "pin": [
+      "^battleshot: ",
+      "^fleeobj f(88[4-9]|89[0-9]|90[0-3]) "
+    ],
+    "env": {
+      "CT_BATTLE_TRACE": "1",
+      "CT_BATTLE_WALKTRACE": "1",
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_HOLDBTN": "30@239:900",
+      "CT_BATTLE_SCRIPT": "n:1400",
+      "CT_BATTLESHOT": "build/flee_objfade.raw",
+      "CT_BATTLESHOT_RESULTS": "1",
+      "CT_BATTLE_DEBUGEND": "939",
+      "CT_BATTLESHOT_ON": "run-off-open#1+60"
+    },
+    "evidence": "Forest fixture, boot -11 (battleBootBandArm). The hold (250 -> 239) and the end (950 -> 939) move with the fight and the fleeobj window moves -11 (f895-914 -> f884-903): the run-off opens at f830 (was f841), the shot at +60 is fnv ADFBE29F unchanged, and the record pair $0598/$05A4 steps F7, EF, E7 ... AF two frames apart as before. Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step)."
+  },
+  "field-battle-solo-victory-no-marle": {
+    "expect": [
+      "battleshot: on victory#1+100 fnv=B70F988E"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. Anchored shot (victory+100): passes unchanged under the switches with CtBattleRenderClock (fnv B70F988E at f1948, was f1959); without it the frozen GATO pose of the module-frame clock gave 33D6E47D."
+  },
+  "field-battle-gato-live-pose-and-foot": {
+    "expect": [
+      "animengpose f924 asc facing=1 idx=0x0F foot=(135,85)",
+      "animengpose f1164 idle facing=3 idx=0x0B foot=(141,88)"
+    ],
+    "pin": [
+      "^animengpose f924 ",
+      "^animengpose f1164 "
+    ],
+    "env": {
+      "CT_BATTLE_SCRIPT": "n:900",
+      "CT_ANIMENG_ATKTRACE": "1",
+      "CT_BATTLE_DEBUGEND": "1164",
+      "CT_BATTLESHOT": "build/gato_livepose.raw",
+      "CT_BATTLESHOT_AT": "924",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. The two pinned frames (935, 1175) are fixed module frames; at 924 / 1164 the same moments print the same poses and feet (asc idx 0F at (135,85), idle facing 3 idx 0B at (141,88)). At the old frames the rule's run was 11 frames further into the walk."
+  },
+  "field-battle-item-elixir-script-vs-oracle": {
+    "expect": [
+      "asc f399 rel=26 t8 ORBIT op=C0 a=1C b=60 c=02 centre=(176,95) r=28 angle=5C step=04 count=32 speed=4 mode=3",
+      "asc f399 rel=26 t9 ORBIT op=C0 a=9C b=20 c=02 centre=(176,95) r=28 angle=24 step=FC count=32 speed=4 mode=3",
+      "asc f402 rel=29 t10 ORBIT op=C2 a=9C b=60 c=02 centre=(176,111) r=28 angle=64 step=FC count=32 speed=4 mode=5",
+      "asc f402 rel=29 t11 ORBIT op=C2 a=1C b=20 c=02 centre=(176,111) r=28 angle=1C step=04 count=32 speed=4 mode=5",
+      "asc f431 rel=58 t8 ORBIT-end at=(193,73)",
+      "asc f431 rel=58 t9 ORBIT-end at=(158,73)",
+      "asc f434 rel=61 t10 ORBIT-end at=(197,102)",
+      "asc f434 rel=61 t11 ORBIT-end at=(154,102)",
+      "orbit f403 A240=97C89CC300000000 A250=6C6C787800000000 AAA5=6C14602000000000 AAC3=1C1C1F1F00000000 A1E0=0000000000000000 AA7F=B0B0B0B000000000 AA92=5F5F6F6F00000000 A342=0101010100000000",
+      "A240=BA00A500CB0094000000000000000000 A250=450045006D006D000000000000000000 A3DF=01:80,0C:81,17:82,22:43,",
+      "A240=BD00A200CB0094000000000000000000 A250=460046006C006C000000000000000000 A3DF=01:80,0C:81,17:42,22:43,",
+      "memmon f302 rel=88  2300=4719FF7FEF29A70C*  2380=0038F04BA535A70C*  A0DC=0000  A3D3=00  AC5A=00  A0E8=00",
+      "memmon f447 rel=74  2300=4719FF7FEF29A70C*  2380=0038F04BA535A70C  A0DC=0000  A3D3=00  AC5A=00  A0E8=00",
+      "memmon f448 rel=75  2300=4719FF7FEF29A70C  2380=0038F04BA535A70C  A0DC=0000  A3D3=00  AC5A=01*  A0E8=00",
+      "memmon f449 rel=76  2300=4719FF7FEF29A70C  2380=0038F04BA535A70C  A0DC=0000  A3D3=00  AC5A=01  A0E8=F8*",
+      "memmon f505 rel=132  2300=4719FF7FEF29A70C  2380=0038F04BA535A70C  A0DC=0000  A3D3=00  AC5A=00*  A0E8=00",
+      "memmon f507 rel=134  2300=4719FF7FEF29A70C  2380=0038F04BA535A70C  A0DC=0001*  A3D3=01*  AC5A=01*  A0E8=00",
+      "memmon f508 rel=135  2300=4719FF7FEF29A70C  2380=0038F04BA535A70C  A0DC=0001  A3D3=01  AC5A=01  A0E8=FF*",
+      "memmon f564 rel=191  2300=4719FF7FEF29A70C  2380=0038F04BA535A70C  A0DC=0001  A3D3=01  AC5A=00*  A0E8=00",
+      "memmon f570 rel=197  2300=4719FF7FEF29A70C  2380=0038F04BA535A70C  A0DC=0000*  A3D3=01  AC5A=00  A0E8=00",
+      "[fxpopup] slot=1 value=12 nd=2 age=0 dy=14 centerX=176 restY=96 leftX=168 y=110 romKind=2 pal=4-green",
+      "[fxpopup] slot=1 value=12 nd=2 age=32 dy=-18 centerX=176 restY=96 leftX=168 y=78 romKind=2 pal=4-green"
+    ],
+    "pin": [
+      "^asc f\\d+ rel=\\d+ t\\d+ ORBIT",
+      "^orbit f403 ",
+      "^fxobj f4(28|29) ",
+      "^memmon f(302|447|448|449|505|507|508|564|570) ",
+      "^\\[fxpopup\\] slot=1 value=12 nd=2 age=(0|32) "
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_BATTLE_SCRIPT": "n:40,d:2,n:8,d:2,n:10,a:2,n:10,a:2,n:10,r:2,n:10,a:2,n:200",
+      "CT_BATTLE_ASCTRACE": "1",
+      "CT_BATTLE_ORBTRACE": "1",
+      "CT_BATTLE_FXOBJTRACE": "1",
+      "CT_BATTLE_MEMMON": "2300:8,2380:8,A0DC:2,A3D3:1,AC5A:1,A0E8:1",
+      "CT_FX_DEBUG": "1",
+      "CT_BATTLESHOT": "build/elixir_mp.raw",
+      "CT_BATTLESHOT_RANGE": "444:574",
+      "CT_BATTLESHOT_AT": "574"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The Elixir's script is graded by rel (from $A013 up, f373 now): every ORBIT arm/end, the orbit and fxobj arrays and the memmon rows come back identical with their frames -11 (rel unchanged); the pinned frames and the shot range are fixed module frames and move with them."
+  },
+  "field-battle-item-ether-mp-row-vs-oracle": {
+    "expect": [
+      "memmon f448 rel=75  A0DC=0001*  AC5A=01*",
+      "memmon f505 rel=132  A0DC=0001  AC5A=00*",
+      "memmon f511 rel=138  A0DC=0000*  AC5A=00",
+      "[fxpopup] slot=1 value=10 nd=2 age=0 dy=14 centerX=176 restY=96 leftX=168 y=110 romKind=2 pal=4-green",
+      "[fxpopup] slot=1 value=10 nd=2 age=32 dy=-18 centerX=176 restY=96 leftX=168 y=78 romKind=2 pal=4-green"
+    ],
+    "pin": [
+      "^memmon f(448|505|511) ",
+      "^\\[fxpopup\\] slot=1 value=10 nd=2 age=(0|32) "
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_BATTLE_SCRIPT": "n:40,d:2,n:8,d:2,n:10,a:2,n:10,a:2,n:10,r:2,n:10,a:2,n:200",
+      "CT_BATTLE_MEMMON": "A0DC:2,AC5A:1",
+      "CT_FX_DEBUG": "1",
+      "CT_BATTLESHOT": "build/ether_mp.raw",
+      "CT_BATTLESHOT_RANGE": "444:519",
+      "CT_BATTLESHOT_AT": "519"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The Ether's MP row: $A0DC / $AC5A at rel 75 / 132 / 138 identical, frames -11; the range and the pinned frames move with them (with the old range 455:530 the popup's age-0 frame fell outside it)."
+  },
+  "field-battle-item-revive-op43-vs-oracle": {
+    "expect": [
+      "asc f393 rel=24 t8 STORE-OFFSET tt=03 (176,111)+(0,-12) -> (176,99)",
+      "m4 f393 A240=B000000000000000 A250=6300000000000000",
+      "m4 f425 A240=B000000000000000 A250=7200000000000000",
+      "m4 f485 A240=B000000000000000 A250=7D00000000000000"
+    ],
+    "pin": [
+      "^asc f\\d+ rel=\\d+ t8 STORE-OFFSET ",
+      "^m4 f(393|425|485) "
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). Op 43's STORE-OFFSET at rel 24 and the mode-4 rows at the three pinned moments are identical at -11; the pin's fixed frames move with them."
+  },
+  "field-battle-tech-cyclone-front-entry-vs-oracle": {
+    "expect": [
+      "zorder f410: 0(front) 0(147) 6(118) 1(111)",
+      "zorder f584: 0(146) 6(118) 1(111)"
+    ],
+    "pin": [
+      "^zorder f(410|584): "
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_BATTLE_SCRIPT": "n:40,d:2,n:10,a:2,n:10,a:2,n:10,a:2,n:500",
+      "CT_BATTLE_ZTRACE": "1",
+      "CT_BATTLESHOT": "build/_cyc_front.raw",
+      "CT_BATTLESHOT_AT": "689",
+      "CT_BATTLESHOT_RANGE": "369:689"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The draw list at the Cyclone's front entry and after it, identical at -11 (f421 / f595 -> f410 / f584); the pinned frames and the shot range move with the fight."
+  },
+  "field-battle-forest-camera-composite": {
+    "expect": [
+      "battleshotfield: f79 fnv=3BDB87D2 hudband=160..207(48)"
+    ],
+    "pin": [
+      "^battleshotfield: f79 fnv="
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "CT_BATTLE_MASHA": "1",
+      "CT_BATTLESHOT_FIELD_AT": "79",
+      "CT_BATTLESHOT_FIELD": "build/forest_camera_composite.raw",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Forest fixture, boot -11 (battleBootBandArm). The composite is shot at a fixed module frame (90): at 79 it is the same moment and the old picture, fnv 3BDB87D2, band 160..207. Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step)."
+  },
+  "battle-obj-priority-3-over-priority-tiles": {
+    "expect": [
+      "battleprio f79 $A5E3=30 cells over priority tiles: 552 in front (OBJ 3), 0 covered",
+      "battleshotfield: f79 fnv=B7223419 hudband=160..207(48)"
+    ],
+    "pin": [
+      "^battleprio f79 ",
+      "^battleshotfield: "
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_BATTLE_PRIOTRACE": "1",
+      "CT_BATTLESHOT_FIELD_AT": "79",
+      "CT_BATTLESHOT_FIELD": "build/_naga_prio.raw"
+    },
+    "evidence": "Fixed-frame field composite (90 -> 79 with the -11 boot): 552 cells in front at priority 3, 0 covered, and the old fnv B7223419. Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step)."
+  },
+  "field-battle-crit-flash1": {
+    "expect": [
+      "battleshot: f195 fnv=6FC332C3",
+      "battleshot: on pc-act#1+49 fnv=6FC332C3",
+      "battleshot: anchor 'pc-act'#1 fired f146, shooting f195 (+49)"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. Anchored shot (pc-act#1+49): the anchor fires at f146 (was f157), fnv 6FC332C3 unchanged."
+  },
+  "field-battle-crit-flash2": {
+    "expect": [
+      "battleshot: f252 fnv=2E49A75F"
+    ],
+    "env": {
+      "CT_BATTLE_CRITRATE": "255",
+      "CT_BATTLE_SCRIPT": "n:20,a:1,n:3,a:1,n:300",
+      "CT_BATTLESHOT": "build/crit_flash2.raw",
+      "CT_BATTLESHOT_AT": "252",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. The shot / window is a FIXED module frame, so it moves with the fight (-11) to stay the same moment; with it the old picture comes back byte-identical (same fnv). f252 = the old f263, fnv 2E49A75F."
+  },
+  "field-battle-pc-approach-early": {
+    "expect": [
+      "battleshot: f161 fnv=EA491C4A"
+    ],
+    "env": {
+      "CT_BATTLE_MASHA": "1",
+      "CT_BATTLESHOT": "build/pc_approach_early.raw",
+      "CT_BATTLESHOT_AT": "161",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. The shot / window is a FIXED module frame, so it moves with the fight (-11) to stay the same moment; with it the old picture comes back byte-identical (same fnv). f161 = the old f172, fnv EA491C4A."
+  },
+  "field-battle-tech-cyclone-whirl-asmb-flip": {
+    "expect": [
+      "battleshot: f461 fnv=929EC8F1",
+      "battleshot: on strike#2+59 fnv=929EC8F1",
+      "battleshot: anchor 'strike'#2 fired f402, shooting f461 (+59)"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. Anchored shot (strike#2+59): the anchor fires at f402 (was f413), fnv 929EC8F1 unchanged."
+  },
+  "field-battle-tech-ice-crystal-shatter": {
+    "expect": [
+      "battleshot: f674 fnv=AD99DBD7",
+      "battleshot: on strike#2+150 fnv=AD99DBD7",
+      "battleshot: anchor 'strike'#2 fired f524, shooting f674 (+150)"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. Anchored shot (strike#2+150): the anchor fires at f524 (was f535), fnv AD99DBD7 unchanged."
+  },
+  "field-battle-topbox-tech-description": {
+    "expect": [
+      "fmemmon f653 loc=006  020C=03  CD05=00  CD06=FF  CCED=00  CCEB=00  95DB=01*",
+      "fmemmon f657 loc=006  020C=11*  CD05=01*  CD06=11*  CCED=00  CCEB=00  95DB=01",
+      "fmemmon f658 loc=006  020C=11  CD05=10*  CD06=11  CCED=01*  CCEB=A0*  95DB=01",
+      "fmemmon f682 loc=006  020C=11  CD05=10  CD06=11  CCED=19*  CCEB=A0  95DB=01",
+      "fmemmon f683 loc=006  020C=11  CD05=00*  CD06=11  CCED=1A*  CCEB=A0  95DB=01",
+      "fmemmon f684 loc=006  020C=11  CD05=00  CD06=11  CCED=1A  CCEB=9F*  95DB=01",
+      "fmemmon f843 loc=006  020C=11  CD05=00  CD06=11  CCED=00*  CCEB=00*  95DB=01"
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1",
+      "CT_AUDIO_LOCKSTEP": "1",
+      "CT_BATTLE_SCRIPT_ABS": "1",
+      "CT_BATTLE_SCRIPT": "n:420,d:2,n:10,a:2,n:246",
+      "CT_FIELD_MEMMON": "020C:1,CD05:1,CD06:1,CCED:1,CCEB:1,95DB:1",
+      "CT_SHOTS": "build/_topbox_chk",
+      "CT_SHOTS_AT": "900",
+      "CT_SHOTS_EXIT": "1",
+      "CT_AUDIO_SEEDSTATE": "saves/battle_re/gato_wait.state"
+    },
+    "inputs": [
+      "ct_assets.dat",
+      "saves/battle_re/gato_wait_lucca.lakewram",
+      "Chrono_Trigger_USA_SNES.sfc",
+      "saves/battle_re/gato_wait.state"
+    ],
+    "evidence": "A FIELD-started fight (--loadwram + --walkscript, CT_AUDIO_LOCKSTEP): the boot is priced on the port's SPC. Under the switches a WRAM run's SPC was a cold driver on the old clock (CtAudioSetRuleOff), which charges the battle NMI's work inside the C0/1BCE song upload: 59 NMIs where the rule's cartridge takes 53 (C0/1BCE f222 line 228 -> C0/1BD2 f275 line 240), the fight 6 frames late and the box at f656/660/661-685/686 (the rule's cartridge, gato_wait + the Lucca pokes, Down f640 / A f652: list f654, post f658, steps f659-f683, terminator f684). With CT_AUDIO_SEEDSTATE (src/field.c fieldSeedStateLoad: the state's own SPC, the rule's clock) the upload is 52 NMIs and the old lines hold unchanged: list f653, post f657, steps f658-f682, terminator f683, close f843 -- one frame ahead of the rule's cartridge (under the valve the port sat 3 ahead). The frame left is the loader clock's: the port's C0/1BCE returns 26 lines short of the cartridge's (52 NMIs, line 214, against 53, line 240); advancing the SPC 1-2 frames before the post changes nothing (52, line 213-216) -- OPEN, audio.c's price of this upload (C7 on the listing, the battle block's HDMA)."
+  },
+  "field-battle-tgtcursor-cyclone-multi": {
+    "expect": [
+      "battleshot: f223 fnv=FC514D76"
+    ],
+    "pin": [
+      "^battleshot: f223 fnv="
+    ],
+    "env": {
+      "CT_BATTLE_SCRIPT": "n:40,d:2,n:8,a:2,n:8,a:2,n:120",
+      "CT_BATTLESHOT": "build/tgtcur_multi.raw",
+      "CT_BATTLESHOT_AT": "223",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. The shot / window is a FIXED module frame, so it moves with the fight (-11) to stay the same moment; with it the old picture comes back byte-identical (same fnv). f223 = the old f234 (the multi-target page $960B on the render clock), fnv FC514D76."
+  },
+  "field-battle-status-render": {
+    "expect": [
+      "battle-status-render f1089 seat1 +0x1E=04 -> poseCls=1A (win +0x68) icon=4",
+      "battle-status-render f1089 seat0 +0x1E=04 -> poseCls=1A (win +0x68) icon=4",
+      "cantact f991 seat0 +1E=04 +21|26=00 -> tgt=1 dmg=0 miss=1 (FD/AB30 -> C1/BFAA)",
+      "battleshot: f1089 fnv=F7F556E5",
+      "battleshot: on act-end#4+178 fnv=F7F556E5",
+      "battleshot: anchor 'act-end'#4 fired f911, shooting f1089 (+178)",
+      "icon f278 cmb0 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=00",
+      "icon f278 cmb1 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=03",
+      "icon f278 cmb6 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=00",
+      "icon f494 cmb0 arm state=04 latch=04 on=1 grp=30 per=10 tmr=1 cur=FF",
+      "icon f494 cmb1 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=03",
+      "icon f494 cmb6 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=00",
+      "icon f695 cmb0 arm state=04 latch=04 on=1 grp=30 per=10 tmr=1 cur=FF",
+      "icon f695 cmb1 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=03",
+      "icon f695 cmb6 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=00",
+      "icon f911 cmb0 arm state=04 latch=04 on=1 grp=30 per=10 tmr=1 cur=FF",
+      "icon f911 cmb1 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=03",
+      "icon f911 cmb6 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=00",
+      "icon f911 cmb1 arm state=04 latch=04 on=1 grp=30 per=10 tmr=1 cur=FF",
+      "icon f1144 cmb0 arm state=04 latch=04 on=1 grp=30 per=10 tmr=1 cur=FF",
+      "icon f1144 cmb1 arm state=04 latch=04 on=1 grp=30 per=10 tmr=1 cur=FF",
+      "icon f1144 cmb6 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=00",
+      "icontick f495 cmb0 cur=0 per=10",
+      "icontick f505 cmb0 cur=1 per=10",
+      "icontick f515 cmb0 cur=2 per=10",
+      "icontick f525 cmb0 cur=3 per=10",
+      "icontick f535 cmb0 cur=0 per=10",
+      "icontick f545 cmb0 cur=1 per=10",
+      "icontick f555 cmb0 cur=2 per=10",
+      "icontick f696 cmb0 cur=0 per=10",
+      "icontick f912 cmb0 cur=0 per=10",
+      "icontick f922 cmb0 cur=1 per=10",
+      "icontick f932 cmb0 cur=2 per=10",
+      "icontick f942 cmb0 cur=3 per=10",
+      "icontick f952 cmb0 cur=0 per=10",
+      "icontick f962 cmb0 cur=1 per=10",
+      "icontick f972 cmb0 cur=2 per=10",
+      "icontick f982 cmb0 cur=3 per=10",
+      "icontick f992 cmb0 cur=0 per=10",
+      "icontick f1145 cmb0 cur=0 per=10",
+      "icontick f1155 cmb0 cur=1 per=10",
+      "icontick f1165 cmb0 cur=2 per=10",
+      "icontick f1175 cmb0 cur=3 per=10",
+      "icontick f1185 cmb0 cur=0 per=10"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. 44 lines at -11: the sleep pose class, can't-act, the icon arms and ticks, and the anchored shot (act-end#4+178, f1089) fnv F7F556E5 unchanged (one more icontick, f1195, enters the run's fixed length; not pinned)."
+  },
+  "field-battle-zorder-forest-live": {
+    "expect": [
+      "zorder f89: 1(144) 5(127) 4(95) 0(71) 3(63)",
+      "battleshot: f89 fnv=3E767702"
+    ],
+    "pin": [
+      "^zorder f89: ",
+      "^battleshot: f89 fnv="
+    ],
+    "env": {
+      "CT_BATTLE_ZTRACE": "1",
+      "CT_BATTLE_SCRIPT": "n:200",
+      "CT_BATTLESHOT_AT": "89",
+      "CT_BATTLESHOT": "build/zorder_forest.raw",
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1"
+    },
+    "evidence": "Forest fixture, boot -11. Fixed-frame draw list + shot (100 -> 89): the same list 1(144) 5(127) 4(95) 0(71) 3(63) and the old fnv 3E767702. Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step)."
+  },
+  "field-battle-idle-walk-boot": {
+    "expect": [
+      "idlecommit f137 slot=0 mode=FF->00 fac=0 cur=0 tmr=1",
+      "idletick f137 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idlecommit f137 slot=1 mode=FF->00 fac=0 cur=0 tmr=1",
+      "idletick f137 slot=1 pose=01 chg=1 cur=0 tmr=3 up=2",
+      "idlecommit f137 slot=2 mode=FF->04 fac=0 cur=0 tmr=1",
+      "idledefer f137 slot=2 pose=07 up=2",
+      "idletick f145 slot=2 pose=07 chg=1 cur=0 tmr=3 up=1",
+      "idletick f161 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f161 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f169 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f185 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f185 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f193 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f209 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f209 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f217 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f412 slot=0 mode=00->0E fac=3 cur=0 tmr=1",
+      "idletick f412 slot=0 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f412 slot=1 pose=01 chg=0 cur=0 tmr=3 up=1",
+      "idletick f420 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f632 slot=1 mode=00->0E fac=3 cur=0 tmr=2",
+      "idlecommit f632 slot=2 mode=04->00 fac=0 cur=0 tmr=3",
+      "idletick f640 slot=0 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f640 slot=1 pose=00 chg=1 cur=1 tmr=3 up=2",
+      "idlecommit f648 slot=0 mode=0E->0E fac=2 cur=2 tmr=2",
+      "idletick f648 slot=2 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f656 slot=0 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f664 slot=1 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f672 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idledefer f672 slot=2 pose=01 up=1",
+      "idletick f680 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f680 slot=0 mode=0E->0E fac=0 cur=0 tmr=3",
+      "idletick f680 slot=1 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f696 slot=0 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f696 slot=1 pose=01 chg=1 cur=0 tmr=3 up=2",
+      "idletick f704 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f720 slot=0 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f720 slot=1 pose=00 chg=1 cur=1 tmr=3 up=2",
+      "idletick f728 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f736 slot=0 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idlecommit f744 slot=0 mode=0E->0E fac=2 cur=3 tmr=2",
+      "idletick f744 slot=1 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f752 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idledefer f752 slot=2 pose=01 up=1",
+      "idletick f760 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f760 slot=1 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idlecommit f776 slot=0 mode=0E->0E fac=1 cur=0 tmr=1",
+      "idletick f776 slot=0 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f776 slot=1 pose=01 chg=1 cur=0 tmr=3 up=2",
+      "idletick f784 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f800 slot=0 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f800 slot=1 pose=00 chg=1 cur=1 tmr=3 up=2",
+      "idlecommit f808 slot=0 mode=0E->0E fac=0 cur=2 tmr=2",
+      "idletick f808 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f816 slot=0 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f824 slot=1 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f832 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idledefer f832 slot=2 pose=01 up=1",
+      "idletick f840 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f840 slot=1 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idlecommit f1046 slot=0 mode=0E->04 fac=3 cur=0 tmr=1",
+      "idletick f1046 slot=0 pose=07 chg=1 cur=0 tmr=3 up=1",
+      "idletick f1046 slot=1 pose=01 chg=1 cur=0 tmr=3 up=2",
+      "idletick f1054 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f1447 slot=1 mode=0E->04 fac=1 cur=0 tmr=2",
+      "idlecommit f1447 slot=2 mode=00->0E fac=0 cur=0 tmr=3",
+      "idletick f1455 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1455 slot=1 pose=07 chg=1 cur=0 tmr=3 up=1",
+      "idlecommit f1463 slot=2 mode=0E->0E fac=3 cur=0 tmr=1",
+      "idletick f1463 slot=2 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f1479 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1479 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1487 slot=2 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idlecommit f1495 slot=2 mode=0E->0E fac=1 cur=2 tmr=2",
+      "idletick f1503 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1503 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1503 slot=2 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f1519 slot=2 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f1527 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1527 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1543 slot=2 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f1551 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1551 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1567 slot=2 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f1575 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1575 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1583 slot=2 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f1599 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1599 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1599 slot=2 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f1623 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1623 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f1623 slot=2 mode=0E->0E fac=0 cur=0 tmr=1",
+      "idletick f1623 slot=2 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f1647 slot=0 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1647 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1647 slot=2 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f1663 slot=2 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idlecommit f1671 slot=0 mode=04->00 fac=3 cur=0 tmr=1",
+      "idletick f1671 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f1671 slot=1 pose=07 chg=0 cur=0 tmr=3 up=1",
+      "idletick f1679 slot=2 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idlecommit f1876 slot=1 mode=04->00 fac=1 cur=0 tmr=2",
+      "idlecommit f1876 slot=2 mode=0E->00 fac=0 cur=0 tmr=3",
+      "idletick f1884 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1884 slot=1 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f1892 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1908 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1908 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1916 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1932 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1932 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1940 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1956 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1956 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1964 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1980 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1980 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f1988 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2004 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2004 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2012 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2028 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2028 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2036 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2052 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2052 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2060 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2076 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2076 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2084 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f2290 slot=0 mode=00->0E fac=3 cur=0 tmr=1",
+      "idletick f2290 slot=0 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f2290 slot=1 pose=01 chg=0 cur=0 tmr=3 up=1",
+      "idletick f2298 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f2689 slot=1 mode=00->04 fac=1 cur=0 tmr=2",
+      "idlecommit f2689 slot=2 mode=00->0E fac=2 cur=0 tmr=3",
+      "idletick f2697 slot=0 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f2697 slot=1 pose=07 chg=1 cur=0 tmr=3 up=2",
+      "idlecommit f2705 slot=0 mode=0E->0E fac=1 cur=2 tmr=2",
+      "idletick f2705 slot=2 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f2713 slot=0 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f2721 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f2721 slot=2 mode=0E->0E fac=0 cur=1 tmr=2",
+      "idletick f2729 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idledefer f2729 slot=2 pose=01 up=1",
+      "idletick f2737 slot=2 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f2745 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2753 slot=0 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idledefer f2753 slot=2 pose=02 up=1",
+      "idletick f2761 slot=2 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idlecommit f2769 slot=0 mode=0E->0E fac=0 cur=1 tmr=2",
+      "idletick f2769 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2777 slot=0 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idledefer f2777 slot=2 pose=01 up=1",
+      "idletick f2785 slot=2 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f2793 slot=0 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f2793 slot=1 pose=07 chg=0 cur=0 tmr=3 up=1",
+      "idletick f2809 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idledefer f2809 slot=2 pose=00 up=1",
+      "idlecommit f2817 slot=2 mode=0E->0E fac=2 cur=0 tmr=1",
+      "idletick f2817 slot=2 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f2817 slot=1 pose=07 chg=0 cur=0 tmr=3 up=1",
+      "idlecommit f2833 slot=0 mode=0E->0E fac=1 cur=0 tmr=1",
+      "idletick f2833 slot=0 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f2841 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f2841 slot=2 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idlecommit f2849 slot=2 mode=0E->0E fac=1 cur=2 tmr=2",
+      "idletick f2857 slot=0 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idledefer f2857 slot=2 pose=02 up=1",
+      "idletick f2865 slot=2 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f2865 slot=1 pose=07 chg=0 cur=0 tmr=3 up=1",
+      "idletick f2873 slot=0 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idletick f2881 slot=2 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f2889 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f2889 slot=1 pose=07 chg=0 cur=0 tmr=3 up=1",
+      "idlecommit f2897 slot=0 mode=0E->0E fac=0 cur=0 tmr=3",
+      "idletick f2905 slot=2 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idlecommit f3104 slot=0 mode=0E->00 fac=3 cur=0 tmr=1",
+      "idletick f3104 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3104 slot=1 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f3310 slot=1 mode=04->00 fac=1 cur=0 tmr=2",
+      "idlecommit f3310 slot=2 mode=0E->04 fac=2 cur=1 tmr=1",
+      "idletick f3310 slot=2 pose=07 chg=1 cur=0 tmr=3 up=1",
+      "idletick f3318 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3318 slot=1 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f3334 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3342 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3342 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3358 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3366 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3366 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3382 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3390 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3390 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3406 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3414 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3414 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3430 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3438 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3438 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3454 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3462 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3462 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3478 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3486 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3486 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3502 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3510 slot=0 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3510 slot=1 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idletick f3526 slot=2 pose=07 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f3753 slot=0 mode=00->0E fac=1 cur=0 tmr=1",
+      "idletick f3753 slot=0 pose=00 chg=1 cur=1 tmr=3 up=1",
+      "idletick f3753 slot=1 pose=01 chg=0 cur=0 tmr=3 up=1",
+      "idlecommit f3940 slot=0 mode=0E->0E fac=0 cur=1 tmr=2",
+      "idlecommit f3940 slot=1 mode=00->0E fac=3 cur=0 tmr=2",
+      "idlecommit f3940 slot=2 mode=04->00 fac=2 cur=0 tmr=1",
+      "idletick f3940 slot=2 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idletick f3948 slot=0 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f3948 slot=1 pose=00 chg=1 cur=1 tmr=3 up=2",
+      "idlecommit f3956 slot=1 mode=0E->0E fac=2 cur=1 tmr=3",
+      "idletick f3964 slot=0 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idledefer f3964 slot=2 pose=01 up=1",
+      "idletick f3972 slot=2 pose=01 chg=0 cur=0 tmr=3 up=0",
+      "idlecommit f3972 slot=0 mode=0E->0E fac=1 cur=3 tmr=2",
+      "idletick f3972 slot=1 pose=01 chg=1 cur=2 tmr=2 up=1",
+      "idletick f3980 slot=0 pose=01 chg=1 cur=0 tmr=3 up=1",
+      "idlecommit f3988 slot=1 mode=0E->0E fac=3 cur=2 tmr=1",
+      "idletick f3988 slot=1 pose=02 chg=1 cur=3 tmr=2 up=1",
+      "idlewalk f149 grp=3 order=6,7,-1",
+      "idlewalk f151 grp=0 order=1,2,0",
+      "idlewalk f153 grp=1 order=0,1,2",
+      "idlewalk f155 grp=2 order=3,4,5",
+      "idlewalk f157 grp=3 order=6,7,-1",
+      "idlewalk f159 grp=0 order=0,1,2",
+      "idlewalk f161 grp=1 order=0,1,2",
+      "idlewalk f163 grp=2 order=3,4,5",
+      "idlewalk f165 grp=3 order=6,7,-1",
+      "idlewalk f167 grp=0 order=1,2,0",
+      "pcwalk f135 seat=0 win=03 idx=1 pose=33 prev=33 pub=1 chg=0 tmr=1 aim=0 up=0",
+      "pcwalk f143 seat=0 win=03 idx=2 pose=C9 prev=33 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcdefer f143 seat=1 up=1",
+      "pcwalk f151 seat=1 win=03 idx=1 pose=DD prev=3B pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcdefer f151 seat=0 up=1",
+      "pcwalk f159 seat=0 win=03 idx=3 pose=33 prev=C9 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcdefer f159 seat=1 up=1",
+      "pcwalk f167 seat=1 win=03 idx=2 pose=DE prev=DD pub=0 chg=0 tmr=1 aim=0 up=0",
+      "pcwalk f167 seat=0 win=03 idx=0 pose=C8 prev=33 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f175 seat=0 win=03 idx=1 pose=33 prev=C8 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcdefer f175 seat=1 up=1",
+      "pcwalk f183 seat=1 win=03 idx=3 pose=DD prev=DD pub=0 chg=0 tmr=1 aim=0 up=0",
+      "pcwalk f183 seat=0 win=03 idx=2 pose=C9 prev=33 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f191 seat=0 win=03 idx=3 pose=33 prev=C9 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcdefer f191 seat=1 up=1",
+      "pcwalk f199 seat=1 win=03 idx=0 pose=DC prev=DD pub=0 chg=0 tmr=1 aim=0 up=0",
+      "pcwalk f199 seat=0 win=03 idx=0 pose=C8 prev=33 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f207 seat=0 win=03 idx=1 pose=33 prev=C8 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcdefer f207 seat=1 up=1",
+      "pcwalk f215 seat=1 win=03 idx=1 pose=DD prev=DD pub=0 chg=0 tmr=1 aim=0 up=0",
+      "pcwalk f215 seat=0 win=03 idx=2 pose=C9 prev=33 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcwalk f223 seat=0 win=03 idx=3 pose=33 prev=C9 pub=1 chg=1 tmr=1 aim=0 up=1",
+      "pcdefer f223 seat=1 up=1",
+      "pcwalk f231 seat=1 win=03 idx=2 pose=DE prev=DD pub=0 chg=0 tmr=1 aim=0 up=0",
+      "pcwalk f231 seat=0 win=03 idx=0 pose=C8 prev=33 pub=1 chg=1 tmr=1 aim=0 up=1"
+    ],
+    "pin": [
+      "^idle(commit|tick|defer) f\\d+ ",
+      "^idlewalk f(149|15[0-9]|16[0-8]) ",
+      "^pc(walk|defer) f(89|9[0-9]|1[0-9][0-9]|2[0-7][0-9]|28[0-8]) "
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). Measured: every old line is printed under the switches with its port frames moved by -11, nothing else changed. (264 lines). The pin's frame windows (idlewalk f160-179, pcwalk/defer f100-299) are fixed module frames and move -11 with them."
+  },
+  "field-battle-hud-name-after-victory": {
+    "expect": [
+      "battleshot: f1715 fnv=5391605C",
+      "battleshot: on end-teardown#1+104 fnv=5391605C",
+      "battleshot: anchor 'end-teardown'#1 fired f1611, shooting f1715 (+104)"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. Anchored shot (end-teardown#1+104): f1715 (was f1726), fnv 5391605C unchanged."
+  },
+  "field-battle-heal-number-green": {
+    "expect": [
+      "[fxpopup] slot=1 value=65 nd=2 age=43 dy=0 centerX=176 restY=96 leftX=168 y=96 romKind=1 pal=4-green",
+      "battleshot: f491 fnv=9C48A053",
+      "battleshot: on strike#2+89 fnv=9C48A053",
+      "battleshot: anchor 'strike'#2 fired f402, shooting f491 (+89)"
+    ],
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. Anchored shot (strike#2+89): f491 (was f502), fnv 9C48A053 unchanged; the popup line is identical."
+  },
+  "field-battle-slot3-enemy-renders": {
+    "expect": [
+      "battleshot: f89 fnv=706B8387"
+    ],
+    "pin": [
+      "^battleshot: f89 fnv="
+    ],
+    "env": {
+      "CT_BATTLESHOT": "build/slot3_f100.raw",
+      "CT_BATTLESHOT_AT": "89",
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_NOPACE": "1"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The render layer's clocks now move with the fight too (src/battle.c CtBattleRenderClock -- GATO's pose cursor, the low-HP blink, the combat-live gate, the target page; on the cartridge GATO's published pose $990D and the blink $A110 come exactly 17 frames sooner with its fight, `--monitor 7E990D` 04 f295/f278, 00 f377/f360 ..., `--monitor 7EA110` f303 315 327 / f286 298 310), so a picture at the same moment of the fight is byte-identical to the valve's. The shot / window is a FIXED module frame, so it moves with the fight (-11) to stay the same moment; with it the old picture comes back byte-identical (same fnv). f89 = the old f100, fnv 706B8387."
+  },
+  "field-battle-endteardown-mode6": {
+    "expect": [
+      "endclear slot=0 29C6 40 -> 40",
+      "endclear slot=1 29C6 01 -> 00",
+      "endteardown slot=0 obj=21 29C6=40 alive=0 stand=0 -> keep",
+      "endteardown slot=1 obj=22 29C6=00 alive=0 stand=0 -> remove",
+      "endteardown slot=2 obj=23 29C6=00 alive=0 stand=0 -> remove",
+      "returnprobe: f1189 explore=1 placed=3 placed_enemies=1 fieldfnv=7A012AAD"
+    ],
+    "evidence": "Forest field run (--loadwram forest_teardown, interactive, CT_BATTLE_MASHA; the boot uncharged, so the pinned arm -11). The battle is the same fight 11 frames sooner: CT_BATTLE_TRACE's 38 lines identical at -11, and the graded teardown (endclear 40/01->00, keep obj 21 / remove 22, 23) unchanged. The return probe is 120 frames after the resolve, so f1200 -> f1189; its field picture differs in 495 px, all of them the surviving mode-6 Hetake's field pose: at the probe the field's own clocks carry the 11 frames the battle no longer spent (WRAM diff: $7C 35 -> 2A, the tile/palette animation records $051D/$0523-05C5, the object animation counters $1001-$1053) -- the field runs under the battle on the cartridge too (D1/FE97 -> FD/E022 on odd $7C). Timing, not a divergence: placed=3, placed_enemies=1."
+  },
+  "battle-hud-iris-live": {
+    "expect": [
+      "battleshotfield: f64 fnv=22689294 hudband=170..197(28)"
+    ],
+    "pin": [
+      "^battleshotfield: f64 "
+    ],
+    "env": {
+      "SDL_VIDEODRIVER": "dummy",
+      "SDL_AUDIODRIVER": "dummy",
+      "CT_BATTLE_MASHA": "1",
+      "CT_BATTLESHOT_FIELD_AT": "64",
+      "CT_BATTLESHOT_FIELD": "build/_hudiris.raw",
+      "CT_NOPACE": "1"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The shot / window is a FIXED module frame, so it moves with the fight (-11) to stay the same moment; with it the old picture comes back byte-identical (same fnv). f64 = the old f75 (six frames into the band's iris): band 170..197, fnv 22689294; at f75 the rule's run already showed the settled band (160..207)."
+  },
+  "battle-turn-machinery-gato-first-pass-vs-oracle": {
+    "expect": [
+      "battlesfx f57 battle-start id=08 pan=80 (CD/04FD)",
+      "battlesfx f136 ready-chime seat0 id=42 pan=80 (C1/1B41) A013=0",
+      "memmon f1 rel=-1  B185=00*  B03A=010100*  AFAB=FFFFFF*",
+      "memmon f134 rel=-1  B185=00  B03A=010100  AFAB=011FFF*",
+      "memmon f136 rel=-1  B185=04*  B03A=810100*  AFAB=001EFF*",
+      "memmon f138 rel=-1  B185=04  B03A=810100  AFAB=001DFF*",
+      "memmon f140 rel=-1  B185=00*  B03A=810100  AFAB=001CFF*",
+      "memmon f142 rel=-1  B185=00  B03A=810100  AFAB=001BFF*",
+      "memmon f144 rel=-1  B185=04*  B03A=810100  AFAB=001AFF*",
+      "memmon f146 rel=-1  B185=04  B03A=810100  AFAB=0019FF*",
+      "memmon f148 rel=-1  B185=00*  B03A=810100  AFAB=0018FF*",
+      "memmon f150 rel=-1  B185=00  B03A=810100  AFAB=0017FF*",
+      "memmon f152 rel=-1  B185=04*  B03A=810100  AFAB=0016FF*",
+      "memmon f154 rel=-1  B185=04  B03A=810100  AFAB=0015FF*",
+      "memmon f156 rel=-1  B185=00*  B03A=810100  AFAB=0014FF*",
+      "memmon f158 rel=-1  B185=00  B03A=810100  AFAB=0013FF*",
+      "memmon f160 rel=-1  B185=04*  B03A=810100  AFAB=0012FF*",
+      "memmon f162 rel=-1  B185=04  B03A=810100  AFAB=0011FF*",
+      "memmon f164 rel=-1  B185=00*  B03A=810100  AFAB=0010FF*",
+      "memmon f166 rel=-1  B185=00  B03A=810100  AFAB=000FFF*",
+      "memmon f168 rel=-1  B185=04*  B03A=810100  AFAB=000EFF*",
+      "memmon f170 rel=-1  B185=04  B03A=810100  AFAB=000DFF*",
+      "memmon f172 rel=-1  B185=00*  B03A=810100  AFAB=000CFF*",
+      "memmon f174 rel=-1  B185=00  B03A=810100  AFAB=000BFF*",
+      "memmon f176 rel=-1  B185=04*  B03A=810100  AFAB=000AFF*",
+      "memmon f178 rel=-1  B185=04  B03A=810100  AFAB=0009FF*",
+      "memmon f180 rel=-1  B185=00*  B03A=810100  AFAB=0008FF*",
+      "memmon f182 rel=-1  B185=00  B03A=810100  AFAB=0007FF*",
+      "memmon f184 rel=-1  B185=04*  B03A=810100  AFAB=0006FF*",
+      "memmon f186 rel=-1  B185=04  B03A=810100  AFAB=0005FF*",
+      "memmon f188 rel=-1  B185=00*  B03A=810100  AFAB=0004FF*"
+    ],
+    "env": {
+      "CT_BATTLE_TRACE": "1",
+      "CT_BATTLE_MEMMON": "B185:1,B03A:3,AFAB:3",
+      "CT_BATTLE_SCRIPT": "n:40",
+      "CT_BATTLE_DEBUGEND": "189",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The battle-start #08 (f57), the first ready chime (f136) and every $B185 / $B03A / $AFAB row print at -11 (f1 unchanged). Graded against the rule's cartridge directly: the port's rows f134-f196 equal the oracle's (CT_ORACLE_LOGICAL+VIRTUAL_BEAM+the switches, gato_wait --input 100:8) at f355-f417, offset 221, every byte. The run's fixed end moves 200 -> 189 so the pinned span is the same."
+  },
+  "battle-ai-pointer-gato-op00-turn-vs-oracle": {
+    "expect": [
+      "battletrace f575 enemy-noop id92#3 cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g102) 9F22(c1,m31) cronoHP=61 marleHP=65 gatoHP=76 pcAtk=0 enAtk=1 9877=31 AE93=00 AEE3=02,00,06 span=153 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f212 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=70 marleHP=65 gatoHP=76 pcAtk=0 enAtk=0 9877=00 AE93=00 AEE3=01,00,05 span=0 anim(ptr=CD/0000 parsed=0 strike=0 showdmg=0 pause=0 play=0) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "battletrace f783 enemy-think   cur=0 A013=0 9609=0 95DB=0 99E0=00/99E1=00 $95DC=0 q[0..2] AFAB(c0,m0,g0) 9F22(c1,m31) cronoHP=61 marleHP=65 gatoHP=76 pcAtk=0 enAtk=1 9877=31 AE93=10 AEE3=02,10,06 span=153 anim(ptr=CD/7A42 parsed=1 strike=0 showdmg=1 pause=15 play=4) atkPose=-1 atkOff=(0,0) knock=(t-1,0,0) vhold=0 hoff=0 9614=0 AF02=FFFFFF92",
+      "memmon f1 rel=-1  B1DA=0000*  B1EA=0000*  B2B9=00*  AEE3=000000*  0026=00*",
+      "memmon f134 rel=-1  B1DA=80A7*  B1EA=80A7*  B2B9=01*  AEE3=010001*  0026=1C*",
+      "memmon f212 rel=-1  B1DA=80A7  B1EA=80A7  B2B9=00*  AEE3=010005*  0026=1C",
+      "memmon f214 rel=0  B1DA=80A7  B1EA=80A7  B2B9=00  AEE3=010005  0026=1E*",
+      "memmon f367 rel=-1  B1DA=84A7*  B1EA=84A7*  B2B9=01*  AEE3=000006*  0026=1E",
+      "memmon f575 rel=-1  B1DA=88A7*  B1EA=88A7*  B2B9=01  AEE3=020006*  0026=1F*",
+      "memmon f783 rel=-1  B1DA=88A7  B1EA=88A7  B2B9=00*  AEE3=021006*  0026=1F",
+      "memmon f1084 rel=-1  B1DA=80A7*  B1EA=80A7*  B2B9=01*  AEE3=011001*  0026=21*"
+    ],
+    "env": {
+      "CT_BATTLE_TRACE": "1",
+      "CT_BATTLE_MEMMON": "B1DA:2,B1EA:2,B2B9:1,AEE3:3,0026:1",
+      "CT_BATTLE_SCRIPT": "n:40",
+      "CT_BATTLE_DEBUGEND": "1289",
+      "CT_NOPACE": "1",
+      "SDL_AUDIODRIVER": "dummy"
+    },
+    "evidence": "Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). The AI pointer's rows ($B1DA/$B1EA, $B2B9, $AEE3, $0026) and the enemy-think / op-00 lines print at -11 (f1 unchanged). Against the rule's cartridge at offset 221 the relation is the valve's at 227, unchanged: the same 460 frame-bytes differ (the port's $B2B9 representation, first f212 against the valve's f223), nothing else. The run's fixed end moves 1300 -> 1289."
+  },
+  "oracle-logical-frame-gato-and-xstrike": {
+    "expect": [
+      "logical gato_wait f0 7EA013=00*",
+      "logical gato_wait f435 7EA013=01*",
+      "logical gato_wait f588 7EA013=00*",
+      "logical gato_wait f1006 7EA013=01*",
+      "logical gato_wait f1305 7EA013=00*",
+      "logical gato_wait f1536 7EA013=01*",
+      "logical gato_wait f1689 7EA013=00*",
+      "logical gato_wait f2107 7EA013=01*",
+      "logical gato_wait f2406 7EA013=00*",
+      "logical xstrike f0 7EA013=00*",
+      "logical xstrike f8 7EA013=01*",
+      "logical xstrike f259 7EA013=00*"
+    ],
+    "env": {
+      "CT_ORACLE_VIRTUAL_BEAM": "1"
+    },
+    "evidence": "PREMISE CHANGE: the check pins the oracle's own $A013 edges. Under the switches the oracle is the rule's, whose beam stands while the CPU works (IFAST): without the virtual beam the field's event runner (C0/5A46, `$213D` against $69) reads a frozen line and cuts every pass, so gato_wait never reaches its battle (only f0 printed). With CT_ORACLE_VIRTUAL_BEAM=1 -- the rule's oracle is LOGICAL + VIRTUAL_BEAM, CLAUDE.md -- the spans the check exists for hold: GATO 153 / 299 / 153 / 299 (f435-588, f1006-1305, f1536-1689, f2107-2406) and the X-Strike 251 (f8-259); the edges are 17 frames sooner (the boot's setup and its upload's CPU side held) and the X-Strike's rise one sooner. Without the switches VIRTUAL_BEAM leaves the valve's edges unchanged (measured). NOTE for the flip: two of the check's three mutations (the APU frozen during a hold, no rollback) edit valve-only paths the rule does not run, so they survive under the rule; they need rule counterparts or retirement."
+  },
+  "battle-gato-fight-vs-logical-oracle": {
+    "expect": [
+      "gato-logical: oracle f355-f1918, port f134-f1697; the oracle's $A013 edges f435 f588 f1006 f1305 f1536 f1689",
+      "gato-logical: $A013 identical on all 1564 frames",
+      "gato-logical: $AFAB identical on all 1564 frames",
+      "gato-logical: $AFB1 identical on all 1564 frames",
+      "gato-logical: $B185 identical on all 1564 frames",
+      "gato-logical: $0027 identical on all 1564 frames",
+      "gato-logical: $00A4 identical on all 1564 frames",
+      "gato-logical: $00E5 identical on all 1564 frames",
+      "gato-logical: GATO's 136 mover steps (f394-f1918) all on the oracle's foot"
+    ],
+    "evidence": "tools/gato_logical_cmp.py under the rule (the switches): the cartridge is the rule's oracle (+ CT_ORACLE_VIRTUAL_BEAM: without it gato_wait never reaches its battle under IFAST), the fixture's offset is 221 (its arm 58 against the cartridge's `$CA1E = FF` f279; 227 was the valve's 69 against f296) and the default window is the same span from the rule's first iteration head: f355-f1918 (port f134-f1697). Result: $A013 (edges f435 f588 f1006 f1305 f1536 f1689 = the valve's -17), the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5 identical on all 1564 frames and GATO's 136 mover steps on the oracle's foot. Without the switches the tool is unchanged (227, f372-f1935)."
+  },
+  "battle-yakra-fight-vs-logical-oracle": {
+    "expect": [
+      "yakra: oracle f355-f1272 (port f134-f1051): $A013, $AEE3 and both HPs identical on all 918 frames",
+      "yakra: tech 0E turn -> $A013: cartridge 13 frames (the CD/0033 name box: C2/0009 + 11), port 13",
+      "yakra: tech 0E span (rise -> fall): cartridge 382, port 382",
+      "yakra: name box from the turn -- post/band/dwell/close: cartridge 0/2/10/170, port 0/2/10/170",
+      "yakra: tech 0E cursors (16 tracks, from each rise): 77/77 changes identical"
+    ],
+    "evidence": "tools/yakra_cmp.py under the rule: the rule's oracle (+ VIRTUAL_BEAM), offset 221, window f355-f1272 (the valve's f372-f1289 from the rule's first head). Identical on all 918 frames, the tech's span 382 both, its 77 cursor changes identical -- and the valve's residual closes: the tech's turn -> $A013 is 13 frames on the cartridge too (was 16) and the name box 0/2/10/170 on both (was 0/5/13/173): C2/0009's render was CPU time, free under the infinitely fast CPU."
+  },
+  "battle-pc-physical-vs-logical-oracle": {
+    "expect": [
+      "pcphys press: the cartridge's PC actions f594-f718(sel 00) f939-f1078(sel 0F) f1551-f1692(sel 00) f1709-f1850(sel 0F)",
+      "pcphys press #1: sel 00 / 00, span 124 both",
+      "pcphys press #1: t0 identical, 22 cursor changes",
+      "pcphys press #1: t3 identical, 10 cursor changes",
+      "pcphys press #1: t8 identical, 6 cursor changes",
+      "pcphys press #1: actor cmb0 foot identical rel 21-124 (0 moves)",
+      "pcphys press #1: victim cmb6 foot identical rel 21-124 (0 moves)",
+      "pcphys press #2: sel 0F / 0F, span 139 both",
+      "pcphys press #2: t0 identical, 4 cursor changes",
+      "pcphys press #2: t3 identical, 9 cursor changes",
+      "pcphys press #2: t8 identical, 18 cursor changes",
+      "pcphys press #2: actor cmb1 foot identical rel 21-139 (0 moves)",
+      "pcphys press #2: victim cmb6 foot identical rel 21-139 (0 moves)",
+      "pcphys press #3: sel 00 / 00, span oracle 141 port 132",
+      "pcphys press #3: t0 differs at change 3: oracle D4C8@39 port D4C8@31",
+      "pcphys press #3: t3 differs at change 1: oracle 03A2@41 port 03A2@33",
+      "pcphys press #3: t8 differs at change 2: oracle 03AE@41 port 03AE@33",
+      "pcphys press #3: actor cmb0 foot differs first at rel 32: oracle (134, 129) port (134, 131)",
+      "pcphys press #3: victim cmb6 move (from its own start: oracle (128, 89) port (128, 98)) identical rel 21-132 (0 moves)",
+      "pcphys press #4: sel 0F / 0F, span 141 both",
+      "pcphys press #4: t0 identical, 4 cursor changes",
+      "pcphys press #4: t3 identical, 9 cursor changes",
+      "pcphys press #4: t8 identical, 18 cursor changes",
+      "pcphys press #4: actor cmb1 foot identical rel 21-141 (0 moves)",
+      "pcphys press #4: victim cmb6 move (from its own start: oracle (128, 84) port (128, 97)) identical rel 21-141 (0 moves)"
+    ],
+    "evidence": "tools/pc_physical_logical_cmp.py under the rule: the rule's oracle (+ VIRTUAL_BEAM; without it no PC action ran). gato_press_action.state is the field before GATO (C1/0000 f222 in every model), so its fight comes 17 frames sooner; the presses after the one that starts it come 17 sooner too (LEAD), keeping the same fight at the same moments. All 24 graded lines are the valve's (spans 124 / 139 / oracle 141 port 132 / 141, cursors, feet; press #3's residual is GATO standing elsewhere in the two fights, as before). The cartridge's actions f594-f718 f939-f1078 f1551-f1692 f1709-f1850 = the valve's -17, except the 4th rise -20: the valve's real-time releases (11 in this run) spent 3 frames between the 3rd action's fall and the 4th's rise that the rule does not spend."
+  },
+  "battle-pc-marle-far-vs-logical-oracle": {
+    "expect": [
+      "pcphys nocrit: the cartridge's PC actions f311-f435(sel 00) f656-f791(sel 02)",
+      "pcphys nocrit #1: sel 00 / 00, span 124 both",
+      "pcphys nocrit #1: t0 identical, 22 cursor changes",
+      "pcphys nocrit #1: t3 identical, 10 cursor changes",
+      "pcphys nocrit #1: t8 identical, 6 cursor changes",
+      "pcphys nocrit #1: actor cmb0 foot identical rel 21-124 (0 moves)",
+      "pcphys nocrit #1: victim cmb6 foot identical rel 21-124 (0 moves)",
+      "pcphys nocrit #2: sel 02 / 02, span 135 both",
+      "pcphys nocrit #2: t0 identical, 3 cursor changes",
+      "pcphys nocrit #2: t3 identical, 9 cursor changes",
+      "pcphys nocrit #2: t8 identical, 16 cursor changes",
+      "pcphys nocrit #2: actor cmb1 foot identical rel 21-135 (0 moves)",
+      "pcphys nocrit #2: victim cmb6 foot identical rel 21-135 (0 moves)"
+    ],
+    "evidence": "tools/pc_physical_logical_cmp.py nocrit under the rule (the rule's oracle + VIRTUAL_BEAM; the post-boot state taken with the presses 17 frames sooner, LEAD): every old line holds unchanged (the scenario's frames are relative to that state): sel 00 / 02, spans 124 / 135 both, cursors and feet identical."
+  },
+  "battle-hud-live-forest-ambush-vs-oracle": {
+    "expect": [
+      "memmon f1 rel=-1  CA1E=0000*  A6D9=FFFFFF*  0B80=F400FC00FD00FC03FD03FC00FD00FC03FD00FC00FD00FC03F400*",
+      "memmon f58 rel=-1  CA1E=0116*  A6D9=FFFFFF  0B80=F400FC00FD00FC03FD03FC00FD00FC03FD00FC00FD00FC03F400",
+      "memmon f138 rel=-1  CA1E=0000  A6D9=00FFFF*  0B80=F400FC00FD00FC03FD03FC00F500FC03FD00FC00FD00FC03F400*",
+      "memmon f198 rel=-1  CA1E=0000  A6D9=0001FF*  0B80=F400FC00FD00FC03FD03FC00F500FC00FD00FC03FD03FC00F500*"
+    ],
+    "pin": [
+      "^memmon f1 rel",
+      "^memmon f58 rel",
+      "A6D9=00FFFF\\*",
+      "A6D9=0001FF\\*"
+    ],
+    "evidence": "Forest field run (--loadwram, interactive, no lockstep: the boot uncharged, the pinned arm -11). The band opens at f58 (`01 16`, was f69 -- the pinned frame moves with it) and the queue's boxes at f138 / f198 (were f149 / f209) with the same $0B80 rows. Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step)."
+  },
+  "battle-item-lapis-every-seat-vs-oracle": {
+    "expect": [
+      "item CA on Marle: cartridge up c706 span 176 | port up p705 span 176 | effect SAME",
+      "   cartridge: c0.HP=46 c1.HP=41",
+      "   port     : c0.HP=46 c1.HP=41"
+    ],
+    "evidence": "tools/battle_ab.py under the rule: the item's span (176) and effect are the cartridge's. The rise frames moved: the rule's cartridge c706 (valve c707); the port's field-started boot was priced on a cold SPC's old clock (59 NMIs for C0/1BCE where the cartridge takes 53) and rose at p708; with CT_AUDIO_SEEDSTATE (the state's own SPC, the rule's clock, now passed by the tool) p705 -- one frame ahead of the cartridge (the valve's port sat two ahead). The frame left is the loader clock's price of the upload, 52 NMIs against the cartridge's 53 (field-battle-topbox-tech-description), OPEN."
+  },
+  "battle-item-megalixir-every-seat-vs-oracle": {
+    "expect": [
+      "item C5 on Marle: cartridge up c706 span 266 | port up p705 span 266 | effect SAME",
+      "   cartridge: c0.HP=46 c1.HP=41 c1.MP=63",
+      "   port     : c0.HP=46 c1.HP=41 c1.MP=63"
+    ],
+    "evidence": "As battle-item-lapis-every-seat-vs-oracle: span 266 and the effect identical; the rule's cartridge rises at c706 (valve c707), the port at p705 with the state's SPC (CT_AUDIO_SEEDSTATE, tools/battle_ab.py; p708 on the cold SPC's old clock)."
+  },
+  "battle-tech-asc-movers-vs-logical-oracle": {
+    "expect": [
+      "ascmover haste (tech 0D): span cartridge 392 port 392",
+      "ascmover haste: $A240/$A250 x8 identical on all 392 frames",
+      "ascmover haste: $A644 x8 identical on all 392 frames",
+      "ascmover laser (tech 1B): span cartridge 375 port 375",
+      "ascmover laser: $5DA0 x12 identical on all 375 frames",
+      "ascmover laser: $A240/$A250 x8 identical on all 375 frames",
+      "ascmover kiss (tech 29): span cartridge 208 port 208",
+      "ascmover kiss: $A240/$A250 x8 identical on all 208 frames",
+      "ascmover water (tech 23): span cartridge 386 port 386",
+      "ascmover water: obj0 identical on all 386 frames",
+      "ascmover water: obj1 identical on all 386 frames",
+      "ascmover water: obj2 identical on all 386 frames",
+      "ascmover water: obj3 identical on all 386 frames",
+      "ascmover ice (tech 0B): span cartridge 426 port 426",
+      "ascmover ice: $A3D1 up +365 / +365, $9876 = 1 +424 / +424: the end waits 59 / 59 frames",
+      "ascmover slash (tech 02): span cartridge 168 port 168"
+    ],
+    "evidence": "tools/battle_asc_mover_cmp.py already runs the rule's oracle; under the switches the cartridge's side takes the infinitely fast CPU and the valve's residuals close: Water's objects 1-3 identical on all 386 frames (were 5 / 5 / 107 frames 884D against 884C), Ice's span 426 both (cartridge was 429) with $A3D1 up +365 and $9876 +424 on both. Haste, Laser, Kiss and Slash unchanged and identical. The port matches the rule's oracle better than the valve's."
+  },
+  "battle-status-machinery-vs-logical-oracle": {
+    "expect": [
+      "status-cmp lifeline c588-c1123: 536 frames, 0 differing frame-fields (none) | cartridge: $5E4F 588:00, $A013 588:00 590:01 782:00, $020C 782:09, $CCEC 784:10 960:00, $5E4A 588:80 978:00",
+      "status-cmp sleeptail c435-c1483: 1049 frames, 0 differing frame-fields (none) | cartridge $B03A[0] through GATO's song: 990:00 992:01 994:00 1297:01",
+      "status-cmp chaosenemy c770-c2683: 1914 frames, 0 differing frame-fields (none) | cartridge GATO actions ($A013): 1136:01 1288:00 1498:01 1650:00 1860:01 2012:00 2222:01 2374:00 2584:01 2736:00",
+      "status-cmp lockdrop c583-c983: states (lock st0 frz drop mp0 hpG) cartridge 4 port 4, identical in order; cartridge c583:000000/08/01/00/6300/4C00 c588:000000/08/00/00/6300/4C00 c590:010000/08/00/00/6300/4C00 c592:010000/08/00/FF/6300/4C00 | port c583:000000/08/01/00/6300/4C00 c588:000000/08/00/00/6300/4C00 c590:010000/08/00/00/6300/4C00 c594:010000/08/00/FF/6300/4C00",
+      "status-cmp blindgate c770-c1283: 514 frames, 0 differing frame-fields (none) | cartridge $A013 after Crono's blinding hit: 1136:01"
+    ],
+    "evidence": "PREMISE: under the switches this check and battle-status-machinery-under-the-rule-vs-oracle run the same model (the full rule); one of them can retire at the flip. tools/battle_status_cmp.py under the rule: the cartridge's fight is 17 frames sooner (C1/0000 f222 in every model; seed f279, first head f355), the port's 11 (its scene-6 --selftest boot takes the fixture's arm), so the offset is 221 and each side's presses and windows move by its own shift (cartridge -17, port -11): the same fight at the same moments. Result: lifeline c588-c1123, sleeptail c435-c1483, chaosenemy c770-c2683, blindgate c770-c1283 all 0 differing frame-fields; lockdrop 4 / 4 states identical in order (the port's drop at c594 against c592, the valve's known 2-frame dispatch residual, unchanged). Every cartridge event is the valve's -17 (lifeline $A013 588/590/782, GATO's chaos turns 1136 ..., the blinding hit 1136)."
+  },
+  "battle-status-machinery-under-the-rule-vs-oracle": {
+    "expect": [
+      "status-cmp lifeline c588-c1123: 536 frames, 0 differing frame-fields (none) | cartridge: $5E4F 588:00, $A013 588:00 590:01 782:00, $020C 782:09, $CCEC 784:10 960:00, $5E4A 588:80 978:00",
+      "status-cmp sleeptail c435-c1483: 1049 frames, 0 differing frame-fields (none) | cartridge $B03A[0] through GATO's song: 990:00 992:01 994:00 1297:01",
+      "status-cmp chaosenemy c770-c2683: 1914 frames, 0 differing frame-fields (none) | cartridge GATO actions ($A013): 1136:01 1288:00 1498:01 1650:00 1860:01 2012:00 2222:01 2374:00 2584:01 2736:00",
+      "status-cmp lockdrop c583-c983: states (lock st0 frz drop mp0 hpG) cartridge 4 port 4, identical in order; cartridge c583:000000/08/01/00/6300/4C00 c588:000000/08/00/00/6300/4C00 c590:010000/08/00/00/6300/4C00 c592:010000/08/00/FF/6300/4C00 | port c583:000000/08/01/00/6300/4C00 c588:000000/08/00/00/6300/4C00 c590:010000/08/00/00/6300/4C00 c594:010000/08/00/FF/6300/4C00",
+      "status-cmp blindgate c770-c1283: 514 frames, 0 differing frame-fields (none) | cartridge $A013 after Crono's blinding hit: 1136:01"
+    ],
+    "evidence": "Its env sets only CT_ORACLE_NMION_HOLD=1 (plain option A, offset 228); with the switches the full rule runs and it is the same run as battle-status-machinery-vs-logical-oracle (one can retire at the flip): offset 221, cartridge frames -17 / port frames -11 (tools/battle_status_cmp.py), every scenario 0 differing frame-fields, lockdrop 4 / 4 in order. Against plain A the lockdrop window caught 2 states with the drop on the same frame (c601 both) -- plain A's cartridge held the drop 3 frames later against its fight (the first chime's re-post); under the rule the cartridge's drop is the valve's -17 (c592) and the port's 2-frame dispatch residual (c594) is back, graded as before by order."
+  },
+  "battle-item-scrolled-record-vs-oracle": {
+    "expect": [
+      "item CA on Marle (down 4): cartridge up c754 span 176 | port up p753 span 176 | effect SAME",
+      "   cartridge: c0.HP=46 c1.HP=41",
+      "   port     : c0.HP=46 c1.HP=41"
+    ],
+    "evidence": "As battle-item-lapis-every-seat-vs-oracle (the scrolled list's record): span 176 and the effect identical; the rule's cartridge rises at c754 (valve c755), the port at p753 with the state's SPC (CT_AUDIO_SEEDSTATE; p756 on the cold SPC's old clock)."
+  }
+}

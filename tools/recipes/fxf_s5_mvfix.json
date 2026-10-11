@@ -1,0 +1,7 @@
+{
+  "name": "fxf_s5_mvfix",
+  "from": "bedroom",
+  "doc": "Stands in for S5_mvfix.state (a scene-5 mover capture with the new game's story flags, storyline 0): the ROM's own loader (--teleport 5 8 8 0, method jmp) from Crono's bedroom puts the lead at the fair's tile (8,8) facing up -- the reference's $0102-$0104 -- with the bedroom's flags, as the reference has.",
+  "steps": [["teleport", 5, 8, 8, 0, 60, "jmp"]],
+  "expect": {"loc": "0x005", "wram": {"0x10000": "0x00"}}
+}

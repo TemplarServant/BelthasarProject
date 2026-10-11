@@ -1,0 +1,7 @@
+{
+  "name": "fxf_loc002_curtain_ctl",
+  "from": "fxf_loc002_intro_curtain",
+  "doc": "Stands in for saves/field_re/loc002_curtain_ctl.state: from the opening's curtain (fxf_loc002_intro_curtain) A every 12 frames 80 times through Mom's wake-up talk (storyline 0 -> 3 at f886), then idle: control returns at f1049 ($011F = 01) and the state is 62 frames later, as the reference was (its control returned at its f664, the capture at f726). Crono's room with the curtain open; slot 1's second E4 pair has run ($7F0142 = 40). The cat (obj 9) wanders elsewhere than in the reference.",
+  "steps": [["pad", "(100:2,0:10)*80,0:151"]],
+  "expect": {"loc": "0x002", "wram": {"0x011F": "0x01", "0x10000": "0x03", "0x10142": "0x40"}}
+}

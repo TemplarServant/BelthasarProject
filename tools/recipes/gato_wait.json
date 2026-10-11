@@ -1,0 +1,7 @@
+{
+  "name": "gato_wait",
+  "from": "gato_front_wait",
+  "doc": "Stands in for saves/battle_re/gato_wait.state (= gato_press_action in Wait mode, $2990 = 84): Crono talks to GATO up to the song's last box; one more A boots the battle.",
+  "steps": [["pad", "100:20,0:40,0:100"]],
+  "expect": {"loc": "0x006", "wram": {"0x2990": "0x84", "0x2981": "0x01", "0x1802": "0x60", "0x1803": "0x08"}}
+}
