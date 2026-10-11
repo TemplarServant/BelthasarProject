@@ -7,8 +7,8 @@ The corpora are the ROM itself (always; verified) plus any FILE given with --cor
 ROM's data decompressed) and the private bakes (src/data/*.h, savestates) are the useful ones, since decompressed
 graphics never appear in the ROM's raw bytes. Every file under <dir> is read:
 
-  * a binary file (a NUL byte, or not UTF-8) is a finding by itself unless it is on the allowlist below, and its bytes
-    are searched too;
+  * a binary file (a NUL byte, or not UTF-8) is a finding by itself unless it is on the allowlist below (the README's
+    screenshots and clip in docs/media/, made by tools/release/make_media.py), and its bytes are searched too;
   * a text file has its byte runs pulled out -- C/Python arrays (0x12, 0x34 ...), 16-bit word arrays (0x1234, read
     little-endian), assembler bytes ($12,$34), hex dumps ("12 34 56 ..."), long hex strings and base64 blobs -- and each
     run is searched.
@@ -28,7 +28,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from ctlib import rom as romlib  # noqa: E402
 
-BINARY_OK = ()                                   # binary files the public tree may carry (none today)
+BINARY_OK_DIR = 'docs/media/'                    # the only binaries the public tree may carry: the README's pictures of
+BINARY_OK_EXT = ('.png', '.gif', '.mp4')         #   the port running (tools/release/make_media.py; docs/ROM.md)
 KNOWN_OK = {                                     # (path, text on the line) that match, and why they are not the game's
     ('snes/dsp.c', 'gaussValues'): "the S-DSP's gaussian interpolation table: the console's hardware (LakeSnes, MIT), not the "
                         "game; a smooth ramp also occurs in the extracted assets",
@@ -144,7 +145,7 @@ def main():
             if text is not None:
                 runs = runs_from_text(text)
             else:
-                if rel not in BINARY_OK:
+                if not (rel.startswith(BINARY_OK_DIR) and rel.lower().endswith(BINARY_OK_EXT)):
                     print('binary: %s  %d bytes (not on the allowlist)' % (rel, len(data)))
                     leaks += 1
                 runs = [(0, data)]

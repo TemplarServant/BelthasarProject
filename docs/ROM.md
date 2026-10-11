@@ -113,8 +113,12 @@ whole or in part, cannot be published in this repository:
 - `ct_assets.dat` and any extracted graphics, palettes, maps, scripts, text or dialogue dumps;
 - the generated `src/data/*.h` tables and `src/xlat/*.c` translations: most are verbatim copies of ROM bytes or
   of data decoded from them, and the rest are composed from such data;
-- savestates, WRAM/VRAM/OAM dumps, framebuffers and screenshots of the game: an emulator state holds the
+- savestates, WRAM/VRAM/OAM dumps and framebuffers: an emulator state holds the
   cartridge's RAM, which holds decompressed game data, and a battery save holds game text;
+- screenshots and video of the game, with one exception: the handful of pictures and the short clip of the port
+  running that the README shows, in [`docs/media/`](media/). They are made by
+  [`tools/release/make_media.py`](../tools/release/make_media.py) from the engine's own output during the attract
+  demo, and they are the only binary files the leak scanner accepts;
 - trace and disassembly output that reproduces the ROM's bytes.
 
 The repository holds the code that **produces** these from your dump, and documentation that describes the game's
@@ -136,8 +140,8 @@ python tools/release/scan_rom_leaks.py <dir> [--rom ROM] [--corpus ct_assets.dat
 - **Corpora.** The ROM (always, after verification) plus any file given with `--corpus`. Pass `ct_assets.dat`:
   decompressed graphics never appear in the ROM's raw bytes, so only the extracted container catches them. The
   private generated headers and savestates are also useful corpora.
-- **Binary files.** Any binary file in the tree is a finding by itself unless it is on the scanner's allowlist
-  (empty today), and its bytes are searched too.
+- **Binary files.** Any binary file in the tree is a finding by itself, except the README's PNG/GIF/MP4 media under
+  `docs/media/`, and its bytes are searched too.
 - **Text files.** Byte runs are pulled out of C and Python arrays, 16-bit word arrays, assembler byte lists, hex
   dumps, long hex strings and base64 blobs, and each run is searched.
 - **Threshold.** A run is a leak when a window of `--window` bytes (24 by default) with at least 8 distinct values

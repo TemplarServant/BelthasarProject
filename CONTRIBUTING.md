@@ -12,7 +12,8 @@ The repository contains no part of Chrono Trigger, and it has to stay that way.
 
 - Never commit the ROM, `ct_assets.dat`, generated `src/data/*.h` or `src/xlat/*.c`, savestates (`.state`,
   `.lakewram`), RAM/VRAM/OAM dumps, battery saves (`.srm`), framebuffers, screenshots, traces, extracted graphics,
-  text or dialogue.
+  text or dialogue. (The README's own pictures in `docs/media/` are the one exception; they come from
+  `tools/release/make_media.py`.)
 - Never paste byte dumps of ROM data or game text into code, comments, notes or issues. Describe a table by its
   address and layout (`CC/4700`, 23-byte records), not by its contents.
 - If your tool needs game data, read it from the user's ROM at run time or generate it during setup.

@@ -3,6 +3,11 @@
 A native C re-implementation of **Chrono Trigger** (SNES, USA, 1995), checked frame by frame against the original
 program running in an embedded SNES core.
 
+<p align="center">
+  <img src="docs/media/widescreen-battle.gif" alt="A battle in the port with the widescreen mod on: Marle casts a spell on Zombor" width="796">
+  <br><sub>The C engine running a battle from the attract demo, widescreen mod on (<a href="docs/media/widescreen-battle.mp4">MP4</a>).</sub>
+</p>
+
 BelthasarProject is named after Belthasar, the Guru of Reason who designed the Epoch. The name keeps clear of the "Chrono"
 trademark.
 
@@ -38,6 +43,27 @@ routine from the 65816 code. The method is the one [snesrev/zelda3](https://gith
 
 The rules behind this, and the decisions that shaped them, are in [docs/METHODOLOGY.md](docs/METHODOLOGY.md) and
 [docs/DECISIONS.md](docs/DECISIONS.md).
+
+## Screenshots
+
+Every picture is the C engine's own output during the attract demo (not the emulator), made by
+[`tools/release/make_media.py`](tools/release/make_media.py).
+
+| | |
+|---|---|
+| ![The title screen](docs/media/title.png) | ![Frog's tech over three enemies in a battle](docs/media/battle-tech.png) |
+| The title sequence | A battle tech, vanilla 256x224 |
+
+With the widescreen mod (16:9), the field, the overworld and battles show more of the map at the sides:
+
+| | |
+|---|---|
+| ![A floating continent over the clouds, widescreen](docs/media/widescreen-zeal.png) | ![A battle on a bridge, widescreen](docs/media/widescreen-battle.png) |
+| ![The party in a forest, widescreen](docs/media/widescreen-forest.png) | ![The party before a castle gate, widescreen](docs/media/widescreen-castle.png) |
+
+The mods are switched on in the F1 overlay. With every option at its default, the game is the vanilla game:
+
+<p align="center"><img src="docs/media/options-overlay.png" alt="The F1 options overlay, Video tab" width="796"></p>
 
 ## Status
 
