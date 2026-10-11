@@ -85,6 +85,10 @@ void cpu_handleState(Cpu* cpu, StateHandler* sh) {
 void (*g_cpuOpHook)(void* mem, uint32_t pc) = NULL;
 // CT: called when the CPU takes an interrupt, before its pushes (snes.c's NMI-on stretch count leaves the handler out).
 void (*g_cpuIntHook)(void* mem) = NULL;
+// CT: a second pair for the routine-level shadow (src/ct_shadow.c), called after the logical mode's own so neither owns
+// the other's slot. The CPU itself does not change.
+void (*g_cpuShadowOpHook)(void* mem, uint32_t pc) = NULL;
+void (*g_cpuShadowIntHook)(void* mem) = NULL;
 
 void cpu_runOpcode(Cpu* cpu) {
   if(cpu->resetWanted) {
@@ -123,10 +127,12 @@ void cpu_runOpcode(Cpu* cpu) {
   // not stopped or waiting, execute a opcode or go to interrupt
   if(cpu->intWanted) {
     if(g_cpuIntHook) g_cpuIntHook(cpu->mem);
+    if(g_cpuShadowIntHook) g_cpuShadowIntHook(cpu->mem);
     cpu_read(cpu, (cpu->k << 16) | cpu->pc);
     cpu_doInterrupt(cpu);
   } else {
     if(g_cpuOpHook) g_cpuOpHook(cpu->mem, ((uint32_t)cpu->k << 16) | cpu->pc);   // CT: snes.c's logical-frame wait detector
+    if(g_cpuShadowOpHook) g_cpuShadowOpHook(cpu->mem, ((uint32_t)cpu->k << 16) | cpu->pc);   // CT: ct_shadow.c
     uint8_t opcode = cpu_readOpcode(cpu);
     cpu_doOpcode(cpu, opcode);
   }

@@ -55,6 +55,8 @@ void cpu_handleState(Cpu* cpu, StateHandler* sh);
 void cpu_runOpcode(Cpu* cpu);
 extern void (*g_cpuOpHook)(void* mem, uint32_t pc);   // CT: see cpu.c
 extern void (*g_cpuIntHook)(void* mem);               // CT: see cpu.c
+extern void (*g_cpuShadowOpHook)(void* mem, uint32_t pc);   // CT: see cpu.c
+extern void (*g_cpuShadowIntHook)(void* mem);               // CT: see cpu.c
 void cpu_nmi(Cpu* cpu);
 void cpu_setIrq(Cpu* cpu, bool state);
 // CT: the translated-program interface (the three halves of cpu_runOpcode) -- src/seq_xlat.h

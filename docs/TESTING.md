@@ -108,15 +108,25 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-11: **822** checks, **2** excluded; `--list` prints the current set).
+(2026-10-11: **823** checks, **2** excluded; `--list` prints the current set).
 
 - **quick** (**582** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
-- **full** (all of them): adds **238** slower checks — whole fights and attract legs against the logical oracle, the
+- **full** (all of them): adds **239** slower checks — whole fights and attract legs against the logical oracle, the
   long menu and shop audits, the widescreen and other mod checks, the ROM-boot drive validators — and the two with no
   tier (`lockstep-talk-box-machine-clean`, `lockstep-scene120-stairs-entry-lucca`), which run only here. A full run
   takes 15-80 minutes, mostly depending on the oracle cache.
+
+### shadow-attract-af22 (`ct.exe --shadow --frames 9000`, the routine-level shadow)
+
+The routine-level shadow's first entry (docs/SHADOW_PROPOSAL.md, phase S0). The oracle plays the attract demo from
+power-on under the logical rule; at each of its 92 calls to C1/AF22 (the battle RNG, from frame 3991) the harness runs
+`battleRngBase` on a copy of the oracle's WRAM and compares, at the return, all 128 KB less the pushed stack bytes, A's
+low byte and the 16-bit X. Needs only the ROM. Three declared mutations (`--mutate shadow-attract-af22`) all turn it
+red: the cursor's `INC $26`, the draw in A, and X's high byte. Unlike `sweeprng-af22-base` (fuzzed inputs) it grades the
+calls the cartridge actually makes. Re-pin only a change in the call count with mismatched still 0, after confirming
+the oracle's run itself changed.
 
 ### field-battletest-gato (`ct_field.exe --battletest`)
 

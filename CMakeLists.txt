@@ -14,6 +14,7 @@ file(GLOB SNES_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/snes/*.c")
 add_executable(ct
   src/main.c
   src/ct_cpu_infra.c src/rom_verify.c
+  src/ct_shadow.c  # --shadow: the routine-level shadow (docs/SHADOW_PROPOSAL.md)
   src/ct_lake_state.c
   src/harness_drive.c
   src/boot.c

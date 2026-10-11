@@ -40408,6 +40408,51 @@
       ],
       "note_pass": "through Fire Whirl the four Naga-ettes hold the poses the cartridge freezes at C1/4058 -- their published $990A every frame the cartridge's, 774 frames",
       "notes": "The user, 2026-10-10 ('fix what was left open', translated from Portuguese: the Naga-ettes' poses during Fire Whirl). battle.c battleIterFrameA blocked the idle walk's dispatch through an ENEMY's turn inside C1/4058 (enThinkDelay) but not through a PC's (pcThinkDelay): the rule's cartridge has $A0FD = 01 by C1:405B at f858, $A013 = 01 by C1:40A9 at f860, and $990A 04 07 04 04 the whole time -- the port published 06 04 05 04 in those two frames, and the frozen poses stood through the tech (2660 px at full resolution, f900). Fixture saves/field_re/m81_nuns_ppu_lake.state: the user's capture animacao_freiras_naga_ettes spliced with --ppu onto `--teleport 129 7 11 0` from m81_nuns_lake.state (whose own VRAM is another camera's). The port's keys are offset by the battle's start (`battlephase:`), which only the interactive path prints. Aligned on the first enemy step, as tools/naga_walk_cmp.py."
+    },
+    {
+      "name": "shadow-attract-af22",
+      "argv": [
+        "build/ct.exe",
+        "--shadow",
+        "--frames",
+        "9000"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0"
+      ],
+      "pin": [
+        "^C1AF22 "
+      ],
+      "tier": "full",
+      "timeout_s": 240,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "        s[0x26] = (uint8_t)(idx + 1);                // AF71 INC $26 -- ONLY on this path",
+          "replace": "        /* MUT: no AF71 INC $26 */",
+          "why": "the stream cursor $26 stops advancing: every divide after the first leaves 7E:0026 one behind the cartridge's"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "        out = (s[0x32] + base) & 0xFF;               // AF6C LDA $32 / AF6E CLC / AF6F ADC $25",
+          "replace": "        out = (s[0x32] + base + 1) & 0xFF;           /* MUT: off by one */",
+          "why": "the draw handed back in A is wrong while WRAM is right: proves the A8 register compare"
+        },
+        {
+          "file": "src/ct_shadow.c",
+          "find": "  out->x = (uint16_t)(w[0x2C] | (w[0x2D] << 8));",
+          "replace": "  out->x = (uint16_t)(w[0x2C]);   /* MUT: X's high byte lost */",
+          "why": "AF75 PLX hands X back 16-bit: proves the X16 register compare (the attract's $2D is non-zero at some call: killed)"
+        }
+      ],
+      "note_pass": "the oracle plays the attract demo from power-on and all 92 of its calls to C1/AF22 match battleRngBase on a copy of its WRAM: all 128 KB, A's low byte and X",
+      "notes": "THE ROUTINE-LEVEL SHADOW, S0 (docs/SHADOW_PROPOSAL.md; src/ct_shadow.c). The oracle plays alone; at each arrival at a registered entry the harness copies its WRAM, runs our C on the copy, lets the oracle run to the return the caller pushed (the stack climbing above the entry S) and compares the whole 128 KB less the bytes the call pushed, plus the registers the caller reads. A call the oracle takes an interrupt inside is counted `interrupted` and not compared; under the logical rule the NMI only lands at waits, and C1/AF22 has none (0 interrupted). The calls are the attract's battles from frame 3991. A count change with mismatched 0 means the demo reached C1/AF22 a different number of times (a change in the oracle's run, not in the routine): re-pin only after confirming that. Unlike --sweeprng (fuzzed inputs), this grades the calls the cartridge actually makes."
     }
   ],
   "excluded": [

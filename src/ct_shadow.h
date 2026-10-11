@@ -1,0 +1,43 @@
+// ct_shadow.h — the routine-level shadow (docs/SHADOW_PROPOSAL.md).
+//
+// The oracle plays alone. Each time its CPU arrives at the entry of a REGISTERED ROM routine, the harness copies the
+// oracle's WRAM, runs our C function for that routine on the copy, lets the oracle run the routine to its return, and
+// compares the two: all 128 KB of WRAM (less the stack bytes the routine pushed) and the registers the caller reads.
+// The port's main loop is not involved, so the coverage is wherever the oracle goes.
+//
+// A call is not compared, and is counted apart, when
+//   - the oracle takes an interrupt inside it (`interrupted`: the handler writes WRAM the C function never sees);
+//   - the oracle leaves it somewhere other than the return address the caller pushed (`exits`);
+//   - the entry's P widths or guard do not hold (`skipped`: the C function was written for another convention).
+#ifndef CT_SHADOW_H
+#define CT_SHADOW_H
+
+#include <stdint.h>
+#include <stdio.h>
+#include "snes.h"
+
+typedef struct CtShadowRegs { uint16_t a, x, y, dp; uint8_t db, p; } CtShadowRegs;
+
+// The registers a caller reads after the return, compared in the entry's `outRegs`.
+enum { CT_SH_A8 = 1, CT_SH_A16 = 2, CT_SH_X16 = 4, CT_SH_Y16 = 8 };
+
+typedef struct CtShadowEntry {
+  uint32_t addr;          // the 24-bit entry address the oracle's CPU fetches
+  const char* name;
+  uint8_t pMask, pValue;  // the P bits (m 0x20, x 0x10, d 0x08) the C function's convention needs at entry
+  uint8_t isLong;         // entered by JSL (the return address is 3 bytes); otherwise by JSR
+  int (*guard)(const CtShadowRegs* in);   // optional, peek-only
+  // Runs the C function on `wram` (the oracle's 128 KB, $7E at offset 0) and fills the registers it hands back.
+  void (*run)(uint8_t* wram, const uint8_t* rom, long romLen, const CtShadowRegs* in, CtShadowRegs* out);
+  unsigned outRegs;
+} CtShadowEntry;
+
+// Arms the shadow on this oracle (one at a time). `dumpPrefix` (may be NULL): at the first mismatch, writes
+// <prefix>.pre.wram (the oracle's WRAM at the entry), <prefix>.oracle.wram and <prefix>.port.wram (at the return).
+void CtShadowInstall(Snes* s, const char* dumpPrefix);
+void CtShadowUninstall(void);
+// One line per registered entry, then the details of the first mismatches, then the `shadow:` total line.
+void CtShadowReport(FILE* f);
+long CtShadowMismatches(void);
+
+#endif

@@ -15,6 +15,7 @@
 #include "ct_cpu_infra.h"
 #include "../snes/dma.h"
 #include "ct_lake_state.h"
+#include "ct_shadow.h"
 #include "harness_drive.h"
 #include "boot.h"
 #include "lz.h"
@@ -15620,6 +15621,52 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
   return 0;
 }
 
+// --shadow [--frames N] [--loadstate S] [--btnscript B] [--dump PREFIX]: the routine-level shadow (src/ct_shadow.c,
+// docs/SHADOW_PROPOSAL.md). The oracle plays N frames -- from power-on (CT_ORACLE_SRAM gives it a battery save) or from
+// a state, pressing B -- and every call it makes to a registered routine is graded against our C function on a copy of
+// its WRAM. Prints one line per entry and `shadow: ... mismatched M ...`; exits 1 when M > 0.
+static int runShadow(int argc, char** argv) {
+  const char* romPath = DEFAULT_ROM; const char* statePath = NULL; const char* script = NULL; const char* dump = NULL;
+  int frames = 3000;
+  for (int i = 2; i < argc; i++) {
+    if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
+    else if (!strcmp(argv[i], "--loadstate") && i + 1 < argc) statePath = argv[++i];
+    else if (!strcmp(argv[i], "--btnscript") && i + 1 < argc) script = argv[++i];
+    else if (!strcmp(argv[i], "--dump") && i + 1 < argc) dump = argv[++i];
+    else if (!strcmp(argv[i], "--rom") && i + 1 < argc) romPath = argv[++i];
+    else { printf("shadow: unknown argument '%s'\n", argv[i]); return 2; }
+  }
+  int len = 0;
+  uint8_t* rom = CtReadFile(romPath, &len);
+  if (!rom) { printf("FAIL: cannot read ROM '%s'\n", romPath); return 2; }
+  Snes* s = CtOracleCreate(rom, len, NULL);
+  if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
+  if (statePath) {
+    uint8_t* sdata = NULL; int slen = 0, fmt = 0;
+    if (CtLakeStateLoadPath(statePath, &sdata, &slen, &fmt) != 0) {
+      printf("FAIL: cannot load savestate '%s'\n", statePath); CtOracleDestroy(s); free(rom); return 2;
+    }
+    StateHandler* sh = sh_init(false, sdata, slen);
+    snes_handleState(s, sh);
+    sh_free(sh); free(sdata);
+  }
+  printf("shadow: %d frame(s) from %s%s%s\n", frames, statePath ? statePath : "power-on",
+         getenv("CT_ORACLE_LOGICAL") ? ", logical frames" : "", script ? ", with a pad script" : "");
+  CtShadowInstall(s, dump);
+  CtBtnScript bs = { script }; uint16_t btn = 0; int left = 0;
+  for (int f = 0; f < frames; f++) {
+    while (left <= 0 && ctBtnNext(&bs, &btn, &left)) {}
+    if (left <= 0) btn = 0; else left--;
+    s->input1->currentState = btn;
+    CtOracleRunFrame(s);
+  }
+  CtShadowUninstall();
+  CtShadowReport(stdout);
+  long bad = CtShadowMismatches();
+  CtOracleDestroy(s); free(rom);
+  return bad ? 1 : 0;
+}
+
 static void ctLogicalReport(void) {
   fprintf(stderr, "logical-frame: %ld hold(s), %ld cycles held, %ld valve release(s); %ld phase hold(s), %ld cycles\n",
           g_ctLogicalHolds, g_ctLogicalHeld, g_ctLogicalValves, g_ctLogicalPhaseHolds, g_ctLogicalPhaseHeld);
@@ -15652,6 +15699,7 @@ int main(int argc, char** argv) {
     const char* ll = getenv("CT_ORACLE_LOGICAL_LOADS");
     g_ctLogicalLoads = !(ll && ll[0] == '0');
   }
+  if (argc >= 2 && !strcmp(argv[1], "--shadow")) return runShadow(argc, argv);
   const char* romPath = DEFAULT_ROM;
   int frames = 300;
   int doDump = 0;
