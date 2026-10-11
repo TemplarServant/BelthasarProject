@@ -6157,6 +6157,55 @@
       "notes": "The user, 2026-10-04 (ct_debug_009 = saves/field_re/door_009.state, loc 081, story 15): 'the door's animation in the attached save does not work'. The Manoria cathedral's organ (obj13 fn1) sets $7F00FF bit 4 (`65 04 FF`), plays sound 74 and runs `E5 27 01 28 04 0C 04 3B` -- the staged copy of the door's rect over the stone wall (C0/AF4E on all the planes). Played from a fresh seed (the rule's cartridge: saves/field_re/door_009_tele_noflag.state by --teleport 0x81 13 8 0 with the user's flags; the port from its WRAM) both open the door in one frame (cartridge f497, port f487 from the same press, the drive's latency). The snapshot's WRAM held the door open ($7E:3000, $30C0, $7000 and $7040 byte-identical to the cartridge's), but an F5/F9 load (and --loadstate) restored the VM and the WRAM only: the picture (the layers, the bake) and the collision (f->C) kept the location's load -- the wall, shut. Now fieldMapFromWram re-reads both from the WRAM on every seed (--loadwram, --loadstate, F9): the BG as before, the collision by the inverse of pack_collision (fieldCollFromWram; 0 cells change on a clean seed). From the snapshot the lead walks up through the door to loc 082 at f38 (cartridge, the same walk from door_009_tele.state: f42)."
     },
     {
+      "name": "battle-flame-toss-band-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "129",
+        "--loadwram",
+        "saves/field_re/m81_nuns_lake.lakewram"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_POKEWRAM": "2839=80",
+        "CT_AUDIO_SEEDSTATE": "saves/field_re/m81_nuns_lake.state",
+        "CT_BATTLE_SCRIPT_ABS": "1",
+        "CT_BATTLE_SCRIPT": "n:137,a:2,n:10,a:2,n:345,d:2,n:10,a:2,n:10,a:2,n:6,d:2,n:10,a:2,n:200",
+        "CT_FIELD_MEMMON": "9604:5,AD8E:4,AE93:1",
+        "CT_SHOTS": "build/_flametoss",
+        "CT_SHOTS_AT": "900",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/m81_nuns_lake.lakewram",
+        "saves/field_re/m81_nuns_lake.state"
+      ],
+      "expect": [
+        "fmemmon f875 loc=081  9604=0001040201*  AD8E=04FFFFFF*  AE93=11*"
+      ],
+      "pin": [
+        "^fmemmon f\\d+ loc=081  9604=00010\\w+\\*"
+      ],
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "battleAreaC586(h, area, 0, actor, tgt) == 1",
+          "replace": "battleAreaC586(h, area, 0, actor, tgt) == 99",
+          "why": "a PC tech's area pass not run: Flame Toss back to the group's single victim, $9604-$9608 never staged"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "Lucca's Flame Toss stages the band C1/C78D -> C1/25A3 as the cartridge does: from Lucca toward the target, $9608 = 1",
+      "notes": "The user, 2026-10-11 (translated from Portuguese): 'Lucca's flame toss should hit more than one enemy in a line'. Flame Toss (tech 11) is group 0C, area 05 (CC/1ACB): C1/C1DD's PC arm (`STZ $0A`, $0C = CC/1ACC[id*2]) runs the area pass C1/C586 at the dispatch, record CC/2B24 `01 / 00 00 82` = C1/C78D ($9605 = $00, the caster) and C1/1FDD routine 0, the band C1/25A3 with $9607 = 02, $9608 = 1; the select handler C1/2203 runs the same band on every cursor move and lights the set (C1/27E8). The port dispatched group 0C to one victim. The drive: the Manoria nuns fight with Flame Toss learned ($2839 = 80 poked on both sides), Crono attacks, Lucca Tech / Flame Toss / Down / A (target 4). The rule's cartridge (ct.exe --from m81_nuns_lake.state, PEEK_POKE 7E2839=80, the same keys at its own menu frames): `$9604-$9608 = 00 01 04 02 01`, `$99C0 = 04`, `$AD8E = 04` -- these four Naga-ettes never stand within the band's 16 px of the line, so one victim on both sides (64 timings x 4 targets swept on the cartridge: always one). The several-victim arm is graded by sweep-band-25a3."
+    },
+    {
       "name": "field-organ-door-opens-live",
       "argv": [
         "build/ct_field.exe",
@@ -35606,6 +35655,38 @@
       "timeout_s": 600,
       "notes": "`FF 83` (FD/DB1D, 767 + the $2100 pulse): scene 8's Telepod state with the script's operand byte poked (`$7F:269C`, the op reads its operand there through C0/3FB1 `LDA $7F2001,X`), so C0/3FEC.. takes this routine's JML -- the same program the return trips' `FF 81/82/83` run (user defect 2026-09-26 #20), lockstepped every instruction against the oracle. The translation is the union of the four routines' traces. | 2026-10-10 re-pinned on the recipe-made fixture (fxf_scene8_gate_warp_f2300): still IDENTICAL every instruction and frame against the oracle from the same state; only the instruction count moved (the recipe's cutscene parks its main loop 39 frames instead of the capture's 38, see seq-gwarp-xlat-lockstep).",
       "note_pass": "the gate warp's `FF 83` routine, translated, is the cartridge's every instruction"
+    },
+    {
+      "name": "sweep-band-25a3",
+      "argv": [
+        "build/ct.exe",
+        "--sweepband25a3"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/bat3_lake.state",
+        "saves/battle_re/bat9_lake.state",
+        "saves/battle_re/gato_cyclone.state",
+        "saves/battle_re/forest_battle_3hetake.state"
+      ],
+      "expect": [
+        "sweepband25a3: C1/25A3 band vs micro-executed C1/25A3 -> 8000/8000 byte-exact over all of WRAM but $0000-$01FF (0 mismatch, 0 lost); two victims or more: enemies' side $9608 0 639, non-zero 955; the party's side $9608 0 396, non-zero 612"
+      ],
+      "pin": [
+        "^sweepband25a3: .*"
+      ],
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  else            { p82 = (d5 + p82) & 0xFF; p83 = (d6 + p83) & 0xFF; w88 = (db + 0x80) & 0xFF; w8A = (db + 0xC0) & 0xFF; }",
+          "replace": "  else            { p82 = (d3 + p82) & 0xFF; p83 = (d4 + p83) & 0xFF; w88 = (db + 0x80) & 0xFF; w8A = (db + 0xC0) & 0xFF; }",
+          "why": "the far point of a $9608 != 0 band (Lucca's Flame Toss) placed at the attacker instead of the target"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "the band C1/25A3 (Slash, Flame Toss, the enemies' area 08) is byte-exact against the ROM, both $9608 arms, with several victims",
+      "notes": "C1/1FDD's routine 0, the band (battle.c battleAreaBand25A3), against the ROM micro-executed on the same WRAM: four battle states, 8000 cases fuzzing the side $9604, the attacker / target $9605 / $9606, the half-width $9607, $9608 (0, 1 or another byte), the candidate gates $96F5 / $9FF7 / $A0A8 / $A09B and every combatant's foot $1D0C / $1D23 (half of them strung along the attacker-target line). All of WRAM is compared but $0000-$01FF (the routine's scratch). Before 2026-10-11 the band was graded only through the enemies' area 08 ($9608 = 0); Lucca's Flame Toss (area 05, `00 00 82`) takes the $9608 = 1 arm, and the user reported it hit one enemy (the port dispatched group 0C to a single victim)."
     },
     {
       "name": "sweep-tech-pass",

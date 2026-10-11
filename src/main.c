@@ -10296,6 +10296,97 @@ static int runSweepAiEval(const char* romPath) {
 }
 
 // =================================================================================================
+// --sweepband25a3 -- C1/25A3, C1/1FDD's routine 0: THE BAND (battle.c battleAreaBand25A3) against the ROM micro-executed
+// on the same WRAM, all of WRAM compared but the direct page and the stack ($0000-$01FF: the routine's scratch $80-$92 /
+// $AE and C1/0222's $D3-$E2, which the port keeps in locals). Battle states give the WRAM; the inputs are fuzzed: the side
+// $9604 (0, 1 or another non-zero byte), the attacker $9605 and the target $9606 (0..A), the half-width $9607 (1..4, the
+// tables' 02 among them), $9608 (0, 1 or another non-zero byte: C1/C78D / C1/C813 stage the area entry's bit 7 there --
+// the enemies' area 08 has 0, Lucca's Flame Toss area 05 has 1), the four candidate gates $96F5 / $9FF7 bit 7 / $A0A8 /
+// $A09B, and every combatant's foot $1D0C / $1D23 -- half the cases at random, half strung along the attacker-target
+// line with a jitter, so the band takes several victims. ENTRY: C1/1FDD's `JSR ($1FEA,X)` -- DB = $7E, D = 0, M 8-bit,
+// X 16-bit; NMI and IRQs off. The tally counts the cases by side and $9608 with two victims or more.
+static int runSweepBand25A3(const char* romPath) {
+  static const char* STATES[] = {
+    "saves/battle_re/bat3_lake.state", "saves/battle_re/bat9_lake.state", "saves/battle_re/gato_cyclone.state",
+    "saves/battle_re/forest_battle_3hetake.state",
+  };
+  enum { NST = sizeof STATES / sizeof STATES[0] };
+  static uint8_t base[NST][0x20000];
+  static uint8_t work[0x20000];
+  int nb = 0; uint8_t* rom = NULL; Snes* s = NULL;
+  for (int i = 0; i < NST; i++) {
+    uint8_t* r = NULL;
+    Snes* t = ctLoadStateOracle(romPath, STATES[i], &r);
+    if (!t) { printf("sweepband25a3: FAIL -- cannot load %s\n", STATES[i]); continue; }
+    memcpy(base[nb++], t->ram, 0x20000);
+    if (!s) { s = t; rom = r; } else { CtOracleDestroy(t); free(r); }
+  }
+  if (!s || nb != NST) { if (s) { CtOracleDestroy(s); free(rom); } return 2; }
+  uint32_t rng = 0x2468ACE1;
+  #define NEXT() (rng = rng * 1103515245u + 12345u, (int)((rng >> 16) & 0xFF))
+  int ok = 0, bad = 0, lost = 0, shown = 0, multi[2][2] = { { 0, 0 }, { 0, 0 } }, cases = 8000;
+  for (int c = 0; c < cases; c++) {
+    uint8_t* r = s->ram;
+    memcpy(r, base[c % nb], 0x20000);
+    int side = (NEXT() & 3) == 0 ? (NEXT() | 1) : (NEXT() & 1);
+    int far = (NEXT() & 3) == 0 ? (NEXT() | 1) : (NEXT() & 1);
+    int a = NEXT() % 11, t = NEXT() % 11;
+    r[0x9604] = (uint8_t)side; r[0x9605] = (uint8_t)a; r[0x9606] = (uint8_t)t;
+    r[0x9607] = (uint8_t)(1 + NEXT() % 4); r[0x9608] = (uint8_t)far;
+    for (int k = 0; k < 11; k++) {
+      r[0x96F5 + k] = (NEXT() & 7) ? 1 : 0;
+      r[0x9FF7 + k] = (uint8_t)((NEXT() & 7) ? (NEXT() & 0x7F) : (NEXT() | 0x80));
+      r[0xA0A8 + k] = (NEXT() & 7) ? 0 : (uint8_t)(NEXT() | 1);
+      r[0xA09B + k] = (NEXT() & 7) ? 0 : (uint8_t)(NEXT() | 1);
+      r[0x1D0C + k] = (uint8_t)NEXT(); r[0x1D23 + k] = (uint8_t)NEXT();
+    }
+    if (c & 1) {                                        // strung along the attacker-target line, past the target too
+      int ax = 0x20 + NEXT() % 0xC0, ay = 0x30 + NEXT() % 0x90, tx = 0x20 + NEXT() % 0xC0, ty = 0x30 + NEXT() % 0x90;
+      r[0x1D0C + a] = (uint8_t)ax; r[0x1D23 + a] = (uint8_t)ay;
+      if (t != a) { r[0x1D0C + t] = (uint8_t)tx; r[0x1D23 + t] = (uint8_t)ty; }
+      for (int k = 0; k < 11; k++) {
+        if (k == a || k == t) continue;
+        int f = NEXT() % 0x180;                         // 0..1.5 of the way, in 1/256ths
+        int jx = (NEXT() % 0x31) - 0x18, jy = (NEXT() % 0x31) - 0x18;
+        r[0x1D0C + k] = (uint8_t)(ax + (tx - ax) * f / 256 + jx);
+        r[0x1D23 + k] = (uint8_t)(ay + (ty - ay) * f / 256 + jy);
+      }
+    }
+    s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
+    s->cpu->dp = 0x0000; s->cpu->db = 0x7E; s->cpu->a = 0; s->cpu->x = 0; s->cpu->y = 0;
+    s->cpu->waiting = false; s->cpu->stopped = false;
+    s->cpu->nmiWanted = s->cpu->irqWanted = s->cpu->intWanted = s->cpu->resetWanted = false;
+    s->cpu->sp = 0x01FD; r[0x01FE] = 0xFD; r[0x01FF] = 0xFF;
+    s->cpu->k = 0xC1; s->cpu->pc = 0x25A3;
+    s->nmiEnabled = false; s->hIrqEnabled = false; s->vIrqEnabled = false;
+    memcpy(work, r, 0x20000);
+    CtBattleAreaBandMem(work);
+    if (CtOracleRunToPC(s, 0xC1, 0xFFFE, 2000000) < 0) { lost++; continue; }
+    int nd = 0, first = -1;
+    for (int k = 0x0200; k < 0x20000; k++)
+      if (work[k] != r[k]) { if (first < 0) first = k; nd++; }
+    if (!nd) {
+      ok++;
+      if (r[0x99C0] != 0xFF && r[0x99C1] != 0xFF) multi[side != 0][far != 0]++;
+      continue;
+    }
+    bad++;
+    if (shown < 10) { shown++;
+      printf("  case %d st%d side %02X a %d t %d w %d far %02X: %d byte(s) differ:", c, c % nb, side, a, t, r[0x9607], far, nd);
+      int n = 0;
+      for (int k = first; k < 0x20000 && n < 12; k++)
+        if (work[k] != r[k]) { printf(" $%04X C=%02X RO=%02X", k, work[k], r[k]); n++; }
+      printf("\n"); }
+  }
+  #undef NEXT
+  printf("sweepband25a3: C1/25A3 band vs micro-executed C1/25A3 -> %d/%d byte-exact over all of WRAM but $0000-$01FF "
+         "(%d mismatch, %d lost); two victims or more: enemies' side $9608 0 %d, non-zero %d; the party's side $9608 0 %d, "
+         "non-zero %d\n", ok, ok + bad, bad, lost, multi[0][0], multi[0][1], multi[1][0], multi[1][1]);
+  CtOracleDestroy(s); free(rom);
+  return (bad || lost || !multi[0][0] || !multi[0][1] || !multi[1][0] || !multi[1][1]) ? 1 : 0;
+}
+
+// =================================================================================================
 // --sweeptechpass -- C1/F205, THE VICTORY'S TECH PASS (single techs, then the dual and triple techs), battle.c's
 // battleTechPass against the ROM micro-executed on the same WRAM, ALL of WRAM compared but the stack page. Five battle
 // states give the WRAM; the pass's inputs are fuzzed: the rosters $AEFF[0..2] (char ids 0-6, sometimes FF), each seat's
@@ -15616,7 +15707,7 @@ int main(int argc, char** argv) {
   const char* wipeDumpState = NULL; int wipeDumpK = 1; const char* wipeDumpIn = NULL; const char* wipeDumpOut = NULL; const char* wipeDumpMask = NULL; uint32_t wipeDumpEntry = 0xC3000E, wipeDumpExit = 0xC022FE, wipeDumpMaskPc = 0xC000CB;
   const char* xlatEnState = NULL; int xlatEnFrames = 1;
   const char* xlatPhState = NULL; uint32_t xlatPhPc = 0; int xlatPhExtra = 0, xlatPhFrames = 1;
-  int doFindOam = 0, doCheckS1 = 0, doCheckOAM = 0, doCheckSort = 0, doCheckXform = 0, doMoveTest = 0, doCheckDecode = 0, doCheckMove = 0, doCheckVel = 0, doCheckDir = 0, doCheckPrio = 0, doVerifyFrame = 0, doCheckStep = 0, doPortTick = 0, doPortRun = 0, doCheckJoy = 0, doFindPlayer = 0, doWatchWrite = 0, doCheckMove2 = 0, doPlayerFrame = 0, doWatchCollide = 0, doCheckCollide = 0, doSweepCollide = 0, doSweepClamp = 0, doCheckSolidAt = 0, doCheckCommit = 0, doCheckActor = 0, doCheckClamp = 0, doTraceMove = 0, doCheckCtrl = 0, doSweepActor = 0, doSweepCb3a = 0, doSweepC98a = 0, doSweepCad9 = 0, doSweepDrain = 0, doSweepDraw = 0, doSweepStage2 = 0, doSweepLoader = 0, doSweepSlot = 0, doSweepScreen = 0, doSweepList = 0, doSweepInit = 0, doSweepVram = 0, doSweepAnim = 0, doSweepIris = 0, doSweepPoly = 0, doSweepOp02 = 0, doSweepA88d = 0, doSweepTouch = 0, doSweepAct = 0, doSweepSolid = 0, doSweepOps = 0, doSweepAcfd = 0, doSweepAba2 = 0, doSweepSnap = 0, doSweepOwRegion = 0, doSweepOwMusic = 0, doSweepAiTarget = 0, doSweepAiEval = 0, doSweepTechPass = 0, doSweepFxLineLate = 0, fxcF0 = 0, fxcF1 = 0, doSweepMoveClass = 0, doSweepDeadFlag = 0, doSweepDeadFlagPc = 0, doSweepMulDiv = 0, doSweepHitRoll = 0, doSweepStatFetch = 0, doSweepRedirect = 0, doSweepRng = 0, doSweepReval = 0, doTraceNpc = 0, doWatchNpcPos = 0;
+  int doFindOam = 0, doCheckS1 = 0, doCheckOAM = 0, doCheckSort = 0, doCheckXform = 0, doMoveTest = 0, doCheckDecode = 0, doCheckMove = 0, doCheckVel = 0, doCheckDir = 0, doCheckPrio = 0, doVerifyFrame = 0, doCheckStep = 0, doPortTick = 0, doPortRun = 0, doCheckJoy = 0, doFindPlayer = 0, doWatchWrite = 0, doCheckMove2 = 0, doPlayerFrame = 0, doWatchCollide = 0, doCheckCollide = 0, doSweepCollide = 0, doSweepClamp = 0, doCheckSolidAt = 0, doCheckCommit = 0, doCheckActor = 0, doCheckClamp = 0, doTraceMove = 0, doCheckCtrl = 0, doSweepActor = 0, doSweepCb3a = 0, doSweepC98a = 0, doSweepCad9 = 0, doSweepDrain = 0, doSweepDraw = 0, doSweepStage2 = 0, doSweepLoader = 0, doSweepSlot = 0, doSweepScreen = 0, doSweepList = 0, doSweepInit = 0, doSweepVram = 0, doSweepAnim = 0, doSweepIris = 0, doSweepPoly = 0, doSweepOp02 = 0, doSweepA88d = 0, doSweepTouch = 0, doSweepAct = 0, doSweepSolid = 0, doSweepOps = 0, doSweepAcfd = 0, doSweepAba2 = 0, doSweepSnap = 0, doSweepOwRegion = 0, doSweepOwMusic = 0, doSweepAiTarget = 0, doSweepAiEval = 0, doSweepTechPass = 0, doSweepBand25A3 = 0, doSweepFxLineLate = 0, fxcF0 = 0, fxcF1 = 0, doSweepMoveClass = 0, doSweepDeadFlag = 0, doSweepDeadFlagPc = 0, doSweepMulDiv = 0, doSweepHitRoll = 0, doSweepStatFetch = 0, doSweepRedirect = 0, doSweepRng = 0, doSweepReval = 0, doTraceNpc = 0, doWatchNpcPos = 0;
   uint32_t watchAddr = 0x7E0700, watchLen = 0x220;     // --findoam watch region (default the OAM buffer)
   const char* saveStateOut = NULL;
   const char* loadStateIn = NULL;
@@ -15731,6 +15822,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--sweepaitarget")) doSweepAiTarget = 1;
     else if (!strcmp(argv[i], "--sweepaieval")) doSweepAiEval = 1;
     else if (!strcmp(argv[i], "--sweeptechpass")) doSweepTechPass = 1;
+    else if (!strcmp(argv[i], "--sweepband25a3")) doSweepBand25A3 = 1;
     else if (!strcmp(argv[i], "--sweepfxline")) doSweepFxLineLate = 1;
     else if (!strcmp(argv[i], "--sweepshake")) doSweepFxLineLate = 2;
     else if (!strcmp(argv[i], "--sweepbganim")) doSweepFxLineLate = 3;
@@ -15981,6 +16073,7 @@ int main(int argc, char** argv) {
   if (doSweepAiTarget) return runSweepAiTarget(romPath);
   if (doSweepAiEval) return runSweepAiEval(romPath);
   if (doSweepTechPass) return runSweepTechPass(romPath);
+  if (doSweepBand25A3) return runSweepBand25A3(romPath);
   if (doSweepFxLineLate == 4) return runSweepFxShape(romPath);
   if (doSweepFxLineLate == 5) return runSweepFxQuad(romPath);
   if (doSweepFxLineLate == 6) return runSweepFxOps(romPath);

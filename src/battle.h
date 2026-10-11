@@ -886,6 +886,7 @@ const uint8_t* CtBattleFieldEnemyRecs(void);     // ROM $E4/F600 (256 x 10B fiel
 // list is valid, -1 when this value's handler is not ported (05/06 have their own wrapper; 07-09 and
 // 11-17 are underived), and -2 on the ROM's OWN non-termination in C1/ADA1. Graded by --sweepaitarget.
 int CtBattleAiResolveList(uint8_t* mem, const uint8_t* rom, int value);
+void CtBattleAreaBandMem(uint8_t* mem);   // C1/25A3, the band of C1/1FDD routine 0 (ct.exe --sweepband25a3)
 // Program op D9 n k (CD/19B1 -> CD/2433, CE/E7CF, CD/2466, D1/F9AF) on a bare $7E page; graded by ct --sweepfxline.
 void CtBattleFxLineMem(uint8_t* mem, int n, int k);
 // The shape-window ops 8A / 89 / AB / 8B (CD/2FED, CD/2FBC, CD/24F3, CD/2FB7 -> the six shapes) on a bare 128 KB

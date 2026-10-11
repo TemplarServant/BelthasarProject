@@ -3079,6 +3079,13 @@ static void battleAreaBand25A3(CtBattleHost* h) {
   if (s[0x99C0] & 0x80)                                                 // C1/27C5
     for (int x = 0; x < 0x0B; x++) s[0x99C0 + x] = s[0x99C1 + x];
 }
+// The sweep's entry point (ct.exe --sweepband25a3): the band on a bare $7E image, the feet read from $1D0C / $1D23.
+void CtBattleAreaBandMem(uint8_t* mem) {
+  static CtBattleHost h;
+  memset(&h, 0, sizeof h);
+  h.mem = mem;
+  battleAreaBand25A3(&h);
+}
 // C1/C586-C730 -- THE AREA PASS of C1/C1DD, for an enemy attacker ($0C = CC/86CA[$B18C * 2], the tech's area byte). The
 // record CC/2AB0[$0C] (bank CC) is a count and 3-byte entries `$3D, $04, $08 | $0E << 7`; for each, C1/C95C[$04 & 7F]
 // stages $9604-$9608 and $04 bit 7 picks C1/2986 ($986E = $3D, the position machine: no list) or C1/1FDD ($99CC = $3D,
@@ -3087,24 +3094,36 @@ static void battleAreaBand25A3(CtBattleHost* h) {
 // Then C659-C72B by $3A: no list at all ($99C0/$99C1 both FF, $3A != 4) -> C1/C72B; $3A = 4 appends $B2AE; unless $3A = 5
 // the absent combatants ($AEFF FF) are squeezed out; $AD8D = the index of the first FF (none -> C1/C72B).
 // Every enemy tech with an area byte has 08: CC/2B30 = `01 / 00 06 02` -- C1/C813 ($9604 = $0A, $9605 = $0C, $9606 = $06,
-// $9607 = 02, $9608 = 0) and C1/1FDD routine 0, the band C1/25A3. Other shapes are not ported: traced, the list kept.
-// Returns 0 for C1/C72B.
-static int battleEnemyAreaC586(CtBattleHost* h, int area, int v3A) {
+// $9607 = 02, $9608 = 0) and C1/1FDD routine 0, the band C1/25A3.
+// A PC's tech takes the same pass (C1/C1DD's PC arm C23E-C257: `STZ $0A` -- the band's candidates are the enemies -- and
+// $0C = CC/1ACC[id * 2], the whole byte). C1/C74C stages $00 = participant 0's seat (`LDA $B2EA / TAX / LDA $B1BE,X`),
+// $06 = $B2AE, $0C = $B18B. Lucca's Flame Toss (11, group 0C, area 05) is CC/2B24 = `01 / 00 00 82`: C1/C78D ($9605 = $00,
+// the caster, `$9608 = 1`) and the band; Slash (02, area 01) is `01 / 00 00 02`. MEASURED, the rule's cartridge,
+// saves/field_re/m81_nuns_lake.state with $2839 = 80 (Flame Toss learned), Crono's attack then Lucca's Tech / Flame Toss
+// / A: `$9604-$9608 = 00 01 03 02 01` and `$99C0 = 03` at the select (f767), `$AD8E = 03` at the dispatch (f779); the
+// band itself is graded by ct.exe --sweepband25a3 (8000/8000, 955 of them $9608 non-zero with two victims or more).
+// pcAtk < 0: an enemy's tech, as before; else the PC caster's seat and pcTgt the target. Other shapes are not ported:
+// traced, nothing written. Returns 0 for C1/C72B, 2 when a shape is not ported (the caller keeps its list), else 1.
+static int battleAreaC586(CtBattleHost* h, int area, int v3A, int pcAtk, int pcTgt) {
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
   int rec = rom[0x0C2AB0 + area * 2] | (rom[0x0C2AB1 + area * 2] << 8);   // C586-C58E $3B
   int cnt = rom[0x0C0000 + rec];                                        // C594 $14
-  int r0A = 1, r0C = s[0xB18B], r06 = s[0xB2AE];                         // C27B; C59A JSR C1/C74C (C782-C78A)
+  int r0A = 1, r0C = s[0xB18B], r06 = s[0xB2AE], r00 = -1;               // C27B; C59A JSR C1/C74C (C782-C78A)
+  if (pcAtk >= 0) { r0A = 0; r0C = r00 = pcAtk; r06 = pcTgt; }           // C248 STZ $0A; C759-C760 $00 (a single tech)
+  for (int k = 0, off = 1; k < cnt; k++, off += 3) {                    // the shapes, before anything is written
+    int e3D = rom[0x0C0000 + rec + off], e04 = rom[0x0C0001 + rec + off], fn = e04 & 0x7F;
+    if (!(fn == 6 || (fn == 0 && r00 >= 0)) || (e04 & 0x80) || (e3D != 0 && e3D != 4)) {   // C1/C813 / C1/C78D + the band
+      if (getenv("CT_BATTLE_TRACE"))
+        fprintf(stderr, "areafx f%d area %02X entry %d (%02X %02X): this shape is NOT PORTED -- the list kept\n",
+                h->frames, area, k, e3D, e04);
+      return 2;
+    }
+  }
   for (int k = 0, off = 1; k < cnt; k++, off += 3) {                    // C5A3-C656
     int e3D = rom[0x0C0000 + rec + off], e04 = rom[0x0C0001 + rec + off], e2 = rom[0x0C0002 + rec + off];
     int e08 = e2 & 0x7F, e0E = (e2 & 0x80) ? 1 : 0;
     int fn = e04 & 0x7F;
-    if (fn != 6 || (e04 & 0x80) || (e3D != 0 && e3D != 4)) {            // only C1/C813 + C1/1FDD's band are ported
-      if (getenv("CT_BATTLE_TRACE"))
-        fprintf(stderr, "enemyfx f%d area %02X entry %d (%02X %02X %02X): this shape is NOT PORTED -- the list kept\n",
-                h->frames, area, k, e3D, e04, e2);
-      return 1;
-    }
-    s[0x9604] = (uint8_t)r0A; s[0x9605] = (uint8_t)r0C; s[0x9606] = (uint8_t)r06;   // C1/C813
+    s[0x9604] = (uint8_t)r0A; s[0x9605] = (uint8_t)(fn == 0 ? r00 : r0C); s[0x9606] = (uint8_t)r06;   // C1/C78D / C1/C813
     s[0x9607] = (uint8_t)e08; s[0x9608] = (uint8_t)e0E;
     s[0x99CC] = (uint8_t)e3D;                                           // C741 STA $99CC
     battleAreaBand25A3(h);                                              // C746 LDA #07 / JSR C1/0003 -> C1/1FDD
@@ -3196,7 +3215,7 @@ static int battleEnemyVictimsC1DD(CtBattleHost* h, int atk) {
   s[0xAD8D] = (uint8_t)n;
   if (v3A == 0 || v3A == 2) s[0xAD8E] = (uint8_t)battleTargetRedirect(s, s[0xB2AE]);   // C55F-C570
   s[0xAF23] = 0;                                                  // C57A STZ $12 / C57C STZ $AF23
-  if (area && !battleEnemyAreaC586(h, area, v3A)) { s[0xAF23] = 1; return 0; }   // C57F LDA $0C / BNE -> C586
+  if (area && !battleAreaC586(h, area, v3A, -1, 0)) { s[0xAF23] = 1; return 0; }   // C57F LDA $0C / BNE -> C586
   n = s[0xAD8D];
   h->aiTurnTgtN = n < 1 ? 1 : (n > 8 ? 8 : n);
   for (int i = 0; i < h->aiTurnTgtN; i++) h->aiTurnTgtList[i] = s[0xAD8E + i];
@@ -5638,6 +5657,25 @@ static int battleBuildHitSet(CtBattleHost* h, int group, int primary, int* out, 
       if (s[0xAF02 + slot] != 0xFF) out[n++] = 3 + slot;         // alive gate ($96F5/$9FF7, C1/2047-204F)
     if (n > 0) return n;
     out[0] = primary; return 1;                                  // degenerate (none alive): keep the primary
+  }
+  // THE BAND GROUPS 0B (Slash, C1/2169) and 0C (Flame Toss, C1/2203): a single-enemy cursor (C1/20A9 + C1/1B55 / C1/27FA on
+  // the pad), then `STZ $9604 / LDA $960F / STA $9605` (the caster), $9606 = the cursor's $99C0[$9614], $9607 = 02, $9608 =
+  // 00 (0B) / 01 (0C), JSR C1/25A3 and C1/27E8 (`$960C = 80`, $99C0 -> $A62D): the hand lights every enemy in the band.
+  // MEASURED, the rule's cartridge (m81_nuns_lake.state, Flame Toss learned): `$9604-$9608 = 00 01 03 02 01` at the select's
+  // open (f767), 00 01 04 02 01 on the next Down (f775). The cursor's renderer calls this every frame, so the bytes the
+  // band writes are put back: the dispatch's own area pass (C1/C586, battleAreaC586) is the one that stages them.
+  if ((group == 0x0B || group == 0x0C) && primary >= 3 && primary < 11 && s[0x95D5] < 3 && cap > 0) {
+    uint8_t keep[5 + 12 + 12];
+    memcpy(keep, s + 0x9604, 5); memcpy(keep + 5, s + 0x99C0, 12); memcpy(keep + 17, s + 0xA62D, 12);
+    s[0x9604] = 0; s[0x9605] = s[0x95D5]; s[0x9606] = (uint8_t)primary;   // 2191-2238 ($960F = the chooser)
+    s[0x9607] = 2; s[0x9608] = (uint8_t)(group == 0x0C);                  // 223B-2242 / 21A1-21A6
+    battleAreaBand25A3(h);                                                 // 2245 / 21A9 JSR C1/25A3
+    int n = 0;
+    for (int x = 0; x < 11 && n < cap; x++)
+      if (s[0x99C0 + x] != 0xFF) out[n++] = s[0x99C0 + x];
+    memcpy(s + 0x9604, keep, 5); memcpy(s + 0x99C0, keep + 5, 12); memcpy(s + 0xA62D, keep + 17, 12);
+    if (n > 0) return n;
+    out[0] = primary; return 1;
   }
   if ((group & 0x7F) == 0x01 && cap > 0) {                      // C1/C1DD group 01: every seat whose $AEFF is not FF,
     int n = 0;                                                   //   in SEAT order (not the cursor's caster-first list)
@@ -11736,6 +11774,20 @@ static void battleDispatchScheduled(CtBattleHost* h) {
         }
       }
       h->hitSetHeld = 0;
+      // C1/C1DD's PC arm: the tech's area byte CC/1ACC[id * 2] ($0C) runs the area pass C1/C586 at the dispatch, on the
+      // positions of that frame -- Lucca's Flame Toss (group 0C, area 05) takes every enemy in the band from her toward
+      // the target (battleAreaC586). The user, 2026-10-11 (translated from Portuguese): "Lucca's flame toss should hit
+      // more than one enemy in a line" -- the port dispatched group 0C to one victim. A shape the pass does not port
+      // (the radius of the Cyclone's area 03, above) leaves the group's own set.
+      { int area = (rom && techId < 0x75) ? rom[0x0C1ACC + techId * 2] : 0;
+        if (h->actTgtN == 0 && area && tgt >= 3 && actor >= 0 && actor < 3 && battleAreaC586(h, area, 0, actor, tgt) == 1) {
+          s[0xB2AE] = (uint8_t)tgt;                                  // C1/C74C's $06: the ROM's $B2AE is the target
+          for (int x = 0; x < 0x0B && h->actTgtN < 8; x++) {
+            int v = s[0xAD8E + x];
+            if (v == 0xFF) break;
+            h->actTgtList[h->actTgtN++] = v;
+          }
+        } }
       if (h->actTgtN == 0) h->actTgtN = battleBuildHitSet(h, grp, tgt, h->actTgtList, 8); }
     // C1/BB93-BBD1: `$AE90 = $AE94 = 0`, the victims C1/C1DD left in $AD8E copied to $AECC ($AECB counts them, up to $AD8D or
     // an FF), then C1/AD09 ($AE95, the first's bit) and C1/AD35 ($AE99, the others') -- before C1/BF79. The port left the

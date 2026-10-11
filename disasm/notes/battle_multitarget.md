@@ -277,8 +277,8 @@ POSITIONS: the walkers stopped for a whole enemy turn instead of at C1/4058's $A
 zero $E5 (the $A4 cycle ran a group ahead). Both fixed and graded: tools/naga_walk_cmp.py, 3600 frames identical
 (check battle-naga-ettes-walk-as-the-cartridge-through-their-turns). The user's exact moment is not in the snapshot (a
 CTFS holds no battle), so the case is closed by the mechanism, not by a replay.
-Still open: the port gates the candidates on `$AF02` alone, not the ROM's four bytes; groups 0B 0C 0D 0F 11 13 1B
-(the line and other shapes) still dispatch one victim.
+Still open: the port gates the candidates on `$AF02` alone, not the ROM's four bytes; groups 0D 0F 11 13 1B (the other
+shapes) still dispatch one victim. Groups 0B / 0C: see section 10.
 
 ---
 
@@ -327,3 +327,36 @@ to the D8, Crono ready f271 on both sides) and puts the keys on the same frames 
 
 **Open.** `$99C0` is one table for every PC: a second PC's select between a Cyclone's confirm
 and its dispatch would rewrite it on the cartridge; the port writes it only at a radius tech's confirm.
+
+---
+
+## 10 — 2026-10-11: the band techs (Slash 02, Flame Toss 11) -- C1/C586 for a PC
+
+The user: "Lucca's flame toss should hit more than one enemy in a line". Flame Toss is group 0C, area 05 (CC/1ACB);
+Slash group 0B, area 01. The port dispatched both to one victim.
+
+**The select** (C1/1FF8[0B] = C1/2169, [0C] = C1/2203): a single-enemy cursor (C1/20A9, the pad through C1/1B55 /
+C1/27FA), then `STZ $9604 / LDA $960F / STA $9605` (the caster), `$9606 = $99C0[$9614]` (the cursor's enemy),
+`$9607 = 02`, `$9608 = 00` (0B) / `01` (0C), `JSR C1/25A3` and `JMP C1/27E8` (`$960C = 80`, `$99C0 -> $A62D`): the hand
+lights every enemy in the band.
+
+**The dispatch** (C1/C1DD's PC arm, C23E-C257): `STZ $0A` (the candidates are the enemies), `$0C = CC/1ACC[id*2]` (the
+whole byte), then C1/C586 over CC/2AB0[$0C]: area 05 = CC/2B24 `01 / 00 00 82`, area 01 = CC/2B14 `01 / 00 00 02` --
+C1/C95C[0] = C1/C78D (`$9604 = $0A`, `$9605 = $00`, `$9606 = $06`, `$9607 = $08`, `$9608 = $0E`; C1/C74C stages $00 =
+participant 0's seat, $06 = $B2AE) and C1/1FDD routine 0, the band. The list goes to $AD8E / $AECC (an enemy whose $AF12
+bit 7 is set left out), C659-C72B squeezes the absent.
+
+**Measured**, the rule's cartridge, saves/field_re/m81_nuns_lake.state with `PEEK_POKE 7E2839=80` (Flame Toss learned):
+Crono attacks (f470), Lucca's menu f727, Tech / Flame Toss / A: `$9604-$9608 = 00 01 03 02 01`, `$99C0 = $A62D = 03` at
+the select (f767); a Down: `00 01 04 02 01`, `04` (f775); the dispatch `$AD8E = 03` / `04` .. (f779 / f787). Swept over
+16 timings x 4 targets: always one victim -- these Naga-ettes stand > 16 px off every Lucca-target line (the nearest,
+cmb5 behind cmb4: 21 px).
+
+**Ported**: battle.c battleAreaC586 (the enemies' C1/C586, now with the PC arm: C1/C78D for `fn` 0) at the tech
+dispatch; battleBuildHitSet's groups 0B / 0C for the cursor (the band's bytes put back: the renderer calls it every
+frame). The band itself is graded by `ct.exe --sweepband25a3` (8000/8000 byte-exact; 955 cases with $9608 non-zero and
+two victims or more) -- before, only the enemies' area 08 ($9608 = 0) had reached it. Checks sweep-band-25a3 and
+battle-flame-toss-band-vs-rule-cartridge.
+
+**Open**: no live fixture yet where the cartridge's Flame Toss takes two victims (the band is graded by the sweep);
+group 0D (C1/21AF, tech 5A) and the area entries other than C1/C78D / C1/C813 + routines 0 / 4 are not ported.

@@ -15352,10 +15352,11 @@ int main(int argc, char** argv) {
       const char* ta = dbg.talkAt; int taf = ta ? atoi(ta) : 0;
       if (frameNo == taf) CtSceneActivate(f.vm, talkObj);
     }
-    // CT_POKEWRAM="ADDR=HH,...": WRAM bytes written once, on the first frame of a --selftest run -- ct.exe's PEEK_POKE
-    // grammar (flat offsets, a 7E/7F bank folded). The port's side of a state no drive reaches cheaply: e.g. $7F01EC,
-    // the lost-battle byte scene 0AC's `48 EC 01 7F 19` reads before its op FF 96.
-    if (selftest && frameNo == 1) {
+    // CT_POKEWRAM="ADDR=HH,...": WRAM bytes written once, on the first frame of a run (--selftest or the interactive path
+    // a battle drive needs) -- ct.exe's PEEK_POKE grammar (flat offsets, a 7E/7F bank folded). The port's side of a state
+    // no drive reaches cheaply: e.g. $7F01EC, the lost-battle byte scene 0AC's `48 EC 01 7F 19` reads before its op FF 96,
+    // or a learned-tech seed $2837+char before a fight boots.
+    if (frameNo == 1) {
       static const char* pk; static int pkRead;
       if (!pkRead) { pkRead = 1; pk = getenv("CT_POKEWRAM"); }
       uint8_t* pw = pk ? CtWramSys(fieldWram()) : NULL;
