@@ -20,6 +20,9 @@ OWN cursor at the 0E6 load: the five draws $FE00[c+1..c+5] give local[6] (the la
 
 (The port's whole load lands in one presented frame, so its cursor before the draws is read as the one after, less 5.)
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os
 import re
 import subprocess
@@ -58,7 +61,7 @@ def grade(name, before, after, local, ids, table):
 
 
 def main():
-    rom = open(ROM, 'rb').read()
+    rom = _romlib.load(ROM)
     watch = '7E0100:2,7E01F8:1,7F020C:1,' + ','.join('7E%04X:1' % a for a in IDS)
     env = dict(os.environ, CT_ORACLE_LOGICAL='1', CT_ORACLE_VIRTUAL_BEAM='1')
     r = subprocess.run([CT, '--monitor', watch, '--from', 'boot', '--frames', str(ORACLE_FRAMES), '--diff'],

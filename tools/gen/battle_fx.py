@@ -35,6 +35,9 @@ cwd). Emits src/data/battle_fx.h. With --verify, regenerates the settled "17"(GA
 f755) frames, reconstructs the digits from the baked tiles+pal0 at the oracle's own digit OAM
 positions, and pixel-diffs vs the oracle fb (verified 73/73 + 79/79 opaque px, 0 mismatch d>24).
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os, sys, subprocess
 sys.path.insert(0, 'tools')
 from ctlib import oam
@@ -151,7 +154,7 @@ def emit(fp, vram, cgram, fpal):
     W("};\n")
 
     # --- heal/restore digit palette: the ROM's sub-palette D1/4D88, next to the damage one D1/4D80 ---
-    rom = open(ROM, 'rb').read()
+    rom = _romlib.load(ROM)
     sub = lambda a: [rom[a + 2*i] | (rom[a + 2*i + 1] << 8) for i in range(4)]
     dmg, heal = sub(0x114D80), sub(0x114D88)                    # D1/4D80, D1/4D88 (HiROM, no copier header)
     assert dmg == dpal[:4], 'D1/4D80 is not the baked damage palette'

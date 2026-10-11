@@ -33,6 +33,9 @@ The screen reuses the SAME chrome TILES as every other menu screen (0x300-0x313 
 
 Port of tools/gen_menuloader.py (which spliced saves/ct_real_save.srm into a 1-frame boot state; the same capture).
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import argparse, os, subprocess, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -145,7 +148,7 @@ with open(OUT, 'w', encoding='utf-8') as f:
         f.write("  {" + ",".join(cells8) + "},\n")
     f.write("};\n\n")
 
-    rom = open(ROM, 'rb').read()
+    rom = _romlib.load(ROM)
     # ---- the two 16x16 SPRITE-ISH bits this screen draws that are not font ---------------------
     # (1) THE PARTY FACE ICONS, BG1 tiles 0x1E0-0x1E3 / 0x1E8-0x1EB / 0x1F0-0x1F3 at cols 15-16 of the
     # party window's three rows.  They are NOT generated: the four 4bpp tiles of each are stored RAW

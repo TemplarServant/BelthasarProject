@@ -6,6 +6,9 @@ map_renderer). Composites all three layers and emulates the SNES color-math
 
 CLI: python assets/maps.py <rom.sfc> scene <index> <out.png> [--no-blend]
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lz import lz_decompress
@@ -408,7 +411,7 @@ def render_scene(rom, scene_index, out, blend=True, full=False, anim_frame=0):
 if __name__ == '__main__':
     if len(sys.argv) < 5 or sys.argv[2] != 'scene':
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     frame = 0
     if '--frame' in sys.argv:
         frame = int(sys.argv[sys.argv.index('--frame') + 1])

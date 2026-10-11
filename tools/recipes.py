@@ -23,7 +23,6 @@ Steps:
   ["poke", "ADDR=HH,..."]  set WRAM bytes on the current state (PEEK_POKE on a 0-frame --peek): for the bytes a
                          recipe cannot replay (a capture's play clock, a party's sheets the owner's own fights left)
                          or that a capture's own provenance poked (a keeper's stores, a minigame's points)
-  ["navworld"]           ct.exe --navworld: the scripted walk from Crono's bedroom to the overworld
   ["teleport", scene, tx, ty, facing, frames(, method)]  ct.exe --teleport: poke the location request ($0100-$0104)
                          and let the ROM's own loader run it (method jmp = enter C0:0066, the default; ow; req), then
                          run `frames` frames with no pad -- how several captures were made from an earlier state
@@ -140,6 +139,14 @@ def check_expect(r, path):
     return bad
 
 
+def write_srm(st):
+    """<state>.srm: the battery RAM of a recipe's state -- the CTLS payload's last block (cart_handleState), as
+    tools/gen/menu_loader.py reads it. An `sram` step boots the oracle with it (CT_ORACLE_SRAM)."""
+    d = open(st, 'rb').read()
+    open(st + '.srm', 'wb').write(d[-8192:])
+    return st + '.srm'
+
+
 def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
     r = recipes[name]
     os.makedirs(OUT, exist_ok=True)
@@ -159,7 +166,7 @@ def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
         op = step[0]
         if op == 'sram':
             srm = make(recipes, step[1], rom_path, rom_sha, tag, False, depth + 1)
-            env['CT_ORACLE_SRAM'] = srm + '.srm'
+            env['CT_ORACLE_SRAM'] = srm + '.srm' if os.path.exists(srm + '.srm') else write_srm(srm)
             continue
         if op == 'power_on':
             p = run([rom_path, '--fb', tmp + '.raw', '--frames', str(step[1])], dict(env, PEEK_SAVE=tmp + '.state'), log)
@@ -171,8 +178,6 @@ def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
         elif op == 'poke':
             p = run([rom_path, '--peek', cur, tmp + '.raw', '--btnscript', '0:0'],
                     dict(env, PEEK_SAVE=tmp + '.state', PEEK_POKE=step[1]), log)
-        elif op == 'navworld':
-            p = run([rom_path, '--navworld', tmp + '.state', '--from', cur], env, log)
         elif op == 'teleport':
             sc, tx, ty, face, frames = step[1:6]
             meth = step[6] if len(step) > 6 else 'jmp'
@@ -194,6 +199,7 @@ def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
     if bad:
         os.remove(st)
         sys.exit('recipe %s: the result is not what the recipe expects: %s (log %s)' % (name, '; '.join(bad), log.name))
+    write_srm(st)
     open(meta, 'w').write(key)
     for f in glob.glob(os.path.join(OUT, name + '.step*')):
         os.remove(f)

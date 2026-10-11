@@ -8,8 +8,11 @@
 #       char EXCEPT this block, so 0x36-0x40 there IS the canonical recalc of each char's join gear; the same 640
 #       bytes as the capture gato_t0 this was first made from). Our equip is read-only, so these static derived
 #       stats are exact; port the C2 recalc if equip-change is ever added.
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os
-ROM=open("Chrono_Trigger_USA_SNES.sfc","rb").read()
+ROM=_romlib.load("Chrono_Trigger_USA_SNES.sfc")
 def _wram(path):
     d=open(path,"rb").read()
     if len(d)==0x20000: return d

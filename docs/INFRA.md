@@ -89,7 +89,7 @@ Tier contents and the meaning of each pinned baseline: [`docs/TESTING.md`](TESTI
 | `disasm/`, `disasm/notes/` | The RE substrate: annotated 65816 traces, per-subsystem notes (`events.md`, `scenes.md`, `sprites.md`, `collision.md`...). Trace/dialogue artifacts are gitignored (ROM-derived, regenerable). |
 | `tools/` | Canonical tooling: `build.bat`/`build.py`, `regress.py` + `regress_checks.json`, `dis.py`, `s9x_to_lake.py`, `disasm65816.py`, `get_sdl2.ps1`, `ct.py` (agent-facing wrapper), and the `ctlib/` helper library. One-off probe scripts use the `tools/_*.py` underscore convention and are gitignored (tracked exceptions like `tools/owbpal0.py` stay tracked). |
 | `build/` | CMake/Ninja output (gitignored): `ct.exe`, `ct_field.exe`, `ct_world.exe`, `ct_viewer.exe`. |
-| `saves/` | ROM-derived savestates/captures (gitignored; regenerate e.g. via `ct.exe --navworld`). |
+| `saves/` | ROM-derived savestates/captures (gitignored; the regenerable ones come from recipes: `python tools/fixtures.py make all`). |
 | repo root | **Scratch capture convention:** oracle work dumps its debris at the root — `.state` savestates, `.bin`/`.oam`/`.vram` WRAM/OAM/VRAM captures, `.raw` framebuffers, `.png` probe shots, `SHOT*`, probe `.txt`/`.json`. All root-anchored-gitignored; the ROM (`Chrono_Trigger_USA_SNES.sfc`, user-supplied) also lives here. |
 | `third_party/SDL2/` | SDL2 dev libs (auto-fetched, gitignored). |
 | `docs/` | This guide, `DEBUG_SURFACE.md`, `TESTING.md`. |
@@ -133,7 +133,7 @@ invalidates every payload (CRC will not save you from a layout change — re-cap
 
 ### LakeSnes `.state` on disk: CTLS + legacy
 
-`ct.exe` save paths (`--savestate`, `--navworld`, `--peek`+`PEEK_SAVE`, `--teleport --out`,
+`ct.exe` save paths (`--savestate`, `--peek`+`PEEK_SAVE`, `--teleport --out`,
 `--owforce`, …) write a **CTLS** container around the raw `snes_handleState` payload:
 
 | Offset | Field |

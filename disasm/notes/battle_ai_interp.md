@@ -816,7 +816,10 @@ and when entry 0 is unmarked the `TXA` leaves the COUNT itself in A, so the targ
 | 08 | 90BE | AC14 list, +2/+3 (16-bit) | HP <= operand (marked, AE21) |
 | 09 / 0B | 9130 / 91F9 | AC14 list, +2 offset (`$0B` = 0), +3 | `[$0A],block` >= / <= operand: the FIRST such entry, then AE21 on the UNMARKED list |
 | 0A | 918E | AC14 list (ring `$B23A` picks one), +2 offset, +3 | `[$0A],block` BIT operand |
-| 0C-10 1F | 925D-93E6 9765 | C1/0003 (the C1/2986 position machine) | NOT PORTED |
+| 0C 1F | 925D 9765 | AC14, +2 polarity; C1/2986 sub-mode 04 / 0E (C1/2B37 / 2B2B) | dist^2 from self to `$AECC` <= 0400 / 0900 (00) or above it |
+| 0D 0E | 92A3 9314 | AC14 list; sub-mode 05 / (+3) + 6; +2 polarity | marks each entry (not self) with `$9872` = 0, AE21, then the LAST `$9872` against the polarity |
+| 0F | 938D | C1/2986 sub-mode 08 (C1/2C02, a path test through C1/0222 / 01F9 / 2AEF and the body box) | NOT PORTED (no script uses it) |
+| 10 | 93E6 | +2 / +3 pick 09-0C | self's foot Y >= 80 / < 80, X >= B0 / < 50 (C1/2CA7-2CE0) |
 | 11 12 | 942A 9474 | +1 (0 -> 40, 1 -> 50), +2/+3 | `$B19E[slot*4]` high nibble (and `$B19F`) |
 | 13 | 94D2 | +1 bit 0, +3 | `$B19E` bit 4 |
 | 14 | 9514 | +1..+3 | bit 4 clear and: `$AF0A[$B19E & 0F]` == +1; `$AF0A[0]` != +1 (the `AND #10` left X = 0); never; always |
@@ -855,7 +858,13 @@ ALL of WRAM but the stack page.
 | 2 | each handler alone, the cursor on every 1/40th occurrence of its byte in bank $CC, `$B1CF` 0/1/80 | 6925/6925 (all 35 ported handlers) |
 | 3 | C1/8C3E + the eval handler, a real section, `$B263`/`$B26B`/`$B1D4`/`$B2C0` varied | 1208/1208 |
 
-EXCUSED (counted): a case whose walk meets C1/0003 (0C-10, 1F) or a resolver without a WRAM port (05/06 need the
+2026-10-11: C1/2986's simple sub-modes are ported (battle.c `aiPos2986`: the head's mirror copy, 04/0E with C1/0089's
+scratch -- `$77`/`$78`, `$80`, `$82`, `$AD`-`$B0`, `$9893` --, 05-07, 09-0C), so 0C, 0D, 0E, 10 and 1F are graded: the ROM
+runs C1/0003 entry 5 when its sub-mode is one of those, and the feet are fuzzed on a stream of their own. Phase 2:
+0C 159, 0D 165, 0E 156, 10 200, 1F 194 cases, byte-exact. The census of CC/8B08: 0C in 66's and 6A's counters
+(`0C 06 00 00`, `0C 17 01 00`), 10 in F8's (`10 00 01 01`), 1F in the counters of 59, 79, 7A, 90, 92 and AC; 0D-0F in no script.
+
+EXCUSED (counted): a case whose walk meets an unported C1/0003 (0F, 0E's sub-modes 08 and up) or a resolver without a WRAM port (05/06 need the
 live host's battleAiTarget; 07-09, 11-17 underived). The live battle closes such a condition and gives such a resolver
 an empty list (the old loop's policy), with a `battletrace ai-unknown-*` line.
 

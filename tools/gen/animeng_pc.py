@@ -18,9 +18,12 @@
 #     Marle (176,111)) -- cross-validated: gather(idx) == the live VRAM byte-exact (Crono idle 10/10 + strike
 #     9/9; Marle idle 11/11) AND the E3 (dx,dy) == the retired bake cells (ctBattleStanceObj / ctCronoIdleAdd /
 #     ctBattleAnimKf A1-A6 / ctMarleAtkKf), so each bake is reproduced 1:1.
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
-ROM = open(os.path.join(ROOT, "Chrono_Trigger_USA_SNES.sfc"), "rb").read()
+ROM = _romlib.load(os.path.join(ROOT, "Chrono_Trigger_USA_SNES.sfc"))
 def foff(bank, addr): return ((bank - 0xC0) << 16) | addr
 def sext(b): return b - 256 if b >= 0x80 else b
 STRIDE = 0x28

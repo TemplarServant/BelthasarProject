@@ -8,6 +8,9 @@ cross-check reference for the C port.
 CLI: python assets/lz.py <rom.sfc> <hex-offset>
      -> prints decompressed size and an FNV-1a/32 hash of the output.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys
 
 def _copy_bytes(data, out, byte_pos, work_pos, small):
@@ -82,7 +85,7 @@ def _fnv32(b):
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     off = int(sys.argv[2], 16)
     data = lz_decompress(rom, off)
     print("LZ @0x%X: decompressed %d bytes, fnv32=%08X" % (off, len(data), _fnv32(data)))

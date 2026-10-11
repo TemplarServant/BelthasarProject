@@ -88,6 +88,8 @@
      "doc": "loc 07B (storyline 0F), Crono at the soldiers' table"},
     {"path": "saves/field_re/s07b_table_seat.lakewram", "recipe": "fxf_s07b_table_seat", "kind": "lakewram",
      "doc": "the same frame's WRAM for ct_field --loadwram"},
+    {"path": "saves/field_re/m81_frog.state", "recipe": "fxf_m81_frog", "kind": "state",
+     "doc": "the Cathedral (loc 081, storyline 12), Frog's cutscene after the Naga-ette fight, obj4 at ip 050F"},
     {"path": "saves/field_re/m81_frog_pre_lake.state", "recipe": "fxf_m81_frog_pre", "kind": "state",
      "doc": "the Cathedral (loc 081, storyline 12), Frog parked one op before his weapon colours"},
     {"path": "saves/field_re/m81_frog_pre_lake.lakewram", "recipe": "fxf_m81_frog_pre", "kind": "lakewram",

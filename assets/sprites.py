@@ -17,6 +17,9 @@ CLI:
   python assets/sprites.py <rom.sfc> chars <out.png>                  # the 7 PCs
   python assets/sprites.py <rom.sfc> render <sprite_index> <out.png>  # raw chip sheet
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lz import lz_decompress
@@ -265,7 +268,7 @@ def render_chars(rom, out, tiles_each=96):
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     cmd = sys.argv[2]
     if cmd == 'info':
         ptrs, gfx_ptrs, pal_ptrs, _ = parse_tables(rom)

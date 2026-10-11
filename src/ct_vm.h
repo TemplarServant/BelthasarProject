@@ -389,6 +389,7 @@ int  CtSceneOffMainLoop(const CtScene* sc);
 // the vblank, then reboots through C0/0000. 1 = the host owes that reboot; Done marks it taken. The scene's main
 // loop is dead from the op on (CtSceneTick does nothing), and the reboot throws the scene away.
 int  CtSceneReboot(const CtScene* sc);
+int  CtSceneColdReset(const CtScene* sc);
 void CtSceneRebootDone(CtScene* sc);
 const char* CtGetName(int id);                 // current name text (ASCII) for char-id 0-7
 void CtSetName(int id, const char* name);      // set char-id's name (<=5 chars) -- the naming screen

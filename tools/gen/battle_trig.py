@@ -21,6 +21,9 @@ bake method -- nothing computed/approximated) and emits them as C arrays:
 Run from repo root (needs Chrono_Trigger_USA_SNES.sfc in cwd). Emits src/data/battle_trig.h.
 --verify re-reads the ROM and spot-checks a handful of table entries + the derived sin/atan2.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os, sys
 
 ROM = os.environ.get('CT_ROM', 'Chrono_Trigger_USA_SNES.sfc')
@@ -44,7 +47,7 @@ def emit_array(rom, name, off, note):
 
 
 def main():
-    rom = open(ROM, 'rb').read()
+    rom = _romlib.load(ROM)
     if '--verify' in sys.argv:
         # spot-check the SINE reader (signed) reproduces the physics we validated (angle 0x40 == +255 == +Y).
         def sin_signed(a):

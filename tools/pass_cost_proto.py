@@ -9,6 +9,9 @@ CT_HOOK_DUMPWRAM). Every instruction is charged LakeSnes's cost as the beam trac
 the pass sub-traces in build/_menuinit/*_pass.txt); a branch is 12 not taken / 18 taken; a data access whose cost
 depends on where it lands (ROM / WRAM) is priced here by the bank it reads.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os
 import sys
 
@@ -16,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ctlib.costtab import CostTab  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ROM = open(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'), 'rb').read()
+ROM = _romlib.load(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'))
 TRACES = ([os.path.join(ROOT, 'build', '_menuinit', t + '_pass.txt') for t in ('p3_close', 'shop_close', 'door468')]
           + [os.path.join(ROOT, 'build', '_menuinit', t + '_pre.txt') for t in ('p3_close', 'shop_close')])
 _T = None

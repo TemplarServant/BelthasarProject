@@ -15,6 +15,9 @@
   (the same SNES metatile encoding the field maps use). World pixel size = 96*16 x 128*16 = 1536 x 2048.
 
 CLI: python assets/overworld.py <rom.sfc> <world 0-7> <out.png>"""
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lz import lz_decompress
@@ -119,7 +122,7 @@ def render_overworld(rom, world):
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     world = int(sys.argv[2])
     out = sys.argv[3] if len(sys.argv) > 3 else 'overworld.png'
     rgb, W, H = render_overworld(rom, world)

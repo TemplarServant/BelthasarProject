@@ -94,7 +94,7 @@ Everything derived from the ROM is generated on your machine:
 | Output | Made by | Used for |
 |---|---|---|
 | `ct_assets.dat` | [`assets/extract_assets.py`](../assets/extract_assets.py) | The asset container: scene palettes, tilesets, maps, sprites, the font, strings and dialogue, scene scripts, collision, exits. The field and the menus draw from it without the ROM. |
-| `src/data/*.h` | the generators in `tools/` | 51 tables the engine compiles in: battle animation records, menu chrome, the title sequence, the overworld placard, and so on. Of these, 12 are generated from the ROM alone, 2 from oracle runs from power-on, and 37 from oracle states at specific game moments. |
+| `src/data/*.h` | the generators in `tools/` | 47 tables the engine compiles in: battle animation records, menu chrome, the title sequence, the overworld placard, and so on. Of these, 12 are generated from the ROM alone and 35 by oracle runs from power-on (the recipes in `tools/recipes/`). |
 | `src/xlat/*.c` | [`tools/gen/xlat_all.py`](../tools/gen/xlat_all.py) (traces) + [`tools/gen/xlat.py`](../tools/gen/xlat.py) | Five timing-sensitive ROM programs translated instruction by instruction into C (see [ARCHITECTURE.md](ARCHITECTURE.md#translated-stages)). |
 | Oracle states | recipes replayed by the oracle | The savestates the generators and the regression suite start from. Each recipe is a pad script played from power-on, optionally on top of a battery save that another recipe produced. |
 

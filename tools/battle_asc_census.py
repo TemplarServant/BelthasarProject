@@ -15,6 +15,9 @@ Prints, per op not run, the scripts that carry it; then the totals. `--scripts` 
 inert ops. An inert op is not necessarily a defect (some are visual only, some free counters), but every one is
 behaviour the cartridge has and the port does not.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import collections
 import os
 import re
@@ -40,7 +43,7 @@ def handled_ops():
 def terminators():
     """Every op whose handler (C1/7A6B) is C1/4CF0 (the track's end) or C1/4CF7 (the action's end): battleAnimOpClass
     sorts them before the switch, so they run with no case of their own (01, 2F, 4B, 56-5C, 7E, 86-97, ...)."""
-    rom = open(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'), 'rb').read()
+    rom = _romlib.load(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'))
     return {op for op in range(0xDB) if (rom[0x17A6B + op * 2] | rom[0x17A6C + op * 2] << 8) in (0x4CF0, 0x4CF7)}
 
 

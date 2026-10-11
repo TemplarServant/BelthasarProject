@@ -18,6 +18,9 @@ prints `dialogue-refs: N/N script boxes read the ROM's string (C2/57E7), T table
 `dat` (the pack ct_field loads) and for `extractor` (assets/text.py's scan_dialogue_tables run now, the packer's own
 call) -- so a stale pack and a broken extractor both show.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os, struct, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -110,7 +113,7 @@ def grade(label, boxes, packed, rom, subs):
 def main():
     dat = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'ct_assets.dat')
     romp = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc')
-    rom = open(romp, 'rb').read()
+    rom = _romlib.load(romp)
     subs = text.load_dict(rom)
     boxes = script_boxes(rom)
     grade('dat', boxes, packed_dialogue(dat), rom, subs)

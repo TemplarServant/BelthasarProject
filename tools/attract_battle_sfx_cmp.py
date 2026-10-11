@@ -18,6 +18,9 @@ line 43, $1E10 1 -> 0 by C7/08F5), ARAM via PEEK_ARAM. NOT attract_loc0AD_flea.s
 (bit7 clear), so C7/0157 skips every command in that run and set A would be there without any upload.
 Compared: ARAM $2F00-$4702 -- the 6144-byte set plus the three bytes a one-unit-too-long stream would write.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os
 import re
 import subprocess
@@ -55,7 +58,7 @@ def which(img, rom):
 
 
 def main():
-    rom = open(ROM, 'rb').read()
+    rom = _romlib.load(ROM)
     pin, posts_in = port(3840, 'in')
     pout, posts_out = port(4392, 'out')
     oin = oracle('saves/attract_demo_battle_f1850.state', 1, 'in')

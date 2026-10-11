@@ -27,6 +27,9 @@ gato_t2 dumps are MID-SLIDE (window not fully open). ROM = the font + provenance
 Run from repo root. Emits src/data/battle_hud.h; with --verify, reconstructs the strip from the baked
 data and pixel-diffs against the oracle fb over renderY 160..207, printing diff counts.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os, sys, subprocess
 sys.path.insert(0, 'tools')
 from ctlib import fb, oam
@@ -48,7 +51,7 @@ BEVEL = 3                 # box L/R frame thickness (px); only used for the inte
 
 # ---- helpers ----------------------------------------------------------------------------------
 def load_font():
-    rom = open(ROM, 'rb').read()
+    rom = _romlib.load(ROM)
     tiles = []
     for code in range(256):
         o = FONT_FILEOFF + code * 16

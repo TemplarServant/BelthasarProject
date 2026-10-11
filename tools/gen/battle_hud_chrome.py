@@ -23,6 +23,9 @@ the ROM's tilemap for its queue, every bake pixel becomes a sample of (tile word
 checks that the 36864 samples never disagree, that every (tile, line) the law can produce for ANY queue is sampled,
 and writes the table. The renderer then draws any queue state -- seat 0 alone, 3 PCs -- from $0B40.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os
 import re
 import sys
@@ -60,7 +63,7 @@ def word(b, r, c):
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'src', 'data', 'battle_hud_chrome.h')
-    rom = open(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'), 'rb').read()
+    rom = _romlib.load(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'))
     bakes = [('ctBattleHudBg1Enemy', 'src/data/battle_hud.h', (0, 0, 0)),
              ('ctBattleHudBg1Cmd', 'src/data/battle_hud.h', (1, 1, 0)),
              ('ctBattleHudBg1Tgt', 'src/data/battle_hud_sub.h', (0, 1, 0))]

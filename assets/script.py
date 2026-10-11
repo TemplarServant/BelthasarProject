@@ -17,6 +17,9 @@ Usage:
   python assets/script.py <rom.sfc> disasm <index> [obj] [slot]   # disassemble a function
   python assets/script.py <rom.sfc> talk <index> <obj> [slot]     # simulate activate -> dialogue
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lz import lz_decompress
@@ -462,7 +465,7 @@ def simulate_interaction(rom, scene, obj, slot=1):
 if __name__ == '__main__':
     if len(sys.argv) < 4:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     mode, scene = sys.argv[2], int(sys.argv[3])
     if mode == 'scene':
         actors, si = extract_actors(rom, scene)

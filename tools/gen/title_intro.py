@@ -25,6 +25,9 @@ following multiply.  Modelled, the whole swing computes exactly (title_intro.md 
 
 Run from the repo root; needs the ROM + build/ct.exe.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os
 import re
 import subprocess
@@ -86,7 +89,7 @@ cols = [c for c in range(128) if any(tmap[r * 128 + c] for r in range(128))]
 R0, R1, C0, C1 = rows[0], rows[-1], cols[0], cols[-1]
 MW, MH = C1 - C0 + 1, R1 - R0 + 1
 
-rom = open(ROM, 'rb').read()
+rom = _romlib.load(ROM)
 sin = rom[0xF900:0xF900 + 1024]               # $C0:F900 -- HiROM bank $C0 == file offset 0
 
 # ---- the overlay's own data ----------------------------------------------------------------------

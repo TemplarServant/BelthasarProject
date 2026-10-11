@@ -5,6 +5,9 @@ init function assigns (script.py). A first step of the M2 field engine.
 
 Usage: python assets/field.py <rom.sfc> <scene> <out.png> [--frame N]
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import maps
@@ -85,6 +88,6 @@ def render_field(rom, scene, out, frame=0, extra=None):
 if __name__ == '__main__':
     if len(sys.argv) < 4:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     frame = int(sys.argv[sys.argv.index('--frame') + 1]) if '--frame' in sys.argv else 0
     render_field(rom, int(sys.argv[2]), sys.argv[3], frame)

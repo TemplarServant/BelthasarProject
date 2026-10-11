@@ -13,12 +13,15 @@ self-confirming range. The live gull/boat objects run scripts at C3:F0F2 and C3:
 
 Run from the repo root: python tools/gen/ow_anim.py [rom] > src/data/ow_anim.h
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys
 
 ROM = sys.argv[1] if len(sys.argv) > 1 else 'Chrono_Trigger_USA_SNES.sfc'
 BASE, SIZE = 0x03E000, 0x2000          # flat file offset of $C3:E000, 8 KB (to $C3:FFFF)
 
-rom = open(ROM, 'rb').read()
+rom = _romlib.load(ROM)
 blob = rom[BASE:BASE + SIZE]
 
 print("// ow_anim.h - the overworld ANIM SUB-VM bytecode, verbatim from ROM $C3:E000..FFFF.")

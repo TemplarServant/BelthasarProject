@@ -65,9 +65,9 @@ By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest sing
 
 | Class | What it needs | Checks (2026-10-11) |
 |---|---|---|
-| **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | 580 of 818, together with B1 |
-| **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 117 fixture files. | (counted in the 580) |
-| **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet. 68 files; they SKIP with their name in a fresh clone. | 238 |
+| **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | 581 of 818, together with B1 |
+| **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 118 fixture files. | (counted in the 581) |
+| **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet. 68 files; they SKIP with their name in a fresh clone. | 237 |
 
 How a fixture became a recipe's twin: the twin is made, every check that reads it runs, and it is kept when they pass
 unchanged. A check whose expectation is specific to the old capture was re-pinned only when it compares the port with

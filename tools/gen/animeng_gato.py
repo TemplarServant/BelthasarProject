@@ -15,10 +15,13 @@
 #   disasm/notes/battle_anim_engine.md ADDENDUM 1 (contradiction C1).
 #   The per-facing windows are the oracle $9907[6] cursor cycles captured this session
 #   (gato_noatk idle; corpus/crono_far{left,right} walks; gato_moving_lake UP walk).
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
-ROM = open(os.path.join(ROOT, "Chrono_Trigger_USA_SNES.sfc"), "rb").read()
+ROM = _romlib.load(os.path.join(ROOT, "Chrono_Trigger_USA_SNES.sfc"))
 # The sheet is decompressed into $7F8000 at the battle's boot and does not change through the fight: any in-battle
 # WRAM of GATO's fight serves (the recipe gato_inbattle, tools/recipes/; a raw 128 KB .wram dump also works).
 SHEET_WRAM = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build", "recipes", "gato_inbattle.state")

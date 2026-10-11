@@ -18,6 +18,9 @@ Usage:
   python assets/text.py <rom.sfc> table <hexaddr> [n]  # decode a dialogue string table
   python assets/text.py <rom.sfc> dialogue [out.txt]   # all dialogue (scan scripts for op 0xB8)
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys
 
 DICT_BASE = 0x1EFA00
@@ -233,7 +236,7 @@ def scan_dialogue_tables(rom, subs, pb='\n———\n', namesub=False, ind='   '
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     mode = sys.argv[2]
     subs = load_dict(rom)
     if mode == 'dict':

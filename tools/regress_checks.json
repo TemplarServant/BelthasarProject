@@ -8212,7 +8212,7 @@
       "argv": [
         "build/ct.exe",
         "--vmdiff",
-        "saves/field_re/m81_frog_lake.state",
+        "saves/field_re/m81_frog.state",
         "--frames",
         "200"
       ],
@@ -8221,17 +8221,18 @@
         "SDL_AUDIODRIVER": "dummy",
         "VMDIFF_ANIM": "1",
         "VMDIFF_OAM": "1",
-        "VMDIFF_WMASK": "1"
+        "VMDIFF_WMASK": "1",
+        "CT_ORACLE_LOGICAL": "1"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/m81_frog_lake.state"
+        "saves/field_re/m81_frog.state"
       ],
       "expect": [
         "  CLEAN: no scheduler divergence over 200 frames",
         "  [oam] OUR image -> CtBuildFieldOAM vs the oracle's OAM over 200 frames -> 0 main + 0 high byte mismatches in 0 frames",
-        "  [oam] visible sprites: ours 2636 / oracle 2636 over the run -- a zero-mismatch line with a zero sprite count would be vacuous"
+        "  [oam] visible sprites: ours 2628 / oracle 2628 over the run -- a zero-mismatch line with a zero sprite count would be vacuous"
       ],
       "pin": [
         "^  CLEAN: ",
@@ -8240,7 +8241,7 @@
       ],
       "timeout_s": 400,
       "mutations": [],
-      "notes": "THE LOCKSTEP ON FROG'S CUTSCENE: scheduler CLEAN and the OAM built from OUR image byte-exact against the oracle's over 200 frames, 2636 visible sprites (so the zero is not vacuous). This is the line that separates the engine from the assets for Crono's frame $38: the ROM-assembly OAM matches, the baked field sprite does not."
+      "notes": "THE LOCKSTEP ON FROG'S CUTSCENE: scheduler CLEAN and the OAM built from OUR image byte-exact against the oracle's over 200 frames, 2636 visible sprites (so the zero is not vacuous). This is the line that separates the engine from the assets for Crono's frame $38: the ROM-assembly OAM matches, the baked field sprite does not. || MOVED 2026-10-11 (roadmap F16 / 1.1): onto the recipe twin saves/field_re/m81_frog.state (fxf_m81_frog) and the rule's oracle (CT_ORACLE_LOGICAL=1). The twin diverged at f70 only against the REAL-TIME cartridge: Frog's `EA 00` at f67 (song 0, a JSL C7/0004) cost that run one frame of SPC wait the rule does not charge (the cadence counters $1001/$1009/$101B/$101F one tick apart from f68). Under the rule the twin and the old capture m81_frog_lake.state are both CLEAN with 0 OAM mismatches (2628 / 2636 visible sprites)."
     },
     {
       "name": "stairs-scene13-slope",
@@ -35185,16 +35186,16 @@
         "saves/battle_re/forest_battle_3hetake.state"
       ],
       "expect": [
-        "sweepaieval: C1/AFD2 walk vs micro-executed C1/AFD2 -> 7184/7184 byte-exact over all of WRAM (0 mismatch, 0 lost); 7184 stopped at the commit (C1/8C53), 0 returned; 496 excused (an unported condition or resolver); 0 reached C1/0003 unflagged",
-        "sweepaieval: conditions the walk ran: 00:5636 01:250 02:39 04:508 05:675 07:350 08:57 09:77 0B:121 17:642 18:137 1A:59 1B:61 23:20 24:20 25:20 26:20",
-        "sweepaieval: C1/B80D handlers alone vs micro-executed -> 7744/7744 byte-exact (0 mismatch, 0 lost); 2222 committed, 5522 returned; 511 excused; 0 reached C1/0003 unflagged",
-        "sweepaieval: handlers graded: 00:205 01:190 02:210 03:125 04:205 05:205 06:210 07:205 08:195 09:204 0A:184 0B:169 11:265 12:215 13:295 14:225 15:290 16:260 17:205 18:175 19:335 1A:300 1B:270 1C:195 1D:228 1E:240 20:210 21:255 22:344 23:225 24:185 25:185 26:175 27:180 28:180",
-        "sweepaieval: C1/8C3E commit vs micro-executed -> 2962/2962 byte-exact (0 mismatch, 0 lost); 2158 excused",
-        "sweepaieval: eval ops the commit ran: 00:642 01:604 02:1179 06:1 07:34 0A:35 0B:61 0D:25 0F:174 11:8 12:59 15:6",
-        "sweepaieval: C1/AC14 + C1/B8BB resolvers 00-38 vs micro-executed -> 7273/7273 byte-exact (0 mismatch, 0 lost); 532 excused (C1/2986's 06 07 17 18, a revive inside 05); 0 reached C1/0003 unflagged: yes",
-        "sweepaieval: resolvers graded: 00:125 01:125 02:125 03:125 04:125 05:107 06:0 07:0 08:125 09:135 0A:125 0B:130 0C:133 0D:129 0E:135 0F:125 10:125 11:135 12:130 13:150 14:124 15:145 16:130 17:0 18:0 19:170 1A:150 1B:135 1C:145 1D:125 1E:160 1F:220 20:125 21:130 22:180 23:145 24:145 25:125 26:125 27:125 28:130 29:130 2A:145 2B:145 2C:125 2D:140 2E:180 2F:140 30:130 31:130 32:120 33:125 34:125 35:215 36:130 37:125 38:125",
-        "sweepaieval: C1/B88D turn handlers vs micro-executed -> 4418/4418 byte-exact (0 mismatch, 0 lost); 833 past a stubbed C1/C1DD, 3585 returned without; 172 excused; 0 reached C1/0003 unflagged; CD/0033 posted 1957, its A 0 wrong",
-        "sweepaieval: turn handlers graded: 00:250 01:290 02:250 03:120 04:120 05:0 06:120 07:190 08:120 09:120 0A:175 0B:335 0C:160 0D:275 0E:120 0F:470 10:140 11:220 12:463 13:100 14:135 15:120 16:125; 07 arrivals 82, 10/16 revives 122"
+        "sweepaieval: C1/AFD2 walk vs micro-executed C1/AFD2 -> 7193/7193 byte-exact over all of WRAM (0 mismatch, 0 lost); 7193 stopped at the commit (C1/8C53), 0 returned; 487 excused (an unported condition or resolver); 0 reached C1/0003 unflagged",
+        "sweepaieval: conditions the walk ran: 00:5645 01:250 02:39 04:508 05:684 07:350 08:57 09:77 0B:121 10:9 17:642 18:137 1A:59 1B:70 23:20 24:20 25:20 26:20",
+        "sweepaieval: C1/B80D handlers alone vs micro-executed -> 8617/8617 byte-exact (0 mismatch, 0 lost); 2336 committed, 6281 returned; 758 excused; 0 reached C1/0003 unflagged",
+        "sweepaieval: handlers graded: 00:205 01:190 02:210 03:125 04:205 05:205 06:210 07:205 08:195 09:204 0A:184 0B:169 0C:159 0D:165 0E:156 10:200 11:265 12:215 13:295 14:225 15:290 16:260 17:205 18:175 19:335 1A:300 1B:270 1C:195 1D:227 1E:240 1F:194 20:210 21:255 22:344 23:225 24:185 25:185 26:175 27:180 28:180",
+        "sweepaieval: C1/8C3E commit vs micro-executed -> 2908/2908 byte-exact (0 mismatch, 0 lost); 2212 excused",
+        "sweepaieval: eval ops the commit ran: 00:625 01:568 02:1164 07:35 0A:38 0B:72 0D:20 0F:159 10:1 11:9 12:62 15:8",
+        "sweepaieval: C1/AC14 + C1/B8BB resolvers 00-38 vs micro-executed -> 7272/7272 byte-exact (0 mismatch, 0 lost); 533 excused (C1/2986's 06 07 17 18, a revive inside 05); 0 reached C1/0003 unflagged: yes",
+        "sweepaieval: resolvers graded: 00:125 01:125 02:125 03:125 04:125 05:107 06:0 07:0 08:125 09:135 0A:125 0B:129 0C:132 0D:130 0E:135 0F:125 10:125 11:135 12:129 13:150 14:125 15:145 16:130 17:0 18:0 19:170 1A:150 1B:135 1C:145 1D:125 1E:160 1F:220 20:125 21:130 22:180 23:145 24:145 25:125 26:125 27:125 28:130 29:130 2A:145 2B:145 2C:125 2D:140 2E:180 2F:140 30:130 31:130 32:120 33:125 34:125 35:215 36:130 37:125 38:125",
+        "sweepaieval: C1/B88D turn handlers vs micro-executed -> 4419/4419 byte-exact (0 mismatch, 0 lost); 834 past a stubbed C1/C1DD, 3585 returned without; 171 excused; 0 reached C1/0003 unflagged; CD/0033 posted 1937, its A 0 wrong",
+        "sweepaieval: turn handlers graded: 00:250 01:290 02:250 03:120 04:120 05:0 06:120 07:190 08:120 09:120 0A:175 0B:335 0C:160 0D:275 0E:120 0F:470 10:140 11:220 12:464 13:100 14:135 15:120 16:125; 07 arrivals 97, 10/16 revives 123"
       ],
       "pin": [
         "^sweepaieval: "
@@ -39489,14 +39490,14 @@
         "widescreen: scene 112 398x224: the middle 256 == the 256 picture (0 px differ); sides 31808 px, 98 black",
         "widescreen: scene roll 398x224: the middle 256 == the 256 picture (0 px differ); sides 31808 px, 29962 black",
         "widescreen: scene line 398x224: the middle 256 == the 256 picture (0 px differ); sides 31808 px, 0 black",
-        "widescreen: scene forest 398x224: the middle 256 != the 256 picture (34261 px differ); sides 31808 px, 0 black; the view stands at x 0 (the camera at the room's edge), 12687 px differ there"
+        "widescreen: scene forest 398x224: the middle 256 != the 256 picture (34264 px differ); sides 31808 px, 0 black; the view stands at x 0 (the camera at the room's edge), 12688 px differ there"
       ],
       "pin": [
         "^widescreen: "
       ],
       "timeout_s": 900,
       "note_pass": "the widescreen field (16:9, 398 columns) keeps the SNES's 256-column picture byte for byte in its middle; its sides end black at the room's scroll mask (scene 6: the room fits the screen)",
-      "notes": "2026-10-09 (the user's options, item 3). field.c composes the field picture g_fw wide with the camera wideX further left (the same passes; plot/drawSprite/the iris and colour windows/the caption plane read g_fw/g_fx), copies the middle 256 back to fb for the box and the rest, and fieldWideAssemble puts the sides (under the frame's brightness, its blank lines, a wipe reaching the edge) around the finished view. Objects live but outside the ROM's latch window (C0/A88D: two tiles past the camera) are drawn on the sides in their last pose and the sprite's own colours -- nothing is written. tools/widescreen_check.py: f150 of scenes 5 / 6 / 112 at x1, integer scale."
+      "notes": "2026-10-09 (the user's options, item 3). field.c composes the field picture g_fw wide with the camera wideX further left (the same passes; plot/drawSprite/the iris and colour windows/the caption plane read g_fw/g_fx), copies the middle 256 back to fb for the box and the rest, and fieldWideAssemble puts the sides (under the frame's brightness, its blank lines, a wipe reaching the edge) around the finished view. Objects live but outside the ROM's latch window (C0/A88D: two tiles past the camera) are drawn on the sides in their last pose and the sprite's own colours -- nothing is written. tools/widescreen_check.py: f150 of scenes 5 / 6 / 112 at x1, integer scale. || RE-PINNED 2026-10-11 (roadmap T8): forest 34261 -> 34265 at the middle, 12687 unchanged at the view's own x 0. Bisected to 32e37124 (the enemies' idle walk does not dispatch inside a PC's C1/4058 waits), a vanilla battle change that moved the Hetakes' poses at f300 in the 256 picture and the wide one alike; only the misaligned middle comparison counts them differently. Not a widescreen regression. || RE-PINNED 2026-10-11: 34265 -> 34264 at the middle, 12687 -> 12688 at the view's own x 0 -- ONE pixel, (74,162), the HUD border's corner. With the camera stopped the old assembly wrote every view pixel equal to its world pixel at the world's place, so the HUD's own pixel at view column 74 (equal to the arena there) landed at x 74 over the HUD's column 3 (Xc 71 + 3); a view pixel that is its world now stays the world's (field.c, the widescreen battle's assembly; the HUD band's sides shaking with the arena)."
     },
     {
       "name": "ow-600ad-motion-owners-under-the-mist",

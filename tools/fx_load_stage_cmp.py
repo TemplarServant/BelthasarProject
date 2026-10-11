@@ -16,6 +16,9 @@ all the cartridge's`, or each divergent region's first differing rel and values.
 blocks, CD/1052's fill; battle_fx_program_census.md sec. 8) are NOT ported -- a layout that spills would move every
 write after it -- so the defaults are single-block effects (0 spill frames on gato_wait's battle).
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import importlib.util
 import os
 import re
@@ -114,7 +117,7 @@ def one(c, k, last):
     rise = lambda rw: min((f for f in rw if f >= after and int(rw[f].get(0xA013, '0'), 16) == 1), default=None)
     uc, up = rise(cr), rise(pr)
     tid = ab.tech_id(c, k)
-    fx = open(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'), 'rb').read()[0x0D45A6 + tid * 7 + 6]
+    fx = _romlib.load(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'))[0x0D45A6 + tid * 7 + 6]
     if uc is None or up is None:
         print('fx-load-stage: char %d k %d (fx %02X): FAIL -- no $A013 rise (cartridge %s, port %s)' % (c, k, fx, uc, up))
         return

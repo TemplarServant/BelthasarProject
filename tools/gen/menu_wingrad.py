@@ -1,3 +1,6 @@
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 # Bake the menu's WINDOW-GRADIENT lists out of the ROM into src/data/menu_wingrad.h.
 #
 # WHAT THIS IS. The dark menu windows are not painted with a baked gradient: the ROM runs an HDMA
@@ -27,7 +30,7 @@
 # Regenerate:  python tools/gen/menu_wingrad.py      (from the repo root; needs the .sfc)
 # (tools/setup.py runs it.)
 
-ROM = open("Chrono_Trigger_USA_SNES.sfc", "rb").read()
+ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 
 BASE = 0x3FBBF2                 # FF/BBF2 -- the first length byte
 NLIST = 10                      # 0-5 = the six X-menu ribbon options; 6-9 follow (8 = the SHOP, screen $0C:

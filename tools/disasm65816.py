@@ -155,7 +155,10 @@ def main():
         print(__doc__); sys.exit(1)
     trace_path = sys.argv[1]
     rom_path = sys.argv[2] if len(sys.argv) > 2 else 'Chrono_Trigger_USA_SNES.sfc'
-    rom = open(rom_path, 'rb').read()
+    import os as _ctos  # ctlib.rom imports this module: the import has to wait for main()
+    sys.path.append(_ctos.path.dirname(_ctos.path.abspath(__file__)))
+    from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
+    rom = _romlib.load(rom_path)
     romsize = len(rom)
 
     line_re = re.compile(

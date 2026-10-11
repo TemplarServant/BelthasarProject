@@ -1,3 +1,6 @@
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 # Extract the ROM battle-RETURN regroup script templates into a baked C header, so the runtime engine
 # can materialize them in its VM script space (the analog of $7F3700) with no .sfc dependency.
 #
@@ -15,7 +18,7 @@
 #   lock ctl | speed | coll-gates off | snap ON | autoanime-reset | WALK to PC0 (the LEAD, blocking) |
 #   snap OFF | loc[0xFF]++ | IF loc[0xFF] >= 3 fall-through else JUMP fwd 4 to `11 09` (jump BACK to the IF) |
 #   RESTORE ctl ($011F=1) | RETURN(pop) | (the 11-jumpback target of the 12)
-ROM = open("Chrono_Trigger_USA_SNES.sfc", "rb").read()
+ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 
 def region(off, n):
     return ROM[off:off + n]

@@ -11,6 +11,9 @@ Usage:
   python assets/atlas.py <rom> build [out.json]      # build the atlas
   python assets/atlas.py <rom> render <scene> <out>  # render a scene at its atlas state
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import script
@@ -109,7 +112,7 @@ def render(rom, scene, out):
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     if sys.argv[2] == 'build':
         build(rom, sys.argv[3] if len(sys.argv) > 3 else None)
     elif sys.argv[2] == 'render':

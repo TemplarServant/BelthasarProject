@@ -9,6 +9,9 @@
 # It seeds from the oracle's own WRAM at boot frame 140 (the frame after the sequence's script
 # installs its tasks) and then runs on its own; every value it prints is compared against a
 # --monitor stream of the same cells.  A mismatch is a hole in the derivation, not a tolerance.
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os
 import re
 import subprocess
@@ -20,7 +23,7 @@ TMP = 'build/_ti'
 os.makedirs(TMP, exist_ok=True)     # a fresh checkout has no build/_ti
 SEED_FRAME = 140
 
-rom = open(ROM, 'rb').read()
+rom = _romlib.load(ROM)
 SIN = rom[0xF900:0xF900 + 1024]
 
 

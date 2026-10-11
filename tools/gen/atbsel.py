@@ -28,6 +28,9 @@ and checks the ROW0+patch reconstruction against the real ROW1 capture pixel-for
 # The EMPTY box's line 0 between ACTIVE's first pen and WAIT's (x = 53, y149-154) comes from the ACTIVE reveal's first
 # frame (from power-on: the recipe attract_boot + POWERON_SCRIPT, tools/naming_cmp.py boot f301): BTNE's WAIT capture
 # holds its first glyph pair there. (It was a hand patch on the header until 2026-10-10; active_first() makes it.)
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import os, sys, subprocess
 
 ROM   = os.environ.get('CT_ROM', 'Chrono_Trigger_USA_SNES.sfc')
@@ -141,7 +144,7 @@ def active_first():
     return load_fb(peek(BTNA, os.path.join(SP, 'atbsel_active1.raw')))
 
 def _rom():
-    return open(ROM, 'rb').read()
+    return _romlib.load(ROM)
 
 def _long(a):
     return a - 0xC00000                      # HiROM long -> file offset

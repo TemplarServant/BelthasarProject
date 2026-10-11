@@ -20,6 +20,9 @@ Prints, per slot and in total:
 
 (disasm/notes/battle_enemy_cells.md; the law is src/battle.c CtBattleEnemyCells.)
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import collections
 import os
 import re
@@ -43,7 +46,7 @@ def main():
     extra = []
     if '--btnscript' in sys.argv:
         extra = ['--btnscript', sys.argv[sys.argv.index('--btnscript') + 1]]
-    rom = open('Chrono_Trigger_USA_SNES.sfc', 'rb').read()
+    rom = _romlib.load('Chrono_Trigger_USA_SNES.sfc')
     if state == 'build/_z_f7085.state' and not os.path.exists(state):   # the attract 087's leg (fxobj_cmp.py)
         subprocess.run([CT, '--peek', 'saves/attract_cena_inicial.state', 'build/_ztmp.raw', '--frames', '7085'],
                        env=dict(os.environ, PEEK_SAVE=state), capture_output=True)

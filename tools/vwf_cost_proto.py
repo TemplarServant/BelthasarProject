@@ -1,3 +1,6 @@
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 #!/usr/bin/env python3
 r"""PROTOTYPE of the bank-C2 VWF's CPU cost (C2/F90C -> C2/57DF / C2/5823 -> C2/58B2 -> C2/5DC4), to be ported to C.
 
@@ -7,7 +10,7 @@ tools/cycle_legs.py (the slot scan C2/D156 on a blank and a saved battery).
 
     python tools/vwf_cost_proto.py
 """
-ROM = open('Chrono_Trigger_USA_SNES.sfc', 'rb').read()
+ROM = _romlib.load('Chrono_Trigger_USA_SNES.sfc')
 ADV = ROM[0x260E6:0x260E6 + 0x60]           # $C2:60E6, index = code - $A0
 
 

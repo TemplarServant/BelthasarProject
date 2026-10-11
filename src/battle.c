@@ -2247,8 +2247,8 @@ static void battleMoveArm(CtBattleHost* h, int slot, int mode, int tgtCmb);   //
 // the count itself as the seat, 01's dead test on +$1E's bit 7 through a sixteen-bit read of +$1D). They are the ROM's,
 // and they are ported as it runs them.
 //
-// NOT PORTED -- conditions 0C-10 and 1F go through C1/0003 (the C1/2986 position machine, whose $96F5/$9FF7 gates
-// nothing here writes), and 05/06/07/17 have only the live host's wrapper
+// NOT PORTED -- condition 0F (C1/2986's sub-mode 08, C1/2C02's path test; in no script) and 0E's sub-modes 08 and up
+// (0C 0D 0E 10 1F run aiPos2986 since 2026-10-11), and resolvers 05/06/07/17 have only the live host's wrapper
 // (battleAiTarget). A walk that meets one is flagged: the sweep excuses the case, the live battle closes the condition
 // (and a resolver's list is empty) and traces it, which is what the old loop did with every condition but three.
 typedef struct BtAi {
@@ -2354,6 +2354,68 @@ static void aiB4AA(BtAi* c) {
   int x = aiW(s, 0x2C);
   if ((s[0x5E4E + x] | s[0x5E53 + x]) & 0x80) aiWs(s, 0xB1D2, 0x8D08);                     // B4C1-B4DD
   else if (((s[0x5E4B + x] ^ s[0x5E50 + x]) & s[0x5E4B + x]) & 0x04) aiWs(s, 0xB1D2, 0x8D1E);   // B4CB-B4E5
+}
+// C1/0003 entry 5 = C1/2986, the POSITION MACHINE, for the sub-modes the conditions ask for (0C 0D 0E 10 1F). The feet are
+// the live host's (mvLiveX/Y, the mirror mvMirX/Y) in a battle and the WRAM's ($1D0C/$1D23, $A039/$A050) under
+// --sweepaieval, which runs the ROM on the same image -- so the sweep grades these now, scratch bytes included.
+//   C1/2986  the mirror of $986F (X) and $9870 (Y) := their feet; STZ $9872; JSR ($2D81 + $986E*2)
+//   04 C1/2B37 / 0E C1/2B2B  $9893 = 0400 / 0900; |dx| and |dy| of the MIRROR (16-bit SBC of zero-extended bytes), each
+//            squared by C1/0089 ($AD x $AE through $4202/$4203: $77/$78 the operands, $AF the product); the sum in sixteen
+//            bits (the carry dropped) > $9893 -> $9872 = FF, else 00. Left behind: $80 = |dy| (16-bit), $82 = dx^2,
+//            $AD = $AE = $77 = $78 = |dy|, $AF = the sum.
+//   05 C1/2BBC  |$1D23,X - $1D23,Y| in EIGHT bits (`BPL` on the difference's bit 7) > 20 -> DEC $9872
+//   06 C1/2BDA / 07 C1/2BEE  $1D23,X (Y) / $1D0C,X (X) >= Y's -> DEC $9872
+//   09 / 0A C1/2CA7 / 2CBA  $1D23,X >> 4 < 8 / >= 8 -> DEC;  0B / 0C C1/2CCD / 2CE0  $1D0C,X >> 4 < 0B / >= 5 -> DEC
+//   08 C1/2C02 (a path test through C1/0222, C1/01F9, C1/2AEF and the body box C1/285A / 2926 / 28B0), 0D and the
+//      table's tail are not ported: returns 0 and the caller flags the case.
+static int aiFoot(const BtAi* c, int i, int y) {
+  if (c->h && c->h->mvInited && i < 11) return (y ? c->h->mvLiveY[i] : c->h->mvLiveX[i]) & 0xFF;
+  return c->s[(y ? 0x1D23 : 0x1D0C) + i];
+}
+static int aiMir(const BtAi* c, int i, int y) {
+  if (c->h && c->h->mvInited && i < 11) return (y ? c->h->mvMirY[i] : c->h->mvMirX[i]) & 0xFF;
+  return c->s[(y ? 0xA050 : 0xA039) + i];
+}
+static void aiMirSet(BtAi* c, int i) {
+  int fx = aiFoot(c, i, 0), fy = aiFoot(c, i, 1);
+  if (c->h && c->h->mvInited && i < 11) { c->h->mvMirX[i] = fx; c->h->mvMirY[i] = fy; }
+  else { c->s[0xA039 + i] = (uint8_t)fx; c->s[0xA050 + i] = (uint8_t)fy; }
+}
+static int aiPos2986(BtAi* c) {
+  uint8_t* s = c->s;
+  int x = s[0x986F], y = s[0x9870], sub = s[0x986E];
+  aiMirSet(c, x); aiMirSet(c, y);                                   // 298E-29A3
+  s[0x9872] = 0;                                                    // 29A6
+  switch (sub) {
+    case 0x04: case 0x0E: {
+      aiWs(s, 0x9893, sub == 0x0E ? 0x0900 : 0x0400);                // 2B2B-2B3E
+      int dx = aiMir(c, x, 0) - aiMir(c, y, 0); if (dx < 0) dx = -dx; // 2B49-2B63
+      aiWs(s, 0xAD, dx); s[0xAE] = (uint8_t)dx;                        // 2B64 STA $AD (16) / 2B69-2B6B
+      int dy = aiMir(c, x, 1) - aiMir(c, y, 1); if (dy < 0) dy = -dy; // 2B6D-2B87
+      aiWs(s, 0x80, dy); aiWs(s, 0x82, aiMir(c, y, 1));                // 2B70-2B79, 2B88 STA $80 (16)
+      s[0x77] = (uint8_t)dx; s[0x78] = (uint8_t)dx; aiWs(s, 0xAF, dx * dx);   // 2B8D JSR C1/0089
+      aiWs(s, 0x82, aiW(s, 0xAF));                                     // 2B90 LDX $AF / STX $82
+      s[0xAD] = (uint8_t)dy; s[0xAE] = (uint8_t)dy;                    // 2B94-2B98
+      s[0x77] = (uint8_t)dy; s[0x78] = (uint8_t)dy; aiWs(s, 0xAF, dy * dy);   // 2B9A JSR C1/0089
+      int sum = (aiW(s, 0x82) + aiW(s, 0xAF)) & 0xFFFF;                // 2B9D REP #21 / ADC $AF
+      aiWs(s, 0xAF, sum);
+      s[0x9872] = sum > aiW(s, 0x9893) ? 0xFF : 0x00;                  // 2BA5-2BB8
+      return 1;
+    }
+    case 0x05: {
+      int d = (aiFoot(c, x, 1) - aiFoot(c, y, 1)) & 0xFF;              // 2BC4-2BC8 SEC / SBC (8-bit)
+      if (d & 0x80) d = (-d) & 0xFF;                                    // 2BCB-2BCF
+      if (d > 0x20) s[0x9872]--;                                        // 2BD0-2BD6
+      return 1;
+    }
+    case 0x06: if (aiFoot(c, x, 1) >= aiFoot(c, y, 1)) s[0x9872]--; return 1;   // 2BE2-2BEA
+    case 0x07: if (aiFoot(c, x, 0) >= aiFoot(c, y, 0)) s[0x9872]--; return 1;   // 2BF6-2BFE
+    case 0x09: if ((aiFoot(c, x, 1) >> 4) < 0x08) s[0x9872]--; return 1;        // 2CAB-2CB6
+    case 0x0A: if ((aiFoot(c, x, 1) >> 4) >= 0x08) s[0x9872]--; return 1;       // 2CBE-2CC9
+    case 0x0B: if ((aiFoot(c, x, 0) >> 4) < 0x0B) s[0x9872]--; return 1;        // 2CD1-2CDC
+    case 0x0C: if ((aiFoot(c, x, 0) >> 4) >= 0x05) s[0x9872]--; return 1;       // 2CE4-2CEF
+    default: return 0;
+  }
 }
 static void aiCommit(BtAi* c);
 #define AIFAIL()   do { s[0xAF24] = 1; return; } while (0)
@@ -2628,27 +2690,69 @@ static void aiCond(BtAi* c, int op) {
       s[0x09] = 0;                                                 // 980D STZ $09 -- both paths
       return;
     }
-    case 0x1F: {                                                  // C1/9765: the target at +1 within 48 px of this enemy
-      // `JSR C1/AC14` (the target by the script's +1 byte -- GATO's 06, the nearest PC), none -> fail; then C1/0003's mode 5
-      // with $986E = 0E (C1/2986 -> C1/2B2B: the Euclidean dist^2 from $986F = this enemy to $9870 = $AECC against $9893
-      // = 0900, i.e. 48 px; $9872 = 0 when within), the polarity the +2 byte (C1/9786 `LDA $CC0001,X`, the cursor on +1):
-      // 00 -> pass when within. Pass: `$AECB = 1`, C1/8C3E (no C1/AEFD). The positions are the live feet the mode-5
-      // machine refreshes ($1D0C / $1D23); the threshold and the metric are battle_counter_gating.md sec. 1's derivation
-      // (11 of 11 GATO hits on the rule's cartridge). The sweep has no positions: it stops here, as for C1/0003 before.
+    case 0x0C: case 0x1F:                                         // C1/925D / C1/9765: the target at +1 within 32 / 48 px
+      // `JSR C1/AC14` (the target by the script's +1 byte), none -> fail; $986F = this enemy ($B252 + 3), $9870 = $AECC,
+      // $986E = 04 (C1/2B37, $9893 = 0400) or 0E (C1/2B2B, 0900): the Euclidean dist^2 between their feet; the polarity
+      // the +2 byte (`LDA $CC0001,X`, the cursor on +1): 00 -> pass when within ($9872 = 0). Pass: `$AECB = 1`, C1/8C3E
+      // (no C1/AEFD). The threshold is battle_counter_gating.md sec. 1's derivation (11 of 11 GATO hits on the rule's
+      // cartridge). Two scripts use 0C, both counters: 66's `0C 06 00 00` and 6A's `0C 17 01 00`.
       aiAC14(c);
-      if (!s[0xAECB]) AIFAIL();                                    // 9768-976B
-      if (!c->h || !c->h->mvInited) { c->unported |= 2; if (c->h) battleAiTraceUnknown(c->h, "cond", 0x1F); AIFAIL(); }
-      { CtBattleHost* hh = c->h; int me = k + 3, t = s[0xAECC];
-        if (t >= 11) AIFAIL();
-        long ddx = hh->mvLiveX[me] - hh->mvLiveX[t], ddy = hh->mvLiveY[me] - hh->mvLiveY[t];
-        int within = ddx * ddx + ddy * ddy <= 0x0900;               // C1/2B2B: $9872 = 0
-        int pol = aiCC(c, aiW(s, 0xB1D2) + 1);                      // 9786-978D
-        if (pol ? within : !within) AIFAIL();                       // 978F-9799 -> 97A5
-        s[0xAECB] = 1;                                              // 979B-979D
-        AICOMMIT();                                                 // 97A0 JSR C1/8C3E
-        return; }
+      if (!s[0xAECB]) AIFAIL();                                    // 9260-9263 / 9768-976B
+      s[0x986F] = (uint8_t)(s[0xB252] + 3);                         // 9265-926B
+      s[0x986E] = op == 0x0C ? 0x04 : 0x0E;                         // 926E-9270
+      s[0x9870] = s[0xAECC];                                        // 9273-9276
+      aiPos2986(c);                                                 // 9279 LDA #05 / JSR C1/0003
+      if (aiCC(c, aiW(s, 0xB1D2) + 1) ? !s[0x9872] : s[0x9872]) AIFAIL();   // 927E-9291
+      s[0xAECB] = 1;                                                // 9293-9295
+      AICOMMIT();                                                   // 9298 JSR C1/8C3E
+      return;
+    case 0x0D: case 0x0E: {                                       // C1/92A3 / C1/9314: mark the targets in range of self
+      // 0D: $986E = 05, |dy| <= 20; 0E: $986E = the +3 byte + 6 (06: self above, 07: self left of the entry). Each list
+      // entry but self goes through C1/2986; a 0 marks it (bit 7) and counts it in $0C; then $AECB = $0C, C1/AE21, and on
+      // a reduced list the polarity at +1 against the LAST entry's $9872. Neither appears in a script (the census of
+      // CC/8B08): only the condition sweep reaches them. A list that is empty leaves $AF24 as it was (92A9 -> RTS).
+      aiAC14(c);
+      if (!s[0xAECB]) return;                                       // 92A9 / 931A
+      int sub = op == 0x0D ? 0x05 : (aiCC(c, aiW(s, 0xB1D2) + 2) + 6) & 0xFF;   // 92B8 / 931C-9326 `LDA $CC0002,X` (cursor on +1)
+      if (sub == 0x08 || sub > 0x0C) {                              // C1/2C02's path test and the table's tail: not ported
+        c->unported |= 2;
+        if (c->h) battleAiTraceUnknown(c->h, "cond", (uint8_t)op);
+        AIFAIL();
+      }
+      s[0x986E] = (uint8_t)sub;
+      s[0x986F] = (uint8_t)(s[0xB252] + 3); s[0x0E] = s[0x986F]; s[0x0F] = 0;   // 92AB-92B6 / 9329-9334
+      aiWs(s, 0x0A, 0); aiWs(s, 0x0C, 0);                           // 92BD TDC / TAX / STX $0A / STX $0C
+      do {
+        x = aiW(s, 0x0A);
+        int e = s[0xAECC + x];
+        if (e != s[0x0E]) {                                         // 92C8 CMP $0E / BEQ
+          s[0x9870] = (uint8_t)e;
+          aiPos2986(c);                                             // 92CF LDA #05 / JSR C1/0003
+          if (!s[0x9872]) { s[0xAECC + x] |= 0x80; s[0x0C]++; }     // 92D4-92E3
+        }
+        s[0x0A]++;                                                  // 92E5 INC $0A (8-bit)
+      } while (s[0x0A] < s[0xAECB]);                                // 92E7-92EC
+      s[0xAECB] = s[0x0C];                                          // 92EE-92F0
+      aiAE21(s);                                                    // 92F3
+      if (s[0xAF24]) return;                                        // 92F6-92F9
+      if (aiCC(c, aiW(s, 0xB1D2) + 1) ? !s[0x9872] : s[0x9872]) return;   // 92FB-930E
+      AICOMMIT();                                                   // 9310 JSR C1/8C3E
+      return;
     }
-    default:                                                      // 0C-10: C1/0003; 29+ run off the table
+    case 0x10: {                                                  // C1/93E6: where this enemy stands on the screen
+      // +3 / +2 pick the sub-mode: 00/00 -> 09, 00/x -> 0A, x/x -> 0B, x/00 -> 0C (pass, $9872 = 0: Y >= 80, Y < 80,
+      // X >= B0, X < 50). $9870 is whatever it held (the head mirrors that seat too). Pass: C1/8C3E; else $AF24 = 1.
+      // One script: F8's `10 00 01 01`.
+      x = aiW(s, 0xB1D2);
+      int b3 = aiCC(c, x + 3), b2 = aiCC(c, x + 2);                 // 93E9 / 93EF / 93FD
+      s[0x986E] = b3 ? (b2 ? 0x0B : 0x0C) : (b2 ? 0x0A : 0x09);     // 93F5-9409
+      s[0x986F] = (uint8_t)(s[0xB252] + 3);                         // 940C-9412
+      aiPos2986(c);                                                 // 9415 LDA #05 / JSR C1/0003
+      if (s[0x9872]) AIFAIL();                                      // 941A-941D -> 9424
+      AICOMMIT();                                                   // 941F JSR C1/8C3E
+      return;
+    }
+    default:                                                      // 0F (C1/938D: C1/2C02's path test); 29+ off the table
       c->unported |= 2;
       if (c->h) battleAiTraceUnknown(c->h, "cond", (uint8_t)op);
       AIFAIL();

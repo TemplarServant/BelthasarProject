@@ -9892,8 +9892,12 @@ static int runSweepAiTarget(const char* romPath) {
 //            anywhere in its condition area, $B263/$B26B equal or not, $B1D4 on one of the section's entries or on
 //            its $FE, $B2C0 0 or 1 (the reactive arm); graded to the RTS.
 // COMPARED: all of WRAM, both banks, but the stack page ($0100-$01FF). EXCUSED (counted, named in the report): the
-// walk met a condition that runs C1/0003 (0C-10, 1F) or a resolver the port does not have (05/06 need the live host;
-// 07-09 / 11-17 underived) -- the ROM run is skipped there; a case the port DID port that reaches C1/0003 FAILS.
+// walk met a condition whose C1/0003 the port does not have (0F's sub-mode 08, 0E's 08 and up) or a resolver the port
+// does not have (05/06 need the live host; 07-09 / 11-17 underived) -- the ROM run is skipped there; a case the port DID
+// port that reaches an unported C1/0003 FAILS. C1/0003 entry 5 with a ported sub-mode of C1/2986 (04-07, 09-0C, 0E: the
+// conditions 0C 0D 0E 10 1F) runs through; the feet ($1D0C/$1D23, the mirror $A039/$A050) are fuzzed on a stream of
+// their own, so the other bytes' draws are what they were (a handler that reads the feet -- the turn handler 07's
+// arrivals -- sees other feet).
 static void aiEvalFuzz(uint8_t* r, uint32_t* rng) {
   #define NEXT() (*rng = *rng * 1103515245u + 12345u, (int)((*rng >> 16) & 0xFF))
   #define FUZZ(a) do { if (NEXT() & 1) r[(a)] = (uint8_t)NEXT(); } while (0)
@@ -9906,13 +9910,25 @@ static void aiEvalFuzz(uint8_t* r, uint32_t* rng) {
   FUZZ(0xAEC6); if ((NEXT() & 3) == 0) r[0xAEC6] = (uint8_t)(NEXT() & 7);
   FUZZ(0x96F1); FUZZ(0x96F2); FUZZ(0x96F3); FUZZ(0xAED8); FUZZ(0x0026); FUZZ(0x000B);
   if (NEXT() & 1) r[0x2989] ^= 0x20;
+  { uint32_t pr = *rng ^ 0x9E3779B9u;                              // the feet, on their own stream (*rng untouched)
+    for (int i = 0; i < 11; i++) {
+      pr = pr * 1103515245u + 12345u; if ((pr >> 16) & 1) r[0x1D0C + i] = (uint8_t)(pr >> 20);
+      pr = pr * 1103515245u + 12345u; if ((pr >> 16) & 1) r[0x1D23 + i] = (uint8_t)(pr >> 20);
+      pr = pr * 1103515245u + 12345u; if (((pr >> 16) & 3) == 0) r[0xA039 + i] = (uint8_t)(pr >> 20);
+      pr = pr * 1103515245u + 12345u; if (((pr >> 16) & 3) == 0) r[0xA050 + i] = (uint8_t)(pr >> 20);
+    } }
   for (int seat = 0; seat < 11; seat++)
     for (int o = 0; o < 0x80; o++)
       if ((NEXT() & 7) == 0) r[0x5E2D + seat * 0x80 + o] = (uint8_t)NEXT();
   #undef FUZZ
   #undef NEXT
 }
-// Run the oracle from C1:pc until C1/8C53 (when stopAtCommit), the RTS to $FFFE, or C1/0003.
+// C1/0003 with A = 5 (C1/2986) and a sub-mode $986E the port has (battle.c aiPos2986): the ROM runs it.
+static int aiEval2986Ported(const Snes* s) {
+  int sub = s->ram[0x986E];
+  return (s->cpu->a & 0xFF) == 5 && ((sub >= 0x04 && sub <= 0x07) || (sub >= 0x09 && sub <= 0x0C) || sub == 0x0E);
+}
+// Run the oracle from C1:pc until C1/8C53 (when stopAtCommit), the RTS to $FFFE, or an unported C1/0003.
 // Returns 1 / 0 / 2, -1 when lost. condSeen counts the walker's JSR ($B80D,X).
 static int aiEvalRunRom(Snes* s, uint16_t pc, int stopAtCommit, int* condSeen) {
   uint8_t* r = s->ram;
@@ -9927,7 +9943,7 @@ static int aiEvalRunRom(Snes* s, uint16_t pc, int stopAtCommit, int* condSeen) {
     if (s->cpu->k == 0xC1) {
       if (stopAtCommit && s->cpu->pc == 0x8C53) return 1;
       if (s->cpu->pc == 0xFFFE) return 0;
-      if (s->cpu->pc == 0x0003) return 2;
+      if (s->cpu->pc == 0x0003 && !aiEval2986Ported(s)) return 2;
       if (condSeen && (s->cpu->pc == 0xB006 || s->cpu->pc == 0xB021)) {
         int op = (s->cpu->x >> 1) & 0xFF; if (op < 0x30) condSeen[op]++;
       }
@@ -10050,7 +10066,7 @@ static int runSweepAiEval(const char* romPath) {
   AiEvalTally t2; memset(&t2, 0, sizeof t2);
   int handSeen[0x29]; memset(handSeen, 0, sizeof handSeen);
   for (int op = 0; op <= 0x28; op++) {
-    if ((op >= 0x0C && op <= 0x10) || op == 0x1F) continue;       // C1/0003's six: unported
+    if (op == 0x0F) continue;                                       // C1/2C02's path test: unported
     int pos[4096], np = 0;
     for (int p = 1; p < 0xFFF0 && np < 4096; p++) if (rom[0x0C0000 + p] == op) pos[np++] = p;
     int step = np > 40 ? np / 40 : 1;
@@ -10240,7 +10256,7 @@ static int runSweepAiEval(const char* romPath) {
   int handMissing = 0;
   printf("sweepaieval: handlers graded:");
   for (int i = 0; i <= 0x28; i++) {
-    if ((i >= 0x0C && i <= 0x10) || i == 0x1F) continue;
+    if (i == 0x0F) continue;                                  // C1/2C02's path test: unported
     printf(" %02X:%d", i, handSeen[i]);
     if (!handSeen[i]) handMissing++;
   }
@@ -12816,12 +12832,6 @@ static int runLoadState(const char* romPath, const char* statePath, const char* 
   return 0;
 }
 
-// M3-B: headless navigation to the OVERWORLD. Drives the play script to gameplay (Crono's bedroom),
-// then walks exit waypoints (bedroom -> downstairs -> front door) reading the live player position
-// ($1800/$1880 idx02, sub-pixel >>4) + location index ($0100; >= 0x1F0 = overworld per the C0:0066
-// dispatch) from WRAM each frame. Greedy d-pad toward the current scene's exit with a stuck-escape
-// (A to clear a textbox, then a perpendicular jiggle). On the overworld: settle, save a LakeSnes
-// savestate + full WRAM + framebuffer — permanent headless access to the world map.
 // Find the input-driven LEAD actor slot: hold Down then Up and pick the actor table offset
 // ($1800/$1880 + off, even offsets, 64 objects) whose world Y tracks the d-pad both ways.
 // Scene loads re-assign slots, so this runs at start + after every scene change.
@@ -12858,150 +12868,6 @@ static int ctFindLeadSlot(Snes* s) {
   int best = ctLeadPass(s, 0x1880, 0x20, 0x10);            // Y: Down then Up
   if (best < 0) best = ctLeadPass(s, 0x1800, 0x80, 0x40);  // X: Right then Left
   return best;   // byte offset into the actor tables, or -1
-}
-
-static int runNavWorld(const char* romPath, const char* outPath, const char* fromState) {
-  int len = 0;
-  uint8_t* rom = CtReadFile(romPath, &len);
-  if (!rom) { printf("FAIL: cannot read ROM '%s'\n", romPath); return 2; }
-  Snes* s = CtOracleCreate(rom, len, NULL);
-  if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
-  if (fromState) {
-    int slen = 0, fmt = 0; uint8_t* sdata = NULL;
-    if (CtLakeStateLoadPath(fromState, &sdata, &slen, &fmt) != 0) {
-      printf("FAIL: cannot load '%s'\n", fromState); CtOracleDestroy(s); free(rom); return 2;
-    }
-    StateHandler* sh = sh_init(false, sdata, slen);
-    snes_handleState(s, sh); sh_free(sh); free(sdata);
-    printf("navworld: resumed from %s (%s)\n", fromState,
-           fmt == CT_LAKE_FMT_WRAPPED ? "CTLS" : "legacy");
-  } else if (HarnessDriveScript(s) != 0) {
-    CtOracleDestroy(s); free(rom); return 4;
-  }
-  const uint8_t* r = s->ram;
-  for (int f = 0; f < 180; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }   // settle into the room
-  int startLoc = r[0x0100] | (r[0x0101] << 8);
-  int lead = ctFindLeadSlot(s);
-  if (lead < 0) { printf("navworld: no lead actor found at start (loc=%03X)\n", startLoc); CtOracleDestroy(s); free(rom); return 4; }
-  printf("navworld: start loc=%03X lead=idx%02X player=(%d,%d)\n", startLoc, lead,
-         (r[0x1800 + lead] | (r[0x1801 + lead] << 8)) >> 4, (r[0x1880 + lead] | (r[0x1881 + lead] << 8)) >> 4);
-  int stuck = 0, escapes = 0, lastPx = -1, lastPy = -1, reached = 0, lastLoc = startLoc, chkSaved = 0, redetects = 0;
-  for (int frame = 0; frame < 21600; frame++) {
-    int loc = r[0x0100] | (r[0x0101] << 8);
-    if (loc >= 0x1F0) { reached = 1; printf("navworld: OVERWORLD reached at frame %d (loc=%03X)\n", frame, loc); break; }
-    if (loc != lastLoc) {
-      printf("navworld: loc %03X -> %03X at frame %d\n", lastLoc, loc, frame);
-      lastLoc = loc; stuck = 0;
-      for (int f = 0; f < 45; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }   // scene fade/load settle
-      if (loc == 1 && !chkSaved) {                 // checkpoint: downstairs, for fast debug iteration
-        StateHandler* sh = sh_init(true, NULL, 0);
-        snes_handleState(s, sh);
-        char cp[600]; snprintf(cp, sizeof(cp), "%s.chk", outPath);
-        if (CtLakeStateSavePath(cp, sh->data, sh->offset) == 0)
-          printf("navworld: checkpoint (CTLS) -> %s\n", cp);
-        sh_free(sh); chkSaved = 1;
-      }
-      lead = ctFindLeadSlot(s);
-      if (lead < 0) { printf("navworld: lost the lead actor after scene change (loc=%03X)\n", loc); break; }
-      printf("navworld: lead now idx%02X at (%d,%d)\n", lead,
-             (r[0x1800 + lead] | (r[0x1801 + lead] << 8)) >> 4, (r[0x1880 + lead] | (r[0x1881 + lead] << 8)) >> 4);
-      continue;
-    }
-    int px = (r[0x1800 + lead] | (r[0x1801 + lead] << 8)) >> 4, py = (r[0x1880 + lead] | (r[0x1881 + lead] << 8)) >> 4;
-    if (frame % 600 == 0)
-      printf("navworld: f%-5d loc=%03X lead=idx%02X pos=(%d,%d) stuck=%d esc=%d\n", frame, loc, lead, px, py, stuck, escapes);
-    // waypoint chains (collision-aware): bedroom = around the bed to the stair head at tx21, then
-    // diagonally down the shape-23 staircase to the exit rect (368,208)+(16,32); downstairs = the
-    // world-exit rect (160,208)+(32,16).
-    static const struct { int x, y; } WP2[3] = { {328, 180}, {344, 186}, {376, 222} };
-    static const struct { int x, y; } WP1[1] = { {176, 216} };
-    static int wpi = 0, wpLoc = -1;
-    if (loc != wpLoc) { wpi = 0; wpLoc = loc; }
-    int tx, ty, nwp;
-    if (loc == 2)      { nwp = 3; tx = WP2[wpi].x; ty = WP2[wpi].y; }
-    else if (loc == 1) { nwp = 1; tx = WP1[wpi].x; ty = WP1[wpi].y; }
-    else { nwp = 1; tx = px; ty = py; }          // unknown room: stand still (report below)
-    if (abs(px - tx) <= 12 && abs(py - ty) <= 12 && wpi < nwp - 1) { wpi++; continue; }
-    uint16_t btn = 0;                            // serial-order bits: Up=10 Dn=20 Lf=40 Rt=80 A=100
-    if (px < tx - 2) btn |= 0x80; else if (px > tx + 2) btn |= 0x40;
-    if (py < ty - 2) btn |= 0x20; else if (py > ty + 2) btn |= 0x10;
-    if (btn == 0 && loc != 1 && loc != 2) {
-      printf("navworld: in unmapped loc %03X at (%d,%d), frame %d -- no waypoint\n", loc, px, py, frame);
-      break;
-    }
-    if ((px == lastPx && py == lastPy && btn) || px > 1100 || py > 1100) stuck++; else stuck = 0;
-    lastPx = px; lastPy = py;
-    if (stuck >= 45) {
-      // TALK mode: something blocks us -- an NPC in the corridor (Mom) or an event that parked the
-      // player. Spaced A presses (interact/advance dialogue; Start every 6th confirms a stray naming
-      // screen), NO d-pad. Every cycle, probe whether the lead responds to movement again; on a long
-      // dead spell try jiggling perpendicular once control is clearly back but the path is a wall.
-      if (++escapes > 40) { printf("navworld: too many TALK cycles (frame %d), giving up\n", frame); break; }
-      printf("navworld: TALK at frame %d, lead idx%02X pos=(%d,%d)\n", frame, lead, px, py);
-      int back = 0;
-      for (int k = 0; k < 80 && !back; k++) {
-        int fx = (r[0x1800 + lead] | (r[0x1801 + lead] << 8)) >> 4, fy = (r[0x1880 + lead] | (r[0x1881 + lead] << 8)) >> 4;
-        if (fx <= 1100 && fy <= 1100) {                      // face the target's dominant axis (turn in place)
-          int dx = tx - fx, dy = ty - fy, adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
-          uint16_t fb2 = (ady >= adx) ? (dy > 0 ? 0x20 : 0x10) : (dx > 0 ? 0x80 : 0x40);
-          for (int f = 0; f < 2; f++) { s->input1->currentState = fb2; CtOracleRunFrame(s); }
-          for (int f = 0; f < 2; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }
-        }
-        uint16_t b = (k % 6 == 5) ? 0x08 : 0x100;            // A,A,A,A,A,Start,...
-        for (int f = 0; f < 2; f++) { s->input1->currentState = b; CtOracleRunFrame(s); }
-        for (int f = 0; f < 22; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }
-        int nl = r[0x0100] | (r[0x0101] << 8);
-        if (nl != loc) break;                                // scene changed (door fired / event warp)
-        int cx = (r[0x1800 + lead] | (r[0x1801 + lead] << 8)) >> 4, cy = (r[0x1880 + lead] | (r[0x1881 + lead] << 8)) >> 4;
-        if (cx <= 1100 && cy <= 1100) {                      // lead visible: movement probe toward target
-          uint16_t pb = 0;
-          if (cx < tx - 2) pb |= 0x80; else if (cx > tx + 2) pb |= 0x40;
-          if (cy < ty - 2) pb |= 0x20; else if (cy > ty + 2) pb |= 0x10;
-          if (!pb) { back = 1; break; }
-          for (int f = 0; f < 10; f++) { s->input1->currentState = pb; CtOracleRunFrame(s); }
-          int nx = (r[0x1800 + lead] | (r[0x1801 + lead] << 8)) >> 4, ny = (r[0x1880 + lead] | (r[0x1881 + lead] << 8)) >> 4;
-          if (nx != cx || ny != cy) back = 1;                // control + path are back
-        } else if (k % 10 == 9) {                            // long-parked: try re-detecting the slot
-          int nl2 = ctFindLeadSlot(s);
-          if (nl2 >= 0) { lead = nl2; back = 1; printf("navworld: lead re-detected idx%02X\n", lead); }
-        }
-      }
-      stuck = 0;
-      continue;
-    }
-    s->input1->currentState = btn;
-    CtOracleRunFrame(s);
-  }
-  if (!reached) {
-    printf("navworld: FAILED to reach the overworld (loc=%03X lead=idx%02X player=(%d,%d) escapes=%d)\n",
-           r[0x0100] | (r[0x0101] << 8), lead,
-           (r[0x1800 + lead] | (r[0x1801 + lead] << 8)) >> 4, (r[0x1880 + lead] | (r[0x1881 + lead] << 8)) >> 4, escapes);
-  } else {
-    for (int f = 0; f < 240; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }  // let the world map settle
-  }
-  char path[600];
-  // framebuffer (for visual confirmation, raw 512x480 [pad,B,G,R] like --fb)
-  size_t fbsize = 512 * 480 * 4;
-  uint8_t* fb = (uint8_t*)malloc(fbsize);
-  snes_setPixels(s, fb);
-  snprintf(path, sizeof(path), "%s.fb.raw", outPath);
-  FILE* fp = fopen(path, "wb"); if (fp) { fwrite(fb, fbsize, 1, fp); fclose(fp); }
-  free(fb);
-  // full WRAM (camera/scroll var hunting)
-  snprintf(path, sizeof(path), "%s.wram", outPath);
-  fp = fopen(path, "wb"); if (fp) { fwrite(s->ram, 0x20000, 1, fp); fclose(fp); }
-  if (reached) {                                  // LakeSnes savestate = permanent overworld access
-    StateHandler* sh = sh_init(true, NULL, 0);
-    snes_handleState(s, sh);
-    if (CtLakeStateSavePath(outPath, sh->data, sh->offset) == 0)
-      printf("navworld: saved CTLS savestate (payload %d) -> %s (+.wram +.fb.raw); scroll $20=%02X%02X $22=%02X%02X\n",
-             sh->offset, outPath, r[0x0021], r[0x0020], r[0x0023], r[0x0022]);
-    else
-      printf("navworld: FAIL writing savestate '%s'\n", outPath);
-    sh_free(sh);
-  }
-  CtOracleDestroy(s); free(rom);
-  return reached ? 0 : 1;
 }
 
 // Load a LakeSnes savestate into a fresh oracle. Returns NULL on failure.
@@ -15705,7 +15571,6 @@ int main(int argc, char** argv) {
   int doSheetCheck = 0;
   const char* cgramOut = NULL;
   const char* fbOut = NULL;
-  const char* navWorldOut = NULL;
   const char* navFromState = NULL;
   const char* peekState = NULL;
   const char* peekOut = NULL;
@@ -15928,7 +15793,6 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--stairtest") && i + 1 < argc) stairState = argv[++i];
     else if (!strcmp(argv[i], "--mash")) mashFlag = 1;
     else if (!strcmp(argv[i], "--script")) scriptFlag = 1;
-    else if (!strcmp(argv[i], "--navworld") && i + 1 < argc) navWorldOut = argv[++i];
     else if (!strcmp(argv[i], "--from") && i + 1 < argc) navFromState = argv[++i];
     else if (!strcmp(argv[i], "--peek") && i + 2 < argc) { peekState = argv[++i]; peekOut = argv[++i]; }
     else if (!strcmp(argv[i], "--btn") && i + 1 < argc) peekBtn = (uint16_t)strtol(argv[++i], NULL, 16);
@@ -16054,7 +15918,6 @@ int main(int argc, char** argv) {
   if (cgramOut) return runDumpCgram(romPath, frames, cgramOut);
   if (fbOut) return runDumpFb(romPath, frames, scriptFlag, fbOut);
   if (vramOut) return runDumpVram(romPath, frames, vramOut);
-  if (navWorldOut) return runNavWorld(romPath, navWorldOut, navFromState);
   if (peekState) return runPeek(romPath, peekState, frames, peekBtn, peekFrames2, peekBtn2, peekScript, peekOut);
   if (owWatchState) return runOwWatch(romPath, owWatchState);
   if (textWatchState) return runTextWatch(romPath, textWatchState);

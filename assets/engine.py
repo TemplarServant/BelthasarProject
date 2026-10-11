@@ -15,6 +15,9 @@ Usage:
   python assets/engine.py <rom.sfc> <scene> talk <obj>   # drive a talk interaction
   python assets/engine.py <rom.sfc> <scene> run [frames]  # tick the scene N frames
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import script
@@ -559,7 +562,7 @@ class SceneEngine:
 if __name__ == '__main__':
     if len(sys.argv) < 4:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     scene = int(sys.argv[2])
     mode = sys.argv[3]
     eng = SceneEngine(rom, scene)

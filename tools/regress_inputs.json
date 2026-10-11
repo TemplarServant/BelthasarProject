@@ -768,7 +768,7 @@
       "used_by": [
         "assets-dialogue-every-script-box-reads-the-rom"
       ],
-      "sha256": "43629799430e5a1f794ae776604fc77401d1489434852b4bc6db73937d2da279",
+      "sha256": "cf484b3fd7a7fb8e63bdf6bc868c50e837797b016687cdcbc70862e60c1cd1cc",
       "size": 14382,
       "present_when_recorded": true
     },
@@ -3281,14 +3281,14 @@
       "present_when_recorded": true
     },
     {
-      "path": "saves/field_re/m81_frog_lake.state",
-      "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "path": "saves/field_re/m81_frog.state",
+      "kind": "lake_state",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fxf_m81_frog): the Cathedral (loc 081, storyline 12), Frog's cutscene after the Naga-ette fight, obj4 at ip 050F",
       "used_by": [
         "vmdiff-manoria-frog"
       ],
-      "sha256": "1032b1384ba0cee6edae0cef45ebac4fc15ff1051cea923f660b5bdea30cf59b",
+      "sha256": "e68f078562b0b3986ff2d6dc272c97a30e57e27db37b57e8130a0680745d6c56",
       "size": 273125,
       "present_when_recorded": true
     },
@@ -4173,8 +4173,8 @@
         "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
-      "sha256": "c8784e723f5a36015252af6e2d4987eff91315602048c3b8048d928361ea16a5",
-      "size": 1712954,
+      "sha256": "718669b0daba4b653b74e2febf9f6c405e6f48ed3f3022d209237a41c2688ccd",
+      "size": 1720318,
       "present_when_recorded": true
     },
     {
@@ -4194,8 +4194,8 @@
         "ow-object-bootstrap-w6-vs-oracle",
         "ow-object-bootstrap-w7-vs-oracle"
       ],
-      "sha256": "136c7025c2cece65c562885f50e0cdd3118475c5925fbac03da2c9ad9f665ed3",
-      "size": 654922,
+      "sha256": "a0cb026bff7a4131a8f4ae29c1a031df9f2218513728ab76379a2447c6293393",
+      "size": 656176,
       "present_when_recorded": true
     },
     {
@@ -4242,8 +4242,8 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "799476cd198bedfa188fa21d9f21c2625e3d71f8889afee0f345412c6b8cbf78",
-      "size": 1479641,
+      "sha256": "d42fdf49a9edcef843d622754732f72e59aab0160eabb890dbe1a60c96be48a8",
+      "size": 1501354,
       "present_when_recorded": true
     },
     {
@@ -4579,7 +4579,7 @@
       "used_by": [
         "assets-dialogue-every-script-box-reads-the-rom"
       ],
-      "sha256": "596402227caec0851f80032d08d242b5b461b890a76275afc28d20c369fb80cf",
+      "sha256": "e0ffb442279a2502810742e3d6bf3ce75d9b5bcbb1b93770dc81bfad5b0bc560",
       "size": 6011,
       "present_when_recorded": true
     },
@@ -4629,7 +4629,7 @@
         "battle-enemy-cells-bat9-vs-oracle",
         "battle-enemy-cells-zombor-vs-oracle"
       ],
-      "sha256": "c41e70da236815f9a5da99573718f9245dfe7f21ca94f92afb56bd652461c4a7",
+      "sha256": "6e6505ea0fb7033962fdbd847ed291a4c367b28db7d5416ad5296a24a636cef0",
       "size": 7227,
       "present_when_recorded": true
     },
@@ -4932,7 +4932,7 @@
       "used_by": [
         "title-intro-machine-vs-oracle-wram"
       ],
-      "sha256": "cd979475361e072d96aac561cb70676eeebc68820ab9406e6fcd6daa6f3b4152",
+      "sha256": "4c5f8138f5da27329f239de8d70e40db65c00b590c47663e52d9cbb5e4e990ff",
       "size": 26870,
       "present_when_recorded": true
     },

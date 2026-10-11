@@ -10,6 +10,9 @@ collision + a walk-cycle animation, and talking to an NPC shows its dialogue.
 Keys: arrow keys = walk, Space/Z = talk to the NPC you face / advance text, Esc = quit.
 Usage: python assets/play.py <rom.sfc> [scene] [--selftest]
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os, ctypes
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import engine as E
@@ -212,7 +215,7 @@ def _textbox(rom, frame, s):
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     scene = 5
     for a in sys.argv[2:]:
         if a.isdigit():

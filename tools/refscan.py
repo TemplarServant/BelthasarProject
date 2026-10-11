@@ -28,11 +28,14 @@ start is reached from almost every anchor and a byte inside an operand from almo
 printed with that agreement count so a thin one can be eyeballed rather than trusted. It is a filter,
 not a proof: confirm anything load-bearing with `tools/dis.py` at the reported address.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import disasm65816 as D
 
-ROM = open("Chrono_Trigger_USA_SNES.sfc", "rb").read()
+ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 NBANK = len(ROM) >> 16
 
 # operand forms that name a 16-bit address, and where that address LIVES.

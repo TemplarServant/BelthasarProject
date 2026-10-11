@@ -1,7 +1,7 @@
 {
   "name": "fxf_m81_frog",
   "from": "cathedral_entry",
-  "doc": "Stands in for saves/field_re/m81_frog_lake.state: frog_joins's drive cut at 11754 frames -- Frog's cutscene in the Cathedral after the Naga-ette fight, obj4 (Frog) at ip 050F. NOT YET USED: vmdiff-manoria-frog diverges on it at f70 (obj4: the port is past an op 0x89 at 051C that the cartridge is still on), so saves/field_re/m81_frog_lake.* stay the capture for now.",
+  "doc": "Stands in for saves/field_re/m81_frog_lake.state: frog_joins's drive cut at 11754 frames -- Frog's cutscene in the Cathedral after the Naga-ette fight, obj4 (Frog) at ip 050F. Used by vmdiff-manoria-frog (as saves/field_re/m81_frog.state) under the rule's oracle: against the real-time cartridge it diverges at f70 (Frog's `EA 00` song post at f67 waits a frame on that run's SPC), under CT_ORACLE_LOGICAL=1 it is CLEAN. saves/field_re/m81_frog_lake.lakewram stays the capture (field-manoria-frog-sword).",
   "steps": [
     [
       "pad",

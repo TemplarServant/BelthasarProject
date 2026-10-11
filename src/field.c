@@ -64,9 +64,8 @@
 #include "data/animeng_sheet_pc.h"  // Crono sheet $D272C0 / Marle sheet $D40000 (uncompressed IN ROM -- no fixture)
 #include "data/animeng_e4_pc.h"     // resolved pose selections: idle cycle + attack ladder + foot origins
 #include "data/battle_gato_atkfaces.h" // GATO directional ATTACK poses (rear-up+strike) UP/LEFT/RIGHT (battle_animeng_corpus.md CAPTURE 1)
-#include "data/battle_gato_song.h"   // GATO SONG pose (front idle + 6px sway); notes moved to battle_fx_song.h (battle_animeng_corpus.md CAPTURE 2)
 // (data/battle_bracket.h is retired: the selection bracket is C1/1115 + the boot's UI tiles, battleBracketRender.)
-#include "data/battle_end.h"     // victory/fallen pose keyframes (battle_end.md T1/T3/T4)
+// (data/battle_gato_song.h and data/battle_end.h are retired: the anim engine draws the song and the victory/fallen poses.)
 #include "data/battle_settle.h"  // victory SETTLE-IN ladder: the ~72f animated celebration INTO the held pose (C.2)
 #include "data/battle_fx.h"      // action feedback: baked damage-digit tiles/rise-table + the hurt-flash palette (battle_actionfx.md)
 #include "data/battle_hetake.h"  // FOREST scenario: 3x Hetake sprites/anchors/attack/cursor (battle_scenario2.md)
@@ -2208,6 +2207,7 @@ static uint8_t g_bwFb[FIELD_WMAX * CAMH * 3], g_bwPre[FIELD_WMAX * CAMH * 3];   
 static int g_bwW, g_bwX, g_bwXc;                  // (X: where the battle's 256 view stands in it; Xc: the middle)
 static uint8_t g_bWorld[CAMW * CAMH * 3];         // the battle's view before its screen-fixed boxes (the results, the HUD)
 static uint8_t g_bMotCanvas[CAMW * CAMH * 3];     // the battle's frames between: the arena before the combatants
+static uint8_t g_bwBand[CAMH];                    // (the rows whose wide arena borrows an arena row's scroll: the HUD band's)
 static int g_wideBeyond;                          // (this frame's fieldBeyondLayers past the room's edge, for the native drawer)
 static uint8_t g_seqWide[FIELD_WMAX * CAMH * 3];  // a translated stage's picture, wide (its PPU's side columns); 0 = none
 static int g_seqWideW;
@@ -6525,7 +6525,6 @@ static void battleStatusIconRender(uint8_t* fb, const uint8_t* mem, const CtBatt
   if (mem[0xA013] || mem[0xA0FE]) return;           // CF/EDC0's gate: suppressed while an action runs
   int dx = 0, dy = 0, tile = 0, pal = 0;
   if (!CtBattleStatusIconLive(mem, cmb, &dx, &dy, &tile, &pal)) return;
-  (void)h;
   const uint8_t* t0 = CtBattleStatusIconTile(tile);          // 16x16 = 4 tiles: n, n+1, n+16, n+17
   if (!t0) return;
   static uint8_t cell[4][32];
@@ -6534,7 +6533,12 @@ static void battleStatusIconRender(uint8_t* fb, const uint8_t* mem, const CtBatt
     if (!src) return;
     memcpy(cell[q], src, 32);
   }
-  const uint16_t* palw = ctBattleAnimPal[pal & 7];
+  // The colours are the record's OBJ palette row of the CGRAM the battle's NMI uploaded (CF/E3C0; h->fxCgram), as
+  // the bracket and the seats read theirs -- not GATO's captured ctBattleAnimPal. A seed render (no live host) reads
+  // the page $7E:2300 the upload ships.
+  uint16_t palw[16];
+  { const uint8_t* src = h ? h->fxCgram + (128 + (pal & 7) * 16) * 2 : mem + 0x2300 + (pal & 7) * 32;
+    for (int k = 0; k < 16; k++) palw[k] = (uint16_t)(src[k * 2] | (src[k * 2 + 1] << 8)); }
   int keepPal = g_bObjPalCur; g_bObjPalCur = pal & 7;        // the record's own palette (the sprites' colour math)
   for (int q = 0; q < 4; q++)                                // the 16x16 quad, top-left origin
     battleBlitCell(fb, cell, 4, q, footX + dx + (q & 1) * 8, footY + dy + (q >> 1) * 8, palw, 0, 0);
@@ -10267,9 +10271,12 @@ int main(int argc, char** argv) {
   // it is the hole that made the forest -> overworld report impossible to reproduce headlessly and
   // forced three savestates out of the user. Nothing here changes an entry that already carries its
   // own plane: --loadstate and the door path both set pz after this point.
-  { int tx = (int)px / 16, ty = (int)py / 16;
-    if (f.C.zb && tx >= 0 && ty >= 0 && tx < f.C.cw && ty < f.C.ch) pz = f.C.zb[ty * f.C.cw + tx] & 3; }
   fieldArrivalTileMode(&f.C, px, py, f.vm);              // C0/9DC3: the arrival tile's $1D34, $0155, the PCs' pairs
+  // pz MIRRORS $0155 (disasm/notes/field_plane_0155.md): C0/9DC3 just stored the arrival tile's plane, or 1 for a
+  // plane-0 tile -- the `zb & 3` re-derived here before had no 1-for-0 and was a second copy of the byte.
+  if (f.vm) pz = CtSceneMem7E(f.vm)[0x0155] & 3;
+  else { int tx = (int)px / 16, ty = (int)py / 16;       // (no scene VM: the harness's own spawn plane)
+    if (f.C.zb && tx >= 0 && ty >= 0 && tx < f.C.cw && ty < f.C.ch) pz = f.C.zb[ty * f.C.cw + tx] & 3; }
   if (loadWramPath && f.vm) {                           // --loadwram: seed the VM + player from a lake state's WRAM
     FILE* lf = fopen(loadWramPath, "rb");
     uint8_t* fb = NULL; long sz = 0;
@@ -10363,8 +10370,7 @@ int main(int argc, char** argv) {
     else if (r == 1) {                                   // older snapshot (VM only): resync from lead + derive Z
       int pl, sp, ax, ay, fa; CtSceneActor(f.vm, CtScenePlayerObj(f.vm), &pl, &sp, &ax, &ay, &fa);
       px = ax; py = ay; pfac = fa;
-      int tx = (int)px / 16, ty = (int)py / 16;
-      pz = (f.C.zb && tx >= 0 && ty >= 0 && tx < f.C.cw && ty < f.C.ch) ? (f.C.zb[ty * f.C.cw + tx] & 3) : f.spawnZ;
+      pz = CtSceneMem7E(f.vm)[0x0155] & 3;               // the snapshot's own $0155, not the tile's `zb & 3`
       fprintf(stderr, "[loadstate] restored %s (VM only), lead at (%d,%d)\n", loadStatePath, ax, ay);
     } else fprintf(stderr, "[loadstate] FAILED (wrong scene? rebuild?) for %s\n", loadStatePath);
     if (r) fieldMapFromWram(&f, CtSceneMem7E(f.vm), "loadstate");
@@ -11448,9 +11454,8 @@ int main(int argc, char** argv) {
                                         //   reboot re-enters the SAME scene 0, and the window the
                                         //   user sees is that one, not the one under the shell
             scene = pendDest; px = (pendX >= 0) ? pendX : f.spawnX;   // pendX/Y = -1 (--reentertest) -> the
-            py = (pendY >= 0) ? pendY : f.spawnY; pfac = pendFac; pz = 1;   // dest scene's own spawn
-            if (f.C.shp) { int tx = (int)px / 16, ty = (int)py / 16;
-              if (tx >= 0 && ty >= 0 && tx < f.C.cw && ty < f.C.ch) pz = f.C.zb[ty * f.C.cw + tx] & 3; }
+            py = (pendY >= 0) ? pendY : f.spawnY; pfac = pendFac; pz = 1;   // dest scene's own spawn (C0/0C4C's 01;
+                                                                            //   C0/9DC3 below stores the arrival's)
             // ⭐ THE ENTRY LAW READS THE ARRIVAL TILE, NOT THE FOOT: C0/7553 `LDA $0103 / CMP $52` (and
             // C0/7506 the $0102 twin). py was then a foot anchor, `(tile*256 + $FF + 1)/16` = (tile+1)*16 whenever
             // arrival bit 3 is clear (the ChangeLocation and reboot sites), so `py / 16` handed the law tile+1
@@ -11476,6 +11481,7 @@ int main(int argc, char** argv) {
             pIdleCtr = 0; pBlink = 0; pAnimMode = 0;        // reset the field idle-blink timer on a scene change
             fieldArrivalTileMode(&f.C, px, py, f.vm);       // C0/9DC3: $1D34, $0155 and the PCs' pairs from the ARRIVAL tile
                                                             //   (else a ladder's climb flag walks through the door)
+            if (f.vm) pz = CtSceneMem7E(f.vm)[0x0155] & 3;  // pz mirrors the byte C0/9DC3 just stored
             // The lead starts where its fn0 LAST wrote $1800/$1880: C0/42B8's arrival, or a later `8B`/`8D`
             // in the same fn0 (ct_vm.c pcLeadInitArm). The plane and $1D34 above stay the arrival tile's --
             // C0/9DDE reads $0102/$0103 and stores $0155 from them, not from the lead's position.
@@ -12043,8 +12049,7 @@ int main(int argc, char** argv) {
           CtSceneActor(f.vm, CtScenePlayerObj(f.vm), &pl, &sp, &ax, &ay, &fa);   //  this block now runs
                                                                     //  ahead of the field path's pObj)
           px = ax; py = ay; pfac = fa;
-          int tx = (int)px / 16, ty = (int)py / 16;
-          pz = (f.C.zb && tx >= 0 && ty >= 0 && tx < f.C.cw && ty < f.C.ch) ? (f.C.zb[ty * f.C.cw + tx] & 3) : f.spawnZ;
+          pz = CtSceneMem7E(f.vm)[0x0155] & 3;               // the snapshot's own $0155, not the tile's `zb & 3`
           fprintf(stderr, "[debug] F9: loaded ct_debug.state (VM only) -> (%d,%d)\n", ax, ay);
         } else fprintf(stderr, "[debug] F9: no/invalid ct_debug.state (same-scene only)\n");
       }
@@ -15358,6 +15363,23 @@ int main(int argc, char** argv) {
       const char* ta = dbg.talkAt; int taf = ta ? atoi(ta) : 0;
       if (frameNo == taf) CtSceneActivate(f.vm, talkObj);
     }
+    // CT_POKEWRAM="ADDR=HH,...": WRAM bytes written once, on the first frame of a --selftest run -- ct.exe's PEEK_POKE
+    // grammar (flat offsets, a 7E/7F bank folded). The port's side of a state no drive reaches cheaply: e.g. $7F01EC,
+    // the lost-battle byte scene 0AC's `48 EC 01 7F 19` reads before its op FF 96.
+    if (selftest && frameNo == 1) {
+      static const char* pk; static int pkRead;
+      if (!pkRead) { pkRead = 1; pk = getenv("CT_POKEWRAM"); }
+      uint8_t* pw = pk ? CtWramSys(fieldWram()) : NULL;
+      for (const char* q = pk; pw && q && *q; ) {
+        char* e; long adr = strtol(q, &e, 16);
+        if (e == q) break;
+        if (adr >= 0x7E0000 && adr <= 0x7FFFFF) adr -= 0x7E0000;
+        if (*e == '=') { long v = strtol(e + 1, &e, 16);
+          if (adr >= 0 && adr < 0x20000) { pw[adr] = (uint8_t)v; printf("pokewram: %05lX = %02lX\n", adr, v & 0xFF); } }
+        while (*e && *e != ',') e++;
+        q = (*e == ',') ? e + 1 : e;
+      }
+    }
     if (selftest && f.vm) {                             // CT_TOUCHAT="obj,frame": force the TOUCH (slot 2) -- bump test
       const char* tc = dbg.touchAt;
       if (tc) { int to = 0, tf = 1; sscanf(tc, "%d,%d", &to, &tf);
@@ -15645,6 +15667,13 @@ int main(int argc, char** argv) {
       CtSceneRebootDone(f.vm); rebootReq = 1;
       printf("reboot: op 0xDF/0xE1 at the vblank -> $0100=%03X, $0105=%03X\n",
              w[0x0100] | (w[0x0101] << 8), w[0x0105] | (w[0x0106] << 8));
+    }
+    // op FF 96 (C0/4181) spins on the same flag, then `JSR C0/0B4E / LDX #06FF / TXS / JML FD/C000`: the RESET entry,
+    // the path CF/E702's `JML C0:FF00` takes too. Its spin ends at this vblank as the DF/E1 one does (the rule's poll),
+    // and the cold init below runs in this frame.
+    if (f.vm && CtSceneColdReset(f.vm) && !rebootReq && !coldResetReq) {
+      CtSceneRebootDone(f.vm);
+      coldResetReq = 1; coldResetWhy = "C0/4181 op FF 96 JML FD:C000";
     }
     // ---- op 0xFF < $90's OWN FADE, ahead of EITHER target (C0/3FBB-3FD1; the $C3 sequence and the $FD warp split only
     // after it, at 3FDC). The op took its first `DEC $19` in its own frame (the VM, CtSceneFfFading) when $0119 was lit;
@@ -18327,14 +18356,29 @@ int main(int argc, char** argv) {
           static CtSceneLayers bBeyondL; int bdet = 0;
           if (bwm0 > -(1 << 29) && f.sd && (bdet = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
               !CtFieldSceneLayers(f.sd, &bBeyondL)) bdet = 0;
+          // The row's battle scroll (the shake, a line wave). The HUD band's rows carry no arena records (arenaRow != 3: the
+          // view's HUD covers them), but their sides are the arena: they take the nearest arena row's, towards the screen's
+          // middle first -- as their colour math does (btFxCompose's band rows) -- so the sides beside the HUD shake with the rest.
+          static int16_t bwD[CAMH * 2];
+          for (int y = 0; y < CAMH; y++) {
+            int src = y, dir = y < CAMH / 2 ? 1 : -1;
+            for (int d = 1; arenaShift && arenaRow[src] != 3 && d < CAMH; d++) {
+              int a = y + dir * d, b = y - dir * d;
+              if (a >= 0 && a < CAMH && arenaRow[a] == 3) src = a;
+              else if (b >= 0 && b < CAMH && arenaRow[b] == 3) src = b;
+            }
+            bwD[y * 2] = arenaD[src * 4]; bwD[y * 2 + 1] = arenaD[src * 4 + 1];
+            g_bwBand[y] = (uint8_t)(src != y);
+          }
           for (int y = 0; y < CAMH; y++)
             for (int x = 0; x < bwW; x++) {
               int ux = camx - bx0 + x, sy = camy + y; size_t i = (size_t)y * bwW + x;
-              if (ux < bwm0 || ux >= bwm1) {             // the room's end (its self-scrolling layers go on: fieldBeyondPixel)
-                if (bdet) fieldBeyondPixel(&bBeyondL, bdet, ux, sy, mot->o2x, mot->o2y, mot->o3x, mot->o3y, g_bwFb + i * 3);
+              int ax = ux + bwD[y * 2], ay = sy + bwD[y * 2 + 1];   // (the map moves under the room's edge with the shake)
+              if (ax < bwm0 || ax >= bwm1) {             // the room's end (its self-scrolling layers go on: fieldBeyondPixel)
+                if (bdet) fieldBeyondPixel(&bBeyondL, bdet, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, g_bwFb + i * 3);
                 else memset(g_bwFb + i * 3, 0, 3);
                 bcov[i] = 0; continue; }
-              memcpy(g_bwFb + i * 3, f.base + fieldBaseAt(&f, ux + arenaD[y * 4], sy + arenaD[y * 4 + 1]) * 3, 3);
+              memcpy(g_bwFb + i * 3, f.base + fieldBaseAt(&f, ax, ay) * 3, 3);
               // (the arena's layer there, wrapping as the map does -- past a room as wide as its map is the map again)
               //  (unshifted by the row's battle scroll, as the view's own lookup above)
               bcov[i] = (cvs && cvW > 0 && cvH > 0) ? cvs[(size_t)((sy % cvH + cvH) % cvH) * cvW + (size_t)((ux % cvW + cvW) % cvW)] : 0;
@@ -18744,15 +18788,20 @@ int main(int argc, char** argv) {
           if (g_bwX == g_bwXc) { memcpy(g_wide + ((size_t)y * g_bwW + g_bwX) * 3, fb + (size_t)y * CAMW * 3, (size_t)CAMW * 3); continue; }
           // (the camera stopped at the room's edge: the world -- the arena, the fighters -- where it stands, the boxes and
           //  the HUD at the middle; under a box the world is the view before the boxes)
+          // (the HUD band's rows: the view drew its arena there unmoved -- the HUD covers it in the 256 picture -- but beside
+          //  the HUD it shows, so where nothing was drawn over that arena (the world still the canvas before the combatants)
+          //  the world is the wide arena's, which moves with the shake: g_bwBand)
           const uint8_t* v = fb + (size_t)y * CAMW * 3; const uint8_t* wv = g_bWorld + (size_t)y * CAMW * 3;
+          const uint8_t* cv = g_bMotCanvas + (size_t)y * CAMW * 3; const uint8_t* av = g_bwPre + ((size_t)y * g_bwW + g_bwX) * 3;
           for (int vx = 0; vx < CAMW; vx++) {
-            uint8_t e[3]; for (int c = 0; c < 3; c++) e[c] = (uint8_t)(bbr >= 15 ? wv[vx * 3 + c] : bbr <= 0 ? 0 : wv[vx * 3 + c] * bbr / 15);
+            const uint8_t* wp = (g_bwBand[y] && !memcmp(wv + vx * 3, cv + vx * 3, 3)) ? av + vx * 3 : wv + vx * 3;
+            uint8_t e[3]; for (int c = 0; c < 3; c++) e[c] = (uint8_t)(bbr >= 15 ? wp[c] : bbr <= 0 ? 0 : wp[c] * bbr / 15);
             memcpy(g_wide + ((size_t)y * g_bwW + g_bwX + vx) * 3, e, 3);
           }
-          for (int vx = 0; vx < CAMW; vx++) {
+          for (int vx = 0; vx < CAMW; vx++) {               // (the view's pixel that is its world's stays the world's above)
             const uint8_t* wp = wv + vx * 3; int same = 1;
             for (int c = 0; c < 3; c++) { int e = bbr >= 15 ? wp[c] : bbr <= 0 ? 0 : wp[c] * bbr / 15; if (e != v[vx * 3 + c]) same = 0; }
-            memcpy(g_wide + ((size_t)y * g_bwW + (same ? g_bwX : g_bwXc) + vx) * 3, v + vx * 3, 3);
+            if (!same) memcpy(g_wide + ((size_t)y * g_bwW + g_bwXc + vx) * 3, v + vx * 3, 3);
           }
         }
         shown = g_wide; shownW = g_bwW;
@@ -18762,12 +18811,18 @@ int main(int argc, char** argv) {
           memcpy(ownV, mot->own, sizeof ownV);
           for (int y = 0; y < CAMH; y++) {
             memcpy(bwCanvas + (size_t)y * g_bwW * 3, g_bwPre + (size_t)y * g_bwW * 3, (size_t)g_bwW * 3);
-            memcpy(bwCanvas + ((size_t)y * g_bwW + g_bwX) * 3, g_bMotCanvas + (size_t)y * CAMW * 3, (size_t)CAMW * 3);
+            if (!(g_bwBand[y] && g_bwX != g_bwXc))         // (the HUD band beside a stopped camera: the wide arena's, as shown)
+              memcpy(bwCanvas + ((size_t)y * g_bwW + g_bwX) * 3, g_bMotCanvas + (size_t)y * CAMW * 3, (size_t)CAMW * 3);
           }
           static uint8_t picV[CAMW * CAMH * 3]; memcpy(picV, g_motPic, sizeof picV);
           for (int y = 0; y < CAMH; y++) {
             memcpy(g_motPic + (size_t)y * g_bwW * 3, g_bwPre + (size_t)y * g_bwW * 3, (size_t)g_bwW * 3);
-            memcpy(g_motPic + ((size_t)y * g_bwW + g_bwX) * 3, picV + (size_t)y * CAMW * 3, (size_t)CAMW * 3);
+            const int band = g_bwBand[y] && g_bwX != g_bwXc;
+            for (int vx = 0; vx < CAMW; vx++) {
+              const uint8_t* p = picV + ((size_t)y * CAMW + vx) * 3;
+              if (band && !memcmp(p, g_bMotCanvas + ((size_t)y * CAMW + vx) * 3, 3)) continue;
+              memcpy(g_motPic + ((size_t)y * g_bwW + g_bwX + vx) * 3, p, 3);
+            }
           }
           mot->w = g_bwW;
           for (int y = 0; y < CAMH; y++)

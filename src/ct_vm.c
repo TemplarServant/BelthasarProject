@@ -1784,7 +1784,8 @@ struct CtScene {
   int ffFade;                  // op 0xFF < $90: 1 = its own fade loop (C0/3FC1-3FD1) took its first `DEC $19` in the
                                //   op's frame -- the host runs the rest before the jump (CtSceneFfFading)
   int rebootReq;               // op 0xDF/0xE1 (C0/3B98/3B4B): 1 = staged, the machine waits for the vblank and
-                               //   reboots through C0/0000; 2 = the host took it. Either way the main loop is dead.
+                               //   reboots through C0/0000; 3 = op FF 96 (C0/4181): the same wait, then the RESET
+                               //   entry FD/C000; 2 = the host took it. Either way the main loop is dead.
   int seqReq;                  // op 0xFF operand < $80: a $C3 SPECIAL SEQUENCE was requested
                                //   (2 = the title screen). The script never resumes.
   int seqHas;                  // ⚠ 1 = seqReq HOLDS a request. Needed because the operand can be
@@ -3422,6 +3423,16 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       // the CLC at 400C below ends the visit as for every sub.
       static const uint8_t k39[5] = { 0x05, 0x07, 0x09, 0x0B, 0x0E };
       w8(sc->mem, 0x7E0139, k39[B[addr + 1] - 0x98]);
+    } else if (B[addr + 1] == 0x96) {
+      // C0/4181, the table's sub 6: `LDA $4210 / BPL ->4181` (the vblank-flag spin, NMI on), `JSR C0/0B4E` (SEI,
+      // force blank, NMI and HDMA off), `LDX #06FF / TXS`, `JML FD/C000` -- the RESET vector's own target ($00:FF00
+      // `SEI / CLC / XCE / JML FD:C000`), so the game reboots cold, as the console's reset button does. It never
+      // returns to the runner: no CLC at 400C, nothing after it in this visit or this scene. One site in the 504
+      // scripts: scene 0AC's obj9 fn1 at 0x0416, on the branch taken when `48 EC 01 7F 19` read a non-zero $7F01EC (the
+      // byte C1:8143 sets when the party loses). The visit parks on the op and the host performs the spin and the cold
+      // init at the vblank, as for 0xDF/0xE1 (field.c, 'THE DF/E1 REBOOT' and 'THE COLD INIT').
+      sc->rebootReq = 3;
+      return 1;                                     // park: s->addr stays on the op
     }
     s->addr = nxt;
     // ...AND IT ENDS THE VISIT. C0/3FAF's portable half is `4000 ... 4009 JSR ($400E,X) / 400C CLC /
@@ -3430,10 +3441,12 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // We used to return 0 (keep spending the visit's 5-op budget), which ran obj0's autorun two ops
     // ahead of the ROM for the rest of scene 254 and fired its next CALL four frames early -- the
     // f435 divergence of the tutorial lockstep. (The per-sub IP deltas are already right: opLen gives
-    // 5 for 0x90/0x97 and 2 otherwise, matching C0/4036's four INXs and C0/41BA's two. The PARKING
-    // subs 0x92-0x95/0x9E, which leave the IP alone while they hand-shake $0139/$0350, are still
-    // unported here -- src/move.c's CtFieldRunnerOne has the whole ladder byte-derived and graded by
-    // --sweepops FF:60; that delegation is the real fix and is OPEN.)
+    // 5 for 0x90/0x97 and 2 otherwise, matching C0/4036's four INXs and C0/41BA's two. The parking
+    // subs 0x92-0x95 run above (ctWipeOp). NOT PORTED here: 0x97 (C0/4191, 4 sites: 0x90's stores with
+    // $0139 = 04) and 0x9E (C0/41C8, scene 0AC: parks until C0/21E1's entry 0C ends in 0D) -- they hand
+    // C0/21E1 entries 4, 0C and 0D, which have no port (docs/ROADMAP.md F19); 0x98-0x9B set 5/7/9/0B,
+    // entries likewise unported. src/move.c's CtFieldRunnerOne has the whole ladder byte-derived and
+    // graded by --sweepops FF:60.)
     return 1;
   }
   if (op == 0xC8) {                                 // Special-Dialog (ROM C0/3757). The operand lands in
@@ -7812,6 +7825,8 @@ void CtSceneSequenceDone(CtScene* sc) { sc->seqReq = 0; sc->seqHas = 0; sc->ffFa
 int CtSceneFfFading(const CtScene* sc) { return sc ? sc->ffFade : 0; }
 // The bank-$FD GATE WARP request (op 0xFF, operand $80-$8F -> C0/3FE8/3FF0/3FF8/3FFC). -1 = none.
 int CtSceneReboot(const CtScene* sc) { return sc->rebootReq == 1 ? 1 : 0; }
+// op FF 96 (C0/4181) is spinning toward the RESET entry FD/C000 (rebootReq 3); CtSceneRebootDone takes it too.
+int CtSceneColdReset(const CtScene* sc) { return sc->rebootReq == 3 ? 1 : 0; }
 void CtSceneRebootDone(CtScene* sc) { sc->rebootReq = 2; }
 int CtSceneGateWarp(const CtScene* sc) { return sc->warpReq ? sc->warpReq : -1; }
 void CtSceneGateWarpDone(CtScene* sc) { sc->warpReq = 0; sc->ffFade = 0; }

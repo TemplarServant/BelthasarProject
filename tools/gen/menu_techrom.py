@@ -14,11 +14,14 @@
 # The $7E:1607 index table is REBUILT here exactly as FF/F8BD-F94B builds it at menu-open, out of
 # CC/24B4 (pair participants, stride 3), CC/28DB (the two per-tech indices per double, stride 6),
 # CC/2979 (the triple participation masks) and CC/2935 (the triple indices).
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, glob, os
 sys.path.insert(0, "assets")
 import text as CTTEXT   # the repo's own dictionary decoder
 
-ROM = open("Chrono_Trigger_USA_SNES.sfc", "rb").read()
+ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 def r8(a):  return ROM[a]
 
 BD40 = ROM[0x2BD40:0x2BD40 + 38]           # C2/BD40

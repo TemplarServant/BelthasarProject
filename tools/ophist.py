@@ -21,6 +21,9 @@ TWO THINGS IT DOES NOT GUESS AT:
    twice), and both times the actors sitting on the missing entries were invisible rather than
    broken -- which does not look like a bug, it looks like a clean run.
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import collections
 import os
 import re
@@ -69,7 +72,7 @@ def ported_opcodes(path='src/move.c'):
 
 def main():
     rom_path = sys.argv[1] if len(sys.argv) > 1 else 'Chrono_Trigger_USA_SNES.sfc'
-    rom = open(rom_path, 'rb').read()
+    rom = _romlib.load(rom_path)
     hist, scenes = histogram(rom)
     ported = ported_opcodes()
     total = sum(hist.values())

@@ -19,6 +19,9 @@ A meta corner is {chip u16, base u8, flags u8 (fx|fy<<1|prio<<2)}.
 
 Usage: python assets/extract_assets.py <rom.sfc> [out=ct_assets.dat]
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '../tools')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os, struct, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import maps
@@ -679,7 +682,7 @@ def build(rom):
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print(__doc__); sys.exit(1)
-    rom = open(sys.argv[1], 'rb').read()
+    rom = _romlib.load(sys.argv[1])
     out = sys.argv[2] if len(sys.argv) > 2 else 'ct_assets.dat'
     data = build(rom)
     open(out, 'wb').write(data)

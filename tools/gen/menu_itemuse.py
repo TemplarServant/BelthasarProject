@@ -17,6 +17,9 @@ ctOrg*       = Organize's group ranges, C2/AC12 (start ids) and C2/AC17 (lengths
 
     python tools/gen/menu_itemuse.py [--state S] [--out src/data/menu_itemuse.h]
 """
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import argparse
 import os
 import sys
@@ -72,7 +75,7 @@ def main():
     ap.add_argument('--state', help='a state with the X menu open instead of the recipe (saves/menu_open_gato2.state)')
     ap.add_argument('--out', default=os.path.join('src', 'data', 'menu_itemuse.h'))
     a = ap.parse_args()
-    rom = open(ROM, 'rb').read()
+    rom = _romlib.load(ROM)
     w = wram_of(a.state or recipe('menu_open_gato2'))
     prop = w[0x7700:0x7700 + 0xF3]
     kind, amt, allp, pool = fx(rom, prop)

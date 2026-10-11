@@ -14,11 +14,14 @@
 # THE ENTRY COUNT IS NOT ASSUMED, IT IS READ OUT OF THE DATA: the smallest pointer in the table is
 # $3095, and 0x2EB1 + 242*2 == 0x3095 exactly -- i.e. the strings start immediately after the table,
 # so the table is exactly 242 entries (ids $00..$F1, which is also the item id space).
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os
 sys.path.insert(0, "assets")
 import text as CTTEXT                      # the repo's own dictionary decoder
 
-ROM = open("Chrono_Trigger_USA_SNES.sfc", "rb").read()
+ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 SUBS = CTTEXT.load_dict(ROM)
 
 BASE = 0x0C2EB1                            # CC/2EB1, HiROM file offset

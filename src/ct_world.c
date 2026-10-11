@@ -10,7 +10,7 @@
 // Usage: ct_world[.exe] [--assets ct_assets.dat | --wram f --vram f] [--selftest]
 //   --assets runs ENTIRELY from the packed CT_ASSET_WORLD blob (no ROM, no savestate dumps);
 //   the dump mode defaults: saves/ow_w0.live.wram / saves/ow_w0.live.vram (produce with:
-//   ct.exe <rom> --navworld saves/ow_w0.state ; ct.exe <rom> --peek saves/ow_w0.state saves/ow_w0.live --frames 1)
+//   python tools/recipes.py make ow_nav_w0 ; ct.exe <rom> --peek build/recipes/ow_nav_w0.state saves/ow_w0.live --frames 1)
 // --selftest uses the dummy video driver, scrolls a scripted path, prints an FNV of the final
 // camera view; WORLD_SHOT=<out.raw> additionally writes the final 256x224 view ([W][H][RGB]).
 #define SDL_MAIN_HANDLED
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
     int wn = 0, vn = 0;
     wram = readfile(wramPath, &wn);
     vram = readfile(vramPath, &vn);
-    if (!wram || wn < 0x20000) { printf("FAIL: wram dump '%s' (need 128KB; run ct.exe --navworld + --peek)\n", wramPath); return 2; }
+    if (!wram || wn < 0x20000) { printf("FAIL: wram dump '%s' (need 128KB; make the recipe ow_nav_w0 + ct.exe --peek)\n", wramPath); return 2; }
     if (!vram || vn < 0x10000) { printf("FAIL: vram dump '%s' (need 64KB; run ct.exe --peek)\n", vramPath); return 2; }
   }
 

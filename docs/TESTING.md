@@ -65,15 +65,15 @@ first missing expectation and the actual nearby output lines.
 
 ## Prerequisites (all in the repo root)
 
-- `Chrono_Trigger_USA_SNES.sfc` — the oracle ROM; needed by every `ct.exe` check
-  (it is the default ROM, resolved from the cwd).
-- `ct_assets.dat` — packed assets; rebuilt with
-  `python assets/extract_assets.py Chrono_Trigger_USA_SNES.sfc`. `ct_field.exe`
-  checks pass it explicitly via `--assets` (there is no default).
-- Oracle savestates / WRAM seeds: full catalogue with sha256 pins, kind, and
-  capture/regeneration notes lives in **`tools/regress_inputs.json`**. Typical
-  set: `im_so_sorry.state`, `bedslide.state`, `DEMO8_mvfix.state`, `S5_mvfix.state`,
-  `saves/ow_w0.state`, `saves/truce_market.state`, `saves/battle_re/gato_t0.raw.wram`, …
+- `Chrono_Trigger_USA_SNES.sfc` — your own dump, verified by SHA-1 wherever it is read (`src/rom_verify.c`,
+  `tools/ctlib/rom.py`); `python tools/setup.py --rom <file>` puts it in place and does everything below.
+- `ct_assets.dat` and the generated files (`src/data/*.h`, `src/xlat/*.c`) — made by `tools/setup.py` from the ROM
+  and the power-on recipes. `ct_field.exe` checks pass the .dat explicitly via `--assets` (there is no default).
+- Oracle states and WRAM seeds: the recipe-made ones come from `python tools/fixtures.py make all` (the recipes in
+  `tools/recipes/`, listed per domain in `tools/fixtures/<domain>.json`); the rest are private captures from the
+  owner's playthrough, which SKIP with their name in a fresh clone. The catalogue, with sha256 pins and each file's
+  provenance, is **`tools/regress_inputs.json`**; [TESTING_OVERVIEW.md](TESTING_OVERVIEW.md) counts the checks by
+  class (ROM only, recipe fixtures, private captures).
 - Built binaries `build/ct.exe`, `build/ct_field.exe` (via `tools\build.bat` /
   `python tools/build.py`).
 
@@ -108,18 +108,15 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(current: **74** checks total, **2** excluded).
+(2026-10-11: **817** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**50** checks): the 512-scene VM actor cross-check, the `--vmdiff`
-  oracle-lockstep baselines, the overworld family (camera / mover / VRAM streaming /
-  location-entry / field-return / ambient-object VM), field camera, headless
-  field↔overworld round trips, new-game pan, GATO battle/menu pins, scene render
-  snapshots, M0 boot, portcheck/bootcheck, synthetic micro-exec sweeps
-  (sweepcollide/sweepactor), and the later battle/ATB/menu pins. Pre-commit tier.
-- **full** (all **74**): adds the 512×3 dat-verify and the ROM-boot drive-script
-  validators — these boot the oracle and replay the hardcoded ~90 s play script into
-  **Crono's bedroom (loc 0x002)**. If the script does not land there, `ct.exe` now
-  prints `SETUP FAIL` and exits 4 (instead of reporting noise mismatches).
+- **quick** (**577** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+  `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
+  behaviours. Pre-commit tier.
+- **full** (all of them): adds **238** slower checks — whole fights and attract legs against the logical oracle, the
+  long menu and shop audits, the widescreen and other mod checks, the ROM-boot drive validators — and the two with no
+  tier (`lockstep-talk-box-machine-clean`, `lockstep-scene120-stairs-entry-lucca`), which run only here. A full run
+  takes 15-80 minutes, mostly depending on the oracle cache.
 
 ### field-battletest-gato (`ct_field.exe --battletest`)
 

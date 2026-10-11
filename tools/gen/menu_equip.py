@@ -12,9 +12,12 @@
 #   4. for id 0..0x93 : $7C00[id] = CC:0000+X2
 #
 # Validated against a live oracle page (a --peek .wram of an open menu): 0 mismatches on all three.
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 import sys, os
 
-ROM = open("Chrono_Trigger_USA_SNES.sfc", "rb").read()
+ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 def r8(a):  return ROM[a]
 def r16(a): return ROM[a] | (ROM[a + 1] << 8)
 

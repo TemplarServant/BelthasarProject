@@ -1,3 +1,6 @@
+import os as _ctos, sys as _ctsys
+_ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
+from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
 # Extract the menu's ROM data tables ONCE at build into a baked header, so the menu is fully ROM-free
 # (runtime needs only ct_assets.dat). Raw contiguous regions (the engine keeps its CT-text decode):
 #   CC 0x0C0B5E..0x0C257B : item names + single-tech names + tech MP
@@ -8,7 +11,7 @@
 #   MAXCNT 0x03FF951..0x03FF959 : per-char single-tech "add" threshold
 # The item-category strings ($FF/B310 ptrs -> $FF-bank strings) are scattered ROM-wide, so we RESOLVE
 # them here into a per-item decoded table (ctItemCat) instead of baking the whole bank.
-ROM=open("Chrono_Trigger_USA_SNES.sfc","rb").read()
+ROM=_romlib.load("Chrono_Trigger_USA_SNES.sfc")
 def region(lo,hi): return ROM[lo:hi]
 CC=(0x0C0B5E,0x0C257B); C2=(0x02BD40,0x02C5B3); CFG=(0x3FD3FE,0x3FD57A); MC=(0x03FF951,0x03FF959)
 # Config screen (menu screen 4), derived in disasm/notes/menu2_config_toggles.md:
