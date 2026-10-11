@@ -1,4 +1,9 @@
 # Original ROM and extracted assets are NOT distributed — supply your own dump.
+# The files tools/setup.py generates from your dump: never committed (docs/ROM.md).
+/Chrono_Trigger_USA_SNES.sfc
+/ct_assets.dat
+/src/data/*.h
+/src/xlat/*.c
 *.sfc
 *.smc
 *.srm
@@ -57,7 +62,7 @@ disasm/notes/*.state
 _*.txt
 _*.asm
 
-# ROM-derived savestates/captures (regenerate via ct.exe --navworld)
+# ROM-derived savestates and captures (the recipe-made ones: python tools/fixtures.py make all)
 saves/
 
 # ─────────────────────────────────────────────────────────────────────────────
