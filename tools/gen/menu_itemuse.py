@@ -11,7 +11,7 @@ ctItemFx*    = the effect of the consumables 0xBC..0xCF, decoded the way C2/B0AB
                multiplier, 0F -> $0DC0 = 40 = to the maximum, byte 3 & 3F = the base), the scope (($CC:1BB5[sub] + 1)
                & 3) << 2 (bit 3 = all the party), and the kind by the dispatch C2/B0FA / ($B0EE,X) on byte 0: bit 7 ->
                C2/B17F (HP/MP restore), bit 4 -> C2/B107 (the Power Meal: C2/B10D's first arm, $0DBD = C2 and
-               $0DC0 = 40 -> HP+MP to the maximum), nothing set down to bit 3 -> C2/B200 (the tabs: power for CD, magic
+               $0DC0 = 40 -> HP+MP to the maximum), bit 3 -> C2/B1F8 (the Shelter: $0DBD = CA, the record's $0DC0), nothing set down to bit 3 -> C2/B200 (the tabs: power for CD, magic
                for CE, speed for the rest). An item the field cannot use ($7700 bit 1 clear) is ITFX_NONE.
 ctOrg*       = Organize's group ranges, C2/AC12 (start ids) and C2/AC17 (lengths).
 
@@ -55,10 +55,14 @@ def fx(rom, prop):
         handler = rom[0x2B0EE + x] | rom[0x2B0EF + x] << 8
         if handler == 0xB107:                      # the Power Meal
             dbd, dc0 = pm_bits, pm_dc0
+        if handler == 0xB1F8:                      # the Shelter: C2/B1F8 `LDA #CA / STA $0DBD / JMP C2/B18B` -- the restore
+            sh = 0x20000 + 0xB1F8                  #   path past C2/B17F's $0DBF store, $0DC0 the record's (0F -> 40)
+            assert rom[sh] == 0xA9 and rom[sh + 2:sh + 5] == bytes([0x8D, 0xBD, 0x0D]), 'C2/B1F8 ($0DBD)'
+            dbd = rom[sh + 1]
         pool[s] = (1 if dbd & 0x80 else 0) | (2 if dbd & 0x40 else 0)
         if not prop[0xBC + s] & 0x02:
             continue
-        if handler in (0xB17F, 0xB107):
+        if handler in (0xB17F, 0xB107, 0xB1F8):
             if dc0 == 0x40:
                 kind[s] = 3
             elif dbd & 0x80:
@@ -77,7 +81,12 @@ def main():
     a = ap.parse_args()
     rom = _romlib.load(ROM)
     w = wram_of(a.state or recipe('menu_open_gato2'))
-    prop = w[0x7700:0x7700 + 0xF3]
+    prop = bytearray(w[0x7700:0x7700 + 0xF3])
+    # C2/9969 `LDA $0D34 / BEQ / LDA #02 / TRB $77C8`: the menu was opened off a save point, so the Shelter's field-usable
+    # bit is gone from the capture. Put it back from C2/98B5's own source -- $CC:0000 + X & 1E, X = FF/CF0E[4] + (C8 - BC)
+    # * FF/CF18[4] (C2/88AD) -- and leave the step to menu.c (CtMenuItemOpenGate), which runs it at every open.
+    x = (rom[0x3FCF16] | rom[0x3FCF17] << 8) + (0xC8 - 0xBC) * rom[0x3FCF1C]
+    prop[0xC8] |= rom[0x0C0000 + x] & 0x02
     kind, amt, allp, pool = fx(rom, prop)
     org_s, org_l = rom[0x2AC12:0x2AC17], rom[0x2AC17:0x2AC1C]
     j = lambda v: ', '.join(str(x) for x in v)

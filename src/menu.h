@@ -175,6 +175,7 @@ int  CtMenuItemDescLen(int id);                      // C2/FA49's steps for item
 int  CtMenuStrLen(int kind, int id);                 // the same for table kind 0 = items ($CC:2EB1), 1 = techs ($CC:3A09)
 
 // ITEM screen interactions (byte-exact ROM, see the ct-field-item-menu-use RE notes):
+void CtMenuItemOpenGate(const uint8_t* mem, const uint8_t* glb);   // C2/9969 at the menu open ($77C8 bit 1)
 int  CtMenuItemUsable(int id);                       // field-menu usable? ($7700[id] bit1)
 int  CtMenuItemUse(uint8_t* mem, int absSlot, int targetSlot);  // apply effect + consume; 1 if used
 // The two halves the Item screen runs 42+ frames apart: C2/8E2D's effect (with C2/9016's pop-up numbers, $0F5D bits

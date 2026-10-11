@@ -108,9 +108,9 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-11: **820** checks, **2** excluded; `--list` prints the current set).
+(2026-10-11: **822** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**580** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**582** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **238** slower checks — whole fights and attract legs against the logical oracle, the
@@ -642,6 +642,25 @@ MEASURED on loc 004: `$7E320A/320B F2→F3 F4→F5`, `$7E330A/330B F6→F7 F8→
 moving. The `[door] tile(10,4) opened=1` line (CT_TRIGDBG) is the countable; the fnv is
 the canary. ⚠ The host also has to seed `$1D1E`/`$1D1F` — unset, they mask every door
 index to (0,0). Dossier: `disasm/notes/field_doors_occluders_decisionbox.md`.
+
+### field-savepoint-a-opens-the-save-screen-vs-rule-cartridge / field-shelter-only-on-the-save-point-vs-rule-cartridge
+
+The save point. Its object (the same script in every location that has one) sets `$7F01CF` bit 7 while the lead stands
+on its tile and, on A (the pad's `$00F8` bit 7, op `31`), runs `C8 40`: mode 6, screen `$0B` (C2/D4F0), the Save screen
+without the ribbon, whose B closes the menu (C2/82B2). The first check holds A on the tile of
+`saves/field_re/savept084_lake.state` (the user's game state on loc 084's save tile, made through the ROM's loader) and
+pins the park, the menu's C frame, the save's jingle (slot 1 written) and the script's resume; the frames are the
+rule's cartridge's (the park 3 frames apart, every step after it equal; the screen 0 px from the cartridge's). The second
+tries the Shelter off the tile (refused: C2/9969 clears `$77C8` bit 1 when `$0D34 != 0`), then on it: the party's HP
+and MP restored on the cartridge's values, a frame ahead (the port's input convention). Both need the private capture.
+
+### sweep-band-25a3 (`ct.exe --sweepband25a3`) / battle-flame-toss-band-vs-rule-cartridge
+
+The band C1/25A3 (C1/1FDD's routine 0: Slash, Lucca's Flame Toss, the enemies' area 08) against the ROM micro-executed,
+8000 fuzzed cases over four battle states, all of WRAM compared but the direct page; the tally counts the cases with two
+victims or more on each side and each `$9608` arm, and the check fails if any is zero. The live check plays the Manoria
+nuns fight with Flame Toss learned (`CT_POKEWRAM 2839=80`) and pins the staging `$9604-$9608 = 00 01 04 02 01` and the
+victim `$AD8E = 04` the rule's cartridge shows for the same target. Both need private battle captures.
 
 ### field-organ-door-opens-live (`--scene 129 --loadwram m81_naga_after_fight.lakewram --walkscript …`)
 

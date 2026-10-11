@@ -10841,6 +10841,7 @@ int main(int argc, char** argv) {
   int menuScreen = 0;                                         // PHASE 3: $7E0067 screen id (0 ribbon; 1..6 sub)
   static CtMenuShop menuShop;                                 // the SHOP (screen $0C), menu.c
   int menuShopOn = 0;                                         // 1 = this menu open came from a parked op 0xC8 $80-$BF
+  int menuSavePtOn = 0;                                       // 1 = from a parked op 0xC8 with an even operand: mode 6
   // SCREEN $0D (op 0xC8 $C0-$FF -> mode 3, C2/808F[3]): the ATB selector and the naming keyboard are ONE screen of the
   // shell, C2/E1E3's substates -- 0 the router C2/E1ED, 1 the keyboard C2/E21E, 2 the selector C2/E236, 3 the naming
   // build C2/E201, 4 the "Enter a name" prompt C2/E209. menuName68 is its $68, menuNameOut C2/83CA's fade-out running
@@ -11976,11 +11977,25 @@ int main(int argc, char** argv) {
     //  loop calls C0/00BF alone: an op parked inside a location's fade-in waits for its end. MEASURED, the new game from
     //  power-on: `C8 C0` parks at f217 with $0119 still climbing, 0F at f219, the first `DEC $19` at f220.)
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneShop(f.vm) >= 0
-        && !inLoadFade) {
+        && (CtSceneShop(f.vm) & 0x80) && !inLoadFade) {
       menuPhase = 1; menuT = -1; menuOpt = 0; menuScreen = 0x0C; menuShopOn = 1;   // (C0/0CCE is the next frame's)
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_SHOPTRACE")) printf("shop: f%d op C8 %02X -> shop %02X (mode 2, screen $0C)\n",
                                          frameNo, CtSceneShop(f.vm), CtSceneShop(f.vm) & 0x3F);
+    }
+    // ---- THE SAVE POINT'S SAVE (op 0xC8, an even operand: C0/0CFC `LDA #06` -> mode 6 -> screen $0B, C2/808F): the
+    // shop's launcher to the byte -- C0/0CC7's fade, C0/0CEA's save, C0/0D18's JSL, C0/0D1C's reload, C0/0D33's handshake.
+    // Screen $0B (C2/D4F0) is the Save screen without the ribbon: substate 0 C2/D4F8 `JSR C2/9AAD / JSR C2/D065 / JSR
+    // C2/D0E5 / INC $68 / JMP C2/83B2` (no C2/CEDC gate: on the save tile the save is allowed), substate 1 C2/D506 the
+    // Save screen's loop with B -> C2/82B2 (the menu closes, back to the field) where screen 6's goes to the ribbon
+    // (C2/9A98), substates 2/3 the Save screen's own C2/CF61 / C2/CF92. (The user, 2026-10-11, translated from
+    // Portuguese: "pressing action on the save sparkle does not open the save menu" -- the op was skipped.)
+    if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneSavePoint(f.vm) >= 0
+        && !inLoadFade) {
+      menuPhase = 1; menuT = -1; menuOpt = 5; menuScreen = 0x0B; menuSavePtOn = 1;   // (C0/0CCE is the next frame's)
+      menuSaveCur = 0; menuSavePrompt = 0; menuSaveDoWrite = 0;                      // C2/D0E5: the cursor on slot 1
+      memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
+      if (getenv("CT_SHOPTRACE")) printf("savepoint: f%d op C8 %02X -> mode 6, screen $0B\n", frameNo, CtSceneSavePoint(f.vm));
     }
     // ---- THE LOAD SHELL (op 0xC8, operand odd): C0/0CF8 `BIT #01 / BNE` -> C0/0D00 `LDA #00` -> C0/0D18 `JSL C2:8000`
     // with A = 0 -- the same C0/0C76 -> C0/0CC7 fade and C0/0CEA save as the shop and the naming. MEASURED (a blank cart
@@ -12894,7 +12909,7 @@ int main(int argc, char** argv) {
         // (C0/0CD4-0CE5, the colour records tick), and under both the field's IRQ steps the tiles. The picture stays the
         // frozen frame below; the machines' state is what the field comes back to.
         if (f.vm && menuT >= 1 && menuT <= 15) {
-          if (!menuShopOn && !menuNameOn && !menuLoaderOn) CtHdmaTableBuild(s7);
+          if (!menuShopOn && !menuNameOn && !menuLoaderOn && !menuSavePtOn) CtHdmaTableBuild(s7);
           else fieldColourRecords(s7);
           fieldIrqTiles(f.sd, s7, frameNo);
         }
@@ -12953,9 +12968,9 @@ int main(int argc, char** argv) {
           // frame), C2/816A over the roster. MEASURED on the logical oracle: 16 with no save (party3's X, the new
           // game's naming), 17 with one (colsave3 / ct_real_save's load list), 19 with three.
           { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-            int caller = (menuNameOn || menuShopOn) ? CT_MENU_CALLER_C8_HI
+            int caller = (menuNameOn || menuShopOn || menuSavePtOn) ? CT_MENU_CALLER_C8_HI
                        : menuLoaderOn ? CT_MENU_CALLER_C8_ODD : CT_MENU_CALLER_X;
-            int mode = menuLoaderOn ? 0 : menuNameOn ? 3 : menuShopOn ? 2 : 1;
+            int mode = menuLoaderOn ? 0 : menuNameOn ? 3 : menuShopOn ? 2 : menuSavePtOn ? 6 : 1;
             long st = ct_menu_open_stretch(rom, rl, s7, fieldSram(), mode, caller);
             menuShellS0 = st > 0 ? (int)(st / CT_FRAME_CPU_CYCLES) : 16;
             if (getenv("CT_MENUSHELL")) printf("menushell: f%d C, NMI-off stretch %ld cycles = %.3f frames -> S0 = C+%d\n",
@@ -12968,6 +12983,9 @@ int main(int argc, char** argv) {
           // C2:8253 at f43 (the old valve: f47), `$0D10` = 02 at f45 .. 0F at f52 (old: f49 .. f56). The ribbon's tab
           // builder yields (C2/A0AC, A0BD) are the ROM's own waits and do not move (X menu and overworld: identical).
           if (menuShopOn && menuRuleNmiOnHold()) menuShellP = menuShellS0;
+          // Screen $0B's substate 0 (C2/D4F8): C2/9AAD / C2/D065 / C2/D0E5, then C2/83B2 spawns the fade-in. MEASURED (the
+          // rule's cartridge, a loc 084 save tile): C f54, `$0067 = 0B` f69, `$00BE = 01` f72, `$0D10 = 02` f74 .. 0F f81.
+          if (menuSavePtOn) menuShellP = menuShellS0 + 2;
           // Screen $0D's substate 0, C2/E1ED: $299F | $71 zero -> C2/E576 builds the selector and C2/83B2 spawns in the
           // same frame (P = S0; MEASURED from power-on: $00BE = 02 at S0, $0D10 = 02 two frames on); otherwise C2/E201 ->
           // C2/E40E, CPU the valve's logical oracle rolls into four frames (P = S0 + 4; Marle: S0 f604, $00BE = 01 at f608)
@@ -13010,6 +13028,7 @@ int main(int argc, char** argv) {
           CtMenuRosterLists(s7);                           // C2/8115 + C2/8130 JSR C2/816A (+ FF/F813's $85)
           CtMenuConfigUnpack(s7); CtMenuConfigBuild(s7);   // C2/8133 (+ the screen build's nav table, C2/C3B5)
           CtMenuOpenSheets(s7);                            // C2/8139 -> C2/9875: the bag cleanup + the seven sheets
+          CtMenuItemOpenGate(s7, glb);                     // ... and C2/9969: the Shelter's bit on a save point only
         }
         if (menuNameOn && menuShellF == menuShellS0 - 1) s7[0x0071] = (uint8_t)menuNameId;   // C2/806B LDA $0A01 / STA $71
         if (menuLoaderOn && menuShellF == menuShellS0) {                  // S0: C2/E613 -> C2/E7C3 (C2/E7CF: the cursor on
@@ -14240,7 +14259,7 @@ int main(int argc, char** argv) {
                 menuSfx(s7, 0x00, "back-to-ribbon");
               }
             }
-          } else if (menuScreen == 6) {                      // ---- SAVE (screen 6, C2/CED4): READ-ONLY slots
+          } else if (menuScreen == 6 || menuScreen == 0x0B) {   // ---- SAVE (screen 6, C2/CED4; the save point's $0B, C2/D4F0)
             // The ROM slot cursor ($0079, stepped in the C2/D0E5 slot-loader) rests on a save-file slot;
             // Up/Down cycle the 3 slots (wrap). A on a slot = the SAVE-WRITE, which is DEFERRED (a marked
             // no-op -- see the CtMenuRenderSave boundary note). B -> ribbon (C2/CEEC: STZ $0067 / $0068=1,
@@ -14369,7 +14388,9 @@ int main(int argc, char** argv) {
                 }
               }
             }
-            if (bHeld && !prevBBtn) {
+            if (bHeld && !prevBBtn && menuScreen == 0x0B) {
+              closeReq = 1;                                  // C2/D516 JMP C2/82B2: the menu closes, back to the field
+            } else if (bHeld && !prevBBtn) {
               menuScreen = 0;
               menuSaveHoverPanel = menuSaveCur;              // C2/9B71 -> C2/D0DB: the picture stays (its panel too)
               menuSfx(s7, 0x00, "back-to-ribbon");           // C2/CF5E JMP C2/9A98 -> C2/9AAA
@@ -14735,7 +14756,7 @@ int main(int argc, char** argv) {
               printf("menuformlayout: %s fnv=%08X\n", line, ffnv);
             }
           } }
-        else if (menuScreen == 6) { CtMenuChrome(fb, 6, menuOpt, 0);
+        else if (menuScreen == 6 || menuScreen == 0x0B) { CtMenuChrome(fb, 6, 5, 0);
                                     CtMenuSavePromptUp(menuSavePrompt || menuSavePromptHold > 0);
                                     CtMenuRenderSave(&mh, fb, menuSaveCur);
                                     CtMenuRenderSavePrompt(&mh, fb, menuSavePrompt ? menuSavePrompt
@@ -15206,7 +15227,7 @@ int main(int argc, char** argv) {
             long rl = 0; const uint8_t* rimg = CtBattleRom(&rl);
             int loc = (s7[0x100] | (s7[0x101] << 8)) & 0x1FF;
             CtReloadCost rc; memset(&rc, 0, sizeof rc);
-            long cyc = rimg ? ct_field_reload_cycles(rimg, rl, s7, loc, (menuShopOn || menuNameOn)
+            long cyc = rimg ? ct_field_reload_cycles(rimg, rl, s7, loc, (menuShopOn || menuNameOn || menuSavePtOn)
                                                      ? CT_RELOAD_CALLER_C8 : CT_RELOAD_CALLER_X, &rc) : -1;
             if (cyc > 0) menuReloadW = ct_nmi_wait_frames(cyc);   // C0/0B38's wait: + 1 only past the vblank's 37 lines
             else {
@@ -15239,10 +15260,11 @@ int main(int argc, char** argv) {
         if (menuT >= 15) {
           menuPhase = 0;
           s7[0x407] = 0;                                     // C0/2844 STZ $0407 (resume complete)
-          if (menuShopOn) {                                  // C0/0D33-0D39: $0117 bit6 off, $0118 bit6 on -> the
-            menuShopOn = 0; menuScreen = 0;                  //   op's next visit steps over it (C0/3774)
+          if (menuShopOn || menuSavePtOn) {                  // C0/0D33-0D39: $0117 bit6 off, $0118 bit6 on -> the
+            const char* what = menuSavePtOn ? "savepoint" : "shop";
+            menuShopOn = 0; menuSavePtOn = 0; menuScreen = 0;   //   op's next visit steps over it (C0/3774)
             if (f.vm) CtSceneShopDone(f.vm);
-            if (getenv("CT_SHOPTRACE")) printf("shop: f%d closed, script resumes\n", frameNo);
+            if (getenv("CT_SHOPTRACE")) printf("%s: f%d closed, script resumes\n", what, frameNo);
           }
           if (menuNameOn) {                                  // the same C0/0D33-0D39 handshake: the op's next visit
             menuNameOn = 0; menuScreen = 0;                  //   steps over it and the script goes on
@@ -18286,10 +18308,11 @@ int main(int argc, char** argv) {
       uint8_t* s7r = CtSceneMem7E(f.vm);
       menuPhase = 0;
       s7r[0x407] = 0;                                        // C0/2844 STZ $0407 (resume complete)
-      if (menuShopOn) {                                      // C0/0D33-0D39: $0117 bit6 off, $0118 bit6 on -> the
-        menuShopOn = 0; menuScreen = 0;                      //   op's next visit steps over it (C0/3774)
+      if (menuShopOn || menuSavePtOn) {                      // C0/0D33-0D39: $0117 bit6 off, $0118 bit6 on -> the
+        const char* what = menuSavePtOn ? "savepoint" : "shop";
+        menuShopOn = 0; menuSavePtOn = 0; menuScreen = 0;    //   op's next visit steps over it (C0/3774)
         CtSceneShopDone(f.vm);
-        if (getenv("CT_SHOPTRACE")) printf("shop: f%d closed, script resumes\n", frameNo);
+        if (getenv("CT_SHOPTRACE")) printf("%s: f%d closed, script resumes\n", what, frameNo);
       }
       if (menuNameOn) {                                      // the same C0/0D33-0D39 handshake: the op's next visit
         menuNameOn = 0; menuScreen = 0;                      //   steps over it and the script goes on

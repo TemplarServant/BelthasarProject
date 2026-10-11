@@ -6206,6 +6206,121 @@
       "notes": "The user, 2026-10-11 (translated from Portuguese): 'Lucca's flame toss should hit more than one enemy in a line'. Flame Toss (tech 11) is group 0C, area 05 (CC/1ACB): C1/C1DD's PC arm (`STZ $0A`, $0C = CC/1ACC[id*2]) runs the area pass C1/C586 at the dispatch, record CC/2B24 `01 / 00 00 82` = C1/C78D ($9605 = $00, the caster) and C1/1FDD routine 0, the band C1/25A3 with $9607 = 02, $9608 = 1; the select handler C1/2203 runs the same band on every cursor move and lights the set (C1/27E8). The port dispatched group 0C to one victim. The drive: the Manoria nuns fight with Flame Toss learned ($2839 = 80 poked on both sides), Crono attacks, Lucca Tech / Flame Toss / Down / A (target 4). The rule's cartridge (ct.exe --from m81_nuns_lake.state, PEEK_POKE 7E2839=80, the same keys at its own menu frames): `$9604-$9608 = 00 01 04 02 01`, `$99C0 = 04`, `$AD8E = 04` -- these four Naga-ettes never stand within the band's 16 px of the line, so one victim on both sides (64 timings x 4 targets swept on the cartridge: always one). The several-victim arm is graded by sweep-band-25a3."
     },
     {
+      "name": "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "132",
+        "--loadwram",
+        "saves/field_re/savept084.lakewram",
+        "--walkscript",
+        "n:30,A:20,n:50,a:1,n:60,b:4,n:200"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/field_re/savept084_lake.state",
+        "CT_SHOPTRACE": "1",
+        "CT_MENUSHELL": "1",
+        "CT_MENUSFX": "1",
+        "CT_SRAM": "build/_savept.srm",
+        "CT_SRAM_FRESH": "1",
+        "CT_SHOTS": "build/_savept",
+        "CT_SHOTS_AT": "300",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/savept084.lakewram",
+        "saves/field_re/savept084_lake.state"
+      ],
+      "expect": [
+        "savepoint: f35 op C8 40 -> mode 6, screen $0B",
+        "menushell: f51 C, NMI-off stretch 5887556 cycles = 16.973 frames -> S0 = C+16",
+        "menusfx-menu: save-jingle -> cmd=19 id=8A pan=80 posted",
+        "savepoint: f221 closed, script resumes"
+      ],
+      "pin": [
+        "^savepoint: f\\d+ op C8 40",
+        "^menushell: f\\d+ C,",
+        "^menusfx-menu: save-jingle",
+        "^savepoint: f\\d+ closed"
+      ],
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "    if (arg && arg < 0x80 && !(arg & 1)) {",
+          "replace": "    if (arg && arg < 0x80 && !(arg & 1) && 0) {",
+          "why": "C8 40 skipped again: A on the save sparkle opens nothing"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "A on the save sparkle opens the save point's save (mode 6, screen $0B) on the cartridge's frames, saves, and B returns to the field",
+      "notes": "The user, 2026-10-11 (translated from Portuguese): 'pressing action on the save sparkle does not open the save menu'. The save point object (the same script in all 35 locations that have one; loc 084 obj9) loops `12 06 03 .. / 12 07 27 ..` (the lead's tile), `16 CF 80 86 0A` ($7F01CF bit 7 already up, else `E8 0B` and `65 87 CF` set it), `31 06` (the pad's $00F8 bit 7: A) -> `65 03 F3 / C8 40`. Op C8 with an even operand is C0/0CFC `LDA #06`: mode 6, screen $0B (C2/808F), the Save screen without the ribbon (C2/D4F0: substate 0 C2/D4F8 = C2/9AAD / C2/D065 / C2/D0E5 / C2/83B2, no C2/CEDC gate; substate 1 C2/D506, B -> C2/82B2 back to the field). The port skipped it. Fixture saves/field_re/savept084_lake.state: the user's game state (F5 ct_debug_032's $2400-$2FFF and $7F:0000-01FF spliced into m81_naga_after_fight_lake.state) taken onto loc 084's save tile (3, 39) by the ROM's own loader (`ct.exe --teleport 0x84 3 39 0`). The rule's cartridge, A held from f30: `$0125 = $0117 = 40` f38, `$0A00 = 0606` f54 (C), `$0067 = 0B` f69, `$00BE = 01` f72, `$0D10` 02 .. 0F f74-81; the port: park f35, C f51, the picture up f71-78 (the save object's visit lands 3 frames apart; every step after it matches). The screen at its full brightness: 0 pixels differ from the cartridge's (256 x 224, the cartridge's line 8 = the port's 0). A on slot 1 writes it (save-jingle, slot 1 = loc 084 tile (3,39)); B on the cartridge f170: the fade 0D .. 00 f171-178, the RTL f179; the port's B f167: the fade f167-173, the RTL f175 (its input convention, a frame ahead)."
+    },
+    {
+      "name": "field-shelter-only-on-the-save-point-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "132",
+        "--loadwram",
+        "saves/field_re/savept084.lakewram",
+        "--walkscript",
+        "d:24,n:20,m:2,n:60,r:2,n:12,a:2,n:40,a:2,n:30,a:2,n:30,a:2,n:40,b:2,n:30,b:2,n:30,b:2,n:30,b:2,n:60,u:24,n:30,m:2,n:60,r:2,n:12,a:2,n:40,a:2,n:30,a:2,n:30,a:2,n:200"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/field_re/savept084_lake.state",
+        "CT_FIELD_MEMMON": "2400:1,2500:1,2603:2,2607:2,26A3:2,26A7:2,2743:2,2747:2,101CF:1",
+        "CT_SHOTS": "build/_shelter",
+        "CT_SHOTS_AT": "1000",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/savept084.lakewram",
+        "saves/field_re/savept084_lake.state"
+      ],
+      "expect": [
+        "fmemmon f445 loc=084  2400=C8  2500=02  2603=6300  2607=0A00  26A3=5100  26A7=0900  2743=6000  2747=0E00  101CF=80*",
+        "fmemmon f662 loc=084  2400=C8  2500=02  2603=8700*  2607=1200*  26A3=6500*  26A7=1200*  2743=8000*  2747=1100*  101CF=80",
+        "fmemmon f745 loc=084  2400=C8  2500=01*  2603=8700  2607=1200  26A3=6500  26A7=1200  2743=8000  2747=1100  101CF=80"
+      ],
+      "pin": [
+        "^fmemmon f\\d+ loc=084 .*101CF=80\\*",
+        "^fmemmon f\\d+ loc=084  2400=C8  2500=0[12]\\*?  2603=8700"
+      ],
+      "mutations": [
+        {
+          "file": "src/menu.c",
+          "find": "  if (id == 0xC8 && !g_mItemShelterGate) p &= ~0x02;",
+          "replace": "  if (id == 0xC8) p &= ~0x02;",
+          "why": "the Shelter never usable (the old bake): no heal on the save tile"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "  if (id == 0xC8 && !g_mItemShelterGate) p &= ~0x02;",
+          "replace": "  (void)g_mItemShelterGate;",
+          "why": "the Shelter usable anywhere: it heals in the first menu, off the save tile"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "the Shelter is refused off the save tile and restores the party's HP and MP on it, on the cartridge's frames and values",
+      "notes": "The user, 2026-10-11 (translated from Portuguese): 'I also can't use Shelter on top of it'. C2/9875 builds the item property page $7700 at every menu open; its last step C2/9969 `LDA $0D34 / BEQ / LDA #02 / TRB $77C8` clears the Shelter's field-usable bit off a save point ($0D34 != 0: a field map without $7F01CF bit 7). The port's table (tools/gen/menu_itemuse.py) was captured with the menu open off a save point, so the Shelter stayed unusable everywhere and its effect was never decoded. Now the generator puts the bit back from $CC (C2/88AD's locator) and decodes C2/B1F8 (`LDA #CA / STA $0DBD / JMP C2/B18B`, the record `08 C2 0F 00`: HP and MP to the maximum, the whole party), and menu.c applies C2/9969 at every open (CtMenuItemOpenGate). The drive: off the tile (Down 24), X, Item, A x4 on the Shelter (refused: nothing changes), B x4 out, Up onto the tile, X, Item, A x4. The rule's cartridge, the same keys: $7F01CF 00 at f4, 80 at f446; HP/MP 99/10 81/9 96/14 -> 135/18 101/18 128/17 at f663; the count 02 -> 01 at f746, the slot still C8. The port: f3, f445, f662, f745, the same values (its input convention, a frame ahead)."
+    },
+    {
       "name": "field-organ-door-opens-live",
       "argv": [
         "build/ct_field.exe",

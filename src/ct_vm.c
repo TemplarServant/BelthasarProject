@@ -3484,7 +3484,20 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       if (sc->shop) return 1;
       s->nm = 0; s->addr = nxt; return 0;
     }
-    s->addr = nxt; return 0;                        // other Special-Dialog operands: skip (mode 5 $00, mode 6 $40)
+    // ⭐ MODE 6 = THE SAVE POINT'S SAVE (screen $0B; C2/808F[6]). C0/0CF8 `BIT #01 / BNE` not taken, C0/0CFC `LDA #06`:
+    // an even operand, `C8 40` in the save point object every one of the 35 locations with one runs (loc 084 obj9:
+    // `12 06 03 .. / 12 07 27 .. / 16 CF 80 86 0A / 31 06 / 65 03 F3 / C8 40 / ..` -- on the save tile, with $7F01CF bit
+    // 7 already up, the pad's $00F8 bit 7 runs it). The same C0/3757 handshake as the shop's, so it parks in the shop's
+    // fields (CtSceneShop; the host tells the two apart by the operand's bit 7, CtSceneSavePoint). MEASURED, the rule's
+    // cartridge (a loc 084 save tile, A held): `$0125 = 40`, `$0117 = 40` at f38, $0119 0E .. 00 over f39-53, `$0A00 =
+    // 0606` at f54, `$0067 = 0B` at f69; B at f170, the RTL at f179, `$0117 = 00` / `$0118 = 40` at f211. (Mode 5,
+    // operand $00, is not ported: skipped.)
+    if (arg && arg < 0x80 && !(arg & 1)) {
+      if (!s->nm) { sc->shop = 1; sc->shopArg = arg; s->nm = 1; return 1; }
+      if (sc->shop) return 1;
+      s->nm = 0; s->addr = nxt; return 0;
+    }
+    s->addr = nxt; return 0;                        // other Special-Dialog operands: skip (mode 5 $00)
   }
   if (op == 0xC7 || op == 0xC9 || op == 0xCA || op == 0xCB ||
       op == 0xCC || op == 0xCD || op == 0xCE) {
@@ -7817,6 +7830,7 @@ int CtSceneLoader(const CtScene* sc) { return sc->loader ? sc->loaderArg : -1; }
 // The mode-2 SHOP request (op 0xC8 operand $80-$BF -> C0/0D09 -> C2/8000 -> screen $0C). -1 = none; else the raw
 // operand (the shop number is operand & $3F).
 int CtSceneShop(const CtScene* sc) { return sc->shop ? sc->shopArg : -1; }
+int CtSceneSavePoint(const CtScene* sc) { return (sc->shop && !(sc->shopArg & 0x80)) ? sc->shopArg : -1; }
 void CtSceneShopDone(CtScene* sc) { sc->shop = 0; }
 // The $C3 special-sequence request (op 0xFF, operand < $90 -> C0/3FE0 `JML $C3:0000`). -1 = none.
 int CtSceneSequence(const CtScene* sc) { return sc->seqHas ? sc->seqReq : -1; }

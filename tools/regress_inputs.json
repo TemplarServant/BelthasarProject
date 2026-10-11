@@ -4194,7 +4194,7 @@
         "ow-object-bootstrap-w6-vs-oracle",
         "ow-object-bootstrap-w7-vs-oracle"
       ],
-      "sha256": "a0cb026bff7a4131a8f4ae29c1a031df9f2218513728ab76379a2447c6293393",
+      "sha256": "606d83d9ee83d9c20472df98ccae4c90ed693e132fb447e69aaf947e691cac2b",
       "size": 656176,
       "present_when_recorded": true
     },
@@ -4242,7 +4242,7 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "120d392192dd07eac3649c243263e28c86fe2ef22e142776e6f772ac3d3b08ed",
+      "sha256": "6c0466b65422492f57e0b24879eba263ec4c02d1af5fa645195504a00f414e24",
       "size": 1501354,
       "present_when_recorded": true
     },
@@ -5032,6 +5032,32 @@
       "how": "tools/fixtures.py (recipe telepod_show): loc 008 with a two-member party (Crono leading, Marle following), control on",
       "sha256": "1907365744b18cda76b05cf883618959a7413e347bac50961feeb70a0710d009",
       "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/savept084_lake.state",
+      "used_by": [
+        "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
+        "field-shelter-only-on-the-save-point-vs-rule-cartridge"
+      ],
+      "kind": "state",
+      "regenerable": false,
+      "how": "A LakeSnes state on loc 084's save tile (3, 39), made 2026-10-11: the user's F5 ct_debug_032.state (CTFS, loc 0CB) dumped by ct_field CT_DUMPWRAM_AT=1, its $2400-$2FFF (bag, sheets, party, techs) and $7F:0000-01FF (the story flags) spliced into saves/field_re/m81_naga_after_fight_lake.state (tools/ctlib/lake.py), then `ct.exe --teleport 0x84 3 39 0 --frames 120 --out` under CT_ORACLE_LOGICAL=1 (the ROM's own loader).",
+      "sha256": "ebb30dfcc77d800910bfaaf8253f433aa268ade2757b3346f5bad739e0754a9c",
+      "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/savept084.lakewram",
+      "used_by": [
+        "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
+        "field-shelter-only-on-the-save-point-vs-rule-cartridge"
+      ],
+      "kind": "lakewram",
+      "regenerable": false,
+      "how": "The WRAM of saves/field_re/savept084_lake.state (tools/ctlib/lake.py wram) behind the 21-byte #lakewram header.",
+      "sha256": "d8991c125db002617c707cdafab7d2bbb2fcb5ce5ac4b887d52504ead85c4a74",
+      "size": 131093,
       "present_when_recorded": true
     }
   ]

@@ -1287,8 +1287,23 @@ int CtMenuSaveCanOpen(const uint8_t* mem, const uint8_t* glb) {
 // ================= ITEM screen Use / Move / Organize (byte-exact ROM, see [[ct-field-item-menu-use]]) =====
 // Field-menu USABLE gate (C2/AB14): $7E7700[id] bit1 (0x02). Consumables only (id >= 0xBC). Not-usable
 // items (equipment, key items, battle-only Heal/Revive/Shelter) make the A-press inert.
+// C2/9969, the last step of C2/9875's $7700 build at every menu open: `LDA $0D34 / BEQ / LDA #02 / TRB $77C8` -- off a save
+// point ($0D34 != 0, CtMenuSaveCanOpen's rule) the Shelter (C8) loses its field-usable bit. ctItemProp holds the table
+// before that step (tools/gen/menu_itemuse.py puts C8's bit back from $CC), so the step is applied here, live: the user,
+// 2026-10-11 (translated from Portuguese), "I can't use Shelter on top of the save point" -- the bake had been taken
+// off a save point and kept the Shelter unusable everywhere.
+static int g_mItemShelterGate = 0;                       // 1 = $0D34 == 0 at the last menu open
+void CtMenuItemOpenGate(const uint8_t* mem, const uint8_t* glb) {
+  if (!mem) { g_mItemShelterGate = 0; return; }
+  int loc = mem[0x0100] | (mem[0x0101] << 8);            // C2/98A1-98B2, as CtMenuSaveCanOpen
+  int savePt = glb ? (glb[0x01CF] & 0x80) : 0;
+  g_mItemShelterGate = (loc >= 0x01F0 || savePt) ? 1 : 0;
+}
 int CtMenuItemUsable(int id) {
-  return (id >= ITFX_BASE && id <= 0xF2 && (ctItemProp[id] & 0x02)) ? 1 : 0;
+  if (id < ITFX_BASE || id > 0xF2) return 0;
+  int p = ctItemProp[id];
+  if (id == 0xC8 && !g_mItemShelterGate) p &= ~0x02;    // C2/996E LDA #02 / TRB $77C8
+  return (p & 0x02) ? 1 : 0;
 }
 
 // Apply a consumable's field effect to ONE char sheet ($7E2600 + charId*0x50). Byte-exact vs the heal
