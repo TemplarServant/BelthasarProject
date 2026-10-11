@@ -108,9 +108,9 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-11: **817** checks, **2** excluded; `--list` prints the current set).
+(2026-10-11: **818** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**577** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**578** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **238** slower checks — whole fights and attract legs against the logical oracle, the
@@ -642,6 +642,20 @@ MEASURED on loc 004: `$7E320A/320B F2→F3 F4→F5`, `$7E330A/330B F6→F7 F8→
 moving. The `[door] tile(10,4) opened=1` line (CT_TRIGDBG) is the countable; the fnv is
 the canary. ⚠ The host also has to seed `$1D1E`/`$1D1F` — unset, they mask every door
 index to (0,0). Dossier: `disasm/notes/field_doors_occluders_decisionbox.md`.
+
+### field-organ-door-opens-live (`--scene 129 --loadwram m81_naga_after_fight.lakewram --walkscript …`)
+
+The same machine on a door a SCRIPT drew, played live. From the WRAM after the Naga-ette fight the drive mashes A
+through the scene and Frog's naming (`CT_HOLDBTN` Start accepts it), plays the Manoria cathedral's organ from below
+(obj13: `E5 27 01 28 04 0C 04 3B` copies the door's rect over the wall on all the planes, C0/AF4E) and walks right
+and up into the door. The countable is `doorlist: f3634 C0/28C0 tile 070D` (`CT_DOORLIST`): C0/9D35 found prop1
+bit 4 on the tile ahead and C0/0D3E took the request; `changeloc: scene 129 -> 130` says the walk went through. The
+host's collision planes (`f->C`) take a scripted copy by re-reading the destination rect from the WRAM
+(`fieldCollFromWramRect`); its old copy of its own packed cells dropped the door flag (zb bit 5), so the exit took
+the party through the door shut. A `--loadstate` / F9 hides this (it re-reads every plane from the WRAM), which is
+why `field-loadstate-keeps-the-door-the-organ-opened` passed throughout. Needs the private capture
+`saves/field_re/m81_naga_after_fight.lakewram`. The request's frame is the port's own drive's; re-pin it only for a
+change that moves the walk or the scene before it.
 
 ### field-scene200-prio0-occluder-order (`--scene 200 --at 632 143`)
 

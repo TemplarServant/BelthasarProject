@@ -1915,39 +1915,27 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
 // collision is the engine's 8-way FEELER path (fieldPlayerCollide, below): byte-exact shape
 // (CtCollisionShapeSolid) + z-gate, at sub-pixel resolution -- not a single-foot approximation. ----
 typedef struct { uint8_t* shp; uint8_t* zb; uint8_t* mv; int cw, ch; } Coll;
-// Scripted tile copies (event ops 0xE4/0xE5) also move the COLLISION prop planes: ROM C0/AF4E
-// flag bit3 copies $7E30C0 (shape<<2 | prio), bit4 copies $7E7000, bit5 copies $7E7040 -- this
-// is how a scripted door opens for the PLAYER, not just visually (scene-121 door: flags 0x3B).
-// Our asset re-packs those planes per cell as shp (=$30C0 shape), zb (bit7 = $7000&0x40;
-// bits 0-4,6 = $7040 per fieldTileFetch below), mv (the $7040-derived mover plane).
-static void fieldCollCopyTiles(Coll* c, int sl, int st, int el, int eb, int dl, int dt, int flags) {
-  if (!c->shp || !(flags & 0x38)) return;
-  int rw = el - sl + 1, rh = eb - st + 1;
-  for (int y = 0; y < rh; y++)
-    for (int x = 0; x < rw; x++) {
-      int sx = sl + x, sy = st + y, dx = dl + x, dy = dt + y;
-      if (sx < 0 || sx >= c->cw || sy < 0 || sy >= c->ch) continue;
-      if (dx < 0 || dx >= c->cw || dy < 0 || dy >= c->ch) continue;
-      int si = sy * c->cw + sx, di = dy * c->cw + dx;
-      if (flags & 0x08) c->shp[di] = c->shp[si];                                  // $30C0 (shape)
-      if (flags & 0x10) c->zb[di] = (uint8_t)((c->zb[di] & 0x7F) | (c->zb[si] & 0x80));   // $7000
-      if (flags & 0x20) {                                                         // $7040
-        c->zb[di] = (uint8_t)((c->zb[di] & 0xA0) | (c->zb[si] & 0x5F));
-        if (c->mv) c->mv[di] = c->mv[si];
-      }
-    }
-}
 // THE PLANES AS THE WRAM HOLDS THEM. The ROM's collision reads the location's prop planes in WRAM -- prop0 at $7E:30C0,
 // prop1 at $7E:7000, prop2 at $7E:7040, tile (row << 8) | col -- which the location load streams (C0/A630) and the
 // scripted copies move (C0/AF4E). The host keeps them packed per cell (pack_collision / maps.scene_props: shp =
 // prop0 >> 2 & 1F; zb = prop2 & 3 | zflags << 2; mv = prop2 bit 7 | prop2 bit 4 >> 3), so a state whose map differs
 // from the location's load -- a door a script opened, then F5 -- needs them re-read from its WRAM, as the BG is.
+// So does a scripted copy as it happens: ops E4/E5 move the planes in WRAM (C0/AF4E: flag bit 3 = $30C0, bit 4 =
+// $7000, bit 5 = $7040), and the host re-reads the destination rect from there. It used to copy its own packed cells
+// instead, and that copy's $7000 mask took zb bit 7 (prop1 0x40) but not zb bit 5 (prop1 0x10, the DOOR flag C0/9D43
+// tests), which the $7040 mask also kept from the destination: the Manoria cathedral's door, drawn by the organ (obj13's
+// `E5 27 01 28 04 0C 04 3B`), was a door in WRAM and not in the host's planes, so walking into it raised no request
+// and the exit took the party through it shut (the user, 2026-10-11).
 // Returns the number of cells that changed.
-static int fieldCollFromWram(Coll* c, const uint8_t* s) {
+static int fieldCollFromWramRect(Coll* c, const uint8_t* s, int x0, int y0, int x1, int y1) {
   if (!c->shp || !c->zb || !s || c->cw > 64 || c->ch > 64) return 0;
+  if (x0 < 0) x0 = 0;
+  if (y0 < 0) y0 = 0;
+  if (x1 >= c->cw) x1 = c->cw - 1;
+  if (y1 >= c->ch) y1 = c->ch - 1;
   int changed = 0;
-  for (int y = 0; y < c->ch; y++)
-    for (int x = 0; x < c->cw; x++) {
+  for (int y = y0; y <= y1; y++)
+    for (int x = x0; x <= x1; x++) {
       int i = y * c->cw + x, o = (y << 8) | x;
       int b0 = s[0x30C0 + o], b1 = s[0x7000 + o], b2 = s[0x7040 + o];
       int zf = ((b2 & 0x04) ? 0x01 : 0) | ((b2 & 0x08) ? 0x02 : 0) | ((b2 & 0x20) ? 0x04 : 0) |
@@ -1959,6 +1947,7 @@ static int fieldCollFromWram(Coll* c, const uint8_t* s) {
     }
   return changed;
 }
+static int fieldCollFromWram(Coll* c, const uint8_t* s) { return fieldCollFromWramRect(c, s, 0, 0, 63, 63); }
 // Full-solid test for the talk-across-the-counter reach (shape 1 = solid block).
 static int fieldTileWalkable(const Coll* c, int tx, int ty, int pz) {
   (void)pz;
@@ -17334,7 +17323,8 @@ int main(int argc, char** argv) {
           if (CtFieldSceneMapFromWramRect(f.sd, CtSceneMem7E(f.vm), tc[4], tc[5], tc[4] + tc[2] - tc[0],   //   from
                                           tc[5] + tc[3] - tc[1], m & 7)) dirty = 1;                        //   WRAM
         } else if (!(tc[6] & CT_TC_COLL)) { CtFieldSceneCopyTiles(f.sd, tc[0], tc[1], tc[2], tc[3], tc[4], tc[5], m); dirty = 1; }
-        if (!(tc[6] & CT_TC_RENDER)) fieldCollCopyTiles(&f.C, tc[0], tc[1], tc[2], tc[3], tc[4], tc[5], m);
+        if (!(tc[6] & CT_TC_RENDER) && (m & 0x38))     // the planes C0/AF4E moved in WRAM, re-read (fieldCollFromWramRect)
+          fieldCollFromWramRect(&f.C, CtSceneMem7E(f.vm), tc[4], tc[5], tc[4] + tc[2] - tc[0], tc[5] + tc[3] - tc[1]);
       }
       if (dirty) {
         int nw = 0, nh = 0; uint8_t* nprio = NULL;

@@ -1071,7 +1071,7 @@ void CtFieldSceneCopyTiles(void* h, int sl, int st, int el, int eb, int dl, int 
   if ((flags & 0x08) && sd->tprio) {                    // $30C0 full-byte copy: the half-tile
     int lw = sd->tpw, lh = sd->tph;                     // BG-prio bits travel with the room
     for (int y = 0; y < rh; y++)                        // state (the shape part = field.c
-      for (int x = 0; x < rw; x++) {                    // fieldCollCopyTiles)
+      for (int x = 0; x < rw; x++) {                    // fieldCollFromWramRect)
         int sx = sl + x, sy = st + y, dx = dl + x, dy = dt + y;
         if (sx < 0 || sx >= lw || sy < 0 || sy >= lh) continue;
         if (dx < 0 || dx >= lw || dy < 0 || dy >= lh) continue;

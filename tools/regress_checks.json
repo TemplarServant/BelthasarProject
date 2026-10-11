@@ -6157,6 +6157,56 @@
       "notes": "The user, 2026-10-04 (ct_debug_009 = saves/field_re/door_009.state, loc 081, story 15): 'the door's animation in the attached save does not work'. The Manoria cathedral's organ (obj13 fn1) sets $7F00FF bit 4 (`65 04 FF`), plays sound 74 and runs `E5 27 01 28 04 0C 04 3B` -- the staged copy of the door's rect over the stone wall (C0/AF4E on all the planes). Played from a fresh seed (the rule's cartridge: saves/field_re/door_009_tele_noflag.state by --teleport 0x81 13 8 0 with the user's flags; the port from its WRAM) both open the door in one frame (cartridge f497, port f487 from the same press, the drive's latency). The snapshot's WRAM held the door open ($7E:3000, $30C0, $7000 and $7040 byte-identical to the cartridge's), but an F5/F9 load (and --loadstate) restored the VM and the WRAM only: the picture (the layers, the bake) and the collision (f->C) kept the location's load -- the wall, shut. Now fieldMapFromWram re-reads both from the WRAM on every seed (--loadwram, --loadstate, F9): the BG as before, the collision by the inverse of pack_collision (fieldCollFromWram; 0 cells change on a clean seed). From the snapshot the lead walks up through the door to loc 082 at f38 (cartridge, the same walk from door_009_tele.state: f42)."
     },
     {
+      "name": "field-organ-door-opens-live",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "129",
+        "--loadwram",
+        "saves/field_re/m81_naga_after_fight.lakewram",
+        "--walkscript",
+        "a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,a:1,n:7,n:100,u:40,l:83,u:40,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,a:1,n:15,n:400,r:163,u:60,n:40",
+        "--selftest",
+        "build/_organ_door_live.raw",
+        "--frames",
+        "3700"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_HOLDBTN": "01@1804:1,01@1820:1,01@1836:1,01@1852:1,01@1868:1,01@1884:1,01@1900:1,01@1916:1,01@1932:1,01@1948:1,01@1964:1,01@1980:1,01@1996:1,01@2012:1,01@2028:1,01@2044:1,01@2060:1,01@2076:1,01@2092:1,01@2108:1,01@2124:1,01@2140:1,01@2156:1,01@2172:1,01@2188:1,01@2204:1,01@2220:1,01@2236:1,01@2252:1,01@2268:1,01@2284:1,01@2300:1,01@2316:1,01@2332:1,01@2348:1,01@2364:1,01@2380:1,01@2396:1,01@2412:1,01@2428:1,01@2444:1,01@2460:1,01@2476:1,01@2492:1,01@2508:1,01@2524:1,01@2540:1,01@2556:1,01@2572:1,01@2588:1",
+        "CT_DOORLIST": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/m81_naga_after_fight.lakewram"
+      ],
+      "expect": [
+        "doorlist: f3634 C0/28C0 tile 070D list 070D",
+        "changeloc: scene 129 -> 130"
+      ],
+      "pin": [
+        "^doorlist: f\\d+ C0/28C0 tile 070D",
+        "^changeloc: scene 129 -> 130"
+      ],
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          fieldCollFromWramRect(&f.C, CtSceneMem7E(f.vm), tc[4], tc[5], tc[4] + tc[2] - tc[0], tc[5] + tc[3] - tc[1]);",
+          "replace": "          (void)0; /* MUT: the host's planes not re-read after a scripted copy */",
+          "why": "the organ's door is drawn in WRAM but not in the host's collision: no door request, the exit takes the party through it shut"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "played live, the organ's door is a door for the collision: walking into it raises the request and opens it before the exit",
+      "notes": "The user, 2026-10-11 (translated from Portuguese): 'the door in the cathedral is again not playing its opening animation (after playing the organ)'. From the WRAM after the Naga-ette fight (m81_naga_after_fight.lakewram) the drive mashes A through the scene and Frog's naming (Start accepts), plays the organ from below (obj13, tile (2,9)) and walks right and up into the door. The organ's `E5 27 01 28 04 0C 04 3B` copies the door's rect on all the planes in WRAM (C0/AF4E), and C0/9D35 raises the door request from prop1 bit 4 ($7E:7000) of the tile ahead. The host's collision planes (f->C) used to take a scripted copy by copying its own packed cells, whose $7000 mask carried zb bit 7 (prop1 0x40) but not zb bit 5 (prop1 0x10, the DOOR flag), and whose $7040 mask kept bit 5 from the destination: the door was a door in WRAM and not in the host's planes, so no request was raised (`$0117` never took bit 4) and the exit at the door's foot took the party to loc 082 through it shut. eb86d0f had fixed the picture's half of the same two-copy problem; --loadstate / F9 hid both (fieldMapFromWram re-reads everything from the WRAM). Now the copy consumer re-reads the destination rect's planes from the WRAM (fieldCollFromWramRect), as the picture does. Before: no C0/28C0 line, the exit at f3649. After: the request at f3634, the door open on screen two frames later. Not graded against the cartridge frame by frame: the drive is the port's own (the request frame moves with the walk)."
+    },
+    {
       "name": "battle-slow-doubles-reload-and-cuts-damage",
       "argv": [
         "build/ct_field.exe",
