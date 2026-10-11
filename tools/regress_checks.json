@@ -40410,7 +40410,7 @@
       "notes": "The user, 2026-10-10 ('fix what was left open', translated from Portuguese: the Naga-ettes' poses during Fire Whirl). battle.c battleIterFrameA blocked the idle walk's dispatch through an ENEMY's turn inside C1/4058 (enThinkDelay) but not through a PC's (pcThinkDelay): the rule's cartridge has $A0FD = 01 by C1:405B at f858, $A013 = 01 by C1:40A9 at f860, and $990A 04 07 04 04 the whole time -- the port published 06 04 05 04 in those two frames, and the frozen poses stood through the tech (2660 px at full resolution, f900). Fixture saves/field_re/m81_nuns_ppu_lake.state: the user's capture animacao_freiras_naga_ettes spliced with --ppu onto `--teleport 129 7 11 0` from m81_nuns_lake.state (whose own VRAM is another camera's). The port's keys are offset by the battle's start (`battlephase:`), which only the interactive path prints. Aligned on the first enemy step, as tools/naga_walk_cmp.py."
     },
     {
-      "name": "shadow-attract-af22",
+      "name": "shadow-attract",
       "argv": [
         "build/ct.exe",
         "--shadow",
@@ -40424,10 +40424,12 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0"
+        "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "shadow: 212 entries, 91 reached, 26926 calls, matched 24781, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 48"
       ],
       "pin": [
-        "^C1AF22 "
+        "^C1AF22 ",
+        "^shadow: \\d+ entries"
       ],
       "tier": "full",
       "timeout_s": 240,
@@ -40449,10 +40451,28 @@
           "find": "  out->x = (uint16_t)(w[0x2C] | (w[0x2D] << 8));",
           "replace": "  out->x = (uint16_t)(w[0x2C]);   /* MUT: X's high byte lost */",
           "why": "AF75 PLX hands X back 16-bit: proves the X16 register compare (the attract's $2D is non-zero at some call: killed)"
+        },
+        {
+          "file": "src/move.c",
+          "find": "        r[0x01D9] = (uint8_t)d; r[0x01DA] = 0x00;\n        h.ip = (ip + 1 + d) & 0xFFFF;",
+          "replace": "        r[0x01D9] = (uint8_t)d; r[0x01DA] = 0x00;\n        h.ip = (ip + 2 + d) & 0xFFFF;   /* MUT: base ip+2 */",
+          "why": "op 10 (C0/62B5) jumps from ip+1: an off-by-one target shows as the returned IP in X"
+        },
+        {
+          "file": "src/move.c",
+          "find": "        h.ip = (ip + 1 + d) & 0xFFFF; h.carry = 1; h.ok = 1; break;\n      }\n      case 0xC0: case 0xC3: case 0xC4: {",
+          "replace": "        h.ip = (ip + 1 + d) & 0xFFFF; h.carry = 0; h.ok = 1; break;   /* MUT: yields */\n      }\n      case 0xC0: case 0xC3: case 0xC4: {",
+          "why": "op 2D (C0/66A5) with nothing held skips and continues the visit (the arm the attract takes, 1908 calls; the held-button arm is never reached without input): proves the carry compare"
+        },
+        {
+          "file": "src/move.c",
+          "find": "  r[0x01F0] = r[0x1801 + idx];                        // 523B / 52E6 / 537E",
+          "replace": "  /* MUT: no 523B $F0 */",
+          "why": "the move-toward-an-actor body's $01F0 staging (op 94's 1439 graded calls): proves the WRAM compare on the VM handlers"
         }
       ],
-      "note_pass": "the oracle plays the attract demo from power-on and all 92 of its calls to C1/AF22 match battleRngBase on a copy of its WRAM: all 128 KB, A's low byte and X",
-      "notes": "THE ROUTINE-LEVEL SHADOW, S0 (docs/SHADOW_PROPOSAL.md; src/ct_shadow.c). The oracle plays alone; at each arrival at a registered entry the harness copies its WRAM, runs our C on the copy, lets the oracle run to the return the caller pushed (the stack climbing above the entry S) and compares the whole 128 KB less the bytes the call pushed, plus the registers the caller reads. A call the oracle takes an interrupt inside is counted `interrupted` and not compared; under the logical rule the NMI only lands at waits, and C1/AF22 has none (0 interrupted). The calls are the attract's battles from frame 3991. A count change with mismatched 0 means the demo reached C1/AF22 a different number of times (a change in the oracle's run, not in the routine): re-pin only after confirming that. Unlike --sweeprng (fuzzed inputs), this grades the calls the cartridge actually makes."
+      "note_pass": "the oracle plays the attract demo from power-on: 26926 calls to 91 of the 212 registered routines (C1/AF22 and the field VM's opcode handlers), every graded one equal to our C on a copy of its WRAM",
+      "notes": "THE ROUTINE-LEVEL SHADOW (docs/SHADOW_PROPOSAL.md; src/ct_shadow.c), S0 + S1's field VM. The oracle plays alone; at each arrival at a registered entry the harness copies its WRAM, runs our C on the copy, lets the oracle run to the return the caller pushed (the stack climbing above the entry S) and compares the whole 128 KB less the bytes the call pushed (and C3/0002's workspace $0308-$0316 for the VM handlers, as --sweepops), plus the registers the caller reads. Entries: C1/AF22 (battleRngBase; 92 calls from frame 3991, A's low byte and X) and the 211 opcode handlers of move.c g_ctVmOps run through CtFieldRunnerOne (X = the new IP, the carry). `skipped` 2097 is mostly op 95's body C0/5410 (1828) and op 94's C0/5215 (265) run as subroutines of ops B6/B5 with the same X and Y -- graded at B6's and B5's own entries, which match. `unported` 48 = the sound posts E8/EA/EB/EC, 8 op FF cases and 1 op 83 case CtFieldRunnerOne traps (the live VM runs them elsewhere: S4). Under the logical rule nothing was interrupted. A count change with mismatched 0 means the demo itself ran differently (a change in the oracle's run): re-pin only after confirming that. Six mutations, all killed."
     }
   ],
   "excluded": [

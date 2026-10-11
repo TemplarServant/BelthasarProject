@@ -118,15 +118,19 @@ Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_check
   tier (`lockstep-talk-box-machine-clean`, `lockstep-scene120-stairs-entry-lucca`), which run only here. A full run
   takes 15-80 minutes, mostly depending on the oracle cache.
 
-### shadow-attract-af22 (`ct.exe --shadow --frames 9000`, the routine-level shadow)
+### shadow-attract (`ct.exe --shadow --frames 9000`, the routine-level shadow)
 
-The routine-level shadow's first entry (docs/SHADOW_PROPOSAL.md, phase S0). The oracle plays the attract demo from
-power-on under the logical rule; at each of its 92 calls to C1/AF22 (the battle RNG, from frame 3991) the harness runs
-`battleRngBase` on a copy of the oracle's WRAM and compares, at the return, all 128 KB less the pushed stack bytes, A's
-low byte and the 16-bit X. Needs only the ROM. Three declared mutations (`--mutate shadow-attract-af22`) all turn it
-red: the cursor's `INC $26`, the draw in A, and X's high byte. Unlike `sweeprng-af22-base` (fuzzed inputs) it grades the
-calls the cartridge actually makes. Re-pin only a change in the call count with mismatched still 0, after confirming
-the oracle's run itself changed.
+The routine-level shadow (docs/SHADOW_PROPOSAL.md, phases S0 and S1's field VM). The oracle plays the attract demo
+from power-on under the logical rule; at each call to a registered routine the harness runs our C function on a copy
+of the oracle's WRAM and compares, at the return, all 128 KB (less the pushed stack bytes, and C3/0002's workspace for
+the VM handlers, as `--sweepops`) and the registers the caller reads. Registered: C1/AF22 (`battleRngBase`; 92 calls,
+A's low byte and X) and the 211 field-script opcode handlers of `g_ctVmOps` through `CtFieldRunnerOne` (the IP back
+in X and the carry). 26926 calls reach 91 entries; 0 mismatched. `skipped` counts handler bodies another handler runs
+as a subroutine with the same X and Y (op 95's C0/5410 inside op B6), graded at the caller's entry; `unported` counts
+the cases `CtFieldRunnerOne` traps (the sound posts E8/EA/EB/EC, some FF and 83). Needs only the ROM. Six declared
+mutations (`--mutate shadow-attract`) all turn it red: the RNG cursor, the draw in A, X's high byte, op 10's jump
+base, op 2D's carry and the $01F0 staging of the move-toward-an-actor body. Re-pin only a change in the counts with
+mismatched still 0, after confirming the oracle's run itself changed.
 
 ### field-battletest-gato (`ct_field.exe --battletest`)
 

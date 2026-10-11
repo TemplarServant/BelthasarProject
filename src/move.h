@@ -130,6 +130,13 @@ int CtFieldRunnerOne(uint8_t* ram, const uint8_t* rom, int romLen, int idx, int 
 
 int CtFieldRunner(uint8_t* ram, const uint8_t* rom, int romLen, int idx);
 
+// The field-script opcodes CtFieldRunnerOne ports, each with its ROM handler in bank $C0 -- the target of the runner's
+// `JSR ($5D6E,X)` (C0/5AB1), entered with X = op*2 and Y = the IP. One table for --sweepops and the routine-level
+// shadow (ct_shadow.c), so a handler graded on fuzzed inputs is also graded on every call the cartridge makes.
+typedef struct { int op; uint16_t addr; const char* name; } CtVmOpInfo;
+#define CT_VM_NOPS 211
+extern const CtVmOpInfo g_ctVmOps[CT_VM_NOPS];
+
 // C1/8003 -> `JMP C1/CFC2` -> `JSR ($D126,X)`, the SIX-LEAF inventory/gold gate every one of the
 // script ops 0xC7/0xC9/0xCA/0xCB/0xCC/0xCD/0xCE calls with `LDA #leaf / JSL $C1:8003`. The table at
 // $C1:D126 is, leaf for leaf: 0 = C1/CFE9 HasItem, 1 = C1/D005 AddItem, 2 = C1/D056 RemoveItem,

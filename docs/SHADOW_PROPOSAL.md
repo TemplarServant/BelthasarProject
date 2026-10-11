@@ -1,6 +1,7 @@
 # Shadow mode: routine-level validation against the oracle (proposal)
 
-Status: **S0 done** (2026-10-11): the harness, the `--shadow` mode and one entry (C1/AF22). S1 onward are proposals.
+Status: **S0 done, S1 under way** (2026-10-11): the harness, the `--shadow` mode, C1/AF22 and the 211 field-script
+opcode handlers. The rest of S1 (C0/ACFD, the battle and menu routines) and S2 onward are proposals.
 
 ## S0, as built
 
@@ -153,7 +154,7 @@ A 2 MB bitmap over the 24-bit address space keeps the per-opcode cost to one bit
 | | Work | Done when |
 |---|---|---|
 | S0 | Hook slot, registry, return/nesting/interrupt logic, report, one entry (C1/AF22 battle RNG) | the attract demo runs with `mismatched 0` and the counts are plausible |
-| S1 | Register what the sweeps already grade: the 211 VM ops through `CtFieldRunnerOne`, C0/ACFD, C1/DC64, the AI walk/conditions/commit, the menu inventory and equip | each one shadowed over the attract demo and the recipe states, and a suite check pinned |
+| S1 (field VM done) | Register what the sweeps already grade: the 211 VM ops through `CtFieldRunnerOne`, C0/ACFD, C1/DC64, the AI walk/conditions/commit, the menu inventory and equip | each one shadowed over the attract demo and the recipe states, and a suite check pinned |
 | S2 | Battery saves as inputs, plus the first three routes (a boss fight, a shop, a late-game dungeon) | the suite runs the shadow over them; mismatches become ROADMAP entries |
 | S3 | Census and `--shadow-poison` | a ranked list of ungraded routines; every `deadBytes` declaration has evidence |
 | S4 | Make the live engine run the registered functions where it still runs its own copy (`step()`'s mirrors in `CtScene`, `src/ct_vm.c:1675-1764`) | what the shadow proves is what the port runs |
@@ -165,6 +166,23 @@ A 2 MB bitmap over the 24-bit address space keeps the per-opcode cost to one bit
 - **A routine that waits for frames cannot be shadowed whole.** Its pieces between waits can.
 - **It grades only the calls the runs make**, which is why S2's routes matter.
 - **It adds nothing to the port.** The harness lives in `ct.exe`, on the oracle's side.
+
+## S1, the field VM's opcode handlers, as built
+
+- The `--sweepops` table moved to `move.c` (`g_ctVmOps`, `CT_VM_NOPS`) so the sweep and the shadow register the same
+  211 handlers. Each is entered `JSR ($5D6E,X)` from the runner C0/5AB1 with D = $0100, X = op*2 and Y = the IP; the
+  adapter runs `CtFieldRunnerOne` and hands back the IP in X and the carry; C3/0002's workspace $0308-$0316 is not
+  compared, as in the sweep, and the report says so.
+- The attract demo: 26926 calls reach 91 of the 212 entries; 24781 matched, **0 mismatched**, 0 interrupted, 0 exits.
+- **What the first run taught.** It reported 1879 mismatches on ops 94 and 95, every one on the IP alone. They were the
+  harness's: op B6's handler (C0/354F) runs op 95's body (C0/5410) as a subroutine with the same X and Y, and op B5 op
+  94's, so the guard that only matched the byte at the IP against X accepted a call that is part of another handler.
+  The guard now asks that X carry the entry's own opcode; those 2093 calls are `skipped`, and B5/B6 match at their own
+  entries.
+- **What it found unported.** 48 calls `CtFieldRunnerOne` traps: the sound posts E8/EA/EB/EC, 8 cases of op FF and 1 of
+  op 83. The live VM (`step()`) runs those elsewhere; S4 is where the two meet.
+- **What a mutation found.** A carry mutation on op 2D's held-button arm survived: the attract presses nothing, so that
+  arm never runs. The check's mutation now sits on the arm the demo takes, and the held-button arm waits for S2's routes.
 
 ## Fit with the mandate
 
