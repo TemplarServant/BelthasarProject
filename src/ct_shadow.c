@@ -5,6 +5,7 @@
 #include "cpu.h"
 #include "cart.h"
 #include "apu.h"
+#include "dma.h"
 #include "battle.h"
 #include "move.h"
 #include "menu.h"
@@ -39,10 +40,9 @@ static int rngRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long r
 // at the IP be it: some handlers are also subroutines of others with the same X and Y (op B6 at C0/354F runs op 95's
 // body at C0/5410, op B5 op 94's at C0/5215), and such a call is part of the caller's handler, graded at its entry,
 // not this one's -- it is skipped rather than graded under the wrong convention.
-static const CtShadowSkip k_vmSkip[] = {
-  { 0x0308, 0x0316, "C3/0002's workspace: ct_lz_decompress is a rewrite, graded on its output (as --sweepops)" },
-  { 0, 0, NULL }
-};
+// C3/0002's workspace ($0308-$0316), which --sweepops excludes because ct_lz_decompress keeps none of the ROM's scratch,
+// is not excluded here: the liveness watch measures it dead on the live calls (ops 82 / 83 on the attract: every
+// differing byte rewritten by the cartridge before any read).
 static int vmGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   return in->dp == 0x0100 && in->x == e->arg * 2 && in->y < 0xDFFF && w[0x12001 + in->y] == e->arg;
 }
@@ -232,6 +232,23 @@ static int fxRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long ro
   return CT_SH_RETURNS;
 }
 
+// FF/FAA3, THE SAVE LOAD (menu.c CtMenuSaveLoad; --loadcheck grades its records on a real save). Entered by JSL (the
+// load screen's C2/E657) with DB = $7E; FF/FBD3 takes the slot from $79 & 3 (D-relative) and its base from FF/FBE1
+// into $7B. It builds an MVN stub at $9690 and stages its 8-record table at $9890 (MVN from FF/FA7B), then copies each
+// record out of the battery RAM ($30:6000 + the slot's base) through the stub -- the C copies the same records from the
+// oracle's own SRAM; the stub, the table, $7B and $00 are scratch the liveness watch measures.
+static Snes* s_snes;
+static int loadGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; return in->db == 0x7E && (w[(in->dp + 0x79) & 0xFFFF] & 3) < 3;
+}
+static int loadRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                   CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)out;
+  if (!s_snes || !s_snes->cart->ram) return CT_SH_UNPORTED;
+  int slot = w[(in->dp + 0x79) & 0xFFFF] & 3;
+  return CtMenuSaveLoad(s_snes->cart->ram, (long)s_snes->cart->ramSize, slot, w) ? CT_SH_RETURNS : CT_SH_UNPORTED;
+}
+
 static const CtShadowEntry k_fixed[] = {
   { 0xC28791, "inventory add (CtMenuInvAdd)", 0x00, 0x00, 0, 0, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC287D5, "inventory remove (CtMenuInvRemove)", 0x00, 0x00, 0, 1, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
@@ -255,6 +272,7 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC1B279, "battle dead flag", 0x30, 0x20, 0, 0, battleGuard, deadRun, 0, NULL },
   { 0xC1F205, "battle tech pass", 0x30, 0x20, 0, 0, battleGuard, techPassRun, 0, NULL },
   { 0xCD16A6, "battle effect op (CD/16A6)", 0x30, 0x20, 0, 0, fxGuard, fxRun, CT_SH_X16, NULL },
+  { 0xFFFAA3, "save load (CtMenuSaveLoad)", 0x00, 0x00, 1, 0, loadGuard, loadRun, 0, NULL },
 };
 #define AI_NCOND 0x29   // the condition ops 00-28 (--sweepaieval's range; op 0F, C1/2C02's path test, is unported)
 #define SH_NFIXED ((int)(sizeof k_fixed / sizeof k_fixed[0]))
@@ -270,7 +288,7 @@ static void buildRegistry(const uint8_t* rom) {
     snprintf(s_names[i], sizeof s_names[i], "vm op %02X %s", g_ctVmOps[i].op, g_ctVmOps[i].name);
     // m 8-bit, x 16-bit: the runner's 5A9E REP #10 and its SEP #20
     CtShadowEntry e = { 0xC00000u | g_ctVmOps[i].addr, s_names[i], 0x30, 0x20, 0, g_ctVmOps[i].op, vmGuard, vmRun,
-                        CT_SH_X16 | CT_SH_C, k_vmSkip };
+                        CT_SH_X16 | CT_SH_C, NULL };
     s_entries[s_n++] = e;
   }
   for (int op = 0; op < AI_NCOND; op++) {        // the handler addresses, from the ROM's own table at C1/B80D
@@ -305,19 +323,20 @@ static void addDetail(const char* fmtd) {
   if (s_nDetail < SH_DETAILS) { strncpy(s_detail[s_nDetail], fmtd, sizeof s_detail[0] - 1); s_nDetail++; }
 }
 
-// THE LIVENESS WATCH (docs/SHADOW_PROPOSAL.md, S3). A call whose registers match but whose WRAM differs only in the
-// direct pages ($0000-$01FF -- the scratch every routine of the engine stages through; no DMA reads them) is not
-// graded at once: the harness watches those bytes on the ORACLE. If the cartridge's next access to each of them is a
-// write, the difference is dead scratch -- no code ever read what our C left there -- and the call counts `dead`, its
-// addresses listed on the report. If the cartridge READS one first (a read-modify-write included), the value mattered:
-// the call counts `mismatched`. A difference anywhere else is graded at once, as before. Calls whose bytes were never
-// touched again by the end of the run are `unresolved`.
-#define SH_WATCH_TOP 0x200
+// THE LIVENESS WATCH (docs/SHADOW_PROPOSAL.md, S3). A call whose registers match but whose WRAM differs in at most
+// SH_REC_ADDRS bytes is not graded at once: the harness watches those bytes on the ORACLE, through every access that
+// reaches WRAM -- the CPU's (cpu->read / cpu->write, WMDATA through its latch) and the DMA's and HDMA's (dma.c's
+// g_dmaBusHook: their A-bus side and a B-bus WMDATA). If the cartridge's next access to each of them is a write, the
+// difference is dead scratch -- nothing ever read what our C left there -- and the call counts `dead`, its addresses
+// listed on the report. If the cartridge READS one first (a read-modify-write included, a DMA source included), the
+// value mattered: the call counts `mismatched`, naming the reader. A wider difference, or a register's, is graded at
+// once. Calls whose bytes were never touched again by the end of the run are `unresolved`.
+#define SH_WATCH_TOP SH_WRAM
 #define SH_REC 65536
-#define SH_REC_ADDRS 48
+#define SH_REC_ADDRS 96
 typedef struct {
   int idx, remaining, done, n; long callNo; uint32_t frame; uint16_t entrySp; CtShadowRegs in;
-  uint16_t addr[SH_REC_ADDRS]; uint8_t oracle[SH_REC_ADDRS], port[SH_REC_ADDRS];
+  uint32_t addr[SH_REC_ADDRS]; uint8_t oracle[SH_REC_ADDRS], port[SH_REC_ADDRS];
 } ShRec;
 static ShRec s_rec[SH_REC]; static int s_recNext, s_recLive;
 static int s_owner[SH_WATCH_TOP];               // the record watching the byte, +1; 0 = none
@@ -326,7 +345,7 @@ static CpuReadHandler s_origRead; static CpuWriteHandler s_origWrite;
 
 static void recClose(ShRec* rc) { rc->done = 1; s_recLive--; }
 // The cartridge touched watched byte k: a read proves the call's difference live, a write retires the byte.
-static void watchHit(Snes* s, int k, int isRead) {
+static void watchHit(Snes* s, int k, int isRead, int byDma) {
   ShRec* rc = &s_rec[s_owner[k] - 1];
   s_owner[k] = 0;
   if (rc->done) return;
@@ -335,9 +354,10 @@ static void watchHit(Snes* s, int k, int isRead) {
     char buf[256];
     st->mismatched++;
     snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X S=%04X: %d WRAM byte(s), "
-             "first %02X:%04X oracle %02X port %02X; READ by the cartridge at %02X:%04X (frame %u)",
+             "first %02X:%04X oracle %02X port %02X; READ by the cartridge's %s at %02X:%04X (frame %u)",
              s_entries[rc->idx].addr, s_entries[rc->idx].name, rc->callNo, rc->frame, rc->in.a, rc->in.x, rc->in.y,
-             rc->entrySp, rc->n, 0x7E, rc->addr[0], rc->oracle[0], rc->port[0], s->cpu->k, s->cpu->pc, s->frames);
+             rc->entrySp, rc->n, 0x7E + (rc->addr[0] >> 16), rc->addr[0] & 0xFFFF, rc->oracle[0], rc->port[0],
+             byDma ? "DMA, started" : "CPU", s->cpu->k, s->cpu->pc, s->frames);
     addDetail(buf);
     recClose(rc);
   } else if (--rc->remaining == 0) {
@@ -356,12 +376,15 @@ static int wramOffset(const Snes* s, uint32_t adr) {
   return -1;
 }
 static uint8_t shRead(void* mem, uint32_t adr) {
-  if (s_recLive) { int k = wramOffset((Snes*)mem, adr); if (k >= 0 && k < SH_WATCH_TOP && s_owner[k]) watchHit((Snes*)mem, k, 1); }
+  if (s_recLive) { int k = wramOffset((Snes*)mem, adr); if (k >= 0 && s_owner[k]) watchHit((Snes*)mem, k, 1, 0); }
   return s_origRead(mem, adr);
 }
 static void shWrite(void* mem, uint32_t adr, uint8_t val) {
-  if (s_recLive) { int k = wramOffset((Snes*)mem, adr); if (k >= 0 && k < SH_WATCH_TOP && s_owner[k]) watchHit((Snes*)mem, k, 0); }
+  if (s_recLive) { int k = wramOffset((Snes*)mem, adr); if (k >= 0 && s_owner[k]) watchHit((Snes*)mem, k, 0, 0); }
   s_origWrite(mem, adr, val);
+}
+static void shDma(void* mem, uint32_t adr, int isRead) {
+  if (s_recLive) { int k = wramOffset((Snes*)mem, adr); if (k >= 0 && s_owner[k]) watchHit((Snes*)mem, k, isRead, 1); }
 }
 static uint8_t cpuP(const Cpu* c) {
   return (uint8_t)((c->n << 7) | (c->v << 6) | (c->mf << 5) | (c->xf << 4) | (c->d << 3) | (c->i << 2) | (c->z << 1) | c->c);
@@ -413,21 +436,17 @@ static void finish(Snes* s, ShActive* a, uint32_t pc) {
   if ((o & CT_SH_C) && (int)c->c != (a->out.p & 1)) {
     regBad = 1; snprintf(regs + strlen(regs), sizeof regs - strlen(regs), " carry oracle %d port %d", c->c, a->out.p & 1); }
   if (!nDiff && !regBad) { st->matched++; return; }
-  if (!regBad && nDiff <= SH_REC_ADDRS) {           // the liveness watch, when every difference is direct-page scratch
-    int dp = 1;
-    for (int k = 0; k < SH_WRAM && dp; k++) {
-      if (k > a->minSp && k <= a->entrySp) continue;
-      if (w[k] != s->ram[k] && !skipped(a->e->skip, k) && k >= SH_WATCH_TOP) dp = 0;
-    }
-    if (dp) {
+  if (!regBad && nDiff <= SH_REC_ADDRS) {           // the liveness watch decides
+    {
       ShRec* rc = &s_rec[s_recNext]; s_recNext = (s_recNext + 1) % SH_REC;
       if (rc->n && !rc->done) { s_stats[rc->idx].unresolved++; recClose(rc); }   // the ring wrapped on it
       memset(rc, 0, sizeof *rc);
       rc->idx = a->idx; rc->callNo = a->callNo; rc->frame = a->frame; rc->entrySp = a->entrySp; rc->in = a->in;
       for (int k = 0; k < SH_WATCH_TOP; k++) {
+        if (!(k & 0xFF) && !memcmp(w + k, s->ram + k, 0x100)) { k += 0xFF; continue; }   // an equal page, at once
         if (k > a->minSp && k <= a->entrySp) continue;
         if (w[k] == s->ram[k] || skipped(a->e->skip, k)) continue;
-        rc->addr[rc->n] = (uint16_t)k; rc->oracle[rc->n] = s->ram[k]; rc->port[rc->n] = w[k]; rc->n++;
+        rc->addr[rc->n] = (uint32_t)k; rc->oracle[rc->n] = s->ram[k]; rc->port[rc->n] = w[k]; rc->n++;
         if (s_owner[k]) {                            // an older call's difference never touched since: hand it over
           ShRec* old = &s_rec[s_owner[k] - 1];
           if (!old->done && --old->remaining == 0) {
@@ -519,11 +538,12 @@ void CtShadowInstall(Snes* s, const char* dumpPrefix, uint32_t dumpAddr) {
   memset(s_rec, 0, sizeof s_rec); memset(s_owner, 0, sizeof s_owner); memset(s_deadAt, 0, sizeof s_deadAt);
   s_recNext = 0; s_recLive = 0;
   s_origRead = s->cpu->read; s_origWrite = s->cpu->write;
-  s->cpu->read = shRead; s->cpu->write = shWrite;
+  s->cpu->read = shRead; s->cpu->write = shWrite; g_dmaBusHook = shDma;
   g_cpuShadowOpHook = shOp; g_cpuShadowIntHook = shInt;
 }
 void CtShadowUninstall(void) {
   if (s_snes) { s_snes->cpu->read = s_origRead; s_snes->cpu->write = s_origWrite; }
+  g_dmaBusHook = NULL;
   for (int i = 0; i < SH_REC; i++)                 // what the run never resolved
     if (s_rec[i].n && !s_rec[i].done) { s_stats[s_rec[i].idx].unresolved++; s_rec[i].done = 1; }
   s_recLive = 0;
@@ -555,11 +575,12 @@ void CtShadowReport(FILE* f) {
   // read.
   for (int i = 0; i < s_n; i++) {
     if (!s_stats[i].dead) continue;
-    char line[512]; int o = snprintf(line, sizeof line, "  dead scratch %06X:", s_entries[i].addr);
+    char line[2048]; int o = snprintf(line, sizeof line, "  dead scratch %06X:", s_entries[i].addr);
     for (int k = 0; k < SH_WATCH_TOP && o < (int)sizeof line - 16; k++) {
       if (!(s_deadAt[i][k >> 3] & (1u << (k & 7)))) continue;
       int e2 = k; while (e2 + 1 < SH_WATCH_TOP && (s_deadAt[i][(e2 + 1) >> 3] & (1u << ((e2 + 1) & 7)))) e2++;
-      o += (e2 > k) ? snprintf(line + o, sizeof line - o, " $%04X-$%04X", k, e2) : snprintf(line + o, sizeof line - o, " $%04X", k);
+      o += (e2 > k) ? snprintf(line + o, sizeof line - o, " %02X:%04X-%04X", 0x7E + (k >> 16), k & 0xFFFF, e2 & 0xFFFF)
+                    : snprintf(line + o, sizeof line - o, " %02X:%04X", 0x7E + (k >> 16), k & 0xFFFF);
       k = e2;
     }
     fprintf(f, "%s\n", line);

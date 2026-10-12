@@ -44,6 +44,7 @@ void dma_free(Dma* dma);
 void dma_reset(Dma* dma);
 void dma_handleState(Dma* dma, StateHandler* sh);
 uint8_t dma_read(Dma* dma, uint16_t adr); // 43x0-43xf
+extern void (*g_dmaBusHook)(void* snes, uint32_t adr, int isRead);   // CT: see dma.c
 void dma_write(Dma* dma, uint16_t adr, uint8_t val); // 43x0-43xf
 void dma_handleDma(Dma* dma, int cpuCycles);
 void dma_startDma(Dma* dma, uint8_t val, bool hdma);

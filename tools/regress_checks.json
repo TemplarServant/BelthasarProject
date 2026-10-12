@@ -40737,10 +40737,12 @@
       "expect": [
         "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C0ACFD velocity+priority (ACFD)         calls 3150  matched 3150  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 274 entries, 112 reached, 120749 calls, matched 114741, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 3853, unresolved 1",
-        "  dead scratch C0CAD9: $01C5-$01C6 $01CD-$01D9 $01EE",
+        "shadow: 275 entries, 112 reached, 120749 calls, matched 114700, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 3894, unresolved 1",
+        "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 4988  matched 4039  mismatched 0  interrupted 0  exits 0  skipped 0  dead 949",
-        "  dead scratch CD16A6: $0003-$000D $000F $0012-$0019 $0023-$002A $0045-$004D"
+        "  dead scratch CD16A6: 7E:0003-000D 7E:000F 7E:0012-0019 7E:0023-002A 7E:0045-004D",
+        "  dead scratch C04590: 7E:0309-030A 7E:030D 7E:030F 7E:0315-0316",
+        "  dead scratch C046DF: 7E:0309-030A 7E:030D 7E:030F 7E:0315-0316"
       ],
       "pin": [
         "^C1AF22 ",
@@ -40748,7 +40750,9 @@
         "^shadow: \\d+ entries",
         "^  dead scratch C0CAD9:",
         "^CD16A6 ",
-        "^  dead scratch CD16A6:"
+        "^  dead scratch CD16A6:",
+        "^  dead scratch C04590:",
+        "^  dead scratch C046DF:"
       ],
       "tier": "full",
       "timeout_s": 240,
@@ -40826,11 +40830,12 @@
       ],
       "expect": [
         "C1DC64 battle hit roll (battleHitCore)  calls 11  matched 11  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 274 entries, 100 reached, 279403 calls, matched 270606, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 7409, unresolved 3",
+        "shadow: 275 entries, 101 reached, 279404 calls, matched 270602, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 7414, unresolved 3",
         "shadow: ended at oracle frame 16270, location 00AC",
-        "  dead scratch C0CAD9: $01C5-$01C6 $01CD-$01D9 $01EE",
+        "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 1704  matched 773  mismatched 0  interrupted 0  exits 0  skipped 0  dead 930  unresolved 1",
-        "  dead scratch CD16A6: $0045 $0047-$0049 $004B-$004D $004F $0051"
+        "  dead scratch CD16A6: 7E:0045 7E:0047-0049 7E:004B-004D 7E:004F 7E:0051",
+        "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0"
       ],
       "pin": [
         "^C1DC64 ",
@@ -40838,7 +40843,8 @@
         "^shadow: ended",
         "^  dead scratch C0CAD9:",
         "^CD16A6 ",
-        "^  dead scratch CD16A6:"
+        "^  dead scratch CD16A6:",
+        "^FFFAA3 "
       ],
       "tier": "full",
       "timeout_s": 420,
@@ -40881,16 +40887,18 @@
       "expect": [
         "C28791 inventory add (CtMenuInvAdd)     calls 4  matched 4  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C287D5 inventory remove (CtMenuInvRemove) calls 8  matched 8  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 274 entries, 42 reached, 18022 calls, matched 17481, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3, dead 538, unresolved 0",
+        "shadow: 275 entries, 43 reached, 18023 calls, matched 17479, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3, dead 541, unresolved 0",
         "shadow: ended at oracle frame 3361, location 00AE",
-        "  dead scratch C0CAD9: $01C5-$01C6 $01CD-$01D9 $01EE"
+        "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
+        "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0"
       ],
       "pin": [
         "^C28791 ",
         "^C287D5 ",
         "^shadow: \\d+ entries",
         "^shadow: ended",
-        "^  dead scratch C0CAD9:"
+        "^  dead scratch C0CAD9:",
+        "^FFFAA3 "
       ],
       "tier": "quick",
       "timeout_s": 90,
@@ -40906,6 +40914,12 @@
           "find": "  if (n == 0) mem[0x2400 + x] = 0;                           // C2/87EE STZ $2400,X",
           "replace": "  /* MUT: no C2/87F0 STZ $2400,X */",
           "why": "C2/87D5 empties the slot's id when the last one goes: the equip changes take the only Flint Edge and helm out of the bag"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "    memcpy(wram + dst, sram + base + off, CT_SAVE_RECS[i].len);",
+          "replace": "    memcpy(wram + dst, sram + base + off + 1, CT_SAVE_RECS[i].len);   /* MUT: every record one byte late */",
+          "why": "FF/FAA3's eight records (party, items, flags, location ...) out of the battery RAM: graded on the route's own slot load"
         }
       ],
       "note_pass": "the oracle loads a public battery save and works the X-menu: four Tonics on Crono and four equipment changes -- 12 calls to the inventory routines C2/8791 / C2/87D5, every one equal to our C",

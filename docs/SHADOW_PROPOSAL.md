@@ -265,6 +265,23 @@ pages, or in a register, is graded at once as before.
 - The watch is the S3 mechanism the proposal asked for (`--shadow-poison`), measured instead of poisoned: no second run
   of the oracle, so no question of the logical rule's state between two runs.
 
+## S3, the watch over all of WRAM, as built
+
+- The DMA reads and writes WRAM without the CPU (the OAM buffer, the WRAM port), so the first watch stopped at the
+  direct pages. `snes/dma.c` now calls `g_dmaBusHook` before every A-bus access a DMA or HDMA transfer makes (and an
+  HDMA table read), and before a B-bus WMDATA access; the watch hears those as it hears the CPU's, so it covers all
+  128 KB. Nothing else reads WRAM (the SPC and the PPU have no path to it). A call may now differ in up to 96 bytes and
+  still be decided by the watch.
+- **An assumption replaced by a measurement.** The VM handlers no longer exclude C3/0002's workspace $0308-$0316 (the
+  exclusion --sweepops makes because ct_lz_decompress keeps none of the ROM's scratch): on the attract the watch finds
+  every differing byte there rewritten before any read (ops 82 / 83, 41 calls).
+- **FF/FAA3, the save load, registered** (JSL, DB = $7E, the slot from $79 & 3, the records out of the oracle's own
+  battery RAM). Its records matched at once; its scratch did not, and the watch caught one byte of it LIVE: the next
+  fight's D1/E7A1 `MVN $7E,$7E` copies $0000-$002A to $CC65, so the $00 the load leaves (the last record's address,
+  $2C7C) reaches the battle. A first-access rule cannot follow a copy -- so it is not argued dead: CtMenuSaveLoad now
+  leaves the ROM's scratch byte for byte (the `MVN $30,$dd / RTL` trampoline at $9690, the record table at $9890, $7B =
+  the slot's base, $9691 / $00 = the last record's bank and address), and the load matches exactly on both routes.
+
 ## S1, the battle effect program's dispatch, as built
 
 - CD/16A6 (`STX $43 / ASL / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43 / RTS`): one entry grades every

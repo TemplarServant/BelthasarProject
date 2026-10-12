@@ -4190,10 +4190,26 @@ int CtMenuSaveSlotValid(const unsigned char* sram, long sramLen, int slot) {
 int CtMenuSaveLoad(const unsigned char* sram, long sramLen, int slot, unsigned char* wram) {
   if (!sram || !wram || sramLen < 0x2000 || slot < 0 || slot >= CT_MENU_SAVE_SLOTS) return 0;
   unsigned base = CT_SAVE_SLOT_BASE[slot], off = 0;
+  // ...AND THE SCRATCH IT LEAVES, byte for byte (its one caller, C2/E657, runs with D = 0). The routine-level shadow
+  // found it read: D1/E7A1's `MVN $7E,$7E` copies $0000-$002A to $CC65 in the next fight, so the $00 this load leaves
+  // reaches the battle (docs/SHADOW_PROPOSAL.md).
+  //   FF/FAA6-FAB0  $9690 = 54 30 / $9692 = 30 6B         the `MVN $30,$dd / RTL` trampoline ($9691 patched per record)
+  //   FF/FAB2-FABB  MVN FF:FA7B -> $9890, $28 bytes      the 8-record table, five bytes each: addr, bank, len
+  //   FF/FBD3-FBDE  $7B = FF/FBE1[slot] = $6000 + base   the slot's base in the battery RAM's bank $30
+  //   FF/FAC6-FAD1  $9691 = the record's bank, $00 = its address -- the last record's stand
+  wram[0x9690] = 0x54; wram[0x9692] = 0x30; wram[0x9693] = 0x6B;
+  wram[0x007B] = (unsigned char)(0x6000 + base); wram[0x007C] = (unsigned char)((0x6000 + base) >> 8);
   for (int i = 0; i < 8; i++) {                       // FF/FAC4..FAE9, the eight MVNs
+    unsigned char* t = wram + 0x9890 + i * 5;
+    t[0] = (unsigned char)CT_SAVE_RECS[i].addr; t[1] = (unsigned char)(CT_SAVE_RECS[i].addr >> 8);
+    t[2] = CT_SAVE_RECS[i].bank; t[3] = (unsigned char)CT_SAVE_RECS[i].len; t[4] = (unsigned char)(CT_SAVE_RECS[i].len >> 8);
+  }
+  for (int i = 0; i < 8; i++) {
     unsigned long dst = (CT_SAVE_RECS[i].bank == 0x7F ? 0x10000u : 0u) + CT_SAVE_RECS[i].addr;
     memcpy(wram + dst, sram + base + off, CT_SAVE_RECS[i].len);
     off += CT_SAVE_RECS[i].len;
+    wram[0x9691] = CT_SAVE_RECS[i].bank;               // FF/FAC6-FAC9
+    wram[0x0000] = (unsigned char)CT_SAVE_RECS[i].addr; wram[0x0001] = (unsigned char)(CT_SAVE_RECS[i].addr >> 8);   // FAD1
   }
   return (int)off;                                    // 0x0834 with the ROM's table intact
 }
