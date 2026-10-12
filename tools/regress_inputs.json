@@ -2808,27 +2808,27 @@
     {
       "path": "saves/battle_re/roly_rider_battle.state",
       "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "regenerable": true,
+      "how": "roly_rider_s119.state (the cartridge under the rule: build/ct.exe --teleport 119 8 10 2 --method jmp --from saves/jogo_trava_lake.state --out saves/battle_re/roly_rider_s119.state, above obj30's trigger tile) 240 frames on: PEEK_SAVE=<this> build/ct.exe --peek saves/battle_re/roly_rider_s119.state x.raw --btnscript 20:40,0:200 (Down 40 walks into the Roly Riders' ambush). Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git). The original's hash is not reproduced (the oracle changed since); the cartridge's side of battle-roly-rider-dissolves-vs-oracle gives the original numbers on it.",
       "used_by": [
         "battle-roly-rider-dissolves-vs-oracle"
       ],
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "sha256": "58c129f2aef4247cafe9b1a6882276a85fc1284a31c4e5c46748cc029dcd2299",
+      "size": 273125,
+      "present_when_recorded": true
     },
     {
       "path": "saves/battle_re/roly_rider_s119.lakewram",
       "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "regenerable": true,
+      "how": "roly_rider_s119.state's WRAM (see roly_rider_battle.state) behind the 21-byte #lakewram header. Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git). On it the port's kill lands at f564 (the first seed's: f565).",
       "used_by": [
         "battle-roly-rider-death-recolor-is-its-own-palette-vs-oracle",
         "battle-roly-rider-dissolves-vs-oracle"
       ],
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "sha256": "fbbf202836efcffca3e5c7c1748b1445e7cf268e890811b81c8ca885b2de8991",
+      "size": 131093,
+      "present_when_recorded": true
     },
     {
       "path": "saves/battle_re/wa2158.raw.wram",
@@ -2978,11 +2978,11 @@
         "ow-party-follower-slot2-walks-the-trail-vs-rule-cartridge"
       ],
       "kind": "lake_wram",
-      "regenerable": true,
-      "how": "saves/field_re/catedral_user.lakewram with $7E:2982 (party slot 2) = 01, Marle: byte 21 + 0x2982 of the file.",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "regenerable": false,
+      "how": "catedral_user.lakewram with $7E:2982 (party slot 2) = 01, Marle: byte 21 + 0x2982 of the file -- byte-identical to the first one. Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git).",
+      "sha256": "9650f51b6a59192c9a06ef6833aa4ff4b4cf32fb5bf0e4c411cde78aad0e3c21",
+      "size": 131093,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/catedral_user.lakewram",
@@ -2990,37 +2990,37 @@
         "ow-party-follower-walks-the-trail-vs-rule-cartridge"
       ],
       "kind": "lake_wram",
-      "regenerable": true,
-      "how": "The WRAM of saves/field_re/catedral_user.state in the #lakewram wrapper: python tools/ct.py wram saves/field_re/catedral_user.state x.bin, then b'#lakewram\\nRAM:131072:' + x.bin.",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "regenerable": false,
+      "how": "catedral_user.state's WRAM behind the 21-byte #lakewram header -- byte-identical to the first one (the owner's capture's WRAM). Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git).",
+      "sha256": "0f0a4f65f4822e8c628d320b91d478d2ff679675042817b94665b955302f65de",
+      "size": 131093,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/catedral_user.state",
       "kind": "unknown",
       "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "how": "The owner's snes9x capture catedral.state (2026-10-03: Crono and Lucca at the 600 A.D. Cathedral's south door, loc 081, storyline 12) spliced by python tools/s9x_to_lake.py <catedral.state> build/recipes/cathedral_entry.state <this> --ppu. Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git). Its WRAM is byte-identical to the first one's (catedral_user.lakewram's hash); the rest comes from the base.",
       "used_by": [
         "ow-party-follower-slot2-walks-the-trail-vs-rule-cartridge",
         "ow-party-follower-walks-the-trail-vs-rule-cartridge"
       ],
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "sha256": "b41d2806eb243821e3868018cd6b77e124fcd51fcb2f1f7598ee17bfab4fc703",
+      "size": 273125,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/catedral_world.lakewram",
       "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "regenerable": true,
+      "how": "catedral_user.state walked out of the door onto the 600 A.D. overworld under the rule: PEEK_SAVE=x.state build/ct.exe --peek saves/field_re/catedral_user.state x.raw --btnscript 20:40,0:200, its WRAM behind the #lakewram header. Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git). Not byte-identical to the first (whose pad was not recorded); its checks pass on their original lines.",
       "used_by": [
         "field-world-exit-places-the-lead-by-the-arrival-law-vs-oracle",
         "ow-600ad-mist-wave-follows-the-camera-vs-oracle"
       ],
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "sha256": "d86e0d8962b7fd07e9b3d5fb4f783aaad5b41dfc9d7fe0d246146f2226335ac7",
+      "size": 131093,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/chest26_opened.flags",
@@ -3067,10 +3067,10 @@
       ],
       "kind": "ctfs_state",
       "regenerable": false,
-      "how": "The user's F5 snapshot ct_debug_009.state (2026-10-04), loc 081 after the organ opened the door. A CTFS image: tied to sizeof(CtScene) -- a struct change invalidates it (regenerate by the same walk to the organ, A, F5).",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "how": "The owner's F5 snapshot build/ct_debug_009.state (2026-10-04), loc 081 after the organ opened the door, copied -- byte-identical to the first one. A CTFS image: tied to sizeof(CtScene) -- a struct change invalidates it (regenerate by the same walk to the organ, A, F5).",
+      "sha256": "a375da5b7fe246c59a0e3418681727aafc81b9b9f7f67c0e7db3b5264ba7619b",
+      "size": 153972,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/fair_soda.flags",
@@ -3104,10 +3104,10 @@
       ],
       "kind": "lake_state",
       "regenerable": true,
-      "how": "CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 build/ct.exe --teleport 0x74 11 28 0 --method jmp --from saves/field_re/catedral_user.state --frames 240 --out saves/field_re/inn600_tele.state (story 0x12, Crono + Lucca at the inn's counter).",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "how": "CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 build/ct.exe --teleport 0x74 11 28 0 --method jmp --from saves/field_re/catedral_user.state --frames 240 --out saves/field_re/inn600_tele.state (story 0x12, Crono + Lucca at the inn's counter). Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git).",
+      "sha256": "9cc82e798d3085a5184ba3f138850de8cbee5eab17bda27ee5107025ec6b4135",
+      "size": 273125,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/inn600_yesno.state",
@@ -3116,10 +3116,10 @@
       ],
       "kind": "lake_state",
       "regenerable": true,
-      "how": "From inn600_tele.state under the rule: PEEK_SAVE=saves/field_re/inn600_yesno.state build/ct.exe --peek saves/field_re/inn600_tele.state x.raw --btnscript 10:16,0:30,100:2,0:120,100:2,0:120,0:10 (the inn's night, loc 0x10F, after Yes).",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "how": "From inn600_tele.state under the rule: PEEK_SAVE=saves/field_re/inn600_yesno.state build/ct.exe --peek saves/field_re/inn600_tele.state x.raw --btnscript 10:16,0:30,100:2,0:120,100:2,0:120,0:10 (the inn's night, loc 0x10F, after Yes). Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git).",
+      "sha256": "66ee16d37569cc549375be1d672fd70f0ce966d2164a7ab7e7b3df076cac5ed9",
+      "size": 273125,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/inn_lucca_007.state",
@@ -3128,10 +3128,10 @@
       ],
       "kind": "ctfs_state",
       "regenerable": false,
-      "how": "The user's own ct_field CTFS state (ct_debug_007.state, 2026-10-04): the 600 A.D. inn (loc 0x74), Crono + Lucca, at the 'Register? Yes' prompt. Not regenerable from the ROM; the user's capture.",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "how": "The owner's own ct_field CTFS state build/ct_debug_007.state (2026-10-04): the 600 A.D. inn (loc 0x74), Crono + Lucca, at the 'Register? Yes' prompt, copied -- byte-identical to the first one. Not regenerable from the ROM.",
+      "sha256": "872ee9229b197ea2707f42aaba739f25526514835b95af05c045961430c45c9b",
+      "size": 153972,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/inn_sleep_10f.lakewram",
@@ -3258,15 +3258,15 @@
     {
       "path": "saves/field_re/lucca_af_s129.lakewram",
       "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "regenerable": true,
+      "how": "CT_ORACLE_LOGICAL=1 build/ct.exe --teleport 129 8 25 0 --method jmp --frames 120 --from saves/battle_re/party3_field.state --out x.state, its WRAM behind the #lakewram header -- byte-identical to the first one. Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git).",
       "used_by": [
         "field-follower-on-op-af-follows-vs-oracle",
         "menu-held-a-stops-on-the-character-select-vs-oracle"
       ],
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "sha256": "6494dee617c9590cbc6401f8f1827d45c87a78342821073932c90d22e1b254a0",
+      "size": 131093,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/m81_frog_lake.lakewram",

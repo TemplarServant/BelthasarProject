@@ -6,7 +6,9 @@ r"""The Roly Rider's death dissolve, port against the rule's cartridge (scene 11
 saves/battle_re/roly_rider_s119.state: the cartridge `--teleport 119 8 10 2` from saves/jogo_trava_lake.state (above
 obj30's trigger tile); Down 40 walks into it and the ambush stages three Roly Riders (id 13, type 1, slots 0/4/6).
 roly_rider_battle.state is the same run 240 frames on. Crono attacks (A, A); his first blow kills slot 0 (C1:ED12,
-cartridge f324 of the battle state = f564 of the s119 state). The port replays the same drive from the s119 WRAM
+cartridge f324 of the battle state = f564 of the s119 state).
+The s119 state was rebuilt on 2026-10-12 by the same teleport (the first one was lost; tools/regress_inputs.json):
+the cartridge's side reproduces the original numbers exactly, and the port's kill lands one frame earlier on it (f564). The port replays the same drive from the s119 WRAM
 (roly_rider_s119.lakewram).
 
 Per frame from the kill, the dying Roly's box (84,26)-(118,62) is compared with the same box once it is gone (the
@@ -30,7 +32,7 @@ FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
 OUT = os.path.join(ROOT, 'build', '_roly')
 CSTATE = 'saves/battle_re/roly_rider_battle.state'
 PSEED = 'saves/battle_re/roly_rider_s119.lakewram'
-CKILL, PKILL = 324, 565            # the kill frame on each side (cartridge: the battle state's; port: the field's)
+CKILL, PKILL = 324, 564            # the kill frame on each side (cartridge: the battle state's; port: the field's)
 OFFS = [0, 2, 10, 20, 30, 40]
 BOX = (84, 26, 118, 62)       # the port's picture; the oracle's PNG is 8 lines lower
 DRIVE = ','.join(['100:2,0:10,100:2,0:120'] * 3)
