@@ -456,6 +456,43 @@ static long b271(Walk* c) {
   return k;
 }
 
+// ---- C0/78EC: BG2's tilemap build (C0/0A50, `JSR C0/78EC` at C0/0AAB), from that JSR to its return. Rows of C0/79CF
+// (sixteen cells, four WMDATA bytes each); the ARM by $1D35 bit 1 and $0BC9 bit 7:
+//   standard   32 rows from ($1D0A, $1D0E): the entry camera is always even (C0/7506/7553's `<< 1`), so it has ONE cost,
+//              and PASS_REST carries it
+//   C0/794E    ($1D35 bit 1) 32 rows at column 0, then by $0BCF / $0BD1: 7976 (both $10) the same 32 again, 7991 ($0BCF
+//              != $10) 32 at column $20, 79AE ($0BD1 != $10) rows 32-63 and `$1D85 := 2`
+//   C0/792F    ($0BC9 bit 7) rows $1D16..$1D18 at column $1D12, which C0/74B1 set from the camera
+// A row costs by its parity and its first column's (C0/79CF's two tests): 10010 / 10028 from an even column, 10220 /
+// 10394 from an odd one (a half cell, fifteen, a half: 7A2A / 7B12). MEASURED on --cputrace beam traces, non-refresh:
+// the hub's standard arm 327,358 and loc 0AD's 794E + 7976 652,856, both to the cycle; the arms no trace ran are priced
+// instruction by instruction on the key of an executed one (tools/ctlib/costtab.py lin_rom).
+#define B78_STD 327358L
+static long row79CF(int row, int col) {
+  return (col & 1) ? ((row & 1) ? 10394 : 10220) : ((row & 1) ? 10028 : 10010);
+}
+static long b78EC(Walk* c) {
+  if (b8(c, 0x1D35) & 0x02) {                              // 7900 BEQ not taken -> BRL C0/794E
+    long k = 284 + 326194;                                 // the head and the 32 rows at column 0 (rows 0-31)
+    if (b8(c, 0x0BCF) != 0x10) k += 326718;                // 7991: 32 rows at column $20
+    else if (b8(c, 0x0BD1) != 0x10) { k += 326800; sb(c, 0x1D85, 2); }   // 79AE: rows 32-63, $85 := 2
+    else k += 326378;                                      // 7976: rows 0-31 again
+    return k;
+  }
+  if (b8(c, 0x0BC9) & 0x80) {                              // 7908 BMI -> BRL C0/792F: rows $16..$18 at column $12
+    int col = b8(c, 0x1D12), r = b8(c, 0x1D16), r1 = b8(c, 0x1D18);
+    long k = 380 + 40;                                     // the caller's JSR .. 7937, and the RTS
+    for (int guard = 0; guard < 256; guard++, r = (r + 1) & 0xFF) {
+      int a = (r + 1) & 0xFF;                              // 7944 LDA $5A / INC A / CMP $18
+      k += 184 + row79CF(r, col) + (a < r1 ? 18 : a == r1 ? 30 : 24);   // BCC taken / BEQ taken / both not
+      if (a > r1) return k;
+    }
+    unpriced(c, "C0/792F: a row range that never ends");
+    return k;
+  }
+  return B78_STD;
+}
+
 // ---- A7E9 / B204: resets over the object count n = $7F2000
 static long a7e9(int n) { return 240 + (long)n * 48 + (n - 1) * BR_T + BR_NT + 92; }
 static long b204(int n) { return 11898 + (long)n * 60 + (n - 1) * BR_T + BR_NT + 74; }
@@ -472,19 +509,28 @@ static long b204(int n) { return 11898 + (long)n * 60 + (n - 1) * BR_T + BR_NT +
 
 static long pass286C(Walk* c, int loc) {
   // The configuration the traces cover: every arm below is the ROM's, taken on the flags it reads.
-  if (b8(c, 0x1D35) & 0x06) { unpriced(c, "pass: $1D35 bits 1/2 (the builders' C0/794E / C0/8385 arms)"); return -1; }
-  if (b8(c, 0x0BC9) & 0x80) { unpriced(c, "pass: $0BC9 set (C0/792F / C0/74B1)"); return -1; }
+  if (b8(c, 0x1D35) & 0x04) { unpriced(c, "pass: $1D35 bit 2 (the BG3 builder's C0/8385 arm)"); return -1; }
   if (b8(c, 0x0126) != 0)   { unpriced(c, "pass: $0126 != 0 (the FD:C2DF/C2E5 handlers 1-2)"); return -1; }
   if (b8(c, 0x1DF9) || b8(c, 0x1DFD)) { unpriced(c, "pass: $1DF9 / $1DFD (the HDMA handlers' effect arms)"); return -1; }
-  if ((b8(c, 0x0153) & 0x80) || (b8(c, 0x013C) & 1) || b8(c, 0x0BE9) || (b8(c, 0x0351) & 1)) {
-    unpriced(c, "pass: $0153 bit 7 / $013C bit 0 / $0BE9 / $0351 bit 0"); return -1;
+  if ((b8(c, 0x0153) & 0x80) || b8(c, 0x0BE9) || (b8(c, 0x0351) & 1)) {
+    unpriced(c, "pass: $0153 bit 7 / $0BE9 / $0351 bit 0"); return -1;
   }
   int n = b8(c, 0x12000);
-  long k = PASS_REST, d0, d1, d2;
+  long k = PASS_REST, d0, d1, d2, d3;
   k += (d0 = doors28E1(c));
   k += (d1 = chestsA712(c, w16(c, 0x0100) & 0x1FF));   // C0/A742 `LDA $0100 / AND #01FF` (the loader's own location)
   k += (d2 = camera(c));
-  if (getenv("CT_PASSCOST_DEBUG")) printf("passcost: doors %ld chests %ld camera %ld n %d\n", d0, d1, d2, n);
+  // C0/74AC `LDA $0BC9 / BPL`: with bit 7, 74B1-74C5 derive the BG2 window C0/792F builds from the camera just set
+  // (+198: the BPL not taken and the block)
+  if (b8(c, 0x0BC9) & 0x80) {
+    int x = (b8(c, 0x1D0A) >> 1) & 0xFE, y = b8(c, 0x1D0E) >> 1;
+    sb(c, 0x1D12, x); sb(c, 0x1D14, x + 0x20); sb(c, 0x1D16, y); sb(c, 0x1D18, y + 0x1C);
+    k += 198;
+  }
+  k += (d3 = b78EC(c)) - B78_STD;                          // C0/78EC's arm, in place of the standard one PASS_REST holds
+  // FD:C1EE's `LDA $013C / BIT #01 / BNE`: the $2129 arm is `LDA #29` alone where $2128's is `LDA #28 / BRA` (-12)
+  if (b8(c, 0x013C) & 1) k -= 12;
+  if (getenv("CT_PASSCOST_DEBUG")) printf("passcost: doors %ld chests %ld camera %ld 78EC %ld n %d\n", d0, d1, d2, d3, n);
   if ((b8(c, 0x0BCA) & 1) && !b8(c, 0x01BB)) {
     if (b8(c, 0x1D35) & 0x04) { unpriced(c, "pass: the BG3 upload C0/7F77"); return -1; }
     k += PASS_BG3;

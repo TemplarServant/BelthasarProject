@@ -16763,6 +16763,10 @@ int main(int argc, char** argv) {
     else if (!battlePhase && !inWorld && f.vm && !loadFadeEntry && fade != 3 && !coldResetHold && !fieldResume &&
         !gameOver && CtSceneSequence(f.vm) < 0 && !rebootReq && ffPro != 1 && ffPro != 2)   // (op 0xFF's own fade: the
         CtSceneTick(f.vm);   // the event VM: FROZEN in battle AND on the overworld      //  scheduler is inside its visit)
+    else if (gameOver && !battlePhase && f.vm) {      // ...what the defeat's passes DO run: C0/02A0's `JSR C0/00EB` (the camera,
+      if (goPhase == 2) CtSceneDefeatFadeFrame(f.vm);  //   FD/C2C1, FD/E39C -- the room's colour animation goes on) and the fade's
+      else CtSceneReturnWaitFrame(f.vm);               //   C0/881E + FD/FFF7
+    }
     // THE SCRIPTED LEAD IS DRAWN WHERE THIS FRAME'S C0/A810 PUT HIM. The follow above (the lead's position while the script
     // drives him) read the VM before its tick, i.e. the previous frame's commit, and the lead is drawn from px/py -- one
     // frame behind every other object, whose sprite the drain builds after A810 in the same frame (C0/00D3 A810, C0/00D6
@@ -16951,6 +16955,9 @@ int main(int argc, char** argv) {
               // the FIELD's IRQ on the pre-flip $0153 = 01).
               if (ruleReturn) { battleReturnHold = 5 - 1; battleReturnWait = 0; fieldIrqPreFlip = 1;
                                 if (f.vm) CtSceneReturnWaitFrame(f.vm); }
+              // ...and a defeat owes none of it: C0/0289's dispatch sends `$7F01EC = 1` with `$2A1F` bit 5 clear straight to
+              // C0/02A0 (no C0/0304 reload), whose first pass is C0/00EB on the next frame (the gameOver branch below).
+              if (gameOver) battleReturnHold = 0;
               if ((selftest || getenv("CT_LOADCOST") || getenv("CT_BATTLE_TRACE")) && ruleReturn)
                 printf("battle-return: loc %03X -- acked at f%d after %ld of C0/1BE6's upload + 1 in the battle's tail; C0/0304's reload held, its five C0/00EB waits = the ack's frame + %d frame(s) held\n",
                        loc, frameNo, g_battleSndFrames, battleReturnHold);

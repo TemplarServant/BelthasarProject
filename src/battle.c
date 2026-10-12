@@ -20971,8 +20971,15 @@ static void battleObjSlotRange(void* ctx, int dst, int cnt, int k, int kind) {
   for (int p = 0; p < 16; p++)
     if (p * 16 >= dst && p * 16 + 16 <= dst + cnt) { h->palK[p] = k; h->palKind[p] = (k < 0) ? 0 : kind; }
 }
+// ...AND THE COLOUR MODES RUN HERE TOO. FD/E39C dispatches modes 1, 2, 3 and 8 (FD/E437 / E532 / E4E8 / E485) on the wrap
+// with no gate (3DE3ED-3DE422), in the fight as on the field. The port left them to the field's VM pass, so an effect
+// program's rotation never moved its colours: Lucca's Hypno Wave arms record 11 `30 19 02 10 .. 04` (mode 3, CGRAM
+// $19-$1B up one every four frames: the BG3 rings widening outwards) and its rings stood at the load's colours, drawn
+// smaller than the cartridge's. MEASURED, the rule's cartridge (tools/battle_ab.py tech 2 1, gato_wait): `$7E:2232..37`
+// rotated by FD:E529 every fourth frame from c748; the port's stayed 2F80 1E20 1540.
 static void battleObjSlotFrame(CtBattleHost* h) {
-  CtObjSlotIo io = { h->mem, battleObjSlotRange, h, battleFleeProgTraceOn() ? "fleeobj" : NULL, h->frames };
+  long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
+  CtObjSlotIo io = { h->mem, battleObjSlotRange, h, battleFleeProgTraceOn() ? "fleeobj" : NULL, h->frames, 1, rom, romLen };
   CtObjSlotService(&io);
 }
 // The stage machine: one frame of C1/81EC-821E's blocked main loop.

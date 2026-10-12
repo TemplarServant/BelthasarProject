@@ -2655,6 +2655,9 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
   }
   sc->vecMove[obj] = 0;                                     // any tile-move family op re-anims (walk)
   int dtx, dty;                                    // target-tile family: re-aim per visit
+  // C0/3546 / C0/354F, ops B5 / B6: `STY $E3` (the op's IP, 16-bit) before `JSR C0/5215` / `JSR C0/5410`, whose `LDX $E3`
+  // hands it back -- the call ops' scratch word, overwritten (reqScratch).
+  if (op == 0xB5 || op == 0xB6) { w8(sc->mem, 0x7E01E3, addr & 0xFF); w8(sc->mem, 0x7E01E4, (addr >> 8) & 0xFF); }
   int tgtObj = -1;                                 // the object the 0x94/0x95/0xB5/0xB6 arm resolved,
                                                    // kept for op 0x95's JOIN branch further down
   if (op == 0x94 || op == 0x95 || op == 0xB5 || op == 0xB6 ||   // 0x94/0xB5 (C0/5215) = toward object[op/2];
@@ -2916,6 +2919,33 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
                                                                  // set before the stair descent)
 }
 
+// THE CALL OPS' DIRECT-PAGE SCRATCH (D = $0100). Every body that installs or queues a call computes the target's
+// $7F0580 slot with the hardware multiplier and leaves it in $E1, and the function's pointer index in $E3:
+//   op 02 / 05 (C0/5FB6): the accept arm (new priority $DF < the target's $1C00 = $D9) C0/5FEB-6015 `$E1 = $D9 * $80 + $DB`,
+//     `$E3 = $DB << 4`; the defer arm ($DF > $D9) C0/603E-6062 `$E1 = $DF * $80 + $DB`, and `$E3` only when that slot is
+//     free (C0/6053 `LDA $7F0580,X / BNE`);
+//   op 03 / 06 (C0/607E) and 04 / 07 (C0/611A): the accept arm alone (C0/60B4-60DE, C0/6150-617A); their wait arms
+//     (equal or less urgent) write nothing.
+// Every body exits first, writing nothing, on `$1C01,X` (op 08's wait), `$1100,X` bit 7 or `$1000,X` bit 7, and on an
+// equal priority. $DB = the target * 2. Read from the WRAM the ROM reads. Nothing in the field reads them back, but they
+// are RAM: the 2300 A.D. fog's class $7759 takes its wave phase from the word at $01E2 (world.c owBg3WaveTick), so the
+// attract's 1F2 starts from what the 0E6 leg's last call left there (cartridge `$01E2 = 03 E0` at f5719, writer C0:6017).
+static void reqScratch(CtScene* sc, int op, int tgt, int pr) {
+  uint32_t X = (uint32_t)tgt * 2;
+  if (r8(sc->mem, 0x7E1C01 + X)) return;                         // 5FC3 / 608B / 6127 BNE
+  if (tgt < 0 || tgt >= sc->nobj) return;
+  if (sc->mode[tgt] & 0x80) return;                              // 5FC8 / 6090 / 612C `$1100,X` BMI
+  if (sc->actors[tgt].cadPause) return;                          // 5FCD / 6095 / 6131 `$1000,X` BMI
+  int d9 = sc->st[tgt].prio;                                     // `$1C00,X` = $D9 (the port keeps it here, not in WRAM)
+  if (pr == d9) return;                                          // 5FE7 / 60B0 / 614C BEQ
+  int queues = (op == 0x02 || op == 0x05);
+  if (pr > d9 && !queues) return;                                // 60B2 / 614E BCS: the wait
+  int e1 = (pr < d9 ? d9 : pr) * 0x80 + (int)X;
+  w8(sc->mem, 0x7E01E1, e1 & 0xFF); w8(sc->mem, 0x7E01E2, (e1 >> 8) & 0xFF);
+  if (pr > d9 && (r8(sc->mem, 0x7F0580 + (uint32_t)e1) | r8(sc->mem, 0x7F0581 + (uint32_t)e1))) return;   // 6053 BNE
+  int e3 = (int)(X & 0xFF) << 4;
+  w8(sc->mem, 0x7E01E3, e3 & 0xFF); w8(sc->mem, 0x7E01E4, (e3 >> 8) & 0xFF);
+}
 static void reqOp(CtScene* sc, int target, int function, int priority) {
   if (target >= sc->nobj || function >= 16 || priority >= 8) return;
   // ROM C0/5FC8-5FD0: refuse if $1100 bit7 (inactive) or $1000 bit7 (cadence paused).
@@ -3692,6 +3722,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       tgt = v / 2;
     }
     int pr = (B[addr + 2] & 0xF0) >> 4;
+    reqScratch(sc, op, tgt, pr);                                     // (Recovered from a 2026-09-20 stash.)
     // ⭐ 0x03/0x04 (and 0x06/0x07, which BRL into their bodies) RETRY UNTIL THE TARGET TAKES THE CALL; only 0x02/0x05
     // queue or drop it (reqOp). Both bodies refuse the same way, C0/6086-60B2 and C0/6122-614E:
     //   LDA $1C01,X / BNE      -> 6106 / 61A4  `TYX / CLC`  the IP stays ON the op and the visit ends
@@ -6142,6 +6173,13 @@ void CtSceneReturnWaitFrame(CtScene* sc) {
   CtSceneCameraTick(sc);                              // C0/881E (the lead's controls are the host's; the camera is this layer's)
   CtHdmaTableBuild(sc->mem->s);                       // C0/00DE: JSL FD/C2C1
   ctObjSlotFrame(sc);                                 //          JSL FD/FFF7 -> FD/E39C
+}
+// C0/02AF-02C1, one frame of the defeat's fade: `JSR C0/881E / JSL FD/FFF7 / JSR C0/EC60` -- the camera and FD/E39C, no
+// C0/00DE (the wait before it, C0/02A0-02AD, is C0/00EB itself: CtSceneReturnWaitFrame).
+void CtSceneDefeatFadeFrame(CtScene* sc) {
+  if (!sc) return;
+  CtSceneCameraTick(sc);                              // C0/02B9 JSR C0/881E
+  ctObjSlotFrame(sc);                                 // C0/02BC JSL FD/FFF7 -> FD/E39C
 }
 
 // ---- THE $0117 BIT-5 SERVICE, C0/1770-188B (disasm/notes/field_tile_copy_e5.md) -------------------------------------

@@ -113,6 +113,7 @@
         "battle-cyclone-every-victim-after-an-enemy-attack-vs-rule-cartridge",
         "battle-defeat-exit-vs-oracle",
         "battle-dissolve-no-flash-vs-rule-cartridge",
+        "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge",
         "battle-enemy-area-band-vs-oracle",
         "battle-enemy-cells-bat2-vs-oracle",
         "battle-enemy-cells-bat9-vs-oracle",
@@ -125,6 +126,7 @@
         "battle-enemy-counter-path-vs-oracle",
         "battle-enemy-sheet-decomp",
         "battle-enemy-turn-handlers-vs-oracle",
+        "battle-flame-toss-band-vs-rule-cartridge",
         "battle-fx-3d-objects-sweep",
         "battle-fx-load-stage-vs-logical-oracle",
         "battle-fx-misc-ops-sweep",
@@ -155,6 +157,7 @@
         "battle-hud-live-forest-ambush-vs-oracle",
         "battle-hud-strip-command-windows-vs-oracle",
         "battle-hud-tech-target-strip-vs-oracle",
+        "battle-hypno-wave-rings-rotate-vs-rule-cartridge",
         "battle-ice-sword-crystal-fx-compose-vs-oracle",
         "battle-item-lapis-every-seat-vs-oracle",
         "battle-item-megalixir-every-seat-vs-oracle",
@@ -186,6 +189,7 @@
         "battle-strip-upload-main-vs-oracle",
         "battle-tech-asc-movers-vs-logical-oracle",
         "battle-turn-machinery-gato-first-pass-vs-oracle",
+        "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge",
         "battle-yakra-fight-vs-logical-oracle",
         "boot-load-save-sound-sequence",
         "boot-natural-blank-cart",
@@ -240,6 +244,7 @@
         "field-battle-cyclone-fx-not-replayed",
         "field-battle-cyclone-holds-its-facing-until-the-idle-reaim",
         "field-battle-death-sfx-serial",
+        "field-battle-discards-an-open-box-vs-rule-cartridge",
         "field-battle-dissolve-serial",
         "field-battle-drop-roll",
         "field-battle-end-deadflag-clear",
@@ -387,6 +392,7 @@
         "field-decision-cursor-machine-0162",
         "field-decision-second-option-branch",
         "field-decision-window-band-clips-text",
+        "field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge",
         "field-diagonal-forces-horizontal",
         "field-diagonal-keeps-run-facing",
         "field-door-follower-lands-on-lead",
@@ -460,6 +466,7 @@
         "field-op84-solid-byte",
         "field-op88-fade-flea-entrance-vs-oracle",
         "field-op94-stops-adjacent",
+        "field-organ-door-opens-live",
         "field-ow-entry-song-reaches-service",
         "field-ow-reentry-reloads-tilemap",
         "field-pad-latch-vs-oracle",
@@ -473,6 +480,7 @@
         "field-power-tab-box-and-walk-after-vs-rule-cartridge",
         "field-reload-cost-vs-oracle",
         "field-save-overworld-position",
+        "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
         "field-scene122-marle-vanish-tints-the-room",
         "field-scene129-class7-action-probe",
         "field-scene157-fixed-sprite-prio",
@@ -489,8 +497,10 @@
         "field-scene8-objpal-sweep-demo-sparkle",
         "field-scene8-telepod-touch-trigger",
         "field-scroll-mask-entry-camera-1b0",
+        "field-shelter-only-on-the-save-point-vs-rule-cartridge",
         "field-slot1-map-copies-vs-logical-oracle",
         "field-soda-minigame-drink-anim",
+        "field-stairs-fall-camera-follows-vs-rule-cartridge",
         "field-tent-hostage-80pt-counter-switch-flames-vs-rule-cartridge",
         "field-tent-mimic-won-bekkler-preempt-vs-rule-cartridge",
         "field-textbox-a-press-does-not-skip-reveal",
@@ -640,6 +650,7 @@
         "seq-ppu-race-vs-oracle",
         "seq-race-xlat-lockstep",
         "seq-race-xlat-stage-handoff",
+        "shadow-attract",
         "shop-buy-sell-ram-vs-oracle",
         "shop-equip-mode-vs-oracle",
         "shop-screens-vs-oracle",
@@ -648,6 +659,7 @@
         "sprite-assembly-decode",
         "stairs-scene13-slope",
         "sweep-ai-condition-walk",
+        "sweep-band-25a3",
         "sweep-battle-fx-op88-subops",
         "sweep-bganim-machines",
         "sweep-bganim-white-submodes",
@@ -769,7 +781,7 @@
         "assets-dialogue-every-script-box-reads-the-rom"
       ],
       "sha256": "cf484b3fd7a7fb8e63bdf6bc868c50e837797b016687cdcbc70862e60c1cd1cc",
-      "size": 14382,
+      "size": 14637,
       "present_when_recorded": true
     },
     {
@@ -889,6 +901,7 @@
         "battle-cyclone-every-victim-after-an-enemy-attack-vs-rule-cartridge",
         "battle-defeat-exit-vs-oracle",
         "battle-dissolve-no-flash-vs-rule-cartridge",
+        "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge",
         "battle-enemy-area-band-vs-oracle",
         "battle-enemy-cells-bat2-vs-oracle",
         "battle-enemy-cells-bat9-vs-oracle",
@@ -900,6 +913,7 @@
         "battle-enemy-close-op01-forest-vs-oracle",
         "battle-enemy-counter-path-vs-oracle",
         "battle-enemy-turn-handlers-vs-oracle",
+        "battle-flame-toss-band-vs-rule-cartridge",
         "battle-fx-load-stage-vs-logical-oracle",
         "battle-fx-teardown-after-program-vs-oracle",
         "battle-fxobj-machine-cyclone-vs-oracle",
@@ -923,6 +937,7 @@
         "battle-hud-strip-command-windows-vs-oracle",
         "battle-hud-target-select",
         "battle-hud-tech-target-strip-vs-oracle",
+        "battle-hypno-wave-rings-rotate-vs-rule-cartridge",
         "battle-item-lapis-every-seat-vs-oracle",
         "battle-item-megalixir-every-seat-vs-oracle",
         "battle-item-scrolled-record-vs-oracle",
@@ -957,6 +972,7 @@
         "battle-turn-machinery-gato-first-pass-vs-oracle",
         "battle-victory-arm-draws-the-pcs",
         "battle-victory-hold2-publishes",
+        "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge",
         "battle-yakra-fight-vs-logical-oracle",
         "boot-load-save-sound-sequence",
         "boot-natural-blank-cart",
@@ -1007,6 +1023,7 @@
         "field-battle-cyclone-fx-not-replayed",
         "field-battle-cyclone-holds-its-facing-until-the-idle-reaim",
         "field-battle-death-sfx-serial",
+        "field-battle-discards-an-open-box-vs-rule-cartridge",
         "field-battle-dissolve-serial",
         "field-battle-drop-roll",
         "field-battle-end-deadflag-clear",
@@ -1153,6 +1170,7 @@
         "field-decision-cursor-machine-0162",
         "field-decision-second-option-branch",
         "field-decision-window-band-clips-text",
+        "field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge",
         "field-diagonal-forces-horizontal",
         "field-diagonal-keeps-run-facing",
         "field-door-follower-lands-on-lead",
@@ -1255,6 +1273,7 @@
         "field-op84-solid-byte",
         "field-op88-fade-flea-entrance-vs-oracle",
         "field-op94-stops-adjacent",
+        "field-organ-door-opens-live",
         "field-ow-entry-song-reaches-service",
         "field-ow-reentry-reloads-tilemap",
         "field-pad-latch-vs-oracle",
@@ -1267,6 +1286,7 @@
         "field-plane-survives-a-cutscene-vs-logical-oracle",
         "field-power-tab-box-and-walk-after-vs-rule-cartridge",
         "field-save-overworld-position",
+        "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
         "field-scene120-lucca-e0-fadechange",
         "field-scene122-marle-vanish-tints-the-room",
         "field-scene129-class7-action-probe",
@@ -1284,6 +1304,7 @@
         "field-scene8-objpal-sweep-demo-sparkle",
         "field-scene8-telepod-touch-trigger",
         "field-scroll-mask-entry-camera-1b0",
+        "field-shelter-only-on-the-save-point-vs-rule-cartridge",
         "field-slot1-map-copies-vs-logical-oracle",
         "field-soda-minigame-drink-anim",
         "field-solid-deflect",
@@ -1291,6 +1312,7 @@
         "field-solid-liveness-fair",
         "field-solid-party-arms-226",
         "field-solid-party-arms-399",
+        "field-stairs-fall-camera-follows-vs-rule-cartridge",
         "field-stairs-run-three-flights",
         "field-tent-hostage-80pt-counter-switch-flames-vs-rule-cartridge",
         "field-tent-mimic-won-bekkler-preempt-vs-rule-cartridge",
@@ -1855,6 +1877,7 @@
       "how": "tools/fixtures.py (recipe fx_forest_bat3)",
       "used_by": [
         "sweep-ai-condition-walk",
+        "sweep-band-25a3",
         "sweep-tech-pass"
       ],
       "sha256": "55c932f50100d014ebdad6671615195f51887f05e93fca5e35b5d39e142ff69b",
@@ -1927,7 +1950,8 @@
       "how": "Auto-added from regress_checks.json; fill in provenance.",
       "used_by": [
         "battle-enemy-cells-bat9-vs-oracle",
-        "battle-hud-strip-command-windows-vs-oracle"
+        "battle-hud-strip-command-windows-vs-oracle",
+        "sweep-band-25a3"
       ],
       "sha256": "c480f7e5efb79976cd649b62ba0481e6022d785e907647cf4b5ab08d9e6aef1c",
       "size": 273109,
@@ -1965,6 +1989,7 @@
       "how": "tools/fixtures.py (recipe fx_forest_holdleft)",
       "used_by": [
         "sweep-ai-condition-walk",
+        "sweep-band-25a3",
         "sweep-tech-pass"
       ],
       "sha256": "c018e69682a9a760a9a5087b9efbe56d4543f54dc65d7af670de5d009ed03e58",
@@ -2223,6 +2248,7 @@
         "battle-fxobj-machine-cyclone-vs-oracle",
         "battle-fxobj-machine-song-vs-oracle",
         "sweep-ai-condition-walk",
+        "sweep-band-25a3",
         "sweep-tech-pass"
       ],
       "sha256": "8d4e0ee0bebc8655eff5820f4d9267beeadb650462c84fb59199382a626e7194",
@@ -2516,6 +2542,7 @@
       "how": "Auto-added from regress_checks.json; fill in provenance.",
       "used_by": [
         "battle-defeat-exit-vs-oracle",
+        "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge",
         "battle-enemy-area-band-vs-oracle",
         "battle-enemy-census-counter-eval-vs-oracle",
         "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",
@@ -2531,6 +2558,7 @@
         "battle-hud-item-list-gap-strip-vs-oracle",
         "battle-hud-item-list-scrolled-strip-vs-oracle",
         "battle-hud-tech-target-strip-vs-oracle",
+        "battle-hypno-wave-rings-rotate-vs-rule-cartridge",
         "battle-item-lapis-every-seat-vs-oracle",
         "battle-item-megalixir-every-seat-vs-oracle",
         "battle-item-scrolled-record-vs-oracle",
@@ -2553,6 +2581,18 @@
       ],
       "sha256": "233ca7485cf1004a5bdeb00a4627026cff1c7a15787e19eb51011e0da0ee1352",
       "size": 273109,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/battle_re/gato_wait_crono_solo.lakewram",
+      "used_by": [
+        "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge"
+      ],
+      "kind": "lakewram",
+      "regenerable": true,
+      "how": "saves/battle_re/gato_wait.state's WRAM with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single learned, MP 99), behind the 21-byte #lakewram header -- what battle_ab.run writes for the port.",
+      "sha256": "a2d2f38f3a0e8f6bb899e8084f230df5b3ea7e0b278d153b684758c43279be0d",
+      "size": 131093,
       "present_when_recorded": true
     },
     {
@@ -3098,6 +3138,30 @@
       "present_when_recorded": true
     },
     {
+      "path": "saves/field_re/fall_stairs083.lakewram",
+      "used_by": [
+        "field-stairs-fall-camera-follows-vs-rule-cartridge"
+      ],
+      "kind": "lakewram",
+      "regenerable": false,
+      "how": "The WRAM of saves/field_re/fall_stairs083_lake.state behind the 21-byte #lakewram header.",
+      "sha256": "f98920a1241bed7965fb120b843effee501f7163d208a55b6bf3c316b759393b",
+      "size": 131093,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/fall_stairs083_lake.state",
+      "used_by": [
+        "field-stairs-fall-camera-follows-vs-rule-cartridge"
+      ],
+      "kind": "state",
+      "regenerable": false,
+      "how": "The user's snes9x capture fall_stairs.state (loc 083, the top of the stairs a script has turned into a conveyor) spliced by `tools/s9x_to_lake.py --ppu` onto a loc 083 base made 2026-10-11 by `ct.exe --teleport 0x83 11 35 1 --frames 120` (CT_ORACLE_LOGICAL=1) from saves/field_re/savept084_lake.state.",
+      "sha256": "ac10f6383dc407fcc90700a9946514f5592709642d18db76af41e33e0079af88",
+      "size": 273125,
+      "present_when_recorded": true
+    },
+    {
       "path": "saves/field_re/inn600_tele.state",
       "used_by": [
         "field-inn-wake-party-slot-calls-vs-rule-cartridge"
@@ -3269,18 +3333,6 @@
       "present_when_recorded": true
     },
     {
-      "path": "saves/field_re/m81_frog_lake.lakewram",
-      "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
-      "used_by": [
-        "field-manoria-frog-sword"
-      ],
-      "sha256": "c0b492f92431e1dd58c93afda60415ae525efc6ecb79d2022ef40bde577b2ca5",
-      "size": 131093,
-      "present_when_recorded": true
-    },
-    {
       "path": "saves/field_re/m81_frog.state",
       "kind": "lake_state",
       "regenerable": true,
@@ -3290,6 +3342,18 @@
       ],
       "sha256": "e68f078562b0b3986ff2d6dc272c97a30e57e27db37b57e8130a0680745d6c56",
       "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/m81_frog_lake.lakewram",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "used_by": [
+        "field-manoria-frog-sword"
+      ],
+      "sha256": "c0b492f92431e1dd58c93afda60415ae525efc6ecb79d2022ef40bde577b2ca5",
+      "size": 131093,
       "present_when_recorded": true
     },
     {
@@ -3319,14 +3383,15 @@
     {
       "path": "saves/field_re/m81_naga_after_fight.lakewram",
       "used_by": [
+        "field-organ-door-opens-live",
         "field-textbox-under-the-rule-vs-logical-oracle"
       ],
       "kind": "lakewram",
       "regenerable": false,
       "how": "The WRAM of saves/field_re/m81_naga_after_fight_lake.state (the port's seed of the same moment).",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "sha256": "76bc3c2f72050b878edfa3fb87247bd1a9840a71b9b7a2e660dd56364679cdff",
+      "size": 131093,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/m81_naga_after_fight_lake.state",
@@ -3337,9 +3402,9 @@
       "kind": "lake_state",
       "regenerable": false,
       "how": "The user's snes9x capture animacao_freiras_naga_ettes re-spliced (s9x_to_lake --ppu) onto --teleport 129 7 11 0 from m81_nuns_lake.state; rule cartridge into the fight, Naga-ette HP poked to 1, A to the end, +40 frames (see the check notes).",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false,
+      "sha256": "e88d0ad4c6c4b2c00c6726176355cceb8c656810cfc9cee7bbc58a248a6eea33",
+      "size": 273125,
+      "present_when_recorded": true,
       "lake_format": "ctls"
     },
     {
@@ -3348,6 +3413,7 @@
       "regenerable": false,
       "how": "Auto-added from regress_checks.json; fill in provenance.",
       "used_by": [
+        "battle-flame-toss-band-vs-rule-cartridge",
         "battle-naga-ettes-hold-their-poses-through-fire-whirl-vs-oracle",
         "battle-naga-ettes-walk-as-the-cartridge-through-their-turns",
         "battle-naga-kiss-slow-vs-oracle",
@@ -3366,9 +3432,10 @@
       "regenerable": false,
       "how": "Auto-added from regress_checks.json; fill in provenance.",
       "used_by": [
+        "battle-flame-toss-band-vs-rule-cartridge",
+        "battle-naga-ettes-walk-as-the-cartridge-through-their-turns",
         "battle-status-colour-cycle-ends-with-the-fight-vs-oracle",
-        "vmdiff-manoria-nuns",
-        "battle-naga-ettes-walk-as-the-cartridge-through-their-turns"
+        "vmdiff-manoria-nuns"
       ],
       "sha256": "ff73a705ee654ae44a80173ef6bcd5f27be3bc5b4ae569026f1ee4e23a354be3",
       "size": 273125,
@@ -3382,9 +3449,35 @@
       "used_by": [
         "battle-naga-ettes-hold-their-poses-through-fire-whirl-vs-oracle"
       ],
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "sha256": "44a7cbfc3b871b255f9487b666bd9296635199d8f7ba98e3aeff45d9aac26fcb",
+      "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/magus_scene.lakewram",
+      "used_by": [
+        "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge",
+        "field-battle-discards-an-open-box-vs-rule-cartridge"
+      ],
+      "kind": "lakewram",
+      "regenerable": false,
+      "how": "The WRAM of saves/field_re/magus_scene_lake.state behind the 21-byte #lakewram header.",
+      "sha256": "039843fef6c77bd93d02c58ac259859c0e40a71d07dabe53654f93e067683f0e",
+      "size": 131093,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/magus_scene_lake.state",
+      "used_by": [
+        "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge",
+        "field-battle-discards-an-open-box-vs-rule-cartridge"
+      ],
+      "kind": "state",
+      "regenerable": false,
+      "how": "The user's snes9x capture magus_scene.state (loc 0CB, the Diablos about to close in, 2026-10-11) spliced by `tools/s9x_to_lake.py --ppu` onto a loc 0CB base made by `ct.exe --teleport 0xCB 55 17 1 --frames 60` (CT_ORACLE_LOGICAL=1) from a state carrying the user's F5 ct_debug_037 game data.",
+      "sha256": "c8dea36118ca2610b12dddb4c94cef7750e84075be553faaf2befb7fa3fc885a",
+      "size": 273125,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/ow_w0.lakewram",
@@ -3424,9 +3517,9 @@
       "kind": "story_flags",
       "regenerable": false,
       "how": "The $7F:0000-01FF story page of the user's F5 capture build/ct_debug_023.state (loc 07B, 2026-10-09; CtScene 'CTFS' format): CT_DUMPWRAM=p.wram CT_DUMPWRAM_AT=3 build/ct_field.exe --assets ct_assets.dat --scene 123 --loadstate build/ct_debug_023.state --selftest x.raw --frames 10, then bytes 0x10000-0x101FF of p.wram. Storyline 0F, party 00/80/80.",
-      "sha256": null,
-      "size": null,
-      "present_when_recorded": false
+      "sha256": "eaee2a546db749764825e028c877f857cd65645685c5abbb9d8446acb7398a32",
+      "size": 512,
+      "present_when_recorded": true
     },
     {
       "path": "saves/field_re/s07b_table_seat.lakewram",
@@ -3661,6 +3754,32 @@
         "field-native-frames-between-over-the-iris-colour-window-captions"
       ],
       "sha256": "7a4e78b7f6d68fd616119e8d70574e59a1ad1b66a7cf2e398c4ac336b89eb1b2",
+      "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/savept084.lakewram",
+      "used_by": [
+        "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
+        "field-shelter-only-on-the-save-point-vs-rule-cartridge"
+      ],
+      "kind": "lakewram",
+      "regenerable": false,
+      "how": "The WRAM of saves/field_re/savept084_lake.state (tools/ctlib/lake.py wram) behind the 21-byte #lakewram header.",
+      "sha256": "d8991c125db002617c707cdafab7d2bbb2fcb5ce5ac4b887d52504ead85c4a74",
+      "size": 131093,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/savept084_lake.state",
+      "used_by": [
+        "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
+        "field-shelter-only-on-the-save-point-vs-rule-cartridge"
+      ],
+      "kind": "state",
+      "regenerable": false,
+      "how": "A LakeSnes state on loc 084's save tile (3, 39), made 2026-10-11: the user's F5 ct_debug_032.state (CTFS, loc 0CB) dumped by ct_field CT_DUMPWRAM_AT=1, its $2400-$2FFF (bag, sheets, party, techs) and $7F:0000-01FF (the story flags) spliced into saves/field_re/m81_naga_after_fight_lake.state (tools/ctlib/lake.py), then `ct.exe --teleport 0x84 3 39 0 --frames 120 --out` under CT_ORACLE_LOGICAL=1 (the ROM's own loader).",
+      "sha256": "ebb30dfcc77d800910bfaaf8253f433aa268ade2757b3346f5bad739e0754a9c",
       "size": 273125,
       "present_when_recorded": true
     },
@@ -3936,6 +4055,18 @@
       "present_when_recorded": true
     },
     {
+      "path": "saves/field_re/yakra_defeat_039.state",
+      "used_by": [
+        "field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge"
+      ],
+      "kind": "state",
+      "regenerable": false,
+      "how": "The owner's F5 snapshot ct_debug_039.state (2026-10-12): loc 0C6, Crono, Lucca and Frog before the Chancellor becomes Yakra, copied. A CTFS image: tied to sizeof(CtScene) -- a struct change invalidates it (regenerate by the same walk and F5).",
+      "sha256": "6615947280cc8a16699c8ebf66a827663f815f68826f3cea0243b8ccaf201c7d",
+      "size": 153972,
+      "present_when_recorded": true
+    },
+    {
       "path": "saves/forest_arrival_flags.bin",
       "kind": "story_flags",
       "regenerable": true,
@@ -4173,8 +4304,8 @@
         "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
-      "sha256": "5c6e753a20e236d90f0ab8846f6eba6c8f35ff32885f326306c2464c22eb45f3",
-      "size": 1720318,
+      "sha256": "b5733ca8773e6c3af7809b9b015688827c7fdc963b71fd6b5d1a8d5feada645f",
+      "size": 1728617,
       "present_when_recorded": true
     },
     {
@@ -4194,8 +4325,8 @@
         "ow-object-bootstrap-w6-vs-oracle",
         "ow-object-bootstrap-w7-vs-oracle"
       ],
-      "sha256": "606d83d9ee83d9c20472df98ccae4c90ed693e132fb447e69aaf947e691cac2b",
-      "size": 656176,
+      "sha256": "2d22e639ff5e5d3c0fc29e39234e5a0146413708bc17045002cf28f8564c4f40",
+      "size": 660744,
       "present_when_recorded": true
     },
     {
@@ -4242,8 +4373,8 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "664da177dd882d3368ac184172fcada363cb0450551b2c3b573a81d66c890394",
-      "size": 1501354,
+      "sha256": "87a23039fac560f1927a847f4707c4b27746ffa710fb9b0b7058769cee975f2e",
+      "size": 1494321,
       "present_when_recorded": true
     },
     {
@@ -4294,7 +4425,7 @@
         "ow-window-object-routine-and-mask-vs-oracle"
       ],
       "sha256": "48e16d1832d3232282694ca4bb31a03a514249d07871465586e9575201de6355",
-      "size": 20153,
+      "size": 19758,
       "present_when_recorded": true
     },
     {
@@ -4306,7 +4437,7 @@
         "field-window-wipe-routine-and-mask-vs-oracle"
       ],
       "sha256": "ca8f2b803b73e866242144f234404fc92e107510e810ecebea3f6eaa570c87a6",
-      "size": 15802,
+      "size": 15489,
       "present_when_recorded": true
     },
     {
@@ -4482,8 +4613,8 @@
       "kind": "tool",
       "regenerable": true,
       "how": "The synthetic-battle harness (GATO's fight made any fight by pokes), port against the rule's cartridge.",
-      "sha256": "96e048434995101e65c3bb2cbf86c222655f07999e20bac584c9759c79f45ac7",
-      "size": 30016,
+      "sha256": "58ee3967879a6746b1b951775b9c6ac0e393bf64ccf2ea306771f8cceee15f3e",
+      "size": 30458,
       "present_when_recorded": true
     },
     {
@@ -4580,7 +4711,7 @@
         "assets-dialogue-every-script-box-reads-the-rom"
       ],
       "sha256": "e0ffb442279a2502810742e3d6bf3ce75d9b5bcbb1b93770dc81bfad5b0bc560",
-      "size": 6011,
+      "size": 6259,
       "present_when_recorded": true
     },
     {
@@ -4630,7 +4761,7 @@
         "battle-enemy-cells-zombor-vs-oracle"
       ],
       "sha256": "6e6505ea0fb7033962fdbd847ed291a4c367b28db7d5416ad5296a24a636cef0",
-      "size": 7227,
+      "size": 7475,
       "present_when_recorded": true
     },
     {
@@ -4921,7 +5052,7 @@
         "field-textbox-under-the-rule-vs-logical-oracle"
       ],
       "sha256": "3b341050922ac642418c44d0dd024be043e1d2e32bf9ca8ccd237c871bcc2425",
-      "size": 4891,
+      "size": 4978,
       "present_when_recorded": true
     },
     {
@@ -4933,7 +5064,7 @@
         "title-intro-machine-vs-oracle-wram"
       ],
       "sha256": "4c5f8138f5da27329f239de8d70e40db65c00b590c47663e52d9cbb5e4e990ff",
-      "size": 26870,
+      "size": 27765,
       "present_when_recorded": true
     },
     {
@@ -5032,106 +5163,6 @@
       "how": "tools/fixtures.py (recipe telepod_show): loc 008 with a two-member party (Crono leading, Marle following), control on",
       "sha256": "1907365744b18cda76b05cf883618959a7413e347bac50961feeb70a0710d009",
       "size": 273125,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/field_re/savept084_lake.state",
-      "used_by": [
-        "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
-        "field-shelter-only-on-the-save-point-vs-rule-cartridge"
-      ],
-      "kind": "state",
-      "regenerable": false,
-      "how": "A LakeSnes state on loc 084's save tile (3, 39), made 2026-10-11: the user's F5 ct_debug_032.state (CTFS, loc 0CB) dumped by ct_field CT_DUMPWRAM_AT=1, its $2400-$2FFF (bag, sheets, party, techs) and $7F:0000-01FF (the story flags) spliced into saves/field_re/m81_naga_after_fight_lake.state (tools/ctlib/lake.py), then `ct.exe --teleport 0x84 3 39 0 --frames 120 --out` under CT_ORACLE_LOGICAL=1 (the ROM's own loader).",
-      "sha256": "ebb30dfcc77d800910bfaaf8253f433aa268ade2757b3346f5bad739e0754a9c",
-      "size": 273125,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/field_re/savept084.lakewram",
-      "used_by": [
-        "field-savepoint-a-opens-the-save-screen-vs-rule-cartridge",
-        "field-shelter-only-on-the-save-point-vs-rule-cartridge"
-      ],
-      "kind": "lakewram",
-      "regenerable": false,
-      "how": "The WRAM of saves/field_re/savept084_lake.state (tools/ctlib/lake.py wram) behind the 21-byte #lakewram header.",
-      "sha256": "d8991c125db002617c707cdafab7d2bbb2fcb5ce5ac4b887d52504ead85c4a74",
-      "size": 131093,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/field_re/fall_stairs083_lake.state",
-      "used_by": [
-        "field-stairs-fall-camera-follows-vs-rule-cartridge"
-      ],
-      "kind": "state",
-      "regenerable": false,
-      "how": "The user's snes9x capture fall_stairs.state (loc 083, the top of the stairs a script has turned into a conveyor) spliced by `tools/s9x_to_lake.py --ppu` onto a loc 083 base made 2026-10-11 by `ct.exe --teleport 0x83 11 35 1 --frames 120` (CT_ORACLE_LOGICAL=1) from saves/field_re/savept084_lake.state.",
-      "sha256": "ac10f6383dc407fcc90700a9946514f5592709642d18db76af41e33e0079af88",
-      "size": 273125,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/field_re/fall_stairs083.lakewram",
-      "used_by": [
-        "field-stairs-fall-camera-follows-vs-rule-cartridge"
-      ],
-      "kind": "lakewram",
-      "regenerable": false,
-      "how": "The WRAM of saves/field_re/fall_stairs083_lake.state behind the 21-byte #lakewram header.",
-      "sha256": "f98920a1241bed7965fb120b843effee501f7163d208a55b6bf3c316b759393b",
-      "size": 131093,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/field_re/magus_scene_lake.state",
-      "used_by": [
-        "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge",
-        "field-battle-discards-an-open-box-vs-rule-cartridge"
-      ],
-      "kind": "state",
-      "regenerable": false,
-      "how": "The user's snes9x capture magus_scene.state (loc 0CB, the Diablos about to close in, 2026-10-11) spliced by `tools/s9x_to_lake.py --ppu` onto a loc 0CB base made by `ct.exe --teleport 0xCB 55 17 1 --frames 60` (CT_ORACLE_LOGICAL=1) from a state carrying the user's F5 ct_debug_037 game data.",
-      "sha256": "c8dea36118ca2610b12dddb4c94cef7750e84075be553faaf2befb7fa3fc885a",
-      "size": 273125,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/field_re/magus_scene.lakewram",
-      "used_by": [
-        "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge",
-        "field-battle-discards-an-open-box-vs-rule-cartridge"
-      ],
-      "kind": "lakewram",
-      "regenerable": false,
-      "how": "The WRAM of saves/field_re/magus_scene_lake.state behind the 21-byte #lakewram header.",
-      "sha256": "039843fef6c77bd93d02c58ac259859c0e40a71d07dabe53654f93e067683f0e",
-      "size": 131093,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/battle_re/gato_wait_crono_solo.lakewram",
-      "used_by": [
-        "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge"
-      ],
-      "kind": "lakewram",
-      "regenerable": true,
-      "how": "saves/battle_re/gato_wait.state's WRAM with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single learned, MP 99), behind the 21-byte #lakewram header -- what battle_ab.run writes for the port.",
-      "sha256": "a2d2f38f3a0e8f6bb899e8084f230df5b3ea7e0b278d153b684758c43279be0d",
-      "size": 131093,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/field_re/yakra_defeat_039.state",
-      "used_by": [
-        "field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge"
-      ],
-      "kind": "state",
-      "regenerable": false,
-      "how": "The owner's F5 snapshot ct_debug_039.state (2026-10-12): loc 0C6, Crono, Lucca and Frog before the Chancellor becomes Yakra, copied. A CTFS image: tied to sizeof(CtScene) -- a struct change invalidates it (regenerate by the same walk and F5).",
-      "sha256": "6615947280cc8a16699c8ebf66a827663f815f68826f3cea0243b8ccaf201c7d",
-      "size": 153972,
       "present_when_recorded": true
     }
   ]

@@ -2,6 +2,7 @@
 r"""A battle ACTION, port against the rule's cartridge, from the same WRAM -- the synthetic-battle harness.
 
     python tools/battle_ab.py tech <char> <k>          # char 0..6's k-th single tech (all eight learned), solo party
+    python tools/battle_ab.py attack [char]            # char 0..6's physical attack on GATO, solo party
     python tools/battle_ab.py item <itemId>            # a consumable on the default target, solo Crono
     python tools/battle_ab.py item <itemId> marle [dead]   # Crono + Marle, the item on Marle (hurt; or dead: 0 HP, $80)
         [inv=2400:BD,2500:05,...] [down=N]            #   another bag (':' pairs), N Downs in the item list
@@ -465,6 +466,11 @@ def main():
     if a[0] == 'tech':
         c, k = int(a[1]), int(a[2])
         work.append(('tech char%d #%d' % (c, k), pokes_for([c]), drive_tech(k), 1500, 'tech_%d_%d' % (c, k), tech_id(c, k)))
+    elif a[0] == 'attack':
+        # the PC PHYSICAL (`attack <char>`): A on Att, A on the target (GATO); $AE93 reads 00 at its dispatch
+        c = int(a[1]) if len(a) > 1 else 0
+        work.append(('attack char%d' % c, pokes_for([c]), [(MENU_AT, 'a', 2), (MENU_AT + 12, 'a', 2)], 1200,
+                     'attack_%d' % c, 0))
     elif a[0] == 'census':
         chars = [int(x) for x in a[1].split(',')] if len(a) > 1 else range(7)
         for c in chars:

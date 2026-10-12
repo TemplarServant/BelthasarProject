@@ -126,6 +126,8 @@ int CtSceneActorCount(const CtScene* sc);
 void CtSceneCameraTick(CtScene* sc);
 // C0/00EB, one wait of the battle return's chain (C0/881E's camera, C0/00DE's $0153 flip and FD/E39C) -- field.c.
 void CtSceneReturnWaitFrame(CtScene* sc);
+// C0/02AF-02C1, one frame of the defeat's fade (C0/881E + FD/FFF7).
+void CtSceneDefeatFadeFrame(CtScene* sc);
 void CtSceneCameraInput(CtScene* sc, int reqX, int reqY, int leadX, int leadY, int leadValid);
 void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY);
 // C0/A385-A4FB: a location load's BG2/BG3 scroll setup from the map header md[1..3] (call after
