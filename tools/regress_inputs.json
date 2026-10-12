@@ -4173,7 +4173,7 @@
         "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
-      "sha256": "02cafbe494e099e5c0f20cb8d86bef2b9069499ec0723d109917539a69e6c73a",
+      "sha256": "eeabe0e047187cb5e0b15dd67b685ddb632fcc04959bb4692a07bcb32e6ab647",
       "size": 1720318,
       "present_when_recorded": true
     },
@@ -5081,6 +5081,30 @@
       "regenerable": false,
       "how": "The WRAM of saves/field_re/fall_stairs083_lake.state behind the 21-byte #lakewram header.",
       "sha256": "f98920a1241bed7965fb120b843effee501f7163d208a55b6bf3c316b759393b",
+      "size": 131093,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/magus_scene_lake.state",
+      "used_by": [
+        "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge"
+      ],
+      "kind": "state",
+      "regenerable": false,
+      "how": "The user's snes9x capture magus_scene.state (loc 0CB, the Diablos about to close in, 2026-10-11) spliced by `tools/s9x_to_lake.py --ppu` onto a loc 0CB base made by `ct.exe --teleport 0xCB 55 17 1 --frames 60` (CT_ORACLE_LOGICAL=1) from a state carrying the user's F5 ct_debug_037 game data.",
+      "sha256": "c8dea36118ca2610b12dddb4c94cef7750e84075be553faaf2befb7fa3fc885a",
+      "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/magus_scene.lakewram",
+      "used_by": [
+        "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge"
+      ],
+      "kind": "lakewram",
+      "regenerable": false,
+      "how": "The WRAM of saves/field_re/magus_scene_lake.state behind the 21-byte #lakewram header.",
+      "sha256": "039843fef6c77bd93d02c58ac259859c0e40a71d07dabe53654f93e067683f0e",
       "size": 131093,
       "present_when_recorded": true
     }

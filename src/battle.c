@@ -8615,6 +8615,7 @@ static void battleAdvanceDissolves(CtBattleHost* h) {
       if (h->dissolveActive[slot]) { h->dissolveRunning = slot; break; }
   int slot = h->dissolveRunning;
   if (slot < 0) return;
+  if (h->deathSfxDue[slot] > 0 && h->deathCceaSeen) return;     // its routine still waits on $CCEA (battleDeathSfxTick)
   if (++h->dissolveStep[slot] > CT_DISSOLVE_STEPS - 1) {       // fully cleared -> gone; the next corpse
     h->dissolveActive[slot] = 0; h->dissolveRunning = -1;      //   starts on the very next frame
   }
@@ -14632,6 +14633,16 @@ static void battleDeathSfxTick(CtBattleHost* h) {
     // so this gate is inert for it and its post keeps the timing it already had.
     if (h->dissolveActive[slot] && h->dissolveRunning != slot) continue;
     if (h->deathSfxDue[slot] == 2 && h->dissolveActive[slot]) battleDeathPalCopy(h, slot);   // CF/FE20: its routine starts
+    // CD/0043's WAIT IS ON $CCEA, NOT ON A FRAME COUNT: `JSR CD/3E75 / JSL CD/04AA` until $CCEA == 0, then the #95 post and
+    // CD/00A5's fade record. $CCEA is the effect program's flag (CD/1609 `INC $CCEA` when its program ends, CD/0497 `STZ
+    // $CCEA` when CD/0453 has restored the colours), so a death a tech causes waits for the tech's own clean-up, whose
+    // colour record (`50 10 10 10`) uses the same objslot record 10 ($0598). MEASURED, the rule's cartridge, the user's
+    // magus_scene capture with X-Strike learned: the Diablos dies f775 (its palette copied the same frame), `$CCEA` 01
+    // from f726 to f796, the clean-up's record f781-795, the death's `40 C0 0F 10` from f798 to f813 -- red. The port
+    // posted two frames after the death (the forest fights, where $CCEA is already 0), so its record started at f777 and
+    // the clean-up's overwrote it at f779: the corpse dissolved in its own colours (the user, 2026-10-11, translated from
+    // Portuguese: "X-Strike, on killing any enemy, does not dissolve in red but in the normal colour").
+    if (h->deathSfxDue[slot] == 1 && h->deathCceaSeen) continue;   // (the loop waits a frame, then reads $CCEA)
     if (--h->deathSfxDue[slot] > 0) continue;
     int cmb = 3 + slot;
     int q = s[0x99D2];
@@ -14668,6 +14679,7 @@ static void battleFxLoadPalArm(uint8_t* s);                 // CD/0E79 (defined 
 static void battleAdvanceAction(CtBattleHost* h) {
   uint8_t* s = h->mem;
   battleDeathSfxTick(h);                                         // CD/0043's $CCEA wait, then the #95 post
+  h->deathCceaSeen = h->mem[0xCCEA];                             // what next frame's wait loop reads (CD/3E75 first)
   for (int i = 0; i < CT_BATTLE_FX_POOL; i++)                    // age every live popup (per render frame), and step its
     if (h->popups[i].active) {                                   //   row along the curve its `$A0DC` picks (battlePopupRise)
       if (++h->popups[i].age >= CT_FX_LIFETIME) h->popups[i].active = 0;

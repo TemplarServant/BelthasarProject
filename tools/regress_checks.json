@@ -6378,6 +6378,60 @@
       "notes": "The user, 2026-10-11 (translated from Portuguese): 'on falling down the stairs, in this save, the camera seems to diverge from the original -- just press Down' (their snes9x capture fall_stairs.state, spliced onto a loc 083 base made by `ct.exe --teleport 0x83 11 35 1` from savept084_lake.state, `tools/s9x_to_lake.py --ppu`). A script has copied conveyor cells into the stairs ($7E:7000 = 0D: speed 20, down). C0/881E runs every frame: C0/88E5 copies the momentum $1D2A/$1D2B into the scroll request $2E/$30, the d-pad (C0/88EE) needs $011F, the collision (C0/8A6D, whose commit C0/9D6E-9DB1 sets the momentum from prop1's conveyor bits) only $0120. The rule's cartridge, Down held: $011F 00 from f4, $1D2B = 20 by C0:9DB1, $1D30 = 20 by C0:88ED over f5-42, the camera $1D0E 36 -> 40 at f3, f6, f13 .. f41 (one step every 4 frames); the lead's $1982 by C0:9E60 (its op B0) over f1-6, then the fall's own move C0:ADF7 = 2B from f10. Two defects: the host ran the controller only with explore on (now also with $011F = 0 and $0120 != 0: no d-pad, the lead integrated only while its script is at op B0), and its collision fetch read the host's packed planes, which kept only prop1 0x10 / 0x40 -- the conveyor was lost (fieldTileFetch now reads $30C0 / $7000 / $7040 from the scene's WRAM). Before: the camera stood at 37 through the fall and crept 1 px a frame afterwards (38 at f69 .. 42 at f149). After: 37 f2, 38 f5, 39 f11 .. 40 f39 (the cartridge's minus 1-2 frames: the port's input convention, and one conveyor step more at the call that ends op B0 -- the host integrates before the VM pass that pre-empts it; the lead runs 2 px ahead until the landing, equal from f130)."
     },
     {
+      "name": "battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "203",
+        "--loadwram",
+        "saves/field_re/magus_scene.lakewram",
+        "--walkscript",
+        "d:60,n:28,a:2,n:600"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_POKEWRAM": "2841=80",
+        "CT_BATTLE_SCRIPT_ABS": "1",
+        "CT_BATTLE_SCRIPT": "n:169,d:2,n:10,a:2,n:10,d:2,n:10,a:2,n:10,a:2,n:900",
+        "CT_FIELD_MEMMON": "0598:4,CCEA:1",
+        "CT_AUDIO_SEEDSTATE": "saves/field_re/magus_scene_lake.state",
+        "CT_SHOTS": "build/_xstrike",
+        "CT_SHOTS_AT": "830",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/magus_scene.lakewram",
+        "saves/field_re/magus_scene_lake.state"
+      ],
+      "expect": [
+        "fmemmon f795 loc=0CB  0598=00101010  CCEA=00*",
+        "fmemmon f797 loc=0CB  0598=40C00F10*  CCEA=00",
+        "fmemmon f812 loc=0CB  0598=00C00F10*  CCEA=00"
+      ],
+      "pin": [
+        "^fmemmon f\\d+ loc=0CB  0598=(40C00F10|00C00F10)\\*",
+        "^fmemmon f\\d+ loc=0CB  0598=00101010  CCEA=00\\*"
+      ],
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    if (h->deathSfxDue[slot] == 1 && h->deathCceaSeen) continue;",
+          "replace": "    /* MUT: no $CCEA wait */",
+          "why": "the death's fade record staged two frames after the death, overwritten by the X-Strike clean-up's: no red"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "an enemy X-Strike kills dissolves red: the death's fade waits for the tech's clean-up ($CCEA) as on the cartridge",
+      "notes": "The user, 2026-10-11 (translated from Portuguese): 'X-Strike, on killing any enemy, does not dissolve in red but in the normal colour'. CD/0043 (the death routine CF/FE20 runs per corpse) waits `JSR CD/3E75 / JSL CD/04AA` until $CCEA == 0 before the #95 post and CD/00A5's fade record 10 ($0598 = 40 C0 0F 10, OBJ palette 4 toward red). $CCEA is the effect program's flag: CD/1609 `INC $CCEA` when the program ends, CD/0497 `STZ $CCEA` after CD/0453's clean-up, whose own colour record (50 10 10 10) is the same record 10. The port waited a fixed two frames (true in the forest fights, where $CCEA is already 0), so after X-Strike its fade started at once and the clean-up's record overwrote it two frames later. The drive: the user's snes9x capture magus_scene.state (loc 0CB, the Diablos about to fight; spliced on a loc 0CB teleport base), X-Strike learned by CT_POKEWRAM 2841=80 (PEEK_POKE on the cartridge), A at d+28 starts the fight, Crono attacks, then Comb / X-Strike / A. The rule's cartridge: the Diablos dies f775 (its palette copied), $CCEA 01 f726-795, the clean-up's record f781-795, the death's record f798-813. The port: f774, $CCEA 0 at f795, the record f797-812 (one frame ahead: its input convention); the corpse dissolves red on both. The dither's start waits on the same flag (battleAdvanceDissolves)."
+    },
+    {
       "name": "field-organ-door-opens-live",
       "argv": [
         "build/ct_field.exe",

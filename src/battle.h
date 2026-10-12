@@ -574,6 +574,7 @@ typedef struct CtBattleHost {
                              //   death routines SERIALLY -- highest combatant index first, the next
                              //   starting the frame the previous clears (battle_death_dissolve_order.md);
                              //   every other dissolveActive slot is QUEUED and renders undissolved.
+  uint8_t deathCceaSeen;     // $CCEA as CD/0043's wait loop sees it: the value the previous frame left (CD/3E75 first)
   int deathSfxDue[8];        // per enemy slot: frames until the DEATH sound posts (CD/0043: the $CCEA wait,
                              //   measured 2 frames after curHP hits 0, 3/3 forest deaths); 0 = nothing pending
   int dissolveStep[8];       // -CT_DISSOLVE_HOLD..0 (full pal4 hold) .. CT_DISSOLVE_STEPS-1 (dither step);

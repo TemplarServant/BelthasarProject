@@ -108,9 +108,9 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-11: **824** checks, **2** excluded; `--list` prints the current set).
+(2026-10-11: **825** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**583** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**584** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **239** slower checks — whole fights and attract legs against the logical oracle, the
@@ -665,6 +665,15 @@ into the scroll request (the collision C0/8A6D still runs on `$0120`). Pins the 
 (38 f5, 39 f11, 3C f23, 40 f39; the cartridge's 1-2 frames later). Two mechanisms: the host runs the controller with
 explore off (no d-pad; the lead integrated only while its script sits at op B0), and the collision fetch reads the
 prop planes from the scene's WRAM (the host's packed copy had lost the conveyor bits). Needs the private capture.
+
+### battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge
+
+An enemy a tech kills: CD/0043, the death routine, waits until `$CCEA` is 0 (the tech's effect program has ended and
+CD/0453 has cleaned up) before the #95 post and the red fade record 10 (`$0598 = 40 C0 0F 10`); the clean-up's own colour
+record is the same record 10. The user's magus_scene capture (the Diablos fight), X-Strike learned by `CT_POKEWRAM`:
+pins `$CCEA` cleared at f795 and the death's record f797-812 (the rule's cartridge: f796, f798-813). Before, the port
+waited a fixed two frames, its fade started at once and the clean-up's record overwrote it: the corpse dissolved in its
+own colours. Needs the private capture.
 
 ### field-savepoint-a-opens-the-save-screen-vs-rule-cartridge / field-shelter-only-on-the-save-point-vs-rule-cartridge
 
