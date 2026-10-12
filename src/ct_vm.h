@@ -139,6 +139,7 @@ void CtSceneLayerOffsetsOf(const CtScene* sc, const uint8_t* page, int* bg2x, in
 // the lead is placed and the camera is set -- it needs both, and its box is NOT the per-frame one.
 void CtScenePalSweepEntry(CtScene* sc);
 void CtSceneCameraPx(const CtScene* sc, int* camx, int* camy);
+void CtSceneCameraPxOf(const uint8_t* page, int* camx, int* camy);   // the same, from a copy of the object page (a battle)
 
 // ---- WRAM bridge for the lockstep oracle differential (--vmdiff) ----
 // Maps our VM's per-object scheduler state to/from the ROM WRAM layout (0x20000):

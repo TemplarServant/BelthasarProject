@@ -6304,7 +6304,7 @@ static int battleObjOrder(const uint8_t* mem, const CtBattleHost* h, int* out) {
   int key[22], n = 0;
   for (int cmb = 0; cmb < 11; cmb++) {                       // FE83F: obj 0x0C..0x16, in object order
     if (mem && !mem[0x96F5 + cmb]) continue;                 // FE845 LDA $96E9,Y / BEQ: not present
-    int y = (h && h->mvInited) ? h->mvLiveY[cmb] : (mem ? mem[0x1D23 + cmb] : 0);   // $1D17,obj = $1D23+cmb
+    int y = (h && h->mvInited) ? BT_LIVEY(h, cmb) : (mem ? mem[0x1D23 + cmb] : 0);   // $1D17,obj = $1D23+cmb
     key[n] = y & 0xFF; out[n] = cmb | 0x40; n++;             // FE84A-FE854: the body entry
     int front = (h && h->mvInited) ? h->frontCmp[cmb] : (mem ? mem[0xA5CD + cmb] : 0);   // $A5CD as the compose read it
     if (front) { key[n] = 0xFE; out[n] = cmb; n++; }         // FE855-FE869: the front entry
@@ -6446,8 +6446,8 @@ static void battleEnemyLiveDelta(const uint8_t* mem, const CtBattleHost* h, int 
   const uint8_t* r = mem + 0x29BF + slot * 12;
   if (r[6] != 0) return;                                // invalid staged record -> no shift
   int cmb = slot + 3;
-  int lx = h->mvInited ? h->mvLiveX[cmb] : mem[0x1D0C + cmb];
-  int ly = h->mvInited ? h->mvLiveY[cmb] : mem[0x1D23 + cmb];
+  int lx = h->mvInited ? BT_LIVEX(h, cmb) : mem[0x1D0C + cmb];
+  int ly = h->mvInited ? BT_LIVEY(h, cmb) : mem[0x1D23 + cmb];
   *dx = lx - (16 * r[0] + r[2]);                        // live foot - staged foot (0 while idle at home)
   *dy = ly - (16 * r[1] + r[3]);
 }
@@ -6657,7 +6657,7 @@ static void battleStanceRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
     // the victim track's A9 (the recoil, +3 here) does, and this layer used to keep drawing the staged foot and
     // paint a 6-px "knockback" on top (CT_FX_KNOCK_MAG, gone: battle.c's epitaph). Enemies already draw at
     // their live foot (battleEnemyLiveDelta); a PC's is the same host array.
-    if (h && h->mvInited && seat >= 0 && seat < 3) { footX = h->mvLiveX[seat]; footY = h->mvLiveY[seat]; }
+    if (h && h->mvInited && seat >= 0 && seat < 3) { footX = BT_LIVEX(h, seat); footY = BT_LIVEY(h, seat); }
     // ⭐ THE COLOURS ARE THE SEAT SLOT'S CGRAM ROW, NOT A PER-CHARACTER TABLE. CC/E6F8 gives seats 0/1/2 OBJ palettes
     // 5/6/7 ($9888 = 0A/0C/0E) and CF/E3C0 uploads the live page every NMI; what is in those rows is the field's own
     // palette for whoever sits there (CC/E6EC copies the base page) plus the weapon colours CC/E739 writes. The port
@@ -7871,8 +7871,8 @@ static void battleAttackRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
   // from the victim (the walker's F454 stop probe) == the old victim-anchored strike origin for the pinned
   // fights; at dispatch/settle it is the staged home (the op-1B snap makes the rest EXACT).
   if (h->mvInited) {
-    footX = h->mvLiveX[0];
-    footY = h->mvLiveY[0];
+    footX = BT_LIVEX(h, 0);
+    footY = BT_LIVEY(h, 0);
   } else {                                                         // pre-init synthetic host -> the staged foot
     if (mem) battlePcAnchorDelta(mem, 0, CT_EXT_CRONO_X, CT_EXT_CRONO_Y,
                         ctBattleStanceActor[0].anchorX, ctBattleStanceActor[0].anchorY, &pdx, &pdy);
@@ -8247,7 +8247,7 @@ static void battleShadowRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
   static uint8_t win[0x12][32];
   static const int name[4] = { 0x00, 0x01, 0x10, 0x11 };                 // VRAM $02 $03 $12 $13, rebased
   for (int q = 0; q < 4; q++) { const uint8_t* s = CtBattleShadowTile(q); if (!s) return; memcpy(win[name[q]], s, 32); }
-  int ox = ((h->mvLiveX[cmb] & 0xFF) - 8) & 0xFF, oy = ((h->mvLiveY[cmb] & 0xFF) - 4) & 0xFF;   // CF/EA97-EAA5
+  int ox = ((BT_LIVEX(h, cmb) & 0xFF) - 8) & 0xFF, oy = ((BT_LIVEY(h, cmb) & 0xFF) - 4) & 0xFF;   // CF/EA97-EAA5
   { int keep = g_bObjPalCur; g_bObjPalCur = ((mem[0xA5E3] | mem[0x9F46]) >> 1) & 7;   // its attribute's palette (1)
     battleBlitCell(fb, win, 0x12, 0, ox, oy, palw, 0, 0);
     g_bObjPalCur = keep; }
@@ -8269,7 +8269,7 @@ static int battleCmbObjPal(const uint8_t* mem, const CtBattleHost* h, int cmb) {
 //  object of it, keyed by the combatant and placed at its live foot, so they move between two frames as it does)
 static int battleMotOwn(const CtBattleHost* h, int c) {
   if (!g_mot) return CT_MOT_FIXED;
-  int x = (h && h->mvInited && c >= 0 && c < 11) ? h->mvLiveX[c] : 0, y = (h && h->mvInited && c >= 0 && c < 11) ? h->mvLiveY[c] : 0;
+  int x = (h && h->mvInited && c >= 0 && c < 11) ? BT_LIVEX(h, c) : 0, y = (h && h->mvInited && c >= 0 && c < 11) ? BT_LIVEY(h, c) : 0;
   return CtMotSprite(g_mot, 0x30000 + c, x, y);
 }
 static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h) {
@@ -8284,7 +8284,7 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
     static char last[128]; char cur[128]; int p = 0;
     for (int i = 0; i < n && p < 100; i++) {
       int c = ord[i] & 0x1F;
-      int y = (h && h->mvInited) ? (h->mvLiveY[c] & 0xFF) : (mem ? mem[0x1D23 + c] : 0);
+      int y = (h && h->mvInited) ? (BT_LIVEY(h, c) & 0xFF) : (mem ? mem[0x1D23 + c] : 0);
       if (ord[i] & 0x40) p += snprintf(cur + p, sizeof cur - (size_t)p, "%s%d(%d)", i ? " " : "", c, y);
       else               p += snprintf(cur + p, sizeof cur - (size_t)p, "%s%d(front)", i ? " " : "", c);
     }
@@ -8306,7 +8306,7 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
     battleStanceRender(fb, mem, h);                   // PC stance: the published pose $9907 at the live foot
     // The ENEMY's status icon: CF/EE2C runs for every combatant whose icon is armed, at its live foot ($1D0C/$1D23).
     if (g_bDrawOnly >= 3 && g_bDrawOnly <= 10 && h && h->mvInited)
-      battleStatusIconRender(fb, mem, h, g_bDrawOnly, h->mvLiveX[g_bDrawOnly], h->mvLiveY[g_bDrawOnly]);
+      battleStatusIconRender(fb, mem, h, g_bDrawOnly, BT_LIVEX(h, g_bDrawOnly), BT_LIVEY(h, g_bDrawOnly));
     battleAttackRender(fb, mem, h);                   // Crono swing pose
     battleMarleAttackRender(fb, mem, h);              // Marle crossbow pose + pal0 spark
     battleFxObjRender(fb, h, g_bDrawOnly, 0x80);     // CF/EDB8: the effect objects drawn BEFORE it (in front)
@@ -8412,8 +8412,8 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
   for (int d = 0; d < nd; d++) {
     int cmb = draw[d], ofx, ofy;
     if (!h->mvInited || !CtBattleCursorOfs(h, cmb, &ofx, &ofy)) continue;   // no ROM record -> absent-render
-    int ax = (h->mvLiveX[cmb] + ofx - 0x10) & 0xFF;         // C1/19C0-19C9 / C1/1ABA-1AC3
-    int ay = (h->mvLiveY[cmb] + ofy) & 0xFF;                // C1/19CD-19D4 / C1/1AC7-1ACE
+    int ax = (BT_LIVEX(h, cmb) + ofx - 0x10) & 0xFF;         // C1/19C0-19C9 / C1/1ABA-1AC3
+    int ay = (BT_LIVEY(h, cmb) + ofy) & 0xFF;                // C1/19CD-19D4 / C1/1AC7-1ACE
     for (int cy = 0; cy < 2; cy++)
       for (int cx = 0; cx < 2; cx++) {
         int ti = 0x000 + cx + 0x10 * cy;                   // tile 0x000 quad: 0x00,0x01,0x10,0x11
@@ -8443,6 +8443,14 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
 // op-0xD8 sees the $0118 ack on its next VM visit with ZERO interposed VM ticks). Moved verbatim
 // from the pre-split fieldBattleConsumer; `outcome` sourced from the host's $7F01EC.
 static int g_battleObjSaved = 0;          // C0/0918 copied $0920..$1DFF to $7F:2000 at the entry (see the staging)
+// THE FIGHT'S LAST FEET, $1D0C-$1D2D as the module left them at the ack. The page is the field's again from C0/0905 on (the
+// field's camera and collision cells live at $1D0A-$1D34 too), but what the screen shows after the ack -- C0/02A0's defeat
+// wait, and the headless fight's post-resolve test compositions -- is the battle's last OAM, which the cartridge keeps
+// uploading without recomputing it (C0/02A0 runs no draw pass; --battletest's shots and pcblit/animengpose traces stand for
+// that picture). The port composes that picture from the battle's state, so it reads the feet the fight ended on, not the
+// field's restored camera bytes. Valid from the ack to the next battle's entry.
+static uint8_t g_battleEndFeet[0x1D2E - 0x1D0C];
+static int g_battleEndFeetOn = 0;
 // $29B0..$2A1F as the staging wrote them. --battletest grades the staging but samples after the run, and the battle's
 // exit (CF/FC08-FC71, CtBattleStagerRecords) rewrites every record's +0..+4 with the live foot and $9907 first.
 static uint8_t g_stagedRecs[0x70];
@@ -8492,6 +8500,7 @@ static void fieldBattleFinish(CtScene* vm, CtBattleHost* h, int* gameOver) {
   // object page $0920..$1DFF back from the save C0/0918 made at the entry (see the staging). Before the outcome
   // dispatch and before the C0/0304 tail's own writes (the $1000 dead marks, the positions) -- the ROM's order.
   s[0x0701] = s[0x0705] = s[0x0709] = s[0x070D] = 0xE0;
+  memcpy(g_battleEndFeet, s + 0x1D0C, sizeof g_battleEndFeet); g_battleEndFeetOn = 1;   // (the picture after the ack, above)
   if (g_battleObjSaved) { memcpy(s + 0x0920, s + 0x12000, 0x14E0); g_battleObjSaved = 0; }   // C0/0905: $7F:2000 -> $0920
   int outcome = h->glb[0x1EC];
   // ---- C1/B3BB -- THE END-OF-BATTLE STAGING TEARDOWN, and it is not conditional on anything.
@@ -8997,7 +9006,7 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
   // frame into $2C74/$2C76 (C0:2CD6) -- where the port had frozen it. `LDA #14DF / MVN` moves 14E0 bytes; the private
   // copy this replaces held 14DF. The image the copy overwrites is the script's: C0/0304's C0/56D4 writes it back
   // (fieldBattleResume, CtSceneScriptImage).
-  memcpy(s + 0x12000, s + 0x0920, 0x14E0); g_battleObjSaved = 1;
+  memcpy(s + 0x12000, s + 0x0920, 0x14E0); g_battleObjSaved = 1; g_battleEndFeetOn = 0;
   // ---- JSL C1/0000 (C0/18A7): the battle module ----
   h->mem = s; h->glb = g; h->frame = NULL; h->ctx = NULL;   // interactive: the host pumps events, not h->frame
   { const char* de = getenv("CT_BATTLE_DEBUGEND");          // env in BOTH modes; unset -> -1 interactive / 4000 headless
@@ -17538,7 +17547,12 @@ int main(int argc, char** argv) {
     // and the terrain + arena-relative combatants share ONE camera (no "teleport", dossier A.5). The ROM camera
     // never follows a scripted lead move: a scene that seems to need it is missing its op-0xE6/E7 effect.
     int camx = 0, camy = 0;
-    if (f.vm) CtSceneCameraPx(f.vm, &camx, &camy);
+    // IN A FIGHT THE FIELD'S PAGE IS THE COPY C0/0918 MADE AT $7F:2000 (the layer offsets above read it there too): the live
+    // $1D0A-$1D10 are the battle's from the entry to C0/0905 -- $1D0C-$1D16 its feet X ($1D0E/$1D0F, the camera's Y word,
+    // are combatants 2 and 3) -- and the arena's scroll is the field camera the fight began on.
+    if (f.vm) { const uint8_t* cp = CtSceneMem7E(f.vm);
+      if (battlePhase && g_battleObjSaved && cp) CtSceneCameraPxOf(cp + 0x12000 - 0x0920, &camx, &camy);
+      else CtSceneCameraPx(f.vm, &camx, &camy); }
     // (No clamp to the canvas: the VM's camera is the ROM's, bounded by the scroll mask the location record gives, and a
     //  mask may run past the map -- loc 1B0's record says 64 rows on a 32-row map. What shows there is the map again;
     //  fieldBaseAt wraps every canvas read below.)
@@ -18417,6 +18431,11 @@ int main(int argc, char** argv) {
     // liveHost threads the ACTION FEEDBACK state (battle_actionfx.md): the attacker skeleton offset + the
     // target hurt-flash swap (both read inside battleStanceRender), then the rising damage-number popups
     // (battleFxPopupsRender) draw ABOVE the stance and BELOW the HUD strip (PART 2 render rule).
+    // After the ack the page is the field's: the composition reads the fight's last feet (g_battleEndFeet) for its span.
+    uint8_t endFeetField[sizeof g_battleEndFeet];
+    int endFeetSwap = battleCompose && !battlePhase && g_battleEndFeetOn && f.vm;
+    if (endFeetSwap) { uint8_t* ew = CtSceneMem7E(f.vm);
+      memcpy(endFeetField, ew + 0x1D0C, sizeof endFeetField); memcpy(ew + 0x1D0C, g_battleEndFeet, sizeof g_battleEndFeet); }
     if (battleCompose) {
       static uint8_t fxFrontFb[CAMW * CAMH * 3]; int fxFrontOn = 0;
       static uint8_t cvwin[CAMW * CAMH];               // the arena composite's main-screen layer under the camera window
@@ -18567,6 +18586,7 @@ int main(int argc, char** argv) {
       { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
         if (!defeatHold) battleResultsRender(fb, &liveHost, font, rr, rl); }   // battle_results_window.md §V: victory results box (top)
     }
+    if (endFeetSwap) memcpy(CtSceneMem7E(f.vm) + 0x1D0C, endFeetField, sizeof endFeetField);
 
     // ---- BATTLE HUD STRIP overlay (interactive): drawn OVER the already-composed (frozen) field from
     // the frame the strip's iris ARMS. 82 was the oracle settle offset (module-boot f222 -> settled f304

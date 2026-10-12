@@ -342,13 +342,21 @@ into the WRAM.
   compose CF/EB42; (3) whole PC cells (up to ~490 bytes) -- the PCs' sheet / record, which the gather reads as it does
   an enemy's. It also needs the feet from the WRAM ($1D0C / $1D23): the host's `mvLiveX` / `mvLiveY` (~220 uses) are
   the largest mirror left.
-- **The feet are NOT a plain copy -- tried and reverted (2026-10-12).** Moving `mvLiveX` / `mvLiveY` onto $1D0C / $1D23
-  turned 32 checks red. The cause, measured on field-battle-entrance-initial-pose: at the forced battle end (f83) the
-  feet read from the WRAM are (0,0) / (32,15) -- in the port the FIELD engine also writes that page (D = $1D00 is the
-  field collision's direct page) while or right after the battle runs, where the cartridge's two engines do not share
-  those bytes that way. The host mirror shields the battle from an overlap only the port has. Moving the feet needs
-  that overlap resolved first -- which engine owns $1D00-$1DFF when, as the ROM has it -- an architecture step of its
-  own.
+- **The feet live in the WRAM (`BT_LIVEX` $1D0C, `BT_LIVEY` $1D23), after the $1D00 page's ownership was settled
+  (2026-10-12).** A first plain copy turned 32 checks red; the page is the field's AND the battle's, and the port read it
+  on the wrong side at two places, both found by tracing the bytes (the battle tick never zeroes them):
+  1. **In the fight the field's page is the copy C0/0918 made at $7F:2000.** C0/0918 saves $0920-$1DFF there at the
+     entry and C0/0905 puts it back at the ack; between them the live $1D0A-$1D34 are the battle's (its feet X at
+     $1D0C-$1D16 cover the field camera's words, $1D0E/$1D0F being combatants 2 and 3). The layer offsets already read the
+     copy; the render camera (`CtSceneCameraPx`) read the live bytes, so with the feet moved the arena scrolled by the
+     feet. It reads the copy now (`CtSceneCameraPxOf`), the same rule. Its old reading was right only because the feet
+     were not there.
+  2. **After the ack the page is the field's again**, but the pictures the port composes there -- C0/02A0's defeat wait
+     and the headless fight's post-resolve test compositions (`--battletest` shots, the pcblit / animengpose traces) --
+     stand for the battle's last OAM, which the cartridge keeps uploading without recomputing it. The port composes that
+     picture from the battle's state, so it reads the feet the fight ended on: `g_battleEndFeet`, taken at the ack just
+     before C0/0905, swapped in for the composition only.
+  The full suite is unchanged with the host's `mvLiveX` / `mvLiveY` gone.
 
 ## S1, the battle effect program's dispatch, as built
 

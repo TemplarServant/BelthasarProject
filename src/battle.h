@@ -168,6 +168,11 @@ typedef struct { int active, value, centerX, restY, age, kind, romKind, rise; } 
 #define BT_PCFACING(h, i)   ((h)->mem[0x96DB + (i)])   // $96DB,X: the PC's facing (read & 3)
 #define BT_PCAIMLATCH(h)    ((h)->mem[0xA098])         // $A098: the round-robin re-aim latch (C1/2F22)
 
+// THE COMBATANTS' LIVE FEET LIVE IN THE WRAM (S4): $1D0C,c / $1D23,c, the bytes every mover, the OAM compose and the
+// walks read. They were the host's mvLiveX / mvLiveY, kept beside the WRAM bytes and synced at a handful of sites.
+#define BT_LIVEX(h, c)      ((h)->mem[0x1D0C + (c)])   // $1D0C,c: the live foot X
+#define BT_LIVEY(h, c)      ((h)->mem[0x1D23 + (c)])   // $1D23,c: the live foot Y
+
 typedef struct CtBattleHost {
   uint8_t* mem;              // the engine's $7E image (64KB): staged interface in, battle blocks out
   uint8_t* glb;              // the $7F0000 page (0x200 bytes): outcome $7F01EC = glb[0x1EC]
@@ -682,12 +687,9 @@ typedef struct CtBattleHost {
   //     is gated on the pre-move MODE byte in the AI script, which is 0 for every MASH (when-hit) action, so
   //     a mash fight never walks -> the pinned mash signatures stay byte-identical. Reset in CtBattleBegin.
   int mvInited;               // 1 once battleMoveInit staged the live positions (render gate; 0 = pre-init)
-  // The LIVE per-combatant battlefield position (the ROM keeps it at $1D0C+cmb/$1D23+cmb, §A.2). We hold it
-  // in the HOST -- NOT the shared $7E image -- because that RAM ($1D0A-$1D0F) doubles as our field composite's
-  // CAMERA SCROLL (field.c reads $1D0A/$1D0E), which the battle-on-field render still consults; writing battle
-  // positions there would clobber the forest composite. Init = the staged foot (16*rel+fine); the mover
-  // updates it; render + the box test read it.
-  int mvLiveX[11], mvLiveY[11];
+  // The LIVE per-combatant battlefield position is the WRAM's $1D0C+cmb / $1D23+cmb (BT_LIVEX / BT_LIVEY, §A.2). The
+  // field's camera words share that page; in a fight the field reads its page from C0/0918's copy at $7F:2000 (field.c),
+  // as the cartridge does, so the battle owns the live bytes from the entry to C0/0905.
   int mvExtentY[11];          // $9729,cmb: the Y half-extent (E4/F600 record +8; the box TOP, C1/2889)
   int mvMirX[11], mvMirY[11]; // $A039/$A050,cmb: the C1/283D MIRROR of the live feet that the box rows and the
                               //   C1/28B0 body test read -- refreshed before each handler loop, overwritten by a

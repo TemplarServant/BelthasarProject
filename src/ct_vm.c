@@ -5620,7 +5620,10 @@ void CtSceneCameraInput(CtScene* sc, int reqX, int reqY, int leadX, int leadY, i
 // the camera 16-aligned, $1D93&7 == $1D87&7 == camPx mod 8 (what oam.c / battle staging already read).
 void CtSceneCameraPx(const CtScene* sc, int* camx, int* camy) {
   if (!sc) return;
-  const uint8_t* s = sc->mem->s;
+  CtSceneCameraPxOf(sc->mem->s, camx, camy);
+}
+void CtSceneCameraPxOf(const uint8_t* s, int* camx, int* camy) {
+  if (!s) return;
   if (camx) *camx = camGet16(s, 0x1D0A) * 8 + (s[0x1D93] & 7);
   if (camy) *camy = camGet16(s, 0x1D0E) * 8 + (s[0x1D96] & 7);
 }
