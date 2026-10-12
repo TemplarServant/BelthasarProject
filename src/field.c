@@ -16754,9 +16754,15 @@ int main(int argc, char** argv) {
         if (!battleReturnHold) battleReturnWait = -1;
       }
     }
+    // ...and FROZEN through the defeat sequence C0/02A0: its passes are `JSR C0/00EB` (C0/881E, C0/00DE, the NMI wait) and
+    // then C0/881E + FD/FFF7 -- no C0/00BF, so no script, no mover, no drain: the fallen party lies where the fight left it
+    // until the press and the fade. MEASURED on the rule's cartridge (Yakra's room, loc 0C6, from the owner's
+    // magus_scene capture with `--teleport 198 7 13 0` and every PC at 1 HP): `$7F01EC = 01` f3949, the ack f4067, the
+    // party lying and the room still until the A at f4078, `$0119` 0E..00 f4079-4093, `$0100 = 0` f4094. The port ran the
+    // VM on: the parked op D8 completed and the scene played its victory (the user's report, 2026-10-12).
     else if (!battlePhase && !inWorld && f.vm && !loadFadeEntry && fade != 3 && !coldResetHold && !fieldResume &&
-        CtSceneSequence(f.vm) < 0 && !rebootReq && ffPro != 1 && ffPro != 2)   // (op 0xFF's own fade: the scheduler is
-        CtSceneTick(f.vm);   // the event VM: FROZEN in battle AND on the overworld      //  inside its visit)
+        !gameOver && CtSceneSequence(f.vm) < 0 && !rebootReq && ffPro != 1 && ffPro != 2)   // (op 0xFF's own fade: the
+        CtSceneTick(f.vm);   // the event VM: FROZEN in battle AND on the overworld      //  scheduler is inside its visit)
     // THE SCRIPTED LEAD IS DRAWN WHERE THIS FRAME'S C0/A810 PUT HIM. The follow above (the lead's position while the script
     // drives him) read the VM before its tick, i.e. the previous frame's commit, and the lead is drawn from px/py -- one
     // frame behind every other object, whose sprite the drain builds after A810 in the same frame (C0/00D3 A810, C0/00D6
@@ -17855,7 +17861,15 @@ int main(int argc, char** argv) {
     // the field sprite draw + the OBJ-occluder stencil pass and draw the stance instead (below). True in
     // the interactive battlePhase AND on the headless --battletest CT_BATTLESHOT frame (battlePhase is 0
     // there -- the battle ran synchronously; btBattleFrame == the resolve/shot frame). Map/BG unaffected.
-    int battleCompose = battlePhase || (battleTest && btBattleFrame && btBattleFrame == frameNo);
+    // THE DEFEAT SEQUENCE C0/02A0 SHOWS THE FIGHT'S LAST SPRITES. Its passes draw nothing of the field's (no C0/00BF: no
+    // C0/A810, no drain, no draw pass), so the OAM the NMI keeps uploading is the battle's last, less the four entries
+    // C0/18C1's C0/B262 hides -- the fallen party and the enemy as the fight left them, over the field C0/0905 restored.
+    // MEASURED on the rule's cartridge (Yakra's room, loc 0C6, every PC at 1 HP): OAM at f4040 (the fight) and f4074 (the
+    // wait) differ in entries 0-3 only. So in the wait the port draws the combatants as the fight ends them, and none of
+    // the field's objects, the fight's effect layers, cursors, numbers or HUD.
+    int defeatHold = gameOver && !battlePhase && f.vm;
+    int defeatBr = 15;                               // the field's brightness, applied after the fight's sprites
+    int battleCompose = battlePhase || (battleTest && btBattleFrame && btBattleFrame == frameNo) || defeatHold;
     // THE WIDESCREEN'S OWN OBJECTS. The ROM latches an object ($0F00, C0/A88D) only inside the camera's window plus two
     // tiles each side, and one outside it is not drawn, not animated and holds no palette or OBJ slot -- the game runs
     // nothing there. A sides wider than those two tiles would have them pop in at the window's edge, so an object that is
@@ -18355,7 +18369,9 @@ int main(int argc, char** argv) {
       int br = vmb < fadeBri ? vmb : fadeBri;
       if (fieldResume) br = menuT > 15 ? 15 : menuT;                          // C0/2824's $0119, this frame's own
       motBright = br;
-      if (br <= 0) memset(fb, 0, (size_t)CAMW * CAMH * 3);
+      defeatBr = br;                                   // (the defeat wait's sprites come after: applied below, on all)
+      if (defeatHold) {}
+      else if (br <= 0) memset(fb, 0, (size_t)CAMW * CAMH * 3);
       else if (br < 15)
         for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) fb[i] = (uint8_t)(fb[i] * br / 15);
     }
@@ -18398,9 +18414,9 @@ int main(int argc, char** argv) {
       static uint8_t fxFrontFb[CAMW * CAMH * 3]; int fxFrontOn = 0;
       static uint8_t cvwin[CAMW * CAMH];               // the arena composite's main-screen layer under the camera window
       const uint8_t* bmem = CtSceneMem7E(f.vm);
-      battleFleeFxRender(fb, bmem, &liveHost);       // the objslot fade page (Cyclone/X-Strike `80 ..`, the run-off) + MOSAIC
+      if (!defeatHold) battleFleeFxRender(fb, bmem, &liveHost);       // the objslot fade page (Cyclone/X-Strike `80 ..`, the run-off) + MOSAIC
       { int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
-        if (cvs) {
+        if (cvs && !defeatHold) {
           for (int y = 0; y < CAMH; y++)
             for (int x = 0; x < CAMW; x++) {
               int sx = camx + x, sy = camy + y;
@@ -18409,7 +18425,7 @@ int main(int argc, char** argv) {
           CtBattleFxLayerCompose(fb, CAMW, CAMH, cvwin, bmem, &liveHost);   // BG3 through the windows + colour math
           memcpy(fxFrontFb, fb, sizeof fxFrontFb); fxFrontOn = 1;   // BG3's priority pixels come back after the sprites
         } }
-      battleCritFlashRender(fb, &liveHost);          // battle_crit.md §C: BG->white crit flash (BEFORE sprites)
+      if (!defeatHold) battleCritFlashRender(fb, &liveHost);          // battle_crit.md §C: BG->white crit flash (BEFORE sprites)
       { int bwW = battlePhase ? hostWideW() : CAMW;   // THE WIDESCREEN'S ARENA (g_bwFb above)
         int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
         if (bwW > CAMW && bwW <= FIELD_WMAX && f.base) {
@@ -18522,11 +18538,11 @@ int main(int argc, char** argv) {
       if ((prioKept || prioCovered) && getenv("CT_BATTLE_PRIOTRACE"))
         fprintf(stderr, "battleprio f%d $A5E3=%02X cells over priority tiles: %d in front (OBJ 3), %d covered\n",
                 liveHost.frames, bmem[0xA5E3], prioKept, prioCovered);
-      battleFxCloudRender(fb, &liveHost);            // a program's sprite cloud (CD/2BFC), OAM 4-19
-      battleBracketRender(fb, bmem, &liveHost);      // active-PC selection bracket ($9609==0; battle_stance.md ADD6)
-      battleTargetCursorRender(fb, bmem, &liveHost); // target hand over the enemy (replaces bracket, $9609==1, P5/A6.4)
+      if (!defeatHold) battleFxCloudRender(fb, &liveHost);            // a program's sprite cloud (CD/2BFC), OAM 4-19
+      if (!defeatHold) battleBracketRender(fb, bmem, &liveHost);      // active-PC selection bracket ($9609==0; battle_stance.md ADD6)
+      if (!defeatHold) battleTargetCursorRender(fb, bmem, &liveHost); // target hand over the enemy (replaces bracket, $9609==1, P5/A6.4)
       if (bMot) g_mot = mot;
-      battleFxPopupsRender(fb, &liveHost);           // rising damage numbers (top)
+      if (!defeatHold) battleFxPopupsRender(fb, &liveHost);           // rising damage numbers (top)
       if (bMot) {                                      // ...their pixels are theirs in the owners' picture, not fixed
         g_mot = NULL;
         for (int i = 0; i < CAMW * CAMH; i++) { int o = mot->own[i] & 0x7F;
@@ -18542,7 +18558,7 @@ int main(int argc, char** argv) {
       g_bObjPalMask = NULL; g_bObjPalCur = -1;
       memcpy(g_bWorld, fb, sizeof g_bWorld);           // (the widescreen: what the screen-fixed boxes below cover)
       { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
-        battleResultsRender(fb, &liveHost, font, rr, rl); }   // battle_results_window.md §V: victory results box (top)
+        if (!defeatHold) battleResultsRender(fb, &liveHost, font, rr, rl); }   // battle_results_window.md §V: victory results box (top)
     }
 
     // ---- BATTLE HUD STRIP overlay (interactive): drawn OVER the already-composed (frozen) field from
@@ -18577,6 +18593,11 @@ int main(int argc, char** argv) {
         else        snprintf(g_bhudShotBand, sizeof g_bhudShotBand, " hudband=%d..%d(%d)", bt, bb2, bb2 - bt + 1);
         free(bpre);
       }
+    }
+    // ...and the defeat wait's fade (C0/02B5 `DEC $19`) dims the whole picture, the fight's last sprites with the field.
+    if (defeatHold) {
+      if (defeatBr <= 0) memset(fb, 0, (size_t)CAMW * CAMH * 3);
+      else if (defeatBr < 15) for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) fb[i] = (uint8_t)(fb[i] * defeatBr / 15);
     }
     // THE BATTLE'S SCREEN BRIGHTNESS -- $2100 as its NMI wrote it this frame (battleInidisp, latched at the tick),
     // over everything the battle composes: the PPU scales the whole output (ppu.c: channel * brightness / 15; bit 7

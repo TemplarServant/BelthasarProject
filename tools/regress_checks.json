@@ -6534,6 +6534,57 @@
       "notes": "The user, 2026-10-11 (translated from Portuguese): in the Magus cult's room some dialogue boxes open by the scene's own event, and 'when the battle started with that dialogue open, it stayed in the battle's background'. Op D8 (C0/3A83) requests the fight with `$0117 |= 21` and C0/1770 takes it without looking at the box; the staging C0/024C then runs `LDA $29 / BEQ / LDA #00 / STA $29 / LDA #00 / STA $26 / STZ $27` (C0/0257-0263): an open box is dropped, with no close ramp. The box's script, parked on `$0129 != 0` (C0/3606), advances on its first visit after the return. MEASURED on the rule's cartridge: saves/field_re/magus_scene_lake.state walked down 60 frames (the cult's box opens by itself, state 7 at f86), saved at f88, then PEEK_POKE `7E0117=21,7E2989=82` (C0/3A83's request with this room's battle byte): `$0129 07 -> 00`, `$0126 01 -> 00`, `$0127 28 -> 00` at f6 (C0:025F / C0:0263 / C0:0265), and the fight's frames show no box. The port, the same poke at f87 (CT_POKEWRAM_AT): before, `$0129` stayed 07 and the box was drawn over the arena (the shot at f147); now the three bytes clear at f92 and the arena is clean. (In the scene's own flow the box closes on A at f102 and the cult's fight starts at f197, on both sides.)"
     },
     {
+      "name": "field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "198",
+        "--loadstate",
+        "saves/field_re/yakra_defeat_039.state",
+        "--walkscript",
+        "n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:400"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_POKEWRAM": "2603=01,2604=00,2653=01,2654=00,26A3=01,26A4=00,26F3=01,26F4=00,2743=01,2744=00,2793=01,2794=00,27E3=01,27E4=00",
+        "CT_POKEWRAM_AT": "2",
+        "CT_FIELD_MEMMON": "1600:8",
+        "CT_FIELDSHOT": "build/_yakdefeat.raw",
+        "CT_FIELDSHOT_AT": "2700"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/yakra_defeat_039.state"
+      ],
+      "expect": [
+        "battle: GAME OVER (party defeated, $2A1F bit5 clear) -- C0/02A0 defeat sequence\nfmemmon f2412 loc=0C6  1600=0000000400000001*\nfieldshot: f2700 camx=0 camy=112 fnv=4A29BE50"
+      ],
+      "pin": [],
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "        !gameOver && CtSceneSequence(f.vm) < 0",
+          "replace": "        CtSceneSequence(f.vm) < 0",
+          "why": "the event VM ticks through the defeat wait: the parked op D8 completes, the objects move again ($1600 from f2428) and the scene plays on as if the fight were won -- the user's report"
+        },
+        {
+          "file": "src/field.c",
+          "find": "    int defeatHold = gameOver && !battlePhase && f.vm;",
+          "replace": "    int defeatHold = 0;  /* MUT */",
+          "why": "the wait draws the field's objects (the party standing, Frog's statue) instead of the fight's last sprites (the party fallen)"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 120,
+      "note_pass": "a lost fight's defeat wait (C0/02A0) keeps the room still with the fight's last sprites -- the party fallen -- until the press, as on the cartridge",
+      "notes": "The user, 2026-10-12 (translated from Portuguese): 'in the battle against Yakra, on LOSING the battle, the game behaved as if I had won ... the game continues with the scene as if I had won, and then goes to the title screen' (their F5 ct_debug_039: loc 0C6, the Chancellor about to become Yakra; a CTFS image, tied to sizeof(CtScene)). C0/0283 sends `$7F01EC = 1` with `$2A1F` bit 5 clear to the defeat sequence C0/02A0, whose passes are `JSR C0/00EB` (C0/881E, C0/00DE, the NMI wait) until a button edge, then the fade: no C0/00BF, so no script, no mover, no drain, no draw pass -- the NMI keeps uploading the fight's last OAM less the four entries C0/B262 hides. MEASURED on the rule's cartridge: the owner's magus_scene capture teleported to loc 0C6 (`--teleport 198 7 13 0 --method jmp --frames 60`), PEEK_POKE every PC's HP to 1, A every 30 frames: the fight from f2042, `$7F01EC = 01` f3949, the ack f4067, the party fallen and the room still until the press at f4078, `$0119` 0E..00 f4079-4093, `$0100 = 0` f4094; its OAM at f4040 (the fight) and f4074 (the wait) differ in entries 0-3 only. The port ticked the VM through the wait (the scene went on: `$1600` moving from f2428) and drew the field's objects (the party standing). Now: the VM frozen while gameOver is set (no `$1600` line between the ack f2412 and the shot), and the battle compose draws the combatants alone (no effect layer, cursor, numbers, results or HUD) -- the frame at f2700 pinned by its FNV. The HP poke is the port's side of the cartridge's PEEK_POKE (the fight is lost in ~2300 frames either way)."
+    },
+    {
       "name": "field-organ-door-opens-live",
       "argv": [
         "build/ct_field.exe",

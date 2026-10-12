@@ -4242,7 +4242,7 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "d02012691e09135ac61b30c4fff1c9ebbe3e20f103a749fb7d7563dfb32cbcc2",
+      "sha256": "664da177dd882d3368ac184172fcada363cb0450551b2c3b573a81d66c890394",
       "size": 1501354,
       "present_when_recorded": true
     },
@@ -5120,6 +5120,18 @@
       "how": "saves/battle_re/gato_wait.state's WRAM with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single learned, MP 99), behind the 21-byte #lakewram header -- what battle_ab.run writes for the port.",
       "sha256": "a2d2f38f3a0e8f6bb899e8084f230df5b3ea7e0b278d153b684758c43279be0d",
       "size": 131093,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/yakra_defeat_039.state",
+      "used_by": [
+        "field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge"
+      ],
+      "kind": "state",
+      "regenerable": false,
+      "how": "The owner's F5 snapshot ct_debug_039.state (2026-10-12): loc 0C6, Crono, Lucca and Frog before the Chancellor becomes Yakra, copied. A CTFS image: tied to sizeof(CtScene) -- a struct change invalidates it (regenerate by the same walk and F5).",
+      "sha256": "6615947280cc8a16699c8ebf66a827663f815f68826f3cea0243b8ccaf201c7d",
+      "size": 153972,
       "present_when_recorded": true
     }
   ]

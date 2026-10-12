@@ -108,9 +108,9 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-11: **827** checks, **2** excluded; `--list` prints the current set).
+(2026-10-12: **828** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**586** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**587** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **239** slower checks — whole fights and attract legs against the logical oracle, the
@@ -668,6 +668,16 @@ into the scroll request (the collision C0/8A6D still runs on `$0120`). Pins the 
 (38 f5, 39 f11, 3C f23, 40 f39; the cartridge's 1-2 frames later). Two mechanisms: the host runs the controller with
 explore off (no d-pad; the lead integrated only while its script sits at op B0), and the collision fetch reads the
 prop planes from the scene's WRAM (the host's packed copy had lost the conveyor bits). Needs the private capture.
+
+### field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge
+
+A lost fight (`$7F01EC = 1`, `$2A1F` bit 5 clear): C0/0283 goes to the defeat sequence C0/02A0, whose passes are
+`JSR C0/00EB` until a button edge and then the fade -- no C0/00BF, so no script, mover, drain or draw pass, and the NMI
+keeps uploading the fight's last OAM (the rule's cartridge in Yakra's room: OAM in the fight and in the wait differ in
+entries 0-3 only, C0/B262's hides). The owner's F5 at the Chancellor (loc 0C6), every PC at 1 HP: pins no object
+change between the ack (f2412) and f2700, and the f2700 frame's FNV (the party fallen, Yakra standing). Before, the VM
+ticked through the wait -- the scene played on as if the fight were won -- and the field's objects were drawn standing.
+Needs the owner's F5 snapshot (a CTFS image, tied to sizeof(CtScene)).
 
 ### field-battle-discards-an-open-box-vs-rule-cartridge
 
