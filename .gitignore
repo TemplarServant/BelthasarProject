@@ -9,6 +9,8 @@
 *.srm
 # The F5 debug snapshots' log (src/field.c), written where the game runs
 ct_debug_log.txt
+# The old private tree's git history (a bundle with ROM-derived files in it): local only, never published
+/private_history/
 *.dat
 dump.bin
 
