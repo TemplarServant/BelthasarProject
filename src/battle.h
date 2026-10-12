@@ -158,6 +158,16 @@ typedef struct { int active, value, centerX, restY, age, kind, romKind, rise; } 
 #define BT_IDLEDWELL(h, i, k) ((h)->mem[0x9799 + 8 * (i) + (k)])   // $9799+8*slot: the window dwells (C1/33F4)
 #define BT_SCHEDA4(h)         ((h)->mem[0x00A4])             // $A4: the 0..3 group counter (CF/E477 / CF/E47F)
 
+// THE PCS' IDLE-WALK STATE LIVES IN THE WRAM too (S4): the dwell timer, the window entry, the published pose (FF = none
+// yet, as the ROM's own $9907 reads), the last window, the defer flags, the facing and the re-aim latch.
+#define BT_PCTIMER(h, i)    ((h)->mem[0x9689 + (i)])   // $9689,X: the PC dwell timer (C1/2E20 DEC)
+#define BT_PCIDX(h, i)      ((h)->mem[0x968C + (i)])   // $968C,X: the window entry (C1/2EA9 INC before the read)
+#define BT_PCPUB(h, i)      ((h)->mem[0x9907 + (i)])   // $9907,X: the pose the walk last published (C1/1C66; FF none)
+#define BT_PCWINLAST(h, i)  ((h)->mem[0xA103 + (i)])   // $A103,X: the last window published (C1/2EFC)
+#define BT_PCDEFER(h, i)    ((h)->mem[0x9922 + (i)])   // $9922,X: the visit-me-first flags (C1/2E18)
+#define BT_PCFACING(h, i)   ((h)->mem[0x96DB + (i)])   // $96DB,X: the PC's facing (read & 3)
+#define BT_PCAIMLATCH(h)    ((h)->mem[0xA098])         // $A098: the round-robin re-aim latch (C1/2F22)
+
 typedef struct CtBattleHost {
   uint8_t* mem;              // the engine's $7E image (64KB): staged interface in, battle blocks out
   uint8_t* glb;              // the $7F0000 page (0x200 bytes): outcome $7F01EC = glb[0x1EC]
@@ -706,7 +716,6 @@ typedef struct CtBattleHost {
                               //   ctBattleFaceTab[walk bearing] (C1/37E9), stamped when the mover (re)aims a
                               //   segment; HELD while idle/attacking (§2.6). 0=up 1=down/front 2=left 3=right;
                               //   default 1 (faces the party). battleGatoRender selects the pose bake by it.
-  int pcFacing[3];            // $96DB+seat (battle_facing_engine.md §2): per-PC FACING, staged at entry by
                               //   C1/350F = ctBattleFaceTab[atan2(nearest present+alive enemy)] on the live
                               //   feet (validated 11/11 across bat1-9); re-stamped by the attack phases
                               //   (arrival aims at the victim, return aims home, settle re-runs the entry law
@@ -722,13 +731,7 @@ typedef struct CtBattleHost {
   int idleDeathPose[8];       // the published pose at the death frame (the dissolve keeps drawing it); FF = none
   int schedWalk;              // this frame is a DISPATCH frame of the idle tick (C1/10A9) -- see battleSchedAdvance
   // ---- THE PC GROUP of the same walk ($A4 == 0: C1/2DA9 -> C1/2F1E; battle.c battlePcWalk) ----
-  int pcTimer[3];             // $9689,X: the PC dwell timer, DEC'd per VISIT (C1/2E20); boot 1,2,3 (C1/34CD-34D7);
                               //   reload = max(1, ptrB dwell / 5) (C1/2ECB-2ED7, the C1/00D7 divide)
-  int pcIdx[3];               // $968C,X: the window entry, INC'd BEFORE the read (C1/2EA9); a 0 dwell wraps it to 0
-  int pcPub[3];               // $9907,X for a PC: the pose the walk last PUBLISHED (C1/1C66); -1 = none yet
-  int pcWinLast[3];           // $A103,X: the last window published (C1/2EFC) -- a change forces a publish
-  int pcDefer[3];             // $9922,X: the visit-me-FIRST flags (C1/2E18 sets on the $9912==1 defer; C1/1C5A clears)
-  int pcAimLatch;             // $A098: the round-robin RE-AIM latch (C1/2F22): bit7 = armed, low bits = the seat
                               //   whose next expiry re-aims its facing at the nearest enemy (C1/2986 + C1/0222)
 
                               //   mover aims / attack script (same sites as mvFacing). The GENERAL enemy

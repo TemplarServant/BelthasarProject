@@ -333,6 +333,15 @@ into the WRAM.
   dead slots, which moved two drives of our own (field-battle-end-uiteardown, battle-slow-doubles-reload-and-cuts-damage,
   re-pinned with the measurement; every oracle-compared check unchanged). Two mutations pin the flag and the gather.
 - `--dumpcall N` (with `--dump` / `--dumpaddr`) dumps an entry's Nth call, whatever its grade.
+- **The PCs' idle-walk state, moved too** (`BT_PCTIMER` $9689, `BT_PCIDX` $968C, `BT_PCPUB` $9907 -- FF = none, as the
+  ROM's own byte reads, where the host used -1 --, `BT_PCWINLAST` $A103, `BT_PCDEFER` $9922, `BT_PCFACING` $96DB,
+  `BT_PCAIMLATCH` $A098): a pure copy, the full suite unchanged (831/0/0).
+- **The PC group of C1/2D9F, tried and not yet matching** (54 of its 62 calls on the Magus route), for three reasons the
+  trial measured, the next step: (1) the PC walk's own direct page -- its C1/00A7 / C1/00D7 operands, `$77` read by
+  D1/FE8C the next frame; (2) the gather's dx/dy table for a PC (`$9F49` one off, E8 against E9), read by the OAM
+  compose CF/EB42; (3) whole PC cells (up to ~490 bytes) -- the PCs' sheet / record, which the gather reads as it does
+  an enemy's. It also needs the feet from the WRAM ($1D0C / $1D23): the host's `mvLiveX` / `mvLiveY` (~220 uses) are
+  the largest mirror left.
 
 ## S1, the battle effect program's dispatch, as built
 

@@ -6729,8 +6729,8 @@ static void battleStanceRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
     // of the ACTIVE seat and holds of a waiting one (battle.c battlePcWalk), a status window's entries, the
     // fallen one-shot. FF = never published (an empty seat). The `$A103 != 0` gate that used to sit here
     // ("the walk has latched") kept the baked entrance morph in front of the byte; the morph is retired.
-    else if (h && h->mvInited ? (h->pcPub[seat] >= 0) : (mem[0x9907 + seat] != 0xFF))
-      poseIdx = (h && h->mvInited) ? h->pcPub[seat] : mem[0x9907 + seat];
+    else if (h && h->mvInited ? (BT_PCPUB(h, seat) != 0xFF) : (mem[0x9907 + seat] != 0xFF))
+      poseIdx = (h && h->mvInited) ? BT_PCPUB(h, seat) : mem[0x9907 + seat];
     else if (stCls != 3)  poseIdx = CtBattlePcWinPose(charId, stCls * 4, 0,
                                                       CtBattlePcFacing(mem, h, seat));
     else                  poseIdx = pcStanceIdx(charId, CtBattlePcFacing(mem, h, seat));
@@ -6758,8 +6758,8 @@ static void battleStanceRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
           // which publisher the pose came from -- the hand-off arbiter's view, so a moved pin can be attributed
           fprintf(stderr, "pcowner f%d seat%d %s ladder=%d asc=%d flinch=%d pub=%02X atk=%d\n", h->frames, seat,
                   ladderPose >= 0 ? "ladder" : (h->ascOn && h->ascPmPose[seat] >= 0) ? "asc" : flinch >= 0 ? "flinch"
-                  : (h->mvInited ? h->pcPub[seat] >= 0 : mem[0x9907 + seat] != 0xFF) ? "pub" : "stance",
-                  ladderPose, h->ascOn ? h->ascPmPose[seat] : -1, flinch, h->pcPub[seat] & 0xFF,
+                  : (h->mvInited ? BT_PCPUB(h, seat) != 0xFF : mem[0x9907 + seat] != 0xFF) ? "pub" : "stance",
+                  ladderPose, h->ascOn ? h->ascPmPose[seat] : -1, flinch, BT_PCPUB(h, seat) & 0xFF,
                   charId == 0 ? cronoAtk : charId == 1 ? marleAtk : 0);
         } } }
     battleStatusIconRender(fb, mem, h, seat, footX, footY);     // AFTER the pose: lower OAM index = on top

@@ -9132,9 +9132,9 @@ static int battlePcWalkTick(CtBattleHost* h) {
   h->pcWalkTrack = dir * 8 + variant;
   h->pcWalkForbid = rom[ROM_PCWALK_FORBID + h->pcWalkTrack];      // CC/F414 (0xFF pad -> effectively none)
   h->pcAtkApFac = rom[ROM_PCWALK_FACE + h->pcWalkTrack] & 3;      // CC/F434 -> the $96DB facing stamp
-  if (cmb < 3) h->pcFacing[cmb] = h->pcAtkApFac;                 // CC/F434 -> $96DB,X of the WALKER (not seat 0)
+  if (cmb < 3) BT_PCFACING(h, cmb) = h->pcAtkApFac;                 // CC/F434 -> $96DB,X of the WALKER (not seat 0)
   { static int ft = -1; if (ft < 0) { const char* t = getenv("CT_BATTLE_FACETRACE"); ft = (t && *t) ? 1 : 0; }
-    if (ft) fprintf(stderr, "pcface WALK f%d fac=%d track=%d\n", h->frames, h->pcFacing[0], h->pcWalkTrack); }
+    if (ft) fprintf(stderr, "pcface WALK f%d fac=%d track=%d\n", h->frames, BT_PCFACING(h, 0), h->pcWalkTrack); }
   h->pcWalkCell = newCell;
   return 1;
 }
@@ -9247,7 +9247,7 @@ static void battlePcAtkTick(CtBattleHost* h, int rel) {
       h->pcAtkArrRel = rel;                                        //   THE ANCHOR (§4: arrival = arm+1+8*segs)
       // the engage block's `72 0D` face-target after the walk (the strike aims at the victim)
       if (h->actTarget >= 0 && h->actTarget < 11)
-        h->pcFacing[0] = ctBattleFaceTab[battleAtan2(h->mvLiveX[0], h->mvLiveY[0],
+        BT_PCFACING(h, 0) = ctBattleFaceTab[battleAtan2(h->mvLiveX[0], h->mvLiveY[0],
                                                      h->mvLiveX[h->actTarget], h->mvLiveY[h->actTarget]) & 0xFF];
       // §6.5: the frozen span EMERGES from the walk -- spanEnd = arrival + CT_PC_ATK_SPANEND. The dispatch-
       // time battleActionSpan could only guess (the walk length is not known until the stop probe fires), so
@@ -9542,8 +9542,8 @@ static void battleSkeleton(CtBattleHost* h, int rel) {
       h->fxAtkPal = -1; h->fxAtkPose = -1;                      // retEnd+19: the IDLE window/bob resumes
       if (h->actAttacker >= 0 && h->actAttacker < 3) {          //   the script's own re-arm of the idle window publishes
         int sa = h->actAttacker;                                 //   ENTRY 0 into $9907,X (gato_wait f506: C6 = facing-0 win[0]);
-        int pv = CtBattlePcWinPose(h->mem[0x2980 + sa] & 7, 0x0C, 0, h->pcFacing[sa] & 3);   // the walk then HOLDS it
-        if (pv >= 0) h->pcPub[sa] = pv; }                        //   for a waiting seat (no idle re-publish, C1/2F09)
+        int pv = CtBattlePcWinPose(h->mem[0x2980 + sa] & 7, 0x0C, 0, BT_PCFACING(h, sa) & 3);   // the walk then HOLDS it
+        if (pv >= 0) BT_PCPUB(h, sa) = pv; }                        //   for a waiting seat (no idle re-publish, C1/2F09)
     }
     return;
   }
@@ -11203,7 +11203,7 @@ void CtBattlePcLadderFallen(CtBattleHost* h, int seat) {
   long a = (long)ROM_PC_DOWN_TBL + cid * 4 + face;
   if (a >= gRomLen) return;
   h->pcLadderPose[seat] = gRom[a];
-  h->pcPub[seat] = gRom[a];                       // the same $9907,X the idle walk reads back (C1/1C66)
+  BT_PCPUB(h, seat) = gRom[a];                       // the same $9907,X the idle walk reads back (C1/1C66)
   h->pcLadderWin[seat]  = -1;                     // no ladder for a fallen seat: the pose HOLDS
   if (getenv("CT_BATTLE_TRACE"))
     fprintf(stderr, "pcfallen f%d seat=%d cid=%d face=%d pose=%02X (D1/5F42)" CT_BATTLE_NL,
@@ -11245,7 +11245,7 @@ void CtBattlePcLadderTick(CtBattleHost* h) {
     if (dw <= 0) { h->pcLadderDwell[seat] = 0x100; continue; }   // 136E7: the terminator -> HOLD
     h->pcLadderDwell[seat] = dw >> 1;                            // 13639 LSR (the copier's own shift)
     int pv = CtBattlePcWinPose(cid, h->pcLadderWin[seat], cur, h->pcLadderFacing[seat]);
-    if (pv >= 0) { h->pcLadderPose[seat] = pv; h->pcPub[seat] = pv; }   // 136F6 publish -> $9907,X (C1/1C66)
+    if (pv >= 0) { h->pcLadderPose[seat] = pv; BT_PCPUB(h, seat) = pv; }   // 136F6 publish -> $9907,X (C1/1C66)
     { static int wt = -1; if (wt < 0) { const char* t = getenv("CT_BATTLE_WALKTRACE"); wt = (t && *t) ? 1 : 0; }
       if (wt && pv >= 0) fprintf(stderr, "pcladderpub f%d seat=%d win=%02X cur=%d pose=%02X" CT_BATTLE_NL, h->frames, seat, h->pcLadderWin[seat], cur, pv); }
   }
@@ -11304,7 +11304,7 @@ static void battleOpenWipe(CtBattleHost* h) {
 }
 int CtBattlePcFacing(const uint8_t* mem, const CtBattleHost* h, int seat) {
   if (seat < 0 || seat > 2 || !mem) return 1;
-  if (h && h->mvInited) return h->pcFacing[seat] & 3;              // staged (+ attack-phase re-stamps)
+  if (h && h->mvInited) return BT_PCFACING(h, seat) & 3;              // staged (+ attack-phase re-stamps)
   // No staged host (e.g. the RENDERWRAM synthetic host): compute from the staged feet directly.
   int lx[11], ly[11];
   for (int c = 0; c < 11; c++) { lx[c] = 0; ly[c] = 0; }
@@ -11338,8 +11338,8 @@ static void battleMoveInit(CtBattleHost* h) {
     BT_IDLETIMER(h, i) = (i < 4) ? 1 : 2;                            //   the first commit builds them (C1/33E1/33FD)
     BT_IDLECUR(h, i) = 0; BT_IDLEDEFER(h, i) = 0; h->idleDeathPose[i] = 0xFF;   // $9694 boot: CC/E2E8-E2FB (1,1,1,1,2,2,2,2)
     if (i < 3) {                                                  // the PC group's boot (C1/34CD-34D7 + the wipe)
-      h->pcTimer[i] = 1 + i; h->pcIdx[i] = 0; h->pcPub[i] = -1; h->pcWinLast[i] = 0;
-      h->pcDefer[i] = 0;
+      BT_PCTIMER(h, i) = 1 + i; BT_PCIDX(h, i) = 0; BT_PCPUB(h, i) = 0xFF; BT_PCWINLAST(h, i) = 0;
+      BT_PCDEFER(h, i) = 0;
     }
     { const uint8_t* r = s + 0x29BF + i * 12;                     // $9907 boot publish = $A4DC = record +4
       BT_IDLEPUB(h, i) = (r[6] & 0x80) ? 0xFF : r[4]; }              //   (CC/EA9E -> C1/34BA -> C1/1C66); FF = empty (CC/E366)
@@ -11347,7 +11347,7 @@ static void battleMoveInit(CtBattleHost* h) {
     h->mvFacing[i] = 1;   // $96DE default 1 = DOWN/front, faces the party (§2.6); held until the mover aims
   }
   h->mvPendAtk = -1; h->mvPendTgt = -1; h->mvPendTech = 0; h->mvPendDecoded = 0;
-  h->pcAimLatch = 0;                                               // $A098 (the boot wipe)
+  BT_PCAIMLATCH(h) = 0;                                               // $A098 (the boot wipe)
   // ($99CF/$99D0, $9FF7, $A5CD, $A5F4, $A5FC, $A5FD, $A605..$A625, $9875 -- the bytes this function used to zero one
   //  by one as they were found -- are inside CF/FB92's range and are zeroed by battleBootWipe before stageAll
   //  now, the ROM's own order: wipe, then the loaders.)
@@ -11431,10 +11431,10 @@ static void battleMoveInit(CtBattleHost* h) {
         if (f4 & 0x80) { s[0xA5C5 + slot] = 0x80; s[0xA5CD + cmb] = 0x80; } } }
   }
   for (int seat = 2; seat >= 0; seat--)                            // C1/350F-354A: `$94` = 2, 1, 0 (DEC $94 / BPL)
-    h->pcFacing[seat] = battlePcScanFace(h, seat, h->mvLiveX, h->mvLiveY);
+    BT_PCFACING(h, seat) = battlePcScanFace(h, seat, h->mvLiveX, h->mvLiveY);
   { static int ft = -1; if (ft < 0) { const char* t = getenv("CT_BATTLE_FACETRACE"); ft = (t && *t) ? 1 : 0; }
     if (ft) fprintf(stderr, "pcface ENTRY f%d fac=%d,%d,%d crono=(%d,%d) e0=(%d,%d)\n",
-                    h->frames, h->pcFacing[0], h->pcFacing[1], h->pcFacing[2],
+                    h->frames, BT_PCFACING(h, 0), BT_PCFACING(h, 1), BT_PCFACING(h, 2),
                     h->mvLiveX[0], h->mvLiveY[0], h->mvLiveX[3], h->mvLiveY[3]); }
   h->mvInited = 1;
 }
@@ -12308,15 +12308,15 @@ static int battleAscResolve(CtBattleHost* h, int self, int mode, int* gx, int* g
 // not a sprite here.
 static void battleAscSetFacing(CtBattleHost* h, int cmb, int facing) {
   if (cmb < 0 || cmb >= 11) return;
-  if (getenv("CT_BATTLE_ASCTRACE") && (facing & 3) != ((cmb < 3) ? h->pcFacing[cmb] : BT_ENFACING(h, cmb - 3)) % 4)
+  if (getenv("CT_BATTLE_ASCTRACE") && (facing & 3) != ((cmb < 3) ? BT_PCFACING(h, cmb) : BT_ENFACING(h, cmb - 3)) % 4)
     fprintf(stderr, "ascface f%d cmb%d %d -> %d\n", h->frames, cmb,
-            ((cmb < 3) ? h->pcFacing[cmb] : BT_ENFACING(h, cmb - 3)) & 3, facing & 3);
-  if (cmb < 3) h->pcFacing[cmb] = facing & 3;
+            ((cmb < 3) ? BT_PCFACING(h, cmb) : BT_ENFACING(h, cmb - 3)) & 3, facing & 3);
+  if (cmb < 3) BT_PCFACING(h, cmb) = facing & 3;
   else         BT_ENFACING(h, cmb - 3) = facing & 3;
 }
 static int battleAscGetFacing(const CtBattleHost* h, int cmb) {
   if (cmb < 0 || cmb >= 11) return 0;
-  return (cmb < 3) ? (h->pcFacing[cmb] & 3) : (BT_ENFACING(h, cmb - 3) & 3);
+  return (cmb < 3) ? (BT_PCFACING(h, cmb) & 3) : (BT_ENFACING(h, cmb - 3) & 3);
 }
 // C1/6549, OPS 9C / 9D: the slide of 98 / 99 (their handlers C1/6299 / C1/672E are the same, and read the op back from $9895:
 // `LDA $9895 / CMP #9C / BEQ / CMP #9D / BNE`, C1/62E4 for a combatant, C1/6425 for an effect object) toward a QUARTER of the
@@ -12517,7 +12517,7 @@ static void battleAscPoseTick(CtBattleHost* h) {
   if (cmb < 3) {                                                                // a PC seat
     int ch = s[0x2980 + cmb];
     if (ch & 0x80) { h->ascPmMode[cmb] = 0; return; }                           // empty party slot
-    id = -1 - ch; facing = h->pcFacing[cmb] & 3;
+    id = -1 - ch; facing = BT_PCFACING(h, cmb) & 3;
   } else {
     id = s[0xAF02 + (cmb - 3)];
     if (id == 0xFF) { h->ascPmMode[cmb] = 0; return; }                          // the seat died mid-window
@@ -12544,7 +12544,7 @@ static void battleAscPoseTick(CtBattleHost* h) {
     // last pose an action published stays on screen after its script ends, until an idle walk replaces it: the attract's
     // 07D Frog Squash leaves anim 03's pose 01 in $9907 on all five enemies from c7231 (C1:4307) until the field takes
     // the page back at c7307 (C0:A62B) -- the Hench stay turned away; ours turned to their boot pose at the script's end.
-    if (cmb < 3) { h->pcPub[cmb] = pose; h->pcDefer[cmb] = 0; }                 //   the idle walk reads it back
+    if (cmb < 3) { BT_PCPUB(h, cmb) = pose; BT_PCDEFER(h, cmb) = 0; }                 //   the idle walk reads it back
     else if (s[0x967C + cmb] != 3) { BT_IDLEPUB(h, cmb - 3) = pose; BT_IDLEDEFER(h, cmb - 3) = 0; }
     h->ascPmBlock = 2;                                                          // C1/430C `LDA #02 / STA $A012`
     if (getenv("CT_BATTLE_ASCTRACE"))
@@ -16331,7 +16331,7 @@ void CtBattleBegin(CtBattleHost* h) {
   for (int seat = 0; seat < 3; seat++) {
     if (s[0x2980 + seat] & 0x80) continue;                         // C1/34AF LDA $96F5,X / BEQ
     s[0xA4DC + seat] = s[0x29B4 + seat * 5];                        // CC/E965-E968 (through the $96A4 copy)
-    h->pcPub[seat] = s[0xA4DC + seat];                              // C1/34BA-34C0 -> C1/1C66 STA $9907,X
+    BT_PCPUB(h, seat) = s[0xA4DC + seat];                              // C1/34BA-34C0 -> C1/1C66 STA $9907,X
   }
   for (int slot = 0; slot < 8; slot++) {
     const uint8_t* r = s + 0x29BF + slot * 12;
@@ -17178,7 +17178,7 @@ static void battlePcWalk(CtBattleHost* h) {
   uint8_t* s = h->mem;
   static int wt = -1; if (wt < 0) { const char* t = getenv("CT_BATTLE_WALKTRACE"); wt = (t && *t) ? 1 : 0; }
   int first = 0;
-  for (int k = 0; k < 3; k++) if (h->pcDefer[k]) { first = k; h->pcDefer[k] = 0; break; }   // C1/2DAD-2DFA
+  for (int k = 0; k < 3; k++) if (BT_PCDEFER(h, k)) { first = k; BT_PCDEFER(h, k) = 0; break; }   // C1/2DAD-2DFA
   int lx[11], ly[11];                                            // the live feet (host) or the staged ones (seed)
   for (int c = 0; c < 11; c++) { lx[c] = h->mvInited ? h->mvLiveX[c] : 0; ly[c] = h->mvInited ? h->mvLiveY[c] : 0; }
   if (!h->mvInited) {
@@ -17192,27 +17192,27 @@ static void battlePcWalk(CtBattleHost* h) {
     int seat = (first + k) % 3;
     if (s[0x2980 + seat] & 0x80) continue;                       // C1/2E09 $96F5,X == 0
     if (uploads == 1) {                                          // C1/2E11 CMP #01 / BNE
-      h->pcDefer[seat]++;
+      BT_PCDEFER(h, seat)++;
       if (wt) fprintf(stderr, "pcdefer f%d seat=%d up=%d" CT_BATTLE_NL, h->frames, seat, uploads);
       continue;
     }
-    h->pcTimer[seat] = (h->pcTimer[seat] - 1) & 0xFF;           // C1/2E20 DEC $9689,X
-    if (h->pcTimer[seat] != 0) continue;
+    BT_PCTIMER(h, seat) = (BT_PCTIMER(h, seat) - 1) & 0xFF;           // C1/2E20 DEC $9689,X
+    if (BT_PCTIMER(h, seat) != 0) continue;
     // ---- C1/2F97: the window and the icon sub-state
     int cls = 3, icon = -1, lowHp = 0;
     CtBattleStatusScanEx(s, seat, &cls, &icon, &lowHp);
     battleStatusScanStore(h, seat);                              // C1/2F97's stores: $A440, $A441,Y
     int dead = s[0x5E4A + seat * 0x80] & 0x80;                   // C1/2FC4 LDA $5E4A,Y / BPL
-    if (dead) h->pcIdx[seat] = 0xFF;                             // C1/2FCE STA $968C,X (#FF)
-    if (lowHp) { if (s[0xA44C + seat] != 0x12) h->pcIdx[seat] = 0xFF; }   // C1/3041-3050 `LDA #12 / CMP $A44C,Y`
-    else if (s[0xA441 + seat] != s[0xA44C + seat]) h->pcIdx[seat] = 0xFF;   // C1/301A CMP $A44C,Y / C1/301F (FF compared too)
+    if (dead) BT_PCIDX(h, seat) = 0xFF;                             // C1/2FCE STA $968C,X (#FF)
+    if (lowHp) { if (s[0xA44C + seat] != 0x12) BT_PCIDX(h, seat) = 0xFF; }   // C1/3041-3050 `LDA #12 / CMP $A44C,Y`
+    else if (s[0xA441 + seat] != s[0xA44C + seat]) BT_PCIDX(h, seat) = 0xFF;   // C1/301A CMP $A44C,Y / C1/301F (FF compared too)
     // ($A09B,X -- the "downed" gate of C1/2F99/3037 -- has no writer in the battle banks: it stays 0.)
     // ---- C1/2F22: the re-aim latch
     int aimed = 0;
-    { int cur = h->pcAimLatch & 0x7F;
-      if (seat != cur) { if (!(h->pcAimLatch & 0x80)) h->pcAimLatch = seat | 0x80; }   // C1/2F31-2F3A
+    { int cur = BT_PCAIMLATCH(h) & 0x7F;
+      if (seat != cur) { if (!(BT_PCAIMLATCH(h) & 0x80)) BT_PCAIMLATCH(h) = seat | 0x80; }   // C1/2F31-2F3A
       else {
-        h->pcAimLatch = cur;                                     // C1/2F3F-2F41
+        BT_PCAIMLATCH(h) = cur;                                     // C1/2F3F-2F41
         if (!dead && !(s[0x5E4B + seat * 0x80] & 2)) {          // C1/2F46-2F52
           // C1/2F54-2F72: `$986E = 2 / $986F = seat / LDA #05 / JSR C1/0045` -> C1/2986 sub-mode 2 (C1/2A43, the nearest
           // enemy) leaves $9870 / $9872 / $9873 and the $A039 mirrors as it found them, and `$99DA,X = $9873`. Those bytes
@@ -17221,34 +17221,34 @@ static void battlePcWalk(CtBattleHost* h) {
           int f;
           if (h->mvInited) { f = battlePcScanFace(h, seat, lx, ly); s[0x99DA + seat] = s[0x9873]; }   // C1/2F54-2F86
           else f = battlePcAimFacing(s, lx[seat], ly[seat], lx, ly);   // (a seed with no staged host: no scan bytes)
-          if (f != (h->pcFacing[seat] & 3)) { h->pcFacing[seat] = f; aimed = 1; }   // C1/2F8C-2F94 ($80)
+          if (f != (BT_PCFACING(h, seat) & 3)) { BT_PCFACING(h, seat) = f; aimed = 1; }   // C1/2F8C-2F94 ($80)
         } } }
     battleIconDispatch(h, seat);                                 // C1/2E2E JSR C1/308C
     int win = cls;
-    if (win == 3 && (s[0x99CF] | s[0x99D0])) { win = 0x2B; h->pcIdx[seat] = 0xFF; }   // C1/2E31-2E49
+    if (win == 3 && (s[0x99CF] | s[0x99D0])) { win = 0x2B; BT_PCIDX(h, seat) = 0xFF; }   // C1/2E31-2E49
     // ---- C1/2EA6..2EEF: entry, dwell, pose
     int charId = s[0x2980 + seat] & 7;
-    int idx = (h->pcIdx[seat] + 1) & 0xFF;                       // C1/2EA9-2EAE INC before the read
+    int idx = (BT_PCIDX(h, seat) + 1) & 0xFF;                       // C1/2EA9-2EAE INC before the read
     int raw = CtBattlePcWinDwell(charId, win * 4, idx);
     if (raw == 0) { idx = 0; raw = CtBattlePcWinDwell(charId, win * 4, 0); }   // C1/2EBE-2EC3 the terminator
     if (raw < 0) raw = 0;
-    h->pcIdx[seat] = idx;
-    { int t = raw / 5; if (t == 0) t = 1; h->pcTimer[seat] = t; }   // C1/2ECB-2ED7 (C1/00D7 divide, min 1)
-    int pose = CtBattlePcWinPose(charId, win * 4, idx, h->pcFacing[seat] & 3);   // C1/2EDA-2EEF
+    BT_PCIDX(h, seat) = idx;
+    { int t = raw / 5; if (t == 0) t = 1; BT_PCTIMER(h, seat) = t; }   // C1/2ECB-2ED7 (C1/00D7 divide, min 1)
+    int pose = CtBattlePcWinPose(charId, win * 4, idx, BT_PCFACING(h, seat) & 3);   // C1/2EDA-2EEF
     // ---- C1/2EF2-2F10: the publish rule
     int publish;
-    if (win != h->pcWinLast[seat]) { h->pcWinLast[seat] = win; publish = 1; }   // C1/2EF4-2EFF
+    if (win != BT_PCWINLAST(h, seat)) { BT_PCWINLAST(h, seat) = win; publish = 1; }   // C1/2EF4-2EFF
     else if (win != 3) publish = 1;                              // C1/2F01
     else if (aimed) publish = 1;                                 // C1/2F05
     else publish = (s[0x95D5] == seat);                          // C1/2F09-2F0E: the ACTIVE seat only
-    int chg = 0, prevPub = h->pcPub[seat];
+    int chg = 0, prevPub = BT_PCPUB(h, seat);
     if (publish) {                                               // C1/1C4A (PCs are type 0) -> C1/1C55
-      h->pcDefer[seat] = 0;                                      // C1/1C5A STZ $9922,X
-      if (pose >= 0 && pose != h->pcPub[seat]) { h->pcPub[seat] = pose; uploads++; chg = 1;      // C1/1C60-1C66, C1/1F75
+      BT_PCDEFER(h, seat) = 0;                                      // C1/1C5A STZ $9922,X
+      if (pose >= 0 && pose != BT_PCPUB(h, seat)) { BT_PCPUB(h, seat) = pose; uploads++; chg = 1;      // C1/1C60-1C66, C1/1F75
         h->pcLadderPose[seat] = -1; }                            //   the STA $9907,X replaced the ladder's byte
     }
     if (wt) fprintf(stderr, "pcwalk f%d seat=%d win=%02X idx=%d pose=%02X prev=%02X pub=%d chg=%d tmr=%d aim=%d up=%d" CT_BATTLE_NL,
-                    h->frames, seat, win, idx, pose & 0xFF, prevPub & 0xFF, publish, chg, h->pcTimer[seat], aimed, uploads);
+                    h->frames, seat, win, idx, pose & 0xFF, prevPub & 0xFF, publish, chg, BT_PCTIMER(h, seat), aimed, uploads);
   }
 }
 // C1/1C4A -- THE GATHER: a combatant's new pose into the WRAM's sprite mirror (disasm/notes/battle_enemy_cells.md sec. 1),
@@ -17426,7 +17426,7 @@ static void battleIdleWalk(CtBattleHost* h) {
 }
 // C1/2D9F, the idle walk's dispatch, on a bare WRAM image -- the routine-level shadow's entry point (ct_shadow.c). The
 // enemy groups ($A4 = 1..3) run whole on the WRAM: their mode, facing and idle-pose state are the BT_* bytes (battle.h)
-// and a publish runs the gather C1/1C4A into the sprite mirror. The PC group ($A4 = 0) still reads host fields: -1.
+// and a publish runs the gather C1/1C4A into the sprite mirror. The PC group ($A4 = 0) is refused: -1 (its cells, its direct page and its feet are the next step, S4).
 int CtBattleIdleWalkProbe(uint8_t* mem) {
   static CtBattleHost scratch;
   memset(&scratch, 0, sizeof scratch);
@@ -17455,7 +17455,7 @@ void CtBattleStagerRecords(CtBattleHost* h) {
     int lx = h->mvLiveX[x] & 0xFF, ly = h->mvLiveY[x] & 0xFF;
     r[0] = (uint8_t)(lx >> 4); r[2] = (uint8_t)(lx & 0x0F);
     r[1] = (uint8_t)(ly >> 4); r[3] = (uint8_t)(ly & 0x0F);
-    r[4] = (uint8_t)h->pcPub[x];                                    // FC2D LDA $9907,X
+    r[4] = (uint8_t)BT_PCPUB(h, x);                                    // FC2D LDA $9907,X
   }
   for (int x = 0; x < 8; x++) {
     uint8_t* r = s + 0x29BF + x * 12;
@@ -17468,7 +17468,7 @@ void CtBattleStagerRecords(CtBattleHost* h) {
 // The RENDERWRAM sweep's entry points (battle.h): seed the walk from a WRAM image, step it one frame.
 void CtBattleIdleSeed(CtBattleHost* h, const uint8_t* w) {
   BT_SCHEDA4(h) = w[0xA4] & 3;
-  h->pcAimLatch = w[0xA098];
+  BT_PCAIMLATCH(h) = w[0xA098];
   h->schedWalk = 0;
   h->mem[0x00E5] = w[0xE5];                                        // the seed's own $E5 says which wait the CPU sits in:
   h->iterPh = w[0xE5] ? 0 : 1;                                     //   1 = wait 1 (next frame A), 0 = wait 2 (next frame B)
@@ -17479,9 +17479,9 @@ void CtBattleIdleSeed(CtBattleHost* h, const uint8_t* w) {
     BT_IDLETIMER(h, i) = w[0x9694 + i]; BT_IDLECUR(h, i) = w[0x969C + i];
     BT_IDLEPUB(h, i) = w[0x9907 + 3 + i]; BT_IDLEDEFER(h, i) = w[0x9925 + i]; h->idleDeathPose[i] = 0xFF;
     if (i < 3) {
-      h->pcTimer[i] = w[0x9689 + i]; h->pcIdx[i] = w[0x968C + i]; h->pcPub[i] = w[0x9907 + i];
-      h->pcWinLast[i] = w[0xA103 + i]; h->pcDefer[i] = w[0x9922 + i];
-      h->pcFacing[i] = w[0x96DB + i] & 3;
+      BT_PCTIMER(h, i) = w[0x9689 + i]; BT_PCIDX(h, i) = w[0x968C + i]; BT_PCPUB(h, i) = w[0x9907 + i];
+      BT_PCWINLAST(h, i) = w[0xA103 + i]; BT_PCDEFER(h, i) = w[0x9922 + i];
+      BT_PCFACING(h, i) = w[0x96DB + i];
     }
   }
 }
