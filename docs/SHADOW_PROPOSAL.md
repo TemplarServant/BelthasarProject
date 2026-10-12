@@ -342,6 +342,13 @@ into the WRAM.
   compose CF/EB42; (3) whole PC cells (up to ~490 bytes) -- the PCs' sheet / record, which the gather reads as it does
   an enemy's. It also needs the feet from the WRAM ($1D0C / $1D23): the host's `mvLiveX` / `mvLiveY` (~220 uses) are
   the largest mirror left.
+- **The feet are NOT a plain copy -- tried and reverted (2026-10-12).** Moving `mvLiveX` / `mvLiveY` onto $1D0C / $1D23
+  turned 32 checks red. The cause, measured on field-battle-entrance-initial-pose: at the forced battle end (f83) the
+  feet read from the WRAM are (0,0) / (32,15) -- in the port the FIELD engine also writes that page (D = $1D00 is the
+  field collision's direct page) while or right after the battle runs, where the cartridge's two engines do not share
+  those bytes that way. The host mirror shields the battle from an overlap only the port has. Moving the feet needs
+  that overlap resolved first -- which engine owns $1D00-$1DFF when, as the ROM has it -- an architecture step of its
+  own.
 
 ## S1, the battle effect program's dispatch, as built
 
