@@ -108,9 +108,9 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-11: **826** checks, **2** excluded; `--list` prints the current set).
+(2026-10-11: **827** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**585** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**586** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **239** slower checks — whole fights and attract legs against the logical oracle, the
@@ -665,6 +665,14 @@ into the scroll request (the collision C0/8A6D still runs on `$0120`). Pins the 
 (38 f5, 39 f11, 3C f23, 40 f39; the cartridge's 1-2 frames later). Two mechanisms: the host runs the controller with
 explore off (no d-pad; the lead integrated only while its script sits at op B0), and the collision fetch reads the
 prop planes from the scene's WRAM (the host's packed copy had lost the conveyor bits). Needs the private capture.
+
+### field-battle-discards-an-open-box-vs-rule-cartridge
+
+A fight requested while a dialogue box is open: op D8 (C0/3A83) and C0/1770 do not look at the box, and the staging
+C0/024C drops it -- C0/0257-0263 `STZ $0129 / $0126 / $0127`, no close ramp; the box's script advances after the return.
+The user's magus_scene capture (the cult's box opens by itself as the party walks down), the request poked at f87 with
+`CT_POKEWRAM_AT`: pins the three bytes cleared at f92 (the rule's cartridge, the same poke: at the poke + 6). Before, the
+port kept the box through the fight and drew it over the arena -- the user's report. Needs the private capture.
 
 ### battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge
 

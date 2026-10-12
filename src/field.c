@@ -8855,6 +8855,13 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
     s[0x117] &= (uint8_t)~0x01; s[0x118] |= 0x01;
     return;
   }
+  // ---- C0/0257-0263, a dialogue box the fight interrupts is discarded: `LDA $29 / BEQ / LDA #00 / STA $29 / LDA #00 /
+  // STA $26 / STZ $27` -- no close ramp, nothing put back after the fight. The box's script, parked on `$0129 != 0`
+  // (C0/3606), takes its advance arm on its first visit after the return. MEASURED on the rule's cartridge (the cult's
+  // box at state 7 in saves/field_re/magus_scene_lake.state, `$0117 = 21` / `$2989 = 82` poked: C0/3A83's request):
+  // `$0129 07 -> 00`, `$0126 01 -> 00`, `$0127 28 -> 00` on the staging frame (C0:025F / C0:0263 / C0:0265), and the
+  // fight is drawn without the box. The port kept the box's bytes through the fight and drew it over the arena.
+  if (s[0x129]) { s[0x129] = 0; s[0x126] = 0; s[0x127] = 0; }
   // ---- C0/066D-068F, the BG map shadows handed to the battle: `$2C56 = $1D7D | $1D84`, `$2C57 = $1D7F | $1D85`,
   // `$2C58 = $1D81 | $1D86` (BG1/BG2/BG3SC as the field's C129-C13C build them), `$2C59 = 0`. The battle's CD/0CF6
   // restages `$BC87 = $2C58` from them (battle.c). Oracle (the GATO fight from power-on, battle_gato_press_action +
@@ -15404,8 +15411,10 @@ int main(int argc, char** argv) {
     // CT_POKEWRAM="ADDR=HH,...": WRAM bytes written once, on the first frame of a run (--selftest or the interactive path
     // a battle drive needs) -- ct.exe's PEEK_POKE grammar (flat offsets, a 7E/7F bank folded). The port's side of a state
     // no drive reaches cheaply: e.g. $7F01EC, the lost-battle byte scene 0AC's `48 EC 01 7F 19` reads before its op FF 96,
-    // or a learned-tech seed $2837+char before a fight boots.
-    if (frameNo == 1) {
+    // or a learned-tech seed $2837+char before a fight boots. CT_POKEWRAM_AT=<frame> writes them on that frame instead.
+    static int pkAt = -1;
+    if (pkAt < 0) { const char* pa = getenv("CT_POKEWRAM_AT"); pkAt = pa ? atoi(pa) : 1; }
+    if (frameNo == pkAt) {
       static const char* pk; static int pkRead;
       if (!pkRead) { pkRead = 1; pk = getenv("CT_POKEWRAM"); }
       uint8_t* pw = pk ? CtWramSys(fieldWram()) : NULL;

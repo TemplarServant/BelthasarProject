@@ -6483,6 +6483,57 @@
       "notes": "The user, 2026-10-11 (translated from Portuguese): 'when Hench hits Crono (the attack that pushes him), the damage stays in the old place; and when the battle ends Crono gives a slight blink in the previous place'. C0/08A1-08C8 stores each PC's field words from its battle record at the epilogue -- `$1801,Y = rel + $F0`, `$1800,Y = fine << 4`, the same for Y -- so the object stands where the fight left it at once. The port moved only the VM's actor; the entry page it restores (C0/0905) put the pre-battle $1800/$1880 back, and the host draws the lead from those words: the lead stood at its old spot on the ack frame and the return's hold frames. GATO's blow pushes Crono three lines (`$1D23` 90 -> 93), and he stays there after his attacks. The rule's cartridge (battle_ab's GATO fight, Crono solo, A every 12 frames from f600): the field words back at f2673 with `$1882 = 0B30`. The port: before, `$1882 = 090B` at the ack (f2981, the pre-battle word); after, 300B. (The ack itself comes 308 frames later than the cartridge's in this drive, with or without the change: a separate, older gap in the victory sequence.) The damage number's origin follows the same law: C1/5B4D-5B6E takes `$1D0C,Y` / `$1D23,Y`, the live position, for a PC as for an enemy -- field-battle-status-render re-pinned."
     },
     {
+      "name": "field-battle-discards-an-open-box-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "203",
+        "--loadwram",
+        "saves/field_re/magus_scene.lakewram",
+        "--walkscript",
+        "d:60,n:500"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/field_re/magus_scene_lake.state",
+        "CT_POKEWRAM": "0117=21,2989=82",
+        "CT_POKEWRAM_AT": "87",
+        "CT_FIELD_MEMMON": "0129:1,0127:1,0126:1,0117:1",
+        "CT_SHOTS": "build/_cultbox",
+        "CT_SHOTS_AT": "147",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/magus_scene.lakewram",
+        "saves/field_re/magus_scene_lake.state"
+      ],
+      "expect": [
+        "fmemmon f87 loc=0CB  0129=07  0127=28  0126=01  0117=01*",
+        "fmemmon f92 loc=0CB  0129=00*  0127=00*  0126=00*  0117=01"
+      ],
+      "pin": [
+        "^fmemmon f\\d+ loc=0CB  0129=00\\*  0127=00\\*  0126=00\\*  0117=01$"
+      ],
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  if (s[0x129]) { s[0x129] = 0; s[0x126] = 0; s[0x127] = 0; }",
+          "replace": "  (void)0; /* MUT: C0/0257's discard not done */",
+          "why": "the box keeps $0129 = 07 / $0127 = 28 through the fight and is drawn over the arena -- the user's report"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "a fight requested while a dialogue box is open discards the box at its staging (C0/0257-0263), as on the cartridge: the arena is drawn without it",
+      "notes": "The user, 2026-10-11 (translated from Portuguese): in the Magus cult's room some dialogue boxes open by the scene's own event, and 'when the battle started with that dialogue open, it stayed in the battle's background'. Op D8 (C0/3A83) requests the fight with `$0117 |= 21` and C0/1770 takes it without looking at the box; the staging C0/024C then runs `LDA $29 / BEQ / LDA #00 / STA $29 / LDA #00 / STA $26 / STZ $27` (C0/0257-0263): an open box is dropped, with no close ramp. The box's script, parked on `$0129 != 0` (C0/3606), advances on its first visit after the return. MEASURED on the rule's cartridge: saves/field_re/magus_scene_lake.state walked down 60 frames (the cult's box opens by itself, state 7 at f86), saved at f88, then PEEK_POKE `7E0117=21,7E2989=82` (C0/3A83's request with this room's battle byte): `$0129 07 -> 00`, `$0126 01 -> 00`, `$0127 28 -> 00` at f6 (C0:025F / C0:0263 / C0:0265), and the fight's frames show no box. The port, the same poke at f87 (CT_POKEWRAM_AT): before, `$0129` stayed 07 and the box was drawn over the arena (the shot at f147); now the three bytes clear at f92 and the arena is clean. (In the scene's own flow the box closes on A at f102 and the cult's fight starts at f197, on both sides.)"
+    },
+    {
       "name": "field-organ-door-opens-live",
       "argv": [
         "build/ct_field.exe",
