@@ -4242,7 +4242,7 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "6c0466b65422492f57e0b24879eba263ec4c02d1af5fa645195504a00f414e24",
+      "sha256": "4f10cd0e1c62ac2599ee46fd83ffb37ee09fb5dc7acbf8cea5b18fed643ea794",
       "size": 1501354,
       "present_when_recorded": true
     },
@@ -5057,6 +5057,30 @@
       "regenerable": false,
       "how": "The WRAM of saves/field_re/savept084_lake.state (tools/ctlib/lake.py wram) behind the 21-byte #lakewram header.",
       "sha256": "d8991c125db002617c707cdafab7d2bbb2fcb5ce5ac4b887d52504ead85c4a74",
+      "size": 131093,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/fall_stairs083_lake.state",
+      "used_by": [
+        "field-stairs-fall-camera-follows-vs-rule-cartridge"
+      ],
+      "kind": "state",
+      "regenerable": false,
+      "how": "The user's snes9x capture fall_stairs.state (loc 083, the top of the stairs a script has turned into a conveyor) spliced by `tools/s9x_to_lake.py --ppu` onto a loc 083 base made 2026-10-11 by `ct.exe --teleport 0x83 11 35 1 --frames 120` (CT_ORACLE_LOGICAL=1) from saves/field_re/savept084_lake.state.",
+      "sha256": "ac10f6383dc407fcc90700a9946514f5592709642d18db76af41e33e0079af88",
+      "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/field_re/fall_stairs083.lakewram",
+      "used_by": [
+        "field-stairs-fall-camera-follows-vs-rule-cartridge"
+      ],
+      "kind": "lakewram",
+      "regenerable": false,
+      "how": "The WRAM of saves/field_re/fall_stairs083_lake.state behind the 21-byte #lakewram header.",
+      "sha256": "f98920a1241bed7965fb120b843effee501f7163d208a55b6bf3c316b759393b",
       "size": 131093,
       "present_when_recorded": true
     }

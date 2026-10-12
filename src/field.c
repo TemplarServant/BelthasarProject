@@ -1981,10 +1981,23 @@ static int fieldNpcTileSolid(void* ctx, int tx, int ty) {
 #define CT_NL "\n"      /* one place for the trace newline */
 static uint8_t g_collRam[0x13000];
 static const Coll* g_fc;
+static const uint8_t* g_fcWram;   // the scene's $7E page for fieldTileFetch (NULL: the host's packed planes)
 static int fieldTileFetch(uint8_t* ram, uint8_t* b0, uint8_t* b1, uint8_t* b2) {
   uint8_t* d = ram + 0x1D00;
   int tx = d[0x67], ty = d[0x69];                          // tentative tile hi-bytes ($1D67/$1D69)
   if (!g_fc->shp || tx < 0 || ty < 0 || tx >= g_fc->cw || ty >= g_fc->ch) return 1;   // off-map -> solid
+  // THE PROP PLANES THE ROM READS. C0/9AC8 fetches $7E:30C0 / $7E:7000 / $7E:7040 at (row << 8) | col -- the planes the
+  // location load streams (lz.c ct_lz_map_to_wram), the scripted copies move (C0/AF4E) and a seed carries. The host's
+  // packed copy below keeps only the bits the shape decode and the door latch used, and dropped prop1's low nibble:
+  // the CONVEYOR (C0/9D6E `LDA $5A / AND #0C`, direction `AND #03`). Loc 083's falling stairs are a conveyor a script
+  // copies in (`$7E:7000` = 0D: speed 20, down), so the port's lead never got the momentum C0/9DB1 sets and the
+  // camera, which follows that momentum through C0/88E5, stood still (the user, 2026-10-11, translated from
+  // Portuguese: "on falling down the stairs the camera diverges from the original"). With a scene, read the WRAM.
+  if (g_fcWram) {
+    int o = (ty << 8) | tx;
+    *b0 = g_fcWram[0x30C0 + o]; *b1 = g_fcWram[0x7000 + o]; *b2 = g_fcWram[0x7040 + o];
+    return 0;
+  }
   int i = ty * g_fc->cw + tx;
   uint8_t zb = g_fc->zb[i];
   *b0 = (uint8_t)(g_fc->shp[i] << 2);                      // shape -> prop0 bits 2-7
@@ -2013,7 +2026,7 @@ static void fieldArrivalTileMode(const Coll* c, double px, double py, CtScene* v
   uint8_t* d = g_collRam + 0x1D00;
   d[0x34] = 0;
   if (!c || !c->shp) { CtSceneArrivalPriorities(vm, 0, 0, 0, 0); return; }
-  g_fc = c;
+  g_fc = c; g_fcWram = vm ? CtSceneMem7E(vm) : NULL;
   int X = ((int)(px * 16.0 + 0.5)) & 0xFFFF;              // the lead's words $1800/$1880 (px, py = word/16);
   int Y = ((int)(py * 16.0 + 0.5)) & 0xFFFF;              //   their high bytes = the arrival tile $0102/$0103
   d[0x67] = (uint8_t)(X >> 8); d[0x69] = (uint8_t)(Y >> 8);   // the tile the fetch hook reads
@@ -2051,7 +2064,7 @@ static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz
     d[0x2C] = 0; d[0x2D] = 0; d[0x32] = 0; d[0x33] = 0;
     return 0;
   }
-  g_fc = c;
+  g_fc = c; g_fcWram = vm ? CtSceneMem7E(vm) : NULL;
   CtCollisionSetTileFetch(fieldTileFetch);
   const int idx = 2;                                        // player at actor slot 2
   ram[0x0197] = (uint8_t)idx; ram[0x0199] = 0xFE; ram[0x019B] = 0xFE;   // no party
@@ -5787,6 +5800,7 @@ static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
     }
   } else { f->C.shp = NULL; f->C.zb = NULL; f->C.mv = NULL; f->C.cw = f->C.ch = 0; }
   g_fc = &f->C;   // scene collision handle for the battle staging's plane projection (battle_ai_interp §9)
+  g_fcWram = NULL;   // (in a battle the scene's $7E page is the battle's: the host's packed planes)
   // CT_COLLDUMP=1 -- print the scene's PER-TILE collision props exactly as fieldTileFetch synthesizes
   // them from the packed asset planes, in the ROM's own (b0,b1,b2) spelling and at the ROM's own tile
   // index (row<<8)|col, so a dump can be diffed straight against the oracle's live WRAM planes
@@ -16512,6 +16526,24 @@ int main(int argc, char** argv) {
       // (applyMove=0) -- the knockdown fall-pan (corpus #11: LEFT pans, RIGHT/idle hold). The VM camera tick's
       // 99DE deadzone then decides whether the d-pad actually scrolls, from the lead's on-screen foot.
       fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, cdx, cdy, crun, 0, &camReqX, &camReqY);
+    }
+    else if (!battlePhase && f.vm && !CtSceneExplore(f.vm) && CtSceneMem7E(f.vm)[0x0120] && !(tbActive && isChoice) &&
+             nameId < 0 && !atbGate && !gameOver && !fieldResume && mlBody) {
+      // C0/881E RUNS WITH EXPLORE OFF. `8833 LDA $0162 / BNE / LDA $011F / BEQ ->8840` skips only the d-pad (C0/88EE);
+      // `8840 LDA $0120 / BEQ ->884C / JSR C0/8A6D` runs the collision on $0120 alone, and its head C0/88E5 copies the
+      // momentum $1D2A/$1D2B into the scroll request $2E/$30 every frame. A conveyor tile keeps that momentum up (C0/9DB1
+      // `$1D2B = 20` on loc 083's stairs), so the camera follows a fall the script runs with $011F = 0. MEASURED (the
+      // rule's cartridge, the user's fall_stairs capture on loc 083, Down held): $011F 00 from f4, $1D30 = 20 by C0:88ED
+      // over f5-f42, $1D0E 36 -> 40 by f41; the port's request stayed 0 (this branch did not exist) and its camera stood
+      // at 37 until the fall ended, then crept 1 px a frame (the user, 2026-10-11, translated from Portuguese: "on falling
+      // down the stairs the camera seems to diverge from the original").
+      // The LEAD takes the controller's velocity only through its own script's op B0: C0/9E3F-9E60 copies $1D32/$1D33
+      // into $1900/$1980 of the lead, which the object mover C0/AB10-AB42 integrates. MEASURED (same run, `--monitor
+      // 7E1982:1 --writer`): $1982 by C0:9E60 over f1-f6 (the conveyor's 20 from f5), then by C0:ADF7 = 2B from f10 --
+      // the fall's own move (op B0 no longer runs: the lead's script is elsewhere), the conveyor no longer reaching it.
+      int atB0 = CtSceneActorAtB0(f.vm, pObj);
+      fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, 0, 0, 0, atB0 ? 1 : 0, &camReqX, &camReqY);
+      if (atB0) CtSceneSetActorPosF(f.vm, pObj, px, py);
     }
     if (f.vm) CtSceneCameraInput(f.vm, camReqX, camReqY, leadStartX, leadStartY, 1);   // hand the request + lead foot to the VM camera
     if (!battlePhase && f.vm && ctlLocked && CtSceneActorCount(f.vm) > 1) {   // the script drives Crono: follow

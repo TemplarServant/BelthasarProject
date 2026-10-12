@@ -108,9 +108,9 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-11: **823** checks, **2** excluded; `--list` prints the current set).
+(2026-10-11: **824** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**582** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**583** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **239** slower checks — whole fights and attract legs against the logical oracle, the
@@ -656,6 +656,15 @@ MEASURED on loc 004: `$7E320A/320B F2→F3 F4→F5`, `$7E330A/330B F6→F7 F8→
 moving. The `[door] tile(10,4) opened=1` line (CT_TRIGDBG) is the countable; the fnv is
 the canary. ⚠ The host also has to seed `$1D1E`/`$1D1F` — unset, they mask every door
 index to (0,0). Dossier: `disasm/notes/field_doors_occluders_decisionbox.md`.
+
+### field-stairs-fall-camera-follows-vs-rule-cartridge (`--scene 131 --loadwram fall_stairs083.lakewram --walkscript d:200`)
+
+The user's snes9x capture at the top of loc 083's stairs, which a script has turned into a conveyor (`$7E:7000` = 0D).
+Down held: the cartridge's lead falls while `$011F` is 0, and the camera follows through the momentum C0/88E5 turns
+into the scroll request (the collision C0/8A6D still runs on `$0120`). Pins the port's camera steps during the fall
+(38 f5, 39 f11, 3C f23, 40 f39; the cartridge's 1-2 frames later). Two mechanisms: the host runs the controller with
+explore off (no d-pad; the lead integrated only while its script sits at op B0), and the collision fetch reads the
+prop planes from the scene's WRAM (the host's packed copy had lost the conveyor bits). Needs the private capture.
 
 ### field-savepoint-a-opens-the-save-screen-vs-rule-cartridge / field-shelter-only-on-the-save-point-vs-rule-cartridge
 

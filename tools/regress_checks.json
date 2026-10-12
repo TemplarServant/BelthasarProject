@@ -6321,6 +6321,63 @@
       "notes": "The user, 2026-10-11 (translated from Portuguese): 'I also can't use Shelter on top of it'. C2/9875 builds the item property page $7700 at every menu open; its last step C2/9969 `LDA $0D34 / BEQ / LDA #02 / TRB $77C8` clears the Shelter's field-usable bit off a save point ($0D34 != 0: a field map without $7F01CF bit 7). The port's table (tools/gen/menu_itemuse.py) was captured with the menu open off a save point, so the Shelter stayed unusable everywhere and its effect was never decoded. Now the generator puts the bit back from $CC (C2/88AD's locator) and decodes C2/B1F8 (`LDA #CA / STA $0DBD / JMP C2/B18B`, the record `08 C2 0F 00`: HP and MP to the maximum, the whole party), and menu.c applies C2/9969 at every open (CtMenuItemOpenGate). The drive: off the tile (Down 24), X, Item, A x4 on the Shelter (refused: nothing changes), B x4 out, Up onto the tile, X, Item, A x4. The rule's cartridge, the same keys: $7F01CF 00 at f4, 80 at f446; HP/MP 99/10 81/9 96/14 -> 135/18 101/18 128/17 at f663; the count 02 -> 01 at f746, the slot still C8. The port: f3, f445, f662, f745, the same values (its input convention, a frame ahead)."
     },
     {
+      "name": "field-stairs-fall-camera-follows-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "131",
+        "--loadwram",
+        "saves/field_re/fall_stairs083.lakewram",
+        "--walkscript",
+        "d:200,n:100"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_FIELD_MEMMON": "1D0E:2",
+        "CT_AUDIO_SEEDSTATE": "saves/field_re/fall_stairs083_lake.state",
+        "CT_SHOTS": "build/_fallstairs",
+        "CT_SHOTS_AT": "200",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/fall_stairs083.lakewram",
+        "saves/field_re/fall_stairs083_lake.state"
+      ],
+      "expect": [
+        "fmemmon f5 loc=083  1D0E=3800*",
+        "fmemmon f11 loc=083  1D0E=3900*",
+        "fmemmon f23 loc=083  1D0E=3C00*",
+        "fmemmon f39 loc=083  1D0E=4000*"
+      ],
+      "pin": [
+        "^fmemmon f\\d+ loc=083  1D0E=(38|39|3C|40)00\\*"
+      ],
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  if (g_fcWram) {",
+          "replace": "  if (0) {",
+          "why": "the host's packed planes again: no conveyor bits, no momentum, the camera stands through the fall"
+        },
+        {
+          "file": "src/field.c",
+          "find": "      fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, 0, 0, 0, atB0 ? 1 : 0, &camReqX, &camReqY);",
+          "replace": "      (void)atB0;",
+          "why": "C0/881E not run with explore off: the momentum never becomes the scroll request"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "falling down loc 083's stairs (a conveyor the script lays) the camera follows the fall as on the cartridge",
+      "notes": "The user, 2026-10-11 (translated from Portuguese): 'on falling down the stairs, in this save, the camera seems to diverge from the original -- just press Down' (their snes9x capture fall_stairs.state, spliced onto a loc 083 base made by `ct.exe --teleport 0x83 11 35 1` from savept084_lake.state, `tools/s9x_to_lake.py --ppu`). A script has copied conveyor cells into the stairs ($7E:7000 = 0D: speed 20, down). C0/881E runs every frame: C0/88E5 copies the momentum $1D2A/$1D2B into the scroll request $2E/$30, the d-pad (C0/88EE) needs $011F, the collision (C0/8A6D, whose commit C0/9D6E-9DB1 sets the momentum from prop1's conveyor bits) only $0120. The rule's cartridge, Down held: $011F 00 from f4, $1D2B = 20 by C0:9DB1, $1D30 = 20 by C0:88ED over f5-42, the camera $1D0E 36 -> 40 at f3, f6, f13 .. f41 (one step every 4 frames); the lead's $1982 by C0:9E60 (its op B0) over f1-6, then the fall's own move C0:ADF7 = 2B from f10. Two defects: the host ran the controller only with explore on (now also with $011F = 0 and $0120 != 0: no d-pad, the lead integrated only while its script is at op B0), and its collision fetch read the host's packed planes, which kept only prop1 0x10 / 0x40 -- the conveyor was lost (fieldTileFetch now reads $30C0 / $7000 / $7040 from the scene's WRAM). Before: the camera stood at 37 through the fall and crept 1 px a frame afterwards (38 at f69 .. 42 at f149). After: 37 f2, 38 f5, 39 f11 .. 40 f39 (the cartridge's minus 1-2 frames: the port's input convention, and one conveyor step more at the call that ends op B0 -- the host integrates before the VM pass that pre-empts it; the lead runs 2 px ahead until the landing, equal from f130)."
+    },
+    {
       "name": "field-organ-door-opens-live",
       "argv": [
         "build/ct_field.exe",
