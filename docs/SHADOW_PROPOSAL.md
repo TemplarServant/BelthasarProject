@@ -282,6 +282,29 @@ pages, or in a register, is graded at once as before.
   leaves the ROM's scratch byte for byte (the `MVN $30,$dd / RTL` trampoline at $9690, the record table at $9890, $7B =
   the slot's base, $9691 / $00 = the last record's bank and address), and the load matches exactly on both routes.
 
+## S3, the census, as built
+
+- `--census N` counts every routine the run calls -- the target of each JSR / JSL / JSR (abs,X), taken at the
+  instruction fetched right after it (an interrupt in between clears the mark) -- and reports the share of the calls
+  whose target a registered entry sits at, then the N routines called most that none does. `shadow-attract` pins its
+  line: the progress number.
+- **The attract, 2026-10-12: 8,835,267 calls to 1039 routines; 143,152 (1.6%) to the 113 routines an entry sits at.**
+  Three targets carry most of the volume: 7E/3176 (code in WRAM, 6.5 M calls), CD/3E44 (742 k) and CD/0036 (546 k).
+  Below them the list is the work order: C0/A88D (the activation gate, a partial port), C0/AA07, C2/225E, C0/E687,
+  C0/5A93 (the VM's runner), C0/B309 (the draw per object), C0/A947, ...
+- C0/A9CD (`CtObjListLink`) registered from it: 22407 calls, 10506 matched and 11901 dead -- its only difference,
+  $01C5 (A9F2 `STY $C5`, which the port does not store), measured dead on every call.
+
+## S4, what the census and the first mirror point at next
+
+The battle host (`CtBattleHost`, battle.h) keeps dozens of WRAM variables in fields of its own -- the enemies' movers
+($974A, $9752, $9786, $9737, $98A7, ...), the pose timers ($9694, $969C, $9689, $968C, ...), the PC grid walker ($A500,
+$A517, $A53D, ...), the victory ladder ($5DC1, $5DBD, ...). Each is a place where the live engine can differ from the
+ROM out of the shadow's sight, as `objPal` did. Making them the WRAM is a rewrite of the battle engine's state, mechanism
+by mechanism; it is the next large step and is to be agreed before it starts. The way in is the same as for `objPal`:
+register the routine that owns the variables, let the shadow show the WRAM the host never wrote, and move the variable
+into the WRAM.
+
 ## S1, the battle effect program's dispatch, as built
 
 - CD/16A6 (`STX $43 / ASL / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43 / RTS`): one entry grades every

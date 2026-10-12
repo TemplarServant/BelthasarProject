@@ -152,6 +152,10 @@ static int unlinkRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, lon
                      CtShadowRegs* out) {
   (void)e; (void)rom; (void)romLen; (void)in; (void)out; CtObjListUnlink(w, w[0x016D]); return CT_SH_RETURNS;
 }
+static int linkRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                   CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)in; (void)out; CtObjListLink(w, w[0x016D]); return CT_SH_RETURNS;
+}
 static int timerRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                     CtShadowRegs* out) {
   (void)e; (void)in; (void)out; CtAnimTimerTick(w, rom, (int)romLen, w[0x016D]); return CT_SH_RETURNS;
@@ -260,6 +264,7 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC0ABA2, "move heading (CtMoveDirAngle)", 0x30, 0x20, 0, 0, fieldGuard, angleRun, 0, NULL },
   { 0xC0AB45, "screen position (CtObjScreenPos)", 0x00, 0x00, 0, 0, fieldGuard, screenRun, 0, NULL },
   { 0xC0A98A, "draw-list unlink (CtObjListUnlink)", 0x00, 0x00, 0, 0, fieldGuard, unlinkRun, 0, NULL },
+  { 0xC0A9CD, "draw-list link (CtObjListLink)", 0x00, 0x00, 0, 0, fieldGuard, linkRun, 0, NULL },
   { 0xC0C98A, "anim timer (CtAnimTimerTick)", 0x30, 0x30, 0, 0, fieldGuard, timerRun, 0, NULL },
   { 0xC09E84, "player anim (CtPlayerAnimSelect)", 0x30, 0x30, 0, 0, fieldGuard, pAnimRun, 0, NULL },
   { 0xC0B701, "anim release (CtAnimRelease)", 0x30, 0x20, 0, 0, fieldGuard, releaseRun, CT_SH_C, NULL },
@@ -476,6 +481,38 @@ static void finish(Snes* s, ShActive* a, uint32_t pc) {
   }
 }
 
+// THE CENSUS (docs/SHADOW_PROPOSAL.md, S3): every routine the run calls -- the target of each JSR / JSL / JSR (abs,X)
+// the oracle executes, counted at the instruction fetched right after it (an interrupt taken in between clears the
+// mark, so a handler is never counted as the call's target). It measures what real play runs against what the shadow
+// grades: the share of the calls whose target is a registered entry, and the routines called most that are not.
+#define CEN_SLOTS (1 << 16)
+static int s_censusTop;                          // 0 = off
+static uint32_t s_cenKey[CEN_SLOTS]; static long s_cenCnt[CEN_SLOTS];
+static int s_cenPrevCall;
+static uint8_t peekCode(const Snes* s, uint32_t pc) {
+  uint8_t bk = (uint8_t)(pc >> 16); uint16_t lo = (uint16_t)pc;
+  if (bk == 0x7E || bk == 0x7F) return s->ram[pc - 0x7E0000];
+  if ((bk < 0x40 || (bk >= 0x80 && bk < 0xC0)) && lo < 0x2000) return s->ram[lo];
+  if (bk >= 0xC0 || ((bk < 0x40 || (bk >= 0x80 && bk < 0xC0)) && lo >= 0x8000)) {
+    uint32_t o = ((uint32_t)(bk & 0x3F) << 16) | lo;
+    return o < s->cart->romSize ? s->cart->rom[o] : 0;
+  }
+  return 0;
+}
+static void censusNote(const Snes* s, uint32_t pc) {
+  if (s_cenPrevCall) {
+    uint32_t h = (pc * 2654435761u) >> 16;
+    for (int i = 0; i < CEN_SLOTS; i++) {
+      uint32_t k = (h + (uint32_t)i) & (CEN_SLOTS - 1);
+      if (s_cenCnt[k] && s_cenKey[k] != pc) continue;
+      s_cenKey[k] = pc; s_cenCnt[k]++; break;
+    }
+  }
+  uint8_t op = peekCode(s, pc);
+  s_cenPrevCall = (op == 0x20 || op == 0x22 || op == 0xFC);
+}
+void CtShadowSetCensus(int top) { s_censusTop = top; }
+
 static int findEntry(uint32_t pc) {
   for (int i = 0; i < s_n; i++) if (s_entries[i].addr == pc) return i;
   return -1;
@@ -495,6 +532,7 @@ static void shOp(void* mem, uint32_t pc) {
     if (c->sp < a->minSp) a->minSp = c->sp;
     break;
   }
+  if (s_censusTop) censusNote(s, pc);
   if (!(s_bits[pc >> 3] & (1u << (pc & 7)))) return;
   int first = findEntry(pc);
   if (first < 0) return;
@@ -526,6 +564,7 @@ static void shOp(void* mem, uint32_t pc) {
 }
 static void shInt(void* mem) {
   if ((Snes*)mem != s_snes) return;
+  s_cenPrevCall = 0;
   for (int i = 0; i < s_depth; i++) s_act[i].interrupted = 1;
 }
 
@@ -536,6 +575,7 @@ void CtShadowInstall(Snes* s, const char* dumpPrefix, uint32_t dumpAddr) {
   memset(s_stats, 0, sizeof s_stats); memset(s_bits, 0, sizeof s_bits);
   for (int i = 0; i < s_n; i++) s_bits[s_entries[i].addr >> 3] |= (uint8_t)(1u << (s_entries[i].addr & 7));
   memset(s_rec, 0, sizeof s_rec); memset(s_owner, 0, sizeof s_owner); memset(s_deadAt, 0, sizeof s_deadAt);
+  memset(s_cenKey, 0, sizeof s_cenKey); memset(s_cenCnt, 0, sizeof s_cenCnt); s_cenPrevCall = 0;
   s_recNext = 0; s_recLive = 0;
   s_origRead = s->cpu->read; s_origWrite = s->cpu->write;
   s->cpu->read = shRead; s->cpu->write = shWrite; g_dmaBusHook = shDma;
@@ -594,6 +634,29 @@ void CtShadowReport(FILE* f) {
         seen[ns++] = sk;
         fprintf(f, "  not compared: $%04X-$%04X, %s\n", sk->lo, sk->hi, sk->why);
       } }
+  if (s_censusTop) {
+    // The census: the targets ranked by calls; graded = a registered entry sits at the target.
+    static int order[CEN_SLOTS]; int n = 0; long all = 0, graded = 0; int gradedR = 0;
+    for (int k = 0; k < CEN_SLOTS; k++) if (s_cenCnt[k]) {
+      order[n++] = k; all += s_cenCnt[k];
+      if (s_bits[s_cenKey[k] >> 3] & (1u << (s_cenKey[k] & 7))) { graded += s_cenCnt[k]; gradedR++; }
+    }
+    for (int i = 1; i < n; i++) {                   // by calls, descending; address breaks ties
+      int v = order[i], j = i - 1;
+      while (j >= 0 && (s_cenCnt[order[j]] < s_cenCnt[v] ||
+                        (s_cenCnt[order[j]] == s_cenCnt[v] && s_cenKey[order[j]] > s_cenKey[v]))) { order[j + 1] = order[j]; j--; }
+      order[j + 1] = v;
+    }
+    fprintf(f, "census: %ld calls to %d routines; %ld calls (%.1f%%) to the %d routines a registered entry sits at\n", all,
+            n, graded, all ? 100.0 * (double)graded / (double)all : 0.0, gradedR);
+    int shown = 0;
+    for (int i = 0; i < n && shown < s_censusTop; i++) {
+      uint32_t k = s_cenKey[order[i]];
+      if (s_bits[k >> 3] & (1u << (k & 7))) continue;
+      fprintf(f, "  census ungraded %02X/%04X  %ld calls\n", k >> 16, k & 0xFFFF, s_cenCnt[order[i]]);
+      shown++;
+    }
+  }
   fprintf(f, "shadow: %d entries, %d reached, %ld calls, matched %ld, mismatched %ld, interrupted %ld, exits %ld, "
           "skipped %ld, unported %ld, dead %ld, unresolved %ld\n", s_n, reached, calls, matched, mism, intr, exits, skip,
           unp, dead, unres);

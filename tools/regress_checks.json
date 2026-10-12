@@ -40726,7 +40726,9 @@
         "build/ct.exe",
         "--shadow",
         "--frames",
-        "9000"
+        "9000",
+        "--census",
+        "10"
       ],
       "env": {
         "CT_ORACLE_LOGICAL": "1"
@@ -40737,12 +40739,14 @@
       "expect": [
         "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C0ACFD velocity+priority (ACFD)         calls 3150  matched 3150  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 275 entries, 112 reached, 120749 calls, matched 114700, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 3894, unresolved 1",
+        "shadow: 276 entries, 113 reached, 143156 calls, matched 125206, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 15795, unresolved 1",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 4988  matched 4039  mismatched 0  interrupted 0  exits 0  skipped 0  dead 949",
         "  dead scratch CD16A6: 7E:0003-000D 7E:000F 7E:0012-0019 7E:0023-002A 7E:0045-004D",
         "  dead scratch C04590: 7E:0309-030A 7E:030D 7E:030F 7E:0315-0316",
-        "  dead scratch C046DF: 7E:0309-030A 7E:030D 7E:030F 7E:0315-0316"
+        "  dead scratch C046DF: 7E:0309-030A 7E:030D 7E:030F 7E:0315-0316",
+        "census: 8835267 calls to 1039 routines; 143152 calls (1.6%) to the 113 routines a registered entry sits at",
+        "  dead scratch C0A9CD: 7E:01C5"
       ],
       "pin": [
         "^C1AF22 ",
@@ -40752,7 +40756,9 @@
         "^CD16A6 ",
         "^  dead scratch CD16A6:",
         "^  dead scratch C04590:",
-        "^  dead scratch C046DF:"
+        "^  dead scratch C046DF:",
+        "^census:",
+        "^  dead scratch C0A9CD:"
       ],
       "tier": "full",
       "timeout_s": 240,
@@ -40830,7 +40836,7 @@
       ],
       "expect": [
         "C1DC64 battle hit roll (battleHitCore)  calls 11  matched 11  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 275 entries, 101 reached, 279404 calls, matched 270602, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 7414, unresolved 3",
+        "shadow: 276 entries, 102 reached, 337099 calls, matched 301481, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 34230, unresolved 3",
         "shadow: ended at oracle frame 16270, location 00AC",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 1704  matched 773  mismatched 0  interrupted 0  exits 0  skipped 0  dead 930  unresolved 1",
@@ -40887,7 +40893,7 @@
       "expect": [
         "C28791 inventory add (CtMenuInvAdd)     calls 4  matched 4  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C287D5 inventory remove (CtMenuInvRemove) calls 8  matched 8  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 275 entries, 43 reached, 18023 calls, matched 17479, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3, dead 541, unresolved 0",
+        "shadow: 276 entries, 44 reached, 22366 calls, matched 18719, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3, dead 3644, unresolved 0",
         "shadow: ended at oracle frame 3361, location 00AE",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0"

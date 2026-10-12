@@ -50,6 +50,8 @@ enum { CT_SH_RETURNS = 0, CT_SH_UNPORTED = 1 };
 // `dumpAddr` (0 = any) limits it to the first mismatch of the entry at that address.
 void CtShadowInstall(Snes* s, const char* dumpPrefix, uint32_t dumpAddr);
 void CtShadowUninstall(void);
+// `top` > 0: also count every routine the run calls (the census) and report the `top` most-called that no entry grades.
+void CtShadowSetCensus(int top);
 // One line per registered entry the run reached, then the details of the first mismatches, the ranges not compared,
 // and the `shadow:` total line.
 void CtShadowReport(FILE* f);
