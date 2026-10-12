@@ -7,6 +7,8 @@
 *.sfc
 *.smc
 *.srm
+# The F5 debug snapshots' log (src/field.c), written where the game runs
+ct_debug_log.txt
 *.dat
 dump.bin
 
