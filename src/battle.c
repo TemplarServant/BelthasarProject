@@ -2971,6 +2971,21 @@ int CtBattleAiCondSweep(uint8_t* mem, const uint8_t* rom, int op, int* unported)
   if (unported) *unported = c.unported;
   return c.unported ? -1 : (c.stopped ? 1 : 0);
 }
+// ...the walk and one condition handler run WHOLE, as the cartridge runs them: the commit a condition reaches (its
+// `JSR C1/8C3E`) runs to its end and the call returns -- no stop at C1/8C53. The routine-level shadow's entry points
+// (ct_shadow.c): it grades the calls the cartridge makes, which return. 0 = returned, -1 = met something unported.
+int CtBattleAiWalkWhole(uint8_t* mem, const uint8_t* rom, int id, int* unported) {
+  BtAi c = { NULL, mem, rom, 0, 0, 0 };
+  aiWalk(&c, id);
+  if (unported) *unported = c.unported;
+  return c.unported ? -1 : 0;
+}
+int CtBattleAiCondWhole(uint8_t* mem, const uint8_t* rom, int op, int* unported) {
+  BtAi c = { NULL, mem, rom, 0, 0, 0 };
+  aiCond(&c, op);
+  if (unported) *unported = c.unported;
+  return c.unported ? -1 : 0;
+}
 // ...C1/8C3E whole, with its eval handlers, from a condition handler's JSR (no host: the mover's state is not armed,
 // its WRAM is). 0 = returned, -1 = an unported resolver or eval handler.
 int CtBattleAiCommitSweep(uint8_t* mem, const uint8_t* rom, int* unported) {

@@ -40638,10 +40638,12 @@
       ],
       "expect": [
         "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 212 entries, 91 reached, 26926 calls, matched 24781, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 48"
+        "C0ACFD velocity+priority (ACFD)         calls 3150  matched 3150  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "shadow: 257 entries, 99 reached, 30100 calls, matched 27946, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57"
       ],
       "pin": [
         "^C1AF22 ",
+        "^C0ACFD ",
         "^shadow: \\d+ entries"
       ],
       "tier": "full",
@@ -40682,10 +40684,22 @@
           "find": "  r[0x01F0] = r[0x1801 + idx];                        // 523B / 52E6 / 537E",
           "replace": "  /* MUT: no 523B $F0 */",
           "why": "the move-toward-an-actor body's $01F0 staging (op 94's 1439 graded calls): proves the WRAM compare on the VM handlers"
+        },
+        {
+          "file": "src/move.c",
+          "find": "  r[0x1900 + idx] = r[0x01DD];                            // ADEB/ADED/ADEF  |  AF18/AF1A/AF1C",
+          "replace": "  r[0x1900 + idx] = (uint8_t)(r[0x01DD] + 1);             /* MUT: velocity off by one */",
+          "why": "C0/ACFD's velocity store $1900,X (3150 graded calls)"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  s[0xB242 + k] = s[0xB239];                                      // 8C43-8C46",
+          "replace": "  /* MUT: no 8C46 STA $B242,X */",
+          "why": "the AI commit's record of the condition it committed, $B242 + slot (the attract's 3 graded commits)"
         }
       ],
-      "note_pass": "the oracle plays the attract demo from power-on: 26926 calls to 91 of the 212 registered routines (C1/AF22 and the field VM's opcode handlers), every graded one equal to our C on a copy of its WRAM",
-      "notes": "THE ROUTINE-LEVEL SHADOW (docs/SHADOW_PROPOSAL.md; src/ct_shadow.c), S0 + S1's field VM. The oracle plays alone; at each arrival at a registered entry the harness copies its WRAM, runs our C on the copy, lets the oracle run to the return the caller pushed (the stack climbing above the entry S) and compares the whole 128 KB less the bytes the call pushed (and C3/0002's workspace $0308-$0316 for the VM handlers, as --sweepops), plus the registers the caller reads. Entries: C1/AF22 (battleRngBase; 92 calls from frame 3991, A's low byte and X) and the 211 opcode handlers of move.c g_ctVmOps run through CtFieldRunnerOne (X = the new IP, the carry). `skipped` 2097 is mostly op 95's body C0/5410 (1828) and op 94's C0/5215 (265) run as subroutines of ops B6/B5 with the same X and Y -- graded at B6's and B5's own entries, which match. `unported` 48 = the sound posts E8/EA/EB/EC, 8 op FF cases and 1 op 83 case CtFieldRunnerOne traps (the live VM runs them elsewhere: S4). Under the logical rule nothing was interrupted. A count change with mismatched 0 means the demo itself ran differently (a change in the oracle's run): re-pin only after confirming that. Six mutations, all killed."
+      "note_pass": "the oracle plays the attract demo from power-on: 30100 calls to 99 of the 257 registered routines (C1/AF22, C0/ACFD, the field VM's opcode handlers, the battle AI's walk, conditions and commit), every graded one equal to our C on a copy of its WRAM",
+      "notes": "THE ROUTINE-LEVEL SHADOW (docs/SHADOW_PROPOSAL.md; src/ct_shadow.c), S0 + S1. The oracle plays alone; at each arrival at a registered entry the harness copies its WRAM, runs our C on the copy, lets the oracle run to the return the caller pushed (the stack climbing above the entry S) and compares the whole 128 KB less the bytes the call pushed (and C3/0002's workspace $0308-$0316 for the VM handlers, as --sweepops), plus the registers the caller reads. Entries: C1/AF22 (battleRngBase; 92 calls, A's low byte and X); C0/ACFD (CtBuildVelocityPriority; 3150 calls, WRAM); C1/DC64 (battleHitCore; not reached by the attract); the 211 opcode handlers of move.c g_ctVmOps through CtFieldRunnerOne (X = the new IP, the carry); the battle AI's walk C1/AFD2, its 41 condition handlers (the ROM's table at C1/B80D) and the commit C1/8C3E, run WHOLE (CtBattleAiWalkWhole / CondWhole: --sweepaieval's stop at C1/8C53 is where the sweep cuts its comparison, inside the commit; the cartridge's calls return). `skipped` 2097 is mostly op 95's body C0/5410 (1828) and op 94's C0/5215 (265) run as subroutines of ops B6/B5 with the same X and Y -- graded at B6's and B5's own entries. `unported` 57 = 48 VM cases CtFieldRunnerOne traps (the sound posts E8/EA/EB/EC, 8 op FF, 1 op 83) and 3 AI commits (each counted at the walk, the commit and condition 00) whose target resolver only the live battle host has (battle.c's flag 1; resolvers 05/06/07/17). Under the logical rule nothing was interrupted. A count change with mismatched 0 means the demo itself ran differently: re-pin only after confirming that. Eight mutations, all killed."
     }
   ],
   "excluded": [

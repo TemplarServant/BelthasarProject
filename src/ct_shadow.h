@@ -36,12 +36,14 @@ typedef struct CtShadowEntry {
   int arg;                // the entry's own datum for its guard and adapter (a VM handler's opcode)
   int (*guard)(const struct CtShadowEntry* e, const uint8_t* wram, const CtShadowRegs* in);   // optional, peek-only
   // Runs the C function on `wram` (the oracle's 128 KB, $7E at offset 0) and fills the registers it hands back.
-  // Returns 0, or nonzero when the C function does not handle this case (counted `unported`, not compared).
+  // Returns CT_SH_RETURNS, or CT_SH_UNPORTED when the C function does not handle this case (counted `unported`, not
+  // compared).
   int (*run)(const struct CtShadowEntry* e, uint8_t* wram, const uint8_t* rom, long romLen, const CtShadowRegs* in,
              CtShadowRegs* out);
   unsigned outRegs;
   const CtShadowSkip* skip;   // optional, ended by { 0, 0, NULL }
 } CtShadowEntry;
+enum { CT_SH_RETURNS = 0, CT_SH_UNPORTED = 1 };
 
 // Arms the shadow on this oracle (one at a time). `dumpPrefix` (may be NULL): at the first mismatch, writes
 // <prefix>.pre.wram (the oracle's WRAM at the entry), <prefix>.oracle.wram and <prefix>.port.wram (at the return).

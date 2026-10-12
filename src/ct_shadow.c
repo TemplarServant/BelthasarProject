@@ -26,7 +26,7 @@ static int rngRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long r
   int r = CtBattleRngBaseProbe(w, rom, (in->a & 0xFF) - 1, in->x & 0xFF);   // its `maxv` is the count less one
   out->a = (uint16_t)((in->a & 0xFF00) | (r & 0xFF));
   out->x = (uint16_t)(w[0x2C] | (w[0x2D] << 8));
-  return 0;
+  return CT_SH_RETURNS;
 }
 
 // THE FIELD-SCRIPT OPCODE HANDLERS (move.c g_ctVmOps, CtFieldRunnerOne; --sweepops grades them offline). The runner
@@ -49,22 +49,81 @@ static int vmRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long ro
   (void)e;
   g_ctApuPort1 = in->apu[1]; g_ctApuPort3 = in->apu[3];   // ops ED and the C0/3CC6 poll read the SPC's mailbox
   CtHRet h;
-  if (CtFieldRunnerOne(w, rom, (int)romLen, w[0x016D], in->y, &h) >= 0) return 1;
+  if (CtFieldRunnerOne(w, rom, (int)romLen, w[0x016D], in->y, &h) >= 0) return CT_SH_UNPORTED;
   out->x = (uint16_t)h.ip;
   out->p = (uint8_t)((in->p & ~1) | (h.carry & 1));
-  return 0;
+  return CT_SH_RETURNS;
+}
+
+// C0/ACFD, THE VELOCITY + PRIORITY BUILDER (move.c CtBuildVelocityPriority; --sweepacfd). Entered with X = the object
+// index and D = $0100 (the VM handlers' `LDX $6D / ... / JSR C0/ACFD`); it reads the heading its caller staged at
+// $01EE. Graded on WRAM alone: its callers reload what they need.
+static int acfdGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; (void)w; return in->dp == 0x0100 && in->db == 0x00 && in->x < 0x80 && !(in->x & 1);
+}
+static int acfdRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                   CtShadowRegs* out) {
+  (void)e; (void)romLen; (void)out;
+  CtBuildVelocityPriority(w, rom, in->x);
+  return CT_SH_RETURNS;
+}
+
+// C1/DC64, THE PHYSICAL TO-HIT ROLL (battle.c battleHitCore; --sweephitroll). The caller stages hit in $16 and evade
+// in $18; the routine hands back its verdict in $16, the roll in $18 and zero in $AE4F -- all WRAM. Its draw is a
+// JSR C1/AF22, which the shadow grades on its own as well.
+static int battleGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; (void)w; return in->dp == 0x0000 && in->db == 0x7E;
+}
+static int hitRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                  CtShadowRegs* out) {
+  (void)e; (void)romLen; (void)in; (void)out;
+  int pct, roll; CtBattleHitCoreProbe(w, rom, &pct, &roll);
+  return CT_SH_RETURNS;
+}
+
+// THE ENEMY AI (battle.c aiWalk / aiCond / aiCommit; --sweepaieval). The walk C1/AFD2 is entered with A = the enemy's
+// AI id (C1/8C0C's TDC leaves B = 0); each condition handler is reached by the walker's `ASL A / TAX / JSR ($B80D,X)`
+// (B006 / B021) with X = the op doubled and the cursor $B1D2 on its op byte; the commit C1/8C3E is a condition's JSR
+// (condition 00 is `JSR C1/8C3E / RTS`). Every one of them returns: the sweep's stop at C1/8C53 is where IT cuts the
+// comparison, inside the commit, not where the cartridge's call ends -- so the shadow runs the C whole (the
+// *Whole entry points), commit included. What the C does not port is flagged and counted `unported`.
+static int aiWalkRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                     CtShadowRegs* out) {
+  (void)e; (void)romLen; (void)out;
+  int unp = 0;
+  return CtBattleAiWalkWhole(w, rom, in->a & 0xFF, &unp) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
+}
+static int aiCondGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)w; return in->dp == 0x0000 && in->db == 0x7E && in->x == e->arg * 2;
+}
+static int aiCondRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                     CtShadowRegs* out) {
+  (void)romLen; (void)in; (void)out;
+  int unp = 0;
+  return CtBattleAiCondWhole(w, rom, e->arg, &unp) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
+}
+static int aiCommitRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                       CtShadowRegs* out) {
+  (void)e; (void)romLen; (void)in; (void)out;
+  int unp = 0;
+  return CtBattleAiCommitSweep(w, rom, &unp) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
 }
 
 static const CtShadowEntry k_fixed[] = {
   { 0xC1AF22, "battle RNG (battleRngBase)", 0x20, 0x20, 0, 0, rngGuard, rngRun, CT_SH_A8 | CT_SH_X16, NULL },
+  { 0xC0ACFD, "velocity+priority (ACFD)", 0x30, 0x20, 0, 0, acfdGuard, acfdRun, 0, NULL },
+  { 0xC1DC64, "battle hit roll (battleHitCore)", 0x30, 0x20, 0, 0, battleGuard, hitRun, 0, NULL },
+  { 0xC1AFD2, "battle AI walk (aiWalk)", 0x30, 0x20, 0, 0, battleGuard, aiWalkRun, 0, NULL },
+  { 0xC18C3E, "battle AI commit (aiCommit)", 0x30, 0x20, 0, 0, battleGuard, aiCommitRun, 0, NULL },
 };
+#define AI_NCOND 0x29   // the condition ops 00-28 (--sweepaieval's range; op 0F, C1/2C02's path test, is unported)
 #define SH_NFIXED ((int)(sizeof k_fixed / sizeof k_fixed[0]))
-#define SH_MAX (SH_NFIXED + CT_VM_NOPS)
+#define SH_MAX (SH_NFIXED + CT_VM_NOPS + AI_NCOND)
 
 static CtShadowEntry s_entries[SH_MAX]; static int s_n;
-static char s_names[CT_VM_NOPS][40];
+static char s_names[CT_VM_NOPS + AI_NCOND][40];
 
-static void buildRegistry(void) {
+static void buildRegistry(const uint8_t* rom) {
   s_n = 0;
   for (int i = 0; i < SH_NFIXED; i++) s_entries[s_n++] = k_fixed[i];
   for (int i = 0; i < CT_VM_NOPS; i++) {
@@ -72,6 +131,13 @@ static void buildRegistry(void) {
     // m 8-bit, x 16-bit: the runner's 5A9E REP #10 and its SEP #20
     CtShadowEntry e = { 0xC00000u | g_ctVmOps[i].addr, s_names[i], 0x30, 0x20, 0, g_ctVmOps[i].op, vmGuard, vmRun,
                         CT_SH_X16 | CT_SH_C, k_vmSkip };
+    s_entries[s_n++] = e;
+  }
+  for (int op = 0; op < AI_NCOND; op++) {        // the handler addresses, from the ROM's own table at C1/B80D
+    char* nm = s_names[CT_VM_NOPS + op];
+    snprintf(nm, 40, "battle AI condition %02X", op);
+    uint16_t hand = (uint16_t)(rom[0x01B80D + op * 2] | (rom[0x01B80D + op * 2 + 1] << 8));
+    CtShadowEntry e = { 0xC10000u | hand, nm, 0x30, 0x20, 0, op, aiCondGuard, aiCondRun, 0, NULL };
     s_entries[s_n++] = e;
   }
 }
@@ -183,19 +249,25 @@ static void shOp(void* mem, uint32_t pc) {
     break;
   }
   if (!(s_bits[pc >> 3] & (1u << (pc & 7)))) return;
-  int idx = findEntry(pc);
-  if (idx < 0) return;
+  int first = findEntry(pc);
+  if (first < 0) return;
+  CtShadowRegs in = { c->a, c->x, c->y, c->dp, c->db, cpuP(c),
+                      { s->apu->outPorts[0], s->apu->outPorts[1], s->apu->outPorts[2], s->apu->outPorts[3] } };
+  // Several entries may share an address (two AI condition ops on one handler): the first whose convention holds.
+  int idx = -1;
+  for (int i = first; i < s_n && idx < 0; i++)
+    if (s_entries[i].addr == pc && !c->e && (in.p & s_entries[i].pMask) == s_entries[i].pValue &&
+        (!s_entries[i].guard || s_entries[i].guard(&s_entries[i], s->ram, &in))) idx = i;
+  if (idx < 0) { s_stats[first].calls++; s_stats[first].skipped++; return; }
   const CtShadowEntry* e = &s_entries[idx];
   ShStats* st = &s_stats[idx];
   st->calls++;
-  CtShadowRegs in = { c->a, c->x, c->y, c->dp, c->db, cpuP(c),
-                      { s->apu->outPorts[0], s->apu->outPorts[1], s->apu->outPorts[2], s->apu->outPorts[3] } };
-  if (c->e || (in.p & e->pMask) != e->pValue || (e->guard && !e->guard(e, s->ram, &in))) { st->skipped++; return; }
   if (s_depth == SH_DEPTH) { s_overflow++; return; }
   int d = s_depth;
   memcpy(s_work[d], s->ram, SH_WRAM);
   CtShadowRegs out = in;
-  if (e->run(e, s_work[d], s_rom, s_romLen, &in, &out)) { st->unported++; return; }
+  int how = e->run(e, s_work[d], s_rom, s_romLen, &in, &out);
+  if (how == CT_SH_UNPORTED) { st->unported++; return; }
   if (s_dump && !s_dumped) memcpy(s_pre[d], s->ram, SH_WRAM);   // only --dump reads it
   s_depth++;
   ShActive* a = &s_act[d];
@@ -211,7 +283,7 @@ static void shInt(void* mem) {
 }
 
 void CtShadowInstall(Snes* s, const char* dumpPrefix) {
-  buildRegistry();
+  buildRegistry(s->cart->rom);
   s_snes = s; s_rom = s->cart->rom; s_romLen = (long)s->cart->romSize;
   s_dump = dumpPrefix; s_dumped = 0; s_depth = 0; s_overflow = 0; s_nDetail = 0;
   memset(s_stats, 0, sizeof s_stats); memset(s_bits, 0, sizeof s_bits);
