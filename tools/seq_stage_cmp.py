@@ -35,7 +35,7 @@ PROBE = {(1, 1): 2840, (1, 2): 4540, (1, 3): 5565, (1, 4): 7549, (1, 5): 8813}
 
 
 def oracle(frame, tag):
-    out = 'build/_seqcmp_%s.raw' % tag
+    out = 'build/_seqcmp_%s_%d.raw' % (tag, os.getpid())   # per process: two checks run this tool at once
     for p in (out, out + '.wram'):
         if os.path.exists(p):
             os.remove(p)
@@ -63,7 +63,7 @@ def locate(entry, page):
 
 
 def compare(entry, page, setup, k):
-    shot = 'build/_seqcmp_ours.raw'
+    shot = 'build/_seqcmp_ours_%d.raw' % os.getpid()
     if os.path.exists(shot):
         os.remove(shot)
     subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--seqstage', str(entry), str(k), str(page)],
@@ -91,4 +91,9 @@ if __name__ == '__main__':
     e, p = int(sys.argv[1]), int(sys.argv[2])
     base = locate(e, p)
     worst = max(compare(e, p, base, int(a)) for a in sys.argv[3:])
+    for tag in ('probe', 'orc', 'ours'):
+        for x in ('', '.wram', '.vram', '.oam'):
+            f = 'build/_seqcmp_%s_%d.raw%s' % (tag, os.getpid(), x)
+            if os.path.exists(f):
+                os.remove(f)
     sys.exit(0 if worst == 0 else 1)
