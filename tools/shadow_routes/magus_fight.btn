@@ -5,8 +5,9 @@
 # Grammar: --btnscript's `hexbtn:frames` (LakeSnes serial order: B=1 Y=2 Sel=4 Start=8 Up=10 Down=20 Left=40 Right=80
 # A=100 X=200 L=400 R=800), `#` comments, `(tokens)*N` repeats a group.
 
-# Power-on to the load screen (Start at 133; the A at 334 lands before the screen takes input), which opens on the
-# save's last slot (3): Up twice, A on slot 1 at frame 952. The party stands at the castle's save point (loc 0AE).
+# Power-on to the load screen: the Start at 133 lands before the title takes input (the picture at 900 is the same
+# without it); the A at 334 opens the screen, on the save's last slot (3): Up twice, A on slot 1 at frame 952.
+# The party stands at the castle's save point (loc 0AE).
 0:133,8:1,0:200,100:1,0:565
 0:10,10:1,0:20,10:1,0:20,100:1,0:547
 

@@ -15538,7 +15538,7 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
 // chained from a battery save one leg at a time.
 static int runShadow(int argc, char** argv) {
   const char* romPath = DEFAULT_ROM; const char* statePath = NULL; const char* script = NULL; const char* dump = NULL;
-  const char* stateOut = NULL;
+  const char* stateOut = NULL; uint32_t dumpAddr = 0;
   int frames = 3000;
   for (int i = 2; i < argc; i++) {
     if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
@@ -15546,6 +15546,7 @@ static int runShadow(int argc, char** argv) {
     else if (!strcmp(argv[i], "--btnscript") && i + 1 < argc) script = argv[++i];
     else if (!strcmp(argv[i], "--dump") && i + 1 < argc) dump = argv[++i];
     else if (!strcmp(argv[i], "--stateout") && i + 1 < argc) stateOut = argv[++i];
+    else if (!strcmp(argv[i], "--dumpaddr") && i + 1 < argc) dumpAddr = (uint32_t)strtoul(argv[++i], NULL, 16);
     else if (!strcmp(argv[i], "--btnfile") && i + 1 < argc) {
       // A route file (tools/shadow_routes/): the --btnscript grammar over any number of lines; `#` starts a comment, and
       // `(tokens)*N` repeats a group N times (a pad pattern held through a fight or a dialogue).
@@ -15592,7 +15593,7 @@ static int runShadow(int argc, char** argv) {
   }
   printf("shadow: %d frame(s) from %s%s%s\n", frames, statePath ? statePath : "power-on",
          getenv("CT_ORACLE_LOGICAL") ? ", logical frames" : "", script ? ", with a pad script" : "");
-  CtShadowInstall(s, dump);
+  CtShadowInstall(s, dump, dumpAddr);
   CtBtnScript bs = { script }; uint16_t btn = 0; int left = 0;
   for (int f = 0; f < frames; f++) {
     while (left <= 0 && ctBtnNext(&bs, &btn, &left)) {}

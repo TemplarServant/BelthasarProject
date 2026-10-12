@@ -159,7 +159,7 @@ A 2 MB bitmap over the 24-bit address space keeps the per-opcode cost to one bit
 | S0 | Hook slot, registry, return/nesting/interrupt logic, report, one entry (C1/AF22 battle RNG) | the attract demo runs with `mismatched 0` and the counts are plausible |
 | S1 (field VM done) | Register what the sweeps already grade: the 211 VM ops through `CtFieldRunnerOne`, C0/ACFD, C1/DC64, the AI walk/conditions/commit, the menu inventory and equip | each one shadowed over the attract demo and the recipe states, and a suite check pinned |
 | S2 (first route done) | Battery saves as inputs, plus the first three routes (a boss fight, a shop, a late-game dungeon) | the suite runs the shadow over them; mismatches become ROADMAP entries |
-| S3 | Census and `--shadow-poison` | a ranked list of ungraded routines; every `deadBytes` declaration has evidence |
+| S3 (liveness watch done) | Census and `--shadow-poison` | a ranked list of ungraded routines; every `deadBytes` declaration has evidence |
 | S4 | Make the live engine run the registered functions where it still runs its own copy (`step()`'s mirrors in `CtScene`, `src/ct_vm.c:1675-1764`) | what the shadow proves is what the port runs |
 
 ## What it does not do
@@ -225,8 +225,45 @@ A 2 MB bitmap over the 24-bit address space keeps the per-opcode cost to one bit
   add's empty-slot search with it, where the port stopped at the bag's $F2, and the add's `ADC $04CB` is 8-bit before
   its cap of 99. menu.c now does all of it; the suite (quick 588/0/0, the 67 full-tier menu/shop/item checks) stays green,
   and two mutations pin the find's record and the remove's emptied slot.
-- Next for S2: a shop and the save screen (Equip's apply C2/9CC1 and the save load FF/FAA3 to register), the dactyl ride,
-  the endings, and the boss fights zdiemer's library lacks.
+- Next for S2: a shop (buying and selling reach the inventory routines with counts above 1), the dactyl ride, the
+  endings, and the boss fights zdiemer's library lacks. Equip's apply C2/9CC1 is not a routine to shadow (after its
+  two inventory calls it ends in `JMP C2/8255`, the menu's state machine); the save load FF/FAA3 builds an MVN in WRAM
+  ($9690) and stages its table at $9890, scratch the C does not keep -- it waits for the liveness watch to reach past
+  the direct pages.
+
+## S1, the rest of the sweeps' routines, as built
+
+A survey of every `--sweep*` mode (its ROM entry, C function, convention, compare and hazards) picked the routines a
+live call can be graded on. Registered: C0/ABA2 (the move heading), C0/AB45 (the screen position), C0/A98A (the draw
+list's unlink), C0/C98A (the animation timer), C0/9E84 (the player's facing and frame), C0/B701 (the animation
+release), C0/CAD9 (one drain visit), C0/305D (the arrival snap), C1/C90B and C1/C92A (the battle's multiply and divide),
+C1/C8F7 (the seat redirect), C1/D174 (the stat fetch), C1/B279 (the dead flag) and C1/F205 (the victory's tech pass).
+The field's per-object routines read their object from $016D (`LDX $6D`), as the ROM does, and their widths are
+the live calls' (C0/AB45 is entered with X 8-bit, where its sweep used 16).
+
+- **What it found.** C0/B701's OAM emitters keep their high-table accumulator in the direct page -- `STA $E6` (the
+  piece's X bit 8), `A = ($E5 << 2) | $E6`, `STA $E5` but on the group's last piece -- and from the second group on
+  the loop's end too (`$E7` = the record base + $20 per group). The port computed both in locals: 404 calls left
+  $01E5/$01E7 otherwise. move.c's ctOamEmit now stores them; C0/B701 matches 18573/18573 on the attract and
+  37534/37534 on the Magus route.
+
+## S3, the liveness watch, as built
+
+A call whose registers match but whose WRAM differs only in the direct pages ($0000-$01FF, the engine's scratch, which
+no DMA reads) is not graded at once. The harness hooks the oracle CPU's reads and writes (`cpu->read` / `cpu->write`,
+the WRAM port $2180 resolved through its latch) and watches the differing bytes: the cartridge's next access decides.
+A write to every one of them -- nothing ever read what our C left there -- makes the call `dead`, and its addresses
+are listed (`dead scratch <entry>: ...`); a read first, a read-modify-write included, makes it `mismatched`, with the
+reading PC. Calls the run ends on before their bytes are touched are `unresolved`. A difference outside the direct
+pages, or in a register, is graded at once as before.
+
+- C0/CAD9's 2905 attract differences are all dead: $01C5-$01C6, $01CD-$01D9 and $01EE, the drain visit's temporaries
+  (the frame lookup C0/CB3A's $D6/$D9, the template builder's $C9-$D8, the copier's $C5), rewritten by the next
+  user every time; the same set on the Magus and menu routes. The evidence is the cartridge's own access order on
+  every call the runs make, not an assumption -- and the mutations that change a byte some code does read (the RNG's
+  cursor $26) stay killed through the watch's read arm.
+- The watch is the S3 mechanism the proposal asked for (`--shadow-poison`), measured instead of poisoned: no second run
+  of the oracle, so no question of the logical rule's state between two runs.
 
 ## Fit with the mandate
 

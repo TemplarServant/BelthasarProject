@@ -5797,7 +5797,14 @@ static void ctOamEmit(uint8_t* r, int cls, int pieces, int instantiate) {
   static const int HIDST[3][3] = { { 0x4F00, 0, 0 }, { 0x4F00, 0x4F01, 0 },
                                    { 0x4F00, 0x4F01, 0x4B40 } };
   for (int g = 0; g * 4 < pieces; g++) {
-  int hi = 0;
+  // The accumulator lives in the direct page: B7B9 `STA $E6` (this piece's X bit 8), B7BB-B7BF `A = ($E5 << 2) |
+  // $E6`, and B7C5 `STA $E5` for every piece BUT the group's last (`CPX $D9 / BEQ` comes first). So a group leaves
+  // $E5 = the bits of its first three pieces and $E6 = the last piece's bit -- the routine-level shadow measured the
+  // port leaving $01E5 at 00 where the cartridge had 11 (C0/B701, the attract, docs/SHADOW_PROPOSAL.md).
+  int hi = 0, hiBeforeLast = 0, bit = 0;
+  // From the second group on the loop's end is a direct-page word too: BAB6 `STZ $E5`, then BABA-BAC0 `LDA $D9 / CLC /
+  // ADC #0020 / STA $E7` (16-bit; the third group's C087 adds #0040), the `CPX $E7` the group's last piece meets.
+  if (g) { int eb = (base + 0x20 * g) & 0xFFFF; r[0x01E7] = (uint8_t)eb; r[0x01E8] = (uint8_t)(eb >> 8); }
   for (int e = g * 4 + 3; e >= g * 4; e--) {                  // B7A6 starts at the LAST piece
     int o = e * 8;
     int xd;
@@ -5809,8 +5816,11 @@ static void ctOamEmit(uint8_t* r, int cls, int pieces, int instantiate) {
     }
     int s = (xd + sx) & 0xFFFF;                               // B7AF ADC $C3
     CT_LIVE(o) = (uint8_t)s;                                  // B7B3 STA $4BC0,X -> +0
-    hi = ((hi << 2) | ((s >> 8) & 1)) & 0xFF;                 // B7B6-B7BF, 2 bits per sprite
+    bit = (s >> 8) & 1;                                       // B7B6 XBA / B7B7 AND #01 / B7B9 STA $E6
+    hiBeforeLast = hi;
+    hi = ((hi << 2) | bit) & 0xFF;                            // B7BB-B7BF, 2 bits per sprite
   }
+  r[0x01E5] = (uint8_t)hiBeforeLast; r[0x01E6] = (uint8_t)bit;   // B7C5 STA $E5 (not on the last) / B7B9 STA $E6
   r[0x10000 + ((HIDST[cls][g] + w) & 0xFFFF)] = (uint8_t)(hi | 0xAA);   // B7D0 ORA / B7D4 STA
   }
   // The Y half. `mode` 0 = B7DD/B922 ($C6 != 0), 1 = B83A/B9A5 ($C6 == 0 and screen-Y bit7 set),

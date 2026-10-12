@@ -46,8 +46,9 @@ typedef struct CtShadowEntry {
 enum { CT_SH_RETURNS = 0, CT_SH_UNPORTED = 1 };
 
 // Arms the shadow on this oracle (one at a time). `dumpPrefix` (may be NULL): at the first mismatch, writes
-// <prefix>.pre.wram (the oracle's WRAM at the entry), <prefix>.oracle.wram and <prefix>.port.wram (at the return).
-void CtShadowInstall(Snes* s, const char* dumpPrefix);
+// <prefix>.pre.wram (the oracle's WRAM at the entry), <prefix>.oracle.wram and <prefix>.port.wram (at the return);
+// `dumpAddr` (0 = any) limits it to the first mismatch of the entry at that address.
+void CtShadowInstall(Snes* s, const char* dumpPrefix, uint32_t dumpAddr);
 void CtShadowUninstall(void);
 // One line per registered entry the run reached, then the details of the first mismatches, the ranges not compared,
 // and the `shadow:` total line.

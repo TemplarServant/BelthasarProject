@@ -5188,8 +5188,8 @@
       "used_by": [
         "shadow-route-magus-fight"
       ],
-      "sha256": "9dff5eb2c4ad4110dd8ba5f390a1a3711a426b4d36d8f710b167e802a39da31e",
-      "size": 1624,
+      "sha256": "d84a7627ecad5c811488ddafa0da46477a99500ebde708fec3b3a9a62fdac3c0",
+      "size": 1677,
       "present_when_recorded": true
     },
     {
@@ -5200,8 +5200,8 @@
       "used_by": [
         "shadow-route-menu-items-equip"
       ],
-      "sha256": "41c79e314c1243e668f0c9c4259b7dde3a9530b2dd1a819e7f8e4b7e50096a54",
-      "size": 1878,
+      "sha256": "41c500faba1925bce1b741a115140032df02d8483fd66c75c27dda5bee52736b",
+      "size": 1931,
       "present_when_recorded": true
     }
   ]

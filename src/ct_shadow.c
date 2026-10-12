@@ -8,6 +8,7 @@
 #include "battle.h"
 #include "move.h"
 #include "menu.h"
+#include "oam.h"
 
 #define SH_WRAM  0x20000
 #define SH_DEPTH 16
@@ -125,6 +126,92 @@ static int invRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long r
   return CT_SH_RETURNS;
 }
 
+// ---- The routines the --sweep* modes grade offline (src/main.c), each at its live entry ---------------------------
+
+// THE FIELD'S PER-OBJECT ROUTINES. Each opens with `LDX $6D` (C0/9E84 `LDY $6D`): the object is the one the caller
+// latched in $016D (D = $0100), not a register, so the adapters read it there.
+static int fieldGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; (void)w; return in->dp == 0x0100 && in->db == 0x00;
+}
+static int carryOut(const CtShadowRegs* in, CtShadowRegs* out, int c) {
+  out->p = (uint8_t)((in->p & ~1) | (c ? 1 : 0)); return CT_SH_RETURNS;
+}
+// C0/ABA2, the heading toward ($01F2,$01F3) from ($01F0,$01F1) (CtMoveDirAngle; --sweepaba2, all WRAM).
+static int angleRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                    CtShadowRegs* out) {
+  (void)e; (void)romLen; (void)in; (void)out; CtMoveDirAngle(w, rom); return CT_SH_RETURNS;
+}
+// C0/AB45 the screen position (CtObjScreenPos; --sweepscreen), C0/A98A the draw list's unlink (CtObjListUnlink;
+// --sweeplist), C0/C98A the animation timer (CtAnimTimerTick; --sweepc98a), C0/9E84 the player's facing and frame
+// (CtPlayerAnimSelect; --sweepanim).
+static int screenRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                     CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)in; (void)out; CtObjScreenPos(w, w[0x016D]); return CT_SH_RETURNS;
+}
+static int unlinkRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                     CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)in; (void)out; CtObjListUnlink(w, w[0x016D]); return CT_SH_RETURNS;
+}
+static int timerRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                    CtShadowRegs* out) {
+  (void)e; (void)in; (void)out; CtAnimTimerTick(w, rom, (int)romLen, w[0x016D]); return CT_SH_RETURNS;
+}
+static int pAnimRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                    CtShadowRegs* out) {
+  (void)e; (void)in; (void)out; CtPlayerAnimSelect(w, rom, (int)romLen, w[0x016D]); return CT_SH_RETURNS;
+}
+// C0/B701 the animation release (CtAnimRelease: 1 SEC skip / 0 CLC draw; --sweepdrain), C0/CAD9 one drain visit
+// (CtAnimDrainVisit: 1 SEC / 0 CLC / -1 unported; --sweepcad9), C0/305D the arrival snap (--sweepsnap): the carry.
+static int releaseRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                      CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; return carryOut(in, out, CtAnimRelease(w, w[0x016D]));
+}
+static int drainRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                    CtShadowRegs* out) {
+  (void)e; int r = CtAnimDrainVisit(w, rom, (int)romLen, w[0x016D]);
+  return r < 0 ? CT_SH_UNPORTED : carryOut(in, out, r);
+}
+static int snapRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                   CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; return carryOut(in, out, ctSweepSnapCall(w, w[0x016D]));
+}
+
+// THE BATTLE'S ARITHMETIC AND BOOKKEEPING (D = 0, DB = $7E: battleGuard).
+// C1/C90B the 16x16 multiply (CtBattleMul16Probe -> the carry out; `REP #20 / LDX #0010`, so X 16-bit) and C1/C92A the
+// 32/16 divide (CtBattleDiv32Probe; `PHP / REP #30 ... PLP`, so the carry comes back as it went in) -- --sweepmuldiv,
+// all WRAM.
+static int mulRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                  CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; return carryOut(in, out, CtBattleMul16Probe(w, in->p & 1));
+}
+static int divRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                  CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)out; CtBattleDiv32Probe(w, in->p & 1); return CT_SH_RETURNS;
+}
+// C1/C8F7 the seat redirect (CtBattleRedirectProbe: A = the seat in, the seat out; --sweepredirect).
+static int redirectRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                       CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen;
+  out->a = (uint16_t)((in->a & 0xFF00) | (CtBattleRedirectProbe(w, in->a & 0xFF) & 0xFF)); return CT_SH_RETURNS;
+}
+// C1/D174 the stat fetch (CtBattleStatFetchProbe; --sweepstatfetch, all WRAM).
+static int statRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                   CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)in; (void)out; CtBattleStatFetchProbe(w); return CT_SH_RETURNS;
+}
+// C1/B279 a combatant's dead flag (CtBattleDeadFlagProbe; Y = the combatant; --sweepdeadflag): arm 4, the PC
+// lifeline, runs on into host-side work the C does not port.
+static int deadRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                   CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)out;
+  return CtBattleDeadFlagProbe(w, in->y & 0xFF) == 4 ? CT_SH_UNPORTED : CT_SH_RETURNS;
+}
+// C1/F205 the victory's tech pass (CtBattleTechPass, its byte from $7F:01E0; --sweeptechpass).
+static int techPassRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                       CtShadowRegs* out) {
+  (void)e; (void)romLen; (void)in; (void)out; CtBattleTechPass(w, rom, w[0x101E0]); return CT_SH_RETURNS;
+}
+
 static const CtShadowEntry k_fixed[] = {
   { 0xC28791, "inventory add (CtMenuInvAdd)", 0x00, 0x00, 0, 0, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC287D5, "inventory remove (CtMenuInvRemove)", 0x00, 0x00, 0, 1, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
@@ -133,6 +220,20 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC1DC64, "battle hit roll (battleHitCore)", 0x30, 0x20, 0, 0, battleGuard, hitRun, 0, NULL },
   { 0xC1AFD2, "battle AI walk (aiWalk)", 0x30, 0x20, 0, 0, battleGuard, aiWalkRun, 0, NULL },
   { 0xC18C3E, "battle AI commit (aiCommit)", 0x30, 0x20, 0, 0, battleGuard, aiCommitRun, 0, NULL },
+  { 0xC0ABA2, "move heading (CtMoveDirAngle)", 0x30, 0x20, 0, 0, fieldGuard, angleRun, 0, NULL },
+  { 0xC0AB45, "screen position (CtObjScreenPos)", 0x00, 0x00, 0, 0, fieldGuard, screenRun, 0, NULL },
+  { 0xC0A98A, "draw-list unlink (CtObjListUnlink)", 0x00, 0x00, 0, 0, fieldGuard, unlinkRun, 0, NULL },
+  { 0xC0C98A, "anim timer (CtAnimTimerTick)", 0x30, 0x30, 0, 0, fieldGuard, timerRun, 0, NULL },
+  { 0xC09E84, "player anim (CtPlayerAnimSelect)", 0x30, 0x30, 0, 0, fieldGuard, pAnimRun, 0, NULL },
+  { 0xC0B701, "anim release (CtAnimRelease)", 0x30, 0x20, 0, 0, fieldGuard, releaseRun, CT_SH_C, NULL },
+  { 0xC0CAD9, "anim drain visit (CtAnimDrainVisit)", 0x30, 0x30, 0, 0, fieldGuard, drainRun, CT_SH_C, NULL },
+  { 0xC0305D, "arrival snap (ctArriveSnap305D)", 0x00, 0x00, 0, 0, fieldGuard, snapRun, CT_SH_C, NULL },
+  { 0xC1C90B, "battle mul16 (battleMul16)", 0x10, 0x00, 0, 0, battleGuard, mulRun, CT_SH_C, NULL },
+  { 0xC1C92A, "battle div32 (battleDiv32)", 0x00, 0x00, 0, 0, battleGuard, divRun, CT_SH_C, NULL },
+  { 0xC1C8F7, "battle seat redirect", 0x20, 0x20, 0, 0, battleGuard, redirectRun, CT_SH_A8, NULL },
+  { 0xC1D174, "battle stat fetch", 0x30, 0x20, 0, 0, battleGuard, statRun, 0, NULL },
+  { 0xC1B279, "battle dead flag", 0x30, 0x20, 0, 0, battleGuard, deadRun, 0, NULL },
+  { 0xC1F205, "battle tech pass", 0x30, 0x20, 0, 0, battleGuard, techPassRun, 0, NULL },
 };
 #define AI_NCOND 0x29   // the condition ops 00-28 (--sweepaieval's range; op 0F, C1/2C02's path test, is unported)
 #define SH_NFIXED ((int)(sizeof k_fixed / sizeof k_fixed[0]))
@@ -162,7 +263,7 @@ static void buildRegistry(const uint8_t* rom) {
 
 // ---- State -----------------------------------------------------------------------------------------------------
 
-typedef struct { long calls, matched, mismatched, interrupted, exits, skipped, unported, skipDiffer; } ShStats;
+typedef struct { long calls, matched, mismatched, interrupted, exits, skipped, unported, skipDiffer, dead, unresolved; } ShStats;
 typedef struct {
   const CtShadowEntry* e; int idx;
   uint16_t entrySp, minSp; uint32_t retPc;
@@ -172,7 +273,7 @@ typedef struct {
 
 static Snes* s_snes;
 static const uint8_t* s_rom; static long s_romLen;
-static const char* s_dump; static int s_dumped;
+static const char* s_dump; static int s_dumped; static uint32_t s_dumpAddr;
 static ShStats s_stats[SH_MAX];
 static ShActive s_act[SH_DEPTH]; static int s_depth; static long s_overflow;
 static uint8_t s_work[SH_DEPTH][SH_WRAM], s_pre[SH_DEPTH][SH_WRAM];
@@ -181,6 +282,65 @@ static char s_detail[SH_DETAILS][256]; static int s_nDetail;
 
 static void addDetail(const char* fmtd) {
   if (s_nDetail < SH_DETAILS) { strncpy(s_detail[s_nDetail], fmtd, sizeof s_detail[0] - 1); s_nDetail++; }
+}
+
+// THE LIVENESS WATCH (docs/SHADOW_PROPOSAL.md, S3). A call whose registers match but whose WRAM differs only in the
+// direct pages ($0000-$01FF -- the scratch every routine of the engine stages through; no DMA reads them) is not
+// graded at once: the harness watches those bytes on the ORACLE. If the cartridge's next access to each of them is a
+// write, the difference is dead scratch -- no code ever read what our C left there -- and the call counts `dead`, its
+// addresses listed on the report. If the cartridge READS one first (a read-modify-write included), the value mattered:
+// the call counts `mismatched`. A difference anywhere else is graded at once, as before. Calls whose bytes were never
+// touched again by the end of the run are `unresolved`.
+#define SH_WATCH_TOP 0x200
+#define SH_REC 65536
+#define SH_REC_ADDRS 48
+typedef struct {
+  int idx, remaining, done, n; long callNo; uint32_t frame; uint16_t entrySp; CtShadowRegs in;
+  uint16_t addr[SH_REC_ADDRS]; uint8_t oracle[SH_REC_ADDRS], port[SH_REC_ADDRS];
+} ShRec;
+static ShRec s_rec[SH_REC]; static int s_recNext, s_recLive;
+static int s_owner[SH_WATCH_TOP];               // the record watching the byte, +1; 0 = none
+static uint8_t s_deadAt[SH_MAX][SH_WATCH_TOP / 8];
+static CpuReadHandler s_origRead; static CpuWriteHandler s_origWrite;
+
+static void recClose(ShRec* rc) { rc->done = 1; s_recLive--; }
+// The cartridge touched watched byte k: a read proves the call's difference live, a write retires the byte.
+static void watchHit(Snes* s, int k, int isRead) {
+  ShRec* rc = &s_rec[s_owner[k] - 1];
+  s_owner[k] = 0;
+  if (rc->done) return;
+  ShStats* st = &s_stats[rc->idx];
+  if (isRead) {
+    char buf[256];
+    st->mismatched++;
+    snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X S=%04X: %d WRAM byte(s), "
+             "first %02X:%04X oracle %02X port %02X; READ by the cartridge at %02X:%04X (frame %u)",
+             s_entries[rc->idx].addr, s_entries[rc->idx].name, rc->callNo, rc->frame, rc->in.a, rc->in.x, rc->in.y,
+             rc->entrySp, rc->n, 0x7E, rc->addr[0], rc->oracle[0], rc->port[0], s->cpu->k, s->cpu->pc, s->frames);
+    addDetail(buf);
+    recClose(rc);
+  } else if (--rc->remaining == 0) {
+    st->dead++;
+    for (int j = 0; j < rc->n; j++) s_deadAt[rc->idx][rc->addr[j] >> 3] |= (uint8_t)(1u << (rc->addr[j] & 7));
+    recClose(rc);
+  }
+}
+static int wramOffset(const Snes* s, uint32_t adr) {
+  uint8_t bk = (uint8_t)(adr >> 16); uint16_t lo = (uint16_t)adr;
+  if (bk == 0x7E || bk == 0x7F) return (int)(adr - 0x7E0000);
+  if (bk < 0x40 || (bk >= 0x80 && bk < 0xC0)) {
+    if (lo < 0x2000) return lo;
+    if (lo == 0x2180) return (int)(s->ramAdr & 0x1FFFF);   // WMDATA: the WRAM port's latch
+  }
+  return -1;
+}
+static uint8_t shRead(void* mem, uint32_t adr) {
+  if (s_recLive) { int k = wramOffset((Snes*)mem, adr); if (k >= 0 && k < SH_WATCH_TOP && s_owner[k]) watchHit((Snes*)mem, k, 1); }
+  return s_origRead(mem, adr);
+}
+static void shWrite(void* mem, uint32_t adr, uint8_t val) {
+  if (s_recLive) { int k = wramOffset((Snes*)mem, adr); if (k >= 0 && k < SH_WATCH_TOP && s_owner[k]) watchHit((Snes*)mem, k, 0); }
+  s_origWrite(mem, adr, val);
 }
 static uint8_t cpuP(const Cpu* c) {
   return (uint8_t)((c->n << 7) | (c->v << 6) | (c->mf << 5) | (c->xf << 4) | (c->d << 3) | (c->i << 2) | (c->z << 1) | c->c);
@@ -232,6 +392,35 @@ static void finish(Snes* s, ShActive* a, uint32_t pc) {
   if ((o & CT_SH_C) && (int)c->c != (a->out.p & 1)) {
     regBad = 1; snprintf(regs + strlen(regs), sizeof regs - strlen(regs), " carry oracle %d port %d", c->c, a->out.p & 1); }
   if (!nDiff && !regBad) { st->matched++; return; }
+  if (!regBad && nDiff <= SH_REC_ADDRS) {           // the liveness watch, when every difference is direct-page scratch
+    int dp = 1;
+    for (int k = 0; k < SH_WRAM && dp; k++) {
+      if (k > a->minSp && k <= a->entrySp) continue;
+      if (w[k] != s->ram[k] && !skipped(a->e->skip, k) && k >= SH_WATCH_TOP) dp = 0;
+    }
+    if (dp) {
+      ShRec* rc = &s_rec[s_recNext]; s_recNext = (s_recNext + 1) % SH_REC;
+      if (rc->n && !rc->done) { s_stats[rc->idx].unresolved++; recClose(rc); }   // the ring wrapped on it
+      memset(rc, 0, sizeof *rc);
+      rc->idx = a->idx; rc->callNo = a->callNo; rc->frame = a->frame; rc->entrySp = a->entrySp; rc->in = a->in;
+      for (int k = 0; k < SH_WATCH_TOP; k++) {
+        if (k > a->minSp && k <= a->entrySp) continue;
+        if (w[k] == s->ram[k] || skipped(a->e->skip, k)) continue;
+        rc->addr[rc->n] = (uint16_t)k; rc->oracle[rc->n] = s->ram[k]; rc->port[rc->n] = w[k]; rc->n++;
+        if (s_owner[k]) {                            // an older call's difference never touched since: hand it over
+          ShRec* old = &s_rec[s_owner[k] - 1];
+          if (!old->done && --old->remaining == 0) {
+            s_stats[old->idx].dead++;
+            for (int j = 0; j < old->n; j++) s_deadAt[old->idx][old->addr[j] >> 3] |= (uint8_t)(1u << (old->addr[j] & 7));
+            recClose(old);
+          }
+        }
+        s_owner[k] = (int)(rc - s_rec) + 1;
+      }
+      rc->remaining = rc->n; s_recLive++;
+      return;
+    }
+  }
   st->mismatched++;
   if (nDiff)
     snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X S=%04X: %d WRAM byte(s), "
@@ -241,7 +430,7 @@ static void finish(Snes* s, ShActive* a, uint32_t pc) {
     snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X S=%04X:%s",
              a->e->addr, a->e->name, a->callNo, a->frame, a->in.a, a->in.x, a->in.y, a->entrySp, regs);
   addDetail(buf);
-  if (s_dump && !s_dumped) {
+  if (s_dump && !s_dumped && (!s_dumpAddr || a->e->addr == s_dumpAddr)) {
     s_dumped = 1;
     writeFile(s_dump, "pre", s_pre[a - s_act]); writeFile(s_dump, "oracle", s->ram); writeFile(s_dump, "port", w);
   }
@@ -286,7 +475,7 @@ static void shOp(void* mem, uint32_t pc) {
   CtShadowRegs out = in;
   int how = e->run(e, s_work[d], s_rom, s_romLen, &in, &out);
   if (how == CT_SH_UNPORTED) { st->unported++; return; }
-  if (s_dump && !s_dumped) memcpy(s_pre[d], s->ram, SH_WRAM);   // only --dump reads it
+  if (s_dump && !s_dumped && (!s_dumpAddr || e->addr == s_dumpAddr)) memcpy(s_pre[d], s->ram, SH_WRAM);   // --dump
   s_depth++;
   ShActive* a = &s_act[d];
   a->e = e; a->idx = idx; a->entrySp = c->sp; a->minSp = c->sp; a->interrupted = 0;
@@ -300,20 +489,30 @@ static void shInt(void* mem) {
   for (int i = 0; i < s_depth; i++) s_act[i].interrupted = 1;
 }
 
-void CtShadowInstall(Snes* s, const char* dumpPrefix) {
+void CtShadowInstall(Snes* s, const char* dumpPrefix, uint32_t dumpAddr) {
   buildRegistry(s->cart->rom);
   s_snes = s; s_rom = s->cart->rom; s_romLen = (long)s->cart->romSize;
-  s_dump = dumpPrefix; s_dumped = 0; s_depth = 0; s_overflow = 0; s_nDetail = 0;
+  s_dump = dumpPrefix; s_dumpAddr = dumpAddr; s_dumped = 0; s_depth = 0; s_overflow = 0; s_nDetail = 0;
   memset(s_stats, 0, sizeof s_stats); memset(s_bits, 0, sizeof s_bits);
   for (int i = 0; i < s_n; i++) s_bits[s_entries[i].addr >> 3] |= (uint8_t)(1u << (s_entries[i].addr & 7));
+  memset(s_rec, 0, sizeof s_rec); memset(s_owner, 0, sizeof s_owner); memset(s_deadAt, 0, sizeof s_deadAt);
+  s_recNext = 0; s_recLive = 0;
+  s_origRead = s->cpu->read; s_origWrite = s->cpu->write;
+  s->cpu->read = shRead; s->cpu->write = shWrite;
   g_cpuShadowOpHook = shOp; g_cpuShadowIntHook = shInt;
 }
-void CtShadowUninstall(void) { g_cpuShadowOpHook = NULL; g_cpuShadowIntHook = NULL; s_snes = NULL; }
+void CtShadowUninstall(void) {
+  if (s_snes) { s_snes->cpu->read = s_origRead; s_snes->cpu->write = s_origWrite; }
+  for (int i = 0; i < SH_REC; i++)                 // what the run never resolved
+    if (s_rec[i].n && !s_rec[i].done) { s_stats[s_rec[i].idx].unresolved++; s_rec[i].done = 1; }
+  s_recLive = 0;
+  g_cpuShadowOpHook = NULL; g_cpuShadowIntHook = NULL; s_snes = NULL;
+}
 
 long CtShadowMismatches(void) { long n = 0; for (int i = 0; i < s_n; i++) n += s_stats[i].mismatched; return n; }
 
 void CtShadowReport(FILE* f) {
-  long calls = 0, matched = 0, mism = 0, intr = 0, exits = 0, skip = 0, unp = 0; int reached = 0;
+  long calls = 0, matched = 0, mism = 0, intr = 0, exits = 0, skip = 0, unp = 0, dead = 0, unres = 0; int reached = 0;
   for (int i = 0; i < s_n; i++) {
     const ShStats* st = &s_stats[i];
     if (!st->calls) continue;
@@ -322,13 +521,28 @@ void CtShadowReport(FILE* f) {
             s_entries[i].addr, s_entries[i].name, st->calls, st->matched, st->mismatched, st->interrupted, st->exits,
             st->skipped);
     if (st->unported) fprintf(f, "  unported %ld", st->unported);
+    if (st->dead) fprintf(f, "  dead %ld", st->dead);
+    if (st->unresolved) fprintf(f, "  unresolved %ld", st->unresolved);
     if (st->skipDiffer) fprintf(f, "  (%ld differed only where not compared)", st->skipDiffer);
     fprintf(f, "\n");
     calls += st->calls; matched += st->matched; mism += st->mismatched; intr += st->interrupted; exits += st->exits;
-    skip += st->skipped; unp += st->unported;
+    skip += st->skipped; unp += st->unported; dead += st->dead; unres += st->unresolved;
   }
   for (int i = 0; i < s_nDetail; i++) fprintf(f, "  %s\n", s_detail[i]);
   if (s_overflow) fprintf(f, "  %ld call(s) past the nesting depth %d, not compared\n", s_overflow, SH_DEPTH);
+  // The dead scratch, per entry: the direct-page bytes our C leaves otherwise, which the cartridge rewrote before any
+  // read.
+  for (int i = 0; i < s_n; i++) {
+    if (!s_stats[i].dead) continue;
+    char line[512]; int o = snprintf(line, sizeof line, "  dead scratch %06X:", s_entries[i].addr);
+    for (int k = 0; k < SH_WATCH_TOP && o < (int)sizeof line - 16; k++) {
+      if (!(s_deadAt[i][k >> 3] & (1u << (k & 7)))) continue;
+      int e2 = k; while (e2 + 1 < SH_WATCH_TOP && (s_deadAt[i][(e2 + 1) >> 3] & (1u << ((e2 + 1) & 7)))) e2++;
+      o += (e2 > k) ? snprintf(line + o, sizeof line - o, " $%04X-$%04X", k, e2) : snprintf(line + o, sizeof line - o, " $%04X", k);
+      k = e2;
+    }
+    fprintf(f, "%s\n", line);
+  }
   // The ranges not compared, said out loud whether or not anything differed there.
   { const CtShadowSkip* seen[8]; int ns = 0;
     for (int i = 0; i < s_n; i++)
@@ -339,5 +553,6 @@ void CtShadowReport(FILE* f) {
         fprintf(f, "  not compared: $%04X-$%04X, %s\n", sk->lo, sk->hi, sk->why);
       } }
   fprintf(f, "shadow: %d entries, %d reached, %ld calls, matched %ld, mismatched %ld, interrupted %ld, exits %ld, "
-          "skipped %ld, unported %ld\n", s_n, reached, calls, matched, mism, intr, exits, skip, unp);
+          "skipped %ld, unported %ld, dead %ld, unresolved %ld\n", s_n, reached, calls, matched, mism, intr, exits, skip,
+          unp, dead, unres);
 }
