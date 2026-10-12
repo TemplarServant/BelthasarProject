@@ -40737,7 +40737,7 @@
       "expect": [
         "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C0ACFD velocity+priority (ACFD)         calls 3150  matched 3150  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 257 entries, 99 reached, 30100 calls, matched 27946, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57"
+        "shadow: 259 entries, 99 reached, 30100 calls, matched 27946, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57"
       ],
       "pin": [
         "^C1AF22 ",
@@ -40796,8 +40796,100 @@
           "why": "the AI commit's record of the condition it committed, $B242 + slot (the attract's 3 graded commits)"
         }
       ],
-      "note_pass": "the oracle plays the attract demo from power-on: 30100 calls to 99 of the 257 registered routines (C1/AF22, C0/ACFD, the field VM's opcode handlers, the battle AI's walk, conditions and commit), every graded one equal to our C on a copy of its WRAM",
+      "note_pass": "the oracle plays the attract demo from power-on: 30100 calls to 99 of the 259 registered routines (C1/AF22, C0/ACFD, the field VM's opcode handlers, the battle AI's walk, conditions and commit), every graded one equal to our C on a copy of its WRAM",
       "notes": "THE ROUTINE-LEVEL SHADOW (docs/SHADOW_PROPOSAL.md; src/ct_shadow.c), S0 + S1. The oracle plays alone; at each arrival at a registered entry the harness copies its WRAM, runs our C on the copy, lets the oracle run to the return the caller pushed (the stack climbing above the entry S) and compares the whole 128 KB less the bytes the call pushed (and C3/0002's workspace $0308-$0316 for the VM handlers, as --sweepops), plus the registers the caller reads. Entries: C1/AF22 (battleRngBase; 92 calls, A's low byte and X); C0/ACFD (CtBuildVelocityPriority; 3150 calls, WRAM); C1/DC64 (battleHitCore; not reached by the attract); the 211 opcode handlers of move.c g_ctVmOps through CtFieldRunnerOne (X = the new IP, the carry); the battle AI's walk C1/AFD2, its 41 condition handlers (the ROM's table at C1/B80D) and the commit C1/8C3E, run WHOLE (CtBattleAiWalkWhole / CondWhole: --sweepaieval's stop at C1/8C53 is where the sweep cuts its comparison, inside the commit; the cartridge's calls return). `skipped` 2097 is mostly op 95's body C0/5410 (1828) and op 94's C0/5215 (265) run as subroutines of ops B6/B5 with the same X and Y -- graded at B6's and B5's own entries. `unported` 57 = 48 VM cases CtFieldRunnerOne traps (the sound posts E8/EA/EB/EC, 8 op FF, 1 op 83) and 3 AI commits (each counted at the walk, the commit and condition 00) whose target resolver only the live battle host has (battle.c's flag 1; resolvers 05/06/07/17). Under the logical rule nothing was interrupted. A count change with mismatched 0 means the demo itself ran differently: re-pin only after confirming that. Eight mutations, all killed."
+    },
+    {
+      "name": "shadow-route-magus-fight",
+      "argv": [
+        "build/ct.exe",
+        "--shadow",
+        "--frames",
+        "16270",
+        "--btnfile",
+        "tools/shadow_routes/magus_fight.btn"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "CT_ORACLE_SRAM": "saves/public/fantasyanime/ctsave07-azala.srm"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/public/fantasyanime/ctsave07-azala.srm",
+        "tools/shadow_routes/magus_fight.btn"
+      ],
+      "expect": [
+        "C1DC64 battle hit roll (battleHitCore)  calls 11  matched 11  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "shadow: 259 entries, 87 reached, 88644 calls, matched 87259, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133",
+        "shadow: ended at oracle frame 16270, location 00AC"
+      ],
+      "pin": [
+        "^C1DC64 ",
+        "^shadow: \\d+ entries",
+        "^shadow: ended"
+      ],
+      "tier": "full",
+      "timeout_s": 420,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  s[0x18] = (uint8_t)roll;                                   // DC97 STA $18",
+          "replace": "  s[0x18] = (uint8_t)(roll + 1);                             /* MUT: the roll's record off by one */",
+          "why": "C1/DC64's roll record $18: the hit roll is reached only by this route (the attract makes no physical attack)"
+        }
+      ],
+      "note_pass": "the oracle loads a public battery save (Magus' Castle) and plays the route to the Magus fight: 88644 calls to 87 registered routines, the hit roll C1/DC64's 11 among them, every graded one equal to our C on a copy of its WRAM",
+      "notes": "THE SHADOW'S FIRST ROUTE (docs/SHADOW_PROPOSAL.md, S2; tools/shadow_routes/magus_fight.btn, every timing this project's, written leg by leg with tools/shadow_route.py from the oracle's pictures). The oracle boots with saves/public/fantasyanime/ctsave07-azala.srm (one of the 51 public saves under saves/public/, gitignored: SOURCES.md and SHA256SUMS there say where each came from), loads slot 1 and goes down the dark stairway (the Vamp ambush, fought by attacking), up into Magus's hall, through the summoning, and attacks in the fight until the party falls at frame 16270. It reaches what the attract does not: C1/DC64 (11 calls), AI conditions 08, 0B, 11 and 18. 0 mismatched. `unported` 133 = the VM cases CtFieldRunnerOne traps and 11 AI commits whose target resolver only the live battle host has (counted at the walk, the commit and condition 00). The route is frame-timed under the logical rule: a count change with mismatched 0 means the oracle's run changed (re-pin only after confirming that); the last line's location says the route still ended in the fight's room."
+    },
+    {
+      "name": "shadow-route-menu-items-equip",
+      "argv": [
+        "build/ct.exe",
+        "--shadow",
+        "--frames",
+        "3360",
+        "--btnfile",
+        "tools/shadow_routes/menu_items_equip.btn"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "CT_ORACLE_SRAM": "saves/public/fantasyanime/ctsave07-azala.srm"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/public/fantasyanime/ctsave07-azala.srm",
+        "tools/shadow_routes/menu_items_equip.btn"
+      ],
+      "expect": [
+        "C28791 inventory add (CtMenuInvAdd)     calls 4  matched 4  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "C287D5 inventory remove (CtMenuInvRemove) calls 8  matched 8  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "shadow: 259 entries, 36 reached, 3227 calls, matched 3224, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3",
+        "shadow: ended at oracle frame 3361, location 00AE"
+      ],
+      "pin": [
+        "^C28791 ",
+        "^C287D5 ",
+        "^shadow: \\d+ entries",
+        "^shadow: ended"
+      ],
+      "tier": "quick",
+      "timeout_s": 90,
+      "mutations": [
+        {
+          "file": "src/menu.c",
+          "find": "{ mem[0x04C7] = (uint8_t)x; mem[0x04C8] = 0; return x; }",
+          "replace": "{ return x; }   /* MUT: C2/880E-8811's slot record left out */",
+          "why": "C2/87FA's found arm records the slot in $04C7/$04C8 -- the write the shadow found missing (7E:04C7 oracle 13 port 00 on the first equip change)"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "  if (n == 0) mem[0x2400 + x] = 0;                           // C2/87EE STZ $2400,X",
+          "replace": "  /* MUT: no C2/87F0 STZ $2400,X */",
+          "why": "C2/87D5 empties the slot's id when the last one goes: the equip changes take the only Flint Edge and helm out of the bag"
+        }
+      ],
+      "note_pass": "the oracle loads a public battery save and works the X-menu: four Tonics on Crono and four equipment changes -- 12 calls to the inventory routines C2/8791 / C2/87D5, every one equal to our C",
+      "notes": "THE SHADOW'S MENU ROUTE (docs/SHADOW_PROPOSAL.md, S2; tools/shadow_routes/menu_items_equip.btn, every timing this project's). From saves/public/fantasyanime/ctsave07-azala.srm, slot 1: X, Item, Tonic on Crono (four used before his HP is full), Equip: the Flint Edge in place of the Slasher and back, the first helm and armour candidates, and B to the field. C2/8791 (add) 4 calls and C2/87D5 (remove) 8, graded on all 128 KB, A and X. ITS FIRST RUN FOUND A PORT DEFECT: C2/87FA, the inventory's find, records the slot it found in $04C7 (STX) and zeroes $04C8 (880E-8811), and mInvFind did neither (7E:04C7 oracle 13 port 00 on the first equip change); it also scans all 256 slots (an 8-bit X wrapping), the add's empty-slot search with it, where the port stopped at $F2, and the add's sum is 8-bit before its cap -- menu.c now does all three. Quick tier: 3360 frames."
     }
   ],
   "excluded": [

@@ -15530,18 +15530,49 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
   return 0;
 }
 
-// --shadow [--frames N] [--loadstate S] [--btnscript B] [--dump PREFIX]: the routine-level shadow (src/ct_shadow.c,
+// --shadow [--frames N] [--loadstate S] [--btnscript B | --btnfile F] [--dump PREFIX] [--stateout S]: the routine-level shadow (src/ct_shadow.c,
 // docs/SHADOW_PROPOSAL.md). The oracle plays N frames -- from power-on (CT_ORACLE_SRAM gives it a battery save) or from
 // a state, pressing B -- and every call it makes to a registered routine is graded against our C function on a copy of
-// its WRAM. Prints one line per entry and `shadow: ... mismatched M ...`; exits 1 when M > 0.
+// its WRAM. Prints one line per entry and `shadow: ... mismatched M ...`; exits 1 when M > 0. `--stateout` writes the
+// oracle's state (CTLS) at the end, and the last line names where the run ended ($0100, the location), so a route can be
+// chained from a battery save one leg at a time.
 static int runShadow(int argc, char** argv) {
   const char* romPath = DEFAULT_ROM; const char* statePath = NULL; const char* script = NULL; const char* dump = NULL;
+  const char* stateOut = NULL;
   int frames = 3000;
   for (int i = 2; i < argc; i++) {
     if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--loadstate") && i + 1 < argc) statePath = argv[++i];
     else if (!strcmp(argv[i], "--btnscript") && i + 1 < argc) script = argv[++i];
     else if (!strcmp(argv[i], "--dump") && i + 1 < argc) dump = argv[++i];
+    else if (!strcmp(argv[i], "--stateout") && i + 1 < argc) stateOut = argv[++i];
+    else if (!strcmp(argv[i], "--btnfile") && i + 1 < argc) {
+      // A route file (tools/shadow_routes/): the --btnscript grammar over any number of lines; `#` starts a comment, and
+      // `(tokens)*N` repeats a group N times (a pad pattern held through a fight or a dialogue).
+      int n = 0; uint8_t* f = CtReadFile(argv[++i], &n);
+      if (!f) { printf("shadow: cannot read the route '%s'\n", argv[i]); return 2; }
+      static char flat[1 << 16], routeBuf[1 << 22]; int o = 0, comment = 0;
+      for (int k = 0; k < n && o < (int)sizeof flat - 2; k++) {
+        char ch = (char)f[k];
+        if (ch == '#') comment = 1;
+        if (ch == '\n' || ch == '\r') { comment = 0; if (o && flat[o - 1] != ',') flat[o++] = ','; continue; }
+        if (!comment && ch != ' ' && ch != '\t') flat[o++] = ch;
+      }
+      flat[o] = 0; free(f);
+      int r = 0;
+      for (const char* p = flat; *p && r < (int)sizeof routeBuf - 2; ) {
+        if (*p != '(') { routeBuf[r++] = *p++; continue; }
+        const char* close = strchr(p, ')');
+        if (!close || close[1] != '*') { printf("shadow: the route's group at '%.20s' is not `(...)*N`\n", p); return 2; }
+        int len = (int)(close - p - 1), times = atoi(close + 2);
+        for (int t = 0; t < times && r + len + 1 < (int)sizeof routeBuf - 2; t++) {
+          memcpy(routeBuf + r, p + 1, (size_t)len); r += len; routeBuf[r++] = ',';
+        }
+        p = close + 2; while (*p >= '0' && *p <= '9') p++;
+        if (*p == ',') p++;
+      }
+      routeBuf[r] = 0; script = routeBuf;
+    }
     else if (!strcmp(argv[i], "--rom") && i + 1 < argc) romPath = argv[++i];
     else { printf("shadow: unknown argument '%s'\n", argv[i]); return 2; }
   }
@@ -15571,6 +15602,14 @@ static int runShadow(int argc, char** argv) {
   }
   CtShadowUninstall();
   CtShadowReport(stdout);
+  printf("shadow: ended at oracle frame %u, location %04X\n", s->frames, s->ram[0x0100] | (s->ram[0x0101] << 8));
+  if (stateOut) {
+    StateHandler* sh = sh_init(true, NULL, 0);
+    snes_handleState(s, sh);
+    if (CtLakeStateSavePath(stateOut, sh->data, sh->offset) == 0) printf("shadow: state (CTLS) -> %s\n", stateOut);
+    else printf("shadow: FAILED to write the state to %s\n", stateOut);
+    sh_free(sh);
+  }
   long bad = CtShadowMismatches();
   CtOracleDestroy(s); free(rom);
   return bad ? 1 : 0;

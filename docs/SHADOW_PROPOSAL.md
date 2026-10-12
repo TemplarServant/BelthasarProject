@@ -1,7 +1,10 @@
 # Shadow mode: routine-level validation against the oracle (proposal)
 
-Status: **S0 done, S1 under way** (2026-10-11): the harness, the `--shadow` mode, C1/AF22 and the 211 field-script
-opcode handlers. The rest of S1 (C0/ACFD, the battle and menu routines) and S2 onward are proposals.
+Status (2026-10-12): **S0 done; S1 done but for the menus; S2 under way** -- the harness, the `--shadow` mode,
+C1/AF22, C0/ACFD, C1/DC64, the 211 field-script opcode handlers and the battle AI (walk, 41 conditions, commit); the
+routes from a public battery save (the Magus fight; the X-menu's Item and Equip screens) and the inventory routines
+C2/8791 / C2/87D5. Equip's apply (C2/9CC1) and the save load (FF/FAA3) are not registered yet; S3 onward are
+proposals.
 
 ## S0, as built
 
@@ -155,7 +158,7 @@ A 2 MB bitmap over the 24-bit address space keeps the per-opcode cost to one bit
 |---|---|---|
 | S0 | Hook slot, registry, return/nesting/interrupt logic, report, one entry (C1/AF22 battle RNG) | the attract demo runs with `mismatched 0` and the counts are plausible |
 | S1 (field VM done) | Register what the sweeps already grade: the 211 VM ops through `CtFieldRunnerOne`, C0/ACFD, C1/DC64, the AI walk/conditions/commit, the menu inventory and equip | each one shadowed over the attract demo and the recipe states, and a suite check pinned |
-| S2 | Battery saves as inputs, plus the first three routes (a boss fight, a shop, a late-game dungeon) | the suite runs the shadow over them; mismatches become ROADMAP entries |
+| S2 (first route done) | Battery saves as inputs, plus the first three routes (a boss fight, a shop, a late-game dungeon) | the suite runs the shadow over them; mismatches become ROADMAP entries |
 | S3 | Census and `--shadow-poison` | a ranked list of ungraded routines; every `deadBytes` declaration has evidence |
 | S4 | Make the live engine run the registered functions where it still runs its own copy (`step()`'s mirrors in `CtScene`, `src/ct_vm.c:1675-1764`) | what the shadow proves is what the port runs |
 
@@ -183,6 +186,47 @@ A 2 MB bitmap over the 24-bit address space keeps the per-opcode cost to one bit
   op 83. The live VM (`step()`) runs those elsewhere; S4 is where the two meet.
 - **What a mutation found.** A carry mutation on op 2D's held-button arm survived: the attract presses nothing, so that
   arm never runs. The check's mutation now sits on the arm the demo takes, and the held-button arm waits for S2's routes.
+
+## S1, C0/ACFD and the battle routines, as built
+
+- C0/ACFD (`CtBuildVelocityPriority`, X = the object, D = $0100), C1/DC64 (`battleHitCore`), and the battle AI: the walk
+  C1/AFD2 (A = the AI id), the 41 condition handlers read from the ROM's own table at C1/B80D (X = the op doubled), and
+  the commit C1/8C3E. Several entries may share an address; the first whose convention holds takes the call.
+- **What the first run taught.** `--sweepaieval` stops its comparison at C1/8C53, inside the commit (condition 00 is
+  `JSR C1/8C3E / RTS`), and the first adapters asked the C for that: 6 "mismatches" that were the sweep's cut, not the
+  cartridge's. Every one of these calls returns, so the shadow runs the C WHOLE, commit included
+  (`CtBattleAiWalkWhole` / `CtBattleAiCondWhole`, battle.c).
+- **What it found unported.** Commits whose target resolver (05/06/07/17) only the live battle host has: the C flags
+  them (battle.c's unported flag 1) and the shadow counts them `unported` at the walk, the commit and condition 00.
+- The attract: 30100 calls reach 99 of 257 entries, 0 mismatched; C1/DC64 is not reached (the demo makes no physical
+  attack).
+
+## S2, the first route, as built
+
+- `--shadow` reads a route file (`--btnfile`, the `--btnscript` grammar over many lines with `#` comments), writes the
+  oracle's state at the end (`--stateout`) and names the frame and location it ended at, so a route is built one leg at
+  a time and looked at between legs (`--peek` + `tools/ct.py fb2png`).
+- `tools/shadow_route.py leg` plays one stretch from a state and shows where it ended (the picture, the frame, the
+  location); `check` plays a whole route. Route files repeat a pad pattern with `(tokens)*N`.
+- **Every route's timings are this project's** (the user's decision, 2026-10-12): a route is written leg by leg from the
+  oracle's own pictures. A first version replayed zdiemer's `battle-magus` movie input aligned on the slot load -- it
+  stayed in step -- and was replaced.
+- `tools/shadow_routes/magus_fight.btn`: from `saves/public/fantasyanime/ctsave07-azala.srm` (slot 1, Magus' Castle),
+  the load screen (it opens on the save's last slot, 3), down the dark stairway (the Vamp ambush, fought by attacking),
+  up into Magus's hall, the summoning, and the fight, attacked until the party falls.
+- The check `shadow-route-magus-fight`: 88644 calls to 87 entries, 0 mismatched; C1/DC64 11 calls, AI conditions 08,
+  0B, 11 and 18 reached for the first time.
+- `tools/shadow_routes/menu_items_equip.btn` (check `shadow-route-menu-items-equip`, quick tier): the same save's X-menu,
+  four Tonics on Crono and four equipment changes; with it C2/8791 (inventory add) and C2/87D5 (remove) are registered
+  (`$04C9` the item, `$04CB` the count, A the verdict).
+- **The first port defect the shadow found.** On the first equip change it graded, C2/87D5 left 7E:04C7 at 13 on the
+  cartridge and 00 in the port: C2/87FA, the inventory's find, ends its found arm with `880E STX $04C7 / 8811 STZ
+  $04C8` -- it records the slot -- and `mInvFind` did not; it also scans all 256 slots (an 8-bit X that wraps), and the
+  add's empty-slot search with it, where the port stopped at the bag's $F2, and the add's `ADC $04CB` is 8-bit before
+  its cap of 99. menu.c now does all of it; the suite (quick 588/0/0, the 67 full-tier menu/shop/item checks) stays green,
+  and two mutations pin the find's record and the remove's emptied slot.
+- Next for S2: a shop and the save screen (Equip's apply C2/9CC1 and the save load FF/FAA3 to register), the dactyl ride,
+  the endings, and the boss fights zdiemer's library lacks.
 
 ## Fit with the mandate
 

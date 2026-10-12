@@ -7,6 +7,7 @@
 #include "apu.h"
 #include "battle.h"
 #include "move.h"
+#include "menu.h"
 
 #define SH_WRAM  0x20000
 #define SH_DEPTH 16
@@ -109,7 +110,24 @@ static int aiCommitRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, l
   return CtBattleAiCommitSweep(w, rom, &unp) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
 }
 
+// C2/8791 AND C2/87D5, THE INVENTORY'S ADD AND REMOVE (menu.c CtMenuInvAdd / CtMenuInvRemove). Both take the item in
+// $04C9 and the count in $04CB, `PHX / PHP / SEP #30` on entry and `PLP / PLX / RTS` on the way out, so any width
+// enters and X comes back as it was; A's low byte is the verdict (0 done, $FF not held / bag full, $FE not enough).
+// Their absolutes ($2400,X / $2500,X) are bank $7E's.
+static int invGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; (void)w; return in->db == 0x7E;
+}
+static int invRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                  CtShadowRegs* out) {
+  (void)rom; (void)romLen;
+  int r = e->arg ? CtMenuInvRemove(w, w[0x04C9], w[0x04CB]) : CtMenuInvAdd(w, w[0x04C9], w[0x04CB]);
+  out->a = (uint16_t)((in->a & 0xFF00) | (r & 0xFF));
+  return CT_SH_RETURNS;
+}
+
 static const CtShadowEntry k_fixed[] = {
+  { 0xC28791, "inventory add (CtMenuInvAdd)", 0x00, 0x00, 0, 0, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
+  { 0xC287D5, "inventory remove (CtMenuInvRemove)", 0x00, 0x00, 0, 1, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC1AF22, "battle RNG (battleRngBase)", 0x20, 0x20, 0, 0, rngGuard, rngRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC0ACFD, "velocity+priority (ACFD)", 0x30, 0x20, 0, 0, acfdGuard, acfdRun, 0, NULL },
   { 0xC1DC64, "battle hit roll (battleHitCore)", 0x30, 0x20, 0, 0, battleGuard, hitRun, 0, NULL },
@@ -216,12 +234,12 @@ static void finish(Snes* s, ShActive* a, uint32_t pc) {
   if (!nDiff && !regBad) { st->matched++; return; }
   st->mismatched++;
   if (nDiff)
-    snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X: %d WRAM byte(s), first "
-             "%02X:%04X oracle %02X port %02X;%s", a->e->addr, a->e->name, a->callNo, a->frame, a->in.a, a->in.x,
-             a->in.y, nDiff, 0x7E + (first >> 16), first & 0xFFFF, s->ram[first], w[first], regs);
+    snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X S=%04X: %d WRAM byte(s), "
+             "first %02X:%04X oracle %02X port %02X;%s", a->e->addr, a->e->name, a->callNo, a->frame, a->in.a, a->in.x,
+             a->in.y, a->entrySp, nDiff, 0x7E + (first >> 16), first & 0xFFFF, s->ram[first], w[first], regs);
   else
-    snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X:%s",
-             a->e->addr, a->e->name, a->callNo, a->frame, a->in.a, a->in.x, a->in.y, regs);
+    snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X S=%04X:%s",
+             a->e->addr, a->e->name, a->callNo, a->frame, a->in.a, a->in.x, a->in.y, a->entrySp, regs);
   addDetail(buf);
   if (s_dump && !s_dumped) {
     s_dumped = 1;

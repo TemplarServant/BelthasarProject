@@ -1,0 +1,32 @@
+# The X-menu's Item and Equip screens, from a battery save -- a route for `ct.exe --shadow --btnfile`
+# (docs/SHADOW_PROPOSAL.md, S2). It grades the inventory routines C2/8791 / C2/87D5 on the calls the menus make.
+# Save: saves/public/fantasyanime/ctsave07-azala.srm, slot 1 (Magus' Castle), given to the oracle as CT_ORACLE_SRAM.
+# Played under the logical rule (CT_ORACLE_LOGICAL=1) for 3360 frames from power-on. Every timing here is this
+# project's, written leg by leg with tools/shadow_route.py from the oracle's own pictures.
+# Grammar: --btnscript's `hexbtn:frames` (LakeSnes serial order: B=1 Y=2 Sel=4 Start=8 Up=10 Down=20 Left=40 Right=80
+# A=100 X=200 L=400 R=800), `#` comments, `(tokens)*N` repeats a group.
+
+# Power-on to the load screen (Start at 133; the A at 334 lands before the screen takes input), which opens on the
+# save's last slot (3): Up twice, A on slot 1 at frame 952. The party stands at the castle's save point (loc 0AE).
+0:133,8:1,0:200,100:1,0:565
+0:10,10:1,0:20,10:1,0:20,100:1,0:547
+
+# X opens the menu; Right to the Item icon, A.
+200:2,0:88
+80:2,0:30,100:2,0:56
+# Tonic (the list's first row) on Crono, then six more A on the target: four Tonics are used (17 -> 13) before his HP
+# is full -- each one a C2/87D5.
+100:2,0:40,100:2,0:106
+100:2,0:118
+(100:2,0:30)*6
+0:108
+# B out of the list and of the Item screen, Left to the first icon (Equip), A; A on Crono, A on his weapon row.
+1:2,0:40,1:2,0:76
+1:2,0:40,40:2,0:30,100:2,0:74
+100:2,0:40,100:2,0:76
+# The Flint Edge in place of the Slasher (C2/8791 the Slasher back to the bag, C2/87D5 the Edge out of it), then the
+# Slasher back again.
+100:2,0:58
+100:2,0:40,100:2,0:76
+# Down to the helm and the first candidate, Down to the armour and the first candidate, then B three times to the field.
+20:2,0:30,100:2,0:40,100:2,0:60,20:2,0:30,100:2,0:40,100:2,0:60,1:2,0:40,1:2,0:40,1:2,0:40,0:82

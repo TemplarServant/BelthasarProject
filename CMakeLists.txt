@@ -29,6 +29,7 @@ add_executable(ct
   src/collision.c
   src/world.c
   src/audio.c
+  src/menu.c src/menu_cost.c   # --shadow: the inventory routines C2/8791 / C2/87D5 (ct_shadow.c)
   src/battle.c   # --sweepaitarget: the first bank-$C1 micro-execution harness needs the battle port
   src/objslot.c  # FD/E39C, the palette-effect records -- one body for the battle and the field VM
   src/tileanim.c # FD/DE98 + FD/E022, the field's animated BG tiles (--sweepbganim)

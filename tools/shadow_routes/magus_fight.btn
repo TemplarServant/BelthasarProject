@@ -1,0 +1,37 @@
+# The Magus fight, from a battery save -- a route for `ct.exe --shadow --btnfile` (docs/SHADOW_PROPOSAL.md, S2).
+# Save: saves/public/fantasyanime/ctsave07-azala.srm, slot 1 (Magus' Castle), given to the oracle as CT_ORACLE_SRAM.
+# Played under the logical rule (CT_ORACLE_LOGICAL=1) for 16270 frames from power-on. Every timing here is this
+# project's, written leg by leg with tools/shadow_route.py from the oracle's own pictures.
+# Grammar: --btnscript's `hexbtn:frames` (LakeSnes serial order: B=1 Y=2 Sel=4 Start=8 Up=10 Down=20 Left=40 Right=80
+# A=100 X=200 L=400 R=800), `#` comments, `(tokens)*N` repeats a group.
+
+# Power-on to the load screen (Start at 133; the A at 334 lands before the screen takes input), which opens on the
+# save's last slot (3): Up twice, A on slot 1 at frame 952. The party stands at the castle's save point (loc 0AE).
+0:133,8:1,0:200,100:1,0:565
+0:10,10:1,0:20,10:1,0:20,100:1,0:547
+
+# Left into the room's exit, then the dark stairway (loc 1BF) down-left until the Vamps gather.
+40:90,0:60
+0:200
+60:200,0:60
+60:120,0:180
+0:300
+# The ambush: every PC attacks (A picks Att. and confirms the target).
+(100:2,0:10)*125
+(100:2,0:10)*125
+
+# On down the stairway to its landing, then up the stairs at its left into Magus's hall (loc 0AC).
+60:300,0:100
+40:150,0:50
+60:240,0:60
+10:200,0:60
+
+# The summoning: the lines with A, then up the hall as the flames light, through the rest of his lines.
+(100:2,0:28)*80
+10:240,0:160
+10:400,0:200
+(110:2,10:28)*60
+
+# The fight: every PC attacks until the party falls (frame 16270; attacks alone cannot pass his barriers).
+(100:2,0:10)*250
+(100:2,0:10)*100

@@ -108,12 +108,12 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-12: **829** checks, **2** excluded; `--list` prints the current set).
+(2026-10-12: **831** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**587** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**588** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
-- **full** (all of them): adds **240** slower checks — whole fights and attract legs against the logical oracle, the
+- **full** (all of them): adds **241** slower checks — whole fights and attract legs against the logical oracle, the
   long menu and shop audits, the widescreen and other mod checks, the ROM-boot drive validators — and the two with no
   tier (`lockstep-talk-box-machine-clean`, `lockstep-scene120-stairs-entry-lucca`), which run only here. A full run
   takes 15-80 minutes, mostly depending on the oracle cache.
@@ -134,6 +134,28 @@ mutations (`--mutate shadow-attract`) all turn it red: the RNG cursor, the draw 
 base, op 2D's carry, the $01F0 staging of the move-toward-an-actor body, C0/ACFD's velocity store and the AI commit's
 $B242 record. Re-pin only a change in the counts with
 mismatched still 0, after confirming the oracle's run itself changed.
+
+### shadow-route-magus-fight (`ct.exe --shadow --btnfile tools/shadow_routes/magus_fight.btn`, a route)
+
+The shadow's first route (docs/SHADOW_PROPOSAL.md, S2). The oracle boots with a public battery save,
+`saves/public/fantasyanime/ctsave07-azala.srm` (`CT_ORACLE_SRAM`; the 51 public saves under `saves/public/` are
+gitignored, and `SOURCES.md` / `SHA256SUMS` there say where each came from), loads slot 1 (Magus' Castle) and plays the
+route file for 16270 frames: down the dark stairway (the Vamp ambush, fought by attacking), up into Magus's hall, the
+summoning, and the fight, attacked until the party falls. Every timing is this project's, written leg by leg with
+`tools/shadow_route.py`. 88644 calls reach 87 entries, 0 mismatched; it grades what the attract cannot reach, C1/DC64's
+hit roll (11 calls) and AI conditions 08, 0B, 11 and 18. One declared mutation (the hit roll's `$18` record) turns it
+red. The route is frame-timed
+under the logical rule: a change in the counts with mismatched 0 means the oracle's run changed; re-pin only after
+confirming that, and the last line's location (`00AC`) says whether the route still ends in the fight's room.
+
+### shadow-route-menu-items-equip (`ct.exe --shadow --btnfile tools/shadow_routes/menu_items_equip.btn`, a route)
+
+The shadow's menu route: from the same save, the X-menu's Item screen (four Tonics on Crono) and Equip screen (the Flint
+Edge in place of the Slasher and back, the first helm and armour candidates), 3360 frames, quick tier. It grades the
+inventory routines C2/8791 (4 calls) and C2/87D5 (8) on all 128 KB, A and X. Its first run found a port defect: C2/87FA,
+the inventory's find, records the slot it found in `$04C7` and zeroes `$04C8`, which `mInvFind` did not (now fixed with
+the 256-slot scans and the add's 8-bit sum, menu.c). Two declared mutations turn it red: the `$04C7` record and the
+remove's emptying of a slot's id.
 
 ### field-battletest-gato (`ct_field.exe --battletest`)
 

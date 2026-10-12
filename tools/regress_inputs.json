@@ -651,6 +651,8 @@
         "seq-race-xlat-lockstep",
         "seq-race-xlat-stage-handoff",
         "shadow-attract",
+        "shadow-route-magus-fight",
+        "shadow-route-menu-items-equip",
         "shop-buy-sell-ram-vs-oracle",
         "shop-equip-mode-vs-oracle",
         "shop-screens-vs-oracle",
@@ -5163,6 +5165,43 @@
       "how": "tools/fixtures.py (recipe telepod_show): loc 008 with a two-member party (Crono leading, Marle following), control on",
       "sha256": "1907365744b18cda76b05cf883618959a7413e347bac50961feeb70a0710d009",
       "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave07-azala.srm",
+      "kind": "cart_sram",
+      "regenerable": true,
+      "how": "a public battery save: fantasyanime.com/squaresoft/ctsaves-srm.htm, archive ctsave07-azala (chrono_trigger.srm), as zdiemer/chrono-trigger-reimplemented vendors it in oracle/saves/fantasyanime/; saves/public/SOURCES.md",
+      "used_by": [
+        "shadow-route-magus-fight",
+        "shadow-route-menu-items-equip"
+      ],
+      "sha256": "54940340fbaa8679c168c54c68a02a3070b6051242552787b3efa68917ff6ce6",
+      "size": 8192,
+      "present_when_recorded": true
+    },
+    {
+      "path": "tools/shadow_routes/magus_fight.btn",
+      "kind": "tool",
+      "regenerable": true,
+      "how": "in the repository (docs/SHADOW_PROPOSAL.md, S2)",
+      "used_by": [
+        "shadow-route-magus-fight"
+      ],
+      "sha256": "9dff5eb2c4ad4110dd8ba5f390a1a3711a426b4d36d8f710b167e802a39da31e",
+      "size": 1624,
+      "present_when_recorded": true
+    },
+    {
+      "path": "tools/shadow_routes/menu_items_equip.btn",
+      "kind": "tool",
+      "regenerable": true,
+      "how": "in the repository (docs/SHADOW_PROPOSAL.md, S2)",
+      "used_by": [
+        "shadow-route-menu-items-equip"
+      ],
+      "sha256": "41c79e314c1243e668f0c9c4259b7dde3a9530b2dd1a819e7f8e4b7e50096a54",
+      "size": 1878,
       "present_when_recorded": true
     }
   ]

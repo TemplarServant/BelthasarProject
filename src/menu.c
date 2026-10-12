@@ -1451,24 +1451,31 @@ int CtMenuItemUse(uint8_t* mem, int absSlot, int targetSlot) {
 // every capture in this repo (all of them carry consumables only) looked like "nothing happens".
 
 // C2/87FA -- find the slot holding `id` with a NON-ZERO count. Returns the slot or -1.
-static int mInvFind(const uint8_t* mem, int id) {
-  for (int x = 0; x < 0xF2; x++) if (mem[0x2400 + x] == (uint8_t)id && mem[0x2500 + x]) return x;
+//   87FA LDX #00 / 87FC CMP $2400,X / BNE / 8801 LDA $2500,X / BNE found / 8806 LDA $04C9 / 8809 INX / BNE loop
+//   880C SEC / RTS                      -- X is 8-bit (both callers SEP #30): ALL 256 slots, not the bag's $F2
+//   880E STX $04C7 / 8811 STZ $04C8 / 8814 CLC / RTS
+// THE FOUND ARM RECORDS THE SLOT: $04C7 = the slot, $04C8 = 0. The port had left both writes out; the routine-level
+// shadow caught it on the first equip change it graded (`ct.exe --shadow`, C2/87D5 from the Equip screen: 7E:04C7
+// oracle 13 port 00, docs/SHADOW_PROPOSAL.md).
+static int mInvFind(uint8_t* mem, int id) {
+  for (int x = 0; x < 0x100; x++)
+    if (mem[0x2400 + x] == (uint8_t)id && mem[0x2500 + x]) { mem[0x04C7] = (uint8_t)x; mem[0x04C8] = 0; return x; }
   return -1;
 }
 
 int CtMenuInvAdd(uint8_t* mem, int id, int qty) {            // C2/8791
-  if (!mem || !id) return 0;                                 // C2/8795: id 0 -> nothing
-  if (id == 0x5A || id == 0x7B || id == 0x94) return 0;      // C2/879A/879E/87A2: the three "none"
+  if (!mem || !id) return 0;                                 // C2/8795: id 0 -> nothing, A = 0
+  if (id == 0x5A || id == 0x7B || id == 0x94) return id;     // C2/879A/879E/87A2: the three "none"
                                                              // sentinels are NEVER added -- and THAT is
-                                                             // the engine's whole unequip story.
+                                                             // the engine's whole unequip story. A keeps the id.
   int x = mInvFind(mem, id);                                 // C2/87A6
-  if (x < 0) {                                               // C2/87AB: first slot with id 0
-    for (x = 0; x < 0xF2 && mem[0x2400 + x]; x++) {}
-    if (x >= 0xF2) return 0xFF;                              // INVENTORY FULL
+  if (x < 0) {                                               // C2/87AB: first slot with id 0, from X = 0 (87FA's
+    for (x = 0; x < 0x100 && mem[0x2400 + x]; x++) {}        //   loop wrapped there) to the 8-bit X's wrap
+    if (x >= 0x100) return 0xFF;                             // C2/87B3 INVENTORY FULL
     mem[0x2400 + x] = (uint8_t)id; mem[0x2500 + x] = 0;      // C2/87B7
   }
-  int n = mem[0x2500 + x] + qty;                             // C2/87C0
-  mem[0x2500 + x] = (uint8_t)(n > 0x63 ? 0x63 : n);          // the stack cap is 99
+  int n = (mem[0x2500 + x] + qty) & 0xFF;                    // C2/87C0 LDA / CLC / ADC $04CB -- EIGHT-bit
+  mem[0x2500 + x] = (uint8_t)(n >= 0x63 ? 0x63 : n);         // C2/87C7 CMP #63 / BCC: the stack cap is 99
   return 0;
 }
 
