@@ -305,6 +305,22 @@ by mechanism; it is the next large step and is to be agreed before it starts. Th
 register the routine that owns the variables, let the shadow show the WRAM the host never wrote, and move the variable
 into the WRAM.
 
+## S4, the enemies' mode / facing / idle-pose state in the WRAM, as built
+
+- Twelve host fields of `CtBattleHost` became the WRAM bytes they mirrored, behind named accessors (battle.h): the move
+  mode `$974A` and its request `$5E0D`, the facing `$96DE` and the built facing `$96E9`, the arrival latch `$9829`, the
+  idle walk's timer `$9694`, cursor `$969C`, published pose `$990A`, defer flags `$9925`, window poses `$97D9` and
+  dwells `$9799`, and the group counter `$A4` -- about 140 uses in battle.c and field.c.
+- **The ROM's own writes now reach the engine.** The AI's counter (C1/87FE `STA $5E0D`) and move decode (C1/982D /
+  988B) wrote the request into the WRAM, where the mirror never saw it. On the bat9 fight the counter at f671 is now
+  committed by the walk at f672 (mode 01 -> 0A, as on the cartridge), and the fight ends 8 frames later
+  (`field-battle-bat9-return`, our own numbers, re-pinned with the measurement). Every oracle-compared check is
+  unchanged; full suite otherwise green.
+- **Not yet shadowed: the idle walk C1/2D9F.** Registered on a trial, its enemy groups differed on ~500 bytes per publish
+  -- the sprite cells C1/1C4A-1C66 assembles in the WRAM ($6Bxx-$6Cxx) when a pose changes, which the port builds only
+  at draw time (`CtBattleEnemyCells`). That gather is the next mechanism to move; the PC group ($A4 = 0) needs the
+  `pc*` fields moved too.
+
 ## S1, the battle effect program's dispatch, as built
 
 - CD/16A6 (`STX $43 / ASL / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43 / RTS`): one entry grades every

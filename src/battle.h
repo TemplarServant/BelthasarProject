@@ -143,6 +143,21 @@ typedef struct { int active, value, centerX, restY, age, kind, romKind, rise; } 
 #define BT_OBJPAL(h, k)    ((h)->mem[0x993C + (k)])
 #define BT_OBJPALDEF(h, k) ((h)->mem[0x9888 + (k)])
 
+// THE ENEMIES' MODE / FACING / IDLE-POSE STATE LIVES IN THE WRAM, at the ROM's own addresses (S4 of docs/SHADOW_PROPOSAL.md:
+// one place per variable, so the routine-level shadow sees what the live battle runs). Each was a host-side field.
+#define BT_MVMODE(h, i)       ((h)->mem[0x974A + (i)])       // $974A,X: the move mode (0 none / 1 approach / 6 return)
+#define BT_MVREQ(h, i)        ((h)->mem[0x5E0D + (i)])       // $5E0D,X: the REQUESTED mode; only C1/3364 commits it
+#define BT_ENFACING(h, i)     ((h)->mem[0x96DE + (i)])       // $96DE,X: the enemy's facing (zeroed at boot, CF:FB9A)
+#define BT_ENFACINGPUB(h, i)  ((h)->mem[0x96E9 + (i)])       // $96E9,X: the facing the sprite was last built with (C1/336A)
+#define BT_ENARRIVE(h, i)     ((h)->mem[0x9829 + (i)])       // $9829+slot: the mode-1 arrival latch
+#define BT_IDLETIMER(h, i)    ((h)->mem[0x9694 + (i)])       // $9694,X: the dwell timer (C1/3409 DEC)
+#define BT_IDLECUR(h, i)      ((h)->mem[0x969C + (i)])       // $969C,X: the window cursor 0..3
+#define BT_IDLEPUB(h, i)      ((h)->mem[0x990A + (i)])       // $9907+3+slot: the published pose (C1/1C66; FF = empty)
+#define BT_IDLEDEFER(h, i)    ((h)->mem[0x9925 + (i)])       // $9925+slot: the visit-me-first flags (C1/344C)
+#define BT_IDLEPOSE(h, i, k)  ((h)->mem[0x97D9 + 8 * (i) + (k)])   // $97D9+8*slot: the window poses (C1/33DF)
+#define BT_IDLEDWELL(h, i, k) ((h)->mem[0x9799 + 8 * (i) + (k)])   // $9799+8*slot: the window dwells (C1/33F4)
+#define BT_SCHEDA4(h)         ((h)->mem[0x00A4])             // $A4: the 0..3 group counter (CF/E477 / CF/E47F)
+
 typedef struct CtBattleHost {
   uint8_t* mem;              // the engine's $7E image (64KB): staged interface in, battle blocks out
   uint8_t* glb;              // the $7F0000 page (0x200 bytes): outcome $7F01EC = glb[0x1EC]
@@ -641,7 +656,6 @@ typedef struct CtBattleHost {
   //     old "think variance" (oracle latencies 24/8/3/0 = latch-wait + scan-distance + 3 processing).
   int scanCur;                // the $B185 cursor (index into $B163, counts down; reload scanTotal-1)
   int scanTotal;              // $AEC7 = alive PCs + 8 (the boot shuffle-1 entry count)
-  int enArrive[8];            // $9826+cmb / $9829+slot: the mode-1 ARRIVAL LATCH -- set by the approach
                               //   pass that detects the stop (oracle f461), cleared at turn start (184BD);
                               //   a mode-1 enemy's turn is GATED on it (C1/84A3-84BB)
   int aiCursor[8][2][4];      // per (slot, block 1 = when-hit, section): the REACTIVE path's cursor over block 2
@@ -668,7 +682,6 @@ typedef struct CtBattleHost {
   int mvMirX[11], mvMirY[11]; // $A039/$A050,cmb: the C1/283D MIRROR of the live feet that the box rows and the
                               //   C1/28B0 body test read -- refreshed before each handler loop, overwritten by a
                               //   slot's PROJECTED step within it (see battleBox)
-  int mvMode[8];              // $974A,X: 0 none / 1 approach / 6 return (bit7 = halted, never armed here)
   int mvTarget[8];            // $9752,X: the move-target COMBATANT idx (approach walks to it / return from it)
   int mvAngle[8];             // $9786,X: the current segment bearing (0..255, 0x100 = full turn)
   int mvBaseX[8], mvBaseY[8]; // $98AF/$98B7,X: the segment's base position (re-read from live pos each segment)
@@ -682,7 +695,6 @@ typedef struct CtBattleHost {
                               //   passes; the 2B13 settle test measures against it)
   // ---- what class 4's SETTLE records for class 0's RE-ACQUIRE (C1/3B45-3B58 -> C1/3772) ----
   // ---- the $A4 GROUP SCHEDULER (battle_facing_engine.md, the 2026-09-08 section) ----
-  int schedA4;                // $A4: the 0..3 group counter. Its ONLY net writer in the ROM is bank CF
                               //   (CF/E477 INC / CF/E47F STZ on ==4); bank C1 borrows and restores it.
   int pcEntranceArmed;        // one-shot: the boot's C1/0042 `JMP C1/34DB` has armed the ENTRANCE ladder
   int pcBandPrev;             // previous $CA1F (CD/0534's predicate), to catch the entry-fade loop's completion edge
@@ -702,18 +714,10 @@ typedef struct CtBattleHost {
   // ---- THE IDLE-TICK CURSOR WALK (C1/2D9F -> C1/3234 -> C1/333D..34A6; battle.c battleIdleWalk). One enemy
   //      GROUP per dispatch of C1/10A9 ($A4 = the group); per visited slot: the $5E0D->$974A commit + sprite
   //      rebuild (the change detector), then the idle window's dwell/cursor/publish tick. ----
-  int mvReq[8];               // $5E0D,X: the REQUESTED move mode. Writers: the AI decode (C1/9833 / C1/9891,
                               //   mode 0 INCLUDED), class 0's hand-back (C1/3793). ONLY the walk's commit
                               //   (C1/3364) moves it into mvMode ($974A) -- measured lead 1..6 frames (bat9
                               //   f175->f181, forest3 f228->f231, f243->f244).
-  int enFacingPub[8];         // $96E9,X: the facing the sprite was last BUILT with (C1/336A); compared with the
                               //   raw $96DE (enFacing) at every visit -- a changed facing rebuilds the rows too
-  int idlePoses[8][8];        // $97D9+8*slot: the window POSES copied at the commit (C1/33DF-33E8)
-  int idleDwells[8][8];       // $9799+8*slot: the window DWELLS, CC/FBCE-remapped (C1/33F4-3405)
-  int idleTimer[8];           // $9694,X: the dwell timer, DEC'd once per VISIT (C1/3409); boot 1,1,1,1,2,2,2,2 (CC/E2E8)
-  int idleCur[8];             // $969C,X: the window cursor 0..3 (C1/3462 INC; C1/346C wrap; C1/341F/3480 zero-dwell reset)
-  int idlePub[8];             // $9907+3+slot: the PUBLISHED pose (C1/1C66); boot = $A4DC = record +4 (CC/EA9E -> C1/34BA)
-  int idleDefer[8];           // $9925+slot (= $9922+cmb): the visit-me-FIRST flags set by the upload-budget defer
                               //   (C1/344C), consumed by the roster builders (C1/3252..332C) and by C1/1C5A
   int idleDeathPose[8];       // the published pose at the death frame (the dissolve keeps drawing it); FF = none
   int schedWalk;              // this frame is a DISPATCH frame of the idle tick (C1/10A9) -- see battleSchedAdvance
@@ -727,7 +731,6 @@ typedef struct CtBattleHost {
   int pcAimLatch;             // $A098: the round-robin RE-AIM latch (C1/2F22): bit7 = armed, low bits = the seat
                               //   whose next expiry re-aims its facing at the nearest enemy (C1/2986 + C1/0222)
 
-  int enFacing[8];            // the RAW $96DE model: zeroed at battle boot (CF:FB9A), stamped ONLY by the
                               //   mover aims / attack script (same sites as mvFacing). The GENERAL enemy
                               //   render keys the ROM windows on this (bat1/3/4 staged facings all 0).
                               //   mvFacing above keeps its default-1 GATO-render interim (§2.6) -- the two

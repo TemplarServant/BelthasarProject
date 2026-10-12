@@ -7523,7 +7523,7 @@ static void battleGatoRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost
   // module f140 / 164 / 188 / 391 / 415 = field + 220). The closed-form clock that stood here (ctAnimengPoseIdx, period 120
   // from CT_BATTLE_COMBAT_LIVE_F) drew GATO's claws a pose off on most idle frames of a field-started fight (c602: 1,109 px).
   int idx = !h->mvInited ? mem[0x9907 + 6]
-          : (h->deadStanding[3] && h->idleDeathPose[3] != 0xFF) ? h->idleDeathPose[3] : h->idlePub[3];
+          : (h->deadStanding[3] && h->idleDeathPose[3] != 0xFF) ? h->idleDeathPose[3] : BT_IDLEPUB(h, 3);
   if (idx == 0xFF || idx < 0) idx = ctAnimengPoseIdx(fac, h->deadStanding[3] ? (int)h->deadStandFrame[3] : CtBattleRenderClock(h));
   ctAnimengGatoTrace(h, "idle", fac, idx, CT_GATO_FOOT_X + gdx, CT_GATO_FOOT_Y + gdy);
   ctAnimengGatoBlit(fb, idx, CT_GATO_FOOT_X + gdx, CT_GATO_FOOT_Y + gdy, palw);
@@ -7644,7 +7644,7 @@ static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattle
     // The stateless "elapsed frames / 10" cycle this replaced could not hold a pose across a row rebuild, did
     // not know a rebuild keeps the cursor, and read a facing-independent dwell row as if poses[c] held for
     // dwells[c] (the ROM reloads with dwells[c+1], C1/3489).
-    int rest = h->mvInited ? h->idlePub[slot] : mem[0x9907 + 3 + slot];
+    int rest = h->mvInited ? BT_IDLEPUB(h, slot) : mem[0x9907 + 3 + slot];
     // The ACTING enemy's cells come from the live anim script (battle_enemy_anim_script.md), the same
     // machine the Hetake's renderer reads -- so an enemy with no dedicated renderer animates its attack
     // too, instead of standing in its idle window through the whole action.
@@ -7770,7 +7770,7 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
       // (battle.c idleDeathPose; FF = no latch -> the live published pose). A seed render reads the seed's $9907.
       int etype = mem[0x967C + 3 + slot] & 7;
       int pose = !h->mvInited ? mem[0x9907 + 3 + slot]
-               : (h->idleDeathPose[slot] != 0xFF) ? h->idleDeathPose[slot] : h->idlePub[slot];
+               : (h->idleDeathPose[slot] != 0xFF) ? h->idleDeathPose[slot] : BT_IDLEPUB(h, slot);
       if (pose == 0xFF) continue;
       CtEnemyCell ec[24];
       int ncell = CtBattleEnemyCells(3 + slot, id, pose, etype, ec, 24);
