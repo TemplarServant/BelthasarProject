@@ -136,6 +136,13 @@ typedef struct { int active, value, centerX, restY, age, kind, romKind, rise; } 
                               // bytes cleared on its first visit) and C1/5B49-5CD4 walks the eleven $AD9C/$AD9E records --
                               // the 07D's Frog Squash shows five at once (cartridge OAM f5130); a pool of 4 lost the first
 
+// THE COMBATANTS' OBJ PALETTE BYTES LIVE IN THE WRAM, as the ROM keeps them: $993C,X the live attribute (0x08 = flashing
+// white; ops C9 / 69 / 6A and CF/FE57 rewrite it) and $9888,X the default the boot stores beside it (CC/E6F8, CC/EAAB
+// `STA $9888,Y / STA $993C,Y`). They were host-side mirrors (objPal / objPalDef) the effect ops wrote instead of the
+// WRAM; the routine-level shadow caught op C9 (CD/1B78) leaving $993C as it found it on the Magus fight.
+#define BT_OBJPAL(h, k)    ((h)->mem[0x993C + (k)])
+#define BT_OBJPALDEF(h, k) ((h)->mem[0x9888 + (k)])
+
 typedef struct CtBattleHost {
   uint8_t* mem;              // the engine's $7E image (64KB): staged interface in, battle blocks out
   uint8_t* glb;              // the $7F0000 page (0x200 bytes): outcome $7F01EC = glb[0x1EC]
@@ -397,8 +404,6 @@ typedef struct CtBattleHost {
   // Boot fill: PCs CC/E6F8-E70D (three unrolled stores, 0x0A/0x0C/0x0E, SEAT-indexed); enemies the
   // CC/EA5B loop ($29C7 of block CC/F939[i] = $29BF + i*12, `ASL A`, slot = i+3, absent iff $29C5 bit7).
   // Three combatants deep, `>> 1` is the OBJ palette number the renderer already speaks.
-  uint8_t objPal[11];        // live  $993C,X  (0x08 = flashing white)
-  uint8_t objPalDef[11];     // default $9888,X -- what op 0x6A restores
   uint8_t deathPal[11];      // CF/FE20 set this corpse's $993C to 08 (its palette moved to OBJ palette 4)
   int ascOwnsFlash;          // 1 while the anim interpreter drives this action's flash (see battleAdvanceAction)
   int fxKnockTarget;         // combatant idx displaced by an enemy's physical (battle_actionfx.md A3.3; -1 none)

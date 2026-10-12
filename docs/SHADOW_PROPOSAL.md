@@ -160,7 +160,7 @@ A 2 MB bitmap over the 24-bit address space keeps the per-opcode cost to one bit
 | S1 (field VM done) | Register what the sweeps already grade: the 211 VM ops through `CtFieldRunnerOne`, C0/ACFD, C1/DC64, the AI walk/conditions/commit, the menu inventory and equip | each one shadowed over the attract demo and the recipe states, and a suite check pinned |
 | S2 (first route done) | Battery saves as inputs, plus the first three routes (a boss fight, a shop, a late-game dungeon) | the suite runs the shadow over them; mismatches become ROADMAP entries |
 | S3 (liveness watch done) | Census and `--shadow-poison` | a ranked list of ungraded routines; every `deadBytes` declaration has evidence |
-| S4 | Make the live engine run the registered functions where it still runs its own copy (`step()`'s mirrors in `CtScene`, `src/ct_vm.c:1675-1764`) | what the shadow proves is what the port runs |
+| S4 (first mirror removed) | Make the live engine run the registered functions where it still runs its own copy (`step()`'s mirrors in `CtScene`, `src/ct_vm.c:1675-1764`) | what the shadow proves is what the port runs |
 
 ## What it does not do
 
@@ -264,6 +264,25 @@ pages, or in a register, is graded at once as before.
   cursor $26) stay killed through the watch's read arm.
 - The watch is the S3 mechanism the proposal asked for (`--shadow-poison`), measured instead of poisoned: no second run
   of the oracle, so no question of the logical rule's state between two runs.
+
+## S1, the battle effect program's dispatch, as built
+
+- CD/16A6 (`STX $43 / ASL / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43 / RTS`): one entry grades every
+  ported effect op through `CtBattleFxProgOpMem`, the adapter storing the $40 it hands back and $43/$44 = the slot, as
+  the dispatch does. `--shadow` loads the battle ROM (`CtBattleLoadRom`) for it.
+- The attract: 4988 calls, 4039 matched, 949 dead -- the dead scratch is $0003-$002A and $0045-$004D, exactly the ranges
+  the effect sweeps excluded by assumption; the watch measures them dead on every call. The Magus fight: 1704 calls.
+
+## S4, the first mirror removed, as built
+
+- **What the shadow found.** On the Magus fight, effect op C9 (CD/1B78: `INC $A101`, EOR #08 on $993C-$9946 and $9F46)
+  left $993C-$9946 as it found them in the port: the battle host kept the combatants' OBJ palette bytes in a mirror
+  (`objPal`, and `objPalDef` for $9888) and the op EORed the mirror, not the WRAM.
+- **The fix is the mechanism, not the op.** The mirror is gone: `BT_OBJPAL(h, k)` / `BT_OBJPALDEF(h, k)` (battle.h) are the
+  WRAM bytes $993C,X / $9888,X, and the 33 uses in battle.c and field.c go through them -- the boot's CC/E6F8 / CC/EAAB
+  stores, ops C9 / 69 / 6A, CF/FE57's flash, the compose snapshot. The full suite is unchanged (828 of 828 outside the
+  shadow's own three checks, which gained the entry), so the mirror was only ever a copy; now the shadow can grade
+  what the port runs. A mutation that drops op C9's EOR on the WRAM is killed by `shadow-route-magus-fight`.
 
 ## Fit with the mandate
 

@@ -15593,6 +15593,7 @@ static int runShadow(int argc, char** argv) {
   }
   printf("shadow: %d frame(s) from %s%s%s\n", frames, statePath ? statePath : "power-on",
          getenv("CT_ORACLE_LOGICAL") ? ", logical frames" : "", script ? ", with a pad script" : "");
+  if (!CtBattleLoadRom(romPath)) printf("shadow: the battle ROM did not load -- CD/16A6 is not graded\n");
   CtShadowInstall(s, dump, dumpAddr);
   CtBtnScript bs = { script }; uint16_t btn = 0; int left = 0;
   for (int f = 0; f < frames; f++) {

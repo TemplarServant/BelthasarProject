@@ -4101,7 +4101,7 @@ static void battleIconClear(CtBattleHost* h, int cmb) {
   uint8_t* s = h->mem;
   s[0xA483 + cmb] = 0; s[0xA48E + cmb] = 0; s[0xA457 + cmb] = 0; s[0xA46D + cmb] = 0; s[0xA478 + cmb] = 0;
   if (cmb < 3) {                                                   // C1/30C7-30CA
-    int row = (h->objPal[cmb] << 4) & 0xFF;                        // C1/30CC-30D2 ($993C is objPal here)
+    int row = (BT_OBJPAL(h, cmb) << 4) & 0xFF;                        // C1/30CC-30D2 ($993C,X)
     for (int i = 0; i < 0x1A; i++) s[0x2300 + row + i] = s[0x2100 + row + i];   // C1/30D3-30DE
   }
 }
@@ -4351,7 +4351,7 @@ static void battleStatusPalCycle(CtBattleHost* h) {
     if (!s[0xA46D + y] || s[0xA101]) continue;                     // FE7E0-FE7E8
     int st = (s[0xA441 + y] << 1) & 0xFF;                          // FE7EC-FE7F0 LDA / ASL (8-bit) / TAX
     int x = ((rom[ROM_STATUS_PALCYC_BASE + st] | (rom[ROM_STATUS_PALCYC_BASE + st + 1] << 8)) + s[0xA499 + y]) & 0xFFFF;   // FE7F1-FE7FB
-    uint8_t pal = h->objPal[y];                                    // $993C,Y (this port keeps it in objPal)
+    uint8_t pal = BT_OBJPAL(h, y);                                    // $993C,Y
     if (pal == 0x08) continue;                                     // FE7FF-FE804
     int row = (pal << 4) & 0xFF;                                   // FE806-FE80A
     if ((long)ROM_STATUS_PALCYC_RAMP + x + 1 >= rl) continue;
@@ -13098,7 +13098,7 @@ static void battleAscFlashOn(CtBattleHost* h, int t, int k, const uint8_t* rom, 
     if (c < 0) break;
     if (c < 11) {
       if ((t >= 4 || c >= 3) && m[0x99D2] && m[0xA08C + c]) bg = 1;   // C1/5DEA-5DF8 / C1/5E09-5E13
-      h->objPal[c] = 0x08;                                            // C1/5DFA / C1/5E15
+      BT_OBJPAL(h, c) = 0x08;                                            // C1/5DFA / C1/5E15
     }
     if (t < 4) break;
   }
@@ -13117,7 +13117,7 @@ static void battleAscFlashOff(CtBattleHost* h, int t) {
     int c = h->ascRole[i];
     if (c < 0) break;
     if (c < 11) {
-      h->objPal[c] = h->objPalDef[c];                                 // C1/5EA0-5EA3 / C1/5EA8-5EAB / C1/5ED1-5ED4
+      BT_OBJPAL(h, c) = BT_OBJPALDEF(h, c);                                 // C1/5EA0-5EA3 / C1/5EA8-5EAB / C1/5ED1-5ED4
       if (t < 4 && c >= 3 && m[0x99D2])                               // C1/5E97-5E9E -> C1/5EB0-5EC2
         for (int y = m[0x99D3] * 2; y < 0x100; y++) m[0x2200 + y] = m[0x2000 + y];
     }
@@ -13817,7 +13817,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           uint8_t* s = h->mem;
           s[0xAB4B] = (uint8_t)a1; s[0xAB4A] = 1; s[0xAB4E] = 1;
           if (s[0x99D2]) for (int i = 0; i < 11; i++) { int y = s[0xA017 + i]; if (y & 0x80) break;   // C1/5EED: the arena
-              if (s[0xA08C + y] && h->objPal[y] == 0x08) { s[0xA08B]++; break; } }                     //   rotates too
+              if (s[0xA08C + y] && BT_OBJPAL(h, y) == 0x08) { s[0xA08B]++; break; } }                     //   rotates too
           isFree = 0;
           break; }
         case 0x43: {                                                 // `43 tt xx yy`: the stored point := resolve(tt) + (xx, yy)
@@ -14629,8 +14629,8 @@ static void battleDeathPalCopy(CtBattleHost* h, int slot) {
   int cmb = 3 + slot;
   if (s[0x9FF7 + cmb] || !s[0x99B5 + cmb]) return;              // CF/FE28-FE2B, CF/FE36-FE39
   if (s[0x29C6 + slot * 12] & 0x40) return;                     // CF/FE3B-FE4D
-  int y = (h->objPal[cmb] << 4) & 0xFF;                         // CF/FE4F-FE56: $993C,X * 16 (8-bit)
-  h->objPal[cmb] = 0x08;                                        // CF/FE57-FE59
+  int y = (BT_OBJPAL(h, cmb) << 4) & 0xFF;                         // CF/FE4F-FE56: $993C,X * 16 (8-bit)
+  BT_OBJPAL(h, cmb) = 0x08;                                        // CF/FE57-FE59
   h->deathPal[cmb] = 1;
   for (int x = 0; x < 0x18; x++) s[0x2382 + x] = s[0x2182 + x] = s[0x2302 + y + x];   // CF/FE61-FE72
 }
@@ -14724,7 +14724,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
                        // HOST LIFETIME, not a ROM claim: every measured script bounds its 0x69 with a 0x6A
                        // inside the span, so with no action live nothing may still be white. Clearing here
                        // means an action cut short (defeat, teardown) cannot strand a combatant at pal4.
-                       if (h->ascOwnsFlash) { for (int c = 0; c < 11; c++) if (!h->deathPal[c]) h->objPal[c] = h->objPalDef[c];
+                       if (h->ascOwnsFlash) { for (int c = 0; c < 11; c++) if (!h->deathPal[c]) BT_OBJPAL(h, c) = BT_OBJPALDEF(h, c);
                                               h->flashTarget = -1; h->fxFlashPal = -1; h->ascOwnsFlash = 0; }
                        h->fxScriptFlashMask = 0;
                        return; }                                                  // no action -> no tech FX
@@ -14878,7 +14878,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
     // flashLeft stays 1 while lit: the countdown at the top of this function then clears the pair every
     // frame and this projection immediately re-sets it, so `flashLeft > 0` keeps meaning "flashing" for
     // the trace line and for anything else that reads the legacy triple.
-    if (lit >= 0) { h->flashTarget = lit; h->fxFlashPal = h->objPalDef[lit] >> 1; h->flashLeft = 1; }
+    if (lit >= 0) { h->flashTarget = lit; h->fxFlashPal = BT_OBJPALDEF(h, lit) >> 1; h->flashLeft = 1; }
     else if (h->flashTarget >= 0)          { h->flashTarget = -1; h->fxFlashPal = -1; h->flashLeft = 0; }
   }
   // per-attacker VISUAL strike offset: Crono melee A2.1 (rel 29) / his CRIT anim 0x01 (rel 87, battle_crit.md
@@ -16196,8 +16196,8 @@ void CtBattleBegin(CtBattleHost* h) {
       for (int k = 0; k < 6; k++) if ((long)(ROM_BATTLE_OBJPAL1_TAIL + k) < gRomLen) s[0x213A + k] = gRom[ROM_BATTLE_OBJPAL1_TAIL + k];
     }
     for (int k = 0x1FF; k >= 0; k--) s[0x2200 + k] = s[0x2000 + k]; }
-  for (int i = 0; i < 3; i++) { h->objPalDef[i] = (uint8_t)(0x0A + 2 * i); h->objPal[i] = h->objPalDef[i];
-                                h->objPalCmp[i] = h->objPalShown[i] = h->objPal[i]; }
+  for (int i = 0; i < 3; i++) { BT_OBJPALDEF(h, i) = (uint8_t)(0x0A + 2 * i); BT_OBJPAL(h, i) = BT_OBJPALDEF(h, i);
+                                h->objPalCmp[i] = h->objPalShown[i] = BT_OBJPAL(h, i); }
   // CC/E710-E753: per seat, `LDA $1C48,Y` (Y = seat*5, the equipped weapon FD/AF04 staged) / `LDA $CD6CEC,X` /
   // x6 / `LDA $D14B00,X / STA $23BA,Y` (Y = seat*32) for six bytes -- colours 13..15 of OBJ palette 5+seat, LIVE page only.
   if (gRom)
@@ -16226,9 +16226,9 @@ void CtBattleBegin(CtBattleHost* h) {
     for (int i = 0; i < 8; i++) {
       const uint8_t* r = bm + 0x29BF + i * 12;                    // the staged slot record (same table as :616)
       int absent = (r[6] & 0x80) != 0;                            // $29C5,X bit7 -> CC/EA66 BMI, slot skipped
-      h->objPalDef[3 + i] = absent ? 0xFF : (uint8_t)(r[8] << 1); // $29C7,X (= rec+8) ASL A
-      h->objPal[3 + i]    = absent ? 0x00 : h->objPalDef[3 + i];  // oracle: $9888 FF / $993C 00 on an absent slot
-      h->objPalCmp[3 + i] = h->objPalShown[3 + i] = h->objPal[3 + i];
+      BT_OBJPALDEF(h, 3 + i) = absent ? 0xFF : (uint8_t)(r[8] << 1); // $29C7,X (= rec+8) ASL A
+      BT_OBJPAL(h, 3 + i)    = absent ? 0x00 : BT_OBJPALDEF(h, 3 + i);  // oracle: $9888 FF / $993C 00 on an absent slot
+      h->objPalCmp[3 + i] = h->objPalShown[3 + i] = BT_OBJPAL(h, 3 + i);
       // ...and CC/EA70 `LDA $29C6,X / AND #07 / STA $967C,Y`: the CELL-LAYOUT TYPE, published ONCE here.
       // It has to be kept, because the record byte it comes from does not survive the fight: the
       // end-of-battle survivor pass is `C1/B3E3 LDA $29C6,Y / AND #40 / ORA #40 / STA $29C6,Y`, after
@@ -19450,14 +19450,14 @@ static uint32_t battleFxOp97(CtBattleHost* h, const uint8_t* rom, int X, uint32_
 }
 // C9 (CD/1B78, no operand -- `REP #20 / DEC $40`): `INC $A101`, EOR #08 on the eleven combatants' OBJ palette bytes
 // $993C..$9946 and on the bracket's $9F46 -- palette n <-> n^4, so the combatants swap between the colour-math half (OBJ
-// palettes 4-7) and the other one. This port keeps $993C in h->objPal (the boot fill CC/E6F8 / CC/EAAB and ops 69/6A write
-// it there, and the compose snapshot reads it), so the EOR goes there; $9F46 and $A101 are the page's (the bracket's
-// attribute, battleBracketOam, and CF/E5AA's grey, battlePulseFrame, read them). Oracle c0k4 f929: `$993C = 02 04 06 08 08
+// palettes 4-7) and the other one. All three are the WRAM's (BT_OBJPAL: the port once kept $993C in a host mirror and
+// EORed that, which left the WRAM as it was -- the routine-level shadow caught it); $9F46 and $A101 are read by the
+// bracket's attribute (battleBracketOam) and CF/E5AA's grey (battlePulseFrame). Oracle c0k4 f929: `$993C = 02 04 06 08 08
 // 08 0A 08 08 08 08` from 0A 0C 0E 00 00 00 02 00 00 00 00, `$9F46 = 0A`, `$A101 = 01`.
 static uint32_t battleFxOpC9(CtBattleHost* h, uint32_t p) {
   uint8_t* s = h->mem;
   s[0xA101]++;                                                     // CD/1B78
-  for (int k = 0; k < 11; k++) h->objPal[k] ^= 0x08;               // CD/1B7B-1B89
+  for (int k = 0; k < 11; k++) BT_OBJPAL(h, k) ^= 0x08;               // CD/1B7B-1B89
   s[0x9F46] ^= 0x08;                                               // CD/1B8B-1B90
   return p - 1;                                                    // CD/1B93-1B97
 }
@@ -21592,7 +21592,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // the compose runs -- the attributes, the effect objects' cells, the afterimage -- and the OAM shadow keeps what the last
   // one wrote (oracle c0k4: $0700.. unchanged from f931 to f1070 under `$A028 = 01` f930-f1068).
   h->composeHeld = h->mem[0xA028];
-  if (!h->composeHeld) memcpy(h->objPalCmp, h->objPal, sizeof h->objPalCmp);
+  if (!h->composeHeld) memcpy(h->objPalCmp, &BT_OBJPAL(h, 0), sizeof h->objPalCmp);
   // ...and the always-front flags the same CF/E83A builds its draw list from (CF/E855 `LDA $A5C1,Y / STA $1D39,Y / BEQ`,
   // $A5C1 + object = $A5CD + cmb, after CF/E84A took the sort key from `$1D17,Y` -- the foot the movers left THIS frame).
   // Ops 27/28 write them from the script, so the list sees a write one frame later, while it sorts the feet of its own

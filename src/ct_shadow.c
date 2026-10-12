@@ -212,6 +212,26 @@ static int techPassRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, l
   (void)e; (void)romLen; (void)in; (void)out; CtBattleTechPass(w, rom, w[0x101E0]); return CT_SH_RETURNS;
 }
 
+// CD/16A6, THE BATTLE EFFECT PROGRAM'S PER-OP DISPATCH (battle.c CtBattleFxProgOpMem; --sweepfxops/fx80/fxmisc/fx3d):
+// `STX $43 / ASL / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43 / RTS`, with A = the op and $40-$42 the op's
+// address in bank $D1. The C runs the op from the ROM and hands back the $40 the handler leaves; the adapter stores
+// it, and $43/$44 = the slot, as the dispatch does. One entry grades every ported effect op on the calls the fights
+// make; what the C does not port (a STOP) is `unported`. Needs the battle ROM loaded (CtBattleLoadRom).
+static int fxGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  int at = w[0x40] | (w[0x41] << 8);
+  return rom && in->dp == 0x0000 && in->db == 0x7E && w[0x42] == 0xD1 && rom[0x110000 + at] == (in->a & 0xFF);
+}
+static int fxRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                 CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)out;
+  int p = CtBattleFxProgOpMem(w, in->x, w[0x40] | (w[0x41] << 8));
+  if (p < 0) return CT_SH_UNPORTED;
+  w[0x40] = (uint8_t)p; w[0x41] = (uint8_t)(p >> 8);
+  w[0x43] = (uint8_t)in->x; w[0x44] = (uint8_t)(in->x >> 8);
+  return CT_SH_RETURNS;
+}
+
 static const CtShadowEntry k_fixed[] = {
   { 0xC28791, "inventory add (CtMenuInvAdd)", 0x00, 0x00, 0, 0, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC287D5, "inventory remove (CtMenuInvRemove)", 0x00, 0x00, 0, 1, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
@@ -234,6 +254,7 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC1D174, "battle stat fetch", 0x30, 0x20, 0, 0, battleGuard, statRun, 0, NULL },
   { 0xC1B279, "battle dead flag", 0x30, 0x20, 0, 0, battleGuard, deadRun, 0, NULL },
   { 0xC1F205, "battle tech pass", 0x30, 0x20, 0, 0, battleGuard, techPassRun, 0, NULL },
+  { 0xCD16A6, "battle effect op (CD/16A6)", 0x30, 0x20, 0, 0, fxGuard, fxRun, CT_SH_X16, NULL },
 };
 #define AI_NCOND 0x29   // the condition ops 00-28 (--sweepaieval's range; op 0F, C1/2C02's path test, is unported)
 #define SH_NFIXED ((int)(sizeof k_fixed / sizeof k_fixed[0]))

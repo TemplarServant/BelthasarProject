@@ -6351,11 +6351,11 @@ static uint16_t battleFleePalWord(uint16_t w, int k, int kind) {
   if (mask & 4) b = battleFleePalC(b, k, kind);
   return (uint16_t)(r | (g << 5) | (b << 10));
 }
-// Combatant `cmb`'s OBJ palette (its OAM attribute bits 1-3, h->objPal) through the live page: `src` untouched
+// Combatant `cmb`'s OBJ palette (its OAM attribute bits 1-3, $993C,X: BT_OBJPAL) through the live page: `src` untouched
 // while the page is the base one, else the scaled copy written into `tmp`.
 static const uint16_t* battleFleeObjPal(const CtBattleHost* h, int cmb, const uint16_t* src, uint16_t* tmp) {
   if (!h || cmb < 0 || cmb >= 11) return src;
-  int k = battleFleePalK(h, 8 + ((h->objPal[cmb] >> 1) & 7)), kind = battleFleePalKind(h, 8 + ((h->objPal[cmb] >> 1) & 7));
+  int k = battleFleePalK(h, 8 + ((BT_OBJPAL(h, cmb) >> 1) & 7)), kind = battleFleePalKind(h, 8 + ((BT_OBJPAL(h, cmb) >> 1) & 7));
   if (k < 0) return src;
   for (int i = 0; i < 16; i++) tmp[i] = battleFleePalWord(src[i], k, kind);
   return tmp;
@@ -6668,7 +6668,7 @@ static void battleStanceRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
     // swaps the page's rows 1-3 and 5-7 after it, so Lightning 2 draws Crono from row 1 (oracle c0k4 f930: his OAM attr
     // 3A -> 32, and $2320.. <-> $23A0..). A seed render (no live host) keeps the staged byte.
     uint16_t livePal[16];
-    { int slot = (h ? (h->mvInited ? h->objPalShown[seat] : h->objPalDef[seat]) : (0x0A + 2 * seat)) >> 1 & 7;
+    { int slot = (h ? (h->mvInited ? h->objPalShown[seat] : BT_OBJPALDEF(h, seat)) : (0x0A + 2 * seat)) >> 1 & 7;
       const uint8_t* src = h ? h->fxCgram + (128 + slot * 16) * 2 : mem + 0x2300 + slot * 32;
       for (int k = 0; k < 16; k++) livePal[k] = (uint16_t)(src[k * 2] | (src[k * 2 + 1] << 8));
       // CT_BATTLE_PCPALTRACE: the sixteen colours a seat is drawn with, printed when they change -- beside an
@@ -7691,7 +7691,7 @@ typedef struct { int16_t x; uint8_t y; uint16_t tile; } CtDissolveCell;
 // (C1/5E40) -- the user's "when the enemy is about to do the dissolve, it flashes" (2026-10-07; every death of
 // the forest ambush and of the 3-Hetake fight, the frame after the kill; the rule's cartridge shows none).
 static void battleDissolveLivePal(const CtBattleHost* h, int cmb, uint16_t* out) {
-  int row = ((h->mvInited ? h->objPalShown[cmb] : h->objPal[cmb]) >> 1) & 7;   // $993C,X as shown (palette bits x2)
+  int row = ((h->mvInited ? h->objPalShown[cmb] : BT_OBJPAL(h, cmb)) >> 1) & 7;   // $993C,X as shown (palette bits x2)
   for (int i = 0; i < 16; i++) {
     int c = (128 + row * 16 + i) * 2;
     out[i] = (uint16_t)(h->fxCgram[c] | (h->fxCgram[c + 1] << 8));
@@ -9961,10 +9961,10 @@ int main(int argc, char** argv) {
       // ...and the rest of what the battle NMI and the boot leave in the host, from the SEED, not from zeros: the
       // per-combatant OBJ palette bytes are the ROM's own $9888 (default) / $993C (live), and the CGRAM the PPU holds
       // is the live page CF/E3C0 uploads ($7E:2200). A zeroed host drew every PC with slot 0 of an empty CGRAM.
-      for (int i = 0; i < 11; i++) { hh.objPalDef[i] = w[0x9888 + i]; hh.objPal[i] = w[0x993C + i]; }
+      for (int i = 0; i < 11; i++) { BT_OBJPALDEF(&hh, i) = w[0x9888 + i]; BT_OBJPAL(&hh, i) = w[0x993C + i]; }
       // The three PC bytes are not seed state at all: CC/E6F8 stores 0A/0C/0E unconditionally, by seat, and a seed
       // captured before the boot (gato_t0: $9888 = 80 ..) would otherwise hand every seat slot 0.
-      for (int i = 0; i < 3; i++) { hh.objPalDef[i] = (uint8_t)(0x0A + 2 * i); if (w[0x993C + i] != 0x08) hh.objPal[i] = hh.objPalDef[i]; }
+      for (int i = 0; i < 3; i++) { BT_OBJPALDEF(&hh, i) = (uint8_t)(0x0A + 2 * i); if (w[0x993C + i] != 0x08) BT_OBJPAL(&hh, i) = BT_OBJPALDEF(&hh, i); }
       memcpy(hh.fxCgram, w + 0x2200, sizeof hh.fxCgram);
       // ...as the NMI shipped it: CF/E5AA writes the bracket's grey AFTER the upload, so the picture of the seed's frame
       // carries the previous step (oracle gato_cyclone f392: $A4EF = 1F, WRAM $233C = D1:5980[1F], PPU = D1:5980[1E]).
