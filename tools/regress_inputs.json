@@ -4173,7 +4173,7 @@
         "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
-      "sha256": "eeabe0e047187cb5e0b15dd67b685ddb632fcc04959bb4692a07bcb32e6ab647",
+      "sha256": "a44011f2d9b9346fe0ce907227f983095234c848f0ca8eaca85ff910077eb0f4",
       "size": 1720318,
       "present_when_recorded": true
     },
@@ -4242,7 +4242,7 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "4f10cd0e1c62ac2599ee46fd83ffb37ee09fb5dc7acbf8cea5b18fed643ea794",
+      "sha256": "e4c9cee2aa9ef172d402b4205a7d2fb8bbedf4dee72216c0dddff94b5ec3a4e4",
       "size": 1501354,
       "present_when_recorded": true
     },
@@ -5105,6 +5105,18 @@
       "regenerable": false,
       "how": "The WRAM of saves/field_re/magus_scene_lake.state behind the 21-byte #lakewram header.",
       "sha256": "039843fef6c77bd93d02c58ac259859c0e40a71d07dabe53654f93e067683f0e",
+      "size": 131093,
+      "present_when_recorded": true
+    },
+    {
+      "path": "saves/battle_re/gato_wait_crono_solo.lakewram",
+      "used_by": [
+        "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge"
+      ],
+      "kind": "lakewram",
+      "regenerable": true,
+      "how": "saves/battle_re/gato_wait.state's WRAM with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single learned, MP 99), behind the 21-byte #lakewram header -- what battle_ab.run writes for the port.",
+      "sha256": "a2d2f38f3a0e8f6bb899e8084f230df5b3ea7e0b278d153b684758c43279be0d",
       "size": 131093,
       "present_when_recorded": true
     }

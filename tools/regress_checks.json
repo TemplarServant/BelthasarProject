@@ -6432,6 +6432,57 @@
       "notes": "The user, 2026-10-11 (translated from Portuguese): 'X-Strike, on killing any enemy, does not dissolve in red but in the normal colour'. CD/0043 (the death routine CF/FE20 runs per corpse) waits `JSR CD/3E75 / JSL CD/04AA` until $CCEA == 0 before the #95 post and CD/00A5's fade record 10 ($0598 = 40 C0 0F 10, OBJ palette 4 toward red). $CCEA is the effect program's flag: CD/1609 `INC $CCEA` when the program ends, CD/0497 `STZ $CCEA` after CD/0453's clean-up, whose own colour record (50 10 10 10) is the same record 10. The port waited a fixed two frames (true in the forest fights, where $CCEA is already 0), so after X-Strike its fade started at once and the clean-up's record overwrote it two frames later. The drive: the user's snes9x capture magus_scene.state (loc 0CB, the Diablos about to fight; spliced on a loc 0CB teleport base), X-Strike learned by CT_POKEWRAM 2841=80 (PEEK_POKE on the cartridge), A at d+28 starts the fight, Crono attacks, then Comb / X-Strike / A. The rule's cartridge: the Diablos dies f775 (its palette copied), $CCEA 01 f726-795, the clean-up's record f781-795, the death's record f798-813. The port: f774, $CCEA 0 at f795, the record f797-812 (one frame ahead: its input convention); the corpse dissolves red on both. The dither's start waits on the same flag (battleAdvanceDissolves)."
     },
     {
+      "name": "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "6",
+        "--loadwram",
+        "saves/battle_re/gato_wait_crono_solo.lakewram",
+        "--walkscript",
+        "a:8"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/battle_re/gato_wait.state",
+        "CT_BATTLE_SCRIPT_ABS": "1",
+        "CT_BATTLE_SCRIPT": "n:380,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:202",
+        "CT_FIELD_MEMMON": "0117:1,1882:2",
+        "CT_SHOTS": "build/_gatoend",
+        "CT_SHOTS_AT": "2990",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait_crono_solo.lakewram",
+        "saves/battle_re/gato_wait.state"
+      ],
+      "expect": [
+        "fmemmon f2981 loc=006  0117=00*  1882=300B*"
+      ],
+      "pin": [
+        "^fmemmon f\\d+ loc=006  0117=00\\*  1882=\\w+\\*"
+      ],
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      fieldEpilogueWords(s, X, px, py);                       // C0/08A1-08C8's words",
+          "replace": "      (void)0; /* MUT: C0/08A1's words not stored */",
+          "why": "the restored entry page keeps the PRE-battle words: the lead comes back at 090B, 3 px above"
+        }
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "note_pass": "a PC the enemy pushed comes back to the field where the fight left it (C0/08A1-08C8's words), as on the cartridge",
+      "notes": "The user, 2026-10-11 (translated from Portuguese): 'when Hench hits Crono (the attack that pushes him), the damage stays in the old place; and when the battle ends Crono gives a slight blink in the previous place'. C0/08A1-08C8 stores each PC's field words from its battle record at the epilogue -- `$1801,Y = rel + $F0`, `$1800,Y = fine << 4`, the same for Y -- so the object stands where the fight left it at once. The port moved only the VM's actor; the entry page it restores (C0/0905) put the pre-battle $1800/$1880 back, and the host draws the lead from those words: the lead stood at its old spot on the ack frame and the return's hold frames. GATO's blow pushes Crono three lines (`$1D23` 90 -> 93), and he stays there after his attacks. The rule's cartridge (battle_ab's GATO fight, Crono solo, A every 12 frames from f600): the field words back at f2673 with `$1882 = 0B30`. The port: before, `$1882 = 090B` at the ack (f2981, the pre-battle word); after, 300B. (The ack itself comes 308 frames later than the cartridge's in this drive, with or without the change: a separate, older gap in the victory sequence.) The damage number's origin follows the same law: C1/5B4D-5B6E takes `$1D0C,Y` / `$1D23,Y`, the live position, for a PC as for an enemy -- field-battle-status-render re-pinned."
+    },
+    {
       "name": "field-organ-door-opens-live",
       "argv": [
         "build/ct_field.exe",
@@ -11352,8 +11403,8 @@
       "expect": [
         "battle-status-render f1093 seat1 +0x1E=04 -> poseCls=1A (win +0x68) icon=4",
         "battle-status-render f1093 seat0 +0x1E=04 -> poseCls=1A (win +0x68) icon=4",
-        "battleshot: f1093 fnv=DC91C563",
-        "battleshot: on act-end#4+178 fnv=DC91C563",
+        "battleshot: f1093 fnv=01F57A33",
+        "battleshot: on act-end#4+178 fnv=01F57A33",
         "battleshot: anchor 'act-end'#4 fired f915, shooting f1093 (+178)",
         "icon f278 cmb0 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=00",
         "icon f278 cmb1 clear state=FF latch=FF on=0 grp=00 per=0 tmr=0 cur=03",

@@ -85,7 +85,7 @@ It is **not yet verified playable from start to finish**.
 ### Not done
 
 - **Part of the suite still needs private states.** Everything the build needs is made from your ROM, and 582 of
-  the 825 regression checks run from it; the other 243 read a state from the owner's playthrough that no recipe
+  the 826 regression checks run from it; the other 244 read a state from the owner's playthrough that no recipe
   reproduces yet, and SKIP in a fresh clone. See [docs/ROADMAP.md](docs/ROADMAP.md#1-the-public-release-and-what-it-left-open).
 - **Some pieces still run on emulated hardware.** The sound processor runs on LakeSnes's SPC700/DSP. Five
   timing-sensitive stages (the motorcycle race and other `$C3` sequences, the window wipe, an overworld window, the

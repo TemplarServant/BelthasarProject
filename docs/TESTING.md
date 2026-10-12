@@ -108,9 +108,9 @@ running `ct_field.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-11: **825** checks, **2** excluded; `--list` prints the current set).
+(2026-10-11: **826** checks, **2** excluded; `--list` prints the current set).
 
-- **quick** (**584** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**585** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **239** slower checks — whole fights and attract legs against the logical oracle, the
@@ -665,6 +665,15 @@ into the scroll request (the collision C0/8A6D still runs on `$0120`). Pins the 
 (38 f5, 39 f11, 3C f23, 40 f39; the cartridge's 1-2 frames later). Two mechanisms: the host runs the controller with
 explore off (no d-pad; the lead integrated only while its script sits at op B0), and the collision fetch reads the
 prop planes from the scene's WRAM (the host's packed copy had lost the conveyor bits). Needs the private capture.
+
+### battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge
+
+A PC an enemy pushed: the battle's epilogue C0/08A1-08C8 stores its field words (`$1800/$1880`) from the battle record,
+so it stands where the fight left it the moment the field resumes. GATO's fight (battle_ab's seed, Crono solo): GATO's
+blow leaves Crono three lines lower; pins `$1882 = 300B` at the port's ack (the cartridge's `0B30`). Before, the restored
+entry page kept the pre-battle word (090B) and the lead was drawn there on the return's first frames -- the user's
+"blink in the previous place". The damage number's origin is the same live position (C1/5B4D-5B6E), which re-pinned
+field-battle-status-render. Needs gato_wait.state.
 
 ### battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge
 

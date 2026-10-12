@@ -8468,6 +8468,17 @@ static void fieldEpilogueFrame(uint8_t* s, int X, const uint8_t* r) {
       (s[0x1201 + X] & 3) != 3)                              // CB0C-CB2F: the four gates, class 3 -> CLC / RTS
     s[0x1B00 + X] = 0x80;                                    // `LDA #80 / STA $1B00,X` at CEEE / D283 / DF28 (E123)
 }
+// C0/080D-0836 / C0/08A1-08C8: the corpse's or the PC's field WORDS straight from its battle record -- `$1801,Y = rel + $F0`,
+// `$1881,Y = rel + $F1`, `$1800,Y = fine << 4`, `$1880,Y = fine << 4` -- i.e. the object stands where the fight left it
+// in WRAM at once, not on the VM's next position commit. The host reads the lead's px/py from $1800/$1880, and the
+// restored entry page (C0/0905) had put the PRE-battle words back there: the lead was drawn at its old spot on the ack
+// frame and the return's hold frames (the user, 2026-10-11, translated from Portuguese: "when the battle ends, Crono
+// gives a slight blink in the previous place" -- after Hench's tackle had carried him ~75 px).
+static void fieldEpilogueWords(uint8_t* s, int X, int px, int py) {
+  int wx = (px * 16) & 0xFFFF, wy = (py * 16) & 0xFFFF;
+  s[0x1800 + X] = (uint8_t)wx; s[0x1801 + X] = (uint8_t)(wx >> 8);
+  s[0x1880 + X] = (uint8_t)wy; s[0x1881 + X] = (uint8_t)(wy >> 8);
+}
 static void fieldBattleFinish(CtScene* vm, CtBattleHost* h, int* gameOver) {
   uint8_t* s = CtSceneMem7E(vm);
   // The module's own end tails -- the rewards (C1/83D2-83F2), C1/EAE8, the C1/B442 writeback, C1/B4E9, the drops, `$29AD`
@@ -8548,6 +8559,7 @@ static void fieldBattleFinish(CtScene* vm, CtBattleHost* h, int* gameOver) {
       } else {                                                // C0/080D restore the field position
         int px = (r[0] + oTX) * 16 + r[2], py = (r[1] + oTY) * 16 + r[3];   // (rel+origin)*16 + fine
         CtSceneSetActorPos(vm, obj, px, py);
+        fieldEpilogueWords(s, X, px, py);                     // C0/080D-0836
         fieldEpilogueFrame(s, X, r);                          // C0/0837-086E
       }
     }
@@ -8562,6 +8574,7 @@ static void fieldBattleFinish(CtScene* vm, CtBattleHost* h, int* gameOver) {
       CtObjListUnlink(s, X);                                  // STA $6D / JSR C0/A98A
       int px = (r[0] + oTX) * 16 + r[2], py = (r[1] + oTY) * 16 + r[3];
       CtSceneSetActorPos(vm, po, px, py);                     // C0/08A1-08C8
+      fieldEpilogueWords(s, X, px, py);                       // C0/08A1-08C8's words
       fieldEpilogueFrame(s, X, r);                            // C0/08CB-0902
     }
     // (the regroup CALL, C0/0330 -> C0/5B1F, is fieldBattleResume's -- it follows the C0/595C run there)
@@ -16875,6 +16888,9 @@ int main(int argc, char** argv) {
           if (--battleTailLeft == 0) {
             fieldBattleFinish(f.vm, &liveHost, &gameOver);   // ack + C0/0283 dispatch AT THIS SITE (same frame),
             battlePhase = 0;                                 //   so the parked op-0xD8 sees $0118 next tick
+            { const uint8_t* lw = CtSceneMem7E(f.vm); int lo = pObj * 2;   // the lead's words C0/08A1 just stored
+              if (lw && pObj >= 0) { px = (lw[0x1800 + lo] | (lw[0x1801 + lo] << 8)) / 16.0;
+                                     py = (lw[0x1880 + lo] | (lw[0x1881 + lo] << 8)) / 16.0; } }
             { const uint8_t* bs = CtSceneMem7E(f.vm);        // C0/08CB handed the lead the fight's last pose ($0F01,Y)
               if (bs) { pLeadShown = bs[0x0F01 + (bs[0x0197] & 0x7E)]; pLeadHold = 1; pLeadHoldAf = -1; pPlay.delay = 0; } }   //   and C0/08FA STZ $1601,Y
             // C0/0304-038C: under the rule its legs run on the chain's waits (the hold below, battleReturnWait 1..4);

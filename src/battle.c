@@ -8884,9 +8884,17 @@ static void battlePopupOrigin(const CtBattleHost* h, int tgt, int* cx, int* ry) 
     // to Crono's spot is fixed at the source (ct_vm.c op-0xD9 D.3), so each PC's own record is now live.
     // Byte-identical to the old baked constant for the GATO fight (its staged Crono foot IS (134,144) ->
     // cx 134/ry 129, matching CT_FX_CRONO_CX/RY exactly -- a zero-diff regression proof).
+    // ...and, as for an enemy, the PC's LIVE position once the movers run: C1/5B4D-5B6E takes the popup's origin from
+    // `LDA $1D0C,Y / STA $94 / LDA $1D23,Y / STA $95` for every combatant alike (plus $9708/$9713 when $A003,Y is set).
+    // The staged foot is only where the PC STOOD at the battle's start: after a push (the Hench's tackle carries Crono
+    // ~75 px, `$1D0C` 5E -> D1+ on the rule's cartridge, the user's golpe_hench capture) the number rose at the old spot
+    // (the user, 2026-10-11, translated from Portuguese: "when Hench hits Crono and pushes him, the damage stays in the
+    // old place"). GATO's own blow pushes Crono too: on the rule's cartridge (gato_wait) the number is spawned at f520
+    // (C1:5B5C) with Crono's `$1D23` = 93, three lines below his staged 90 -- field-battle-status-render re-pinned for it.
     const uint8_t* r = (tgt >= 0 && tgt < 3) ? (s + 0x29B0 + tgt * 5) : NULL;
-    if (r) { *cx = 16 * r[0] + r[2]; *ry = 16 * r[1] + r[3] - 15; }
-    else   { *cx = CT_FX_CRONO_CX;   *ry = CT_FX_CRONO_RY; }   // invalid seat (never hit in practice) -> fallback
+    if (r && h->mvInited) { *cx = h->mvLiveX[tgt]; *ry = h->mvLiveY[tgt] - 15; }
+    else if (r) { *cx = 16 * r[0] + r[2]; *ry = 16 * r[1] + r[3] - 15; }
+    else        { *cx = CT_FX_CRONO_CX;   *ry = CT_FX_CRONO_RY; }   // invalid seat (never hit in practice) -> fallback
   }
 }
 // THE RISE, read from the ROM. The popup animator CF/E781 (battlePopupAnimator) adds one step a frame to every combatant's
