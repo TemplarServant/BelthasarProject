@@ -316,10 +316,23 @@ into the WRAM.
   committed by the walk at f672 (mode 01 -> 0A, as on the cartridge), and the fight ends 8 frames later
   (`field-battle-bat9-return`, our own numbers, re-pinned with the measurement). Every oracle-compared check is
   unchanged; full suite otherwise green.
-- **Not yet shadowed: the idle walk C1/2D9F.** Registered on a trial, its enemy groups differed on ~500 bytes per publish
-  -- the sprite cells C1/1C4A-1C66 assembles in the WRAM ($6Bxx-$6Cxx) when a pose changes, which the port builds only
-  at draw time (`CtBattleEnemyCells`). That gather is the next mechanism to move; the PC group ($A4 = 0) needs the
-  `pc*` fields moved too.
+- **The idle walk C1/2D9F, shadowed (enemy groups).** Three mechanisms had to become the ROM's before it matched:
+  1. **The gather C1/1C4A**, byte for byte (`battleCellGather`): a published pose's cells into the WRAM sprite mirror
+     (CC:F941 + the layout's rows, tiles from the sheet `$1C57`, bit-14 cells through C0:FD00), the cells' dx/dy into
+     `$9F47` (sign-extended), `INC $9912`. `$9912` is the WRAM byte now (STZ at C1/2D9F), and `$967B` / `$9679` are
+     stored where C1/3428 / 3430 store them. (C1/1F75 is the gather's own tail, `INC $9912 / RTS`.)
+  2. **The presence flag.** The walk gates on `$96F8,X` (C1/3349); the port read a stand-in -- the staged record's
+     byte +6 bit 7, which a death never changes -- and kept visiting delisted slots (48 of the 50 mismatches). The port
+     already staged `$96F5` at the boot; it now clears it as CF/FE7B does (when a corpse's death routine ends, or at
+     once for the `$9FF7` / `$99B5` arms), and `battleSlotStaged` / `battleMirrorPresent` read the flag itself.
+  3. **The commit's direct page.** C1/3370-3405 leaves `$C0`-`$C5` (the pose / dwell pointers), `$A5`/`$A7`/`$A8` and
+     the product of C1/00A7 (`$77`/`$78` included), `$86`, `$82`, `$80`, `$84`, `$9C` -- and D1/FE8A's multiply reads
+     `$77`/`$78` as they stand the next frame (the watch measured both read).
+  On the Magus route: 248 calls, 0 mismatched, 185 dead (`$80`, `$9C`, `$9841`, `$992D`-`$992F`), 62 unported (the PC
+  group, still the host's `pc*` fields). The live battle follows the cartridge more closely: the walk no longer commits
+  dead slots, which moved two drives of our own (field-battle-end-uiteardown, battle-slow-doubles-reload-and-cuts-damage,
+  re-pinned with the measurement; every oracle-compared check unchanged). Two mutations pin the flag and the gather.
+- `--dumpcall N` (with `--dump` / `--dumpaddr`) dumps an entry's Nth call, whatever its grade.
 
 ## S1, the battle effect program's dispatch, as built
 

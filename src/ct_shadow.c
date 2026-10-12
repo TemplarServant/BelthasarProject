@@ -253,6 +253,15 @@ static int loadRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long 
   return CtMenuSaveLoad(s_snes->cart->ram, (long)s_snes->cart->ramSize, slot, w) ? CT_SH_RETURNS : CT_SH_UNPORTED;
 }
 
+// C1/2D9F, THE IDLE WALK'S DISPATCH (battle.c battleIdleWalk via CtBattleIdleWalkProbe): `STZ $9912 / LDA $A4 /
+// BEQ (the PCs) / JMP C1/3234 (the enemy groups)`, from C1/10A9 every other frame; a publish runs the gather C1/1C4A
+// into the sprite mirror. The enemy groups' state is the WRAM's (S4); the PC group is still the host's (unported).
+static int idleWalkRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                       CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)in; (void)out;
+  return CtBattleIdleWalkProbe(w) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
+}
+
 static const CtShadowEntry k_fixed[] = {
   { 0xC28791, "inventory add (CtMenuInvAdd)", 0x00, 0x00, 0, 0, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC287D5, "inventory remove (CtMenuInvRemove)", 0x00, 0x00, 0, 1, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
@@ -277,6 +286,7 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC1B279, "battle dead flag", 0x30, 0x20, 0, 0, battleGuard, deadRun, 0, NULL },
   { 0xC1F205, "battle tech pass", 0x30, 0x20, 0, 0, battleGuard, techPassRun, 0, NULL },
   { 0xCD16A6, "battle effect op (CD/16A6)", 0x30, 0x20, 0, 0, fxGuard, fxRun, CT_SH_X16, NULL },
+  { 0xC12D9F, "battle idle walk (C1/2D9F)", 0x20, 0x20, 0, 0, battleGuard, idleWalkRun, 0, NULL },
   { 0xFFFAA3, "save load (CtMenuSaveLoad)", 0x00, 0x00, 1, 0, loadGuard, loadRun, 0, NULL },
 };
 #define AI_NCOND 0x29   // the condition ops 00-28 (--sweepaieval's range; op 0F, C1/2C02's path test, is unported)
@@ -317,7 +327,7 @@ typedef struct {
 
 static Snes* s_snes;
 static const uint8_t* s_rom; static long s_romLen;
-static const char* s_dump; static int s_dumped; static uint32_t s_dumpAddr;
+static const char* s_dump; static int s_dumped; static uint32_t s_dumpAddr; static long s_dumpCall;
 static ShStats s_stats[SH_MAX];
 static ShActive s_act[SH_DEPTH]; static int s_depth; static long s_overflow;
 static uint8_t s_work[SH_DEPTH][SH_WRAM], s_pre[SH_DEPTH][SH_WRAM];
@@ -349,6 +359,10 @@ static uint8_t s_deadAt[SH_MAX][SH_WATCH_TOP / 8];
 static CpuReadHandler s_origRead; static CpuWriteHandler s_origWrite;
 
 static void recClose(ShRec* rc) { rc->done = 1; s_recLive--; }
+static uint8_t s_recPort(const ShRec* rc, int k) {           // what our C left at k
+  for (int j = 0; j < rc->n; j++) if ((int)rc->addr[j] == k) return rc->port[j];
+  return 0;
+}
 // The cartridge touched watched byte k: a read proves the call's difference live, a write retires the byte.
 static void watchHit(Snes* s, int k, int isRead, int byDma) {
   ShRec* rc = &s_rec[s_owner[k] - 1];
@@ -359,9 +373,9 @@ static void watchHit(Snes* s, int k, int isRead, int byDma) {
     char buf[256];
     st->mismatched++;
     snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X S=%04X: %d WRAM byte(s), "
-             "first %02X:%04X oracle %02X port %02X; READ by the cartridge's %s at %02X:%04X (frame %u)",
+             "%02X:%04X oracle %02X port %02X READ by the cartridge's %s at %02X:%04X (frame %u)",
              s_entries[rc->idx].addr, s_entries[rc->idx].name, rc->callNo, rc->frame, rc->in.a, rc->in.x, rc->in.y,
-             rc->entrySp, rc->n, 0x7E + (rc->addr[0] >> 16), rc->addr[0] & 0xFFFF, rc->oracle[0], rc->port[0],
+             rc->entrySp, rc->n, 0x7E + (k >> 16), k & 0xFFFF, s->ram[k], s_recPort(rc, k),
              byDma ? "DMA, started" : "CPU", s->cpu->k, s->cpu->pc, s->frames);
     addDetail(buf);
     recClose(rc);
@@ -418,6 +432,9 @@ static void finish(Snes* s, ShActive* a, uint32_t pc) {
     return;
   }
   const uint8_t* w = s_work[a - s_act];
+  if (s_dump && s_dumpCall && a->callNo == s_dumpCall && a->e->addr == s_dumpAddr) {   // --dumpcall, at the return
+    writeFile(s_dump, "oracle", s->ram); writeFile(s_dump, "port", w);
+  }
   int nDiff = 0, first = -1, skipDiff = 0;
   for (int k = 0; k < SH_WRAM; k++) {
     if (!(k & 0xFF) && !memcmp(w + k, s->ram + k, 0x100)) { k += 0xFF; continue; }   // an equal page, at once
@@ -475,7 +492,7 @@ static void finish(Snes* s, ShActive* a, uint32_t pc) {
     snprintf(buf, sizeof buf, "mismatch %06X %s: call #%ld (frame %u) A=%04X X=%04X Y=%04X S=%04X:%s",
              a->e->addr, a->e->name, a->callNo, a->frame, a->in.a, a->in.x, a->in.y, a->entrySp, regs);
   addDetail(buf);
-  if (s_dump && !s_dumped && (!s_dumpAddr || a->e->addr == s_dumpAddr)) {
+  if (s_dump && !s_dumped && (!s_dumpAddr || a->e->addr == s_dumpAddr) && (!s_dumpCall || a->callNo == s_dumpCall)) {
     s_dumped = 1;
     writeFile(s_dump, "pre", s_pre[a - s_act]); writeFile(s_dump, "oracle", s->ram); writeFile(s_dump, "port", w);
   }
@@ -512,6 +529,7 @@ static void censusNote(const Snes* s, uint32_t pc) {
   s_cenPrevCall = (op == 0x20 || op == 0x22 || op == 0xFC);
 }
 void CtShadowSetCensus(int top) { s_censusTop = top; }
+void CtShadowSetDumpCall(long n) { s_dumpCall = n; }
 
 static int findEntry(uint32_t pc) {
   for (int i = 0; i < s_n; i++) if (s_entries[i].addr == pc) return i;
@@ -554,6 +572,8 @@ static void shOp(void* mem, uint32_t pc) {
   int how = e->run(e, s_work[d], s_rom, s_romLen, &in, &out);
   if (how == CT_SH_UNPORTED) { st->unported++; return; }
   if (s_dump && !s_dumped && (!s_dumpAddr || e->addr == s_dumpAddr)) memcpy(s_pre[d], s->ram, SH_WRAM);   // --dump
+  if (s_dumpCall && e->addr == s_dumpAddr && st->calls == s_dumpCall && s_dump)
+    writeFile(s_dump, "pre", s->ram);           // --dumpcall: the entry's call N, whatever its grade
   s_depth++;
   ShActive* a = &s_act[d];
   a->e = e; a->idx = idx; a->entrySp = c->sp; a->minSp = c->sp; a->interrupted = 0;

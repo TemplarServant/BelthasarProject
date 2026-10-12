@@ -15548,6 +15548,7 @@ static int runShadow(int argc, char** argv) {
     else if (!strcmp(argv[i], "--stateout") && i + 1 < argc) stateOut = argv[++i];
     else if (!strcmp(argv[i], "--dumpaddr") && i + 1 < argc) dumpAddr = (uint32_t)strtoul(argv[++i], NULL, 16);
     else if (!strcmp(argv[i], "--census") && i + 1 < argc) CtShadowSetCensus(atoi(argv[++i]));
+    else if (!strcmp(argv[i], "--dumpcall") && i + 1 < argc) CtShadowSetDumpCall(atol(argv[++i]));
     else if (!strcmp(argv[i], "--btnfile") && i + 1 < argc) {
       // A route file (tools/shadow_routes/): the --btnscript grammar over any number of lines; `#` starts a comment, and
       // `(tokens)*N` repeats a group N times (a pad pattern held through a fight or a dialogue).

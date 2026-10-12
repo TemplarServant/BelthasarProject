@@ -52,6 +52,8 @@ void CtShadowInstall(Snes* s, const char* dumpPrefix, uint32_t dumpAddr);
 void CtShadowUninstall(void);
 // `top` > 0: also count every routine the run calls (the census) and report the `top` most-called that no entry grades.
 void CtShadowSetCensus(int top);
+// With --dump and --dumpaddr: dump that entry's call `n` (its pre state at the entry, then oracle/port if it mismatches).
+void CtShadowSetDumpCall(long n);
 // One line per registered entry the run reached, then the details of the first mismatches, the ranges not compared,
 // and the `shadow:` total line.
 void CtShadowReport(FILE* f);

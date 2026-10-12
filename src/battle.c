@@ -7803,7 +7803,7 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
         fprintf(stderr, "battledeath f%d slot=%d rec7=%02X 9FF7=%02X 99B5=%02X scan=%s sfx=%d\n", h->frames, dslot,
                 s[0x29C6 + dslot * 12], s[0x9FF7 + tgt], s[0x99B5 + tgt],
                 scanRuns ? "runs (CD/0024)" : scanStands ? "stands (FE7E)" : "cleared (FE7B)", h->deathSfxDue[dslot]);
-      if (!scanRuns && !scanStands) { }       // FE7B: the presence is cleared -- no routine, no corpse (alive-list FF)
+      if (!scanRuns && !scanStands) s[0x96F5 + tgt] = 0;   // FE7B STZ $96F5,X: the presence cleared -- no routine, no corpse
       else if (scanStands) {                  // FE7E: no routine -> the corpse stands undissolved (GATO, X5)
         h->deadStanding[tgt - 3] = 1;
         h->deadStandFrame[tgt - 3] = (uint32_t)CtBattleRenderClock(h);   // battle_gato_idle_victory.md D.2: LATCH the idle
@@ -8633,6 +8633,7 @@ static void battleAdvanceDissolves(CtBattleHost* h) {
   if (h->deathSfxDue[slot] > 0 && h->deathCceaSeen) return;     // its routine still waits on $CCEA (battleDeathSfxTick)
   if (++h->dissolveStep[slot] > CT_DISSOLVE_STEPS - 1) {       // fully cleared -> gone; the next corpse
     h->dissolveActive[slot] = 0; h->dissolveRunning = -1;      //   starts on the very next frame
+    h->mem[0x96F5 + 3 + slot] = 0;                             // CF/FE7B STZ $96F5,X once CD/0024 returns (writer CF:FE7E)
   }
 }
 
@@ -10368,9 +10369,9 @@ static void battleMoveReacquire(CtBattleHost* h, int slot) {
 static int  battleGridBlocked(const uint8_t* s, int x0, int y0, int x1, int y1);   // (defined with the grid below)
 static void battleBox(const CtBattleHost* h, int cmb, int* minX, int* maxX, int* minY, int* maxY);   // (C1/285A, below)
 static int battleSlotStaged(const uint8_t* s, int slot);
-// $96F5,c -- PRESENT: a PC seat that is occupied, an enemy slot whose staged record is valid (rec[6] bit7 clear).
+// $96F5,c -- PRESENT, the byte itself (CC/E63D / CC/EC23 at the boot, CF/FE7B at a death).
 static int battleMirrorPresent(const uint8_t* s, int c) {
-  return c < 3 ? !(s[0x2980 + c] & 0x80) : battleSlotStaged(s, c - 3);
+  return s[0x96F5 + c] != 0;
 }
 // C1/283D: every PRESENT combatant's live foot -> the $A039/$A050 mirror (and its box rows). Called before every
 // handler loop of the idle tick (C1/10B8, C1/10DF) and every frame of the action state (C1/40C8). Absent ones keep
@@ -16483,8 +16484,12 @@ static int battleIterFrameA(const CtBattleHost* h, int fxTd) {
   for (int slot = 0; slot < 8; slot++) if (h->enMsgHold[slot] > 0) return 0;      // ...or inside its message's CD/0295
   return 1;
 }
-static int battleSlotStaged(const uint8_t* s, int slot) {          // $96F8,X (CC/EC23 INC): the staged record's
-  return !(s[0x29BF + slot * 12 + 6] & 0x80);                      //   byte +6 bit7 = EMPTY (verified on 4 seeds)
+// $96F8,X -- the slot's PRESENT flag itself, as C1/3349 / CC/ECC0 read it: staged by CC/EC23 `INC $96F8,X` (the boot,
+// battle.c's staging writes it), cleared by CF/FE7B `STZ $96F5,X` when a corpse's death routine ends. It used to stand
+// in with the staged record's byte +6 bit 7, which a death never changes: the routine-level shadow caught the idle walk
+// C1/2D9F visiting a slot the cartridge had delisted (docs/SHADOW_PROPOSAL.md, S4).
+static int battleSlotStaged(const uint8_t* s, int slot) {
+  return s[0x96F8 + slot] != 0;
 }
 // ---- ONE ITERATION OF THE BATTLE MAIN LOOP'S TURN MACHINERY (C1/8120-8345, dis.py 18120..18345) --------------------
 // The loop head is `C1/8120 TDC / INC $0027 / STA $B2C7 / LDA #03 / JSR C1/0003` (the idle tick C1/106E and its frame
@@ -17246,6 +17251,95 @@ static void battlePcWalk(CtBattleHost* h) {
                     h->frames, seat, win, idx, pose & 0xFF, prevPub & 0xFF, publish, chg, h->pcTimer[seat], aimed, uploads);
   }
 }
+// C1/1C4A -- THE GATHER: a combatant's new pose into the WRAM's sprite mirror (disasm/notes/battle_enemy_cells.md sec. 1),
+// byte for byte, so the walk that publishes a pose leaves the WRAM the cartridge leaves (the routine-level shadow,
+// docs/SHADOW_PROPOSAL.md S4: the port used to build these cells only at draw time). Entered with $9679 = the combatant
+// and $967B = the pose:
+//   1C4A-1C54  type ($967C,cmb) 3 -> RTS
+//   1C55-1C65  $88 = cmb (16-bit), STZ $9922,cmb; the pose already published ($9907,cmb) -> RTS
+//   1C66-1C7F  $9907,cmb = pose; $A5 = pose, $A7/$A8 = CC:F40A[type] (the record stride), JSR C1/00A7: $A9 = pose*stride
+//   1C82-1CA3  X = CC:F92D[cmb]: $BA = $1C78,X + $A9, $BC = $1C7A,X (the record), $BD = $1C57,X, DB = $1C59,X (the sheet)
+//   1CA4-1CE6  $AD = the layout (type, but 5 for a type 2 outside combatant 3), $AE = 0E, JSR C1/0089: $AF = $AD*$AE;
+//              $80 = $81 = CC:F3C2[$AF] (words per row), $85 = CC:F3C3[$AF] (rows), $82/$84 = CC:F3B6+$AF (the row
+//              offsets), $88 = cmb*2, $AF = 7E
+//   1CE7-1F39  per row: X = CC:F941[cmb*2] + offset; per word w = [$BA]: low 11 bits 0 -> 32 zero bytes at 7E:X; else
+//              tile (w & 7FF)*32 + $BD of the sheet, copied as is (bit 14 clear) or byte by byte through C0:FD00 (bit
+//              14 set: $8C = the source, $AD = the destination); X += 32, $BA += 2
+//   1F3C-1F73  the record's dx,dy bytes (CC:F4FC[type] of them) into $9F47 + CC:F917[cmb*2], every byte a sign-
+//              extended word; then 1F75 INC $9912
+static uint8_t btBus(const uint8_t* s, int bank, int addr) {
+  bank &= 0xFF; addr &= 0xFFFF;
+  if (bank == 0x7E || bank == 0x7F) return s[((bank - 0x7E) << 16) | addr];
+  if ((bank < 0x40 || (bank >= 0x80 && bank < 0xC0)) && addr < 0x2000) return s[addr];
+  long o = ((long)(bank & 0x3F) << 16) | addr;
+  return (gRom && o < gRomLen) ? gRom[o] : 0;
+}
+static void battleCellGather(uint8_t* s, int cmb) {
+  const uint8_t* cc = gRom ? gRom + 0x0C0000 : NULL;
+  if (!cc || !gRom || gRomLen < 0x110000) return;
+  int type = s[0x967C + cmb];
+  if (type == 3) return;                                             // 1C50-1C54
+  s[0x0088] = (uint8_t)cmb; s[0x0089] = 0;                           // 1C58 STX $88
+  s[0x9922 + cmb] = 0;                                               // 1C5A STZ $9922,X
+  int pose = s[0x967B];
+  if (pose == s[0x9907 + cmb]) return;                               // 1C60-1C65
+  s[0x9907 + cmb] = (uint8_t)pose;                                   // 1C66
+  int stride = cc[0xF40A + type * 2] | (cc[0xF40B + type * 2] << 8); // 1C6E-1C78
+  s[0x00A7] = (uint8_t)stride; s[0x00A8] = (uint8_t)(stride >> 8); s[0x00A5] = (uint8_t)pose;
+  long prod = (long)pose * stride;                                   // C1/00A7: $A9..$AB, $77 = $A5, $78 = $A8
+  s[0x0077] = (uint8_t)pose; s[0x0078] = (uint8_t)(stride >> 8);
+  s[0x00A9] = (uint8_t)prod; s[0x00AA] = (uint8_t)(prod >> 8); s[0x00AB] = (uint8_t)(prod >> 16);
+  int x = cc[0xF92D + cmb];                                          // 1C84-1C88
+  int rec = ((s[0x1C78 + x] | (s[0x1C79 + x] << 8)) + (int)(prod & 0xFFFF)) & 0xFFFF;   // 1C89-1C90 (CLC by REP #21)
+  int recBank = s[0x1C7A + x];
+  int sheet = s[0x1C57 + x] | (s[0x1C58 + x] << 8), sheetBank = s[0x1C59 + x];
+  s[0x00BA] = (uint8_t)rec; s[0x00BB] = (uint8_t)(rec >> 8); s[0x00BC] = (uint8_t)recBank;
+  s[0x00BD] = (uint8_t)sheet; s[0x00BE] = (uint8_t)(sheet >> 8);
+  int layout = (type == 2 && cmb != 3) ? 5 : type;                   // 1CA6-1CB8
+  int lo = layout * 0x0E;                                            // C1/0089: $AF = $AD * $AE, $77/$78 = the operands
+  s[0x00AD] = (uint8_t)layout; s[0x00AE] = 0x0E; s[0x0077] = (uint8_t)layout; s[0x0078] = 0x0E;
+  s[0x00AF] = (uint8_t)lo; s[0x00B0] = (uint8_t)(lo >> 8);
+  int perRow = cc[0xF3C2 + lo], rows = cc[0xF3C3 + lo];              // 1CC3-1CCF
+  int rowPtr = 0xF3B6 + lo;
+  s[0x0080] = s[0x0081] = (uint8_t)perRow; s[0x0085] = (uint8_t)rows;
+  s[0x0082] = (uint8_t)rowPtr; s[0x0083] = (uint8_t)(rowPtr >> 8); s[0x0084] = 0xCC;
+  s[0x0088] = (uint8_t)(cmb * 2); s[0x0089] = 0;                     // 1CD9 ASL $88
+  s[0x00AF] = 0x7E;                                                  // 1CE2-1CE4
+  int base = cc[0xF941 + cmb * 2] | (cc[0xF942 + cmb * 2] << 8);
+  for (int row = 0; row < rows; row++) {                             // 1CE7: per row
+    int off = cc[(rowPtr + row * 2) & 0xFFFF] | (cc[(rowPtr + row * 2 + 1) & 0xFFFF] << 8);
+    int dst = (base + off) & 0xFFFF;
+    for (int k = 0; k < perRow; k++) {                               // 1CF6: per word
+      int w = btBus(s, recBank, rec) | (btBus(s, recBank, rec + 1) << 8);
+      s[0x008C] = (uint8_t)w; s[0x008D] = (uint8_t)(w >> 8);
+      if (!(w & 0x07FF)) memset(s + dst, 0, 32);                     // 1D01-1D3D: an empty cell
+      else {
+        int src = (((w & 0x07FF) << 5) + sheet) & 0xFFFF;            // 1D4A-1D52
+        if (!(w & 0x4000))                                           // 1D5A-1DC6
+          for (int b = 0; b < 32; b++) s[(dst + b) & 0xFFFF] = btBus(s, sheetBank, src + b);
+        else {                                                       // 1DD3-1F1A, through C0:FD00
+          s[0x008C] = (uint8_t)src; s[0x008D] = (uint8_t)(src >> 8);
+          s[0x00AD] = (uint8_t)dst; s[0x00AE] = (uint8_t)(dst >> 8);
+          for (int b = 0; b < 32; b++) s[(dst + b) & 0xFFFF] = gRom[0x00FD00 + btBus(s, sheetBank, src + b)];
+        }
+      }
+      dst = (dst + 0x20) & 0xFFFF;
+      rec = (rec + 2) & 0xFFFF;                                      // 1F23 INC $BA x2
+    }
+  }
+  s[0x00BA] = (uint8_t)rec; s[0x00BB] = (uint8_t)(rec >> 8);
+  s[0x0080] = 0; s[0x0085] = 0;                                      // the counters ran out
+  int n = cc[0xF4FC + type];                                         // 1F3D-1F4A: $80 = the byte count
+  s[0x0080] = (uint8_t)n; s[0x0081] = 0;
+  int tab = cc[0xF917 + cmb * 2] | (cc[0xF918 + cmb * 2] << 8);      // 1F4C-1F58
+  s[0x0082] = (uint8_t)tab; s[0x0083] = (uint8_t)(tab >> 8);
+  for (int i = 0; i < n; i++) {                                      // 1F5F-1F73
+    uint8_t v = btBus(s, recBank, rec + i);
+    s[(0x9F47 + tab + i * 2) & 0xFFFF] = v;
+    s[(0x9F48 + tab + i * 2) & 0xFFFF] = (v & 0x80) ? 0xFF : 0x00;
+  }
+  s[0x9912]++;                                                       // 1F75 INC $9912
+}
 static void battleIdleWalk(CtBattleHost* h) {
   uint8_t* s = h->mem;
   int grp = BT_SCHEDA4(h);                                            // A = $A4 (C1/2DA2); 0 = the PC group
@@ -17256,7 +17350,7 @@ static void battleIdleWalk(CtBattleHost* h) {
   for (int k = 0; k < n; k++)                                      // the roster: the first set DEFER flag goes
     if (BT_IDLEDEFER(h, base + k)) { first = k; BT_IDLEDEFER(h, base + k) = 0; break; }   //   first and is cleared
   for (int k = 0; k < 3; k++) order[k] = (k < n) ? base + (first + k) % n : -1;     // group 3 = {6,7,FF}
-  int uploads = 0;                                                 // $9912: STZ at C1/2D9F, per dispatch
+  s[0x9912] = 0;                                                   // C1/2D9F STZ $9912 (C1/1F75 INCs it per publish)
   if (wt) fprintf(stderr, "idlewalk f%d grp=%d order=%d,%d,%d" CT_BATTLE_NL, h->frames, grp, order[0], order[1], order[2]);
   for (int k = 0; k < 3; k++) {
     int slot = order[k];
@@ -17268,6 +17362,25 @@ static void battleIdleWalk(CtBattleHost* h) {
       int prev = BT_MVMODE(h, slot);
       BT_MVMODE(h, slot) = BT_MVREQ(h, slot);                            // C1/3364 LDA $5E0D,X / STA $974A,X
       BT_ENFACINGPUB(h, slot) = BT_ENFACING(h, slot);                    // C1/336A LDA $96DE,X / STA $96E9,X
+      { // ...and the direct page as the commit leaves it (C1/3370-3405), the bytes later code reads: D1/FE8A's multiply
+        // takes $77/$78 as they stand, which C1/00A7 here sets (the routine-level shadow measured them read, S4).
+        CtEnemyPoseStage st; int id0 = s[battleBlock(cmb) + 0];
+        if (CtBattleEnemyPoseStage(id0, &st)) {
+          int fac = BT_ENFACING(h, slot), cls0 = gRom[ROM_POSE_CLASS_TBL + (unsigned)(BT_MVMODE(h, slot) & 0xFF)];
+          int off0 = (cls0 == 0) ? 0x0C : (cls0 == 1) ? 0x04 : 0x18;          // C1/33AE-33C6 -> $86
+          long prod = (long)fac * st.stride;                                 // C1/33A5 JSR C1/00A7: $A5 * ($A8:$A7)
+          int px = gRom[0x0CF82F + slot];                                    // C1/33D7 CC:F82F[slot]
+          s[0x009C] = (uint8_t)slot; s[0x009D] = 0;                           // C1/3347 STX $9C
+          s[0x00C0] = (uint8_t)st.ptrA; s[0x00C1] = (uint8_t)(st.ptrA >> 8); s[0x00C2] = (uint8_t)(st.ptrA >> 16);   // C1/3385-3392
+          s[0x00C3] = (uint8_t)st.ptrB; s[0x00C4] = (uint8_t)(st.ptrB >> 8); s[0x00C5] = (uint8_t)(st.ptrB >> 16);   // C1/3376-3383
+          s[0x00A5] = (uint8_t)fac; s[0x00A7] = (uint8_t)st.stride; s[0x00A8] = (uint8_t)(st.stride >> 8);
+          s[0x0077] = (uint8_t)fac; s[0x0078] = (uint8_t)(st.stride >> 8);   // C1/00AD / C1/00C1
+          s[0x00A9] = (uint8_t)prod; s[0x00AA] = (uint8_t)(prod >> 8); s[0x00AB] = (uint8_t)(prod >> 16);
+          s[0x0086] = (uint8_t)off0;
+          s[0x0082] = (uint8_t)(off0 + prod); s[0x0083] = (uint8_t)((off0 + prod) >> 8);   // C1/33C8-33CC
+          s[0x0080] = 0;                                                     // the two 8-count loops ran out
+          s[0x0084] = (uint8_t)(px + 8); s[0x0085] = 0;                       // C1/33EF STX $84, then 8 x INC $84
+        } }
       { uint8_t ps[8], dw[8]; int id = s[battleBlock(cmb) + 0];    // C1/3370-3405: the $97D9 / $9799 rows
         if (CtBattleEnemyIdleWin(id, BT_MVMODE(h, slot) & 0xFF, BT_ENFACINGPUB(h, slot) & 3, ps, dw))
           for (int i = 0; i < 8; i++) { BT_IDLEPOSE(h, slot, i) = ps[i]; BT_IDLEDWELL(h, slot, i) = dw[i]; } }
@@ -17288,7 +17401,9 @@ static void battleIdleWalk(CtBattleHost* h) {
     int cur = BT_IDLECUR(h, slot);
     if (BT_IDLEDWELL(h, slot, cur) == 0) { cur = 0; BT_IDLECUR(h, slot) = 0; }   // C1/341A-341F: zero dwell -> cursor 0
     int pose = BT_IDLEPOSE(h, slot, cur);                            // C1/3425 LDA $97D9,Y / STA $967B
+    s[0x967B] = (uint8_t)pose; s[0x9679] = (uint8_t)cmb;           // C1/3428 STA $967B / C1/3430 STA $9679
     int type = s[0x967C + 3 + slot] & 7;                           // the PUBLISHED type (CC/EA70-EA75), not the record
+    int uploads = s[0x9912];
     if (uploads != 0) {                                            // C1/3434 LDA $9912 / BEQ
       int proceed = (uploads == 1 && type == 0 && (cmb == 4 || cmb >= 6));   // C1/3439-344A: the one exception
       if (!proceed) {                                              // C1/344C INC $9922,X / C1/3451 INC $9694,X
@@ -17299,15 +17414,27 @@ static void battleIdleWalk(CtBattleHost* h) {
     }
     int chg = 0;
     if (type < 3) {                                                // C1/3456 CMP #03 / BCS -> skip C1/1C4A
-      BT_IDLEDEFER(h, slot) = 0;                                      // C1/1C5A STZ $9922,X
-      if (pose != BT_IDLEPUB(h, slot)) { BT_IDLEPUB(h, slot) = pose; uploads++; chg = 1; }   // C1/1C60-1C66 + C1/1F75
+      chg = (pose != BT_IDLEPUB(h, slot));
+      battleCellGather(s, cmb);                                    // C1/345D JSR C1/1C4A: $9922, $9907, the cells, $9912
     }
     cur++; if (cur == 4) cur = 0;                                  // C1/3462-346C
     if (BT_IDLEDWELL(h, slot, cur) == 0) cur = 0;                    // C1/347B-3480
     BT_IDLECUR(h, slot) = cur; BT_IDLETIMER(h, slot) = BT_IDLEDWELL(h, slot, cur);   // C1/3489 STA $9694,X
     if (wt) fprintf(stderr, "idletick f%d slot=%d pose=%02X chg=%d cur=%d tmr=%d up=%d" CT_BATTLE_NL, h->frames,
-                    slot, pose, chg, cur, BT_IDLETIMER(h, slot), uploads);
+                    slot, pose, chg, cur, BT_IDLETIMER(h, slot), s[0x9912]);
   }
+}
+// C1/2D9F, the idle walk's dispatch, on a bare WRAM image -- the routine-level shadow's entry point (ct_shadow.c). The
+// enemy groups ($A4 = 1..3) run whole on the WRAM: their mode, facing and idle-pose state are the BT_* bytes (battle.h)
+// and a publish runs the gather C1/1C4A into the sprite mirror. The PC group ($A4 = 0) still reads host fields: -1.
+int CtBattleIdleWalkProbe(uint8_t* mem) {
+  static CtBattleHost scratch;
+  memset(&scratch, 0, sizeof scratch);
+  scratch.mem = mem;
+  int grp = BT_SCHEDA4(&scratch);
+  if (grp < 1 || grp > 3) return -1;
+  battleIdleWalk(&scratch);
+  return 0;
 }
 // CF/FC08-FC71 -- the battle's EXIT writes each combatant back into its staging record, which the field's epilogue
 // reads (C0/080D for an enemy, C0/08A0 for a PC: the position, and `$0F01,Y := +4`). It has no presence test:
