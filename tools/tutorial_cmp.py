@@ -78,6 +78,7 @@ def seed_path(seg):
 
 
 def ensure_seed(seg):
+    os.makedirs(OUT, exist_ok=True)
     sp = seed_path(seg)
     if not os.path.exists(sp):
         subprocess.run([CT, '--peek', SRC, os.path.join(OUT, '_mk.raw'), '--btnscript', drive(SEGMENTS[seg][0])],

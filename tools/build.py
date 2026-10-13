@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Honest build driver for the Chrono Trigger decomp (stdlib only).
 
+macOS/Linux use cmake and ninja from PATH; CMake discovers system SDL2.
+Native executables have .exe compatibility aliases for the existing asset and test tools.
+
 Replaces the logic that used to live in tools/build.bat (which is now a thin
 wrapper around this script). Same flow: VS 2022 BuildTools vcvars64 ->
 cmake -S . -B build -G Ninja (RelWithDebInfo; CT_BUILD_TYPE overrides) -> cmake --build. On top of that it
@@ -23,15 +26,15 @@ kills the three historical FALSE-'Build OK' mechanisms:
 Usage:  python tools/build.py [ct|ct_field|ct_world|ct_viewer]
         (no argument = build all configured targets, like before)
 
-Read-only with respect to the engine: it reads CMakeLists.txt to learn the
-true per-target source lists (including the file(GLOB) of snes/*.c for
-ct.exe); it never edits any source content.
+Read-only with respect to the engine: it uses CMake's configured targets
+and source lists for freshness checks (including
+conditional target_sources and file(GLOB)); it never edits source content.
 """
 import glob as globmod
 import hashlib
 import json
 import os
-import re
+import shutil
 import subprocess
 import sys
 import time
@@ -48,7 +51,6 @@ CMAKE_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 NINJA_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 
 KNOWN_TARGETS = ("ct", "ct_field", "ct_world", "ct_viewer")
-SDL_H = os.path.join(ROOT, "third_party", "SDL2", "include", "SDL.h")
 
 
 def fail(reason, code=1):
@@ -75,44 +77,47 @@ def rel(path):
     return os.path.relpath(path, ROOT).replace("\\", "/")
 
 
-# ---------------------------------------------------------------- CMakeLists
-def parse_cmakelists():
-    """Read-only parse of CMakeLists.txt -> [{name, sources[abs], sdl}]."""
-    path = os.path.join(ROOT, "CMakeLists.txt")
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        text = f.read()
-    code = re.sub(r"#[^\n]*", "", text)  # strip comments
+# ---------------------------------------------------------------- CMake sources
+def request_cmake_sources():
+    """Ask CMake's file API (available since 3.15) for configured source lists."""
+    query = os.path.join(BUILD, ".cmake", "api", "v1", "query", "client-ct-build")
+    try:
+        os.makedirs(query, exist_ok=True)
+        with open(os.path.join(query, "codemodel-v2"), "w"):
+            pass
+    except OSError as error:
+        fail("cannot request CMake's configured source lists: {}".format(error))
 
-    # file(GLOB VAR [CONFIGURE_DEPENDS] "pattern")
-    globs = {}
-    for m in re.finditer(r'file\s*\(\s*GLOB\s+(\w+)\s+(?:CONFIGURE_DEPENDS\s+)?"([^"]+)"\s*\)', code):
-        var, pat = m.group(1), m.group(2)
-        pat = pat.replace("${CMAKE_CURRENT_SOURCE_DIR}", ROOT.replace("\\", "/"))
-        globs[var] = sorted(globmod.glob(pat))
 
-    # The SDL2 presence gate: targets declared inside it only exist when SDL.h does.
-    span = None
-    gate = re.search(r"if\s*\(\s*EXISTS\s+\$\{SDL2_DIR\}/include/SDL\.h\s*\)", code)
-    if gate:
-        endm = re.search(r"\b(?:else|endif)\s*\(", code[gate.end():])
-        end = gate.end() + endm.start() if endm else len(code)
-        span = (gate.start(), end)
+def configured_source_lists():
+    """Read active sources, with CMake conditions and generator expressions resolved."""
+    reply = os.path.join(BUILD, ".cmake", "api", "v1", "reply")
+    try:
+        indexes = sorted(globmod.glob(os.path.join(reply, "index-*.json")))
+        if not indexes:
+            fail("CMake did not return configured source lists")
 
-    targets = []
-    for m in re.finditer(r"add_executable\s*\(\s*(\w+)\s+([^)]+)\)", code):
-        name, body = m.group(1), m.group(2)
-        srcs = []
-        for tok in body.split():
-            vm = re.fullmatch(r"\$\{(\w+)\}", tok)
-            if vm:
-                srcs.extend(globs.get(vm.group(1), []))
-            else:
-                srcs.append(os.path.join(ROOT, tok.replace("/", os.sep)))
-        sdl = bool(span and span[0] <= m.start() < span[1])
-        targets.append({"name": name, "sources": [os.path.normpath(s) for s in srcs], "sdl": sdl})
-    if not targets:
-        fail("could not parse any add_executable() out of CMakeLists.txt")
-    return targets
+        def read_json(filename):
+            with open(os.path.join(reply, filename), "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        index = read_json(indexes[-1])
+        model_file = index["reply"]["client-ct-build"]["codemodel-v2"]["jsonFile"]
+        model = read_json(model_file)
+        configurations = model["configurations"]
+        if len(configurations) != 1:
+            fail("expected one CMake configuration for the Ninja build")
+        sources = {}
+        for target in configurations[0]["targets"]:
+            if target["name"] not in KNOWN_TARGETS:
+                continue
+            description = read_json(target["jsonFile"])
+            sources[target["name"]] = sorted({
+                os.path.normpath(os.path.join(model["paths"]["source"], source["path"]))
+                for source in description["sources"]})
+        return sources
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        fail("cannot read CMake's configured source lists: {}".format(error))
 
 
 # ------------------------------------------------------------------ pre-flight
@@ -222,9 +227,9 @@ def save_stamp(entries):
     os.replace(tmp, STAMP_PATH)
 
 
-def hash_sources(target):
+def hash_sources(sources):
     out = {}
-    for s in target["sources"]:
+    for s in sources:
         h = sha1_file(s)
         if h is None:
             print("WARNING: source listed in CMakeLists.txt not found: {}".format(rel(s)), flush=True)
@@ -247,23 +252,8 @@ def main(argv):
         if want not in KNOWN_TARGETS:
             fail("unknown target '{}' (know: {})".format(want, ", ".join(KNOWN_TARGETS)), 2)
 
-    targets = parse_cmakelists()
-    byname = {t["name"]: t for t in targets}
-    sdl_present = os.path.isfile(SDL_H)
-
-    if want is not None and want not in byname:
-        fail("target '{}' is not declared in CMakeLists.txt".format(want), 2)
-    if want is not None and byname[want]["sdl"] and not sdl_present:
-        fail("target '{}' needs SDL2 but third_party/SDL2/include/SDL.h is missing "
-             "- run tools/get_sdl2.ps1 first".format(want), 2)
-
-    if want is not None:
-        requested = [want]
-    else:
-        requested = [t["name"] for t in targets if (not t["sdl"]) or sdl_present]
-
     # ---- pre-flight: refuse to build over a RUNNING exe (the LNK1168 class).
-    procs = running_ct_processes()
+    procs = running_ct_processes() if os.name == "nt" else []
     if procs is None:
         print("WARNING: could not check for running ct*.exe processes (powershell "
               "unavailable?) - a locked exe will still fail the link loudly.", flush=True)
@@ -274,16 +264,22 @@ def main(argv):
              "Close them and re-run; refusing to link over a locked exe. "
              "(Nothing was killed.)".format(len(procs)), 2)
 
-    exe_path = {t["name"]: os.path.join(BUILD, t["name"] + ".exe") for t in targets}
+    exe_path = {n: os.path.join(BUILD, n + ".exe") for n in KNOWN_TARGETS}
     pre_hash = {n: sha1_file(p) for n, p in exe_path.items()}
     stamp = load_stamp()
 
     # ---- toolchain + the exact same configure/build flow as before.
-    vs_root = find_vs()
-    print("VS: {}".format(vs_root), flush=True)
-    env = vcvars_env(vs_root)
-    cmake = find_tool(vs_root, env, CMAKE_REL, "cmake.exe")
-    ninja = find_tool(vs_root, env, NINJA_REL, "ninja.exe")
+    if os.name == "nt":
+        vs_root = find_vs()
+        print("VS: {}".format(vs_root), flush=True)
+        env = vcvars_env(vs_root)
+        cmake = find_tool(vs_root, env, CMAKE_REL, "cmake.exe")
+        ninja = find_tool(vs_root, env, NINJA_REL, "ninja.exe")
+    else:
+        env = dict(os.environ)
+        cmake, ninja = shutil.which("cmake"), shutil.which("ninja")
+        if not cmake or not ninja:
+            fail("cmake and ninja must be installed and available on PATH", 2)
 
     # BUILD TYPE. The tree built Debug (/Od) for years, which is why a suite of emulator runs took
     # minutes: every check is an oracle or engine run and none of it was optimised. RelWithDebInfo
@@ -293,8 +289,15 @@ def main(argv):
     btype = os.environ.get("CT_BUILD_TYPE", "RelWithDebInfo")
     cfg = [cmake, "-S", ROOT, "-B", BUILD, "-G", "Ninja",
            "-DCMAKE_MAKE_PROGRAM=" + ninja, "-DCMAKE_BUILD_TYPE=" + btype]
+    request_cmake_sources()
     if run_step(cfg, env, "cmake configure (Ninja, " + btype + ")") != 0:
         fail("cmake configure step failed (see errors above)")
+    source_lists = configured_source_lists()
+    if want is not None and want not in source_lists:
+        fail("target '{}' is not configured; install SDL2 for graphical targets".format(want), 2)
+    requested = [want] if want is not None else [n for n in KNOWN_TARGETS if n in source_lists]
+    if not requested:
+        fail("CMake did not configure any known targets")
 
     bld = [cmake, "--build", BUILD]
     if want is not None:
@@ -309,14 +312,15 @@ def main(argv):
     cur_src = {}    # name -> {relpath: sha1}
     skewed = {}     # name -> [changed relpaths]
     for n in requested:
-        cur_src[n] = hash_sources(byname[n])
+        cur_src[n] = hash_sources(source_lists[n])
         post = sha1_file(exe_path[n])
         if post is None:
             status[n] = ("FAILED", "exe missing after a 'successful' build")
             continue
         st = stamp.get(n)
         if st:
-            changed = [p for p, h in cur_src[n].items() if st.get("sources", {}).get(p) != h]
+            changed = [p for p, h in cur_src[n].items()
+                       if st.get("sources", {}).get(p) != h]
             if changed and post == st.get("exe"):
                 skewed[n] = changed   # edit on disk, exe provably the old build
 
@@ -336,7 +340,10 @@ def main(argv):
             fail("re-build after the clock-skew auto-heal failed (see errors above)")
         for n, files in skewed.items():
             post = sha1_file(exe_path[n])
-            if post == stamp.get(n, {}).get("exe"):
+            # Newly tracked sources must also be rebuilt before certification.
+            # With no earlier content hash, an identical rebuilt exe is valid.
+            previous_sources = stamp.get(n, {}).get("sources", {})
+            if post == stamp.get(n, {}).get("exe") and any(p in previous_sources for p in files):
                 status[n] = ("STALE", files)
             # else: healed; final status decided below from pre/post hashes
 
@@ -354,8 +361,7 @@ def main(argv):
     print("", flush=True)
     print("--- build status " + "-" * 45, flush=True)
     ok = True
-    for t in targets:
-        n = t["name"]
+    for n in KNOWN_TARGETS:
         if n in status:
             s, detail = status[n]
             if s == "BUILT":
@@ -368,8 +374,8 @@ def main(argv):
             else:
                 ok = False
                 line = "FAILED       ({})".format(detail)
-        elif t["sdl"] and not sdl_present:
-            line = "SKIPPED      (SDL2 missing: third_party/SDL2 not found - run tools/get_sdl2.ps1)"
+        elif n not in source_lists:
+            line = "SKIPPED      (not configured by CMake; graphical targets require SDL2)"
         else:
             line = "not requested"
         print("  {:<11} {}".format(n, line), flush=True)

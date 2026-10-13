@@ -189,16 +189,28 @@ extern "C" int CtOverlayFrame(void) {
       if (ImGui::Checkbox("VSync", &vs)) { s->vsync = vs; ch |= CT_OVL_VIDEO; }
       if (!s->fullscreen && ImGui::SliderInt("Window size", &s->windowScale, 1, 8, "%dx")) ch |= CT_OVL_VIDEO;
       ImGui::Separator();
-      const char* bk[] = { "SDL (Direct3D / automatic)", "OpenGL 3.3", "Vulkan" };
+#ifdef __APPLE__
+      const char* bk[] = { "SDL (automatic)", "OpenGL 4.1", "Vulkan" };
+#else
+      const char* bk[] = { "SDL (automatic)", "OpenGL 3.3", "Vulkan" };
+#endif
       if (ImGui::Combo("Video backend", &s->backend, bk, 3)) ch |= CT_OVL_RESTART;
       if (s->backend == CT_BACKEND_SDL) {
-        const char* drv[] = { "Automatic", "Direct3D 9", "Direct3D 11", "OpenGL (SDL's)", "Software" };
-        const char* drvKey[] = { "", "direct3d", "direct3d11", "opengl", "software" };
-        int cur = 0;
-        for (int i = 1; i < 5; i++) if (!strcmp(s->renderDriver, drvKey[i])) cur = i;
-        if (ImGui::Combo("SDL driver", &cur, drv, 5)) {
-          snprintf(s->renderDriver, sizeof s->renderDriver, "%s", drvKey[cur]);
-          ch |= CT_OVL_RESTART;
+        const char* current = s->renderDriver[0] ? s->renderDriver : "Automatic";
+        if (ImGui::BeginCombo("SDL driver", current)) {
+          if (ImGui::Selectable("Automatic", !s->renderDriver[0])) {
+            s->renderDriver[0] = 0;
+            ch |= CT_OVL_RESTART;
+          }
+          for (int i = 0; i < SDL_GetNumRenderDrivers(); i++) {
+            SDL_RendererInfo info;
+            if (SDL_GetRenderDriverInfo(i, &info) != 0) continue;
+            if (ImGui::Selectable(info.name, !strcmp(s->renderDriver, info.name))) {
+              snprintf(s->renderDriver, sizeof s->renderDriver, "%s", info.name);
+              ch |= CT_OVL_RESTART;
+            }
+          }
+          ImGui::EndCombo();
         }
       }
       ImGui::TextDisabled("In use: %s", g_backendName);

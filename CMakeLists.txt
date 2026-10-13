@@ -52,7 +52,7 @@ endif()
 # in third_party/SDL2 (downloaded, git-ignored). The headless 'ct' stays SDL-free;
 # ct_viewer only needs the renderer (scene.c/lz.c/assets.c), not the oracle core.
 set(SDL2_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2)
-if(EXISTS ${SDL2_DIR}/include/SDL.h)
+if(WIN32 AND EXISTS ${SDL2_DIR}/include/SDL.h)
   set(CT_SDL_INC ${SDL2_DIR}/include)
   set(CT_SDL_LIB ${SDL2_DIR}/lib/x64/SDL2.lib)
   set(CT_SDL_DLL ${SDL2_DIR}/SDL2.dll)
@@ -147,4 +147,25 @@ if(CT_SDL_INC)
   message(STATUS "SDL2 found: building ct_viewer + ct_field + ct_world")
 else()
   message(STATUS "SDL2 not in third_party/SDL2 (nor the system's): skipping ct_viewer/ct_field (headless ct still builds)")
+endif()
+
+# Native Finder resource lookup and writable Application Support paths.
+if(APPLE AND TARGET ct_field)
+    enable_language(OBJC)
+    target_sources(ct_field PRIVATE src/macos_paths.m src/macos_window.m src/macos_menu.m)
+    set_source_files_properties(src/macos_paths.m src/macos_window.m src/macos_menu.m PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(ct_field "-framework AppKit")
+endif()
+
+# Keep normal Unix executable names and the .exe aliases used by the shared
+# Python oracle/recipe/regression tools. Both names execute native machine code.
+if(UNIX)
+    foreach(target ct ct_field ct_world ct_viewer)
+        if(TARGET ${target})
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E remove -f "$<TARGET_FILE_DIR:${target}>/${target}.exe"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE_NAME:${target}>"
+                    "$<TARGET_FILE_DIR:${target}>/${target}.exe")
+        endif()
+    endforeach()
 endif()
