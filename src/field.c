@@ -10816,6 +10816,7 @@ int main(int argc, char** argv) {
   uint8_t* pmask = (uint8_t*)malloc((size_t)FIELD_WMAX * CAMH);   // per-frame: every PLAYER pixel (stencil exclusion)
   AnimPlay animPlay[64]; memset(animPlay, 0, sizeof animPlay);   // per-actor scripted playback
   static AnimPlay sidePlay[64]; memset(sidePlay, 0, sizeof sidePlay);   // (the widescreen's side objects' own, picture only)
+  static uint8_t sideShown[64]; memset(sideShown, 0, sizeof sideShown);   // ...and which of them the sides drew last frame
   AnimPlay pPlay; memset(&pPlay, 0, sizeof pPlay);                // the player (idle/walk/run + idle-blink/headshake)
   int pIdleCtr = 0, pBlink = 0;     // field idle-anim timer (C0/A1FD $58, threshold 0x2FF) + the blink-armed flag
   int pAnimMode = 0;                // the lead's live $1680 anim mode -- what C0/9E84's 9EA4 arm HOLDS
@@ -11534,7 +11535,7 @@ int main(int argc, char** argv) {
             // scene load -- fieldLoad seeded the new mask above; here we seed the camera from the arrival tile. Without
             // it the camera kept the PRIOR scene's scroll (visibly off in a multi-screen scene entered from the
             // overworld, user report: scene 5). Replaces the old stateful camX=px-128 re-seed + the >32 recentre hack.
-            memset(animPlay, 0, sizeof animPlay); memset(&pPlay, 0, sizeof pPlay); memset(sidePlay, 0, sizeof sidePlay);
+            memset(animPlay, 0, sizeof animPlay); memset(&pPlay, 0, sizeof pPlay); memset(sidePlay, 0, sizeof sidePlay); memset(sideShown, 0, sizeof sideShown);
             pIdleCtr = 0; pBlink = 0; pAnimMode = 0;        // reset the field idle-blink timer on a scene change
             fieldArrivalTileMode(&f.C, px, py, f.vm);       // C0/9DC3: $1D34, $0155 and the PCs' pairs from the ARRIVAL tile
                                                             //   (else a ladder's climb flag walks through the door)
@@ -17924,15 +17925,20 @@ int main(int argc, char** argv) {
     // the ROM's ticker (animTickActor) on a play state of its own -- the ROM's $0F01 is not stepped off screen, and a
     // frozen pose sliding along the side read as broken. Picture only: nothing is written (no $0F01, no 'anim finished').
     if (wideX > 0 && f.vm && !battleCompose)
-      for (int o = 0; o < nact; o++) {
+      for (int o = 0; o < nact && o < 64; o++) {
         if (o == pObj) continue;
         int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);
+        int shown = sideShown[o]; sideShown[o] = 0;
         if (pl) { memset(&sidePlay[o], 0, sizeof sidePlay[o]); continue; }   // latched: the ROM's, in the list below
         const uint8_t* w7 = CtSceneMem7E(f.vm);
         int cls = w7[0x1100 + o * 2], vis = w7[0x1A81 + o * 2];
         if (cls == 7 || cls == 8 || (cls & 0x80) || !vis || (vis & 0x80)) continue;
         int sx = ax - camx, sy = ay - camy;
-        if (sx >= wideX - 32 && sx < wideX + CAMW + 32) continue;   // the window's own band: the ROM's decision
+        // The window's own band is the ROM's decision -- but the ROM's, not this pixel test's: C0/B127 latches by tiles
+        // and a frame after an object that walks in from the sides crosses into the band, so one the sides drew last frame
+        // stays theirs until the ROM latches it. MEASURED (the attract's 087, 16:9): Zombor, drawn in the left columns,
+        // crossed the band at f9139 with `$0F16`/`$0F18` still 00 (they read 80 from f9140) and no one drew him.
+        if (sx >= wideX - 32 && sx < wideX + CAMW + 32 && !shown) continue;
         if (sx < -48 || sx >= wideW + 48 || sy < -16 || sy >= CAMH + 64) continue;
         int tf = (w7[0x0C00 + o * 2] & 0x30) == 0x30, bf = (w7[0x0C01 + o * 2] & 0x30) == 0x30;
         int am, ai, ail, alp, ast, agen = CtSceneActorAnim(f.vm, o, &am, &ai, &ail, &alp, &ast);
@@ -17940,6 +17946,7 @@ int main(int argc, char** argv) {
         int af = an ? animTickActor(&sidePlay[o], an, al, am, ai, ail, alp, ast, agen, CtSceneActorMoving(f.vm, o), 0,
                                     CtSceneActorMoveAnim(f.vm, o), fa, NULL) : actorAf[o];        g_motOwn = CtMotSprite(mot, o, ax, ay);
         drawSprite(&assets, fb, sidx, spal, sp, af, sx, sy, front, tf, bf, 0, 0, 0, 0, 0, NULL, 0, NULL, NULL, NULL);
+        sideShown[o] = 1;
       }
     for (int i = 0; !battleCompose && i < n; i++) {
       if (sten[i]) {                                     // a $0F80 prio-0/1 OCCLUDER, cutting at its
@@ -18807,7 +18814,9 @@ int main(int argc, char** argv) {
       CtXlatStageHardware(gwX)->input1->currentState = padSerial;
       { int sw = hostWideW(); g_seqWideW = 0;            // (the widescreen, a mod: its PPU's side columns too)
         if (sw > CAMW && sw <= FIELD_WMAX) { g_ppuWideSide = (sw - CAMW) / 2; g_ppuWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3); } }
-      if (gwXState == 0) gwXState = CtXlatStageFrame(gwX);
+      { uint32_t apu0 = CtAudioApuCycles(audio);
+        if (gwXState == 0 && (gwXState = CtXlatStageFrame(gwX)) == 1 && audio)
+          CtAudioStageExitFrame(audio, CtAudioApuCycles(audio) - apu0); }   // (its exit frame's remaining SPC: audio.c)
       if (g_ppuWideSide) { g_seqWideW = CAMW + 2 * g_ppuWideSide; g_ppuWideSide = 0; g_ppuWideOut = NULL; }
       CtXlatStagePicture(gwX, fb, CAMW, CAMH);
     }
@@ -18875,7 +18884,9 @@ int main(int argc, char** argv) {
         // (the widescreen, a mod: the stage's PPU renders the side columns too -- snes/ppu.c g_ppuWideSide)
         { int sw = hostWideW(); g_seqWideW = 0;
           if (sw > CAMW && sw <= FIELD_WMAX) { g_ppuWideSide = (sw - CAMW) / 2; g_ppuWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3); } }
-        if (seqXState == 0) seqXState = CtXlatStageFrame(seqX);
+        { uint32_t apu0 = CtAudioApuCycles(audio);
+          if (seqXState == 0 && (seqXState = CtXlatStageFrame(seqX)) == 1 && audio)
+            CtAudioStageExitFrame(audio, CtAudioApuCycles(audio) - apu0); }   // (its exit frame's remaining SPC: audio.c)
         if (g_ppuWideSide) { g_seqWideW = CAMW + 2 * g_ppuWideSide; g_ppuWideSide = 0; g_ppuWideOut = NULL; }
         // CT_XLAT_STAGE_VRAM=<path>,<stage frame>: the stage's VRAM + CGRAM after that frame, beside an oracle --peek's
         // .vram/.oam from the hand-off state at the same count (tools/entry3_vram_cmp.py) -- which regions the

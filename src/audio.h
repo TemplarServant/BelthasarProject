@@ -140,6 +140,8 @@ const uint8_t* CtAudioAram(const CtAudio* a);      // 64KB, for --aram-style dif
 // The SPC itself, for a translated stage (src/seq_xlat.h) to borrow: while the stage runs, its bus drives this APU
 // and the host must not advance it with CtAudioFrame -- its samples are still read with CtAudioSamples.
 struct Apu* CtAudioApu(CtAudio* a);
+uint32_t  CtAudioApuCycles(const CtAudio* a);               // the SPC's own cycle count (a stage's share of a frame)
+void      CtAudioStageExitFrame(CtAudio* a, uint32_t ran);  // a translated stage left mid-frame: the frame's remaining SPC
 // The reset's `JSL $C7:0000` (C0/0053) on the RUNNING driver: F0 hands the SPC to its IPL and the driver is uploaded
 // again, on the loader clock with the reset's quiet background. Out: the master cycles and the frames it took.
 int CtAudioColdBoot(CtAudio* a, long long* master, int* frames);

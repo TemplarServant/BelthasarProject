@@ -1648,6 +1648,23 @@ void CtAudioSeedMailboxPage(const CtAudio* a, uint8_t* mem7E) {
 
 const uint8_t* CtAudioAram(const CtAudio* a) { return a ? a->apu->ram : NULL; }
 struct Apu* CtAudioApu(CtAudio* a) { return a ? a->apu : NULL; }
+uint32_t CtAudioApuCycles(const CtAudio* a) { return a ? a->apu->cycles : 0; }
+// A TRANSLATED STAGE'S EXIT FRAME. A stage's bus runs this SPC itself while it is open (the host's slice is skipped,
+// field.c `!seqX && !gwX`), one frame of SPC per stage frame -- and the frame it leaves in (`JML C0:0000`) its bus ran
+// only up to the jump. The cartridge's SPC does not stop there: the rest of that frame's 17,088 cycles run on while the
+// CPU goes on into C0/000E. The port ran nobody's: the remainder was lost, the frame's output came out ~528 samples short
+// and the last sample was held over the gap. MEASURED (CT_XLAT_APUTRACE + CT_AUDIO_FIFOTRACE, the attract's race):
+// stage call 425 ran 220 APU cycles and jumped, out8534 held 6 samples (16.5 ms of one held value, audible -- the user's
+// "the curtain after the race cuts the music"); entry 3's exit, out9025, the same. The cartridge's PCM (PEEK_PCM, the
+// real and the rule's) has no held run of 40 samples or more in the whole demo. `ran`: the APU cycles the stage's bus
+// ran in that last frame.
+void CtAudioStageExitFrame(CtAudio* a, uint32_t ran) {
+  if (!a || !a->ready) return;
+  double want = APU_CYCLES_PER_FRAME - (double)ran;
+  if (want < 1.0) return;
+  int got = apuRun(a, (int)want);
+  a->cycleCarry += want - (double)got;                 // (an opcode's overshoot, carried as CtAudioFrame carries it)
+}
 
 uint32_t CtAudioAramFnv(const CtAudio* a) {
   if (!a) return 0;

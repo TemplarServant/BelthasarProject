@@ -4339,7 +4339,7 @@
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
       "sha256": "7e1047cf2eb6474d358f2b92c11cda576d9e3b3dd2594e1443dca0e40f176743",
-      "size": 1758304,
+      "size": 1758389,
       "present_when_recorded": true
     },
     {
@@ -4407,8 +4407,8 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "8414650db112f0c934a52ede329a18f7551428ba4348618d35b740c600f53a59",
-      "size": 1516702,
+      "sha256": "6eb22b7d847501f6bfd7141445d5cbf67bbc76c3a07d779eef51edfc18f9013c",
+      "size": 1498660,
       "present_when_recorded": true
     },
     {
@@ -4543,8 +4543,8 @@
       "used_by": [
         "attract-sound-stays-with-the-picture"
       ],
-      "sha256": "29b7b89ec2872cec83afb34009338ccc952fd8793eb2ac6a8bfcc79d724b56b7",
-      "size": 5178,
+      "sha256": "1f720c5ff3ff013424c3294cc85c3ed98d86f3ce99f503ee5118b22d849b2b1b",
+      "size": 5962,
       "present_when_recorded": true
     },
     {

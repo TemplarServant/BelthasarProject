@@ -23,7 +23,10 @@ oldest samples when the 087 battle's JSLs pre-ran on top of it -- 841 samples lo
 (the stage ran more SPC than the DSP's 0x400 ring between two reads). Now: none.
 
 Printed: the backlog at a few points (the title, before the race, after the race, after entry 3, the end), the largest
-one over the two translated stages (the race f8150-8580, entry 3 f8760-9070) and the largest over the whole demo.
+one over the two translated stages (the race f8150-8580, entry 3 f8760-9070) and the largest over the whole demo (all
+three on the trace's 60-frame grid), and every output frame over the demo that came out more than 32 samples short of
+its 534 -- the rest of it the last sample held, an audible gap (the user, 2026-10-13: "the curtain after the race cuts
+the music"; it was a translated stage's exit frame whose remaining SPC time nobody ran -- audio.c CtAudioStageExitFrame).
 
 What was wrong (1.8 s behind the picture by the end): the race's logical-frame holds ran the APU (snes.c
 g_ctLogicalHoldApu -- the zelda3 model runs one SPC frame per displayed frame, ct_field turns it off), the field's
@@ -51,17 +54,22 @@ def main():
         END = int(sys.argv[3])
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
     os.chdir(root)
-    env = dict(os.environ, CT_AUDIO_FIFOTRACE='60', CT_AUDIO_LOCKSTEP='1', CT_SHOTS=os.path.join('build', '_audlat'),
+    env = dict(os.environ, CT_AUDIO_FIFOTRACE='1', CT_AUDIO_LOCKSTEP='1', CT_SHOTS=os.path.join('build', '_audlat'),
                CT_SHOTS_AT=str(END), CT_SHOTS_EXIT='1', SDL_AUDIODRIVER='dummy')
     r = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
                        env=env, capture_output=True, text=True, errors='replace')
-    q, lost = {}, 0
+    q, lost, short = {}, 0, []
     for l in (r.stdout + r.stderr).splitlines():
         m = re.match(r'audiofifo out(\d+) queued=(\d+) .*dropped=(\d+) carry=(-?[\d.]+)', l)
         if m:
-            debt = int(-float(m.group(4)) / 32.0) if float(m.group(4)) < 0 else 0
-            q[int(m.group(1))] = max(0, int(m.group(2)) - debt)
+            o, n = int(m.group(1)), int(m.group(2))
+            if 60 <= o <= END and n < 534 - 32:
+                short.append((o, n))
             lost = int(m.group(3))
+            if o % 60:
+                continue                        # the backlog statistics: on the 60-frame grid, as they always were
+            debt = int(-float(m.group(4)) / 32.0) if float(m.group(4)) < 0 else 0
+            q[o] = max(0, n - debt)
     if not q:
         sys.exit('audio-latency: no audiofifo lines (no audio device?)')
     for p in POINTS:
@@ -73,6 +81,8 @@ def main():
     al = [v for o, v in q.items() if o >= 60]
     print('audio-latency: the whole demo (out60-%d): at most %d samples (%.1f frames)' % (END, max(al), max(al) / 534.0))
     print('audio-latency: samples lost over the demo (the DSP ring overrun or the FIFO full): %d' % lost)
+    print('audio-latency: output frames more than 32 samples short (a held gap): %d%s' % (
+        len(short), ''.join(' out%d=%d' % x for x in short)))
 
 
 if __name__ == '__main__':
