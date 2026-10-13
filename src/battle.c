@@ -4206,7 +4206,7 @@ static void battleCloseRebase40FB(CtBattleHost* h) {
     if (r & 0x80) break;                                           // C1/4100 BMI
     if (r < 3 || r >= 11) continue;                                // C1/4102-4104 CMP #03 / BCC
     int slot = r - 3;
-    h->mvBaseX[slot] = BT_LIVEX(h, r); h->mvBaseY[slot] = BT_LIVEY(h, r);   // C1/4107-4110
+    BT_MVBASEX(h, slot) = BT_LIVEX(h, r); BT_MVBASEY(h, slot) = BT_LIVEY(h, r);   // C1/4107-4110
   }
 }
 // C1/411D-4131, at every action CLOSE (after the CC/F06B wipe at C1/4119): `LDA $99D9 / PHA / STZ $99D9 / STZ $A102 /
@@ -10230,7 +10230,7 @@ static int battleMoveExtentY(int cmb, int id) {
 // clamp; $2989 bit2 set -> y itself, C1/2897-28A4). The Y top is the record's OWN Y extent (+8 of E4/F600:
 // Beetle 8 x 16, Avian 2 x 16), not the X one -- 249 of the 256 records differ.
 static void battleBoxAt(const CtBattleHost* h, int cmb, int lx, int ly, int* minX, int* maxX, int* minY, int* maxY) {
-  int e = h->mvExtent[cmb], ey = h->mvExtentY[cmb];
+  int e = BT_MVEXTENT(h, cmb), ey = BT_MVEXTENTY(h, cmb);
   *minX = (lx - e < 0) ? 0 : lx - e;   *maxX = (lx + e > 0xFF) ? 0xFF : lx + e;    // C1/285A-2880: +-$971E
   *minY = (ly - ey < 0) ? 0 : ly - ey;                                             // C1/2883-2894: -$9729
   *maxY = (h->mem[0x2989] & 0x04) ? ly : ((ly + 8) & 0xFF);                        // C1/2897-28AC: +8 (wraps), else +0
@@ -10255,8 +10255,8 @@ static void battleBox(const CtBattleHost* h, int cmb, int* minX, int* maxX, int*
 static void battleMvSegStartTrace(const CtBattleHost* h, int slot) {
   static int mv = -1; if (mv < 0) { const char* t = getenv("CT_BATTLE_MVTRACE"); mv = (t && *t) ? 1 : 0; }
   if (mv) fprintf(stderr, "mvseg f%d slot%d start mode%d cad=%d period=%d step=%d angle=%d base=(%d,%d)" CT_BATTLE_NL,
-                  h->frames, slot, BT_MVMODE(h, slot) & 0xFF, h->mvSegCad[slot], h->mvSegPeriod[slot], h->mvPhaseStep[slot],
-                  h->mvAngle[slot] & 0xFF, h->mvBaseX[slot], h->mvBaseY[slot]);
+                  h->frames, slot, BT_MVMODE(h, slot) & 0xFF, BT_MVSEGCAD(h, slot), BT_MVSEGPERIOD(h, slot), BT_MVPHASESTEP(h, slot),
+                  BT_MVANGLE(h, slot) & 0xFF, BT_MVBASEX(h, slot), BT_MVBASEY(h, slot));
 }
 static void battleMoveArm(CtBattleHost* h, int slot, int mode, int tgtCmb) {
   // THE ARM IS A REQUEST. $5E0D,X (mvReq) is what every arm site writes -- C1/9833 / C1/9891 (the AI decode,
@@ -10266,7 +10266,7 @@ static void battleMoveArm(CtBattleHost* h, int slot, int mode, int tgtCmb) {
   // commit lands 1..6 frames later, at the next visit of the slot's group. (mvTarget is still written here:
   // $5E15 -> $9752 is copied by the mode machine's own pass, C1/3742-374A, before any handler reads it.)
   // $5E15,X itself is kept too: the attack's TURN reads its target there (C1/99CE, battleAiTurn).
-  BT_MVREQ(h, slot) = mode; h->mvTarget[slot] = tgtCmb;
+  BT_MVREQ(h, slot) = mode; BT_MVTARGET(h, slot) = tgtCmb;
   h->mem[0x5E15 + slot] = (uint8_t)tgtCmb;                          // C1/9833 / C1/9894 STA $5E15,X
 }
 
@@ -10406,11 +10406,11 @@ static void battleMoveReacquire(CtBattleHost* h, int slot) {
                                                                    //   (enemy 03 in GATO's arena: mode 04 f384-f559 then 0A
                                                                    //   at f713 resumes the orbit at $A615 = 90, no re-capture)
   s[0xA5FD + slot] = 0;                                            // C1/3779 STZ $A5FD,X
-  int cmb = slot + 3, tcmb = h->mvTarget[slot];
-  if (tcmb < 0) tcmb = cmb;
-  if (BT_LIVEX(h, tcmb) == h->mvRecX[slot] &&                       // C1/3783 CMP $9831,X
-      BT_LIVEY(h, tcmb) == h->mvRecY[slot]) return;                 // C1/378B CMP $9839,X -> BEQ RTS
-  BT_MVREQ(h, slot) = h->mvSaveMode[slot];                            // C1/3790 LDA $5E1D,X / STA $5E0D,X (a REQUEST)
+  int cmb = slot + 3, tcmb = BT_MVTARGET(h, slot);
+  if (tcmb == 0xFF) tcmb = cmb;
+  if (BT_LIVEX(h, tcmb) == BT_MVRECX(h, slot) &&                       // C1/3783 CMP $9831,X
+      BT_LIVEY(h, tcmb) == BT_MVRECY(h, slot)) return;                 // C1/378B CMP $9839,X -> BEQ RTS
+  BT_MVREQ(h, slot) = BT_MVSAVEMODE(h, slot);                            // C1/3790 LDA $5E1D,X / STA $5E0D,X (a REQUEST)
   BT_ENARRIVE(h, slot) = 0;                                           // C1/3796 STZ $9829,X
 }
 static int  battleGridBlocked(const uint8_t* s, int x0, int y0, int x1, int y1);   // (defined with the grid below)
@@ -10475,16 +10475,16 @@ static void battleMvBlockTrace(const CtBattleHost* h, int slot, const char* cls,
 static void battleMoveApproach(CtBattleHost* h, int slot) {
   uint8_t* s = h->mem;
   s[0xA5FD + slot] = 0;                                            // C1/379C STZ $A5FD,X
-  int cmb = slot + 3, tcmb = h->mvTarget[slot];
-  if (tcmb < 0) tcmb = cmb;                                        // ($9752 = FF never reaches a live mode-1 slot)
+  int cmb = slot + 3, tcmb = BT_MVTARGET(h, slot);
+  if (tcmb == 0xFF) tcmb = cmb;                                        // ($9752 = FF never reaches a live mode-1 slot)
   int mode = BT_MVMODE(h, slot) & 0xFF;
   int sx = BT_LIVEX(h, cmb), sy = BT_LIVEY(h, cmb), tx = BT_LIVEX(h, tcmb), ty = BT_LIVEY(h, tcmb);
   int ang;
-  if (h->mvWalking[slot]) ang = h->mvAngle[slot];                  // C1/379F-37A9: the stored bearing
-  else { h->mvBaseX[slot] = sx; h->mvBaseY[slot] = sy;             // C1/37AB-37B8 re-base
+  if (BT_MVWALKING(h, slot)) ang = BT_MVANGLE(h, slot);                  // C1/379F-37A9: the stored bearing
+  else { BT_MVBASEX(h, slot) = sx; BT_MVBASEY(h, slot) = sy;             // C1/37AB-37B8 re-base
          ang = battleAtan2(sx, sy, tx, ty); }                      // C1/37BB-37C9 toward the target
   ang &= 0xFF;
-  h->mvAngle[slot] = ang;                                          // C1/37D4 STA $9786,X
+  BT_MVANGLE(h, slot) = ang;                                          // C1/37D4 STA $9786,X
   int stepY = battleS8(battleTrigMul(ang, 8));                     // $8C = trig(bearing)*8      (C1/37D7, $AE = 8)
   int stepX = battleS8(battleTrigMul((ang + 0x40) & 0xFF, 8));     // $8E = trig(bearing+40)*8  (C1/37DC-37E4)
   h->mvFacing[slot] = ctBattleFaceTab[ang]; BT_ENFACING(h, slot) = h->mvFacing[slot];   // C1/37E9-37EF $96DE,X
@@ -10496,13 +10496,13 @@ static void battleMoveApproach(CtBattleHost* h, int slot) {
   int arrived = (thr < 0) || (dx * dx + dy * dy <= thr);           // C1/2B49-2BBB -> $9872 == 0
   { static int mt = -1; if (mt < 0) { const char* t = getenv("CT_BATTLE_MVTRACE"); mt = (t && *t) ? 1 : 0; }
     if (mt) fprintf(stderr, "mvapproach f%d slot%d mode%d self=(%d,%d) tgt=(%d,%d) d2=%ld thr=%ld stored=%d -> %s" CT_BATTLE_NL,
-                    h->frames, slot, mode, sx, sy, tx, ty, dx * dx + dy * dy, thr, h->mvWalking[slot],
+                    h->frames, slot, mode, sx, sy, tx, ty, dx * dx + dy * dy, thr, BT_MVWALKING(h, slot),
                     arrived ? "ARRIVED" : "step"); }
   if (arrived) {                                                   // C1/3831-384F
     BT_ENARRIVE(h, slot) = 1;                                         //   INC $9829,X (the scanner's turn gate)
-    h->mvSaveMode[slot] = BT_MVREQ(h, slot);                          //   $5E1D := $5E0D
-    h->mvRecX[slot] = tx; h->mvRecY[slot] = ty;                    //   $9831/$9839 := the target's foot
-    h->mvActive[slot] = 0;                                         //   STZ $98A7,X
+    BT_MVSAVEMODE(h, slot) = BT_MVREQ(h, slot);                          //   $5E1D := $5E0D
+    BT_MVRECX(h, slot) = tx; BT_MVRECY(h, slot) = ty;                    //   $9831/$9839 := the target's foot
+    BT_MVACTIVE(h, slot) = 0;                                         //   STZ $98A7,X
     return;
   }
   int px = (sx + stepX) & 0xFF, py = (sy + stepY) & 0xFF;          // C1/3851-3862 the projected step
@@ -10513,17 +10513,17 @@ static void battleMoveApproach(CtBattleHost* h, int slot) {
   int grid = battleGridBlocked(s, bx0, by0, bx1, by1);             // C1/387C JSR C1/2926
   int body = (!grid && mode != 3) ? battleBodyBlocked(h, cmb, px, py) : 0;   // C1/3881-388B JSR C1/28B0
   if (grid || body) {                                              // C1/388D-38AD
-    h->mvAngle[slot] = (ang + 0x40) & 0xC0;                        //   ADC #40 / LSR x6 / ASL x6 -> $9786,X
-    h->mvWalking[slot] = (h->mvWalking[slot] + 1) & 0xFF;          //   INC $9791,X -- a COUNTER (wait_ambush f4667:
+    BT_MVANGLE(h, slot) = (ang + 0x40) & 0xC0;                        //   ADC #40 / LSR x6 / ASL x6 -> $9786,X
+    BT_MVWALKING(h, slot) = (BT_MVWALKING(h, slot) + 1) & 0xFF;          //   INC $9791,X -- a COUNTER (wait_ambush f4667:
                                                                    //   1 -> 2); every reader is a BNE
-    h->mvActive[slot] = 0;                                         //   STZ $98A7,X
-    { char out[48]; snprintf(out, sizeof out, "deflect bearing=%02X stored=%d", h->mvAngle[slot], h->mvWalking[slot]);
+    BT_MVACTIVE(h, slot) = 0;                                         //   STZ $98A7,X
+    { char out[48]; snprintf(out, sizeof out, "deflect bearing=%02X stored=%d", BT_MVANGLE(h, slot), BT_MVWALKING(h, slot));
       battleMvBlockTrace(h, slot, "approach", mode, px, py, bx0, bx1, by0, by1, grid, body, out); }
     return;
   }
   battleMvBlockTrace(h, slot, "approach", mode, px, py, bx0, bx1, by0, by1, 0, 0, "clear");
-  h->mvWalking[slot] = 0;                                          // C1/38B1 STZ $9791,X
-  h->mvActive[slot] = 1; battleMvSegStartTrace(h, slot);           // C1/38B4-38B6 $98A7,X := 1
+  BT_MVWALKING(h, slot) = 0;                                          // C1/38B1 STZ $9791,X
+  BT_MVACTIVE(h, slot) = 1; battleMvSegStartTrace(h, slot);           // C1/38B4-38B6 $98A7,X := 1
   // THE PHASE IS NOT TOUCHED HERE OR AT ANY SEGMENT START: $9737,X's only writers are the mover's wrap (CF/F996)
   // and its end (CF/F9A2). A segment still in flight at a fresh pass (a Beetle's 6 x 8 = 48-frame segment
   // outlives the 40-frame pass interval) continues from the RE-BASED origin at its current phase -- wait_ambush
@@ -10555,8 +10555,8 @@ static int battleGridBlocked(const uint8_t* s, int x0, int y0, int x1, int y1) {
 static void battleMoveReturn(CtBattleHost* h, int slot) {
   uint8_t* s = h->mem;
   s[0xA5FD + slot] = 0;                                            // C1/3A3F STZ $A5FD,X (see class 6)
-  int cmb = slot + 3, tcmb = h->mvTarget[slot];
-  if (tcmb < 0) tcmb = cmb;                                        // degenerate: no reference -> self (no move)
+  int cmb = slot + 3, tcmb = BT_MVTARGET(h, slot);
+  if (tcmb == 0xFF) tcmb = cmb;                                        // degenerate: no reference -> self (no move)
   int sx = BT_LIVEX(h, cmb), sy = BT_LIVEY(h, cmb);
   // $A2B5 IS THE MODE BEING DISPATCHED, not an arena constant. `8D B5 A2` occurs exactly ONCE in the
   // 4 MB image, at C1/3752, immediately before `TAX / LDA $CCFBAB,X / ASL A / TAX / JSR ($3760,X)` --
@@ -10564,22 +10564,22 @@ static void battleMoveReturn(CtBattleHost* h, int slot) {
   // fixture holds 0x80, so `== 0x10` was permanently false and mode 0x10 silently took the mode-06 arm.
   int scale = (BT_MVMODE(h, slot) == 0x10) ? 0x80 : 0x40;             // C1/3A71 CMP #10 -> $AE = 0x80 else 0x40
   int ang;
-  if (h->mvWalking[slot]) {
-    ang = h->mvAngle[slot];                                        // $9791 latched: stored bearing (C1/3A42)
+  if (BT_MVWALKING(h, slot)) {
+    ang = BT_MVANGLE(h, slot);                                        // $9791 latched: stored bearing (C1/3A42)
   } else {
     int tx = BT_LIVEX(h, tcmb), ty = BT_LIVEY(h, tcmb);
-    h->mvBaseX[slot] = sx; h->mvBaseY[slot] = sy;                  // C1/3A62/3A6A $98AF/$98B7,X := self: the FRESH
+    BT_MVBASEX(h, slot) = sx; BT_MVBASEY(h, slot) = sy;                  // C1/3A62/3A6A $98AF/$98B7,X := self: the FRESH
                                                                    //   pass re-bases (settled, blocked or clear); a
                                                                    //   latched pass (C1/3A4C JMP 3AF7) never does
     ang = battleAtan2(tx, ty, sx, sy);                             // AWAY bearing (operands swapped, C1/3A4F)
-    h->mvRefX[slot] = (tx + battleS8(battleTrigMul((ang + 0x40) & 0xFF, scale))) & 0xFF;  // ref (C1/3A8C)
-    h->mvRefY[slot] = (ty + battleS8(battleTrigMul(ang, scale))) & 0xFF;                  //     (C1/3A7F)
-    int cX = (sx >= h->mvRefX[slot]) ? 0 : 1;                      // $81: 0 = selfX >= refX, 1(FF) = below
+    BT_MVREFX(h, slot) = (tx + battleS8(battleTrigMul((ang + 0x40) & 0xFF, scale))) & 0xFF;  // ref (C1/3A8C)
+    BT_MVREFY(h, slot) = (ty + battleS8(battleTrigMul(ang, scale))) & 0xFF;                  //     (C1/3A7F)
+    int cX = (sx >= BT_MVREFX(h, slot)) ? 0 : 1;                      // $81: 0 = selfX >= refX, 1(FF) = below
     // $83: C1/3AAB `LDA $1D26,X / SBC $82` has NO SEC -- it inherits the borrow of the X compare's `TDC / SBC #00`, so when
     // selfX < refX the Y test is selfY - refY - 1, i.e. FF already at selfY == refY. MEASURED, the rule's oracle (battle_ab
     // enemies 83): self (183,147), ref (205,147), bearing F8 -> `$9786 = 78` at f794 (C1:3B02, the 180 reverse) and a clear
     // step; the port's independent `selfY >= refY` kept F8 and walked into the arena edge.
-    int cY = (sy - h->mvRefY[slot] - cX < 0) ? 1 : 0;              // C1/3AAB-3AB3
+    int cY = (sy - BT_MVREFY(h, slot) - cX < 0) ? 1 : 0;              // C1/3AAB-3AB3
     int quad = (ang >> 6) & 3;                                     // C1/0118
     int crossed = (quad == 0) ? (cX == 0 || cY == 0)               // C1/3AC0 matrix, quadrant-exact
                 : (quad == 1) ? (cX == 1 || cY == 0)               // C1/3ACE
@@ -10588,16 +10588,16 @@ static void battleMoveReturn(CtBattleHost* h, int slot) {
     { static int ft = -1; if (ft < 0) { const char* t = getenv("CT_BATTLE_FACETRACE"); ft = (t && *t) ? 1 : 0; }
       if (ft) fprintf(stderr, "ret-fresh f%d slot%d self=(%d,%d) tgt=(%d,%d) ang=%02X ref=(%d,%d) q%d cX%d cY%d crossed=%d\n",
                       h->frames, slot, sx, sy, BT_LIVEX(h, tcmb), BT_LIVEY(h, tcmb), ang & 0xFF,
-                      h->mvRefX[slot], h->mvRefY[slot], quad, cX, cY, crossed); }
+                      BT_MVREFX(h, slot), BT_MVREFY(h, slot), quad, cX, cY, crossed); }
     if (crossed) ang = (ang + 0x80) & 0xFF;                        // C1/3AF0: REVERSE 180
   }
-  h->mvAngle[slot] = ang;                                          // $9786 store (C1/3AFD)
+  BT_MVANGLE(h, slot) = ang;                                          // $9786 store (C1/3AFD)
   h->mvFacing[slot] = ctBattleFaceTab[ang & 0xFF];                 // facing = C0F700[$DB] (C1/3B14)
   BT_ENFACING(h, slot) = h->mvFacing[slot];
   { static int ft = -1; if (ft < 0) { const char* t = getenv("CT_BATTLE_FACETRACE"); ft = (t && *t) ? 1 : 0; }
     if (ft) fprintf(stderr, "battleface f%d slot%d bearing=%02X facing=%d (return)\n",
                     h->frames, slot, ang & 0xFF, h->mvFacing[slot]); }
-  { long dx = sx - h->mvRefX[slot], dy = sy - h->mvRefY[slot];     // the 2B13 settle test: dist² <= 0x10
+  { long dx = sx - BT_MVREFX(h, slot), dy = sy - BT_MVREFY(h, slot);     // the 2B13 settle test: dist² <= 0x10
     // The ROM threshold (4px), enabled by the LIVE KNOCK port (battle_ai_interp.md §10e): the ref tracks
     // the victim's live foot, which now carries the strike displacement like the oracle's -- the dance's
     // final correction leg + the exact rest reproduce.
@@ -10607,14 +10607,14 @@ static void battleMoveReturn(CtBattleHost* h, int slot) {
       // away bearing, stamped above), nothing sticky: the NEXT pass is a fresh one that re-bases, re-aims and
       // re-tests the 4-px settle against the target's live foot -- the ROM's own re-derivation. (The port's
       // mvStopped early-out, its `mvWalking = 1` and its `mvFacing = 1` here were inventions; retired 2026-09-09.)
-      h->mvActive[slot] = 0;                                       // STZ $98A7,X
+      BT_MVACTIVE(h, slot) = 0;                                       // STZ $98A7,X
       BT_ENARRIVE(h, slot) = 1;                                       // INC $9829 (the scanner's arrival latch)
       // C1/3B45-3B58: the settle also SAVES the requested mode and RECORDS the victim's foot. Those two
       // stores are the input to class 0's re-acquire (C1/3772) and nothing else reads them; without them
       // class 0 has nothing to compare against, which is why it looked like a no-op.
-      h->mvSaveMode[slot] = BT_MVREQ(h, slot);                        // LDA $5E0D,X / STA $5E1D,X (the REQUEST byte)
-      h->mvRecX[slot] = BT_LIVEX(h, tcmb);                          // LDA $1D0C,Y / STA $9831,X
-      h->mvRecY[slot] = BT_LIVEY(h, tcmb);                          // LDA $1D23,Y / STA $9839,X
+      BT_MVSAVEMODE(h, slot) = BT_MVREQ(h, slot);                        // LDA $5E0D,X / STA $5E1D,X (the REQUEST byte)
+      BT_MVRECX(h, slot) = BT_LIVEX(h, tcmb);                          // LDA $1D0C,Y / STA $9831,X
+      BT_MVRECY(h, slot) = BT_LIVEY(h, tcmb);                          // LDA $1D23,Y / STA $9839,X
       return;
     } }
   int stepX = battleS8(battleTrigMul((ang + 0x40) & 0xFF, 8));     // the 8px step (C1/3AF7 $AE=8)
@@ -10636,16 +10636,16 @@ static void battleMoveReturn(CtBattleHost* h, int slot) {
   int grid = battleGridBlocked(s, bx0, by0, bx1, by1);             // C1/3B7F C1/2926, unconditional
   int body = (!grid && BT_MVMODE(h, slot) != 0x03) ? battleBodyBlocked(h, cmb, dX, dY) : 0;   // C1/3B84-3B8B
   if (grid || body) {
-    h->mvAngle[slot] = ((ang + 0x40) & 0xFF) >> 6 << 6;            // BLOCKED: axis-quantize/rotate (C1/3B90)
-    h->mvWalking[slot] = (h->mvWalking[slot] + 1) & 0xFF;          // INC $9791 (latch the quantized bearing)
-    h->mvActive[slot] = 0;                                         // STZ $98A7 -- no move this pass
-    { char out[48]; snprintf(out, sizeof out, "deflect bearing=%02X stored=%d", h->mvAngle[slot], h->mvWalking[slot]);
+    BT_MVANGLE(h, slot) = ((ang + 0x40) & 0xFF) >> 6 << 6;            // BLOCKED: axis-quantize/rotate (C1/3B90)
+    BT_MVWALKING(h, slot) = (BT_MVWALKING(h, slot) + 1) & 0xFF;          // INC $9791 (latch the quantized bearing)
+    BT_MVACTIVE(h, slot) = 0;                                         // STZ $98A7 -- no move this pass
+    { char out[48]; snprintf(out, sizeof out, "deflect bearing=%02X stored=%d", BT_MVANGLE(h, slot), BT_MVWALKING(h, slot));
       battleMvBlockTrace(h, slot, "return", BT_MVMODE(h, slot) & 0xFF, dX, dY, bx0, bx1, by0, by1, grid, body, out); }
     return;
   }
   battleMvBlockTrace(h, slot, "return", BT_MVMODE(h, slot) & 0xFF, dX, dY, bx0, bx1, by0, by1, 0, 0, "clear");
-  h->mvWalking[slot] = 0;                                          // STZ $9791 (C1/3BB4 -- fresh next pass)
-  h->mvActive[slot] = 1; battleMvSegStartTrace(h, slot);           // C1/3BB7 $98A7 = 1: walk the segment (the base is
+  BT_MVWALKING(h, slot) = 0;                                          // STZ $9791 (C1/3BB4 -- fresh next pass)
+  BT_MVACTIVE(h, slot) = 1; battleMvSegStartTrace(h, slot);           // C1/3BB7 $98A7 = 1: walk the segment (the base is
   // the fresh head's, C1/3A62/3A6A -- a latched pass keeps the old one -- and the phase is never written here)
 }
 
@@ -10677,25 +10677,25 @@ static void battleMoveReturn(CtBattleHost* h, int slot) {
 // second-probe skip compares #0F where class 4 compares #03. Plus the mode-0x0D park at C1/3CC6-3CD2.
 static void battleMoveWander(CtBattleHost* h, int slot) {
   uint8_t* s = h->mem;
-  int cmb = slot + 3, tcmb = h->mvTarget[slot];
+  int cmb = slot + 3, tcmb = BT_MVTARGET(h, slot);
   int mode = BT_MVMODE(h, slot) & 0xFF;
-  if (tcmb < 0) tcmb = cmb;                                        // degenerate: no reference -> self
+  if (tcmb == 0xFF) tcmb = cmb;                                        // degenerate: no reference -> self
   int sx = BT_LIVEX(h, cmb), sy = BT_LIVEY(h, cmb);
   s[0xA5FD + slot] = 0;                                            // C1/3BC4 STZ $A5FD,X
   int radius = 0x20;                                               // C1/3BF2 LDA #20 / STA $A5FC
   if (mode == 0x0E) radius <<= 1;                                  // C1/3BFA CMP #0E -> C1/3C01 ASL $A5FC
   s[0xA5FC] = (uint8_t)radius;                                     // the ROM's own byte (single writer C1/3BF4)
   int ang;
-  if (h->mvWalking[slot]) {
-    ang = h->mvAngle[slot];                                        // $9791 latched: reuse $9786,X (C1/3BC9)
+  if (BT_MVWALKING(h, slot)) {
+    ang = BT_MVANGLE(h, slot);                                        // $9791 latched: reuse $9786,X (C1/3BC9)
   } else {
     int tx = BT_LIVEX(h, tcmb), ty = BT_LIVEY(h, tcmb);
-    h->mvBaseX[slot] = sx; h->mvBaseY[slot] = sy;                  // C1/3BE7/3BEF $98AF/$98B7,X := self (the fresh pass)
+    BT_MVBASEX(h, slot) = sx; BT_MVBASEY(h, slot) = sy;                  // C1/3BE7/3BEF $98AF/$98B7,X := self (the fresh pass)
     ang = battleAtan2(tx, ty, sx, sy);                             // C1/0222, same operands as class 4
-    h->mvRefX[slot] = (tx + battleS8(battleTrigMul((ang + 0x40) & 0xFF, radius))) & 0xFF;
-    h->mvRefY[slot] = (ty + battleS8(battleTrigMul(ang, radius))) & 0xFF;
-    int cX = (sx >= h->mvRefX[slot]) ? 0 : 1;
-    int cY = (sy - h->mvRefY[slot] - cX < 0) ? 1 : 0;              // C1/3C2E: the same SEC-less SBC as class 4's C1/3AAB
+    BT_MVREFX(h, slot) = (tx + battleS8(battleTrigMul((ang + 0x40) & 0xFF, radius))) & 0xFF;
+    BT_MVREFY(h, slot) = (ty + battleS8(battleTrigMul(ang, radius))) & 0xFF;
+    int cX = (sx >= BT_MVREFX(h, slot)) ? 0 : 1;
+    int cY = (sy - BT_MVREFY(h, slot) - cX < 0) ? 1 : 0;              // C1/3C2E: the same SEC-less SBC as class 4's C1/3AAB
     int quad = (ang >> 6) & 3;                                     // C1/0118, the same quadrant matrix
     int crossed = (quad == 0) ? (cX == 0 || cY == 0)
                 : (quad == 1) ? (cX == 1 || cY == 0)
@@ -10703,18 +10703,18 @@ static void battleMoveWander(CtBattleHost* h, int slot) {
                 :               (cX == 0 || cY == 1);
     if (crossed) ang = (ang + 0x80) & 0xFF;
   }
-  h->mvAngle[slot] = ang;
+  BT_MVANGLE(h, slot) = ang;
   h->mvFacing[slot] = ctBattleFaceTab[ang & 0xFF];
   BT_ENFACING(h, slot) = h->mvFacing[slot];
-  long ddx = sx - h->mvRefX[slot], ddy = sy - h->mvRefY[slot];
+  long ddx = sx - BT_MVREFX(h, slot), ddy = sy - BT_MVREFY(h, slot);
   if (ddx * ddx + ddy * ddy <= 0x0100) {                           // C1/2B1F threshold -> C1/3CC3 JMP C1/3D40
     // ---- THE ORBIT ARM, C1/3D40. Recompute the bearing to the target, ROTATE IT BY +/-0x10 (22.5
     // degrees) according to $A5F4,X, rebuild a reference at $A5FC around the target, and take the
     // bearing from THAT back to self. $A5F4 has exactly ONE writer in the 4 MB image -- C1/3E24,
     // this arm's own flip below -- so the port is its sole writer too, exactly like the ROM.
-    h->mvWalking[slot] = 0;                                        // C1/3D42 STZ $9791,X
+    BT_MVWALKING(h, slot) = 0;                                        // C1/3D42 STZ $9791,X
     int tx = BT_LIVEX(h, tcmb), ty = BT_LIVEY(h, tcmb);
-    h->mvBaseX[slot] = sx; h->mvBaseY[slot] = sy;                  // C1/3D58/3D60 STA $98AF/$98B7,X
+    BT_MVBASEX(h, slot) = sx; BT_MVBASEY(h, slot) = sy;                  // C1/3D58/3D60 STA $98AF/$98B7,X
     int raw = battleAtan2(tx, ty, sx, sy);                         // C1/3D63 ($D3/$D4 target, $D5/$D6 self)
     int dir = s[0xA5F4 + slot] & 0xFF;
     int b = (raw + (dir ? 0xF0 : 0x10)) & 0xFF;                    // C1/3D69-3D77: +0x10, or -0x10 when set
@@ -10725,7 +10725,7 @@ static void battleMoveWander(CtBattleHost* h, int slot) {
       b2 = (b2 + 1) & 0xFF;                                        // C1/3DB0 INC $DB
       if (radius == 0x20) b2 = (b2 + 1) & 0xFF;                    // C1/3DB2-3DB9 CMP #20 -> INC again
     }
-    h->mvAngle[slot] = b2;                                         // C1/3DC3 STA $9786,X
+    BT_MVANGLE(h, slot) = b2;                                         // C1/3DC3 STA $9786,X
     h->mvFacing[slot] = ctBattleFaceTab[b2];                       // C1/3DD8 C0F700[$DB] -> $96DE,X
     BT_ENFACING(h, slot) = h->mvFacing[slot];
     int oX = (sx + battleS8(battleTrigMul((b2 + 0x40) & 0xFF, 8))) & 0xFF;   // C1/3DBB $AE = 8
@@ -10744,11 +10744,11 @@ static void battleMoveWander(CtBattleHost* h, int slot) {
       return;
     }
     battleMvBlockTrace(h, slot, "orbit", mode, oX, oY, bx0, bx1, by0, by1, 0, 0, "clear");
-    h->mvActive[slot] = 1; battleMvSegStartTrace(h, slot);         // C1/3E2B-3E2D $98A7,X := 1 (phase untouched)
+    BT_MVACTIVE(h, slot) = 1; battleMvSegStartTrace(h, slot);         // C1/3E2B-3E2D $98A7,X := 1 (phase untouched)
     return;
   }
   // ---- the FAR arm: class 4's tail, with the mode-0x0D park and the two #0F edits ----
-  if (mode == 0x0D) { h->mvActive[slot] = 0; return; }             // C1/3CC8-3CD2 STZ $98A7,X
+  if (mode == 0x0D) { BT_MVACTIVE(h, slot) = 0; return; }             // C1/3CC8-3CD2 STZ $98A7,X
   s[0x9875] = (mode == 0x0F) ? 1 : 0;                              // C1/3CEE STZ / C1/3CFA STA (mode-0F relax)
   int stepX = battleS8(battleTrigMul((ang + 0x40) & 0xFF, 8));
   int stepY = battleS8(battleTrigMul(ang, 8));
@@ -10759,16 +10759,16 @@ static void battleMoveWander(CtBattleHost* h, int slot) {
   int grid = battleGridBlocked(s, bx0, by0, bx1, by1);             // C1/3CFD JSR C1/2926
   int body = (!grid && mode != 0x0F) ? battleBodyBlocked(h, cmb, dX, dY) : 0;   // C1/3D03 CMP #0F (class 4: #03)
   if (grid || body) {
-    h->mvAngle[slot] = ((ang + 0x40) & 0xFF) >> 6 << 6;            // C1/3D10-3D23 axis-quantize
-    h->mvWalking[slot] = (h->mvWalking[slot] + 1) & 0xFF;          // C1/3D28 INC $9791,X
-    h->mvActive[slot] = 0;                                         // C1/3D2B STZ $98A7,X
-    { char out[48]; snprintf(out, sizeof out, "deflect bearing=%02X stored=%d", h->mvAngle[slot], h->mvWalking[slot]);
+    BT_MVANGLE(h, slot) = ((ang + 0x40) & 0xFF) >> 6 << 6;            // C1/3D10-3D23 axis-quantize
+    BT_MVWALKING(h, slot) = (BT_MVWALKING(h, slot) + 1) & 0xFF;          // C1/3D28 INC $9791,X
+    BT_MVACTIVE(h, slot) = 0;                                         // C1/3D2B STZ $98A7,X
+    { char out[48]; snprintf(out, sizeof out, "deflect bearing=%02X stored=%d", BT_MVANGLE(h, slot), BT_MVWALKING(h, slot));
       battleMvBlockTrace(h, slot, "wander", mode, dX, dY, bx0, bx1, by0, by1, grid, body, out); }
     return;
   }
   battleMvBlockTrace(h, slot, "wander", mode, dX, dY, bx0, bx1, by0, by1, 0, 0, "clear");
-  h->mvWalking[slot] = 0;                                          // C1/3D33 STZ $9791,X
-  h->mvActive[slot] = 1; battleMvSegStartTrace(h, slot);           // C1/3D36 $98A7,X := 1 (base: the fresh head's; phase untouched)
+  BT_MVWALKING(h, slot) = 0;                                          // C1/3D33 STZ $9791,X
+  BT_MVACTIVE(h, slot) = 1; battleMvSegStartTrace(h, slot);           // C1/3D36 $98A7,X := 1 (base: the fresh head's; phase untouched)
 }
 
 // FORMATION handler (class 6, C1/3E33 -- modes 0A/0B/0C). The dossier carried this as
@@ -10800,11 +10800,11 @@ static void battleMoveWander(CtBattleHost* h, int slot) {
 // own stores, so the port is their sole writer too.
 static void battleMoveFormation(CtBattleHost* h, int slot) {
   uint8_t* s = h->mem;
-  int cmb = slot + 3, tcmb = h->mvTarget[slot];
+  int cmb = slot + 3, tcmb = BT_MVTARGET(h, slot);
   int mode = BT_MVMODE(h, slot) & 0xFF;
-  if (tcmb < 0) tcmb = cmb;
+  if (tcmb == 0xFF) tcmb = cmb;
   int sx = BT_LIVEX(h, cmb), sy = BT_LIVEY(h, cmb);
-  h->mvBaseX[slot] = sx; h->mvBaseY[slot] = sy;                    // C1/3E35-3E3E $98AF/$98B7,X
+  BT_MVBASEX(h, slot) = sx; BT_MVBASEY(h, slot) = sy;                    // C1/3E35-3E3E $98AF/$98B7,X
   if (!s[0xA5FD + slot]) {                                         // C1/3E41 BNE -> skip
     s[0xA5FD + slot] = 1;                                          // C1/3E46 INC $A5FD,X
     s[0xA60D + slot] = (uint8_t)((sy + 0x10) & 0xFF);              // C1/3E4A centre Y = selfY + 0x10
@@ -10822,7 +10822,7 @@ static void battleMoveFormation(CtBattleHost* h, int slot) {
   int refY = (cy + battleS8(battleTrigMul(ang, radius))) & 0xFF;                     // C1/3E8A-3E90
   int refX = (cx + battleS8(battleTrigMul((ang + 0x40) & 0xFF, radius + 0x20))) & 0xFF;  // C1/3E96-3EA8
   int b = battleAtan2(sx, sy, refX, refY);                         // C1/3EBB ($D3/$D4 self, $D5/$D6 ref)
-  h->mvAngle[slot] = b;                                            // C1/3EC0 STA $9786,X
+  BT_MVANGLE(h, slot) = b;                                            // C1/3EC0 STA $9786,X
   h->mvFacing[slot] = ctBattleFaceTab[b];                          // C1/3ED5 C0F700[$DB] -> $96DE,X
   BT_ENFACING(h, slot) = h->mvFacing[slot];
   int dX = (sx + battleS8(battleTrigMul((b + 0x40) & 0xFF, 8))) & 0xFF;   // C1/3EB7 $AE = 8
@@ -10844,7 +10844,7 @@ static void battleMoveFormation(CtBattleHost* h, int slot) {
     return;
   }
   battleMvBlockTrace(h, slot, "formation", mode, dX, dY, bx0, bx1, by0, by1, 0, 0, "clear");
-  h->mvActive[slot] = 1; battleMvSegStartTrace(h, slot);           // C1/3F4B $98A7,X = 1 (phase untouched)
+  BT_MVACTIVE(h, slot) = 1; battleMvSegStartTrace(h, slot);           // C1/3F4B $98A7,X = 1 (phase untouched)
   // ($9819,X is NOT re-seeded here or at any segment start: its only writers are the loader and the wrap, so
   //  a segment that ended early leaves its count in place -- wait_ambush f2178: the new segment's first
   //  step lands f2182, four frames later, on the 04 the last wrap left behind.)
@@ -10875,12 +10875,12 @@ static void battleMoveFormation(CtBattleHost* h, int slot) {
 static int battleMoveChargeStep(CtBattleHost* h, int slot, int ang, int* pxOut, int* pyOut) {
   int cmb = slot + 3;
   int sx = BT_LIVEX(h, cmb), sy = BT_LIVEY(h, cmb);
-  h->mvAngle[slot] = ang;                                          // 3998/399C / 3FB8 STA $9786,X
+  BT_MVANGLE(h, slot) = ang;                                          // 3998/399C / 3FB8 STA $9786,X
   int stepY = battleS8(battleTrigMul(ang, 8));                     // $8C -- `LDA #08 / STA $AE` then C1/01F9
   int stepX = battleS8(battleTrigMul((ang + 0x40) & 0xFF, 8));     // $8E -- the quadrature component
   h->mvFacing[slot] = ctBattleFaceTab[ang];                        // `LDA $C0F700,X / STA $96DE,X`
   BT_ENFACING(h, slot) = h->mvFacing[slot];
-  h->mvActive[slot] = 1;                                           // ARMED BEFORE THE TESTS -- 3909 / 39BA /
+  BT_MVACTIVE(h, slot) = 1;                                           // ARMED BEFORE THE TESTS -- 3909 / 39BA /
                                                                    //   3FE5, unlike class 1's C1/38B4
   int px = (sx + stepX) & 0xFF, py = (sy + stepY) & 0xFF;
   BT_MIRX(h, cmb) = px; BT_MIRY(h, cmb) = py;                        // $A03C,X / $A053,X
@@ -10897,19 +10897,19 @@ static int battleMoveChargeStep(CtBattleHost* h, int slot, int ang, int* pxOut, 
 // split commit, the victim's foot recorded, the segment disarmed -- in THAT order.
 static void battleMoveChargeStop(CtBattleHost* h, int slot, int tcmb) {
   BT_ENARRIVE(h, slot) = (BT_ENARRIVE(h, slot) + 1) & 0xFF;              // INC $9829,X
-  h->mvSaveMode[slot] = BT_MVREQ(h, slot);                            // $5E1D,X := $5E0D,X
-  h->mvRecX[slot] = BT_LIVEX(h, tcmb);                              // $9831,X := $1D0C,Y
-  h->mvRecY[slot] = BT_LIVEY(h, tcmb);                              // $9839,X := $1D23,Y
-  h->mvActive[slot] = 0;                                           // STZ $98A7,X
+  BT_MVSAVEMODE(h, slot) = BT_MVREQ(h, slot);                            // $5E1D,X := $5E0D,X
+  BT_MVRECX(h, slot) = BT_LIVEX(h, tcmb);                              // $9831,X := $1D0C,Y
+  BT_MVRECY(h, slot) = BT_LIVEY(h, tcmb);                              // $9839,X := $1D23,Y
+  BT_MVACTIVE(h, slot) = 0;                                           // STZ $98A7,X
 }
 // CLASS 2 -- C1/38BF. A straight CHARGE at the move-target: re-aim every pass, step 8, and treat the
 // first blocked step as the arrival. There is no proximity test anywhere in the handler.
 static void battleMoveCharge(CtBattleHost* h, int slot) {
-  int cmb = slot + 3, tcmb = h->mvTarget[slot];
-  if (tcmb < 0) tcmb = cmb;
+  int cmb = slot + 3, tcmb = BT_MVTARGET(h, slot);
+  if (tcmb == 0xFF) tcmb = cmb;
   h->mem[0xA5FD + slot] = 0;                                       // 38C1 STZ $A5FD,X
-  h->mvBaseX[slot] = BT_LIVEX(h, cmb);                              // 38C4 $98AF,X := $1D0F,X (and $D3)
-  h->mvBaseY[slot] = BT_LIVEY(h, cmb);                              // 38CC $98B7,X := $1D26,X (and $D4)
+  BT_MVBASEX(h, slot) = BT_LIVEX(h, cmb);                              // 38C4 $98AF,X := $1D0F,X (and $D3)
+  BT_MVBASEY(h, slot) = BT_LIVEY(h, cmb);                              // 38CC $98B7,X := $1D26,X (and $D4)
   int ang = battleAtan2(BT_LIVEX(h, cmb), BT_LIVEY(h, cmb),          // 38E6 JSR C1/0222, $D5/$D6 = the target
                         BT_LIVEX(h, tcmb), BT_LIVEY(h, tcmb)) & 0xFF;
   if (battleMoveChargeStep(h, slot, ang, NULL, NULL))              // 392B/3930 -- blocked IS arrived
@@ -10920,12 +10920,12 @@ static void battleMoveCharge(CtBattleHost* h, int slot) {
 // 08, on the X axis otherwise (i.e. mode 09). It stops on a block OR when the two coordinates land in
 // the same 32-pixel cell, which is what C1/0119 (`LSR A` x5) measures.
 static void battleMoveAxisCharge(CtBattleHost* h, int slot) {
-  int cmb = slot + 3, tcmb = h->mvTarget[slot];
-  if (tcmb < 0) tcmb = cmb;
+  int cmb = slot + 3, tcmb = BT_MVTARGET(h, slot);
+  if (tcmb == 0xFF) tcmb = cmb;
   int mode = BT_MVMODE(h, slot) & 0xFF;                               // $A2B5, the mode being dispatched
   h->mem[0xA5FD + slot] = 0;                                       // 395B STZ $A5FD,X
-  h->mvBaseX[slot] = BT_LIVEX(h, cmb);                              // 395E $98AF,X (no $D3: no atan2 here)
-  h->mvBaseY[slot] = BT_LIVEY(h, cmb);                              // 3964 $98B7,X
+  BT_MVBASEX(h, slot) = BT_LIVEX(h, cmb);                              // 395E $98AF,X (no $D3: no atan2 here)
+  BT_MVBASEY(h, slot) = BT_LIVEY(h, cmb);                              // 3964 $98B7,X
   int ang;
   if (mode == 0x08) ang = (BT_LIVEY(h, tcmb) >= BT_LIVEY(h, cmb)) ? 0x40 : 0xC0;   // 3975-3983 BCS
   else              ang = (BT_LIVEX(h, tcmb) >= BT_LIVEX(h, cmb)) ? 0x00 : 0x80;   // 3985-3991 BCS
@@ -10942,8 +10942,8 @@ static void battleMoveAxisCharge(CtBattleHost* h, int slot) {
 static void battleMoveCompass(CtBattleHost* h, int slot) {
   int cmb = slot + 3;
   int mode = BT_MVMODE(h, slot) & 0xFF;
-  h->mvBaseX[slot] = BT_LIVEX(h, cmb);                              // 3F5C $98AF,X -- and NO STZ $A5FD,X
-  h->mvBaseY[slot] = BT_LIVEY(h, cmb);                              // 3F62 $98B7,X
+  BT_MVBASEX(h, slot) = BT_LIVEX(h, cmb);                              // 3F5C $98AF,X -- and NO STZ $A5FD,X
+  BT_MVBASEY(h, slot) = BT_LIVEY(h, cmb);                              // 3F62 $98B7,X
   int ang, faceOverride = -1;                                      // `LDA #FF / STA $80` = no override
   switch (mode) {                                                  // 3F6C-3FB6
     case 0x11: ang = 0xC0; break;
@@ -10964,7 +10964,7 @@ static void battleMoveCompass(CtBattleHost* h, int slot) {
   // then `INC $9829,X`. It commits NO split ($5E1D) and records NO victim foot ($9831/$9839); reusing
   // battleMoveChargeStop here would invent three writes the ROM does not make.
   if (blocked) {
-    h->mvActive[slot] = 0;                                         // 4013 STZ $98A7,X
+    BT_MVACTIVE(h, slot) = 0;                                         // 4013 STZ $98A7,X
     BT_ENARRIVE(h, slot) = (BT_ENARRIVE(h, slot) + 1) & 0xFF;            // 4016 INC $9829,X
   }
 }
@@ -10973,13 +10973,13 @@ static void battleMoveCompass(CtBattleHost* h, int slot) {
 // destination, no C1/285A box, no collision test, no arrival. Mode 0x19 alone.
 static void battleMoveAimCentre(CtBattleHost* h, int slot) {
   int cmb = slot + 3;
-  h->mvBaseX[slot] = BT_LIVEX(h, cmb);                              // 4023 $98AF,X (and $D3)
-  h->mvBaseY[slot] = BT_LIVEY(h, cmb);                              // 402B $98B7,X (and $D4)
+  BT_MVBASEX(h, slot) = BT_LIVEX(h, cmb);                              // 4023 $98AF,X (and $D3)
+  BT_MVBASEY(h, slot) = BT_LIVEY(h, cmb);                              // 402B $98B7,X (and $D4)
   int ang = battleAtan2(BT_LIVEX(h, cmb), BT_LIVEY(h, cmb), 0x80, 0x70) & 0xFF;   // 4033 $D5=#80 $D6=#70
-  h->mvAngle[slot] = ang;                                          // 4040 STA $9786,X
+  BT_MVANGLE(h, slot) = ang;                                          // 4040 STA $9786,X
   h->mvFacing[slot] = ctBattleFaceTab[ang];                        // 4044 LDA $C0F700,X / STA $96DE,X
   BT_ENFACING(h, slot) = h->mvFacing[slot];
-  h->mvActive[slot] = 1;                                           // 404D LDA #01 / STA $98A7,X
+  BT_MVACTIVE(h, slot) = 1;                                           // 404D LDA #01 / STA $98A7,X
 }
 
 // --sweepmoveclass's ENTRY POINT: run ONE class handler out of a flat $7E image and put its results back,
@@ -11001,18 +11001,18 @@ int CtBattleMoveClassProbe(uint8_t* mem, int slot) {
   for (int c = 0; c < 11; c++) {
     BT_LIVEX(h, c)  = mem[0x1D0C + c]; BT_LIVEY(h, c)  = mem[0x1D23 + c];
     BT_MIRX(h, c)   = mem[0xA039 + c]; BT_MIRY(h, c)   = mem[0xA050 + c];
-    h->mvExtent[c] = mem[0x971E + c]; h->mvExtentY[c] = mem[0x9729 + c];
+    BT_MVEXTENT(h, c) = mem[0x971E + c]; BT_MVEXTENTY(h, c) = mem[0x9729 + c];
   }
   for (int k = 0; k < 8; k++) {
     int t = mem[0x9752 + k];
-    h->mvTarget[k]   = (t == 0xFF) ? -1 : t;
-    BT_MVREQ(h, k)      = mem[0x5E0D + k];  h->mvSaveMode[k] = mem[0x5E1D + k];
-    BT_ENARRIVE(h, k)   = mem[0x9829 + k];  h->mvActive[k]   = mem[0x98A7 + k];
-    h->mvAngle[k]    = mem[0x9786 + k];  h->mvFacing[k]   = mem[0x96DE + k];
+    BT_MVTARGET(h, k)   = (t == 0xFF) ? -1 : t;
+    BT_MVREQ(h, k)      = mem[0x5E0D + k];  BT_MVSAVEMODE(h, k) = mem[0x5E1D + k];
+    BT_ENARRIVE(h, k)   = mem[0x9829 + k];  BT_MVACTIVE(h, k)   = mem[0x98A7 + k];
+    BT_MVANGLE(h, k)    = mem[0x9786 + k];  h->mvFacing[k]   = mem[0x96DE + k];
     BT_ENFACING(h, k)   = mem[0x96DE + k];
-    h->mvBaseX[k]    = mem[0x98AF + k];  h->mvBaseY[k]    = mem[0x98B7 + k];
-    h->mvRecX[k]     = mem[0x9831 + k];  h->mvRecY[k]     = mem[0x9839 + k];
-    h->mvWalking[k]  = mem[0x9791 + k];
+    BT_MVBASEX(h, k)    = mem[0x98AF + k];  BT_MVBASEY(h, k)    = mem[0x98B7 + k];
+    BT_MVRECX(h, k)     = mem[0x9831 + k];  BT_MVRECY(h, k)     = mem[0x9839 + k];
+    BT_MVWALKING(h, k)  = mem[0x9791 + k];
   }
   int mode = mem[0xA2B5];                        // C1/373B's `STA $A2B5` -- the mode being dispatched
   BT_MVMODE(h, slot) = mode;
@@ -11025,11 +11025,11 @@ int CtBattleMoveClassProbe(uint8_t* mem, int slot) {
     default: return -1;                          // the sweep only drives the four derived here
   }
   int cmb = slot + 3;
-  mem[0x9786 + slot] = (uint8_t)h->mvAngle[slot];   mem[0x96DE + slot] = (uint8_t)h->mvFacing[slot];
-  mem[0x98AF + slot] = (uint8_t)h->mvBaseX[slot];   mem[0x98B7 + slot] = (uint8_t)h->mvBaseY[slot];
-  mem[0x98A7 + slot] = (uint8_t)h->mvActive[slot];  mem[0x9829 + slot] = (uint8_t)BT_ENARRIVE(h, slot);
-  mem[0x5E1D + slot] = (uint8_t)h->mvSaveMode[slot];
-  mem[0x9831 + slot] = (uint8_t)h->mvRecX[slot];    mem[0x9839 + slot] = (uint8_t)h->mvRecY[slot];
+  mem[0x9786 + slot] = (uint8_t)BT_MVANGLE(h, slot);   mem[0x96DE + slot] = (uint8_t)h->mvFacing[slot];
+  mem[0x98AF + slot] = (uint8_t)BT_MVBASEX(h, slot);   mem[0x98B7 + slot] = (uint8_t)BT_MVBASEY(h, slot);
+  mem[0x98A7 + slot] = (uint8_t)BT_MVACTIVE(h, slot);  mem[0x9829 + slot] = (uint8_t)BT_ENARRIVE(h, slot);
+  mem[0x5E1D + slot] = (uint8_t)BT_MVSAVEMODE(h, slot);
+  mem[0x9831 + slot] = (uint8_t)BT_MVRECX(h, slot);    mem[0x9839 + slot] = (uint8_t)BT_MVRECY(h, slot);
   mem[0xA039 + cmb]  = (uint8_t)BT_MIRX(h, cmb);     mem[0xA050 + cmb]  = (uint8_t)BT_MIRY(h, cmb);
   return cls;
 }
@@ -11069,24 +11069,24 @@ static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: th
     // (No hold for the enemy whose turn is pending: CF/F978 has none. Its walk stops with every other one when C1/4058 counts
     // $A0FD up, the loop's own gate above. MEASURED, the census's enemy 1B: its think at f684 and one more step at f685
     // (123 -> 124, CF:F9CE) before the action opens; the port held it from the think and its slides ran 2 frames long.)
-    if (h->mvActive[slot]) {                                       // mover: advance the phase / 4f
-      if (--h->mvSegCad[slot] <= 0) {                              // CF/F984 DEC $9819,X / BNE (every frame)
-        h->mvSegCad[slot] = h->mvSegPeriod[slot];                  // CF/F989 LDA $9742,X / STA $9819,X
-        h->mvPhase[slot] += h->mvPhaseStep[slot];                  // CF/F98F CLC / ADC $98C2,X (the per-slot step)
-        int ph = h->mvPhase[slot];                                 // CF/F999: $00 holds the pre-reset phase
-        if (ph >= 8) { h->mvActive[slot] = 0; h->mvPhase[slot] = 0; }   // segment done (CF/F99F)
-        int oy = battleS8(battleTrigMul(h->mvAngle[slot], ph));          // Y = baseY + trig(angle)   (CF/F9C2)
-        int ox = battleS8(battleTrigMul((h->mvAngle[slot] + 0x40) & 0xFF, ph));  // X = baseX + trig(angle+40) (CF/F9CB)
-        BT_LIVEY(h, cmb) = (h->mvBaseY[slot] + oy) & 0xFF;
-        BT_LIVEX(h, cmb) = (h->mvBaseX[slot] + ox) & 0xFF;
+    if (BT_MVACTIVE(h, slot)) {                                       // mover: advance the phase / 4f
+      if (--BT_MVSEGCAD(h, slot) <= 0) {                              // CF/F984 DEC $9819,X / BNE (every frame)
+        BT_MVSEGCAD(h, slot) = BT_MVSEGPERIOD(h, slot);                  // CF/F989 LDA $9742,X / STA $9819,X
+        BT_MVPHASE(h, slot) += BT_MVPHASESTEP(h, slot);                  // CF/F98F CLC / ADC $98C2,X (the per-slot step)
+        int ph = BT_MVPHASE(h, slot);                                 // CF/F999: $00 holds the pre-reset phase
+        if (ph >= 8) { BT_MVACTIVE(h, slot) = 0; BT_MVPHASE(h, slot) = 0; }   // segment done (CF/F99F)
+        int oy = battleS8(battleTrigMul(BT_MVANGLE(h, slot), ph));          // Y = baseY + trig(angle)   (CF/F9C2)
+        int ox = battleS8(battleTrigMul((BT_MVANGLE(h, slot) + 0x40) & 0xFF, ph));  // X = baseX + trig(angle+40) (CF/F9CB)
+        BT_LIVEY(h, cmb) = (BT_MVBASEY(h, slot) + oy) & 0xFF;
+        BT_LIVEX(h, cmb) = (BT_MVBASEX(h, slot) + ox) & 0xFF;
         // Live-position trace (battle_enemy_move_target.md acceptance): a SEPARATE "battlemove" line (env
         // CT_BATTLE_MVTRACE) so it never collides with the pinned "battletrace" format. Logs the walking
         // enemy's live foot each segment step -> the approach/return distance + the settle are inspectable.
         static int mv = -1; if (mv < 0) { const char* t = getenv("CT_BATTLE_MVTRACE"); mv = (t && *t) ? 1 : 0; }
         if (mv) fprintf(stderr, "battlemove f%d slot%d cmb%d mode%d ph%d live=(%d,%d) tgt=(%d,%d)\n",
                         h->frames, slot, cmb, BT_MVMODE(h, slot), ph, BT_LIVEX(h, cmb), BT_LIVEY(h, cmb),
-                        h->mvTarget[slot] >= 0 ? BT_LIVEX(h, h->mvTarget[slot]) : -1,
-                        h->mvTarget[slot] >= 0 ? BT_LIVEY(h, h->mvTarget[slot]) : -1);
+                        BT_MVTARGET(h, slot) != 0xFF ? BT_LIVEX(h, BT_MVTARGET(h, slot)) : -1,
+                        BT_MVTARGET(h, slot) != 0xFF ? BT_LIVEY(h, BT_MVTARGET(h, slot)) : -1);
       }
     }
   }
@@ -11098,8 +11098,8 @@ static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: th
   for (int slot = 0; slot < 8; slot++) {
     int cmb = slot + 3;
     if (!battlePresent(s, cmb)) continue;
-    if (cadFrame && BT_MVMODE(h, slot) != 0 && --h->mvModeCad[slot] <= 0) {   // C1/371F `LDA $974A,X / BEQ`: mode 0
-      h->mvModeCad[slot] = h->mvModeReload[slot];                  //   neither counts nor runs; the wrap reloads $989F,X
+    if (cadFrame && BT_MVMODE(h, slot) != 0 && --BT_MVMODECAD(h, slot) <= 0) {   // C1/371F `LDA $974A,X / BEQ`: mode 0
+      BT_MVMODECAD(h, slot) = BT_MVMODERELOAD(h, slot);                  //   neither counts nor runs; the wrap reloads $989F,X
                                                                    //   (C1/3729) and runs the handler
       // The pending-turn think holds the HANDLER only (oracle: the f461 pass between ATB-0 f454 and the
       // f478 window never armed -- position constant -- while the counter kept decrementing).
@@ -11373,12 +11373,12 @@ int CtBattlePcFacing(const uint8_t* mem, const CtBattleHost* h, int seat) {
 static void battleMoveInit(CtBattleHost* h) {
   uint8_t* s = h->mem;
   for (int i = 0; i < 8; i++) {
-    BT_MVMODE(h, i) = 0xFF; h->mvTarget[i] = -1;   // $974A = FF at the boot (CC/E34E) until the walk's first commit h->mvAngle[i] = 0; h->mvBaseX[i] = 0; h->mvBaseY[i] = 0;
-    h->mvSaveMode[i] = 0; h->mvRecX[i] = 0; h->mvRecY[i] = 0;   // the settle/re-acquire pair
-    h->mvPhase[i] = 0; h->mvActive[i] = 0; h->mvWalking[i] = 0;
-    h->mvSegPeriod[i] = 4; h->mvPhaseStep[i] = 1;      // overwritten below from the E4/F609 record byte (CC/EBCC-EBE0)
-    h->mvSegCad[i] = 4; h->mvModeCad[i] = 0x20;       // $9897 = 0x20 for every slot (CC/E3F6), re-staged per enemy below
-    h->mvModeReload[i] = 0x20;                         //   with its own reload $989F (CC/EBF0-EBFA)
+    BT_MVMODE(h, i) = 0xFF; BT_MVTARGET(h, i) = -1;   // $974A = FF at the boot (CC/E34E) until the walk's first commit BT_MVANGLE(h, i) = 0; BT_MVBASEX(h, i) = 0; BT_MVBASEY(h, i) = 0;
+    BT_MVSAVEMODE(h, i) = 0; BT_MVRECX(h, i) = 0; BT_MVRECY(h, i) = 0;   // the settle/re-acquire pair
+    BT_MVPHASE(h, i) = 0; BT_MVACTIVE(h, i) = 0; BT_MVWALKING(h, i) = 0;
+    BT_MVSEGPERIOD(h, i) = 4; BT_MVPHASESTEP(h, i) = 1;      // overwritten below from the E4/F609 record byte (CC/EBCC-EBE0)
+    BT_MVSEGCAD(h, i) = 4; BT_MVMODECAD(h, i) = 0x20;       // $9897 = 0x20 for every slot (CC/E3F6), re-staged per enemy below
+    BT_MVMODERELOAD(h, i) = 0x20;                         //   with its own reload $989F (CC/EBF0-EBFA)
     h->aiTurnAdv[i] = 0;                                          // no action's step pending (C1/8E4A)
     BT_MVREQ(h, i) = 0; BT_ENFACINGPUB(h, i) = 0;                       // $5E0D / $96E9 zeroed by the boot wipe (CF/FB9A)
     for (int k = 0; k < 8; k++) { BT_IDLEPOSE(h, i, k) = 0; BT_IDLEDWELL(h, i, k) = 0; }   // $97D9/$9799: EMPTY until
@@ -11399,7 +11399,7 @@ static void battleMoveInit(CtBattleHost* h) {
   //  by one as they were found -- are inside CF/FB92's range and are zeroed by battleBootWipe before stageAll
   //  now, the ROM's own order: wipe, then the loaders.)
   h->scanCur = 0; h->scanTotal = 0;                                // armed by battleCombatStart's boot block
-  for (int i = 0; i < 8; i++) { BT_ENARRIVE(h, i) = 0; h->mvRefX[i] = 0; h->mvRefY[i] = 0; }
+  for (int i = 0; i < 8; i++) { BT_ENARRIVE(h, i) = 0; BT_MVREFX(h, i) = 0; BT_MVREFY(h, i) = 0; }
   // THE ARENA COLLISION GRID (battle_ai_interp.md §9, stager CC/E45E-E4B8): $7BFD[16x16] = the STATIC
   // border template (rows 0-1/13-15 + cols 0-1/14-15 = 0xC0) OR'd with the field-projected planes --
   // bit7($2B23,X) >> 1 (the mover-solid window -> bit6 SOLID) | bit7($2A23,X). Verified 256/256 against
@@ -11419,7 +11419,7 @@ static void battleMoveInit(CtBattleHost* h) {
   battleHudChromeBase(s);
   // CC/E554-E563: `$80FD,X := 29FF` for X = $C0..$1FE -- among them $81BD..$81FC, the source of BG3 row 0 (CC/E0AF).
   for (int x = 0xC0; x < 0x200; x += 2) { s[0x80FD + x] = 0xFF; s[0x80FE + x] = 0x29; }
-  for (int cmb = 0; cmb < 11; cmb++) { h->mvExtent[cmb] = 8; h->mvExtentY[cmb] = 8; BT_LIVEX(h, cmb) = 0; BT_LIVEY(h, cmb) = 0; }
+  for (int cmb = 0; cmb < 11; cmb++) { BT_MVEXTENT(h, cmb) = 8; BT_MVEXTENTY(h, cmb) = 8; BT_LIVEX(h, cmb) = 0; BT_LIVEY(h, cmb) = 0; }
   for (int seat = 0; seat < 3; seat++) {                           // PCs: $29B0 + 5*seat -> foot
     const uint8_t* r = s + 0x29B0 + seat * 5;
     if (!battlePresent(s, seat)) {                                 // CC/E941-E95D stage an ABSENT seat's foot too (8-bit;
@@ -11433,7 +11433,7 @@ static void battleMoveInit(CtBattleHost* h) {
       continue;                                                    //   program op AF (CD/20F3) reads it
     }
     BT_LIVEX(h, seat) = 16 * r[0] + r[2]; BT_LIVEY(h, seat) = 16 * r[1] + r[3];
-    h->mvExtent[seat] = battleMoveExtent(seat, 0); h->mvExtentY[seat] = battleMoveExtentY(seat, 0);
+    BT_MVEXTENT(h, seat) = battleMoveExtent(seat, 0); BT_MVEXTENTY(h, seat) = battleMoveExtentY(seat, 0);
   }
   for (int slot = 0; slot < 8; slot++) {                           // enemies: $29BF + 12*slot -> foot
     int cmb = slot + 3;
@@ -11442,13 +11442,13 @@ static void battleMoveInit(CtBattleHost* h) {
     if (r[6] != 0) continue;                                       // invalid staged record
     BT_LIVEX(h, cmb) = 16 * r[0] + r[2]; BT_LIVEY(h, cmb) = 16 * r[1] + r[3];
     BT_MIRX(h, cmb) = BT_LIVEX(h, cmb); BT_MIRY(h, cmb) = BT_LIVEY(h, cmb);
-    h->mvExtent[cmb] = battleMoveExtent(cmb, s[battleBlock(cmb) + 0]);
-    h->mvExtentY[cmb] = battleMoveExtentY(cmb, s[battleBlock(cmb) + 0]);
+    BT_MVEXTENT(h, cmb) = battleMoveExtent(cmb, s[battleBlock(cmb) + 0]);
+    BT_MVEXTENTY(h, cmb) = battleMoveExtentY(cmb, s[battleBlock(cmb) + 0]);
     { const uint8_t* fer = CtBattleFieldEnemyRecs();               // E4/F600 + id*10, byte +9 (CC/EBCC-EBE0):
       int id = s[battleBlock(cmb) + 0];                              //   & 7 -> $98C2,Y the phase STEP per wrap,
       int b9 = fer ? fer[(size_t)id * 10 + 9] : 0x41;                //   >> 4 -> $9742,Y the reload, also seeded into
-      h->mvPhaseStep[slot] = b9 & 7; h->mvSegPeriod[slot] = b9 >> 4; //   $9819,Y (CC/EBE0). Hetake/Avian 0x41 = 4/+1,
-      h->mvSegCad[slot] = h->mvSegPeriod[slot];                      //   Beetle 0x61 = 6/+1 (wait_ambush $9742 = 06 06 04)
+      BT_MVPHASESTEP(h, slot) = b9 & 7; BT_MVSEGPERIOD(h, slot) = b9 >> 4; //   $9819,Y (CC/EBE0). Hetake/Avian 0x41 = 4/+1,
+      BT_MVSEGCAD(h, slot) = BT_MVSEGPERIOD(h, slot);                      //   Beetle 0x61 = 6/+1 (wait_ambush $9742 = 06 06 04)
       // CC/EBE3-EBFA: the handler pass's reload $989F,Y = CC/F544[((period >> 1) << 2) + (step >> 1)] (`LSR / ASL /
       // ASL / STA $82`, `LDA $98C2,Y / LSR / ADC $82 / TAX`), and the counter $9897,Y = it + $80 (the slot): GATO /
       // Hetake 0x41 -> 0x20, Yakra 0x21 -> 0x10 -- measured, gato_wait with Yakra's id: $9897 = 20 20 20 13 (CC:EBFD),
@@ -11462,10 +11462,10 @@ static void battleMoveInit(CtBattleHost* h) {
       // carried into its `43 00 F6 C0` point and the effect object's `A8 FF` met the arena's top row a frame early.
       if (id == 0xD8 || id == 0x94 || id == 0xAD) { BT_LIVEY(h, cmb) = (BT_LIVEY(h, cmb) + 1) & 0xFF; BT_MIRY(h, cmb) = BT_LIVEY(h, cmb); }
       { long rl = 0; const uint8_t* crom = CtBattleRom(&rl);
-        int ix = (((h->mvSegPeriod[slot] >> 1) << 2) + (h->mvPhaseStep[slot] >> 1)) & 0xFF;
+        int ix = (((BT_MVSEGPERIOD(h, slot) >> 1) << 2) + (BT_MVPHASESTEP(h, slot) >> 1)) & 0xFF;
         int rel = (crom && rl > 0x0CF544L + ix) ? crom[0x0CF544 + ix] : 0x20;
-        h->mvModeReload[slot] = rel;
-        h->mvModeCad[slot] = (rel + slot) & 0xFF; }
+        BT_MVMODERELOAD(h, slot) = rel;
+        BT_MVMODECAD(h, slot) = (rel + slot) & 0xFF; }
       // CC/EB75-EB83, the same loader, byte +4: `LDA $E4F604,X / STA $9700,Y` (the staged flags byte) then `AND #80
       // / BEQ / STA $A5C5,Y / STA $A5D0,Y` -- bit7 alone, into $A5C5+slot (written and never read anywhere in the
       // image) and $A5D0+slot = $A5CD+cmb, the byte C1/28C2 reads to skip a body: the airborne Avian Chaos (id $19,
@@ -11668,7 +11668,7 @@ static void battleOpenAction(CtBattleHost* h, int atk, int reactive) {
   // attack script itself stamps $96DE (writer C1:600C, §4.1), so a counter never renders facing-away/up. The
   // mover-idle dispatch gate (battleReactiveCounterTick) already holds the counter to rest, so this is a
   // second guarantee. (For a non-reactive action the !mvActive guard stands -- the walk-in owns the facing.)
-  if (!battleIsPc(atk) && !isTech && tgt >= 0 && tgt < 11 && (!h->mvActive[atk - 3] || reactive)) {
+  if (!battleIsPc(atk) && !isTech && tgt >= 0 && tgt < 11 && (!BT_MVACTIVE(h, atk - 3) || reactive)) {
     int b = battleAtan2(BT_LIVEX(h, atk), BT_LIVEY(h, atk), BT_LIVEX(h, tgt), BT_LIVEY(h, tgt));
     h->mvFacing[atk - 3] = ctBattleFaceTab[b & 0xFF];
     BT_ENFACING(h, atk - 3) = h->mvFacing[atk - 3];
@@ -13787,13 +13787,13 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           // mvPhaseStep / mvSegPeriod. The PC physical's walk super CE/D4C3 opens with it.
           int c = (t < 8) ? h->ascRole[t] : -1;
           if (c >= 0 && c < 11) {
-            h->ascSpeed[t] = (c < 3) ? 2 : h->mvPhaseStep[c - 3];
-            h->ascRate[t]  = (c < 3) ? 1 : h->mvSegPeriod[c - 3];
+            h->ascSpeed[t] = (c < 3) ? 2 : BT_MVPHASESTEP(h, c - 3);
+            h->ascRate[t]  = (c < 3) ? 1 : BT_MVSEGPERIOD(h, c - 3);
           }
           { int cs[11], nc = (t < 8) ? battleAscCmbs(h, t, cs) : 0;
             for (int i = 0; i < nc; i++) { int k = cs[i];
-              h->mem[0xA324 + k] = (uint8_t)((k < 3) ? 2 : h->mvPhaseStep[k - 3]);
-              h->mem[0xA2FE + k] = (uint8_t)((k < 3) ? 1 : h->mvSegPeriod[k - 3]); } }
+              h->mem[0xA324 + k] = (uint8_t)((k < 3) ? 2 : BT_MVPHASESTEP(h, k - 3));
+              h->mem[0xA2FE + k] = (uint8_t)((k < 3) ? 1 : BT_MVSEGPERIOD(h, k - 3)); } }
           break; }
         case 0x33:                                                   // store resolve(a1) -> $5D9E/$5D9F
           if (battleAscResolve(h, t, a1, &gx, &gy)) { h->mem[0x5D80 + 0x1E] = gx; h->mem[0x5D80 + 0x1F] = gy; }
@@ -17641,24 +17641,24 @@ void CtBattleMoverSeed(CtBattleHost* h, const uint8_t* w) {
   uint8_t* s = h->mem;
   for (int c = 0; c < 11; c++) { BT_LIVEX(h, c) = w[0x1D0C + c]; BT_LIVEY(h, c) = w[0x1D23 + c];
                                  BT_MIRX(h, c) = w[0xA039 + c]; BT_MIRY(h, c) = w[0xA050 + c];   // the C1/283D mirror as left
-                                 h->mvExtent[c] = 8; h->mvExtentY[c] = 8; }
+                                 BT_MVEXTENT(h, c) = 8; BT_MVEXTENTY(h, c) = 8; }
   for (int seat = 0; seat < 3; seat++) {
     if (s[0x2980 + seat] & 0x80) continue;
-    h->mvExtent[seat] = battleMoveExtent(seat, 0); h->mvExtentY[seat] = battleMoveExtentY(seat, 0);
+    BT_MVEXTENT(h, seat) = battleMoveExtent(seat, 0); BT_MVEXTENTY(h, seat) = battleMoveExtentY(seat, 0);
   }
   for (int i = 0; i < 8; i++) {
     int cmb = 3 + i, id = s[battleBlock(cmb) + 0];
-    h->mvTarget[i] = (w[0x9752 + i] == 0xFF) ? -1 : w[0x9752 + i];
-    h->mvAngle[i] = w[0x9786 + i]; h->mvBaseX[i] = w[0x98AF + i]; h->mvBaseY[i] = w[0x98B7 + i];
-    h->mvPhase[i] = w[0x9737 + i]; h->mvActive[i] = w[0x98A7 + i]; h->mvWalking[i] = w[0x9791 + i];
-    h->mvSegCad[i] = w[0x9819 + i]; h->mvSegPeriod[i] = w[0x9742 + i]; h->mvPhaseStep[i] = w[0x98C2 + i];
-    h->mvModeCad[i] = w[0x9897 + i]; h->mvModeReload[i] = w[0x989F + i];
-    h->mvRefX[i] = w[0xA5E4 + i]; h->mvRefY[i] = w[0xA5EC + i];
-    BT_ENARRIVE(h, i) = w[0x9829 + i] != 0; h->mvSaveMode[i] = w[0x5E1D + i];
-    h->mvRecX[i] = w[0x9831 + i]; h->mvRecY[i] = w[0x9839 + i];
+    BT_MVTARGET(h, i) = (w[0x9752 + i] == 0xFF) ? -1 : w[0x9752 + i];
+    BT_MVANGLE(h, i) = w[0x9786 + i]; BT_MVBASEX(h, i) = w[0x98AF + i]; BT_MVBASEY(h, i) = w[0x98B7 + i];
+    BT_MVPHASE(h, i) = w[0x9737 + i]; BT_MVACTIVE(h, i) = w[0x98A7 + i]; BT_MVWALKING(h, i) = w[0x9791 + i];
+    BT_MVSEGCAD(h, i) = w[0x9819 + i]; BT_MVSEGPERIOD(h, i) = w[0x9742 + i]; BT_MVPHASESTEP(h, i) = w[0x98C2 + i];
+    BT_MVMODECAD(h, i) = w[0x9897 + i]; BT_MVMODERELOAD(h, i) = w[0x989F + i];
+    BT_MVREFX(h, i) = w[0xA5E4 + i]; BT_MVREFY(h, i) = w[0xA5EC + i];
+    BT_ENARRIVE(h, i) = w[0x9829 + i] != 0; BT_MVSAVEMODE(h, i) = w[0x5E1D + i];
+    BT_MVRECX(h, i) = w[0x9831 + i]; BT_MVRECY(h, i) = w[0x9839 + i];
     h->mvFacing[i] = w[0x96DE + i] & 3;
     if (!battleSlotStaged(s, i)) continue;
-    h->mvExtent[cmb] = battleMoveExtent(cmb, id); h->mvExtentY[cmb] = battleMoveExtentY(cmb, id);
+    BT_MVEXTENT(h, cmb) = battleMoveExtent(cmb, id); BT_MVEXTENTY(h, cmb) = battleMoveExtentY(cmb, id);
   }
   h->mvPendAtk = -1; h->mvPendTgt = -1; h->mvPendTech = 0; h->mvPendDecoded = 0;
   h->mvInited = 1;                                                 // the render reads the walked host state

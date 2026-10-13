@@ -178,6 +178,28 @@ typedef struct { int active, value, centerX, restY, age, kind, romKind, rise; } 
 #define BT_MIRX(h, c)       ((h)->mem[0xA039 + (c)])   // $A039,c: the mirror's foot X
 #define BT_MIRY(h, c)       ((h)->mem[0xA050 + (c)])   // $A050,c: the mirror's foot Y
 
+// THE ENEMIES' MOVER STATE LIVES IN THE WRAM (S4), at the ROM's own addresses, X = the enemy slot (the extents: the
+// combatant). Each was a host field (mvTarget, mvAngle, ...), copied in and out of the WRAM at a few sites.
+#define BT_MVTARGET(h, i)                ((h)->mem[0x9752 + (i)])   // $9752,X: the move-target combatant (FF = none)
+#define BT_MVANGLE(h, i)                 ((h)->mem[0x9786 + (i)])   // $9786,X: the segment bearing (0x100 = a full turn)
+#define BT_MVBASEX(h, i)                 ((h)->mem[0x98AF + (i)])   // $98AF,X: the segment's base X
+#define BT_MVBASEY(h, i)                 ((h)->mem[0x98B7 + (i)])   // $98B7,X: the segment's base Y
+#define BT_MVPHASE(h, i)                 ((h)->mem[0x9737 + (i)])   // $9737,X: the 8-phase mover counter
+#define BT_MVACTIVE(h, i)                ((h)->mem[0x98A7 + (i)])   // $98A7,X: a segment mid-advance (CF/F98F runs it)
+#define BT_MVWALKING(h, i)               ((h)->mem[0x9791 + (i)])   // $9791,X: the stored-bearing latch
+#define BT_MVREFX(h, i)                  ((h)->mem[0xA5E4 + (i)])   // $A5E4,X: the return's reference X
+#define BT_MVREFY(h, i)                  ((h)->mem[0xA5EC + (i)])   // $A5EC,X: the return's reference Y
+#define BT_MVSAVEMODE(h, i)              ((h)->mem[0x5E1D + (i)])   // $5E1D,X: the requested mode saved at the settle (C1/3B48)
+#define BT_MVRECX(h, i)                  ((h)->mem[0x9831 + (i)])   // $9831,X: the victim's foot X at the settle
+#define BT_MVRECY(h, i)                  ((h)->mem[0x9839 + (i)])   // $9839,X: the victim's foot Y at the settle
+#define BT_MVSEGCAD(h, i)                ((h)->mem[0x9819 + (i)])   // $9819,X: the mover's per-slot frame counter (CF/F984 DEC)
+#define BT_MVMODERELOAD(h, i)            ((h)->mem[0x989F + (i)])   // $989F,X: the mode machine's cadence reload (CC/EBF4)
+#define BT_MVSEGPERIOD(h, i)             ((h)->mem[0x9742 + (i)])   // $9742,X: the mover counter's reload (E4/F609 >> 4)
+#define BT_MVPHASESTEP(h, i)             ((h)->mem[0x98C2 + (i)])   // $98C2,X: the phase increment per wrap (E4/F609 & 7)
+#define BT_MVMODECAD(h, i)               ((h)->mem[0x9897 + (i)])   // $9897,X: the mode machine's cadence counter (C1/3727 DEC)
+#define BT_MVEXTENTY(h, c)               ((h)->mem[0x9729 + (c)])   // $9729,c: the box's Y half-extent, per combatant (E4/F608 for an enemy)
+#define BT_MVEXTENT(h, c)                ((h)->mem[0x971E + (c)])   // $971E,c: the box's X half-extent, per combatant (E4/F607 for an enemy)
+
 typedef struct CtBattleHost {
   uint8_t* mem;              // the engine's $7E image (64KB): staged interface in, battle blocks out
   uint8_t* glb;              // the $7F0000 page (0x200 bytes): outcome $7F01EC = glb[0x1EC]
@@ -695,27 +717,27 @@ typedef struct CtBattleHost {
   // The LIVE per-combatant battlefield position is the WRAM's $1D0C+cmb / $1D23+cmb (BT_LIVEX / BT_LIVEY, §A.2). The
   // field's camera words share that page; in a fight the field reads its page from C0/0918's copy at $7F:2000 (field.c),
   // as the cartridge does, so the battle owns the live bytes from the entry to C0/0905.
-  int mvExtentY[11];          // $9729,cmb: the Y half-extent (E4/F600 record +8; the box TOP, C1/2889)
+  // (was mvExtentY, now the WRAM byte below) $9729,cmb: the Y half-extent (E4/F600 record +8; the box TOP, C1/2889)
   // (the C1/283D mirror of the feet, $A039/$A050,cmb, is the WRAM's: BT_MIRX / BT_MIRY above -- refreshed before each
   //  handler loop, overwritten by a slot's PROJECTED step within it; see battleBox)
-  int mvTarget[8];            // $9752,X: the move-target COMBATANT idx (approach walks to it / return from it)
-  int mvAngle[8];             // $9786,X: the current segment bearing (0..255, 0x100 = full turn)
-  int mvBaseX[8], mvBaseY[8]; // $98AF/$98B7,X: the segment's base position (re-read from live pos each segment)
-  int mvPhase[8];             // $9737,X: the 8-phase mover counter (offset = trig(angle)*phase>>8, 0..8)
-  int mvActive[8];            // $98A7,X: 1 while a segment is mid-advance (mover runs); 0 = segment done/settled
-  int mvWalking[8];           // $9791,X: the STORED-BEARING latch (battle_ai_interp.md §9): set by a BLOCKED
+  // (was mvTarget, now the WRAM byte below) $9752,X: the move-target COMBATANT idx (approach walks to it / return from it)
+  // (was mvAngle, now the WRAM byte below) $9786,X: the current segment bearing (0..255, 0x100 = full turn)
+  // (was mvBaseX, now the WRAM byte below) $98AF/$98B7,X: the segment's base position (re-read from live pos each segment)
+  // (was mvPhase, now the WRAM byte below) $9737,X: the 8-phase mover counter (offset = trig(angle)*phase>>8, 0..8)
+  // (was mvActive, now the WRAM byte below) $98A7,X: 1 while a segment is mid-advance (mover runs); 0 = segment done/settled
+  // (was mvWalking, now the WRAM byte below) $9791,X: the STORED-BEARING latch (battle_ai_interp.md §9): set by a BLOCKED
                               //   return step (the bearing axis-quantized), reused on later passes (skip the
                               //   recompute/reverse); cleared by an unblocked walking pass. Also the mode-1
                               //   arrival hold flag (historical name).
-  int mvRefX[8], mvRefY[8];   // $A5E4/$A5EC,X: the return REF = victim + trig(away)*$AE (persists across
+  // (was mvRefX, now the WRAM byte below) $A5E4/$A5EC,X: the return REF = victim + trig(away)*$AE (persists across
                               //   passes; the 2B13 settle test measures against it)
   // ---- what class 4's SETTLE records for class 0's RE-ACQUIRE (C1/3B45-3B58 -> C1/3772) ----
   // ---- the $A4 GROUP SCHEDULER (battle_facing_engine.md, the 2026-09-08 section) ----
                               //   (CF/E477 INC / CF/E47F STZ on ==4); bank C1 borrows and restores it.
   int pcEntranceArmed;        // one-shot: the boot's C1/0042 `JMP C1/34DB` has armed the ENTRANCE ladder
   int pcBandPrev;             // previous $CA1F (CD/0534's predicate), to catch the entry-fade loop's completion edge
-  int mvSaveMode[8];          // $5E1D,X: the requested move mode saved at the settle (C1/3B48)
-  int mvRecX[8], mvRecY[8];   // $9831/$9839,X: the victim's live foot AT the settle (C1/3B52/3B58) --
+  // (was mvSaveMode, now the WRAM byte below) $5E1D,X: the requested move mode saved at the settle (C1/3B48)
+  // (was mvRecX, now the WRAM byte below) $9831/$9839,X: the victim's live foot AT the settle (C1/3B52/3B58) --
                               //   class 0 compares the victim's CURRENT foot against these and, when it
                               //   has moved off, hands the saved mode back (C1/3790).
   int mvFacing[8];            // $96DE,X (battle_pc_approach_facing.md §2.2): per-enemy FACING =
@@ -744,20 +766,20 @@ typedef struct CtBattleHost {
                               //   render keys the ROM windows on this (bat1/3/4 staged facings all 0).
                               //   mvFacing above keeps its default-1 GATO-render interim (§2.6) -- the two
                               //   models merge when GATO's window-vs-facing wrinkle is derived.
-  int mvSegCad[8];            // $9819,X: the mover's per-slot frame counter -- DEC'd EVERY frame by the mover loop
+  // (was mvSegCad, now the WRAM byte below) $9819,X: the mover's per-slot frame counter -- DEC'd EVERY frame by the mover loop
                               //   CF/F984, reloaded from $9742,X on the wrap (CF/F989-F98C); written by nobody else
                               //   (the loader CC/EBE0 seeds it = the period; a segment start does NOT re-seed it)
-  int mvModeReload[8];        // $989F,X: the pass counter's reload = CC/F544[((period >> 1) << 2) + (step >> 1)]
+  // (was mvModeReload, now the WRAM byte below) $989F,X: the pass counter's reload = CC/F544[((period >> 1) << 2) + (step >> 1)]
                               //   (CC/EBE3-EBF4): 0x20 for a record byte 0x41 (GATO, Hetake), 0x10 for 0x21 (Yakra)
-  int mvSegPeriod[8];         // $9742,X: the reload = E4/F609[id] >> 4 (CC/EBD5-EBDD): 4 for a Hetake/Avian, 6 for a Beetle
-  int mvPhaseStep[8];         // $98C2,X: the phase increment per wrap = E4/F609[id] & 7 (CC/EBCC-EBD2)
-  int mvModeCad[8];           // $9897,X: mode-machine cadence counter. Staged $989F + slot (CC/EBF7-EBFA, the
+  // (was mvSegPeriod, now the WRAM byte below) $9742,X: the reload = E4/F609[id] >> 4 (CC/EBD5-EBDD): 4 for a Hetake/Avian, 6 for a Beetle
+  // (was mvPhaseStep, now the WRAM byte below) $98C2,X: the phase increment per wrap = E4/F609[id] & 7 (CC/EBCC-EBD2)
+  // (was mvModeCad, now the WRAM byte below) $9897,X: mode-machine cadence counter. Staged $989F + slot (CC/EBF7-EBFA, the
                               //   per-slot STAGGER); counts down on every idle frame (writer C1:3727) while the
                               //   live mode is not 0 (C1/371F `BEQ`); wrap -> reload $989F + run the mode
                               //   handler. Frozen with the
                               //   rest of the mover by $A013 spans; the pending-turn think skips the HANDLER
                               //   only (oracle: counter decrements f454-478, the f461 pass never arms).
-  int mvExtent[11];           // per-combatant box HALF-EXTENT $971E/$9729 (oracle-read: GATO 16, PC 8): the
+  // (was mvExtent, now the WRAM byte below) per-combatant box HALF-EXTENT $971E/$9729 (oracle-read: GATO 16, PC 8): the
                               //   arrival box is [live +/- ext] X, [live-ext .. live+8] Y (writer CC/E285A).
   // E.3 RESOLVED (battle_enemy_move_target.md addendum + battle_facing_engine.md SESSION-7/8): the enemy
   // dispatch is POSITION-INDEPENDENT -- it never waits for arrival. An enemy turn latches here between the
