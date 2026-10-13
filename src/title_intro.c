@@ -648,6 +648,15 @@ void CtTitleIntroReset(CtTitleIntro* t) {
   t->bri = CT_TITLE_SEED_BRI;
   t->briPeriod = CT_TITLE_SEED_BRIPER;
   t->briCnt = CT_TITLE_SEED_BRICNT;
+  // (host mod) The seed's OAM is the buffer as the copyright task left it -- its block in the slots up to the OAM pointer
+  // (cell C11) -- so its anchor slots are seeded with it: the first latch (frame 0) carries the block, and without them the
+  // widescreen drew it one frame at the ROM's columns before moving it (the user, 2026-10-13).
+  for (int i = 0; i < 16; i++)
+    if (t->task[i] == T_COPY && t->cell[CT_TI_C11]) {
+      t->anchorLo = 0;
+      t->anchorHi = (uint8_t)(((t->cell[CT_TI_C11] - 1) & 0x1FF) >> 2) + 1;
+      break;
+    }
   t->frame = -1;                                     // the first tick produces frame 0
 }
 

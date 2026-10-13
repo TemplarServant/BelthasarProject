@@ -18512,9 +18512,13 @@ int main(int argc, char** argv) {
               int ux = camx - bx0 + x, sy = camy + y; size_t i = (size_t)y * bwW + x;
               int ax = ux + bwD[y * 2], ay = sy + bwD[y * 2 + 1];   // (the map moves under the room's edge with the shake)
               if (ax < bwm0 || ax >= bwm1) {             // the room's end (its self-scrolling layers go on: fieldBeyondPixel)
-                if (bdet) fieldBeyondPixel(&bBeyondL, bdet, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, g_bwFb + i * 3);
-                else memset(g_bwFb + i * 3, 0, 3);
-                bcov[i] = 0; continue; }
+                // ...and its coverage is the layer drawn there (1 BG1, 2 BG2, 4 BG3, 0 the backdrop), so the fight's colour
+                // math reaches it as it reaches that layer in the view: marked 0, the sides past a narrow room's edge were
+                // backdrop to CtBattleFxLayerComposeWide and the X-Strike's white flash stopped at the 256 columns with
+                // wide_room_wrap off (the user, 2026-10-13).
+                if (bdet) bcov[i] = (uint8_t)fieldBeyondPixel(&bBeyondL, bdet, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, g_bwFb + i * 3);
+                else { memset(g_bwFb + i * 3, 0, 3); bcov[i] = 0; }
+                continue; }
               memcpy(g_bwFb + i * 3, f.base + fieldBaseAt(&f, ax, ay) * 3, 3);
               // (the arena's layer there, wrapping as the map does -- past a room as wide as its map is the map again)
               //  (unshifted by the row's battle scroll, as the view's own lookup above)
