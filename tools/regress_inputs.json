@@ -743,7 +743,8 @@
         "vmdiff-wmask-party3",
         "wram-loadcensus-clearlist",
         "wram-loadcensus-natural-door",
-        "battle-forest-feet-vs-oracle"
+        "battle-forest-feet-vs-oracle",
+        "battle-gato-feet-vs-oracle"
       ],
       "kind": "rom",
       "regenerable": false,
@@ -1506,7 +1507,8 @@
         "vmdiff-walk-touch-preempt",
         "vmdiff-wmask-party3",
         "wram-lifetime-survives-load",
-        "battle-forest-feet-vs-oracle"
+        "battle-forest-feet-vs-oracle",
+        "battle-gato-feet-vs-oracle"
       ],
       "kind": "assets",
       "regenerable": true,
@@ -2486,7 +2488,8 @@
         "menu-save-screen-real",
         "menu-status-screen",
         "menu-tech-screen",
-        "menusave-ow-open"
+        "menusave-ow-open",
+        "battle-gato-feet-vs-oracle"
       ],
       "kind": "raw_wram",
       "regenerable": true,
@@ -2586,7 +2589,8 @@
         "battle-yakra-fight-vs-logical-oracle",
         "field-battle-topbox-tech-description",
         "oracle-logical-frame-gato-and-xstrike",
-        "oracle-peekshots-equal-a-peek-per-frame"
+        "oracle-peekshots-equal-a-peek-per-frame",
+        "battle-gato-feet-vs-oracle"
       ],
       "sha256": "233ca7485cf1004a5bdeb00a4627026cff1c7a15787e19eb51011e0da0ee1352",
       "size": 273109,
@@ -4640,6 +4644,19 @@
       "present_when_recorded": true
     },
     {
+      "path": "tools/battle_feet_cmp.py",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "tools/battle_feet_cmp.py (in the repo): a fight's feet, port against the rule's oracle",
+      "used_by": [
+        "battle-forest-feet-vs-oracle",
+        "battle-gato-feet-vs-oracle"
+      ],
+      "sha256": "5d08d8876989f8fc2b90b7aaebccefe864fd0e0cd3c551e6ad592b6c5cfa00fd",
+      "size": 4946,
+      "present_when_recorded": true
+    },
+    {
       "path": "tools/battle_field_anim_cmp.py",
       "kind": "unknown",
       "regenerable": false,
@@ -4820,18 +4837,6 @@
       ],
       "sha256": "81ce063fad3252470d6a8de96967e630516334960c707fd99782a78a4ca5497e",
       "size": 6079,
-      "present_when_recorded": true
-    },
-    {
-      "path": "tools/forest_feet_cmp.py",
-      "kind": "unknown",
-      "regenerable": false,
-      "how": "tools/forest_feet_cmp.py (in the repo): the forest fight's feet, port against the rule's oracle",
-      "used_by": [
-        "battle-forest-feet-vs-oracle"
-      ],
-      "sha256": "41b07b1668cf3983db8575a5be9d6524ed1c491225683e59a9ed64fbc260c79b",
-      "size": 3247,
       "present_when_recorded": true
     },
     {

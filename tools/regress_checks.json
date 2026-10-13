@@ -41048,10 +41048,11 @@
       "name": "battle-forest-feet-vs-oracle",
       "argv": [
         "python",
-        "tools/forest_feet_cmp.py"
+        "tools/battle_feet_cmp.py",
+        "forest"
       ],
       "inputs": [
-        "tools/forest_feet_cmp.py",
+        "tools/battle_feet_cmp.py",
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
         "saves/battle_re/forest_holdleft_pre.state",
@@ -41065,13 +41066,45 @@
       ],
       "timeout_s": 600,
       "note_pass": "the forest fight's three Hetakes move exactly as the cartridge's: every change of their feet, in value and frame, from the boot to the port's debug end",
-      "notes": "THE WHOLE MOVEMENT OF A FIGHT, GRADED AGAINST THE RULE'S ORACLE (2026-10-13). tools/forest_feet_cmp.py runs the cartridge (forest_holdleft_pre.state, --input 40:2600, CT_ORACLE_LOGICAL=1, `--monitor 7E1D0F:3,7E1D26:3 --diff`) and the port (forest_pre.raw.wram --battletest, CT_BATTLE_MEMMON on the same six bytes) and compares every change of the Hetakes' feet: the idle wander (classes 5 / 6 through the mode machine C1/3714), the action slides and the returns. The port's fight is the cartridge's minus 172 frames. Found by the mirror-order question: with C1/283D refreshed before C1/3714 (the port's order until 8483cf1) the feet held for 79 changes only.",
+      "notes": "THE WHOLE MOVEMENT OF A FIGHT, GRADED AGAINST THE RULE'S ORACLE (2026-10-13). tools/battle_feet_cmp.py forest runs the cartridge (forest_holdleft_pre.state, --input 40:2600, CT_ORACLE_LOGICAL=1, `--monitor 7E1D0F:3,7E1D26:3 --diff`) and the port (forest_pre.raw.wram --battletest, CT_BATTLE_MEMMON on the same six bytes) and compares every change of the Hetakes' feet: the idle wander (classes 5 / 6 through the mode machine C1/3714), the action slides and the returns. The port's fight is the cartridge's minus 172 frames. Found by the mirror-order question: with C1/283D refreshed before C1/3714 (the port's order until 8483cf1) the feet held for 79 changes only.",
       "mutations": [
         {
           "file": "src/battle.c",
           "find": "  battleModeMachine3714(h, h->mvPendAtk);\n  battleMirrorRefresh(h);",
           "replace": "  battleMirrorRefresh(h);   /* MUT: the mirror refreshed BEFORE the machine */\n  battleModeMachine3714(h, h->mvPendAtk);",
           "why": "C1/10B5 JSR C1/3714 / C1/10B8 JSR C1/283D: the handlers read the rows the previous refresh built; refreshing first holds the feet for 79 changes"
+        }
+      ]
+    },
+    {
+      "name": "battle-gato-feet-vs-oracle",
+      "argv": [
+        "python",
+        "tools/battle_feet_cmp.py",
+        "gato"
+      ],
+      "inputs": [
+        "tools/battle_feet_cmp.py",
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait.state",
+        "saves/battle_re/gato_t0.raw.wram"
+      ],
+      "expect": [
+        "gato-feet: 137 of 137 changes equal in value and frame (port + 221)"
+      ],
+      "pin": [
+        "^gato-feet: "
+      ],
+      "timeout_s": 600,
+      "note_pass": "GATO's fight moves exactly as the cartridge's: every change of Crono's, Marle's and GATO's feet, in value and frame, to the port's frame 2150",
+      "notes": "THE WHOLE MOVEMENT OF GATO'S FIGHT, GRADED AGAINST THE RULE'S ORACLE (2026-10-13). tools/battle_feet_cmp.py gato: the cartridge from saves/battle_re/gato_wait.state with `--input 100:8,0:2400` (CT_ORACLE_LOGICAL=1 + CT_ORACLE_VIRTUAL_BEAM=1, the pairing of tools/gato_logical_cmp.py), the port from gato_t0.raw.wram (CT_BATTLE_SCRIPT n:2000); port frame p = oracle frame p + 221. Compared from the first state equal on both sides: every change of $1D0C/$1D23 for cmb 0 (Crono), 1 (Marle) and 6 (GATO) -- the PCs' engage walks and returns, GATO's approach, attacks, song and returns.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "        BT_MVPHASE(h, slot) += BT_MVPHASESTEP(h, slot);                  // CF/F98F CLC / ADC $98C2,X (the per-slot step)",
+          "replace": "        BT_MVPHASE(h, slot) += 2;   /* MUT: a fixed phase step */",
+          "why": "CF/F98F `CLC / ADC $98C2,X`: the segment's phase grows by the enemy's own step (E4/F609 & 7), 1 for GATO"
         }
       ]
     }
