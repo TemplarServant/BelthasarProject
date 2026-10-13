@@ -210,3 +210,6 @@ Consequence met: moving the battle entry's C0/1BAB post to C1/0000's frame (the 
 fight end exact) changes the SPC phase at 112's song load (a 3-line handshake becomes 23; the cartridge's is 29), the
 rounded price goes 28 -> 29 black and 112 runs 422 frames against the cartridge's 421 -- HEAD's 421 is the two errors
 above cancelling the short price.
+User decision 2026-10-13: enemy 07's (and B9's) `$AE93` one frame is closed as a timing artefact (CLAUDE.md's
+no-emulation rule: the fight's outcome is the cartridge's; only where the ack falls against the beam differs). The entry
+fix stays out until the object init is priced, if that is ever taken on.
