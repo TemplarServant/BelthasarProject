@@ -349,8 +349,11 @@ into the WRAM.
   - the C1/283D mirror of the feet moved into the WRAM too (`BT_MIRX` $A039, `BT_MIRY` $A050; it was `mvMirX` / `mvMirY`);
   - the enemy groups leave $9841, the roster, $9C and $80, and the dispatch DECs $A4 and INCs it back against the
     caller's borrow $993B (C1/10A4-10B3, `battleWalkDispatch`, which the port had not ported: the net is the same).
-  One gap is left for the live engine: the loaders' pointers the gather reads ($1C57-$1CC5, CC/E97A-EA30 / CC/EAC4-EB62)
-  are not staged by the port's boot, so the live gather reads the field's page there; the shadow grades on the oracle's.
+- **The loaders' pointers are staged** (`battleLoaderPointers`, CC/E97A-EA30 for the seats, CC/EAC4-EB62 for each present
+  enemy): the sheet $1C57,X, the assembly records $1C78,X, the pose and dwell windows $1C99,X / $1CBA,X and the stride
+  $966E / $A2C8 -- what the gather reads. The port's boot had never written them, so the live gather read the field's
+  page there (the shadow graded on the oracle's). battle-loader-pointers-gato pins the cartridge's own bytes in the GATO
+  fight (read with `--shadow --loadstate saves/gato_inbattle.state --dumpaddr C12D9F --dumpcall 1`).
 - **The feet live in the WRAM (`BT_LIVEX` $1D0C, `BT_LIVEY` $1D23), after the $1D00 page's ownership was settled
   (2026-10-12).** A first plain copy turned 32 checks red; the page is the field's AND the battle's, and the port read it
   on the wrong side at two places, both found by tracing the bytes (the battle tick never zeroes them):

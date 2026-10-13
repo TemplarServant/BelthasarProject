@@ -40955,6 +40955,52 @@
       ],
       "note_pass": "the oracle loads a public battery save and works the X-menu: four Tonics on Crono and four equipment changes -- 12 calls to the inventory routines C2/8791 / C2/87D5, every one equal to our C",
       "notes": "THE SHADOW'S MENU ROUTE (docs/SHADOW_PROPOSAL.md, S2; tools/shadow_routes/menu_items_equip.btn, every timing this project's). From saves/public/fantasyanime/ctsave07-azala.srm, slot 1: X, Item, Tonic on Crono (four used before his HP is full), Equip: the Flint Edge in place of the Slasher and back, the first helm and armour candidates, and B to the field. C2/8791 (add) 4 calls and C2/87D5 (remove) 8, graded on all 128 KB, A and X. ITS FIRST RUN FOUND A PORT DEFECT: C2/87FA, the inventory's find, records the slot it found in $04C7 (STX) and zeroes $04C8 (880E-8811), and mInvFind did neither (7E:04C7 oracle 13 port 00 on the first equip change); it also scans all 256 slots (an 8-bit X wrapping), the add's empty-slot search with it, where the port stopped at $F2, and the add's sum is 8-bit before its cap -- menu.c now does all three. Quick tier: 3360 frames."
+    },
+    {
+      "name": "battle-loader-pointers-gato",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--battletest",
+        "saves/battle_re/gato_t0.raw.wram"
+      ],
+      "env": {
+        "CT_BATTLE_TRACE": "1",
+        "CT_BATTLE_SCRIPT": "n:100",
+        "CT_BATTLE_DEBUGEND": "60",
+        "CT_NOPACE": "1",
+        "SDL_AUDIODRIVER": "dummy"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_t0.raw.wram",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "loaderptrs c0=D272C0/DC27B0/E43000/E4A800/0128 c1=D40000/DC9AD8/E434A0/E4A928/00F8 c6=7F8000/E30000/E472C0/E4BF09/0028"
+      ],
+      "pin": [
+        "^loaderptrs "
+      ],
+      "tier": "quick",
+      "timeout_s": 120,
+      "note_pass": "the boot stages each combatant's sheet ($1C57,X), assembly records ($1C78,X), pose and dwell windows ($1C99,X / $1CBA,X) and window stride ($966E / $A2C8) as CC/E97A-EA30 and CC/EAC4-EB62 do -- the cartridge's own bytes in the GATO fight",
+      "notes": "MEASURED, the rule's oracle: `ct.exe --shadow --loadstate saves/gato_inbattle.state --frames 120 --dump build/_gw --dumpaddr C12D9F --dumpcall 1` dumps the WRAM at the fight's first idle walk; its $1C57-$1CC5 / $966E / $A2C8 read Crono c0=D272C0/DC27B0/E43000/E4A800/0128, Marle c1=D40000/DC9AD8/E434A0/E4A928/00F8, GATO c6=7F8000/E30000/E472C0/E4BF09/0028 (sheet / records / poses / dwells / stride). The gather C1/1C4A reads the sheet and the records from these bytes; before this the port never staged them and the live gather read the field's page there. GATO's sheet $7F8000 is the field staging's own copy ($29C8-$29CA from $1280/$1281/$1200).",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    int st = ((E4W(0x2600 + nx) - pa) & 0xFFFF) >> 2;",
+          "replace": "    int st = ((E4W(0x2600 + nx) - pa) & 0xFFFF) >> 1;   /* MUT: stride over 2 */",
+          "why": "CC/EA0E-EA0F `LSR / LSR`: the window stride is the distance to the next character's pose table over FOUR (four facings)"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "int pidx = e4[(0xF603 + t) & 0xFFFF], ridx = e4[(0xF601 + t) & 0xFFFF];",
+          "replace": "int pidx = e4[(0xF601 + t) & 0xFFFF], ridx = e4[(0xF603 + t) & 0xFFFF];   /* MUT: the two indices swapped */",
+          "why": "CC/EAE0 / EAE9: E4:F603 of the enemy's 10-byte record picks its pose/dwell tables (E4:2600 / 2800), E4:F601 its assembly records (E4:2300, three bytes each)"
+        }
+      ]
     }
   ],
   "excluded": [

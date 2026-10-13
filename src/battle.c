@@ -15776,6 +15776,61 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
       break;
   }
 }
+// THE LOADERS' POINTERS, CC/E97A-EA30 (the PC seats) and CC/EAC4-EB62 (each present enemy slot): where the gather C1/1C4A finds
+// a combatant's sheet ($1C57,X), its assembly records ($1C78,X), and where the walks find its pose windows ($1C99,X, the poses)
+// and dwells ($1CBA,X), X = cmb*3, plus the window stride $966E,cmb / $A2C8,cmb (the next character's pose pointer minus
+// this one's, over 4). The port read those tables from the ROM at draw time and never staged the bytes, so the live gather
+// read the field's page there.
+//   PC seat Y = $80: A = $2980,Y; `ASL / PHA / CLC / ADC $2980,Y / TAX` (8-bit, X = 3*A); `$1C57,Y3 = E4:2000,X` and
+//   `$1C78,Y3 = E4:2300,X` (three bytes each); `PLA / TAX` (X = 2*A): `$1C99,Y3 = E4:2600,X` and `$1CBA,Y3 = E4:2800,X` (two
+//   bytes, bank E4), then the next character's words: `$966E,Y = (E4:2600,X+2 - E4:2600,X) >> 2`, `$A2C8,Y` its high byte.
+//   Enemy slot $80 (record X = CC:F939[$80], Y = 3*$80): `$1C60,Y = $29C8,X` (16-bit) / `$1C62,Y = $29CA,X` -- the sheet the
+//   field's staging copied from the object ($1280/$1281/$1200); with id = $29C4,X (16-bit) and T = 10*id: `$1C81,Y` =
+//   E4:2300 + 3*E4:F601,T (three bytes), and with P = E4:F603,T: `$1CA2,Y = E4:2600 + 2P`, `$1CC3,Y = E4:2800 + 2P` (bank
+//   E4), `$966E / $A2C8,($80+3)` = (E4:2600 + 2P+2 - E4:2600 + 2P) >> 2.
+static void battleLoaderPointers(uint8_t* s) {
+  if (!gRom || gRomLen < 0x250000L) return;
+  const uint8_t* e4 = gRom + 0x240000;
+  #define E4W(a) (e4[(a) & 0xFFFF] | (e4[((a) + 1) & 0xFFFF] << 8))
+  for (int y = 0; y < 3; y++) {                                   // CE97E-EA2E
+    int c = s[0x2980 + y], a2 = (c << 1) & 0xFF, x = (a2 + c) & 0xFF, y3 = y * 3;
+    for (int k = 0; k < 3; k++) { s[0x1C57 + y3 + k] = e4[0x2000 + x + k]; s[0x1C78 + y3 + k] = e4[0x2300 + x + k]; }
+    int pa = E4W(0x2600 + a2), pb = E4W(0x2800 + a2);
+    s[0x1C99 + y3] = (uint8_t)pa; s[0x1C9A + y3] = (uint8_t)(pa >> 8); s[0x1C9B + y3] = 0xE4;
+    s[0x1CBA + y3] = (uint8_t)pb; s[0x1CBB + y3] = (uint8_t)(pb >> 8); s[0x1CBC + y3] = 0xE4;
+    int nx = (((a2 >> 1) + 1) << 1) & 0xFF;                        // CE9EA-E9EE TXA / LSR / INC / ASL
+    int st = ((E4W(0x2600 + nx) - pa) & 0xFFFF) >> 2;              // CEA07-EA10
+    s[0x966E + y] = (uint8_t)st; s[0xA2C8 + y] = (uint8_t)(st >> 8);
+  }
+  for (int i = 0; i < 8; i++) {                                   // CEA5B-EC26
+    const uint8_t* r = s + 0x29BF + gRom[0x0CF939 + i];
+    if (r[6] & 0x80) continue;                                    // CEA62 LDA $29C5,X / BPL
+    int y3 = i * 3;
+    s[0x1C62 + y3] = r[11]; s[0x1C60 + y3] = r[9]; s[0x1C61 + y3] = r[10];   // CEAC4-EACF
+    int t = ((r[5] | (r[6] << 8)) * 10) & 0xFFFF;                 // CEAD2-EADF
+    int pidx = e4[(0xF603 + t) & 0xFFFF], ridx = e4[(0xF601 + t) & 0xFFFF];
+    int rx = (ridx * 3) & 0xFFFF;                                  // CEAE9-EAF6
+    s[0x1C81 + y3] = e4[(0x2300 + rx) & 0xFFFF]; s[0x1C82 + y3] = e4[(0x2301 + rx) & 0xFFFF];
+    s[0x1C83 + y3] = e4[(0x2302 + rx) & 0xFFFF];
+    int pa = E4W(0x2600 + pidx * 2), pb = E4W(0x2800 + pidx * 2);  // CEB0A-EB2A
+    s[0x1CA2 + y3] = (uint8_t)pa; s[0x1CA3 + y3] = (uint8_t)(pa >> 8); s[0x1CA4 + y3] = 0xE4;
+    s[0x1CC3 + y3] = (uint8_t)pb; s[0x1CC4 + y3] = (uint8_t)(pb >> 8); s[0x1CC5 + y3] = 0xE4;
+    int st = ((E4W(0x2600 + (pidx + 1) * 2) - pa) & 0xFFFF) >> 2; // CEB2D-EB60
+    s[0x966E + 3 + i] = (uint8_t)st; s[0xA2C8 + 3 + i] = (uint8_t)(st >> 8);
+  }
+  if (getenv("CT_BATTLE_TRACE")) {                               // the staged pointers, one combatant per field
+    fprintf(stderr, "loaderptrs");
+    for (int c = 0; c < 11; c++) {
+      if (c < 3 ? (s[0x2980 + c] & 0x80) : (s[0x29BF + gRom[0x0CF939 + c - 3] + 6] & 0x80)) continue;
+      int y = c * 3;
+      fprintf(stderr, " c%d=%02X%02X%02X/%02X%02X%02X/%02X%02X%02X/%02X%02X%02X/%02X%02X", c,
+              s[0x1C59 + y], s[0x1C58 + y], s[0x1C57 + y], s[0x1C7A + y], s[0x1C79 + y], s[0x1C78 + y],
+              s[0x1C9B + y], s[0x1C9A + y], s[0x1C99 + y], s[0x1CBC + y], s[0x1CBB + y], s[0x1CBA + y], s[0xA2C8 + c], s[0x966E + c]);
+    }
+    fprintf(stderr, CT_BATTLE_NL);
+  }
+  #undef E4W
+}
 
 // Boot head: stage the canonical battle data (stageAll), then set up the ATB loop state.
 // THE DEAD-FLAG REFRESH, C1/B223 -> C1/B279. The ROM runs it right after staging (call site
@@ -16287,6 +16342,7 @@ void CtBattleBegin(CtBattleHost* h) {
       // at f2190 (C0:A689). Absent slots are skipped -- CC/EA66's `BMI ->CC/EC26` leaves $967C alone.
       if (!absent) h->mem[0x967C + 3 + i] = (uint8_t)(r[7] & 7);
     } }
+  battleLoaderPointers(h->mem);                                 // CC/E97A-EA30 + CC/EAC4-EB62: the gather's pointers
   h->fxKnockTarget = -1;                                        // no combatant struck (idle)
   h->hurtPoseLeft = 0; h->hurtPoseTgt = -1; h->critAnim = 0;   // battle_anim_polish2.md ITEM 1/4: no hurt pose / no crit anim
   h->victoryHold = 0; h->handoffLeft = 0; h->endTeardownDone = 0;   // victory timer + field-handoff (not entered)

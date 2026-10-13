@@ -163,6 +163,7 @@
         "battle-item-megalixir-every-seat-vs-oracle",
         "battle-item-scrolled-record-vs-oracle",
         "battle-jsl-audio-keeps-playing",
+        "battle-loader-pointers-gato",
         "battle-menu-cursor-per-seat-vs-oracle",
         "battle-menu-item-list-scroll-vs-oracle",
         "battle-menu-item-stash-vs-oracle",
@@ -944,6 +945,7 @@
         "battle-item-megalixir-every-seat-vs-oracle",
         "battle-item-scrolled-record-vs-oracle",
         "battle-jsl-audio-keeps-playing",
+        "battle-loader-pointers-gato",
         "battle-menu-cursor-per-seat-vs-oracle",
         "battle-menu-item-list-scroll-vs-oracle",
         "battle-menu-item-stash-vs-oracle",
@@ -2418,6 +2420,7 @@
         "battle-fx-teardown-after-program-vs-oracle",
         "battle-gato-death-skips-the-death-routine-no-sound",
         "battle-gato-fight-vs-logical-oracle",
+        "battle-loader-pointers-gato",
         "battle-pc-marle-far-vs-logical-oracle",
         "battle-pc-physical-vs-logical-oracle",
         "battle-turn-machinery-gato-first-pass-vs-oracle",
@@ -4227,6 +4230,19 @@
       "present_when_recorded": true
     },
     {
+      "path": "saves/public/fantasyanime/ctsave07-azala.srm",
+      "kind": "cart_sram",
+      "regenerable": true,
+      "how": "a public battery save: fantasyanime.com/squaresoft/ctsaves-srm.htm, archive ctsave07-azala (chrono_trigger.srm), as zdiemer/chrono-trigger-reimplemented vendors it in oracle/saves/fantasyanime/; saves/public/SOURCES.md",
+      "used_by": [
+        "shadow-route-magus-fight",
+        "shadow-route-menu-items-equip"
+      ],
+      "sha256": "54940340fbaa8679c168c54c68a02a3070b6051242552787b3efa68917ff6ce6",
+      "size": 8192,
+      "present_when_recorded": true
+    },
+    {
       "path": "saves/s120_lucca_flags.bin",
       "kind": "story_flags",
       "regenerable": false,
@@ -4306,8 +4322,8 @@
         "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
-      "sha256": "b5733ca8773e6c3af7809b9b015688827c7fdc963b71fd6b5d1a8d5feada645f",
-      "size": 1728617,
+      "sha256": "ace719a291b93794c9a43d50397489d34707277f0e93d7a2d897b4151dca104f",
+      "size": 1728801,
       "present_when_recorded": true
     },
     {
@@ -4327,8 +4343,8 @@
         "ow-object-bootstrap-w6-vs-oracle",
         "ow-object-bootstrap-w7-vs-oracle"
       ],
-      "sha256": "2d22e639ff5e5d3c0fc29e39234e5a0146413708bc17045002cf28f8564c4f40",
-      "size": 660744,
+      "sha256": "8c40928d4ba80565361982a8d4a6e6f324864400c9f7358dc499d0092cab9190",
+      "size": 660844,
       "present_when_recorded": true
     },
     {
@@ -4375,8 +4391,8 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "87a23039fac560f1927a847f4707c4b27746ffa710fb9b0b7058769cee975f2e",
-      "size": 1494321,
+      "sha256": "ab9ea54e781cc03d138b648878b590a0d1538768bb6166654379a341a0c9c71c",
+      "size": 1515469,
       "present_when_recorded": true
     },
     {
@@ -5022,6 +5038,30 @@
       "present_when_recorded": true
     },
     {
+      "path": "tools/shadow_routes/magus_fight.btn",
+      "kind": "tool",
+      "regenerable": true,
+      "how": "in the repository (docs/SHADOW_PROPOSAL.md, S2)",
+      "used_by": [
+        "shadow-route-magus-fight"
+      ],
+      "sha256": "d84a7627ecad5c811488ddafa0da46477a99500ebde708fec3b3a9a62fdac3c0",
+      "size": 1677,
+      "present_when_recorded": true
+    },
+    {
+      "path": "tools/shadow_routes/menu_items_equip.btn",
+      "kind": "tool",
+      "regenerable": true,
+      "how": "in the repository (docs/SHADOW_PROPOSAL.md, S2)",
+      "used_by": [
+        "shadow-route-menu-items-equip"
+      ],
+      "sha256": "41c500faba1925bce1b741a115140032df02d8483fd66c75c27dda5bee52736b",
+      "size": 1931,
+      "present_when_recorded": true
+    },
+    {
       "path": "tools/slot1_map_copy_cmp.py",
       "kind": "tool",
       "regenerable": false,
@@ -5165,43 +5205,6 @@
       "how": "tools/fixtures.py (recipe telepod_show): loc 008 with a two-member party (Crono leading, Marle following), control on",
       "sha256": "1907365744b18cda76b05cf883618959a7413e347bac50961feeb70a0710d009",
       "size": 273125,
-      "present_when_recorded": true
-    },
-    {
-      "path": "saves/public/fantasyanime/ctsave07-azala.srm",
-      "kind": "cart_sram",
-      "regenerable": true,
-      "how": "a public battery save: fantasyanime.com/squaresoft/ctsaves-srm.htm, archive ctsave07-azala (chrono_trigger.srm), as zdiemer/chrono-trigger-reimplemented vendors it in oracle/saves/fantasyanime/; saves/public/SOURCES.md",
-      "used_by": [
-        "shadow-route-magus-fight",
-        "shadow-route-menu-items-equip"
-      ],
-      "sha256": "54940340fbaa8679c168c54c68a02a3070b6051242552787b3efa68917ff6ce6",
-      "size": 8192,
-      "present_when_recorded": true
-    },
-    {
-      "path": "tools/shadow_routes/magus_fight.btn",
-      "kind": "tool",
-      "regenerable": true,
-      "how": "in the repository (docs/SHADOW_PROPOSAL.md, S2)",
-      "used_by": [
-        "shadow-route-magus-fight"
-      ],
-      "sha256": "d84a7627ecad5c811488ddafa0da46477a99500ebde708fec3b3a9a62fdac3c0",
-      "size": 1677,
-      "present_when_recorded": true
-    },
-    {
-      "path": "tools/shadow_routes/menu_items_equip.btn",
-      "kind": "tool",
-      "regenerable": true,
-      "how": "in the repository (docs/SHADOW_PROPOSAL.md, S2)",
-      "used_by": [
-        "shadow-route-menu-items-equip"
-      ],
-      "sha256": "41c500faba1925bce1b741a115140032df02d8483fd66c75c27dda5bee52736b",
-      "size": 1931,
       "present_when_recorded": true
     }
   ]
