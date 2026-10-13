@@ -369,8 +369,12 @@ into the WRAM.
   longer rewrites $A5FC (the orbit keeps the last fresh pass's radius), class 1 refreshes the target's and its own mirror
   before its arrival test (C1/37F2-3810) and INCs $9829, and every handler's body test reads rows. The other six classes
   (0, 2, 3, 4, 7, 8) run on the same row and grid routines but keep their own direct page, unmeasured: no route of ours
-  reaches them yet. Still the port's, not the ROM's: the live tick refreshes the mirror BEFORE its handler pass where the
-  ROM's C1/283D runs AFTER C1/3714 (C1/10B8 / 10DF), and it holds a pending enemy's handler (`mvPendAtk`, the think model).
+  reaches them yet. The live tick runs the same `battleModeMachine3714` (the counter no longer gated on presence, the
+  handler on $96F8, $9752 from $5E15, $A2B5 written; full suite 832/0). Two things stay the port's, recorded at the call:
+  it holds a pending enemy's handler (`mvPendAtk`, the think model), and it refreshes the mirror BEFORE the machine where
+  the ROM's C1/283D runs AFTER it -- measured on the oracle (the mover's step and C1/283D's copy in one logical frame, so
+  the cartridge's handlers read rows one step old); taking the ROM's order turns nine oracle-pinned forest checks red,
+  which points at this port's mover sitting a frame off the cartridge's -- the offset to find next.
 - **The feet live in the WRAM (`BT_LIVEX` $1D0C, `BT_LIVEY` $1D23), after the $1D00 page's ownership was settled
   (2026-10-12).** A first plain copy turned 32 checks red; the page is the field's AND the battle's, and the port read it
   on the wrong side at two places, both found by tracing the bytes (the battle tick never zeroes them):

@@ -11105,6 +11105,7 @@ int CtBattleMoveClassProbe(uint8_t* mem, int slot) {
 // ($A013==0) -- the walk pauses while a strike animates, exactly like the ROM (the ATB keeps ticking but the
 // mover is frozen with the rest of C1/4090). Runs for every armed enemy slot; inert until an approach/return
 // is armed (mvMode 0).
+static void battleModeMachine3714(CtBattleHost* h, int holdCmb);   // C1/3714 (below)
 static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: the C1/3714 pass runs (no turn in its handler)
   uint8_t* s = h->mem;
   if (s[0xA013] || s[0x99E0]) return;                              // frozen during an action span / Wait submenu
@@ -11158,54 +11159,20 @@ static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: th
   }
   if (!handlers) return;                                           // the handler pass is the main loop's (C1/3714): not
                                                                    //   reached while a turn is inside its handler
-  battleMirrorRefresh(h);                                          // C1/283D before every handler loop
-  int cadFrame = 1;                                                // C1/3714 runs on both frames of the iteration
-                                                                   //   (C1/10B5, C1/10DC): every idle frame
-  for (int slot = 0; slot < 8; slot++) {
-    int cmb = slot + 3;
-    if (!battlePresent(s, cmb)) continue;
-    if (cadFrame && BT_MVMODE(h, slot) != 0 && --BT_MVMODECAD(h, slot) <= 0) {   // C1/371F `LDA $974A,X / BEQ`: mode 0
-      BT_MVMODECAD(h, slot) = BT_MVMODERELOAD(h, slot);                  //   neither counts nor runs; the wrap reloads $989F,X
-                                                                   //   (C1/3729) and runs the handler
-      // The pending-turn think holds the HANDLER only (oracle: the f461 pass between ATB-0 f454 and the
-      // f478 window never armed -- position constant -- while the counter kept decrementing).
-      // DISPATCH ON THE CLASS, NOT ON THE MODE. C1/373B: `LDA $974A,X` (the live mode) / `BMI ->375F`
-      // (bit7 = empty slot) / `STA $A2B5` / `TAX` / `LDA $CCFBAB,X` / `ASL A` / `TAX` /
-      // `JSR ($3760,X)`. The class table CC/FBAB is indexed by the RAW mode -- no mask -- and
-      // C1/3760 holds NINE handler words: 3772 379A 38BF 3959 3A3D 3BC2 3E33 3F5A 4021.
-      //   CC/FBAB[0x00..0x1F] = 00 01 01 01 00 01 04 02 03 03 06 06 06 05 05 05 04 07 07 07 ...
-      // so modes 01/02/03/05 are class 1 (approach C1/379A) and modes 06 AND 0x10 are class 4
-      // (return C1/3A3D). Ours compared the MODE against 1 and 6, so 0x10 fell through to nothing
-      // and modes 0x0A/0x0E/0x0F (classes 6 and 5) armed 166 times in a forest fight and moved ZERO
-      // times -- "they do not even move".
-      // C1/3722 `LDA $974A,X / BEQ ->13732` -- MODE 0 IS NEVER DISPATCHED. This was inert while class 0
-      // did nothing (CC/FBAB[0x00] = 0); with the re-acquire ported, mode 0 would reach it, so the ROM's
-      // own skip has to be here. Class 0's live modes are 04 and 1A, never 00.
-      if (BT_MVMODE(h, slot) != 0 && h->mvPendAtk != cmb && !(BT_MVMODE(h, slot) & 0x80)) {
-        const uint8_t* crom = CtBattleRom(NULL);
-        int mode = BT_MVMODE(h, slot) & 0xFF;
-        // PORT DECISION, recorded rather than presented as ROM behaviour: CC/FBAB is read with the
-        // raw 8-bit mode, so the table is 256 wide as far as the ROM is concerned; only 0x00-0x1F
-        // have been read out here. Beyond that we take no class rather than invent one.
-        int cls = (crom && mode < 0x20) ? crom[ROM_MOVE_MODE_CLASS + mode] : -1;
-        // ALL NINE CLASSES OF C1/3760 ARE PORTED as of 2026-09-11. The table's nine words are
-        // 3772 379A 38BF 3959 3A3D 3BC2 3E33 3F5A 4021, and each arm below names its own.
-        if (cls == 0) battleMoveReacquire(h, slot);                // C1/3772 -- modes 04 and 1A
-        else if (cls == 1) battleMoveApproach(h, slot);             // C1/379A -- 01/02/03/05/1C/1D
-        else if (cls == 2) battleMoveCharge(h, slot);              // C1/38BF -- 07/1B/1E/1F
-        else if (cls == 3) battleMoveAxisCharge(h, slot);          // C1/3959 -- 08 (Y axis) and 09 (X)
-        else if (cls == 4) battleMoveReturn(h, slot);              // C1/3A3D -- modes 06 and 0x10
-        else if (cls == 5) battleMoveWander(h, slot);              // C1/3BC2 -- modes 0D/0E/0F
-        else if (cls == 6) battleMoveFormation(h, slot);            // C1/3E33 -- modes 0A/0B/0C
-        else if (cls == 7) battleMoveCompass(h, slot);             // C1/3F5A -- modes 11..18
-        else if (cls == 8) battleMoveAimCentre(h, slot);           // C1/4021 -- mode 19 alone
-        // ⚠ NO FIXTURE THIS REPO OWNS ARMS 2/3/7/8, so wiring them is inert for the suite and they are
-        // graded by --sweepmoveclass against micro-executed bank-$C1 handlers instead. They are wired
-        // anyway because the ROM's own table dispatches them: a port that HAS a handler and refuses to
-        // call it is less correct than one that does. disasm/notes/battle_enemy_move_modes.md.
-      }
-    }
-  }
+  // The mode machine C1/3714 itself (battleModeMachine3714, the routine the shadow grades 496/496 on the Magus route).
+  // ⚠ OPEN, THE ORDER: the ROM runs C1/283D AFTER it (C1/10B5 / 10B8, C1/10DC / 10DF), so a handler reads the rows the
+  // previous refresh built. Here the refresh runs BEFORE it, on this frame's feet -- and that is the order the oracle-pinned
+  // checks hold: refreshing after turns battle-enemy-close-op01-forest-vs-oracle, battle-ai-pointer-forest-op00-turns-vs-
+  // oracle and seven more forest checks red (2026-10-13). Where this port's mover step sits against the ROM's frame service
+  // (CF/EFBA -> CF/F978) is the question. MEASURED on the rule's oracle (forest_wait_ambush_active, `--monitor 7E1D11:1,
+  // 7EA03E:1 --diff --writer`, f4629-f4659): the mover's CF:F9CE step and C1:284A's copy land in the SAME logical frame,
+  // the mirror equal to the stepped foot -- so the cartridge's C1/3714 reads rows one mover step old, as the shadow's
+  // 496/496 (graded on the cartridge's rows) agrees. That this port needs the fresher rows to hold the oracle's checks
+  // says its mover step sits a frame off the cartridge's; that offset is what to find, not this order to keep.
+  // PORT GATE, recorded: a pending enemy's handler is held (mvPendAtk, the think model of battleArrive) -- the ROM's
+  // enemy turn runs inside its own main-loop state, which this port models as a delay; the cadence still counts.
+  battleMirrorRefresh(h);
+  battleModeMachine3714(h, h->mvPendAtk);
 }
 // C1/3714, THE MODE MACHINE, as the ROM runs it from the idle tick (C1/10B5 and C1/10DC, each followed by C1/283D):
 //   3714 `LDA $99E0 / BNE` (the Wait submenu: nothing); X = $9C = 0..7:
@@ -11213,7 +11180,7 @@ static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: th
 //   373B `LDA $96F8,X / BEQ` (not staged), `LDA $5E15,X / CMP $9752,X / BEQ / STA $9752,X` (the requested target goes
 //        live here), `LDA $974A,X / BMI` (halted), `STA $A2B5`, the class CC/FBAB[mode] -> JSR ($3760,X) (nine handlers)
 // The routine-level shadow grades it through CtBattleModeMachineProbe; the live tick (battleMoveTick) runs its own pass.
-static void battleModeMachine3714(CtBattleHost* h) {
+static void battleModeMachine3714(CtBattleHost* h, int holdCmb) {   // holdCmb: the port's pending enemy (-1: none)
   uint8_t* s = h->mem;
   if (s[0x99E0]) return;                                           // 13714-13717
   const uint8_t* crom = CtBattleRom(NULL);
@@ -11226,6 +11193,7 @@ static void battleModeMachine3714(CtBattleHost* h) {
     if (s[0x5E15 + x] != BT_MVTARGET(h, x)) BT_MVTARGET(h, x) = s[0x5E15 + x];   // 13742-1374A
     int mode = BT_MVMODE(h, x);
     if (mode & 0x80) continue;                                      // 1374D-13750 BMI
+    if (x + 3 == holdCmb) continue;                                 // (the port's think: see battleMoveTick)
     s[0xA2B5] = (uint8_t)mode;                                      // 13752
     int cls = crom ? crom[ROM_MOVE_MODE_CLASS + mode] : -1;         // 13755-1375C
     switch (cls) {
@@ -11248,7 +11216,7 @@ int CtBattleModeMachineProbe(uint8_t* mem) {
   memset(&scratch, 0, sizeof scratch);
   scratch.mem = mem;
   scratch.mvInited = 1;                                            // the feet are the WRAM's ($1D0C/$1D23)
-  battleModeMachine3714(&scratch);
+  battleModeMachine3714(&scratch, -1);
   return 0;
 }
 // THE END OF AN ENEMY'S TURN: C1/8E4A's step (after an action -- the action ran synchronously inside the turn,
