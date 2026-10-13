@@ -23,6 +23,8 @@
 #include <string.h>
 #include <limits.h>
 #include "battle.h"
+static int battleTechGroup(int techId);
+static int battleBuildHitSet(CtBattleHost* h, int group, int primary, int* out, int cap);
 #include "player.h"      // CtJoypadHeldWord: the battle NMI's C2/84D2 (the pad latch CD/0340 reads $F8)
 #include "objslot.h"
 void CtHdmaTableBuild(uint8_t* wram128);   // ct_vm.c: `JSL FD/C2C1`, the field's HDMA table builder

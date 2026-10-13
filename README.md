@@ -99,8 +99,12 @@ It is **not yet verified playable from start to finish**.
 
 ## Quick start
 
+For experimental macOS support, see the [local app build guide](docs/MACOS.md).
+
 ### Requirements
 
+- **macOS (experimental):** Xcode Command Line Tools, Python 3, CMake, Ninja,
+  pkg-config and SDL2; see the [Mac guide](docs/MACOS.md).
 - **Windows:** Visual Studio 2022 Build Tools (MSVC, with the bundled CMake and Ninja) and Python 3.
 - **Linux:** gcc or clang, CMake, `libsdl2-dev`, Python 3. The Linux build is a compile-parity build, not the
   reference platform (see [docs/INFRA.md](docs/INFRA.md#build)).

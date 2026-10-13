@@ -27,6 +27,9 @@
 #include <stdint.h>
 #include <time.h>
 #include <math.h>
+#ifdef __APPLE__
+#include "macos.h"
+#endif
 #include "scene.h"
 #include "assets.h"
 #include "lz.h"          // ct_lz_load_cost: what the ROM pays to load a location
@@ -222,6 +225,11 @@ static void hostWindowSize(int* w, int* h) {
 static void hostApplyVideo(CtPresenter* pr) {
   const CtSettings* st = CtSettingsGet();
   SDL_Window* win = CtPresentWindow(pr);
+#ifdef __APPLE__
+  int aspectW = hostWideW(), aspectH = CAMH;
+  if (st->aspect == CT_ASPECT_4_3) { aspectW *= 7; aspectH *= 6; }
+  CtMacSetWindowAspect(win, st->fullscreen ? 0 : aspectW, st->fullscreen ? 0 : aspectH);
+#endif
   int fsNow = (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
   if (st->fullscreen != fsNow) SDL_SetWindowFullscreen(win, st->fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
   if (!st->fullscreen) {
@@ -9248,6 +9256,9 @@ static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
     CtPresentSwap(pr);
     if (!CtSettingsGet()->vsync) SDL_Delay(16);
   }
+#ifdef __APPLE__
+  CtMacTakeSettingsRequest(); // Already-open Settings commands must not reopen it on close.
+#endif
   CtSettingsSave();
   g_hostT0 = -1.0; g_hostFrames = 0;                 // the pause is not a stall to catch up on
   if (dev) { SDL_ClearQueuedAudio(dev); SDL_PauseAudioDevice(dev, 0); }
@@ -9255,6 +9266,10 @@ static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
 }
 
 int main(int argc, char** argv) {
+#ifdef __APPLE__
+  int macStatus = CtMacConfigure(&argc, &argv);
+  if (macStatus) return macStatus == 2 ? 0 : macStatus;
+#endif
   dbgInit();                                     // cache the debug env flags (hot loops read dbg.*)
   // A PLAYER: one frame of SPC per displayed frame, so a translated stage's holds do not run the APU (snes.c, the
   // switch's note: the race's holds left the demo's sound 1.8 s behind). CT_XLAT_HOLDAPU=1 keeps the oracle's way.
@@ -10771,6 +10786,9 @@ int main(int argc, char** argv) {
   // picture under the logical size. An interactive one takes the player's window, backend, driver and vsync.
   CtPresentConfig pc; memset(&pc, 0, sizeof pc);
   pc.title = "Chrono Trigger - native field (C)"; pc.w = CAMW * 2; pc.h = CAMH * 2; pc.picW = CAMW; pc.picH = CAMH;
+#ifdef __APPLE__
+  pc.title = "Chrono Trigger";
+#endif
   pc.software = !g_hostInteractive && (selftest || g_noPace); pc.logical = !g_hostInteractive; pc.vsync = 1; pc.sdlDriver = "";
   if (g_hostInteractive) {
     const CtSettings* st = CtSettingsGet();
@@ -10785,6 +10803,9 @@ int main(int argc, char** argv) {
     hostApplyVideo(pr);
     fprintf(stderr, "[video] %s\n", CtPresentName(pr));
     if (CtOverlayInit(pr)) fprintf(stderr, "[options] F1: options (%s)\n", CtSettingsPath());
+#ifdef __APPLE__
+    if (CtOverlayAvailable()) CtMacInstallSettingsMenu();
+#endif
   }
 
   uint8_t* fb = (uint8_t*)calloc((size_t)CAMW * CAMH * 3, 1);   // zeroed: the pre-first-compose frame
@@ -11197,6 +11218,9 @@ int main(int argc, char** argv) {
       if (se & PAD_RIGHT) rightPressed = 1; }
     // THE OPTIONS OVERLAY (F1): the game stands still -- no tick, no sound -- while the player edits settings.h's options
     // over the last picture; they are saved on close, and the host clock re-anchors so the pause costs no catch-up.
+#ifdef __APPLE__
+    if (CtMacTakeSettingsRequest() && CtOverlayAvailable()) optionsReq = 1;
+#endif
     if (optionsReq && fieldOptionsModal(pr, audioDev)) running = 0;
     // CT_OVERLAY_SHOT=<out.bmp>[@frame][:tab] (probe): at that frame (default 60) draw the overlay over the picture on
     // tab 0..3, save the window as a BMP and leave -- how the overlay is checked headless (SDL_VIDEODRIVER=dummy).

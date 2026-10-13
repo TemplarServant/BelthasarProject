@@ -4570,6 +4570,8 @@ static int runSweepDoorList(const char* romPath) {
   static uint8_t work[0x20000];
   uint8_t* r = s->ram;
   uint32_t rng = 0x2935C0DE;
+  // The pinned MSVC inputs used the second draw for both NEXT() operands.
+  // Sequence those draws explicitly below so every compiler uses the same corpus.
   #define NEXT() (rng = rng * 1103515245u + 12345u, (int)((rng >> 16) & 0xFF))
   static const uint8_t IDS[5] = { 0xE6, 0xEC, 0xEE, 0xFA, 0xFC };
   int ok[3] = { 0 }, bad[3] = { 0 }, lost[3] = { 0 }, shown = 0;
@@ -4585,8 +4587,16 @@ static int runSweepDoorList(const char* romPath) {
       for (int k = 0; k < 16; k++) {
         int row = NEXT() & 0x3F, col = NEXT() & 0x3F;
         if (NEXT() < 32) row = NEXT() & 1;                                  // the top rows: the block wraps into $7F
-        idx[k] = (NEXT() < 16) ? ((NEXT() << 8) | NEXT()) & 0x7FFF : (row << 8) | col;
-        int w = k < n ? idx[k] : (k == n ? (0x8000 | (NEXT() << 8) | NEXT()) : ((NEXT() << 8) | NEXT()));
+        if (NEXT() < 16) {
+          NEXT(); int byte = NEXT();
+          idx[k] = ((byte << 8) | byte) & 0x7FFF;
+        } else idx[k] = (row << 8) | col;
+        int w = idx[k];
+        if (k >= n) {
+          NEXT(); int byte = NEXT();
+          w = (byte << 8) | byte;
+          if (k == n) w |= 0x8000;
+        }
         r[0x11CC8 + k * 2] = (uint8_t)w; r[0x11CC9 + k * 2] = (uint8_t)(w >> 8);
       }
       int tile = 0;
@@ -4601,7 +4611,7 @@ static int runSweepDoorList(const char* romPath) {
         if (part == 1) {
           int pick = NEXT() % 4;
           if (pick == 0 && n > 0) tile = idx[NEXT() % n];                   // already listed
-          else if (pick == 1) tile = (NEXT() << 8) | NEXT();                // any word, bit 15 too
+          else if (pick == 1) { NEXT(); int byte = NEXT(); tile = (byte << 8) | byte; } // bit 15 too
         } else {
           int id = NEXT() < 214 ? IDS[NEXT() % 5] : NEXT();
           r[0x3000 + tile] = (uint8_t)id;
@@ -9077,6 +9087,7 @@ static int runSweepBgAnim(const char* romPath) {
   static uint16_t pv[0x8000];
   uint8_t* r = s->ram;
   uint32_t rng = 0x13579BDF;
+  // Preserve MSVC's pinned paired draws without unsequenced writes to rng.
   #define NEXT() (rng = rng * 1103515245u + 12345u, (int)((rng >> 16) & 0xFF))
   int ok[3] = { 0 }, bad[3] = { 0 }, lost[3] = { 0 }, shown = 0;
   int locAnims = 0, fcSeen[3] = { 0 }, palSeen[4] = { 0 }, dmas = 0, carries = 0, applies[9] = { 0 }, subSeen[8] = { 0 };
@@ -9111,7 +9122,8 @@ static int runSweepBgAnim(const char* romPath) {
   }
   // (2) the runner
   for (int c = 0; c < 3000; c++) {
-    int loc = NEXT() | ((NEXT() & 1) << 8);
+    NEXT(); int byte = NEXT();
+    int loc = byte | ((byte & 1) << 8);
     for (int i = 0x10000; i < 0x20000; i++) r[i] = (uint8_t)NEXT();
     if (c & 1) { CtTileAnimLoad(r, rom, len, loc); }                               // a real location's tables
     else for (int k = 0; k < 12; k++) {                                            // or random ones (steps up to $3FC)
@@ -9121,7 +9133,7 @@ static int runSweepBgAnim(const char* romPath) {
     }
     for (int k = 0; k < 12; k++) { r[0x05B0 + k * 5] = (uint8_t)NEXT(); r[0x05B1 + k * 5] = (uint8_t)NEXT(); }
     r[0x051D] = (uint8_t)NEXT();
-    for (int i = 0; i < 0x8000; i++) s->ppu->vram[i] = (uint16_t)(NEXT() | (NEXT() << 8));
+    for (int i = 0; i < 0x8000; i++) { NEXT(); int byte = NEXT(); s->ppu->vram[i] = (uint16_t)(byte | (byte << 8)); }
     memcpy(work, r, 0x20000); memcpy(pv, s->ppu->vram, sizeof pv);
     int acc0[12]; for (int k = 0; k < 12; k++) acc0[k] = r[0x05B0 + k * 5] | (r[0x05B1 + k * 5] << 8);
     SweepBgDma dc = { work, pv, 0 };
@@ -9142,7 +9154,8 @@ static int runSweepBgAnim(const char* romPath) {
   }
   // (3) the colour service
   for (int c = 0; c < 6000; c++) {
-    int loc = NEXT() | ((NEXT() & 1) << 8);
+    NEXT(); int byte = NEXT();
+    int loc = byte | ((byte & 1) << 8);
     for (int i = 0x2000; i < 0x2600; i++) r[i] = (uint8_t)NEXT();
     for (int i = 0x0520; i < 0x05B0; i++) r[i] = (uint8_t)NEXT();
     if (c & 1) CtObjSlotLoad(r, rom, len, loc);
@@ -9150,7 +9163,8 @@ static int runSweepBgAnim(const char* romPath) {
       uint8_t* q = r + 0x0520 + k * 12;
       if ((c & 1) && k < 6 && (q[0] & 0xF0)) { q[5] = (uint8_t)(1 + (NEXT() & 7)); q[4] = (uint8_t)(NEXT() % q[5]); continue; }
       static const uint8_t M[8] = { 0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x80, 0x90 };
-      int m = M[NEXT() & 7] | (NEXT() & 0x0F);
+      NEXT(); int byte = NEXT();
+      int m = M[byte & 7] | (byte & 0x0F);
       q[0] = (uint8_t)m; q[1] = (uint8_t)NEXT(); q[2] = (uint8_t)(1 + (NEXT() % 15));
       q[5] = (uint8_t)(1 + (NEXT() & 7)); q[4] = (uint8_t)(NEXT() % q[5]);
       q[3] = (uint8_t)(NEXT() % ((m & 0x0F) + 1));

@@ -66,6 +66,8 @@ def load_checks():
 def resolve_argv(argv):
     """CreateProcess does not resolve 'build/ct.exe' against the subprocess cwd on
     Windows -- make argv[0] absolute against the repo root when it exists there."""
+    if argv[0] in ("python", "python3"):
+        return [sys.executable] + list(argv[1:])
     exe = os.path.normpath(os.path.join(ROOT, argv[0]))
     if os.path.exists(exe):
         return [exe] + list(argv[1:])
