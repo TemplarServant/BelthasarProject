@@ -41043,6 +41043,37 @@
           "why": "CC/EAE0 / EAE9: E4:F603 of the enemy's 10-byte record picks its pose/dwell tables (E4:2600 / 2800), E4:F601 its assembly records (E4:2300, three bytes each)"
         }
       ]
+    },
+    {
+      "name": "battle-forest-feet-vs-oracle",
+      "argv": [
+        "python",
+        "tools/forest_feet_cmp.py"
+      ],
+      "inputs": [
+        "tools/forest_feet_cmp.py",
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/forest_holdleft_pre.state",
+        "saves/battle_re/forest_pre.raw.wram"
+      ],
+      "expect": [
+        "forest-feet: 399 of 399 changes equal in value and frame (port + 172)"
+      ],
+      "pin": [
+        "^forest-feet: "
+      ],
+      "timeout_s": 600,
+      "note_pass": "the forest fight's three Hetakes move exactly as the cartridge's: every change of their feet, in value and frame, from the boot to the port's debug end",
+      "notes": "THE WHOLE MOVEMENT OF A FIGHT, GRADED AGAINST THE RULE'S ORACLE (2026-10-13). tools/forest_feet_cmp.py runs the cartridge (forest_holdleft_pre.state, --input 40:2600, CT_ORACLE_LOGICAL=1, `--monitor 7E1D0F:3,7E1D26:3 --diff`) and the port (forest_pre.raw.wram --battletest, CT_BATTLE_MEMMON on the same six bytes) and compares every change of the Hetakes' feet: the idle wander (classes 5 / 6 through the mode machine C1/3714), the action slides and the returns. The port's fight is the cartridge's minus 172 frames. Found by the mirror-order question: with C1/283D refreshed before C1/3714 (the port's order until 8483cf1) the feet held for 79 changes only.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  battleModeMachine3714(h, h->mvPendAtk);\n  battleMirrorRefresh(h);",
+          "replace": "  battleMirrorRefresh(h);   /* MUT: the mirror refreshed BEFORE the machine */\n  battleModeMachine3714(h, h->mvPendAtk);",
+          "why": "C1/10B5 JSR C1/3714 / C1/10B8 JSR C1/283D: the handlers read the rows the previous refresh built; refreshing first holds the feet for 79 changes"
+        }
+      ]
     }
   ],
   "excluded": [

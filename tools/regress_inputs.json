@@ -742,7 +742,8 @@
         "vmdiff-withpos-bedslide",
         "vmdiff-wmask-party3",
         "wram-loadcensus-clearlist",
-        "wram-loadcensus-natural-door"
+        "wram-loadcensus-natural-door",
+        "battle-forest-feet-vs-oracle"
       ],
       "kind": "rom",
       "regenerable": false,
@@ -1504,7 +1505,8 @@
         "vmdiff-scene8-taban-moveto2",
         "vmdiff-walk-touch-preempt",
         "vmdiff-wmask-party3",
-        "wram-lifetime-survives-load"
+        "wram-lifetime-survives-load",
+        "battle-forest-feet-vs-oracle"
       ],
       "kind": "assets",
       "regenerable": true,
@@ -2023,7 +2025,8 @@
       "regenerable": true,
       "how": "tools/fixtures.py (recipe fx_forest_holdleft)",
       "used_by": [
-        "vmdiff-forest-battle-entry"
+        "vmdiff-forest-battle-entry",
+        "battle-forest-feet-vs-oracle"
       ],
       "sha256": "8c91ece34a919e733859aae35a3aae77f16ae9ee8f959d220cf2039a722018d9",
       "size": 273109,
@@ -2066,7 +2069,8 @@
         "field-battle-sched-a4-cadence",
         "field-battle-tech-learn",
         "field-battle-zorder-forest-live",
-        "field-battleloop-forest"
+        "field-battleloop-forest",
+        "battle-forest-feet-vs-oracle"
       ],
       "kind": "raw_wram",
       "regenerable": true,
@@ -4816,6 +4820,18 @@
       ],
       "sha256": "81ce063fad3252470d6a8de96967e630516334960c707fd99782a78a4ca5497e",
       "size": 6079,
+      "present_when_recorded": true
+    },
+    {
+      "path": "tools/forest_feet_cmp.py",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "tools/forest_feet_cmp.py (in the repo): the forest fight's feet, port against the rule's oracle",
+      "used_by": [
+        "battle-forest-feet-vs-oracle"
+      ],
+      "sha256": "41b07b1668cf3983db8575a5be9d6524ed1c491225683e59a9ed64fbc260c79b",
+      "size": 3247,
       "present_when_recorded": true
     },
     {
