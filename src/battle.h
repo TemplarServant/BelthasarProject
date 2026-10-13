@@ -965,7 +965,8 @@ int CtBattleAiTargetRequest(uint8_t* mem, const uint8_t* rom);
 int CtBattleAiWalkSweep(uint8_t* mem, const uint8_t* rom, int id, int* unported);
 int CtBattleAiCondSweep(uint8_t* mem, const uint8_t* rom, int op, int* unported);   // one C1/B80D handler
 int CtBattleAiCommitSweep(uint8_t* mem, const uint8_t* rom, int* unported);         // C1/8C3E + its eval handlers
-int CtBattleIdleWalkProbe(uint8_t* mem);    // C1/2D9F on a WRAM image (enemy groups; -1 = the PC group)
+int CtBattleIdleWalkProbe(uint8_t* mem);
+int CtBattleModeMachineProbe(uint8_t* mem); // C1/3714 on a WRAM image (the mode machine: cadence, $9752, the nine handlers)    // C1/2D9F on a WRAM image (enemy groups; -1 = the PC group)
 int CtBattleAiWalkWhole(uint8_t* mem, const uint8_t* rom, int id, int* unported);    // the walk, its commit run whole
 int CtBattleAiCondWhole(uint8_t* mem, const uint8_t* rom, int op, int* unported);    // one handler, the same
 int CtBattleAiAC14Sweep(uint8_t* mem, const uint8_t* rom, int* unported);           // C1/AC14 + the C1/B8BB resolver

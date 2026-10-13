@@ -262,6 +262,14 @@ static int idleWalkRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, l
   return CtBattleIdleWalkProbe(w) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
 }
 
+// C1/3714, THE MODE MACHINE (battle.c battleModeMachine3714 via CtBattleModeMachineProbe): per enemy slot the cadence
+// $9897, the requested target $5E15 -> $9752 and the class handler C1/3760[CC/FBAB[mode]], from C1/10B5 and C1/10DC.
+static int modeMachineRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                          CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)in; (void)out;
+  return CtBattleModeMachineProbe(w) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
+}
+
 static const CtShadowEntry k_fixed[] = {
   { 0xC28791, "inventory add (CtMenuInvAdd)", 0x00, 0x00, 0, 0, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC287D5, "inventory remove (CtMenuInvRemove)", 0x00, 0x00, 0, 1, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
@@ -287,6 +295,7 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC1F205, "battle tech pass", 0x30, 0x20, 0, 0, battleGuard, techPassRun, 0, NULL },
   { 0xCD16A6, "battle effect op (CD/16A6)", 0x30, 0x20, 0, 0, fxGuard, fxRun, CT_SH_X16, NULL },
   { 0xC12D9F, "battle idle walk (C1/2D9F)", 0x20, 0x20, 0, 0, battleGuard, idleWalkRun, 0, NULL },
+  { 0xC13714, "battle mode machine (C1/3714)", 0x20, 0x20, 0, 0, battleGuard, modeMachineRun, 0, NULL },
   { 0xFFFAA3, "save load (CtMenuSaveLoad)", 0x00, 0x00, 1, 0, loadGuard, loadRun, 0, NULL },
 };
 #define AI_NCOND 0x29   // the condition ops 00-28 (--sweepaieval's range; op 0F, C1/2C02's path test, is unported)

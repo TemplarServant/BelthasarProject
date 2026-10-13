@@ -40738,13 +40738,13 @@
       "expect": [
         "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C0ACFD velocity+priority (ACFD)         calls 3150  matched 3150  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 277 entries, 114 reached, 143158 calls, matched 125208, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 15795, unresolved 1",
+        "shadow: 278 entries, 115 reached, 143162 calls, matched 125212, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 15795, unresolved 1",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 4988  matched 4039  mismatched 0  interrupted 0  exits 0  skipped 0  dead 949",
         "  dead scratch CD16A6: 7E:0003-000D 7E:000F 7E:0012-0019 7E:0023-002A 7E:0045-004D",
         "  dead scratch C04590: 7E:0309-030A 7E:030D 7E:030F 7E:0315-0316",
         "  dead scratch C046DF: 7E:0309-030A 7E:030D 7E:030F 7E:0315-0316",
-        "census: 8835267 calls to 1039 routines; 143154 calls (1.6%) to the 114 routines a registered entry sits at",
+        "census: 8835267 calls to 1039 routines; 143158 calls (1.6%) to the 115 routines a registered entry sits at",
         "  dead scratch C0A9CD: 7E:01C5"
       ],
       "pin": [
@@ -40835,13 +40835,14 @@
       ],
       "expect": [
         "C1DC64 battle hit roll (battleHitCore)  calls 11  matched 11  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 277 entries, 103 reached, 337347 calls, matched 301729, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 34230, unresolved 3",
+        "shadow: 278 entries, 104 reached, 337843 calls, matched 302225, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 34230, unresolved 3",
         "shadow: ended at oracle frame 16270, location 00AC",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 1704  matched 773  mismatched 0  interrupted 0  exits 0  skipped 0  dead 930  unresolved 1",
         "  dead scratch CD16A6: 7E:0045 7E:0047-0049 7E:004B-004D 7E:004F 7E:0051",
         "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "C12D9F battle idle walk (C1/2D9F)       calls 248  matched 248  mismatched 0  interrupted 0  exits 0  skipped 0"
+        "C12D9F battle idle walk (C1/2D9F)       calls 248  matched 248  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "C13714 battle mode machine (C1/3714)    calls 496  matched 496  mismatched 0  interrupted 0  exits 0  skipped 0"
       ],
       "pin": [
         "^C1DC64 ",
@@ -40851,7 +40852,8 @@
         "^CD16A6 ",
         "^  dead scratch CD16A6:",
         "^FFFAA3 ",
-        "^C12D9F "
+        "^C12D9F ",
+        "^C13714 "
       ],
       "tier": "full",
       "timeout_s": 420,
@@ -40891,6 +40893,30 @@
           "find": "int q = raw / 5, rm = raw % 5;",
           "replace": "int q = raw / 4, rm = raw % 4;   /* MUT: the dwell over 4 */",
           "why": "C1/2ECB-2ECF `LDA #05 / STA $B3 / JSR C1/00D7`: the PC dwell timer is the window byte divided by FIVE (min 1), the quotient left at $B5 and the remainder at $B7."
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (idx >= 0x200) t = (0u - t) & 0xFFFF;                         // 1020D EOR #FFFF / INC A",
+          "replace": "  (void)idx;   /* MUT: no negative half */",
+          "why": "C1/01F9 `CPX #0200 / BCC / EOR #FFFF / INC A`: the trig table's second half is negated as a sixteen-bit word -- the step's sign and the product C1/00A7 leaves at $A9-$AB"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (mode == 0x0A) s[0xA625] >>= 1;                               // 13E79-13E80 LSR $A625",
+          "replace": "  (void)mode;   /* MUT: no LSR */",
+          "why": "C1/3E79-3E80 `CMP #0A / LSR $A625`: mode 0A's formation orbits at radius 0x10, not 0x20 (the Magus route's Vamps / Jugglers run mode 0A)"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "    if (s[0x5E15 + x] != BT_MVTARGET(h, x)) BT_MVTARGET(h, x) = s[0x5E15 + x];   // 13742-1374A",
+          "replace": "    (void)0;   /* MUT: the requested target never goes live */",
+          "why": "C1/3742-374A `LDA $5E15,X / CMP $9752,X / BEQ / STA $9752,X`: the mode machine copies the AI's requested target into the mover's live one before the handler reads it"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "      if (!s[0x9875] && (t & 0x80)) return 1;                       // 12963-1296B",
+          "replace": "      (void)0;   /* MUT: bit 7 never blocks */",
+          "why": "C1/2963-296B `LDA $9875 / BNE / LDA $7BFD,Y / BMI`: a grid tile's bit 7 blocks while $9875 is 0 -- the counters C1/2926 leaves at $82-$86 stop at that cell"
         }
       ],
       "note_pass": "the oracle loads a public battery save (Magus' Castle) and plays the route to the Magus fight: 88644 calls to 87 registered routines, the hit roll C1/DC64's 11 among them, every graded one equal to our C on a copy of its WRAM",
@@ -40918,7 +40944,7 @@
       "expect": [
         "C28791 inventory add (CtMenuInvAdd)     calls 4  matched 4  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C287D5 inventory remove (CtMenuInvRemove) calls 8  matched 8  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 277 entries, 44 reached, 22366 calls, matched 18719, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3, dead 3644, unresolved 0",
+        "shadow: 278 entries, 44 reached, 22366 calls, matched 18719, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3, dead 3644, unresolved 0",
         "shadow: ended at oracle frame 3361, location 00AE",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0"

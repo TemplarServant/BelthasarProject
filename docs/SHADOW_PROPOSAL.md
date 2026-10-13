@@ -354,6 +354,23 @@ into the WRAM.
   $966E / $A2C8 -- what the gather reads. The port's boot had never written them, so the live gather read the field's
   page there (the shadow graded on the oracle's). battle-loader-pointers-gato pins the cartridge's own bytes in the GATO
   fight (read with `--shadow --loadstate saves/gato_inbattle.state --dumpaddr C12D9F --dumpcall 1`).
+- **The enemies' mover state lives in the WRAM** (`BT_MVTARGET` $9752, `BT_MVANGLE` $9786, `BT_MVBASEX/Y` $98AF/$98B7,
+  `BT_MVPHASE` $9737, `BT_MVACTIVE` $98A7, `BT_MVWALKING` $9791, `BT_MVREFX/Y` $A5E4/$A5EC, `BT_MVSAVEMODE` $5E1D,
+  `BT_MVRECX/Y` $9831/$9839, the cadences $9819 / $989F / $9742 / $98C2 / $9897, the extents $971E / $9729): a pure copy
+  (832/0), `mvTarget`'s none becoming the ROM's FF.
+- **The mode machine C1/3714 is graded whole: 496 of 496 calls equal on the Magus route.** `battleModeMachine3714` is the
+  routine as the ROM runs it ($9C, the cadence DEC gated on the mode, C1/373B's $96F8 gate, the $5E15 -> $9752 copy, $A2B5,
+  the class table); the shadow found every handler pass different and the three classes the route runs (1 approach, 5
+  wander, 6 formation) are byte for byte now, through sub-routines that leave the ROM's direct page: C1/00A7, C1/01F9
+  (`battleTrig01F9`), C1/0222 (`battleAtan2Dp`), the metric C1/2B49 with its threshold (C1/2B37 / 2B1F / 2AEF / 2AFB /
+  2B07), C1/285A (`battleBoxRows285A`, which STORES the box rows $975A / $9765 / $9770 / $977B the port only computed),
+  C1/2926 (`battleGrid2926`, its loops tested at the end) and C1/28B0 (`battleBody28B0`, which reads the other
+  combatants' rows from the WRAM; C1/283D rebuilds them). Three behaviours changed with it: class 5's latched pass no
+  longer rewrites $A5FC (the orbit keeps the last fresh pass's radius), class 1 refreshes the target's and its own mirror
+  before its arrival test (C1/37F2-3810) and INCs $9829, and every handler's body test reads rows. The other six classes
+  (0, 2, 3, 4, 7, 8) run on the same row and grid routines but keep their own direct page, unmeasured: no route of ours
+  reaches them yet. Still the port's, not the ROM's: the live tick refreshes the mirror BEFORE its handler pass where the
+  ROM's C1/283D runs AFTER C1/3714 (C1/10B8 / 10DF), and it holds a pending enemy's handler (`mvPendAtk`, the think model).
 - **The feet live in the WRAM (`BT_LIVEX` $1D0C, `BT_LIVEY` $1D23), after the $1D00 page's ownership was settled
   (2026-10-12).** A first plain copy turned 32 checks red; the page is the field's AND the battle's, and the port read it
   on the wrong side at two places, both found by tracing the bytes (the battle tick never zeroes them):
