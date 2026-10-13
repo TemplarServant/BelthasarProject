@@ -120,6 +120,7 @@
         "battle-enemy-cells-zombor-vs-oracle",
         "battle-enemy-census-counter-eval-vs-oracle",
         "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
         "battle-enemy-census-mechanisms-vs-oracle",
         "battle-enemy-census-movers-vs-oracle",
         "battle-enemy-close-op01-forest-vs-oracle",
@@ -127,6 +128,7 @@
         "battle-enemy-sheet-decomp",
         "battle-enemy-turn-handlers-vs-oracle",
         "battle-flame-toss-band-vs-rule-cartridge",
+        "battle-forest-feet-vs-oracle",
         "battle-fx-3d-objects-sweep",
         "battle-fx-load-stage-vs-logical-oracle",
         "battle-fx-misc-ops-sweep",
@@ -145,7 +147,9 @@
         "battle-gato-counter-keeps-his-turn-vs-rule-cartridge",
         "battle-gato-death-skips-the-death-routine-no-sound",
         "battle-gato-entry-stands-still-vs-rule-cartridge",
+        "battle-gato-feet-vs-oracle",
         "battle-gato-fight-vs-logical-oracle",
+        "battle-gato-long-feet-vs-oracle",
         "battle-gato-song-spotlight-is-the-arena-colour-math-vs-rule-cartridge",
         "battle-hetake-idle-poses-from-the-users-cartridge-save",
         "battle-hetake-recoil-pose-under-the-blow-vs-cartridge-oam",
@@ -741,12 +745,9 @@
         "vmdiff-walk-touch-preempt",
         "vmdiff-withpos-bedslide",
         "vmdiff-wmask-party3",
+        "wide-box-is-the-vanilla-box-at-a-rooms-edge",
         "wram-loadcensus-clearlist",
-        "wram-loadcensus-natural-door",
-        "battle-forest-feet-vs-oracle",
-        "battle-gato-feet-vs-oracle",
-        "battle-enemy-census-feet-vs-oracle",
-        "battle-gato-long-feet-vs-oracle"
+        "wram-loadcensus-natural-door"
       ],
       "kind": "rom",
       "regenerable": false,
@@ -915,12 +916,14 @@
         "battle-enemy-cells-zombor-vs-oracle",
         "battle-enemy-census-counter-eval-vs-oracle",
         "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
         "battle-enemy-census-mechanisms-vs-oracle",
         "battle-enemy-census-movers-vs-oracle",
         "battle-enemy-close-op01-forest-vs-oracle",
         "battle-enemy-counter-path-vs-oracle",
         "battle-enemy-turn-handlers-vs-oracle",
         "battle-flame-toss-band-vs-rule-cartridge",
+        "battle-forest-feet-vs-oracle",
         "battle-fx-load-stage-vs-logical-oracle",
         "battle-fx-teardown-after-program-vs-oracle",
         "battle-fxobj-machine-cyclone-vs-oracle",
@@ -930,7 +933,9 @@
         "battle-gato-counter-keeps-his-turn-vs-rule-cartridge",
         "battle-gato-death-skips-the-death-routine-no-sound",
         "battle-gato-entry-stands-still-vs-rule-cartridge",
+        "battle-gato-feet-vs-oracle",
         "battle-gato-fight-vs-logical-oracle",
+        "battle-gato-long-feet-vs-oracle",
         "battle-gato-song-spotlight-is-the-arena-colour-math-vs-rule-cartridge",
         "battle-hetake-idle-poses-from-the-users-cartridge-save",
         "battle-hetake-recoil-pose-under-the-blow-vs-cartridge-oam",
@@ -1508,11 +1513,8 @@
         "vmdiff-scene8-taban-moveto2",
         "vmdiff-walk-touch-preempt",
         "vmdiff-wmask-party3",
-        "wram-lifetime-survives-load",
-        "battle-forest-feet-vs-oracle",
-        "battle-gato-feet-vs-oracle",
-        "battle-enemy-census-feet-vs-oracle",
-        "battle-gato-long-feet-vs-oracle"
+        "wide-box-is-the-vanilla-box-at-a-rooms-edge",
+        "wram-lifetime-survives-load"
       ],
       "kind": "assets",
       "regenerable": true,
@@ -4076,6 +4078,18 @@
       "present_when_recorded": true
     },
     {
+      "path": "saves/field_re/wide_box_07a.state",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "used_by": [
+        "wide-box-is-the-vanilla-box-at-a-rooms-edge"
+      ],
+      "sha256": "0fc8b2031c1b4e84c42fe2877cef3fbecaed00a11f7f25deda4c9191377170f1",
+      "size": 153972,
+      "present_when_recorded": true
+    },
+    {
       "path": "saves/field_re/yakra_defeat_039.state",
       "used_by": [
         "field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge"
@@ -4407,8 +4421,8 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "6eb22b7d847501f6bfd7141445d5cbf67bbc76c3a07d779eef51edfc18f9013c",
-      "size": 1498660,
+      "sha256": "31c4861039ae50287f493a06650a763842c64c36e50ae863f82e28d97ad79b4f",
+      "size": 1518808,
       "present_when_recorded": true
     },
     {
@@ -5140,6 +5154,18 @@
       ],
       "sha256": "4c5f8138f5da27329f239de8d70e40db65c00b590c47663e52d9cbb5e4e990ff",
       "size": 27765,
+      "present_when_recorded": true
+    },
+    {
+      "path": "tools/wide_box_cmp.py",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "used_by": [
+        "wide-box-is-the-vanilla-box-at-a-rooms-edge"
+      ],
+      "sha256": "03a161e2a4a8077bf2f2194f9d8dfdce72679059ebb7ebd64d848ff466f614ea",
+      "size": 4133,
       "present_when_recorded": true
     },
     {

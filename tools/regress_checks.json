@@ -41201,6 +41201,37 @@
           "why": "C1/2B13 reads the mirror, not the live foot -- GATO's returns settle on the cartridge's frames"
         }
       ]
+    },
+    {
+      "name": "wide-box-is-the-vanilla-box-at-a-rooms-edge",
+      "argv": [
+        "python",
+        "tools/wide_box_cmp.py"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/wide_box_07a.state",
+        "tools/wide_box_cmp.py"
+      ],
+      "expect": [
+        "wide-box: f262 box rows 8-87, widescreen (398 wide) vs vanilla: 0 differing pixel(s)"
+      ],
+      "pin": [
+        "^wide-box: "
+      ],
+      "tier": "full",
+      "timeout_s": 300,
+      "note_pass": "the widescreen (a mod) shows the dialogue box exactly as the vanilla picture does, where the camera stops at a room's edge and the box moves to the middle",
+      "notes": "The user, 2026-10-13 (translated from Portuguese): 'remnants of the background over the dialogue box' in widescreen, captured with F5 in loc 07A (saves/field_re/wide_box_07a.state = ct_debug_040.state). 07A's camera stops at the room's left edge, so the 256 view stands at x0 = 0 of the 398-wide picture and fieldWideAssemble moves the view's screen-fixed pixels to the middle (xc = 71). It told them from the world BY COLOUR: a view pixel equal to the world's pixel under it stayed with the world. The box's darkest pixels -- BG3 colour 0 on the backdrop, (0,0,8), rows 78-86 -- equal the black floor under them, so they stayed at x0 and the middle showed the room past the edge through them (64 pixels at f262). drawCtWindow already records the box's rows as CT_MOT_FIXED in the frame's owner record; the assembly now takes that record too (and the record covers only the rows the opening band draws). The vanilla picture is untouched (the assembly is the widescreen's).",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    if (m && m->w == w) { memcpy(foRow, m->own + (size_t)y * w + x0, CAMW); fo = foRow; }",
+          "replace": "    (void)foRow;   /* MUT: by colour alone, as before */",
+          "why": "the box's (0,0,8) pixels over the black floor stay with the world again and the room past the edge shows through them (64 pixels)"
+        }
+      ]
     }
   ],
   "excluded": [

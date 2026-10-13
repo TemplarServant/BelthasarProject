@@ -2880,10 +2880,11 @@ static int drawCtWindowPpu(uint8_t* fb, int top, int y0c, int y1c) {
   return 1;
 }
 static void drawCtWindow(uint8_t* fb, int top, int h) {
-  for (int y = top; y < top + h && y < CAMH; y++)                                // (the box is screen-fixed)
-    if (y >= 0) memset(g_motBuf[g_motIdx].own + y * g_motBuf[g_motIdx].w + g_motViewX, CT_MOT_FIXED, CAMW);
   int mid = top + h / 2;
   int y0c = mid - tbAnimBand, y1c = mid + tbAnimBand;
+  for (int y = top; y < top + h && y < CAMH; y++)                                // (the box is screen-fixed: the rows
+    if (y >= 0 && y >= y0c && y < y1c)                                           //  its opening band draws)
+      memset(g_motBuf[g_motIdx].own + y * g_motBuf[g_motIdx].w + g_motViewX, CT_MOT_FIXED, CAMW);
   if (h == TB_H && drawCtWindowPpu(fb, top, y0c, y1c)) return;     // the field box: the PPU's own picture
   if (tbWinPx && tbWinH > 24) {
     // blit the real window: rows map 1:1 when h == native height; otherwise 9-patch rows
@@ -9218,16 +9219,23 @@ static void fieldWideAssemble(uint8_t* out, const uint8_t* wpic, const uint8_t* 
     }
     if (xc == x0) { memcpy(o + (size_t)x0 * 3, view + (size_t)y * CAMW * 3, (size_t)CAMW * 3); continue; }
     const uint8_t* v = view + (size_t)y * CAMW * 3; const uint8_t* p = wpic + ((size_t)y * w + x0) * 3;
+    // A view pixel is screen-fixed when an overlay recorded it so (the box: drawCtWindow's CT_MOT_FIXED at the view's
+    // place) or, for the overlays that record nothing, when it differs from the world's pixel there. By colour alone a
+    // box pixel that happened to equal the world under it stayed with the world: the box's darkest rows (BG3 colour 0 on
+    // the backdrop, (0,0,8)) over 07A's black floor were left at the camera's place, and the middle showed the room past
+    // the edge through them (the user, 2026-10-13: "remnants of the background over the box", capture 040, 16:9).
+    uint8_t foRow[CAMW]; const uint8_t* fo = NULL;  // (a copy: the middle's marks are written into the same row below)
+    if (m && m->w == w) { memcpy(foRow, m->own + (size_t)y * w + x0, CAMW); fo = foRow; }
     for (int vx = 0; vx < CAMW; vx++) {              // (the world's pixels at the camera's place first...)
-      int same = 1;
-      for (int c = 0; c < 3; c++) { int e = bright >= 15 ? p[vx * 3 + c] : bright <= 0 ? 0 : p[vx * 3 + c] * bright / 15;
-                                    if (e != v[vx * 3 + c]) same = 0; }
+      int same = !(fo && fo[vx] == CT_MOT_FIXED);
+      for (int c = 0; c < 3 && same; c++) { int e = bright >= 15 ? p[vx * 3 + c] : bright <= 0 ? 0 : p[vx * 3 + c] * bright / 15;
+                                            if (e != v[vx * 3 + c]) same = 0; }
       if (same) memcpy(o + ((size_t)x0 + vx) * 3, v + vx * 3, 3);
     }
     for (int vx = 0; vx < CAMW; vx++) {              // (...then the screen-fixed ones at the middle)
-      int same = 1;
-      for (int c = 0; c < 3; c++) { int e = bright >= 15 ? p[vx * 3 + c] : bright <= 0 ? 0 : p[vx * 3 + c] * bright / 15;
-                                    if (e != v[vx * 3 + c]) same = 0; }
+      int same = !(fo && fo[vx] == CT_MOT_FIXED);
+      for (int c = 0; c < 3 && same; c++) { int e = bright >= 15 ? p[vx * 3 + c] : bright <= 0 ? 0 : p[vx * 3 + c] * bright / 15;
+                                            if (e != v[vx * 3 + c]) same = 0; }
       if (!same) { memcpy(o + ((size_t)xc + vx) * 3, v + vx * 3, 3);
                    if (m && m->w == w) m->own[y * w + xc + vx] = CT_MOT_FIXED; }
     }
