@@ -4330,8 +4330,8 @@
         "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
-      "sha256": "7c3a23303bd473bdaaf3cf0aa3ca18f44f17079bb8698dfaa3b742de69496dde",
-      "size": 1735121,
+      "sha256": "80d2c036c4294dabc8612af810bd2d04b35763620badc76cf8862c59e164b0ec",
+      "size": 1757703,
       "present_when_recorded": true
     },
     {
@@ -4399,8 +4399,8 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "ab9ea54e781cc03d138b648878b590a0d1538768bb6166654379a341a0c9c71c",
-      "size": 1515469,
+      "sha256": "d6d4034fd8d16c9068feac9d27d75e7286225188ba905a7138666624a6878e27",
+      "size": 1516243,
       "present_when_recorded": true
     },
     {
@@ -4653,7 +4653,7 @@
         "battle-gato-feet-vs-oracle"
       ],
       "sha256": "5d08d8876989f8fc2b90b7aaebccefe864fd0e0cd3c551e6ad592b6c5cfa00fd",
-      "size": 4946,
+      "size": 5041,
       "present_when_recorded": true
     },
     {
