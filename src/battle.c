@@ -11159,20 +11159,18 @@ static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: th
   }
   if (!handlers) return;                                           // the handler pass is the main loop's (C1/3714): not
                                                                    //   reached while a turn is inside its handler
-  // The mode machine C1/3714 itself (battleModeMachine3714, the routine the shadow grades 496/496 on the Magus route).
-  // ⚠ OPEN, THE ORDER: the ROM runs C1/283D AFTER it (C1/10B5 / 10B8, C1/10DC / 10DF), so a handler reads the rows the
-  // previous refresh built. Here the refresh runs BEFORE it, on this frame's feet -- and that is the order the oracle-pinned
-  // checks hold: refreshing after turns battle-enemy-close-op01-forest-vs-oracle, battle-ai-pointer-forest-op00-turns-vs-
-  // oracle and seven more forest checks red (2026-10-13). Where this port's mover step sits against the ROM's frame service
-  // (CF/EFBA -> CF/F978) is the question. MEASURED on the rule's oracle (forest_wait_ambush_active, `--monitor 7E1D11:1,
-  // 7EA03E:1 --diff --writer`, f4629-f4659): the mover's CF:F9CE step and C1:284A's copy land in the SAME logical frame,
-  // the mirror equal to the stepped foot -- so the cartridge's C1/3714 reads rows one mover step old, as the shadow's
-  // 496/496 (graded on the cartridge's rows) agrees. That this port needs the fresher rows to hold the oracle's checks
-  // says its mover step sits a frame off the cartridge's; that offset is what to find, not this order to keep.
+  // C1/10B5 JSR C1/3714 / C1/10B8 JSR C1/283D (C1/10DC / C1/10DF on the iteration's second frame): the mode machine
+  // (battleModeMachine3714, the routine the shadow grades 496/496 on the Magus route), THEN the mirror -- so a handler reads
+  // the rows the previous refresh built, one mover step old (the oracle: the mover's CF:F9CE step and C1:284A's copy land in
+  // one logical frame, forest_wait_ambush_active f4629-f4659). The boot's C1/002A and the action loop's C1/40C8 refresh
+  // them too. MEASURED, the forest fight against the rule's oracle (forest_holdleft_pre --input 40:2600, port + 172): the
+  // three Hetakes' feet equal in value and frame over 393 changes, and all eight actions open and close on the same frames
+  // (spans 177 202 190 189 192 187 190). The port refreshed BEFORE the machine until 2026-10-13, which kept the feet equal
+  // for 79 changes only and closed the third action two frames early.
   // PORT GATE, recorded: a pending enemy's handler is held (mvPendAtk, the think model of battleArrive) -- the ROM's
   // enemy turn runs inside its own main-loop state, which this port models as a delay; the cadence still counts.
-  battleMirrorRefresh(h);
   battleModeMachine3714(h, h->mvPendAtk);
+  battleMirrorRefresh(h);
 }
 // C1/3714, THE MODE MACHINE, as the ROM runs it from the idle tick (C1/10B5 and C1/10DC, each followed by C1/283D):
 //   3714 `LDA $99E0 / BNE` (the Wait submenu: nothing); X = $9C = 0..7:
@@ -13443,6 +13441,8 @@ static void battleAscTick(CtBattleHost* h, int rel) {
     int b = h->mem[0xA4E8 + k], gx, gy;
     if (b && battleAscResolve(h, -1, b - 1, &gx, &gy)) { h->mem[0x5DA0 + k * 2] = (uint8_t)gx; h->mem[0x5DA1 + k * 2] = (uint8_t)gy; }
   }
+  battleMirrorRefresh(h);                                         // C1/40C8 JSR C1/283D, every frame of the action, before
+                                                                  //   the tracks (C1/40CB JSR C1/4BBE)
   for (int t = 0; t < 16; t++) {
     if (!h->ascLive[t]) continue;
     // WHICH TRACKS RUN (C1/4BBE-4C9D): 0-3 when live; 4 only when the action has an $AE99 list (C1/4BF7 `LDA $AE99 /
@@ -16527,6 +16527,7 @@ void CtBattleBegin(CtBattleHost* h) {
   s[0xA112] = 0x08;                                                 // CC/E378-E37A: the low-HP blink's first period (CF/E58A)
   s[0xCE0F] = 0;                                                    // D1/F26E `STZ $CE0F` (CD/088D's gate on the strip upload)
   battleStripBoot(h);                                               // C1/0023-0027 + the boot NMI's CC/E0AF / CC/E1B0
+  battleMirrorRefresh(h);                                           // C1/002A JSR C1/283D: the mirror and its box rows
 }
 
 // ONE module frame. The battle plays ON the live field scene (oracle-proven, battle_entry.md §1).

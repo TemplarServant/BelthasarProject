@@ -370,11 +370,13 @@ into the WRAM.
   before its arrival test (C1/37F2-3810) and INCs $9829, and every handler's body test reads rows. The other six classes
   (0, 2, 3, 4, 7, 8) run on the same row and grid routines but keep their own direct page, unmeasured: no route of ours
   reaches them yet. The live tick runs the same `battleModeMachine3714` (the counter no longer gated on presence, the
-  handler on $96F8, $9752 from $5E15, $A2B5 written; full suite 832/0). Two things stay the port's, recorded at the call:
-  it holds a pending enemy's handler (`mvPendAtk`, the think model), and it refreshes the mirror BEFORE the machine where
-  the ROM's C1/283D runs AFTER it -- measured on the oracle (the mover's step and C1/283D's copy in one logical frame, so
-  the cartridge's handlers read rows one step old); taking the ROM's order turns nine oracle-pinned forest checks red,
-  which points at this port's mover sitting a frame off the cartridge's -- the offset to find next.
+  handler on $96F8, $9752 from $5E15, $A2B5 written), and in the ROM's order: C1/3714 THEN C1/283D (C1/10B5/10B8), with
+  the boot's C1/002A and the action loop's C1/40C8 refreshes added. Measured on the forest fight against the rule's oracle
+  (forest_holdleft_pre --input 40:2600, port + 172): the Hetakes' feet equal in value and frame over 393 changes, all eight
+  actions on the cartridge's frames (spans 177 202 190 189 192 187 190), the three op 00 turns too. The old order (refresh
+  first) held the feet for 79 changes and closed the third action two frames early; the checks that had pinned it were
+  port-pinned and moved. One port gate stays, recorded at the call: a pending enemy's handler is held (`mvPendAtk`, the
+  think model).
 - **The feet live in the WRAM (`BT_LIVEX` $1D0C, `BT_LIVEY` $1D23), after the $1D00 page's ownership was settled
   (2026-10-12).** A first plain copy turned 32 checks red; the page is the field's AND the battle's, and the port read it
   on the wrong side at two places, both found by tracing the bytes (the battle tick never zeroes them):
