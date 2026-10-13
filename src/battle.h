@@ -173,6 +173,11 @@ typedef struct { int active, value, centerX, restY, age, kind, romKind, rise; } 
 #define BT_LIVEX(h, c)      ((h)->mem[0x1D0C + (c)])   // $1D0C,c: the live foot X
 #define BT_LIVEY(h, c)      ((h)->mem[0x1D23 + (c)])   // $1D23,c: the live foot Y
 
+// THE C1/283D MIRROR OF THE FEET LIVES IN THE WRAM (S4): $A039,c / $A050,c, what the body box rows, C1/28B0's test and the
+// position machine C1/2986 read. It was the host's mvMirX / mvMirY.
+#define BT_MIRX(h, c)       ((h)->mem[0xA039 + (c)])   // $A039,c: the mirror's foot X
+#define BT_MIRY(h, c)       ((h)->mem[0xA050 + (c)])   // $A050,c: the mirror's foot Y
+
 typedef struct CtBattleHost {
   uint8_t* mem;              // the engine's $7E image (64KB): staged interface in, battle blocks out
   uint8_t* glb;              // the $7F0000 page (0x200 bytes): outcome $7F01EC = glb[0x1EC]
@@ -691,9 +696,8 @@ typedef struct CtBattleHost {
   // field's camera words share that page; in a fight the field reads its page from C0/0918's copy at $7F:2000 (field.c),
   // as the cartridge does, so the battle owns the live bytes from the entry to C0/0905.
   int mvExtentY[11];          // $9729,cmb: the Y half-extent (E4/F600 record +8; the box TOP, C1/2889)
-  int mvMirX[11], mvMirY[11]; // $A039/$A050,cmb: the C1/283D MIRROR of the live feet that the box rows and the
-                              //   C1/28B0 body test read -- refreshed before each handler loop, overwritten by a
-                              //   slot's PROJECTED step within it (see battleBox)
+  // (the C1/283D mirror of the feet, $A039/$A050,cmb, is the WRAM's: BT_MIRX / BT_MIRY above -- refreshed before each
+  //  handler loop, overwritten by a slot's PROJECTED step within it; see battleBox)
   int mvTarget[8];            // $9752,X: the move-target COMBATANT idx (approach walks to it / return from it)
   int mvAngle[8];             // $9786,X: the current segment bearing (0..255, 0x100 = full turn)
   int mvBaseX[8], mvBaseY[8]; // $98AF/$98B7,X: the segment's base position (re-read from live pos each segment)

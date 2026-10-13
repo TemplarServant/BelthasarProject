@@ -336,12 +336,21 @@ into the WRAM.
 - **The PCs' idle-walk state, moved too** (`BT_PCTIMER` $9689, `BT_PCIDX` $968C, `BT_PCPUB` $9907 -- FF = none, as the
   ROM's own byte reads, where the host used -1 --, `BT_PCWINLAST` $A103, `BT_PCDEFER` $9922, `BT_PCFACING` $96DB,
   `BT_PCAIMLATCH` $A098): a pure copy, the full suite unchanged (831/0/0).
-- **The PC group of C1/2D9F, tried and not yet matching** (54 of its 62 calls on the Magus route), for three reasons the
-  trial measured, the next step: (1) the PC walk's own direct page -- its C1/00A7 / C1/00D7 operands, `$77` read by
-  D1/FE8C the next frame; (2) the gather's dx/dy table for a PC (`$9F49` one off, E8 against E9), read by the OAM
-  compose CF/EB42; (3) whole PC cells (up to ~490 bytes) -- the PCs' sheet / record, which the gather reads as it does
-  an enemy's. It also needs the feet from the WRAM ($1D0C / $1D23): the host's `mvLiveX` / `mvLiveY` (~220 uses) are
-  the largest mirror left.
+- **C1/2D9F whole, the PC group included: 248 of 248 calls equal on the Magus route (2026-10-12).** The PC group ran the
+  host's habits the enemy groups had shed: a local upload count for $9912, presence from $2980 for $96F5, a publish that
+  only stored $9907. It now runs as C1/2DA9-2F1E does -- the roster $992D-$992F, $92/$94, C1/2F97's $84/$A2/$80, the
+  re-aim latch's $80/$81, the pose pointers $A1E8/$A1FE, C1/00A7 ($A5/$A7/$A8, $77/$78, $A9-$AB, $82), C1/00D7 ($B1-$B3,
+  $79-$7B, $B5-$B8, $A029), $967B/$9679 -- and its publish is the gather C1/1C4A, the enemies' own (the cells and the
+  dx/dy words at $9F47 the OAM compose CF/EB42 reads). On the way:
+  - the position machine C1/2986 (`battleAiPosScan`) leaves the metric C1/2B37's direct page ($80-$83, $AD-$B0, $77/$78,
+    $9893) and the loops' $84/$86/$8A, writes $9873 as the sixteen-bit store it is, and gates on the ROM's own bytes --
+    $96F5, $9FF7 bit 7, $5E4A -- where it had battlePresent / battleAlive's stand-ins;
+  - atan2 C1/0222 has a twin that leaves $D3-$E3 (`battleAtan2Dp`);
+  - the C1/283D mirror of the feet moved into the WRAM too (`BT_MIRX` $A039, `BT_MIRY` $A050; it was `mvMirX` / `mvMirY`);
+  - the enemy groups leave $9841, the roster, $9C and $80, and the dispatch DECs $A4 and INCs it back against the
+    caller's borrow $993B (C1/10A4-10B3, `battleWalkDispatch`, which the port had not ported: the net is the same).
+  One gap is left for the live engine: the loaders' pointers the gather reads ($1C57-$1CC5, CC/E97A-EA30 / CC/EAC4-EB62)
+  are not staged by the port's boot, so the live gather reads the field's page there; the shadow grades on the oracle's.
 - **The feet live in the WRAM (`BT_LIVEX` $1D0C, `BT_LIVEY` $1D23), after the $1D00 page's ownership was settled
   (2026-10-12).** A first plain copy turned 32 checks red; the page is the field's AND the battle's, and the port read it
   on the wrong side at two places, both found by tracing the bytes (the battle tick never zeroes them):

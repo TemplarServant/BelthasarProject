@@ -40738,7 +40738,7 @@
       "expect": [
         "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C0ACFD velocity+priority (ACFD)         calls 3150  matched 3150  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 277 entries, 114 reached, 143158 calls, matched 125206, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 59, dead 15795, unresolved 1",
+        "shadow: 277 entries, 114 reached, 143158 calls, matched 125208, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 15795, unresolved 1",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 4988  matched 4039  mismatched 0  interrupted 0  exits 0  skipped 0  dead 949",
         "  dead scratch CD16A6: 7E:0003-000D 7E:000F 7E:0012-0019 7E:0023-002A 7E:0045-004D",
@@ -40835,13 +40835,13 @@
       ],
       "expect": [
         "C1DC64 battle hit roll (battleHitCore)  calls 11  matched 11  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 277 entries, 103 reached, 337347 calls, matched 301481, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 195, dead 34415, unresolved 4",
+        "shadow: 277 entries, 103 reached, 337347 calls, matched 301729, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 34230, unresolved 3",
         "shadow: ended at oracle frame 16270, location 00AC",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 1704  matched 773  mismatched 0  interrupted 0  exits 0  skipped 0  dead 930  unresolved 1",
         "  dead scratch CD16A6: 7E:0045 7E:0047-0049 7E:004B-004D 7E:004F 7E:0051",
         "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "C12D9F battle idle walk (C1/2D9F)       calls 248  matched 0  mismatched 0  interrupted 0  exits 0  skipped 0  unported 62  dead 185  unresolved 1"
+        "C12D9F battle idle walk (C1/2D9F)       calls 248  matched 248  mismatched 0  interrupted 0  exits 0  skipped 0"
       ],
       "pin": [
         "^C1DC64 ",
@@ -40879,6 +40879,18 @@
           "find": "for (int b = 0; b < 32; b++) s[(dst + b) & 0xFFFF] = gRom[0x00FD00 + btBus(s, sheetBank, src + b)];",
           "replace": "for (int b = 0; b < 32; b++) s[(dst + b) & 0xFFFF] = btBus(s, sheetBank, src + b);   /* MUT: no C0:FD00 flip */",
           "why": "the gather C1/1C4A copies a bit-14 cell through C0:FD00 (C1/1DD3): a flipped enemy cell in the WRAM sprite mirror"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "      battleCellGather(s, seat);",
+          "replace": "      (void)seat;   /* MUT: the PC publish skips C1/1C4A */",
+          "why": "C1/2F10 `JSR C1/1C4A`: a PC's publish runs the same gather as an enemy's -- $9907, the cells into the sprite mirror and the dx/dy words at $9F47 the OAM compose CF/EB42 reads. Without it the PC calls differ by up to ~490 bytes."
+        },
+        {
+          "file": "src/battle.c",
+          "find": "int q = raw / 5, rm = raw % 5;",
+          "replace": "int q = raw / 4, rm = raw % 4;   /* MUT: the dwell over 4 */",
+          "why": "C1/2ECB-2ECF `LDA #05 / STA $B3 / JSR C1/00D7`: the PC dwell timer is the window byte divided by FIVE (min 1), the quotient left at $B5 and the remainder at $B7."
         }
       ],
       "note_pass": "the oracle loads a public battery save (Magus' Castle) and plays the route to the Magus fight: 88644 calls to 87 registered routines, the hit roll C1/DC64's 11 among them, every graded one equal to our C on a copy of its WRAM",
