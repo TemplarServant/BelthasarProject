@@ -41232,6 +41232,48 @@
           "why": "the box's (0,0,8) pixels over the black floor stay with the world again and the room past the edge shows through them (64 pixels)"
         }
       ]
+    },
+    {
+      "name": "wide-race-curtain-crosses-the-whole-picture",
+      "argv": [
+        "python",
+        "tools/wide_curtain_cmp.py"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "tools/wide_curtain_cmp.py"
+      ],
+      "expect": [
+        "wide-curtain: f8164 vanilla edge 41 -> widescreen edge 64 (scaled 64)",
+        "wide-curtain: f8168 vanilla edge 82 -> widescreen edge 128 (scaled 128)",
+        "wide-curtain: f8172 vanilla edge 118 -> widescreen edge 184 (scaled 184)",
+        "wide-curtain: f8176 vanilla edge 157 -> widescreen edge 245 (scaled 244)",
+        "wide-curtain: f8180 vanilla edge 193 -> widescreen edge 301 (scaled 300)",
+        "wide-curtain: f8184 vanilla edge 232 -> widescreen edge 362 (scaled 361)",
+        "wide-curtain: f8500 vanilla edge 222 -> widescreen edge 346 (scaled 346)",
+        "wide-curtain: f8504 vanilla edge 181 -> widescreen edge 282 (scaled 282)",
+        "wide-curtain: f8508 vanilla edge 140 -> widescreen edge 219 (scaled 218)",
+        "wide-curtain: f8512 vanilla edge 101 -> widescreen edge 158 (scaled 157)",
+        "wide-curtain: f8516 vanilla edge 59 -> widescreen edge 92 (scaled 92)",
+        "wide-curtain: f8520 vanilla edge 13 -> widescreen edge 21 (scaled 20)",
+        "wide-curtain: 0 of 12 frame(s) off the scaled edge"
+      ],
+      "pin": [
+        "^wide-curtain: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "the widescreen (a mod) runs the race's curtain across its whole picture, the vanilla edge scaled to it, in the same frames",
+      "notes": "The user, 2026-10-13 (translated from Portuguese): 'in widescreen the race's curtain in the demo does not work as it should'. A translated stage's PPU draws the widescreen's side columns (snes/ppu.c g_ppuWideSide) and decides their windows in ppu_winTest. A curtain -- C3/01E4's window, one edge on the screen's edge and the other crossing it -- only moved across the 256 columns there: the race's left side was lit from its first frame and its right side snapped from dark to lit when the edge came within 16 columns of it (and the reverse on the close; entry 3 the same, mirrored). ppu_winTest's curtain arm now scales the moving edge to the picture (column 0 at its 0, 255 at its last), the field's wipe rule (field.c wideWipeEdge). This check runs the attract to the race's end twice (16:9 and off) and holds every listed frame's widescreen edge to the vanilla one scaled (a pixel of slack); the expect lines pin the spans themselves.",
+      "mutations": [
+        {
+          "file": "snes/ppu.c",
+          "find": "  if((r >= 255) != (l <= 0)) {                     // a curtain: exactly one edge on the screen's edge",
+          "replace": "  if(0) {                                          // MUT: no curtain arm",
+          "why": "the race's curtain moves across the 256 columns only again: the left side lit from the first frame, the right one snapping at the end"
+        }
+      ]
     }
   ],
   "excluded": [

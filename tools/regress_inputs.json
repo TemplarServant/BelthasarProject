@@ -746,6 +746,7 @@
         "vmdiff-withpos-bedslide",
         "vmdiff-wmask-party3",
         "wide-box-is-the-vanilla-box-at-a-rooms-edge",
+        "wide-race-curtain-crosses-the-whole-picture",
         "wram-loadcensus-clearlist",
         "wram-loadcensus-natural-door"
       ],
@@ -1514,6 +1515,7 @@
         "vmdiff-walk-touch-preempt",
         "vmdiff-wmask-party3",
         "wide-box-is-the-vanilla-box-at-a-rooms-edge",
+        "wide-race-curtain-crosses-the-whole-picture",
         "wram-lifetime-survives-load"
       ],
       "kind": "assets",
@@ -5166,6 +5168,18 @@
       ],
       "sha256": "03a161e2a4a8077bf2f2194f9d8dfdce72679059ebb7ebd64d848ff466f614ea",
       "size": 4133,
+      "present_when_recorded": true
+    },
+    {
+      "path": "tools/wide_curtain_cmp.py",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "used_by": [
+        "wide-race-curtain-crosses-the-whole-picture"
+      ],
+      "sha256": "c360e49b76725ac38e9939ad11f60dc1738a39971b42faecb2a29ccae39ce28c",
+      "size": 3504,
       "present_when_recorded": true
     },
     {

@@ -627,10 +627,21 @@ static int ppu_getPixelForMode7(Ppu* ppu, int x, int layer, bool priority) {
 //     window at all: it would stand as a stripe inside the wider picture, and not carry into the side;
 //   * a WIDE span's edge within 16 columns of the screen's edge runs on to the picture's edge (a picture framed a few
 //     columns in -- 1999's Lavos sequence -- or a wipe or a curtain from that edge carries on into the side).
+//   * a CURTAIN -- one edge on the screen's edge, the other crossing it (the race's and entry 3's openings and closings,
+//     C3/01E4) -- crosses the whole picture in the same frames: its moving edge is the screen's scaled to the picture
+//     (column 0 at the picture's 0, 255 at its last), as the field's wipe is (field.c wideWipeEdge). Read with the rule
+//     above it only crossed the 256 columns: the side it starts from was lit (or dark) from the first frame and the other
+//     side snapped at once when the edge came within 16 columns of it (the user, 2026-10-13: "in widescreen the race's
+//     curtain in the demo does not work as it should").
 static bool ppu_winTest(int x, int l, int r) {
   if(g_ppuWideSide <= 0) return x >= l && x <= r;
   if((r >= 255 && l >= 240) || (l <= 0 && r <= 15)) return false;
   if(r - l < 16) return x >= l && x <= r;
+  if((r >= 255) != (l <= 0)) {                     // a curtain: exactly one edge on the screen's edge
+    int w = 256 + 2 * g_ppuWideSide, xp = x + g_ppuWideSide;
+    int L = l <= 0 ? -(1 << 20) : (l * (w - 1) + 127) / 255, R = r >= 255 ? (1 << 20) : (r * (w - 1) + 127) / 255;
+    return xp >= L && xp <= R;
+  }
   int L = l <= 16 ? -(1 << 20) : l, R = r >= 239 ? (1 << 20) : r;
   return x >= L && x <= R;
 }
