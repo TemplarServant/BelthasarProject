@@ -744,7 +744,9 @@
         "wram-loadcensus-clearlist",
         "wram-loadcensus-natural-door",
         "battle-forest-feet-vs-oracle",
-        "battle-gato-feet-vs-oracle"
+        "battle-gato-feet-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
+        "battle-gato-long-feet-vs-oracle"
       ],
       "kind": "rom",
       "regenerable": false,
@@ -1508,7 +1510,9 @@
         "vmdiff-wmask-party3",
         "wram-lifetime-survives-load",
         "battle-forest-feet-vs-oracle",
-        "battle-gato-feet-vs-oracle"
+        "battle-gato-feet-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
+        "battle-gato-long-feet-vs-oracle"
       ],
       "kind": "assets",
       "regenerable": true,
@@ -2489,7 +2493,9 @@
         "menu-status-screen",
         "menu-tech-screen",
         "menusave-ow-open",
-        "battle-gato-feet-vs-oracle"
+        "battle-gato-feet-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
+        "battle-gato-long-feet-vs-oracle"
       ],
       "kind": "raw_wram",
       "regenerable": true,
@@ -2590,7 +2596,9 @@
         "field-battle-topbox-tech-description",
         "oracle-logical-frame-gato-and-xstrike",
         "oracle-peekshots-equal-a-peek-per-frame",
-        "battle-gato-feet-vs-oracle"
+        "battle-gato-feet-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
+        "battle-gato-long-feet-vs-oracle"
       ],
       "sha256": "233ca7485cf1004a5bdeb00a4627026cff1c7a15787e19eb51011e0da0ee1352",
       "size": 273109,
@@ -4330,8 +4338,8 @@
         "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
-      "sha256": "80d2c036c4294dabc8612af810bd2d04b35763620badc76cf8862c59e164b0ec",
-      "size": 1757703,
+      "sha256": "7e1047cf2eb6474d358f2b92c11cda576d9e3b3dd2594e1443dca0e40f176743",
+      "size": 1758304,
       "present_when_recorded": true
     },
     {
@@ -4634,13 +4642,15 @@
       "path": "tools/battle_ab.py",
       "used_by": [
         "battle-module-tail-vs-oracle",
-        "battle-enemy-census-mechanisms-vs-oracle"
+        "battle-enemy-census-mechanisms-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
+        "battle-gato-long-feet-vs-oracle"
       ],
       "kind": "tool",
       "regenerable": true,
       "how": "The synthetic-battle harness (GATO's fight made any fight by pokes), port against the rule's cartridge.",
-      "sha256": "58ee3967879a6746b1b951775b9c6ac0e393bf64ccf2ea306771f8cceee15f3e",
-      "size": 30458,
+      "sha256": "49f7bd147e8849ef8463a1bc8bd52961d417002e1108e397399f740aa59fbf77",
+      "size": 30404,
       "present_when_recorded": true
     },
     {
@@ -4650,10 +4660,12 @@
       "how": "tools/battle_feet_cmp.py (in the repo): a fight's feet, port against the rule's oracle",
       "used_by": [
         "battle-forest-feet-vs-oracle",
-        "battle-gato-feet-vs-oracle"
+        "battle-gato-feet-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
+        "battle-gato-long-feet-vs-oracle"
       ],
-      "sha256": "5d08d8876989f8fc2b90b7aaebccefe864fd0e0cd3c551e6ad592b6c5cfa00fd",
-      "size": 5041,
+      "sha256": "1f702f6f0e1538b1d70cceae77c207a411363f40cc83b97b1a8991769060201c",
+      "size": 5228,
       "present_when_recorded": true
     },
     {

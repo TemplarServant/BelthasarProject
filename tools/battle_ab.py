@@ -54,6 +54,7 @@ BTN = {'a': 0x100, 'b': 0x01, 'u': 0x10, 'd': 0x20, 'l': 0x40, 'r': 0x80, 'L': 0
 COMBATANTS = 11
 VERBOSE = False
 MENU_AT = 640         # the drive's first button: after GATO's first action (c453-c606) on every party measured
+FEET = False          # `enemies`: also every combatant's feet $1D0C,c / $1D23,c (the movement, both sides)
 
 
 def regions():
@@ -64,7 +65,8 @@ def regions():
     for c in range(COMBATANTS):
         b = 0x5E2D + c * 0x80
         out += [(b + 3, 6), (b + 0x1D, 6)]
-    return out + [(0xA013, 1), (0x95DB, 1), (0x9609, 1), (0xAE93, 1), (0x9877, 1), (0x2500, 1)]
+    out += [(0xA013, 1), (0x95DB, 1), (0x9609, 1), (0xAE93, 1), (0x9877, 1), (0x2500, 1)]
+    return out + ([(0x1D0C, COMBATANTS), (0x1D23, COMBATANTS)] if FEET else [])
 
 
 def fields():
@@ -73,7 +75,10 @@ def fields():
     for c in range(COMBATANTS):
         b = 0x5E2D + c * 0x80
         out += [('c%d.HP' % c, b + 3, 0, 2), ('c%d.MP' % c, b + 3, 4, 2), ('c%d.ST' % c, b + 0x1D, 0, 3), ('c%d.BF' % c, b + 0x1D, 3, 3)]
-    return out + [('$%04X' % a, a, 0, 1) for a in (0xA013, 0x95DB, 0x9609, 0xAE93, 0x9877, 0x2500)]
+    out += [('$%04X' % a, a, 0, 1) for a in (0xA013, 0x95DB, 0x9609, 0xAE93, 0x9877, 0x2500)]
+    if FEET:
+        out += [('c%d.X' % c, 0x1D0C, c, 1) for c in range(COMBATANTS)] + [('c%d.Y' % c, 0x1D23, c, 1) for c in range(COMBATANTS)]
+    return out
 
 
 def pokes_for(party, learned=None, mp=99, extra=None):
@@ -459,7 +464,7 @@ def main():
     os.chdir(ROOT)
     global VERBOSE
     VERBOSE = '-v' in sys.argv[1:]
-    a = [x for x in sys.argv[1:] if not x.startswith('-j') and not x.startswith('-t') and x != '-v']
+    a = [x for x in sys.argv[1:] if not x.startswith('-j') and not x.startswith('-t') and x not in ('-v', '-feet')]
     jobs = int(next((x[2:] for x in sys.argv[1:] if x.startswith('-j')), '1') or 1)
     if not a: print(__doc__); return 1
     work = []
@@ -516,6 +521,8 @@ def main():
         for iid in ITEMS:
             work.append(('item %02X' % iid, item_pokes(iid), drive_item(0), 1400, 'item_%02X' % iid, iid))
     elif a[0] in ('enemy', 'enemies'):
+        global FEET
+        FEET = '-feet' in sys.argv[1:]                              # -feet: the movement too (every combatant's feet)
         ids = [int(x, 16) for x in a[1].split(',')] if len(a) > 1 else list(range(0x00, 0xFF))   # (FF: no enemy, the oracle spins)
         total = int(next((x[2:] for x in sys.argv[1:] if x.startswith('-t')), '1500'))
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as ex:

@@ -27,6 +27,9 @@ FIXTURES = {
     'gato':   dict(state='saves/battle_re/gato_wait.state', inp='100:8,0:2400', oenv={'CT_ORACLE_VIRTUAL_BEAM': '1'},
                    wram='saves/battle_re/gato_t0.raw.wram', scene=None, script='n:2000', end=2150, ofs=221,
                    cmbs=[0, 1, 6], label='gato'),
+    'gatolong': dict(state='saves/battle_re/gato_wait.state', inp='100:8,0:4400', oenv={'CT_ORACLE_VIRTUAL_BEAM': '1'},
+                   wram='saves/battle_re/gato_t0.raw.wram', scene=None, script='n:4200', end=3950, ofs=221,
+                   cmbs=[0, 1, 6], label='gatolong'),
 }
 
 

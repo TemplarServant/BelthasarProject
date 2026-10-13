@@ -377,6 +377,13 @@ into the WRAM.
   first) held the feet for 79 changes and closed the third action two frames early; the checks that had pinned it were
   port-pinned and moved. One port gate stays, recorded at the call: a pending enemy's handler is held (`mvPendAtk`, the
   think model).
+- **The movement graded whole against the oracle (2026-10-13).** Beyond the routine-level shadow, three comparisons of
+  every change of the combatants' feet, port against the rule's oracle: the forest fight (399/399), GATO's (137/137, and
+  325/325 to f3950) and the enemy census with feet (`battle_ab.py enemies -feet`, 253/255; the two left are $AE93 a
+  frame off). They found three mechanisms the port lacked, each ported from the ROM: the NMI's stepper CF/EFAF + CF/F978
+  (gated on $A013 / $A0FD and $98A7 only -- the port had tied it to the idle tick, presence and the teardown), class 4
+  byte for byte (its settle C1/2B13 measures the mirror, not the live foot), the defeat's eight idle ticks run whole
+  (C1/106E: walk dispatch, C1/3714 + C1/283D), and the victory stager's `STZ $98A7,X` x8 (C1/3574).
 - **The feet live in the WRAM (`BT_LIVEX` $1D0C, `BT_LIVEY` $1D23), after the $1D00 page's ownership was settled
   (2026-10-12).** A first plain copy turned 32 checks red; the page is the field's AND the battle's, and the port read it
   on the wrong side at two places, both found by tracing the bytes (the battle tick never zeroes them):

@@ -10601,102 +10601,88 @@ static void battleMoveApproach(CtBattleHost* h, int slot) {
 //   this pass (the axis-pure dance segments); CLEAR -> clear the latch + walk the segment.
 static void battleMoveReturn(CtBattleHost* h, int slot) {
   uint8_t* s = h->mem;
-  s[0xA5FD + slot] = 0;                                            // C1/3A3F STZ $A5FD,X (see class 6)
-  int cmb = slot + 3, tcmb = BT_MVTARGET(h, slot);
-  if (tcmb == 0xFF) tcmb = cmb;                                        // degenerate: no reference -> self (no move)
-  int sx = BT_LIVEX(h, cmb), sy = BT_LIVEY(h, cmb);
-  // $A2B5 IS THE MODE BEING DISPATCHED, not an arena constant. `8D B5 A2` occurs exactly ONCE in the
-  // 4 MB image, at C1/3752, immediately before `TAX / LDA $CCFBAB,X / ASL A / TAX / JSR ($3760,X)` --
-  // the handler's own entry. Our engine READ that byte in three places and WROTE it nowhere, and every
-  // fixture holds 0x80, so `== 0x10` was permanently false and mode 0x10 silently took the mode-06 arm.
-  int scale = (BT_MVMODE(h, slot) == 0x10) ? 0x80 : 0x40;             // C1/3A71 CMP #10 -> $AE = 0x80 else 0x40
-  int ang;
-  if (BT_MVWALKING(h, slot)) {
-    ang = BT_MVANGLE(h, slot);                                        // $9791 latched: stored bearing (C1/3A42)
+  int x = slot, cmb = slot + 3;
+  int mode = BT_MVMODE(h, slot) & 0xFF;                            // = $A2B5 (C1/3752)
+  s[0xA5FD + x] = 0;                                               // 13A3F STZ $A5FD,X (see class 6)
+  if (BT_MVWALKING(h, x)) {
+    s[0xDB] = (uint8_t)BT_MVANGLE(h, x);                           // 13A42-13A4C: the stored bearing, JMP 3AF7
   } else {
-    int tx = BT_LIVEX(h, tcmb), ty = BT_LIVEY(h, tcmb);
-    BT_MVBASEX(h, slot) = sx; BT_MVBASEY(h, slot) = sy;                  // C1/3A62/3A6A $98AF/$98B7,X := self: the FRESH
-                                                                   //   pass re-bases (settled, blocked or clear); a
-                                                                   //   latched pass (C1/3A4C JMP 3AF7) never does
-    ang = battleAtan2(tx, ty, sx, sy);                             // AWAY bearing (operands swapped, C1/3A4F)
-    BT_MVREFX(h, slot) = (tx + battleS8(battleTrigMul((ang + 0x40) & 0xFF, scale))) & 0xFF;  // ref (C1/3A8C)
-    BT_MVREFY(h, slot) = (ty + battleS8(battleTrigMul(ang, scale))) & 0xFF;                  //     (C1/3A7F)
-    int cX = (sx >= BT_MVREFX(h, slot)) ? 0 : 1;                      // $81: 0 = selfX >= refX, 1(FF) = below
-    // $83: C1/3AAB `LDA $1D26,X / SBC $82` has NO SEC -- it inherits the borrow of the X compare's `TDC / SBC #00`, so when
-    // selfX < refX the Y test is selfY - refY - 1, i.e. FF already at selfY == refY. MEASURED, the rule's oracle (battle_ab
-    // enemies 83): self (183,147), ref (205,147), bearing F8 -> `$9786 = 78` at f794 (C1:3B02, the 180 reverse) and a clear
-    // step; the port's independent `selfY >= refY` kept F8 and walked into the arena edge.
-    int cY = (sy - BT_MVREFY(h, slot) - cX < 0) ? 1 : 0;              // C1/3AAB-3AB3
-    int quad = (ang >> 6) & 3;                                     // C1/0118
-    int crossed = (quad == 0) ? (cX == 0 || cY == 0)               // C1/3AC0 matrix, quadrant-exact
-                : (quad == 1) ? (cX == 1 || cY == 0)               // C1/3ACE
-                : (quad == 2) ? (cX == 1 || cY == 1)               // C1/3ADE
-                :               (cX == 0 || cY == 1);              // C1/3AE8
+    int y = BT_MVTARGET(h, x);                                     // 13A4F-13A52 (the raw byte)
+    s[0xD3] = s[0x1D0C + y]; s[0xD4] = s[0x1D23 + y];              // 13A53-13A5B the target
+    s[0xD5] = s[0x1D0F + x]; BT_MVBASEX(h, x) = s[0xD5];           // 13A5D-13A62 self, and the segment's base
+    s[0xD6] = s[0x1D26 + x]; BT_MVBASEY(h, x) = s[0xD6];           // 13A65-13A6A
+    // $A2B5 IS THE MODE BEING DISPATCHED (C1/3752 is its only writer): mode 0x10 doubles the reference radius.
+    s[0xAE] = (mode == 0x10) ? 0x80 : 0x40;                        // 13A6D-13A7A
+    battleAtan2Dp(s, s[0xD3], s[0xD4], s[0xD5], s[0xD6]);          // 13A7C JSR C1/0222: the AWAY bearing
+    int v = (battleTrig01F9(s, s[0xDB]) + s[0xD4]) & 0xFF;         // 13A7F-13A83
+    s[0x82] = (uint8_t)v; BT_MVREFY(h, x) = v;                     // 13A87-13A89 $A5EC,X
+    v = (battleTrig01F9(s, (s[0xDB] + 0x40) & 0xFF) + s[0xD3]) & 0xFF;   // 13A8C-13A95
+    s[0x80] = (uint8_t)v; BT_MVREFX(h, x) = v;                     // 13A99-13A9B $A5E4,X
+    // $83: `LDA $1D26,X / SBC $82` has NO SEC -- it inherits the borrow of the X compare's `TDC / SBC #00`, so when selfX <
+    // refX the Y test is selfY - refY - 1. MEASURED, the rule's oracle (battle_ab enemies 83): self (183,147), ref (205,147),
+    // bearing F8 -> `$9786 = 78` at f794 (C1:3B02, the 180 reverse).
+    int sxv = s[0x1D0F + x], c1 = sxv >= s[0x80];                  // 13AA0-13AA4
+    s[0x81] = c1 ? 0x00 : 0xFF;                                    // 13AA6-13AA9
+    int syv = s[0x1D26 + x], c2 = (syv - s[0x82] - (c1 ? 0 : 1)) >= 0;   // 13AAB-13AAE
+    s[0x83] = c2 ? 0x00 : 0xFF;                                    // 13AB0-13AB3
+    int q = s[0xDB] >> 6; s[0x84] = (uint8_t)q;                    // 13AB5-13ABA JSR C1/0118
+    int cross = (q == 0) ? (!s[0x81] || !s[0x83])                  // 13AC4-13ACC
+              : (q == 1) ? ((s[0x81] & 0x80) || !s[0x83])          // 13ACE-13AD6
+              : (q == 2) ? ((s[0x81] & 0x80) || (s[0x83] & 0x80))  // 13ADE-13AE6
+              :            (!s[0x81] || s[0x83]);                  // 13AE8-13AEE
     { static int ft = -1; if (ft < 0) { const char* t = getenv("CT_BATTLE_FACETRACE"); ft = (t && *t) ? 1 : 0; }
       if (ft) fprintf(stderr, "ret-fresh f%d slot%d self=(%d,%d) tgt=(%d,%d) ang=%02X ref=(%d,%d) q%d cX%d cY%d crossed=%d\n",
-                      h->frames, slot, sx, sy, BT_LIVEX(h, tcmb), BT_LIVEY(h, tcmb), ang & 0xFF,
-                      BT_MVREFX(h, slot), BT_MVREFY(h, slot), quad, cX, cY, crossed); }
-    if (crossed) ang = (ang + 0x80) & 0xFF;                        // C1/3AF0: REVERSE 180
+                      h->frames, slot, sxv, syv, s[0xD3], s[0xD4], s[0xDB], BT_MVREFX(h, x), BT_MVREFY(h, x), q,
+                      c1 ? 0 : 1, c2 ? 0 : 1, cross ? 1 : 0); }
+    if (cross) s[0xDB] = (uint8_t)(s[0xDB] + 0x80);                // 13AF0-13AF5: REVERSE 180
   }
-  BT_MVANGLE(h, slot) = ang;                                          // $9786 store (C1/3AFD)
-  h->mvFacing[slot] = ctBattleFaceTab[ang & 0xFF];                 // facing = C0F700[$DB] (C1/3B14)
+  s[0xAE] = 8;                                                     // 13AF7-13AF9
+  BT_MVANGLE(h, x) = s[0xDB];                                      // 13AFB-13AFF
+  s[0x8C] = (uint8_t)battleTrig01F9(s, s[0xDB]);                   // 13B02-13B05
+  s[0x8E] = (uint8_t)battleTrig01F9(s, (s[0xDB] + 0x40) & 0xFF);   // 13B07-13B0F
+  h->mvFacing[slot] = ctBattleFaceTab[s[0xDB]];                    // 13B11-13B1A C0F700[$DB] -> $96DE,X
   BT_ENFACING(h, slot) = h->mvFacing[slot];
   { static int ft = -1; if (ft < 0) { const char* t = getenv("CT_BATTLE_FACETRACE"); ft = (t && *t) ? 1 : 0; }
     if (ft) fprintf(stderr, "battleface f%d slot%d bearing=%02X facing=%d (return)\n",
-                    h->frames, slot, ang & 0xFF, h->mvFacing[slot]); }
-  { long dx = sx - BT_MVREFX(h, slot), dy = sy - BT_MVREFY(h, slot);     // the 2B13 settle test: dist² <= 0x10
-    // The ROM threshold (4px), enabled by the LIVE KNOCK port (battle_ai_interp.md §10e): the ref tracks
-    // the victim's live foot, which now carries the strike displacement like the oracle's -- the dance's
-    // final correction leg + the exact rest reproduce.
-    if (dx * dx + dy * dy <= 0x10 && BT_MVMODE(h, slot) != 0x10) {    // C1/3B1D CMP #10 / 3B22 BEQ ->3B60
-      // THE SETTLE, C1/3B40-3B5E, and nothing else: INC $9829,X; $5E1D := $5E0D; $9831/$9839 := the target's
-      // foot; STZ $98A7,X; -> 3BBC (RTS). No $9791 write, no facing write (the facing is C1/3B14's, from the
-      // away bearing, stamped above), nothing sticky: the NEXT pass is a fresh one that re-bases, re-aims and
-      // re-tests the 4-px settle against the target's live foot -- the ROM's own re-derivation. (The port's
-      // mvStopped early-out, its `mvWalking = 1` and its `mvFacing = 1` here were inventions; retired 2026-09-09.)
-      BT_MVACTIVE(h, slot) = 0;                                       // STZ $98A7,X
-      BT_ENARRIVE(h, slot) = 1;                                       // INC $9829 (the scanner's arrival latch)
-      // C1/3B45-3B58: the settle also SAVES the requested mode and RECORDS the victim's foot. Those two
-      // stores are the input to class 0's re-acquire (C1/3772) and nothing else reads them; without them
-      // class 0 has nothing to compare against, which is why it looked like a no-op.
-      BT_MVSAVEMODE(h, slot) = BT_MVREQ(h, slot);                        // LDA $5E0D,X / STA $5E1D,X (the REQUEST byte)
-      BT_MVRECX(h, slot) = BT_LIVEX(h, tcmb);                          // LDA $1D0C,Y / STA $9831,X
-      BT_MVRECY(h, slot) = BT_LIVEY(h, tcmb);                          // LDA $1D23,Y / STA $9839,X
+                    h->frames, slot, s[0xDB], h->mvFacing[slot]); }
+  if (mode != 0x10) {                                              // 13B1D-13B22 CMP #10 / BEQ -> the step
+    s[0xA050 + 0x0B] = (uint8_t)BT_MVREFY(h, x);                   // 13B24-13B30 the reference into the mirror's
+    s[0xA039 + 0x0B] = (uint8_t)BT_MVREFX(h, x);                   //   scratch slot 0B
+    battlePosMetric(s, cmb, 0x0B, 0x0010);                         // 13B33-13B38 C1/2B13: the MIRROR's self (4 px)
+    if (!(s[0x9872] & 0x80)) {                                     // 13B3B-13B3E
+      // THE SETTLE, C1/3B40-3B5E: INC $9829,X; $5E1D := $5E0D; $9831/$9839 := the target's foot; STZ $98A7,X. No $9791
+      // write, no facing write beyond C1/3B14's above: the next pass is a fresh one (class 0's re-acquire reads $5E1D /
+      // $9831 / $9839).
+      BT_ENARRIVE(h, x) = (BT_ENARRIVE(h, x) + 1) & 0xFF;          // 13B42 INC $9829,X
+      BT_MVSAVEMODE(h, x) = BT_MVREQ(h, x);                        // 13B45-13B48
+      int y = BT_MVTARGET(h, x);                                   // 13B4B-13B4E
+      BT_MVRECX(h, x) = s[0x1D0C + y]; BT_MVRECY(h, x) = s[0x1D23 + y];   // 13B4F-13B58
+      BT_MVACTIVE(h, x) = 0;                                       // 13B5B STZ $98A7,X
+      s[0x80] = (uint8_t)cmb; s[0x81] = 0;                         // 13BBC-13BBF (X = $9C)
       return;
-    } }
-  int stepX = battleS8(battleTrigMul((ang + 0x40) & 0xFF, 8));     // the 8px step (C1/3AF7 $AE=8)
-  int stepY = battleS8(battleTrigMul(ang, 8));
-  int dX = (sx + stepX) & 0xFF, dY = (sy + stepY) & 0xFF;          // C1/3B62-3B71 -> $A053/$A03C,X (the mirror)
-  BT_MIRX(h, cmb) = dX; BT_MIRY(h, cmb) = dY;
-  int bx0, bx1, by0, by1;
-  BT_MIRX(h, cmb) = dX; BT_MIRY(h, cmb) = dY;
-  s[0x80] = (uint8_t)cmb; s[0x81] = 0;
-  battleBoxRows285A(s, cmb);                                       // C1/3B79 JSR C1/285A (Y top = -$9729, not -$971E)
-  bx0 = s[0x975A + cmb]; bx1 = s[0x9770 + cmb]; by0 = s[0x9765 + cmb]; by1 = s[0x977B + cmb];
-  // TWO deflectors quantize the step (C1/3B7C-3B8E): STZ $9875, the ARENA GRID on the step's box (C1/2926),
-  // then -- unless the mode is 03 -- EVERY OTHER BODY (C1/28B0: all eleven, present, not hidden, not $A5CD
-  // bit7; the oracle's down->LEFT turn at y=125 is Crono's box, not a wall, and wait_ambush f4667 is the OTHER
-  // Beetle's box). Either -> axis-quantize the bearing ((b+0x40)>>6<<6 -- note the +0x40 ROTATES a blocked
-  // cardinal into the NEXT one) + INC $9791 + no move this pass.
-  // ⚠ NEITHER probe is gated on mode 0x10. 3B22's BEQ jumps INTO this tail (at 3B60), so mode 0x10
-  // reaches `3B7F JSR C1/2926` exactly like every other class-4 mode -- the arena probe is
-  // UNCONDITIONAL. The only mode-keyed skip here is on the SECOND probe and it keys on 0x03, not 0x10:
-  // `3B84 LDA $A2B5 / 3B87 CMP #03 / 3B89 BEQ ->3BB2` jumps past `3B8B JSR C1/28B0`.
-  s[0x9875] = 0;                                                   // C1/3B7C STZ $9875 (no bit7-class relax here)
-  int grid = battleGrid2926(s);                                    // C1/3B7F C1/2926, unconditional
-  int body = (!grid && BT_MVMODE(h, slot) != 0x03) ? battleBodyBlocked(h, cmb, dX, dY) : 0;   // C1/3B84-3B8B
-  if (grid || body) {
-    BT_MVANGLE(h, slot) = ((ang + 0x40) & 0xFF) >> 6 << 6;            // BLOCKED: axis-quantize/rotate (C1/3B90)
-    BT_MVWALKING(h, slot) = (BT_MVWALKING(h, slot) + 1) & 0xFF;          // INC $9791 (latch the quantized bearing)
-    BT_MVACTIVE(h, slot) = 0;                                         // STZ $98A7 -- no move this pass
-    { char out[48]; snprintf(out, sizeof out, "deflect bearing=%02X stored=%d", BT_MVANGLE(h, slot), BT_MVWALKING(h, slot));
-      battleMvBlockTrace(h, slot, "return", BT_MVMODE(h, slot) & 0xFF, dX, dY, bx0, bx1, by0, by1, grid, body, out); }
-    return;
+    }
   }
-  battleMvBlockTrace(h, slot, "return", BT_MVMODE(h, slot) & 0xFF, dX, dY, bx0, bx1, by0, by1, 0, 0, "clear");
-  BT_MVWALKING(h, slot) = 0;                                          // STZ $9791 (C1/3BB4 -- fresh next pass)
-  BT_MVACTIVE(h, slot) = 1; battleMvSegStartTrace(h, slot);           // C1/3BB7 $98A7 = 1: walk the segment (the base is
-  // the fresh head's, C1/3A62/3A6A -- a latched pass keeps the old one -- and the phase is never written here)
+  BT_MIRY(h, cmb) = (uint8_t)(s[0x1D26 + x] + s[0x8C]);             // 13B60-13B68 $A053,X
+  BT_MIRX(h, cmb) = (uint8_t)(s[0x1D0F + x] + s[0x8E]);             // 13B6B-13B71 $A03C,X
+  s[0x80] = (uint8_t)cmb; s[0x81] = 0;                             // 13B74-13B77
+  battleBoxRows285A(s, cmb);                                       // 13B79 JSR C1/285A
+  s[0x9875] = 0;                                                   // 13B7C STZ $9875 (no bit7-class relax here)
+  int grid = battleGrid2926(s);                                    // 13B7F JSR C1/2926 -- unconditional, mode 0x10 too
+  int body = (!grid && mode != 0x03) ? battleBodyHit(s) : 0;       // 13B84-13B8E: the second probe skips mode 03
+  int bx0 = s[0x975A + cmb], bx1 = s[0x9770 + cmb], by0 = s[0x9765 + cmb], by1 = s[0x977B + cmb];
+  if (grid || body) {
+    s[0xDB] = (uint8_t)((((s[0xDB] + 0x40) & 0xFF) >> 6) << 6);    // 13B90-13BA3 axis-quantize (+0x40 rotates a cardinal)
+    BT_MVANGLE(h, x) = s[0xDB];                                    // 13BA5-13BA7
+    BT_MVWALKING(h, x) = (BT_MVWALKING(h, x) + 1) & 0xFF;          // 13BAA INC $9791,X
+    BT_MVACTIVE(h, x) = 0;                                         // 13BAD STZ $98A7,X
+    { char out[48]; snprintf(out, sizeof out, "deflect bearing=%02X stored=%d", BT_MVANGLE(h, x), BT_MVWALKING(h, x));
+      battleMvBlockTrace(h, slot, "return", mode, BT_MIRX(h, cmb), BT_MIRY(h, cmb), bx0, bx1, by0, by1, grid, body, out); }
+  } else {
+    battleMvBlockTrace(h, slot, "return", mode, BT_MIRX(h, cmb), BT_MIRY(h, cmb), bx0, bx1, by0, by1, 0, 0, "clear");
+    BT_MVWALKING(h, x) = 0;                                        // 13BB2-13BB4 STZ $9791,X
+    BT_MVACTIVE(h, x) = 1; battleMvSegStartTrace(h, slot);         // 13BB7-13BB9 $98A7,X := 1
+  }
+  s[0x80] = (uint8_t)cmb; s[0x81] = 0;                             // 13BBC-13BBF INX x3 / STX $80
 }
 
 // WANDER handler (class 5, C1/3BC2 -- modes 0D/0E/0F). THE HETAKES' MOVEMENT, and the reason
@@ -11108,9 +11094,16 @@ int CtBattleMoveClassProbe(uint8_t* mem, int slot) {
 // mover is frozen with the rest of C1/4090). Runs for every armed enemy slot; inert until an approach/return
 // is armed (mvMode 0).
 static void battleModeMachine3714(CtBattleHost* h, int holdCmb);   // C1/3714 (below)
-static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: the C1/3714 pass runs (no turn in its handler)
+// CF/EFAF + CF/F978, THE NMI'S STEPPER: `LDA $A013 / BNE / LDA $A0FD / BEQ -> JMP CF/F978`, then per slot `LDA $98A7,X / BEQ
+// next / DEC $9819,X / BNE next / reload from $9742,X / phase += $98C2,X` and the foot from the base. It reads the segment's
+// flag and nothing else: no presence, no mode, no Wait submenu ($99E0 is C1/3714's), and it is not behind the main loop's
+// CD/0009 -- an action's close tail and the effect teardown leave the walkers stepping. MEASURED, the rule's oracle,
+// battle_ab's enemy 92 (GATO in his arena with three PCs): his return segment in flight when the action ends steps on at
+// f1301, the frame after `$A013 = 0`, while C1/3714's counter $9897 stays frozen to f1322; the port held the stepper with
+// the idle tick and walked 21 frames late.
+static void battleMoveStepper(CtBattleHost* h) {
   uint8_t* s = h->mem;
-  if (s[0xA013] || s[0x99E0]) return;                              // frozen during an action span / Wait submenu
+  if (s[0xA013] || s[0xA0FD]) return;                              // FEFAF-FEFB9
   // The $9897 cadence clock (SESSION-6b/8, writer C1:3727): every counter decrements on the ROM's 4-of-5
   // frame pattern (~1.25 real f/count) from combat-live, FREE-RUNNING regardless of the armed mode (oracle:
   // all 8 columns tick from f377; GATO's staged 0x23 stagger -> first handler pass at f421 = arm+45 EXACT;
@@ -11126,15 +11119,13 @@ static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: th
   // oracle, saves/field_re/m81_nuns_lake.state with no input: the Naga-ettes' returns step on (CF:F9C5) through the kiss's
   // name box (`$CCEB = A0` CD:02BE f1512) until `$A0FD = 01` (C1:405B) f1513; the port had stopped them at the turn, 11
   // frames sooner, and they stood 6 px short for the next 300 frames -- enough to move one out of a Cyclone's radius.
-  for (int slot = 0; slot < 8 && !s[0xA0FD]; slot++) {
+  for (int slot = 0; slot < 8; slot++) {
     int cmb = slot + 3;
-    if (!battlePresent(s, cmb)) continue;
     // CF/F97D-F982 `LDX $C6 / LDA $98A7,X / BEQ next`: the stepper reads the SEGMENT's flag, never the mode. A segment in
     // flight when the turn's commit sets mode 00 walks on to its end -- MEASURED, the census's enemy 16 (GATO's arena, the
     // party idle): its no-action turn (op 00) at f677 starts a segment toward (177,90) and requests mode 00 ($974A = 00
     // f680, C1:336A); the cartridge steps it on (CF:F9C5/F9CE) to (177,90) while the port stood at (181,83), its attack's
     // `A8 FF` walk then began 7 px off and its span ended a frame late. (Mode 0 never runs a HANDLER -- C1/3722, below.)
-    if (BT_MVMODE(h, slot) & 0x80) continue;                         // halted
     // (No hold for the enemy whose turn is pending: CF/F978 has none. Its walk stops with every other one when C1/4058 counts
     // $A0FD up, the loop's own gate above. MEASURED, the census's enemy 1B: its think at f684 and one more step at f685
     // (123 -> 124, CF:F9CE) before the action opens; the port held it from the think and its slides ran 2 frames long.)
@@ -11159,6 +11150,10 @@ static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: th
       }
     }
   }
+}
+static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: the C1/3714 pass runs (no turn in its handler)
+  uint8_t* s = h->mem;
+  if (s[0xA013]) return;                                           // the idle tick's: no action span open
   if (!handlers) return;                                           // the handler pass is the main loop's (C1/3714): not
                                                                    //   reached while a turn is inside its handler
   // C1/10B5 JSR C1/3714 / C1/10B8 JSR C1/283D (C1/10DC / C1/10DF on the iteration's second frame): the mode machine
@@ -17744,7 +17739,7 @@ void CtBattleMoverSeed(CtBattleHost* h, const uint8_t* w) {
   h->mvPendAtk = -1; h->mvPendTgt = -1; h->mvPendTech = 0; h->mvPendDecoded = 0;
   h->mvInited = 1;                                                 // the render reads the walked host state
 }
-void CtBattleMoveStep(CtBattleHost* h) { battleMoveTick(h, 1); }   // (the sweep host runs no turn)
+void CtBattleMoveStep(CtBattleHost* h) { battleMoveStepper(h); battleMoveTick(h, 1); }   // (the sweep host runs no turn)
 int CtBattleIdleStep(CtBattleHost* h) {                           // one frame of the iteration, the sweep's host
   h->schedWalk = 0;
   if (h->fxTeardownT) return 0;
@@ -21387,14 +21382,25 @@ static int battleExitFbe5Tick(CtBattleHost* h) {
   h->fleeStage = 2; h->fleeExitT = 5; h->exitCd0c = 0;            // e == 5: CD/03B4's first frame (CF/FCCF's)
   return battleFleeStageTick(h);
 }
+static void battleWalkDispatch(CtBattleHost* h);                  // C1/10A4-10B3 (below)
+static void battleMoveStepper(CtBattleHost* h);                   // CF/EFAF (below)
 static int battleDefeatStageTick(CtBattleHost* h) {
   uint8_t* s = h->mem;
   int t = h->defeatT++;
+  battleMoveStepper(h);                                            // the NMI's CF/EFAF runs through the whole sequence
+  // THE EIGHT IDLE TICKS ARE WHOLE ONES (C1/106E with $A10E set: C1/1071 skips the head): frame A -- the walk dispatch
+  // C1/10A9, C1/3714 + C1/283D, `STZ $E5` -- and frame B -- `INC $E5`, the menu pass, C1/3714 + C1/283D. MEASURED, the rule's
+  // oracle (battle_ab enemies 59, the party wiped at f1179): $9897 counts on (C1:3727) and the enemy's segment steps and
+  // restarts (C1/3714 at f1190) through f1195, the ladder C1/3686 from f1196; the port had stood every walker still.
   if (t <= 16) {
-    if (t & 1) s[0x00E5] = 0;                                      // C1/10BB STZ $E5 (then C1/10BD's wait)
-    else {
+    if (t & 1) {
+      battleWalkDispatch(h);                                       // C1/10A4-10B3
+      battleMoveTick(h, !battleThinkPending(h));                   // C1/10B5 JSR C1/3714 / C1/10B8 JSR C1/283D
+      s[0x00E5] = 0;                                               // C1/10BB STZ $E5 (then C1/10BD's wait)
+    } else {
       s[0x00E5]++;                                                 // C1/10C4 INC $E5
       if (s[0x993A]) { s[0x993A] = 0; battleMenuPass(h, 0, "defeat"); s[0x00EE] = 0; }   // C1/10C6-10DA
+      battleMoveTick(h, !battleThinkPending(h));                   // C1/10DC JSR C1/3714 / C1/10DF JSR C1/283D
     }
   }
   if (t == 16) {
@@ -22122,8 +22128,10 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // ...and the same stall while the main loop's CD/0009 is inside the effect teardown (battleFxTeardown): the mode machine
   // C1/3714 that starts a walk runs from the idle state (C1/10B5 / C1/10DC), behind the CD/0009 that is holding it --
   // gato_wait: GATO stands at (135,85) from the song's end f1462 through the teardown and first steps at f1517, in mode 1.
+  if (!wasFrozen) battleMoveStepper(h);                            // CF/EFAF: the NMI's, whatever the main loop is doing
   if (h->dissolveRunning < 0 && !fxTd) {
-    if (!wasFrozen)            // the action's last frame (the NMI's CF/F978 saw $A013 = 1); inside, $A0FD (C1/4058) stops
+    if (!wasFrozen && !h->victoryHold)   // (the victory is C1/8186's blocking chain: no idle tick, no C1/3714)
+                               // the action's last frame (the NMI's CF/F978 saw $A013 = 1); inside, $A0FD (C1/4058) stops
                                //   the walkers and a turn inside its handler the C1/3714 pass
     battleMoveTick(h, !battleThinkPending(h));   // battle_enemy_move_target.md §A: advance any enemy walk (approach/return) --
                                 //   RENDER-frame paced like the popups (~0.25px/f), self-gated OUTSIDE the
@@ -22333,6 +22341,8 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     s[0xA5A9] = 0xFF;                                         // C1/817E-8183 (MEASURED: f1355, C1:8183 -- Black Hole's kill)
     battleStatusClearEA9D(h);                                 // C1/8183 JSR C1/EA9D
     s[0xA0FE]++;                                              // C1/8186 #08 -> C1/356D: JSL CD/0009, INC $A0FE (C1:3574, f1355)
+    for (int x = 7; x >= 0; x--) BT_MVACTIVE(h, x) = 0;       // C1/3574-357B `LDX #0007 / STZ $98A7,X / DEX / BPL`: every
+                                                              //   segment in flight ends -- the NMI's stepper has nothing left
     // C1/357D-3587 `LDX #0002 / STX $94 / JSR C1/30B6 / DEC $94 / BPL`: the three seats' icon arms cleared and, for each,
     // its OBJ palette row put back from the base page ($2100 -> $2300, 26 bytes) -- what ends a status colour cycle
     // (CF/E7D7: Slow, Haste, Protect, Magic Wall) with the fight. The port skipped it and a Slowed PC walked the field
