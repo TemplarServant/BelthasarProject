@@ -182,3 +182,31 @@ lines, C0/0A50 alone 968 832 of them. So the fix is the one field_load_cost.md Â
 floor + 1 -- and it moves every load of the suite. Also measured: a translated stage opened on J + 1 ends its run one
 frame later than the cartridge's (the race: J + 425 there, J + 426 here), and a stage's `JML $C0:0000` is loaded on the
 frame after it.
+
+### 7b. Measured 2026-10-13: every attract load's window, and where loc 112's frame goes
+
+The rule's cartridge (`CT_ORACLE_LOGICAL=1`, saves/attract_cena_inicial.state, `--hookpc C00B5D` / `C00B3F`): the
+window W from the NMI going off (C0/0B5D) to it coming back (C0/0B3F), against the port's 1 + black frames (CT_LOADCOST):
+
+| loc | W (frames) | port | | loc | W | port |
+|---|---|---|---|---|---|---|
+| 16E | 17.96 | 17 | | 0A5 | 26.99 | 25 |
+| 01C | 33.99 | 32 | | 07D | 47.99 | 47 |
+| 01B | 38.09 | 38 | | 0E6 | 36.99 | 36 |
+| 0AD | 25.11 | 24 | | 06B | 21.99 | 21 |
+| 112 | 29.99 | 29 | | 087 | 36.99 | 36 |
+| 0DB | 22.99 | 24 | | 1B0 | 22.99 | 22 |
+| hub 1B1 | 4.97 | 7 | | | | |
+
+The price is short by one or two frames on most field loads (the hub over by two); the one-iteration-after convention
+and, after a $C3 sequence, the host seeing the sequence's done flag a frame late (CtTitleIntroTick runs after the
+check) put most of them back. Loc 112, leg by leg (`--hookpc`, frame / line): C0/005D f2392 l228, C0/00F4 l230, the
+song's JSL to l260, C0/0960 l260, C0/6DCF f2404 l42, C0/7084 f2405 l237, C0/A33B l247, C0/09DD f2410 l161, C0/0A14
+f2412 l95, C0/56D4 f2413 l40, C0/008E / C0/56A6 f2414 l45, C0/28AA f2417 l164, C0/2848 / C0/286C l165, C0/0B3F f2422
+l225. Before the pass the cartridge spends ~8.59M non-refresh cycles where the port prices ~8.27M: the gap is the
+OBJECT INIT, C0/56A6 .. C0/28AA (3.45 frames), whose script runs the port does not price (only their sprite
+decompressions, g_ctLzSpriteCycles) -- and pricing them needs every VM op's cycle cost (section 4's class).
+Consequence met: moving the battle entry's C0/1BAB post to C1/0000's frame (the cartridge's, which makes enemy 07's
+fight end exact) changes the SPC phase at 112's song load (a 3-line handshake becomes 23; the cartridge's is 29), the
+rounded price goes 28 -> 29 black and 112 runs 422 frames against the cartridge's 421 -- HEAD's 421 is the two errors
+above cancelling the short price.
