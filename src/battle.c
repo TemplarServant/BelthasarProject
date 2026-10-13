@@ -11164,7 +11164,7 @@ static void battleMoveTick(CtBattleHost* h, int handlers) {      // handlers: th
   // the rows the previous refresh built, one mover step old (the oracle: the mover's CF:F9CE step and C1:284A's copy land in
   // one logical frame, forest_wait_ambush_active f4629-f4659). The boot's C1/002A and the action loop's C1/40C8 refresh
   // them too. MEASURED, the forest fight against the rule's oracle (forest_holdleft_pre --input 40:2600, port + 172): the
-  // three Hetakes' feet equal in value and frame over 393 changes, and all eight actions open and close on the same frames
+  // three Hetakes' feet equal in value and frame over all 399 changes of the fight (to the port's debug end), and all eight actions open and close on the same frames
   // (spans 177 202 190 189 192 187 190). The port refreshed BEFORE the machine until 2026-10-13, which kept the feet equal
   // for 79 changes only and closed the third action two frames early.
   // PORT GATE, recorded: a pending enemy's handler is held (mvPendAtk, the think model of battleArrive) -- the ROM's

@@ -372,7 +372,7 @@ into the WRAM.
   reaches them yet. The live tick runs the same `battleModeMachine3714` (the counter no longer gated on presence, the
   handler on $96F8, $9752 from $5E15, $A2B5 written), and in the ROM's order: C1/3714 THEN C1/283D (C1/10B5/10B8), with
   the boot's C1/002A and the action loop's C1/40C8 refreshes added. Measured on the forest fight against the rule's oracle
-  (forest_holdleft_pre --input 40:2600, port + 172): the Hetakes' feet equal in value and frame over 393 changes, all eight
+  (forest_holdleft_pre --input 40:2600, port + 172): the Hetakes' feet equal in value and frame over all 399 changes of the fight (to the port's debug end), all eight
   actions on the cartridge's frames (spans 177 202 190 189 192 187 190), the three op 00 turns too. The old order (refresh
   first) held the feet for 79 changes and closed the third action two frames early; the checks that had pinned it were
   port-pinned and moved. One port gate stays, recorded at the call: a pending enemy's handler is held (`mvPendAtk`, the
