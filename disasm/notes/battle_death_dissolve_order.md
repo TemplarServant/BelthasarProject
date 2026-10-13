@@ -190,3 +190,44 @@ frame again, KILLED).
 **Not closed:** our gap is 41 frames against the oracle's 43. The separation is `CT_DISSOLVE_HOLD +
 CT_DISSOLVE_STEPS`, the run length pinned separately by `battle_dissolve.md` — so the two frames
 belong to that constant, not to this gate.
+
+## ADDENDUM (2026-10-13) — THE CORPSE STANDS STILL: THE SCAN STOPS ITS WALK, THE HEAD WAITS FOR THE SCAN
+
+The user (translated from Portuguese): "after the final blow on an enemy, it moves a little before the dissolve".
+
+**Measured**, the rule's cartridge, `forest_wait_ambush_active.state` with A held (`--monitor` of `$AF02`, `$98A7`, `$9819`,
+`$A013`, `$A0FD`, `$1D0C`/`$1D23`, `$96F5`, `$0027`, `--writer`): the second Beetle (slot 2) and the Avian Chaos (slot 5)
+die with a walk segment in flight (`$98A7,X = 01`). On the delist's frame (f819 / f1361) the segment flag reads 00
+(writer CF:FE36), and the corpse's foot holds through the dissolve. `$A0FD` stays 01 from the action's open until
+`C1:1076` zeroes it at f613 / f862 / f1404 -- the frame each corpse's `$96F5` clears (CF:FE7E), with `$0027`++ (C1:8124):
+the loop's head runs when the scan returns, 43 frames after the delist.
+
+**The ROM** (`dis.py 0FFE20 0x65 1 0`): CF/FE20, X = 10 down to 3, for each `$AEB0,X` set:
+
+```
+FE28  LDA $9FF7,X / BNE FE7B
+FE2D  INC $A0A8,X
+FE30  STZ $AEB0,X
+FE33  STZ $98A4,X        ; $98A7 + slot: the corpse's segment flag -- CF/F978 never steps it again
+FE36  LDA $99B5,X / BEQ FE7B ... (the record's +7 bit 6, the palette copy) ... FE76 JSL CD/0024 (the routine)
+FE7B  STZ $96F5,X
+```
+
+and CF/EFAF, the NMI's stepper, runs only while `$A013` and `$A0FD` are both 0.
+
+**The port** kept the corpse's segment, so CF/F978 stepped it on: the Avian slid 7 px right, the Beetle 1 px right and
+6 down, while they dissolved. Now `battleDeathScanStores` (CF/FE30-FE33) runs at each routine's start
+(`battleAdvanceDissolves` picking it) or at the death for a corpse with no routine. Check
+`battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge` (tools/corpse_still_cmp.py): 0 of 3 corpses move;
+before, 2 of 3.
+
+**Not made, and why:**
+- CF/FE2D `INC $A0A8,X`: the port's C1/2FBD store (`battleStatusScanStore`) already sets `$A0A8,X = 1` on the death's
+  frame, which the cartridge does not (party3_field.state: `$A0AC` reads 00 until CF:FE30, then 01); the INC would leave 02.
+- The head's wait: the cartridge's C1/1076 `STZ $A0FD` comes when the scan returns (43 frames from the delist), which stops
+  EVERY walker through the routines; the port's head runs on the delist's frame (`$A0FD` 0 at once -- the living walkers
+  step through the routine). Deferring it (the head pending while `dissolveRunning >= 0`) was tried: the forest fight held,
+  but with the routine 3 frames short (D3: the port's `$A0FD` held 40 frames against 43) party3_field's next enemy turn
+  chose another attack (`$9877` 04 against the cartridge's 05) and four pinned fights moved
+  (battle-slow-doubles-reload-and-cuts-damage, field-battle-lucca-type2, field-battle-bat9-return,
+  field-battle-solo-victory-no-marle). Do D3 first, then the head's wait.

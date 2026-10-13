@@ -7737,6 +7737,7 @@ static void battleCounterArmROM(CtBattleHost* h, int n, const int* list) {
 // The HP write itself (C1/EC99-ED17 for one combatant) with the deaths it causes: curHP -= dmg, then death or the maxHP
 // clamp. Called by C1/EC7F (battleApplySlotsEC7F) for every slot it writes -- an action's span end, a status action's
 // close (poison, the 1-HP drain); the when-hit counter is armed apart (battleCounterArm).
+static void battleDeathScanStores(CtBattleHost* h, int cmb);   // CF/FE2D-FE33 (below, with the death routine)
 static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
   uint8_t* s = h->mem; int tb = battleBlock(tgt);
   int curHP = s[tb + 3] | (s[tb + 4] << 8), maxHP = s[tb + 5] | (s[tb + 6] << 8);
@@ -7838,6 +7839,7 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
         fprintf(stderr, "battledeath f%d slot=%d rec7=%02X 9FF7=%02X 99B5=%02X scan=%s sfx=%d\n", h->frames, dslot,
                 s[0x29C6 + dslot * 12], s[0x9FF7 + tgt], s[0x99B5 + tgt],
                 scanRuns ? "runs (CD/0024)" : scanStands ? "stands (FE7E)" : "cleared (FE7B)", h->deathSfxDue[dslot]);
+      if (tgt >= 3 && tgt < 11 && !scanRuns) battleDeathScanStores(h, tgt);   // CF/FE2D-FE33 (a routine's: at its start)
       if (!scanRuns && !scanStands) s[0x96F5 + tgt] = 0;   // FE7B STZ $96F5,X: the presence cleared -- no routine, no corpse
       else if (scanStands) {                  // FE7E: no routine -> the corpse stands undissolved (GATO, X5)
         h->deadStanding[tgt - 3] = 1;
@@ -8662,7 +8664,7 @@ static void battleAdvanceDissolves(CtBattleHost* h) {
   if (h->dissolveRunning >= 0 && !h->dissolveActive[h->dissolveRunning]) h->dissolveRunning = -1;
   if (h->dissolveRunning < 0)
     for (int slot = 7; slot >= 0; slot--)                      // highest combatant index first (both runs)
-      if (h->dissolveActive[slot]) { h->dissolveRunning = slot; break; }
+      if (h->dissolveActive[slot]) { h->dissolveRunning = slot; battleDeathScanStores(h, 3 + slot); break; }   // + CF/FE2D-FE33
   int slot = h->dissolveRunning;
   if (slot < 0) return;
   if (h->deathSfxDue[slot] > 0 && h->deathCceaSeen) return;     // its routine still waits on $CCEA (battleDeathSfxTick)
@@ -14739,6 +14741,22 @@ static void battleThinkTick(CtBattleHost* h) {
 // Every pinned fight takes D0093 ($99D2 reads 0; the siblings' per-combatant bytes are 0 in our image, which
 // is what the oracle's three deaths also took). The #40/#38 arms go through CD/0E05 -- a DIFFERENT poster
 // (CD/0DFA + 0EBD + 0D33, a $5D9B wait) that is NOT ported -- so they TRACE and post nothing rather than guess.
+// CF/FE2D-FE33, the scan's stores for each dying combatant it reaches with `$9FF7,X` clear, BEFORE the `$99B5` gate and its
+// routine: `INC $A0A8,X / STZ $AEB0,X / STZ $98A4,X` -- the last is the corpse's own segment flag ($98A7 + slot), so the
+// NMI's stepper (CF/F978) never moves it again. MEASURED, the rule's cartridge, the forest ambush with A held
+// (forest_wait_ambush_active.state): a Beetle and the Avian Chaos die with a segment in flight (`$98A7,X = 01`); it reads 00
+// from the delist (CF:FE36, f819 / f1361) and the corpse holds its foot through the dissolve. The port stepped it on: the
+// Avian slid 7 px right and the Beetle 1 px right and 6 down while they dissolved (the user, 2026-10-13, translated from
+// Portuguese: "after the final blow on an enemy, it moves a little before the dissolve").
+static void battleDeathScanStores(CtBattleHost* h, int cmb) {
+  uint8_t* s = h->mem;
+  if (s[0x9FF7 + cmb]) return;                                   // CF/FE28-FE2B -> FE7B
+  // (CF/FE2D `INC $A0A8,X` is not made here: the port's C1/2FBD store (battleStatusScanStore) already set it to 1 on the
+  //  death's frame, which the cartridge does not -- party3_field.state: `$A0AC` 00 until CF:FE30 makes it 01 at the scan --
+  //  and the INC would leave 02. It belongs here once that store runs at its own frame.)
+  s[0xAEB0 + cmb] = 0;                                           // CF/FE30
+  s[0x98A4 + cmb] = 0;                                           // CF/FE33
+}
 // CF/FE20 (C1/AC75 -> C1/006D `JSL CF/FE20`, the post-action death scan): for each dying combatant, X = 10 down to 3, it
 // runs the death routine CD/0024 INSIDE its loop -- so the corpses' routines are serial, highest index first, and each
 // one's palette step comes right before its own routine (CD/0043: the $CCEA wait, the #95 post a frame later):

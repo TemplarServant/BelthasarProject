@@ -110,6 +110,7 @@
         "battle-anim-orbit-op-c1-vs-oracle",
         "battle-bracket-chooser-and-target-select",
         "battle-bracket-rebuild-live-foot",
+        "battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge",
         "battle-cyclone-every-victim-after-an-enemy-attack-vs-rule-cartridge",
         "battle-defeat-exit-vs-oracle",
         "battle-dissolve-no-flash-vs-rule-cartridge",
@@ -907,6 +908,7 @@
         "battle-anim-orbit-op-c1-vs-oracle",
         "battle-bracket-chooser-and-target-select",
         "battle-bracket-rebuild-live-foot",
+        "battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge",
         "battle-cyclone-every-victim-after-an-enemy-attack-vs-rule-cartridge",
         "battle-defeat-exit-vs-oracle",
         "battle-dissolve-no-flash-vs-rule-cartridge",
@@ -2160,6 +2162,7 @@
       "regenerable": true,
       "how": "build/ct.exe --peek saves/battle_re/forest_wait_ambush_active.state out.raw --frames 0, then \"HEADER\nRAM:131072:\" + out.raw.wram (the state's own WRAM, for ct_field --loadwram)",
       "used_by": [
+        "battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge",
         "battle-dissolve-no-flash-vs-rule-cartridge",
         "battle-hud-live-forest-ambush-vs-oracle",
         "field-forest-ambush-stages-vs-oracle"
@@ -2174,6 +2177,7 @@
       "regenerable": false,
       "how": "Auto-added from regress_checks.json; fill in provenance.",
       "used_by": [
+        "battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge",
         "battle-dissolve-no-flash-vs-rule-cartridge",
         "battle-hud-strip-command-windows-vs-oracle",
         "field-battle-class5-flip-seed",
@@ -4354,8 +4358,8 @@
         "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
         "attract-0ad-battle-exit-tail-drifts-the-stars-vs-oracle"
       ],
-      "sha256": "7e1047cf2eb6474d358f2b92c11cda576d9e3b3dd2594e1443dca0e40f176743",
-      "size": 1758389,
+      "sha256": "82c2e1e974776bdfd958bd5f173b158edcde94c83050b2cc002fb7ef7e6d9fe4",
+      "size": 1760181,
       "present_when_recorded": true
     },
     {
