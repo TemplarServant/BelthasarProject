@@ -38867,6 +38867,49 @@
       "notes": "Roadmap G1a item 1, the race's native port, stage 1 (user decision 2026-10-14: native, in stages). tools/race_step_cmp.py walks the user's Lab 32 capture (saves/race_re/race_user.state) and micro-executes the task on both sides from the same frame (ct.exe --callrom 7E485D --writes, CT_CALLROM_ALLWRITES=1, against ct.exe --racestep). disasm/notes/sequence_table.md sec. 12."
     },
     {
+      "name": "race-task-4339-vs-oracle",
+      "argv": [
+        "python",
+        "tools/race_step_cmp.py",
+        "--task",
+        "4339",
+        "--poked"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state",
+        "tools/race_step_cmp.py"
+      ],
+      "expect": [
+        "racestep: poked 61 cases, 0 differing",
+        "racestep 4339: idle 66 stops, 0 differing",
+        "racestep 4339: boost 65 stops, 0 differing",
+        "racestep 4339: steer 65 stops, 0 differing",
+        "racestep 4339: camera 65 stops, 0 differing"
+      ],
+      "pin": [
+        "^racestep"
+      ],
+      "timeout_s": 420,
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "  { r->c = 0; unsigned a = adc(r, rd(r, 0x0A0A), 0x0040);              // 4361",
+          "replace": "  { r->c = 0; unsigned a = adc(r, rd(r, 0x0A0A), 0x0030);   /* MUT */",
+          "why": "4361 ADC #0040: the masks' quarter is the angle rounded to the nearest $80 -- off by $10 the d-pad steers the wrong way near a boundary"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "      if (pad & 0x0010) { x++; if (!(x < 0x000C)) x = 0x000C; } else if (x) x--;\n      wr(r, 0x0A3A, x); }",
+          "replace": "      if (pad & 0x0010) { x++; if (!(x < 0x000B)) x = 0x000B; } else if (x) x--;   /* MUT */\n      wr(r, 0x0A3A, x); }",
+          "why": "43C1 CPX #000C: R's turn counter tops out at 12"
+        }
+      ],
+      "note_pass": "the race's camera task $7E:4339 (src/seq_race.c) is the cartridge's: 261 calls along four drives and 61 poked frames (the story's L/R turn, the angle on every quarter boundary)",
+      "notes": "The race's native port, stage 1 (sequence_table.md sec. 12). The masks $00B6/$00B8 it leaves are what the race task $485D steers by."
+    },
+    {
       "name": "jackie-saves-census-vs-oracle",
       "argv": [
         "python",

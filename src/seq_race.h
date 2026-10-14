@@ -16,4 +16,7 @@ typedef struct {
 // another task address that replaces it ($39B1: 0x4677, the player crossed first).
 unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io);
 
+// $7E:4339, the camera's angle (L/R on the story's call) and height (X/A), and the steering masks $00B6/$00B8.
+void CtRaceTask4339(uint8_t* w);
+
 #endif

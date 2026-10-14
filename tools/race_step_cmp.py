@@ -64,7 +64,7 @@ def run(args, env=None):
 
 
 def oracle_writes(state, pokes=None):
-    args = ['--callrom', '7E485D', '--from', state, '--regdp', '0000', '--regdb', '7E', '--m16', '--x16', '--writes',
+    args = ['--callrom', '7E' + TASK[0], '--from', state, '--regdp', '0000', '--regdb', '7E', '--m16', '--x16', '--writes',
             '--maxops', '4000']
     if pokes:
         args += ['--pokewram', ','.join('%06X=%02X' % kv for kv in sorted(pokes.items()))]
@@ -86,10 +86,11 @@ def oracle_writes(state, pokes=None):
 
 
 SFX_1E03 = [0]
+TASK = ['485D']            # the task under grade (--task)
 
 
 def port_writes(wram):
-    r = subprocess.run([CT, '--racestep', wram], cwd=ROOT, capture_output=True, text=True, errors='replace').stdout
+    r = subprocess.run([CT, '--racestep', wram, TASK[0]], cwd=ROOT, capture_output=True, text=True, errors='replace').stdout
     w = {int(m.group(1), 16): int(m.group(2), 16) for m in re.finditer(r'w ([0-9A-F]{6}) = ([0-9A-F]{2})', r)}
     for m in re.finditer(r'sfx ([0-9A-F]{2}) ([0-9A-F]{2}) ([0-9A-F]{2})', r):   # $377E: $1E00..$1E03 -> $2140..$2143
         w.setdefault(0x002140, int(m.group(1), 16)); w.setdefault(0x002141, int(m.group(2), 16))
@@ -101,6 +102,17 @@ def port_writes(wram):
 def poked_cases(state, wram):
     """The finish's two arms on a real race frame, the condition poked in (as --sweepops grades a routine)."""
     base = open(wram, 'rb').read()
+    if TASK[0] == '4339':                                     # the story's call: L / R turn the camera ($0044 != 0)
+        cases = []
+        for pad in (0x0010, 0x0020, 0x0030, 0x0000, 0x0050, 0x00A0):
+            for c3a, c3c in ((0, 0), (5, 0), (0x0C, 3), (2, 0x0C)):
+                for fr in (0, 1):
+                    cases.append(('pad %04X 3A=%X 3C=%X f%d' % (pad, c3a, c3c, fr),
+                                  {0x7E0044: 1, 0x7E0045: 0, 0x7E0006: pad & 0xFF, 0x7E0007: pad >> 8, 0x7E0A3A: c3a,
+                                   0x7E0A3B: 0, 0x7E0A3C: c3c, 0x7E0A3D: 0, 0x7E0008: fr}))
+        for ang in (0x0000, 0x002F, 0x0030, 0x003F, 0x0040, 0x00BF, 0x00C0, 0x013F, 0x0140, 0x01BF, 0x01C0, 0x03C0, 0x03FF):
+            cases.append(('angle $0A0A=%04X' % ang, {0x7E0A0A: ang & 0xFF, 0x7E0A0B: ang >> 8}))
+        return grade_cases(state, wram, base, cases)
     cases = [('lose $78=8', {0x7E0078: 0x08, 0x7E0079: 0x00})]
     for score in (0x0612, 0x00F6, 0x09A4, 0x07D0, 0x0FA0, 0x1770, 0x0400, 0x0A28, 0x0BB8, 0x0FA2):
         cases.append(('win $69=%04X' % score, {0x7E0053: 0x08, 0x7E0054: 0x00, 0x7E0069: score & 0xFF, 0x7E006A: score >> 8}))
@@ -112,6 +124,10 @@ def poked_cases(state, wram):
     tbl = [base[0x4770 + x] | base[0x4771 + x] << 8 for x in range(2, 0x18, 2)]
     for v in tbl[:3]:                                         # three of the jackpot table's own values
         cases.append(('win $69=%04X (table)' % (v * 2), {0x7E0053: 0x08, 0x7E0054: 0x00, 0x7E0069: (v * 2) & 0xFF, 0x7E006A: (v * 2) >> 8 & 0xFF}))
+    return grade_cases(state, wram, base, cases)
+
+
+def grade_cases(state, wram, base, cases):
     bad = 0
     for name, pk in cases:
         w = bytearray(base)
@@ -137,8 +153,10 @@ def main():
     ap.add_argument('--drives', default='idle,boost,steer,camera')
     ap.add_argument('--from', dest='start', type=int, default=140)
     ap.add_argument('--to', type=int, default=2880)
+    ap.add_argument('--task', default='485D', help='the task: 485D (the race) or 4339 (the camera and the masks)')
     ap.add_argument('--poked', action='store_true', help='also grade the finish arms on a poked frame (f1500, idle)')
     a = ap.parse_args()
+    TASK[0] = a.task.upper()
     os.makedirs(OUT, exist_ok=True)
     if a.poked:
         st = os.path.join(OUT, 'poke_%d.state' % os.getpid()); raw = os.path.join(OUT, 'poke_%d.raw' % os.getpid())
@@ -157,7 +175,8 @@ def main():
             state, at = st, f
             wram = raw + '.wram'
             pre = open(wram, 'rb').read()
-            if pre[0x0920:0x0940].find(bytes([0x5D, 0x48])) < 0 or pre[0x0920:0x0940].find(bytes([0x5D, 0x48])) % 2:
+            tb = bytes([int(TASK[0][2:], 16), int(TASK[0][:2], 16)])
+            if pre[0x0920:0x0940].find(tb) < 0 or pre[0x0920:0x0940].find(tb) % 2:
                 f += a.step                                   # the task is not in the list (before the start / after it)
                 continue
             ow = oracle_writes(st)
@@ -178,7 +197,7 @@ def main():
                 bad += 1
                 print('racestep %s f%d task %s: %s' % (name, f, task, ' | '.join(diffs[:12])))
             f += a.step
-        print('racestep: %s %d stops, %d differing' % (name, stops, bad))
+        print('racestep %s: %s %d stops, %d differing' % (TASK[0], name, stops, bad)) if TASK[0] != '485D' else print('racestep: %s %d stops, %d differing' % (name, stops, bad))
 
 
 if __name__ == '__main__':

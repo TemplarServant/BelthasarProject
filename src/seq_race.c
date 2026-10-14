@@ -273,3 +273,46 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
     r->c = 1; a = sbc(r, rd(r, 0x73), rd(r, 0x8C)); if (neg(a)) a = 0; wr(r, 0x73, a); }
   return 0x485D;                                                      // 4C3E RTS: the task stays
 }
+
+// $7E:4339 -- THE CAMERA AND THE STEERING MASKS (D = $0A00, set by the task itself: `LDA #0A00 / TCD`).
+//   4339  on the story's call (`$0044` != 0, `FF 09`'s INC / the attract leaves it 0): the pad `$0006` through $43B8 (R,
+//         bit 4: $0A3A up to 12, else down to 0) and $43D5 (L, bit 5: $0A3C), then the angle `$0A0A += ($3A >> 2) - ($3C >> 2)`
+//   4361  the masks: X = (($0A0A + $40) >> 6) & $0E; `$00B6 = $7E:4319,X`, `$00B8 = $7E:4329,X` -- which d-pad bit steers
+//         which way for the camera's quarter (the tables are the overlay's own words)
+//   4380  every second frame (`$0008` bit 0): X (bit 6) raises `$0A00/$0A04/$0A0C` while `$0A00 < $7F`; else A (bit 7)
+//         lowers them while `$0A00 >= $60` -- the camera's height, which nothing in the race reads
+void CtRaceTask4339(uint8_t* w) {
+  R rr = { w, 0, 0 }, *r = &rr;
+  if (rd(r, 0x0044)) {
+    unsigned pad = rd(r, 0x0006);
+    { unsigned x = rd(r, 0x0A3A);                                     // 43B8
+      if (pad & 0x0010) { x++; if (!(x < 0x000C)) x = 0x000C; } else if (x) x--;
+      wr(r, 0x0A3A, x); }
+    { unsigned x = rd(r, 0x0A3C);                                     // 43D5
+      if (pad & 0x0020) { x++; if (!(x < 0x000C)) x = 0x000C; } else if (x) x--;
+      wr(r, 0x0A3C, x); }
+    unsigned a = lsr(r, rd(r, 0x0A3A)); a = lsr(r, a); wr(r, 0x0AF0, a);   // 434B LDA $3A / LSR / LSR / STA $F0
+    a = lsr(r, rd(r, 0x0A3C)); a = lsr(r, a); wr(r, 0x0AF2, a);
+    r->c = 0; a = adc(r, rd(r, 0x0A0A), rd(r, 0x0AF0));                // 4357 LDA $0A / CLC / ADC $F0
+    r->c = 1; a = sbc(r, a, rd(r, 0x0AF2));                            //      SEC / SBC $F2
+    wr(r, 0x0A0A, a);
+  }
+  { r->c = 0; unsigned a = adc(r, rd(r, 0x0A0A), 0x0040);              // 4361
+    for (int k = 0; k < 6; k++) a = lsr(r, a);
+    unsigned x = a & 0x000E;
+    wr(r, 0x00B6, rd(r, 0x4319 + x)); wr(r, 0x00B8, rd(r, 0x4329 + x)); }
+  unsigned pad = rd(r, 0x0006);
+  if (pad & 0x0040) {                                                 // 4380 BIT #0040 -- X
+    if (rd(r, 0x0008) & 1) {                                          // LDA $0008 / LSR / BCC
+      if (!cmpn(r, rd(r, 0x0A00), 0x007F)) return;                    // CMP #007F / BPL -> RTS
+      wr(r, 0x0A04, rd(r, 0x0A04) + 1); wr(r, 0x0A00, rd(r, 0x0A00) + 1); wr(r, 0x0A0C, rd(r, 0x0A0C) + 1);
+      return;
+    }
+  }
+  if (pad & 0x0080) {                                                 // 439C BIT #0080 -- A
+    if (rd(r, 0x0008) & 1) {
+      if (cmpn(r, rd(r, 0x0A00), 0x0060)) return;                     // CMP #0060 / BMI -> RTS
+      wr(r, 0x0A04, rd(r, 0x0A04) - 1); wr(r, 0x0A00, rd(r, 0x0A00) - 1); wr(r, 0x0A0C, rd(r, 0x0A0C) - 1);
+    }
+  }
+}

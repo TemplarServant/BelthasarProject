@@ -15659,14 +15659,17 @@ int main(int argc, char** argv) {
   // --racestep <in.wram>: run the race's per-frame task $7E:485D (src/seq_race.c, CtRaceStep485D) once over a 128 KB WRAM
   // image and print every byte it changed -- graded against `--callrom 7E485D --writes` from the same frame's state
   // (tools/race_step_cmp.py). The sound callbacks print what the ROM would post.
-  if (argc == 3 && !strcmp(argv[1], "--racestep")) {
+  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--racestep")) {
     static uint8_t w0[0x20000], w[0x20000];
     FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w0, 1, sizeof w0, wf) != sizeof w0) { fprintf(stderr, "racestep: bad WRAM\n"); return 1; }
     fclose(wf);
     memcpy(w, w0, sizeof w);
     CtRaceIo io; memset(&io, 0, sizeof io);
     io.apu = racestepApu; io.sfx = racestepSfx;
-    unsigned t = CtRaceStep485D(w, &io);
+    unsigned task = argc == 4 ? (unsigned)strtoul(argv[3], NULL, 16) : 0x485D, t = task;
+    if (task == 0x485D) t = CtRaceStep485D(w, &io);
+    else if (task == 0x4339) CtRaceTask4339(w);
+    else { fprintf(stderr, "racestep: task %04X is not ported\n", task); return 1; }
     printf("racestep: task -> %04X\n", t);
     for (int a = 0; a < 0x20000; a++) if (w[a] != w0[a]) printf("  w %06X = %02X\n", a < 0x10000 ? 0x7E0000 + a : 0x7F0000 + (a - 0x10000), w[a]);
     return 0;

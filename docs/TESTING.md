@@ -755,6 +755,13 @@ walked in 37-frame segments and at every stop the task runs once on both sides f
 the eight bump codes poked in (the win with every jackpot score, Johnny's win). Every WRAM byte and APU port write equal:
 `racestep: <drive> N stops, 0 differing`. Full tier (~1.5 min). Needs the user's capture.
 
+### race-task-4339-vs-oracle (`tools/race_step_cmp.py --task 4339 --poked`)
+
+The race's camera task `$7E:4339` (src/seq_race.c CtRaceTask4339): the story's L/R turn of the camera (`$0044` != 0), the
+steering masks `$00B6/$00B8` the race task steers by, the camera's height (X/A every second frame). The same walk as
+race-step-485d-vs-oracle (261 calls) plus 61 poked frames: L/R at every counter edge on both frame parities, and the angle
+on every quarter boundary. Full tier (~1.5 min). Needs the user's capture.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, local and gitignored -- SKIPs without them), booted the
