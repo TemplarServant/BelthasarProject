@@ -670,6 +670,25 @@ static int worldInit(CtAssets* a, World* w, int id) {
   }
   return 1;
 }
+// C2/2C93's WRAM half, after the X menu (C2/2556 -> C2/2E72 -> C2/03EF -> C2/2C93): the menu uses $7E:3000.. as its own
+// scratch (C2:9641 / C2:96B8 / C2:971B / C2:97B9 .., C2:ECD4 / C2:F224 while it builds its screens), and C2/2E72's six
+// stash blocks do not cover it -- the rebuild DECOMPRESSES it again from the world's own packets (C3:07BB writes $7E:3000
+// and $7E:3800, then $7E:7000). MEASURED, the rule's cartridge, saves/ow_w0.state (X at f80, B, B): the block definitions
+// $7E:3000-3FFF and $7E:7000-71FF read the same before the menu and after the return. These are the bytes worldInit
+// copies from the world's image (the entry's decompressed packets), so the rebuild copies them again. The port left the
+// menu's bytes there: the map's streaming (owTilemapBuildBg / the column writers) built every column that came into view
+// after the menu from them -- roofs in the forest, the castle's stairs gone (the user, 2026-10-13) -- and so did the
+// widescreen's sides (a mod) at once.
+static void worldReloadMenuScratch(CtAssets* a, World* w) {
+  uint32_t blen = 0;
+  const uint8_t* b = CtAssetGet(a, CT_ASSET_WORLD, (uint32_t)w->world, &blen);
+  if (!b || blen < 20503 || !w->wram) return;
+  const uint8_t* p = b + 6 + 6144 + 6144;                 // past the two grids ($4000, $5800: C2/2E72's stash)
+  memcpy(w->wram + 0x3000, p, 2048); p += 2048;           // BG1's block definitions
+  memcpy(w->wram + 0x3800, p, 2048); p += 2048;           // BG2's
+  p += 512;                                               // ($7F:8C00, the palettes: not the menu's)
+  memcpy(w->wram + 0x7000, p, 512);
+}
 
 // C2/2C50 + C2/2F0F -- THE OVERWORLD'S OWN SONG, issued on entry.
 //
@@ -15184,7 +15203,8 @@ int main(int argc, char** argv) {
           // ---- THE RTL (R): back in the caller (C0/1964 X / C0/0D1C shop / C2/2556 overworld).
           if (menuStashOw == 0) memcpy(s7 + 0x0920, menuStash, 0x14E0);          // C0/01A5 -> C0/0905
           else if (menuStashOw == 1) { size_t o = 0; for (int k = 0; k < 6; k++) {  // C2/2E72
-                 memcpy(s7 + kOwStash[k].at, menuStash + o, kOwStash[k].len); o += kOwStash[k].len; } }
+                 memcpy(s7 + kOwStash[k].at, menuStash + o, kOwStash[k].len); o += kOwStash[k].len; }
+                 if (haveWorld) worldReloadMenuScratch(&assets, &wd); }   // ...and C2/2C93's decompressions into WRAM
           menuStashOw = -1;
           // Menu EXIT (C2/82B4 RTL -> field resume C0/1964-1984). The ROM re-runs the field
           // LOAD chain (C0/01A5: VRAM rebuild + $7F2000 script re-decompress, byte-identical)

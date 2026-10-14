@@ -33394,6 +33394,38 @@
       "notes": "tools/menu_audit_cmp.py's owsave drive: X at 80 (the port's --loadwram seed enters the world through a 44-frame load the cartridge's state is past), L (the ribbon wraps to Save), A, B, B. MEASURED on the logical oracle: `$027C` = 5 at f81, the fade object's force blank (`$001C` = 80) at f97, C2/8000 (`$0A00` = 01, C2:8020) at f101, the first menu NMI (`$0D00` = 1) at f117, `$0D10` 02 at f121 .. 0F at f128; --hdma on the Save screen: `math=07 half=1` over the two non-cursor rows' 32 lines, W1 = 16..239. The close (f302 on) is not graded: the overworld's return (C2/2E72 restore + C2/2C93 rebuild) is still unmodelled (menu_shell_timing.md)."
     },
     {
+      "name": "ow-menu-return-rebuilds-the-map-tables-vs-rule-cartridge",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/ow_menu_scratch_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ow_w0.state",
+        "saves/field_re/ow_w0.lakewram"
+      ],
+      "expect": [
+        "ow-menu-scratch: $7E:3000-37FF (BG1 block definitions) cartridge 0 byte(s) changed, port 0",
+        "ow-menu-scratch: $7E:3800-3FFF (BG2 block definitions) cartridge 0 byte(s) changed, port 0",
+        "ow-menu-scratch: $7E:4000-6FFF (the block grids) cartridge 0 byte(s) changed, port 0",
+        "ow-menu-scratch: $7E:7000-71FF cartridge 0 byte(s) changed, port 0"
+      ],
+      "timeout_s": 600,
+      "note_pass": "the overworld's block definitions read the same after the X menu as before it, as on the cartridge: the columns streamed in after the menu are the map's",
+      "notes": "The user, 2026-10-13 (translated from Portuguese): 'after opening and closing the menu on the overworld, some places were damaged'. The menu uses $7E:3000.. as its scratch (C2:9641 / C2:971B / C2:97B9 ..) and C2/2E72's six stash blocks do not cover it; C2/2C93's rebuild decompresses it again (C3:07BB, $7E:3000 then $7E:3800 and $7E:7000). On the rule's cartridge the tables read the same before the menu and after the return; the port kept 86 bytes of the menu's in BG1's block definitions, and the map's streaming built every column that came into view after the menu from them (roofs in the forest, the castle's stairs gone), and the widescreen's sides (a mod) at once. src/field.c worldReloadMenuScratch (the tables worldInit copies from the world's image) at the RTL's C2/2E72.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "                 if (haveWorld) worldReloadMenuScratch(&assets, &wd); }   // ...and C2/2C93's decompressions into WRAM",
+          "replace": "                 }   /* MUT: no C2/2C93 */",
+          "why": "the menu's scratch stays in the block definitions"
+        }
+      ]
+    },
+    {
       "name": "sweep-bganim-machines",
       "tier": "quick",
       "argv": [
