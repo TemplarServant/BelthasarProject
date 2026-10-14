@@ -38910,6 +38910,46 @@
       "notes": "The race's native port, stage 1 (sequence_table.md sec. 12). The masks $00B6/$00B8 it leaves are what the race task $485D steers by."
     },
     {
+      "name": "race-scripts-vs-oracle",
+      "argv": [
+        "python",
+        "tools/race_scripts_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state",
+        "tools/race_step_cmp.py",
+        "tools/race_scripts_cmp.py"
+      ],
+      "expect": [
+        "3749 racestep: poked 75 cases, 0 differing",
+        "3749 racestep 3749: idle 59 stops, 0 differing",
+        "3754 racestep: poked 75 cases, 0 differing",
+        "3754 racestep 3754: idle 59 stops, 0 differing"
+      ],
+      "pin": [
+        "^racestep"
+      ],
+      "timeout_s": 600,
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "      if (ctr && !neg(ctr - rd(r, ip))) {                                // 0C9B BEQ / CMP ($20) / BMI",
+          "replace": "      if (ctr && !neg(ctr - rd(r, ip) - 1)) {   /* MUT */",
+          "why": "C3/0C9D CMP ($20) / BMI: a loop of limit L runs L + 1 times; off by one every countdown beep and the finish's waits move a frame"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "  unsigned x = v & 0x0002;",
+          "replace": "  unsigned x = v & 0x0001;   /* MUT */",
+          "why": "$7E:3F5C AND #0002: bit 1 of the RNG byte picks the camera intro"
+        }
+      ],
+      "note_pass": "the race's two $C3 script tasks ($7E:3749 page A, $7E:3754 page B) run C3/0AFF's interpreter natively over their WRAM pages, byte for byte with the cartridge: along the start and on 75 poked IPs each (the random intro, the countdown's sounds, the finish, the END, every loop limit)",
+      "notes": "The race's native port, stage 1 (sequence_table.md sec. 12). src/seq_race.c CtRaceScript."
+    },
+    {
       "name": "jackie-saves-census-vs-oracle",
       "argv": [
         "python",

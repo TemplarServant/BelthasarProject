@@ -2369,3 +2369,15 @@ poked frames (the story's L/R turn at every counter edge, the angle on every qua
 What decides the race's TIMING and its END: the two scripts (the start -- page B installs `$485D` at `$4047` and waits
 at `$404A` --, the countdown, and page A's finish `$4211` -> END), `$485D` / `$4339`, and the finish's tail (`$44CE`,
 `$449C`, `$3495`). The rest builds the picture: stage 2.
+
+**Step three: the two scripts run natively** (CtRaceScript, C3/0AFF over the page in WRAM; check race-scripts-vs-oracle).
+Page B (`$400A`) is the COUNTDOWN: three beeps (`F6 18 96 80 00`) 60 frames apart, the start's (`19 97`) and 20 frames,
+`$0390` = 1 (Start may skip from now on), r13 (`$0B1A`) = 1, sound `18 44`, then it adds `$485D` and waits on itself.
+Page A (`$3F14`, already run once by the setup) adds the tasks `42CE 42BD 3749 3754 428B 4F54 4D0D 347A 4447` and the
+hooks `380B 3843 5221 43F2 44FE 4643`, sets r9 r2 r0 r8 r1 r5 r6, and calls `$3F59` -- INLINE 65816 after the op:
+`JSR $3448` (the RNG: `$039B` + 1, the byte at `$C0:FE00` + it) and bit 1 picks the IP from `$3F66` (+2 by the call's own
+step): `$3F6A` or `$3FAC`, two camera intros (the angle r5 = `$0A0A`, the height r0, r2, r8, r11, r12) that both end by
+adding `$4339` and waiting on themselves (`$3FA9` / `$4007`). The finish `$4211` (written by `$485D`): sounds `F2 00`, `F2
+01`, `85 40 80`, 32 frames, hook `$464D`, task `$3495` (the fade), 128 frames, sound `F0`, END. ⚠ The list routines
+`$0CE2`/`$0CB8`/`$0CF8`/`$0CCD` (and the overlay's `$3934`/`$395E`/`$3974`) have NO bound: they walk past the sixteen
+slots to the first zero -- kept. tools/race_script_walk.py lists any script statically.

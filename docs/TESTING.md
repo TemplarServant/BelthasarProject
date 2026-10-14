@@ -762,6 +762,14 @@ steering masks `$00B6/$00B8` the race task steers by, the camera's height (X/A e
 race-step-485d-vs-oracle (261 calls) plus 61 poked frames: L/R at every counter edge on both frame parities, and the angle
 on every quarter boundary. Full tier (~1.5 min). Needs the user's capture.
 
+### race-scripts-vs-oracle (`tools/race_scripts_cmp.py`)
+
+The race's two `$C3` script tasks, `$7E:3749` (page `$0A00`) and `$7E:3754` (page `$0B00`), run by C3/0AFF's interpreter
+natively over their WRAM pages (src/seq_race.c CtRaceScript): along the idle drive's start (every 13 frames to f900) and
+on 75 poked IPs each -- the inline call `$3F59` with seven RNG counters (both camera intros), the countdown's sounds, the
+finish `$4211`-`$424C` and its END, every loop at its limits. Every WRAM byte and the post's port writes equal the
+cartridge's (`--callrom 7E3749` / `7E3754`). Full tier (~30 s). Needs the user's capture.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, local and gitignored -- SKIPs without them), booted the

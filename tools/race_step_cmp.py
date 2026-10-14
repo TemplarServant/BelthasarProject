@@ -113,6 +113,22 @@ def poked_cases(state, wram):
         for ang in (0x0000, 0x002F, 0x0030, 0x003F, 0x0040, 0x00BF, 0x00C0, 0x013F, 0x0140, 0x01BF, 0x01C0, 0x03C0, 0x03FF):
             cases.append(('angle $0A0A=%04X' % ang, {0x7E0A0A: ang & 0xFF, 0x7E0A0B: ang >> 8}))
         return grade_cases(state, wram, base, cases)
+    if TASK[0] in ('3749', '3754'):                           # the scripts: the IP put on each kind of op
+        pg = 0x7E0A00 if TASK[0] == '3749' else 0x7E0B00
+        def at(ip, extra=None):
+            d = {pg + 0x20: ip & 0xFF, pg + 0x21: ip >> 8}
+            d.update(extra or {})
+            return d
+        cases = []
+        for seed in (0x00, 0x01, 0x02, 0x03, 0x7F, 0xFE, 0xFF):           # the call $3F59: both camera intros
+            cases.append(('call 3F59 $039B=%02X' % seed, at(0x3F56, {0x7E039B: seed})))
+        for ip in (0x3F14, 0x3F41, 0x3F6A, 0x3FAC, 0x4211, 0x4216, 0x421B, 0x423F, 0x4247, 0x424C, 0x400A, 0x4013, 0x403B,
+                   0x4047):
+            cases.append(('ip %04X' % ip, at(ip)))
+        for ip, n in ((0x4220, 1), (0x4242, 1), (0x3FBB, 0), (0x3F7F, 1), (0x3F8A, 0), (0x4018, 1)):
+            for ctr in (0x0000, 0x0001, 0x001E, 0x001F, 0x0020, 0x003B, 0x003C, 0x007F, 0x0080):
+                cases.append(('loop %04X ctr=%04X' % (ip, ctr), at(ip, {pg + 0x22 + 2 * n: ctr & 0xFF, pg + 0x23 + 2 * n: ctr >> 8})))
+        return grade_cases(state, wram, base, cases)
     cases = [('lose $78=8', {0x7E0078: 0x08, 0x7E0079: 0x00})]
     for score in (0x0612, 0x00F6, 0x09A4, 0x07D0, 0x0FA0, 0x1770, 0x0400, 0x0A28, 0x0BB8, 0x0FA2):
         cases.append(('win $69=%04X' % score, {0x7E0053: 0x08, 0x7E0054: 0x00, 0x7E0069: score & 0xFF, 0x7E006A: score >> 8}))

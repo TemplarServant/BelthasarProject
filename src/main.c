@@ -7328,6 +7328,12 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
 // --racestep's sound: what the task sends the ports, printed as the writes the ROM makes ($2141 = pitch, then $2140 = $89).
 static void racestepApu(void* c, uint8_t p) { (void)c; printf("  w 002141 = %02X\n  w 002140 = 89\n", p); }
 static void racestepSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)c; printf("  sfx %02X %02X %02X\n", a, b, d); }
+// ...and a script's post, as C7/0004 leaves it visible: $1E00-$1E03 out to the ports, $1E00 consumed (ctx = the WRAM).
+static void racestepPost(void* c) {
+  uint8_t* w = (uint8_t*)c;
+  printf("  w 002140 = %02X\n  w 002141 = %02X\n  w 002142 = %02X\n  w 002143 = %02X\n", w[0x1E00], w[0x1E01], w[0x1E02], w[0x1E03]);
+  w[0x1E00] = 0;
+}
 static uint32_t xlatCrc(const uint8_t* p, size_t n) {
   uint32_t h = 2166136261u;
   for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 16777619u; }
@@ -15665,10 +15671,13 @@ int main(int argc, char** argv) {
     fclose(wf);
     memcpy(w, w0, sizeof w);
     CtRaceIo io; memset(&io, 0, sizeof io);
-    io.apu = racestepApu; io.sfx = racestepSfx;
+    io.apu = racestepApu; io.sfx = racestepSfx; io.post = racestepPost; io.ctx = w;
+    static uint8_t rsRom[0x600000];
+    { FILE* rf = fopen(DEFAULT_ROM, "rb"); if (rf) { io.romLen = (long)fread(rsRom, 1, sizeof rsRom, rf); fclose(rf); io.rom = rsRom; } }
     unsigned task = argc == 4 ? (unsigned)strtoul(argv[3], NULL, 16) : 0x485D, t = task;
     if (task == 0x485D) t = CtRaceStep485D(w, &io);
     else if (task == 0x4339) CtRaceTask4339(w);
+    else if (task == 0x3749 || task == 0x3754) { if (CtRaceScript(w, task == 0x3749 ? 0x0A00 : 0x0B00, &io) < 0) return 1; }
     else { fprintf(stderr, "racestep: task %04X is not ported\n", task); return 1; }
     printf("racestep: task -> %04X\n", t);
     for (int a = 0; a < 0x20000; a++) if (w[a] != w0[a]) printf("  w %06X = %02X\n", a < 0x10000 ? 0x7E0000 + a : 0x7F0000 + (a - 0x10000), w[a]);

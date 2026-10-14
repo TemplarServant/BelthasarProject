@@ -13,6 +13,7 @@
 // instruction does. N is derived where a branch reads it (BMI/BPL after LDA/CMP/SBC/ADC: bit 15 of the result, M = 16).
 #include "seq_race.h"
 #include <string.h>
+#include <stdio.h>
 
 typedef struct { uint8_t* w; int c; const CtRaceIo* io; } R;
 
@@ -28,9 +29,11 @@ static int neg(unsigned v) { return (v & 0x8000) != 0; }
 
 // The task-list library (C3 overlay): $3934 removes X from the task list $0920, $395E adds it at the first free slot,
 // $3974 adds a vblank hook at the first free slot of $0940. Each is `PHP ... PLP`: the caller's flags survive the call.
-static void taskDel(R* r, unsigned x) { for (unsigned i = 0; i < 0x20; i += 2) if (rd(r, 0x0920 + i) == x) { wr(r, 0x0920 + i, 0); return; } }
-static void taskAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x20; i += 2) if (!rd(r, 0x0920 + i)) { wr(r, 0x0920 + i, x); return; } }
-static void vblAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x20; i += 2) if (!rd(r, 0x0940 + i)) { wr(r, 0x0940 + i, x); return; } }
+// ⚠ NONE OF THE THREE HAS A BOUND: `LDA $0920,X / BEQ / INX / INX / BRA` walks on past the list's sixteen slots until it meets
+// a zero (the task list runs into the hook list at $0940, the hook list into $0960). Kept; the cap only stops a runaway.
+static void taskDel(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (rd(r, 0x0920 + i) == x) { wr(r, 0x0920 + i, 0); return; } }
+static void taskAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (!rd(r, 0x0920 + i)) { wr(r, 0x0920 + i, x); return; } }
+static void vblAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (!rd(r, 0x0940 + i)) { wr(r, 0x0940 + i, x); return; } }
 
 // $4C3F / $4C84: a bump from behind / ahead -- the two positions pushed apart, then $4CC7 swaps the speeds.
 static void bumpSwap(R* r) { unsigned x = rd(r, 0x4A); wr(r, 0x4A, rd(r, 0x6F)); wr(r, 0x6F, x); }   // 4CC7 LDX $4A / LDA $6F / STA $4A / STX $6F
@@ -315,4 +318,106 @@ void CtRaceTask4339(uint8_t* w) {
       wr(r, 0x0A04, rd(r, 0x0A04) - 1); wr(r, 0x0A00, rd(r, 0x0A00) - 1); wr(r, 0x0A0C, rd(r, 0x0A0C) - 1);
     }
   }
+}
+
+// ---- THE $C3 SCRIPT INTERPRETER (C3/0AFF -> C3/0B03), over its register page in WRAM -------------------------------------
+// The same machine title_intro.c runs for the title (sequence_table.md sec. 8.1), here over the page itself, because the
+// race's tasks read the registers straight from WRAM ($0A0A, $0A00, $0B1A, ...) and the race's own task writes the IP ($0A20).
+// Encoding (C3/0B03): bit 7 clear = an assignment (low nibble = the register; high nibble with bit 5 clear = a 16-bit
+// immediate, set when it is 0 and added otherwise; bit 5 set = a register named by the next byte, set when $20 and added
+// otherwise); $8n / $9n = loop n; anything else dispatches on its low nibble through C3:0B74.
+static unsigned pg16(const R* r, unsigned page, unsigned off) { return rd(r, page + off); }
+static void pgw16(R* r, unsigned page, unsigned off, unsigned v) { wr(r, page + off, v); }
+
+// $7E:3F59 -- the race's one inline call: `JSR $3448 / AND #0002 / TAX / LDA $3F66,X / STA $20 / RTS`. $3448 is the overlay's
+// RNG: `$039B` + 1 (8-bit), then the byte at $C0:FE00 + it. Which camera intro page A plays.
+static void call3F59(R* r, unsigned page, const CtRaceIo* io) {
+  uint8_t c = (uint8_t)(r->w[0x039B] + 1);
+  r->w[0x039B] = c;
+  unsigned v = (io && io->rom && io->romLen > 0xFE00 + c) ? io->rom[0xFE00 + c] : 0;
+  unsigned x = v & 0x0002;
+  pgw16(r, page, 0x20, rd(r, 0x3F66 + x));
+}
+
+int CtRaceScript(uint8_t* w, unsigned page, const CtRaceIo* io) {
+  R rr = { w, 0, io }, *r = &rr;
+  for (int guard = 0; guard < 4096; guard++) {
+    unsigned ip = pg16(r, page, 0x20);
+    unsigned a = rd(r, ip);                                              // 0B03 LDA ($20) -- sixteen bits
+    pgw16(r, page, 0x20, ip + 1);                                        // 0B05 INC $20
+    if (!(a & 0x0080)) {                                                 // an assignment
+      unsigned reg = page + (a & 0x000F) * 2;                            // 0B0C .. 0B16 $F0 = D + n * 2
+      pgw16(r, page, 0xF0, reg);
+      unsigned hi = a & 0x00F0, v;
+      ip = pg16(r, page, 0x20);
+      if (!(hi & 0x0020)) {
+        v = (hi == 0) ? rd(r, ip) : (rd(r, reg) + rd(r, ip)) & 0xFFFF;   // 0B26 / 0B2A
+        pgw16(r, page, 0x20, ip + 2);                                    // 0B4D INC $20 / 0B4F INC $20
+      } else {
+        unsigned x = rd(r, ip) & 0x001E;                                 // 0B36 / 0B40 `LDA ($20) / AND #001E / TAX`
+        v = (hi == 0x20) ? rd(r, page + x) : (rd(r, reg) + rd(r, page + x)) & 0xFFFF;
+        pgw16(r, page, 0x20, ip + 1);                                    // 0B4F
+      }
+      wr(r, reg, v);                                                     // 0B51 STA ($F0)
+      continue;
+    }
+    pgw16(r, page, 0xF0, a);                                             // 0B55 STA $F0
+    unsigned hi = a & 0x00F0;
+    if (hi == 0x0080 || hi == 0x0090) {                                  // C3/0C92, the loop counters
+      unsigned n = (a & 0x000F) * 2, ctr = pg16(r, page, 0x22 + n);
+      ip = pg16(r, page, 0x20);
+      if (ctr && !neg(ctr - rd(r, ip))) {                                // 0C9B BEQ / CMP ($20) / BMI
+        pgw16(r, page, 0x22 + n, 0);
+        pgw16(r, page, 0x20, ip + 4);                                    // 0CA3 past the limit and the target
+      } else {
+        pgw16(r, page, 0x22 + n, ctr + 1);                               // 0CAC INC A / STA $22,X
+        pgw16(r, page, 0x20, rd(r, ip + 2));                             // 0CAF the target
+      }
+      if (hi == 0x0090) return 0;                                        // $9n: C3/0B67 JMP $0C92 -- a yield
+      continue;                                                          // $8n: C3/0C8C, on to the next op
+    }
+    ip = pg16(r, page, 0x20);
+    switch (a & 0x000F) {
+      case 0xF:                                                          // 0B95 END: DEC $20 / $7E:0000 = 0001
+        pgw16(r, page, 0x20, ip - 1); wr(r, 0x0000, 0x0001); return 0;
+      case 0xE: pgw16(r, page, 0x20, rd(r, ip)); continue;               // 0B9F JUMP
+      case 0xD: pgw16(r, page, 0x20, rd(r, ip)); return 0;               // 0BA6 JUMP and yield
+      case 0xC: return 0;                                                // 0BAA yield
+      case 0xA: taskAdd(r, rd(r, ip)); pgw16(r, page, 0x20, ip + 2); continue;   // 0BAB -> C3/0CE2
+      case 0x9: taskDel(r, rd(r, ip)); pgw16(r, page, 0x20, ip + 2); continue;   // 0BBC -> C3/0CB8
+      case 0x8: vblAdd(r, rd(r, ip)); pgw16(r, page, 0x20, ip + 2); continue;    // 0BC4 -> C3/0CF8
+      case 0x7: {                                                        // 0BCC -> C3/0CCD: the hook out of $0940
+        unsigned x = rd(r, ip);
+        for (unsigned i = 0; i < 0x1000; i += 2) if (rd(r, 0x0940 + i) == x) { wr(r, 0x0940 + i, 0); break; }
+        pgw16(r, page, 0x20, ip + 2); continue;
+      }
+      case 0x6:                                                          // 0BD4 the sound command
+        wr(r, 0x1E00, rd(r, ip)); wr(r, 0x1E02, rd(r, ip + 2));
+        pgw16(r, page, 0x20, ip + 4);
+        if (!w[0x0388] && io && io->post) io->post(io->ctx);           // 0BE4 LDA $0388 / BNE / JSL C7/0004
+        continue;
+      case 0x1:                                                          // 0C19 a byte into bank 0 (the low-RAM mirror)
+        w[rd(r, ip) & 0x1FFF] = w[(ip + 2) & 0xFFFF];
+        pgw16(r, page, 0x20, ip + 3); continue;
+      case 0x2:                                                          // 0C41 a word into bank 0
+        wr(r, rd(r, ip) & 0x1FFF, rd(r, ip + 2));
+        pgw16(r, page, 0x20, ip + 4); continue;
+      case 0x3:                                                          // 0C7C GOSUB: $30 = IP + 2, then JUMP
+        pgw16(r, page, 0x30, ip + 2); pgw16(r, page, 0x20, rd(r, ip)); continue;
+      case 0x4: pgw16(r, page, 0x20, pg16(r, page, 0x30)); continue;     // 0C85 RETURN
+      case 0x0: {                                                        // 0C51 CALL: $7E:00F0 = the target, JSL $7E:37F3
+        unsigned tgt = rd(r, ip);
+        wr(r, 0x00F0, tgt);
+        if (tgt == 0x3F59) call3F59(r, page, io);
+        else { fprintf(stderr, "racescript: call $%04X is not ported\n", tgt); return -1; }
+        pgw16(r, page, 0x20, pg16(r, page, 0x20) + 2);                   // 0BB1 INC $20 / 0BB5 INC $20
+        continue;
+      }
+      default:
+        fprintf(stderr, "racescript: op %02X at $%04X is not ported\n", a & 0xFF, ip - 1);
+        pgw16(r, page, 0x20, ip - 1);
+        return -1;
+    }
+  }
+  return 0;
 }
