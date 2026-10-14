@@ -15,6 +15,8 @@ panels and the ribbon box. Everything here is read off the oracle's VRAM/CGRAM, 
   ctMenuChromeEquipTM    the Equip detail (substate 2): A (member select), A (Crono)             [menu_open_gato2]
   ctMenuChromeEquipListTM  the Equip candidate list (substate 3): X, A, A, Down (Helmet), A -- a bag with gear Crono can
                          wear, or the ROM buzzes (C2/9C8D) and the list never opens            [menu_equip_spare]
+  ctMenuChromeExchTM     screen $07, the party exchange (menu mode 5): the field's Y with the storyline at 0x49 and a
+                         reserve member -- `7F0000=49, 2982=02, 2983=03, 0126=00` poked on GATO's field  [gato_wait]
 
 Each tilemap is the visible 32x28 region at word 0x6000, verbatim. The captures were first taken from the owner's
 states (saves/menu_open_gato2, grupo_3_mapa, ow_w0, eq_spare; one-off scripts, then pasted); this script makes the whole
@@ -38,16 +40,17 @@ ap.add_argument('--out', default=os.path.join(ROOT, 'src', 'data', 'menu_chrome.
 a = ap.parse_args()
 if a.private:
     S = {k: os.path.join(ROOT, 'saves', v + '.state') for k, v in
-         (('menu', 'menu_open_gato2'), ('form', 'grupo_3_mapa'), ('save', 'ow_w0'), ('eqlist', 'eq_spare'))}
+         (('menu', 'menu_open_gato2'), ('form', 'grupo_3_mapa'), ('save', 'ow_w0'), ('eqlist', 'eq_spare'),
+                                       ('exch', 'battle_re/gato_wait'))}
 else:
     S = {'menu': recipe('menu_open_gato2'), 'form': recipe('grupo_3_mapa'), 'save': recipe('ow_w0'),
-         'eqlist': recipe('menu_equip_spare')}
+         'eqlist': recipe('menu_equip_spare'), 'exch': recipe('gato_wait')}
 RULE = not a.norule
 TMW, TMH, BASE = 32, 28, 0x6000
 
 
-def cap(key, name, script):
-    out = peek(S[key], scratch('menu_chrome_' + name), script, rule=RULE)
+def cap(key, name, script, env=None):
+    out = peek(S[key], scratch('menu_chrome_' + name), script, env=env, rule=RULE)
     return (open(out + '.raw.vram', 'rb').read(), open(out + '.raw.wram', 'rb').read(), cgram_of(out + '.raw'))
 
 
@@ -89,6 +92,11 @@ v, w, _ = cap('eqlist', 'eqlist', OPEN_X + ',100:2,0:40,100:2,0:60,20:2,0:20,100
 need(w[0x67] == 1 and w[0xBE] == 3, 'not the Equip candidate list ($00BE = %d)' % w[0xBE])
 need(w[0x0FC6] > 0, 'empty candidate list')
 EQL = tilemap(v)
+# Screen $07 (C2/C7A6): Y on the field (C0/1985 -> C0/19CE), the picker settled (P = f86, the fade-in done by f95).
+v, w, _ = cap('exch', 'exch', '0:20,2:4,0:96', env={'PEEK_POKE': '7F0000=49,2982=02,2983=03,0126=00'})
+need(w[0x67] == 7 and w[0x0A00] == 5, 'the exchange screen did not open ($0067 = %02X, $0A00 = %02X)' % (w[0x67], w[0x0A00]))
+need(w[0x0F0C] == 1, 'no reserve member on the exchange screen ($0F0C = %d)' % w[0x0F0C])
+EXC = tilemap(v)
 
 
 def conv(x):
@@ -161,6 +169,8 @@ text = (HEAD + ''.join(pal) + '};\n'
         + TM % ('ctMenuChromeEquipTM', '') + flat(EQ) + '};\n'
         + '// --- EQUIP CANDIDATE-LIST (ROM substate 3) chrome : _gen_menuchrome_equiplist.py ---\n'
         + TM % ('ctMenuChromeEquipListTM', '') + flat(EQL) + '};\n'
+        + "// --- SCREEN $07, THE PARTY EXCHANGE (menu mode 5, C2/C7A6): the field's Y at storyline 0x49 [gato_wait] ---\n"
+        + TM % ('ctMenuChromeExchTM', '') + flat(EXC) + '};\n'
         + '\n#endif\n')
 with open(a.out, 'w', newline='\r\n') as f:
     f.write(text)

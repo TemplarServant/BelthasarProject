@@ -4727,6 +4727,15 @@ static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
 // and the overworld ENTRY all do this inline in the ROM). No audio -> inert, and the mailbox simply
 // stays staged, exactly as it does when the driver latch is down.
 static void fieldSoundFlush(uint8_t* mem7E) { if (g_fieldAudio && mem7E) CtAudioService(g_fieldAudio, mem7E); }
+// The sound driver still busy on its port 1 ($2141 != 0) -- what screen $07's song task polls before each post (C2/CBC1,
+// C2/CC28). Read only where the SPC keeps the console's clock (lockstep, paced, the rule's audio); elsewhere it never waits.
+static int menuExchBusy(void) {
+  static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
+  if (!g_fieldAudio || !(ls || g_sndPaced || g_ruleAudio) || hostSyncFree()) return 0;
+  uint8_t po[4] = { 0, 0, 0, 0 };
+  CtAudioPorts(g_fieldAudio, NULL, po);
+  return po[1] != 0;
+}
 // The overworld pass's inline JSL (world.c obNative, C2/2F0F's C2/2F49): posted from inside the world's NMI, so under the
 // rule it starts where the NMI began (the vblank: the pass's CPU work before it is free) and the NMIs it meets wait for
 // nothing (C2/0178 `JMP C2/033D`: INC $4B / RTI). Returns the NMIs crossed -- the frames the world stands still.
@@ -10938,6 +10947,10 @@ int main(int argc, char** argv) {
   static CtMenuShop menuShop;                                 // the SHOP (screen $0C), menu.c
   int menuShopOn = 0;                                         // 1 = this menu open came from a parked op 0xC8 $80-$BF
   int menuSavePtOn = 0;                                       // 1 = from a parked op 0xC8 with an even operand: mode 6
+  // SCREEN $07, THE PARTY EXCHANGE (menu mode 5, C2/C7A6; menu.c CtMenuExch*): menuExchOn 1 = the field's Y (C0/1985 ->
+  // C0/19A7's fade, the X path's), 2 = a parked op `C8 00` (C0/0CC7's fade, the shop's). menuExch68 is its $68 (1 the
+  // picker C2/C7E0, 2 the second pick C2/C6B9), menuExchSong C2/CB8B's $0F0F (song $3E was posted), menuExchOld its $0F0E.
+  int menuExchOn = 0, menuExch68 = 0, menuExchSong = 0, menuExchOld = 0, menuExchHold = 0, prevYBtn = 0;
   // SCREEN $0D (op 0xC8 $C0-$FF -> mode 3, C2/808F[3]): the ATB selector and the naming keyboard are ONE screen of the
   // shell, C2/E1E3's substates -- 0 the router C2/E1ED, 1 the keyboard C2/E21E, 2 the selector C2/E236, 3 the naming
   // build C2/E201, 4 the "Enter a name" prompt C2/E209. menuName68 is its $68, menuNameOut C2/83CA's fade-out running
@@ -12081,6 +12094,30 @@ int main(int argc, char** argv) {
         }
       }
     }
+    // ---- THE Y BUTTON: THE PARTY EXCHANGE (C0/18D9's C0/1916 `LDA $00F6 / BIT #01` -> C0/1985). With a message window up
+    // C0/1985 only moves it to the other side (the flip below, at C0/1916's slot in the field tick); with none,
+    // C0/198E-19A5's gates -- the storyline $7F0000 >= 0x49 (SBC #49 / BCS), $011F != 0, $0162 == 0, $0110 == 0 -- then
+    // C0/19A7-19BF, the X path's own fade (`$0407 = FF`, DEC $19 / JSL FD/C2C1 / C0/EC60), C0/19C1 JSR C0/0B4E, C0/19C4
+    // JSR C0/011B and C0/19C7-19CE `LDX #0000 / TDC / XBA / LDA #05 / JSL C2/8000`: mode 5, screen $07. The X path's
+    // conventions throughout (the press on its own frame, the fade's first DEC on it). MEASURED (the rule's cartridge,
+    // gato_wait with `7F0000=49, 2982=02, 2983=03, 0126=00`, Y down at f20): $00F6 = 01 and $0119 = 0E at f21 (C0:19B4),
+    // 00 at f35, `$0A00 = 05` at f36 (C2:8020), `$0067 = 07` at f51 (C2:807F). (The overworld's own poll, C2/2552's
+    // `$027C == 5 ? 1 : 5`, is not this one: OPEN.)
+    {
+      int yHeld = (padSerial & 0x002) ? 1 : 0;
+      int yEdge = yHeld && !prevYBtn;
+      prevYBtn = yHeld;
+      if (yEdge && menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && !fade && !pendKind
+          && s7[0x0126] == 0                                 // C0/1985 `LDA $26 / BEQ ->198E` (else the flip)
+          && glb[0x0000] >= 0x49                             // C0/198E-1995
+          && CtSceneExplore(f.vm) && s7[0x162] == 0 && s7[0x110] == 0   // C0/1998-19A5
+          && !CtSceneOffMainLoop(f.vm)) {                    // C0/18D9 runs only inside C0/0097's loop
+        menuPhase = 1; menuT = 0; menuScreen = 0x07; menuExchOn = 1; menuExch68 = 0;
+        s7[0x407] = 0xFF;                                    // C0/19A7-19A9
+        memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);         // the field is halted under the synchronous fade
+        if (getenv("CT_SHOPTRACE")) printf("exchange: f%d Y -> mode 5, screen $07\n", frameNo);
+      }
+    }
     // ---- THE SHOP (op 0xC8 $80-$BF, parked by the VM: C0/3757 armed $0117 bit6). The main loop's C0/0CC7 arm fades
     // (C0/0CCE: DEC $19 per frame with only C0/881E ($1F = 0), FD/E39C and the NMI wait -- the field picture is FROZEN,
     // as under the X menu's C0/193E), then C0/0CEA saves the field state (C0/011B) and C0/0D18 `JSL $C2:8000` with
@@ -12108,6 +12145,15 @@ int main(int argc, char** argv) {
       menuSaveCur = 0; menuSavePrompt = 0; menuSaveDoWrite = 0;                      // C2/D0E5: the cursor on slot 1
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_SHOPTRACE")) printf("savepoint: f%d op C8 %02X -> mode 6, screen $0B\n", frameNo, CtSceneSavePoint(f.vm));
+    }
+    // ---- THE PARTY EXCHANGE FROM A SCRIPT (op 0xC8 00): the shop's launcher (C0/0CC7's fade, C0/0CEA's save) to C0/0CF4
+    // `BEQ ->0D04`, `LDA #05 / BRL C0/19C7` -- the Y path's own JSL and its return C0/19D2, whose `$0117 bit6 -> $0118
+    // bit6` (C0/19EB-19F7) is the op's handshake. No `$0407 = FF` on this path (the Y path's is C0/19A7, before 19C7).
+    if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneExchange(f.vm)
+        && !inLoadFade) {
+      menuPhase = 1; menuT = -1; menuScreen = 0x07; menuExchOn = 2; menuExch68 = 0;   // (C0/0CCE is the next frame's)
+      memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
+      if (getenv("CT_SHOPTRACE")) printf("exchange: f%d op C8 00 -> mode 5, screen $07\n", frameNo);
     }
     // ---- THE LOAD SHELL (op 0xC8, operand odd): C0/0CF8 `BIT #01 / BNE` -> C0/0D00 `LDA #00` -> C0/0D18 `JSL C2:8000`
     // with A = 0 -- the same C0/0C76 -> C0/0CC7 fade and C0/0CEA save as the shop and the naming. MEASURED (a blank cart
@@ -12982,6 +13028,7 @@ int main(int argc, char** argv) {
     }
     if (fieldResume) {                                       // C0/2824's iteration (see fieldResume): C0/2829
       menuT++;                                               // `INC $19`, and C0/00DE = `JSL FD/C2C1` ($0153 flips) /
+      s7[0x0119] = (uint8_t)(menuT > 15 ? 15 : menuT);      // (the byte: MEASURED 01 .. 0F over the resume, C0:282B)
       if (menuT >= 1 && menuT <= 15) {                       // `JSL FD/FFF7` (the colour records); the IRQ's tiles
         CtHdmaTableBuild(s7);                                // step in the field's own render below
         fieldColourRecords(s7);
@@ -13021,11 +13068,15 @@ int main(int argc, char** argv) {
         // (C0/0CD4-0CE5, the colour records tick), and under both the field's IRQ steps the tiles. The picture stays the
         // frozen frame below; the machines' state is what the field comes back to.
         if (f.vm && menuT >= 1 && menuT <= 15) {
-          if (!menuShopOn && !menuNameOn && !menuLoaderOn && !menuSavePtOn) CtHdmaTableBuild(s7);
+          if (!menuShopOn && !menuNameOn && !menuLoaderOn && !menuSavePtOn && menuExchOn != 2) CtHdmaTableBuild(s7);
           else fieldColourRecords(s7);
           fieldIrqTiles(f.sd, s7, frameNo);
         }
         int bri = 15 - menuT; if (bri > 15) bri = 15; if (bri < 0) bri = 0;
+        // ...and the byte itself: C0/1949 / C0/0CD4 / C0/19B2 `DEC $19` (MEASURED, the exchange's Y: $0119 0E at f21 ..
+        // 00 at f35, C0:19B4). The field is halted under the fade, so nothing reads it before the resume's C0/2829 puts it
+        // back up.
+        if (f.vm && !inWorld && menuT >= 1) s7[0x0119] = (uint8_t)bri;
         for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) fb[i] = (uint8_t)(menuFb[i] * bri / 15);
         if (menuT >= 16) {
           // C0/011B FIELD-STATE SAVE at black: $0102-4 lead tile/facing + the $7F1D09-26 block
@@ -13080,9 +13131,10 @@ int main(int argc, char** argv) {
           // frame), C2/816A over the roster. MEASURED on the logical oracle: 16 with no save (party3's X, the new
           // game's naming), 17 with one (colsave3 / ct_real_save's load list), 19 with three.
           { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-            int caller = (menuNameOn || menuShopOn || menuSavePtOn) ? CT_MENU_CALLER_C8_HI
+            int caller = menuExchOn == 1 ? CT_MENU_CALLER_Y : menuExchOn == 2 ? CT_MENU_CALLER_C8_00
+                       : (menuNameOn || menuShopOn || menuSavePtOn) ? CT_MENU_CALLER_C8_HI
                        : menuLoaderOn ? CT_MENU_CALLER_C8_ODD : CT_MENU_CALLER_X;
-            int mode = menuLoaderOn ? 0 : menuNameOn ? 3 : menuShopOn ? 2 : menuSavePtOn ? 6 : 1;
+            int mode = menuExchOn ? 5 : menuLoaderOn ? 0 : menuNameOn ? 3 : menuShopOn ? 2 : menuSavePtOn ? 6 : 1;
             long st = ct_menu_open_stretch(rom, rl, s7, fieldSram(), mode, caller);
             menuShellS0 = st > 0 ? (int)(st / CT_FRAME_CPU_CYCLES) : 16;
             if (getenv("CT_MENUSHELL")) printf("menushell: f%d C, NMI-off stretch %ld cycles = %.3f frames -> S0 = C+%d\n",
@@ -13095,6 +13147,10 @@ int main(int argc, char** argv) {
           // C2:8253 at f43 (the old valve: f47), `$0D10` = 02 at f45 .. 0F at f52 (old: f49 .. f56). The ribbon's tab
           // builder yields (C2/A0AC, A0BD) are the ROM's own waits and do not move (X menu and overworld: identical).
           if (menuShopOn && menuRuleNmiOnHold()) menuShellP = menuShellS0;
+          // Screen $07's substate 0 (C2/C7AC) reaches C2/C649 and C2/83B2 two scheduler scans after S0 -- MEASURED with the song
+          // suppressed ($7F01CF bit 6): $0F02 at f52 = S0, $54 by C2:C652 at f54, $0D10 = 02 at f56 -- and the song task
+          // C2/CB8B spawns holds the CPU in its `JSL C7/0004`s, so with the song the two scans come after them (below).
+          if (menuExchOn) menuShellP = menuShellS0 + 2;
           // Screen $0B's substate 0 (C2/D4F8): C2/9AAD / C2/D065 / C2/D0E5, then C2/83B2 spawns the fade-in. MEASURED (the
           // rule's cartridge, a loc 084 save tile): C f54, `$0067 = 0B` f69, `$00BE = 01` f72, `$0D10 = 02` f74 .. 0F f81.
           if (menuSavePtOn) menuShellP = menuShellS0 + 2;
@@ -13139,10 +13195,16 @@ int main(int argc, char** argv) {
           menuWinColour = s7[0x2991] & 7;                  // C2/983F: $0D8C = $2991 & 7 / JMP C2/C511
           CtMenuRosterLists(s7);                           // C2/8115 + C2/8130 JSR C2/816A (+ FF/F813's $85)
           CtMenuConfigUnpack(s7); CtMenuConfigBuild(s7);   // C2/8133 (+ the screen build's nav table, C2/C3B5)
+          CtMenuOpenFlags(s7, glb);                        // C2/9875's head: $0D32 / $0D34 / $0D36
           CtMenuOpenSheets(s7);                            // C2/8139 -> C2/9875: the bag cleanup + the seven sheets
           CtMenuItemOpenGate(s7, glb);                     // ... and C2/9969: the Shelter's bit on a save point only
         }
         if (menuNameOn && menuShellF == menuShellS0 - 1) s7[0x0071] = (uint8_t)menuNameId;   // C2/806B LDA $0A01 / STA $71
+        if (menuExchOn && menuShellF == 1) {                 // C2/940D's fill at C + 1 -- of the direct page too ($0000-00FF),
+          static const uint16_t dp[] = { 0x54, 0x55, 0x56, 0x5A, 0x67, 0x68, 0x7F, 0x80, 0x81 };   //   which the port keeps
+          for (size_t i = 0; i < sizeof dp / sizeof dp[0]; i++) s7[dp[i]] = 0;   //   live for the field: the screen's own bytes
+        }
+        if (menuExchOn && menuShellF == menuShellS0 - 1) s7[0x0067] = 0x07;   // C2/807F, C2/808F[5] (MEASURED: f51 = C+15)
         if (menuLoaderOn && menuShellF == menuShellS0) {                  // S0: C2/E613 -> C2/E7C3 (C2/E7CF: the cursor on
           CtMenuHost lh; fieldLoaderHost(&lh);                   //   $30:7FE0's slot, else New Game)
           ldrCur = CtMenuLoaderDefaultRow(&lh);
@@ -13185,6 +13247,67 @@ int main(int argc, char** argv) {
           s7[0x0D75] = 7;                                  // C2/DC26 LDA #07 / STA $0D75 (the build's sprite budget)
           if (getenv("CT_SHOPTRACE")) printf("shop: f%d built shop %02X: %d item(s) at S0 (C2/DACA); substate 1 at P+1\n",
                                              frameNo, menuShop.shopNo, menuShop.nList);
+        }
+        // SCREEN $07's substate 0 (C2/C7AC): `$0D36 = $0D37 = $71` (0: C0/19C7's X), C2/CB8B -- the song task -- and the
+        // roster C2/CD2B (MEASURED: $0F02 by C2:CD8C at S0, f52). C2/CB8B: unless $7F01CF bit 6, the song playing ($02AE,
+        // or $29AE when $0D32) goes to $0F0E and, if it is not $3E already, $0F0F = 1 and a task (C2/CBBF: `$2141` = 0,
+        // then C2/CBEB `14 3E 80 80`, C2/CBF7 `81 01 FF FF`, then `$2143 & 0F` != 0, C2/8216) whose JSLs and wait are the
+        // frames C2/C649 waits for: MEASURED, $54 by C2:C652 at f86 = S0 + 34, $0D10 = 02 at f88 = P + 2.
+        if (menuShellF == menuShellS0 && menuExchOn) {
+          long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+          s7[0x0071] = 0; s7[0x0D36] = s7[0x0071]; s7[0x0D37] = s7[0x0071];   // C2/C7AC-C7B3
+          CtMenuExchRoster(s7, glb);                         // C2/CD2B
+          CtMenuExchGraph(s7, rom, rl);                      // the setup list's $FF:B77A -> $9380
+          menuWinDim = menuWinColour;
+          menuExchSong = 0; s7[0x0F0F] = 0;                  // C2/CB8B STZ $0F0F
+          if (!(glb[0x01CF] & 0x40)) {                       // C2/CB8E-CB94
+            uint8_t cur = s7[0x0D32] ? s7[0x29AE] : s7[0x02AE];   // C2/CB96-CBA1
+            s7[0x0F0E] = cur; menuExchOld = cur;
+            if (cur != 0x3E) {                               // C2/CBA4-CBA8: C2/CBBF's task, posted below
+              s7[0x0F0F] = 1; menuExchSong = 3;
+            }
+          }
+          if (getenv("CT_SHOPTRACE")) printf("exchange: f%d S0, roster %02X%02X%02X%02X%02X%02X%02X%02X%02X free %d reserve %d, P = S0 + %d\n",
+                                             frameNo, s7[0x0F02], s7[0x0F03], s7[0x0F04], s7[0x0F05], s7[0x0F06], s7[0x0F07],
+                                             s7[0x0F08], s7[0x0F09], s7[0x0F0A], s7[0x0F0B], s7[0x0F0C], menuShellP - menuShellS0);
+        }
+        // C2/CBBF, the song task: `LDA $2141 / BEQ` (a yield a frame while the driver is busy), C2/CBEB `14 3E 80 80`, C2/CBF7
+        // `81 01 FF FF`, C2/CBE0 the `$2143 & 0F` spin, C2/8216. Its JSLs and its spin are the frames before C2/C649 (P).
+        if (menuExchOn && menuExchSong == 3 && menuShellF >= menuShellS0) {
+          static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
+          const int priced = (ls || g_sndPaced || g_ruleAudio) && !hostSyncFree() && g_fieldAudio;
+          uint8_t po[4] = { 0, 0, 0, 0 };
+          if (priced) CtAudioPorts(g_fieldAudio, NULL, po);
+          if (po[1]) { if (menuShellP < menuShellF + 3) menuShellP = menuShellF + 3; }   // C2/CBC5 BEQ not taken: C2/CBC7
+                                                                                       //   JSR C2/821E, a frame
+          else {
+            int fr = 0, fw = 0;
+            s7[0x1E00] = 0x14; s7[0x1E01] = 0x3E; s7[0x1E02] = 0x80; s7[0x1E03] = 0x80;   // C2/CBCC-CBF0
+            fieldSoundFlush(s7);                             // C2/CBF3 JSL C7/0004
+            if (g_fieldAudio) { int f1 = 0; CtAudioLastPostRaster(g_fieldAudio, &f1, NULL, NULL); fr += f1; }
+            s7[0x1E00] = 0x81; s7[0x1E01] = 0x01; s7[0x1E02] = 0xFF; s7[0x1E03] = 0xFF;   // C2/CBF7-CC06 ($02 = 01, $03 = FF)
+            fieldSoundFlush(s7);                             // C2/CC09 JSL C7/0004
+            if (g_fieldAudio) { int f2 = 0; CtAudioLastPostRaster(g_fieldAudio, &f2, NULL, NULL); fr += f2;
+                                if (priced) CtAudioWaitReplyNibble(g_fieldAudio, &fw); }   // C2/CBE0-CBE6
+            // The JSLs hold the CPU, so substate 0's two scans come after them: MEASURED, the post at f52 = S0, its last
+            // `$1E00` consumed at f84 (C7:0196), $54 at f86 = S0 + 32 + 2. (A post a busy driver delayed past S0 + 2 would
+            // find C2/C649 already run and hold only the fade-in, C2/C7CB's wait on $00C0: not measured, taken as P.)
+            { int pe = menuShellF + 2 + (priced ? fr + fw : 0);
+              menuShellP = pe > menuShellS0 + 2 ? pe : menuShellS0 + 2; }
+            menuExchSong = 1;
+            g_mnSfxPosts += 2; g_mnSfxEvents += 2; g_mnSfxSeen = 1;
+            if (getenv("CT_MENUSFX")) printf("menusfx-menu: f%d exchange song 14 3E, 81 01 FF (C2/CBBF) -- %d + %d frame(s)\n",
+                                             frameNo, fr, fw);
+          }
+        }
+        if (menuShellF == menuShellP && menuExchOn) {         // C2/C7BC-C7C0 LDX #00 / JSR C2/C649, then the build
+          CtMenuExchEntry(s7);
+          menuExch68 = 1;                                    // C2/C65A INC $68 (the task's own $68: C2/81FF / C2/8211
+                                                             //   swap it per scheduler slot, so the byte is not the screen's)
+          CtMenuExchValidate(s7);                            // C2/CAF3's C2/C805: $0F0D, $7F, $56 for the entry cell
+          s7[0x9689] = 0x17;                                 // C2/C7D5
+          s7[0x0D75] = 2;                                    // C2/CA39 (MEASURED: $0D75 = 02 by C2:CA3C at P, f86)
+          menuFormAnimReq = 1;
         }
         // P: C2/8A98's task steps now -- AFTER the build above: C2/D52B spawns it at the end of C2/DACA, so on the frame
         // the build runs (P = S0 under the rule) its first step follows the build's $0DA0 = $0DA3 = 0 (MEASURED, logical
@@ -14318,6 +14441,40 @@ int main(int argc, char** argv) {
                 }
               }
             }
+          } else if (menuScreen == 0x07 && menuExchOn) {     // ---- THE EXCHANGE (screen $07: C2/C7E0, C2/C6B9)
+            // C2/E984 decodes A and B on their edge ($00F0); C2/E9E2 walks the graph on $F5, the d-pad's repeat byte (R, L,
+            // D, U: the first set bit). The picker C2/C7E0: A -> C2/C7F7 (refused on a LOCKED entry) -> C2/C674, the first
+            // pick, `INC $68`; B -> C2/C7FF `JSR C2/CC0E / JMP C2/82B2`, the menu closes (no ribbon in mode 5); else C2/C805
+            // and the blip when $54 moved. The second pick C2/C6B9 (the Form's): A -> C2/C6D0 (the swap, unless LOCKED), B ->
+            // the cancel, both C2/C6DE's one blip and `DEC $68`; else the same move.
+            int dir = ((rHeld && !prevRBtn) ? 1 : 0) | ((lHeld && !prevLBtn) ? 2 : 0)
+                    | ((dHeld && !prevDBtn) ? 4 : 0) | ((uHeld && !prevUBtn) ? 8 : 0);
+            int aE = aHeld && !prevABtn, bE = bHeld && !prevBBtn;
+            if (menuExch68 == 1) {
+              if (aE) {
+                if (CtMenuExchPick(s7)) { menuSfx(s7, 0x00, "exch-pick"); menuExch68 = 2; }   // C2/C674
+              } else if (bE) {
+                if (menuExchSong) {                          // C2/CC0E-CC1D: `81 08 01 01` (C2/CBF7), the song down
+                  s7[0x1E00] = 0x81; s7[0x1E01] = 0x08; s7[0x1E02] = 0x01; s7[0x1E03] = 0x01;
+                  fieldSoundFlush(s7);
+                  g_mnSfxPosts++; g_mnSfxEvents++; g_mnSfxSeen = 1;
+                }
+                closeReq = 1;                                // C2/CC20 JSR C2/83CA, then C2/C802 JMP C2/82B2
+              } else { if (CtMenuExchMove(s7, dir)) menuSfx(s7, 0x00, "exch-cursor");   // C2/C7EA-C7F3
+                       menuFormAnimReq = 1; }                // C2/C840 JSR C2/C973
+            } else if (menuExch68 == 2) {
+              if (aE || bE) {
+                int sw = CtMenuExchSecond(s7, glb, aE);      // C2/C6D0 / C2/C6DE-C70A
+                menuSfx(s7, 0x00, "exch-confirm");           // C2/C6DE, shared by A, B and a refused A
+                menuExch68 = 1;                              // C2/C6E5 DEC $68
+                menuFormAnimReq = -1;                        // C2/C6F7: every block's $1811 := 0
+                if (sw && getenv("CT_SHOPTRACE"))
+                  printf("exchange: f%d swap -> party %02X %02X %02X | %02X %02X %02X %02X %02X %02X\n", frameNo,
+                         s7[0x2980], s7[0x2981], s7[0x2982], s7[0x2983], s7[0x2984], s7[0x2985], s7[0x2986],
+                         s7[0x2987], s7[0x2988]);
+              } else { if (CtMenuExchMove(s7, dir)) menuSfx(s7, 0x00, "exch-cursor");   // C2/C6C3-C6CC
+                       menuFormAnimReq = 1; }
+            }
           } else if (menuScreen == 5) {                      // ---- FORM / PARTY-EXCHANGE (screen 5, C2/C621)
             // The picker (ROM $0054, cursor mover C2/C805) rests on a panel of C2/CD2B's array
             // $0F02..$0F0A, and it skips LOCKED members as well as empty slots: C2/C805 -> C2/C9AE ->
@@ -14666,6 +14823,12 @@ int main(int argc, char** argv) {
           else if (menuFormAnimReq < 0) CtMenuSprFormAnims(&mh, -1, -1);
           menuFormAnimReq = 0;
         }
+        else if (menuScreen == 0x07 && menuExchOn) {         // C2/C973 from C2/C805 (cursor $0F0D, pick $0F00); C2/C6F7 clears
+          if (menuFormAnimReq > 0) CtMenuSprFormAnims(&mh, s7[0x0F0D] < 9 ? s7[0x0F0D] : -1,
+                                                      s7[0x0F00] < 9 ? s7[0x0F00] : -1);
+          else if (menuFormAnimReq < 0) CtMenuSprFormAnims(&mh, -1, -1);
+          menuFormAnimReq = 0;
+        }
         else if (menuScreen == 0x0C)                         // the SHOP: $1811 as C2/DD7C / C2/D605 left it
           for (int c = 0; c < 7; c++) CtMenuSprRequest(c, menuShop.anim[c]);
         else                 CtMenuSprFormAnims(&mh, -1, -1);  // off Form: everyone still (anim 0)
@@ -14817,6 +14980,8 @@ int main(int argc, char** argv) {
         else if (menuScreen == 4) { if (menuCfgFresh) CtMenuChromeRibbonWindow(&mh, 1);   // CONFIG
                                     CtMenuChrome(fb, 4, menuOpt, 0); CtMenuChromeRibbonWindow(&mh, 0);
                                     CtMenuRenderConfig(&mh, fb, menuCfgCur, menuCfgSub, menuCfgFresh, g_cfgNameN, g_cfgValN); }
+        else if (menuScreen == 0x07 && menuExchOn) {       // THE EXCHANGE (screen $07)
+                                    CtMenuRenderExchange(&mh, fb, !(s7[0x0DA0] & 1)); }
         else if (menuScreen == 5) { CtMenuChrome(fb, 5, menuOpt, 0);
                                     uint8_t fp9[9]; CtMenuFormPanels(s7, glb, fp9);
                                     // the picked hand: C2/8A45 shows it while C2/8B6E's $0DA0 bit 0 is CLEAR
@@ -15216,6 +15381,32 @@ int main(int argc, char** argv) {
           menuBri = (menuBri - 2 < 0) ? 0 : menuBri - 2;
           if (menuLoaderOn) ldrFadeF++;
           for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) fb[i] = (uint8_t)(menuFrozen[i] * menuBri / 15);
+        } else if (menuExchOn && menuExchSong == 1 && menuExchBusy()) {
+          memset(fb, 0, (size_t)CAMW * CAMH * 3);            // C2/CC28 `LDA $2141 / BEQ` -- C2/CC2E JSR C2/821E: the driver
+                                                             //   still answers the `81 08` (MEASURED: f240 -> f250)
+        } else if (menuExchOn && menuExchSong == 1) {
+          // SCREEN $07's close, C2/CC23-CC4B after its C2/83CA: the song put back -- `$2141` = 0, `11 <$0F0E> 80 80`
+          // (C2/CBEB) and `81 10 xx xx` with xx = $04FB, or FF when it is 0 (C2/CBF7) -- before C2/C802 JMP C2/82B2's RTL.
+          // Their JSLs (the field song's upload) are frames of black before the RTL. MEASURED (the rule's cartridge):
+          // `11 42` at f250, `81 10 FF FF` at f278 (C2:CC09), the field's C0/0905 at f281.
+          int fr = 0;
+          s7[0x1E00] = 0x11; s7[0x1E01] = (uint8_t)menuExchOld; s7[0x1E02] = 0x80; s7[0x1E03] = 0x80;
+          fieldSoundFlush(s7);
+          if (g_fieldAudio) { int f1 = 0; CtAudioLastPostRaster(g_fieldAudio, &f1, NULL, NULL); fr += f1; }
+          uint8_t v = s7[0x04FB] ? s7[0x04FB] : 0xFF;
+          s7[0x1E00] = 0x81; s7[0x1E01] = 0x10; s7[0x1E02] = v; s7[0x1E03] = v;
+          fieldSoundFlush(s7);
+          if (g_fieldAudio) { int f2 = 0; CtAudioLastPostRaster(g_fieldAudio, &f2, NULL, NULL); fr += f2; }
+          g_mnSfxPosts += 2; g_mnSfxEvents += 2; g_mnSfxSeen = 1;
+          { static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
+            menuExchHold = ((ls || g_sndPaced || g_ruleAudio) && !hostSyncFree()) ? fr : 0; }
+          menuExchSong = 2;
+          memset(fb, 0, (size_t)CAMW * CAMH * 3);
+          if (getenv("CT_MENUSFX")) printf("menusfx-menu: exchange close 11 %02X, 81 10 %02X (C2/CC33) -- %d frame(s)\n",
+                                           menuExchOld, v, fr);
+        } else if (menuExchHold > 0) {
+          menuExchHold--;
+          memset(fb, 0, (size_t)CAMW * CAMH * 3);
         } else {
           // ---- THE RTL (R): back in the caller (C0/1964 X / C0/0D1C shop / C2/2556 overworld).
           if (menuStashOw == 0) memcpy(s7 + 0x0920, menuStash, 0x14E0);          // C0/01A5 -> C0/0905
@@ -15369,6 +15560,7 @@ int main(int argc, char** argv) {
           fieldIrqTiles(f.sd, s7, frameNo);
         }
         int bri = menuT; if (bri > 15) bri = 15;
+        if (f.vm && !inWorld) s7[0x0119] = (uint8_t)bri;     // C0/2829 INC $19 (MEASURED: 01 .. 0F over the resume, C0:282B)
         for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) fb[i] = (uint8_t)(menuFb[i] * bri / 15);
         if (menuT >= 15) {
           menuPhase = 0;
@@ -15383,6 +15575,12 @@ int main(int argc, char** argv) {
             menuNameOn = 0; menuScreen = 0;                  //   steps over it and the script goes on
             if (f.vm) CtSceneNameDone(f.vm);
             if (getenv("CT_NAMETRACE")) printf("naming: f%d closed, script resumes\n", frameNo);
+          }
+          if (menuExchOn) {                                  // C0/19EB-19F7 (the Y path's return, `C8 00`'s too): $0117
+            if (menuExchOn == 2 && f.vm) CtSceneShopDone(f.vm);   //   bit6 -> $0118 bit6, so a parked `C8 00` steps over
+            if (getenv("CT_SHOPTRACE")) printf("exchange: f%d closed, party %02X %02X %02X\n", frameNo,
+                                               s7[0x2980], s7[0x2981], s7[0x2982]);
+            menuExchOn = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuScreen = 0;
           }
           if (menuTest) {
             printf("menutest: %s (panels %d, hp %d/%d %d/%d, resume %s)\n",
@@ -18488,6 +18686,12 @@ int main(int argc, char** argv) {
         menuNameOn = 0; menuScreen = 0;                      //   steps over it and the script goes on
         CtSceneNameDone(f.vm);
         if (getenv("CT_NAMETRACE")) printf("naming: f%d closed, script resumes\n", frameNo);
+      }
+      if (menuExchOn) {                                      // C0/19EB-19F7 (the Y path's return, `C8 00`'s too): $0117
+        if (menuExchOn == 2) CtSceneShopDone(f.vm);          //   bit6 -> $0118 bit6, so a parked `C8 00` steps over
+        if (getenv("CT_SHOPTRACE")) printf("exchange: f%d closed, party %02X %02X %02X\n", frameNo,
+                                           s7r[0x2980], s7r[0x2981], s7r[0x2982]);
+        menuExchOn = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuScreen = 0;
       }
       if (menuTest) {
         printf("menutest: %s (panels %d, hp %d/%d %d/%d, resume %s)\n",

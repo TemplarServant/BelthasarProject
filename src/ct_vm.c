@@ -3538,12 +3538,16 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // cartridge (a loc 084 save tile, A held): `$0125 = 40`, `$0117 = 40` at f38, $0119 0E .. 00 over f39-53, `$0A00 =
     // 0606` at f54, `$0067 = 0B` at f69; B at f170, the RTL at f179, `$0117 = 00` / `$0118 = 40` at f211. (Mode 5,
     // operand $00, is not ported: skipped.)
-    if (arg && arg < 0x80 && !(arg & 1)) {
+    // ⭐ MODE 5 = THE PARTY EXCHANGE (operand $00: C0/0CF4 `BEQ ->0D04`, `LDA #05 / BRL C0/19C7` -- the Y button's own
+    // `LDX #0000 / ... / JSL C2/8000`, so screen $07 with $71 = 0, and the Y path's return C0/19D2, whose `$0117 bit6 ->
+    // $0118 bit6` is this op's handshake). Parked in the shop's fields with operand 0 (CtSceneExchange); the host clears
+    // sc->shop when the screen has closed. Sites: scenes 08D, 113, 127 and 1D0 (twelve).
+    if (!(arg & 1) && arg < 0x80) {
       if (!s->nm) { sc->shop = 1; sc->shopArg = arg; s->nm = 1; return 1; }
       if (sc->shop) return 1;
       s->nm = 0; s->addr = nxt; return 0;
     }
-    s->addr = nxt; return 0;                        // other Special-Dialog operands: skip (mode 5 $00)
+    s->addr = nxt; return 0;
   }
   if (op == 0xC7 || op == 0xC9 || op == 0xCA || op == 0xCB ||
       op == 0xCC || op == 0xCD || op == 0xCE) {
@@ -7887,7 +7891,8 @@ int CtSceneLoader(const CtScene* sc) { return sc->loader ? sc->loaderArg : -1; }
 // The mode-2 SHOP request (op 0xC8 operand $80-$BF -> C0/0D09 -> C2/8000 -> screen $0C). -1 = none; else the raw
 // operand (the shop number is operand & $3F).
 int CtSceneShop(const CtScene* sc) { return sc->shop ? sc->shopArg : -1; }
-int CtSceneSavePoint(const CtScene* sc) { return (sc->shop && !(sc->shopArg & 0x80)) ? sc->shopArg : -1; }
+int CtSceneSavePoint(const CtScene* sc) { return (sc->shop && !(sc->shopArg & 0x80) && sc->shopArg) ? sc->shopArg : -1; }
+int CtSceneExchange(const CtScene* sc) { return (sc->shop && sc->shopArg == 0) ? 1 : 0; }   // `C8 00`: mode 5
 void CtSceneShopDone(CtScene* sc) { sc->shop = 0; }
 // The $C3 special-sequence request (op 0xFF, operand < $90 -> C0/3FE0 `JML $C3:0000`). -1 = none.
 int CtSceneSequence(const CtScene* sc) { return sc->seqHas ? sc->seqReq : -1; }

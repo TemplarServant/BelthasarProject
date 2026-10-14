@@ -221,6 +221,10 @@ static long l_011b(const uint8_t* w, int caller) {
   switch (caller) {                                       // the caller's code to its JSL C2:8000, JSL included
     case CT_MENU_CALLER_X:     return c + 12 + 18 + 54;   // C0/195E, C0/195F, C0/1960
     case CT_MENU_CALLER_C8_HI: return c + 12 + 18 + 20 + 12 + 18 + 18 + 18 + 12 + 18 + 20 + 4 * 12 + 54;   // .. 0D16
+    // C0/19C7 `LDX #0000` (three FastROM fetches, 18) / `TDC` (12) / `XBA` (18) / `LDA #05` (12) / C0/19CE `JSL C2:8000` (54)
+    case CT_MENU_CALLER_Y:     return c + 18 + 12 + 18 + 12 + 54;
+    // C0/0CF0 `TDC` 12 / `XBA` 18 / `LDA $25` 20 / `BEQ` taken 18 / C0/0D04 `LDA #05` 12 / `BRL` 24 -- then the Y arm's five
+    case CT_MENU_CALLER_C8_00: return c + 12 + 18 + 20 + 18 + 12 + 24 + 18 + 12 + 18 + 12 + 54;
     default:                   return c + 12 + 18 + 20 + 12 + 12 + 12 + 18 + 12 + 18 + 54;             // 0D00 arm
   }
 }

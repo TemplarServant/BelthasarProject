@@ -20571,6 +20571,50 @@
       "notes": "THE FORM SCREEN, with the picker the ROM actually has. C2/CD2B builds a 9-entry PANEL ARRAY $0F02..$0F0A -- 0x80 empty, 0x40|i LOCKED by the story ($7F:01DF), i selectable -- and the cursor mover skips BOTH kinds (C2/C805 -> C2/C9AE -> C2/C9CD re-applies the graph step while the landed entry has bit6 or bit7); the second pick is refused on bit6 (C2/C6D0 `BIT $0F0D / BVS`), not on slot equality. The run picks slot 0, moves DOWN to slot 1 and picks again: C2/C70C exchanges the two $2980 bytes, so the party goes 00 01 80 -> 01 00 80 and Marle becomes the lead. The three SFX sites are now conditioned, which closes menu_sfx.md row P2: C2/C670/C6CC blip only when the cursor ACTUALLY moved, C2/C674 on the first A unconditionally, and C2/C6DE is ONE site shared by the swap, the lock-refusal and the B-cancel (C2/C6DE falls through into C2/C6E7 in every arm). ⚠ STILL OPEN: the party RECONCILE at menu exit (C0/1A03 -- re-run the PC objects' init so the new order shows on the map without a scene reload). It is fully specified in menu2_form_screen.md §5.6 but needs a VM entry point this engine does not have yet, so the new order currently reaches the field on the next scene load."
     },
     {
+      "name": "menu-exchange-vs-oracle",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/menu_exchange_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/menu_exchange_cmp.py"
+      ],
+      "expect": [
+        "menu-exchange: 2267 frame-fields, 0 differing",
+        "menu-exchange: cartridge mode 5 open f35, cursor f86, fade-in done f95, swap f191 (000302018080808080), field back f319"
+      ],
+      "pin": [
+        "^menu-exchange: "
+      ],
+      "timeout_s": 120,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            { int pe = menuShellF + 2 + (priced ? fr + fw : 0);",
+          "replace": "            { int pe = menuShellF + (priced ? fr + fw : 0);  /* MUT: no scheduler scans */",
+          "why": "substate 0 reaches C2/C649 two scans after the song task's JSLs release the CPU (MEASURED: `14 3E` consumed f84, $54 f86): without them the cursor lands at f84"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "    mem[0x0D32] = mem[0x0D33] = 0xFF;                               // 298A9 DEC $0D32",
+          "replace": "    (void)0; /* MUT: no DEC $0D32 */",
+          "why": "C2/CB96 then keeps the overworld's $02AE (1E) instead of the field's $29AE (42): the close posts the wrong song and $0F0E differs"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "  if (mem[0x0D36]) return;                                         // 2CD72 LDA $0D36 / BNE ->2CD99",
+          "replace": "  return; /* MUT: no reserve scan */",
+          "why": "C2/CD2B's reserve scan (with $0D36 = 0): Robo never enters the roster, $0F0C = 0 and Right finds no reserve column"
+        }
+      ],
+      "note_pass": "the party exchange (menu mode 5, screen $07) is the cartridge's frame for frame: Y on the field at storyline 0x49, the song task, the cursor on the two columns, Robo picked from the reserve and swapped for Marle, the close and the field's return -- every byte the screen owns equal over 2267 frame-fields",
+      "notes": "Roadmap G1a item 2 (2026-10-14). disasm/notes/menu2_form_screen.md 2.14. The recipe gato_wait on both sides (its state on the cartridge under the rule, its WRAM dump on the port with its SPC: CT_AUDIO_SEEDSTATE + CT_AUDIO_LOCKSTEP), `7F0000=49, 2982=02, 2983=03, 0126=00` poked on both. The cartridge's milestones are printed on the second line, so a recipe that changed under the check is visible. The picture is not graded here (its BG3 wave, prompt text and hooded figure are OPEN). Re-pin only with both sides read again; the 0 must stay 0."
+    },
+    {
       "name": "field-menu-form-locked-member",
       "argv": [
         "build/ct_field.exe",

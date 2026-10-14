@@ -1599,6 +1599,19 @@ void CtMenuEquipWriteBack(uint8_t* mem, int charId) {
 // (C2/8E9E `CMP $003F,Y`) -- recomputed from the sheet itself. Outside the menu that word holds something else: the
 // oracle's party3_field.state has Crono at 25/96 HP with +$3F = 1029 until C2:9160 writes 0060 at f35. Without this
 // pass a Tonic clamped to the stale word and healed past the maximum (user report 2026-09-24).
+// C2/9895-98B2, the head of C2/9875 (A 16-bit): `STZ $0D32 / STZ $0D34`, `$0D36 = FFFF`, then on a field map ($0100 < $01F0)
+// `DEC $0D32` -- FFFF -- and, off a save point ($7F01CE bit 15 clear), `DEC $0D34` too. $0D32 picks the song screen $07's
+// C2/CB96 keeps (the field's $29AE, the overworld's $02AE); $0D36 is the Form's reserve gate (screen $07 sets it to $71).
+// MEASURED (the rule's cartridge, gato_wait): `$0D32 = FF` by C2:98AC at C+13 (f49).
+void CtMenuOpenFlags(uint8_t* mem, const uint8_t* glb) {
+  if (!mem) return;
+  mem[0x0D32] = mem[0x0D33] = 0; mem[0x0D34] = mem[0x0D35] = 0;      // 29895 / 29898
+  mem[0x0D36] = mem[0x0D37] = 0xFF;                                 // 2989B-2989E
+  if (((mem[0x0100] | (mem[0x0101] << 8)) & 0xFFFF) < 0x01F0) {    // 298A1-298A7
+    mem[0x0D32] = mem[0x0D33] = 0xFF;                               // 298A9 DEC $0D32
+    if (!(glb && (glb[0x01CF] & 0x80))) mem[0x0D34] = mem[0x0D35] = 0xFF;   // 298AC-298B2
+  }
+}
 void CtMenuOpenSheets(uint8_t* mem) {
   if (!mem) return;
   for (int x = 0; x < 0x100; x++) {                                    // C2/9988, X 8-bit: the whole 256-slot page
@@ -3026,6 +3039,208 @@ int CtMenuFormEntryCell(const uint8_t* mem, const uint8_t* glb) {
   for (int k = 0; k < 3; k++) if (!(fp[k] & 0xC0)) return k;
   return 0;
 }
+// ---------------------------------------------------- SCREEN 7 = THE EXCHANGE WITH RESERVES (C2/C7A6)
+// Menu mode 5 (C2/808F[5] = $07), opened by the field's Y button at storyline >= 0x49 (C0/1985 -> C0/19CE) and by the
+// script op `C8 00` (C0/0D04 -> C0/19C7), both with $71 = 0. It is the Form screen's own machinery (C2/C6B9, C2/C805,
+// C2/C70C are shared) run with $0D36 = $71 = 0, so C2/CD2B scans the reserves and the graph is the two-column one.
+// These run on the menu's WRAM as the ROM does: the bytes are the state (disasm/notes/menu2_form_screen.md 2.3-2.11).
+
+// C2/CD2B: `$0F02..$0F0A = 80`, `STZ $0F0B`; the actives compacted from $0F02 (`slot | 40` when $7F01DF & FF/F9BB[id]
+// locks the character, which also takes it out of $0F0B); with $0D36 = 0 the reserves $2983..$2988 compacted from $0F05
+// and their count in $0F0C (C2/CD72-CD96). With $0D36 != 0 the reserve scan is skipped and $0F0C is left alone.
+void CtMenuExchRoster(uint8_t* mem, const uint8_t* glb) {
+  if (!mem) return;
+  for (int i = 0; i < 9; i++) mem[0x0F02 + i] = 0x80;             // 2CD2E-2CD3D
+  mem[0x0F0B] = 0; mem[0x0F0C] = 0;                                // 2CD40 STZ $0F0B (16-bit: $0F0C too)
+  int y = 0;
+  for (int x = 0; x < 3; x++) {                                    // 2CD45-2CD70
+    uint8_t a = mem[0x2980 + x];
+    if (a & 0x80) continue;                                        // 2CD4F BMI
+    mem[0x0F0B]++;                                                 // 2CD51
+    uint8_t v = (uint8_t)x;
+    if (glb && (glb[0x01DF] & MFORM_LOCKMASK(a))) { mem[0x0F0B]--; v |= 0x40; }   // 2CD55-2CD62
+    mem[0x0F02 + y++] = v;                                         // 2CD64-2CD69
+  }
+  if (mem[0x0D36]) return;                                         // 2CD72 LDA $0D36 / BNE ->2CD99
+  int r = 0;
+  for (int x = 3; x < 9; x++) {                                    // 2CD7D-2CD90
+    if (mem[0x2980 + x] & 0x80) continue;                          // 2CD84 BMI
+    mem[0x0F05 + r++] = (uint8_t)x;                                // 2CD86-2CD8C (`ORA $00`, $00 = 0 on this entry)
+  }
+  mem[0x0F0C] = (uint8_t)r;                                        // 2CD96 STY $0F0C
+}
+// C2/C649 (screen 7 enters it with X = 0, C2/C7BE): the first panel entry with neither LOCKED nor EMPTY, over all nine
+// -- so with every active member locked the hand starts on the reserve column -- then both picks to FF and `INC $68`.
+void CtMenuExchEntry(uint8_t* mem) {
+  if (!mem) return;
+  int x = 0;
+  while (x < 9 && (mem[0x0F02 + x] & 0xC0)) x++;                  // 2C648-2C64E
+  mem[0x0054] = (uint8_t)(x < 9 ? x : 0);                          // 2C650 STX $54
+  mem[0x0F00] = 0xFF; mem[0x0F01] = 0xFF;                          // 2C652-2C657
+}
+// The screen's setup list copies the cursor graph $FF:B77A (a length byte 2A, then seven 6-byte cells: hand X, hand Y,
+// up, down, left, right; bit 7 of a neighbour = "ran off the reserve list") to $7E:9380 verbatim. The X menu's Form
+// overwrites the hand X with 38 (C2/CB18); screen 7 keeps the table's 08 / E8.
+void CtMenuExchGraph(uint8_t* mem, const uint8_t* rom, long romLen) {
+  if (!mem || !rom || romLen < 0x3FB77A + 43) return;
+  memcpy(mem + 0x9380, rom + 0x3FB77B, 42);
+}
+// C2/C9AE -- the re-drive when the landed entry is not selectable: a LEFT/RIGHT press hops to the other column when the
+// side it is on has nobody selectable (`$0F0B` / `$0F0C` = 0), else the graph is walked once more along UP (bit 3 of $5A)
+// or DOWN (anything else, a LEFT/RIGHT included): C2/C9CD-C9E0.
+static void mExchRedrive(uint8_t* m) {
+  if (m[0x5A] & 0x03) {                                            // 2C9AE-2C9B2
+    if (m[0x54] < 3) { if (!m[0x0F0B]) { m[0x54] = (uint8_t)(m[0x54] + 3); return; } }   // 2C9B4-2C9CA
+    else             { if (!m[0x0F0C]) { m[0x54] = (uint8_t)(m[0x54] - 3); return; } }   // 2C9C3-2C9CA
+  }
+  int c = m[0x54] & 0x0F; if (c > 6) c = 6;                        // 2C9CD JSR C2/EA27: X = cell * 6
+  uint8_t v = (m[0x5A] & 0x08) ? m[0x9382 + c * 6] : m[0x9383 + c * 6];   // 2C9D2-2C9E0
+  m[0x54] = (uint8_t)(v & 0x0F);
+}
+// C2/E9E2 + C2/C805, one call per input frame: `dir` is the pad latch's auto-repeat byte $F5 (bit 0 R, 1 L, 2 D, 3 U).
+// E9E2: $81 = $54; the FIRST set bit picks the neighbour (R, L, D, U in that order: 2E9F4's LSR loop); a neighbour with
+// bit 7 sets $5A bit 7 (SCROLL) and lands on its low bits. C805: the reserve scroll C2/C85B (only with five reserves or
+// more), then the validity loop -- C2/C819 `$0F0B | $0F0C` both 0 -> $54 = 0 and the entry is 40; else the entry under the
+// cursor ($0F02 + $54, + the scroll $80 on the reserve column) re-drives (C2/C9AE) while it is LOCKED or EMPTY -- and
+// finally $0F0D = the entry, $7F = $54, $56 = 1 on the reserve column. Returns 1 when the cursor moved ($81 != $54: the
+// blip C2/EAC2 of C2/C7EA / C2/C6C6).
+int CtMenuExchMove(uint8_t* m, int dir) {
+  if (!m) return 0;
+  m[0x81] = m[0x54];                                               // 2E9E5
+  m[0x0D1E] = 0x80;                                                // 2E9E9
+  m[0x5A] = (uint8_t)(dir & 0x0F);                                 // 2E9F0 LDA $F5 / STA $5A
+  int x = 0;
+  while (x < 4 && !((dir >> x) & 1)) x++;                          // 2E9F4-2E9FA
+  if (x < 4 && !m[0x0D1F]) {                                       // 2E9FE-2EA04
+    m[0x0D1E] = (uint8_t)x;
+    int c = m[0x54] & 0x0F; if (c > 6) c = 6;
+    m[0x55] = m[0x54];                                             // 2EA0C
+    static const int off[4] = { 5, 4, 3, 2 };                      // 2EA1F: EA45 R, EA40 L, EA3B D, EA36 U
+    uint8_t v = m[0x9380 + c * 6 + off[x]];
+    m[0x54] = v;                                                   // 2EA48
+    if (v & 0x80) { m[0x5A] |= 0x80; m[0x54] &= 0x7F; }            // 2EA4A-2EA50
+  }
+  m[0x0D1F] = 0;                                                   // 2EA1A
+  CtMenuExchValidate(m);
+  return m[0x81] != m[0x54];
+}
+// C2/C805 alone -- what the screen's build (C2/CAF3) runs on the entry cell, with no move before it.
+void CtMenuExchValidate(uint8_t* m) {
+  if (!m) return;
+  m[0x0D9E] = 0;                                                   // 2C808
+  if (m[0x0F0C] >= 5 && (m[0x5A] & 0x80)) {                        // 2C80B-2C816: C2/C85B
+    if (m[0x5A] & 0x08) {                                          //   UP off the top of the reserve column
+      m[0x54] = 3;
+      if (m[0x80]) { m[0x80]--; m[0x0D9E] = 0xD0; }                //   (C2/C8BA's redraw is the picture's)
+    } else {                                                       //   DOWN off its bottom
+      int lim = m[0x0F0C] - 3;
+      m[0x54] = 6;
+      if (m[0x80] + 1 < lim) { m[0x80]++; m[0x0D9E] = 0x30; }
+    }
+  }
+  uint8_t e;
+  for (int guard = 0; ; guard++) {                                 // 2C819-2C83B
+    if (!(m[0x0F0B] | m[0x0F0C])) { m[0x54] = 0; e = 0x40; break; }
+    int k = m[0x54] < 3 ? m[0x54] : m[0x54] + m[0x80];
+    e = (k < 9) ? m[0x0F02 + k] : 0x80;
+    if (!(e & 0xC0) || guard > 16) break;
+    mExchRedrive(m);
+  }
+  m[0x0F0D] = e;                                                   // 2C83D
+  m[0x0D13] &= (uint8_t)~0x04;                                     // 2C843 TRB $0D13
+  m[0x56] = 0; m[0x7F] = m[0x54];                                  // 2C848-2C84C
+  if (m[0x54] >= 3) m[0x56] = 1;                                   // 2C84E-2C852
+}
+// C2/C674 (screen 7's A, C2/C7F7: refused while $0F0D carries LOCKED): the first pick. $0DA8 = the scroll, $54 = $0D9C =
+// $7F, $0F00 = $0F0D. Returns 0 when refused (no blip: C2/C7FA's BVS goes straight to the RTS).
+int CtMenuExchPick(uint8_t* m) {
+  if (!m || (m[0x0F0D] & 0x40)) return 0;                          // 2C7F7 BIT $0F0D / BVS
+  m[0x0DA8] = m[0x80];                                             // 2C677
+  m[0x54] = m[0x7F]; m[0x0D9C] = m[0x7F];                          // 2C67C-2C680
+  m[0x0F00] = m[0x0F0D];                                           // 2C6A8-2C6AB
+  return 1;
+}
+// C2/C6D0 + C2/C6DE-C70A (the second-pick substate, C2/C6B9, shared with the Form screen): A on a selectable entry stores
+// it in $0F01 and runs THE SWAP C2/C70C over $2980..$2988 (then C2/816A, C2/CD2B -- the roster rebuilt from the new
+// party -- and the panels' redraw); A on a LOCKED one, or B, cancels. Either way the picks go back to FF and the cursor to
+// $7F. Returns 1 when the swap ran.
+int CtMenuExchSecond(uint8_t* m, const uint8_t* glb, int a) {
+  if (!m) return 0;
+  int swapped = 0;
+  if (a && !(m[0x0F0D] & 0x40)) {                                  // 2C6D0 BIT $0F0D / BVS ->2C6DE
+    m[0x0F01] = m[0x0F0D];                                         // 2C6D5
+    int i = m[0x0F00] & 0x3F, j = m[0x0F01] & 0x3F;
+    CtMenuFormSwap(m, i, j);                                       // 2C70F-2C722
+    CtMenuRosterLists(m);                                          // 2C725 JSR C2/816A
+    CtMenuExchRoster(m, glb);                                      // 2C77C JSR C2/CD2B
+    swapped = 1;
+  }
+  m[0x54] = m[0x7F];                                               // 2C6E1
+  m[0x0F00] = 0xFF; m[0x0F01] = 0xFF;                              // 2C6EA-2C6EF
+  return swapped;
+}
+
+// SCREEN $07's PICTURE, from the menu's own WRAM:
+//   BG2  the captured chrome (ctMenuChromeExchTM: the two columns and the prompt box), the window ramp of list 0 -- `--hdma`
+//        on the cartridge reads one 192-line ramp from line 17, 12 lines a step, as the status screen's -- and C2/CC4F's dim
+//        re-applied over the three active panels' rows (2 + 6r .. 7 + 6r, tile columns 2-15; C2/CC4F walks $0F02..$0F04
+//        only, so the reserve column never dims);
+//   BG1  each panel at C2/C784's (column, row): column 3 for the actives, 0x13 for the reserves, row (index & 7) * 6 + 2 --
+//        the Form's rows, so its y -- except the reserve panel a first pick lifted (C2/C688-C6A5 blanks it);
+//   OBJ  the members at C2/CDE3's places, C2/CE6E[$02]: the actives from index 0 (x 116, feet 56 + 48r), the reserves from 6
+//        (x 140) for the window's four rows from the scroll $80; the hand at the graph's cell $54 ($7E:9380), and the picked
+//        cell's second hand ($0D9C, +2 / -1) on the blink's visible half, as the Form's.
+// OPEN, not drawn: the BG3 wave behind the windows (HDMA channel 4 on $2111 from $7E:922C), the prompt's text and the
+// hooded figure in its box (C2/CE9D's object, $FF:D57A -> $0F12) -- each its own derivation.
+void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
+  if (!h || !fb || !h->mem) return;
+  const uint8_t* m = h->mem;
+  { static uint16_t scratch[CT_MENU_CHROME_TMW * CT_MENU_CHROME_TMH];
+    memcpy(scratch, ctMenuChromeExchTM, sizeof scratch);
+    for (int r = 0; r < 3; r++) {
+      int dim = (m[0x0F02 + r] & 0xC0) != 0;                          // 2CC7B AND #00C0
+      for (int ty = 2 + 6 * r; ty < 8 + 6 * r; ty++)
+        for (int tx = 2; tx <= 15; tx++) {
+          uint16_t* e = &scratch[ty * CT_MENU_CHROME_TMW + tx];
+          int t = *e & 0x3FF;
+          if (!((t >= 0x3DC && t <= 0x3EF) || (t >= 0x300 && t <= 0x313))) continue;
+          *e = (uint16_t)((*e & ~0x1C00) | (dim ? (4 << 10) : 0));
+        }
+    }
+    mChromeTMPal2L(fb, scratch, 0, ctMenuChromePal, mWinGrad(0), 0); }
+  const int lifted = (m[0x0F00] != 0xFF && m[0x0D9C] >= 3) ? m[0x0D9C] - 3 + m[0x0DA8] : -1;   // C2/C683-C6A5
+  for (int r = 0; r < 3; r++) {                                       // the actives, C2/C784 column 3
+    uint8_t e = m[0x0F02 + r];
+    if (e & 0x80) continue;
+    CtMenuPanel p;
+    if (!CtMenuPanelData(h->mem, e & 0x3F, &p)) continue;
+    int y = 8 + r * MP_PITCH, dim = (e & 0x40) ? 1 : 0;
+    mCharPanel(h, fb, MP_X, y, &p, 3 * 8 - MP_X, dim);
+    mPanelAtkDefOne(h, fb, 3 * 8 - MP_X, y + 40, p.charId, dim);
+    mBlitPartySpr(h, fb, p.charId, 116, 56 + r * MP_PITCH, dim);    // C2/CE6E[0 + 2r]
+  }
+  for (int k = 0; k < 4; k++) {                                       // the reserves, column 0x13, from the scroll
+    int ix = m[0x80] + k;
+    if (ix >= 6) break;
+    uint8_t e = m[0x0F05 + ix];
+    if (e & 0x80) continue;
+    CtMenuPanel p;
+    if (!CtMenuPanelData(h->mem, e & 0x3F, &p)) continue;
+    int y = 8 + k * MP_PITCH;
+    if (ix != lifted) {
+      mCharPanel(h, fb, MP_X, y, &p, 0x13 * 8 - MP_X, 0);
+      mPanelAtkDefOne(h, fb, 0x13 * 8 - MP_X, y + 40, p.charId, 0);
+    }
+    mBlitPartySpr(h, fb, p.charId, 140, 56 + k * MP_PITCH, 0);      // C2/CE6E[6 + 2k]
+  }
+  int c = m[0x54] & 0x0F; if (c > 6) c = 6;                           // the hand: the graph's (x, y)
+  mHandCursor(h, fb, m[0x9380 + c * 6], m[0x9381 + c * 6]);
+  if (m[0x0F00] != 0xFF && pickBlink) {
+    int pc = m[0x0D9C] & 0x0F; if (pc > 6) pc = 6;
+    mHandCursor(h, fb, m[0x9380 + pc * 6] + 2, m[0x9381 + pc * 6] - 1);
+  }
+}
+
 void CtMenuRenderForm(const CtMenuHost* h, uint8_t* fb, int cursor, int picked, const uint8_t* panel9,
                       int pickBlink) {
   if (!h || !fb) return;

@@ -17,7 +17,9 @@
 // The callers' arms (their code between C0/011B's RTS and the JSL differs)
 enum { CT_MENU_CALLER_X = 0,          // the field's X: C0/1958 -> C0/195B JSR C0/011B -> C0/1960 JSL C2:8000
        CT_MENU_CALLER_C8_HI = 1,      // op C8 $80+ (shop, naming): C0/0CEA .. C0/0D09 .. C0/0D18
-       CT_MENU_CALLER_C8_ODD = 2 };   // op C8 odd (the load shell): C0/0D00 `LDA #00` .. C0/0D18
+       CT_MENU_CALLER_C8_ODD = 2,     // op C8 odd (the load shell): C0/0D00 `LDA #00` .. C0/0D18
+       CT_MENU_CALLER_Y = 3,          // the field's Y (the exchange): C0/19C4 JSR C0/011B -> C0/19C7 .. C0/19CE JSL C2:8000
+       CT_MENU_CALLER_C8_00 = 4 };    // op C8 00 (the exchange): C0/0CEA .. C0/0D04 `LDA #05 / BRL C0/19C7` .. C0/19CE
 
 // C2/F90C over string `idx` of the pointer table at $FF:`table` (2 bpp, the pen from 0): the bank-C2 VWF, glyph by
 // glyph (C2/58B2 -> C2/5DC4 -> 24 rows through C2/5E89's shift arm). -1 if the string holds a code it does not walk.

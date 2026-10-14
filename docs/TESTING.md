@@ -727,6 +727,15 @@ entry page kept the pre-battle word (090B) and the lead was drawn there on the r
 "blink in the previous place". The damage number's origin is the same live position (C1/5B4D-5B6E), which re-pinned
 field-battle-status-render. Needs gato_wait.state.
 
+### menu-exchange-vs-oracle (`tools/menu_exchange_cmp.py`)
+
+The party exchange (menu mode 5, screen `$07`): the field's Y at storyline 0x49 opens it, the song task posts `14 3E` and
+`81 01 FF`, the cursor walks the two columns, Robo is picked from the reserve and swapped for Marle, B closes it (the song put
+back, the field reloaded with the new party). The recipe gato_wait on both sides (`7F0000=49, 2982=02, 2983=03, 0126=00`;
+the port's SPC is the state's, in lockstep): the party, the roster `$0F02-$0F0C`, the picks, the cursor, the song bytes,
+`$0D10` and `$0119`, each while the screen owns it -- 0 differing over 2267 frame-fields. Quick tier (~2 s). The picture is
+not graded (its BG3 wave, the prompt text and the hooded figure are OPEN). disasm/notes/menu2_form_screen.md 2.14.
+
 ### battle-victory-teardown-frames-vs-oracle (`tools/battle_victory_teardown_cmp.py`)
 
 The victory's C1/356D takes four frames: one C1/1BAA queue removal per seat in V, V+1 and V+2 (each closed by C1/007E's

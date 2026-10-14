@@ -162,7 +162,8 @@
         "menu_open_gato2",
         "grupo_3_mapa",
         "ow_w0",
-        "menu_equip_spare"
+        "menu_equip_spare",
+        "gato_wait"
       ],
       "status": "power-on"
     },

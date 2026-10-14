@@ -252,6 +252,7 @@ void CtMenuRecalcDerived(const uint8_t* sheet, uint8_t* out11);
 // clamping curHP (+0x03) to the new effective max and rebuilding the HP-bar scale $0D38 + charId*2.
 void CtMenuEquipWriteBack(uint8_t* mem, int charId);
 // C2/9875's pass at every menu open: the bag cleanup C2/9988 and all seven sheets recomputed + written back (C2/99B2).
+void CtMenuOpenFlags(uint8_t* mem, const uint8_t* glb);   // C2/9895-98B2: $0D32 / $0D34 / $0D36 at the open
 void CtMenuOpenSheets(uint8_t* mem);
 // ROM C2/9CC1: give the old piece back, write `newId` into the sheet at C2/A4AB[gearSlot]
 // (Weapon +0x29, Helm +0x27, Armor +0x28, Accessory +0x2A), take the new piece out, zero
@@ -492,6 +493,23 @@ void CtMenuFormPanels(const uint8_t* mem, const uint8_t* glb, uint8_t* panel9);
 // C2/C649: the cell the Form picker opens on -- the first panel entry with neither the LOCKED
 // (0x40) nor the EMPTY (0x80) bit set.
 int CtMenuFormEntryCell(const uint8_t* mem, const uint8_t* glb);
+// SCREEN 7 = THE EXCHANGE WITH RESERVES (menu mode 5; C2/C7A6) -- the field's Y at storyline >= 0x49 and the script's
+// `C8 00`. The Form screen's machinery on the menu's WRAM with $0D36 = 0 (disasm/notes/menu2_form_screen.md 2.11):
+//   CtMenuExchRoster  C2/CD2B: $0F02..$0F0A (actives from $0F02, reserves from $0F05), $0F0B, $0F0C
+//   CtMenuExchEntry   C2/C649 from X = 0: $54, both picks FF
+//   CtMenuExchGraph   the setup list's copy of the cursor graph $FF:B77A -> $7E:9380
+//   CtMenuExchMove    C2/E9E2 + C2/C805 (C2/C85B, C2/C9AE): `dir` = $F5; returns 1 when $54 moved (the blip)
+//   CtMenuExchPick    C2/C674 (refused on a LOCKED entry, C2/C7F7): returns 0 when refused
+//   CtMenuExchSecond  C2/C6D0 / C2/C6DE-C70A: `a` = A (else B); the swap C2/C70C + C2/816A + C2/CD2B; returns 1 if swapped
+void CtMenuExchRoster(uint8_t* mem, const uint8_t* glb);
+void CtMenuExchEntry(uint8_t* mem);
+void CtMenuExchGraph(uint8_t* mem, const uint8_t* rom, long romLen);
+int  CtMenuExchMove(uint8_t* mem, int dir);
+void CtMenuExchValidate(uint8_t* mem);      // C2/C805 alone (the build's, on the entry cell)
+int  CtMenuExchPick(uint8_t* mem);
+int  CtMenuExchSecond(uint8_t* mem, const uint8_t* glb, int a);
+// Screen $07's picture from the menu's WRAM (the chrome, the panels, the members, the hands): menu.c says what is OPEN.
+void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink);
 // C2/CC4F: hand CtMenuChrome the LIVE panel array so the FORM views' per-panel dim comes from the
 // current roster instead of the one the chrome tilemap was captured on. NULL leaves the map alone.
 void CtMenuSetFormPanelDim(const uint8_t* panel9);

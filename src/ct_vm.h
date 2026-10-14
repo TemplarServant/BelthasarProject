@@ -372,6 +372,7 @@ int  CtSceneLoader(const CtScene* sc);
 // CtSceneShopDone (the shop closed and the field resumed), then steps over the op -- C0/3757's done arm.
 int  CtSceneShop(const CtScene* sc);
 int  CtSceneSavePoint(const CtScene* sc);   // the same park with an even operand below $80: mode 6, screen $0B
+int  CtSceneExchange(const CtScene* sc);    // ...and operand $00: mode 5, screen $07, the party exchange (1 = parked)
 void CtSceneShopDone(CtScene* sc);
 // A $C3 SPECIAL SEQUENCE (event op 0xFF with an operand < $90 -- C0/3FBB fades, C0/3FD6 resets the
 // stack and C0/3FE0 `JML $C3:0000`). Returns the sequence id (2 = the title screen) or -1. The

@@ -1454,3 +1454,51 @@ and D3 shows one of its index claims (`$0F05..$0F0A`) is already imprecise.
 * **The sprite budget `$0D75` is the screen's**: 2 from the Form tab's builder (C2/CA39), so two blocks take new poses
   per frame (each upload adds the block's `$1802` = 01 to `$0D73`, 2F820). MEASURED on the swap frame: `$0D73` = 02,
   Lucca's and Frog's new poses both in it. The port had assumed one a frame (a misreading of 2F826 as 0x20).
+
+---
+
+## 2.14 SCREEN $07 PORTED 2026-10-14: the party exchange with reserves (the Y button, the script's `C8 00`)
+
+Roadmap G1a item 2: without it a player could never bring a reserve member into the party, and the four scripts that ask
+for the exchange (scenes 08D, 113, 127 and 1D0 -- twelve `C8 00` sites) went on without one.
+
+**How it is reached.** The field's Y: C0/1916 `LDA $00F6 / BIT #01` -> C0/1985 (a window up: flip it, `$26 EOR 3`) ->
+C0/198E gates (storyline `$7F0000` >= 0x49, `$011F` != 0, `$0162` = 0, `$0110` = 0) -> C0/19A7 the X path's own fade (`$0407 =
+FF`, `DEC $19` / FD/C2C1 / C0/EC60) -> C0/19C1 JSR C0/0B4E, JSR C0/011B -> C0/19C7 `LDX #0000 / TDC / XBA / LDA #05 / JSL
+C2/8000`. The script's `C8 00`: C0/3757 parks it (`$0117` bit 6), C0/0CC7's fade (the shop's: C0/881E, FD/FFF7), C0/0CEA's
+save, C0/0CF4 `BEQ ->0D04` `LDA #05 / BRL C0/19C7`. Both return through C0/19D2 -- C0/01A5, the party reconcile C0/1A03, and
+`$0117` bit 6 -> `$0118` bit 6 (C0/19EB-19F7: the op's handshake) -- then C0/B192 and C0/2824.
+
+**The screen** (C2/808F[5] = $07, C2/C7A6: substates C7AC / C7E0 / C6B9). C2/C7AC: `$0D36 = $0D37 = $71` (0), C2/CB8B (the song
+task below), C2/C9E5 (the two-column list $FF:BF05), C2/C649 from X = 0, C2/CAF3 (the build, its C2/C805), C2/CE86, C2/C7CB
+waits for the song task (`$00C0`), `$9689 = 17`, C2/CE9D, C2/83B2's fade-in. C2/C7E0: A -> C2/C7F7 (`BIT $0F0D / BVS`: a
+locked entry is refused, silently) -> C2/C674; B -> C2/C7FF `JSR C2/CC0E / JMP C2/82B2` (no ribbon in mode 5: the menu
+closes); else C2/C805 and the blip. C2/C6B9 is the Form's. With $0D36 = 0, C2/CD2B scans the reserves (from $0F05, compacted,
+never locked: $00 = 0 on this entry), C2/C784 puts panels in columns 3 / 0x13, C2/CDE3 the members at C2/CE6E[0 + 2r] (x 116)
+and [6 + 2k] (x 140), and the graph $FF:B77A keeps its hand X 08 / E8. C2/9875's head (C2/9895-98B2): `$0D32 = $0D34 = 0`,
+`$0D36 = FFFF`, a field map -> `$0D32 = FFFF` (and `$0D34` off a save point).
+
+**The song.** C2/CB8B: unless `$7F01CF` bit 6, `$0F0E` = the song playing (`$29AE` when `$0D32`, else `$02AE`), and if it is not
+$3E, `$0F0F = 1` and the task C2/CBBF: `$2141` = 0 (a yield a frame), `14 3E 80 80`, `81 01 FF FF`, the `$2143 & 0F` spin,
+C2/8216. Its JSLs hold the CPU, so substate 0's two scheduler scans (C2/C649 at S0 + 2 without the song) come after them.
+The close C2/CC0E: `81 08 01 01`, C2/83CA's fade, `$2141` = 0, `11 <$0F0E> 80 80`, `81 10 xx xx` (xx = `$04FB`, or FF).
+
+**MEASURED** (the rule's cartridge, the recipe gato_wait with `7F0000=49, 2982=02, 2983=03, 0126=00`; Y f20, Right f124, A f146,
+Left f168, A f190, B f232): `$0119` 0E..00 f21-35, `$0A00 = 05` f36, `$0067 = 07` f51, `$0F02 = 40 01 02 03 80..` f52 (C2:CD8C),
+`14 3E` posted f52 and consumed f84, `$54 = 01` f86 (C2:C652), `$0D10` 02..0F f88-95, Right -> `$54 = 03` f125, A -> `$0F00 =
+03` f147, Left -> `$54 = 01` f169, A -> `$2980 = 00 03 02 01` f191 (C2:C725), B -> `81 08` f233, `$0D10` 0D..00 f233-240, `11 42`
+f250 (`$2141` busy f240-249), `81 10 FF FF` f278 (C2:CC09), C0/0905 f281, `$0119` 01..0F f305-319. With the song suppressed
+(`$7F01CF` bit 6): `$54` f54, `$0D10 = 02` f56.
+
+**The port** (src/menu.c CtMenuExch*, CtMenuOpenFlags, CtMenuRenderExchange; src/field.c the Y and `C8 00` launchers, the
+song task, the close; src/ct_vm.c CtSceneExchange): `tools/menu_exchange_cmp.py` -- every byte above, frame for frame, 0
+differing over 2267 frame-fields (check menu-exchange-vs-oracle). On the way: the menu fades now write `$0119` (C0/1949 /
+C0/0CD4 / C0/19B2 `DEC $19`, C0/2829 `INC $19`), and C2/9875's head runs at every open.
+
+**OPEN.** (1) The picture's three layers not drawn: the BG3 wave behind the windows (HDMA channel 4 on `$2111` from
+`$7E:922C`), the prompt's text in the bottom box, and the hooded figure in it (C2/CE9D's object, `$FF:D57A` -> `$0F12`). The
+rest is the cartridge's layout (the captured chrome `ctMenuChromeExchTM`, C2/C784's panels, C2/CE6E's members, the graph's
+hand) but has not been graded pixel by pixel. (2) The script's `C8 00` arm is the same screen through the same launcher
+code, but no state reaches one of its twelve sites: ungraded. (3) A song post a busy driver holds past S0 + 2 is modelled
+as moving P; the cartridge would run C2/C649 first and hold only the fade-in (C2/C7CB) -- not measured. (4) The overworld's
+own poll (C2/2552: `$027C == 5 ? 1 : 5`) is not this launcher and is not ported.
