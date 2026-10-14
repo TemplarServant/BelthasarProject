@@ -34,6 +34,7 @@ add_executable(ct
   src/objslot.c  # FD/E39C, the palette-effect records -- one body for the battle and the field VM
   src/tileanim.c # FD/DE98 + FD/E022, the field's animated BG tiles (--sweepbganim)
   src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c  # --xlatcmp: the race's program translated from the ROM, lockstepped per instruction
+  src/seq_race.c # --racestep: the race's tasks, native (sequence_table.md sec. 12)
   src/seq_ppu.c  # --seqppucmp: the sequence stages' vendored-PPU picture, graded against the oracle's own frame
   ${SNES_SRC}
 )

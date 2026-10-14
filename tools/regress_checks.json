@@ -38820,6 +38820,53 @@
       "notes": "Roadmap G1a item 4 (2026-10-14). battle_ab's enemy B6 wipes the party in GATO's arena; C0/0289-029E then runs C0/0304, the won fight's tail, C0/0343-038C included (the followers' regroup, $7F03FE, $011F). The port had gated that tail on a won fight: after losing to GATO the player never regained control. src/field.c fieldBattleResume."
     },
     {
+      "name": "race-step-485d-vs-oracle",
+      "argv": [
+        "python",
+        "tools/race_step_cmp.py",
+        "--poked"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state",
+        "tools/race_step_cmp.py"
+      ],
+      "expect": [
+        "racestep: poked 22 cases, 0 differing",
+        "racestep: idle 64 stops, 0 differing",
+        "racestep: boost 63 stops, 0 differing",
+        "racestep: steer 63 stops, 0 differing",
+        "racestep: camera 63 stops, 0 differing"
+      ],
+      "pin": [
+        "^racestep: "
+      ],
+      "timeout_s": 420,
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "{ r->c = 1; unsigned a = sbc(r, rd(r, 0x4A), 0x80); if (neg(a)) a = 0; wr(r, 0x4A, a); }",
+          "replace": "{ r->c = 1; unsigned a = sbc(r, rd(r, 0x4A), 0x7F); if (neg(a)) a = 0; wr(r, 0x4A, a); }   /* MUT */",
+          "why": "48FD's drag is $80 a frame: one less and the player's speed creeps up every frame of the race"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "  wr(r, 0x76, sbc(r, rd(r, 0x76), rd(r, 0xF8)));                      // 4C76 LDA $76 / SBC $F8 -- $F8, as the ROM has it",
+          "replace": "  wr(r, 0x76, sbc(r, rd(r, 0x76), rd(r, 0xF6)));   /* MUT: the 'obvious' $F6 */",
+          "why": "4C76 subtracts $F8, not $F6 -- the ROM's own quirk in the bump from behind; the 'fix' moves Johnny after every bump"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "  if (a == 0x0309) rank = 2;",
+          "replace": "  if (a == 0x0308) rank = 2;   /* MUT */",
+          "why": "47C2 CMP #0309: the 777 jackpot ($0381 = 2)"
+        }
+      ],
+      "note_pass": "the race's per-frame task $7E:485D (src/seq_race.c) is the cartridge's: 253 calls along four drives and 22 poked frames (the finishes and the eight bumps), every WRAM byte and APU port write equal",
+      "notes": "Roadmap G1a item 1, the race's native port, stage 1 (user decision 2026-10-14: native, in stages). tools/race_step_cmp.py walks the user's Lab 32 capture (saves/race_re/race_user.state) and micro-executes the task on both sides from the same frame (ct.exe --callrom 7E485D --writes, CT_CALLROM_ALLWRITES=1, against ct.exe --racestep). disasm/notes/sequence_table.md sec. 12."
+    },
+    {
       "name": "jackie-saves-census-vs-oracle",
       "argv": [
         "python",

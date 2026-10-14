@@ -746,6 +746,15 @@ no press). Before 2026-10-14 the port stopped black on overworld 1F4 (op 03), ha
 Last Village, waited for A on self-closing boxes and listed Marle twice on the exchange screen. Full tier (~2.5 min).
 Needs the user's capture (SKIPs without it).
 
+### race-step-485d-vs-oracle (`tools/race_step_cmp.py --poked`)
+
+The motorcycle race's per-frame task `$7E:485D`, native (src/seq_race.c), against the cartridge call by call: from the
+user's Lab 32 capture (saves/race_re/race_user.state) four drives (idle, B boosts, steering with bumps, the camera) are
+walked in 37-frame segments and at every stop the task runs once on both sides from the same frame (`ct.exe --callrom
+7E485D --writes` with CT_CALLROM_ALLWRITES=1, against `ct.exe --racestep`); 22 more frames have the finish's two arms and
+the eight bump codes poked in (the win with every jackpot score, Johnny's win). Every WRAM byte and APU port write equal:
+`racestep: <drive> N stops, 0 differing`. Full tier (~1.5 min). Needs the user's capture.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, local and gitignored -- SKIPs without them), booted the

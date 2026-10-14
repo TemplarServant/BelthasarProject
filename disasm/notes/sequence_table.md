@@ -2334,3 +2334,17 @@ ENDS at f2877 (`$7E:0000 = 01`, then the teardown's `JML $C0:0000` into the stag
 48A9 reads the course position: `LDA $9E / BNE / LDA $9C / CMP #1000` -- the 24-bit `$9C-$9E` (`$9B` the fraction)
 climbs ~224 a frame with no input. Next: the task that owns `$78` and its phases, the position's speed law (the boost),
 Johnny's, and REST's source.
+
+**Stage 1, step one: the race task `$7E:485D` is NATIVE** (src/seq_race.c, CtRaceStep485D, 2026-10-14) and graded call by
+call (check race-step-485d-vs-oracle): 253 frames along four drives and 22 poked ones (both finishes, every jackpot, the
+eight bumps), every WRAM byte and APU write equal to the cartridge's. What the task is, in full: the clock `$BC`; the two
+finishes (`$53 == 8` the player, `$78 == 8` Johnny); the HUD's two markers on the camera point `$9C/$9E` (vblank hooks
+`$464D`, `$4643`); the lead flags `$63/$88`; drag `$80`, engine `$0100` (Johnny `$F8`, once `$98` bit 15) under the top
+speeds `$57` / `$7C` (`$55`/`$59`, `$7A`/`$7E` by `$8E`'s sign -- whoever trails gets the higher one); the boost (B's
+edge, `$9A` left, `$BA` = 128 frames with the palette flash every eighth, `+$1700` capped `$7FFF`); the camera's `$0A02`;
+Johnny's steering (`$98` bits 8/9) and the score `$69` (+2 a frame ahead, -1 behind, +20 / -10 on a bump); the player's
+steering (`$06 & $B8` / `$06 & $B6`, the camera's masks from task `$4339`), lateral speeds `$65/$67`, `$8A/$8C`; `$8E`;
+the collision (`$A4`, `$A8`, the four bumps and their swaps, the SFX `19 98 80`); the engine pitch (`$2141`); the
+positions (`speed >> 6`) and the lateral clamp `0..$7000`. ⚠ 4C76/4C7C subtract `$F8` (not `$F6`): kept.
+Next: task `$4339` (the masks and the camera), then the start (who clears `$B0`, sets `$9A`, the top speeds) and the
+finish's tail to the END, so the stage can run from `FF 00` to `JML $C0:0000` natively.

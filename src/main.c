@@ -7324,6 +7324,10 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
 // VRAM, CGRAM and OAM. The first disagreement is printed with the address the translation was at -- nothing is
 // averaged, so a green run means the translation ran exactly the cartridge's instruction stream and clock.
 #include "seq_xlat.h"
+#include "seq_race.h"   // --racestep: the race task $7E:485D, native
+// --racestep's sound: what the task sends the ports, printed as the writes the ROM makes ($2141 = pitch, then $2140 = $89).
+static void racestepApu(void* c, uint8_t p) { (void)c; printf("  w 002141 = %02X\n  w 002140 = 89\n", p); }
+static void racestepSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)c; printf("  sfx %02X %02X %02X\n", a, b, d); }
 static uint32_t xlatCrc(const uint8_t* p, size_t n) {
   uint32_t h = 2166136261u;
   for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 16777619u; }
@@ -14692,9 +14696,10 @@ static int runCallRom(const char* romPath, const char* statePath, const char* ad
   if (showWrites) {
     int n = CtWriteLogCount(); const CtWrite* w = CtWriteLogData();
     printf("callrom: %d write(s)\n", n);
-    for (int i = 0; i < n && i < 64; i++)
+    int cap = getenv("CT_CALLROM_ALLWRITES") ? n : 64;   // CT_CALLROM_ALLWRITES=1: every write (tools/race_step_cmp.py)
+    for (int i = 0; i < n && i < cap; i++)
       printf("  w %06X = %02X  (by %02X:%04X)\n", w[i].adr, w[i].val, w[i].bank, w[i].pc);
-    if (n > 64) printf("  ... %d more\n", n - 64);
+    if (n > cap) printf("  ... %d more\n", n - cap);
   }
   CtOracleDestroy(s); free(rom);
   return ok ? 0 : 1;
@@ -15650,6 +15655,21 @@ int main(int argc, char** argv) {
     FILE* of = fopen(argv[3], "wb"); if (of) { fwrite(w, 1, sizeof w, of); fclose(of); }
     printf("hdmabuild: FD/C2C1 -> %d ($0153 %02X)\n", r, w[0x0153]);
     return r == 0 ? 0 : 1;
+  }
+  // --racestep <in.wram>: run the race's per-frame task $7E:485D (src/seq_race.c, CtRaceStep485D) once over a 128 KB WRAM
+  // image and print every byte it changed -- graded against `--callrom 7E485D --writes` from the same frame's state
+  // (tools/race_step_cmp.py). The sound callbacks print what the ROM would post.
+  if (argc == 3 && !strcmp(argv[1], "--racestep")) {
+    static uint8_t w0[0x20000], w[0x20000];
+    FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w0, 1, sizeof w0, wf) != sizeof w0) { fprintf(stderr, "racestep: bad WRAM\n"); return 1; }
+    fclose(wf);
+    memcpy(w, w0, sizeof w);
+    CtRaceIo io; memset(&io, 0, sizeof io);
+    io.apu = racestepApu; io.sfx = racestepSfx;
+    unsigned t = CtRaceStep485D(w, &io);
+    printf("racestep: task -> %04X\n", t);
+    for (int a = 0; a < 0x20000; a++) if (w[a] != w0[a]) printf("  w %06X = %02X\n", a < 0x10000 ? 0x7E0000 + a : 0x7F0000 + (a - 0x10000), w[a]);
+    return 0;
   }
   // CT_ORACLE_VIRTUAL_BEAM=1: C3/02DD reads the virtual beam (snes.c g_ctVirtualBeam = 2, CLAUDE.md's one exception) --
   // the oracle side of every comparison of the field wipe / the world's window object against the port.
