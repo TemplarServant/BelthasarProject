@@ -2392,3 +2392,14 @@ pad held the frame before the NMI), and ONE piece of the HUD task `$4F54`: `$511
 The setup ran 73 frames with the NMI off on the cartridge (f66 -> the first NMI at f139); the port's frame 0 is the state
 after it. Stage 2: the picture (the render tasks and hooks, mode 7 with the per-line matrix, the HUD), the setup's frames
 and its song handshake, and the host's wiring (field.c, `FF 00`/`FF 09` -> the stage -> the reboot into the staged loc).
+
+**The race plays through in the port** (field.c, 2026-10-14): `FF 00` / `FF 09` with `$0384` bit 6 clear open the native
+stage over the host's WRAM (CtRaceStageOpen; the attract's `FF 60` keeps its translated stage), its opening priced like
+the other entries' (the overlay's C3/0557 cycles + the init's DMAs + the setup's 9521394, measured `--callrom 7E3B48` with
+CT_CALLROM_NONMI=1 and `$0384` = 20 so the song's handshake is left to the host's SPC): 44 black frames. Each frame after
+it is one CtRaceStageFrame with the frame's pad ($4218's word); the sounds go through the host's post (`F6`, the bump's
+`19 98 80`) and the engine's pitch straight into the SPC's input ports. At the END: CtRaceStageClose (the driver reset)
+and the reboot into the staged location. Check race-story-plays-through-in-the-port: 10F, the race, the reboot, 0DF at
+(39,14) -- the cartridge's path; the port arrives 28 frames early (the song's handshake inside the setup is not charged).
+Still open: the picture (stage 2), those 28 frames, and `FF 09`'s story-only code patches' effects (they patch picture
+code: `$53A0`... are in the HUD/sprite tasks).

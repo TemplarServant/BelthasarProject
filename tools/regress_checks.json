@@ -38996,6 +38996,59 @@
       "notes": "Roadmap G1a item 1, the race's native port, stage 1 complete (sequence_table.md sec. 12). The cartridge runs the user's Lab 32 capture under the rule; the port runs ct.exe --racestage from the cartridge's WRAM at the hand-off, frame k = the cartridge's k + shift (the setup's NMI-off frames, found on the race clock's first tick), the pad read one frame after it is held. The picture is stage 2."
     },
     {
+      "name": "race-story-plays-through-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "223",
+        "--loadwram",
+        "saves/race_re/race_user.lakewram",
+        "--walkscript",
+        "n:30,a:2,n:3000"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state",
+        "CT_LOCTRACE": "1",
+        "CT_SHOTS": "build/_race_story",
+        "CT_SHOTS_AT": "3100",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/race_re/race_user.state",
+        "saves/race_re/race_user.lakewram"
+      ],
+      "expect": [
+        "loctrace: -> loc 10F tile(8,8) facing=0 style=0",
+        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 cycles = 44 black frame(s)",
+        "sequence: the race ended ($7E:0000=1) -> reboot into loc 10F",
+        "reboot: JML C0:0000 -> loc 10F tile(8,8) bits00",
+        "loctrace: -> loc 0DF tile(39,14) facing=0 style=0"
+      ],
+      "pin": [
+        "^loctrace: ",
+        "^sequence: ",
+        "^reboot: "
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9) && !(seqId & 0x40)) {",
+          "replace": "      if (0) {   /* MUT: the race is not ported */",
+          "why": "without the native stage the port held on `FF 00` for good: Lab 32's race stopped the playthrough"
+        }
+      ],
+      "note_pass": "Johnny's race in Lab 32 plays through in the port (stage 1: its logic, the picture black): the race's END, the reboot into the staged loc 10F, and 10F's return to 0DF at the cartridge's tile",
+      "notes": "Roadmap G1a item 1 (the $C3 sequences): the first one a playthrough meets. From the user's capture (saves/race_re/race_user.*). The cartridge's own path: 10F at f2877, 0DF (39,14) at f2913; the port reaches 0DF 28 frames earlier -- the setup's song handshake is not charged yet (timing only)."
+    },
+    {
       "name": "jackie-saves-census-vs-oracle",
       "argv": [
         "python",

@@ -770,6 +770,13 @@ on 75 poked IPs each -- the inline call `$3F59` with seven RNG counters (both ca
 finish `$4211`-`$424C` and its END, every loop at its limits. Every WRAM byte and the post's port writes equal the
 cartridge's (`--callrom 7E3749` / `7E3754`). Full tier (~30 s). Needs the user's capture.
 
+### race-story-plays-through-in-the-port (ct_field, the user's Lab 32 capture)
+
+Johnny's race in the port itself: from saves/race_re/race_user.lakewram (the user's capture, loc 0DF), A at f30 -- the
+second-meeting arm's `CHANGELOC 10F` (f46) and `FF 00` at f66 open the native race (seq_race.c, 44 black frames of opening:
+the overlay's C3/0557 cycles, the init's DMAs, the setup's 9521394), which runs to its END and reboots into 10F, whose
+script returns to 0DF at (39,14) -- the cartridge's path. The picture is black (stage 2). Quick (~3 s).
+
 ### race-stage-logic-vs-oracle (`tools/race_stage_cmp.py`)
 
 The motorcycle race's LOGIC end to end, native (src/seq_race.c CtRaceStageOpen / CtRaceStageFrame): the overlay

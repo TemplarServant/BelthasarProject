@@ -85,7 +85,7 @@ if(CT_SDL_INC)
   # src/move.c runs live: ct_vm.c drives the ported C0/CAD9 animation tree through it (CtAnimDrainPass,
   # CtAnimDrawPass), the field runner CtFieldRunnerOne (which reaches the object loader CtObjLoad) and
   # most of the VM's op families (CtVm*).
-  add_executable(ct_field src/field.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
+  add_executable(ct_field src/field.c src/seq_race.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
                           src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c ${SNES_SRC})
   target_include_directories(ct_field PRIVATE src ${CT_SDL_INC} snes)
   target_link_libraries(ct_field ${CT_SDL_LIB})

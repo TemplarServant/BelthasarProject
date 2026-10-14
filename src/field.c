@@ -81,6 +81,7 @@
 #include "title_intro.h"        // the X-button menu module boundary (C0/192F entry -> C2/8000 mode 1)
 #include "audio.h"       // the SPC700 sound system: bank-$C7 driver upload + the $2140-43 command channel
 #include "seq_xlat.h"    // a $C3 stage whose output depends on the CPU clock: its program translated from the ROM
+#include "seq_race.h"    // the motorcycle race (sequence entry 0, `FF 00` / `FF 09`), native: its logic (stage 1)
 #include "data/ct_charbase.h" // baked $CC:0000 char base-stat table (new-game init; NO runtime ROM needed)
 #include "collision.h"   // CtCollisionShapeSolid — the byte-exact engine shape collision (C0/9AD3)
 #include "player.h"      // CtPlayerControl — the byte-exact player input->velocity controller (C0/881E)
@@ -4750,6 +4751,22 @@ static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
 // and the overworld ENTRY all do this inline in the ROM). No audio -> inert, and the mailbox simply
 // stays staged, exactly as it does when the driver latch is down.
 static void fieldSoundFlush(uint8_t* mem7E) { if (g_fieldAudio && mem7E) CtAudioService(g_fieldAudio, mem7E); }
+// THE RACE'S SOUND (seq_race.h CtRaceIo, ctx = the host's WRAM): a script's `F6` and the bump's `19 98 80` are the mailbox
+// $1E00-$1E03 the stage already wrote, posted like every other `JSL $C7:0004`; the engine's pitch is the CPU writing the
+// SPC's own input ports ($2141 = pitch, $2140 = $89: `$7E:4BD2` / `4BD7`), on the same SPC.
+static void raceSndPost(void* c) { fieldSoundFlush((uint8_t*)c); }
+static void raceSndSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)a; (void)b; (void)d; fieldSoundFlush((uint8_t*)c); }
+static void raceSndApu(void* c, uint8_t pitch) {
+  (void)c;
+  struct Apu* apu = g_fieldAudio ? CtAudioApu(g_fieldAudio) : NULL;
+  if (apu) { apu->inPorts[1] = pitch; apu->inPorts[0] = 0x89; }
+}
+static CtRaceIo raceIoFor(uint8_t* w) {
+  CtRaceIo io; memset(&io, 0, sizeof io);
+  long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
+  io.ctx = w; io.post = raceSndPost; io.sfx = raceSndSfx; io.apu = raceSndApu; io.rom = rb; io.romLen = rl;
+  return io;
+}
 // The sound driver still busy on its port 1 ($2141 != 0) -- what screen $07's song task polls before each post (C2/CBC1,
 // C2/CC28). Read only where the SPC keeps the console's clock (lockstep, paced, the rule's audio); elsewhere it never waits.
 static int menuExchBusy(void) {
@@ -11083,6 +11100,7 @@ int main(int argc, char** argv) {
   int seqOpen = 0;                                            // a NON-title table entry is running
   CtXlatStage* seqX = NULL;                                   // ...as a TRANSLATED program (seq_xlat.h)
   int seqXState = 0;                                          //   0 running, 1 exited, < 0 a CT_XLAT_* stop
+  int raceOn = 0, raceEnded = 0;                              // ...as the NATIVE race (seq_race.h): open / END met
   CtXlatStage* gwX = NULL;                                    // the GATE WARP ($FD), translated the same way
   int gwXState = 0;
   int seqHold = 0;                                            // frames of the SETUP still to run
@@ -16189,6 +16207,28 @@ int main(int argc, char** argv) {
         { static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
           if (audio && (ls || g_sndPaced || g_ruleAudio)) seqHold = g_titlePostFrames + g_titleSpinFrames; }
       }
+      // THE RACE, NATIVE (stage 1: its logic). `FF 00` / `FF 09` -- entries 0 and 9 are one routine, $7E:3B48 -- on the
+      // story's call ($0384 bit 6 clear: the attract's `FF 60` keeps its translated stage below): seq_race.c runs the whole
+      // stage over the host's WRAM -- C3:0000's overlay, the common init, the setup, the NMI with the player's pad -- and
+      // ends in the teardown's reboot into the location the script staged (Johnny's `CHANGELOC 10F`). Its opening is priced
+      // like the other entries': the overlay's C3/0557 cycles, the init's DMAs and the setup's own 9521394 (`--callrom 7E3B48`,
+      // CT_CALLROM_NONMI=1, $0384 = 20 to leave the song's handshake to the host's SPC; sequence_table.md sec. 12). Its
+      // picture is stage 2: the screen stays black.
+      if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9) && !(seqId & 0x40)) {
+        CtRaceIo rio = raceIoFor(w);
+        if (CtRaceStageOpen(w, (uint8_t)seqId, &rio) == 0) {
+          seqOpen = seqEntry + 1; raceOn = 1; raceEnded = 0;
+          long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
+          if (orb && orl > 0x3E0005) {
+            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
+            long od = 8L * (0x100 + 0x1500 + 0x200), os = 9521394L;
+            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
+            printf("sequence: entry %d (the race) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
+                   seqEntry, frameNo, oc, od, os, seqHold);
+          }
+        } else printf("sequence: entry %d -- the native race declined (CtRaceStageOpen)\n", seqEntry);
+      }
       if (seqId != 2 && !seqOpen) {
         seqOpen = CtTitleIntroResetStage(&titleIntro, seqEntry) ? seqEntry + 1 : -1;
         if (seqOpen > 0) { seqCommonInitWram(w, (uint8_t)seqId);  // a native entry: the overlay's init is ours to make
@@ -16329,6 +16369,19 @@ int main(int argc, char** argv) {
         // under 06B's second BG1 half, sequence_table.md 11.11), so the image comes back before the stage closes.
         { Snes* hw = CtXlatStageHardware(seqX); if (hw && hw->ppu) memcpy(g_fieldVram, hw->ppu->vram, sizeof g_fieldVram); }
         CtXlatStageClose(seqX); seqX = NULL; seqXState = 0;
+      } else if (seqOpen > 0 && raceOn) {
+        // THE RACE'S END: its script ENDed ($7E:0000 = 1, page A's `FF` after the finish's 128 frames); the main loop at
+        // $7E:3026 leaves for $302A -- NMI off, the driver reset $3177, `JML $C0:0000` -- into the location Johnny's script
+        // staged before the call. (A soft reset, L+R+Select+Start, is C3/0AB5's `JML $00FF00`: the same reboot here.)
+        if (raceEnded) {
+          CtRaceIo rio = raceIoFor(w);
+          CtRaceStageClose(w, &rio);
+          CtSceneSequenceDone(f.vm);
+          rebootReq = 1; stageExit = 1;                              // 7E:303F JML $C0:0000
+          printf("sequence: the race ended (%s) -> reboot into loc %03X\n", raceEnded == 2 ? "soft reset" : "$7E:0000=1",
+                 w[0x0100] | (w[0x0101] << 8));
+          seqOpen = 0; raceOn = 0; raceEnded = 0;
+        }
       } else if (seqOpen > 0 && !seqX && titleIntro.done) {   // (titleIntro keeps the LAST machine's done flag)
         // Every other entry's teardown is the PLAIN fade $7E:34E3 -- the title's $34C2 without the
         // two sound commands -- and it ends the same way: `INC $00`, which the main loop at
@@ -19214,6 +19267,20 @@ int main(int argc, char** argv) {
             if (vf) { Snes* hw = CtXlatStageHardware(seqX); fwrite(hw->ppu->vram, 2, 0x8000, vf); fwrite(hw->ppu->cgram, 2, 0x100, vf); fclose(vf);
                       printf("xlat-stage: vram+cgram after stage frame %ld -> %s\n", svAt, svPath); } } }
         CtXlatStagePicture(seqX, fb, CAMW, CAMH);
+      } else if (seqOpen > 0 && raceOn) {
+        // THE RACE: one NMI of its stage (seq_race.c) with the frame's pad as C3/0A8E reads it ($4218: LakeSnes' serial
+        // order turned into the register's word). Its picture is stage 2 -- the frame stays black (cleared above).
+        drewSwing = 1;
+        if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
+        else if (!raceEnded) {
+          static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
+                                            0x0080, 0x0040, 0x0020, 0x0010 };
+          uint16_t joy = 0;
+          for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
+          CtRaceIo rio = raceIoFor(CtWramSys(fieldWram()));
+          int st = CtRaceStageFrame(CtWramSys(fieldWram()), joy, &rio);
+          if (st) raceEnded = st;
+        }
       } else if (seqOpen > 0) {
         // Any other ported table entry, on the same engine and in the same order: tick first (the
         // vblank hooks latch what THIS frame renders with), then draw the latch.
