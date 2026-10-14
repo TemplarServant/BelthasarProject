@@ -2324,3 +2324,13 @@ raises `$0A00/$0A04/$0A0C` up to $7F and bit 7 (**A**) lowers them down to $60 -
 `$7E:42CE`: compares `$0A00/$0A0A/$0A0C/$0A10/$0A16` with their shadows `$0A30-$0A38` and recomputes what moved (4309..).
 Words that climb ~0.89 a frame with no input (position candidates, 8.8): `$0051/52`, `$0076/77`, `$009C/9D`, `$00F0`,
 `$00F2`; page A `$0A13/14` +0.25 a frame; `$00BB/BC` +1 a frame. The REST digits' source is not found yet.
+
+**The finish (found).** The page-A script sits on `FD 07 40` at $4007 (jump-to-self and yield) from f266 to f2716: the
+race runs entirely in the tasks. At f2716 `$7E:48A6` (a task's state machine on `$78`) writes `$0A20 = $4211`: with
+`$78 == 8` (486B) it sets `$0380 = 2`, removes task `$4339` (the steering, `JSR $3934`), `$7E:510D = $60`,
+`$0A12 = (($4A + $6F) >> 8) >> 3`, swaps task `$449C` for `$44CE` (`$3974` / `$395E`), points the script at $4211 and
+returns through `$39A7`. From $4211 the script runs the finish (task `$44CE` f2716-2717, `$3495` at f2749 -- the fade) and
+ENDS at f2877 (`$7E:0000 = 01`, then the teardown's `JML $C0:0000` into the staged loc 10F). Right after the finish test,
+48A9 reads the course position: `LDA $9E / BNE / LDA $9C / CMP #1000` -- the 24-bit `$9C-$9E` (`$9B` the fraction)
+climbs ~224 a frame with no input. Next: the task that owns `$78` and its phases, the position's speed law (the boost),
+Johnny's, and REST's source.
