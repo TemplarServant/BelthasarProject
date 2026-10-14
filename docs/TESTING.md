@@ -746,6 +746,14 @@ no press). Before 2026-10-14 the port stopped black on overworld 1F4 (op 03), ha
 Last Village, waited for A on self-closing boxes and listed Marle twice on the exchange screen. Full tier (~2.5 min).
 Needs the user's capture (SKIPs without it).
 
+### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
+
+Real battery saves across the story (saves/downloaded/ctjackie, local and gitignored -- SKIPs without them), booted the
+player's way and pressed through with A. Seven saves whose world scripts needed what the 2026-10-14 census found missing
+(ops 24, 44/45, 4F and the native C2/7BC4) must run without a PARKED/UNDERIVED line; ch16's world map buffers after op 4F
+equal the cartridge's (`map ch16 diffs 0`); ch23 (loc 173, after the Ocean Palace) pins the frame with the lead drawn --
+the lead is `$0197`'s object, not the first fn0 with op 0x57 (Crono's own load). Full tier (~2 min).
+
 ### menu-exchange-vs-oracle (`tools/menu_exchange_cmp.py`)
 
 The party exchange (menu mode 5, screen `$07`): the field's Y at storyline 0x49 opens it, the song task posts `14 3E` and

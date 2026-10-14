@@ -4656,6 +4656,14 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
     w8(sc->mem, 0x7E1100 + (uint32_t)n * 2, sc->mode[n] & 0xFF);
     if (sc->mode[n] >= 0 && sc->mode[n] <= 2) w8(sc->mem, 0x7E0197 + (uint32_t)sc->mode[n] * 2, n * 2);
   }
+  // THE LEAD IS $0197, the object the slot-0 PC loaded into (C0/426A, above) -- not the first object whose fn0 has op
+  // 0x57. Op 0x57 is CRONO's load (0x5C Marle, 0x62 Lucca, 0x6A Robo, 0x68 Frog, 0x6C Ayla, 0x6D Magus), and it loads
+  // nothing when he is not in the party: after the Ocean Palace the lead is whoever stands in slot 0. MEASURED on Jackie's
+  // ch23 save (loc 173, party Marle / Lucca / Frog): $0197 = 02 on the cartridge and in the port's own RAM, while the
+  // scan cached obj3 (Crono's object, unloaded) -- the host then drew no lead at all, and Marle (obj1) walked invisible.
+  // The scan stays as the fallback for a scene whose PCs all failed to load ($0197 = 80).
+  { int v = r8(sc->mem, 0x7E0197);
+    if (!(v & 0x80) && v / 2 < count) { sc->playerObj = v / 2; sc->playerLoaded = 1; } }
   // op 0x88 COLOR-effect visibility gating (the Telepod vortex, scene 8). The vortex sprites
   // (94/95) load + position at init but have NO palette -- their blue swirl is painted ONLY by
   // op 0x88 during the cutscene (ROM C0/4892; oracle scene_8_pod: obj27/28 placed, $7F0B80 all

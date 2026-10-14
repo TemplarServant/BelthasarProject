@@ -1491,6 +1491,11 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
     if (g_owJsl) { int n = g_owJsl(ram); if (n > 0) g_owSuspendNmis = n; }
     return;
   }
+  if (addr == 0x7BC4) {
+    // C2/7BC4 -- `STZ $00 / LDA $7F00F7 / BIT #02 / BEQ / INC $00 / RTS`: a story bit into $00 for the script's next test.
+    ram[0x00] = (ram[0x100F7] & 0x02) ? 1 : 0;
+    return;
+  }
   if (addr == 0x7BD1) {
     // C2/7BD1 -- `LDA $00 / STA $7E29AE / RTS` with M = 8 (C2/180E SEP #20): the song C2/2F0F plays while $7F01ED holds it.
     // The scripts set $00 just before with op 0x13 (1F4: `13 00 00 0D` / `34 D1 7B`).
@@ -1841,6 +1846,23 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         obAllocNative(ram, B, 0x1CF5);
         adv = 10; break;
       case 0x05: CtWorldObjOp05(ram, op); adv = 5; break;   // C2/1100 -- ENTER A LOCATION
+      // C2/1B2F -- COPY A RECTANGLE OF THE MAP: `4F sb sx sy db dx dy w h`. Each end is a map buffer of $7E -- $4000 when its
+      // first operand is 01, else $5800 -- plus `y * $60` (`STA $4202 / LDA #60 / STA $4203`, the row stride) + x; $10-$12 /
+      // $13-$15 hold the two long pointers. Then h rows ($01, `DEC $01 / BNE`) of w bytes ($00 -> $02 each row) through
+      // WMADD ($2181 = $13 per row, $2183 = 7E, `LDA [$10],Y / STA $2180`), both pointers + $60 a row. 1BDC LDA #0009.
+      case 0x4F: {
+        uint16_t src = (uint16_t)((op[1] == 1 ? 0x4000 : 0x5800) + op[3] * 0x60 + op[2]);
+        uint16_t dst = (uint16_t)((op[4] == 1 ? 0x4000 : 0x5800) + op[6] * 0x60 + op[5]);
+        int w = op[7] ? op[7] : 256, h = op[8] ? op[8] : 256;   // `DEC $02 / BNE` and `DEC $01 / BNE` from a zero: 256
+        for (int r = 0; r < h; r++) {
+          for (int k = 0; k < w; k++) ram[(uint16_t)(dst + k)] = ram[(uint16_t)(src + k)];
+          src = (uint16_t)(src + 0x60); dst = (uint16_t)(dst + 0x60);
+        }
+        ram[0x00] = op[7]; ram[0x01] = 0; ram[0x02] = 0;
+        ram[0x10] = (uint8_t)src; ram[0x11] = (uint8_t)(src >> 8); ram[0x12] = 0x7E;
+        ram[0x13] = (uint8_t)dst; ram[0x14] = (uint8_t)(dst >> 8); ram[0x15] = 0x7E;
+        adv = 9; break;
+      }
       case 0x07: {                                  // plot a tile byte into a map buffer
         static const uint16_t BASES[6] = { 0x4000, 0x5800, 0x7000, 0x6000, 0x6800, 0x7000 };
         int bi = op[1] ? op[1] - 1 : 0;
@@ -1946,6 +1968,25 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         adv = 3; break;
       case 0x22: if (ram[op[1] | (op[2] << 8)] == 0) { pc = (uint16_t)(pc + (int8_t)op[3]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 4; break;
       case 0x23: if (ram[op[1] | (op[2] << 8)] != 0) { pc = (uint16_t)(pc + (int8_t)op[3]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 4; break;
+      // C2/14AD -- op 0x25's opposite: `CMP $0000,X / BEQ ->14CC` steps 5 when the byte EQUALS the operand, else returns the
+      // sign-extended offset (`TDC / INY / LDA [$58],Y / BPL / ORA #FF00`) and the dispatcher jumps by it.
+      case 0x24: if (ram[op[1] | (op[2] << 8)] != op[3]) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
+      // C2/1A52 (0x44) / C2/1AAC (0x45) -- SET / CLEAR BIT 7 OF A RECORD: `JSR ($1A70,X)` on operand 1 (three real entries --
+      // the table's later words are the code after it) points $10 at record operand 2 of one of three $7E arrays:
+      //   1A76  $10 = $7E00 + n * 7  (the world's entrance records)   1A8A  $8300 + n * 3   1A9B  $8180 + n * 3
+      // (each `STA $00` the 16-bit n first), then $12 = 7E and `LDA [$10] / ORA #80` (0x44) or `AND #7F` (0x45). Three bytes.
+      case 0x44: case 0x45: {
+        static const uint16_t BASE[3] = { 0x7E00, 0x8300, 0x8180 };
+        static const uint8_t SIZE[3] = { 7, 3, 3 };
+        if (op[1] > 2) { static int said = 0;
+          if (!said) { said = 1; fprintf(stderr, "owobj: op %02X sub %02X is past C2:1A70's three entries -- not run\n", op[0], op[1]); }
+          adv = 3; break; }
+        uint16_t a = (uint16_t)(BASE[op[1]] + op[2] * SIZE[op[1]]);
+        ram[0x00] = op[2]; ram[0x01] = 0;
+        ram[0x10] = (uint8_t)a; ram[0x11] = (uint8_t)(a >> 8); ram[0x12] = 0x7E;
+        if (op[0] == 0x44) ram[a] |= 0x80; else ram[a] &= 0x7F;
+        adv = 3; break;
+      }
       case 0x25: if (ram[op[1] | (op[2] << 8)] == op[3]) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
       case 0x26: if ((ram[op[1] | (op[2] << 8)] & op[3]) != 0) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
       case 0x27: if ((ram[op[1] | (op[2] << 8)] & op[3]) == 0) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;

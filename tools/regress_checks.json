@@ -38820,6 +38820,67 @@
       "notes": "Roadmap G1a item 4 (2026-10-14). battle_ab's enemy B6 wipes the party in GATO's arena; C0/0289-029E then runs C0/0304, the won fight's tail, C0/0343-038C included (the followers' regroup, $7F03FE, $011F). The port had gated that tail on a won fight: after losing to GATO the player never regained control. src/field.c fieldBattleResume."
     },
     {
+      "name": "jackie-saves-census-vs-oracle",
+      "argv": [
+        "python",
+        "tools/jackie_census_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "saves/downloaded/ctjackie/srm/ch02.srm",
+        "saves/downloaded/ctjackie/srm/ch10.srm",
+        "saves/downloaded/ctjackie/srm/ch13.srm",
+        "saves/downloaded/ctjackie/srm/ch16.srm",
+        "saves/downloaded/ctjackie/srm/ch19.srm",
+        "saves/downloaded/ctjackie/srm/ch21.srm",
+        "saves/downloaded/ctjackie/srm/ch23.srm",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "saves/downloaded/ctjackie/states/ch16.state",
+        "tools/jackie_census_cmp.py"
+      ],
+      "expect": [
+        "census ch02 070 clean",
+        "census ch10 1F1 clean",
+        "census ch13 1F3 clean",
+        "census ch16 113 clean",
+        "census ch19 133 clean",
+        "census ch21 1F4 clean",
+        "census ch24 1F6 clean",
+        "map ch16 diffs 0",
+        "lead ch23 (358,207) cam(256,16) f1 topF=0 botF=0, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=0 fgpx=438667 fgskip=0 -> 256x224 fnv32=B35C88D9"
+      ],
+      "pin": [
+        "^census ",
+        "^map ch16 ",
+        "^lead ch23 "
+      ],
+      "timeout_s": 240,
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "        adv = 9; break;\n      }\n      case 0x07: {",
+          "replace": "        adv = -1; break;   /* MUT: op 4F parks */\n      }\n      case 0x07: {",
+          "why": "C2/1B2F copies a map rectangle and steps 9: parked, 1F3's and 1F4's scripts stop and the party enters nothing"
+        },
+        {
+          "file": "src/world.c",
+          "find": "      case 0x24: if (ram[op[1] | (op[2] << 8)] != op[3])",
+          "replace": "      case 0x7FFF: if (ram[op[1] | (op[2] << 8)] != op[3])   /* MUT: op 24 has no case */",
+          "why": "C2/14AD, op 25's opposite: without it 1F6's script parks"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "    if (!(v & 0x80) && v / 2 < count) { sc->playerObj = v / 2; sc->playerLoaded = 1; } }",
+          "replace": "    (void)v; }   /* MUT: the lead is the first fn0 with op 0x57 */",
+          "why": "the lead is $0197's object (C0/426A): with Crono out of the party the op-0x57 scan picks his unloaded object and Marle walks undrawn"
+        }
+      ],
+      "note_pass": "real saves across the story load and play on: the world scripts that needed ops 24/44/45/4F and C2/7BC4 run clean, op 4F's map copy equals the cartridge's, and after the Ocean Palace the lead (Marle) is drawn",
+      "notes": "Roadmap G1a item 6 (2026-10-14): a census of Jackie's 27 battery saves (fantasyanime, downloaded with the user's OK; local, gitignored). tools/jackie_census_cmp.py."
+    },
+    {
       "name": "ocean-palace-aftermath-chain-vs-oracle",
       "argv": [
         "python",
