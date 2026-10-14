@@ -2381,3 +2381,14 @@ adding `$4339` and waiting on themselves (`$3FA9` / `$4007`). The finish `$4211`
 01`, `85 40 80`, 32 frames, hook `$464D`, task `$3495` (the fade), 128 frames, sound `F0`, END. ⚠ The list routines
 `$0CE2`/`$0CB8`/`$0CF8`/`$0CCD` (and the overlay's `$3934`/`$395E`/`$3974`) have NO bound: they walk past the sixteen
 slots to the first zero -- kept. tools/race_script_walk.py lists any script statically.
+
+**STAGE 1 COMPLETE: the race's logic is native end to end** (CtRaceStageOpen / CtRaceStageFrame / CtRaceStageClose; check
+race-stage-logic-vs-oracle). Four drives frame for frame against the cartridge, every race byte equal and the END on the
+same frame (idle f2877, boost f2843, steering with bumps f2841, camera f2844). What it took beyond the tasks: the NMI's
+order (C3/08D0: hooks, `INC $08`, the snapshot `$0920 -> $0950`, C3/0A8E's pad -- `$02 = $4218`, the soft reset on
+`$3030`, Start's pause once `$0390` allows it -- then the snapshot's tasks), `$42BD`'s rotation (the race reads `$06`, the
+pad held the frame before the NMI), and ONE piece of the HUD task `$4F54`: `$5116` floors the score at 0 every frame
+(51A2), which a trailing player's `DEC $69` in `$485D` then takes to FFFF (the HUD's own picture work stays for stage 2).
+The setup ran 73 frames with the NMI off on the cartridge (f66 -> the first NMI at f139); the port's frame 0 is the state
+after it. Stage 2: the picture (the render tasks and hooks, mode 7 with the per-line matrix, the HUD), the setup's frames
+and its song handshake, and the host's wiring (field.c, `FF 00`/`FF 09` -> the stage -> the reboot into the staged loc).

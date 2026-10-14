@@ -7328,6 +7328,7 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
 // --racestep's sound: what the task sends the ports, printed as the writes the ROM makes ($2141 = pitch, then $2140 = $89).
 static void racestepApu(void* c, uint8_t p) { (void)c; printf("  w 002141 = %02X\n  w 002140 = 89\n", p); }
 static void racestepSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)c; printf("  sfx %02X %02X %02X\n", a, b, d); }
+static void racestagePost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }   // --racestage: C7/0004 consumes the command byte
 // ...and a script's post, as C7/0004 leaves it visible: $1E00-$1E03 out to the ports, $1E00 consumed (ctx = the WRAM).
 static void racestepPost(void* c) {
   uint8_t* w = (uint8_t*)c;
@@ -15677,10 +15678,51 @@ int main(int argc, char** argv) {
     unsigned task = argc == 4 ? (unsigned)strtoul(argv[3], NULL, 16) : 0x485D, t = task;
     if (task == 0x485D) t = CtRaceStep485D(w, &io);
     else if (task == 0x4339) CtRaceTask4339(w);
+    else if (task == 0x42BD) CtRaceTask42BD(w);
     else if (task == 0x3749 || task == 0x3754) { if (CtRaceScript(w, task == 0x3749 ? 0x0A00 : 0x0B00, &io) < 0) return 1; }
     else { fprintf(stderr, "racestep: task %04X is not ported\n", task); return 1; }
     printf("racestep: task -> %04X\n", t);
     for (int a = 0; a < 0x20000; a++) if (w[a] != w0[a]) printf("  w %06X = %02X\n", a < 0x10000 ? 0x7E0000 + a : 0x7F0000 + (a - 0x10000), w[a]);
+    return 0;
+  }
+  // --racestage <in.wram> <operand> <frames> <btnscript> <ADDR:LEN,...>: the race's stage natively (src/seq_race.c) from a
+  // field WRAM at the hand-off -- CtRaceStageOpen, then one CtRaceStageFrame a frame with the pad of the btnscript (the oracle's
+  // `hexbtn:frames` grammar, LakeSnes order, converted to the $4218 word) -- printing the regions on change in --monitor's
+  // format (`fN  7EAAAA=HH..`, frame 0 = the state after the setup). tools/race_stage_cmp.py grades it against the cartridge.
+  if (argc == 7 && !strcmp(argv[1], "--racestage")) {
+    static uint8_t w[0x20000], rsRom2[0x600000];
+    FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w, 1, sizeof w, wf) != sizeof w) { fprintf(stderr, "racestage: bad WRAM\n"); return 1; }
+    fclose(wf);
+    CtRaceIo io; memset(&io, 0, sizeof io);
+    { FILE* rf = fopen(DEFAULT_ROM, "rb"); if (rf) { io.romLen = (long)fread(rsRom2, 1, sizeof rsRom2, rf); fclose(rf); io.rom = rsRom2; } }
+    io.ctx = w; io.post = racestagePost;
+    int frames = atoi(argv[4]);
+    uint16_t* pads = (uint16_t*)calloc((size_t)frames + 2, sizeof *pads);
+    { int f = 0; const char* p = argv[5];
+      while (*p && f <= frames) { unsigned m = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+        int n = (int)strtol(p, (char**)&p, 10); if (*p == ',') p++;
+        static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010 };
+        uint16_t j = 0; for (int b = 0; b < 12; b++) if (m & (1u << b)) j |= map[b];
+        for (int k = 0; k < n && f <= frames; k++) pads[f++] = j; } }
+    unsigned ra[64], rl[64]; int nr = 0;
+    { const char* p = argv[6]; while (*p && nr < 64) { ra[nr] = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+        rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
+    if (CtRaceStageOpen(w, (uint8_t)strtoul(argv[3], NULL, 16), &io) < 0) { printf("racestage: open failed\n"); return 1; }
+    static uint8_t last[0x20000]; int first = 1;
+    for (int f = 0; f <= frames; f++) {
+      int st = f ? CtRaceStageFrame(w, pads[f], &io) : 0;
+      int ch = first; for (int k = 0; k < nr && !ch; k++) for (unsigned b = 0; b < rl[k]; b++) { unsigned a = (ra[k] + b) & 0x1FFFF; if (w[a] != last[a]) { ch = 1; break; } }
+      if (ch) {
+        printf("  f%-6d", f);
+        for (int k = 0; k < nr; k++) { printf("  7E%04X=", ra[k] & 0xFFFF); for (unsigned b = 0; b < rl[k]; b++) printf("%02X", w[(ra[k] + b) & 0x1FFFF]); }
+        printf("\n");
+        for (int k = 0; k < nr; k++) for (unsigned b = 0; b < rl[k]; b++) last[(ra[k] + b) & 0x1FFFF] = w[(ra[k] + b) & 0x1FFFF];
+        first = 0;
+      }
+      if (st == 1) { printf("racestage: END at frame %d\n", f); CtRaceStageClose(w, &io); break; }
+      if (st == 2) { printf("racestage: soft reset at frame %d\n", f); break; }
+    }
+    free(pads);
     return 0;
   }
   // CT_ORACLE_VIRTUAL_BEAM=1: C3/02DD reads the virtual beam (snes.c g_ctVirtualBeam = 2, CLAUDE.md's one exception) --

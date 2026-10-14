@@ -14,6 +14,7 @@
 #include "seq_race.h"
 #include <string.h>
 #include <stdio.h>
+#include "lz.h"       // the overlay: C3:0000 decompresses it with C3/0557
 
 typedef struct { uint8_t* w; int c; const CtRaceIo* io; } R;
 
@@ -420,4 +421,147 @@ int CtRaceScript(uint8_t* w, unsigned page, const CtRaceIo* io) {
     }
   }
   return 0;
+}
+
+// $7E:42BD -- THE PAD'S THREE WORDS, rotated once a frame (D = $0000): `LDA $02 / STA $F0 / LDA $04 / STA $02 / LDA $06 /
+// STA $04 / LDA $F0 / STA $06`. The NMI (C3/0A8E) puts the pad in $02; after this task, $06 is it -- what $4339 and $485D
+// read -- and $02/$04 hold the two before. ($F0 keeps the word, as the ROM leaves it.)
+void CtRaceTask42BD(uint8_t* w) {
+  R rr = { w, 0, 0 }, *r = &rr;
+  unsigned t = rd(r, 0x02);
+  wr(r, 0xF0, t); wr(r, 0x02, rd(r, 0x04)); wr(r, 0x04, rd(r, 0x06)); wr(r, 0x06, t);
+}
+
+// ---- THE STAGE: C3:0000 -> $7E:3000 -> the NMI, for entry 0 (the race) -------------------------------------------------------
+// Stage 1 of the native port: the race's LOGIC end to end -- what decides how it plays and when it ends -- over the WRAM
+// image, the picture's own work left out (the packets and DMAs of the setup, the render tasks $42CE $428B $4447 $4D0D $4F54
+// $347A $44CE $3495 and the vblank hooks; stage 2). sequence_table.md sec. 12.
+
+// The overlay, decompressed where C3:0000 puts it: `LDA $FE0003` (= C3:1313) -> $0300, `$7E:3000` -> $0303, JSL C3/0557.
+static int raceOverlay(uint8_t* w, const CtRaceIo* io) {
+  if (!io || !io->rom || io->romLen < 0x3E0006) return -1;
+  const uint8_t* p = io->rom + 0x3E0003;
+  uint32_t a = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+  size_t n = ct_lz_decompress_bounded(io->rom, (size_t)io->romLen, w + 0x3000, 0x10000 - 0x3000, ct_lz_hirom_offset(a));
+  w[0x0300] = p[0]; w[0x0301] = p[1]; w[0x0302] = p[2];
+  w[0x0303] = 0x00; w[0x0304] = 0x30; w[0x0305] = 0x7E;
+  return n ? 0 : -1;
+}
+
+// $7E:3177 -- the driver reset (five commands through $377E; sequence_table / title_intro.c CtTitleIntroDriverReset), as WRAM
+// leaves it: each command's bytes in $1E00-$1E02, the last one `81 00 FF`, posted by the host.
+static void raceDriverReset(R* r, const CtRaceIo* io) {
+  static const uint8_t cmd[5][3] = { { 0x85, 0x00, 0x00 }, { 0x89, 0x00, 0x00 }, { 0xF2, 0x00, 0x00 },
+                                     { 0xF2, 0x01, 0x00 }, { 0x81, 0x00, 0xFF } };
+  for (int k = 0; k < 5; k++) {
+    if (k == 0) { r->w[0x1E02] = 0; r->w[0x1E03] = 0; }              // STZ $1E02 (16-bit)
+    r->w[0x1E00] = cmd[k][0];
+    if (k == 0 || k == 3 || k == 4) r->w[0x1E01] = cmd[k][1];
+    if (k == 4) r->w[0x1E02] = cmd[k][2];
+    if (io && io->post) io->post(io->ctx);
+    r->w[0x1E00] = cmd[k][0];                                         // $377E never clears the mailbox (title_intro.c)
+  }
+}
+
+int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
+  R rr = { w, 0, io }, *r = &rr;
+  // C3:0014 -- the vectors ($0500-$0507: JML $C3:0548 / $C3:0529), the operand into $0384, the overlay
+  w[0x0500] = 0x5C; w[0x0501] = 0x48; w[0x0502] = 0x05; w[0x0503] = 0xC3;
+  w[0x0504] = 0x5C; w[0x0505] = 0x29; w[0x0506] = 0x05; w[0x0507] = 0xC3;
+  w[0x0384] = operand;
+  if (raceOverlay(w, io) < 0) return -1;
+  // $7E:3063 -- the common init's WRAM: the shadows, then $0000-$00FF and $0900-$1DFF cleared (a DMA out of MPYL = 0)
+  w[0x038E] = 4; w[0x038F] = 4;
+  static const uint16_t z[] = { 0x0380, 0x0381, 0x0390, 0x0392, 0x0394, 0x0391, 0x0393, 0x0395, 0x0396, 0x0388, 0x038D, 0x038C, 0x0366 };
+  for (unsigned k = 0; k < sizeof z / sizeof z[0]; k++) w[z[k]] = 0;
+  memset(w + 0x0000, 0, 0x100);
+  if (!(operand & 0x80)) memset(w + 0x0900, 0, 0x1500); else memset(w + 0x0920, 0, 0x14E0);
+  if (!(operand & 0x20)) { w[0x038A] = 0; raceDriverReset(r, io); }   // 30E9 BIT #20 / BNE / STZ $038A / JSR $3177
+  memset(w + 0x0700, 0xE0, 0x200);                                    // JSR $3843: the OAM shadow, every sprite off screen
+  wr(r, 0x13, 0x0900);                                                // 30F9 LDX #0900 / STX $13
+  if ((operand & 0x1F) != 0 && (operand & 0x1F) != 9) return -1;      // entries 0 and 9: $7E:3B48
+  // $7E:3B48 -- the race's setup, its logic
+  if (operand & 0x0F) w[0x44]++;                                      // 3B48 LDA $0384 / AND #0F / BEQ / INC $44
+  if (!(operand & 0x20)) {                                            // 3B51 BIT #20 / BNE / LDA #2C / JSR $375F: the song
+    w[0x038A] = 0x2C; w[0x0389] = 0x2C;
+    w[0x1E01] = 0x2C; w[0x1E00] = 0x10; w[0x1E02] = 0xFF; w[0x1E03] = 0xFF;
+    if (io && io->post) io->post(io->ctx);
+  }
+  // $7E:45D6 (JSR at 3C51): the start values
+  if (w[0x44]) {                                                      // the story's call: six bytes of the overlay's own code
+    w[0x53A0] = 0xD8; w[0x4F74] = 0xD8; w[0x50DA] = 0xD8; w[0x53A4] = 0xE8; w[0x5395] = 0x06; w[0x53AE] = 0x01;
+  } else { w[0xBA] = 0x80; w[0x9A] = 0x03; }
+  wr(r, 0x55, 0x4000); wr(r, 0x59, 0x4000); wr(r, 0x7A, 0x3000); wr(r, 0x7E, 0x5000);
+  wr(r, 0xAE, 0); wr(r, 0x4E, 0x6000); wr(r, 0x73, 0x2000); wr(r, 0xA8, 0x0020);
+  wr(r, 0xA2, 1); wr(r, 0xA0, 1); wr(r, 0x1444, 0);
+  wr(r, 0x00B6, rd(r, 0x4319)); wr(r, 0x00B8, rd(r, 0x4329));
+  // (4640 JMP $4309: the picture's tables)
+  w[0x038C] = 0x3F;                                                   // 3C4C (then 3C70's $3E on the story's branch)
+  if (!(operand & 0x40)) {                                            // 3C54 BIT #0040 / BNE: the story's scripts
+    wr(r, 0x0A20, 0x3F14); wr(r, 0x0B20, 0x400A);
+    wr(r, 0x038E, 0x0808); w[0x038C] = 0x3E; wr(r, 0x0382, 0);
+  } else return -1;                                                   // the attract's window arm: not this port's yet
+  if (CtRaceScript(w, 0x0A00, io) < 0) return -1;                     // 3CD8 JSR $3749 -- page A runs once in the setup
+  wr(r, 0x35FD, 0x45B0); wr(r, 0x3024, 0x51D1);                       // 3CDB / 3CE1: two words of the overlay
+  // $7E:300D .. 301E: $388B (CGRAM), $31B0 (the vblank), JSL C3/08D0 (one NMI, run here), NMI on, STZ $00, STZ $0392
+  CtRaceStageFrame(w, 0, io);
+  wr(r, 0x0000, 0); wr(r, 0x0392, 0);
+  return 0;
+}
+
+// C3/08D0 -- ONE NMI of the stage, its logic: INC $08, the task list into its snapshot $0950, the pad (C3/0A8E: $02, the
+// pause on Start's edge once $0390 allows it, the soft reset on L+R+Select+Start), then the tasks of the snapshot in order
+// (7E:398A), each one able to remove or replace itself in the live list at its own index ($39A7 / $39B1). Paused ($0392),
+// neither the hooks nor the tasks run. Returns 1 once the script ENDed ($7E:0000 != 0: the main loop's `LDA $00 / BEQ`
+// leaves for the teardown), 2 on the soft reset, else 0.
+int CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
+  R rr = { w, 0, io }, *r = &rr;
+  wr(r, 0x08, rd(r, 0x08) + 1);                                       // 090F INC $08
+  memmove(w + 0x0950, w + 0x0920, 0x20);                              // 0911 MVN $0920 -> $0950, 32 bytes
+  wr(r, 0x02, joy);                                                   // 0A99 LDA $4218 / STA $02
+  if (joy == 0x3030 && !w[0x0396]) return 2;                          // 0A9E the soft reset (JML $00FF00)
+  if (rd(r, 0x0390)) {                                                // 0ABB the pause
+    if (w[0x03] & 0x10) {
+      if (!rd(r, 0x0394)) {
+        wr(r, 0x0394, rd(r, 0x0394) + 1);
+        unsigned p = (rd(r, 0x0392) + 1) & 1;
+        wr(r, 0x0392, p);
+        if (p) { wr(r, 0x1E00, 0x00F2); }                             // 0ADB `F2` -- JSL $377A
+        else { wr(r, 0x1E00, 0x4418); wr(r, 0x1E02, 0x0080); }        // 0AE7 `18 44 80 00`
+        if (io && io->post) io->post(io->ctx);
+      }
+    } else wr(r, 0x0394, 0);
+  }
+  if (!rd(r, 0x0392)) {                                               // 0922 LDA $0392 / BEQ -> JSL $7E:398A
+    for (unsigned x = 0; x < 0x20; x += 2) {
+      unsigned t = rd(r, 0x0950 + x);
+      if (!t) continue;
+      switch (t) {
+        case 0x3749: CtRaceScript(w, 0x0A00, io); break;
+        case 0x3754: CtRaceScript(w, 0x0B00, io); break;
+        case 0x42BD: CtRaceTask42BD(w); break;
+        case 0x4F54: CtRaceTask4F54(w); break;                     // (its logic: the score's floor)
+        case 0x4339: CtRaceTask4339(w); break;
+        case 0x485D: { unsigned k = CtRaceStep485D(w, io); if (k != 0x485D) wr(r, 0x0920 + x, k); break; }
+        default: break;                                               // the picture's tasks (stage 2)
+      }
+    }
+  }
+  return rd(r, 0x0000) ? 1 : 0;
+}
+
+// $7E:302A -- the teardown after the END: NMI and HDMA off, forced blank, the driver reset, `JML $C0:0000` (the host's reboot).
+void CtRaceStageClose(uint8_t* w, const CtRaceIo* io) {
+  R rr = { w, 0, io };
+  raceDriverReset(&rr, io);
+}
+
+// $7E:4F54 -- THE HUD's task, its one piece of logic. Everything else in it draws (the minimap's two markers, the boost
+// icons, REST, BEST, the score: stage 2), but on the story's call it reaches `$5116` every frame (4F8A-4F90 or 4FA1-4FA7,
+// `$0384` bit 6 clear) and that routine FLOORS THE SCORE before it draws it: 51A2 `LDA $69 / BPL / LDA #0000 / STA $69`.
+// The race task $485D runs after it in the list, so a trailing player's `DEC $69` leaves FFFF and the next frame puts it
+// back to 0 -- the cartridge's $69 sits at FFFF all the while Johnny leads (measured: f340 on). The win's jackpots read it.
+void CtRaceTask4F54(uint8_t* w) {
+  if (w[0x0384] & 0x40) return;                                       // 4F85 / 4F9C BIT #0040: the attract's arm draws less
+  if (w[0x6A] & 0x80) { w[0x69] = 0; w[0x6A] = 0; }                   // 51A2
 }

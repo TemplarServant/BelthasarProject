@@ -38950,6 +38950,52 @@
       "notes": "The race's native port, stage 1 (sequence_table.md sec. 12). src/seq_race.c CtRaceScript."
     },
     {
+      "name": "race-stage-logic-vs-oracle",
+      "argv": [
+        "python",
+        "tools/race_stage_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state",
+        "tools/race_stage_cmp.py",
+        "tools/race_step_cmp.py"
+      ],
+      "expect": [
+        "racestage: idle 2538 frames compared, 0 differing, END cartridge f2877 port f2877 (same)",
+        "racestage: boost 2504 frames compared, 0 differing, END cartridge f2843 port f2843 (same)",
+        "racestage: steer 2502 frames compared, 0 differing, END cartridge f2841 port f2841 (same)",
+        "racestage: camera 2505 frames compared, 0 differing, END cartridge f2844 port f2844 (same)"
+      ],
+      "pin": [
+        "^racestage: "
+      ],
+      "timeout_s": 600,
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "  if (w[0x6A] & 0x80) { w[0x69] = 0; w[0x6A] = 0; }                   // 51A2",
+          "replace": "  (void)w;   /* MUT: no floor */",
+          "why": "the HUD task's 51A2 floors the score at 0 every frame -- without it a trailing player's score runs negative"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "  wr(r, 0xF0, t); wr(r, 0x02, rd(r, 0x04)); wr(r, 0x04, rd(r, 0x06)); wr(r, 0x06, t);",
+          "replace": "  wr(r, 0xF0, t); wr(r, 0x06, t);   /* MUT: no rotation */",
+          "why": "$42BD rotates the pad's three words: the race reads $06"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "  wr(r, 0x55, 0x4000); wr(r, 0x59, 0x4000); wr(r, 0x7A, 0x3000); wr(r, 0x7E, 0x5000);",
+          "replace": "  wr(r, 0x55, 0x4000); wr(r, 0x59, 0x4000); wr(r, 0x7A, 0x3000); wr(r, 0x7E, 0x4800);   /* MUT */",
+          "why": "$45D6: Johnny's top speed while he trails is $5000"
+        }
+      ],
+      "note_pass": "the motorcycle race's logic runs natively end to end (src/seq_race.c CtRaceStage*: the overlay, the common init, the setup's values, the scripts, the race, the camera, the pad, the score's floor) and is the cartridge's frame for frame on four drives, the END on the same frame",
+      "notes": "Roadmap G1a item 1, the race's native port, stage 1 complete (sequence_table.md sec. 12). The cartridge runs the user's Lab 32 capture under the rule; the port runs ct.exe --racestage from the cartridge's WRAM at the hand-off, frame k = the cartridge's k + shift (the setup's NMI-off frames, found on the race clock's first tick), the pad read one frame after it is held. The picture is stage 2."
+    },
+    {
       "name": "jackie-saves-census-vs-oracle",
       "argv": [
         "python",

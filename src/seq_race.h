@@ -31,4 +31,19 @@ void CtRaceTask4339(uint8_t* w);
 // first yield. Returns 0, or -1 if it met an op or a call this port does not have (named on stderr).
 int CtRaceScript(uint8_t* w, unsigned page, const CtRaceIo* io);
 
+// $7E:42BD, the pad's three words rotated ($02 -> $06 -> $04 -> $02): $06 = the pad the NMI just read.
+void CtRaceTask42BD(uint8_t* w);
+
+// $7E:4F54, the HUD's task -- its logic only: the score's floor at 0 ($5116 -> 51A2). The rest is its picture (stage 2).
+void CtRaceTask4F54(uint8_t* w);
+
+// THE STAGE, its logic (stage 1 of the native port): C3:0000 + $7E:3000 for entry 0/9 up to the main loop (the overlay
+// decompressed into $7E:3000, the common init, the setup's race values, page A run once, the first NMI); one NMI a frame
+// (`joy` = the $4218 word: A $0080, X $0040, L $0020, R $0010, B $8000, Y $4000, Select $2000, Start $1000, Up $0800, Down
+// $0400, Left $0200, Right $0100); and the teardown. Open returns -1 for what it does not port (the attract's arm).
+// Frame returns 1 once the script ENDed, 2 on the soft reset, else 0.
+int  CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
+int  CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);
+void CtRaceStageClose(uint8_t* w, const CtRaceIo* io);
+
 #endif

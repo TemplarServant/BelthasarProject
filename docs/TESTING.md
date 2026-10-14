@@ -770,6 +770,17 @@ on 75 poked IPs each -- the inline call `$3F59` with seven RNG counters (both ca
 finish `$4211`-`$424C` and its END, every loop at its limits. Every WRAM byte and the post's port writes equal the
 cartridge's (`--callrom 7E3749` / `7E3754`). Full tier (~30 s). Needs the user's capture.
 
+### race-stage-logic-vs-oracle (`tools/race_stage_cmp.py`)
+
+The motorcycle race's LOGIC end to end, native (src/seq_race.c CtRaceStageOpen / CtRaceStageFrame): the overlay
+decompressed into $7E:3000, the common init, the setup's race values, page A's run inside the setup, then one NMI a frame
+(the clock, the task snapshot, the pad and the pause, the tasks $3749 $3754 $42BD $4F54-logic $4339 $485D in order) to the
+script's END. The cartridge plays the user's Lab 32 capture under the rule; the port runs `ct.exe --racestage` from the
+cartridge's WRAM at the hand-off with the same pad (its frame k = the cartridge's k + the setup's frames, the pad read one
+frame after it is held). Four drives (idle, B boosts, steering with bumps, the camera): every race byte equal on every
+frame and the END on the same frame (f2877, f2843, f2841, f2844). The picture's bytes are not graded (stage 2).
+Full tier (~1 min). Needs the user's capture.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, local and gitignored -- SKIPs without them), booted the
