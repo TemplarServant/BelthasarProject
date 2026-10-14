@@ -2281,3 +2281,46 @@ own count starts one frame after power-on's: the old race state f8247 ran C3:000
 re-measured on it; both power-on runs kept under build/_stagerule/ by ct.exe's sha1. On the new states both stages grade as
 before (entry 3 299 / 299, the race 63 / 425 with the same frames differing) and $0386 at the hand-offs is 7B / E4 as
 before. attract-entry3-stage-picture-vs-oracle (entry3_stage_cmp.py) still reads the committed entry-3 state.
+
+## 12. THE STORY'S RACE (`FF 00` / `FF 09`, scene 223) -- what it reads and what it leaves (2026-10-14)
+
+The user's capture at Lab 32's west end (loc 0DF, storyline BD, the lead facing Johnny), spliced to
+`saves/race_re/race_user.state` (+ `.bin`, `.lakewram`); `saves/race_re/race_f300.wram` is the cartridge's WRAM 300
+frames in (the overlay at $7E:3000, for `tools/wdis.py`). User decision: a NATIVE port, in stages -- the logic first, then
+the picture -- not the translated stage of section 11.
+
+**The call.** A at f30 starts obj8 (Johnny) fn1. Its second-meeting arm (`$7F0054` bit 7 set): `D2 00 20`, `$7F0054`
+bits 1-3, `CHANGELOC 10F (8,8)` ($0100 = 10F at f47 by C0:3B2A), then `16 36 80 86 05`: `$7F0136` bit 7 set -> `FF 09`
+(song $2C, `$44` bumped), else `FF 00`. The capture has `$7F0136` = 01 -> `FF 00` at f66 ($0384 = 00 by C3:003B); the
+task list is cleared at f82 and rebuilt at f136 (`$0920` = 42CE by C3:0CF6); at f300 it is `42CE 42BD 3749 3754 428B
+4F54 4D0D 4339`.
+
+**The controls** (`$4218` -> `$0002/$0003` in the sequence NMI, C3/0A8E; Start with `$0390` set skips a skippable
+stage): **B** is the boost (the "W.P." counter and Johnny's distance move: 104 against 168 at f600 with B every 20
+frames, the dash gauge empties), **X** changes the camera (the horizon moves), **A**, Y, L, R and the d-pad change
+nothing measured. "REST" counts the course down the same in every run (908 at f600, 528 at f1500).
+
+**The end.** The race runs to the reboot: the field loads loc 10F at **f2877** with no input, with A held, with A tapped
+-- and at **f2845** with B every 20 frames: the boost shortens the race, so its length is the race's own state. Loc 10F's
+script then writes `$29C9` (C0:46A2) and `$7F0154` bit 2 (C0:6BCE) and exits to 0DF at tile (39,14) (C0:0CB8, 36 frames
+later), where a robot says "You're worthless!" in both runs.
+
+**What it leaves.** Against the hand-off (f65), the race itself changes nothing in `$7F:0000-01FF`, `$7E:2600-2FFF`
+(party, items) or `$7F:0200-02FF`, with or without play; only the field bytes `$0119`, `$0152`, `$0158`. After the return
+a played race and an idle one differ in no story flag, party byte or local -- only in the system page, 32 frames apart.
+So for the playthrough the race decides WHEN control comes back, not what changes; the "BEST" record (1000 shown) is not
+in those pages and is not located yet.
+
+**Stage 1 (the logic)** therefore needs the race's own state machine -- the course counter, the player's speed with the
+boost and its gauge, Johnny's speed, the finish -- and the hand-back (`JML C0:0000`, the staged loc 10F). Stage 2 is the
+picture (mode 7 with the per-line matrix, the six HDMA channels of section 7.1, the sprites and the HUD).
+
+**The tasks, first pass.** `$7E:4339` (page A, DP $0A00): with `$0044` set (the in-game call, `FF 09`'s INC) it steers
+from the pad word `$0006` (JSR 43B8 / 43D5, then `$0A += ($3A >> 2) - ($3C >> 2)`); then `$00B6/$00B8` from the tables
+`$7E:4319,X` / `$4329,X` on `($0A0A + $40) >> 6 & $0E`; and every second frame (`$0008` bit 0) `$0006` bit 6 (**X**)
+raises `$0A00/$0A04/$0A0C` up to $7F and bit 7 (**A**) lowers them down to $60 -- the camera, which is why A held changed
+454 low-page bytes and nothing in the race. `$7E:428B`: `$0A02 += $0A12` (mod $400), then BG positions `$1420/$142C` and
+`$1422/$142E` from it and `$0B04` plus `$1440/$1442`. `$7E:42BD`: rotates `$02 -> $06 -> $04 -> $02` (`$F0` scratch).
+`$7E:42CE`: compares `$0A00/$0A0A/$0A0C/$0A10/$0A16` with their shadows `$0A30-$0A38` and recomputes what moved (4309..).
+Words that climb ~0.89 a frame with no input (position candidates, 8.8): `$0051/52`, `$0076/77`, `$009C/9D`, `$00F0`,
+`$00F2`; page A `$0A13/14` +0.25 a frame; `$00BB/BC` +1 a frame. The REST digits' source is not found yet.
