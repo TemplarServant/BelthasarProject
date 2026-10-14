@@ -160,10 +160,12 @@ def timeline(rows, regs):
     return tl
 
 
-def run(pokes, drive, total, tag):
+def run(pokes, drive, total, tag, regs=None, raw=False):
+    """regs: other regions than regions()'s; raw: return the per-frame rows ({frame: {addr: hex}}) instead of the
+    timelines of fields() (tools/battle_victory_teardown_cmp.py)."""
     os.makedirs(OUT, exist_ok=True)
     tag += os.environ.get('BATTLE_AB_TAG', '')            # (BATTLE_AB_TAG=_x: keep two runs' files apart)
-    regs = regions()
+    regs = regs or regions()
     mon = ','.join('7E%04X:%d' % (a, n) for a, n in regs)
     pk = ','.join('%X=%02X' % (a, v) for a, v in sorted(pokes.items()))
     inp = oracle_input(drive, total)
@@ -213,6 +215,8 @@ def run(pokes, drive, total, tag):
                 os.remove(f)
             except OSError:
                 pass
+    if raw:
+        return regs, orows, prows, cth, pth_, p
     return regs, timeline(orows, regs), timeline(prows, regs), cth, pth_, p
 
 

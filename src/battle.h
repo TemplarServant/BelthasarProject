@@ -74,8 +74,11 @@
 // The FIXED, non-skippable hold between the victory DISPATCH and the first reward glyph. Shared: battle.c
 // (the results phase machine) + field.c (the box render gate).
 //
-// `victoryHold == 1` IS the ROM's dispatch frame -- the very next statement after the arm in battle.c is
-// `CtBattlePcLadderArm(h, 0x28, 0)`, the port twin of `C1/35CA LDA #28 / STA $5DF1,Y` (writer C1:35CD).
+// `victoryHold == 1` IS the ROM's dispatch frame V (C1/8186 -> C1/356D, `INC $A0FE`). C1/356D's three per-seat removals
+// take V, V+1 and V+2 (each followed by C1/007E's wait), and `C1/35CA LDA #28 / STA $5DF1,Y` arms the ladder in V+3
+// (battleVictoryTeardownFrame; disasm/notes/battle_end_ui_teardown.md sec. 9). MEASURED, the rule's cartridge on GATO's
+// fight (Dark Matter's kill, tools/battle_ab.py): V c1322, `$5DC9 = 40` c1325, `$5DC9 = 00` c1389, `$CCEC = 10` c1391 =
+// V+69, so the glyphs land at V+71 = victoryHold 72. The account below (from the forest fight) counts from the arm:
 // From there the ROM spends, byte-for-byte:
 //     64  the ONLY blocking hold in the victory stager -- `C1/3681 LDA #40 / STA $5DC9`, loop
 //         C1/3686-C1/3693, one real frame per DEC (`JSR C1/007E` = `INC $9E / JSL CD0009 / LDA $9E / BNE`).

@@ -5080,6 +5080,33 @@ static void battleEndTeardown(CtBattleHost* h) {               // == C1/356D (vi
   h->mem[0x95D5] = 0xFF;                                       // C1/35A1-35A3, AFTER the loop (C1/1BAA can
   battleTrace(h, "end-teardown");                              //   re-point $95D5 at another queued seat)
 }
+// C1/356D's teardown as the frames it takes, one call per frame from the victory's frame V (victoryHold 1):
+//   1358B-1359E  `STZ $A1 / JSR C1/1BAA / JSR C1/007E`, then `INC $A1 / JSR C1/1BAA / JSR C1/007E` twice: seat 0's removal
+//                in V, seat 1's in V+1, seat 2's in V+2, each frame closed by C1/007E's wait;
+//   135A1-135A6  in V+3: `$95D5 = FF`, `JSR C1/0C2D` (the strip repainted -- C1/0C4E's `$A6DD != $A6DF` takes the FE the
+//                removals left), then C1/35A9's arm of the pose ladder (window +0x28 into $5DF1,Y) and the copier, whose
+//                loop steps from V+4 (CtBattlePcLadderTick runs ahead of this call in the frame).
+// MEASURED, the rule's cartridge on GATO's fight (tools/battle_ab.py's harness: Magus, Crono and Marle, Dark Matter's kill):
+// V = c1397 (`$A0FE` 00 -> 01) with `$A1` = 00, `$A6D9` FF FF 02, `$A6DD` 02 01 FE, `$95D5` 02; c1398 `$A1` = 01 (seat 1 not
+// queued); c1399 `$A1` = 02, `$A6D9` FF FF FF, `$95D5` FF; c1400 `$A6DF` FE -> FF, `$5DF1` = 28 00 x3, `$5DC9` = 40, `$E5` 0;
+// the first victory publish `$9907` c1402 (V+5). Crono solo the same: arm c1325 = V+3, publish c1327. The port used to make
+// the three removals in V+1 and arm the ladder in V, so the celebration's poses came three frames early.
+// (C1/35A9's `LDA $2989 / AND #01` early-out -- a fight with no celebration at all -- is UNPORTED: measured 0 in every
+//  fixture, and the byte that would set it has not been traced to a writer.)
+static void battleVictoryTeardownFrame(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  int seat = h->victoryHold - 1;                               // 0, 1, 2 -- then 3 = the tail
+  if (seat < 3) {
+    s[0x00A1] = (uint8_t)seat;                                 // 13589 STZ $A1 / 13591, 13599 INC $A1
+    battleQueueRemoveTeardown(h, seat);                        // 1358B / 13593 / 1359B JSR C1/1BAA
+    return;                                                    // 1358E / 13596 / 1359E JSR C1/007E
+  }
+  h->endTeardownDone = 1;
+  s[0x95D5] = 0xFF;                                            // 135A1-135A3
+  battleTrace(h, "end-teardown");
+  battleMenuPassHead(h);                                       // 135A6 JSR C1/0C2D: C1/0299's names and party rows, posted
+  CtBattlePcLadderArm(h, 0x28, 0);                             // 135B1-135DD, the copier's tail C1/367D
+}
 
 // ---- CT_BATTLE_SCRIPT test hook: "btn:frames,btn:frames,.." (btn in {a,u,d,n} = A/Up/Down/nothing;
 // frames = hold ticks). Returns the button active at combat-tick p (p=0 is the first post-intro action
@@ -22185,10 +22212,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // anim-set-2 death STANDS instead of dissolving (battle_death_dissolve_gate.md) and so freezes nothing.
   // (Residual: our dissolve is HOLD 9 + STEPS 32 = 41 render frames vs the ROM's 43-45 -- the dissolve
   // LENGTH is the battle_dissolve.md render fixture, so that offset rides that pin, OPEN.)
-  if (h->victoryHold > 0 && !h->endTeardownDone) {
-    battleEndTeardown(h);
-    battleMenuPassHead(h);                                      // C1/35A6 `JSR C1/0C2D`: the strip repainted (the queue
-  }                                                             //   gone: C1/0299's names and party rows, posted)
+  if (h->victoryHold > 1 && !h->endTeardownDone) battleVictoryTeardownFrame(h);   // V+1..V+3 (V's is step G's)
   if (h->handoffLeft > 0 && battleFbe5Step(h)) {               // CF/FBE5's waits done: CF/FCE9 JSL CD/0006 -> CD/03B4
     h->handoffLeft = 0;
     battleTrace(h, "victory-handoff");
@@ -22373,18 +22397,11 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     // Force-close any open action window (the killing swing) so the PC SNAPS to the victory pose (the ~58f
     // settle is OPEN -> snap is the byte-exact minimum, T1); the killing-blow popup keeps aging out.
     h->victoryHold = 1;
-    // C1/8186 `LDA #08 / JSR C1/0003` -> the dispatch table C1/0051[8] -> C1/356D, the VICTORY stager:
-    // window +0x28 into $5DF1,Y for all three seats, $5DDD/$5DDE = 0/0. (C1/35A9's `LDA $2989 / AND #01`
-    // early-out -- a fight with no celebration at all -- is UNPORTED: measured 0 in every fixture, and
-    // the byte that would set it has not been traced to a writer.)
-    // ⚠ C1/35A1-35A3 `LDA #FF / STA $95D5` is NOT the stager's first instruction. C1/356D opens with
-    // `JSL CD0009 / INC $A0FE / STZ $98A7,X x8 / JSR C1/30B6 x3`, then THREE per-seat queue removals each
-    // followed by a whole rendered frame (`STZ $A1 / JSR C1/1BAA / JSR C1/007E`, `INC $A1` x2), and only
-    // THEN 35A1's force + the C1/0C2D repaint. Forcing $95D5 here, before the removals, changes what
-    // C1/1BAA does with the queue: the ready-queue head came out 1 instead of 255 at the teardown
-    // (field-battle-end-uiteardown, measured). battleEndTeardown's existing write is the canonical
-    // placement -- after the loop -- and it stays there.
-    CtBattlePcLadderArm(h, 0x28, 0);
+    // C1/8186 `LDA #08 / JSR C1/0003` -> the dispatch table C1/0051[8] -> C1/356D, the VICTORY stager. After the
+    // `JSL CD0009 / INC $A0FE / STZ $98A7,X x8 / JSR C1/30B6 x3` above come THREE per-seat queue removals, each followed by
+    // a whole rendered frame (`STZ $A1 / JSR C1/1BAA / JSR C1/007E`, `INC $A1` x2), and only then C1/35A1's `$95D5 = FF`,
+    // the C1/0C2D repaint and the ladder's arm (window +0x28) -- battleVictoryTeardownFrame. Seat 0's removal is this frame's.
+    battleVictoryTeardownFrame(h);
     battleBuildResults(h);                                     // battle_results_window.md §V2: build the reward line sequence
     h->actActive = 0; h->actAttacker = -1; h->actTarget = -1; s[0xA013] = 0;   // ($A013 already 0 past the freeze gate)
     h->fxAtkPal = -1; h->fxAtkPose = -1; h->fxFlashPal = -1; h->flashTarget = -1; h->flashLeft = 0;

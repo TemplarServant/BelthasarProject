@@ -727,6 +727,15 @@ entry page kept the pre-battle word (090B) and the lead was drawn there on the r
 "blink in the previous place". The damage number's origin is the same live position (C1/5B4D-5B6E), which re-pinned
 field-battle-status-render. Needs gato_wait.state.
 
+### battle-victory-teardown-frames-vs-oracle (`tools/battle_victory_teardown_cmp.py`)
+
+The victory's C1/356D takes four frames: one C1/1BAA queue removal per seat in V, V+1 and V+2 (each closed by C1/007E's
+wait), then `$95D5 = FF`, the C1/0C2D repaint and the pose ladder's arm in V+3; the first victory pose publishes in V+5.
+GATO's fight made into a Dark Matter kill with tools/battle_ab.py's pokes, Magus solo and Magus + Crono + Marle, on the
+rule's cartridge and the port: the queue, the chooser, the menu bytes, `$E5`, `$A1` (from V) and `$9907` from V-2 to V+40,
+0 differing on both parties (the engine before 2026-10-13: 95 and 114). Full tier (~35 s). Needs gato_wait.state. Re-pin
+only after looking at both sides' frames; the zeros must stay zeros. disasm/notes/battle_end_ui_teardown.md sec. 9.
+
 ### battle-xstrike-death-fade-waits-for-the-effect-vs-rule-cartridge
 
 An enemy a tech kills: CD/0043, the death routine, waits until `$CCEA` is 0 (the tech's effect program has ended and

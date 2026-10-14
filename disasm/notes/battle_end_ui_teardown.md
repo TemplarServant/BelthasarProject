@@ -694,3 +694,49 @@ ROM's own gates already).
 (same frame — inside the ROM's 3-frame window) → `f1628 victory` → **`f1665 end-teardown … cur=-1
 q[255..0]`**. Pinned as `field-battle-end-uiteardown`. The whole suite stayed green with ZERO re-pins, as the
 dossier predicted (every MASHA fight confirms before the kill, so both changes write already-cleared values).
+
+---
+
+## 9. THE VICTORY'S FOUR FRAMES (2026-10-13, roadmap B5) — SHIPPED
+
+The addendum above ran C1/356D's three `C1/1BAA` removals together, one frame after the victory, and armed the pose
+ladder in the victory's own frame. `dis.py 1356D 0x48 1 0` says otherwise: every removal is followed by `JSR C1/007E`
+(the one-frame wait), and the arm comes after the third wait:
+
+```
+1356D JSL CD/0009 / INC $A0FE / STZ $98A7,X x8 / JSR C1/30B6 x3      ; frame V
+13589 STZ $A1 / JSR C1/1BAA / JSR C1/007E                             ; seat 0 in V
+13591 INC $A1 / JSR C1/1BAA / JSR C1/007E                             ; seat 1 in V+1
+13599 INC $A1 / JSR C1/1BAA / JSR C1/007E                             ; seat 2 in V+2
+135A1 LDA #FF / STA $95D5 / JSR C1/0C2D                               ; V+3: no chooser, the strip repainted
+135A9 LDA $2989 / AND #01 / BEQ ; 135B1-135DD the windows +28, the copier C1/35DD -> C1/367D's 64-frame loop
+```
+
+The defeat and flee teardown `C1/B7F2` (`dis.py 1B7F2 0x1B 1 0`) is three `LDA #02 / JSR C1/0003` with `$A1` = 0/1/2 and
+no wait: those stay immediate.
+
+**Measured**, the rule's cartridge (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1) on GATO's fight made into a Dark Matter
+kill (tools/battle_ab.py's pokes on saves/battle_re/gato_wait.state; Magus's eighth tech at the first menu):
+
+| party | V (`$A0FE` 00->01) | `$A1` 00 / 01 / 02 | queue | `$A6DF` FE->FF, `$5DF1` = 28 00 x3, `$5DC9` = 40 | first `$9907` publish |
+|---|---|---|---|---|---|
+| Magus + Crono + Marle | c1397 | V / V+1 / V+2 | V: `$A6D9` 00 FF 02 -> FF FF 02, `$A6DD` 02 01 FE, `$95D5` 02; V+2: `$A6D9` FF FF FF, `$95D5` FF | V+3 | V+5 |
+| Magus solo | c1322 | V / V+1 / V+2 | (empty) | V+3 | V+5 |
+
+The port made the three removals in V+1 and published the first victory pose in V+2 — three frames early.
+`battleVictoryTeardownFrame` (src/battle.c) now runs one call per frame from V: the removal of seat `victoryHold - 1`
+with `$A1`, and in V+3 `$95D5 = FF`, `battleMenuPassHead` (C1/0C2D) and `CtBattlePcLadderArm(0x28)`. The ladder's stepper
+runs ahead of it in the frame, so its loop begins in V+4 as C1/367D's does. `CT_BATTLE_VICTORY_CELEBRATE` counts from V, not
+from the arm, so the results are unchanged: the cartridge's `$5DC9` runs 40 (c1325 = V+3) to 00 (c1389), and the results
+box's `$CCEC = 10` lands at c1391 = V+69, the glyphs two frames later at victoryHold 72. The `end-teardown` trace is printed at
+C1/35A1 (V+3); the checks anchored on it moved by two frames, with the same pictures.
+
+Pinned by `battle-victory-teardown-frames-vs-oracle` (tools/battle_victory_teardown_cmp.py): both parties, every byte of
+the queue, the menu, `$E5`, `$A1` (from V) and `$9907` from V-2 to V+40 equal to the cartridge's (the old engine: 95 and
+114 differing frame-fields).
+
+**Open:** the ladder's own bytes (`$5DF1/$5DF2` windows, `$5DDD/$5DDE`, `$5DBD` dwells, `$5DC1` cursors, `$5DC9` loop) live
+in the host (`pcLadder*`), not the WRAM; the cartridge writes them at V+3. Before V, the port's `$A1` reads 00 where the
+cartridge's reads 02 (another writer of the direct page's `$A1`, not traced). After the results the port's exit runs three frames
+behind the cartridge's (CF/FBE5's `$A4` 00 -> 01: cartridge V+457, port V+460; the song post `$1E00 = 10` V+462 / V+465),
+unchanged by this section's work -- not derived yet.
