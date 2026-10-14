@@ -735,6 +735,17 @@ the party in GATO's arena on both sides; every change of `$7F01EC`, `$7F03FE` an
 cartridge's (`830 01EC=01`, `967 03FE=02`, `1007 03FE=03 / 011F=01`, `1046 011F=00`). Before 2026-10-14 the port ran that
 tail for a won fight only and the player never regained control. Quick tier (~7 s). Needs gato_wait.state.
 
+### ocean-palace-aftermath-chain-vs-oracle (`tools/ocean_aftermath_cmp.py`)
+
+From Lavos rising to the party's new leader, port against the rule's cartridge. From the user's capture before the Mammon
+Machine scene (saves/field_re/pre_scene_19f.state + .lakewram: loc 19F, storyline CB), no input to f6000, then A every 40
+frames to f9600 on both sides. Graded: the location chain `19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9`, the storyline (CD)
+and the party at the end (`02 04 01 | 80 85 81 03 05 80`: Lucca, Frog, Marle, with Marle's reserve entry marked), and the
+Last Village box's own timing ("A tidal wave!": its `03 08` pause, `06` 121 frames after state 7, then `07`, then `0D` with
+no press). Before 2026-10-14 the port stopped black on overworld 1F4 (op 03), had no world-to-world exit, kept Crono in the
+Last Village, waited for A on self-closing boxes and listed Marle twice on the exchange screen. Full tier (~2.5 min).
+Needs the user's capture (SKIPs without it).
+
 ### menu-exchange-vs-oracle (`tools/menu_exchange_cmp.py`)
 
 The party exchange (menu mode 5, screen `$07`): the field's Y at storyline 0x49 opens it, the song task posts `14 3E` and

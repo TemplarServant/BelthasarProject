@@ -133,7 +133,7 @@ if(CT_SDL_INC)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_field>)
   endif()
   # M3-B: interactive overworld camera viewer (live map from a WRAM/VRAM dump + the byte-exact camera).
-  add_executable(ct_world src/ct_world.c src/world.c src/assets.c)
+  add_executable(ct_world src/ct_world.c src/world.c src/lz.c src/assets.c)   # lz.c: the world scripts' far call C6/E028
   target_include_directories(ct_world PRIVATE src ${CT_SDL_INC})
   target_link_libraries(ct_world ${CT_SDL_LIB})
   if(MSVC)

@@ -2823,6 +2823,29 @@ static int wordW(const uint8_t* font, const char* s, int i, int j) {
 // of the 14 line timings across str 0x29's and 0x2B's four pages is `visible chars + 1 for the
 // break`, with the token's indent free -- e.g. '   My pendant!' takes 12 frames (11 + 1), not 15.
 #define TB_IND   '\x02'
+// THE PAUSE AND THE SELF-CLOSING END -- the dialogue's code 03 (C2/5945: ONE argument byte). The packer (assets/text.py)
+// emits `03 n` as TB_PAUSE + two letters ('A' + n >> 4, 'A' + n & 15) and `03 00` as TB_AUTOEND, the string's end. Neither
+// is drawn: tbStripPauses takes them out after the names are resolved and keeps where each pause stood, and the typewriter
+// spends one iteration on each (C0/2176 -> 21A8, CtSceneTextboxPause).
+#define TB_PAUSE   '\x03'
+#define TB_AUTOEND '\x04'
+#define TB_MAXPAUSE 32
+// Removes the markers in place; tbPausePos[k] = the position in the stripped string the pause stood before, tbPauseArg[k]
+// its n. Returns the new length; *autoEnd = the string ended on `03 00`.
+static int tbStripPauses(char* s, int len, int* pausePos, int* pauseArg, int* nPause, int* autoEnd) {
+  int o = 0; *nPause = 0; *autoEnd = 0;
+  for (int i = 0; i < len; i++) {
+    if (s[i] == TB_AUTOEND) { *autoEnd = 1; break; }
+    if (s[i] == TB_PAUSE && i + 2 < len) {
+      int n = ((s[i + 1] - 'A') << 4) | (s[i + 2] - 'A');
+      if (*nPause < TB_MAXPAUSE) { pausePos[*nPause] = o; pauseArg[*nPause] = n & 0xFF; (*nPause)++; }
+      i += 2; continue;
+    }
+    s[o++] = s[i];
+  }
+  s[o] = 0;
+  return o;
+}
 // The canonical CT window (default scheme, GREY -- resampled from the oracle with the correct
 // [X,B,G,R] fb layout): full width, double light frame (173,181,181 / white / dark gap) with
 // rounded corners, a cool blue-grey gradient fill (115,123,132)->(0,8,16) with a faint
@@ -11174,6 +11197,7 @@ int main(int argc, char** argv) {
   int loadHold = 0;      // frames still owed to the LOAD itself (fade == 3): the ROM is inside
                          // C0/00F4 with the screen blank and nothing else running at all
   int pendKind = 0;   // transition captured at fade-out start: 0 none, 1 scene->scene door, 2 scene->overworld, 3 overworld->scene
+  int pendWorld = -1; // pendKind 2 from the overworld itself: the world C0:0000 loads (worldInit at the commit)
   int pendDest = 0, pendFac = 0, pendHasFlags = 0;
   // pendX/pendY are the 16-bit ROM position scaled to pixels, so they carry the 4 fractional bits
   // C0/42EE-430A puts in the LOW byte ($FF = .9375, $7F = 7.9375). They were ints and the fraction
@@ -11195,6 +11219,7 @@ int main(int argc, char** argv) {
   // 2161) and page (1FB4). The field NMI (C0/EB79) copies the buffer into window line $0131 while $0136 != 0.
   int tbSlotPos[4] = { -1, -1, -1, -1 }, tbSlotN[4] = { 0, 0, 0, 0 }, tbBufPos = -1, tbBufN = 0;
   int tbLineStepDue = 0, tbBreakAt = -1;   // a break's iteration was spent (the next one steps $0131) / the break paid for
+  int tbPausePos[TB_MAXPAUSE], tbPauseArg[TB_MAXPAUSE], tbNPause = 0, tbPauseNext = 0, tbAutoEnd = 0;   // code 03 (TB_PAUSE)
   int tbClose = 0, tbWasActive = 0, tbWasChoice = 0;   // the CLOSE ramp (C0/2032) + the edge that arms it
   int tbLS[160]; uint8_t tbLB[160];
   int choiceSel = 0, didSelect = 0;                    // selected option in a decision box
@@ -11624,6 +11649,7 @@ int main(int argc, char** argv) {
           // 1000 AD pan started. The image is the host's now, so scene0 -> overworld -> loc271 -> loc2
           // chains through both hops with nothing captured at all.
           fieldFree(&f);
+          if (pendWorld >= 0) { haveWorld = worldInit(&assets, &wd, pendWorld); pendWorld = -1; }   // a world's own exit
           worldEnterAt(&wd, pendWX, pendWY);
           // C2/012F zero-fills $0000-$00EF (`STZ $00 / MVN $00,$00` over $EF bytes) and C2/0143 `LDA #80 / STA $1C`: the
           // world opens FORCE-BLANKED at brightness 0, and only a fade object (op 0x29 in the world's own script) lights it.
@@ -12624,6 +12650,19 @@ int main(int argc, char** argv) {
                    wd.wram[0x0105] | (wd.wram[0x0106] << 8), wd.wram[0x0107], wd.wram[0x0108], wd.wram[0x027C]);
             printf("ow-op05-cam: $20=%04X $22=%04X $26=%04X $28=%04X\n",   // the scroll words the ROM holds at
                    wd.cam.bg1h, wd.cam.bg2h, wd.cam.bg1v, wd.cam.bg2v);  // $0020/$0022/$0026/$0028
+          } else {
+            // ...AND INTO ANOTHER WORLD. State 2 does not look at the destination: `SEI / NMITIMEN 0 / JSR C2/26F0 / $1E00 = 82,
+            // 83 / JML $C0:0000`, and the reset's C0/006B `CPX #01F0 / BMI` sends a $0100 of $1F0 or more to the overworld
+            // loader again -- the reboot's own world arm. Lavos's rising is one: 1F4's script ends `05 F5 01 08 08` (C2/1100
+            // -> 1F5, Zeal's sky) and the cartridge goes 1F4 -> 1F5 -> 1EE -> 1F5; the port only knew exits into a location
+            // and stayed on 1F4's last frame, black (saves/field_re/pre_scene_19f, the user's own capture).
+            memcpy(wd.wram + 0x101F0, wd.wram + 0x1BA7, 16);            // C2/24E0 JSR C2/26F0
+            memcpy(flagsBuf, wd.wram + 0x10000, 0x200); haveFlagsBuf = 1;
+            pendKind = 2; pendWorld = dl - 0x1F0; ngIntro = 0;
+            pendWX = wd.wram[0x0102] * 8; pendWY = wd.wram[0x0103] * 8;
+            fade = 1; fadeBri = 0;
+            printf("ow-op05: C2/1100 -> world %03X tile(%d,%d) flags=%X ret=%03X\n", dl, wd.wram[0x0102], wd.wram[0x0103],
+                   wd.wram[0x0104], wd.wram[0x0105] | (wd.wram[0x0106] << 8));
           }
         }
         if (wr[0x1E00] && getenv("CT_OWSONG"))
@@ -15835,6 +15874,8 @@ int main(int argc, char** argv) {
         // active party), exactly as the ROM's text decoder does at render time.
         static char tbNameBuf[4096];
         if (tbStr) { tbStrLen = CtResolveNames(tbConvBuf, tbStrLen, tbNameBuf, sizeof tbNameBuf, f.vm); tbStr = tbNameBuf; }
+        tbNPause = 0; tbPauseNext = 0; tbAutoEnd = 0;
+        if (tbStr) tbStrLen = tbStripPauses(tbNameBuf, tbStrLen, tbPausePos, tbPauseArg, &tbNPause, &tbAutoEnd);
         if (tbStr && dbg.tbText) { fprintf(stderr, "[tbtext] '%.*s'\n", tbStrLen, tbStr); }  // probe: resolved box text
         // a decision box pages only at a page code (the prompt pages, then the options page with the
         // cursor); plain text lays out as lines, four to a window
@@ -16845,6 +16886,14 @@ int main(int argc, char** argv) {
       // into $1900/$1980 of the lead, which the object mover C0/AB10-AB42 integrates. MEASURED (same run, `--monitor
       // 7E1982:1 --writer`): $1982 by C0:9E60 over f1-f6 (the conveyor's 20 from f5), then by C0:ADF7 = 2B from f10 --
       // the fall's own move (op B0 no longer runs: the lead's script is elsewhere), the conveyor no longer reaching it.
+      // C0/8A6D works on the lead's own words $1800/$1880,X, and (px, py) is their copy -- which a script op that PLACES the
+      // lead (8B, C0/5709's family) does not update. Read back first: Last Village 182's obj1 loop is `16 6A 01 06 04 / 8B FF
+      // FF / B0` with $011F = 0, and the stale arrival copy was written back over the script's (255,255) every frame -- the
+      // lead PC stood in the hut where the rule's cartridge has none ($1802/$1882 = FFxx from f3647, saves/field_re/
+      // pre_scene_19f).
+      { const uint8_t* lw = CtSceneMem7E(f.vm);
+        px = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;
+        py = (lw[0x1880 + pObj * 2] | (lw[0x1881 + pObj * 2] << 8)) / 16.0; }
       int atB0 = CtSceneActorAtB0(f.vm, pObj);
       fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, 0, 0, 0, atB0 ? 1 : 0, &camReqX, &camReqY);
       if (atB0) CtSceneSetActorPosF(f.vm, pObj, px, py);
@@ -17072,14 +17121,22 @@ int main(int argc, char** argv) {
     // state 7 (the tent keeper's last character at f126, state 7 at f127).
     if (tbActive && f.vm && tbStr && tbReveal <= tbLimit && mlBody) {
       uint8_t* tw = CtSceneMem7E(f.vm);
-      if (tw && tw[0x0129] == 6) {
+      if (tw && tw[0x0129] == 6 && !CtSceneTextboxResumeArmed(f.vm)) {   // (a pause's end, 2096, types from the next frame)
         int pos = isChoice ? tbPageStart[tbPage] : tbLS[tbLine], seen = 0;   // the source position of the
         int end = isChoice ? tbPageEnd : tbWinEnd;                            // next character to reveal
         while (pos < end && seen < tbReveal) {                            // TB_IND is the break
           if (tbStr[pos] != '\n' && !TB_PGBRK(tbStr[pos]) && tbStr[pos] != TB_IND) seen++;   // token's own
           pos++; }                                                        // indent -- not a character
         while (pos < end && (TB_PGBRK(tbStr[pos]) || tbStr[pos] == TB_IND)) pos++;
-        if (tbReveal >= tbLimit) {
+        // A PAUSE (`03 n`) costs its own iteration, as a break does: C0/216D's render stops on the code and C0/2176 -> 21A8
+        // takes the machine to state 7 for n * 15 frames. It is met where it stands in the text -- before a break that
+        // follows it, after one that precedes it (then 2126's head steps the line in the same iteration, below).
+        int tbPz = (tbPauseNext < tbNPause) ? tbPausePos[tbPauseNext] : 0x7FFFFFFF;
+        if (tbPz <= pos) {
+          CtSceneTextboxPause(f.vm, tbPauseArg[tbPauseNext++]);
+        } else if (tbReveal >= tbLimit && !tbMore && tbAutoEnd) {
+          CtSceneTextboxPause(f.vm, 0);                                  // `03 00`: 21AB -> 21D8, $0134 kept (2096 closes)
+        } else if (tbReveal >= tbLimit) {
           // $0215 = the code the engine stopped ON: non-zero while another page/line follows (C0/2024 reads exactly
           // this to keep a decision's cursor from arming on a page that is not the last one -- which is why a two-page
           // decision costs two presses). A window that ends on a page code says which one (0x0B waits for A; 0x0A,
@@ -17094,14 +17151,18 @@ int main(int argc, char** argv) {
             CtSceneTextboxLineStep(f.vm, 0x05);                          // (3 wraps to 0) and JSR C0/20B2 -- a fresh
             tbBufPos = -1; tbBufN = 0; tbLineStepDue = 0;                // line buffer
           }
-          { int cp = pos;                                                // the character this iteration types
-            while (cp < end && (tbStr[cp] == '\n' || TB_PGBRK(tbStr[cp]) || tbStr[cp] == TB_IND)) cp++;   // (past a paid break)
+          int cp = pos;                                                  // the character this iteration types
+          while (cp < end && (tbStr[cp] == '\n' || TB_PGBRK(tbStr[cp]) || tbStr[cp] == TB_IND)) cp++;   // (past a paid break)
+          if (tbPz <= cp) {
+            CtSceneTextboxPause(f.vm, tbPauseArg[tbPauseNext++]);        // a pause right after the break: no character
+          } else {
             int ls = cp, lo = isChoice ? tbPageStart[tbPage] : tbLS[tbLine], nv = 0;   // the buffer = this line so far
             while (ls > lo && tbStr[ls - 1] != '\n' && !TB_PGBRK(tbStr[ls - 1])) ls--;
             for (int q = ls; q <= cp && q < tbStrLen; q++) if (tbStr[q] != TB_IND) nv++;
-            tbBufPos = ls; tbBufN = nv; }
-          tw[0x0136] = 1;                                                // 21A3
-          tbReveal += 1;
+            tbBufPos = ls; tbBufN = nv;
+            tw[0x0136] = 1;                                              // 21A3
+            tbReveal += 1;
+          }
         }
       }
     }

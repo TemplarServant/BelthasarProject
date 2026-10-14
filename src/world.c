@@ -1,6 +1,7 @@
 // M3-B: overworld camera/scroll -- C port of the bank-C2 scroll engine (see world.h for the RE map).
 #include "world.h"
 #include "ct_owobj.h"   // the ambient-object block ABI (offsets/class shared with field.c)
+#include "lz.h"       // C6/E028: the world scripts' far call into C3/0002 (ct_lz_decompress_bounded)
 #include "data/ow_anim.h"  // ROM $C3:E000..EFFF: the anim sub-VM's pointer table + bytecode
 #include <string.h>
 #include <stddef.h>   // ptrdiff_t (the draw list maps a block pointer back to its index)
@@ -120,9 +121,15 @@ int CtWorldSoundRequest(uint8_t* ram) {
 // C2/18F1 -- the ambient script's PLAY SONG op (0x3D), gated on $7F01ED (the same field-song hold
 // C2/2FAE uses). ONE body, two callers: the sub-VM's case 0x3D, and the host's new-game intro entry
 // -- see the note at that call for why the host has to issue it itself.
+// Op 0x4A's handler IS C2/18F9, the body below without the gate: the script plays its song whatever $7F01ED holds
+// (overworld 1F4's second visit, `4A 4A`, the song with the hold set by C6/E63D).
+static void owPlaySong18F9(uint8_t* ram, uint8_t song);
 void CtWorldScriptPlaySong(uint8_t* ram, uint8_t song) {
   if (ram[0x101ED]) return;                         // 218F3 LDA $7F01ED / BNE -> straight to the RTS
-  ram[0x1BE8] = 0x10;                               // 218FB LDA #10 -- cmd $10 = PLAY SONG
+  owPlaySong18F9(ram, song);
+}
+static void owPlaySong18F9(uint8_t* ram, uint8_t song) {
+  ram[0x1BE8] = 0x10;                              // 218FB LDA #10 -- cmd $10 = PLAY SONG
   ram[0x1BE9] = song;                               // 21905 STA $1BE9
   ram[0x02AE] = song;                               // 21908 STA $02AE -- the shadow, written here
                                                     //   UNCONDITIONALLY (owMusicPlayRegion commits it
@@ -1484,6 +1491,12 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
     if (g_owJsl) { int n = g_owJsl(ram); if (n > 0) g_owSuspendNmis = n; }
     return;
   }
+  if (addr == 0x7BD1) {
+    // C2/7BD1 -- `LDA $00 / STA $7E29AE / RTS` with M = 8 (C2/180E SEP #20): the song C2/2F0F plays while $7F01ED holds it.
+    // The scripts set $00 just before with op 0x13 (1F4: `13 00 00 0D` / `34 D1 7B`).
+    ram[0x29AE] = ram[0x00];
+    return;
+  }
   if (addr == 0x78A1) {
     uint16_t dx = (uint16_t)(obW(B + OWOBJ_XPOS) - c->bg2h + 0x10);
     if (dx >= 0x8000) dx += 0x600;
@@ -1612,8 +1625,20 @@ void CtWorldObjOp05(uint8_t* ram, const uint8_t* op) {
 // so the leg never ends and scene 433's chain never advances to its next entry (notes 9.17).
 // The host's hook for the window object's two targets (field.c installs CtXlatOwWindowCall on the vendored hardware;
 // a host without one -- ct_world, the oracle -- names the call and advances, as before).
+static const uint8_t* g_owRom = NULL;   // the host's ROM image (CtWorldSetRom, below)
+static long g_owRomLen = 0;
 static CtWorldOp4EHook g_owWinCall = NULL;
 void CtWorldSetOp4EHook(CtWorldOp4EHook fn) { g_owWinCall = fn; }
+// The picture loaders' body (see their cases in CtWorldObjOp4E): $0300-$0305 as the routine leaves them, then C3/0002.
+static void owFarLz(uint8_t* ram, uint16_t dst, uint16_t tbl, uint16_t x) {
+  if (!g_owRom || g_owRomLen < 0x60000L + tbl + x + 3) return;
+  const uint8_t* p = g_owRom + 0x60000L + tbl + x;
+  ram[0x0300] = p[0]; ram[0x0301] = p[1]; ram[0x0302] = p[2];
+  ram[0x0303] = (uint8_t)dst; ram[0x0304] = (uint8_t)(dst >> 8); ram[0x0305] = 0x7F;
+  uint32_t a = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+  if (!ct_lz_decompress_bounded(g_owRom, (size_t)g_owRomLen, ram + 0x10000 + dst, 0x10000u - dst, ct_lz_hirom_offset(a)))
+    fprintf(stderr, "owobj: the packet at $%06X did not decompress inside $7F:%04X-$FFFF\n", a, dst);
+}
 void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
   uint32_t tgt = (uint32_t)op[1] | ((uint32_t)op[2] << 8) | ((uint32_t)op[3] << 16);
   switch (tgt) {
@@ -1640,6 +1665,23 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
                                         tgt, g_owWinCall ? "translation stop" : "no host hook", r); } }
       break;
     }
+    // THE PICTURE LOADERS -- four routines of one shape, the whole family in bank C6 (a byte-pattern scan of the bank finds
+    // these four and no other):
+    //   LDX #dst / STX $0303 / LDA #7F / STA $0305 / LDX #x / REP #20 / LDA tbl,X / STA $0300 / SEP #20 / LDA tbl+2,X /
+    //   STA $0302 / JSL C3/0002 / RTL
+    // -- the packet named by the three-byte record at tbl + x, decompressed by C3/0002 (= C3/0557, the LZ routine; its
+    // $0308-$0316 workspace is the routine's own and not kept, as everywhere else in the port). Lavos's rising (overworld
+    // 1F4) runs E028 (the picture, then op 0x03 sends it to VRAM) and E04D (its palettes: the three op-0x04 rows after it
+    // read $7F:8C00/8C20/8C40).
+    case 0xC6E028: owFarLz(ram, 0x9000, 0xFDF0, 0x06); break;
+    case 0xC6E04D: owFarLz(ram, 0x8C00, 0xFEA0, 0x03); break;
+    case 0xC6E64A: owFarLz(ram, 0x9000, 0xFDF0, 0x27); break;
+    case 0xC6E66F: owFarLz(ram, 0x8C00, 0xFEA0, 0x06); break;
+    // THE HELD SONG'S FLAG: E63D `LDA #01 / STA $7F01ED / RTL`, E644 `TDC / STA $7F01ED / RTL` (M = 8, D = 0). While it is set
+    // the loader's zoning arm C2/2F0F plays $7E:29AE instead of the cell's song (1F4's script stores 0D there just before,
+    // `13 00 00 0D` / `34 D1 7B`).
+    case 0xC6E63D: ram[0x101ED] = 0x01; break;
+    case 0xC6E644: ram[0x101ED] = 0x00; break;
     default: {
       static int said = 0;
       if (!said) { said = 1;
@@ -1655,8 +1697,6 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
 // fade-out are scripts in bank $C2 itself ($C2:2EC1 `28 01 52`, $C2:2EC4 `29 01 52`, spawned by C2/04D9 with A = $C2).
 // The ROM image is the host's (CtWorldSetRom); without one, and for any bank that is neither $7E nor a ROM bank, the
 // read stays where it always was, $7F.
-static const uint8_t* g_owRom = NULL;
-static long g_owRomLen = 0;
 void CtWorldSetRom(const uint8_t* rom, long len) { g_owRom = rom; g_owRomLen = len; }
 static const uint8_t* obScript(const uint8_t* ram, uint8_t bank, uint16_t pc, uint8_t* buf) {
   if (bank == 0x7E) return ram + pc;
@@ -1791,6 +1831,15 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         B[0x32] = op[4]; B[0x33] = 0; B[0x34] = op[5];
         obAllocNative(ram, B, 0x1DD4);
         adv = 6; break;
+      // C2/10BF -- A VRAM UPLOAD. `SEP #20 / LDX #1CF5 / JSR C2/048A / REP #20 / LDA #000A / RTS`: the op only spawns class
+      // $1CF5 (obVramUp below) and steps over its nine operand bytes; the child reads them through its copy of the parent's
+      // +07 (C2/0F86 stores the pc after every advance -- the port keeps it in a local, so it is stored first, as 0x28/0x29).
+      // Lavos's rising (overworld 1F4): `4E 28 E0 C6` decompresses the picture to $7F:9000, then `03 00 90 7F 00 00 00 00 00
+      // 01` sends its $100 tiles to VRAM word 0 -- the port PARKED here (no case), and the map stayed black.
+      case 0x03:
+        obPutW(B + OWOBJ_PC, pc);
+        obAllocNative(ram, B, 0x1CF5);
+        adv = 10; break;
       case 0x05: CtWorldObjOp05(ram, op); adv = 5; break;   // C2/1100 -- ENTER A LOCATION
       case 0x07: {                                  // plot a tile byte into a map buffer
         static const uint16_t BASES[6] = { 0x4000, 0x5800, 0x7000, 0x6000, 0x6800, 0x7000 };
@@ -1873,6 +1922,7 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
       case 0x0A: B[op[1]] = 0; adv = 2; break;
       case 0x0B: B[op[1]]++; adv = 2; break;        // C2/121D: B[operand]++ (the fair release-3 sub 07FC
                                                     // interleaves 0B between its 3 spawns; parking here gave 1 bunch + a frozen blob)
+      case 0x0C: B[op[1]]--; adv = 2; break;        // C2/1230: `LDA ($4E),Y / DEC A / STA ($4E),Y`, Y = the operand
       case 0x0D: B[op[1]] = op[2]; adv = 3; break;
       case 0x0E: B[op[1]] |= op[2]; adv = 3; break;
       case 0x0F: B[op[1]] &= (uint8_t)~op[2]; adv = 3; break;
@@ -1953,6 +2003,36 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
           }
         }
         adv = -1; break;
+      // C2/16FA -- ONE LAYER'S PAN, op 0x32's twin for the layer the script names: `51 <layer> <frames>`. The timer is
+      // operand 2 (16FA-1708: +0A, the four accumulators zeroed, on into the step the same visit; 171B DEC +0A / BNE, and
+      // 0 -> LDA #0003), the step is op 0x32's (1726 JSR C2/1759 / JSR C2/0F38), and the whole pixels go to that layer
+      // alone: 172E JSR C2/1784 / BCC / `$00 = operand 1 / JSR C2/0568`, 1743 JSR C2/17AB / BCC / `$00 = operand 1 / JSR
+      // C2/066C` -- no BG3 arm, no gates. 1754 TDC / CLC / RTS: it yields. C2/0568 / 066C take the layer as `$00 & 3`
+      // (1 = BG1, 2 = BG2, 0 = nothing). Lavos's rising pans BG2 with it (`51 02 01` at pc 0721 / 0774).
+      case 0x51: {
+        if (B[OWOBJ_WAIT] == 0) {
+          B[OWOBJ_WAIT] = op[2];
+          obPutW(B + OWOBJ_XFRAC, 0); obPutW(B + OWOBJ_XPOS, 0);
+          obPutW(B + OWOBJ_YFRAC, 0); obPutW(B + OWOBJ_YPOS, 0);
+        } else if (--B[OWOBJ_WAIT] == 0) { adv = 3; break; }
+        obSignNorm(B);
+        obAdd32(B + OWOBJ_XFRAC, B + OWOBJ_XPOS, obW(B + OWOBJ_VELXF), obW(B + OWOBJ_VELXI));
+        obAdd32(B + OWOBJ_YFRAC, B + OWOBJ_YPOS, obW(B + OWOBJ_VELYF), obW(B + OWOBJ_VELYI));
+        int bg = (op[1] & 3) - 1, d;
+        if (bg > 1) {                               // BG3 through C2/0568's third table row: not a layer obScroll steps
+          static int said = 0;
+          if (!said) { said = 1; fprintf(stderr, "owobj: op 51 on layer 3 -- the pan is not applied\n"); }
+          bg = -1;
+        }
+        if (obWholeStep(B + OWOBJ_XFRAC, B + OWOBJ_XPOS, &d) && bg >= 0) obScroll(ram, c, bg, 0, d);
+        if (obWholeStep(B + OWOBJ_YFRAC, B + OWOBJ_YPOS, &d) && bg >= 0) obScroll(ram, c, bg, 1, d);
+        adv = -1; break;
+      }
+      // C2/1ACA / C2/1AE1 -- A BLOCK BYTE PLUS / MINUS AN IMMEDIATE: `46 off n` = block[off] += n, `47 off n` = block[off]
+      // -= n (M = 8, `LDA [$58],Y / TAX` with B = 0 from the dispatcher's AND #00FF, `ADC ($4E),Y` / `SBC [$58],Y`, the carry
+      // CLC / SEC first). Three bytes each.
+      case 0x46: B[op[1]] = (uint8_t)(B[op[1]] + op[2]); adv = 3; break;
+      case 0x47: B[op[1]] = (uint8_t)(B[op[1]] - op[2]); adv = 3; break;
       case 0x34: obNative(ram, B, (uint16_t)(op[1] | (op[2] << 8)), c); adv = 3; break;
       case 0x36: obPutW(B + OWOBJ_GOSUB, (uint16_t)(pc + 3)); pc = (uint16_t)(op[1] | (op[2] << 8)); obPutW(B + OWOBJ_OPSTATE, 0); continue;
       case 0x37: pc = obW(B + OWOBJ_GOSUB); obPutW(B + OWOBJ_OPSTATE, 0); continue;
@@ -2002,6 +2082,10 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
       // C2/18F1 -- PLAY SONG, gated on $7F01ED (the same field-song hold C2/2FAE uses at line 124).
       case 0x3D:
         CtWorldScriptPlaySong(ram, op[1]);
+        adv = 2; break;                               // 2191B LDA #0002 / RTS
+      // C2/18F9 -- PLAY SONG, UNGATED: op 0x3D's body from its gate on (the dispatch word C2:0F91+4A*2 = 18F9).
+      case 0x4A:
+        owPlaySong18F9(ram, op[1]);
         adv = 2; break;                               // 2191B LDA #0002 / RTS
       // C2/191F -- the RAW command: all four mailbox bytes come from the script.
       case 0x4B:
@@ -2148,6 +2232,44 @@ static int obPalRow(uint8_t* ram, uint8_t* B) {
     ram[(uint16_t)(dst + k)] = obScript(ram, B[0x37], (uint16_t)(sa + k), sb)[0];   // `LDA [$10],Y`, $12 = +37
   }
   ram[0x4C] |= 0x02;                                                   // 1E29 LDA #02 / TSB $4C
+  return 0;
+}
+
+// CLASS $1CF5, THE VRAM UPLOAD (op 0x03). `JMP ($1D02,X)` on +02: 1D06 / 1D4C.
+//   1D06 INC $0002,X / $10 = +07 (the op's address), $12 = +09 (its bank) / +0D = [op+3] (the source bank, 8-bit) / 16-bit:
+//        +0B = [op+1] (the source), +0E = [op+4] (the VRAM word), +12 = [op+6] (tiles a frame), +14 = [op+8] (tiles in all) /
+//        +12 == 0 -> +12 = +14 -- and falls into 1D4C the same frame
+//   1D4C LDX $4E / $08 = min(+12, +14) / one NMI queue entry at $60 + $5F (INC $5E around the write, like the anim op 6):
+//        $62 = +0D, $67 = 80, $60 = +0B, $63 = +0E, $65 = $0A = $08 << 5 (32-byte tiles) / $5F += 8 / STZ $5E /
+//        +14 -= $08: zero -> SEC (1DB3, the block is freed) / else +0B += $0A, +0E += $0A >> 1, CLC
+static int obVramUp(uint8_t* ram, uint8_t* B) {
+  if (B[2] == 0) {
+    B[2]++;
+    uint8_t ob[16];
+    const uint8_t* op = obScript(ram, B[0x09], obW(B + OWOBJ_PC), ob);
+    B[0x0D] = op[3];
+    B[0x0B] = op[1]; B[0x0C] = op[2];
+    B[0x0E] = op[4]; B[0x0F] = op[5];
+    B[0x12] = op[6]; B[0x13] = op[7];
+    B[0x14] = op[8]; B[0x15] = op[9];
+    if (obW(B + 0x12) == 0) obPutW(B + 0x12, obW(B + 0x14));
+  }
+  uint16_t n = obW(B + 0x12), left = obW(B + 0x14);
+  if (n >= left) n = left;                                             // 1D51 CMP $0014,X / BCC / LDA $0014,X
+  uint16_t bytes = (uint16_t)(n << 5);
+  uint8_t x = ram[0x5F];
+  ram[(uint8_t)(0x62 + x)] = B[0x0D]; ram[(uint8_t)(0x67 + x)] = 0x80;
+  ram[(uint8_t)(0x60 + x)] = B[0x0B]; ram[(uint8_t)(0x61 + x)] = B[0x0C];
+  ram[(uint8_t)(0x63 + x)] = B[0x0E]; ram[(uint8_t)(0x64 + x)] = B[0x0F];
+  ram[(uint8_t)(0x65 + x)] = (uint8_t)bytes; ram[(uint8_t)(0x66 + x)] = (uint8_t)(bytes >> 8);
+  ram[0x0A] = (uint8_t)bytes; ram[0x0B] = (uint8_t)(bytes >> 8);       // 1D84 STA $0A
+  ram[0x08] = (uint8_t)n; ram[0x09] = (uint8_t)(n >> 8);               // 1D59 STA $08
+  ram[0x5F] = (uint8_t)(x + 8); ram[0x5E] = 0;
+  left = (uint16_t)(left - n);
+  if (left == 0) return 1;                                             // 1DB3 SEC
+  obPutW(B + 0x14, left);
+  obPutW(B + 0x0B, (uint16_t)(obW(B + 0x0B) + bytes));
+  obPutW(B + 0x0E, (uint16_t)(obW(B + 0x0E) + (bytes >> 1)));
   return 0;
 }
 
@@ -2299,6 +2421,11 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
       if ((cls == 0x1DD4 ? obPalRow(ram, B) : obRowFade(ram, B)) == 0) {
         int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
       } else obPutW(B, 0);
+      continue;
+    }
+    if (cls == 0x1CF5) {                            // the VRAM upload (op 0x03), same tail
+      if (obVramUp(ram, B) == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
+      else obPutW(B, 0);
       continue;
     }
     if (cls == 0x3AE2) {                            // a party follower (obFollower), the same CLC tail

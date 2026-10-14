@@ -96,10 +96,20 @@ def _decode_tokens(rom, o, subs, length=None, pb='\n———\n', namesub=False,
         elif v == 1 or v == 2:
             out.append(parse_character(rom[o])); o += 1
         elif v == 3:
+            # THE PAUSE: ONE argument byte (C2/5945 `LDA [$31] / STA $16 / INC $31`, $15 = 03 -- measured on the rule's
+            # cartridge, Last Village 182's "A tidal wave!" `03 08 03 00`: the pointer steps 2 over `03 08`). The typewriter
+            # C0/21A8 waits $0216 * 15 frames in state 7 and types on (2096 -> 6); `03 00` leaves state 7 with $0134 as it
+            # stands and C0/2096 closes the box (2081) -- nothing after it is ever typed, so it ends the string.
+            # This consumed a SECOND byte ("tick byte"), which dropped the character after every pause (290 of them in
+            # the dialogue) and only came out right when that byte was a `03 00`.
             delay = rom[o]; o += 1
-            if delay == 0:
+            if pb == '\f':                     # the packer: the field engine's markers (field.c TB_PAUSE / TB_AUTOEND)
+                if delay == 0:
+                    out.append('\x04')
+                    break
+                out.append('\x03' + chr(0x41 + (delay >> 4)) + chr(0x41 + (delay & 15)))
+            elif delay == 0:
                 break
-            o += 1                             # tick byte; render nothing
         elif v == 0x0B:                        # wait-for-input + clear: a hard page break
             out.append(pb)
         elif v in (0x09, 0x0A) and pb == '\f': # the packer: the page break that turns ITSELF (C0/2181 -> 21D8 leaves

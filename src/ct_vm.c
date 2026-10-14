@@ -1581,8 +1581,13 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
       if (t >= 0 && t < nobj && actors[t].hasPos)
         vmSetFacing(mem, a, obj, mvTables()[0x400 + mvAngle(actors[t].x - a->x, actors[t].y - a->y)]);
     }
-    else if (op == 0xE3) { if (explore) *explore = B[addr + 1] ? 1 : 0; }
-    else if (op == 0xF0) { if (bright) {                 // screen fade (ROM C0/3CD0): hi nibble =
+    // C0/3C05 `LDA $7F2001,X / STA $1F` (D = $0100): the BYTE is the op's whole effect, here as in step(). The init pass
+    // only set the host's flag and left $011F at the loader's 1 (C0/0BC4), so a fn0 `E3 00` never locked the player: the
+    // host's explore-mode sync then put the lead back on the arrival tile every frame after the scene's own loop moved it
+    // off the map (Last Village 182 after the Ocean Palace: obj0 fn0 `E3 00`, obj1's loop `8B FF FF` -- Crono, dead in
+    // the story, stood in the hut; the rule's cartridge, saves/field_re/pre_scene_19f: $011F = 00 at f3638).
+    else if (op == 0xE3) { if (explore) *explore = B[addr + 1] ? 1 : 0; w8(mem, 0x7E011F, B[addr + 1]); }
+    else if (op == 0xF0) { if (bright) {                // screen fade (ROM C0/3CD0): hi nibble =
       int tg = (B[addr + 1] >> 4) & 0xF;                 // target, lo = speed; speed 0 = INSTANT
       if ((B[addr + 1] & 0x0F) == 0) { bright[0] = tg; bright[1] = tg; w8(mem, 0x7E0119, (uint8_t)tg); }   // 3CF9 STA $19
       else { bright[1] = tg; vmOpF0Arm(mem, B[addr + 1]); }   // armed: ticks toward the target (C0/1F24)
@@ -3673,7 +3678,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     s->addr = cf.ip - sc->header;
     return cf.carry ? 0 : 1;
   }
-  if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD4 || op == 0xD7 ||
+  if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD7 ||
       op == 0xF8 || op == 0xF9 || op == 0xFA) {
     // ---- THE $C2 PARTY / ROSTER family's seven opcodes that had NO ARM IN THIS RUNNER AT ALL --
     // C0/388D (0xCF has-character), C0/38BE (0xD0 add to the RESERVE roster), C0/38D3 (0xD1 remove
@@ -3690,9 +3695,14 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // bounds-checked against romLen, so a missing image yields the routine's own zero-fill arm
     // rather than a special case invented here.
     //
-    // ⚠ 0xD2/0xD3 are deliberately NOT routed here yet. They DO have arms in this runner (below),
-    // hand-derived down to the carry, and several pinned fair/join checks stand on them; migrating
-    // those is its own change with its own validation, not a rider on this one.
+    // ⚠ 0xD2 is deliberately NOT routed here yet. It has an arm in this runner (below), hand-derived down to the carry.
+    //
+    // ⭐ 0xD3 (C0/3919, JOIN) IS routed here now. Its old arm was a subset of leaf 1 (C2/8C79): it took the first empty
+    // active slot and stopped -- no `JSR C2/8CF7` first (the joiner's RESERVE entry marked empty, `| 80`), no eviction
+    // into the reserve when the three slots are full (8C88-8CCC), and none of C0/392F-3949 ($78, the object into
+    // $0199 / $019B). MEASURED, the rule's cartridge after Crono's death (loc 1A9, saves/field_re/pre_scene_19f with A every
+    // 40 frames from f6000): `D3 01` -> $2985 = 81 by C2:8D01 and $2982 = 01 by C2:8C9E at f9395; the port left $2985 = 01,
+    // and the exchange screen that follows (C8 00) listed Marle twice, in the party and in the reserve.
     //
     // ⭐ 0xD4 (C0/394E, LEAVE) IS routed here now. Its old arm scanned the MEMBERSHIP array $7E:2980
     // for the char id, on the stated assumption that it agrees with the party OBJECT slots on emptiness.
@@ -3788,35 +3798,6 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // read zero there at every sampled frame, so his sword drew black on loc 01C.
     CtVmC2Epilogue(sc->mem->s, gRomImg, (int)gRomImgLen);
     return 0;
-  }
-  if (op == 0xD3) {                                  // ADD-to-active-party (ROM C0/3919 -> C2/8004 -> C2/8C36
-    // mode 1, handler C2/8C79): byte1 = PC char-id. Scan the 3 ACTIVE slots $7E2980/81/82 for the first
-    // EMPTY one (C2/8C7E `LDA $2980,Y / BMI place` -- bit7 set = empty) and store the char-id there (8C9E).
-    // (If all 3 are full the ROM replaces slot 2; not reached for the Marle join.) This registers the new
-    // member so op 0xD2's membership test sees it AND the very next op 0x5C (LOADPC slot 1) resolves its
-    // move-mode to 1 (follower) instead of 0x80 (idle). The Marle bump's fn1 talk does `D3 01` then `5C`.
-    int pc = B[addr + 1], placed = 0;
-    for (int k = 0; k < 3; k++)
-      if (r8(sc->mem, 0x7E2980 + k) & 0x80) { w8(sc->mem, 0x7E2980 + k, pc); placed = 1; break; }
-    if (!placed) w8(sc->mem, 0x7E2982, pc);          // all full -> slot 2 (ROM C2/8C88)
-    s->addr = nxt;
-    // C2/834D, THE GATE'S EPILOGUE, runs after every leaf of C2/8C36 -- after this join too -- and this arm
-    // never reaches the gate, so it is called here: it paints the three weapon rows (colours 13-15 of OBJ
-    // slots 5/6/7, $7E:21BA/$21DA/$21FA, from bank $D1 via C2/F5ED), rebuilds the triple-tech flags and
-    // rescans the relics. MEASURED: on the cartridge `$7E21BA` is written by C2:836C at f35 of the attract
-    // capture (loc 433's `D4 ..` tail) and holds Crono's gold sword colours for every later leg; the port
-    // read zero there at every sampled frame, so his sword drew black on loc 01C.
-    CtVmC2Epilogue(sc->mem->s, gRomImg, (int)gRomImgLen);
-
-    // ⚠ THE IP ADVANCES AND THE VISIT ENDS. C0/3919 exits `LDX $C7 / RTS` with NO SEC and NO CLC,
-    // and it contains no carry-affecting instruction ANYWHERE -- before or after the JSL. The $C2
-    // gate (C2/8C36) brackets itself with PHP/PLP, so the carry crosses the call unchanged. So the
-    // exit carry is simply the carry at handler ENTRY, and that is ZERO: the runner's dispatch does
-    // `5AA8 REP #20 / 5AAA AND #00FF / 5AAD ASL A`, a SIXTEEN-BIT shift of a value below $100, so
-    // the opcode's bit 7 lands in bit 8 rather than in the carry. `5AB4 BCC` then ends the visit.
-    // (An 8-bit ASL would have set C for every opcode >= $80, which is the easy way to get this
-    // backwards.) This returned 0 = CONTINUE until 2026-08-07 -- a scheduler divergence on 127 sites.
-    return 1;
   }
   if (op == 0x2D) {
     // C0/66A5 -- SKIP UNLESS SOMETHING IS HELD. $00F8 is the button latch, $00F9 the direction
@@ -6069,9 +6050,13 @@ static void tbLineStep(Mem* m, int code) {
 }
 void CtSceneTextboxLineStep(CtScene* sc, int code) { if (sc) tbLineStep(sc->mem, code); }
 
+// C0/2096 set $0129 = 6 THIS frame (a pause ran out): C0/2126 types from the next. One frame long, so it is not part of
+// CtScene (whose layout the CTFS snapshots carry).
+static int gTbResumeArmed = 0;
 static void tbMachineTick(CtScene* sc) {
   Mem* m = sc->mem;
   uint8_t st = (uint8_t)r8(m, 0x7E0129);
+  gTbResumeArmed = 0;
   if (st == 0) return;
   // $0131 = THE LINE CURSOR. Its writers are these handlers (1FB9 STZ, 1FC2 INC, 1FEE STZ) and the typewriter's head
   // (tbLineStep: here at 1FC5's JSR C0/2126, the host's typewriter for every other iteration). MEASURED on the tent
@@ -6141,7 +6126,20 @@ static void tbMachineTick(CtScene* sc) {
     // f0 -> stays 01 through page 1's own wait at f91 -> 02 at f141, one frame after the OPTION page
     // reached state 7 at f140 -> 03 at f201 (the press) -> 01 at f212, the next decision box.
     int d = r8(m, 0x7E0162);
-    if (d == 0 && r8(m, 0x7E0134) == 0 && r8(m, 0x7E0135) == 0) {
+    int t34 = r8(m, 0x7E0134) | (r8(m, 0x7E0135) << 8);
+    if (d == 0 && t34 != 0 && t34 != 0xFFFF) {
+      // 20A9 `CPX #FFFF / BEQ` / 20AE `DEX / STX $34`: THE PAUSE'S COUNT -- an in-string `03 n` left $0134 = n * 15 (C0/21A8,
+      // CtSceneTextboxPause) and nothing but this frame tick spends it; A does not (C0/1AB8 spends FFFF only).
+      t34--;
+      w8(m, 0x7E0134, (uint8_t)t34); w8(m, 0x7E0135, (uint8_t)(t34 >> 8));
+    } else if (d == 0 && t34 == 0 && r8(m, 0x7E0215) == 0x03) {
+      // 2058 on the pause code: 2096 `LDA $0216 / BEQ ->2081` -- a pause that ran out types on (`LDA #06 / STA $29`), and
+      // `03 00` (no count left to spend) closes the box with no press (2081 `LDA #0D / STA $29`). MEASURED, the rule's
+      // cartridge from saves/field_re/last_village_182_f3605.state: $0134 = 0078 at f517 by C0:21C0, one less a frame by
+      // C0:20B1, $0129 = 06 at f638, 07 at f639 (the `03 00`), 0D at f640 -- "A tidal wave!" with no input.
+      if (r8(m, 0x7E0216)) { w8(m, 0x7E0129, 6); gTbResumeArmed = 1; }   // 209B ... RTL: the typewriter is next frame's
+      else w8(m, 0x7E0129, 0x0D);
+    } else if (d == 0 && t34 == 0) {
       // 20A5 `LDX $34 / BEQ ->2058` -- ADVANCE NOW, no press: the typewriter reached state 7 through 21D8 alone
       // (a self-turning page code, 0x09/0x0A), which leaves $0134 at 0. 2058 on the code: a page code -> 2086
       // `LDA #08 / STA $29`; a line code -> 8 when the window is full ($0131 == 3), else back to 6. (A pressed box
@@ -7836,6 +7834,21 @@ void CtSceneTextboxRevealDone(CtScene* sc, int pendingCode) {
   // page. The host knows which it is, so it passes the code: 0x0B/0x05 = a page/line break pending.
   w8(sc->mem, 0x7E0215, (uint8_t)pendingCode);
 }
+// The typewriter met an in-string PAUSE (`03 n`, C2/5945: $0215 = 03, $0216 = n): C0/2176 -> 21A8.
+//   n != 0: `STA $4202 / LDA #0F / STA $4203` -> $0134 = n * 15, `LDA #07 / STA $29`, then 21A3 `LDA #01 / STA $36`
+//   n == 0: 21AB `BEQ ->21D8` -- `$29 = 7 / $36 = $81`, $0134 left as it stands (0 after a pause ran out: the box closes
+//           on the next frame, 2096 -> 2081; FFFF if the last thing was a press-wait: the press spends it and closes)
+// The countdown and what follows it are state 7's (the box machine, above).
+void CtSceneTextboxPause(CtScene* sc, int n) {
+  if (!sc || r8(sc->mem, 0x7E0129) != 6) return;
+  w8(sc->mem, 0x7E0215, 0x03); w8(sc->mem, 0x7E0216, (uint8_t)n);
+  w8(sc->mem, 0x7E0129, 7);
+  if (n) {
+    unsigned t = (unsigned)n * 15u;
+    w8(sc->mem, 0x7E0134, (uint8_t)t); w8(sc->mem, 0x7E0135, (uint8_t)(t >> 8));
+    w8(sc->mem, 0x7E0136, 0x01);
+  } else w8(sc->mem, 0x7E0136, 0x81);
+}
 // State 7's PAGE advance, C0/2086 `LDA #08 / STA $29`: the machine re-decodes (8), counts (9-B) and resumes
 // the typewriter (C -> 6).
 void CtSceneTextboxPage(CtScene* sc) {
@@ -7872,6 +7885,7 @@ int CtSceneTextboxUnparking(const CtScene* sc) {
 }
 
 int CtSceneTextboxChoice(const CtScene* sc) { return sc->textbox ? sc->tbChoice : 0; }
+int CtSceneTextboxResumeArmed(const CtScene* sc) { return sc ? gTbResumeArmed : 0; }   // see tbMachineTick, 2096
 // Decision-box option-line range (op 0xC0/0xC3/0xC4 operand2): returns 1 + fills first/last option line
 // (within the OPTION page) so the renderer can place the cursor on the real options (CT indents both the
 // prompt's continuation lines and the option lines, so leading-space can't tell them apart). 0 = no choice.
