@@ -38788,6 +38788,39 @@
       "notes": "BYTE-EXACT AND FRAME-EXACT vs the rule's cartridge (disasm/notes/battle_defeat_flow.md, 'The module's exit after a defeat'). tools/battle_ab.py's enemy B6 on GATO's arena wipes the party (a scripted-loss continue, $2A1F bit5): the module's tail C1/8423-8448 ($29AD, the RNG cursor -- the C1/8822 `$24` gate keeps the AI eval and its draw from running after the wipe), CF/FBE5's $A4 loop, CF/FCCF's 0 -> 1 HP floor on the sheets, CD/03B4 (CD/0516's $CE16, the band's 0C / 0E / 08), CD/0415-0438's two waits and SPC poll before C0/1BE6's $1E10, and the ack -- every change of each from f900 to f970 on both sides. Before: the port left on C1/8164's frame (ack 42 frames early, the party on 0 HP, $29AD one byte along). Re-pin only with a cartridge measurement that moves."
     },
     {
+      "name": "battle-lost-fight-continues-vs-oracle",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/battle_lost_continue_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "tools/battle_lost_continue_cmp.py",
+        "tools/battle_ab.py"
+      ],
+      "expect": [
+        "lost-continue: cartridge 830:7F01EC=01 967:7F03FE=02 1007:7F03FE=03 1007:7E011F=01 1046:7E011F=00 | port 830:7F01EC=01 967:7F03FE=02 1007:7F03FE=03 1007:7E011F=01 1046:7E011F=00 | IDENTICAL"
+      ],
+      "pin": [
+        "^lost-continue: "
+      ],
+      "timeout_s": 120,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  if (stage < 0 || stage == 3) {\n    if (s[0x2A1F] & 0x80) s[0x103FE] = 3;",
+          "replace": "  if ((stage < 0 || stage == 3) && outcome == 0) {  /* MUT: the won fight's tail only */\n    if (s[0x2A1F] & 0x80) s[0x103FE] = 3;",
+          "why": "C0/0289-029E sends a lost fight with $2A1F bit 5 to the same C0/0304 tail: without its regroup $7F03FE stays 00 and $011F never comes back -- the player never moves again after losing to GATO"
+        }
+      ],
+      "note_pass": "a fight the party may lose ($2A1F bit 5 -- GATO's) returns to the field as the cartridge's: the regroup's $7F03FE 02 then 03 and the control's return, frame for frame",
+      "notes": "Roadmap G1a item 4 (2026-10-14). battle_ab's enemy B6 wipes the party in GATO's arena; C0/0289-029E then runs C0/0304, the won fight's tail, C0/0343-038C included (the followers' regroup, $7F03FE, $011F). The port had gated that tail on a won fight: after losing to GATO the player never regained control. src/field.c fieldBattleResume."
+    },
+    {
       "name": "ow-ferry-clears-its-direction-after-the-crossing",
       "argv": [
         "build/ct_field.exe",

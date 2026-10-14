@@ -122,3 +122,17 @@ Open: C0/0304's C0/56D4 + C0/595C (obj0 slot 1) run on the ack's frame in the po
 at ack + 2 the port's SPC answers the location's next post (`18 BA`, the 0AD's f2222) in 13 NMIs where the cartridge
 answers it in its frame. And C0/1BE6's chain prices one NMI more than the cartridge's on some fights (battle_ab 6E / E3 /
 F4: the ack +1; the attract's 07D: 13 NMIs against 12). Both the SPC's state after the exit's posts.
+
+## The continue: a lost fight that goes on (2026-10-14, roadmap G1a item 4)
+
+C0/0289-029E: `$7F01EC` 0 -> `BRL 0304`; 1 -> C0/0298 `LDA $7E2A1F / BIT #20 / BNE ->0304` (else the defeat sequence C0/02A0);
+2 -> C0/02CD. A lost fight with `$2A1F` bit 5 -- GATO's `D8 92 20` stages 20 -- therefore runs **the won fight's whole
+tail**, C0/0304-038C: the map rebuilt, obj0's slot 1, and C0/0343-038C (`JSL C0/2B78`, `$47 |= 02`; with bit 7 of `$2A1F`
+`$7F03FE = 3` at C0/035D, else the followers' regroup: `$7F03FE` = 1 / 2 by C0/0380 / C0/0377 and 3 when they are back,
+C0/6C81, and the control's `$011F`). Nothing in it tests the outcome.
+
+MEASURED (the rule's cartridge; tools/battle_ab.py's enemy B6 wipes the party in GATO's arena, saves/battle_re/
+gato_wait.state): `$7F01EC = 01` f830 (C1:8143), `$7F03FE = 02` f967 (C0:0377), `03` f1007 (C0:6C81) with `$011F = 01`
+(C0:3C0D), `$011F = 00` f1046 (the scene's script). The port ran C0/0343-038C for outcome 0 only (field.c fieldBattleResume):
+`$7F03FE` stayed 00 and `$011F` never came back -- after losing to GATO the player could not move. Fixed; graded by
+battle-lost-fight-continues-vs-oracle (tools/battle_lost_continue_cmp.py), every change of the three bytes frame for frame.

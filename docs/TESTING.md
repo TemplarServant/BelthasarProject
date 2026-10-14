@@ -727,6 +727,14 @@ entry page kept the pre-battle word (090B) and the lead was drawn there on the r
 "blink in the previous place". The damage number's origin is the same live position (C1/5B4D-5B6E), which re-pinned
 field-battle-status-render. Needs gato_wait.state.
 
+### battle-lost-fight-continues-vs-oracle (`tools/battle_lost_continue_cmp.py`)
+
+A fight the party may lose (`$2A1F` bit 5, which GATO's `D8 92 20` stages) goes on after a defeat: C0/0289-029E sends it
+to C0/0304, the won fight's return, the followers' regroup and the control's return included. battle_ab's enemy B6 wipes
+the party in GATO's arena on both sides; every change of `$7F01EC`, `$7F03FE` and `$011F` from f800 to f1100 must be the
+cartridge's (`830 01EC=01`, `967 03FE=02`, `1007 03FE=03 / 011F=01`, `1046 011F=00`). Before 2026-10-14 the port ran that
+tail for a won fight only and the player never regained control. Quick tier (~7 s). Needs gato_wait.state.
+
 ### menu-exchange-vs-oracle (`tools/menu_exchange_cmp.py`)
 
 The party exchange (menu mode 5, screen `$07`): the field's Y at storyline 0x49 opens it, the song task posts `14 3E` and

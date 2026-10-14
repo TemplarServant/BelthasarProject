@@ -8725,7 +8725,12 @@ static void fieldBattleResume(CtScene* vm, CtBattleHost* h, int stage) {
   // followers' walk-to-the-lead for every outcome-0 return, so after the demo's X-Strike obj5 walked (op 95) for
   // ~90 frames while obj9's `04 0A 45` waited on it; the cartridge's obj5 runs only the called fn's `AB 0C` (32
   // frames, s1850 f354-386) and obj9 goes on at f60.
-  if ((stage < 0 || stage == 3) && outcome == 0) {
+  // EVERY return that reaches C0/0304 runs it -- a won fight AND a lost one that continues (C0/0289-029E: `$7F01EC` 0 -> BRL
+  // 0304; 1 with `$2A1F` bit 5 -> BNE 0304, the same tail). The port ran it for outcome 0 alone, so after a fight the party is
+  // allowed to lose (bit 5: GATO's own, D8 imm2 20) neither the followers' regroup, `$7F03FE` nor the control's return
+  // ($011F) ever came. MEASURED (the rule's cartridge, battle_ab's enemy B6 wiping the party in GATO's arena): `$7F01EC = 1`
+  // f830 (C1:8143), `$7F03FE = 02` f967 (C0:0377), 03 f1007 (C0:6C81) with `$011F = 01` (C0:3C0D). (Roadmap G1a item 4.)
+  if (stage < 0 || stage == 3) {
     if (s[0x2A1F] & 0x80) s[0x103FE] = 3;                    // 035D-035F, $7F is at +0x10000 in the flat image
     else CtSceneBattleReturn(vm);                            // 0353-038C seed barrier + VM-CALL the followers
   }
