@@ -1207,6 +1207,7 @@
         "field-gameover-reboots-to-title",
         "field-gate-arrival-vs-rule-cartridge",
         "field-gate-lead-pc-obeys-its-priority-byte",
+        "field-gate-return-008-dead-npc-box-cancelled-vs-rule-cartridge",
         "field-gate-transition-vs-cartridge-from-its-wram",
         "field-gato-talk-starts-battle",
         "field-inn-sleep-vs-rule-cartridge",
@@ -3193,6 +3194,18 @@
       "present_when_recorded": true
     },
     {
+      "path": "saves/field_re/gate_return_600ad_to_008.state",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "used_by": [
+        "field-gate-return-008-dead-npc-box-cancelled-vs-rule-cartridge"
+      ],
+      "sha256": "69e78a078eb3e1214b8b0de3fa0e02c0f79acb2dcc02ec417aada5341f0fc4e0",
+      "size": 153972,
+      "present_when_recorded": true
+    },
+    {
       "path": "saves/field_re/inn600_tele.state",
       "used_by": [
         "field-inn-wake-party-slot-calls-vs-rule-cartridge"
@@ -4383,8 +4396,8 @@
         "ow-object-bootstrap-w6-vs-oracle",
         "ow-object-bootstrap-w7-vs-oracle"
       ],
-      "sha256": "8c40928d4ba80565361982a8d4a6e6f324864400c9f7358dc499d0092cab9190",
-      "size": 660844,
+      "sha256": "1cadb53b966eb29c7944a567a0ddd8dc3349c1beb47710e0db350fa058265c25",
+      "size": 662345,
       "present_when_recorded": true
     },
     {
@@ -4431,8 +4444,8 @@
         "boot-title-opening-no-false-start-vs-rule-cartridge",
         "ow-ferry-both-ways-vs-rule-cartridge"
       ],
-      "sha256": "42313b03092514237e5c789c2dc523effd5ed7c98b6d2ceb66a4a8db059a144f",
-      "size": 1520559,
+      "sha256": "fbac6f523341ff14ac78201d2c9c61268743349578fbdc8742ec6578229b59c0",
+      "size": 1522361,
       "present_when_recorded": true
     },
     {

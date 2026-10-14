@@ -3000,11 +3000,12 @@ static int gVmTick;                                // trace timestamps only
 // and its caller admits CLASS 8, which the per-frame loop skips outright (B0F8 tests only #07,
 // where A822/A826 test both) -- so a class-8 object can hold a slot from scene entry until the
 // next C0/7155. Preserve that asymmetry; do not unify the two filters.
-// On a PASS the ROM stores $0F00,X = 0x80 and calls C0/7170. On a FAIL it does neither (B190 CLC).
-// DELIBERATELY NOT PORTED: the other six stores in B16D-B185 ($0E80, $0E81, $1681 = 0, $1601,
-// $1B00, and $0F01 = 0xFF). They belong to the draw-list and animation machinery whose later
-// evolution the port does not model -- the oracle's $0F01 for a live object animates every few
-// frames -- so writing them would CLAIM write-mask addresses we cannot then keep correct.
+// On a PASS (B16D-B18F) the ROM makes the per-frame pass's rising edge (A8EA-A90B) for that object: `$0E80 / $0E81 /
+// $0F00 := 80`, `$1681 / $1601 / $1B00 := 0`, `$0F01 := FF`, C0/7170 (the palette) and C0/6F9A (the OBJ slot); back in
+// the loop (B101-B117) C0/AB45 (its screen position), C0/A9CD (the draw list), `STZ $79`, C0/CAD9 until it pops it, C0/B1B2
+// (the upload) and C0/EA42 (the arena run); and the sweep ends `BRL C0/B271`, the draw pass. On a FAIL nothing (B190 CLC).
+// With the legs off (legsOn) the port keeps the latch and the palette only, as the per-frame pass does. (Until 2026-10-13
+// the six stores were left out on purpose, from before the legs were modelled.)
 // WHERE THIS IS CALLED FROM, and it took two wrong attempts (objpal_allocator.md sec 8): the ROM
 // runs the scene LOAD first (C0/56B0, whose C0/5709 script-init runner PLACES every object), and
 // only then the location ENTRY (C0/286C), which sets the camera (0A50 -> 74A6 -> 7506/7553) and
@@ -3038,9 +3039,24 @@ static void palSweepB0E6(CtScene* sc) {
       if (pt) fprintf(stderr, "[palsweep] obj%d cls=%02X vis=%02X tile=(%02X,%02X) box=[%02X,%02X)x[%02X,%02X) -> %s\n",
                       o, cls, vis, tx, ty, c3, c4, c5, c6, inBox ? "admit" : "reject"); }
     if (!inBox) continue;
+    if (!legsOn()) { w8(m, X + 0x0F00, 0x80); palAlloc7170(m, o); continue; }   // B175 / B188 (the legs off)
+    uint8_t* R = m->s; int idx = o * 2;
+    R[0x016D] = (uint8_t)idx;                                    // B0F1 STX $6D (D = $0100)
+    w8(m, X + 0x0E80, 0x80); w8(m, X + 0x0E81, 0x80);            // B16F / B172
     w8(m, X + 0x0F00, 0x80);                                     // B175
-    palAlloc7170(m, o);                                          // B188
+    w8(m, X + 0x1681, 0x00); w8(m, X + 0x1601, 0x00);            // B17A / B17D
+    w8(m, X + 0x1B00, 0x00);                                     // B180
+    w8(m, X + 0x0F01, 0xFF);                                     // B185
+    palAlloc7170(m, o);                                          // B188 JSR C0/7170
+    CtObjSlotAlloc(R, idx);                                      // B18B JSR C0/6F9A
+    CtObjScreenPos(R, idx);                                      // B101 JSR C0/AB45
+    CtObjListLink(R, idx);                                       // B104 JSR C0/A9CD
+    R[0x0179] = 0;                                               // B107 STZ $79
+    for (int k = 0; k < 64 && CtAnimDrainVisit(R, gRomImg, (int)gRomImgLen, idx); k++) {}   // B109-B10C (BCS ->B109)
+    CtAnimUploadFlush(R, NULL);                                  // B111 JSR C0/B1B2
+    CtArenaFreeRun(R, idx);                                      // B117 JSR C0/EA42
   }
+  if (legsOn()) CtAnimDrawPass(m->s, NULL);                      // B124 BRL C0/B271
 }
 void CtScenePalSweepEntry(CtScene* sc) { if (sc) palSweepB0E6(sc); }
 

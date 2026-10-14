@@ -308,3 +308,31 @@ for obj12's fn2, storyline 09) against the oracle's mid-demo states (`scene8_tab
 * The soda-stand check `field-soda-minigame-drink-anim` re-pinned 257 -> 258 on the way: its 257 was the
   port's (the stand's `$1800/$1880` words not in WRAM at the first up-probe of C0/9923, so the player slipped
   a pixel before the second probe hit); the ROM stores them inside C0/5709 before any input frame.
+
+## ADDENDUM (2026-10-13) — C0/B0E6 on EVERY location load, and ported whole
+
+The user (translated from Portuguese): back in scene 8 from 600 A.D. through the gate, "I guess even HER inventions have to
+work, sometimes." appeared with no one talked to, then Marle's "Phew! We're back!". Capture: F5 beside the 600 A.D. gate
+(saves/field_re/gate_return_600ad_to_008.state), Down into it.
+
+**The ROM.** Scene 8's obj22 (fn0 `... 16 00 0C 04 05 / 0A 2C / 10 02 / B2`, fn1 `16 56 02 06 05 / BB 84 ...`) kills itself on
+its first visit; C0/6254 ends `SEC`, so the visit runs on through `10 02` (C0/62B5: ip + 1 + 2) into fn1 and its `BB 84`
+arms a box (`$0129 = 1`, `$7F0A00,X = 1`, string 132). C0/A910's FALLING edge then cancels it (`LDA $7F0A00,X / BEQ / LDA $30
+/ BNE / LDA #0D / STA $29`) -- but only for an object that WAS latched. On the rule's cartridge it was: C0/2881 -> C0/B0E6 at
+the location's entry stores `$0F2C = 80` (C0:B178) before any script runs, the death comes two frames later, `$0129 = 0D`
+(C0:A934), and the machine is idle again 15 frames after that. No box is ever seen.
+
+**The port** ran C0/B0E6 only on the harness's fresh entry (sec. 8), never on a location change in play: obj22 was not latched,
+its box opened and waited for A, and obj4's "Phew" parked behind it (`$0129 = 07`). Now:
+- `palSweepB0E6` is C0/B0E6 whole: on a pass the rising edge's stores (`$0E80 / $0E81 / $0F00 = 80`, `$1681 / $1601 / $1B00 =
+  0`, `$0F01 = FF`), C0/7170, C0/6F9A, then C0/AB45, C0/A9CD, `STZ $79`, C0/CAD9 until it pops the object, C0/B1B2, C0/EA42,
+  and the sweep's `BRL C0/B271`. With the legs off (legsOn) it keeps the latch and the palette, as the per-frame pass does.
+- field.c's location change owes it (`entrySweepPend`) and makes it on the entry ramp's first frame -- C0/2848's
+  `JSR C0/286C`, the frame of the first scheduler pass: the port builds the location at the commit and holds the black after
+  it, and the cartridge claims the slots there (the attract's loc 112: `$0B80` at f4492).
+- Not over a restored F5 snapshot (`--loadstate`): the snapshot already holds what the sweep wrote; running it again reset the
+  animation timers of a scene in progress (field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge).
+
+Check field-gate-return-008-dead-npc-box-cancelled-vs-rule-cartridge. Re-pinned (port-only): render-scene1/5-snapshot,
+field-scene8-objpal-sweep-demo-sparkle (`$0D00` of the sparkle 88 -> 40: the entry now takes the OBJ slots in the ROM's
+order), ow-600ad-motion-owners-under-the-mist. Every vs-oracle check holds; suite 841/841.

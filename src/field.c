@@ -10437,8 +10437,10 @@ int main(int argc, char** argv) {
       if (nb) { free(f.base); free(f.prio); f.base = nb; f.prio = nprio; f.W = nw; f.H = nh; } else free(nprio);
     }
   }
+  int stateRestored = 0;                                 // (a restored snapshot already carries C0/B0E6's bytes)
   if (loadStatePath && f.vm) {                           // --loadstate: restore a debug F5 snapshot at startup
     double plr[4]; int r = CtSceneLoadState(f.vm, loadStatePath, plr);   // (scene already loaded, pointers match)
+    stateRestored = r > 0;
     if (r == 2) { px = plr[0]; py = plr[1]; pz = (int)plr[2]; pfac = (int)plr[3];   // full restore (incl. Z plane)
       fprintf(stderr, "[loadstate] restored %s, lead at (%.0f,%.0f)\n", loadStatePath, px, py); }
     else if (r == 1) {                                   // older snapshot (VM only): resync from lead + derive Z
@@ -10474,7 +10476,9 @@ int main(int argc, char** argv) {
                                                         //   clamp((arrTile-8)*16, mask), 16-aligned. The
                                                         //   arrival tile = the spawn tile (foot = tile*16+8/+16).
     fieldPassObjSlots();                                 // C0/2872 JSR C0/6F79
-    CtScenePalSweepEntry(f.vm);                          // C0/2881 -> C0/B0E6, needs both of the above
+    // C0/2881 -> C0/B0E6, needs both of the above. Not over a restored F5 snapshot: the sweep is a location load's, and the
+    // snapshot already holds what it wrote ($0F00, the slots, the animation timers) as the frame it was taken left them.
+    if (!stateRestored) CtScenePalSweepEntry(f.vm);
   }
   { const char* fl = getenv("CT_FIELDLOCK");            // the oracle lockstep, off unless asked
     if (fl && f.vm) { fieldLockInit(fl); CtVmWmaskResetW(fieldWram(), g_lockOracle ? g_lockOracle->ram : NULL); }
@@ -11148,6 +11152,7 @@ int main(int argc, char** argv) {
   int loadRampSkip = 0;
   int owPassHold = 0;    // frames the overworld stands still inside its pass's inline JSL (world.c obNative)
   int owPassResume = 0;  // ...and the suspended pass resumes on the frame after them
+  int entrySweepPend = 0;   // C0/286C's C0/B0E6 owed by a location change, made on the entry ramp's first frame (fade 2)
   int loadHold = 0;      // frames still owed to the LOAD itself (fade == 3): the ROM is inside
                          // C0/00F4 with the screen blank and nothing else running at all
   int pendKind = 0;   // transition captured at fade-out start: 0 none, 1 scene->scene door, 2 scene->overworld, 3 overworld->scene
@@ -11580,6 +11585,17 @@ int main(int argc, char** argv) {
             // 172); on the cartridge obj1 starts at (120.4,460.0) px (--vmdiff --withpos, seed f2778) and walks 67 frames.
             if (f.vm) { int L = CtScenePlayerObj(f.vm);
                         if (!CtSceneLeadScriptPlaced(f.vm, L, &px, &py)) CtSceneSetActorPosF(f.vm, L, px, py); }
+            // ...and C0/2881 -> C0/B0E6, the entry's sweep: every location load runs C0/286C, not only the harness's fresh
+            // entry above, so the objects in the window are latched ($0F00,X = 80, C0:B175) before any script's first
+            // visit. Without it, an object that dies on its first visit was never latched, C0/A910's falling edge never
+            // came, and its box was not cancelled: scene 8's obj22 (`0A 2C` then fn1's `BB 84`) on the return from 600 A.D.
+            // -- "I guess even HER inventions have to work, sometimes." with no one talked to (the user, 2026-10-13).
+            // MEASURED, the rule's cartridge (scene 8, storyline 24): `$0F2C = 80` (C0:B178) before obj22's first visit;
+            // its death and `$0129 = 0D` (C0:A934) two frames later.
+            // It runs where C0/286C does, C0/2848's first JSR, on the first frame of the entry ramp (fade 2, the frame of the
+            // first scheduler pass): the port builds the location at the commit and holds the black after it, and the
+            // rule's cartridge claims the slots there (the attract's loc 112: `$0B80` at f4492, the window's end).
+            entrySweepPend = f.vm != NULL;
             inWorld = 0;
             if (worldTest && pendKind == 3) { wtStage = 2;
               printf("worldtest: ENTERED location %03X at tile (%d,%d)\n", pendDest, (int)pendX / 16, ((int)pendY - 15) / 16); }
@@ -11741,6 +11757,7 @@ int main(int argc, char** argv) {
         else { fade = 2; fadeBri = 0; loadFadeEntry = 1; loadRamp = 1; loadFadeF0 = frameNo; }
       }
     } else if (fade == 2) {                             // fading IN
+      if (entrySweepPend && f.vm) { CtScenePalSweepEntry(f.vm); entrySweepPend = 0; }   // C0/2848 JSR C0/286C -> C0/B0E6
       // ⭐ C0/2848, THE LOAD'S OWN RAMP -- and it is a LOOP INSIDE THE LOADER, not a state of the main
       // loop. C0/0094 calls it once, between the location load and the first C0/0097 frame:
       //     2848 JSR C0/286C / BNE ->2866        ; one pipeline frame; $011E != 0 SKIPS the whole ramp
