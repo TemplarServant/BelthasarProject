@@ -2348,3 +2348,24 @@ the collision (`$A4`, `$A8`, the four bumps and their swaps, the SFX `19 98 80`)
 positions (`speed >> 6`) and the lateral clamp `0..$7000`. ⚠ 4C76/4C7C subtract `$F8` (not `$F6`): kept.
 Next: task `$4339` (the masks and the camera), then the start (who clears `$B0`, sets `$9A`, the top speeds) and the
 finish's tail to the END, so the stage can run from `FF 00` to `JML $C0:0000` natively.
+
+**Step two: `$7E:4339` is native too** (CtRaceTask4339, check race-task-4339-vs-oracle): 261 calls along the drives and 61
+poked frames (the story's L/R turn at every counter edge, the angle on every quarter boundary).
+
+**The stage's map, for the rest of stage 1** (measured f136-f2877, both drives; `$0920` tasks, `$0940` vblank hooks):
+- the SETUP `$7E:3B48` (NMI off, f66-f135): `$44` +1 on the story's `FF 09` (the operand's low nibble), song `$2C` unless
+  `$0384` bit 5, the packets and DMAs (the picture), then `JSR $45D6` (the race's start values: `$44` != 0 patches six
+  bytes of the overlay's own code -- `$53A0`, `$4F74`, `$50DA` = D8, `$53A4` = E8, `$5395` = 06, `$53AE` = 01 -- else
+  `$BA` = 80 and `$9A` = 3; both: `$55` = `$59` = 4000, `$7A` = 3000, `$7E` = 5000, `$AE` = 0, `$4E` = 6000, `$73` = 2000,
+  `$A8` = 20, `$A2` = `$A0` = 1, `$1444` = 0, the masks from `$4319`/`$4329`, JMP `$4309`); then, `$0384` bit 6 clear (the
+  story), page A's IP `$0A20` = `$3F14`, page B's `$0B20` = `$400A`, `$038E` = 0808, `$038C` = 3E, `$0382` = 0 (bit 6 set,
+  the attract: the window registers and `$404D`/`$40C3` + `$415E`); `JSR $3749` (page A runs once inside the setup -- it is
+  at `$3F2D` by f136), `$35FD` = `$45B0`, `$3024` = `$51D1` (two words of the overlay rewritten), the PPU and one DMA.
+- TASKS: `$3749`/`$3754` (the `$C3` interpreter C3/0AFF on pages $0A00 / $0B00: IP at +$20, sixteen registers at
+  +$00..+$1E, command table C3:0B74), `$485D` and `$4339` (native), `$3495` (the fade), `$347A`, `$428B`, `$42BD`,
+  `$42CE`, `$4412`, `$4447`, `$44CE` (the finish), `$4D0D`, `$4F54`; the win adds `$4755` / `$4677`.
+- VBLANK HOOKS: `$380B` (OAM), `$3843`, `$43F2`, `$449C` (the finish), `$44FE`, `$4643` / `$464D` (the HUD's markers),
+  `$5221`.
+What decides the race's TIMING and its END: the two scripts (the start -- page B installs `$485D` at `$4047` and waits
+at `$404A` --, the countdown, and page A's finish `$4211` -> END), `$485D` / `$4339`, and the finish's tail (`$44CE`,
+`$449C`, `$3495`). The rest builds the picture: stage 2.
