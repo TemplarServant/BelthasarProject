@@ -449,6 +449,9 @@ typedef struct CtBattleHost {
   // from $993A) and as the next NMI uploaded them; `on` = the rebuild wrote the bracket and nothing replaced it.
   struct { uint8_t x, y, name, attr; } brkOam[4], brkOamShown[4];
   uint8_t brkOn, brkOnShown;
+  // The target hand's PAGE: the `$960B` the last multi-arm rebuild started its sprites 1-3 at (C1/1AA7 -- entries 1-3
+  // hold $A62D[page..]) and as the next NMI uploaded it. The rebuild leaves the NEXT page in `$960B` (C1/1AF8).
+  uint8_t handPage, handPageShown;
   int fxScriptFlashMask;     // bit k = combatant k's UPLOADED attribute is palette 4 (a script's op 69): drawn from CGRAM row 4
                              //   of the single flashTarget below. Cyclone pulses its WHOLE hit set
                              //   (disasm/notes/battle_tech_cyclone_fx.md): 4 frames on / 5 off from rel 74,
@@ -1166,6 +1169,10 @@ int CtBattleGroupCasterRadius(int grp);
 // (CC/E3C7/CC/E3CA), enemies = bytes +1/+2 of the E4/F604 + id*10 graphics record (CC/EBB0/CC/EBB7).
 // The hand's origin is then (live + ofs - (0x10,0)) & 0xFF (C1/19C0-19D4 / C1/1ABA-1ACE). 0 if unavailable.
 int CtBattleCursorOfs(const CtBattleHost* h, int cmb, int* dx, int* dy);
+// The target hand's actors, C1/1979's `$A62D` for the select in `mem` (battle_multitarget_cursor.md): the PC-side and
+// caster-radius groups read the list their select published, the other enemy groups the hit set around the cursor's
+// slot. Returns the count (0: no hand -- the cursor's slot is empty); 2 or more is C1/19AC's multi arm (`$A62E` lit).
+int CtBattleTargetHandSet(CtBattleHost* h, const uint8_t* mem, int* set, int cap);
 
 // The number of characters the top box's typewriter types for the posted string ($020C over the $020D-F table).
 int CtBattleMsgLen(const uint8_t* mem);

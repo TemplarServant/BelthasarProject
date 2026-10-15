@@ -2424,3 +2424,15 @@ Here the Guardia prison's two Blue Shields (scene 048 obj9/obj10), both at 1 HP 
 CT_POKEWRAM_AT), A mashed. Pins the staged ids, the death palette page's 37 states (the same sequence on both sides)
 and, as a PINNED RESIDUAL, the deaths: the port 4 and 8 frames early, the same drift gato_wait's own unstaged fight
 shows under the same mash (`fight native`). Re-pin the deaths only from a fix that moves them toward the cartridge.
+
+### battle-target-hand-page-vs-rule-cartridge (`python tools/target_hand_page_cmp.py`)
+
+The target hand's secondary sprites (C1/1979 -> C1/1A7B: sprites 1-3 on the page of `$A62D` from `$960B`, C1/1AA2-1AF8),
+port against the rule's cartridge on tools/caster_radius_dispatch_cmp.py's fixture with each select held: Area Bomb
+(group 11), Cyclone on an enemy with a neighbour (group 12) and Cyclone with nobody near (the single arm: no turn). Grades,
+on every frame either side holds the select, `$960B` (WRAM, the same frame), the frames it turns on, and the hand's shown
+sprites -- the cartridge's OAM entries 0-3 visible by `$0900` against the port's CT_BATTLE_HANDTRACE -- at the picture's
+alignment (port f = cartridge shadow f - 1: the cartridge's picture N shows the shadow of N - 2, the port's picture in a
+fight is the cartridge's P + 1). Byte-for-byte: re-pin only when the fixture's frames move with an oracle-verified reason.
+`-v` prints every held frame of both sides and the sprite match at every lag. disasm/notes/battle_multitarget_cursor.md
+sec. 10.

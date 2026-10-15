@@ -11331,6 +11331,52 @@
       ]
     },
     {
+      "name": "battle-target-hand-page-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/target_hand_page_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait.state"
+      ],
+      "expect": [
+        "hand-page Area Bomb: $960B over 72 frames, first difference none",
+        "hand-page Area Bomb: $960B turns cartridge f737 f741 f745 f749 f753 f757 f761 f765 f769 f773 f777 f781 f785 f789 f793 f797 f801 f805 port f737 f741 f745 f749 f753 f757 f761 f765 f769 f773 f777 f781 f785 f789 f793 f797 f801 f805",
+        "hand-page Area Bomb: shown sprites over 71 frames (port f = cartridge shadow f-1), first difference none",
+        "hand-page Cyclone: $960B over 135 frames, first difference none",
+        "hand-page Cyclone: $960B turns cartridge f665 f672 f676 f680 f684 f688 f692 f696 f700 f704 f708 f712 f716 f720 f724 f728 f732 f736 f740 f744 f748 f752 f756 f760 f764 f768 f772 f776 f780 f784 f788 f792 f796 port f665 f672 f676 f680 f684 f688 f692 f696 f700 f704 f708 f712 f716 f720 f724 f728 f732 f736 f740 f744 f748 f752 f756 f760 f764 f768 f772 f776 f780 f784 f788 f792 f796",
+        "hand-page Cyclone: shown sprites over 134 frames (port f = cartridge shadow f-1), first difference none",
+        "hand-page Cyclone, none near: $960B over 75 frames, first difference none",
+        "hand-page Cyclone, none near: $960B turns cartridge - port -",
+        "hand-page Cyclone, none near: shown sprites over 74 frames (port f = cartridge shadow f-1), first difference none",
+        "hand-page: 9/9 identical"
+      ],
+      "pin": [
+        "^hand-page "
+      ],
+      "tier": "quick",
+      "timeout_s": 180,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "        s[0x960B] = (p == 6) ? 0 : p;",
+          "replace": "        (void)p;   /* MUT: C1/1AF8's store gone */",
+          "why": "the page never turns: $960B stays and the secondary hands stay on one page"
+        },
+        {
+          "file": "src/field.c",
+          "find": "    for (int i = h->handPageShown; i < n && nd < 4; ) {     //   started at $960B (battle.c battleMenuPassTail), shipped",
+          "replace": "    for (int i = h->handPage; i < n && nd < 4; ) {     /* MUT: the pass's page, not the NMI's */",
+          "why": "the picture draws the page before the NMI ships it: the port's frame f shows the cartridge's shadow of f, one frame early"
+        }
+      ],
+      "note_pass": "The target hand's secondary sprites page through $A62D on the fight's own menu passes, frame for frame with the rule's cartridge: Area Bomb (group 11) and Cyclone (group 12) turn $960B on the same frames, a lone Cyclone target never turns it, and the shown sprites match at the picture's alignment.",
+      "notes": "disasm/notes/battle_multitarget_cursor.md sec. 10 (closes sec. 8 C3). C1/17DD -> C1/1979: a second lit actor (C1/19AC `LDA $A62E / BMI`) takes the multi arm C1/1A7B, whose sprites 1-3 are the page of $A62D from `$960B` (C1/1AA2-1AF8) and which stores the next page, 3 after 0 and 0 after 3 -- the byte's only store in the ROM, once per menu pass (the $993A request); the battle's boot clears it and nothing else does. The port drew the page on its render clock ((CtBattleRenderClock >> 2) & 1), one frame early against the cartridge (Area Bomb's $0900 page-3 frames f741-744, the port's f740-743). Now battle.c battleMenuPassTail runs the page loop on WRAM $960B when CtBattleTargetHandSet lights two or more, keeps the page it drew (h->handPage), the battle NMI ships it beside the bracket's entries (h->handPageShown) and field.c battleTargetCursorRender draws sprites 1-3 from it. MEASURED, tools/target_hand_page_cmp.py on tools/caster_radius_dispatch_cmp.py's fixture (gato_wait + four Hetakes through op 0x83, each select held): $960B identical on every held frame (72 / 135 / 75), the turns on the same frames, the shown sprites (the cartridge's OAM entries 0-3 visible by $0900 against CT_BATTLE_HANDTRACE) at port f = cartridge shadow f-1 -- the cartridge's picture N shows the shadow of N-2 and the port's picture in a fight is the cartridge's P+1 (the thumbnails' hand cell agrees). Old build 3/9. The select's open frame is left out of the sprite grade: the port draws the hand on the frame $9609 rises, the cartridge one frame later (the hand's visibility, not its page; open). field-battle-tgtcursor-cyclone-multi keeps its pin (f223 still page 0)."
+    },
+    {
       "name": "field-battle-end-uiteardown",
       "argv": [
         "build/ct_field.exe",

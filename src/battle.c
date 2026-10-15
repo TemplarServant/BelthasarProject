@@ -4955,7 +4955,30 @@ static void battleMenuPassTail(CtBattleHost* h) {
   // (C1/1979 -> C1/1987 `JSR C1/0EBA`, unless the list emptied, `$9613` bit 7) -- not posted: the head's post of the same
   // pass carries it, the DMA reads the buffer at the NMI; the item list's arrows and hand (C1/18B0-1976), posted.
   if (!(s[0x95D5] & 0x80)) {                                     // C1/17DD-17E2 (no chooser: C1/1AFE, OAM only)
-    if (s[0x9609]) { if (!(s[0x9613] & 0x80) && s[0x95DB] == 1) bsTechHandClear(s); }
+    if (s[0x9609]) {
+      if (!(s[0x9613] & 0x80) && s[0x95DB] == 1) bsTechHandClear(s);
+      // C1/19AC `LDA $A62E / BMI`: a second lit actor takes the MULTI arm C1/1A7B, whose sprites 1-3 are a page of
+      // $A62D starting at `$960B` (C1/1AA2-1AF8, 16-bit X):
+      //     LDY #0001 / STY $82 / LDA $960B / TAY / STY $80     sprite 1, the page's first entry
+      //     loop: (entry $A62D[$80] into sprite $82 unless FF) / INC $80 / LDA $80 / CMP #03 / BEQ / CMP #06 / BEQ
+      //           INC $82 / LDA $82 / CMP #04 / BNE loop
+      //     LDA $80 / CMP #06 / BNE / TDC / STA $960B             the next page: 3 after page 0, 0 after page 3
+      // Only this rebuild stores $960B (C1/1AF8); the battle's boot clears it with its page, and nothing else resets it --
+      // not the select's open C1/1F79, not the single arm -- so the page runs on across selects, once per menu pass (the
+      // $993A request, every 4th frame) that lights two or more. MEASURED, the rule's cartridge: tools/target_hand_page_cmp.py
+      // (Area Bomb, Cyclone: $960B on every held frame, the sprites shown) and disasm/notes/battle_multitarget_cursor.md sec. 10.
+      int set[11];
+      if (!(s[0x9613] & 0x80) && CtBattleTargetHandSet(h, s, set, 11) >= 2) {
+        uint8_t p = s[0x960B], sp = 1;                           // C1/1AA2-1AAB
+        h->handPage = p;
+        for (;;) {
+          p++;
+          if (p == 3 || p == 6) break;
+          if (++sp == 4) break;
+        }
+        s[0x960B] = (p == 6) ? 0 : p;
+      }
+    }
     else if (s[0x95DB] == 2) bsItemTail(s);
   }
   // CT_BATTLE_TRACE: `bracket f<N> seat<S> oam=XX YY NN AA ...` (or `bracket f<N> off`) whenever a rebuild changes it --
@@ -5860,6 +5883,28 @@ int CtBattleHitSet(CtBattleHost* h, int group, int primary, int* out, int cap) {
   return battleBuildHitSet(h, group, primary, out, cap);
 }
 int CtBattleGroupPcSide(int grp) { return battleGroupPcSide(grp); }
+// The target hand's actors, C1/1979's `$A62D` (battle_multitarget_cursor.md sec. 2): what the menu pass's rebuild draws
+// (battleMenuPassTail, the page) and the renderer shows (field.c battleTargetCursorRender) -- one set for both.
+//   A PC-SIDE group (C1/1FF8[grp & 7F] = 00/01/03/04; bit 7 only picks the side the cursor starts on): C1/1979 draws no
+//   side test -- the hand sits on the actors in $A62D, the single one ($A62E = FF, C1/19AC) or the ALL group's whole
+//   list (C1/1A7B), as the group handler published them (battlePcTargetPublish: C1/203A, C1/209A, Revive's C1/20E0).
+//   The RADIUS around a party member (C1/224B / C1/22A4 / C1/22D3 -> C1/27E8): the select published the whole set.
+//   Any other group: $A62D is the whole hit set when the handler set `$960C = 80` (C1/207E) and the cursor's entry
+//   otherwise (C1/208D) -- CtBattleHitSet around the cursor's slot `$9614`; an empty slot draws nothing.
+int CtBattleTargetHandSet(CtBattleHost* h, const uint8_t* mem, int* set, int cap) {
+  if (!h || !mem || !set || cap <= 0) return 0;
+  int group = mem[0x960D], n = 0;
+  if (battleGroupPcSide(group)) {
+    for (int i = 0; i < 3 && i < cap && mem[0xA62D + i] < 3; i++) set[n++] = mem[0xA62D + i];
+  } else if (battleGroupCasterRadius(group)) {
+    for (int i = 0; i < 11 && i < cap && mem[0xA62D + i] >= 3 && mem[0xA62D + i] < 11; i++) set[n++] = mem[0xA62D + i];
+  } else {
+    int slot = mem[0x9614];
+    if (slot >= 8 || mem[0xAF02 + slot] == 0xFF) return 0;
+    n = CtBattleHitSet(h, group & 0x7F, 3 + slot, set, cap);
+  }
+  return n;
+}
 // The per-actor CURSOR OFFSET $9708,cmb / $9713,cmb (battle_multitarget_cursor.md §1: the hand's origin law
 // is OAM.x = ($1D0C,A + $9708,A - 0x10) & 0xFF, OAM.y = ($1D23,A + $9713,A) & 0xFF -- identical code at
 // C1/19C0-19D4 (single) and C1/1ABA-1ACE (multi)). PCs (cmb 0..2) load (0x00, 0xF0) from CC/E3C7 (STZ) +
@@ -21331,6 +21376,7 @@ static void battleNmiHead(CtBattleHost* h) {
   h->fxOamCloudOn = h->fxCloudRan; h->fxCloudRan = 0;
   memcpy(h->brkOamShown, h->brkOam, sizeof h->brkOamShown);       // entries 0-3 as the main loop last wrote them
   h->brkOnShown = h->brkOn;
+  h->handPageShown = h->handPage;                                  // the target hand's sprites 1-3, the same entries
                                                                    //   (oracle vPos 235), before this NMI's FD/E39C fades it
 }
 // C0/2C41 -- the FIELD's layer scroll, still running under the battle (D1/E7E3 `JSL CD/0C89` = `PHB/PHD/PHP / JSL C0/0002`
@@ -22037,10 +22083,11 @@ void CtBattleStripVramSeed(const uint8_t* mem, uint8_t* out) {
 static int battleBootIntro(const CtBattleHost* h) {
   return battleBootBandArm(h) + 76 + CT_BATTLE_BOOT_CPU;
 }
-// THE RENDER LAYER'S CLOCK. field.c draws four things on a clock of the module's own frames, calibrated on the pinned
+// THE RENDER LAYER'S CLOCK. field.c draws three things on a clock of the module's own frames, calibrated on the pinned
 // fixture boot (arm CT_BHUD_ARM_FRAME): GATO's pose cursor (ctAnimengPoseIdx, and the death latch deadStandFrame), the
-// low-HP digits' blink (C1/0620's `$A110`, CF/E58A's 12-frame countdown), the combat-live gate CT_BATTLE_COMBAT_LIVE_F
-// and the multi-target page ($960B). On the cartridge every one of them is LOCKED TO THE FIGHT, not to the module's
+// low-HP digits' blink (C1/0620's `$A110`, CF/E58A's 12-frame countdown) and the combat-live gate CT_BATTLE_COMBAT_LIVE_F.
+// (The multi-target page $960B was the fourth; it is the menu pass's own now, battleMenuPassTail.) On the cartridge every
+// one of them is LOCKED TO THE FIGHT, not to the module's
 // start: the rule's boot is 17 frames shorter than the valve's (gato_wait: `$CA1E = FF` f279 against f296, C1/0000 at
 // f222 in both) and they all come 17 frames sooner with it -- `--monitor 7E990D` (GATO's published pose, $9907 + 6):
 // 04 f295 / f278, 00 f377 / f360, 01 f401 / f384 ... every change -17; `--monitor 7EA110`: the blink's toggles f303 315

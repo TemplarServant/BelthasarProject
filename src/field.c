@@ -8507,35 +8507,25 @@ static void battleBracketRender(uint8_t* fb, const uint8_t* mem, const CtBattleH
 //      So Cyclone (group 0x12) lights the primary AND every enemy inside its radius, which is the whole
 //      point of the user report; a single-target group (Att/Ice = 0x07) lights one, as before.
 //  (c) THE BLINK: sprite 0 is ALWAYS $A62D[0] (the primary, C1/1A7B); sprites 1-3 are a 3-entry PAGE
-//      window whose start $960B toggles 0<->3 on every rebuild (C1/1AA2-1AF8), and a rebuild is requested
-//      every 4th battle frame (CF/E73B: INC $9931 / AND #03 / BNE / INC $993A). So the SECONDARY hands
-//      blink 4 frames on / 4 off while the primary's stays lit.
+//      window whose start $960B toggles 0<->3 on every multi-arm rebuild (C1/1AA2-1AF8), and a rebuild is
+//      requested every 4th battle frame (CF/E73B: INC $9931 / AND #03 / BNE / INC $993A). So the SECONDARY
+//      hands blink 4 frames on / 4 off while the primary's stays lit. The toggle is the menu pass's own
+//      (battle.c battleMenuPassTail keeps $960B in WRAM); the picture shows the page that pass drew, as the
+//      NMI shipped it (h->handPageShown) -- the phase is the fight's menu passes, not a render clock.
 // Head gate = C1/17DD's `LDA $95D5 / BPL` (bit7), i.e. no hand while no PC owns the command.
 static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHost* h) {
   if (!fb || !mem || !h || mem[0x9609] == 0) return;        // C1/17E5 BEQ: any nonzero $9609 shows the hand
   if (mem[0x95D5] & 0x80) return;                           // C1/17DD BPL: $95D5 = 0xFF (no chooser) -> hidden
-  int set[11], n;
-  int group = mem[0x960D];
-  if (CtBattleGroupPcSide(group)) {                         // PC-SIDE group (C1/1FF8[grp & 7F] = 00/01/03/04; bit 7
-    // only picks the side the cursor starts on): C1/1979 draws no side test -- the hand sits on the actors in $A62D,
-    // the single one ($A62E = FF, C1/19AC) or the ALL group's whole list (C1/1A7B), as the group handler published
-    // them (battlePcTargetPublish: C1/203A, C1/209A, Revive's fallen seats C1/20E0).
-    n = 0;
-    for (int i = 0; i < 3 && mem[0xA62D + i] < 3; i++) set[n++] = mem[0xA62D + i];
-  } else if (CtBattleGroupCasterRadius(group)) {            // the radius around a party member (C1/224B / C1/22A4 /
-    n = 0;                                                  // C1/22D3 -> C1/27E8): the select published the whole set
-    for (int i = 0; i < 11 && mem[0xA62D + i] >= 3 && mem[0xA62D + i] < 11; i++) set[n++] = mem[0xA62D + i];
-  } else {
-    int slot = mem[0x9614];
-    if (slot < 0 || slot >= 8 || mem[0xAF02 + slot] == 0xFF) return;   // cursor on a dead/absent slot -> nothing
-    n = CtBattleHitSet(h, group & 0x7F, 3 + slot, set, 11);
-  }
+  int set[11], group = mem[0x960D];
+  int n = CtBattleTargetHandSet(h, mem, set, 11);           // C1/1979's $A62D (battle.c: the PC side, the radius, the hit set)
   if (n <= 0) return;
   int draw[4], nd = 0;
   draw[nd++] = set[0];                                      // sprite 0 = $A62D[0], every rebuild (C1/1A7B)
-  int page = ((CtBattleRenderClock(h) >> 2) & 1) ? 3 : 0;   // $960B toggles per rebuild = every 4th frame
-  for (int i = page; i < page + 3 && i < n && nd < 4; i++)
-    if (i != 0) draw[nd++] = set[i];                        // (page 0 re-draws the primary -- pixel-identical)
+  if (n >= 2)                                               // the multi arm: sprites 1-3 = the page the last rebuild
+    for (int i = h->handPageShown; i < n && nd < 4; ) {     //   started at $960B (battle.c battleMenuPassTail), shipped
+      if (i != 0) draw[nd++] = set[i];                      //   by the NMI (page 0 re-draws the primary -- pixel-identical)
+      if (++i == 3 || i == 6) break;                        // C1/1ADD-1AE7: the page ends at entry 3 / 6
+    }
   // The hand's attribute is 32 (C1/19D8 / C1/1AD2 `LDA #32 / STA $0703,X`): OBJ palette 1, and its tiles use colours
   // 13-15 only -- the same three the bracket does, so its middle band PULSES with CF/E5AA's $A4EF grey. Read them from
   // the uploaded CGRAM (h->fxCgram), not from the captured ctBattleStanceObjPal[1], whose colour 14 was one frozen step.
@@ -8548,8 +8538,8 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
     int ax = (BT_LIVEX(h, cmb) + ofx - 0x10) & 0xFF;         // C1/19C0-19C9 / C1/1ABA-1AC3
     int ay = (BT_LIVEY(h, cmb) + ofy) & 0xFF;                // C1/19CD-19D4 / C1/1AC7-1ACE
     if (getenv("CT_BATTLE_HANDTRACE"))                       // the sprite's OAM x/y, the oracle's $0700+d*4 / $0701+d*4
-      printf("battlehand: sprite%d cmb=%d oam=%02X,%02X grp=%02X a62d=%02X%02X%02X\n", d, cmb, ax, ay, group,
-             mem[0xA62D], mem[0xA62E], mem[0xA62F]);
+      printf("battlehand: sprite%d cmb=%d oam=%02X,%02X grp=%02X a62d=%02X%02X%02X page=%d\n", d, cmb, ax, ay, group,
+             mem[0xA62D], mem[0xA62E], mem[0xA62F], n >= 2 ? h->handPageShown : -1);
     for (int cy = 0; cy < 2; cy++)
       for (int cx = 0; cx < 2; cx++) {
         int ti = 0x000 + cx + 0x10 * cy;                   // tile 0x000 quad: 0x00,0x01,0x10,0x11

@@ -444,7 +444,7 @@ single-target byte-identity proof.
 |---|---|---|
 | C1 | **PC-side cursor rendered** (`$960D` bit7, e.g. a Tonic on a PC) | the DATA is pinned (`$9708/$9713` PC entries `(0,0xF0)`, `CC/E3C7`/`CC/E3CA`, and oracle-read `F0 F0 F0`), and `C1/1979` is actor-index-generic (no PC branch), but **no capture exists**: both repo battle states have an EMPTY inventory (`$1580 = 00…` in the forest AND in the GATO fight, so the Item submenu opens with nothing confirmable). Closes with a pre-battle state carrying ≥1 Tonic (patch `$2400`/`$2500` in the field state, then `Down,Down,A,A`). Predicted seat-0 cursor in the forest: `(160−16, 71−16) = (144,55)`. |
 | C2 | **Sets of 4–6 (a true 2-page cycle)** | the page law is fully disassembled but every reachable set here is ≤3 (3 enemies max), so page 1 is always empty. A fight with ≥4 enemies + an all-enemies tech (group 0x08) would show sprites 1-3 walking `[0,1,2]→[3,4,5]`. Entries `[6..10]` provably never get a cursor. |
-| C3 | **The absolute blink PHASE** | the cadence is pinned (`$9931 & 3 == 0`, `$9931` = battle frame index, first INC at oracle f245 on `forest_cyclone.state`), but the mapping from `$9931` to our `h->frames` origin is not measured, so the spec's `(h->frames/4)&1` may be up to 3 frames out of phase with the ROM. Closes by monitoring `9931` alongside a landmark our engine also emits (e.g. the first `battletrace cursor` frame). |
+| C3 | ~~**The absolute blink PHASE**~~ **CLOSED 2026-10-15** (§10: `$960B` is the menu pass's own byte now, frame-identical to the cartridge) | (was: the cadence is pinned but the mapping from `$9931` to our `h->frames` origin is not measured, so `(h->frames/4)&1` may be out of phase.) |
 | C4 | **Group `0x0B` (Slash) corridor test `C1/25A3`** | the handler (`C1/2169`: caster `$960F` → `$9605`, primary → `$9606`, width `$9607=2`, `$9608=0`, `JSR C1/25A3`) is located and the oracle result measured (`$A62D = 03 FF…` from primary slot0 in the forest geometry), but `C1/25A3` itself is not disassembled, so the *general* line law is unknown. Today it coincides with the single fallback → no visible error. |
 | C5 | **`$9613` / `$A64E` name+HP readout** (`C1/19DC-11A4B`: `$984D,X`, `CC/F8ED`, `$9F34`, `$9F29,Y`, `E1/DE80`, `JSL CD/0030`) | the single-target path also raises the enemy NAME/HP display; not part of this lane, not rendered by our engine. |
 | C6 | **`$A0A8,X` / `$A09B,X` skip gates** (carried from `battle_multitarget.md` M2) | still 0 for every actor in both captures, so the exact status semantics stay un-pinned; our `$AF02 != 0xFF` proxy is the measured equivalent here. |
@@ -576,3 +576,56 @@ of radius) — the ROM positions exactly. GATO's single-target hand moved (120,7
 the oracle's own OAM coordinate; the verifier's R1/R2 warning was right that this is a real move, and no
 pinned check contained a target-select frame, so the suite stayed green. Pinned as
 `field-battle-tgtcursor-cyclone-multi`.
+
+
+---
+
+# 10 — THE PAGE ON THE MENU PASS (2026-10-15; closes §8 C3)
+
+The port drew sprites 1-3 on `((CtBattleRenderClock >> 2) & 1) ? 3 : 0` -- a render clock standing in for `$960B`. On
+the rule's cartridge the page runs on the fight's own menu passes, and the render clock was one frame early: Area Bomb's
+select (tools/caster_radius_dispatch_cmp.py's fixture, `--monitor 7E0900:1,7E960B:1`) has `$0900 = EA` (page 0)
+f737-740 / f745-748 and `FE` (page 3) f741-744; the port's page-3 frames were f740-743 / f748.
+
+**The ROM (§3, re-read 2026-10-15).** `C1/1AF8 STA $960B` is the byte's only writer in the whole ROM (the stores `8D/8E/9C
+0B 96` occur at C1/1AF8 alone; the other byte matches, F4/C596 and FD/97A8, are outside the battle). The multi arm is taken
+by `C1/19AC LDA $A62E / BMI` -- a SECOND lit actor, whatever the group: Cyclone around a lone enemy (`$A62D = 03 FF`) runs
+the single arm C1/19B4 and does not turn the page. C1/1AA2-1AF8 with the 16-bit index: `$80 := $960B`, `$82 := 1`; per
+entry `INC $80`, out at `$80` = 3 or 6, else `INC $82`, out at `$82` = 4; then `$960B := $80`, or 0 when it is 6. So from
+page 0 the next is 3, from 3 it is 0 (and any other start ends at the next of 3 / 6, `$82` capping three sprites).
+The battle's boot clears it with the rest of its page (no store names it: a block clear -- a `05` poked into the field's
+WRAM reads `00` from the cartridge's f271 on; the port's entry clears the same page at its f216, before any select), and
+after that nothing resets it: not the select's open C1/1F79 (§8 C13), not the single arm -- it carries over from one select
+to the next.
+
+**The port.** `battleMenuPassTail` (C1/17DD) runs C1/1979's gate -- a chooser (`$95D5` bit 7 clear), `$9609`, `$9613`
+bit 7 clear -- and, when `CtBattleTargetHandSet` lights two or more (C1/19AC), the page loop above on WRAM `$960B`,
+keeping the page it started at in `h->handPage`. The battle NMI ships it with the bracket's OAM entries
+(`h->handPageShown`, beside `brkOamShown`), and `battleTargetCursorRender` draws sprites 1-3 from that page, the loop's
+own end (entry 3 / 6). `CtBattleTargetHandSet` (battle.c) is the one set the pass and the renderer read: the PC-side and
+caster-radius groups' published `$A62D`, the hit set around the cursor's slot otherwise.
+
+**Measured** (`python tools/target_hand_page_cmp.py -v`, the rule's cartridge, every frame the select is held):
+
+| case | `$960B` | turns (both sides) | shown sprites, port f = cartridge shadow f-1 |
+|---|---|---|---|
+| Area Bomb (group 11, `$A62D = 04 06`), 72 frames | identical | f737 (the open's own pass) f741 f745 ... f805 (18) | 71/71 |
+| Cyclone on cmb3 (group 12, `$A62D = 03 06`), 135 frames | identical | f665 (the open's own pass) f672 f676 ... f796 | 134/134 |
+| Cyclone with nobody near (`$A62D = 03`), 75 frames | identical, no turn | - | 74/74 |
+
+The old build: 3/9 (only the no-turn case: its `$960B` never moved, and its sprites differ from the first turn on --
+Area Bomb f740, Cyclone f668). The picture alignment:
+the cartridge's frame N shows the shadow of N - 2 and in a fight the port's picture P is the cartridge's P + 1, so the
+port's frame f must draw the shadow of f - 1 -- the thumbnails' secondary-hand cell turns on and off on the same frames at
+P + 1 (BATTLE_AB_KEEP=1), and the sprite match is 71/71 at lag -1 against 54/71 at 0.
+
+`field-battle-tgtcursor-cyclone-multi` (forest Cyclone, `--battletest`) keeps its pin: the page-0 window around its shot
+moved from f221-224 to f223-226, and f223 is still a two-hand frame, fnv 3E6AD273 unchanged.
+
+**Found in passing, not this section's** (each its own follow-up):
+- *The hand's visibility at the select's open.* The renderer reads live `$9609`, so the port draws the hand on the frame the
+  select opens; the cartridge's picture shows it one frame later (Area Bomb: port f737 hand on, cartridge picture f738
+  off, f739 on). The ROM's model is the bracket's -- OAM entries 0-3 as the pass wrote them, shipped by the NMI -- for the
+  hand's positions and visibility too, not only its page.
+- *The enemy cursor's Down order.* On the fixture's Hetakes the cartridge's Down from cmb3 goes to cmb6, then cmb5, cmb4
+  (`$A62D` 0306 -> 0603 -> 05 -> 04); the port's walks slots 4, 5, 6 (C1/176C's next-target rule).
