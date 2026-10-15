@@ -2275,6 +2275,11 @@ static const uint8_t* hostFitWidth(const uint8_t* img, int* w) {
 // THE PICTURE AT THE INTERNAL SCALE (settings.h renderScale): the frame redrawn by CtMotRaster at k x 256 by k x 224 from
 // its owners. At 1x (the default, and always headless) it is the composed frame itself.
 static uint8_t* g_hostPic; static size_t g_hostPicN;
+static const uint8_t* g_hostLastUp; static int g_hostLastUpW, g_hostLastUpH;   // what went to the screen last (F5's picture)
+static void hostUpload(CtPresenter* pr, const uint8_t* pic, int w, int h) {
+  CtPresentSetPicSize(pr, w, h); CtPresentUpload(pr, pic);
+  g_hostLastUp = pic; g_hostLastUpW = w; g_hostLastUpH = h;
+}
 // THE TITLE SEQUENCE'S OWN PICTURE (title_intro.h CtTitleIntroRenderEx): when a frame was the $C3 machine's, the host
 // draws it itself at the options -- the mode-7 pendulum past the 256 columns (the widescreen), at k x, and between two
 // frames with the matrix interpolated. g_hostTi is that frame's machine; g_hostTiPrev the latch the frame before it drew.
@@ -2290,22 +2295,20 @@ static void hostUploadPictureAt(CtPresenter* pr, const uint8_t* fb, int w, int t
     if (g_hostPicN < n) { free(g_hostPic); g_hostPic = (uint8_t*)malloc(n); g_hostPicN = g_hostPic ? n : 0; }
     if (g_hostPic) {
       CtTitleIntroRenderEx(g_hostTi, g_hostTiPrevOk ? &g_hostTiPrev : NULL, t, g_hostPic, W, (W - CAMW) / 2, k);
-      CtPresentSetPicSize(pr, W * k, CAMH * k);
-      CtPresentUpload(pr, g_hostPic);
+      hostUpload(pr, g_hostPic, W * k, CAMH * k);
       return;
     }
   }
   fb = hostFitWidth(fb, &w);
-  if (k == 1) { CtPresentSetPicSize(pr, w, CAMH); CtPresentUpload(pr, fb); return; }
+  if (k == 1) { hostUpload(pr, fb, w, CAMH); return; }
   size_t n = (size_t)w * k * CAMH * k * 3;
   if (g_hostPicN < n) { free(g_hostPic); g_hostPic = (uint8_t*)malloc(n); g_hostPicN = g_hostPic ? n : 0; }
-  if (!g_hostPic) { CtPresentSetPicSize(pr, w, CAMH); CtPresentUpload(pr, fb); return; }
+  if (!g_hostPic) { hostUpload(pr, fb, w, CAMH); return; }
   // the frames between: natively where the frame allows it (fieldnative.c), else the reprojection
   if (!(t < 256 && !getenv("CT_NATIVE_OFF") && (CtFieldRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic) ||
                                                 owRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic))))
     CtMotRaster(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic);
-  CtPresentSetPicSize(pr, w * k, CAMH * k);
-  CtPresentUpload(pr, g_hostPic);
+  hostUpload(pr, g_hostPic, w * k, CAMH * k);
 }
 static void hostUploadPicture(CtPresenter* pr, const uint8_t* fb) { hostUploadPictureAt(pr, fb, CAMW, 256, 0); }
 // This frame's picture is the title machine's: the latch it drew from, and the one before it (if that frame drew it too).
@@ -2427,6 +2430,26 @@ static void motCheck(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_
 }
 // Present this frame's picture (`w` wide: 256, or the widescreen field's), `motion` = its owners were recorded.
 static const uint8_t* g_lastShown; static int g_lastShownW = CAMW;   // the frame last presented (the probe redraws it)
+// F5's pictures (debug): ct_debug_NNN_frame.ppm = the frame the game composed (1x), ct_debug_NNN_screen.ppm = what was on
+// the screen (the internal scale's picture or a frame between, when a mod draws one), and one line in ct_debug_log.txt with
+// the two motion frames the screen's picture was drawn from -- so a picture the F5 state does not bring back (the
+// presenter's, outside the WRAM and the VM) can still be read.
+static void hostDebugPictures(int n) {
+  char p[64];
+  if (g_lastShown) { snprintf(p, sizeof p, "ct_debug_%03d_frame.ppm", n); FILE* f = fopen(p, "wb");
+    if (f) { fprintf(f, "P6 %d %d 255 ", g_lastShownW, CAMH); fwrite(g_lastShown, 1, (size_t)g_lastShownW * CAMH * 3, f); fclose(f); } }
+  if (g_hostLastUp) { snprintf(p, sizeof p, "ct_debug_%03d_screen.ppm", n); FILE* f = fopen(p, "wb");
+    if (f) { fprintf(f, "P6 %d %d 255 ", g_hostLastUpW, g_hostLastUpH); fwrite(g_hostLastUp, 1, (size_t)g_hostLastUpW * g_hostLastUpH * 3, f); fclose(f); } }
+  FILE* lf = fopen("ct_debug_log.txt", "a");
+  if (!lf) return;
+  for (int i = 0; i < 2; i++) { const CtMotFrame* m = &g_motBuf[i];
+    fprintf(lf, "     motion[%d]%s valid %d scene %X cam (%d,%d) o2 (%d,%d) o3 (%d,%d) native %d own[0] %02X\n", i,
+            i == g_motIdx ? " (next)" : "", m->valid, m->scene, m->camX, m->camY, m->o2x, m->o2y, m->o3x, m->o3y,
+            m->native != NULL, m->own[0]); }
+  fprintf(lf, "     screen %dx%d settings: render_scale %d interpolation %d\n", g_hostLastUpW, g_hostLastUpH,
+          CtSettingsGet()->renderScale, CtSettingsGet()->interpolate);
+  fclose(lf);
+}
 static void hostPresentMot(CtPresenter* pr, const uint8_t* fb, int w, int motion) {
   static int frameNo = 0;
   g_lastShown = fb; g_lastShownW = w;
@@ -12270,19 +12293,33 @@ int main(int argc, char** argv) {
     if (!selftest && f.vm) {
       const Uint8* dks = SDL_GetKeyboardState(NULL);
       int f5 = dks[SDL_SCANCODE_F5], f9 = dks[SDL_SCANCODE_F9];
+      { const char* dk = getenv("CT_DEBUG_KEYS");                       // (test) "f5@N,f9@M": the key held on frame N
+        for (const char* q = dk; q && *q; ) {
+          int key = 0, at = -1;
+          if (sscanf(q, "f%d@%d", &key, &at) == 2 && at == frameNo) { if (key == 5) f5 = 1; else if (key == 9) f9 = 1; }
+          q = strchr(q, ','); if (q) q++; } }
       if (f5 && !prevF5) {
         double plr[4] = { px, py, (double)pz, (double)pfac };
         int n = fieldDebugNextCapture();
         char np[64]; snprintf(np, sizeof np, "ct_debug_%03d.state", n);
         int ok = CtSceneSaveState(f.vm, np, plr);
         CtSceneSaveState(f.vm, "ct_debug.state", plr);                  // the latest, for F9
-        if (ok) fieldDebugLogCapture(n, "scene", frameNo, CtSceneMem7E(f.vm), px, py);
-        fprintf(stderr, ok ? "[debug] F5: saved %s (and ct_debug.state); logged in ct_debug_log.txt\n"
+        if (ok) { fieldDebugLogCapture(n, "scene", frameNo, CtSceneMem7E(f.vm), px, py); hostDebugPictures(n); }
+        if (ok && g_fieldAudio) {                                       // ...and the SPC of the same moment (F9's music)
+          char na[72]; snprintf(na, sizeof na, "%s.apu", np);
+          CtAudioSaveState(g_fieldAudio, na); CtAudioSaveState(g_fieldAudio, "ct_debug.state.apu"); }
+        fprintf(stderr, ok ? "[debug] F5: saved %s (+ _frame/_screen.ppm; and ct_debug.state); logged in ct_debug_log.txt\n"
                            : "[debug] F5: SAVE FAILED (%s)\n", np);
       }
       if (f9 && !prevF9) {
         double plr[4]; int r = CtSceneLoadState(f.vm, "ct_debug.state", plr);
         if (r) fieldMapFromWram(&f, CtSceneMem7E(f.vm), "F9");
+        // THE SOUND PROCESSOR GOES BACK WITH THE WRAM. The restored WRAM holds the CPU's side of the APU protocol (the
+        // token it echoes, the song it believes is loaded); against the SPC that kept running, every handshake after the
+        // restore is out of step and the music came out garbled (the user, 2026-10-15, ct_debug_051). A snapshot from
+        // before the .apu sidecar existed restores without it, as before.
+        if (r && g_fieldAudio && !CtAudioLoadState(g_fieldAudio, "ct_debug.state.apu"))
+          fprintf(stderr, "[debug] F9: no ct_debug.state.apu -- the SPC keeps running as it was (the music may break)\n");
         if (r == 2) { px = plr[0]; py = plr[1]; pz = (int)plr[2]; pfac = (int)plr[3];
           fprintf(stderr, "[debug] F9: loaded ct_debug.state -> (%.0f,%.0f)\n", px, py); }
         else if (r == 1) {                                    // old snapshot (VM only): resync + derive Z

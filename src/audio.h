@@ -75,6 +75,10 @@ int      CtAudioService(CtAudio* a, uint8_t* mem7E);
 // upload cost the parked field: the NMIs crossed (frames lost) and the line the RTL landed on.
 struct Apu;
 void      CtAudioSeedFromApu(CtAudio* a, const struct Apu* src);   // adopt a savestate's SPC/DSP/ARAM (the oracle's driver state)
+// The debug snapshot's sound processor (field.c F5/F9): the SPC, the DSP, ARAM and the timers to a file, and back -- the
+// WRAM a restore brings back holds the CPU's side of the APU protocol, which only works against the SPC of the same moment.
+int       CtAudioSaveState(CtAudio* a, const char* path);
+int       CtAudioLoadState(CtAudio* a, const char* path);
 void      CtAudioSetEngineMode(CtAudio* a, int mode);   // 0 field, 1 battle: which measured background block
 void      CtAudioSetPostLine(CtAudio* a, int vPos);     // the raster line the next JSL begins on (default 12)
 // THE RULE (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1, the migration switches; CLAUDE.md "The SPC under the rule"): the

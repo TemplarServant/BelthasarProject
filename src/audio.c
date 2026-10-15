@@ -1608,6 +1608,36 @@ void CtAudioSeedFromApu(CtAudio* a, const Apu* src) {
   a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;
   audReset(a);
 }
+#define CT_APUSTATE_MAGIC 0x50415443u   /* 'CTAP' LE */
+int CtAudioSaveState(CtAudio* a, const char* path) {
+  if (!a || !a->apu || !path) return 0;
+  StateHandler* sh = sh_init(true, NULL, 0);
+  apu_handleState(a->apu, sh);
+  FILE* f = fopen(path, "wb");
+  uint32_t hdr[2] = { CT_APUSTATE_MAGIC, (uint32_t)sh->offset };
+  int ok = f && fwrite(hdr, 4, 2, f) == 2 && fwrite(sh->data, 1, (size_t)sh->offset, f) == (size_t)sh->offset;
+  if (f) fclose(f);
+  sh_free(sh);
+  return ok;
+}
+int CtAudioLoadState(CtAudio* a, const char* path) {
+  if (!a || !a->apu || !path) return 0;
+  FILE* f = fopen(path, "rb");
+  if (!f) return 0;
+  uint32_t hdr[2] = { 0, 0 }; uint8_t* buf = NULL;
+  int ok = fread(hdr, 4, 2, f) == 2 && hdr[0] == CT_APUSTATE_MAGIC && hdr[1] > 0 && hdr[1] < (1u << 20)
+           && (buf = (uint8_t*)malloc(hdr[1])) != NULL && fread(buf, 1, hdr[1], f) == hdr[1];
+  fclose(f);
+  if (ok) {
+    StateHandler* sh = sh_init(false, buf, (int)hdr[1]);
+    apu_handleState(a->apu, sh);
+    sh_free(sh);
+    a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;   // (as CtAudioSeedFromApu: the adopted driver's moment)
+    audReset(a);
+  }
+  free(buf);
+  return ok;
+}
 void CtAudioSetEngineMode(CtAudio* a, int mode) { if (a) a->engineMode = (mode >= 0 && mode <= 2) ? mode : 0; }   // 2 = the loader's quiet background
 void CtAudioSetPostLine(CtAudio* a, int vPos)   { if (a) a->postLine = vPos; }
 void CtAudioSetRulePost(CtAudio* a, long postAt, long nmiWait) { if (a) { a->rulePostAt = postAt; a->ruleNmiWait = nmiWait; } }
