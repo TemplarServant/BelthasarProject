@@ -2221,11 +2221,8 @@ static int battleTargetRevalidate(uint8_t* s, const uint8_t* rom) {
   battleTargetMask(s);                                             // D68E JSR C1/AD09
   return 1;
 }
-// ⚠ NEITHER OF THESE IS WIRED, and the reason is the enclosing routine, not these. C1/D63F sits in the
-// middle of the block that C1/D581, D60C, D659 and D73C all jump out of into C1/D742, and none of that
-// routine is ported -- there is no caller here that reaches this point with the state it expects. What
-// changed today is that the two halves this depended on are done: the $AE6D table it hops through, and
-// battleRng's X, which its own `LDX #0003` is the located reason for.
+// battleTargetRevalidate is WIRED for the PC's command (2026-10-15): battleStageAtkHeader runs it at D63F's place,
+// between D629 and D691, with the committed seat in $AECC (C1/BFDF), and battleComputeDamage strikes the seat it leaves.
 
 // THE PER-ENEMY ACTION POINTER -- ONE per enemy, not one per section (C1/8C3E, C1/8CF9, C1/8E4A):
 //   $B1D4,Y (u16, bank $CC)  the entry this enemy's next TURN executes            Y = slot * 2
@@ -5091,8 +5088,12 @@ static void battleEndTeardown(CtBattleHost* h) {               // == C1/356D (vi
 // queued); c1399 `$A1` = 02, `$A6D9` FF FF FF, `$95D5` FF; c1400 `$A6DF` FE -> FF, `$5DF1` = 28 00 x3, `$5DC9` = 40, `$E5` 0;
 // the first victory publish `$9907` c1402 (V+5). Crono solo the same: arm c1325 = V+3, publish c1327. The port used to make
 // the three removals in V+1 and arm the ladder in V, so the celebration's poses came three frames early.
-// (C1/35A9's `LDA $2989 / AND #01` early-out -- a fight with no celebration at all -- is UNPORTED: measured 0 in every
-//  fixture, and the byte that would set it has not been traced to a writer.)
+// C1/35A9's `LDA $2989 / AND #01 / BEQ` -- A FIGHT WITH NO CELEBRATION: with bit 0 the stager returns after C1/0C2D (35B0
+// RTS), before the ladder's arm (35B1-35DD) and the 64-frame `$5DC9` hold (C1/3681-3693), and C1/818B goes on to C1/83BB's
+// rewards and FD/AD17 at once. The writer is op D8's first operand (C0/3A91 -> $2989): the Day of Lavos's fights, `D8 91
+// E0` (scene 467). MEASURED, the rule's cartridge (saves/lavos_re/lavos_1d3_wait.state, up 300 then A every 12 frames):
+// the last mimic falls f1300, CD/0516's `$CE16 = 1` f1351, C0/1C89's `70 00` f1368, the ack f1380 -- the port, holding
+// the 64, acked at f1446.
 static void battleVictoryTeardownFrame(CtBattleHost* h) {
   uint8_t* s = h->mem;
   int seat = h->victoryHold - 1;                               // 0, 1, 2 -- then 3 = the tail
@@ -5105,6 +5106,7 @@ static void battleVictoryTeardownFrame(CtBattleHost* h) {
   s[0x95D5] = 0xFF;                                            // 135A1-135A3
   battleTrace(h, "end-teardown");
   battleMenuPassHead(h);                                       // 135A6 JSR C1/0C2D: C1/0299's names and party rows, posted
+  if (s[0x2989] & 0x01) return;                                // 135A9 LDA $2989 / AND #01 / BEQ, else 135B0 RTS
   CtBattlePcLadderArm(h, 0x28, 0);                             // 135B1-135DD, the copier's tail C1/367D
 }
 
@@ -6737,6 +6739,9 @@ static int battleRollHit(CtBattleHost* h, int atk, int tgt) {
   return hitv;
 }
 
+// C1/D63F's verdict for the command being staged (battleTargetRevalidate: 1 published, 0 skipped, -1 no enemy left).
+static int g_btRevalid;
+
 // ---- THE 12-BYTE ATTACK HEADER ($AEE6..$AEF1) and the $AE4D it feeds -------------------------------
 // The ROM stages a 12-byte record per action and every later stage reads it out of WRAM rather than
 // re-indexing the ROM. Two stagers, both a plain 12-byte copy, differing only in the table:
@@ -6821,6 +6826,12 @@ static void battleStageAtkHeader(CtBattleHost* h, int atk) {
   for (int i = 0; i < 12; i++) s[0xAEE6 + i] = rom[tbl + idx * 12 + i];   // C1/D5EF / C1/D945
   s[0xAE4D] = s[0xAEED]; s[0xAE4E] = s[0xAEEE];                           // C1/EB0E
   s[0xAE4D] |= s[0xB2CA];                                                 // D629-D62F
+  // C1/D63F-D68E, between D629 and the $B18E stores (D691): the command's target in $AECC re-validated -- a seat that
+  // died since the confirm hops through $AE6D and, if still absent, a random living enemy seat is rolled (D677,
+  // battleTargetRevalidate). MEASURED, the rule's cartridge (saves/lavos_re/lavos_1d3_wait.state, up 300 then A every
+  // 12 frames): Ayla's attack, committed on the slot-3 mimic Crono killed first, draws $26 5C -> 60 (seats 3, 6, 3, 9)
+  // and strikes seat 9 at f1024; the port struck the FIRST living slot (seat 7) at f931 and the fight drifted 100 frames.
+  if (battleIsPc(atk)) g_btRevalid = battleTargetRevalidate(s, rom);
   // (C1/D629's `ORA $B2CA` was left out while $B2CA was unstaged -- forest_pre carried 29, whose bit 5 closed every
   //  PC hit roll; it is staged now, D584-D5B0, from the action record: 00 for the seven physical actions.)
   // C1/D6AE-D6BC, after the $B18E-$B191 stores: `LDA $AE92 / CMP #02 / BEQ` -- a command that is not a tech (the physical,
@@ -6941,9 +6952,12 @@ static int battleDcfdTail(CtBattleHost* h, int atk, int tgt, int dmg, int* stage
 static void battleLastHitD508(uint8_t* s, int tgt);            // C1/D508 (below)
 static void battleMissE8E2(CtBattleHost* h, int tgt, int v1A, int v1C);   // C1/E8E2 (below)
 static void battleSelAttackerE9A3(uint8_t* s);
-static int battleComputeDamage(CtBattleHost* h, int atk, int tgt) {
+static int battleComputeDamage(CtBattleHost* h, int atk, int* tgt) {
+  g_btRevalid = 0;
   battleStageAtkHeader(h, atk);                                   // C1/D5EF (a PC) / C1/D7C4 / C1/D8D1 (an enemy)
-  return battleD2DE(h, atk, tgt);
+  if (g_btRevalid == 1) *tgt = h->mem[0xAECC];                    // D687 STA $AECC: the target the effect strikes
+  else if (g_btRevalid < 0) return 0;                             // D656: no enemy left -> JMP D742, no effect
+  return battleD2DE(h, atk, *tgt);
 }
 // C1/D2DE -- the DAMAGE kind (C1/D9D7[03]) on one target, the header already staged at $AEE6. It opens `JSR C1/E9A3 /
 // JSR C1/E9B8`: $B1F4 = $B18B * 80 and $B1F6 = the target * 80 through C1/C90B, $B1FD = the target -- read by the
@@ -11753,7 +11767,7 @@ static void battleOpenAction(CtBattleHost* h, int atk, int reactive) {
   else if (!battleIsPc(atk)) { int one = tgt; battleEnemyExecute(h, atk, 1, &one); }   // (no non-counter enemy opens here)
   else {
     s[0xAE92] = 1;                                                 // C1/BFDA-BFDC: the physical, before C1/D523 (D6AE)
-    h->actValue  = battleComputeDamage(h, atk, tgt);              // deferred damage (RNG advance $26 here) + crit roll
+    h->actValue  = battleComputeDamage(h, atk, &tgt);             // deferred damage (RNG advance $26 here) + crit roll
     h->actTgtN = 1; h->actTgtList[0] = tgt; h->actTgtVal[0] = h->actValue;
     h->actTgtApply[0] = 1;
     battleShowRecordsHits(h);                                      // its ShowDamage record (C1/DE6A / C1/E904)
@@ -11861,6 +11875,11 @@ static void battleDispatchScheduled(CtBattleHost* h) {
         return;
       } }
   } else if (slot >= 0 && slot < 8 && s[0xAF02 + slot] != 0xFF) tgt = 3 + slot;
+  // A PHYSICAL whose enemy died since the confirm keeps it here: C1/BFDF puts the committed seat in $AECC and C1/D523's
+  // D63F re-validates it (battleComputeDamage) -- the hop through $AE6D, then a random living seat. (A TECH re-derives
+  // its target at C1/C1DD -- C1/C830's own reroll, ported for the demo's arm only: it keeps the first living slot here,
+  // an open stand-in.)
+  else if (itemId == 0 && techId == 0 && slot >= 0 && slot < 8) tgt = 3 + slot;
   else { int fa = battleFirstEnemySlot(s); tgt = (fa >= 0) ? 3 + fa : -1; }
   if (tgt < 0) {                                                // degenerate: no enemy alive -> just reload the
     battleAtbLoad(s, atk); battleAtbRearm(s, atk);  //   timer (commit already dequeued)
@@ -11987,7 +12006,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
       battleTargetMask(s);
       s[0xAE94] = 0;
     }
-    h->actValue  = battleComputeDamage(h, atk, tgt);            // RNG draw HERE (animate-time; order preserved) + crit roll
+    h->actValue  = battleComputeDamage(h, atk, &tgt);           // RNG draw HERE (animate-time; order preserved) + crit roll
   }
   if (h->actTgtN <= 1) { h->actTgtN = 1; h->actTgtList[0] = tgt; h->actTgtVal[0] = h->actValue; }  // single-target normalize (item/physical/Ice)
   if (techId == 0) h->actTgtApply[0] = 1;                      // physical / item: the one victim (a miss is actMiss)
@@ -15843,7 +15862,9 @@ void CtBattleVictoryRewards(CtBattleHost* h);   // C1/83D2-83F2 (with the module
 static void battleModuleTail(CtBattleHost* h, int path);
 static void battleResultsTick(CtBattleHost* h, int aHeld) {
   uint8_t* s = h->mem;
-  if (h->victoryHold < CT_BATTLE_VICTORY_CELEBRATE || h->handoffLeft > 0) return;   // still in the 3+64+7 hold
+  // the 3+64+7 hold -- without the 64 when C1/35A9 returned early ($2989 bit 0: no celebration)
+  int hold = (s[0x2989] & 0x01) ? CT_BATTLE_VICTORY_CELEBRATE - CT_BATTLE_VICTORY_LADDER : CT_BATTLE_VICTORY_CELEBRATE;
+  if (h->victoryHold < hold || h->handoffLeft > 0) return;
   CtBattleVictoryRewards(h);                                     // C1/83D2-83F2, then 83F5 JSL FD/AD17 (once)
   if (h->resultN <= 0 || h->resultLine < 0) {                    // no reward line at all -> straight to the handoff
     if (h->resultPhase < 0) { h->resultPhase = 3; h->resultPhaseT = 0;
@@ -17334,7 +17355,7 @@ static void battleForcedPhysicalStage(CtBattleHost* h, int y, int t) {
   battleShowRecordsClear(s);                                       // (C1/D523's FD/ACFD + the command's FD/ACEE)
   h->actCrit = 0; h->actCritFlash = 0; h->actMiss = 0;
   h->actTechId = 0; h->actItemId = 0; h->actTgtN = 1;
-  h->actValue = battleComputeDamage(h, y, t);                      // C1/BF79 -> C1/D523 (D306: DE9E, DEF0, DC64, ...)
+  h->actValue = battleComputeDamage(h, y, &t);                     // C1/BF79 -> C1/D523 (D306: DE9E, DEF0, DC64, ...)
   h->actTgtList[0] = t; h->actTgtVal[0] = h->actValue; h->actTgtApply[0] = 1;
   battleShowRecordsHits(h);                                        // its ShowDamage record (C1/DE6A / C1/E904)
   s[0xA0FD]++;                                                     // C1/4058 INC $A0FD

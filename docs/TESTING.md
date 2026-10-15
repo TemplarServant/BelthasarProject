@@ -788,13 +788,23 @@ frame after it is held). Four drives (idle, B boosts, steering with bumps, the c
 frame and the END on the same frame (f2877, f2843, f2841, f2844). The picture's bytes are not graded (stage 2).
 Full tier (~1 min). Needs the user's capture.
 
+### battle-lavos-mimic-fight-vs-rule-cartridge (ct_field, from the oracle's pre-fight state)
+
+The Day of Lavos's first mimic fight (scene 467, `D8 91 E0`) from saves/lavos_re/lavos_1d3_wait.* (Jackie's ch26 party in
+front of the shell): up 300 frames into it, then A every 12. Crono kills the slot-3 mimic; Ayla's attack, committed on
+it, is re-targeted at the dispatch by C1/D63F (the hop through $AE6D, then `LDX #0003 / LDA #0B / JSR C1/AF22` until a
+living seat: $26 5C -> 60, seat 9) -- the port used to strike the first living slot; the victory has no celebration
+($2989 bit 0: C1/35A9 returns before the ladder and the 64-frame $5DC9 hold); the ack and the arena 15A. The cartridge:
+$26 = 62 f767, 65 f1075, the ack f1380, 15A f1490 -- the port on each to 3. Quick (~10 s). Needs the local saves.
+
 ### lavos-day-chain-in-the-port (ct_field, the oracle's own run from Jackie's ch26)
 
 The Day of Lavos in the port, from the End of Time bucket's arrival (saves/lavos_re/lavos_1d2_arrival.*, loc 1D2): up to
 the party, 1F7 (Lavos rises -- its world script's `34 44 7B`, C2/7B44: `$7F00AA` bit 0; without it 1F7 replays), back to
 1D2, the talk in 1D3, the first mimic arena 15B, then the walk into Lavos and A only: the first fight and its arena 15A.
 Every location change on the cartridge's frame to 3 until the fight (the cartridge: 961, 2057, 2226, 2481, 3225, 3456,
-3838); the fight's own timing is open (ROADMAP). Quick (~13 s). Needs the local saves.
+3838); inside the fight the pad meets the menus a frame apart (15A f5570, the cartridge f5500) -- the fight itself is
+battle-lavos-mimic-fight-vs-rule-cartridge. Quick (~13 s). Needs the local saves.
 
 ### ending-chain-after-lavos-in-the-port (ct_field, the oracle's own run from Jackie's ch27)
 

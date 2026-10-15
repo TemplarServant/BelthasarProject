@@ -39216,6 +39216,7 @@
         "saves/lavos_re/lavos_1d2_arrival.lakewram"
       ],
       "expect": [
+        "fmemmon f0 loc=1D2  0100=D201*",
         "fmemmon f960 loc=1F7  0100=F701*",
         "fmemmon f2059 loc=1D2  0100=D201*",
         "fmemmon f2223 loc=1D3  0100=D301*",
@@ -39223,8 +39224,8 @@
         "fmemmon f3221 loc=1D3  0100=D301*",
         "fmemmon f3454 loc=15B  0100=5B01*",
         "fmemmon f3834 loc=1D3  0100=D301*",
-        "fmemmon f5714 loc=15A  0100=5A01*",
-        "fmemmon f6145 loc=1D3  0100=D301*"
+        "fmemmon f5570 loc=15A  0100=5A01*",
+        "fmemmon f6001 loc=1D3  0100=D301*"
       ],
       "pin": [
         "^fmemmon "
@@ -39239,7 +39240,7 @@
         }
       ],
       "note_pass": "the Day of Lavos plays through in the port from the bucket's arrival (loc 1D2, Jackie's ch26): 1F7 (Lavos rises; C2/7B44 native), the party's talk in 1D3, the mimic-boss arena 15B, the first fight in 1D3 and its arena 15A -- on the cartridge's path",
-      "notes": "Roadmap G1a. From the oracle's own run (saves/lavos_re/lavos_1d2_arrival.*: EoT's bucket, ch26). The cartridge under the same pad: 1F7 f961, 1D2 f2057, 1D3 f2226, 1D2 f2481, 1D3 f3225, 15B f3456, 1D3 f3838, 15A f5500, 1D3 f5931 -- the port is on its frames to 3 until the fight; the fight's entry comes 13 frames early and its end -> 15A ~97 late/early by drive (open: battle_lavos timing, ROADMAP)."
+      "notes": "Roadmap G1a. From the oracle's own run (saves/lavos_re/lavos_1d2_arrival.*: EoT's bucket, ch26). The cartridge under the same pad: 1F7 f961, 1D2 f2057, 1D3 f2226, 1D2 f2481, 1D3 f3225, 15B f3456, 1D3 f3838, 15A f5500, 1D3 f5931 -- the port is on its frames to 3 until the fight; inside it the pad meets the menus a frame apart (the arrival's one-frame offset), so 15A comes at f5570. The fight itself, from the same pre-fight state, is battle-lavos-mimic-fight-vs-rule-cartridge (on the cartridge's frames to 3)."
     },
     {
       "name": "ending-chain-after-lavos-in-the-port",
@@ -39290,6 +39291,70 @@
       "mutations": [],
       "note_pass": "after Lavos's core the ending's field chain plays through in the port on the cartridge's frames (to 3): 052 -> 10F -> 002 -> 04F -> the night fair 050 (control back f11886), the walk to Leene's Square 051, the telepods' farewells 055 (control back f28651) and the square again, where `FF 2B` follows (ending-story-plays-through-in-the-port)",
       "notes": "Roadmap G1a. From the oracle's own run (saves/ending_re/ending_052_f1745.*: Jackie's ch27, the core beaten). The cartridge under the same pad: 10F f82, 002 f1040, 04F f2038, 050 f8054, control f11888, 051 f13474, 055 f13986, control f28650, 051 f44407."
+    },
+    {
+      "name": "battle-lavos-mimic-fight-vs-rule-cartridge",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "467",
+        "--loadwram",
+        "saves/lavos_re/lavos_1d3_wait.lakewram",
+        "--walkscript",
+        "u:300,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/lavos_re/lavos_1d3_wait.state",
+        "CT_FIELD_MEMMON": "0026:1,0117:2,0100:2",
+        "CT_SHOTS": "build/_lavos_fight",
+        "CT_SHOTS_AT": "1500",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/lavos_re/lavos_1d3_wait.state",
+        "saves/lavos_re/lavos_1d3_wait.lakewram"
+      ],
+      "expect": [
+        "fmemmon f768 loc=1D3  0026=62*  0117=0100  0100=D301",
+        "fmemmon f1072 loc=1D3  0026=65*  0117=0100  0100=D301",
+        "fmemmon f1378 loc=1D3  0026=65  0117=0001*  0100=D301",
+        "fmemmon f1491 loc=15A  0026=65  0117=0000  0100=5A01*"
+      ],
+      "pin": [
+        "^fmemmon f\\d+ loc=\\w+  0026=\\w+\\*",
+        "0117=0001\\*",
+        "0100=5A01\\*"
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (battleIsPc(atk)) g_btRevalid = battleTargetRevalidate(s, rom);",
+          "replace": "  (void)0;   /* MUT: no D63F */",
+          "why": "a physical whose enemy died since the confirm is re-targeted by C1/D63F's random roll (four draws here), not the first living slot"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (s[0x2989] & 0x01) return;                                // 135A9 LDA $2989 / AND #01 / BEQ, else 135B0 RTS",
+          "replace": "  (void)0;   /* MUT */",
+          "why": "with $2989 bit 0 (`D8 91 E0`) the victory stager returns before the ladder's arm"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  int hold = (s[0x2989] & 0x01) ? CT_BATTLE_VICTORY_CELEBRATE - CT_BATTLE_VICTORY_LADDER : CT_BATTLE_VICTORY_CELEBRATE;",
+          "replace": "  int hold = CT_BATTLE_VICTORY_CELEBRATE;   /* MUT */",
+          "why": "...and without the celebration's 64-frame $5DC9 hold: the fight ends 66 frames sooner"
+        }
+      ],
+      "note_pass": "the Day of Lavos's first mimic fight (scene 467, `D8 91 E0`) is the cartridge's: Ayla's attack on the fallen mimic re-targeted by C1/D63F's random roll ($26 5C -> 62, seat 9), the next draws, the victory with no celebration ($2989 bit 0, C1/35A9) and the ack, the arena 15A -- each on the cartridge's frame to 3",
+      "notes": "From the oracle's own run (saves/lavos_re/lavos_1d3_wait.*, Jackie's ch26 party at the Lavos shell). The cartridge under the same pad: $26 = 62 f767, 65 f1075, the ack f1380, 15A f1490. Before the two fixes the port struck the first living slot (seat 7) and held the 64-frame celebration: the ack came at f1280 / f1446 and the boss rush drifted."
     },
     {
       "name": "jackie-saves-census-vs-oracle",

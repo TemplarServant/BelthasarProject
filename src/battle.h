@@ -94,6 +94,8 @@
 // kill -> FIELD-RESUMED (231f) and charged the message lines' own 16+16 ramps, ~90f of module teardown and
 // a different A cadence to a "fixed celebration" that does not exist. See the dossier's TRAP 2/TRAP 3.
 #define CT_BATTLE_VICTORY_CELEBRATE 72
+// ...of which the celebration's own `$5DC9` hold (C1/3681-3693): a fight with $2989 bit 0 has none (C1/35A9).
+#define CT_BATTLE_VICTORY_LADDER 64
 
 // The per-line cadence of the results message machine CD/01B3. One line =
 //   OPEN (CD/025E+CD/027F, $CCEC=0x10) | 16f `JSR CD/020A` | DWELL | CLOSE ($CCEC=0, CD/01FD) | 16f CD/020A
