@@ -39,6 +39,12 @@ DRIVES = {
     '2E': dict(state=os.path.join(ROOT, 'saves', 'ending_re', 'ending_handoff_f6837.state'), handoff=0,
                hstate=os.path.join(ROOT, 'saves', 'ending_re', 'ending_handoff_f6837.state'),
                shift=53, hold=54, total=11000, wait=(0x9669, 0x925E, 0x92C7, 0x92E2)),
+    # entry 3 from the story (`FF 23`, scenes 102-107 after the Blackbird) -- the attract's own hand-off with the story's two
+    # bytes put back ($7F0057 bit 2 clear, the storyline D3): scene 107's controller then takes the story's arm, `DD F6 03
+    # 91 35 / FF 23`, on the cartridge (saves/blackbird_re/ff23_story_poked.state; the hand-off at f25, FF 23 on f26)
+    '23': dict(state=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'), handoff=0,
+               hstate=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'),
+               shift=19, hold=20, total=650, tag='seqstage'),
 }
 REGIONS = [(0x0000, 2), (0x0380, 0x1C), (0x0920, 0x20), (0x0A00, 0x30), (0x0B00, 0x30)]
 # the picture's bytes inside them: the credits pointer (task $9B4F) and the overlay's RNG $039B ($7E:3448), which only the
@@ -106,9 +112,15 @@ def run(op, d, verbose):
         print('endingstage: FF %s -- no output (cartridge %d rows, port %d rows)' % (op, len(orows), len(prows)))
         return
     oend = next((f for f in sorted(orows) if f >= shift and orows[f].get(0x0000) == 1), None)
+    if oend is None:
+        # the END and the teardown's reboot in one frame: $0000 never reads 1 at a frame's end, but the field's boot clears
+        # both script IPs on that frame (C2/1DBD .. 1DCA)
+        ipf = expand(orows, shift, total)
+        oend = next((f for f in sorted(ipf) if f > shift and not any(ipf[f].get(k, 0) for k in (0x0A20, 0x0A21, 0x0B20, 0x0B21))
+                     and any(ipf[f - 1].get(k, 0) for k in (0x0A20, 0x0A21, 0x0B20, 0x0B21))), None)
     pm = re.search(r'END at frame (\d+)', p)
     pend = int(pm.group(1)) + shift if pm else None
-    last = (oend or total)
+    last = (oend - 1 if oend else total)   # (the END's own frame: the reboot may have cleared the cartridge's bytes)
     ofull = expand(orows, shift, last)
     pfull = expand(prows, 0, last - shift)
     n = bad = 0
@@ -126,10 +138,12 @@ def run(op, d, verbose):
                 first = (of, dd)
             if verbose and bad <= 8:
                 print('  f%d: %s' % (of, ' '.join('%04X o=%s p=%s' % (k, ov.get(k), pv.get(k)) for k in dd[:10])))
-    print('endingstage: FF %s %d frames compared, %d differing, END cartridge f%s port f%s (%s)'
-          % (op, n, bad, oend, pend, 'same' if oend == pend else 'DIFFERENT'))
-    print('endingstage: FF %s song markers cartridge %s port %s'
-          % (op, ' '.join(map(str, marks(ofull, 0, d))), ' '.join(map(str, marks(pfull, shift, d)))))
+    tag = d.get('tag', 'endingstage')
+    print('%s: FF %s %d frames compared, %d differing, END cartridge f%s port f%s (%s)'
+          % (tag, op, n, bad, oend, pend, 'same' if oend == pend else 'DIFFERENT'))
+    if d.get('past') or d.get('wait'):
+        print('%s: FF %s song markers cartridge %s port %s'
+              % (tag, op, ' '.join(map(str, marks(ofull, 0, d))), ' '.join(map(str, marks(pfull, shift, d)))))
     if first and not verbose:
         of, dd = first
         print('  first: f%d %s' % (of, ' '.join('%04X o=%s p=%s' % (k, ofull[of].get(k), pfull[of - shift].get(k)) for k in dd[:8])))
@@ -138,7 +152,7 @@ def run(op, d, verbose):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('-v', action='store_true')
-    ap.add_argument('--drives', default='2B,2E')
+    ap.add_argument('--drives', default='2B,2E,23')
     a = ap.parse_args()
     for op in a.drives.split(','):
         run(op, DRIVES[op], a.v)

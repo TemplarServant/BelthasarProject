@@ -814,6 +814,14 @@ Every location change and both control returns on the cartridge's frame to 3 (10
 control f11888, 051 f13474, 055 f13986, control f28650, 051 f44407). (The cartridge's $011F = 1 inside each load -- C0/0BC8
 at its start, the fn0's `E3 00` at its end -- is not on screen; the port writes both on one frame.) Full (~70 s).
 
+### panorama-story-ff23-plays-through-in-the-port (ct_field, the attract's hand-off with the story's bytes)
+
+After the Blackbird, scenes 102-107's controller takes its story arm (`$7F0057` bit 2 clear, the storyline D3): `DD F6 03
+91 35` stages the Epoch's world 1F6 and `FF 23` opens entry 3 natively (src/seq_entry3.c, 17 black frames), which runs to
+its END; the teardown reboots into 1F6 (its world natives C2/7B5A / 7B9F) and the world script goes on to 1DD at f1010 --
+the cartridge's f1011 from the same state (saves/blackbird_re/ff23_story_f18.*). The picture is black (stage 2). Quick.
+Needs the local saves.
+
 ### ending-story-plays-through-in-the-port (ct_field, the oracle's own playthrough)
 
 The game's ending in the port itself: from saves/ending_re/ending_pre_ff2b.lakewram (Leene's Square, the talk to obj9

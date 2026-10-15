@@ -1476,6 +1476,7 @@ static int g_owSuspendNmis = 0;      // NMIs the pass's inline JSL crossed: the 
 static int g_owResumeBlock = -1;     // ...on this block (its script resumes at its saved pc)
 void CtWorldSetJsl(CtWorldJslFn fn) { g_owJsl = fn; }
 int CtWorldTakePassSuspend(void) { int n = g_owSuspendNmis; g_owSuspendNmis = 0; return n; }
+static void owFarLzTo(uint8_t* ram, uint8_t bank, uint16_t dst, uint16_t tbl, uint16_t x);   // (below)
 static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
   if (addr == 0x2F0F) {
     // C2/2F0F -- the zoning arm of the loader script: the world's song for the arrival cell, posted inline.
@@ -1504,6 +1505,19 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
   if (addr == 0x7B4F) {
     // C2/7B4F -- `LDA $7F019A / ORA #08 / STA $7F019A / RTS`: its sibling, the same shape on another story byte.
     ram[0x1019A] |= 0x08;
+    return;
+  }
+  if (addr == 0x7B5A) {
+    // C2/7B5A -- `LDX #9000 / STX $0303 / LDA #7F / STA $0305 / LDX #0009 / LDA $C6FDF0,X (16) / STA $0300 / LDA $C6FDF2,X /
+    // STA $0302 / JSL C3/0002`: the packet at C6:FDF0's entry 3 decompressed into $7F:9000 (C3/0557), the world's picture
+    // data (1F6 after the Blackbird's panorama: `34 5A 7B`).
+    owFarLzTo(ram, 0x7F, 0x9000, 0xFDF0, 0x0009);
+    return;
+  }
+  if (addr == 0x7B9F) {
+    // C2/7B9F -- the same shape into $7E:C600 (`LDA #7E / STA $0305 / LDX #C600 / STX $0303`) from C6:FEA0's entry 18
+    // (`LDX #0036`).
+    owFarLzTo(ram, 0x7E, 0xC600, 0xFEA0, 0x0036);
     return;
   }
   if (addr == 0x7BD1) {
@@ -1645,15 +1659,19 @@ static long g_owRomLen = 0;
 static CtWorldOp4EHook g_owWinCall = NULL;
 void CtWorldSetOp4EHook(CtWorldOp4EHook fn) { g_owWinCall = fn; }
 // The picture loaders' body (see their cases in CtWorldObjOp4E): $0300-$0305 as the routine leaves them, then C3/0002.
-static void owFarLz(uint8_t* ram, uint16_t dst, uint16_t tbl, uint16_t x) {
+// C3/0557 through the world's caller convention: the source from the table at $C6:<tbl> + x (3 bytes) into $0300-$0302,
+// the destination $<bank>:<dst> into $0303-$0305, then the packet decompressed there.
+static void owFarLzTo(uint8_t* ram, uint8_t bank, uint16_t dst, uint16_t tbl, uint16_t x) {
   if (!g_owRom || g_owRomLen < 0x60000L + tbl + x + 3) return;
   const uint8_t* p = g_owRom + 0x60000L + tbl + x;
   ram[0x0300] = p[0]; ram[0x0301] = p[1]; ram[0x0302] = p[2];
-  ram[0x0303] = (uint8_t)dst; ram[0x0304] = (uint8_t)(dst >> 8); ram[0x0305] = 0x7F;
+  ram[0x0303] = (uint8_t)dst; ram[0x0304] = (uint8_t)(dst >> 8); ram[0x0305] = bank;
   uint32_t a = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
-  if (!ct_lz_decompress_bounded(g_owRom, (size_t)g_owRomLen, ram + 0x10000 + dst, 0x10000u - dst, ct_lz_hirom_offset(a)))
-    fprintf(stderr, "owobj: the packet at $%06X did not decompress inside $7F:%04X-$FFFF\n", a, dst);
+  uint8_t* out = ram + (bank == 0x7F ? 0x10000 : 0) + dst;
+  if (!ct_lz_decompress_bounded(g_owRom, (size_t)g_owRomLen, out, 0x10000u - dst, ct_lz_hirom_offset(a)))
+    fprintf(stderr, "owobj: the packet at $%06X did not decompress inside $%02X:%04X-$FFFF\n", a, bank, dst);
 }
+static void owFarLz(uint8_t* ram, uint16_t dst, uint16_t tbl, uint16_t x) { owFarLzTo(ram, 0x7F, dst, tbl, x); }
 void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
   uint32_t tgt = (uint32_t)op[1] | ((uint32_t)op[2] << 8) | ((uint32_t)op[3] << 16);
   switch (tgt) {

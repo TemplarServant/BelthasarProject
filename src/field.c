@@ -83,6 +83,7 @@
 #include "seq_xlat.h"    // a $C3 stage whose output depends on the CPU clock: its program translated from the ROM
 #include "seq_race.h"    // the motorcycle race (sequence entry 0, `FF 00` / `FF 09`), native: its logic (stage 1)
 #include "seq_ending.h"   // the ending's $C3 stage (FF 2A/2B/2E/2F), native
+#include "seq_entry3.h"   // entry 3 from the story (FF 23, after the Blackbird), native
 #include "data/ct_charbase.h" // baked $CC:0000 char base-stat table (new-game init; NO runtime ROM needed)
 #include "collision.h"   // CtCollisionShapeSolid — the byte-exact engine shape collision (C0/9AD3)
 #include "player.h"      // CtPlayerControl — the byte-exact player input->velocity controller (C0/881E)
@@ -11115,7 +11116,7 @@ int main(int argc, char** argv) {
   CtXlatStage* seqX = NULL;                                   // ...as a TRANSLATED program (seq_xlat.h)
   int seqXState = 0;                                          //   0 running, 1 exited, < 0 a CT_XLAT_* stop
   int raceOn = 0, raceEnded = 0;                              // ...as the NATIVE race (seq_race.h): open / END met
-  int endOn = 0, endEnded = 0;                                // ...as the NATIVE ending (seq_ending.h): open / END met
+  int endOn = 0, endEnded = 0;                                // ...as the NATIVE ending (seq_ending.h: 1) or entry 3 (seq_entry3.h: 2)
   CtXlatStage* gwX = NULL;                                    // the GATE WARP ($FD), translated the same way
   int gwXState = 0;
   int seqHold = 0;                                            // frames of the SETUP still to run
@@ -16267,6 +16268,25 @@ int main(int argc, char** argv) {
           }
         } else printf("sequence: entry %d -- the native ending declined (CtEndingStageOpen)\n", seqEntry);
       }
+      // ENTRY 3 FROM THE STORY, NATIVE (stage 1: its logic). `FF 23` in scenes 102-107, after the Blackbird (their controller's
+      // story arm, storyline D3: `DD F6 03 91 35 / FF 23`): the night panorama's two scripts run to their END and the
+      // teardown reboots into the Epoch's world 1F6. The attract's `FF 63` (bit 6) keeps its translated stage. Priced like
+      // the others: the overlay's C3/0557 cycles, the init's DMAs, the setup's 120000 (sequence_table.md sec. 14).
+      if (seqId != 2 && !seqOpen && CtEntry3StageHas((uint8_t)seqId)) {
+        CtRaceIo rio = raceIoFor(w);
+        if (CtEntry3StageOpen(w, (uint8_t)seqId, &rio) == 0) {
+          seqOpen = seqEntry + 1; endOn = 2; endEnded = 0;
+          long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
+          if (orb && orl > 0x3E0005) {
+            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
+            long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry3StageSetupCycles();
+            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
+            printf("sequence: entry %d (the story's panorama) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
+                   seqEntry, frameNo, oc, od, os, seqHold);
+          }
+        } else printf("sequence: entry %d -- the native entry 3 declined (CtEntry3StageOpen)\n", seqEntry);
+      }
       if (seqId != 2 && !seqOpen) {
         seqOpen = CtTitleIntroResetStage(&titleIntro, seqEntry) ? seqEntry + 1 : -1;
         if (seqOpen > 0) { seqCommonInitWram(w, (uint8_t)seqId);  // a native entry: the overlay's init is ours to make
@@ -16425,11 +16445,11 @@ int main(int argc, char** argv) {
         // `JML $C0:0000` into the location obj10 staged; or the soft reset from "The End" (C3/0AB5 `JML $00FF00`).
         if (endEnded) {
           CtRaceIo rio = raceIoFor(w);
-          CtEndingStageClose(w, &rio);
+          if (endOn == 2) CtEntry3StageClose(w, &rio); else CtEndingStageClose(w, &rio);
           CtSceneSequenceDone(f.vm);
           rebootReq = 1; stageExit = 1;                              // 7E:303F JML $C0:0000
-          printf("sequence: the ending ended (%s) -> reboot into loc %03X\n", endEnded == 2 ? "soft reset" : "$7E:0000=1",
-                 w[0x0100] | (w[0x0101] << 8));
+          printf("sequence: the %s ended (%s) -> reboot into loc %03X\n", endOn == 2 ? "panorama" : "ending",
+                 endEnded == 2 ? "soft reset" : "$7E:0000=1", w[0x0100] | (w[0x0101] << 8));
           seqOpen = 0; endOn = 0; endEnded = 0;
         }
       } else if (seqOpen > 0 && !seqX && titleIntro.done) {   // (titleIntro keeps the LAST machine's done flag)
@@ -19341,7 +19361,8 @@ int main(int argc, char** argv) {
           uint16_t joy = 0;
           for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
           CtRaceIo rio = raceIoFor(CtWramSys(fieldWram()));
-          int st = CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
+          int st = endOn == 2 ? CtEntry3StageFrame(CtWramSys(fieldWram()), joy, &rio)
+                              : CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) endEnded = st;
         }
       } else if (seqOpen > 0) {

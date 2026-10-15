@@ -39060,16 +39060,19 @@
         "saves/ending_re/ending_pre_ff2b.state",
         "saves/ending_re/ending_handoff_f130.state",
         "saves/ending_re/ending_handoff_f6837.state",
-        "tools/ending_stage_cmp.py"
+        "tools/ending_stage_cmp.py",
+        "saves/blackbird_re/ff23_handoff_f25.state"
       ],
       "expect": [
-        "endingstage: FF 2B 4747 frames compared, 0 differing, END cartridge f4925 port f4925 (same)",
+        "endingstage: FF 2B 4746 frames compared, 0 differing, END cartridge f4925 port f4925 (same)",
         "endingstage: FF 2B song markers cartridge 829 2029 3950 4910 port 829 2029 3950 4910",
         "endingstage: FF 2E 10948 frames compared, 0 differing, END cartridge fNone port fNone (same)",
-        "endingstage: FF 2E song markers cartridge 115 2037 4192 7788 port 115 2037 4192 7788"
+        "endingstage: FF 2E song markers cartridge 115 2037 4192 7788 port 115 2037 4192 7788",
+        "seqstage: FF 23 582 frames compared, 0 differing, END cartridge f601 port f601 (same)"
       ],
       "pin": [
-        "^endingstage: "
+        "^endingstage: ",
+        "^seqstage: "
       ],
       "timeout_s": 900,
       "mutations": [
@@ -39120,10 +39123,16 @@
           "find": "    case 0x8D56: w[0x038C] = 0x01; wr(w, 0x4A, 0xB099); wr(w, 0x48, 0xFFE0); return 0;",
           "replace": "    case 0x8D56: return 0;   /* MUT */",
           "why": "hook $8D56 points the rolling text at its start ($4A = $B099)"
+        },
+        {
+          "file": "src/seq_entry3.c",
+          "find": "      if (w[0x0520]) return t;                                        // 6A53 LDA $0520 / BEQ / RTS",
+          "replace": "      (void)0;   /* MUT */",
+          "why": "the moon's first light step waits for record 0's fade (FD/E39C, task $37FA) like the other two"
         }
       ],
-      "note_pass": "the ending's $C3 stage (entries 10/11/14/15 = $7E:8538) runs natively (src/seq_ending.c on seq_race.c's shared machine): its two scripts, the waits on the song's markers (`F5`, the SPC's port 2), the fades and the END, the tasks and hooks whose work the logic reads (the orbit, the credits' pager, the rolling text, the planet, the backdrops' list resets) and the NMI's song change with its upload frames -- `FF 2B` for 4747 frames and `FF 2E` for 10948, byte for byte with the cartridge",
-      "notes": "Roadmap G1a item 1 (the $C3 sequences): the ending a playthrough meets (sequence_table.md sec. 13). The cartridge runs saves/ending_re/ending_pre_ff2b.state (reached by the oracle from Jackie's ch27, memory note endgame-oracle-route) under the rule; the port runs ct.exe --seqstage from the cartridge's state at the hand-off (f130), its SPC seeded into CtAudio; frame k = the cartridge's k + 179, the SPC 50 frames ahead. The picture is stage 2."
+      "note_pass": "the ending's $C3 stage (entries 10/11/14/15 = $7E:8538) runs natively (src/seq_ending.c on seq_race.c's shared machine): its two scripts, the waits on the song's markers (`F5`, the SPC's port 2), the fades and the END, the tasks and hooks whose work the logic reads (the orbit, the credits' pager, the rolling text, the planet, the backdrops' list resets) and the NMI's song change with its upload frames -- `FF 2B` for 4747 frames and `FF 2E` for 10948, byte for byte with the cartridge; and entry 3 from the story (`FF 23`, after the Blackbird) for 582 frames, the END on the same frame",
+      "notes": "Roadmap G1a item 1 (the $C3 sequences): the ending a playthrough meets (sequence_table.md sec. 13). The cartridge runs saves/ending_re/ending_pre_ff2b.state (reached by the oracle from Jackie's ch27, memory note endgame-oracle-route) under the rule; the port runs ct.exe --seqstage from the cartridge's state at the hand-off (f130), its SPC seeded into CtAudio; frame k = the cartridge's k + 179, the SPC 50 frames ahead. The picture is stage 2. FF 23: the attract's own hand-off (saves/attract_entry3_handoff_rule_f8859.state) with $7F0057 bit 2 cleared and the storyline set to D3, so scene 107's controller takes the story's arm (saves/blackbird_re)."
     },
     {
       "name": "ending-story-plays-through-in-the-port",
@@ -39355,6 +39364,67 @@
       ],
       "note_pass": "the Day of Lavos's first mimic fight (scene 467, `D8 91 E0`) is the cartridge's: Ayla's attack on the fallen mimic re-targeted by C1/D63F's random roll ($26 5C -> 62, seat 9), the next draws, the victory with no celebration ($2989 bit 0, C1/35A9) and the ack, the arena 15A -- each on the cartridge's frame to 3",
       "notes": "From the oracle's own run (saves/lavos_re/lavos_1d3_wait.*, Jackie's ch26 party at the Lavos shell). The cartridge under the same pad: $26 = 62 f767, 65 f1075, the ack f1380, 15A f1490. Before the two fixes the port struck the first living slot (seat 7) and held the 64-frame celebration: the ack came at f1280 / f1446 and the boss rush drifted."
+    },
+    {
+      "name": "panorama-story-ff23-plays-through-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "107",
+        "--loadwram",
+        "saves/blackbird_re/ff23_story_f18.lakewram",
+        "--walkscript",
+        "n:1200"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/blackbird_re/ff23_story_f18.state",
+        "CT_LOCTRACE": "1",
+        "CT_FIELD_MEMMON": "0100:2",
+        "CT_SHOTS": "build/_ff23_story",
+        "CT_SHOTS_AT": "1200",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/blackbird_re/ff23_story_f18.state",
+        "saves/blackbird_re/ff23_story_f18.lakewram"
+      ],
+      "expect": [
+        "loctrace: -> loc 1F6 tile(145,53) facing=1 style=0",
+        "sequence: entry 3 (the story's panorama) opening at f5 -- 5728360 + 49152 + 120000 cycles = 17 black frame(s)",
+        "sequence: the panorama ended ($7E:0000=1) -> reboot into loc 1F6",
+        "reboot: JML C0:0000 -> loc 1F6 tile(145,53) bits01",
+        "fmemmon f1010 loc=1DD  0100=DD01*"
+      ],
+      "pin": [
+        "^loctrace: ",
+        "^sequence: ",
+        "^reboot: ",
+        "^fmemmon f\\d+ loc=1DD"
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      if (seqId != 2 && !seqOpen && CtEntry3StageHas((uint8_t)seqId)) {",
+          "replace": "      if (0) {   /* MUT: entry 3 from the story is not ported */",
+          "why": "without the native stage the port held on `FF 23` for good: after the Blackbird the Epoch's world never came"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    owFarLzTo(ram, 0x7F, 0x9000, 0xFDF0, 0x0009);",
+          "replace": "    (void)0;   /* MUT */",
+          "why": "1F6's `34 5A 7B` (C2/7B5A) decompresses its picture data into $7F:9000"
+        }
+      ],
+      "note_pass": "after the Blackbird the story's panorama (`FF 23`, scene 107's story arm) plays through in the port: loc 1F6 staged, the native entry-3 stage to its END, the reboot into the Epoch's world 1F6 (its natives C2/7B5A / 7B9F) and on to 1DD -- the cartridge's path",
+      "notes": "Roadmap G1a item 1. The cartridge from the same state (saves/blackbird_re/ff23_story_f18: the attract's hand-off at loc 06B with the story's two bytes, $7F0057 bit 2 clear and the storyline D3): 1F6 f3, `FF 23` f8, the END f583, 1DD f1011. A real capture at the Blackbird would grade the context too (the song, the party)."
     },
     {
       "name": "jackie-saves-census-vs-oracle",

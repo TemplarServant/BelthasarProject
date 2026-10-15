@@ -2477,3 +2477,33 @@ overlay RNG `$039B` aside), the markers on the same frames. The story run: `FF 2
 hooks' drawing, the main thread's `$8930`, the scroll `$46` -- its +1 also rides the field bit, 9EDF); entries 10 (`FF 2A`)
 and 15 (`FF 2F`) are not graded against the cartridge (no state at their call: they need `glb[110]` the other way -- scene
 81 obj0 fn3 and scene 90's `16 6E 03 00 05`); 8A01's `$038C = 01` and 8AF5's are read from the listings, not measured.
+
+---
+
+## 14. ENTRY 3 FROM THE STORY (`FF 23`, scenes 102-107 after the Blackbird) -- stage 1 (2026-10-15)
+
+**Where the story calls it.** Scenes 102-107 (locs 066-06B, blank rooms) share one controller, obj0 fn0's continuation
+(raw script $000E): `16 57 04 06 08` -- with `$7F0057` bit 2 (the attract) `DD B1 03 08 08 / FF 63`; else `18 D4 13 / 18 D3
+03 / 10 0E` (the storyline at D3), `E7 00 00 / 65 82 F6 / DD F6 03 91 35 / FF 23`: the Epoch's world 1F6 staged, then entry 3.
+The Blackbird (scene 377) leaves for loc 066 (`DF 66 ..` at its $088E / $0894); Jackie's ch23 (loc 173, storyline CF) is
+before it and ch24 (world 1F6, D3) after -- so the story's `FF 23` is on the way out of 12000 BC, and the port held there.
+
+**The setup's story arm** ($7E:671F, `$0384` bit 6 clear): pages A `$6902` / B `$693A`, `$038C = 0E`, the moon's fade (records
+0/1 by `$6ACD`, length 50, then FD/E39C once), `$0352-$0354 = 7E:F1C4`, `$7E4259 = 1`; its DMAs read the field's BG1 rows
+(the picture's). Page A adds `3749 3754 73C6 6A23 69AF 37FA 6A51`, the hooks `388B 380B 66DD`, the fade-in `347A`, and waits;
+page B counts seven spans (1F, 77, 77, 31, 31, 1D, 77 frames, r0 -1 each), adds `34E3`, waits 3F, and ENDs. No `F5`, no call.
+Tasks that write the logic's bytes: `$37FA` = FD/E39C (`JSL FD/FFF7`, the palette records), `$6A51` -> `$6A74` -> `$6A97`
+(each waits for record 0's fade, `$0520 = 0`, arms the next with `$6ACD` and hands its slot on, `$39B1`; the last leaves,
+`$39A7`), `$69AF` (page B's r0 kept to 0-7, r2 -1 a frame, the 64 offset words at `$0043`, `$C3`/`$C4` stepping the mosaic).
+`$73C6` (the PPU's multiplier) and `$6A23` (the `$F000` table) only draw.
+
+**How it was graded without a capture.** The attract's own hand-off at loc 06B (saves/attract_entry3_handoff_rule_f8859.state)
+with the story's two bytes put back -- `$7F0057` bit 2 cleared, `$7F0000 = D3` (saves/blackbird_re/ff23_story_poked.state, the
+CTLS CRC fixed): the cartridge then takes the story's arm itself, `DD F6` f21, `FF 23` f26, the END f601 (the teardown's reboot
+in the same frame: the field clears both IPs), world 1F6, loc 1DD f1029. Native (src/seq_entry3.c, `ct.exe --seqstage
+.../ff23_handoff_f25.state 23`): **582 frames, 0 differing, END f601 on both** (tools/ending_stage_cmp.py drive 23). The port
+(field.c) from f18 of that run: 1F6 f3, the stage f5 (17 black frames: the overlay's decompression; the setup 120000 cycles),
+the reboot into 1F6, whose world script needed two more natives (C2/7B5A: C6:FDF0's packet 3 into $7F:9000; C2/7B9F:
+C6:FEA0's packet 18 into $7E:C600, both through C3/0557), and 1DD at f1010 (the cartridge f1011).
+
+**Open.** The picture (stage 2); a real capture at the Blackbird would grade the context too (the song playing, the party).
