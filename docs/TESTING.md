@@ -2373,3 +2373,13 @@ Enemy C1 confuses the party; the line must read `IDENTICAL`. A forced (confused)
 (C1/C011); when the counter takes no action, C1/881C's eval still runs on the same frame (C1/8C09, its draws). Without it
 the RNG cursor runs one along and the next confused PC's target (FD/AB40) differs -- C1's fourth action walks to Lucca
 instead of the enemy. disasm/notes/battle_ai_interp.md sec. 25.3.
+
+### field-dragon-tank-bridge-vs-rule-cartridge (`python tools/dragon_tank_cmp.py`)
+
+The Dragon Tank's bridge (loc 01C) from its arrival to its reward lines, port against the rule's cartridge on the same
+drive (seed saves/field_re/tank/tele01c.state / .lakewram, gitignored -- SKIP without them; how it was made is the tool's
+docstring). Four lines: the tank box at the arrival (c1440) and at the hurt flash (c2160), Crono's attack anims ($9877
+whenever he acts: the far 0E of C1/4A71's walk test against the head and the grinder) and the reward lines (XP and Gold,
+no TP line before Spekkio). The two box counts are pinned residuals -- the port's tank and Lucca run 2-3 frames behind
+after the second trigger and Lucca stops 4 px nearer Crono -- so a re-pin is legitimate only when that lag is fixed
+(the counts then rise), never to absorb a fall. The anim and line signatures must stay as pinned.

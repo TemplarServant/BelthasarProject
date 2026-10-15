@@ -7017,7 +7017,11 @@ static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_
     long tp = 0x0CCBC9L + 2L * h->mem[0x020C];
     if (rom && tp + 1 < romLen) fieldCtDecodeAt(0x0C0000L + (rom[tp] | (rom[tp + 1] << 8)), line, (int)sizeof line);
   } else {
-    if (!h->victoryHold || h->victoryHold < CT_BATTLE_VICTORY_CELEBRATE) return;   // still in the 3+64+7 hold
+    // still in the 3+64+7 hold -- the hold battleResultsTick waits out, so without the 64 when C1/35A9 returned early
+    // ($2989 bit 0: no celebration). Gated on the full 72 here, a no-celebration fight ran its first line unseen: the
+    // Dragon Tank's (D8 87, loc 01C) "Got 40 experience point(s)!", which the cartridge shows c7235-7261.
+    int vhold = (h->mem[0x2989] & 0x01) ? CT_BATTLE_VICTORY_CELEBRATE - CT_BATTLE_VICTORY_LADDER : CT_BATTLE_VICTORY_CELEBRATE;
+    if (!h->victoryHold || h->victoryHold < vhold) return;
     if (h->resultLine < 0 || h->resultLine >= h->resultN) return;
     // CD/01FD `STZ $CCEC` CLOSES the window between lines: phases 2/3 are the 16f post-close hold plus the
     // next line's build, and the screen is genuinely box-FREE for those 19-20 frames (measured $CCEC=0 at
@@ -7737,11 +7741,19 @@ static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattle
     // The stateless "elapsed frames / 10" cycle this replaced could not hold a pose across a row rebuild, did
     // not know a rebuild keeps the cursor, and read a facing-independent dwell row as if poses[c] held for
     // dwells[c] (the ROM reloads with dwells[c+1], C1/3489).
-    int rest = h->mvInited ? BT_IDLEPUB(h, slot) : mem[0x9907 + 3 + slot];
+    // A TYPE-3 COMBATANT NEVER CHANGES POSE. The builder's first test is `C1/1C4A LDX $9679 / LDA $967C,X / CMP #03 /
+    // BEQ RTS` -- ahead of the $9907 publish (1C66), the tile upload and the dx,dy template (1F3C) -- so neither the idle
+    // walk (C1/345D) nor an anim script's pose (C1/2F10 / 3702 / 4307) reaches the picture: it stays the pose the staging
+    // published (CC:E366, $9907,X = 00). MEASURED (the Dragon Tank, cmb 3, loc 01C): $967C+3 = 03 and $990A = 00 from the
+    // boot to the victory, while the hurt flash's script asks for pose 01 -- sprite 403's frame 1, all chips 0000 -- so the
+    // port drew the body as nothing for the flash and the twenty frames after it (the cartridge: eight frames of the white
+    // silhouette, then the body).
+    int pub = mem[0x9907 + 3 + slot];
+    int rest = etype == 3 ? pub : h->mvInited ? BT_IDLEPUB(h, slot) : pub;
     // The ACTING enemy's cells come from the live anim script (battle_enemy_anim_script.md), the same
     // machine the Hetake's renderer reads -- so an enemy with no dedicated renderer animates its attack
     // too, instead of standing in its idle window through the whole action.
-    if (h->ascOn && h->ascPmPose[3 + slot] >= 0) {
+    if (etype != 3 && h->ascOn && h->ascPmPose[3 + slot] >= 0) {
       uint16_t gp[16];
       if (CtBattleEnemyPalRom(id, gp) && etype <= 3) {
         const uint16_t* gw = battleEnemyFlashing(h, 3 + slot) ? battleFlashPalFor(h, 3 + slot) : gp;
@@ -18223,6 +18235,17 @@ int main(int argc, char** argv) {
       // (defect #7 of the 2026-09-02 list, 'Marle moved without animating'). With the legs live the NPC
       // frame is the drain's; the ticker remains the fallback for hosts without the ROM image. (The lead PC
       // is drawn from the same byte in its own block below.) $FF is CAD9's 'no frame yet' sentinel.
+      // CLASS 3 SHOWS WHAT C0/E12A STAGED: FRAME 0. A sprite of 24 pieces ($1201,X & 3 = 3) never goes through the
+      // drain (C0/CAD9's class dispatch rejects it, and so does the CB0A twin at CB2F). Its picture is staged ONCE, when
+      // op 0x83 loads it -- C0/47DC `LDA $1201,X / AND #03 / CMP #03` -> 47E9 JSR C0/E12A (and the reload chain's
+      // C0/0212) -- and E12A stages the assembly's FIRST frame: `LDA #00 / STA $0F01,X` (E14A), the 0x60
+      // chips from `[$1380,X]` at Y = 0 into the $7F:3800 slot and VRAM, and the live OAM records $7F:4BC2.. from the
+      // offsets at Y = $C0 (E1CF). The camera-window latch C0/A88D later writes its $FF sentinel to $0F01,X (A902)
+      // without re-staging, so the cartridge goes on drawing frame 0 under that $FF. MEASURED (the Dragon Tank's body,
+      // obj13 sprite 403, loc 01C, saves/field_re/tank/tele01c.state): $0F1B = FF from the latch until the battle, OAM
+      // #44-67 = frame 0's 24 pieces (tiles 040-08E); the ticker below took the FF for "no frame yet" and drew frame 1,
+      // whose chips are all 0000 -- the body vanished and left the head (obj14) and the wheel (obj15) in the air.
+      if (CtSceneFrameLegsOn() && i != pObj && (CtSceneMem7E(f.vm)[0x1201 + i * 2] & 3) == 3) { actorAf[i] = 0; continue; }
       if (CtSceneFrameLegsOn() && i != pObj) {
         uint8_t f01 = CtSceneMem7E(f.vm)[0x0F01 + i * 2];
         if (f01 != 0xFF) { actorAf[i] = f01; continue; }

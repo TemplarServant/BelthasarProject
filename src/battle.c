@@ -161,15 +161,15 @@ const uint8_t* CtBattleRom(long* lenOut) { if (lenOut) *lenOut = gRomLen; return
                                         Lucca 0x05, Frog 0x08 -- measured; battle_3pc_lucca_frog.md §1.3 +
                                         battle_polish3.md §3). Its FAR sibling is CD/4000, its CRIT CD/400E. */
 #define ROM_FAR_ANIM_TBL  0x0D4000u /* CD/4000: per-charid FAR/ranged (variant) anim id (C1/4340, the $9930==0
-                                        out-of-range branch): 0E 02 04 11 0E 0E 12 (Marle FAR 0x02; Crono 0x0E
-                                        latent -- he approaches to melee range, battle_polish3.md §3.3). */
+                                        out-of-range branch): 0E 02 04 11 0E 0E 12 (Marle FAR 0x02; Crono 0x0E when
+                                        C1/4A71 finds no walk to the target -- the Dragon Tank's head). */
 #define ROM_CRIT_ANIM_TBL 0x0D400Eu /* CD/400E: per-charid CRIT anim id (C1/438B): 01 0F 10 07 09 0B 0D
                                         (Crono 0x01 dedicated flashing / Marle 0x0F crossbow crit -- ORACLE-
                                         PROVEN no whole-screen flash, battle_crit.md §C.3). */
 #define ROM_WEAPON_RANGED_TBL 0x0CF63Cu /* CC/F63C: per-charid WEAPON-ranged flag (C1/4A40): 01 00 00 01 01 01
-                                        01 -- Marle/Lucca RANGED(0) keep the pure 40² dist test (close CD/4007 /
-                                        far CD/4000); MELEE(1) run the C1/4A71 refinement (undecoded) but
-                                        approach -> stay close (battle_polish3.md §3.2). */
+                                        01 -- MELEE(1) take C1/4A71's walk test (battleTargetWalkable) whatever
+                                        the 40² dist test said; RANGED(0) take it only where the dist test said
+                                        close. */
 #define ROM_REWARD_TBL    0x0C5E00u /* CC/5E00: enemy REWARD records id*7 (FD/ABD2): +0..1 XP(u16) +2..3
                                         Gold(u16) +4 drop-item +5 charm-item +6 TP(u8) (battle_results_window.md P2) */
 // --- THE LEVEL-UP tables (disasm/notes/battle_victory_rewards.md; ROM offset = (bank&0x3F)<<16|addr). ---
@@ -10004,6 +10004,42 @@ static int battleAnimParse(CtBattleHost* h, int sel, int isTech) {
 // §3.1): each selector = one CD/5FF0 script with its own windup+58+tail length. 0x00 Crono melee / 0x03 Marle
 // CLOSE-melee both 125; 0x02 Marle FAR-ranged 137; 0x01 Crono crit 177; 0x0F Marle crit-crossbow 146. An
 // unmeasured selector (Lucca 0x05/0x10, Frog 0x08/0x09, ...) falls back to the melee 125 (G7 boundary).
+// C1/4A71's VERDICT for the physical anim selector C1/49FF: can the attacker walk to the target? The grid is CC/F110's,
+// built just before (C1/4336 JSL): the arena image $7BFD copied to $7CFD, then 0x40 on the cell of every combatant whose
+// $96F5,Y is set, Y = 0..10 (3..13 with $2989 bit 2). C1/4A71 then puts 0x20 on the attacker's cell and 0xFF on the
+// target's (one row up when they share a cell, 4AA5-4AAD) and floods from the attacker: wave $94 = 1, 2, .. writes every
+// free (0) neighbour -- up, down, left, right, the cell offsets F0 / 10 / FF / 01 with an 8-bit wrap -- and a neighbour
+// holding 0xFF counts a touch in $92. A wave that touched ends the flood (C1/4B77 then traces the path, which this verdict
+// does not need); one that did not starts the next, until $94 reaches 0x1F: `LDA #80 / STA $92` (4B71) -- unreachable, and
+// C1/4A62 `LDA $92 / BPL` turns that into $9930 = 0. So the target must lie within 30 steps through free cells.
+// MEASURED (the Dragon Tank, loc 01C, saves/field_re/tank/tele01c.state): Crono's attacks on the Tank Head (cmb 9, up on
+// the tank) and the Grinder take $9877 = 0E (CD/4000[0], the far variant) on the cartridge, the port's 00.
+static int battleTargetWalkable(CtBattleHost* h, int atk, int tgt) {
+  const uint8_t* s = h->mem;
+  uint8_t g[256];
+  memcpy(g, s + 0x7BFD, 256);                                       // CC/F110's MVN $7BFD -> $7CFD
+  int y0 = (s[0x2989] & 0x04) ? 3 : 0;                              // CC/F121-CF12C
+  for (int y = y0; y < y0 + 11; y++)                                // CC/F12E-CF153, $82 = 0B
+    if (s[0x96F5 + y]) g[(s[0x1D23 + y] & 0xF0) | (s[0x1D0C + y] >> 4)] = 0x40;
+  int self = (s[0x1D23 + atk] & 0xF0) | (s[0x1D0C + atk] >> 4);     // C1/4A79-4A89
+  int goal = (s[0x1D23 + tgt] & 0xF0) | (s[0x1D0C + tgt] >> 4);     // C1/4A97-4AA4
+  if (goal == self) goal = (goal - 0x10) & 0xFF;                    // C1/4AA5-4AAD
+  g[self] = 0x20; g[goal] = 0xFF;
+  static const int NB[4] = { 0xF0, 0x10, 0xFF, 0x01 };             // C1/4ACA / 4AEA / 4B0A / 4B2A
+  uint8_t cur[257], nxt[257]; int nc = 1; cur[0] = (uint8_t)self;
+  for (int wave = 1; wave < 0x1F; wave++) {                         // $94 = 1 .. 1E (4B66-4B6E)
+    int nn = 0, touched = 0;
+    for (int i = 0; i < nc; i++)
+      for (int k = 0; k < 4; k++) {
+        int cell = (cur[i] + NB[k]) & 0xFF;
+        if (g[cell] == 0) { g[cell] = (uint8_t)wave; nxt[nn++] = (uint8_t)cell; }
+        else if (g[cell] == 0xFF) touched = 1;
+      }
+    if (touched) return 1;                                          // 4B4D LDA $92 / BNE -> the path, $92 > 0
+    memcpy(cur, nxt, (size_t)nn); nc = nn;                          // (an empty list only runs the waves out)
+  }
+  return 0;                                                         // 4B71 $92 = 80
+}
 static int battlePcAnimSpan(int sel) {
   switch (sel & 0xFF) {
     case 0x02: return CT_SPAN_PC_RANGED;        // Marle FAR/ranged crossbow (137)
@@ -10096,23 +10132,25 @@ static int battleActionSpan(CtBattleHost* h, int atk, int isTech) {
     // ROM chain: $AE92=1 -> C1/49FF setup ($9930=1 default MELEE; C1/2AE3 sets threshold $9893=0x0640=40²,
     // then C1/2B49 computes dist²=dx²+dy² of the LIVE foot positions -> $9872; out of range STZ $9930) ->
     // selector C1/4340. The per-char WEAPON-ranged flag CC/F63C (01 00 00 01 01 01 01: Marle/Lucca RANGED=0,
-    // all others MELEE=1) decides whether the pure dist test drives the pick: a RANGED weapon keeps it (close
-    // CD/4007 / far CD/4000); a MELEE weapon runs the C1/4A71 refinement (UNDECODED) but its PC APPROACHES to
-    // melee range -> stays close (CD/4007), its far variant latent (§3.3: Crono 0x0E capture-pending -> NOT
-    // wired). Selector: crit ($AE9B bit7) -> CD/400E[cid]; else in-range -> CD/4007[cid]; far -> CD/4000[cid].
+    // all others MELEE=1) decides what the walk test C1/4A71 (battleTargetWalkable) adds: a MELEE weapon takes its
+    // answer whatever the distance said, a RANGED one only when the distance said close (far stays far).
+    // Selector: crit ($AE9B bit7) -> CD/400E[cid]; else in-range -> CD/4007[cid]; far -> CD/4000[cid].
     // The prior `(cid==1)?0x0F` was Marle's CRIT anim (CD/400E[1]) mislabeled as her normal (every earlier
     // 0x0F capture was a crit, $AE9B=80); crit-off her normal is 0x03 (close, 125) / 0x02 (far, 137), SAME
     // −18 damage (both $AEEB=02, anim/span ONLY). Tables read byte-exact from the ROM (verified this session).
     int cid = s[0x2980 + atk];
     const uint8_t* rom = CtBattleRom(NULL);
     int weapRanged = rom ? (rom[ROM_WEAPON_RANGED_TBL + (cid & 0xFF)] == 0) : (cid == 1);
-    int melee = 1;                                              // $9930 default 1 (C1/49FF); a melee-weapon PC approaches -> close
-    if (weapRanged && h->actTarget >= 0 && h->actTarget < 11) { // RANGED weapon: the pure 40² dist test drives it
+    int melee = 1;                                              // $9930 default 1 (C1/49FF)
+    if (h->actTarget >= 0 && h->actTarget < 11) {
       int dx = BT_LIVEX(h, atk) - BT_LIVEX(h, h->actTarget);      // live foot Δ (mvLiveX/Y == $1D0C/$1D23, the ROM's test source)
       int dy = BT_LIVEY(h, atk) - BT_LIVEY(h, h->actTarget);
       melee = (dx * dx + dy * dy) <= 0x0640;                    // C1/2AE3 threshold $9893=0x0640=40² (inclusive). VERIFIED
                                                                 // 2026-09-09: C1/49FF `JSR C1/2AE3` (A9 40 / A9 06); the 0x0900
                                                                 // stub is C1/2B2B, the cond-1F counter gate's entry -- not this.
+      // C1/4A40-4A6D: a MELEE weapon (CC/F63C != 0), or a ranged one the distance kept close, then asks C1/4A71 whether
+      // the attacker can WALK to the target, and that answer is the verdict ($92 < 0 -> $9930 = 0, the far anim).
+      if (!weapRanged || melee) melee = battleTargetWalkable(h, atk, h->actTarget);
     }
     s[0x9930] = (uint8_t)melee;                                // C1/49FF's verdict, read by C1/4394 to pick the config
     int normalSel = rom ? rom[(melee ? ROM_NORMAL_ANIM_TBL : ROM_FAR_ANIM_TBL) + (cid & 0xFF)] : 0x00;
@@ -15745,8 +15783,20 @@ static void battleResolveDrops(CtBattleHost* h) {
 static void battleBuildResults(CtBattleHost* h) {
   battleResolveDrops(h);                                      // battle_drop_charm.md: roll the pending drops FIRST
   h->resultN = 0; h->resultLine = -1; h->resultPhase = -1; h->resultPhaseT = 0;
+  // THE TECH PASS, READ-ONLY: C1/F205 on a copy of the WRAM -- what this victory will learn, single, dual and triple
+  // (fieldBattleFinish applies it on the real one, from the same blocks and $2830.., untouched in between). It runs
+  // first because it is also what decides the TP line (below).
+  long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
+  static uint8_t tpv[0x10000];
+  memcpy(tpv, h->mem, sizeof tpv);
+  if (rr) CtBattleVictoryTechPass(tpv, rr, h->rewTp, h->glb ? h->glb[0x1E0] : 0);
   if (h->rewXp > 0) { h->resultKind[h->resultN] = 0; h->resultVal[h->resultN] = h->rewXp; h->resultN++; }  // XP
-  if (h->rewTp > 0) { h->resultKind[h->resultN] = 1; h->resultVal[h->resultN] = h->rewTp; h->resultN++; }  // TP
+  // THE TP LINE IS FD/AD32's: `LDA $B2AF / BIT #10 / BEQ` before the total's own test (AD39-AD41), and bit 4 has one
+  // writer, C1/F4A2 -- in the tech pass's C1/F45F, past `CC/1BEB[tech*11] bit 7 -> AND $7F01E0 / BNE` for each present
+  // seat's next tech. A party whose next techs are all gated ($7F01E0 = 0 before Spekkio) earns the TP and shows no
+  // line. MEASURED (the Dragon Tank, loc 01C, saves/field_re/tank/tele01c.state): TP total $B2DB = 5, $B2AF = C0
+  // (C1:F7ED), and the cartridge shows "Got 40 experience point(s)!" then "Found 500G!" -- the port showed the TP line.
+  if (h->rewTp > 0 && (tpv[0xB2AF] & 0x10)) { h->resultKind[h->resultN] = 1; h->resultVal[h->resultN] = h->rewTp; h->resultN++; }
   if (h->rewGp > 0) { h->resultKind[h->resultN] = 2; h->resultVal[h->resultN] = h->rewGp; h->resultN++; }  // Gold
   for (int d = 0; d < h->rewDropN && h->resultN < CT_BATTLE_RESULT_MAX; d++) {                             // items
     h->resultKind[h->resultN] = 3; h->resultVal[h->resultN] = h->rewDrops[d]; h->resultN++;
@@ -15764,12 +15814,7 @@ static void battleBuildResults(CtBattleHost* h) {
   // The predictions are read-only (apply=0): the blocks are applied at fieldBattleFinish, from the same block+0x12 /
   // +0x2B / +0x2D and $2830 / $2837, untouched between the victory and the battle's end, so predict and apply agree.
   // glb = the $7F page for the magic-unlock gate.
-  { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
-    // THE TECH PASS, READ-ONLY: C1/F205 on a copy of the WRAM -- what this victory will learn, single, dual and triple
-    // (fieldBattleFinish applies it on the real one, from the same blocks and $2830.., untouched in between).
-    static uint8_t tpv[0x10000];
-    memcpy(tpv, h->mem, sizeof tpv);
-    if (rr) CtBattleVictoryTechPass(tpv, rr, h->rewTp, h->glb ? h->glb[0x1E0] : 0);
+  {
     for (int seat = 0; seat < 3; seat++) {
       uint8_t id = h->mem[0x2980 + seat];
       if (id == 0xFF || id >= 8) { h->rewLevels[seat] = 0; continue; }
@@ -15885,7 +15930,11 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
       long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
       int idx = (s[0x2991] >> 3) & 7;                                                 // CD/01A5, Message Speed
       int dwell = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? rom[ROM_MSG_DWELL_TBL + idx] : 0xA0;
-      if (aHeld || h->resultPhaseT >= dwell) { h->resultPhase = 2; h->resultPhaseT = 0; }
+      if (aHeld || h->resultPhaseT >= dwell) {
+        h->resultPhase = 2; h->resultPhaseT = 0;
+        if (getenv("CT_BATTLE_TRACE"))
+          fprintf(stderr, "results f%d line%d dwell ends (%s)\n", h->frames, h->resultLine, aHeld ? "A held" : "timeout");
+      }
       break; }
     case 2:                                                                          // 16f post-close hold
       if (h->resultPhaseT >= CT_BATTLE_RESULT_RAMP) {
@@ -22277,7 +22326,11 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // HELD copy ($00F8 bit7, CD/01F2 `LDA $F8 / BPL`), NOT an edge; CT_BATTLE_MASHA counts as held because
   // it models a continuous masher (the same drive as the oracle's own mash-A victory capture) -- our
   // MASHA toggle is TICK-level and would otherwise read as "released" on most real frames.
-  if (h->victoryHold > 0) battleResultsTick(h, ((input & CT_BIN_AH) != 0) || masha);
+  // The held copy is this frame's $F8 as CD/0348 latched it into $CC99 (battlePadLatch, above): the pad's auto-read word
+  // through C2/8555's button config, whatever drives it -- a keyboard, a pad or a script. (CT_BIN_AH is the host
+  // keyboard's level alone: a scripted drive's A reached the commands and never the dwell, which timed out instead --
+  // the Dragon Tank's two lines 48 frames each against the cartridge's 26 and 30.)
+  if (h->victoryHold > 0) battleResultsTick(h, (s[0xCC99] & 0x80) != 0 || masha);
 
   // ===== $A013 ACTION-FREEZE (battle_loop.md ADDENDUM §E-§H + PART 2 freeze -- the "battle too fast"
   //       fix). While an action animates ($A013=1) the ROM's action-execution routine C1/4090 OWNS the
