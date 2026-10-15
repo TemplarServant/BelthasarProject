@@ -13,9 +13,11 @@ the cartridge's side reproduces the original numbers exactly, and the port's kil
 
 Per frame from the kill, the dying Roly's box (84,26)-(118,62) is compared with the same box once it is gone (the
 cartridge's +60): the count of pixels that still differ = how much of the corpse is drawn. A dissolve shows the
-count holding, then thinning to 0; a corpse that vanishes on the blow reads 0 from the first frame.
-
-    roly-dissolve: +<k> cartridge <n> port <m>
+count holding, then thinning to 0; a corpse that vanishes on the blow reads 0 from the first frame. The port's +k is set
+against the cartridge's +k+1: inside a fight the pictures align at P+1 (docs/TESTING.md; the port's own picture draws what
+the NMI shipped -- the CGRAM page and, since 2026-10-15, CD/3ED2's dither tiles). Graded at the same +k the port read one
+to two frames ahead -- the comparison's offset, not the routine's (CD/0043's 43 frames, battle_death_dissolve_order.md,
+last addendum); at P+1 every sampled frame is the cartridge's count.
 """
 import os
 import subprocess
@@ -33,7 +35,8 @@ OUT = os.path.join(ROOT, 'build', '_roly')
 CSTATE = 'saves/battle_re/roly_rider_battle.state'
 PSEED = 'saves/battle_re/roly_rider_s119.lakewram'
 CKILL, PKILL = 324, 564            # the kill frame on each side (cartridge: the battle state's; port: the field's)
-OFFS = [0, 2, 10, 20, 30, 40]
+OFFS = [0, 2, 3, 10, 12, 20, 30, 40, 42, 43]
+PICT = 1                      # the cartridge's picture of the port's frame P is its --peek P+1 (in a fight)
 BOX = (84, 26, 118, 62)       # the port's picture; the oracle's PNG is 8 lines lower
 DRIVE = ','.join(['100:2,0:10,100:2,0:120'] * 3)
 
@@ -79,7 +82,7 @@ def main():
     cend = cart_frame(CKILL + 60)[y0 + 8:y1 + 8, x0:x1]          # (the oracle's picture starts 8 lines higher)
     pend = port_frame(PKILL + 60)[y0:y1, x0:x1]
     for k in OFFS:
-        c = cart_frame(CKILL + k)[y0 + 8:y1 + 8, x0:x1]
+        c = cart_frame(CKILL + k + PICT)[y0 + 8:y1 + 8, x0:x1]
         p = port_frame(PKILL + k)[y0:y1, x0:x1]
         cn = int((np.abs(c - cend).max(axis=2) > 24).sum())
         pn = int((np.abs(p - pend).max(axis=2) > 24).sum())

@@ -138,7 +138,7 @@ def emit(dither):
     L.append("#define CT_BATTLE_DISSOLVE_H")
     L.append("")
     L.append("#define CT_DISSOLVE_STEPS      32   /* dither levels; pixel clears at step==dither+1 */")
-    L.append("#define CT_DISSOLVE_HOLD       9    /* peek frames pal-swap(~N180)->dissolve start(N189) */")
+    L.append("/* The timing is not here either: CD/0043's own waits (battle.c battleDeathRoutineStart, battleAdvanceDissolves). */")
     L.append("#define CT_DISSOLVE_RATE_PX    20   /* px cleared per frame (emergent from the matrix) */")
     L.append("/* The recolor is not here: the corpse draws with the live OBJ palette its $993C names -- CF/FE20's copy into")
     L.append(" * palette 4 and CD/00A5's red fade record (battle_death_dissolve_gate.md PART 5). */")

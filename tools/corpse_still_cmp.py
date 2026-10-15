@@ -12,12 +12,17 @@ on through the dissolve.
 Cartridge: build/ct.exe under the rule, `--monitor` of the alive list $AF02, the segment flags $98A7 and the feet
 $1D0C / $1D23 from saves/battle_re/forest_wait_ambush_active.state. Port: the same WRAM (forest_wait_ambush_active.lakewram),
 CT_BATTLE_MASHA, CT_FIELD_MEMMON of the same bytes (and $A0FD). For each delist ($AF02,slot := FF), over the 80 frames
-from it -- and, not graded, the frames from it that $A0FD still reads 1 (the cartridge's head waits for the scan; the
-port's runs on the delist's frame, see the check's notes):
+from it; then the frames from it that $A0FD still reads 1 -- the loop's head C1/1073 `STZ $A0FD` waits for the death scan
+(every corpse's routine CD/0043), so the NMI's stepper CF/F978 moves nobody through a dissolve -- and, over those frames,
+the moves of every OTHER enemy's foot (the living walkers):
 
     corpse-still: death<k> slot <s> foot (<x>,<y>): cartridge <n> move(s), port <m> move(s); segment flag at the delist: cartridge <a> port <b>
-    corpse-still-info: death<k> $A0FD held from the delist: cartridge <n> frame(s), port <m>
+    corpse-still: death<k> $A0FD held from the delist: cartridge <n> frame(s), port <m>; other enemies' moves meanwhile: cartridge <a> port <b>
     corpse-still: <k> of <n> corpse(s) moved on the port
+
+The user, 2026-10-15 (translated from Portuguese): "when a final blow kills more than one enemy, they keep moving a little before the
+dissolve". The port's head ran on the delist's frame: the living Avian Chaos stepped 7 px through the second Beetle's
+dissolve (cartridge 0).
 """
 import os
 import re
@@ -68,6 +73,17 @@ def moves(rows, f0, c):
     return sum(1 for a, b in zip(foot, foot[1:]) if a != b), foot[0]
 
 
+def others(rows, f0, n, dead):
+    """Foot changes of every enemy but `dead` over the n frames from f0 (the living walkers through the routine)."""
+    k = 0
+    for c in range(3, 11):
+        if c == dead:
+            continue
+        foot = [(byte(rows, f, 0x1D0C, c), byte(rows, f, 0x1D23, c)) for f in range(f0, min(N, f0 + n) + 1)]
+        k += sum(1 for a, b in zip(foot, foot[1:]) if a != b)
+    return k
+
+
 def held(rows, f0):
     n = 0
     while f0 + n <= N and byte(rows, f0 + n, 0xA0FD, 0) == 1:
@@ -99,8 +115,9 @@ def main():
         print('corpse-still: death%d slot %d foot (%d,%d): cartridge %d move(s), port %d move(s); segment flag at the '
               'delist: cartridge %02X port %02X' % (k + 1, s, foot[0], foot[1], cm, pm, byte(C, cf, 0x98A7, s),
                                                      byte(P, pf, 0x98A7, s)))
-        print('corpse-still-info: death%d $A0FD held from the delist: cartridge %d frame(s), port %d' % (k + 1, held(C, cf),
-                                                                                               held(P, pf)))
+        ch, ph = held(C, cf), held(P, pf)
+        print('corpse-still: death%d $A0FD held from the delist: cartridge %d frame(s), port %d; other enemies\' moves '
+              'meanwhile: cartridge %d port %d' % (k + 1, ch, ph, others(C, cf, ch, s + 3), others(P, pf, ch, s + 3)))
     print('corpse-still: %d of %d corpse(s) moved on the port' % (moved, len(cd)))
     return 0
 

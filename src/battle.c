@@ -33,7 +33,7 @@ void CtHdmaTableBuild(uint8_t* wram128);   // ct_vm.c: `JSL FD/C2C1`, the field'
 #include "data/battle_anim.h" // baked attack/idle trajectories: ctCronoAttackTraj (A2), ctGatoIdleTraj/Bob (ADD.4)
 // (battle_tracks.h -- the baked CC/F494/F594 track fixture -- is no longer included: the op-18 walker
 //  reads the ROM track/probe/facing tables directly, battle_ai_interp.md §11b.)
-#include "data/battle_dissolve.h"  // enemy-death dissolve: CT_DISSOLVE_HOLD/STEPS (battle_dissolve.md PART 2)
+#include "data/battle_dissolve.h"  // enemy-death dissolve: CT_DISSOLVE_STEPS + the matrix (battle_dissolve.md PART 2)
 #include "rom_verify.h"
 #include "data/battle_trig.h"  // enemy-movement trig tables: ctBattleAtanTab/SinTab/FaceTab (battle_enemy_move_target.md §A)
 
@@ -5090,11 +5090,23 @@ static void battleFleeConsumer(CtBattleHost* h) {
   battleFleeTrace(h, "cantflee-post");
 }
 
+// The death routines hold the whole loop (battle_death_dissolve_order.md ADDENDUM), and so does the frame the scan returns
+// on: the head runs there (battleAdvanceDissolves), the idle tick's first frame is the next one (oracle: the last `$96F5`
+// clear f793, `$993A = 01` f794).
+static int battleDeathHold(const CtBattleHost* h) { return h->dissolveRunning >= 0 || h->deathHeadF == (int)h->frames; }
 // THE ITERATION'S HEAD, C1/8120-109C: `TDC / INC $0027 / STA $B2C7`, then the idle tick's C1/106E-109C (the flee
 // consumer) up to its first wait. It runs on the combat start's frame, at the end of every frame B whose tail opened
 // no action, and on the frame an action ends (the handler that ran it returns into the loop).
 static void battleIterHead(CtBattleHost* h) {
-  h->mem[0x0027]++;                                           // C1/8121 INC $0027
+  // ...but not while a death routine runs: the action's handler reaches the head only once its post-action death scan
+  // (C1/006D `JSL CF/FE20`, every corpse's CD/0043 inside the loop) returns, so the head -- and its `STZ $A0FD`, which
+  // lets the NMI's stepper CF/F978 move the walkers again -- waits for the last corpse (battleAdvanceDissolves runs it).
+  // MEASURED, the rule's cartridge, the forest ambush: `$A0FD` 01 from the delist to the routine's end (+43) for each of
+  // the three deaths, and the living Avian Chaos, its walk segment in flight, holds (117,118) through the Beetle's routine;
+  // the port's head ran on the delist's frame and the Avian stepped 7 px during the dissolve (the user, 2026-10-15,
+  // translated from Portuguese: "when a final blow kills more than one enemy, they keep moving a little before the dissolve").
+  if (h->dissolveRunning >= 0) { h->headPend = 1; return; }
+  h->mem[0x0027]++;                                         // C1/8121 INC $0027
   h->mem[0xB2C7] = 0;                                         // C1/8124 STA $B2C7 (A = 0, C1/8120 TDC): the effect index
                                                               //   an item's delta slot (C1/EBF8) is indexed by
   if (!h->mem[0xA10E]) h->mem[0xA0FD] = 0;                    // C1/106E-1073: STZ $A0FD (outside the defeat's sequence)
@@ -7904,7 +7916,6 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
       int dslot = tgt - 3;
       int scanRuns = !s[0x9FF7 + tgt] && s[0x99B5 + tgt] && !(s[0x29C6 + dslot * 12] & 0x40);
       int scanStands = !s[0x9FF7 + tgt] && s[0x99B5 + tgt] && (s[0x29C6 + dslot * 12] & 0x40);
-      if (tgt >= 3 && tgt < 11 && scanRuns) h->deathSfxDue[dslot] = 2;
       if (tgt >= 3 && tgt < 11) h->idleDeathPose[tgt - 3] = BT_IDLEPUB(h, tgt - 3);   // the pose on screen at death
       if (getenv("CT_BATTLE_TRACE") && tgt >= 3 && tgt < 11)
         fprintf(stderr, "battledeath f%d slot=%d rec7=%02X 9FF7=%02X 99B5=%02X scan=%s sfx=%d\n", h->frames, dslot,
@@ -7917,7 +7928,7 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
         h->deadStandFrame[tgt - 3] = (uint32_t)CtBattleRenderClock(h);   // battle_gato_idle_victory.md D.2: LATCH the idle
       } else {                                              //   clock on the death-frame pose (render freezes it)
         h->dissolveActive[tgt - 3] = 1;       // standard dither-dissolve -- EVERY death incl. the fight-ender
-        h->dissolveStep[tgt - 3] = -CT_DISSOLVE_HOLD;   // Render-only: does not feed back into $AF02/gameplay
+        h->dissolveStep[tgt - 3] = 0;         // queued: drawn intact until its routine starts (battleDeathRoutineStart)
       }                                                  //   (set above, unconditionally). Id-dispatched at render.
       }                                                  // (the demo gate)
     }
@@ -8730,18 +8741,43 @@ static void battleTechExecute(CtBattleHost* h, int techId) {
 // is by DESCENDING COMBATANT INDEX, not by hit-set order (that experiment is what separates the two rules).
 // The waiting corpse keeps rendering UNDISSOLVED meanwhile (peeks: the queued Hetake is still pal1 while
 // the running one is pal4 dithering), which falls out for free: only the RUNNING slot's step advances, so a
-// queued slot stays frozen at its -CT_DISSOLVE_HOLD arm value and battleDissolveRender draws it intact.
+// queued slot keeps the 0 its death armed and battleDissolveRender draws it intact.
+// ONE ROUTINE, FRAME BY FRAME (CD/0043, dis.py 0D0043): `JSR CD/3E75` (a frame) until $CCEA reads 0, the #95 post, then
+// CD/00BF `LDA #0A / JSR CD/3E3B` -- ten more frames -- and CD/00C4-0107, 32 passes of `JSR CD/010A` x2 (the next
+// dither level ANDed out of the corpse's tiles) and CD/3ED2's upload, which waits for the last one's NMI: one level a
+// frame. MEASURED, the rule's cartridge (forest_battle_3hetake.state, A mashed): the delist and `$993F = 08` f152, the
+// post f153, `$CCFE` 00 at f163 .. 1F at f194, 20 and `$96F5` cleared f195 -- the routine is the delist + 43, and the next
+// corpse's CF/FE20 pass (its palette copy) runs on that same frame. The port used to start the dither on the delist's
+// frame with a 9-frame hold and return at +40 (the routine 3 frames short, the dither 2 frames early on the picture).
+static void battleDeathPalCopy(CtBattleHost* h, int slot);       // CF/FE4F-FE72 (below, with the death sound)
+static void battleDeathRoutineStart(CtBattleHost* h, int slot) {   // CF/FE20's pass for this corpse, then CD/0043's entry
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  h->dissolveRunning = slot;
+  battleDeathScanStores(h, 3 + slot);                             // CF/FE2D-FE33
+  battleDeathPalCopy(h, slot);                                    // CF/FE4F-FE72
+  h->deathSfxDue[slot] = 1;                                       // CD/0046-0050: the $CCEA wait (battleDeathSfxTick)
+  h->dissolveStep[slot] = -((rom && rl > 0x0D00C0) ? rom[0x0D00C0] : 0x0A);   // CD/00BF LDA #0A: CD/3E3B's waits
+}
 static void battleAdvanceDissolves(CtBattleHost* h) {
+  uint8_t* s = h->mem;
   if (h->dissolveRunning >= 0 && !h->dissolveActive[h->dissolveRunning]) h->dissolveRunning = -1;
-  if (h->dissolveRunning < 0)
-    for (int slot = 7; slot >= 0; slot--)                      // highest combatant index first (both runs)
-      if (h->dissolveActive[slot]) { h->dissolveRunning = slot; battleDeathScanStores(h, 3 + slot); break; }   // + CF/FE2D-FE33
   int slot = h->dissolveRunning;
-  if (slot < 0) return;
-  if (h->deathSfxDue[slot] > 0 && h->deathCceaSeen) return;     // its routine still waits on $CCEA (battleDeathSfxTick)
-  if (++h->dissolveStep[slot] > CT_DISSOLVE_STEPS - 1) {       // fully cleared -> gone; the next corpse
-    h->dissolveActive[slot] = 0; h->dissolveRunning = -1;      //   starts on the very next frame
-    h->mem[0x96F5 + 3 + slot] = 0;                             // CF/FE7B STZ $96F5,X once CD/0024 returns (writer CF:FE7E)
+  if (slot >= 0) {
+    // Every frame of a routine returns from a CD/3E75 -- the $CCEA loop's, CD/3E3B's ten, CD/3ED2's `INC $CA26 / JSR
+    // CD/3E75` per level -- whose `JSL C1/0012` is C1/10E3, the menu pass on the frame service's `$993A`. MEASURED, the
+    // rule's cartridge (saves/lavos_re/lavos_1d3_wait.state): `$993A` reads 00 from the last mimic's delist f1300 to the
+    // head f1343 while CF/E745 raises it every fourth frame; the port's counted 01..0A through the routine.
+    if (s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
+    if (h->deathSfxDue[slot] > 0) return;                         // its routine still waits on $CCEA (battleDeathSfxTick)
+    if (++h->dissolveStep[slot] <= CT_DISSOLVE_STEPS) return;     // CD/00CA-0107: one level a frame
+    h->dissolveActive[slot] = 0; h->dissolveRunning = -1;         // CD/0109 RTL: the corpse is gone
+    h->mem[0x96F5 + 3 + slot] = 0;                                // CF/FE7B STZ $96F5,X once CD/0024 returns (writer CF:FE7E)
+  }
+  for (slot = 7; slot >= 0; slot--)                               // CF/FE20's loop goes on: highest combatant index first,
+    if (h->dissolveActive[slot]) { battleDeathRoutineStart(h, slot); return; }   //   the next routine on this frame
+  if (h->headPend) {                                              // the scan returns into the loop: C1/8120's head
+    h->headPend = 0; h->deathHeadF = h->frames;                   //   (oracle: `$A0FD = 00` and `$0027`++ with the last
+    battleIterHead(h);                                            //   `$96F5` clear, f195)
   }
 }
 
@@ -14900,7 +14936,6 @@ static void battleDeathSfxTick(CtBattleHost* h) {
     // A death with NO dissolve (anim-set 2, the stand-in-place corpses) never sets dissolveActive,
     // so this gate is inert for it and its post keeps the timing it already had.
     if (h->dissolveActive[slot] && h->dissolveRunning != slot) continue;
-    if (h->deathSfxDue[slot] == 2 && h->dissolveActive[slot]) battleDeathPalCopy(h, slot);   // CF/FE20: its routine starts
     // CD/0043's WAIT IS ON $CCEA, NOT ON A FRAME COUNT: `JSR CD/3E75 / JSL CD/04AA` until $CCEA == 0, then the #95 post and
     // CD/00A5's fade record. $CCEA is the effect program's flag (CD/1609 `INC $CCEA` when its program ends, CD/0497 `STZ
     // $CCEA` when CD/0453 has restored the colours), so a death a tech causes waits for the tech's own clean-up, whose
@@ -15928,6 +15963,18 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
   uint8_t* s = h->mem;
   // the 3+64+7 hold -- without the 64 when C1/35A9 returned early ($2989 bit 0: no celebration)
   int hold = (s[0x2989] & 0x01) ? CT_BATTLE_VICTORY_CELEBRATE - CT_BATTLE_VICTORY_LADDER : CT_BATTLE_VICTORY_CELEBRATE;
+  // THE STAGER RETURNS FOUR FRAMES BEFORE THE BOX: V+3 when C1/35A9 skipped the celebration, the hold's end otherwise; the
+  // box's +4 is CD/01B3's own (`$CCEC = 10` two frames after `$5DC9 = 00`, the glyphs two after that). C1/83D2-83F2 apply
+  // the rewards on that frame, and a victory with NO reward line opens no box: FD/AD17 returns at once and C1/83F9 runs
+  // there too. MEASURED, the rule's cartridge: the Day of Lavos's first mimic fight (saves/lavos_re/lavos_1d3_wait.state,
+  // $2989 bit 0, no line; --hookpc) C1/8186 and C1/356D f1345, C1/83F9 and CF/FBE5 f1348, CD/03B4 f1351 -- the port
+  // dismissed at the box's frame, V+7; tools/battle_module_tail_cmp.py (Black Hole on GATO) C1/F93E's XP f1422, which the
+  // port applied at the box's frame, f1426.
+  if (!h->handoffLeft && h->resultPhase < 0 && h->victoryHold >= hold - 4 && h->victoryHold < hold) {
+    CtBattleVictoryRewards(h);                                   // C1/83D2-83F2 (once)
+    if (h->resultN <= 0 || h->resultLine < 0) { h->resultPhase = 3; h->resultPhaseT = 0;
+      battleTrace(h, "victory-dismiss"); battleModuleTail(h, 0); battleFbe5Begin(h); return; }
+  }
   if (h->victoryHold < hold || h->handoffLeft > 0) return;
   CtBattleVictoryRewards(h);                                     // C1/83D2-83F2, then 83F5 JSL FD/AD17 (once)
   if (h->resultN <= 0 || h->resultLine < 0) {                    // no reward line at all -> straight to the handoff
@@ -16570,7 +16617,8 @@ void CtBattleBegin(CtBattleHost* h) {
   h->pcLadderTick = 0; h->pcLadderDefeat = 0;
   for (int fi = 0; fi < CT_BATTLE_FX_POOL; fi++) h->popups[fi].active = 0;
   for (int di = 0; di < 8; di++) { h->dissolveActive[di] = 0; h->dissolveStep[di] = 0; h->deadStanding[di] = 0; h->deadStandFrame[di] = 0; h->deadNoCmd[di] = 0; }
-  for (int di = 0; di < 8; di++) h->deathSfxDue[di] = 0;
+  for (int di = 0; di < 8; di++) h->deathSfxDue[di] = h->dissolveStepShown[di] = 0;
+  h->headPend = 0; h->deathHeadF = -1;
   h->dissolveRunning = -1;                                     // no corpse animating yet (serial queue)  // battle_dissolve.md + D.2 latch
   // C1/FCFE-FD24, the staging tail, in its order: FD/B0D5 (the timer flags and counts), FD/B4E7 (the timer bases and
   // timers), FD/B7EB (the ATB reloads, below), ... and C1/B093 for the three seats (the low-HP bit). battleStatusTimerStage.
@@ -16785,7 +16833,7 @@ static void battleUploadService(CtBattleHost* h) {
 // port ran one more frame A between the action's end and its demo end (0AD f366, 07D f619, 087 f523) -- at the 07D it
 // committed the right Vamp's idle window and published pose 00 over the tech's closing 01 (the user's F5, 2026-09-27).
 static int battleIterFrameA(const CtBattleHost* h, int fxTd) {
-  if (h->victoryHold || h->iterPh < 0 || (h->iterPh & 1) || h->mem[0xA013] || fxTd || h->dissolveRunning >= 0 || h->demoDispatchAt >= 0 ||
+  if (h->victoryHold || h->iterPh < 0 || (h->iterPh & 1) || h->mem[0xA013] || fxTd || battleDeathHold(h) || h->demoDispatchAt >= 0 ||
       h->demoPass || h->stActOpenAt >= 0 || h->llSeat >= 0) return 0;
   for (int slot = 0; slot < 8; slot++) if (h->enThinkDelay[slot] > 0) return 0;   // a turn inside C1/4058
   // ...a PC's too: C1/4058 (`INC $A0FD / JSL CC/F06B`) and its two waits C1/405F / C1/40A0 are the action state, which never
@@ -21163,6 +21211,7 @@ static void battleNmiHead(CtBattleHost* h) {
   // combatants every frame, so entries 4-19 hold a program's sprite cloud only when CD/2BFC ran after it (vPos 155).
   memcpy(h->fxOamCloud, s + 0x0710, sizeof h->fxOamCloud);
   memcpy(h->objPalShown, h->objPalCmp, sizeof h->objPalShown);    // the combatants' attributes the compose wrote
+  memcpy(h->dissolveStepShown, h->dissolveStep, sizeof h->dissolveStepShown);   // CD/3ED2's tiles: the corpse's dither level
   memcpy(h->fxObjShown, h->fxObjCmp, sizeof h->fxObjShown);       // ...and the effect objects' cells
   memcpy(h->fxObjMatShown, h->fxObjMatCmp, sizeof h->fxObjMatShown);
   h->fxObjGateShown = h->fxObjGateCmp;
@@ -22278,7 +22327,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // holds the whole simulation); the $A013 span already zeroed schedWalk at the top of the frame.
   // (Not while the demo's C1/B967 is between its turn and C1/40A6: the ROM is inside the call, not in the idle tick --
   //  $A4 still counts, its INC rides C1/4058's waits (0AD f1858..f1861, CF:E479), but C1/10A9 is never reached.)
-  if (h->schedWalk && h->dissolveRunning < 0 && h->demoDispatchAt < 0) battleWalkDispatch(h);
+  if (h->schedWalk && !battleDeathHold(h) && h->demoDispatchAt < 0) battleWalkDispatch(h);
   // C1/106E-1099 is the main loop's iteration HEAD, and the head executes in the SAME frame as the previous
   // iteration's tail -- after that frame's service (the INC) and its walk dispatch -- before `JSR C1/007E` waits
   // for the next NMI. One iteration spans 2 or 3 frames (the 2-per-5 cadence the walk dispatch rides), so the
@@ -22289,7 +22338,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // C1/3714 that starts a walk runs from the idle state (C1/10B5 / C1/10DC), behind the CD/0009 that is holding it --
   // gato_wait: GATO stands at (135,85) from the song's end f1462 through the teardown and first steps at f1517, in mode 1.
   if (!wasFrozen) battleMoveStepper(h);                            // CF/EFAF: the NMI's, whatever the main loop is doing
-  if (h->dissolveRunning < 0 && !fxTd) {
+  if (!battleDeathHold(h) && !fxTd) {
     if (!wasFrozen && !h->victoryHold)   // (the victory is C1/8186's blocking chain: no idle tick, no C1/3714)
                                // the action's last frame (the NMI's CF/F978 saw $A013 = 1); inside, $A0FD (C1/4058) stops
                                //   the walkers and a turn inside its handler the C1/3714 pass
@@ -22325,8 +22374,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // victory) until the last corpse clears. Which is exactly why the ROM's measured gap is ENEMY-DEPENDENT
   // -- 45/46 frames for the dissolving ids (0x5E/0x0C/0x15/0x8D) but only 2 for GATO (0x92), whose
   // anim-set-2 death STANDS instead of dissolving (battle_death_dissolve_gate.md) and so freezes nothing.
-  // (Residual: our dissolve is HOLD 9 + STEPS 32 = 41 render frames vs the ROM's 43-45 -- the dissolve
-  // LENGTH is the battle_dissolve.md render fixture, so that offset rides that pin, OPEN.)
+  // (The routine is CD/0043's 43 frames from the delist -- battleAdvanceDissolves; the head and the idle tick follow it.)
   if (h->victoryHold > 1 && !h->endTeardownDone) battleVictoryTeardownFrame(h);   // V+1..V+3 (V's is step G's)
   if (h->handoffLeft > 0 && battleFbe5Step(h)) {               // CF/FBE5's waits done: CF/FCE9 JSL CD/0006 -> CD/03B4
     h->handoffLeft = 0;
@@ -22401,7 +22449,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   //       sequence. The render-frame work above (the dissolve itself, popups, the FX) still advances.
   //       This also makes the VICTORY entry land where the ROM's scan does -- gated on the death routines
   //       finishing (battle_end_ui_teardown.md measured that same 45f delist->scan gap from the other side).
-  if (h->dissolveRunning >= 0) return 0;
+  if (battleDeathHold(h)) return 0;
   // ...and the same hold while the demo's C1/B967 is on its way to C1/40A6 (battleCommitDemoTech): the main loop that
   // would run the next pass is the caller of that call. The logic-tick accumulator holds, as in the freeze above.
   if (h->demoDispatchAt >= 0) return 0;

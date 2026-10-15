@@ -253,7 +253,9 @@ and objslot service fade the live page; the dissolve draws with the palette its 
 the NMI uploaded (`h->fxCgram`). The forest fixture (`--battletest forest_pre.raw.wram`, mash A) and the Roly
 ambush both give `$2380` byte-identical to the cartridge from the copy to the record's end. The baked target, the
 linear ramp (CT_DISSOLVE_FADE_FRAMES) and the misread ctBattleDissolvePal are gone.
-**Still open:** the dither's own timing (the port's HOLD 9 + 32 steps against CD/0043's wait + the `$CCFE` loop).
+~~**Still open:** the dither's own timing (the port's HOLD 9 + 32 steps against CD/0043's wait + the `$CCFE` loop).~~
+CLOSED 2026-10-15: CD/0043 frame by frame (battle_death_dissolve_order.md, last addendum) -- the copy on the delist's frame,
+the post +1, CD/00BF's ten waits, one level a frame, the return at +43.
 
 # PART 6 -- THE WHITE FRAME AT THE DEATH (2026-10-07): the corpse reads the attribute the PICTURE carries
 

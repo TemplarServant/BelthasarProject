@@ -7869,7 +7869,7 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
   for (int slot = 0; slot < 8; slot++) {
     if (BATTLE_ZSKIP(3 + slot)) continue;                 // Z-sorted walk (slot -> cmb 3+slot)
     if (!h->dissolveActive[slot]) continue;
-    int step = h->dissolveStep[slot];
+    int step = h->dissolveStepShown[slot];          // the level the NMI uploaded (CD/3ED2), not the routine's live one
     uint8_t id = mem[CT_ENEMY_BLOCK(slot) + 0];
     if (id == 0x92) {                                  // GATO: ALL 16 pal1 stance cells (already absolute --
                                                           //   ctBattleStanceActor[2].nspr=16: oidx0-3 the foot-

@@ -80,7 +80,7 @@ re-pins — nothing else in the suite kills two enemies at once.
 |---|---|---|
 | D1 | **The ROM side of the queue.** The serialization + order are measured; the actual death-routine dispatcher (which per-combatant slot it walks, and where the "one at a time" token lives) was not disassembled — the bank-CF handler around `CF/FE7B` is the entry point. | disassemble the CF death handler's caller and find the per-frame slot selector |
 | D2 | **Three or more simultaneous deaths.** Both runs had exactly two victims. Descending index predicts 5→4→3, but that is an extrapolation from a 2-sample rule. | a 3-victim AoE kill (needs a formation where the radius covers three, or a stronger AoE tech) |
-| D3 | **The 43 vs 41-frame length.** Each ROM death routine spans 43 render frames; our fixture is HOLD 9 + STEPS 32 = 41. The residual rides `battle_dissolve.md`'s bake, not this queue. | re-measure the dither step count against a per-frame OAM/fb capture |
+| D3 | **CLOSED 2026-10-15 (the last addendum).** ~~The 43 vs 41-frame length.~~ Each ROM death routine spans 43 render frames; our fixture is HOLD 9 + STEPS 32 = 41. The residual rides `battle_dissolve.md`'s bake, not this queue. | re-measure the dither step count against a per-frame OAM/fb capture |
 | D4 | **Mixed death kinds.** GATO's anim-set-2 death *stands* instead of dissolving (`battle_death_dissolve_gate.md`); whether a standing death also occupies the queue slot (and so delays a dissolving one) is unexercised — no capture kills a stander and a dissolver together. | an AoE kill mixing anim-set 0 and anim-set 2 enemies |
 
 ---
@@ -231,3 +231,99 @@ before, 2 of 3.
   chose another attack (`$9877` 04 against the cartridge's 05) and four pinned fights moved
   (battle-slow-doubles-reload-and-cuts-damage, field-battle-lucca-type2, field-battle-bat9-return,
   field-battle-solo-victory-no-marle). Do D3 first, then the head's wait.
+
+## ADDENDUM (2026-10-15) -- NOBODY WALKS UNTIL THE SCAN RETURNS: the port's head still runs at the delist
+
+The user (translated from Portuguese): "when a final blow kills more than one enemy, they keep moving a little before
+the dissolve". Measured, the rule's cartridge against the port, `$A0FD` / `$98A7,X` / `$1D0C,X` / `$1D23,X` per frame:
+
+- **The forest Cyclone** (forest_holdleft_pre.state, `PEEK_POKE=2837=80`, run A's drive): `$A0FD = 01` from the action's
+  open (f380) through BOTH routines -- delist f691, `$96F5[4]` f734, `$96F5[3]` f777, `$A0FD = 00` f777 (C1/1073, the
+  head after the scan). 86 frames = the 2 x 43 of the addendum above. No Hetake has a segment in flight here, so nothing
+  can be seen to move on either side.
+- **Loc 070, Cyclone on two Blue Imps + a Roly** (tools/cyclone_victims_cmp.py's drive): both Imps delisted f828 on both
+  sides. Cartridge `$A0FD` 01 to f914 (86 frames); port 00 at f828. No segment in flight at the kill (cmb6's cleared by
+  the scan, cmb5 and the Roly had none), and thumbnails every frame show the queued Imp unchanged until its dither on
+  both sides (cartridge f873-883, port f869-877): nothing moves in this fixture either.
+- **The forest ambush** (tools/corpse_still_cmp.py's drive), the second Beetle's death (cartridge f819 / port f825): the
+  LIVING Avian Chaos (cmb8) has a segment in flight (`$98A7,X = 01`). Cartridge: (117,118) for all 43 frames, `$A0FD`
+  01. Port: `$A0FD` 00 from the delist and the Avian steps on, (117,118) -> (117,125) at +7, +11, ... +31 -- 7 px during
+  the dissolve.
+
+So the movement the user sees is NOT canonical: CF/EFAF runs the stepper CF/F978 only while `$A013` and `$A0FD` are both
+0, and the ROM's `$A0FD` (C1/4058's INC at the action's open) stands until the main loop's head C1/1073 runs, which is
+when C1/006D's `JSL CF/FE20` returns -- after the LAST corpse's CD/0043. Nothing walks through any death routine: neither
+the living enemies nor a queued corpse whose segment the scan has not yet cleared (CF/FE33 runs at its own turn in the
+loop, inside the same held stretch). The port runs the head on the delist's frame (battleIterHead), so every walker
+with a segment in flight steps through the dissolves -- in a multi-kill also the queued corpse, until battleAdvanceDissolves
+reaches it and battleDeathScanStores clears its flag.
+
+### D3 closed: the routine, frame by frame (CD/0043, `dis.py 0D0043 0xD0 1 0`)
+
+```
+D0043  STA $CD00
+D0046  JSR CD/3E75 / JSL CD/04AA / LDA $CCEA / BNE D0046   ; a frame at least, until $CCEA reads 0
+D0093  ... LDA #95 / JSR CD/3B71                          ; the death sound (pan = $1D0C,X)
+D00A0  $CD01 = 07; D00A5 the red fade record (CE:EFE1-EFE9 -> $CCD9.., $CCE5 |= 80)
+D00BF  LDA #0A / JSR CD/3E3B                              ; TEN frames (CD/3E3B = n x CD/3E75)
+D00C4  STZ $CCFE / STZ $CCFF
+D00CA  JSR CD/010A x2 (one dither level ANDed out of the corpse's tiles in WRAM), CD/3ED2 (the upload;
+       it waits on $CA26 for the previous one's NMI), JSL CD/04AA, INC $CCFE, until $CCFE = 20   ; 32 frames
+D0109  RTL -> CF/FE7B STZ $96F5,X, and CF/FE20's loop goes on with the next corpse ON THE SAME FRAME
+```
+
+Measured, the rule's cartridge (forest_battle_3hetake.state, A mashed; `--monitor` of `$AF02`, `$993F`, `$CCFE`, `$96F5`,
+`$1E00`, `$A0FD`, `$0027`, `$CA26`): delist + `$993F = 08` f152, the #95 post f153, `$CCFE` 00 at f163 .. 1F at f194, 20 with
+`$96F5` 0, `$A0FD` 0 and `$0027`++ at f195. So from the delist D: palette copy D, post D+1, dither levels D+11 .. D+42, the
+routine's return, the head and the next corpse's start D+43. The picture (PEEK_SHOTS every frame, the forest ambush's second
+Beetle): the corpse's first level gone at peek D+13, the last pixel at D+44 -- the RAM + 2, the project's alignment.
+
+The port had: palette copy D+1 (the census's family 1), post D+2, a 9-frame hold counted from D and 32 levels from D+9, the
+return at D+40, the head at D.
+
+### The fix (src/battle.c)
+
+- `battleDeathRoutineStart` = CF/FE20's pass for one corpse + CD/0043's entry, on the frame the scan reaches it (the delist
+  for the first, the previous corpse's return for the next): the scan stores, the palette copy, the `$CCEA` wait armed, the
+  dither at minus CD/00BF's operand (read from the ROM).
+- `battleAdvanceDissolves`: no level while the routine waits on `$CCEA` (the post clears it); then one level a frame; past
+  32 the return ($96F5), the next corpse at once, and when none is left, the pending head.
+- `battleIterHead` defers itself (`headPend`) while a routine runs; `battleDeathHold` keeps the idle tick (walk dispatch,
+  C1/3714, the think drains, the logic gate, frame A) off through the routines AND the head's own frame.
+
+Graded, the rule's cartridge against the port, from each side's delist:
+
+| fixture | event | cartridge | port before | port after |
+|---|---|---|---|---|
+| forest ambush, 3 deaths | palette copy / post / `$96F5` / head | +0 / +1 / +43 / +43 | +1 / +2 / +40 / +0 | +0 / +1 / +43 / +43 |
+| forest ambush | `$0027` after the head | +45, +47, ... | +41, +43, ... | +45, +47, ... |
+| forest ambush | port death frames against the cartridge's | | +10, +6, +2 | +10, +10, +10 |
+| forest ambush, Beetle 2 | the living Avian's moves through the routine | 0 | 7 (7 px down) | 0 |
+| forest ambush, picture | first level / gone (port P = peek P+2) | D+13 / D+44 | D+9 / D+40 | D+11 / D+42 |
+| loc 070, two Blue Imps | `$96F5` / `$A0FD` | f871, f914 / f914 | f868, f909 / f828 | f871, f914 / f914 |
+
+tools/corpse_still_cmp.py now grades the head's wait and the other enemies' moves (check
+battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge).
+
+### Three more things the routine's frames carried (found grading the suite against the cartridge)
+
+1. **The picture draws the uploaded level.** CD/3ED2 ships the ANDed tiles at the NMI, as CF/E3C0 ships the CGRAM page:
+   the port drew the routine's live level (a frame ahead of its own colours, which it already took from the uploaded page).
+   `dissolveStepShown` is copied in battleNmiHead beside `fxCgram` and battleDissolveRender draws it. Graded, the Roly
+   Rider (tools/roly_dissolve_cmp.py, port +k against the cartridge's --peek +k+1, the fight's picture alignment): the
+   fade's first frame and every dither sample are the cartridge's counts (427 427 449 465 452 342 195 48 16 0).
+2. **The routine runs the menu pass.** Every frame of CD/0043 returns from a CD/3E75 (the `$CCEA` loop, CD/3E3B's ten,
+   CD/3ED2's `INC $CA26 / JSR CD/3E75` per level), whose `JSL C1/0012` is C1/10E3 on `$993A`. Cartridge, the Day of Lavos's
+   first mimic fight (saves/lavos_re/lavos_1d3_wait.state): `$993A` 00 from the last delist f1300 to the head f1343; the
+   port counted 01..0A. Now the same 52 changes in the same order for the whole fight.
+3. **A victory with no reward line returns on the stager's frame.** FD/AD17 with no line opens no box, so C1/83F9 runs on
+   the frame C1/356D returns: V+3 when C1/35A9 skips the celebration (`$2989` bit 0). `--hookpc` on the same fight:
+   C1/8186 and C1/356D f1345, C1/83F9 and CF/FBE5 f1348, CD/03B4 f1351. The port dismissed at the box's frame (V+7); the
+   routine's 3 short frames had hidden it (the old binary: victory -> `$CE16` 10 frames, the cartridge's 6). With it the
+   fight is the cartridge's +1 (the pad) to its end: `$26` 65 f1076 / f1075, the ack f1381 / f1380, 15A f1490 / f1490.
+   The same frame is where C1/83D2-83F2 apply the rewards in every victory (the box follows 4 frames later): the module
+   tail's XP (tools/battle_module_tail_cmp.py, Black Hole on GATO) moved f1426 -> f1422, the cartridge's.
+
+The suite's re-pins (22 checks) are frame moves of +4 per death in the port's own drives (values unchanged), the dither's
+pictures, and three cartridge checks that now match exactly (Blue Shield's deaths [818, 1030], the Roly's dissolve, the
+mimic fight). One chain (tyranno-ff24) moved by the drive's fixed 30-frame A grid; see its check notes.

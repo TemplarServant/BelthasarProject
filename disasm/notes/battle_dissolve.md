@@ -99,6 +99,7 @@ OPEN, needs a non-Hetake death capture. The DITHER is proven generic.)
 - `ctBattleDissolveDither[8][8]` — the clear-STEP per sprite-local `(x%8,y%8)` (0..31).
 - `ctBattleDissolvePal[16]` — the pal-4 death OBJ palette (BGR555 LE).
 - `CT_DISSOLVE_STEPS=32`, `CT_DISSOLVE_HOLD≈9`, `CT_DISSOLVE_RATE_PX=20`.
+  (2026-10-15: the HOLD is gone -- the timing is CD/0043's own waits, battle_death_dissolve_order.md last addendum.)
 - NOT baked: the enemy's base tiles (the engine already has the live enemy OBJ tiles) — the dissolve is applied
   ON them. This is why the bake is generic & small.
 
