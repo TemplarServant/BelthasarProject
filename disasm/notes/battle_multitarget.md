@@ -298,14 +298,23 @@ The port ran C1/BB66 only for the demo's records (battle.c battleDemoCommand). A
 a Blue Imp's attack found the bit set: the list is processed last-first, so the Roly (cmb 9) took the damage and the
 loop stopped -- both Imps 0. Fixed in the interactive tech dispatch (battle.c, `C1/BB66-BB6B`).
 
-**The held set.** C1/C600-C63E (the dispatch) copies `$99C0,X` (X = 0..0A) into `$AD8E,X` / `$AECC,X`, skipping an
-enemy entry whose `$AF12,X` bit 7 is set (hidden) and counting the non-FF ones into `$AD8D` / `$AECB` -- no radius scan.
-While the select is open the group handler rebuilds `$99C0` as the enemies move; measured on bat6_lake.state with the
-select held on slot 2: `05 09` (f67) -> `05 06 09` (f291) -> `05 09` (f299) -> `05` (f657) -> `05 09` (f701). After the
-confirm it holds until the dispatch (bat6: built f67, confirmed f76, a Blue Imp's attack f69-229, copied f233). The port
-re-ran the scan at the dispatch with the positions of that frame; it now writes `$99C0` at the confirm (the radius
-groups 0x12 / 0x1A) and the dispatch copies it (battle.c `hitSetHeld`). No fixture yet where the two differ: in the
-check's drive the set at the confirm and the scan at the dispatch are both 05 06 09.
+**The dispatch REBUILDS the set (2026-10-15; this replaces "the held set").** C1/C600-C63E copies `$99C0,X` (X = 0..0A)
+into `$AD8E,X` / `$AECC,X`, skipping an enemy entry whose `$AF12,X` bit 7 is set (hidden) and counting the non-FF ones
+into `$AD8D` / `$AECB` -- but the `$99C0` it copies is the one the area pass C1/C586 has just built, not the select's.
+The radius techs carry area 03 (CC/1ACC: Cyclone 01, Fire Whirl 3C, and 14 17 34 3B 3E 48 49 52-54): CC/2B1C = `01 / 01 01 09`, so
+C1/C95C[1] = C1/C7A7 stages `$9604 = $0A` (0: the enemies), `$9605 = $06` (the action's target, `$B2AE` from C1/BB88),
+`$9606 = 0`, `$9607 = 09`, `$9608 = 0`, then C1/C741 `$99CC := 01` and C1/1FDD[1] = C1/2701, the radius scan of sec. 2
+on the feet `$1D0C,X / $1D23,X` of that frame (C1/27D9 FF-fills `$99C0 / $A62D`, C1/27AD / 27C5 the centre). C1/1FDD's
+table C1/1FEA: 0 / 4 the band C1/25A3, 1 / 2 the radius C1/2701, 3 / 5 C1/23A4, 6 C1/2332. The square sum is an 8-bit
+`ADC` of two CC/FB6F entries: it wraps past FF (|dx| = 15, |dy| = 6 -> 225 + 36 = 05, inside).
+MEASURED, the rule's cartridge (--monitor --writer), gato_wait staged with Yakra, ACTIVE mode: Crono's Fire Whirl
+confirmed during Yakra's attack, then Frog's Slurp on himself (its PC select writes `$99C0 = 02 00 01`, C1/203A) before
+Fire Whirl dispatches: f937 `$B2AE = 03` (C1:BB88), `$99CC = 01` (C1:C746), `$99C0 = 03` (C1:27C5), `$AD8E = 03`.
+The port held the select's table to the dispatch (`hitSetHeld`, from the 2026-10-09 Cyclone report, whose cause was
+the `$B1FC` latch below): Fire Whirl struck Frog, Crono and Lucca (the user, 2026-10-15). It now runs the same pass
+(battle.c battleAreaC586 + battleAreaRadius2701); tools/radius_dispatch_cmp.py, check
+battle-radius-tech-victims-rebuilt-at-dispatch-vs-rule-cartridge. Still open: the radius around the CASTER (C1/C78D +
+routine 1: areas 02 / 0A -- techs 1F, 2E, 37, 40, 6A) is not measured and keeps the group's own set.
 
 **Fixture** saves/battle_re/loc070_imps_roly_pre_lake.state (+ .lakewram): loc 070 reloaded by the ROM's loader
 (`--teleport 112 12 18 1`) after bat6's fight was won, its group (obj22's ambush: obj23 / obj24 Blue Imps, obj25 the
@@ -325,8 +334,8 @@ The live VM's arm (ct_vm.c) stepped past it and kept running (move.c's graded ar
 loc[6] = 3 on another phase: the D8 at f122 instead of f130. Fixed; the check grades the ambush first (10/10 regions up
 to the D8, Crono ready f271 on both sides) and puts the keys on the same frames on both sides.
 
-**Open.** `$99C0` is one table for every PC: a second PC's select between a Cyclone's confirm
-and its dispatch would rewrite it on the cartridge; the port writes it only at a radius tech's confirm.
+**Closed (2026-10-15).** `$99C0` is one table for every PC and a second PC's select does rewrite it between a radius
+tech's confirm and its dispatch -- harmlessly on the cartridge, whose dispatch rebuilds it (above).
 
 ---
 

@@ -8,8 +8,8 @@ damage". Bit 1 of $B1FC is the one-victim latch: an enemy's physical attack sets
 it after every victim of a kind-3 damage loop. The PC command's tech arm clears it (C1/BB66-BB6B `LDA $B1FC / AND #FD /
 STA $B1FC`); the port did that only for the demo's commands, so a Cyclone dispatched after a Blue Imp's attack stopped
 at its first victim (the list is processed last-first: the Roly took the damage, the Imps none). The victims themselves
-are the $99C0 the target select left: C1/C600-C63E copies it into $AD8E / $AECC at the dispatch, with no new radius scan
-(battle_multitarget.md sec. 3.1).
+are the $99C0 the dispatch's area pass rebuilds around the action's target (C1/C586 -> C1/C7A7 + C1/2701) and
+C1/C600-C63E copies into $AD8E / $AECC (battle_multitarget.md sec. 3.1, tools/radius_dispatch_cmp.py).
 
 The cartridge: saves/battle_re/loc070_imps_roly_pre_lake.state -- loc 070 reloaded by the ROM's own loader after the
 bat6 fight was won (its group of two Blue Imps + a Roly respawned), Crono 60 frames into a walk down onto them. Down for

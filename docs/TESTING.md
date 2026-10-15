@@ -2344,6 +2344,15 @@ set by the Imp's attack (C1/99C2) -- the PC tech arm clears it (C1/BB66). The HP
 f130) must read `ambush 10/10 regions identical` and Crono be ready on f271 on both sides: an ambush 4 frames early is
 op 0xDA without a follower not ending its visit (C0/3463 `INX / CLC`). disasm/notes/battle_multitarget.md sec. 9.
 
+### battle-radius-tech-victims-rebuilt-at-dispatch-vs-rule-cartridge (`python tools/radius_dispatch_cmp.py`)
+
+gato_wait staged with Yakra (battle_sim's op 0x83), the party Crono / Lucca / Frog, ACTIVE mode: Crono's Fire Whirl
+(tech 3C, group 12, area 03) confirmed on Yakra during Yakra's attack, then Frog's Slurp on himself before Fire Whirl
+dispatches. Graded: the dispatch frame, `$99C0` at the dispatch (`03` on both sides -- the area pass C1/C586 ->
+C1/C7A7 + C1/2701 rebuilds it from the action's target), the victims `$AD8D / $AD8E` (`01 [03]`) and, per combatant,
+whether the span took HP: `7/7 identical`. `$99C0 ... port 02 00 01` is the old held table -- the Slurp's PC list --
+and Fire Whirl striking the party (the user's report, 2026-10-15). HP values are `radius-dispatch-info`, not graded.
+
 ### options-free-sync-skips-the-hardware-waits (`python tools/sync_free_check.py`)
 
 The FREE sync mode (settings `sync=free`, field.c `hostSyncFree`): the attract's first 3600 frames under both modes, every

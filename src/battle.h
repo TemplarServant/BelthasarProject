@@ -833,8 +833,6 @@ typedef struct CtBattleHost {
                              //   read by the span-end apply to pick the MP-clamp path (block+7 vs block+3).
   int schedItem[3];          // FIFO parallel to schedTech: the committed action's item id (0 = not an item)
   int schedItemTgt[3];       // FIFO: an item's healed PC combatant idx (the target-select result; -1 = n/a)
-  int hitSetHeld;            // 1 = a radius-group confirm left its hit set in $99C0 for the dispatch's C1/C600 copy
-                             //   (battle_multitarget.md sec. 3.1); cleared when the dispatch consumes it
   int itemTgtSel;            // battle_items_nonhp.md §0.5 (item lane O2 partial-close): the item target-select's
                              //   chosen PC seat (0..2), navigable over PRESENT seats (Down/Right +1, Up/Left -1;
                              //   default = the chooser). Committed as schedItemTgt so an item heals/revives the

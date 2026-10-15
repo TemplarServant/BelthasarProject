@@ -41051,6 +41051,44 @@
       ]
     },
     {
+      "name": "battle-radius-tech-victims-rebuilt-at-dispatch-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/radius_dispatch_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait.state"
+      ],
+      "expect": [
+        "radius-dispatch: Fire Whirl dispatch ($AE93 = 3C) cartridge f937 port f937",
+        "radius-dispatch: $99C0 at the dispatch cartridge 03 port 03",
+        "radius-dispatch: victims ($AD8D / $AD8E) cartridge 01 [03] port 01 [03]",
+        "radius-dispatch: cmb0 took damage in the span cartridge no port no",
+        "radius-dispatch: cmb1 took damage in the span cartridge no port no",
+        "radius-dispatch: cmb2 took damage in the span cartridge no port no",
+        "radius-dispatch: cmb3 took damage in the span cartridge yes port yes",
+        "radius-dispatch: 7/7 identical"
+      ],
+      "pin": [
+        "^radius-dispatch: "
+      ],
+      "tier": "full",
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "(fn == 1 && radius)",
+          "replace": "(fn == 99 && radius)",
+          "why": "area 03's shape not ported (the old port): the dispatch keeps the $99C0 Frog's Slurp select left (02 00 01)"
+        }
+      ],
+      "note_pass": "Crono's Fire Whirl, confirmed during Yakra's attack and dispatched after Frog's Slurp on himself, hits Yakra alone on both sides: the dispatch's area pass (C1/C7A7 + C1/2701) rebuilds $99C0 = 03 from the action's target",
+      "notes": "The user, 2026-10-15 (translated from Portuguese): 'in the battle against Yakra I used Slurp with Frog on himself, and also Fire Whirl with Crono and Lucca; Crono attacked Frog ... and killed Frog'. The port held the $99C0 a radius tech's target select left to its dispatch; a PC-side select in between (Slurp, group 80, caster first) rewrote it to 02 00 01 and Fire Whirl struck Frog, Crono and Lucca. The cartridge's C1/C586 (area 03 = CC/2B1C `01 / 01 01 09`) centres the radius C1/2701 on the action's target at the dispatch: $99C0 = 03 (C1:27C5), $99CC = 01 (C1:C746), $AD8E = 03 at f937. Fixture: gato_wait staged with Yakra (battle_sim's op 0x83), party Crono/Lucca/Frog, $283F = E0, ACTIVE mode ($2990 = C4). The HP values are info only (the damage's RNG). Re-pin only for a measured change of the drive's frames on BOTH sides."
+    },
+    {
       "name": "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",
       "tier": "full",
       "argv": [

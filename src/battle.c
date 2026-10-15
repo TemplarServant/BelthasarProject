@@ -3126,6 +3126,31 @@ static void battleAreaBand25A3(CtBattleHost* h) {
   if (s[0x99C0] & 0x80)                                                 // C1/27C5
     for (int x = 0; x < 0x0B; x++) s[0x99C0 + x] = s[0x99C1 + x];
 }
+// C1/2701 -- C1/1FDD's routines 1 and 2: THE RADIUS. The victims are the combatants of one side whose feet, each scaled
+// >>4 (C1/011A), lie within the radius of the centre $9605's: CC/FB6F[|dx|] + CC/FB6F[|dy|] (the squares, an 8-bit ADC
+// that wraps) <= $9607 (C1/2784-279C). Candidates ($9604 != 0: the PCs 0..2, else the enemies 3..A) pass the band's own
+// gates and are not the centre; they go to $99C1.. in seat order after C1/27D9's FF-fill, C1/27AD puts the centre in
+// $99C0 when it is on that side and C1/27C5 closes the hole when it is not -- the band's tail (C1/25A3 jumps to it).
+static void battleAreaRadius2701(CtBattleHost* h) {
+  uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
+  int t = s[0x9605];
+  int cx = battleFootX(h, t) >> 4, cy = battleFootY(h, t) >> 4;          // 2701-2715 $80 / $82
+  for (int i = 0; i < 12; i++) { s[0x99C0 + i] = 0xFF; s[0xA62D + i] = 0xFF; }   // 2717 JSR C1/27D9
+  int lo = 3, hi = 0x0B;                                                // 271A-272D $8E / $90
+  if (s[0x9604]) { lo = 0; hi = 3; }
+  int y = 0;
+  for (int x = lo; x < hi; x++) {                                       // 2737-27AB
+    if (!s[0x96F5 + x] || (s[0x9FF7 + x] & 0x80) || s[0xA0A8 + x] || s[0xA09B + x] || x == t) continue;
+    int dx = (battleFootX(h, x) >> 4) - cx, dy = (battleFootY(h, x) >> 4) - cy;   // 2751-277F
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    int sq = rom ? ((rom[0x0CFB6F + dx] + rom[0x0CFB6F + dy]) & 0xFF) : dx * dx + dy * dy;   // 2784-2795
+    if (sq <= s[0x9607]) s[0x99C1 + y++] = (uint8_t)x;                  // 2797-27A4
+  }
+  if (s[0x9604] ? (t < 3) : (t >= 3)) s[0x99C0] = (uint8_t)t;          // C1/27AD
+  if (s[0x99C0] & 0x80)                                                 // C1/27C5
+    for (int x = 0; x < 0x0B; x++) s[0x99C0 + x] = s[0x99C1 + x];
+}
 // The sweep's entry point (ct.exe --sweepband25a3): the band on a bare $7E image, the feet read from $1D0C / $1D23.
 void CtBattleAreaBandMem(uint8_t* mem) {
   static CtBattleHost h;
@@ -3159,7 +3184,10 @@ static int battleAreaC586(CtBattleHost* h, int area, int v3A, int pcAtk, int pcT
   if (pcAtk >= 0) { r0A = 0; r0C = r00 = pcAtk; r06 = pcTgt; }           // C248 STZ $0A; C759-C760 $00 (a single tech)
   for (int k = 0, off = 1; k < cnt; k++, off += 3) {                    // the shapes, before anything is written
     int e3D = rom[0x0C0000 + rec + off], e04 = rom[0x0C0001 + rec + off], fn = e04 & 0x7F;
-    if (!(fn == 6 || (fn == 0 && r00 >= 0)) || (e04 & 0x80) || (e3D != 0 && e3D != 4)) {   // C1/C813 / C1/C78D + the band
+    // C1/C813 / C1/C78D with the band (0 / 4), C1/C7A7 with the radius (1 / 2: area 03, `01 01 09`). The radius
+    // around the CASTER (C78D + 1: areas 02 / 0A -- Laser Spin, Black Hole ..) is not measured yet: kept out.
+    int band = (e3D == 0 || e3D == 4), radius = (e3D == 1 || e3D == 2);
+    if (!((fn == 6 && band) || (fn == 0 && r00 >= 0 && band) || (fn == 1 && radius)) || (e04 & 0x80)) {
       if (getenv("CT_BATTLE_TRACE"))
         fprintf(stderr, "areafx f%d area %02X entry %d (%02X %02X): this shape is NOT PORTED -- the list kept\n",
                 h->frames, area, k, e3D, e04);
@@ -3170,10 +3198,12 @@ static int battleAreaC586(CtBattleHost* h, int area, int v3A, int pcAtk, int pcT
     int e3D = rom[0x0C0000 + rec + off], e04 = rom[0x0C0001 + rec + off], e2 = rom[0x0C0002 + rec + off];
     int e08 = e2 & 0x7F, e0E = (e2 & 0x80) ? 1 : 0;
     int fn = e04 & 0x7F;
-    s[0x9604] = (uint8_t)r0A; s[0x9605] = (uint8_t)(fn == 0 ? r00 : r0C); s[0x9606] = (uint8_t)r06;   // C1/C78D / C1/C813
-    s[0x9607] = (uint8_t)e08; s[0x9608] = (uint8_t)e0E;
+    s[0x9604] = (uint8_t)r0A; s[0x9607] = (uint8_t)e08;
+    if (fn == 1) { s[0x9605] = (uint8_t)r06; s[0x9606] = 0; s[0x9608] = 0; }   // C1/C7A7: the target is the centre
+    else { s[0x9605] = (uint8_t)(fn == 0 ? r00 : r0C); s[0x9606] = (uint8_t)r06; s[0x9608] = (uint8_t)e0E; }   // C78D / C813
     s[0x99CC] = (uint8_t)e3D;                                           // C741 STA $99CC
-    battleAreaBand25A3(h);                                              // C746 LDA #07 / JSR C1/0003 -> C1/1FDD
+    if (e3D == 1 || e3D == 2) battleAreaRadius2701(h);                  // C746 LDA #07 / JSR C1/0003 -> C1/1FDD[$99CC]:
+    else battleAreaBand25A3(h);                                         //   1, 2 the radius C1/2701; 0, 4 the band C1/25A3
     int x = k * 0x0B, y = 0;                                            // C5FE-C60B $2C = $12 * 11 (C1/C90B)
     do {                                                                // C610-C638
       int v = s[0x99C0 + x];
@@ -5649,13 +5679,12 @@ static void battleCommitPcAction(CtBattleHost* h, int atk) {
     // THE HIT SET THE SELECTION SHOWED. While the target select is open the group handler rebuilds $99C0 (and the
     // highlight $A62D) as the enemies move -- measured on bat6_lake.state (Blue Imps + Roly, the select held open,
     // Cyclone on slot 2): $99C0 = 05 09 -> 05 06 09 (f291) -> 05 09 (f299) -> 05 (f657) -> 05 09 (f701). The confirm
-    // closes the select and the table holds: the dispatch's C1/C600 copies it into the action's list (below), it
-    // does not run the radius scan again. Written here for the radius groups, the only ones the dispatch reads it for.
+    // closes the select and the table keeps its last build, written here for the radius groups. The dispatch does not
+    // read it: its area pass C1/C586 rebuilds $99C0 from the action's target (battleAreaC586, C1/C7A7 + C1/2701).
     { int grp = battleTechGroup(techId), set[11];
       if ((grp == 0x12 || grp == 0x1A) && tgt >= 3) {
         int n = battleBuildHitSet(h, grp, tgt, set, 11);
         for (int x = 0; x < 11; x++) s[0x99C0 + x] = (uint8_t)(x < n ? set[x] : 0xFF);
-        h->hitSetHeld = 1;
       } }
     if (s[0xA0D5]) {                                      //   C1/1644-1656: the cursor memory, per seat
       s[0xA866 + atk] = s[0x95EB + atk]; s[0xA863 + atk] = s[0x95DF + atk]; s[0xA0D8 + atk] = s[0x9EE3];
@@ -11990,28 +12019,17 @@ static void battleDispatchScheduled(CtBattleHost* h) {
     // enemy tech (Ice group 0x07) -> battleBuildHitSet returns 1 -> the identical single-target compute + draw.
     h->actTgtN = 0;
     { int grp = battleTechGroup(techId);
-      if ((grp == 0x12 || grp == 0x1A) && h->hitSetHeld) {
-        // C1/C600-C63E: the victims are the $99C0 the target select left (the confirm above), copied entry by entry
-        // into $AD8E/$AECC -- an enemy entry whose $AF12,X bit 7 is set (hidden, C1/9C1A) is skipped (C1/C612-C61F)
-        // and the FF entries are not counted ($AD8D = $AECB = the count, C1/C63A-C63E). No radius scan here: an Imp
-        // that hopped out of the radius after the confirm is still hit, one that hopped in is not. The user,
-        // 2026-10-09: "when using cyclone on two enemies, only one of them took damage" -- the port re-ran the scan
-        // with the positions of the dispatch, after the enemy's turn had moved the Blue Imps. (The port also keeps
-        // its alive gate $AF02: a victim that died between the confirm and the dispatch is not computed.)
-        for (int x = 0; x < 11 && h->actTgtN < 8; x++) {
-          int v = s[0x99C0 + x];
-          if (v == 0xFF) continue;
-          if (v >= 3 && (s[0xAF12 + v] & 0x80)) continue;
-          if (v >= 3 && v < 11 && s[0xAF02 + (v - 3)] == 0xFF) continue;
-          h->actTgtList[h->actTgtN++] = v;
-        }
-      }
-      h->hitSetHeld = 0;
       // C1/C1DD's PC arm: the tech's area byte CC/1ACC[id * 2] ($0C) runs the area pass C1/C586 at the dispatch, on the
       // positions of that frame -- Lucca's Flame Toss (group 0C, area 05) takes every enemy in the band from her toward
       // the target (battleAreaC586). The user, 2026-10-11 (translated from Portuguese): "Lucca's flame toss should hit
       // more than one enemy in a line" -- the port dispatched group 0C to one victim. A shape the pass does not port
-      // (the radius of the Cyclone's area 03, above) leaves the group's own set.
+      // leaves the group's own set.
+      // The radius techs (groups 12 / 1A, area 03: Cyclone, Fire Whirl ..) take the same pass: C1/C7A7 centres the
+      // radius C1/2701 on the action's target and REBUILDS $99C0 before C1/C600 copies it -- the list the target select
+      // left is not what is copied. MEASURED, the rule's cartridge in Active mode (Yakra, gato_wait staged; Crono's Fire
+      // Whirl confirmed during Yakra's attack, then Frog's Slurp on himself before its dispatch): at the dispatch f937
+      // `$99C0 = 03` (C1:27C5, `$99CC = 01` C1:C746) and `$AD8E = 03` -- the Slurp's PC list `02 00 01` in $99C0 is gone.
+      // The port had held that table to the dispatch: Fire Whirl struck Frog, Crono and Lucca (the user, 2026-10-15).
       { int area = (rom && techId < 0x75) ? rom[0x0C1ACC + techId * 2] : 0;
         if (h->actTgtN == 0 && area && tgt >= 3 && actor >= 0 && actor < 3 && battleAreaC586(h, area, 0, actor, tgt) == 1) {
           s[0xB2AE] = (uint8_t)tgt;                                  // C1/C74C's $06: the ROM's $B2AE is the target
@@ -16417,7 +16435,6 @@ void CtBattleBegin(CtBattleHost* h) {
   h->schedDispatchDelay = 0;                                 // pacing_v2 FIX D latency counter
   for (int si = 0; si < 3; si++) { h->schedAtk[si] = -1; h->schedTgtSlot[si] = -1; h->schedTech[si] = 0; h->pcInTurn[si] = 0;
                                    h->schedItem[si] = 0; h->schedItemTgt[si] = -1; }  // §D turn latch + battle_item_slice.md FIFO
-  h->hitSetHeld = 0;
   // battle_tech_slice.md: no Tech submenu open, no tech list built, no pending/dispatching tech (reset per battle).
   h->techOpen = 0; h->techSel = 0; h->techListN = 0; h->pendTechId = 0; h->actTechId = 0;
   for (int ti = 0; ti < 8; ti++) h->techListId[ti] = 0;
