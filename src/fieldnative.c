@@ -42,25 +42,34 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   }
   if (fabs(o2x - cur->o2x) > 32 || fabs(o2y - cur->o2y) > 32) { o2x = cur->o2x; o2y = cur->o2y; }
   if (fabs(o3x - cur->o3x) > 32 || fabs(o3y - cur->o3y) > 32) { o3x = cur->o3x; o3y = cur->o3y; }
-  long camXk = (long)floor(camXt * k + 0.5), camYk = (long)floor(camYt * k + 0.5);
+  // EVERY PLACE AT t BY ONE RULE: the whole 1/k pixel under it on the map, floor(p * k). The screen shows map pixel
+  // camXk / k + X / k, a layer its pixel at the camera plus its offset, an object its map place less the camera -- each
+  // the floor of its own sum, so whatever moves together at t lands together: a layer held to the camera (BG1, a BG2
+  // part of the map) and one held to the screen (camera + offset constant, a sky) exactly, an object standing on the map
+  // or walking with the camera exactly. (Rounded apart -- the camera to the nearest, the offset down -- a layer held to
+  // the screen came out a quarter pixel off on some t and showed a column of its other side at the screen's edge.) The
+  // floor is also the drawn frame's: the drawn offset is the whole part of the continuous one, so at t = 256 and 1x this
+  // is the frame as composed.
+  #define FLK(p) ((long)floor((p) * k + 1e-9))
+  long camXk = FLK(camXt), camYk = FLK(camYt);
   long offXk[6], offYk[6];
-  // (the floor: the drawn offset is the whole part of the continuous one -- at t = 256 and 1x this is the drawn frame)
-  { long b1x = 0, b1y = 0, b2x = (long)floor(o2x * k + 1e-9), b2y = (long)floor(o2y * k + 1e-9);
-    long b3x = (long)floor(o3x * k + 1e-9), b3y = (long)floor(o3y * k + 1e-9);
-    long ox[6] = { b3x, b2x, b1x, b2x, b1x, b3x }, oy[6] = { b3y, b2y, b1y, b2y, b1y, b3y };
-    for (int i = 0; i < 6; i++) { offXk[i] = camXk + ox[i]; offYk[i] = camYk + oy[i]; } }
+  { const double ox[6] = { o3x, o2x, 0, o2x, 0, o3x }, oy[6] = { o3y, o2y, 0, o2y, 0, o3y };
+    for (int i = 0; i < 6; i++) { offXk[i] = FLK(camXt + ox[i]); offYk[i] = FLK(camYt + oy[i]); } }
   // each object's shift at t (its place at t against where this frame drew it), in 1/k pixels
   int sx[128], sy[128];
   memset(sx, 0, sizeof sx); memset(sy, 0, sizeof sy);
   for (int i = 0; i < cur->nspr && i < 120; i++) {
     int j = 0; while (j < prev->nspr && prev->sprKey[j] != cur->sprKey[i]) j++;
-    double dx = 0, dy = 0;
-    if (j < prev->nspr) {
+    if (j < prev->nspr) {                                 // (new, or a jump: where this frame has it on the screen)
       int wx = cur->sprX[i] - prev->sprX[j], wy = cur->sprY[i] - prev->sprY[j];
-      if (abs(wx) <= 32 && abs(wy) <= 32) { dx = wx - dcx; dy = wy - dcy; }
+      if (abs(wx) <= 32 && abs(wy) <= 32) {
+        // (its map place at t, floor(sprX - back * wx), less the screen's at t, camXk, against where this frame drew it:
+        // the whole pixels cancel)
+        sx[CT_MOT_SPR + i] = (int)(FLK(-back * wx) - FLK(-back * dcx)); sy[CT_MOT_SPR + i] = (int)(FLK(-back * wy) - FLK(-back * dcy));
+      }
     }
-    sx[CT_MOT_SPR + i] = (int)floor(-back * dx * k + 0.5); sy[CT_MOT_SPR + i] = (int)floor(-back * dy * k + 0.5);
   }
+  #undef FLK
   // the sprites, in paint order, into their own plane: 0 none, 1 a sprite pixel, 2 one in front of the foreground
   static uint8_t* sp; static uint8_t* spf; static uint8_t* spp; static size_t spN;
   if (spN < (size_t)W * H) {

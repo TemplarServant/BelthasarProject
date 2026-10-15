@@ -1821,12 +1821,16 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   }
   if (fabs(o2x - cur->o2x) > 32 || fabs(o2y - cur->o2y) > 32) { o2x = cur->o2x; o2y = cur->o2y; }
   if (fabs(o3x - cur->o3x) > 32 || fabs(o3y - cur->o3y) > 32) { o3x = cur->o3x; o3y = cur->o3y; }
-  // each layer's scroll at t, in 1/k pixels (at t = 256 the frame's own: the camera's whole pixel, the offsets' floor)
-  const long c1x = (long)floor((cs->bg1h - back * dcx) * k + 0.5), c1y = (long)floor((cs->bg1v - back * dcy) * k + 0.5);
-  const long c2x = c1x + (long)floor(o2x * k + 1e-9) + (long)(cs->bg2h - cs->bg1h - cur->o2x) * k;
-  const long c2y = c1y + (long)floor(o2y * k + 1e-9) + (long)(cs->bg2v - cs->bg1v - cur->o2y) * k;
-  const long c3x = c1x + (long)floor(o3x * k + 1e-9) + (long)(cs->bg3h - cs->bg1h - cur->o3x) * k;
-  const long c3y = c1y + (long)floor(o3y * k + 1e-9) + (long)(cs->bg3v - cs->bg1v - cur->o3y) * k;
+  // each layer's scroll at t, in 1/k pixels (at t = 256 the frame's own: the camera's whole pixel, the offsets' floor) --
+  // each the floor of its whole sum, camera and offset together, as fieldnative.c does: a layer held to the screen lands
+  // exactly, never a quarter pixel off with a column of its other side at the edge
+  #define FLK(p) ((long)floor((p) * k + 1e-9))
+  const double camXt = cs->bg1h - back * dcx, camYt = cs->bg1v - back * dcy;
+  const long c1x = FLK(camXt), c1y = FLK(camYt);
+  const long c2x = FLK(camXt + o2x) + (long)(cs->bg2h - cs->bg1h - cur->o2x) * k;
+  const long c2y = FLK(camYt + o2y) + (long)(cs->bg2v - cs->bg1v - cur->o2y) * k;
+  const long c3x = FLK(camXt + o3x) + (long)(cs->bg3h - cs->bg1h - cur->o3x) * k;
+  const long c3y = FLK(camYt + o3y) + (long)(cs->bg3v - cs->bg1v - cur->o3y) * k;
   // the registers, as worldComposeAt reads them
   const uint8_t* wr = w->wram;
   const int cgadsub = wr[0x0046], tmain = wr[0x0041], cgwsel = wr[0x0045];
@@ -1834,18 +1838,19 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   const int mathFix = !(cgwsel & 0x02), clip = (cgwsel >> 6) & 3, prevent = (cgwsel >> 4) & 3;
   const int fix[3] = { wr[0x0048] & 0x1F, wr[0x0049] & 0x1F, wr[0x0047] & 0x1F };
   const int bg3On = w->haveBg3 && (tmain & 0x04);
-  // each object's shift at t (its place at t against where this frame drew it), in 1/k pixels
+  // each object's shift at t (its place at t against where this frame drew it), in 1/k pixels: its own step floored as the
+  // camera's, less the camera's
   int sx[256], sy[256];
   memset(sx, 0, sizeof sx); memset(sy, 0, sizeof sy);
   for (int i = 0; i < cur->nspr && CT_MOT_SPR + i < 256; i++) {
     int j = 0; while (j < prev->nspr && prev->sprKey[j] != cur->sprKey[i]) j++;
-    double dx = 0, dy = 0;
-    if (j < prev->nspr) {
+    if (j < prev->nspr) {                             // (new, or a jump: where this frame has it on the screen)
       int wx = owWrapD(cur->sprX[i] - prev->sprX[j], 1536), wy = owWrapD(cur->sprY[i] - prev->sprY[j], 1024);
-      if (abs(wx) <= 32 && abs(wy) <= 32) { dx = wx - dcx; dy = wy - dcy; }
+      if (abs(wx) <= 32 && abs(wy) <= 32) {
+        sx[CT_MOT_SPR + i] = (int)(FLK(-back * wx) - FLK(-back * dcx)); sy[CT_MOT_SPR + i] = (int)(FLK(-back * wy) - FLK(-back * dcy)); }
     }
-    sx[CT_MOT_SPR + i] = (int)floor(-back * dx * k + 0.5); sy[CT_MOT_SPR + i] = (int)floor(-back * dy * k + 0.5);
   }
+  #undef FLK
   // the OBJ layer at t: colour index (0 = none) and priority
   static uint8_t* sci; static uint8_t* spr; static size_t sN;
   if (sN < (size_t)W * H) {
@@ -2404,7 +2409,8 @@ static void motCheck(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_
             FILE* pf = fopen(path, "wb"); if (!pf) continue;
             fprintf(pf, "P6\n%d %d\n255\n", w, CAMH); fwrite(k < 3 ? img[k] : ownRgb, 1, (size_t)w * CAMH * 3, pf); fclose(pf); }
           static uint8_t big[FIELD_WMAX * 4 * CAMH * 4 * 3];   // ...and the frames between at 4x: _mot_t000.ppm .. _mot_t256.ppm
-          for (int t = 0; t <= 256; t += 64) { char path[64]; snprintf(path, sizeof path, "build/_mot_t%03d.ppm", t);
+          int step = getenv("CT_MOTDUMP_STEP") ? atoi(getenv("CT_MOTDUMP_STEP")) : 64; if (step < 1) step = 64;   // (every t-th)
+          for (int t = 0; t <= 256; t = t < 256 && t + step > 256 ? 256 : t + step) { char path[64]; snprintf(path, sizeof path, "build/_mot_t%03d.ppm", t);
             if (!(t < 256 && (CtFieldRasterNative(cur, prev, fb, w, t, 4, big) || owRasterNative(cur, prev, fb, w, t, 4, big)))) CtMotRaster(cur, prev, fb, w, t, 4, big);
             FILE* pf = fopen(path, "wb"); if (!pf) continue;
             fprintf(pf, "P6\n%d %d\n255\n", w * 4, CAMH * 4); fwrite(big, 1, (size_t)w * 4 * CAMH * 4 * 3, pf); fclose(pf); } } }

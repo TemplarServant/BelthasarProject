@@ -20,7 +20,7 @@ int CtMotSprite(CtMotFrame* m, int key, int x, int y) {
 // ---- the self-scrolling layers' continuous offsets (motion.h CtMotFit) ---------------------------------------------------
 int g_ctMotNoFrac;                                 // (CT_MOTCHECK: the owners against the frame as drawn -- whole pixels)
 #define FIT_N 12
-static struct { int scene, n; double v[6][FIT_N]; double q[6]; int qOk[6]; } g_fit;
+static struct { int scene, n; double v[6][FIT_N]; double cam[2][FIT_N]; double q[6]; int qOk[6]; } g_fit;
 // The layer's slope over the history (least squares); 0 = not one steady sub-pixel slope.
 static double fitSlope(const double* v, int n) {
   if (n < 6) return 0;
@@ -47,19 +47,32 @@ void CtMotFit(CtMotFrame* m) {
   m->qFrac = 0;
   if (!m->valid) { g_fit.n = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); return; }
   if (g_fit.scene != m->scene) { g_fit.scene = m->scene; g_fit.n = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); }
-  double now[6] = { m->o2x, m->o2y, m->o3x, m->o3y, m->bg3X, m->bg3Y };
-  if (g_fit.n == FIT_N) { for (int c = 0; c < 6; c++) memmove(g_fit.v[c], g_fit.v[c] + 1, (FIT_N - 1) * sizeof(double)); g_fit.n--; }
+  double now[6] = { m->o2x, m->o2y, m->o3x, m->o3y, m->bg3X, m->bg3Y }, cam[2] = { m->camX, m->camY };
+  if (g_fit.n == FIT_N) { for (int c = 0; c < 6; c++) memmove(g_fit.v[c], g_fit.v[c] + 1, (FIT_N - 1) * sizeof(double));
+                          for (int c = 0; c < 2; c++) memmove(g_fit.cam[c], g_fit.cam[c] + 1, (FIT_N - 1) * sizeof(double)); g_fit.n--; }
   for (int c = 0; c < 6; c++) g_fit.v[c][g_fit.n] = now[c];
+  for (int c = 0; c < 2; c++) g_fit.cam[c][g_fit.n] = cam[c];
   g_fit.n++;
   double q[6];
   for (int c = 0; c < 6; c++) {
     // (a jump in the history -- a re-seed, a teleport -- restarts it)
     if (g_fit.n > 1 && (now[c] - g_fit.v[c][g_fit.n - 2] > 32 || g_fit.v[c][g_fit.n - 2] - now[c] > 32)) {
       for (int k = 0; k < 6; k++) g_fit.v[k][0] = now[k];
+      for (int k = 0; k < 2; k++) g_fit.cam[k][0] = cam[k];
       g_fit.n = 1; memset(g_fit.qOk, 0, sizeof g_fit.qOk);
     }
   }
-  for (int c = 0; c < 6; c++) q[c] = fitOne(c, g_fit.v[c], g_fit.n, now[c]);
+  for (int c = 0; c < 6; c++) {
+    // BG2's / BG3's offset over the canvas that only undoes the camera (camera + offset the same all along the history: a
+    // layer held to the screen, the bridge's sky at 01C) does not scroll on its own: the camera's own interpolation already
+    // places it. Its fit took the camera's whole-pixel steps for a slope and put the layer half a pixel off the screen
+    // between two frames -- the sky shifted, a strip of the layer's other side at the screen's edge.
+    int held = c < 4 && g_fit.n > 1;
+    for (int i = 1; held && i < g_fit.n; i++)
+      if (g_fit.v[c][i] + g_fit.cam[c & 1][i] != g_fit.v[c][0] + g_fit.cam[c & 1][0]) held = 0;
+    if (held) { g_fit.qOk[c] = 0; q[c] = now[c]; continue; }
+    q[c] = fitOne(c, g_fit.v[c], g_fit.n, now[c]);
+  }
   m->q2x = q[0]; m->q2y = q[1]; m->q3x = q[2]; m->q3y = q[3]; m->qbx = q[4]; m->qby = q[5];
   m->qFrac = 1;
 }
