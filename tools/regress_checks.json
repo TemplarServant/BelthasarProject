@@ -39187,6 +39187,111 @@
       "notes": "Roadmap G1a item 1. From the oracle's own playthrough of Jackie's ch27 (saves/ending_re/ending_pre_ff2b.*, the talk to obj9 already made). The cartridge: FF 2B at f131, END f4925, 02D -> 105 f5286 -> 059 f5619 -> 05A f6285, FF 2E at f6838; the port opens FF 2B at f132 and FF 2E at f6840."
     },
     {
+      "name": "lavos-day-chain-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "466",
+        "--loadwram",
+        "saves/lavos_re/lavos_1d2_arrival.lakewram",
+        "--walkscript",
+        "r:40,u:450,n:40,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,a:2,n:38,u:300,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10,a:2,n:10"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/lavos_re/lavos_1d2_arrival.state",
+        "CT_FIELD_MEMMON": "0100:2",
+        "CT_SHOTS": "build/_lavos_chain",
+        "CT_SHOTS_AT": "6400",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/lavos_re/lavos_1d2_arrival.state",
+        "saves/lavos_re/lavos_1d2_arrival.lakewram"
+      ],
+      "expect": [
+        "fmemmon f960 loc=1F7  0100=F701*",
+        "fmemmon f2059 loc=1D2  0100=D201*",
+        "fmemmon f2223 loc=1D3  0100=D301*",
+        "fmemmon f2479 loc=1D2  0100=D201*",
+        "fmemmon f3221 loc=1D3  0100=D301*",
+        "fmemmon f3454 loc=15B  0100=5B01*",
+        "fmemmon f3834 loc=1D3  0100=D301*",
+        "fmemmon f5714 loc=15A  0100=5A01*",
+        "fmemmon f6145 loc=1D3  0100=D301*"
+      ],
+      "pin": [
+        "^fmemmon "
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    ram[0x100AA] |= 0x01;",
+          "replace": "    (void)0;   /* MUT */",
+          "why": "1F7's `34 44 7B` sets $7F00AA bit 0 (C2/7B44): without it the Day of Lavos replays 1F7 and never reaches 1D3"
+        }
+      ],
+      "note_pass": "the Day of Lavos plays through in the port from the bucket's arrival (loc 1D2, Jackie's ch26): 1F7 (Lavos rises; C2/7B44 native), the party's talk in 1D3, the mimic-boss arena 15B, the first fight in 1D3 and its arena 15A -- on the cartridge's path",
+      "notes": "Roadmap G1a. From the oracle's own run (saves/lavos_re/lavos_1d2_arrival.*: EoT's bucket, ch26). The cartridge under the same pad: 1F7 f961, 1D2 f2057, 1D3 f2226, 1D2 f2481, 1D3 f3225, 15B f3456, 1D3 f3838, 15A f5500, 1D3 f5931 -- the port is on its frames to 3 until the fight; the fight's entry comes 13 frames early and its end -> 15A ~97 late/early by drive (open: battle_lavos timing, ROADMAP)."
+    },
+    {
+      "name": "ending-chain-after-lavos-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "82",
+        "--loadwram",
+        "saves/ending_re/ending_052_f1745.lakewram",
+        "--walkscript",
+        "n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,u:150,r:200,u:300,l:120,u:400,l:96,u:400,n:100,u:100,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,n:200,a:2,d:200,n:300"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/ending_re/ending_052_f1745.state",
+        "CT_FIELD_MEMMON": "0100:2,011F:1",
+        "CT_SHOTS": "build/_ending_chain",
+        "CT_SHOTS_AT": "44800",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/ending_re/ending_052_f1745.state",
+        "saves/ending_re/ending_052_f1745.lakewram"
+      ],
+      "expect": [
+        "fmemmon f0 loc=052  0100=5200*  011F=00*",
+        "fmemmon f80 loc=10F  0100=0F01*  011F=00",
+        "fmemmon f1039 loc=002  0100=0200*  011F=00",
+        "fmemmon f2036 loc=04F  0100=4F00*  011F=00",
+        "fmemmon f8051 loc=050  0100=5000*  011F=00",
+        "fmemmon f13473 loc=051  0100=5100*  011F=01",
+        "fmemmon f13983 loc=055  0100=5500*  011F=01",
+        "fmemmon f44406 loc=051  0100=5100*  011F=01",
+        "fmemmon f11886 loc=050  0100=5000  011F=01*",
+        "fmemmon f28651 loc=055  0100=5500  011F=01*"
+      ],
+      "pin": [
+        "^fmemmon f\\d+ loc=\\w+  0100=\\w+\\*",
+        "011F=01\\*"
+      ],
+      "timeout_s": 600,
+      "mutations": [],
+      "note_pass": "after Lavos's core the ending's field chain plays through in the port on the cartridge's frames (to 3): 052 -> 10F -> 002 -> 04F -> the night fair 050 (control back f11886), the walk to Leene's Square 051, the telepods' farewells 055 (control back f28651) and the square again, where `FF 2B` follows (ending-story-plays-through-in-the-port)",
+      "notes": "Roadmap G1a. From the oracle's own run (saves/ending_re/ending_052_f1745.*: Jackie's ch27, the core beaten). The cartridge under the same pad: 10F f82, 002 f1040, 04F f2038, 050 f8054, control f11888, 051 f13474, 055 f13986, control f28650, 051 f44407."
+    },
+    {
       "name": "jackie-saves-census-vs-oracle",
       "argv": [
         "python",

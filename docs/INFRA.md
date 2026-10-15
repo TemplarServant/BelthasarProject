@@ -21,7 +21,9 @@ the bundled CMake/Ninja, configure + compile into `build\`. Targets (from
   the driver's exit code plus a blanket "Build OK" banner. Success is reported (and the
   exit code set) *per target*.
 - **Single-target argument.** `python tools/build.py ct_field` builds and verifies just
-  that target.
+  that target; another ct*.exe running (the player's `ct_field` while `ct.exe` is rebuilt) does not block it.
+- **A second tree.** `CT_BUILD_DIR=build_alt python tools/build.py ct_field` builds into `build_alt\` (gitignored):
+  exes to test with while the player's `build\ct_field.exe` is running. The suite and the tools keep reading `build\`.
 - **The three historical false-"Build OK" traps it catches** (all observed in this
   project; `build.py`'s own header is authoritative once it lands):
   1. **Locked exe.** With `ct_field.exe` still running, the link cannot replace the

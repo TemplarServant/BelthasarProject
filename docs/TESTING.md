@@ -788,6 +788,22 @@ frame after it is held). Four drives (idle, B boosts, steering with bumps, the c
 frame and the END on the same frame (f2877, f2843, f2841, f2844). The picture's bytes are not graded (stage 2).
 Full tier (~1 min). Needs the user's capture.
 
+### lavos-day-chain-in-the-port (ct_field, the oracle's own run from Jackie's ch26)
+
+The Day of Lavos in the port, from the End of Time bucket's arrival (saves/lavos_re/lavos_1d2_arrival.*, loc 1D2): up to
+the party, 1F7 (Lavos rises -- its world script's `34 44 7B`, C2/7B44: `$7F00AA` bit 0; without it 1F7 replays), back to
+1D2, the talk in 1D3, the first mimic arena 15B, then the walk into Lavos and A only: the first fight and its arena 15A.
+Every location change on the cartridge's frame to 3 until the fight (the cartridge: 961, 2057, 2226, 2481, 3225, 3456,
+3838); the fight's own timing is open (ROADMAP). Quick (~13 s). Needs the local saves.
+
+### ending-chain-after-lavos-in-the-port (ct_field, the oracle's own run from Jackie's ch27)
+
+After Lavos's core (saves/ending_re/ending_052_f1745.*, loc 052): A every 202 frames through 10F, 002, 04F to the night
+fair 050, the walk to Leene's Square 051 once control is back, the telepods' farewells 055 and down to the square again.
+Every location change and both control returns on the cartridge's frame to 3 (10F f82, 002 f1040, 04F f2038, 050 f8054,
+control f11888, 051 f13474, 055 f13986, control f28650, 051 f44407). (The cartridge's $011F = 1 inside each load -- C0/0BC8
+at its start, the fn0's `E3 00` at its end -- is not on screen; the port writes both on one frame.) Full (~70 s).
+
 ### ending-story-plays-through-in-the-port (ct_field, the oracle's own playthrough)
 
 The game's ending in the port itself: from saves/ending_re/ending_pre_ff2b.lakewram (Leene's Square, the talk to obj9

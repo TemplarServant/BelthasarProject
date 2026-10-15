@@ -16,6 +16,7 @@ dump.bin
 
 # Build output
 /build/
+/build_alt/
 
 # Vendored upstream clone (the core is copied into snes/)
 /_vendor_*/

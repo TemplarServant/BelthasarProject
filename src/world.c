@@ -1496,6 +1496,16 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
     ram[0x00] = (ram[0x100F7] & 0x02) ? 1 : 0;
     return;
   }
+  if (addr == 0x7B44) {
+    // C2/7B44 -- `LDA $7F00AA / ORA #01 / STA $7F00AA / RTS`: a story bit (1F7, the Day of Lavos: `34 44 7B`).
+    ram[0x100AA] |= 0x01;
+    return;
+  }
+  if (addr == 0x7B4F) {
+    // C2/7B4F -- `LDA $7F019A / ORA #08 / STA $7F019A / RTS`: its sibling, the same shape on another story byte.
+    ram[0x1019A] |= 0x08;
+    return;
+  }
   if (addr == 0x7BD1) {
     // C2/7BD1 -- `LDA $00 / STA $7E29AE / RTS` with M = 8 (C2/180E SEP #20): the song C2/2F0F plays while $7F01ED holds it.
     // The scripts set $00 just before with op 0x13 (1F4: `13 00 00 0D` / `34 D1 7B`).

@@ -40,7 +40,9 @@ import sys
 import time
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-BUILD = os.path.join(ROOT, "build")
+# CT_BUILD_DIR=<dir under the repo>: build into another tree (e.g. build_alt) -- a second set of exes to test with while the
+# player's build\ct_field.exe is running. Everything else (the suite, the tools) keeps reading build\.
+BUILD = os.path.join(ROOT, os.environ.get("CT_BUILD_DIR") or "build")
 STAMP_PATH = os.path.join(BUILD, ".ctbuildstamp.json")
 VCENV_BAT = os.path.join(BUILD, ".ctvcenv.bat")
 
