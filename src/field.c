@@ -10013,6 +10013,18 @@ int main(int argc, char** argv) {
     // to match, three lines it had NO kind for, a tab (whose ROM form carries QUOTES), two stat
     // bonuses whose vocabulary and amount it invented, an id whose ROM string is EMPTY where it
     // printed text anyway, and the longest string in the table.
+  // --loadstate: the snapshot names its own scene ($0100 of the image it carries) and story page, so `--scene` is
+  // optional. The restore below is same-scene only; a `--scene` that disagrees is reported, and the snapshot wins.
+  if (loadStatePath) {
+    uint8_t sf[0x200]; int sl = CtSceneStateLoc(loadStatePath, sf);
+    if (sl >= 0) {
+      if (sceneSet && scene != sl)
+        fprintf(stderr, "[loadstate] %s was taken in loc %03X (scene %d), not scene %d -- loading its own\n",
+                loadStatePath, sl, sl, scene);
+      scene = sl; sceneSet = 1;
+      if (!haveFlags) { memcpy(gmem, sf, 0x200); haveFlags = 1; }
+    }
+  }
     static const int ids[] = { 0xBD, 0xC6, 0xC7, 0xC8, 0xCD, 0x95, 0x96, 0x98, 0xB6, 0xD6, 0x74 };
     int n = 0, empty = 0;
     for (int k = 0; k < (int)(sizeof ids / sizeof ids[0]); k++) {
@@ -10880,7 +10892,7 @@ int main(int argc, char** argv) {
       if (audio && ruleSeeded) CtAudioSeedFromApu(audio, seedSpc->apu);   // (the rule: the image's own SPC)
       if (audio && CtAudioRuleOn() && !g_ruleAudio) CtAudioSetRuleOff(audio, 1);   // (the rule: not this SPC)
       if (audio && CtAudioReady(audio) && f.vm) {
-        if (!ruleSeeded) CtAudioSeedMailboxPage(audio, CtSceneMem7E(f.vm));     // the $C7:00FF tail incl. the $1E05 latch
+        if (!ruleSeeded && !stateApu[0]) CtAudioSeedMailboxPage(audio, CtSceneMem7E(f.vm));     // the $C7:00FF tail incl. the $1E05 latch
         g_fieldAudio = audio;
         CtWorldSetJsl(owSoundJsl);                    // the overworld pass's inline JSL (C2/2F0F)
         { static CtSoundSink sink; sink.ctx = audio; sink.post = fieldSoundPostVm; sink.port = fieldSoundPort;
@@ -10901,7 +10913,7 @@ int main(int argc, char** argv) {
         // command that fieldLoad staged. So the current scene's song is re-staged once, right after
         // the seed -- the same $F6 record through the same path, just replayed at the point the ROM
         // would have reached it. Later scene loads need nothing: by then the page is live.
-        if (!ruleSeeded) { int song = fieldLocationSong(scene);   // (a seeded SPC already plays the image's song)
+        if (!ruleSeeded && !stateApu[0]) { int song = fieldLocationSong(scene);   // (a seeded SPC already plays the image's song)
           uint8_t* mm = CtSceneMem7E(f.vm);
           if (ruleSpc) CtAudioSetEngineMode(audio, 2);         // (the rule: a location load's JSLs run with the NMI off)
           mm[0x1E01] = 0x00; mm[0x1E02] = 0xFF; mm[0x1E03] = 0xFF; mm[0x1E00] = 0x81;
@@ -10995,6 +11007,16 @@ int main(int argc, char** argv) {
   int prevBattleU = 0, prevBattleD = 0;   // Up/Down held-state -> the battle menu-nav edges (§B); field frozen
   int prevBattleL = 0, prevBattleR = 0;   // Left/Right held-state -> target-select nav (battle_scenario2.md T3.1)
   int prevBattleB = 0;             // B-key held-state (X/Backspace) -> the target-select CANCEL edge (P5.1)
+      // --loadstate with the snapshot's SPC beside it (`<state>.apu`, written by F5): the restored WRAM already holds the
+      // CPU's side of the APU protocol, so neither the mailbox seed nor the song re-stage below may write over it -- the
+      // SPC goes back with it instead, as F9 does.
+      char stateApu[1024] = "";
+      if (loadStatePath && stateRestored && !ruleSeeded) {
+        snprintf(stateApu, sizeof stateApu, "%s.apu", loadStatePath);
+        FILE* af = fopen(stateApu, "rb");
+        if (af) fclose(af);
+        else { fprintf(stderr, "[loadstate] no %s -- the location's song starts from a cold driver\n", stateApu); stateApu[0] = 0; }
+      }
   int battleAReleased = 0;         // mode-entry isolation: the A that CONFIRMED the field trigger may still be
                                    // HELD when battle begins; require it to go UP once after entry before the
                                    // first command edge counts (ROM $00F6 fresh-press semantics; user R1/R2)
@@ -11026,6 +11048,8 @@ int main(int argc, char** argv) {
   // callers save their own first and restore it on the way back:
   //   the field  C0/011B (C0/195B / C0/0CEA) `$7E:0920-1DFF -> $7F:2000` (0x14E0 bytes), C0/01A5 -> C0/0905 the reverse,
   //              before the reload's legs and the party reconcile C0/1A03;
+        if (stateApu[0] && !CtAudioLoadState(audio, stateApu))
+          fprintf(stderr, "[loadstate] %s did not load -- the SPC stays cold (the music may break)\n", stateApu);
   //   the overworld C2/2E23 six blocks -- $0000-00EF, $0700-1DFF, $B000-B507, $4000-6FFF, $7200-7DFF, $7E00-85FF --
   //              and C2/2E72 the reverse, right after the RTL.
   // The copies live here, not at the ROM's $7F addresses: the field's $7F:2000 is its event script, which the cartridge
@@ -11391,6 +11415,7 @@ int main(int argc, char** argv) {
           running = 0; } } }
 
     // (the title's own picture belongs to the frame that drew it: the probe above has had it; a frame that does not draw
+  int pendStateLoc = -1;   // DEBUG F9 across scenes: the location being entered, whose ct_debug.state is restored at its end
     //  the title breaks the chain of latches the frames between interpolate along)
     g_hostTiChain = g_hostTi != NULL; g_hostTi = NULL;
     // ---- SOUND: one frame of the SPC700, then hand the DSP's samples to SDL ----
@@ -12316,7 +12341,27 @@ int main(int argc, char** argv) {
         fprintf(stderr, ok ? "[debug] F5: saved %s (+ _frame/_screen.ppm; and ct_debug.state); logged in ct_debug_log.txt\n"
                            : "[debug] F5: SAVE FAILED (%s)\n", np);
       }
-      if (f9 && !prevF9) {
+      // A SNAPSHOT FROM ANOTHER SCENE. The restore is same-scene only (the VM's static scene data must be the one it was
+      // taken over), so F9 first walks to the snapshot's location ($0100 of its image) through the door path -- at black,
+      // the destination's own spawn -- and restores once that entry has finished, as if F9 were pressed there.
+      int f9Now = f9 && !prevF9;
+      if (f9Now) {
+        int sl = CtSceneStateLoc("ct_debug.state", NULL);
+        if (sl >= 0 && sl != scene) {
+          f9Now = 0;
+          if (!fade && !pendKind) {
+            pendKind = 1; pendDest = sl; pendX = -1; pendY = -1; pendTileX = pendTileY = -1; pendFac = 0; pendHasFlags = 0;
+            fade = 1; fadeBri = 0; g_arrivalFromSpawn = 1; pendStateLoc = sl;
+            fprintf(stderr, "[debug] F9: ct_debug.state is loc %03X (scene %d) -- entering it, then restoring\n", sl, sl);
+          } else fprintf(stderr, "[debug] F9: ct_debug.state is loc %03X -- not during a transition, press again\n", sl);
+        }
+      }
+      if (pendStateLoc >= 0 && !fade && !pendKind) {
+        if (scene == pendStateLoc) f9Now = 1;
+        else fprintf(stderr, "[debug] F9: the entry ended in scene %d, not loc %03X -- nothing restored\n", scene, pendStateLoc);
+        pendStateLoc = -1;
+      }
+      if (f9Now) {
         double plr[4]; int r = CtSceneLoadState(f.vm, "ct_debug.state", plr);
         if (r) fieldMapFromWram(&f, CtSceneMem7E(f.vm), "F9");
         // THE SOUND PROCESSOR GOES BACK WITH THE WRAM. The restored WRAM holds the CPU's side of the APU protocol (the
@@ -12334,7 +12379,7 @@ int main(int argc, char** argv) {
           px = ax; py = ay; pfac = fa;
           pz = CtSceneMem7E(f.vm)[0x0155] & 3;               // the snapshot's own $0155, not the tile's `zb & 3`
           fprintf(stderr, "[debug] F9: loaded ct_debug.state (VM only) -> (%d,%d)\n", ax, ay);
-        } else fprintf(stderr, "[debug] F9: no/invalid ct_debug.state (same-scene only)\n");
+        } else fprintf(stderr, "[debug] F9: no/invalid ct_debug.state\n");
       }
       prevF5 = f5; prevF9 = f9;
     }
@@ -12371,7 +12416,21 @@ int main(int argc, char** argv) {
         fprintf(stderr, "[debug] F5: no scene (overworld/menu) -> wrote %s (128K) + %s (8K), and ct_debug.wram/.srm; "
                         "logged in ct_debug_log.txt; replay with --menutest %s\n", nw, ns, nw);
       }
-      prevF5 = f5b;
+      // F9 from the world: ct_debug.state is a scene's, so enter its location the way an overworld entry does (at once,
+      // the destination's own spawn) and restore it when the entry ends -- the field's F9 above, pendStateLoc.
+      int f9b = dks2[SDL_SCANCODE_F9];
+      if (f9b && !prevF9) {
+        int sl = CtSceneStateLoc("ct_debug.state", NULL);
+        if (sl < 0) fprintf(stderr, "[debug] F9: no/invalid ct_debug.state\n");
+        else if (!inWorld || menuPhase || fade || pendKind)
+          fprintf(stderr, "[debug] F9: ct_debug.state is loc %03X -- only from the open overworld, press again\n", sl);
+        else {
+          pendKind = 3; pendDest = sl; pendX = -1; pendY = -1; pendTileX = pendTileY = -1; pendFac = 0; pendHasFlags = 0;
+          fade = 1; fadeBri = 0; g_arrivalFromSpawn = 1; pendStateLoc = sl;
+          fprintf(stderr, "[debug] F9: ct_debug.state is loc %03X (scene %d) -- entering it, then restoring\n", sl, sl);
+        }
+      }
+      prevF5 = f5b; prevF9 = f9b;
     }
     // ---- OVERWORLD mode: the byte-exact M3 engine drives until a location entry ----
     // menuPhase != 2: the menu is ONE machine for both modules (the ROM has ONE C2/8000 program).

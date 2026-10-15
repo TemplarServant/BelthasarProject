@@ -457,6 +457,7 @@ int  CtSceneActorScripted(const CtScene* sc, int i); // 1 = a called/scripted fn
 int  CtSceneActorMode(const CtScene* sc, int i);     // $1100 move-mode probe (debug)
 int  CtSceneSaveState(const CtScene* sc, const char* path, const double player[4]);  // DEBUG: snapshot the scene + the field player state {px,py,pz,pfac} (ct_field F5)
 int  CtSceneLoadState(CtScene* sc, const char* path, double player[4]);  // DEBUG: restore (F9); same-scene only. 0=fail, 1=VM only (old/no player), 2=VM+player[] restored
+int  CtSceneStateLoc(const char* path, uint8_t* flags);  // DEBUG: the location ($0100) a snapshot was taken in (+ its $7F:0000 page into flags[0x200] if non-NULL); -1 if not loadable
 void CtSceneAnimFinished(CtScene* sc, int i);       // renderer: the once-anim of actor i ended
 void CtSceneChoose(CtScene* sc, int option);   // pick option N: set the owner's `result` (op 0x1A) + dismiss
 void CtSceneGetFlags(const CtScene* sc, uint8_t* out0x200);  // copy the live $7F0000 story flags (door carry)

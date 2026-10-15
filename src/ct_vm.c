@@ -8187,6 +8187,22 @@ void CtSceneAnimFinished(CtScene* sc, int i) {
   if (i < 0 || i >= sc->nobj) return;
   // The ROM's completion condition is $7F0B01,X == 1 (C0/2EA2), driven 2 -> 1 by the frame legs
   // CtSceneTick runs (CtAnimTimerTick's CA4F arm, CtFieldFrameLookup's CBA4 arm) whenever the legs
+// The location a snapshot was taken in: $0100 of the WRAM image that closes it (v3/v4), so the host can load that
+// scene before CtSceneLoadState, which is same-scene only. `flags` (0x200 bytes, may be NULL) takes the image's
+// $7F:0000 story page, for the scene's create-time fn0 pass. -1 if the file is not a loadable snapshot.
+int CtSceneStateLoc(const char* path, uint8_t* flags) {
+  FILE* f = fopen(path, "rb");
+  if (!f) return -1;
+  uint32_t magic = 0, ver = 0, sz = 0; uint8_t loc[2];
+  long img = 0;
+  int ok = fread(&magic, 4, 1, f) == 1 && fread(&ver, 4, 1, f) == 1 && fread(&sz, 4, 1, f) == 1
+        && magic == CT_STATE_MAGIC && (ver == CT_STATE_VERSION || ver == 3u) && sz == (uint32_t)sizeof(CtScene);
+  if (ok) img = (long)(12 + sz + 4 * sizeof(double));                    // header, CtScene, player[4] -> the image
+  ok = ok && fseek(f, img + 0x0100, SEEK_SET) == 0 && fread(loc, 1, 2, f) == 2;
+  if (ok && flags) ok = fseek(f, img + (long)offsetof(Mem, g), SEEK_SET) == 0 && fread(flags, 1, 0x200, f) == 0x200;
+  fclose(f);
+  return ok ? ((loc[0] | (loc[1] << 8)) & 0x1FF) : -1;
+}
   // are on and a ROM image is there for them to read the $E4 tables from. Then this renderer signal
   // decides NOTHING, and must not: writing the byte here would put the port's own playback clock
   // over the ROM's, which is the defect the delegation retired (see step()'s anim arm).
