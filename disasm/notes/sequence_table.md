@@ -2506,4 +2506,67 @@ in the same frame: the field clears both IPs), world 1F6, loc 1DD f1029. Native 
 the reboot into 1F6, whose world script needed two more natives (C2/7B5A: C6:FDF0's packet 3 into $7F:9000; C2/7B9F:
 C6:FEA0's packet 18 into $7E:C600, both through C3/0557), and 1DD at f1010 (the cartridge f1011).
 
-**Open.** The picture (stage 2); a real capture at the Blackbird would grade the context too (the song playing, the party).
+**Open.** The picture (stage 2); a real capture at the Blackbird would grade the context too (the song playing, the party). Since 2026-10-15 the
+grade also takes palette records 0 and 1 ($0520-$0537, the moon's light chain's): exact. Records 2-11 -- the field's own
+colour cycles, which FD/E39C keeps running -- are one step behind the cartridge's in the port from the first frame on (one
+service fewer before the first NMI; not yet located): the picture's, open.
+
+## 15. ENTRY 4 (`FF 24`, scene 301: the Tyranno Lair, Lavos falls) -- stage 1 (2026-10-15)
+
+**Where the story calls it.** Scene 301 (loc 12D, the Lair's top). Objs 15-20 sit on row 10 (x 5-10) and each one's slot 1
+calls obj21 fn3 (raw $0373): Azala's talk, `D8 93 C0` (the Black Tyranno + Azala), the talk after it, `65 07 EC` (glb[236]
+bit 7), a fade, `FF 24`. The teardown reboots into 301, whose obj0 fn1 sees the bit and hides Azala and the Tyranno; Ayla's
+lines, the dactyls, then `DF` into world 1F3 (the crater; its op 49 fades the impact's colour), 105 (Ioka), 1F3. Jackie's
+ch17 (world 1F3, storyline 93, Crono / Ayla / Robo) is before it -- `ct.exe --teleport 301 8 30 0 --method req` loads the
+scene through the ROM's loader (the default method from a world state leaves the field's VRAM unloaded); the party loses
+the fight on A alone, so the oracle's run pokes both enemies' HP to 1 ($5FB0 the Tyranno, $61B0 Azala; slots 0 and 4).
+
+**The setup** $7E:53BB has no arm on `$0384`: its VRAM packets ($3691 / C3/0557: the first into $7E:0C00, read back through
+WMDATA by $54EA), the mode-7 tile conversion $37CA (bank 7F), the tables $36AA and the DMAs are the picture's. For the
+logic: `$0A20 = 552A`, `$0B20 = 5568`, page A once ($3749), the 128 stars ($5777), `$038E = 0606`. Page A adds `3749 3754
+579B 56A9 347A` and the hooks `380B 5654`, waits 77, writes TM, counts r0 down 35 times by 40; page B counts its spans,
+adds `5855`, steps r5 by 2 (twice 43 frames), adds `55F9`, moves r2 up / down / up (7 / 15 / 7 steps of 15 frames), drops
+`55F9` and `5855`, calls `564D` (page A to `$5635`: r0 += 40 for 35 frames) and `5640` (`$582E = 0080`: the stars' far tiles
+turn plain; page A to `$5604`: the planet's sprite `56EB` -- C3/0D5E, the OAM's -- r1/r2 stepping, TM, then `34E3`, which
+ENDs). No `F5`, no song.
+
+**The tasks the logic reads.** `$56A9` (D = $0A00): r5 += 16 -- `ADC #0016` without CLC: the dispatcher's `CPX #0020`
+leaves the carry clear for every slot but 0 -- then the mode-7 matrix r10..r13 from cos/sin r5 times r0 ($56D1: |v| * r0
+through $31BF, the high word's middle, the sign put back). `$5855` (D = $0B00): r1 = sin r5 >> 5, r0 = cos r5 >> 5.
+`$55F9`: r5 += 2. `$579B`: the stars (Y = $11 .. 1FC by 4) -- the depth $0E00,Y moves by page B's r0, a star past 7F (or
+below 0 backwards) is drawn again from the RNG ($3443 -> C3/02DD, X = the task's slot), x/y $0C00/$0C01 move by r1/r2, and
+the sprite into the OAM shadow: x = v * 256 / depth (the divider; its low byte halved, the sign back) + 80 + the carry the
+PHP saved, y the same + 70, the tile 60 + depth / 8, the attributes 32 below tile 68 until `$582E`'s `BMI` became a `BRA`.
+The carry runs through the whole loop as the ROM threads it (`CMP #7F`, the RNG's last `SBC`, each `ADC`, the PLPs). The
+hook `$380B` resets the OAM cursors `$11 = 0` / `$13 = 0900` after `$3870` finishes the last high-table byte -- the stars'
+loop starts from `$11`, which `56EB` advances later in the same frame.
+
+**C3/02DD under the rule** (the RNG): `ROL / ADC $0386 / STA / TXA / ADC $0386 / ADC $0008 / CMP $2137 / ADC $213C / SBC
+$213D / ADC $0386 / ADC $00F0 / EOR $00F2 / ADC $00F4 / SBC $213D / STA $0386`. The virtual beam gives `$213C = $0351`,
+`$213D = 00`; `CMP $2137` latches the counters and reads the open bus, the operand's own `21` -- it only sets the carry. The
+setup's draws see `$00F0 = 40`, `$00F2 = 18` (then each star's X, `STX $00F2`), `$00F4 = 0`; the first draw's A is what page
+A's first visit left (`55`, the IP its loop's yield stored) with the carry clear (C3/0C97's `ASL`). `$0386` is the field's
+afterwards (its wipes fold it in), so it is graded.
+
+**Graded.** `ct.exe --seqstage saves/tyranno_re/ff24_handoff_f27.state 24 ...` (tools/ending_stage_cmp.py drive 24, the
+regions plus `$0386` and the star bytes of $0C00-$0FFF): **1711 frames, 0 differing, END f1735 on both**. The cartridge: `FF
+24` on the hand-off's f1, the setup at f18 (1937968 cycles, the beam trace), the first NMI with tasks f24 (shift 24). The port
+in the field (tyranno-ff24-chain-plays-through-in-the-port, from saves/tyranno_re/tele301_req.*): the walk, the talk, the
+fight (the same poke), `FF 24` at f4331, 22 black frames, the END 1732 frames after the op -- the cartridge's 1734. The two
+frames are the opening's pricing: C3:0000 -> $7E:3010 is 7899068 cycles on the cartridge (22 boundaries), then the common
+init's `JSR $31B0` waits for a vblank (boundary 23: a wait by design) and the setup's own `JSL C3/08D0` runs in the frame
+after it, NMI off, so the first NMI comes at boundary 24; the field prices `(oc + od + os) / 346888` = 22 for the whole
+opening. FF 23 shows the same frame (1DD at f1010, the cartridge's f1011: 6074890 cycles = 16.999 frames, then the wait).
+A timing artefact (CLAUDE.md 2026-10-09); open.
+
+**Found on the way: Azala's ring.** In the port the fight froze on Azala's technique (CD/D38E): its effect program 74
+(D1/6CD9) loops `83 96 / EB 01 / 84` and op EB (CD/185F -> D1/EFE3) was missing, so the program stopped and the tech never
+ended. D1/EFE3: `$CD3A += [$40]`, the radius `60 - $CD3A`, the centre point 0 + its offset ($CA5A + $CA5E, $CA5C + $CA60),
+106 point pairs into $C15D.. (x at +0/+4, y at +2/+6, 8 bytes a step) from CE:F48E[angle] * radius (the product's high byte,
+negated for an angle >= 80, sign-extended by its bit 7), the angles from `$7C * 2` / `$7C * 4`, one step each a pair. On the
+cartridge (its own fight, s301_c2) EB runs from f2121, `$CD3A` 01, 02, 03 ..; in the port the program now ends
+(battle-azala-ring-op-eb-in-the-port).
+
+**Open.** The picture (stage 2: the planet in mode 7, the stars' sprites, 56EB); the two frames above; the world 1F3's
+picture natives after the fall (C2/7957, C2/7981 -- the window circle through C3/0008 -- and C6:E072, a COLDATA HDMA), which
+advance without running.

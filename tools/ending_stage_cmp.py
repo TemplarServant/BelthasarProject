@@ -44,7 +44,19 @@ DRIVES = {
     # 91 35 / FF 23`, on the cartridge (saves/blackbird_re/ff23_story_poked.state; the hand-off at f25, FF 23 on f26)
     '23': dict(state=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'), handoff=0,
                hstate=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'),
-               shift=19, hold=20, total=650, tag='seqstage'),
+               shift=19, hold=20, total=650, tag='seqstage',
+               # (palette records 0 and 1, which the moon's light chain waits on and arms -- FD/E39C's, task $37FA; records 2-11, the
+               # field's own colour cycles, are a step behind in the port: open, sequence_table.md sec. 14)
+               extra=[(0x0520, 0x18)]),
+    # entry 4 (`FF 24`, scene 301 after the Black Tyranno: Lavos falls) -- Jackie's ch17 brought to 301 (`--teleport 301 8 30 0
+    # --method req`), walked to the trigger row, the fight won (both enemies' HP poked to 1: saves/tyranno_re/s301_c1_hp1.state),
+    # the talk advanced with A; the hand-off at f27 of ff24_pre_f3100 (FF 24 on its f28). The stars' RNG ($0386) and their
+    # tables ($0C00-$0FFF) are graded too: the field inherits $0386.
+    '24': dict(state=os.path.join(ROOT, 'saves', 'tyranno_re', 'ff24_handoff_f27.state'), handoff=0,
+               hstate=os.path.join(ROOT, 'saves', 'tyranno_re', 'ff24_handoff_f27.state'),
+               shift=24, hold=25, total=1800, tag='seqstage', extra=[(0x0386, 1), (0x0C00, 0x400)], unskip={0x0386},
+               # (the rest of $0C00-$0FFF is the setup's first VRAM packet, decompressed there: the picture's)
+               skip={a for a in range(0x0C00, 0x1000) if (a - 0x0C00) % 4 not in ((0, 1) if a < 0x0E00 else (0,))}),
 }
 REGIONS = [(0x0000, 2), (0x0380, 0x1C), (0x0920, 0x20), (0x0A00, 0x30), (0x0B00, 0x30)]
 # the picture's bytes inside them: the credits pointer (task $9B4F) and the overlay's RNG $039B ($7E:3448), which only the
@@ -97,7 +109,8 @@ def marks(full, shift, d):
 
 
 def run(op, d, verbose):
-    spec = ','.join('7E%04X:%d' % r for r in REGIONS)
+    spec = ','.join('7E%04X:%d' % r for r in REGIONS + d.get('extra', []))
+    skip = (SKIP - d.get('unskip', set())) | d.get('skip', set())
     env = dict(os.environ, CT_ORACLE_LOGICAL='1')
     if not os.path.exists(d['hstate']):
         subprocess.run([CT, ROM, '--peek', d['state'], os.path.join(ROOT, 'build', '_ending_h.raw'), '--btnscript',
@@ -130,7 +143,7 @@ def run(op, d, verbose):
         if of not in ofull:
             continue
         ov, pv = ofull[of], pfull[pf]
-        dd = [k for k in sorted(set(ov) | set(pv)) if k not in SKIP and ov.get(k) != pv.get(k)]
+        dd = [k for k in sorted(set(ov) | set(pv)) if k not in skip and ov.get(k) != pv.get(k)]
         n += 1
         if dd:
             bad += 1
@@ -152,7 +165,7 @@ def run(op, d, verbose):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('-v', action='store_true')
-    ap.add_argument('--drives', default='2B,2E,23')
+    ap.add_argument('--drives', default='2B,2E,23,24')
     a = ap.parse_args()
     for op in a.drives.split(','):
         run(op, DRIVES[op], a.v)

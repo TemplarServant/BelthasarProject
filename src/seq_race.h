@@ -66,6 +66,14 @@ void CtSeqStageEnd(uint8_t* w, const CtRaceIo* io);
 // to 0), $7E:34E3 fades out and ENDs ($7E:0000 += 1) -- one step every $038E frames ($038F counts). CtSeqTaskFn's return.
 unsigned CtSeqTaskFade(uint8_t* w, unsigned slot, unsigned task, const CtRaceIo* io);
 
+// $7E:3465 -- the sine of an angle (0-$3FF) from the table at $C0:F900 (a byte each), negative below $200: `AND #03FF / TAX /
+// LDA $C0F900,X / AND #00FF / CPX #0200 / BCS -> RTS / EOR #FFFF / INC A`. $7E:3461 is the cosine (`CLC / ADC #0100` first).
+unsigned CtSeqSine(const CtRaceIo* io, unsigned a);
+// $7E:31BF -- the unsigned 16 x 16 product $F0 * $F2 into $F4-$F7 (D = `d`) on the CPU's 8 x 8 multiplier, as the ROM has it
+// (M = 16, X = 8), down to its `ROL $F7`: it parks the middle sum's carry in $F7 bit 0 for the high word, and its own carry out
+// -- bit 7 of $F8, the byte after -- goes into the next ADC.
+void CtSeqMul31BF(uint8_t* w, unsigned d);
+
 // $7E:485D, the race's per-frame task, over the 128 KB WRAM image `w` ($7E at 0, $7F at 0x10000; D = $0000). Returns the
 // task that holds this slot afterwards: 0x485D (it stays), 0 (it removed itself, $39A7: Johnny crossed the line first) or
 // another task address that replaces it ($39B1: 0x4677, the player crossed first).

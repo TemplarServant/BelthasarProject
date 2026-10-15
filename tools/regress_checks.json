@@ -39061,14 +39061,16 @@
         "saves/ending_re/ending_handoff_f130.state",
         "saves/ending_re/ending_handoff_f6837.state",
         "tools/ending_stage_cmp.py",
-        "saves/blackbird_re/ff23_handoff_f25.state"
+        "saves/blackbird_re/ff23_handoff_f25.state",
+        "saves/tyranno_re/ff24_handoff_f27.state"
       ],
       "expect": [
         "endingstage: FF 2B 4746 frames compared, 0 differing, END cartridge f4925 port f4925 (same)",
         "endingstage: FF 2B song markers cartridge 829 2029 3950 4910 port 829 2029 3950 4910",
         "endingstage: FF 2E 10948 frames compared, 0 differing, END cartridge fNone port fNone (same)",
         "endingstage: FF 2E song markers cartridge 115 2037 4192 7788 port 115 2037 4192 7788",
-        "seqstage: FF 23 582 frames compared, 0 differing, END cartridge f601 port f601 (same)"
+        "seqstage: FF 23 582 frames compared, 0 differing, END cartridge f601 port f601 (same)",
+        "seqstage: FF 24 1711 frames compared, 0 differing, END cartridge f1735 port f1735 (same)"
       ],
       "pin": [
         "^endingstage: ",
@@ -39109,8 +39111,8 @@
         {
           "file": "src/seq_ending.c",
           "find": "    if (!(((x - 0xAB1A) & 0xFFFF) & 0x8000)) return 0;                // 9B76 CPX #AB1A / BMI -> 9B7E, else JMP $39A7",
-          "replace": "    if (!(((x - 0xAB00) & 0xFFFF) & 0x8000)) return 0;   /* MUT */",
-          "why": "the pager ends past the last page ($AB1A): the task leaves the list then, and the slots after it move"
+          "replace": "    if ((((x - 0xAB1A) & 0xFFFF) & 0x8000)) return 0;   /* MUT: BPL for BMI */",
+          "why": "the pager leaves the list only past the last page ($AB1A, `CPX / BMI`): with the branch's sense inverted it left after the first page"
         },
         {
           "file": "src/seq_ending.c",
@@ -39126,13 +39128,25 @@
         },
         {
           "file": "src/seq_entry3.c",
-          "find": "      if (w[0x0520]) return t;                                        // 6A53 LDA $0520 / BEQ / RTS",
+          "find": "      if (w[0x0520]) return t;                                        // 6A76 LDA $0520 / BEQ / RTS",
           "replace": "      (void)0;   /* MUT */",
-          "why": "the moon's first light step waits for record 0's fade (FD/E39C, task $37FA) like the other two"
+          "why": "the moon's second light step waits for record 0's fade (FD/E39C, task $37FA) to end before it arms the next (the first finds it ended already)"
+        },
+        {
+          "file": "src/seq_entry4.c",
+          "find": "  *c = a >= 0x21;                                                     // 02EB CMP $2137",
+          "replace": "  (void)0;   /* MUT */",
+          "why": "C3/02DD's `CMP $2137` reads the open bus (the operand's 21) and sets the carry the next ADC adds: the stars' RNG $0386 the field inherits"
+        },
+        {
+          "file": "src/seq_entry4.c",
+          "find": "    case 0x5640: wr(w, 0x582E, 0x0080); wr(w, 0x0A20, 0x5604); return 0;",
+          "replace": "    case 0x5640: wr(w, 0x582E, 0x0080); return 0;   /* MUT */",
+          "why": "page B's call $5640 sends page A to its last part ($5604: the planet's sprite, then the fade that ENDs)"
         }
       ],
-      "note_pass": "the ending's $C3 stage (entries 10/11/14/15 = $7E:8538) runs natively (src/seq_ending.c on seq_race.c's shared machine): its two scripts, the waits on the song's markers (`F5`, the SPC's port 2), the fades and the END, the tasks and hooks whose work the logic reads (the orbit, the credits' pager, the rolling text, the planet, the backdrops' list resets) and the NMI's song change with its upload frames -- `FF 2B` for 4747 frames and `FF 2E` for 10948, byte for byte with the cartridge; and entry 3 from the story (`FF 23`, after the Blackbird) for 582 frames, the END on the same frame",
-      "notes": "Roadmap G1a item 1 (the $C3 sequences): the ending a playthrough meets (sequence_table.md sec. 13). The cartridge runs saves/ending_re/ending_pre_ff2b.state (reached by the oracle from Jackie's ch27, memory note endgame-oracle-route) under the rule; the port runs ct.exe --seqstage from the cartridge's state at the hand-off (f130), its SPC seeded into CtAudio; frame k = the cartridge's k + 179, the SPC 50 frames ahead. The picture is stage 2. FF 23: the attract's own hand-off (saves/attract_entry3_handoff_rule_f8859.state) with $7F0057 bit 2 cleared and the storyline set to D3, so scene 107's controller takes the story's arm (saves/blackbird_re)."
+      "note_pass": "the ending's $C3 stage (entries 10/11/14/15 = $7E:8538) runs natively (src/seq_ending.c on seq_race.c's shared machine): its two scripts, the waits on the song's markers (`F5`, the SPC's port 2), the fades and the END, the tasks and hooks whose work the logic reads (the orbit, the credits' pager, the rolling text, the planet, the backdrops' list resets) and the NMI's song change with its upload frames -- `FF 2B` for 4747 frames and `FF 2E` for 10948, byte for byte with the cartridge; and entry 3 from the story (`FF 23`, after the Blackbird) for 582 frames, the END on the same frame; and entry 4 (`FF 24`, the Tyranno Lair: Lavos falls) for 1711 frames with its stars' RNG and tables, the END on the same frame",
+      "notes": "Roadmap G1a item 1 (the $C3 sequences): the ending a playthrough meets (sequence_table.md sec. 13). The cartridge runs saves/ending_re/ending_pre_ff2b.state (reached by the oracle from Jackie's ch27, memory note endgame-oracle-route) under the rule; the port runs ct.exe --seqstage from the cartridge's state at the hand-off (f130), its SPC seeded into CtAudio; frame k = the cartridge's k + 179, the SPC 50 frames ahead. The picture is stage 2. FF 23: the attract's own hand-off (saves/attract_entry3_handoff_rule_f8859.state) with $7F0057 bit 2 cleared and the storyline set to D3, so scene 107's controller takes the story's arm (saves/blackbird_re). FF 24: Jackie's ch17 brought to scene 301 (`--teleport 301 8 30 0 --method req`), walked to the trigger row, the fight won with both enemies' HP poked to 1 and the talk advanced with A (saves/tyranno_re); the extra regions $0386 and the star bytes of $0C00-$0FFF."
     },
     {
       "name": "ending-story-plays-through-in-the-port",
@@ -39425,6 +39439,125 @@
       ],
       "note_pass": "after the Blackbird the story's panorama (`FF 23`, scene 107's story arm) plays through in the port: loc 1F6 staged, the native entry-3 stage to its END, the reboot into the Epoch's world 1F6 (its natives C2/7B5A / 7B9F) and on to 1DD -- the cartridge's path",
       "notes": "Roadmap G1a item 1. The cartridge from the same state (saves/blackbird_re/ff23_story_f18: the attract's hand-off at loc 06B with the story's two bytes, $7F0057 bit 2 clear and the storyline D3): 1F6 f3, `FF 23` f8, the END f583, 1DD f1011. A real capture at the Blackbird would grade the context too (the song, the party)."
+    },
+    {
+      "name": "tyranno-ff24-chain-plays-through-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "301",
+        "--loadwram",
+        "saves/tyranno_re/tele301_req.lakewram",
+        "--walkscript",
+        "u:300,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/tyranno_re/tele301_req.state",
+        "CT_LOCTRACE": "1",
+        "CT_FIELD_MEMMON": "0100:2,0047:3",
+        "CT_POKEWRAM": "5FB0=01,5FB1=00,61B0=01,61B1=00",
+        "CT_POKEWRAM_AT": "1700",
+        "CT_SHOTS": "build/_ff24_chain",
+        "CT_SHOTS_AT": "9000",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/tyranno_re/tele301_req.state",
+        "saves/tyranno_re/tele301_req.lakewram"
+      ],
+      "expect": [
+        "sequence: entry 4 (Lavos falls) opening at f4331 -- 5728360 + 49152 + 1938002 cycles = 22 black frame(s)",
+        "sequence: the fall ended ($7E:0000=1) -> reboot into loc 12D",
+        "reboot: JML C0:0000 -> loc 12D tile(8,13) bits00",
+        "reboot: op 0xDF/0xE1 at the vblank -> $0100=1F3, $0105=12D",
+        "reboot: JML C0:0000 -> loc 1F3 tile(0,0) bits01",
+        "fmemmon f8870 loc=105  0100=0501*  0047=3D1E1E",
+        "fmemmon f8703 loc=1F3  0100=F301  0047=1B1B1B*",
+        "fmemmon f8710 loc=1F3  0100=F301  0047=000000*",
+        "fmemmon f8716 loc=1F3  0100=F301  0047=101010*"
+      ],
+      "pin": [
+        "^sequence: entry 4 ",
+        "^sequence: the fall ended",
+        "^reboot: ",
+        "^fmemmon f\\d+ loc=105",
+        "^fmemmon f87(03|10|16) loc=1F3"
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      if (seqId != 2 && !seqOpen && CtEntry4StageHas((uint8_t)seqId)) {",
+          "replace": "      if (0) {   /* MUT: entry 4 is not ported */",
+          "why": "without the native stage the port held on `FF 24` for good: the Tyranno Lair never let the party out"
+        },
+        {
+          "file": "src/world.c",
+          "find": "        ram[a] = (uint8_t)(ram[a] - op[3]);",
+          "replace": "        (void)a;   /* MUT */",
+          "why": "world 1F3's op 49 (C2/1B15) steps the impact's colour $0047-$0049 down by 4 a frame"
+        }
+      ],
+      "note_pass": "after the Black Tyranno the Tyranno Lair's `FF 24` plays through in the port: the native entry-4 stage to its END, the reboot into 301 (Azala's last words, the dactyls), world 1F3 with the impact's colour fade (op 49) and on to 105 -- the cartridge's path",
+      "notes": "Roadmap G1a. Jackie's ch17 brought to scene 301 through the ROM's loader (`ct.exe --teleport 301 8 30 0 --method req`, saves/tyranno_re/tele301_req.*), walked up to the trigger row (objs 15-20 call obj21 fn3), the talk and the fight driven with A; the fight's two enemies' HP poked to 1 at f1700 (CT_POKEWRAM: $5FB0 Black Tyranno, $61B0 Azala) -- a test fixture, the party of ch17 loses the fight on A alone on the cartridge too. The cartridge (s301_c1_hp1, the same poke): `FF 24` at f3128, the END 1734 frames later, world 1F3 f7378, $0047 = 1F at +148 then -4 a frame from +152, 105 at +319; the port: the END 1732 frames after `FF 24` (the common init's vblank wait $7E:3010 -> $31B0 and the setup's NMI frame are not priced: a timing artefact) and 1F3's leg 3 frames later than the cartridge's, the same fade and the same path."
+    },
+    {
+      "name": "battle-azala-ring-op-eb-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "301",
+        "--loadwram",
+        "saves/tyranno_re/tele301_req.lakewram",
+        "--walkscript",
+        "u:300,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/tyranno_re/tele301_req.state",
+        "CT_BATTLE_TRACE": "1",
+        "CT_SHOTS": "build/_azala_ring",
+        "CT_SHOTS_AT": "4200",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/tyranno_re/tele301_req.state",
+        "saves/tyranno_re/tele301_req.lakewram"
+      ],
+      "expect": [
+        "fleeprog f2589 slot0 op=84 at=6CFE next=6CFF BE9A=00 CFFF=00 9FFA=00 loop=0",
+        "fleeprog f2654 done 5D9B=0 CCEA=1 stops=0",
+        "fleeprog: run total stops=0"
+      ],
+      "pin": [
+        "^fleeprog f2589 slot0 op=84 at=6CFE next=6CFF",
+        "^fleeprog f2654 done",
+        "^fleeprog: run total"
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "case 0xE8: case 0xE9: case 0xEB: case 0xEE:",
+          "replace": "case 0xE8: case 0xE9: case 0xEE:",
+          "why": "without op EB (CD/185F -> D1/EFE3) the effect program stopped on it and the fight froze on Azala's boulder"
+        }
+      ],
+      "note_pass": "Azala's ring (effect program D1/6CD9, op EB = D1/EFE3: 106 point pairs around point 0 into $C15D..) runs its 151 steps and the program ends: the fight goes on",
+      "notes": "The fight in scene 301 (Black Tyranno + Azala) from the same seed as tyranno-ff24-chain-plays-through-in-the-port, unpoked, A held: Azala's technique (CD/D38E) arms program 74 (D1/6CD9) at battle f2446; its loop `83 96 / EB 01 / 84` ran into op EB, which the port did not have -- the program stopped and the tech never ended (the boulder hung on screen and the fight froze). On the cartridge (s301_c2, its own fight) EB runs from f2121: $CD3A 01, 02, 03 .., $45/$47 the angles, their high bytes 00."
     },
     {
       "name": "jackie-saves-census-vs-oracle",

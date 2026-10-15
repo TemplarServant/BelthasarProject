@@ -2179,6 +2179,14 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         ram[a] = (uint8_t)(ram[a] & ~op[3]);
         adv = 4; break;
       }
+      // C2/1B15 -- SUBTRACT: `mem[addr] -= imm`, four bytes: `LDY #0001 / LDA [$58],Y / TAX` (the 16-bit address), `SEP #20 /
+      // LDY #0003 / LDA $0000,X / SEC / SBC [$58],Y / STA $0000,X / REP #20 / LDA #0004 / RTS`. World 1F3 after Lavos's fall
+      // (`FF 24`'s reboot) parked an object on it at pc 0825 until this existed.
+      case 0x49: {
+        int a = op[1] | (op[2] << 8);
+        ram[a] = (uint8_t)(ram[a] - op[3]);
+        adv = 4; break;
+      }
       // THE BYTE-COPY FAMILY C2/1302-1369 (16-bit A, `LDA [$58],Y` reads the op's own bytes, ($4E) = this block):
       //   16 off lo hi   C2/1302  `LDA ($4E),Y / STA $0000,X`   -- $7E:hilo := block[off]           4 bytes
       //   17 off lo hi   C2/131C  `LDA $0000,X / STA ($4E),Y`   -- block[off] := $7E:hilo           4 bytes

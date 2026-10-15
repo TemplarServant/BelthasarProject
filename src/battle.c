@@ -20483,6 +20483,33 @@ static int battleFxOpsMisc(CtBattleHost* h, int X, int op, int* pp) {
       return 0;
     case 0xF0: s[0xCAA4 + MB(0)] = s[0x5D8F]; return 0;            // CD/182A: X = b; `LDA $5D8F / STA $CAA4,X`
     case 0xE9: s[0xCD39] = (uint8_t)(s[0xCD39] + MB(0)); return 0; // CD/1879 -> D1/FB68: `$CD39 += [$40]`
+    case 0xEB: {
+      // CD/185F -> D1/EFE3: a RING of 106 point pairs around point 0 + its offset, into the line records $C15D.. (8 bytes a
+      // step, Y = 0..348: x at +0 / +4, y at +2 / +6, 16-bit). `$CD3A += [$40]`, the radius $4B = $4D = 60 - $CD3A (8-bit);
+      // the centre $4F = $CA5A + $CA5E, $51 = $CA5C + $CA60. The angles start at $47 = $7C * 2 (x) and $45 = $7C * 4 (y), one
+      // step each a pair: CE:F48E[angle] * radius, the product's high byte ($4217), negated for an angle of 80 or more
+      // (`EOR #FF / INC A`); D1/F07E / F0E9 sign-extend it by its bit 7 (`ORA #FF00`) before the centre is added. $48 / $46
+      // take the accumulator's hidden byte (`TAX / STX`, X 16-bit): 00 on the cartridge (Azala's ring, scene 301, c2+f2121).
+      int r = 0;
+      s[0x47] = (uint8_t)(s[0x7C] << 1); s[0x48] = 0;              // D1/EFE3-EFE7 LDA $7C / ASL A / TAX / STX $47
+      s[0x45] = (uint8_t)(s[0x7C] << 2); s[0x46] = 0;              // D1/EFE9-EFEB ASL A / TAX / STX $45
+      s[0xCD3A] = (uint8_t)(s[0xCD3A] + MB(0));                    // D1/EFED-EFF3 CLC / ADC [$40]
+      r = (0x60 - s[0xCD3A]) & 0xFF; s[0x4B] = s[0x4D] = (uint8_t)r;   // D1/EFF6-EFFE
+      unsigned cx = (unsigned)(s[0xCA5A] | (s[0xCA5B] << 8)) + (unsigned)(s[0xCA5E] | (s[0xCA5F] << 8));   // D1/F002-F009
+      unsigned cy = (unsigned)(s[0xCA5C] | (s[0xCA5D] << 8)) + (unsigned)(s[0xCA60] | (s[0xCA61] << 8));   // D1/F00B-F012
+      s[0x4F] = (uint8_t)cx; s[0x50] = (uint8_t)(cx >> 8); s[0x51] = (uint8_t)cy; s[0x52] = (uint8_t)(cy >> 8);
+      for (unsigned y = 0; y != 0x350; y += 8) {                   // D1/F017 TAY .. F078 CPY #0350 / BNE
+        for (int k = 0; k < 2; k++) {                              // x from $47 (F019-F05D -> F07E), y from $45 (-> F0E9)
+          int ang = k ? s[0x45] : s[0x47];
+          int hi = ((unsigned)rom[ROM_FX_TRIG_TBL + ang] * (unsigned)r) >> 8;   // STA $4202 / $4203 / LDA $4217
+          if (ang & 0x80) hi = (-hi) & 0xFF;                       // EOR #FF / INC A
+          unsigned v = (unsigned)((hi & 0x80) ? (0xFF00 | hi) : hi) + (k ? cy : cx);   // BPL / ORA #FF00 / ADC $4F|$51
+          long o = 0xC15D + (long)y + (k ? 2 : 0);                 // STA $C15D,Y / $C161,Y (x), $C15F,Y / $C163,Y (y)
+          s[o] = s[o + 4] = (uint8_t)v; s[o + 1] = s[o + 5] = (uint8_t)(v >> 8);
+        }
+        s[0x45]++; s[0x47]++;                                      // D1/F069 INC $45 / INC $47
+      }
+      return 0; }
     case 0xE8: {
       // CD/1874 -> D1/FB72: the HORIZONTAL BAND. `$CD38 += b`; $49 := $CD39, $4A := $CD39 ^ FF; $45 := $CD38 + 6A (8-bit);
       // X = ((6A - $CD38) & FF) * 4 and, 16-bit, $45 := $45 * 4; then while X != $45 the word $49 goes to window 1's pair
@@ -21013,9 +21040,9 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
     case 0xE3: battleFxTriFrom(s, PB(0), 0x5DA0, 0x5DA2, 0x5DA4, 0x5DA1, 0x5DA3, 0x5DA5); break;   // CD/18DF
     case 0xB8: battleFxOpB8(h, PB(0)); break;                      // CD/1F47 -> CD/3924: the wedge fill of object b
     case 0xB3: battleFxOpB3(h); break;                             // CD/1FC8: the per-line BG3 scroll table
-    case 0xD0: case 0xD1: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xDF: case 0xE7: case 0xE8: case 0xE9: case 0xEE:
+    case 0xD0: case 0xD1: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xDF: case 0xE7: case 0xE8: case 0xE9: case 0xEB: case 0xEE:
     case 0xF0: case 0xF4:
-      return battleFxOpsMisc(h, X, op, pp);                        // (above: CD/1ACB 1ABE 1A9C 1A8B 1A7A 1A66 1913 187E 1874 1879 1850 182A 1805)
+      return battleFxOpsMisc(h, X, op, pp);                        // (above: CD/1ACB 1ABE 1A9C 1A8B 1A7A 1A66 1913 187E 1874 1879 185F 1850 182A 1805)
     default: return 1;
   }
   #undef PB

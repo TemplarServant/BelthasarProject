@@ -814,6 +814,21 @@ Every location change and both control returns on the cartridge's frame to 3 (10
 control f11888, 051 f13474, 055 f13986, control f28650, 051 f44407). (The cartridge's $011F = 1 inside each load -- C0/0BC8
 at its start, the fn0's `E3 00` at its end -- is not on screen; the port writes both on one frame.) Full (~70 s).
 
+### tyranno-ff24-chain-plays-through-in-the-port (ct_field, scene 301 from Jackie's ch17)
+
+The Tyranno Lair's top from the ROM's own load (saves/tyranno_re/tele301_req.*: ch17 brought in by `--teleport 301 8 30 0
+--method req`): the walk to the trigger row, Azala's talk and the fight driven with A (both enemies' HP poked to 1 at f1700 --
+a fixture: the party loses on A alone), `FF 24` natively (src/seq_entry4.c, 22 black frames) to its END, the reboot into 301,
+world 1F3 with the impact's colour fade (world op 49, C2/1B15: $0047-$0049 down by 4 a frame, the cartridge's shape 3 frames
+later) and 105. The END comes 1732 frames after the op, the cartridge's 1734 (the opening's vblank wait, sequence_table.md
+sec. 15). Quick. Needs the local saves.
+
+### battle-azala-ring-op-eb-in-the-port (ct_field, the same fight unpoked)
+
+Azala's technique arms effect program 74 (D1/6CD9), whose loop runs op EB (CD/185F -> D1/EFE3, the ring of 106 point pairs
+around point 0): without it the program stopped and the fight froze with the boulder on screen. Pins the loop's exit and the
+program's end (`stops=0`). Quick. Needs the local saves.
+
 ### panorama-story-ff23-plays-through-in-the-port (ct_field, the attract's hand-off with the story's bytes)
 
 After the Blackbird, scenes 102-107's controller takes its story arm (`$7F0057` bit 2 clear, the storyline D3): `DD F6 03

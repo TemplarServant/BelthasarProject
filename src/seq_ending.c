@@ -67,39 +67,20 @@ static int endingCall(uint8_t* w, unsigned page, unsigned tgt, const CtRaceIo* i
 // $7E:90C1 -- page A's r2 turns by page B's r8: `LDA $0A04 / CLC / ADC $0B10 / AND #03FF / STA $0A04` (an angle, 0-$3FF).
 static void task90C1(uint8_t* w) { wr(w, 0x0A04, (rd(w, 0x0A04) + rd(w, 0x0B10)) & 0x03FF); }
 
-// $7E:3465 -- the sine of an angle (0-$3FF) from the table at $C0:F900 (a byte each), negative below $200: `AND #03FF / TAX /
-// LDA $C0F900,X / AND #00FF / CPX #0200 / BCS -> RTS / EOR #FFFF / INC A`. $7E:3461 is the cosine (`CLC / ADC #0100` first).
-static unsigned sine3465(const CtRaceIo* io, unsigned a) {
-  unsigned x = a & 0x03FF;
-  unsigned v = (io && io->rom && io->romLen > 0xF900 + 0x3FF) ? io->rom[0xF900 + x] : 0;
-  return x >= 0x0200 ? v : ((v ^ 0xFFFF) + 1) & 0xFFFF;
-}
+// $7E:3465 / $7E:3461 -- the overlay's sine and cosine (seq_race.h CtSeqSine).
+static unsigned sine3465(const CtRaceIo* io, unsigned a) { return CtSeqSine(io, a); }
 
 // $7E:33D6 -- the signed product $F0 * $F2 into $F4-$F7 (D = the page): the sign of $F0 ^ $F2 kept, both made positive, then
-// $7E:31BF's unsigned 16 x 16 on the CPU's 8 x 8 multiplier, and the 32-bit result negated if the sign was set. 31BF as the
-// ROM has it (M = 16, X = 8), down to its `ROL $F7`: it parks the middle sum's carry in $F7 bit 0 for the high word, and its
-// own carry out -- bit 7 of $F8, the byte after -- goes into the next ADC.
+// $7E:31BF's unsigned 16 x 16 (seq_race.h CtSeqMul31BF), and the 32-bit result negated if the sign was set.
 static void mul33D6(uint8_t* w, unsigned d) {
   unsigned f0 = rd(w, d + 0xF0), f2 = rd(w, d + 0xF2);
   int negr = ((f0 ^ f2) & 0x8000) != 0;
   if (f0 & 0x8000) f0 = ((f0 ^ 0xFFFF) + 1) & 0xFFFF;
   if (f2 & 0x8000) f2 = ((f2 ^ 0xFFFF) + 1) & 0xFFFF;
   wr(w, d + 0xF0, f0); wr(w, d + 0xF2, f2);
-  // 31BF
-  unsigned a0 = f0 & 0xFF, a1 = f0 >> 8, b0 = f2 & 0xFF, b1 = f2 >> 8;
-  unsigned p1 = b0 * a0, p2 = b0 * a1, p3 = b1 * a0, p4 = b1 * a1;
-  wr(w, d + 0xF6, 0);                                                 // 31D5 STZ $F6 (16-bit: $F6, $F7)
-  wr(w, d + 0xF4, p1);                                                // 31DD STA $F4
-  unsigned s = p2 + p3;                                               // 31EE CLC / ADC $4216
-  unsigned c = s > 0xFFFF; s &= 0xFFFF;
-  { unsigned wd = rd(w, d + 0xF7); unsigned nc = (wd >> 15) & 1;     // 31F2 ROL $F7 (16-bit: $F7, $F8)
-    wr(w, d + 0xF7, ((wd << 1) | c) & 0xFFFF); c = nc; }
-  s = s + rd(w, d + 0xF5) + c; c = s > 0xFFFF; s &= 0xFFFF;          // 31F7 ADC $F5
-  wr(w, d + 0xF5, s);                                                 // 31F9 STA $F5
-  s = p4 + rd(w, d + 0xF6) + c; s &= 0xFFFF;                          // 31FB LDA $4216 / ADC $F6
-  wr(w, d + 0xF6, s);                                                 // 3200 STA $F6
+  CtSeqMul31BF(w, d);                                                 // 31BF
   if (negr) {                                                         // 33F6 CLC / EOR #FFFF / ADC #0001 ...
-    unsigned lo = (rd(w, d + 0xF4) ^ 0xFFFF) + 1; c = lo > 0xFFFF;
+    unsigned lo = (rd(w, d + 0xF4) ^ 0xFFFF) + 1, c = lo > 0xFFFF;
     wr(w, d + 0xF4, lo);
     wr(w, d + 0xF6, (rd(w, d + 0xF6) ^ 0xFFFF) + c);                  // ... EOR #FFFF / ADC #0000
   }

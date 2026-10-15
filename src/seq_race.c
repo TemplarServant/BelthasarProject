@@ -576,6 +576,29 @@ unsigned CtSeqTaskFade(uint8_t* w, unsigned slot, unsigned task, const CtRaceIo*
   }
 }
 
+unsigned CtSeqSine(const CtRaceIo* io, unsigned a) {
+  unsigned x = a & 0x03FF;
+  unsigned v = (io && io->rom && io->romLen > 0xF900 + 0x3FF) ? io->rom[0xF900 + x] : 0;
+  return x >= 0x0200 ? v : ((v ^ 0xFFFF) + 1) & 0xFFFF;
+}
+
+void CtSeqMul31BF(uint8_t* w, unsigned d) {
+  R rr = { w, 0, NULL }, *r = &rr;
+  unsigned f0 = rd(r, d + 0xF0), f2 = rd(r, d + 0xF2);
+  unsigned a0 = f0 & 0xFF, a1 = f0 >> 8, b0 = f2 & 0xFF, b1 = f2 >> 8;
+  unsigned p1 = b0 * a0, p2 = b0 * a1, p3 = b1 * a0, p4 = b1 * a1;
+  wr(r, d + 0xF6, 0);                                                 // 31D5 STZ $F6 (16-bit: $F6, $F7)
+  wr(r, d + 0xF4, p1);                                                // 31DD STA $F4
+  unsigned s = p2 + p3;                                               // 31EE CLC / ADC $4216
+  unsigned c = s > 0xFFFF; s &= 0xFFFF;
+  { unsigned wd = rd(r, d + 0xF7); unsigned nc = (wd >> 15) & 1;     // 31F2 ROL $F7 (16-bit: $F7, $F8)
+    wr(r, d + 0xF7, ((wd << 1) | c) & 0xFFFF); c = nc; }
+  s = s + rd(r, d + 0xF5) + c; c = s > 0xFFFF; s &= 0xFFFF;          // 31F7 ADC $F5
+  wr(r, d + 0xF5, s);                                                 // 31F9 STA $F5
+  s = p4 + rd(r, d + 0xF6) + c; s &= 0xFFFF;                          // 31FB LDA $4216 / ADC $F6
+  wr(r, d + 0xF6, s);                                                 // 3200 STA $F6
+}
+
 // ---- the race: entries 0 and 9, $7E:3B48 ----
 
 static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io);
