@@ -7329,6 +7329,15 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
 static void racestepApu(void* c, uint8_t p) { (void)c; printf("  w 002141 = %02X\n  w 002140 = 89\n", p); }
 static void racestepSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)c; printf("  sfx %02X %02X %02X\n", a, b, d); }
 static void racestagePost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }   // --racestage: C7/0004 consumes the command byte
+#include "seq_ending.h"   // --seqstage: the ending's stage, native
+// --seqstage's sound: the stage's posts go to the port's SPC (seeded from the state), the script's `F5` reads its port.
+static uint8_t* g_seqstageWram;
+static void seqstagePost(void* c) { CtAudioService((CtAudio*)c, g_seqstageWram); }
+static uint8_t seqstagePort(void* c, int n) { uint8_t in[4], out[4]; CtAudioPorts((CtAudio*)c, in, out); return out[n & 3]; }
+// The PPU's field bit as the stage's NMI reads it: the state's own at the hand-off, flipped at every frame's start since.
+static int g_seqstageField;
+static int seqstageField(void* c) { (void)c; return g_seqstageField; }
+static int seqstagePostFrames(void* c) { int fr = 0, el = 0; CtAudioLastPostRaster((CtAudio*)c, &fr, &el, NULL); return fr; }
 // ...and a script's post, as C7/0004 leaves it visible: $1E00-$1E03 out to the ports, $1E00 consumed (ctx = the WRAM).
 static void racestepPost(void* c) {
   uint8_t* w = (uint8_t*)c;
@@ -15721,6 +15730,59 @@ int main(int argc, char** argv) {
       }
       if (st == 1) { printf("racestage: END at frame %d\n", f); CtRaceStageClose(w, &io); break; }
       if (st == 2) { printf("racestage: soft reset at frame %d\n", f); break; }
+    }
+    free(pads);
+    return 0;
+  }
+  // --seqstage <state> <operand> <frames> <btnscript> <ADDR:LEN,...> [hold]: a $C3 stage natively (the race, src/seq_race.c, or
+  // the ending, src/seq_ending.c, by the operand) from an ORACLE STATE at the hand-off -- its WRAM, and its sound processor
+  // seeded into the port's (CtAudio): the stage's posts go to it, a script's `F5` reads its port 2. `hold` frames of the SPC run
+  // before the first NMI (the setup's black frames). Then one NMI and one frame of the SPC a frame, the regions printed on
+  // change in --monitor's format. tools/ending_stage_cmp.py grades it against the cartridge.
+  if ((argc == 7 || argc == 8) && !strcmp(argv[1], "--seqstage")) {
+    static uint8_t w[0x20000];
+    uint8_t* srom = NULL;
+    Snes* ss = ctLoadStateOracle(DEFAULT_ROM, argv[2], &srom);
+    if (!ss) { printf("seqstage: cannot load %s\n", argv[2]); return 1; }
+    memcpy(w, ss->ram, sizeof w);
+    int rlv = 0; uint8_t* rimg = CtReadFile(DEFAULT_ROM, &rlv);
+    if (!rimg) { printf("seqstage: no ROM\n"); return 1; }
+    CtAudio* sa = CtAudioInit(rimg, rlv);
+    if (!sa) { printf("seqstage: CtAudioInit failed\n"); return 1; }
+    CtAudioSeedFromApu(sa, ss->apu);
+    CtRaceIo io; memset(&io, 0, sizeof io);
+    io.ctx = sa; io.rom = rimg; io.romLen = rlv;
+    io.post = seqstagePost; io.port = seqstagePort; io.field = seqstageField; io.postFrames = seqstagePostFrames; g_seqstageWram = w;
+    int frames = atoi(argv[4]), hold = argc == 8 ? atoi(argv[7]) : 0;
+    uint8_t op = (uint8_t)strtoul(argv[3], NULL, 16);
+    uint16_t* pads = (uint16_t*)calloc((size_t)frames + 2, sizeof *pads);
+    { int f = 0; const char* p = argv[5];
+      while (*p && f <= frames) { unsigned m = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+        int n = (int)strtol(p, (char**)&p, 10); if (*p == ',') p++;
+        static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010 };
+        uint16_t j = 0; for (int b = 0; b < 12; b++) if (m & (1u << b)) j |= map[b];
+        for (int k = 0; k < n && f <= frames; k++) pads[f++] = j; } }
+    unsigned ra[64], rl[64]; int nr = 0;
+    { const char* p = argv[6]; while (*p && nr < 64) { ra[nr] = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+        rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
+    int ending = CtEndingStageHas(op);
+    if ((ending ? CtEndingStageOpen(w, op, &io) : CtRaceStageOpen(w, op, &io)) < 0) { printf("seqstage: open failed\n"); return 1; }
+    for (int k = 0; k < hold; k++) CtAudioFrame(sa);
+    g_seqstageField = (ss->ppu->evenFrame ? 1 : 0) ^ ((hold - 1) & 1);   // the frames started from the hand-off to frame 0
+    static uint8_t last[0x20000]; int first = 1;
+    for (int f = 0; f <= frames; f++) {
+      int st = 0;
+      if (f) { g_seqstageField ^= 1; st = ending ? CtEndingStageFrame(w, pads[f], &io) : CtRaceStageFrame(w, pads[f], &io); CtAudioFrame(sa); }
+      int ch = first; for (int k = 0; k < nr && !ch; k++) for (unsigned b = 0; b < rl[k]; b++) { unsigned a = (ra[k] + b) & 0x1FFFF; if (w[a] != last[a]) { ch = 1; break; } }
+      if (ch) {
+        printf("  f%-6d", f);
+        for (int k = 0; k < nr; k++) { printf("  7E%04X=", ra[k] & 0xFFFF); for (unsigned b = 0; b < rl[k]; b++) printf("%02X", w[(ra[k] + b) & 0x1FFFF]); }
+        printf("\n");
+        for (int k = 0; k < nr; k++) for (unsigned b = 0; b < rl[k]; b++) last[(ra[k] + b) & 0x1FFFF] = w[(ra[k] + b) & 0x1FFFF];
+        first = 0;
+      }
+      if (st == 1) { printf("seqstage: END at frame %d\n", f); if (ending) CtEndingStageClose(w, &io); else CtRaceStageClose(w, &io); break; }
+      if (st == 2) { printf("seqstage: soft reset at frame %d\n", f); break; }
     }
     free(pads);
     return 0;

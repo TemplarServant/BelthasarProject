@@ -2403,3 +2403,77 @@ and the reboot into the staged location. Check race-story-plays-through-in-the-p
 (39,14) -- the cartridge's path; the port arrives 28 frames early (the song's handshake inside the setup is not charged).
 Still open: the picture (stage 2), those 28 frames, and `FF 09`'s story-only code patches' effects (they patch picture
 code: `$53A0`... are in the HUD/sprite tasks).
+
+---
+
+## 13. THE ENDING (`FF 2A` / `FF 2B` / `FF 2E` / `FF 2F`, entries 10/11/14/15 = `$7E:8538`) -- stage 1 (2026-10-14)
+
+**How it was reached.** No capture: the oracle played it from Jackie's battery saves (the memory note endgame-oracle-route
+has the whole route and the states). ch27 (loc 1DA, all level 99) -> 1DB inner Lavos -> 1DF the core -> 052 -> 10F -> 002
+-> 04F -> 050 (the night fair) -> 051 (Leene's Square) -> 055 (the telepod farewells) -> 051 again, where talking to obj9
+at (21,14) runs obj9 fn1 and, through obj10 fn3, `SETGLBFLAG glb[118].bit1 / DE 2D 02 08 08 / FF 2B` (scene 81 at $0517;
+`glb[110]` picks obj0 fn3's `FF 2A` or `CHANGELOC 256` instead). `saves/ending_re/ending_pre_ff2b.state` (+ `.lakewram`)
+is that talk 100 frames before the op: **`FF 2B` at f131**. After its END the field reboots into 02D, then 105 -> 059 ->
+05A, where scene 90's obj0 runs `FF 2E` (`glb[110]` bit 0/1 set) or `DE 56 02 08 08 / FF 2F` (raw script $0126-$0131):
+the credits on the starfield and "The End".
+
+**One setup, four entries.** `$7E:3043` points 10, 11, 14 and 15 at `$7E:8538`. It loads the picture (VRAM packets via
+`$3691`, WRAM tables via `$36AA` / `$38E7` / C3/09E9, the mode-7 setup), then by `$0384 & 0F` (85D4, 86B5): entry 10 also
+runs 85E1-8652 (its own backdrop and hook `$9CE2`) and takes pages A `$90CF` / B `$9341`; entry 11 `$9450` / `$97A6`;
+14 and 15 `$9613` / `$970F`; 10 and 11 set the credits pointer `$0382 = $A651`. Then page A runs once (86E6 JSR `$3749`),
+`$35FD = $9B46`, FD/E275 clears the colour animations (`$0520 + 12k`), `$81 = 1`, `$7D = $40`, `$7F = $140`, `$0396 = 1`
+(no soft reset while it plays), `$038C = $1F`, `$038E/$038F = $0101` (a fade step every frame). `$0384` bit 5 is set in all
+four: no driver reset (`$3177`: `BIT #20 / BNE`) -- the song is the one the field started.
+
+**The scripts keep time with the song.** Op `F5 n` (C3/0C2A) reads `$2142` until stable, and continues once its low nibble
+is >= n (`CMP ($20) / BPL`); otherwise `DEC $20 / RTS`, again next frame. Every `$An`-`$Fn` op dispatches on its low
+nibble (C3/0B6A; the walker now reads them all). Op `FB v r` (C3/0C5F) writes v to `$21rr`. `FF 2B`'s page A (`$9450`):
+`F0 87CC` (the world), tasks `9ABD 9D48 9BF9`, hooks `9DBC 9080 9AF3 89C0`, waits for markers 1 and 2, hands page B
+`$97A9`, waits 0x29F frames, the zoom loops, `F5 03` -> task `$347A` (fade in), ..., `F5 04` -> `$6439`, the last loops,
+task `$34E3` (fade out) and **a jump-to-self at $9610 -- the END is the fade's**: `$34E3` steps `$038D` down every `$038E`
+frames and at 0 does `INC $00` and removes itself. Cartridge: the markers pass at **f349, f829, f2029, f3950**, the fade
+starts f4910, **END f4925**, the reboot f4941. `FF 2E`/`2F` (`$9613`) share entry 10's tail (`jumpyield $925E`) and end on
+`$9303`: `$0396 = 0`, `$0384 = 0`, after 0x707 frames `$038A = 7`, then a jump-to-self -- "The End" until the player's
+soft reset (L+R+Select+Start, allowed again by `$0396 = 0`).
+
+**What writes the script pages besides the scripts.** Task `$90C1`: page A r2 += page B r8 (mod $400). Task `$992A`
+(page B's orbit): r1 = (sin r5 * r8)'s bits 12-27 + $80, r2 = (cos r5 * r8)'s bits 13-28 + $70 (sine table `$C0:F900`,
+`$7E:3465` / `$3461`; the signed product `$33D6` on `$31BF`, whose `ROL $F7` carries bit 7 of `$F8` into the next ADC), and
+`$004E` from -r5. Both are ported. The picture's hooks also use page A as scratch -- `$9AF3` (`$0A1E = $0B0C`, then the
+mode-7 matrix), `$56C0` (`$0A16/$0A18`), `$9DBC` once `$7B` is set (r3/r4 = r1/r2 + $80) -- and no script reads those.
+The overlay's RNG `$039B` (`$3448`) is drawn only by the shooting stars (the setup's `$9BB8`, task `$9BF9`); task `$9B4F`
+advances `$0382` a credits line every 264 frames. All of those are the picture (stage 2).
+
+**Stage 1 (src/seq_ending.c) -- byte for byte.** `ct.exe --seqstage saves/ending_re/ending_handoff_f130.state 2B ...`
+runs the native stage from the cartridge's state at the hand-off, its SPC seeded into the port's (CtAudio): against the
+cartridge (tools/ending_stage_cmp.py), **4747 frames, 0 differing, END f4925 on both, the four markers on the same
+frames** (the port's frame 0 = the cartridge's f179, its SPC 50 frames ahead of the hand-off). The shared machine moved
+out of the race into seq_race.c's CtSeqStageBegin / CtSeqStageNmi / CtSeqScript / CtSeqStageEnd / CtSeqTaskFade (the
+race's checks unchanged). The setup's cost, for the host's opening: 10986252 cycles (`--callrom 7E8538`,
+CT_CALLROM_NONMI=1, from the cartridge at f148, inside the opening).
+
+**`FF 2E` -- the last screens, and what they add to the logic** (2026-10-14). Entries 14/15 (`$9613`) are long -- the
+markers 6, 7, 8, 9 pass at 115, 2037, 4192, 7788 frames after the hand-off (saves/ending_re/ending_handoff_f6837.state,
+`FF 2E` on its next frame) -- and four more things in them write what the logic reads:
+- the backdrop reloads `8A01` `8AF5` `8BAF` `8C14` start with `$7E:7EF8` / `$7E:7F05` (`MVN $7E,$D2`: 32 zeros over the task
+  list, 16 over the hooks) and set `$038C` (01 / 0F / 00 / 00); `8CD0` clears the tasks only, and for entry 15 (`$0384 & 0F
+  = 0F`) points page A at `$9315` (8CE9) -- `$038E = $0404`, task `$34E3`: **`FF 2F` ENDs on a fade** and the field reboots into
+  the `CHANGELOC 256` scene 90 staged; `FF 2E` stays on "The End";
+- task `$9B4F`, the credits' pager: `$85` pages, `$83` phase, `$81` its frames (`$7D` / `$7F`); on a lit odd phase it counts
+  down, and the page's end -- `$7E:64CA`'s walk: a byte a time, `00 x y` three, to `40` -- becomes `$0382`, or past `$AB1A`
+  the task removes itself. The pointer carries from `FF 2B` into `FF 2E` (the common init leaves `$0382`);
+- task `$9E7B`, the rolling text: every 16th frame the next line of `$4A` into `$141C..` (`/` ends it, `\` ends the text:
+  `INC $6A`, hook `$9EFC` and the task out); hook `$8D56` sets `$4A = $B099`, `$48 = $FFE0`; tasks `$997D` (page B r2 / r0
+  = sin / cos r5 >> 6) and `$9A0C` (the planet: `$71` `$73` `$75` `$77` `$79` to `$390`, out when `$75` gets there; and `DEC
+  $0A04`, 8-bit, on frames the PPU's field bit `$213F` bit 7 is set -- the port keeps a field bit that flips every frame,
+  seeded from the state's PPU in the harness);
+- the NMI's song change C3/09A4 (after C3/08D0, the real NMI only): `$0384` = 0 and `$038A` = 7 at `$9303`/`$9310` post
+  song 7 (`10 07 FF FF`, JSL C7/0004) -- and the upload keeps the NMI 14 frames on the cartridge (`$0388` = 1 through them,
+  no task runs); the port holds the stage for the frames its own SPC's handshake takes (CtAudioLastPostRaster): 14.
+Native: **`FF 2E` 10948 frames, 0 differing** (the hooks' scratch, the HDMA shadow `$038C`, the beam RNG `$0386` and the
+overlay RNG `$039B` aside), the markers on the same frames. The story run: `FF 2B` -> 02D -> 105 -> 059 -> 05A -> `FF 2E`.
+
+**Open questions.** The picture (stage 2: the mode-7 world, the credits' glyphs, the shooting stars and their RNG, the
+hooks' drawing, the main thread's `$8930`, the scroll `$46` -- its +1 also rides the field bit, 9EDF); entries 10 (`FF 2A`)
+and 15 (`FF 2F`) are not graded against the cartridge (no state at their call: they need `glb[110]` the other way -- scene
+81 obj0 fn3 and scene 90's `16 6E 03 00 05`); 8A01's `$038C = 01` and 8AF5's are read from the listings, not measured.

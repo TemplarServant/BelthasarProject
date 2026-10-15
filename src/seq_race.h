@@ -7,8 +7,13 @@
 //   `sfx`  = a mailbox command through $7E:377E ($1E00-$1E02, already written to WRAM by the caller),
 //   `apu`  = the engine's pitch, written straight to the ports ($2141 = pitch, $2140 = $89),
 //   `post` = a script's `F6` (C3/0BD4): $1E00-$1E03 are already in WRAM; the host runs C7/0004 on them,
-//   `rom`  = the ROM image (HiROM file order), for the overlay's RNG table $C0:FE00 ($7E:3448).
-// Any of them may be NULL.
+//   `rom`  = the ROM image (HiROM file order), for the overlay's RNG table $C0:FE00 ($7E:3448),
+//   `port` = what the CPU reads from the sound processor's output port n ($2140 + n) -- a script's `F5` (C3/0C2A) waits on
+//            port 2's low nibble, the song's own marker,
+//   `ppu`  = a script's `FB` (C3/0C5F): the byte `v` into $21`reg` -- the picture's (stage 2); NULL drops it,
+//   `field`= the PPU's field bit ($213F bit 7: it flips at every frame's start) as the stage's NMI reads it this frame,
+//   `postFrames` = the frames the last `post` kept the CPU in the driver's handshake (the SPC's time; 0 if unknown).
+// Any of them may be NULL (`port` NULL: the marker never comes, and a script that waits on it holds there).
 typedef struct {
   void* ctx;
   void (*sfx)(void* ctx, uint8_t cmd, uint8_t p1, uint8_t p2);
@@ -16,7 +21,50 @@ typedef struct {
   void (*post)(void* ctx);
   const uint8_t* rom;
   long romLen;
+  uint8_t (*port)(void* ctx, int n);
+  void (*ppu)(void* ctx, uint8_t reg, uint8_t v);
+  int (*field)(void* ctx);
+  int (*postFrames)(void* ctx);
 } CtRaceIo;
+
+// ---- THE $C3 STAGE'S SHARED MACHINE (every entry: the overlay, the common init, the interpreter, the NMI, the fades) ----
+
+// A script's `F0` (C3/0C51: `$7E:00F0` = the target, JSL $7E:37F3) -- the entry's own inline routine. Returns 0, or -1 for a
+// target the entry does not port. The interpreter adds the two bytes of the target to the IP afterwards (0BB1 / 0BB5).
+typedef int (*CtSeqCall)(uint8_t* w, unsigned page, unsigned target, const CtRaceIo* io);
+
+// One visit of a script task over its page (see CtRaceScript), with the entry's inline calls.
+int CtSeqScript(uint8_t* w, unsigned page, const CtRaceIo* io, CtSeqCall call);
+
+// C3:0000 -> $7E:3000 up to the entry's setup: the vectors, `operand` into $0384, the overlay decompressed into $7E:3000
+// (C3:1313 by $C3:FE0003), the common init's WRAM ($7E:3063: the shadows, $0000-$00FF and $0900-$1DFF cleared, the driver
+// reset $3177 unless $0384 bit 5, the OAM shadow, $13 = $0900). Returns -1 without the ROM.
+int  CtSeqStageBegin(uint8_t* w, uint8_t operand, const CtRaceIo* io);
+
+// A task the NMI runs: `slot` = its offset in the list, `task` = its address. Returns what the slot holds afterwards: `task`
+// (it stays), 0 (it removed itself, $39A7) or another address (it replaced itself, $39B1).
+typedef unsigned (*CtSeqTaskFn)(uint8_t* w, unsigned slot, unsigned task, const CtRaceIo* io);
+
+// C3/08D0 -- one NMI of the stage, its logic (INC $08, the snapshot, the pad and the pause, the tasks through `run`).
+// Returns 1 once the script ENDed ($7E:0000 != 0), 2 on the soft reset, else 0.
+int  CtSeqStageNmi(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn run);
+// The same with the vblank hooks first (C3/08F7 JSL $7E:39BE, before `INC $08`: the LIVE list $0940, eight slots, each hook
+// able to remove itself -- $39DE -- or replace itself -- $39E8): `hook` returns what its slot holds afterwards, as `run`.
+int  CtSeqStageNmiHooks(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn hook, CtSeqTaskFn run);
+
+// C3/09A4 -- the stage NMI's song check, after C3/08D0 (the real NMI only: C3/08B3 `JSL C308D0 / JSR $09A4`; the setup's own
+// `JSL C3/08D0` skips it): with $0388 clear and $0384 bit 5 clear, a script's new $038A (!= $0389) is played -- `$0389 =
+// $038A`, the mailbox `10 <song> FF FF`, `JSL C7/0004` (io->post). The end of `FF 2E` asks for its song this way. Returns
+// the frames the upload's handshake holds the NMI (io->postFrames): $0388 stays 1 through them (09D5's STZ comes after the
+// JSL) and no NMI of the stage runs -- the caller holds them and clears $0388 at their end. 0 = no song posted.
+int  CtSeqStageSong(uint8_t* w, const CtRaceIo* io);
+
+// $7E:302A -- the teardown after the END: the driver reset ($3177, skipped for $0384 bit 5), then `JML $C0:0000`.
+void CtSeqStageEnd(uint8_t* w, const CtRaceIo* io);
+
+// The overlay's shared brightness tasks (every entry): $7E:347A fades in ($038D up to $0F), $7E:3495 fades out ($038D down
+// to 0), $7E:34E3 fades out and ENDs ($7E:0000 += 1) -- one step every $038E frames ($038F counts). CtSeqTaskFn's return.
+unsigned CtSeqTaskFade(uint8_t* w, unsigned slot, unsigned task, const CtRaceIo* io);
 
 // $7E:485D, the race's per-frame task, over the 128 KB WRAM image `w` ($7E at 0, $7F at 0x10000; D = $0000). Returns the
 // task that holds this slot afterwards: 0x485D (it stays), 0 (it removed itself, $39A7: Johnny crossed the line first) or

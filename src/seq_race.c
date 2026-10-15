@@ -340,7 +340,15 @@ static void call3F59(R* r, unsigned page, const CtRaceIo* io) {
   pgw16(r, page, 0x20, rd(r, 0x3F66 + x));
 }
 
-int CtRaceScript(uint8_t* w, unsigned page, const CtRaceIo* io) {
+static int raceCall(uint8_t* w, unsigned page, unsigned tgt, const CtRaceIo* io) {
+  R rr = { w, 0, io };
+  if (tgt == 0x3F59) { call3F59(&rr, page, io); return 0; }
+  return -1;
+}
+
+int CtRaceScript(uint8_t* w, unsigned page, const CtRaceIo* io) { return CtSeqScript(w, page, io, raceCall); }
+
+int CtSeqScript(uint8_t* w, unsigned page, const CtRaceIo* io, CtSeqCall call) {
   R rr = { w, 0, io }, *r = &rr;
   for (int guard = 0; guard < 4096; guard++) {
     unsigned ip = pg16(r, page, 0x20);
@@ -406,16 +414,26 @@ int CtRaceScript(uint8_t* w, unsigned page, const CtRaceIo* io) {
       case 0x3:                                                          // 0C7C GOSUB: $30 = IP + 2, then JUMP
         pgw16(r, page, 0x30, ip + 2); pgw16(r, page, 0x20, rd(r, ip)); continue;
       case 0x4: pgw16(r, page, 0x20, pg16(r, page, 0x30)); continue;     // 0C85 RETURN
+      case 0x5: {                                                        // 0C2A WAIT FOR THE SONG: port 2's low nibble
+        if (!io || !io->port) { pgw16(r, page, 0x20, ip - 1); return 0; }   //   (no sound processor: the marker never comes)
+        uint8_t v = (uint8_t)(io->port(io->ctx, 2) & 0x0F);             // 0C2C LDA $2142 (read until stable) / AND #0F
+        if ((int8_t)(uint8_t)(v - w[ip & 0xFFFF]) >= 0) {                 // 0C38 CMP ($20) / BPL -> 0C28 -> 0BB5
+          pgw16(r, page, 0x20, ip + 1); continue;
+        }
+        pgw16(r, page, 0x20, ip - 1); return 0;                          // 0C3E DEC $20 / RTS: again next frame
+      }
+      case 0xB:                                                          // 0C5F a byte into the PPU: $21[ip+1] = [ip]
+        if (io && io->ppu) io->ppu(io->ctx, w[(ip + 1) & 0xFFFF], w[ip & 0xFFFF]);
+        pgw16(r, page, 0x20, ip + 2); continue;
       case 0x0: {                                                        // 0C51 CALL: $7E:00F0 = the target, JSL $7E:37F3
         unsigned tgt = rd(r, ip);
         wr(r, 0x00F0, tgt);
-        if (tgt == 0x3F59) call3F59(r, page, io);
-        else { fprintf(stderr, "racescript: call $%04X is not ported\n", tgt); return -1; }
+        if (!call || call(w, page, tgt, io) < 0) { fprintf(stderr, "seqscript: call $%04X is not ported\n", tgt); return -1; }
         pgw16(r, page, 0x20, pg16(r, page, 0x20) + 2);                   // 0BB1 INC $20 / 0BB5 INC $20
         continue;
       }
       default:
-        fprintf(stderr, "racescript: op %02X at $%04X is not ported\n", a & 0xFF, ip - 1);
+        fprintf(stderr, "seqscript: op %02X at $%04X is not ported\n", a & 0xFF, ip - 1);
         pgw16(r, page, 0x20, ip - 1);
         return -1;
     }
@@ -432,13 +450,14 @@ void CtRaceTask42BD(uint8_t* w) {
   wr(r, 0xF0, t); wr(r, 0x02, rd(r, 0x04)); wr(r, 0x04, rd(r, 0x06)); wr(r, 0x06, t);
 }
 
-// ---- THE STAGE: C3:0000 -> $7E:3000 -> the NMI, for entry 0 (the race) -------------------------------------------------------
-// Stage 1 of the native port: the race's LOGIC end to end -- what decides how it plays and when it ends -- over the WRAM
-// image, the picture's own work left out (the packets and DMAs of the setup, the render tasks $42CE $428B $4447 $4D0D $4F54
-// $347A $44CE $3495 and the vblank hooks; stage 2). sequence_table.md sec. 12.
+// ---- THE STAGE: C3:0000 -> $7E:3000 -> the NMI ----------------------------------------------------------------------------
+// The machine every entry shares (the overlay, the common init, the NMI, the brightness tasks), then the race's own setup and
+// tasks. Stage 1 of the native port: the LOGIC end to end -- what decides how a stage plays and when it ends -- over the WRAM
+// image, the picture's own work left out (the packets and DMAs of the setups, the render tasks and the vblank hooks; stage 2).
+// sequence_table.md sec. 12 (the race) and sec. 13 (the ending).
 
 // The overlay, decompressed where C3:0000 puts it: `LDA $FE0003` (= C3:1313) -> $0300, `$7E:3000` -> $0303, JSL C3/0557.
-static int raceOverlay(uint8_t* w, const CtRaceIo* io) {
+static int seqOverlay(uint8_t* w, const CtRaceIo* io) {
   if (!io || !io->rom || io->romLen < 0x3E0006) return -1;
   const uint8_t* p = io->rom + 0x3E0003;
   uint32_t a = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
@@ -449,10 +468,12 @@ static int raceOverlay(uint8_t* w, const CtRaceIo* io) {
 }
 
 // $7E:3177 -- the driver reset (five commands through $377E; sequence_table / title_intro.c CtTitleIntroDriverReset), as WRAM
-// leaves it: each command's bytes in $1E00-$1E02, the last one `81 00 FF`, posted by the host.
-static void raceDriverReset(R* r, const CtRaceIo* io) {
+// leaves it: each command's bytes in $1E00-$1E02, the last one `81 00 FF`, posted by the host. `LDA $0384 / BIT #20 / BNE`:
+// an entry called with bit 5 keeps the song the field left playing (the ending's `FF 2A`..`FF 2F`).
+static void seqDriverReset(R* r, const CtRaceIo* io) {
   static const uint8_t cmd[5][3] = { { 0x85, 0x00, 0x00 }, { 0x89, 0x00, 0x00 }, { 0xF2, 0x00, 0x00 },
                                      { 0xF2, 0x01, 0x00 }, { 0x81, 0x00, 0xFF } };
+  if (r->w[0x0384] & 0x20) return;                                    // 3177 LDA $0384 / BIT #20 / BNE -> RTS
   for (int k = 0; k < 5; k++) {
     if (k == 0) { r->w[0x1E02] = 0; r->w[0x1E03] = 0; }              // STZ $1E02 (16-bit)
     r->w[0x1E00] = cmd[k][0];
@@ -463,22 +484,105 @@ static void raceDriverReset(R* r, const CtRaceIo* io) {
   }
 }
 
-int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
+int CtSeqStageBegin(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   R rr = { w, 0, io }, *r = &rr;
   // C3:0014 -- the vectors ($0500-$0507: JML $C3:0548 / $C3:0529), the operand into $0384, the overlay
   w[0x0500] = 0x5C; w[0x0501] = 0x48; w[0x0502] = 0x05; w[0x0503] = 0xC3;
   w[0x0504] = 0x5C; w[0x0505] = 0x29; w[0x0506] = 0x05; w[0x0507] = 0xC3;
   w[0x0384] = operand;
-  if (raceOverlay(w, io) < 0) return -1;
+  if (seqOverlay(w, io) < 0) return -1;
   // $7E:3063 -- the common init's WRAM: the shadows, then $0000-$00FF and $0900-$1DFF cleared (a DMA out of MPYL = 0)
   w[0x038E] = 4; w[0x038F] = 4;
   static const uint16_t z[] = { 0x0380, 0x0381, 0x0390, 0x0392, 0x0394, 0x0391, 0x0393, 0x0395, 0x0396, 0x0388, 0x038D, 0x038C, 0x0366 };
   for (unsigned k = 0; k < sizeof z / sizeof z[0]; k++) w[z[k]] = 0;
   memset(w + 0x0000, 0, 0x100);
   if (!(operand & 0x80)) memset(w + 0x0900, 0, 0x1500); else memset(w + 0x0920, 0, 0x14E0);
-  if (!(operand & 0x20)) { w[0x038A] = 0; raceDriverReset(r, io); }   // 30E9 BIT #20 / BNE / STZ $038A / JSR $3177
+  if (!(operand & 0x20)) { w[0x038A] = 0; seqDriverReset(r, io); }   // 30E9 BIT #20 / BNE / STZ $038A / JSR $3177
   memset(w + 0x0700, 0xE0, 0x200);                                    // JSR $3843: the OAM shadow, every sprite off screen
   wr(r, 0x13, 0x0900);                                                // 30F9 LDX #0900 / STX $13
+  return 0;
+}
+
+// C3/08D0 -- ONE NMI of the stage, its logic: INC $08, the task list into its snapshot $0950, the pad (C3/0A8E: $02, the
+// pause on Start's edge once $0390 allows it, the soft reset on L+R+Select+Start unless $0396), then the tasks of the snapshot
+// in order (7E:398A: sixteen slots, `CPX #0020`), each one able to remove or replace itself in the live list at its own index
+// ($39A7 / $39B1). Paused ($0392), neither the hooks nor the tasks run.
+int CtSeqStageNmi(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn run) { return CtSeqStageNmiHooks(w, joy, io, NULL, run); }
+
+int CtSeqStageNmiHooks(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn hook, CtSeqTaskFn run) {
+  R rr = { w, 0, io }, *r = &rr;
+  if (hook && !rd(r, 0x0392))                                         // 08F2 LDA $0392 / BNE / JSL $7E:39BE
+    for (unsigned x = 0; x < 0x10; x += 2) {                          // 39C0 .. 39D8 CPX #0010
+      unsigned h = rd(r, 0x0940 + x);
+      if (!h) continue;
+      unsigned k = hook(w, x, h, io);
+      if (k != h) wr(r, 0x0940 + x, k);                               // 39E3 STZ / 39F0 STA $0940,X
+    }
+  wr(r, 0x08, rd(r, 0x08) + 1);                                       // 090F INC $08
+  memmove(w + 0x0950, w + 0x0920, 0x20);                              // 0911 MVN $0920 -> $0950, 32 bytes
+  wr(r, 0x02, joy);                                                   // 0A99 LDA $4218 / STA $02
+  if (joy == 0x3030 && !w[0x0396]) return 2;                          // 0A9E the soft reset (JML $00FF00)
+  if (rd(r, 0x0390)) {                                                // 0ABB the pause
+    if (w[0x03] & 0x10) {
+      if (!rd(r, 0x0394)) {
+        wr(r, 0x0394, rd(r, 0x0394) + 1);
+        unsigned p = (rd(r, 0x0392) + 1) & 1;
+        wr(r, 0x0392, p);
+        if (p) { wr(r, 0x1E00, 0x00F2); }                             // 0ADB `F2` -- JSL $377A
+        else { wr(r, 0x1E00, 0x4418); wr(r, 0x1E02, 0x0080); }        // 0AE7 `18 44 80 00`
+        if (io && io->post) io->post(io->ctx);
+      }
+    } else wr(r, 0x0394, 0);
+  }
+  if (!rd(r, 0x0392)) {                                               // 0922 LDA $0392 / BEQ -> JSL $7E:398A
+    for (unsigned x = 0; x < 0x20; x += 2) {
+      unsigned t = rd(r, 0x0950 + x);
+      if (!t || !run) continue;
+      unsigned k = run(w, x, t, io);
+      if (k != t) wr(r, 0x0920 + x, k);
+    }
+  }
+  return rd(r, 0x0000) ? 1 : 0;
+}
+
+int CtSeqStageSong(uint8_t* w, const CtRaceIo* io) {
+  if (w[0x0388]) return 0;                                            // 09A6 LDA $0388 / BNE
+  if (w[0x0384] & 0x20) return 0;                                     // 09AB LDA $0384 / BIT #20 / BNE
+  if (w[0x038A] == w[0x0389]) return 0;                               // 09B2 LDA $038A / CMP $0389 / BEQ
+  w[0x0389] = w[0x038A];                                              // 09BA STA $0389
+  w[0x0388]++;                                                        // 09BD INC $0388
+  w[0x1E00] = 0x10; w[0x1E01] = w[0x038A]; w[0x1E02] = 0xFF; w[0x1E03] = 0xFF;   // 09C0 .. 09CE
+  int n = 0;
+  if (io && io->post) { io->post(io->ctx); if (io->postFrames) n = io->postFrames(io->ctx); }   // 09D1 JSL C7/0004
+  if (n <= 0) { w[0x0388] = 0; return 0; }                            // 09D5 STZ $0388
+  return n;                                                           //   (after the frames the upload holds)
+}
+
+void CtSeqStageEnd(uint8_t* w, const CtRaceIo* io) {
+  R rr = { w, 0, io };
+  seqDriverReset(&rr, io);
+}
+
+unsigned CtSeqTaskFade(uint8_t* w, unsigned slot, unsigned task, const CtRaceIo* io) {
+  (void)slot; (void)io;
+  if (--w[0x038F]) return task;                                       // DEC $038F / BNE -> RTS
+  w[0x038F] = w[0x038E];                                              // LDA $038E / STA $038F
+  switch (task) {
+    case 0x347A: return ++w[0x038D] == 0x0F ? 0 : task;               // 3487 INC $038D / CMP #0F / BEQ -> JMP $39A7
+    case 0x3495: return --w[0x038D] == 0 ? 0 : task;                  // 34A2 DEC $038D / BEQ -> JMP $39A7
+    case 0x34E3: if (--w[0x038D]) return task;                        // 34F0 DEC $038D / BEQ
+                 w[0x0000]++; return 0;                               // 34F6 INC $00 / JMP $39A7: the END
+    default: return task;
+  }
+}
+
+// ---- the race: entries 0 and 9, $7E:3B48 ----
+
+static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io);
+
+int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
+  R rr = { w, 0, io }, *r = &rr;
+  if (CtSeqStageBegin(w, operand, io) < 0) return -1;
   if ((operand & 0x1F) != 0 && (operand & 0x1F) != 9) return -1;      // entries 0 and 9: $7E:3B48
   // $7E:3B48 -- the race's setup, its logic
   if (operand & 0x0F) w[0x44]++;                                      // 3B48 LDA $0384 / AND #0F / BEQ / INC $44
@@ -504,57 +608,33 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (CtRaceScript(w, 0x0A00, io) < 0) return -1;                     // 3CD8 JSR $3749 -- page A runs once in the setup
   wr(r, 0x35FD, 0x45B0); wr(r, 0x3024, 0x51D1);                       // 3CDB / 3CE1: two words of the overlay
   // $7E:300D .. 301E: $388B (CGRAM), $31B0 (the vblank), JSL C3/08D0 (one NMI, run here), NMI on, STZ $00, STZ $0392
-  CtRaceStageFrame(w, 0, io);
+  CtSeqStageNmi(w, 0, io, raceTask);
   wr(r, 0x0000, 0); wr(r, 0x0392, 0);
   return 0;
 }
 
-// C3/08D0 -- ONE NMI of the stage, its logic: INC $08, the task list into its snapshot $0950, the pad (C3/0A8E: $02, the
-// pause on Start's edge once $0390 allows it, the soft reset on L+R+Select+Start), then the tasks of the snapshot in order
-// (7E:398A), each one able to remove or replace itself in the live list at its own index ($39A7 / $39B1). Paused ($0392),
-// neither the hooks nor the tasks run. Returns 1 once the script ENDed ($7E:0000 != 0: the main loop's `LDA $00 / BEQ`
-// leaves for the teardown), 2 on the soft reset, else 0.
+// The race's tasks (the logic ones; the picture's are stage 2).
+static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io) {
+  (void)slot;
+  switch (t) {
+    case 0x3749: CtRaceScript(w, 0x0A00, io); return t;
+    case 0x3754: CtRaceScript(w, 0x0B00, io); return t;
+    case 0x42BD: CtRaceTask42BD(w); return t;
+    case 0x4F54: CtRaceTask4F54(w); return t;                         // (its logic: the score's floor)
+    case 0x4339: CtRaceTask4339(w); return t;
+    case 0x485D: return CtRaceStep485D(w, io);
+    default: return t;                                                // the picture's tasks (stage 2)
+  }
+}
+
 int CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
-  R rr = { w, 0, io }, *r = &rr;
-  wr(r, 0x08, rd(r, 0x08) + 1);                                       // 090F INC $08
-  memmove(w + 0x0950, w + 0x0920, 0x20);                              // 0911 MVN $0920 -> $0950, 32 bytes
-  wr(r, 0x02, joy);                                                   // 0A99 LDA $4218 / STA $02
-  if (joy == 0x3030 && !w[0x0396]) return 2;                          // 0A9E the soft reset (JML $00FF00)
-  if (rd(r, 0x0390)) {                                                // 0ABB the pause
-    if (w[0x03] & 0x10) {
-      if (!rd(r, 0x0394)) {
-        wr(r, 0x0394, rd(r, 0x0394) + 1);
-        unsigned p = (rd(r, 0x0392) + 1) & 1;
-        wr(r, 0x0392, p);
-        if (p) { wr(r, 0x1E00, 0x00F2); }                             // 0ADB `F2` -- JSL $377A
-        else { wr(r, 0x1E00, 0x4418); wr(r, 0x1E02, 0x0080); }        // 0AE7 `18 44 80 00`
-        if (io && io->post) io->post(io->ctx);
-      }
-    } else wr(r, 0x0394, 0);
-  }
-  if (!rd(r, 0x0392)) {                                               // 0922 LDA $0392 / BEQ -> JSL $7E:398A
-    for (unsigned x = 0; x < 0x20; x += 2) {
-      unsigned t = rd(r, 0x0950 + x);
-      if (!t) continue;
-      switch (t) {
-        case 0x3749: CtRaceScript(w, 0x0A00, io); break;
-        case 0x3754: CtRaceScript(w, 0x0B00, io); break;
-        case 0x42BD: CtRaceTask42BD(w); break;
-        case 0x4F54: CtRaceTask4F54(w); break;                     // (its logic: the score's floor)
-        case 0x4339: CtRaceTask4339(w); break;
-        case 0x485D: { unsigned k = CtRaceStep485D(w, io); if (k != 0x485D) wr(r, 0x0920 + x, k); break; }
-        default: break;                                               // the picture's tasks (stage 2)
-      }
-    }
-  }
-  return rd(r, 0x0000) ? 1 : 0;
+  int st = CtSeqStageNmi(w, joy, io, raceTask);
+  if (st != 2 && CtSeqStageSong(w, io) > 0) w[0x0388] = 0;           // (the race never changes $038A)
+  return st;
 }
 
 // $7E:302A -- the teardown after the END: NMI and HDMA off, forced blank, the driver reset, `JML $C0:0000` (the host's reboot).
-void CtRaceStageClose(uint8_t* w, const CtRaceIo* io) {
-  R rr = { w, 0, io };
-  raceDriverReset(&rr, io);
-}
+void CtRaceStageClose(uint8_t* w, const CtRaceIo* io) { CtSeqStageEnd(w, io); }
 
 // $7E:4F54 -- THE HUD's task, its one piece of logic. Everything else in it draws (the minimap's two markers, the boost
 // icons, REST, BEST, the score: stage 2), but on the story's call it reaches `$5116` every frame (4F8A-4F90 or 4FA1-4FA7,

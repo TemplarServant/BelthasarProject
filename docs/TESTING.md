@@ -788,6 +788,28 @@ frame after it is held). Four drives (idle, B boosts, steering with bumps, the c
 frame and the END on the same frame (f2877, f2843, f2841, f2844). The picture's bytes are not graded (stage 2).
 Full tier (~1 min). Needs the user's capture.
 
+### ending-story-plays-through-in-the-port (ct_field, the oracle's own playthrough)
+
+The game's ending in the port itself: from saves/ending_re/ending_pre_ff2b.lakewram (Leene's Square, the talk to obj9
+made), obj10's `CHANGELOC 02D` and `FF 2B` open the native ending stage (seq_ending.c, 48 black frames: the overlay's C3/0557
+cycles, the init's DMAs, the setup's 10986252), which runs to its END and reboots into 02D; the field's chain 105 -> 059
+-> 05A follows (the cartridge's), and scene 90's `FF 2E` opens at f6840 (the cartridge: f6838) with its 52. The picture is
+black (stage 2). Quick (~7 s). Needs the local saves.
+
+### ending-stage-logic-vs-oracle (`tools/ending_stage_cmp.py`)
+
+The ending's $C3 stage, its LOGIC native (src/seq_ending.c on seq_race.c's shared machine; entries 10/11/14/15 are one
+setup, $7E:8538): the overlay, the common init, the setup's script pages and shadows, page A inside the setup, then one
+NMI a frame -- the vblank hooks' logic, the two scripts with their `F5` waits on the song's marker (the SPC's port 2), the
+fades $347A/$3495/$34E3 (the last one ENDs), the tasks whose work the logic reads ($90C1, the orbit $992A, $997D, the
+credits' pager $9B4F, the rolling text $9E7B, the planet $9A0C), the backdrop reloads' list resets, and C3/09A4's song
+change with the frames its upload holds the NMI. Two drives from the oracle's own run (saves/ending_re, reached from
+Jackie's ch27): `FF 2B` (Leene's Square) from its hand-off at f130 -- 4747 frames, every logic byte equal, the markers and
+the END (f4925) on the same frames -- and `FF 2E` (scene 90, "The End") from f6837 -- 10948 frames, 0 differing, the
+markers on the same frames. The port runs `ct.exe --seqstage` from the cartridge's state at each hand-off (its SPC and its
+PPU's field bit seeded from it). The picture's bytes (the hooks' scratch in page A, the HDMA shadow $038C, the two RNGs)
+are not graded (stage 2). Full tier (~2 min). Needs the local saves.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, local and gitignored -- SKIPs without them), booted the

@@ -41,8 +41,7 @@ def main():
                 lim, tgt = w16(ip + 1), w16(ip + 3)
                 listing[ip] = 'loop%d %s limit %04X -> %04X' % (n, '(yield)' if hi == 0x90 else '', lim, tgt)
                 todo.append(tgt); ip += 5; continue
-            if hi != 0xF0:
-                listing[ip] = '?? %02X' % op; break
+            # $A0-$FF: C3/0B6A dispatches every one of them on its low nibble ($Fn is only the usual spelling)
             name, ln = OPS[n]
             arg = w16(ip + 1) if ln >= 2 else (w[ip + 1] if ln == 1 else None)
             if n == 1:

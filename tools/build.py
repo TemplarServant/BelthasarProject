@@ -254,6 +254,10 @@ def main(argv):
 
     # ---- pre-flight: refuse to build over a RUNNING exe (the LNK1168 class).
     procs = running_ct_processes() if os.name == "nt" else []
+    # A single-target build links only that exe: another one running (the player's ct_field while ct.exe is rebuilt) is
+    # not in its way.
+    if procs and args:
+        procs = [(pid, path) for pid, path in procs if os.path.basename(path).lower() == args[0].lower() + ".exe"]
     if procs is None:
         print("WARNING: could not check for running ct*.exe processes (powershell "
               "unavailable?) - a locked exe will still fail the link loudly.", flush=True)

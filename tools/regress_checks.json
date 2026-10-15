@@ -39049,6 +39049,144 @@
       "notes": "Roadmap G1a item 1 (the $C3 sequences): the first one a playthrough meets. From the user's capture (saves/race_re/race_user.*). The cartridge's own path: 10F at f2877, 0DF (39,14) at f2913; the port reaches 0DF 28 frames earlier -- the setup's song handshake is not charged yet (timing only)."
     },
     {
+      "name": "ending-stage-logic-vs-oracle",
+      "argv": [
+        "python",
+        "tools/ending_stage_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ending_re/ending_pre_ff2b.state",
+        "saves/ending_re/ending_handoff_f130.state",
+        "saves/ending_re/ending_handoff_f6837.state",
+        "tools/ending_stage_cmp.py"
+      ],
+      "expect": [
+        "endingstage: FF 2B 4747 frames compared, 0 differing, END cartridge f4925 port f4925 (same)",
+        "endingstage: FF 2B song markers cartridge 829 2029 3950 4910 port 829 2029 3950 4910",
+        "endingstage: FF 2E 10948 frames compared, 0 differing, END cartridge fNone port fNone (same)",
+        "endingstage: FF 2E song markers cartridge 115 2037 4192 7788 port 115 2037 4192 7788"
+      ],
+      "pin": [
+        "^endingstage: "
+      ],
+      "timeout_s": 900,
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "        if ((int8_t)(uint8_t)(v - w[ip & 0xFFFF]) >= 0) {                 // 0C38 CMP ($20) / BPL -> 0C28 -> 0BB5",
+          "replace": "        if (1) {   /* MUT: no wait for the song */",
+          "why": "`F5 n` holds the script until the song's marker n: without it the credits run ahead of the music and END early"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "                 w[0x0000]++; return 0;                               // 34F6 INC $00 / JMP $39A7: the END",
+          "replace": "                 return 0;   /* MUT: no END */",
+          "why": "the stage's END is $34E3's: page A stops on a jump-to-self"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "static void task90C1(uint8_t* w) { wr(w, 0x0A04, (rd(w, 0x0A04) + rd(w, 0x0B10)) & 0x03FF); }",
+          "replace": "static void task90C1(uint8_t* w) { (void)w; }   /* MUT */",
+          "why": "task $90C1 turns page A's r2 by page B's r8 every frame"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "  wr(w, d + 0x02, ((rd(w, d + 0xF5) >> 4) + 0x0080) & 0xFFFF);        // 993C LDA $F5 / LSR x4 / CLC / ADC #0080 / STA $02",
+          "replace": "  wr(w, d + 0x02, ((rd(w, d + 0xF5) >> 5) + 0x0080) & 0xFFFF);   /* MUT */",
+          "why": "the orbit's r1 is the product's bits 12-27"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    case 0x8BAF: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x00; return 0;   // 8BB0 / 8BB3, 8BC3 (A = $0000, TCD)",
+          "replace": "    case 0x8BAF: return 0;   /* MUT: the reload keeps the lists */",
+          "why": "the last screens' backdrop reload clears the task and hook lists before the script re-adds its own"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    if (!(((x - 0xAB1A) & 0xFFFF) & 0x8000)) return 0;                // 9B76 CPX #AB1A / BMI -> 9B7E, else JMP $39A7",
+          "replace": "    if (!(((x - 0xAB00) & 0xFFFF) & 0x8000)) return 0;   /* MUT */",
+          "why": "the pager ends past the last page ($AB1A): the task leaves the list then, and the slots after it move"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "  if (st != 2) s_songHold = CtSeqStageSong(w, io);",
+          "replace": "  if (st != 2) { CtSeqStageSong(w, io); w[0x0388] = 0; }   /* MUT */",
+          "why": "the song's upload holds the stage's NMI (C3/09A4's JSL inside it) for the SPC's handshake frames"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    case 0x8D56: w[0x038C] = 0x01; wr(w, 0x4A, 0xB099); wr(w, 0x48, 0xFFE0); return 0;",
+          "replace": "    case 0x8D56: return 0;   /* MUT */",
+          "why": "hook $8D56 points the rolling text at its start ($4A = $B099)"
+        }
+      ],
+      "note_pass": "the ending's $C3 stage (entries 10/11/14/15 = $7E:8538) runs natively (src/seq_ending.c on seq_race.c's shared machine): its two scripts, the waits on the song's markers (`F5`, the SPC's port 2), the fades and the END, the tasks and hooks whose work the logic reads (the orbit, the credits' pager, the rolling text, the planet, the backdrops' list resets) and the NMI's song change with its upload frames -- `FF 2B` for 4747 frames and `FF 2E` for 10948, byte for byte with the cartridge",
+      "notes": "Roadmap G1a item 1 (the $C3 sequences): the ending a playthrough meets (sequence_table.md sec. 13). The cartridge runs saves/ending_re/ending_pre_ff2b.state (reached by the oracle from Jackie's ch27, memory note endgame-oracle-route) under the rule; the port runs ct.exe --seqstage from the cartridge's state at the hand-off (f130), its SPC seeded into CtAudio; frame k = the cartridge's k + 179, the SPC 50 frames ahead. The picture is stage 2."
+    },
+    {
+      "name": "ending-story-plays-through-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "81",
+        "--loadwram",
+        "saves/ending_re/ending_pre_ff2b.lakewram",
+        "--walkscript",
+        "n:7000"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/ending_re/ending_pre_ff2b.state",
+        "CT_LOCTRACE": "1",
+        "CT_SHOTS": "build/_ending_story",
+        "CT_SHOTS_AT": "7000",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/ending_re/ending_pre_ff2b.state",
+        "saves/ending_re/ending_pre_ff2b.lakewram"
+      ],
+      "expect": [
+        "loctrace: -> loc 02D tile(8,8) facing=1 style=1",
+        "sequence: entry 11 (the ending) opening at f132 -- 5728360 + 49152 + 10986252 cycles = 48 black frame(s)",
+        "sequence: the ending ended ($7E:0000=1) -> reboot into loc 02D",
+        "reboot: JML C0:0000 -> loc 105 tile(56,30) bits00",
+        "reboot: JML C0:0000 -> loc 059 tile(19,8) bits01",
+        "reboot: JML C0:0000 -> loc 05A tile(24,19) bits01",
+        "sequence: entry 14 (the ending) opening at f6840 -- 5728360 + 49152 + 12460664 cycles = 52 black frame(s)"
+      ],
+      "pin": [
+        "^loctrace: ",
+        "^sequence: ",
+        "^reboot: "
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      if (seqId != 2 && !seqOpen && CtEndingStageHas((uint8_t)seqId)) {",
+          "replace": "      if (0) {   /* MUT: the ending is not ported */",
+          "why": "without the native stage the port held on `FF 2B` for good: the game's ending stopped there"
+        },
+        {
+          "file": "src/field.c",
+          "find": "            long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEndingStageSetupCycles((uint8_t)seqId);",
+          "replace": "            long od = 8L * (0x100 + 0x1500 + 0x200), os = 0;   /* MUT */",
+          "why": "the setup's own cycles are the black frames of the ending's opening (48 for FF 2B, 52 for FF 2E: the cartridge's)"
+        }
+      ],
+      "note_pass": "the game's ending plays through in the port (stage 1: its logic, the picture black): Leene's Square's `FF 2B` runs natively to its END, the reboot into 02D and the field's own chain 105 -> 059 -> 05A (the cartridge's), and scene 90's `FF 2E` opens -- \"The End\"",
+      "notes": "Roadmap G1a item 1. From the oracle's own playthrough of Jackie's ch27 (saves/ending_re/ending_pre_ff2b.*, the talk to obj9 already made). The cartridge: FF 2B at f131, END f4925, 02D -> 105 f5286 -> 059 f5619 -> 05A f6285, FF 2E at f6838; the port opens FF 2B at f132 and FF 2E at f6840."
+    },
+    {
       "name": "jackie-saves-census-vs-oracle",
       "argv": [
         "python",
