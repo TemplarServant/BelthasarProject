@@ -8516,10 +8516,12 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
   if (mem[0x95D5] & 0x80) return;                           // C1/17DD BPL: $95D5 = 0xFF (no chooser) -> hidden
   int set[11], n;
   int group = mem[0x960D];
-  if (group & 0x80) {                                       // PC-SIDE group (C1/1F9D BPL, e.g. an item's 0x80):
-    int seat = h->itemTgtSel;                               //   the cursor rides the PC target-select seat
-    if (seat < 0 || seat > 2 || (mem[0x2980 + seat] & 0x80)) return;
-    set[0] = seat; n = 1;                                   //   (only the single PC groups are exercised, §5)
+  if (CtBattleGroupPcSide(group)) {                         // PC-SIDE group (C1/1FF8[grp & 7F] = 00/01/03/04; bit 7
+    // only picks the side the cursor starts on): C1/1979 draws no side test -- the hand sits on the actors in $A62D,
+    // the single one ($A62E = FF, C1/19AC) or the ALL group's whole list (C1/1A7B), as the group handler published
+    // them (battlePcTargetPublish: C1/203A, C1/209A, Revive's fallen seats C1/20E0).
+    n = 0;
+    for (int i = 0; i < 3 && mem[0xA62D + i] < 3; i++) set[n++] = mem[0xA62D + i];
   } else {
     int slot = mem[0x9614];
     if (slot < 0 || slot >= 8 || mem[0xAF02 + slot] == 0xFF) return;   // cursor on a dead/absent slot -> nothing
@@ -8542,6 +8544,9 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
     if (!h->mvInited || !CtBattleCursorOfs(h, cmb, &ofx, &ofy)) continue;   // no ROM record -> absent-render
     int ax = (BT_LIVEX(h, cmb) + ofx - 0x10) & 0xFF;         // C1/19C0-19C9 / C1/1ABA-1AC3
     int ay = (BT_LIVEY(h, cmb) + ofy) & 0xFF;                // C1/19CD-19D4 / C1/1AC7-1ACE
+    if (getenv("CT_BATTLE_HANDTRACE"))                       // the sprite's OAM x/y, the oracle's $0700+d*4 / $0701+d*4
+      printf("battlehand: sprite%d cmb=%d oam=%02X,%02X grp=%02X a62d=%02X%02X%02X\n", d, cmb, ax, ay, group,
+             mem[0xA62D], mem[0xA62E], mem[0xA62F]);
     for (int cy = 0; cy < 2; cy++)
       for (int cx = 0; cx < 2; cx++) {
         int ti = 0x000 + cx + 0x10 * cy;                   // tile 0x000 quad: 0x00,0x01,0x10,0x11

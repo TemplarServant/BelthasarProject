@@ -1152,6 +1152,8 @@ int CtBattleEnemyIdleWin(int id, int mode, int facing, uint8_t poses[8], uint8_t
 // alive enemies. Fills out[0..n-1] with COMBATANT indices; returns n (>=1). The target-select cursor and
 // the dispatch damage loop share it -- the ROM's highlight table $A62D IS the $99C0 the handler built.
 int CtBattleHitSet(CtBattleHost* h, int group, int primary, int* out, int cap);
+// 1 when target group $960D's handler (C1/1FF8[grp & 7F]) walks the PC side: 00 / 01 / 03 / 04, bit 7 or not.
+int CtBattleGroupPcSide(int grp);
 // The per-actor target-cursor OFFSET $9708,cmb / $9713,cmb (battle_multitarget_cursor.md §1): PCs = (0,-16)
 // (CC/E3C7/CC/E3CA), enemies = bytes +1/+2 of the E4/F604 + id*10 graphics record (CC/EBB0/CC/EBB7).
 // The hand's origin is then (live + ofs - (0x10,0)) & 0xFF (C1/19C0-19D4 / C1/1ABA-1ACE). 0 if unavailable.

@@ -5785,6 +5785,7 @@ int CtBattleHitSet(CtBattleHost* h, int group, int primary, int* out, int cap) {
   if (!h || !out || cap <= 0) return 0;
   return battleBuildHitSet(h, group, primary, out, cap);
 }
+int CtBattleGroupPcSide(int grp) { return battleGroupPcSide(grp); }
 // The per-actor CURSOR OFFSET $9708,cmb / $9713,cmb (battle_multitarget_cursor.md §1: the hand's origin law
 // is OAM.x = ($1D0C,A + $9708,A - 0x10) & 0xFF, OAM.y = ($1D23,A + $9713,A) & 0xFF -- identical code at
 // C1/19C0-19D4 (single) and C1/1ABA-1ACE (multi)). PCs (cmb 0..2) load (0x00, 0xF0) from CC/E3C7 (STZ) +

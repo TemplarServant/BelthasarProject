@@ -989,6 +989,16 @@ C1:2F94). Pins the spin's last `ascface` and the first seat-0 `pcwalk ... aim=1`
 every PC attacker (the removed SETTLE) leaves the latch nothing to change -- no aim=1 line, the check fails.
 Dossier: disasm/notes/battle_facing_engine.md section 4 (correction).
 
+### field-battle-item-revive-hand-on-fallen-vs-oracle
+
+Revive's target hand sits on the fallen ally, not on an enemy. Revive's group is 03 (CC/1BB5), which has no bit 7: the
+hand renderer used to take only bit-7 groups as PC-side and read `$9614` (an index into the fallen list) as an enemy
+slot. C1/1979 has no side test: it draws on the actors of `$A62D`, which C1/20E0 fills with the fallen seats. The check
+drives the `field-battle-item-revive` seed (Crono alive, Marle fallen) into the target select and reads
+CT_BATTLE_HANDTRACE on f190: `cmb=1 oam=A0,5F`. The cartridge's own bytes match, from gato_wait.state with
+`tools/battle_ab.py`'s `item_pokes_marle(0xC7, dead=True)` and `d,d,a,a` from c640: `$A62D = 01 FF FF`, `$0700 = A0 5F 00 32`
+at c678. One mutation (the old `group & 0x80` gate) turns it red.
+
 ### field-battle-item-{elixir-script,ether-mp-row,heal-op43,revive-op43}-vs-oracle / field-battle-tech-cyclone-front-entry-vs-oracle
 
 The anim-script ops a7b7a5d ported on a branch, reconciled with main (`disasm/notes/battle_asc_inert_ops.md`). Each
