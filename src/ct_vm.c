@@ -4797,6 +4797,14 @@ void CtSceneSeedFromWram(CtScene* sc, const uint8_t* w) {
   // battle seed (saves/attract_demo_battle_pre.lakewram, f1735: $7F03FC = 02, the followers on `96` at IP
   // 1746/1766, $7F3748 = 01 19) -- and the template's `96 00 00` walked them to tile (0,0) instead.
   if (sc->raw && sc->rgBase >= 0) memcpy(sc->raw + 0x1700, w + 0x13700, 0x86);
+  // ...and the rest of the image, $7F2000-36FF: the ROM's runner reads every op from $7F:2001 + IP (C0/5A46), so the
+  // seed's own bytes are the script it runs. Taken only when the seed holds THIS scene's image (its object count and
+  // fn table equal ours): an F5 capture from before the port wrote the image to WRAM holds zeros there. A seed whose
+  // WRAM was poked runs the poked script on both sides -- tools/battle_sim.py stages any formation by writing
+  // `83 id op2 / 8B x y ...` at $7F:3000 and pointing objects' $1180,X there, so the field's own op 0x83 (C0/46DF) loads
+  // each enemy's sprite and palette.
+  if (sc->raw && sc->rgBase >= 0 && !memcmp(w + 0x12000, sc->raw, (size_t)(1 + sc->header)))
+    memcpy(sc->raw, w + 0x12000, 0x1700);
   int hoff = CTW_IPOFF(sc);
   // The dialogue string table is the ROM's $012B/$012C/$012D (op 0xB8, C0/3557); the location loader
   // clears the bank byte (C0/0BDA) and op 0xBB refuses a box while it is zero (C0/3570). A seeded state

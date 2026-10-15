@@ -160,9 +160,14 @@ def timeline(rows, regs):
     return tl
 
 
-def run(pokes, drive, total, tag, regs=None, raw=False):
+BUILD = os.environ.get('CT_BUILD_DIR') or 'build'   # CT_BUILD_DIR=build_alt: another set of exes (tools/build.py)
+
+
+def run(pokes, drive, total, tag, regs=None, raw=False, timed=None):
     """regs: other regions than regions()'s; raw: return the per-frame rows ({frame: {addr: hex}}) instead of the
-    timelines of fields() (tools/battle_victory_teardown_cmp.py)."""
+    timelines of fields() (tools/battle_victory_teardown_cmp.py); timed: (frame, {addr: value}) -- WRAM bytes written
+    on that frame on both sides (the cartridge's PEEK_POKE_AT, the port's CT_POKEWRAM_AT: port field frame f = cartridge
+    frame f on this fixture), e.g. an enemy's staged HP once the fight has booted (tools/battle_sim.py)."""
     os.makedirs(OUT, exist_ok=True)
     tag += os.environ.get('BATTLE_AB_TAG', '')            # (BATTLE_AB_TAG=_x: keep two runs' files apart)
     regs = regs or regions()
@@ -170,7 +175,13 @@ def run(pokes, drive, total, tag, regs=None, raw=False):
     pk = ','.join('%X=%02X' % (a, v) for a, v in sorted(pokes.items()))
     inp = oracle_input(drive, total)
     env = dict(os.environ, **RULE, PEEK_POKE=pk)
-    ct = os.path.abspath('build/ct.exe')
+    tenv = {}
+    if timed:
+        tf, tp = timed
+        tpk = ','.join('%X=%02X' % (a, v) for a, v in sorted(tp.items()))
+        env['PEEK_POKE_AT'] = '%d:%s' % (tf, tpk)
+        tenv = {'CT_POKEWRAM': tpk, 'CT_POKEWRAM_AT': str(tf)}
+    ct = os.path.abspath(os.path.join(BUILD, 'ct.exe'))
     o = subprocess.run([ct, '--monitor', mon, '--from', STATE, '--input', inp, '--diff'], env=env,
                        capture_output=True, text=True, errors='replace').stdout
     oth = os.path.join(OUT, tag + '_c.thumbs')
@@ -191,13 +202,13 @@ def run(pokes, drive, total, tag, regs=None, raw=False):
         # CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1): the WRAM image is that state's, so its driver is the console's and the
         # boot's song upload is priced on the rule's clock -- a cold driver keeps the old clock, the battle NMI's work
         # charged, and the field-started fight ran 6 frames behind the rule's cartridge.
-        penv = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
+        penv = dict(os.environ, **tenv, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                     CT_AUDIO_SEEDSTATE=STATE,
                     CT_BATTLE_SCRIPT_ABS='1', CT_BATTLE_SCRIPT=port_script(drive, start, total),
                     CT_FIELD_MEMMON=','.join('%04X:%X' % (a, n) for a, n in regs),
                     CT_SHOTS_THUMBS=pth, CT_SHOTS_THUMBS_EVERY='1', CT_SHOTS=os.path.join(OUT, tag + '_p'),
                     CT_SHOTS_AT=str(total), CT_SHOTS_EXIT='1')
-        p = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
+        p = subprocess.run([os.path.abspath(os.path.join(BUILD, 'ct_field.exe')), '--assets', 'ct_assets.dat', '--scene', '6',
                             '--loadwram', lw, '--walkscript', 'a:8'], env=penv, capture_output=True, text=True,
                            errors='replace').stdout
         m = re.search(r'battlephase: begins at field f(\d+)', p)
@@ -381,7 +392,7 @@ def combo_ready(pokes, n):
     an open submenu freezes the ATBs in Wait mode ($99E0 = $99E1, C1/1172) and a partner not ready greys the combo (C1/0EE1
     rule 4), so the drive opens the list only after it."""
     env = dict(os.environ, **RULE, PEEK_POKE=','.join('%X=%02X' % (a, v) for a, v in sorted(pokes.items())))
-    o = subprocess.run([os.path.abspath('build/ct.exe'), '--monitor', '7EA6DE:1', '--from', STATE, '--input', '100:8,0:1400',
+    o = subprocess.run([os.path.abspath(os.path.join(BUILD, 'ct.exe')), '--monitor', '7EA6DE:1', '--from', STATE, '--input', '100:8,0:1400',
                         '--diff'], env=env, capture_output=True, text=True, errors='replace').stdout
     for f, r in sorted(parse_mon(o, r'\s*f(\d+)\s+(.*)').items()):
         v = int(r.get(0xA6DE, '0'), 16)

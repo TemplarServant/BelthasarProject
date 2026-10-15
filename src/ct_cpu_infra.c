@@ -49,9 +49,31 @@ static void padLogFlush(void) {
   s_padRun = 0;
 }
 void CtOracleDestroy(Snes* s) { padLogFlush(); if (s) snes_free(s); }
+static int s_runN;
+void CtOracleFrameCountReset(void) { s_runN = 0; }
+static void ctTimedPoke(Snes* s, int n) {
+  static const char* spec; static int read;
+  if (!read) { read = 1; spec = getenv("PEEK_POKE_AT"); }
+  for (const char* g = spec; g && *g; ) {
+    char* e; long at = strtol(g, &e, 10);
+    if (e == g || *e != ':') return;
+    const char* q = e + 1;
+    while (*q && *q != ';') {
+      long adr = strtol(q, &e, 16);
+      if (e == q) break;
+      if (adr >= 0x7E0000 && adr <= 0x7FFFFF) adr -= 0x7E0000;
+      if (*e == '=') { long v = strtol(e + 1, &e, 16);
+        if (at == n && adr >= 0 && adr < 0x20000) s->ram[adr] = (uint8_t)v; }
+      while (*e && *e != ',' && *e != ';') e++;
+      q = (*e == ',') ? e + 1 : e;
+    }
+    g = (*q == ';') ? q + 1 : q;
+  }
+}
 void CtOracleRunFrame(Snes* s) {
   static int opened;
   if (!opened) { opened = 1; const char* p = getenv("CT_ORACLE_PADLOG"); if (p && *p) s_padLog = fopen(p, "w"); }
+  ctTimedPoke(s, s_runN++);
   if (s_padLog) {
     int b = s->input1->currentState;
     if (b != s_padBtn) { padLogFlush(); s_padBtn = b; }

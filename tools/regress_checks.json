@@ -42417,6 +42417,35 @@
       "timeout_s": 700,
       "note_pass": "the Dragon Tank on the bridge (loc 01C) against the rule's cartridge: its body drawn on arrival and through the hurt flash, Crono's far attacks on the head and the grinder, and the cartridge's two reward lines",
       "notes": "USER REPORT 2026-10-14 (build/ct_debug_049.state, loc 01C: 'the tank's image got broken') and 'the battle against the dragon tank had several bugs ... including the scene after defeating it' (translated from Portuguese). Five fixes, each against the cartridge: (1) a CLASS-3 field sprite ($1201,X & 3 = 3, the tank's body, sprite 403) shows the frame C0/E12A staged at its op 0x83 load -- frame 0 -- under the camera latch's $FF in $0F01,X; the port's ticker drew frame 1, all chips 0000 (field.c's actor frame loop). (2) A TYPE-3 combatant never changes pose: C1/1C4A returns at 1C54 before the $9907 publish, so the hurt flash's pose 01 never reaches the picture (field.c battleEnemyGenRender). (3) C1/49FF's physical anim pick asks C1/4A71 whether the attacker can WALK to the target (CC/F110's grid, a 30-wave flood); Crono's attacks on the head and the grinder take CD/4000's far 0E (battle.c battleTargetWalkable). (4) The TP line is FD/AD32's `$B2AF bit 4`, set only by the tech pass's C1/F4A2 behind $7F01E0 -- no TP line before Spekkio (battleBuildResults). (5) A no-celebration fight ($2989 bit 0, D8 87) ran its first reward line unseen: field.c's box gate waited the full 72 frames; and the dwell's A gate reads the fight's latch $CC99 (CD/01F2's $F8). The arrival and flash boxes are PINNED RESIDUALS, not clean: after the second trigger the port's tank and Lucca run 2-3 frames behind (Lucca's $0F0B 73 at +4 vs +1, the tank's first step +70 vs +68) and Lucca stops 4 px nearer Crono (the follower ring, 255 vs 259); the flash box differs on the silhouette's lower edge. The seed and the drive are the tool's docstring."
+    },
+    {
+      "name": "battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_sim.py",
+        "fight",
+        "@048:9",
+        "hp=1"
+      ],
+      "env": {},
+      "expect": [
+        "sim f048_9 [3E Blue Shield 3E Blue Shield]: staged cartridge ['3E', '3E'] f271, port ['3E', '3E'] f216",
+        "sim f048_9 [3E Blue Shield 3E Blue Shield]: deaths cartridge [818, 1030] port [814, 1022]",
+        "sim f048_9 [3E Blue Shield 3E Blue Shield]: death palette (OBJ pal 4, $2380): cartridge 37 states, port 37, the same sequence"
+      ],
+      "pin": [
+        "^sim f048_9 .*: staged ",
+        "^sim f048_9 .*: deaths ",
+        "^sim f048_9 .*: death palette "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "notes": "ANY FORMATION, staged the ROM's way on both sides (tools/battle_sim.py): the Guardia prison's pair of Blue Shields (scene 048 obj9/obj10, `83 3E 03` / `83 3E 04`) in GATO's arena -- the bytes `83 id op2 / 8B x y / 89 20 / AA 03 / B2` written into gato_wait's script image at $7F:3000, objects 3/4's IPs pointed there, GATO out ($1110 = 80) -- so the field's own op 0x83 (C0/46DF) loads their sprite and palette (the port runs the seed's image: ct_vm.c CtSceneSeedFromWram). Both HP := 1 at f600 (PEEK_POKE_AT / CT_POKEWRAM_AT), A mashed. Pins: the staged ids on both sides; the OBJ palette-4 page's 37 states over the two dissolves, the same sequence on both (CF/FE20's copy of each shield's own colours, CD/00A5's fade to red); and the deaths, a PINNED RESIDUAL: the port 4 and 8 frames early (cartridge 818/1030, port 814/1022) -- the same mash on gato_wait's own unstaged fight drifts the same way (`battle_sim.py fight native`: -4 x6 -2 x12 +0 x21), so it is the port's, not the staging's. The tool also reports, unpinned: $993C FF in the empty combatants on the port (battle.c's host-lifetime restore copies $9888 = FF into all 11) and the picture per frame. Re-pin the deaths only from a fix that moves them toward the cartridge's frames."
     }
   ],
   "excluded": [

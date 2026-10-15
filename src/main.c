@@ -12936,6 +12936,7 @@ static Snes* ctLoadStateOracle(const char* romPath, const char* statePath, uint8
   // PEEK_POKE="ADDR=HH,...": WRAM bytes set on the loaded state before any mode runs it (--pokewram's grammar) -- how a
   // capture no drive reaches cheaply is made, e.g. a party on 1 HP for a defeat (every --peek/--monitor/--hookpc/...).
   ctPokeWram(s, getenv("PEEK_POKE"));
+  CtOracleFrameCountReset();                                   // PEEK_POKE_AT counts from here
   *romOut = rom;
   return s;
 }

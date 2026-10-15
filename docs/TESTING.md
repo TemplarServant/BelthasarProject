@@ -2393,3 +2393,13 @@ whenever he acts: the far 0E of C1/4A71's walk test against the head and the gri
 no TP line before Spekkio). The two box counts are pinned residuals -- the port's tank and Lucca run 2-3 frames behind
 after the second trigger and Lucca stops 4 px nearer Crono -- so a re-pin is legitimate only when that lag is fixed
 (the counts then rise), never to absorb a fall. The anim and line signatures must stay as pinned.
+
+### battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge (`python tools/battle_sim.py fight @048:9 hp=1`)
+
+Any formation, staged the ROM's way on both sides: tools/battle_sim.py writes `83 id op2 / 8B x y / 89 20 / AA 03 / B2`
+into gato_wait's script image ($7F:3000), points the non-party PC objects' IPs at it and takes GATO out, so the field's
+own op 0x83 loads each enemy's sprite and palette (the port runs the seed's script image, ct_vm.c CtSceneSeedFromWram).
+Here the Guardia prison's two Blue Shields (scene 048 obj9/obj10), both at 1 HP from f600 (PEEK_POKE_AT /
+CT_POKEWRAM_AT), A mashed. Pins the staged ids, the death palette page's 37 states (the same sequence on both sides)
+and, as a PINNED RESIDUAL, the deaths: the port 4 and 8 frames early, the same drift gato_wait's own unstaged fight
+shows under the same mash (`fight native`). Re-pin the deaths only from a fix that moves them toward the cartridge.

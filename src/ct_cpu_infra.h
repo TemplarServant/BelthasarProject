@@ -44,6 +44,10 @@ uint8_t* CtReadFile(const char* path, int* outLen);
 Snes* CtOracleCreate(const uint8_t* rom, int len, int* outType);
 void  CtOracleDestroy(Snes* s);
 void  CtOracleRunFrame(Snes* s);
+// PEEK_POKE_AT="N:ADDR=HH,...[;M:ADDR=HH,...]": WRAM bytes written before the (N+1)-th CtOracleRunFrame after the
+// state loaded (PEEK_POKE's grammar per group) -- the cartridge's side of the port's CT_POKEWRAM_AT, e.g. an enemy's
+// staged HP mid-fight. The state loader resets the count.
+void  CtOracleFrameCountReset(void);
 void  CtOracleStep(Snes* s);   // execute exactly one CPU opcode (for tracing)
 
 // --- CPU bus-write logging (for porting validation) ---
