@@ -8509,37 +8509,28 @@ static void battleBracketRender(uint8_t* fb, const uint8_t* mem, const CtBattleH
 //  (c) THE BLINK: sprite 0 is ALWAYS $A62D[0] (the primary, C1/1A7B); sprites 1-3 are a 3-entry PAGE
 //      window whose start $960B toggles 0<->3 on every multi-arm rebuild (C1/1AA2-1AF8), and a rebuild is
 //      requested every 4th battle frame (CF/E73B: INC $9931 / AND #03 / BNE / INC $993A). So the SECONDARY
-//      hands blink 4 frames on / 4 off while the primary's stays lit. The toggle is the menu pass's own
-//      (battle.c battleMenuPassTail keeps $960B in WRAM); the picture shows the page that pass drew, as the
-//      NMI shipped it (h->handPageShown) -- the phase is the fight's menu passes, not a render clock.
-// Head gate = C1/17DD's `LDA $95D5 / BPL` (bit7), i.e. no hand while no PC owns the command.
+//      hands blink 4 frames on / 4 off while the primary's stays lit.
+// The picture is OAM entries 0-3 as the menu pass's C1/17DD last placed them and the next NMI shipped them, like the
+// bracket's (battle.c battleMenuPassTail -> h->handOam / handVis, battleNmiHead -> handOamShown / handVisShown): the
+// positions are the feet at that pass, the hand appears a frame after the pass that opens the select and stays until a
+// pass parks it (C1/1AFE) or the bracket takes the entries back (C1/1115) -- not on the live $9609 / $95D5.
 static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHost* h) {
-  if (!fb || !mem || !h || mem[0x9609] == 0) return;        // C1/17E5 BEQ: any nonzero $9609 shows the hand
-  if (mem[0x95D5] & 0x80) return;                           // C1/17DD BPL: $95D5 = 0xFF (no chooser) -> hidden
-  int set[11], group = mem[0x960D];
-  int n = CtBattleTargetHandSet(h, mem, set, 11);           // C1/1979's $A62D (battle.c: the PC side, the radius, the hit set)
-  if (n <= 0) return;
-  int draw[4], nd = 0;
-  draw[nd++] = set[0];                                      // sprite 0 = $A62D[0], every rebuild (C1/1A7B)
-  if (n >= 2)                                               // the multi arm: sprites 1-3 = the page the last rebuild
-    for (int i = h->handPageShown; i < n && nd < 4; ) {     //   started at $960B (battle.c battleMenuPassTail), shipped
-      if (i != 0) draw[nd++] = set[i];                      //   by the NMI (page 0 re-draws the primary -- pixel-identical)
-      if (++i == 3 || i == 6) break;                        // C1/1ADD-1AE7: the page ends at entry 3 / 6
-    }
+  if (!fb || !mem || !h || !h->mvInited || !h->handVisShown) return;
   // The hand's attribute is 32 (C1/19D8 / C1/1AD2 `LDA #32 / STA $0703,X`): OBJ palette 1, and its tiles use colours
   // 13-15 only -- the same three the bracket does, so its middle band PULSES with CF/E5AA's $A4EF grey. Read them from
   // the uploaded CGRAM (h->fxCgram), not from the captured ctBattleStanceObjPal[1], whose colour 14 was one frozen step.
   uint16_t palw[16];
   for (int i = 0; i < 16; i++) palw[i] = (uint16_t)(h->fxCgram[(128 + 16 + i) * 2] | (h->fxCgram[(128 + 16 + i) * 2 + 1] << 8));
+  if (getenv("CT_BATTLE_HANDTRACE"))                         // each shown sprite's OAM x/y, the oracle's $0700+d*4 / $0701+d*4
+    for (int d = 0; d < 4; d++)
+      if ((h->handVisShown >> d) & 1)
+        printf("battlehand: sprite%d cmb=%d oam=%02X,%02X grp=%02X a62d=%02X%02X%02X page=%d\n", d, h->handOamShown[d].cmb,
+               h->handOamShown[d].x, h->handOamShown[d].y, mem[0x960D], mem[0xA62D], mem[0xA62E], mem[0xA62F],
+               h->handPageShown == 0xFF ? -1 : h->handPageShown);
   g_bObjPalCur = 1;                                         // attr 32: OBJ palette 1 (the sprites' colour math)
-  for (int d = 0; d < nd; d++) {
-    int cmb = draw[d], ofx, ofy;
-    if (!h->mvInited || !CtBattleCursorOfs(h, cmb, &ofx, &ofy)) continue;   // no ROM record -> absent-render
-    int ax = (BT_LIVEX(h, cmb) + ofx - 0x10) & 0xFF;         // C1/19C0-19C9 / C1/1ABA-1AC3
-    int ay = (BT_LIVEY(h, cmb) + ofy) & 0xFF;                // C1/19CD-19D4 / C1/1AC7-1ACE
-    if (getenv("CT_BATTLE_HANDTRACE"))                       // the sprite's OAM x/y, the oracle's $0700+d*4 / $0701+d*4
-      printf("battlehand: sprite%d cmb=%d oam=%02X,%02X grp=%02X a62d=%02X%02X%02X page=%d\n", d, cmb, ax, ay, group,
-             mem[0xA62D], mem[0xA62E], mem[0xA62F], n >= 2 ? h->handPageShown : -1);
+  for (int d = 3; d >= 0; d--) {                            // entry 0 over 1 over 2 over 3 (the lower OAM index in front)
+    if (!((h->handVisShown >> d) & 1)) continue;
+    int ax = h->handOamShown[d].x, ay = h->handOamShown[d].y;
     for (int cy = 0; cy < 2; cy++)
       for (int cx = 0; cx < 2; cx++) {
         int ti = 0x000 + cx + 0x10 * cy;                   // tile 0x000 quad: 0x00,0x01,0x10,0x11

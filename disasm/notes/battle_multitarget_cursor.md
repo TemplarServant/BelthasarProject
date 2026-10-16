@@ -623,9 +623,64 @@ P + 1 (BATTLE_AB_KEEP=1), and the sprite match is 71/71 at lag -1 against 54/71 
 moved from f221-224 to f223-226, and f223 is still a two-hand frame, fnv 3E6AD273 unchanged.
 
 **Found in passing, not this section's** (each its own follow-up):
-- *The hand's visibility at the select's open.* The renderer reads live `$9609`, so the port draws the hand on the frame the
-  select opens; the cartridge's picture shows it one frame later (Area Bomb: port f737 hand on, cartridge picture f738
-  off, f739 on). The ROM's model is the bracket's -- OAM entries 0-3 as the pass wrote them, shipped by the NMI -- for the
-  hand's positions and visibility too, not only its page.
+- ~~*The hand's visibility at the select's open.*~~ **CLOSED 2026-10-15, §11**: the hand is OAM entries 0-3 as the pass
+  placed them and the NMI shipped them, positions and visibility too.
 - *The enemy cursor's Down order.* On the fixture's Hetakes the cartridge's Down from cmb3 goes to cmb6, then cmb5, cmb4
   (`$A62D` 0306 -> 0603 -> 05 -> 04); the port's walks slots 4, 5, 6 (C1/176C's next-target rule).
+
+# 11 — THE HAND IS OAM ENTRIES 0-3 AS THE PASS LEFT THEM (2026-10-15; closes §10's first follow-up)
+
+§10 shipped the hand's page through the NMI, but the renderer still read the live `$9609`, `$95D5`, the set and the feet
+every frame: the hand appeared on the frame the select opened (Area Bomb: port f737, the cartridge's picture f739 = the
+port's f738) and left on the frame `$9609` fell, and its positions followed the feet between passes. On the ROM the hand
+is four OAM entries that only the menu pass writes; the NMI's DMA ships the shadow as the pass left it.
+
+**Who writes entries 0-3, per pass** (the `$993A` pass C1/10C6 / C1/10E3 / C1/10FA: C1/1B67, C1/0C2D, C1/1153, C1/17DD):
+
+| step | condition | entries 0-3 |
+|---|---|---|
+| C1/1153 (before the key) | `$95D5` bit 7 | none (C1/179C) |
+| | `$9609` != 0 | none here -- C1/1561, the select's key |
+| | else | C1/1167 `JSR C1/1115`: the bracket, `$0900 = AA` |
+| C1/1561's cancel C1/1577 (B at C1/156E, or the `$9613` veto C1/1564-156C) | | C1/15D0-15E3: `$0900 |= 55`, Y = F0 -- all four parked |
+| C1/161A (the confirm) | | none; C1/1725-1742 makes `$95D5` the next queued PC (`$A6D9`), FF when there is none |
+| C1/17DD (after the key) | `$95D5` bit 7 | C1/1AFE: all four parked, Y = F0 |
+| | `$9609` != 0, `$9613` bit 7 | none (C1/1979 -> C1/1AFB) |
+| | `$9609` != 0 | C1/1979: all four parked (C1/198A), tile 00 / attribute 32, then the single arm C1/19B4 (sprite 0, `$0900 AND FE`) or the multi arm C1/1A7B (sprite 0 + the page into 1-3, `$0900 AND CC:FB8D[k]` = FE FB EF BF) |
+| | `$95DB` = 1 | C1/17FE: C1/1115 again (C1/18AA) or the partners' hands |
+| | `$95DB` = 2 / 0 | none (C1/18B0 / C1/1B14) |
+
+So the select's open pass writes the bracket and then the hand over it (the NMI ships the hand); its confirm parks them
+(C1/1AFE) when nobody is queued -- with a PC waiting, `$95D5` is already that PC and C1/17DD writes nothing (`$9609` 0,
+`$95DB` 0 -> C1/1B14), so the hand stays a pass and the bracket comes up on the next pass's C1/1115; a cancel parks them in C1/1577 -- the Att's (`$95DB` = 0) then shows nothing until the next pass's C1/1115
+brings the bracket back, a tech's (`$95DB` = 1) gets the bracket on the same pass from C1/17FE.
+
+**The port.** `battleMenuPass` takes C1/1153's arm before the key (`battleBracketPlace` = C1/1115, the gates left to its
+callers); `battleMenuPassTail(h, b1115)` runs C1/17DD on the state after it and keeps the bracket's entries (`brkOam`,
+`brkOn`) and the hand's (`handOam[4]` = x, y and the combatant; `handVis` = the entries whose `$0900` X-high bit C1/1979
+cleared; `handPage`); `battleTargetHandBuild` is C1/1979's two arms with the page loop, `battleTargetCancel` parks both
+(C1/15D0); `battleNmiHead` ships `handOamShown` / `handVisShown` / `handPageShown` beside `brkOamShown`; and
+`battleTargetCursorRender` draws the shipped entries (3 down to 0: the lower OAM index in front), nothing live. Before, the
+bracket was `CtBattleBracketBuild` on the state after the key, which put it back on the Att cancel's own pass (f686, the
+cartridge's f690).
+
+**Measured** (`python tools/target_hand_page_cmp.py -v`, the rule's cartridge; the shown sprites = the cartridge's entries
+0-3 holding tile 00 / attribute 32 with the X-high bit clear, against CT_BATTLE_HANDTRACE, from two frames before the select
+to nine after it, port f = cartridge shadow f-1):
+
+| case | frames graded | hand shown, both sides | result |
+|---|---|---|---|
+| Area Bomb, confirmed | f735-f817 | f738-f809 | 83/83 |
+| Cyclone on cmb3, confirmed | f663-f808 | f666-f800 | 146/146 |
+| Cyclone, nobody near | f663-f748 | f666-f740 | 86/86 |
+| Area Bomb, cancelled (back to the tech list) | f735-f789 | f738-f781 | 55/55 (cartridge `$0900 = AA` at the cancel's f781) |
+| Att, cancelled (back to the command row) | f639-f694 | f642-f686 | 56/56 (cartridge `$0900 = FF` f686-689, `AA` f690) |
+| Att confirmed, Marle already queued | f639-f691 | f642-f687 | 53/53 (the confirm's pass f682 keeps the hand: `$95D5 = 01`, `$0900 = FE`) |
+
+`$960B` and its turns stay identical in every case (18/18 lines). Before this section (a3bce24's build on the same tool:
+12/18) every case drew the hand a frame early at the open (on the frame `$9609` rose: f737 / f665 / f665 / f737 / f641 /
+f641, the cartridge's shadow had none) and dropped it a frame early at the close (f808 against f809 ...), the queued
+confirm five frames early (f682 against f687: the pass the hand stays). The queued confirm, measured on its own (Crono + Marle from gato_wait, both
+ready at f415; Att opened f641, confirmed f653): the cartridge's `$95D5 = 01` from f653 with `$0900 = FE` and the hand's
+entries through f658, Marle's bracket `A4 4B 06 32 ...` at f659; the port's CT_BATTLE_TRACE `bracket` seat1 on battle f443 =
+field f659. The bracket after the Att cancel: the port's CT_BATTLE_TRACE `bracket` on battle f474 = field f690, the cartridge's f690.

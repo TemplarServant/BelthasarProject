@@ -2427,12 +2427,16 @@ shows under the same mash (`fight native`). Re-pin the deaths only from a fix th
 
 ### battle-target-hand-page-vs-rule-cartridge (`python tools/target_hand_page_cmp.py`)
 
-The target hand's secondary sprites (C1/1979 -> C1/1A7B: sprites 1-3 on the page of `$A62D` from `$960B`, C1/1AA2-1AF8),
-port against the rule's cartridge on tools/caster_radius_dispatch_cmp.py's fixture with each select held: Area Bomb
-(group 11), Cyclone on an enemy with a neighbour (group 12) and Cyclone with nobody near (the single arm: no turn). Grades,
-on every frame either side holds the select, `$960B` (WRAM, the same frame), the frames it turns on, and the hand's shown
-sprites -- the cartridge's OAM entries 0-3 visible by `$0900` against the port's CT_BATTLE_HANDTRACE -- at the picture's
-alignment (port f = cartridge shadow f - 1: the cartridge's picture N shows the shadow of N - 2, the port's picture in a
-fight is the cartridge's P + 1). Byte-for-byte: re-pin only when the fixture's frames move with an oracle-verified reason.
-`-v` prints every held frame of both sides and the sprite match at every lag. disasm/notes/battle_multitarget_cursor.md
-sec. 10.
+The target hand, port against the rule's cartridge on tools/caster_radius_dispatch_cmp.py's fixture with each select held:
+its secondary sprites (C1/1979 -> C1/1A7B: sprites 1-3 on the page of `$A62D` from `$960B`, C1/1AA2-1AF8) and its four OAM
+entries as the menu pass placed them and the NMI shipped them. Cases: Area Bomb (group 11), Cyclone on an enemy with a
+neighbour (group 12) and Cyclone with nobody near (the single arm: no turn), each confirmed; Area Bomb cancelled back to
+the tech list; the Att cancelled back to the command row (C1/1577 parks the entries, the bracket returns on the next pass);
+the Att confirmed with Marle already queued (C1/17DD writes nothing on the confirm's pass: the hand stays a pass).
+Grades `$960B` on every frame either side holds the select (WRAM, the same frame) and the frames it turns on; and, from two
+frames before the select to nine after it, the hand's shown sprites -- the cartridge's OAM entries 0-3 holding tile 00 /
+attribute 32 visible by `$0900`, against the port's CT_BATTLE_HANDTRACE -- at the picture's alignment (port f = cartridge
+shadow f - 1: the cartridge's picture N shows the shadow of N - 2, the port's picture in a fight is the cartridge's P + 1),
+so the open and the close frames are graded. Byte-for-byte: re-pin only when the fixture's frames move with an
+oracle-verified reason. `-v` prints every graded frame of both sides and the sprite match at every lag.
+disasm/notes/battle_multitarget_cursor.md secs. 10-11.

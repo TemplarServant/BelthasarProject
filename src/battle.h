@@ -449,8 +449,12 @@ typedef struct CtBattleHost {
   // from $993A) and as the next NMI uploaded them; `on` = the rebuild wrote the bracket and nothing replaced it.
   struct { uint8_t x, y, name, attr; } brkOam[4], brkOamShown[4];
   uint8_t brkOn, brkOnShown;
-  // The target hand's PAGE: the `$960B` the last multi-arm rebuild started its sprites 1-3 at (C1/1AA7 -- entries 1-3
-  // hold $A62D[page..]) and as the next NMI uploaded it. The rebuild leaves the NEXT page in `$960B` (C1/1AF8).
+  // The target hand: OAM entries 0-3 as the last C1/1979 placed them (x, y, the combatant each points at; bit k of handVis
+  // = entry k shown, its $0900 X-high bit clear) and as the next NMI uploaded them (battle.c battleMenuPassTail -- the
+  // bracket and the hand share the four entries, so a write of one ends the other). handPage = the `$960B` the multi arm
+  // started its sprites 1-3 at (C1/1AA7), FF for the single arm; the rebuild leaves the NEXT page in `$960B` (C1/1AF8).
+  struct { uint8_t x, y, cmb; } handOam[4], handOamShown[4];
+  uint8_t handVis, handVisShown;
   uint8_t handPage, handPageShown;
   int fxScriptFlashMask;     // bit k = combatant k's UPLOADED attribute is palette 4 (a script's op 69): drawn from CGRAM row 4
                              //   of the single flashTarget below. Cyclone pulses its WHOLE hit set

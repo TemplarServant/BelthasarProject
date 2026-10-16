@@ -4448,11 +4448,10 @@ static void battlePulseFrame(CtBattleHost* h) {
 // 82 6C 06 72 7A 84 06 B2 82 84 06 F2` (C1:1144) for Crono's foot (134,144); f1150 the entries follow Marle's
 // foot from B0 to B3 (f1147) -- a rebuild, three frames later.
 #define ROM_BRACKET_OAM_TBL 0x0CF604u     /* CC:F604: 4 x [dx, dy, name, attribute] */
-int CtBattleBracketBuild(const CtBattleHost* h, const uint8_t* w, CtBattleOamEntry out[4]) {
+// C1/1115 itself, no gate (its callers' gates are CtBattleBracketBuild's and battleMenuPass's): 0 when nothing is placed.
+static int battleBracketPlace(const CtBattleHost* h, const uint8_t* w, CtBattleOamEntry out[4]) {
   if (!w || !gRom || (long)ROM_BRACKET_OAM_TBL + 16 > gRomLen) return 0;
   int seat = w[0x95D5];
-  if (seat & 0x80) return 0;                                   // C1/1157 BPL / C1/17E0 -> C1/1AFE
-  if (w[0x9609]) return 0;                                     // C1/1164 -> C1/1561 / C1/17E8 -> C1/1979
   if (seat >= 11) return 0;
   int fx = (h && h->mvInited) ? BT_LIVEX(h, seat) & 0xFF : w[0x1D0C + seat];
   int fy = (h && h->mvInited) ? BT_LIVEY(h, seat) & 0xFF : w[0x1D23 + seat];
@@ -4463,6 +4462,12 @@ int CtBattleBracketBuild(const CtBattleHost* h, const uint8_t* w, CtBattleOamEnt
     out[k].name = e[2];
     out[k].attr = (uint8_t)((e[3] & 0xF1) | w[0x9F46]);
   }
+  return 1;
+}
+int CtBattleBracketBuild(const CtBattleHost* h, const uint8_t* w, CtBattleOamEntry out[4]) {
+  if (!w || (w[0x95D5] & 0x80)) return 0;                      // C1/1157 BPL / C1/17E0 -> C1/1AFE
+  if (w[0x9609]) return 0;                                     // C1/1164 -> C1/1561 / C1/17E8 -> C1/1979
+  if (!battleBracketPlace(h, w, out)) return 0;
   if (w[0x95DB] == 1 && w[0x9EE3] >= 0x39 && w[0x9EE7] != 0xFF) return 0;   // C1/17FE-180F: the partners' hands
   return 1;
 }
@@ -4928,12 +4933,66 @@ void CtBattleHudChromeRebuild(uint8_t* mem) {
   if (mem[0x95D5] & 0x80) battleHudChromeBase(mem);
   bsPost(mem, 0x0CC0); mem[0x99E2]++;
 }
-static void battleMenuPassTail(CtBattleHost* h) {
+// C1/1979 -> C1/19C0-19D4 / C1/1A82-1A9F / C1/1ABA-1ADA: hand sprite `sp` on combatant `cmb` --
+//     OAM.x = $1D0C,A + $9708,A - 10     OAM.y = $1D23,A + $9713,A     ($0900 &= CC:FB8D[sp] = FE FB EF BF: shown)
+static void battleTargetHandSprite(CtBattleHost* h, int sp, int cmb) {
+  int ofx, ofy;
+  if (!CtBattleCursorOfs(h, cmb, &ofx, &ofy)) return;           // no ROM record: not placed (the absent-render boundary)
+  int fx = h->mvInited ? BT_LIVEX(h, cmb) : h->mem[0x1D0C + cmb];
+  int fy = h->mvInited ? BT_LIVEY(h, cmb) : h->mem[0x1D23 + cmb];
+  h->handOam[sp].x = (uint8_t)((fx + ofx - 0x10) & 0xFF);
+  h->handOam[sp].y = (uint8_t)((fy + ofy) & 0xFF);
+  h->handOam[sp].cmb = (uint8_t)cmb;
+  h->handVis |= (uint8_t)(1u << sp);
+}
+// C1/1979 past its `$9613` gate: the target hand in OAM entries 0-3 (disasm/notes/battle_multitarget_cursor.md secs. 2-3,
+// 10-11). `$0900 |= 55` parks all four (C1/198A); a second lit actor (C1/19AC `LDA $A62E / BMI`) takes the MULTI arm C1/1A7B,
+// whose sprite 0 is $A62D[0] and sprites 1-3 a page of $A62D starting at `$960B` (C1/1AA2-1AF8, 16-bit X):
+//     LDY #0001 / STY $82 / LDA $960B / TAY / STY $80     sprite 1, the page's first entry
+//     loop: (entry $A62D[$80] into sprite $82 unless FF) / INC $80 / LDA $80 / CMP #03 / BEQ / CMP #06 / BEQ
+//           INC $82 / LDA $82 / CMP #04 / BNE loop
+//     LDA $80 / CMP #06 / BNE / TDC / STA $960B             the next page: 3 after page 0, 0 after page 3
+// (page 0 puts the primary in sprite 1 too -- the same cell twice); the single arm C1/19B4 shows sprite 0 alone, or nothing
+// when $A62D[0] is FF. Only C1/1AF8 stores $960B; the battle's boot clears it with its page, and nothing else resets it --
+// not the select's open C1/1F79, not the single arm -- so the page runs on across selects, once per menu pass (the $993A
+// request, every 4th frame) that lights two or more. MEASURED, the rule's cartridge: tools/target_hand_page_cmp.py.
+static void battleTargetHandBuild(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  int set[11], n = CtBattleTargetHandSet(h, s, set, 11);
+  h->handVis = 0;                                                // C1/198A-198F: all four parked
+  h->handPage = 0xFF;
+  if (n >= 2) {                                                  // C1/1A7B
+    battleTargetHandSprite(h, 0, set[0]);
+    uint8_t p = s[0x960B], sp = 1;                               // C1/1AA2-1AAB
+    h->handPage = p;
+    for (;;) {
+      if (p < n) battleTargetHandSprite(h, sp, set[p]);          // C1/1AAD-1ADA (an FF entry: no sprite, the slot used)
+      p++;
+      if (p == 3 || p == 6) break;
+      if (++sp == 4) break;
+    }
+    s[0x960B] = (p == 6) ? 0 : p;                                // C1/1AF1-1AF8
+  } else if (n == 1) battleTargetHandSprite(h, 0, set[0]);      // C1/19B4-19D4 ... C1/1A4B `AND #FE`
+}
+// C1/17DD, after the key (C1/1153's own bracket write C1/1115 came before it -- `b1115`, NULL when C1/1153 took another arm).
+// OAM entries 0-3 are ONE set of four sprites, the bracket's or the hand's, and the NMI ships whatever the pass left there:
+//   C1/1153: `$95D5` bit 7 -> C1/179C (nothing); `$9609` -> C1/1561 (the select's key, no OAM); else C1/1115, the bracket,
+//            `$0900 = AA` -- on the state BEFORE this pass's key;
+//   C1/17DD: `$95D5` bit 7 -> C1/1AFE (all four parked); `$9609` -> C1/1979 (the hand; with `$9613` bit 7 C1/1AFB: entries
+//            untouched); `$95DB` = 1 -> C1/17FE (the bracket again, C1/18AA, or the partners' hands); 2 -> C1/18B0 and
+//            0 -> C1/1B14, neither of which writes an entry -- on the state AFTER it.
+// A select's cancel parks the four itself (C1/1577, battleTargetCancel). The confirm writes none and makes `$95D5` the next
+// queued PC (C1/1725-1742): nobody queued -> C1/1AFE parks them; a PC waiting -> C1/17DD writes nothing (`$9609` 0, `$95DB`
+// 0) and the hand stays a pass. Either way the bracket comes back on the next pass's C1/1115 (b1115 is NULL on the closing
+// pass: C1/1153 took C1/1561). MEASURED, the rule's cartridge: tools/target_hand_page_cmp.py ('Att, Marle queued').
+static void battleMenuPassTail(CtBattleHost* h, const CtBattleOamEntry* b1115) {
   uint8_t* s = h->mem;
   CtBattleOamEntry e[4];
   int wasOn = h->brkOn, wasX = h->brkOam[0].x, wasY = h->brkOam[0].y;
-  h->brkOn = (uint8_t)CtBattleBracketBuild(h, s, e);
-  if (h->brkOn) for (int k = 0; k < 4; k++) { h->brkOam[k].x = e[k].x; h->brkOam[k].y = e[k].y; h->brkOam[k].name = e[k].name; h->brkOam[k].attr = e[k].attr; }
+  if (b1115) {                                                   // C1/1167 JSR C1/1115
+    h->brkOn = 1; h->handVis = 0;
+    for (int k = 0; k < 4; k++) { h->brkOam[k].x = b1115[k].x; h->brkOam[k].y = b1115[k].y; h->brkOam[k].name = b1115[k].name; h->brkOam[k].attr = b1115[k].attr; }
+  }
   // C1/17DD -> C1/1979 -> C1/19D7-1A47 (after the input): the ATTACK's picker ($9609 set, $95DB == 0 -- the tech picker
   // keeps 1) on ONE enemy posts its NAME into the top box: `$0200 := the enemy id`; with a SightScope/Relic seat ($9F34)
   // and the enemy's $9F2C bit, `$0201-04 := its HP cur / max` and message 0B (name + HP), else 0C (name); the key is FF
@@ -4954,40 +5013,26 @@ static void battleMenuPassTail(CtBattleHost* h) {
   // The tail's part of the strip's images (C1/17DD): a target being picked over the Tech list clears the list's hand
   // (C1/1979 -> C1/1987 `JSR C1/0EBA`, unless the list emptied, `$9613` bit 7) -- not posted: the head's post of the same
   // pass carries it, the DMA reads the buffer at the NMI; the item list's arrows and hand (C1/18B0-1976), posted.
-  if (!(s[0x95D5] & 0x80)) {                                     // C1/17DD-17E2 (no chooser: C1/1AFE, OAM only)
+  if (!(s[0x95D5] & 0x80)) {                                     // C1/17DD-17E2
     if (s[0x9609]) {
       if (!(s[0x9613] & 0x80) && s[0x95DB] == 1) bsTechHandClear(s);
-      // C1/19AC `LDA $A62E / BMI`: a second lit actor takes the MULTI arm C1/1A7B, whose sprites 1-3 are a page of
-      // $A62D starting at `$960B` (C1/1AA2-1AF8, 16-bit X):
-      //     LDY #0001 / STY $82 / LDA $960B / TAY / STY $80     sprite 1, the page's first entry
-      //     loop: (entry $A62D[$80] into sprite $82 unless FF) / INC $80 / LDA $80 / CMP #03 / BEQ / CMP #06 / BEQ
-      //           INC $82 / LDA $82 / CMP #04 / BNE loop
-      //     LDA $80 / CMP #06 / BNE / TDC / STA $960B             the next page: 3 after page 0, 0 after page 3
-      // Only this rebuild stores $960B (C1/1AF8); the battle's boot clears it with its page, and nothing else resets it --
-      // not the select's open C1/1F79, not the single arm -- so the page runs on across selects, once per menu pass (the
-      // $993A request, every 4th frame) that lights two or more. MEASURED, the rule's cartridge: tools/target_hand_page_cmp.py
-      // (Area Bomb, Cyclone: $960B on every held frame, the sprites shown) and disasm/notes/battle_multitarget_cursor.md sec. 10.
-      int set[11];
-      if (!(s[0x9613] & 0x80) && CtBattleTargetHandSet(h, s, set, 11) >= 2) {
-        uint8_t p = s[0x960B], sp = 1;                           // C1/1AA2-1AAB
-        h->handPage = p;
-        for (;;) {
-          p++;
-          if (p == 3 || p == 6) break;
-          if (++sp == 4) break;
-        }
-        s[0x960B] = (p == 6) ? 0 : p;
-      }
+      if (!(s[0x9613] & 0x80)) { h->brkOn = 0; battleTargetHandBuild(h); }   // C1/1979 (else C1/1AFB: untouched)
+    }
+    else if (s[0x95DB] == 1) {                                   // C1/17FE: C1/1115 again (C1/18AA) or the partners' hands
+      h->handVis = 0;
+      h->brkOn = (uint8_t)CtBattleBracketBuild(h, s, e);
+      if (h->brkOn) for (int k = 0; k < 4; k++) { h->brkOam[k].x = e[k].x; h->brkOam[k].y = e[k].y; h->brkOam[k].name = e[k].name; h->brkOam[k].attr = e[k].attr; }
     }
     else if (s[0x95DB] == 2) bsItemTail(s);
-  }
+  } else { h->brkOn = 0; h->handVis = 0; }                       // C1/1AFE: `$0900 |= 55`, Y = F0
   // CT_BATTLE_TRACE: `bracket f<N> seat<S> oam=XX YY NN AA ...` (or `bracket f<N> off`) whenever a rebuild changes it --
   // the cartridge's `--monitor 7E0700:16 --diff --writer` (C1:1144 writes, C1:1B14 hides).
   if (getenv("CT_BATTLE_TRACE") && (h->brkOn != wasOn || (h->brkOn && (h->brkOam[0].x != wasX || h->brkOam[0].y != wasY)))) {
     if (!h->brkOn) fprintf(stderr, "bracket f%d off\n", h->frames);
     else fprintf(stderr, "bracket f%d seat%d oam=%02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X\n",
-                 h->frames, s[0x95D5], e[0].x, e[0].y, e[0].name, e[0].attr, e[1].x, e[1].y, e[1].name, e[1].attr,
-                 e[2].x, e[2].y, e[2].name, e[2].attr, e[3].x, e[3].y, e[3].name, e[3].attr);
+                 h->frames, s[0x95D5], h->brkOam[0].x, h->brkOam[0].y, h->brkOam[0].name, h->brkOam[0].attr,
+                 h->brkOam[1].x, h->brkOam[1].y, h->brkOam[1].name, h->brkOam[1].attr, h->brkOam[2].x, h->brkOam[2].y,
+                 h->brkOam[2].name, h->brkOam[2].attr, h->brkOam[3].x, h->brkOam[3].y, h->brkOam[3].name, h->brkOam[3].attr);
   }
 }
 // CD/0027 -> CD/0310, the SYSTEM MESSAGE post (the menu-bank box, C2/0003, over table CC:3A09):
@@ -5647,7 +5692,12 @@ static int battlePcTargetList(const uint8_t* s, int grp, int caster, int* out) {
 // The strip's part (C1/158F-15CD): the stashed list's window comes back -- the item list's frames $D1:5BD0, `$9920 := FF`
 // and `INC $99E2` (C1/1595-15A9), or for the Tech list `STZ $A869 / INC $A86A` (C1/15AE-15B1, the next head) -- and back on
 // the command row `INC $A43F` (C1/15C8-15CD: the next head draws the hand).
-static void battleTargetCancel(uint8_t* s) {
+// C1/1577, the select's close by B (C1/156E) or by the veto of an empty set (C1/1564-156C): ... and C1/15D0-15E3
+// `$0900 |= 55 / Y := F0` parks OAM entries 0-3 itself -- the hand goes on this pass's NMI, whatever C1/17DD does next (it
+// writes nothing on the command row and the item list, C1/1B14 / C1/18B0; the bracket comes back on the next pass's
+// C1/1115). MEASURED, the rule's cartridge (tools/target_hand_page_cmp.py, 'Att, cancelled'): `$0900 = FF` at f686.
+static void battleTargetCancel(CtBattleHost* h) {
+  uint8_t* s = h->mem;
   s[0x9614] = 0; s[0x960E] = 0; s[0x9609] = 0;
   if (s[0xA86B]) {
     s[0x95DB] = (uint8_t)(s[0xA86B] - 1); s[0xA09A] = 0; s[0xA86B] = 0;
@@ -5657,6 +5707,7 @@ static void battleTargetCancel(uint8_t* s) {
     } else { s[0xA869] = 0; s[0xA86A]++; }
   }
   if (!s[0x95DB]) s[0xA43F]++;
+  h->handVis = 0; h->brkOn = 0;                                  // C1/15D0-15E3
 }
 // C1/1F8F-1F9B + the group handler: `$99C0` (the eligible list) and `$A62D` (the lit targets) FF-filled, then the list,
 // and `$A62D[0] := $99C0[$9614]` for a single group (C1/1FF8's arity, law 6), the whole list for an ALL group.
@@ -5672,7 +5723,7 @@ static int battlePcTargetTick(CtBattleHost* h, int caster, int dir) {
   int list[3], n = battlePcTargetList(s, s[0x960D], caster, list);
   int idx = s[0x9614];
   battlePcTargetPublish(s, list, n, idx);
-  if (n == 0 || idx >= n) { battleTargetCancel(s); battleTrace(h, "target-autocancel"); return 0; }
+  if (n == 0 || idx >= n) { battleTargetCancel(h); battleTrace(h, "target-autocancel"); return 0; }
   if (dir && !battleGroupAll(s[0x960D])) { idx = ((idx + dir) % n + n) % n; s[0x9614] = (uint8_t)idx; }
   battlePcTargetPublish(s, list, n, idx);
   h->itemTgtSel = list[idx];
@@ -6224,11 +6275,11 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
       if (dir && !aE && !bE) battleTrace(h, "target-nav");
     } else if (battleGroupCasterRadius(s[0x960D])) {        // C1/1561 JSR C1/1F79: rebuilt every pass, no cursor
       if (!battleCasterRadiusBuild(h, cur)) {                //   ($960C = 80); emptied -> C1/1569 the silent cancel
-        battleTargetCancel(s); battleTrace(h, "target-autocancel"); return;
+        battleTargetCancel(h); battleTrace(h, "target-autocancel"); return;
       }
     } else if (dir) { battleTargetNav(s, dir); battleTrace(h, "target-nav"); }
     if (aE)      battleCommitPcAction(h, cur);             // §2.6 CONFIRM -> commit (threads pendTechId, closes submenu)
-    else if (bE) { battleTargetCancel(s); battleTechTrace(h, "target-cancel", cur); }   // B -> back to the tech list
+    else if (bE) { battleTargetCancel(h); battleTechTrace(h, "target-cancel", cur); }   // B -> back to the tech list
   }
 }
 
@@ -6333,7 +6384,7 @@ static void battleItemSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
       battleItemTrace(h, "target-nav");
     }
     if (aE)      battleCommitPcAction(h, cur);               // §2.5 CONFIRM -> commit (consume $1583 + queue 0x40)
-    else if (bE) { battleTargetCancel(s); battleItemTrace(h, "target-cancel"); }   // B -> back to the item list
+    else if (bE) { battleTargetCancel(h); battleItemTrace(h, "target-cancel"); }   // B -> back to the item list
   }
 }
 
@@ -6506,11 +6557,11 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
     int dir = k.dn ? 1 : k.up ? -1 : 0;                          //   C1/176C next / C1/1786 previous
     if (dir) { battleTargetNav(s, dir); battleTrace(h, "target-nav"); }
     if (k.a) battleCommitPcAction(h, cur);                       //   C1/161A: the confirm (queued; the dispatch runs it)
-    else if (k.b) { battleTargetCancel(s); battleTrace(h, "target-cancel"); }   // C1/1577
+    else if (k.b) { battleTargetCancel(h); battleTrace(h, "target-cancel"); }   // C1/1577
   }
 }
 static void battleMenuPassHead(CtBattleHost* h);
-static void battleMenuPassTail(CtBattleHost* h);
+static void battleMenuPassTail(CtBattleHost* h, const CtBattleOamEntry* b1115);
 // One pass: C1/0C2D (the tech list's grey pass, resolver and description), C1/1153 (the key), C1/17DD (the bracket and
 // the target's name box). CT_BATTLE_MASHA, the headless masher, holds A for every idle pass that has a chooser.
 // (The waits' passes -- C1/10E3 from CD/3E78's `JSL C1/0012`, C1/10FA in the action loops -- also `STZ $E5` after their
@@ -6524,9 +6575,11 @@ static void battleMenuPass(CtBattleHost* h, int masha, const char* pass) {
   battleMenuPassHead(h);
   int cur = battleQueueHead(s);
   if (masha && cur >= 0) s[0x00EE] |= 0x80;
+  CtBattleOamEntry b[4];                                         // C1/1157-1167: a chooser and no target select -> C1/1115,
+  int w1115 = !(s[0x95D5] & 0x80) && !s[0x9609] && battleBracketPlace(h, s, b);   //   before the key
   BattleMenuKey k = battleMenuPassKey(h, cur);
   battleMenuInput(h, cur, k, pass);
-  battleMenuPassTail(h);
+  battleMenuPassTail(h, w1115 ? b : NULL);
 }
 
 // battle_gato_moveset.md §C.1/F.1: the ROM's UNIVERSAL min-1-damage floor (C1/DCF0-DCF9, in the damage
@@ -21376,7 +21429,9 @@ static void battleNmiHead(CtBattleHost* h) {
   h->fxOamCloudOn = h->fxCloudRan; h->fxCloudRan = 0;
   memcpy(h->brkOamShown, h->brkOam, sizeof h->brkOamShown);       // entries 0-3 as the main loop last wrote them
   h->brkOnShown = h->brkOn;
-  h->handPageShown = h->handPage;                                  // the target hand's sprites 1-3, the same entries
+  memcpy(h->handOamShown, h->handOam, sizeof h->handOamShown);   // ...or the target hand's, the same entries
+  h->handVisShown = h->handVis;
+  h->handPageShown = h->handPage;
                                                                    //   (oracle vPos 235), before this NMI's FD/E39C fades it
 }
 // C0/2C41 -- the FIELD's layer scroll, still running under the battle (D1/E7E3 `JSL CD/0C89` = `PHB/PHD/PHP / JSL C0/0002`
