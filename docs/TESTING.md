@@ -2415,6 +2415,15 @@ sides) and grades C1/C66A's action 7B, its span and C1/BC5A's drop (`$AF23`, MP 
 byte-for-byte against the cartridge: re-pin only if the fixture's frames move with an oracle-verified reason, never to
 absorb a difference. disasm/notes/battle_multitarget.md sec. 11.
 
+### battle-enemy-target-walk-order-vs-rule-cartridge (`python tools/target_nav_order_cmp.py`)
+
+The enemy target cursor's walk on Up / Down / Left / Right, port against the rule's cartridge on the same four-Hetake
+fixture (Crono alone): C1/1561 runs the group handler C1/1F79 before the pass's keys, and 0B-0D / 0F / 12 / 1A read the
+pad themselves -- Cyclone's group 12 walks `$99C0` BACKWARDS on Down (C1/2814), the band group 0B steps forward on every
+key -- while the Att (07) keeps C1/15F9's walk. Grades, for Cyclone (Downs, Ups, Right / Left), Slash and the Att, the
+frames the select is held, the sequence of `$9614` and `$9614 $A62D` on every held frame. Byte-for-byte against the
+cartridge: re-pin only if the fixture's frames move with an oracle-verified reason. disasm/notes/battle_target_nav_order.md.
+
 ### battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge (`python tools/battle_sim.py fight @048:9 hp=1`)
 
 Any formation, staged the ROM's way on both sides: tools/battle_sim.py writes `83 id op2 / 8B x y / 89 20 / AA 03 / B2`

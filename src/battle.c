@@ -5873,6 +5873,21 @@ static int battleTechGroup(int techId) {
 // Hetakes stage to 16*r[0]+r[2]), each scaled >>4 (C1/011A = LSR×4); the per-axis square is CC/FB6F[|Δ|] = |Δ|²
 // (the squares table, idx 0..15). The primary is $99C0[0] (re-added at C1/27C0 after the loop EXCLUDES it,
 // C1/274D); neighbours follow in enemy-slot order. Returns the victim count (>=1). out[] must hold >= cap entries.
+// The band around a party member (C1/2191-21AC 0B, C1/21E4-2200 0D, C1/2228-2248 0C): `$9604 = 0`, `$9605 = caster`,
+// `$9606 = primary`, `$9607 = 02`, `$9608 = sh`, JSR C1/25A3 -- the bytes put back after (see the band groups below).
+static int battleBandSet(CtBattleHost* h, int caster, int primary, int sh, int* out, int cap) {
+  uint8_t* s = h->mem;
+  uint8_t keep[5 + 12 + 12];
+  memcpy(keep, s + 0x9604, 5); memcpy(keep + 5, s + 0x99C0, 12); memcpy(keep + 17, s + 0xA62D, 12);
+  s[0x9604] = 0; s[0x9605] = (uint8_t)caster; s[0x9606] = (uint8_t)primary;
+  s[0x9607] = 2; s[0x9608] = (uint8_t)sh;
+  battleAreaBand25A3(h);
+  int n = 0;
+  for (int x = 0; x < 11 && n < cap; x++)
+    if (s[0x99C0 + x] != 0xFF) out[n++] = s[0x99C0 + x];
+  memcpy(s + 0x9604, keep, 5); memcpy(s + 0x99C0, keep + 5, 12); memcpy(s + 0xA62D, keep + 17, 12);
+  return n;
+}
 static int battleBuildHitSet(CtBattleHost* h, int group, int primary, int* out, int cap) {
   uint8_t* s = h->mem;
   out[0] = primary;                                              // $99C0[0] = the centre/primary (C1/27C0)
@@ -5892,15 +5907,8 @@ static int battleBuildHitSet(CtBattleHost* h, int group, int primary, int* out, 
   // open (f767), 00 01 04 02 01 on the next Down (f775). The cursor's renderer calls this every frame, so the bytes the
   // band writes are put back: the dispatch's own area pass (C1/C586, battleAreaC586) is the one that stages them.
   if ((group == 0x0B || group == 0x0C) && primary >= 3 && primary < 11 && s[0x95D5] < 3 && cap > 0) {
-    uint8_t keep[5 + 12 + 12];
-    memcpy(keep, s + 0x9604, 5); memcpy(keep + 5, s + 0x99C0, 12); memcpy(keep + 17, s + 0xA62D, 12);
-    s[0x9604] = 0; s[0x9605] = s[0x95D5]; s[0x9606] = (uint8_t)primary;   // 2191-2238 ($960F = the chooser)
-    s[0x9607] = 2; s[0x9608] = (uint8_t)(group == 0x0C);                  // 223B-2242 / 21A1-21A6
-    battleAreaBand25A3(h);                                                 // 2245 / 21A9 JSR C1/25A3
-    int n = 0;
-    for (int x = 0; x < 11 && n < cap; x++)
-      if (s[0x99C0 + x] != 0xFF) out[n++] = s[0x99C0 + x];
-    memcpy(s + 0x9604, keep, 5); memcpy(s + 0x99C0, keep + 5, 12); memcpy(s + 0xA62D, keep + 17, 12);
+    // 2191-2238 ($960F = the chooser), 223B-2242 / 21A1-21A6, 2245 / 21A9 JSR C1/25A3
+    int n = battleBandSet(h, s[0x95D5], primary, group == 0x0C, out, cap);
     if (n > 0) return n;
     out[0] = primary; return 1;
   }
@@ -6231,12 +6239,97 @@ static void battleTechNav(CtBattleHost* h, int seat, int dir) {
   }
 }
 
+// THE ENEMY SIDE OF C1/1F79, the target select's group handler: run by the select's open (C1/12B0 the Att, C1/1369 a
+// tech) and FIRST on every pass of it (C1/1561 `JSR C1/1F79`), before the pass reads B, A or the plain walk. C1/1F80-1F9B
+// `$960C = 0` and $99C0 / $A62D FF-filled, then C1/1FF8[$960D & 7F] (clamped 20):
+//   07 C1/20A9: the list (C1/2045: X = 3..0A, present, $9FF7 bit 7 clear, $A0A8 / $A09B clear -> $99C1,Y; C1/27C5
+//      compacts) and `$A62D = $99C0[$9614]` (C1/207E). The cursor is the pass's: $960C clear -> C1/15F9 `$EF & 05`
+//      (Down|Right) C1/176C next, `$EF & 0A` (Up|Left) C1/1786 previous, each `$A62D := $99C0[$9614]`.
+//   08 / 0A C1/20B6: the list, `$960C = 80` and `$A62D := $99C0` (C1/2088-2097): every enemy, no cursor.
+//   0B / 0C / 0D (C1/2169 / C1/2203 / C1/21AF): C1/20A9, `$960C = 80`, then THEIR OWN PAD: `$EF & 09` (Up|Right) and
+//      `$EF & 06` (Down|Left) are both C1/1B55 + C1/27FA, the NEXT entry; then the band around the chooser $960F (0D:
+//      around the seat holding char 03, C1/21D4-21E3 -- none: RTS, the cursor's lone $A62D stays) and C1/27E8.
+//   12 / 1A C1/225F, 0F C1/22F5: C1/20A9, then `$EF & 09` -> C1/27FA (next), `$EF & 06` -> C1/2814 (PREVIOUS: Down
+//      walks BACKWARDS), `$9604 = 0`, `$9605 = $99C0[$9614]`; 12 / 1A `$9607 = 09 / 19` and C1/2701, the radius around
+//      it; 0F C1/2332, the row: every enemy whose $1D23 is within 20 of the centre's (clamped 00 / FF), the centre first.
+//      Then C1/27E8: `$960C = 80`, `$A62D := $99C0`.
+// C1/27FA / C1/2814 are C1/176C / C1/1786's walk behind C1/282D (no entry at all: no move); with `$960C = 80` C1/15F4
+// skips the pass's own walk. The port's cursor $9614 is the enemy SLOT, not the ROM's index into the compacted $99C0:
+// battleTargetNav's walk over $AF02 visits the same enemies in the same order, and the two values agree while no slot
+// below the cursor is empty. The lists come from the alive list $AF02 (battleTargetSetRevalidate's caveat: the ROM's own
+// gates are $96F5 / $9FF7 / $A0A8 / $A09B).
+// MEASURED, the rule's cartridge (tools/target_nav_order_cmp.py; four Hetakes, Crono alone): Cyclone's four Downs move
+// $9614 0 -> 3 -> 2 -> 1 -> 0 and its Ups 0 -> 1 -> 2 -> 3 -> 0, `$A62D` = 03 06 / 06 03 / 05 / 04, the radius set
+// around each; Slash's Downs and Ups all step forward. The port walked Cyclone's Down forward and Slash's Up back.
+static int battleEnemyGroupStep(const uint8_t* s, uint8_t ef, const char** site) {
+  int g = s[0x960D] & 0x7F;
+  if (g >= 0x21) g = 0x20;                                       // C1/1FC1-1FC5
+  int fwd = (ef & 0x09) != 0, back = !fwd && (ef & 0x06);
+  if (!fwd && !back) return 0;
+  switch (g) {
+    case 0x0B: *site = fwd ? "217A" : "2188"; return 1;          // C1/2174-218B: both C1/27FA
+    case 0x0D: *site = fwd ? "21C0" : "21CE"; return 1;          // C1/21BA-21D1
+    case 0x0C: *site = fwd ? "2214" : "2222"; return 1;          // C1/220E-2225
+    case 0x12: case 0x1A: *site = fwd ? "226B" : "2279"; return fwd ? 1 : -1;   // C1/2265-227C: 27FA / 2814
+    case 0x0F: *site = fwd ? "2301" : "230F"; return fwd ? 1 : -1;              // C1/22FB-2312
+  }
+  return 0;
+}
+static int battleEnemyGroupHandled(int grp) {
+  int g = grp & 0x7F;
+  return g == 0x07 || g == 0x08 || g == 0x0A || (g >= 0x0B && g <= 0x0D) || g == 0x0F || g == 0x12 || g == 0x1A;
+}
+static void battleEnemyTargetPass(CtBattleHost* h, int step) {
+  uint8_t* s = h->mem;
+  int g = s[0x960D] & 0x7F;
+  if (!battleEnemyGroupHandled(g)) return;
+  int list[8], n = 0;
+  for (int slot = 0; slot < 8; slot++) if (s[0xAF02 + slot] != 0xFF) list[n++] = 3 + slot;   // C1/2045 + C1/27C5
+  if (step && n) battleTargetNav(s, step);                       // C1/27FA / C1/2814 (C1/282D: an entry at all)
+  int slot = s[0x9614], cur = (slot < 8 && s[0xAF02 + slot] != 0xFF) ? 3 + slot : (n ? list[0] : 0xFF);
+  int set[11], m = 0, all = 1;
+  if (g == 0x07) { all = 0; }
+  else if (g == 0x08 || g == 0x0A) { for (int i = 0; i < n; i++) set[m++] = list[i]; }
+  else if (cur == 0xFF) { m = 0; }
+  else if (g == 0x0B || g == 0x0C) m = battleBandSet(h, s[0x95D5], cur, g == 0x0C, set, 11);   // C1/2191 / C1/222B
+  else if (g == 0x0D) {                                          // C1/21D4-21E3: the seat holding char 03
+    int c = 0;
+    while (c < 3 && s[0x2980 + c] != 0x03) c++;
+    if (c < 3) m = battleBandSet(h, c, cur, 0, set, 11); else all = 0;
+  } else if (g == 0x12 || g == 0x1A) {                           // C1/227F-22A1
+    s[0x9604] = 0; s[0x9605] = (uint8_t)cur; s[0x9607] = (uint8_t)(g == 0x1A ? 0x19 : 0x09);
+    m = battleBuildHitSet(h, g, cur, set, 11);
+  } else if (g == 0x0F && h->mvInited) {                         // C1/2315-2325 -> C1/2332
+    s[0x9604] = 0; s[0x9605] = (uint8_t)cur;
+    int y = BT_LIVEY(h, cur) & 0xFF, lo = y >= 0x20 ? y - 0x20 : 0, hi = y + 0x20 <= 0xFF ? y + 0x20 : 0xFF;
+    set[m++] = cur;                                              // C1/239E `LDA $88 / STA $99C0`
+    for (int i = 0; i < n; i++) {
+      int yy = BT_LIVEY(h, list[i]) & 0xFF;
+      if (list[i] != cur && yy >= lo && yy <= hi) set[m++] = list[i];   // C1/236B-2392
+    }
+  }
+  s[0x960C] = (uint8_t)((g == 0x07) ? 0 : 0x80);                 // C1/1F83; C1/20BE / C1/216F / C1/27E8
+  for (int i = 0; i < 12; i++) { s[0x99C0 + i] = 0xFF; s[0xA62D + i] = 0xFF; }   // C1/1F8F-1F9B
+  if (!all) {                                                    // the list, and the cursor's entry lit (C1/207E)
+    for (int i = 0; i < n; i++) s[0x99C0 + i] = (uint8_t)list[i];
+    s[0xA62D] = (uint8_t)cur;
+  } else {                                                       // the set, all of it lit (C1/27E8)
+    for (int i = 0; i < m && i < 11; i++) { s[0x99C0 + i] = (uint8_t)set[i]; s[0xA62D + i] = (uint8_t)set[i]; }
+  }
+}
+// The pass's own walk (C1/15F9 -> C1/176C / C1/1786) also lights the entry it lands on: `STA $A62D`.
+static void battleEnemyTargetWalk(CtBattleHost* h, int dir) {
+  uint8_t* s = h->mem;
+  battleTargetNav(s, dir);
+  if (battleEnemyGroupHandled(s[0x960D]) && s[0x9614] < 8 && s[0xAF02 + s[0x9614]] != 0xFF)
+    s[0xA62D] = (uint8_t)(3 + s[0x9614]);
+}
 // The Tech submenu STATE MACHINE (battle_tech_slice.md §2.3-§2.6), shared by step F (tick edges) + the frozen
 // menu pass (raw edges) -- like battleNav. `cur` = the choosing seat. While the list is up ($9609==0): nav skips
 // the cap, A confirms (greyed BMI blocks, §2.4/2.5) -> opens target-select with the tech's group ($960D=$9EE4),
 // B cancels back to the command row. In target-select ($9609==1): nav enemies, A COMMITS (battleCommitPcAction
 // threads the pending tech id + closes the submenu, §2.6), B backs to the list. Runs the resolver each entry.
-static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE, int dnE, int lE, int rE) {
+static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE, int dnE, int lE, int rE, int step) {
   uint8_t* s = h->mem;
   if (!s[0xA86B]) s[0x95DB] = 1;                          // submenu open ($95DB=1, canonical §2.2; 0 while stashed)
   // C1/10C6's order: the grey pass (C1/0EE1) and the resolver (C1/0D4D) run BEFORE the input (C1/1320), so a cursor
@@ -6257,6 +6350,7 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
         } else {
           s[0x9609] = 1;
           if (s[0xAF02 + s[0x9614]] == 0xFF || s[0x9614] >= 8) { int fa = battleFirstEnemySlot(s); if (fa >= 0) s[0x9614] = (uint8_t)fa; }
+          battleEnemyTargetPass(h, 0);                          //   C1/1379: C1/1F79, the group's handler
         }
         battleTechTrace(h, "tech-confirm", cur);
       } else battleTechTrace(h, "tech-grey-block", cur);   // A on a greyed tech = no-op (confirm blocked)
@@ -6277,7 +6371,11 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
       if (!battleCasterRadiusBuild(h, cur)) {                //   ($960C = 80); emptied -> C1/1569 the silent cancel
         battleTargetCancel(h); battleTrace(h, "target-autocancel"); return;
       }
-    } else if (dir) { battleTargetNav(s, dir); battleTrace(h, "target-nav"); }
+    } else {                                               // C1/1561 JSR C1/1F79: the handler first, its own pad
+      battleEnemyTargetPass(h, step);
+      if (step) battleTrace(h, "target-nav");
+      if (dir) { battleEnemyTargetWalk(h, dir); battleTrace(h, "target-nav"); }   //   C1/15F9 (`$960C` clear)
+    }
     if (aE)      battleCommitPcAction(h, cur);             // §2.6 CONFIRM -> commit (threads pendTechId, closes submenu)
     else if (bE) { battleTargetCancel(h); battleTechTrace(h, "target-cancel", cur); }   // B -> back to the tech list
   }
@@ -6455,13 +6553,14 @@ static void battlePadLatch(CtBattleHost* h, uint16_t f8) {
 }
 // C1/1153's handlers: the key each one acts on, in its own order, then C1/179C. $EE = A 80, X 40, L 20, R 10, B 08|02,
 // Y 01, Select 04; $EF = Up 08, Down 04, Left 02, Right 01 (the default config, battle_ui_sfx_sites.md 2.4).
-typedef struct { int a, b, up, dn, l, r; } BattleMenuKey;
+typedef struct { int a, b, up, dn, l, r, step; const char* stepSite; } BattleMenuKey;
 static BattleMenuKey battleMenuPassKey(CtBattleHost* h, int cur) {
   uint8_t* s = h->mem;
-  BattleMenuKey k = { 0, 0, 0, 0, 0, 0 };
+  BattleMenuKey k = { 0, 0, 0, 0, 0, 0, 0, 0 };
   uint8_t ee = s[0x00EE], ef = s[0x00EF];
   if (cur < 0) {                                                 // C1/1157 `LDA $95D5 / BPL` else C1/179C
   } else if (s[0x9609]) {                                        // C1/1561, the target
+    k.step = battleEnemyGroupStep(s, ef, &k.stepSite);           //   JSR C1/1F79 first: a handler's own pad
     if (ee & 0x08) k.b = 1;                                      //   C1/156E cancel
     else if (ee & 0xC0) k.a = 1;                                 //   C1/15E8 A or X -> C1/161A
     else if (!(s[0x960C] & 0x80)) {                              //   C1/15F4
@@ -6501,6 +6600,7 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
   // $95DB on its iteration (f654) and froze that pass -- the dispatch's cursor phase one pass off (with Marle fallen beside
   // Magus, Black Hole's `$AE93` at f756 against the cartridge's f752).
   if (s[0x9609] == 0) s[0x99E0] = s[0x95DB] ? s[0x99E1] : 0;    // C1/116A-1187
+  if (k.step) battleUiBlip(h, k.stepSite, pass);                // C1/1561 -> C1/1F79: the group handler's C1/1B55
   battleUiBlipDispatch(h, k.a, k.b, k.up, k.dn, k.l, k.r, pass);   // C1/1B55 inside each handler, before its work
   if (!h->techOpen && !h->itemOpen && s[0x9609] == 0 && (k.l || k.r)) {   // C1/11E1 / C1/1218: the ready-PC switch
     battleCursorCycle(s, k.r ? 1 : -1);                          //   (DEC / INC $A6DD, cyclic, skipping the empty)
@@ -6514,7 +6614,7 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
     return;                                                      //   JMP C1/179C
   }
   if (h->techOpen) {                                             // C1/1320 + its target select
-    battleTechSubmenu(h, cur, k.a, k.b, k.up, k.dn, k.l, k.r);
+    battleTechSubmenu(h, cur, k.a, k.b, k.up, k.dn, k.l, k.r, k.step);
   } else if (h->itemOpen) {                                      // C1/143D + its target select
     battleItemSubmenu(h, cur, k.a, k.b, k.up, k.dn, k.l, k.r);
   } else if (s[0x9609] == 0) {                                   // C1/1184, the command row
@@ -6532,7 +6632,7 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
         battleTargetMsgPost(h, 0xFF, 0x0B);                      //   C1/129C `LDA #FF / JSL CD/002D`: the latch reset
         s[0x9609] = 1;                                           //   C1/12B6 INC $9609
         s[0x960D] = 7;                                           //   C1/12A8 `LDA #07 / STA $960D`
-        s[0x960C] = 0;                                           //   C1/12B0 JSR C1/1F79: C1/1F83 `STZ $960C`
+        battleEnemyTargetPass(h, 0);                             //   C1/12B0 JSR C1/1F79 (C1/1F83 `STZ $960C`, C1/20A9)
         battleTrace(h, "target-select");
       } else battleOpenAction(h, cur, 0);                        //   (no enemy at all: never in a measured fight)
     } else if (k.a && s[0x95DC + cur] == 1) {                    // C1/12BC: the Tech list, behind $A0A7 bit 0
@@ -6554,8 +6654,9 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
       battleItemTrace(h, "item-open");
     }
   } else {                                                       // C1/1561, the Att's target select
+    battleEnemyTargetPass(h, k.step);                            //   JSR C1/1F79 (07: C1/20A9, no pad of its own)
     int dir = k.dn ? 1 : k.up ? -1 : 0;                          //   C1/176C next / C1/1786 previous
-    if (dir) { battleTargetNav(s, dir); battleTrace(h, "target-nav"); }
+    if (dir) { battleEnemyTargetWalk(h, dir); battleTrace(h, "target-nav"); }
     if (k.a) battleCommitPcAction(h, cur);                       //   C1/161A: the confirm (queued; the dispatch runs it)
     else if (k.b) { battleTargetCancel(h); battleTrace(h, "target-cancel"); }   // C1/1577
   }

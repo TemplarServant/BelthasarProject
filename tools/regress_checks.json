@@ -41284,6 +41284,64 @@
       "notes": "disasm/notes/battle_multitarget.md sec. 11. C1/BB88 JSR C1/C1DD comes before C1/BF79 (the MP, C1/D74F, the effect): a PC tech's area pass that finds nobody (16-bit `$99C0` = FFFF, C1/C659-C668) with a PC attacker (C1/C66A `LDA $B18B / CMP #03 / BCS ->C6A6`) stages `$AE91 = $B18B`, `$AE92 = 02`, `$AE94 = $AE95 = 0`, `$AE96 = 10`, `$AE93 = 7D` / `7C` / `7B` by the participants $B2EC / $B2EB (C1/C684-C6A0), runs that action (JSR C1/AC57; CD/45A6[7B] = `7B 61 00 01 00 00 FF`, the shape of the status timers' 7F), then C1/C72B `$AF23 = 1` and C1/BB8B -> C1/BC5A = C1/BDB3 (the reloads) + C1/BCF8 (the record clears). An enemy attacker ($B18B >= 3) goes straight to C1/C72B. MEASURED, the rule's cartridge (--monitor --writer; the fixture's feet poked at f850 on both sides): the dispatch f953 `$AD8D = 00` (C1:C641), `$9604-$9606 = 00 00 04` (C1:C79C), `$AE91-92 = 00 02`, `$AE93 = 7B` (C1:C6A3); `$A013 = 01` f955 (C1:40A9); the close f1058 `$A013 = 00` (C1:41BD), `$AF23 = 01` (C1:C730), `$AFAB = 72` (C1:BE2A); Robo's MP 63 kept; the next Hetake action f1062 on both sides. The port fell back to the group's own set (battleBuildHitSet: the record's target alone) and spent the MP. Ported: battleDispatchScheduled runs the pass before C1/D74F and stages C1/C66A; the action opens on C1/C66A's header through battleC1ActionRoles (battleDispatchOpen, actDropTech) and its close runs C1/BC5A. 7C / 7D (a dual / triple tech) are derived, not measured."
     },
     {
+      "name": "battle-enemy-target-walk-order-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/target_nav_order_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait.state"
+      ],
+      "expect": [
+        "target-nav Cyclone, Down x4: select held cartridge f665-f919 port f665-f919",
+        "target-nav Cyclone, Down x4: $9614 walk cartridge [0 3 2 1 0] port [0 3 2 1 0]",
+        "target-nav Cyclone, Down x4: $9614 $A62D on 255 frames, first difference none",
+        "target-nav Cyclone, Up x4: select held cartridge f665-f919 port f665-f919",
+        "target-nav Cyclone, Up x4: $9614 walk cartridge [0 1 2 3 0] port [0 1 2 3 0]",
+        "target-nav Cyclone, Up x4: $9614 $A62D on 255 frames, first difference none",
+        "target-nav Cyclone, Right / Left: select held cartridge f665-f919 port f665-f919",
+        "target-nav Cyclone, Right / Left: $9614 walk cartridge [0 1 2 1 0] port [0 1 2 1 0]",
+        "target-nav Cyclone, Right / Left: $9614 $A62D on 255 frames, first difference none",
+        "target-nav Slash, Down / Up: select held cartridge f680-f931 port f680-f931",
+        "target-nav Slash, Down / Up: $9614 walk cartridge [0 1 2 3 0] port [0 1 2 3 0]",
+        "target-nav Slash, Down / Up: $9614 $A62D on 252 frames, first difference none",
+        "target-nav Att, Down / Up: select held cartridge f641-f1012 port f641-f1012",
+        "target-nav Att, Down / Up: $9614 walk cartridge [0 1 2 3 2 1 0] port [0 1 2 3 2 1 0]",
+        "target-nav Att, Down / Up: $9614 $A62D on 372 frames, first difference none",
+        "target-nav: 15/15 identical"
+      ],
+      "pin": [
+        "^target-nav "
+      ],
+      "tier": "full",
+      "timeout_s": 450,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    case 0x12: case 0x1A: *site = fwd ? \"226B\" : \"2279\"; return fwd ? 1 : -1;   // C1/2265-227C: 27FA / 2814",
+          "replace": "    case 0x12: case 0x1A: *site = fwd ? \"226B\" : \"2279\"; return fwd ? -1 : 1;   // C1/2265-227C: 27FA / 2814",
+          "why": "Cyclone's group with C1/15F9's mapping (the old port): Down walks forward, Up back"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (!battleEnemyGroupHandled(g)) return;",
+          "replace": "  if (1) return;",
+          "why": "no C1/1F79 for the enemy groups: no handler step, $960C / $A62D never published during the select"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "    s[0xA62D] = (uint8_t)(3 + s[0x9614]);",
+          "replace": "    ;",
+          "why": "C1/176C / C1/1786 without their `STA $A62D`: the Att's lit enemy lags its cursor by a pass"
+        }
+      ],
+      "note_pass": "the enemy target cursor visits the cartridge's enemies on the cartridge's frames: Cyclone (group 12) Down backwards / Up forwards through $99C0, Slash (0B) forward on every key, the Att (07) C1/15F9's walk; $A62D the handler's set every frame",
+      "notes": "disasm/notes/battle_target_nav_order.md. C1/1561 runs the group handler C1/1F79 -> C1/1FF8[$960D & 7F] BEFORE the pass's keys; 0B / 0C / 0D (C1/2169 / 2203 / 21AF) step NEXT on `$EF & 09` and `$EF & 06` (C1/27FA both), 0F / 12 / 1A (C1/22F5 / 225F) `$EF & 09` -> C1/27FA next, `$EF & 06` (Down|Left) -> C1/2814 PREVIOUS, and all of them leave `$960C = 80` so C1/15F4 skips C1/15F9's walk (`$EF & 05` Down|Right next, `$EF & 0A` Up|Left previous). MEASURED, the rule's cartridge (four Hetakes at cmb3 12,8 / cmb4 6,7 / cmb5 8,3 / cmb6 10,10, Crono alone): Cyclone's Downs $9614 0 -> 3 -> 2 -> 1 -> 0, $A62D 0306 / 0603 / 05 / 04. The old port walked every group with C1/15F9's mapping and never wrote $A62D in an enemy select: 5/12 (Cyclone Down / Up reversed, Slash's Up backwards). Ported: battle.c battleEnemyGroupStep (the pad), battleEnemyTargetPass (C1/1F79 for 07 / 08 / 0A / 0B-0D / 0F / 12 / 1A), battleEnemyTargetWalk (C1/176C / 1786's STA $A62D)."
+    },
+    {
       "name": "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",
       "tier": "full",
       "argv": [
