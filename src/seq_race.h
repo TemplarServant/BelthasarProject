@@ -58,6 +58,12 @@ int  CtSeqStageNmiHooks(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskF
 // the frames the upload's handshake holds the NMI (io->postFrames): $0388 stays 1 through them (09D5's STZ comes after the
 // JSL) and no NMI of the stage runs -- the caller holds them and clears $0388 at their end. 0 = no song posted.
 int  CtSeqStageSong(uint8_t* w, const CtRaceIo* io);
+// ...and the frames after it: C3/09A4's `JSL C7/0004` sits inside the NMI, but the NMI is not masked -- the next ones come
+// in over it and run the whole stage (C3/08D0: the tasks, the scripts), while `$0388` stays set (09A6's guard skips another
+// post) until the JSL returns and 09D5 clears it. `hold` = the frames left (0 = none); returns the new count. Call once a
+// frame, after the frame's NMI. MEASURED, the rule's cartridge (FF 07, song 3A: `$0388` 01 from f683 to f696, `$0008` and
+// page A's counters running every frame between).
+int  CtSeqStageSongTick(uint8_t* w, const CtRaceIo* io, int hold);
 
 // $7E:302A -- the teardown after the END: the driver reset ($3177, skipped for $0384 bit 5), then `JML $C0:0000`.
 void CtSeqStageEnd(uint8_t* w, const CtRaceIo* io);

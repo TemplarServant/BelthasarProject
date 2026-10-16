@@ -39299,6 +39299,95 @@
       "notes": "Roadmap G1a item 1 (the $C3 sequences): the ending a playthrough meets (sequence_table.md sec. 13). The cartridge runs saves/ending_re/ending_pre_ff2b.state (reached by the oracle from Jackie's ch27, memory note endgame-oracle-route) under the rule; the port runs ct.exe --seqstage from the cartridge's state at the hand-off (f130), its SPC seeded into CtAudio; frame k = the cartridge's k + 179, the SPC 50 frames ahead. The picture is stage 2. FF 23: the attract's own hand-off (saves/attract_entry3_handoff_rule_f8859.state) with $7F0057 bit 2 cleared and the storyline set to D3, so scene 107's controller takes the story's arm (saves/blackbird_re). FF 24: Jackie's ch17 brought to scene 301 (`--teleport 301 8 30 0 --method req`), walked to the trigger row, the fight won with both enemies' HP poked to 1 and the talk advanced with A (saves/tyranno_re); the extra regions $0386 and the star bytes of $0C00-$0FFF."
     },
     {
+      "name": "lavos-day-ff07-stage-logic-vs-oracle",
+      "argv": [
+        "python",
+        "tools/ending_stage_cmp.py",
+        "--drives",
+        "07"
+      ],
+      "env": {},
+      "expect": [
+        "seqstage: FF 07 995 frames compared, 1 differing, END cartridge f1029 port f1029 (same)",
+        "  first: f696 0388 o=0 p=1"
+      ],
+      "pin": [
+        "^seqstage: FF 07 ",
+        "^  first: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/ff07_pre_f1530.state",
+        "saves/lavos_re/ff07_handoff_f10.state",
+        "tools/ending_stage_cmp.py"
+      ],
+      "note_pass": "entry 7 (FF 07, the Day of Lavos after the lost final battle) runs natively byte for byte with the cartridge to its reset",
+      "mutations": [
+        {
+          "file": "src/seq_entry7.c",
+          "find": "  uint8_t x = ++w[0x039B];",
+          "replace": "  uint8_t x = w[0x039B]++;   /* MUT: the RNG read before its INC */",
+          "why": "$3448 increments $039B BEFORE it indexes C0/FE00: every sparkle's x, y and delay drawn one byte early"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "    if (--hold == 0) w[0x0388] = 0;                                   // 09D5 STZ $0388, once it returns",
+          "replace": "    if (--hold == 0) w[0x0388] = 0; return hold + 1000;   /* MUT: the stage frozen through the post */",
+          "why": "the NMIs run on over C3/09A4's JSL C7/0004 on the cartridge (song 3A: $0008 and page A's counters every frame f684-f695)"
+        }
+      ],
+      "notes": "THE DAY OF LAVOS, ENTRY 7 (disasm/notes/sequence_table.md sec. 16; src/seq_entry7.c). From Jackie's ch27 with glb[170] bit 5 set (saves/lavos_re/ch27_aa77.state), `ct.exe --teleport 476 7 8 0 --method jmp` (scene 476 = loc 1DC, entered on the cartridge only by the lost final battle), A every 32 frames: obj1's loop runs the operator's and the director's lines and `FF 07` at f1540 of that run (saves/lavos_re/ff07_pre_f1530.state: f10). The cartridge under the rule against the native stage from its own hand-off (f10), SHIFT 34 / HOLD 25, A at f900 (the port's pad from shift - 1: C3/0A99 reads $4218 a frame on). Graded: the sequence shadows, the task list, page A, the sparkles' records $0C00-$0CBF with the RNG $039B they draw from ($3448), the WRAM fade's arm $0360-$0367 and palette record 0. The one difference is pinned: `$0388` clears at f697 in the port, f696 on the cartridge -- song 3A's handshake crosses 14 vblanks on the port's SPC model, 13 on the cartridge's (a timing artefact, CLAUDE.md 2026-10-09). The reset ($63F5's `JML $00FF00`) on the same frame, f1029."
+    },
+    {
+      "name": "lavos-day-ff07-plays-through-to-the-title-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "476",
+        "--loadwram",
+        "saves/lavos_re/tele476_aa77.lakewram",
+        "--walkscript",
+        "n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/lavos_re/tele476_aa77.state",
+        "CT_LOCTRACE": "1",
+        "CT_SHOTS_AT": "2700",
+        "CT_SHOTS_EXIT": "1",
+        "CT_SHOTS": "build/_ff07_chain"
+      },
+      "expect": [
+        "sequence: entry 7 (the Day of Lavos) opening at f1573 -- 5728360 + 49152 + 2534972 cycles = 23 black frame(s)",
+        "sequence: the Day of Lavos ended -> reset",
+        "reset: 7E:63FA JML 00:FF00 -> C0/000E cold init at f2527: WRAM cleared, $7F0061=0, reboot into loc 000",
+        "sequence: op-0xFF 02 -> JML $C3:0000 ($0384=2) = the TITLE screen ($7E:5978), and the overlay's machine plays it. (at f2608)"
+      ],
+      "pin": [
+        "^sequence: entry 7 ",
+        "^sequence: the Day of Lavos ended",
+        "^reset: 7E:63FA ",
+        "^sequence: op-0xFF 02 "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/tele476_aa77.lakewram",
+        "saves/lavos_re/tele476_aa77.state"
+      ],
+      "note_pass": "the Day of Lavos plays through in the port: obj1's lines, FF 07's native stage, the pad press, the console's reset and the title",
+      "notes": "The port's side of lavos-day-ff07-stage-logic-vs-oracle in the field: the cartridge's own WRAM at scene 476 after the teleport (saves/lavos_re/tele476_aa77.*), A every 32 frames. Before entry 7 was native the port held at `FF 07` (`overlay not ported: holding`). Now: `FF 07` at f1573, 23 black frames (the overlay's C3/0557, the init's DMAs, the setup's 2534972), the stage, the press, $63F5's reset 954 frames after the op (the cartridge's run: 955, f1540 -> f2495) -- the cold init (field.c coldResetReq, FD/C000's path) -- loc 000, 1B1 and the title's `FF 02` 81 frames after the reset (the cartridge: 77, f2495 -> f2572)."
+    },
+    {
       "name": "ending-story-plays-through-in-the-port",
       "argv": [
         "build/ct_field.exe",

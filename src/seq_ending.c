@@ -16,7 +16,7 @@
 #include <string.h>
 #include <stdio.h>
 
-// The frames a song's upload still holds the stage's NMI (C3/09A4's JSL C7/0004, inside the NMI: no NMI runs until it returns).
+// The frames a song's post is still inside C3/09A4's JSL C7/0004 (`$0388` set; the NMIs run on over it: CtSeqStageSongTick).
 static int s_songHold;
 
 static unsigned rd(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
@@ -278,12 +278,8 @@ int CtEndingStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
 }
 
 int CtEndingStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
-  if (s_songHold > 0) {                                               // still in the driver's handshake
-    if (--s_songHold == 0) w[0x0388] = 0;                             // 09D5 STZ $0388, once the JSL returns
-    return 0;
-  }
-  int st = CtSeqStageNmiHooks(w, joy, io, endingHook, endingTask);
-  if (st != 2) s_songHold = CtSeqStageSong(w, io);
+  int st = CtSeqStageNmiHooks(w, joy, io, endingHook, endingTask);   // (the NMIs run on over a song's post: CtSeqStageSongTick)
+  if (st != 2) s_songHold = CtSeqStageSongTick(w, io, s_songHold);
   return st;
 }
 

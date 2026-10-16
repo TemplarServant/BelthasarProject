@@ -90,6 +90,7 @@
 #include "seq_ending.h"   // the ending's $C3 stage (FF 2A/2B/2E/2F), native
 #include "seq_entry3.h"   // entry 3 from the story (FF 23, after the Blackbird), native
 #include "seq_entry4.h"   // entry 4 (FF 24, the Tyranno Lair: Lavos falls), native
+#include "seq_entry7.h"   // entry 7 (FF 07, the Day of Lavos after the lost final battle), native
 #include "data/ct_charbase.h" // baked $CC:0000 char base-stat table (new-game init; NO runtime ROM needed)
 #include "collision.h"   // CtCollisionShapeSolid — the byte-exact engine shape collision (C0/9AD3)
 #include "player.h"      // CtPlayerControl — the byte-exact player input->velocity controller (C0/881E)
@@ -16582,6 +16583,25 @@ int main(int argc, char** argv) {
           }
         } else printf("sequence: entry %d -- the native entry 4 declined (CtEntry4StageOpen)\n", seqEntry);
       }
+      // ENTRY 7, NATIVE (stage 1: its logic). `FF 07` in scene 476 (loc 1DC, the Day of Lavos after the lost final battle; obj1's
+      // loop with glb[170] bit 5 set): the script runs to its endless yield, task $63D5 waits for a pad press, and 128 frames
+      // after it $63F5 resets the console (`JML $00FF00` -> C0/FF00 -> FD/C000: the cold init, back to the title). Priced like
+      // the others: the overlay's C3/0557 cycles, the init's DMAs, the setup's 2534972 (sequence_table.md sec. 16).
+      if (seqId != 2 && !seqOpen && CtEntry7StageHas((uint8_t)seqId)) {
+        CtRaceIo rio = raceIoFor(w);
+        if (CtEntry7StageOpen(w, (uint8_t)seqId, &rio) == 0) {
+          seqOpen = seqEntry + 1; endOn = 4; endEnded = 0;
+          long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
+          if (orb && orl > 0x3E0005) {
+            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
+            long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry7StageSetupCycles();
+            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
+            printf("sequence: entry %d (the Day of Lavos) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
+                   seqEntry, frameNo, oc, od, os, seqHold);
+          }
+        } else printf("sequence: entry %d -- the native entry 7 declined (CtEntry7StageOpen)\n", seqEntry);
+      }
       if (seqId != 2 && !seqOpen) {
         seqOpen = CtTitleIntroResetStage(&titleIntro, seqEntry) ? seqEntry + 1 : -1;
         if (seqOpen > 0) { seqCommonInitWram(w, (uint8_t)seqId);  // a native entry: the overlay's init is ours to make
@@ -16741,12 +16761,18 @@ int main(int argc, char** argv) {
         if (endEnded) {
           CtRaceIo rio = raceIoFor(w);
           if (endOn == 2) CtEntry3StageClose(w, &rio); else if (endOn == 3) CtEntry4StageClose(w, &rio);
+          else if (endOn == 4) CtEntry7StageClose(w, &rio);
           else CtEndingStageClose(w, &rio);
           CtSceneSequenceDone(f.vm);
+          if (endOn == 4) {                                          // $63F5's `JML $00FF00`: the console's reset (C0/FF00 ->
+            coldResetReq = 1; coldResetWhy = "7E:63FA JML 00:FF00"; //   FD/C000) -- the cold init below, not $0100's reboot
+            printf("sequence: the Day of Lavos ended -> reset\n");
+            seqOpen = 0; endOn = 0; endEnded = 0;
+          } else {
           rebootReq = 1; stageExit = 1;                              // 7E:303F JML $C0:0000
           printf("sequence: the %s ended (%s) -> reboot into loc %03X\n", endOn == 2 ? "panorama" : endOn == 3 ? "fall" : "ending",
                  endEnded == 2 ? "soft reset" : "$7E:0000=1", w[0x0100] | (w[0x0101] << 8));
-          seqOpen = 0; endOn = 0; endEnded = 0;
+          seqOpen = 0; endOn = 0; endEnded = 0; }
         }
       } else if (seqOpen > 0 && !seqX && titleIntro.done) {   // (titleIntro keeps the LAST machine's done flag)
         // Every other entry's teardown is the PLAIN fade $7E:34E3 -- the title's $34C2 without the
@@ -19667,6 +19693,7 @@ int main(int argc, char** argv) {
           CtRaceIo rio = raceIoFor(CtWramSys(fieldWram()));
           int st = endOn == 2 ? CtEntry3StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 3 ? CtEntry4StageFrame(CtWramSys(fieldWram()), joy, &rio)
+                 : endOn == 4 ? CtEntry7StageFrame(CtWramSys(fieldWram()), joy, &rio)
                               : CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) endEnded = st;
         }

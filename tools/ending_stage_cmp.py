@@ -57,6 +57,14 @@ DRIVES = {
                shift=24, hold=25, total=1800, tag='seqstage', extra=[(0x0386, 1), (0x0C00, 0x400)], unskip={0x0386},
                # (the rest of $0C00-$0FFF is the setup's first VRAM packet, decompressed there: the picture's)
                skip={a for a in range(0x0C00, 0x1000) if (a - 0x0C00) % 4 not in ((0, 1) if a < 0x0E00 else (0,))}),
+    # entry 7 (`FF 07`, scene 476 = loc 1DC: the Day of Lavos after the lost final battle) -- Jackie's ch27 with glb[170] bit 5
+    # set (saves/lavos_re/ch27_aa77.state), `ct.exe --teleport 476 7 8 0 --method jmp`, A every 32 frames to f1530
+    # (ff07_pre_f1530.state): `FF 07` on its f10. The stage waits for a pad press after its text (task $63D5, f821): A at f900,
+    # then 128 frames to the reset (`JML $00FF00`). The sparkles' records and the RNG they draw from are graded too.
+    '07': dict(state=os.path.join(ROOT, 'saves', 'lavos_re', 'ff07_pre_f1530.state'), handoff=10,
+               hstate=os.path.join(ROOT, 'saves', 'lavos_re', 'ff07_handoff_f10.state'),
+               shift=34, hold=25, total=1150, tag='seqstage', press=[(900, 0x100, 2)],
+               extra=[(0x0C00, 0xC0), (0x0360, 8), (0x0520, 0x0C)], unskip={0x039B}),
 }
 REGIONS = [(0x0000, 2), (0x0380, 0x1C), (0x0920, 0x20), (0x0A00, 0x30), (0x0B00, 0x30)]
 # the picture's bytes inside them: the credits pointer (task $9B4F) and the overlay's RNG $039B ($7E:3448), which only the
@@ -116,9 +124,18 @@ def run(op, d, verbose):
         subprocess.run([CT, ROM, '--peek', d['state'], os.path.join(ROOT, 'build', '_ending_h.raw'), '--btnscript',
                         '0:%d' % d['handoff']], cwd=ROOT, env=dict(env, PEEK_SAVE=d['hstate']), capture_output=True)
     total, shift = d['total'], d['shift']
-    o = subprocess.run([CT, ROM, '--monitor', spec, '--from', d['state'], '--input', '0:%d' % total, '--diff'],
+    def pads(off, n):                 # the drive's presses (cartridge frames) as a btnscript from frame `off`, `n` frames long
+        # (the port's: from shift - 1 -- the NMI reads the pad the frame after the cartridge's input frame, C3/0A99's $4218)
+        parts, f = [], 0
+        for at, m, hold in d.get('press', []):
+            at -= off
+            if at > f: parts.append('0:%d' % (at - f)); f = at
+            parts.append('%x:%d' % (m, hold)); f += hold
+        parts.append('0:%d' % max(1, n - f))
+        return ','.join(parts)
+    o = subprocess.run([CT, ROM, '--monitor', spec, '--from', d['state'], '--input', pads(0, total), '--diff'],
                        cwd=ROOT, env=env, capture_output=True, text=True, errors='replace').stdout
-    p = subprocess.run([CT, '--seqstage', d['hstate'], op, str(total - shift), '0:%d' % (total - shift), spec, str(d['hold'])],
+    p = subprocess.run([CT, '--seqstage', d['hstate'], op, str(total - shift), pads(shift - 1, total - shift), spec, str(d['hold'])],
                        cwd=ROOT, capture_output=True, text=True, errors='replace').stdout
     orows, prows = parse(o), parse(p)
     if not orows or not prows:
@@ -131,7 +148,7 @@ def run(op, d, verbose):
         ipf = expand(orows, shift, total)
         oend = next((f for f in sorted(ipf) if f > shift and not any(ipf[f].get(k, 0) for k in (0x0A20, 0x0A21, 0x0B20, 0x0B21))
                      and any(ipf[f - 1].get(k, 0) for k in (0x0A20, 0x0A21, 0x0B20, 0x0B21))), None)
-    pm = re.search(r'END at frame (\d+)', p)
+    pm = re.search(r'(?:END|soft reset) at frame (\d+)', p)
     pend = int(pm.group(1)) + shift if pm else None
     last = (oend - 1 if oend else total)   # (the END's own frame: the reboot may have cleared the cartridge's bytes)
     ofull = expand(orows, shift, last)

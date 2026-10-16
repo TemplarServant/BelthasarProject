@@ -2570,3 +2570,49 @@ cartridge (its own fight, s301_c2) EB runs from f2121, `$CD3A` 01, 02, 03 ..; in
 **Open.** The picture (stage 2: the planet in mode 7, the stars' sprites, 56EB); the two frames above; the world 1F3's
 picture natives after the fall (C2/7957, C2/7981 -- the window circle through C3/0008 -- and C6:E072, a COLDATA HDMA), which
 advance without running.
+
+## 16. ENTRY 7 (`FF 07`, scene 476: the Day of Lavos after the lost final battle) -- stage 1 (2026-10-16); and §2's two ghosts
+
+**§2's census, re-read.** Of the four `FF nn` it left unported, two are not ops. Scene 79's `FF 7F` is the colour data of obj14
+fn3's `88 80 22 00 FF 7F FF 7F ...` (op 0x88 COLOR/PAL, white `7FFF` words). Scene 261's `FF 2D` (and its `FF 2B`) sits in the
+0x12 operand bytes of op 0xFE at 0x0050 (`FE F0 C0 70 2B 2B C0 70 2D 2D FF FF 2D 2D FF FF 2B 2B`) in obj0's loop. Neither is
+ever executed. The real ones are `FF 07` (scene 476) and `FF 26` (scene 432, loc 1B0 = the Epoch's cockpit: after `CHANGELOC
+1DA`, the Epoch into Lavos's shell). Note on reading scripts: an object's fn0 goes on after its first RETURN -- the code after
+it is the object's loop -- so `ct.py script` (which stops at the RETURN) does not show where these sites are; tools'
+iter_ops from the RETURN + 1 does.
+
+**Where the story calls it.** No script and no exit leads to loc 1DC; the lost final battle does. Its obj1 loop (0x0017..):
+`16 AA 20 06 69` (glb[170] & 20): clear -- lines 56/57, `65 05 AA` (the bit set), `CHANGELOC 1F0`; set -- the operator's and the
+director's lines (58-65), `66 05 AA` (cleared), `FF 07`. Jackie's ch27 has glb[170] = 57 (bit 5 clear): the oracle state that
+reaches the op is ch27 with the byte at 77 (saves/lavos_re/ch27_aa77.state: CTLS WRAM at +85, its CRC32 at [12:16]), then
+`ct.exe --teleport 476 7 8 0 --method jmp` (`req` leaves the old scene's objects running), A every 32 frames: `FF 07` at f1540.
+
+**The setup** $7E:6248 (entry 8's too: `LDA $0384 / AND #000F / CMP #0008` picks page A $63A6 over $633D). The picture: the
+VRAM packets ($3691 x7), the CGRAM shadow ($8772's three colours, $38AF's copy $2000 -> $2200), the PPU. The logic: `$0A20 =
+633D`, page A once ($3749), `JSR $6598` (24 sparkle records at $0C00, 8 bytes each, from the overlay RNG $3448: `$039B + 1`,
+the byte at C0/FE00 + it), `JSL FD/FFEE` (each palette record's +0 cleared), `$0399 = 0080`. 2534972 cycles (`--callrom`).
+
+**The script** ($633D): CALL $6390 (r0 = 0100, tasks 3749 37FA 347A, hooks 380B 3843 388B), task `65DD` (the sparkles), wait
+119, task `6439` (the WRAM palette fade), F0 `63FE` (its arm: $0360 = B7B4, $0362 = 2240, $0364 = 00C0, $0366 = 0020, $038E =
+0808), wait 179, `$0044 = 1` (the text is up: new sparkles at y E0), wait 119, $2131, F0 `6422` (target B5B4, and `$643E = 1F`:
+6439's `AND #0F` becomes #1F, half the rate), `$0384 = 07`, wait 229, `$038A = 3A` (the song), wait 9, `65DD` out and `64BF`
+(the text's sprites) in, F0 `5DB4` (palette record 0's fade), wait 127, task `63D5`, an endless yield.
+
+**The end** is not `$7E:0000`. `$63D5` (M = 16): `LDA $02 / BEQ` -- the pad word the NMI stores -- then `81 40` through $377E,
+the fade-out $3495 added ($395E: the first empty slot of $0920), the slot handed to `$63F5`: `DEC $0399` and at 0 `JML
+$00FF00` = C0/FF00 `SEI / CLC / XCE / JML FD/C000`, the console's reset: the cold init, the title.
+
+**C3/09A4's post does not freeze the stage.** `$038A = 3A` at f683: `$0388` reads 01 from f683 to f696 while `$0008` and page
+A's counters step every frame -- the JSL C7/0004 sits inside the NMI, and the next NMIs come in over it and run C3/08D0 whole
+(09A6's `LDA $0388 / BNE` keeps them from posting). The port froze the stage for the post (seq_ending.c's model, which none of
+the ending's graded runs ever exercised: `$0388` never changes there). Now `CtSeqStageSongTick` (seq_race.c), for both.
+
+**Graded.** tools/ending_stage_cmp.py drive 07 (check lavos-day-ff07-stage-logic-vs-oracle): **995 frames, 1 differing, the
+reset on f1029 on both**. The one frame: `$0388` clears at f697 in the port -- the port's SPC model has song 3A's handshake
+cross 14 vblanks, the cartridge 13 (a timing artefact). The pad: the port's from SHIFT - 1 (C3/0A99 reads $4218 the frame
+after the input). In the field (lavos-day-ff07-plays-through-to-the-title-in-the-port): `FF 07` at f1573, the press, the reset
+954 frames after the op (the cartridge's 955), loc 000 -> 1B1 -> the title.
+
+**Open.** The picture (stage 2: the packets, the text 64BF, the sparkles C3/0DBC, the fade's colours); and how the port reaches
+loc 1DC at all -- the lost final battle's path to it is not derived (the boss rush from lavos_1d3_wait ran 18000 frames of A
+without ending).

@@ -558,6 +558,14 @@ int CtSeqStageSong(uint8_t* w, const CtRaceIo* io) {
   return n;                                                           //   (after the frames the upload holds)
 }
 
+int CtSeqStageSongTick(uint8_t* w, const CtRaceIo* io, int hold) {
+  if (hold > 0) {                                                     // the post's JSL still in the driver's handshake
+    if (--hold == 0) w[0x0388] = 0;                                   // 09D5 STZ $0388, once it returns
+    return hold;
+  }
+  return CtSeqStageSong(w, io);
+}
+
 void CtSeqStageEnd(uint8_t* w, const CtRaceIo* io) {
   R rr = { w, 0, io };
   seqDriverReset(&rr, io);
