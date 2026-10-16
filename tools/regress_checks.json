@@ -42972,6 +42972,46 @@
         }
       ],
       "notes": "THE BOSS DEATH (disasm/notes/battle_boss_death_0e05.md; battle_sim_census.md family 5). CD/0043 after its $CCEA wait: `$99D2` (CC/EC90, the arena kind from E1:DE00 by the enemy's id) not 0/2 and `$A08C,X` (CC/EBA4, E4:F600 byte +4 bit 2) -> the dissolve (CD/00A0, no #95, no red record) then `LDA #40 / JSL CD0E05`; else `$A01D,X` bit 0 (FD/B121, the stat record's byte 21 & 3) -> `LDA #38 / JMP CD/0E05` -- the effect load, the programs, the teardown CD/0453 inside its loop. Each enemy alone at 1 HP from f600, A mashed, from gato_wait. Pins, all against the rule's cartridge: the whole monitored WRAM plus $CCEA / $5D9B / $96F5 (`mon=`) the same values in the same order, +0 on every change, the deaths, and the OBJ palette 4 page: Yakra 190 states (program 3F: three flashes of colour 0x10, the 80 0F priority store, the fade to white), Lavos's core 1 (the copy, no fade: $99D2 = 01; its 75-frame routine, CD/3ED2's two $400 packets a level for cell type 2), Giga Gaia and the Guardian 2 (the dissolve, then effect 40 / program 4A with its 80 11 cut). Before this, all four took D0093: 18 / 17 / 18 / 18 states and the fights ended after the dissolve. Byte-for-byte: re-pin only with an oracle-verified reason."
+    },
+    {
+      "name": "battle-sim-walk-path-dry-last-wave-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_sim.py",
+        "fight",
+        "@1BE:18",
+        "hp=1"
+      ],
+      "env": {},
+      "expect": [
+        "sim f1BE_18 [F2 Roly Bomber 34 Outlaw]: wram same values in the same order on both sides",
+        "sim f1BE_18 [F2 Roly Bomber 34 Outlaw]: port frame - cartridge frame per change: -1 x2 +0 x73",
+        "sim f1BE_18 [F2 Roly Bomber 34 Outlaw]: deaths cartridge [1269] port [1269]",
+        "sim f1BE_18 [F2 Roly Bomber 34 Outlaw]: death palette (OBJ pal 4, $2380): cartridge 18 states, port 18, the same sequence"
+      ],
+      "pin": [
+        "^sim f1BE_18 .*: wram ",
+        "^sim f1BE_18 .*: port frame ",
+        "^sim f1BE_18 .*: deaths ",
+        "^sim f1BE_18 .*: death palette "
+      ],
+      "tier": "full",
+      "timeout_s": 300,
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "note_pass": "Crono's walk to a Roly Bomber standing in a solid row finds the cartridge's path and the fight plays to the cartridge's outcome",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    if (touched) break;                                           // C1/4B4D `LDA $92 / BNE` -> C1/4B77",
+          "replace": "    if (touched) { if (!nn) wave--; break; }   /* MUT: a dry last pass starts the backtrace one wave low */",
+          "why": "the old port: the backtrace matches nothing, marks the row rightward, Crono walks off the arena for 600 frames and the fight stalls"
+        }
+      ],
+      "notes": "THE WALKER'S FLOOD EXIT (C1/4A71, the op-18 arm C1/5479; battle.c battlePcWalkArm). Each pass writes wave $94 into the free neighbours of the frontier and counts a goal neighbour in $92; C1/4B4D tests $92 FIRST, so a pass that met the goal goes to the backtrace with $94 still its own wave even when it wrote no new cell, and C1/4B7C DECs it once before the first probe. Without a touch the flood runs to $94 = 1F ($92 := 80, C1/4B71): no backtrace, the self mark 0x20 kept. The port broke on the dry frontier before the goal test and started the backtrace one wave low. Staged formation f1BE_18 (scene 1BE obj 18: F2 Roly Bomber + 34 Outlaw, census family 4's leftover): the Roly Bomber sits in a solid row (cell 35), reached only from the last wave's cell 45 -- the cartridge's grid at the arm f784 has column 5 E8..E3 then E2 E1 E0, Crono rests at (86,80) f833, Roly Bomber's HP 0 and its death tech 18 f934, the party falls f1269; the port walked (56,239) until f1385 and every later change came 552 frames late. Pins the whole monitored WRAM sequence, the deaths and the death palette on the cartridge's frames. The -1 x2 is a PINNED RESIDUAL after the party's fall ($AE93 / $95DB = 80 at port f1467/f1469, cartridge f1468/f1470), not this mechanism; re-pin it only from a fix that moves it to +0."
     }
   ],
   "excluded": [

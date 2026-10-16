@@ -2474,6 +2474,16 @@ $400 packets). Each alone at 1 HP from f600, A mashed. Pins the whole monitored 
 cartridge's on both sides at +0, the deaths, and the OBJ palette 4 page (190 / 1 / 2 / 2 states). Five mutations killed.
 Byte-for-byte: re-pin only with an oracle-verified reason.
 
+### battle-sim-walk-path-dry-last-wave-vs-rule-cartridge (`python tools/battle_sim.py fight @1BE:18 hp=1`)
+
+The op-18 walker's path (C1/4A71's flood and C1/4B77's backtrace, battle.c battlePcWalkArm): C1/4B4D tests the goal touch
+before the frontier swap, so a pass that met the goal and wrote no new cell still traces the path from its own wave
+minus one; with no touch the flood runs out at 1F and nothing is traced. Staged formation f1BE_18 (Roly Bomber + Outlaw):
+the Roly Bomber stands in a solid row reached only from the last wave's cell, and the port used to start the backtrace
+one wave low -- Crono walked off the arena for 600 frames. Pins the whole monitored WRAM sequence, the deaths (f1269) and
+the death palette on the cartridge's frames; the `-1 x2` offset after the party's fall is a pinned residual of another
+mechanism -- re-pin it only from a fix that brings it to +0.
+
 ### battle-target-hand-page-vs-rule-cartridge (`python tools/target_hand_page_cmp.py`)
 
 The target hand, port against the rule's cartridge on tools/caster_radius_dispatch_cmp.py's fixture with each select held:

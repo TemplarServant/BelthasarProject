@@ -9576,7 +9576,15 @@ static void battlePcWalkArm(CtBattleHost* h, int cmb, int gx, int gy) {
   uint8_t cur[256], nxt[256]; int nc = 0, wave = 1, touched = 0;  // $7DFD/$7EFD frontier lists
   cur[0] = (uint8_t)self; nc = 1;
   static const int NB[4] = { -0x10, +0x10, -1, +1 };              // probe order up/down/left/right
-  while (!touched && wave < 0x1F) {
+  // One pass per wave $94 = 1..1E (C1/4ABA-4B4A), then C1/4B4D: a pass that met the goal (`$92` != 0) goes to the
+  // backtrace with $94 still ITS wave -- tested before the frontier is swapped or $94 INCed, so a pass that both met
+  // the goal and wrote no new cell is still a path. Otherwise C1/4B66 `INC $94 / CMP #1F`: a dry frontier writes
+  // nothing more, and the flood runs out at 1F with `$92` := 80 (C1/4B71) -- no path: no backtrace, and the self
+  // mark 0x20 stays (C1/4B79 is the backtrace's). The arm (C1/5479-54A5) copies the grid whatever came out.
+  // (The port broke on the dry frontier BEFORE the goal test: the f1BE_18 Roly Bomber sits in a solid row, reached
+  // only from the last wave's cell, so the backtrace started one wave low, matched nothing, marked the row's cells
+  // rightward, and Crono walked off the arena for 600 frames. Cartridge, the arm f784: `$7CFD` column 5 E8..E3.)
+  while (wave < 0x1F) {
     int nn = 0;
     for (int i = 0; i < nc; i++) {
       for (int k = 0; k < 4; k++) {
@@ -9586,15 +9594,14 @@ static void battlePcWalkArm(CtBattleHost* h, int cmb, int gx, int gy) {
         else if (v == 0xFF) touched++;
       }
     }
-    if (!nn) break;                                               // enclosed -> flood dries (walker still arms)
-    memcpy(cur, nxt, (size_t)nn); nc = nn; wave++;
+    if (touched) break;                                           // C1/4B4D `LDA $92 / BNE` -> C1/4B77
+    memcpy(cur, nxt, (size_t)nn); nc = nn; wave++;                // C1/4B51-4B66 (a dry list stays dry)
   }
-  g[self] = 0;                                                    // C1/4B79: clear the self mark pre-backtrace
-  // C1/4B7E backtrace: goal -> self down the waves. The ROM exits the flood with $94 = the LAST WRITTEN wave
-  // and DECs once before the first probe (probe value = lastWave-1); our `wave` var has already incremented
-  // past the touched pass, so the first probe value = wave-2.
-  { int c2 = goal;
-    for (int w = wave - 2; w >= 0; w--) {
+  if (touched) g[self] = 0;                                       // C1/4B79: clear the self mark pre-backtrace
+  // C1/4B7C backtrace: goal -> self down the waves. $94 is the touched pass's wave and is DECed once before the
+  // first probe, so the first probe value = wave - 1 (the goal's neighbour of the last written wave).
+  if (touched) { int c2 = goal;
+    for (int w = wave - 1; w >= 0; w--) {
       int pick = (c2 + 1) & 0xFF;                                 // default = the RIGHT cell (C1/4BA7 idiom)
       for (int k = 0; k < 4; k++) {
         int cell = (c2 + NB[k]) & 0xFF;

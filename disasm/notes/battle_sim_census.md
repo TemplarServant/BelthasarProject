@@ -109,7 +109,11 @@ c811 / p800; f1CB_1: 86 at c390 / p379), same open question.
 **FIXED 2026-10-16** (battle_counter_gating.md sec. 8; check battle-sim-fallen-enemy-counter-vs-rule-cartridge): the
 loop's gates at the victim's decode, the death scan after the counters (C1/881C), the counter's name box and its C1/8787
 sweep. 19 of the 22 ids (20 with Azala in a 1450-frame window) and 29 of the 38 formations now match the cartridge's whole WRAM sequence; the rest are
-families 3 and 5, a staging difference (f0AE_10) and a port stall on Crono's physical (f1BE_18).
+families 3 and 5, a staging difference (f0AE_10) and a port stall on Crono's physical (f1BE_18 -- FIXED 2026-10-16: not a counter matter but the op-18 walker's path. C1/4B4D
+tests the goal touch before the frontier swap, so the Roly Bomber in a solid row, met by a pass that wrote no new cell, is
+still traced from that pass's wave minus one; the port broke on the dry frontier first, traced one wave low and Crono walked
+off the arena for 600 frames. Now the whole WRAM sequence is the cartridge's; check
+battle-sim-walk-path-dry-last-wave-vs-rule-cartridge).
 
 ROM, C1/8694-86C6 (`dis.py 18640 0x1E0 1 0`): in the counter loop, a victim enemy whose `$AEFF,X` = FF (fallen) is
 taken anyway when its AI block 2 opens with condition `20` (C1/86A5 `LDA $AF0A,X / JSR C1/B488`, C1/86B4 `CMP #20`): its
