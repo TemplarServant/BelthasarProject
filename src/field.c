@@ -46,7 +46,6 @@
 #include "tileanim.h"    // FD/DE98 + FD/E022: the location's animated BG tiles
 #include "data/ow_gullmap.h" // ROM tile name -> captured gull atlas slot (derived by pixel identity)
 #include "data/battle_hud.h"  // battle-mode HUD strip: baked chrome/palettes/tilemaps (battle_hud_render.md)
-#include "data/battle_hud_chrome.h"  // the strip's frame tiles, per line (tools/gen/battle_hud_chrome.py)
 #include "data/battle_stance.h"  // battle-entry combatant STANCE OBJs: baked tiles/palettes/assembly (battle_stance.md)
 #include "data/battle_anim.h"    // attack/idle keyframes + trajectory tables (battle_actionfx.md A2/A3, stance ADD.4).
                             //   ctBattleAnimTiles[6]/[7] (GATO idle kf6/kf7) are now anim-engine FIXTURES: the
@@ -6144,9 +6143,10 @@ static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
 // the fixed non-periodic dither carried in the BG1 4bpp tiles, char word 0x1000; ch5 HDMA $2132 ADD
 // lines 160-183 / SUBTRACT 184-206), the per-box bevel frames, the 2px inter-box separators and the
 // 2px outer screen-edge frame -- is the opaque BG1 layer. The subscreen is BG1+BG3 (NOT the field)
-// and CGWSEL=0, so the strip is field-INDEPENDENT; probed both phases: the BG1-only oracle render
-// (PEEK_ISOBG=0) == the normal render byte-exact at EVERY strip pixel outside glyph ink. Its pixels per
-// (tile, strip line) are src/data/battle_hud_chrome.h; the BG3 text is drawn ON TOP (the oracle's own
+// and CGWSEL=0, so the field's picture never shows through; probed both phases: the BG1-only oracle render
+// (PEEK_ISOBG=0) == the normal render byte-exact at EVERY strip pixel outside glyph ink. Its tiles and
+// colours are the field window's in the player's Window Color, $2991 & 7 (battleHudRenderStrip); the
+// BG3 text is drawn ON TOP (the oracle's own
 // compositing order -- the hand's ink lands on the windows' bevel columns).
 // THE SHOW/HIDE TIMELINE, so the draw-list gate is graded and not only its "shown" end. A drive that
 // merely idles cannot tell a gated placard from an always-on one: both are drawn on the last frame.
@@ -6247,21 +6247,73 @@ static void battleHudRenderStrip(uint8_t* fb, const uint8_t* mem, const uint8_t*
   const uint8_t (*pal8)[4][3] = ctBattleHudPalCmd;
   // 1. BG1, THE FRAME ROWS 16..21 of the tilemap at $7800, from what the NMI last uploaded there (CF/E384 `$99E2`; the
   //    boot's CC/E1B0): the base $D1:5800, a command window C1/0929 per queued seat, the Tech list's $D1:5A50 or the item
-  //    list's $D1:5BD0. Per tile and strip line its 8 pixels come from src/data/battle_hud_chrome.h (the window bodies'
-  //    gradient + dither, the bevels; every (tile, line) the three list layouts use is in the table -- checked against
-  //    $D1:5800/5A50/5BD0). The layer is opaque.
+  //    list's $D1:5BD0. The layer is opaque.
+  //    THE WINDOW IS THE FIELD'S, IN THE PLAYER'S WINDOW COLOR. The frame words name tiles F0..FF and 3FC..3FF of the
+  //    $1000 char base, palette 0 -- the field window's own tiles and colours, which no battle code loads: the location
+  //    load's C0/6E5C put FF/(9E10 + v * 0x280) there (v = $2991 & 7; fieldWindowFromRom) and C0/70E9 put FF/B210 + v * 16
+  //    on CGRAM row 0 (fieldPaletteText), and the battle's palette page keeps row 0's colours 1-7 (CC/E6EC copies the base
+  //    page onto the live one). MEASURED (`--peek`): the Dragon Tank's fight (loc 01C, $2991 = 86) holds VRAM $1F00-$1FFF /
+  //    $4FC0-$4FFF = FF/9E10 + 6 * 0x280 and CGRAM 1-7 = FF/B210 + 6 * 16; GATO's (A0) colour 0's. So a pixel is the tile's
+  //    4bpp colour p, coloured CGRAM[pal * 16 + p] from the live page $2200, then the line's colour math (below). The old
+  //    colour-0 bake (src/data/battle_hud_chrome.h) is this rule at v = 0: 7680 / 7680 samples. A tile outside the two
+  //    runs is one no frame row holds: black, as before.
+  //    THE GRADIENT is channel 5's colour math ($C948: CGWSEL CGADSUB COLDATA SETINI), walked from line 0 the way the HDMA
+  //    does (btFxCompose): a repeat entry transfers its next record every line, a plain one once and the registers hold;
+  //    COLDATA sets the components its bits 5-7 name. On the settled strip the band entry repeats over D1/F83D's records
+  //    from $C02F -- ADD 8..1 then SUBTRACT 0..7, three lines a value, the last line $C0EC/$C0ED with no math -- and the
+  //    open/close steps move it ($C94F -= 4 / += 4, CD/053C / CD/0577). Only the fixed colour is modelled (CGWSEL bit 1
+  //    clear, as every band record measured); CGADSUB bit 0 applies it to BG1, bit 5 to the backdrop, bit 7 subtracts,
+  //    bit 6 halves. MEASURED: GATO's p600 (colour 0) and the tank's c3000 (colour 6) give the cartridge's strip on every
+  //    pixel outside the BG3 glyph ink.
+  long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
+  const uint8_t* winTiles = (rom && romLen >= 0x3F9E10L + 8 * 0x280)
+                          ? rom + 0x3F9E10L + (long)(mem[0x2991] & 7) * 0x280 : NULL;   // C0/6E5C's source
+  uint8_t mathOp[CT_BHUD_H], mathFix[CT_BHUD_H][3];
+  {
+    int sy0 = CT_BHUD_Y0 + g_bhudStripDy, acc = 0, ind = 0, n = 0, rep = 0, a = 0xC948;
+    uint8_t op = 0, fix[3] = { 0, 0, 0 };
+    for (int line = 0; line < sy0 + CT_BHUD_H; line++) {
+      if (line == acc + n) {                                        // the next entry (or the table's end: registers hold)
+        int c = mem[a];
+        if (!c || a >= 0xC948 + 0x1E) { n = 0x7FFF; ind = -1; }
+        else { acc = line; n = (c & 0x7F) ? (c & 0x7F) : 0x80; rep = c & 0x80; ind = mem[a + 1] | (mem[a + 2] << 8); a += 3; }
+      }
+      if (ind >= 0 && (rep || line == acc)) {
+        int r = (ind + 4 * (rep ? line - acc : 0)) & 0xFFFF;
+        uint8_t cd = mem[(r + 2) & 0xFFFF];
+        op = mem[(r + 1) & 0xFFFF];
+        if (cd & 0x20) fix[0] = cd & 0x1F;
+        if (cd & 0x40) fix[1] = cd & 0x1F;
+        if (cd & 0x80) fix[2] = cd & 0x1F;
+      }
+      if (line >= sy0) { mathOp[line - sy0] = op; memcpy(mathFix[line - sy0], fix, 3); }
+    }
+  }
   for (int ry = 0; ry < CT_BHUD_H; ry++) {
     int y = CT_BHUD_Y0 + g_bhudStripDy + ry;
     for (int col = 0; col < 32; col++) {
-      const uint8_t* px8 = NULL;
       int a = CT_BSTRIP_FRAME_OFS + (ry >> 3) * 0x40 + col * 2;
       uint16_t w = (uint16_t)(vram[a] | (vram[a + 1] << 8));
-      for (int t = 0; t < CT_BHUD_CHROME_NT; t++)
-        if (ctBattleHudChromeWord[t] == w) { px8 = ctBattleHudChromePix[t][ry]; break; }
+      int t = w & 0x3FF, k = (t >= 0xF0 && t <= 0xFF) ? t - 0xF0 : (t >= 0x3FC) ? 16 + (t - 0x3FC) : -1;
+      int ty = (w & 0x8000) ? 7 - (ry & 7) : (ry & 7);
       for (int x = col * 8; x < col * 8 + 8; x++) {
-        int idx = (px8 && px8[x & 7] != 0xFF) ? px8[x & 7] : 0;   // a tile no frame row holds: black
-        const uint8_t* c = ctBattleHudBg1Pal[idx];
-        plot(fb, x, y, c[0], c[1], c[2]);
+        if (k < 0 || !winTiles) { plot(fb, x, y, 0, 0, 0); continue; }
+        int tx = (w & 0x4000) ? 7 - (x & 7) : (x & 7), b = 7 - tx;
+        const uint8_t* g = winTiles + k * 32 + ty * 2;
+        int p = ((g[0] >> b) & 1) | (((g[1] >> b) & 1) << 1) | (((g[16] >> b) & 1) << 2) | (((g[17] >> b) & 1) << 3);
+        int ci = p ? ((w >> 10) & 7) * 16 + p : 0;
+        int cw = mem[0x2200 + ci * 2] | (mem[0x2201 + ci * 2] << 8);
+        uint8_t op = mathOp[ry], rgb[3];
+        for (int c = 0; c < 3; c++) {
+          int c5 = (cw >> (5 * c)) & 0x1F;
+          if (op & (p ? 0x01 : 0x20)) {
+            c5 = (op & 0x80) ? c5 - mathFix[ry][c] : c5 + mathFix[ry][c];
+            if (op & 0x40) c5 >>= 1;
+            c5 = c5 < 0 ? 0 : c5 > 31 ? 31 : c5;
+          }
+          rgb[c] = (uint8_t)((c5 << 3) | (c5 >> 2));
+        }
+        plot(fb, x, y, rgb[0], rgb[1], rgb[2]);
       }
     }
   }

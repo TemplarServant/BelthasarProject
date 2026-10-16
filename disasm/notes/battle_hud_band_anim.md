@@ -192,6 +192,9 @@ idle — the port's form of the `CD/03DA` spin.
 - The **opening chrome's one-row ramp shift** (§4) needs the 17 differing rows as oracle bytes; the
   port draws the settled chrome through the band, so those 17 rows are 1/32 dark (and row 0 / row 47
   are 8/32 and 7/32) during the 13 opening frames. Geometry is exact; this is colour only.
+  **CLOSED 2026-10-15**: the strip's chrome is now drawn from the ROM's tiles and channel 5's records walked from WRAM
+  (battle_hud_render.md, "THE WINDOW COLOR"), so the shift is drawn; the cartridge's mid-open frame gato_t2 (band rows
+  180..187) is 2048/2048 px identical.
 - `CD/039E`'s own `LDA #0F / JMP CD/3E3B` 15-frame wait before the close is still not modelled
   (a pre-existing gap in the ~35-frame handoff deficit already recorded in `battle.c`).
 - The TOP strip position (`$2989` bit1 clear) is animated by the same rows-local machine; only the

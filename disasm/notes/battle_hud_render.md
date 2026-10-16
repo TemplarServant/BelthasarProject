@@ -271,6 +271,7 @@ uses committed `saves/battle_re/p600.raw*` for the command phase).
   `[23-s, 24+s]`. Ported 2026-09-04; graded by battle-hud-iris-live / battle-hud-iris-closes. The one
   piece still open is COLOUR, not geometry: during the open the COLDATA ramp is shifted one strip row
   (`$C94F -= 4` per step), so 17 of the 48 rows want a second chrome bake.
+  CLOSED 2026-10-15 (the last section: the chrome walks channel 5 from WRAM).
 - **Name palette rule (Q4):** seat0=pal2 / seat1=pal3 is baked from the only party captured (Crono+Marle).
   Whether the palette is per-character (signature colour), per-seat, or per-HP-status needs a capture with
   a different party order / a low-HP PC (the HP-status colouring is the likely mechanism — unverified).
@@ -745,3 +746,30 @@ and the picker up. `CT_BATTLE_RENDERWRAM` on that frame's WRAM: **0 differing px
 
 Pinned as `battle-hud-atb-partial` (4 mutations, 4 killed: the `>>3` scale, the partial cell, the
 READY palette, and the cell code base). The fill arithmetic is no longer derivation-only.
+
+## 2026-10-15 — THE WINDOW COLOR: the strip is the field window's tiles and palette, not a fixed bake
+
+The Q2 bake was GATO's fight in Window Color 0, and "field-INDEPENDENT" held only for the picture behind the strip. The
+strip's chrome follows the player's Window Color `$2991 & 7` (Dragon Tank review, disasm/notes/dragon_tank_bridge.md:
+colour 6 draws near-black windows on the cartridge, the port drew grey).
+
+* **No battle code loads window graphics.** The frame words (`$0B40`, Q2's correction) name tiles F0..FF and 3FC..3FF of
+  the BG1 char base $1000, palette 0. Those are the field window's: the location load's C0/6E5C uploads
+  FF/(9E10 + v * 0x280) to VRAM $1F00 / $4FC0, and C0/70E9 puts FF/B210 + v * 16 + 2 on CGRAM colours 1-15 of row 0
+  (field.c fieldWindowFromRom / fieldPaletteText). The battle's boot copies the base page onto the live page $2200
+  (CC/E6EC) after writing row 0's colours 8-15 only, so colours 1-7 stay the field's.
+* **MEASURED** (`--peek`, the rule's oracle): the tank's fight (loc 01C, `$2991` = 86) holds VRAM $1F00-$1FFF and
+  $4FC0-$4FFF = FF/9E10 + 6 * 0x280 byte for byte, and CGRAM 1-7 = FF/B210 + 6 * 16; its WRAM pages $2000 / $2200 the same.
+* **The gradient** is HDMA channel 5 ($C948, CGWSEL CGADSUB COLDATA SETINI). On the settled strip the band entry is a
+  repeat entry over D1/F83D's records from $C02F, one a line: CGADSUB 01 with COLDATA 8..1 (three lines a value), then 81
+  with 0..7, and the last line's record $C0EC/$C0ED = 00 / E0 (no math). So pixel = CGRAM[pal * 16 + p] +- COLDATA(line).
+* **The rule reproduces every capture**: the old colour-0 table (src/data/battle_hud_chrome.h) on all 7680 (tile, line,
+  x) samples with v = 0 and that ramp; and the cartridge's strip outside the BG3 glyph ink on GATO's p600 (colour 0) and
+  the tank's fight in colours 2, 4 and 6 (the last two made by re-running the ROM's load with `PEEK_POKE=2991=8v`).
+* **The port** (field.c battleHudRenderStrip): the frame tiles from FF/9E10 + ($2991 & 7) * 0x280, the colours from the
+  live page $2200 in the battle's WRAM, channel 5 walked from line 0 the way the HDMA does (a repeat entry transfers a
+  record a line, a plain one once). The band's open/close moves the ramp with $C94F (CD/053C / CD/0577), which the
+  per-line bake could not. The BG3 text palettes (CGRAM 8-15, the battle's own) stay baked. Pinned:
+  battle-hud-window-colour-vs-oracle (12288/12288 px at colours 2, 4, 6); colour 0 stays
+  battle-hud-strip-command-windows-vs-oracle's.
+* Not modelled: a band record with CGWSEL bit 1 (sub-screen addition) -- none measured.

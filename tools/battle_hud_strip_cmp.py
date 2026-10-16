@@ -3,6 +3,7 @@ r"""The port's battle HUD strip against the cartridge's, on the cartridge's own 
 
     python tools/battle_hud_strip_cmp.py <oracle_state> <frame> [--btnscript S] [--label L]
     python tools/battle_hud_strip_cmp.py --suite
+    python tools/battle_hud_strip_cmp.py --colours
 
 1. build/ct.exe --peek <state> --frames <frame> [--btnscript S]: the cartridge's picture and its 128 KB WRAM.
    (With --btnscript the peek runs the whole script and ignores --frames: give the script's length as <frame>.)
@@ -18,6 +19,16 @@ Prints:
 --suite runs SUITE below: the queue states that tell the ROM's law (C1/0785, C1/081E, C1/08A2) from the port's old
 pictures and $960A gates. A residual cell at cols 26..29 is a running ATB gauge -- the cartridge's picture is its last
 HUD rebuild, a few frames old (ct-hud-rebuild-lag-vs-wram). (disasm/notes/battle_hud_command_windows.md.)
+
+--colours runs COLOURS below: the strip in the player's Window Color ($2991 & 7). The fight draws the field window's tiles
+and colours, which the location load put in VRAM and CGRAM (C0/6E5C, C0/70E9; field.c battleHudRenderStrip), so each
+state is the Dragon Tank's fight (loc 01C) after a load in that colour. The fixtures are local (saves/ is not committed);
+remake them with the rule's oracle (CT_ORACLE_LOGICAL=1):
+    colour 6: saves/field_re/tank/tele01c.state ($2991 = 86) as it is;
+    colour v: PEEK_POKE=2991=8v ct.exe --teleport 28 44 9 2 --from saves/field_re/tank/tele01c.state --method jmp
+              --frames 60 --out <tele_cv.state> (the ROM's own load, in colour v);
+    then PEEK_SAVE=saves/battle_re/wincolour/tank_cv.state ct.exe --peek <that state> x.raw --frames 3000 --btnscript
+    <tools/dragon_tank_cmp.py's drive() cut to its first 3000 frames> -- the fight's enemy-name strip.
 """
 import os
 import struct
@@ -37,6 +48,7 @@ SUITE = [
     ('gato-marle-alone', 'saves/gato_inbattle.state', 824, '0:600,100:2,0:20,100:2,0:200'),  # the old "picker" bake
     ('bat9-frog-active', 'saves/battle_re/bat9_lake.state', 189, '0:21,80:2,0:6,80:2,0:12,80:2,0:140'),  # seats 0 + 2
 ]
+COLOURS = [('tank-colour%d' % v, 'saves/battle_re/wincolour/tank_c%d.state' % v, 2, None) for v in (2, 4, 6)]
 
 
 def compare(state, frame, script, label):
@@ -89,8 +101,8 @@ def compare(state, frame, script, label):
 
 def main():
     os.chdir(ROOT)
-    if len(sys.argv) > 1 and sys.argv[1] == '--suite':
-        for label, state, frame, script in SUITE:
+    if len(sys.argv) > 1 and sys.argv[1] in ('--suite', '--colours'):
+        for label, state, frame, script in (SUITE if sys.argv[1] == '--suite' else COLOURS):
             print('\n'.join(compare(state, frame, script, label)))
         return
     if len(sys.argv) < 3:

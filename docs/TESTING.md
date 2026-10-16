@@ -1847,6 +1847,15 @@ the boot's clear of a stale band mode (D1/F2AC `STZ $CA1E`), the band's open, an
 for Crono and for Crono + Marle -- the cartridge's `$0B80` at f440 and f515. Re-pin only with an oracle-verified reason;
 a change in the residual cells means the ATB gauge moved, not the windows.
 
+### battle-hud-window-colour-vs-oracle (`python tools/battle_hud_strip_cmp.py --colours`)
+
+The strip's windows in the player's Window Color (`$2991 & 7`). No battle code loads window graphics: the frame tiles
+F0..FF / 3FC..3FF and CGRAM row 0 are the field window's, as the location load left them (C0/6E5C, C0/70E9), and the
+bodies' gradient is HDMA channel 5's records (D1/F83D) -- disasm/notes/battle_hud_render.md, "THE WINDOW COLOR". The
+check is the --suite comparison on the Dragon Tank's fight (loc 01C) loaded in colours 2, 4 and 6
+(saves/battle_re/wincolour/, local; the tool's docstring has the recipe). Colour 0 is the --suite check's. Re-pin never:
+the strip is the cartridge's on all 12288 px of each state.
+
 ### sweep-bganim-machines / field-bg-seed-{tent-keeper,party3,loc13B-colour-cycle}-vs-oracle (the field's background)
 
 The field BG as the ROM draws it (disasm/notes/field_bg_anim.md): the PPU's colour math in 5 bits, the animated tiles
