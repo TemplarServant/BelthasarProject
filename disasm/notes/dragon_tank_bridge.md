@@ -46,8 +46,33 @@ fieldPadNmi's PHASE note), which this lines up; the fight's pad (g_padAutoRead) 
    dwell's A test (CD/01F2 `LDA $F8 / BPL`) read the host keyboard only: it reads `$CC99` now, the copy CD/0348 makes of
    `$F8` in the same NMI. (GATO's Crono-solo ack moved f2981 -> f2672, the cartridge's f2673.)
 
+6. **The railing vanished after the fight.** At the return obj0 fn1 runs `E4 07 0C 0B 0D 07 09 41`, emptying BG1 cells
+   7-11 x 9-10 in WRAM; op 0xE4 (C0/3D97) uploads nothing and the cells never leave the streamed window, so the cartridge
+   keeps the railing in front of the wreck's lower piece (35 chips held in VRAM, c7364-c7600). The port redrew the map at
+   once. Now the picture follows the ROM's tilemap uploads (disasm/notes/field_tile_copy_e4.md): railing box 8399/8400 ->
+   identical at c7400, the whole frame identical at c7600 (old: 56466/57344).
+
 After these the fight is the cartridge's hit for hit: the same frames and the same damage to the end, Crono's 0E
 attacks and the closing critical (01) included.
+
+## The "lag after the second trigger" was the picture alignment (2026-10-15)
+
+Reported open: 2-3 frames of lag after obj1 fn1's CALL to obj5 fn4 (Lucca's `$0F0B = 73` at +4 against +1, the tank's
+first step +70 against +68) and Lucca 4 px nearer Crono at the stop. Measured per frame on the tool's drive -- the
+cartridge's `--monitor` against the port's CT_FIELD_MEMMON, no shift -- `$1800`/`$1880` (every object's X/Y), `$0F00`
+(active + frame), `$1180` (script pointers), `$1D00-$1D9F` (the camera, the layer counters) and `$0400` (the play clock)
+are IDENTICAL f1100-f1700: the trigger (obj1 at 7A03) f1209, `$0F0B = 73` f1210 and the tank's first step f1276 on both
+sides, every step of the walk and the stop the same. (Only `$0F01,X` of an inactive object differs: the cartridge's FF,
+the port's 00.) The call, the E8 92 post and the follower ring have no latency to fix.
+
+What differed was the frame the tool compared. The port's picture of frame P is the cartridge's `--peek` P+2 -- the
+project's one alignment (memory ct-frame-alignment-p2; field_window_wipe.md: the NMI names the HDMA set the loop before
+built, set B's FD/C6F7 copying `$1D87/$1D89` to `$7F:150C` on the even frames, set A's FD/C5A7 to `$7F:1508` on the odd)
+-- and is 0 px different from it in the tank box on f150-163 (the camera scrolling), f1196-1212 (the walk before the
+trigger) and f1432-1449 (the shake, where the same-frame picture is a 1-px camera phase off). tools/dragon_tank_cmp.py
+compared c1440 with p1440; at P+2 the arrival box is 16384/16384. In the fight the pad one frame behind makes it P+1
+(the hurt flash's pose changes on port 2156/2159, cartridge 2157/2160); its residual there is Crono's sprite frame and
+the HUD's top rows.
 
 ## Open, measured and not fixed
 
@@ -55,14 +80,6 @@ attacks and the closing critical (01) included.
   colour 0. The ROM loads the window palette only in the field (C0/70E9, `$2991 & 7` -> FF:B210) and the menu (C2/ED15);
   the fight draws with the colours the field left. This save has colour 6: the cartridge's window bodies are near-black
   ((41,41,66) -> (0,0,24) -> (0,0,0) down the box), the port's grey ((74,82,90) -> (41,49,57)).
-* **Op E4 redraws the picture at once; the ROM does not.** C0/3D97 is `JSR C0/AF4E` on the WRAM map and nothing else -- no
-  tilemap upload. At the battle's return obj0 fn1 runs `E4 07 0C 0B 0D 07 09 41`, which empties BG1 cols 7-11 rows 9-10
-  (the railing) in WRAM on both sides; the cartridge keeps showing the railing (VRAM untouched) in front of the wreck's
-  lower piece, the port removes it (CtFieldSceneCopyTiles) and the piece shows. A fix needs the picture to follow the
-  ROM's uploads (the load, op E5's style branch, the camera streamer), not the WRAM copy -- E4's curtains and levers ride
-  on it too.
-* **2-3 frames of lag after the second trigger** (Lucca's `$0F0B = 73` at +4 against +1, the tank's first step +70
-  against +68) and Lucca 4 px nearer Crono at the stop (the follower ring: 255 against 259).
 * **The shakes' residue.** F4 01's auto-scroll (C0/91F8) takes its direction from the play clock `$0400`; where the shake
   stops, the camera keeps a 0/1-pixel phase. With the port's field input one frame early, the clock phase at the shake
   differs and the residue can too: the first run left `$1D96 = 1`, and the D8's alignment (C0/885A) then spent 12 more

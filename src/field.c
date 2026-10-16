@@ -5074,6 +5074,64 @@ static int fieldTileAnimSeedShown(void* sd, const uint8_t* w) {
   }
   return c.dirty;
 }
+// ---- THE PICTURE FOLLOWS THE ROM's TILEMAP UPLOADS, NOT THE WRAM MAP (disasm/notes/field_tile_copy_e4.md) ----
+// Op 0xE4 (C0/3D97) copies a rect in the WRAM map ($7E:3000..) and schedules no upload: the VRAM keeps what it had until
+// the load's fill (C0/0A50), an op-0xE5 style rebuild (C0/179A), the camera streamer's edges or a door / chest handler
+// rewrites it. The streamer (C0/93E1 -> C0/979B-9918 -> the builders C0/8243-8442, the NMI's C0/EB91 DMAs) builds each
+// chip line that ENTERS the window -- BG1 chip columns $1D0A..$1D0C (= $1D0A + 32) and rows $1D0E..$1D10 (= $1D0E + 28);
+// a column spans rows $1D0E-1..+29, a row columns $1D0A-1..+34 -- from the WRAM of that frame's camera tick, before the
+// VM pass. BG2 and BG3 built from the camera use BG1's window (BG2's half-camera mode, `$0BC9` bit 7, its own $1D12-
+// $1D18); a layer built from the map (`$1D35` bit 1 / 2) is never streamed (C0/87F1, 8803 / 8814). MEASURED, the rule's
+// cartridge, saves/field_re/tank/tele01c.state (tools/dragon_tank_cmp.py's drive): after the fight's fill every one of
+// the 957 window chips equals the WRAM map's metatile word ($7E:B000 + id * 8); obj0 fn1's `E4 07 0C 0B 0D 07 09 41`
+// empties BG1 cells 7-11 x 9-10 in WRAM and 35 chips keep the railing in VRAM ($6000 ring, origin $1D99/$1D9A) from that
+// frame to c7600, through the camera's eight-chip pan left. The battle leaves the three tilemaps in VRAM as they were.
+// THE LAYER'S STREAMED WINDOW (chips, inclusive) from the field page `pg` (the battle's saved copy during a fight), and its
+// map's chip masks ($1D1E.. are metatile masks: C0/7612 `LSR / AND $1E`); 0 = built from the map, nothing streams it.
+static int fieldPicWindow(const uint8_t* pg, int L, int win[4], int* cmx, int* cmy) {
+  *cmx = (pg[0x1D1E + L * 2] << 1) | 1; *cmy = (pg[0x1D1F + L * 2] << 1) | 1;
+  if (L && (pg[0x1D35] & (L == 1 ? 0x02 : 0x04))) return 0;
+  int b = (L == 1 && (pg[0x0BC9] & 0x80)) ? 0x1D12 : 0x1D0A;          // C0/8385 / 8405 / 8285 / 8305: $12-$18
+  win[0] = pg[b]; win[1] = pg[b + 4]; win[2] = pg[b + 2]; win[3] = pg[b + 6];
+  return 1;
+}
+// This frame's edges: every held chip that left the window comes back from the WRAM map (the line that brings it in is
+// built from it). Before the frame's copies: the camera tick C0/881E runs before the VM pass C0/00BF.
+static int fieldPicStream(void* sd, const uint8_t* pg) {
+  int n = 0;
+  for (int L = 0; L < 3; L++) { int w[4], cx, cy; if (fieldPicWindow(pg, L, w, &cx, &cy)) n += CtFieldScenePicRelease(sd, L, w, cx, cy); }
+  return n;
+}
+// Drain the VM's scripted tile copies (0xE4 / 0xE5) into the layers and the collision planes. `hold` = 0 when an upload of
+// the whole map follows (the load's fill): the chips the copy reached show the WRAM at once. Returns 1 when the bake changes.
+static int fieldTileCopyDrain(Field* f, const uint8_t* pg, int frameNo, int hold) {
+  int tc[7], dirty = 0;
+  const uint8_t* s7 = CtSceneMem7E(f->vm);
+  while (CtScenePollTileCopy(f->vm, tc)) {          // (op 0xE5's halves come apart: the planes at C0/1790's
+    int m = tc[6] & 0xFF;                           //  AF4E, the picture at its style branch's upload)
+    int x1 = tc[4] + tc[2] - tc[0], y1 = tc[5] + tc[3] - tc[1];
+    if (getenv("CT_XFERTRACE"))                     // (the VM's `xfer:` line is C0/1790's copy in WRAM)
+      printf("tilecopy: f%d %02X,%02X-%02X,%02X -> %02X,%02X mask %02X%s\n", frameNo, tc[0], tc[1], tc[2], tc[3],
+             tc[4], tc[5], m, (tc[6] & CT_TC_RENDER) ? " picture" : (tc[6] & CT_TC_COLL) ? " planes" : hold ? "" : " filled");
+    if (tc[6] & CT_TC_RENDER) {                     // the style branch's upload: C0/75E9 / 78EC / 7CB5 rebuild the layers'
+      for (int L = 0; L < 3; L++)                   //   whole windows from the WRAM map
+        if ((m & (1 << L)) && CtFieldScenePicRelease(f->sd, L, NULL, 0, 0)) dirty = 1;
+      if (CtFieldSceneMapFromWramRect(f->sd, s7, 0, 0, 63, 63, m & 7)) dirty = 1;
+    } else if (!(tc[6] & CT_TC_COLL)) {             // op 0xE4: the WRAM map only; the chips the VRAM holds keep theirs
+      if (hold)
+        for (int L = 0; L < 3; L++) {
+          if (!(m & (1 << L))) continue;
+          int w[4], cx, cy, win = fieldPicWindow(pg, L, w, &cx, &cy);
+          CtFieldScenePicHold(f->sd, L, tc[4], tc[5], x1, y1, win ? w : NULL, cx, cy);
+        }
+      if (CtFieldSceneMapFromWramRect(f->sd, s7, tc[4], tc[5], x1, y1, m & 7)) dirty = 1;
+      if (m & 0x08) { CtFieldSceneCopyTiles(f->sd, tc[0], tc[1], tc[2], tc[3], tc[4], tc[5], 0x08); dirty = 1; }   // $30C0's prio
+    }
+    if (!(tc[6] & CT_TC_RENDER) && (m & 0x38))      // the planes C0/AF4E moved in WRAM, re-read (fieldCollFromWramRect)
+      fieldCollFromWramRect(&f->C, s7, tc[4], tc[5], x1, y1);
+  }
+  return dirty;
+}
 // A STATE'S MAP IS ITS WRAM's. A seed or a restored F5 snapshot carries the location's map as the ROM left it at
 // $7E:3000 (an open door is a bumped or copied cell there, C0/0D4C / C0/AF4E) and its prop planes ($30C0 / $7000 /
 // $7040), while the host's picture (f->sd's layers, the bake) and collision (f->C) still hold the location's LOAD. Read
@@ -5082,6 +5140,7 @@ static int fieldTileAnimSeedShown(void* sd, const uint8_t* w) {
 // and the restored snapshot drew the wall.
 static void fieldMapFromWram(Field* f, const uint8_t* sw, const char* tag) {
   if (!f->sd || !sw) return;
+  for (int L = 0; L < 3; L++) CtFieldScenePicRelease(f->sd, L, NULL, 0, 0);   // (the picture is the WRAM's again)
   int md = CtFieldSceneMapFromWram(f->sd, sw), td = fieldTileAnimSeedShown(f->sd, sw);
   memcpy(g_fieldCgram, sw + 0x2200, sizeof g_fieldCgram);   // (a seed's CGRAM is not in the image: its page)
   int cd = CtFieldSceneSetCgram(f->sd, g_fieldCgram);
@@ -5258,6 +5317,11 @@ static void fieldEntryTilemapFill(Field* f, int scene) {
   if (!g_fieldVramFillPending || !f->sd || !f->vm) return;
   { const uint8_t* s7 = CtSceneMem7E(f->vm);
     uint8_t* w7 = (uint8_t*)s7;
+    // The tilemaps are built from the WRAM map as it stands, so the copies the load's obj0 slot 1 made (C0/56C8, C0/0206)
+    // show at once and nothing the VRAM held before is held any more.
+    fieldTileCopyDrain(f, s7, -1, 0);
+    for (int L = 0; L < 3; L++) CtFieldScenePicRelease(f->sd, L, NULL, 0, 0);
+    CtFieldSceneMapFromWram(f->sd, s7);
     // C0/0A73-0A93 (D = $1D00): the tilemaps' VRAM words and the BGnSC size bytes the HDMA records OR in (FD/C129-C147).
     w7[0x1D7C] = 0x00; w7[0x1D7D] = 0x60;                  // 0A73 LDX #6000 / STX $1D7C   BG1
     w7[0x1D7E] = 0x00; w7[0x1D7F] = 0x68;                  // 0A79 LDX #6800 / STX $1D7E   BG2
@@ -16763,6 +16827,8 @@ int main(int argc, char** argv) {
         // WRAM opened it and the screen kept it shut (the user, 2026-10-10, translated from Portuguese: 'walking up, the door is not
         // playing its opening animation'). A --loadstate rebuilds the copy from the WRAM, which hid it.
         int opened = CtWramDoorOpen(fieldWram(), di);                    // 0D4C LDX $5B
+        if (opened && CtFieldScenePicReleaseRect(f.sd, 0, (di & 0xFF) - 1, ((di >> 8) & 0xFF) - 2, (di & 0xFF) + 1,
+                                                 (di >> 8) & 0xFF)) dirty = 1;   // (the handler writes its block to VRAM)
         if (opened && CtFieldSceneMapFromWramRect(f.sd, CtSceneMem7E(f.vm), (di & 0xFF) - 1, ((di >> 8) & 0xFF) - 2,
                                                   (di & 0xFF) + 1, (di >> 8) & 0xFF, 1)) dirty = 1;
         // ⭐ THE DOOR SOUND, and it belongs to the HANDLERS, not to the request. `JSR C0/1B90` sits
@@ -16783,7 +16849,10 @@ int main(int argc, char** argv) {
         fieldSfxPost(CtSceneMem7E(f.vm), 0x01FB, "chest");
         const uint8_t* cw7 = CtSceneMem7E(f.vm);
         int ci = cw7 ? cw7[0x015D] | (cw7[0x015E] << 8) : 0;
-        if (CtFieldSceneChestOpen(f.sd, ci & 0xFF, (ci >> 8) & 0xFF)) dirty = 1;   // 16EE LDX $5D
+        if (CtFieldSceneChestOpen(f.sd, ci & 0xFF, (ci >> 8) & 0xFF)) {          // 16EE LDX $5D
+          CtFieldScenePicReleaseRect(f.sd, 0, ci & 0xFF, (ci >> 8) & 0xFF, ci & 0xFF, (ci >> 8) & 0xFF);   // 1705 (VRAM too)
+          dirty = 1;
+        }
         if (getenv("CT_CHESTDBG")) fprintf(stderr, "chest: tile(%d,%d) bumped=%d\n", ci & 0xFF, (ci >> 8) & 0xFF, dirty);
       }
       c0d3eDirty = dirty;
@@ -18043,19 +18112,11 @@ int main(int argc, char** argv) {
       fprintf(stderr, "\n");
     }
     if (f.vm && f.sd) {                              // scripted map tile copies (0xE4/0xE5)
-      int tc[7], dirty = c0d3eDirty;
-      while (CtScenePollTileCopy(f.vm, tc)) {        // (op 0xE5's halves come apart: the planes at C0/1790's
-        int m = tc[6] & 0xFF;                          //  AF4E, the picture at its style branch's upload)
-        if (getenv("CT_XFERTRACE"))                    // (the VM's `xfer:` line is C0/1790's copy in WRAM)
-          printf("tilecopy: f%d %02X,%02X-%02X,%02X -> %02X,%02X mask %02X%s\n", frameNo, tc[0], tc[1], tc[2], tc[3],
-                 tc[4], tc[5], m, (tc[6] & CT_TC_RENDER) ? " picture" : (tc[6] & CT_TC_COLL) ? " planes" : "");
-        if (tc[6] & CT_TC_RENDER) {                    // the style branch's upload: the destination rect, re-read
-          if (CtFieldSceneMapFromWramRect(f.sd, CtSceneMem7E(f.vm), tc[4], tc[5], tc[4] + tc[2] - tc[0],   //   from
-                                          tc[5] + tc[3] - tc[1], m & 7)) dirty = 1;                        //   WRAM
-        } else if (!(tc[6] & CT_TC_COLL)) { CtFieldSceneCopyTiles(f.sd, tc[0], tc[1], tc[2], tc[3], tc[4], tc[5], m); dirty = 1; }
-        if (!(tc[6] & CT_TC_RENDER) && (m & 0x38))     // the planes C0/AF4E moved in WRAM, re-read (fieldCollFromWramRect)
-          fieldCollFromWramRect(&f.C, CtSceneMem7E(f.vm), tc[4], tc[5], tc[4] + tc[2] - tc[0], tc[5] + tc[3] - tc[1]);
-      }
+      int dirty = c0d3eDirty;
+      const uint8_t* pg = CtSceneMem7E(f.vm);        // the field page: under a fight, the copy C0/0918 left at $7F:2000
+      if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
+      if (fieldPicStream(f.sd, pg)) dirty = 1;       // the camera tick's edges, then the VM pass's copies
+      if (fieldTileCopyDrain(&f, pg, frameNo, 1)) dirty = 1;
       if (dirty) {
         int nw = 0, nh = 0; uint8_t* nprio = NULL;
         uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);

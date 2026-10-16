@@ -2408,9 +2408,12 @@ The Dragon Tank's bridge (loc 01C) from its arrival to its reward lines, port ag
 drive (seed saves/field_re/tank/tele01c.state / .lakewram, gitignored -- SKIP without them; how it was made is the tool's
 docstring). Four lines: the tank box at the arrival (c1440) and at the hurt flash (c2160), Crono's attack anims ($9877
 whenever he acts: the far 0E of C1/4A71's walk test against the head and the grinder) and the reward lines (XP and Gold,
-no TP line before Spekkio). The two box counts are pinned residuals -- the port's tank and Lucca run 2-3 frames behind
-after the second trigger and Lucca stops 4 px nearer Crono -- so a re-pin is legitimate only when that lag is fixed
-(the counts then rise), never to absorb a fall. The anim and line signatures must stay as pinned.
+no TP line before Spekkio). The boxes are graded at the project's alignment (memory ct-frame-alignment-p2): the
+arrival's port frame 1438 against the cartridge's 1440 (P+2, clean: 16384/16384 -- the field's WRAM is the cartridge's
+frame for frame, so the "2-3 frames of lag" once pinned here was the same-frame picture compare), the flash's 2159 against
+2160 (P+1: the fight's pad one frame behind). The flash count is a pinned residual (Crono's sprite frame, the HUD's top
+rows), so its re-pin is legitimate only when it rises, never to absorb a fall. The anim and line signatures must stay as
+pinned.
 
 ### battle-caster-radius-tech-victims-at-dispatch-vs-rule-cartridge / battle-caster-radius-empty-pass-plays-7b-then-drops-vs-rule-cartridge (`python tools/caster_radius_dispatch_cmp.py --skip|--only "walked out"`)
 

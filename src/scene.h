@@ -61,6 +61,11 @@ int   CtFieldSceneSetCgram(void* h, const uint8_t* page);                       
 int   CtFieldSceneSetScreen(void* h, int on, int cgwsel, int cgadsub, int tm, int ts);   // a battle's colour math + TM/TS
 int   CtFieldSceneMapFromWram(void* h, const uint8_t* s7e);                        // the maps from $7E:3000.. (a seed's)
 int   CtFieldSceneMapFromWramRect(void* h, const uint8_t* s7e, int x0, int y0, int x1, int y1, int layers);   // a rect of them
+// The VRAM's own copy (scene.c CtFieldScenePicHold): chips an op-0xE4 copy reached while the tilemap held them keep their
+// metatile until an upload (the streamer's edge, a style rebuild, the load's fill, a door/chest handler) releases them.
+int   CtFieldScenePicHold(void* h, int layer, int x0, int y0, int x1, int y1, const int* win, int cmx, int cmy);
+int   CtFieldScenePicRelease(void* h, int layer, const int* win, int cmx, int cmy);   // outside win, or all (win NULL)
+int   CtFieldScenePicReleaseRect(void* h, int layer, int x0, int y0, int x1, int y1);
 int   CtFieldSceneDoorOpen(void* h, int tx, int ty);   // ROM C0/0D4C: bump a door's L1 metatiles
 int   CtFieldSceneChestOpen(void* h, int tx, int ty); // ROM C0/16DC: bump a TREASURE CHEST's L1 metatile
 void  CtFieldSceneCopyTiles(void* h, int sl, int st, int el, int eb, int dl, int dt, int flags);

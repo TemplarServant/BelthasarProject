@@ -233,7 +233,7 @@ static int build_pal_anim_desc(const uint8_t* rom, int index, uint8_t* out) {
 static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* tiles, int lw, int lh,
                        const Meta* metas, int nmeta, const uint8_t* chips, const uint8_t* present,
                        int nchips, uint8_t pal[128][3], int prio, uint8_t bit, uint8_t* priomask,
-                       const uint8_t* tprio, int tpw, int tph, int sox, int soy, int mapRing) {
+                       const uint8_t* tprio, int tpw, int tph, int sox, int soy, int mapRing, const uint16_t* held) {
   if (!tiles || !metas || !chips) return;
   // SNES BG layers wrap: a layer smaller than the canvas tiles to fill it
   // (chip_x % width, chip_y % height in CTViewer). Iterate the whole canvas in
@@ -257,21 +257,24 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
   for (int cy = 0; cy <= chm; cy++)
     for (int cx = 0; cx <= cwm; cx++) {
       if (cy * 16 - fy0 >= H || cx * 16 - fx0 >= W) continue;
-      int ti;
-      if (!mapRing) ti = tiles[((cy + my0) % lh) * lw + ((cx + mx0) % lw)];
+      int mr, mc;                                        // the map cell this metatile shows
+      if (!mapRing) { mr = (cy + my0) % lh; mc = (cx + mx0) % lw; }
       else {
         int rx = (cx + mx0) % 32, ry = (cy + my0) % 16;
-        if (lw != 16)      ti = tiles[ry * lw + rx];                                     // C0/7991 / 7D28
-        else if (lh != 16) ti = tiles[(ry + (rx >= 16 ? 16 : 0)) * lw + rx % 16];      // C0/79AE / 7D45
-        else               ti = tiles[ry * lw + rx % 16];                                // C0/7976 / 7D0D
+        if (lw != 16)      { mr = ry; mc = rx; }                                         // C0/7991 / 7D28
+        else if (lh != 16) { mr = ry + (rx >= 16 ? 16 : 0); mc = rx % 16; }              // C0/79AE / 7D45
+        else               { mr = ry; mc = rx % 16; }                                    // C0/7976 / 7D0D
       }
-      if (ti >= nmeta) continue;
-      const Meta* m = &metas[ti];
+      int ti = tiles[mr * lw + mc];
       (void)tprio; (void)tpw; (void)tph;
       // (A "high-bank metas = prio" rule was tried and REFUTED against the live VRAM
       // tilemap: the real map prios at the bed are exactly the per-corner P bits.)
       for (int k = 0; k < 4; k++) {
-        const Corner* c = &m->c[k];
+        // A chip the VRAM still holds from an earlier upload (CtFieldScenePicHold) shows that metatile's corner.
+        int tk = ti;
+        if (held) { uint16_t hv = held[(mr * 2 + k / 2) * (lw * 2) + mc * 2 + (k & 1)]; if (hv != 0xFFFF) tk = hv; }
+        if (tk >= nmeta) continue;
+        const Corner* c = &metas[tk].c[k];
         if (c->chip >= nchips || !present[c->chip]) continue;
         if ((int)c->prio != (prio == 1)) continue;
         const uint8_t* tile = chips + (size_t)c->chip * 64;
@@ -298,7 +301,7 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
 
 typedef struct { const uint16_t* tiles; int lw, lh; const Meta* metas; int nmeta;
                  const uint8_t* chips; const uint8_t* present; int nchips;
-                 const uint8_t* tprio; int tpw, tph; int sox, soy; int mapRing; } LInfo;
+                 const uint8_t* tprio; int tpw, tph; int sox, soy; int mapRing; const uint16_t* held; } LInfo;
 
 static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint8_t pal[128][3],
                       LInfo* l1, LInfo* l2, LInfo* l3, uint8_t* priomask) {
@@ -310,7 +313,7 @@ static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint
     LInfo* L = order_l[i];
     draw_layer(px, cov, W, H, L->tiles, L->lw, L->lh, L->metas, L->nmeta,
                L->chips, L->present, L->nchips, pal, order_prio[i], (uint8_t)order_bit[i], priomask,
-               L->tprio, L->tpw, L->tph, L->sox, L->soy, L->mapRing);
+               L->tprio, L->tpw, L->tph, L->sox, L->soy, L->mapRing, L->held);
   }
 }
 
@@ -352,12 +355,16 @@ typedef struct {
   int bakedO[4];                           // the layer offsets the last bake drew at (l2ox l2oy l3ox l3oy then)
   uint8_t* bakeMotCov;                     // ...and the layer the pixel's picture comes from: the main screen's, else the
                                            //   sub screen's where only it shows (motion.h: what the pixel moves with)
+  // THE CHIPS THE VRAM STILL HOLDS FROM AN EARLIER UPLOAD (CtFieldScenePicHold): per layer, (2 w) x (2 h) chips, the
+  // metatile id whose corner that chip shows, 0xFFFF = the layer's own cell (l1t..). NULL until a chip is held.
+  uint16_t* held[3]; int heldN[3];
 } SceneData;
 
 static void CtFreeSceneData(SceneData* sd) {
   free(sd->chips12); free(sd->pres12); free(sd->meta12);
   free(sd->chips3); free(sd->pres3); free(sd->meta3);
   free(sd->l1t); free(sd->l2t); free(sd->l3t); free(sd->tprio);
+  for (int i = 0; i < 3; i++) { free(sd->held[i]); sd->held[i] = NULL; sd->heldN[i] = 0; }
   free(sd->animChips); free(sd->chipAnimDesc); free(sd->palAnimDesc); free(sd->prevChips); free(sd->bakeCov); free(sd->bakeMotCov); free(sd->bakeMain);
   for (int i = 0; i < 6; i++) { free(sd->layRgb[i]); free(sd->layCov[i]); sd->layRgb[i] = sd->layCov[i] = NULL; }
 }
@@ -509,9 +516,9 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   uint8_t* priomask = outPrio ? calloc((size_t)W * H, 1) : NULL;
   uint8_t palc[128][3]; memcpy(palc, sd->pal, sizeof(palc));
 
-  LInfo li1 = { sd->l1t, sd->w1, sd->h1, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, 0, 0, 0 };
-  LInfo li2 = { sd->l2t, sd->w2, sd->h2, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, sd->l2ox, sd->l2oy, (sd->mapBuilt & 0x02) != 0 };
-  LInfo li3 = { sd->l3t, sd->w3, sd->h3, sd->meta3, 256, sd->chips3, sd->pres3, sd->nchips3, NULL, 1, 1, sd->l3ox, sd->l3oy, (sd->mapBuilt & 0x04) != 0 };
+  LInfo li1 = { sd->l1t, sd->w1, sd->h1, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, 0, 0, 0, sd->held[0] };
+  LInfo li2 = { sd->l2t, sd->w2, sd->h2, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, sd->l2ox, sd->l2oy, (sd->mapBuilt & 0x02) != 0, sd->held[1] };
+  LInfo li3 = { sd->l3t, sd->w3, sd->h3, sd->meta3, 256, sd->chips3, sd->pres3, sd->nchips3, NULL, 1, 1, sd->l3ox, sd->l3oy, (sd->mapBuilt & 0x04) != 0, sd->held[2] };
   // ⭐ THE PRIORITY MASK IS A **LAYER-ORDER** FACT, NOT A MAIN-SCREEN ONE. main_t/sub_t are the
   // TM/TS designations, i.e. which layers feed COLOUR MATH; the SNES priority ladder (OBJ prio-3 >
   // BG1.1 > BG2.1 > OBJ prio-2 > BG1.0 > BG2.0 ...) is independent of them, and this compose already
@@ -816,9 +823,9 @@ int CtFieldSceneLayers(void* h, CtSceneLayers* o) {
   if (sd->layDirty || !sd->layRgb[0]) {
     uint8_t palc[128][3]; memcpy(palc, sd->pal, sizeof palc);
     LInfo li[3] = {
-      { sd->l1t, sd->w1, sd->h1, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, 0, 0, 0 },
-      { sd->l2t, sd->w2, sd->h2, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, 0, 0, (sd->mapBuilt & 0x02) != 0 },
-      { sd->l3t, sd->w3, sd->h3, sd->meta3, 256, sd->chips3, sd->pres3, sd->nchips3, NULL, 1, 1, 0, 0, (sd->mapBuilt & 0x04) != 0 } };
+      { sd->l1t, sd->w1, sd->h1, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, 0, 0, 0, sd->held[0] },
+      { sd->l2t, sd->w2, sd->h2, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, 0, 0, (sd->mapBuilt & 0x02) != 0, sd->held[1] },
+      { sd->l3t, sd->w3, sd->h3, sd->meta3, 256, sd->chips3, sd->pres3, sd->nchips3, NULL, 1, 1, 0, 0, (sd->mapBuilt & 0x04) != 0, sd->held[2] } };
     static const int ordLay[6] = { 2, 1, 0, 1, 0, 2 }, ordPri[6] = { 0, 0, 0, 1, 1, 1 };
     static const uint8_t ordBit[6] = { BL3, BL2, BL1, BL2, BL1, BL3 };
     for (int i = 0; i < 6; i++) {
@@ -835,7 +842,7 @@ int CtFieldSceneLayers(void* h, CtSceneLayers* o) {
       memset(sd->layRgb[i], 0, (size_t)LW * LH * 3); memset(sd->layCov[i], 0, (size_t)LW * LH);
       if (ordLay[i] == 2 && !sd->has_l3) continue;
       draw_layer(sd->layRgb[i], sd->layCov[i], LW, LH, L->tiles, L->lw, L->lh, L->metas, L->nmeta, L->chips, L->present,
-                 L->nchips, palc, ordPri[i], ordBit[i], NULL, L->tprio, L->tpw, L->tph, 0, 0, L->mapRing);
+                 L->nchips, palc, ordPri[i], ordBit[i], NULL, L->tprio, L->tpw, L->tph, 0, 0, L->mapRing, L->held);
     }
     sd->layDirty = 0;
   }
@@ -959,6 +966,78 @@ int CtFieldSceneMapFromWramRect(void* h, const uint8_t* s7e, int x0, int y0, int
       }
   }
   return changed;
+}
+// THE PICTURE IS THE VRAM'S, NOT THE WRAM MAP'S. The field's tilemaps are built from the map in WRAM only at the ROM's
+// uploads: the load's fill (C0/0A50), op 0xE5's style branch (C0/179A: the layer's whole window, C0/75E9 / 78EC / 7CB5),
+// the camera streamer's edges (C0/93E1 -> C0/979B..9918 -> the twelve builders C0/8243-8442, uploaded by the NMI's
+// C0/EB91 -> C0/8445..), and the door / chest handlers' own writes. Op 0xE4 (C0/3D97) is `JSR C0/AF4E` on the WRAM map
+// and nothing else, so a chip the VRAM holds keeps its old metatile until one of those rewrites it. The layers here
+// (l1t..) follow the WRAM map; a HELD chip shows the metatile it had when the copy came. disasm/notes/field_tile_copy_e4.md.
+static int picInWin(int c, int lo, int hi, int cm) {   // chip c inside [lo..hi] on a map that wraps at cm + 1 chips
+  int span = (hi - lo) & 0xFF;
+  return span >= cm || ((c - lo) & cm) <= span;
+}
+static uint16_t* picHeld(SceneData* sd, int L, int* w, int* hh) {
+  *w = L == 0 ? sd->w1 : L == 1 ? sd->w2 : sd->w3; *hh = L == 0 ? sd->h1 : L == 1 ? sd->h2 : sd->h3;
+  return L == 0 ? sd->l1t : L == 1 ? sd->l2t : sd->l3t;
+}
+// Before a copy lands on the layers: the chips of the metatile rect (x0..x1, y0..y1) that the VRAM holds -- inside the
+// chip window win[0..3] (left, top, right, bottom, inclusive; the map wraps at cmx + 1 / cmy + 1 chips), or every chip
+// when win is NULL (a layer built from the map, which no streamer rewrites) -- keep the metatile they show now.
+int CtFieldScenePicHold(void* h, int layer, int x0, int y0, int x1, int y1, const int* win, int cmx, int cmy) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || layer < 0 || layer > 2) return 0;
+  int w, hh; const uint16_t* t = picHeld(sd, layer, &w, &hh);
+  if (!t || w <= 0 || hh <= 0) return 0;
+  int n = 0;
+  for (int y = y0 < 0 ? 0 : y0; y <= y1 && y < hh; y++)
+    for (int x = x0 < 0 ? 0 : x0; x <= x1 && x < w; x++)
+      for (int k = 0; k < 4; k++) {
+        int cx = x * 2 + (k & 1), cy = y * 2 + k / 2;
+        if (win && !(picInWin(cx, win[0], win[2], cmx) && picInWin(cy, win[1], win[3], cmy))) continue;
+        if (!sd->held[layer]) {
+          sd->held[layer] = (uint16_t*)malloc((size_t)w * hh * 4 * sizeof(uint16_t));
+          if (!sd->held[layer]) return n;
+          memset(sd->held[layer], 0xFF, (size_t)w * hh * 4 * sizeof(uint16_t));
+        }
+        uint16_t* p = &sd->held[layer][cy * (w * 2) + cx];
+        if (*p == 0xFFFF) { *p = t[y * w + x]; sd->heldN[layer]++; n++; }
+      }
+  return n;
+}
+// An upload rewrote chips from the WRAM map: release the held ones OUTSIDE the chip window (the streamer builds every
+// chip that enters it, C0/8243-8442; what lies outside is not on the screen), or all of them when win is NULL (a rebuild).
+// Returns the number released (the picture changed).
+int CtFieldScenePicRelease(void* h, int layer, const int* win, int cmx, int cmy) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || layer < 0 || layer > 2 || !sd->held[layer] || !sd->heldN[layer]) return 0;
+  int w, hh; picHeld(sd, layer, &w, &hh);
+  int n = 0;
+  for (int cy = 0; cy < hh * 2; cy++)
+    for (int cx = 0; cx < w * 2; cx++) {
+      uint16_t* p = &sd->held[layer][cy * (w * 2) + cx];
+      if (*p == 0xFFFF) continue;
+      if (win && picInWin(cx, win[0], win[2], cmx) && picInWin(cy, win[1], win[3], cmy)) continue;
+      *p = 0xFFFF; n++;
+    }
+  sd->heldN[layer] -= n;
+  return n;
+}
+// ...the same over a metatile rect: a handler that writes its block to VRAM itself (the doors' C0/0D78..1454, the chest's
+// C0/1705) shows the WRAM's cells there at once.
+int CtFieldScenePicReleaseRect(void* h, int layer, int x0, int y0, int x1, int y1) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || layer < 0 || layer > 2 || !sd->held[layer] || !sd->heldN[layer]) return 0;
+  int w, hh; picHeld(sd, layer, &w, &hh);
+  int n = 0;
+  for (int y = y0 < 0 ? 0 : y0; y <= y1 && y < hh; y++)
+    for (int x = x0 < 0 ? 0 : x0; x <= x1 && x < w; x++)
+      for (int k = 0; k < 4; k++) {
+        uint16_t* p = &sd->held[layer][(y * 2 + k / 2) * (w * 2) + x * 2 + (k & 1)];
+        if (*p != 0xFFFF) { *p = 0xFFFF; n++; }
+      }
+  sd->heldN[layer] -= n;
+  return n;
 }
 void CtFieldSceneDumpTiles(void* h, int x0, int y0, int x1, int y1) {
   SceneData* sd = (SceneData*)h;
