@@ -29,7 +29,7 @@ mutations. `tools/regress.py` has no per-check logic.
 | Untiered | 2 (run only in the full run) |
 | Excluded candidates | 2, each with the reason it has no stable signature |
 | Checks with mutations | 635, carrying 1,680 mutations in all |
-| Checks that must run alone | 55 (`exclusive`, run serially after the parallel batch) |
+| Checks that must run alone | 56 (`exclusive`: one at a time in declared order, in one worker beside the parallel batch) |
 
 By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest single check sets the floor.
 

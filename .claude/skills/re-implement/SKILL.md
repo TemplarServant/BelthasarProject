@@ -33,9 +33,12 @@ report the boundary — do NOT approximate.
 3. **Build honestly:** `tools\build.bat` — it prints a per-target table and
    `Build OK` only when every target verified. If it says a build/ct*.exe is
    RUNNING, close it (ask the user if it's theirs) — never test a stale exe.
-4. **Quick tier after every stage:** `python tools/regress.py --quick` (~25s).
+4. **Quick tier after every stage:** `python tools/regress.py --quick` (~2 min after a
+   port edit, measured 2026-10-16; ~3 min cold after an edit to the oracle itself --
+   snes/*.c, src/main.c, ct_cpu_infra.c -- which the oracle cache cannot replay).
    Must stay `N pass, 0 fail`.
-5. **Full suite before finishing:** `python tools/regress.py` (~6.5 min). The pass
+5. **Full suite before finishing:** `python tools/regress.py` (~12 min after a port
+   edit, measured 2026-10-16). The pass
    count must equal the previous count (+ any check you added), 0 fail. The fnv32
    render canaries must be UNCHANGED unless your change intentionally altered
    pixels (then see re-pin rules below).

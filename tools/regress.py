@@ -19,9 +19,9 @@ This suite therefore NEVER trusts exit codes -- a check PASSes iff every literal
 substring in its "expect" list appears in the combined stdout+stderr.
 
 All checks are read-only (verified: no included check writes files), so they run as
-parallel subprocesses. A check declaring "exclusive": true is run serially after
-the parallel batch. Checks whose declared inputs are missing are SKIPped with the
-missing file named (they stay in the suite so the needed capture stays discoverable).
+parallel subprocesses. A check declaring "exclusive": true (it writes a file) runs in
+the exclusive lane: one at a time, in declared order, in one worker beside the batch.
+Checks whose declared inputs are missing are SKIPped with the missing file named (they stay in the suite so the needed capture stays discoverable).
 
 Exit status: 1 iff any check FAILed (SKIPs do not fail the suite).
 --check-inputs exits 1 if any input is missing or its sha256 disagrees with the
@@ -677,22 +677,34 @@ def main():
         times = {}
     par = sorted((c for c in checks if not c.get("exclusive")), key=lambda c: -times.get(c["name"], 1e9))
     ser = [c for c in checks if c.get("exclusive")]
+
+    def report(c, r):
+        results[c["name"]] = r
+        print("%-4s %s (%.1fs)" % (r["status"], c["name"], r["secs"]), flush=True)
+
+    # THE EXCLUSIVE LANE: the exclusive checks run one at a time, in their declared order, in ONE worker of the pool,
+    # alongside the parallel batch -- not after it. "exclusive" means a check that writes a file, and the files they
+    # write (build/_nmsfx.raw, build/_svsfx.srm, the battleshot dumps ...) are shared only among THEMSELVES: audited
+    # 2026-10-16, no read-only check names any of them, and none is graded on wall-clock time (all CT_NOPACE). Serial
+    # after the batch they were 112 s of the quick tier's 272 s.
+    def lane():
+        for c in ser:
+            report(c, run_check(c))
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        lane_fut = ex.submit(lane) if ser else None       # first: the lane is the longest single job of the batch
         futs = {ex.submit(run_check, c): c for c in par}
         for fut in concurrent.futures.as_completed(futs):
-            c = futs[fut]
-            results[c["name"]] = fut.result()
-            r = results[c["name"]]
-            print("%-4s %s (%.1fs)" % (r["status"], c["name"], r["secs"]), flush=True)
-    for c in ser:  # exclusive checks run one at a time, after the parallel batch
-        results[c["name"]] = run_check(c)
-        r = results[c["name"]]
-        print("%-4s %s (%.1fs)" % (r["status"], c["name"], r["secs"]), flush=True)
+            report(futs[fut], fut.result())
+        if lane_fut:
+            lane_fut.result()
     total = time.time() - t0
     save_run(checks, results)
     if ORACLE_CACHE:
-        kept, size = oracle_cache.prune(ORACLE_CACHE, int(float(os.environ.get("CT_ORACLE_CACHE_GB", "8")) * (1 << 30)))
-        print("regress: oracle cache %d entries, %.2f GB (CT_ORACLE_CACHE_GB caps it, default 8)" % (kept, size / (1 << 30)))
+        # 24 GB: the cap was 8 and sat full (2026-10-16), so every run evicted the entries of the binaries before it -- a
+        # branch switch or a reverted change came back to a cold cache. One generation of the quick tier is ~0.13 GB.
+        kept, size = oracle_cache.prune(ORACLE_CACHE, int(float(os.environ.get("CT_ORACLE_CACHE_GB", "24")) * (1 << 30)))
+        print("regress: oracle cache %d entries, %.2f GB (CT_ORACLE_CACHE_GB caps it, default 24)" % (kept, size / (1 << 30)))
 
     # failure details first, then the aligned table in declaration order
     for c in checks:

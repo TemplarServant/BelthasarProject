@@ -26,16 +26,36 @@ tools\preflight.ps1                             # Windows wrapper
 Run from anywhere — the script resolves the repo root from its own location and runs
 every check from the repo root. Exit status is 1 iff any check FAILed (SKIPs don't fail).
 
-## Speed (2026-10-08)
+## Speed (2026-10-08, 2026-10-16)
 
 - **The oracle cache** (`tools/ctlib/oracle_cache.py`). A `ct.exe --peek / --monitor / --hdma / --fb` run (--fb without --script) is a pure function
-  of the ct.exe binary (sha256), its arguments, its environment and the CONTENT of every file an argument or an env
+  of the binary, its arguments, its environment and the CONTENT of every file an argument or an env
   value names (+ the ROM); its outputs are enumerated (`--peek`'s OUT + .wram/.vram/.oam, `--fb`'s OUT + .wram, PEEK_SAVE, PEEK_THUMBS,
   PEEK_PCM, PEEK_ARAM, CT_DSP_RAWPCM, PEEK_SHOTS' frames). regress.py keys every such run of a check -- its own argv and
   its python tools' (`tools/oracle_cache_site/sitecustomize.py` on PYTHONPATH, CT_ORACLE_CACHE) -- in
-  `build/_oracle_cache`, zlib-compressed, LRU-capped at `CT_ORACLE_CACHE_GB` (default 8). A change to the port alone
-  (src/field.c, the menu, ...) leaves ct.exe's bytes alone, so the cartridge side of every `-vs-oracle` check is
-  replayed; a change to anything ct.exe links (snes/*.c, main.c, battle.c, ct_vm.c, ...) misses, as it must.
+  `build/_oracle_cache`, zlib-compressed, LRU-capped at `CT_ORACLE_CACHE_GB` (default 24; it was 8 and sat full).
+- **The oracle alone, `build/ct_oracle.exe`** (2026-10-16). The cache used to key on ct.exe's sha256, and ct.exe links
+  nearly the whole port (battle.c, ct_vm.c, menu.c ...) -- so EVERY port edit threw every cartridge run away. ct_oracle
+  is ct.exe's own main.c built with `CT_ORACLE_ONLY`: only `--peek / --monitor / --hdma / --fb` are dispatched, every
+  other mode answers 97 + `ct_oracle: not an oracle mode`, and the linker decides its sources (main.c, ct_cpu_infra.c,
+  rom_verify.c, ct_lake_state.c, harness_drive.c, snes/*.c). The cache RUNS ct_oracle for those calls and keys on it;
+  on the refusal it runs ct.exe itself, uncached. `ct` depends on `ct_oracle`, so they are always built together.
+  Proof of equivalence: `CT_ORACLE_VERIFY=1` (a measurement switch) runs both on every miss and compares rc, stdout,
+  stderr and every output file byte for byte into `build/_oracle_verify.log` -- 2026-10-16 every oracle call of the
+  suite was SAME. A change to snes/*.c, main.c or the CPU infra misses, as it must; a change to the port does not.
+- **The link identity is not the key** (2026-10-16). MSVC writes a fresh identity into every link (the PE stamp, the
+  PDB GUID, the repro hash: 69 bytes) even of the same objects, so a rebuild that changed nothing -- a touch, the
+  restore after `--mutate` -- used to miss everything. CMakeLists.txt builds with `/Brepro` and `/INCREMENTAL:NO` (the
+  code bytes are then identical) and `oracle_cache._exe_sha` hashes the image with those 69 bytes zeroed.
+- **The exclusive lane** (2026-10-16). `"exclusive": true` checks (they write a file) run one at a time in their declared
+  order in ONE worker of the pool, beside the parallel batch; they used to run serially after it (112 s of the quick
+  tier's 272 s). Audited: the files they write are shared only among themselves, none is graded on wall-clock time.
+- **Measured** (quick tier, 595 checks, 12 jobs, 2026-10-16, each 595/0): a rebuild with no code change 340 s -> 192 s
+  (the link identity); the cap 192 s -> 191 s (the quick tier's working set is 146 oracle calls, 0.13 GB); the lane
+  191 s -> 122 s; after an edit to the port (battle.c) 177 s (ct.exe keyed, every cartridge run made again) -> 122 s
+  (ct_oracle keyed, every one replayed). End to end, a quick run after a port edit: 340 s -> 122 s. The full suite
+  after a port edit: 881/0 in 702 s (the runs of 2026-10-12..14 took 915-1120 s). An edit to a non-oracle mode of
+  src/main.c relinks ct_oracle with the same code, so it keeps the cache too.
 - **One oracle run for many frames** (`PEEK_SHOTS`, `tools/ctlib/peekshots.py`): a tool that graded N frames by running
   `--peek` N times from the state (N^2/2 emulated frames) runs it once. Byte-identical to the per-frame peeks
   (`tools/peekshots_selftest.py`). menu_shell_cmp 716 s -> 18 s, menu_equip_list_cmp 352 s -> 5 s.
@@ -1322,8 +1342,8 @@ Three things worth copying from these:
    else — fed with `--loadflags`. Cheap to regenerate and readable in one line, unlike a state blob.
 
 All included checks were verified read-only (no file writes), so they run as
-parallel subprocesses. A check can opt out with `"exclusive": true` (none currently
-needs it).
+parallel subprocesses. A check that writes a file declares `"exclusive": true`: it runs in the
+exclusive lane (one at a time, in declared order, beside the parallel batch -- see "Speed").
 
 ### field-battle-{pcblock-derive,lucca-type2,marle-type2} (the PC damage pass)
 

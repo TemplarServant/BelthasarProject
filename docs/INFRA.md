@@ -62,7 +62,8 @@ the oracle inputs in the repo root.
   a check PASSes iff every literal substring in its `expect` list appears in the
   combined stdout+stderr.
 - **Tiers.** `--quick` runs only the `tier: "quick"` checks; the default run is the
-  full suite (4 parallel jobs, `--jobs N` to change; `exclusive` checks run serially).
+  full suite (min(12, CPUs-2) parallel jobs, `--jobs N` to change; `exclusive` checks run one at a time in
+  their own lane beside the batch).
 - **Pinning.** `--pin <check>` re-derives a check's `expect` lines from the current
   output (deterministic hashes like the `--lz`/`--datonly` FNV-32 make good pins).
 - Missing inputs → **SKIP** (named), not FAIL; the suite exits 1 iff any check FAILed.

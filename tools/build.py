@@ -52,7 +52,7 @@ VCVARS_REL = r"VC\Auxiliary\Build\vcvars64.bat"
 CMAKE_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 NINJA_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 
-KNOWN_TARGETS = ("ct", "ct_field", "ct_world", "ct_viewer")
+KNOWN_TARGETS = ("ct", "ct_oracle", "ct_field", "ct_world", "ct_viewer")
 
 
 def fail(reason, code=1):
@@ -257,9 +257,10 @@ def main(argv):
     # ---- pre-flight: refuse to build over a RUNNING exe (the LNK1168 class).
     procs = running_ct_processes() if os.name == "nt" else []
     # A single-target build links only that exe: another one running (the player's ct_field while ct.exe is rebuilt) is
-    # not in its way.
+    # not in its way. `ct` also links ct_oracle (CMakeLists.txt: add_dependencies), so a running ct_oracle is in its way.
     if procs and args:
-        procs = [(pid, path) for pid, path in procs if os.path.basename(path).lower() == args[0].lower() + ".exe"]
+        links = {args[0].lower() + ".exe"} | ({"ct_oracle.exe"} if args[0].lower() == "ct" else set())
+        procs = [(pid, path) for pid, path in procs if os.path.basename(path).lower() in links]
     if procs is None:
         print("WARNING: could not check for running ct*.exe processes (powershell "
               "unavailable?) - a locked exe will still fail the link loudly.", flush=True)

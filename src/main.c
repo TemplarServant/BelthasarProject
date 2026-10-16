@@ -15663,10 +15663,27 @@ static void ctLogicalReport(void) {
   fprintf(stderr, "logical-frame: %ld hold(s), %ld cycles held, %ld valve release(s); %ld phase hold(s), %ld cycles\n",
           g_ctLogicalHolds, g_ctLogicalHeld, g_ctLogicalValves, g_ctLogicalPhaseHolds, g_ctLogicalPhaseHeld);
 }
+// THE ORACLE-ONLY BUILD (ct_oracle.exe, CMakeLists.txt): this main() with only the cartridge's own modes dispatched --
+// --peek, --monitor, --hdma, --fb. Every other mode answers 97 and the marker below instead of running, so nothing but
+// those four reaches the link, and the linker -- not a list -- decides which sources the oracle needs. The suite's
+// oracle cache (tools/ctlib/oracle_cache.py) runs THIS binary for those modes and keys on its bytes: an edit to the port
+// (battle.c, ct_vm.c, field.c ...) leaves it unchanged, so the cartridge side of every -vs-oracle check is replayed. On
+// the marker it falls back to build/ct.exe (a mode whose flags take another branch of the chain below).
+#ifdef CT_ORACLE_ONLY
+static int ctOracleOnlyRefuse(void) {
+  fprintf(stderr, "ct_oracle: not an oracle mode -- run build/ct.exe\n");
+  return 97;
+}
+#define CT_NOT_ORACLE(call) ctOracleOnlyRefuse()
+#else
+#define CT_NOT_ORACLE(call) (call)
+#endif
+
 int main(int argc, char** argv) {
   // --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (src/xlat/hdma_fd.c, CtXlatHdmaBuild) on a
   // 128 KB WRAM image and write what it leaves -- graded against the cartridge's own WRAM before and after one call
   // (--hookpc FDC2C1 / C000CB with CT_HOOK_DUMPWRAM).
+#ifndef CT_ORACLE_ONLY   // the translated stages and the native sequences: not the cartridge's modes
   if (argc == 4 && !strcmp(argv[1], "--hdmabuild")) {
     FILE* rf = fopen(DEFAULT_ROM, "rb"); if (!rf) { fprintf(stderr, "hdmabuild: no ROM\n"); return 1; }
     static uint8_t rom[0x600000], w[0x20000]; long rl = (long)fread(rom, 1, sizeof rom, rf); fclose(rf);
@@ -15803,6 +15820,7 @@ int main(int argc, char** argv) {
   }
   // CT_ORACLE_VIRTUAL_BEAM=1: C3/02DD reads the virtual beam (snes.c g_ctVirtualBeam = 2, CLAUDE.md's one exception) --
   // the oracle side of every comparison of the field wipe / the world's window object against the port.
+#endif
   { const char* vb = getenv("CT_ORACLE_VIRTUAL_BEAM"), *lg = getenv("CT_ORACLE_LOGICAL");   // the rule's oracle = the
     if (vb ? *vb != '0' : (lg && *lg)) g_ctVirtualBeam = 2; }                             //   logical mode + this
   // CT_ORACLE_LOGICAL=1: run by LOGICAL frames (snes.c snes_setLogicalFrames, CLAUDE.md's one exception) -- vblank waits
@@ -15815,7 +15833,7 @@ int main(int argc, char** argv) {
     const char* ll = getenv("CT_ORACLE_LOGICAL_LOADS");
     g_ctLogicalLoads = !(ll && ll[0] == '0');
   }
-  if (argc >= 2 && !strcmp(argv[1], "--shadow")) return runShadow(argc, argv);
+  if (argc >= 2 && !strcmp(argv[1], "--shadow")) return CT_NOT_ORACLE(runShadow(argc, argv));
   const char* romPath = DEFAULT_ROM;
   int frames = 300;
   int doDump = 0;
@@ -16143,167 +16161,170 @@ int main(int argc, char** argv) {
   }
   CtRomSetPath(romPath);                      // the game's own tables are read from this ROM (rom_verify.h)
 
-  if (loadCostLoc >= 0) return runLoadCost(romPath, navFromState, loadCostLoc);
-  if (doPortcheck) return runPortCheck(romPath);
-  if (doBootcheck) return runBootCheck(romPath);
+  if (loadCostLoc >= 0) return CT_NOT_ORACLE(runLoadCost(romPath, navFromState, loadCostLoc));
+  if (doPortcheck) return CT_NOT_ORACLE(runPortCheck(romPath));
+  if (doBootcheck) return CT_NOT_ORACLE(runBootCheck(romPath));
   if (callRomAddr) {
     if (callSetup.dp == CT_CALL_KEEP && !navFromState) callSetup.dp = 0x0100;  // scheduler DP
-    return runCallRom(romPath, navFromState, callRomAddr, &callSetup, settleN, callRomWrites, jsonOut, pokeSpec);
+    return CT_NOT_ORACLE(runCallRom(romPath, navFromState, callRomAddr, &callSetup, settleN, callRomWrites, jsonOut, pokeSpec));
   }
-  if (readSpec) return runRead(romPath, navFromState, readSpec, settleN, jsonOut);
-  if (doLifeTrace) return runLifeTrace(romPath, navFromState, lifeW, lifePc,
-      inputScript ? inputScript : peekScript, frames, settleN);
-  if (censusState) return runLoadCensus(romPath, censusState,
+  if (readSpec) return CT_NOT_ORACLE(runRead(romPath, navFromState, readSpec, settleN, jsonOut));
+  if (doLifeTrace) return CT_NOT_ORACLE(runLifeTrace(romPath, navFromState, lifeW, lifePc,
+      inputScript ? inputScript : peekScript, frames, settleN));
+  if (censusState) return CT_NOT_ORACLE(runLoadCensus(romPath, censusState,
       inputScript ? inputScript : peekScript, censusTeleS, censusTeleX, censusTeleY, censusTeleF,
-      censusPre, censusPost, censusAt, censusAtOn, censusSpans, censusNull, censusOut);
+      censusPre, censusPost, censusAt, censusAtOn, censusSpans, censusNull, censusOut));
   if (monitorAddrs) return runMonitor(romPath, navFromState, monitorAddrs,
       inputScript ? inputScript : peekScript, frames, settleN, diffOnly, writerMode, jsonOut);
-  if (doFollowScene) return runFollowScene(romPath, navFromState,
-      inputScript ? inputScript : peekScript, frames, settleN, jsonOut);
-  if (doFollowVm) return runFollowVm(romPath, navFromState, followObj,
-      inputScript ? inputScript : peekScript, frames, settleN, jsonOut);
-  if (doFollowTest) return runFollowTest(romPath, navFromState, vmDiffDat, inputScript);
-  if (teleOn) return runTeleport(romPath, navFromState, teleScene, teleX, teleY, teleFace,
-      teleMethod, frames, sceneOut);
-  if (lzOffset >= 0) return runLzTest(romPath, lzOffset);
-  if (doSheetCheck) return runSheetCheck(romPath);
-  if (songLoadSpec) return runSongLoad(romPath, songLoadSpec, navFromState);
-  if (doSongDirs) return runSongDirs(romPath, navFromState);
-  if (doAudioTest) return runAudioTest(romPath, framesSet ? frames : 25);
-  if (doAram) return runAramDump(romPath, navFromState, frames, sceneOut, aramAt);
-  if (cgramOut) return runDumpCgram(romPath, frames, cgramOut);
+  if (doFollowScene) return CT_NOT_ORACLE(runFollowScene(romPath, navFromState,
+      inputScript ? inputScript : peekScript, frames, settleN, jsonOut));
+  if (doFollowVm) return CT_NOT_ORACLE(runFollowVm(romPath, navFromState, followObj,
+      inputScript ? inputScript : peekScript, frames, settleN, jsonOut));
+  if (doFollowTest) return CT_NOT_ORACLE(runFollowTest(romPath, navFromState, vmDiffDat, inputScript));
+  if (teleOn) return CT_NOT_ORACLE(runTeleport(romPath, navFromState, teleScene, teleX, teleY, teleFace,
+      teleMethod, frames, sceneOut));
+  if (lzOffset >= 0) return CT_NOT_ORACLE(runLzTest(romPath, lzOffset));
+  if (doSheetCheck) return CT_NOT_ORACLE(runSheetCheck(romPath));
+  if (songLoadSpec) return CT_NOT_ORACLE(runSongLoad(romPath, songLoadSpec, navFromState));
+  if (doSongDirs) return CT_NOT_ORACLE(runSongDirs(romPath, navFromState));
+  if (doAudioTest) return CT_NOT_ORACLE(runAudioTest(romPath, framesSet ? frames : 25));
+  if (doAram) return CT_NOT_ORACLE(runAramDump(romPath, navFromState, frames, sceneOut, aramAt));
+  if (cgramOut) return CT_NOT_ORACLE(runDumpCgram(romPath, frames, cgramOut));
   if (fbOut) return runDumpFb(romPath, frames, scriptFlag, fbOut);
-  if (vramOut) return runDumpVram(romPath, frames, vramOut);
+  if (vramOut) return CT_NOT_ORACLE(runDumpVram(romPath, frames, vramOut));
   if (peekState) return runPeek(romPath, peekState, frames, peekBtn, peekFrames2, peekBtn2, peekScript, peekOut);
-  if (owWatchState) return runOwWatch(romPath, owWatchState);
-  if (textWatchState) return runTextWatch(romPath, textWatchState);
-  if (owCamState) return runCheckOwCam(romPath, owCamState);
-  if (owMoveState) return runCheckOwMove(romPath, owMoveState);
-  if (owStreamState) return runOwStreamWatch(romPath, owStreamState);
-  if (owCkStreamState) return runCheckOwStream(romPath, owCkStreamState);
-  if (owEntryState) return runCheckOwEntry(romPath, owEntryState);
-  if (owReturnState) return runCheckOwReturn(romPath, owReturnState);
-  if (fieldCamState) return runCheckFieldCam(romPath, fieldCamState);
-  if (owForceState) return runOwForce(romPath, owForceState, owForceWorld, owForceOut);
-  if (owSprState) return runOwSprite(romPath, owSprState, owSprOut);
-  if (owBirdState) return runOwBirds(romPath, owBirdState, owBirdOut);
-  if (owBalloonState) return runOwBalloons(romPath, owBalloonState, owBalloonOut);
-  if (owBoatState) return runOwBoat(romPath, owBoatState, owBoatOut);
-  if (owObjState) return runCheckOwObj(romPath, owObjState);
-  if (owSpawnState) return runOwSpawnWatch(romPath, owSpawnState);
-  if (owTrackState) return runOwBirdTrack(romPath, owTrackState);
-  if (ppuRegsState) return runPpuRegs(romPath, ppuRegsState, peekScript);
+  if (owWatchState) return CT_NOT_ORACLE(runOwWatch(romPath, owWatchState));
+  if (textWatchState) return CT_NOT_ORACLE(runTextWatch(romPath, textWatchState));
+  if (owCamState) return CT_NOT_ORACLE(runCheckOwCam(romPath, owCamState));
+  if (owMoveState) return CT_NOT_ORACLE(runCheckOwMove(romPath, owMoveState));
+  if (owStreamState) return CT_NOT_ORACLE(runOwStreamWatch(romPath, owStreamState));
+  if (owCkStreamState) return CT_NOT_ORACLE(runCheckOwStream(romPath, owCkStreamState));
+  if (owEntryState) return CT_NOT_ORACLE(runCheckOwEntry(romPath, owEntryState));
+  if (owReturnState) return CT_NOT_ORACLE(runCheckOwReturn(romPath, owReturnState));
+  if (fieldCamState) return CT_NOT_ORACLE(runCheckFieldCam(romPath, fieldCamState));
+  if (owForceState) return CT_NOT_ORACLE(runOwForce(romPath, owForceState, owForceWorld, owForceOut));
+  if (owSprState) return CT_NOT_ORACLE(runOwSprite(romPath, owSprState, owSprOut));
+  if (owBirdState) return CT_NOT_ORACLE(runOwBirds(romPath, owBirdState, owBirdOut));
+  if (owBalloonState) return CT_NOT_ORACLE(runOwBalloons(romPath, owBalloonState, owBalloonOut));
+  if (owBoatState) return CT_NOT_ORACLE(runOwBoat(romPath, owBoatState, owBoatOut));
+  if (owObjState) return CT_NOT_ORACLE(runCheckOwObj(romPath, owObjState));
+  if (owSpawnState) return CT_NOT_ORACLE(runOwSpawnWatch(romPath, owSpawnState));
+  if (owTrackState) return CT_NOT_ORACLE(runOwBirdTrack(romPath, owTrackState));
+  if (ppuRegsState) return CT_NOT_ORACLE(runPpuRegs(romPath, ppuRegsState, peekScript));
   if (hdmaState) return runHdmaProbe(romPath, hdmaState, peekScript);
-  if (owProbeState) return runOwProbe(romPath, owProbeState, owProbePrefix);
-  if (saveStateOut) return runSaveState(romPath, frames, mashFlag, saveStateOut);
-  if (loadStateIn) return runLoadState(romPath, loadStateIn, flagsOut);
-  if (stairState) return runStairTest(romPath, stairState);
-  if (flagsOut) return runDumpFlags(romPath, frames, flagsOut);
-  if (playFlagsOut) return runPlayFlags(romPath, frames, playFlagsOut);
-  if (oamOut) return runDumpOam(romPath, frames, mashFlag, scriptFlag, oamOut);
-  if (doFindOam) return runFindOam(romPath, frames, mashFlag, scriptFlag, watchAddr, watchLen);
-  if (doCheckS1) return runCheckStage1(romPath);
-  if (doCheckOAM) return runCheckOAM(romPath);
-  if (doCheckSort) return runCheckSort(romPath);
-  if (doCheckXform) return runCheckXform(romPath);
-  if (doMoveTest) return runMoveTest(romPath);
-  if (doCheckDecode) return runCheckDecode(romPath);
-  if (doCheckMove) return runCheckMove(romPath);
-  if (doCheckVel) return runCheckVel(romPath);
-  if (doCheckDir) return runCheckDir(romPath);
-  if (doCheckPrio) return runCheckPrio(romPath);
-  if (doVerifyFrame) return runVerifyFrame(romPath);
-  if (doCheckStep) return runCheckStep(romPath);
-  if (doPortTick) return runPortTick(romPath);
-  if (doPortRun) return runPortRun(romPath);
-  if (doCheckJoy) return runCheckJoy(romPath);
-  if (doFindPlayer) return runFindPlayer(romPath);
-  if (doWatchWrite) return runWatchWrite(romPath);
-  if (doWatchCollide) return runWatchCollide(romPath);
-  if (doCheckCollide) return runCheckCollide(romPath);
-  if (doSweepCollide) return runSweepCollide(romPath);
-  if (doSweepClamp) return runSweepClamp(romPath);
-  if (doCheckSolidAt) return runCheckSolidAt(romPath);
-  if (doCheckCommit) return runCheckCommit(romPath);
-  if (doCheckActor) return runCheckActor(romPath);
-  if (doCheckClamp) return runCheckClamp(romPath);
-  if (doTraceMove) return runTraceMove(romPath);
-  if (doCheckCtrl) return runCheckCtrl(romPath);
-  if (doSweepActor) return runSweepActor(romPath);
-  if (doSweepCb3a) return runSweepCb3a(romPath);
-  if (doSweepC98a) return runSweepC98a(romPath);
-  if (doSweepCad9) return runSweepCad9(romPath);
-  if (doSweepDrain) return runSweepDrain(romPath);
-  if (doSweepAiTarget) return runSweepAiTarget(romPath);
-  if (doSweepAiEval) return runSweepAiEval(romPath);
-  if (doSweepTechPass) return runSweepTechPass(romPath);
-  if (doSweepBand25A3) return runSweepBand25A3(romPath);
-  if (doSweepFxLineLate == 4) return runSweepFxShape(romPath);
-  if (doSweepFxLineLate == 5) return runSweepFxQuad(romPath);
-  if (doSweepFxLineLate == 6) return runSweepFxOps(romPath);
-  if (doSweepFxLineLate == 7) return runSweepFx3d(romPath);
-  if (doSweepFxLineLate == 8) return runSweepFx80(romPath);
-  if (doSweepFxLineLate == 9) return runSweepFxMisc(romPath);
-  if (doSweepFxLineLate == 3) return runSweepBgAnim(romPath);
-  if (doSweepFxLineLate == 2) return runSweepShake(romPath);
-  if (doSweepFxLineLate) return runSweepFxLine(romPath);
-  if (arenaState) return runSweepArenaScroll(romPath, arenaState, fxcF0, fxcF1);
-  if (fxcState) return runSweepFxCompose(romPath, fxcState, fxcF0, fxcF1);
-  if (seqPpuState) return runSeqPpuCmp(romPath, seqPpuState, seqPpuFrames);
-  if (cpuTraceState) return runCpuTrace(romPath, cpuTraceState, cpuTraceFrames, cpuTraceOut);
-  if (xlatCmpState) return runXlatCmp(romPath, xlatCmpState, xlatCmpFrames);
-  if (wipeDumpState) return runWipeDump(romPath, wipeDumpState, wipeDumpK, wipeDumpIn, wipeDumpOut, wipeDumpMask, wipeDumpEntry, wipeDumpExit, wipeDumpMaskPc);
-  if (xlatEnState) return runXlatEntries(romPath, xlatEnState, xlatEnFrames);
-  if (xlatPhState) return runXlatPhase(romPath, xlatPhState, xlatPhPc, xlatPhExtra, xlatPhFrames);
-  if (doSweepMoveClass) return runSweepMoveClass(romPath);
-  if (doSweepDeadFlag) return runSweepDeadFlag(romPath);
-  if (doSweepDeadFlagPc) return runSweepDeadFlagPc(romPath);
-  if (doSweepMulDiv) return runSweepMulDiv(romPath);
-  if (doSweepHitRoll) return runSweepHitRoll(romPath);
-  if (doSweepStatFetch) return runSweepStatFetch(romPath);
-  if (doSweepRedirect) return runSweepRedirect(romPath);
-  if (doSweepRng) return runSweepRng(romPath);
-  if (doSweepReval) return runSweepRevalidate(romPath);
-  if (doSweepDraw) return runSweepDraw(romPath);
-  if (doSweepStage2) return runSweepStage2(romPath);
-  if (doSweepLoader) return runSweepLoader(romPath);
-  if (doSweepSlot) return runSweepSlot(romPath);
-  if (doSweepScreen) return runSweepScreen(romPath);
-  if (doSweepList) return runSweepList(romPath);
-  if (doSweepInit) return runSweepInit(romPath);
-  if (doSweepVram) return runSweepVram(romPath);
-  if (doSweepAnim) return runSweepAnim(romPath);
-  if (doSweepIris) return runSweepIris(romPath);
-  if (doSweepPoly) return runSweepPoly(romPath);
-  if (doSweepOp02) return runSweepOp02(romPath);
-  if (doSweepA88d) return runSweepA88d(romPath);
-  if (doSweepTouch) return runSweepTouch(romPath);
-  if (doSweepAct == 2) return runSweepDoorList(romPath);
-  if (doSweepAct) return runSweepAct(romPath);
-  if (doSweepSolid) return runSweepSolid(romPath);
-  if (doSweepOps) return runSweepOps(romPath);
-  if (doSweepAcfd) return runSweepAcfd(romPath);
-  if (doSweepAba2) return runSweepAba2(romPath);
-  if (doSweepSnap) return runSweepSnap(romPath);
-  if (doSweepOwRegion) return runSweepOwRegion(romPath);
-  if (doSweepOwMusic) return runSweepOwMusic(romPath);
-  if (doTraceNpc) return runTraceNpc(romPath);
-  if (doWatchNpcPos) return runWatchNpcPos(romPath);
-  if (doCheckMove2) return runPlayerMove(romPath);
-  if (doPlayerFrame) return runPlayerFrame(romPath);
-  if (cgramSeq) return runDumpCgramSeq(romPath, frames, count, cgramSeq);
-  if (assetInfo) return runAssetInfo(assetInfo);
-  if (datVerify) return runDatVerify(romPath, datVerify);
-  if (datField) return runDatField(datField, sceneIdx >= 0 ? sceneIdx : 5);
-  if (fieldDat) return runField(fieldDat, sceneIdx >= 0 ? sceneIdx : 5, sceneOut);
-  if (vmDat) return runVm(vmDat, sceneIdx, frames);
-  if (vmDemoDat) return runVmDemo(vmDemoDat, sceneIdx >= 0 ? sceneIdx : 8);
-  if (hookPc >= 0) return runHookPc(romPath, navFromState,
-                                    hookPc, hookWatch, peekScript, frames > 0 ? frames : 20);
-  if (vmDiffState) return runVmDiff(romPath, vmDiffState, vmDiffDat, frames > 0 ? frames : 300, vmDiffPos);
-  if (textDump) return runTextDump(textDump);
-  if (datOnly && sceneIdx >= 0) return runSceneFromDat(datOnly, sceneIdx, aframe, full, sceneOut);
-  if (sceneIdx >= 0) return runScene(romPath, sceneIdx, aframe, full, sceneOut, assetsPath);
+  if (owProbeState) return CT_NOT_ORACLE(runOwProbe(romPath, owProbeState, owProbePrefix));
+  if (saveStateOut) return CT_NOT_ORACLE(runSaveState(romPath, frames, mashFlag, saveStateOut));
+  if (loadStateIn) return CT_NOT_ORACLE(runLoadState(romPath, loadStateIn, flagsOut));
+  if (stairState) return CT_NOT_ORACLE(runStairTest(romPath, stairState));
+  if (flagsOut) return CT_NOT_ORACLE(runDumpFlags(romPath, frames, flagsOut));
+  if (playFlagsOut) return CT_NOT_ORACLE(runPlayFlags(romPath, frames, playFlagsOut));
+  if (oamOut) return CT_NOT_ORACLE(runDumpOam(romPath, frames, mashFlag, scriptFlag, oamOut));
+  if (doFindOam) return CT_NOT_ORACLE(runFindOam(romPath, frames, mashFlag, scriptFlag, watchAddr, watchLen));
+  if (doCheckS1) return CT_NOT_ORACLE(runCheckStage1(romPath));
+  if (doCheckOAM) return CT_NOT_ORACLE(runCheckOAM(romPath));
+  if (doCheckSort) return CT_NOT_ORACLE(runCheckSort(romPath));
+  if (doCheckXform) return CT_NOT_ORACLE(runCheckXform(romPath));
+  if (doMoveTest) return CT_NOT_ORACLE(runMoveTest(romPath));
+  if (doCheckDecode) return CT_NOT_ORACLE(runCheckDecode(romPath));
+  if (doCheckMove) return CT_NOT_ORACLE(runCheckMove(romPath));
+  if (doCheckVel) return CT_NOT_ORACLE(runCheckVel(romPath));
+  if (doCheckDir) return CT_NOT_ORACLE(runCheckDir(romPath));
+  if (doCheckPrio) return CT_NOT_ORACLE(runCheckPrio(romPath));
+  if (doVerifyFrame) return CT_NOT_ORACLE(runVerifyFrame(romPath));
+  if (doCheckStep) return CT_NOT_ORACLE(runCheckStep(romPath));
+  if (doPortTick) return CT_NOT_ORACLE(runPortTick(romPath));
+  if (doPortRun) return CT_NOT_ORACLE(runPortRun(romPath));
+  if (doCheckJoy) return CT_NOT_ORACLE(runCheckJoy(romPath));
+  if (doFindPlayer) return CT_NOT_ORACLE(runFindPlayer(romPath));
+  if (doWatchWrite) return CT_NOT_ORACLE(runWatchWrite(romPath));
+  if (doWatchCollide) return CT_NOT_ORACLE(runWatchCollide(romPath));
+  if (doCheckCollide) return CT_NOT_ORACLE(runCheckCollide(romPath));
+  if (doSweepCollide) return CT_NOT_ORACLE(runSweepCollide(romPath));
+  if (doSweepClamp) return CT_NOT_ORACLE(runSweepClamp(romPath));
+  if (doCheckSolidAt) return CT_NOT_ORACLE(runCheckSolidAt(romPath));
+  if (doCheckCommit) return CT_NOT_ORACLE(runCheckCommit(romPath));
+  if (doCheckActor) return CT_NOT_ORACLE(runCheckActor(romPath));
+  if (doCheckClamp) return CT_NOT_ORACLE(runCheckClamp(romPath));
+  if (doTraceMove) return CT_NOT_ORACLE(runTraceMove(romPath));
+  if (doCheckCtrl) return CT_NOT_ORACLE(runCheckCtrl(romPath));
+  if (doSweepActor) return CT_NOT_ORACLE(runSweepActor(romPath));
+  if (doSweepCb3a) return CT_NOT_ORACLE(runSweepCb3a(romPath));
+  if (doSweepC98a) return CT_NOT_ORACLE(runSweepC98a(romPath));
+  if (doSweepCad9) return CT_NOT_ORACLE(runSweepCad9(romPath));
+  if (doSweepDrain) return CT_NOT_ORACLE(runSweepDrain(romPath));
+  if (doSweepAiTarget) return CT_NOT_ORACLE(runSweepAiTarget(romPath));
+  if (doSweepAiEval) return CT_NOT_ORACLE(runSweepAiEval(romPath));
+  if (doSweepTechPass) return CT_NOT_ORACLE(runSweepTechPass(romPath));
+  if (doSweepBand25A3) return CT_NOT_ORACLE(runSweepBand25A3(romPath));
+  if (doSweepFxLineLate == 4) return CT_NOT_ORACLE(runSweepFxShape(romPath));
+  if (doSweepFxLineLate == 5) return CT_NOT_ORACLE(runSweepFxQuad(romPath));
+  if (doSweepFxLineLate == 6) return CT_NOT_ORACLE(runSweepFxOps(romPath));
+  if (doSweepFxLineLate == 7) return CT_NOT_ORACLE(runSweepFx3d(romPath));
+  if (doSweepFxLineLate == 8) return CT_NOT_ORACLE(runSweepFx80(romPath));
+  if (doSweepFxLineLate == 9) return CT_NOT_ORACLE(runSweepFxMisc(romPath));
+  if (doSweepFxLineLate == 3) return CT_NOT_ORACLE(runSweepBgAnim(romPath));
+  if (doSweepFxLineLate == 2) return CT_NOT_ORACLE(runSweepShake(romPath));
+  if (doSweepFxLineLate) return CT_NOT_ORACLE(runSweepFxLine(romPath));
+  if (arenaState) return CT_NOT_ORACLE(runSweepArenaScroll(romPath, arenaState, fxcF0, fxcF1));
+  if (fxcState) return CT_NOT_ORACLE(runSweepFxCompose(romPath, fxcState, fxcF0, fxcF1));
+  if (seqPpuState) return CT_NOT_ORACLE(runSeqPpuCmp(romPath, seqPpuState, seqPpuFrames));
+  if (cpuTraceState) return CT_NOT_ORACLE(runCpuTrace(romPath, cpuTraceState, cpuTraceFrames, cpuTraceOut));
+  if (xlatCmpState) return CT_NOT_ORACLE(runXlatCmp(romPath, xlatCmpState, xlatCmpFrames));
+  if (wipeDumpState) return CT_NOT_ORACLE(runWipeDump(romPath, wipeDumpState, wipeDumpK, wipeDumpIn, wipeDumpOut, wipeDumpMask, wipeDumpEntry, wipeDumpExit, wipeDumpMaskPc));
+  if (xlatEnState) return CT_NOT_ORACLE(runXlatEntries(romPath, xlatEnState, xlatEnFrames));
+  if (xlatPhState) return CT_NOT_ORACLE(runXlatPhase(romPath, xlatPhState, xlatPhPc, xlatPhExtra, xlatPhFrames));
+  if (doSweepMoveClass) return CT_NOT_ORACLE(runSweepMoveClass(romPath));
+  if (doSweepDeadFlag) return CT_NOT_ORACLE(runSweepDeadFlag(romPath));
+  if (doSweepDeadFlagPc) return CT_NOT_ORACLE(runSweepDeadFlagPc(romPath));
+  if (doSweepMulDiv) return CT_NOT_ORACLE(runSweepMulDiv(romPath));
+  if (doSweepHitRoll) return CT_NOT_ORACLE(runSweepHitRoll(romPath));
+  if (doSweepStatFetch) return CT_NOT_ORACLE(runSweepStatFetch(romPath));
+  if (doSweepRedirect) return CT_NOT_ORACLE(runSweepRedirect(romPath));
+  if (doSweepRng) return CT_NOT_ORACLE(runSweepRng(romPath));
+  if (doSweepReval) return CT_NOT_ORACLE(runSweepRevalidate(romPath));
+  if (doSweepDraw) return CT_NOT_ORACLE(runSweepDraw(romPath));
+  if (doSweepStage2) return CT_NOT_ORACLE(runSweepStage2(romPath));
+  if (doSweepLoader) return CT_NOT_ORACLE(runSweepLoader(romPath));
+  if (doSweepSlot) return CT_NOT_ORACLE(runSweepSlot(romPath));
+  if (doSweepScreen) return CT_NOT_ORACLE(runSweepScreen(romPath));
+  if (doSweepList) return CT_NOT_ORACLE(runSweepList(romPath));
+  if (doSweepInit) return CT_NOT_ORACLE(runSweepInit(romPath));
+  if (doSweepVram) return CT_NOT_ORACLE(runSweepVram(romPath));
+  if (doSweepAnim) return CT_NOT_ORACLE(runSweepAnim(romPath));
+  if (doSweepIris) return CT_NOT_ORACLE(runSweepIris(romPath));
+  if (doSweepPoly) return CT_NOT_ORACLE(runSweepPoly(romPath));
+  if (doSweepOp02) return CT_NOT_ORACLE(runSweepOp02(romPath));
+  if (doSweepA88d) return CT_NOT_ORACLE(runSweepA88d(romPath));
+  if (doSweepTouch) return CT_NOT_ORACLE(runSweepTouch(romPath));
+  if (doSweepAct == 2) return CT_NOT_ORACLE(runSweepDoorList(romPath));
+  if (doSweepAct) return CT_NOT_ORACLE(runSweepAct(romPath));
+  if (doSweepSolid) return CT_NOT_ORACLE(runSweepSolid(romPath));
+  if (doSweepOps) return CT_NOT_ORACLE(runSweepOps(romPath));
+  if (doSweepAcfd) return CT_NOT_ORACLE(runSweepAcfd(romPath));
+  if (doSweepAba2) return CT_NOT_ORACLE(runSweepAba2(romPath));
+  if (doSweepSnap) return CT_NOT_ORACLE(runSweepSnap(romPath));
+  if (doSweepOwRegion) return CT_NOT_ORACLE(runSweepOwRegion(romPath));
+  if (doSweepOwMusic) return CT_NOT_ORACLE(runSweepOwMusic(romPath));
+  if (doTraceNpc) return CT_NOT_ORACLE(runTraceNpc(romPath));
+  if (doWatchNpcPos) return CT_NOT_ORACLE(runWatchNpcPos(romPath));
+  if (doCheckMove2) return CT_NOT_ORACLE(runPlayerMove(romPath));
+  if (doPlayerFrame) return CT_NOT_ORACLE(runPlayerFrame(romPath));
+  if (cgramSeq) return CT_NOT_ORACLE(runDumpCgramSeq(romPath, frames, count, cgramSeq));
+  if (assetInfo) return CT_NOT_ORACLE(runAssetInfo(assetInfo));
+  if (datVerify) return CT_NOT_ORACLE(runDatVerify(romPath, datVerify));
+  if (datField) return CT_NOT_ORACLE(runDatField(datField, sceneIdx >= 0 ? sceneIdx : 5));
+  if (fieldDat) return CT_NOT_ORACLE(runField(fieldDat, sceneIdx >= 0 ? sceneIdx : 5, sceneOut));
+  if (vmDat) return CT_NOT_ORACLE(runVm(vmDat, sceneIdx, frames));
+  if (vmDemoDat) return CT_NOT_ORACLE(runVmDemo(vmDemoDat, sceneIdx >= 0 ? sceneIdx : 8));
+  if (hookPc >= 0) return CT_NOT_ORACLE(runHookPc(romPath, navFromState,
+                                    hookPc, hookWatch, peekScript, frames > 0 ? frames : 20));
+  if (vmDiffState) return CT_NOT_ORACLE(runVmDiff(romPath, vmDiffState, vmDiffDat, frames > 0 ? frames : 300, vmDiffPos));
+  if (textDump) return CT_NOT_ORACLE(runTextDump(textDump));
+  if (datOnly && sceneIdx >= 0) return CT_NOT_ORACLE(runSceneFromDat(datOnly, sceneIdx, aframe, full, sceneOut));
+  if (sceneIdx >= 0) return CT_NOT_ORACLE(runScene(romPath, sceneIdx, aframe, full, sceneOut, assetsPath));
+#ifdef CT_ORACLE_ONLY
+  return CT_NOT_ORACLE(0);                    // the M0 harness and --trace below
+#endif
 
   // --trace N: emit the executed instruction stream from reset to stdout, one
   // line per opcode "KK PPPP M X E" (program bank, pc, M flag, X flag, emu).

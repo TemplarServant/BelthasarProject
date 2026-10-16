@@ -11,6 +11,17 @@ endif()
 # (it pulls in SDL); the M0 harness is headless.
 file(GLOB SNES_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/snes/*.c")
 
+# DETERMINISTIC BUILD (MSVC): the same sources link the same code bytes. The suite's oracle cache
+# (tools/ctlib/oracle_cache.py) is keyed by the sha256 of the exe it runs, and MSVC stamps a time into every PE it
+# writes -- so a rebuild that changed nothing (a touch, the restore at the end of a --mutate run) threw the whole cache
+# away. /Brepro drops the stamps from the objects; incremental linking pads the image differently on every link, so
+# it goes too. The linker still writes a fresh identity per link (the PE stamp, the PDB GUID, the repro hash: 69 bytes,
+# the code identical), which the cache's key leaves out (oracle_cache._exe_sha).
+if(MSVC)
+  add_compile_options(/Brepro)
+  add_link_options(/Brepro /INCREMENTAL:NO)
+endif()
+
 # The playable host's sources (ct_field below; the Android app's libmain.so, android/CMakeLists.cmake).
 set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_ending.c src/seq_entry3.c src/seq_entry4.c src/seq_entry6.c src/seq_entry7.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
                  src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
@@ -62,6 +73,27 @@ if(MSVC)
   # The LakeSnes core emits many benign implicit-conversion warnings; quiet them.
   target_compile_options(ct PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
 endif()
+
+# The ORACLE alone: main.c with only --peek / --monitor / --hdma / --fb dispatched (CT_ORACLE_ONLY, src/main.c). The
+# suite's oracle cache runs it for those modes and keys on its bytes, so a change to the port does not throw the
+# cartridge's runs away (tools/ctlib/oracle_cache.py). Its sources are what those four modes LINK -- the linker's list,
+# not a guess (2026-10-16: nothing else resolves a symbol they reach): the vendored core, the rule's CPU infra, the ROM
+# reader, the state loader and --fb's play script. `ct` depends on it, so the two are always built together.
+add_executable(ct_oracle
+  src/main.c
+  src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/harness_drive.c
+  ${SNES_SRC}
+)
+target_compile_definitions(ct_oracle PRIVATE CT_ORACLE_ONLY)
+target_include_directories(ct_oracle PRIVATE snes src)
+if(UNIX)
+  target_link_libraries(ct_oracle m)
+endif()
+if(MSVC)
+  target_compile_definitions(ct_oracle PRIVATE _CRT_SECURE_NO_WARNINGS)
+  target_compile_options(ct_oracle PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101 /wd4505)
+endif()
+add_dependencies(ct ct_oracle)
 
 # Interactive SDL2 viewer for the C scene engine. Built only when SDL2 is present
 # in third_party/SDL2 (downloaded, git-ignored). The headless 'ct' stays SDL-free;

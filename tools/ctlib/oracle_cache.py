@@ -4,7 +4,9 @@ only for what changed.
 A run of those modes is a pure function of (the ct.exe binary, its arguments, its environment, the files it reads); every
 one of them goes into the key:
 
-  * sha256 of the ct.exe being run -- a rebuilt oracle (snes/*.c, src/main.c, any port file ct.exe links) misses;
+  * sha256 of the binary that runs it, minus its link identity (_exe_sha) -- build/ct_oracle.exe when it is there (the
+    oracle alone: main.c's four modes + snes/*.c + the CPU infra and state loader, CMakeLists.txt), so a rebuilt oracle
+    (snes/*.c, src/main.c, ct_cpu_infra.c ...) misses and an edit to the port (battle.c, ct_vm.c, field.c ...) does not;
   * the arguments and the working directory, minus the OUTPUT paths (`--peek <state> <OUT>`, and the env outputs below);
   * the environment, minus the operating system's own variables (PATH, TEMP, ...) -- CT_*, PEEK_*, VMDIFF_* ... all in;
   * the CONTENT of every argument or environment value that names an existing file (a state, a .lakewram, the ROM given
@@ -51,11 +53,12 @@ _OS_VARS = {
     'SESSIONNAME', 'PROMPT', 'PSMODULEPATH', 'PWD', 'OLDPWD', 'SHLVL', 'TERM', 'SHELL', 'LANG', 'MSYSTEM', 'ORIGINAL_PATH',
     'EXEPATH', 'MSYS', 'MINGW_PREFIX', 'MSYSTEM_PREFIX', 'HOSTNAME', 'INFOPATH', 'MANPATH', 'ACLOCAL_PATH',
     'PKG_CONFIG_PATH', 'CONFIG_SITE', 'DISPLAY', 'PYTHONPATH', 'PYTHONIOENCODING', 'PYTHONUTF8', 'PYTHONHASHSEED',
-    'CT_ORACLE_CACHE', 'ONEDRIVE', 'ONEDRIVECONSUMER', 'DRIVERDATA', 'CHROME_CRASHPAD_PIPE_NAME', '_', 'TERM_PROGRAM',
+    'CT_ORACLE_CACHE', 'CT_ORACLE_VERIFY', 'ONEDRIVE', 'ONEDRIVECONSUMER', 'DRIVERDATA', 'CHROME_CRASHPAD_PIPE_NAME', '_', 'TERM_PROGRAM',
     'TERM_PROGRAM_VERSION', 'COLORTERM', 'WT_SESSION', 'WT_PROFILE_ID', 'VSCODE_GIT_IPC_HANDLE', 'GIT_ASKPASS',
     'SDL_VIDEODRIVER', 'SDL_AUDIODRIVER',
 }
 DEFAULT_ROM = 'Chrono_Trigger_USA_SNES.sfc'
+ORACLE_REFUSED = (97, b'ct_oracle: not an oracle mode')   # src/main.c ctOracleOnlyRefuse
 _hash_memo = {}
 
 
@@ -69,6 +72,59 @@ def _file_sha(path):
             for chunk in iter(lambda: fh.read(1 << 20), b''):
                 d.update(chunk)
         h = _hash_memo[k] = d.hexdigest()
+    return h
+
+
+def _pe_identity_spans(b):
+    """[(offset, length)] of the bytes a Windows linker writes FRESH on every link of the same code: the COFF header's
+    TimeDateStamp, the optional header's CheckSum, each debug directory entry's TimeDateStamp, the CodeView record's PDB
+    GUID + age, and the REPRO entry's hash. With /Brepro and /INCREMENTAL:NO (CMakeLists.txt) these are the only bytes two
+    links of the same objects differ in (measured: 69 bytes, 2026-10-16). None for a file that is not a PE32+ image."""
+    u16 = lambda o: int.from_bytes(b[o:o + 2], 'little')
+    u32 = lambda o: int.from_bytes(b[o:o + 4], 'little')
+    if len(b) < 0x40 or b[:2] != b'MZ':
+        return None
+    pe = u32(0x3C)
+    if b[pe:pe + 4] != b'PE\0\0':
+        return None
+    nsec, optsz, opt = u16(pe + 6), u16(pe + 20), pe + 24
+    if u16(opt) != 0x20B:
+        return None
+    spans = [(pe + 8, 4), (opt + 64, 4)]
+    drva, dsize = u32(opt + 112 + 6 * 8), u32(opt + 112 + 6 * 8 + 4)
+    sec = opt + optsz
+    def file_off(rva):
+        for i in range(nsec):
+            s = sec + 40 * i
+            va, vsz, raw = u32(s + 12), max(u32(s + 8), u32(s + 16)), u32(s + 20)
+            if va <= rva < va + vsz:
+                return raw + (rva - va)
+        return None
+    d = file_off(drva) if dsize else None
+    if d is None:
+        return spans
+    for e in range(d, d + dsize - 27, 28):
+        spans.append((e + 4, 4))
+        typ, size, ptr = u32(e + 12), u32(e + 16), u32(e + 24)
+        if typ == 2 and b[ptr:ptr + 4] == b'RSDS':      # IMAGE_DEBUG_TYPE_CODEVIEW: 'RSDS' GUID[16] age[4] path
+            spans.append((ptr + 4, 20))
+        elif typ == 16:                                  # IMAGE_DEBUG_TYPE_REPRO: the linker's own content hash
+            spans.append((ptr, size))
+    return spans
+
+
+def _exe_sha(path):
+    """sha256 of an executable minus its link identity (_pe_identity_spans): two links of the same code key the same, so a
+    rebuild that changed nothing keeps the cache. Any other file (not a PE32+) hashes whole, like _file_sha."""
+    st = os.stat(path)
+    k = ('exe', os.path.abspath(path), st.st_size, st.st_mtime_ns)
+    h = _hash_memo.get(k)
+    if h is None:
+        with open(path, 'rb') as fh:
+            b = bytearray(fh.read())
+        for off, n in _pe_identity_spans(b) or []:
+            b[off:off + n] = bytes(n)
+        h = _hash_memo[k] = hashlib.sha256(b).hexdigest()
     return h
 
 
@@ -118,7 +174,7 @@ def _key(argv, env, cwd):
     oi = mode_of(argv)[1]
     out_args = {oi} if oi is not None else set()
     keyenv = {k: v for k, v in env.items() if k.upper() not in _OS_VARS and k not in ENV_OUTS}
-    parts = {'exe': _file_sha(argv[0]), 'argv': [a for i, a in enumerate(argv[1:], 1) if i not in out_args], 'cwd': cwd,
+    parts = {'exe': _exe_sha(argv[0]), 'argv': [a for i, a in enumerate(argv[1:], 1) if i not in out_args], 'cwd': cwd,
              'env': sorted(keyenv.items()), 'files': []}
     for tag, v in [('a%d' % i, a) for i, a in enumerate(argv[1:], 1) if i not in out_args] + sorted(keyenv.items()):
         if isinstance(v, str) and v and len(v) < 1024:
@@ -153,6 +209,42 @@ def _finish(argv, kwargs, rc, out, err):
     return subprocess.CompletedProcess(argv, rc, o, e)
 
 
+def _ct_run_snapshot(argv, outs, real_run, kw):
+    """CT_ORACLE_VERIFY=1 (a measurement switch): run ct.exe itself first and keep what it printed and wrote."""
+    t0 = time.time()
+    r = real_run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kw)
+    files = {}
+    for role, p in outs.items():
+        if os.path.isfile(p) and os.stat(p).st_mtime >= t0 - 2:
+            with open(p, 'rb') as fh:
+                files[role] = fh.read()
+            os.remove(p)                                       # so the second run's file is its own
+    return r.returncode, r.stdout or b'', r.stderr or b'', files
+
+
+def _verify_report(argv, cwd, ref, r, outs, t0):
+    """...then compare ct_oracle.exe's run of the same call with it, byte for byte; one line per call in
+    build/_oracle_verify.log (SAME, or DIFF and what differed)."""
+    rc, so, se, files = ref
+    bad = []
+    if rc != r.returncode:
+        bad.append('rc %d/%d' % (rc, r.returncode))
+    if so != (r.stdout or b''):
+        bad.append('stdout')
+    if se != (r.stderr or b''):
+        bad.append('stderr')
+    for role, p in outs.items():
+        mine = None
+        if os.path.isfile(p) and os.stat(p).st_mtime >= t0 - 2:
+            with open(p, 'rb') as fh:
+                mine = fh.read()
+        if files.get(role) != mine:
+            bad.append('file ' + role)
+    line = '%s %s\n' % ('SAME' if not bad else 'DIFF[' + ','.join(bad) + ']', json.dumps(argv[1:]))
+    with open(os.path.join(cwd, 'build', '_oracle_verify.log'), 'a', encoding='utf-8') as fh:
+        fh.write(line)
+
+
 def run(argv, kwargs, real_run, cache=None):
     """subprocess.run(argv, **kwargs) through the cache `cache` (default: CT_ORACLE_CACHE), when this is a cacheable
     oracle run."""
@@ -169,8 +261,16 @@ def run(argv, kwargs, real_run, cache=None):
     env = kwargs.get('env')
     env = dict(env) if env is not None else dict(os.environ)
     cwd = os.path.abspath(kwargs.get('cwd') or os.getcwd())
+    # THE ORACLE ALONE: the same four modes from ct_oracle.exe (CMakeLists.txt, src/main.c CT_ORACLE_ONLY), built beside
+    # ct.exe from ct.exe's own main.c with every other mode compiled out -- it links none of the port, so an edit to the
+    # port leaves its bytes, and so this key, alone. The run is made by the binary the key names. A mode whose flags take
+    # another branch of main()'s chain gets ORACLE_REFUSED from it and is run by ct.exe itself, uncached.
+    xargv = argv
+    oracle = os.path.join(os.path.dirname(argv[0]), 'ct_oracle.exe')
+    if os.path.isfile(oracle):
+        xargv = [oracle] + argv[1:]
     try:
-        key = _key(argv, env, cwd)
+        key = _key(xargv, env, cwd)
     except OSError:
         return real_run(argv, **kwargs)
     outs = _outputs(argv, env, cwd)
@@ -201,8 +301,15 @@ def run(argv, kwargs, real_run, cache=None):
             shutil.rmtree(ent, ignore_errors=True)            # a bad entry is dropped and the run made for real
     kw = {k: v for k, v in kwargs.items() if k not in ('stdout', 'stderr', 'capture_output', 'text', 'universal_newlines',
                                                        'encoding', 'errors', 'check')}
+    verify = None
+    if xargv is not argv and os.environ.get('CT_ORACLE_VERIFY') == '1':
+        verify = _ct_run_snapshot(argv, outs, real_run, kw)
     t0 = time.time()
-    r = real_run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kw)
+    r = real_run(xargv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kw)
+    if xargv is not argv and r.returncode == ORACLE_REFUSED[0] and ORACLE_REFUSED[1] in (r.stderr or b''):
+        return real_run(argv, **kwargs)
+    if verify is not None:
+        _verify_report(argv, cwd, verify, r, outs, t0)
     roles, whole = [], True
     for role, p in outs.items():
         try:
