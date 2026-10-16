@@ -84,8 +84,8 @@ It is **not yet verified playable from start to finish**.
 
 ### Not done
 
-- **Part of the suite still needs private states.** Everything the build needs is made from your ROM, and 582 of
-  the 829 regression checks run from it; the other 247 read a state from the owner's playthrough that no recipe
+- **Part of the suite still needs private states.** Everything the build needs is made from your ROM, and 587 of
+  the 869 regression checks run from it; the other 282 read a state from the owner's playthrough that no recipe
   reproduces yet, and SKIP in a fresh clone. See [docs/ROADMAP.md](docs/ROADMAP.md#1-the-public-release-and-what-it-left-open).
 - **Some pieces still run on emulated hardware.** The sound processor runs on LakeSnes's SPC700/DSP. Five
   timing-sensitive stages (the motorcycle race and other `$C3` sequences, the window wipe, an overworld window, the
@@ -193,7 +193,7 @@ another path). Headless runs never read that file, so the test suite always sees
 
 | Tab | Options |
 |---|---|
-| Video | Window or fullscreen, window size, scaling (fit / integer / stretch), aspect (square pixels or 4:3), filtering, vsync, backend (SDL_Renderer, OpenGL 3.3, Vulkan; applied at the next start). The mods live here too: **widescreen** (off, 16:9, 16:10, 21:9; plus whether a room as wide as its map continues the map into the sides), **internal resolution** (1x to 4x), **frames between** (draws the picture at the display's refresh rate between two 60 Hz frames, at a cost of one frame of latency) |
+| Video | Window or fullscreen, window size, scaling (fit / integer / stretch), aspect (square pixels or 4:3), filtering, vsync, backend (SDL with its render driver, OpenGL 3.3 -- 4.1 on macOS -- or Vulkan; applied at the next start; Android has SDL only). The mods live here too: **widescreen** (off, 16:9, 16:10, 21:9; plus whether a room as wide as its map continues the map into the sides), **internal resolution** (1x to 4x), **frames between** (draws the picture at the display's refresh rate between two 60 Hz frames, at a cost of one frame of latency) |
 | Audio | Volume, mute |
 | Controls | Key and controller bindings; the left stick as the d-pad |
 | Sync | **Frame-perfect** (default) or **free**: in free mode, waits that exist only because the SNES was busy (song uploads, load stalls) cost no frames |
@@ -212,7 +212,7 @@ watch any RAM the cartridge has (`--peek`, `--monitor`, `--read`). Timing is gra
 zelda3's model: lag frames, beam-counter races and CPU cycle counts are removed on both sides, so the comparison is
 deterministic.
 
-`python tools/regress.py` runs the regression suite: 807 checks (570 in the `--quick` tier). A check passes when its
+`python tools/regress.py` runs the regression suite: 869 checks (595 in the `--quick` tier). A check passes when its
 expected output lines appear, never because of an exit code, and a check whose inputs are missing is reported as
 SKIP. Most checks also carry mutations: deliberate defects that the check must catch. A check that still passes with
 its mutation applied is treated as a blind spot, not as coverage.
@@ -236,7 +236,7 @@ for the suite.
 | [tools/README.md](tools/README.md) | The tooling index (`dis.py`, `ct.py`, `ctlib`) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Ground rules and workflow for contributors |
 | [CLAUDE.md](CLAUDE.md) | The project mandate as given to the coding agents, with the owner's dated decisions |
-| [disasm/notes/](disasm/notes/) | About 260 reverse-engineering dossiers, one per mechanism |
+| [disasm/notes/](disasm/notes/) | About 270 reverse-engineering dossiers, one per mechanism |
 | [.claude/skills/](.claude/skills/) | Step-by-step playbooks: derive, implement, pin, capture, triage |
 
 ## Credits and license
