@@ -39536,6 +39536,146 @@
       "notes": "THE EPOCH ON THE OVERWORLD, BOARDING (disasm/notes/ow_vehicle.md; ROADMAP G1a item 3). Jackie's ch24 battery save: loc 1F6 (12000 B.C.), the party standing on the parked winged Epoch ($0294 = A0), storyline D3. One A: the boarding manager (class $309E, C2/30CD: the lead's box C2:324C over the vehicle's C2:3254) sets $028F = 2, $027E = 4; the lead (C2/3489) and the followers (C2/3B6A) walk aboard and count $0294 up; at 3 aboard $027E = 2; the Epoch (class $42DD) sets bit 6 and lifts off 0x30 frames at half a pixel a frame with the song 13 post (C2/4A2A); storyline D3 then spawns script C2:4A9B (`$027C = 7`), which enters loc 1DD (the Black Omen rising) 19 frames later. Timeline counted from the frame $027E leaves 0, both sides; the pictures at the P+2 alignment, the era placard masked (the port loads the battery save at another frame than the cartridge state was taken, so its $1BF7 counter starts lower -- not the vehicle's)."
     },
     {
+      "name": "ow-black-omen-rising-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py",
+        "--omen"
+      ],
+      "env": {},
+      "expect": [
+        "epoch-omen: 0 underived native(s)",
+        "epoch-omen: picture port f1060 / cartridge f700 0 px differ",
+        "epoch-omen: picture port f1260 / cartridge f900 0 px differ",
+        "epoch-omen: picture port f1460 / cartridge f1100 0 px differ",
+        "epoch-omen: picture port f1660 / cartridge f1300 0 px differ",
+        "epoch-omen: picture port f1860 / cartridge f1500 0 px differ"
+      ],
+      "pin": [
+        "^epoch-omen: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch24.state",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "note_pass": "the Black Omen rises on 1F6 pixel for pixel with the cartridge: its pictures (C2/7AFC, 7B20), BG2's HDMA wave (C2/7C56-7D5E) and BG3 added to the sub screen (TM 15 / TS 12)",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    obPutW(B + 0x24, (uint16_t)(obW(B + 0x24) + 0x0010));",
+          "replace": "    obPutW(B + 0x24, (uint16_t)(obW(B + 0x24) + 0x0008));   /* MUT */",
+          "why": "C2/7D2D: the wave's phase steps 0x10 a frame"
+        },
+        {
+          "file": "src/field.c",
+          "find": "#define OW_HDMA_LINE 1",
+          "replace": "#define OW_HDMA_LINE 0   /* MUT */",
+          "why": "scanline s takes table line s (the cartridge's --hdma trace: entry 9 first on line 9); row y is scanline y + 1"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  const int subOwn = w->wram && ((w->wram[0x0042] & 0x13) != (tmain & 0x13)) && mathBg3 && !mathFix;   // owComposeSub",
+          "replace": "  const int subOwn = 0;   /* MUT */",
+          "why": "with TS = 12 the BG3 silhouette adds BG2's waved sea, not the black backdrop"
+        }
+      ],
+      "notes": "THE BLACK OMEN'S RISING (disasm/notes/ow_vehicle.md sec. 6). Jackie's ch24, A once on the parked Epoch, then A every 32 frames: the lift-off into loc 1DD (Marle: What's that?!) and back onto 1F6, whose script $7F:0632 runs the six natives the port skipped (a crash reading BG3 tile 0x3FF before 2026-10-16): C2/7AFC / 7B20 decompress C6:FE20[6C] / C6:FF40[0F] into $7F:9000 for op 0x03; C2/7C56 / 7C97 program HDMA channels 1 and 2 (DMAP 42, indirect, to BG2HOFS / BG2VOFS) from $7E:8A35 / 8A42 and zero their line buffers; the two wave children call C2/7CD8 / 7D5E each frame (double-buffered shift, the newest line sine(+24) x +22). The script also sets TM = 15 and TS = 12, so the silhouette is BG3 added to the sub screen BG2 -- the port's composer now builds a real sub screen when TS is not the main screen under BG3 (field.c owComposeSub). Pictures at port f + 360 (its boarding A at f420, the cartridge's at f60)."
+    },
+    {
+      "name": "ow-epoch-flight-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py",
+        "--flight"
+      ],
+      "env": {},
+      "expect": [
+        "epoch-flight: timeline same -- 56 changes from the first step (cartridge f3083); last +55:01/02/E3/04D8/01B8/03",
+        "epoch-flight: picture port f3458 / cartridge f3102 0 px differ",
+        "epoch-flight: picture port f3488 / cartridge f3132 0 px differ",
+        "epoch-flight: picture port f3558 / cartridge f3202 0 px differ",
+        "epoch-flight: picture port f3658 / cartridge f3302 0 px differ"
+      ],
+      "pin": [
+        "^epoch-flight: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch24.state",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "note_pass": "the Epoch flies under the pad step for step with the cartridge (C2/44B7 -> C2/461D -> C2/4675, 2 px a frame, both layers scrolled) and the camera follows it",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    obPutW(B + 0x1C, (uint16_t)owRomW(0x4899 + dir * 4));              // 4628 LDA $C24899,X",
+          "replace": "    obPutW(B + 0x1C, (uint16_t)owRomW(0x4899 + (dir ^ 1) * 4));   /* MUT */",
+          "why": "C2:4899 is indexed by the facing: right is +2 px, left -2"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    owScrollBoth(ram, c, 0, obW(B + 0x1C));                            // 4681-4691 C2/0568 x2",
+          "replace": "    /* MUT: no horizontal scroll */",
+          "why": "C2/4681: the Epoch scrolls BG1 and BG2 by its own velocity -- the camera follows the craft"
+        }
+      ],
+      "notes": "THE EPOCH'S FREE FLIGHT (disasm/notes/ow_vehicle.md). ch24 driven past the Black Omen (A every 32 frames through 1DD, 06B, 1DD) to the free flight on 1F6 (the cartridge's f3073), then Right 40 frames, Down 16, A (refused over the sea). Graded from the first step: $027C $027E $0294, the position $0290/$0292 and the Epoch's state on every change, and four pictures (P+2). The port's world runs 358 frames after the cartridge's there (its field scenes in between run a few frames apart), and the flight is pressed on that clock."
+    },
+    {
+      "name": "ow-epoch-landing-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py",
+        "--land"
+      ],
+      "env": {},
+      "expect": [
+        "epoch-land: timeline same -- 15 changes from the first step (cartridge f3101); last +195:01/02/E3/0488/0198/02",
+        "epoch-land: picture port f3468 / cartridge f3112 0 px differ",
+        "epoch-land: picture port f3510 / cartridge f3154 23543 px differ",
+        "epoch-land: picture port f3528 / cartridge f3172 0 px differ",
+        "epoch-land: picture port f3558 / cartridge f3202 0 px differ",
+        "epoch-land: picture port f3688 / cartridge f3332 0 px differ"
+      ],
+      "pin": [
+        "^epoch-land: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch24.state",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "note_pass": "the Epoch lands (C2/46E2), the party steps out (module 5) and boards again and lifts off -- twice -- on the cartridge's frames",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "        B[0x26] = 0x31;",
+          "replace": "        B[0x26] = 0x30;   /* MUT */",
+          "why": "C2/4599: the landing lasts 0x31 frames"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    ram[0x0294] &= (uint8_t)~0x40;                                     // 4705 TRB $0294",
+          "replace": "    /* MUT: still riding */",
+          "why": "C2/4705 clears bit 6: the boarding manager reads it and sends the party out"
+        }
+      ],
+      "notes": "THE EPOCH'S LANDING (disasm/notes/ow_vehicle.md). ch24 with A every 32 frames: at the free flight the A lands it at once (1F6 allows it everywhere, C6/E797), the party steps out ($027E 5 -> 0, the lead's init C2/34F8 again in the host), the next A boards and lifts off, and so on. Timeline from the landing's first frame; pictures at P+2. PINNED RESIDUAL: port f3510 / cartridge f3154 differs on the sea only -- 1F6's sea palette row (row 2, a step every 10 frames) steps one frame later in the port there: it runs on the world's own clock since its entry from loc 1DD, which takes the port 72 frames to free roam against the cartridge's 71 (the location-load clock, ROADMAP F1), while the vehicle's events run on the pad's. Re-pin only from a fix of that clock."
+    },
+    {
       "name": "ending-story-plays-through-in-the-port",
       "argv": [
         "build/ct_field.exe",

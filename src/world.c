@@ -1645,6 +1645,41 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
     ram[0x1BA3] = ram[0x2980];
     ram[0x1BA4] = ram[0x2981];
     ram[0x1BA5] = ram[0x2982];
+  } else if (addr == 0x7AFC || addr == 0x7B20) {
+    // THE BLACK OMEN'S PICTURE LOADERS (the 1F6 cutscene, $7F:0668 / $067E): `LDX #9000 / STX $0303 / LDA #7F / STA $0305 /
+    // LDX $08 / REP #20 / LDA tbl,X / STA $0300 / SEP #20 / LDA tbl+2,X / STA $0302 / JSL C3/0002` -- the packet the record at
+    // tbl + `$08` names (the script's `13 08 00 nn`), C6:FE20 for 7AFC, C6:FF40 for 7B20, into $7F:9000; op 0x03 then sends it.
+    owFarLzTo(ram, 0x7F, 0x9000, addr == 0x7AFC ? 0xFE20 : 0xFF40, (uint16_t)(ram[0x08] | (ram[0x09] << 8)));
+  } else if (addr == 0x7C56 || addr == 0x7C97) {
+    // ...AND ITS WAVE: two indirect HDMA channels on BG2's scroll. 7C56: `$8A35 = $8A38 = F0`, `$8A3B = 00`, channel 1 = DMAP
+    // 42 (indirect, two writes) to $210F (BG2HOFS) from $7E:8A35, `TSB $4A` #02; 7C97 the same on channel 2 to $2110 (BG2VOFS)
+    // from $7E:8A42, #04. Each zeroes its caller's +26 and fills its two line buffers with 0 (`STA $8B56 / MVN` over 0x460
+    // bytes: $8B56-$8FB5; $9176-$95D5). The tables' pointers are the NMI's copies of $8A21/$8A23 and $8A25/$8A27 (C2/02B2).
+    int two = (addr == 0x7C97);
+    unsigned t = two ? 0x8A42 : 0x8A35, buf = two ? 0x9176 : 0x8B56;
+    ram[t] = 0xF0; ram[t + 3] = 0xF0; ram[t + 6] = 0x00;
+    CtWorldHdmaSet(two ? 2 : 1, 0x42, two ? 0x10 : 0x0F, (uint16_t)t);
+    ram[0x4A] |= (uint8_t)(two ? 0x04 : 0x02);
+    B[0x26] = 0;
+    memset(ram + buf, 0, 0x460);
+  } else if (addr == 0x7CD8 || addr == 0x7D5E) {
+    // ...ITS STEP, once a frame from each wave child: `INC $0026,X`; on an even count the table reads buffer A while buffer B,
+    // shifted one line (`MVN` 0x1BE bytes from B + 2), becomes A; on an odd count the other way round -- then the newest
+    // line, the last word of the buffer just written: `+24 += 10`, C2/225E's sine of it, its magnitude times the amplitude
+    // +22 through $4202/$4203, the product's high byte, the sign put back.
+    int v = (addr == 0x7D5E);
+    unsigned A = v ? 0x9176 : 0x8B56, Bb = v ? 0x9416 : 0x8DF6, ptr = v ? 0x8A25 : 0x8A21;
+    B[0x26]++;
+    unsigned dst, last;
+    if (!(B[0x26] & 1)) { dst = A; memmove(ram + A, ram + Bb + 2, 0x1BE); last = A + 0x1BE; }
+    else                { dst = Bb; memmove(ram + Bb, ram + A + 2, 0x1BE); last = Bb + 0x1BE; }
+    obPutW(ram + ptr, (uint16_t)dst); obPutW(ram + ptr + 2, (uint16_t)(dst + 0xE0));
+    obPutW(ram + 0x10, (uint16_t)last); ram[0x12] = 0x7E;
+    obPutW(B + 0x24, (uint16_t)(obW(B + 0x24) + 0x0010));
+    int s = owSine(obW(B + 0x24));
+    unsigned mag = (unsigned)(s < 0 ? -s : s) & 0xFF;
+    unsigned prod = (mag * B[0x22]) >> 8;
+    obPutW(ram + last, (uint16_t)(s < 0 ? (0x10000 - prod) & 0xFFFF : prod));
   } else {
     // An op-0x34 target this port does not have: C2/1807 `JMP ($005B)` runs whatever C2 routine the script names,
     // so skipping it silently changes what the script branches on later. Name it (once per address).
@@ -1767,6 +1802,7 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
     // seed reads the H/V counters -- the world VM's position in the frame, which this port has no clock for: every call
     // starts on the first call's (CT_XLAT_OWWIN_V/H, field_window_wipe.md sec. 6).
     case 0xC6E241: case 0xC6E27E: {
+      if (tgt == 0xC6E241) CtWorldHdmaSet(2, 0x40, 0x27, 0x8A42);   // E241: channel 2 = window 1's right edge
       int r = g_owWinCall ? g_owWinCall(ram, tgt) : -1;
       if (r) { static int said = 0;
         if (!said) { said = 1; fprintf(stderr, "owobj: op 4E -> $%06X not run (%s, r=%d) -- the script advances, the window is not stepped\n",
@@ -2857,6 +2893,20 @@ static int obEpochShadow(uint8_t* ram, uint8_t* B) {
 }
 
 static uint8_t g_owNmiEn = 0, g_owNmiWh0 = 0, g_owNmiWh1 = 0;   // the NMI's HDMAEN / WH0 / WH1 pushes (see below)
+// THE OVERWORLD'S HDMA CHANNELS as the natives program them ($43x0 DMAP, $43x1 B-bus target, $43x2-3 the table in bank
+// $7E): channel 2 is window 1's right edge (C6/E241: DMAP 40 to $2127 from $8A42) unless the Black Omen's wave took it
+// (C2/7C97: DMAP 42 to $2110); channel 1 is that wave's BG2HOFS (C2/7C56). What the picture reads, with HDMAEN ($4A as
+// the NMI pushed it).
+static struct { uint8_t dmap, bbad; uint16_t tbl; } g_owHdma[8] = { { 0 }, { 0 }, { 0x40, 0x27, 0x8A42 } };
+void CtWorldHdmaSet(int ch, uint8_t dmap, uint8_t bbad, uint16_t tbl) {
+  if (ch < 0 || ch > 7) return;
+  g_owHdma[ch].dmap = dmap; g_owHdma[ch].bbad = bbad; g_owHdma[ch].tbl = tbl;
+}
+int CtWorldHdmaGet(int ch, uint8_t* dmap, uint8_t* bbad, uint16_t* tbl) {
+  if (ch < 0 || ch > 7) return 0;
+  *dmap = g_owHdma[ch].dmap; *bbad = g_owHdma[ch].bbad; *tbl = g_owHdma[ch].tbl;
+  return g_owHdma[ch].bbad != 0;
+}
 void CtWorldNmiLatch(uint8_t* en, uint8_t* wh0, uint8_t* wh1) { *en = g_owNmiEn; *wh0 = g_owNmiWh0; *wh1 = g_owNmiWh1; }
 void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
   // C2/02C2-02D1, in the NMI that precedes every object pass: `LDA $7E8A25 / STA $7E8A43 / LDA $7E8A27 / STA $7E8A46`
@@ -2872,8 +2922,12 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
   if (g_owResumeBlock >= 0) { b0 = g_owResumeBlock; g_owResumeBlock = -1; }
   else {
   g_owNmiEn = ram[0x004A]; g_owNmiWh0 = ram[0x003B]; g_owNmiWh1 = ram[0x003C];
+  ram[0x8A36] = ram[0x8A21]; ram[0x8A37] = ram[0x8A22];        // C2/02B2-02DE: channel 1's two entries,
+  ram[0x8A39] = ram[0x8A23]; ram[0x8A3A] = ram[0x8A24];        //   channel 2's (below) and channel 3's
   ram[0x8A43] = ram[0x8A25]; ram[0x8A44] = ram[0x8A26];
   ram[0x8A46] = ram[0x8A27]; ram[0x8A47] = ram[0x8A28];
+  ram[0x8A50] = ram[0x8A29]; ram[0x8A51] = ram[0x8A2A];
+  ram[0x8A53] = ram[0x8A2B]; ram[0x8A54] = ram[0x8A2C];
   }
 
   g_obStream = st;

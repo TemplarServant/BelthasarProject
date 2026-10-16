@@ -195,6 +195,8 @@ void CtWorldLeadAnimFrame(uint8_t* ram, int dir, int phaseBefore, int blocked, i
 typedef int (*CtWorldJslFn)(uint8_t* ram);
 void CtWorldSetJsl(CtWorldJslFn fn);
 int  CtWorldTakePassSuspend(void);    // NMIs crossed by this frame's inline JSL (0 = the pass completed), consumed
+void CtWorldHdmaSet(int ch, uint8_t dmap, uint8_t bbad, uint16_t tbl);   // an HDMA channel as a native programs it
+int  CtWorldHdmaGet(int ch, uint8_t* dmap, uint8_t* bbad, uint16_t* tbl);
 void CtWorldLeadReinit(uint8_t* ram);     // C2/34F8: the lead's init again (stepping out of a vehicle, $027E 5 -> 0)
 void CtWorldLeadRingPush(uint8_t* ram);   // C2/3934: the lead's step arrival onto its trail ring ($1B5A/$1B5B/$1B7B)
 

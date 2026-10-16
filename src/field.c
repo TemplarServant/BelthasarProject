@@ -1411,7 +1411,8 @@ static void worldObjLinePieces(const World* w, int y, uint8_t* pix, uint8_t* pri
 // WH0 = the shadow $003B (C2/025F `LDA $3B / STA $2126`). Returns the window's [l, r] on `line` (1..224) and 1, or 0.
 static int owWin1Line(const uint8_t* wram, int en, int wh0, int wh1, int line, int* l, int* r) {
   if (!wram) return 0;
-  if (!(en & 0x04)) { *l = wh0; *r = wh1; return 1; }            // the channel off this frame: the pushed edges
+  uint8_t dm, bb; uint16_t tb;                                     // (channel 2 may be another effect's: C2/7C97's BG2VOFS)
+  if (!(en & 0x04) || (CtWorldHdmaGet(2, &dm, &bb, &tb) && bb != 0x27)) { *l = wh0; *r = wh1; return 1; }   // off: the pushed edges
   int i = line - 1; if (i < 0) i = 0; if (i > 223) i = 223;
   unsigned p = (i < 112) ? (unsigned)(wram[0x8A43] | (wram[0x8A44] << 8)) + (unsigned)i
                          : (unsigned)(wram[0x8A46] | (wram[0x8A47] << 8)) + (unsigned)(i - 112);
@@ -1433,6 +1434,32 @@ static int g_owWide;
 static uint8_t g_wipeOn[CAMH], g_wipeBd[3];
 static int16_t g_wipeL[CAMH], g_wipeR[CAMH];
 static CtMotFrame* g_mot;                        // (the picture's owners while a compositor draws: the field's, below)
+// AN INDIRECT HDMA CHANNEL'S VALUE ON A LINE (the Black Omen's wave on BG2, C2/7C56 / 7C97): the channel HDMAEN `en` holds
+// whose B-bus target is `bbad`, its table walked from the frame's top -- `n ptr` records, n = 1..80 lines with one transfer
+// (80 = 128), 81..FF = n - 80 lines with one unit a line (two bytes for DMAP mode 2, the write-twice scroll registers), 0 =
+// the end, after which the register holds. Screen row y is table line y + OW_HDMA_LINE (as window 1's, owWin1Line).
+#define OW_HDMA_LINE 1
+static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line, uint16_t* out) {
+  for (int ch = 0; ch < 8; ch++) {
+    uint8_t dm, bb; uint16_t t;
+    if (!(en & (1 << ch)) || !CtWorldHdmaGet(ch, &dm, &bb, &t) || bb != bbad || !(dm & 0x40)) continue;
+    int unit = ((dm & 7) == 2 || (dm & 7) == 1) ? 2 : 1, l = 0, have = 0;
+    uint16_t val = 0;
+    for (int guard = 0; guard < 64; guard++) {
+      uint8_t n = wram[t & 0xFFFF];
+      if (!n) break;
+      unsigned ptr = (unsigned)(wram[(t + 1) & 0xFFFF] | (wram[(t + 2) & 0xFFFF] << 8));
+      t = (uint16_t)(t + 3);
+      int rep = n > 0x80, cnt = n == 0x80 ? 128 : (n & 0x7F);
+      unsigned at = ptr + (unsigned)(rep ? (line - l < cnt ? line - l : cnt - 1) * unit : 0);
+      val = (uint16_t)(wram[at & 0xFFFF] | (unit == 2 ? wram[(at + 1) & 0xFFFF] << 8 : 0)); have = 1;
+      if (line < l + cnt) break;
+      l += cnt;
+    }
+    if (have) { *out = val; return 1; }
+  }
+  return 0;
+}
 static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int X0) {
   const uint8_t* wram = w->wram;
   int l = 0, r = 0;
@@ -1506,6 +1533,52 @@ typedef struct OwNat {
 static OwNat g_owNat[2];
 static OwNat* g_owNatRec;                        // (set while the frame's picture is composed: its OBJ layer is recorded)
 static CtMotFrame* g_mot;                        // (the field's, below: the picture's owners while a compositor draws)
+// THE SUB SCREEN, when it is not "the main screen under BG3" (TS's BG1/BG2/OBJ differ from TM's): the layers $0042 names, in
+// mode 1's order (BG1p1 > BG2p1 > OBJ2 > BG1p0 > BG2p0 > OBJ1/0; OBJ3 above both), BG2 on its HDMA lines, and where none is
+// opaque the fixed colour ($2132 -- the sub screen's backdrop). The Black Omen's rising on 1F6 is that case: TM = 15, TS = 12,
+// the silhouette on BG3 added (CGADSUB 04) to BG2's waved sea (C2:0632's `13 41 00 15 / 13 42 00 12`; --ppuregs / --hdma).
+static uint8_t owSubScr[OW_WMAX * CAMH * 3];
+static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorldCam* cs, uint8_t hdmaEn, int W, int X0) {
+  const uint8_t* wr = w->wram;
+  const int tsub = wr ? wr[0x0042] : 0x13;
+  const int fix[3] = { wr ? (wr[0x0048] & 0x1F) : 0, wr ? (wr[0x0049] & 0x1F) : 0, wr ? (wr[0x0047] & 0x1F) : 0 };   // R, G, B
+  uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
+  for (int y = 0; y < CAMH; y++) {
+    uint16_t h2 = cs->bg2h, v2 = cs->bg2v, hv;
+    if (hdmaEn & 0x06) {
+      if (owHdmaWordAt(wr, hdmaEn, 0x0F, y + OW_HDMA_LINE, &hv)) h2 = hv;
+      if (owHdmaWordAt(wr, hdmaEn, 0x10, y + OW_HDMA_LINE, &hv)) v2 = hv;
+    }
+    if (tsub & 0x10) worldObjLine(w, y, opix, opri, oidx, W, X0); else memset(opix, 0, (size_t)W);
+    uint8_t* d = owSubScr + (size_t)y * W * 3;
+    for (int x = 0; x < W; x++) {
+      int ci[2][2] = { { -1, -1 }, { -1, -1 } };                     // [bg][prio]
+      for (int bg = 0; bg < 2; bg++) {
+        if (!(tsub & (1 << bg))) continue;
+        uint16_t hofs = bg == 0 ? cs->bg1h : h2, vofs = bg == 0 ? cs->bg1v : v2;
+        int wx = hofs + x - X0, wy = vofs + y + OW_BG_VLINE;
+        int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
+        uint16_t chip = stm->tilemap[bg][(col & 0x1F) + ((col & 0x20) << 5) + row * 0x20];
+        int t = chip & 0x3FF, pb = ((chip >> 10) & 7) * 16, tx = wx & 7, ty = wy & 7;
+        if (chip & 0x4000) tx = 7 - tx;
+        if (chip & 0x8000) ty = 7 - ty;
+        int bi = ((t + 512) * 32 + ty * 2) & 0xFFFF, k = 7 - tx;
+        uint8_t v4 = (uint8_t)(((w->vram[bi] >> k) & 1) | (((w->vram[(bi + 1) & 0xFFFF] >> k) & 1) << 1) |
+                               (((w->vram[(bi + 16) & 0xFFFF] >> k) & 1) << 2) | (((w->vram[(bi + 17) & 0xFFFF] >> k) & 1) << 3));
+        if (v4) ci[bg][(chip & 0x2000) ? 1 : 0] = pb + v4;
+      }
+      int o = opix[x] ? opri[x] : -1, c = -1;
+      if (o == 3) c = opix[x];
+      else if (ci[0][1] >= 0) c = ci[0][1];
+      else if (ci[1][1] >= 0) c = ci[1][1];
+      else if (o == 2) c = opix[x];
+      else if (ci[0][0] >= 0) c = ci[0][0];
+      else if (ci[1][0] >= 0) c = ci[1][0];
+      else if (o >= 0) c = opix[x];
+      for (int ch = 0; ch < 3; ch++) d[x * 3 + ch] = c >= 0 ? w->pal[c][ch] : (uint8_t)((fix[ch] << 3) | (fix[ch] >> 2));
+    }
+  }
+}
 static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldStream* stm) {
   // ⭐ THE COLOUR MATH IS PER-WORLD, read from the CGADSUB shadow $0046 (the byte the overworld NMI
   // pushes to $2131 every frame, C2/0296 `LDA $46 / STA $2131`). Each world's LOAD SCRIPT stores it
@@ -1543,14 +1616,21 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   static uint8_t bgCover[CAMH * OW_WMAX];
   const CtWorldCam* cs = w->haveShow ? &w->camShow : &w->cam;   // the NMI's latch (see the World struct)
   const int showX = w->haveShow ? w->posShowX : w->mv.posX, showY = w->haveShow ? w->posShowY : w->mv.posY;
+  uint8_t hdmaEn = 0, hwh0, hwh1; CtWorldNmiLatch(&hdmaEn, &hwh0, &hwh1);
+  const int subOwn = w->wram && ((w->wram[0x0042] & 0x13) != (tmain & 0x13)) && mathBg3 && !mathFix;   // owComposeSub
+  if (subOwn) owComposeSub(w, stm, cs, hdmaEn, W, X0);
   for (int y = 0; y < CAMH; y++) {
     uint8_t* dst = fb + (size_t)y * W * 3;
+    uint16_t bg2hL = cs->bg2h, bg2vL = cs->bg2v;                 // BG2's scroll on this line: HDMA's when a channel feeds it
+    if (hdmaEn & 0x06) { uint16_t hv;
+      if (owHdmaWordAt(w->wram, hdmaEn, 0x0F, y + OW_HDMA_LINE, &hv)) bg2hL = hv;
+      if (owHdmaWordAt(w->wram, hdmaEn, 0x10, y + OW_HDMA_LINE, &hv)) bg2vL = hv; }
     for (int x = 0; x < W; x++) {
       int p0 = -1, p1 = -1, p1bg1 = -1, p0bg = 5, p1bg = 5;
       bgCover[y * W + x] = 0;
       for (int bg = 0; bg < 2; bg++) {                 // BG1 over BG2 (both transparent at idx 0)
         if (!(tmain & (1 << bg))) continue;             // $212C bit0 BG1 / bit1 BG2
-        uint16_t hofs = bg == 0 ? cs->bg1h : cs->bg2h, vofs = bg == 0 ? cs->bg1v : cs->bg2v;
+        uint16_t hofs = bg == 0 ? cs->bg1h : bg2hL, vofs = bg == 0 ? cs->bg1v : bg2vL;
         int wx = hofs + x - X0, wy = vofs + y + OW_BG_VLINE;
         int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
         uint16_t chip = stm->tilemap[bg][(col & 0x1F) + ((col & 0x20) << 5) + row * 0x20];
@@ -1591,7 +1671,15 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
       // screen there is its BACKDROP = the fixed colour $2132, measured (0,0,0) -- the half-add
       // therefore reduces to "the BG3 colour, halved in 5-bit space". Without this the deep-sea
       // texture rendered at full brightness.
-      if (bg3Math && mathBg3 && !mathFix) {
+      if (bg3Math && subOwn) {                         // the sub screen of its own (owComposeSub)
+        const uint8_t* sp = owSubScr + ((size_t)y * W + x) * 3;
+        for (int ch = 0; ch < 3; ch++) {
+          int m5 = w->pal[ci][ch] >> 3, s5 = sp[ch] >> 3, o5 = mathSub ? m5 - s5 : m5 + s5;
+          if (mathHalf) o5 >>= 1;
+          if (o5 > 31) o5 = 31; if (o5 < 0) o5 = 0;
+          dst[x * 3 + ch] = (uint8_t)((o5 << 3) | (o5 >> 2));
+        }
+      } else if (bg3Math && mathBg3 && !mathFix) {
         for (int ch = 0; ch < 3; ch++) {                // sub screen here is its BACKDROP = the fixed
           int o5 = w->pal[ci][ch] >> 3;                 // colour $2132, measured (0,0,0) in every world
           if (mathHalf) o5 >>= 1;                       //   -> add/subtract is a no-op, only HALF bites
@@ -1774,7 +1862,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
           continue;
         }
         for (int ch = 0; ch < 3; ch++) {
-          int m5 = w->pal[pb3 + v3][ch] >> 3, s5 = dst[x * 3 + ch] >> 3;
+          int m5 = w->pal[pb3 + v3][ch] >> 3, s5 = (subOwn ? owSubScr[((size_t)y * W + x) * 3 + ch] : dst[x * 3 + ch]) >> 3;
           int o5 = mathSub ? m5 - s5 : m5 + s5;         // $2131 bit7 = subtract
           if (mathHalf) o5 >>= 1;                       // bit6 = half (600 A.D. has it CLEAR: full add)
           if (o5 > 31) o5 = 31; if (o5 < 0) o5 = 0;     // the PPU clamps in 5-bit space

@@ -55,17 +55,50 @@ pose 1F at y + 18.
 
 ## 4. Graded
 
-`tools/epoch_board_cmp.py` (Jackie's ch24, A once on the parked Epoch): every change of `$027C $027E $0294` and the Epoch's
-state, counted from the frame `$027E` leaves 0, equal on both sides (+0 4, +1 A2, +2 module 2, +3 bit 6 and state 2, +51
-`$027C = 7`, +70 `$027C = 2`); the lift-off picture and the fade into 1DD 0 px apart (P+2; the era placard masked: the port
-loads the battery save at another frame, so its counter `$1BF7` starts lower).
+`tools/epoch_board_cmp.py` (Jackie's ch24), four checks:
+
+- `ow-epoch-boarding-and-liftoff-vs-oracle` (A once on the parked Epoch): every change of `$027C $027E $0294` and the
+  Epoch's state, counted from the frame `$027E` leaves 0, equal on both sides (+0 4, +1 A2, +2 module 2, +3 bit 6 and state
+  2, +51 `$027C = 7`, +70 `$027C = 2`); the lift-off picture and the fade into 1DD 0 px apart (P+2; the era placard masked:
+  the port loads the battery save at another frame, so its counter `$1BF7` starts lower).
+- `ow-black-omen-rising-vs-oracle` (`--omen`, sec. 6): five pictures of the rising, 0 px.
+- `ow-epoch-flight-vs-oracle` (`--flight`): past the rising to the free flight (the cartridge's f3073), Right 40 frames, Down
+  16, A: 56 changes of `$027C $027E $0294`, `$0290/$0292` and the state equal from the first step; four pictures 0 px.
+- `ow-epoch-landing-vs-oracle` (`--land`, A every 32 frames): the landing, the party out, aboard again, the lift-off, twice:
+  15 changes equal; four pictures 0 px and one pinned (below).
+
+The port's world runs a few frames apart from the cartridge's after the field scenes in between (1DD, 06B, 1DD): 358 frames
+behind at the flight with the boarding A 360 behind. The world's entry from 1DD takes the port 72 frames to free roam against
+the cartridge's 71 (the location-load clock, ROADMAP F1), so 1F6's sea palette row (row 2, a step every 10 frames, on the
+world's own clock) steps one frame later against the vehicle's events: the landing check's port f3510 differs on the sea only.
 
 ## 5. Open
 
-- The free flight and the landing are ported (states 3-5) but not graded: the story path from ch24 next needs the Black Omen
-  cutscene on 1F6, whose script calls six op-34 natives not derived yet (C2/7AFC, 7B20, 7C56, 7C97, 7CD8, 7D5E: the port
-  shows garbage BG3/OBJ there); a `--loadwram` of the user's flying capture (saves/epoch_re/epoch_user.state) runs the ROM's
-  bootstrap with `CT_OWSEEDBOOT=1`, but the host enters the world at its default cell, not the Epoch's, so the craft is off
-  screen.
 - The time gauge (`$027C = 8`, states 6/7, script C2:4B8C / 4C8F), `$027C = 6`, vehicle B's ride (module 3) beyond boarding.
+- A `--loadwram` of the user's flying capture (saves/epoch_re/epoch_user.state) runs the ROM's bootstrap with
+  `CT_OWSEEDBOOT=1`, but the host enters the world at its default cell, not the Epoch's, so the craft is off screen.
 - In loc 1DD (the cockpit) the party in the canopy is drawn with the wrong tiles (a field-side picture item).
+
+## 6. The Black Omen's rising (1F6, script `$7F:0632`)
+
+After the first flight's scene (loc 1DD), 1F6 comes back with the camera cells zeroed and the script:
+
+- `3D 44` (the song), `13 41 00 15` (TM = BG1 + BG3 + OBJ), `13 42 00 12` (TS = BG2 + OBJ), `13 45 00 02` (CGWSEL: the sub
+  screen), `13 46 00 04` (CGADSUB: add, BG3 only).
+- `13 08 00 6C / 34 FC 7A / 03 ...` and `13 08 00 0F / 34 20 7B / 03 ...`: C2/7AFC and C2/7B20 decompress (C3/0002) the
+  packets C6:FE20[`$08`] and C6:FF40[`$08`] into `$7F:9000`; op 0x03 sends each to VRAM.
+- `34 56 7C / 34 97 7C`: HDMA channel 1 (DMAP 42: indirect, two writes, to `$210F` BG2HOFS) from `$7E:8A35` and channel 2
+  (to `$2110` BG2VOFS) from `$7E:8A42`, both `F0 <p1> F0 <p2> 00`, `$4A |= 06`; the line buffers `$8B56`-`$8FB5` and
+  `$9176`-`$95D5` zeroed. The NMI (C2/02B2-02DE) copies `$8A21/$8A23` into the first table's pointers, `$8A25/$8A27` into
+  the second's.
+- Two children (`$7F:084E`, `$086F`) each frame: `+22 + 1` (the amplitude), C2/7CD8 / C2/7D5E -- `+26 + 1`; the even step
+  points the table at buffer A and copies buffer B shifted one line into it, the odd step the other way; the newest line (the
+  buffer's last word) = sign(sine(`+24 += 10`)) x ((|sine| x `+22`) >> 8), C2/225E's table at C0/F900.
+
+So the silhouette is BG3 (its own colours dark) ADDED to the sub screen, which is BG2 drawn with a per-line wave: the sea
+seen through a rippling shape. The port's composer had the sub screen fixed as "the main screen under BG3" (TS = 13 in every
+world before); it now builds the sub screen of `$0042` when it differs (field.c owComposeSub) and reads BG2's scroll per
+line from an indirect HDMA channel (owHdmaWordAt; scanline s takes table line s, measured with `ct.exe --hdma`: entry 9 first
+on line 9). The channels' programming is kept as the natives write it (world.c CtWorldHdmaSet; window 1's C6/E241 sets
+channel 2 to WH1, the rising to BG2VOFS). Before, the six natives were skipped and the port crashed on the BG3 tile 0x3FF the
+unloaded VRAM held (worldBg3Px now wraps the VRAM address at 64 KB, as the PPU does).
