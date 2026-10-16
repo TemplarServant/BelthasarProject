@@ -15346,11 +15346,10 @@ static void battleAdvanceAction(CtBattleHost* h) {
                        if (h->ascOn && getenv("CT_BATTLE_ASCTRACE"))
                          fprintf(stderr, "asc off f%d (no action live)\n", h->frames);
                        h->ascOn = 0;
-                       // HOST LIFETIME, not a ROM claim: every measured script bounds its 0x69 with a 0x6A
-                       // inside the span, so with no action live nothing may still be white. Clearing here
-                       // means an action cut short (defeat, teardown) cannot strand a combatant at pal4.
-                       if (h->ascOwnsFlash) { for (int c = 0; c < 11; c++) if (!h->deathPal[c]) BT_OBJPAL(h, c) = BT_OBJPALDEF(h, c);
-                                              h->flashTarget = -1; h->fxFlashPal = -1; h->ascOwnsFlash = 0; }
+                       // $993C is left as the script left it: the ROM restores it only through C1/5E8B (op 6A,
+                       // op 6C's OFF arm), for the track's combatant or the $A018 list -- never all eleven, so an
+                       // empty slot keeps the boot's 00 beside its $9888 FF (disasm/notes/battle_objpal_restore.md).
+                       if (h->ascOwnsFlash) { h->flashTarget = -1; h->fxFlashPal = -1; h->ascOwnsFlash = 0; }
                        h->fxScriptFlashMask = 0;
                        return; }                                                  // no action -> no tech FX
   int rel = h->frames - h->actStart;
