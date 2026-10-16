@@ -9997,6 +9997,18 @@ int main(int argc, char** argv) {
     uint8_t* lw = fieldReadLakeWram(loadWramPath);
     if (lw) { g_owObjFromCapture = (lw[0x0100] | (lw[0x0101] << 8)) >= 0x1F0; free(lw); }
   }
+  // --loadstate: the snapshot names its own scene ($0100 of the image it carries) and story page, so `--scene` is
+  // optional. The restore below is same-scene only; a `--scene` that disagrees is reported, and the snapshot wins.
+  if (loadStatePath) {
+    uint8_t sf[0x200]; int sl = CtSceneStateLoc(loadStatePath, sf);
+    if (sl >= 0) {
+      if (sceneSet && scene != sl)
+        fprintf(stderr, "[loadstate] %s was taken in loc %03X (scene %d), not scene %d -- loading its own\n",
+                loadStatePath, sl, sl, scene);
+      scene = sl; sceneSet = 1;
+      if (!haveFlags) { memcpy(gmem, sf, 0x200); haveFlags = 1; }
+    }
+  }
   if (newGame) {                       // NEW GAME: start at the title/naming scene 0 with the New-Game menu
     if (!sceneSet) scene = 0;          // flag glb[0x61]($7F0061)=1 set, so scene 0 runs the new-game setup
     gmem[0x61] = 1; haveFlags = 1;     // (Crono naming + $54 bit7 + party init), NOT the attract demo (-> 433).
@@ -10113,18 +10125,6 @@ int main(int argc, char** argv) {
     // to match, three lines it had NO kind for, a tab (whose ROM form carries QUOTES), two stat
     // bonuses whose vocabulary and amount it invented, an id whose ROM string is EMPTY where it
     // printed text anyway, and the longest string in the table.
-  // --loadstate: the snapshot names its own scene ($0100 of the image it carries) and story page, so `--scene` is
-  // optional. The restore below is same-scene only; a `--scene` that disagrees is reported, and the snapshot wins.
-  if (loadStatePath) {
-    uint8_t sf[0x200]; int sl = CtSceneStateLoc(loadStatePath, sf);
-    if (sl >= 0) {
-      if (sceneSet && scene != sl)
-        fprintf(stderr, "[loadstate] %s was taken in loc %03X (scene %d), not scene %d -- loading its own\n",
-                loadStatePath, sl, sl, scene);
-      scene = sl; sceneSet = 1;
-      if (!haveFlags) { memcpy(gmem, sf, 0x200); haveFlags = 1; }
-    }
-  }
     static const int ids[] = { 0xBD, 0xC6, 0xC7, 0xC8, 0xCD, 0x95, 0x96, 0x98, 0xB6, 0xD6, 0x74 };
     int n = 0, empty = 0;
     for (int k = 0; k < (int)(sizeof ids / sizeof ids[0]); k++) {
