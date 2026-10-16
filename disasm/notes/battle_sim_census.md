@@ -91,6 +91,12 @@ early ((43, 42), (86, 83), (129, 124)).
 
 ## 4. Family 3 — the next action opens one menu pass early (fixed pass, ~220 fights)
 
+**FIXED 2026-10-16** (battle_queue_death.md addendum 2026-10-16; check
+battle-sim-next-action-on-the-cartridges-pass-vs-rule-cartridge): two mechanisms -- a zeroed record stays in the
+confirm FIFO $99D4 and costs the executor a pass (C1/85C2), and a counter plays before the iteration's head (C1/8671-881C
+in the handler's tail). The enemy sweep (237 ids, hp=1) has no -4 left: 223 match the whole monitored WRAM, 167 at +0 on
+every change; what differs is family 5 (boss deaths), staging, and the end-of-fight handoff.
+
 What remains of the −4 once family 1 is removed: the first offset of 184 fights is `$AE93` −4, of 26 `$9877` −4, of 10 a
 status byte −4. e8F (fixed): an action closes at f740 on both sides; the cartridge restarts `$9931` (CC/F0E6 in
 CC/F06B, writer CC:F0E9) at **f748** and raises `$A013` f750; the port restarts it at **f744** and raises `$A013` f746.

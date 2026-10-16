@@ -2455,14 +2455,21 @@ CT_POKEWRAM_AT), A mashed. Pins the staged ids, the death palette page's 37 stat
 and, as a PINNED RESIDUAL, the deaths: the port 4 and 8 frames early, the same drift gato_wait's own unstaged fight
 shows under the same mash (`fight native`). Re-pin the deaths only from a fix that moves them toward the cartridge.
 
+### battle-sim-next-action-on-the-cartridges-pass-vs-rule-cartridge (`python tools/battle_sim.py sweep 8F,02 hp=1 -j2`)
+
+Census family 3 (disasm/notes/battle_queue_death.md, addendum 2026-10-16): the next action opens on the cartridge's own
+pass. Cyrus (8F) KOs Crono at a close: his zeroed record stays in the confirm FIFO $99D4 and the executor's pass that pops
+it runs nothing (C1/85C2), so Marle's command opens one pass later. The Terrasaur (02) counters Marle's attack: the
+counter runs in the handler's tail with no C1/8120 head in between. Pins the whole monitored WRAM and +0 on every change;
+a re-pin is never legitimate unless the cartridge's side changed.
+
 ### battle-sim-fallen-enemy-counter-vs-rule-cartridge (`python tools/battle_sim.py sweep 0F,9A hp=1 frames=1450 -j2`)
 
 A fallen enemy's block-2 counter (disasm/notes/battle_counter_gating.md sec. 8): an enemy whose block 2 opens with
 condition 20 fights back from the grave -- the counter loop lists it again (C1/86C3), its turn and action play, and only
 C1/881C's death scan starts its routine. The Mud Imp (0F: tech 7F at once) and Azala (9A: tech 1F after its name box `43`),
-each alone at 1 HP from f600, A mashed. Pins: the whole monitored WRAM sequence the cartridge's on both, and the frame
-offsets and deaths with their constant -4 -- census family 3 (the next action's menu pass one pass early), not this
-mechanism; re-pin those two lines only from a fix of that family (they then read +0).
+each alone at 1 HP from f600, A mashed. Pins: the whole monitored WRAM sequence the cartridge's on both, every change at
++0 and the deaths on the cartridge's frames (the -4 they carried was census family 3, fixed 2026-10-16).
 
 ### battle-sim-boss-death-cd0e05-vs-rule-cartridge (`python tools/battle_sim.py sweep 90,CC,D1,D4 hp=1 mon=CCEA:1,5D9B:1,96F5:11 -j4`)
 

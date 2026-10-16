@@ -1298,7 +1298,8 @@ static void battleH12TailRest(CtBattleHost* h, int slot);       // fwd: ...its C
 static int battleLifelineMsgTick(CtBattleHost* h, int aHeld);   // fwd: CD/01B3 #9, the revive's message (inside C1/B223)
 static void battleDisabledSweep883D(CtBattleHost* h);          // fwd: C1/883D, a disabled PC's pending turn cancelled
 static int battleDisabledA8B0(const uint8_t* s, int seat);     // fwd: FD/A8B0, dead / berserk / stop-sleep-chaos
-static void battleTurnCancel(CtBattleHost* h, int k, int dequeue);   // fwd: FD/A8CE / FD/A8FE
+static void battleTurnCancelEx(CtBattleHost* h, int k, int dequeue, int poppedItem);   // fwd: FD/A8CE / FD/A8FE
+#define battleTurnCancel(h, k, dq) battleTurnCancelEx((h), (k), (dq), 0)
 
 // C1/AF22 IS A ROUTINE, NOT A `%`. The value is only half of it; the rest is the state it leaves, and
 // the X it takes. THE X IS A BASE -- the routine returns a number in [X, A), not in [0, A):
@@ -3924,16 +3925,10 @@ static void battleRemoveDead(CtBattleHost* h) {
   for (int seat = 0; seat < 3; seat++) {
     if (!battleAlive(s, seat)) {
       if (s[0xA6D9 + seat] != 0xFF) battleQueueRemove(s, seat);
-      // battle_queue_death.md Q2 (the FD/A914 twin: DEATH zeroes the confirmed-action record, so the
-      // executor pops an empty record and no attack fires): purge the dead seat's committed-but-unanimated
-      // entries from the sched FIFO + clear his turn latch. Without this a dead PC's queued attack lands.
+      // battle_queue_death.md Q2 (the FD/A914 twin: DEATH zeroes the confirmed-action record): his turn latch goes. His
+      // committed entry stays in the confirm FIFO $99D4 -- the executor pops it with nothing to run, a pass of its own
+      // (battleDispatchScheduled, C1/85C2-85C8); purging it here opened the next PC's command one pass early.
       h->pcInTurn[seat] = 0;
-      for (int i = 0; i < h->schedN; ) {
-        if (h->schedAtk[i] == seat) {
-          for (int j = i + 1; j < h->schedN; j++) { h->schedAtk[j-1] = h->schedAtk[j]; h->schedTgtSlot[j-1] = h->schedTgtSlot[j]; }
-          h->schedN--; h->schedAtk[h->schedN] = -1; h->schedTgtSlot[h->schedN] = -1;
-        } else i++;
-      }
     }
   }
 }
@@ -5871,7 +5866,7 @@ static void battleCommitPcAction(CtBattleHost* h, int atk) {
   s[0xA862] = 0; s[0x99E0] = 0;                           // C1/1745 STZ $A862 / C1/1748 STZ $99E0 (the Wait gate drops)
   if (h->schedN < 3) { h->schedAtk[h->schedN] = atk; h->schedTgtSlot[h->schedN] = slot;
                        h->schedTech[h->schedN] = techId; h->schedItem[h->schedN] = itemId;
-                       h->schedItemTgt[h->schedN] = itemTgt; h->schedN++; }   // §2.6: carry tech/item id + PC target
+                       h->schedItemTgt[h->schedN] = itemTgt; h->schedVoid[h->schedN] = 0; h->schedN++; }   // §2.6: carry tech/item id + PC target
   const char* ev = itemId ? "pc-commit-item" : techId ? "pc-commit-tech" : "pc-commit";
   battleTrace(h, ev);                                    // V: confirm registered (the action animates later)
   if (itemId) battleItemTrace(h, ev); else battleTechTrace(h, ev, atk);
@@ -7948,7 +7943,7 @@ static void battleCommitDemoTech(CtBattleHost* h, int seat, int techId, int tgt)
   if (h->schedN < 3) {
     h->schedAtk[h->schedN] = seat; h->schedTgtSlot[h->schedN] = (tgt >= 3) ? tgt - 3 : -1;
     h->schedTech[h->schedN] = techId; h->schedItem[h->schedN] = 0; h->schedItemTgt[h->schedN] = -1;
-    h->schedN++;
+    h->schedVoid[h->schedN] = 0; h->schedN++;
   }
   h->demoOpenAt = h->frames + (battleRuleNmiOnHold() ? 0 : CT_DEMO_STAGING_SPILL);   // C1/4058 -> C1/405B JSL CC/F06B
   h->demoDispatchAt = h->demoOpenAt + 2;                            // C1/40A6 INC $A013, after C1/405F's and C1/40A0's waits
@@ -12360,22 +12355,26 @@ static void battleDispatchScheduled(CtBattleHost* h) {
   if (h->schedDispatchDelay > 0) { h->schedDispatchDelay--; return; }   // FIX D: the executor-reach latency
   int atk = h->schedAtk[0], slot = h->schedTgtSlot[0], techId = h->schedTech[0];   // §2.6: the committed tech id
   int itemId = h->schedItem[0], itemTgt = h->schedItemTgt[0];   // battle_item_slice.md: the committed item id + PC target
+  int voidRec = h->schedVoid[0];
   for (int i = 1; i < h->schedN; i++) {                         // pop oldest (shift the FIFO down)
     h->schedAtk[i - 1] = h->schedAtk[i]; h->schedTgtSlot[i - 1] = h->schedTgtSlot[i]; h->schedTech[i - 1] = h->schedTech[i];
-    h->schedItem[i - 1] = h->schedItem[i]; h->schedItemTgt[i - 1] = h->schedItemTgt[i];
+    h->schedItem[i - 1] = h->schedItem[i]; h->schedItemTgt[i - 1] = h->schedItemTgt[i]; h->schedVoid[i - 1] = h->schedVoid[i];
   }
   h->schedN--;
-  // battle_queue_death.md Q2 defensive gate (the C1/8580 executor pops an EMPTY record for a dead actor and
-  // fires nothing): a dead attacker's popped action is DISCARDED. The battleRemoveDead purge normally
-  // prevents this from ever being reached (death between purge and pop within one tick).
-  if (atk >= 0 && atk < 3 && !battleAlive(s, atk)) { battleTrace(h, "sched-cancel-dead"); return; }
+  // AN EMPTY RECORD (C1/85C2-85C8, `LDA $93EE,X / EOR $B188,X / BPL -> C1/860D`): the seat stays in the confirm FIFO
+  // $99D4 when its command record is zeroed -- FD/A8FE (the sweep C1/883D: dead, berserk, stop, sleep, chaos) or a death --
+  // and the executor pops it with nothing to run: that pass opens no action, the next command waits for the next odd pass.
+  // MEASURED, the rule's cartridge (tools/battle_sim.py fight 8F hp=1): Crono KO'd at the close f741 (FD:A917 `$93EE = 00`,
+  // FD:A934 `$B188 = 00`), his entry popped at f745 (C1:85A3, `$B18B = 00`, no command), Marle's at f749. The port purged
+  // the entry at the death and opened Marle's command one pass (4 frames) early.
+  if (voidRec || (atk >= 0 && atk < 3 && !battleAlive(s, atk))) {
+    if (atk >= 0 && atk < 3) s[0xB18B] = (uint8_t)atk;             // C1/8597-859A `LDA $99D4 / STA $B18B`
+    battleTrace(h, "sched-pop-empty"); return; }
   // C1/B9B8-BA30, the executor's own check before it runs a PC command: the actor (and a dual/triple tech's co-actors, the
   // $93F3 nibbles) through FD/A8A5 -- any one BERSERK, or STOP / SLEEP / CHAOS (+1E & 86) -> FD/A93C: FD/A8CE for each (the
   // ATB starts over, the command and its item go back) and C1/BD6B, no action. (A dead actor keeps the older path above.)
   if (atk >= 0 && atk < 3 && battleDisabledA8B0(s, atk)) {
-    h->schedAtk[h->schedN] = atk; h->schedItem[h->schedN] = itemId; h->schedTgtSlot[h->schedN] = slot;   // (the popped
-    h->schedTech[h->schedN] = techId; h->schedItemTgt[h->schedN] = itemTgt; h->schedN++;                //  entry, for A8CE)
-    battleTurnCancel(h, atk, 0);                                   // FD/A93C -> FD/A8CE
+    battleTurnCancelEx(h, atk, 0, itemId);                         // FD/A93C -> FD/A8CE (the popped entry's item goes back)
     battleTrace(h, "sched-cancel-disabled");
     return;
   }
@@ -12720,6 +12719,13 @@ static int battleCounterDecodeRest(CtBattleHost* h, int slot, int op, int tgt) {
 // decided in its handler's tail, C1/8671-8819, BEFORE C1/881C's death scan (battleDeathScanNext) -- so a victim that does
 // not counter does not hold a corpse's routine for a frame (the forest's Cyclone: the #95 post at f528). Only the decode;
 // the name box and the countdown are the frame's regular pass.
+// The loop's last victim done with no action of its own: the handler returns into the loop -- C1/8120's head on this frame,
+// as after an action's end (the close deferred it while the counter loop ran).
+static void battleCounterLoopReturn(CtBattleHost* h) {
+  if (battleCounterPhase(h) || h->mem[0xA013] || battleThinkPending(h) || h->demoDispatchAt >= 0) return;
+  h->iterPh = 0; h->mem[0x00E5] = 0;
+  battleIterHead(h);
+}
 static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
   uint8_t* s = h->mem;
   for (int slot = 0; slot < 8; slot++) {
@@ -12745,6 +12751,7 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
       int more = 0;
       for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) more = 1;
       if (!more && !s[0x24]) battleAiEvalAll(h);
+      battleCounterLoopReturn(h);
       continue;
     }
     if (h->ctrPendSlot < 0) {                                     // the next counter in the victim list's order ($B315)
@@ -12768,6 +12775,7 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
         int more = 0;
         for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) more = 1;
         if (!more && !s[0x24]) battleAiEvalAll(h);
+        if (!decodeOnly) battleCounterLoopReturn(h);              // (the close's own pass: its head is the close's)
         continue;
       }
       h->ctrPendSlot = slot; h->ctrDecodeF = h->frames;          // decoded: its window opens on the countdown,
@@ -15346,7 +15354,7 @@ static int battleThinkPending(const CtBattleHost* h) {            // a turn is i
   if (h->stActOpenAt >= 0) return 1;                              // ...or a status timer's action 7F (C1/895B -> C1/4058)
   if (h->llSeat >= 0) return 1;                                   // ...or the sweep C1/B223 stopped on a lifeline revive
   if (h->ctrPendSlot >= 0) return 1;                              // ...or a counter decoded in the handler's tail (C1/8780)
-  if (h->ctrMsgHold > 0) return 1;                               // ...or a counter's name box, inside its handler (C1/9B35)
+  if (battleCounterPhase(h)) return 1;                            // ...or the counter loop C1/8671-881C, armed to its last turn
   return 0;
 }
 static void battleThinkTick(CtBattleHost* h) {
@@ -17038,7 +17046,7 @@ void CtBattleBegin(CtBattleHost* h) {
   h->schedN = 0;                                             // battle_confirm_queue.md §C.1: no committed-but-unanimated PC actions
   h->schedDispatchDelay = 0;                                 // pacing_v2 FIX D latency counter
   for (int si = 0; si < 3; si++) { h->schedAtk[si] = -1; h->schedTgtSlot[si] = -1; h->schedTech[si] = 0; h->pcInTurn[si] = 0;
-                                   h->schedItem[si] = 0; h->schedItemTgt[si] = -1; }  // §D turn latch + battle_item_slice.md FIFO
+                                   h->schedItem[si] = 0; h->schedItemTgt[si] = -1; h->schedVoid[si] = 0; }  // §D turn latch + battle_item_slice.md FIFO
   // battle_tech_slice.md: no Tech submenu open, no tech list built, no pending/dispatching tech (reset per battle).
   h->techOpen = 0; h->techSel = 0; h->techListN = 0; h->pendTechId = 0; h->actTechId = 0;
   for (int ti = 0; ti < 8; ti++) h->techListId[ti] = 0;
@@ -17921,19 +17929,14 @@ static void battleRefundItemB6D1(CtBattleHost* h, int itemId) {
 //   A937 (A8FE only)  JSL C1/B961 -> C1/0003 #2 = C1/1BAA, the dequeue (the command window closes)
 // Oracle, GATO's rider patched to 80 (stop) on a waiting Crono: f605 `$93EE = 00` (FD:A917), `$AFAB = 48` (FD:A92B),
 // `$B188 = 00` (FD:A934), `$A6D9 = FF 01 FF` / `$95D5 = 01` (C1:1C18 / 1C23) -- Marle takes the command window.
-static void battleTurnCancel(CtBattleHost* h, int k, int dequeue) {
+static void battleTurnCancelEx(CtBattleHost* h, int k, int dequeue, int poppedItem) {
   uint8_t* s = h->mem;
-  int item = 0;
-  for (int i = 0; i < h->schedN; ) {                               // the committed command, if any, is withdrawn
-    if (h->schedAtk[i] == k) {
-      if (!item) item = h->schedItem[i];
-      for (int j = i + 1; j < h->schedN; j++) {
-        h->schedAtk[j-1] = h->schedAtk[j]; h->schedTgtSlot[j-1] = h->schedTgtSlot[j]; h->schedTech[j-1] = h->schedTech[j];
-        h->schedItem[j-1] = h->schedItem[j]; h->schedItemTgt[j-1] = h->schedItemTgt[j];
-      }
-      h->schedN--; h->schedAtk[h->schedN] = -1; h->schedTgtSlot[h->schedN] = -1;
-    } else i++;
-  }
+  int item = poppedItem;
+  for (int i = 0; i < h->schedN; i++)                              // the committed command's RECORD is zeroed ($93EE below);
+    if (h->schedAtk[i] == k && !h->schedVoid[i]) {                 //   its seat stays in the FIFO $99D4 for the executor to
+      if (!item) item = h->schedItem[i];                           //   pop with nothing to run (battleDispatchScheduled)
+      h->schedVoid[i] = 1;
+    }
   battleRefundItemB6D1(h, item);                                   // JSL C1/FDCF
   s[0x93EE + k * 7] = 0; s[0x93EF + k * 7] = 0; s[0x93F3 + k * 7] = 0xFF;
   s[0xAFAB + k] = s[0x99DD + k] = s[0x9F22 + k] = s[0xB158 + k];
@@ -23003,7 +23006,8 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
       // returns yet: battleLifelineResume runs the head.)
       if (h->llSeat >= 0) { /* inside C1/B223 */ }
       else if (h->demoPass && h->schedN == 0) battleDemoEnd(h);  // the demo's pass returns: C1/85D1 -> C1/83AE (G0)
-      else if (h->stResumeX < 0) battleIterHead(h);
+      else if (h->stResumeX < 0) { if (!battleCounterPhase(h)) battleIterHead(h); }   // (a counter the action provoked
+                                                                  //   plays first: C1/881C, then the head -- below)
       else {
         battleStatusResume(h);
         if (!s[0xA013] && !battleThinkPending(h) && h->demoDispatchAt < 0) battleIterHead(h);

@@ -353,3 +353,36 @@ python tools/dis.py 3DA8FE 0x40 0 0   # death cleanup FD/A8FE: STZ $93EE,X (FD:A
 python tools/dis.py 1B2A0 0x40 0 0    # PC-death flag: STA $5E4A,X #80 (C1:B2B9) + $AEFF,Y=FF
 python tools/dis.py 1ECC0 0xC0 0 0    # death path: dead flag (ED04) / zero curHP (ED0F-ED12); no cursor writes
 ```
+
+## Addendum 2026-10-16 — the empty pop is a PASS of its own, and the head waits for the counter loop (census family 3)
+
+The battle_sim census (disasm/notes/battle_sim_census.md sec. 4) found the next action opening one 4-frame menu pass
+before the cartridge in ~220 fights. Two mechanisms, both measured on the rule's cartridge with tools/battle_sim.py
+(hp=1, A mashed); ported in src/battle.c.
+
+### 1. A zeroed record stays in the confirm FIFO
+
+`C1/8570`'s executor (dis.py 18570 0x9A 1 0) ALWAYS pops the FIFO head first -- `LDA $99D4 / BMI` (empty), then
+`STA $B18B`, the shift `$99D4 := $99D5 := $99D6 := FF`, `DEC $99D8` (C1/8597-85AE) -- and only then tests the seat's
+record: `LDA $93EE,X / EOR $B188,X / BPL -> C1/860D` (C1/85C2-85C8, 85DA-85E0, 85F3-85F9). A record zeroed by FD/A8FE
+(the sweep C1/883D for a dead / berserk / stop / sleep / chaos PC: `$93EE = 00` FD:A917, `$B188 = 00` FD:A934) or by
+FD/A8CE leaves the seat IN the FIFO, so that pass pops it, runs nothing, and the next command waits for the next odd pass.
+
+Cyrus (8F): Crono KO'd at the close f740; f741 FD:A917 / FD:A934; f745 C1:85A3 pops him (`$B18B = 00`, `$0027` 4E, no
+action); f749 pops Marle (`$0027` 4F -> her command, `$A013 = 01` at f750). The port's `battleRemoveDead` (and
+`battleTurnCancel`) removed the entry at the death, so Marle opened at f744/f746. Now the entry is kept with
+`schedVoid` (battleTurnCancelEx marks it; a dead seat's entry stays as it is) and `battleDispatchScheduled` pops it as
+the ROM does ("sched-pop-empty", `$B18B` written). (The old purge also left `schedTech` / `schedItem` unshifted.)
+
+### 2. The iteration's head after a close waits for the counters
+
+When an action provokes a counter, C1/8671-881C runs inside the handler's tail: the counter's own C1/4058 follows the
+close with no head in between (`$0027` unchanged, `$A0FD` 01 -> 02). Terrasaur (02): Marle's close f996, the counter's
+`$AE93 = B0` (C1:AD08) the same frame, `$A013 = 01` f998. The port ran C1/8120's head at the close (`$0027` 80,
+`$A0FD = 00`) and every later pass was one iteration out of phase. The close's head now waits while
+`battleCounterPhase` holds (and `battleThinkPending` reports it), and the loop's end with no action runs it
+(battleCounterLoopReturn).
+
+### Result
+
+8F, 0F, 9A, 02 and f1A0_21 now match the cartridge's whole monitored WRAM sequence at +0 on every change.
