@@ -360,7 +360,34 @@ static LONG CALLBACK watchVeh(EXCEPTION_POINTERS* ep) {
   }
   return EXCEPTION_CONTINUE_SEARCH;
 }
+// CT_CRASHTRACE=1: an access violation anywhere prints the faulting function and its callers (file:line) to stderr,
+// then the crash goes on as usual -- the port's own stack, for a crash with no debugger at hand.
+static LONG CALLBACK crashVeh(EXCEPTION_POINTERS* ep) {
+  if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || gWatchArmed) return EXCEPTION_CONTINUE_SEARCH;
+  CONTEXT cc = *ep->ContextRecord; STACKFRAME64 sf; memset(&sf, 0, sizeof sf);
+  sf.AddrPC.Offset = cc.Rip; sf.AddrPC.Mode = AddrModeFlat;
+  sf.AddrFrame.Offset = cc.Rbp; sf.AddrFrame.Mode = AddrModeFlat;
+  sf.AddrStack.Offset = cc.Rsp; sf.AddrStack.Mode = AddrModeFlat;
+  fprintf(stderr, "[crash] access violation at %p (address %p)\n", ep->ExceptionRecord->ExceptionAddress,
+          (void*)ep->ExceptionRecord->ExceptionInformation[1]);
+  for (int f = 0; f < 16 && StackWalk64(IMAGE_FILE_MACHINE_AMD64, GetCurrentProcess(), GetCurrentThread(), &sf, &cc,
+                                        NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL) && sf.AddrPC.Offset; f++) {
+    char buf[sizeof(SYMBOL_INFO) + 256]; SYMBOL_INFO* si = (SYMBOL_INFO*)buf;
+    si->SizeOfStruct = sizeof(SYMBOL_INFO); si->MaxNameLen = 255;
+    DWORD64 d = 0; DWORD l = 0; IMAGEHLP_LINE64 li; li.SizeOfStruct = sizeof li;
+    if (SymFromAddr(GetCurrentProcess(), sf.AddrPC.Offset, &d, si) && SymGetLineFromAddr64(GetCurrentProcess(), sf.AddrPC.Offset, &l, &li))
+      fprintf(stderr, "[crash]   #%d %s  (%s:%lu)\n", f, si->Name, li.FileName, (unsigned long)li.LineNumber);
+    else fprintf(stderr, "[crash]   #%d %llx\n", f, (unsigned long long)sf.AddrPC.Offset);
+  }
+  fflush(stderr);
+  return EXCEPTION_CONTINUE_SEARCH;
+}
 static void watchStart(uint8_t* base) {
+  if (getenv("CT_CRASHTRACE")) {
+    static int on = 0;
+    if (!on) { on = 1; SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS); SymInitialize(GetCurrentProcess(), NULL, TRUE);
+               AddVectoredExceptionHandler(0, crashVeh); }
+  }
   const char* e = getenv("CT_WATCH"); if (!e) return;
   unsigned off = (unsigned)strtoul(e, NULL, 16);
   SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS);

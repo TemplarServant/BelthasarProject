@@ -1063,32 +1063,12 @@ int CtWorldLeadBlock(const uint8_t* ram) {
     if ((ram[b] | (ram[b + 1] << 8)) == 0x3404) return b;
   return 0x0D70;                    // world 0's block, and where the mover seed reads ($0D84/$0D88) when none is tagged
 }
+static void leadInit(uint8_t* ram, uint8_t* B);
 void CtWorldLeadAnimFrame(uint8_t* ram, int dir, int phaseBefore, int blocked, int facingInit) {
   uint8_t* B = ram + CtWorldLeadBlock(ram);
   int magus = (ram[0x2980] == 6) ? 0x0C : 0;                           // C2/3971 / 399C: LDA $00 / CMP #06 / ... ADC #0C
-  if (B[OWOBJ_ANIMBK] != 0xC3) {                                       // C2/34F8, the init phase, once
-    int loc = ram[0x0100] | (ram[0x0101] << 8);
-    B[OWOBJ_ATTR] = (loc == 0x01F5) ? 0xB8 : 0xA8;                     // 34FD LDY $0100 / CPY #01F5 / LDA #A8|#B8 / STA $000F,X
-    B[0x10] = 0; B[0x11] = 0;                                          // 350B STZ $0010,X (tile base 0, 16x16)
-    B[0x26] = 0;                                                       // 353A STZ $0026,X
-    // 3533 LDA $0104 / AND #03 / STA $0028,X -- the ARRIVAL byte the location commit (C0/0CBC) copied from the exit's
-    // $0116, not the host's own facing: `facingInit` was the host's wd.pfac, which worldInit seeds to 1 (down) and which
-    // follows +28 only after this init. MEASURED (the user, 2026-10-07: "when leaving the ticket office in porre, crono is
-    // facing a different direction"): loc 038's one exit, ROM record E5:06DA `34 2E 01 F0 07 32 77`, stages $0116 =
-    // ((07 >> 1) & 0F) = 03; the cartridge's save on the map reads $0104 = 03, +28 = 03, the right stand E19E; the port
-    // committed $0104 = 03 and then drew Crono facing down (+28 = 01, E14C) and wrote 01 back into $0104.
-    (void)facingInit;
-    B[0x28] = (uint8_t)(ram[0x0104] & 3);
-    // 353B STZ $1B5A / 3540 JSR C2/391C: the lead's TRAIL ring (16 words of X at $1B5B, of Y at $1B7B, cursor $1B5A)
-    // starts empty -- every entry the arrival point, `LDA $0283 / STA $1B5B,X / LDA $0285 / STA $1B7B,X` x 16. The init
-    // put that point in the block first (3515-351E `LDA $0283 / STA $0014,X`), so the block's position is it.
-    ram[0x1B5A] = 0;
-    for (int i = 0; i < 16; i++) {
-      obPutW(ram + 0x1B5B + i * 2, obW(B + OWOBJ_XPOS));
-      obPutW(ram + 0x1B7B + i * 2, obW(B + OWOBJ_YPOS));
-    }
-    leadInstall(B, kLeadStandId[B[0x28] & 3] + magus);                 // 3549 JSR C2/3987
-  }
+  (void)facingInit;
+  if (B[OWOBJ_ANIMBK] != 0xC3) leadInit(ram, B);                       // C2/34F8, the init phase, once
   if (dir >= -1 && phaseBefore == 1) {                                 // phase 1 = C2/3567, the input frame
     if (dir < 0) {                                                     // C2/35B3, no button at all
       B[0x28] &= 0x7F;                                                 // 35B5-35BA
@@ -1117,6 +1097,34 @@ void CtWorldLeadAnimFrame(uint8_t* ram, int dir, int phaseBefore, int blocked, i
     }
   }
   obAnimTick(ram, B);                                                  // 35E0 / 36E2 / 3731 JSR C2/0E1D
+}
+// C2/34F8 -- the lead's init (its phase 0): on the first frame of a world, and again when the party steps out of a vehicle
+// (C2/34AD zeroes the phase; the host calls CtWorldLeadReinit on that edge, field.c).
+void CtWorldLeadReinit(uint8_t* ram) { leadInit(ram, ram + CtWorldLeadBlock(ram)); }
+static void leadInit(uint8_t* ram, uint8_t* B) {
+  int magus = (ram[0x2980] == 6) ? 0x0C : 0;
+  {
+    int loc = ram[0x0100] | (ram[0x0101] << 8);
+    B[OWOBJ_ATTR] = (loc == 0x01F5) ? 0xB8 : 0xA8;                     // 34FD LDY $0100 / CPY #01F5 / LDA #A8|#B8 / STA $000F,X
+    B[0x10] = 0; B[0x11] = 0;                                          // 350B STZ $0010,X (tile base 0, 16x16)
+    B[0x26] = 0;                                                       // 353A STZ $0026,X
+    // 3533 LDA $0104 / AND #03 / STA $0028,X -- the ARRIVAL byte the location commit (C0/0CBC) copied from the exit's
+    // $0116, not the host's own facing: `facingInit` was the host's wd.pfac, which worldInit seeds to 1 (down) and which
+    // follows +28 only after this init. MEASURED (the user, 2026-10-07: "when leaving the ticket office in porre, crono is
+    // facing a different direction"): loc 038's one exit, ROM record E5:06DA `34 2E 01 F0 07 32 77`, stages $0116 =
+    // ((07 >> 1) & 0F) = 03; the cartridge's save on the map reads $0104 = 03, +28 = 03, the right stand E19E; the port
+    // committed $0104 = 03 and then drew Crono facing down (+28 = 01, E14C) and wrote 01 back into $0104.
+    B[0x28] = (uint8_t)(ram[0x0104] & 3);
+    // 353B STZ $1B5A / 3540 JSR C2/391C: the lead's TRAIL ring (16 words of X at $1B5B, of Y at $1B7B, cursor $1B5A)
+    // starts empty -- every entry the arrival point, `LDA $0283 / STA $1B5B,X / LDA $0285 / STA $1B7B,X` x 16. The init
+    // put that point in the block first (3515-351E `LDA $0283 / STA $0014,X`), so the block's position is it.
+    ram[0x1B5A] = 0;
+    for (int i = 0; i < 16; i++) {
+      obPutW(ram + 0x1B5B + i * 2, obW(B + OWOBJ_XPOS));
+      obPutW(ram + 0x1B7B + i * 2, obW(B + OWOBJ_YPOS));
+    }
+    leadInstall(B, kLeadStandId[B[0x28] & 3] + magus);                 // 3549 JSR C2/3987
+  }
 }
 // C2/3934 -- the lead's arrival PUSH onto its trail ring, `JSR C2/3934` at C2/3757: once per completed 8-px step
 // (the frame the lead's position equals its step target +2A/+2C, C2/3745-3755), before anything else in the pass reads it.
@@ -1320,14 +1328,81 @@ static void folPhase(uint8_t* ram, uint8_t* B, int ph) {
   }
   obAnimTick(ram, B);                                                  // 3D36 / 3D97 JSR C2/0E1D
 }
-// Returns 0 (CLC: the dispatcher bumps +3), or -1 for a branch this port does not reach ($027E 4/5, $0280 != 0).
+// ===================== BOARDING AND LEAVING A VEHICLE ($027E 4 / 5) =====================
+// `$028F` names the vehicle: 2 = the Epoch (record $0290 x, $0292 y, $0294 flags -- bits 0-1 the members aboard, 5 the
+// wings, 6 riding, 7 present), 3 = the other one ($029A / $029C / $029E, only on loc 1F3). C2/3AB1, one more member aboard:
+// `LDA $028F / ASL A / TAX / JMP ($3ABA,X)` -> 3AC3 `INC $0294` / 3AC7 `INC $029E` (0 / 1: nothing).
+static void owVehicleAboard(uint8_t* ram) {
+  if (ram[0x028F] == 2) ram[0x0294]++;
+  else if (ram[0x028F] == 3) ram[0x029E]++;
+}
+// C2/34AD / 34CD (the lead) and C2/3B8E / 3BA8 (a follower), $027E = 5: the member steps out onto the vehicle's spot and
+// one fewer is aboard -- every frame the module holds, so the lead and the followers count $0294 down together and the
+// boarding manager (C2/321C) ends the module when it reaches 0. The lead also takes the arrival facing (`$0104 = 1`) and
+// C2/3ACB's cells; a follower its position only. No tick: neither is drawn on that frame.
+static void owVehicleLeave(uint8_t* ram, uint8_t* B, int lead) {
+  int v = ram[0x028F];
+  if (v != 2 && v != 3) return;                                        // 34AB / 3B8C CLC
+  B[2] = 0;                                                            // 34AF STZ $0002,X
+  uint16_t x = obW(ram + (v == 2 ? 0x0290 : 0x029A)), y = obW(ram + (v == 2 ? 0x0292 : 0x029C));
+  obPutW(B + OWOBJ_XPOS, x); obPutW(B + OWOBJ_YPOS, y);                // 34B4-34C3 (the lead also into $0283 / $0285)
+  if (lead) { obPutW(ram + 0x0283, x); obPutW(ram + 0x0285, y); }
+  ram[v == 2 ? 0x0294 : 0x029E]--;                                     // 34C8 DEC $0294 / 34E8 DEC $029E
+  if (lead) {
+    B[0x26] = 0;                                                       // 34EB STZ $0026,X
+    ram[0x0104] = 0x01;                                                // 34EE LDA #01 / STA $0104
+    ram[0x0102] = (uint8_t)(x >> 3); ram[0x0103] = (uint8_t)(y >> 3);  // 34F3 JSR C2/3ACB
+  }
+}
+// C2/3B6A -- a follower boarding ($027E = 4), phase table C2/3B74: it walks the lead's cell the way C2/3C39 walks the trail
+// (C2/3F94 aims at `$0283 & FFF8` / `$0285 & FFF8`, then the same delta, path and velocity), and on the frame it stands
+// exactly on the lead it is aboard (C2/3AB1) and hides (phase 3: no tick).
+static int folBoard(uint8_t* ram, uint8_t* B) {
+  switch (B[2]) {
+  case 0:                                                              // C2/3DE5
+    obPutW(B + 0x2A, obW(ram + 0x0283) & 0xFFF8);                      // 3DE9 JSR C2/3F94
+    obPutW(B + 0x2C, obW(ram + 0x0285) & 0xFFF8);
+    folDelta(B);                                                       // 3DEC JSR C2/3FA7
+    folDecidePath(ram, B);                                             // 3DEF JSR C2/3FBC
+    if (B[0x29] & 0x20) folVelY(B); else folVelX(B);                   // 3DF2 JSR C2/4125
+    folFaceFromVel(B);                                                 // 3DF5 JSR C2/40E4
+    folWalkArm(ram, B);                                                // 3DF8 JSR C2/4184
+    obPutW(B + 3, 0);                                                  // 3DFB STZ $0003,X / STZ $0004,X
+    B[2] = (B[0x29] & 0x10) ? 1 : 2;                                   // 3E01 BIT #10: 1 -> 3E17, else 2 -> 3E7B
+    return folBoard(ram, B);
+  case 1: case 2: {                                                    // C2/3E17 (the row: X) / C2/3E7B (the column: Y)
+    int row = (B[2] == 1);
+    if (obW(B + (row ? OWOBJ_XPOS : OWOBJ_YPOS)) != obW(B + (row ? 0x2A : 0x2C))) obIntegrate(B);   // 3E1E / 3E82
+    else {
+      uint8_t n = (uint8_t)((B[0x29] & 0x0F) - 1);                     // 3E2C AND #000F / DEC A
+      if (n) {
+        B[0x29] = n;                                                   // 3E37 STA $0029,X
+        B[2] = row ? 2 : 1;                                            // 3E3A LDA #02 / 3E9E LDA #01
+        if (row) folVelY(B); else folVelX(B);                          // 3E41 JSR C2/4152 / 3EA5 JSR C2/4138
+        folFaceFromVel(B);
+        folWalkArm(ram, B);
+      } else if (obW(B + OWOBJ_XPOS) == obW(ram + 0x0283) && obW(B + OWOBJ_YPOS) == obW(ram + 0x0285)) {
+        owVehicleAboard(ram);                                          // 3E5E JSR C2/3AB1
+        B[2] = 3;                                                      // 3E63 LDA #03 / STA $0002,X
+      } else { B[2] = 0; folStand(ram, B); }                           // 3E6E STZ $0002,X / JSR C2/416C
+    }
+    obAnimTick(ram, B);                                                // 3E76 / 3EDA JSR C2/0E1D
+    return 0;
+  }
+  }
+  return 0;                                                            // 3EDF CLC (aboard: not drawn)
+}
+
+// Returns 0 (CLC: the dispatcher bumps +3), or -1 for a branch this port does not reach ($0280 != 0).
 static int obFollower(uint8_t* ram, uint8_t* B) {
   if (ram[0x2980 + B[0x24]] & 0x80) return 0;                         // 3AEB BPL / 3AED CLC: no member in the slot
   if (ram[0x027E] != ram[0x027F]) B[2] = 0;                            // 3AF1-3AF9
   if (ram[0x0280] != ram[0x0281]) B[2] = 0;                            // 3AFC-3B04
   uint8_t mod = ram[0x027E];
   if (mod >= 1 && mod <= 3) return 0;                                  // 3B68 CLC / RTS
-  if (mod != 0) return -1;                                             // 3B6A / 3B7C: not ported
+  if (mod == 4) return folBoard(ram, B);                               // 3B6A
+  if (mod == 5) { owVehicleLeave(ram, B, 0); return 0; }               // 3B7C (3B8E / 3BA8)
+  if (mod != 0) return -1;
   if (ram[0x027C] != 0 && ram[0x027C] != 1) {                          // 3B1B-3B24
     folStand(ram, B);                                                  // 3B28-3B3C (+28 &= 7F, C2/3987)
     obAnimTick(ram, B);                                                // 3B3F JSR C2/0E1D
@@ -2429,6 +2504,358 @@ static int obRowFade(uint8_t* ram, uint8_t* B) {
   return 1;
 }
 
+// ===================== THE EPOCH ON THE MAP: classes $309E, $42DD, $495E and the lead's modules 2/4/5 =====================
+// disasm/notes/ow_vehicle.md. `$027E` is the lead's MODULE (C2/3404's table C2:342D): 0 on foot (the host's mover), 1
+// nothing, 2 riding the Epoch (C2/346D: `$0283 = $0290`, no tick -- the party is inside), 3 riding vehicle B (C2/347B), 4
+// boarding (C2/3489), 5 stepping out (C2/349B). The boarding manager $309E moves it; the Epoch $42DD flies.
+static void owUnderway(const char* what) {
+  static char seen[8][48]; static int n = 0;
+  for (int i = 0; i < n; i++) if (!strcmp(seen[i], what)) return;
+  if (n < 8) { strncpy(seen[n], what, 47); seen[n][47] = 0; n++; }
+  printf("owvehicle: UNDERIVED %s -- held\n", what);
+}
+// C2/3ACB, the lead's cells: `$0102 = $0283 >> 3`, `$0103 = $0285 >> 3`.
+static void owLeadCells(uint8_t* ram) {
+  ram[0x0102] = (uint8_t)(obW(ram + 0x0283) >> 3); ram[0x0103] = (uint8_t)(obW(ram + 0x0285) >> 3);
+}
+// C2/0568 / C2/066C on BG1 then BG2 (`$00` = 1, 2) by the low byte of a velocity word, and the word into $1BF1 / $1BF3.
+static void owScrollBoth(uint8_t* ram, CtWorldCam* c, int vert, uint16_t vel) {
+  obScroll(ram, c, 0, vert, (int8_t)(uint8_t)vel);
+  obScroll(ram, c, 1, vert, (int8_t)(uint8_t)vel);
+}
+static void owStoreCamVel(uint8_t* ram, CtWorldCam* c, const uint8_t* B) {   // `LDA $001C,X / STA $1BF1 / LDA $0020,X / STA $1BF3`
+  obPutW(ram + 0x1BF1, obW(B + OWOBJ_VELXI)); obPutW(ram + 0x1BF3, obW(B + OWOBJ_VELYI));
+  if (c) { c->pendDx = (int16_t)obW(B + OWOBJ_VELXI); c->pendDy = (int16_t)obW(B + OWOBJ_VELYI); }
+}
+static void owVelZero(uint8_t* B) { obPutW(B + 0x1A, 0); obPutW(B + 0x1C, 0); obPutW(B + 0x1E, 0); obPutW(B + 0x20, 0); }
+// C2/2345 -- two boxes overlap: `$08/$0A` and box `[$10]` against `$0C/$0E` and box `[$13]` (four words each: left,
+// right, up, down extents). C2/2353 on X, C2/2379 on Y, each `SBC` 16 bits wide and its sign the verdict (`BMI` = hit).
+static int owBoxHit(unsigned ax, unsigned ay, unsigned abox, unsigned bx, unsigned by, unsigned bbox) {
+  unsigned d = (bx - ax) & 0xFFFF, r;
+  if (d) {                                                             // 2359 SBC $08 / BEQ -> hit
+    if (bx >= ax) r = d - owRomW(abox + 2) - owRomW(bbox);             // 235F SBC [$10],Y (2) / SBC [$13]
+    else r = ((0x10000 - d) & 0xFFFF) - owRomW(bbox + 2) - owRomW(abox);   // 2369 EOR / INC / SBC [$13],Y / SBC [$10]
+    if (!(r & 0x8000)) return 0;
+  }
+  d = (by - ay) & 0xFFFF;
+  if (!d) return 1;                                                    // 237E BEQ -> SEC
+  if (by >= ay) r = d - owRomW(abox + 6) - owRomW(bbox + 4);
+  else r = ((0x10000 - d) & 0xFFFF) - owRomW(bbox + 6) - owRomW(abox + 4);
+  return (r & 0x8000) != 0;
+}
+// THE BOARDING MANAGER, class $309E (block $0E30 on 1F6). Only in free roam or a cutscene ($027C 0 / 1) and with no entry
+// pending ($0280 = 0); `$027F = $027E` first (the lead and the followers zero their phase when the two differ), then the
+// module's arm (C2:30C1).
+static int obBoardManager(uint8_t* ram) {
+  if (ram[0x027C] != 0 && ram[0x027C] != 1) return 0;                  // 309E-30A9
+  if (ram[0x0280]) return 0;                                           // 30AB-30B1
+  ram[0x027F] = ram[0x027E];                                           // 30B2 STA $027F
+  int party = 0;
+  switch (ram[0x027E]) {
+  case 0: {                                                            // C2/30CD: A, standing on a vehicle
+    if (!(obW(ram + 0x00F8) & 0x0080)) return 0;                       // 30CF BIT #0080
+    obPutW(ram + 0x0008, obW(ram + 0x0283)); obPutW(ram + 0x000A, obW(ram + 0x0285));
+    int v = 0;
+    if ((ram[0x0294] & 0x80) && (obW(ram + 0x0100) & 0x01FF) == obW(ram + 0x029F)   // 30EF BPL / 30F6 AND #01FF / CMP $029F
+        && owBoxHit(obW(ram + 0x0283), obW(ram + 0x0285), 0x324C, obW(ram + 0x0290), obW(ram + 0x0292), 0x3254)) {
+      if (ram[0x1BA6] == 0xD2) {                                       // 311F CMP #D2: the story's own boarding
+        ram[0x027C] = 0x07;
+        CtWorldSpawnVm(ram, 0xC2, 0x31A8);                             // 3154 JSR C2/04D9
+        return 0;
+      }
+      v = 2;
+    } else if ((ram[0x029E] & 0x80) && obW(ram + 0x0100) == 0x01F3    // 3159 BPL / 315E LDX $0100 / CPX #01F3
+               && owBoxHit(obW(ram + 0x0283), obW(ram + 0x0285), 0x324C, obW(ram + 0x029A), obW(ram + 0x029C), 0x325C))
+      v = 3;
+    if (!v) return 0;
+    ram[0x1B58] = 0; ram[0x1B59] = 0;                                  // 3130 / 3184
+    obPutW(ram + 0x1B32, 0xFFFF); obPutW(ram + 0x1B34, 0xFFFF); obPutW(ram + 0x1B36, 0xFFFF);
+    ram[0x1B44] = 0; ram[0x0282] = 0;
+    ram[0x028F] = (uint8_t)v; ram[0x027E] = 0x04;                      // 3126-312D / 319C-31A3
+    return 0;
+  }
+  case 2: if (!(ram[0x0294] & 0x40)) ram[0x027E] = 0x05; return 0;     // C2/31B4: the Epoch landed
+  case 3: if (!(ram[0x029E] & 0x40)) ram[0x027E] = 0x05; return 0;     // C2/31C2
+  case 4:                                                              // C2/31D0: everyone aboard
+    for (int i = 0; i < 3; i++) if (!(ram[0x2980 + i] & 0x80)) party++;
+    if (ram[0x028F] == 2 && (ram[0x0294] & 3) == party) ram[0x027E] = 0x02;
+    if (ram[0x028F] == 3 && (ram[0x029E] & 3) == party) ram[0x027E] = 0x03;
+    return 0;
+  case 5:                                                              // C2/321C: everyone out
+    if ((ram[0x028F] == 2 && !(ram[0x0294] & 3)) || (ram[0x028F] == 3 && !(ram[0x029E] & 3))) {
+      ram[0x027E] = 0; ram[0x028F] = 0;
+    }
+    return 0;
+  }
+  return 0;                                                            // 1: 31B2 CLC
+}
+// THE LEAD'S MODULES 1-5 (C2/3404 past its module-0 arm, which the host's mover is). Called from the pass on the lead's
+// block while `$027E != 0`; returns 0 (CLC).
+static int obLeadModule(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
+  if (ram[0x2980] & 0x80) return 0;                                    // 3404 LDA $7E2980 / BPL
+  if (ram[0x027E] != ram[0x027F]) B[2] = 0;                            // 340E-3416
+  if (ram[0x0280] != ram[0x0281]) B[2] = 0;                            // 3419-3421
+  int magus = (ram[0x2980] == 6) ? 0x0C : 0;
+  switch (ram[0x027E]) {
+  case 2: obPutW(ram + 0x0283, obW(ram + 0x0290)); obPutW(ram + 0x0285, obW(ram + 0x0292)); return 0;   // C2/346D
+  case 3: obPutW(ram + 0x0283, obW(ram + 0x029A)); obPutW(ram + 0x0285, obW(ram + 0x029C)); return 0;   // C2/347B
+  case 5: owVehicleLeave(ram, B, 1); return 0;                         // C2/349B
+  case 4: break;
+  default: return 0;                                                   // 1: C2/3479 CLC
+  }
+  switch (B[2]) {                                                      // C2/3489, the table C2:3493
+  case 0: {                                                            // C2/37BD: aim at the vehicle, walk the column first
+    if (ram[0x028F] == 2) { obPutW(B + 0x2A, obW(ram + 0x0290)); obPutW(B + 0x2C, obW(ram + 0x0292)); }
+    if (ram[0x028F] == 3) { obPutW(B + 0x2A, obW(ram + 0x029A)); obPutW(B + 0x2C, obW(ram + 0x029C)); }
+    owVelZero(B);                                                      // 37F6-37FF
+    unsigned d = (obW(B + 0x2C) - obW(B + OWOBJ_YPOS)) & 0xFFFF;       // 3802 SEC / SBC $0018,X
+    if (d) {
+      if (d & 0x8000) { obPutW(B + 0x20, 0xFFFF); B[0x28] = 0; }       // 380F-3819
+      else            { obPutW(B + 0x20, 0x0001); B[0x28] = 1; }       // 381E-3828
+    }
+    B[2]++;                                                            // 382B INC $0002,X
+    leadInstall(B, kLeadWalkId[(B[0x28] & 3) * 2 + (B[0x26] & 1)] + magus);   // 382E JSR C2/3953
+  }  /* fall through: 3837 is the next instruction */
+  /* FALLTHROUGH */
+  case 1: {                                                            // C2/3837: the column
+    obIntegrate(B);                                                    // 383B JSR C2/0F38 / JSR C2/1CB8
+    obPutW(ram + 0x0283, obW(B + OWOBJ_XPOS)); obPutW(ram + 0x0285, obW(B + OWOBJ_YPOS));
+    owLeadCells(ram);                                                  // 384F JSR C2/3ACB
+    owScrollBoth(ram, c, 1, obW(B + 0x20));                            // 3852-3862 C2/066C x2
+    owStoreCamVel(ram, c, B);                                          // 3865-3872
+    if (obW(B + OWOBJ_YPOS) == obW(B + 0x2C)) {                        // 3877 CMP $002C,X
+      owVelZero(B);
+      unsigned d = (obW(B + 0x2A) - obW(B + OWOBJ_XPOS)) & 0xFFFF;     // 388B SEC / SBC $0014,X
+      if (d) {
+        if (d & 0x8000) { obPutW(B + 0x1C, 0xFFFF); B[0x28] = 2; }     // 3898-38A2
+        else            { obPutW(B + 0x1C, 0x0001); B[0x28] = 3; }     // 38A7-38B1
+      }
+      B[2]++;                                                          // 38B4 INC $0002,X
+      leadInstall(B, kLeadWalkId[(B[0x28] & 3) * 2 + (B[0x26] & 1)] + magus);   // 38BD JSR C2/3953
+    }
+    obAnimTick(ram, B);                                                // 38C0 JSR C2/0E1D
+    return 0;
+  }
+  case 2:                                                              // C2/38C5: the row, then aboard
+    obIntegrate(B);
+    if (obW(B + OWOBJ_XPOS) == obW(B + 0x2A)) { B[2]++; owVehicleAboard(ram); }   // 38D2 CMP $002A,X / 38D9 / 38DC
+    obPutW(ram + 0x0283, obW(B + OWOBJ_XPOS)); obPutW(ram + 0x0285, obW(B + OWOBJ_YPOS));
+    owLeadCells(ram);                                                  // 38EF JSR C2/3ACB
+    owScrollBoth(ram, c, 0, obW(B + 0x1C));                            // 38F2-3902 C2/0568 x2
+    owStoreCamVel(ram, c, B);
+    obAnimTick(ram, B);                                                // 3915 JSR C2/0E1D
+    return 0;
+  }
+  return 0;                                                            // 3: C2/391A CLC (aboard: not drawn)
+}
+// C2/48A9: the Epoch's pose for its facing +28 -- C2:48C5[f] without wings, C2:48C9[f] with ($0294 bit 5).
+static void owEpochPose(uint8_t* ram, uint8_t* B) {
+  unsigned t = (ram[0x0294] & 0x20) ? 0x48C9 : 0x48C5;
+  leadInstall(B, owRomW(t + (B[0x28] & 3)) & 0xFF);
+}
+// C2/4A2A: the Epoch's song (13 with wings or without), posted at priority 0; taken -> `$02AE`.
+static void owEpochSong(uint8_t* ram) {
+  ram[0x1BE8] = 0x10; ram[0x1BEA] = 0xFF; ram[0x1BEB] = 0x80; ram[0x1BED] = 0;
+  ram[0x1BE9] = 0x13;                                                  // 4A43 / 4A47 LDA #13 (both arms)
+  if (CtWorldSoundRequest(ram)) ram[0x02AE] = ram[0x1BE9];             // 4A4C JSR C2/2ED9 / BCS
+}
+// C2/2F4E: the region's song when the Epoch lands -- the cell under the screen's middle (`($E3 >> 1) + 8`, `(($E7 >> 1)
+// + 7) & 3F`, 8-bit), or the field song held in $7E29AE; no priority written (the last one stands).
+static void owRegionSong(uint8_t* ram) {
+  if (ram[0x101ED]) ram[0x1BE9] = ram[0x29AE];
+  else ram[0x1BE9] = ram[0x1B9B + CtWorldRegion(ram, (uint8_t)((ram[0xE3] >> 1) + 8), ((ram[0xE7] >> 1) + 7) & 0x3F)];
+  ram[0x1BE8] = 0x10; ram[0x1BEA] = 0xFF; ram[0x1BEB] = 0x80;
+  if (CtWorldSoundRequest(ram)) ram[0x02AE] = ram[0x1BE9];
+}
+// C2/39D5 then C2/4A58: the map properties around the cell of pixel ($08, $0A) -- +22 (x-1, y-1), +23 (x, y-1), +24
+// (x-1, y), +25 (x, y), and below it +2E (x-1, y+1), +2F (x, y+1); a column of -1 wraps to BF, rows to 7F. The landing
+// reads them. `$08` / `$0A` are left in cells ($0A one row down), as the two routines leave them.
+static void owEpochProps(uint8_t* ram, uint8_t* B, unsigned px, unsigned py) {
+  int x = (int)(px >> 3), y = (int)(py >> 3);
+  int xm = x - 1 < 0 ? 0xBF : x - 1;
+  B[0x22] = CtWorldProp(ram, xm, (y - 1) & 0x7F); B[0x23] = CtWorldProp(ram, x, (y - 1) & 0x7F);
+  B[0x24] = CtWorldProp(ram, xm, y);             B[0x25] = CtWorldProp(ram, x, y);
+  int yp = (y + 1) & 0x7F;                                             // 4A78 LDA $0A / INC A / AND #007F / STA $0A
+  B[0x2E] = CtWorldProp(ram, xm, yp);            B[0x2F] = CtWorldProp(ram, x, yp);
+  obPutW(ram + 0x0008, (uint16_t)x); obPutW(ram + 0x000A, (uint16_t)yp);
+}
+// C6/E797: may the Epoch land here? A forbidden rectangle of cells per world (C6:E7BA by `$0100 - 1F0`): inside it -> SEC.
+static int owLandForbidden(const uint8_t* ram, const uint8_t* B) {
+  static const uint8_t R[8][4] = {                                     // {y lo, y hi, x lo, x hi} (E7CA..E7E4's LDX / LDY)
+    { 0x64, 0x7F, 0x41, 0x72 }, { 0x76, 0x7F, 0x60, 0x6E }, { 0 }, { 0x00, 0x34, 0x00, 0x0E }, { 0x60, 0x7F, 0x00, 0x20 } };
+  int w = (int)(obW(ram + 0x0100) - 0x01F0);
+  if (w < 0 || w > 7 || w == 2 || w > 4) return 0;                     // E7DA CLC
+  unsigned x = (obW(B + OWOBJ_XPOS) >> 3) & 0xFF, y = (obW(B + OWOBJ_YPOS) >> 3) & 0xFF;   // C6/E797 LSR x3 (low bytes)
+  int out = 0;                                                         // C6/E74E: $06, 0 = inside
+  if (x < R[w][2]) out |= 1; else if (x >= R[w][3]) out |= 2;
+  if (y < R[w][0]) out |= 4; else if (y >= R[w][1]) out |= 8;
+  return out == 0;
+}
+// THE EPOCH, class $42DD (block $0DB0 on 1F6), states C2:42E6.
+static int obEpoch(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
+  for (;;) switch (B[2]) {
+  case 0:                                                              // C2/42F8: placed on its record
+    obPutW(B + OWOBJ_XPOS, obW(ram + 0x0290)); obPutW(B + OWOBJ_YPOS, obW(ram + 0x0292));
+    obPutW(B + OWOBJ_XFRAC, 0); obPutW(B + OWOBJ_YFRAC, 0); obPutW(B + 0x10, 0);
+    if (!(ram[0x0294] & 0x40)) {                                       // 4316 BIT #40: parked
+      B[2]++; B[OWOBJ_ATTR] = 0xA0; B[0x28] = B[0x27] = 0x01; ram[0x1BEF] = 0;
+      leadInstall(B, (ram[0x0294] & 0x20) ? 0x18 : 0x2D);              // 432D BIT #20
+      obAnimTick(ram, B);
+      return 0;
+    }
+    if (ram[0x0294] & 0x10) {                                          // 4387: reloaded inside the time gauge
+      owUnderway("the Epoch reloaded inside the time gauge (C2/4387, state 7)");
+      return 0;
+    }
+    B[2] = 3; B[OWOBJ_ATTR] = 0xB0;                                    // 434C-4353: riding
+    B[0x28] = B[0x27] = (uint8_t)(ram[0x0104] & 3); ram[0x1BEF] = 1;
+    ram[0x0294] &= (uint8_t)~0x0C;                                     // 4366 TRB $0294
+    owEpochPose(ram, B);
+    owEpochProps(ram, B, obW(B + OWOBJ_XPOS), obW(B + OWOBJ_YPOS));    // 4372-437F
+    obAnimTick(ram, B);
+    return 0;
+  case 1:                                                              // C2/43CB: parked, waiting for the party
+    if (ram[0x027E] != 2) { obAnimTick(ram, B); return 0; }
+    ram[0x0294] |= 0x40;                                               // 43D7 TSB $0294
+    if (!(ram[0x0294] & 0x20)) {                                       // 43E3: no wings -- the time gauge at once
+      ram[0x0294] |= 0x10; ram[0x027C] = 0x08; B[2] = 6; obPutW(ram + 0x02AF, 0);
+      obAnimTick(ram, B);
+      return 0;
+    }
+    B[2]++;                                                            // 4401 INC $0002,X
+    owEpochSong(ram);                                                  // 4404 JSR C2/4A2A
+    owEpochProps(ram, B, obW(B + OWOBJ_XPOS), obW(B + OWOBJ_YPOS));    // 4407-4416
+    obPutW(B + 0x1E, 0x8000); obPutW(B + 0x20, 0xFFFF);                // 441B-4424: up, half a pixel a frame
+    obPutW(B + 0x1A, 0); obPutW(B + 0x1C, 0); obPutW(B + 3, 0);
+    B[0x26] = 0x30;                                                    // 4432
+    leadInstall(B, 0x19);                                              // 4437 JSR C2/1CDA
+    /* FALLTHROUGH: 443C */
+  case 2:                                                              // C2/443C: the lift-off
+    if (B[3] == 0x08) B[OWOBJ_ATTR] = 0xB0;
+    if (B[3] < B[0x26]) { obIntegrate(B); obAnimTick(ram, B); return 0; }
+    if (ram[0x1BA6] == 0xD3) {                                         // 4461: the story's first flight
+      if (ram[0x027C] == 1) {
+        ram[0x027C] = 0x07;
+        CtWorldSpawnVm(ram, 0xC2, 0x4A9B);                             // 4479 JSR C2/04D9
+        obAnimTick(ram, B);
+      }
+      return 0;
+    }
+    B[2]++;                                                            // 4481 INC $0002,X
+    owEpochPose(ram, B);                                               // 4484 JSR C2/48A9
+    owEpochSong(ram);                                                  // 4487 JSR C2/4A2A
+    ram[0x1BEF] = 1;
+    obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(B + OWOBJ_YPOS) + 0x0018));  // 4491 ADC $0018,X
+    owVelZero(B); obPutW(B + 3, 0);
+    ram[0x0104] = (uint8_t)((ram[0x0104] & 0xFC) | B[0x28]);           // 44AC-44B4
+    /* FALLTHROUGH: 44B7 */
+  case 3: {                                                            // C2/44B7: in the air, waiting for the pad
+    if (ram[0x027C] != 1) { obAnimTick(ram, B); return 0; }
+    unsigned pad = obW(ram + 0x00F8);
+    if (!pad) { obAnimTick(ram, B); return 0; }
+    if (pad & 0x0080) {                                                // C2/4510: A
+      if (ram[0x0294] & 0x08) {
+        if (!(ram[0x0294] & 0x04)) {
+          ram[0x027C] = 0x07; ram[0x0294] |= 0x04;
+          CtWorldSpawnVm(ram, 0xC2, 0x4C8F);                           // 452C JSR C2/04D9
+        }
+        obAnimTick(ram, B);
+        return 0;
+      }
+      int refuse = ((B[0x22] | B[0x23] | B[0x24] | B[0x25] | B[0x2E] | B[0x2F]) & 0x07) != 0;   // 4533-453C AND #0707
+      if (!refuse && (ram[0x029E] & 0x80) && obW(ram + 0x0100) == 0x01F3   // C2/4917: not onto vehicle B
+          && owBoxHit(obW(ram + 0x0290), obW(ram + 0x0292), 0x4946, obW(ram + 0x029A), obW(ram + 0x029C), 0x494E)) refuse = 1;
+      if (!refuse && owLandForbidden(ram, B)) refuse = 1;              // 455E JSL C6/E797
+      if (!refuse) {                                                   // C2/4569: down it goes
+        obPutW(B + 0x1A, 0); obPutW(B + 0x1C, 0); obPutW(B + 0x1E, 0x8000); obPutW(B + 0x20, 0); obPutW(B + 3, 0);
+        obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(B + OWOBJ_YPOS) + 0xFFE8));   // 457D ADC $0018,X
+        B[0x28] = 0x01;
+        ram[0x0104] = (uint8_t)((ram[0x0104] & 0xFC) | B[0x28]);
+        B[0x26] = 0x31;
+        leadInstall(B, 0x1A);                                          // 45A0 JSR C2/1CDA
+        ram[0x1BEF] = 0;
+        owRegionSong(ram);                                             // 45A6 JSR C2/2F4E
+        B[2] = 5;
+        obAnimTick(ram, B);
+        return 0;
+      }
+    }
+    int dir = -1;                                                      // C2/44CC
+    if (pad & 0x0001) {                                                // 45C7: the time gauge
+      ram[0x0294] |= 0x10; ram[0x027C] = 0x08; B[2] = 6; obPutW(ram + 0x02AF, 0);
+      obAnimTick(ram, B);
+      return 0;
+    }
+    if (pad & 0x0040) { ram[0x027C] = 0x05; obAnimTick(ram, B); return 0; }   // 45BD
+    if (pad & 0x0004) { ram[0x027C] = 0x06; owUnderway("the Epoch's $027C = 6 (C2/45B3)"); obAnimTick(ram, B); return 0; }   // 45B3
+    if (pad & 0x0800) dir = 0; else if (pad & 0x0400) dir = 1;
+    else if (pad & 0x0200) dir = 2; else if (pad & 0x0100) dir = 3;
+    if (dir < 0) { obAnimTick(ram, B); return 0; }
+    B[0x27] = B[0x28]; B[0x28] = (uint8_t)dir;                         // C2/461D
+    obPutW(B + 0x1C, (uint16_t)owRomW(0x4899 + dir * 4));              // 4628 LDA $C24899,X
+    obPutW(B + 0x20, (uint16_t)owRomW(0x489B + dir * 4));
+    obPutW(B + 0x1A, 0); obPutW(B + 0x1E, 0);
+    if (B[0x28] != B[0x27]) {
+      ram[0x0104] = (uint8_t)((ram[0x0104] & 0xFC) | B[0x28]);
+      owEpochPose(ram, B);                                             // 4652 JSR C2/48A9
+    }
+    {                                                                  // 4659 JSR C2/3A56 / JSR C2/3A8F: the next cell
+      unsigned tx = obW(B + OWOBJ_XPOS), ty = obW(B + OWOBJ_YPOS);
+      int16_t vx = (int16_t)obW(B + 0x1C), vy = (int16_t)obW(B + 0x20);
+      if (vx) tx += vx > 0 ? 8 : 0xFFF8;
+      if (vy) ty += vy > 0 ? 8 : 0xFFF8;
+      tx &= 0xFFFF; ty &= 0xFFFF;
+      if (tx & 0x8000) tx = (tx + 0x600) & 0xFFFF; else if (tx >= 0x600) tx -= 0x600;
+      obPutW(B + 0x2A, (uint16_t)tx); obPutW(B + 0x2C, (uint16_t)(ty & 0x3FF));
+    }
+    owEpochProps(ram, B, obW(B + 0x2A), obW(B + 0x2C));                // 465F-466C
+    obPutW(ram + 0x1BF7, 0);                                           // 466F STZ $1BF7 (M = 16)
+    B[2]++;                                                            // 4672 INC $0002,X
+  }
+    /* FALLTHROUGH: 4675 */
+  case 4:                                                              // C2/4675: the step
+    obIntegrate(B);
+    owScrollBoth(ram, c, 0, obW(B + 0x1C));                            // 4681-4691 C2/0568 x2
+    owScrollBoth(ram, c, 1, obW(B + 0x20));                            // 4694-46A6 C2/066C x2
+    owStoreCamVel(ram, c, B);
+    obAnimTick(ram, B);
+    obPutW(ram + 0x0290, obW(B + OWOBJ_XPOS)); obPutW(ram + 0x0292, obW(B + OWOBJ_YPOS));
+    if (obW(B + OWOBJ_XPOS) == obW(B + 0x2A) && obW(B + OWOBJ_YPOS) == obW(B + 0x2C)) obPutW(B + 2, 0x0003);   // 46DA
+    return 0;
+  case 5:                                                              // C2/46E2: the landing
+    if (B[3] == 0x20) B[OWOBJ_ATTR] = 0xA0;
+    if (B[3] < B[0x26]) { obIntegrate(B); obAnimTick(ram, B); return 0; }
+    ram[0x0294] &= (uint8_t)~0x40;                                     // 4705 TRB $0294
+    B[2] = 0;
+    leadInstall(B, 0x18);
+    owVelZero(B); obPutW(B + 3, 0);
+    obAnimTick(ram, B);
+    return 0;
+  case 8:                                                              // C2/4888
+    if (ram[0x027E] == 5) B[2] = 0;
+    obAnimTick(ram, B);
+    return 0;
+  default:                                                             // 6 (C2/4728), 7 (C2/4823): the time gauge
+    owUnderway("the Epoch's time gauge (C2/4728 / C2/4823)");
+    obAnimTick(ram, B);
+    return 0;
+  }
+}
+// THE EPOCH'S SHADOW, class $495E: only on the Epoch's world (else SEC, gone); every frame its pose afresh -- 4E above the
+// craft, or with wings and aloft ($1BEF) 1F below it.
+static int obEpochShadow(uint8_t* ram, uint8_t* B) {
+  if (B[2] == 0) {                                                     // C2/496B
+    if ((obW(ram + 0x0100) & 0x01FF) != obW(ram + 0x029F)) return 1;   // 4976 BEQ / SEC
+    B[2]++; B[OWOBJ_ATTR] = 0xB0; B[0x10] = 0; B[0x11] = 0;
+  }
+  int up = !((ram[0x0294] & 0x20) && ram[0x1BEF]);                     // C2/498C
+  leadInstall(B, up ? 0x4E : 0x1F);
+  obPutW(B + OWOBJ_XPOS, obW(ram + 0x0290));
+  obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(ram + 0x0292) + (up ? 0xFFE8 : 0x0018)));
+  obAnimTick(ram, B);
+  return 0;
+}
+
 static uint8_t g_owNmiEn = 0, g_owNmiWh0 = 0, g_owNmiWh1 = 0;   // the NMI's HDMAEN / WH0 / WH1 pushes (see below)
 void CtWorldNmiLatch(uint8_t* en, uint8_t* wh0, uint8_t* wh1) { *en = g_owNmiEn; *wh0 = g_owNmiWh0; *wh1 = g_owNmiWh1; }
 void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
@@ -2479,6 +2906,19 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
     // THE LEAD'S SLOT: C2/3725 `LDA $001C,X / STA $1BF1 / LDA $0020,X / STA $1BF3` -- its velocity, stored on the frames
     // its mover integrates. The mover itself is the host's (CtWorldStreamFrame held the delta); the store lands here.
     if (cls == 0x3404 && c && c->leadStore) { c->pendDx = c->leadDx; c->pendDy = c->leadDy; c->leadStore = 0; }
+    // ...EXCEPT IN A VEHICLE'S MODULES ($027E != 0): there the lead's handler is the ROM's own (obLeadModule), not the host's
+    // mover, and it runs here in its slot like any block.
+    if (cls == 0x3404 && ram[0x027E] != 0) {
+      obLeadModule(ram, B, c);
+      int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
+      continue;
+    }
+    if (cls == 0x309E || cls == 0x42DD || cls == 0x495E) {      // the boarding manager, the Epoch, its shadow (CLC / SEC)
+      int r = cls == 0x309E ? obBoardManager(ram) : cls == 0x42DD ? obEpoch(ram, B, c) : obEpochShadow(ram, B);
+      if (r == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
+      else obPutW(B, 0);
+      continue;
+    }
     // THE BG3 OBJECTS, AT THEIR OWN SLOTS: the drift (C2/75C3 / 75FD / 7702 / 77F2) and, after it in block order, the
     // per-line wave (C2/7759 / 7652) that reads the moved `$24`. All return CLC. They were ticked outside the pass, before
     // it -- so on the frame the bootstrap spawns the drift object (op $35, same pass, a later block) the cartridge already
@@ -2512,6 +2952,22 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
     if (cls != OWOBJ_CLASS_VM) continue;            // the other native classes are still not run
     if (obRun(ram, B, c) == 2) { g_owResumeBlock = b; return; }   // its inline JSL holds the pass (obNative)
   }
+  // CT_OWVEHTRACE=1: the vehicle machine as each pass leaves it, on change -- `$027C $027E $027F $028F $0294`, then every
+  // block of the lead / Epoch / shadow / boarding-manager / follower classes as `addr:class/state` (the oracle's side:
+  // `ct.exe --monitor 7E027C:6,7E028F:1,7E0294:1,...`).
+  { static int tr = -1; static char last[256]; static int pass = 0;
+    if (tr < 0) { const char* e = getenv("CT_OWVEHTRACE"); tr = (e && *e) ? 1 : 0; }
+    pass++;
+    if (tr) {
+      char buf[256]; int n = snprintf(buf, sizeof buf, "027C=%02X 027E=%02X 027F=%02X 028F=%02X 0294=%02X 0290=%04X,%04X |",
+                                      ram[0x027C], ram[0x027E], ram[0x027F], ram[0x028F], ram[0x0294], obW(ram + 0x0290), obW(ram + 0x0292));
+      for (int b = OWOBJ_BASE; b < OWOBJ_END && n < 240; b += OWOBJ_STRIDE) {
+        uint16_t k = obW(ram + b);
+        if (k == 0x3404 || k == 0x42DD || k == 0x495E || k == 0x309E || k == 0x3AE2)
+          n += snprintf(buf + n, sizeof buf - (size_t)n, " %04X:%04X/%02X", b, k, ram[b + 2]);
+      }
+      if (strcmp(buf, last)) { strcpy(last, buf); printf("owveh: pass %d %s\n", pass, buf); }
+    } }
 }
 
 void CtWorldEnter(CtWorldCam* c, CtWorldMover* m, int cell8x, int cell8y) {

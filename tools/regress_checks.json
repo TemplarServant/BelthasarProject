@@ -39489,6 +39489,53 @@
       "notes": "The cockpit (loc 1B0) from the cartridge's own WRAM at f1700 of the Epoch drive (no box open: the port cannot resume a box mid-way), A every 32 frames. Before: obj11 fn3's `48 42 21 00 0E / 67 0F 0E / 12 0E 03 04 03` -- a pointer read of $00:2142, the SPC's port 2 (the song's marker) -- read nothing in the port (ctFlatAddr24 has no I/O), the loop never ended and the cockpit hung. Now ops 0x48 / 0x49 on $2140-$2143 read the SPC's output ports (g_ctApuOut, filled by field.c from src/audio.c before the VM's tick). `FF 26` at f1071 (the cartridge: 1070 frames after the same point), 31 black frames, the dive, `$7E:0000 = 1`, and the reboot into 1DA that obj11 staged."
     },
     {
+      "name": "ow-epoch-boarding-and-liftoff-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py"
+      ],
+      "env": {},
+      "expect": [
+        "epoch-board: timeline same -- 6 changes; the cartridge +0:01/04/A0/01 +1:01/04/A2/01 +2:01/02/A3/01 +3:01/02/E3/02 +51:07/02/E3/02 +70:02/02/E3/02",
+        "epoch-board: picture A+20 (lift-off, placard masked) 0 px differ",
+        "epoch-board: picture A+60 (the fade into 1DD) 0 px differ"
+      ],
+      "pin": [
+        "^epoch-board: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch24.state",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "note_pass": "the party boards the parked Epoch and it lifts off frame for frame with the cartridge (C2/309E, the lead's module 4, C2/42DD, its shadow C2/495E), and storyline D3's first flight starts the Black Omen scene",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    if (ram[0x028F] == 2 && (ram[0x0294] & 3) == party) ram[0x027E] = 0x02;",
+          "replace": "    if (ram[0x028F] == 2 && (ram[0x0294] & 3) == party + 1) ram[0x027E] = 0x02;   /* MUT */",
+          "why": "C2/31FC compares the members aboard with the party's size: off by one, nobody ever rides"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    B[0x26] = 0x30;                                                    // 4432",
+          "replace": "    B[0x26] = 0x20;   /* MUT */",
+          "why": "the lift-off lasts +26 = 0x30 frames (C2/4432); shorter, the D3 script starts 16 frames early"
+        },
+        {
+          "file": "src/world.c",
+          "find": "  obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(ram + 0x0292) + (up ? 0xFFE8 : 0x0018)));",
+          "replace": "  obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(ram + 0x0292) + (up ? 0xFFF0 : 0x0018)));   /* MUT */",
+          "why": "the parked shadow sits 0x18 above the craft's record (C2/49AB ADC #FFE8)"
+        }
+      ],
+      "notes": "THE EPOCH ON THE OVERWORLD, BOARDING (disasm/notes/ow_vehicle.md; ROADMAP G1a item 3). Jackie's ch24 battery save: loc 1F6 (12000 B.C.), the party standing on the parked winged Epoch ($0294 = A0), storyline D3. One A: the boarding manager (class $309E, C2/30CD: the lead's box C2:324C over the vehicle's C2:3254) sets $028F = 2, $027E = 4; the lead (C2/3489) and the followers (C2/3B6A) walk aboard and count $0294 up; at 3 aboard $027E = 2; the Epoch (class $42DD) sets bit 6 and lifts off 0x30 frames at half a pixel a frame with the song 13 post (C2/4A2A); storyline D3 then spawns script C2:4A9B (`$027C = 7`), which enters loc 1DD (the Black Omen rising) 19 frames later. Timeline counted from the frame $027E leaves 0, both sides; the pictures at the P+2 alignment, the era placard masked (the port loads the battery save at another frame than the cartridge state was taken, so its $1BF7 counter starts lower -- not the vehicle's)."
+    },
+    {
       "name": "ending-story-plays-through-in-the-port",
       "argv": [
         "build/ct_field.exe",

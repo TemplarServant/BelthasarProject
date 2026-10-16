@@ -397,8 +397,8 @@ static uint8_t worldBg3Px(const World* w, int wx, int wy, int* prio, int* palBas
   int tx = wx & 7, ty = wy & 7;
   if (e & 0x4000) tx = 7 - tx;
   if (e & 0x8000) ty = 7 - ty;
-  int ba = 0xE000 + t * 16 + ty * 2, k = 7 - tx;
-  return (uint8_t)(((w->vram[ba] >> k) & 1) | (((w->vram[ba + 1] >> k) & 1) << 1));
+  int ba = (0xE000 + t * 16 + ty * 2) & 0xFFFF, k = 7 - tx;           // (VRAM is 64 KB: the PPU's address wraps)
+  return (uint8_t)(((w->vram[ba] >> k) & 1) | (((w->vram[(ba + 1) & 0xFFFF] >> k) & 1) << 1));
 }
 
 static void worldPalRefresh(World* w, int from, int to) {
@@ -903,6 +903,7 @@ static void worldEnterSong(World* w, int cell8x, int cell8y) {
 static int g_owObjFromCapture = 0;                 // set by --loadwram and the CT_OWBOAT_SHOT canary
 static int owBootstrapObjects(void) {
   if (getenv("CT_OWSNAP")) return 0;
+  if (getenv("CT_OWSEEDBOOT")) return 1;          // a world capture entered the ROM's way: its bootstrap over its own WRAM
   return !g_owObjFromCapture;
 }
 
@@ -11428,6 +11429,7 @@ int main(int argc, char** argv) {
   // stages the NEXT location with op 0xDE/0xDF sets `$011E` again DURING them; reading the byte at the
   // end therefore eats the flag the next load is owed. Latched here, at the load.
   int loadRampSkip = 0;
+  int owVehicleModule = 0;   // the last overworld frame ran a vehicle's lead module ($027E != 0; world.c obLeadModule)
   int owPassHold = 0;    // frames the overworld stands still inside its pass's inline JSL (world.c obNative)
   int owPassResume = 0;  // ...and the suspended pass resumes on the frame after them
   int entrySweepPend = 0;   // C0/286C's C0/B0E6 owed by a location change, made on the entry ramp's first frame (fade 2)
@@ -12352,8 +12354,12 @@ int main(int argc, char** argv) {
                f.vm ? CtSceneLoader(f.vm) : -1, f.vm ? CtSceneNaming(f.vm) : -1, f.vm ? CtSceneExplore(f.vm) : -1,
                s7[0x162], s7[0x110], fade, battlePhase,
                (!battlePhase && xFire && !gameOver && menuFb && modGate && !fade && !pendKind) ? "OPEN" : "refused");
-      if (menuPhase == 0 && !battlePhase && xFire && !gameOver && menuFb
-          && modGate
+      // IN THE EPOCH the lead's handler is not the poll (C2/3572 is module 0's): the Epoch's own C2/44B7 reads the pad and its
+      // X (C2/45BD) writes the same `$027C = 5` -- so on the map the menu opens on the module-0 poll, or on that store.
+      int owEpochMenu = inWorld && s7[0x027E] != 0 && s7[0x027C] == 5;
+      if (inWorld && s7[0x027E] != 0) xFire = 0;
+      if (menuPhase == 0 && !battlePhase && (xFire || owEpochMenu) && !gameOver && menuFb
+          && (modGate || owEpochMenu)
           && !fade && !pendKind) {                           // engine transfer boundary (see above)
         menuPhase = 1; menuT = 0;
         menuSaveHoverPanel = -1;
@@ -12734,8 +12740,29 @@ int main(int argc, char** argv) {
           fade = 1;                                    // gated storyline<3) over a BLACK screen, then SELF-routes to
           if (selftest) printf("ngintro: pan complete (%d f) -> loc 271 (wake-up intro)\n", NG_PAN_END);  // loc 2 (op-0xE0).
         }
+      } else if (wd.wram && wd.wram[0x027E] != 0 && (owBootstrapObjects() ? CtWorldHasLead(wd.wram) : 1)) {
+        // A VEHICLE'S MODULE ($027E 2-5: boarding, riding, stepping out). The lead's handler is then the ROM's own and runs in
+        // its slot of the object pass (world.c obLeadModule); so does the Epoch, which scrolls the camera itself (C2/4675).
+        // What the host does here is the NMI's half: flush what the steppers staged.
+        CtWorldStreamFrame(&wd.stm, &wd.cam, wd.wram, 0, 0);
+        owVehicleModule = 1;
       } else {
         int wdx = 0, wdy = 0;
+        // STEPPING OUT OF A VEHICLE: the frame `$027E` comes back to 0 the lead's phase is 0 (C2/34AD, and C2/340E's compare
+        // against `$027F`), so its handler runs the init C2/34F8 from the spot C2/34AD left in `$0283` / `$0285`. The host's
+        // mover is that handler's module 0: it restarts there, at rest, on the cell boundary.
+        if (owVehicleModule && wd.wram) {
+          owVehicleModule = 0;
+          wd.mv.posX = wd.mv.probeX = (uint16_t)(wd.wram[0x0283] | (wd.wram[0x0284] << 8));
+          wd.mv.posY = wd.mv.probeY = (uint16_t)(wd.wram[0x0285] | (wd.wram[0x0286] << 8));
+          wd.mv.velX = wd.mv.velY = 0; wd.mv.phase = 1; wd.mv.moving = 0;
+          if (owBootstrapObjects() ? CtWorldHasLead(wd.wram) : 1) {
+            uint8_t* LB = wd.wram + CtWorldLeadBlock(wd.wram);
+            LB[OWOBJ_XPOS] = wd.wram[0x0283]; LB[OWOBJ_XPOS + 1] = wd.wram[0x0284];
+            LB[OWOBJ_YPOS] = wd.wram[0x0285]; LB[OWOBJ_YPOS + 1] = wd.wram[0x0286];
+            CtWorldLeadReinit(wd.wram);
+          }
+        }
         uint8_t ph0 = wd.mv.phase;
         CtWorldMoverFrame(&wd.mv, wd.wram, wUp, wDown, wLeft, wRight, &wdx, &wdy);
         CtWorldStreamFrame(&wd.stm, &wd.cam, wd.wram, wdx, wdy);
@@ -12788,6 +12815,7 @@ int main(int argc, char** argv) {
       // script later pokes it to 1 via op $13 (C2/12C8), and the port bakes $1B9B instead of running that
       // script, but BOTH values are inside the handler's {0,1,7} gate, so it is open either way.
       { uint8_t* wr = wd.wram;
+        if (!owVehicleModule) {                       // (in a vehicle's module the lead's handler writes them itself)
         wr[0x0283] = (uint8_t)wd.mv.posX; wr[0x0284] = (uint8_t)(wd.mv.posX >> 8);
         wr[0x0285] = (uint8_t)wd.mv.posY; wr[0x0286] = (uint8_t)(wd.mv.posY >> 8);
         // ⭐ ...AND C2/3ACB, THE OTHER HALF OF THAT MIRROR -- the one the SAVE reads. All five of
@@ -12810,6 +12838,7 @@ int main(int argc, char** argv) {
         // the census's usual +1). That state's mover is (440,280), and 440>>3 = 0x37, 280>>3 = 0x23.
         wr[0x0102] = (uint8_t)(wd.mv.posX >> 3);
         wr[0x0103] = (uint8_t)(wd.mv.posY >> 3);
+        }
         // ...BUT NOT $0104. Walking writes no $0104 on the cartridge: its thirteen C2 writers are all transitions (the
         // exits' `AND #FC / ORA $0028,X`, 44B4 4596 464F 4EAB 4F13 480C; the special arrivals' `LDA #01`, 34F0 478F 47B9;
         // the scripts', 1141 24B6). MEASURED (the rule's cartridge, saves/ow_w0.state, right / up / down): $0D98 (+28)
@@ -12837,7 +12866,7 @@ int main(int argc, char** argv) {
         // The same bridge for the brightness: a replayed snapshot never runs the bootstrap's op 0x29, so nothing would
         // ever light $1C/$1D. It holds the value that fade object settles on (C2/2183: $1D = 0F, $1C = 0).
         if (!menuPhase && !owBootstrapObjects()) { wr[0x001C] = 0x00; wr[0x001D] = 0x0F; }
-        wr[0x027E] = 0;
+        // ($027E is the lead's module -- C2/3404's table -- and the boarding manager $309E moves it: no pin.)
         // ⚠ A BRIDGE, and it exists only because the world still keeps a PRIVATE $7E while the field's is
         // the host's (wram_load_census.md 8). The song shadows and the mailbox are CPU-GLOBAL in the ROM;
         // across two images they have to be carried by hand. The real fix is to give the world the host
@@ -13009,7 +13038,7 @@ int main(int argc, char** argv) {
       //  A fixed rotation of colours $24-$2E stood here for every world -- right for world 0's row 2, and the mountains'
       //  colours in world 3, whose script animates rows 3 and 4.)
       if (owEnterCd > 0) owEnterCd--;
-      else if (talkPressed && owPad && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // ENTER the location (C2/35E5)
+      else if (talkPressed && owPad && !owVehicleModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // ENTER the location (C2/35E5)
         // C2/35E5 `$027C = 3`, and the main loop's state 3 is the whole exit (C2/2402):
         //   2452 LDA #C2 / LDX #2EC1 / JSR C2/04D9     a VM object on $C2:2EC1 = `28 01 52` (fade out at rate 1, die)
         //   245C NMITIMEN $81 / LDX #0012 / JSR C2/0346 x18   eighteen NMIs -- the object pass runs the fade in them
