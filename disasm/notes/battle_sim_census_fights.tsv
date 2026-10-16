@@ -1,0 +1,814 @@
+# battle_sim census, 2026-10-15: every fight of `sweep all hp=1` (e<id>) and `formations hp=1` (f<scene>_<obj>)
+# class: a staging differs | b WRAM sequence differs | c death palette differs | d timing only | e picture only | same
+# asis = battle_sim as it is (port buttons 4 frames early); fixed = port buttons mapped from field f216
+# families (battle_sim_census.md): recolor_plus1, recolor_queue = 2; next_open_minus4 = 3; fallen_counter = 4; death_0E05 = 5; staging_overflow = 6 (cartridge never stages); picture_big = 7 (>= 20 frames over 400 px)
+tag	enemies	asis	fixed	first_diff_fixed	families_fixed
+e00	00	d	d		recolor_plus1
+e01	01	d	d		recolor_plus1
+e02	02	d	d		next_open_minus4,picture_big,recolor_plus1
+e03	03	d	d		recolor_plus1
+e04	04	b	b	$2380 f1201	death_0E05,picture_big,recolor_plus1
+e05	05	d	d		recolor_plus1
+e06	06	d	d		recolor_plus1
+e07	07	d	d		recolor_plus1
+e08	08	d	d		recolor_plus1
+e09	09	d	d		recolor_plus1
+e0A	0A	d	d		recolor_plus1
+e0B	0B	d	d		picture_big,recolor_plus1
+e0C	0C	d	d		recolor_plus1
+e0D	0D	d	d		recolor_plus1
+e0E	0E	d	d		recolor_plus1
+e0F	0F	b	b	$AE93 f930	fallen_counter,next_open_minus4,picture_big,recolor_plus1
+e10	10	d	d		recolor_plus1
+e11	11	d	d		recolor_plus1
+e12	12	d	d		recolor_plus1
+e13	13	d	d		recolor_plus1
+e14	14	d	d		recolor_plus1
+e15	15	d	d		recolor_plus1
+e16	16	d	d		recolor_plus1
+e17	17	d	d		recolor_plus1
+e18	18	d	d		recolor_plus1
+e19	19	d	d		recolor_plus1
+e1A	1A	d	d		recolor_plus1
+e1B	1B	b	b	$AE93 f1107	recolor_plus1
+e1C	1C	d	d		recolor_plus1
+e1D	1D	d	d		recolor_plus1
+e1E	1E	d	d		recolor_plus1
+e20	20	d	e		
+e22	22	d	d		recolor_plus1
+e23	23	d	d		recolor_plus1
+e25	25	d	d		
+e26	26	d	d		recolor_plus1
+e27	27	d	d		recolor_plus1
+e28	28	d	e		
+e29	29	d	d		recolor_plus1
+e2A	2A	d	d		recolor_plus1
+e2B	2B	d	d		recolor_plus1
+e2C	2C	d	d		recolor_plus1
+e2D	2D	d	d		recolor_plus1
+e2E	2E	d	d		recolor_plus1
+e2F	2F	d	d		recolor_plus1
+e30	30	d	d		recolor_plus1
+e31	31	d	d		recolor_plus1
+e32	32	d	e		
+e33	33	d	d		recolor_plus1
+e34	34	d	d		recolor_plus1
+e35	35	d	d		picture_big,recolor_plus1
+e36	36	d	d		recolor_plus1
+e37	37	d	d		picture_big,recolor_plus1
+e38	38	d	d		picture_big,recolor_plus1
+e39	39	d	d		recolor_plus1
+e3A	3A	d	e		picture_big
+e3B	3B	d	d		recolor_plus1
+e3D	3D	d	d		recolor_plus1
+e3E	3E	d	d		recolor_plus1
+e3F	3F	d	d		recolor_plus1
+e40	40	d	d		recolor_plus1
+e41	41	d	d		recolor_plus1
+e42	42	d	d		recolor_plus1
+e43	43	d	e		
+e45	45	d	d		recolor_plus1
+e46	46	d	d		recolor_plus1
+e47	47	d	d		recolor_plus1
+e48	48	d	d		recolor_plus1
+e49	49	d	d		recolor_plus1
+e4A	4A	d	d		recolor_plus1
+e4B	4B	d	d		recolor_plus1
+e4C	4C	d	d		recolor_plus1
+e4D	4D	d	d		recolor_plus1
+e4E	4E	d	d		recolor_plus1
+e4F	4F	d	d		recolor_plus1
+e50	50	b	d		recolor_plus1
+e51	51	d	d		recolor_plus1
+e52	52	d	d		recolor_plus1
+e53	53	d	d		recolor_plus1
+e54	54	d	d		recolor_plus1
+e55	55	d	d		recolor_plus1
+e56	56	d	d		recolor_plus1
+e57	57	d	e		
+e58	58	d	d		recolor_plus1
+e59	59	d	d		recolor_plus1
+e5B	5B	d	d		recolor_plus1
+e5C	5C	d	d		recolor_plus1
+e5D	5D	d	d		picture_big
+e5E	5E	d	d		recolor_plus1
+e5F	5F	d	e		
+e61	61	d	d		recolor_plus1
+e62	62	d	d		recolor_plus1
+e63	63	d	d		recolor_plus1
+e64	64	d	d		recolor_plus1
+e65	65	d	e		
+e66	66	d	d		
+e68	68	b	d		
+e69	69	d	d		recolor_plus1
+e6A	6A	d	d		recolor_plus1
+e6B	6B	d	d		recolor_plus1
+e6C	6C	d	d		recolor_plus1
+e6D	6D	d	d		recolor_plus1
+e6E	6E	b	b	$AE93 f865	fallen_counter,picture_big,recolor_plus1
+e6F	6F	d	d		picture_big,recolor_plus1
+e70	70	d	d		recolor_plus1
+e71	71	d	d		recolor_plus1
+e72	72	d	d		recolor_plus1
+e73	73	d	d		recolor_plus1
+e74	74	d	d		recolor_plus1
+e75	75	d	d		recolor_plus1
+e76	76	d	d		recolor_plus1
+e79	79	d	d		recolor_plus1
+e7A	7A	d	d		recolor_plus1
+e7B	7B	d	d		recolor_plus1
+e7C	7C	d	d		recolor_plus1
+e7D	7D	d	d		picture_big,recolor_plus1
+e7E	7E	d	d		picture_big
+e7F	7F	d	d		picture_big
+e80	80	d	e		
+e81	81	d	d		recolor_plus1
+e82	82	d	d		recolor_plus1
+e83	83	d	d		recolor_plus1
+e84	84	d	d		recolor_plus1
+e85	85	d	d		recolor_plus1
+e86	86	d	d		recolor_plus1
+e87	87	d	d		recolor_plus1
+e88	88	d	d		recolor_plus1
+e89	89	d	d		picture_big,recolor_plus1
+e8A	8A	d	d		recolor_plus1
+e8B	8B	d	d		recolor_plus1
+e8C	8C	d	d		recolor_plus1
+e8D	8D	d	d		recolor_plus1
+e8E	8E	d	d		picture_big,recolor_plus1
+e8F	8F	d	d		next_open_minus4
+e90	90	c	c	$2380 f837	death_0E05,picture_big,recolor_plus1
+e91	91	d	d		recolor_plus1
+e92	92	d	d		
+e93	93	d	d		
+e94	94	d	d		recolor_plus1
+e95	95	d	d		picture_big
+e96	96	d	d		picture_big,recolor_plus1
+e97	97	d	d		recolor_plus1
+e98	98	d	d		recolor_plus1
+e99	99	c	c	$2380 f793	death_0E05,picture_big,recolor_plus1
+e9A	9A	b	b	$AE93 f1179	fallen_counter,next_open_minus4,picture_big,recolor_plus1
+e9B	9B	c	c	$2380 f821	death_0E05,picture_big,recolor_plus1
+e9C	9C	e	e		picture_big
+e9D	9D	b	b	$AE93 f1010	death_0E05,fallen_counter,picture_big,recolor_plus1
+e9E	9E	b	b	$9877 f705	next_open_minus4,picture_big
+e9F	9F	c	c	$2380 f808	death_0E05,picture_big,recolor_plus1
+eA0	A0	d	e		picture_big
+eA1	A1	b	b	$AE93 f1147	picture_big
+eA2	A2	b	b	$AE93 f820	fallen_counter,picture_big
+eA3	A3	d	d		recolor_plus1
+eA4	A4	d	d		recolor_plus1
+eA5	A5	d	d		recolor_plus1
+eA6	A6	b	b	$2380 f405	death_0E05,picture_big,recolor_plus1
+eA7	A7	b	b	$62CA f273	picture_big,recolor_plus1
+eA8	A8	b	b	$AE93 f800	fallen_counter,picture_big,recolor_plus1
+eA9	A9	d	d		
+eAA	AA	d	d		recolor_plus1
+eAB	AB	d	d		recolor_plus1
+eAC	AC	d	d		recolor_plus1
+eAD	AD	d	d		recolor_plus1
+eAE	AE	d	d		recolor_plus1
+eAF	AF	d	d		recolor_plus1
+eB0	B0	b	b	$AE93 f1093	fallen_counter,next_open_minus4,picture_big,recolor_plus1
+eB1	B1	d	d		picture_big,recolor_plus1
+eB2	B2	d	d		picture_big,recolor_plus1
+eB3	B3	d	d		picture_big
+eB4	B4	b	b	$AE93 f937	fallen_counter,picture_big
+eB5	B5	d	d		picture_big
+eB6	B6	d	d		picture_big
+eB7	B7	d	d		picture_big,recolor_plus1
+eB8	B8	d	d		next_open_minus4,picture_big,recolor_plus1
+eB9	B9	e	e		picture_big
+eBA	BA	d	d		
+eBB	BB	d	d		
+eBC	BC	b	b	$AE93 f815	fallen_counter
+eBD	BD	b	d		
+eBE	BE	d	d		picture_big
+eBF	BF	d	d		picture_big
+eC0	C0	b	b	$2380 f899	fallen_counter,picture_big
+eC1	C1	e	e		
+eC2	C2	b	b	$AE93 f809	fallen_counter,picture_big
+eC3	C3	d	e		
+eC4	C4	b	b	$AE93 f911	fallen_counter,picture_big
+eC5	C5	d	d		
+eC6	C6	d	d		picture_big
+eC7	C7	b	b	$AF02 f1304	death_0E05,fallen_counter,picture_big
+eC8	C8	d	d		recolor_plus1
+eC9	C9	e	e		
+eCA	CA	d	d		
+eCB	CB	e	e		picture_big
+eCC	CC	c	c	$2380 f382	picture_big,recolor_plus1
+eCD	CD	c	c	$2380 f382	picture_big,recolor_plus1
+eCE	CE	a	a		staging_overflow
+eCF	CF	d	d		recolor_plus1
+eD0	D0	d	d		recolor_plus1
+eD1	D1	b	b	$AE93 f815	fallen_counter,picture_big,recolor_plus1
+eD2	D2	d	d		recolor_plus1
+eD3	D3	d	d		recolor_plus1
+eD4	D4	b	b	$2380 f801	fallen_counter,picture_big,recolor_plus1
+eD5	D5	d	d		recolor_plus1
+eD6	D6	d	d		recolor_plus1
+eD7	D7	d	d		picture_big,recolor_plus1
+eD8	D8	e	e		picture_big
+eD9	D9	e	e		picture_big
+eDA	DA	d	d		recolor_plus1
+eDB	DB	d	d		recolor_plus1
+eDC	DC	d	d		recolor_plus1
+eDD	DD	d	d		recolor_plus1
+eDE	DE	d	d		recolor_plus1
+eDF	DF	b	b	$AE93 f1190	fallen_counter,next_open_minus4,picture_big,recolor_plus1
+eE0	E0	d	e		
+eE1	E1	d	e		
+eE2	E2	d	e		
+eE3	E3	e	e		picture_big
+eE4	E4	d	d		picture_big
+eE5	E5	e	e		picture_big
+eE6	E6	b	b	$AE93 f799	fallen_counter,picture_big
+eE7	E7	b	b	$AE93 f800	fallen_counter,picture_big
+eEB	EB	e	e		picture_big
+eEC	EC	d	d		picture_big
+eED	ED	d	d		picture_big,recolor_plus1
+eEE	EE	d	e		
+eEF	EF	b	b	$AE93 f806	fallen_counter,picture_big,recolor_plus1
+eF0	F0	b	b	$993C f914	fallen_counter,picture_big,recolor_plus1
+eF1	F1	b	b	$AE93 f805	fallen_counter,picture_big,recolor_plus1
+eF2	F2	b	b	$AE93 f800	fallen_counter,picture_big
+eF3	F3	d	d		picture_big,recolor_plus1
+eF5	F5	d	d		recolor_plus1
+eF6	F6	d	d		
+eF7	F7	d	d		recolor_plus1
+eF8	F8	d	d		recolor_plus1
+eF9	F9	d	d		picture_big
+eFA	FA	c	c		picture_big
+f006_8	92	d	d		
+f013_14	11	d	d		recolor_plus1
+f013_15	8D 8D 8D	d	d		next_open_minus4,recolor_plus1
+f013_18	5E 5E 5E	d	d		next_open_minus4,recolor_plus1
+f013_21	5E 5E 5E	d	d		next_open_minus4,recolor_plus1
+f013_25	19 8D 8D	d	d		next_open_minus4,picture_big,recolor_plus1
+f013_30	5E 5E 5E	b	b	$993C f909	next_open_minus4,picture_big,recolor_plus1
+f01A_10	1C 1E	d	d		next_open_minus4,recolor_plus1
+f01A_12	1E	d	d		recolor_plus1
+f01A_8	1C 1C	d	d		next_open_minus4,recolor_plus1
+f01C_13	93 AD 94	d	e		
+f01C_13b	93 AD 94	d	e		
+f01D_10	31 31	d	d		next_open_minus4,recolor_plus1
+f01E_7	2E 2E	d	d		next_open_minus4,recolor_plus1
+f01F_11	0C 0D 0D	d	d		next_open_minus4,recolor_plus1
+f01F_8	A6 4B 4B 4B 0D	a	a		staging_overflow
+f021_8	A6 0D	b	b	$AF02 f780	death_0E05,fallen_counter,picture_big,recolor_plus1,recolor_queue
+f022_8	0D	d	d		recolor_plus1
+f023_9	4B 48 48	d	d		picture_big,recolor_plus1
+f024_8	0F 0C	b	b	$AE93 f893	fallen_counter,picture_big,recolor_plus1,recolor_queue
+f027_10	7C	d	d		recolor_plus1
+f027_9	4B 0C	d	d		recolor_plus1
+f02A_21	00	d	d		recolor_plus1
+f02C_3	C0	b	b	$2380 f899	fallen_counter,picture_big
+f02D_3	C0	b	b	$2380 f899	fallen_counter,picture_big
+f02F_13	A9	d	d		
+f02F_18	73 73 73	d	d		next_open_minus4,recolor_plus1
+f02F_21	45 23 23 23	d	d		next_open_minus4,recolor_plus1
+f030_10	45 23 23 23	d	d		next_open_minus4,recolor_plus1
+f030_8	4B 4B	d	d		next_open_minus4,recolor_plus1
+f031_10	47 47	d	d		next_open_minus4,recolor_plus1
+f031_12	47 47 47 47	d	d		next_open_minus4,picture_big,recolor_plus1
+f03C_4	57 05 05 51 51	d	e		
+f03F_10	A6 9F 9D	a	a		staging_overflow
+f041_8	8F	d	d		next_open_minus4
+f042_11	32 32	d	e		
+f042_9	32 32	d	e		
+f044_12	2B	d	d		recolor_plus1
+f044_13	2B 2B	d	d		next_open_minus4,recolor_plus1
+f044_14	2B	d	d		recolor_plus1
+f046_12	2B 2B	d	d		next_open_minus4,recolor_plus1
+f046_14	2B 2B	d	d		next_open_minus4,recolor_plus1
+f047_22	31 31	d	d		next_open_minus4,recolor_plus1
+f047_28	2E	d	d		recolor_plus1
+f047_29	31 31	d	d		next_open_minus4,recolor_plus1
+f047_29b	31	d	d		recolor_plus1
+f047_34	2E	d	d		recolor_plus1
+f048_11	3E 3E	d	d		next_open_minus4,recolor_plus1
+f048_15	31	d	d		recolor_plus1
+f048_16	31	d	d		recolor_plus1
+f048_17	31	d	d		recolor_plus1
+f048_9	3E 3E	d	d		next_open_minus4,recolor_plus1
+f05B_11	97 98	b	b	$AF02 f789	fallen_counter,picture_big,recolor_plus1,recolor_queue
+f05C_2	9D 9F A7	a	a		staging_overflow
+f05E_7	4F 4F 04 52	b	b	$2380 f952	death_0E05,picture_big,recolor_plus1
+f064_10	8E 20 20	d	d		picture_big,recolor_plus1
+f064_11	8E	d	d		picture_big,recolor_plus1
+f064_12	20 20	d	d		next_open_minus4,picture_big,recolor_plus1
+f064_8	C1 C1	e	e		
+f065_10	8E 20 20	d	d		picture_big,recolor_plus1
+f065_11	8E	d	d		picture_big,recolor_plus1
+f065_12	20 20	d	d		next_open_minus4,picture_big,recolor_plus1
+f065_8	C1 C1	e	e		
+f066_10	B0 B2 B1	b	d		next_open_minus4
+f067_10	B0 B2 B1	b	d		next_open_minus4
+f068_10	B0 B2 B1	b	d		next_open_minus4
+f069_10	B0 B2 B1	b	d		next_open_minus4
+f06A_10	B0 B2 B1	b	d		next_open_minus4
+f06B_10	B0 B2 B1	b	d		next_open_minus4
+f06D_14	AC AB AB	d	e		
+f06D_17	AC 81 81	e	e		picture_big
+f06E_13	AC AC	b	b	$9877 f1379	recolor_plus1
+f06E_15	AB AB AB	b	b	$9877 f1319	picture_big,recolor_plus1
+f06E_18	AC AC	b	b	$9877 f1379	recolor_plus1
+f070_11	1A	d	d		recolor_plus1
+f070_12	1A	d	d		recolor_plus1
+f070_13	15 15 0C 0D	d	d		next_open_minus4,picture_big,recolor_plus1
+f070_16	0C 11	d	d		next_open_minus4,recolor_plus1
+f070_23	0D 0D 10	b	b	$993C f1098	next_open_minus4,picture_big,recolor_plus1
+f070_26	13	d	d		recolor_plus1
+f071_12	0C A6 0C 0C	b	b	$AF02 f1163	death_0E05,fallen_counter,next_open_minus4,picture_big,recolor_plus1
+f077_17	10 10 10	c	c		next_open_minus4,recolor_plus1
+f077_22	10 10 0D	d	d		next_open_minus4,recolor_plus1
+f077_27	15 15 15	d	c		picture_big,recolor_plus1
+f077_32	13 13 13	b	d		next_open_minus4,recolor_plus1
+f077_38	10 10 0D 0D 13	b	b	$993C f1113	next_open_minus4,picture_big,recolor_plus1
+f077_43	13	d	d		recolor_plus1
+f077_53	10 10 0D 0D 13	b	b	$993C f1136	next_open_minus4,recolor_plus1
+f077_58	13	d	d		recolor_plus1
+f07D_17	57	d	e		
+f07D_18	05 51 51 05	d	d		next_open_minus4,recolor_plus1
+f07E_8	56	d	d		recolor_plus1
+f07E_9	56	d	d		picture_big
+f081_20	1E 1E 1E 1E 1E	c	c		next_open_minus4,picture_big,recolor_plus1
+f082_17	48 1C 1C 1C 1C	a	a		staging_overflow
+f082_21	48 48	d	d		picture_big,recolor_plus1
+f082_25	48 48	d	d		recolor_plus1
+f082_30	48 48 48	d	d		next_open_minus4,recolor_plus1
+f082_31	48	d	d		recolor_plus1
+f082_33	48	d	d		recolor_plus1
+f082_9	1E 1E 1C 1C	d	d		next_open_minus4,recolor_plus1
+f083_16	50 4B 4B 4B	d	d		next_open_minus4,recolor_plus1
+f083_20	50 50 4B 4B	d	b	$993C f1146	picture_big,recolor_plus1
+f083_25	50 48 48 48	d	d		next_open_minus4,picture_big,recolor_plus1
+f083_32	50 4B	d	d		next_open_minus4,recolor_plus1
+f083_41	48 4B 4B 4B	b	b	$993C f1460	picture_big,recolor_plus1
+f083_47	50 50 50 50	d	b	$9877 f1380	next_open_minus4,picture_big,recolor_plus1
+f083_55	4B	d	d		recolor_plus1
+f084_13	4B 4B	d	d		next_open_minus4,recolor_plus1
+f084_15	1E 1E	d	d		next_open_minus4,recolor_plus1
+f084_17	4B	d	d		recolor_plus1
+f084_18	4B	d	d		recolor_plus1
+f086_10	A6	d	d		picture_big
+f086_11	B4 B3	b	b	$AE93 f1026	picture_big
+f086_11b	B4 B3	b	b	$AE93 f1033	fallen_counter,picture_big,recolor_plus1
+f086_19	2E 2D 2E 2D	d	d		next_open_minus4,picture_big,recolor_plus1
+f087_10	A6	d	d		picture_big
+f087_11	B4 B3	b	b	$AE93 f1026	picture_big
+f087_11b	B4 B3	b	b	$AE93 f1033	fallen_counter,picture_big,recolor_plus1
+f087_19	2E 2D 2E 2D	d	d		next_open_minus4,picture_big,recolor_plus1
+f08C_13	4C	d	d		recolor_plus1
+f08C_15	4C 4C 1D 4C 00	a	a		staging_overflow
+f08C_19	4C	d	d		recolor_plus1
+f08C_21	4C 4C	d	d		next_open_minus4,recolor_plus1
+f08E_10	33	d	d		recolor_plus1
+f08E_12	71 74	d	d		next_open_minus4,recolor_plus1
+f08E_13	71 74 71	d	d		next_open_minus4,recolor_plus1
+f08E_14	71 74	d	d		next_open_minus4,recolor_plus1
+f08E_19	71	d	d		recolor_plus1
+f08F_11	33 71 71 71 74	d	d		next_open_minus4,recolor_plus1
+f08F_12	33 74 71 71	d	d		next_open_minus4,picture_big,recolor_plus1
+f08F_14	33	d	d		recolor_plus1
+f090_10	33 33	d	d		next_open_minus4,recolor_plus1
+f090_12	08	d	d		recolor_plus1
+f090_14	33	d	d		recolor_plus1
+f090_15	33	d	d		recolor_plus1
+f091_10	08 08 71 71	d	d		next_open_minus4,picture_big,recolor_plus1
+f091_14	71 71	d	d		next_open_minus4,recolor_plus1
+f091_15	74	d	d		recolor_plus1
+f092_12	33 33 74 71	d	d		next_open_minus4,picture_big,recolor_plus1
+f092_16	74 71	d	d		next_open_minus4,recolor_plus1
+f092_9	33 33	d	d		next_open_minus4,recolor_plus1
+f093_10	74 71	d	d		recolor_plus1
+f093_14	33	d	d		recolor_plus1
+f093_9	33 33	d	d		next_open_minus4,recolor_plus1
+f094_10	08 08 08	d	d		next_open_minus4,recolor_plus1
+f096_12	74 71 71	d	d		picture_big,recolor_plus1
+f096_14	33 33 71	b	c		next_open_minus4,recolor_plus1
+f096_15	74	d	d		recolor_plus1
+f096_19	74 71	d	d		recolor_plus1
+f096_21	33	d	d		recolor_plus1
+f096_9	74 71 71	d	d		next_open_minus4,picture_big,recolor_plus1
+f097_18	97 98	b	b	$AF02 f798	fallen_counter,picture_big
+f097_20	99	c	c	$2380 f793	death_0E05,picture_big,recolor_plus1
+f0A2_8	A8	b	b	$AE93 f800	fallen_counter,picture_big,recolor_plus1
+f0A4_11	87 51 51 87 87	b	d		recolor_plus1
+f0A4_14	51 51	d	d		next_open_minus4,recolor_plus1
+f0A4_18	87 87	d	d		next_open_minus4,recolor_plus1
+f0A4_20	87	d	d		recolor_plus1
+f0A4_21	87 87	d	d		next_open_minus4,recolor_plus1
+f0A4_8	51 87 87	d	d		recolor_plus1
+f0A6_11	A6 05 05 51 51	d	d		next_open_minus4,picture_big,recolor_plus1
+f0A6_16	05 05	d	d		next_open_minus4,recolor_plus1
+f0A7_8	A6	b	b	$2380 f409	death_0E05,picture_big,recolor_plus1
+f0A8_9	A6	b	b	$2380 f409	death_0E05,picture_big,recolor_plus1
+f0A9_11	9D 2E 2E 2E 2E	b	b	$5EB0 f561	death_0E05,picture_big,recolor_plus1
+f0A9_12	9E 2E	b	b	$AE93 f873	picture_big
+f0AA_10	A6 05 05	b	b	$AF02 f898	death_0E05,fallen_counter,picture_big,recolor_plus1,recolor_queue
+f0AA_15	05 05	d	d		next_open_minus4,recolor_plus1
+f0AA_17	05 05	d	d		next_open_minus4,recolor_plus1
+f0AA_19	05 05	d	d		next_open_minus4,recolor_plus1
+f0AB_14	66 66 66 66	b	b	$993C f457	picture_big
+f0AC_8	F9	d	d		picture_big
+f0AD_11	F0 9F	b	b	$993C f1070	fallen_counter,picture_big,recolor_plus1
+f0AD_12	9F	d	d		
+f0AE_10	A7 F1 F1 F1 F1	b	b	$5FCA f273	fallen_counter,picture_big,recolor_queue
+f0AF_11	A6	b	b	$2380 f405	death_0E05,picture_big,recolor_plus1
+f0B0_16	10	d	d		recolor_plus1
+f0B0_17	10 51	b	d		next_open_minus4,recolor_plus1
+f0B0_18	51	d	d		recolor_plus1
+f0B0_19	51	d	d		recolor_plus1
+f0B0_21	39	d	d		recolor_plus1
+f0B0_22	39	d	d		recolor_plus1
+f0B1_8	A8	b	b	$AE93 f800	fallen_counter,picture_big,recolor_plus1
+f0B2_12	A8	b	b	$AE93 f800	fallen_counter,picture_big,recolor_plus1
+f0B2_13	72 72	d	d		next_open_minus4,recolor_plus1
+f0B3_9	A8	b	b	$AE93 f800	fallen_counter,picture_big,recolor_plus1
+f0B4_8	A8 A5 A0	a	a		staging_overflow
+f0B5_8	A8 F1	b	b	$AE93 f791	fallen_counter,picture_big,recolor_plus1
+f0B5_8b	A7	b	b	$5FCA f273	
+f0B6_8	A8 BB	b	b	$AE93 f794	fallen_counter,picture_big,recolor_plus1
+f0B7_8	A8 BB	b	b	$AE93 f794	fallen_counter,picture_big,recolor_plus1
+f0B8_8	A8 BA	b	b	$AE93 f893	fallen_counter,recolor_plus1
+f0C3_11	81 81 81	e	e		picture_big
+f0C3_14	5F 5F	d	e		
+f0C3_8	AA AB AB	b	b	$9877 f887	picture_big,recolor_plus1
+f0C4_10	AC	d	d		recolor_plus1
+f0C4_11	AB AB	d	d		next_open_minus4,recolor_plus1
+f0C4_8	AC AC	d	d		next_open_minus4,recolor_plus1
+f0C5_9	BD	b	d		
+f0C6_10	90	c	c	$2380 f837	death_0E05,picture_big,recolor_plus1
+f0C8_15	1C 1C 1C	d	d		next_open_minus4,picture_big,recolor_plus1
+f0C9_9	4B 4B 4B	d	d		next_open_minus4,recolor_plus1
+f0CA_8	1E 48 4B	a	a		staging_overflow
+f0CB_12	1E 1E 48 48 48	a	a		staging_overflow
+f0CC_11	4D 4D	d	d		next_open_minus4,recolor_plus1
+f0CD_9	A6	a	a		staging_overflow
+f0D4_15	27 22 22	b	d		next_open_minus4,recolor_plus1
+f0D4_18	27 5B 5B 5B	d	d		next_open_minus4,recolor_plus1
+f0D4_22	27 22 22	b	d		next_open_minus4,recolor_plus1
+f0D4_25	27 27 22 22	d	d		next_open_minus4,recolor_plus1
+f0D4_29	5B 5B 5B 5B 5B	c	c		next_open_minus4,picture_big,recolor_plus1
+f0D5_10	A3	d	d		recolor_plus1
+f0D5_11	66 66 66	d	d		
+f0D5_14	66 66 66	d	e		
+f0D5_17	66 66 66	d	e		
+f0D5_9	A3	d	d		recolor_plus1
+f0D7_10	8C 8C	d	d		recolor_plus1
+f0D7_12	54 86 86	b	b	$AE93 f1077	picture_big,recolor_plus1
+f0D7_8	8C 8C	b	b	$993C f983	picture_big
+f0D9_10	66 66	d	e		
+f0D9_12	54 86 86 86	d	d		picture_big,recolor_plus1
+f0D9_16	89	d	d		picture_big,recolor_plus1
+f0D9_17	89	d	d		recolor_plus1
+f0D9_18	89	d	d		picture_big,recolor_plus1
+f0D9_19	89	d	d		picture_big,recolor_plus1
+f0DB_11	D4	b	b	$2380 f801	fallen_counter,picture_big,recolor_plus1
+f0DB_12	CF	d	d		recolor_plus1
+f0DB_13	CF	d	d		recolor_plus1
+f0DB_14	89 54 54 89	b	b	$5E30 f1100	picture_big,recolor_plus1
+f0DD_12	86	d	d		recolor_plus1
+f0DD_13	86	d	d		recolor_plus1
+f0DD_8	86	d	d		recolor_plus1
+f0DF_9	89 89 89 89	b	e		
+f0E0_12	A3	d	d		recolor_plus1
+f0E0_13	A3	d	d		recolor_plus1
+f0E0_14	66 66 66 66 66	d	e		
+f0E0_19	A3 A3 A3	d	d		picture_big,recolor_plus1
+f0E0_9	A3 A3 A3	b	b	$993C f958	picture_big,recolor_plus1
+f0E4_11	55 55 55 69	c	d		next_open_minus4,recolor_plus1
+f0E5_9	69 6A 6A	d	d		next_open_minus4,recolor_plus1
+f0E6_10	F8 F8 F8 F8 F8	d	d		picture_big,recolor_plus1
+f0E6_15	F8 6A	d	d		next_open_minus4,recolor_plus1
+f0E6_18	69 69 69 69 69	b	d		next_open_minus4,picture_big,recolor_plus1
+f0E6_24	6A	d	d		recolor_plus1
+f0E6_25	69	d	d		recolor_plus1
+f0E6_26	69 69	d	d		next_open_minus4,recolor_plus1
+f0E6_28	6A	d	d		recolor_plus1
+f0E8_8	8C 8C 8C 8C	b	b	$993C f1469	
+f0E9_8	55 55 8A 8A	d	d		next_open_minus4,picture_big,recolor_plus1
+f0EC_11	2A 2A 63	d	d		next_open_minus4,recolor_plus1
+f0EC_15	63 63 52 4F	d	d		next_open_minus4,recolor_plus1
+f0EC_18	2A 2A 4F 4F	d	d		next_open_minus4,recolor_plus1
+f0EC_21	63 63	d	d		next_open_minus4,recolor_plus1
+f0EC_23	2A 2A	d	d		next_open_minus4,recolor_plus1
+f0EC_29	4F	d	d		recolor_plus1
+f0EC_36	04 52	d	d		next_open_minus4,recolor_plus1
+f0ED_14	63 63 63	d	d		next_open_minus4,recolor_plus1
+f0ED_18	86	d	d		recolor_plus1
+f0ED_20	63 63	d	d		next_open_minus4,recolor_plus1
+f0ED_23	63 63	d	d		next_open_minus4,recolor_plus1
+f0ED_9	63 63 63 63 63	d	d		next_open_minus4,recolor_plus1
+f0EE_11	45	d	d		recolor_plus1
+f0F0_2	00	d	d		recolor_plus1
+f0F0_3	4F 00 4F	b	d		next_open_minus4,recolor_plus1
+f0F1_10	00	d	d		recolor_plus1
+f0F1_9	00	d	d		recolor_plus1
+f0F2_16	00	d	d		recolor_plus1
+f0F3_14	00	d	d		recolor_plus1
+f0F5_11	29 29	d	d		next_open_minus4,recolor_plus1
+f0F5_13	2F	d	d		recolor_plus1
+f0F5_8	29 29 29	d	d		next_open_minus4,recolor_plus1
+f0F6_13	2F 2F	d	d		next_open_minus4,recolor_plus1
+f0F6_9	29 29 29 2F	d	d		next_open_minus4,recolor_plus1
+f0F7_8	D7 D8	d	d		picture_big
+f0FB_11	F6 F7 F7 F7 F7	d	d		picture_big,recolor_plus1
+f0FB_16	F7	d	d		recolor_plus1
+f100_34	56 56	e	e		picture_big
+f100_36	56	d	d		recolor_plus1
+f100_39	8B 8B 8B	e	e		
+f100_42	D9 D9 D9 D9	b	b	$AE93 f980	picture_big,recolor_plus1
+f100_46	D9 D9 8B	d	d		next_open_minus4,picture_big,recolor_plus1
+f101_8	8B	d	d		recolor_plus1
+f102_9	8B 8B 8B	d	d		picture_big
+f103_10	8A	d	d		recolor_plus1
+f103_9	8A	d	d		recolor_plus1
+f107_8	2F 2F 2F	d	d		next_open_minus4,recolor_plus1
+f108_13	29 29 29	d	d		next_open_minus4,recolor_plus1
+f108_16	29	d	d		recolor_plus1
+f108_8	D7 D8	d	d		picture_big
+f10A_11	45	d	d		recolor_plus1
+f10B_9	8B 8B D9 D9	b	b	$993C f845	next_open_minus4,picture_big,recolor_plus1
+f10C_15	D9 D9	d	d		picture_big,recolor_plus1
+f10C_17	D9 D9 D9 D9 D9	e	e		picture_big
+f10C_22	D9 D9 D9 D9 D9	d	d		next_open_minus4,picture_big,recolor_plus1
+f10C_27	D9 D9	d	d		next_open_minus4,recolor_plus1
+f10E_1	3D	d	d		recolor_plus1
+f10E_2	3D	d	d		recolor_plus1
+f123_15	4D 4E 91	d	d		next_open_minus4,recolor_plus1
+f123_18	6B 6C	d	d		next_open_minus4,recolor_plus1
+f123_20	4D 4E 91	d	d		next_open_minus4,recolor_plus1
+f123_23	4D 4E 91 6B 6C	d	d		next_open_minus4,picture_big,recolor_plus1
+f123_26	4D 4E 91	d	d		next_open_minus4,recolor_plus1
+f123_31	00	d	d		
+f123_32	00	d	d		
+f123_33	00	d	d		
+f124_13	00	d	d		recolor_plus1
+f125_11	61 62 61 62 7A	b	b	$5E30 f1387	next_open_minus4,picture_big,recolor_plus1
+f125_17	83 83	d	d		picture_big,recolor_plus1
+f125_19	61 62 61 62 61	b	b	$5E30 f1474	next_open_minus4,picture_big,recolor_plus1
+f125_24	62	d	d		recolor_plus1
+f126_11	61 62 7A 7A	b	b	$5E30 f1034	next_open_minus4,recolor_plus1
+f126_15	61 62	b	b	$9877 f911	picture_big,recolor_plus1
+f126_17	61 62	c	d		recolor_plus1
+f126_19	7A	d	d		recolor_plus1
+f126_21	83	d	d		recolor_plus1
+f126_22	83	d	d		recolor_plus1
+f128_10	AA	d	d		recolor_plus1
+f128_8	AB AB	d	d		next_open_minus4,picture_big,recolor_plus1
+f12A_10	5C 5C	d	d		next_open_minus4,recolor_plus1
+f12A_12	83	d	d		recolor_plus1
+f12A_13	3D 3D	d	d		next_open_minus4,recolor_plus1
+f12A_15	83	d	d		recolor_plus1
+f12A_18	3D 3D 3D	d	d		next_open_minus4,recolor_plus1
+f12A_21	83	d	d		recolor_plus1
+f12A_25	3D 02 5C 5C	a	a		staging_overflow
+f12A_26	5C 3D 5C 3D 3D	d	d		picture_big,recolor_plus1
+f12A_27	5C	d	d		recolor_plus1
+f12A_28	5C	d	d		recolor_plus1
+f12A_30	02	d	d		next_open_minus4,picture_big,recolor_plus1
+f12A_34	83 5C	d	d		next_open_minus4,picture_big,recolor_plus1
+f12A_35	83 02 83	d	d		recolor_plus1
+f12A_36	83	d	d		recolor_plus1
+f12A_38	3D	d	d		recolor_plus1
+f12A_50	5C	d	d		recolor_plus1
+f12A_51	83 02	d	d		next_open_minus4,recolor_plus1
+f12A_53	83	d	d		recolor_plus1
+f12A_54	83	d	d		recolor_plus1
+f12A_59	02	d	d		next_open_minus4,recolor_plus1
+f12B_9	7A 7A 3D	d	d		next_open_minus4,picture_big,recolor_plus1
+f12C_8	9A	b	b	$AE93 f1179	fallen_counter,next_open_minus4,picture_big,recolor_plus1
+f12D_10	9A	b	b	$AE93 f1191	fallen_counter,next_open_minus4,picture_big,recolor_plus1
+f12D_8	BC 9A	d	d		next_open_minus4
+f12E_10	3D 3D 3D	d	d		next_open_minus4,picture_big,recolor_plus1
+f12E_13	3D 7A	d	d		next_open_minus4,recolor_plus1
+f12E_14	3D 02	d	d		next_open_minus4,recolor_plus1
+f12F_14	5C 02	d	d		recolor_plus1
+f12F_20	02 02	d	d		next_open_minus4,recolor_plus1
+f130_8	9C	e	e		picture_big
+f131_11	02 3D 5C	a	a		staging_overflow
+f131_17	83 3D 5C	b	b	$9877 f868	picture_big,recolor_plus1
+f134_13	40 40 41 41	b	b	$AE93 f791	picture_big,recolor_plus1
+f135_10	07 07	e	e		picture_big
+f135_12	07 96	d	e		
+f135_14	96	d	d		picture_big,recolor_plus1
+f136_10	09	d	d		recolor_plus1
+f136_11	09	d	d		recolor_plus1
+f136_8	09	d	d		recolor_plus1
+f136_9	09	d	d		recolor_plus1
+f137_11	42 43 43	d	d		next_open_minus4,recolor_plus1
+f137_14	43 42 43	d	e		
+f137_17	42	d	d		recolor_plus1
+f137_19	43	d	e		
+f137_21	43	d	d		recolor_plus1
+f138_11	A4 A4	d	e		
+f138_13	A4 53	d	d		recolor_plus1
+f138_14	A4 53	d	d		recolor_plus1
+f139_13	20 20	d	d		next_open_minus4,recolor_plus1
+f139_16	42 43 43	d	d		next_open_minus4,picture_big,recolor_plus1
+f139_24	96 53 53	e	e		
+f139_9	42 43 43	d	d		next_open_minus4,picture_big,recolor_plus1
+f13A_11	53 53	d	d		recolor_plus1
+f13A_16	20 20	d	b	$61B0 f798	next_open_minus4,picture_big,recolor_plus1
+f13A_19	43 43 42	b	b	$A013 f1049	picture_big
+f13A_29	96 07	d	e		
+f13A_38	96 07	d	d		picture_big,recolor_plus1
+f13B_10	00 00	d	d		next_open_minus4,recolor_plus1
+f13B_13	4F 4F	d	d		next_open_minus4,recolor_plus1
+f13C_8	C8	d	d		recolor_plus1
+f13D_11	C1 C1	e	e		
+f13D_13	40 41 40 41 40	d	d		next_open_minus4,recolor_plus1
+f13D_18	41	d	d		recolor_plus1
+f13D_19	20 20 20 20	d	d		next_open_minus4,recolor_plus1
+f13E_11	43 43 42	d	d		next_open_minus4,recolor_plus1
+f13E_14	53 8E 8E	d	d		picture_big
+f13E_15	42 43 43 43 43	d	d		next_open_minus4,recolor_plus1
+f13E_20	42	d	d		recolor_plus1
+f13F_11	C8 53 53	d	d		
+f13F_17	07	d	d		recolor_plus1
+f13F_18	C1	e	e		
+f142_11	85 84 84 85	d	d		picture_big,recolor_plus1
+f142_16	42 43 43 43 43	d	d		next_open_minus4,picture_big,recolor_plus1
+f142_24	85	d	d		recolor_plus1
+f142_25	85	d	d		recolor_plus1
+f143_14	35 36	d	d		picture_big,recolor_plus1
+f144_17	C8 C8	d	d		next_open_minus4,recolor_plus1
+f145_11	09 09 09 09	e	e		picture_big
+f145_15	38 37	d	d		picture_big
+f149_15	00 00	d	d		
+f14C_11	A1	b	b	$AE93 f1147	picture_big
+f14C_12	95	d	d		picture_big
+f14E_10	A1	b	b	$AE93 f836	fallen_counter,picture_big
+f14F_14	97	d	d		recolor_plus1
+f14F_15	97	d	d		recolor_plus1
+f14F_16	97	d	d		recolor_plus1
+f153_8	4C AE 10	d	d		next_open_minus4,recolor_plus1
+f154_8	97 97 A1	b	b	$AF02 f823	death_0E05,fallen_counter,picture_big,recolor_queue
+f155_9	04 4B 2E	a	a		staging_overflow
+f156_10	AF	d	d		recolor_plus1
+f15B_1	93 AD 94	d	e		
+f15C_1	A9	b	b	$2380 f951	death_0E05,picture_big,recolor_plus1
+f15D_1	B4 B3	b	b	$AE93 f1026	picture_big
+f15E_1	99	c	c	$2380 f793	death_0E05,picture_big,recolor_plus1
+f163_14	97	d	d		recolor_plus1
+f163_15	97	d	d		recolor_plus1
+f163_16	97	d	d		recolor_plus1
+f165_9	00	d	d		recolor_plus1
+f168_17	00	d	d		recolor_plus1
+f168_23	00	d	d		recolor_plus1
+f169_13	00	d	d		recolor_plus1
+f169_8	82 00 00 82 82	b	b	$993C f1125	picture_big
+f16A_7	F5 A2	d	d		next_open_minus4,recolor_plus1
+f16A_8	F5	d	d		recolor_plus1
+f16B_21	F3 80	d	e		
+f16B_24	80	d	e		
+f16B_25	80	d	e		
+f16B_26	80	d	e		
+f16B_27	80	d	e		
+f16B_28	80	d	e		
+f16F_6	F5 F5 F5 F5 A2	d	d		picture_big,recolor_plus1
+f170_10	F5 F5	d	d		next_open_minus4,recolor_plus1
+f170_12	F5 D0	d	d		next_open_minus4,picture_big,recolor_plus1
+f170_13	D0	d	d		recolor_plus1
+f170_15	D0	d	d		recolor_plus1
+f170_7	F5 F5	d	d		next_open_minus4,recolor_plus1
+f171_10	F5 F5 D0	b	d		next_open_minus4,recolor_plus1
+f171_13	F5 F5	d	d		next_open_minus4,recolor_plus1
+f171_15	D0	d	d		recolor_plus1
+f171_7	F5 F5	d	d		next_open_minus4,picture_big,recolor_plus1
+f172_7	F5 F5 F5	d	d		next_open_minus4,picture_big,recolor_plus1
+f174_11	F5	d	d		recolor_plus1
+f174_6	F5 F5 F5 F5 F5	d	d		next_open_minus4,picture_big
+f175_7	F5 F5	d	d		next_open_minus4,recolor_plus1
+f176_6	F5 F5 D0	c	d		next_open_minus4,recolor_plus1
+f177_6	F5 D0	c	d		next_open_minus4,recolor_plus1
+f179_8	A2	b	b	$AE93 f805	fallen_counter,picture_big
+f17A_12	C0	b	b	$2380 f899	fallen_counter,picture_big
+f17B_11	00	d	d		recolor_plus1
+f17E_13	A1	b	b	$993C f826	death_0E05,fallen_counter,picture_big,recolor_plus1
+f183_10	0F 7E 7F	d	d		next_open_minus4,recolor_plus1
+f183_13	7D 7D	d	d		picture_big,recolor_plus1
+f183_15	7D 7D	d	d		picture_big,recolor_plus1
+f184_10	0F 7E 7F	d	d		next_open_minus4,recolor_plus1
+f184_13	7D 7D	d	d		picture_big,recolor_plus1
+f184_15	7D 7D	d	d		picture_big,recolor_plus1
+f186_11	45	d	d		recolor_plus1
+f187_8	BB 32 F2	b	b	$2380 f998	fallen_counter,next_open_minus4,picture_big,recolor_plus1
+f188_24	5F	d	d		recolor_plus1
+f188_25	5F	d	d		recolor_plus1
+f188_26	5F	d	d		recolor_plus1
+f189_13	28 28 28 28	e	e		
+f189_17	28 28	d	d		recolor_plus1
+f189_22	5F	d	d		recolor_plus1
+f18A_11	5F	d	e		
+f18A_12	5F	d	d		recolor_plus1
+f18C_10	D1 D2 D3	b	b	$AE93 f379	picture_big
+f18C_9	A6	b	b	$2380 f405	death_0E05,picture_big,recolor_plus1
+f18D_10	D1 D2 D3	b	b	$AE93 f379	picture_big
+f18D_9	A6	b	b	$2380 f405	death_0E05,picture_big,recolor_plus1
+f18E_11	00	d	d		recolor_plus1
+f191_15	00	d	d		recolor_plus1
+f191_16	97 97 00	b	b	$AE93 f1284	fallen_counter,picture_big,recolor_queue
+f191_32	00	d	d		recolor_plus1
+f191_33	00	d	d		recolor_plus1
+f191_34	00	d	d		recolor_plus1
+f191_36	00 00	d	d		
+f194_9	98	d	d		recolor_plus1
+f195_10	52 52 D5	d	d		next_open_minus4,recolor_plus1
+f195_12	D5 D5	d	d		next_open_minus4,recolor_plus1
+f195_15	52 52	d	d		next_open_minus4,recolor_plus1
+f195_18	D6 D6 D6	d	d		next_open_minus4,recolor_plus1
+f195_23	3B	d	d		recolor_plus1
+f195_24	52 52	d	d		next_open_minus4,recolor_plus1
+f196_11	58 59	d	d		next_open_minus4,recolor_plus1
+f196_13	D5 D5 3B	d	d		picture_big,recolor_plus1
+f196_17	58 59	d	d		next_open_minus4,recolor_plus1
+f196_19	D6 D6 3B	d	d		picture_big,recolor_plus1
+f196_23	D5 D6 52	d	d		next_open_minus4,recolor_plus1
+f196_27	D5 D6 52	d	d		next_open_minus4,recolor_plus1
+f197_12	D5 D5	d	d		next_open_minus4,recolor_plus1
+f197_14	D6 D6	d	d		next_open_minus4,recolor_plus1
+f197_16	D5 D6 3B	d	d		next_open_minus4,recolor_plus1
+f197_19	D6 D5 3B	d	d		next_open_minus4,recolor_plus1
+f197_22	D5 D6 3B	d	d		next_open_minus4,recolor_plus1
+f197_25	D6 D5 3B	d	d		next_open_minus4,recolor_plus1
+f197_8	D5	d	d		recolor_plus1
+f198_7	D6 D5 6D	b	d		next_open_minus4,recolor_plus1
+f199_19	6D 6D 6D 6D	d	d		picture_big,recolor_plus1
+f199_24	6D 70 6D 70	c	c		next_open_minus4,recolor_plus1
+f199_28	06	d	d		recolor_plus1
+f199_29	6D 6D 70 70 97	c	c		next_open_minus4,recolor_plus1
+f19A_7	58 59	d	d		next_open_minus4,recolor_plus1
+f19B_12	D6 52 52 D6	d	d		next_open_minus4,recolor_plus1
+f19B_16	3B	d	d		recolor_plus1
+f19E_14	A1	b	b	$AE93 f1147	picture_big
+f19E_15	95	d	d		picture_big
+f19E_16	95	b	b	$993C f811	fallen_counter,picture_big,recolor_plus1
+f19F_24	00	d	d		
+f1A0_12	58 59	d	d		next_open_minus4,recolor_plus1
+f1A0_14	6D	d	d		recolor_plus1
+f1A0_15	6D 6D	b	b	$993C f1297	picture_big
+f1A0_17	3B 3B	b	b	$9877 f1024	next_open_minus4,picture_big,recolor_plus1
+f1A0_19	70	d	d		recolor_plus1
+f1A0_20	70	d	d		recolor_plus1
+f1A0_21	52 52 52	d	d		next_open_minus4,recolor_plus1
+f1A0_23	D5 D6	d	d		next_open_minus4,recolor_plus1
+f1A0_24	D6 D5	d	d		next_open_minus4,recolor_plus1
+f1A3_22	CA	d	d		
+f1A4_22	CA	d	d		
+f1A5_22	CA	d	d		
+f1A6_8	0A	d	d		recolor_plus1
+f1A7_22	CA	d	d		
+f1A8_17	A1 F5 F5 F5	d	d		next_open_minus4,recolor_plus1
+f1AA_8	00	d	d		recolor_plus1
+f1AE_10	3D 3D	d	d		next_open_minus4,recolor_plus1
+f1AE_19	3D 02	d	d		next_open_minus4,recolor_plus1
+f1AE_20	7A	d	d		recolor_plus1
+f1AE_8	3D 3D 3D	b	b	$2380 f1135	next_open_minus4,picture_big,recolor_plus1
+f1B5_8	8A 55 55 55 55	d	d		next_open_minus4,picture_big,recolor_plus1
+f1B6_13	C7	b	b	$AF02 f1304	death_0E05,fallen_counter,picture_big
+f1B8_13	1C 1E 1E	d	d		next_open_minus4,recolor_plus1
+f1B8_14	1C 1E 1E	d	d		next_open_minus4,recolor_plus1
+f1BA_6	D0	d	d		recolor_plus1
+f1BB_7	D0	d	d		recolor_plus1
+f1BC_7	F5	d	d		recolor_plus1
+f1BE_18	F2 34	b	b	$AE93 f934	fallen_counter,picture_big
+f1BE_19	F2 34 39	b	b	$AE93 f653	fallen_counter,picture_big,recolor_plus1
+f1BE_20	34	d	d		recolor_plus1
+f1BE_21	34	d	d		recolor_plus1
+f1BE_25	39	d	d		recolor_plus1
+f1BF_24	51	d	d		recolor_plus1
+f1BF_25	51	d	d		recolor_plus1
+f1BF_26	51	d	d		recolor_plus1
+f1BF_27	51	d	d		recolor_plus1
+f1BF_28	51	d	d		recolor_plus1
+f1BF_29	51	d	d		recolor_plus1
+f1C1_10	D9 D9 D9	b	b	$AE93 f826	picture_big,recolor_plus1
+f1C1_13	D9 D9 D9	d	d		next_open_minus4,recolor_plus1
+f1C2_9	09 09 09 09 09	e	e		picture_big
+f1C3_8	25	d	d		
+f1C8_1	9B	c	c	$2380 f821	death_0E05,picture_big,recolor_plus1
+f1CA_1	BC 9A	b	b	$AE93 f1142	fallen_counter,picture_big
+f1CB_1	D1 D2 D3	b	b	$AE93 f379	picture_big
+f1D1_10	E5	e	e		picture_big
+f1D3_10	CA CA DA DB	d	e		
+f1D3_14	C2 DC DD	b	b	$AF02 f800	picture_big,recolor_plus1,recolor_queue
+f1D3_17	C3 DE 14	b	b	$993C f1343	death_0E05,picture_big,recolor_plus1
+f1D3_18	C4 DF	b	b	$AE93 f1022	fallen_counter,picture_big
+f1D3_20	C5 18	d	d		recolor_plus1
+f1D3_21	C6	d	d		picture_big
+f1D3_22	C9	e	e		
+f1D3_23	E6	b	b	$AE93 f799	fallen_counter,picture_big
+f1D3_25	E7	b	b	$AE93 f800	fallen_counter,picture_big
+f1D3_28	EC	d	d		picture_big
+f1D5_14	7C 2E 2E 2E 2E	d	d		next_open_minus4,picture_big,recolor_plus1
+f1D5_19	7C 2E 2E 2E 2E	d	d		next_open_minus4,picture_big,recolor_plus1
+f1D7_17	2E 2E 2E 2E 2E	d	d		next_open_minus4,picture_big,recolor_plus1
+f1D7_22	2E	d	d		recolor_plus1
+f1DB_12	CD CC	a	a		staging_overflow
+f1DB_8	0B ED EF CB	b	b	$AE93 f754	picture_big
+f1DF_8	CE ED EF	a	a		staging_overflow
+f1EF_10	D8	e	e		picture_big
