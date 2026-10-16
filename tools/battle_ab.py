@@ -205,13 +205,18 @@ def run(pokes, drive, total, tag, regs=None, raw=False, timed=None):
         penv = dict(os.environ, **tenv, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                     CT_AUDIO_SEEDSTATE=STATE,
                     CT_BATTLE_SCRIPT_ABS='1', CT_BATTLE_SCRIPT=port_script(drive, start, total),
+                    CT_BATTLE_TRACE='1',
                     CT_FIELD_MEMMON=','.join('%04X:%X' % (a, n) for a, n in regs),
                     CT_SHOTS_THUMBS=pth, CT_SHOTS_THUMBS_EVERY='1', CT_SHOTS=os.path.join(OUT, tag + '_p'),
                     CT_SHOTS_AT=str(total), CT_SHOTS_EXIT='1')
-        p = subprocess.run([os.path.abspath(os.path.join(BUILD, 'ct_field.exe')), '--assets', 'ct_assets.dat', '--scene', '6',
+        r = subprocess.run([os.path.abspath(os.path.join(BUILD, 'ct_field.exe')), '--assets', 'ct_assets.dat', '--scene', '6',
                             '--loadwram', lw, '--walkscript', 'a:8'], env=penv, capture_output=True, text=True,
-                           errors='replace').stdout
-        m = re.search(r'battlephase: begins at field f(\d+)', p)
+                           errors='replace')
+        p = r.stdout
+        # The battle's frame 0 on the field's clock: src/field.c prints it on STDERR, and only under CT_BATTLE_TRACE. (Read
+        # from stdout it was never found, `start` stayed 220 while the fight begins at f216 on this fixture, and every port
+        # button landed 4 frames early -- the "port drifts 2-8 frames early under the A mash" tools/battle_sim.py reported.)
+        m = re.search(r'battlephase: begins at field f(\d+)', r.stderr)
         if not m or int(m.group(1)) == start: break
         start = int(m.group(1))
     orows = parse_mon(o, r'\s*f(\d+)\s+(.*)')

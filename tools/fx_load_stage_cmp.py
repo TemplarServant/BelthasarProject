@@ -54,13 +54,16 @@ def port(c, k, pokes, drive, total):
     start = 220
     for attempt in range(2):
         env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
-                   CT_BATTLE_SCRIPT_ABS='1', CT_BATTLE_SCRIPT=ab.port_script(drive, start, total),
+                   CT_BATTLE_SCRIPT_ABS='1', CT_BATTLE_SCRIPT=ab.port_script(drive, start, total), CT_BATTLE_TRACE='1',
                    CT_FIELD_MEMMON=','.join('%04X:%X' % r for r in REG), CT_SHOTS=os.path.join(OUT, 'stage_p'),
                    CT_SHOTS_AT=str(total), CT_SHOTS_EXIT='1')
-        out = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
-                              '--loadwram', lw, '--walkscript', 'a:8'], env=env, capture_output=True, text=True,
-                             errors='replace', cwd=ROOT).stdout
-        m = re.search(r'battlephase: begins at field f(\d+)', out)
+        r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
+                            '--loadwram', lw, '--walkscript', 'a:8'], env=env, capture_output=True, text=True,
+                           errors='replace', cwd=ROOT)
+        out = r.stdout
+        # The battle's frame 0 on the field's clock: src/field.c prints it on STDERR, and only under CT_BATTLE_TRACE (read
+        # from stdout it was never found and `start` stayed 220 -- see tools/battle_ab.py run()).
+        m = re.search(r'battlephase: begins at field f(\d+)', r.stderr)
         if not m or int(m.group(1)) == start: return out
         start = int(m.group(1))
     return out

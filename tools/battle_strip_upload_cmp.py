@@ -119,11 +119,15 @@ def run_port(drive, total, tag):
         if os.path.exists(th): os.remove(th)
         env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                    CT_AUDIO_SEEDSTATE=STATE, CT_BATTLE_SCRIPT_ABS='1', CT_BATTLE_SCRIPT=port_script(drive, start, total),
+                   CT_BATTLE_TRACE='1',
                    CT_FIELD_MEMMON=mm, CT_SHOTS_THUMBS=th, CT_SHOTS_THUMBS_EVERY='1', CT_SHOTS=os.path.join(OUT, tag + '_p'),
                    CT_SHOTS_AT=str(total - 1), CT_SHOTS_EXIT='1')
-        p = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6', '--loadwram',
-                            lw, '--walkscript', 'a:8'], env=env, capture_output=True, text=True, errors='replace').stdout
-        m = re.search(r'battlephase: begins at field f(\d+)', p)
+        r = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6', '--loadwram',
+                            lw, '--walkscript', 'a:8'], env=env, capture_output=True, text=True, errors='replace')
+        p = r.stdout
+        # The battle's frame 0 on the field's clock: src/field.c prints it on STDERR, and only under CT_BATTLE_TRACE (read
+        # from stdout it was never found and `start` stayed 220 -- see tools/battle_ab.py run()).
+        m = re.search(r'battlephase: begins at field f(\d+)', r.stderr)
         if not m or int(m.group(1)) == start: break
         start = int(m.group(1))
     rows = {}
