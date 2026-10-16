@@ -9,3 +9,4 @@ int  CtOverlayFrame(void) { return CT_OVL_CLOSE; }
 void CtOverlayRender(void) {}
 void CtOverlaySetPadName(const char* name) { (void)name; }
 void CtOverlaySelectTab(int tab) { (void)tab; }
+void CtOverlayTouchDraw(const struct CtTouchDraw* d) { (void)d; }

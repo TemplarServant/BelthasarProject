@@ -18,7 +18,9 @@
 //                     boots from an erased cart).
 //   --loadcheck <srm> run FF/FAA3 over an SRAM image and print each slot's unpacked fields.
 //   --sramcheck <srm> run the ROM's FF/FBE7 checksum over an SRAM image, per slot.
+#ifndef __ANDROID__                // (Android: SDL's Java activity calls main as SDL_main -- SDL_main.h renames it)
 #define SDL_MAIN_HANDLED
+#endif
 #include "rom_verify.h"
 #include "SDL.h"
 #include <stdio.h>
@@ -40,6 +42,10 @@
 #include "objslot.h"     // FD/E292 + FD/E39C: the location's colour animation records
 #include "settings.h"    // the player's options (ct_settings.ini), edited by the F1 overlay
 #include "overlay.h"     // the F1 options overlay (Dear ImGui; a stub without third_party/imgui)
+#include "touchpad.h"    // the on-screen virtual gamepad (a player option; on by default on Android only)
+#ifdef __ANDROID__
+#include "android.h"     // where the player's ROM, ct_assets.dat, save and options live on the device
+#endif
 #include "present.h"     // the window and the backend the picture goes through (SDL_Renderer / OpenGL)
 #include "motion.h"      // what moves each pixel of the field picture: the higher internal scale, the frames between
 #include "fieldnative.h" // the frames between drawn natively from the map's layers and the sprites' pixels
@@ -213,8 +219,16 @@ static void hostDstRect(CtPresenter* pr, SDL_Rect* r) {
   }
   r->x = (ow - w) / 2; r->y = (oh - h) / 2; r->w = w; r->h = h;
 }
+// THE VIRTUAL GAMEPAD (touchpad.h): read and drawn while g_touchOn -- an interactive run, the option on (the default on
+// Android only), no physical controller IN USE. Not while the options overlay is open (it takes the fingers).
+// g_padUsed: a controller's button or stick moved since the last touch -- a phone's own keys can enumerate as a
+// controller (the emulator's keyboard has a d-pad source), so being connected is not enough to hide the touch pad.
+static int g_touchOn = 0, g_hostInOptions = 0, g_padUsed = 0;
 static void hostDrawPicture(CtPresenter* pr) {
-  if (g_hostInteractive) { SDL_Rect d; hostDstRect(pr, &d); CtPresentDraw(pr, &d, CtSettingsGet()->linearFilter); }
+  if (g_hostInteractive) { SDL_Rect d; hostDstRect(pr, &d); CtPresentDraw(pr, &d, CtSettingsGet()->linearFilter);
+    if (g_touchOn && !g_hostInOptions) {
+      int ow = 0, oh = 0; CtPresentOutputSize(pr, &ow, &oh); CtTouchPadSetOutput(ow, oh);
+      CtTouchDraw td; CtTouchPadBuild(&td); CtOverlayTouchDraw(&td); } }
   else CtPresentDraw(pr, NULL, 0);
 }
 // The window's size for the options: the picture at `windowScale` (4:3 widens it).
@@ -4472,6 +4486,14 @@ static uint16_t fieldStickPad(void) {
   if (y > PAD_STICK_DEAD) ob |= PAD_DOWN;  else if (y < -PAD_STICK_DEAD) ob |= PAD_UP;
   return ob;
 }
+// The fingers on the virtual gamepad (touchpad.h), as the same buttons: like the stick, a level with no events.
+static uint16_t fieldTouchPad(void) {
+  if (!g_touchOn) return 0;
+  uint32_t m = CtTouchPadButtons();
+  uint16_t ob = 0;
+  for (int b = 0; b < CT_BTN_COUNT; b++) if (m & (1u << b)) ob |= PAD_OF_BTN[b];
+  return ob;
+}
 static uint16_t fieldKeyPad(void) {
   const Uint8* kb = SDL_GetKeyboardState(NULL);   // whatever a human is holding
   const CtSettings* st = CtSettingsGet();
@@ -4485,6 +4507,7 @@ static uint16_t fieldKeyPad(void) {
       if (st->pad[b] >= 0 && SDL_GameControllerGetButton(g_pad, (SDL_GameControllerButton)st->pad[b])) ob |= PAD_OF_BTN[b];
     ob |= fieldStickPad();
   }
+  ob |= fieldTouchPad();
   return ob;
 }
 // The pad buttons a key event names (0 = none): the EDGE half of fieldKeyPad, for the event loop.
@@ -9475,6 +9498,7 @@ extern int g_ctLogicalHoldApu;                   // snes/snes.c: the APU through
 static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
   if (dev) SDL_PauseAudioDevice(dev, 1);
   int open = 1, quit = 0;
+  g_hostInOptions = 1; CtTouchPadReset();            // the overlay takes the fingers (no button stays held)
   while (open) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
@@ -9482,6 +9506,9 @@ static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
       else if (e.type == SDL_CONTROLLERDEVICEADDED) fieldPadOpen();
       if (CtOverlayProcessEvent(&e)) continue;       // a binding being captured, a widget typing
       if (e.type == SDL_KEYDOWN && !e.key.repeat && (e.key.keysym.sym == SDLK_F1 || e.key.keysym.sym == SDLK_ESCAPE)) open = 0;
+#ifdef __ANDROID__
+      if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_AC_BACK) open = 0;   // the Back button
+#endif
       if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) open = 0;
     }
     int ch = CtOverlayFrame();
@@ -9497,6 +9524,7 @@ static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
   CtMacTakeSettingsRequest(); // Already-open Settings commands must not reopen it on close.
 #endif
   CtSettingsSave();
+  g_hostInOptions = 0; CtTouchPadReset();
   g_hostT0 = -1.0; g_hostFrames = 0;                 // the pause is not a stall to catch up on
   if (dev) { SDL_ClearQueuedAudio(dev); SDL_PauseAudioDevice(dev, 0); }
   return quit;
@@ -9506,6 +9534,10 @@ int main(int argc, char** argv) {
 #ifdef __APPLE__
   int macStatus = CtMacConfigure(&argc, &argv);
   if (macStatus) return macStatus == 2 ? 0 : macStatus;
+#endif
+#ifdef __ANDROID__
+  int androidStatus = CtAndroidConfigure(&argc, &argv);
+  if (androidStatus) return androidStatus;
 #endif
   dbgInit();                                     // cache the debug env flags (hot loops read dbg.*)
   // A PLAYER: one frame of SPC per displayed frame, so a translated stage's holds do not run the APU (snes.c, the
@@ -10945,6 +10977,9 @@ int main(int argc, char** argv) {
     g_hostInteractive = !selftest && !g_noPace && !(vd && !strcmp(vd, "dummy"));
     if (getenv("CT_OVERLAY_SHOT")) g_hostInteractive = 1; }   // (the probe below: the overlay without a visible window)
   CtSettingsLoad(g_hostInteractive);
+#ifdef __ANDROID__
+  { CtSettings* st = CtSettingsGet(); st->fullscreen = 1; st->backend = CT_BACKEND_SDL; }   // the screen; OpenGL ES
+#endif
   if (g_hostInteractive && SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) == 0) fieldPadOpen();
   int audioOn = (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0);
   SDL_AudioDeviceID audioDev = 0;
@@ -11452,13 +11487,16 @@ int main(int argc, char** argv) {
                                                      // pipeline frame with no C0/00BF in it -> no VM tick)
     SDL_Event e;
     int optionsReq = 0;                              // F1 (or the controller's Guide): the options overlay, this pass
+    g_touchOn = g_hostInteractive && CtTouchPadEnabled(g_padUsed);
+    CtTouchPadNewFrame();
     while (SDL_PollEvent(&e)) {
       if (e.type == SDL_QUIT) running = 0;           // window X: quit ONLY (never resolves a battle -- see battlePhase)
       else if (e.type == SDL_CONTROLLERDEVICEADDED) fieldPadOpen();
       else if (e.type == SDL_CONTROLLERDEVICEREMOVED) {
         if (g_pad && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_pad)) == e.cdevice.which) {
-          SDL_GameControllerClose(g_pad); g_pad = NULL; fieldPadOpen(); } }
+          SDL_GameControllerClose(g_pad); g_pad = NULL; g_padUsed = 0; fieldPadOpen(); } }
       else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+        if (!g_padUsed) { g_padUsed = 1; CtTouchPadReset(); }   // the controller in use: the touch pad hides
         if (e.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE && CtOverlayAvailable()) { optionsReq = 1; continue; }
         uint16_t pb = fieldPadButtonOf(e.cbutton.button);   // the same edges a key gives (below)
         if (pb & PAD_A) { talkPressed = 1; nmType = 1; }
@@ -11469,11 +11507,24 @@ int main(int argc, char** argv) {
         if (pb & PAD_ST) nmOk = 1;
         if (pb & PAD_B) nmDel = 1;
       }
+      else if (e.type == SDL_FINGERDOWN || e.type == SDL_FINGERMOTION || e.type == SDL_FINGERUP) {
+        // the virtual gamepad's fingers (its buttons' edges are made below, like the stick's); its MENU button = F1.
+        // A touch brings it back after a controller hid it.
+        if (e.type == SDL_FINGERDOWN && g_padUsed && g_hostInteractive && CtTouchPadEnabled(0)) { g_padUsed = 0; g_touchOn = 1; }
+        if (g_touchOn && (CtTouchPadEvent(&e) & CT_TOUCH_MENU) && CtOverlayAvailable()) optionsReq = 1;
+      }
+#ifdef __ANDROID__
+      else if (e.type == SDL_APP_WILLENTERBACKGROUND) CtTouchPadReset();   // the fingers' ups are not seen there
+      else if (e.type == SDL_APP_DIDENTERFOREGROUND) { g_hostT0 = -1.0; g_hostFrames = 0; }   // no catch-up after a pause
+#endif
       else if (e.type == SDL_KEYDOWN && !e.key.repeat) {   // !repeat: a HELD key auto-repeats SDL_KEYDOWN; these
         // are EDGE flags (talk/nav/name/F8), so only the FRESH press counts (ROM $00F6 edge-detect). Held
         // MOVEMENT is unaffected -- it reads SDL_GetKeyboardState (level), not these events.
         int k = e.key.keysym.sym;
         if (k == SDLK_F1 && CtOverlayAvailable()) { optionsReq = 1; continue; }
+#ifdef __ANDROID__
+        if (k == SDLK_AC_BACK && CtOverlayAvailable()) { optionsReq = 1; continue; }   // the Back button: the options
+#endif
         uint16_t pb = fieldKeyPadOf(e.key.keysym.scancode);  // the pad buttons this key is bound to (settings.h)
         if (k == SDLK_ESCAPE) running = 0;
         if (pb & PAD_A) talkPressed = 1;
@@ -11489,10 +11540,20 @@ int main(int argc, char** argv) {
     }
     // The stick's d-pad has no events: its edges are the transitions of the level it reads.
     { static uint16_t stickPrev = 0; uint16_t sp = fieldStickPad(), se = (uint16_t)(sp & ~stickPrev); stickPrev = sp;
+      if (se && !g_padUsed) { g_padUsed = 1; CtTouchPadReset(); }
       if (se & PAD_UP) upPressed = 1;
       if (se & PAD_DOWN) downPressed = 1;
       if (se & PAD_LEFT) leftPressed = 1;
       if (se & PAD_RIGHT) rightPressed = 1; }
+    // ...and the virtual gamepad's: the edges a controller button's press gives (above).
+    { static uint16_t touchPrev = 0; uint16_t tp = fieldTouchPad(), te = (uint16_t)(tp & ~touchPrev); touchPrev = tp;
+      if (te & PAD_A) { talkPressed = 1; nmType = 1; }
+      if (te & PAD_UP) upPressed = 1;
+      if (te & PAD_DOWN) downPressed = 1;
+      if (te & PAD_LEFT) leftPressed = 1;
+      if (te & PAD_RIGHT) rightPressed = 1;
+      if (te & PAD_ST) nmOk = 1;
+      if (te & PAD_B) nmDel = 1; }
     // THE OPTIONS OVERLAY (F1): the game stands still -- no tick, no sound -- while the player edits settings.h's options
     // over the last picture; they are saved on close, and the host clock re-anchors so the pause costs no catch-up.
 #ifdef __APPLE__

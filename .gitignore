@@ -23,6 +23,7 @@ dump.bin
 
 # Downloaded SDL2 dev libs for the viewer (auto-fetched, not distributed)
 /third_party/SDL2/
+/third_party/SDL2-src/
 /third_party/imgui/
 /third_party/vulkan/
 

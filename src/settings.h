@@ -49,6 +49,10 @@ typedef struct CtSettings {
   int keys[CT_BTN_COUNT][CT_BIND_KEYS];   // SDL_Scancode per button
   int pad[CT_BTN_COUNT];                  // SDL_GameControllerButton per button (-1 = none)
   int padStick;                 // the left stick also drives the d-pad
+  // the on-screen virtual gamepad (touchpad.h): a host option, on by default on Android only
+  int touchPad;                 // shown while no controller is connected
+  int touchOpacity;             // 10..100 (%)
+  int touchScale;               // 50..150 (%), the controls' size
   // how the game keeps the SNES's timing
   int sync;                     // CT_SYNC_*
 } CtSettings;

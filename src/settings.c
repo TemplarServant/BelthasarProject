@@ -41,6 +41,12 @@ void CtSettingsDefaults(CtSettings* s) {
     SDL_CONTROLLER_BUTTON_BACK, SDL_CONTROLLER_BUTTON_START };
   for (int b = 0; b < CT_BTN_COUNT; b++) s->pad[b] = p0[b];
   s->padStick = 1;
+#ifdef __ANDROID__
+  s->touchPad = 1; s->fullscreen = 1;               // a phone: the whole screen, the fingers as the pad
+#else
+  s->touchPad = 0;
+#endif
+  s->touchOpacity = 45; s->touchScale = 100;
   s->sync = CT_SYNC_FRAME_PERFECT;
 }
 
@@ -99,6 +105,10 @@ static void setKey(CtSettings* s, const char* sec, const char* key, const char* 
       else if (!strcmp(key, k2)) s->keys[b][1] = *val ? (int)SDL_GetScancodeFromName(val) : 0;
       else if (!strcmp(key, kp)) s->pad[b] = *val ? (int)SDL_GameControllerGetButtonFromString(val) : -1;
     }
+  } else if (!strcmp(sec, "touch")) {
+    if (!strcmp(key, "virtual_pad")) s->touchPad = iv != 0;
+    else if (!strcmp(key, "opacity")) s->touchOpacity = clampi(iv, 10, 100);
+    else if (!strcmp(key, "size")) s->touchScale = clampi(iv, 50, 150);
   } else if (!strcmp(sec, "timing")) {
     if (!strcmp(key, "sync")) s->sync = !strcmp(val, "free") ? CT_SYNC_FREE : CT_SYNC_FRAME_PERFECT;
   }
@@ -144,6 +154,7 @@ int CtSettingsSave(void) {
     const char* pn = s->pad[b] >= 0 ? SDL_GameControllerGetStringForButton((SDL_GameControllerButton)s->pad[b]) : NULL;
     fprintf(f, "pad_%s=%s\n", BTN_KEY[b], pn ? pn : "");
   }
+  fprintf(f, "\n[touch]\nvirtual_pad=%d\nopacity=%d\nsize=%d\n", s->touchPad, s->touchOpacity, s->touchScale);
   fprintf(f, "\n[timing]\nsync=%s\n", s->sync == CT_SYNC_FREE ? "free" : "frame_perfect");
   fclose(f);
   return 1;

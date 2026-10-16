@@ -1,0 +1,8 @@
+# Gradle / Android Studio output and the machine's SDK path
+.gradle/
+build/
+app/build/
+app/.cxx/
+local.properties
+.idea/
+*.iml

@@ -11,6 +11,17 @@ endif()
 # (it pulls in SDL); the M0 harness is headless.
 file(GLOB SNES_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/snes/*.c")
 
+# The playable host's sources (ct_field below; the Android app's libmain.so, android/CMakeLists.cmake).
+set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_ending.c src/seq_entry3.c src/seq_entry4.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
+                 src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
+
+# ANDROID (docs/ANDROID.md): only the playable host, as the shared library SDL's Java activity loads. The NDK's CMake
+# reaches this file through android/app/build.gradle.
+if(ANDROID)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/android/CMakeLists.cmake)
+  return()
+endif()
+
 add_executable(ct
   src/main.c
   src/ct_cpu_infra.c src/rom_verify.c
@@ -88,8 +99,7 @@ if(CT_SDL_INC)
   # src/move.c runs live: ct_vm.c drives the ported C0/CAD9 animation tree through it (CtAnimDrainPass,
   # CtAnimDrawPass), the field runner CtFieldRunnerOne (which reaches the object loader CtObjLoad) and
   # most of the VM's op families (CtVm*).
-  add_executable(ct_field src/field.c src/seq_race.c src/seq_ending.c src/seq_entry3.c src/seq_entry4.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
-                          src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c ${SNES_SRC})
+  add_executable(ct_field ${CT_FIELD_SRC})
   target_include_directories(ct_field PRIVATE src ${CT_SDL_INC} snes)
   target_link_libraries(ct_field ${CT_SDL_LIB})
   if(MSVC)

@@ -108,6 +108,8 @@ For experimental macOS support, see the [local app build guide](docs/MACOS.md).
 - **Windows:** Visual Studio 2022 Build Tools (MSVC, with the bundled CMake and Ninja) and Python 3.
 - **Linux:** gcc or clang, CMake, `libsdl2-dev`, Python 3. The Linux build is a compile-parity build, not the
   reference platform (see [docs/INFRA.md](docs/INFRA.md#build)).
+- **Android (experimental):** the Android SDK and NDK, built from Windows with Gradle, with on-screen touch controls;
+  see the [Android guide](docs/ANDROID.md).
 - Your own ROM, as described above.
 - On Windows, clone into a short path (for example `C:\src\BelthasarProject`): the build's object paths under a
   long directory exceed Windows' 260-character limit and the compiler check fails.

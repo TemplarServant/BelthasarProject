@@ -28,6 +28,9 @@ int  CtOverlayFrame(void);
 void CtOverlayRender(void);                               // draw it (after the host drew the game picture)
 void CtOverlaySetPadName(const char* name);               // the connected controller, or NULL
 void CtOverlaySelectTab(int tab);                         // (CT_OVERLAY_SHOT) open on tab 0..3 next frame
+// The virtual gamepad (touchpad.h) over the picture the host just drew, outside the modal overlay: a frame of its own.
+struct CtTouchDraw;
+void CtOverlayTouchDraw(const struct CtTouchDraw* d);
 #ifdef __cplusplus
 }
 #endif

@@ -1,0 +1,50 @@
+// The app: SDL's Java activity (third_party/SDL2-src, tools/get_sdl2_src.ps1) + the game's native library, built by
+// the NDK's CMake from the repository's root CMakeLists.txt (its ANDROID branch, android/CMakeLists.cmake).
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'org.belthasar.ct'
+    compileSdk 36
+    ndkVersion '28.2.13676358'
+
+    defaultConfig {
+        applicationId 'org.belthasar.ct'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '0.1'
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_STL=c++_static'
+                // a phone (arm64) and the x86_64 emulator; add 'armeabi-v7a' for old 32-bit devices
+                abiFilters 'arm64-v8a', 'x86_64'
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path file('../../CMakeLists.txt')
+            version '3.22.1'
+            buildStagingDirectory file('.cxx')
+        }
+    }
+    sourceSets {
+        main {
+            java.srcDirs += ['../../third_party/SDL2-src/android-project/app/src/main/java']
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    lint {
+        abortOnError false
+    }
+}

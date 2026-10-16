@@ -2,6 +2,7 @@
 // on the SDL_Renderer the game presents with. See overlay.h. Edits settings.h's options; the host applies them.
 #include "overlay.h"
 #include "settings.h"
+#include "touchpad.h"
 #include "imgui.h"
 #include "backends/imgui_impl_sdl2.h"
 #include "backends/imgui_impl_sdlrenderer2.h"
@@ -45,7 +46,11 @@ extern "C" int CtOverlayInit(CtPresenter* pr) {
   // The built-in bitmap font at a whole multiple of its 13 px, from the window's height: sharp at 2x on a 1080p
   // fullscreen, 1x in the default 512x448 window.
   { int ow = 0, oh = 0; CtPresentOutputSize(pr, &ow, &oh);
+#ifdef __ANDROID__
+    int k = (oh + 180) / 360; if (k < 1) k = 1; if (k > 4) k = 4;   // a phone's screen: big enough for a finger
+#else
     int k = (oh + 270) / 540; if (k < 1) k = 1; if (k > 4) k = 4;
+#endif
     ImFontConfig fc; fc.SizePixels = 13.0f * (float)k; io.Fonts->AddFontDefault(&fc);
     ImGui::GetStyle().ScaleAllSizes((float)k); }
   ImGui::StyleColorsDark();
@@ -147,13 +152,20 @@ extern "C" int CtOverlayFrame(void) {
                           ImGuiCond_Always, ImVec2(0.5f, 0.5f));
   ImGui::SetNextWindowSize(size, ImGuiCond_Always);
   bool open = true;
-  ImGui::Begin("Options  (F1 / Esc closes)", &open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+#ifdef __ANDROID__
+  const char* title = "Options  (Back closes)";
+#else
+  const char* title = "Options  (F1 / Esc closes)";
+#endif
+  ImGui::Begin(title, &open, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                ImGuiWindowFlags_NoCollapse);
   if (!open) ch |= CT_OVL_CLOSE;
   if (ImGui::BeginTabBar("tabs")) {
     if (ImGui::BeginTabItem("Video", NULL, g_selTab == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
+#ifndef __ANDROID__                                        // (a phone's window is always the whole screen)
       bool fs = s->fullscreen != 0;
       if (ImGui::Checkbox("Fullscreen", &fs)) { s->fullscreen = fs; ch |= CT_OVL_VIDEO; }
+#endif
       const char* scales[] = { "Fit to window", "Integer scale (sharp pixels)", "Stretch" };
       if (ImGui::Combo("Scale", &s->scaleMode, scales, 3)) ch |= CT_OVL_VIDEO;
       const char* aspects[] = { "Square pixels (8:7)", "TV 4:3 (as on the console)" };
@@ -187,6 +199,7 @@ extern "C" int CtOverlayFrame(void) {
                           "pixels. With frames between, 1x uses 4x.", 256 * s->renderScale, 224 * s->renderScale);
       bool vs = s->vsync != 0;
       if (ImGui::Checkbox("VSync", &vs)) { s->vsync = vs; ch |= CT_OVL_VIDEO; }
+#ifndef __ANDROID__                                        // (Android: SDL_Renderer on OpenGL ES, the only backend)
       if (!s->fullscreen && ImGui::SliderInt("Window size", &s->windowScale, 1, 8, "%dx")) ch |= CT_OVL_VIDEO;
       ImGui::Separator();
 #ifdef __APPLE__
@@ -215,6 +228,9 @@ extern "C" int CtOverlayFrame(void) {
       }
       ImGui::TextDisabled("In use: %s", g_backendName);
       ImGui::TextDisabled("The backend and the driver take effect the next time the game starts.");
+#else
+      ImGui::TextDisabled("In use: %s", g_backendName);
+#endif
       ImGui::EndTabItem();
     }
     if (ImGui::BeginTabItem("Audio", NULL, g_selTab == 1 ? ImGuiTabItemFlags_SetSelected : 0)) {
@@ -224,6 +240,16 @@ extern "C" int CtOverlayFrame(void) {
       ImGui::EndTabItem();
     }
     if (ImGui::BeginTabItem("Controls", NULL, g_selTab == 2 ? ImGuiTabItemFlags_SetSelected : 0)) {
+#ifdef __ANDROID__                                        // (first: a finger cannot scroll the list below)
+      bool tp = s->touchPad != 0;
+      if (ImGui::Checkbox("On-screen gamepad", &tp)) s->touchPad = tp;
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Touch controls drawn at the screen's sides. They hide when a controller is used and come back\n"
+                          "at the next touch.");
+      ImGui::SliderInt("Gamepad opacity", &s->touchOpacity, 10, 100, "%d%%");
+      ImGui::SliderInt("Gamepad size", &s->touchScale, 50, 150, "%d%%");
+      ImGui::Separator();
+#endif
       ImGui::Text("Controller: %s", g_padName[0] ? g_padName : "none connected");
       bool st = s->padStick != 0;
       if (ImGui::Checkbox("Left stick moves like the d-pad", &st)) s->padStick = st;
@@ -246,6 +272,9 @@ extern "C" int CtOverlayFrame(void) {
       if (ImGui::Button("Restore defaults")) {
         CtSettings d; CtSettingsDefaults(&d);
         memcpy(s->keys, d.keys, sizeof s->keys); memcpy(s->pad, d.pad, sizeof s->pad); s->padStick = d.padStick;
+#ifdef __ANDROID__
+        s->touchPad = d.touchPad; s->touchOpacity = d.touchOpacity; s->touchScale = d.touchScale;
+#endif
       }
       ImGui::EndTabItem();
     }
@@ -271,6 +300,59 @@ extern "C" int CtOverlayFrame(void) {
   ImGui::End();
   ImGui::Render();
   return ch;
+}
+
+// The virtual gamepad: a frame of ImGui of its own (no window, only the foreground draw list), drawn over the picture.
+extern "C" void CtOverlayTouchDraw(const CtTouchDraw* d) {
+  if (!g_ok || !d || d->n <= 0) return;
+#ifdef CT_HAVE_VULKAN
+  if (g_vk) ImGui_ImplVulkan_NewFrame(); else
+#endif
+  if (g_gl) ImGui_ImplOpenGL3_NewFrame(); else ImGui_ImplSDLRenderer2_NewFrame();
+  ImGui_ImplSDL2_NewFrame();
+  ImGui::NewFrame();
+  ImDrawList* dl = ImGui::GetForegroundDrawList();
+  float a = d->alpha;
+  ImU32 fill = IM_COL32(40, 40, 48, (int)(170 * a)), fillOn = IM_COL32(230, 230, 240, (int)(200 * a));
+  ImU32 edge = IM_COL32(255, 255, 255, (int)(220 * a)), text = IM_COL32(255, 255, 255, (int)(255 * a));
+  ImU32 textOn = IM_COL32(20, 20, 24, (int)(255 * a));
+  ImFont* font = ImGui::GetFont();
+  // the layout is in drawable pixels; ImGui draws in the window's units (the same on Android, not on a high-DPI desktop)
+  const ImGuiIO& io = ImGui::GetIO();
+  float sx = d->outW > 0 ? io.DisplaySize.x / d->outW : 1.0f, sy = d->outH > 0 ? io.DisplaySize.y / d->outH : 1.0f;
+  for (int i = 0; i < d->n; i++) {
+    CtTouchControl sc = d->c[i];
+    sc.x *= sx; sc.y *= sy; sc.w *= sx; sc.h *= sy;
+    const CtTouchControl* c = &sc;
+    ImVec2 ctr(c->x, c->y);
+    if (c->shape == CT_TOUCH_SHAPE_DPAD) {                 // a plus: four arms, each lit while its direction is held
+      float r = c->w / 2, t = r / 3;
+      dl->AddCircleFilled(ctr, r, IM_COL32(40, 40, 48, (int)(70 * a)), 48);
+      struct { int btn; float x0, y0, x1, y1; } arm[4] = {
+        { CT_BTN_UP, -t, -r, t, -t }, { CT_BTN_DOWN, -t, t, t, r }, { CT_BTN_LEFT, -r, -t, -t, t }, { CT_BTN_RIGHT, t, -t, r, t } };
+      dl->AddRectFilled(ImVec2(ctr.x - t, ctr.y - t), ImVec2(ctr.x + t, ctr.y + t), fill);
+      for (int k = 0; k < 4; k++) {
+        int on = (d->dpadDirs >> arm[k].btn) & 1;
+        ImVec2 p0(ctr.x + arm[k].x0, ctr.y + arm[k].y0), p1(ctr.x + arm[k].x1, ctr.y + arm[k].y1);
+        dl->AddRectFilled(p0, p1, on ? fillOn : fill, t * 0.25f);
+        dl->AddRect(p0, p1, edge, t * 0.25f, 0, 2.0f);
+      }
+      continue;
+    }
+    float fs = (c->shape == CT_TOUCH_SHAPE_CIRCLE ? c->w * 0.45f : c->h * 0.5f);
+    if (c->shape == CT_TOUCH_SHAPE_CIRCLE) {
+      dl->AddCircleFilled(ctr, c->w / 2, c->pressed ? fillOn : fill, 40);
+      dl->AddCircle(ctr, c->w / 2, edge, 40, 2.0f);
+    } else {
+      ImVec2 p0(c->x - c->w / 2, c->y - c->h / 2), p1(c->x + c->w / 2, c->y + c->h / 2);
+      dl->AddRectFilled(p0, p1, c->pressed ? fillOn : fill, c->h / 2);
+      dl->AddRect(p0, p1, edge, c->h / 2, 0, 2.0f);
+    }
+    ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, c->label);
+    dl->AddText(font, fs, ImVec2(ctr.x - ts.x / 2, ctr.y - ts.y / 2), c->pressed ? textOn : text, c->label);
+  }
+  ImGui::Render();
+  CtOverlayRender();
 }
 
 extern "C" void CtOverlayRender(void) {
