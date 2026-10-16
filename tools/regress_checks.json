@@ -42894,6 +42894,84 @@
         }
       ],
       "notes": "A FALLEN ENEMY'S BLOCK-2 COUNTER (disasm/notes/battle_sim_census.md, family 4: 60 fights, 28 ids; disasm/notes/battle_counter_gating.md, 'THE FALLEN VICTIM'). C1/8694-86C6: in the counter loop a victim whose $AEFF is FF is taken when its AI block 2 opens with condition 20, and listed again ($AF02,X := $AF0D,X) -- after the handler's sweep C1/8626 has delisted it; C1/86FF's status byte is the only gate after that. The counter's turn C1/8780 JSR C1/8CF9 plays its whole action inside the loop, then C1/8787 JSR C1/B223 delists it again, and only C1/881C's C1/AC5E (-> CF/FE20) starts the corpse's routine. MEASURED, the rule's cartridge: the Mud Imp (0F) f931 C1:B2C3 / C1:86C6, `$AE93 = 7F` (C1:AD08), f957 C1:B2C3, `$96FC = 00` f1000 (+43); Azala (9A) f1180 `$AE93 = 00` (C1:8D0D), its name box `43`, `$AE93 = 1F` f1191. The port dropped the counter on its own alive test, restored $AF02 before its close's sweep (undone), started the routine at the HP write and decoded the tech without its name box. The -4 frame offset pinned is family 3 (the next action's menu pass one pass early), not this mechanism: its fix re-pins these lines (the counts rise to +0), legitimately. frames=1450 keeps Azala's later party heal inside both windows."
+    },
+    {
+      "name": "battle-sim-boss-death-cd0e05-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_sim.py",
+        "sweep",
+        "90,CC,D1,D4",
+        "hp=1",
+        "mon=CCEA:1,5D9B:1,96F5:11",
+        "-j4"
+      ],
+      "env": {},
+      "expect": [
+        "sim e90 [90 Yakra]: wram same values in the same order on both sides",
+        "sim e90 [90 Yakra]: port frame - cartridge frame per change: +0 x217",
+        "sim e90 [90 Yakra]: deaths cartridge [834] port [834]",
+        "sim e90 [90 Yakra]: death palette (OBJ pal 4, $2380): cartridge 190 states, port 190, the same sequence",
+        "sim eCC [CC ]: wram same values in the same order on both sides",
+        "sim eCC [CC ]: port frame - cartridge frame per change: +0 x14",
+        "sim eCC [CC ]: deaths cartridge [379] port [379]",
+        "sim eCC [CC ]: death palette (OBJ pal 4, $2380): cartridge 1 states, port 1, the same sequence",
+        "sim eD1 [D1 Giga Gaia]: wram same values in the same order on both sides",
+        "sim eD1 [D1 Giga Gaia]: port frame - cartridge frame per change: +0 x17",
+        "sim eD1 [D1 Giga Gaia]: deaths cartridge [841] port [841]",
+        "sim eD1 [D1 Giga Gaia]: death palette (OBJ pal 4, $2380): cartridge 2 states, port 2, the same sequence",
+        "sim eD4 [D4 Guardian]: wram same values in the same order on both sides",
+        "sim eD4 [D4 Guardian]: port frame - cartridge frame per change: +0 x17",
+        "sim eD4 [D4 Guardian]: deaths cartridge [835] port [835]",
+        "sim eD4 [D4 Guardian]: death palette (OBJ pal 4, $2380): cartridge 2 states, port 2, the same sequence"
+      ],
+      "pin": [
+        "^sim e(90|CC|D1|D4) .*: wram ",
+        "^sim e(90|CC|D1|D4) .*: port frame ",
+        "^sim e(90|CC|D1|D4) .*: deaths ",
+        "^sim e(90|CC|D1|D4) .*: death palette "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "note_pass": "the boss deaths run CD/0043's own arms: Yakra's effect 38 (program 3F, 190 palette states), Giga Gaia's and the Guardian's dissolve then effect 40, Lavos's core with no red fade and two frames a dither level",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  for (int slot = 0; slot < 8; slot++) s[0xA020 + slot] = (uint8_t)(s[ENEMY_BLOCK(slot) + 0x1A] & 0x03);",
+          "replace": "  ;   /* MUT: no FD/B121 */",
+          "why": "$A01D stays 00: Yakra takes D0093, the #95 post and the 18-state red dissolve instead of effect 38"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "          else { s[0x99D2] = (uint8_t)k; s[0x99D3] = (uint8_t)(k >> 8); }   // CC/EC90",
+          "replace": "          else { ; }   /* MUT: no arena from E1:DE00 */",
+          "why": "$99D2 stays 00: Giga Gaia and the Guardian dissolve red and end the fight; Lavos's core fades red"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  int chunk = h->mem[0xCE0F] ? 0x1000 : 0x400;                    // CD/3EF8 `LDA $CE0F / BEQ`",
+          "replace": "  int chunk = 0x1000;   /* MUT: one packet a level */",
+          "why": "Lavos's core and the Guardian (type 2) dissolve one level a frame: the routine 32 frames short"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "      if (PB(0) == 0x0F) { if (s[0xCD00] < 11) s[0x99B5 + s[0xCD00]] = 0; break; }   // CD/2B5C `LDX $CD00 / STZ $99B5,X`",
+          "replace": "",
+          "why": "program 3F stops at its `80 0F` (D1/8834): Yakra's effect ends 294 frames early, its fade to white never runs"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (battleFxTeardownDue(h)) { battleFxTeardown(h); h->deathFxTd = 1; return 1; }",
+          "replace": "  if (battleFxTeardownDue(h)) { h->deathFxTd = 1; return 1; }   /* MUT: CD/0453 from the main loop's CD/0009 */",
+          "why": "the teardown enters a frame after the runner's end: $CCEA's clear at f1389, a frame after the cartridge's f1388"
+        }
+      ],
+      "notes": "THE BOSS DEATH (disasm/notes/battle_boss_death_0e05.md; battle_sim_census.md family 5). CD/0043 after its $CCEA wait: `$99D2` (CC/EC90, the arena kind from E1:DE00 by the enemy's id) not 0/2 and `$A08C,X` (CC/EBA4, E4:F600 byte +4 bit 2) -> the dissolve (CD/00A0, no #95, no red record) then `LDA #40 / JSL CD0E05`; else `$A01D,X` bit 0 (FD/B121, the stat record's byte 21 & 3) -> `LDA #38 / JMP CD/0E05` -- the effect load, the programs, the teardown CD/0453 inside its loop. Each enemy alone at 1 HP from f600, A mashed, from gato_wait. Pins, all against the rule's cartridge: the whole monitored WRAM plus $CCEA / $5D9B / $96F5 (`mon=`) the same values in the same order, +0 on every change, the deaths, and the OBJ palette 4 page: Yakra 190 states (program 3F: three flashes of colour 0x10, the 80 0F priority store, the fade to white), Lavos's core 1 (the copy, no fade: $99D2 = 01; its 75-frame routine, CD/3ED2's two $400 packets a level for cell type 2), Giga Gaia and the Guardian 2 (the dissolve, then effect 40 / program 4A with its 80 11 cut). Before this, all four took D0093: 18 / 17 / 18 / 18 states and the fights ended after the dissolve. Byte-for-byte: re-pin only with an oracle-verified reason."
     }
   ],
   "excluded": [

@@ -2464,6 +2464,16 @@ each alone at 1 HP from f600, A mashed. Pins: the whole monitored WRAM sequence 
 offsets and deaths with their constant -4 -- census family 3 (the next action's menu pass one pass early), not this
 mechanism; re-pin those two lines only from a fix of that family (they then read +0).
 
+### battle-sim-boss-death-cd0e05-vs-rule-cartridge (`python tools/battle_sim.py sweep 90,CC,D1,D4 hp=1 mon=CCEA:1,5D9B:1,96F5:11 -j4`)
+
+The boss deaths (disasm/notes/battle_boss_death_0e05.md; census family 5): CD/0043's arms after its `$CCEA` wait, on the
+staging bytes they read -- `$A01D,X` (FD/B121), `$A08C,X` (CC/EBA4) and `$99D2` (CC/EC90, E1:DE00). Yakra (90) takes
+`LDA #38 / JMP CD/0E05` (the effect load, program 3F, the teardown inside its loop); Giga Gaia (D1) and the Guardian (D4)
+the dissolve and then effect 40; Lavos's core (CC) the plain death with no red record, two frames a dither level (CD/3ED2's
+$400 packets). Each alone at 1 HP from f600, A mashed. Pins the whole monitored WRAM plus `$CCEA` / `$5D9B` / `$96F5` the
+cartridge's on both sides at +0, the deaths, and the OBJ palette 4 page (190 / 1 / 2 / 2 states). Five mutations killed.
+Byte-for-byte: re-pin only with an oracle-verified reason.
+
 ### battle-target-hand-page-vs-rule-cartridge (`python tools/target_hand_page_cmp.py`)
 
 The target hand, port against the rule's cartridge on tools/caster_radius_dispatch_cmp.py's fixture with each select held:

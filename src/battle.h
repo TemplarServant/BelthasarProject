@@ -654,10 +654,17 @@ typedef struct CtBattleHost {
   int deathSfxDue[8];        // per enemy slot: 1 while its routine CD/0043 waits on $CCEA (set at the routine's start,
                              //   the #95 post clears it); 0 = nothing pending
   int dissolveStep[8];       // the running routine's dither level: -(CD/00BF's waits) at its start, +1 a frame from
-                             //   the post; 1..CT_DISSOLVE_STEPS = levels cleared (CD/00CA's loop, one a frame);
+                             //   the post; 1..CT_DISSOLVE_STEPS = levels cleared (CD/00CA's loop, one per CD/3ED2 upload);
                              //   > CT_DISSOLVE_STEPS -> the routine returns, dissolveActive cleared (CF/FE7B)
   int dissolveStepShown[8];  // ...as the NMI shipped it: CD/3ED2 uploads the ANDed tiles at the NMI, so the picture draws
                              //   the level of the frame before (battleNmiHead, beside the CGRAM page)
+  int dissolvePkt[8];        // CD/3ED2's packets the running level has shipped (a level is CE:F156[$967C] / $400 of them)
+  int deathFxAfter[8];       // the routine's CD/0E05 effect still to run after its dissolve (D0073 `LDA #40`), 0 = none
+  int deathFxSlot;           // the slot whose routine is inside CD/0E05 (-1 = none) ...
+  int deathFxId;             // ...the effect it loads (D008E #38 / D0073 #40)
+  int deathFxT;              // ...frames into it: 0 = CD/0DFA's $5D9B wait, then 1 + the load's frame, then the run's wait
+  int deathFxW;              // ...the load's palette wait (0, 15 or 31; CD/0EFD-0F25)
+  int deathFxTd;             // ...its loop's CD/04AA: 1 while CD/0453 runs, 2 on the frame it returned (CD/04A2's wait)
   int headPend;              // the loop's head C1/8120 asked for while a death routine runs: it waits for the scan
   int deathHeadF;            // the frame the scan returned and that head ran (the idle tick starts on the next)
   int deadStanding[8];       // battle_dissolve.md ADD (T2 CORRECTION) X5: the FIGHT-ENDING kill does NOT

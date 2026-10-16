@@ -20,6 +20,7 @@ r"""ANY BATTLE, port against the rule's cartridge: every enemy formation the ROM
   hp=N             every staged enemy's curHP := N at frame hpat (default off): makes any enemy killable
   hpat=F           that frame (default 600, the fight booted and its first menu not yet up)
   frames=N         run length (default 1500)
+  mon=CCEA:1,...   more WRAM regions ($7E addr:len) graded with the rest (the cartridge's --monitor takes 32 in all)
 
 WHY A NEW STAGING. CT has no formation table: the fight takes the enemy OBJECTS on screen (C0/0557 reads `$1101,Y`),
 and op 0x83 (C0/46DF) is what makes an object an enemy -- its id, its slot (`$0D00` from operand 2), its mode (operand 2
@@ -263,7 +264,7 @@ def staged_at(rows, total):
     return next((f for f in range(total + 1) if s[f] and 'FF' in [s[f][i:i + 2] for i in range(0, 16, 2)]), None)
 
 
-def grade(label, rows_c, rows_p, cth, pth, total):
+def grade(label, rows_c, rows_p, cth, pth, total, regs=None):
     """Both sides from the frame both have staged: the value sequences compared WITHOUT their frames (the first
     field whose sequence differs), then the frame offsets of the matching changes, then the picture frame by frame."""
     lines = []
@@ -275,7 +276,7 @@ def grade(label, rows_c, rows_p, cth, pth, total):
     lines.append('sim %s: staged cartridge %s f%d, port %s f%d' % (label, ids_of(st_c.get(0xAF02)), sc0,
                                                                 ids_of(st_p.get(0xAF02)), sp0))
     offs, diffs = [], []
-    for a, n in regions():
+    for a, n in (regs or regions()):
         cc, pp = changes(rows_c, a, f0, total), changes(rows_p, a, f0, total)
         vc, vp = [v for f, v in cc], [v for f, v in pp]
         k = next((i for i in range(min(len(vc), len(vp))) if vc[i] != vp[i]), None)
@@ -334,7 +335,7 @@ def grade(label, rows_c, rows_p, cth, pth, total):
     return lines
 
 
-def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=600, total=1500, verbose=False):
+def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=600, total=1500, verbose=False, mon=()):
     # placed == []: gato_wait's own fight (GATO as the scene loaded it) -- the baseline the staging is measured against
     pk = ab.pokes_for(list(party), extra=staging_pokes(placed) if placed else {})
     if inv:
@@ -361,9 +362,10 @@ def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=60
         for eid, op2, tx, ty in (placed or [(0x92, 0x86, 0, 0)]):   # the slot op 0x83 gives it: (operand2 & 7F) + 1 - 4 (C0/47AC,
             b = cmb_base(3 + (op2 & 0x7F) - 3) + 3      #   C0/0560), combatant = slot + 3; curHP at +3
             timed[1][b], timed[1][b + 1] = hp & 0xFF, hp >> 8
-    regs, rows_c, rows_p, cth, pth, plog = ab.run(pk, drv, total, 'sim_' + tag, regs=regions(), raw=True, timed=timed)
+    want = regions() + [r for r in mon if r not in regions()]
+    regs, rows_c, rows_p, cth, pth, plog = ab.run(pk, drv, total, 'sim_' + tag, regs=want, raw=True, timed=timed)
     label = tag + ' [' + (' '.join('%02X %s' % (p[0], names()[p[0]]) for p in placed) or 'GATO as loaded') + ']'
-    out = grade(label, rows_c, rows_p, cth, pth, total)
+    out = grade(label, rows_c, rows_p, cth, pth, total, regs=want)
     if verbose:
         for a in (0xAF02, 0x993C, 0x2380):
             for side, rows in (('cartridge', rows_c), ('port', rows_p)):
@@ -384,6 +386,7 @@ def options(args):
     if 'hp' in o: kw['hp'] = int(o['hp'])
     if 'hpat' in o: kw['hpat'] = int(o['hpat'])
     if 'frames' in o: kw['total'] = int(o['frames'])
+    if 'mon' in o: kw['mon'] = [(int(a, 16) & 0xFFFF, int(n)) for a, n in (x.split(':') for x in o['mon'].split(','))]
     return kw
 
 

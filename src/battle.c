@@ -1170,6 +1170,10 @@ static void stageAll(CtBattleHost* h) {
       memcpy(s + b + 0x19, rec + 20, 3);             // rec+20..22 -> block+0x19 ($5FC6,Y)
     }
   }
+  // C1/FAB9 `JSL FDB121`, right after the FD/B438 loop: `LDX #0180 / LDY #0000`, then `LDA $5E47,X / AND #03 / STA $A020,Y`
+  // eight times, X += $80 -- block +0x1A & 3 into `$A01D,cmb` for the eight enemy slots. CD/0043's D0087 reads bit 0 (the
+  // boss death, CD/0E05 #38). Oracle (battle_sim fight 90): `$A020 = 03` at f271 (FD:B12F), Yakra's record byte 21.
+  for (int slot = 0; slot < 8; slot++) s[0xA020 + slot] = (uint8_t)(s[ENEMY_BLOCK(slot) + 0x1A] & 0x03);
   // (v) battle_status_pipeline.md §2/§9 (ROM C1/EA9D, 1EA9D zeroes the status region $5E4B..$5E53 at combat
   // reset): a fresh battle must start STATUSLESS. Our block sources (the PC char-sheet 0x50 copy (iii) + the
   // seed's enemy blocks (iv)) carry STALE field/seed bits in the status byte +0x1E (e.g. the forest seed's enemy
@@ -9031,9 +9035,86 @@ static void battleDeathRoutineStart(CtBattleHost* h, int slot) {   // CF/FE20's 
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   h->dissolveRunning = slot;
   battleDeathScanStores(h, 3 + slot);                             // CF/FE2D-FE33
+  h->mem[0xCD00] = (uint8_t)(3 + slot);                           // CD/0043 `STA $CD00` (the corpse; program op 80 0F reads it)
   battleDeathPalCopy(h, slot);                                    // CF/FE4F-FE72
   h->deathSfxDue[slot] = 1;                                       // CD/0046-0050: the $CCEA wait (battleDeathSfxTick)
   h->dissolveStep[slot] = -((rom && rl > 0x0D00C0) ? rom[0x0D00C0] : 0x0A);   // CD/00BF LDA #0A: CD/3E3B's waits
+  h->dissolvePkt[slot] = 0; h->deathFxAfter[slot] = 0;
+}
+// A DITHER LEVEL IS CD/3ED2's UPLOAD, $400 BYTES A FRAME. CD/00D0-00F8: `LDA $967C,X` (the corpse's cell-layout type, X =
+// $CD00) indexes the word table CE:F156 (`0400 0400 0800 1000 1000 0800 0400 0400`) for the size, and CD/3ED2 ships it in
+// packets of $400 (`$CE0F` clear, CD/3F47-3F6D: `INC $CA26` and a frame until the NMI's DMA clears it) or $1000 (`$CE0F`
+// set, CD/3EFD-3F23), one a frame -- so a type-2 or type-5 corpse takes two frames a level. MEASURED, the rule's cartridge
+// (battle_sim fight CC, Lavos's core type 2): the routine from `$CD00 = 06` f379 (CD:0046) to `$96FC` cleared f454 (CF:FE7E),
+// 75 = 1 + 10 + 32 x 2; Giga Gaia D1 (type 0) f841 -> its CD/0E05 load f884, 43. The port ran every corpse at one a frame.
+static int battleDissolvePackets(const CtBattleHost* h, int slot) {
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  int type = h->mem[0x967C + 3 + slot] & 0xFF;
+  if (!rom || rl <= 0x0EF166L) return 1;
+  int size = rom[0x0EF156 + (type & 7) * 2] | (rom[0x0EF157 + (type & 7) * 2] << 8);   // CD/00D4-00DF (8-bit A, ASL)
+  int chunk = h->mem[0xCE0F] ? 0x1000 : 0x400;                    // CD/3EF8 `LDA $CE0F / BEQ`
+  int n = (size + chunk - 1) / chunk;
+  return n > 0 ? n : 1;
+}
+// CD/0E05, THE BOSS'S DEATH EFFECT (D008E `LDA #38 / JMP CD/0E05`, and D0073 `LDA #40 / JSL CD0E05` after the dissolve):
+//   CD/0E06 JSR CD/0DFA   `LDA $5D9B / BEQ` else a frame (CD/3E75): an action's program still running is waited out
+//   CD/0E0B JSR CD/0EBD   the effect load of `A` (the action's own load, CD/0D28 minus its `STZ $5D9B`), on its frames
+//   CD/0E0E JSR CD/0D33   the two program slots armed from D1:6240[fx*4]
+//   CD/0E11 INC $5D9B     the programs run (CD/1609 in the frame service)
+//   CD/0E14-0E20          `LDA $5D9B / BEQ ->RTL`, then `JSR CD/3E75 / JSL CD04AA` -- a frame, and CD/04AA's CD/0453 (the
+//                         teardown, battleFxTeardown) once the runner's end raised `$CCEA`
+// MEASURED, the rule's cartridge (battle_sim fight 90 hp=1, Yakra, `$A020 = 03`): the death f834 (`$CD00 = 03`, CD:0046),
+// `$CCA2 = 38` f835 (CD:0EE1), `$CA93 = 3F FF FF FF` f837 (CD:0F56), `$5D9B = 01` f843 (CD:0E14) -- the load's f 0 / w+2 /
+// w+8 with w = 0; program 3F's flashes and its fade to white, `$5D9B = 00` / `$CCEA = 01` f1368 (CD:1650 / 1653), the
+// teardown's `$CCA2 = 00` f1388 (CD:049C). Giga Gaia D1 / the Guardian D4 (`$99D2 = 01`, `$A08C,X = 04`): the dissolve,
+// then `$CCA2 = 40` f884 / f910 and `$CA93 = 4A FF 02 02`.
+// Returns 1 while CD/0E05 runs, 0 on the frame its RTL is reached.
+static int battleFxTeardownDue(const CtBattleHost* h);           // CD/04B5-04C2 (with CD/0453, below)
+static int battleFxTeardown(CtBattleHost* h);
+static void battleFxLoadBegin(CtBattleHost* h, int fx);           // CD/0EBD's frames (with the effect load, below)
+static void battleFxLoadRegs(CtBattleHost* h);
+static void battleFxLoadRegs2(CtBattleHost* h);
+static void battleFxLoadHead(CtBattleHost* h, int fx);
+static void battleFxLoadSheet(CtBattleHost* h, int i);
+static void battleFxLoadFill(CtBattleHost* h);
+static void battleFxLoadMap2(CtBattleHost* h);
+static void battleFxLoadEnd(CtBattleHost* h);
+static void battleFxArmSlots(CtBattleHost* h, int fx);
+static int battleFxLoadRemap(const uint8_t* s, int fx);
+static int battleFxHasGraphics(int fx);
+static void battleFxLoadPalArm(uint8_t* s);
+static int battleDeathFxFrame(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  int fx = h->deathFxId;
+  if (h->deathFxT == 0) {
+    if (s[0x5D9B]) return 1;                                      // CD/0DFA-0E02
+    int gfx = battleFxHasGraphics(battleFxLoadRemap(s, fx));      // CD/0EF8 JSR CD/0E9D
+    h->deathFxW = !gfx ? 0 : (s[0x2A21] & 0x01) ? 31 : ((s[0x2C66] | s[0x2C67]) & 0x04) ? 15 : 0;   // CD/0EFD-0F25
+    h->deathFxT = 1;
+    if (getenv("CT_BATTLE_TRACE"))
+      fprintf(stderr, "battle-death-fx f%d slot=%d CD/0E05 fx=%02X w=%d\n", h->frames, h->deathFxSlot, fx, h->deathFxW);
+  }
+  int f = h->deathFxT++ - 1, w = h->deathFxW;
+  if (!battleFxHasGraphics(battleFxLoadRemap(s, fx))) {
+    if (f == 0) { battleFxLoadBegin(h, fx); battleFxLoadHead(h, fx); battleFxArmSlots(h, fx); s[0x5D9B]++; return 1; }
+  } else if (f <= w + 8) {
+    if (f == 0) { battleFxLoadBegin(h, fx); if (w) battleFxLoadPalArm(s); }   // CD/0EDD-0EF5, CD/0F04 / CD/0F20
+    if (f == w) battleFxLoadRegs(h);
+    if (f == w + 1) battleFxLoadRegs2(h);
+    if (f == w + 2) battleFxLoadHead(h, fx);
+    if (f >= w + 2 && f <= w + 5) battleFxLoadSheet(h, f - w - 2);
+    if (f == w + 6) battleFxLoadFill(h);
+    if (f == w + 7) battleFxLoadMap2(h);
+    if (f == w + 8) { battleFxLoadEnd(h); battleFxArmSlots(h, fx); s[0x5D9B]++; }   // CD/0E0E JSR CD/0D33, CD/0E11
+    return 1;
+  }
+  // The loop's `JSL CD04AA` comes right after the CD/3E75 whose NMI ran the programs' last frame, so CD/0453 starts on
+  // that frame (cartridge: `$5D9B = 00` f1368 and the teardown's t 20 f1388) -- before the main loop's own CD/0009 would
+  // reach it, a frame later -- and its last frame's CD/3E75 (CD/04A2) is one more before the RTL (`$96F8 = 00` f1389).
+  if (h->fxTeardownT) { h->deathFxTd = 1; return 1; }
+  if (battleFxTeardownDue(h)) { battleFxTeardown(h); h->deathFxTd = 1; return 1; }
+  if (h->deathFxTd == 1) { h->deathFxTd = 2; return 1; }          // CD/0453's RTS this frame: CD/04A2's wait
+  return s[0x5D9B] ? 1 : 0;                                       // CD/0E14-0E17
 }
 static void battleDeathScanNext(CtBattleHost* h);              // (below: C1/881C -> C1/AC5E)
 static void battleAdvanceDissolves(CtBattleHost* h) {
@@ -9047,7 +9128,22 @@ static void battleAdvanceDissolves(CtBattleHost* h) {
     // head f1343 while CF/E745 raises it every fourth frame; the port's counted 01..0A through the routine.
     if (s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
     if (h->deathSfxDue[slot] > 0) return;                         // its routine still waits on $CCEA (battleDeathSfxTick)
-    if (++h->dissolveStep[slot] <= CT_DISSOLVE_STEPS) return;     // CD/00CA-0107: one level a frame
+    if (h->deathFxSlot == slot) {                                 // inside CD/0E05
+      if (battleDeathFxFrame(h)) return;
+      if (h->deathFxId == 0x40 && h->glb) h->glb[0x1520] = (uint8_t)(s[0xBE89] & 0xFE);   // D0079-D007E
+      h->deathFxSlot = -1;
+      if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-death-fx f%d slot=%d CD/0E05 returns\n", h->frames, slot);
+    } else {
+      int st = h->dissolveStep[slot];
+      if (st >= 0 && st < CT_DISSOLVE_STEPS && ++h->dissolvePkt[slot] < battleDissolvePackets(h, slot)) return;   // CD/3ED2
+      h->dissolvePkt[slot] = 0;
+      if (++h->dissolveStep[slot] <= CT_DISSOLVE_STEPS) return;   // CD/00CA-0107: one level per upload
+      if (h->deathFxAfter[slot]) {                                // CD/00A0's RTL into D0073 `LDA #40 / JSL CD0E05`
+        h->deathFxSlot = slot; h->deathFxId = h->deathFxAfter[slot]; h->deathFxT = 0; h->deathFxTd = 0; h->deathFxAfter[slot] = 0;
+        if (battleDeathFxFrame(h)) return;
+        h->deathFxSlot = -1;
+      }
+    }
     h->dissolveActive[slot] = 0; h->dissolveRunning = -1;         // CD/0109 RTL: the corpse is gone
     h->mem[0x96F5 + 3 + slot] = 0;                                // CF/FE7B STZ $96F5,X once CD/0024 returns (writer CF:FE7E)
   }
@@ -11989,8 +12085,32 @@ static void battleMoveInit(CtBattleHost* h) {
       // first, as CF/FB92 does before this loader runs.
       { int f4 = fer ? fer[(size_t)id * 10 + 4] : 0;
         s[0x9700 + slot] = (uint8_t)f4;
-        if (f4 & 0x80) { s[0xA5C5 + slot] = 0x80; s[0xA5CD + cmb] = 0x80; } } }
+        if (f4 & 0x80) { s[0xA5C5 + slot] = 0x80; s[0xA5CD + cmb] = 0x80; }
+        // CC/EBA4-EBA9 `LDA $9700,Y / AND #04 / STA $A08F,Y` (no branch): `$A08C,cmb`, the part of the boss the ARENA is
+        // (C1/5DEA, CD/0043's D0066 arm). Oracle (battle_sim fight D1, Giga Gaia): `$A092 = 04` at f271 (CC:EBAC).
+        s[0xA08F + slot] = (uint8_t)(f4 & 0x04); } }
   }
+  // CC/EC63-ECAF, after the eight slots: each enemy's id word $9853,Y (Y = 0..E step 2) against the records of E1:DE00
+  // (`id word, kind word`, up to a negative id). Kind 3 -> `$80 = 1`, kind 4 -> `$82 = 4`, any other kind -> the 16-bit
+  // `STA $99D2` (the boss's arena: $99D2 = the kind's low byte, $99D3 its high byte); then `$A0A7 |= $80`, `$A113 = $82`.
+  // Oracle (battle_sim): `$99D2 = 01` at f271 (CC:EC93) for Lavos CC, Giga Gaia D1 and the Guardian D4 (kinds 6001, 7001).
+  { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+    if (rom && rl > 0x21DF00L) {
+      int f80 = 0, f82 = 0;
+      for (int y = 0; y < 16; y += 2) {
+        int id = s[0x9853 + y] | (s[0x9854 + y] << 8);
+        for (long x = 0x21DE00L; x + 3 < rl; x += 4) {
+          int w = rom[x] | (rom[x + 1] << 8), k = rom[x + 2] | (rom[x + 3] << 8);
+          if (w & 0x8000) break;                                     // CC/EC70 BMI
+          if (w != id) continue;                                     // CC/EC72 CMP $9853,Y
+          if (k == 3) f80 = 1;                                       // CC/EC7B-EC83
+          else if (k == 4) f82 = 4;                                  // CC/EC87-EC8C
+          else { s[0x99D2] = (uint8_t)k; s[0x99D3] = (uint8_t)(k >> 8); }   // CC/EC90
+        }
+      }
+      s[0xA0A7] |= (uint8_t)f80;                                     // CC/ECA5-ECAA
+      s[0xA113] = (uint8_t)f82;                                      // CC/ECAD-ECAF
+    } }
   for (int seat = 2; seat >= 0; seat--)                            // C1/350F-354A: `$94` = 2, 1, 0 (DEC $94 / BPL)
     { int fx[11], fy[11]; for (int c = 0; c < 11; c++) { fx[c] = BT_LIVEX(h, c); fy[c] = BT_LIVEY(h, c); }
       BT_PCFACING(h, seat) = battlePcScanFace(h, seat, fx, fy); }
@@ -15287,12 +15407,12 @@ static void battleThinkTick(CtBattleHost* h) {
 // The death-sound countdown (CD/0043's tail). The three branches, in the ROM's order:
 //     D0052  LDA $99D2 / BEQ 0083 / CMP #02 / BEQ 0083      ; $99D2 in {0,2} -> the plain path
 //     D005B  LDA $2A21 / AND #10 / BNE 0093                  ; staged flag bit4 -> the plain path
-//     D0062  LDA $A08C,X / BEQ 0083                          ; per-combatant $A08C set -> #40 via CD/0E05 (+ 7F1520)
+//     D0062  LDA $A08C,X / BEQ 0083                          ; per-combatant $A08C set -> the dissolve, then #40 via CD/0E05
 //     D0083  LDA $A01D,X / AND #01 / BEQ 0093                ; per-combatant $A01D bit0 -> #38 via CD/0E05
-//     D0093  LDA $1D0C,X / TAX / LDA #95 / JSR CD/3B71       ; THE MEASURED PATH: id #95, pan = screen X
-// Every pinned fight takes D0093 ($99D2 reads 0; the siblings' per-combatant bytes are 0 in our image, which
-// is what the oracle's three deaths also took). The #40/#38 arms go through CD/0E05 -- a DIFFERENT poster
-// (CD/0DFA + 0EBD + 0D33, a $5D9B wait) that is NOT ported -- so they TRACE and post nothing rather than guess.
+//     D0093  LDA $1D0C,X / TAX / LDA #95 / JSR CD/3B71       ; the plain death: id #95, pan = screen X
+// The two CD/0E05 arms are battleDeathFxFrame's (an effect load and its programs, no #95 post); the bytes they read are
+// staged at the boot -- $A01D by FD/B121 (stageAll), $A08C and $99D2 by CC/EBA4 / CC/EC90 (battleMoveInit).
+// disasm/notes/battle_boss_death_0e05.md.
 // CF/FE2D-FE33, the scan's stores for each dying combatant it reaches with `$9FF7,X` clear, BEFORE the `$99B5` gate and its
 // routine: `INC $A0A8,X / STZ $AEB0,X / STZ $98A4,X` -- the last is the corpse's own segment flag ($98A7 + slot), so the
 // NMI's stepper (CF/F978) never moves it again. MEASURED, the rule's cartridge, the forest ambush with A held
@@ -15361,13 +15481,16 @@ static void battleDeathSfxTick(CtBattleHost* h) {
     if (h->deathSfxDue[slot] == 1 && h->deathCceaSeen) continue;   // (the loop waits a frame, then reads $CCEA)
     if (--h->deathSfxDue[slot] > 0) continue;
     int cmb = 3 + slot;
-    int q = s[0x99D2];
-    int sib40 = (q != 0 && q != 2) && !(s[0x2A21] & 0x10) && s[0xA08C + cmb] != 0;   // D0062 arm
-    int sib38 = !sib40 && (s[0xA01D + cmb] & 1);                                     // D0087 arm
-    if (sib40 || sib38) {                                        // CD/0E05 poster: NOT PORTED -> trace, no guess
-      if (getenv("CT_BATTLE_TRACE"))
-        fprintf(stderr, "battlesfx f%d death slot=%d cmb=%d id=%02X via CD/0E05 NOT PORTED\n",
-                h->frames, slot, cmb, sib40 ? 0x40 : 0x38);
+    int q = s[0x99D2], arena = q != 0 && q != 2;                 // D0052-D0059
+    int plain = arena && (s[0x2A21] & 0x10);                     // D005B-D0060 -> D0093
+    int sib40 = arena && !plain && s[0xA08C + cmb] != 0;         // D0062-D0069 -> D006B
+    int sib38 = !plain && !sib40 && (s[0xA01D + cmb] & 1);       // D0083-D008C -> D008E
+    if (sib38) {                                                 // `LDA #38 / JMP CD/0E05`: no post, no dissolve
+      h->deathFxSlot = slot; h->deathFxId = 0x38; h->deathFxT = 0; h->deathFxTd = 0;
+      continue;
+    }
+    if (sib40) {                                                 // `JSL CD00A0` (the dissolve, no post; $99D2 != 0 skips
+      h->deathFxAfter[slot] = 0x40;                              //   CD/00A5's record), then `LDA #40 / JSL CD0E05`
       continue;
     }
     uint8_t pan = h->mvInited ? (uint8_t)BT_LIVEX(h, cmb) : s[0x1D0C + cmb];   // $1D0C[$CD00]
@@ -17044,7 +17167,8 @@ void CtBattleBegin(CtBattleHost* h) {
   h->pcLadderTick = 0; h->pcLadderDefeat = 0;
   for (int fi = 0; fi < CT_BATTLE_FX_POOL; fi++) h->popups[fi].active = 0;
   for (int di = 0; di < 8; di++) { h->dissolveActive[di] = 0; h->dissolveStep[di] = 0; h->deadStanding[di] = 0; h->deadStandFrame[di] = 0; h->deadNoCmd[di] = 0; }
-  for (int di = 0; di < 8; di++) h->deathSfxDue[di] = h->dissolveStepShown[di] = 0;
+  for (int di = 0; di < 8; di++) h->deathSfxDue[di] = h->dissolveStepShown[di] = h->dissolvePkt[di] = h->deathFxAfter[di] = 0;
+  h->deathFxSlot = -1; h->deathFxId = 0; h->deathFxT = 0; h->deathFxW = 0; h->deathFxTd = 0;
   h->headPend = 0; h->deathHeadF = -1;
   h->dissolveRunning = -1;                                     // no corpse animating yet (serial queue)  // battle_dissolve.md + D.2 latch
   // C1/FCFE-FD24, the staging tail, in its order: FD/B0D5 (the timer flags and counts), FD/B4E7 (the timer bases and
@@ -21282,6 +21406,13 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
   switch (op) {
     case 0x80:                                                     // CD/2A4A `LDA [$40] / ASL / TAX / JMP ($2A51,X)`
       if (PB(0) == 0x1B) { for (int k = 0; k < 8; k++) s[0x9FFA + k]++; break; }   // CD/2A8B: the hide flags
+      if (PB(0) == 0x0F) { if (s[0xCD00] < 11) s[0x99B5 + s[0xCD00]] = 0; break; }   // CD/2B5C `LDX $CD00 / STZ $99B5,X`
+      if (PB(0) == 0x11) {                                         // CD/2B27: the arena's records cut to its range --
+        s[0x99D2] |= 0x80;                                         //   `$99D2 |= 80`, then records 9 and 10's dst := $99D3
+        s[0x05A5] = s[0x0599] = s[0x99D3];                         //   and count := 80 - $99D3 (CGRAM $99D3..$7F)
+        s[0x05A6] = s[0x059A] = (uint8_t)(0x80 - s[0x99D3]);
+        break;
+      }
       if (PB(0) == 0x10) {                                         // CD/2B45: the per-line COLDATA records to E0
         for (int k = 0; k < 0x80; k += 4) { s[0xBB07 + k] = 0xE0; s[0xBB87 + k] = 0xE0; s[0xBC07 + k] = 0xE0; }
         break;
@@ -21867,23 +21998,29 @@ static void battleFxTeardownTail(uint8_t* s) {
   battleFxPalRestore(s);                                           // CD/049F JSR CD/0E23
 }
 static int battleFxTeardownStep(CtBattleHost* h);
+static int battleFxTeardownDue(const CtBattleHost* h) {          // CD/0009 -> CD/04AA would enter CD/0453 now
+  const uint8_t* s = h->mem;
+  if (s[0xCE11] || !s[0xCCEA] || s[0xA013]) return 0;            // CD/04B5-04C2
+  // CD/0009 is reached from the NEXT iteration's idle state (C1/8121 INC $0027, C1/8127 JSR C1/0003 -> C1/107E wait ->
+  // C1/10A0), i.e. only when the combat goes on. An action that ENDS the battle leaves through the end path instead,
+  // whose own CD/0453 is CD/03B4's (the port's exitCd0c) -- the attract's X-Strike: `$CCEA = 1` f209, `$A013 = 0` f276,
+  // handler 12's tail -> C1/83B8 -> C1/8440 -> ... -> CD/03C6 -> CD/0453 at f284, no idle state in between. (C1/356D,
+  // the victory stager, also opens with `JSL CD0009`: a victory whose last action ran a program would run this there
+  // -- not ported; none of the measured fights ends on such an action.)
+  if (h->victoryHold || h->fleeStage || h->exitDemo) return 0;
+  if (h->demoPass) return 0;                                       // C1/83AE `LDA $2989 / BIT #20 / BNE ->83B8`: the demo's
+                                                                   //   pass ENDS the battle instead of `JMP C1/8120` (G0)
+  return 1;
+}
 static int battleFxTeardown(CtBattleHost* h) {
   uint8_t* s = h->mem;
   // CD/03B4's own CD/0453 (the exit, h->exitCd0c) is stepped by the exit machine (battleFleeStageTick), once a frame; this
-  // is the main loop's CD/0009. Stepping it here too ran the exit's teardown two steps a frame: `$CD0C = 0` at the 0AD
-  // demo's drop + 7 where the cartridge's CD:0466 writes it at drop + 9 (CD/03B4 at drop + 5, CD/3ED2's four packets).
+  // is the main loop's CD/0009 (and CD/0043's and CD/0E05's own `JSL CD04AA`, which reach the same CD/04AA). Stepping it
+  // here too ran the exit's teardown two steps a frame: `$CD0C = 0` at the 0AD demo's drop + 7 where the cartridge's
+  // CD:0466 writes it at drop + 9 (CD/03B4 at drop + 5, CD/3ED2's four packets).
   if (h->exitCd0c) return 0;
   if (!h->fxTeardownT) {
-    if (s[0xCE11] || !s[0xCCEA] || s[0xA013]) return 0;            // CD/04B5-04C2
-    // CD/0009 is reached from the NEXT iteration's idle state (C1/8121 INC $0027, C1/8127 JSR C1/0003 -> C1/107E wait ->
-    // C1/10A0), i.e. only when the combat goes on. An action that ENDS the battle leaves through the end path instead,
-    // whose own CD/0453 is CD/03B4's (the port's exitCd0c) -- the attract's X-Strike: `$CCEA = 1` f209, `$A013 = 0` f276,
-    // handler 12's tail -> C1/83B8 -> C1/8440 -> ... -> CD/03C6 -> CD/0453 at f284, no idle state in between. (C1/356D,
-    // the victory stager, also opens with `JSL CD0009`: a victory whose last action ran a program would run this there
-    // -- not ported; none of the measured fights ends on such an action.)
-    if (h->victoryHold || h->fleeStage || h->exitDemo) return 0;
-    if (h->demoPass) return 0;                                     // C1/83AE `LDA $2989 / BIT #20 / BNE ->83B8`: the demo's
-                                                                   //   pass ENDS the battle instead of `JMP C1/8120` (G0)
+    if (!battleFxTeardownDue(h)) return 0;
     // (No end-of-fight skip: the main loop's C1/8120 runs C1/0003 #03 -- the idle tick and its CD/0009 -- BEFORE C1/8130's
     //  checks, C1/B223 -> C1/813F (defeat) and C1/8167 (victory). MEASURED, the rule's oracle: Magus's Black Hole kills GATO
     //  (battle_ab tech 6 6) -- `$A013 = 0` f1332, `$CCEA = 0` f1353 (CD:049F, t 20), the victory's `$A5A9 = FF` f1355

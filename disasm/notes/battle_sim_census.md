@@ -132,6 +132,13 @@ Atropos XR, the Lavos forms, Yakra XIII, Giga Gaia, Guardian, Flea, Roly Bomber 
 
 ## 6. Family 5 — the boss death (`CD/0E05` #38) never runs (27 fights, 11 ids died in the census)
 
+**FIXED 2026-10-16** (battle_boss_death_0e05.md; check battle-sim-boss-death-cd0e05-vs-rule-cartridge): FD/B121, CC/EBA4
+and CC/EC63-ECAF staged, CD/0E05 on its frames, program op 80's sub-ops 0F and 11, and the dissolve's level paced by
+CD/3ED2's packets. Every family-5 fight, and CC / CD / D1 / D4 / BC / BD, now shows the cartridge's death palette
+sequence. Left: Ozzie's second death 8 frames early (A6 and its packs; -8 x10, the rest +0 -- family 3's class);
+f0A9_11 and f1D3_17 keep their earlier timing residuals (the same before this fix); f05E_7's first death 63 frames late
+(also before).
+
 ROM: CD/0043, the corpse's death routine (`dis.py D0043 0x90 1 0`): after the `$CCEA` wait, `$99D2` = 0 → D0083:
 `LDA $A01D,X / AND #01 / BEQ D0093` else **`LDA #38 / JMP CD/0E05`** — no #95 post, no CD/00A5 fade record. `$A01D,X`
 for an enemy is written once at the boot by **FD/B121-B13E**: `$A020,Y := $5E47,X & 03` for the eight enemy blocks
