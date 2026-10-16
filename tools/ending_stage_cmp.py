@@ -65,6 +65,14 @@ DRIVES = {
                hstate=os.path.join(ROOT, 'saves', 'lavos_re', 'ff07_handoff_f10.state'),
                shift=34, hold=25, total=1150, tag='seqstage', press=[(900, 0x100, 2)],
                extra=[(0x0C00, 0xC0), (0x0360, 8), (0x0520, 0x0C)], unskip={0x039B}),
+    # entry 6 (`FF 26`, scene 432 = loc 1B0: the Epoch into Lavos's shell) -- the user's Epoch capture (saves/epoch_re/
+    # epoch_user.state: world 1F0, storyline D6), the time gauge (Y), 1999 A.D. (Up), A, then A every 32 frames through the
+    # cockpit's question and the party's lines (ff26_pre_f2760.state): `FF 26` on its f10, the END 1643 frames later. Page B's
+    # r5 and $0386-7 are the Epoch's shake and lightning (C3/02DD in 16 bits, on $2138 / $213E: stage 2) -- skipped.
+    '26': dict(state=os.path.join(ROOT, 'saves', 'lavos_re', 'ff26_pre_f2760.state'), handoff=10,
+               hstate=os.path.join(ROOT, 'saves', 'lavos_re', 'ff26_handoff_f10.state'),
+               shift=42, hold=33, total=1700, tag='seqstage',
+               extra=[(0x0520, 0x18), (0x0A30, 6), (0x0B38, 2)], skip={0x0B0A, 0x0B0B, 0x0387}),
 }
 REGIONS = [(0x0000, 2), (0x0380, 0x1C), (0x0920, 0x20), (0x0A00, 0x30), (0x0B00, 0x30)]
 # the picture's bytes inside them: the credits pointer (task $9B4F) and the overlay's RNG $039B ($7E:3448), which only the

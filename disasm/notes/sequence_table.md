@@ -2616,3 +2616,41 @@ after the input). In the field (lavos-day-ff07-plays-through-to-the-title-in-the
 **Open.** The picture (stage 2: the packets, the text 64BF, the sparkles C3/0DBC, the fade's colours); and how the port reaches
 loc 1DC at all -- the lost final battle's path to it is not derived (the boss rush from lavos_1d3_wait ran 18000 frames of A
 without ending).
+
+## 17. ENTRY 6 (`FF 26`, scene 432 = loc 1B0: the Epoch into Lavos's shell) -- stage 1 (2026-10-16)
+
+**Where the story calls it.** The Epoch's cockpit (loc 1B0), reached from the time gauge's 1999 A.D.: obj10's question, and with
+glb[186] bit 7 (`16 BA 80 06`) obj11 fn3 -- the party's lines, a wait on the song's marker (`48 42 21 00 0E / 67 0F 0E / 12 0E 03
+04 03`: a pointer read of `$00:2142`, the SPC's port 2), `CHANGELOC 1DA` staged, `FF 26`. The teardown's reboot lands on 1DA,
+Lavos's outer shell. The oracle drive: the user's Epoch capture (saves/epoch_re/epoch_user.state), Y, Up, A, then A every 32
+frames: `FF 26` at f2770 (saves/lavos_re/ff26_pre_f2760.state).
+
+**The setup** $7E:78DD: page A at `$0A20 = 7C73` (run once), page B at `$0B20 = 7CF3`, `$3024 = 8278` (the main thread's mode-7
+hook, the picture's), `$0046 = $0B0A = 00A8`, `$0021 + 1`, `$8205` once. 5216178 cycles (`--callrom`, the packets and the mode-7
+tables above all).
+
+**Page B drives it.** The dive: page A's r1/r2 step by r8 through `$7F12` / `$7F35`, kept in 0..3FF (`CMP #0400 / BMI / SBC
+#0400`; below 0 `ADC #0400` with the CMP's carry set, i.e. + 0401), r3 = r1 + 80, r4 = r2 - 81. `$8205`: `$32E2` divides 0400 by
+page B's r0 (eight `ROL $F0 / ROL A` steps, eight `ASL A`, each `SBC $F8 / BCS / ADC $F2 / CLC`, the quotient in `$F4`); `$17 =
+$0B04 - $F4`, `$0B38 = $F4 + 3 + C`, `$15 = $0B02 + 4 + C`; `$7FC4` copies `$0B38` to page B's r6. The task list swaps twice
+(`$7EE8` / `$7ED1`: 0x20 bytes from `$D2:0000` to `$0920`, then the overlay's table `$7EDC` / `$7EC7`). The hooks `$7A35` (`$35FD
+= 8042`, `$0A00 = 0080`, `$038C = 3F`) and `$79F8` (`$0A00 = 00FF`, `$0A04 = 0`, `$0A08 = 0070`, `$3634 = $368D`, `$35FD = 801F`,
+`$038C = 1F`) reset page A. `$82D1` redraws when r0/r5/r7 differ from `$0A30/32/34`; with `$35FD = 8042` it counts `$0044` and,
+on odd counts, page A's r7. `$82F5` / `$831F` fade palette records 0-1. Page B's `F5 04` waits on the SPC's marker; `$34E3`
+ENDs (`$7E:0000 = 1`).
+
+**Not stage 1.** The shake and the lightning (`$7F7D`, `$8079`) and the sprites (`$835B`, `$7FCB`, `$7BF2`, `$7F58`) call C3/02DD
+with A 16 bits wide: `CMP $2137` / `SBC $213D` then read `$2138` (OAM data) and `$213E` as words, PPU state stage 1 does not
+hold. Page B's r5 and `$0386-7` are theirs alone; nothing the logic reads comes from them.
+
+**The cockpit hung in the port first.** obj11's `48 42 21 00 0E` read nothing: ops 0x48/0x49 go through ctFlatAddr24, which has
+no I/O, so the marker never came. Now a read of `$2140-$2143` (banks 00-3F/80-BF) takes the SPC's output ports (`g_ctApuOut`,
+move.c; field.c fills it from src/audio.c before the VM's tick). Other readers of the ports (ED/3CC6's port 1/3) are not routed.
+
+**Graded.** tools/ending_stage_cmp.py drive 26 (SHIFT 42 / HOLD 33; check lavos-epoch-ff26-stage-logic-vs-oracle): byte for byte
+to f1512; at f1513 page B's `F5 04` passes on the cartridge and two frames later in the port (the port's SPC answers late; HOLD
+31 / 35 move it non-monotonically, memory spc-phase-sensitivity) -- 1611 frames, 140 differing, END f1653 against f1655, a timing
+artefact. In the field (lavos-epoch-ff26-plays-through-in-the-port, from the cartridge's cockpit at f1700 of the drive): `FF 26`
+at f1071 (the cartridge 1070), 31 black frames, the dive, the reboot into 1DA.
+
+**Open.** The picture (stage 2: mode 7, the shake, the lightning, the Epoch's sprite).

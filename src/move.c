@@ -2525,7 +2525,11 @@ int CtVmReadPtrFamily(uint8_t* r, const uint8_t* script, int ip, int* outIp) {
   r[0x01D9] = (uint8_t)(ip + 4); r[0x01DA] = (uint8_t)((ip + 4) >> 8);   // 67BD, 16-bit
   int a = 0x10200 + ((vi * 2) & 0xFFFF);             // 67C4 ASL A -- the stride-two array
   int fa = ctFlatAddr24(bk, (mid << 8) | lo);        // 6797 / 67CA LDA [$CD]
-  if (fa >= 0) {
+  unsigned io = (unsigned)((mid << 8) | lo);
+  if ((bk <= 0x3F || (bk >= 0x80 && bk <= 0xBF)) && io >= 0x2140 && io <= 0x2143) {   // the SPC's output ports (B bus)
+    r[a] = g_ctApuOut[io & 3];
+    if (op == 0x49) r[a + 1] = g_ctApuOut[(io + 1) & 3];
+  } else if (fa >= 0) {
     r[a] = r[fa];
     if (op == 0x49) {                                // the 16-bit twin: the second byte comes
       int fb = ctFlatAddr24(bk, (((mid << 8) | lo) + 1) & 0xFFFF);   // from the SAME bank,
@@ -5241,6 +5245,7 @@ int g_ctVmTraceIdx = -1, g_ctVmTraceFrame = -1;
 // "low nibble clear", which is the arm that lets the script advance -- so a host that never sets it
 // gets a no-op opcode rather than a script wedged forever on a byte it can never pass.
 uint8_t g_ctApuPort3 = 0;
+uint8_t g_ctApuOut[4] = { 0, 0, 0, 0 };                     // ops 0x48 / 0x49 on $2140-$2143; see move.h
 uint8_t g_ctApuPort1 = 0;                                   // op 0xED (C0/3CBD); see move.h
 
 int CtFieldRunner(uint8_t* r, const uint8_t* rom, int romLen, int idx) {

@@ -39388,6 +39388,107 @@
       "notes": "The port's side of lavos-day-ff07-stage-logic-vs-oracle in the field: the cartridge's own WRAM at scene 476 after the teleport (saves/lavos_re/tele476_aa77.*), A every 32 frames. Before entry 7 was native the port held at `FF 07` (`overlay not ported: holding`). Now: `FF 07` at f1573, 23 black frames (the overlay's C3/0557, the init's DMAs, the setup's 2534972), the stage, the press, $63F5's reset 954 frames after the op (the cartridge's run: 955, f1540 -> f2495) -- the cold init (field.c coldResetReq, FD/C000's path) -- loc 000, 1B1 and the title's `FF 02` 81 frames after the reset (the cartridge: 77, f2495 -> f2572)."
     },
     {
+      "name": "lavos-epoch-ff26-stage-logic-vs-oracle",
+      "argv": [
+        "python",
+        "tools/ending_stage_cmp.py",
+        "--drives",
+        "26"
+      ],
+      "env": {},
+      "expect": [
+        "seqstage: FF 26 1611 frames compared, 140 differing, END cartridge f1653 port f1655 (DIFFERENT)",
+        "  first: f1513 092E o=242 p=0 092F o=123 p=0 0B20 o=174 p=159"
+      ],
+      "pin": [
+        "^seqstage: FF 26 ",
+        "^  first: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/ff26_pre_f2760.state",
+        "saves/lavos_re/ff26_handoff_f10.state",
+        "tools/ending_stage_cmp.py"
+      ],
+      "note_pass": "entry 6 (FF 26, the Epoch into Lavos's shell) runs natively byte for byte with the cartridge up to the SPC's marker",
+      "mutations": [
+        {
+          "file": "src/seq_entry6.c",
+          "find": "    if (n & 1) wr(w, 0x0A0E, rd(w, 0x0A0E) + 1);                      // 8049 BIT #0001 / BEQ; 8054 INC $0E",
+          "replace": "    (void)n;   /* MUT: $8042's INC $0E dropped */",
+          "why": "page A's r7 counts every other redraw on the cartridge (f43 01, f44 02 ...): without it 82D1 never redraws and $0A0E / $0A34 stay 0"
+        },
+        {
+          "file": "src/seq_entry6.c",
+          "find": "  return (a + 0x0401) & 0xFFFF;                                       // 7F29 ADC #0400 (C = 1)",
+          "replace": "  return (a + 0x0400) & 0xFFFF;   /* MUT: the CMP's carry forgotten */",
+          "why": "7F24 `CMP #0000` leaves the carry set: the wrap below 0 adds 0401, not 0400"
+        },
+        {
+          "file": "src/seq_entry6.c",
+          "find": "    case 0x7FC4: wr(w, 0x0B0C, rd(w, 0x0B38)); return t;              // 7FC4 LDA $0B38 / STA $0B0C",
+          "replace": "    case 0x7FC4: return t;   /* MUT: page B's r6 not taken from the divide */",
+          "why": "page B's r6 follows $0B38 = 0400 / r0 + 3 (+ the SBC's carry) while $7FC4 runs"
+        }
+      ],
+      "notes": "THE EPOCH INTO LAVOS'S SHELL, ENTRY 6 (disasm/notes/sequence_table.md sec. 17; src/seq_entry6.c). The user's Epoch capture (saves/epoch_re/epoch_user.state, spliced from the snes9x state over Jackie's ch09: world 1F0, storyline D6), Y (the time gauge), Up (1999 A.D.), A, then A every 32 frames: the cockpit (loc 1B0), obj10's question, obj11 fn3's lines, `CHANGELOC 1DA`, `FF 26` at f2770 of that drive (saves/lavos_re/ff26_pre_f2760.state: f10). The native stage from the cartridge's own hand-off (f10), SHIFT 42 / HOLD 33. Graded: the shadows, the task list, both pages, palette records 0-1, page A's copies $0A30-$0A35 and $0B38. Page B's r5 and $0386-7 are skipped: the Epoch's shake and the lightning draw from C3/02DD with A 16 bits wide, whose word reads take $2138 (OAM data) and $213E -- PPU state stage 1 does not hold, and nothing the logic reads comes from them. PINNED RESIDUAL: byte for byte to f1512; at f1513 page B's `F5 04` (the SPC's marker after the `DB18` post) passes on the cartridge and two frames later in the port -- the port's SPC answers late, and HOLD 31 / 35 move it non-monotonically (memory spc-phase-sensitivity); everything after rides two frames late, the END f1655 against f1653. A timing artefact (CLAUDE.md 2026-10-09). Re-pin only from a fix that moves it toward the cartridge."
+    },
+    {
+      "name": "lavos-epoch-ff26-plays-through-in-the-port",
+      "argv": [
+        "build/ct_field.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "432",
+        "--loadwram",
+        "saves/lavos_re/cockpit_1b0_f1700.lakewram",
+        "--walkscript",
+        "n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/lavos_re/cockpit_1b0_f1700.state",
+        "CT_LOCTRACE": "1",
+        "CT_SHOTS_AT": "4800",
+        "CT_SHOTS_EXIT": "1",
+        "CT_SHOTS": "build/_ff26_chain"
+      },
+      "expect": [
+        "sequence: entry 6 (the Epoch into Lavos) opening at f1071 -- 5728360 + 49152 + 5216178 cycles = 31 black frame(s)",
+        "sequence: the Epoch's dive ended ($7E:0000=1) -> reboot into loc 1DA",
+        "reboot: JML C0:0000 -> loc 1DA tile(7,58) bits00"
+      ],
+      "pin": [
+        "^sequence: entry 6 ",
+        "^sequence: the Epoch's dive ended",
+        "^reboot: JML C0:0000 -> loc 1DA"
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/cockpit_1b0_f1700.lakewram",
+        "saves/lavos_re/cockpit_1b0_f1700.state"
+      ],
+      "note_pass": "the Epoch's cockpit plays to FF 26 in the port (the song's marker read through op 0x48), the native stage ends and the game reboots into Lavos's shell",
+      "mutations": [
+        {
+          "file": "src/move.c",
+          "find": "    r[a] = g_ctApuOut[io & 3];",
+          "replace": "    r[a] = 0;   /* MUT: no SPC port behind $2142 */",
+          "why": "obj11's `48 42 21 00 0E` loop waits for the song's marker on port 2: without the SPC's port it never ends, `FF 26` never comes"
+        }
+      ],
+      "notes": "The cockpit (loc 1B0) from the cartridge's own WRAM at f1700 of the Epoch drive (no box open: the port cannot resume a box mid-way), A every 32 frames. Before: obj11 fn3's `48 42 21 00 0E / 67 0F 0E / 12 0E 03 04 03` -- a pointer read of $00:2142, the SPC's port 2 (the song's marker) -- read nothing in the port (ctFlatAddr24 has no I/O), the loop never ended and the cockpit hung. Now ops 0x48 / 0x49 on $2140-$2143 read the SPC's output ports (g_ctApuOut, filled by field.c from src/audio.c before the VM's tick). `FF 26` at f1071 (the cartridge: 1070 frames after the same point), 31 black frames, the dive, `$7E:0000 = 1`, and the reboot into 1DA that obj11 staged."
+    },
+    {
       "name": "ending-story-plays-through-in-the-port",
       "argv": [
         "build/ct_field.exe",

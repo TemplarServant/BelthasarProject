@@ -104,6 +104,12 @@ extern uint8_t g_ctApuPort3;
 // arm that lets the script advance, so a host that never sets it gets a no-op rather than a wedge.
 extern uint8_t g_ctApuPort1;
 
+// THE SPC700's FOUR OUTPUT PORTS ($2140-$2143 as the CPU reads them), for a script's pointer read (ops 0x48 / 0x49, C0/6792 /
+// 67C7) whose 24-bit pointer names one: `48 42 21 00 nn` reads the song's marker on port 2 into a local and the script loops
+// on it (scene 432 obj11, the Epoch's cockpit, before `FF 26`). The host fills them each frame from its SPC (ct_field: src/
+// audio.c's outPorts, field.c before the VM's tick); a host that never does reads zeros.
+extern uint8_t g_ctApuOut[4];
+
 // C0/ACFD -- the field VELOCITY + PRIORITY builder, byte-exact (the two components through the
 // hardware multiplier, the $1C80,X bit-0 gate, the $FE00 BOUNCE retry and all of the direct-page
 // staging $01D9/$01DB-$01E1/$01E5). It reads the heading from $01EE rather than taking it as an
