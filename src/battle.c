@@ -1389,32 +1389,50 @@ static int battleFirstEnemy(const uint8_t* s) {    // first alive enemy combatan
   return -1;
 }
 // ---- Target 3: multi-enemy TARGET-SELECT nav (battle_scenario2.md T3, corrects battle_actionfx.md P5.3's
-// "target=$960D" -- $960D is the cursor's OWN battle-obj index, a ROM CONSTANT (#$07), NOT the target;
-// the real selector is $9614 (0..7, our alive-list-$AF02-indexed enemy SLOT, T3.1). ----
-static int battleFirstEnemySlot(const uint8_t* s) {   // first alive enemy SLOT idx 0..7 (not combatant idx)
-  for (int slot = 0; slot < 8; slot++) if (s[0xAF02 + slot] != 0xFF) return slot;
-  return -1;
-}
-// Nav (T3.1, C1/176C-179C byte-exact): dir=+1 (Down/Right) next, dir=-1 (Up/Left) prev; cyclic, SKIPPING
-// any dead slot (our alive-list $AF02==FF equivalent of the ROM's $99C0,X bit7 skip-dead check -- the
-// CLAUDE.md-cited translation of the ROM's transient per-slot target table onto our own alive-list).
-// Bounded loop: the caller only navs while target-select is open, itself only enterable with >=1 alive.
-static void battleTargetNav(uint8_t* s, int dir) {
-  if (!dir) return;
-  int cur = s[0x9614];
-  for (int guard = 0; guard < 8; guard++) {
-    cur = ((cur + dir) % 8 + 8) % 8;
-    if (s[0xAF02 + cur] != 0xFF) { s[0x9614] = (uint8_t)cur; return; }
+// "target=$960D" -- $960D is the cursor's OWN battle-obj index, a ROM CONSTANT (#$07), NOT the target).
+// The selector is $9614, an INDEX into the compacted list $99C0 that C1/20A9 -> C1/2045 builds on every pass of the
+// select (disasm/notes/battle_target_nav_order.md sec. 5) -- not an enemy slot: with slots 0 and 2 eligible the cursor
+// on cmb5 is 1. ----
+// C1/20A9 -> C1/2045 (dis.py 12045 0x55 1 0), X = 3..0A: an enemy enters when present (`$96F5,X`), `$9FF7,X` bit 7 is
+// clear, `$A0A8,X` is clear (group 04 skips that test; it never lists enemies) and `$A09B,X` is clear -- in combatant
+// order into `$99C1,Y`; C1/27C5 shifts the list down because `$99C0` stayed FF (the caster `$960F` = a seat never equals
+// X here). Returns the count.
+static int battleEnemyList(const uint8_t* s, int* list) {
+  int n = 0, g = s[0x960D] & 0x7F;
+  for (int x = 3; x < 0x0B; x++) {
+    if (!s[0x96F5 + x] || (s[0x9FF7 + x] & 0x80) || (s[0xA0A8 + x] && g != 0x04) || s[0xA09B + x]) continue;
+    list[n++] = x;
   }
+  return n;
 }
-// The PC dispatch TARGET = the selected slot $9614, resolved-alive (T3.3 "A = DISPATCH on the selected
-// slot"). Defensive fallback to first-alive if the persisted selection is somehow dead/out-of-range at
-// dispatch time (never strands a turn on a dead target) -- same skip-dead spirit as the nav rule above.
+// The enemy under the cursor: the list's entry `$99C0[$9614]` (C1/207E) -- -1 when the index is past the list's end
+// (the ROM's FF entry: C1/1FD9 raises `$9613` and the pass cancels the select, C1/1564).
+static int battleEnemyCursor(const uint8_t* s) {
+  int list[8], n = battleEnemyList(s, list), i = s[0x9614];
+  return i < n ? list[i] : -1;
+}
+int CtBattleEnemyCursor(const uint8_t* mem) { return battleEnemyCursor(mem); }
+// C1/176C / C1/1786 (dis.py 1176C 0x35 1 0; C1/27FA / C1/2814 the same behind C1/282D): `INC / DEC $9614`, wrapping
+// 0B -> 0 / FF -> 0A, until `$99C0,X` is not FF -- over the fresh list (the pass's C1/1F79 has just rebuilt it). No
+// entry at all: no move (C1/282D).
+static void battleTargetNav(uint8_t* s, int dir) {
+  int list[8], n = battleEnemyList(s, list), i = s[0x9614];
+  if (!dir || !n) return;
+  do {
+    i += dir;
+    if (i == 0x0B) i = 0;
+    else if (i < 0) i = 0x0A;
+  } while (i >= n);
+  s[0x9614] = (uint8_t)i;
+}
+// The PC dispatch TARGET = the cursor's enemy (T3.3 "A = DISPATCH on the selected slot"; C1/1703 takes `$A62D[0]`,
+// which C1/207E / C1/176C set to the same entry). Defensive fallback to the first eligible enemy if the index is past
+// the list at dispatch time (never strands a turn on a dead target).
 static int battleSelectedEnemy(const uint8_t* s) {
-  int slot = s[0x9614];
-  if (slot >= 0 && slot < 8 && s[0xAF02 + slot] != 0xFF) return 3 + slot;
-  int fa = battleFirstEnemySlot(s);
-  return fa >= 0 ? 3 + fa : -1;
+  int t = battleEnemyCursor(s);
+  if (t >= 0) return t;
+  int list[8];
+  return battleEnemyList(s, list) ? list[0] : -1;
 }
 static int battleLeadPc(const uint8_t* s) {         // lead living PC (the enemy-AI target; dossier S4)
   for (int seat = 0; seat < 3; seat++)
@@ -3951,8 +3969,10 @@ static void battleTargetSetRevalidate(CtBattleHost* h) {
     battleTrace(h, "target-empty");
     return;
   }
-  if (s[0x9614] >= 8 || s[0xAF02 + s[0x9614]] == 0xFF)         // C.1: the cursor re-resolves off a dead slot
-    s[0x9614] = (uint8_t)first;
+  // C.1, the non-empty branch: nothing to do here. `$9614` indexes the list the pass's C1/1F79 rebuilds from live RAM,
+  // so when the cursor's enemy drops out of it the same index lands on the next entry at the next pass (oracle f381:
+  // `$99C0` compacted, `$9614` unchanged, `$A62D` the next enemy) -- or past the end, which cancels (C1/1FD9, C1/1564).
+  (void)first;
 }
 // (2) The COMMAND MENU + the ready queue + the current actor are torn down by C1/1BAA, called once per
 //     party seat. The ROM reaches it on ALL THREE outcomes: victory via C1/356D (C1/358B/3593/359B, one
@@ -5641,6 +5661,12 @@ static int battleGroupAll(int grp) { int g = grp & 0x7F; return g == 0x01 || g =
 // takes no Up / Down) and `$A62D := $99C0`. C1/1FCC-1FD9: no entry in $A62D -> `$9613 = FF`, which vetoes the open
 // (C1/137C: `STZ $9614`, the list stays) and cancels a held select (C1/1564 -> C1/1577). The confirm's record takes
 // `$93F1 := $A62D[0]` (C1/1703), the target C1/BB85 puts in $B2AE. Returns the count.
+// C1/1F80 `STZ $9613`, then C1/1FCC-1FD9 after the group handler: no entry of `$A62D[0..0A]` lit -> `$9613 = FF`.
+static void battleTargetLitFlag(uint8_t* s) {
+  s[0x9613] = 0;
+  for (int x = 0; x < 0x0B && (s[0xA62D + x] & 0x80); x++)
+    if (x == 0x0A) s[0x9613] = 0xFF;
+}
 static int battleGroupCasterRadius(int grp) { int g = grp & 0x7F; return g == 0x11 || g == 0x13 || g == 0x14 || g == 0x1B; }
 int CtBattleGroupCasterRadius(int grp) { return battleGroupCasterRadius(grp); }
 static int battleCasterRadiusBuild(CtBattleHost* h, int chooser) {
@@ -5651,9 +5677,9 @@ static int battleCasterRadiusBuild(CtBattleHost* h, int chooser) {
   if (g != 0x11) {                                                      // C1/22A4-22B6 / C1/22D3-22E5
     int want = (g == 0x1B) ? 0x06 : 0x03;
     for (c = 0; c < 3 && s[0x2980 + c] != want; c++) {}
-    if (c >= 3) return 0;
+    if (c >= 3) { battleTargetLitFlag(s); return 0; }
   }
-  if (c < 0 || c >= 3) return 0;
+  if (c < 0 || c >= 3) { battleTargetLitFlag(s); return 0; }
   s[0x9604] = 0; s[0x9605] = (uint8_t)c;
   s[0x9607] = (uint8_t)((g == 0x11 || g == 0x13) ? 0x10 : 0x19);      // C1/2254 / C1/22C2-22C8 / C1/22EA
   battleAreaRadius2701(h);                                              // JSR C1/2701
@@ -5661,6 +5687,7 @@ static int battleCasterRadiusBuild(CtBattleHost* h, int chooser) {
   for (int x = 0; x <= 0x0A; x++) s[0xA62D + x] = s[0x99C0 + x];
   int n = 0;
   for (int x = 0; x < 0x0B; x++) if (!(s[0xA62D + x] & 0x80)) n++;     // C1/1FCC-1FD9
+  battleTargetLitFlag(s);
   return n;
 }
 // The PC-side target LIST (C1/1F79 -> C1/1FF8[grp & 7F], disasm/notes/battle_target_select_pc_side.md sec. 0):
@@ -5717,6 +5744,7 @@ static void battlePcTargetPublish(uint8_t* s, const int* list, int n, int idx) {
   for (int i = 0; i < n; i++) s[0x99C0 + i] = (uint8_t)list[i];
   if (battleGroupAll(s[0x960D])) { for (int i = 0; i < n; i++) s[0xA62D + i] = (uint8_t)list[i]; }
   else if (idx < n) s[0xA62D] = (uint8_t)list[idx];
+  battleTargetLitFlag(s);                                               // C1/1F80 + C1/1FCC-1FD9
 }
 static int battlePcTargetTick(CtBattleHost* h, int caster, int dir) {
   uint8_t* s = h->mem;
@@ -5823,7 +5851,7 @@ static void battleCommitPcAction(CtBattleHost* h, int atk) {
   }
   // C1/16A8-16D4: unless the X shortcut chose ($A114), the chooser's command row goes into its cursor memory
   // (`$9916,X := $95DC,X`, X = $95D5) -- and with the cursor memory off ($A0D4 = 0, CC/E3A1) every seat's row and
-  // memory are zeroed; then `STZ $A114 / $960E / $9614` (the next target select starts from slot 0).
+  // memory are zeroed; then `STZ $A114 / $960E / $9614` (the next target select starts on the list's first entry).
   if (!s[0xA114]) {
     if (s[0x95D5] < 3) s[0x9916 + s[0x95D5]] = s[0x95DC + s[0x95D5]];
     if (!s[0xA0D4]) for (int k = 0; k < 3; k++) { s[0x95DC + k] = 0; s[0x9916 + k] = 0; }
@@ -5958,9 +5986,9 @@ int CtBattleTargetHandSet(CtBattleHost* h, const uint8_t* mem, int* set, int cap
   } else if (battleGroupCasterRadius(group)) {
     for (int i = 0; i < 11 && i < cap && mem[0xA62D + i] >= 3 && mem[0xA62D + i] < 11; i++) set[n++] = mem[0xA62D + i];
   } else {
-    int slot = mem[0x9614];
-    if (slot >= 8 || mem[0xAF02 + slot] == 0xFF) return 0;
-    n = CtBattleHitSet(h, group & 0x7F, 3 + slot, set, cap);
+    int cur = CtBattleEnemyCursor(mem);                          // `$99C0[$9614]`: $9614 indexes the select's list
+    if (cur < 0) return 0;                                        // past the list's end -> nothing
+    n = CtBattleHitSet(h, group & 0x7F, cur, set, cap);
   }
   return n;
 }
@@ -6254,10 +6282,10 @@ static void battleTechNav(CtBattleHost* h, int seat, int dir) {
 //      it; 0F C1/2332, the row: every enemy whose $1D23 is within 20 of the centre's (clamped 00 / FF), the centre first.
 //      Then C1/27E8: `$960C = 80`, `$A62D := $99C0`.
 // C1/27FA / C1/2814 are C1/176C / C1/1786's walk behind C1/282D (no entry at all: no move); with `$960C = 80` C1/15F4
-// skips the pass's own walk. The port's cursor $9614 is the enemy SLOT, not the ROM's index into the compacted $99C0:
-// battleTargetNav's walk over $AF02 visits the same enemies in the same order, and the two values agree while no slot
-// below the cursor is empty. The lists come from the alive list $AF02 (battleTargetSetRevalidate's caveat: the ROM's own
-// gates are $96F5 / $9FF7 / $A0A8 / $A09B).
+// skips the pass's own walk. `$9614` is the index into the list (battleEnemyList: C1/2045's own gates), so an empty
+// slot below the cursor moves the number, not the enemy. C1/1FCC-1FD9: no entry of `$A62D` lit -> `$9613 = FF` (the
+// cursor's index past the list's end, an empty list), which vetoes a tech's open (C1/137C) and cancels a held select at
+// its next pass (C1/1564 -> C1/1569 `STZ $9614`, C1/1577).
 // MEASURED, the rule's cartridge (tools/target_nav_order_cmp.py; four Hetakes, Crono alone): Cyclone's four Downs move
 // $9614 0 -> 3 -> 2 -> 1 -> 0 and its Ups 0 -> 1 -> 2 -> 3 -> 0, `$A62D` = 03 06 / 06 03 / 05 / 04, the radius set
 // around each; Slash's Downs and Ups all step forward. The port walked Cyclone's Down forward and Slash's Up back.
@@ -6283,10 +6311,9 @@ static void battleEnemyTargetPass(CtBattleHost* h, int step) {
   uint8_t* s = h->mem;
   int g = s[0x960D] & 0x7F;
   if (!battleEnemyGroupHandled(g)) return;
-  int list[8], n = 0;
-  for (int slot = 0; slot < 8; slot++) if (s[0xAF02 + slot] != 0xFF) list[n++] = 3 + slot;   // C1/2045 + C1/27C5
-  if (step && n) battleTargetNav(s, step);                       // C1/27FA / C1/2814 (C1/282D: an entry at all)
-  int slot = s[0x9614], cur = (slot < 8 && s[0xAF02 + slot] != 0xFF) ? 3 + slot : (n ? list[0] : 0xFF);
+  int list[8], n = battleEnemyList(s, list);                     // C1/20A9 -> C1/2045 + C1/27C5
+  if (step) battleTargetNav(s, step);                            // C1/27FA / C1/2814 (C1/282D: an entry at all)
+  int cur = s[0x9614] < n ? list[s[0x9614]] : 0xFF;              // `$99C0[$9614]` (FF past the list's end)
   int set[11], m = 0, all = 1;
   if (g == 0x07) { all = 0; }
   else if (g == 0x08 || g == 0x0A) { for (int i = 0; i < n; i++) set[m++] = list[i]; }
@@ -6316,13 +6343,26 @@ static void battleEnemyTargetPass(CtBattleHost* h, int step) {
   } else {                                                       // the set, all of it lit (C1/27E8)
     for (int i = 0; i < m && i < 11; i++) { s[0x99C0 + i] = (uint8_t)set[i]; s[0xA62D + i] = (uint8_t)set[i]; }
   }
+  battleTargetLitFlag(s);                                        // C1/1F80 + C1/1FCC-1FD9
 }
-// The pass's own walk (C1/15F9 -> C1/176C / C1/1786) also lights the entry it lands on: `STA $A62D`.
+// The pass's own walk (C1/15F9 -> C1/176C / C1/1786) also lights the entry it lands on: `STA $A62D`. A group whose
+// handler set `$960C = 80` takes no walk (C1/15F4); the groups the port has no handler for (02 / 05 / 06 one entry,
+// 09 / 18 `$960C = 80`) have none to take either.
 static void battleEnemyTargetWalk(CtBattleHost* h, int dir) {
   uint8_t* s = h->mem;
+  if (!battleEnemyGroupHandled(s[0x960D]) || (s[0x960C] & 0x80)) return;
   battleTargetNav(s, dir);
-  if (battleEnemyGroupHandled(s[0x960D]) && s[0x9614] < 8 && s[0xAF02 + s[0x9614]] != 0xFF)
-    s[0xA62D] = (uint8_t)(3 + s[0x9614]);
+  int t = battleEnemyCursor(s);
+  if (t >= 0) s[0xA62D] = (uint8_t)t;
+}
+// C1/1564: the pass's handler found nothing to light (`$9613` FF) -> C1/1569 `STZ $9614` and C1/1577's cancel tail,
+// before B, A or the walk. Returns 1 when it cancelled.
+static int battleEnemyTargetEmpty(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  if (!battleEnemyGroupHandled(s[0x960D]) || !(s[0x9613] & 0x80)) return 0;
+  battleTargetCancel(h);
+  battleTrace(h, "target-autocancel");
+  return 1;
 }
 // The Tech submenu STATE MACHINE (battle_tech_slice.md §2.3-§2.6), shared by step F (tick edges) + the frozen
 // menu pass (raw edges) -- like battleNav. `cur` = the choosing seat. While the list is up ($9609==0): nav skips
@@ -6348,9 +6388,10 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
           if (battleCasterRadiusBuild(h, cur)) s[0x9609] = 1;   //   (C1/137C `LDA $9613 / BPL` -> C1/1381 STZ $9614)
           else { s[0x9614] = 0; battleTrace(h, "target-veto"); }
         } else {
-          s[0x9609] = 1;
-          if (s[0xAF02 + s[0x9614]] == 0xFF || s[0x9614] >= 8) { int fa = battleFirstEnemySlot(s); if (fa >= 0) s[0x9614] = (uint8_t)fa; }
           battleEnemyTargetPass(h, 0);                          //   C1/1379: C1/1F79, the group's handler
+          if (battleEnemyGroupHandled(s[0x960D]) && (s[0x9613] & 0x80)) {   //   C1/137C `LDA $9613 / BPL`
+            s[0x9614] = 0; battleTrace(h, "target-veto");      //   C1/1381 STZ $9614: the select never opens
+          } else s[0x9609] = 1;                                 //   C1/1389 INC $9609
         }
         battleTechTrace(h, "tech-confirm", cur);
       } else battleTechTrace(h, "tech-grey-block", cur);   // A on a greyed tech = no-op (confirm blocked)
@@ -6373,6 +6414,7 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
       }
     } else {                                               // C1/1561 JSR C1/1F79: the handler first, its own pad
       battleEnemyTargetPass(h, step);
+      if (battleEnemyTargetEmpty(h)) return;                 //   C1/1564
       if (step) battleTrace(h, "target-nav");
       if (dir) { battleEnemyTargetWalk(h, dir); battleTrace(h, "target-nav"); }   //   C1/15F9 (`$960C` clear)
     }
@@ -6628,7 +6670,6 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
       s[0xA43F] += 2;                                            //   C1/12A2 / C1/12A5 `INC $A43F` twice (the hand goes)
       int tgt = battleFirstEnemy(s);
       if (tgt >= 0) {
-        if (s[0xAF02 + s[0x9614]] == 0xFF || s[0x9614] >= 8) { int fa = battleFirstEnemySlot(s); if (fa >= 0) s[0x9614] = (uint8_t)fa; }
         battleTargetMsgPost(h, 0xFF, 0x0B);                      //   C1/129C `LDA #FF / JSL CD/002D`: the latch reset
         s[0x9609] = 1;                                           //   C1/12B6 INC $9609
         s[0x960D] = 7;                                           //   C1/12A8 `LDA #07 / STA $960D`
@@ -6655,6 +6696,7 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
     }
   } else {                                                       // C1/1561, the Att's target select
     battleEnemyTargetPass(h, k.step);                            //   JSR C1/1F79 (07: C1/20A9, no pad of its own)
+    if (battleEnemyTargetEmpty(h)) return;                       //   C1/1564: nothing lit -> the cancel tail
     int dir = k.dn ? 1 : k.up ? -1 : 0;                          //   C1/176C next / C1/1786 previous
     if (dir) { battleEnemyTargetWalk(h, dir); battleTrace(h, "target-nav"); }
     if (k.a) battleCommitPcAction(h, cur);                       //   C1/161A: the confirm (queued; the dispatch runs it)
@@ -12225,7 +12267,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
   // its target at C1/C1DD -- C1/C830's own reroll, ported for the demo's arm only: it keeps the first living slot here,
   // an open stand-in.)
   else if (itemId == 0 && techId == 0 && slot >= 0 && slot < 8) tgt = 3 + slot;
-  else { int fa = battleFirstEnemySlot(s); tgt = (fa >= 0) ? 3 + fa : -1; }
+  else tgt = battleFirstEnemy(s);
   if (tgt < 0) {                                                // degenerate: no enemy alive -> just reload the
     battleAtbLoad(s, atk); battleAtbRearm(s, atk);  //   timer (commit already dequeued)
     if (atk >= 0 && atk < 3) h->pcInTurn[atk] = 0;             // battle_atb_reload.md §D: reload here -> clear the latch
@@ -16966,7 +17008,8 @@ void CtBattleBegin(CtBattleHost* h) {
   battleQueueClear(s);                                          // PC ready-queue empty (per-seat $A6D9=FF, cursor/count 0, S1)
   s[0x95D5] = 0xFF; s[0x95DB] = 0; s[0x9609] = 0;               // no current actor (S2/§B)
   s[0x95DC] = s[0x95DD] = s[0x95DE] = 0;                          // every seat's command row (CF/FB97's clear of $2D00..)
-  s[0x9614] = 0;   // target-select selected SLOT (battle_scenario2.md T3): the one observed data point is
+  s[0x9614] = 0;   // the target cursor, an index into $99C0 (battle_target_nav_order.md sec. 5; T3): the one
+                   // observed data point is
                    // "resolves to first alive slot 0" on the FIRST-EVER entry; slot0 is always alive at
                    // battle start (staging invariant), so this reset reproduces that exactly and gives the
                    // nav a determinate starting point (the ROM's own $9614 init path is an OPEN boundary,

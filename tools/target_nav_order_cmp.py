@@ -23,6 +23,12 @@ $99C0[$9614] (C1/225F -> C1/2701 -> C1/27E8). Slash (tech 02, group 0B, the band
 battle_ab.drive_tech(k) (or the Att's A) with the keys held 2 frames, 60 apart, between the select's open and its A.
 The port: battle.c battleEnemyGroupStep / battleEnemyTargetPass / battleEnemyTargetWalk.
 
+The cases whose name holds ':' grade $9614 as the INDEX into C1/2045's compacted list (dis.py 12045 0x55 1 0; present
+$96F5, $9FF7 bit 7 / $A0A8 / $A09B clear), not an enemy slot: 'gap' stages the fixture without cmb4 (slots 0 / 2 / 3 --
+the Att's Downs walk 0 1 2 0 on the cartridge), 'killed' kills cmb4 first (1 HP, Crono's Att) and opens the select on
+his next turn. The port: battle.c battleEnemyList / battleEnemyCursor / battleTargetNav (battle_target_nav_order.md
+sec. 5).
+
     target-nav <case>: select held cartridge f<a>-f<b> port f<a>-f<b>
     target-nav <case>: $9614 walk cartridge [<i> ..] port [<i> ..]
     target-nav <case>: $9614 $A62D on <n> frames, first difference <none | f<n> cartridge <..> port <..>>
@@ -42,9 +48,20 @@ ROOT = os.path.dirname(TOOLS)
 # (id, op2, tile x, tile y): op 0x83's `8B x y` puts the foot at (x * 16 + 8, y * 16 - 1) -- the cell (x, y - 1)
 PLACED = [(0x5E, 3, 12, 9), (0x5E, 4, 6, 8), (0x5E, 5, 8, 4), (0x5E, 6, 10, 11)]
 GAP = 60
-# (name, Crono's tech row k for battle_ab.drive_tech -- None: the Att, the keys between the select's open and its A)
-CASES = [('Cyclone, Down x4', 0, 'dddd'), ('Cyclone, Up x4', 0, 'uuuu'), ('Cyclone, Right / Left', 0, 'rrll'),
-         ('Slash, Down / Up', 1, 'dduu'), ('Att, Down / Up', None, 'ddduuu')]
+# The fixtures: 'four' = PLACED; 'gap' = the same without cmb4 (op2 4 never staged: slots 0, 2, 3, the cursor's index
+# into $99C0 and the slot differ above the hole); 'killed' = PLACED with cmb4 at 1 HP (f600), Crono's Att kills it
+# (Down, A) and the case's select opens on his next turn (f1379 on both sides) at KILLED_AT -- cmb4 delisted
+# (`$A0A8,4` f817, `$96F5,4` cleared f860).
+FIXTURES = {'four': PLACED, 'gap': [p for p in PLACED if p[1] != 4], 'killed': PLACED}
+KILLED_AT = 1400
+# (name, fixture, Crono's tech row k for battle_ab.drive_tech -- None: the Att, the keys between the select's open and
+# its A)
+CASES = [('Cyclone, Down x4', 'four', 0, 'dddd'), ('Cyclone, Up x4', 'four', 0, 'uuuu'),
+         ('Cyclone, Right / Left', 'four', 0, 'rrll'), ('Slash, Down / Up', 'four', 1, 'dduu'),
+         ('Att, Down / Up', 'four', None, 'ddduuu'),
+         ('gap: Att, Down / Up', 'gap', None, 'ddduuu'), ('gap: Cyclone, Down x3', 'gap', 0, 'ddd'),
+         ('gap: Cyclone, Up x3', 'gap', 0, 'uuu'), ('gap: Slash, Down x3', 'gap', 1, 'ddd'),
+         ('killed: Att, Down / Up', 'killed', None, 'ddduuu'), ('killed: Cyclone, Down x3', 'killed', 0, 'ddd')]
 
 
 def main():
@@ -58,15 +75,21 @@ def main():
         print('target-nav ' + line)
 
     flt = sys.argv[1:3] if len(sys.argv) >= 3 and sys.argv[1] in ('--only', '--skip') else None
-    for i, (name, k, keys) in enumerate(CASES):
+    for i, (name, fx, k, keys) in enumerate(CASES):
         if flt and (flt[1] in name) != (flt[0] == '--only'):
             continue
-        pk = ab.pokes_for([0], extra=bs.staging_pokes(PLACED))
+        pk = ab.pokes_for([0], extra=bs.staging_pokes(FIXTURES[fx]))
         drive = ab.drive_tech(k) if k is not None else [(ab.MENU_AT, 'a', 2), (ab.MENU_AT + 12, 'a', 2)]
+        timed = pre = None
+        if fx == 'killed':
+            hp = bs.cmb_base(4) + 3                        # cmb4's current HP
+            timed = (600, {hp: 1, hp + 1: 0})
+            pre = [(ab.MENU_AT, 'a', 2), (ab.MENU_AT + 12, 'd', 2), (ab.MENU_AT + 24, 'a', 2)]
+            drive = pre + [(f - ab.MENU_AT + KILLED_AT, b, h) for f, b, h in drive]
         at = drive[-1][0]                                  # the select's A: the keys first, GAP frames apart
         drive = drive[:-1] + [(at + GAP * j, b, 2) for j, b in enumerate(keys)] + [(at + GAP * len(keys), 'a', 2)]
         total = at + GAP * len(keys) + 30
-        _, rc, rp, _, _, _ = ab.run(pk, drive, total, 'target_nav_%d' % i, regs=regs, raw=True)
+        _, rc, rp, _, _, _ = ab.run(pk, drive, total, 'target_nav_%d' % i, regs=regs, raw=True, timed=timed)
         sides = {}
         for side, rows in (('cartridge', rc), ('port', rp)):
             sr = [bs.series(rows, a, total) for a in (0x9609, 0x9614, 0xA62D)]

@@ -70,14 +70,67 @@ C1/12B0, a tech's C1/1379) and first on every pass of the Att's and the tech's s
 `$A62D` (the set from battleBuildHitSet / battleBandSet / the row). battleEnemyTargetWalk is C1/176C / 1786 with its
 `STA $A62D`. The other groups (05 / 06 / 09 / 0E and up) keep the old path.
 
+## 5. `$9614` is an index into `$99C0`, not an enemy slot (2026-10-15, second pass)
+
+C1/20A9 (`$80 = 0B`, X = 3, `INC $960A`) -> C1/2045 (dis.py 12045 0x55 1 0):
+
+```
+2047  LDA $96F5,X / BEQ skip        ; present
+204C  LDA $9FF7,X / BMI skip
+2051  LDA $A0A8,X / BEQ ok          ; set: skip unless the group is 04
+205F  LDA $A09B,X / BNE skip
+2064  CPX $960F / BNE               ; the caster ($960F = $95D5, a seat: never X >= 3) -> $99C0
+2071  TXA / STA $99C1,Y / INY       ; the rest in X order
+2076  INX / CPX $80 / BNE 2047
+207B  JSR C1/27C5                   ; $99C0 still FF: shift the list down one
+207E  LDA $9614 / TAX / LDA $99C0,X / STA $A62D
+```
+
+then C1/1FCC-1FD9: no `$A62D[0..0A]` without bit 7 -> `$9613 = FF` (C1/1F80 cleared it). The tech's open (C1/137C)
+reads it as a veto (`STZ $9614`, `$9609` stays 0); the Att's open (C1/12B0) has none, and the held select's next pass
+cancels (C1/1564 -> C1/1569 `STZ $9614` -> C1/1577). Neither opener resets `$9614`: the confirm (C1/1716 area), the
+cancel (C1/1577) and the teardown (C1/1C02) zero it. So the cursor is a position in the compacted list: with an absent
+or dead enemy below it the number and the enemy's slot differ, and when the cursor's own enemy leaves the list the same
+index lands on the next one (battle_queue_death.md A.3, f381: `$99C0` compacted, `$9614` unchanged) -- or past the
+end, which cancels.
+
+MEASURED, the rule's cartridge (tools/target_nav_order_cmp.py, the cases whose name holds ':'):
+
+- **gap** (the four-Hetake fixture without op2 4: slots 0 / 2 / 3, cmb4 never staged): the Att's Downs `$9614` 0 -> 1 ->
+  2 -> 0 and Ups 0 -> 2 -> 1 -> 0, `$A62D` = 03 / 05 / 06; Cyclone's Downs 0 -> 2 -> 1 -> 0, its Ups 0 -> 1 -> 2 -> 0;
+  Slash's Downs 0 -> 1 -> 2 -> 0.
+- **killed** (four Hetakes, cmb4 at 1 HP from f600; Crono's Att, Down, A kills it): `$A0A8,4 = 01` and `$AF02[1] = FF`
+  at f817, `$96F5,4` cleared at f860 (the death routine's CF/FE7B); the next turn's (f1379) Att and Cyclone selects walk
+  the three left as in the gap case.
+
+Old port (fb0ddd5, `$9614` the slot over `$AF02`): 6/18 -- every walk the slot sequence (the gap Att 0 2 3 0 3 2 0, Cyclone Down 0 3 2 0), `$A62D` the same enemies on
+the same frames; the original five cases 15/15 both ways. Ported: 18/18, every held frame of `$9614` / `$A62D`
+identical; the original five cases unchanged (15/15). Pinned: regress check
+`battle-enemy-target-cursor-indexes-the-list-vs-rule-cartridge` (full tier, 2 mutations killed);
+`battle-enemy-target-walk-order-vs-rule-cartridge` now runs the five cases without ':' (`--skip :`).
+
+The port (src/battle.c): battleEnemyList is C1/2045 for X = 3..0A with its four gates (the list no longer comes from
+`$AF02`); battleEnemyCursor = `$99C0[$9614]` (-1 past the end), exported as CtBattleEnemyCursor for
+src/field.c battleTargetCursorRender; battleTargetNav is C1/176C / 1786's wrap (0B -> 0, FF -> 0A, skip FF) over it;
+battleSelectedEnemy reads the cursor (the first entry when the index is past the list -- a defensive fallback, kept);
+battleEnemyTargetPass / battleCasterRadiusBuild / battlePcTargetPublish write `$9613` (battleTargetLitFlag);
+battleEnemyTargetEmpty is C1/1564 on the Att's and the tech's pass; the tech's open takes C1/137C's veto; the openers'
+"dead slot -> first alive" resets are gone (the ROM has none); battleTargetSetRevalidate keeps only its empty-set branch
+(the non-empty re-resolve is the index's own behaviour now). battleEnemyTargetWalk returns for a group with
+`$960C = 80` (C1/15F4) and for the groups the port has no handler for (02 / 05 / 06: one entry; 09 / 18: `$960C = 80`).
+
 ## Open
 
-- **`$9614` is the port's enemy SLOT, the ROM's index into the compacted `$99C0`.** The walks visit the same enemies in
-  the same order, but with an empty slot below the cursor the two numbers differ (slots 0 and 2 alive: the ROM's cursor
-  on cmb5 is 1, the port's 2). Every reader of `$9614` (battleSelectedEnemy, battleTargetSetRevalidate, the openers,
-  src/field.c battleTargetCursorRender) would move with it. Unmeasured.
-- **The list's gates**: the port builds from the alive list `$AF02`; the ROM's C1/2045 / C1/2701 / C1/2332 gate on
-  `$96F5` / `$9FF7` / `$A0A8` / `$A09B` (battleTargetSetRevalidate's caveat). A hidden or dying enemy can differ.
+- ~~`$9614` is the port's enemy SLOT~~ -- closed by sec. 5.
+- ~~The list's gates~~ -- closed by sec. 5 for C1/2045 (the enemy list). The measured death delisted through `$A0A8`
+  and `$AF02` on the same frame, so the fixture does not tell the two apart; a hidden enemy (`$9FF7` bit 7) or one
+  whose `$96F5` drops without `$AF02` would. battleTargetSetRevalidate's empty test still reads `$AF02` + `$AF15`
+  bit 6 (its regress check pins the teardown frames) -- the ROM's is the same C1/1FD9 at the pass.
+- The cursor's own enemy dying while the select is held is derived, not measured: the index then lands on the next
+  entry, or past the end on the last one, and the Att's select cancels at the next pass (C1/1564). The cadence of the
+  pass against the port's render-frame revalidate is the open note of battle_queue_death.md (f378 -> f381).
 - 0B / 0C's band writes `$9604-$9608` and the ROM leaves them; battleBandSet puts them back (the dispatch's area pass
   stages its own). 0D / 0F / 1A are derived, not measured.
 - The item select's enemy groups (C1/14C5) still walk with the old code.
+- The groups 02 / 05 / 06 / 09 / 18 (C1/20D6 / 2136 / 2163 / 20C6 / 2329) have no handler in the port: their `$99C0`,
+  `$A62D` and `$9613` are not published, and the hand reads CtBattleEnemyCursor over the enemy list.

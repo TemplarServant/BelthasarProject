@@ -381,7 +381,7 @@ typedef struct CtBattleHost {
   //     enemy freeze -- back-to-back commits). Reset in CtBattleBegin. Fixes the deferred-confirm boundary
   //     race (the "sometimes A does nothing" drop on the 3 dispatch/span-end frames).
   int schedAtk[3];           // committed attacker combatant idx (FIFO, oldest at [0])
-  int schedTgtSlot[3];       // the enemy SLOT (0..7) captured at confirm ($9614 resolved-alive), per entry
+  int schedTgtSlot[3];       // the enemy SLOT (0..7) captured at confirm (the cursor's enemy - 3), per entry
   int schedN;                // FIFO depth (0..3)
   int schedDispatchDelay;    // battle_pacing_v2.md FIX D: the C1/1B19->C1/4090 executor reach -- a scheduled
                              //   PC action animates ~8f after the freeze clears in the oracle (f636->f644);
@@ -1169,6 +1169,9 @@ int CtBattleGroupPcSide(int grp);
 // 1 when group $960D's handler is the radius around a party member (C1/1FF8[11] / [13] / [14] / [1B]): the select
 // publishes its whole set in $A62D (`$960C = 80`) and the hand lights it.
 int CtBattleGroupCasterRadius(int grp);
+// The enemy under the target cursor: the entry `$9614` indexes in the list C1/20A9 -> C1/2045 builds from live WRAM
+// (`$96F5` / `$9FF7` / `$A0A8` / `$A09B`, combatants 3..0A in order); -1 when the index is past the list's end.
+int CtBattleEnemyCursor(const uint8_t* mem);
 // The per-actor target-cursor OFFSET $9708,cmb / $9713,cmb (battle_multitarget_cursor.md §1): PCs = (0,-16)
 // (CC/E3C7/CC/E3CA), enemies = bytes +1/+2 of the E4/F604 + id*10 graphics record (CC/EBB0/CC/EBB7).
 // The hand's origin is then (live + ofs - (0x10,0)) & 0xFF (C1/19C0-19D4 / C1/1ABA-1ACE). 0 if unavailable.

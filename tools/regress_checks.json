@@ -41287,7 +41287,9 @@
       "name": "battle-enemy-target-walk-order-vs-rule-cartridge",
       "argv": [
         "python",
-        "tools/target_nav_order_cmp.py"
+        "tools/target_nav_order_cmp.py",
+        "--skip",
+        ":"
       ],
       "env": {},
       "inputs": [
@@ -41333,13 +41335,70 @@
         },
         {
           "file": "src/battle.c",
-          "find": "    s[0xA62D] = (uint8_t)(3 + s[0x9614]);",
-          "replace": "    ;",
+          "find": "  if (t >= 0) s[0xA62D] = (uint8_t)t;",
+          "replace": "  (void)t;",
           "why": "C1/176C / C1/1786 without their `STA $A62D`: the Att's lit enemy lags its cursor by a pass"
         }
       ],
       "note_pass": "the enemy target cursor visits the cartridge's enemies on the cartridge's frames: Cyclone (group 12) Down backwards / Up forwards through $99C0, Slash (0B) forward on every key, the Att (07) C1/15F9's walk; $A62D the handler's set every frame",
       "notes": "disasm/notes/battle_target_nav_order.md. C1/1561 runs the group handler C1/1F79 -> C1/1FF8[$960D & 7F] BEFORE the pass's keys; 0B / 0C / 0D (C1/2169 / 2203 / 21AF) step NEXT on `$EF & 09` and `$EF & 06` (C1/27FA both), 0F / 12 / 1A (C1/22F5 / 225F) `$EF & 09` -> C1/27FA next, `$EF & 06` (Down|Left) -> C1/2814 PREVIOUS, and all of them leave `$960C = 80` so C1/15F4 skips C1/15F9's walk (`$EF & 05` Down|Right next, `$EF & 0A` Up|Left previous). MEASURED, the rule's cartridge (four Hetakes at cmb3 12,8 / cmb4 6,7 / cmb5 8,3 / cmb6 10,10, Crono alone): Cyclone's Downs $9614 0 -> 3 -> 2 -> 1 -> 0, $A62D 0306 / 0603 / 05 / 04. The old port walked every group with C1/15F9's mapping and never wrote $A62D in an enemy select: 5/12 (Cyclone Down / Up reversed, Slash's Up backwards). Ported: battle.c battleEnemyGroupStep (the pad), battleEnemyTargetPass (C1/1F79 for 07 / 08 / 0A / 0B-0D / 0F / 12 / 1A), battleEnemyTargetWalk (C1/176C / 1786's STA $A62D)."
+    },
+    {
+      "name": "battle-enemy-target-cursor-indexes-the-list-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/target_nav_order_cmp.py",
+        "--only",
+        ":"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait.state"
+      ],
+      "expect": [
+        "target-nav gap: Att, Down / Up: select held cartridge f641-f1012 port f641-f1012",
+        "target-nav gap: Att, Down / Up: $9614 walk cartridge [0 1 2 0 2 1 0] port [0 1 2 0 2 1 0]",
+        "target-nav gap: Att, Down / Up: $9614 $A62D on 372 frames, first difference none",
+        "target-nav gap: Cyclone, Down x3: select held cartridge f665-f859 port f665-f859",
+        "target-nav gap: Cyclone, Down x3: $9614 walk cartridge [0 2 1 0] port [0 2 1 0]",
+        "target-nav gap: Cyclone, Down x3: $9614 $A62D on 195 frames, first difference none",
+        "target-nav gap: Cyclone, Up x3: select held cartridge f665-f859 port f665-f859",
+        "target-nav gap: Cyclone, Up x3: $9614 walk cartridge [0 1 2 0] port [0 1 2 0]",
+        "target-nav gap: Cyclone, Up x3: $9614 $A62D on 195 frames, first difference none",
+        "target-nav gap: Slash, Down x3: select held cartridge f680-f871 port f680-f871",
+        "target-nav gap: Slash, Down x3: $9614 walk cartridge [0 1 2 0] port [0 1 2 0]",
+        "target-nav gap: Slash, Down x3: $9614 $A62D on 192 frames, first difference none",
+        "target-nav killed: Att, Down / Up: select held cartridge f641-f1773 port f641-f1773",
+        "target-nav killed: Att, Down / Up: $9614 walk cartridge [0 1 0 1 2 0 2 1 0] port [0 1 0 1 2 0 2 1 0]",
+        "target-nav killed: Att, Down / Up: $9614 $A62D on 395 frames, first difference none",
+        "target-nav killed: Cyclone, Down x3: select held cartridge f641-f1618 port f641-f1618",
+        "target-nav killed: Cyclone, Down x3: $9614 walk cartridge [0 1 0 2 1 0] port [0 1 0 2 1 0]",
+        "target-nav killed: Cyclone, Down x3: $9614 $A62D on 216 frames, first difference none",
+        "target-nav: 18/18 identical"
+      ],
+      "pin": [
+        "^target-nav "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    if (!s[0x96F5 + x] || (s[0x9FF7 + x] & 0x80) || (s[0xA0A8 + x] && g != 0x04) || s[0xA09B + x]) continue;",
+          "replace": "    if (0) continue;",
+          "why": "C1/2045 without its gates: the absent / dead cmb4 stays in the list and the cursor stops on it"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  return i < n ? list[i] : -1;\n}\nint CtBattleEnemyCursor",
+          "replace": "  (void)list; (void)n; return (i < 8 && s[0xAF02 + i] != 0xFF) ? 3 + i : -1;\n}\nint CtBattleEnemyCursor",
+          "why": "the old port's reading: $9614 as an enemy SLOT -- above the hole the lit enemy is the slot's, not $99C0[$9614]"
+        }
+      ],
+      "note_pass": "the enemy target cursor $9614 is the index into C1/2045's compacted list $99C0, with an absent enemy (staged gap) and a dead one (killed first) below it: the cartridge's $9614 and $A62D on every held frame of the Att, Cyclone and Slash selects",
+      "notes": "disasm/notes/battle_target_nav_order.md sec. 5. C1/20A9 -> C1/2045 (dis.py 12045 0x55 1 0) lists X = 3..0A that are present ($96F5), $9FF7 bit 7 clear, $A0A8 clear, $A09B clear, compacted (C1/27C5); C1/176C / 1786 / 27FA / 2814 step $9614 through it, C1/207E lights $99C0[$9614]. MEASURED, the rule's cartridge: three Hetakes in slots 0 / 2 / 3 (op2 4 never staged) -- the Att's Downs $9614 0 -> 1 -> 2 -> 0 (the port's slot was 0 -> 2 -> 3 -> 0), Cyclone's Downs 0 -> 2 -> 1 -> 0; a Hetake at 1 HP killed first by Crono (cmb4: $A0A8,4 = 01 f817, $96F5,4 cleared f860, the same frames as $AF02's FF) and the next turn's select (f1379) walks the three left the same way. Ported: battle.c battleEnemyList / battleEnemyCursor / battleTargetNav / battleSelectedEnemy, $9613 (C1/1F80 + C1/1FCC-1FD9) with the open's veto C1/137C and the held select's cancel C1/1564, field.c battleTargetCursorRender (CtBattleEnemyCursor)."
     },
     {
       "name": "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",

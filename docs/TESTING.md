@@ -2422,7 +2422,16 @@ fixture (Crono alone): C1/1561 runs the group handler C1/1F79 before the pass's 
 pad themselves -- Cyclone's group 12 walks `$99C0` BACKWARDS on Down (C1/2814), the band group 0B steps forward on every
 key -- while the Att (07) keeps C1/15F9's walk. Grades, for Cyclone (Downs, Ups, Right / Left), Slash and the Att, the
 frames the select is held, the sequence of `$9614` and `$9614 $A62D` on every held frame. Byte-for-byte against the
-cartridge: re-pin only if the fixture's frames move with an oracle-verified reason. disasm/notes/battle_target_nav_order.md.
+cartridge: re-pin only if the fixture's frames move with an oracle-verified reason. disasm/notes/battle_target_nav_order.md. Runs the five
+cases without ':' (`--skip :`); the gap / killed cases are the next check's.
+
+### battle-enemy-target-cursor-indexes-the-list-vs-rule-cartridge (`python tools/target_nav_order_cmp.py --only :`)
+
+`$9614` is the index into C1/2045's compacted enemy list `$99C0`, not an enemy slot: the same tool's 'gap' fixture
+(three Hetakes in slots 0 / 2 / 3) and 'killed' fixture (cmb4 at 1 HP, killed by Crono's first Att; the next turn's
+select) grade the Att's, Cyclone's and Slash's selects -- the held frames, the `$9614` sequence (the Att's Downs 0 1 2 0
+where the slot was 0 2 3 0) and `$9614 $A62D` on every held frame. Byte-for-byte against the cartridge.
+disasm/notes/battle_target_nav_order.md sec. 5.
 
 ### battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge (`python tools/battle_sim.py fight @048:9 hp=1`)
 
