@@ -8522,6 +8522,9 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
     // them (battlePcTargetPublish: C1/203A, C1/209A, Revive's fallen seats C1/20E0).
     n = 0;
     for (int i = 0; i < 3 && mem[0xA62D + i] < 3; i++) set[n++] = mem[0xA62D + i];
+  } else if (CtBattleGroupCasterRadius(group)) {            // the radius around a party member (C1/224B / C1/22A4 /
+    n = 0;                                                  // C1/22D3 -> C1/27E8): the select published the whole set
+    for (int i = 0; i < 11 && mem[0xA62D + i] >= 3 && mem[0xA62D + i] < 11; i++) set[n++] = mem[0xA62D + i];
   } else {
     int slot = mem[0x9614];
     if (slot < 0 || slot >= 8 || mem[0xAF02 + slot] == 0xFF) return;   // cursor on a dead/absent slot -> nothing

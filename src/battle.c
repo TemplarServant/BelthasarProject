@@ -3184,10 +3184,10 @@ static int battleAreaC586(CtBattleHost* h, int area, int v3A, int pcAtk, int pcT
   if (pcAtk >= 0) { r0A = 0; r0C = r00 = pcAtk; r06 = pcTgt; }           // C248 STZ $0A; C759-C760 $00 (a single tech)
   for (int k = 0, off = 1; k < cnt; k++, off += 3) {                    // the shapes, before anything is written
     int e3D = rom[0x0C0000 + rec + off], e04 = rom[0x0C0001 + rec + off], fn = e04 & 0x7F;
-    // C1/C813 / C1/C78D with the band (0 / 4), C1/C7A7 with the radius (1 / 2: area 03, `01 01 09`). The radius
-    // around the CASTER (C78D + 1: areas 02 / 0A -- Laser Spin, Black Hole ..) is not measured yet: kept out.
+    // C1/C813 / C1/C78D with the band (0 / 4), C1/C7A7 with the radius (1 / 2: area 03, `01 01 09`), and C1/C78D with
+    // the radius around the CASTER (areas 02 `01 00 10` / 0A `01 00 19`: Area Bomb 1F, Tail Spin 2E, Black Hole 37 ..).
     int band = (e3D == 0 || e3D == 4), radius = (e3D == 1 || e3D == 2);
-    if (!((fn == 6 && band) || (fn == 0 && r00 >= 0 && band) || (fn == 1 && radius)) || (e04 & 0x80)) {
+    if (!((fn == 6 && band) || (fn == 0 && r00 >= 0 && (band || radius)) || (fn == 1 && radius)) || (e04 & 0x80)) {
       if (getenv("CT_BATTLE_TRACE"))
         fprintf(stderr, "areafx f%d area %02X entry %d (%02X %02X): this shape is NOT PORTED -- the list kept\n",
                 h->frames, area, k, e3D, e04);
@@ -5566,6 +5566,35 @@ static void battleDemoTurn(CtBattleHost* h) {
 // moves the cursor's first side (C1/1F9D); the set is the handler's.
 static int battleGroupPcSide(int grp) { int g = grp & 0x7F; return g == 0x00 || g == 0x01 || g == 0x03 || g == 0x04; }
 static int battleGroupAll(int grp) { int g = grp & 0x7F; return g == 0x01 || g == 0x04; }   // $960C = 80: no cursor
+// THE RADIUS AROUND A PARTY MEMBER, the select's side (C1/1F79 -> C1/1FF8[grp & 7F]): [11] = C1/224B `STZ $9604 / LDA
+// $960F / STA $9605 / LDA #10 / STA $9607 / JSR C1/2701 / JMP C1/27E8` -- every enemy around the chooser ($960F = $95D5,
+// C1/1F7D); [13] / [14] = C1/22A4 around the seat holding char 03 (`$2980,X = 03`), radius² 10 (14: 19); [1B] = C1/22D3
+// around the seat holding char 06, 19 (no such seat: RTS, the lists stay FF). C1/27E8 `$960C = 80` (no cursor: C1/15F4
+// takes no Up / Down) and `$A62D := $99C0`. C1/1FCC-1FD9: no entry in $A62D -> `$9613 = FF`, which vetoes the open
+// (C1/137C: `STZ $9614`, the list stays) and cancels a held select (C1/1564 -> C1/1577). The confirm's record takes
+// `$93F1 := $A62D[0]` (C1/1703), the target C1/BB85 puts in $B2AE. Returns the count.
+static int battleGroupCasterRadius(int grp) { int g = grp & 0x7F; return g == 0x11 || g == 0x13 || g == 0x14 || g == 0x1B; }
+int CtBattleGroupCasterRadius(int grp) { return battleGroupCasterRadius(grp); }
+static int battleCasterRadiusBuild(CtBattleHost* h, int chooser) {
+  uint8_t* s = h->mem;
+  int g = s[0x960D] & 0x7F, c = chooser;
+  s[0x960C] = 0;                                                        // C1/1F83
+  for (int i = 0; i < 12; i++) { s[0x99C0 + i] = 0xFF; s[0xA62D + i] = 0xFF; }   // C1/1F8F-1F9B
+  if (g != 0x11) {                                                      // C1/22A4-22B6 / C1/22D3-22E5
+    int want = (g == 0x1B) ? 0x06 : 0x03;
+    for (c = 0; c < 3 && s[0x2980 + c] != want; c++) {}
+    if (c >= 3) return 0;
+  }
+  if (c < 0 || c >= 3) return 0;
+  s[0x9604] = 0; s[0x9605] = (uint8_t)c;
+  s[0x9607] = (uint8_t)((g == 0x11 || g == 0x13) ? 0x10 : 0x19);      // C1/2254 / C1/22C2-22C8 / C1/22EA
+  battleAreaRadius2701(h);                                              // JSR C1/2701
+  s[0x960C] = 0x80;                                                     // C1/27E8-27F7
+  for (int x = 0; x <= 0x0A; x++) s[0xA62D + x] = s[0x99C0 + x];
+  int n = 0;
+  for (int x = 0; x < 0x0B; x++) if (!(s[0xA62D + x] & 0x80)) n++;     // C1/1FCC-1FD9
+  return n;
+}
 // The PC-side target LIST (C1/1F79 -> C1/1FF8[grp & 7F], disasm/notes/battle_target_select_pc_side.md sec. 0):
 //   00/80 C1/203A, 01/81 C1/209A (04 too, without the $A0A8 test): a seat is eligible when present ($96F5), $9FF7 bit 7
 //         clear, $A0A8 clear (the status scan's fallen/doomed mark) and $A09B clear; the CASTER ($960F = $95D5) first,
@@ -5609,6 +5638,7 @@ static void battleTargetCancel(uint8_t* s) {
 // C1/1F8F-1F9B + the group handler: `$99C0` (the eligible list) and `$A62D` (the lit targets) FF-filled, then the list,
 // and `$A62D[0] := $99C0[$9614]` for a single group (C1/1FF8's arity, law 6), the whole list for an ALL group.
 static void battlePcTargetPublish(uint8_t* s, const int* list, int n, int idx) {
+  s[0x960C] = 0;                                                        // C1/1F83 (a radius select may have left 80)
   for (int i = 0; i < 12; i++) { s[0x99C0 + i] = 0xFF; s[0xA62D + i] = 0xFF; }
   for (int i = 0; i < n; i++) s[0x99C0 + i] = (uint8_t)list[i];
   if (battleGroupAll(s[0x960D])) { for (int i = 0; i < n; i++) s[0xA62D + i] = (uint8_t)list[i]; }
@@ -5665,6 +5695,9 @@ static void battleCommitPcAction(CtBattleHost* h, int atk) {
     // gone. All-party (Lapis 0x81) remains the O5 boundary. itemTgt = the PC combatant idx (== seat for PCs).
     itemTgt = (h->itemTgtSel >= 0 && h->itemTgtSel < 3 && !(s[0x2980 + h->itemTgtSel] & 0x80)) ? h->itemTgtSel : atk;
     tgt = itemTgt; slot = -1;
+  } else if (techId > 0 && battleGroupCasterRadius(s[0x960D]) && s[0xA62D] >= 3 && s[0xA62D] < 11) {
+    tgt  = s[0xA62D];                                     // C1/1703 `LDA $A62D / STA $93F1,X`: the set's first
+    slot = tgt - 3;
   } else {
     tgt  = battleSelectedEnemy(s);                        // resolved-alive target combatant idx NOW ($9614, T3.3)
     slot = (tgt >= 3) ? (tgt - 3) : -1;                  // enemy slot (or -1 = degenerate no-enemy confirm)
@@ -6122,7 +6155,10 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
         h->pendTechId = s[0x9EE3];                        //   remember the tech through target-select (-> commit)
         s[0x960D] = s[0x9EE4];                            //   §2.5: target group = $9EE4 (0x12) -> open target-select
         if (battleGroupPcSide(s[0x960D])) battlePcTargetOpen(h, cur);   // the PC side: its list, or the VETO (C1/1379)
-        else {
+        else if (battleGroupCasterRadius(s[0x960D])) {          // the radius around a party member: its set, or the veto
+          if (battleCasterRadiusBuild(h, cur)) s[0x9609] = 1;   //   (C1/137C `LDA $9613 / BPL` -> C1/1381 STZ $9614)
+          else { s[0x9614] = 0; battleTrace(h, "target-veto"); }
+        } else {
           s[0x9609] = 1;
           if (s[0xAF02 + s[0x9614]] == 0xFF || s[0x9614] >= 8) { int fa = battleFirstEnemySlot(s); if (fa >= 0) s[0x9614] = (uint8_t)fa; }
         }
@@ -6141,6 +6177,10 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
     if (battleGroupPcSide(s[0x960D])) {                    // the PC side: rebuilt every tick (C1/1561 -> C1/1F79)
       if (!battlePcTargetTick(h, cur, (aE || bE) ? 0 : dir)) return;   //   emptied / shrank -> silent cancel (C1/1564)
       if (dir && !aE && !bE) battleTrace(h, "target-nav");
+    } else if (battleGroupCasterRadius(s[0x960D])) {        // C1/1561 JSR C1/1F79: rebuilt every pass, no cursor
+      if (!battleCasterRadiusBuild(h, cur)) {                //   ($960C = 80); emptied -> C1/1569 the silent cancel
+        battleTargetCancel(s); battleTrace(h, "target-autocancel"); return;
+      }
     } else if (dir) { battleTargetNav(s, dir); battleTrace(h, "target-nav"); }
     if (aE)      battleCommitPcAction(h, cur);             // §2.6 CONFIRM -> commit (threads pendTechId, closes submenu)
     else if (bE) { battleTargetCancel(s); battleTechTrace(h, "target-cancel", cur); }   // B -> back to the tech list
@@ -6396,6 +6436,7 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
         battleTargetMsgPost(h, 0xFF, 0x0B);                      //   C1/129C `LDA #FF / JSL CD/002D`: the latch reset
         s[0x9609] = 1;                                           //   C1/12B6 INC $9609
         s[0x960D] = 7;                                           //   C1/12A8 `LDA #07 / STA $960D`
+        s[0x960C] = 0;                                           //   C1/12B0 JSR C1/1F79: C1/1F83 `STZ $960C`
         battleTrace(h, "target-select");
       } else battleOpenAction(h, cur, 0);                        //   (no enemy at all: never in a measured fight)
     } else if (k.a && s[0x95DC + cur] == 1) {                    // C1/12BC: the Tech list, behind $A0A7 bit 0
@@ -11930,6 +11971,7 @@ static void battleOpenAction(CtBattleHost* h, int atk, int reactive) {
 #define CT_BATTLE_DISPATCH_LAT 5   // pacing_v2 FIX D: oracle freeze-end->animate = 8f (f636->f644); our pop
                                    //   path contributes ~3f -> hold the remaining 5 so the observable matches.
 static void battleDispatchOpen(CtBattleHost* h);
+static int battleC1ActionRoles(CtBattleHost* h);   // C1/4093-40A6 + CC/F156 + C1/4310 (below)
 static void battleDispatchScheduled(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (h->demoDispatchAt >= 0) return;                           // the demo's synchronous C1/B967 owns the open (above)
@@ -12014,6 +12056,50 @@ static void battleDispatchScheduled(CtBattleHost* h) {
     // Blue Imp's attack stopped at its first victim (the list is processed last-first: the Roly took 21, both Imps 0)
     // -- the user, 2026-10-09: "when using cyclone on two enemies, only one of them took damage".
     s[0xB1FC] &= (uint8_t)~0x02;
+    // C1/BB85 `STA $B2AE` / C1/BB88 JSR C1/C1DD -- the area pass runs BEFORE C1/BF79 (the MP, C1/D74F, the effect). A PC's
+    // C1/C1DD is the PC arm of battleEnemyVictimsC1DD's: `STZ $AF23`, C1/CB93's participants, $0C = the tech's area byte
+    // CC/1ACC[id * 2]; with one, C1/C586 (battleAreaC586, around participant 0's seat for C1/C78D). A pass that finds NOBODY
+    // (16-bit `$99C0` = FFFF, C1/C659-C668) with a PC attacker ($B18B < 3, C1/C66A) is C1/C66A-C6A6: `$AE91 = $B18B`, `$AE92
+    // = 02`, `$AE94 = $AE95 = 0`, `$AE96 = 10`, `$AE93 = 7D` with a third participant ($B2EC bit 7 clear), `7C` with a second
+    // ($B2EB != FF), else `7B`, then JSR C1/AC57 -- that ACTION plays (CD/45A6[7B] = `7B 61 00 01 00 00 FF`, the shape of
+    // the status timers' 7F) -- and C1/C72B `$AF23 = 1`, so C1/BB8B -> C1/BC5A after it: C1/BDB3's reloads, C1/BCF8's record
+    // clears. Nothing is spent (C1/BF79 never runs). MEASURED, the rule's cartridge: Robo's Area Bomb (gato_wait, four
+    // Hetakes staged by tools/battle_sim.py) confirmed with cmb4 / cmb6 in radius² 10, both moved out ($1D0C / $1D23 poked)
+    // at f850 while a Hetake's attack runs: the dispatch f953 `$AD8D = 00` (C1:C641), `$9604-$9606 = 00 00 04` (C1:C79C),
+    // `$AE91 = 00 02` (C1:C679), `$AE93 = 7B` (C1:C6A3); `$A013 = 01` f955 (C1:40A9); the close f1058 `$A013 = 00`
+    // (C1:41BD), `$AF23 = 01` (C1:C730), `$AFAB = 72` (C1:BE2A), Robo's MP 63 kept. tools/caster_radius_dispatch_cmp.py.
+    int areaRes = -1;
+    { int area = (rom && techId < 0x75) ? rom[0x0C1ACC + techId * 2] : 0;
+      int p0 = battleTechParticipantSeat(s, rom, techId, 0);
+      if (area && tgt >= 3 && p0 >= 0 && p0 < 3) {
+        s[0xB2AE] = (uint8_t)tgt;                                    // C1/BB85
+        s[0xAF23] = 0;                                               // C1/C1DD STZ $AF23
+        battleTechParticipants(s, rom, techId);                      // C1/C1E1 JSR C1/CB93
+        areaRes = battleAreaC586(h, area, 0, p0, tgt);
+        if (areaRes == 0 && s[0x99C0] == 0xFF && s[0x99C1] == 0xFF && atk >= 0 && atk < 3) {   // C1/C659-C66F
+          s[0xAE91] = (uint8_t)atk; s[0xAE92] = 2;                   // C1/C671-C676
+          s[0xAE94] = 0; s[0xAE95] = 0; s[0xAE96] = 0x10;            // C1/C679-C681
+          s[0xAE93] = (uint8_t)(!(s[0xB2EC] & 0x80) ? 0x7D : s[0xB2EB] != 0xFF ? 0x7C : 0x7B);   // C1/C684-C6A0
+          h->actTechId = s[0xAE93]; h->actItemId = 0; h->actTgtN = 0; h->actDropTech = techId;
+          h->dispOpenPend = 1; h->dispActor = atk; h->dispTgt = -1; h->dispTech = s[0xAE93]; h->dispItem = 0;
+          if (getenv("CT_BATTLE_TRACE"))
+            fprintf(stderr, "techempty f%d seat=%d tech=%02X area=%02X -> action %02X (C1/C66A -> C1/AC57, then C1/BC5A)\n",
+                    h->frames, atk, techId, area, s[0xAE93]);
+          battleTrace(h, "sched-empty-area");
+          return;                                                    // C1/AC57: C1/4058's waits, then C1/40A6
+        }
+        if (areaRes == 0) {                                          // C1/C723 -> C1/C72B with no action: C1/BC5A at once
+          s[0xAF23] = 1;
+          int fl = s[0xB03A + p0];
+          s[0xB188 + p0] = 0; battleAtbLoad(s, p0); battleAtbRearm(s, p0);   // C1/BDB3
+          if (fl) s[0x93EE + p0 * 7] = 0;
+          battleTechCoReloadBDB3(h, techId);
+          if (atk >= 0 && atk < 3) h->pcInTurn[atk] = 0;
+          h->pcInTurn[p0] = 0; s[0xAF22] = 0;                        // C1/BD6B
+          battleTrace(h, "sched-drop-tech");
+          return;
+        }
+      } }
     // C1/BF79 -> C1/D523 -> C1/D573 JSR C1/D74F: a LOCKED participant ($A0D1, +1E bit 3) or one short of MP drops the
     // tech before anything is spent (C1/BBDC -> C1/BC5A: C1/BDB3's reloads, C1/BCF8's record clears) -- battleTechFeasibleD74F.
     if (battleTechFeasibleD74F(h, techId)) {
@@ -12066,8 +12152,13 @@ static void battleDispatchScheduled(CtBattleHost* h) {
       // Whirl confirmed during Yakra's attack, then Frog's Slurp on himself before its dispatch): at the dispatch f937
       // `$99C0 = 03` (C1:27C5, `$99CC = 01` C1:C746) and `$AD8E = 03` -- the Slurp's PC list `02 00 01` in $99C0 is gone.
       // The port had held that table to the dispatch: Fire Whirl struck Frog, Crono and Lucca (the user, 2026-10-15).
+      // The radius around the CASTER (groups 11 / 13 / 1B, areas 02 / 0A) is the same pass with C1/C78D: `$9605 = $00`,
+      // participant 0's seat, `$9607 = 10 / 19`. MEASURED, the rule's cartridge (four Hetakes around a lone caster):
+      // Area Bomb 1F `$9604-$9608 = 00 00 04 10 00` (`$9605` by C1:C797, `$99CC = 01` C1:C746), `$AD8E = 04 06`; Black
+      // Hole 37 `00 00 03 19 00`, `$AD8E = 03 04 06` -- the group's own set gave one victim.
       { int area = (rom && techId < 0x75) ? rom[0x0C1ACC + techId * 2] : 0;
-        if (h->actTgtN == 0 && area && tgt >= 3 && actor >= 0 && actor < 3 && battleAreaC586(h, area, 0, actor, tgt) == 1) {
+        if (h->actTgtN == 0 && area && tgt >= 3 && actor >= 0 && actor < 3 &&
+            (areaRes >= 0 ? areaRes : battleAreaC586(h, area, 0, actor, tgt)) == 1) {   // (the pass above, before C1/BF79)
           s[0xB2AE] = (uint8_t)tgt;                                  // C1/C74C's $06: the ROM's $B2AE is the target
           for (int x = 0; x < 0x0B && h->actTgtN < 8; x++) {
             int v = s[0xAD8E + x];
@@ -12121,6 +12212,19 @@ static void battleDispatchOpen(CtBattleHost* h) {
   if (!h->actOpenWiped) { s[0xA0FD]++; CtBattlePcLadderWipe(h); }   // C1/4058-405B at the open, the PC dispatch path --
   h->actOpenWiped = 0;                                         //   unless C1/4058 ran it two frames ago (battleOpenWipe)
   battleOpen409C(h);                                   // CC/F102 at C1/409C, before INC $A013
+  if (h->actDropTech) {                                        // C1/C66A's action 7B-7D (the empty area pass): C1/40A6 on the
+    battleC1ActionRoles(h);                                    //   header C1/C66A wrote -- the roles and CD/45A6[$AE93], as
+    h->actAttacker = s[0xA014]; h->actTarget = (s[0xA017] & 0x80) ? -1 : s[0xA017];   // the status timers' 7F opens
+    h->actIsTech = 1; h->actTechId = s[0xAE93]; h->actItemId = 0; h->actPhysScript = 0;
+    h->actCrit = 0; h->actCritFlash = 0; h->actMiss = 0; h->actValue = 0;
+    h->actTgtN = 1; h->actTgtList[0] = h->actTarget; h->actTgtVal[0] = 0; h->actTgtApply[0] = 0;
+    h->actApplied = 1; h->popupSpawned = 1; h->sfxAtkPosted = 2; h->critFlash2Done = 1;
+    h->pcAtkAnchored = 0; h->pcAtkMvActive = 0; h->pcAtkArrRel = -1; h->pcAtkRetEndRel = -1;
+    h->actStart = h->frames; h->actSpan = 0x7FFF; h->actEndByScript = 0; h->actScriptEnd = 0; h->actEndRel = 0;
+    h->actEndHold = 0; h->ascLoaded = 0;
+    battleTrace(h, "pc-act-empty-area");
+    return;
+  }
   if (techId == 0 && itemId == 0) battlePcAtkArm(h);           // PHYSICAL: the op-18 engage walk (battlePcAtkArm)
   else { h->pcAtkAnchored = 0; h->pcAtkMvActive = 0; h->pcAtkArrRel = -1; h->pcAtkRetEndRel = -1; h->actPhysScript = 0; }
   h->sfxAtkPosted = 0; h->actStart  = h->frames; h->actApplied = 0; h->popupSpawned = 0; h->critFlash2Done = 0; h->ascLoaded = 0;
@@ -15397,7 +15501,8 @@ static void battleAdvanceAction(CtBattleHost* h) {
     // flee end writes back through C1/8212's chain, not through an action's hit path.
     // The counter path's arm (C1/8626-8704), for every action that reaches its tail -- a hit or a miss (C1/BB2D: nothing
     // reads the result); a status timer's action 7F and a script-ended window (the run-off) do not.
-    if (!h->actStatusFx && !h->actEndByScript && !h->actCounter) battleCounterArmROM(h, h->actTgtN, h->actTgtList);
+    if (!h->actStatusFx && !h->actEndByScript && !h->actCounter && !h->actDropTech)   // (C1/BC5A: no C1/BC4A, no victims)
+      battleCounterArmROM(h, h->actTgtN, h->actTgtList);
     int wasCounter = h->actCounter;                          // (kept for the reload below)
     h->actCounter = 0;                                       // (a counter runs inside C1/8706's loop: it arms none)
     if (h->actStatusFx) {
@@ -15468,7 +15573,13 @@ static void battleAdvanceAction(CtBattleHost* h) {
     // (Participant 0's factor, CC/2BDC >> 4, divides by the $2A C1/C90B left -- `LDX #000A` has no `STX $2A` at
     // C1/BE17 -- which is 0, so it never applies: a single tech's reload is the plain one.) MEASURED
     // (battle_dual_triple_techs.md sec. 8): Ice Sword `$AFAB = 48 7A` from `$B158 = 48 66`, Delta Force `48 84 94`.
-    if (isPc && h->actTechId > 0) battleTechCoReloadBDB3(h, h->actTechId);
+    if (isPc && h->actDropTech) {                              // C1/C72B `$AF23 = 1` -> C1/BB8B -> C1/BC5A: C1/BDB3 for the
+      int fl = s[0xB03A + atk];                                 //   tech whose pass was empty (`$B188 = 0`, the flag's record
+      s[0xAF23] = 1; s[0xB188 + atk] = 0;                       //   arm), then C1/BCF8 (`STZ $AF22`, C1/BD6B)
+      if (fl) s[0x93EE + atk * 7] = 0;
+      battleTechCoReloadBDB3(h, h->actDropTech);
+      s[0xAF22] = 0;
+    } else if (isPc && h->actTechId > 0) battleTechCoReloadBDB3(h, h->actTechId);
     }
     if (isPc && atk >= 0 && atk < 3 && !statusFx) h->pcInTurn[atk] = 0;   // battle_atb_reload.md §D: CLEAR the turn latch at
                                                                //   span-end (C1:85D8, the C1:BCEB reload twin) -> the
@@ -15537,6 +15648,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
     h->actEndByScript = 0; h->actEndRel = 0; h->actScriptEnd = 0; h->actEndHold = 0;
     if (statusFx) { h->actStatusFx = 0; battleStatusActClose(h); }   // C1/41BA's return: C1/AC85 -> C1/EC7F, the handler's tail
     if (h->actForced) { h->actForced = 0; s[0xAF23]++; }             // ...or FD/AB30's: FD/AB72 / AB9E `INC $AF23`
+    h->actDropTech = 0;
   }
 }
 
@@ -16606,7 +16718,7 @@ void CtBattleBegin(CtBattleHost* h) {
   h->demoPass = 0;                                                   // no demo pass (C1/8461 -> C1/B725) in flight
   h->demoOpenAt = h->demoDispatchAt = -1;                            // ...and no synchronous C1/B967 pending
   h->actStatusFx = 0; h->stActOpenAt = -1; h->stActHandler = -1; h->stResumeX = -1;   // no timer handler's action
-  h->stSweepAtEnd = 0; h->stActKind = 0; h->stForcedAtk = h->stForcedTgt = -1; h->actForced = 0; h->h12TailPc = 0;
+  h->stSweepAtEnd = 0; h->stActKind = 0; h->stForcedAtk = h->stForcedTgt = -1; h->actForced = 0; h->actDropTech = 0; h->h12TailPc = 0;
   h->llSeat = -1; h->llCont = 0; h->llSlot = -1; h->llMsgT = -1; h->llMsgClose = -1;   // no C1/B223 suspended on a revive
   h->resultPhase = -1; h->resultPhaseT = 0;                          // CD/01B3 per-line phase (not opened)
   for (int seat = 0; seat < 3; seat++) {          // the pose-window ladder starts disarmed (CC/F06B's

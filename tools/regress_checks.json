@@ -41105,6 +41105,118 @@
       "notes": "The user, 2026-10-15 (translated from Portuguese): 'in the battle against Yakra I used Slurp with Frog on himself, and also Fire Whirl with Crono and Lucca; Crono attacked Frog ... and killed Frog'. The port held the $99C0 a radius tech's target select left to its dispatch; a PC-side select in between (Slurp, group 80, caster first) rewrote it to 02 00 01 and Fire Whirl struck Frog, Crono and Lucca. The cartridge's C1/C586 (area 03 = CC/2B1C `01 / 01 01 09`) centres the radius C1/2701 on the action's target at the dispatch: $99C0 = 03 (C1:27C5), $99CC = 01 (C1:C746), $AD8E = 03 at f937. Fixture: gato_wait staged with Yakra (battle_sim's op 0x83), party Crono/Lucca/Frog, $283F = E0, ACTIVE mode ($2990 = C4). The HP values are info only (the damage's RNG). Re-pin only for a measured change of the drive's frames on BOTH sides."
     },
     {
+      "name": "battle-caster-radius-tech-victims-at-dispatch-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/caster_radius_dispatch_cmp.py",
+        "--skip",
+        "walked out"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait.state"
+      ],
+      "expect": [
+        "caster-radius Area Bomb: select ($9609 $960C $A62D) on 12 frames, first difference none",
+        "caster-radius Area Bomb: the hand's sprites over the select cartridge [58,67 98,97] port [58,67 98,97]",
+        "caster-radius Area Bomb: dispatch ($AE93 = 1F) cartridge f953 port f953",
+        "caster-radius Area Bomb: $9604 $9605 $9607 $9608 at the dispatch cartridge 00001000 port 00001000",
+        "caster-radius Area Bomb: $9606 (the record's target $B2AE) at the dispatch cartridge 04 port 04",
+        "caster-radius Area Bomb: victims ($AD8D / $AD8E) cartridge 02 [04 06] port 02 [04 06]",
+        "caster-radius Tail Spin: dispatch ($AE93 = 2E) cartridge f742 port f742",
+        "caster-radius Tail Spin: $9606 (the record's target $B2AE) at the dispatch cartridge 04 port 04",
+        "caster-radius Tail Spin: victims ($AD8D / $AD8E) cartridge 02 [04 06] port 02 [04 06]",
+        "caster-radius Tail Spin: cmb4 took damage in the span cartridge yes port yes",
+        "caster-radius Tail Spin: cmb6 took damage in the span cartridge yes port yes",
+        "caster-radius Black Hole: select ($9609 $960C $A62D) on 12 frames, first difference none",
+        "caster-radius Black Hole: the hand's sprites over the select cartridge [58,67 98,97 B8,77] port [58,67 98,97 B8,77]",
+        "caster-radius Black Hole: dispatch ($AE93 = 37) cartridge f998 port f998",
+        "caster-radius Black Hole: $9604 $9605 $9607 $9608 at the dispatch cartridge 00001900 port 00001900",
+        "caster-radius Black Hole: $9606 (the record's target $B2AE) at the dispatch cartridge 03 port 03",
+        "caster-radius Black Hole: victims ($AD8D / $AD8E) cartridge 03 [03 04 06] port 03 [03 04 06]",
+        "caster-radius Area Bomb + Down: select ($9609 $960C $A62D) on 24 frames, first difference none",
+        "caster-radius Area Bomb + Down: $9606 (the record's target $B2AE) at the dispatch cartridge 04 port 04",
+        "caster-radius Area Bomb, none near: select ($9609 $960C $A62D) on 0 frames, first difference none",
+        "caster-radius Area Bomb, none near: dispatch ($AE93 = 1F) cartridge fNone port fNone",
+        "caster-radius: 43/43 identical"
+      ],
+      "pin": [
+        "^caster-radius "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "(fn == 0 && r00 >= 0 && (band || radius))",
+          "replace": "(fn == 0 && r00 >= 0 && band)",
+          "why": "the radius around the caster not ported (the old port): Area Bomb, Tail Spin and Black Hole dispatch the group's own set -- one victim"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "    tgt  = s[0xA62D];                                     // C1/1703 `LDA $A62D / STA $93F1,X`: the set's first",
+          "replace": "    tgt  = battleSelectedEnemy(s);                        // C1/1703 `LDA $A62D / STA $93F1,X`: the set's first",
+          "why": "the confirm keeps the cursor's enemy (the old port) instead of $A62D[0]: Area Bomb's $9606 is cmb3, the cartridge's cmb4"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "        else if (battleGroupCasterRadius(s[0x960D])) {          // the radius around a party member: its set, or the veto",
+          "replace": "        else if (0) {          // the radius around a party member: its set, or the veto",
+          "why": "the select opens on the enemy cursor (the old port): no $A62D set, $960C 00, one hand, and 'none near' opens and dispatches"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  } else if (CtBattleGroupCasterRadius(group)) {            // the radius around a party member (C1/224B / C1/22A4 /",
+          "replace": "  } else if (0) {            // the radius around a party member (C1/224B / C1/22A4 /",
+          "why": "the hand reads the cursor's enemy through CtBattleHitSet (the old renderer): one hand on cmb3 instead of the set $A62D"
+        }
+      ],
+      "note_pass": "Area Bomb (1F) and Tail Spin (2E, area 02) and Black Hole (37, area 0A), each cast alone among four staged Hetakes: the select lights the set around the caster ($A62D, `$960C = 80`, the hand on each), the record's target is $A62D[0] ($9606 at the dispatch), the dispatch's area pass C1/C78D + C1/2701 takes the cartridge's victims; nobody in the radius vetoes the open",
+      "notes": "Groups 11 / 13 / 1B light every enemy around the caster at the select (C1/224B / 22A4 / 22D3 -> C1/2701); their area byte 02 (CC/2B18 `01 / 00 00 10`) or 0A (CC/2B38 `01 / 00 00 19`) sends C1/C1DD's PC arm ($3A = 3, C1/C518-C536) through C1/C586 with C1/C95C[0] = C1/C78D and C1/1FDD routine 1 = C1/2701 (battle.c battleAreaC586). MEASURED, the rule's cartridge (--monitor --writer): Area Bomb's dispatch f953 `$9605 = 00` by C1:C797, `$99CC = 01` by C1:C746, `$99C0` by C1:27D2, `$AD8D = 02 04 06`; Black Hole f998 `$9604-$9608 = 00 00 03 19 00`, `$AD8D = 03 03 04 06`. The port kept these shapes out and dispatched one victim. 2026-10-15 (b): the select is ported (battle.c battleCasterRadiusBuild: C1/1F79 -> C1/224B / 22A4 / 22D3 -> C1/2701 -> C1/27E8, `$960C = 80`, `$A62D := $99C0`; an empty set is C1/1FD9's `$9613 = FF`, the open's veto C1/137C and the held select's cancel C1/1564), the confirm's record target is `$93F1 := $A62D[0]` (C1/1703, dis.py 116A8), and the hand reads $A62D (field.c battleTargetCursorRender). MEASURED, the rule's cartridge: Area Bomb's select f737-f748 `$9609 = 01`, `$960C = 80`, `$A62D = 04 06 FF`, OAM $0700 = 58,67 58,67 98,97 with $0900 = EA (sprite 3 hidden) / FE on the page-3 rebuilds; $9606 = 04 at the dispatch (the port had 03, the first living enemy). The empty area pass is battle-caster-radius-empty-pass-plays-7b-then-drops-vs-rule-cartridge. disasm/notes/battle_multitarget.md sec. 11."
+    },
+    {
+      "name": "battle-caster-radius-empty-pass-plays-7b-then-drops-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/caster_radius_dispatch_cmp.py",
+        "--only",
+        "walked out"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait.state"
+      ],
+      "expect": [
+        "caster-radius Area Bomb, walked out: select ($9609 $960C $A62D) on 12 frames, first difference none",
+        "caster-radius Area Bomb, walked out: dispatch ($AE93 = 7B) cartridge f953 port f953",
+        "caster-radius Area Bomb, walked out: $9606 (the record's target $B2AE) at the dispatch cartridge 04 port 04",
+        "caster-radius Area Bomb, walked out: victims ($AD8D / $AD8E) cartridge 00 [-] port 00 [-]",
+        "caster-radius Area Bomb, walked out: $AE91 $AE92 / $AE96 at the dispatch cartridge 0002 / 10 port 0002 / 10",
+        "caster-radius Area Bomb, walked out: span ($A013) cartridge f955-f1058 port f955-f1058",
+        "caster-radius Area Bomb, walked out: after the close $AF23 / MP / $AFAB cartridge 01 6300 72 port 01 6300 72",
+        "caster-radius: 13/13 identical"
+      ],
+      "pin": [
+        "^caster-radius "
+      ],
+      "tier": "quick",
+      "timeout_s": 120,
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "        if (areaRes == 0 && s[0x99C0] == 0xFF && s[0x99C1] == 0xFF && atk >= 0 && atk < 3) {   // C1/C659-C66F",
+          "replace": "        if (0) {   // C1/C659-C66F",
+          "why": "the empty pass drops the tech at once (C1/C72B without C1/C66A's action): no action 7B, no $A013 span"
+        }
+      ],
+      "note_pass": "Area Bomb confirmed with two Hetakes in its radius, both moved out before the dispatch: the empty area pass plays action 7B (C1/C66A -> C1/AC57) f955-f1058 and then drops the tech (C1/C72B `$AF23 = 1`, C1/BB8B -> C1/BC5A: Robo's ATB reloaded, MP kept)",
+      "notes": "disasm/notes/battle_multitarget.md sec. 11. C1/BB88 JSR C1/C1DD comes before C1/BF79 (the MP, C1/D74F, the effect): a PC tech's area pass that finds nobody (16-bit `$99C0` = FFFF, C1/C659-C668) with a PC attacker (C1/C66A `LDA $B18B / CMP #03 / BCS ->C6A6`) stages `$AE91 = $B18B`, `$AE92 = 02`, `$AE94 = $AE95 = 0`, `$AE96 = 10`, `$AE93 = 7D` / `7C` / `7B` by the participants $B2EC / $B2EB (C1/C684-C6A0), runs that action (JSR C1/AC57; CD/45A6[7B] = `7B 61 00 01 00 00 FF`, the shape of the status timers' 7F), then C1/C72B `$AF23 = 1` and C1/BB8B -> C1/BC5A = C1/BDB3 (the reloads) + C1/BCF8 (the record clears). An enemy attacker ($B18B >= 3) goes straight to C1/C72B. MEASURED, the rule's cartridge (--monitor --writer; the fixture's feet poked at f850 on both sides): the dispatch f953 `$AD8D = 00` (C1:C641), `$9604-$9606 = 00 00 04` (C1:C79C), `$AE91-92 = 00 02`, `$AE93 = 7B` (C1:C6A3); `$A013 = 01` f955 (C1:40A9); the close f1058 `$A013 = 00` (C1:41BD), `$AF23 = 01` (C1:C730), `$AFAB = 72` (C1:BE2A); Robo's MP 63 kept; the next Hetake action f1062 on both sides. The port fell back to the group's own set (battleBuildHitSet: the record's target alone) and spent the MP. Ported: battleDispatchScheduled runs the pass before C1/D74F and stages C1/C66A; the action opens on C1/C66A's header through battleC1ActionRoles (battleDispatchOpen, actDropTech) and its close runs C1/BC5A. 7C / 7D (a dual / triple tech) are derived, not measured."
+    },
+    {
       "name": "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",
       "tier": "full",
       "argv": [

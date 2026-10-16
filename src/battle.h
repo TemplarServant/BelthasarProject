@@ -587,6 +587,8 @@ typedef struct CtBattleHost {
   int stActKind;             // what stActOpenAt opens: 0 = a status timer's action 7F, 1 = FD/AB30's forced physical (C1/BFAA)
   int stForcedAtk, stForcedTgt;   // ...its attacker (the confused / berserk PC) and the target FD/AB30 drew
   int actForced;             // the live action is FD/AB30's: its return is where `INC $AF23` (FD/AB72 / AB9E) lands
+  int actDropTech;           // the live action is C1/C66A's 7B-7D for this PC tech, whose area pass found nobody: its close is
+                             //   C1/C72B (`$AF23 = 1`) and C1/BB8B -> C1/BC5A (C1/BDB3's reloads of this tech's participants)
   // --- THE DEAD-FLAG SWEEP C1/B223 SUSPENDED (LIFELINE, C1/B30F-B390): a fallen PC with +22 bit 7 is revived INSIDE the
   //     sweep -- action 7A (C1/AC57) and the CD/0021 #9 message run there, and the sweep and its caller go on after them.
   int llSeat;                // the seat being revived (-1 = no sweep suspended); the sweep resumes at llSeat + 1
@@ -1157,6 +1159,9 @@ int CtBattleEnemyIdleWin(int id, int mode, int facing, uint8_t poses[8], uint8_t
 int CtBattleHitSet(CtBattleHost* h, int group, int primary, int* out, int cap);
 // 1 when target group $960D's handler (C1/1FF8[grp & 7F]) walks the PC side: 00 / 01 / 03 / 04, bit 7 or not.
 int CtBattleGroupPcSide(int grp);
+// 1 when group $960D's handler is the radius around a party member (C1/1FF8[11] / [13] / [14] / [1B]): the select
+// publishes its whole set in $A62D (`$960C = 80`) and the hand lights it.
+int CtBattleGroupCasterRadius(int grp);
 // The per-actor target-cursor OFFSET $9708,cmb / $9713,cmb (battle_multitarget_cursor.md §1): PCs = (0,-16)
 // (CC/E3C7/CC/E3CA), enemies = bytes +1/+2 of the E4/F604 + id*10 graphics record (CC/EBB0/CC/EBB7).
 // The hand's origin is then (live + ofs - (0x10,0)) & 0xFF (C1/19C0-19D4 / C1/1ABA-1ACE). 0 if unavailable.

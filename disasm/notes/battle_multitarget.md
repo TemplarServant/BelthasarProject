@@ -277,8 +277,8 @@ POSITIONS: the walkers stopped for a whole enemy turn instead of at C1/4058's $A
 zero $E5 (the $A4 cycle ran a group ahead). Both fixed and graded: tools/naga_walk_cmp.py, 3600 frames identical
 (check battle-naga-ettes-walk-as-the-cartridge-through-their-turns). The user's exact moment is not in the snapshot (a
 CTFS holds no battle), so the case is closed by the mechanism, not by a replay.
-Still open: the port gates the candidates on `$AF02` alone, not the ROM's four bytes; groups 0D 0F 11 13 1B (the other
-shapes) still dispatch one victim. Groups 0B / 0C: see section 10.
+Still open: the port gates the candidates on `$AF02` alone, not the ROM's four bytes; groups 0D 0F (the other
+shapes) still dispatch one victim. Groups 0B / 0C: see section 10; groups 11 13 1B: section 11.
 
 ---
 
@@ -313,8 +313,8 @@ Fire Whirl dispatches: f937 `$B2AE = 03` (C1:BB88), `$99CC = 01` (C1:C746), `$99
 The port held the select's table to the dispatch (`hitSetHeld`, from the 2026-10-09 Cyclone report, whose cause was
 the `$B1FC` latch below): Fire Whirl struck Frog, Crono and Lucca (the user, 2026-10-15). It now runs the same pass
 (battle.c battleAreaC586 + battleAreaRadius2701); tools/radius_dispatch_cmp.py, check
-battle-radius-tech-victims-rebuilt-at-dispatch-vs-rule-cartridge. Still open: the radius around the CASTER (C1/C78D +
-routine 1: areas 02 / 0A -- techs 1F, 2E, 37, 40, 6A) is not measured and keeps the group's own set.
+battle-radius-tech-victims-rebuilt-at-dispatch-vs-rule-cartridge. The radius around the CASTER (C1/C78D + routine 1:
+areas 02 / 0A -- techs 1F, 2E, 37, 40, 6A) is measured and ported since: section 11.
 
 **Fixture** saves/battle_re/loc070_imps_roly_pre_lake.state (+ .lakewram): loc 070 reloaded by the ROM's loader
 (`--teleport 112 12 18 1`) after bat6's fight was won, its group (obj22's ambush: obj23 / obj24 Blue Imps, obj25 the
@@ -369,3 +369,78 @@ battle-flame-toss-band-vs-rule-cartridge.
 
 **Open**: no live fixture yet where the cartridge's Flame Toss takes two victims (the band is graded by the sweep);
 group 0D (C1/21AF, tech 5A) and the area entries other than C1/C78D / C1/C813 + routines 0 / 4 are not ported.
+
+---
+
+## 11 — 2026-10-15: the radius around the caster (areas 02 / 0A: Area Bomb, Tail Spin, Black Hole)
+
+The techs whose area byte (CC/1ACC) is 02 or 0A: 1F Area Bomb and 2E Tail Spin (group 11), 40 and 6A (group 13), 37
+Black Hole (group 1B). Area 02 = CC/2B18 `01 / 00 00 10`, area 0A = CC/2B38 `01 / 00 00 19`: one entry, C1/C95C[0] =
+C1/C78D, routine 1 (C1/2701), radius² 10 / 19.
+
+**The select** (C1/1FF8): [11] = C1/224B `STZ $9604 / LDA $960F / STA $9605 / LDA #10 / STA $9607 / JSR C1/2701 / JMP
+C1/27E8` -- every enemy around the chooser, no cursor (`$960C = 80`); [13]/[14] = C1/22A4, the centre the seat holding
+char 03 (`$2980,X = 03`), radius² 10 (14: 19); [1B] = C1/22D3, the seat holding char 06, radius² 19.
+
+**The dispatch.** C1/C1DD's group chain sends 10 11 13 14 15 1B to C1/C532 (`$3A = 3`: the list as it is), then C1/C57F
+`LDA $0C / BNE` -> C1/C586. C1/C78D: `$9604 = $0A` (0, C1/C248), `$9605 = $00` (participant 0's seat, C1/C759-C760),
+`$9606 = $06` (`$B2AE`), `$9607 = $08`, `$9608 = $0E`; C1/C741 `$99CC := 01`, C1/1FDD[1] = C1/2701 around `$9605`, C1/C600
+copies `$99C0` into `$AD8E`. An empty list is C1/C659 -> C1/C72B (`$AF23 = 1`), and C1/BB8B `LDA $AF23 / BNE` -> C1/BC5A
+drops the tech.
+
+**Measured**, the rule's cartridge: gato_wait staged with four Hetakes by tools/battle_sim.py (op 0x83, tiles (12,9)
+(6,8) (8,4) (10,11) -> cells (12,8) (6,7) (8,3) (10,10)), the caster alone in seat 0 (foot 86,90 -> cell 8,9): squares
+17 / 8 / 36 / 5. Area Bomb (Robo, drive_tech 6): the select f737 `$99C0 = 04 06` (C1:27D2, `$9605 = 00` C1:2254); the
+dispatch f953 `$9604-$9608 = 00 00 04 10 00` (`$9605` by C1:C797), `$99CC = 01` (C1:C746), `$AD8D = 02 04 06`. Tail
+Spin (Ayla, 5): f742, the same. Black Hole (Magus, 6): f998 `00 00 03 19 00`, `$AD8D = 03 03 04 06` -- cmb3 at 17 is in
+19's radius and out of 10's. With nobody inside 10 the select confirms nothing (an earlier layout: `$99C0` all FF at
+f739, no dispatch).
+
+**Ported**: battleAreaC586's gate takes C1/C78D with the radius as well as the band (`fn == 0` and `band || radius`); the
+staging was already C1/C78D's. Before, these shapes were "not ported" and the dispatch took battleBuildHitSet's
+single-target fallback: one victim. tools/caster_radius_dispatch_cmp.py, check
+battle-caster-radius-tech-victims-at-dispatch-vs-rule-cartridge: 21/21 (victims, staging bytes, who took damage).
+
+**The select, ported 2026-10-15 (b).** C1/1369 (the tech's A) `$960D := $9EE4`, JSR C1/1F79: `$960F := $95D5`, `STZ $9613
+/ $960C / $960A`, `$99C0` and `$A62D` FF-filled (C1/1F8F), the handler C1/1FF8[grp & 7F]; C1/27E8 `$960C = 80` and `$A62D :=
+$99C0` (C1/27ED-27F7). C1/1FCC-1FD9: no entry of `$A62D` below 80 -> `$9613 = FF`, which vetoes the open (C1/137C `BPL`,
+else C1/1381 `STZ $9614` and the list stays) and cancels a held select (C1/1561 runs C1/1F79 again every pass; C1/1564 ->
+C1/1569 -> the C1/1577 tail). `$960C` bit 7 makes C1/15F4 skip Up / Down: no cursor. The confirm C1/161A writes the
+command record at C1/16DA-1713: `$93F0 := $9615`, **`$93F1 := $A62D`** (C1/1703) -- so for these groups the record's target,
+which C1/BB85 puts in `$B2AE` and C1/C78D stages as `$9606`, is the first enemy of the set in seat order (C1/2701 does not
+put the PC centre in `$99C0[0]`, C1/27C5 closes the hole). The hand (C1/17DD -> C1/1979, the multi arm C1/1A7B since
+`$A62E` is not FF): sprite 0 on `$A62D[0]`, sprites 1-3 on `$A62D[$960B ..]` (C1/1AA2-1AF8: `$82` = 1.., `$80` =
+`$960B`; an FF entry leaves its sprite unwritten, hidden by C1/198A's `$0900 |= 55` X-high bits), and `$960B` becomes 3
+after page 0, 0 after page 3. MEASURED, the rule's cartridge (the fixture above, Area Bomb): f737-f748 `$9609 = 01`,
+`$960C = 80`, `$A62D = 04 06 FF`, OAM `$0700` = 58,67 / 58,67 / 98,97 / 82,84 with `$0900` = EA on f737-740 and f745-748
+(sprite 3 hidden) and FE on f741-744 (only sprite 0); `$9606 = 04` at the dispatch. Black Hole: `$A62D = 03 04 06`, the
+hand on B8,77 58,67 98,97. Four Hetakes out of radius² 10: `$9609` never rises, `$A62D` all FF, no dispatch.
+Ported: battle.c battleCasterRadiusBuild (the open with its veto and the per-pass rebuild with its cancel in
+battleTechSubmenu, `$960C` cleared by the other C1/1F79 builds the port has: the Att open, battlePcTargetPublish), the
+confirm's target `$A62D[0]` (battleCommitPcAction), and field.c battleTargetCursorRender reads `$A62D` for these groups
+(CtBattleGroupCasterRadius). tools/caster_radius_dispatch_cmp.py grades the select's `$9609 $960C $A62D` frame by frame,
+the hand's positions (the cartridge's shown OAM entries against CT_BATTLE_HANDTRACE) and `$9606`: 43/43.
+
+**The pass that finds nobody, ported 2026-10-15 (b).** C1/BB85 `STA $B2AE`, C1/BB88 JSR C1/C1DD, C1/BB8B `LDA $AF23 / BNE
+->BC5A` -- before C1/BB9A-BBD4 (`$AE91-$AE93`, the victims into `$AECC`, C1/BF79: the MP, C1/D74F, the effect). C1/C659-C6A6
+(dis.py 1C659 0x52 1 0): `$3A != 4` and the 16-bit `$99C0` = FFFF -> `LDA $B18B / CMP #03 / BCS ->C6A6` (an enemy: C1/C72B
+at once); a PC: `$AE91 = $B18B`, `$AE92 = 02`, `STZ $AE94 / $AE95`, `$AE96 = 10`, `$AE93 = 7D` when `$B2EC` bit 7 is clear,
+else `7C` when `$B2EB != FF`, else `7B`, **JSR C1/AC57** -- the action plays (CD/45A6[7B] = `7B 61 00 01 00 00 FF`, the shape
+of the status timers' 7F; 7C / 7D the same with their ids) -- then C1/C72B `$AF23 = 1` and C1/BC5A = JSR C1/BDB3 (the
+reloads) + JMP C1/BCF8 (the record clears, `STZ $AF22`). MEASURED, the rule's cartridge: Area Bomb confirmed with cmb4 /
+cmb6 inside, both feet poked out at f850 while a Hetake's attack holds the dispatch back (battle_ab's timed pokes, both
+sides): the dispatch f953 `$AD8D = 00` (C1:C641), `$9604-$9606 = 00 00 04` (C1:C79C), `$AE91-$AE92 = 00 02`, `$AE93 = 7B`
+(C1:C6A3); `$A013 = 01` f955 (C1:40A9); the close f1058 `$A013 = 00` (C1:41BD), `$AF23 = 01` (C1:C730), `$AFAB = 72`
+(C1:BE2A), `$B188 = 00`; Robo's MP 63 kept; the next Hetake action f1062. Ported: battleDispatchScheduled runs the pass
+before C1/D74F (its result reused by the old caller), stages C1/C66A and opens the action through battleC1ActionRoles
+(battleDispatchOpen, `actDropTech`); the close runs C1/BC5A instead of the tech's reloads (no counter arm: C1/BC4A is not
+reached). C1/C723's other way to C1/C72B (no FF left in `$AD8E`) drops at once. Check
+battle-caster-radius-empty-pass-plays-7b-then-drops-vs-rule-cartridge: 13/13 (the old port fell back to the record's target
+alone and spent the MP).
+
+**Open**: (1) the secondary hands' blink phase: the port pages on its render clock ((clock >> 2) & 1), the cartridge on
+`$960B`, which C1/1A7B toggles on each menu-pass rebuild and nothing resets (C1/1F79 does not) -- measured above, the port's
+page-3 frames are f740-743 / f748 against the cartridge's f741-744; the set and the positions match. This is every
+multi-hand group's (Cyclone 12 too), not these groups'. (2) 7C / 7D (an empty pass for a dual / triple tech, e.g. 40 / 6A of
+group 13, centred on Robo) are derived, not measured. (3) `$93F0-$93F4` (the command record) is not kept by
+the port's select; it reads `$A62D[0]` at the confirm into its own queue.

@@ -2403,6 +2403,18 @@ no TP line before Spekkio). The two box counts are pinned residuals -- the port'
 after the second trigger and Lucca stops 4 px nearer Crono -- so a re-pin is legitimate only when that lag is fixed
 (the counts then rise), never to absorb a fall. The anim and line signatures must stay as pinned.
 
+### battle-caster-radius-tech-victims-at-dispatch-vs-rule-cartridge / battle-caster-radius-empty-pass-plays-7b-then-drops-vs-rule-cartridge (`python tools/caster_radius_dispatch_cmp.py --skip|--only "walked out"`)
+
+The techs whose radius is centred on a party member (groups 11 / 13 / 14 / 1B: Area Bomb, Tail Spin, Black Hole ..),
+port against the rule's cartridge on gato_wait with four Hetakes staged around a lone caster (tools/battle_sim.py's op
+0x83). The first check grades the select (C1/1F79 -> C1/224B / 22A4 / 22D3 -> C1/2701 -> C1/27E8: `$9609 $960C $A62D`
+frame by frame, the hand's sprite positions, Down doing nothing, the veto with nobody in the radius), the record's target
+`$9606` = `$A62D[0]` (C1/1703), and the dispatch's area pass (C1/C78D + C1/2701: the victims and who took damage). The
+second moves the two Hetakes inside out of the radius between the confirm and the dispatch (timed pokes of their feet, both
+sides) and grades C1/C66A's action 7B, its span and C1/BC5A's drop (`$AF23`, MP kept, the ATB reload). Both are
+byte-for-byte against the cartridge: re-pin only if the fixture's frames move with an oracle-verified reason, never to
+absorb a difference. disasm/notes/battle_multitarget.md sec. 11.
+
 ### battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge (`python tools/battle_sim.py fight @048:9 hp=1`)
 
 Any formation, staged the ROM's way on both sides: tools/battle_sim.py writes `83 id op2 / 8B x y / 89 20 / AA 03 / B2`
