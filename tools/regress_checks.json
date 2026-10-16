@@ -39623,22 +39623,22 @@
         "saves/tyranno_re/tele301_req.lakewram"
       ],
       "expect": [
-        "sequence: entry 4 (Lavos falls) opening at f4330 -- 5728360 + 49152 + 1938002 cycles = 22 black frame(s)",
+        "sequence: entry 4 (Lavos falls) opening at f4151 -- 5728360 + 49152 + 1938002 cycles = 22 black frame(s)",
         "sequence: the fall ended ($7E:0000=1) -> reboot into loc 12D",
         "reboot: JML C0:0000 -> loc 12D tile(8,13) bits00",
         "reboot: op 0xDF/0xE1 at the vblank -> $0100=1F3, $0105=12D",
         "reboot: JML C0:0000 -> loc 1F3 tile(0,0) bits01",
-        "fmemmon f8901 loc=105  0100=0501*  0047=3D1E1E",
-        "fmemmon f8734 loc=1F3  0100=F301  0047=1B1B1B*",
-        "fmemmon f8741 loc=1F3  0100=F301  0047=000000*",
-        "fmemmon f8747 loc=1F3  0100=F301  0047=101010*"
+        "fmemmon f8690 loc=105  0100=0501*  0047=3D1E1E",
+        "fmemmon f8523 loc=1F3  0100=F301  0047=1B1B1B*",
+        "fmemmon f8530 loc=1F3  0100=F301  0047=000000*",
+        "fmemmon f8536 loc=1F3  0100=F301  0047=101010*"
       ],
       "pin": [
         "^sequence: entry 4 ",
         "^sequence: the fall ended",
         "^reboot: ",
         "^fmemmon f\\d+ loc=105",
-        "^fmemmon f87(34|41|47) loc=1F3"
+        "^fmemmon f85(23|30|36) loc=1F3"
       ],
       "timeout_s": 300,
       "mutations": [
@@ -39656,7 +39656,7 @@
         }
       ],
       "note_pass": "after the Black Tyranno the Tyranno Lair's `FF 24` plays through in the port: the native entry-4 stage to its END, the reboot into 301 (Azala's last words, the dactyls), world 1F3 with the impact's colour fade (op 49) and on to 105 -- the cartridge's path",
-      "notes": "Roadmap G1a. Jackie's ch17 brought to scene 301 through the ROM's loader (`ct.exe --teleport 301 8 30 0 --method req`, saves/tyranno_re/tele301_req.*), walked up to the trigger row (objs 15-20 call obj21 fn3), the talk and the fight driven with A; the fight's two enemies' HP poked to 1 at f1700 (CT_POKEWRAM: $5FB0 Black Tyranno, $61B0 Azala) -- a test fixture, the party of ch17 loses the fight on A alone on the cartridge too. The cartridge (s301_c1_hp1, the same poke): `FF 24` at f3128, the END 1734 frames later, world 1F3 f7378, $0047 = 1F at +148 then -4 a frame from +152, 105 at +319; the port: the END 1732 frames after `FF 24` (the common init's vblank wait $7E:3010 -> $31B0 and the setup's NMI frame are not priced: a timing artefact) and 1F3's leg 3 frames later than the cartridge's, the same fade and the same path. ==== 2026-10-15, RE-PINNED (frames only; the values unchanged): every enemy death routine is CD/0043's 43 frames from the delist (the port's were 40: the palette copy a frame late, a 9-frame hold from the delist) and the battle's loop head waits for the last one, the idle tick on the frame after (battle_death_dissolve_order.md last addendum; graded against the rule's cartridge by battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge, battle-roly-rider-dissolves-vs-oracle, battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge, battle-lavos-mimic-fight-vs-rule-cartridge). Each death moves what follows by +4; a death sound posts on the delist + 1 as the cartridge's; a picture inside a dissolve shows the dither at the cartridge's level (drawn from the tiles the NMI uploaded). Here: the Azala's routine ends 4 frames later (victory f541 -> f545 of the battle) and its death sound posts a frame earlier (the cartridge's delist + 1); the reward lines ride the drive's A grid, so the handoff is unchanged (f721), the fall opens a frame earlier (f4331 -> f4330: the sound processor's phase at the handshake) and 1F3 arrives 31 frames later (f8548 -> f8579: one period of the drive's fixed 30-frame A grid in 301's boxes). The 1F3 fade's three pinned frames move with it (8703/8710/8716 -> 8734/8741/8747); the path and the fade are the same."
+      "notes": "Roadmap G1a. Jackie's ch17 brought to scene 301 through the ROM's loader (`ct.exe --teleport 301 8 30 0 --method req`, saves/tyranno_re/tele301_req.*), walked up to the trigger row (objs 15-20 call obj21 fn3), the talk and the fight driven with A; the fight's two enemies' HP poked to 1 at f1700 (CT_POKEWRAM: $5FB0 Black Tyranno, $61B0 Azala) -- a test fixture, the party of ch17 loses the fight on A alone on the cartridge too. The cartridge (s301_c1_hp1, the same poke): `FF 24` at f3128, the END 1734 frames later, world 1F3 f7378, $0047 = 1F at +148 then -4 a frame from +152, 105 at +319; the port: the END 1732 frames after `FF 24` (the common init's vblank wait $7E:3010 -> $31B0 and the setup's NMI frame are not priced: a timing artefact) and 1F3's leg 3 frames later than the cartridge's, the same fade and the same path. ==== 2026-10-15, RE-PINNED (frames only; the values unchanged): every enemy death routine is CD/0043's 43 frames from the delist (the port's were 40: the palette copy a frame late, a 9-frame hold from the delist) and the battle's loop head waits for the last one, the idle tick on the frame after (battle_death_dissolve_order.md last addendum; graded against the rule's cartridge by battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge, battle-roly-rider-dissolves-vs-oracle, battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge, battle-lavos-mimic-fight-vs-rule-cartridge). Each death moves what follows by +4; a death sound posts on the delist + 1 as the cartridge's; a picture inside a dissolve shows the dither at the cartridge's level (drawn from the tiles the NMI uploaded). Here: the Azala's routine ends 4 frames later (victory f541 -> f545 of the battle) and its death sound posts a frame earlier (the cartridge's delist + 1); the reward lines ride the drive's A grid, so the handoff is unchanged (f721), the fall opens a frame earlier (f4331 -> f4330: the sound processor's phase at the handshake) and 1F3 arrives 31 frames later (f8548 -> f8579: one period of the drive's fixed 30-frame A grid in 301's boxes). The 1F3 fade's three pinned frames move with it (8703/8710/8716 -> 8734/8741/8747); the path and the fade are the same. ==== 2026-10-16, RE-PINNED (frames only): the Black Tyranno's block 2 opens with condition 20, so when he falls he counters from the grave (C1/8694-86C6, disasm/notes/battle_counter_gating.md sec. 8): the rule's cartridge from s301_c1_hp1 (A every 30 frames) -- f718 his HP 0 (C1:ED12) and on that frame `$AE93 = 7F` (C1:AD08), tech 7F's effect on his own side (C1:F12E) taking Azala with him: no further action, the victory. The port dropped that counter on its own alive test, and the party needed another action to kill Azala. Now the fight ends at his death (battle f294 counter, f320 Azala's routine, f365 the victory): the fall opens 179 frames earlier (f4330 -> f4151) and everything after it 211 (1F3's fade 8734/8741/8747 -> 8523/8530/8536, 105 f8901 -> f8690; the 32 between them one period of the drive's 30-frame A grid in the boxes). The legs relative to each other are unchanged (1F3's $0047 = 1F at +151 of its arrival, 105 at +322; the cartridge's +148 / +319)."
     },
     {
       "name": "battle-azala-ring-op-eb-in-the-port",
@@ -42839,6 +42839,61 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "notes": "ANY FORMATION, staged the ROM's way on both sides (tools/battle_sim.py): the Guardia prison's pair of Blue Shields (scene 048 obj9/obj10, `83 3E 03` / `83 3E 04`) in GATO's arena -- the bytes `83 id op2 / 8B x y / 89 20 / AA 03 / B2` written into gato_wait's script image at $7F:3000, objects 3/4's IPs pointed there, GATO out ($1110 = 80) -- so the field's own op 0x83 (C0/46DF) loads their sprite and palette (the port runs the seed's image: ct_vm.c CtSceneSeedFromWram). Both HP := 1 at f600 (PEEK_POKE_AT / CT_POKEWRAM_AT), A mashed. Pins: the staged ids on both sides; the OBJ palette-4 page's 37 states over the two dissolves, the same sequence on both (CF/FE20's copy of each shield's own colours, CD/00A5's fade to red); and the deaths, a PINNED RESIDUAL: the first on the cartridge's frame, the second 4 frames early (cartridge 818/1030, port 818/1026). RE-PINNED 2026-10-15 from a HARNESS fix, not an engine change (was port 814/1022): tools/battle_ab.py run() looked for `battlephase: begins at field fN` on the port's stdout, but src/field.c prints it on stderr and only under CT_BATTLE_TRACE, so the button map kept its default start f220 while this staged fight begins at f216 -- every port key landed 4 frames early. With the start read, the per-change offsets went from -8 x11 -7 x17 -4 x9 -3 x17 +0 x2 to -4 x11 -3 x17 +0 x11 +1 x17. (gato_wait's own fight does begin at f220, which is why the other battle_ab checks did not move; its -4 x6 -2 x12 +0 x21 under the mash is unchanged and is the port's own -- the remaining -4 here is the same family, not the staging's.) The tool also reports, unpinned: $993C FF in the empty combatants on the port (battle.c's host-lifetime restore copies $9888 = FF into all 11) and the picture per frame. Re-pin the deaths only from a fix that moves them toward the cartridge's frames."
+    },
+    {
+      "name": "battle-sim-fallen-enemy-counter-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_sim.py",
+        "sweep",
+        "0F,9A",
+        "hp=1",
+        "frames=1450",
+        "-j2"
+      ],
+      "env": {},
+      "expect": [
+        "sim e0F [0F Mud Imp]: wram same values in the same order on both sides",
+        "sim e0F [0F Mud Imp]: port frame - cartridge frame per change: -4 x34 +0 x11",
+        "sim e0F [0F Mud Imp]: deaths cartridge [956] port [952]",
+        "sim e9A [9A Azala]: wram same values in the same order on both sides",
+        "sim e9A [9A Azala]: port frame - cartridge frame per change: -4 x40 +0 x8",
+        "sim e9A [9A Azala]: deaths cartridge [1392] port [1388]"
+      ],
+      "pin": [
+        "^sim e(0F|9A) .*: wram ",
+        "^sim e(0F|9A) .*: port frame ",
+        "^sim e(0F|9A) .*: deaths "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "note_pass": "a fallen enemy whose block 2 opens with condition 20 counters before it dissolves, as the cartridge does: the Mud Imp's tech 7F at once, Azala's tech 1F after its name box",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->dissolveRunning >= 0 || battleCounterPhase(h)) return;  // C1/881C not reached yet",
+          "replace": "  if (h->dissolveRunning >= 0) return;  /* MUT: the scan does not wait for the counters */",
+          "why": "the corpse's routine starts at the HP write, during the counter: the delist and the dissolve 30 frames early"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "      s[0xAF02 + slot] = s[0xAF0D + slot];                           // 86BC-86C3",
+          "replace": "      ;   /* MUT: the fallen victim is not listed again */",
+          "why": "tech 7F's own-side group finds nobody (C1/C72B): the Mud Imp takes its third section's tech 6F instead"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->aiTurnMsg && (op == 0x02 || op == BT_AI_ACT_HDR)) {",
+          "replace": "  if (0) {   /* MUT: no name box before the counter's decode */",
+          "why": "Azala's $AE93 = 1F lands on the turn's frame, 11 frames before the cartridge's (the box comes first)"
+        }
+      ],
+      "notes": "A FALLEN ENEMY'S BLOCK-2 COUNTER (disasm/notes/battle_sim_census.md, family 4: 60 fights, 28 ids; disasm/notes/battle_counter_gating.md, 'THE FALLEN VICTIM'). C1/8694-86C6: in the counter loop a victim whose $AEFF is FF is taken when its AI block 2 opens with condition 20, and listed again ($AF02,X := $AF0D,X) -- after the handler's sweep C1/8626 has delisted it; C1/86FF's status byte is the only gate after that. The counter's turn C1/8780 JSR C1/8CF9 plays its whole action inside the loop, then C1/8787 JSR C1/B223 delists it again, and only C1/881C's C1/AC5E (-> CF/FE20) starts the corpse's routine. MEASURED, the rule's cartridge: the Mud Imp (0F) f931 C1:B2C3 / C1:86C6, `$AE93 = 7F` (C1:AD08), f957 C1:B2C3, `$96FC = 00` f1000 (+43); Azala (9A) f1180 `$AE93 = 00` (C1:8D0D), its name box `43`, `$AE93 = 1F` f1191. The port dropped the counter on its own alive test, restored $AF02 before its close's sweep (undone), started the routine at the HP write and decoded the tech without its name box. The -4 frame offset pinned is family 3 (the next action's menu pass one pass early), not this mechanism: its fix re-pins these lines (the counts rise to +0), legitimately. frames=1450 keeps Azala's later party heal inside both windows."
     }
   ],
   "excluded": [

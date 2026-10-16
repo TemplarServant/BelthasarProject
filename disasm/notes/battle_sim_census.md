@@ -106,6 +106,11 @@ c811 / p800; f1CB_1: 86 at c390 / p379), same open question.
 
 ## 5. Family 4 — a fallen enemy's block-2 counter never runs (60 fights, 28 enemy ids)
 
+**FIXED 2026-10-16** (battle_counter_gating.md sec. 8; check battle-sim-fallen-enemy-counter-vs-rule-cartridge): the
+loop's gates at the victim's decode, the death scan after the counters (C1/881C), the counter's name box and its C1/8787
+sweep. 19 of the 22 ids (20 with Azala in a 1450-frame window) and 29 of the 38 formations now match the cartridge's whole WRAM sequence; the rest are
+families 3 and 5, a staging difference (f0AE_10) and a port stall on Crono's physical (f1BE_18).
+
 ROM, C1/8694-86C6 (`dis.py 18640 0x1E0 1 0`): in the counter loop, a victim enemy whose `$AEFF,X` = FF (fallen) is
 taken anyway when its AI block 2 opens with condition `20` (C1/86A5 `LDA $AF0A,X / JSR C1/B488`, C1/86B4 `CMP #20`): its
 `$AF02,X := $AF0D,X` (C1/86BC-86C3) and its block 2 runs. The only gate after it is C1/86FF `LDA $5E4B,X / BIT #8F`

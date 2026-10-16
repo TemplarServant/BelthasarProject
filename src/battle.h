@@ -689,6 +689,9 @@ typedef struct CtBattleHost {
   int actCounter;             // the open action is a counter's (C1/8780): its span end arms no counter of its own
   int ctrPendSlot;            // a counter DECODED (C1/8686-8E15 on the first free frame) whose window has not opened: -1
   int ctrTgt, ctrIsTech;      //   none; its target and kind, for battleOpenAction's reactive open
+  int ctrDecodeF;             // the frame its decode ran (the countdown starts on the next)
+  int ctrMsgHold, ctrMsgSlot, ctrMsgOp, ctrMsgTgt;   // a counter's tech name box (C1/9B35 -> CD/0295) still up: the rest of
+                              //   its decode (C1/8DA4-8E15) waits for it -- frames left, the slot, its op and target
   // --- ENEMY THINK HANDSHAKE (disasm/notes/battle_pacing_v2.md FIX B): the C1/28B0-arrival -> C1/40A6-
   //     dispatch handshake -- an enemy idles a fixed CT_BATTLE_ENEMY_THINK render frames between becoming
   //     ready+arrived and his action window OPENING (§3.B: mode-machine stop + AI cursor decode + dispatch,

@@ -287,3 +287,71 @@ case 1F, battleAiTurn's $B2C0 branch. Graded: tools/battle_ab.py enemies D9 iden
 never countered); the first difference is the defeat's own sequence (status wipe c990, port 1008). GATO's whole fight
 (battle-gato-fight-vs-logical-oracle) and the status machinery around the counter path (battle-status-machinery-*)
 unchanged. Census 222/255, no enemy lost; 19 improved (#10 -> #18).
+
+## §8 — 2026-10-16: THE FALLEN VICTIM, AND THE DEATH SCAN AFTER THE LOOP (battle_sim census family 4)
+
+Derived on the rule's cartridge with `tools/battle_sim.py` (any formation staged by op 0x83, every staged enemy's HP 1 at
+f600, A mashed). Ported in `src/battle.c`; check `battle-sim-fallen-enemy-counter-vs-rule-cartridge`.
+
+### 8.1 What the ROM does, in order (one pass of the ATB handler's tail, all on the action's closing frame)
+
+```
+C1/8626  JSR C1/B223          the dead-flag sweep: a victim killed by the action leaves the roster ($AEFF/$AF02 := FF,
+                               C1/B2C3) and gets its death byte ($AEB0,X := 1, $AEB2 := 1, C1/B3AF)
+C1/8671  for $B315 = 0..7 over the victim list $B3AC:
+  8694     LDA $AEFF,X / CMP #FF: a FALLEN enemy -> 869B..86C6: its id from $AF0A (JSR C1/B488: block 2), and only if
+           block 2 opens with condition 20 (86B4 CMP #20) is it LISTED AGAIN: 86C0 LDA $AF0D,X / STA $AF02,X
+           (= $AEFF + combatant); any other block 2 -> C1/8809, no counter
+  86FF     LDA $5E4B,X / BIT #8F (stop, lock, chaos, sleep, blind) -> C1/8809: the only gate after that
+  8749     block 2's conditions; condition 20 (C1/97AB) holds when $AEB3,X -- the death byte -- is set
+  8780     JSR C1/8CF9           the counter's TURN, and with it its whole action (the handler waits inside C1/4058)
+  8787     JSR C1/B223           the sweep again: the fallen counterer leaves the roster for good
+C1/881C  JSR C1/AC5E          `LDA $AEB2 / BEQ`, then `LDA #06 / JSR C1/0003` -> C1/006D `JSL CF/FE20`: the post-action
+                               DEATH SCAN -- every corpse's routine CD/0043 -- only now, after every counter turn
+         ... C1/8822 the eval C1/8C09
+```
+
+So condition 20 is "I have just died", and an enemy that has it fights back from the grave before it dissolves: the
+re-listing makes its own side's tech groups find it (tech 7F's group `CC/86C9 = 01` is the enemies, C1/C37B), and the
+whole counter plays before the corpse's routine starts.
+
+### 8.2 Measured
+
+| fight | cartridge |
+|---|---|
+| Mud Imp (0F), `20 / 02 7F 03` | f931 C1:B291 `$AF06 = 0F`, C1:B2C3 `FF`, C1:86C6 `0F`; C1:8D0D `$AE93 = 00`, C1:AD08 `7F` (same frame: no name); the action to f956; f957 C1:B291 / B2C3 `$AF06 = FF`; `$96FC = 00` f1000 (CF:FE7E, +43) |
+| Azala (9A), `20 / 02 1F 05 00 00 43` | f1180 delist / re-list, `$AE93 = 00` (C1:8D0D); the name box `43` (C1/9B35 -> CD/0295, inside op 02's handler); `$AE93 = 1F` f1191 (C1:AD08); delist f1393 |
+
+### 8.3 What the port did, and the fix
+
+1. `battleReactiveCounterTick` dropped any counter whose enemy was dead (`battleAlive`, the +1D bit) -- a test the loop
+   never makes. Gone; the loop's own gates (8694-86C6, 86FF) moved from the close's arm (`battleCounterArmROM`) into the
+   victim's decode (`battleCounterDecode`), because the port's close runs its sweep after the arm: a re-listing done at
+   the arm was undone by it, and the tech was dropped (C1/C72B) -- the Mud Imp took its third section's 6F.
+2. The death scan waited for nothing: `battleAdvanceDissolves` started a corpse's routine at the HP write. Its start is
+   now `battleDeathScanNext`, held while the counter phase is live (`battleCounterPhase`: a counter armed, decoded, in
+   its name box or playing) -- C1/881C after the loop.
+3. A counter's tech with a name box decoded at once. `battleCounterDecode` now posts the box and returns 2;
+   `battleCounterDecodeRest` (C1/8DA4-8E15) runs when CD/0295 returns (`ctrMsgHold`), and the main loop's iteration
+   holds meanwhile (`battleThinkPending`: the handler is inside it).
+4. A counter's close ran no sweep: C1/8787's `JSR C1/B223` is now run there (`wasCounter`), with a lifeline revive it
+   meets resumed the handler tail's way.
+5. The close's own counter loop: so that a victim that does not counter does not hold a corpse for a frame (the forest's
+   Cyclone double kill: the #95 post at f528), the decode runs right after `battleAdvanceAction`, before the scan
+   (`battleReactiveCounterTick(h, 1)`); the name box and the countdown stay in the frame's regular pass, which skips the
+   decode's own frame (`ctrDecodeF`).
+
+### 8.4 Result (`battle_sim sweep` / `fight @...`, hp=1)
+
+22 enemy ids and 38 formations tagged `fallen_counter` by the census: the WRAM's whole monitored sequence is the
+cartridge's on 19 ids and 29 formations (Azala alone and in f12C_8 too in a 1450-frame window: at 1500 its party heal falls outside the cartridge's run). The rest are other families: D1 Giga Gaia, D4 Guardian and every fight with an
+A1 Dalton or A6 Ozzie take the death routine's other arms (`CD/0E05` #38, `$99D2`/`$A08C`; census family 5); 9D Slash
+the same; f0AE_10 differs at its staging (f273, `$5FCA`); f1BE_18 (Roly Bomber + Outlaw) stalls in the port on Crono's
+physical at its strike (battle f575, no span end -- HEAD too, not this mechanism). Every match keeps a constant -4: census
+family 3, the next action's menu pass one pass early.
+
+Re-pinned with it: `tyranno-ff24-chain-plays-through-in-the-port`. The Black Tyranno (BC) has the same condition-20 block 2:
+on the rule's cartridge (saves/tyranno_re/s301_c1_hp1.state, A every 30 frames) he falls at f718 (C1:ED12) and his tech
+7F (`$AE93 = 7F`, C1:AD08, the same frame) takes Azala with him (C1:F12E on both enemies) -- the fight ends there. The
+port, which dropped the counter, needed another action to kill Azala; the chain after the fight now runs 179-211 frames
+sooner, the legs relative to each other unchanged.

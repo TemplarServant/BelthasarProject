@@ -8085,14 +8085,9 @@ static void battleCounterArmROM(CtBattleHost* h, int n, const int* list) {
     int v = list[k] & 0xFF;
     if (v < 3 || v == 0xFF || v >= 11) continue;                         // C1/8685-8690
     int slot = v - 3;
-    if (s[0xAEFF + v] == 0xFF) {                                         // C1/8694-86C6: a fallen enemy
-      int id = s[0xAF0A + v], ptr = rom[ROM_AI_PTR_TABLE + id * 2] | (rom[ROM_AI_PTR_TABLE + id * 2 + 1] << 8);
-      long p = aiFlat(ptr); int g;
-      for (g = 0; g < 0x2000 && p < romLen && rom[p] != 0xFF; p++, g++) {}   // C1/B488: block 2
-      if (p + 1 >= romLen || rom[p + 1] != 0x20) continue;               // 86B4-86C8
-      s[0xAF02 + slot] = s[0xAF0D + slot];                               // 86BC-86C3
-    }
-    if (s[battleBlock(v) + 0x1E] & 0x8F) continue;                       // C1/86FF-8704
+    // (The loop's per-victim gates -- a fallen one only for its block 2's condition 20, C1/8694-86C6, and C1/86FF's
+    //  status byte -- come after the handler's sweep C1/8626, which the port's close runs after this arm: they are
+    //  battleCounterDecode's, at the victim's turn in the loop.)
     h->enCounterDelay[slot] = CT_BATTLE_COUNTER_DELAY;                   // its block 2 runs (battleReactiveCounterTick)
     h->enCounterBy[slot] = a; h->enCounterK[slot] = k;                   // $B3B7, $B315
     h->enCounterWait[slot] = 0;                                          // decoded on the close's frame, after a PC's hit
@@ -9040,6 +9035,7 @@ static void battleDeathRoutineStart(CtBattleHost* h, int slot) {   // CF/FE20's 
   h->deathSfxDue[slot] = 1;                                       // CD/0046-0050: the $CCEA wait (battleDeathSfxTick)
   h->dissolveStep[slot] = -((rom && rl > 0x0D00C0) ? rom[0x0D00C0] : 0x0A);   // CD/00BF LDA #0A: CD/3E3B's waits
 }
+static void battleDeathScanNext(CtBattleHost* h);              // (below: C1/881C -> C1/AC5E)
 static void battleAdvanceDissolves(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (h->dissolveRunning >= 0 && !h->dissolveActive[h->dissolveRunning]) h->dissolveRunning = -1;
@@ -9055,7 +9051,23 @@ static void battleAdvanceDissolves(CtBattleHost* h) {
     h->dissolveActive[slot] = 0; h->dissolveRunning = -1;         // CD/0109 RTL: the corpse is gone
     h->mem[0x96F5 + 3 + slot] = 0;                                // CF/FE7B STZ $96F5,X once CD/0024 returns (writer CF:FE7E)
   }
-  for (slot = 7; slot >= 0; slot--)                               // CF/FE20's loop goes on: highest combatant index first,
+  battleDeathScanNext(h);
+}
+// THE SCAN WAITS FOR THE COUNTERS. The post-action death scan is C1/AC5E (`LDA $AEB2 / BEQ`, then `LDA #06 / JSR C1/0003`
+// -> C1/006D `JSL CF/FE20`), and its caller is C1/881C -- the END of the counter loop C1/8671-8819, after every victim's
+// counter turn C1/8780 `JSR C1/8CF9` has played its whole action. So a corpse's routine starts only once the counters
+// the action provoked are over -- the fallen enemy's own block-2 counter included (C1/8694-86C6). MEASURED, the rule's
+// cartridge (tools/battle_sim.py fight 0F hp=1, the Mud Imp): f931 C1/B2C3 delists it and C1/86C6 lists it again, `$AE93
+// = 7F` (C1/AD08) and its tech plays; f957 C1/B291 / B2C3 delist it after the turn and the routine runs from there
+// (`$96FC = 00` at f1000 by CF/FE7E, +43). The port started the routine at the HP write and never ran the counter.
+static int battleCounterPhase(const CtBattleHost* h) {
+  if (h->actCounter || h->ctrPendSlot >= 0 || h->ctrMsgHold > 0) return 1;
+  for (int k = 0; k < 8; k++) if (h->enCounterDelay[k] > 0) return 1;
+  return 0;
+}
+static void battleDeathScanNext(CtBattleHost* h) {
+  if (h->dissolveRunning >= 0 || battleCounterPhase(h)) return;  // C1/881C not reached yet
+  for (int slot = 7; slot >= 0; slot--)                           // CF/FE20's loop goes on: highest combatant index first,
     if (h->dissolveActive[slot]) { battleDeathRoutineStart(h, slot); return; }   //   the next routine on this frame
   if (h->headPend) {                                              // the scan returns into the loop: C1/8120's head
     h->headPend = 0; h->deathHeadF = h->frames;                   //   (oracle: `$A0FD = 00` and `$0027`++ with the last
@@ -11990,6 +12002,7 @@ static void battleMoveInit(CtBattleHost* h) {
 }
 
 static int battleNameBoxPost(CtBattleHost* h, int id);
+static void battleNameBoxFrame(CtBattleHost* h);              // (below: CD/0295's waits, one a frame)
 // Open an action window: pick the target (PC->the TARGET-SELECTed slot; enemy -> the AI interpreter's own
 // decision, battle_interp_verify.md T1/P2.A), COMPUTE the deferred damage now (RNG draws at dispatch,
 // preserving draw order), and raise the $95DB action gate (the S2 command-gate byte; PART2's "set the REAL
@@ -12497,8 +12510,23 @@ static void battleDispatchOpen(CtBattleHost* h) {
 // (C1:8EA3), the counter's `$AEE3 = 02 76` (C1:9A55), `$AE93 = 76` (C1:AD08), its damage `$AD89` (C1:DCED) and the
 // self-destruct's `$6130 = 0` (C1:F131) all on c530; `$A013 = 01` (C1:40A9) on c553, $0027 standing still between (the
 // handler holds the main loop). The port decoded at the window's open, 24 frames on. Returns 0 for no counter.
+static int battleCounterDecodeRest(CtBattleHost* h, int slot, int op, int tgt);
 static int battleCounterDecode(CtBattleHost* h, int slot) {
   uint8_t* s = h->mem; int atk = slot + 3, tgt = -1;
+  // THE LOOP'S GATES FOR THIS VICTIM (C1/8694-8704), after the handler's sweep C1/8626 has run. A fallen one ($AEFF FF)
+  // counters only when its block 2 opens with condition 20, and is listed again for it (86BC-86C3 `$AF02,X := $AF0D,X`):
+  // its block 2 then sees itself on the roster -- tech 7F's own-side group (CC/86C9 = 01, C1/C37B) finds it. Then C1/86FF
+  // `LDA $5E4B,X / BIT #8F` (stop, lock, chaos, sleep, blind) -> C1/8809, no counter. MEASURED, the rule's cartridge
+  // (tools/battle_sim.py fight 0F hp=1): f931 C1:B2C3 delists the Mud Imp, C1:86C6 lists it again, `$AE93 = 7F` (C1:AD08).
+  { long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
+    if (s[0xAEFF + atk] == 0xFF) {
+      int fid = s[0xAF0A + atk];
+      long p = rom ? aiFlat(rom[ROM_AI_PTR_TABLE + fid * 2] | (rom[ROM_AI_PTR_TABLE + fid * 2 + 1] << 8)) : 0;
+      for (int g = 0; rom && g < 0x2000 && p < romLen && rom[p] != 0xFF; p++, g++) {}   // C1/B488: block 2
+      if (!rom || p + 1 >= romLen || rom[p + 1] != 0x20) return 0;  // 86B4-86C8
+      s[0xAF02 + slot] = s[0xAF0D + slot];                           // 86BC-86C3
+    }
+    if (s[battleBlock(atk) + 0x1E] & 0x8F) return 0; }               // C1/86FF-8704
   int id = s[battleBlock(atk) + 0];
   int op = battleCounterTurn(h, h->enCounterK[slot], atk, h->enCounterBy[slot], &tgt);   // C1/8686-87FB
   char evbuf[32];
@@ -12506,6 +12534,25 @@ static int battleCounterDecode(CtBattleHost* h, int slot) {
     snprintf(evbuf, sizeof evbuf, "counter-nofire id%02X#%d", id, slot);
     battleTrace(h, evbuf); return 0;
   }
+  // A TECH'S NAME BOX COMES FIRST, inside op 02's handler (C1/9B35 JSL CD/0033, CD/0295's waits), and only then C1/8D8B
+  // returns into C1/8DA4 -- as on a turn. MEASURED, the rule's cartridge (tools/battle_sim.py fight 9A hp=1, Azala's
+  // `02 1F 05 00 00 43`): the counter's turn f1180 `$AE93 = 00` (C1:8D0D), the box, `$AE93 = 1F` (C1:AD08) at f1191.
+  if (h->aiTurnMsg && (op == 0x02 || op == BT_AI_ACT_HDR)) {
+    int hold = battleNameBoxPost(h, h->aiTurnMsg);
+    h->aiTurnMsg = 0;
+    if (hold > 0) {
+      h->ctrMsgHold = hold; h->ctrMsgSlot = slot; h->ctrMsgOp = op; h->ctrMsgTgt = tgt;
+      snprintf(evbuf, sizeof evbuf, "counter-box id%02X#%d", id, slot);
+      battleTrace(h, evbuf); return 2;
+    }
+  }
+  h->aiTurnMsg = 0;
+  return battleCounterDecodeRest(h, slot, op, tgt);
+}
+// ...C1/8DA4-8E15, the counter's decode after its handler (and its name box) returned. Returns 0 for no counter.
+static int battleCounterDecodeRest(CtBattleHost* h, int slot, int op, int tgt) {
+  uint8_t* s = h->mem; int atk = slot + 3, id = s[battleBlock(atk) + 0];
+  char evbuf[32];
   int isTech = (op == 0x02 || op == BT_AI_ACT_HDR);
   // C1/8DA4-8DF8 inside the counter's C1/8CF9, as on a turn: a target that has left the roster -- an enemy: no action;
   // a PC: a living PC at random (`LDA #30 / JSR C1/AF22 / LSR x4`).
@@ -12542,10 +12589,15 @@ static int battleCounterDecode(CtBattleHost* h, int slot) {
 // (the hit itself lands at a span end, freeing the engine that frame), AND while GATO's own mover is active
 // (battle_polish3.md ITEM 4: the action fires at REST -> the facing stamp faces the victim). One dispatch per
 // hit; re-arm on the next qualifying hit. Only GATO arms it (battleEnemyHasCounter); inert otherwise.
-static void battleReactiveCounterTick(CtBattleHost* h) {
+// `decodeOnly`: the close's own pass (battleTickBody, right after battleAdvanceAction): the counters an action provoked are
+// decided in its handler's tail, C1/8671-8819, BEFORE C1/881C's death scan (battleDeathScanNext) -- so a victim that does
+// not counter does not hold a corpse's routine for a frame (the forest's Cyclone: the #95 post at f528). Only the decode;
+// the name box and the countdown are the frame's regular pass.
+static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
   uint8_t* s = h->mem;
   for (int slot = 0; slot < 8; slot++) {
     if (h->enCounterDelay[slot] <= 0) continue;
+    if (decodeOnly && (h->ctrMsgHold > 0 || h->ctrPendSlot >= 0)) return;
     if (h->actActive) continue;                                   // engine busy -> hold the countdown (fire when free)
     // battle_ai_interp.md §11 (SESSION-18): the old battle_polish3 ITEM-4 "fire AT REST" position hold
     // (mvActive / unsettled-return gate) is DELETED -- it was a cosmetic patch for the reactive facing,
@@ -12557,13 +12609,28 @@ static void battleReactiveCounterTick(CtBattleHost* h) {
     // not a rest, bounds the dance). FIX C's own derivation stands: delay ~4f, TIMER-INDEPENDENT, no
     // position gate.
     int cmb = slot + 3;
+    if (h->ctrMsgHold > 0) {                                      // a counter's name box (CD/0295) -- its decode waits
+      if (h->ctrMsgSlot != slot || h->ctrDecodeF == h->frames) continue;
+      if (h->nameBoxT >= 0) battleNameBoxFrame(h);
+      if (--h->ctrMsgHold > 0) continue;
+      if (battleCounterDecodeRest(h, slot, h->ctrMsgOp, h->ctrMsgTgt)) { h->ctrPendSlot = slot; continue; }
+      h->enCounterDelay[slot] = 0;                                // (its target left: C1/881C as below)
+      int more = 0;
+      for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) more = 1;
+      if (!more && !s[0x24]) battleAiEvalAll(h);
+      continue;
+    }
     if (h->ctrPendSlot < 0) {                                     // the next counter in the victim list's order ($B315)
       int best = -1;
       for (int k2 = 0; k2 < 8; k2++)
         if (h->enCounterDelay[k2] > 0 && (best < 0 || h->enCounterK[k2] < h->enCounterK[best])) best = k2;
       if (best != slot) continue;
-      if (h->enCounterWait[slot] > 0) { h->enCounterWait[slot]--; continue; }
-      if (!battleAlive(s, cmb) || !battleCounterDecode(h, slot)) {
+      if (h->enCounterWait[slot] > 0) { if (!decodeOnly) h->enCounterWait[slot]--; continue; }
+      // (No alive test: the loop takes a fallen enemy for its block 2's condition 20 -- C1/8694-86C6 and C1/86FF are the
+      //  decode's own gates.)
+      int dec = battleCounterDecode(h, slot);
+      if (dec == 2) { h->ctrDecodeF = h->frames; continue; }      // its name box first (ctrMsgHold)
+      if (!dec) {
         h->enCounterDelay[slot] = 0;
         // C1/87FE-8826: the loop's last victim done (C1/880C-8814), C1/881C `JSR C1/AC5E / STZ $B2C0 / LDA $24 / BNE /
         // JSR C1/8C09` -- the eval of every slot whose $B2B6 is 0 runs after the counters, a counter that took no action
@@ -12576,10 +12643,10 @@ static void battleReactiveCounterTick(CtBattleHost* h) {
         if (!more && !s[0x24]) battleAiEvalAll(h);
         continue;
       }
-      h->ctrPendSlot = slot;                                      // decoded: its window opens on the countdown,
+      h->ctrPendSlot = slot; h->ctrDecodeF = h->frames;          // decoded: its window opens on the countdown,
       continue;                                                   //   from the next frame (C1/4058's two waits)
     }
-    if (h->ctrPendSlot != slot) continue;
+    if (decodeOnly || h->ctrPendSlot != slot || h->ctrDecodeF == h->frames) continue;
     if (--h->enCounterDelay[slot] > 0) continue;                  // still counting down (~4 render frames, §3)
     battleOpenAction(h, cmb, 1);                                  // the decoded counter's window (C1/4058)
   }
@@ -15152,6 +15219,7 @@ static int battleThinkPending(const CtBattleHost* h) {            // a turn is i
   if (h->stActOpenAt >= 0) return 1;                              // ...or a status timer's action 7F (C1/895B -> C1/4058)
   if (h->llSeat >= 0) return 1;                                   // ...or the sweep C1/B223 stopped on a lifeline revive
   if (h->ctrPendSlot >= 0) return 1;                              // ...or a counter decoded in the handler's tail (C1/8780)
+  if (h->ctrMsgHold > 0) return 1;                               // ...or a counter's name box, inside its handler (C1/9B35)
   return 0;
 }
 static void battleThinkTick(CtBattleHost* h) {
@@ -15851,7 +15919,14 @@ static void battleAdvanceAction(CtBattleHost* h) {
       battleShowRecordsClear(s);                                // the command's FD/ACEE (C1/BC56 / C1/C01D)
       tailWaits = battleH12Tail(h, LL_CONT_H12, -1); tailRan = 1;
     }
-    if (!tailRan && turnSlot >= 0) battleSpanEndArm(h, turnSlot);   // (a counter's close: its step-less C1/881C)
+    // A counter's close: C1/8780 `JSR C1/8CF9` returns into C1/8787 `JSR C1/B223` -- the sweep, which takes a fallen enemy
+    // that countered off the roster again (the rule's cartridge, the Mud Imp: f957 C1:B291 / C1:B2C3 `$AF06 = FF`, and its
+    // routine from there) -- then the loop's tail and its step-less C1/881C (battleSpanEndArm). A lifeline revive the sweep
+    // meets waits there as on the handler's own tail, and the eval after it (battleLifelineResume -> battleH12TailRest).
+    if (!tailRan && turnSlot >= 0) {
+      if (wasCounter && battleDeadFlagSweep(h, 0, LL_CONT_H12)) { h->llSlot = turnSlot; tailWaits = 1; }
+      else battleSpanEndArm(h, turnSlot);
+    }
     // (No re-aim here. A PC's facing after its action is whatever the action's script left: a plain attack re-aims with its
     // own op 72 (C1/5FDE -> C1/75CC, `STA $96DB,X` C1/6009; oracle gato_cyclone.state, attack: f498 `$96DB = 00` C1:600C),
     // the Cyclone has none and holds the spin's last facing (f627 `01` C1:638C .. f733 act end) until the idle walk's
@@ -16874,7 +16949,7 @@ void CtBattleBegin(CtBattleHost* h) {
     h->mem[0xB2B6 + ai] = 0; h->mem[0xB26B + ai] = 0xFF; h->mem[0xB16E + ai] = 0xFF;
     h->enCounterDelay[ai] = 0;                                // battle_counter_gating.md FIX C: no reactive counter armed
     h->enCounterBy[ai] = 0; h->enCounterK[ai] = 0; h->enCounterWait[ai] = 0;
-    h->ctrPendSlot = -1; h->actCounter = 0;
+    h->ctrPendSlot = -1; h->actCounter = 0; h->ctrMsgHold = 0; h->ctrDecodeF = -1;
     h->enThinkDelay[ai] = 0;                                   // battle_pacing_v2.md FIX B: no think handshake pending
     h->enMsgHold[ai] = 0;                                      // no turn held by its message box (CD/0295)
     h->enGoneHold[ai] = 0;
@@ -22672,6 +22747,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     h->stActKind = 0;
   }
   battleAdvanceAction(h);
+  if (!battleDeathHold(h)) battleReactiveCounterTick(h, 1);   // the close's counter loop, before C1/881C's scan (below)
   battleAdvanceDissolves(h);   // battle_dissolve.md PART 2: the dying enemy's corpse dither-clears (same
                                 //   real-frame pacing class as the popups above). Runs FIRST of the
                                 //   simulation ticks because it OWNS the death freeze below.
@@ -22705,7 +22781,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
                                 //   Inert until an approach/return is armed (a MASH fight never arms one).
     battleThinkTick(h);        // battle_pacing_v2.md FIX B: drain the enemy think handshake (~24f arrival/ready
                                 //   -> window open); fires battleArrive on expiry. Real-frame like the walk above.
-    battleReactiveCounterTick(h); // battle_counter_gating.md FIX C: drain + dispatch GATO's reactive when-hit
+    battleReactiveCounterTick(h, 0); // battle_counter_gating.md FIX C: drain + dispatch GATO's reactive when-hit
                                 //   counter (attack-B, ~4f after a qualifying hit, cond-1F gated). Real-frame
                                 //   paced like battleMoveTick's walk-in dispatch; inert when no counter is armed.
   }
