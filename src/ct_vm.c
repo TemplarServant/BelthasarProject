@@ -8188,13 +8188,6 @@ int CtSceneLoadState(CtScene* sc, const char* path, double player[4]) {
   free(tmp); free(img);
   return 2;
 }
-void CtSceneActorSetFacing(CtScene* sc, int i, int facing) {
-  if (i >= 0 && i < sc->nobj) vmSetFacing(sc->mem, &sc->actors[i], i, facing);
-}
-void CtSceneAnimFinished(CtScene* sc, int i) {
-  if (i < 0 || i >= sc->nobj) return;
-  // The ROM's completion condition is $7F0B01,X == 1 (C0/2EA2), driven 2 -> 1 by the frame legs
-  // CtSceneTick runs (CtAnimTimerTick's CA4F arm, CtFieldFrameLookup's CBA4 arm) whenever the legs
 // The location a snapshot was taken in: $0100 of the WRAM image that closes it (v3/v4), so the host can load that
 // scene before CtSceneLoadState, which is same-scene only. `flags` (0x200 bytes, may be NULL) takes the image's
 // $7F:0000 story page, for the scene's create-time fn0 pass. -1 if the file is not a loadable snapshot.
@@ -8211,6 +8204,13 @@ int CtSceneStateLoc(const char* path, uint8_t* flags) {
   fclose(f);
   return ok ? ((loc[0] | (loc[1] << 8)) & 0x1FF) : -1;
 }
+void CtSceneActorSetFacing(CtScene* sc, int i, int facing) {
+  if (i >= 0 && i < sc->nobj) vmSetFacing(sc->mem, &sc->actors[i], i, facing);
+}
+void CtSceneAnimFinished(CtScene* sc, int i) {
+  if (i < 0 || i >= sc->nobj) return;
+  // The ROM's completion condition is $7F0B01,X == 1 (C0/2EA2), driven 2 -> 1 by the frame legs
+  // CtSceneTick runs (CtAnimTimerTick's CA4F arm, CtFieldFrameLookup's CBA4 arm) whenever the legs
   // are on and a ROM image is there for them to read the $E4 tables from. Then this renderer signal
   // decides NOTHING, and must not: writing the byte here would put the port's own playback clock
   // over the ROM's, which is the defect the delegation retired (see step()'s anim arm).

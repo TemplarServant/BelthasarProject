@@ -10891,6 +10891,16 @@ int main(int argc, char** argv) {
       if (arom) audio = CtAudioInit(arom, arl);
       if (audio && ruleSeeded) CtAudioSeedFromApu(audio, seedSpc->apu);   // (the rule: the image's own SPC)
       if (audio && CtAudioRuleOn() && !g_ruleAudio) CtAudioSetRuleOff(audio, 1);   // (the rule: not this SPC)
+      // --loadstate with the snapshot's SPC beside it (`<state>.apu`, written by F5): the restored WRAM already holds the
+      // CPU's side of the APU protocol, so neither the mailbox seed nor the song re-stage below may write over it -- the
+      // SPC goes back with it instead, as F9 does.
+      char stateApu[1024] = "";
+      if (loadStatePath && stateRestored && !ruleSeeded) {
+        snprintf(stateApu, sizeof stateApu, "%s.apu", loadStatePath);
+        FILE* af = fopen(stateApu, "rb");
+        if (af) fclose(af);
+        else { fprintf(stderr, "[loadstate] no %s -- the location's song starts from a cold driver\n", stateApu); stateApu[0] = 0; }
+      }
       if (audio && CtAudioReady(audio) && f.vm) {
         if (!ruleSeeded && !stateApu[0]) CtAudioSeedMailboxPage(audio, CtSceneMem7E(f.vm));     // the $C7:00FF tail incl. the $1E05 latch
         g_fieldAudio = audio;
@@ -10922,6 +10932,8 @@ int main(int argc, char** argv) {
                            mm[0x1E01] = (uint8_t)song; mm[0x1E00] = 0x10;
                            CtAudioService(audio, mm); }         // C0/1B86 load + play
           if (ruleSpc) CtAudioSetEngineMode(audio, 0); }
+        if (stateApu[0] && !CtAudioLoadState(audio, stateApu))
+          fprintf(stderr, "[loadstate] %s did not load -- the SPC stays cold (the music may break)\n", stateApu);
         if (audioDev) SDL_PauseAudioDevice(audioDev, 0);
         fprintf(stderr, "[audio] SPC700 up: driver in ARAM, %d Hz, %d samples/frame\n",
                 audioHz, audioSamplesPerFrame);
@@ -11007,16 +11019,6 @@ int main(int argc, char** argv) {
   int prevBattleU = 0, prevBattleD = 0;   // Up/Down held-state -> the battle menu-nav edges (§B); field frozen
   int prevBattleL = 0, prevBattleR = 0;   // Left/Right held-state -> target-select nav (battle_scenario2.md T3.1)
   int prevBattleB = 0;             // B-key held-state (X/Backspace) -> the target-select CANCEL edge (P5.1)
-      // --loadstate with the snapshot's SPC beside it (`<state>.apu`, written by F5): the restored WRAM already holds the
-      // CPU's side of the APU protocol, so neither the mailbox seed nor the song re-stage below may write over it -- the
-      // SPC goes back with it instead, as F9 does.
-      char stateApu[1024] = "";
-      if (loadStatePath && stateRestored && !ruleSeeded) {
-        snprintf(stateApu, sizeof stateApu, "%s.apu", loadStatePath);
-        FILE* af = fopen(stateApu, "rb");
-        if (af) fclose(af);
-        else { fprintf(stderr, "[loadstate] no %s -- the location's song starts from a cold driver\n", stateApu); stateApu[0] = 0; }
-      }
   int battleAReleased = 0;         // mode-entry isolation: the A that CONFIRMED the field trigger may still be
                                    // HELD when battle begins; require it to go UP once after entry before the
                                    // first command edge counts (ROM $00F6 fresh-press semantics; user R1/R2)
@@ -11048,8 +11050,6 @@ int main(int argc, char** argv) {
   // callers save their own first and restore it on the way back:
   //   the field  C0/011B (C0/195B / C0/0CEA) `$7E:0920-1DFF -> $7F:2000` (0x14E0 bytes), C0/01A5 -> C0/0905 the reverse,
   //              before the reload's legs and the party reconcile C0/1A03;
-        if (stateApu[0] && !CtAudioLoadState(audio, stateApu))
-          fprintf(stderr, "[loadstate] %s did not load -- the SPC stays cold (the music may break)\n", stateApu);
   //   the overworld C2/2E23 six blocks -- $0000-00EF, $0700-1DFF, $B000-B507, $4000-6FFF, $7200-7DFF, $7E00-85FF --
   //              and C2/2E72 the reverse, right after the RTL.
   // The copies live here, not at the ROM's $7F addresses: the field's $7F:2000 is its event script, which the cartridge
@@ -11299,6 +11299,7 @@ int main(int argc, char** argv) {
   int pendKind = 0;   // transition captured at fade-out start: 0 none, 1 scene->scene door, 2 scene->overworld, 3 overworld->scene
   int pendWorld = -1; // pendKind 2 from the overworld itself: the world C0:0000 loads (worldInit at the commit)
   int pendDest = 0, pendFac = 0, pendHasFlags = 0;
+  int pendStateLoc = -1;   // DEBUG F9 across scenes: the location being entered, whose ct_debug.state is restored at its end
   // pendX/pendY are the 16-bit ROM position scaled to pixels, so they carry the 4 fractional bits
   // C0/42EE-430A puts in the LOW byte ($FF = .9375, $7F = 7.9375). They were ints and the fraction
   // was lost -- see the arrival-flag rule at the changeloc consumer below. -1 stays the sentinel.
@@ -11415,7 +11416,6 @@ int main(int argc, char** argv) {
           running = 0; } } }
 
     // (the title's own picture belongs to the frame that drew it: the probe above has had it; a frame that does not draw
-  int pendStateLoc = -1;   // DEBUG F9 across scenes: the location being entered, whose ct_debug.state is restored at its end
     //  the title breaks the chain of latches the frames between interpolate along)
     g_hostTiChain = g_hostTi != NULL; g_hostTi = NULL;
     // ---- SOUND: one frame of the SPC700, then hand the DSP's samples to SDL ----
