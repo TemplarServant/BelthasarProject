@@ -2400,9 +2400,11 @@ CT_CALLROM_NONMI=1 and `$0384` = 20 so the song's handshake is left to the host'
 it is one CtRaceStageFrame with the frame's pad ($4218's word); the sounds go through the host's post (`F6`, the bump's
 `19 98 80`) and the engine's pitch straight into the SPC's input ports. At the END: CtRaceStageClose (the driver reset)
 and the reboot into the staged location. Check race-story-plays-through-in-the-port: 10F, the race, the reboot, 0DF at
-(39,14) -- the cartridge's path; the port arrives 28 frames early (the song's handshake inside the setup is not charged).
-Still open: the picture (stage 2), those 28 frames, and `FF 09`'s story-only code patches' effects (they patch picture
-code: `$53A0`... are in the HUD/sprite tasks).
+(39,14) -- the cartridge's path. ~~The port arrives 28 frames early (the song's handshake inside the setup is not charged).~~
+**Charged since 2026-10-17** (field.c raceSndPost while the race opens: the post's SPC time, CtAudioLastPostRaster, joins the
+NMI-off stretch): 73 black frames, the cartridge's; 0DF in the port's presented f2914 (the cartridge writes `$0100` at f2913).
+The picture is native too (seq_picture.md sec. 4); it reads `FF 09`'s story-only patches where the overlay holds them (the
+immediates at `$4F74` and `$50DA`, the lists' bytes `$53A0`..), but no capture of an `FF 09` call grades them yet.
 
 ---
 

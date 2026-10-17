@@ -556,7 +556,8 @@ static void hud50D3(K* k, const CtSeqStagePic* sp, unsigned a) {
   a = (a & 0xFFFF) >> 3;
   k->prod = k->mpa * (a & 0xFF);                                      // 50D6 STA $4203
   unsigned v = ((k->prod >> 8) & 0xFF) | ((sp->joy & 0xFF) << 8);
-  k->c = 0; ww(w, 0x15, ksbc(k, 0x00BE, v));                          // 50D9 LDA #00B8 / SEC / CLC / ADC #0006 / SBC $4217
+  unsigned y0 = (rw(w, 0x50DA) + rw(w, 0x50DF)) & 0xFFFF;            // 50D9 LDA #imm / SEC / CLC / ADC #imm: the overlay's bytes
+  k->c = 0; ww(w, 0x15, ksbc(k, y0, v));                             // SBC $4217 ($B8 + 6; FF 09's setup writes $D8 at $50DA)
 }
 static void hud50E7(K* k, unsigned a) { ww(k->w, 0x17, (((a & 0xFFFF) >> 3) + 0xC0) & 0xFFFF); k->c = 0; }
 // $7E:50F1 / 5100 -- the two bikes' markers on the minimap (second $77 / $74, first $52 / $4F), the sprite $7E:538D / 5391
@@ -663,7 +664,8 @@ static void task4F54(CtSeqStagePic* sp, uint8_t* w, int c) {
   k->c = (int)((a >> 15) & 1); a = (a << 1) & 0xFFFF;                 // 4F65 ASL A
   ww(w, 0xFE, a & 0x000E);
   if (!rw(w, 0x0B1A)) ww(w, 0x0A14, 0);
-  k->mpa = ksbc(k, 0x00B8, 0x0021) & 0xFF; k->prod = 0;              // 4F73 STA $4202 (16-bit: $4203 = 0 too)
+  k->mpa = ksbc(k, rw(w, 0x4F74), rw(w, 0x4F77)) & 0xFF; k->prod = 0;   // 4F73 LDA #imm / SBC #imm / STA $4202 (16-bit: $4203 = 0
+                                                                      // too); the immediates are the overlay's ($B8, $21; FF 09: $D8)
   unsigned x61 = rw(w, 0x61), x86 = rw(w, 0x86);
   int hud = !(w[0x0384] & 0x40);
   k->c = x61 >= x86;

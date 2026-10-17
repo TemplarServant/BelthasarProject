@@ -89,10 +89,12 @@ survive): a sprite past x 255, a repeated source row (a zoom past 1), a column s
 step's exact value at the finish.
 
 IN PLAY (2026-10-17): the field gives the race its picture (src/field.c g_racePic, reset when the race opens) and draws
-CtSeqStagePicFrame after each NMI. The user's drive in the port is the cartridge's pixel for pixel, 31 frames later on the
-cartridge -- the opening's residual (the port prices 44 black frames before the setup's NMI, the cartridge takes 75: the setup's
-song handshake), not the picture's: port f150 / 400 / 1000 / 2000 / 2700 / 2760 = cartridge f181 / 431 / 1031 / 2031 / 2731 /
-2791, every one 57344 / 57344 (race-story-picture-midrace-in-the-port-vs-oracle, race-story-picture-finish-in-the-port-vs-oracle).
+CtSeqStagePicFrame after each NMI. The user's drive in the port is the cartridge's pixel for pixel at the field's alignment
+(port P = cartridge `--peek` P+2): port f400 / 2760 = cartridge f402 / 2762, 57344 / 57344 each
+(race-story-picture-midrace-in-the-port-vs-oracle, race-story-picture-finish-in-the-port-vs-oracle). That needed the opening
+priced whole: the song $2C's post inside the setup (`JSR $375F`, its JSL C7/0004 with the NMI off) costs the SPC time the
+host's driver takes, 10177261 cycles here, so the stretch is 73 frames -- the cartridge's (f66 -> the first NMI at f139);
+without it the port opened 29 frames early.
 
 ## 5. Next
 

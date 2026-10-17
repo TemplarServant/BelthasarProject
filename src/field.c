@@ -5099,7 +5099,13 @@ static void fieldSoundFlush(uint8_t* mem7E) { if (g_fieldAudio && mem7E) CtAudio
 // THE RACE'S SOUND (seq_race.h CtRaceIo, ctx = the host's WRAM): a script's `F6` and the bump's `19 98 80` are the mailbox
 // $1E00-$1E03 the stage already wrote, posted like every other `JSL $C7:0004`; the engine's pitch is the CPU writing the
 // SPC's own input ports ($2141 = pitch, $2140 = $89: `$7E:4BD2` / `4BD7`), on the same SPC.
-static void raceSndPost(void* c) { fieldSoundFlush((uint8_t*)c); }
+// While the race OPENS (g_raceOpening), its posts are inside the setup's NMI-off stretch -- the song $2C's `JSR $375F` at
+// $7E:3B51 -- and their SPC time, the C7 code's real cycles waiting on the driver, is part of that stretch: summed here.
+static int g_raceOpening = 0; static long long g_raceOpenPostMaster = 0;
+static void raceSndPost(void* c) {
+  fieldSoundFlush((uint8_t*)c);
+  if (g_raceOpening && g_fieldAudio) g_raceOpenPostMaster += CtAudioLastPostRaster(g_fieldAudio, NULL, NULL, NULL);
+}
 static void raceSndSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)a; (void)b; (void)d; fieldSoundFlush((uint8_t*)c); }
 static void raceSndApu(void* c, uint8_t pitch) {
   (void)c;
@@ -16959,16 +16965,20 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9) && !(seqId & 0x40)) {
         CtRaceIo rio = raceIoFor(w);
         memset(&g_racePic, 0, sizeof g_racePic); CtSeqPicReset(&g_racePic.p); rio.pic = &g_racePic;
-        if (CtRaceStageOpen(w, (uint8_t)seqId, &rio) == 0) {
+        g_raceOpening = 1; g_raceOpenPostMaster = 0;
+        int opened = CtRaceStageOpen(w, (uint8_t)seqId, &rio) == 0;
+        g_raceOpening = 0;
+        if (opened) {
           seqOpen = seqEntry + 1; raceOn = 1; raceEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
             uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = 9521394L;
-            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
-            printf("sequence: entry %d (the race) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
-                   seqEntry, frameNo, oc, od, os, seqHold);
+            long sp = (long)g_raceOpenPostMaster;
+            if (oc > 0) seqHold = (int)((oc + od + os + sp) / CT_LOAD_FRAME_CYCLES);
+            printf("sequence: entry %d (the race) opening at f%d -- %ld + %ld + %ld + the song's %ld cycles = %d black frame(s)\n",
+                   seqEntry, frameNo, oc, od, os, sp, seqHold);
           }
         } else printf("sequence: entry %d -- the native race declined (CtRaceStageOpen)\n", seqEntry);
       }

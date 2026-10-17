@@ -39500,10 +39500,11 @@
       ],
       "expect": [
         "loctrace: -> loc 10F tile(8,8) facing=0 style=0",
-        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 cycles = 44 black frame(s)",
+        "loctrace: -> loc 0DF tile(39,14) facing=0 style=0",
+        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 + the song's 10177261 cycles = 73 black frame(s)",
+        "sequence: op-0xFF 00 -> JML $C3:0000 ($0384=0) = sequence-table entry 0, and the overlay's machine plays it. (at f66)",
         "sequence: the race ended ($7E:0000=1) -> reboot into loc 10F",
-        "reboot: JML C0:0000 -> loc 10F tile(8,8) bits00",
-        "loctrace: -> loc 0DF tile(39,14) facing=0 style=0"
+        "reboot: JML C0:0000 -> loc 10F tile(8,8) bits00"
       ],
       "pin": [
         "^loctrace: ",
@@ -39529,7 +39530,7 @@
         "python",
         "tools/frame_region_cmp.py",
         "saves/race_re/race_user.state",
-        "431",
+        "402",
         "400",
         "0",
         "0",
@@ -39547,7 +39548,7 @@
       ],
       "env": {
         "CT_ORACLE_LOGICAL": "1",
-        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:30,100:2,0:399",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:30,100:2,0:370",
         "CT_AUDIO_LOCKSTEP": "1",
         "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state"
       },
@@ -39559,7 +39560,7 @@
         "tools/frame_region_cmp.py"
       ],
       "expect": [
-        "frame-region-cmp: port f400 vs oracle f431 box (0,0)-(256,224) -> 57344 / 57344 identical"
+        "frame-region-cmp: port f400 vs oracle f402 box (0,0)-(256,224) -> 57344 / 57344 identical"
       ],
       "pin": [
         "^frame-region-cmp: "
@@ -39571,10 +39572,16 @@
           "find": "          else CtSeqStagePicFrame(&g_racePic, CtWramSys(fieldWram()), fb);",
           "replace": "          /* MUT: the race drawn black */",
           "why": "the field draws the race's native picture after each of its NMIs"
+        },
+        {
+          "file": "src/field.c",
+          "find": "            if (oc > 0) seqHold = (int)((oc + od + os + sp) / CT_LOAD_FRAME_CYCLES);",
+          "replace": "            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);   /* MUT */",
+          "why": "the song $2C's post inside the setup costs the SPC's time: the opening is 73 NMI-off frames, not 44"
         }
       ],
-      "note_pass": "the story race as the port plays it, mid-race (the road, both bikes, the HUD): the whole frame the cartridge's, pixel for pixel (31 frames later on the cartridge: the opening's known residual)",
-      "notes": "The field (src/field.c) gives the race its picture (g_racePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 400; the cartridge (the logical oracle, the same pad) its frame 431. THE 31 FRAMES are the opening's residual, not the picture: the port prices 44 black frames before the setup's NMI, the cartridge takes 75 (the setup's song handshake: race-native-port memory, sequence_table.md sec. 12); from the setup's NMI on the frames are the same NMI for NMI (race-picture-native-vs-oracle)."
+      "note_pass": "the story race as the port plays it, mid-race (the road, both bikes, the HUD): the whole frame the cartridge's, pixel for pixel (port P = cartridge P+2, the field's alignment)",
+      "notes": "The field (src/field.c) gives the race its picture (g_racePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 400; the cartridge (the logical oracle, the same pad) its --peek frame 402: the field's P+2 alignment (ct-frame-alignment). The opening is the cartridge's 73 NMI-off frames since the song $2C's post inside the setup is charged (the SPC time of its JSL C7/0004, 10177261 cycles in this run); before that the port opened 29 frames early."
     },
     {
       "name": "race-story-picture-finish-in-the-port-vs-oracle",
@@ -39583,7 +39590,7 @@
         "python",
         "tools/frame_region_cmp.py",
         "saves/race_re/race_user.state",
-        "2791",
+        "2762",
         "2760",
         "0",
         "0",
@@ -39601,7 +39608,7 @@
       ],
       "env": {
         "CT_ORACLE_LOGICAL": "1",
-        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:30,100:2,0:2759",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:30,100:2,0:2730",
         "CT_AUDIO_LOCKSTEP": "1",
         "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state"
       },
@@ -39613,7 +39620,7 @@
         "tools/frame_region_cmp.py"
       ],
       "expect": [
-        "frame-region-cmp: port f2760 vs oracle f2791 box (0,0)-(256,224) -> 57344 / 57344 identical"
+        "frame-region-cmp: port f2760 vs oracle f2762 box (0,0)-(256,224) -> 57344 / 57344 identical"
       ],
       "pin": [
         "^frame-region-cmp: "
@@ -39627,8 +39634,8 @@
           "why": "the field draws the race's native picture after each of its NMIs"
         }
       ],
-      "note_pass": "the story race as the port plays it, after the finish (the markers gone, the score counted down): the whole frame the cartridge's, pixel for pixel (31 frames later on the cartridge: the opening's known residual)",
-      "notes": "The field (src/field.c) gives the race its picture (g_racePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 2760; the cartridge (the logical oracle, the same pad) its frame 2791. THE 31 FRAMES are the opening's residual, not the picture: the port prices 44 black frames before the setup's NMI, the cartridge takes 75 (the setup's song handshake: race-native-port memory, sequence_table.md sec. 12); from the setup's NMI on the frames are the same NMI for NMI (race-picture-native-vs-oracle)."
+      "note_pass": "the story race as the port plays it, after the finish (the markers gone, the score counted down): the whole frame the cartridge's, pixel for pixel (port P = cartridge P+2, the field's alignment)",
+      "notes": "The field (src/field.c) gives the race its picture (g_racePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 2760; the cartridge (the logical oracle, the same pad) its --peek frame 2762: the field's P+2 alignment (ct-frame-alignment). The opening is the cartridge's 73 NMI-off frames since the song $2C's post inside the setup is charged (the SPC time of its JSL C7/0004, 10177261 cycles in this run); before that the port opened 29 frames early."
     },
     {
       "name": "ending-stage-logic-vs-oracle",
