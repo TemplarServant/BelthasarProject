@@ -26885,6 +26885,140 @@
       "notes": "The sequence stages are drawn by the vendored LakeSnes PPU (src/seq_ppu.c) fed with what the stage's code writes, the way audio.c feeds the SPC700 -- the user's choice over extending the hand transliteration in title_intro.c, which had modes 7/0/2 only and read mode 7 from the title's baked map. This check isolates the picture path from any ported stage code: ct.exe --seqppucmp steps the oracle until it LEAVES vblank (every NMI write for the frame done), copies its PPU and its DMA channel setup into a CtSeqPpu, draws the frame there with the port's HDMA walk (dma.c's order, no cycles), lets the oracle draw the same frame, and compares all 2048 bytes of every line. MEASURED: the race's NMI tasks overrun into the visible frame -- 1180 CPU writes into $7E:F232..$F807 from the self-modifying mode-7 table builder ($7E:357B, its loop at $3634) after line 0 -- so the grader draws with the WRAM as the frame ENDS (SEQPPUCMP_LATE=1); drawn that way the picture is exact on every frame of the race measured (200 from saves' f6150 setup, 120 from f6300), i.e. the builder always finishes a line's entry before HDMA reads it, and a port whose NMI builds its tables before the frame draws is exact too. The battle is NOT a target: its HUD splits the screen with a mid-frame IRQ (lines 212-224 differ). FIXTURE: saves/attract_race_f6300.state = the attract at f6300, 145 frames into entry 0 (build/ct.exe --peek saves/attract_cena_inicial.state --frames 5800, then +350, then +150, each with PEEK_SAVE). SURVIVING MUTATION, stated: dma_doHdma's last-active-channel quirk (only the high byte of a terminating indirect pointer) does not move the race's picture -- none of its channels ends on such an entry inside the visible lines."
     },
     {
+      "name": "seq-pic-race-attract-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--seqpiccmp",
+        "saves/attract_race_handoff_f6150.state",
+        "430"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/attract_race_handoff_f6150.state"
+      ],
+      "expect": [
+        "seqpiccmp: 430 frame(s) from saves/attract_race_handoff_f6150.state -> 0 differ (0 pixels) -- the native compositor reproduces the cartridge's picture"
+      ],
+      "pin": [
+        "^seqpiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "the motorcycle race's picture, 430 frames of the attract's run, drawn by the native compositor equals the cartridge's",
+      "mutations": [
+        {
+          "file": "src/seq_pic.c",
+          "find": "  L->m7sx = ((p->m7[0] * ch) & ~63) + ((p->m7[1] * ry) & ~63) + ((p->m7[1] * cv) & ~63) + (xc << 8);",
+          "replace": "  L->m7sx = (p->m7[0] * ch) + (p->m7[1] * ry) + (p->m7[1] * cv) + (xc << 8);   /* MUT */",
+          "why": "mode 7's line start drops the low 6 bits of each product (the PPU's own arithmetic)"
+        },
+        {
+          "file": "src/seq_pic.c",
+          "find": "  if (rd) { hdmaInit(ch, en, w, rd, ctx); hdmaRun(p, ch, en, w, rd, ctx, 0); }",
+          "replace": "  if (rd) { hdmaInit(ch, en, w, rd, ctx); }   /* MUT */",
+          "why": "HDMA's first transfer comes before line 1: without it every per-line register lands a line late"
+        },
+        {
+          "file": "src/seq_pic.c",
+          "find": "        if (L->half && (sl != 5 || !L->addSub)) { r >>= 1; g >>= 1; b >>= 1; }",
+          "replace": "        if (L->half) { r >>= 1; g >>= 1; b >>= 1; }   /* MUT */",
+          "why": "the half does not apply where the sub screen is its backdrop and the operand is the sub screen"
+        }
+      ],
+      "notes": "THE SEQUENCE STAGES' NATIVE PICTURE (src/seq_pic.c; the user's decision 2026-10-17: a native compositor for the $C3 stages, not the vendored PPU). ct.exe --seqpiccmp steps the oracle until it LEAVES vblank (every NMI write for the frame done), turns its PPU's state back into the register bytes it was written as (VRAM, CGRAM, OAM copied), draws the frame natively with the oracle's WRAM as HDMA's tables, runs the oracle to its next vblank and compares the two pictures pixel for pixel. The compositor follows the rules of the oracle's PPU over the register bytes: the layer order by mode, the 2/4/8 bpp fetch, offset per tile, mode 7's start and step, the windows, the colour math and its half, the sprites' 32 / 34 limits, and HDMA walked between the lines. Graded here on the stages' own frames; the stages' code that FILLS it (the race's setup, hooks and tasks) is ported next."
+    },
+    {
+      "name": "seq-pic-entry3-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--seqpiccmp",
+        "saves/attract_entry3_handoff_f6750.state",
+        "300"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/attract_entry3_handoff_f6750.state"
+      ],
+      "expect": [
+        "seqpiccmp: 300 frame(s) from saves/attract_entry3_handoff_f6750.state -> 0 differ (0 pixels) -- the native compositor reproduces the cartridge's picture"
+      ],
+      "pin": [
+        "^seqpiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "entry 3's night panorama (mode 2, offset per tile, BG2's map base changed mid-frame) drawn natively equals the cartridge's, 300 frames",
+      "mutations": [
+        {
+          "file": "src/seq_pic.c",
+          "find": "        if (L->mode == 2 || L->mode == 4 || L->mode == 6) opt(p, L, cl, &lx, &ly);",
+          "replace": "        /* MUT: no offset per tile */",
+          "why": "mode 2's offset per tile: the water's ripple is BG3's table of offsets"
+        }
+      ],
+      "notes": "THE SEQUENCE STAGES' NATIVE PICTURE (src/seq_pic.c; the user's decision 2026-10-17: a native compositor for the $C3 stages, not the vendored PPU). ct.exe --seqpiccmp steps the oracle until it LEAVES vblank (every NMI write for the frame done), turns its PPU's state back into the register bytes it was written as (VRAM, CGRAM, OAM copied), draws the frame natively with the oracle's WRAM as HDMA's tables, runs the oracle to its next vblank and compares the two pictures pixel for pixel. The compositor follows the rules of the oracle's PPU over the register bytes: the layer order by mode, the 2/4/8 bpp fetch, offset per tile, mode 7's start and step, the windows, the colour math and its half, the sprites' 32 / 34 limits, and HDMA walked between the lines. Graded here on the stages' own frames; the stages' code that FILLS it (the race's setup, hooks and tasks) is ported next."
+    },
+    {
+      "name": "seq-pic-ending-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--seqpiccmp",
+        "saves/ending_re/ending_handoff_f130.state",
+        "400"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ending_re/ending_handoff_f130.state"
+      ],
+      "expect": [
+        "seqpiccmp: 400 frame(s) from saves/ending_re/ending_handoff_f130.state -> 0 differ (0 pixels) -- the native compositor reproduces the cartridge's picture"
+      ],
+      "pin": [
+        "^seqpiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "the ending's picture drawn natively equals the cartridge's, 400 frames",
+      "mutations": [],
+      "notes": "THE SEQUENCE STAGES' NATIVE PICTURE (src/seq_pic.c; the user's decision 2026-10-17: a native compositor for the $C3 stages, not the vendored PPU). ct.exe --seqpiccmp steps the oracle until it LEAVES vblank (every NMI write for the frame done), turns its PPU's state back into the register bytes it was written as (VRAM, CGRAM, OAM copied), draws the frame natively with the oracle's WRAM as HDMA's tables, runs the oracle to its next vblank and compares the two pictures pixel for pixel. The compositor follows the rules of the oracle's PPU over the register bytes: the layer order by mode, the 2/4/8 bpp fetch, offset per tile, mode 7's start and step, the windows, the colour math and its half, the sprites' 32 / 34 limits, and HDMA walked between the lines. Graded here on the stages' own frames; the stages' code that FILLS it (the race's setup, hooks and tasks) is ported next."
+    },
+    {
+      "name": "seq-pic-day-of-lavos-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--seqpiccmp",
+        "saves/lavos_re/ff07_handoff_f10.state",
+        "400"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/ff07_handoff_f10.state"
+      ],
+      "expect": [
+        "seqpiccmp: 400 frame(s) from saves/lavos_re/ff07_handoff_f10.state -> 0 differ (0 pixels) -- the native compositor reproduces the cartridge's picture"
+      ],
+      "pin": [
+        "^seqpiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "the Day of Lavos's picture (FF 07) drawn natively equals the cartridge's, 400 frames",
+      "mutations": [],
+      "notes": "THE SEQUENCE STAGES' NATIVE PICTURE (src/seq_pic.c; the user's decision 2026-10-17: a native compositor for the $C3 stages, not the vendored PPU). ct.exe --seqpiccmp steps the oracle until it LEAVES vblank (every NMI write for the frame done), turns its PPU's state back into the register bytes it was written as (VRAM, CGRAM, OAM copied), draws the frame natively with the oracle's WRAM as HDMA's tables, runs the oracle to its next vblank and compares the two pictures pixel for pixel. The compositor follows the rules of the oracle's PPU over the register bytes: the layer order by mode, the 2/4/8 bpp fetch, offset per tile, mode 7's start and step, the windows, the colour math and its half, the sprites' 32 / 34 limits, and HDMA walked between the lines. Graded here on the stages' own frames; the stages' code that FILLS it (the race's setup, hooks and tasks) is ported next."
+    },
+    {
       "name": "seq-race-xlat-lockstep",
       "argv": [
         "build/ct.exe",

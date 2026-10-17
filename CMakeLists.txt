@@ -23,7 +23,7 @@ if(MSVC)
 endif()
 
 # The playable host's sources (ct_field below; the Android app's libmain.so, android/CMakeLists.cmake).
-set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_ending.c src/seq_entry3.c src/seq_entry4.c src/seq_entry6.c src/seq_entry7.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
+set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_pic.c src/seq_ending.c src/seq_entry3.c src/seq_entry4.c src/seq_entry6.c src/seq_entry7.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
                  src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
 
 # ANDROID (docs/ANDROID.md): only the playable host, as the shared library SDL's Java activity loads. The NDK's CMake
@@ -61,6 +61,7 @@ add_executable(ct
   src/seq_entry3.c # --seqstage: entry 3 from the story (FF 23), native (sequence_table.md sec. 14)
   src/seq_entry4.c src/seq_entry6.c src/seq_entry7.c # --seqstage: entry 4 (FF 24, the Tyranno Lair: Lavos falls), native (sequence_table.md sec. 15)
   src/seq_ppu.c  # --seqppucmp: the sequence stages' vendored-PPU picture, graded against the oracle's own frame
+  src/seq_pic.c  # --seqpiccmp: the sequence stages' NATIVE picture, graded against the oracle's own frame
   ${SNES_SRC}
 )
 target_include_directories(ct PRIVATE snes src)

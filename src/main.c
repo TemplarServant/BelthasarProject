@@ -7221,6 +7221,94 @@ static int runSeqPpuCmp(const char* romPath, const char* statePath, int frames) 
   return 0;
 }
 
+// --seqpiccmp <state> <frames> -- THE SEQUENCE PICTURE, NATIVE (src/seq_pic.c), graded against the oracle's own frame: the same
+// instant as --seqppucmp (the oracle leaving vblank), its PPU's state turned back into the register bytes it was written as,
+// VRAM / CGRAM / OAM copied, the frame drawn natively with the oracle's WRAM as HDMA's tables, the oracle run to its next
+// vblank, and the two pictures compared pixel for pixel (the oracle's line buffer, as the screen shows it).
+#include "seq_pic.h"
+static void seqPicFromPpu(CtSeqPic* q, const Ppu* u) {
+  CtSeqPicReset(q);
+  memcpy(q->vram, u->vram, sizeof q->vram); memcpy(q->cgram, u->cgram, sizeof q->cgram);
+  memcpy(q->oam, u->oam, sizeof q->oam); memcpy(q->highOam, u->highOam, sizeof q->highOam);
+  uint8_t* r = q->r;
+  r[0x00] = (uint8_t)((u->forcedBlank ? 0x80 : 0) | (u->brightness & 0x0F));
+  r[0x01] = (uint8_t)((u->objSize << 5) | ((u->objTileAdr1 >> 13) & 7) | ((((u->objTileAdr2 - u->objTileAdr1) >> 9) - 8) & 0x18));
+  r[0x02] = u->oamAdr; r[0x03] = (uint8_t)(u->objPriority ? 0x80 : 0);
+  r[0x05] = (uint8_t)(u->mode | (u->bg3priority ? 8 : 0));
+  for (int i = 0; i < 4; i++) {
+    if (u->bgLayer[i].bigTiles) r[0x05] |= (uint8_t)(0x10 << i);
+    if (u->bgLayer[i].mosaicEnabled) r[0x06] |= (uint8_t)(1 << i);
+    r[0x07 + i] = (uint8_t)((u->bgLayer[i].tilemapAdr >> 8) | (u->bgLayer[i].tilemapWider ? 1 : 0) | (u->bgLayer[i].tilemapHigher ? 2 : 0));
+    q->hofs[i] = u->bgLayer[i].hScroll; q->vofs[i] = u->bgLayer[i].vScroll;
+  }
+  r[0x06] |= (uint8_t)((u->mosaicSize - 1) << 4); q->mosaicStart = u->mosaicStartLine;
+  r[0x0B] = (uint8_t)((u->bgLayer[0].tileAdr >> 12) | ((u->bgLayer[1].tileAdr >> 12) << 4));
+  r[0x0C] = (uint8_t)((u->bgLayer[2].tileAdr >> 12) | ((u->bgLayer[3].tileAdr >> 12) << 4));
+  q->scrollPrev = u->scrollPrev; q->scrollPrev2 = u->scrollPrev2;
+  for (int i = 0; i < 8; i++) q->m7[i] = u->m7matrix[i];
+  q->m7prev = u->m7prev;
+  r[0x1A] = (uint8_t)((u->m7largeField ? 0x80 : 0) | (u->m7charFill ? 0x40 : 0) | (u->m7yFlip ? 2 : 0) | (u->m7xFlip ? 1 : 0));
+  for (int i = 0; i < 6; i++) {
+    const WindowLayer* w = &u->windowLayer[i];
+    uint8_t n = (uint8_t)((w->window1inversed ? 1 : 0) | (w->window1enabled ? 2 : 0) | (w->window2inversed ? 4 : 0) | (w->window2enabled ? 8 : 0));
+    r[0x23 + i / 2] |= (uint8_t)(n << ((i & 1) * 4));
+    if (i < 4) r[0x2A] |= (uint8_t)((w->maskLogic & 3) << (i * 2)); else r[0x2B] |= (uint8_t)((w->maskLogic & 3) << ((i - 4) * 2));
+  }
+  r[0x26] = u->window1left; r[0x27] = u->window1right; r[0x28] = u->window2left; r[0x29] = u->window2right;
+  for (int i = 0; i < 5; i++) {
+    if (u->layer[i].mainScreenEnabled) r[0x2C] |= (uint8_t)(1 << i);
+    if (u->layer[i].subScreenEnabled) r[0x2D] |= (uint8_t)(1 << i);
+    if (u->layer[i].mainScreenWindowed) r[0x2E] |= (uint8_t)(1 << i);
+    if (u->layer[i].subScreenWindowed) r[0x2F] |= (uint8_t)(1 << i);
+  }
+  r[0x30] = (uint8_t)((u->clipMode << 6) | (u->preventMathMode << 4) | (u->addSubscreen ? 2 : 0) | (u->directColor ? 1 : 0));
+  r[0x31] = (uint8_t)((u->subtractColor ? 0x80 : 0) | (u->halfColor ? 0x40 : 0));
+  for (int i = 0; i < 6; i++) if (u->mathEnabled[i]) r[0x31] |= (uint8_t)(1 << i);
+  q->fix[0] = u->fixedColorR; q->fix[1] = u->fixedColorG; q->fix[2] = u->fixedColorB;
+  r[0x33] = (uint8_t)((u->m7extBg ? 0x40 : 0) | (u->pseudoHires ? 8 : 0) | (u->overscan ? 4 : 0) | (u->objInterlace ? 2 : 0) | (u->interlace ? 1 : 0));
+}
+static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) return 2;
+  static CtSeqPic q;
+  static uint8_t rgb[256 * 224 * 3];
+  long totalBad = 0; int badFrames = 0, first = -1;
+  for (int k = 0; k < frames; k++) {
+    while (s->inVblank) cpu_runOpcode(s->cpu);
+    seqPicFromPpu(&q, s->ppu);
+    CtSeqPicHdma ch[8]; uint8_t en = 0;
+    for (int i = 0; i < 8; i++) {
+      DmaChannel* c = &s->dma->channel[i];
+      ch[i].dmap = (uint8_t)((c->indirect ? 0x40 : 0) | (c->mode & 7));
+      ch[i].bAdr = c->bAdr; ch[i].aAdr = c->aAdr; ch[i].aBank = c->aBank; ch[i].indBank = c->indBank;
+      if (c->hdmaActive) en |= (uint8_t)(1 << i);
+    }
+    int late = getenv("SEQPICCMP_LATE") != NULL;                      // (the tables as the frame ends: see --seqppucmp)
+    if (!late) CtSeqPicFrame(&q, ch, en, seqPpuCmpRead, s, rgb);
+    uint32_t fr = s->frames;
+    while (!s->inVblank && fr == s->frames) cpu_runOpcode(s->cpu);
+    if (late) CtSeqPicFrame(&q, ch, en, seqPpuCmpRead, s, rgb);
+    int bad = 0;
+    for (int y = 0; y < 224; y++) {
+      const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+      int lb = 0;
+      for (int x = 0; x < 256; x++) {
+        const uint8_t* o = b + x * 8 + 4; const uint8_t* m = rgb + (y * 256 + x) * 3;   // the main pixel, B G R (+1 format)
+        if (o[s->ppu->pixelOutputFormat + 2] != m[0] || o[s->ppu->pixelOutputFormat + 1] != m[1] || o[s->ppu->pixelOutputFormat + 0] != m[2]) { bad++; lb++; }
+      }
+      if (lb && k == 0 && getenv("SEQPICCMP_LINES")) printf("seqpiccmp: frame 0 line %d: %d px differ\n", y + 1, lb);
+    }
+    if (bad) { badFrames++; totalBad += bad; if (first < 0) first = k; }
+    if (getenv("SEQPICCMP_VERBOSE")) printf("seqpiccmp: frame %d -> %d / 57344 pixels differ\n", k, bad);
+  }
+  printf("seqpiccmp: %d frame(s) from %s -> %d differ (%ld pixels)%s\n", frames, statePath, badFrames, totalBad,
+         first >= 0 ? "" : " -- the native compositor reproduces the cartridge's picture");
+  if (first >= 0) printf("seqpiccmp: first differing frame %d\n", first);
+  CtOracleDestroy(s); free(rom);
+  return 0;
+}
+
 // --cputrace <state> <frames> <out.txt> -- EVERY instruction the oracle executes, with the bytes it executed.
 // One line per opcode: `KK:PPPP b0 b1 b2 b3 A=.... X=.... Y=.... S=.... D=.... B=.. P=nvmxdizc`, the four bytes read
 // off the bus at the moment of execution (so self-modifying code -- the race's $357B patches its own loop every
@@ -15884,6 +15972,7 @@ int main(int argc, char** argv) {
   const char* oamOut = NULL;
   const char* fxcState = NULL, *arenaState = NULL;
   const char* seqPpuState = NULL; int seqPpuFrames = 1;
+  const char* seqPicState = NULL; int seqPicFrames = 1;
   const char* cpuTraceState = NULL, *cpuTraceOut = NULL; int cpuTraceFrames = 1;
   const char* xlatCmpState = NULL; int xlatCmpFrames = 1;
   const char* wipeDumpState = NULL; int wipeDumpK = 1; const char* wipeDumpIn = NULL; const char* wipeDumpOut = NULL; const char* wipeDumpMask = NULL; uint32_t wipeDumpEntry = 0xC3000E, wipeDumpExit = 0xC022FE, wipeDumpMaskPc = 0xC000CB;
@@ -16017,6 +16106,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--sweepfxcompose") && i + 3 < argc) { fxcState = argv[++i]; fxcF0 = atoi(argv[++i]); fxcF1 = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--sweeparenascroll") && i + 3 < argc) { arenaState = argv[++i]; fxcF0 = atoi(argv[++i]); fxcF1 = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--seqppucmp") && i + 2 < argc) { seqPpuState = argv[++i]; seqPpuFrames = atoi(argv[++i]); }
+    else if (!strcmp(argv[i], "--seqpiccmp") && i + 2 < argc) { seqPicState = argv[++i]; seqPicFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatphase") && i + 4 < argc) { xlatPhState = argv[++i]; xlatPhPc = (uint32_t)strtoul(argv[++i], NULL, 16); xlatPhExtra = atoi(argv[++i]); xlatPhFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatentries") && i + 2 < argc) { xlatEnState = argv[++i]; xlatEnFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatcmp") && i + 2 < argc) { xlatCmpState = argv[++i]; xlatCmpFrames = atoi(argv[++i]); }
@@ -16268,6 +16358,7 @@ int main(int argc, char** argv) {
   if (arenaState) return CT_NOT_ORACLE(runSweepArenaScroll(romPath, arenaState, fxcF0, fxcF1));
   if (fxcState) return CT_NOT_ORACLE(runSweepFxCompose(romPath, fxcState, fxcF0, fxcF1));
   if (seqPpuState) return CT_NOT_ORACLE(runSeqPpuCmp(romPath, seqPpuState, seqPpuFrames));
+  if (seqPicState) return CT_NOT_ORACLE(runSeqPicCmp(romPath, seqPicState, seqPicFrames));
   if (cpuTraceState) return CT_NOT_ORACLE(runCpuTrace(romPath, cpuTraceState, cpuTraceFrames, cpuTraceOut));
   if (xlatCmpState) return CT_NOT_ORACLE(runXlatCmp(romPath, xlatCmpState, xlatCmpFrames));
   if (wipeDumpState) return CT_NOT_ORACLE(runWipeDump(romPath, wipeDumpState, wipeDumpK, wipeDumpIn, wipeDumpOut, wipeDumpMask, wipeDumpEntry, wipeDumpExit, wipeDumpMaskPc));
