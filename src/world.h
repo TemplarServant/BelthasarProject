@@ -206,6 +206,7 @@ void CtWorldTraceEnd(const uint8_t* ram);               // ...and its line as th
 void CtWorldMapEnter(uint8_t* ram, uint8_t* vram);     // C2/631F's NMI-off half: the world map ($027C = 6) set up
 void CtWorldLeadReinit(uint8_t* ram);     // C2/34F8: the lead's init again (stepping out of a vehicle, $027E 5 -> 0)
 void CtWorldLeadRingPush(uint8_t* ram);   // C2/3934: the lead's step arrival onto its trail ring ($1B5A/$1B5B/$1B7B)
+void CtWorldLeadArrive(uint8_t* ram);     // C2/375F: the arrival's cell test -> $0282 (the scanner's request)
 
 // FIELD -> OVERWORLD RETURN: a field 'world' exit jumps to the overworld with $0102/$0103 =
 // the arrival 8px cell (the exit record's dpos>>3) and $0104 = facing. The loader places the

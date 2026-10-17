@@ -3755,10 +3755,7 @@ static void drawMenuGlyphSave(uint8_t* fb, int code, int x, int y) {
 }
 // (The non-cursor rows' 115/24/8 dim is NOT a palette: it is the PPU's windowed half color math,
 //  applied by CtMenuRenderSave as a composed-pixel band halve -- see the measurement note there.)
-// The overworld location-name banner (oracle-verified: the 12px DIALOGUE VWF in a WHITE/grey
-// palette -- body 214,214,214 / AA 82,82,82 / shadow 41,41,41 -- NO box, centred on the player,
-// body top y68 = ~44px above the screen-centred player). "Market" measured 41px wide x 9px tall.
-// The two VWF hooks the LOAD screen needs (menu.h): the same dialogue font drawOwLocName uses.
+// The two VWF hooks the LOAD screen needs (menu.h): the dialogue font (host approximations -- bank C2's own engine is vwf.c).
 // A space is 4 px there and here -- cGlyphW has no entry for it.
 static int mVwfWidth(const char* s) {
   int w = 0;
@@ -3769,15 +3766,6 @@ static void mVwfDraw(uint8_t* fb, const char* s, int x, int y, const uint8_t ton
   if (!g_font) return;
   for (; *s; s++)
     x += (*s == ' ') ? 4 : cDrawGlyphP(fb, g_font, cGlyph((unsigned char)*s), x, y, tone);
-}
-static void drawOwLocName(uint8_t* fb, const uint8_t* font, const char* s, int len, int cx, int top) {
-  static const uint8_t tone[4][3] = {{0,0,0},{41,41,41},{82,82,82},{214,214,214}};
-  if (!font) return;
-  int tw = 0;
-  for (int i = 0; i < len; i++) tw += (s[i] == ' ') ? 4 : cGlyphW(font, cGlyph((unsigned char)s[i]));
-  int x = cx - tw / 2;
-  for (int i = 0; i < len; i++)
-    x += (s[i] == ' ') ? 4 : cDrawGlyphP(fb, font, cGlyph((unsigned char)s[i]), x, top, tone);
 }
 // The CT char code for an ASCII name char (looked up via the keyboard grid), or 0.
 static int asciiToCt(char a) {
@@ -13146,7 +13134,7 @@ int main(int argc, char** argv) {
             CtWorldLeadAnimFrame(wd.wram, dir, ph0, blocked, wd.pfac);
             // C2/3745-3757: the frame the step ARRIVES (the mover's phase 2 -> 1), the handler pushes the lead's
             // position onto its trail ring -- after its tick (3731), before the followers' blocks read it in the pass.
-            if (ph0 == 2 && wd.mv.phase == 1) CtWorldLeadRingPush(wd.wram);
+            if (ph0 == 2 && wd.mv.phase == 1) { CtWorldLeadRingPush(wd.wram); CtWorldLeadArrive(wd.wram); }
             wd.pfac = wd.wram[CtWorldLeadBlock(wd.wram) + 0x28] & 3; }   // the facing IS +28 & 3
         }
         wd.prevPhase = wd.mv.phase;
@@ -13619,16 +13607,8 @@ int main(int argc, char** argv) {
             if (shown && g_placardShowAt < 0) g_placardShowAt = cur;   // must be the op-0x4C operand, $78
           }
           g_placardPrevShown = shown; }
-        // The name is the banner object's (class $5628, C2/5628: it renders $1B58's string from $C6:F400 into $7E:8621 and
-        // queues it to VRAM $1E00/$1F00) -- no such block, no banner.
-        if (wd.entryLatch != 0xFFFF && CtWorldHasObjClass(wd.wram, OWOBJ_CLASS_NAMEBANNER)) {
-          CtWorldEntry en;
-          if (CtWorldEntryDecode(wd.wram, wd.entryLatch, &en)) {
-            int sl = 0;
-            const char* ns = CtAssetString(&assets, CT_ASSET_STRINGS, 3, en.nameId, &sl);
-            if (ns) drawOwLocName(fb, font, ns, sl, CAMW / 2, 68);   // oracle: centred on player, body top y68
-          }
-        }
+        // The place name is the banner object's own (class $5628, world.c obNameBanner: $1B58's string from $C6:F400 through
+        // vwf.c into $7E:8621, the NMI's queue to VRAM $1E00/$1F00, its frame on the draw list) -- an OBJ like the placard.
       }
       { const char* os = dbg.owIdleShot;             // headless idle-fidget capture (pre-fire + the fidget poses)
         if (os && worldTest) {

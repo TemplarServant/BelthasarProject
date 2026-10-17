@@ -670,6 +670,17 @@ make a lost hide look intentional. Three mutations (drop the gate, drop the `STZ
 move the enqueue onto the expiring dwell) are all killed. Dossier:
 `disasm/notes/ow_placard_draw_list.md`.
 
+### ow-place-name-banner-vs-rule-cartridge (`tools/ow_banner_cmp.py`)
+
+The overworld's place-name banner is the ROM's object, class `$5628` (world.c obNameBanner): the name `$1B58` written one
+glyph a frame by bank C2's text engine (vwf.c) into `$7E:8621`, queued to VRAM `$1E00`/`$1F00`, six 16 x 16 pieces over
+the party through the draw list. Cartridge `saves/ow_w0.state` against the port's `saves/field_re/ow_w0.lakewram`, walked
+onto the Market's entrance and off again; each phase aligned on its own event. Pins the block's timeline (state, `$1B58`,
+X/Y, pen, glyph count) and, on 15 frames, 0 bytes differing in the strip and frame, the direct page `$0200-$02A1` and the
+block (its frame counter and the port's +3E left out), 0 in VRAM `$1E00-$1FFF`, the same OAM entries and 0 px in the
+text's box. Four mutations (all glyphs in one call, no centring, no WRAM descriptors, no arrival test `$0282`) are killed.
+Re-pin only against a fresh oracle measurement of the same route. Dossier: `disasm/notes/vwf_engine.md` sec. 6.
+
 ### field-scene5-bottom-edge-draw-window (`--scene 5 --at 376 488`)
 
 Pins that the draw list is the ROM's camera window and NOTHING narrower. `placed` is

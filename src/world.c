@@ -23,6 +23,12 @@ static const uint8_t* ctWorldAnimRom(uint8_t bank, uint16_t pc) {
   if (pc < CT_OWANIM_BASE || (uint32_t)pc + 4u > CT_OWANIM_BASE + CT_OWANIM_SIZE) return NULL;
   return ctOwAnimC3 + (pc - CT_OWANIM_BASE);
 }
+// ...and from WRAM: C2/0E1D reads its script and C2/0D08 the descriptor through a long pointer whose bank is the block's +0D,
+// and the place-name banner's are in bank $7E (C2/5656: +0B = $8600, +0D = $7E -- the frame C2/5775 copies there).
+static const uint8_t* owAnimPtr(const uint8_t* ram, uint8_t bank, uint16_t pc) {
+  if ((bank == 0x7E || bank == 0x7F) && ram) return pc <= 0xFFF8 ? ram + ((bank & 1) << 16) + pc : NULL;
+  return ctWorldAnimRom(bank, pc);
+}
 
 void CtWorldCamSeed(CtWorldCam* c, const uint8_t* ram) {
   c->bg1h = (uint16_t)(ram[0x20] | (ram[0x21] << 8));
@@ -861,7 +867,7 @@ void CtWorldOamBuild(uint8_t* ram, uint16_t scrollH, uint16_t scrollV) {   // $2
     uint8_t bank = ram[n + 0x0D];
     owW16s(ram, 0x10, n);                                  // 0CFA STX $10
     owW16s(ram, 0x55, desc); ram[0x57] = bank;            // 0D08 LDY $000B,X / STY $55 ; 0D0D LDA $000D,X / STA $57
-    const uint8_t* d = ctWorldAnimRom(bank, desc);
+    const uint8_t* d = owAnimPtr(ram, bank, desc);
     if (!d) continue;
     int count = d[0];
     ram[0x00] = (uint8_t)count; ram[0x01] = 0;             // 0D12 LDA [$55] / STA $00 / STZ $01
@@ -887,7 +893,7 @@ void CtWorldOamBuild(uint8_t* ram, uint16_t scrollH, uint16_t scrollV) {   // $2
     int nodeIx = (n >= 0xB000 && n < 0xB400) ? (n - 0xB000) >> 4 : -1;
     int blk = nodeIx >= 0 ? g_owNodeBlk[nodeIx] : -1;
     for (int k = 0; k < count; k++) {
-      const uint8_t* q = ctWorldAnimRom(bank, (uint16_t)(desc + 1 + k * 4));
+      const uint8_t* q = owAnimPtr(ram, bank, (uint16_t)(desc + 1 + k * 4));
       if (!q) break;
       { int key = blk >= 0 ? blk : 64 + (nodeIx & 63);    // (the picture's record: no RAM) the object, not the piece
         int wx = (int16_t)(uint16_t)((int8_t)q[0] + cx), wy = (int16_t)(uint16_t)((int8_t)q[1] + cy);
@@ -937,7 +943,7 @@ static void obAnimTick(uint8_t* ram, uint8_t* B) {         // C2/0E1D
   // obRun's, and its loop was never measured -- only obRun's was (C2/0F73). Lifting a budget on the
   // strength of a neighbour's derivation is exactly the kind of guess the mandate forbids.
   for (int guard = 0; guard < 64; guard++) {               // (the ROM loops until a handler returns 0)
-    const uint8_t* op = ctWorldAnimRom(B[OWOBJ_ANIMBK], pc);
+    const uint8_t* op = owAnimPtr(ram, B[OWOBJ_ANIMBK], pc);
     if (!op) break;
     int adv;
     switch (op[0]) {
@@ -1147,6 +1153,16 @@ void CtWorldLeadRingPush(uint8_t* ram) {
   obPutW(ram + 0x1B5B + y, obW(B + OWOBJ_XPOS));
   obPutW(ram + 0x1B7B + y, obW(B + OWOBJ_YPOS));
   ram[0x1B5A] = (uint8_t)((y + 2) & 0x1F);
+}
+// C2/375F-376D, right after the push: C2/39AE on the cell the step arrived on -- +22 / +23, the top pair C2/39D5 read for the
+// step's target on its input frame (C2/36A4-36AE) -- both with bit 2 (an entrance or an event's cell): `TSB $0282 #03`, the
+// scanner (class $3264) looks at the cell; else `TRB $0282 #02`, and the scanner forgets the name ($1B58 = 0). The free-roam
+// lead is the host's mover, so the test reads the cell's properties straight (C2/39D5's indices: x - 1 wraps to $BF).
+void CtWorldLeadArrive(uint8_t* ram) {
+  const uint8_t* B = ram + CtWorldLeadBlock(ram);
+  int x = obW(B + OWOBJ_XPOS) >> 3, y = obW(B + OWOBJ_YPOS) >> 3, xm = x - 1 < 0 ? 0xBF : x - 1;
+  if (CtWorldProp(ram, xm, (y - 1) & 0x7F) & CtWorldProp(ram, x, (y - 1) & 0x7F) & 0x04) ram[0x0282] |= 0x03;
+  else ram[0x0282] &= (uint8_t)~0x02;
 }
 
 // ===================== THE PARTY FOLLOWERS (class $3AE2, C2/3AE2) =====================
@@ -4048,6 +4064,10 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
       obEntryScan(ram, B); { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
       continue;
     }
+    if (cls == OWOBJ_CLASS_NAMEBANNER) {            // the place-name banner (obNameBanner), the same CLC tail
+      obNameBanner(ram, B); { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
+      continue;
+    }
     if (cls == 0x3AE2) {                            // a party follower (obFollower), the same CLC tail
       if (obFollower(ram, B, c) == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
       continue;
@@ -4154,6 +4174,54 @@ static int obEntryScan(uint8_t* ram, uint8_t* B) {
     if (!said) { said = 1; fprintf(stderr, "owscan: UNDERIVED `$0280 = %02X` -- past C2:3275's two entries\n", ram[0x0280]); }
   }
   return 0;
+}
+// THE PLACE-NAME BANNER, class $5628 (C2/5628, states C2:5637 = 563F / 5663 / 5699 / 56F9; every one falls into the next and
+// every exit is CLC). It writes the name `$1B58` (the scanner's, C2/6263) one glyph a frame into the strip `$7E:8621` with the
+// proportional-text engine (vwf.c), queues the strip's two rows to VRAM `$1E00` / `$1F00` (OBJ tiles $1E0-$1EB / $1F0-$1FB) and
+// then shows itself every frame through the anim sub-VM: its script is `04 8604 00` at `$7E:8600` (C2/5775), the frame
+// `$7E:8604` six 16 x 16 pieces 16 px apart, 48 px above the block. disasm/notes/vwf_engine.md sec. 5.
+static void owBannerClear(uint8_t* ram) { memset(ram + 0x8621, 0, 0x400); }   // C2/5798: `STA $8621` + MVN $3FE -> $8621-$8A20
+static int obNameBanner(uint8_t* ram, uint8_t* B) {
+  switch (B[2]) {
+  case 0:                                                               // 563F
+    B[2]++; B[OWOBJ_ATTR] = 0xB0; B[0x10] = 0; B[0x11] = 0;
+    if (g_owRom) {                                                      // C2/5775: C2:57C2 -> $7E:8600 (4), C2:57C6 -> $8604 (MVN $18)
+      memcpy(ram + 0x8600, g_owRom + 0x257C2, 4);
+      memcpy(ram + 0x8604, g_owRom + 0x257C6, 0x19);
+    }
+    obPutW(B + OWOBJ_ANIM, 0x8600); B[OWOBJ_ANIMBK] = 0x7E;             // 5656-5660
+    /* fall through */
+  case 1:                                                               // 5663
+    if (!ram[0x1B58]) return 0;
+    B[2]++; B[OWOBJ_DWELL] = 0;                                         // 566C INC / 566F STZ $000E,X
+    ram[0x020C] = ram[0x1B58]; obPutW(ram + 0x020D, 0xF400); ram[0x020F] = 0xC6;
+    ram[0x0214] = 0x02; obPutW(ram + 0x0210, 0x8621); ram[0x0212] = 0x7E;
+    if (g_owRom) CtVwfBegin(ram, g_owRom, g_owRomLen);                  // 5695 JSL C2/57DF
+    /* fall through */
+  case 2:                                                               // 5699
+    ram[0x0213] = 0x01;
+    if (g_owRom) CtVwfRun(ram, g_owRom, g_owRomLen);                    // 569E JSL C2/5823: one glyph
+    if (ram[0x0215] == 0x10) return 0;
+    B[2]++;
+    { uint8_t x = ram[0x5F];                                            // 56B2-56F4: two entries on the NMI's queue
+      ram[0x5E]++;
+      ram[0x62 + x] = 0x7E; ram[0x6A + x] = 0x7E; ram[0x67 + x] = 0x80; ram[0x6F + x] = 0x80;
+      obPutW(ram + 0x60 + x, 0x8621); obPutW(ram + 0x68 + x, 0x8821);
+      obPutW(ram + 0x63 + x, 0x1E00); obPutW(ram + 0x6B + x, 0x1F00);
+      obPutW(ram + 0x65 + x, 0x0180); obPutW(ram + 0x6D + x, 0x0180);
+      ram[0x5F] = (uint8_t)(x + 0x10); ram[0x5E] = 0; }
+    /* fall through */
+  default:                                                              // 56F9
+    if (!ram[0x1B58]) { B[2] = 1; owBannerClear(ram); }                // 5700: the name is gone -- still drawn this frame
+    else if (ram[0x1B59]) { B[2] = 1; ram[0x1B59] = 0; owBannerClear(ram); return 0; }
+    if (ram[0x0294] & 0x10) return 0;                                   // 571E
+    if (ram[0x027E] == 2) { obPutW(B + OWOBJ_XPOS, obW(ram + 0x0290)); obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(ram + 0x0292) + 0x40)); }
+    else { obPutW(B + OWOBJ_XPOS, obW(ram + 0x0283)); obPutW(B + OWOBJ_YPOS, obW(ram + 0x0285)); }
+    ram[0x8604] = 0x06;                                                 // 5754
+    obPutW(B + OWOBJ_XPOS, (uint16_t)(obW(B + OWOBJ_XPOS) - (ram[0x0234] >> 1)));   // 575C-576D: x less half the pen
+    obAnimTick(ram, B);                                                 // 5770 JSR C2/0E1D
+    return 0;
+  }
 }
 // C2/2A44 -- the world's trigger tables: the packet C6:FFC0[header +15] decompressed into `$7F:0400` holds, each list a count
 // byte and its records, the entrances ($7E:7E00, 7 bytes, `$1B38`), the event cells ($7E:8300, 3 bytes: the cell word -- bit 7

@@ -27794,6 +27794,72 @@
       "notes": "THE LOCATION ENTRY'S FADE, the last overworld fade the host still made itself (15 frames) after attract-world5-fade-objects-vs-oracle. C2/35E5 sets $027C = 3; the main loop's state 3 (C2/2402) spawns a VM object on $C2:2EC1 = `28 01 52` (C2/04D9 with A = $C2: a bank-$C2 script, which the port's object VM can read now -- C2/0F67 takes the bank from +09), waits 18 NMIs (C2/2461) while the NMI's object pass runs the fade-out, then makes C2/1100's stores over the entrance record (C2/2470-24D2, no $027C request) and falls into state 2's JML $C0:0000. ORACLE (saves/ow_w0.state, --btnscript \"40:72,20:8,40:8,0:22,100:2,0:80\", --monitor 7E0100:10,7E001C:2,7E1BF6:1,7E027C:1 --diff): $027C = 03 at f111, $1BF6 = 02 at f112, $1D 0E..01 over f113-f126, `$1C:$1D = 80:00` + $1BF6 = 00 at f127, $0100..$0109 = 0011 16 2C 04 01F0 2D 26 01 at f129 with $027C still 03. PORT (--worldtest, A at f155): $1BF6 = 02 f156, steps f157-f170, blank f171, the change at f173 (the load at f174) with $027C = 03 -- the same offsets from the press. Also pinned: the world entry's own `29 02` fade-in (f45-f75: $1BF6 = 01, then $1D +1 every 2 frames to 0F), the shape the cartridge's forest hop shows (f91, f93..f121). KNOWN, not this check's subject: the return column $0107 reads 44 where the cartridge's reads 45 -- it is ($E5 + $10) % $C0 and the port's drive leaves the BG2 column cursor one cell off the oracle's; the stores themselves are C2/1100's, graded by --callrom. ==== 2026-09-15, RE-ANCHORED by the LOAD's own price, not re-graded: ct_lz_load_cost stopped at C0/09DD, and the location it was calibrated on (scene 468) has no BG3 tileset and a 30654-cycle script, so what it left out was inside its rounding there. The load is `092B / 1B53 / 0960 / 6DCF / 7084 / 7F7E / A33B / 09DD / 0A14 / 56D4`: C0/6DCF decompresses the BG3 tileset (record byte +2 -> $F6:2220 -> $7F:5080, then C0/2DC8 DMAs $1000 bytes to VRAM $5000), C0/0A14 its assembly (the same byte -> $F6:21C0 -> $7E:C000) and C0/56D4 the location's SCRIPT (record word +8 -> $FC:F9F0 -> $7F:2000); the object pass then decompresses each sprite sheet C0/5C90's dedup does not already have (g_ctLzSpriteCycles). All of it is priced with the same cycle-exact ct_lz_rom_cycles, and `--loadcost` grades the three new packets against the real C3/0557 too (468 10/10, scene 5 12/12 exact). ORACLE, `--monitor 7E0119:1` from saves/field_re/scene468_stairs_to_120.state: the two 468 loads are 33 black frames each and the 122 load is 40 ($0119 = 00 at f19/f85/f151, the ramp's first INC at f52/f118/f191); the port now holds 32/32/39 where it held 32/32/32. Every frame after a load moved and the graded content was re-measured at the shifted frame. disasm/notes/field_load_cost.md section 6b. ==== RE-PIN 2026-09-26 (the exit drain reads the HEAD's $0117; field_door_list.md sec. 7.1): C0/0C76 runs at C0/00A4, before the controller C0/881E whose accepted step stages a positional exit, so the first DEC of $0119 is the iteration AFTER the stage and the commit is stage + 16 -- the logical cartridge's (scene 468: stages f4/f70/f136, commits f20/f86/f152; the forest's south exit: stage f12, $0100 = 01F0 at f28). The port's drain took its first DEC in the staging frame and committed at stage + 15; every positional exit's commit moves one frame later, onto the cartridge's. --worldtest starts the lead ON scene 1's exit with $0119 = 0: the cartridge would stage in the first iteration's controller and commit in the next (0C91 `LDA $19 / BEQ ->0C9A`), where the port committed in the staging frame. Every line moves one frame (the pin windows f157-f172 / f46-f79 moved with them); the offsets from the press -- what this check grades against the oracle -- are identical. ==== 2026-09-29, RE-ANCHORED +33 (the press), not re-graded: the overworld pad is read by the lead's handler alone and only in free roam (C2/3567 `LDA $027C / CMP #01 / BNE`), so --worldtest's walk is now timed from the first frame the bootstrap's `13 7C 02 01` opens it with the $3404 block live (field.c owPad / wtPad0) -- it used to press into a cutscene-mode world from the entry frame. The fade's shape from the press is unchanged (press+1: $1BF6 = 02, fourteen steps, the blank, the change, the load). And the KNOWN divergence above closes: the return column $0107 now reads 45, the cartridge's -- the walk now starts from the lead the bootstrap placed. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/attract.json): --worldtest: the world-0 window is 43 black frames for 44 (fieldRuleNmiOnHold's world entry, the C2/0A5A build held; the rule's oracle: the Truce market's world C2/23D2 at f85 for f86), so every line moves -1 with the same shape: the `29 02` fade-in f45..f75 (was f46..f76), the press's fade-out f189..f204, the change and the scene-17 load at f207 -- the offsets from the press (what is graded against the oracle) unchanged. The load line gains `+ 16368 on the loader clock`: under the rule the port's SPC runs in a selftest too and C0/1B8B's song JSL inside the load is priced (12 lines of wall time, no extra frame: 38 black frames as before). The stale first pin (f157-f172, from before the 2026-09-29 +33) is replaced by the window the expect lines are in. ==== 2026-10-04, RE-PINNED (the overworld pass's inline JSL, world.c obNative C2/2F0F; disasm/notes/ow_party_followers.md sec. 6): the world's song is posted by the loader script's zoning arm `34 0F 2F` in the world's first pass, priced on the port's SPC, and the world stands still for the NMIs the upload crosses (the cartridge's C2/0178 `INC $4B / RTI` while the CPU is in bank C7). The SPC reaches the next field load in another state, so that load's song JSL reads 17732 master cycles on the loader clock (was 16368); its 38 black frames and every fade line are unchanged."
     },
     {
+      "name": "ow-place-name-banner-vs-rule-cartridge",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/ow_banner_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ow_w0.state",
+        "saves/field_re/ow_w0.lakewram",
+        "tools/ow_banner_cmp.py"
+      ],
+      "expect": [
+        "ow-banner: timeline same -- 15 changes from the name (cartridge f88, port f131) and the walk off (f149 / f191)",
+        "ow-banner: appear c89 p131 wram 0+0+0 bytes differ, vram 0, oam 0/0 entries same, text box 0 of 714 px differ",
+        "ow-banner: appear c90 p132 wram 0+0+0 bytes differ, vram 0, oam 0/0 entries same, text box 0 of 714 px differ",
+        "ow-banner: appear c92 p134 wram 0+0+0 bytes differ, vram 0, oam 0/0 entries same, text box 0 of 714 px differ",
+        "ow-banner: appear c94 p136 wram 0+0+0 bytes differ, vram 0, oam 0/0 entries same, text box 0 of 714 px differ",
+        "ow-banner: appear c95 p137 wram 0+0+0 bytes differ, vram 0, oam 6/6 entries same, text box 0 of 714 px differ",
+        "ow-banner: appear c96 p138 wram 0+0+0 bytes differ, vram 0, oam 6/6 entries same, text box 0 of 714 px differ",
+        "ow-banner: appear c100 p142 wram 0+0+0 bytes differ, vram 0, oam 6/6 entries same, text box 0 of 714 px differ",
+        "ow-banner: appear c130 p172 wram 0+0+0 bytes differ, vram 0, oam 6/6 entries same, text box 0 of 714 px differ",
+        "ow-banner: leave c150 p191 wram 0+0+0 bytes differ, vram 0, oam 6/6 entries same, text box 0 of 714 px differ",
+        "ow-banner: leave c155 p196 wram 0+0+0 bytes differ, vram 0, oam 6/6 entries same, text box 0 of 714 px differ",
+        "ow-banner: leave c156 p197 wram 0+0+0 bytes differ, vram 0, oam 6/6 entries same, text box 0 of 714 px differ",
+        "ow-banner: leave c157 p198 wram 0+0+0 bytes differ, vram 0, oam 6/6 entries same, text box 0 of 714 px differ",
+        "ow-banner: leave c158 p199 wram 0+0+0 bytes differ, vram 0, oam 0/0 entries same, text box 0 of 714 px differ",
+        "ow-banner: leave c159 p200 wram 0+0+0 bytes differ, vram 0, oam 0/0 entries same, text box 0 of 714 px differ",
+        "ow-banner: leave c160 p201 wram 0+0+0 bytes differ, vram 0, oam 0/0 entries same, text box 0 of 714 px differ"
+      ],
+      "pin": [
+        "^ow-banner: "
+      ],
+      "timeout_s": 120,
+      "note_pass": "the place-name banner is the ROM's object: class $5628 writes 'Market' one glyph a frame through bank C2's text engine, queues it to VRAM $1E00/$1F00 and shows its six pieces over the party -- the cartridge's bytes, entries and pixels on every compared frame",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    ram[0x0213] = 0x01;\n    if (g_owRom) CtVwfRun(ram, g_owRom, g_owRomLen);                    // 569E JSL C2/5823: one glyph",
+          "replace": "    ram[0x0213] = 0x0C;   /* MUT */\n    if (g_owRom) CtVwfRun(ram, g_owRom, g_owRomLen);",
+          "why": "C2/5699 `LDA #01 / STA $0213`: one glyph a frame -- the name is written over six frames and the banner shows on the seventh"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    obPutW(B + OWOBJ_XPOS, (uint16_t)(obW(B + OWOBJ_XPOS) - (ram[0x0234] >> 1)));",
+          "replace": "    (void)0;   /* MUT */",
+          "why": "C2/575C-576D: the banner's X is the party's less half the pen, the text centred on it"
+        },
+        {
+          "file": "src/world.c",
+          "find": "  if ((bank == 0x7E || bank == 0x7F) && ram) return pc <= 0xFFF8 ? ram + ((bank & 1) << 16) + pc : NULL;",
+          "replace": "  (void)ram;   /* MUT */",
+          "why": "C2/0E1D and C2/0D08 read the banner's script and frame from WRAM ($7E:8600 / $8604): no entries, no banner"
+        },
+        {
+          "file": "src/field.c",
+          "find": "{ CtWorldLeadRingPush(wd.wram); CtWorldLeadArrive(wd.wram); }",
+          "replace": "{ CtWorldLeadRingPush(wd.wram); }   /* MUT */",
+          "why": "C2/375F-376D: the step's arrival on an entrance cell asks the scanner to look ($0282 |= 3) -- without it $1B58 stays 0 and nothing is named"
+        }
+      ],
+      "notes": "THE PLACE-NAME BANNER, class $5628 (C2/5628, world.c obNameBanner; disasm/notes/vwf_engine.md sec. 5-6). Until 2026-10-17 the host drew it (field.c drawOwLocName: the asset font, a guessed tone table, centred at y68) whenever its own entry latch sat on an entrance; now the ROM's object does: state 0 its anim script and frame at $7E:8600 (C2/5775), state 1 on $1B58 the text engine's set-up (C6:F400, mode 2, strip $7E:8621, vwf.c CtVwfBegin), state 2 ONE glyph a frame (CtVwfRun with $0213 = 1) until $0215 != 10, then two entries on the NMI's queue ($8621 -> VRAM $1E00, $8821 -> $1F00, $180 bytes each), state 3 over the party (x - $0234/2; $0290/$0292+40 aboard the Epoch), $8604 = 6 and C2/0E1D -- the compositor draws it from the OAM like any OBJ. $1B58 = 0 (or $1B59) clears the strip (C2/5798) and returns to state 1 -- on the $1B58 = 0 frame it is still drawn once from the old VRAM. For the scanner to name the cell on foot, the free-roam lead's arrival test C2/375F-376D (TSB $0282 #03 on an entrance cell, TRB #02 off one) is now made at the host mover's arrival (world.c CtWorldLeadArrive). ORACLE saves/ow_w0.state (CT_ORACLE_LOGICAL), PORT saves/field_re/ow_w0.lakewram; left 72 / down 8 / left 8 onto the Market's entrance, wait, right 30. Each phase aligned on its own event (the port's world reads its first pad 43 frames into its run, and the host's input latency differs by one frame between the first and later presses -- not this check's subject). Re-pin only against a fresh oracle measurement of the same route."
+    },
+    {
       "name": "attract-window-wipe-flow-vs-oracle",
       "tier": "full",
       "argv": [
@@ -37174,23 +37240,8 @@
       ],
       "timeout_s": 300,
       "note_pass": "both ferry crossings are world 0's own bootstrap, frame for frame the cartridge's: no banner, the right boat, the far office",
-      "notes": "USER REPORT 2026-09-28 ('when travelling by boat, the text Ticket office stays; in the original game it does not' / 'on appearing in porre and asking to ride the boat again, the animation goes back to truce'). Both offices pay with `E0 F0 03 3F 28` (loc $1F0 at the Truce office's entrance cell 63,40) after a direction bit in $7F:01F0 (scene 18 `65 82 F0` bit 2, scene 56 `65 83 F0` bit 3); world 0's bootstrap reads it through C2/26D6's $1BA7 and plays the crossing, spawning no lead ($3404), no entrance scanner ($3264) and no name banner ($5628). The port installed a captured Truce->Porre boat over the bootstrap object for any pay landing on 63,40 with bit 2 (never cleared): the Porre pay replayed the Truce ride, 1380 black frames, a heuristic drop on the Porre pier; and its host entry latch, parked on the office's entrance cell, kept 'Ticket Office' up for the whole crossing. Now: the bootstrap alone; no $3264 -> latch FFFF (C2/2C44), no $5628 -> no banner, no lead in free roam -> no pad (C2/3567); the BG3 drift and wave run at their blocks in the object pass (on the spawn frame the cartridge already stepped the drift's +22 -- the port's clouds were a frame behind every fourth frame). The Porre crossing holds right/down and presses A mid-sail on both sides. Aligned on each side's first frame in the far office; every overworld frame before it compared. disasm/notes/ow_ferry.md. Not graded: op $20/$21 (C2/1420/1444; the object that parked on it at $7F:0A3D changes no pixel), and the Truce office after the Porre crossing (lights one frame early: the field load clock). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/attract.json): Both crossings, port against the rule's cartridge: every overworld frame identical (0 differ) and the lit->fade frames unchanged (c1714 p1714, c1970 p1970); the world visits are one frame shorter on BOTH sides (1790 / 2046 for 1791 / 2047) -- the world entry's first NMI build C2/0A5A held (fieldRuleNmiOnHold on the port, the rule's oracle).",
+      "notes": "USER REPORT 2026-09-28 ('when travelling by boat, the text Ticket office stays; in the original game it does not' / 'on appearing in porre and asking to ride the boat again, the animation goes back to truce'). Both offices pay with `E0 F0 03 3F 28` (loc $1F0 at the Truce office's entrance cell 63,40) after a direction bit in $7F:01F0 (scene 18 `65 82 F0` bit 2, scene 56 `65 83 F0` bit 3); world 0's bootstrap reads it through C2/26D6's $1BA7 and plays the crossing, spawning no lead ($3404), no entrance scanner ($3264) and no name banner ($5628). The port installed a captured Truce->Porre boat over the bootstrap object for any pay landing on 63,40 with bit 2 (never cleared): the Porre pay replayed the Truce ride, 1380 black frames, a heuristic drop on the Porre pier; and its host entry latch, parked on the office's entrance cell, kept 'Ticket Office' up for the whole crossing. Now: the bootstrap alone; no $3264 -> latch FFFF (C2/2C44), no $5628 -> no banner, no lead in free roam -> no pad (C2/3567); the BG3 drift and wave run at their blocks in the object pass (on the spawn frame the cartridge already stepped the drift's +22 -- the port's clouds were a frame behind every fourth frame). The Porre crossing holds right/down and presses A mid-sail on both sides. Aligned on each side's first frame in the far office; every overworld frame before it compared. disasm/notes/ow_ferry.md. Not graded: op $20/$21 (C2/1420/1444; the object that parked on it at $7F:0A3D changes no pixel), and the Truce office after the Porre crossing (lights one frame early: the field load clock). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/attract.json): Both crossings, port against the rule's cartridge: every overworld frame identical (0 differ) and the lit->fade frames unchanged (c1714 p1714, c1970 p1970); the world visits are one frame shorter on BOTH sides (1790 / 2046 for 1791 / 2047) -- the world entry's first NMI build C2/0A5A held (fieldRuleNmiOnHold on the port, the rule's oracle). || RETIRED MUTATION 2026-10-17 (the banner went native, check ow-place-name-banner-vs-rule-cartridge): `if (wd.mv.phase == 1) {` in place of the scanner gate on the host's entry latch -- the latch drew 'Ticket Office' itself (field.c drawOwLocName) and now draws nothing: the banner is class $5628's own, named by $1B58, which only the scanner writes, and the crossing spawns neither. SURVIVED; the latch now only gates the A-press entry, which the crossing's A mid-sail does not reach (no lead, no pad).",
       "mutations": [
-        {
-          "edits": [
-            {
-              "file": "src/field.c",
-              "find": "      if (!(wd.wram && CtWorldHasObjClass(wd.wram, OWOBJ_CLASS_ENTRYSCAN))) wd.entryLatch = 0xFFFF;\n      else if (wd.mv.phase == 1) {",
-              "replace": "      if (wd.mv.phase == 1) {   /* MUT: the host latch runs with no scanner object */"
-            },
-            {
-              "file": "src/field.c",
-              "find": "if (wd.entryLatch != 0xFFFF && CtWorldHasObjClass(wd.wram, OWOBJ_CLASS_NAMEBANNER)) {",
-              "replace": "if (wd.entryLatch != 0xFFFF) {   /* MUT: no banner object needed */"
-            }
-          ],
-          "why": "the host mover's latch on the office's entrance cell draws 'Ticket Office' over the whole crossing (the user's report)."
-        },
         {
           "edits": [
             {
@@ -42315,14 +42366,14 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "motion: 73 frames moved; pixels off the previous frame: plain 30809/frame, reprojected 5432/frame (17.6%)"
+        "motion: 73 frames moved; pixels off the previous frame: plain 30810/frame, reprojected 5440/frame (17.7%)"
       ],
       "pin": [
         "^motion: \\d+ frames moved"
       ],
       "timeout_s": 600,
       "note_pass": "600 A.D.'s overworld under its mist: the frames between move the map with the camera, not with the mist's own drift (5691 px/frame left of 29752; standing still nothing moves)",
-      "notes": "2026-10-09 (the user: 'the 600ad overworld became shaky'). The mist is BG3 priority 1 half-added over the whole map; its pixels were owned by BG3, whose scroll drifts on its own (C2/75CE..), so with the camera still every frame between slid the whole map by the drift and snapped back. A translucent cloud now keeps the map's owner (worldComposeAt's clouds pass); an opaque one moves with BG3. Before: 152 frames 'moved' (the drift), 25243 -> 13320 px/frame, and with the camera still the reprojection was WORSE than nothing (21791 vs 20987). The frames left high (every 4th, ~20000) are the mist's own step, which no shift explains. RE-PINNED 2026-10-13: C0/2881 -> C0/B0E6, the entry's sweep, is ported whole (ct_vm.c palSweepB0E6: the rising edge's stores, C0/7170, C0/6F9A, C0/AB45, C0/A9CD, C0/CAD9 until it pops, C0/B1B2, C0/EA42, then C0/B271) and runs on every location change too (the user's scene-8 gate return: obj22's box, check field-gate-return-008-dead-npc-box-cancelled-vs-rule-cartridge). A fresh entry now takes its OBJ slots and first animation frames at the load, as the ROM's entry does; every vs-oracle check holds (attract-01b-placement-priority-pair, attract-kill-revive-112, inn-wake, world-exit, field-door-follower)."
+      "notes": "2026-10-09 (the user: 'the 600ad overworld became shaky'). The mist is BG3 priority 1 half-added over the whole map; its pixels were owned by BG3, whose scroll drifts on its own (C2/75CE..), so with the camera still every frame between slid the whole map by the drift and snapped back. A translucent cloud now keeps the map's owner (worldComposeAt's clouds pass); an opaque one moves with BG3. Before: 152 frames 'moved' (the drift), 25243 -> 13320 px/frame, and with the camera still the reprojection was WORSE than nothing (21791 vs 20987). The frames left high (every 4th, ~20000) are the mist's own step, which no shift explains. RE-PINNED 2026-10-13: C0/2881 -> C0/B0E6, the entry's sweep, is ported whole (ct_vm.c palSweepB0E6: the rising edge's stores, C0/7170, C0/6F9A, C0/AB45, C0/A9CD, C0/CAD9 until it pops, C0/B1B2, C0/EA42, then C0/B271) and runs on every location change too (the user's scene-8 gate return: obj22's box, check field-gate-return-008-dead-npc-box-cancelled-vs-rule-cartridge). A fresh entry now takes its OBJ slots and first animation frames at the load, as the ROM's entry does; every vs-oracle check holds (attract-01b-placement-priority-pair, attract-kill-revive-112, inn-wake, world-exit, field-door-follower). RE-PINNED 2026-10-17 (the place-name banner went native, class $5628 -- check ow-place-name-banner-vs-rule-cartridge): the walk stands on Truce Canyon's entrance f261-f389 ($1B58 = 18), and the banner there is now the ROM's object (one glyph a frame, the OAM's pieces) instead of the host font; plain 30809 -> 30810, reprojected 5432 -> 5440 px/frame, 73 frames moved unchanged."
     },
     {
       "name": "field-motion-sprite-uncovers-a-sprite",

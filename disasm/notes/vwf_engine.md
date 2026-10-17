@@ -74,7 +74,42 @@ on and the high one on (both STORED, not OR-ed), `$63` OR-ed. The pen then moves
 - **The world's place-name banner** (class `$5628`): state 1 the set-up (C2/5775 its sprite frame at `$7E:8600`, the
   same C6:F400 / mode 2 / `$7E:8621`, the id `$1B58`), state 2 ONE glyph a frame (`$0213` = 1) until `$15` != 10, then
   two DMA queue entries (`$5E`/`$5F`: `$8621` -> VRAM `$1E00`, `$8821` -> `$1F00`, 180 bytes each), state 3 the banner
-  over the party (x less `$0234` / 2, the centre), `$7E:8604` = 6, C2/0E1D. Not ported: the port's banner is the host's
-  (field.c drawOwLocName, the asset font).
+  over the party (x less `$0234` / 2, the centre), `$7E:8604` = 6, C2/0E1D. Ported 2026-10-17 (world.c obNameBanner),
+  sec. 6.
 - Menus and battles through C2:0003 / 0009 (C2/F90C, CD/025E, CD/027F): the shadow grades those calls wherever the
   oracle goes.
+
+## 6. The place-name banner, class $5628 (C2/5628)
+
+Port: `world.c` obNameBanner, dispatched on its class word in the object pass (CtWorldAmbientFrame). Graded by
+`tools/ow_banner_cmp.py` (check `ow-place-name-banner-vs-rule-cartridge`).
+
+States through C2:5637 (`3F 56 63 56 99 56 F9 56`); each falls into the next, every exit is CLC:
+- **0 (563F)**: `INC +2`, `+0F` = B0 (world coordinates, priority 3), `+10/+11` = 0; C2/5775 copies C2:57C2 (4 bytes:
+  `04 04 86 00`, the anim script -- op 4, the frame `$8604`, dwell 0) to `$7E:8600` and C2:57C6 (MVN, `$19` bytes) to
+  `$8604`: a count (0 here) and six pieces `{x 00..50 step 10, y D0, word 01E0 + 2k}` -- 16 x 16 OBJ tiles $1E0-$1EB
+  48 px above the block; `+0B` = `$8600`, `+0D` = `$7E`.
+- **1 (5663)**: `$1B58` = 0 -> out. Else `INC +2`, `STZ +0E`, `$020C` = `$1B58`, `$020D` = C6:F400, `$0214` = 2,
+  `$0210` = 7E:8621, `JSL C2/57DF`.
+- **2 (5699)**: `$0213` = 1, `JSL C2/5823`; `$0215` = 10 -> out (more glyphs next frame). Else `INC +2` and two entries on
+  the NMI's queue at `$0060 + $5F` (`INC $5E` around them): `$7E:8621` -> VRAM `$1E00`, `$7E:8821` -> `$1F00`, `$0180`
+  bytes each, VMAIN 80; `$5F` += 10.
+- **3 (56F9)**: `$1B58` = 0 -> state 1, C2/5798 (`$7E:8621-$8A20` zeroed), and on to the draw (so the banner shows once
+  more, from the VRAM it still has); `$1B59` set -> state 1, `STZ $1B59`, C2/5798, out. 571E: `$0294` bit 4 -> out. X/Y
+  = `$0283/$0285` (on foot) or `$0290/$0292 + 40` (`$027E` = 2, the Epoch); `$8604` = 6; X -= `$0234 >> 1` (half the
+  pen: the text centred); `JSR C2/0E1D` -- op 4 with dwell 0 parks every frame and enqueues the frame (C2/0B53).
+
+The name comes from the scanner (class $3264, C2/3349 -> C2/6263 `$1B58`), which only looks when `$0282` bit 0 is set:
+on foot by the lead's step arrival, C2/375F-376D -- C2/39AE on +22/+23 (C2/39D5's top pair of the target cell, read on
+the step's input frame C2/36A4-36AE): both with bit 2 -> `TSB $0282 #03`, else `TRB $0282 #02` (and the scanner then
+clears `$1B58`). The port's free-roam lead is the host mover, so the test is made at its arrival (CtWorldLeadArrive).
+C2/0E1D and C2/0D08 read the script and the frame through the block's bank `$7E` (world.c owAnimPtr).
+
+Measured (saves/ow_w0.state, CT_ORACLE_LOGICAL, `--btnscript 40:72,20:8,40:8,0:60,80:30,0:60`, `--monitor
+7E0EF2:1,...`; the block is `$0EF0`): f88 `$1B58` = 0B (Market) and states 1 -> 2 in the same pass, the first glyph
+(`$0217` = 1, pen 09); one glyph a frame to f93 (`$0217` = 6, pen 29); f94 `$0215` = 0, state 3, the queue (`$5F` = 10),
+X = 168 - 14 = 154, Y = 120, `$8604` = 6; first shown in `--peek` 96. The walk off: f149.. X follows the party; f156
+`$1B58` = 0, state 1, still drawn (peek 157-158), gone from peek 159. The port, `--loadwram saves/field_re/ow_w0.lakewram`,
+the same route 43 frames later: every change of the block the same, and on 15 compared frames the strip, the frame, the
+direct page `$0200-$02A1`, the block (but +3/+4/+3E), VRAM `$1E00-$1FFF`, the six OAM entries and the text's pixels
+identical.
