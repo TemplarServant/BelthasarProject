@@ -14,4 +14,7 @@ int  CtEntry4StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
 int  CtEntry4StageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);
 void CtEntry4StageClose(uint8_t* w, const CtRaceIo* io);
 
+// C3/02DD with an 8-bit A (`$7E:3443`): the overlay's RNG, the carry threaded, X's low byte -- the rule's virtual beam.
+uint8_t CtSeqRng02DD8(uint8_t* w, uint8_t a, int* c, unsigned x);
+
 #endif

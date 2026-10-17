@@ -2664,4 +2664,4 @@ to f1512; at f1513 page B's `F5 04` passes on the cartridge and two frames later
 artefact. In the field (lavos-epoch-ff26-plays-through-in-the-port, from the cartridge's cockpit at f1700 of the drive): `FF 26`
 at f1071 (the cartridge 1070), 31 black frames, the dive, the reboot into 1DA.
 
-**Open.** The picture (stage 2: mode 7, the shake, the lightning, the Epoch's sprite).
+**The picture is native (2026-10-17, seq_picture.md sec. 8)**, exact NMI for NMI and in play.

@@ -45,13 +45,45 @@ void CtSeqPicWrite(CtSeqPic* p, uint8_t adr, uint8_t val, int line) {
       if (val & 0x80) p->fix[2] = val & 0x1F;
       break;
     case 0x06: p->r[adr] = val; p->mosaicStart = (uint8_t)line; break;
-    case 0x04: case 0x18: case 0x19: case 0x22: {                      // the data ports: a stage's native code fills the
+    case 0x02: p->r[adr] = val; p->oamAdr = p->oamAdrWritten = val; p->oamInHigh = p->oamInHighWritten; p->oamSecond = 0; break;
+    case 0x03: p->r[adr] = val; p->oamInHigh = p->oamInHighWritten = val & 1; p->oamAdr = p->oamAdrWritten; p->oamSecond = 0; break;
+    case 0x04:                                                         // OAM data: the low table a word at a time, then the high
+      if (p->oamInHigh) {
+        p->highOam[((p->oamAdr & 0x0F) << 1) | p->oamSecond] = val;
+        if (p->oamSecond && ++p->oamAdr == 0) p->oamInHigh = 0;
+      } else if (!p->oamSecond) p->oamBuffer = val;
+      else { p->oam[p->oamAdr] = (uint16_t)((val << 8) | p->oamBuffer); if (++p->oamAdr == 0) p->oamInHigh = 1; }
+      p->oamSecond ^= 1;
+      break;
+    case 0x18: case 0x19: case 0x22: {                                 // the data ports: a stage's native code fills the
       static int said = 0;                                             // arrays itself (no stage measured writes them by HDMA)
       if (!said) { said = 1; fprintf(stderr, "seqpic: a write to the data port $21%02X -- not modelled\n", adr); }
       break;
     }
     default: p->r[adr] = val; break;
   }
+}
+
+uint8_t CtSeqPicReg(CtSeqPic* p, uint8_t adr) {
+  switch (adr & 0x3F) {
+    case 0x38: {                                                       // OAM data: the address the writes and reads share
+      uint8_t v;
+      if (p->oamInHigh) {
+        v = p->highOam[((p->oamAdr & 0x0F) << 1) | p->oamSecond];
+        if (p->oamSecond && ++p->oamAdr == 0) p->oamInHigh = 0;
+      } else if (!p->oamSecond) v = (uint8_t)p->oam[p->oamAdr];
+      else { v = (uint8_t)(p->oam[p->oamAdr] >> 8); if (++p->oamAdr == 0) p->oamInHigh = 1; }
+      p->oamSecond ^= 1; p->ppu1OpenBus = v;
+      return v;
+    }
+    case 0x3E: {                                                       // STAT77: the version 1, the open bus' bit 4, the flags
+      uint8_t v = (uint8_t)(0x01 | (p->ppu1OpenBus & 0x10) | (p->rangeOver << 6) | (p->timeOver << 7));
+      p->ppu1OpenBus = v;
+      return v;
+    }
+  }
+  { static int said = 0; if (!said) { said = 1; fprintf(stderr, "seqpic: a read of $21%02X -- not modelled\n", adr & 0x3F); } }
+  return 0;
 }
 
 typedef struct {
@@ -71,7 +103,7 @@ static void decode(const CtSeqPic* p, Line* L) {
   const uint8_t* r = p->r;
   L->blank = (r[0x00] & 0x80) != 0; L->bright = r[0x00] & 0x0F;
   L->objSize = r[0x01] >> 5; L->objAdr1 = (r[0x01] & 7) << 13; L->objAdr2 = L->objAdr1 + (((r[0x01] & 0x18) + 8) << 9);
-  L->objPrioRot = (r[0x03] & 0x80) != 0; L->oamIndex = L->objPrioRot ? (r[0x02] & 0xFE) : 0;
+  L->objPrioRot = (r[0x03] & 0x80) != 0; L->oamIndex = L->objPrioRot ? (p->oamAdr & 0xFE) : 0;   // (the OAM address now)
   L->mode = r[0x05] & 7;
   L->actMode = L->mode == 1 && (r[0x05] & 8) ? 8 : L->mode == 7 && (r[0x33] & 0x40) ? 9 : L->mode;
   for (int i = 0; i < 4; i++) {
@@ -107,7 +139,7 @@ static int winState(const CtSeqPic* p, const Line* L, int layer, int x) {
   switch (L->logic[layer]) { case 0: return t1 || t2; case 1: return t1 && t2; case 2: return t1 != t2; default: return t1 == t2; }
 }
 
-static void sprites(const CtSeqPic* p, Line* L, int line) {
+static void sprites(CtSeqPic* p, Line* L, int line) {
   memset(L->objPix, 0, sizeof L->objPix);
   if (L->blank) return;
   int idx = L->oamIndex, found = 0, tiles = 0;
@@ -119,7 +151,7 @@ static void sprites(const CtSeqPic* p, Line* L, int line) {
       int x = (p->oam[idx] & 0xFF) | (((p->highOam[idx >> 3] >> (idx & 7)) & 1) << 8);
       if (x > 255) x -= 512;
       if (x > -size) {
-        if (++found > 32) { found = 32; break; }
+        if (++found > 32) { found = 32; p->rangeOver = 1; break; }       // STAT77 bit 6
         list[found - 1] = (uint8_t)idx;
       }
     }
@@ -137,7 +169,7 @@ static void sprites(const CtSeqPic* p, Line* L, int line) {
     if (at & 0x8000) row = (uint8_t)(size - 1 - row);
     for (int col = 0; col < size; col += 8) {
       if (col + x <= -8 || col + x >= 256) continue;
-      if (++tiles > 34) break;
+      if (++tiles > 34) { p->timeOver = 1; break; }                   // STAT77 bit 7
       int uc = hf ? size - 1 - col : col;
       uint8_t t = (uint8_t)((((tile >> 4) + (row / 8)) << 4) | (((tile & 0xF) + (uc / 8)) & 0xF));
       int base = (at & 0x100) ? L->objAdr2 : L->objAdr1;
@@ -260,7 +292,7 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
   return layer;
 }
 
-static void drawLine(const CtSeqPic* p, Line* L, int line, uint8_t* out) {
+static void drawLine(CtSeqPic* p, Line* L, int line, uint8_t* out) {
   decode(p, L);
   if (p->r[0x33] & 0x0B) {                                             // pseudo-hires / interlace / overscan
     static int said = 0;
@@ -348,11 +380,13 @@ void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t en, CtSeqPicRe
   Walk w[8];
   memset(w, 0, sizeof w);
   p->mosaicStart = 1;                                                  // (the frame's start: a vblank write counts from line 1)
+  p->rangeOver = p->timeOver = 0;                                      // (and the sprite flags cleared: ppu.c handleFrameStart)
   if (rd) { hdmaInit(ch, en, w, rd, ctx); hdmaRun(p, ch, en, w, rd, ctx, 0); }
   for (int line = 1; line <= 224; line++) {
     drawLine(p, &L, line, rgb ? rgb + (size_t)(line - 1) * 256 * 3 : scratch);
     if (rd) hdmaRun(p, ch, en, w, rd, ctx, line);
   }
+  if (!(p->r[0x00] & 0x80)) { p->oamAdr = p->oamAdrWritten; p->oamInHigh = p->oamInHighWritten; p->oamSecond = 0; }   // the vblank
 }
 
 // ---- a stage's data ports ----
@@ -379,9 +413,7 @@ void CtSeqStagePicDma(CtSeqStagePic* sp, const uint8_t* w, uint8_t dmap, uint8_t
       if (!second) buf = v; else sp->p.cgram[sp->cgadd++] = (uint16_t)((v << 8) | buf);
       second ^= 1;
     } else if (b == 0x04) {                                            // OAM: 256 words, then the 32 bytes of the high table
-      if (oamAdr < 0x100) { if (!second) buf = v; else sp->p.oam[oamAdr++] = (uint16_t)((v << 8) | buf); }
-      else { sp->p.highOam[((oamAdr & 0x0F) << 1) | second] = v; if (second) oamAdr++; }
-      second ^= 1;
+      CtSeqPicWrite(&sp->p, 0x04, v, 0);                                // (through the OAM address the stage set)
     } else {
       static int said = 0;
       if (!said) { said = 1; fprintf(stderr, "seqpic: a DMA to $21%02X -- not modelled\n", b); }

@@ -17103,6 +17103,7 @@ int main(int argc, char** argv) {
       // cycles, the init's DMAs, the setup's 5216178 (sequence_table.md sec. 17).
       if (seqId != 2 && !seqOpen && CtEntry6StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
+        stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry6pic.c)
         if (CtEntry6StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 5; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -20209,14 +20210,14 @@ int main(int argc, char** argv) {
           uint16_t joy = 0;
           for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
           CtRaceIo rio = raceIoFor(CtWramSys(fieldWram()));
-          if (endOn >= 2 && endOn <= 4) rio.pic = &g_stagePic;      // entries 3, 4 and 7's pictures are ported (the others: black)
+          if (endOn >= 2 && endOn <= 5) rio.pic = &g_stagePic;      // entries 3, 4, 7 and 6's pictures are ported (the ending: black)
           int st = endOn == 2 ? CtEntry3StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 3 ? CtEntry4StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 4 ? CtEntry7StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 5 ? CtEntry6StageFrame(CtWramSys(fieldWram()), joy, &rio)
                               : CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) endEnded = st;
-          else if (endOn >= 2 && endOn <= 4) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
+          else if (endOn >= 2 && endOn <= 5) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
           if (getenv("CT_STAGEPIC_TRACE")) { long sum = 0; for (int i = 0; i < CAMW * CAMH * 3; i++) sum += fb[i];
             fprintf(stderr, "stagepic: f%d end=%d st=%d INIDISP=%02X TM=%02X hdmaen=%02X sum=%ld cg1=%04X\n", frameNo, endOn, st,
                     g_stagePic.p.r[0], g_stagePic.p.r[0x2C], g_stagePic.hdmaen, sum, g_stagePic.p.cgram[1]); }

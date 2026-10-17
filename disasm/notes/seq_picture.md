@@ -169,7 +169,7 @@ op's own frame -- the script clears glb[170] bit 5 ($7F:00AA, C0/6BCE) on the fr
 **Equal on every frame** to the console's reset (995 NMIs; `entry7-picture-native-vs-oracle`; unseeded the same picture). **In
 play**: 300 frames after the op the whole frame is the cartridge's at P+2 (`entry7-story-picture-in-the-port-vs-oracle`).
 
-## 8. Entry 6, the Epoch into the shell (src/seq_entry6pic.c) -- IN PROGRESS
+## 8. Entry 6, the Epoch into the shell (src/seq_entry6pic.c) -- DONE (2026-10-17)
 
 `FF 26` (sequence_table.md sec. 17). **Part 1 (2026-10-17)**, VRAM / CGRAM / HDMA the cartridge's from the first NMI to the END
 (`entry6-picture-native-vs-oracle`, a ratchet): the setup $7E:78DD -- packet $66 as the mode-7 characters (VRAM's high bytes from
@@ -184,11 +184,26 @@ halves on alternate frames -- `DEX / DEX` from $FF to the limit $01C0 with page 
 $801F (after the turn: each line's distance read through WMDATA from $E260, the tail `BRA $3662` copied from $368D). The harness
 answers a script's `F5` with the oracle's own SPC, so the END is the cartridge's (1611).
 
-**Part 2, open**: the sprites -- tasks $7F7D (the Epoch's and its glow's pieces through $3A97), $7FCB (the window circle C3/0077 into
-$E060.., the lightning's tables), $8079 (the lightning's sprites, rewritten through WMDATA), $835B, $7BF2. Their draws call C3/02DD
-with a 16-bit A: `CMP $2137` reads $2138 (OAM data at the OAM address) as its high byte and `SBC $213D` reads $213E (STAT77: 1 |
-the PPU1 open bus' bit 4 | range over << 6 | time over << 7) -- the compositor must keep the OAM address ($2102 / $2103, the DMA,
-those reads; reset at the vblank when not forced blank) and the last frame's sprite flags. Then in play.
+**Part 2 (2026-10-17)**: the sprites. $7F7D (the Epoch's glow: three lists through $3A97, a list drawer read through WMDATA with a
+9-bit x -- off the left edge bit 8 set, off the right edge y = $E0 -- whose exit A and carry the next RNG takes), $8205's own draw
+(`LDA #82B0 / JSL C3/0D5E`, missing from the logic), $7FCB (C3/0077's midpoint circle into the window table $E060, mirrored, and the
+HDMA bytes $7C5C..; then $E0E0 from it + page B's r1), $8079 (the lightning: two tile words from $80E1 by a 16-bit draw, four
+sprites through WMDATA at $8112 from $80E9 by 8-bit draws), $835B (the explosion's frames from the table $84F6), $7BF2 (an HDMA
+table opening, then channel 0's table address written at $4302).
+
+⚠ C3/02DD WITH A 16-BIT A reads its three absolute operands as WORDS IN THE CALLER's DATA BANK. Under $00 (the dispatcher's): `CMP
+$2137` = the CPU's open bus $21 and OAM data at the OAM address ($2138, advancing it); `ADC $213C` = the virtual beam ($0351, 0);
+`SBC $213D` = 0 and STAT77 (1 | the PPU1 open bus' bit 4 | range over << 6 | time over << 7). So the compositor keeps the OAM
+address as the PPU does ($2102 / $2103, $2104 writes and the DMA through them, $2138 reads; put back at a vblank not in forced blank
+-- `$380B`'s `STX $2102` writes $2103 too) and the last frame's sprite flags (set while evaluating, cleared at the frame's start);
+sprite evaluation starts at the OAM address under priority rotation. Under $7E (`$8079`'s `PHK / PLB`) the same operands are WRAM's
+$7E:2137.. -- no PPU read at all. And the logic's $37FA (`LDX $4202`: the open bus, $4242) stores on its caller's direct page: $00F0
+for the task, $0AF0 / $0BF0 for a script's call (`$00F0` keeps the call's target there).
+
+**Equal on every frame**: 1611 NMIs to the END, state, the stage's WRAM, every pixel (`entry6-picture-native-vs-oracle`; unseeded
+the same picture). **In play**: 429 frames after the op the whole frame is the cartridge's at P+2
+(`entry6-story-picture-in-the-port-vs-oracle`). Not exercised: CMP $2137's low byte deciding a carry, a sprite past x 255 in
+$3A97, a circle's edge past $FF.
 
 ## 9. Next
 

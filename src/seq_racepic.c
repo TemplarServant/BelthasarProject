@@ -143,7 +143,8 @@ static void hook3870(uint8_t* w) {
 }
 static void hook380B(CtSeqStagePic* sp, uint8_t* w) {
   hook3870(w);
-  CtSeqStagePicDma(sp, w, 0x00, 0x04, 0x0700, 0x220);                // $2102 = 0, DMAP 00 to $2104
+  CtSeqPicWrite(&sp->p, 0x02, 0x00, 0); CtSeqPicWrite(&sp->p, 0x03, 0x00, 0);   // 380E STX $2102 (16-bit: $2103 too)
+  CtSeqStagePicDma(sp, w, 0x00, 0x04, 0x0700, 0x220);                // DMAP 00 to $2104
   CtSeqPicWrite(&sp->p, 0x03, 0x80, 0); CtSeqPicWrite(&sp->p, 0x02, w[0x10], 0);   // 382E: priority rotation from `$10`
   ww(w, 0x11, 0); ww(w, 0x13, 0x0900);
 }

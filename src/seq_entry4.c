@@ -31,7 +31,7 @@ long CtEntry4StageSetupCycles(void) { return 1938002L; }
 // ADC $213C / SBC $213D / ADC $0386 / ADC $00F0 / EOR $00F2 / ADC $00F4 / SBC $213D / STA $0386`, the carry threaded through.
 // The beam counters are the rule's VIRTUAL BEAM on both sides (CLAUDE.md; snes/snes.c snes_readBBus): $213C = $0351, $213D =
 // 00. `CMP $2137` latches the counters and reads the open bus -- the operand's last byte, 21 -- so it only sets the carry.
-static uint8_t rng02DD(uint8_t* w, uint8_t a, int* c, unsigned x) {
+uint8_t CtSeqRng02DD8(uint8_t* w, uint8_t a, int* c, unsigned x) {
   unsigned t;
   int nc = a >> 7; a = (uint8_t)((a << 1) | *c); *c = nc;             // 02DD ROL A
   t = a + w[0x0386] + *c; a = (uint8_t)t; *c = t > 0xFF;              // 02DE ADC $0386
@@ -56,9 +56,9 @@ static uint8_t rng02DD(uint8_t* w, uint8_t a, int* c, unsigned x) {
 // `CPX #0200` clears the carry between stars. The first draw's A and carry are what page A's first visit left (`a`, `c`).
 static void entry4StarsInit(uint8_t* w, uint8_t a, int c) {
   for (unsigned x = 0; x < 0x200; x += 4) {
-    a = rng02DD(w, a, &c, x); w[0x0C00 + x] = a;                      // 577A JSR $3443 / STA $0C00,X
-    a = rng02DD(w, a, &c, x); w[0x0C01 + x] = a;                      // 5780 JSR $3443 / STA $0C01,X
-    a = rng02DD(w, a, &c, x); a &= 0x7F; w[0x0E00 + x] = a;           // 5786 JSR $3443 / AND #7F / STA $0E00,X
+    a = CtSeqRng02DD8(w, a, &c, x); w[0x0C00 + x] = a;                      // 577A JSR $3443 / STA $0C00,X
+    a = CtSeqRng02DD8(w, a, &c, x); w[0x0C01 + x] = a;                      // 5780 JSR $3443 / STA $0C01,X
+    a = CtSeqRng02DD8(w, a, &c, x); a &= 0x7F; w[0x0E00 + x] = a;           // 5786 JSR $3443 / AND #7F / STA $0E00,X
     wr(w, 0x00F2, x);                                                 // 578E STX $00F2
     c = 0;                                                            // 5795 CPX #0200 (X < 200)
   }
@@ -99,8 +99,8 @@ static void entry4Stars(uint8_t* w, unsigned slot) {
       a = (uint8_t)t; c = t > 0xFF; respawn = (a & 0x80) != 0;        // 57B0 BPL -> 57C0
     }
     if (respawn) {                                                    // 57B2 PHA
-      uint8_t r = rng02DD(w, a, &c, slot); w[0x0C00 + y] = r;         // 57B3 JSR $3443 / STA $0C00,Y
-      r = rng02DD(w, r, &c, slot); w[0x0C01 + y] = r;                 // 57B9 JSR $3443 / STA $0C01,Y
+      uint8_t r = CtSeqRng02DD8(w, a, &c, slot); w[0x0C00 + y] = r;         // 57B3 JSR $3443 / STA $0C00,Y
+      r = CtSeqRng02DD8(w, r, &c, slot); w[0x0C01 + y] = r;                 // 57B9 JSR $3443 / STA $0C01,Y
     }                                                                 // 57BF PLA
     a &= 0x7F; w[0x0E00 + y] = a;                                     // 57C0 AND #7F / STA $0E00,Y
     t = a + 0x80 + c; uint8_t depth = (uint8_t)t; c = t > 0xFF;       // 57C5 ADC #80

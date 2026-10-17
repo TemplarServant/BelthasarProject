@@ -32,7 +32,10 @@ long CtEntry6StageSetupCycles(void) { return 5216178L; }
 static int s_songHold;
 
 // $7E:37FA -- the palette records' frame: FD/E39C over the twelve records at $0520 (seq_entry3.c's).
-static void entry6Objslot(uint8_t* w, const CtRaceIo* io) {
+// `dp` = the direct page it runs on: `LDX $4202` reads a write-only register -- the open bus, $4242 -- and `STX $F0` keeps it
+// there (a task's D = 0; a script's call runs on its page, $0A00 / $0B00).
+static void entry6Objslot(uint8_t* w, const CtRaceIo* io, unsigned dp) {
+  wr(w, dp + 0xF0, 0x4242);                                           // 37FA LDX $4202 / STX $F0
   CtObjSlotIo o; memset(&o, 0, sizeof o);
   o.s = w; o.colourModes = 1; o.rom = io ? io->rom : NULL; o.romLen = io ? io->romLen : 0;
   CtObjSlotService(&o);
@@ -63,7 +66,7 @@ static unsigned entry6Div(uint8_t* w, unsigned a) {
 // $7E:8205 (M = 16, D = 0): `$F2 = $0027 = page B's r0`, $32E2 of 0400 by it; `$17 = $0B04 - $F4` (SEC / SBC), `$0B38 = $F4 +
 // 3 + the SBC's carry`, `$15 = $0B02 + 4 + that ADC's carry`; the Epoch's sprite (`$82B0` = 09, or 05 from $0027 >= 80, then
 // C3/0D5E: the picture's).
-static void entry6Epoch8205(uint8_t* w) {
+static void entry6Epoch8205(uint8_t* w, const CtRaceIo* io) {
   wr(w, 0x00F2, rd(w, 0x0B00)); wr(w, 0x0027, rd(w, 0x0B00));         // 8205-820A
   entry6Div(w, 0x0400);                                               // 820D LDA #0400 / JSR $32E2
   unsigned b4 = rd(w, 0x0B04), f4 = rd(w, 0x00F4);
@@ -73,6 +76,7 @@ static void entry6Epoch8205(uint8_t* w) {
   wr(w, 0x0B38, t); c = t > 0xFFFF;
   wr(w, 0x0015, rd(w, 0x0B02) + 4 + (unsigned)c);                     // 8223 LDA $0B02 / ADC #0004 / STA $15
   w[0x82B0] = (w[0x0027] >= 0x80) ? 0x05 : 0x09;                      // 822D-823C (8-bit)
+  if (io && io->pic) CtSeqPicOam0D5E(w, 0x82B0);                      // 8242 LDA #82B0 / JSL C3/0D5E: the Epoch (the picture's)
 }
 
 // $7E:7F12 / $7F35 (D = $0A00, M = 16, the carry clear: the dispatcher's `CPX #0020`): page A's r1 (r2) += r8, kept in
@@ -129,12 +133,12 @@ static int entry6Call(uint8_t* w, unsigned page, unsigned tgt, const CtRaceIo* i
     case 0x7ED1: entry6Tasks(w, 0x7EC7, 0x0A, io); return 0;
     case 0x82F5:                                                      // palette record 0, then one pass of the service
       w[0x0520] = 0x40; wr(w, 0x0521, 0x2020); wr(w, 0x0523, 0x0001); wr(w, 0x0525, 0x0001); wr(w, 0x0527, 0x00FF);
-      entry6Objslot(w, io); return 0;                                 // 82FB-8315, 8319 JSR $37FA
+      entry6Objslot(w, io, page); return 0;                           // 82FB-8315, 8319 JSR $37FA
     case 0x831F:                                                      // records 0 and 1, then the service
       w[0x0520] = 0x40; w[0x052C] = 0x40; wr(w, 0x0521, 0x4080); wr(w, 0x052D, 0x3050);
       wr(w, 0x0523, 0x0008); wr(w, 0x052F, 0x0008); wr(w, 0x0525, 0x0001); wr(w, 0x0531, 0x0001);
       wr(w, 0x0527, 0xFF00); wr(w, 0x0533, 0xFF00);                   // 8325-8351
-      entry6Objslot(w, io); return 0;                                 // 8355 JSR $37FA
+      entry6Objslot(w, io, page); return 0;                           // 8355 JSR $37FA
   }
   return -1;
 }
@@ -166,16 +170,16 @@ static unsigned entry6Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x3749: CtSeqScript(w, 0x0A00, io, entry6Call); return t;
     case 0x3754: CtSeqScript(w, 0x0B00, io, entry6Call); return t;
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);
-    case 0x37FA: entry6Objslot(w, io); return t;
+    case 0x37FA: entry6Objslot(w, io, 0); return t;
     case 0x7F12: entry6DiveA(w, 0); return t;
     case 0x7F35: entry6DiveA(w, 1); return t;
-    case 0x8205: entry6Epoch8205(w); return t;
+    case 0x8205: entry6Epoch8205(w, io); return t;
     case 0x7FC4: wr(w, 0x0B0C, rd(w, 0x0B38)); return t;              // 7FC4 LDA $0B38 / STA $0B0C
     case 0x81F1: wr(w, 0x0A04, rd(w, 0x0A04) + 3); return t;          // 81F1 LDA $0A04 / ADC #0003 (C clear)
     case 0x81FB: wr(w, 0x0A08, rd(w, 0x0A08) + 0xFFFD); return t;     // 81FB LDA $0A08 / ADC #FFFD
     case 0x82D1: entry6Copies(w, io); return t;
     default:                                                          // 7F7D 7FCB 8079 835B 7BF2: the picture's
-      if (io && io->pic) CtEntry6PicTask(io->pic, w, t, io);
+      if (io && io->pic) CtEntry6PicTask(io->pic, w, slot, t, io);
       return t;
   }
 }
@@ -194,7 +198,7 @@ int CtEntry6StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   wr(w, 0x3024, 0x8278);                                              // 79B4 the main thread's call (the picture's tables)
   wr(w, 0x0046, 0x00A8); wr(w, 0x0B0A, 0x00A8);                       // 79BB-79C1
   wr(w, 0x0021, rd(w, 0x0021) + 1);                                   // 79C4 TCD (D = 0) / 79C8 INC $21
-  entry6Epoch8205(w);                                                 // 79CA JSR $8205
+  entry6Epoch8205(w, io);                                             // 79CA JSR $8205
   // (79CD JSR $8278: `LDA $21 / BNE -> RTS`; then the PPU)
   if (io && io->pic) { CtEntry6PicSetupB(io->pic); CtRacePicCgram(io->pic, w); }   // 79D0-79F7, then 300D JSR $388B
   // $7E:300D .. 301E: $388B, $31B0, JSL C3/08D0 (one NMI, run here, without C3/09A4), NMI on, STZ $00, STZ $0392

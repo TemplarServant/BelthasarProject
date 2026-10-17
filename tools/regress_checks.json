@@ -27279,7 +27279,7 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          else if (endOn >= 2 && endOn <= 4) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
+          "find": "          else if (endOn >= 2 && endOn <= 5) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
           "replace": "          /* MUT: entry 3 drawn black */",
           "why": "the field draws entry 3's native picture after each of its NMIs"
         },
@@ -27420,8 +27420,8 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          if (endOn >= 2 && endOn <= 4) rio.pic = &g_stagePic;      // entries 3, 4 and 7's pictures are ported (the others: black)",
-          "replace": "          if (endOn == 2 || endOn == 4) rio.pic = &g_stagePic;   /* MUT */",
+          "find": "          if (endOn >= 2 && endOn <= 5) rio.pic = &g_stagePic;      // entries 3, 4, 7 and 6's pictures are ported (the ending: black)",
+          "replace": "          if (endOn == 2 || endOn == 4 || endOn == 5) rio.pic = &g_stagePic;   /* MUT */",
           "why": "the field gives entry 4 its picture"
         }
       ],
@@ -27551,8 +27551,8 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          if (endOn >= 2 && endOn <= 4) rio.pic = &g_stagePic;      // entries 3, 4 and 7's pictures are ported (the others: black)",
-          "replace": "          if (endOn == 2 || endOn == 3) rio.pic = &g_stagePic;   /* MUT */",
+          "find": "          if (endOn >= 2 && endOn <= 5) rio.pic = &g_stagePic;      // entries 3, 4, 7 and 6's pictures are ported (the ending: black)",
+          "replace": "          if (endOn == 2 || endOn == 3 || endOn == 5) rio.pic = &g_stagePic;   /* MUT */",
           "why": "the field gives entry 7 its picture"
         }
       ],
@@ -27580,19 +27580,109 @@
       ],
       "expect": [
         "racepiccmp: the stage's setup made its NMI 32 frame(s) after the hand-off",
-        "racepiccmp: frame 1: the race's WRAM differs in 199 bytes",
-        "racepiccmp: frame 1: VRAM 0 CGRAM 0 OAM 102 words differ; registers 1 02:01/00; HDMA 0; WRAM 247 bytes",
         "racepiccmp: native stage ended (1) at frame 1611",
-        "racepiccmp: 1700 frames -- first state difference 1, first race-WRAM difference 1, first picture difference 2 (14431659 px)"
+        "racepiccmp: 1700 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
       ],
       "pin": [
         "^racepiccmp: "
       ],
       "tier": "full",
       "timeout_s": 900,
-      "note_pass": "entry 6 (FF 26, the Epoch into Lavos's shell), its picture native in progress (a ratchet): the setup's uploads, the hooks, the main thread's Epoch and the mode-7 tables -- VRAM, CGRAM, the HDMA channels the cartridge's from the first NMI; the sprites (OAM) are part 2",
-      "notes": "SEQUENCE ENTRY 6's PICTURE, PART 1 (src/seq_entry6pic.c; disasm/notes/seq_picture.md sec. 8). The setup $7E:78DD with $7A68, the hooks $81C4 / $824A / $7F58 and the PPU halves of $7A35 / $79F8, the main thread $8278 (C3/0307 and $B574 shared with the race), $82D1's $357B (generalized: its pre-routine at $35FD -- $8042 alternating the two halves of the table, $801F reading each line's distance through WMDATA -- the tail and the limit read back from the patched code). The harness now answers a script's `F5` with the oracle's own SPC ports, so the END comes on the cartridge's frame (1611). Not yet: the tasks $7F7D, $7FCB (C3/0077), $8079, $835B, $7BF2 -- the sprites, whose draws read $2138 / $213E through C3/02DD with a 16-bit A.",
-      "mutations": []
+      "note_pass": "entry 6 (FF 26, the Epoch into Lavos's shell), its picture native end to end: 1611 NMIs to the END (the cartridge's frame), VRAM / CGRAM / OAM / the registers / HDMA / the stage's WRAM and every pixel the cartridge's",
+      "notes": "SEQUENCE ENTRY 6's PICTURE (src/seq_entry6pic.c; disasm/notes/seq_picture.md sec. 8). The setup $7E:78DD with $7A68; the hooks $81C4 / $824A / $7F58 and the PPU halves of $7A35 / $79F8; the main thread $8278 (C3/0307 and $B574, the race's); $82D1's shared $357B with its pre-routines $8042 / $801F; the sprites: $7F7D (the Epoch's glow through $3A97, a list drawer with a 9-bit x), $8205's own draw (C3/0D5E, missing from the logic), $7FCB (the window circle C3/0077 into $E060.. and its HDMA bytes), $8079 (the lightning's sprites rewritten through WMDATA), $835B (the explosion's frames), $7BF2 (the opening of an HDMA table, channel 0's $4302). C3/02DD with a 16-bit A reads, under the data bank $00, $2138 (OAM at the OAM address the compositor now keeps) and $213E (STAT77) as its words' high bytes; under $7E (8079's `PHK / PLB`) it reads WRAM $7E:2137.. instead. The logic's $37FA keeps the open bus $4242 on its caller's direct page ($00F0 for the task, $0AF0 / $0BF0 for a script's call). The harness answers `F5` with the oracle's SPC. Unseeded the picture is the same. Not exercised by this run (their mutations survive): CMP $2137's open-bus low byte deciding a carry, a sprite past x 255 in $3A97, a circle's edge past $FF in C3/0077.",
+      "mutations": [
+        {
+          "file": "src/seq_entry6pic.c",
+          "find": "  k->dbr7e = 1;                                                       // 8079 PHK / PLB",
+          "replace": "  /* MUT */",
+          "why": "$8079 runs the RNG under the data bank $7E: WRAM, not the PPU"
+        },
+        {
+          "file": "src/seq_entry6.c",
+          "find": "  if (io && io->pic) CtSeqPicOam0D5E(w, 0x82B0);",
+          "replace": "  /* MUT */",
+          "why": "$8205 draws the Epoch through C3/0D5E"
+        },
+        {
+          "file": "src/seq_entry6.c",
+          "find": "  wr(w, dp + 0xF0, 0x4242);",
+          "replace": "  wr(w, 0x00F0, 0x4242);",
+          "why": "$37FA's STX $F0 lands on its caller's direct page"
+        },
+        {
+          "file": "src/seq_entry6pic.c",
+          "find": "      ww(w, 0x004E, 0x84F6);                                          // 836E: the table again",
+          "replace": "      ww(w, 0x004E, 0x84F9);",
+          "why": "$835B's table starts again at $84F6"
+        },
+        {
+          "file": "src/seq_entry6pic.c",
+          "find": "  k->sp->ch[0].aAdr = 0x7BE5;",
+          "replace": "  /* MUT */",
+          "why": "$7BF2 points HDMA channel 0 at $7BE5"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "    } else if (wmx) { x = w[wm & 0x1FFFF]; wm = (wm + 1) & 0x1FFFF; }",
+          "replace": "    } else if (wmx) { x = w[wm & 0x1FFFF]; }   /* MUT */",
+          "why": "$357B's turn tail reads each line's distance through WMDATA"
+        }
+      ]
+    },
+    {
+      "name": "entry6-story-picture-in-the-port-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/lavos_re/ff26_pre_f2760.state",
+        "441",
+        "1500",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "432",
+        "--loadwram",
+        "saves/lavos_re/cockpit_1b0_f1700.lakewram",
+        "--walkscript",
+        "n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2"
+      ],
+      "env": {
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/lavos_re/cockpit_1b0_f1700.state",
+        "CT_ORACLE_LOGICAL": "1",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:441"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/cockpit_1b0_f1700.lakewram",
+        "saves/lavos_re/cockpit_1b0_f1700.state",
+        "saves/lavos_re/ff26_pre_f2760.state",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f1500 vs oracle f441 box (0,0)-(256,224) -> 57344 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: "
+      ],
+      "timeout_s": 600,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          if (endOn >= 2 && endOn <= 5) rio.pic = &g_stagePic;      // entries 3, 4, 7 and 6's pictures are ported (the ending: black)",
+          "replace": "          if (endOn >= 2 && endOn <= 4) rio.pic = &g_stagePic;   /* MUT */",
+          "why": "the field gives entry 6 its picture"
+        }
+      ],
+      "note_pass": "the Epoch's dive as the port plays it: 429 frames after FF 26 the whole picture is the cartridge's, pixel for pixel (P+2 from the op)",
+      "notes": "The port plays lavos-epoch-ff26-plays-through-in-the-port's drive (FF 26 at f1071) and presents f1500; the cartridge's drive state ff26_pre_f2760 (FF 26 on its f10) matches at f441 -- P+2 from the op, the opening priced whole (32 frames)."
     },
     {
       "name": "seq-race-xlat-lockstep",

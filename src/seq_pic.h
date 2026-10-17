@@ -27,6 +27,11 @@ typedef struct CtSeqPic {
   uint8_t  m7prev;
   uint8_t  fix[3];          // COLDATA: red, green, blue
   uint8_t  mosaicStart;     // the line the last $2106 write took effect on (1 when written in the vblank)
+  // OAM's address as the PPU keeps it ($2102 / $2103, advanced by $2104 writes and $2138 reads, put back at each vblank that is
+  // not forced blank) -- sprite evaluation starts there under priority rotation, and a stage's code reads OAM through $2138 --
+  // and what the last frame's sprite evaluation found (STAT77's range-over / time-over), with PPU1's open bus.
+  uint8_t  oamAdr, oamAdrWritten, oamInHigh, oamInHighWritten, oamSecond, oamBuffer;
+  uint8_t  rangeOver, timeOver, ppu1OpenBus;
 } CtSeqPic;
 
 // One HDMA channel as the stage programmed it ($43x0-$43x7).
@@ -43,6 +48,9 @@ typedef uint8_t (*CtSeqPicRead)(void* ctx, uint32_t adr);   // a byte of WRAM, a
 void CtSeqPicReset(CtSeqPic* p);
 // A register write ($21xx, adr = xx), in the vblank (line 0) or by HDMA at a line's end (line = the line just drawn).
 void CtSeqPicWrite(CtSeqPic* p, uint8_t adr, uint8_t val, int line);
+// A register read the stage's code makes ($2138 OAM data, $213E STAT77): the PPU's answer, its side effects (the OAM address, the
+// open bus) kept.
+uint8_t CtSeqPicReg(CtSeqPic* p, uint8_t adr);
 // The frame: the HDMA's init and first transfer, then lines 1..224 each drawn and followed by its HDMA transfer. rgb is
 // 256 x 224 RGB888 (may be NULL).
 void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t hdmaen, CtSeqPicRead rd, void* ctx, uint8_t* rgb);

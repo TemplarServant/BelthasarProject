@@ -7403,7 +7403,8 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     static const uint8_t live[] = { 0x00, 0x01, 0x02, 0x03, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x1A, 0x23, 0x24, 0x25, 0x26,
                                     0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33 };
     for (unsigned i = 0; i < sizeof live; i++)
-      if (q.r[live[i]] != sp.p.r[live[i]]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " %02X:%02X/%02X", live[i], q.r[live[i]], sp.p.r[live[i]]); }
+      { uint8_t pv = live[i] == 0x02 ? sp.p.oamAdr : sp.p.r[live[i]];   // ($2102: the oracle's is its OAM address now, as the port's)
+        if (q.r[live[i]] != pv) { rb++; if (rl < 200) rl += sprintf(regs + rl, " %02X:%02X/%02X", live[i], q.r[live[i]], pv); } }
     for (int i = 0; i < 4; i++) {
       if (q.hofs[i] != sp.p.hofs[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " hofs%d", i); }
       if (q.vofs[i] != sp.p.vofs[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " vofs%d", i); }
