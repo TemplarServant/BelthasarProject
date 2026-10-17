@@ -298,5 +298,7 @@ the `SEP #20` -- the rest of the list runs with a 16-bit A: `DEC $19` a word, ea
 **Equal**: `FF 2A` 15000 NMIs, through "The End" held (`ending-ff2a-picture-native-vs-oracle`; one WRAM byte, FF 2B's hand-off's
 $7F:0076); `FF 2F` 3968 NMIs to its END on the cartridge's NMI (`ending-ff2f-picture-native-vs-oracle`). The logic
 (`ending-stage-logic-ff2a-ff2f-vs-oracle`): FF 2F byte for byte to the END; FF 2A 5 frames a frame early where page A waits on the
-song's 8th marker (the port's own SPC under --seqstage). In play the field draws all four (CtEndingPicHas); entries 10 / 15 are not
+song's 8th marker (the port's own SPC under --seqstage: it runs 17,088 cycles every frame where the
+console's odd frames are 4 master cycles short -- snes.c's line 240 -- 17,087.81; modelled per frame the 5 frames go, but 13
+attract checks move a frame, their song-load pricing having compensated the drift: not landed, build/_wip_spc_shortline.patch). In play the field draws all four (CtEndingPicHas); entries 10 / 15 are not
 compared in play (no drive reaches them: the oracle walked the `glb[$6D]` branch from the core to the fair, saves/ending_re/a1_*).
