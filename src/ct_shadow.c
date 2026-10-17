@@ -10,6 +10,7 @@
 #include "move.h"
 #include "menu.h"
 #include "oam.h"
+#include "vwf.h"
 
 #define SH_WRAM  0x20000
 #define SH_DEPTH 16
@@ -270,6 +271,22 @@ static int modeMachineRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom
   return CtBattleModeMachineProbe(w) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
 }
 
+// C2/57DF AND C2/5823, THE PROPORTIONAL TEXT (vwf.c CtVwfBegin / CtVwfRun), entered by JSL (C2:0003 / C2:0009 jump to
+// them; C2/6965 calls them straight). Both `PHP / REP #20 / PHD` and set D = $0200 themselves, so any m enters; 57DF's
+// `LDX #0200` is three bytes, so x is 16-bit. Their absolutes ($0231, $0237-$023A) are the direct page's bytes when DB
+// maps the low WRAM. A comes back 0000 (57DF `LDA #0000 ... LDA #00`; 5823 `LDA #00 / XBA` with B = 0); X and Y are
+// left as the last step had them and no caller reads them.
+static int vwfGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; (void)w; return in->db == 0x7E || !(in->db & 0x40);
+}
+static int vwfRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                  CtShadowRegs* out) {
+  (void)in;
+  if (e->arg) { if (CtVwfRun(w, rom, romLen) < 0) return CT_SH_UNPORTED; }
+  else CtVwfBegin(w, rom, romLen);
+  out->a = 0;
+  return CT_SH_RETURNS;
+}
 static const CtShadowEntry k_fixed[] = {
   { 0xC28791, "inventory add (CtMenuInvAdd)", 0x00, 0x00, 0, 0, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC287D5, "inventory remove (CtMenuInvRemove)", 0x00, 0x00, 0, 1, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
@@ -297,6 +314,8 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC12D9F, "battle idle walk (C1/2D9F)", 0x20, 0x20, 0, 0, battleGuard, idleWalkRun, 0, NULL },
   { 0xC13714, "battle mode machine (C1/3714)", 0x20, 0x20, 0, 0, battleGuard, modeMachineRun, 0, NULL },
   { 0xFFFAA3, "save load (CtMenuSaveLoad)", 0x00, 0x00, 1, 0, loadGuard, loadRun, 0, NULL },
+  { 0xC257DF, "text set-up (CtVwfBegin)", 0x10, 0x00, 1, 0, vwfGuard, vwfRun, CT_SH_A16, NULL },
+  { 0xC25823, "text run (CtVwfRun)", 0x10, 0x00, 1, 1, vwfGuard, vwfRun, CT_SH_A16, NULL },
 };
 #define AI_NCOND 0x29   // the condition ops 00-28 (--sweepaieval's range; op 0F, C1/2C02's path test, is unported)
 #define SH_NFIXED ((int)(sizeof k_fixed / sizeof k_fixed[0]))

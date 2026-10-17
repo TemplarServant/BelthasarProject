@@ -39810,7 +39810,6 @@
       ],
       "env": {},
       "expect": [
-        "map: port says owmap: UNDERIVED the era's label text (C2/57DF / 5823, the proportional text engine) -- left blank",
         "map: port says owmap: f3476 load, 24313210 cycles = 69 frame(s)",
         "map: port says owmap: f3733 return, 11107718 cycles = 31 frame(s)",
         "map: the cartridge lost 1 picture(s) to a long DMA (monitor f3117)",
@@ -39820,8 +39819,8 @@
         "map: picture port f3464 / cartridge f3106 0 px differ",
         "map: picture port f3560 / cartridge f3201 0 px differ",
         "map: picture port f3575 / cartridge f3216 0 px differ",
-        "map: picture port f3610 / cartridge f3251 355 px differ",
-        "map: picture port f3660 / cartridge f3301 355 px differ",
+        "map: picture port f3610 / cartridge f3251 0 px differ",
+        "map: picture port f3660 / cartridge f3301 0 px differ",
         "map: picture port f3700 / cartridge f3341 0 px differ",
         "map: picture port f3715 / cartridge f3356 0 px differ",
         "map: picture port f3772 / cartridge f3413 0 px differ",
@@ -39841,7 +39840,7 @@
         "saves/downloaded/ctjackie/srm/ch24.srm",
         "tools/epoch_board_cmp.py"
       ],
-      "note_pass": "Select aboard the Epoch opens the world map (C2/258D -> C2/631F) and B closes it on the cartridge's frames: the mosaic and the fades, the NMI-off set-up and rebuild, the zoom, and the mode-7 picture pixel for pixel but the era's label",
+      "note_pass": "Select aboard the Epoch opens the world map (C2/258D -> C2/631F) and B closes it on the cartridge's frames: the mosaic and the fades, the NMI-off set-up and rebuild, the zoom, and the mode-7 picture pixel for pixel, the era's label included (C2/6965 through the proportional-text engine, vwf.c)",
       "mutations": [
         {
           "file": "src/field.c",
@@ -39878,9 +39877,33 @@
           "find": "    if (obW(B + 0x28) >= 0x40) { obPutW(B + 0x28, 0x003E); B[2]++; CtWorldSpawnVm(ram, 0xC2, 0x6A0A); }",
           "replace": "    if (obW(B + 0x28) >= 0x30) { obPutW(B + 0x28, 0x003E); B[2]++; CtWorldSpawnVm(ram, 0xC2, 0x6A0A); }   /* MUT */",
           "why": "C2/66CB: the zoom out takes 32 steps of C6:F560 / F5A0"
+        },
+        {
+          "file": "src/vwf.c",
+          "find": "  if (DP(0x14) & 0x0F) glyphRows(v, 0x01F0, 0x6066); else glyphRows(v, 0x00F0, 0x5FE6);",
+          "replace": "  if (DP(0x14) & 0x0F) glyphRows(v, 0x00F0, 0x6066); else glyphRows(v, 0x00F0, 0x5FE6);   /* MUT */",
+          "why": "C2/5F2E: in a 4 bpp strip the glyph's lower eight rows are the tile below, $1F0 on (16 tiles of 32 bytes)"
+        },
+        {
+          "file": "src/vwf.c",
+          "find": "    wr(v, a, (uint8_t)(rd(v, a) | (w >> 8)));",
+          "replace": "    wr(v, a, (uint8_t)(w >> 8));   /* MUT */",
+          "why": "C2/5FB1: a glyph shifted right 1-4 ORs its high byte into the column the previous glyph ended in"
+        },
+        {
+          "file": "src/vwf.c",
+          "find": "  DP(0x34) = (uint8_t)(DP(0x34) + rd(v, 0xC260E6u + (uint8_t)(DP(0x35) - 0xA0)));",
+          "replace": "  DP(0x34) = (uint8_t)(DP(0x34) + 8);   /* MUT */",
+          "why": "C2/5E28: the pen moves by the glyph's own width, C2:60E6[code - A0]"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    CtVwfBegin(ram, g_owRom, g_owRomLen);                              // JSL C2/57DF",
+          "replace": "    ram[0x0215] = 0x00;   /* MUT */",
+          "why": "C2/6965 draws the era's label (C2/57DF / 5823) before the strip goes to VRAM $6200"
         }
       ],
-      "notes": "THE WORLD MAP (disasm/notes/ow_world_map.md; ROADMAP G1a item 3). Jackie's ch24 driven to the free flight on 1F6 (as ow-epoch-flight-vs-oracle), then Select (the cartridge's f3082) and B 242 frames on. C2/258D: script C2:2EC7 (mosaic up, fade out) and 34 NMIs; NMI off, the direct page and the object array stashed, C2/631F's set-up (VRAM cleared, the world's chars decompressed, one colour a tile, the map one pixel a 16 x 16 cell, the markers, the backdrop's HDMA ramp); NMI on; the controller $666C zooms out (32 steps), waits for B, zooms back; 17 NMIs; NMI off, the stash back, C2/2C93 rebuilds the world; script C2:2ED0 and 41 NMIs; `$027C = 1`. The port's stretches are priced as the ROM's (the decompressor model plus rests measured with --callrom, graded by the oracle's own stretches) and end with the NMI's return rule (owNmiOffFrames: a stretch ending inside the vblank it crossed gets its NMI at once, uncounted by C2/0454). The tool reads the cartridge's LOST PICTURES (CT_ORACLE_RUNFRAME_TRACE: C2/26A8's 64 KB DMA ends inside the next vblank, one snes_runFrame call for two frames) and puts the cartridge's events and the presses on the console's clock; the port's world runs 359 frames behind from the free flight (the world VM in $0C30 ends at f3074 / f3433), and its pictures (the NMI's shadows, latched before the pass) are the cartridge's --peek P + 1 there. PINNED RESIDUAL: the era's label (355 px) -- C2/6965's text goes through the proportional-text engine C2/57DF / 5823, not ported; the label's tiles stay blank and the port says so once."
+      "notes": "THE WORLD MAP (disasm/notes/ow_world_map.md; ROADMAP G1a item 3). Jackie's ch24 driven to the free flight on 1F6 (as ow-epoch-flight-vs-oracle), then Select (the cartridge's f3082) and B 242 frames on. C2/258D: script C2:2EC7 (mosaic up, fade out) and 34 NMIs; NMI off, the direct page and the object array stashed, C2/631F's set-up (VRAM cleared, the world's chars decompressed, one colour a tile, the map one pixel a 16 x 16 cell, the markers, the backdrop's HDMA ramp); NMI on; the controller $666C zooms out (32 steps), waits for B, zooms back; 17 NMIs; NMI off, the stash back, C2/2C93 rebuilds the world; script C2:2ED0 and 41 NMIs; `$027C = 1`. The port's stretches are priced as the ROM's (the decompressor model plus rests measured with --callrom, graded by the oracle's own stretches) and end with the NMI's return rule (owNmiOffFrames: a stretch ending inside the vblank it crossed gets its NMI at once, uncounted by C2/0454). The tool reads the cartridge's LOST PICTURES (CT_ORACLE_RUNFRAME_TRACE: C2/26A8's 64 KB DMA ends inside the next vblank, one snes_runFrame call for two frames) and puts the cartridge's events and the presses on the console's clock; the port's world runs 359 frames behind from the free flight (the world VM in $0C30 ends at f3074 / f3433), and its pictures (the NMI's shadows, latched before the pass) are the cartridge's --peek P + 1 there. The era's label: C2/6965's text through the proportional-text engine C2/57DF / 5823 (vwf.c, disasm/notes/vwf_engine.md), its strip byte for byte the cartridge's $7E:8621; the engine's calls are also graded by the shadow."
     },
     {
       "name": "ow-event-cell-600ad-scene097-vs-oracle",
@@ -42946,7 +42969,7 @@
       "expect": [
         "C1AF22 battle RNG (battleRngBase)       calls 92  matched 92  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C0ACFD velocity+priority (ACFD)         calls 3150  matched 3150  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 278 entries, 115 reached, 143162 calls, matched 125212, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 15795, unresolved 1",
+        "shadow: 280 entries, 115 reached, 143162 calls, matched 125212, mismatched 0, interrupted 0, exits 0, skipped 2097, unported 57, dead 15795, unresolved 1",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 4988  matched 4039  mismatched 0  interrupted 0  exits 0  skipped 0  dead 949",
         "  dead scratch CD16A6: 7E:0003-000D 7E:000F 7E:0012-0019 7E:0023-002A 7E:0045-004D",
@@ -43043,14 +43066,16 @@
       ],
       "expect": [
         "C1DC64 battle hit roll (battleHitCore)  calls 11  matched 11  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 278 entries, 104 reached, 337843 calls, matched 302225, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 34230, unresolved 3",
+        "shadow: 280 entries, 106 reached, 338404 calls, matched 302786, mismatched 0, interrupted 0, exits 0, skipped 1252, unported 133, dead 34230, unresolved 3",
         "shadow: ended at oracle frame 16270, location 00AC",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
         "CD16A6 battle effect op (CD/16A6)       calls 1704  matched 773  mismatched 0  interrupted 0  exits 0  skipped 0  dead 930  unresolved 1",
         "  dead scratch CD16A6: 7E:0045 7E:0047-0049 7E:004B-004D 7E:004F 7E:0051",
         "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C12D9F battle idle walk (C1/2D9F)       calls 248  matched 248  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "C13714 battle mode machine (C1/3714)    calls 496  matched 496  mismatched 0  interrupted 0  exits 0  skipped 0"
+        "C13714 battle mode machine (C1/3714)    calls 496  matched 496  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "C257DF text set-up (CtVwfBegin)         calls 32  matched 32  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "C25823 text run (CtVwfRun)              calls 529  matched 529  mismatched 0  interrupted 0  exits 0  skipped 0"
       ],
       "pin": [
         "^C1DC64 ",
@@ -43061,7 +43086,9 @@
         "^  dead scratch CD16A6:",
         "^FFFAA3 ",
         "^C12D9F ",
-        "^C13714 "
+        "^C13714 ",
+        "^C257DF ",
+        "^C25823 "
       ],
       "tier": "full",
       "timeout_s": 420,
@@ -43152,10 +43179,12 @@
       "expect": [
         "C28791 inventory add (CtMenuInvAdd)     calls 4  matched 4  mismatched 0  interrupted 0  exits 0  skipped 0",
         "C287D5 inventory remove (CtMenuInvRemove) calls 8  matched 8  mismatched 0  interrupted 0  exits 0  skipped 0",
-        "shadow: 278 entries, 44 reached, 22366 calls, matched 18719, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3, dead 3644, unresolved 0",
+        "shadow: 280 entries, 46 reached, 22449 calls, matched 18802, mismatched 0, interrupted 0, exits 0, skipped 0, unported 3, dead 3644, unresolved 0",
         "shadow: ended at oracle frame 3361, location 00AE",
         "  dead scratch C0CAD9: 7E:01C5-01C6 7E:01CD-01D9 7E:01EE",
-        "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0"
+        "FFFAA3 save load (CtMenuSaveLoad)       calls 1  matched 1  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "C257DF text set-up (CtVwfBegin)         calls 23  matched 23  mismatched 0  interrupted 0  exits 0  skipped 0",
+        "C25823 text run (CtVwfRun)              calls 60  matched 60  mismatched 0  interrupted 0  exits 0  skipped 0"
       ],
       "pin": [
         "^C28791 ",
@@ -43163,7 +43192,9 @@
         "^shadow: \\d+ entries",
         "^shadow: ended",
         "^  dead scratch C0CAD9:",
-        "^FFFAA3 "
+        "^FFFAA3 ",
+        "^C257DF ",
+        "^C25823 "
       ],
       "tier": "quick",
       "timeout_s": 90,
@@ -43185,6 +43216,12 @@
           "find": "    memcpy(wram + dst, sram + base + off, CT_SAVE_RECS[i].len);",
           "replace": "    memcpy(wram + dst, sram + base + off + 1, CT_SAVE_RECS[i].len);   /* MUT: every record one byte late */",
           "why": "FF/FAA3's eight records (party, items, flags, location ...) out of the battery RAM: graded on the route's own slot load"
+        },
+        {
+          "file": "src/vwf.c",
+          "find": "  DP(0x34) = (uint8_t)(DP(0x34) + rd(v, 0xC260E6u + (uint8_t)(DP(0x35) - 0xA0)));",
+          "replace": "  DP(0x34) = (uint8_t)(DP(0x34) + 8);   /* MUT */",
+          "why": "C2/5E28: the proportional text's pen moves by the glyph's own width, C2:60E6[code - A0] (the menu's names and descriptions, graded call by call)"
         }
       ],
       "note_pass": "the oracle loads a public battery save and works the X-menu: four Tonics on Crono and four equipment changes -- 12 calls to the inventory routines C2/8791 / C2/87D5, every one equal to our C",

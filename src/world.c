@@ -1,6 +1,7 @@
 // M3-B: overworld camera/scroll -- C port of the bank-C2 scroll engine (see world.h for the RE map).
 #include "world.h"
 #include "ct_owobj.h"   // the ambient-object block ABI (offsets/class shared with field.c)
+#include "vwf.h"      // C2/57DF / 5823: the proportional text (the world map's era label)
 #include "lz.h"       // C6/E028: the world scripts' far call into C3/0002 (ct_lz_decompress_bounded)
 #include "data/ow_anim.h"  // ROM $C3:E000..EFFF: the anim sub-VM's pointer table + bytecode
 #include <string.h>
@@ -3480,8 +3481,8 @@ static int obMapMarker(uint8_t* ram, uint8_t* B, uint16_t cls) {
   return 0;
 }
 // C2/631F's NMI-off half (the world stashed by C2/258D before it): BGMODE 7, OBSEL 63, CGWSEL 00 / CGADSUB 20 (the fixed colour
-// added to the backdrop), VRAM cleared (C2/26A8), C2/03EF, C2/0471; C2/6965 the era's label (its text, C2/57DF / 5823, is the
-// proportional-text engine this port does not have: the label's tiles stay blank); C2/68F4 the backdrop's blue ramp (HDMA
+// added to the backdrop), VRAM cleared (C2/26A8), C2/03EF, C2/0471; C2/6965 the era's label (its text through the
+// proportional-text engine C2/57DF / 5823, vwf.c, into a 4 bpp strip at $7E:8621 for OBJ tiles $6200); C2/68F4 the backdrop's blue ramp (HDMA
 // channel 1 to $2132, 16 shades x 7 lines, twice); C2/63DF the map; the markers' tiles C6:F500 / F520 to VRAM $6000 / $6020,
 // CGRAM 0 = 0, C6:F540 to $0A20; the controller and script C2:69F8.
 void CtWorldMapEnter(uint8_t* ram, uint8_t* vram) {
@@ -3497,8 +3498,11 @@ void CtWorldMapEnter(uint8_t* ram, uint8_t* vram) {
   if (id == 0x6C && ram[0x1BA6] < 0x36) id = 0x6F;
   else if (id == 0x6B && !(ram[0x1BAD] & 0x01)) id = 0x6F;
   ram[0x020C] = id; obPutW(ram + 0x020D, 0xF400); ram[0x020F] = 0xC6; ram[0x0214] = 0x02;
-  obPutW(ram + 0x0210, 0x8621); ram[0x0212] = 0x7E; ram[0x0213] = 0x0C;
-  { static int said = 0; if (!said) { said = 1; printf("owmap: UNDERIVED the era's label text (C2/57DF / 5823, the proportional text engine) -- left blank\n"); } }
+  obPutW(ram + 0x0210, 0x8621); ram[0x0212] = 0x7E;
+  if (g_owRom) {
+    CtVwfBegin(ram, g_owRom, g_owRomLen);                              // JSL C2/57DF
+    ram[0x0213] = 0x0C; CtVwfRun(ram, g_owRom, g_owRomLen);            // twelve glyphs, JSL C2/5823 (13 would be "65000000 B.C.")
+  }
   if (vram) memcpy(vram + 2 * 0x6200, ram + 0x8621, 0x400);
   // C2/68F4
   { unsigned o = 0x8B56;                                               // the second loop runs on from 10 round to 10 again: 256

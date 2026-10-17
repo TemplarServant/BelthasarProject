@@ -23,7 +23,7 @@ if(MSVC)
 endif()
 
 # The playable host's sources (ct_field below; the Android app's libmain.so, android/CMakeLists.cmake).
-set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_ending.c src/seq_entry3.c src/seq_entry4.c src/seq_entry6.c src/seq_entry7.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
+set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_ending.c src/seq_entry3.c src/seq_entry4.c src/seq_entry6.c src/seq_entry7.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
                  src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
 
 # ANDROID (docs/ANDROID.md): only the playable host, as the shared library SDL's Java activity loads. The NDK's CMake
@@ -49,7 +49,7 @@ add_executable(ct
   src/input.c
   src/player.c
   src/collision.c
-  src/world.c
+  src/world.c src/vwf.c
   src/audio.c
   src/menu.c src/menu_cost.c   # --shadow: the inventory routines C2/8791 / C2/87D5 (ct_shadow.c)
   src/battle.c   # --sweepaitarget: the first bank-$C1 micro-execution harness needs the battle port
@@ -179,7 +179,7 @@ if(CT_SDL_INC)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_field>)
   endif()
   # M3-B: interactive overworld camera viewer (live map from a WRAM/VRAM dump + the byte-exact camera).
-  add_executable(ct_world src/ct_world.c src/world.c src/lz.c src/assets.c)   # lz.c: the world scripts' far call C6/E028
+  add_executable(ct_world src/ct_world.c src/world.c src/vwf.c src/lz.c src/assets.c)   # lz.c: the world scripts' far call C6/E028
   target_include_directories(ct_world PRIVATE src ${CT_SDL_INC})
   target_link_libraries(ct_world ${CT_SDL_LIB})
   if(MSVC)

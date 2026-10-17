@@ -87,9 +87,11 @@ world's clock (ch24: 359 frames behind from the free flight) the port's picture 
 ## 6. Graded, and what is left
 
 `ow-world-map-vs-oracle`: every change of `$0100 $027C $1C $1D $1F $1B48` and of the controller's state the same, frame for
-frame, to `$027C = 1`; twelve pictures pixel for pixel (the mosaic and the fades both ways, the zoom, the map, the way back)
-but the label. Left:
+frame, to `$027C = 1`; twelve pictures pixel for pixel (the mosaic and the fades both ways, the zoom, the map, the way back),
+the era's label included: C2/6965's text runs through the proportional-text engine (src/vwf.c,
+[vwf_engine.md](vwf_engine.md)) -- the strip at `$7E:8621` byte for byte the cartridge's on 1F6, and every call the
+cartridge makes to C2/57DF / 5823 graded by the shadow. ONE call of twelve glyphs: 65,000,000 B.C.'s `65000000 B.C.` is
+thirteen, so its label is `65000000 B.C` on the cartridge (the port draws the same; not graded on a picture). Left:
 
-- **The era's label** (355 px): C2/6965's text runs through the proportional-text engine C2/57DF / 5823 (C2/58B2..), not
-  ported -- the label's tiles stay blank (`owmap: UNDERIVED ...`, said once). The same engine draws the world's location names.
-- C2/631F's rest is measured on world 0 and graded on 1F6 only; C2/6965's share (the text) moves with the label's length.
+- C2/631F's rest is measured on world 0 and graded on 1F6 only; C2/6965's share (the text: ten glyphs on 1F6, nine on 1F0)
+  moves with the label's length and is not priced apart.
