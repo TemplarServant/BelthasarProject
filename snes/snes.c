@@ -112,6 +112,7 @@ void snes_handleState(Snes* snes, StateHandler* sh) {
   cart_handleState(snes->cart, sh);
 }
 
+static unsigned g_runFrameCalls = 0;   // (the harness frame, for the traces below)
 void snes_runFrame(Snes* snes) {
   // TODO: improve handling of dma's that take up entire vblank / frame
   // run until we are starting a new frame (leaving vblank)
@@ -123,6 +124,11 @@ void snes_runFrame(Snes* snes) {
   while(!snes->inVblank && frame == snes->frames) {
     cpu_runOpcode(snes->cpu);
   }
+  { static int tr = -1; unsigned calls = ++g_runFrameCalls;   // CT_ORACLE_RUNFRAME_TRACE=1: a call that ran over a frame boundary --
+    if(tr < 0) tr = getenv("CT_ORACLE_RUNFRAME_TRACE") != NULL;   // one opcode (a long DMA) past both the vblank and line 0:
+    if(tr && snes->frames != frame)                           // one picture for two frames (the TODO above)
+      fprintf(stderr, "runframe: call %u ran frames %u-%u (to V=%d) at %02X:%04X\n", calls, frame, snes->frames, snes->vPos,
+              snes->cpu->k, snes->cpu->pc); }
   snes_catchupApu(snes); // catch up the apu after running
 }
 
@@ -404,6 +410,7 @@ int g_ctLogicalHoldApu = 1;
 static unsigned long long lfVbCycles = 0; static long lfVbRefresh = 0;
 static long lfPhaseHold = 0; static int lfPhasePending = 0;
 long g_ctLogicalPhaseHolds = 0, g_ctLogicalPhaseHeld = 0;
+static unsigned long long lfOffCycles = 0; static long lfOffRefresh = 0;
 void snes_noteNmiWrite(Snes* snes, int wasOn, int nowOn) {
   if(g_ctLogicalFrames && wasOn != nowOn) lfStretchEnd();
   if(!g_ctLogicalFrames || !g_ctLogicalLoads) return;
@@ -411,11 +418,15 @@ void snes_noteNmiWrite(Snes* snes, int wasOn, int nowOn) {
     long spent = (long)(snes->cycles - lfVbCycles) - (g_cycTagCycles[4] - lfVbRefresh) - (g_ctIfastHeld - lfVbIfast);
     lfPhaseHold = spent > 0 ? spent : 0; lfPhasePending = lfPhaseHold > 0;
     if(getenv("CT_ORACLE_LOGICAL_TRACE"))
-      fprintf(stderr, "logical-frame: frame %u NMI off at %02X:%04X, %ld cycles into the frame -> phase hold\n",
-              snes->frames, snes->cpu->k, snes->cpu->pc, lfPhaseHold);
+      fprintf(stderr, "logical-frame: frame %u (call %u) NMI off at %02X:%04X, %ld cycles into the frame -> phase hold\n",
+              snes->frames, g_runFrameCalls + 1, snes->cpu->k, snes->cpu->pc, lfPhaseHold);
   } else if(!wasOn && nowOn && lfPhasePending) {
     lfPhasePending = 0; lfPhaseHold = 0;
   }
+  if(wasOn && !nowOn) { lfOffCycles = snes->cycles; lfOffRefresh = g_cycTagCycles[4]; }
+  else if(!wasOn && nowOn && getenv("CT_ORACLE_LOGICAL_TRACE"))   // the stretch's length, for pricing its port twin
+    fprintf(stderr, "logical-frame: frame %u (call %u) NMI on at %02X:%04X (V=%d H=%d inNmi=%d), %llu cycles since it went off (%ld refresh)\n",
+            snes->frames, g_runFrameCalls + 1, snes->cpu->k, snes->cpu->pc, snes->vPos, snes->hPos, snes->inNmi, snes->cycles - lfOffCycles, g_cycTagCycles[4] - lfOffRefresh);
 }
 void snes_setLogicalFrames(int on) {
   g_ctLogicalFrames = on;

@@ -12,7 +12,7 @@ Check: `ow-epoch-time-gauge-vs-oracle` (`tools/epoch_board_cmp.py --gauge`). Fol
 | 2 | 24D5 | location change |
 | 3 | 2402 | entering a location |
 | 5 / 9 | 251E | the menu |
-| 6 | 258D | another screen, C2/631F -- not ported (the Epoch's `$00F8 & 04`) |
+| 6 | 258D | the world map, C2/631F ([ow_world_map.md](ow_world_map.md); the vehicle's `$00F8 & 04`) |
 | 8 | 261D | the time gauge |
 
 C2/261D: the fade script C2:2EC1 and `LDX #0012 / JSR C2/0454` (18 NMIs, the world live); NMI off: `$1E00 = 82` (the song
@@ -70,17 +70,21 @@ Mode 7, ppu.c's: the start of each line `((A*cH)&~63) + ((B*y)&~63) + ((B*cV)&~6
 centre, the field repeating (M7SEL 0), BG1's pixel the high byte of the char word, the matrix from the swirl's channels --
 scanline s takes table line s (screen row y = scanline y + 1). The OBJ with OBSEL 03 (8 / 16, word `$6000`). Mode-7 order
 OBJ3 > OBJ2 > OBJ1 > BG1 > OBJ0. Window 1 from channel 1 takes table line y for row y (as owWin1Line's window); inside it
-the fixed colour is added to BG1 and to OBJ palettes 4-7.
+the fixed colour is added to BG1 and to OBJ palettes 4-7. The shadows (`$20-$37`, `$41`, `$45-$49`) are the direct page as the last pass left it
+(g_owZpShow, latched before the pass with the camera -- what the NMI pushes; since 2026-10-17).
 
 ## 5. Graded, and what is left
 
 `ow-epoch-time-gauge-vs-oracle`: ch24 to the free flight, Y, Up, A -- every change of `$0100 $027C $0294 $0290/$0292 $02AF
 $1BB7` the same to `$027C = 7`; the picture pixel for pixel but the last line (below). Left:
 
-- The way back is a frame short and the trip two frames early: the port prices C2/2C93 with the X menu's model (a remainder
-  measured on world 0); on 1F6 C2/2C93 costs 11,225,250 cycles (`--callrom`), ~0.8 M more -- the X menu's return there too
-  (ROADMAP F1, the load clock).
+- ~~The way back a frame short, the trip two frames early~~ -- fixed 2026-10-17 with the world map: C2/2C93 is priced by
+  owRebuildCycles (its decompressions, ct_lz_world_return_cost, plus a rest of 1,733,474 measured on world 0), not the X menu's
+  model; the stretch on 1F6 is the oracle's own (12,049,946 cycles, the model 12,050,166) and the stretches end by the NMI's
+  return rule (owNmiOffFrames, [ow_world_map.md](ow_world_map.md) sec. 4). The way back is 69 frames on both, the trip +466.
+- The world's load into 1F1 after the trip is 2 frames long in the port (the Epoch's first step there at +514 against +512):
+  C2's loader on the load clock (ROADMAP F1).
 - The last line of the gauge's picture (scanline 224, just past the HDMA tables' 224 lines) is not the cartridge's (158-201 px);
   13 px of the needle's edge differ while it turns.
-- `$027C = 6` (C2/258D -> C2/631F), the trip flags `$7F01F4 & 0A` / `$7F01F5 & 02` (the world is rebuilt anyway, said once),
+- The trip flags `$7F01F4 & 0A` / `$7F01F5 & 02` (the world is rebuilt anyway, said once),
   the `$027C = 9` menu.

@@ -201,6 +201,8 @@ void CtWorldGaugeEnter(uint8_t* ram, uint8_t* vram);   // C2/6A34's NMI-off half
 void CtWorldGaugeLeave(uint8_t* ram);                  // C2/6AA6: the gauge's fade-out script
 int  CtWorldGaugeTakeSound(void);
 void CtWorldTraceFrame(int f);                          // the host frame number CT_OWVEHTRACE prints
+void CtWorldTraceEnd(const uint8_t* ram);               // ...and its line as the host frame ends
+void CtWorldMapEnter(uint8_t* ram, uint8_t* vram);     // C2/631F's NMI-off half: the world map ($027C = 6) set up
 void CtWorldLeadReinit(uint8_t* ram);     // C2/34F8: the lead's init again (stepping out of a vehicle, $027E 5 -> 0)
 void CtWorldLeadRingPush(uint8_t* ram);   // C2/3934: the lead's step arrival onto its trail ring ($1B5A/$1B5B/$1B7B)
 

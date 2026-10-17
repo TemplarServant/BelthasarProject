@@ -1560,8 +1560,20 @@ static CtMotFrame* g_mot;                        // (the field's, below: the pic
 // opaque the fixed colour ($2132 -- the sub screen's backdrop). The Black Omen's rising on 1F6 is that case: TM = 15, TS = 12,
 // the silhouette on BG3 added (CGADSUB 04) to BG2's waved sea (C2:0632's `13 41 00 15 / 13 42 00 12`; --ppuregs / --hdma).
 static uint8_t owSubScr[OW_WMAX * CAMH * 3];
+// THE MOSAIC ($2106, the shadow `$1F` the NMI pushes: the size - 1 in the high nybble, BG1-BG4 in bits 0-3), ppu.c's: a layer
+// it covers takes, for the pixel at screen column x, the one at x - x % size, and for scanline L the one at L - (L - start) %
+// size -- start is 1 when the register was written in the vblank (ppu_handleFrameStart), so a screen row y takes y - y % size.
+// The widescreen's columns count from the SNES screen's left edge (X0).
+// ...and like every register the NMI pushes, the picture takes it from the shadows the LAST pass left (C2/01D5 `LDA $1F / STA
+// $2106` runs before C2/051D's pass): g_owZpShow, the direct page as it stood before this frame's pass (latched with the camera).
+static uint8_t g_owZpShow[0x100]; static int g_owZpHave = 0;
+static inline const uint8_t* owZp(const uint8_t* wr) { return g_owZpHave ? g_owZpShow : wr; }
+static inline int owMosaicSize(const uint8_t* wr) { return wr ? (owZp(wr)[0x1F] >> 4) + 1 : 1; }
+static inline int owMosaicOn(const uint8_t* wr, int bg) { return wr && (owZp(wr)[0x1F] & (1 << bg)) && (owZp(wr)[0x1F] >> 4); }
+static inline int owMosaicX(int x, int X0, int n) { int s = x - X0; return x - ((s % n) + n) % n; }
 static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorldCam* cs, uint8_t hdmaEn, int W, int X0) {
   const uint8_t* wr = w->wram;
+  const int mz = owMosaicSize(wr);
   const int tsub = wr ? wr[0x0042] : 0x13;
   const int fix[3] = { wr ? (wr[0x0048] & 0x1F) : 0, wr ? (wr[0x0049] & 0x1F) : 0, wr ? (wr[0x0047] & 0x1F) : 0 };   // R, G, B
   uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
@@ -1578,7 +1590,8 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
       for (int bg = 0; bg < 2; bg++) {
         if (!(tsub & (1 << bg))) continue;
         uint16_t hofs = bg == 0 ? cs->bg1h : h2, vofs = bg == 0 ? cs->bg1v : v2;
-        int wx = hofs + x - X0, wy = vofs + y + OW_BG_VLINE;
+        const int mo = owMosaicOn(wr, bg);
+        int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
         int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
         uint16_t chip = stm->tilemap[bg][(col & 0x1F) + ((col & 0x20) << 5) + row * 0x20];
         int t = chip & 0x3FF, pb = ((chip >> 10) & 7) * 16, tx = wx & 7, ty = wy & 7;
@@ -1609,19 +1622,19 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
 // Layer order in mode 7: OBJ3 > OBJ2 > OBJ1 > BG1 > OBJ0; the backdrop CGRAM 0.
 static int owS13(unsigned v) { return ((int16_t)((v & 0x1FFF) << 3)) >> 3; }
 static void worldComposeGauge(World* w, uint8_t* fb) {
-  const uint8_t* wr = w->wram;
+  const uint8_t* wr = w->wram, *zp = owZp(w->wram);                // (the NMI's shadows: the last pass's)
   uint8_t en = 0, wh0 = 0, wh1 = 0; CtWorldNmiLatch(&en, &wh0, &wh1);
-  const int cgwsel = wr[0x45], cgadsub = wr[0x46], tm = wr[0x41];
-  const int fix[3] = { wr[0x48] & 0x1F, wr[0x49] & 0x1F, wr[0x47] & 0x1F };   // R, G, B
-  const int xc = owS13(wr[0x34] | (wr[0x35] << 8)), yc = owS13(wr[0x36] | (wr[0x37] << 8));
-  const int hs = owS13(wr[0x20] | (wr[0x21] << 8)), vs = owS13(wr[0x26] | (wr[0x27] << 8));
+  const int cgwsel = zp[0x45], cgadsub = zp[0x46], tm = zp[0x41];
+  const int fix[3] = { zp[0x48] & 0x1F, zp[0x49] & 0x1F, zp[0x47] & 0x1F };   // R, G, B
+  const int xc = owS13(zp[0x34] | (zp[0x35] << 8)), yc = owS13(zp[0x36] | (zp[0x37] << 8));
+  const int hs = owS13(zp[0x20] | (zp[0x21] << 8)), vs = owS13(zp[0x26] | (zp[0x27] << 8));
   uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
   uint8_t keep = g_owObsel; g_owObsel = 0x03;
   for (int y = 0; y < CAMH; y++) {
     int line = y + OW_HDMA_LINE;
     uint16_t v;
-    int A = (int16_t)(wr[0x2C] | (wr[0x2D] << 8)), B = (int16_t)(wr[0x2E] | (wr[0x2F] << 8));
-    int C = (int16_t)(wr[0x30] | (wr[0x31] << 8)), D = (int16_t)(wr[0x32] | (wr[0x33] << 8));
+    int A = (int16_t)(zp[0x2C] | (zp[0x2D] << 8)), B = (int16_t)(zp[0x2E] | (zp[0x2F] << 8));
+    int C = (int16_t)(zp[0x30] | (zp[0x31] << 8)), D = (int16_t)(zp[0x32] | (zp[0x33] << 8));
     if (owHdmaWordAt(wr, en, 0x1B, line, &v)) A = (int16_t)v;
     if (owHdmaWordAt(wr, en, 0x1C, line, &v)) B = (int16_t)v;
     if (owHdmaWordAt(wr, en, 0x1D, line, &v)) C = (int16_t)v;
@@ -1653,6 +1666,115 @@ static void worldComposeGauge(World* w, uint8_t* fb) {
       if (prevent == 3 || (prevent == 1 && !inWin) || (prevent == 2 && inWin)) math = 0;
       for (int ch = 0; ch < 3; ch++) {
         int c5 = w->pal[ci][ch] >> 3;
+        if (math && !(cgwsel & 0x02)) {
+          c5 = (cgadsub & 0x80) ? c5 - fix[ch] : c5 + fix[ch];
+          if (cgadsub & 0x40) c5 >>= 1;
+          if (c5 > 31) c5 = 31; if (c5 < 0) c5 = 0;
+        }
+        dst[x * 3 + ch] = (uint8_t)((c5 << 3) | (c5 >> 2));
+      }
+    }
+  }
+  g_owObsel = keep;
+}
+// BANK C2'S NMI ON AFTER AN NMI-OFF STRETCH (`LDA #81 / STA $4200`, then C2/046E's wait for `$4B`: the time gauge's C2/6A91 and
+// C2/2683, the world map's C2/63B5 and C2/260C). Its C cycles cross floor(C / F) vblanks (the rule's phase-0 start; F = a frame
+// less its refresh, 262 lines of 1324), and the NMI comes at the next vblank -- unless the stretch ends inside the vblank it
+// last crossed (lines 225-261, 37 x 1324 cycles past it): RDNMI's flag is still up there, and enabling the NMI raises it at once
+// (snes.c `$4200`, "if nmi is enabled while inNmi is still set"), a frame earlier. That NMI is not one C2/0454 counts: its
+// C2/0346 reads `$4B` after it and waits for the next change -- so a count of N NMIs after the write takes N + 1 passes
+// (*early). Measured, the world map on 1F6: in 70.09 frames of work, 69 without an NMI; back 32.02, 31, and `$027C = 1` 42
+// passes after the first (the oracle's stretches, CT_ORACLE_LOGICAL_TRACE). Returns the frames with no NMI.
+static int owNmiOffFrames(long cyc, int* early) {
+  const long f = 262L * 1324;
+  int t = (int)(cyc / f);
+  *early = t > 0 && cyc - (long)t * f < 37L * 1324;
+  return t - *early;
+}
+// C2/03EF + C2/2C93, the world rebuilt after a screen of its own (the time gauge's C2/2665, the world map's C2/25F0): C2/03EF
+// 7,338 cycles (`--callrom`), C2/2C93's decompressions by ct_lz_world_return_cost, and the rest of C2/2C93 MEASURED on world 0
+// (`--callrom C2/2C93` from build/_epoch/map_f2.state: 11,766,764 cycles, 345,080 of them refresh, less 9,688,210 of
+// decompression). Graded by the oracle's own stretches (CT_ORACLE_LOGICAL_TRACE, refresh excluded): the map's way back on 1F0
+// 11,635,250 (the model with its stash 11,635,482), on 1F6 11,107,072 (11,107,718); the gauge's on 1F6 12,049,946 (12,050,166).
+#ifndef CT_OW_2C93_REST
+#define CT_OW_2C93_REST 1733474L
+#endif
+static long owRebuildCycles(int world) {
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  return 7338L + (rom ? ct_lz_world_return_cost(rom, (size_t)rl, world, NULL) : 0) + CT_OW_2C93_REST;
+}
+// C2/27DE's seven char packets of a world (C6:FD00[world] -> its first seven bytes, C6:FE20 by index, into $7F:9000 + k x 1000),
+// priced by the decompressor's model (lz.c).
+static long owMapLzCycles(const uint8_t* rom, size_t rl, int world) {
+  if (!rom || world < 0 || world > 7) return 0;
+  size_t hp = ct_lz_hirom_offset(0xC6FD00) + (size_t)world * 2;
+  if (hp + 2 > rl) return 0;
+  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)rom[hp] | ((unsigned)rom[hp + 1] << 8)));
+  long cyc = 0;
+  for (int k = 0; k < 7; k++) {
+    if (hdr + (size_t)k >= rl || (rom[hdr + k] & 0x80)) continue;
+    size_t e = ct_lz_hirom_offset(0xC6FE20) + (size_t)rom[hdr + k] * 3;
+    if (e + 3 > rl) continue;
+    unsigned src = (unsigned)rom[e] | ((unsigned)rom[e + 1] << 8) | ((unsigned)rom[e + 2] << 16);
+    cyc += ct_lz_rom_cycles(rom, rl, ct_lz_hirom_offset(src), 1);
+  }
+  return cyc;
+}
+// THE WORLD MAP'S PICTURE (C2/631F: BGMODE 7, OBSEL 63). BG1 is the mode-7 plane C2/63DF built (the map in the 32 x 32 corner,
+// one pixel a cell), the matrix the controller's shadows $2C-$33 (no HDMA), the centre $34 / $36 and the scroll $20 / $26, the
+// field repeating; BG1 under the mosaic of `$1F` (the zoom's C2:69F8 / 69FF). The markers and the label are OBJ (16 / 32, word
+// $6000). The backdrop is CGRAM 0 (= 0) with the fixed colour added (CGWSEL 00, CGADSUB 20): channel 1 writes its blue a line at
+// a time (DMAP 40 to $2132, C2/68F4's ramp), the red and green the NMI's $48 / $49.
+#ifndef OW_MAP_FIXLINE
+#define OW_MAP_FIXLINE 0
+#endif
+static void worldComposeMap(World* w, uint8_t* fb) {
+  const uint8_t* wr = w->wram, *zp = owZp(w->wram);                // (the NMI's shadows: the last pass's)
+  uint8_t en = 0, wh0 = 0, wh1 = 0; CtWorldNmiLatch(&en, &wh0, &wh1);
+  const int cgwsel = zp[0x45], cgadsub = zp[0x46], tm = zp[0x41];
+  int fix[3] = { zp[0x48] & 0x1F, zp[0x49] & 0x1F, zp[0x47] & 0x1F };   // R, G, B
+  const int xc = owS13(zp[0x34] | (zp[0x35] << 8)), yc = owS13(zp[0x36] | (zp[0x37] << 8));
+  const int hs = owS13(zp[0x20] | (zp[0x21] << 8)), vs = owS13(zp[0x26] | (zp[0x27] << 8));
+  const int A = (int16_t)(zp[0x2C] | (zp[0x2D] << 8)), B = (int16_t)(zp[0x2E] | (zp[0x2F] << 8));
+  const int C = (int16_t)(zp[0x30] | (zp[0x31] << 8)), D = (int16_t)(zp[0x32] | (zp[0x33] << 8));
+  const int mz = owMosaicSize(wr), mo = owMosaicOn(wr, 0);
+  uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
+  uint8_t keep = g_owObsel; g_owObsel = 0x63;
+  for (int y = 0; y < CAMH; y++) {
+    uint16_t v;
+    if (owHdmaWordAt(wr, en, 0x32, y + OW_MAP_FIXLINE, &v)) {         // a $2132 write: bits 5 / 6 / 7 pick red / green / blue
+      if (v & 0x20) fix[0] = v & 0x1F;
+      if (v & 0x40) fix[1] = v & 0x1F;
+      if (v & 0x80) fix[2] = v & 0x1F;
+    }
+    int line = (mo ? y - y % mz : y) + OW_HDMA_LINE;
+    int cH = hs - xc, cV = vs - yc;
+    cH = (cH & 0x2000) ? (cH | ~1023) : (cH & 1023);
+    cV = (cV & 0x2000) ? (cV | ~1023) : (cV & 1023);
+    int sx = ((A * cH) & ~63) + ((B * line) & ~63) + ((B * cV) & ~63) + (xc << 8);
+    int sy = ((C * cH) & ~63) + ((D * line) & ~63) + ((D * cV) & ~63) + (yc << 8);
+    if (tm & 0x10) worldObjLine(w, y, opix, opri, oidx, CAMW, 0); else memset(opix, 0, CAMW);
+    uint8_t* dst = fb + (size_t)y * CAMW * 3;
+    for (int x = 0; x < CAMW; x++) {
+      int bg = 0;
+      if (tm & 0x01) {
+        int xm = mo ? x - x % mz : x;
+        int xp = ((sx + A * xm) >> 8) & 0x3FF, yp = ((sy + C * xm) >> 8) & 0x3FF;
+        int tile = w->vram[((yp >> 3) * 128 + (xp >> 3)) * 2];
+        bg = w->vram[(tile * 64 + (yp & 7) * 8 + (xp & 7)) * 2 + 1];
+      }
+      int ci = 0, layer = 5;                                         // 5 = the backdrop
+      if (opix[x] && opri[x] >= 1) { ci = opix[x]; layer = 4; }
+      else if (bg) { ci = bg; layer = 0; }
+      else if (opix[x]) { ci = opix[x]; layer = 4; }
+      int math = (layer == 0 && (cgadsub & 0x01)) || (layer == 4 && (cgadsub & 0x10) && (((ci - 0x80) >> 4) & 7) >= 4)
+                 || (layer == 5 && (cgadsub & 0x20));
+      int inWin = wh0 <= wh1 && x >= wh0 && x <= wh1;
+      int prevent = (cgwsel >> 4) & 3, clip = (cgwsel >> 6) & 3;
+      if (prevent == 3 || (prevent == 1 && !inWin) || (prevent == 2 && inWin)) math = 0;
+      int black = clip == 3 || (clip == 1 && !inWin) || (clip == 2 && inWin);
+      for (int ch = 0; ch < 3; ch++) {
+        int c5 = black ? 0 : w->pal[ci][ch] >> 3;
         if (math && !(cgwsel & 0x02)) {
           c5 = (cgadsub & 0x80) ? c5 - fix[ch] : c5 + fix[ch];
           if (cgadsub & 0x40) c5 >>= 1;
@@ -1703,6 +1825,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   const int showX = w->haveShow ? w->posShowX : w->mv.posX, showY = w->haveShow ? w->posShowY : w->mv.posY;
   uint8_t hdmaEn = 0, hwh0, hwh1; CtWorldNmiLatch(&hdmaEn, &hwh0, &hwh1);
   const int subOwn = w->wram && ((w->wram[0x0042] & 0x13) != (tmain & 0x13)) && mathBg3 && !mathFix;   // owComposeSub
+  const int mz = owMosaicSize(w->wram), mo3 = owMosaicOn(w->wram, 2);
   if (subOwn) owComposeSub(w, stm, cs, hdmaEn, W, X0);
   for (int y = 0; y < CAMH; y++) {
     uint8_t* dst = fb + (size_t)y * W * 3;
@@ -1716,7 +1839,8 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
       for (int bg = 0; bg < 2; bg++) {                 // BG1 over BG2 (both transparent at idx 0)
         if (!(tmain & (1 << bg))) continue;             // $212C bit0 BG1 / bit1 BG2
         uint16_t hofs = bg == 0 ? cs->bg1h : bg2hL, vofs = bg == 0 ? cs->bg1v : bg2vL;
-        int wx = hofs + x - X0, wy = vofs + y + OW_BG_VLINE;
+        const int mo = owMosaicOn(w->wram, bg);         // (the mosaic: the line's own scroll, the block's first pixel)
+        int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
         int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
         uint16_t chip = stm->tilemap[bg][(col & 0x1F) + ((col & 0x20) << 5) + row * 0x20];
         int t = chip & 0x3FF, pb = ((chip >> 10) & 7) * 16;
@@ -1745,7 +1869,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
       int bg3Math = 0;
       if (ci < 0 && w->haveBg3 && (tmain & 0x04)) {    // BG3 under: the drifting ocean texture ($212C bit2)
         int pr, pb3;
-        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, y) + x - X0, cs->bg3v + y + OW_BG_VLINE, &pr, &pb3);
+        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, y) + (mo3 ? owMosaicX(x, X0, mz) : x) - X0, cs->bg3v + (mo3 ? y - y % mz : y) + OW_BG_VLINE, &pr, &pb3);
         if (v3) { ci = pb3 + v3; bg3Math = 1; mlayer[y * W + x] = 2; if (g_mot) g_mot->own[y * W + x] = CT_MOT_BG3; }
       }
       if (ci < 0) ci = 0;                              // backdrop (CGRAM 0)
@@ -1931,7 +2055,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
       uint8_t* dst = fb + (size_t)y * W * 3;
       for (int x = 0; x < W; x++) {
         int pr, pb3;
-        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, y) + x - X0, cs->bg3v + y + OW_BG_VLINE, &pr, &pb3);
+        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, y) + (mo3 ? owMosaicX(x, X0, mz) : x) - X0, cs->bg3v + (mo3 ? y - y % mz : y) + OW_BG_VLINE, &pr, &pb3);
         if (!pr || !v3) continue;
         // ...in 5-BIT space, which is where the SNES does it: out5 = (main5 + sub5) >> 1 per
         // channel, then back to 8-bit. MEASURED on the oracle's own composed overworld frame
@@ -11606,8 +11730,13 @@ int main(int argc, char** argv) {
   // THE TIME GAUGE'S PHASES ($027C = 8, C2/261D -> C2/6A34, disasm/notes/ow_time_gauge.md): 1 the world fading out (C2:2EC1,
   // 18 NMIs), 2 the NMI-off load (C2/2E23 + C2/6A34's half), 3 the gauge live (its own 18 NMIs, then a check after each),
   // 4 its fade-out (C2:74B3, 18 NMIs), 5 the NMI-off return (C2/2E72 + C2/2C93), 6 the world fading in (C2:2EC4, 17 NMIs).
-  int owGaugePh = 0, owGaugeT = 0, owGaugeN = 0;
-  int owPassHold = 0;    // frames the overworld stands still inside its pass's inline JSL (world.c obNative)
+  int owGaugePh = 0, owGaugeT = 0, owGaugeN = 0, owGaugeEarly = 0;
+  // THE WORLD MAP'S PHASES ($027C = 6, C2/258D -> C2/631F, disasm/notes/ow_world_map.md), the same shape: 1 the world's mosaic
+  // and fade (C2:2EC7, 34 NMIs), 2 the NMI-off load (the stash + C2/631F's half), 3 the map live (a check after each NMI),
+  // 4 its last 17 NMIs, 5 the NMI-off return (the stash back, C2/03EF, C2/2C93), 6 the world coming back (C2:2ED0, 41 NMIs).
+  int owMapPh = 0, owMapT = 0, owMapEarly = 0;
+  static uint8_t owMapStash[0xF0 + 0x1000];
+  int owPassHold = 0;   // frames the overworld stands still inside its pass's inline JSL (world.c obNative)
   int owPassResume = 0;  // ...and the suspended pass resumes on the frame after them
   int entrySweepPend = 0;   // C0/286C's C0/B0E6 owed by a location change, made on the entry ramp's first frame (fade 2)
   int loadHold = 0;      // frames still owed to the LOAD itself (fade == 3): the ROM is inside
@@ -12810,12 +12939,18 @@ int main(int argc, char** argv) {
       int owGaugeBlack = 0;
       if (owGaugePh == 2 || owGaugePh == 5) {
         if (owGaugeT > 0) { owGaugeT--; owGaugeBlack = 1; }
-        else if (owGaugePh == 2) { owGaugePh = 3; owGaugeN = 0; }        // C2/6A91 NMI on: the gauge's first pass
+        else if (owGaugePh == 2) { owGaugePh = 3; owGaugeN = -owGaugeEarly; }   // C2/6A91 NMI on: the gauge's first pass
         else {                                                         // C2/2671 / 2683: the world's fade-in, NMI on
           CtWorldSpawnVm(wd.wram, 0xC2, 0x2EC4);
           wd.wram[0x4C] |= 0x03;
-          owGaugePh = 6; owGaugeT = 0x11;
+          owGaugePh = 6; owGaugeT = 0x11 + owGaugeEarly;
         }
+      }
+      // ...and the world map's (C2/631F's set-up, C2/2C93's rebuild): its NMI comes back on with the work done (C2/63B7 / 260C).
+      if (owMapPh == 2 || owMapPh == 5) {
+        if (owMapT > 0) { owMapT--; owGaugeBlack = 1; }
+        else if (owMapPh == 2) owMapPh = 3;
+        else { owMapPh = 6; owMapT = 0x29 + owMapEarly; }
       }
       const int owLoading = (fade == 3) || owPassFrozen || owGaugeBlack;
       CtWorldTraceFrame(frameNo);
@@ -12837,6 +12972,7 @@ int main(int argc, char** argv) {
       // f3076, rows 0-224) goes 55382 -> 56267. The lead's position rides with it: its OAM is built in the same pass.
       if (!owLoading && wd.wram) {
         wd.camShow = wd.cam; wd.posShowX = wd.mv.posX; wd.posShowY = wd.mv.posY; wd.haveShow = 1;
+        memcpy(g_owZpShow, wd.wram, sizeof g_owZpShow); g_owZpHave = 1;   // (the shadows the NMI pushes: owZp)
       }
       if (!owLoading && wd.wram && (wd.wram[0x4C] & 0x01)) {
         if (wd.wram[0x4C] & 0x02) {
@@ -13108,7 +13244,7 @@ int main(int argc, char** argv) {
           if (sn > 0) { owPassHold = sn - 1; owPassResume = 1; }
           if (!wasResume) owLatchShow(&wd);
           if (sn <= 0) {
-        if (owGaugePh == 3 || owGaugePh == 4)        // (the gauge's OBJ are screen-placed: its BG2 shadows $22 / $28 are 0)
+        if (owGaugePh == 3 || owGaugePh == 4 || owMapPh == 3 || owMapPh == 4)   // (the gauge's and the map's OBJ: the shadows $22 / $28)
           CtWorldOamBuild(wd.wram, (uint16_t)(wr[0x22] | (wr[0x23] << 8)), (uint16_t)(wr[0x28] | (wr[0x29] << 8)));
         else
         CtWorldOamBuild(wd.wram, wd.cam.bg2h, wd.cam.bg2v);
@@ -13130,7 +13266,7 @@ int main(int argc, char** argv) {
           CtWorldGaugeEnter(wr, wd.vram);
           long cyc = 0; for (int k = 0; k < 6; k++) cyc += (long)kOwStash[k].len * 46;
           cyc += 524674L + 2248948L;
-          owGaugePh = 2; owGaugeT = (int)(cyc / CT_LOAD_FRAME_CYCLES);
+          owGaugePh = 2; owGaugeT = owNmiOffFrames(cyc, &owGaugeEarly);
           if (getenv("CT_OWGAUGETRACE")) printf("owgauge: f%d load, %ld cycles = %d frame(s)\n", frameNo, cyc, owGaugeT);
         } else if (owGaugePh == 3) {
           // C2/6A96 `LDX #0012 / JSR C2/0454`, then C2/6A9C `JSR C2/046E / LDA $027C / CMP #08`: the first look is after the
@@ -13138,7 +13274,7 @@ int main(int argc, char** argv) {
           if (++owGaugeN >= 19 && wr[0x027C] != 0x08) { CtWorldGaugeLeave(wr); owGaugePh = 4; owGaugeT = 0x12; }
         } else if (owGaugePh == 4 && --owGaugeT == 0) {
           // C2/6AB4 `$1E = 09`, NMI off; C2/2665 -> C2/2E72 (the six blocks back), C2/03EF; unless the trip set `$7F01F4 & 0A`
-          // or `$7F01F5 & 02`, C2/2C93 rebuilds the world -- priced as the X menu's return (C2/2556).
+          // or `$7F01F5 & 02`, C2/2C93 rebuilds the world: the stash's bytes at 46 cycles, then owRebuildCycles.
           wr[0x1E] = 0x09;
           { size_t o = 0; for (int k = 0; k < 6; k++) { memcpy(wr + kOwStash[k].at, menuStash + o, kOwStash[k].len); o += kOwStash[k].len; } }
           wr[0x5E] = 0; wr[0x5F] = 0; wr[0xE0] = 0x00; wr[0xE1] = 0xF0; wr[0xE2] = 0x7E; memset(wr + 0x60, 0, 0x80);
@@ -13147,17 +13283,51 @@ int main(int argc, char** argv) {
             if (!said) { said = 1; printf("owgauge: UNDERIVED the trip's flags ($7F01F4 & 0A / $7F01F5 & 02) -- the world is rebuilt anyway\n"); }
           }
           if (haveWorld) { worldReloadMenuScratch(&assets, &wd); worldReloadVram(&assets, &wd); }
-          #ifndef CT_OW_RETURN_REST
-          #define CT_OW_RETURN_REST 964078L
-          #endif
-          long rl = 0, cyc = 0; const uint8_t* rimg = CtBattleRom(&rl);
+          long cyc = owRebuildCycles(haveWorld ? wd.world : 0);
           for (int k = 0; k < 6; k++) cyc += (long)kOwStash[k].len * 46;
-          if (rimg) cyc += ct_lz_world_return_cost(rimg, (size_t)rl, haveWorld ? wd.world : 0, NULL);
-          cyc += CT_OW_RETURN_REST;
-          owGaugePh = 5; owGaugeT = (int)(cyc / CT_LOAD_FRAME_CYCLES);
+          owGaugePh = 5; owGaugeT = owNmiOffFrames(cyc, &owGaugeEarly);
           if (getenv("CT_OWGAUGETRACE")) printf("owgauge: f%d return, %ld cycles = %d frame(s)\n", frameNo, cyc, owGaugeT);
         } else if (owGaugePh == 6 && --owGaugeT == 0) {
           wr[0x027C] = 0x01; owGaugePh = 0;                               // C2/26A0 `LDA #01 / STA $027C`
+        }
+        // ...and for the world map (C2/258D).
+        if (owGaugePh == 0 && owMapPh == 0 && wr[0x027C] == 0x06) {        // C2/2591: the mosaic and fade object, 34 NMIs
+          CtWorldSpawnVm(wr, 0xC2, 0x2EC7);
+          owMapPh = 1; owMapT = 0x22;
+        } else if (owMapPh == 1 && --owMapT == 0) {
+          // C2/25A4-25CF, NMI off: HDMA off (`$4A = 0`), $0000-00EF and the object array $0B30-1B2F stashed in $7F (MVN), C2/631F
+          // up to its NMI on. Priced as the ROM's: the MVNs' 0x10F0 bytes at 46 master cycles, C2/27DE's seven decompressions by
+          // the decompressor's model (owMapLzCycles), and the rest of C2/631F MEASURED: `--callrom C2/631F` from
+          // build/_epoch/map_s32.state (1F0) to the wait loop's entry, 25,345,038 cycles, 743,280 of them refresh, less world 0's
+          // 4,235,520 of decompression. Graded by the oracle's own stretches (CT_ORACLE_LOGICAL_TRACE, refresh excluded): 1F0
+          // 24,801,448 (the model 24,801,214), 1F6 24,313,912 (the model 24,313,210) -- the rest is the same on both.
+          #ifndef CT_OW_631F_REST
+          #define CT_OW_631F_REST 20366238L
+          #endif
+          wr[0x4A] = 0;
+          memcpy(owMapStash, wr, 0xF0); memcpy(owMapStash + 0xF0, wr + 0x0B30, 0x1000);
+          CtWorldMapEnter(wr, wd.vram);
+          long rl0 = 0; const uint8_t* rom0 = CtBattleRom(&rl0);
+          long cyc = (long)sizeof owMapStash * 46 + owMapLzCycles(rom0, (size_t)rl0, haveWorld ? wd.world : 0) + CT_OW_631F_REST;
+          owMapPh = 2; owMapT = owNmiOffFrames(cyc, &owMapEarly);
+          if (getenv("CT_OWGAUGETRACE")) printf("owmap: f%d load, %ld cycles = %d frame(s)\n", frameNo, cyc, owMapT);
+        } else if (owMapPh == 3) {
+          if (wr[0x027C] != 0x06) { owMapPh = 4; owMapT = 0x11; }          // C2/63BA-63C7: a look after every NMI, then 17
+        } else if (owMapPh == 4 && --owMapT == 0) {
+          // C2/63CA `$1E = 09`, `$2101 = 60`, NMI and HDMA off; C2/25D2-25F3: the two blocks back, C2/03EF, C2/2C93 (the world
+          // rebuilt); C2:2ED0 the way back, `$1B58` -> `INC $1B59`, `TSB $4C #03`, the NMI on. Priced: the MVNs, owRebuildCycles.
+          wr[0x1E] = 0x09; wr[0x4A] = 0;
+          memcpy(wr, owMapStash, 0xF0); memcpy(wr + 0x0B30, owMapStash + 0xF0, 0x1000);
+          wr[0x5E] = 0; wr[0x5F] = 0; wr[0xE0] = 0x00; wr[0xE1] = 0xF0; wr[0xE2] = 0x7E; memset(wr + 0x60, 0, 0x80);
+          if (haveWorld) { worldReloadMenuScratch(&assets, &wd); worldReloadVram(&assets, &wd); }
+          CtWorldSpawnVm(wr, 0xC2, 0x2ED0);
+          if (wr[0x1B58]) wr[0x1B59]++;
+          wr[0x4C] |= 0x03;
+          long cyc = (long)sizeof owMapStash * 46 + owRebuildCycles(haveWorld ? wd.world : 0);
+          owMapPh = 5; owMapT = owNmiOffFrames(cyc, &owMapEarly);
+          if (getenv("CT_OWGAUGETRACE")) printf("owmap: f%d return, %ld cycles = %d frame(s)\n", frameNo, cyc, owMapT);
+        } else if (owMapPh == 6 && --owMapT == 0) {
+          wr[0x027C] = 0x01; owMapPh = 0;                                 // C2/2615 `LDA #01 / STA $027C`
         }
                                                       // spawner included -- natives 754D/7598 + RNG); ALSO
                                                       // The music object rides in the same array.
@@ -13326,9 +13496,11 @@ int main(int argc, char** argv) {
           memcpy(g_motPic, g_wfb, (size_t)owWideW * CAMH * 3);
         } }
       if (owWideW == CAMW) { g_mot = owMot; g_owNatRec = &g_owNat[g_motIdx]; }
+      CtWorldTraceEnd(wd.wram);                       // (CT_OWVEHTRACE: the frame as it ends, the main thread included)
       worldCompose(&wd, fb);
       if (owGaugePh == 3 || owGaugePh == 4) worldComposeGauge(&wd, fb);   // the time gauge's own picture (mode 7)
-      else if (owGaugePh == 2 || owGaugePh == 5) {   // the NMI-off stretches: the picture held, black ($1C = 80)
+      else if (owMapPh == 3 || owMapPh == 4) worldComposeMap(&wd, fb);    // the world map's (mode 7)
+      else if (owGaugePh == 2 || owGaugePh == 5 || owMapPh == 2 || owMapPh == 5) {   // the NMI-off stretches: black ($1C = 80)
         static int said = 0;
         if (!said) { said = 1; printf("owgauge: the NMI-off stretches draw black\n"); }
         memset(fb, 0, (size_t)CAMW * CAMH * 3);

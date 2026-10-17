@@ -12,8 +12,13 @@
 // object's +0D/+0B. Only bank $C3 is ever stamped (object-VM op 0x30), and the reachable region is
 // baked in ow_anim.h -- so this resolves exactly that window and refuses anything else instead of
 // reading out of bounds.
+// ...and from the ROM itself for another bank (the world map's markers run scripts in bank $C2, C2:6A18 / 6A20).
+static const uint8_t* g_owRom; static long g_owRomLen;   // (defined with CtWorldSetRom below)
 static const uint8_t* ctWorldAnimRom(uint8_t bank, uint16_t pc) {
-  if (bank != 0xC3) return NULL;
+  if (bank != 0xC3) {
+    long o = ((long)(bank & 0x3F) << 16) + pc;
+    return (bank >= 0xC0 && g_owRom && o + 8 <= g_owRomLen) ? g_owRom + o : NULL;
+  }
   if (pc < CT_OWANIM_BASE || (uint32_t)pc + 4u > CT_OWANIM_BASE + CT_OWANIM_SIZE) return NULL;
   return ctOwAnimC3 + (pc - CT_OWANIM_BASE);
 }
@@ -2148,6 +2153,11 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         obAllocNative(ram, B, op[0] == 0x28 ? 0x20A2 : 0x2105);
         adv = 2; break;
       }
+      case 0x2A: case 0x2B: {                       // C2/15A7 / 15B5: the MOSAIC up (class $21F8) / down ($2194), 2 operands
+        obPutW(B + OWOBJ_PC, pc);
+        obAllocNative(ram, B, op[0] == 0x2A ? 0x21F8 : 0x2194);
+        adv = 3; break;
+      }
       case 0x2C: obPutW(B + OWOBJ_XPOS, (uint16_t)(op[1] | (op[2] << 8))); obPutW(B + OWOBJ_YPOS, (uint16_t)(op[3] | (op[4] << 8))); adv = 5; break;
       case 0x2E: obPutW(B + OWOBJ_VELXF, (uint16_t)(op[1] | (op[2] << 8))); obPutW(B + OWOBJ_VELXI, (uint16_t)(op[3] | (op[4] << 8))); adv = 5; break;
       case 0x2F: obPutW(B + OWOBJ_VELYF, (uint16_t)(op[1] | (op[2] << 8))); obPutW(B + OWOBJ_VELYI, (uint16_t)(op[3] | (op[4] << 8))); adv = 5; break;
@@ -2356,6 +2366,26 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
 // is a CUT. Their counter is the block's +3, which the object loop bumps after every CLC (C2/054E) -- so a step waits
 // until +3 reaches the rate, then clears it. Returns 1 = SEC (the loop frees the block), 0 = CLC.
 // M is 8-bit in both handlers (the loop's `SEP #20` at C2/053A), so every +3 store and compare is one byte.
+// THE MOSAIC OBJECTS, classes $21F8 (up: ops 0x2A) and $2194 (down: 0x2B), on `$1F` -- the MOSAIC shadow ($2106: the size
+// in the high nybble, the layers in the low). Their script operands: +1 the layers OR-ed into `$1F`, +2 the frames a step
+// (0: at once -- up to F, or down to 0). A step every +2 frames: up `$1F += 10` until the size is F, down `- 10` to 0.
+static int obMosaic(uint8_t* ram, uint8_t* B, uint16_t cls) {
+  uint8_t rb[8];
+  const uint8_t* op = obScript(ram, B[0x09], obW(B + OWOBJ_PC), rb);   // `LDA $0007,X / STA $10 / LDA $0009,X / STA $12`
+  int up = (cls == 0x21F8);
+  if (B[2] == 0) {                                                     // C2/2209 / 21A7
+    B[2]++;
+    ram[0x1F] |= op[1];                                                // 221D / 21BB ORA [$10],Y (1)
+    if (!op[2]) { if (up) ram[0x1F] |= 0xF0; else ram[0x1F] &= 0x0F; return 1; }   // 2228 / 21C6 BNE: at once, SEC
+    B[OWOBJ_WAIT] = op[2]; B[3] = 0;                                   // 2232 / 21D0 STA $000A,X / STZ $0003,X
+  }
+  if (B[3] < B[OWOBJ_WAIT]) return 0;                                  // 223C / 21DA CMP $000A,X / BCS
+  B[3] = 0;
+  if (up) { ram[0x1F] = (uint8_t)(ram[0x1F] + 0x10); return (ram[0x1F] & 0xF0) == 0xF0; }   // 2249 ADC #10 / CMP #F0
+  if (!(ram[0x1F] & 0xF0)) return 1;                                   // 21E7 AND #F0 / BEQ -> SEC
+  ram[0x1F] = (uint8_t)(ram[0x1F] - 0x10);                             // 21ED SBC #10
+  return 0;
+}
 static int obFade(uint8_t* ram, uint8_t* B, uint16_t cls) {
   uint8_t rb[8];
   uint8_t rate0 = obScript(ram, B[0x09], (uint16_t)(obW(B + OWOBJ_PC) + 1), rb)[0];   // `LDY #0001 / LDA [$10],Y`, $12 = +09
@@ -3279,6 +3309,194 @@ static int obDactylMateShadow(uint8_t* ram, uint8_t* B) {
   }
 }
 
+// ===================== THE WORLD MAP ($027C = 6: C2/258D -> C2/631F) =====================
+// disasm/notes/ow_world_map.md. Select aboard the Epoch or a Dactyl. A mode-7 picture of the whole world built from its own
+// map: one pixel wide and two high for each 16 x 16 cell (the colour of one pixel of the cell's tiles), zoomed out from the
+// party's place (class $666C), the party's and the Epoch's markers and the era's label; B zooms back in.
+static void owLzTo(uint8_t* ram, uint32_t src, uint8_t bank, uint16_t dst);   // (with the time gauge, below)
+static unsigned owRomW6(unsigned off) {                                // a word of bank $C6
+  long o = 0x060000L + (long)off;
+  return (g_owRom && o + 1 < g_owRomLen) ? (unsigned)(g_owRom[o] | (g_owRom[o + 1] << 8)) : 0u;
+}
+// C2/658E: the colours the map drops (the sea's, the lava's): 0F, 2F and 24-2B; on 1F3 40-4E instead.
+static uint8_t owMapFilter(const uint8_t* ram, uint8_t a) {
+  if (obW(ram + 0x0100) == 0x01F3) return (a >= 0x40 && a < 0x4F) ? 0 : a;
+  if (a == 0x0F || a == 0x2F || (a >= 0x24 && a < 0x2C)) return 0;
+  return a;
+}
+// C2/653E: one cell's two pixels -- its block definition at `$0E` (8 bytes: four tile words), the tiles of words 1 and 3
+// through C2/6400's table at $7E:AB25 (one colour a tile), each OR its palette ((attr & 1C) << 2), filtered, at ($05) and
+// ($05) + 8 (the next row of the mode-7 char) unless the tile's colour is 0.
+static void owMapCell(uint8_t* ram) {
+  unsigned e = obW(ram + 0x0E), at = obW(ram + 0x05);
+  ram[0x00] = (uint8_t)((ram[(e + 3) & 0xFFFF] & 0x1C) << 2); ram[0x01] = (uint8_t)((ram[(e + 7) & 0xFFFF] & 0x1C) << 2);
+  uint8_t c = ram[0xAB25 + (obW(ram + ((e + 2) & 0xFFFF)) & 0x03FF)];
+  if (c) ram[at & 0xFFFF] = owMapFilter(ram, (uint8_t)(c | ram[0x00]));
+  c = ram[0xAB25 + (obW(ram + ((e + 6) & 0xFFFF)) & 0x03FF)];
+  if (c) ram[(at + 8) & 0xFFFF] = owMapFilter(ram, (uint8_t)(c | ram[0x01]));
+}
+// C2/6736: the mode-7 matrix of the zoom -- +22 the angle, +24 / +26 the scales; C2/67B3 divides cos x 8 and sin x 8 by them
+// (16 by 8 bits through $4204-$4206; a scale of 0 gives FFFF): M7A = cos / sx, M7B = sin / sx, M7C = -(sin / sy), M7D =
+// cos / sy, signs put back after.
+static unsigned owDiv16x8(unsigned a, unsigned b) { return b ? (a & 0xFFFF) / b : 0xFFFF; }
+static void owMapMatrix(uint8_t* ram, uint8_t* B) {
+  obPutW(ram + 0x10, 0);
+  int s = owSine(obW(B + 0x22)), c = owSine((int)obW(B + 0x22) + 0x100);
+  if (s < 0) { s = -s; ram[0x10]++; }
+  obPutW(ram + 0x0A, (uint16_t)((s << 3) & 0xFFFF));
+  if (c < 0) { c = -c; ram[0x11]++; }
+  obPutW(ram + 0x08, (uint16_t)((c << 3) & 0xFFFF));
+  obPutW(ram + 0x0C, obW(B + 0x24)); obPutW(ram + 0x0E, obW(B + 0x26));
+  unsigned sx = ram[0x0C], sy = ram[0x0E];
+  unsigned m00 = owDiv16x8(obW(ram + 0x08), sx), m02 = owDiv16x8(obW(ram + 0x0A), sx);
+  unsigned q3 = owDiv16x8(obW(ram + 0x0A), sy), m06 = owDiv16x8(obW(ram + 0x08), sy);
+  unsigned m04 = (0x10000 - q3) & 0xFFFF;
+  if (ram[0x10]) { m02 = (0x10000 - m02) & 0xFFFF; m04 = (0x10000 - m04) & 0xFFFF; }
+  if (ram[0x11]) { m00 = (0x10000 - m00) & 0xFFFF; m06 = (0x10000 - m06) & 0xFFFF; }
+  obPutW(ram + 0x00, (uint16_t)m00); obPutW(ram + 0x02, (uint16_t)m02); obPutW(ram + 0x04, (uint16_t)m04); obPutW(ram + 0x06, (uint16_t)m06);
+  obPutW(ram + 0x2C, (uint16_t)m00); obPutW(ram + 0x2E, (uint16_t)m02); obPutW(ram + 0x30, (uint16_t)m04); obPutW(ram + 0x32, (uint16_t)m06);
+}
+// THE CONTROLLER, class $666C (states C2:6675): centre the plane on the party, zoom out (C6:F560 / F5A0, 32 steps), wait for
+// B (`$00F6 & 08`), zoom back in, `$027C = 7` and away.
+static int obMapCtl(uint8_t* ram, uint8_t* B) {
+  for (;;) switch (B[2]) {
+  case 0: {                                                            // C2/667D
+    B[2]++;
+    unsigned x = (obW(ram + 0x0283) >> 4) + 0x10;
+    obPutW(ram + 0x34, (uint16_t)x); obPutW(ram + 0x20, (uint16_t)((0x10000 - x) & 0xFFFF));
+    obPutW(ram + 0x36, (uint16_t)((obW(ram + 0x0285) >> 3) + 0x30)); obPutW(ram + 0x26, 0);
+    obPutW(B + 0x22, 0); obPutW(B + 0x28, 0);
+  }  /* FALLTHROUGH */
+  case 1: {                                                            // C2/66AB: the zoom out
+    unsigned k = obW(B + 0x28);
+    obPutW(B + 0x24, (uint16_t)owRomW6(0xF560 + k)); obPutW(B + 0x26, (uint16_t)owRomW6(0xF5A0 + k));
+    obPutW(B + 0x28, (uint16_t)(k + 2));
+    if (obW(B + 0x28) >= 0x40) { obPutW(B + 0x28, 0x003E); B[2]++; CtWorldSpawnVm(ram, 0xC2, 0x6A0A); }
+    owMapMatrix(ram, B);
+    return 0;
+  }
+  case 2:                                                              // C2/66E9: B
+    if (obW(ram + 0x00F6) & 0x0008) { B[2]++; CtWorldSpawnVm(ram, 0xC2, 0x69FF); }
+    return 0;
+  case 3: {                                                            // C2/6704: the zoom back in
+    unsigned k = obW(B + 0x28);
+    obPutW(B + 0x24, (uint16_t)owRomW6(0xF560 + k)); obPutW(B + 0x26, (uint16_t)owRomW6(0xF5A0 + k));
+    obPutW(B + 0x28, (uint16_t)(k - 2));
+    owMapMatrix(ram, B);
+    if (obW(B + 0x28) == 0) { ram[0x027C] = 0x07; return 1; }         // 6728: SEC
+    return 0;
+  }
+  default: return 0;
+  }
+}
+// THE MARKERS, classes $67FA (the party: $0283/$0285) and $683B (the Epoch, on its world only): C2/688A's map place (x / 8 +
+// 20, y / 8 + 30, each with the LSRs' carry), their blink in bank C2 (6A18 / 6A20); gone when `$1B48` (the zoom back) is set.
+// $68A3, the era's label: C2:68E4[world], y C0, pose 47.
+static void owMapPlace(uint8_t* B) {
+  unsigned x = obW(B + OWOBJ_XPOS), y = obW(B + OWOBJ_YPOS);
+  obPutW(B + OWOBJ_XPOS, (uint16_t)((x >> 3) + 0x20 + ((x >> 2) & 1)));
+  obPutW(B + OWOBJ_YPOS, (uint16_t)((y >> 3) + 0x30 + ((y >> 2) & 1)));
+}
+static int obMapMarker(uint8_t* ram, uint8_t* B, uint16_t cls) {
+  if (B[2] == 0) {
+    if (cls == 0x683B && (obW(ram + 0x0100) & 0x01FF) != obW(ram + 0x029F)) return 1;   // 684F BNE -> SEC
+    B[2]++; B[OWOBJ_ATTR] = 0x30; obPutW(B + 0x10, 0);
+    if (cls == 0x68A3) {
+      obPutW(B + OWOBJ_XPOS, (uint16_t)owRomW(0x68E4 + 2 * ((obW(ram + 0x0100) & 0x01FF) - 0x01F0)));
+      obPutW(B + OWOBJ_YPOS, 0x00C0);
+      leadInstall(B, 0x47);
+    } else {
+      unsigned a = cls == 0x67FA ? 0x0283 : 0x0290;
+      obPutW(B + OWOBJ_XPOS, obW(ram + a)); obPutW(B + OWOBJ_YPOS, obW(ram + a + 2));
+      owMapPlace(B);
+      obPutW(B + OWOBJ_ANIM, cls == 0x67FA ? 0x6A18 : 0x6A20); B[OWOBJ_ANIMBK] = 0xC2; B[OWOBJ_DWELL] = 0;
+    }
+  }
+  if (ram[0x1B48]) return 1;
+  obAnimTick(ram, B);
+  return 0;
+}
+// C2/631F's NMI-off half (the world stashed by C2/258D before it): BGMODE 7, OBSEL 63, CGWSEL 00 / CGADSUB 20 (the fixed colour
+// added to the backdrop), VRAM cleared (C2/26A8), C2/03EF, C2/0471; C2/6965 the era's label (its text, C2/57DF / 5823, is the
+// proportional-text engine this port does not have: the label's tiles stay blank); C2/68F4 the backdrop's blue ramp (HDMA
+// channel 1 to $2132, 16 shades x 7 lines, twice); C2/63DF the map; the markers' tiles C6:F500 / F520 to VRAM $6000 / $6020,
+// CGRAM 0 = 0, C6:F540 to $0A20; the controller and script C2:69F8.
+void CtWorldMapEnter(uint8_t* ram, uint8_t* vram) {
+  ram[0x1E] = 0x07; ram[0x45] = 0x00; ram[0x46] = 0x20;                // 631F; `$2101 = 63` is the host's OBSEL
+  if (vram) memset(vram, 0, 0x10000);                                  // C2/26A8
+  ram[0x5E] = 0; ram[0x5F] = 0; obPutW(ram + 0xE0, 0xF000); ram[0xE2] = 0x7E; memset(ram + 0x60, 0, 0x80);   // C2/03EF
+  obPutW(ram + 0x4E, 0x0B30);                                          // C2/0471
+  for (int b = OWOBJ_BASE; b < OWOBJ_END; b += OWOBJ_STRIDE) obPutW(ram + b, 0);
+  // C2/6965: the label's parameters and its (empty) buffer to VRAM $6200
+  memset(ram + 0x8621, 0, 0x401);                                      // C2/5798
+  unsigned w = (obW(ram + 0x0100) & 0x01FF) - 0x01F0;
+  uint8_t id = (uint8_t)owRomW(0x69F0 + w);
+  if (id == 0x6C && ram[0x1BA6] < 0x36) id = 0x6F;
+  else if (id == 0x6B && !(ram[0x1BAD] & 0x01)) id = 0x6F;
+  ram[0x020C] = id; obPutW(ram + 0x020D, 0xF400); ram[0x020F] = 0xC6; ram[0x0214] = 0x02;
+  obPutW(ram + 0x0210, 0x8621); ram[0x0212] = 0x7E; ram[0x0213] = 0x0C;
+  { static int said = 0; if (!said) { said = 1; printf("owmap: UNDERIVED the era's label text (C2/57DF / 5823, the proportional text engine) -- left blank\n"); } }
+  if (vram) memcpy(vram + 2 * 0x6200, ram + 0x8621, 0x400);
+  // C2/68F4
+  { unsigned o = 0x8B56;                                               // the second loop runs on from 10 round to 10 again: 256
+    for (int v = 0; v < 16; v++) for (int k = 0; k < 7; k++) ram[o++] = (uint8_t)(v | 0x80);   // values (the HDMA reads 224 lines)
+    for (int i = 0; i < 256; i++) for (int k = 0; k < 7; k++) ram[o++] = (uint8_t)(((0x10 + i) & 0xFF) | 0x80);
+    ram[0x00] = 0x10; }
+  ram[0x8A35] = 0xF0; ram[0x8A38] = 0xF0; ram[0x8A3B] = 0;
+  obPutW(ram + 0x8A21, 0x8B56); obPutW(ram + 0x8A23, 0x8BC6);
+  CtWorldHdmaSet(1, 0x40, 0x32, 0x8A35); ram[0x4A] |= 0x02;
+  // C2/63DF -> C2/27DE: the world's seven char packets (C6:FD00[world] -> [$ED], C6:FE20) into $7F:9000 + k x 1000
+  { unsigned h = owRomW6(0xFD00 + 2 * w);
+    for (int k = 0; k < 7; k++) {
+      uint8_t pk = g_owRom ? g_owRom[0x060000 + h + (unsigned)k] : 0x80;
+      if (pk & 0x80) continue;
+      unsigned t = 0xFE20 + 3u * pk;
+      uint32_t src = (uint32_t)owRomW6(t) | ((uint32_t)(owRomW6(t + 2) & 0xFF) << 16);
+      owLzTo(ram, src, 0x7F, (uint16_t)(0x9000 + 0x1000 * k));
+    } }
+  // C2/6400: one colour a tile -- the pixel at column 3 of row 2, its four planes (+04 +05 +14 +15) -- for 0x380 tiles
+  for (unsigned t = 0; t < 0x380; t++) {
+    const uint8_t* T = ram + 0x10000 + 0x9000 + 32 * t;
+    unsigned c = (((T[0x15] >> 4) & 1) << 3) | (((T[0x14] >> 4) & 1) << 2) | (((T[0x05] >> 4) & 1) << 1) | ((T[0x04] >> 4) & 1);
+    ram[0xAB25 + t] = (uint8_t)c;
+  }
+  // C2/645C: the cells, four rows at a time into the staging $7E:F000, sent as 12 chars to the high bytes from VRAM $0040
+  { obPutW(ram + 0x10, 0x5800); obPutW(ram + 0x13, 0x4000); obPutW(ram + 0x16, 0x3800); obPutW(ram + 0x19, 0x3000);
+    unsigned stg = obW(ram + 0xE0), vw = 0x0040;
+    obPutW(ram + 0x05, (uint16_t)stg); memset(ram + stg, 0, 0x400);    // (C = 03FE: B left at 03 by C2/6400's CMP #0380)
+    for (unsigned r = 0; r < 0x40; r++) {
+      for (unsigned c = 0; c < 0x60; c++) {
+        obPutW(ram + 0x0E, (uint16_t)(ram[(obW(ram + 0x10) + c) & 0xFFFF] * 8 + obW(ram + 0x16)));
+        owMapCell(ram);
+        if (obW(ram + 0x0100) != 0x01F5) {
+          obPutW(ram + 0x0E, (uint16_t)(ram[(obW(ram + 0x13) + c) & 0xFFFF] * 8 + obW(ram + 0x19)));
+          owMapCell(ram);
+        }
+        obPutW(ram + 0x05, (uint16_t)(obW(ram + 0x05) + (((c + 1) & 7) ? 1 : 0x39)));
+      }
+      obPutW(ram + 0x10, (uint16_t)(obW(ram + 0x10) + 0x60)); obPutW(ram + 0x13, (uint16_t)(obW(ram + 0x13) + 0x60));
+      obPutW(ram + 0x05, (uint16_t)(obW(ram + 0x05) - 0x2F0));
+      if (((r + 1) & 3) == 0) {
+        if (vram) for (unsigned i = 0; i < 0x300; i++) vram[2 * ((vw + i) & 0x7FFF) + 1] = ram[(stg + i) & 0xFFFF];
+        memset(ram + stg, 0, 0x300); obPutW(ram + 0x05, (uint16_t)stg); vw += 0x300;
+      }
+    }
+    obPutW(ram + 0x08, 0x40); obPutW(ram + 0x0A, 0x60); obPutW(ram + 0x0C, (uint16_t)vw); }
+  // C2/65B2: the mode-7 map -- tiles 1..C0, 12 a row, 16 rows, at column 2, row 6 of the 32 x 32 corner (low bytes)
+  memset(ram + 0xF000, 0, 0x400);
+  for (unsigned r = 0; r < 16; r++) for (unsigned c = 0; c < 12; c++) ram[0xF000 + (6 + r) * 0x20 + 2 + c] = (uint8_t)(1 + r * 12 + c);
+  if (vram) for (unsigned r = 0; r < 32; r++) for (unsigned c = 0; c < 32; c++) vram[2 * (r * 0x80 + c)] = ram[0xF000 + r * 0x20 + c];
+  ram[0x00] = 0; obPutW(ram + 0x0A, (uint16_t)(0xF000 + 32 * 0x20)); obPutW(ram + 0x0C, 0x1000);
+  // the markers' tiles, CGRAM 0, the markers' palette
+  if (vram && g_owRom) { memcpy(vram + 2 * 0x6000, g_owRom + 0x06F500, 0x20); memcpy(vram + 2 * 0x6020, g_owRom + 0x06F520, 0x20); }
+  obPutW(ram + 0x0920, 0);
+  if (g_owRom) memcpy(ram + 0x0A20, g_owRom + 0x06F540, 0x21);
+  uint8_t* P = ram + 0x0B30;
+  obAllocNative(ram, P, 0x666C);
+  CtWorldSpawnVm(ram, 0xC2, 0x69F8);
+  ram[0x4C] |= 0x03;
+}
+
 // ===================== THE TIME GAUGE ($027C = 8: C2/261D -> C2/6A34) =====================
 // disasm/notes/ow_time_gauge.md. The gauge is a screen of the overworld's own engine: its objects run in the same pass,
 // the controller $6AC8, the swirl $6F85 (the mode-7 matrix per line), seven era markers $7143 and three palette / fade
@@ -3618,6 +3836,28 @@ int CtWorldHdmaGet(int ch, uint8_t* dmap, uint8_t* bbad, uint16_t* tbl) {
 void CtWorldNmiLatch(uint8_t* en, uint8_t* wh0, uint8_t* wh1) { *en = g_owNmiEn; *wh0 = g_owNmiWh0; *wh1 = g_owNmiWh1; }
 static int g_owTraceFrame = 0;                    // the host's frame number, for CT_OWVEHTRACE
 void CtWorldTraceFrame(int f) { g_owTraceFrame = f; }
+// CT_OWVEHTRACE=1: the vehicle machine as each pass leaves it, on change -- `$027C $027E $027F $028F $0294`, then every
+// block of the lead / Epoch / shadow / boarding-manager / follower classes as `addr:class/state` (the oracle's side:
+// `ct.exe --monitor 7E027C:6,7E028F:1,7E0294:1,...`) -- and again as the host frame ends (CtWorldTraceEnd), so a write of the
+// main thread after the pass (`$027C = 1` after a load) is in the frame it is made, where the oracle's monitor samples it.
+static void owVehTrace(const uint8_t* ram, int isPass) {
+  { static int tr = -1; static char last[400]; static int pass = 0;
+    if (tr < 0) { const char* e = getenv("CT_OWVEHTRACE"); tr = (e && *e) ? 1 : 0; }
+    if (isPass) pass++;
+    if (tr) {
+      char buf[400]; int n = snprintf(buf, sizeof buf, "027C=%02X 027E=%02X 027F=%02X 028F=%02X 0294=%02X 0290=%04X,%04X 0100=%04X 02AF=%04X 1BB7=%02X 029A=%04X,%04X 029E=%02X 1BF0=%02X 02A6=%04X,%04X,%04X,%04X 1C=%02X%02X 1F=%02X 1B48=%02X |",
+                                      ram[0x027C], ram[0x027E], ram[0x027F], ram[0x028F], ram[0x0294], obW(ram + 0x0290), obW(ram + 0x0292),
+                                      obW(ram + 0x0100), obW(ram + 0x02AF), ram[0x1BB7], obW(ram + 0x029A), obW(ram + 0x029C), ram[0x029E], ram[0x1BF0],
+                                      obW(ram + 0x02A6), obW(ram + 0x02A8), obW(ram + 0x02AA), obW(ram + 0x02AC), ram[0x1C], ram[0x1D], ram[0x1F], ram[0x1B48]);
+      for (int b = OWOBJ_BASE; b < OWOBJ_END && n < 380; b += OWOBJ_STRIDE) {
+        uint16_t k = obW(ram + b);
+        if (k == 0x3404 || k == 0x42DD || k == 0x495E || k == 0x309E || k == 0x3AE2 || k == 0x4CC5 || k == 0x504B || k == 0x5097 || k == 0x5494 || k == 0x666C)
+          n += snprintf(buf + n, sizeof buf - (size_t)n, " %04X:%04X/%02X", b, k, ram[b + 2]);
+      }
+      if (strcmp(buf, last)) { strcpy(last, buf); printf("owveh: pass %d f%d %s\n", pass, g_owTraceFrame, buf); }
+    } }
+}
+void CtWorldTraceEnd(const uint8_t* ram) { if (ram) owVehTrace(ram, 0); }
 void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
   // C2/02C2-02D1, in the NMI that precedes every object pass: `LDA $7E8A25 / STA $7E8A43 / LDA $7E8A27 / STA $7E8A46`
   // (16-bit) -- the window object's HDMA channel 2 (op 4E -> $C6:E241) reads its two indirect table entries from
@@ -3662,6 +3902,11 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
       else obPutW(B, 0);
       continue;
     }
+    if (cls == 0x21F8 || cls == 0x2194) {           // the mosaic objects (ops 0x2A/0x2B), same tail
+      if (obMosaic(ram, B, cls) == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
+      else obPutW(B, 0);
+      continue;
+    }
     if (cls == 0x20A2 || cls == 0x2105) {           // the fade objects (ops 0x28/0x29), same tail
       if (obFade(ram, B, cls) == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
       else obPutW(B, 0);
@@ -3675,6 +3920,12 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
     if (cls == 0x3404 && ram[0x027E] != 0) {
       obLeadModule(ram, B, c);
       int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
+      continue;
+    }
+    if (cls == 0x666C || cls == 0x67FA || cls == 0x683B || cls == 0x68A3) {   // the world map's controller and markers
+      int r = cls == 0x666C ? obMapCtl(ram, B) : obMapMarker(ram, B, cls);
+      if (r == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
+      else obPutW(B, 0);
       continue;
     }
     if (cls == 0x4CC5 || cls == 0x504B || cls == 0x5097 || cls == 0x5494) {   // vehicle B: the Dactyls and their shadows
@@ -3732,24 +3983,7 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
     if (cls != OWOBJ_CLASS_VM) continue;            // the other native classes are still not run
     if (obRun(ram, B, c) == 2) { g_owResumeBlock = b; return; }   // its inline JSL holds the pass (obNative)
   }
-  // CT_OWVEHTRACE=1: the vehicle machine as each pass leaves it, on change -- `$027C $027E $027F $028F $0294`, then every
-  // block of the lead / Epoch / shadow / boarding-manager / follower classes as `addr:class/state` (the oracle's side:
-  // `ct.exe --monitor 7E027C:6,7E028F:1,7E0294:1,...`).
-  { static int tr = -1; static char last[400]; static int pass = 0;
-    if (tr < 0) { const char* e = getenv("CT_OWVEHTRACE"); tr = (e && *e) ? 1 : 0; }
-    pass++;
-    if (tr) {
-      char buf[400]; int n = snprintf(buf, sizeof buf, "027C=%02X 027E=%02X 027F=%02X 028F=%02X 0294=%02X 0290=%04X,%04X 0100=%04X 02AF=%04X 1BB7=%02X 029A=%04X,%04X 029E=%02X 1BF0=%02X 02A6=%04X,%04X,%04X,%04X |",
-                                      ram[0x027C], ram[0x027E], ram[0x027F], ram[0x028F], ram[0x0294], obW(ram + 0x0290), obW(ram + 0x0292),
-                                      obW(ram + 0x0100), obW(ram + 0x02AF), ram[0x1BB7], obW(ram + 0x029A), obW(ram + 0x029C), ram[0x029E], ram[0x1BF0],
-                                      obW(ram + 0x02A6), obW(ram + 0x02A8), obW(ram + 0x02AA), obW(ram + 0x02AC));
-      for (int b = OWOBJ_BASE; b < OWOBJ_END && n < 380; b += OWOBJ_STRIDE) {
-        uint16_t k = obW(ram + b);
-        if (k == 0x3404 || k == 0x42DD || k == 0x495E || k == 0x309E || k == 0x3AE2 || k == 0x4CC5 || k == 0x504B || k == 0x5097 || k == 0x5494)
-          n += snprintf(buf + n, sizeof buf - (size_t)n, " %04X:%04X/%02X", b, k, ram[b + 2]);
-      }
-      if (strcmp(buf, last)) { strcpy(last, buf); printf("owveh: pass %d f%d %s\n", pass, g_owTraceFrame, buf); }
-    } }
+  owVehTrace(ram, 1);
 }
 
 void CtWorldEnter(CtWorldCam* c, CtWorldMover* m, int cell8x, int cell8y) {

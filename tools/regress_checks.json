@@ -39685,8 +39685,9 @@
       "env": {},
       "expect": [
         "gauge: the gauge same -- 4 changes to `$027C = 7` (cartridge +190, port +190)",
-        "gauge: the way back 69 frames on the cartridge, 68 in the port",
-        "gauge: the trip into $01F1 at +466 on the cartridge, +464 in the port; at the end the same",
+        "gauge: the way back 69 frames on the cartridge, 69 in the port",
+        "gauge: the trip into $01F1 at +466 on the cartridge, +466 in the port; at the end DIFFERENT",
+        "gauge: on the new world the Epoch first moves at +512 on the cartridge, +514 in the port",
         "gauge: picture port f3540 / cartridge f3184 158 px differ (158 on the last line)",
         "gauge: picture port f3560 / cartridge f3204 214 px differ (201 on the last line)",
         "gauge: picture port f3600 / cartridge f3244 201 px differ (201 on the last line)",
@@ -39738,7 +39739,7 @@
           "why": "C2/7389's loads are 2,248,948 cycles of the NMI-off stretch: without them the gauge comes up 6 frames early"
         }
       ],
-      "notes": "THE EPOCH'S TIME GAUGE (disasm/notes/ow_time_gauge.md; ROADMAP G1a item 3). ch24 driven to the free flight (the cartridge's f3073), Y: `$027C = 8` (C2/45C7), C2/261D's fade (C2:2EC1, 18 NMIs), the NMI-off stretch (C2/2E23's stash + C2/26A8 + C2/7389, priced 3,915,526 cycles = 11 frames, the cartridge's 12-frame gap to the first gauge pass), the gauge (controller $6AC8, swirl $6F85, markers $7143, palette scripts), Up (12000 B.C. -> 600 A.D.), A: `$02AF = 01F1`, `$027C = 7`, the fade-out (C2:74B3), C2/2E72 + C2/2C93, the fade-in, the Epoch's state 6 / 7 (C2/4728, script C2:4AAD), loc 1F1 and the arrival (C2/4387, script C2:4B8C). `$1BB7` compared only while the gauge is up and from the controller's first write (outside it the byte is a field fill the port does not make). PINNED RESIDUALS: (a) the way back is a frame short and the trip two frames early -- the port prices C2/2C93 with the X menu's model (ct_lz_world_return_cost + a remainder measured on world 0); on 1F6 the cartridge's C2/2C93 is 11,225,250 cycles (--callrom), some 0.8 M more, as the X menu's return there would be too (the load clock, ROADMAP F1); (b) the gauge picture's last line (scanline 224, after the HDMA tables' 224 lines) is not the cartridge's: 158-201 px on that line, the rest pixel for pixel (P+2) but for 13 px of the needle's edge while it turns (f3560: its two line buffers a turn step apart); (c) port f3968 is the cartridge's f3611, not f3612 -- the trip's location load a frame apart (F1)."
+      "notes": "THE EPOCH'S TIME GAUGE (disasm/notes/ow_time_gauge.md; ROADMAP G1a item 3). ch24 driven to the free flight (the cartridge's f3073), Y: `$027C = 8` (C2/45C7), C2/261D's fade (C2:2EC1, 18 NMIs), the NMI-off stretch (C2/2E23's stash + C2/26A8 + C2/7389, priced 3,915,526 cycles = 11 frames, the cartridge's 12-frame gap to the first gauge pass), the gauge (controller $6AC8, swirl $6F85, markers $7143, palette scripts), Up (12000 B.C. -> 600 A.D.), A: `$02AF = 01F1`, `$027C = 7`, the fade-out (C2:74B3), C2/2E72 + C2/2C93, the fade-in, the Epoch's state 6 / 7 (C2/4728, script C2:4AAD), loc 1F1 and the arrival (C2/4387, script C2:4B8C). `$1BB7` compared only while the gauge is up and from the controller's first write (outside it the byte is a field fill the port does not make). PINNED RESIDUALS: (a) the way back is a frame short and the trip two frames early -- the port prices C2/2C93 with the X menu's model (ct_lz_world_return_cost + a remainder measured on world 0); on 1F6 the cartridge's C2/2C93 is 11,225,250 cycles (--callrom), some 0.8 M more, as the X menu's return there would be too (the load clock, ROADMAP F1); (b) the gauge picture's last line (scanline 224, after the HDMA tables' 224 lines) is not the cartridge's: 158-201 px on that line, the rest pixel for pixel (P+2) but for 13 px of the needle's edge while it turns (f3560: its two line buffers a turn step apart); (c) port f3968 is the cartridge's f3611, not f3612 -- the trip's location load a frame apart (F1). RE-PINNED 2026-10-17 with the world map: the way back is now the cartridge's 69 frames (C2/2C93 priced by owRebuildCycles -- its decompressions plus a rest measured on world 0, graded by the oracle's own stretch on 1F6: 12,049,946 cycles, the model 12,050,166) and the trip lands at +466 on both; the end differs by the world's LOAD into 1F1 (C2's loader on the load clock, ROADMAP F1): the Epoch's first step there at +514 against +512 -- before, a way back 2 frames short hid it. Re-pin only from a fix of that clock."
     },
     {
       "name": "ow-dactyl-ride-vs-oracle",
@@ -39799,6 +39800,87 @@
         }
       ],
       "notes": "VEHICLE B, THE DACTYLS (disasm/notes/ow_vehicle.md sec. 7; ROADMAP G1a item 3). Jackie's ch17 (loc 1F3, storyline 93, the party at the Tyrano Lair over its Dactyl, $029E = 80): a step down (off the lair's entrance: an A there enters it), A -- the boarding manager's vehicle-B arm (C2/315E, box C2:325C), the lead's module 4 to $029A, module 3 --, the lead's Dactyl $4CC5 lifts off (0x30 frames) while the followers' $5097 climb out sideways and take their places (C2/531D's formation by the lead's facing, C2/5374's heading through C0:F300 / C0:F800, re-aimed every 4 frames, C2/528A's cap), Right 40 frames, Left 40 (back over the plateau), A: the landing (C2/4E20's tests: the corners, C2/39AE, C2/48E8, C6/E74E), the followers in under it (C2/53D3), the party out. Timeline from `$027E = 4`, both sides; pictures at the boarding's clock (P + 1), the lava's four cycling colours set aside (they turn on the world's clock since the save's load, a frame the port's boot and the cartridge's state do not share)."
+    },
+    {
+      "name": "ow-world-map-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py",
+        "--map"
+      ],
+      "env": {},
+      "expect": [
+        "map: port says owmap: UNDERIVED the era's label text (C2/57DF / 5823, the proportional text engine) -- left blank",
+        "map: port says owmap: f3476 load, 24313210 cycles = 69 frame(s)",
+        "map: port says owmap: f3733 return, 11107718 cycles = 31 frame(s)",
+        "map: the cartridge lost 1 picture(s) to a long DMA (monitor f3117)",
+        "map: timeline same -- 91 changes from `$027C = 6` (cartridge f3083, port f3442; 91 in the port)",
+        "map: `$027C = 7` at +274 on the cartridge, +274 in the port; `$027C = 1` at +364 / +364",
+        "map: picture port f3459 / cartridge f3101 0 px differ",
+        "map: picture port f3464 / cartridge f3106 0 px differ",
+        "map: picture port f3560 / cartridge f3201 0 px differ",
+        "map: picture port f3575 / cartridge f3216 0 px differ",
+        "map: picture port f3610 / cartridge f3251 355 px differ",
+        "map: picture port f3660 / cartridge f3301 355 px differ",
+        "map: picture port f3700 / cartridge f3341 0 px differ",
+        "map: picture port f3715 / cartridge f3356 0 px differ",
+        "map: picture port f3772 / cartridge f3413 0 px differ",
+        "map: picture port f3790 / cartridge f3431 0 px differ",
+        "map: picture port f3805 / cartridge f3446 0 px differ",
+        "map: picture port f3830 / cartridge f3471 0 px differ"
+      ],
+      "pin": [
+        "^map: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch24.state",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "note_pass": "Select aboard the Epoch opens the world map (C2/258D -> C2/631F) and B closes it on the cartridge's frames: the mosaic and the fades, the NMI-off set-up and rebuild, the zoom, and the mode-7 picture pixel for pixel but the era's label",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  *early = t > 0 && cyc - (long)t * f < 37L * 1324;",
+          "replace": "  *early = 0;   /* MUT */",
+          "why": "a stretch that ends inside the vblank it crossed gets its NMI at once (RDNMI still up): the map's way in is 69 frames, not 70"
+        },
+        {
+          "file": "src/field.c",
+          "find": "#define OW_MAP_FIXLINE 0",
+          "replace": "#define OW_MAP_FIXLINE 1   /* MUT */",
+          "why": "the backdrop's blue ramp: row y takes channel 1's entry y (a colour register, like a window, not a scroll)"
+        },
+        {
+          "file": "src/field.c",
+          "find": "static inline const uint8_t* owZp(const uint8_t* wr) { return g_owZpHave ? g_owZpShow : wr; }",
+          "replace": "static inline const uint8_t* owZp(const uint8_t* wr) { return wr; }   /* MUT */",
+          "why": "the NMI pushes $2106 and the mode-7 matrix from the LAST pass's shadows (C2/01D5, before C2/051D)"
+        },
+        {
+          "file": "src/field.c",
+          "find": "          long cyc = (long)sizeof owMapStash * 46 + owMapLzCycles(rom0, (size_t)rl0, haveWorld ? wd.world : 0) + CT_OW_631F_REST;",
+          "replace": "          long cyc = (long)sizeof owMapStash * 46 + 4235520L + CT_OW_631F_REST;   /* MUT */",
+          "why": "C2/27DE decompresses the world's own seven packets: 1F6's cost 488,004 cycles less than world 0's"
+        },
+        {
+          "file": "src/world.c",
+          "find": "  if (up) { ram[0x1F] = (uint8_t)(ram[0x1F] + 0x10); return (ram[0x1F] & 0xF0) == 0xF0; }   // 2249 ADC #10 / CMP #F0",
+          "replace": "  if (up) { ram[0x1F] = (uint8_t)(ram[0x1F] + 0x20); return (ram[0x1F] & 0xF0) >= 0xE0; }   /* MUT */",
+          "why": "C2/2249: the mosaic grows one size a step"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    if (obW(B + 0x28) >= 0x40) { obPutW(B + 0x28, 0x003E); B[2]++; CtWorldSpawnVm(ram, 0xC2, 0x6A0A); }",
+          "replace": "    if (obW(B + 0x28) >= 0x30) { obPutW(B + 0x28, 0x003E); B[2]++; CtWorldSpawnVm(ram, 0xC2, 0x6A0A); }   /* MUT */",
+          "why": "C2/66CB: the zoom out takes 32 steps of C6:F560 / F5A0"
+        }
+      ],
+      "notes": "THE WORLD MAP (disasm/notes/ow_world_map.md; ROADMAP G1a item 3). Jackie's ch24 driven to the free flight on 1F6 (as ow-epoch-flight-vs-oracle), then Select (the cartridge's f3082) and B 242 frames on. C2/258D: script C2:2EC7 (mosaic up, fade out) and 34 NMIs; NMI off, the direct page and the object array stashed, C2/631F's set-up (VRAM cleared, the world's chars decompressed, one colour a tile, the map one pixel a 16 x 16 cell, the markers, the backdrop's HDMA ramp); NMI on; the controller $666C zooms out (32 steps), waits for B, zooms back; 17 NMIs; NMI off, the stash back, C2/2C93 rebuilds the world; script C2:2ED0 and 41 NMIs; `$027C = 1`. The port's stretches are priced as the ROM's (the decompressor model plus rests measured with --callrom, graded by the oracle's own stretches) and end with the NMI's return rule (owNmiOffFrames: a stretch ending inside the vblank it crossed gets its NMI at once, uncounted by C2/0454). The tool reads the cartridge's LOST PICTURES (CT_ORACLE_RUNFRAME_TRACE: C2/26A8's 64 KB DMA ends inside the next vblank, one snes_runFrame call for two frames) and puts the cartridge's events and the presses on the console's clock; the port's world runs 359 frames behind from the free flight (the world VM in $0C30 ends at f3074 / f3433), and its pictures (the NMI's shadows, latched before the pass) are the cartridge's --peek P + 1 there. PINNED RESIDUAL: the era's label (355 px) -- C2/6965's text goes through the proportional-text engine C2/57DF / 5823, not ported; the label's tiles stay blank and the port says so once."
     },
     {
       "name": "ending-story-plays-through-in-the-port",

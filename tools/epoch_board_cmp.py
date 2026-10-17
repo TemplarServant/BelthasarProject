@@ -266,6 +266,12 @@ def gauge():
         return next((d for d, v in ev if v[0] != (ev[0][1][0] if ev else '')), None)
     print('gauge: the trip into $%s at +%s on the cartridge, +%s in the port; at the end %s' % (
         o[-1][1][0] if o else '-', trip(o), trip(p), 'the same' if o and p and o[-1] == p[-1] else 'DIFFERENT'))
+    # ...and the world's load there (C2's loader, priced by the load clock -- ROADMAP F1): the Epoch's first step on the new world
+    def first_move(ev, t):
+        y0 = next((v[4] for d, v in ev if t is not None and d >= t), None)
+        return next((d for d, v in ev if t is not None and d > t and v[4] != y0), None)
+    print('gauge: on the new world the Epoch first moves at +%s on the cartridge, +%s in the port' % (
+        first_move(o, trip(o)), first_move(p, trip(p))))
     if os.environ.get('EPOCH_DUMP'):
         oi = {d: v for d, v in o}; pi = {d: v for d, v in p}
         for d in sorted(set(oi) | set(pi)):
@@ -284,6 +290,110 @@ def gauge():
         n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
         nl = sum(po(x, 223) != oo(x, 223) for x in range(256))
         print('gauge: picture port f%d / cartridge f%d %d px differ (%d on the last line)' % (f + FLIGHT_SHIFT, f + 2, n, nl))
+    return 0
+
+
+MAP_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '4:2', '0:240', '1:2', '0:250']
+MAP_SEL, MAP_B = 3082, 3324                       # Select and B on the cartridge's clock
+MAP_SHIFT = 359    # the world's own scripts run 359 frames behind from the free flight (the VM in $0C30 ends at f3074 / f3433)
+MAP_SHOTS = [3100, 3105, 3200, 3215, 3250, 3300, 3340, 3355, 3412, 3430, 3445, 3470]   # the mosaic and fade, the zoom, the map, B, the way back
+MAP_P = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:600']
+
+
+def world_map():
+    """The world map from the free flight (C2/258D -> C2/631F, disasm/notes/ow_world_map.md): Select (the cartridge's f3082,
+    CT_HOLDBTN Sel on the port's world clock), the mosaic and the fade, the map zooming out, B 242 frames on (the zoom back), the
+    world rebuilt and back. Every change of `$0100 $027C $1C $1D $1F $1B48` and of the controller's state ($0C30 = 666C, +2),
+    counted from the frame `$027C` becomes 6; pictures at MAP_SHOTS: the port's P against the cartridge's --peek P + 3 (on the
+    world's clock; the gauge's P + 2 is on the press's, a frame behind it)."""
+    os.makedirs(OUT, exist_ok=True)
+    frames = MAP_B + 252
+    r = subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--monitor', '7E0100:2,7E027C:1,7E001C:4,7E1B48:1,7E0C30:3',
+                        '--from', os.path.join(JK, 'states', 'ch24.state'), '--btnscript', ','.join(MAP_O), '--frames',
+                        str(frames), '--diff'], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1', CT_ORACLE_RUNFRAME_TRACE='1'),
+                       capture_output=True, text=True, errors='replace')
+    # THE CARTRIDGE'S LOST PICTURES: snes_runFrame cannot stop inside an opcode, and C2/26A8's 64 KB VRAM clear (one DMA, 1.47
+    # frames) ends inside the vblank after the one it began before -- one call (one picture) for two frames. The console shows
+    # both; the port, on the console's clock, is a frame later than the harness from there. Measured, not assumed: a call that
+    # ran over a frame boundary to a line of the vblank (>= 225) is a lost picture at monitor index call - 1.
+    lost = sorted(int(m.group(1)) - 1 for m in re.finditer(r'runframe: call (\d+) ran frames \d+-\d+ \(to V=(\d+)\)', r.stderr)
+                  if int(m.group(2)) >= 225)
+    lost_by = lambda f: sum(1 for x in lost if x <= f)
+    w = lambda h: h[2:4] + h[0:2]
+    oe = []
+    for l in r.stdout.splitlines():
+        m = re.match(r'\s+f(\d+)\s+7E0100=(....)\*?\s+7E027C=(..)\*?\s+7E001C=(........)\*?\s+7E1B48=(..)\*?\s+'
+                     r'7E0C30=(......)', l)
+        if m:
+            q, b = m.group(4), m.group(6)
+            oe.append((int(m.group(1)), (w(m.group(2)), m.group(3), q[0:2] + q[2:4], q[6:8], m.group(5),
+                                         b[4:6] if w(b[0:4]) == '666C' else '--')))
+    env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_OWGAUGETRACE='1',
+               CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1',
+               CT_HOLDBTN='02@%d:2,08@%d:2' % (MAP_SEL + MAP_SHIFT + 1 + lost_by(MAP_SEL), MAP_B + MAP_SHIFT + 1 + lost_by(MAP_B)),
+               CT_SHOTS=os.path.join(OUT, 'map'),
+               CT_SHOTS_AT=','.join(str(f + MAP_SHIFT + lost_by(f)) for f in MAP_SHOTS + [frames]),
+               CT_SHOTS_EXIT='1')
+    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+                        ','.join(MAP_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
+    pe = []
+    for l in r.stdout.splitlines():
+        if l.startswith('owmap:'): print('map: port says ' + l)
+        m = re.match(r'owveh: pass \d+ f(\d+) 027C=(..) .* 0100=(....) .* 1C=(....) 1F=(..) 1B48=(..) \|(.*)', l)
+        if m:
+            c = re.search(r':666C/(..)', m.group(7))
+            pe.append((int(m.group(1)), (m.group(3), m.group(2), m.group(4), m.group(5), m.group(6), c.group(1) if c else '--')))
+    def rel(ev):
+        # `$1B48` from the map's own first write on (C2:6A0A `10 48 1B`, spawned as the zoom ends: the controller's state 2):
+        # before it the byte is whatever the field left (the cartridge's F3, the port's 00) and nothing reads it.
+        ev = [(f, v[:4] + ('--',) + v[5:] if v[1] == '06' and v[5] in ('--', '00', '01') else v) for f, v in ev]
+        # ...and the controller from its first pass (state 1): the port's set-up is made at once, the cartridge's over the
+        # NMI-off stretch, so a block standing in state 0 meanwhile is no state either side shows.
+        ev = [(f, v[:5] + ('--',) if v[5] == '00' else v) for f, v in ev]
+        t0 = next((f for f, v in ev if v[1] == '06'), None)
+        out, last = [], None
+        for f, v in ev:
+            if t0 is None or f < t0 or v == last:
+                continue
+            out.append((f - t0, v)); last = v
+        return out, t0
+    o, ot = rel(oe)
+    p, pt = rel(pe)
+    o = [(d + lost_by(ot + d), v) for d, v in o]                 # the cartridge's events on the console's clock
+    print('map: the cartridge lost %d picture(s) to a long DMA (monitor %s)' % (len([x for x in lost if x >= (ot or 0)]),
+          ', '.join('f%d' % x for x in lost if x >= (ot or 0)) or '-'))
+    hor = frames - (ot or 0) + lost_by(frames)
+    o = [e for e in o if e[0] <= hor]; p = [e for e in p if e[0] <= hor]
+    print('map: timeline %s -- %d changes from `$027C = 6` (cartridge f%s, port f%s; %d in the port)' % (
+        'same' if o == p else 'DIFFERENT', len(o), ot, pt, len(p)))
+    if o != p:
+        for a, b in zip(o, p):
+            if a != b: print('map:   first difference cartridge +%d:%s port +%d:%s' % (a[0], '/'.join(a[1]), b[0], '/'.join(b[1]))); break
+    t7o = next((d for d, v in o if v[1] == '07'), None); t7p = next((d for d, v in p if v[1] == '07'), None)
+    t1o = next((d for d, v in o if v[1] == '01' and t7o is not None and d > t7o), None)
+    t1p = next((d for d, v in p if v[1] == '01' and t7p is not None and d > t7p), None)
+    print('map: `$027C = 7` at +%s on the cartridge, +%s in the port; `$027C = 1` at +%s / +%s' % (t7o, t7p, t1o, t1p))
+    if os.environ.get('EPOCH_DUMP'):
+        oi = {d: v for d, v in o}; pi = {d: v for d, v in p}
+        for d in sorted(set(oi) | set(pi)):
+            print('map:   +%d cartridge %s port %s' % (d, '/'.join(oi[d]) if d in oi else '-', '/'.join(pi[d]) if d in pi else '-'))
+    for f in MAP_SHOTS:
+        o_raw = os.path.join(OUT, 'map_o%d.raw' % f)
+        bs, t = [], 0
+        for it in MAP_O:
+            b, n = it.split(':'); n = int(n)
+            if t + n >= f + 1: bs.append("%s:%d" % (b, f + 1 - t)); break
+            bs.append(it); t += n
+        subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch24.state'), o_raw,
+                        '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
+        q = f + MAP_SHIFT + lost_by(f)
+        pp = os.path.join(OUT, 'map_f%d.raw' % q)
+        if not os.path.exists(pp):
+            print('map: picture port f%d MISSING' % q); continue
+        po = raw_rgb(pp, False)
+        oo = raw_rgb(o_raw, True)
+        n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
+        print("map: picture port f%d / cartridge f%d %d px differ" % (q, f + 1, n))
     return 0
 
 
@@ -365,6 +475,8 @@ def dactyl():
 
 
 def main():
+    if '--map' in sys.argv:
+        return world_map()
     if '--dactyl' in sys.argv:
         return dactyl()
     if '--gauge' in sys.argv:
