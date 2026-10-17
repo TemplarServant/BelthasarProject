@@ -27279,7 +27279,7 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          else if (endOn == 2) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
+          "find": "          else if (endOn == 2 || endOn == 3) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
           "replace": "          /* MUT: entry 3 drawn black */",
           "why": "the field draws entry 3's native picture after each of its NMIs"
         },
@@ -27292,6 +27292,141 @@
       ],
       "note_pass": "the story's panorama as the port plays it: the native picture drawn from the field's VRAM, 56614 / 57344 pixels the cartridge's (a ratchet: the seed's early call and the field's colour cycles one step behind are the field's, not the picture's)",
       "notes": "A RATCHET. The port plays the story drive (scene 107 from ff23_story_f18) and presents frame 200; the cartridge's frame that matches is f205: P+2 and 3 frames more -- the FF 23 call comes 3 frames early because the seed (ff23_story_f18) was captured inside the location load's ramp C0/2848 ($0119 = 01 rising to 04 by C0:284F on the cartridge), which a seeded start does not resume, so the op's own fade (C0/3FBB) starts from 01 instead of 04: an artefact of this seed, not of a played load. (The opening itself is the cartridge's 18 frames since 2026-10-17: seqOpeningHold, the jump's vblank wait $31B0 priced; before it the stage ran 6 frames early.) The 730 pixels left are the water's and the city's colours: palette records 2-11, the field's own colour cycles FD/E39C keeps running, one step behind the cartridge's in the port from the first frame (sequence_table.md sec. 14, OPEN). The picture's own code is exact NMI for NMI (entry3-picture-native-vs-oracle)."
+    },
+    {
+      "name": "entry4-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/tyranno_re/ff24_handoff_f27.state",
+        "0:3000",
+        "0",
+        "24",
+        "1800"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/tyranno_re/ff24_handoff_f27.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 25 frame(s) after the hand-off",
+        "racepiccmp: native stage ended (1) at frame 1711",
+        "racepiccmp: 1800 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "note_pass": "entry 4 (FF 24, Lavos falls onto the planet), its picture native end to end: 1711 NMIs from the setup's to the END, VRAM / CGRAM / OAM / the registers / the stage's WRAM and every pixel the cartridge's",
+      "notes": "SEQUENCE ENTRY 4's PICTURE (src/seq_entry4pic.c over the native compositor; disasm/notes/seq_picture.md sec. 6). The setup $7E:53BB: packet $2D's nibbles spread through WMDATA by $350E (the stack moved onto $0C00; the old S, $06F9, left in $00FE) and sent as VRAM's high bytes (the mode-7 characters), packet $42's tiles chosen by the $FE-table's $60 numbers ($54EA, through WMDATA, to VRAM $4000), packet $33 to $4600, packet $30's 64 x 64 map rows doubled with zeros by $37CA ($380 bytes of it to VRAM's low bytes, the rest from one fixed byte by $90A7), the palettes ($36AA), the registers; hook $5654 (page A's mode-7 matrix, centre and BG1 scrolls); task $56EB (the planet, C3/0D5E). The stars' OAM is the logic's ($579B). Unseeded the picture is the same (the stage uploads its own VRAM); the seed makes the state compare exact too.",
+      "mutations": [
+        {
+          "file": "src/seq_entry4pic.c",
+          "find": "w[wm++ & 0x1FFFF] = b & 0x0F; w[wm++ & 0x1FFFF] = b >> 4; }",
+          "replace": "w[wm++ & 0x1FFFF] = b >> 4; w[wm++ & 0x1FFFF] = b & 0x0F; }   /* MUT */",
+          "why": "$350E writes each byte's low nibble first"
+        },
+        {
+          "file": "src/seq_entry4pic.c",
+          "find": "0x10200 + ((unsigned)w[0x0C00 + k] << 5), 0x20);",
+          "replace": "0x10200 + ((unsigned)w[0x0C00 + k] << 4), 0x20);   /* MUT */",
+          "why": "$54EA's tiles are 32 bytes each"
+        },
+        {
+          "file": "src/seq_entry4pic.c",
+          "find": "    for (unsigned i = 0; i < 0x40; i++) w[0x10000 | ((y + 0x40 + i) & 0xFFFF)] = 0;",
+          "replace": "    /* MUT */",
+          "why": "$37CA clears the 64 bytes after each map row"
+        },
+        {
+          "file": "src/seq_entry4pic.c",
+          "find": "  CtSeqStagePicDma(sp, w, 0x08, 0x18, 0x0350B, 0x3C80);",
+          "replace": "  CtSeqStagePicDma(sp, w, 0x00, 0x18, 0x0350B, 0x3C80);   /* MUT */",
+          "why": "$90A7's DMA has a fixed source (DMAP $08)"
+        },
+        {
+          "file": "src/seq_entry4pic.c",
+          "find": "  ww(w, 0x00FE, 0x06F9);",
+          "replace": "  ww(w, 0x00FE, 0x06F7);   /* MUT */",
+          "why": "$350E keeps the stack pointer $06F9 in $00FE"
+        },
+        {
+          "file": "src/seq_entry4pic.c",
+          "find": "{ 0x14, 0x16, 0x18, 0x1A, 0x06, 0x08, 0x02, 0x04 }",
+          "replace": "{ 0x14, 0x16, 0x18, 0x1A, 0x08, 0x06, 0x02, 0x04 }   /* MUT */",
+          "why": "hook $5654 writes M7X from r3 and M7Y from r4"
+        },
+        {
+          "file": "src/seq_entry4pic.c",
+          "find": "  ww(w, 0x15, 0x0000); ww(w, 0x17, 0x0070);",
+          "replace": "  ww(w, 0x15, 0x0000); ww(w, 0x17, 0x0060);   /* MUT */",
+          "why": "$56EB draws the planet at y $70"
+        }
+      ]
+    },
+    {
+      "name": "entry4-story-picture-in-the-port-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/tyranno_re/ff24_handoff_f27.state",
+        "252",
+        "4400",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "301",
+        "--loadwram",
+        "saves/tyranno_re/tele301_req.lakewram",
+        "--walkscript",
+        "u:300,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28,a:2,n:28"
+      ],
+      "env": {
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/tyranno_re/tele301_req.state",
+        "CT_LOCTRACE": "1",
+        "CT_FIELD_MEMMON": "0100:2,0047:3",
+        "CT_POKEWRAM": "5FB0=01,5FB1=00,61B0=01,61B1=00",
+        "CT_POKEWRAM_AT": "1700",
+        "CT_ORACLE_LOGICAL": "1",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:252"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/tyranno_re/ff24_handoff_f27.state",
+        "saves/tyranno_re/tele301_req.lakewram",
+        "saves/tyranno_re/tele301_req.state",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f4400 vs oracle f252 box (0,0)-(256,224) -> 56549 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: "
+      ],
+      "timeout_s": 600,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          if (endOn == 2 || endOn == 3) rio.pic = &g_stagePic;      // entries 3 and 4's pictures are ported (the others: black)",
+          "replace": "          if (endOn == 2) rio.pic = &g_stagePic;   /* MUT */",
+          "why": "the field gives entry 4 its picture"
+        }
+      ],
+      "note_pass": "Lavos's fall as the port plays it (the Tyranno chain's drive): the native picture at P+2 from the op, 56549 / 57344 pixels the cartridge's -- the rest are the stars, seeded by the field's RNG $0386, which the two drives leave differently (a ratchet)",
+      "notes": "A RATCHET. The port plays tyranno-ff24-chain-plays-through-in-the-port's drive (FF 24 at f4151) and presents f4400, 249 frames after the op; the cartridge's hand-off state ff24_handoff_f27 (FF 24 on its f1, a different drive: s301_c1_hp1) matches at f252 -- P+2, the field's alignment, since the opening is priced whole. Lavos is the cartridge's to the pixel; the 795 pixels left are the stars, whose positions come from C3/02DD over the field's $0386 at the hand-off (seq_entry4.c), different in the two drives."
     },
     {
       "name": "seq-race-xlat-lockstep",

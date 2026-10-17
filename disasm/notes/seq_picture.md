@@ -134,8 +134,25 @@ the cartridge's (`entry3-story-picture-in-the-port-vs-oracle`, a ratchet), with 
   fewer before the op), not measured.
 Not exercised: the mosaic ($C4 is 0 on the story's arm).
 
-## 6. Next
+## 6. Entry 4, Lavos falls (src/seq_entry4pic.c) -- DONE (2026-10-17)
 
-The other stages' pictures, the same way: entry 4 (`FF 24`, Lavos falls), entry 6 (`FF 26`, the Epoch into the shell), entry 7
-(`FF 07`, the Day of Lavos), the ending (`FF 2A`..`2F`) -- each its setup's uploads, its hooks and its picture tasks, graded NMI
-for NMI by `--racepiccmp` and then in play.
+`FF 24` (sequence_table.md sec. 15): mode 7 (the planet's map and characters), the stars (OAM, the logic's $579B) and Lavos
+burning in (task $56EB, C3/0D5E's list $7E:56FD at y $70). The setup $7E:53BB: packet $2D's bytes split into nibbles through
+WMDATA by $350E (with D = $2100 it moves the stack onto $0C00 and PLAs the bytes; the old S, $06F9, stays in `$00FE`) and sent as
+VRAM's HIGH bytes from $0000 (the mode-7 characters); the $FE-table's $3F ($60 tile numbers) into $7E:0C00 by $36AA, packet $42
+into $7F:0200 and $54EA's loop -- each number read through WMDATA picks a 32-byte tile, 16 words to VRAM from $4000; packet $33
+to $4600; packet $30's 64 x 64 map rows doubled with 64 zeros each by $37CA ($7F:2200..), $380 bytes of it to VRAM's LOW bytes
+from $0000 (VMAIN 0), the rest ($3C80) filled from the one byte $7E:350B by $90A7 (DMAP $08, a fixed source); the palettes
+($36AA: $FE-table $3C and $36 into $7E:2200 / 2300, $2200-01 cleared); TM $10 before the script, then mode 7, M7SEL $80, the
+bases, CGWSEL 02. Hook $5654 (D = $0A00): M7A-M7D from r10-r13, M7X / M7Y from r3 / r4, BG1 H / V from r1 / r2.
+
+**Equal on every frame**: 1711 NMIs to the END, state, the stage's WRAM, every pixel (`entry4-picture-native-vs-oracle`;
+unseeded the picture is the same -- the stage uploads all it shows). **In play** (the Tyranno chain's drive): P+2 from the op,
+Lavos to the pixel; the stars differ because they come from C3/02DD over the field's `$0386` at the hand-off and the two drives
+(the port's tele301_req, the cartridge's s301_c1_hp1) leave it differently (`entry4-story-picture-in-the-port-vs-oracle`, a
+ratchet).
+
+## 7. Next
+
+Entry 6 (`FF 26`, the Epoch into the shell), entry 7 (`FF 07`, the Day of Lavos), the ending (`FF 2A`..`2F`) -- each its setup's
+uploads, its hooks and its picture tasks, graded NMI for NMI by `--racepiccmp` (add its open / frame to rpcOpen) and then in play.

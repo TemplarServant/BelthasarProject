@@ -26,5 +26,10 @@ void CtRacePicThread(CtSeqStagePic* sp, uint8_t* w);
 long CtSeqPicMpy(const CtSeqStagePic* sp);
 void CtSeqPicHdma36CC(CtSeqStagePic* sp, const uint8_t* w, unsigned table);
 int CtSeqPicCommonHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook);
+// ...and the overlay's packet $7E:3691 (FE:0000,X into `$0303-$0305` through C3/0557), the DMA $7E:38E7 (`$F0` / `$F2` from
+// `$0303-$0306`), C3/0D5E (a list of large sprites at `$15` / `$17` into the OAM shadow).
+void CtSeqPicUnpack(uint8_t* w, const CtRaceIo* io, unsigned x);
+void CtSeqPicDma38E7(CtSeqStagePic* sp, const uint8_t* w);
+void CtSeqPicOam0D5E(uint8_t* w, unsigned list);
 
 #endif

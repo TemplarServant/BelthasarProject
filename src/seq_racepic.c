@@ -196,6 +196,10 @@ void CtSeqPicHdma36CC(CtSeqStagePic* sp, const uint8_t* w, unsigned t) {
     sp->ch[c].aAdr = (uint16_t)rw(w, t + 2); sp->ch[c].aBank = w[(t + 4) & 0x1FFFF]; sp->ch[c].indBank = w[(t + 4) & 0x1FFFF];
   }
 }
+static void oam0D5E(uint8_t* w, unsigned a);
+void CtSeqPicUnpack(uint8_t* w, const CtRaceIo* io, unsigned x) { unpack(w, io, x); }
+void CtSeqPicDma38E7(CtSeqStagePic* sp, const uint8_t* w) { dma38E7(sp, w); }
+void CtSeqPicOam0D5E(uint8_t* w, unsigned list) { oam0D5E(w, list); }
 int CtSeqPicCommonHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook) {
   switch (hook) {
     case 0x380B: hook380B(sp, w); return 1;

@@ -13,6 +13,8 @@
 // field's afterwards. The picture (the mode-7 registers $5654, the planet's sprite $56EB through C3/0D5E, the setup's VRAM
 // packets and tables) is stage 2.
 #include "seq_entry4.h"
+#include "seq_entry4pic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_racepic.h"
 #include <string.h>
 
 static unsigned rd(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
@@ -163,7 +165,8 @@ static int entry4Call(uint8_t* w, unsigned page, unsigned tgt, const CtRaceIo* i
 // four shifted in as `SEC / ROR / LSR`, into ($13)), DMAs it, and resets the cursors `$11 = 0`, `$13 = 0900` -- the stars'
 // loop starts from $11. $5654 writes the mode-7 registers from page A (the picture's).
 static unsigned entry4Hook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) {
-  (void)slot; (void)io;
+  (void)slot;
+  if (io && io->pic) return CtEntry4PicHook(io->pic, w, h);           // the picture's (its $380B does the cursors too)
   if (h == 0x380B) {
     unsigned x = (w[0x0011] >> 2) & 3, p = rd(w, 0x0013);             // 3874 LDA $11 / LSR / LSR / AND #03 / TAX
     uint8_t a = w[p & 0xFFFF];                                        // 387B LDA ($13)
@@ -183,7 +186,9 @@ static unsigned entry4Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x56A9: entry4Spin(w, io); return t;
     case 0x5855: entry4Orbit(w, io); return t;
     case 0x55F9: wr(w, 0x0B0A, rd(w, 0x0B0A) + 2); return t;          // 55F9 LDA $0B0A / CLC / ADC #0002 / STA $0B0A
-    default: return t;                                                // 56EB: the planet's sprite (C3/0D5E), the picture's
+    default:                                                          // 56EB: the planet's sprite (C3/0D5E), the picture's
+      if (io && io->pic) CtEntry4PicTask(io->pic, w, t);
+      return t;
   }
 }
 
@@ -191,7 +196,9 @@ int CtEntry4StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (!CtEntry4StageHas(operand)) return -1;
   if (CtSeqStageBegin(w, operand, io) < 0) return -1;
   // $7E:53BB -- the setup. Its VRAM packets ($3691 / C3/0557), the tile conversion ($37CA, bank 7F), the tables ($36AA), the
-  // DMAs and the PPU are the picture's; what the logic reads, in order. The scratch $00F0-$00F4 the stars' draws fold in:
+  // DMAs and the PPU are the picture's (seq_entry4pic.c, when the host draws); what the logic reads, in order. The scratch
+  // $00F0-$00F4 the stars' draws fold in:
+  if (io && io->pic) CtEntry4PicSetupA(io->pic, w, io);               // 53BB-54B0
   w[0x00F0] = 0x40; w[0x00F1] = 0; w[0x00F2] = 0x18;                  // 53EF .. 548B (STZ $F0 / $F2 = 19 / $F0 = 60 / 1 /
                                                                       //  $F2 = 18 / $37CA's count to 0 / $F0 = 20 / ASL $F0)
   wr(w, 0x0A20, 0x552A); wr(w, 0x0B20, 0x5568);                       // 54A1-54AA
@@ -200,6 +207,7 @@ int CtEntry4StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   // (C3/0C97's `ASL` of the loop's register number, on the loop's first visit)
   entry4StarsInit(w, w[0x0A20], 0);
   wr(w, 0x038E, 0x0606);                                              // 54CB LDX #0606 / STX $038E
+  if (io && io->pic) { CtEntry4PicSetupB(io->pic); CtRacePicCgram(io->pic, w); }   // 54C1-54E9, then 300D JSR $388B
   // $7E:300D .. 301E: $388B, $31B0, JSL C3/08D0 (one NMI, run here, without C3/09A4), NMI on, STZ $00, STZ $0392
   CtSeqStageNmiHooks(w, 0, io, entry4Hook, entry4Task);
   wr(w, 0x0000, 0); wr(w, 0x0392, 0);

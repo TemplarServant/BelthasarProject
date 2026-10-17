@@ -2578,7 +2578,7 @@ negated for an angle >= 80, sign-extended by its bit 7), the angles from `$7C * 
 cartridge (its own fight, s301_c2) EB runs from f2121, `$CD3A` 01, 02, 03 ..; in the port the program now ends
 (battle-azala-ring-op-eb-in-the-port).
 
-**Open.** The picture (stage 2: the planet in mode 7, the stars' sprites, 56EB); the two frames above; the world 1F3's
+**The picture is native (2026-10-17, seq_picture.md sec. 6)**, exact NMI for NMI. **Open.** The frame above (the END 1733 frames after the op, the cartridge's 1734); the world 1F3's
 picture natives after the fall (C2/7957, C2/7981 -- the window circle through C3/0008 -- and C6:E072, a COLDATA HDMA), which
 advance without running.
 
