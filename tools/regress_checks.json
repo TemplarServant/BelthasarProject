@@ -27279,7 +27279,7 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          else if (endOn == 2 || endOn == 3) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
+          "find": "          else if (endOn >= 2 && endOn <= 4) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
           "replace": "          /* MUT: entry 3 drawn black */",
           "why": "the field draws entry 3's native picture after each of its NMIs"
         },
@@ -27420,13 +27420,144 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          if (endOn == 2 || endOn == 3) rio.pic = &g_stagePic;      // entries 3 and 4's pictures are ported (the others: black)",
-          "replace": "          if (endOn == 2) rio.pic = &g_stagePic;   /* MUT */",
+          "find": "          if (endOn >= 2 && endOn <= 4) rio.pic = &g_stagePic;      // entries 3, 4 and 7's pictures are ported (the others: black)",
+          "replace": "          if (endOn == 2 || endOn == 4) rio.pic = &g_stagePic;   /* MUT */",
           "why": "the field gives entry 4 its picture"
         }
       ],
       "note_pass": "Lavos's fall as the port plays it (the Tyranno chain's drive): the native picture at P+2 from the op, 56549 / 57344 pixels the cartridge's -- the rest are the stars, seeded by the field's RNG $0386, which the two drives leave differently (a ratchet)",
       "notes": "A RATCHET. The port plays tyranno-ff24-chain-plays-through-in-the-port's drive (FF 24 at f4151) and presents f4400, 249 frames after the op; the cartridge's hand-off state ff24_handoff_f27 (FF 24 on its f1, a different drive: s301_c1_hp1) matches at f252 -- P+2, the field's alignment, since the opening is priced whole. Lavos is the cartridge's to the pixel; the 795 pixels left are the stars, whose positions come from C3/02DD over the field's $0386 at the hand-off (seq_entry4.c), different in the two drives."
+    },
+    {
+      "name": "entry7-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/lavos_re/ff07_pre_f1530.state",
+        "0:900,100:2,0:3000",
+        "11",
+        "07",
+        "1100"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/ff07_pre_f1530.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 24 frame(s) after the hand-off",
+        "racepiccmp: native stage ended (2) at frame 995",
+        "racepiccmp: 1100 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "note_pass": "entry 7 (FF 07, the Day of Lavos after the lost final battle), its picture native to the console's reset: 995 NMIs, VRAM / CGRAM / OAM / the registers / the stage's WRAM and every pixel the cartridge's",
+      "notes": "SEQUENCE ENTRY 7's PICTURE (src/seq_entry7pic.c; disasm/notes/seq_picture.md sec. 7). The hand-off is the op's own frame (f11 of ff07_pre_f1530): the field's script clears glb[170] bit 5 ($7F:00AA, C0/6BCE) on the frame it calls FF 07. The setup $7E:6248: packet $63's 2bpp characters widened to 4bpp through WMDATA ($66B0), packets $5D / $CF / $B1 to VRAM $4800 / $5000 / $7000, the palettes into WRAM ($54 / $57 / $5A / $60, $8772's three colours) and $38AF's copy into the CGRAM shadow, the registers (mode 3); the hooks are the common three; task $64BF's text (its pen in its own operands $64D6 / $64DA; large letters 16 x 16, narrow ones two 8 x 8); the sparkles' draw (C3/0DBC from $6640) inside the logic's loop. $37FA's open-bus `$F0` ($4242) fixed in the logic as in entry 3. Unseeded the picture is the same. The press: A at f900 (task $63D5), the reset at 995.",
+      "mutations": [
+        {
+          "file": "src/seq_entry7pic.c",
+          "find": "    for (int k = 0; k < 8; k++) { sp->p.vram[sp->vaddr & 0x7FFF] = 0; sp->vaddr = (uint16_t)(sp->vaddr + 1); }",
+          "replace": "    for (int k = 0; k < 8; k++) { sp->vaddr = (uint16_t)(sp->vaddr + 1); }   /* MUT */",
+          "why": "$66B0 writes eight zero words after each 2bpp tile"
+        },
+        {
+          "file": "src/seq_entry7pic.c",
+          "find": "  for (unsigned i = 0; i < 0x200; i++) w[0x2200 + i] = w[0x2000 + i];",
+          "replace": "  /* MUT */",
+          "why": "$38AF copies $7E:2000 into the CGRAM shadow"
+        },
+        {
+          "file": "src/seq_entry7pic.c",
+          "find": "  ww(w, 0x21E2, 0x77BD);",
+          "replace": "  ww(w, 0x21E2, 0x0000);",
+          "why": "$8772 writes three colours into the palette page"
+        },
+        {
+          "file": "src/seq_entry7pic.c",
+          "find": "    if (!((uint8_t)(wd - 9) & 0x80)) {",
+          "replace": "    if (!((uint8_t)(wd - 0x0B) & 0x80)) {   /* MUT */",
+          "why": "a letter 9 wide or more is one large sprite"
+        },
+        {
+          "file": "src/seq_entry7.c",
+          "find": "    if (draw) CtEntry7PicSparkle(w);",
+          "replace": "    /* MUT */",
+          "why": "each live sparkle is drawn through C3/0DBC"
+        },
+        {
+          "file": "src/seq_entry7pic.c",
+          "find": "  CtSeqPicWrite(&sp->p, 0x0D, 0xB8, 0);",
+          "replace": "  CtSeqPicWrite(&sp->p, 0x0D, 0xB0, 0);",
+          "why": "BG1's H scroll is $FFB8"
+        },
+        {
+          "file": "src/seq_entry7.c",
+          "find": "    case 0x37FA: wr(w, 0x00F0, 0x4242);",
+          "replace": "    case 0x37FA: wr(w, 0x00F0, 0x4201);",
+          "why": "$37FA's LDX $4202 reads the open bus ($42)"
+        }
+      ]
+    },
+    {
+      "name": "entry7-story-picture-in-the-port-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/lavos_re/ff07_pre_f1530.state",
+        "312",
+        "1873",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "476",
+        "--loadwram",
+        "saves/lavos_re/tele476_aa77.lakewram",
+        "--walkscript",
+        "n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2,n:30,a:2"
+      ],
+      "env": {
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/lavos_re/tele476_aa77.state",
+        "CT_ORACLE_LOGICAL": "1",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:312"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/ff07_pre_f1530.state",
+        "saves/lavos_re/tele476_aa77.lakewram",
+        "saves/lavos_re/tele476_aa77.state",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f1873 vs oracle f312 box (0,0)-(256,224) -> 57344 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: "
+      ],
+      "timeout_s": 600,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          if (endOn >= 2 && endOn <= 4) rio.pic = &g_stagePic;      // entries 3, 4 and 7's pictures are ported (the others: black)",
+          "replace": "          if (endOn == 2 || endOn == 3) rio.pic = &g_stagePic;   /* MUT */",
+          "why": "the field gives entry 7 its picture"
+        }
+      ],
+      "note_pass": "the Day of Lavos as the port plays it: 300 frames after FF 07 the whole picture is the cartridge's, pixel for pixel (P+2 from the op)",
+      "notes": "The port plays lavos-day-ff07-plays-through-to-the-title-in-the-port's drive (FF 07 at f1573) and presents f1873; the cartridge's drive state ff07_pre_f1530 (FF 07 on its f10) matches at f312 -- P+2 from the op, the opening priced whole (24 frames)."
     },
     {
       "name": "seq-race-xlat-lockstep",

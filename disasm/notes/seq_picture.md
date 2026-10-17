@@ -152,7 +152,24 @@ Lavos to the pixel; the stars differ because they come from C3/02DD over the fie
 (the port's tele301_req, the cartridge's s301_c1_hp1) leave it differently (`entry4-story-picture-in-the-port-vs-oracle`, a
 ratchet).
 
-## 7. Next
+## 7. Entry 7, the Day of Lavos (src/seq_entry7pic.c) -- DONE (2026-10-17)
 
-Entry 6 (`FF 26`, the Epoch into the shell), entry 7 (`FF 07`, the Day of Lavos), the ending (`FF 2A`..`2F`) -- each its setup's
-uploads, its hooks and its picture tasks, graded NMI for NMI by `--racepiccmp` (add its open / frame to rpcOpen) and then in play.
+`FF 07` (sequence_table.md sec. 16): mode 3, the planet, the sparkles and the text "BUT... THE FUTURE REFUSED TO CHANGE.". The
+setup $7E:6248: `$0303-$0305` = $7F:0200 ($89ED); packet $63's 2bpp characters widened to 4bpp through WMDATA by $66B0 (two bytes
+a row to $2118 / $2119, then eight zero words a tile; WMADD in the bank C3/0557 left) at VRAM $4000; packets $5D / $CF / $B1 to
+$4800 / $5000 / $7000 by $38E7; the palettes into WRAM -- packets $54 / $57 / $5A / $60 at $2020 / $B574 / $B774 / $21C0, $8772's
+colours $21E2-$21E7 and `$2000 = 0` -- and $38AF's MVN of $7E:2000 into the CGRAM shadow $2200; after the script mode 3, BG1SC
+$70, BG12NBA $05, BG1 at ($FFB8, $FFCC), CGWSEL / CGADSUB 02 / 01, TM / TS 01 / 10, TMW / TSW 1F. The hooks are the common three
+($380B, $3843, $388B every frame). Task $64BF draws the string $7E:6644 (`40` ends, `00 x y` moves the pen and rewrites the
+code's own operands $64D6 / $64DA, `2F` a new line, `20` a space; a letter from $664F + c, attr $3E, width from $662F + c: from 9
+up one 16 x 16 sprite, else two 8 x 8 with the tile + $10 below). The sparkles: the logic's records drawn through C3/0DBC from
+$7E:6640 inside its loop. Found on the way: $37FA's `LDX $4202` open bus (`$F0` = $4242, as entry 3), and the hand-off is the
+op's own frame -- the script clears glb[170] bit 5 ($7F:00AA, C0/6BCE) on the frame it calls `FF 07`.
+
+**Equal on every frame** to the console's reset (995 NMIs; `entry7-picture-native-vs-oracle`; unseeded the same picture). **In
+play**: 300 frames after the op the whole frame is the cartridge's at P+2 (`entry7-story-picture-in-the-port-vs-oracle`).
+
+## 8. Next
+
+Entry 6 (`FF 26`, the Epoch into the shell), the ending (`FF 2A`..`2F`) -- each its setup's uploads, its hooks and its picture
+tasks, graded NMI for NMI by `--racepiccmp` (add its open / frame to rpcOpen) and then in play.

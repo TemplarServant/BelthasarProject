@@ -31,5 +31,6 @@ int CtSeqPicCommonHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook);
 void CtSeqPicUnpack(uint8_t* w, const CtRaceIo* io, unsigned x);
 void CtSeqPicDma38E7(CtSeqStagePic* sp, const uint8_t* w);
 void CtSeqPicOam0D5E(uint8_t* w, unsigned list);
+void CtSeqPicOam0DBC(uint8_t* w, unsigned rec);   // C3/0DBC: one small sprite from the record $7E:rec
 
 #endif

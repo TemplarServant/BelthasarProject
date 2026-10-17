@@ -7317,11 +7317,14 @@ static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) 
 #include "seq_racepic.h"
 #include "seq_entry3.h"
 #include "seq_entry4.h"
+#include "seq_entry7.h"
 // The stage by its operand: entry 3 / entry 4 (seq_entry3.c, seq_entry4.c and their *pic.c) or the race (seq_race.c / seq_racepic.c).
 static int rpcOpen(uint8_t* w, uint8_t op, const CtRaceIo* io) {
-  return CtEntry3StageHas(op) ? CtEntry3StageOpen(w, op, io) : CtEntry4StageHas(op) ? CtEntry4StageOpen(w, op, io) : CtRaceStageOpen(w, op, io); }
+  return CtEntry3StageHas(op) ? CtEntry3StageOpen(w, op, io) : CtEntry4StageHas(op) ? CtEntry4StageOpen(w, op, io)
+       : CtEntry7StageHas(op) ? CtEntry7StageOpen(w, op, io) : CtRaceStageOpen(w, op, io); }
 static int rpcFrame(uint8_t* w, uint8_t op, uint16_t joy, const CtRaceIo* io) {
-  return CtEntry3StageHas(op) ? CtEntry3StageFrame(w, joy, io) : CtEntry4StageHas(op) ? CtEntry4StageFrame(w, joy, io) : CtRaceStageFrame(w, joy, io); }
+  return CtEntry3StageHas(op) ? CtEntry3StageFrame(w, joy, io) : CtEntry4StageHas(op) ? CtEntry4StageFrame(w, joy, io)
+       : CtEntry7StageHas(op) ? CtEntry7StageFrame(w, joy, io) : CtRaceStageFrame(w, joy, io); }
 static void racepicPost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }
 // RACEPICCMP_PCLOG=<hex 24-bit PC>: the oracle's A / X / Y / carry each time it is about to run that instruction.
 static void rpcOp(Snes* s, int k) {

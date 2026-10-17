@@ -2624,7 +2624,7 @@ cross 14 vblanks, the cartridge 13 (a timing artefact). The pad: the port's from
 after the input). In the field (lavos-day-ff07-plays-through-to-the-title-in-the-port): `FF 07` at f1573, the press, the reset
 954 frames after the op (the cartridge's 955), loc 000 -> 1B1 -> the title.
 
-**Open.** The picture (stage 2: the packets, the text 64BF, the sparkles C3/0DBC, the fade's colours); and how the port reaches
+**The picture is native (2026-10-17, seq_picture.md sec. 7)**, exact NMI for NMI and in play. **Open.** How the port reaches
 loc 1DC at all -- the lost final battle's path to it is not derived (the boss rush from lavos_1d3_wait ran 18000 frames of A
 without ending).
 
