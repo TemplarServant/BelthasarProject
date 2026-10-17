@@ -576,6 +576,8 @@ static int worldInit(CtAssets* a, World* w, int id) {
   int nrec = *p++;
   w->wram[0x1B38] = (uint8_t)nrec;
   memcpy(w->wram + 0x7E00, p, (size_t)nrec * 7); p += (size_t)nrec * 7;
+  { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); }
+  CtWorldLoadTriggers(w->wram, id);                     // ...and the event / transition cells beside them (C2/2A44)
   memcpy(w->vram + 0x4000, p, 28672); p += 28672;
   if (b[0] >= 2 && p + 0x1000 + 0x1600 <= b + blen) {   // fmt 2: ambient-object VM inputs
     // THE OBJECT BLOCKS DO NOT REACH WRAM HERE. They land in objSnap, and worldEnterAt's restore is
@@ -11727,6 +11729,7 @@ int main(int argc, char** argv) {
   // end therefore eats the flag the next load is owed. Latched here, at the load.
   int loadRampSkip = 0;
   int owVehicleModule = 0;   // the last overworld frame ran a vehicle's lead module ($027E != 0; world.c obLeadModule)
+  int owEventModule = 0;     // ...or an event cell's ($0280 / $0281 != 0: the lead's own row in the pass)
   // THE TIME GAUGE'S PHASES ($027C = 8, C2/261D -> C2/6A34, disasm/notes/ow_time_gauge.md): 1 the world fading out (C2:2EC1,
   // 18 NMIs), 2 the NMI-off load (C2/2E23 + C2/6A34's half), 3 the gauge live (its own 18 NMIs, then a check after each),
   // 4 its fade-out (C2:74B3, 18 NMIs), 5 the NMI-off return (C2/2E72 + C2/2C93), 6 the world fading in (C2:2EC4, 17 NMIs).
@@ -13069,6 +13072,12 @@ int main(int argc, char** argv) {
           fade = 1;                                    // gated storyline<3) over a BLACK screen, then SELF-routes to
           if (selftest) printf("ngintro: pan complete (%d f) -> loc 271 (wake-up intro)\n", NG_PAN_END);  // loc 2 (op-0xE0).
         }
+      } else if (wd.wram && (wd.wram[0x0280] != 0 || wd.wram[0x0281] != 0) && wd.wram[0x027E] == 0
+                 && (owBootstrapObjects() ? CtWorldHasLead(wd.wram) : 1)) {
+        // AN EVENT CELL'S SCRIPT ($0280 = 1, world.c obEntryScan): the lead walks its sub-script in its own slot of the pass
+        // (C2:345D's second row), and the frame it ends, C2/34F8 there too. The host only flushes what the steppers staged.
+        CtWorldStreamFrame(&wd.stm, &wd.cam, wd.wram, 0, 0);
+        owEventModule = 1;
       } else if (wd.wram && wd.wram[0x027E] != 0 && (owBootstrapObjects() ? CtWorldHasLead(wd.wram) : 1)) {
         // A VEHICLE'S MODULE ($027E 2-5: boarding, riding, stepping out). The lead's handler is then the ROM's own and runs in
         // its slot of the object pass (world.c obLeadModule); so does the Epoch, which scrolls the camera itself (C2/4675).
@@ -13080,6 +13089,12 @@ int main(int argc, char** argv) {
         // STEPPING OUT OF A VEHICLE: the frame `$027E` comes back to 0 the lead's phase is 0 (C2/34AD, and C2/340E's compare
         // against `$027F`), so its handler runs the init C2/34F8 from the spot C2/34AD left in `$0283` / `$0285`. The host's
         // mover is that handler's module 0: it restarts there, at rest, on the cell boundary.
+        if (owEventModule && wd.wram) {              // ...and after an event the mover restarts where its script left the lead
+          owEventModule = 0;
+          wd.mv.posX = wd.mv.probeX = (uint16_t)(wd.wram[0x0283] | (wd.wram[0x0284] << 8));
+          wd.mv.posY = wd.mv.probeY = (uint16_t)(wd.wram[0x0285] | (wd.wram[0x0286] << 8));
+          wd.mv.velX = wd.mv.velY = 0; wd.mv.phase = 1; wd.mv.moving = 0;
+        }
         if (owVehicleModule && wd.wram) {
           owVehicleModule = 0;
           wd.mv.posX = wd.mv.probeX = (uint16_t)(wd.wram[0x0283] | (wd.wram[0x0284] << 8));
@@ -13144,7 +13159,7 @@ int main(int argc, char** argv) {
       // script later pokes it to 1 via op $13 (C2/12C8), and the port bakes $1B9B instead of running that
       // script, but BOTH values are inside the handler's {0,1,7} gate, so it is open either way.
       { uint8_t* wr = wd.wram;
-        if (!owVehicleModule) {                       // (in a vehicle's module the lead's handler writes them itself)
+        if (!owVehicleModule && !owEventModule) {     // (in a vehicle's module or an event the lead's handler writes them)
         wr[0x0283] = (uint8_t)wd.mv.posX; wr[0x0284] = (uint8_t)(wd.mv.posX >> 8);
         wr[0x0285] = (uint8_t)wd.mv.posY; wr[0x0286] = (uint8_t)(wd.mv.posY >> 8);
         // ⭐ ...AND C2/3ACB, THE OTHER HALF OF THAT MIRROR -- the one the SAVE reads. All five of
@@ -13449,7 +13464,7 @@ int main(int argc, char** argv) {
       //  A fixed rotation of colours $24-$2E stood here for every world -- right for world 0's row 2, and the mountains'
       //  colours in world 3, whose script animates rows 3 and 4.)
       if (owEnterCd > 0) owEnterCd--;
-      else if (talkPressed && owPad && !owVehicleModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // ENTER the location (C2/35E5)
+      else if (talkPressed && owPad && !owVehicleModule && !owEventModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // ENTER the location (C2/35E5)
         // C2/35E5 `$027C = 3`, and the main loop's state 3 is the whole exit (C2/2402):
         //   2452 LDA #C2 / LDX #2EC1 / JSR C2/04D9     a VM object on $C2:2EC1 = `28 01 52` (fade out at rate 1, die)
         //   245C NMITIMEN $81 / LDX #0012 / JSR C2/0346 x18   eighteen NMIs -- the object pass runs the fade in them

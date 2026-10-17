@@ -108,6 +108,7 @@ void CtWorldObjOp05(uint8_t* ram, const uint8_t* op);
 void CtWorldLocationStores(uint8_t* ram, const uint8_t* op);   // C2/1100's stores = state 3's C2/2470 (no $027C)
 void CtWorldSetRom(const uint8_t* rom, long len);            // the ROM image, for VM objects running bank-$C2 scripts
 void CtWorldSpawnVm(uint8_t* ram, uint8_t bank, uint16_t pc); // C2/04D9 -- a VM object started from outside the pass
+void CtWorldLoadTriggers(uint8_t* ram, int world);     // C2/2A44: the event / transition cells and the event scripts
 void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op);
 typedef int (*CtWorldOp4EHook)(uint8_t* ram128, uint32_t target);   // op 4E -> $C6:E241 / $C6:E27E: 0 = ran
 void CtWorldSetOp4EHook(CtWorldOp4EHook fn);

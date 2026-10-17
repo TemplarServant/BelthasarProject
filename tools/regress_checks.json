@@ -39883,6 +39883,104 @@
       "notes": "THE WORLD MAP (disasm/notes/ow_world_map.md; ROADMAP G1a item 3). Jackie's ch24 driven to the free flight on 1F6 (as ow-epoch-flight-vs-oracle), then Select (the cartridge's f3082) and B 242 frames on. C2/258D: script C2:2EC7 (mosaic up, fade out) and 34 NMIs; NMI off, the direct page and the object array stashed, C2/631F's set-up (VRAM cleared, the world's chars decompressed, one colour a tile, the map one pixel a 16 x 16 cell, the markers, the backdrop's HDMA ramp); NMI on; the controller $666C zooms out (32 steps), waits for B, zooms back; 17 NMIs; NMI off, the stash back, C2/2C93 rebuilds the world; script C2:2ED0 and 41 NMIs; `$027C = 1`. The port's stretches are priced as the ROM's (the decompressor model plus rests measured with --callrom, graded by the oracle's own stretches) and end with the NMI's return rule (owNmiOffFrames: a stretch ending inside the vblank it crossed gets its NMI at once, uncounted by C2/0454). The tool reads the cartridge's LOST PICTURES (CT_ORACLE_RUNFRAME_TRACE: C2/26A8's 64 KB DMA ends inside the next vblank, one snes_runFrame call for two frames) and puts the cartridge's events and the presses on the console's clock; the port's world runs 359 frames behind from the free flight (the world VM in $0C30 ends at f3074 / f3433), and its pictures (the NMI's shadows, latched before the pass) are the cartridge's --peek P + 1 there. PINNED RESIDUAL: the era's label (355 px) -- C2/6965's text goes through the proportional-text engine C2/57DF / 5823, not ported; the label's tiles stay blank and the port says so once."
     },
     {
+      "name": "ow-event-cell-600ad-scene097-vs-oracle",
+      "argv": [
+        "python",
+        "tools/ow_event_cmp.py",
+        "w1"
+      ],
+      "env": {},
+      "expect": [
+        "ow-event w1: timeline same -- 151 changes from `$0280 = 1` (cartridge f496, port f336); `$0280 = 0` at +193 / +193",
+        "ow-event w1: `$027C = 1` at +32 on the cartridge, +31 in the port",
+        "ow-event w1: picture +30 57344 px differ",
+        "ow-event w1: picture +60 33618 px differ",
+        "ow-event w1: picture +90 25757 px differ"
+      ],
+      "pin": [
+        "^ow-event w1: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "tools/ow_event_cmp.py",
+        "tools/vwf_cost_proto.py",
+        "tools/epoch_board_cmp.py",
+        "saves/downloaded/ctjackie/srm/ch10.srm"
+      ],
+      "note_pass": "600 A.D.'s event cell (scene 097's arrival) runs on the cartridge's frames: the members' arcs, op 2C's fractions",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "  if (ram[0x0280] == 1) return owEventMember(ram, B, c, B[0x24]);     // 3B58's second row (3D9C / 3DC1 / 3DE3)",
+          "replace": "  if (ram[0x0280] == 1) return owEventMember(ram, B, c, 0);   /* MUT */",
+          "why": "C2/3D9E: a follower takes the sub-script of its own slot ($1B3B + 2 x +24)"
+        },
+        {
+          "file": "src/world.c",
+          "find": "                 obPutW(B + OWOBJ_YPOS, (uint16_t)(op[3] | (op[4] << 8))); obPutW(B + OWOBJ_YFRAC, 0); adv = 5; break;",
+          "replace": "                 obPutW(B + OWOBJ_YPOS, (uint16_t)(op[3] | (op[4] << 8))); adv = 5; break;   /* MUT */",
+          "why": "C2/15C3: op 2C clears the fractions with the place -- 600 A.D.'s second arc lands a pixel lower without it"
+        }
+      ],
+      "notes": "THE OVERWORLD'S EVENT CELLS (disasm/notes/ow_event_cells.md; ROADMAP G1a item 3, `$0280 != 0`). The world's packet C6:FFC0[header +15] holds, after the entrances, the event cells ($7E:8300: a cell word whose bit 7 arms it and a script index), the transition cells ($7E:8180) and the event scripts ($7E:8480) -- C2/2A44. The scanner (class $3264, C2/3264) looks at the cell the lead reaches (`$0282`, set by C2/34F8 / 3766 when C2/39AE finds bit 2 on its top pair) and C2/3349 acts: an armed event cell spawns its script in bank $7F and sets `$0280 = 1`; the lead (C2:345D's second row) and each follower (C2:3B58's) then run the sub-script op 08 names them (`$1B3B` + 2 x slot) INLINE on their own block, until the script sets `$1B43` and the scanner puts `$0280` back to 0 -- the lead's phase is then 0 and C2/34F8 runs again. Only two cells are ever armed: world 0's (1B, 19) by its bootstrap when `$7F:01F0` bit 0 is set (scene 02F, Heckran's cave: the whirlpool exits onto it) and world 1's (1A, 1F) when `$7F:01F3` bit 4 is (scene 097). No save stands there: the tool edits Jackie's battery slot 0 (place and story bit, the sum recomputed) and loads it on both sides. PINNED RESIDUAL: `$027C = 1` a frame early relative to the event (+31 against +32) -- the world's entry from the load, the cartridge's first NMI raised at once inside the vblank (C2:23CF, V=258) and not counted (the load clock, ROADMAP F1); the world's own clocks (the sea's palette cycle, 600 A.D.'s BG3 mist, the gulls) stand a frame apart from the event with it, so the pictures differ there while the party's sprites match."
+    },
+    {
+      "name": "ow-event-cell-heckran-whirlpool-vs-oracle",
+      "argv": [
+        "python",
+        "tools/ow_event_cmp.py",
+        "heckran"
+      ],
+      "env": {},
+      "expect": [
+        "ow-event heckran: timeline same -- 136 changes from `$0280 = 1` (cartridge f482, port f322); `$0280 = 0` at +265 / +265",
+        "ow-event heckran: `$027C = 1` at +32 on the cartridge, +31 in the port",
+        "ow-event heckran: picture +40 731 px differ",
+        "ow-event heckran: picture +95 2599 px differ",
+        "ow-event heckran: picture +130 314 px differ",
+        "ow-event heckran: picture +200 20711 px differ",
+        "ow-event heckran: picture +262 96 px differ"
+      ],
+      "pin": [
+        "^ow-event heckran: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "tools/ow_event_cmp.py",
+        "tools/vwf_cost_proto.py",
+        "tools/epoch_board_cmp.py",
+        "saves/downloaded/ctjackie/srm/ch04.srm"
+      ],
+      "note_pass": "the party comes out of Heckran's whirlpool onto 1000 A.D.'s shore on the cartridge's frames: world 0's event cell, its script and the members' arcs (C2/3264, C2/3349, C2:345D / 3B58's second rows)",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "  if ((obW(B + 0x22) & 0x0404) == 0x0404) ram[0x0282] |= 0x03;",
+          "replace": "  /* MUT: no scan on arrival */",
+          "why": "C2/3550-3564: the lead's init asks the scanner to look at its cell -- the whirlpool's arrival is what fires the event"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    uint32_t v = (uint32_t)obW(B + 0x1E) + 0x2000u;",
+          "replace": "    uint32_t v = (uint32_t)obW(B + 0x1E) + 0x1000u;   /* MUT */",
+          "why": "C2/79C8: the arcs' gravity is 0x2000 a frame"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    if (ram[0x1B43]) {                                                 // 32B7-32C8",
+          "replace": "    if (0) {   /* MUT */",
+          "why": "C2/32B7: the event ends when its script sets $1B43"
+        }
+      ],
+      "notes": "THE OVERWORLD'S EVENT CELLS (disasm/notes/ow_event_cells.md; ROADMAP G1a item 3, `$0280 != 0`). The world's packet C6:FFC0[header +15] holds, after the entrances, the event cells ($7E:8300: a cell word whose bit 7 arms it and a script index), the transition cells ($7E:8180) and the event scripts ($7E:8480) -- C2/2A44. The scanner (class $3264, C2/3264) looks at the cell the lead reaches (`$0282`, set by C2/34F8 / 3766 when C2/39AE finds bit 2 on its top pair) and C2/3349 acts: an armed event cell spawns its script in bank $7F and sets `$0280 = 1`; the lead (C2:345D's second row) and each follower (C2:3B58's) then run the sub-script op 08 names them (`$1B3B` + 2 x slot) INLINE on their own block, until the script sets `$1B43` and the scanner puts `$0280` back to 0 -- the lead's phase is then 0 and C2/34F8 runs again. Only two cells are ever armed: world 0's (1B, 19) by its bootstrap when `$7F:01F0` bit 0 is set (scene 02F, Heckran's cave: the whirlpool exits onto it) and world 1's (1A, 1F) when `$7F:01F3` bit 4 is (scene 097). No save stands there: the tool edits Jackie's battery slot 0 (place and story bit, the sum recomputed) and loads it on both sides. PINNED RESIDUAL: `$027C = 1` a frame early relative to the event (+31 against +32) -- the world's entry from the load, the cartridge's first NMI raised at once inside the vblank (C2:23CF, V=258) and not counted (the load clock, ROADMAP F1); the world's own clocks (the sea's palette cycle, 600 A.D.'s BG3 mist, the gulls) stand a frame apart from the event with it, so the pictures differ there while the party's sprites match."
+    },
+    {
       "name": "ending-story-plays-through-in-the-port",
       "argv": [
         "build/ct_field.exe",
