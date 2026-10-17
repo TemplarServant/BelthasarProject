@@ -13,7 +13,11 @@ void CtRacePicSetupB(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io);
 void CtRacePicCgram(CtSeqStagePic* sp, const uint8_t* w);
 // One vblank hook of the list $0940 (C3/08F7 -> $7E:39BE); returns what its slot holds afterwards.
 unsigned CtRacePicHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook, const CtRaceIo* io);
-// One of the picture's tasks; returns 0 for a task this file does not draw (the caller's own, or not ported yet).
-int CtRacePicTask(CtSeqStagePic* sp, uint8_t* w, unsigned task, const CtRaceIo* io);
+// One of the picture's tasks (in the list's slot `slot`, a byte offset); returns 0 for a task this file does not draw (the caller's own, or not ported yet).
+int CtRacePicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned task, const CtRaceIo* io);
+
+// C3/09E9's code at $7E:B574 (the setup B's first step), and the main thread's pass after each NMI ($7E:51D1).
+void CtRacePicGenB574(uint8_t* w);
+void CtRacePicThread(CtSeqStagePic* sp, uint8_t* w);
 
 #endif

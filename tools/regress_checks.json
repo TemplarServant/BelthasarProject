@@ -27027,7 +27027,7 @@
         "0:30,100:2,0:3000",
         "65",
         "00",
-        "12"
+        "3000"
       ],
       "env": {
         "CT_ORACLE_LOGICAL": "1",
@@ -27039,16 +27039,15 @@
       ],
       "expect": [
         "racepiccmp: the stage's setup made its NMI 75 frame(s) after the hand-off",
-        "racepiccmp: frame 1: VRAM 0 CGRAM 0 OAM 99 words differ; registers 0; HDMA 0; WRAM 6607 bytes",
-        "racepiccmp: frame 8: 3280 px differ",
-        "racepiccmp: 12 frames -- first state difference 1, first picture difference 8 (15891 px)"
+        "racepiccmp: native stage ended (1) at frame 2738",
+        "racepiccmp: 3000 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
       ],
       "pin": [
         "^racepiccmp: "
       ],
       "tier": "full",
       "timeout_s": 600,
-      "note_pass": "the race's picture, native (stage 2, in progress): its setup's VRAM, CGRAM, the display registers and the HDMA channels equal the cartridge's after its first NMI",
+      "note_pass": "the story race's picture, native end to end (stage 2): from its setup's NMI to the END (2738 frames) VRAM, CGRAM, OAM, the display registers and the HDMA channels equal the cartridge's every frame, and so does every pixel",
       "mutations": [
         {
           "file": "src/seq_racepic.c",
@@ -27073,9 +27072,90 @@
           "find": "  ww(w, 0x141C, a); ww(w, 0x1434, a >> 1); ww(w, 0x1430, a >> 2);",
           "replace": "  ww(w, 0x141C, a); ww(w, 0x1434, a >> 2); ww(w, 0x1430, a >> 1);   /* MUT */",
           "why": "$7E:4447: BG3 scrolls at half the angle, BG2 at a quarter"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "      task4D0D(w, io, 0); return 1;",
+          "replace": "      task4D0D(w, io, 1); return 1;   /* MUT */",
+          "why": "the dispatcher's CPX #0020 leaves the carry clear for $4D0D's first ADC"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "        k->x = (k->x + 1) & 0xFF;",
+          "replace": "        k->x = (k->x + 2) & 0xFF;   /* MUT */",
+          "why": "C3/0E29 searches the bike's divisor one by one (INX)"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "  ww(w, 0x46, ksbc(k, rw(w, 0xF2), rw(w, 0xF0)));",
+          "replace": "  k->c = 1; ww(w, 0x46, ksbc(k, rw(w, 0xF2), rw(w, 0xF0)));   /* MUT */",
+          "why": "$4E73's SBC takes the LSR's carry, not a SEC"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "  if (k->w[0x510D] == 0x60) return;                                   // 510D: the overlay's own byte",
+          "replace": "  /* MUT */",
+          "why": "the finish writes RTS at $7E:510D: the minimap markers stop"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "    k->c = 1; a = ksbc(k, a, rw(w, 0x5171));",
+          "replace": "    k->c = 1; a = ksbc(k, a, 0x0018);   /* MUT */",
+          "why": "REST subtracts the routine's own immediate $7E:5171, stepped every 64 frames"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "    if (!pass51D1(sp, w) || rw(w, 0x00)) return;                      // 3026 LDA $00 / BEQ $3023",
+          "replace": "    { pass51D1(sp, w); return; }   /* MUT */",
+          "why": "the main loop passes again while a pass did work: the next request is taken in the same frame"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "    if (rw(w, 0x39)) { sp->thread = (uint8_t)(b + 1); return 0; }     // 5211 the wait",
+          "replace": "    if (0) { sp->thread = (uint8_t)(b + 1); return 0; }   /* MUT */",
+          "why": "the main thread waits at 5211 until hook $5221 has sent the last frame"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "static const uint16_t tab09D9[8] = { 0x0000, 0x0200, 0x0100, 0x0300,",
+          "replace": "static const uint16_t tab09D9[8] = { 0x0000, 0x0100, 0x0200, 0x0300,   /* MUT */",
+          "why": "C3/09D9's offsets interleave the planes 0/2/1/3"
         }
       ],
-      "notes": "THE RACE'S PICTURE, NATIVE (stage 2, in progress; disasm/notes/seq_picture.md sec. 4). ct.exe --racepiccmp runs the oracle through Johnny's race to the FF 00 hand-off (f65), opens the native stage with a CtSeqStagePic there, and lays each native NMI against the oracle's: VRAM, CGRAM, OAM, the display registers, the HDMA channels and WRAM compared as the oracle leaves vblank, then the pictures. RACEPICCMP_SEEDVRAM=1 starts the native VRAM as the cartridge's at the hand-off: the field's leftovers the race never writes (the port's field keeps no VRAM image). Ported: the setup ($7E:3D8C, 3B5D-3C4E, 3CEA-3D44, 388B, the common init's PPU reset), the tasks 42CE / 357B (the per-line mode-7 matrix), 428B, 4447 and the fades, the hooks 380B, 3843, 5221, 43F2, 44FE, 4643 / 464D. Not yet: the bikes (4D0D), the HUD (4F54's drawing), the bike frames (the main thread $51D1, C3/0307, the code C3/09E9 writes at $7E:B574), the transitions (3D72, C3/01E4). This check is a RATCHET: re-pin as each lands."
+      "notes": "THE RACE's PICTURE, NATIVE (src/seq_racepic.c over the native compositor src/seq_pic.c; disasm/notes/seq_picture.md sec. 4). ct.exe --racepiccmp opens the native stage from the oracle's WRAM at Johnny's hand-off and lays it against the oracle NMI by NMI: the setup's uploads and HDMA, the road's self-patching matrix builder $357B, the bikes' projection $4D0D (signed products C3/094C, the restoring divide $32E2, the hardware divider's search C3/0E29, the carry threaded), the HUD and the sprites $4F54 (C3/0D0E, 0D5E, 0DBC; the routine's own immediate at $7E:5171 and the finish's RTS at $510D), the main thread $7E:51D1 run after each NMI (C3/0307 scales a bike frame into $7F:0200, C3/09E9's code at $7E:B574 reformats it into $0C00, the wait on $39 across NMIs), the hooks (OAM, the bike frames' VRAM, the scrolls, the curtain's bytes, the finish's $449C) and the score counted down after the finish ($44CE). RACEPICCMP_SEEDVRAM starts the native VRAM as the cartridge's: the field's leftovers the race never writes (race-picture-native-unseeded-vs-oracle shows they are never displayed). Not graded here: the attract's arm ($0384 bit 6: the curtain task $3D72 over C3/01E4's virtual beam), which the native stage does not open yet. NOT EXERCISED by this drive (their mutations survive; a drive that reaches them is still to capture): a bike's sprite past x 255 (C3/0D5E's $9801 and the high table's bit 8), a source row repeated (C3/0307's copy: a zoom past 1, $27 < $80), a column step's carry (C3/0307's ADC chain), $449C's LSR carry, and a score left on a step's exact value at the finish ($44CE)."
+    },
+    {
+      "name": "race-picture-native-unseeded-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/race_re/race_user.state",
+        "0:30,100:2,0:3000",
+        "65",
+        "00",
+        "3000"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 75 frame(s) after the hand-off",
+        "racepiccmp: frame 1: VRAM 6765 CGRAM 0 OAM 0 words differ; registers 0; HDMA 0; WRAM 184 bytes",
+        "racepiccmp: native stage ended (1) at frame 2738",
+        "racepiccmp: 3000 frames -- first state difference 1, first race-WRAM difference -1, first picture difference -1 (0 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "the story race's picture, native, with the native VRAM as the port leaves it (the field's leftovers not copied): 6765 VRAM words differ and not one pixel",
+      "mutations": [],
+      "notes": "The sibling of race-picture-native-vs-oracle without RACEPICCMP_SEEDVRAM: the VRAM words the race never writes (the field's leftovers the port's field does not keep) differ, and the picture is equal on every frame of the race -- no region the race displays shows them."
     },
     {
       "name": "seq-race-xlat-lockstep",

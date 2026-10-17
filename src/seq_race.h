@@ -100,6 +100,7 @@ void CtRaceTask42BD(uint8_t* w);
 
 // $7E:4F54, the HUD's task -- its logic only: the score's floor at 0 ($5116 -> 51A2). The rest is its picture (stage 2).
 void CtRaceTask4F54(uint8_t* w);
+int CtRaceTask44CE(uint8_t* w);   // the score counted down after the finish; 0 = done (off the list)
 
 // THE STAGE, its logic (stage 1 of the native port): C3:0000 + $7E:3000 for entry 0/9 up to the main loop (the overlay
 // decompressed into $7E:3000, the common init, the setup's race values, page A run once, the first NMI); one NMI a frame

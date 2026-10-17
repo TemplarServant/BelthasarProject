@@ -538,6 +538,7 @@ int CtSeqStageNmiHooks(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn
   wr(r, 0x08, rd(r, 0x08) + 1);                                       // 090F INC $08
   memmove(w + 0x0950, w + 0x0920, 0x20);                              // 0911 MVN $0920 -> $0950, 32 bytes
   wr(r, 0x02, joy);                                                   // 0A99 LDA $4218 / STA $02
+  if (pic) pic->joy = joy;
   if (joy == 0x3030 && !w[0x0396]) return 2;                          // 0A9E the soft reset (JML $00FF00)
   if (rd(r, 0x0390)) {                                                // 0ABB the pause
     if (w[0x03] & 0x10) {
@@ -664,6 +665,7 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   // $7E:300D .. 301E: $388B (CGRAM), $31B0 (the vblank), JSL C3/08D0 (one NMI, run here), NMI on, STZ $00, STZ $0392
   CtSeqStageNmiHooks(w, 0, io, (io && io->pic) ? raceHook : NULL, raceTask);
   wr(r, 0x0000, 0); wr(r, 0x0392, 0);
+  if (io && io->pic) CtRacePicThread(io->pic, w);                    // 3023: the main loop's first pass
   return 0;
 }
 
@@ -673,12 +675,15 @@ static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* 
     case 0x3749: CtRaceScript(w, 0x0A00, io); return t;
     case 0x3754: CtRaceScript(w, 0x0B00, io); return t;
     case 0x42BD: CtRaceTask42BD(w); return t;
-    case 0x4F54: CtRaceTask4F54(w); return t;                         // (its logic: the score's floor)
+    case 0x4F54:                                                      // the HUD and the sprites; its logic, the score's floor
+      if (io && io->pic) CtRacePicTask(io->pic, w, slot, t, io); else CtRaceTask4F54(w);
+      return t;
     case 0x4339: CtRaceTask4339(w); return t;
+    case 0x44CE: return CtRaceTask44CE(w) ? t : 0;
     case 0x485D: return CtRaceStep485D(w, io);
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);   // the brightness (the overlay's own)
     default:                                                          // the picture's tasks (stage 2)
-      if (io && io->pic) CtRacePicTask(io->pic, w, t, io);
+      if (io && io->pic) CtRacePicTask(io->pic, w, slot, t, io);
       return t;
   }
 }
@@ -686,6 +691,7 @@ static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* 
 int CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
   int st = CtSeqStageNmiHooks(w, joy, io, (io && io->pic) ? raceHook : NULL, raceTask);
   if (st != 2 && CtSeqStageSong(w, io) > 0) w[0x0388] = 0;           // (the race never changes $038A)
+  if (st != 2 && io && io->pic) CtRacePicThread(io->pic, w);         // $7E:3023 the main loop's pass
   return st;
 }
 
@@ -700,4 +706,16 @@ void CtRaceStageClose(uint8_t* w, const CtRaceIo* io) { CtSeqStageEnd(w, io); }
 void CtRaceTask4F54(uint8_t* w) {
   if (w[0x0384] & 0x40) return;                                       // 4F85 / 4F9C BIT #0040: the attract's arm draws less
   if (w[0x6A] & 0x80) { w[0x69] = 0; w[0x6A] = 0; }                   // 51A2
+}
+
+// $7E:44CE -- THE SCORE COUNTED DOWN after the finish (485D puts it in $4339's slot): every 4th frame (`$08` & 3 = 0) `$69`
+// loses 2000, else 200, else 20, else 2 -- the first that fits (`SEC / SBC / BCS`, the `ADC` putting it back); under 2 the
+// task removes itself (44F8 JMP $39A7). Returns 0 then.
+int CtRaceTask44CE(uint8_t* w) {
+  static const unsigned step[4] = { 2000, 200, 20, 2 };
+  if (w[0x08] & 3) return 1;                                          // 44CE LDA $08 / AND #0003 / BNE
+  unsigned a = (unsigned)(w[0x69] | (w[0x6A] << 8));
+  for (int i = 0; i < 4; i++)
+    if (a >= step[i]) { a -= step[i]; w[0x69] = (uint8_t)a; w[0x6A] = (uint8_t)(a >> 8); return 1; }
+  return 0;
 }

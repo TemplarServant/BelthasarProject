@@ -56,6 +56,8 @@ typedef struct CtSeqStagePic {
   uint16_t vaddr;           // $2116
   uint8_t vmain;            // $2115
   uint8_t cgadd;            // $2121
+  uint16_t joy;             // $4218 / $4219, the pad's auto-read (the race's 16-bit `SBC $4217` reads $4218 with it)
+  uint8_t thread;           // where the stage's main thread waits (the stage's own numbering; 0 = its idle loop)
 } CtSeqStagePic;
 // A DMA from WRAM into the PPU's data ports, as a stage's code issues it ($43x0 / $43x1 = dmap / bbad, from WRAM byte `src`,
 // `n` bytes; DMAP bit 3 = the fixed source): $2118 / $2119 (VRAM through the port's address and VMAIN), $2122 (CGRAM), $2104

@@ -45,29 +45,50 @@ reads VRAM back through $2139 (the read buffer's one-word lag: the first word co
 CtSeqStageNmiHooks, C3/08D0) writes INIDISP $80 and HDMAEN 0 before the hooks, HDMAEN = `$038C` and INIDISP = `$038D` (or $80)
 after them; a script's `FB` (C3/0C5F) writes its register. A host gives the stage a picture through `CtRaceIo.pic`.
 
-## 4. The race (src/seq_racepic.c, in progress)
+## 4. The race (src/seq_racepic.c) -- DONE for the story race (2026-10-17)
 
 `ct.exe --racepiccmp <state> <btnscript> <handoff> <operand> <frames>` lays the native stage against the oracle NMI by NMI from
 Johnny's `FF 00` (saves/race_re/race_user.state, A at f30, the hand-off at f65): VRAM, CGRAM, OAM, the registers, the HDMA
-channels and WRAM as the oracle leaves vblank, then the pictures. `RACEPICCMP_SEEDVRAM=1` starts the native VRAM as the
-cartridge's at the hand-off -- the field's leftovers, which the race never writes and the port's field does not keep (a
-region the race displays would show them; none measured so far).
+channels and the race's own WRAM (all but the field's pages $0100-$06FF and the stack / sound queue $1E00-$1FFF) as the oracle
+leaves vblank, then the pictures. `RACEPICCMP_SEEDVRAM=1` starts the native VRAM as the cartridge's at the hand-off (the field's
+leftovers, which the race never writes and the port's field does not keep).
 
-Ported and equal after the setup's NMI: the setup's uploads ($7E:3D8C -- the OBJ clear, the palette packet, the mode-7
-characters and map (packets 15, 18, 1B; `$7E:37A6` doubles each map row), the sky's characters and the three BG maps;
-$7E:3B5D-3C4E -- the bikes' packets 06 / 09 / 0C, the 8 x 8 blocks of `$7E:3EB7`, the mirrored streams of `$7E:3ED3` through
-WMDATA, the multiplier fills, the HDMA channels from the record table $7E:3D45; $7E:3CEA-3D44 -- the layers' registers and the
-start line's column read back into $7E:C995; $7E:388B), the common init's PPU reset ($7E:30F9), the tasks `42CE` / `357B` (the
-road's per-line matrix: cos / X and sin / X through the hardware divider; the routine patches its own loop -- the products
-as immediates, the negation as a branch, the sine tables' order, a tail that duplicates lines -- and those bytes are written
-too), `428B`, `4447` and the fades, the hooks `380B` (OAM, the priority rotation), `3843` (the OAM shadow cleared from the
-multiplier), `5221` (the bike frames' VRAM), `43F2` (the mode-7 centre, BG2 / BG3 scrolls), `44FE` (the curtain's table bytes,
-$7E:E100 to VRAM $5180), `4643` / `464D` (the start line's column from $D2:0000 or $7E:C995). Check
-`race-picture-native-vs-oracle` (a ratchet).
+**Equal on every frame of the race** -- 2738 NMIs from the setup's to the END: state, the race's WRAM (with bank $7F) and every
+pixel (`race-picture-native-vs-oracle`); without the seed 6765 VRAM words differ and not one pixel
+(`race-picture-native-unseeded-vs-oracle`): no region the race displays shows the leftovers.
 
-Not yet: the bikes (`4D0D`, ~770 instructions: their projection and sprites), the HUD's drawing (`4F54`), the bike frames (the
-main thread's `$51D1`: C3/0307 decompresses a frame, the code C3/09E9 wrote at $7E:B574 reformats it, hook 5221 sends it), the
-opening and closing curtains (`3D72`, C3/01E4 over the virtual beam). Then the field draws the race through it.
+What is ported:
+
+- the setup ($7E:3D8C, $7E:3B5D-3C4E, $7E:3CEA-3D44 with C3/09E9's code at $7E:B574, $7E:388B, the common init's PPU reset);
+- the vblank hooks `380B`, `3843`, `5221`, `43F2`, `44FE`, `4643` / `464D` and the finish's `449C` (the sky's scrolls from the
+  camera);
+- the tasks `42CE` / `357B` (the road's self-patching matrix), `428B`, `4447`, the fades, and:
+  - `4D0D`, THE BIKES' PROJECTION: the turn's sine / cosine, C3/094C's signed 16 x 8 products (⚠ `$F6` is not cleared: the 8-bit
+    `STZ $F7` and the 16-bit `ADC $F5`), the depth's screen row through the hardware divider's search C3/0E29 (from `$B4` up,
+    D = $4200: the first divisor whose quotient falls under the row, cached in `$1446,row`), the restoring divide `$32E2` (its
+    first `ROL $F0` takes the caller's carry) and `$33D6`; the carry threaded through every `ADC` / `SBC` with no `CLC` / `SEC`
+    -- the task enters with the dispatcher's (`$7E:398A` restores the flags of its `CPX #0020`: clear for every slot but the
+    first);
+  - `4F54`, THE HUD AND THE SPRITES through C3's OAM library over the shadow $0700 / $0900 (`0D0E` small, `0D5E` large with a
+    9-bit x -- from $100 the word `$9801` -- , `0DBC` one record): the minimap markers (⚠ 50D3's 16-bit `SBC $4217` reads
+    `$4218` too, the pad's auto-read: CtSeqStagePic keeps it), the boosts, the panel, REST (⚠ its `SBC #imm` at 5170 is the
+    routine's own byte $7E:5171, stepped down every 64 frames of `$BC`) and the score as digit sprites (`$39F5`); the two bikes'
+    frame requests ($1400.. / $140E..) and lists; ⚠ the finish writes `RTS` at $7E:510D (485D) and the markers end there;
+  - `44CE` (logic, seq_race.c): the score counted down after the finish, 2000 / 200 / 20 / 2 every 4th frame.
+- THE MAIN THREAD `$7E:51D1` (CtRacePicThread): the loop `3023 JSR $51D1 / LDA $00 / BEQ` runs after each NMI (the infinitely fast
+  CPU: done before the beam moves) and again while a pass did work. A request (`$1402` / `$1410` = 1) is scaled by C3/0307 into
+  $7F:0200 (one byte a pixel, 64 a row, from `$23`; rows stepped by `$27`, columns by `$29` = 2 x `$27` in 8.8; 8 pixels -> 4
+  bit planes; a repeated row copied; the rows down to the last frame's end cleared), then -- once hook `5221` has sent the last
+  one (`$39` = 0: the pass waits at 5211 across NMIs, `sp->thread`) -- `$39` raised, the rows reformatted into the tiles at
+  $0C00 by the code at $B574 (C3/09E9's walk: 1024 `LDA $src / STA $dp`, the offsets C3:09D9 x 4 x 2 x $20), and the request
+  marked sent (2). Hook `5221` sends $0C00 to VRAM $4000 / $4400 when 4FAD / 5047 raise `$AA` / `$AC`.
+
+Not here: the attract's arm (`$0384` bit 6, `FF 60`): its curtain task `3D72` (C3/01E4 over the virtual beam, C3/02DD) -- the
+native stage does not open that arm yet (the attract runs the translated stage). Paths this drive never takes (their mutations
+survive): a sprite past x 255, a repeated source row (a zoom past 1), a column step's carry, $449C's LSR carry, a score on a
+step's exact value at the finish.
+
+Next: the field draws the race through it (the host gives the stage a picture and draws CtSeqStagePicFrame).
 
 ## 5. Next
 
