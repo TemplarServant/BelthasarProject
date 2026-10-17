@@ -5118,10 +5118,19 @@ static uint8_t raceSndPort(void* c, int n) {
   if (!g_fieldAudio) return 0;
   CtAudioPorts(g_fieldAudio, in, out); return out[n & 3];
 }
-// THE RACE's PICTURE (stage 2): the stage's PPU state -- the compositor's arrays and registers, the HDMA channels, the ports --
-// filled by the race's own code (seq_racepic.c: the setup, the hooks, the tasks, the main thread) and drawn after each NMI.
-// Reset when the race opens; only the race is given it (the other stages' pictures are not ported).
-static CtSeqStagePic g_racePic;
+// A $C3 STAGE's PICTURE (stage 2): the stage's PPU state -- the compositor's arrays and registers, the HDMA channels, the
+// ports -- filled by the stage's own code (seq_racepic.c: the race; seq_entry3pic.c: entry 3) and drawn after each NMI. Opened
+// with the stage: the registers reset, VRAM the field's (g_fieldVram: the console's VRAM does not change hands -- entry 3
+// draws with the tiles and maps loc 06B left). Only the stages whose picture is ported are given it.
+static CtSeqStagePic g_stagePic;
+static uint16_t g_fieldVram[0x8000];
+static void stagePicOpen(void) {
+  memset(&g_stagePic, 0, sizeof g_stagePic); CtSeqPicReset(&g_stagePic.p);
+  memcpy(g_stagePic.p.vram, g_fieldVram, sizeof g_stagePic.p.vram);
+  if (getenv("CT_STAGEPIC_TRACE")) { long n = 0; for (int i = 0; i < 0x8000; i++) n += g_fieldVram[i] != 0;
+    { const char* dp = getenv("CT_STAGEPIC_VRAMDUMP"); FILE* df = dp ? fopen(dp, "wb") : NULL; if (df) { fwrite(g_fieldVram, 2, 0x8000, df); fclose(df); } }
+    fprintf(stderr, "stagepic: open, the field VRAM has %ld nonzero words (1000: %04X 6140: %04X 6800: %04X)\n", n, g_fieldVram[0x1000], g_fieldVram[0x6140], g_fieldVram[0x6800]); }
+}
 static CtRaceIo raceIoFor(uint8_t* w) {
   CtRaceIo io; memset(&io, 0, sizeof io);
   long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
@@ -5176,7 +5185,6 @@ static int owSoundJsl(uint8_t* mem7E) {
 // entry 3 a tilemap still holding 1B1's fill (the cartridge's $6000: 555A 414B / 4B2F 4E41 = that assembly's
 // metatile 0, saves/attract_entry3_handoff_f6750.state, --peek frames 0..9). The sprite sheets ($0000-$1FFF, $4FC0)
 // and the streamer's rows are not modelled: the stage rewrites what it draws with.
-static uint16_t g_fieldVram[0x8000];
 static int g_fieldVramFillPending = 0;
 // ---- THE CAPTION PLANE (disasm/notes/field_caption_plane.md) -----------------------------------------------------------
 // The endings' staff roll writes BG3 through WRAM, not through the map: ops 0x2A/0x2B have C0/274D zero $7E:C800 (C0/75A0)
@@ -5688,6 +5696,16 @@ static void fieldEntryTilemapFill(Field* f, int scene) {
     printf("vram-fill: loc %03X tilemaps filled TM %02X TS %02X asm %02X%02X %02X%02X %02X%02X %02X%02X\n", scene,
            CtSceneMem7E(f->vm)[0x11520], CtSceneMem7E(f->vm)[0x11521],
            a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); }
+}
+// A SEEDED START (--loadwram / --loadstate) has the location's tiles in the VRAM image (fieldMapHeaderStage) but skips the
+// entry fill: the seed's WRAM already holds what C0/0A73-0AC0 writes there. The three tilemaps are built here from the
+// seed's map the way that fill builds them -- the VRAM image only -- so a stage that reads the field's VRAM (entry 3:
+// BG1's rows from $6140, BG2's maps $6800 / $6A00) finds what the location load left on the console.
+static void fieldSeedVramTilemaps(Field* f) {
+  if (!g_fieldVramFillPending || !f->sd || !f->vm) return;
+  const uint8_t* s7 = CtSceneMem7E(f->vm);
+  CtFieldSceneVramTilemaps(f->sd, g_fieldVram, s7 + 0xB000, s7 + 0xC000, s7[0x1D35], (s7[0x0BCA] & 1) && !s7[0x01BB]);
+  g_fieldVramFillPending = 0;
 }
 static long g_battleSndFrames = 0;   // NMIs the chain's JSLs crossed, summed by the caller's bracket (the boot's / the return's price)
 static void fieldBattleSndPost(CtAudio* a, uint8_t* bs, const char* site, int entry) {
@@ -11006,6 +11024,7 @@ int main(int argc, char** argv) {
     } else fprintf(stderr, "[loadstate] FAILED (wrong scene? rebuild?) for %s\n", loadStatePath);
     if (r) fieldMapFromWram(&f, CtSceneMem7E(f.vm), "loadstate");
   }
+  if (camSeeded) fieldSeedVramTilemaps(&f);             // the seed's tilemaps into the VRAM image (no fill ran)
   if (!camSeeded && f.vm) {                              // fresh scene entry (no WRAM/state seed).
     // THE ROM'S ORDER (objpal_allocator.md sec 8): the scene LOAD (C0/56B0) places every object via
     // its script-init runner C0/5709, and only THEN does the location ENTRY (C0/286C) set the camera
@@ -16961,10 +16980,10 @@ int main(int argc, char** argv) {
       // ends in the teardown's reboot into the location the script staged (Johnny's `CHANGELOC 10F`). Its opening is priced
       // like the other entries': the overlay's C3/0557 cycles, the init's DMAs and the setup's own 9521394 (`--callrom 7E3B48`,
       // CT_CALLROM_NONMI=1, $0384 = 20 to leave the song's handshake to the host's SPC; sequence_table.md sec. 12). Its
-      // picture (stage 2) is drawn natively from g_racePic: every frame the cartridge's (race-picture-native-vs-oracle).
+      // picture (stage 2) is drawn natively from g_stagePic: every frame the cartridge's (race-picture-native-vs-oracle).
       if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9) && !(seqId & 0x40)) {
         CtRaceIo rio = raceIoFor(w);
-        memset(&g_racePic, 0, sizeof g_racePic); CtSeqPicReset(&g_racePic.p); rio.pic = &g_racePic;
+        stagePicOpen(); rio.pic = &g_stagePic;
         g_raceOpening = 1; g_raceOpenPostMaster = 0;
         int opened = CtRaceStageOpen(w, (uint8_t)seqId, &rio) == 0;
         g_raceOpening = 0;
@@ -17011,6 +17030,7 @@ int main(int argc, char** argv) {
       // the others: the overlay's C3/0557 cycles, the init's DMAs, the setup's 120000 (sequence_table.md sec. 14).
       if (seqId != 2 && !seqOpen && CtEntry3StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
+        stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry3pic.c)
         if (CtEntry3StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 2; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -20159,10 +20179,10 @@ int main(int argc, char** argv) {
                                             0x0080, 0x0040, 0x0020, 0x0010 };
           uint16_t joy = 0;
           for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
-          CtRaceIo rio = raceIoFor(CtWramSys(fieldWram())); rio.pic = &g_racePic;
+          CtRaceIo rio = raceIoFor(CtWramSys(fieldWram())); rio.pic = &g_stagePic;
           int st = CtRaceStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) raceEnded = st;
-          else CtSeqStagePicFrame(&g_racePic, CtWramSys(fieldWram()), fb);
+          else CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
         }
       } else if (seqOpen > 0 && endOn) {
         // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad. Its picture is stage 2 -- black.
@@ -20174,12 +20194,17 @@ int main(int argc, char** argv) {
           uint16_t joy = 0;
           for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
           CtRaceIo rio = raceIoFor(CtWramSys(fieldWram()));
+          if (endOn == 2) rio.pic = &g_stagePic;                    // entry 3's picture is ported (the others: black)
           int st = endOn == 2 ? CtEntry3StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 3 ? CtEntry4StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 4 ? CtEntry7StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 5 ? CtEntry6StageFrame(CtWramSys(fieldWram()), joy, &rio)
                               : CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) endEnded = st;
+          else if (endOn == 2) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
+          if (getenv("CT_STAGEPIC_TRACE")) { long sum = 0; for (int i = 0; i < CAMW * CAMH * 3; i++) sum += fb[i];
+            fprintf(stderr, "stagepic: f%d end=%d st=%d INIDISP=%02X TM=%02X hdmaen=%02X sum=%ld cg1=%04X\n", frameNo, endOn, st,
+                    g_stagePic.p.r[0], g_stagePic.p.r[0x2C], g_stagePic.hdmaen, sum, g_stagePic.p.cgram[1]); }
         }
       } else if (seqOpen > 0) {
         // Any other ported table entry, on the same engine and in the same order: tick first (the

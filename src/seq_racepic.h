@@ -20,4 +20,11 @@ int CtRacePicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned task, c
 void CtRacePicGenB574(uint8_t* w);
 void CtRacePicThread(CtSeqStagePic* sp, uint8_t* w);
 
+// Shared by the stages' pictures: the multiplier's product (M7A x M7B's high byte, $2134-$2136), $7E:36CC's HDMA channels
+// from a 5-byte record table, and the common vblank hooks $380B (OAM), $3843 (the OAM shadow cleared), $388B (CGRAM) --
+// returns 0 for any other hook.
+long CtSeqPicMpy(const CtSeqStagePic* sp);
+void CtSeqPicHdma36CC(CtSeqStagePic* sp, const uint8_t* w, unsigned table);
+int CtSeqPicCommonHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook);
+
 #endif

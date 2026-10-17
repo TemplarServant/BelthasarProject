@@ -2508,7 +2508,8 @@ in the same frame: the field clears both IPs), world 1F6, loc 1DD f1029. Native 
 the reboot into 1F6, whose world script needed two more natives (C2/7B5A: C6:FDF0's packet 3 into $7F:9000; C2/7B9F:
 C6:FEA0's packet 18 into $7E:C600, both through C3/0557), and 1DD at f1010 (the cartridge f1011).
 
-**Open.** The picture (stage 2); a real capture at the Blackbird would grade the context too (the song playing, the party). Since 2026-10-15 the
+**The picture is native too (2026-10-17, seq_picture.md sec. 5)**: exact NMI for NMI; in play 6 frames early and the colour
+cycles below one step behind. **Open.** A real capture at the Blackbird would grade the context too (the song playing, the party). Since 2026-10-15 the
 grade also takes palette records 0 and 1 ($0520-$0537, the moon's light chain's): exact. Records 2-11 -- the field's own
 colour cycles, which FD/E39C keeps running -- are one step behind the cartridge's in the port from the first frame on (one
 service fewer before the first NMI; not yet located): the picture's, open.

@@ -399,6 +399,15 @@ void CtSeqStagePicVramRead(CtSeqStagePic* sp, uint8_t* w, uint32_t dst, unsigned
     if (!(sp->vmain & 0x80)) { bufw = sp->p.vram[sp->vaddr & 0x7FFF]; sp->vaddr = (uint16_t)(sp->vaddr + inc); }
   }
 }
+void CtSeqStagePicVramReadWords(CtSeqStagePic* sp, uint8_t* w, uint32_t dst, unsigned n) {
+  uint16_t bufw = sp->p.vram[sp->vaddr & 0x7FFF];
+  int inc = (sp->vmain & 3) == 0 ? 1 : (sp->vmain & 3) == 1 ? 32 : 128;
+  for (unsigned i = 0; i < n; i++) {
+    int hi = (int)(i & 1);
+    w[(dst + i) & 0x1FFFF] = (uint8_t)(hi ? bufw >> 8 : bufw);
+    if (hi == ((sp->vmain & 0x80) != 0)) { bufw = sp->p.vram[sp->vaddr & 0x7FFF]; sp->vaddr = (uint16_t)(sp->vaddr + inc); }
+  }
+}
 static uint8_t stageRead(void* ctx, uint32_t adr) {
   const uint8_t* w = (const uint8_t*)ctx;
   uint8_t bank = (uint8_t)(adr >> 16);

@@ -7315,6 +7315,10 @@ static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) 
 // against the oracle's next one: as the oracle leaves vblank, VRAM / CGRAM / OAM / the display registers / the HDMA channels are
 // compared, then both frames are drawn and compared pixel for pixel. The native stage takes the oracle's pad from its $02.
 #include "seq_racepic.h"
+#include "seq_entry3.h"
+// The stage by its operand: entry 3 (seq_entry3.c / seq_entry3pic.c) or the race (seq_race.c / seq_racepic.c).
+static int rpcOpen(uint8_t* w, uint8_t op, const CtRaceIo* io) { return CtEntry3StageHas(op) ? CtEntry3StageOpen(w, op, io) : CtRaceStageOpen(w, op, io); }
+static int rpcFrame(uint8_t* w, uint8_t op, uint16_t joy, const CtRaceIo* io) { return CtEntry3StageHas(op) ? CtEntry3StageFrame(w, joy, io) : CtRaceStageFrame(w, joy, io); }
 static void racepicPost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }
 // RACEPICCMP_PCLOG=<hex 24-bit PC>: the oracle's A / X / Y / carry each time it is about to run that instruction.
 static void rpcOp(Snes* s, int k) {
@@ -7341,9 +7345,20 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   // RACEPICCMP_SEEDVRAM=1: the native VRAM starts as the cartridge's at the hand-off (the field's leftovers the race never
   // writes) -- to tell the race's own uploads from what the port's field does not keep.
   if (getenv("RACEPICCMP_SEEDVRAM")) memcpy(sp.p.vram, s->ppu->vram, sizeof sp.p.vram);
-  if (CtRaceStageOpen(w, (uint8_t)operand, &io) < 0) { printf("racepiccmp: open failed\n"); return 1; }
-  int waited = 0;
-  while (!(s->ram[0x08] == 1 && s->ram[0x09] == 0 && s->ram[0x3024] == 0xD1) && waited < 200) { RPC_PAD(); CtOracleRunFrame(s); waited++; }
+  // RACEPICCMP_SEEDZERO=<lo>-<hi>[,...] (hex words): those ranges of the seeded VRAM cleared -- which of the field's regions a
+  // stage displays.
+  { const char* z = getenv("RACEPICCMP_SEEDZERO"); while (z && *z) { char* e; long lo = strtol(z, &e, 16), hi = lo;
+      if (*e == '-') hi = strtol(e + 1, &e, 16); for (long i = lo; i <= hi && i < 0x8000; i++) sp.p.vram[i] = 0;
+      z = (*e == ',') ? e + 1 : e; if (e == z && *z) break; } }
+  if (rpcOpen(w, (uint8_t)operand, &io) < 0) { printf("racepiccmp: open failed\n"); return 1; }
+  // The setup's NMI: once the overlay has the operand in $0384 and the common init has cleared $0008, the first INC $08.
+  int waited = 0, armed = 0;
+  for (;;) {
+    if (s->ram[0x0384] == (uint8_t)operand && s->ram[0x08] == 0 && s->ram[0x09] == 0) armed = 1;
+    else if (armed && s->ram[0x08] == 1 && s->ram[0x09] == 0) break;
+    if (waited >= 300) break;
+    RPC_PAD(); CtOracleRunFrame(s); waited++;
+  }
   printf("racepiccmp: the stage's setup made its NMI %d frame(s) after the hand-off\n", waited);
   CtSeqStagePicFrame(&sp, w, NULL);                                   // (the frame the setup's NMI drew: its HDMA's last writes)
   int firstState = -1, firstPic = -1, firstWram = -1; long picBad = 0;
@@ -7351,7 +7366,7 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     RPC_PAD();
     while (s->inVblank) rpcOp(s, k);                         // the oracle's NMI k and its hooks done
     uint16_t joy = s->portAutoRead[0];                                  // $4218 / $4219 as the NMI read them (C3/0A99)
-    int st = CtRaceStageFrame(w, joy, &io);
+    int st = rpcFrame(w, (uint8_t)operand, joy, &io);
     if (st) { printf("racepiccmp: native stage ended (%d) at frame %d\n", st, k); break; }
     seqPicFromPpu(&q, s->ppu);
     int vb = 0, cb = 0, ob = 0, rb = 0, rl = 0; char regs[256] = "";

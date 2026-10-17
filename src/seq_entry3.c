@@ -11,6 +11,8 @@
 // $6A74 -> $6A97, each waiting for record 0's fade to end) and the task that writes page B's registers ($69AF). The
 // picture (the mode-2 offsets $73C6 / $6A23, the HDMA, the hooks, the setup's DMAs) is stage 2.
 #include "seq_entry3.h"
+#include "seq_entry3pic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_racepic.h"
 #include "objslot.h"
 #include <string.h>
 
@@ -25,7 +27,8 @@ int CtEntry3StageHas(uint8_t operand) { return (operand & 0x1F) == 3 && !(operan
 long CtEntry3StageSetupCycles(void) { return 120000L; }
 
 // $7E:37FA -- the palette records' frame (`LDX $4202 / STX $F0 / JSL FD/FFF7 / LDX $F0 / STX $4202`): FD/E39C over the
-// twelve records at $0520, whose record 0 the task chain below waits on.
+// twelve records at $0520, whose record 0 the task chain below waits on. ⚠ $4202 / $4203 are write-only: the `LDX` reads the
+// open bus, the instruction's last byte ($42), so `$F0` = $4242 -- the cartridge's (the oracle measured, ff23_handoff_f25).
 static void entry3Objslot(uint8_t* w, const CtRaceIo* io) {
   CtObjSlotIo o; memset(&o, 0, sizeof o);
   o.s = w; o.colourModes = 1; o.rom = io ? io->rom : NULL; o.romLen = io ? io->romLen : 0;
@@ -47,7 +50,7 @@ static void entry3Fade6ACD(uint8_t* w, uint8_t a) {
 // $7E:6A51 / 6A74 / 6A97 -- three steps of the moon's light, each waiting for record 0 to finish ($0520 = 0) before it arms
 // the next fade and hands its slot to the next step ($39B1); the last also writes TM ($212C = 13, the picture's) and
 // leaves the list ($39A7).
-static unsigned entry3Chain(uint8_t* w, unsigned t) {
+static unsigned entry3Chain(uint8_t* w, unsigned t, const CtRaceIo* io) {
   switch (t) {
     case 0x6A51:
       if (w[0x0520]) return t;                                        // 6A53 LDA $0520 / BEQ / RTS
@@ -61,7 +64,8 @@ static unsigned entry3Chain(uint8_t* w, unsigned t) {
       return 0x6A97;
     case 0x6A97:
       if (w[0x0520]) return t;
-      entry3Fade6ACD(w, 0x40);                                        // (6A9F-6AA2 $212C = 0013: the picture's)
+      if (io && io->pic) { CtSeqPicWrite(&io->pic->p, 0x2C, 0x13, 0); CtSeqPicWrite(&io->pic->p, 0x2D, 0x00, 0); }   // 6A9F STX $212C
+      entry3Fade6ACD(w, 0x40);
       w[0x0523] = 3; w[0x052F] = 3; w[0x0525] = 1; w[0x0531] = 1;     // 6AAA-6AB7
       w[0x0527] = 0xFF; w[0x0533] = 0xFF; w[0x0528] = 0; w[0x0534] = 0;   // 6ABA-6AC7
       return 0;                                                       // 6ACA JMP $39A7
@@ -72,7 +76,7 @@ static unsigned entry3Chain(uint8_t* w, unsigned t) {
 // $7E:69AF -- the water (M = 16): page B's r0 kept to 0-7 and turned into the 32 + 32 offset words at $0043 (+r0 each, then
 // -r0), $003D += r0, $003F = r2 >> 2, r2 -1 a frame; then (8-bit) `$C3` counts down and, at 0 with `$C4` left, steps the
 // mosaic ($2106, the picture's) and reloads $C3 = 14.
-static void entry3Water(uint8_t* w) {
+static void entry3Water(uint8_t* w, const CtRaceIo* io) {
   unsigned r0 = rd(w, 0x0B00) & 0x0007;                               // 69AF AND #0007 / STA $0B00
   wr(w, 0x0B00, r0);
   unsigned f0 = ((((r0 ^ 0xFFFF) + 1) & 0xFFFF) << 3) & 0xFFFF;       // 69B8 EOR / INC / ASL x3 / STA $F0
@@ -89,7 +93,8 @@ static void entry3Water(uint8_t* w) {
   wr(w, 0x003F, rd(w, 0x0B04) >> 2);                                  // 69FE-6A03
   wr(w, 0x0B04, rd(w, 0x0B04) - 1);                                   // 6A06 DEC $0B04
   if (--w[0xC3] == 0 && w[0xC4]) {                                    // 6A0B DEC $C3 / BNE; LDA $C4 / BEQ
-    w[0xC4]--;                                                        // 6A13-6A14 (the mosaic, 6A16-6A1B: the picture's)
+    w[0xC4]--;                                                        // 6A13-6A14
+    if (io && io->pic) CtSeqPicWrite(&io->pic->p, 0x06, (uint8_t)((w[0xC4] << 4) | 1), 0);   // 6A16 ASL x3 / SEC / ROL / STA $2106
     w[0xC3] = 0x14;                                                   // 6A1E-6A20
   }
 }
@@ -99,22 +104,28 @@ static unsigned entry3Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x3749: CtSeqScript(w, 0x0A00, io, NULL); return t;
     case 0x3754: CtSeqScript(w, 0x0B00, io, NULL); return t;
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);
-    case 0x37FA: entry3Objslot(w, io); return t;
-    case 0x69AF: entry3Water(w); return t;
-    case 0x6A51: case 0x6A74: case 0x6A97: return entry3Chain(w, t);
-    default: return t;                                                // 73C6, 6A23: the picture's (stage 2)
+    case 0x37FA: wr(w, 0x00F0, 0x4242); entry3Objslot(w, io); return t;   // (the setup's 682B calls FD/FFF7 itself)
+    case 0x69AF: entry3Water(w, io); return t;
+    case 0x6A51: case 0x6A74: case 0x6A97: return entry3Chain(w, t, io);
+    default:                                                          // 73C6, 6A23: the picture's (stage 2)
+      if (io && io->pic) CtEntry3PicTask(io->pic, w, t, io);
+      return t;
   }
 }
+
+static unsigned entry3Hook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) { (void)slot; return CtEntry3PicHook(io->pic, w, h); }
 
 int CtEntry3StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (!CtEntry3StageHas(operand)) return -1;
   if (CtSeqStageBegin(w, operand, io) < 0) return -1;
   // $7E:671F -- the setup (the story's arm, bit 6 clear). Its DMAs (the field's BG1 rows into $7E:1680, the tilemaps) and the
-  // PPU are the picture's; what the logic reads, in order:
+  // PPU are the picture's (seq_entry3pic.c, when the host draws); what the logic reads, in order:
+  if (io && io->pic) CtEntry3PicSetupA(io->pic, w);                   // 671F-6772
   wr(w, 0x0A20, 0x6902); wr(w, 0x0B20, 0x693A);                       // 6777-678E
   if (CtSeqScript(w, 0x0A00, io, NULL) < 0) return -1;                // 6792 JSR $3749 -- page A runs once in the setup
-  w[0x7841] = 0;                                                      // 6795 STZ $7841 (a byte of the overlay)
+  wr(w, 0x7841, 0);                                                   // 6795 STZ $7841 -- 16-bit (6775 REP #20): $7842 too
   w[0x3B] = 0;                                                        // 679F INC $3B, then $783C's DMA and STZ $3B
+  if (io && io->pic) CtEntry3PicSetupB(io->pic, w, operand);          // 67A1-6805: the DMA, the HDMA, the registers
   w[0x7442] = 0x1C;                                                   // 67A4 STA $7E7442
   w[0x038C] = 0x0E;                                                   // 67B5 LDX #000E / 67DA STA $038C (bit 6 clear)
   for (unsigned y = 0; y < 0x90; y += 0x0C) w[0x0520 + y] = 0;        // 6808 JSL $FD:FFEE -> FD/E275
@@ -125,13 +136,14 @@ int CtEntry3StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   w[0x0354] = 0x7E; wr(w, 0x0352, 0xF1C4); w[0x0351] = 0;             // 682F-683A
   w[0x4259] = 0x01;                                                   // 683D STA $7E4259
   // $7E:300D .. 301E: $388B, $31B0, JSL C3/08D0 (one NMI, run here, without C3/09A4), NMI on, STZ $00, STZ $0392
-  CtSeqStageNmi(w, 0, io, entry3Task);
+  if (io && io->pic) CtRacePicCgram(io->pic, w);                      // 300D JSR $388B
+  CtSeqStageNmiHooks(w, 0, io, (io && io->pic) ? entry3Hook : NULL, entry3Task);
   wr(w, 0x0000, 0); wr(w, 0x0392, 0);
   return 0;
 }
 
 int CtEntry3StageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
-  int st = CtSeqStageNmi(w, joy, io, entry3Task);
+  int st = CtSeqStageNmiHooks(w, joy, io, (io && io->pic) ? entry3Hook : NULL, entry3Task);
   if (st != 2 && CtSeqStageSong(w, io) > 0) w[0x0388] = 0;            // (no song change in this entry)
   return st;
 }

@@ -27158,6 +27158,142 @@
       "notes": "The sibling of race-picture-native-vs-oracle without RACEPICCMP_SEEDVRAM: the VRAM words the race never writes (the field's leftovers the port's field does not keep) differ, and the picture is equal on every frame of the race -- no region the race displays shows them."
     },
     {
+      "name": "entry3-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/blackbird_re/ff23_handoff_f25.state",
+        "0:3000",
+        "0",
+        "23",
+        "600"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/blackbird_re/ff23_handoff_f25.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 20 frame(s) after the hand-off",
+        "racepiccmp: native stage ended (1) at frame 582",
+        "racepiccmp: 600 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "entry 3 from the story (FF 23, the night panorama after the Blackbird), its picture native end to end: 582 NMIs from the setup's to the END, VRAM / CGRAM / OAM / the registers / HDMA / the stage's WRAM and every pixel the cartridge's",
+      "notes": "SEQUENCE ENTRY 3's PICTURE (src/seq_entry3pic.c over the native compositor; disasm/notes/seq_picture.md sec. 5). The stage draws with the FIELD's VRAM (the location's tiles $2000-$4FFF, BG1's map rows read back from $6140, BG2's maps $6800 / $6A00 -- measured by clearing each region of the seed: those three alone change the picture), so RACEPICCMP_SEEDVRAM is the console's VRAM at the hand-off, as the field host hands its own image (g_fieldVram). Ported: the setup's two reads (a mode-1 DMA from $2134 / $2135 fills $7E:1400 with 00 01; $2139 / $213A in turn with VMAIN $80 read the field's BG1 rows into $7E:1680, the first word twice), $783C's upload as BG1's map at $0000, the HDMA records $7E:685E, the registers; hook $66DD (BG3's offset row from $0043, the BG3 H / BG1 V scrolls); tasks $73C6 (the PPU's multiplier) and $6A23 (BG1's per-line scroll table at $F000, swapped every frame); the mosaic and TM writes of the logic's tasks. Two stage-1 bytes fixed on the way: `STZ $7841` is 16-bit ($7842 too), and $37FA's `LDX $4202` reads the open bus ($F0 = $4242). Not exercised here: the mosaic $69AF steps ($C4 is 0 on the story's arm; its write is ported, its mutation survives).",
+      "mutations": [
+        {
+          "file": "src/seq_entry3pic.c",
+          "find": "w[0x1400 + i] = (uint8_t)(m >> (8 * (i & 1)));",
+          "replace": "w[0x1400 + i] = (uint8_t)m;   /* MUT */",
+          "why": "the setup's DMA is mode 1: $2134 and $2135 in turn (00 01)"
+        },
+        {
+          "file": "src/seq_pic.c",
+          "find": "    if (hi == ((sp->vmain & 0x80) != 0)) {",
+          "replace": "    if (!hi) {   /* MUT */",
+          "why": "the read buffer refills on the read VMAIN bit 7 names"
+        },
+        {
+          "file": "src/seq_entry3pic.c",
+          "find": "  CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x0043, 0x80);",
+          "replace": "  /* MUT */",
+          "why": "hook $66DD sends BG3's offset row to VRAM $7000 every frame"
+        },
+        {
+          "file": "src/seq_entry3pic.c",
+          "find": "ww(w, 0xF000 + x, odd ? r0 : 0); ww(w, 0xF002 + x, odd ? 0 : r0);",
+          "replace": "ww(w, 0xF000 + x, odd ? 0 : r0); ww(w, 0xF002 + x, odd ? r0 : 0);   /* MUT */",
+          "why": "$6A23's table swaps its order on the frame's parity"
+        },
+        {
+          "file": "src/seq_entry3pic.c",
+          "find": "  CtSeqPicWrite(&sp->p, 0x0E, w[0x0B02], 0); CtSeqPicWrite(&sp->p, 0x0E, w[0x0B03], 0);",
+          "replace": "  /* MUT */",
+          "why": "hook $66DD writes BG1's V scroll from page B's r1"
+        },
+        {
+          "file": "src/seq_entry3.c",
+          "find": "    case 0x37FA: wr(w, 0x00F0, 0x4242); entry3Objslot(w, io); return t;",
+          "replace": "    case 0x37FA: entry3Objslot(w, io); return t;   /* MUT */",
+          "why": "$37FA's LDX $4202 reads the open bus into $F0"
+        },
+        {
+          "file": "src/seq_entry3.c",
+          "find": "  wr(w, 0x7841, 0);",
+          "replace": "  w[0x7841] = 0;   /* MUT */",
+          "why": "the setup's STZ $7841 is 16-bit"
+        }
+      ]
+    },
+    {
+      "name": "entry3-story-picture-in-the-port-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/blackbird_re/ff23_story_f18.state",
+        "206",
+        "200",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "107",
+        "--loadwram",
+        "saves/blackbird_re/ff23_story_f18.lakewram",
+        "--walkscript",
+        "n:1200"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:206",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/blackbird_re/ff23_story_f18.state"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/blackbird_re/ff23_story_f18.state",
+        "saves/blackbird_re/ff23_story_f18.lakewram",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f200 vs oracle f206 box (0,0)-(256,224) -> 56614 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: "
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          else if (endOn == 2) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
+          "replace": "          /* MUT: entry 3 drawn black */",
+          "why": "the field draws entry 3's native picture after each of its NMIs"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  if (camSeeded) fieldSeedVramTilemaps(&f);",
+          "replace": "  /* MUT */",
+          "why": "a seeded start builds the location's tilemaps into the VRAM image, which entry 3 reads"
+        }
+      ],
+      "note_pass": "the story's panorama as the port plays it: the native picture drawn from the field's VRAM, 56614 / 57344 pixels the cartridge's (a ratchet: the opening's 6 frames and the field's colour cycles one step behind are the field's, not the picture's)",
+      "notes": "A RATCHET. The port plays the story drive (scene 107 from ff23_story_f18) and presents frame 200; the cartridge's frame that matches is f206, not P+2: the stage runs 6 frames early in the port ($0008 at the port's f200 = the cartridge's after f205) -- the FF 23 call 3 frames early on the field's side and the opening 17 frames against ~19 (OPEN, not derived yet). The 730 pixels left are the water's and the city's colours: palette records 2-11, the field's own colour cycles FD/E39C keeps running, one step behind the cartridge's in the port from the first frame (sequence_table.md sec. 14, OPEN). The picture's own code is exact NMI for NMI (entry3-picture-native-vs-oracle)."
+    },
+    {
       "name": "seq-race-xlat-lockstep",
       "argv": [
         "build/ct.exe",
@@ -39569,7 +39705,7 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          else CtSeqStagePicFrame(&g_racePic, CtWramSys(fieldWram()), fb);",
+          "find": "          else CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
           "replace": "          /* MUT: the race drawn black */",
           "why": "the field draws the race's native picture after each of its NMIs"
         },
@@ -39581,7 +39717,7 @@
         }
       ],
       "note_pass": "the story race as the port plays it, mid-race (the road, both bikes, the HUD): the whole frame the cartridge's, pixel for pixel (port P = cartridge P+2, the field's alignment)",
-      "notes": "The field (src/field.c) gives the race its picture (g_racePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 400; the cartridge (the logical oracle, the same pad) its --peek frame 402: the field's P+2 alignment (ct-frame-alignment). The opening is the cartridge's 73 NMI-off frames since the song $2C's post inside the setup is charged (the SPC time of its JSL C7/0004, 10177261 cycles in this run); before that the port opened 29 frames early."
+      "notes": "The field (src/field.c) gives the race its picture (g_stagePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 400; the cartridge (the logical oracle, the same pad) its --peek frame 402: the field's P+2 alignment (ct-frame-alignment). The opening is the cartridge's 73 NMI-off frames since the song $2C's post inside the setup is charged (the SPC time of its JSL C7/0004, 10177261 cycles in this run); before that the port opened 29 frames early."
     },
     {
       "name": "race-story-picture-finish-in-the-port-vs-oracle",
@@ -39629,13 +39765,13 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          else CtSeqStagePicFrame(&g_racePic, CtWramSys(fieldWram()), fb);",
+          "find": "          else CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
           "replace": "          /* MUT: the race drawn black */",
           "why": "the field draws the race's native picture after each of its NMIs"
         }
       ],
       "note_pass": "the story race as the port plays it, after the finish (the markers gone, the score counted down): the whole frame the cartridge's, pixel for pixel (port P = cartridge P+2, the field's alignment)",
-      "notes": "The field (src/field.c) gives the race its picture (g_racePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 2760; the cartridge (the logical oracle, the same pad) its --peek frame 2762: the field's P+2 alignment (ct-frame-alignment). The opening is the cartridge's 73 NMI-off frames since the song $2C's post inside the setup is charged (the SPC time of its JSL C7/0004, 10177261 cycles in this run); before that the port opened 29 frames early."
+      "notes": "The field (src/field.c) gives the race its picture (g_stagePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 2760; the cartridge (the logical oracle, the same pad) its --peek frame 2762: the field's P+2 alignment (ct-frame-alignment). The opening is the cartridge's 73 NMI-off frames since the song $2C's post inside the setup is charged (the SPC time of its JSL C7/0004, 10177261 cycles in this run); before that the port opened 29 frames early."
     },
     {
       "name": "ending-stage-logic-vs-oracle",

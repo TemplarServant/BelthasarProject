@@ -188,6 +188,22 @@ static void hook4643(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io, int from
   }
 }
 static void hook449C(uint8_t* w);
+// ---- shared by the stages' pictures (the overlay's common code: every entry runs the same $7E:3000-39FF) ----
+long CtSeqPicMpy(const CtSeqStagePic* sp) { return (long)sp->p.m7[0] * (int8_t)((uint16_t)sp->p.m7[1] >> 8); }
+void CtSeqPicHdma36CC(CtSeqStagePic* sp, const uint8_t* w, unsigned t) {
+  for (unsigned c = 0; c < 8 && w[t & 0x1FFFF] != 0xFF; c++, t += 5) {   // 5-byte records, $FF ends; the bank to $43x4 and $43x7
+    sp->ch[c].dmap = w[t & 0x1FFFF]; sp->ch[c].bAdr = w[(t + 1) & 0x1FFFF];
+    sp->ch[c].aAdr = (uint16_t)rw(w, t + 2); sp->ch[c].aBank = w[(t + 4) & 0x1FFFF]; sp->ch[c].indBank = w[(t + 4) & 0x1FFFF];
+  }
+}
+int CtSeqPicCommonHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook) {
+  switch (hook) {
+    case 0x380B: hook380B(sp, w); return 1;
+    case 0x3843: hook3843(sp, w); return 1;
+    case 0x388B: CtRacePicCgram(sp, w); return 1;
+    default: return 0;
+  }
+}
 unsigned CtRacePicHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook, const CtRaceIo* io) {
   switch (hook) {
     case 0x4643: hook4643(sp, w, io, 1); return 0;

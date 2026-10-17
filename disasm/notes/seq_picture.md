@@ -96,9 +96,43 @@ priced whole: the song $2C's post inside the setup (`JSR $375F`, its JSL C7/0004
 host's driver takes, 10177261 cycles here, so the stretch is 73 frames -- the cartridge's (f66 -> the first NMI at f139);
 without it the port opened 29 frames early.
 
-## 5. Next
+## 5. Entry 3 from the story (src/seq_entry3pic.c) -- DONE (2026-10-17)
 
+`FF 23`, the night panorama after the Blackbird (sequence_table.md sec. 7.2 / 14). `--racepiccmp` runs any stage whose picture
+is ported, by its operand (`... ff23_handoff_f25.state 0:3000 0 23 600`); the setup's NMI is found the same way for every stage
+(the operand in `$0384`, `$0008` cleared by the common init, then its first `INC $08`).
 
-Each stage's code that FILLS the compositor -- its setup's uploads, its NMI's register writes and hooks (OAM, CGRAM, VRAM DMAs),
-its picture tasks -- ported natively over the stage's WRAM, graded on VRAM / CGRAM / OAM / the registers frame by frame and then
-on the picture. The race first (sequence_table.md sec. 12).
+**The stage draws with the FIELD's VRAM.** Clearing each region of the seed in turn (`RACEPICCMP_SEEDZERO`), three change the
+picture and nothing else does: the location's tiles $2000-$4FFF, BG1's map $6000-$67FF (the setup reads its rows back from
+$6140) and BG2's maps $6800-$6FFF (HDMA channel 3 switches BG2SC from $60 to $6A at line 70). So the stage's CtSeqStagePic
+starts as the console's VRAM: the oracle's in the harness, the field's image (g_fieldVram) in the port.
+
+What is ported: the setup -- M7A = $0100 / M7B = 1 and a MODE-1 `B -> A` DMA from $2134 / $2135 (the product's low and middle
+bytes in turn: 00 01) into $7E:1400; $2116 = $6140, a dummy `LDA $213A` (VMAIN 0), VMAIN $80 and $580 bytes from $2139 / $213A
+in turn into $7E:1680 (CtSeqStagePicVramReadWords: the buffer refills where VMAIN bit 7 says, the first word twice); BG12NBA
+$11; after the script $783C sends $7E:1400 as BG1's map at VRAM $0000, $36CC installs the HDMA from $7E:685E, the layers'
+registers (mode 2, W12SEL $33 -- $FF on the attract's arm --, TM / TS 13 / 12, the window) -- the hooks $388B / $380B (shared)
+and $66DD (BG3's offset-per-tile row from $0043 to VRAM $7000, BG3 H / BG1 V scrolls), the tasks $73C6 (the sine and cosine
+through the PPU's multiplier into $1F..$2D) and $6A23 (BG1's per-line H scroll at $7E:F000, r0 and 0 swapped every frame), the
+logic tasks' TM (6A9F) and mosaic (6A16) writes. Two stage-1 bytes were wrong and are fixed: `STZ $7841` is 16-bit (6775
+REP #20: $7842 too), and $37FA's `LDX $4202` reads a write-only register -- the open bus, the instruction's last byte: `$F0` =
+$4242.
+
+**Equal on every frame**: 582 NMIs from the setup's to the END, state, the stage's WRAM and every pixel
+(`entry3-picture-native-vs-oracle`).
+
+**In play** (field.c): the stage is given g_stagePic (opened with g_fieldVram) and drawn after each NMI. A seeded start
+(`--loadwram`) skips the location's entry fill, so its VRAM image had the tiles and no tilemaps: `fieldSeedVramTilemaps` builds
+them from the seed's map as C0/0A73 would (the VRAM image only). The story drive then shows the panorama, 56614 / 57344 pixels
+the cartridge's (`entry3-story-picture-in-the-port-vs-oracle`, a ratchet), with two residuals of the FIELD, not the picture:
+- the stage runs 6 frames early (the port's f200 = the cartridge's f206; `$0008` at the port's f200 = the cartridge's after
+  f205): the `FF 23` call 3 frames early and the opening 17 frames against ~19 -- OPEN;
+- the water's and the city's colours: palette records 2-11 (the field's colour cycles FD/E39C keeps running) one step behind
+  the cartridge's from the first frame (sequence_table.md sec. 14) -- OPEN.
+Not exercised: the mosaic ($C4 is 0 on the story's arm).
+
+## 6. Next
+
+The other stages' pictures, the same way: entry 4 (`FF 24`, Lavos falls), entry 6 (`FF 26`, the Epoch into the shell), entry 7
+(`FF 07`, the Day of Lavos), the ending (`FF 2A`..`2F`) -- each its setup's uploads, its hooks and its picture tasks, graded NMI
+for NMI by `--racepiccmp` and then in play.

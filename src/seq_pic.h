@@ -65,6 +65,10 @@ typedef struct CtSeqStagePic {
 void CtSeqStagePicDma(CtSeqStagePic* sp, const uint8_t* w, uint8_t dmap, uint8_t bbad, uint32_t src, unsigned n);
 // ...and `$2139 / $213A` into WRAM: VRAM read back through the port (its read buffer's one-word lag, VMAIN's step).
 void CtSeqStagePicVramRead(CtSeqStagePic* sp, uint8_t* w, uint32_t dst, unsigned n);
+// The same through $2139 / $213A in turn (a DMA in mode 1 from $2139: low, high, low, ...): the buffer -- loaded from the word at
+// the address when $2116 was written -- refills and the address steps on the read VMAIN bit 7 names ($213A when set, $2139 when
+// clear), so with VMAIN $80 the first word comes twice.
+void CtSeqStagePicVramReadWords(CtSeqStagePic* sp, uint8_t* w, uint32_t dst, unsigned n);
 // The stage's frame drawn from `w`'s HDMA tables.
 void CtSeqStagePicFrame(CtSeqStagePic* sp, const uint8_t* w, uint8_t* rgb);
 
