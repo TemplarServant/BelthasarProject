@@ -39676,6 +39676,71 @@
       "notes": "THE EPOCH'S LANDING (disasm/notes/ow_vehicle.md). ch24 with A every 32 frames: at the free flight the A lands it at once (1F6 allows it everywhere, C6/E797), the party steps out ($027E 5 -> 0, the lead's init C2/34F8 again in the host), the next A boards and lifts off, and so on. Timeline from the landing's first frame; pictures at P+2. PINNED RESIDUAL: port f3510 / cartridge f3154 differs on the sea only -- 1F6's sea palette row (row 2, a step every 10 frames) steps one frame later in the port there: it runs on the world's own clock since its entry from loc 1DD, which takes the port 72 frames to free roam against the cartridge's 71 (the location-load clock, ROADMAP F1), while the vehicle's events run on the pad's. Re-pin only from a fix of that clock."
     },
     {
+      "name": "ow-epoch-time-gauge-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py",
+        "--gauge"
+      ],
+      "env": {},
+      "expect": [
+        "gauge: the gauge same -- 4 changes to `$027C = 7` (cartridge +190, port +190)",
+        "gauge: the way back 69 frames on the cartridge, 68 in the port",
+        "gauge: the trip into $01F1 at +466 on the cartridge, +464 in the port; at the end the same",
+        "gauge: picture port f3540 / cartridge f3184 158 px differ (158 on the last line)",
+        "gauge: picture port f3560 / cartridge f3204 214 px differ (201 on the last line)",
+        "gauge: picture port f3600 / cartridge f3244 201 px differ (201 on the last line)",
+        "gauge: picture port f3938 / cartridge f3582 0 px differ (0 on the last line)",
+        "gauge: picture port f3968 / cartridge f3612 57344 px differ (256 on the last line)"
+      ],
+      "pin": [
+        "^gauge: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch24.state",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "note_pass": "the Epoch's time gauge (C2/261D -> C2/6A34) opens, turns and sends the party to 600 A.D. on the cartridge's frames, its mode-7 picture pixel for pixel but the last line",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    else if (pad & 0x0800) dir = -1; else if (pad & 0x0400) dir = 1;",
+          "replace": "    else if (pad & 0x0800) dir = 1; else if (pad & 0x0400) dir = -1;   /* MUT */",
+          "why": "C2/6B78: Up (0800) turns the needle back an era, Down (0400) on"
+        },
+        {
+          "file": "src/world.c",
+          "find": "  return owRomW((ram[0x1BA6] >= 0xCC ? 0x6CA5 : 0x6C97) + 2 * (unsigned)(i & 0xFF));",
+          "replace": "  return owRomW((ram[0x1BA6] >= 0xCC ? 0x6C97 : 0x6CA5) + 2 * (unsigned)(i & 0xFF));   /* MUT */",
+          "why": "C2/745A: from storyline CC the table names 1F6 (the frozen 12000 B.C.), before it 1F4"
+        },
+        {
+          "file": "src/world.c",
+          "find": "  ram[0x00] = 0x84; ram[0x01] = 0x70;\r\n  unsigned ang = obW(B + 0x18);",
+          "replace": "  ram[0x00] = 0x85; ram[0x01] = 0x70;   /* MUT */\r\n  unsigned ang = obW(B + 0x18);",
+          "why": "C2/6D00: the needle turns about (84, 70)"
+        },
+        {
+          "file": "src/world.c",
+          "find": "      t = (t + 4) & 0xFFFF;",
+          "replace": "      t = (t + 2) & 0xFFFF;   /* MUT */",
+          "why": "C2/7072: the swirl's angle steps 4 a line"
+        },
+        {
+          "file": "src/field.c",
+          "find": "          cyc += 524674L + 2248948L;",
+          "replace": "          cyc += 524674L;   /* MUT */",
+          "why": "C2/7389's loads are 2,248,948 cycles of the NMI-off stretch: without them the gauge comes up 6 frames early"
+        }
+      ],
+      "notes": "THE EPOCH'S TIME GAUGE (disasm/notes/ow_time_gauge.md; ROADMAP G1a item 3). ch24 driven to the free flight (the cartridge's f3073), Y: `$027C = 8` (C2/45C7), C2/261D's fade (C2:2EC1, 18 NMIs), the NMI-off stretch (C2/2E23's stash + C2/26A8 + C2/7389, priced 3,915,526 cycles = 11 frames, the cartridge's 12-frame gap to the first gauge pass), the gauge (controller $6AC8, swirl $6F85, markers $7143, palette scripts), Up (12000 B.C. -> 600 A.D.), A: `$02AF = 01F1`, `$027C = 7`, the fade-out (C2:74B3), C2/2E72 + C2/2C93, the fade-in, the Epoch's state 6 / 7 (C2/4728, script C2:4AAD), loc 1F1 and the arrival (C2/4387, script C2:4B8C). `$1BB7` compared only while the gauge is up and from the controller's first write (outside it the byte is a field fill the port does not make). PINNED RESIDUALS: (a) the way back is a frame short and the trip two frames early -- the port prices C2/2C93 with the X menu's model (ct_lz_world_return_cost + a remainder measured on world 0); on 1F6 the cartridge's C2/2C93 is 11,225,250 cycles (--callrom), some 0.8 M more, as the X menu's return there would be too (the load clock, ROADMAP F1); (b) the gauge picture's last line (scanline 224, after the HDMA tables' 224 lines) is not the cartridge's: 158-201 px on that line, the rest pixel for pixel (P+2) but for 13 px of the needle's edge while it turns (f3560: its two line buffers a turn step apart); (c) port f3968 is the cartridge's f3611, not f3612 -- the trip's location load a frame apart (F1)."
+    },
+    {
       "name": "ending-story-plays-through-in-the-port",
       "argv": [
         "build/ct_field.exe",

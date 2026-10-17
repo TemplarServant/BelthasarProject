@@ -698,6 +698,24 @@ static int worldInit(CtAssets* a, World* w, int id) {
 // menu's bytes there: the map's streaming (owTilemapBuildBg / the column writers) built every column that came into view
 // after the menu from them -- roofs in the forest, the castle's stairs gone (the user, 2026-10-13) -- and so did the
 // widescreen's sides (a mod) at once.
+// ...and C2/2C93's VRAM half, after the time gauge, which cleared all of VRAM (C2/26A8) for its own mode-7 picture: the
+// world's BG char ($4000 bytes on), BG3 ($E000), the sprites (C2/2CCD / 2CDC) -- the same packets the entry decompressed,
+// which is what worldInit copied from the world's image.
+static void worldLoadObjFromRom(World* w);
+static void worldReloadVram(CtAssets* a, World* w) {
+  uint32_t blen = 0;
+  const uint8_t* b = CtAssetGet(a, CT_ASSET_WORLD, (uint32_t)w->world, &blen);
+  if (!b || blen < 20503 || !w->vram) return;
+  memset(w->vram, 0, 0x10000);
+  const uint8_t* p = b + 6 + 6144 + 6144 + 2048 + 2048 + 512 + 512 + 3072 + 16;
+  int nrec = *p++;
+  p += (size_t)nrec * 7;
+  memcpy(w->vram + 0x4000, p, 28672); p += 28672;
+  if (b[0] >= 2 && p + 0x1000 + 0x1600 <= b + blen) p += 0x1000 + 0x1600;
+  if (b[0] >= 3 && p + 0x180 <= b + blen) p += 0x180;
+  if (b[0] >= 4 && p + 0x2000 <= b + blen) memcpy(w->vram + 0xE000, p, 0x2000);
+  worldLoadObjFromRom(w);
+}
 static void worldReloadMenuScratch(CtAssets* a, World* w) {
   uint32_t blen = 0;
   const uint8_t* b = CtAssetGet(a, CT_ASSET_WORLD, (uint32_t)w->world, &blen);
@@ -1321,8 +1339,12 @@ static int owPlacardEntry(const uint8_t* o, int i) {
 // `W` columns with the 256-wide view at `X0` (the widescreen's sides: an OAM X from 256 up to the right side's end is to the
 // right of the view, not 512 to its left); `oi` (if any) gets each pixel's OAM index.
 static void worldObjLinePieces(const World* w, int y, uint8_t* pix, uint8_t* pri, int16_t* oi, int W, int X0);
+// OBSEL ($2101) as the world last wrote it: $60 on every world (16 / 32 pixel sprites from VRAM word 0, C2/6AB8), $03 inside
+// the time gauge (8 / 16 from word $6000, C2/6A41).
+static uint8_t g_owObsel = 0x60;
 static void worldObjLine(const World* w, int y, uint8_t* pix, uint8_t* pri, uint8_t* oi, int W, int X0) {
-  static const int sizes[2] = { 16, 32 };                       // spriteSizes[3]
+  static const int kSizes[8][2] = { { 8, 16 }, { 8, 32 }, { 8, 64 }, { 16, 32 }, { 16, 64 }, { 32, 64 }, { 16, 32 }, { 16, 32 } };
+  const int* sizes = kSizes[(g_owObsel >> 5) & 7];             // ppu.c spriteSizes
   const uint8_t* o = w->oamShow;
   memset(pix, 0, (size_t)W);
   int line = y, found[32], nf = 0, tiles = 0;
@@ -1354,7 +1376,7 @@ static void worldObjLine(const World* w, int y, uint8_t* pix, uint8_t* pri, uint
       if (++tiles > 34) break;
       int usedCol = hflip ? size - 1 - col : col;
       uint8_t usedTile = (uint8_t)((((tile >> 4) + (row / 8)) << 4) | (((tile & 0xF) + (usedCol / 8)) & 0xF));
-      unsigned objAdr = (word & 0x100) ? 0x1000u : 0u;
+      unsigned objAdr = ((unsigned)(g_owObsel & 7) << 13) + ((word & 0x100) ? (((unsigned)((g_owObsel >> 3) & 3) + 1) << 12) : 0u);
       unsigned w1 = (objAdr + usedTile * 16u + (row & 7u)) & 0x7FFF, w2 = (objAdr + usedTile * 16u + 8u + (row & 7u)) & 0x7FFF;
       uint16_t plane1 = (uint16_t)(w->vram[w1 * 2] | (w->vram[w1 * 2 + 1] << 8));
       uint16_t plane2 = (uint16_t)(w->vram[w2 * 2] | (w->vram[w2 * 2 + 1] << 8));
@@ -1389,7 +1411,7 @@ static void worldObjLinePieces(const World* w, int y, uint8_t* pix, uint8_t* pri
     for (int col = 0; col < size; col += 8) {
       int usedCol = hflip ? size - 1 - col : col;
       uint8_t usedTile = (uint8_t)((((tile >> 4) + (row / 8)) << 4) | (((tile & 0xF) + (usedCol / 8)) & 0xF));
-      unsigned objAdr = (word & 0x100) ? 0x1000u : 0u;
+      unsigned objAdr = ((unsigned)(g_owObsel & 7) << 13) + ((word & 0x100) ? (((unsigned)((g_owObsel >> 3) & 3) + 1) << 12) : 0u);
       unsigned w1 = (objAdr + usedTile * 16u + (row & 7u)) & 0x7FFF, w2 = (objAdr + usedTile * 16u + 8u + (row & 7u)) & 0x7FFF;
       uint16_t plane1 = (uint16_t)(w->vram[w1 * 2] | (w->vram[w1 * 2 + 1] << 8));
       uint16_t plane2 = (uint16_t)(w->vram[w2 * 2] | (w->vram[w2 * 2 + 1] << 8));
@@ -1578,6 +1600,69 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
       for (int ch = 0; ch < 3; ch++) d[x * 3 + ch] = c >= 0 ? w->pal[c][ch] : (uint8_t)((fix[ch] << 3) | (fix[ch] >> 2));
     }
   }
+}
+// THE TIME GAUGE'S PICTURE (C2/6A34: BGMODE 7, ppu.c's mode 7). BG1 is the mode-7 plane: its map in VRAM's low bytes (128 x
+// 128), its 8-bit chars in the high bytes, the field repeating (M7SEL 0); the matrix A..D a line at a time from HDMA (the
+// swirl, C2/6F85: channels to $211B-$211E), else the shadows $2C-$33; the scroll $20 / $26 (13 bits, FF80 / FF90) and the
+// centre $34 / $36. The era markers are OBJ (OBSEL 03). The needle is window 1 (C2/6CC1's edges, channel 1 to WH0 / WH1):
+// CGWSEL 10 keeps colour math inside it, CGADSUB 17 adds the fixed colour ($47-$49 = 0F) to BG1 and OBJ palettes 4-7 there.
+// Layer order in mode 7: OBJ3 > OBJ2 > OBJ1 > BG1 > OBJ0; the backdrop CGRAM 0.
+static int owS13(unsigned v) { return ((int16_t)((v & 0x1FFF) << 3)) >> 3; }
+static void worldComposeGauge(World* w, uint8_t* fb) {
+  const uint8_t* wr = w->wram;
+  uint8_t en = 0, wh0 = 0, wh1 = 0; CtWorldNmiLatch(&en, &wh0, &wh1);
+  const int cgwsel = wr[0x45], cgadsub = wr[0x46], tm = wr[0x41];
+  const int fix[3] = { wr[0x48] & 0x1F, wr[0x49] & 0x1F, wr[0x47] & 0x1F };   // R, G, B
+  const int xc = owS13(wr[0x34] | (wr[0x35] << 8)), yc = owS13(wr[0x36] | (wr[0x37] << 8));
+  const int hs = owS13(wr[0x20] | (wr[0x21] << 8)), vs = owS13(wr[0x26] | (wr[0x27] << 8));
+  uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
+  uint8_t keep = g_owObsel; g_owObsel = 0x03;
+  for (int y = 0; y < CAMH; y++) {
+    int line = y + OW_HDMA_LINE;
+    uint16_t v;
+    int A = (int16_t)(wr[0x2C] | (wr[0x2D] << 8)), B = (int16_t)(wr[0x2E] | (wr[0x2F] << 8));
+    int C = (int16_t)(wr[0x30] | (wr[0x31] << 8)), D = (int16_t)(wr[0x32] | (wr[0x33] << 8));
+    if (owHdmaWordAt(wr, en, 0x1B, line, &v)) A = (int16_t)v;
+    if (owHdmaWordAt(wr, en, 0x1C, line, &v)) B = (int16_t)v;
+    if (owHdmaWordAt(wr, en, 0x1D, line, &v)) C = (int16_t)v;
+    if (owHdmaWordAt(wr, en, 0x1E, line, &v)) D = (int16_t)v;
+    int l = wh0, r = wh1;
+    if (owHdmaWordAt(wr, en, 0x26, y, &v)) { l = v & 0xFF; r = v >> 8; }   // a window's edges: entry y (owWin1Line's; the matrix entry y + 1)
+    int cH = hs - xc, cV = vs - yc;
+    cH = (cH & 0x2000) ? (cH | ~1023) : (cH & 1023);
+    cV = (cV & 0x2000) ? (cV | ~1023) : (cV & 1023);
+    int sx = ((A * cH) & ~63) + ((B * line) & ~63) + ((B * cV) & ~63) + (xc << 8);
+    int sy = ((C * cH) & ~63) + ((D * line) & ~63) + ((D * cV) & ~63) + (yc << 8);
+    if (tm & 0x10) worldObjLine(w, y, opix, opri, oidx, CAMW, 0); else memset(opix, 0, CAMW);
+    uint8_t* dst = fb + (size_t)y * CAMW * 3;
+    for (int x = 0; x < CAMW; x++) {
+      int bg = 0;
+      if (tm & 0x01) {
+        int xp = ((sx + A * x) >> 8) & 0x3FF, yp = ((sy + C * x) >> 8) & 0x3FF;
+        int tile = w->vram[((yp >> 3) * 128 + (xp >> 3)) * 2];
+        bg = w->vram[(tile * 64 + (yp & 7) * 8 + (xp & 7)) * 2 + 1];
+      }
+      int ci = 0, layer = 5;                                         // 5 = the backdrop
+      if (opix[x] && opri[x] >= 1) { ci = opix[x]; layer = 4; }
+      else if (bg) { ci = bg; layer = 0; }
+      else if (opix[x]) { ci = opix[x]; layer = 4; }
+      int math = (layer == 0 && (cgadsub & 0x01)) || (layer == 4 && (cgadsub & 0x10) && (((ci - 0x80) >> 4) & 7) >= 4)
+                 || (layer == 5 && (cgadsub & 0x20));
+      int inWin = l <= r && x >= l && x <= r;
+      int prevent = (cgwsel >> 4) & 3;
+      if (prevent == 3 || (prevent == 1 && !inWin) || (prevent == 2 && inWin)) math = 0;
+      for (int ch = 0; ch < 3; ch++) {
+        int c5 = w->pal[ci][ch] >> 3;
+        if (math && !(cgwsel & 0x02)) {
+          c5 = (cgadsub & 0x80) ? c5 - fix[ch] : c5 + fix[ch];
+          if (cgadsub & 0x40) c5 >>= 1;
+          if (c5 > 31) c5 = 31; if (c5 < 0) c5 = 0;
+        }
+        dst[x * 3 + ch] = (uint8_t)((c5 << 3) | (c5 >> 2));
+      }
+    }
+  }
+  g_owObsel = keep;
 }
 static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldStream* stm) {
   // ⭐ THE COLOUR MATH IS PER-WORLD, read from the CGADSUB shadow $0046 (the byte the overworld NMI
@@ -11518,6 +11603,10 @@ int main(int argc, char** argv) {
   // end therefore eats the flag the next load is owed. Latched here, at the load.
   int loadRampSkip = 0;
   int owVehicleModule = 0;   // the last overworld frame ran a vehicle's lead module ($027E != 0; world.c obLeadModule)
+  // THE TIME GAUGE'S PHASES ($027C = 8, C2/261D -> C2/6A34, disasm/notes/ow_time_gauge.md): 1 the world fading out (C2:2EC1,
+  // 18 NMIs), 2 the NMI-off load (C2/2E23 + C2/6A34's half), 3 the gauge live (its own 18 NMIs, then a check after each),
+  // 4 its fade-out (C2:74B3, 18 NMIs), 5 the NMI-off return (C2/2E72 + C2/2C93), 6 the world fading in (C2:2EC4, 17 NMIs).
+  int owGaugePh = 0, owGaugeT = 0, owGaugeN = 0;
   int owPassHold = 0;    // frames the overworld stands still inside its pass's inline JSL (world.c obNative)
   int owPassResume = 0;  // ...and the suspended pass resumes on the frame after them
   int entrySweepPend = 0;   // C0/286C's C0/B0E6 owed by a location change, made on the entry ramp's first frame (fade 2)
@@ -12717,7 +12806,23 @@ int main(int argc, char** argv) {
       // pass (owPassResume): no pad latch, no draw-list reset, no lead -- the NMI that began it already did those.
       int owPassFrozen = 0;
       if (owPassHold > 0) { owPassHold--; owPassFrozen = 1; }
-      const int owLoading = (fade == 3) || owPassFrozen;
+      // The gauge's two NMI-off stretches are frames without an NMI: no pad, no pass, the picture held (black: $1C = 80).
+      int owGaugeBlack = 0;
+      if (owGaugePh == 2 || owGaugePh == 5) {
+        if (owGaugeT > 0) { owGaugeT--; owGaugeBlack = 1; }
+        else if (owGaugePh == 2) { owGaugePh = 3; owGaugeN = 0; }        // C2/6A91 NMI on: the gauge's first pass
+        else {                                                         // C2/2671 / 2683: the world's fade-in, NMI on
+          CtWorldSpawnVm(wd.wram, 0xC2, 0x2EC4);
+          wd.wram[0x4C] |= 0x03;
+          owGaugePh = 6; owGaugeT = 0x11;
+        }
+      }
+      const int owLoading = (fade == 3) || owPassFrozen || owGaugeBlack;
+      CtWorldTraceFrame(frameNo);
+      { static int at = -2; if (at == -2) { const char* e = getenv("CT_OWDUMPWRAM_AT"); at = e ? atoi(e) : -1; }   // CT_OWDUMPWRAM(_AT):
+        if (at >= 0 && frameNo == at && wd.wram) {                    //   the world's 128 KB at the START of that frame
+          const char* pth = getenv("CT_OWDUMPWRAM"); FILE* df = fopen(pth ? pth : "ct_owdump.wram", "wb");
+          if (df) { fwrite(wd.wram, 1, 0x20000, df); fclose(df); printf("owdumpwram: f%d\n", frameNo); } } }
       const int owResumeFrame = !owLoading && owPassResume;
       const uint8_t owIni = wd.wram ? (uint8_t)(wd.wram[0x1C] | wd.wram[0x1D]) : 0x0F;
       // The NMI's CGRAM half, in the same order: C2/0172 `LDA $4C / BIT #01` (the last pass completed) takes the full path,
@@ -13003,9 +13108,57 @@ int main(int argc, char** argv) {
           if (sn > 0) { owPassHold = sn - 1; owPassResume = 1; }
           if (!wasResume) owLatchShow(&wd);
           if (sn <= 0) {
+        if (owGaugePh == 3 || owGaugePh == 4)        // (the gauge's OBJ are screen-placed: its BG2 shadows $22 / $28 are 0)
+          CtWorldOamBuild(wd.wram, (uint16_t)(wr[0x22] | (wr[0x23] << 8)), (uint16_t)(wr[0x28] | (wr[0x29] << 8)));
+        else
         CtWorldOamBuild(wd.wram, wd.cam.bg2h, wd.cam.bg2v);
         wr[0x4C] |= 0x01;                             // C2/033B: the pass is complete, the next NMI may upload
           } }
+        // THE MAIN THREAD AFTER THIS NMI (C2/23CF: `JSR C2/046E` then the module of `$027C`), for the time gauge.
+        if (owGaugePh == 0 && wr[0x027C] == 0x08) {                        // C2/261D: the fade object, then 18 NMIs
+          CtWorldSpawnVm(wr, 0xC2, 0x2EC1);
+          owGaugePh = 1; owGaugeT = 0x12;
+        } else if (owGaugePh == 1 && --owGaugeT == 0) {
+          // C2/2634-2658, NMI off: the song's stop (`$1E00 = 82`, JSL C7/0004), C2/2E23's stash, C2/6A34 up to its NMI on.
+          // Priced as the ROM's (the rule's NMI-off stretch from phase 0): the stash's 0x60F8 bytes at 46 master cycles, then
+          // MEASURED (`--callrom` from the gauge's own state, saves/epoch_re: f28, refresh excluded) C2/26A8 524,674 and
+          // C2/7389 2,248,948 -- 3,915,526 cycles, 11 frames; the cartridge's first gauge pass is 12 frames after the fade's
+          // last NMI (f29 -> f41).
+          wr[0x1E00] = 0x82; wr[0x1E01] = 0x00; wr[0x1E02] = 0xFF;
+          fieldSoundFlush(wr);
+          { size_t o = 0; for (int k = 0; k < 6; k++) { memcpy(menuStash + o, wr + kOwStash[k].at, kOwStash[k].len); o += kOwStash[k].len; } }
+          CtWorldGaugeEnter(wr, wd.vram);
+          long cyc = 0; for (int k = 0; k < 6; k++) cyc += (long)kOwStash[k].len * 46;
+          cyc += 524674L + 2248948L;
+          owGaugePh = 2; owGaugeT = (int)(cyc / CT_LOAD_FRAME_CYCLES);
+          if (getenv("CT_OWGAUGETRACE")) printf("owgauge: f%d load, %ld cycles = %d frame(s)\n", frameNo, cyc, owGaugeT);
+        } else if (owGaugePh == 3) {
+          // C2/6A96 `LDX #0012 / JSR C2/0454`, then C2/6A9C `JSR C2/046E / LDA $027C / CMP #08`: the first look is after the
+          // 19th NMI; once `$027C` has moved, C2/6AA6's fade-out script and 18 NMIs.
+          if (++owGaugeN >= 19 && wr[0x027C] != 0x08) { CtWorldGaugeLeave(wr); owGaugePh = 4; owGaugeT = 0x12; }
+        } else if (owGaugePh == 4 && --owGaugeT == 0) {
+          // C2/6AB4 `$1E = 09`, NMI off; C2/2665 -> C2/2E72 (the six blocks back), C2/03EF; unless the trip set `$7F01F4 & 0A`
+          // or `$7F01F5 & 02`, C2/2C93 rebuilds the world -- priced as the X menu's return (C2/2556).
+          wr[0x1E] = 0x09;
+          { size_t o = 0; for (int k = 0; k < 6; k++) { memcpy(wr + kOwStash[k].at, menuStash + o, kOwStash[k].len); o += kOwStash[k].len; } }
+          wr[0x5E] = 0; wr[0x5F] = 0; wr[0xE0] = 0x00; wr[0xE1] = 0xF0; wr[0xE2] = 0x7E; memset(wr + 0x60, 0, 0x80);
+          if ((wr[0x101F4] & 0x0A) || (wr[0x101F5] & 0x02)) {
+            static int said = 0;
+            if (!said) { said = 1; printf("owgauge: UNDERIVED the trip's flags ($7F01F4 & 0A / $7F01F5 & 02) -- the world is rebuilt anyway\n"); }
+          }
+          if (haveWorld) { worldReloadMenuScratch(&assets, &wd); worldReloadVram(&assets, &wd); }
+          #ifndef CT_OW_RETURN_REST
+          #define CT_OW_RETURN_REST 964078L
+          #endif
+          long rl = 0, cyc = 0; const uint8_t* rimg = CtBattleRom(&rl);
+          for (int k = 0; k < 6; k++) cyc += (long)kOwStash[k].len * 46;
+          if (rimg) cyc += ct_lz_world_return_cost(rimg, (size_t)rl, haveWorld ? wd.world : 0, NULL);
+          cyc += CT_OW_RETURN_REST;
+          owGaugePh = 5; owGaugeT = (int)(cyc / CT_LOAD_FRAME_CYCLES);
+          if (getenv("CT_OWGAUGETRACE")) printf("owgauge: f%d return, %ld cycles = %d frame(s)\n", frameNo, cyc, owGaugeT);
+        } else if (owGaugePh == 6 && --owGaugeT == 0) {
+          wr[0x027C] = 0x01; owGaugePh = 0;                               // C2/26A0 `LDA #01 / STA $027C`
+        }
                                                       // spawner included -- natives 754D/7598 + RNG); ALSO
                                                       // The music object rides in the same array.
         // ⭐ ...and one of its opcodes can ASK TO LEAVE. C2/1100 (object-VM op $05) writes the
@@ -13174,6 +13327,12 @@ int main(int argc, char** argv) {
         } }
       if (owWideW == CAMW) { g_mot = owMot; g_owNatRec = &g_owNat[g_motIdx]; }
       worldCompose(&wd, fb);
+      if (owGaugePh == 3 || owGaugePh == 4) worldComposeGauge(&wd, fb);   // the time gauge's own picture (mode 7)
+      else if (owGaugePh == 2 || owGaugePh == 5) {   // the NMI-off stretches: the picture held, black ($1C = 80)
+        static int said = 0;
+        if (!said) { said = 1; printf("owgauge: the NMI-off stretches draw black\n"); }
+        memset(fb, 0, (size_t)CAMW * CAMH * 3);
+      }
       g_mot = NULL; g_owNatRec = NULL;
       if (owWideW == CAMW) memcpy(g_motPic, fb, (size_t)CAMW * CAMH * 3);
       owMot->valid = wd.wram != NULL && !owLoading;

@@ -53,7 +53,7 @@ def port_run():
                         '--walkscript', ws], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     ev = []
     for l in r.stdout.splitlines():
-        m = re.match(r'owveh: pass (\d+) 027C=(..) 027E=(..) .* 0294=(..) .*?(?:\S+:42DD/(..))?', l)
+        m = re.match(r'owveh: pass (\d+) (?:f\d+ )?027C=(..) 027E=(..) .* 0294=(..) .*?(?:\S+:42DD/(..))?', l)
         if m:
             e = re.search(r':42DD/(..)', l)
             ev.append((int(m.group(1)), (m.group(2), m.group(3), m.group(4), e.group(1) if e else '--')))
@@ -121,7 +121,7 @@ def flight(tag='epoch-flight', drive_o=None, drive_p=None, anchor='04', shots=(3
                         ','.join(drive_p)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     pe = []
     for l in r.stdout.splitlines():
-        m = re.match(r'owveh: pass (\d+) 027C=(..) 027E=(..) .* 0294=(..) 0290=(....),(....)', l)
+        m = re.match(r'owveh: pass (\d+) (?:f\d+ )?027C=(..) 027E=(..) .* 0294=(..) 0290=(....),(....)', l)
         e = re.search(r':42DD/(..)', l)
         if m and e:
             pe.append((int(m.group(1)), (m.group(2), m.group(3), m.group(4), m.group(5), m.group(6), e.group(1))))
@@ -194,7 +194,102 @@ def omen():
     return 0
 
 
+GAUGE_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '2:2', '0:98', '10:2', '0:88', '100:2', '0:520']
+GAUGE_SHOTS = [3182, 3202, 3242, 3580, 3610]   # the gauge (needle turning, turning, still), the arrival on 1F1 (P+2)
+GAUGE_P = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:143', 'u:2', 'n:88', 'a:2', 'n:600']
+
+
+def gauge():
+    """The time gauge from the free flight (C2/261D -> C2/6A34, disasm/notes/ow_time_gauge.md): Y (the cartridge's f3082,
+    the port's f3440 on the world's clock), Up (12000 B.C. -> 600 A.D.), A: the trip, loc 1F1 and the arrival (C2/4387).
+    Every change of `$0100 $027C $0294 $0290/$0292 $02AF $1BB7`, counted from the frame `$027C` becomes 8."""
+    os.makedirs(OUT, exist_ok=True)
+    r = subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--monitor',
+                        '7E0100:2,7E027C:1,7E0294:1,7E0290:4,7E02AF:2,7E1BB7:1', '--from',
+                        os.path.join(JK, 'states', 'ch24.state'), '--btnscript', ','.join(GAUGE_O), '--frames', '3820',
+                        '--diff'], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True, text=True,
+                       errors='replace')
+    oe = []
+    for l in r.stdout.splitlines():
+        m = re.match(r'\s+f(\d+)\s+7E0100=(....)\*?\s+7E027C=(..)\*?\s+7E0294=(..)\*?\s+7E0290=(........)\*?\s+'
+                     r'7E02AF=(....)\*?\s+7E1BB7=(..)', l)
+        if m:
+            w = lambda h: h[2:4] + h[0:2]
+            q = m.group(5)
+            oe.append((int(m.group(1)), (w(m.group(2)), m.group(3), m.group(4), w(q[0:4]), w(q[4:8]), w(m.group(6)), m.group(7))))
+    env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
+               CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1', CT_HOLDBTN='04@%d:2' % (3082 + FLIGHT_SHIFT + 1),   # (CT_HOLDBTN reaches the latch a frame before the walkscript)
+               CT_SHOTS=os.path.join(OUT, 'gauge'), CT_SHOTS_AT=','.join(str(f + FLIGHT_SHIFT) for f in GAUGE_SHOTS + [3820]),
+               CT_SHOTS_EXIT='1')
+    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+                        ','.join(GAUGE_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
+    pe = []
+    for l in r.stdout.splitlines():
+        m = re.match(r'owveh: pass \d+ f(\d+) 027C=(..) 027E=.. 027F=.. 028F=.. 0294=(..) 0290=(....),(....) 0100=(....) '
+                     r'02AF=(....) 1BB7=(..)', l)
+        if m:
+            pe.append((int(m.group(1)), (m.group(6), m.group(2), m.group(3), m.group(4), m.group(5), m.group(7), m.group(8))))
+    def rel(ev):
+        # `$1BB7` only while the gauge is open: outside it the byte is whatever the field's fill left (the cartridge's 06B ->
+        # 1F6 entry fills $1B82-$1BFF with `00 01`, the port's does not) -- the controller writes it before any reader.
+        t0 = next((f for f, v in ev if v[1] == '08'), None)
+        # ...and only from the controller's first write (C2/6B58, its first pass): before that the gauge is not up yet.
+        t1 = next((f for f, v in ev if t0 is not None and f > t0 and v[6] != ev[[k for k, (g, _) in enumerate(ev) if g == t0][0]][1][6]), None)
+        ev = [(f, v if (v[1] == '08' and t1 is not None and f >= t1) else v[:6] + ('--',)) for f, v in ev]
+        out, last = [], None
+        for f, v in ev:
+            if t0 is None or f < t0 or v == last:
+                continue
+            out.append((f - t0, v)); last = v
+        return out, t0
+    o, ot = rel(oe)
+    p, pt = rel(pe)
+    hor = 3820 - (ot or 0)
+    o = [e for e in o if e[0] <= hor]; p = [e for e in p if e[0] <= hor]
+    # (1) the gauge itself: every change until `$027C` leaves 8 and the main thread's 18 NMIs after it
+    def until7(ev):
+        t7 = next((d for d, v in ev if v[1] == '07'), None)
+        return [e for e in ev if t7 is None or e[0] <= t7], t7
+    o1, o7 = until7(o); p1, p7 = until7(p)
+    print('gauge: the gauge %s -- %d changes to `$027C = 7` (cartridge +%s, port +%s)' % (
+        'same' if o1 == p1 else 'DIFFERENT', len(o1), o7, p7))
+    if o1 != p1:
+        for a, b in zip(o1, p1):
+            if a != b: print('gauge:   first difference cartridge +%d:%s port +%d:%s' % (a[0], '/'.join(a[1]), b[0], '/'.join(b[1]))); break
+    # (2) the way back: `$027C` 7 -> 1 (the fade-out's 18 NMIs, C2/2E72 + C2/2C93 NMI off, the fade-in's 17)
+    def back(ev, t7):
+        t1 = next((d for d, v in ev if t7 is not None and d > t7 and v[1] == '01'), None)
+        return (t1 - t7) if t1 is not None else None
+    print('gauge: the way back %d frames on the cartridge, %d in the port' % (back(o, o7) or -1, back(p, p7) or -1))
+    # (3) the trip: the frame the location changes, and the state at the end
+    def trip(ev):
+        return next((d for d, v in ev if v[0] != (ev[0][1][0] if ev else '')), None)
+    print('gauge: the trip into $%s at +%s on the cartridge, +%s in the port; at the end %s' % (
+        o[-1][1][0] if o else '-', trip(o), trip(p), 'the same' if o and p and o[-1] == p[-1] else 'DIFFERENT'))
+    if os.environ.get('EPOCH_DUMP'):
+        oi = {d: v for d, v in o}; pi = {d: v for d, v in p}
+        for d in sorted(set(oi) | set(pi)):
+            print('gauge:   +%d cartridge %s port %s' % (d, '/'.join(oi[d]) if d in oi else '-', '/'.join(pi[d]) if d in pi else '-'))
+    for f in GAUGE_SHOTS:                                # the port's picture P is the cartridge's --peek P + 2
+        o_raw = os.path.join(OUT, 'gauge_o%d.raw' % f)
+        bs, t = [], 0
+        for it in GAUGE_O:
+            b, n = it.split(':'); n = int(n)
+            if t + n >= f + 2: bs.append('%s:%d' % (b, f + 2 - t)); break
+            bs.append(it); t += n
+        subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch24.state'), o_raw,
+                        '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
+        po = raw_rgb(os.path.join(OUT, 'gauge_f%d.raw' % (f + FLIGHT_SHIFT)), False)
+        oo = raw_rgb(o_raw, True)
+        n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
+        nl = sum(po(x, 223) != oo(x, 223) for x in range(256))
+        print('gauge: picture port f%d / cartridge f%d %d px differ (%d on the last line)' % (f + FLIGHT_SHIFT, f + 2, n, nl))
+    return 0
+
+
 def main():
+    if '--gauge' in sys.argv:
+        return gauge()
     if '--omen' in sys.argv:
         return omen()
     if '--flight' in sys.argv:
