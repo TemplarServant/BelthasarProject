@@ -27019,6 +27019,65 @@
       "notes": "THE SEQUENCE STAGES' NATIVE PICTURE (src/seq_pic.c; the user's decision 2026-10-17: a native compositor for the $C3 stages, not the vendored PPU). ct.exe --seqpiccmp steps the oracle until it LEAVES vblank (every NMI write for the frame done), turns its PPU's state back into the register bytes it was written as (VRAM, CGRAM, OAM copied), draws the frame natively with the oracle's WRAM as HDMA's tables, runs the oracle to its next vblank and compares the two pictures pixel for pixel. The compositor follows the rules of the oracle's PPU over the register bytes: the layer order by mode, the 2/4/8 bpp fetch, offset per tile, mode 7's start and step, the windows, the colour math and its half, the sprites' 32 / 34 limits, and HDMA walked between the lines. Graded here on the stages' own frames; the stages' code that FILLS it (the race's setup, hooks and tasks) is ported next."
     },
     {
+      "name": "race-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/race_re/race_user.state",
+        "0:30,100:2,0:3000",
+        "65",
+        "00",
+        "12"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 75 frame(s) after the hand-off",
+        "racepiccmp: frame 1: VRAM 0 CGRAM 0 OAM 99 words differ; registers 0; HDMA 0; WRAM 6607 bytes",
+        "racepiccmp: frame 8: 3280 px differ",
+        "racepiccmp: 12 frames -- first state difference 1, first picture difference 8 (15891 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "the race's picture, native (stage 2, in progress): its setup's VRAM, CGRAM, the display registers and the HDMA channels equal the cartridge's after its first NMI",
+      "mutations": [
+        {
+          "file": "src/seq_racepic.c",
+          "find": "  for (int r = 0; r < 0x40; r++) { mvn(w, y, x, 0x40); mvn(w, y + 0x40, x, 0x40); x += 0x40; y += 0x80; }",
+          "replace": "  for (int r = 0; r < 0x40; r++) { mvn(w, y, x, 0x40); mvn(w, y + 0x40, x + 0x40, 0x40); x += 0x40; y += 0x80; }   /* MUT */",
+          "why": "$7E:37A6 writes each 64-byte row of the road's map twice"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "    for (int i = 0; i < 0x20; i++) { w[*wm & 0x1FFFF] = w[0x10000 | x]; *wm = (*wm + 1) & 0x1FFFF; x = (x - 1) & 0xFFFF; }",
+          "replace": "    for (int i = 0; i < 0x20; i++) { w[*wm & 0x1FFFF] = w[0x10000 | x]; *wm = (*wm + 1) & 0x1FFFF; x = (x + 1) & 0xFFFF; }   /* MUT */",
+          "why": "$7E:3ED3 streams each row backwards (DEX): the bikes' frames are mirrored"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "    } else x = (x + 1) & 0xFFFF;                                       // 3634 NOP / INX",
+          "replace": "    } else x = (x + 2) & 0xFFFF;   /* MUT */",
+          "why": "$7E:357B: the line's distance steps one a line (its tail `NOP / INX`)"
+        },
+        {
+          "file": "src/seq_racepic.c",
+          "find": "  ww(w, 0x141C, a); ww(w, 0x1434, a >> 1); ww(w, 0x1430, a >> 2);",
+          "replace": "  ww(w, 0x141C, a); ww(w, 0x1434, a >> 2); ww(w, 0x1430, a >> 1);   /* MUT */",
+          "why": "$7E:4447: BG3 scrolls at half the angle, BG2 at a quarter"
+        }
+      ],
+      "notes": "THE RACE'S PICTURE, NATIVE (stage 2, in progress; disasm/notes/seq_picture.md sec. 4). ct.exe --racepiccmp runs the oracle through Johnny's race to the FF 00 hand-off (f65), opens the native stage with a CtSeqStagePic there, and lays each native NMI against the oracle's: VRAM, CGRAM, OAM, the display registers, the HDMA channels and WRAM compared as the oracle leaves vblank, then the pictures. RACEPICCMP_SEEDVRAM=1 starts the native VRAM as the cartridge's at the hand-off: the field's leftovers the race never writes (the port's field keeps no VRAM image). Ported: the setup ($7E:3D8C, 3B5D-3C4E, 3CEA-3D44, 388B, the common init's PPU reset), the tasks 42CE / 357B (the per-line mode-7 matrix), 428B, 4447 and the fades, the hooks 380B, 3843, 5221, 43F2, 44FE, 4643 / 464D. Not yet: the bikes (4D0D), the HUD (4F54's drawing), the bike frames (the main thread $51D1, C3/0307, the code C3/09E9 writes at $7E:B574), the transitions (3D72, C3/01E4). This check is a RATCHET: re-pin as each lands."
+    },
+    {
       "name": "seq-race-xlat-lockstep",
       "argv": [
         "build/ct.exe",

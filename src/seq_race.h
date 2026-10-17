@@ -2,6 +2,7 @@
 #ifndef CT_SEQ_RACE_H
 #define CT_SEQ_RACE_H
 #include <stdint.h>
+#include "seq_pic.h"   // CtSeqStagePic: the stage's picture (stage 2), when the host draws it
 
 // What the race sends to the sound processor and what it reads from the ROM:
 //   `sfx`  = a mailbox command through $7E:377E ($1E00-$1E02, already written to WRAM by the caller),
@@ -25,6 +26,7 @@ typedef struct {
   void (*ppu)(void* ctx, uint8_t reg, uint8_t v);
   int (*field)(void* ctx);
   int (*postFrames)(void* ctx);
+  CtSeqStagePic* pic;        // the stage's picture, filled natively (stage 2); NULL: no picture, the logic alone
 } CtRaceIo;
 
 // ---- THE $C3 STAGE'S SHARED MACHINE (every entry: the overlay, the common init, the interpreter, the NMI, the fades) ----

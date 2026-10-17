@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "lz.h"       // the overlay: C3:0000 decompresses it with C3/0557
+#include "seq_racepic.h"   // the picture (stage 2), when the host draws it (io->pic)
 
 typedef struct { uint8_t* w; int c; const CtRaceIo* io; } R;
 
@@ -424,6 +425,7 @@ int CtSeqScript(uint8_t* w, unsigned page, const CtRaceIo* io, CtSeqCall call) {
       }
       case 0xB:                                                          // 0C5F a byte into the PPU: $21[ip+1] = [ip]
         if (io && io->ppu) io->ppu(io->ctx, w[(ip + 1) & 0xFFFF], w[ip & 0xFFFF]);
+        if (io && io->pic) CtSeqPicWrite(&io->pic->p, w[(ip + 1) & 0xFFFF], w[ip & 0xFFFF], 0);
         pgw16(r, page, 0x20, ip + 2); continue;
       case 0x0: {                                                        // 0C51 CALL: $7E:00F0 = the target, JSL $7E:37F3
         unsigned tgt = rd(r, ip);
@@ -500,6 +502,15 @@ int CtSeqStageBegin(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (!(operand & 0x20)) { w[0x038A] = 0; seqDriverReset(r, io); }   // 30E9 BIT #20 / BNE / STZ $038A / JSR $3177
   memset(w + 0x0700, 0xE0, 0x200);                                    // JSR $3843: the OAM shadow, every sprite off screen
   wr(r, 0x13, 0x0900);                                                // 30F9 LDX #0900 / STX $13
+  if (io && io->pic) {                                                // 3102-3170: the PPU reset through D = $2100 (8-bit A = 0, X = 0)
+    static const uint8_t seq[] = { 0x00, 0x80, 0x01, 0x02, 0x32, 0xE0, 0x02, 0, 0x03, 0, 0x05, 0, 0x06, 0, 0x07, 0, 0x08, 0, 0x09, 0, 0x0A, 0,
+      0x0B, 0, 0x0C, 0, 0x0D, 0, 0x0D, 0, 0x0E, 0, 0x0E, 0, 0x0F, 0, 0x0F, 0, 0x10, 0, 0x10, 0, 0x11, 0, 0x11, 0, 0x12, 0, 0x12, 0,
+      0x13, 0, 0x13, 0, 0x14, 0, 0x14, 0, 0x15, 0, 0x1A, 0, 0x1B, 0, 0x1B, 0, 0x1C, 0, 0x1C, 0, 0x1D, 0, 0x1D, 0, 0x1E, 0, 0x1E, 0,
+      0x1F, 0, 0x1F, 0, 0x20, 0, 0x20, 0, 0x21, 0, 0x23, 0, 0x24, 0, 0x25, 0, 0x26, 0, 0x27, 0, 0x28, 0, 0x29, 0, 0x2A, 0, 0x2B, 0,
+      0x2C, 0, 0x2D, 0, 0x2E, 0, 0x2F, 0, 0x30, 0, 0x31, 0, 0x32, 0, 0x33, 0 };
+    for (unsigned k = 0; k < sizeof seq; k += 2) CtSeqPicWrite(&io->pic->p, seq[k], seq[k + 1], 0);
+    io->pic->vmain = 0; io->pic->cgadd = 0;                           // ($2115 = 0, $2121 = 0)
+  }
   return 0;
 }
 
@@ -511,6 +522,8 @@ int CtSeqStageNmi(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn run)
 
 int CtSeqStageNmiHooks(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn hook, CtSeqTaskFn run) {
   R rr = { w, 0, io }, *r = &rr;
+  CtSeqStagePic* pic = io ? io->pic : NULL;
+  if (pic) { pic->hdmaen = 0; CtSeqPicWrite(&pic->p, 0x00, 0x80, 0); } // 08DC STZ $420C / 08ED LDA #80 / STA $2100
   if (hook && !rd(r, 0x0392))                                         // 08F2 LDA $0392 / BNE / JSL $7E:39BE
     for (unsigned x = 0; x < 0x10; x += 2) {                          // 39C0 .. 39D8 CPX #0010
       unsigned h = rd(r, 0x0940 + x);
@@ -518,6 +531,10 @@ int CtSeqStageNmiHooks(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn
       unsigned k = hook(w, x, h, io);
       if (k != h) wr(r, 0x0940 + x, k);                               // 39E3 STZ / 39F0 STA $0940,X
     }
+  if (pic) {                                                          // 08FD LDA $038C / STA $420C, 0903 $038D or $80 -> $2100
+    pic->hdmaen = w[0x038C];
+    CtSeqPicWrite(&pic->p, 0x00, w[0x038D] ? w[0x038D] : 0x80, 0);
+  }
   wr(r, 0x08, rd(r, 0x08) + 1);                                       // 090F INC $08
   memmove(w + 0x0950, w + 0x0920, 0x20);                              // 0911 MVN $0920 -> $0950, 32 bytes
   wr(r, 0x02, joy);                                                   // 0A99 LDA $4218 / STA $02
@@ -533,6 +550,9 @@ int CtSeqStageNmiHooks(uint8_t* w, uint16_t joy, const CtRaceIo* io, CtSeqTaskFn
         if (io && io->post) io->post(io->ctx);
       }
     } else wr(r, 0x0394, 0);
+  }
+  if (w[0x0392] && pic) {                                             // 0927 paused: $038D / 2, or $80
+    unsigned b = w[0x038D] >> 1; CtSeqPicWrite(&pic->p, 0x00, (uint8_t)(b ? b : 0x80), 0);
   }
   if (!rd(r, 0x0392)) {                                               // 0922 LDA $0392 / BEQ -> JSL $7E:398A
     for (unsigned x = 0; x < 0x20; x += 2) {
@@ -610,6 +630,7 @@ void CtSeqMul31BF(uint8_t* w, unsigned d) {
 // ---- the race: entries 0 and 9, $7E:3B48 ----
 
 static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io);
+static unsigned raceHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) { (void)slot; return CtRacePicHook(io->pic, w, h, io); }
 
 int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   R rr = { w, 0, io }, *r = &rr;
@@ -622,6 +643,7 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
     w[0x1E01] = 0x2C; w[0x1E00] = 0x10; w[0x1E02] = 0xFF; w[0x1E03] = 0xFF;
     if (io && io->post) io->post(io->ctx);
   }
+  if (io && io->pic) CtRacePicSetupA(io->pic, w, io);                 // 3B5D-3C4E: the picture's loads (stage 2)
   // $7E:45D6 (JSR at 3C51): the start values
   if (w[0x44]) {                                                      // the story's call: six bytes of the overlay's own code
     w[0x53A0] = 0xD8; w[0x4F74] = 0xD8; w[0x50DA] = 0xD8; w[0x53A4] = 0xE8; w[0x5395] = 0x06; w[0x53AE] = 0x01;
@@ -630,7 +652,7 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   wr(r, 0xAE, 0); wr(r, 0x4E, 0x6000); wr(r, 0x73, 0x2000); wr(r, 0xA8, 0x0020);
   wr(r, 0xA2, 1); wr(r, 0xA0, 1); wr(r, 0x1444, 0);
   wr(r, 0x00B6, rd(r, 0x4319)); wr(r, 0x00B8, rd(r, 0x4329));
-  // (4640 JMP $4309: the picture's tables)
+  if (io && io->pic) CtRacePicTables(w);                              // 4640 JMP $4309: the picture's tables
   w[0x038C] = 0x3F;                                                   // 3C4C (then 3C70's $3E on the story's branch)
   if (!(operand & 0x40)) {                                            // 3C54 BIT #0040 / BNE: the story's scripts
     wr(r, 0x0A20, 0x3F14); wr(r, 0x0B20, 0x400A);
@@ -638,15 +660,15 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   } else return -1;                                                   // the attract's window arm: not this port's yet
   if (CtRaceScript(w, 0x0A00, io) < 0) return -1;                     // 3CD8 JSR $3749 -- page A runs once in the setup
   wr(r, 0x35FD, 0x45B0); wr(r, 0x3024, 0x51D1);                       // 3CDB / 3CE1: two words of the overlay
+  if (io && io->pic) { CtRacePicSetupB(io->pic, w, io); CtRacePicCgram(io->pic, w); }   // 3CEA-3D44, then $7E:300D's $388B
   // $7E:300D .. 301E: $388B (CGRAM), $31B0 (the vblank), JSL C3/08D0 (one NMI, run here), NMI on, STZ $00, STZ $0392
-  CtSeqStageNmi(w, 0, io, raceTask);
+  CtSeqStageNmiHooks(w, 0, io, (io && io->pic) ? raceHook : NULL, raceTask);
   wr(r, 0x0000, 0); wr(r, 0x0392, 0);
   return 0;
 }
 
 // The race's tasks (the logic ones; the picture's are stage 2).
 static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io) {
-  (void)slot;
   switch (t) {
     case 0x3749: CtRaceScript(w, 0x0A00, io); return t;
     case 0x3754: CtRaceScript(w, 0x0B00, io); return t;
@@ -654,12 +676,15 @@ static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* 
     case 0x4F54: CtRaceTask4F54(w); return t;                         // (its logic: the score's floor)
     case 0x4339: CtRaceTask4339(w); return t;
     case 0x485D: return CtRaceStep485D(w, io);
-    default: return t;                                                // the picture's tasks (stage 2)
+    case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);   // the brightness (the overlay's own)
+    default:                                                          // the picture's tasks (stage 2)
+      if (io && io->pic) CtRacePicTask(io->pic, w, t, io);
+      return t;
   }
 }
 
 int CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
-  int st = CtSeqStageNmi(w, joy, io, raceTask);
+  int st = CtSeqStageNmiHooks(w, joy, io, (io && io->pic) ? raceHook : NULL, raceTask);
   if (st != 2 && CtSeqStageSong(w, io) > 0) w[0x0388] = 0;           // (the race never changes $038A)
   return st;
 }

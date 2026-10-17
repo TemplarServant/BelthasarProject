@@ -354,3 +354,56 @@ void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t en, CtSeqPicRe
     if (rd) hdmaRun(p, ch, en, w, rd, ctx, line);
   }
 }
+
+// ---- a stage's data ports ----
+static void vramPortWrite(CtSeqStagePic* sp, int high, uint8_t v) {
+  if (sp->vmain & 0x0C) {
+    static int said = 0;
+    if (!said) { said = 1; fprintf(stderr, "seqpic: VMAIN $%02X remaps the VRAM address -- not modelled\n", sp->vmain); }
+  }
+  unsigned a = sp->vaddr & 0x7FFF;
+  if (high) sp->p.vram[a] = (uint16_t)((sp->p.vram[a] & 0x00FF) | (v << 8));
+  else sp->p.vram[a] = (uint16_t)((sp->p.vram[a] & 0xFF00) | v);
+  int inc = (sp->vmain & 3) == 0 ? 1 : (sp->vmain & 3) == 1 ? 32 : 128;
+  if (((sp->vmain & 0x80) != 0) == high) sp->vaddr = (uint16_t)(sp->vaddr + inc);
+}
+void CtSeqStagePicDma(CtSeqStagePic* sp, const uint8_t* w, uint8_t dmap, uint8_t bbad, uint32_t src, unsigned n) {
+  int mode = dmap & 7, fixed = (dmap & 0x08) != 0, step = (dmap & 0x10) ? -1 : 1;
+  unsigned oamAdr = 0, second = 0; uint8_t buf = 0;                  // ($2102 = 0 and $2121 written just before, in every stage)
+  for (unsigned i = 0, j = 0; i < n; i++, j = (j + 1) % kLen[mode]) {
+    uint8_t v = w[src & 0x1FFFF];
+    if (!fixed) src = (src & 0x10000) | ((src + (unsigned)step) & 0xFFFF);
+    uint8_t b = (uint8_t)(bbad + kBOff[mode][j]);
+    if (b == 0x18 || b == 0x19) vramPortWrite(sp, b == 0x19, v);
+    else if (b == 0x22) {                                              // CGRAM: the low byte buffered, the pair on the high
+      if (!second) buf = v; else sp->p.cgram[sp->cgadd++] = (uint16_t)((v << 8) | buf);
+      second ^= 1;
+    } else if (b == 0x04) {                                            // OAM: 256 words, then the 32 bytes of the high table
+      if (oamAdr < 0x100) { if (!second) buf = v; else sp->p.oam[oamAdr++] = (uint16_t)((v << 8) | buf); }
+      else { sp->p.highOam[((oamAdr & 0x0F) << 1) | second] = v; if (second) oamAdr++; }
+      second ^= 1;
+    } else {
+      static int said = 0;
+      if (!said) { said = 1; fprintf(stderr, "seqpic: a DMA to $21%02X -- not modelled\n", b); }
+    }
+  }
+}
+// $2139: the word the read buffer holds (filled when $2116/$2117 were written), then the buffer refilled from the port's address
+// and the address stepped -- with VMAIN bit 7 clear, as on the low byte (ppu.c `case 0x39`). A DMA of mode 0 from $2139 reads the
+// low byte n times, the first word twice.
+void CtSeqStagePicVramRead(CtSeqStagePic* sp, uint8_t* w, uint32_t dst, unsigned n) {
+  uint16_t bufw = sp->p.vram[sp->vaddr & 0x7FFF];
+  int inc = (sp->vmain & 3) == 0 ? 1 : (sp->vmain & 3) == 1 ? 32 : 128;
+  for (unsigned i = 0; i < n; i++) {
+    w[(dst + i) & 0x1FFFF] = (uint8_t)bufw;
+    if (!(sp->vmain & 0x80)) { bufw = sp->p.vram[sp->vaddr & 0x7FFF]; sp->vaddr = (uint16_t)(sp->vaddr + inc); }
+  }
+}
+static uint8_t stageRead(void* ctx, uint32_t adr) {
+  const uint8_t* w = (const uint8_t*)ctx;
+  uint8_t bank = (uint8_t)(adr >> 16);
+  return w[(((uint32_t)bank & 1) << 16) | (adr & 0xFFFF)];
+}
+void CtSeqStagePicFrame(CtSeqStagePic* sp, const uint8_t* w, uint8_t* rgb) {
+  CtSeqPicFrame(&sp->p, sp->ch, sp->hdmaen, stageRead, (void*)w, rgb);
+}

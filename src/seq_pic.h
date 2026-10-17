@@ -47,4 +47,24 @@ void CtSeqPicWrite(CtSeqPic* p, uint8_t adr, uint8_t val, int line);
 // 256 x 224 RGB888 (may be NULL).
 void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t hdmaen, CtSeqPicRead rd, void* ctx, uint8_t* rgb);
 
+// A STAGE's picture: the compositor's state plus what the stage's code sets around it -- the HDMA channels it programmed, HDMAEN,
+// and the data ports' addresses ($2116 / $2115 VRAM, $2121 CGRAM) its DMAs go through.
+typedef struct CtSeqStagePic {
+  CtSeqPic p;
+  CtSeqPicHdma ch[8];
+  uint8_t hdmaen;           // $420C (the stage NMI writes it from $038C, C3/08FD)
+  uint16_t vaddr;           // $2116
+  uint8_t vmain;            // $2115
+  uint8_t cgadd;            // $2121
+} CtSeqStagePic;
+// A DMA from WRAM into the PPU's data ports, as a stage's code issues it ($43x0 / $43x1 = dmap / bbad, from WRAM byte `src`,
+// `n` bytes; DMAP bit 3 = the fixed source): $2118 / $2119 (VRAM through the port's address and VMAIN), $2122 (CGRAM), $2104
+// (OAM, from the address the stage set -- 0 in every stage measured). Reads `w` as the 128 KB WRAM ($7E at 0).
+void CtSeqStagePicDma(CtSeqStagePic* sp, const uint8_t* w, uint8_t dmap, uint8_t bbad, uint32_t src, unsigned n);
+// ...and `$2139 / $213A` into WRAM: VRAM read back through the port (its read buffer's one-word lag, VMAIN's step).
+void CtSeqStagePicVramRead(CtSeqStagePic* sp, uint8_t* w, uint32_t dst, unsigned n);
+// The stage's frame drawn from `w`'s HDMA tables.
+void CtSeqStagePicFrame(CtSeqStagePic* sp, const uint8_t* w, uint8_t* rgb);
+
+
 #endif

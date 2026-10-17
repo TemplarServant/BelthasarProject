@@ -7309,6 +7309,105 @@ static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) 
   return 0;
 }
 
+// --racepiccmp <state> <btnscript> <handoff> <operand> <frames> -- THE RACE'S PICTURE, NATIVE, in lockstep with the oracle. The
+// oracle runs the drive to the hand-off frame; its WRAM there opens the native stage with a picture (src/seq_racepic.c); the
+// oracle runs on until its stage has made the setup's NMI ($0008 = 1 at a frame's end), and from there each native NMI is laid
+// against the oracle's next one: as the oracle leaves vblank, VRAM / CGRAM / OAM / the display registers / the HDMA channels are
+// compared, then both frames are drawn and compared pixel for pixel. The native stage takes the oracle's pad from its $02.
+#include "seq_racepic.h"
+static void racepicPost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }
+static int runRacePicCmp(const char* romPath, const char* statePath, const char* btns, int handoff, int operand, int frames) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) return 2;
+  static uint8_t w[0x20000], rgb[256 * 224 * 3], romImg[0x600000];
+  static CtSeqStagePic sp; static CtSeqPic q;
+  CtRaceIo io; memset(&io, 0, sizeof io);
+  { FILE* rf = fopen(romPath, "rb"); if (rf) { io.romLen = (long)fread(romImg, 1, sizeof romImg, rf); fclose(rf); io.rom = romImg; } }
+  io.ctx = w; io.post = racepicPost; io.pic = &sp;
+  CtBtnScript bs = { btns }; uint16_t held = 0; int left = 0;
+  #define RPC_PAD() do { while (left <= 0) { int n_; if (!ctBtnNext(&bs, &held, &n_)) { held = 0; n_ = 1 << 30; } left = n_; } \
+                         s->input1->currentState = held; left--; } while (0)
+  for (int f = 0; f < handoff; f++) { RPC_PAD(); CtOracleRunFrame(s); }
+  memcpy(w, s->ram, sizeof w);
+  memset(&sp, 0, sizeof sp); CtSeqPicReset(&sp.p);
+  // RACEPICCMP_SEEDVRAM=1: the native VRAM starts as the cartridge's at the hand-off (the field's leftovers the race never
+  // writes) -- to tell the race's own uploads from what the port's field does not keep.
+  if (getenv("RACEPICCMP_SEEDVRAM")) memcpy(sp.p.vram, s->ppu->vram, sizeof sp.p.vram);
+  if (CtRaceStageOpen(w, (uint8_t)operand, &io) < 0) { printf("racepiccmp: open failed\n"); return 1; }
+  int waited = 0;
+  while (!(s->ram[0x08] == 1 && s->ram[0x09] == 0 && s->ram[0x3024] == 0xD1) && waited < 200) { RPC_PAD(); CtOracleRunFrame(s); waited++; }
+  printf("racepiccmp: the stage's setup made its NMI %d frame(s) after the hand-off\n", waited);
+  CtSeqStagePicFrame(&sp, w, NULL);                                   // (the frame the setup's NMI drew: its HDMA's last writes)
+  int firstState = -1, firstPic = -1; long picBad = 0;
+  for (int k = 1; k <= frames; k++) {
+    RPC_PAD();
+    while (s->inVblank) cpu_runOpcode(s->cpu);                         // the oracle's NMI k and its hooks done
+    uint16_t joy = (uint16_t)(s->ram[0x02] | (s->ram[0x03] << 8));
+    int st = CtRaceStageFrame(w, joy, &io);
+    if (st) { printf("racepiccmp: native stage ended (%d) at frame %d\n", st, k); break; }
+    seqPicFromPpu(&q, s->ppu);
+    int vb = 0, cb = 0, ob = 0, rb = 0, rl = 0; char regs[256] = "";
+    for (int i = 0; i < 0x8000; i++) vb += q.vram[i] != sp.p.vram[i];
+    for (int i = 0; i < 256; i++) cb += q.cgram[i] != sp.p.cgram[i];
+    for (int i = 0; i < 256; i++) ob += q.oam[i] != sp.p.oam[i];
+    for (int i = 0; i < 32; i++) ob += q.highOam[i] != sp.p.highOam[i];
+    static const uint8_t live[] = { 0x00, 0x01, 0x02, 0x03, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x1A, 0x23, 0x24, 0x25, 0x26,
+                                    0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33 };
+    for (unsigned i = 0; i < sizeof live; i++)
+      if (q.r[live[i]] != sp.p.r[live[i]]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " %02X:%02X/%02X", live[i], q.r[live[i]], sp.p.r[live[i]]); }
+    for (int i = 0; i < 4; i++) {
+      if (q.hofs[i] != sp.p.hofs[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " hofs%d", i); }
+      if (q.vofs[i] != sp.p.vofs[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " vofs%d", i); }
+    }
+    for (int i = 0; i < 8; i++) if (q.m7[i] != sp.p.m7[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " m7[%d]", i); }
+    for (int i = 0; i < 3; i++) if (q.fix[i] != sp.p.fix[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " fix%d", i); }
+    uint8_t en = 0; int hb = 0;
+    for (int i = 0; i < 8; i++) {
+      DmaChannel* c = &s->dma->channel[i];
+      if (c->hdmaActive) en |= (uint8_t)(1 << i);
+      uint8_t dm = (uint8_t)((c->indirect ? 0x40 : 0) | (c->mode & 7));
+      if (((sp.hdmaen >> i) & 1) && (dm != sp.ch[i].dmap || c->bAdr != sp.ch[i].bAdr || c->aAdr != sp.ch[i].aAdr || c->aBank != sp.ch[i].aBank)) hb++;
+    }
+    if (en != sp.hdmaen) hb++;
+    int wb = 0; for (int i = 0; i < 0x20000; i++) wb += s->ram[i] != w[i];
+    if (getenv("RACEPICCMP_WRAMAT") && k == atoi(getenv("RACEPICCMP_WRAMAT"))) {
+      int st0 = -1, shown = 0;
+      for (int i = 0; i <= 0x20000 && shown < 80; i++) { int d = i < 0x20000 && s->ram[i] != w[i];
+        if (d && st0 < 0) st0 = i; if (!d && st0 >= 0) { printf("racepiccmp:   WRAM $%05X-$%05X cart %02X port %02X\n", st0, i - 1, s->ram[st0], w[st0]); st0 = -1; shown++; } }
+    }
+    int bad = vb || cb || ob || rb || hb;
+    if (bad && firstState < 0) firstState = k;
+    if (k == firstState && getenv("RACEPICCMP_VRAM")) {
+      int st0 = -1;
+      for (int i = 0; i <= 0x8000; i++) { int d = i < 0x8000 && q.vram[i] != sp.p.vram[i];
+        if (d && st0 < 0) st0 = i; if (!d && st0 >= 0) { printf("racepiccmp:   VRAM $%04X-$%04X (cart %04X port %04X)\n", st0, i - 1, q.vram[st0], sp.p.vram[st0]); st0 = -1; } }
+    }
+    if (getenv("RACEPICCMP_VERBOSE") || k == firstState)
+      printf("racepiccmp: frame %d: VRAM %d CGRAM %d OAM %d words differ; registers %d%s; HDMA %d; WRAM %d bytes\n", k, vb, cb, ob, rb, regs, hb, wb);
+    CtSeqStagePicFrame(&sp, w, rgb);
+    uint32_t fr = s->frames;
+    while (!s->inVblank && fr == s->frames) cpu_runOpcode(s->cpu);
+    int pb = 0;
+    for (int y = 0; y < 224; y++) {
+      const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+      for (int x = 0; x < 256; x++) {
+        const uint8_t* o = b + x * 8 + 4 + s->ppu->pixelOutputFormat; const uint8_t* m = rgb + (y * 256 + x) * 3;
+        if (o[2] != m[0] || o[1] != m[1] || o[0] != m[2]) pb++;
+      }
+    }
+    if (pb) { picBad += pb; if (firstPic < 0) { firstPic = k; printf("racepiccmp: frame %d: %d px differ\n", k, pb); } }
+    if (getenv("RACEPICCMP_SHOT") && k == atoi(getenv("RACEPICCMP_SHOT"))) {
+      FILE* o = fopen("build/racepic_native.raw", "wb");
+      if (o) { uint32_t hd[2] = { 256, 224 }; fwrite(hd, 4, 2, o); fwrite(rgb, 1, sizeof rgb, o); fclose(o); }
+    }
+  }
+  #undef RPC_PAD
+  printf("racepiccmp: %d frames -- first state difference %d, first picture difference %d (%ld px)\n", frames, firstState, firstPic, picBad);
+  CtOracleDestroy(s); free(rom);
+  return 0;
+}
+
 // --cputrace <state> <frames> <out.txt> -- EVERY instruction the oracle executes, with the bytes it executed.
 // One line per opcode: `KK:PPPP b0 b1 b2 b3 A=.... X=.... Y=.... S=.... D=.... B=.. P=nvmxdizc`, the four bytes read
 // off the bus at the moment of execution (so self-modifying code -- the race's $357B patches its own loop every
@@ -15973,6 +16072,7 @@ int main(int argc, char** argv) {
   const char* fxcState = NULL, *arenaState = NULL;
   const char* seqPpuState = NULL; int seqPpuFrames = 1;
   const char* seqPicState = NULL; int seqPicFrames = 1;
+  const char* rpcArgs[5] = { 0 };
   const char* cpuTraceState = NULL, *cpuTraceOut = NULL; int cpuTraceFrames = 1;
   const char* xlatCmpState = NULL; int xlatCmpFrames = 1;
   const char* wipeDumpState = NULL; int wipeDumpK = 1; const char* wipeDumpIn = NULL; const char* wipeDumpOut = NULL; const char* wipeDumpMask = NULL; uint32_t wipeDumpEntry = 0xC3000E, wipeDumpExit = 0xC022FE, wipeDumpMaskPc = 0xC000CB;
@@ -16107,6 +16207,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--sweeparenascroll") && i + 3 < argc) { arenaState = argv[++i]; fxcF0 = atoi(argv[++i]); fxcF1 = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--seqppucmp") && i + 2 < argc) { seqPpuState = argv[++i]; seqPpuFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--seqpiccmp") && i + 2 < argc) { seqPicState = argv[++i]; seqPicFrames = atoi(argv[++i]); }
+    else if (!strcmp(argv[i], "--racepiccmp") && i + 5 < argc) { for (int k = 0; k < 5; k++) rpcArgs[k] = argv[++i]; }
     else if (!strcmp(argv[i], "--xlatphase") && i + 4 < argc) { xlatPhState = argv[++i]; xlatPhPc = (uint32_t)strtoul(argv[++i], NULL, 16); xlatPhExtra = atoi(argv[++i]); xlatPhFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatentries") && i + 2 < argc) { xlatEnState = argv[++i]; xlatEnFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatcmp") && i + 2 < argc) { xlatCmpState = argv[++i]; xlatCmpFrames = atoi(argv[++i]); }
@@ -16359,6 +16460,7 @@ int main(int argc, char** argv) {
   if (fxcState) return CT_NOT_ORACLE(runSweepFxCompose(romPath, fxcState, fxcF0, fxcF1));
   if (seqPpuState) return CT_NOT_ORACLE(runSeqPpuCmp(romPath, seqPpuState, seqPpuFrames));
   if (seqPicState) return CT_NOT_ORACLE(runSeqPicCmp(romPath, seqPicState, seqPicFrames));
+  if (rpcArgs[0]) return CT_NOT_ORACLE(runRacePicCmp(romPath, rpcArgs[0], rpcArgs[1], atoi(rpcArgs[2]), (int)strtol(rpcArgs[3], NULL, 16), atoi(rpcArgs[4])));
   if (cpuTraceState) return CT_NOT_ORACLE(runCpuTrace(romPath, cpuTraceState, cpuTraceFrames, cpuTraceOut));
   if (xlatCmpState) return CT_NOT_ORACLE(runXlatCmp(romPath, xlatCmpState, xlatCmpFrames));
   if (wipeDumpState) return CT_NOT_ORACLE(runWipeDump(romPath, wipeDumpState, wipeDumpK, wipeDumpIn, wipeDumpOut, wipeDumpMask, wipeDumpEntry, wipeDumpExit, wipeDumpMaskPc));
