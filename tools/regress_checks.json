@@ -27306,6 +27306,153 @@
       "notes": "Same drive on to FF 2E (f6840, 52 black frames). Pixel-exact at port f8000 = cartridge f8000; from page B's wait on the song's marker (f8679 in the port, f8681 on the cartridge: the port's SPC gives the marker two frames early in play -- the harness, answering `F5` from the oracle's SPC, is exact: ending-ff2e-picture-native-vs-oracle) the port runs two frames ahead: the world's zoom then mixes the two pages (f8800 / f9200: 54 / 382 pixels), and from the star screen on every frame checked is the cartridge's at +2 (f10400, 11600, 12800, 15000, 17600; pinned: f12800, \"The End\"'s rolling text, which a field bit left out moves -- 5099 pixels). The rolling text's scroll and the last planet's turn ride the PPU's field bit, which the field now gives the stage (raceIoFor's io.field: it flips every frame, a cold boot's phase)."
     },
     {
+      "name": "ending-ff2a-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/ending_re/ending_handoff_f130_ff2a.state",
+        "0:16000",
+        "0",
+        "2A",
+        "15000"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ending_re/ending_handoff_f130_ff2a.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 46 frame(s) after the hand-off",
+        "racepiccmp: frame 1: the race's WRAM differs in 1 bytes",
+        "racepiccmp: 15000 frames -- first state difference -1, first race-WRAM difference 1, first picture difference -1 (0 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "note_pass": "the ending's FF 2A (entry 10: its own planet, the world, the stars, the planet, \"The End\"), its picture native: 15000 NMIs, VRAM / CGRAM / OAM / the registers / HDMA and every pixel the cartridge's; the one WRAM byte is FF 2B's hand-off's $7F:0076",
+      "notes": "THE ENDING's PICTURE, FF 2A (src/seq_endingpic.c; disasm/notes/seq_picture.md sec. 9): the setup's entry-10 part (packets $BD / $B4, 320 tiles picked through WMDATA in the bank packet $B4's unpack left -- $7F), the hook $9CE2 (the sprite's frame to VRAM $5800 by `$A3`), the task $9C58 (the sprite, its window, three tiles cycled in its list's own bytes, through $A03D -- whose skip of a sprite leaves A 16-bit for the rest of the list), $9D45, the calls $8A01 (the 4bpp-nibble planet through $353C) / $8AF5, the hooks $8B52 / $9E19. Each hand-off is the FF 2B / FF 2E one with the op's operand byte in the scene's script changed (saves/ending_re/*_ff2a / *_ff2f.state, written by setting $7F:2983 = 2A / $7F:2268 = 2F in ending_handoff_f130 / f6837 and its CRC): the cartridge then runs entry 10 / 15 from the same world and the same song. The game reaches them by `glb[$6E]` (scene 052's obj0 stores 1-4 from `glb[$6D]` bit 7 and Crono in the party: 1 or 4 -> scene 81's `FF 2A`; scene 90 runs `FF 2F` for 0 or 4) -- the oracle walked the 6D-bit-7 branch from lavos_core_defeated to the fair (saves/ending_re/a1_*.state) but not to the square. Not exercised (a mutation survives): $8B52's `ADC #00` (page A's r5 stays even on the frames it runs).",
+      "mutations": [
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "    m16 = 1;",
+          "replace": "    m16 = 0;",
+          "why": "$A03D's skipped sprite leaves A 16-bit (the SEP #20 jumped over)"
+        },
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "    unsigned wm = ((unsigned)(w[0x0305] & 1) << 16) | 0x2200;",
+          "replace": "    unsigned wm = 0x2200;",
+          "why": "entry 10's tile picks read WMDATA in the bank the last unpack left"
+        },
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "      CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10000 | rw(w, 0x9D25 + x), 0x0800);",
+          "replace": "      CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10000 | rw(w, 0x9D25 + x), 0x0400);",
+          "why": "$9CE2 sends $800 bytes of the sprite's frame"
+        },
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "          CtSeqStagePicVramWrite(sp, 1, (uint8_t)(b & 0x0F)); CtSeqStagePicVramWrite(sp, 1, (uint8_t)(b >> 4));",
+          "replace": "          CtSeqStagePicVramWrite(sp, 1, (uint8_t)(b >> 4)); CtSeqStagePicVramWrite(sp, 1, (uint8_t)(b & 0x0F));",
+          "why": "$353C writes the low nibble first"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    w[0xA0F6] = (uint8_t)((n << 2) | 0xE0); w[0xA0FA] = (uint8_t)(w[0xA0F6] + 2);",
+          "replace": "    w[0xA0F6] = (uint8_t)((n << 2) | 0xE0); w[0xA0FA] = (uint8_t)(w[0xA0F6] + 1);",
+          "why": "$9C58 cycles the list's tiles two apart"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    case 0x9C58: task9C58(w, io); return t;",
+          "replace": "    case 0x9C58: return t;   /* MUT */",
+          "why": "$9C58 re-adds the hook $9CE2 when `$A3` changes"
+        }
+      ]
+    },
+    {
+      "name": "ending-ff2f-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/ending_re/ending_handoff_f6837_ff2f.state",
+        "0:12000",
+        "0",
+        "2F",
+        "4000"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ending_re/ending_handoff_f6837_ff2f.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 54 frame(s) after the hand-off",
+        "racepiccmp: native stage ended (1) at frame 3968",
+        "racepiccmp: 4000 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 1200,
+      "note_pass": "the ending's FF 2F (entry 15: FF 2E's screens to the stars and the planet, then its own END at $8CD0), its picture native: 3968 NMIs to the END (the cartridge's frame), every pixel",
+      "notes": "FF 2F leaves FF 2E's path at the call $8CD0 (`$0A20` = $9315) and ENDs on the fade: the oracle's $0000 is 1 on the same NMI (RACEPICCMP_PEEK prints it). Each hand-off is the FF 2B / FF 2E one with the op's operand byte in the scene's script changed (saves/ending_re/*_ff2a / *_ff2f.state, written by setting $7F:2983 = 2A / $7F:2268 = 2F in ending_handoff_f130 / f6837 and its CRC): the cartridge then runs entry 10 / 15 from the same world and the same song. The game reaches them by `glb[$6E]` (scene 052's obj0 stores 1-4 from `glb[$6D]` bit 7 and Crono in the party: 1 or 4 -> scene 81's `FF 2A`; scene 90 runs `FF 2F` for 0 or 4) -- the oracle walked the 6D-bit-7 branch from lavos_core_defeated to the fair (saves/ending_re/a1_*.state) but not to the square.",
+      "mutations": [
+        {
+          "file": "src/seq_ending.c",
+          "find": "      if ((w[0x0384] & 0x0F) == 0x0F) { wr(w, 0x0A20, 0x9315); return 0; }",
+          "replace": "      if (0) { wr(w, 0x0A20, 0x9315); return 0; }   /* MUT */",
+          "why": "entry 15 leaves entry 14's path at $8CD0"
+        }
+      ]
+    },
+    {
+      "name": "ending-stage-logic-ff2a-ff2f-vs-oracle",
+      "argv": [
+        "python",
+        "tools/ending_stage_cmp.py",
+        "--drives",
+        "2A,2F"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ending_re/ending_handoff_f130_ff2a.state",
+        "saves/ending_re/ending_handoff_f6837_ff2f.state",
+        "tools/ending_stage_cmp.py"
+      ],
+      "expect": [
+        "endingstage: FF 2A 11956 frames compared, 5 differing, END cartridge fNone port fNone (same)",
+        "endingstage: FF 2A song markers cartridge 219 699 3820 8741 port 219 699 3820 8741",
+        "endingstage: FF 2F 3968 frames compared, 0 differing, END cartridge f4021 port f4021 (same)",
+        "endingstage: FF 2F song markers cartridge 115 2037 port 115 2037"
+      ],
+      "pin": [
+        "^endingstage: "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "note_pass": "the ending's entries 10 and 15 (FF 2A / FF 2F) run natively against the cartridge: FF 2F byte for byte to its END on the same frame; FF 2A for 11956 frames, 5 of them a frame apart where page A waits on the song's 8th marker (the port's own SPC)",
+      "notes": "ending_stage_cmp.py's drives 2A / 2F (the --seqstage port, its SPC seeded from the state, against the cartridge's --monitor). FF 2A's 5 frames (f10898-10902): page A leaves its `F5 08` (IP $92C7) one frame early -- the marker on the port's own SPC; the harness, which answers `F5` from the oracle's SPC, is exact (ending-ff2a-picture-native-vs-oracle). Each hand-off is the FF 2B / FF 2E one with the op's operand byte in the scene's script changed (saves/ending_re/*_ff2a / *_ff2f.state, written by setting $7F:2983 = 2A / $7F:2268 = 2F in ending_handoff_f130 / f6837 and its CRC): the cartridge then runs entry 10 / 15 from the same world and the same song. The game reaches them by `glb[$6E]` (scene 052's obj0 stores 1-4 from `glb[$6D]` bit 7 and Crono in the party: 1 or 4 -> scene 81's `FF 2A`; scene 90 runs `FF 2F` for 0 or 4) -- the oracle walked the 6D-bit-7 branch from lavos_core_defeated to the fair (saves/ending_re/a1_*.state) but not to the square. (The hook list $0940 is not in the comparison: $9C58's re-add of $9CE2 is graded by the picture, ending-ff2a-picture-native-vs-oracle.)",
+      "mutations": [
+        {
+          "file": "src/seq_ending.c",
+          "find": "    case 0x9D45: wr(w, 0x0A0A, rd(w, 0x0A0A) - 1); task9D48(w); return t;   // 9D45 DEC $0A0A, then $9D48",
+          "replace": "    case 0x9D45: task9D48(w); return t;   /* MUT */",
+          "why": "$9D45 turns page A's r5 down every frame"
+        }
+      ]
+    },
+    {
       "name": "seq-pic-day-of-lavos-vs-oracle",
       "argv": [
         "build/ct.exe",
@@ -40534,8 +40681,8 @@
         },
         {
           "file": "src/seq_ending.c",
-          "find": "    case 0x8BAF: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x00; return 0;   // 8BB0 / 8BB3, 8BC3 (A = $0000, TCD)",
-          "replace": "    case 0x8BAF: return 0;   /* MUT: the reload keeps the lists */",
+          "find": "    case 0x8BAF: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x00;            // 8BB0 / 8BB3, 8BC3 (A = $0000, TCD)",
+          "replace": "    case 0x8BAF: w[0x038C] = 0x00;   /* MUT: the reload keeps the lists */",
           "why": "the last screens' backdrop reload clears the task and hook lists before the script re-adds its own"
         },
         {
@@ -40546,14 +40693,14 @@
         },
         {
           "file": "src/seq_ending.c",
-          "find": "  if (st != 2) s_songHold = CtSeqStageSong(w, io);",
+          "find": "  if (st != 2) s_songHold = CtSeqStageSongTick(w, io, s_songHold);",
           "replace": "  if (st != 2) { CtSeqStageSong(w, io); w[0x0388] = 0; }   /* MUT */",
           "why": "the song's upload holds the stage's NMI (C3/09A4's JSL inside it) for the SPC's handshake frames"
         },
         {
           "file": "src/seq_ending.c",
-          "find": "    case 0x8D56: w[0x038C] = 0x01; wr(w, 0x4A, 0xB099); wr(w, 0x48, 0xFFE0); return 0;",
-          "replace": "    case 0x8D56: return 0;   /* MUT */",
+          "find": "      w[0x038C] = 0x01; wr(w, 0x4A, 0xB099); wr(w, 0x48, 0xFFE0); return 0;",
+          "replace": "      return 0;   /* MUT */",
           "why": "hook $8D56 points the rolling text at its start ($4A = $B099)"
         },
         {

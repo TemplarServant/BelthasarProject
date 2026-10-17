@@ -83,7 +83,8 @@ void CtEndingPicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
   if (e == 0x0A) {                                                    // 85D4 CMP #0A: entry 10's own pictures
     CtSeqPicUnpack(w, io, 0xBD);                                      // 85E1 (to $7F:0200)
     ww(w, 0x0303, 0x2200); CtSeqPicUnpack(w, io, 0xB4);               // 85E7 (to $7F:2200)
-    unsigned wm = 0x2200;                                             // 85F3 $2181 = $2200 ($2183 = $7E since 8558)
+    unsigned wm = ((unsigned)(w[0x0305] & 1) << 16) | 0x2200;         // 85F3 $2181 = $2200, the bank packet $B4's unpack left
+                                                                      //   in $2183 (C3/0557: `$0305`'s, $7F)
     ww(w, 0x18000, 0x0140);                                           // 85FF LDA #0140 / STA $8000 (the data bank $7F)
     unsigned y = 0xD800;
     do {                                                              // 860C LDA $80 (WMDATA) / AND #00FF / ASL x5 / ADC #0200
@@ -149,10 +150,7 @@ static void world87DD(uint8_t* w, const CtRaceIo* io, unsigned d) {
   ww(w, d + 0xF0, 0x0020);                                            // 8836 LDX #0020 / STX $F0 (the page's)
   copy36AA(w, io, d, 0xA5, 0x2100); copy36AA(w, io, d, 0xA5, 0x2300);
 }
-int CtEndingPicHas(uint8_t operand) {
-  unsigned e = operand & 0x1F;
-  return CtEndingStageHas(operand) && (e == 11 || e == 14 || e == 15);
-}
+int CtEndingPicHas(uint8_t operand) { return CtEndingStageHas(operand); }
 // ---- the last screens (`FF 2E` / `FF 2F`) ----
 // $7E:5E54 (4bpp) / $7E:5EF8 (8bpp), the data bank $7F, D = 0 -- one tile's rows from $7F:X into mode 7's characters (the high
 // bytes through $2119, VMAIN $80): each pixel's bits rolled out of the planes' bytes ($3B.. as the rows load them), the first
@@ -274,10 +272,37 @@ int CtEndingPicCall(CtSeqStagePic* sp, uint8_t* w, unsigned page, unsigned tgt, 
       copy36AA(w, io, page, 0xA2, 0x21E0); copy36AA(w, io, page, 0xAB, 0x2000);
       memmove(w + 0x2200, w + 0x2000, 0x200);                         // 8E17 $38AF
       return 1;
-    case 0x8A01: case 0x8AF5: {                                       // entry 10's screens: not ported
-      static unsigned said; if (said != tgt) { said = tgt; fprintf(stderr, "endingpic: UNDERIVED -- call $%04X (FF 2A)\n", tgt); }
+    case 0x8A01:                                                      // ENTRY 10's PLANET (after the logic's lists; D = 0):
+      reg(sp, 0x00, 0x80); sp->hdmaen = 0; sp->vmain = 0x80;          // 8A12 INIDISP $80, 8A17 TDC / STA $420C, 8A1B VMAIN
+      ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                   // 8A20 $89ED
+      w[0x00F0] = 0x01; w[0x00F2] = 0x18;
+      sp->vaddr = 0x6000; CtSeqPicUnpack(w, io, 0xC6); CtSeqPicDma38E7(sp, w);   // 8A23
+      sp->vaddr = 0x7000; CtSeqPicUnpack(w, io, 0xC9); CtSeqPicDma38E7(sp, w);   // 8A3D
+      CtSeqStagePicDma(sp, w, 0x09, 0x18, 0x350B, 0x0700);            // 8A4D $90AA: the fill byte on, both bytes
+      sp->vaddr = 0x7400; CtSeqPicUnpack(w, io, 0xCC); CtSeqPicDma38E7(sp, w);   // 8A56
+      CtSeqStagePicDma(sp, w, 0x09, 0x18, 0x350B, 0x0680);            // 8A66 $90AA
+      sp->vaddr = 0x0000; CtSeqPicUnpack(w, io, 0xB7);                // 8A6F, then $353C: each byte of $7F:0200 through
+      { unsigned wm = 0x10200;                                        //   WMDATA, its low nibble then its high to $2119 (two
+        for (unsigned n = rw(w, 0x0306); n; n--) {                    //   mode-7 pixels a byte), `$0306` of them
+          uint8_t b = w[wm & 0x1FFFF]; wm = (wm + 1) & 0x1FFFF;
+          CtSeqStagePicVramWrite(sp, 1, (uint8_t)(b & 0x0F)); CtSeqStagePicVramWrite(sp, 1, (uint8_t)(b >> 4));
+        } }
+      sp->vaddr = 0x0000; CtSeqPicUnpack(w, io, 0xBA); rows37CA(w);   // 8A81 packet $BA, $37CA
+      sp->vmain = 0x00; CtSeqStagePicDma(sp, w, 0x00, 0x18, 0x12200, 0x2000);   // 8A91 (TDC: VMAIN 0, DMAP 0)
+      w[0x0305] = 0; ww(w, 0x00F0, 0x0060); CtSeqPicCopy36AA(w, io, 0x93, 0x2000);   // 8AB3
+      memmove(w + 0x2200, w + 0x2000, 0x200);                         // 8AC4 $38AF
+      CtRacePicCgram(sp, w);                                          // 8AC7 $388B
+      CtSeqPicHdma36CC(sp, w, 0x9003);                                // 8ACA
+      reg(sp, 0x1A, 0x80); reg(sp, 0x05, 0x07);                       // 8AD5 M7SEL, BGMODE
+      reg(sp, 0x2E, 0x11); reg(sp, 0x2F, 0x01); reg(sp, 0x2C, 0x11); reg(sp, 0x2D, 0x10); reg(sp, 0x31, 0x21);   // 8ADF
       return 1;
-    }
+    case 0x8AF5:                                                      // entry 10's last world (D = 0): the HDMA from $900E,
+      reg(sp, 0x00, 0x80); sp->hdmaen = 0;                            //   TM / TS, WOBJSEL, the tables' counts, BG2's scroll
+      CtSeqPicHdma36CC(sp, w, 0x900E);
+      reg(sp, 0x2C, 0x13); reg(sp, 0x2D, 0x10); reg(sp, 0x25, 0x00);
+      w[0x9043] = w[0x9046] = w[0x9039] = w[0x903C] = w[0x9057] = w[0x905A] = 0x64;   // 8B25
+      w[0x1406] = 0x70; reg(sp, 0x10, 0x70); w[0x1407] = 0xFF; reg(sp, 0x10, 0xFF);    // 8B3F
+      return 1;
     default: return 0;
   }
 }
@@ -389,6 +414,28 @@ unsigned CtEndingPicHook(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned 
       CtSeqPicHdma36CC(sp, w, 0x9029);
       return 0;
     case 0x8E88: reg(sp, 0x10, w[0x0A04]); reg(sp, 0x10, w[0x0A05]); return hook;   // BG2's scroll = page A's r2
+    case 0x9CE2: {                                                    // entry 10's sprite frame (`$A3` & 3): $800 bytes of $7F
+      unsigned x = (unsigned)(w[0xA3] & 3) << 3;                      //   from the table $9D25 to VRAM $5800 (the logic keeps
+      sp->vaddr = 0x5800; sp->vmain = 0x80;                           //   `$AB` / `$AC` and takes the hook out)
+      CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10000 | rw(w, 0x9D25 + x), 0x0800);
+      return 0;
+    }
+    case 0x8B52: {                                                    // entry 10's tables and scroll from page A's r5:
+      unsigned a = rw(w, 0x0A0A);                                     //   8B54 CMP #00E0 / BMI (else $E0)
+      if (!((a - 0x00E0) & 0x8000)) a = 0x00E0;
+      uint8_t b = (uint8_t)a; int c = b & 1; b >>= 1;                 // 8B61 LSR A (8-bit)
+      w[0x9043] = w[0x9046] = w[0x9039] = b;
+      b = (uint8_t)(b + c); w[0x903C] = w[0x9057] = w[0x905A] = b;    // 8B6E ADC #00
+      unsigned s = rw(w, 0x0A0A) + 0x0031; c = s > 0xFFFF;            // 8B7C REP #21 / ADC #0031
+      unsigned v = ((s ^ 0xFFFF) + 1) & 0xFFFF; ww(w, 0x1406, v);     // EOR #FFFF / INC A / STA $1406
+      reg(sp, 0x10, (uint8_t)(v + 0x0020 + (unsigned)c)); reg(sp, 0x10, w[0x1407]);   // 8B8B ADC #0020; 8B93 LDA $1407
+      ww(w, 0x140E, ((rw(w, 0x0A0A) ^ 0xFFFF) + 0x0080 + 1) & 0xFFFF); // 8B9B EOR / SEC / ADC #0080
+      ww(w, 0x140C, 0xFF50);                                          // 8BA8
+      return hook;
+    }
+    case 0x9E19:                                                      // BG4's scroll = page A's r7, `$1404` = r1, then $9E2B
+      reg(sp, 0x0F, w[0x0A0E]); reg(sp, 0x0F, w[0x0A0F]); ww(w, 0x1404, rw(w, 0x0A02));
+      return CtEndingPicHook(sp, w, slot, 0x9E2B, io) == 0x9E2B ? hook : 0;
     default: {
       static unsigned said = 0;
       if (said != hook) { said = hook; fprintf(stderr, "endingpic: UNDERIVED vblank hook $%04X\n", hook); }
@@ -415,22 +462,35 @@ static void task9ABD(uint8_t* w, const CtRaceIo* io) {
 }
 // $7E:A03D (the data bank $7E) -- a list of large sprites read through WMDATA from A (`n + 1`, then tile, attr, x, y per sprite)
 // at `$15` / `$17`: x = byte + `$15` (8-bit), y = byte + `$17` (16-bit). The code at $A074 `BCS` skips a sprite whose y is $E0
-// or more -- unless a caller wrote it over with `NOP / NOP` ($9BF9 does). The OAM cursor `$11`, the high table's `$13`.
+// or more -- unless a caller wrote it over with `NOP / NOP` ($9BF9 does) -- and ITS JUMP SKIPS THE `SEP #20`: the loop runs on
+// with a 16-bit A (the count `$19` a word, each `LDA $2180` the byte twice, each store two bytes, x + `$15` a word) until a
+// sprite is kept. The OAM cursor `$11`, the high table's `$13`.
 static void listA03D(uint8_t* w, unsigned p) {
   unsigned y = rw(w, 0x11), x = rw(w, 0x13);                          // A042 LDY $11 / LDX $13
-  w[0x19] = w[p & 0xFFFF]; p++;                                       // A049 LDA $2180 / STA $19
-  for (unsigned guard = 0; guard < 0x100; guard++) {
-    if (!--w[0x19]) break;                                            // A04E DEC $19 / BEQ
-    w[(0x0702 + y) & 0x1FFFF] = w[p & 0xFFFF]; p++;
-    w[(0x0703 + y) & 0x1FFFF] = w[p & 0xFFFF]; p++;
-    w[(0x0700 + y) & 0x1FFFF] = (uint8_t)(w[p & 0xFFFF] + w[0x15]); p++;   // CLC / ADC $15
-    unsigned a = (w[p & 0xFFFF] + rw(w, 0x17)) & 0xFFFF; p++;         // A06A REP #21 / AND #00FF / ADC $17
-    if (w[0xA074] == 0xB0 && a >= 0x00E0) continue;                   // A071 CMP #00E0 / BCS (the code as it stands)
-    w[(0x0701 + y) & 0x1FFFF] = (uint8_t)a;
+  w[0x19] = w[p & 0xFFFF]; p++;                                       // A049 LDA $2180 / STA $19 (8-bit)
+  int m16 = 0;                                                        // M: 8-bit from A040's SEP #20
+  #define B(o, v) (w[((o) + y) & 0x1FFFF] = (uint8_t)(v))
+  for (unsigned guard = 0; guard < 0x10000; guard++) {
+    if (m16) { unsigned n = (rw(w, 0x19) - 1) & 0xFFFF; ww(w, 0x19, n); if (!n) break; }   // A04E DEC $19 / BEQ (16-bit)
+    else if (!--w[0x19]) break;
+    uint8_t t = w[p & 0xFFFF], at, xb; p++;                           // A052 LDA $2180 (16-bit: the high byte is $2181's
+    B(0x0702, t); if (m16) B(0x0703, t);                              //   open bus, the byte just read) / STA $0702,Y
+    at = w[p & 0xFFFF]; p++;
+    B(0x0703, at); if (m16) B(0x0704, at);                            // A058 LDA $2180 / STA $0703,Y
+    xb = w[p & 0xFFFF]; p++;
+    if (m16) { unsigned v = ((unsigned)xb | ((unsigned)xb << 8)) + rw(w, 0x15); B(0x0700, v); B(0x0701, v >> 8); }   // CLC / ADC $15
+    else B(0x0700, xb + w[0x15]);
+    unsigned a = (w[p & 0xFFFF] + rw(w, 0x17)) & 0xFFFF; p++;         // A067 LDA $2180 / REP #21 / AND #00FF / ADC $17
+    m16 = 1;
+    if (w[0xA074] == 0xB0 && a >= 0x00E0) continue;                   // A071 CMP #00E0 / BCS (the code as it stands): back to
+                                                                      //   A04E with A still 16-bit -- the SEP #20 skipped
+    m16 = 0;                                                          // A076 SEP #20
+    B(0x0701, a);
     w[x & 0x1FFFF] = (uint8_t)((w[x & 0x1FFFF] >> 2) | 0x80);         // A07B LSR / SEC / ROR: large
     y = (y + 4) & 0xFFFF;
     if (!(y & 0x0F)) x = (x + 1) & 0xFFFF;                            // A088 TYA / AND #0F / BNE; INX
   }
+  #undef B
   ww(w, 0x13, x); ww(w, 0x11, y);
 }
 // $7E:9BF9 (the data bank $7E) -- THE SHOOTING STARS, two (X = 0, 2): `$87,X` counts the frame down; at 0 the script `$8F,X`
@@ -518,3 +578,4 @@ void CtEndingPicThread(CtSeqStagePic* sp, uint8_t* w) {
   ww(w, 0x21, rw(w, 0x21) + 1);                                       // 89BB INC $21
 }
 void CtEndingPicReset(void) { s_threadC = 0; }
+void CtEndingPicListA03D(uint8_t* w, unsigned list) { listA03D(w, list); }

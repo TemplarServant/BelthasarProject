@@ -163,6 +163,34 @@ static void task9D48(uint8_t* w) {
   if (rd(w, 0x08) & 0x0007) return;                                   // 9D48 LDA $08 / AND #0007 / BNE
   for (int i = 0; i < 8; i++) { unsigned a = rd(w, pr[i][0]); wr(w, pr[i][0], rd(w, pr[i][1])); wr(w, pr[i][1], a); }
 }
+// $7E:9C58 (D = 0) -- ENTRY 10's SPRITE: its frame anew when `$A3` changed (`$A5`, the hook $9CE2 added, C3's $3974); at x =
+// -(page B's r1 + `$6D`), y = -(r2 + `$6F`), the window's HDMA bytes from them and the size `$AB` / `$AC`; every 4th frame
+// (`$A9`) the next of three tiles (`$A7`) written into the list's own bytes $A0F6 / $A0FA; then the list $9D27 + ($A3 & 3) x 8
+// through $A03D (the picture's).
+static void task9C58(uint8_t* w, const CtRaceIo* io) {
+  wr(w, 0x15, 0); wr(w, 0x17, 0);                                     // 9C58 STZ $15 / STZ $17 (16-bit)
+  if (w[0xA3] != w[0xA5]) {                                           // 9C5E LDA $A3 / CMP $A5 / BEQ
+    w[0xA5] = w[0xA3];
+    unsigned x = 0; while (x < 0x10 && rd(w, 0x0940 + x)) x += 2;     // 9C66 LDX #9CE2 / JSR $3974
+    if (x < 0x10) wr(w, 0x0940 + x, 0x9CE2);
+  }
+  unsigned t = (unsigned)w[0x0B02] + w[0x6D];                         // 9C6C CLC / ADC $6D
+  uint8_t a = (uint8_t)(((t & 0xFF) ^ 0xFF) + 1);                     // EOR #FF / INC A
+  w[0x15] = a; w[0x9077] = w[0x907A] = a;
+  t = (unsigned)a + w[0xAB];                                          // 9C7F CLC / ADC $AB
+  w[0x9078] = w[0x907B] = (uint8_t)t;
+  t = (unsigned)w[0x0B04] + w[0x6F];                                  // 9C8A CLC / ADC $6F
+  a = (uint8_t)(((t & 0xFF) ^ 0xFF) + 1); w[0x17] = a;
+  int c = a & 1; a >>= 1; w[0x9070] = a; w[0x9073] = (uint8_t)(a + c);   // 9C95 LSR A / ADC #00
+  a = w[0xAC]; c = a & 1; a >>= 1; w[0x9076] = a; w[0x9079] = (uint8_t)(a + c);   // 9CA0
+  if (++w[0xA9] == 4) {                                               // 9CAD INC $A9 / CMP #04
+    w[0xA9] = 0;
+    uint8_t n = (uint8_t)(w[0xA7] + 1); if (!((uint8_t)(n - 3) & 0x80)) n = 0;   // 9CB7 INC A / CMP #03 / BMI
+    w[0xA7] = n;
+    w[0xA0F6] = (uint8_t)((n << 2) | 0xE0); w[0xA0FA] = (uint8_t)(w[0xA0F6] + 2);   // 9CC2 ASL / ASL / ORA #E0, INC / INC
+  }
+  if (io && io->pic) CtEndingPicListA03D(w, rd(w, 0x9D27 + ((unsigned)(w[0xA3] & 3) << 3)));   // 9CDB LDA $9D27,X / JMP $A03D
+}
 // $7E:891B -- the main thread's `$004E` from page A's r5: ((r5 + $10) & $3E0) << 5, + $1200 (the dispatcher's carry clear).
 static void task891B(uint8_t* w) { wr(w, 0x004E, ((((rd(w, 0x0A0A) + 0x0010) & 0x03E0) << 5) + 0x1200) & 0xFFFF); }
 // $7E:37FA -- the object slots' service (FD/FFF7: the colour animations $0520..), `LDX $4202 / STX $F0` the open bus around it.
@@ -309,6 +337,10 @@ static unsigned endingHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo
       if (pic) CtEndingPicHook(pic, w, slot, h, io);                  // its VRAM, HDMA and layers (the picture's)
       w[0x038C] = 0x01; wr(w, 0x4A, 0xB099); wr(w, 0x48, 0xFFE0); return 0;
     case 0x8C05: memset(w + 0x0900, 0, 0x20); return h;               // 8C05 MVN $00,$D2: the OAM's high table cleared (the stars')
+    case 0x9CE2:                                                      // entry 10's sprite frame: its DMA the picture's; the
+      if (pic) CtEndingPicHook(pic, w, slot, h, io);                  //   sprite's width / height for $9C58 from the table
+      { unsigned x = (unsigned)(w[0xA3] & 3) << 3; w[0xAB] = w[0x9D29 + x]; w[0xAC] = w[0x9D2B + x]; }   // 9D09 / 9D0F
+      return 0;                                                       //   9D22 JMP $39DE
     case 0x8E44:                                                      // the last screen's layers (the picture's), HDMA on:
       if (pic) CtEndingPicHook(pic, w, slot, h, io);
       w[0x038C] = 0x01; return 0;                                     //   8E80 LDA #01 / STA $038C, 8E85 JMP $39DE
@@ -339,6 +371,8 @@ static unsigned endingTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x9D48: task9D48(w); return t;
     case 0x891B: task891B(w); return t;
     case 0x999C: task999C(w, slot); return t;
+    case 0x9D45: wr(w, 0x0A0A, rd(w, 0x0A0A) - 1); task9D48(w); return t;   // 9D45 DEC $0A0A, then $9D48
+    case 0x9C58: task9C58(w, io); return t;
     default:                                                          // 9ABD 9BF9 8850 99FA: the picture's
       if (io && io->pic) CtEndingPicTask(io->pic, w, slot, t, io);
       return t;

@@ -7397,7 +7397,9 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     while (s->inVblank) rpcOp(s, k);                         // the oracle's NMI k and its hooks done
     uint16_t joy = s->portAutoRead[0];                                  // $4218 / $4219 as the NMI read them (C3/0A99)
     int st = rpcFrame(w, (uint8_t)operand, joy, &io);
-    if (st) { printf("racepiccmp: native stage ended (%d) at frame %d\n", st, k); break; }
+    if (st) { printf("racepiccmp: native stage ended (%d) at frame %d\n", st, k);
+              if (getenv("RACEPICCMP_PEEK")) printf("racepiccmp: f%d the oracle's $0000 = %02X%02X (its NMI %d done)\n", k, s->ram[1], s->ram[0], k);
+              break; }
     seqPicFromPpu(&q, s->ppu);
     int vb = 0, cb = 0, ob = 0, rb = 0, rl = 0; char regs[256] = "";
     for (int i = 0; i < 0x8000; i++) vb += q.vram[i] != sp.p.vram[i];

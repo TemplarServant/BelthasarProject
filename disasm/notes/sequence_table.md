@@ -2477,9 +2477,9 @@ overlay RNG `$039B` aside), the markers on the same frames. The story run: `FF 2
 
 **The picture (stage 2, seq_picture.md sec. 9)**: native for `FF 2B` and `FF 2E` since 2026-10-17, exact NMI for NMI
 (`ending-ff2b-picture-native-vs-oracle`, `ending-ff2e-picture-native-vs-oracle`) and drawn in play (FF 2E two frames early from
-the song's second marker). **Open questions.** Entry 10's own screens ($8A01 / $8AF5: not ported, black in play); entries 10 (`FF 2A`)
-and 15 (`FF 2F`) are not graded against the cartridge (no state at their call: they need `glb[110]` the other way -- scene
-81 obj0 fn3 and scene 90's `16 6E 03 00 05`); 8A01's `$038C = 01` and 8AF5's are read from the listings, not measured.
+the song's second marker); entries 10 and 15 graded from the FF 2B / FF 2E hand-offs with the op's operand changed in the script
+(seq_picture.md sec. 9, which also has `glb[$6E]`'s derivation; 8A01's `$038C = 01` and 8AF5's measured there). **Open
+questions.** No natural drive reaches entries 10 / 15 yet (the oracle walked `glb[$6D]` bit 7's branch from the core to the fair).
 
 ---
 

@@ -205,7 +205,7 @@ the same picture). **In play**: 429 frames after the op the whole frame is the c
 (`entry6-story-picture-in-the-port-vs-oracle`). Not exercised: CMP $2137's low byte deciding a carry, a sprite past x 255 in
 $3A97, a circle's edge past $FF.
 
-## 9. The ending (src/seq_endingpic.c) -- `FF 2B` and `FF 2E` DONE (2026-10-17); `FF 2F` its screens, ungraded; `FF 2A` not ported
+## 9. The ending (src/seq_endingpic.c) -- all four entries DONE (2026-10-17)
 
 One setup, $7E:8538, for entries 10 / 11 / 14 / 15 (sequence_table.md sec. 13); its logic is seq_ending.c.
 
@@ -273,3 +273,30 @@ cold boot's phase): `FF 2B` pixel-exact at P+2 from the op (port f1500 / f4000 =
 B's wait on the song's marker ends two frames early in the port (f8679 vs f8681: the port's SPC in play, the class of
 spc-phase-sensitivity; the harness takes the oracle's ports and is exact), and from the star screen on every frame checked is the
 cartridge's at +2 (`ending-ff2e-story-picture-in-the-port-vs-oracle` pins f12800 / f12802, the rolling text).
+
+**Which entry the game plays** (traced on the cartridge from lavos_core_defeated, `--cputrace` C0/69BA): scene 052's obj0 stores
+`glb[$6E]` (op at C0/69A6, `$7F0000,X` = imm): `16 6D 80 06` tests `glb[$6D]` bit 7 and `CF 00` Crono in the party -- 1 (bit 7,
+Crono), 2 (bit 7, no Crono), 3 (no bit 7, Crono: Jackie's run), 4 (neither). Scene 81's obj0 runs `FF 2A` when bit 1 of it is clear
+(1, 4: `16 6E 02 00 08`), else the talk's `FF 2B`; scene 90 runs `FF 2F` when bits 0 and 1 are both clear, else `FF 2E`.
+
+**`FF 2A` and `FF 2F`, graded** from the FF 2B / FF 2E hand-offs with the op's operand byte in the scene's script changed
+($7F:2983 = $2A, $7F:2268 = $2F; saves/ending_re/*_ff2a / *_ff2f.state): the same world and song, entry 10 / 15's code.
+Entry 10's own pieces: the setup's 85E1-864F (packet $BD, packet $B4's 320 tile indices read through WMDATA -- in $7F: THE UNPACK
+C3/0557 SETS `$2183` FROM `$0305` -- each a 32-byte tile copied into $7F:D800.., to VRAM $5C00), the hook $9CE2 (the sprite's frame by
+`$A3` & 3 from the table $9D25 to VRAM $5800, `$AB` / `$AC` its size, then out), the task $9C58 (the frame again when `$A3` changes,
+the sprite at -(page B's r1 / r2 + `$6D` / `$6F`), its window's HDMA bytes, every 4th frame one of three tiles written into its list's
+own bytes $A0F6 / $A0FA, the list through $A03D), $9D45 (r5 down, then $9D48), the calls $8A01 (its planet: packets $C6 / $C9 / $CC,
+the 4bpp-nibble characters of packet $B7 through $353C -- low nibble first -- the map of packet $BA, the palette $93, HDMA from $9003)
+and $8AF5 (HDMA from $900E, the tables' counts $64, BG2's scroll $FF70), the hooks $8B52 (the tables' counts from r5 / 2, BG2's
+scroll, $140C / $140E) and $9E19 (BG4's scroll, then $9E2B).
+
+⚠ $A03D WITH ITS `BCS` LIVE (entry 10's $9C58; $9BF9 patches it out): a skipped sprite (y >= $E0) jumps back to the loop's top OVER
+the `SEP #20` -- the rest of the list runs with a 16-bit A: `DEC $19` a word, each `LDA $2180` the byte twice (the high byte is
+`$2181`'s open bus, the byte just read), each store two bytes (the tile into $0702 / $0703, the attribute into $0703 / $0704, x +
+`$15` a word into $0700 / $0701), until a kept sprite's `SEP #20`. Measured on the cartridge (sprite 4's x alone written).
+
+**Equal**: `FF 2A` 15000 NMIs, through "The End" held (`ending-ff2a-picture-native-vs-oracle`; one WRAM byte, FF 2B's hand-off's
+$7F:0076); `FF 2F` 3968 NMIs to its END on the cartridge's NMI (`ending-ff2f-picture-native-vs-oracle`). The logic
+(`ending-stage-logic-ff2a-ff2f-vs-oracle`): FF 2F byte for byte to the END; FF 2A 5 frames a frame early where page A waits on the
+song's 8th marker (the port's own SPC under --seqstage). In play the field draws all four (CtEndingPicHas); entries 10 / 15 are not
+compared in play (no drive reaches them: the oracle walked the `glb[$6D]` branch from the core to the fair, saves/ending_re/a1_*).
