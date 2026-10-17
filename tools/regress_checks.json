@@ -39519,8 +39519,116 @@
           "why": "without the native stage the port held on `FF 00` for good: Lab 32's race stopped the playthrough"
         }
       ],
-      "note_pass": "Johnny's race in Lab 32 plays through in the port (stage 1: its logic, the picture black): the race's END, the reboot into the staged loc 10F, and 10F's return to 0DF at the cartridge's tile",
+      "note_pass": "Johnny's race in Lab 32 plays through in the port (its logic, stage 1; its picture, stage 2, graded by race-story-picture-*-in-the-port-vs-oracle): the race's END, the reboot into the staged loc 10F, and 10F's return to 0DF at the cartridge's tile",
       "notes": "Roadmap G1a item 1 (the $C3 sequences): the first one a playthrough meets. From the user's capture (saves/race_re/race_user.*). The cartridge's own path: 10F at f2877, 0DF (39,14) at f2913; the port reaches 0DF 28 frames earlier -- the setup's song handshake is not charged yet (timing only)."
+    },
+    {
+      "name": "race-story-picture-midrace-in-the-port-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/race_re/race_user.state",
+        "431",
+        "400",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "223",
+        "--loadwram",
+        "saves/race_re/race_user.lakewram",
+        "--walkscript",
+        "n:30,a:2,n:3000"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:30,100:2,0:399",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state",
+        "saves/race_re/race_user.lakewram",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f400 vs oracle f431 box (0,0)-(256,224) -> 57344 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: "
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          else CtSeqStagePicFrame(&g_racePic, CtWramSys(fieldWram()), fb);",
+          "replace": "          /* MUT: the race drawn black */",
+          "why": "the field draws the race's native picture after each of its NMIs"
+        }
+      ],
+      "note_pass": "the story race as the port plays it, mid-race (the road, both bikes, the HUD): the whole frame the cartridge's, pixel for pixel (31 frames later on the cartridge: the opening's known residual)",
+      "notes": "The field (src/field.c) gives the race its picture (g_racePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 400; the cartridge (the logical oracle, the same pad) its frame 431. THE 31 FRAMES are the opening's residual, not the picture: the port prices 44 black frames before the setup's NMI, the cartridge takes 75 (the setup's song handshake: race-native-port memory, sequence_table.md sec. 12); from the setup's NMI on the frames are the same NMI for NMI (race-picture-native-vs-oracle)."
+    },
+    {
+      "name": "race-story-picture-finish-in-the-port-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/race_re/race_user.state",
+        "2791",
+        "2760",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "223",
+        "--loadwram",
+        "saves/race_re/race_user.lakewram",
+        "--walkscript",
+        "n:30,a:2,n:3000"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:30,100:2,0:2759",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state",
+        "saves/race_re/race_user.lakewram",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f2760 vs oracle f2791 box (0,0)-(256,224) -> 57344 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: "
+      ],
+      "timeout_s": 300,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          else CtSeqStagePicFrame(&g_racePic, CtWramSys(fieldWram()), fb);",
+          "replace": "          /* MUT: the race drawn black */",
+          "why": "the field draws the race's native picture after each of its NMIs"
+        }
+      ],
+      "note_pass": "the story race as the port plays it, after the finish (the markers gone, the score counted down): the whole frame the cartridge's, pixel for pixel (31 frames later on the cartridge: the opening's known residual)",
+      "notes": "The field (src/field.c) gives the race its picture (g_racePic) and draws it after each NMI -- seq_racepic.c over the native compositor. The port runs the user's drive (A at f30) in Lab 32 and presents frame 2760; the cartridge (the logical oracle, the same pad) its frame 2791. THE 31 FRAMES are the opening's residual, not the picture: the port prices 44 black frames before the setup's NMI, the cartridge takes 75 (the setup's song handshake: race-native-port memory, sequence_table.md sec. 12); from the setup's NMI on the frames are the same NMI for NMI (race-picture-native-vs-oracle)."
     },
     {
       "name": "ending-stage-logic-vs-oracle",

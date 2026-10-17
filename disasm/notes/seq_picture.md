@@ -88,7 +88,11 @@ native stage does not open that arm yet (the attract runs the translated stage).
 survive): a sprite past x 255, a repeated source row (a zoom past 1), a column step's carry, $449C's LSR carry, a score on a
 step's exact value at the finish.
 
-Next: the field draws the race through it (the host gives the stage a picture and draws CtSeqStagePicFrame).
+IN PLAY (2026-10-17): the field gives the race its picture (src/field.c g_racePic, reset when the race opens) and draws
+CtSeqStagePicFrame after each NMI. The user's drive in the port is the cartridge's pixel for pixel, 31 frames later on the
+cartridge -- the opening's residual (the port prices 44 black frames before the setup's NMI, the cartridge takes 75: the setup's
+song handshake), not the picture's: port f150 / 400 / 1000 / 2000 / 2700 / 2760 = cartridge f181 / 431 / 1031 / 2031 / 2731 /
+2791, every one 57344 / 57344 (race-story-picture-midrace-in-the-port-vs-oracle, race-story-picture-finish-in-the-port-vs-oracle).
 
 ## 5. Next
 

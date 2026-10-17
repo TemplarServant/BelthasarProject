@@ -87,6 +87,7 @@
 #include "audio.h"       // the SPC700 sound system: bank-$C7 driver upload + the $2140-43 command channel
 #include "seq_xlat.h"    // a $C3 stage whose output depends on the CPU clock: its program translated from the ROM
 #include "seq_race.h"    // the motorcycle race (sequence entry 0, `FF 00` / `FF 09`), native: its logic (stage 1)
+#include "seq_pic.h"     // ... and its picture (stage 2: the native compositor, src/seq_racepic.c)
 #include "seq_ending.h"   // the ending's $C3 stage (FF 2A/2B/2E/2F), native
 #include "seq_entry3.h"   // entry 3 from the story (FF 23, after the Blackbird), native
 #include "seq_entry4.h"   // entry 4 (FF 24, the Tyranno Lair: Lavos falls), native
@@ -5111,6 +5112,10 @@ static uint8_t raceSndPort(void* c, int n) {
   if (!g_fieldAudio) return 0;
   CtAudioPorts(g_fieldAudio, in, out); return out[n & 3];
 }
+// THE RACE's PICTURE (stage 2): the stage's PPU state -- the compositor's arrays and registers, the HDMA channels, the ports --
+// filled by the race's own code (seq_racepic.c: the setup, the hooks, the tasks, the main thread) and drawn after each NMI.
+// Reset when the race opens; only the race is given it (the other stages' pictures are not ported).
+static CtSeqStagePic g_racePic;
 static CtRaceIo raceIoFor(uint8_t* w) {
   CtRaceIo io; memset(&io, 0, sizeof io);
   long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
@@ -16950,9 +16955,10 @@ int main(int argc, char** argv) {
       // ends in the teardown's reboot into the location the script staged (Johnny's `CHANGELOC 10F`). Its opening is priced
       // like the other entries': the overlay's C3/0557 cycles, the init's DMAs and the setup's own 9521394 (`--callrom 7E3B48`,
       // CT_CALLROM_NONMI=1, $0384 = 20 to leave the song's handshake to the host's SPC; sequence_table.md sec. 12). Its
-      // picture is stage 2: the screen stays black.
+      // picture (stage 2) is drawn natively from g_racePic: every frame the cartridge's (race-picture-native-vs-oracle).
       if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9) && !(seqId & 0x40)) {
         CtRaceIo rio = raceIoFor(w);
+        memset(&g_racePic, 0, sizeof g_racePic); CtSeqPicReset(&g_racePic.p); rio.pic = &g_racePic;
         if (CtRaceStageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; raceOn = 1; raceEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -20134,7 +20140,8 @@ int main(int argc, char** argv) {
         CtXlatStagePicture(seqX, fb, CAMW, CAMH);
       } else if (seqOpen > 0 && raceOn) {
         // THE RACE: one NMI of its stage (seq_race.c) with the frame's pad as C3/0A8E reads it ($4218: LakeSnes' serial
-        // order turned into the register's word). Its picture is stage 2 -- the frame stays black (cleared above).
+        // order turned into the register's word), then its picture as that NMI left the PPU (seq_racepic.c; black while
+        // the opening holds).
         drewSwing = 1;
         if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
         else if (!raceEnded) {
@@ -20142,9 +20149,10 @@ int main(int argc, char** argv) {
                                             0x0080, 0x0040, 0x0020, 0x0010 };
           uint16_t joy = 0;
           for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
-          CtRaceIo rio = raceIoFor(CtWramSys(fieldWram()));
+          CtRaceIo rio = raceIoFor(CtWramSys(fieldWram())); rio.pic = &g_racePic;
           int st = CtRaceStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) raceEnded = st;
+          else CtSeqStagePicFrame(&g_racePic, CtWramSys(fieldWram()), fb);
         }
       } else if (seqOpen > 0 && endOn) {
         // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad. Its picture is stage 2 -- black.

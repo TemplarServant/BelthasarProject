@@ -10,7 +10,8 @@ the oracle (build/ct.exe --peek <oracle_state> --frames <oracle_frame>) dumps it
     frame-region-cmp: port f<N> vs oracle f<M> box (x0,y0)-(x1,y1) -> <identical> / <total> identical
 
 Oracle framebuffer = 512x480 [pad,B,G,R], downsampled 2x; the port's row y is the oracle's row y+8
-(FRAME_CMP_DY=<n> adds n, for the measured one-line residual some modes carry). Both sides run live.
+(FRAME_CMP_DY=<n> adds n, for the measured one-line residual some modes carry; FRAME_CMP_ORACLE_ARGS=<args> are added to the
+oracle's --peek, e.g. its --btnscript). Both sides run live.
 """
 import os
 import struct
@@ -40,7 +41,8 @@ def main():
     port = d[8:]
     os.remove(shot)
     orc = tmp + '_orc.raw'
-    subprocess.run([CT, '--peek', st, orc, '--frames', str(of)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    extra = os.environ.get('FRAME_CMP_ORACLE_ARGS', '').split()   # e.g. --btnscript 0:30,100:2,0:3000 for a drive
+    subprocess.run([CT, '--peek', st, orc, '--frames', str(of)] + extra, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not os.path.exists(orc):
         sys.exit('frame-region-cmp: the oracle wrote no frame')
     o = open(orc, 'rb').read()
