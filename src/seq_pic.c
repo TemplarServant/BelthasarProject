@@ -401,6 +401,7 @@ static void vramPortWrite(CtSeqStagePic* sp, int high, uint8_t v) {
   int inc = (sp->vmain & 3) == 0 ? 1 : (sp->vmain & 3) == 1 ? 32 : 128;
   if (((sp->vmain & 0x80) != 0) == high) sp->vaddr = (uint16_t)(sp->vaddr + inc);
 }
+void CtSeqStagePicVramWrite(CtSeqStagePic* sp, int high, uint8_t v) { vramPortWrite(sp, high, v); }
 void CtSeqStagePicDma(CtSeqStagePic* sp, const uint8_t* w, uint8_t dmap, uint8_t bbad, uint32_t src, unsigned n) {
   int mode = dmap & 7, fixed = (dmap & 0x08) != 0, step = (dmap & 0x10) ? -1 : 1;
   unsigned oamAdr = 0, second = 0; uint8_t buf = 0;                  // ($2102 = 0 and $2121 written just before, in every stage)

@@ -203,6 +203,7 @@ void CtSeqPicDma38E7(CtSeqStagePic* sp, const uint8_t* w) { dma38E7(sp, w); }
 void CtSeqPicOam0D5E(uint8_t* w, unsigned list) { oam0D5E(w, list); }
 static void oam0DBC(uint8_t* w, unsigned t);
 void CtSeqPicOam0DBC(uint8_t* w, unsigned rec) { oam0DBC(w, rec); }
+void CtSeqPicOamHigh3870(uint8_t* w) { hook3870(w); }
 int CtSeqPicCommonHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook) {
   switch (hook) {
     case 0x380B: hook380B(sp, w); return 1;

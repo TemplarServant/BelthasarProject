@@ -89,6 +89,7 @@
 #include "seq_race.h"    // the motorcycle race (sequence entry 0, `FF 00` / `FF 09`), native: its logic (stage 1)
 #include "seq_pic.h"     // ... and its picture (stage 2: the native compositor, src/seq_racepic.c)
 #include "seq_ending.h"   // the ending's $C3 stage (FF 2A/2B/2E/2F), native
+#include "seq_endingpic.h"   // ... and its picture (entries 11, 14, 15)
 #include "seq_entry3.h"   // entry 3 from the story (FF 23, after the Blackbird), native
 #include "seq_entry4.h"   // entry 4 (FF 24, the Tyranno Lair: Lavos falls), native
 #include "seq_entry6.h"   // entry 6 (FF 26, the Epoch into Lavos's shell), native
@@ -5144,10 +5145,15 @@ static void stagePicOpen(void) {
     { const char* dp = getenv("CT_STAGEPIC_VRAMDUMP"); FILE* df = dp ? fopen(dp, "wb") : NULL; if (df) { fwrite(g_fieldVram, 2, 0x8000, df); fclose(df); } }
     fprintf(stderr, "stagepic: open, the field VRAM has %ld nonzero words (1000: %04X 6140: %04X 6800: %04X)\n", n, g_fieldVram[0x1000], g_fieldVram[0x6140], g_fieldVram[0x6800]); }
 }
+// `$213F`'s bit 7, the PPU's field, as a stage's NMI reads it (`LDA $213E` 16-bit, the ending's $9E7B / $9A0C): it flips every
+// frame. Its phase is a cold boot's -- the first frame odd (ppu.c ppu_handleFrameStart), the port's frame f the cartridge's f + 2;
+// a run started from a WRAM image keeps that phase from its own first frame.
+static int fieldPpuField(void* c) { (void)c; return !(g_sndTraceFrame & 1); }
 static CtRaceIo raceIoFor(uint8_t* w) {
   CtRaceIo io; memset(&io, 0, sizeof io);
   long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
   io.ctx = w; io.post = raceSndPost; io.sfx = raceSndSfx; io.apu = raceSndApu; io.rom = rb; io.romLen = rl;
+  io.field = fieldPpuField;
   if (g_fieldAudio) io.port = raceSndPort;                        // a script's `F5` waits on the song's marker
   return io;
 }
@@ -17021,9 +17027,10 @@ int main(int argc, char** argv) {
       // reset. The opening is priced like the race's: the overlay's C3/0557 cycles, the init's DMAs and the setup's own, per
       // entry (CtEndingStageSetupCycles: `--callrom 7E8538`, CT_CALLROM_NONMI=1; sequence_table.md sec. 13) -- 48 black
       // frames for `FF 2B` and 52 for `FF 2E`, the cartridge's own.
-      // Its picture is stage 2: the screen stays black.
+      // Its picture is native (seq_endingpic.c) for entries 11, 14 and 15; entry 10's stays black.
       if (seqId != 2 && !seqOpen && CtEndingStageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
+        if (CtEndingPicHas((uint8_t)seqId)) { stagePicOpen(); rio.pic = &g_stagePic; }
         if (CtEndingStageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 1; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -20201,7 +20208,7 @@ int main(int argc, char** argv) {
           else CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
         }
       } else if (seqOpen > 0 && endOn) {
-        // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad. Its picture is stage 2 -- black.
+        // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad, and its picture (entry 10's: black).
         drewSwing = 1;
         if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
         else if (!endEnded) {
@@ -20210,14 +20217,15 @@ int main(int argc, char** argv) {
           uint16_t joy = 0;
           for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
           CtRaceIo rio = raceIoFor(CtWramSys(fieldWram()));
-          if (endOn >= 2 && endOn <= 5) rio.pic = &g_stagePic;      // entries 3, 4, 7 and 6's pictures are ported (the ending: black)
+          int stagePic = (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(CtWramSys(fieldWram())[0x0384]));
+          if (stagePic) rio.pic = &g_stagePic;                      // entries 3, 4, 7, 6 and the ending's 11 / 14 / 15
           int st = endOn == 2 ? CtEntry3StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 3 ? CtEntry4StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 4 ? CtEntry7StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 5 ? CtEntry6StageFrame(CtWramSys(fieldWram()), joy, &rio)
                               : CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) endEnded = st;
-          else if (endOn >= 2 && endOn <= 5) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
+          else if (stagePic) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
           if (getenv("CT_STAGEPIC_TRACE")) { long sum = 0; for (int i = 0; i < CAMW * CAMH * 3; i++) sum += fb[i];
             fprintf(stderr, "stagepic: f%d end=%d st=%d INIDISP=%02X TM=%02X hdmaen=%02X sum=%ld cg1=%04X\n", frameNo, endOn, st,
                     g_stagePic.p.r[0], g_stagePic.p.r[0x2C], g_stagePic.hdmaen, sum, g_stagePic.p.cgram[1]); }

@@ -13,6 +13,8 @@ unsigned CtEntry6PicHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook);
 // One of the picture's tasks; 0 for a task this file does not draw. $82D1's build ($357B with the entry's pre-routine).
 int CtEntry6PicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned task, const CtRaceIo* io);
 void CtEntry6Pic357B(uint8_t* w, const CtRaceIo* io);
+// $7E:3A97, a list of sprites at `$15` / `$17` (the ending's planet takes it too).
+void CtSeqPicList3A97(uint8_t* w, unsigned list);
 // The main thread's pass $7E:8278, after each NMI.
 void CtEntry6PicThread(uint8_t* w);
 

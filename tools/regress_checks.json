@@ -27075,6 +27075,237 @@
       ]
     },
     {
+      "name": "ending-ff2e-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/ending_re/ending_handoff_f6837.state",
+        "0:12000",
+        "0",
+        "2E",
+        "11000"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ending_re/ending_handoff_f6837.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 54 frame(s) after the hand-off",
+        "racepiccmp: 11000 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "note_pass": "the ending's FF 2E (the world, the starfield, the planet, \"The End\"'s rolling text and the last planet), its picture native: 11000 NMIs to \"The End\" held for good, VRAM / CGRAM / OAM / the registers / HDMA / the stage's WRAM and every pixel the cartridge's",
+      "notes": "THE ENDING's PICTURE, FF 2E (src/seq_endingpic.c; disasm/notes/seq_picture.md sec. 9). After FF 2B's world: the star screen $8BAF (entry 4's $5777 / $579B stars, A = $80 and the carry clear from the `F0` op's dispatch; $999C keeps the first 64 sprites, X = 4 and the carry set from $3870; the high table cleared by the hook $8C05), the planet $8C14 (8bpp tiles through $5E3C -> $5EF8, the JSR and the step patched in the overlay's code; the map through $5AB2's WMDATA, every second byte), \"The End\" $8CD0 / $8D56 / $9EFC / $9E7B (the rolling text, its scroll `$46` +1 on the frames the PPU's field bit is set -- `LDA $213E` 16-bit -- the harness now answers it from the oracle's PPU), the VRAM hooks $9F2B / $9F39 / $9F47 / $9F73 that remove themselves, the last planet $8DF3 / $9A0C (C3/0EFA's quad window into $7E:E000 -- ct_vm.c's port -- and $3A97's sprite) / $99FA / $8E44 / $8E88; the calls $9702, $96FB, $9F8A. Unseeded the picture is the same (the VRAM the stage never loads differs).",
+      "mutations": [
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "      w[0x5E44] = 0xF8; w[0x5E45] = 0x5E; w[0x5E4A] = 0x30;",
+          "replace": "      /* MUT */",
+          "why": "$8C14 patches $5E3C to the 8bpp converter $5EF8"
+        },
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "    for (int i = 0; i < 0x20; i++) { CtSeqStagePicVramWrite(sp, 0, w[wm & 0x1FFFF]); wm = (wm + 2) & 0x1FFFF; }",
+          "replace": "    for (int i = 0; i < 0x20; i++) { CtSeqStagePicVramWrite(sp, 0, w[wm & 0x1FFFF]); wm = (wm + 1) & 0x1FFFF; }",
+          "why": "$5AB2 skips every second byte"
+        },
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "w[wm & 0x1FFFF] = (uint8_t)(x + i);",
+          "replace": "w[wm & 0x1FFFF] = (uint8_t)x;",
+          "why": "$8CD0's fill counts x .. x + 3"
+        },
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10400, 0x0A00); return 0;",
+          "replace": "CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10400, 0x0800); return 0;",
+          "why": "$9F2B sends $A00 bytes"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "  CtSeqStars579B(w, x, 1);",
+          "replace": "  CtSeqStars579B(w, x, 0);",
+          "why": "$999C enters $579B with the carry set"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    CtSeqPicOamHigh3870(w); x = 4;",
+          "replace": "    CtSeqPicOamHigh3870(w);",
+          "why": "$3870 leaves X = 4 for the stars' RNG"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "      CtSeqStars5777(w, 0x80, 0);",
+          "replace": "      CtSeqStars5777(w, 0x00, 0);",
+          "why": "$8BAF's $5777 starts from A = $80"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "  else if (io && io->field && io->field(io->ctx)) wr(w, 0x46, rd(w, 0x46) + 1);",
+          "replace": "  /* MUT */",
+          "why": "the rolling text's scroll rides the PPU's field bit"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "  CtPolyQuadImage(w);                                                 // 9A4F JSL C3/0EFA",
+          "replace": "  /* MUT */",
+          "why": "$9A0C draws the window's quad"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    if (io && io->pic) CtSeqPicList3A97(w, 0xA1E2);",
+          "replace": "    /* MUT */",
+          "why": "$9A0C draws the planet's sprite through $3A97"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    case 0x8C05: memset(w + 0x0900, 0, 0x20); return h;",
+          "replace": "    case 0x8C05: return h;",
+          "why": "$8C05 clears the OAM's high table"
+        },
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "      reg(sp, 0x1B, w[0x0A00]); reg(sp, 0x1B, w[0x0A01]);",
+          "replace": "      reg(sp, 0x1B, w[0x0A00]); reg(sp, 0x1B, 0);",
+          "why": "$9E2B's M7A is page A's r0, both bytes"
+        },
+        {
+          "file": "src/seq_endingpic.c",
+          "find": "  a = (uint8_t)(a + c);                                               // 9094 ADC #00",
+          "replace": "  /* MUT */",
+          "why": "$9080's second counts take the LSR's carry"
+        },
+        {
+          "file": "src/seq_ending.c",
+          "find": "    case 0x9702: memmove(w + 0x2200, w + 0xC995, 0x0101); return 0;",
+          "replace": "    case 0x9702: return 0;",
+          "why": "$9702 copies the world's palette"
+        }
+      ]
+    },
+    {
+      "name": "ending-ff2b-story-picture-in-the-port-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/ending_re/ending_pre_ff2b.state",
+        "4001",
+        "4000",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "81",
+        "--loadwram",
+        "saves/ending_re/ending_pre_ff2b.lakewram",
+        "--walkscript",
+        "n:7000"
+      ],
+      "env": {
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/ending_re/ending_pre_ff2b.state",
+        "CT_ORACLE_LOGICAL": "1",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:4001"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ending_re/ending_pre_ff2b.state",
+        "saves/ending_re/ending_pre_ff2b.lakewram",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f4000 vs oracle f4001 box (0,0)-(256,224) -> 57344 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: "
+      ],
+      "timeout_s": 1800,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          int stagePic = (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(CtWramSys(fieldWram())[0x0384]));",
+          "replace": "          int stagePic = endOn >= 2 && endOn <= 5;   /* MUT */",
+          "why": "the field gives the ending its picture"
+        }
+      ],
+      "note_pass": "the staff credits over the turning world as the port plays them: 3868 frames after FF 2B the whole picture is the cartridge's, pixel for pixel",
+      "notes": "The port plays ending-story-plays-through-in-the-port's drive (FF 2B at f132, 48 black frames) and presents f4000; the cartridge from the same state ending_pre_ff2b (FF 2B at its f131) matches at f4001 -- P+2 from the op. Exact at f1500 / f1501 too."
+    },
+    {
+      "name": "ending-ff2e-story-picture-in-the-port-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/ending_re/ending_pre_ff2b.state",
+        "12802",
+        "12800",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "81",
+        "--loadwram",
+        "saves/ending_re/ending_pre_ff2b.lakewram",
+        "--walkscript",
+        "n:13000"
+      ],
+      "env": {
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_AUDIO_SEEDSTATE": "saves/ending_re/ending_pre_ff2b.state",
+        "CT_ORACLE_LOGICAL": "1",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:12802"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/ending_re/ending_pre_ff2b.state",
+        "saves/ending_re/ending_pre_ff2b.lakewram",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f12800 vs oracle f12802 box (0,0)-(256,224) -> 57344 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: "
+      ],
+      "timeout_s": 1800,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          int stagePic = (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(CtWramSys(fieldWram())[0x0384]));",
+          "replace": "          int stagePic = endOn >= 2 && endOn <= 5;   /* MUT */",
+          "why": "the field gives the ending its picture"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  io.field = fieldPpuField;",
+          "replace": "  /* MUT */",
+          "why": "the field gives the stage the PPU's field bit"
+        }
+      ],
+      "note_pass": "the ending's last screens as the port plays them, through the reboot chain 02D -> 105 -> 059 -> 05A and FF 2E: the whole picture the cartridge's, pixel for pixel, two frames early (the song's marker)",
+      "notes": "Same drive on to FF 2E (f6840, 52 black frames). Pixel-exact at port f8000 = cartridge f8000; from page B's wait on the song's marker (f8679 in the port, f8681 on the cartridge: the port's SPC gives the marker two frames early in play -- the harness, answering `F5` from the oracle's SPC, is exact: ending-ff2e-picture-native-vs-oracle) the port runs two frames ahead: the world's zoom then mixes the two pages (f8800 / f9200: 54 / 382 pixels), and from the star screen on every frame checked is the cartridge's at +2 (f10400, 11600, 12800, 15000, 17600; pinned: f12800, \"The End\"'s rolling text, which a field bit left out moves -- 5099 pixels). The rolling text's scroll and the last planet's turn ride the PPU's field bit, which the field now gives the stage (raceIoFor's io.field: it flips every frame, a cold boot's phase)."
+    },
+    {
       "name": "seq-pic-day-of-lavos-vs-oracle",
       "argv": [
         "build/ct.exe",
@@ -27362,7 +27593,7 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          else if (endOn >= 2 && endOn <= 5) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
+          "find": "          else if (stagePic) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);",
           "replace": "          /* MUT: entry 3 drawn black */",
           "why": "the field draws entry 3's native picture after each of its NMIs"
         },
@@ -27503,8 +27734,8 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          if (endOn >= 2 && endOn <= 5) rio.pic = &g_stagePic;      // entries 3, 4, 7 and 6's pictures are ported (the ending: black)",
-          "replace": "          if (endOn == 2 || endOn == 4 || endOn == 5) rio.pic = &g_stagePic;   /* MUT */",
+          "find": "          int stagePic = (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(CtWramSys(fieldWram())[0x0384]));",
+          "replace": "          int stagePic = endOn == 2 || endOn == 4 || endOn == 5;   /* MUT */",
           "why": "the field gives entry 4 its picture"
         }
       ],
@@ -27634,8 +27865,8 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          if (endOn >= 2 && endOn <= 5) rio.pic = &g_stagePic;      // entries 3, 4, 7 and 6's pictures are ported (the ending: black)",
-          "replace": "          if (endOn == 2 || endOn == 3 || endOn == 5) rio.pic = &g_stagePic;   /* MUT */",
+          "find": "          int stagePic = (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(CtWramSys(fieldWram())[0x0384]));",
+          "replace": "          int stagePic = endOn == 2 || endOn == 3 || endOn == 5;   /* MUT */",
           "why": "the field gives entry 7 its picture"
         }
       ],
@@ -27759,8 +27990,8 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "          if (endOn >= 2 && endOn <= 5) rio.pic = &g_stagePic;      // entries 3, 4, 7 and 6's pictures are ported (the ending: black)",
-          "replace": "          if (endOn >= 2 && endOn <= 4) rio.pic = &g_stagePic;   /* MUT */",
+          "find": "          int stagePic = (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(CtWramSys(fieldWram())[0x0384]));",
+          "replace": "          int stagePic = endOn >= 2 && endOn <= 4;   /* MUT */",
           "why": "the field gives entry 6 its picture"
         }
       ],

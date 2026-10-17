@@ -71,6 +71,8 @@ typedef struct CtSeqStagePic {
 // `n` bytes; DMAP bit 3 = the fixed source): $2118 / $2119 (VRAM through the port's address and VMAIN), $2122 (CGRAM), $2104
 // (OAM, from the address the stage set -- 0 in every stage measured). Reads `w` as the 128 KB WRAM ($7E at 0).
 void CtSeqStagePicDma(CtSeqStagePic* sp, const uint8_t* w, uint8_t dmap, uint8_t bbad, uint32_t src, unsigned n);
+// One byte the CPU stores to $2118 (`high` 0) or $2119 (`high` 1): through the port's address, stepped as VMAIN says.
+void CtSeqStagePicVramWrite(CtSeqStagePic* sp, int high, uint8_t v);
 // ...and `$2139 / $213A` into WRAM: VRAM read back through the port (its read buffer's one-word lag, VMAIN's step).
 void CtSeqStagePicVramRead(CtSeqStagePic* sp, uint8_t* w, uint32_t dst, unsigned n);
 // The same through $2139 / $213A in turn (a DMA in mode 1 from $2139: low, high, low, ...): the buffer -- loaded from the word at

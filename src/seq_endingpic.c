@@ -149,6 +149,63 @@ static void world87DD(uint8_t* w, const CtRaceIo* io, unsigned d) {
   ww(w, d + 0xF0, 0x0020);                                            // 8836 LDX #0020 / STX $F0 (the page's)
   copy36AA(w, io, d, 0xA5, 0x2100); copy36AA(w, io, d, 0xA5, 0x2300);
 }
+int CtEndingPicHas(uint8_t operand) {
+  unsigned e = operand & 0x1F;
+  return CtEndingStageHas(operand) && (e == 11 || e == 14 || e == 15);
+}
+// ---- the last screens (`FF 2E` / `FF 2F`) ----
+// $7E:5E54 (4bpp) / $7E:5EF8 (8bpp), the data bank $7F, D = 0 -- one tile's rows from $7F:X into mode 7's characters (the high
+// bytes through $2119, VMAIN $80): each pixel's bits rolled out of the planes' bytes ($3B.. as the rows load them), the first
+// plane in bit 0. Returns X past the rows (2 a row); the counter `$3F` / `$31` and the planes' bytes end at 0.
+static unsigned tile5E54(CtSeqStagePic* sp, uint8_t* w, unsigned x) {
+  w[0x3F] = 0x08;
+  do {
+    ww(w, 0x3B, rw(w, 0x10000 | x)); ww(w, 0x3D, rw(w, 0x10000 | ((x + 0x10) & 0xFFFF))); x = (x + 2) & 0xFFFF;
+    for (int px = 0; px < 8; px++) {
+      uint8_t v = 0;                                                  // TDC (D = 0)
+      for (unsigned b = 0x3E; b >= 0x3B; b--) { v = (uint8_t)((v << 1) | (w[b] >> 7)); w[b] = (uint8_t)(w[b] << 1); }
+      CtSeqStagePicVramWrite(sp, 1, v);                               // STA $002119
+    }
+  } while (--w[0x3F]);                                                // DEC $3F / BEQ
+  return x;
+}
+static unsigned tile5EF8(CtSeqStagePic* sp, uint8_t* w, unsigned x) {
+  w[0x31] = 0x08;
+  do {
+    for (unsigned k = 0; k < 4; k++) ww(w, 0x3B + 2 * k, rw(w, 0x10000 | ((x + 0x10 * k) & 0xFFFF)));
+    x = (x + 2) & 0xFFFF;
+    for (int px = 0; px < 8; px++) {
+      uint8_t v = 0;                                                  // (eight ROLs: A's old bits all out)
+      for (unsigned b = 0x42; b >= 0x3B; b--) { v = (uint8_t)((v << 1) | (w[b] >> 7)); w[b] = (uint8_t)(w[b] << 1); }
+      CtSeqStagePicVramWrite(sp, 1, v);
+    }
+  } while (--w[0x31]);
+  return x;
+}
+// $7E:5E3C (Y = the tiles) -- from $7F:0200, each tile through the routine its `JSR` names ($5E44: $5E54, or $5EF8 once $8C14
+// patched it) and X + the step its `ADC #imm` holds ($5E4A: $10, or $30), the carry clear.
+static void tiles5E3C(CtSeqStagePic* sp, uint8_t* w, unsigned n) {
+  unsigned x = 0x0200;
+  for (; n; n--) {
+    unsigned tgt = rw(w, 0x5E44);
+    if (tgt == 0x5EF8) x = tile5EF8(sp, w, x);
+    else if (tgt == 0x5E54) x = tile5E54(sp, w, x);
+    else { fprintf(stderr, "endingpic: UNDERIVED -- $5E3C's JSR names $%04X\n", tgt); return; }
+    x = (x + rw(w, 0x5E4A)) & 0xFFFF;                                 // 5E46 REP #21 / TXA / ADC #imm / TAX
+  }
+}
+// $7E:5AB2 -- the DMA $38E7, then mode 7's map: 32 rows of 32 bytes read through WMDATA from $0200 (in the bank C3/0557 left,
+// `$0305`'s: every second byte skipped) into $2118, each row padded with $60 zeros; then $1000 bytes of the byte at $7E:350B.
+static void map5AB2(CtSeqStagePic* sp, uint8_t* w) {
+  CtSeqPicDma38E7(sp, w);
+  unsigned wm = ((unsigned)(w[0x0305] & 1) << 16) | 0x0200;           // 5AB6 $2181 = $0200
+  sp->vmain = 0x00; sp->vaddr = 0x0000;
+  for (int r = 0; r < 0x20; r++) {
+    for (int i = 0; i < 0x20; i++) { CtSeqStagePicVramWrite(sp, 0, w[wm & 0x1FFFF]); wm = (wm + 2) & 0x1FFFF; }
+    for (int i = 0; i < 0x60; i++) CtSeqStagePicVramWrite(sp, 0, 0);
+  }
+  CtSeqStagePicDma(sp, w, 0x08, 0x18, 0x350B, 0x1000);                // 5AE8
+}
 int CtEndingPicCall(CtSeqStagePic* sp, uint8_t* w, unsigned page, unsigned tgt, const CtRaceIo* io) {
   uint8_t dl = (uint8_t)page;                                         // TDC: A's low byte is D's
   switch (tgt) {
@@ -168,6 +225,59 @@ int CtEndingPicCall(CtSeqStagePic* sp, uint8_t* w, unsigned page, unsigned tgt, 
       dma8752(sp, w); dma8752(sp, w);
       world87DD(w, io, page);
       return 1;
+    case 0x8BAF:                                                      // THE STARS (after the logic's lists and $5777):
+      sp->hdmaen = 0; reg(sp, 0x00, 0x80);                            // 8BC0 STA $420C (A = 0), 8BC6 INIDISP $80
+      ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                   // 8BCE $89ED
+      w[0x00F0] = 0x01; w[0x00F2] = 0x18;
+      sp->vaddr = 0x4600; CtSeqPicUnpack(w, io, 0x33); CtSeqPicDma38E7(sp, w);   // 8BDB: the stars' tiles
+      ww(w, 0x0304, 0x0000);                                          // 8BEB LDX #0000 / STX $0304: bank $7E
+      ww(w, 0x00F0, 0x0020); CtSeqPicCopy36AA(w, io, 0x39, 0x2120);   // 8BF1 (D = 0)
+      memmove(w + 0x2200, w + 0x2000, 0x200);                         // 8BFF $38AF
+      return 1;
+    case 0x8C14:                                                      // THE PLANET (mode 7, 8bpp):
+      sp->hdmaen = 0; reg(sp, 0x00, 0x80); reg(sp, 0x1A, 0x80);       // 8C25 / 8C2D, 8C30 M7SEL
+      ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                   // 8C33 $89ED
+      w[0x00F0] = 0x01; w[0x00F2] = 0x18; sp->vmain = 0x80;
+      CtSeqPicUnpack(w, io, 0xCF); sp->vaddr = 0x6000; CtSeqPicDma38E7(sp, w);   // 8C45
+      sp->vaddr = 0x0000;
+      w[0x5E44] = 0xF8; w[0x5E45] = 0x5E; w[0x5E4A] = 0x30;           // 8C5B: $5E3C's JSR -> $5EF8, its step $30
+      tiles5E3C(sp, w, 0xA4);                                         // 8C6D LDY #00A4 / JSR $5E3C
+      CtSeqPicUnpack(w, io, 0xB1); sp->vaddr = 0x4400; map5AB2(sp, w);   // 8C73
+      w[0x0305] = 0; ww(w, 0x0303, 0x2020); CtSeqPicUnpack(w, io, 0x54);   // 8C82: the palette at $7E:2020
+      ww(w, 0x2000, 0x0000); ww(w, 0x2002, 0x77BD); ww(w, 0x2004, 0x4631); ww(w, 0x2006, 0x1CE7);   // 8C91 $8CB2
+      memmove(w + 0x2200, w + 0x2000, 0x200);                         // 8C94 $38AF
+      CtRacePicCgram(sp, w);                                          // 8C97 $388B
+      reg(sp, 0x2C, 0x01); reg(sp, 0x2D, 0x10); reg(sp, 0x2E, 0x00); reg(sp, 0x2F, 0x00); reg(sp, 0x05, 0x07);   // 8C9E
+      return 1;
+    case 0x8CD0: {                                                    // "THE END"'s layers (entry 14; 15 left at 8CE9):
+      sp->hdmaen = 0;                                                 // 8CD8 LDA #5B00 / SEP / STA $420C
+      ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                   // 8CF2 $89ED
+      CtSeqPicUnpack(w, io, 0xAE);
+      ww(w, 0x0303, 0x0400); CtSeqPicUnpack(w, io, 0x8D);             // 8CFB
+      ww(w, 0x0303, 0x0F00); CtSeqPicUnpack(w, io, 0xC0);             // 8D07
+      // 8D13 (D = $2100): WMDATA from $1000 in the bank C3/0557 left -- eight times, for X = 0, 4, 8, C, eight times `x, 0, x+1, 0,
+      // x+2, 0, x+3, 0` (`STY $7F` stores Y = 0 to $217F, the SPC's port 3, and $2180).
+      unsigned wm = ((unsigned)(w[0x0305] & 1) << 16) | 0x1000;
+      w[0x00F0] = 0x08;
+      do {
+        for (unsigned x = 0; x != 0x10; x += 4) {
+          w[0x00F2] = 0x08;
+          do { for (unsigned i = 0; i < 4; i++) { w[wm & 0x1FFFF] = (uint8_t)(x + i); w[(wm + 1) & 0x1FFFF] = 0; wm = (wm + 2) & 0x1FFFF; } }
+          while (--w[0x00F2]);
+        }
+      } while (--w[0x00F0]);
+      return 1;
+    }
+    case 0x8DF3:                                                      // THE LAST PLANET's palettes (D = the page's):
+      ww(w, 0x0304, 0x0000);                                          // 8DFA LDX #0000 / STX $0304
+      ww(w, page + 0xF0, 0x0020);
+      copy36AA(w, io, page, 0xA2, 0x21E0); copy36AA(w, io, page, 0xAB, 0x2000);
+      memmove(w + 0x2200, w + 0x2000, 0x200);                         // 8E17 $38AF
+      return 1;
+    case 0x8A01: case 0x8AF5: {                                       // entry 10's screens: not ported
+      static unsigned said; if (said != tgt) { said = tgt; fprintf(stderr, "endingpic: UNDERIVED -- call $%04X (FF 2A)\n", tgt); }
+      return 1;
+    }
     default: return 0;
   }
 }
@@ -248,6 +358,37 @@ unsigned CtEndingPicHook(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned 
     case 0x9AF3: hook9AF3(w, io); return hook;
     case 0x89C0: hook89C0(sp, w); return hook;
     case 0x8850: draw8850(w); return hook;
+    case 0x9E2B:                                                      // 9E2B (D = $0A00): mode 7 without a turn -- M7A = M7D = r0,
+      reg(sp, 0x1C, 0); reg(sp, 0x1C, 0); reg(sp, 0x1D, 0); reg(sp, 0x1D, 0);   //   M7B = M7C = 0, the centre r3 / r4, the scroll
+      reg(sp, 0x1B, w[0x0A00]); reg(sp, 0x1B, w[0x0A01]); reg(sp, 0x1E, w[0x0A00]); reg(sp, 0x1E, w[0x0A01]);   //   r1 / r2
+      reg(sp, 0x1F, w[0x0A06]); reg(sp, 0x1F, w[0x0A07]); reg(sp, 0x20, w[0x0A08]); reg(sp, 0x20, w[0x0A09]);
+      reg(sp, 0x0D, w[0x0A02]); reg(sp, 0x0D, w[0x0A03]); reg(sp, 0x0E, w[0x0A04]); reg(sp, 0x0E, w[0x0A05]);
+      return hook;
+    case 0x8D56:                                                      // "THE END"'s screen: $7F:0200 to VRAM $4000 ($200 bytes),
+      sp->vaddr = 0x4000; sp->vmain = 0x80; CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10200, 0x0200);
+      sp->vaddr = 0x4800; sp->vmain = 0x00; CtSeqStagePicDma(sp, w, 0x08, 0x18, 0x350B, 0x0400);   // 8D7D $90A7: the low bytes
+      sp->vaddr = 0x4800; sp->vmain = 0x80; CtSeqStagePicDma(sp, w, 0x08, 0x19, 0x9E7A, 0x0400);   // 8D8C: the high, $7E:9E7A's
+      CtSeqPicHdma36CC(sp, w, 0x9023);                                // 8DAC
+      reg(sp, 0x0F, 0x00); reg(sp, 0x0F, 0x00);                       // 8DC1 (D = $2100, TDC: 0) BG4HOFS
+      reg(sp, 0x0B, 0x46); reg(sp, 0x0C, 0x00); reg(sp, 0x07, 0x44); reg(sp, 0x08, 0x48); reg(sp, 0x09, 0x60);
+      reg(sp, 0x05, 0x04); reg(sp, 0x31, 0x82); reg(sp, 0x2C, 0x13); reg(sp, 0x2D, 0x00); reg(sp, 0x2E, 0x00); reg(sp, 0x2F, 0x00);
+      return 0;
+    case 0x9EFC:                                                      // the rolling text's line: $1414 (32 bytes) to `$48`'s row
+      sp->vaddr = (uint16_t)rw(w, 0x48); sp->vmain = 0x00;            //   (the low bytes), BG2's scroll `$46`
+      CtSeqStagePicDma(sp, w, 0x00, 0x18, 0x1414, 0x0020);
+      reg(sp, 0x10, w[0x46]); reg(sp, 0x10, w[0x47]);
+      return hook;
+    case 0x9F2B: sp->vaddr = 0x5000; sp->vmain = 0x80; CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10400, 0x0A00); return 0;   // $9F59
+    case 0x9F39: sp->vaddr = 0x4C00; sp->vmain = 0x80; CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x11000, 0x0800); return 0;
+    case 0x9F47: sp->vaddr = 0x0000; sp->vmain = 0x80; CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10F00, 0x0100); return 0;
+    case 0x9F73: sp->vmain = 0x80; sp->vaddr = 0x20A0; CtSeqStagePicDma(sp, w, 0x09, 0x18, 0x350B, 0x06C0); return 0;   // $90AA
+    case 0x8E44:                                                      // the last screen's layers (D = $2100), the HDMA from $9029
+      reg(sp, 0x31, 0x21); reg(sp, 0x32, 0xE0); reg(sp, 0x2C, 0x01); reg(sp, 0x2D, 0x12); reg(sp, 0x05, 0x04);
+      reg(sp, 0x08, 0x4C); reg(sp, 0x0B, 0x06); reg(sp, 0x09, 0x60); reg(sp, 0x23, 0x30); reg(sp, 0x2F, 0x02);
+      reg(sp, 0x26, 0x00); reg(sp, 0x28, 0x00); reg(sp, 0x33, 0x00);
+      CtSeqPicHdma36CC(sp, w, 0x9029);
+      return 0;
+    case 0x8E88: reg(sp, 0x10, w[0x0A04]); reg(sp, 0x10, w[0x0A05]); return hook;   // BG2's scroll = page A's r2
     default: {
       static unsigned said = 0;
       if (said != hook) { said = hook; fprintf(stderr, "endingpic: UNDERIVED vblank hook $%04X\n", hook); }
@@ -322,6 +463,7 @@ int CtEndingPicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned t, co
     case 0x9ABD: task9ABD(w, io); return 1;
     case 0x9BF9: task9BF9(w, io); return 1;
     case 0x8850: draw8850(w); return 1;
+    case 0x99FA: ww(w, 0x15, 0x003C); ww(w, 0x17, 0x0090); CtSeqPicOam0D5E(w, 0xA1A1); return 1;   // the last screen's sprite
     default: return 0;
   }
 }

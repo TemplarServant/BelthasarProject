@@ -243,7 +243,9 @@ static void draw3A97(Cpu6* k, unsigned list) {
   }
   ww(w, 0x11, y);                                                     // 3A92 REP #20 / STY $11
   k->a = (hi << 8) | lo;
+  (void)k->sp;
 }
+void CtSeqPicList3A97(uint8_t* w, unsigned list) { Cpu6 kk = { NULL, w, 0, 0, 0, 0 }; draw3A97(&kk, list); }
 // $7E:7F7D -- the Epoch and its glow: x = page B's r1 + $80 (the carry the task enters with), y = $46 = the draw & `$4A` + $A8 (also
 // page B's r5), the lists $8109 at y - $28, $819B at $46 + ($12 + the next draw & 1), $8122 at y - $28.
 static void task7F7D(Cpu6* k) {

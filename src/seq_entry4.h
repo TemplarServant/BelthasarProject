@@ -18,5 +18,9 @@ void CtEntry4StageClose(uint8_t* w, const CtRaceIo* io);
 uint8_t CtSeqRng02DD8(uint8_t* w, uint8_t a, int* c, unsigned x);
 // $7E:56B4 -- the mode-7 matrix (page A's r10-r13) from page A's r5 scaled by r0 (the ending's $9ABD takes it too).
 void CtSeqMatrix56B4(uint8_t* w, const CtRaceIo* io);
+// $7E:5777 (the 128 stars drawn at $0C00 / $0E00 from the RNG: A and the carry the caller's) and $7E:579B (their frame: X = the
+// RNG's X, the carry the caller's) -- the ending's star screen runs them too.
+void CtSeqStars5777(uint8_t* w, uint8_t a, int c);
+void CtSeqStars579B(uint8_t* w, unsigned x, int c);
 
 #endif

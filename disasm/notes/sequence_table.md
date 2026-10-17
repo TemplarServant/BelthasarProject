@@ -2475,9 +2475,9 @@ markers 6, 7, 8, 9 pass at 115, 2037, 4192, 7788 frames after the hand-off (save
 Native: **`FF 2E` 10948 frames, 0 differing** (the hooks' scratch, the HDMA shadow `$038C`, the beam RNG `$0386` and the
 overlay RNG `$039B` aside), the markers on the same frames. The story run: `FF 2B` -> 02D -> 105 -> 059 -> 05A -> `FF 2E`.
 
-**The picture (stage 2, seq_picture.md sec. 9)**: native for `FF 2B` since 2026-10-17, exact NMI for NMI to the END
-(`ending-ff2b-picture-native-vs-oracle`). **Open questions.** `FF 2E` / `FF 2F`'s screens (the stars, the planet, "The End"'s
-rolling text and the scroll `$46` -- its +1 also rides the field bit, 9EDF; the last planet); entries 10 (`FF 2A`)
+**The picture (stage 2, seq_picture.md sec. 9)**: native for `FF 2B` and `FF 2E` since 2026-10-17, exact NMI for NMI
+(`ending-ff2b-picture-native-vs-oracle`, `ending-ff2e-picture-native-vs-oracle`) and drawn in play (FF 2E two frames early from
+the song's second marker). **Open questions.** Entry 10's own screens ($8A01 / $8AF5: not ported, black in play); entries 10 (`FF 2A`)
 and 15 (`FF 2F`) are not graded against the cartridge (no state at their call: they need `glb[110]` the other way -- scene
 81 obj0 fn3 and scene 90's `16 6E 03 00 05`); 8A01's `$038C = 01` and 8AF5's are read from the listings, not measured.
 

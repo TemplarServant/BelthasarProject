@@ -5,6 +5,9 @@
 #include "seq_pic.h"
 #include "seq_race.h"
 
+// 1 if the picture of the ending's entry `operand` is ported: 11 (`FF 2B`), 14 (`FF 2E`) and 15 (`FF 2F`, 14's screens but the
+// last); entry 10 (`FF 2A`)'s own screens ($8A01 / $8AF5) are not.
+int CtEndingPicHas(uint8_t operand);
 // The setup's picture: A = $7E:8538-86A1 (before the script), B = $7E:870E-874E ($9BB8, the HDMA channels, the layers).
 void CtEndingPicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io);
 void CtEndingPicSetupB(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io);

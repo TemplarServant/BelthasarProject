@@ -54,7 +54,7 @@ uint8_t CtSeqRng02DD8(uint8_t* w, uint8_t a, int* c, unsigned x) {
 // $7E:5777 -- the setup's 128 stars (X = 0..1FC by 4): $0C00,X / $0C01,X = two draws (the star's x / y), $0E00,X = a third
 // & 7F (its depth), then `STX $00F2` -- which the next star's draws EOR in. A and the carry run on from draw to draw;
 // `CPX #0200` clears the carry between stars. The first draw's A and carry are what page A's first visit left (`a`, `c`).
-static void entry4StarsInit(uint8_t* w, uint8_t a, int c) {
+void CtSeqStars5777(uint8_t* w, uint8_t a, int c) {
   for (unsigned x = 0; x < 0x200; x += 4) {
     a = CtSeqRng02DD8(w, a, &c, x); w[0x0C00 + x] = a;                      // 577A JSR $3443 / STA $0C00,X
     a = CtSeqRng02DD8(w, a, &c, x); w[0x0C01 + x] = a;                      // 5780 JSR $3443 / STA $0C01,X
@@ -84,9 +84,8 @@ static uint8_t starAxis(uint8_t v, uint8_t depth, unsigned centre, int* c) {
 // slot); its x / y ($0C00 / $0C01) move by page B's r1 / r2 ($0B02 / $0B04), and its sprite is written to the OAM shadow:
 // x = $0C00 * 256 / depth + 80, y = $0C01 * 256 / depth + 70, the tile 60 + depth / 8, the attributes 32 for the far tiles
 // (< 68) -- 02 once the call $5640 has made the `BMI` at $582E a `BRA` (`$582E = 0080`). The carry runs through the whole loop
-// as the ROM threads it; it enters clear (`slot` > 0: the dispatcher's `CPX #0020`).
-static void entry4Stars(uint8_t* w, unsigned slot) {
-  int c = 0;
+// as the ROM threads it; X and the carry are the caller's (entry 4's task: its slot, clear -- the dispatcher's `CPX #0020`).
+void CtSeqStars579B(uint8_t* w, unsigned slot, int c) {
   unsigned y = rd(w, 0x0011);                                         // 579D LDY $11
   for (unsigned guard = 0; guard < 0x4000; guard++) {
     uint8_t a = w[0x0B00];                                            // 579F LDA $0B00
@@ -187,7 +186,7 @@ static unsigned entry4Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x3749: CtSeqScript(w, 0x0A00, io, entry4Call); return t;
     case 0x3754: CtSeqScript(w, 0x0B00, io, entry4Call); return t;
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);
-    case 0x579B: entry4Stars(w, slot); return t;
+    case 0x579B: CtSeqStars579B(w, slot, 0); return t;
     case 0x56A9: entry4Spin(w, io); return t;
     case 0x5855: entry4Orbit(w, io); return t;
     case 0x55F9: wr(w, 0x0B0A, rd(w, 0x0B0A) + 2); return t;          // 55F9 LDA $0B0A / CLC / ADC #0002 / STA $0B0A
@@ -210,7 +209,7 @@ int CtEntry4StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (CtSeqScript(w, 0x0A00, io, entry4Call) < 0) return -1;          // 54B4 JSR $3749 -- page A runs once in the setup
   // 54BE JSR $5777 with what the visit left: A = the IP its yield stored (C3/0CB3 `LDA ($20) / STA $20`), the carry clear
   // (C3/0C97's `ASL` of the loop's register number, on the loop's first visit)
-  entry4StarsInit(w, w[0x0A20], 0);
+  CtSeqStars5777(w, w[0x0A20], 0);
   wr(w, 0x038E, 0x0606);                                              // 54CB LDX #0606 / STX $038E
   if (io && io->pic) { CtEntry4PicSetupB(io->pic); CtRacePicCgram(io->pic, w); }   // 54C1-54E9, then 300D JSR $388B
   // $7E:300D .. 301E: $388B, $31B0, JSL C3/08D0 (one NMI, run here, without C3/09A4), NMI on, STZ $00, STZ $0392

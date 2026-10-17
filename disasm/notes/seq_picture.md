@@ -205,7 +205,7 @@ the same picture). **In play**: 429 frames after the op the whole frame is the c
 (`entry6-story-picture-in-the-port-vs-oracle`). Not exercised: CMP $2137's low byte deciding a carry, a sprite past x 255 in
 $3A97, a circle's edge past $FF.
 
-## 9. The ending (src/seq_endingpic.c) -- `FF 2B` DONE (2026-10-17); `FF 2E` / `2F` in progress, `FF 2A` not started
+## 9. The ending (src/seq_endingpic.c) -- `FF 2B` and `FF 2E` DONE (2026-10-17); `FF 2F` its screens, ungraded; `FF 2A` not ported
 
 One setup, $7E:8538, for entries 10 / 11 / 14 / 15 (sequence_table.md sec. 13); its logic is seq_ending.c.
 
@@ -240,3 +240,36 @@ pen into $64CA's operands), $9FC8 / $9FEA (colour animations), $98F6 / $98FB / $
 (`ending-ff2b-picture-native-vs-oracle`; unseeded the same picture -- only VRAM the stage never loads differs). One WRAM byte differs
 from the first frame: $7F:0076 (cart 06, port 04), already 06 when the cartridge enters C3:0000 -- the field's frame after the op,
 not the stage's (`--hookpc C30000 --hookwatch 10076`).
+
+**`FF 2E`'s last screens** (page A from $9613: `F0 8790`, `F0 9702` -- the world's palette copied whole, $C995 -> $2200, $101
+bytes -- then FF 2B's world; `F0 96FB` points the main thread back at the RTS $3176):
+- **the stars** `F0 8BAF`: the lists cleared, `$038C` = 0, entry 4's $5777 (A = $80, the carry clear: the `F0` op's dispatch C3/0B6F
+  ends on `ASL` of op & $0F), packet $33 to VRAM $4600, the palette $39 at $2120. Task $999C: once, the first 64 sprites kept
+  (`$11` < $100: $3870's high-table byte, `$11` = $100, `$13` = $0910), then entry 4's $579B with X = 4 ($3870 leaves it) and the
+  carry set; hook $8C05 clears the high table $0900-$091F every frame (`MVN $00,$D2`).
+- **the planet** `F0 8C14`: packet $CF to $6000; the 8bpp mode-7 characters -- the call PATCHES THE OVERLAY's CODE ($5E44 = $5EF8,
+  the step at $5E4A = $30) so $5E3C runs $5EF8 (eight planes rolled out per pixel into $2119) instead of $5E54 (four); packet $B1
+  to $4400 and $5AB2's map (32 rows of every second byte through WMDATA from $0200 in the bank C3/0557 left -- `$0305`'s, the
+  unpack sets `$2183` from it -- each row padded to 128 with zeros, then $1000 fill bytes); the palette $54 at $2020, $8CB2, $38AF,
+  $388B. Hook $9E2B: mode 7 without a turn (M7A = M7D = page A's r0).
+- **"The End"** `F0 8CD0` (entry 15 leaves here, $0A20 = $9315): packets $AE / $8D / $C0 to $7F:0200 / 0400 / 0F00; a WMDATA fill at
+  $1000 of `x, 0, x+1, 0, ..` (its `STY $7F` with D = $2100 also writes 0 to $217F, the SPC's port 3 -- not modelled). Hook $8D56:
+  $7F:0200 to $4000, $4800's low bytes from $350B and its high from $7E:9E7A, HDMA from $9023, mode 4. Hook $9EFC: the rolling
+  text's line ($1414, 32 bytes) to `$48`'s row and BG2's scroll `$46`; $9E7B's 9ED6 moves `$46` by 8 with `$AD`, else by 1 on the
+  frames the PPU's field bit is set (`LDA $213E` 16-bit: $213F bit 7). Hooks $9F2B / $9F39 / $9F47 / $9F73: one transfer each
+  ($7F:0400 -> $5000, $7F:1000 -> $4C00, $7F:0F00 -> $0000, the fill byte to $20A0) and out ($39DE).
+- **the last planet** `F0 8DF3` (palettes $A2 / $AB on the script page's `$F0`, $38AF; the logic's row clear and pan): task $9A0C
+  writes the quad's corners at $0360-$0367 and runs C3/0EFA into $7E:E000 (ct_vm.c CtPolyQuadImage, the field's port of it), and
+  while `$71` its sprite ($3A97's list $A1E2 at `$71` - $0C, `$73` / 4); task $99FA C3/0D5E's $A1A1 at ($3C, $90); hooks $8E44 (the
+  layers, COLDATA $E0, HDMA from $9029, `$038C` = 1, out) and $8E88 (BG2's scroll = page A's r2). `F0 9F8A` the last colour fade.
+
+**`FF 2E` equal on every frame**: 11000 NMIs, through "The End" held (`ending-ff2e-picture-native-vs-oracle`; unseeded the same
+picture). The harness answers `$213F` from the oracle's PPU: `racepicField`, the field the oracle's NMI k read -- the harness steps
+the oracle out of that vblank first, so its PPU already holds the next frame's.
+
+**In play** (the field: `CtEndingPicHas` -- entries 11, 14, 15; `raceIoFor` now gives every stage `io.field`, flipping each frame, a
+cold boot's phase): `FF 2B` pixel-exact at P+2 from the op (port f1500 / f4000 = cartridge f1501 / f4001,
+`ending-ff2b-story-picture-in-the-port-vs-oracle`); `FF 2E` through the reboot chain exact at port f8000 = cartridge f8000, then page
+B's wait on the song's marker ends two frames early in the port (f8679 vs f8681: the port's SPC in play, the class of
+spc-phase-sensitivity; the harness takes the oracle's ports and is exact), and from the star screen on every frame checked is the
+cartridge's at +2 (`ending-ff2e-story-picture-in-the-port-vs-oracle` pins f12800 / f12802, the rolling text).
