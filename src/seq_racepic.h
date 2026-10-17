@@ -31,6 +31,17 @@ int CtSeqPicCommonHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook);
 void CtSeqPicUnpack(uint8_t* w, const CtRaceIo* io, unsigned x);
 void CtSeqPicDma38E7(CtSeqStagePic* sp, const uint8_t* w);
 void CtSeqPicOam0D5E(uint8_t* w, unsigned list);
+// $7E:357B, the mode-7 per-line matrix builder (D = $0A00): `pre` is the entry's routine its `JSR` at $35FD names -- it leaves the
+// first distance X and Y, and writes the loop's tail ($3634) and limit ($3637).
+typedef void (*CtSeqPic357BPre)(uint8_t* w, unsigned* x, unsigned* y, unsigned* wm);   // wm: WMADD after it (17-bit)
+void CtSeqPic357B(uint8_t* w, const CtRaceIo* io, CtSeqPic357BPre pre);
+// C3/09E9's code (written through WMDATA from wm: X the tiles' page, Y the rows' base) and what it does when run (`JSR $B574` with
+// the data bank $7F); C3/0307's scaler over the request in $1F..$2D (D = 0, the data bank $7F), the carry it enters with.
+void CtSeqPicGen09E9(uint8_t* w, unsigned wm, unsigned x, unsigned y);
+void CtSeqPicRun09E9(uint8_t* w, unsigned x, unsigned y);
+void CtSeqPicScale0307(uint8_t* w, int carry);
+void CtSeqPicRows37A6(uint8_t* w);                                    // $7E:37A6: $7F:0200's 64 rows of 64 doubled at $7F:2200
+void CtSeqPicCopy36AA(uint8_t* w, const CtRaceIo* io, unsigned x, unsigned y);   // $7E:36AA
 void CtSeqPicOam0DBC(uint8_t* w, unsigned rec);   // C3/0DBC: one small sprite from the record $7E:rec
 
 #endif

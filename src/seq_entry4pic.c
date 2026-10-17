@@ -14,17 +14,6 @@
 static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
 static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
 
-// $7E:36AA -- `$F0` bytes from the $FE-table's pointer X (bank $FE) to Y, in bank $7E or $7F by `$0305` bit 0 (C3/099C / 09A0).
-static void copy36AA(uint8_t* w, const CtRaceIo* io, unsigned x, unsigned y) {
-  if (!io || !io->rom) return;
-  long t = 0x3E0000L + (long)x;
-  if (t + 2 > io->romLen) return;
-  unsigned src = (unsigned)(io->rom[t] | (io->rom[t + 1] << 8)), n = rw(w, 0xF0) & 0xFFFF, b = (unsigned)(w[0x0305] & 1) << 16;
-  for (unsigned i = 0; i < n; i++) {
-    long r = 0x3E0000L + (long)((src + i) & 0xFFFF);
-    w[b | ((y + i) & 0xFFFF)] = (r < io->romLen) ? io->rom[r] : 0;
-  }
-}
 // $7E:53BB-54B0 (8-bit A) -- the setup before the script.
 void CtEntry4PicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
   sp->vmain = 0x80; sp->vaddr = 0x0000;                               // 53BB / 53C0
@@ -39,7 +28,7 @@ void CtEntry4PicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
   w[0x0305] = 0x7F; ww(w, 0x0303, 0x0200); w[0x00F0] = 0; w[0x00F2] = 0x19;
   CtSeqPicDma38E7(sp, w);                                             // 53F7: the mode-7 characters, VRAM's high bytes
   w[0x0305] = 0; w[0x00F1] = 0; w[0x00F0] = 0x60;
-  copy36AA(w, io, 0x3F, 0x0C00);                                      // 540A: $60 tile numbers -> $7E:0C00
+  CtSeqPicCopy36AA(w, io, 0x3F, 0x0C00);                                      // 540A: $60 tile numbers -> $7E:0C00
   w[0x0305] = 0x7F; ww(w, 0x0303, 0x0200);
   CtSeqPicUnpack(w, io, 0x42);                                        // 541B: packet $42 -> $7F:0200
   sp->vaddr = 0x4000;                                                 // 541E
@@ -62,9 +51,9 @@ void CtEntry4PicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
   CtSeqStagePicDma(sp, w, 0x00, 0x18, 0x12200, 0x0380);               // 545D: $380 bytes of the map, VRAM's low bytes
   CtSeqStagePicDma(sp, w, 0x08, 0x18, 0x0350B, 0x3C80);               // 5473 $7E:90A7: the rest from one byte ($7E:350B)
   w[0x0305] = 0; w[0x00F1] = 0; w[0x00F0] = 0x20;
-  copy36AA(w, io, 0x3C, 0x2200);                                      // 5488: the palettes
+  CtSeqPicCopy36AA(w, io, 0x3C, 0x2200);                                      // 5488: the palettes
   w[0x00F0] = 0x40;                                                   // 548B ASL $F0
-  copy36AA(w, io, 0x36, 0x2300);
+  CtSeqPicCopy36AA(w, io, 0x36, 0x2300);
   w[0x2200] = 0; w[0x2201] = 0;                                       // 5496-549B
   CtSeqPicWrite(&sp->p, 0x2C, 0x10, 0); CtSeqPicWrite(&sp->p, 0x2D, 0x00, 0);   // 54AD STX $212C: the sprites alone
 }

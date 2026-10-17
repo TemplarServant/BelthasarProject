@@ -169,7 +169,27 @@ op's own frame -- the script clears glb[170] bit 5 ($7F:00AA, C0/6BCE) on the fr
 **Equal on every frame** to the console's reset (995 NMIs; `entry7-picture-native-vs-oracle`; unseeded the same picture). **In
 play**: 300 frames after the op the whole frame is the cartridge's at P+2 (`entry7-story-picture-in-the-port-vs-oracle`).
 
-## 8. Next
+## 8. Entry 6, the Epoch into the shell (src/seq_entry6pic.c) -- IN PROGRESS
 
-Entry 6 (`FF 26`, the Epoch into the shell), the ending (`FF 2A`..`2F`) -- each its setup's uploads, its hooks and its picture
-tasks, graded NMI for NMI by `--racepiccmp` (add its open / frame to rpcOpen) and then in play.
+`FF 26` (sequence_table.md sec. 17). **Part 1 (2026-10-17)**, VRAM / CGRAM / HDMA the cartridge's from the first NMI to the END
+(`entry6-picture-native-vs-oracle`, a ratchet): the setup $7E:78DD -- packet $66 as the mode-7 characters (VRAM's high bytes from
+$2000), packet $69's map doubled ($37A6) and sent twice to VRAM's low bytes ($38C3), the palette page (packet $6C, a MVN, $36AA's
+$6F, `$2000` = $6F69, $38AF), $7A68 (the window circle's table pointer `$0356` = $7E:E060, $FF - sin / 2 at $E260, the ramps at
+$E000 / $E030, packets $72 / $7B to $4400 / $5000, the backdrop's map at $6000 from packet $75's attributes, $7F:0200 cleared from
+$2134), packet $78 (the Epoch's frames) at $7F:0A00 and C3/09E9's code at $B574; the hooks $81C4 (BG1 scrolls, the mode-7 centre),
+$824A (the Epoch's frame to VRAM $4000), $7F58 (HDMA table bytes), the PPU halves of $7A35 (the dive: mode 1, TM $11) and $79F8
+(the turn: mode 7), each installing HDMA by $36CC; the main thread $8278 (C3/0307 over $7F:0A00, `$1F` 4, `$25` $21, `$2B` $400, then
+$B574 -- the race's, shared); the task $82D1, the shared $357B with the pre-routine its `JSR $35FD` names: $8042 (the table in two
+halves on alternate frames -- `DEX / DEX` from $FF to the limit $01C0 with page A's r7 + 1, `INX / INX` from $20 to `$46` x 4) and
+$801F (after the turn: each line's distance read through WMDATA from $E260, the tail `BRA $3662` copied from $368D). The harness
+answers a script's `F5` with the oracle's own SPC, so the END is the cartridge's (1611).
+
+**Part 2, open**: the sprites -- tasks $7F7D (the Epoch's and its glow's pieces through $3A97), $7FCB (the window circle C3/0077 into
+$E060.., the lightning's tables), $8079 (the lightning's sprites, rewritten through WMDATA), $835B, $7BF2. Their draws call C3/02DD
+with a 16-bit A: `CMP $2137` reads $2138 (OAM data at the OAM address) as its high byte and `SBC $213D` reads $213E (STAT77: 1 |
+the PPU1 open bus' bit 4 | range over << 6 | time over << 7) -- the compositor must keep the OAM address ($2102 / $2103, the DMA,
+those reads; reset at the vblank when not forced blank) and the last frame's sprite flags. Then in play.
+
+## 9. Next
+
+The ending (`FF 2A`..`2F`): its setup's uploads, hooks and picture tasks, graded NMI for NMI and then in play.

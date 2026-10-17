@@ -238,7 +238,10 @@ static unsigned div16x8(unsigned a, unsigned b) { b &= 0xFF; return b ? (a & 0xF
 // the products as the loop's immediates ($3623, $360B), the negation as a branch ($3616: `80 00` falls into it, `80 04` skips),
 // the two sine tables' order ($362B / $3632) and, with reg 11 set, the loop's tail ($3634 = $368F's `BRA` to $366C: every line
 // computed is copied to the next and the distance steps 2). Those bytes are written here too: they are the overlay's WRAM.
-static void build357B(uint8_t* w, const CtRaceIo* io) {
+// The routine is the overlay's, shared: what each entry patches before its loop is the `JSR` at $35FD (the race's $45B0, entry
+// 6's $8042), which leaves X (the first distance) and Y and writes the loop's tail at $3634 (`NOP / INX`, `INX / INX`, `DEX / DEX`,
+// or the race's `BRA` to $366C) and its limit at $3637 (`CPY #imm`) -- read back here from WRAM.
+void CtSeqPic357B(uint8_t* w, const CtRaceIo* io, CtSeqPic357BPre pre) {
   const unsigned D = 0x0A00;
   unsigned reg0 = rw(w, D + 0x00), reg5 = rw(w, D + 0x0A);
   unsigned c = CtSeqSine(io, reg5 + 0x100); int cneg = (c & 0x8000) != 0;   // 357F JSR $3461
@@ -253,11 +256,15 @@ static void build357B(uint8_t* w, const CtRaceIo* io) {
   ww(w, 0x360B, sinP);
   unsigned p1 = sneg ? 0xF484 : 0xF0FE, p2 = sneg ? 0xF0FE : 0xF484;
   ww(w, 0x362B, p1); ww(w, 0x3632, p2);
-  // $7E:45B0 (the JSR $35FD names): Y = reg 6 x 4 (reg 6 at least 1), X = reg 8, the tail by reg 11
-  if (rw(w, D + 0x0C) < 1) ww(w, D + 0x0C, 1);
-  unsigned y = (rw(w, D + 0x0C) << 2) & 0xFFFF, x = rw(w, D + 0x10);
-  int alt = rw(w, D + 0x16) != 0;
-  ww(w, 0x3634, alt ? rw(w, 0x368F) : 0xE8EA);
+  unsigned x = 0, y = 0, wm = 0;
+  pre(w, &x, &y, &wm);                                                 // 35FC JSR (the entry's)
+  uint8_t t0 = w[0x3634], t1 = w[0x3635];
+  unsigned tgt = t0 == 0x80 ? (0x3636 + (unsigned)(int8_t)t1) & 0xFFFF : 0;   // a BRA: the tail's code
+  int alt = tgt == 0x366C;                                             // the race's: the line again, the distance 2 on
+  int wmx = tgt == 0x3662;                                             // entry 6's turn: the next distance read through WMDATA
+  if (tgt && !alt && !wmx) { static unsigned said; if (said != tgt) { said = tgt; fprintf(stderr, "racepic: UNDERIVED $357B tail $%04X\n", tgt); } }
+  int step = tgt ? 0 : ((t0 == 0xE8) - (t0 == 0xCA) + (t1 == 0xE8) - (t1 == 0xCA));   // INX = +1, DEX = -1, NOP = 0
+  unsigned limit = rw(w, 0x3637);                                      // 3636 CPY #imm
   unsigned dividend = cosP, guard = 0;                                 // 3603 LDA $3623 / STA $4204
   do {
     unsigned q1 = div16x8(dividend, x);                                // 3608 STX $4206
@@ -274,9 +281,20 @@ static void build357B(uint8_t* w, const CtRaceIo* io) {
       ww(w, 0xF100 + y, rw(w, 0xF0FC + y)); ww(w, 0xF48A + y, rw(w, 0xF0FC + y));
       ww(w, 0xF102 + y, rw(w, 0xF0FE + y)); ww(w, 0xF488 + y, rw(w, 0xF484 + y));
       x = (x + 2) & 0xFFFF; y = (y + 4) & 0xFFFF;
-    } else x = (x + 1) & 0xFFFF;                                       // 3634 NOP / INX
-  } while (y != 0x0380 && ++guard < 0x4000);                           // 3636 CPY #0380 / BNE
+    } else if (wmx) { x = w[wm & 0x1FFFF]; wm = (wm + 1) & 0x1FFFF; }  // 3662 LDA $2180 / AND #00FF / TAX
+    else x = (x + (unsigned)step) & 0xFFFF;                            // 3634: the tail
+  } while (y != limit && ++guard < 0x4000);                            // 3636 CPY #imm / BNE
 }
+// $7E:45B0, the race's (the JSR $35FD names): Y = reg 6 x 4 (reg 6 at least 1), X = reg 8, the tail by reg 11 (`NOP / INX`, or
+// $368F's `BRA` to $366C: each line copied to the next, the distance 2 on).
+static void pre45B0(uint8_t* w, unsigned* x, unsigned* y, unsigned* wm) {
+  (void)wm;
+  const unsigned D = 0x0A00;
+  if (rw(w, D + 0x0C) < 1) ww(w, D + 0x0C, 1);
+  *y = (rw(w, D + 0x0C) << 2) & 0xFFFF; *x = rw(w, D + 0x10);
+  ww(w, 0x3634, rw(w, D + 0x16) ? rw(w, 0x368F) : 0xE8EA);
+}
+static void build357B(uint8_t* w, const CtRaceIo* io) { CtSeqPic357B(w, io, pre45B0); }
 // $7E:42CE -- the matrix is rebuilt when page A's reg 0, 5, 6, 8 or 11 changed since the last build ($0A30-$0A38 keep them); a
 // change of reg 0 also clears the requests $1446-$1545 ($4309). The ROM's branches enter its store chain at the changed one.
 static void task42CE(uint8_t* w, const CtRaceIo* io) {
@@ -824,5 +842,22 @@ int CtRacePicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned t, cons
       if (slot == 0) { static int said; if (!said++) fprintf(stderr, "racepic: UNDERIVED -- task $4D0D in slot 0 (the carry the NMI leaves)\n"); }
       task4D0D(w, io, 0); return 1;
     default: return 0;
+  }
+}
+
+// ---- exported for the other stages (seq_entry6pic.c) ----
+void CtSeqPicGen09E9(uint8_t* w, unsigned wm, unsigned x, unsigned y) { walk09E9(w, wm, x, y, 0); }
+void CtSeqPicRun09E9(uint8_t* w, unsigned x, unsigned y) { walk09E9(w, 0, x, y, 1); }
+void CtSeqPicScale0307(uint8_t* w, int carry) { K kk = { w, carry, 0, NULL, 0, 0, 0, 0 }; scale0307(&kk); }
+void CtSeqPicRows37A6(uint8_t* w) { rows37A6(w); }
+// $7E:36AA -- `$F0` bytes from the $FE-table's pointer X (bank $FE) to Y, in bank $7E or $7F by `$0305` bit 0 (C3/099C / 09A0).
+void CtSeqPicCopy36AA(uint8_t* w, const CtRaceIo* io, unsigned x, unsigned y) {
+  if (!io || !io->rom) return;
+  long t = 0x3E0000L + (long)x;
+  if (t + 2 > io->romLen) return;
+  unsigned src = (unsigned)(io->rom[t] | (io->rom[t + 1] << 8)), n = rw(w, 0xF0) & 0xFFFF, b = (unsigned)(w[0x0305] & 1) << 16;
+  for (unsigned i = 0; i < n; i++) {
+    long r = 0x3E0000L + (long)((src + i) & 0xFFFF);
+    w[b | ((y + i) & 0xFFFF)] = (r < io->romLen) ? io->rom[r] : 0;
   }
 }

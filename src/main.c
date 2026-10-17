@@ -7318,14 +7318,20 @@ static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) 
 #include "seq_entry3.h"
 #include "seq_entry4.h"
 #include "seq_entry7.h"
+#include "seq_entry6.h"
 // The stage by its operand: entry 3 / entry 4 (seq_entry3.c, seq_entry4.c and their *pic.c) or the race (seq_race.c / seq_racepic.c).
 static int rpcOpen(uint8_t* w, uint8_t op, const CtRaceIo* io) {
   return CtEntry3StageHas(op) ? CtEntry3StageOpen(w, op, io) : CtEntry4StageHas(op) ? CtEntry4StageOpen(w, op, io)
-       : CtEntry7StageHas(op) ? CtEntry7StageOpen(w, op, io) : CtRaceStageOpen(w, op, io); }
+       : CtEntry7StageHas(op) ? CtEntry7StageOpen(w, op, io) : CtEntry6StageHas(op) ? CtEntry6StageOpen(w, op, io)
+       : CtRaceStageOpen(w, op, io); }
 static int rpcFrame(uint8_t* w, uint8_t op, uint16_t joy, const CtRaceIo* io) {
   return CtEntry3StageHas(op) ? CtEntry3StageFrame(w, joy, io) : CtEntry4StageHas(op) ? CtEntry4StageFrame(w, joy, io)
-       : CtEntry7StageHas(op) ? CtEntry7StageFrame(w, joy, io) : CtRaceStageFrame(w, joy, io); }
+       : CtEntry7StageHas(op) ? CtEntry7StageFrame(w, joy, io) : CtEntry6StageHas(op) ? CtEntry6StageFrame(w, joy, io)
+       : CtRaceStageFrame(w, joy, io); }
 static void racepicPost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }
+// A script's `F5` reads the SPC's output ports: here the oracle's own (the cartridge's marker on its frame).
+static Snes* g_rpcSnes;
+static uint8_t racepicPort(void* c, int n) { (void)c; return g_rpcSnes ? g_rpcSnes->apu->outPorts[n & 3] : 0; }
 // RACEPICCMP_PCLOG=<hex 24-bit PC>: the oracle's A / X / Y / carry each time it is about to run that instruction.
 static void rpcOp(Snes* s, int k) {
   static long pc = -2; if (pc == -2) { const char* e = getenv("RACEPICCMP_PCLOG"); pc = e ? strtol(e, NULL, 16) : -1; }
@@ -7341,7 +7347,7 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   static CtSeqStagePic sp; static CtSeqPic q;
   CtRaceIo io; memset(&io, 0, sizeof io);
   { FILE* rf = fopen(romPath, "rb"); if (rf) { io.romLen = (long)fread(romImg, 1, sizeof romImg, rf); fclose(rf); io.rom = romImg; } }
-  io.ctx = w; io.post = racepicPost; io.pic = &sp;
+  io.ctx = w; io.post = racepicPost; io.pic = &sp; io.port = racepicPort; g_rpcSnes = s;
   CtBtnScript bs = { btns }; uint16_t held = 0; int left = 0;
   #define RPC_PAD() do { while (left <= 0) { int n_; if (!ctBtnNext(&bs, &held, &n_)) { held = 0; n_ = 1 << 30; } left = n_; } \
                          s->input1->currentState = held; left--; } while (0)

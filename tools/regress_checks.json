@@ -27560,6 +27560,41 @@
       "notes": "The port plays lavos-day-ff07-plays-through-to-the-title-in-the-port's drive (FF 07 at f1573) and presents f1873; the cartridge's drive state ff07_pre_f1530 (FF 07 on its f10) matches at f312 -- P+2 from the op, the opening priced whole (24 frames)."
     },
     {
+      "name": "entry6-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/lavos_re/ff26_pre_f2760.state",
+        "0:3000",
+        "11",
+        "26",
+        "1700"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/ff26_pre_f2760.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 32 frame(s) after the hand-off",
+        "racepiccmp: frame 1: the race's WRAM differs in 199 bytes",
+        "racepiccmp: frame 1: VRAM 0 CGRAM 0 OAM 102 words differ; registers 1 02:01/00; HDMA 0; WRAM 247 bytes",
+        "racepiccmp: native stage ended (1) at frame 1611",
+        "racepiccmp: 1700 frames -- first state difference 1, first race-WRAM difference 1, first picture difference 2 (14431659 px)"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "note_pass": "entry 6 (FF 26, the Epoch into Lavos's shell), its picture native in progress (a ratchet): the setup's uploads, the hooks, the main thread's Epoch and the mode-7 tables -- VRAM, CGRAM, the HDMA channels the cartridge's from the first NMI; the sprites (OAM) are part 2",
+      "notes": "SEQUENCE ENTRY 6's PICTURE, PART 1 (src/seq_entry6pic.c; disasm/notes/seq_picture.md sec. 8). The setup $7E:78DD with $7A68, the hooks $81C4 / $824A / $7F58 and the PPU halves of $7A35 / $79F8, the main thread $8278 (C3/0307 and $B574 shared with the race), $82D1's $357B (generalized: its pre-routine at $35FD -- $8042 alternating the two halves of the table, $801F reading each line's distance through WMDATA -- the tail and the limit read back from the patched code). The harness now answers a script's `F5` with the oracle's own SPC ports, so the END comes on the cartridge's frame (1611). Not yet: the tasks $7F7D, $7FCB (C3/0077), $8079, $835B, $7BF2 -- the sprites, whose draws read $2138 / $213E through C3/02DD with a 16-bit A.",
+      "mutations": []
+    },
+    {
       "name": "seq-race-xlat-lockstep",
       "argv": [
         "build/ct.exe",
