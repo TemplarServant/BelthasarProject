@@ -2946,6 +2946,339 @@ static int obEpochShadow(uint8_t* ram, uint8_t* B) {
   return 0;
 }
 
+// ===================== VEHICLE B, THE DACTYLS (loc 1F3, 65,000,000 B.C.) =====================
+// disasm/notes/ow_vehicle.md sec. 7. Record `$029A/$029C` (position), `$029E` (bits 0-1 aboard, 5 landing, 6 riding, 7 present);
+// `$1BF0` aloft. The lead's module 3 (C2/347B) rides it; the boarding manager's vehicle-B arm (box C2:325C) boards it. Classes:
+// $4CC5 the lead's Dactyl, $504B its shadow, $5097 x 2 the followers' Dactyls (+24 = the slot), $5494 x 2 their shadows.
+static uint8_t owRomC0(unsigned a) { return (g_owRom && a < (unsigned)g_owRomLen) ? g_owRom[a] : 0; }
+static unsigned owTrig2277(unsigned a) {                               // C2/2277 (sin); C2/2273 = it of a + 40 (cos)
+  a &= 0xFF;
+  if (a == 0x40) return 0x0080;
+  if (a == 0xC0) return 0xFF80;
+  uint8_t v = owRomC0(0xF800 + a);                                     // C0:F800, DB = 00
+  return (v & 0x80) ? (0xFF00u | v) : v;
+}
+// C2/229D: the heading from ($08, $0A) to ($0C, $0E) on the wrapping map, 0..FF (C0:F300's octant table); X = the table index
+// (0 when the two coincide).
+static unsigned owHeading(uint8_t* ram, unsigned* xOut) {
+  unsigned d0 = (obW(ram + 0x0A) - obW(ram + 0x0E)) & 0xFFFF;          // 229D: dy
+  unsigned a2 = (d0 & 0x8000) ? (0x10000 - d0) & 0xFFFF : d0;
+  if (a2 >= 0x0200) { a2 = (0x10000 - ((a2 - 0x0400) & 0xFFFF)) & 0xFFFF; d0 = (0x10000 - d0) & 0xFFFF; }
+  unsigned d4 = (obW(ram + 0x08) - obW(ram + 0x0C)) & 0xFFFF;          // 22C3: dx
+  unsigned a6 = (d4 & 0x8000) ? (0x10000 - d4) & 0xFFFF : d4;
+  if (a6 >= 0x0300) { a6 = (0x10000 - ((a6 - 0x0600) & 0xFFFF)) & 0xFFFF; d4 = (0x10000 - d4) & 0xFFFF; }
+  obPutW(ram + 0x00, (uint16_t)d0); obPutW(ram + 0x02, (uint16_t)a2); obPutW(ram + 0x04, (uint16_t)d4);
+  a6 >>= 2;
+  unsigned x = (((a2 & 0xFFFC) << 3) + a6) & 0xFFFF;
+  unsigned t = owRomC0(0xF300 + x);
+  obPutW(ram + 0x06, (uint16_t)t);
+  *xOut = x;
+  if (!((d0 ^ d4) & 0x8000)) return (d4 & 0x8000) ? t : 0x80 + t;
+  return (d4 & 0x8000) ? (0x100 - t) & 0xFFFF : (0x80 - t) & 0xFFFF;
+}
+static void owDacSaveSlot(uint8_t* ram, const uint8_t* B) {            // C2/5605: where a follower's Dactyl is
+  unsigned a = (B[0x24] & 1) ? 0x02A6 : 0x02AA;
+  obPutW(ram + a, obW(B + OWOBJ_XPOS)); obPutW(ram + a + 2, obW(B + OWOBJ_YPOS));
+}
+static void owDacPose(uint8_t* ram, uint8_t* B) {                      // C2/5470: a follower's pose for its facing
+  if (B[0x28] == B[0x27]) return;
+  leadInstall(B, owRomW(0x548C + (unsigned)((B[0x24] - 1) * 4 + B[0x28])) & 0xFF);
+}
+// C2/53D3: the velocity that covers the way to +2A/+2C in 0x30 frames (|d| byte-swapped through $4204 / $4206).
+static void owDacToward(uint8_t* ram, uint8_t* B) {
+  unsigned dx = (obW(B + 0x2A) - obW(B + OWOBJ_XPOS)) & 0xFFFF; obPutW(ram + 0x08, (uint16_t)dx);
+  unsigned ax = (dx & 0x8000) ? (0x10000 - dx) & 0xFFFF : dx;
+  ax = ((ax & 0xFF) << 8) | (ax >> 8);                                 // 53E6 XBA
+  owVelZero(B);
+  obPutW(B + 0x1B, (uint16_t)(ax / 0x30));
+  unsigned dy = (obW(B + 0x2C) - obW(B + OWOBJ_YPOS)) & 0xFFFF; obPutW(ram + 0x0A, (uint16_t)dy);
+  unsigned ay = (dy & 0x8000) ? (0x10000 - dy) & 0xFFFF : dy;
+  ay = ((ay & 0xFF) << 8) | (ay >> 8);
+  if (dx & 0x8000) obNeg32(B + 0x1A, B + 0x1C);                        // 5429 JSR C2/1C84
+  obPutW(B + 0x1F, (uint16_t)(ay / 0x30));
+  if (dy & 0x8000) obNeg32(B + 0x1E, B + 0x20);                        // 5436 JSR C2/1C9E
+}
+// C2/5374: the heading to +2A/+2C and four times its cos / sin as the velocity (8.8, sign-extended); 0 when there.
+static int owDacSteer(uint8_t* ram, uint8_t* B) {
+  owVelZero(B);
+  obPutW(ram + 0x08, obW(B + OWOBJ_XPOS)); obPutW(ram + 0x0A, obW(B + OWOBJ_YPOS));
+  obPutW(ram + 0x0C, obW(B + 0x2A)); obPutW(ram + 0x0E, obW(B + 0x2C));
+  unsigned x, h = owHeading(ram, &x);
+  obPutW(ram + 0x08, (uint16_t)h);
+  if (!x) return 0;
+  obPutW(B + 0x1B, (uint16_t)(owTrig2277(h + 0x40) << 2));
+  obPutW(B + 0x1F, (uint16_t)(owTrig2277(h) << 2));
+  if (B[0x1C] & 0x80) B[0x1D] = 0xFF;
+  if (B[0x20] & 0x80) B[0x21] = 0xFF;
+  return 1;
+}
+// C2/528A: no step past the target -- each axis's whole part capped at the distance left (the map's wrap folded).
+static void owDacCap(uint8_t* ram, uint8_t* B) {
+  for (int ax = 0; ax < 2; ax++) {
+    uint8_t* fr = B + (ax ? 0x1E : 0x1A); uint8_t* in = B + (ax ? 0x20 : 0x1C);
+    int neg = (obW(in) & 0x8000) != 0;
+    unsigned whole = obW(in);
+    if (neg) { unsigned f = (~obW(fr) & 0xFFFF) + 1; whole = ((~obW(in) & 0xFFFF) + (f >> 16)) & 0xFFFF; }
+    obPutW(ram + 0x08, (uint16_t)whole); obPutW(ram + 0x0A, (uint16_t)neg);
+    unsigned d = (obW(B + (ax ? 0x2C : 0x2A)) - obW(B + (ax ? OWOBJ_YPOS : OWOBJ_XPOS))) & 0xFFFF;
+    if (d & 0x8000) d = (0x10000 - d) & 0xFFFF;
+    if (d >= (ax ? 0x0200u : 0x0300u)) d = (0x10000 - ((d - 0x0400) & 0xFFFF)) & 0xFFFF;
+    if (d < whole) {
+      obPutW(in, (uint16_t)d); obPutW(fr, 0);
+      if (neg) obNeg32(fr, in);
+    }
+  }
+}
+// C2/39D5 alone (the Dactyl does not take C2/4A58's row below): the four properties about the cell of ($08, $0A).
+static void owDactylProps(uint8_t* ram, uint8_t* B, unsigned px, unsigned py) {
+  int x = (int)(px >> 3), y = (int)(py >> 3), xm = x - 1 < 0 ? 0xBF : x - 1;
+  B[0x22] = CtWorldProp(ram, xm, (y - 1) & 0x7F); B[0x23] = CtWorldProp(ram, x, (y - 1) & 0x7F);
+  B[0x24] = CtWorldProp(ram, xm, y);             B[0x25] = CtWorldProp(ram, x, y);
+  obPutW(ram + 0x0008, (uint16_t)x); obPutW(ram + 0x000A, (uint16_t)y);
+}
+// THE LEAD'S DACTYL, class $4CC5 (states C2:4CCE).
+static int obDactyl(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
+  for (;;) switch (B[2]) {
+  case 0:                                                              // C2/4CDA
+    obPutW(B + OWOBJ_XPOS, obW(ram + 0x029A)); obPutW(B + OWOBJ_YPOS, obW(ram + 0x029C));
+    obPutW(B + OWOBJ_XFRAC, 0); obPutW(B + OWOBJ_YFRAC, 0); obPutW(B + 0x10, 0);
+    B[0x28] = B[0x27] = 0x01;
+    if (!(ram[0x029E] & 0x40)) { B[2]++; B[OWOBJ_ATTR] = 0xA8; ram[0x1BF0] = 0; leadInstall(B, 0x24); }
+    else { B[2] = 3; B[OWOBJ_ATTR] = 0xB8; ram[0x1BF0] = 1; leadInstall(B, owRomW(0x5047 + 1) & 0xFF); }
+    obAnimTick(ram, B);
+    return 0;
+  case 1:                                                              // C2/4D37: parked
+    if (ram[0x027E] != 3) { obAnimTick(ram, B); return 0; }
+    ram[0x029E] |= 0x40;
+    B[2]++;
+    owDactylProps(ram, B, obW(B + OWOBJ_XPOS), obW(B + OWOBJ_YPOS));   // 4D59 JSR C2/39D5
+    obPutW(B + 0x1E, 0x8000); obPutW(B + 0x20, 0xFFFF);
+    obPutW(B + 0x1A, 0); obPutW(B + 0x1C, 0); obPutW(B + 3, 0);
+    leadInstall(B, 0x29);
+    /* FALLTHROUGH: 4D79 */
+  case 2:                                                              // C2/4D79: the lift-off
+    if (B[3] == 0x08) B[OWOBJ_ATTR] = 0xB8;
+    if (B[3] < 0x30) { obIntegrate(B); obAnimTick(ram, B); return 0; }
+    B[2]++; ram[0x1BF0] = 1;
+    obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(B + OWOBJ_YPOS) + 0x0018));
+    owVelZero(B); obPutW(B + 3, 0);
+    leadInstall(B, 0x25);
+    ram[0x0104] = (uint8_t)((ram[0x0104] & 0xFC) | B[0x28]);
+    /* FALLTHROUGH: 4DCF */
+  case 3: {                                                            // C2/4DCF: aloft, the pad
+    if (ram[0x027C] != 1) { obAnimTick(ram, B); return 0; }
+    unsigned pad = obW(ram + 0x00F8);
+    if (!pad) { obAnimTick(ram, B); return 0; }
+    if ((pad & 0x0080)                                                 // C2/4E20: A -- down, if it may
+        && !((obW(B + 0x22) | obW(B + 0x24) | obW(B + 0x2E)) & 0x0707)
+        && (obW(B + 0x22) & 0x0404) != 0x0404                          // C2/39AE: not an entrance
+        && !((ram[0x0294] & 0x80) && obW(ram + 0x0100) == obW(ram + 0x029F)   // C2/48E8: not onto the Epoch
+             && owBoxHit(obW(ram + 0x029A), obW(ram + 0x029C), 0x494E, obW(ram + 0x0290), obW(ram + 0x0292), 0x4946))) {
+      unsigned x = (obW(B + OWOBJ_XPOS) >> 3) & 0xFF, y = (obW(B + OWOBJ_YPOS) >> 3) & 0xFF;   // C6/E74E: x 00-0D, y 00-33
+      int inside = x < 0x0E && y < 0x34;
+      if (!inside) {
+        obPutW(B + 0x1A, 0); obPutW(B + 0x1C, 0); obPutW(B + 0x1E, 0x8000); obPutW(B + 0x20, 0); obPutW(B + 3, 0);
+        obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(B + OWOBJ_YPOS) + 0xFFE8));
+        leadInstall(B, 0x29);
+        B[0x28] = 0x01; ram[0x0104] = (uint8_t)((ram[0x0104] & 0xFC) | 1);
+        ram[0x1BF0] = 0; ram[0x029E] |= 0x20;
+        B[2] = 5;
+        obAnimTick(ram, B);
+        return 0;
+      }
+    }
+    if (pad & 0x0040) { ram[0x027C] = 0x05; obAnimTick(ram, B); return 0; }   // C2/4EBE
+    if (pad & 0x0004) { ram[0x027C] = 0x06; obAnimTick(ram, B); return 0; }   // C2/4EC8
+    int dir = (pad & 0x0800) ? 0 : (pad & 0x0400) ? 1 : (pad & 0x0200) ? 2 : (pad & 0x0100) ? 3 : -1;
+    if (dir < 0) { obAnimTick(ram, B); return 0; }
+    obPutW(ram + 0x08, (uint16_t)dir);                                 // C2/4EE2
+    obPutW(B + 0x1C, (uint16_t)owRomW(0x5037 + 4 * (unsigned)dir)); obPutW(B + 0x20, (uint16_t)owRomW(0x5039 + 4 * (unsigned)dir));
+    obPutW(B + 0x1A, 0); obPutW(B + 0x1E, 0);
+    if (B[0x28] != dir) {
+      B[0x28] = (uint8_t)dir; ram[0x0104] = (uint8_t)((ram[0x0104] & 0xFC) | dir);
+      leadInstall(B, owRomW(0x5047 + (unsigned)dir) & 0xFF);
+    }
+    {                                                                  // 4F21 JSR C2/3A56 / C2/3A8F: the next cell
+      unsigned tx = obW(B + OWOBJ_XPOS), ty = obW(B + OWOBJ_YPOS);
+      int16_t vx = (int16_t)obW(B + 0x1C), vy = (int16_t)obW(B + 0x20);
+      if (vx) tx += vx > 0 ? 8 : 0xFFF8;
+      if (vy) ty += vy > 0 ? 8 : 0xFFF8;
+      tx &= 0xFFFF;
+      if (tx & 0x8000) tx = (tx + 0x600) & 0xFFFF; else if (tx >= 0x600) tx -= 0x600;
+      obPutW(B + 0x2A, (uint16_t)tx); obPutW(B + 0x2C, (uint16_t)(ty & 0x3FF));
+    }
+    owDactylProps(ram, B, obW(B + 0x2A), obW(B + 0x2C));               // 4F31 JSR C2/39D5
+    if ((B[0x22] & 3) == 3 || (B[0x23] & 3) == 3 || (B[0x24] & 3) == 3 || (B[0x25] & 3) == 3) {   // 4F34: a cliff
+      owVelZero(B);
+      owDactylProps(ram, B, obW(B + OWOBJ_XPOS), obW(B + OWOBJ_YPOS));
+      obAnimTick(ram, B);
+      return 0;
+    }
+    ram[0x1BF7] = 0;
+    B[2]++;
+  }
+    /* FALLTHROUGH: 4F7E */
+  case 4:                                                              // C2/4F7E: the step
+    obIntegrate(B);
+    owScrollBoth(ram, c, 0, obW(B + 0x1C));
+    owScrollBoth(ram, c, 1, obW(B + 0x20));
+    owStoreCamVel(ram, c, B);
+    obAnimTick(ram, B);
+    obPutW(ram + 0x029A, obW(B + OWOBJ_XPOS)); obPutW(ram + 0x029C, obW(B + OWOBJ_YPOS));
+    if (obW(B + OWOBJ_XPOS) == obW(B + 0x2A) && obW(B + OWOBJ_YPOS) == obW(B + 0x2C)) obPutW(B + 2, 0x0003);
+    return 0;
+  case 5:                                                              // C2/4FEB: the landing
+    if (B[3] == 0x20) B[OWOBJ_ATTR] = 0xA8;
+    if (B[3] < 0x31) { obIntegrate(B); obAnimTick(ram, B); return 0; }
+    ram[0x029E] &= (uint8_t)~0x60;                                     // 500D TRB #40 / 5012 TRB #20
+    B[2] = 1;
+    leadInstall(B, 0x24);
+    owVelZero(B); obPutW(B + 3, 0);
+    obAnimTick(ram, B);
+    return 0;
+  default:
+    return 0;
+  }
+}
+// THE DACTYL'S SHADOW, class $504B: under it on the ground (4E, 18 above), or (aloft, `$1BF0`) 1F, 18 below.
+static int obDactylShadow(uint8_t* ram, uint8_t* B) {
+  if (B[2] == 0) { B[2]++; B[OWOBJ_ATTR] = 0xB0; B[0x10] = 0; B[0x11] = 0; }   // C2/5058
+  unsigned k = (unsigned)ram[0x1BF0] * 4;                              // C2/5068: C2:508F[$1BF0]
+  obPutW(B + OWOBJ_YPOS, (uint16_t)(owRomW(0x508F + k) + obW(ram + 0x029C)));
+  obPutW(B + OWOBJ_XPOS, obW(ram + 0x029A));
+  leadInstall(B, owRomW(0x5091 + k) & 0xFF);
+  obAnimTick(ram, B);
+  return 0;
+}
+// A FOLLOWER'S DACTYL, class $5097 (+24 = the slot, 1 or 2; states C2:50A0).
+static int obDactylMate(uint8_t* ram, uint8_t* B) {
+  int slot1 = (B[0x24] == 1);
+  for (;;) switch (B[2]) {
+  case 0:                                                              // C2/50AC
+    obPutW(B + OWOBJ_XPOS, obW(ram + 0x029A)); obPutW(B + OWOBJ_YPOS, obW(ram + 0x029C));
+    obPutW(B + OWOBJ_XFRAC, 0); obPutW(B + OWOBJ_YFRAC, 0); obPutW(B + 0x10, 0);
+    B[0x28] = B[0x27] = 0x01;
+    B[OWOBJ_ATTR] = slot1 ? 0xAA : 0xAC;
+    if (!(ram[0x029E] & 0x40)) { B[2]++; leadInstall(B, 0x24); return 0; }   // (no tick: under the lead's)
+    B[2] = 3; B[OWOBJ_ATTR] |= 0x30; B[0x27] = 0xFF;
+    owDacPose(ram, B); owDacSaveSlot(ram, B);
+    obAnimTick(ram, B);
+    return 0;
+  case 1:                                                              // C2/5110
+    if (ram[0x027E] != 3) return 0;
+    B[2]++; obPutW(B + 3, 0);
+    obPutW(B + 0x1C, slot1 ? 0x0000 : 0xFFFF); obPutW(B + 0x1A, 0x8000);   // up and out, half a pixel sideways
+    obPutW(B + 0x20, 0xFFFF); obPutW(B + 0x1E, 0);
+    leadInstall(B, slot1 ? 0x6F : 0x74);
+    /* FALLTHROUGH: 514C */
+  case 2:                                                              // C2/514C: the lift-off
+    if (B[3] == 0x08) B[OWOBJ_ATTR] |= 0x30;
+    if (B[3] < 0x30) { obIntegrate(B); owDacSaveSlot(ram, B); obAnimTick(ram, B); return 0; }
+    B[2]++; B[OWOBJ_ATTR] |= 0x30;
+    obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(B + OWOBJ_YPOS) + 0x0018));
+    owVelZero(B); obPutW(B + 3, 0);
+    B[0x27] = 0xFF; owDacPose(ram, B);
+    /* FALLTHROUGH: 51A5 */
+  case 3:                                                              // C2/51A5: the formation
+    if (ram[0x029E] & 0x20) {                                          // the lead's Dactyl is landing: in under it
+      B[2] = 5; B[3] = 0; B[0x22] = 0;
+      obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(B + OWOBJ_YPOS) + 0xFFE8));
+      obPutW(B + 0x2A, obW(ram + 0x029A)); obPutW(B + 0x2C, obW(ram + 0x029C));   // C2/5361
+      owDacToward(ram, B);                                             // C2/53D3
+      B[0x27] = ram[0x0028];                                           // 51CD LDA $0028 (absolute: the scroll shadow)
+      B[0x28] = 0x01;
+      leadInstall(B, slot1 ? 0x6F : 0x74);
+      obAnimTick(ram, B);
+      return 0;
+    }
+    {                                                                  // C2/531D: its place, from the lead's facing
+      unsigned i = ((((unsigned)(ram[0x0104] & 3) << 1) | (unsigned)((B[0x24] - 1) & 1)) << 2);
+      unsigned x = (owRomW(0x543C + i) + obW(ram + 0x029A)) & 0xFFF8;
+      if (x & 0x8000) x = (x + 0x0600) & 0xFFFF; else if (x >= 0x0600) x -= 0x0600;
+      obPutW(B + 0x2A, (uint16_t)x);
+      obPutW(B + 0x2C, (uint16_t)((owRomW(0x543E + i) + obW(ram + 0x029C)) & 0x03F8));
+    }
+    if (owDacSteer(ram, B)) {                                          // C2/5374, then C2/545C: the facing of the heading
+      ram[0x09] = 0;
+      B[0x27] = B[0x28]; B[0x28] = owRomC0(0xF700 + ram[0x08]);
+    } else {
+      owVelZero(B);
+      B[0x27] = B[0x28]; B[0x28] = (uint8_t)(ram[0x0104] & 3);
+    }
+    owDacPose(ram, B);
+    B[2]++; B[3] = 0;
+    /* FALLTHROUGH: 5227 */
+  case 4:                                                              // C2/5227: four frames on that heading
+    if (B[3] >= 4) { B[2]--; continue; }                               // 5243 DEC / JMP C2/51A5
+    owDacCap(ram, B);
+    obIntegrate(B); owDacSaveSlot(ram, B); obAnimTick(ram, B);
+    return 0;
+  case 5:                                                              // C2/5249: the landing
+    if (B[3] < 0x31) { obIntegrate(B); owDacSaveSlot(ram, B); obAnimTick(ram, B); return 0; }
+    B[2] = 1; B[OWOBJ_ATTR] = (uint8_t)((B[OWOBJ_ATTR] & 0xCF) | 0x20);
+    obPutW(B + OWOBJ_XFRAC, 0); obPutW(B + OWOBJ_YFRAC, 0); owVelZero(B);
+    obAnimTick(ram, B);
+    return 0;
+  default:
+    return 0;
+  }
+}
+// A FOLLOWER DACTYL'S SHADOW, class $5494 (+24 = the slot; states C2:549D).
+static int obDactylMateShadow(uint8_t* ram, uint8_t* B) {
+  int slot1 = (B[0x24] == 1);
+  for (;;) switch (B[2]) {
+  case 0:                                                              // C2/54A7
+    B[OWOBJ_ATTR] = 0xB0;
+    if (ram[0x029E] & 0x40) {
+      B[2] = 3; leadInstall(B, 0x1F);
+      obPutW(B + OWOBJ_XPOS, obW(ram + (slot1 ? 0x02A6 : 0x02AA)));
+      obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(ram + (slot1 ? 0x02A8 : 0x02AC)) + 0x0030));
+      obPutW(B + 0x10, 0);
+      return 0;
+    }
+    B[2]++;
+    obPutW(B + OWOBJ_XPOS, obW(ram + 0x029A)); obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(ram + 0x029C) + 0xFFE8));
+    obPutW(B + 0x10, 0);
+    leadInstall(B, 0x4E);
+    /* FALLTHROUGH: 550E */
+  case 1:                                                              // C2/550E
+    if (ram[0x027E] != 3) return 0;
+    B[2]++; B[3] = 0;
+    obPutW(B + 0x1C, slot1 ? 0x0000 : 0xFFFF);
+    obPutW(B + 0x1A, 0x8000); obPutW(B + 0x1E, 0x8000); obPutW(B + 0x20, 0xFFFF);
+    /* FALLTHROUGH: 5542 */
+  case 2:                                                              // C2/5542
+    if (B[3] < 0x30) { obIntegrate(B); obAnimTick(ram, B); return 0; }
+    B[2]++;
+    obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(B + OWOBJ_YPOS) + 0x0030));
+    leadInstall(B, 0x1F);
+    /* FALLTHROUGH: 556D */
+  case 3:                                                              // C2/556D
+    if (ram[0x029E] & 0x20) {
+      B[2] = 4; B[3] = 0;
+      obPutW(B + 0x2A, obW(ram + 0x029A)); obPutW(B + 0x2C, (uint16_t)(obW(ram + 0x029C) + 0xFFE8));
+      obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(B + OWOBJ_YPOS) + 0xFFD0));
+      owDacToward(ram, B);
+      leadInstall(B, 0x4E);
+      obAnimTick(ram, B);
+      return 0;
+    }
+    obPutW(B + OWOBJ_XPOS, obW(ram + (slot1 ? 0x02A6 : 0x02AA)));     // C2/55A7
+    obPutW(B + OWOBJ_YPOS, (uint16_t)(obW(ram + (slot1 ? 0x02A8 : 0x02AC)) + 0x0018));
+    obWrapWorld(B);
+    obAnimTick(ram, B);
+    return 0;
+  case 4:                                                              // C2/55D1
+    if (B[3] < 0x31) { obIntegrate(B); obAnimTick(ram, B); return 0; }
+    B[2] = 1;
+    obPutW(B + OWOBJ_XFRAC, 0); obPutW(B + OWOBJ_YFRAC, 0); owVelZero(B);
+    obAnimTick(ram, B);
+    return 0;
+  default:
+    return 0;
+  }
+}
+
 // ===================== THE TIME GAUGE ($027C = 8: C2/261D -> C2/6A34) =====================
 // disasm/notes/ow_time_gauge.md. The gauge is a screen of the overworld's own engine: its objects run in the same pass,
 // the controller $6AC8, the swirl $6F85 (the mode-7 matrix per line), seven era markers $7143 and three palette / fade
@@ -3344,6 +3677,13 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
       int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
       continue;
     }
+    if (cls == 0x4CC5 || cls == 0x504B || cls == 0x5097 || cls == 0x5494) {   // vehicle B: the Dactyls and their shadows
+      int r = cls == 0x4CC5 ? obDactyl(ram, B, c) : cls == 0x504B ? obDactylShadow(ram, B)
+            : cls == 0x5097 ? obDactylMate(ram, B) : obDactylMateShadow(ram, B);
+      if (r == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
+      else obPutW(B, 0);
+      continue;
+    }
     if (cls == 0x6AC8 || cls == 0x6F85 || cls == 0x7143) {      // the time gauge's controller, swirl, era markers
       int r = cls == 0x6AC8 ? obGaugeCtl(ram, B) : cls == 0x6F85 ? obGaugeSwirl(ram, B) : obGaugeMarker(ram, B);
       { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
@@ -3395,16 +3735,17 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
   // CT_OWVEHTRACE=1: the vehicle machine as each pass leaves it, on change -- `$027C $027E $027F $028F $0294`, then every
   // block of the lead / Epoch / shadow / boarding-manager / follower classes as `addr:class/state` (the oracle's side:
   // `ct.exe --monitor 7E027C:6,7E028F:1,7E0294:1,...`).
-  { static int tr = -1; static char last[256]; static int pass = 0;
+  { static int tr = -1; static char last[400]; static int pass = 0;
     if (tr < 0) { const char* e = getenv("CT_OWVEHTRACE"); tr = (e && *e) ? 1 : 0; }
     pass++;
     if (tr) {
-      char buf[256]; int n = snprintf(buf, sizeof buf, "027C=%02X 027E=%02X 027F=%02X 028F=%02X 0294=%02X 0290=%04X,%04X 0100=%04X 02AF=%04X 1BB7=%02X |",
+      char buf[400]; int n = snprintf(buf, sizeof buf, "027C=%02X 027E=%02X 027F=%02X 028F=%02X 0294=%02X 0290=%04X,%04X 0100=%04X 02AF=%04X 1BB7=%02X 029A=%04X,%04X 029E=%02X 1BF0=%02X 02A6=%04X,%04X,%04X,%04X |",
                                       ram[0x027C], ram[0x027E], ram[0x027F], ram[0x028F], ram[0x0294], obW(ram + 0x0290), obW(ram + 0x0292),
-                                      obW(ram + 0x0100), obW(ram + 0x02AF), ram[0x1BB7]);
-      for (int b = OWOBJ_BASE; b < OWOBJ_END && n < 240; b += OWOBJ_STRIDE) {
+                                      obW(ram + 0x0100), obW(ram + 0x02AF), ram[0x1BB7], obW(ram + 0x029A), obW(ram + 0x029C), ram[0x029E], ram[0x1BF0],
+                                      obW(ram + 0x02A6), obW(ram + 0x02A8), obW(ram + 0x02AA), obW(ram + 0x02AC));
+      for (int b = OWOBJ_BASE; b < OWOBJ_END && n < 380; b += OWOBJ_STRIDE) {
         uint16_t k = obW(ram + b);
-        if (k == 0x3404 || k == 0x42DD || k == 0x495E || k == 0x309E || k == 0x3AE2)
+        if (k == 0x3404 || k == 0x42DD || k == 0x495E || k == 0x309E || k == 0x3AE2 || k == 0x4CC5 || k == 0x504B || k == 0x5097 || k == 0x5494)
           n += snprintf(buf + n, sizeof buf - (size_t)n, " %04X:%04X/%02X", b, k, ram[b + 2]);
       }
       if (strcmp(buf, last)) { strcpy(last, buf); printf("owveh: pass %d f%d %s\n", pass, g_owTraceFrame, buf); }

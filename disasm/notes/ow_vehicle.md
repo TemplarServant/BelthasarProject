@@ -102,3 +102,32 @@ line from an indirect HDMA channel (owHdmaWordAt; scanline s takes table line s,
 on line 9). The channels' programming is kept as the natives write it (world.c CtWorldHdmaSet; window 1's C6/E241 sets
 channel 2 to WH1, the rising to BG2VOFS). Before, the six natives were skipped and the port crashed on the BG3 tile 0x3FF the
 unloaded VRAM held (worldBg3Px now wraps the VRAM address at 64 KB, as the PPU does).
+
+## 7. Vehicle B, the Dactyls (loc 1F3, 65,000,000 B.C.) -- 2026-10-16
+
+Record `$029A/$029C` (position), `$029E` (bits 0-1 aboard, 5 landing, 6 riding, 7 present), `$1BF0` aloft; the followers'
+places `$02A6/$02A8` (slot 1) and `$02AA/$02AC` (slot 2). Boarded through the boarding manager's vehicle-B arm (C2/315E, loc
+1F3, box C2:325C), the lead's module 4 / 3 and the followers' (sec. 2). Port: world.c obDactyl, obDactylShadow, obDactylMate,
+obDactylMateShadow. Check `ow-dactyl-ride-vs-oracle` (`tools/epoch_board_cmp.py --dactyl`, Jackie's ch17 at the Tyrano Lair).
+
+- **The lead's Dactyl** `$4CC5` (C2:4CCE): 0 placed (parked: pose 24, attr A8; riding: pose C2:5047[1], attr B8), 1 parked
+  until `$027E = 3`, then bit 6 and 2 the lift-off (0x30 frames up at half a pixel, attr B8 at 8; then pose 25, `$1BF0 = 1`,
+  y + 18), 3 the pad: X `$027C = 5`, Select (04) `$027C = 6`, the d-pad (C2:5037's 2 px, pose C2:5047 = `26 25 27 28`; the
+  next cell's four corners C2/39D5 -- any `& 3 == 3`, a cliff, refuses the step), A lands when the corners and the row below
+  are clear (`& 0707`), the cell is not an entrance (C2/39AE `& 0404`), it is not over the Epoch (C2/48E8) and outside C6/E74E's
+  rectangle x 00-0D, y 00-33 -- then 5, the landing (0x31 frames, pose 29, bit 5; at the end bits 5-6 cleared, back to 1).
+  4 the step, as the Epoch's (both layers scrolled, `$029A/$029C` kept).
+- **Its shadow** `$504B`: C2:508F[`$1BF0`] = {y - 18, pose 4E} on the ground, {y + 18, 1F} aloft.
+- **The followers' Dactyls** `$5097` (+24 = the slot): parked under the lead's (no tick), then out and up (slot 1 + 0.5 x,
+  slot 2 - 0.5 x, -1 y, 0x30 frames, poses 6F / 74), then the formation: C2/531D's place from C2:543C by the lead's facing
+  and the slot (rounded to 8, wrapped), C2/5374's heading (C2/229D through C0:F300, the wrap folded) and 4 x cos / sin
+  (C2/2273 / 2277, C0:F800), the facing C0:F700[heading], re-aimed every 4 frames, each axis capped at the distance left
+  (C2/528A); when the lead's Dactyl lands (bit 5): in under it in 0x30 frames (C2/53D3: |d| byte-swapped / 30), then parked.
+  Their places go to `$02A6-$02AD` every frame (C2/5605). Note C2/51CD's `LDA $0028` is absolute: the BG2 scroll shadow's low
+  byte becomes the old facing.
+- **Their shadows** `$5494`: under the parked Dactyl, up with them, then on `$02A6-$02AD` + 18 (+ 30 when the world comes up
+  with them aloft); in under the lead's on the landing.
+
+Graded: 201 changes of `$027C $027E $029A/$029C $029E $1BF0 $02A6-$02AD` the cartridge's from the boarding, the lift-off, the
+flight right and back, the landing and the party out; eight pictures pixel for pixel (the lava's four cycling colours set
+aside: they turn on the world's clock since the save's load, a frame the port's boot and the cartridge's state do not share).

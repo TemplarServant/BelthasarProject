@@ -287,7 +287,86 @@ def gauge():
     return 0
 
 
+DACTYL_O = ['0:60', '20:8', '0:20', '100:2', '0:90', '80:40', '0:20', '40:40', '0:20', '100:2', '0:160']
+DACTYL_P = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'd:8', 'n:20', 'a:2', 'n:90', 'r:40', 'n:20', 'l:40', 'n:20', 'a:2', 'n:160']
+DACTYL_SHOTS = [120, 160, 200, 240, 300, 330, 370, 440]
+
+
+def dactyl():
+    """Vehicle B, the Dactyls (loc 1F3; disasm/notes/ow_vehicle.md sec. 7): Jackie's ch17 at the Tyrano Lair, a step down onto
+    the Dactyl, A (aboard), the lift-off, Right 40 frames, A (the landing). Every change of `$027C $027E $029A/$029C $029E
+    $1BF0` and the followers' places `$02A6-$02AD`, from the frame `$027E` leaves 0; six pictures (P+2)."""
+    os.makedirs(OUT, exist_ok=True)
+    r = subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--monitor', '7E027C:3,7E029A:5,7E02A6:8,7E1BF0:1', '--from',
+                        os.path.join(JK, 'states', 'ch17.state'), '--btnscript', ','.join(DACTYL_O), '--frames', '480',
+                        '--diff'], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True, text=True,
+                       errors='replace')
+    w = lambda h: h[2:4] + h[0:2]
+    oe = []
+    for l in r.stdout.splitlines():
+        m = re.match(r'\s+f(\d+)\s+7E027C=([0-9A-F]{6})\*?\s+7E029A=([0-9A-F]{10})\*?\s+7E02A6=([0-9A-F]{16})\*?\s+'
+                     r'7E1BF0=(..)', l)
+        if m:
+            c, b, q = m.group(2), m.group(3), m.group(4)
+            oe.append((int(m.group(1)), (c[0:2], c[4:6], w(b[0:4]), w(b[4:8]), b[8:10], m.group(5),
+                                          w(q[0:4]), w(q[4:8]), w(q[8:12]), w(q[12:16]))))
+    env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
+               CT_SRAM=os.path.join(JK, 'srm', 'ch17.srm'), CT_OWVEHTRACE='1', CT_SHOTS=os.path.join(OUT, 'dactyl'),
+               CT_SHOTS_AT=','.join(str(f + 360) for f in DACTYL_SHOTS + [480]), CT_SHOTS_EXIT='1')
+    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+                        ','.join(DACTYL_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
+    pe = []
+    for l in r.stdout.splitlines():
+        m = re.match(r'owveh: pass \d+ f(\d+) 027C=(..) 027E=(..) .*029A=(....),(....) 029E=(..) 1BF0=(..) '
+                     r'02A6=(....),(....),(....),(....)', l)
+        if m:
+            pe.append((int(m.group(1)), tuple(m.group(k) for k in range(2, 12))))
+    def rel(ev):
+        t0 = next((f for f, v in ev if v[1] != '00'), None)
+        out, last = [], None
+        for f, v in ev:
+            if t0 is None or f < t0 or v == last:
+                continue
+            out.append((f - t0, v)); last = v
+        return out, t0
+    o, ot = rel(oe); p, pt = rel(pe)
+    hor = 480 - (ot or 0)
+    o = [e for e in o if e[0] <= hor]; p = [e for e in p if e[0] <= hor]
+    same = o == p and len(o) > 0
+    print('dactyl: timeline %s -- %d changes from `$027E = 4` (cartridge f%s, port f%s)' % ('same' if same else 'DIFFERENT', len(o), ot, pt))
+    if not same:
+        oi = {d: v for d, v in o}; pi = {d: v for d, v in p}
+        n = 0
+        for d in sorted(set(oi) | set(pi)):
+            if oi.get(d) != pi.get(d):
+                print('dactyl:   +%d cartridge %s port %s' % (d, '/'.join(oi[d]) if d in oi else '-', '/'.join(pi[d]) if d in pi else '-'))
+                n += 1
+                if n >= 12: break
+    off = (pt - ot) if (ot is not None and pt is not None) else 359
+    for f in DACTYL_SHOTS:                               # the port's picture P is the cartridge's --peek P + 1 on the clock of
+                                                         # the boarding (its A reaches the latch a frame later than the port's)
+        o_raw = os.path.join(OUT, 'dactyl_o%d.raw' % f)
+        bs, t = [], 0
+        for it in DACTYL_O:
+            b, n = it.split(':'); n = int(n)
+            if t + n >= f + 360 - off + 1: bs.append('%s:%d' % (b, f + 360 - off + 1 - t)); break
+            bs.append(it); t += n
+        subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch17.state'), o_raw,
+                        '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
+        po = raw_rgb(os.path.join(OUT, 'dactyl_f%d.raw' % (f + 360)), False)
+        oo = raw_rgb(o_raw, True)
+        # the lava's four colours cycle on the world's own clock since the save's load -- a frame the port and the cartridge's
+        # state do not share (the cartridge's state was taken some frames after its load): a pixel both sides draw in one of
+        # them is the lava, whatever its phase
+        lava = {(189, 41, 0), (189, 57, 0), (189, 74, 0), (189, 82, 0)}
+        n = sum(1 for y in range(8, 216) for x in range(256) if po(x, y) != oo(x, y) and not (po(x, y) in lava and oo(x, y) in lava))
+        print('dactyl: picture port f%d %d px differ (the lava cycle aside)' % (f + 360, n))
+    return 0
+
+
 def main():
+    if '--dactyl' in sys.argv:
+        return dactyl()
     if '--gauge' in sys.argv:
         return gauge()
     if '--omen' in sys.argv:

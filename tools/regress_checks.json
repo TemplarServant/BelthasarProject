@@ -39741,6 +39741,66 @@
       "notes": "THE EPOCH'S TIME GAUGE (disasm/notes/ow_time_gauge.md; ROADMAP G1a item 3). ch24 driven to the free flight (the cartridge's f3073), Y: `$027C = 8` (C2/45C7), C2/261D's fade (C2:2EC1, 18 NMIs), the NMI-off stretch (C2/2E23's stash + C2/26A8 + C2/7389, priced 3,915,526 cycles = 11 frames, the cartridge's 12-frame gap to the first gauge pass), the gauge (controller $6AC8, swirl $6F85, markers $7143, palette scripts), Up (12000 B.C. -> 600 A.D.), A: `$02AF = 01F1`, `$027C = 7`, the fade-out (C2:74B3), C2/2E72 + C2/2C93, the fade-in, the Epoch's state 6 / 7 (C2/4728, script C2:4AAD), loc 1F1 and the arrival (C2/4387, script C2:4B8C). `$1BB7` compared only while the gauge is up and from the controller's first write (outside it the byte is a field fill the port does not make). PINNED RESIDUALS: (a) the way back is a frame short and the trip two frames early -- the port prices C2/2C93 with the X menu's model (ct_lz_world_return_cost + a remainder measured on world 0); on 1F6 the cartridge's C2/2C93 is 11,225,250 cycles (--callrom), some 0.8 M more, as the X menu's return there would be too (the load clock, ROADMAP F1); (b) the gauge picture's last line (scanline 224, after the HDMA tables' 224 lines) is not the cartridge's: 158-201 px on that line, the rest pixel for pixel (P+2) but for 13 px of the needle's edge while it turns (f3560: its two line buffers a turn step apart); (c) port f3968 is the cartridge's f3611, not f3612 -- the trip's location load a frame apart (F1)."
     },
     {
+      "name": "ow-dactyl-ride-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py",
+        "--dactyl"
+      ],
+      "env": {},
+      "expect": [
+        "dactyl: timeline same -- 201 changes from `$027E = 4` (cartridge f89, port f448)",
+        "dactyl: picture port f480 0 px differ (the lava cycle aside)",
+        "dactyl: picture port f520 0 px differ (the lava cycle aside)",
+        "dactyl: picture port f560 0 px differ (the lava cycle aside)",
+        "dactyl: picture port f600 0 px differ (the lava cycle aside)",
+        "dactyl: picture port f660 0 px differ (the lava cycle aside)",
+        "dactyl: picture port f690 0 px differ (the lava cycle aside)",
+        "dactyl: picture port f730 0 px differ (the lava cycle aside)",
+        "dactyl: picture port f800 0 px differ (the lava cycle aside)"
+      ],
+      "pin": [
+        "^dactyl: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch17.state",
+        "saves/downloaded/ctjackie/srm/ch17.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "note_pass": "the party boards the Dactyls at the Tyrano Lair, they lift off in formation, fly and land on the cartridge's frames (C2/4CC5, C2/5097, C2/504B, C2/5494)",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "      unsigned i = ((((unsigned)(ram[0x0104] & 3) << 1) | (unsigned)((B[0x24] - 1) & 1)) << 2);",
+          "replace": "      unsigned i = ((((unsigned)(ram[0x0104] & 3) << 1) | (unsigned)(B[0x24] & 1)) << 2);   /* MUT */",
+          "why": "C2/5327: the slot (+24 - 1) picks the follower's side of the formation C2:543C"
+        },
+        {
+          "file": "src/world.c",
+          "find": "  obPutW(B + 0x1B, (uint16_t)(ax / 0x30));",
+          "replace": "  obPutW(B + 0x1B, (uint16_t)(ax / 0x20));   /* MUT */",
+          "why": "C2/53EC: the way in under the lead's Dactyl takes 0x30 frames"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    if (B[3] < 0x30) { obIntegrate(B); obAnimTick(ram, B); return 0; }\r\n    B[2]++; ram[0x1BF0] = 1;",
+          "replace": "    if (B[3] < 0x28) { obIntegrate(B); obAnimTick(ram, B); return 0; }   /* MUT */\r\n    B[2]++; ram[0x1BF0] = 1;",
+          "why": "C2/4D8A: the lead's Dactyl climbs 0x30 frames"
+        },
+        {
+          "file": "src/world.c",
+          "find": "      int inside = x < 0x0E && y < 0x34;",
+          "replace": "      int inside = 1;   /* MUT */",
+          "why": "C6/E74E's rectangle (x 00-0D, y 00-33) is the only ground it refuses here: the lair's plateau takes it"
+        }
+      ],
+      "notes": "VEHICLE B, THE DACTYLS (disasm/notes/ow_vehicle.md sec. 7; ROADMAP G1a item 3). Jackie's ch17 (loc 1F3, storyline 93, the party at the Tyrano Lair over its Dactyl, $029E = 80): a step down (off the lair's entrance: an A there enters it), A -- the boarding manager's vehicle-B arm (C2/315E, box C2:325C), the lead's module 4 to $029A, module 3 --, the lead's Dactyl $4CC5 lifts off (0x30 frames) while the followers' $5097 climb out sideways and take their places (C2/531D's formation by the lead's facing, C2/5374's heading through C0:F300 / C0:F800, re-aimed every 4 frames, C2/528A's cap), Right 40 frames, Left 40 (back over the plateau), A: the landing (C2/4E20's tests: the corners, C2/39AE, C2/48E8, C6/E74E), the followers in under it (C2/53D3), the party out. Timeline from `$027E = 4`, both sides; pictures at the boarding's clock (P + 1), the lava's four cycling colours set aside (they turn on the world's clock since the save's load, a frame the port's boot and the cartridge's state do not share)."
+    },
+    {
       "name": "ending-story-plays-through-in-the-port",
       "argv": [
         "build/ct_field.exe",
