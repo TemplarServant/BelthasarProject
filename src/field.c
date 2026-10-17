@@ -5118,6 +5118,19 @@ static uint8_t raceSndPort(void* c, int n) {
   if (!g_fieldAudio) return 0;
   CtAudioPorts(g_fieldAudio, in, out); return out[n & 3];
 }
+// A NATIVE STAGE's OPENING, priced whole (2026-10-17; disasm/notes/sequence_table.md sec. 15 derived it for entry 4). From
+// C3:0000 the NMI is off ($4200 = 01 at C3:0032) and the overlay's work runs to $7E:3010 -- C3/0557's decompression (`oc`, the
+// LZ model's cycles NET of DRAM refresh: x 1364 / 1324 is the real clock; `--callrom C30557` reads 5901440 with 173080 of
+// refresh), C3:0000-006F's own 580, the common init $7E:3063 (54196 with its DMAs, `--callrom 7E3063`), the setup (`os`) and
+// $388B (4704); the jump lands 4449 cycles into its vblank (v 228, h ~357, every stage measured). That stretch crosses
+// floor(C / 357368) frame boundaries (the rule's NMI-off clock), `JSR $31B0` then waits for the next vblank and `$3013 JSL
+// C3/08D0` runs inside it -- the stage's first NMI is the frame after. MEASURED in place (ct.exe --racepiccmp RACEPICCMP_SPAN
+// C30000,7E3013): FF 2B 48, FF 2E 52, FF 23 18, FF 24 23, FF 07 24, FF 26 32 frames -- this formula's on all six. (The race
+// keeps its own: its song's post is priced on the host's SPC -- sequence_table.md sec. 12.)
+static int seqOpeningHold(long oc, long os) {
+  long long c = (long long)oc * 1364 / 1324 + 580 + 54196 + os + 4704;
+  return (int)((c + 4449) / 357368) + 1;
+}
 // A $C3 STAGE's PICTURE (stage 2): the stage's PPU state -- the compositor's arrays and registers, the HDMA channels, the
 // ports -- filled by the stage's own code (seq_racepic.c: the race; seq_entry3pic.c: entry 3) and drawn after each NMI. Opened
 // with the stage: the registers reset, VRAM the field's (g_fieldVram: the console's VRAM does not change hands -- entry 3
@@ -17018,7 +17031,7 @@ int main(int argc, char** argv) {
             uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEndingStageSetupCycles((uint8_t)seqId);
-            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
+            if (oc > 0) seqHold = seqOpeningHold(oc, os);
             printf("sequence: entry %d (the ending) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
           }
@@ -17038,7 +17051,7 @@ int main(int argc, char** argv) {
             uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry3StageSetupCycles();
-            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
+            if (oc > 0) seqHold = seqOpeningHold(oc, os);
             printf("sequence: entry %d (the story's panorama) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
           }
@@ -17057,7 +17070,7 @@ int main(int argc, char** argv) {
             uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry4StageSetupCycles();
-            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
+            if (oc > 0) seqHold = seqOpeningHold(oc, os);
             printf("sequence: entry %d (Lavos falls) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
           }
@@ -17076,7 +17089,7 @@ int main(int argc, char** argv) {
             uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry7StageSetupCycles();
-            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
+            if (oc > 0) seqHold = seqOpeningHold(oc, os);
             printf("sequence: entry %d (the Day of Lavos) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
           }
@@ -17095,7 +17108,7 @@ int main(int argc, char** argv) {
             uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry6StageSetupCycles();
-            if (oc > 0) seqHold = (int)((oc + od + os) / CT_LOAD_FRAME_CYCLES);
+            if (oc > 0) seqHold = seqOpeningHold(oc, os);
             printf("sequence: entry %d (the Epoch into Lavos) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
           }

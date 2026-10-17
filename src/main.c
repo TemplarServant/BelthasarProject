@@ -7340,6 +7340,20 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   #define RPC_PAD() do { while (left <= 0) { int n_; if (!ctBtnNext(&bs, &held, &n_)) { held = 0; n_ = 1 << 30; } left = n_; } \
                          s->input1->currentState = held; left--; } while (0)
   for (int f = 0; f < handoff; f++) { RPC_PAD(); CtOracleRunFrame(s); }
+  // RACEPICCMP_SPAN=<pcA>,<pcB> (24-bit hex): the oracle stepped opcode by opcode from the hand-off; the master cycles and the
+  // frame counter at the first visit of each -- an opening's cost measured where it runs (then the run ends).
+  if (getenv("RACEPICCMP_SPAN")) {
+    char* e; long pa = strtol(getenv("RACEPICCMP_SPAN"), &e, 16), pb = (*e == ',') ? strtol(e + 1, NULL, 16) : -1;
+    uint64_t ca = 0; uint32_t fa = 0; int seen = 0; RPC_PAD();
+    for (long n = 0; n < 400000000L && seen < 2; n++) {
+      long pc = ((long)s->cpu->k << 16) | s->cpu->pc;
+      if (!seen && pc == pa) { ca = s->cycles; fa = s->frames; seen = 1; printf("racepiccmp: span %06lX at frame %u v=%d h=%d\n", pa, fa, s->vPos, s->hPos); }
+      else if (seen == 1 && pc == pb) { seen = 2; printf("racepiccmp: span %06lX at frame %u v=%d h=%d -- %llu master cycles after %06lX\n",
+                                              pb, s->frames, s->vPos, s->hPos, (unsigned long long)(s->cycles - ca), pa); }
+      cpu_runOpcode(s->cpu);
+    }
+    return 0;
+  }
   memcpy(w, s->ram, sizeof w);
   memset(&sp, 0, sizeof sp); CtSeqPicReset(&sp.p);
   // RACEPICCMP_SEEDVRAM=1: the native VRAM starts as the cartridge's at the hand-off (the field's leftovers the race never

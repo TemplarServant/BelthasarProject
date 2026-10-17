@@ -125,10 +125,13 @@ $4242.
 (`--loadwram`) skips the location's entry fill, so its VRAM image had the tiles and no tilemaps: `fieldSeedVramTilemaps` builds
 them from the seed's map as C0/0A73 would (the VRAM image only). The story drive then shows the panorama, 56614 / 57344 pixels
 the cartridge's (`entry3-story-picture-in-the-port-vs-oracle`, a ratchet), with two residuals of the FIELD, not the picture:
-- the stage runs 6 frames early (the port's f200 = the cartridge's f206; `$0008` at the port's f200 = the cartridge's after
-  f205): the `FF 23` call 3 frames early and the opening 17 frames against ~19 -- OPEN;
+- the stage runs 3 frames early (the port's f200 = the cartridge's f205, P+2 and 3): the `FF 23` call comes early because the
+  seed (ff23_story_f18) was captured inside the location load's ramp C0/2848 (`$0119` 01 rising to 04 on the cartridge), which
+  a seeded start does not resume, so the op's own fade starts from 01 -- an artefact of the seed, not of a played load. (The
+  opening is the cartridge's 18 frames since it is priced whole -- sequence_table.md sec. 15; it was 17, the stage 6 early);
 - the water's and the city's colours: palette records 2-11 (the field's colour cycles FD/E39C keeps running) one step behind
-  the cartridge's from the first frame (sequence_table.md sec. 14) -- OPEN.
+  the cartridge's from the first frame (sequence_table.md sec. 14) -- OPEN; likely the same seed's doing (three field frames
+  fewer before the op), not measured.
 Not exercised: the mosaic ($C4 is 0 on the story's arm).
 
 ## 6. Next

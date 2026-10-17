@@ -2560,6 +2560,14 @@ frames are the opening's pricing: C3:0000 -> $7E:3010 is 7899068 cycles on the c
 init's `JSR $31B0` waits for a vblank (boundary 23: a wait by design) and the setup's own `JSL C3/08D0` runs in the frame
 after it, NMI off, so the first NMI comes at boundary 24; the field prices `(oc + od + os) / 346888` = 22 for the whole
 opening. FF 23 shows the same frame (1DD at f1010, the cartridge's f1011: 6074890 cycles = 16.999 frames, then the wait).
+**Priced whole since 2026-10-17** (field.c seqOpeningHold): H = floor((C + 4449) / 357368) + 1, C the real cost to $7E:3010 (C3/0557's
+cycles with their refresh -- the LZ model's are net of it --, C3:0000's own 580, the common init's 54196, the setup's, $388B's
+4704), 4449 the jump's place in its vblank (v 228, h ~357 on every stage), +1 the vblank `$31B0` waits for. MEASURED in place
+(`ct.exe --racepiccmp ... RACEPICCMP_SPAN=C30000,7E3013`, frames from the jump to `$3013`): FF 2B 48, FF 2E 52, FF 23 18, FF 24 23,
+FF 07 24, FF 26 32 -- the formula's on all six (the old one gave 48 52 17 22 23 31). Now: 1DD at the cartridge's f1011, the
+fall's END 1733 frames after the op (the cartridge's 1734: one frame left, the op's side). The race keeps its own pricing: its
+song's post is priced on the host's SPC, and measured in place its setup costs 691k more than `--callrom` read while the host's
+song post costs 336k more than the cartridge's (9825788) -- two errors that cancel to the cartridge's 73; OPEN (sec. 12).
 A timing artefact (CLAUDE.md 2026-10-09); open.
 
 **Found on the way: Azala's ring.** In the port the fight froze on Azala's technique (CD/D38E): its effect program 74
