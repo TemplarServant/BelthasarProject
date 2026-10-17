@@ -79,7 +79,7 @@ static void entry7Sparkles(uint8_t* w, const CtRaceIo* io) {
 // $7E:6439 -- the WRAM palette fade (D = $0300): every 16 frames (`LDA $08 / AND #0F`; $6422 makes it #1F), while $0366
 // counts down, each of the $0364 colours at ($0362) steps one unit per component toward the one at ($0360). The scratch
 // $03F0 / $03F2 / $03FE is the routine's own.
-static void entry7PalFade(uint8_t* w) {
+void CtSeqPalFade6439(uint8_t* w) {
   if (w[0x0008] & w[0x643E]) return;                                  // 643B LDA $08 / AND #0F (the operand at $643E)
   if (!w[0x0366]) return;                                             // 6445 LDA $66 / BEQ
   w[0x0366]--;                                                        // 6449 DEC $66
@@ -151,7 +151,7 @@ static unsigned entry7Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);
     case 0x37FA: wr(w, 0x00F0, 0x4242); entry7Objslot(w, io); return t;   // `LDX $4202` reads the open bus ($42), as entry 3
     case 0x65DD: entry7Sparkles(w, io); return t;
-    case 0x6439: entry7PalFade(w); return t;
+    case 0x6439: CtSeqPalFade6439(w); return t;
     case 0x63D5: case 0x63F5: return entry7End(w, t, io);
     default:                                                          // 64BF: the text's sprites (the picture's)
       if (io && io->pic) CtEntry7PicTask(io->pic, w, t);

@@ -205,6 +205,38 @@ the same picture). **In play**: 429 frames after the op the whole frame is the c
 (`entry6-story-picture-in-the-port-vs-oracle`). Not exercised: CMP $2137's low byte deciding a carry, a sprite past x 255 in
 $3A97, a circle's edge past $FF.
 
-## 9. Next
+## 9. The ending (src/seq_endingpic.c) -- `FF 2B` DONE (2026-10-17); `FF 2E` / `2F` in progress, `FF 2A` not started
 
-The ending (`FF 2A`..`2F`): its setup's uploads, hooks and picture tasks, graded NMI for NMI and then in play.
+One setup, $7E:8538, for entries 10 / 11 / 14 / 15 (sequence_table.md sec. 13); its logic is seq_ending.c.
+
+**The setup's picture** (8538-86A1): packet $63's 2bpp tiles widened at VRAM $5000 by $66B0 (entry 7's), C3/09E9's code at
+$7E:B574, the mode-7 characters (packet $7E, VRAM's high bytes), the map (packets $81 / $D2: $37CA's rows -- 64 bytes and 64 zeros --
+sent to the low bytes by $8752, twice), $4000-$4FFF's low bytes the byte at $7E:350B ($90A7), packet $87 at $4000, entry 10's own
+picture (packets $BD / $B4, 320 tiles of 32 bytes picked through WMDATA, to $5C00), the palettes ($36AA's $96 / $99 / $9C / $9F / $90,
+$8772, packet $8A at $2180, $38AF). After the script: $9BB8 (the two shooting stars' scripts: $9BD8 picks one of $9C4E's by the RNG
+$3448, or $A60A once `$9F` is set), $36CC's channels from $8FEA (M7A-D indirect from $355F / $356D, BG1's scroll from $9043, TM-TSW
+from $904D, BGMODE from $902F, the window from $9070, CGADSUB / COLDATA from $452B), the layers (mode 7, M7SEL $C0).
+
+**Page A's first op** `F0 87CC` (`F0 8790` reloads the map first: packet $84 doubled by $37A6, its VMAIN / VRAM address / M7SEL from
+`TDC` -- D's low byte): the main thread's call `$3024` = $8930, HDMA off, the world's sprite sheet (packet $D8 at $7F:0A00, its
+16-row blocks from $7F:4E00 up mirrored into $7F:5600 by $3ED3 -- the data bank $7F: the stride `$0200` is $7F:0200), `$0037` =
+$0A00, the palettes $A5 at $2100 / $2300 (`$F0` on the script page's direct page).
+
+**The hooks**: $9DBC (`$7B` clear: the mode-7 centre from $1408 / $140A and the scroll origin $1404-$140E; set: $5654 with page A's
+r1 / r2 + $80), $9080 (the HDMA tables' line counts from r6 / 2 and + the LSR's carry), $9AF3 (the orbit: page B's r6 as the radius,
+$33D6's signed products of cos / sin r5), $89C0 (the main thread's sheet, `$2B` bytes of $0C00, to VRAM $5800), $8850 (the planet:
+C3/0D5E's list $88B9 / $88DA, the window's HDMA bytes). **The tasks**: $9ABD (`$7B` set: one matrix, $56B4 -- entry 4's; else
+$357B with the pre-routine $9B46 only when r0 / r5 / r6 / r8 changed), $9BF9 (the shooting stars through $A03D: a list read through
+WMDATA, its `BCS` at $A074 patched to `NOP / NOP` while the task runs and put back from `$F0`), $8850, the credits' pages ($9B4F ->
+$64CA, entry 7's text drawer: its attribute is the operand at $6525, which the setup sets to $3F). **The main thread** $8930: the
+sheet scaled by page B's r0 & $1FF (C3/0307, `$25` / `$2B` by `$7B`, `$4C` = $800 / r0 by the divide $32E2 -- whose first `ROL $F0`
+takes the last pass's carry, the `CPX #0100` -- and $B574), the planet's list counts by the size.
+
+The logic took the WRAM-only pieces it lacked: the tasks $37FA (the colour animations $0520..), $6439 (entry 7's palette fade),
+$99B5, $9D48 (the twinkle: four colour pairs swapped every 8th frame in $2000 and $2200), $891B, and the calls $9919 (the credits'
+pen into $64CA's operands), $9FC8 / $9FEA (colour animations), $98F6 / $98FB / $9900 ($6439's request).
+
+**`FF 2B` equal on every frame**: 4746 NMIs to the END, VRAM / CGRAM / OAM / the registers / HDMA and every pixel
+(`ending-ff2b-picture-native-vs-oracle`; unseeded the same picture -- only VRAM the stage never loads differs). One WRAM byte differs
+from the first frame: $7F:0076 (cart 06, port 04), already 06 when the cartridge enters C3:0000 -- the field's frame after the op,
+not the stage's (`--hookpc C30000 --hookwatch 10076`).

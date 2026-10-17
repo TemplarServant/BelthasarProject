@@ -7319,15 +7319,16 @@ static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) 
 #include "seq_entry4.h"
 #include "seq_entry7.h"
 #include "seq_entry6.h"
+#include "seq_ending.h"
 // The stage by its operand: entry 3 / entry 4 (seq_entry3.c, seq_entry4.c and their *pic.c) or the race (seq_race.c / seq_racepic.c).
 static int rpcOpen(uint8_t* w, uint8_t op, const CtRaceIo* io) {
   return CtEntry3StageHas(op) ? CtEntry3StageOpen(w, op, io) : CtEntry4StageHas(op) ? CtEntry4StageOpen(w, op, io)
        : CtEntry7StageHas(op) ? CtEntry7StageOpen(w, op, io) : CtEntry6StageHas(op) ? CtEntry6StageOpen(w, op, io)
-       : CtRaceStageOpen(w, op, io); }
+       : CtEndingStageHas(op) ? CtEndingStageOpen(w, op, io) : CtRaceStageOpen(w, op, io); }
 static int rpcFrame(uint8_t* w, uint8_t op, uint16_t joy, const CtRaceIo* io) {
   return CtEntry3StageHas(op) ? CtEntry3StageFrame(w, joy, io) : CtEntry4StageHas(op) ? CtEntry4StageFrame(w, joy, io)
        : CtEntry7StageHas(op) ? CtEntry7StageFrame(w, joy, io) : CtEntry6StageHas(op) ? CtEntry6StageFrame(w, joy, io)
-       : CtRaceStageFrame(w, joy, io); }
+       : CtEndingStageHas(op) ? CtEndingStageFrame(w, joy, io) : CtRaceStageFrame(w, joy, io); }
 static void racepicPost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }
 // A script's `F5` reads the SPC's output ports: here the oracle's own (the cartridge's marker on its frame).
 static Snes* g_rpcSnes;
@@ -7441,6 +7442,10 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
       int st0 = -1;
       for (int i = 0; i <= 0x8000; i++) { int d = i < 0x8000 && q.vram[i] != sp.p.vram[i];
         if (d && st0 < 0) st0 = i; if (!d && st0 >= 0) { printf("racepiccmp:   VRAM $%04X-$%04X (cart %04X port %04X)\n", st0, i - 1, q.vram[st0], sp.p.vram[st0]); st0 = -1; } }
+    }
+    if (k == firstState && getenv("RACEPICCMP_OAM")) {                  // the OAM words that differ (low table), the high table's bytes
+      for (int i = 0; i < 256; i++) if (q.oam[i] != sp.p.oam[i]) printf("racepiccmp:   OAM word %3d (sprite %3d) cart %04X port %04X\n", i, i >> 1, q.oam[i], sp.p.oam[i]);
+      for (int i = 0; i < 32; i++) if (q.highOam[i] != sp.p.highOam[i]) printf("racepiccmp:   OAM high %2d cart %02X port %02X\n", i, q.highOam[i], sp.p.highOam[i]);
     }
     if (getenv("RACEPICCMP_VERBOSE") || k == firstState)
       printf("racepiccmp: frame %d: VRAM %d CGRAM %d OAM %d words differ; registers %d%s; HDMA %d; WRAM %d bytes\n", k, vb, cb, ob, rb, regs, hb, wb);

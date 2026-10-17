@@ -14,19 +14,22 @@
 static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
 static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
 
+// $7E:66B0 (D = $2100, X = the tiles): WMADD = `$0303` in the bank C3/0557 left ($7F); each tile's eight rows: two bytes read
+// to $2118 / $2119, then eight zero words -- 2bpp widened to 4bpp.
+void CtSeqPicWiden66B0(CtSeqStagePic* sp, const uint8_t* w, unsigned tiles) {
+  for (unsigned t = 0, r = 0x10000 | rw(w, 0x0303); t < tiles; t++) {
+    for (int k = 0; k < 8; k++) {                                     // 66BD LDA $80 / STA $18 / LDA $80 / STA $19
+      sp->p.vram[sp->vaddr & 0x7FFF] = (uint16_t)(w[r & 0x1FFFF] | (w[(r + 1) & 0x1FFFF] << 8)); r += 2; sp->vaddr = (uint16_t)(sp->vaddr + 1); }
+    for (int k = 0; k < 8; k++) { sp->p.vram[sp->vaddr & 0x7FFF] = 0; sp->vaddr = (uint16_t)(sp->vaddr + 1); }
+  }
+}
 // $7E:6248-62EB (8-bit A) -- the setup before the script.
 void CtEntry7PicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
   sp->vmain = 0x80;                                                   // 6248
   ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                       // 624D $7E:89ED: the destination $7F:0200
   sp->vaddr = 0x4000;
   CtSeqPicUnpack(w, io, 0x63);                                        // 6256: packet $63 -> $7F:0200
-  // $7E:66B0 (D = $2100, X = $80 tiles): WMADD = `$0303` in the bank C3/0557 left ($7F); each tile's eight rows: two bytes read
-  // to $2118 / $2119, then eight zero words -- 2bpp widened to 4bpp.
-  for (unsigned t = 0, r = 0x10000 | rw(w, 0x0303); t < 0x80; t++) {
-    for (int k = 0; k < 8; k++) {                                     // 66BD LDA $80 / STA $18 / LDA $80 / STA $19
-      sp->p.vram[sp->vaddr & 0x7FFF] = (uint16_t)(w[r & 0x1FFFF] | (w[(r + 1) & 0x1FFFF] << 8)); r += 2; sp->vaddr = (uint16_t)(sp->vaddr + 1); }
-    for (int k = 0; k < 8; k++) { sp->p.vram[sp->vaddr & 0x7FFF] = 0; sp->vaddr = (uint16_t)(sp->vaddr + 1); }
-  }
+  CtSeqPicWiden66B0(sp, w, 0x80);                                     // 6262 LDX #0080 / JSR $66B0
   sp->vaddr = 0x4800;
   CtSeqPicUnpack(w, io, 0x5D);                                        // 6268
   w[0x00F0] = 0x01; w[0x00F2] = 0x18;
@@ -65,9 +68,10 @@ void CtEntry7PicSparkle(uint8_t* w) { CtSeqPicOam0DBC(w, 0x6640); }
 // $7E:64BF -> 64CA -- THE TEXT (8-bit A, the data bank $7E): from the string at X, the pen ($15 / $17) starting where the code's
 // own operands at $64D6 / $64DA say; `40` ends it (the OAM cursor back to `$11`), `00 x y` moves the pen (and rewrites both
 // operands), `2F` a new line ($15 = the line's x, $17 += $10), `20` a space ($15 += 8). A character c: its tile from $7E:664F + c,
-// attr $3E, at the pen; its width w from $7E:662F + c -- from 9 up a large sprite (16 x 16: the high table's `SEC / ROR`), else
-// two small ones, the second 8 lower with the tile + $10 (`CLC / ROR`); the pen moves w + 1 (`SEC / ADC $15`).
-static void text64CA(uint8_t* w, unsigned x) {
+// its attribute the operand at $6525 (6524 `LDA #imm`), at the pen; its width w from $7E:662F + c -- from 9 up a large sprite
+// (16 x 16: the high table's `SEC / ROR`), else two small ones, the second 8 lower with the tile + $10 (`CLC / ROR`); the pen
+// moves w + 1 (`SEC / ADC $15`).
+void CtSeqPicText64CA(uint8_t* w, unsigned x) {
   unsigned y = rw(w, 0x11);
   w[0x15] = w[0x64D6]; w[0x17] = w[0x64DA];                           // 64D5 LDA #imm / STA $15, 64D9 LDA #imm / STA $17
   for (unsigned guard = 0; guard < 0x400; guard++) {
@@ -81,7 +85,7 @@ static void text64CA(uint8_t* w, unsigned x) {
     if (c == 0x2F) { w[0x15] = w[0x64D6]; w[0x17] = (uint8_t)(w[0x17] + 0x10); continue; }
     if (c == 0x20) { w[0x15] = (uint8_t)(w[0x15] + 8); continue; }
     unsigned o = 0x0700 + y;
-    w[(o + 2) & 0x1FFF] = w[(0x664F + c) & 0x1FFFF]; w[(o + 3) & 0x1FFF] = 0x3E;
+    w[(o + 2) & 0x1FFF] = w[(0x664F + c) & 0x1FFFF]; w[(o + 3) & 0x1FFF] = w[0x6525];   // 6524 LDA #imm (the operand: entry 7 $3E, the ending $3F)
     w[o & 0x1FFF] = w[0x15]; w[(o + 1) & 0x1FFF] = w[0x17];
     uint8_t wd = w[(0x662F + c) & 0x1FFFF];
     unsigned p = rw(w, 0x13);
@@ -105,6 +109,6 @@ static void text64CA(uint8_t* w, unsigned x) {
 int CtEntry7PicTask(CtSeqStagePic* sp, uint8_t* w, unsigned t) {
   (void)sp;
   if (t != 0x64BF) return 0;
-  text64CA(w, 0x6644);
+  CtSeqPicText64CA(w, 0x6644);
   return 1;
 }

@@ -132,16 +132,21 @@ static unsigned spin56D1(uint8_t* w, unsigned v) {
   return neg ? ((a ^ 0xFFFF) + 1) & 0xFFFF : a;                       // 56E3 PLP / BPL / EOR #FFFF / INC A
 }
 
-// $7E:56A9 -- the planet's turn (D = $0A00): r5 += 16 (`ADC #0016`, the carry clear: the dispatcher's `CPX #0020`), then the
-// mode-7 matrix from it scaled by r0 -- r10 = r13 = cos r5 * r0, r11 = sin r5 * r0, r12 = -r11 (the hook $5654 writes them).
-static void entry4Spin(uint8_t* w, const CtRaceIo* io) {
+// $7E:56B4 (D = $0A00) -- the mode-7 matrix from page A's r5 scaled by r0: r10 = r13 = cos r5 * r0, r11 = sin r5 * r0, r12 =
+// -r11 (the hook $5654 writes them).
+void CtSeqMatrix56B4(uint8_t* w, const CtRaceIo* io) {
   const unsigned d = 0x0A00;
-  wr(w, d + 0x0A, rd(w, d + 0x0A) + 0x0016);                          // 56AD LDA $0A / ADC #0016 / STA $0A
   unsigned a = spin56D1(w, CtSeqSine(io, rd(w, d + 0x0A) + 0x0100));  // 56B4 LDA $0A / JSR $3461 / JSR $56D1
   wr(w, d + 0x14, a); wr(w, d + 0x1A, a);                             // 56BC STA $14 / STA $1A
   a = spin56D1(w, CtSeqSine(io, rd(w, d + 0x0A)));                    // 56C0 LDA $0A / JSR $3465 / JSR $56D1
   wr(w, d + 0x16, a);                                                 // 56C8 STA $16
   wr(w, d + 0x18, ((a ^ 0xFFFF) + 1) & 0xFFFF);                       // 56CA EOR #FFFF / INC A / STA $18
+}
+// $7E:56A9 -- the planet's turn (D = $0A00): r5 += 16 (`ADC #0016`, the carry clear: the dispatcher's `CPX #0020`), then the
+// matrix ($56B4).
+static void entry4Spin(uint8_t* w, const CtRaceIo* io) {
+  wr(w, 0x0A0A, rd(w, 0x0A0A) + 0x0016);                              // 56AD LDA $0A / ADC #0016 / STA $0A
+  CtSeqMatrix56B4(w, io);
 }
 
 // $7E:5855 -- the stars' drift (D = $0B00): r1 = sin r5 >> 5, r0 = cos r5 >> 5 (logical shifts of the 16-bit value).

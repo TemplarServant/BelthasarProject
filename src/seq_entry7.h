@@ -15,5 +15,7 @@ long CtEntry7StageSetupCycles(void);
 int  CtEntry7StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
 int  CtEntry7StageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);
 void CtEntry7StageClose(uint8_t* w, const CtRaceIo* io);
+// The overlay's WRAM palette fade, task $7E:6439 (the ending runs it too).
+void CtSeqPalFade6439(uint8_t* w);
 
 #endif
