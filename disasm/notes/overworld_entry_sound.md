@@ -432,3 +432,14 @@ C0/0000 both at f2158). The port's native stages (the race, the ending, entries 
 the next; field.c now closes them and pends the reboot in the END frame (after the frame's picture), so the load is the next
 host frame, as the cold reset's (the Day of Lavos' console reset keeps its own path). `ow-world-map-vs-oracle` (the Epoch's
 dive, then Select's map) is on the cartridge's frames again.
+
+**A load's last JSLs in its last frame (2026-10-18).** tools/sound_post_cmp.py (the cartridge's `$2140` command writes --
+C7/0635, a song's `10` at C7/0A6E -- with their `$2141`, against the port's CT_SNDPOSTS lines) found every command of the
+Lavos chain the cartridge's, one 25 frames early: the 1D3 load's `18 FF`, obj0 slot 1's `E8 FF` -- C0/56B0's `JSR C0/595C`
+(C0/56C8) at f2249 line 71, C0/2848 at f2249 line 89 (--cputrace from a PEEK_SAVE at f2244): the load's init runner (C0/5709)
+and slot 1 run at its END, NMI off, where the port ran them in the load's first frame and held the black after. ct_vm.c now
+queues those JSLs (gLoadPost: the mailbox as each left it, `$1E03` included; the load's own song post at C0/1B8B stays at its
+start) and field.c posts them in the load's last frame (CtSceneLoadPostsFlush when the hold ends): port f2250. The attract
+(tools/attract_divergence.py): the 112 visit one frame longer, 422 against the cartridge's 433 (421 before); no other visit
+moved. Left: a song the init posts begins its upload on the cartridge the upload's own length before the load's end
+(the attract's f4220 `10 18`: 14 frames before C0/2848); the port posts it at the end.

@@ -1515,6 +1515,7 @@ int CtAudioPost(CtAudio* a, uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) {
   return 1;
 }
 
+int g_ctAudioTraceFrame = 0;
 int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   if (!a || !mem7E) return 0;      // NULL mem7E = no scene VM (overworld); nothing stages commands there
   uint8_t* mb = mem7E + 0x1E00;                        // $00:1E00 mirrors $7E:1E00
@@ -1531,6 +1532,10 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
       a->lastMaster = 0; a->lastFrames = 0; a->lastPolls = 0;
       return undone ? -1 : 0;
     } }
+  // CT_SNDPOSTS=1: every JSL that reaches the ports, `sndpost f<host frame> cmd=<$1E00> p1=<$1E01>` -- the port's side of
+  // tools/sound_post_cmp.py, which reads the cartridge's $2140 command writes (C7/0635, a song's C7/0A6E) and their $2141.
+  { static int sp = -1; if (sp < 0) sp = getenv("CT_SNDPOSTS") ? 1 : 0;
+    if (sp && (mb[0x05] & 0x80) && mb[0x00]) printf("sndpost f%d cmd=%02X p1=%02X\n", g_ctAudioTraceFrame, mb[0x00], mb[0x01]); }
   if (!ldStartRule(a))                                 // (the rule: from where the SPC and the CPU's last wait stand)
     ldStart(a->engineMode, a->postLine);               // the JSL begins: the clock runs until the RTL
   ldRun(ld.ifast ? 740 - 54 : 740);                    // JSL 54 (the caller's: free under the rule) + C7/0004 JMP 18 + the $0140 prologue 264 (PHB PHD PHP REP REP PHA PHX PHY SEP LDA PHA PLB) + $0150-$0173 dispatch 404 (LDX PHX PLD SEP ... JMP ($0AD9,X))

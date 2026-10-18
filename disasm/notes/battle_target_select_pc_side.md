@@ -319,6 +319,18 @@ f1 `$99C0=00 FF`, `$A62D=FF`, `$9613=FF` (C1:1FDC), `$9609=0` (C1:1580), `$9614=
 never rises, the record is cleared (C1:85D8), Marle stays dead, `$1583` stays 04 (consumed). Without the poke the
 dispatch at f705 gives `$AD8E=01` (C1:C573) `$AE95=0x4000` (C1:AD31) `$AE93=BD` and `$A017=01` at f707.
 
+### 5.6b Enemy target dead between confirm and dispatch (one-enemy tech): C1/C82D re-targets (2026-10-18)
+C1/C335's dispatch on the tech's group (CC/1ACB & 7F): **00 / 05 / 06** take `$AD8E = C1/C8F7($B2AE)` -- the seat if
+present, else `$AE6D,X` (FD/B223's identity) -- and drop on `$5E4A,X` bit 7 (C1/C36E -> C1/C72B, `$AF23 = 1`). **07, 0B-0F,
+12, 1A** (C1/C427, C1/C506) take **C1/C82D**: `STZ $AF23`; for a PC (`$B18B < 3`) no present enemy -> `$AF23 = 1`
+(C8F1); `$B2AE` present -> kept (C84E-C858); else `$2989` bit 5 picks the first present seat from 3 (C883-C89B, the demo's)
+or `LDX #0003 / LDA #0B / JSR C1/AF22` until a present one (C861-C876); the pick into `$B2AE` / `$AD8E`, `$AD8D = 1`. Group
+09's arms jump into C82D / C37F / C43B by a C1/AF22 roll. Measured (battle_sim `@013:18`, three Hetakes at 1 HP, Crono's
+attack on the first and the next PC's tech on the same): the first falls at f941, the tech's dispatch writes `$B2AE = 04`
+at f988 (the first living seat: the roll's pick here). The port took the first living seat without the ROM's writes
+(battle.c battleTechC82D / battlePcRetarget now; check battle-sim-tech-retarget-c82d-vs-rule-cartridge). The roll picking
+a later seat is not yet measured on a drive.
+
 ### 5.7 Dispatch masks (`M2="7EB2AE:1,7EAD8E:3,7EAECB:1,7EAE95:2,7EAE99:2,7EA017:3,7EAF23:1"`)
 | action | record +3 | `$AD8E` (writer) | `$AE95` | `$AE99` | `$A017..` |
 |---|---|---|---|---|---|
