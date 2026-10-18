@@ -1046,6 +1046,12 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   g_sndUnits = g_sndBytes = g_sndBlocks = 0; g_sndSpcCycles = 0; g_sndSettleCycles = 0; g_sndMovedBytes = 0;
   int nsong = CtAudioSongCount(a);
   if (songId < 0 || songId >= nsong) return -1;                 // $C7:01A5 CMP $C70AE9 / BCS -> drop
+  // The ROM's loader reads its inputs from the mailbox -- the id at C7/01A3 and C7/0A64 `LDA $01`, the command at C7/0737
+  // and C7/0A69 `LDA $00` (posted to $2140, and the token seed) -- so the parameters ARE those two bytes. Staged here: a
+  // caller that left the page unposted (the driver fuzz's direct call) had the port block send command $00 for song $00,
+  // and the driver took the stream's tokens for commands -- an upload session whose garbage headers reached the kind-7
+  // mover and ran it over the driver's own code. (CtAudioService's page already holds them: no change there.)
+  SM8(m, 0x1E00, cmd); SM8(m, 0x1E01, (unsigned)songId);
   ldRun(18 + I_LDA_DP + 30 + I_BR_NT + I_JSR + 250 + I_RTS + I_JSR + 276 + I_RTS + 2 * I_LDA_DP);   // $01A1-$01B3: SEP, LDA $01, CMP $C70AE9, BCS, JSR C7/0734 (the exception scan, 1 entry), JSR C7/0A39 (the record: 14 instructions), LDA/STA $05
 
   // ---- $C7:0734: the song-exception scan, then bit2 for cmd >= $14 ------------------------
@@ -1130,7 +1136,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
       if (!id) { ldRun(I_BR_T - I_BR_NT); break; }
       int used = 0; ldRun(I_IMM16);                             // 0220 LDY #0000
       for (int k = 0; k < 16; k++) { ldRun(34); if (M16(m, 0x1F00 + k * 2) == id) { used = 1; ldRun(I_BR_T); break; } ldRun(I_BR_NT + 2 * I_IMPL + I_IMM16 + (k < 15 ? I_BR_T : I_BR_NT)); }   // 0223 CMP $1F00,Y / BEQ / INY INY / CPY / BNE (the ROM walks all 16 slots)
-      if (!used) { SM16(m, 0x1E20 + s * 2, 0); SM16(m, 0x1E40 + s * 2, 0); ldRun(I_LDA_DPX16); }   // 022F STZ $20,X
+      if (!used) { SM16(m, 0x1E20 + s * 2, 0); ldRun(I_LDA_DPX16); }   // 022F STZ $20,X -- the id only: $1E40 keeps its length (the append or 0367 rewrites it)
       ldRun(2 * I_IMPL + I_IMM16 + (s < 15 ? I_BR_T : I_BR_NT));   // 0231 INX INX / CPX #0020 / BNE
     }
     int firstFree = 0;

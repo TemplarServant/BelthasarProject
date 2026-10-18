@@ -46125,11 +46125,11 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "snddrvfuzz: seed 2, 600 actions (commands 187, effects 109, songs 32, constructed 135, sessions 29, boots 32), 21 echo waits missed, 34 recoveries",
-        "snddrv-lockstep: ticks 122567 compared 122567 mismatched 0 diverged 0",
+        "snddrvfuzz: seed 2, 600 actions (commands 180, effects 101, songs 76, constructed 143, sessions 35, boots 38), 21 echo waits missed, 44 recoveries",
+        "snddrv-lockstep: ticks 122941 compared 122941 mismatched 0 diverged 0",
         "snddrv-lockstep: events run 60/60, not run: -",
         "snddrv-lockstep: commands run 29/29, not run: -",
-        "snddrv-lockstep: upload kinds run 7/8, not run: 07",
+        "snddrv-lockstep: upload kinds run 8/8, not run: -",
         "snddrv-lockstep: look-ahead handlers run 7/7, not run: -"
       ],
       "pin": [
@@ -46137,8 +46137,8 @@
         "^snddrv-lockstep: "
       ],
       "timeout_s": 120,
-      "note_pass": "the sound driver in C equals the cartridge's on a constructed command stream that reaches what no game run does: all 60 sequence events, all 29 commands posted, upload kinds 0-6, the 7 look-ahead handlers -- every tick identical",
-      "notes": "src/sound/fuzz.c; disasm/notes/audio_spc_driver.md, 'The port'. A seeded generator drives the original's ports the way the CPU would: the game's own loads (CtAudioLoadSong, $14/$15 on a fresh CtAudio -- see the note on the loader's $10 defragmentation), effect starts on the loaded set, random commands (fades, modifiers, mono, mute, pause, fast, echo delay, S-DSP writes, the meter mode), cold boots (FF F0), upload sessions with every block kind (a block below $1E00, the effect table itself), and constructed songs whose tracks draw from all 60 events with random operands, the pointer-moving ones (loops and their exits, FA, F6, the effect subroutines E9/EA) laid out so every cycle holds a note. The C driver runs beside it in lockstep. Kind 7 (the defragmenter) runs in the attract (snddrv-lockstep-attract). 'mismatched 0 diverged 0' is the verdict; the coverage lines prove the stream reached what it is for.",
+      "note_pass": "the sound driver in C equals the cartridge's on a constructed command stream that reaches what no game run does: all 60 sequence events, all 29 commands posted, upload kinds 0-7, the 7 look-ahead handlers -- every tick identical",
+      "notes": "src/sound/fuzz.c; disasm/notes/audio_spc_driver.md, 'The port'. A seeded generator drives the original's ports the way the CPU would: the game's own loads (CtAudioLoadSong, all four commands $10/$11/$14/$15, two songs per fresh CtAudio: the change runs the defragmenter, kind 7), effect starts on the loaded set, random commands (fades, modifiers, mono, mute, pause, fast, echo delay, S-DSP writes, the meter mode), cold boots (FF F0), upload sessions with every block kind (a block below $1E00, the effect table itself), and constructed songs whose tracks draw from all 60 events with random operands, the pointer-moving ones (loops and their exits, FA, F6, the effect subroutines E9/EA) laid out so every cycle holds a note. The C driver runs beside it in lockstep. 'mismatched 0 diverged 0' is the verdict; the coverage lines prove the stream reached what it is for.",
       "mutations": [
         {
           "file": "src/sound/driver.c",
@@ -46169,6 +46169,81 @@
           "find": "      for (int y = 0x05; y < 0x80; y += 0x10) dsp(d, (uint8_t)y, (uint8_t)(dspIn(d, (uint8_t)y) & 0x7F));",
           "replace": "      for (int y = 0x05; y < 0x80; y += 0x10) dsp(d, (uint8_t)y, (uint8_t)(dspIn(d, (uint8_t)y) & 0x7E));   /* MUT */",
           "why": "command F5's pause clears each ADSR1's enable bit only ($0FC8 AND #$7F)"
+        }
+      ]
+    },
+    {
+      "name": "snddrv-songs-direct",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--snddrvsongs",
+        "10",
+        "03",
+        "06",
+        "11",
+        "15",
+        "2F",
+        "3B",
+        "3C",
+        "49",
+        "24+49",
+        "2E+09+35+12+40"
+      ],
+      "env": {
+        "CT_SNDDRV_LOCKSTEP": "1",
+        "CT_SNDDRV_LOCKSTEP_OUT": ""
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "snddrvsongs: cmd 10 song 03 rc=1 seq exact, heap packed, 9/9 instruments exact, 9/9 of its set resident, driver in its loop, song 03",
+        "snddrvsongs: cmd 10 song 06 rc=1 seq exact, heap packed, 10/10 instruments exact, 10/10 of its set resident, driver in its loop, song 06",
+        "snddrvsongs: cmd 10 song 11 rc=1 seq exact, heap packed, 2/2 instruments exact, 2/2 of its set resident, driver in its loop, song 11",
+        "snddrvsongs: cmd 10 song 15 rc=1 seq exact, heap packed, 10/10 instruments exact, 10/10 of its set resident, driver in its loop, song 15",
+        "snddrvsongs: cmd 10 song 2F rc=1 seq exact, heap packed, 6/6 instruments exact, 6/6 of its set resident, driver in its loop, song 2F",
+        "snddrvsongs: cmd 10 song 3B rc=1 seq exact, heap packed, 8/8 instruments exact, 8/8 of its set resident, driver in its loop, song 3B",
+        "snddrvsongs: cmd 10 song 3C rc=1 seq exact, heap packed, 6/6 instruments exact, 6/6 of its set resident, driver in its loop, song 3C",
+        "snddrvsongs: cmd 10 song 49 rc=1 seq exact, heap packed, 9/9 instruments exact, 9/9 of its set resident, driver in its loop, song 49",
+        "snddrvsongs: cmd 10 song 24 rc=1 seq exact, heap packed, 1/1 instruments exact, 1/1 of its set resident, driver in its loop, song 24",
+        "snddrvsongs: cmd 10 song 2E rc=1 seq exact, heap packed, 6/6 instruments exact, 6/6 of its set resident, driver in its loop, song 2E",
+        "snddrvsongs: cmd 10 song 09 rc=1 seq exact, heap packed, 9/9 instruments exact, 9/9 of its set resident, driver in its loop, song 09",
+        "snddrvsongs: cmd 10 song 35 rc=1 seq exact, heap packed, 7/7 instruments exact, 0/0 of its set resident, driver in its loop, song 35",
+        "snddrvsongs: cmd 10 song 12 rc=1 seq exact, heap packed, 1/1 instruments exact, 1/1 of its set resident, driver in its loop, song 12",
+        "snddrvsongs: cmd 10 song 40 rc=1 seq exact, heap packed, 2/2 instruments exact, 2/2 of its set resident, driver in its loop, song 40",
+        "snddrvsongs: 15 loads, 0 wrong",
+        "snddrv-lockstep: ticks 1989 compared 1989 mismatched 0 diverged 0",
+        "snddrv-lockstep: events run 30/60, not run: C7 CA CC CE D1 D3 D7 DB DE DF E3 E4 E5 E6 E7 E8 E9 EA EC ED EE EF F1 F4 F5 F9 FA FC FE FF",
+        "snddrv-lockstep: commands run 1/29, not run: 11 14 15 18 19 80 81 82 83 85 86 87 88 89 8E F0 F1 F2 F3 F4 F5 F6 F8 F9 FC FD FE FF",
+        "snddrv-lockstep: upload kinds run 3/8, not run: 00 01 04 05 06",
+        "snddrv-lockstep: look-ahead handlers run 2/7, not run: DC/E4-E7 E9 EA F5 FA"
+      ],
+      "pin": [
+        "^snddrvsongs: ",
+        "^snddrv-lockstep: "
+      ],
+      "timeout_s": 60,
+      "note_pass": "the game's song loader called directly with command $10 on a cold, unposted mailbox page: every song's sequence and instruments land in ARAM byte for byte as the ROM's blocks, the driver plays it, and the song changes (2E -> 09 defragments) leave the heap exact",
+      "notes": "src/sound/fuzz.c CtSndSongs; src/audio.c CtAudioLoadSong. The ROM's loader reads its inputs from the mailbox ($1E01 the id at C7/01A3 and C7/0A64, $1E00 the command at C7/0737 and C7/0A69 -- posted to $2140 and the token seed). The port's took the id for its tables from its argument but posted the page's bytes, so a direct caller with an unposted page (the driver fuzz) sent command $00 for song $00: the driver read the stream's tokens as commands and upload headers, and its kind-7 mover ($1206) ran over its own code (the SPC copying forever at $122C) -- songs 03 06 11 15 2F 3B 3C 49 with $10 from a fresh CtAudio, and song changes. CtAudioLoadSong now stages $1E00/$1E01 from its arguments (the service's page already held them). Each argument is a fresh CtAudio; a+b loads b after a. Verdict per load: rc 1, the sequence at $2000 and every resident instrument at its $1E60 base equal to its ROM block, the song's whole set resident, the driver back in its loop with $80 = the id; the C driver in lockstep beside it. The old code hangs (the timeout is the failure).",
+      "mutations": [
+        {
+          "file": "src/audio.c",
+          "find": "  SM8(m, 0x1E00, cmd); SM8(m, 0x1E01, (unsigned)songId);\n",
+          "replace": "  /* MUT */\n",
+          "why": "the loader posts the page's $1E00/$1E01: a direct load with an unposted page sends command $00 for song $00 and the driver's mover runs over its code"
+        },
+        {
+          "file": "src/audio.c",
+          "find": "    SM16(m, 0x1E62 + y, base + M16(m, 0x1E40 + x));     // 02B5",
+          "replace": "    SM16(m, 0x1E62 + y, base + M16(m, 0x1E40 + x) + 2); /* MUT */ // 02B5",
+          "why": "the defragmenter's new fence is the destination base plus the moved length (C7/02B5 ADC $40,X / STA $1E62,Y)"
+        },
+        {
+          "file": "src/audio.c",
+          "find": "      SM16(m, 0x1E62 + firstFree * 2, base + (unsigned)len);",
+          "replace": "      SM16(m, 0x1E62 + firstFree * 2, base + (unsigned)len + 1); /* MUT */",
+          "why": "the append's fence is the slot's base plus the block's length"
         }
       ]
     },
