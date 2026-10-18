@@ -16237,6 +16237,13 @@ int main(int argc, char** argv) {
     long rl = 0; const uint8_t* rom = CtRomImage(&rl);
     return CtSndFuzz(rom, rl, strtol(argv[2], NULL, 0), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
   }
+  // --snddrvsongs <cmd> <id|id+id...>... (with CT_SNDDRV_LOCKSTEP=1): the game's song loader called directly on a fresh
+  // CtAudio per argument, each load's ARAM against its ROM blocks and the driver playing it (src/sound/fuzz.c).
+  if (argc >= 4 && !strcmp(argv[1], "--snddrvsongs")) {
+    extern int CtSndSongs(const uint8_t* rom, long romLen, uint8_t cmd, int nspec, char** spec);
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    return CtSndSongs(rom, rl, (uint8_t)strtol(argv[2], NULL, 16), argc - 3, argv + 3);
+  }
   if ((argc >= 3 && argc <= 5) && !strcmp(argv[1], "--hdmafuzz")) {
     long rl = 0; const uint8_t* rom = CtRomImage(&rl);
     long n = strtol(argv[2], NULL, 0);

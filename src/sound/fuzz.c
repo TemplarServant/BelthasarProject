@@ -204,10 +204,7 @@ static int validSfx(uint8_t* id) {
 static uint8_t g_lastSong = 0xFF;
 static void realSong(void) {
   int n = CtAudioSongCount(g_au);
-  // $14/$15 only: the port's loader (src/audio.c CtAudioLoadSong) with $10 on songs 03 06 11 15 2F 3B 3C 49 from a fresh
-  // CtAudio sends a defragmentation that runs over the driver -- the loader's matter, not the driver's; the constructed
-  // songs post $10/$11 themselves
-  static const uint8_t cmds[] = { 0x14, 0x15, 0x14, 0x15 };
+  static const uint8_t cmds[] = { 0x10, 0x11, 0x14, 0x15 };
   uint8_t id = (uint8_t)(1 + rn(n - 1));
   { const char* f = getenv("CT_SNDDRV_FUZZ_SONG"); if (f) id = (uint8_t)strtol(f, NULL, 16); }   // (debugging: one song)
   settle();   // (after a boot the driver still waits out its echo buffer: the loader posts to the main loop)
@@ -286,6 +283,74 @@ static void randomCommand(void) {
 
 static void coldWram(void) { memset(g_wram, 0, sizeof g_wram); CtAudioSeedMailboxPage(g_au, g_wram); }   // nothing resident
 
+// `ct.exe --snddrvsongs <cmd> <ids...>` (with CT_SNDDRV_LOCKSTEP=1): the game's loader (CtAudioLoadSong) called directly,
+// the fuzz's way -- the mailbox page cold and unposted -- each id on a fresh CtAudio; "24+49" loads 24 then 49 on the same
+// one (the song change, the defragmenter's case). After each load: the sequence at $2000 byte for byte against its ROM
+// block, the heap packed from its base and every resident instrument there byte for byte, the whole song's set resident;
+// then 30 frames, and the driver must be in its main loop playing that id ($80). The loader once posted command $00 for song $00 from such a page (it took the
+// command and id from the page, not from its arguments): the driver read the stream as commands and upload headers, and
+// its kind-7 mover ran over its own code.
+int CtSndSongs(const uint8_t* rom, long romLen, uint8_t cmd, int nspec, char** spec) {
+  if (!CtSndLockstepWanted()) { fprintf(stderr, "snddrvsongs: needs CT_SNDDRV_LOCKSTEP=1\n"); return 2; }
+  long bad = 0, loads = 0;
+  for (int i = 0; i < nspec; i++) {
+    g_au = CtAudioInit(rom, romLen);
+    if (!g_au) { printf("snddrvsongs: FAIL (CtAudioInit)\n"); return 3; }
+    g_apu = CtAudioApu(g_au);
+    CtAudioSetRuleOff(g_au, 1);
+    coldWram();
+    frames(30);   // (after a boot the driver still waits out its echo buffer)
+    for (const char* p = spec[i]; *p; ) {
+      int id = (int)strtol(p, (char**)&p, 16);
+      while (*p == '+') p++;
+      settle();
+      int rc = CtAudioLoadSong(g_au, g_wram, id, cmd);
+      loads++;
+      const uint8_t* aram = g_apu->ram;
+      int n = 0, seqOk = 0, smpOk = 0, smpN = 0, setN = 0, setRes = 0;
+      const uint8_t* seq = CtAudioSeqBlock(g_au, id, &n);
+      if (seq) seqOk = !memcmp(aram + 0x2000, seq, (size_t)n);
+      // the heap packed from its base: each slot's length its block's, its fence (= the next slot's base) base + length
+      // (C7/06A2-06BA `STA $40,X / CLC / ADC $60,X / STA $62,X`), so every instrument sits where the ROM's loader puts it
+      unsigned pos = CtAudioHeapBase(g_au);
+      int packed = 1;
+      for (int s = 0; s < 16; s++) {
+        unsigned sid = g_wram[0x1E20 + s * 2] | g_wram[0x1E21 + s * 2] << 8;
+        if (!sid) break;
+        int len = 0; const uint8_t* blk = CtAudioSampleBlock(g_au, (int)sid, &len);
+        if (!blk) { packed = 0; break; }
+        smpN++;
+        unsigned at = g_wram[0x1E60 + s * 2] | g_wram[0x1E61 + s * 2] << 8;
+        unsigned ln = g_wram[0x1E40 + s * 2] | g_wram[0x1E41 + s * 2] << 8;
+        unsigned fence = g_wram[0x1E62 + s * 2] | g_wram[0x1E63 + s * 2] << 8;
+        if (at != pos || ln != (unsigned)len || fence != pos + (unsigned)len) packed = 0;
+        if (pos + (unsigned)len <= 0x10000 && !memcmp(aram + pos, blk, (size_t)len)) smpOk++;
+        pos += (unsigned)len;
+      }
+      const uint8_t* set = CtAudioInstrSet(g_au, id);
+      for (int k = 0; k < 16 && set; k++) {
+        unsigned want = set[k * 2] | set[k * 2 + 1] << 8;
+        if (!want) break;
+        setN++;
+        for (int s = 0; s < 16; s++) if ((unsigned)(g_wram[0x1E20 + s * 2] | g_wram[0x1E21 + s * 2] << 8) == want) { setRes++; break; }
+      }
+      frames(30);
+      int loop = 0;
+      for (long c = 0; c < 60000 && !(loop = inLoop()); c += 16) spc(16);   // (a tick may be under way: its main loop within)
+      int playing = aram[0x80] == (uint8_t)id;
+      int ok = rc == 1 && seqOk && packed && smpOk == smpN && setRes == setN && playing && loop;
+      if (!ok) bad++;
+      printf("snddrvsongs: cmd %02X song %02X rc=%d seq %s, heap %s, %d/%d instruments exact, %d/%d of its set resident, driver %s song %02X%s\n",
+             cmd, id, rc, seqOk ? "exact" : "WRONG", packed ? "packed" : "NOT PACKED", smpOk, smpN, setRes, setN, loop ? "in its loop," : "OUT OF ITS LOOP,",
+             aram[0x80], ok ? "" : "  <-- FAIL");
+    }
+    CtAudioFree(g_au); g_au = NULL;
+  }
+  printf("snddrvsongs: %ld loads, %ld wrong\n", loads, bad);
+  CtSndLockstepReport();
+  return (bad || CtSndLockstepMismatches()) ? 1 : 0;
+}
+
 static const uint8_t* g_rom; static long g_romLen;
 int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed) {
   g_rom = rom; g_romLen = romLen;
@@ -307,7 +372,7 @@ int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed) {
     else if (r < 45) { uint8_t s; if (validSfx(&s)) post(rn(2) ? 0x18 : 0x19, s, (uint8_t)rnd(), 0); counts[1]++; }
     else if (r < 70) { constructedSong(); counts[3]++; frames(60 + rn(240)); }
     else if (r < 76) { uploadCmd(); counts[4]++; }
-    else if (r < 82) {   // command FF F0 and the driver uploaded again, then the game's own load of a song (one: a second, the song change, can meet the same loader trouble below)
+    else if (r < 82) {   // command FF F0 and the driver uploaded again, then the game's own loads of two songs (the change: the defragmenter)
       // (only here: the game's loader keeps its own account of ARAM, which the constructed blocks would have put out of
       // step -- its defragmenter would then move garbage over the driver)
       long long m; int f;
@@ -322,6 +387,8 @@ int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed) {
       g_apu = CtAudioApu(g_au);
       CtAudioSetRuleOff(g_au, 1);
       coldWram();
+      realSong(); counts[2]++;
+      frames(1 + rn(60));
       realSong(); counts[2]++;
     }
     else counts[6]++;

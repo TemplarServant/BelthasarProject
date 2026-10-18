@@ -300,8 +300,8 @@ The C port names every field (`src/sound/driver.c`: D_ the direct page, P_ page 
 - The fuzz, `src/sound/fuzz.c`: `CT_SNDDRV_LOCKSTEP=1 ct.exe --snddrvfuzz <actions> [seed]` -- constructed songs from
   all 60 events, random commands, upload sessions of every kind, effects, cold boots (FF F0).
 - Results: the attract (`--scene 433`, 11,200 frames) 34,859 ticks identical; the quick tier's runs (242 processes, these two checks among them) 1,129,203 ticks
-  identical; the fuzz (600 actions, seed 2) 122,567 ticks identical, all 60 events, all 29 commands it posts, upload
-  kinds 0-6, the 7 look-ahead handlers. Kind 7 (the defragmenter) runs in the attract.
+  identical; the fuzz (600 actions, seed 2) 122,941 ticks identical, all 60 events, all 29 commands it posts, upload
+  kinds 0-7 (7, the defragmenter, from its song changes), the 7 look-ahead handlers.
 - What the lockstep found in the C (fixed): `$0903`/`$0995` take the depth into `$A5` before the delay's test; event CE
   is the pan sweep's end (its handler is CD's tail), not a jump. A gap in the lockstep itself, found by its mutation
   checks (fixed): the echo buffer left out of the RAM compare is the set of bytes the S-DSP may have written, marked from
@@ -310,9 +310,18 @@ The C port names every field (`src/sound/driver.c`: D_ the direct page, P_ page 
   unchecked after a boot (ESA = 0 at the S-DSP's reset).
 - Pinned: regress checks `snddrv-lockstep-attract` and `snddrv-lockstep-fuzz` (quick tier), each with mutations of the
   C driver that must fail them (`python tools/regress.py --mutate snddrv-lockstep-attract snddrv-lockstep-fuzz`).
-- Out of the driver, found by the fuzz: the port's loader (`src/audio.c` CtAudioLoadSong) with command `$10` on songs 03
-  06 11 15 2F 3B 3C 49 from a fresh CtAudio, and on some song changes, sends a defragmentation (kind 7) that runs over
-  the driver (the SPC copies forever at `$122C`); `$14` loads them. The fuzz loads with `$14/$15` on a fresh CtAudio.
+- Out of the driver, found by the fuzz (FIXED 2026-10-18): the port's loader (`src/audio.c` CtAudioLoadSong) called
+  directly on an unposted mailbox page (the fuzz's way) hung the SPC copying forever at `$122C`. Not the defragmenter:
+  the ROM's loader reads the id and the command from the mailbox (`LDA $01` at C7/01A3 and C7/0A64, `LDA $00` at C7/0737
+  and C7/0A69 -- the post to `$2140` and the token seed), and the port took the id for its tables from its argument but
+  posted the page's bytes, so it sent command `$00` for song `$00`; the driver read the stream's tokens as commands and
+  upload headers, one of them kind 7, whose mover ran over the driver's code. (`$14` only seemed to work: it ORs bit 2
+  into the page's `$00`, posting `$04`.) CtAudioLoadSong now stages `$1E00`/`$1E01` from its arguments; the game's path
+  (CtAudioService) already had them there, so nothing changes for it. Also aligned in passing: the eviction C7/022F
+  `STZ $20,X` clears the id only, not `$1E40` (never observable after a load). Pinned by `snddrv-songs-direct`
+  (`ct.exe --snddrvsongs 10 ...`: each song's sequence and instruments in ARAM against the ROM's blocks, the heap packed
+  from its base as C7/06A2-06BA builds it, the song changes 24 -> 49 and 2E -> 09 (a defragmentation) included); the
+  fuzz loads with all four commands, two songs per fresh CtAudio.
 - For step 5 (the C driver playing for real), what the host must give it: the ticks (timer 0: `$2A` = 190.5 Hz, `$01`
   in fast mode, from the control writes; a tick missed while a command runs is lost -- `$FD` is read and cleared), timer
   1 for the echo waits (16 ms units, restarted by `$1352`/`$1397`), the refusal's release, the upload tick for kind-5
