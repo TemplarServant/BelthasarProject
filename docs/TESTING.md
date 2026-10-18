@@ -2415,7 +2415,7 @@ Three enemies of the census in GATO's arena whose fights end in the party's defe
 hand-back) included, against the rule's cartridge -- each line must read `IDENTICAL`. They grade the exit chain C0/1BE6
 (five `JSL C7:0004`, the field's song among them) priced on the HDMA the battle's exit tail leaves: none until an NMI is
 taken inside C7 (D1/F4C0's absolute `STA $420C` goes through the interrupted code's bank), then the field's six channels
-on lines 0-210 (FD/C1EE's program, the tables the ROM's builder FD/C2C1 writes -- src/xlat/hdma_fd.c -- and the V-IRQ's
+on lines 0-210 (FD/C1EE's program, the tables the ROM's builder FD/C2C1 writes -- src/hdma_table.c -- and the V-IRQ's
 cut at 211). With the battle's 8-channel mean the chain ended past a vblank and the hand-back came a frame late.
 
 ### battle-enemy-census-movers-vs-oracle (`python tools/battle_ab.py enemies 16,1B,4C,D8 -j4`)
@@ -2537,3 +2537,20 @@ shadow f - 1: the cartridge's picture N shows the shadow of N - 2, the port's pi
 so the open and the close frames are graded. Byte-for-byte: re-pin only when the fixture's frames move with an
 oracle-verified reason. `-v` prints every graded frame of both sides and the sprite match at every lag.
 disasm/notes/battle_multitarget_cursor.md secs. 10-11.
+
+### field-hdma-builder-native-vs-cartridge-census (`python tools/hdma_build_cmp.py`)
+
+FD/C2C1, the field's HDMA table builder, native (src/hdma_table.c) against the rule's cartridge call for call. Ten drives
+(the tent keeper's and the Naga-ette's boxes, Mom's box flipped to the top, the attract around loc 16E's wipe, the 07D demo
+battle's exit tail, the End of Time's window wave, and four poked inputs the ROM then runs itself: `$0139` = 0C, `$1DF9`
+under each box, `$7F:0351` odd); the oracle dumps the WRAM at every call's entry and RTL (`--hookpc FDC2C1`,
+CT_HOOK_DUMPCALLS) and `ct.exe --hdmabuildcmp` grades each: 128 KB equal outside the stack page, and every byte the builder
+writes (the tables and DP bytes poisoned twice) the cartridge's. The census line says what the calls exercised. A `wrong`
+count is a builder defect; re-pin only when a drive's frame window is moved on purpose. disasm/notes/field_hdma_tables.md.
+
+### field-hdma-builder-native-vs-translation-fuzz (`ct.exe --hdmafuzz 40000 1`)
+
+The same builder against the ROM's own code on random WRAM images: CtXlatHdmaBuild (src/xlat/hdma_fd.c, ct.exe only) runs
+whatever the translation lacks on the vendored core, so every path of FD:C2C1-D52C is the reference. Inputs drawn so every
+reachable branch key of both sets' six handlers is hit (60 of 128: the rest are impossible combinations). Never re-pin a
+`differ`.

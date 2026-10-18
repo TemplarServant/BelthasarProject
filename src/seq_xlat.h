@@ -160,7 +160,8 @@ int CtXlatWipePeek(const uint8_t* rom, long romLen, uint8_t* wram128, int vPos, 
 // through ($C2DF,X)), the handler writes that set's eight channel tables and their indirect data ($7F:14F0..), and C2CE /
 // C2DA flips the bit. FD/C1EE (the NMI's) then programs the channels at the set the bit names. Run on the host's 128 KB
 // WRAM until its RTL; it touches WRAM only (the translation's stores: bank $7F's tables and data, $1D27-$1D57, $01D9/$01DB,
-// $1DFB). 0 = ran, < 0 = no ROM / a CT_XLAT_* stop (the WRAM is then left as it was).
+// $1DFB). 0 = ran, < 0 = no ROM / a CT_XLAT_* stop (the WRAM is then left as it was). ct.exe only (CT_XLAT_HDMA_REF): the
+// reference `ct.exe --hdmafuzz` grades the native builder src/hdma_table.c against; every caller runs the native one.
 int CtXlatHdmaBuild(const uint8_t* rom, long romLen, uint8_t* wram128);
 
 // ---- the OVERWORLD's window object: op 4E -> $C6:E241 (install + first call) / $C6:E27E (a call a frame) ------------

@@ -12,6 +12,7 @@
 #include "seq_xlat.h"      // CtXlatWipeCall: the window wipe C3/01E4 translated      // CtObjSceneInit / CtObjSlotAlloc / CtObjListLink: the
                        // scene-entry tables and C0/A88D's rising-edge setup
 #include "ct_vm.h"
+#include "hdma_table.h"     // FD/C2C1, the field's HDMA table builder (CtHdmaTableBuild)
 #include "rom_verify.h"
 #include "objslot.h"       // FD/E39C, the palette-effect records op 0x88 arms (the battle's body)
 #include "lz.h"
@@ -689,12 +690,12 @@ static const uint8_t* gEnemyRecTab; static int gEnemyRecLen;
 void CtSceneSetEnemyRecTable(const uint8_t* tab, int len) { gEnemyRecTab = tab; gEnemyRecLen = len; }
 static const uint8_t* gRomImg; static long gRomImgLen;
 void CtSceneSetRomImage(const uint8_t* rom, long len) { gRomImg = rom; gRomImgLen = len; }
-// `JSL FD/C2C1` -- the field's HDMA table builder (src/xlat/hdma_fd.c through CtXlatHdmaBuild, seq_xlat.h): one of the
+// `JSL FD/C2C1` -- the field's HDMA table builder, native (src/hdma_table.c, disasm/notes/field_hdma_tables.md): one of the
 // two table sets is written from the WRAM's state and $0153 bit 0 flips. Every caller of the port's runs it here; with no
 // ROM image (a host that never set one) the flip alone is left, as before the builder was in.
 void CtHdmaTableBuild(uint8_t* wram128) {
   if (!wram128) return;
-  if (!gRomImg || CtXlatHdmaBuild(gRomImg, gRomImgLen, wram128) != 0) wram128[0x0153] ^= 0x01;
+  if (!gRomImg || CtHdmaBuildNative(wram128, gRomImg, gRomImgLen) != 0) wram128[0x0153] ^= 0x01;
 }
 // ---- THE FRAME LEGS SWITCH (disasm/notes/frame_wiring.md) ---------------------------------------
 // C0/A810's four per-object legs (C98A / A98A / AB45 / A9CD) + the A88D edges' one-shot setup and

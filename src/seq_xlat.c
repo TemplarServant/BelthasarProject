@@ -283,6 +283,9 @@ int CtXlatOwWindowCall(const uint8_t* rom, long romLen, uint8_t* wram128, uint32
 }
 
 // ---- the field's HDMA table builder FD/C2C1 (seq_xlat.h: CtXlatHdmaBuild) ---------------------------------------------
+// The translation, kept in ct.exe only (CT_XLAT_HDMA_REF) as the reference --hdmafuzz grades the native builder against
+// (src/hdma_table.c, the one every caller runs). Belthasar does not link it.
+#ifdef CT_XLAT_HDMA_REF
 int CtXlatHdmaBuild(const uint8_t* rom, long romLen, uint8_t* wram128) {
   if (!rom || !wram128) return -1;
   if (!g_callHw) {
@@ -314,6 +317,7 @@ int CtXlatHdmaBuild(const uint8_t* rom, long romLen, uint8_t* wram128) {
   memcpy(wram128, s->ram, 0x0600); memcpy(wram128 + 0x0700, s->ram + 0x0700, 0x20000 - 0x0700);
   return 0;
 }
+#endif
 
 Snes* CtXlatStageHardware(CtXlatStage* st) { return st ? st->hw : NULL; }
 void CtXlatStageSetRule(CtXlatStage* st, int on) { if (st) { st->rule = on; if (on) snes_logicalFresh(); } }

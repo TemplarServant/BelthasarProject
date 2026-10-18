@@ -29158,9 +29158,9 @@
       "mutations": [
         {
           "file": "src/ct_vm.c",
-          "find": "    m->s[0x0153] ^= 0x01;",
-          "replace": "    (void)0;   /* MUT: $0153 never flips */",
-          "why": "C0/00C7 FD/C2C1 flips $0153 bit 0 every main-loop frame (C2CE TSB / C2DA TRB); the NMI's FD/C1EE programs the HDMA table set the bit names, so the wipe draws from the wrong buffer without it. The arm lines carry $0153: 16E's is the cartridge's (01 at f578)."
+          "find": "  if (!gRomImg || CtHdmaBuildNative(wram128, gRomImg, gRomImgLen) != 0) wram128[0x0153] ^= 0x01;",
+          "replace": "  (void)0;   /* MUT: FD/C2C1 never runs -- no table set built, $0153 never flips */",
+          "why": "C0/00C7 FD/C2C1 (CtHdmaTableBuild -> src/hdma_table.c) flips $0153 bit 0 every main-loop frame (C2CE TSB / C2DA TRB); the NMI's FD/C1EE programs the HDMA table set the bit names, so the wipe draws from the wrong buffer without it. The arm lines carry $0153: 16E's is the cartridge's (01 at f578)."
         },
         {
           "file": "src/ct_vm.c",
@@ -45216,6 +45216,113 @@
         }
       ],
       "notes": "THE WALKER'S FLOOD EXIT (C1/4A71, the op-18 arm C1/5479; battle.c battlePcWalkArm). Each pass writes wave $94 into the free neighbours of the frontier and counts a goal neighbour in $92; C1/4B4D tests $92 FIRST, so a pass that met the goal goes to the backtrace with $94 still its own wave even when it wrote no new cell, and C1/4B7C DECs it once before the first probe. Without a touch the flood runs to $94 = 1F ($92 := 80, C1/4B71): no backtrace, the self mark 0x20 kept. The port broke on the dry frontier before the goal test and started the backtrace one wave low. Staged formation f1BE_18 (scene 1BE obj 18: F2 Roly Bomber + 34 Outlaw, census family 4's leftover): the Roly Bomber sits in a solid row (cell 35), reached only from the last wave's cell 45 -- the cartridge's grid at the arm f784 has column 5 E8..E3 then E2 E1 E0, Crono rests at (86,80) f833, Roly Bomber's HP 0 and its death tech 18 f934, the party falls f1269; the port walked (56,239) until f1385 and every later change came 552 frames late. Pins the whole monitored WRAM sequence, the deaths and the death palette on the cartridge's frames. The -1 x2 is a PINNED RESIDUAL after the party's fall ($AE93 / $95DB = 80 at port f1467/f1469, cartridge f1468/f1470), not this mechanism; re-pin it only from a fix that moves it to +0."
+    },
+    {
+      "name": "field-hdma-builder-native-vs-cartridge-census",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/hdma_build_cmp.py"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "tools/hdma_build_cmp.py",
+        "saves/field_re/tent_keeper_lake.state",
+        "saves/field_re/m81_naga_after_fight_lake.state",
+        "saves/intro_box.state",
+        "saves/attract_cena_inicial.state",
+        "saves/attract_07d_battle_f4540.state",
+        "saves/downloaded/ctjackie/states/ch08.state"
+      ],
+      "expect": [
+        "hdma-build: tent-keeper 170 calls (0 interrupted, set aside) -> exact 170/170, written 22168 bytes, 0 wrong",
+        "hdma-build: naga 256 calls (0 interrupted, set aside) -> exact 256/256, written 23720 bytes, 0 wrong",
+        "hdma-build: top-box 125 calls (0 interrupted, set aside) -> exact 125/125, written 12364 bytes, 0 wrong",
+        "hdma-build: attract 204 calls (0 interrupted, set aside) -> exact 204/204, written 14484 bytes, 0 wrong",
+        "hdma-build: demo-battle 57 calls (0 interrupted, set aside) -> exact 57/57, written 4047 bytes, 0 wrong",
+        "hdma-build: wave-ch3 200 calls (0 interrupted, set aside) -> exact 200/200, written 45600 bytes, 0 wrong",
+        "hdma-build: wave-ch2 120 calls (0 interrupted, set aside) -> exact 120/120, written 24848 bytes, 0 wrong",
+        "hdma-build: wave-box 170 calls (0 interrupted, set aside) -> exact 170/170, written 47370 bytes, 0 wrong",
+        "hdma-build: wave-top-box 125 calls (0 interrupted, set aside) -> exact 125/125, written 31416 bytes, 0 wrong",
+        "hdma-build: odd-0351 60 calls (0 interrupted, set aside) -> exact 60/60, written 13680 bytes, 0 wrong",
+        "hdma-build: census set A modes 0/1/2 498/42/204, set B modes 0/1/2 497/40/206, $0127 10 values (2 <= 0A), wave ch3 555 (under a box 204) ch2 104 tail 659, $53 bit 7 28, $0351 odd 60"
+      ],
+      "pin": [
+        "^hdma-build: "
+      ],
+      "timeout_s": 200,
+      "note_pass": "FD/C2C1 native (src/hdma_table.c) builds the cartridge's own tables on every call of ten drives: textboxes top and bottom, the attract, the demo battle's exit tail, the window wave on ch2 / ch3 / under a box, $7F:0351 odd",
+      "notes": "disasm/notes/field_hdma_tables.md. The oracle (rule on) dumps the WRAM at each FD/C2C1 entry and at its RTL (ct.exe --hookpc FDC2C1, CT_HOOK_DUMPCALLS, CT_HOOK_DUMPEXIT=FDC2D2,FDC2DE); ct.exe --hdmabuildcmp runs the native builder on each entry image: EXACT = all 128 KB equal outside the stack page $0600-$06FF; WRITTEN = with the tables ($7F:0F80-$1E26) and DP $01D9-$01EF poisoned twice, every byte the builder writes equals the cartridge's (a builder that writes nothing cannot pass on the calls that rewrite unchanged tables). Three drives poke an input the ROM then runs itself: $0139 = 0C (C0/264F sets $1DFD = 11), $1DF9 = 01 under a box (the run lists CC5E / CCB8), $7F:0351 = 01. Re-pin only if a drive's frame window is moved on purpose; a 'wrong' count is a builder defect.",
+      "mutations": [
+        {
+          "file": "src/hdma_table.c",
+          "find": "  int hi = (int)(v & 1) == s->ch7odd;",
+          "replace": "  int hi = (int)(v & 1) != s->ch7odd;   /* MUT: ch7's parity rule inverted */",
+          "why": "C439 (set A) draws $18A8 on an even $7F:0351, C477 (set B) on an odd one: inverted, channel 7's two entries are wrong on every call"
+        },
+        {
+            "file": "src/hdma_table.c",
+            "find": "      dp8(h, 0xEE, ldp8(h, 0xEE) + ldp8(h, 0xD9));               // CC7E CLC / ADC $D9",
+            "replace": "      (void)0;   /* MUT: $EE does not count a remainder run's lines */",
+            "why": "CC7E adds each remainder run to $01EE, the line count that picks the next run's wave dword ($EE & 0F): without it the box-and-wave drives' later entries point at the wrong dword"
+          },
+        {
+          "file": "src/hdma_table.c",
+          "find": "  h->c = (int)(v & 1);",
+          "replace": "  h->c = 0;   /* MUT: the wave's first ADC without ch7's carry */",
+          "why": "the wave's sixteen ADC $001D8F have no CLC: the first takes the LSR's carry ($7F:0351 bit 0) -- the odd-0351 drive sees the +1"
+        },
+        {
+          "file": "src/hdma_table.c",
+          "find": "  if (ldp8(h, 0x53) & 0x80) tailBattle(h, s);                     // C3F8 LDA $53 / BMI",
+          "replace": "  if (0) tailBattle(h, s);   /* MUT: the exit tail's words ignored */",
+          "why": "mode 0 under $53 bit 7 (the battle's exit tail, C0/0AFF) copies the battle's $7F:3467.. words, not the field's $1D87.."
+        }
+      ]
+    },
+    {
+      "name": "field-hdma-builder-native-vs-translation-fuzz",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--hdmafuzz",
+        "40000",
+        "1"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "src/xlat/hdma_fd.c"
+      ],
+      "expect": [
+        "hdmafuzz: 40000 images, 0 differ, 0 translation stops, 0 native refusals",
+        "hdmafuzz: set A mode 0: 3393 images, 60 of the 128 branch keys",
+        "hdmafuzz: set A mode 1: 3309 images, 60 of the 128 branch keys",
+        "hdmafuzz: set A mode 2: 3456 images, 60 of the 128 branch keys",
+        "hdmafuzz: set B mode 0: 10090 images, 60 of the 128 branch keys",
+        "hdmafuzz: set B mode 1: 9830 images, 60 of the 128 branch keys",
+        "hdmafuzz: set B mode 2: 9922 images, 60 of the 128 branch keys"
+      ],
+      "pin": [
+        "^hdmafuzz: "
+      ],
+      "timeout_s": 60,
+      "note_pass": "FD/C2C1 native equals the ROM's own code (the translation, every untranslated path on the core) on 40000 random WRAM images: both sets, every mode handler, every reachable branch",
+      "notes": "disasm/notes/field_hdma_tables.md. Random 128 KB images with the builder's inputs drawn to reach every branch ($0126 0..5 under bit 0 set / 0..2 clear, $0127 0..FF, $1DF9/$1DFD low and high bytes, $53 bit 7, $7F:0351 parity) through CtHdmaBuildNative and CtXlatHdmaBuild (interp = 1: what the translation lacks runs on the vendored core, so the reference is the ROM's code, the 365 statically decoded lines and the two runs it never had, FD:C68A-C6E4 / C7DA-C834, included). 60 of 128 branch keys is all that is reachable (n = 0 and n > 28 exclude each other; a wave on ch2 / ch3 implies the tail's). Re-pin never: any 'differ' is a defect.",
+      "mutations": [
+        {
+          "file": "src/hdma_table.c",
+          "find": "static unsigned c4b(unsigned n) { return n <= 0x0A ? 0x02 : (((n << 1) & 0xFF) - 0x14) & 0xFF; }",
+          "replace": "static unsigned c4b(unsigned n) { return n <= 0x0A ? 0x02 : (((n << 1) & 0xFF) - 0x13) & 0xFF; }   /* MUT */",
+          "why": "ch4's middle run past n = 10 is 2n - 20 (CB0E ASL A / SEC / SBC #14)"
+        },
+        {
+          "file": "src/hdma_table.c",
+          "find": "    if (mode > 5) return -1;                                      // JSR ($C2DF,X)\n    if (run(&h, mode >= 3, mode >= 3 ? mode - 3 : mode)) return -1;",
+          "replace": "    if (mode > 2) return -1;   /* MUT: set A's table stops at its own three */\n    if (run(&h, 0, mode)) return -1;",
+          "why": "FD:C2DF's table runs on into C2E5's: $0126 = 3..5 under bit 0 set reach set B's handlers"
+        }
+      ]
     }
   ],
   "excluded": [

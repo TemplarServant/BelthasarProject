@@ -481,7 +481,7 @@ void CtSceneSetEnemyRecTable(const uint8_t* tab, int len);
 // Optional like the rec table -- without it fresh loads leave $1280/$1380/$1400../$0F81 zero
 // exactly as before (WRAM-seeded scenes carry the oracle's values regardless).
 void CtSceneSetRomImage(const uint8_t* rom, long len);
-void CtHdmaTableBuild(uint8_t* wram128);   // `JSL FD/C2C1`: the field's HDMA table builder (the ROM's, src/xlat/hdma_fd.c), $0153 bit 0 flips
+void CtHdmaTableBuild(uint8_t* wram128);   // `JSL FD/C2C1`: the field's HDMA table builder (src/hdma_table.c), $0153 bit 0 flips
 void CtSceneFree(CtScene* sc);
 
 #endif
