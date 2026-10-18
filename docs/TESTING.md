@@ -2537,3 +2537,14 @@ shadow f - 1: the cartridge's picture N shows the shadow of N - 2, the port's pi
 so the open and the close frames are graded. Byte-for-byte: re-pin only when the fixture's frames move with an
 oracle-verified reason. `-v` prints every graded frame of both sides and the sprite match at every lag.
 disasm/notes/battle_multitarget_cursor.md secs. 10-11.
+
+### wipe-native-every-call-vs-cartridge (`ct.exe --wipeaudit boot 9200`, CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1)
+
+The window wipe's routine C3/01E4 with its seed C3/02DD and the overworld's window object C6/E241 / E27E, NATIVE in
+src/wipe.c (the playable host runs no translation of them), against every call the cartridge makes from power-on through
+the attract: at each entry the native routine runs on a copy of the oracle's 128 KB WRAM (C3/01E4 with the cartridge's own
+X and data bank; the window object with the target alone, so the port's X = 009C is graded too) and must equal the
+cartridge's WRAM where its RTL lands, every byte but the 32 dead stack bytes below the caller's S. One line per call site
+-- the field's C0/22FA, the world's C6/E241 and C6/E27E, the race stage's 7E/3D72 and 7E/6844 -- pins its calls, modes,
+fills, ends and registers (1015 calls). Byte-for-byte against the cartridge: re-pin only when the attract's call count
+moves for an oracle-verified reason, never for a difference. disasm/notes/field_window_wipe.md, "Native".

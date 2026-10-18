@@ -1832,7 +1832,7 @@ void CtWorldObjOp05(uint8_t* ram, const uint8_t* op) {
 // object -- permanently, since a parked object re-reads the same op every frame. That is what froze
 // the attract's world-5 flyover: its driver reaches `4E 41 E2 C6` at pc=0562 and never gets past it,
 // so the leg never ends and scene 433's chain never advances to its next entry (notes 9.17).
-// The host's hook for the window object's two targets (field.c installs CtXlatOwWindowCall on the vendored hardware;
+// The host's hook for the window object's two targets (field.c installs the native wipe.h CtOwWindowObject;
 // a host without one -- ct_world, the oracle -- names the call and advances, as before).
 static const uint8_t* g_owRom = NULL;   // the host's ROM image (CtWorldSetRom, below)
 static long g_owRomLen = 0;
@@ -1864,19 +1864,17 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
     case 0xC6E2AF:
       ram[0x10062] = 0x00;
       break;
-    // $C6:E241 (install + the first C3/01E4 call) and $C6:E27E (a call a frame): TRANSLATED from the ROM (src/xlat/owwin_c6.c,
-    // tools/gen/xlat.py from the cartridge's own trace of the attract's 1F5 leg) and run on the vendored hardware over this WRAM
-    // through the object VM's far call as C2/181C makes it (seq_xlat.c CtXlatOwWindowCall). E241: HDMA channel 2 over $2127
-    // (DMAP $40, table $7E:8A42, bank $7E), `TSB $4A` #04, the object's +$22 -> $0350 and +$24 -> $0352 (bank $7E),
+    // $C6:E241 (install + the first C3/01E4 call) and $C6:E27E (a call a frame): native (wipe.h CtOwWindowObject, through the
+    // host's hook) over this WRAM, as C2/181C's far call runs them. E241: HDMA channel 2 over $2127 (DMAP $40, table
+    // $7E:8A42, bank $7E -- the registers here), `TSB $4A` #04, the object's +$22 -> $0350 and +$24 -> $0352 (bank $7E),
     // JSL C3/000E; both: $7E:8A25 / $8A27 = the table half C3/01E4 wrote (+0 or +$E0 by $0351) and +$70. The routine's
-    // seed reads the H/V counters -- the world VM's position in the frame, which this port has no clock for: every call
-    // starts on the first call's (CT_XLAT_OWWIN_V/H, field_window_wipe.md sec. 6).
+    // seed reads the rule's virtual beam (field_window_wipe.md, "The virtual beam").
     case 0xC6E241: case 0xC6E27E: {
       if (tgt == 0xC6E241) CtWorldHdmaSet(2, 0x40, 0x27, 0x8A42);   // E241: channel 2 = window 1's right edge
       int r = g_owWinCall ? g_owWinCall(ram, tgt) : -1;
       if (r) { static int said = 0;
         if (!said) { said = 1; fprintf(stderr, "owobj: op 4E -> $%06X not run (%s, r=%d) -- the script advances, the window is not stepped\n",
-                                        tgt, g_owWinCall ? "translation stop" : "no host hook", r); } }
+                                        tgt, g_owWinCall ? "no ROM" : "no host hook", r); } }
       break;
     }
     // THE PICTURE LOADERS -- four routines of one shape, the whole family in bank C6 (a byte-pattern scan of the bank finds

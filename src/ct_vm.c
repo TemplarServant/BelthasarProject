@@ -16,6 +16,7 @@
 #include "objslot.h"       // FD/E39C, the palette-effect records op 0x88 arms (the battle's body)
 #include "lz.h"
 #include "data/ct_regroup.h"          // baked ROM battle-RETURN regroup script templates (tools/_gen_regroup.py)
+#include "wipe.h"                     // CtWipeRoutine: the window wipe C3/01E4 and its seed C3/02DD, native
 #define CTPI 3.14159265358979323846
 
 // ---- the sound sink (ct_vm.h; disasm/notes/audio_commands.md §6) -------------
@@ -5732,10 +5733,8 @@ static int ctWipeOp(CtScene* sc, int sub) {        // 1 = complete (advance 2), 
 // C0/00B1 JSR C0/21E1: `LDA $39 / BEQ / DEC / ASL / TAX / JSR ($21EE,X)`, and entry 3 is C0/22D8 -- once per main-loop frame,
 // BEFORE the object pass (C0/00B7). While $0350 is set it arms the window shadows, steps C3/01E4 (DP $0300) and holds
 // `$19 = 0F`; after, with $013C < 2 (92/93), it clears them again (C0/2307).
-// C3/01E4 runs TRANSLATED (src/xlat/wipe_c3.c, tools/gen/xlat.py from the cartridge's own traces of 16E's and 01C's wipes) on the
-// vendored hardware over this WRAM. Its seed C3/02DD folds $2137/$213C/$213D -- the H/V counters at that instant, the CPU's
-// position in the field's frame, which this port has no clock for: every call starts on the cartridge's first-call position
-// (seq_xlat.h CT_XLAT_WIPE_V/H, the one input that is not derived). The window is drawn by field.c from the tables the
+// C3/01E4 runs NATIVE (wipe.c CtWipeRoutine) over this WRAM. Its seed C3/02DD folds the beam counters, which read the rule's
+// virtual beam ($213C = $0351, $213D = 00; CLAUDE.md, the zelda3 model). The window is drawn by field.c from the tables the
 // routine writes, through the HDMA channel FD/C1EE programs ($2128/$2129 by $013C bit 0) and the shadows C0/22D8 sets.
 static void ctWipeFrame(CtScene* sc) {
   Mem* m = sc->mem;
@@ -5744,15 +5743,15 @@ static void ctWipeFrame(CtScene* sc) {
     w8(m, 0x7F1522, 0x17); w8(m, 0x7F1523, 0x17);                     // 22DD
     w8(m, 0x7E0BD9, 0x88); w8(m, 0x7E0BDA, 0x88); w8(m, 0x7E0BDB, 0x88);
     w8(m, 0x7E0BDC, 0x00); w8(m, 0x7E0BDD, 0xFF);
-    // JSL C3/000E -> C3/01E4: the routine itself, translated from the ROM (src/xlat/wipe_c3.c) and run on the vendored
-    // hardware over this WRAM (seq_xlat.h CtXlatWipeCall): the first call's fill, every call's step through $C0:FE00 with
+    // JSL C3/000E -> C3/01E4 (wipe.c CtWipeRoutine): the first call's fill, every call's step through $C0:FE00 with
     // C3/02DD's seed, the tables at $7F:17C8 / $7F:18A8, $51's count and $50's clear on the 32nd call, $0386's update.
-    int xr = gRomImg ? CtXlatWipeCall(gRomImg, gRomImgLen, m->s, CT_XLAT_WIPE_V, CT_XLAT_WIPE_H) : -1;
+    // The registers it reads: X = 0004 (C0/21EA `DEC A / ASL A / TAX` of state 3) and the data bank 00 (--wipedump).
+    int xr = CtWipeRoutine(gRomImg, gRomImgLen, m->s, CT_WIPE_FIELD_X, CT_WIPE_FIELD_DB);
     if (xr) {
-      // No ROM (a harness without one) or a translation stop: the routine cannot run. What the op waits on -- the count --
-      // is kept so the flow still completes; the tables stay as they are. Reported once.
+      // No ROM (a harness without one): the routine cannot run. What the op waits on -- the count -- is kept so the flow
+      // still completes; the tables stay as they are. Reported once.
       static int said = 0;
-      if (!said) { said = 1; printf("wipe: C3/01E4 not run (%s, r=%d) -- the count is kept, the tables are not stepped%s", gRomImg ? "translation stop" : "no ROM image", xr, "\n"); }
+      if (!said) { said = 1; printf("wipe: C3/01E4 not run (%s, r=%d) -- the count is kept, the tables are not stepped%s", gRomImg ? "a bank it cannot address" : "no ROM image", xr, "\n"); }
       int mode = r8(m, 0x7E0350), stp = r8(m, 0x7E0351);
       if (stp == 0) {                                                 // 01FA: the fill, 00 (mode 1) or FF (mode 2)
         uint32_t base = ((uint32_t)(r8(m, 0x7E0352) | (r8(m, 0x7E0353) << 8)) + 0x01C0) & 0xFFFF;

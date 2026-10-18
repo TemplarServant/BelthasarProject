@@ -86,6 +86,7 @@
 #include "title_intro.h"        // the X-button menu module boundary (C0/192F entry -> C2/8000 mode 1)
 #include "audio.h"       // the SPC700 sound system: bank-$C7 driver upload + the $2140-43 command channel
 #include "seq_xlat.h"    // a $C3 stage whose output depends on the CPU clock: its program translated from the ROM
+#include "wipe.h"        // the window wipe C3/01E4 + C3/02DD and the overworld's window object C6/E241, native
 #include "seq_race.h"    // the motorcycle race (sequence entry 0, `FF 00` / `FF 09`), native: its logic (stage 1)
 #include "seq_pic.h"     // ... and its picture (stage 2: the native compositor, src/seq_racepic.c)
 #include "seq_ending.h"   // the ending's $C3 stage (FF 2A/2B/2E/2F), native
@@ -1491,10 +1492,10 @@ static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int 
   }
 }
 
-// The overworld's op 4E far call, on the vendored hardware (seq_xlat.h CtXlatOwWindowCall) with the ROM the engine loaded.
+// The overworld's op 4E far call, native (wipe.h CtOwWindowObject) with the ROM the engine loaded.
 static int owWindowCallHook(uint8_t* ram128, uint32_t target) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-  return rom ? CtXlatOwWindowCall(rom, rl, ram128, target, CT_XLAT_OWWIN_V, CT_XLAT_OWWIN_H, target == 0xC6E241 ? 0 : -1, -1) : -1;
+  return CtOwWindowObject(rom, rl, ram128, target);
 }
 
 // THE OVERWORLD'S PICTURE, `W` columns wide with the SNES's 256-wide view at `X0` (the widescreen: settings.h; 256 / 0 is the
@@ -9716,7 +9717,7 @@ static void fieldWipeMask(uint8_t* fb, int w, int h, const uint8_t* wram) {
   if (wram && wram[0x0139] == 3 && wram[0x0350]) {             // the next C0/22D8 steps C3/01E4 (22D8's first arm)
     long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
     memcpy(g_wipeNext, wram, sizeof g_wipeNext);
-    if (rom && CtXlatWipePeek(rom, rl, g_wipeNext, CT_XLAT_WIPE_V, CT_XLAT_WIPE_H) == 0) tab = g_wipeNext;
+    if (CtWipePeek(rom, rl, g_wipeNext, CT_WIPE_FIELD_X, CT_WIPE_FIELD_DB) == 0) tab = g_wipeNext;
   }
   int setA = wram && !(wram[0x0153] & 1);
   { static int tr = -1; if (tr < 0) tr = getenv("CT_WIPETRACE") ? 1 : 0;      // why a frame is (not) masked
@@ -10035,33 +10036,33 @@ int main(int argc, char** argv) {
       }
       return 0;
     }
-    else if (!strcmp(argv[i], "--wipecall") && i + 4 < argc) {
-      // --wipecall <in.wram128> <vPos> <hPos> <out.wram128> : run the translated C3/01E4 once on that WRAM, as the field's
-      // C0/22FA does, on the given counter position (tools/wipe_step_cmp.py feeds the cartridge's own).
-      const char* ip = argv[++i]; int vp = atoi(argv[++i]); int hp = atoi(argv[++i]); const char* op = argv[++i];
+    else if (!strcmp(argv[i], "--wipecall") && i + 2 < argc) {
+      // --wipecall <in.wram128> <out.wram128> : run the native C3/01E4 once on that WRAM, as the field's C0/22FA does
+      // (ct_vm.c ctWipeFrame: X and the data bank as C0/22FA leaves them; tools/wipe_step_cmp.py).
+      const char* ip = argv[++i]; const char* op = argv[++i];
       static uint8_t wr[0x20000];
       FILE* wf = fopen(ip, "rb"); if (!wf) { printf("wipecall: cannot open %s\n", ip); return 1; }
       size_t got = fread(wr, 1, sizeof wr, wf); fclose(wf);
       if (got != sizeof wr) { printf("wipecall: %s is %u bytes, need 131072\n", ip, (unsigned)got); return 1; }
       { const char* rp = getenv("CT_ROM"); if (!rp) rp = "Chrono_Trigger_USA_SNES.sfc"; if (!CtBattleRom(0)) CtBattleLoadRom(rp); }
       long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-      int r = rom ? CtXlatWipeCall(rom, rl, wr, vp, hp) : -1;
-      printf("wipecall: v=%d h=%d -> r=%d $0351=%02X $0386=%02X\n", vp, hp, r, wr[0x0351], wr[0x0386]);
+      int r = CtWipeRoutine(rom, rl, wr, CT_WIPE_FIELD_X, CT_WIPE_FIELD_DB);
+      printf("wipecall: -> r=%d $0351=%02X $0386=%02X\n", r, wr[0x0351], wr[0x0386]);
       FILE* of = fopen(op, "wb"); if (of) { fwrite(wr, 1, sizeof wr, of); fclose(of); }
       return r ? 1 : 0;
     }
-    else if (!strcmp(argv[i], "--owwincall") && i + 7 < argc) {
-      // --owwincall <in.wram128> <target hex> <vPos> <hPos> <hSecond> <ppu2bus hex> <out.wram128> : run the overworld's window object routine once
-      // ($C6:E241 or $C6:E27E) on that WRAM on that beam, as the object VM's op 4E does (tools/owwin_step_cmp.py).
-      const char* ip = argv[++i]; uint32_t tg = (uint32_t)strtoul(argv[++i], NULL, 16); int vp = atoi(argv[++i]); int hp = atoi(argv[++i]); int hs = atoi(argv[++i]); int b2 = (int)strtol(argv[++i], NULL, 16); const char* op = argv[++i];
+    else if (!strcmp(argv[i], "--owwincall") && i + 3 < argc) {
+      // --owwincall <in.wram128> <target hex> <out.wram128> : run the overworld's window object once ($C6:E241 or $C6:E27E,
+      // native: wipe.h CtOwWindowObject) on that WRAM, as the object VM's op 4E does (tools/owwin_step_cmp.py).
+      const char* ip = argv[++i]; uint32_t tg = (uint32_t)strtoul(argv[++i], NULL, 16); const char* op = argv[++i];
       static uint8_t wr[0x20000];
       FILE* wf = fopen(ip, "rb"); if (!wf) { printf("owwincall: cannot open %s\n", ip); return 1; }
       size_t got = fread(wr, 1, sizeof wr, wf); fclose(wf);
       if (got != sizeof wr) { printf("owwincall: %s is %u bytes, need 131072\n", ip, (unsigned)got); return 1; }
       { const char* rp = getenv("CT_ROM"); if (!rp) rp = "Chrono_Trigger_USA_SNES.sfc"; if (!CtBattleRom(0)) CtBattleLoadRom(rp); }
       long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-      int r = rom ? CtXlatOwWindowCall(rom, rl, wr, tg, vp, hp, hs, b2) : -1;
-      printf("owwincall: $%06X v=%d h=%d -> r=%d $0351=%02X $0386=%02X $8A25=%02X%02X $8A27=%02X%02X\n", tg, vp, hp, r,
+      int r = CtOwWindowObject(rom, rl, wr, tg);
+      printf("owwincall: $%06X -> r=%d $0351=%02X $0386=%02X $8A25=%02X%02X $8A27=%02X%02X\n", tg, r,
              wr[0x0351], wr[0x0386], wr[0x8A26], wr[0x8A25], wr[0x8A28], wr[0x8A27]);
       FILE* of = fopen(op, "wb"); if (of) { fwrite(wr, 1, sizeof wr, of); fclose(of); }
       return r ? 1 : 0;
