@@ -1495,10 +1495,34 @@ song task, the close; src/ct_vm.c CtSceneExchange): `tools/menu_exchange_cmp.py`
 differing over 2267 frame-fields (check menu-exchange-vs-oracle). On the way: the menu fades now write `$0119` (C0/1949 /
 C0/0CD4 / C0/19B2 `DEC $19`, C0/2829 `INC $19`), and C2/9875's head runs at every open.
 
-**OPEN.** (1) The picture's three layers not drawn: the BG3 wave behind the windows (HDMA channel 4 on `$2111` from
-`$7E:922C`), the prompt's text in the bottom box, and the hooded figure in it (C2/CE9D's object, `$FF:D57A` -> `$0F12`). The
-rest is the cartridge's layout (the captured chrome `ctMenuChromeExchTM`, C2/C784's panels, C2/CE6E's members, the graph's
-hand) but has not been graded pixel by pixel. (2) The script's `C8 00` arm is the same screen through the same launcher
+**THE PICTURE (2026-10-18), pixel for pixel** (`tools/menu_exchange_pic_cmp.py`, check menu-exchange-picture-vs-oracle: the
+port's shot N - 1 against the cartridge's `--peek` N, 0 px over the fade-in's end, the move, the swap and the close's start).
+- **BG3, the wave.** C2/C7C8 `JSR C2/CE86` at P: `JSL FF/F677` -- C3/0002 decompresses $FF:E8DC to $7E:B000 (2bpp characters),
+  `$0D0E = 01FF`, the map at $7E:4E00 (six rows of 32: 16 words from $FF:F6F2[k] counting up, the row's first $20 bytes again
+  by `MVN`; then `MVN` $4E00 -> $4F80, $680 bytes over itself: the six rows repeat), $FF:F706 -> $94B0 (palettes 6-7), $FF:F6FE ->
+  $9100 -- and two VRAM DMAs through C2/8385 ($B000 -> $7000, $4E00 -> $6800). C2/C7DA `JSR C2/CE9D`: BG3SC = $68, `STZ $0F10`
+  (16-bit), $FF:D57A (12 bytes) -> $0F12, the task C2/CECE (`$0D13 |= 10`, two frames, `JSL FF/F716`). FF/F716: `$0F10`, `$0F11`
+  up; every fourth `$0D0C` up, `$0D0E` down, `$0F10` back two; `$9240,Y = $FF:F759,X + $0D0C (+ C)` for Y = `$51`..$1E by 2, X =
+  `($0F10 * 2) & 3E` by 4 (the first sum takes the `ASL`'s carry). The picture (oracle `--hdma`): HDMA channel 4, indirect, $9200:
+  fourteen `90 40 92` -- line y's HOFS is the word at $9240 + 2 (y & 15); VOFS `$0D0E`; the PPU fetches BG line y + 1; TMW = 04
+  masks BG3 by W34SEL's window 2 alone (`w2en = 24`), empty here (255..0) -- window 1, 16..239, is the colour math's. So BG3
+  shows wherever BG2 leaves colour 0 (the desktop around the windows). MEASURED: F716 at f86 = P, then every second frame
+  through the close's fade and `$2141` wait (f248), none from the `11` post's JSLs on (menu_exchange_cmp grades $0F10-$0F1D,
+  $0D0C-$0D0F and $9240-$925F: 0 differing).
+- **BG1, the prompt.** C2/C9E5 (S0): C2/CA6D-CA8F -- string 4 of $FF:CF3B ("Who'll you" `05` "replace?"; 5, "Can't do that.",
+  when `$0D7C` is set) through C2/F905 (`$0214 = 81`, buffer `$0DC5` = $5E00, JSL C2/57DF, then JSL C2/5823 with `$0213 = 20`
+  while it stops on `05`, `$0211` += 4), C2/FBB4 laying (6, 21) $0100.. over $0110.. and (6, 23) $0121.. over $0131.. (`AND
+  #33EF`, `ORA #10`) in the BG1 buffer $7E:2E00. MEASURED: the strip written at f52 = S0 by C2:5F9F / 5FD7.
+- **OBJ, the figure.** C2/CA9E-CAB7, D = $19C0 (block 7): C2/F422 with `$00 = 48`, `$01 = 01` -- record 0x48 of the type-1 table
+  $E4:F023 (C2/F55C[1]), the $E4:F000 header 0x4F -- `$0E-$0F = CA 20` (y 202, x 32), `$1A = 20`. C2/F871 puts each 16 x 16 unit
+  at (x + dx, y + dy) with the assembly's offsets: the cartridge's OAM (53, 160) E8, (24, 174) EA, (24, 158) EC, (24, 190) EE;
+  its tiles go up at P (f86, through the WRAM thunk 7E:9690). The port composes CT_ASSET_SPRITE[0x4F] frame 0 there.
+- **The picked reserve panel stays.** C2/C688-C6A5's C2/EF05 is a rectangle COPY (`MVN` row by row) of the panel to (2, 0x20),
+  off screen -- not a blank. The port had hidden it from the pick to the swap.
+- Open in the picture: the hand on the reserve column 2 px off (f130, f160, f190), the pick's frames f148-149, a member's pose at
+  f184 / f214, and the fades a brightness step apart (f94, f238).
+
+**OPEN.** (2) The script's `C8 00` arm is the same screen through the same launcher
 code, but no state reaches one of its twelve sites: ungraded. (3) A song post a busy driver holds past S0 + 2 is modelled
 as moving P; the cartridge would run C2/C649 first and hold only the fade-in (C2/C7CB) -- not measured. (4) The overworld's
 own poll (C2/2552: `$027C == 5 ? 1 : 5`) is not this launcher and is not ported.

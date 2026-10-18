@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <stdlib.h>   // atoi (config number-strip values)
 #include "menu.h"
+#include "lz.h"            // ct_lz_decompress_bounded: the exchange's BG3 characters (FF/F677's C3/0002)
+#include "scene.h"         // CT_SPR_OX / CT_SPR_OY: the sprite composer's canvas origin (the exchange's figure)
+#include "vwf.h"           // CtVwfBegin / CtVwfRun: C2/57DF / C2/5823, the exchange prompt's proportional text
 #include "tables/menu_icons.h"   // captured OBJ ribbon icons (6 base + 6 selected-highlight, 16x16 RGBA)
 #include "tables/menu_chrome.h"  // BYTE-EXACT BG2 chrome: marble desktop + dark-blue window panels + ribbon box
 #include "tables/menu_shop.h"    // the SHOP screen ($0C): its BG2 chrome, narrow digits and text palettes (captured)
@@ -343,6 +346,7 @@ static const uint8_t* mChromeInk(const uint8_t (*pal)[16][3], int pl, int v) {
 // (31) + 8 reads 19, not the 15 a halve of the capped sum gives (MEASURED, owsave f180: (156,156,148) where the port
 // had (123,123,123)). The boot Load screen's scroll chrome has always done this; the X menu's Save list sets the band.
 static uint8_t mHalfBand[MH];
+static uint8_t* mChromeZero;   // when set, mChromeTMPal2L marks the pixels its tiles leave at colour 0 (the layers below show)
 static void mChromeTMPal2L(uint8_t* fb, const uint16_t* tm, int mode, const uint8_t (*pal)[16][3],
                            const int8_t* d5, int csTone) {
   // d5 = the per-scanline 5-bit COLDATA delta mWinGrad() generated for this screen's window list.
@@ -368,6 +372,7 @@ static void mChromeTMPal2L(uint8_t* fb, const uint16_t* tm, int mode, const uint
         for (int xx = 0; xx < 8; xx++) {
           int v = g[yy * 8 + xx], px = tx * 8 + xx, py = ty * 8 + yy;
           if (px < MW && py < MH) {                    // index 0 = backdrop black (opaque background)
+            if (mChromeZero) mChromeZero[py * MW + px] = (uint8_t)(v == 0);
             const uint8_t* C = mChromeInk(pal, pl, v);
             int r = C[0], gg = C[1], b = C[2];
             if (isWin && !(mRibbonW2On && px >= mRibbonW2[py][0] && px <= mRibbonW2[py][1])) {
@@ -3085,6 +3090,94 @@ void CtMenuExchGraph(uint8_t* mem, const uint8_t* rom, long romLen) {
   if (!mem || !rom || romLen < 0x3FB77A + 43) return;
   memcpy(mem + 0x9380, rom + 0x3FB77B, 42);
 }
+// THE EXCHANGE'S BG3 WAVE. C2/C7AC's C2/CE86 (at P) runs `JSL FF/F677` and queues two VRAM DMAs through C2/8385 (C2/CE96:
+// $7E:B000 -> VRAM $7000, $600 bytes, BG3's characters; $FF:FC14: $7E:4E00 -> VRAM $6800, $1000 bytes, BG3's map), and its
+// C2/CE9D sets BG3SC = $68, clears $0F10-$0F11, copies $FF:D57A (12 bytes) to $0F12 and spawns the task C2/CECE: `$0D13 |= 10`,
+// two frames, `JSL FF/F716`, again. The picture: BG3 at VOFS $0D0E, HOFS by HDMA, an indirect table at $9200 -- fourteen
+// `90 40 92` (16 lines each, repeat) -- so line y reads the word at $9240 + 2 * (y & 15). MEASURED (the rule's cartridge, the
+// recipe of menu_exchange_cmp): F716 at f86 = P, then every second frame through the close's fade and `$2141` wait (f248),
+// none from the `11` post's JSLs on; `$0D0E = 01FF` at f86 (FF:F69A).
+// FF/F677: C3/0002 decompresses $FF:E8DC to $7E:B000; `$0D0E = 01FF`; the map at $7E:4E00: six rows of 32, each 16 words
+// from $FF:F6F2[k] counting up and the same 16 again (`MVN` of the row's first $20 bytes), then `MVN` $4E00 -> $4F80, $680
+// bytes -- a forward copy over itself, so the six rows repeat to the map's end; $FF:F706 (16 bytes) to $94B0 (CGRAM 24-31,
+// BG3's palettes 6 and 7) and $FF:F6FE (8 bytes) to $9100.
+void CtMenuExchWaveInit(uint8_t* m, const uint8_t* rom, long romLen) {
+  if (!m || !rom || romLen < 0x3FF7D8) return;
+  { static uint8_t out[0x10000]; size_t n = ct_lz_decompress_bounded(rom, (size_t)romLen, out, sizeof out, 0x3FE8DC);
+    if (n > 0x5000) n = 0x5000;
+    memcpy(m + 0xB000, out, n); }                                  // 3FF678-3FF690 JSL C3/0002
+  m[0x0D0E] = 0xFF; m[0x0D0F] = 0x01;                              // 3FF694-3FF697
+  int y = 0x4E00;
+  for (int k = 0; k < 6; k++) {                                    // 3FF69A-3FF6CA
+    int row = y, v = rom[0x3FF6F2 + 2 * k] | (rom[0x3FF6F3 + 2 * k] << 8);
+    for (int i = 0; i < 16; i++, v++, y += 2) { m[y] = (uint8_t)v; m[y + 1] = (uint8_t)(v >> 8); }
+    for (int i = 0; i < 0x20; i++) m[y + i] = m[row + i];          // 3FF6BA-3FF6BF MVN, $20 bytes
+    y += 0x20;
+  }
+  for (int i = 0; i < 0x680; i++) m[0x4F80 + i] = m[0x4E00 + i];   // 3FF6CC-3FF6D5: byte by byte, over itself
+  memcpy(m + 0x94B0, rom + 0x3FF706, 16);                          // 3FF6D8-3FF6E1
+  memcpy(m + 0x9100, rom + 0x3FF6FE, 8);                           // 3FF6E4-3FF6ED
+  m[0x0F10] = 0; m[0x0F11] = 0;                                    // 2CEA8 STZ $0F10 (16-bit)
+  memcpy(m + 0x0F12, rom + 0x3FD57A, 12);                          // 2CEB4-2CEBD MVN $7E,$FF
+}
+// THE PROMPT'S TEXT (C2/C9E5, substate 0 at S0: C2/CA6D-CAD5). The string -- 4, "Who'll you" 05 "replace?", or 5 when `$0D7C`
+// (16-bit) is set, "Can't" 05 "do that." -- from the table $FF:CF3B, drawn by C2/F905 into the 4bpp strip $7E:5E00: `$0214 = 81`,
+// `$0210-$0212 = $0DC5 / 7E`, JSL C2/57DF, then JSL C2/5823 with `$0213 = 20` again while it stops on the line break `05`
+// (`$0215`), each time 4 added to `$0211` -- the next line $400 bytes on (C2/F923-F93F). C2/FBB4 lays each line's tiles in
+// BG1's map buffer ($7E:2E00 = VRAM $5800): at (6, 21) eight from $0100 over eight from $0110, at (6, 23) from $0121 / $0131
+// (`AND #33EF`, the lower row `ORA #10`) -- the strip's tiles, VRAM $1000 on (C2/CAD9's DMA). MEASURED (the rule's cartridge,
+// --monitor --writer): the strip's bytes written at f52 = S0 by C2:5F9F / 5FD7, after a clear at f43; the map words read
+// back from the cartridge's VRAM 0100-0107 / 0110-0117 / 0121-0128 / 0131-0138 at (6..13, 21..24).
+// THE PROMPT'S FIGURE (C2/C9E5: C2/CA9E-CAB7 with D = $19C0, block 7): C2/F422 with `$00 = 48`, `$01 = 01` -- the type-1
+// table's record 0x48 (C2/F55C[1] = $E4:F023, 5 bytes a record: the $E4:F000 header index 7 + 48 = 0x4F) -- `$0E-$0F = CA 20`
+// (y 202, x 32), `$1A = 20` (attr: priority 2, palette 0). C2/F871 places each 16 x 16 unit at (x + dx, y + dy) of the
+// assembly's offsets (MEASURED, the cartridge's OAM: (53, 160) E8, (24, 174) EA, (24, 158) EC, (24, 190) EE -- the block's
+// $19E2.. = 15 D6 / F8 E4 / F8 D4 / F8 F4), the frame the block's +3 names (0); the tiles go up at P (f86, the task C2/F657).
+#define MEXCH_FIG_SPR 0x4F
+static int mExchFigOn;
+void CtMenuExchFigure(int on) { mExchFigOn = on; }
+void CtMenuExchPrompt(uint8_t* m, const uint8_t* rom, long romLen) {
+  if (!m || !rom || romLen < 0x3FD010) return;
+  memset(m + 0x5E00, 0, 0x800);                                    // (the strip as the init left it: zero, f43)
+  m[0x020C] = (m[0x0D7C] | m[0x0D7D]) ? 5 : 4;                     // 2CA72-2CA7B
+  m[0x0DC5] = 0x00; m[0x0DC6] = 0x5E;                              // 2CA7E-2CA81
+  m[0x020D] = 0x3B; m[0x020E] = 0xCF; m[0x020F] = 0xFF;            // 2CA84-2CA8C
+  m[0x0214] = 0x81;                                                // 2F905-2F911 (C2/F905: LDA #81)
+  m[0x0210] = m[0x0DC5]; m[0x0211] = m[0x0DC6]; m[0x0212] = 0x7E;  // 2F914-2F91C
+  CtVwfBegin(m, rom, romLen);                                      // 2F91F JSL C2/0003
+  for (int guard = 0; guard < 16; guard++) {
+    m[0x0213] = 0x20;                                              // 2F923-2F925
+    if (CtVwfRun(m, rom, romLen) < 0) break;                       // 2F928 JSL C2/0009
+    if (m[0x0215] != 5) break;                                     // 2F92C-2F931
+    m[0x0211] = (uint8_t)(m[0x0211] + 4);                          // 2F933-2F93F
+  }
+  static const struct { int x, a; } lines[2] = { { 0x334C, 0x0100 }, { 0x33CC, 0x0121 } };   // 2CABA-2CACF
+  for (int l = 0; l < 2; l++) {                                    // C2/FBB4
+    int x = lines[l].x, a = lines[l].a;
+    for (int k = 0; k < 8; k++, x += 2) {
+      int v = a & 0x33EF, u = v | 0x10;
+      m[x] = (uint8_t)v; m[x + 1] = (uint8_t)(v >> 8); m[x + 0x40] = (uint8_t)u; m[x + 0x41] = (uint8_t)(u >> 8);
+      a = (u + 1) & 0xFFEF;
+    }
+  }
+}
+// FF/F716, one step of the task: `$0F10`, `$0F11` up (8-bit); every fourth (`$0F11 & 3` = 0) `$0D0C` up, `$0D0E` down and
+// `$0F10` back by two (all 8-bit). Then 16-bit: `$00 = $0D0C`, X = `($0F10 * 2) & 3E` -- the `ASL` leaving bit 15 of the word
+// in the carry -- Y = `$51`, and while Y < $20: `$9240,Y = $FF:F759,X + $00 + C` (the first sum takes the ASL's carry, the rest
+// the CPY's clear one), X += 4, Y += 2.
+void CtMenuExchWaveTick(uint8_t* m, const uint8_t* rom, long romLen) {
+  if (!m || !rom || romLen < 0x3FF7D8) return;
+  m[0x0F10]++; m[0x0F11]++;                                        // 3FF719-3FF71C
+  if (!(m[0x0F11] & 3)) { m[0x0D0C]++; m[0x0D0E]--; m[0x0F10] -= 2; }   // 3FF71F-3FF72F
+  int base = m[0x0D0C] | (m[0x0D0D] << 8);                         // 3FF734-3FF737
+  int w = m[0x0F10] | (m[0x0F11] << 8), c = (w >> 15) & 1;         // 3FF739-3FF73C ASL A
+  int x = (w << 1) & 0x3E, y = m[0x0051] | (m[0x0052] << 8);       // 3FF73D-3FF741
+  while (y < 0x20) {                                               // 3FF743-3FF755
+    int v = (rom[0x3FF759 + x] | (rom[0x3FF75A + x] << 8)) + base + c;
+    m[0x9240 + y] = (uint8_t)v; m[0x9241 + y] = (uint8_t)(v >> 8);
+    c = 0; x += 4; y += 2;
+  }
+}
 // C2/C9AE -- the re-drive when the landed entry is not selectable: a LEFT/RIGHT press hops to the other column when the
 // side it is on has nobody selectable (`$0F0B` / `$0F0C` = 0), else the graph is walked once more along UP (bit 3 of $5A)
 // or DOWN (anything else, a LEFT/RIGHT included): C2/C9CD-C9E0.
@@ -3186,12 +3279,14 @@ int CtMenuExchSecond(uint8_t* m, const uint8_t* glb, int a) {
 //        re-applied over the three active panels' rows (2 + 6r .. 7 + 6r, tile columns 2-15; C2/CC4F walks $0F02..$0F04
 //        only, so the reserve column never dims);
 //   BG1  each panel at C2/C784's (column, row): column 3 for the actives, 0x13 for the reserves, row (index & 7) * 6 + 2 --
-//        the Form's rows, so its y -- except the reserve panel a first pick lifted (C2/C688-C6A5 blanks it);
+//        the Form's rows, so its y (a first pick's C2/C688-C6A5 does not blank the reserve panel: C2/EF05 is a rectangle COPY,
+//        `MVN` row by row from the panel at (0x13, row) to (2, 0x20) -- off screen -- and the panel stays: MEASURED, Robo's
+//        panel on the cartridge's picture from the pick, f148, to the swap, f190);
 //   OBJ  the members at C2/CDE3's places, C2/CE6E[$02]: the actives from index 0 (x 116, feet 56 + 48r), the reserves from 6
 //        (x 140) for the window's four rows from the scroll $80; the hand at the graph's cell $54 ($7E:9380), and the picked
 //        cell's second hand ($0D9C, +2 / -1) on the blink's visible half, as the Form's.
-// OPEN, not drawn: the BG3 wave behind the windows (HDMA channel 4 on $2111 from $7E:922C), the prompt's text and the
-// hooded figure in its box (C2/CE9D's object, $FF:D57A -> $0F12) -- each its own derivation.
+//   BG3  the wave (CtMenuExchWaveInit / Tick), BG1 the prompt's text (CtMenuExchPrompt), OBJ the prompt's figure (block 7,
+//        CtMenuExchFigure) -- 2026-10-18; tools/menu_exchange_pic_cmp.py grades the picture pixel for pixel.
 void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
   if (!h || !fb || !h->mem) return;
   const uint8_t* m = h->mem;
@@ -3207,8 +3302,68 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
           *e = (uint16_t)((*e & ~0x1C00) | (dim ? (4 << 10) : 0));
         }
     }
-    mChromeTMPal2L(fb, scratch, 0, ctMenuChromePal, mWinGrad(0), 0); }
-  const int lifted = (m[0x0F00] != 0xFF && m[0x0D9C] >= 3) ? m[0x0D9C] - 3 + m[0x0DA8] : -1;   // C2/C683-C6A5
+    static uint8_t zero[MW * MH];
+    memset(zero, 1, sizeof zero); mChromeZero = zero;            // (a cell BG2 does not draw is transparent too)
+    mChromeTMPal2L(fb, scratch, 0, ctMenuChromePal, mWinGrad(0), 0);
+    mChromeZero = NULL;
+    // BG3, the wave (CtMenuExchWaveInit / Tick): where BG2's windows leave colour 0. Its map $7E:4E00 (32 x 32, VRAM $6800),
+    // its 2bpp characters $7E:B000 (VRAM $7000), CGRAM from $7E:9480; line y at VOFS $0D0E + 1 and HOFS $9240[y & 15] (the HDMA).
+    // (TMW = 04 masks BG3 by window 2 alone, W34SEL's -- and window 2 is empty here, 255..0; window 1, 16..239, is the colour
+    // math's: the oracle's --hdma on the screen.)
+    if (m[0x0D0E] | m[0x0D0F]) {
+      int vofs = (m[0x0D0E] | (m[0x0D0F] << 8)) & 0x3FF;
+      for (int y = 0; y < MH; y++) {
+        int hofs = (m[0x9240 + 2 * (y & 15)] | (m[0x9241 + 2 * (y & 15)] << 8)) & 0x3FF;
+        int by = (y + 1 + vofs) & 0xFF;                               // (the PPU fetches line y + 1 of the BG)
+        for (int x = 0; x < MW; x++) {
+          if (!zero[y * MW + x]) continue;
+          uint8_t* d = fb + (y * MW + x) * 3;
+          d[0] = d[1] = d[2] = 0;                                       // the backdrop (CGRAM 0) unless BG3 has a colour here
+          int bx = (x + hofs) & 0xFF;
+          int e = m[0x4E00 + ((by >> 3) * 32 + (bx >> 3)) * 2] | (m[0x4E01 + ((by >> 3) * 32 + (bx >> 3)) * 2] << 8);
+          int t = e & 0x3FF, pl = (e >> 10) & 7, fx = bx & 7, fy = by & 7;
+          if (e & 0x4000) fx = 7 - fx;
+          if (e & 0x8000) fy = 7 - fy;
+          if (t * 16 + 16 > 0x5000) continue;
+          const uint8_t* g = m + 0xB000 + t * 16 + fy * 2;
+          int ci = ((g[0] >> (7 - fx)) & 1) | (((g[1] >> (7 - fx)) & 1) << 1);
+          if (!ci) continue;
+          int cw = m[0x9480 + (pl * 4 + ci) * 2] | (m[0x9481 + (pl * 4 + ci) * 2] << 8);
+          int r5 = cw & 31, g5 = (cw >> 5) & 31, b5 = (cw >> 10) & 31;
+          d[0] = (uint8_t)((r5 << 3) | (r5 >> 2)); d[1] = (uint8_t)((g5 << 3) | (g5 >> 2)); d[2] = (uint8_t)((b5 << 3) | (b5 >> 2));
+        }
+      }
+    } }
+  // BG1, the prompt's text (CtMenuExchPrompt): the map buffer's cells (6..13, 21..24) whose tile is the strip's ($0100-$013F,
+  // $7E:5E00 + 32 per tile, 4bpp), in BG1's palette (CGRAM 0 on: the menu's palettes).
+  for (int r = 21; r <= 24; r++)
+    for (int c = 6; c <= 13; c++) {                                   // (the cells C2/FBB4 lays; the init cleared the rest)
+      int e = m[0x2E00 + (r * 32 + c) * 2] | (m[0x2E01 + (r * 32 + c) * 2] << 8), t = e & 0x3FF, pl = (e >> 10) & 7;
+      if (t < 0x100 || t >= 0x140) continue;
+      const uint8_t* g = m + 0x5E00 + (t - 0x100) * 32;
+      for (int yy = 0; yy < 8; yy++)
+        for (int xx = 0; xx < 8; xx++) {
+          int fy = (e & 0x8000) ? 7 - yy : yy, fx = (e & 0x4000) ? xx : 7 - xx;
+          int ci = ((g[fy * 2] >> fx) & 1) | (((g[fy * 2 + 1] >> fx) & 1) << 1) | (((g[16 + fy * 2] >> fx) & 1) << 2) |
+                   (((g[17 + fy * 2] >> fx) & 1) << 3);
+          if (!ci) continue;
+          uint8_t* d = fb + ((r * 8 + yy) * MW + c * 8 + xx) * 3;
+          memcpy(d, ctMenuChromePal[pl][ci], 3);
+        }
+    }
+  if (mExchFigOn && h->anySprFrame) {                                  // OBJ, priority 2: over BG1 and BG2 (CtMenuExchFigure)
+    int cx = 0, cy = 0; const uint8_t* b = h->anySprFrame(MEXCH_FIG_SPR, 0, &cx, &cy);
+    if (b) {
+      int bw = b[0], bh = b[1], x0 = 32 - CT_SPR_OX + cx, y0 = 202 - CT_SPR_OY + cy;
+      for (int yy = 0; yy < bh; yy++)
+        for (int xx = 0; xx < bw; xx++) {
+          const uint8_t* s = b + 2 + ((size_t)yy * bw + xx) * 4;
+          int px = x0 + xx, py = y0 + yy;
+          if (!s[3] || px < 0 || px >= MW || py < 0 || py >= MH) continue;
+          memcpy(fb + (py * MW + px) * 3, s, 3);
+        }
+    }
+  }
   for (int r = 0; r < 3; r++) {                                       // the actives, C2/C784 column 3
     uint8_t e = m[0x0F02 + r];
     if (e & 0x80) continue;
@@ -3227,10 +3382,8 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
     CtMenuPanel p;
     if (!CtMenuPanelData(h->mem, e & 0x3F, &p)) continue;
     int y = 8 + k * MP_PITCH;
-    if (ix != lifted) {
-      mCharPanel(h, fb, MP_X, y, &p, 0x13 * 8 - MP_X, 0);
-      mPanelAtkDefOne(h, fb, 0x13 * 8 - MP_X, y + 40, p.charId, 0);
-    }
+    mCharPanel(h, fb, MP_X, y, &p, 0x13 * 8 - MP_X, 0);
+    mPanelAtkDefOne(h, fb, 0x13 * 8 - MP_X, y + 40, p.charId, 0);
     mBlitPartySpr(h, fb, p.charId, 140, 56 + k * MP_PITCH, 0);      // C2/CE6E[6 + 2k]
   }
   int c = m[0x54] & 0x0F; if (c > 6) c = 6;                           // the hand: the graph's (x, y)

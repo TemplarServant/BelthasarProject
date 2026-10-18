@@ -31,9 +31,10 @@ STATE = 'build/recipes/gato_wait.state'
 WRAM = 'build/recipes/gato_wait.raw.wram'
 POKES = {0x10000: 0x49, 0x2982: 0x02, 0x2983: 0x03, 0x0126: 0x00}
 REGS = [(0x2980, 9), (0x0067, 1), (0x0054, 1), (0x0F00, 2), (0x0F02, 11), (0x0F0D, 1), (0x0F0E, 2), (0x0D10, 1),
-        (0x0119, 1)]
+        (0x0119, 1), (0x0F10, 14), (0x0D0C, 4), (0x9240, 32)]
 SPAN = {0x2980: (20, 330), 0x0119: (20, 330), 0x0067: (51, 280), 0x0054: (86, 280), 0x0F00: (37, 280), 0x0F02: (37, 280),
-        0x0F0D: (37, 280), 0x0F0E: (37, 280), 0x0D10: (37, 280)}
+        0x0F0D: (37, 280), 0x0F0E: (37, 280), 0x0D10: (37, 280),
+        0x0F10: (86, 280), 0x0D0C: (86, 280), 0x9240: (86, 280)}   # (the BG3 wave: C2/CE86 / C2/CE9D at P, FF/F716 after)
 # (button, the cartridge's press frame): Y, Right, A, Left, A, B. The port presses a frame later (the cartridge latches the
 # pad a frame after it goes down); Y goes through CT_HOLDBTN ($00F2 bit 2), the rest through the drive.
 PRESSES = [(0x002, 20), (0x080, 124), (0x100, 146), (0x040, 168), (0x100, 190), (0x001, 232)]

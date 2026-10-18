@@ -3641,6 +3641,23 @@ static const uint8_t* mnPartySprFrame(int charId, int asmFrame, int* cropX, int*
   if (cropY) *cropY = mnSprFrameOy[charId][asmFrame];
   return mnSprFrameCache[charId][asmFrame];
 }
+// Any sprite's frame for the menu (CtMenuHost.anySprFrame): C2/F422's blocks name a sprite by the $E4:F000 header index,
+// the asset's own id. A small cache: the exchange's figure is one sprite at one frame.
+static CtAssets* mnAssets = NULL;
+static const uint8_t* mnAnySprFrame(int sprId, int asmFrame, int* cropX, int* cropY) {
+  static int kId[4] = { -1, -1, -1, -1 }, kFr[4], kX[4], kY[4], kNext = 0; static uint8_t* kBlob[4];
+  for (int k = 0; k < 4; k++)
+    if (kId[k] == sprId && kFr[k] == asmFrame) { if (cropX) *cropX = kX[k]; if (cropY) *cropY = kY[k]; return kBlob[k]; }
+  if (!mnAssets || sprId < 0 || asmFrame < 0) return NULL;
+  uint32_t sl = 0; const uint8_t* sb = CtAssetGet(mnAssets, CT_ASSET_SPRITE, (uint32_t)sprId, &sl);
+  if (!sb) return NULL;
+  int cx = 0, cy = 0; uint8_t* b = mnComposeBlob(sb, sl, asmFrame, &cx, &cy);
+  if (!b) return NULL;
+  int k = kNext; kNext = (kNext + 1) & 3;
+  free(kBlob[k]); kBlob[k] = b; kId[k] = sprId; kFr[k] = asmFrame; kX[k] = cx; kY[k] = cy;
+  if (cropX) *cropX = cx; if (cropY) *cropY = cy;
+  return b;
+}
 static const uint8_t* nsTri = NULL;              // name-cursor triangle (11x12 RGBA; V-flip for ▼)
 static const uint8_t* nsWin = NULL;              // CT_ASSET_NAMEWIN: window bg (BG2 isolated), [w][h]u16+RGB
 static const uint8_t* nsMsg = NULL;              // CT_ASSET_NAMEMSG: "Enter a name..." box [x0,y0,w,h]u16+RGB
@@ -11543,6 +11560,7 @@ int main(int argc, char** argv) {
   // C0/19A7's fade, the X path's), 2 = a parked op `C8 00` (C0/0CC7's fade, the shop's). menuExch68 is its $68 (1 the
   // picker C2/C7E0, 2 the second pick C2/C6B9), menuExchSong C2/CB8B's $0F0F (song $3E was posted), menuExchOld its $0F0E.
   int menuExchOn = 0, menuExch68 = 0, menuExchSong = 0, menuExchOld = 0, menuExchHold = 0, prevYBtn = 0;
+  int menuExchWaveP = -1;   // the frame the exchange's BG3 wave task (C2/CECE -> FF/F716) first ran: P
   // SCREEN $0D (op 0xC8 $C0-$FF -> mode 3, C2/808F[3]): the ATB selector and the naming keyboard are ONE screen of the
   // shell, C2/E1E3's substates -- 0 the router C2/E1ED, 1 the keyboard C2/E21E, 2 the selector C2/E236, 3 the naming
   // build C2/E201, 4 the "Enter a name" prompt C2/E209. menuName68 is its $68, menuNameOut C2/83CA's fade-out running
@@ -13915,6 +13933,15 @@ int main(int argc, char** argv) {
       // init chain (C..C+15) and through the field's reload (phase 5); live from S0 on and during the field fade-in.
       if (!(menuPhase == 2 && menuShellF < menuShellS0) && menuPhase != 5)
         CtMenuClockTick(s7);
+      // The exchange's BG3 wave task (C2/CECE -> FF/F716): every second frame from P, through the close's fade and its `$2141`
+      // wait, until the `11` post's JSLs hold the CPU (MEASURED: f86 = P, f88 .. f248; `11 42` at f250).
+      // (On the frame the close posts `11` -- the fade done, the driver free -- its JSLs come first: no step there.)
+      if (menuExchOn && menuExchWaveP >= 0 && frameNo > menuExchWaveP && !((frameNo - menuExchWaveP) & 1) &&
+          menuExchSong != 2 && !menuExchHold &&
+          !(menuPhase == 4 && menuBri <= 0 && menuExchSong == 1 && !menuExchBusy())) {
+        long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+        CtMenuExchWaveTick(s7, rom, rl);
+      }
       if (menuPhase == 1) {                                  // entry fade: 15 frames, 1 step/frame (C0/1949)
         // menuT = k on the frame of the k-th `DEC $19` ($0119 = 15 - k): the X path's first DEC is the edge frame
         // itself (C0/193E), the shop's is the NEXT main-loop iteration (C0/0C76 -> C0/0CCE, so its trigger starts
@@ -14119,6 +14146,7 @@ int main(int argc, char** argv) {
           s7[0x0071] = 0; s7[0x0D36] = s7[0x0071]; s7[0x0D37] = s7[0x0071];   // C2/C7AC-C7B3
           CtMenuExchRoster(s7, glb);                         // C2/CD2B
           CtMenuExchGraph(s7, rom, rl);                      // the setup list's $FF:B77A -> $9380
+          CtMenuExchPrompt(s7, rom, rl);                     // C2/C9E5's C2/F905 + C2/FBB4: the prompt's text (MEASURED: f52 = S0)
           menuWinDim = menuWinColour;
           menuExchSong = 0; s7[0x0F0F] = 0;                  // C2/CB8B STZ $0F0F
           if (!(glb[0x01CF] & 0x40)) {                       // C2/CB8E-CB94
@@ -14167,6 +14195,11 @@ int main(int argc, char** argv) {
                                                              //   swap it per scheduler slot, so the byte is not the screen's)
           CtMenuExchValidate(s7);                            // C2/CAF3's C2/C805: $0F0D, $7F, $56 for the entry cell
           s7[0x9689] = 0x17;                                 // C2/C7D5
+          { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+            CtMenuExchWaveInit(s7, rom, rl);                 // C2/CE86 (FF/F677) and C2/CE9D: BG3's wave
+            CtMenuExchWaveTick(s7, rom, rl);                 // C2/CECE's first FF/F716 (MEASURED: f86 = P)
+            CtMenuExchFigure(1);                             // block 7's tiles uploaded (MEASURED: $8240 at f86, 7E:9693)
+            menuExchWaveP = frameNo; }
           s7[0x0D75] = 2;                                    // C2/CA39 (MEASURED: $0D75 = 02 by C2:CA3C at P, f86)
           menuFormAnimReq = 1;
         }
@@ -15632,6 +15665,7 @@ int main(int argc, char** argv) {
           mh.spriteAnimLen[c] = mnSprAnimLen[c];                      //   tables (see menu.h)
         }
         mh.partySprFrame = mnPartySprFrame;                           //   compose an arbitrary frame
+        mnAssets = &assets; mh.anySprFrame = mnAnySprFrame;            //   ...and any sprite's (C2/F422's blocks)
         { long rl = 0; mh.rom = CtBattleRom(&rl); mh.romLen = rl; }   // $CC item-name table (CT_ROM); NULL ok
         CtMenuWindowColourLoad(&mh, menuWinColour, menuWinDim);   // what the last C2/C511 and C2/A0E7 left
         mh.glb = glb;                                        // $7F -- the Form panel array reads $01DF
@@ -16441,7 +16475,7 @@ int main(int argc, char** argv) {
             if (menuExchOn == 2 && f.vm) CtSceneShopDone(f.vm);   //   bit6 -> $0118 bit6, so a parked `C8 00` steps over
             if (getenv("CT_SHOPTRACE")) printf("exchange: f%d closed, party %02X %02X %02X\n", frameNo,
                                                s7[0x2980], s7[0x2981], s7[0x2982]);
-            menuExchOn = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuScreen = 0;
+            menuExchOn = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
           }
           if (menuTest) {
             printf("menutest: %s (panels %d, hp %d/%d %d/%d, resume %s)\n",
@@ -19671,7 +19705,7 @@ int main(int argc, char** argv) {
         if (menuExchOn == 2) CtSceneShopDone(f.vm);          //   bit6 -> $0118 bit6, so a parked `C8 00` steps over
         if (getenv("CT_SHOPTRACE")) printf("exchange: f%d closed, party %02X %02X %02X\n", frameNo,
                                            s7r[0x2980], s7r[0x2981], s7r[0x2982]);
-        menuExchOn = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuScreen = 0;
+        menuExchOn = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
       }
       if (menuTest) {
         printf("menutest: %s (panels %d, hp %d/%d %d/%d, resume %s)\n",

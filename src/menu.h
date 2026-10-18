@@ -79,6 +79,10 @@ typedef struct CtMenuHost {
   const uint8_t* spriteAnim[7];
   unsigned       spriteAnimLen[7];
   const uint8_t* (*partySprFrame)(int charId, int asmFrame, int* cropX, int* cropY);
+  // anySprFrame(sprId, asmFrame, cropX, cropY) = CT_ASSET_SPRITE[sprId] (any sprite: the $E4:F000 header's index) composed at
+  //   that assembly frame, cropped like partySprFrame; (cropX, cropY) = the crop's corner in the composer's canvas, whose
+  //   (CT_SPR_OX, CT_SPR_OY) is the object's position.
+  const uint8_t* (*anySprFrame)(int sprId, int asmFrame, int* cropX, int* cropY);
   const uint8_t* handCursor; // the party-panel SELECTION hand (☞) = ROM $FF/9CF0 (CT_ASSET_NAMESPRITES id 0,
                              // [w u8][h u8] + RGBA) reused; NULL = fall back to a plain triangle marker
   const uint8_t* rom;        // the loaded ROM image (battle.c CtBattleRom) — the Item screen decodes
@@ -508,6 +512,10 @@ int  CtMenuExchMove(uint8_t* mem, int dir);
 void CtMenuExchValidate(uint8_t* mem);      // C2/C805 alone (the build's, on the entry cell)
 int  CtMenuExchPick(uint8_t* mem);
 int  CtMenuExchSecond(uint8_t* mem, const uint8_t* glb, int a);
+void CtMenuExchPrompt(uint8_t* mem, const uint8_t* rom, long romLen);
+void CtMenuExchFigure(int on);   // block 7's figure on screen (from P, when the task C2/F657 uploads its tiles)     // C2/C9E5's prompt: C2/F905 + C2/FBB4 (at S0)
+void CtMenuExchWaveInit(uint8_t* mem, const uint8_t* rom, long romLen);   // C2/CE86's FF/F677 + C2/CE9D: BG3's wave set up
+void CtMenuExchWaveTick(uint8_t* mem, const uint8_t* rom, long romLen);   // FF/F716: the task's step (every second frame)
 // Screen $07's picture from the menu's WRAM (the chrome, the panels, the members, the hands): menu.c says what is OPEN.
 void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink);
 // C2/CC4F: hand CtMenuChrome the LIVE panel array so the FORM views' per-panel dim comes from the

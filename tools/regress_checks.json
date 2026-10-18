@@ -20707,7 +20707,7 @@
         "tools/menu_exchange_cmp.py"
       ],
       "expect": [
-        "menu-exchange: 2267 frame-fields, 0 differing",
+        "menu-exchange: 2852 frame-fields, 0 differing",
         "menu-exchange: cartridge mode 5 open f35, cursor f86, fade-in done f95, swap f191 (000302018080808080), field back f319"
       ],
       "pin": [
@@ -20732,10 +20732,77 @@
           "find": "  if (mem[0x0D36]) return;                                         // 2CD72 LDA $0D36 / BNE ->2CD99",
           "replace": "  return; /* MUT: no reserve scan */",
           "why": "C2/CD2B's reserve scan (with $0D36 = 0): Robo never enters the roster, $0F0C = 0 and Right finds no reserve column"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "  if (!(m[0x0F11] & 3)) { m[0x0D0C]++; m[0x0D0E]--; m[0x0F10] -= 2; }",
+          "replace": "  if (!(m[0x0F11] & 3)) { m[0x0D0C]++; m[0x0D0E]--; m[0x0F10] -= 1; }   /* MUT */",
+          "why": "FF/F716 takes $0F10 back by two every fourth step"
         }
       ],
       "note_pass": "the party exchange (menu mode 5, screen $07) is the cartridge's frame for frame: Y on the field at storyline 0x49, the song task, the cursor on the two columns, Robo picked from the reserve and swapped for Marle, the close and the field's return -- every byte the screen owns equal over 2267 frame-fields",
-      "notes": "Roadmap G1a item 2 (2026-10-14). disasm/notes/menu2_form_screen.md 2.14. The recipe gato_wait on both sides (its state on the cartridge under the rule, its WRAM dump on the port with its SPC: CT_AUDIO_SEEDSTATE + CT_AUDIO_LOCKSTEP), `7F0000=49, 2982=02, 2983=03, 0126=00` poked on both. The cartridge's milestones are printed on the second line, so a recipe that changed under the check is visible. The picture is not graded here (its BG3 wave, prompt text and hooded figure are OPEN). Re-pin only with both sides read again; the 0 must stay 0."
+      "notes": "Roadmap G1a item 2 (2026-10-14). disasm/notes/menu2_form_screen.md 2.14. The recipe gato_wait on both sides (its state on the cartridge under the rule, its WRAM dump on the port with its SPC: CT_AUDIO_SEEDSTATE + CT_AUDIO_LOCKSTEP), `7F0000=49, 2982=02, 2983=03, 0126=00` poked on both. The cartridge's milestones are printed on the second line, so a recipe that changed under the check is visible. The picture is not graded here (its BG3 wave, prompt text and hooded figure are OPEN). Re-pin only with both sides read again; the 0 must stay 0. | 2026-10-18: + the BG3 wave's bytes ($0F10-$0F1D, $0D0C-$0D0F, $9240-$925F) from P: C2/CE86's FF/F677 and C2/CE9D at P, FF/F716 every second frame to the close's `11` post (menu.c CtMenuExchWaveInit / Tick); 2852 frame-fields, 0 differing."
+    },
+    {
+      "name": "menu-exchange-picture-vs-oracle",
+      "argv": [
+        "python",
+        "tools/menu_exchange_pic_cmp.py",
+        "--drive",
+        "88",
+        "100",
+        "112",
+        "124",
+        "196",
+        "202",
+        "220",
+        "232",
+        "244"
+      ],
+      "env": {},
+      "expect": [
+        "exchange-picture: cartridge f88 port f87: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f100 port f99: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f112 port f111: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f124 port f123: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f196 port f195: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f202 port f201: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f220 port f219: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f232 port f231: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f244 port f243: 0 px differ, 0 outside the figure"
+      ],
+      "pin": [
+        "^exchange-picture: "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/menu_exchange_pic_cmp.py"
+      ],
+      "note_pass": "the party exchange's picture pixel for pixel against the cartridge -- the BG3 wave, the prompt's text and its hooded figure, the panels and the members -- from the fade-in's last frame through the move, the swap and the close's start",
+      "notes": "tools/menu_exchange_pic_cmp.py (menu_exchange_cmp's recipe and drive; the port's shot N - 1 against the cartridge's peek N). Ported 2026-10-18: BG3 (C2/CE86's FF/F677: FF:E8DC decompressed to the 2bpp characters, the six-row map, palettes 6-7; HOFS by the HDMA $9200 -> $9240[y & 15], VOFS $0D0E + 1; BG3 shows where BG2 leaves colour 0 -- TMW masks it by window 2, empty here); BG1 the prompt (C2/C9E5: string 4 of $FF:CF3B through C2/F905 = C2/57DF / 5823, laid by C2/FBB4); OBJ the figure (C2/F422's block 7: the $E4:F000 header 0x4F at (32, 202), C2/F871's units); and the picked reserve panel stays (C2/EF05 is a copy, not a blank). Frames left out, open: the hand on the reserve column 2 px off (f130, f160, f190: ~150 px), the pick's frames f148-149, a member's pose at f184 / f214, and the fades a brightness step apart (f94, f238).",
+      "mutations": [
+        {
+          "file": "src/menu.c",
+          "find": "        int by = (y + 1 + vofs) & 0xFF;",
+          "replace": "        int by = (y + vofs) & 0xFF;   /* MUT */",
+          "why": "the PPU fetches BG line y + 1"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "    int cx = 0, cy = 0; const uint8_t* b = h->anySprFrame(MEXCH_FIG_SPR, 0, &cx, &cy);",
+          "replace": "    int cx = 0, cy = 0; const uint8_t* b = NULL;   /* MUT */",
+          "why": "the prompt's figure is C2/F422's block 7"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "  m[0x020C] = (m[0x0D7C] | m[0x0D7D]) ? 5 : 4;",
+          "replace": "  m[0x020C] = 5;   /* MUT */",
+          "why": "the prompt is string 4 when $0D7C is clear"
+        }
+      ]
     },
     {
       "name": "field-menu-form-locked-member",
