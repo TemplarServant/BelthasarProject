@@ -6883,6 +6883,32 @@ static int runHookPc(const char* romPath, const char* statePath, int hookPc, int
         if (!inInt && s->cpu->intWanted && !s->cpu->waiting && !s->cpu->stopped) { inInt = 1; intSp = s->cpu->sp; ints++; curIsNmi = s->cpu->nmiWanted; }
         g_cycTag = inInt ? 1 : (s->cpu->k == 0xC7 && (s->cpu->pc == 0x09E0 || s->cpu->pc == 0x09E3)) ? 5 : 0;
       }
+      // CT_HOOK_DUMPCALLS=<prefix> + CT_HOOK_DUMPEXIT=<hexpc>[,<hexpc>...]: every call's WRAM pair -- <prefix>_<n>_in.wram at
+      // each visit to the hook (the routine's first instruction) and <prefix>_<n>_out.wram at the first exit PC after it
+      // (its RTL, before it runs). A call the CPU left its bank during (an interrupt: the hooked routine must not leave
+      // its bank itself) writes <prefix>_<n>_int.wram instead of _out, so a grader can set it aside. How FD/C2C1's builder is graded against the cartridge (tools/hdma_build_cmp.py).
+      // CT_HOOK_DUMPCALLS_FROM=<f>: only calls from the run's frame f on; CT_HOOK_DUMPCALLS_MAX=<n>: the cap (default 256).
+      { static const char* cp; static int init, armed, intr, ncall, from, cap = 256; static uint32_t ex[8]; static int nex;
+        if (!init) { init = 1; cp = getenv("CT_HOOK_DUMPCALLS"); const char* e = getenv("CT_HOOK_DUMPEXIT");
+                     if (getenv("CT_HOOK_DUMPCALLS_FROM")) from = atoi(getenv("CT_HOOK_DUMPCALLS_FROM"));
+                     if (getenv("CT_HOOK_DUMPCALLS_MAX")) cap = atoi(getenv("CT_HOOK_DUMPCALLS_MAX"));
+                     while (e && *e && nex < 8) { ex[nex++] = (uint32_t)strtoul(e, (char**)&e, 16); if (*e == ',') e++; } }
+        if (cp && ncall < cap && f >= from) {
+          uint32_t pcn = ((uint32_t)s->cpu->k << 16) | s->cpu->pc; char fn[1024];
+          if (armed) {
+            if (s->cpu->k != hookBank) intr = 1;
+            for (int q = 0; q < nex; q++) if (pcn == ex[q]) {
+              snprintf(fn, sizeof fn, "%s_%d_%s.wram", cp, ncall, intr ? "int" : "out");
+              FILE* df = fopen(fn, "wb"); if (df) { fwrite(s->ram, 1, 0x20000, df); fclose(df); }
+              printf("hookpc: call %d (frame %u) exit %06X%s\n", ncall, fr, pcn, intr ? " interrupted" : "");
+              armed = 0; ncall++; break; }
+          }
+          if (!armed && s->cpu->k == hookBank && s->cpu->pc == hookOff && !s->cpu->intWanted) {
+            snprintf(fn, sizeof fn, "%s_%d_in.wram", cp, ncall);
+            FILE* df = fopen(fn, "wb"); if (df) { fwrite(s->ram, 1, 0x20000, df); fclose(df); }
+            armed = 1; intr = 0;
+          }
+        } }
       int detail = (cycSplit >= 2 && f == cycFrame);
       uint32_t pcKey = ((uint32_t)s->cpu->k << 16) | s->cpu->pc; uint64_t cyc0 = s->cycles; int wasInt = inInt;
       if (pollHist && s->cpu->k == 0xC7) { if (s->cpu->pc == 0x09E0) pSince++; else if (s->cpu->pc == 0x09E5) { long k = pSince - 1; if (k < 0) k = 0; pHist[k > 64 ? 64 : k]++; pSince = 0; } }
@@ -7580,6 +7606,7 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
 // VRAM, CGRAM and OAM. The first disagreement is printed with the address the translation was at -- nothing is
 // averaged, so a green run means the translation ran exactly the cartridge's instruction stream and clock.
 #include "seq_xlat.h"
+#include "hdma_table.h"   // --hdmabuild / --hdmafuzz: FD/C2C1 native
 #include "seq_race.h"   // --racestep: the race task $7E:485D, native
 // --racestep's sound: what the task sends the ports, printed as the writes the ROM makes ($2141 = pitch, then $2140 = $89).
 static void racestepApu(void* c, uint8_t p) { (void)c; printf("  w 002141 = %02X\n  w 002140 = 89\n", p); }
@@ -15936,19 +15963,110 @@ static int ctOracleOnlyRefuse(void) {
 #endif
 
 int main(int argc, char** argv) {
-  // --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (src/xlat/hdma_fd.c, CtXlatHdmaBuild) on a
-  // 128 KB WRAM image and write what it leaves -- graded against the cartridge's own WRAM before and after one call
-  // (--hookpc FDC2C1 / C000CB with CT_HOOK_DUMPWRAM).
+  // --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (native, src/hdma_table.c -- the one every
+  // caller runs) on a 128 KB WRAM image and write what it leaves -- graded against the cartridge's own WRAM before and after
+  // one call (tools/hdma_build_cmp.py: --hookpc FDC2C1 / the RTL with CT_HOOK_DUMPWRAM). --hdmabuildxlat runs the
+  // translation (src/xlat/hdma_fd.c on the vendored core) instead, the reference.
+  // --hdmafuzz <N> [seed] [base.wram]: N random WRAM images (every mode of both sets, every branch: `$0126` 0..5 under bit
+  // 0 set / 0..2 clear, `$0127` 0..FF, the wave's `$1DF9` / `$1DFD` / `$1DFB`, `$53` bit 7, `$7F:0351`'s parity, the rest
+  // random) through the native builder and the translation; prints the first differing byte of any image and a census.
 #ifndef CT_ORACLE_ONLY   // the translated stages and the native sequences: not the cartridge's modes
-  if (argc == 4 && !strcmp(argv[1], "--hdmabuild")) {
-    FILE* rf = fopen(DEFAULT_ROM, "rb"); if (!rf) { fprintf(stderr, "hdmabuild: no ROM\n"); return 1; }
-    static uint8_t rom[0x600000], w[0x20000]; long rl = (long)fread(rom, 1, sizeof rom, rf); fclose(rf);
+  if (argc == 4 && (!strcmp(argv[1], "--hdmabuild") || !strcmp(argv[1], "--hdmabuildxlat"))) {
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    static uint8_t w[0x20000];
     FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w, 1, sizeof w, wf) != sizeof w) { fprintf(stderr, "hdmabuild: bad WRAM\n"); return 1; }
     fclose(wf);
-    int r = CtXlatHdmaBuild(rom, rl, w);
+    int xl = !strcmp(argv[1], "--hdmabuildxlat");
+    int r = xl ? CtXlatHdmaBuild(rom, rl, w) : CtHdmaBuildNative(w, rom, rl);
     FILE* of = fopen(argv[3], "wb"); if (of) { fwrite(w, 1, sizeof w, of); fclose(of); }
-    printf("hdmabuild: FD/C2C1 -> %d ($0153 %02X)\n", r, w[0x0153]);
+    printf("hdmabuild: FD/C2C1 (%s) -> %d ($0153 %02X)\n", xl ? "translation" : "native", r, w[0x0153]);
     return r == 0 ? 0 : 1;
+  }
+  // --hdmabuildcmp <prefix> <n>: grade the native builder against the cartridge's calls <prefix>_<k>_in.wram ->
+  // <prefix>_<k>_out.wram, k < n (ct.exe --hookpc FDC2C1 with CT_HOOK_DUMPCALLS; a missing pair -- an interrupted call -- is
+  // skipped). EXACT: all 128 KB equal outside the stack page $0600-$06FF. WRITTEN: the entry's tables and data ($7F:0F80-
+  // $1E26) and DP $01D9-$01EF poisoned with $5A and with $A5 and built again -- a byte both builds agree on is one
+  // the builder wrote, and it must be the cartridge's. Prints `hdmabuildcmp: call <k> ...` for a failing call and one
+  // `hdmabuildcmp: key <k> <set> <mode> <n> <dfd> <df9> <tail> <b7> <odd>` line a call (the census, from the entry image).
+  if (argc == 4 && !strcmp(argv[1], "--hdmabuildcmp")) {
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    int n = atoi(argv[3]); long calls = 0, exact = 0, written = 0, bad = 0;
+    static uint8_t ci[0x20000], co[0x20000], nw[0x20000], p0[0x20000], p1[0x20000];
+    static const int pr[2][2] = { { 0x10F80, 0x11E27 }, { 0x01D9, 0x01F0 } };   // not $1DFB: the wave's step, read then stepped
+    for (int k = 0; k < n; k++) {
+      char fi[1024], fo[1024]; snprintf(fi, sizeof fi, "%s_%d_in.wram", argv[2], k); snprintf(fo, sizeof fo, "%s_%d_out.wram", argv[2], k);
+      FILE* a = fopen(fi, "rb"); FILE* b = fopen(fo, "rb");
+      int ok = a && b && fread(ci, 1, sizeof ci, a) == sizeof ci && fread(co, 1, sizeof co, b) == sizeof co;
+      if (a) fclose(a); if (b) fclose(b);
+      if (!ok) continue;
+      calls++;
+      memcpy(nw, ci, sizeof nw); memcpy(p0, ci, sizeof p0); memcpy(p1, ci, sizeof p1);
+      for (int q = 0; q < 2; q++) { memset(p0 + pr[q][0], 0x5A, pr[q][1] - pr[q][0]); memset(p1 + pr[q][0], 0xA5, pr[q][1] - pr[q][0]); }
+      if (CtHdmaBuildNative(nw, rom, rl) || CtHdmaBuildNative(p0, rom, rl) || CtHdmaBuildNative(p1, rom, rl)) {
+        bad++; printf("hdmabuildcmp: call %d: the builder refused ($0126 %02X $0153 %02X)\n", k, ci[0x0126], ci[0x0153]); continue; }
+      int d = -1, nd = 0;
+      for (int i = 0; i < 0x20000; i++) if ((i < 0x0600 || i >= 0x0700) && nw[i] != co[i]) { if (d < 0) d = i; nd++; }
+      int wd = -1, nwd = 0; long wr = 0;
+      for (int q = 0; q < 2; q++) for (int i = pr[q][0]; i < pr[q][1]; i++)
+        if (p0[i] == p1[i]) { wr++; if (p0[i] != co[i]) { if (wd < 0) wd = i; nwd++; } }
+      written += wr;
+      if (d < 0 && wd < 0) exact++;
+      else { bad++;
+        int at = d >= 0 ? d : wd; const uint8_t* got = d >= 0 ? nw : p0;
+        printf("hdmabuildcmp: call %d ($0126 %02X $0127 %02X $0153 %02X): %d byte(s) differ, %d written byte(s) wrong; first %s:%04X cartridge %02X native %02X\n",
+               k, ci[0x0126], ci[0x0127], ci[0x0153], nd, nwd, at < 0x10000 ? "7E" : "7F", at & 0xFFFF, co[at], got[at]); }
+      int setB = !(ci[0x0153] & 1) || ci[0x0126] >= 3, md = ci[0x0126] % 3;
+      if (md && !ci[0x0127]) md = 0;
+      printf("hdmabuildcmp: key %d %c %d %02X %d %d %d %d %d\n", k, setB ? 'B' : 'A', md, ci[0x0127], ci[0x1DFD] != 0, ci[0x1DF9] != 0,
+             (ci[0x1DF9] | ci[0x1DFA] | ci[0x1DFD] | ci[0x1DFE]) != 0, md == 0 && (ci[0x0153] & 0x80), ci[0x10351] & 1);
+    }
+    printf("hdmabuildcmp: %ld calls, %ld exact, %ld written bytes, %ld wrong\n", calls, exact, written, bad);
+    return bad ? 1 : 0;
+  }
+  if ((argc >= 3 && argc <= 5) && !strcmp(argv[1], "--hdmafuzz")) {
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    long n = strtol(argv[2], NULL, 0);
+    uint32_t rs = argc >= 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u;
+    static uint8_t base[0x20000], a[0x20000], b[0x20000];
+    int haveBase = 0;
+    if (argc == 5) { FILE* bf = fopen(argv[4], "rb"); haveBase = bf && fread(base, 1, sizeof base, bf) == sizeof base; if (bf) fclose(bf);
+                     if (!haveBase) { fprintf(stderr, "hdmafuzz: bad WRAM %s\n", argv[4]); return 1; } }
+#define HF_RND() (rs ^= rs << 13, rs ^= rs >> 17, rs ^= rs << 5, rs)
+    static long cen[2][3][128];   // [set B][the mode run][branch key: n = 0, n > $28, ch2 wave, ch3 wave, tail wave, $53 bit 7, $0351 odd]
+    long bad = 0, xfail = 0, nfail = 0;
+    for (long k = 0; k < n; k++) {
+      if (haveBase && (k & 1)) memcpy(a, base, sizeof a);
+      else for (int i = 0; i < 0x20000; i += 4) { uint32_t v = HF_RND(); memcpy(a + i, &v, 4); }
+      int setA = HF_RND() & 1;
+      a[0x0153] = (uint8_t)((a[0x0153] & 0xFE) | setA);
+      if (HF_RND() & 1) a[0x0153] &= 0x7F;
+      a[0x0126] = (uint8_t)(HF_RND() % (setA ? 6 : 3));
+      unsigned r = HF_RND() & 7;
+      a[0x0127] = (uint8_t)(r == 0 ? 0 : r < 5 ? HF_RND() % 0x29 : r == 5 ? 0x28 : HF_RND());
+      for (int q = 0; q < 2; q++) { unsigned z = HF_RND() & 3;   // $1DF9 / $1DFD: off, low byte only, high byte only, both
+        unsigned ad = q ? 0x1DFD : 0x1DF9; a[ad] = (z & 1) ? (uint8_t)(HF_RND() | 1) : 0; a[ad + 1] = (z & 2) ? (uint8_t)(HF_RND() | 1) : 0; }
+      memcpy(b, a, sizeof b);
+      int rx = CtXlatHdmaBuild(rom, rl, a);
+      int rn = CtHdmaBuildNative(b, rom, rl);
+      if (rx) { xfail++; continue; }
+      if (rn) { nfail++; continue; }
+      int d = -1; for (int i = 0; i < 0x20000; i++) if (a[i] != b[i]) { d = i; break; }
+      unsigned md = a[0x0126] % 3, nn = a[0x0127];
+      int setB = !setA || a[0x0126] >= 3;
+      int key = (nn == 0) | (nn > 0x28) << 1 | (a[0x1DFD] != 0) << 2 | (a[0x1DF9] != 0) << 3 |
+                ((a[0x1DF9] | a[0x1DFA] | a[0x1DFD] | a[0x1DFE]) != 0) << 4 | ((a[0x0153] >> 7) & 1) << 5 | (a[0x10351] & 1) << 6;
+      cen[setB][md][key]++;
+      if (d >= 0) { if (bad++ < 8) printf("hdmafuzz: image %ld ($0126 %02X $0127 %02X $0153 %02X) differs at %c:%04X: translation %02X native %02X\n",
+                                         k, a[0x0126], nn, a[0x0153], d < 0x10000 ? 'E' : 'F', d & 0xFFFF, a[d], b[d]); }
+    }
+#undef HF_RND
+    printf("hdmafuzz: %ld images, %ld differ, %ld translation stops, %ld native refusals\n", n, bad, xfail, nfail);
+    for (int sb = 0; sb < 2; sb++) for (int md = 0; md < 3; md++) {
+      int keys = 0; long imgs = 0;
+      for (int q = 0; q < 128; q++) if (cen[sb][md][q]) { keys++; imgs += cen[sb][md][q]; }
+      printf("hdmafuzz: set %c mode %d: %ld images, %d of the 128 branch keys\n", sb ? 'B' : 'A', md, imgs, keys);
+    }
+    return bad || xfail || nfail ? 1 : 0;
   }
   // --racestep <in.wram>: run the race's per-frame task $7E:485D (src/seq_race.c, CtRaceStep485D) once over a 128 KB WRAM
   // image and print every byte it changed -- graded against `--callrom 7E485D --writes` from the same frame's state

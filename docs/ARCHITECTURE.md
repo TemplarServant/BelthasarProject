@@ -169,7 +169,7 @@ oracle into one labelled line of C, and `seq_xlat.c` runs it over the vendored 6
 | `src/xlat/wipe_c3.c` | The field's window wipe (`C3/01E4` and its seed routine `C3/02DD`). |
 | `src/xlat/owwin_c6.c` | The same window routine called from the overworld (`$C6:E241`). |
 | `src/xlat/gwarp_fd.c` | The gate warp effect (bank `$FD`). |
-| `src/xlat/hdma_fd.c` | The HDMA table builder `FD/C2C1`. |
+| `src/xlat/hdma_fd.c` | The HDMA table builder `FD/C2C1` -- ct.exe's reference only since 2026-10-18 (`--hdmafuzz`); every caller runs the native `src/hdma_table.c` and Belthasar does not link the translation. |
 
 `tools/gen/xlat_all.py` makes all five from the ROM: it runs the oracle's unique traces from the recipe states
 (`tools/recipes/attract_*`) and then `tools/gen/xlat.py` with the options each file was made with; `gwarp_fd.c` and
