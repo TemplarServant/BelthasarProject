@@ -16,7 +16,7 @@
 #include "rom_verify.h"
 #include "objslot.h"       // FD/E39C, the palette-effect records op 0x88 arms (the battle's body)
 #include "lz.h"
-#include "data/ct_regroup.h"          // baked ROM battle-RETURN regroup script templates (tools/_gen_regroup.py)
+#include "tables/ct_regroup.h"          // baked ROM battle-RETURN regroup script templates (tools/_gen_regroup.py)
 #include "wipe.h"                     // CtWipeRoutine: the window wipe C3/01E4 and its seed C3/02DD, native
 #define CTPI 3.14159265358979323846
 

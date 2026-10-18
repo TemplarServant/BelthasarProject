@@ -11,24 +11,24 @@
 #include <stdio.h>
 #include <stdlib.h>   // atoi (config number-strip values)
 #include "menu.h"
-#include "data/menu_icons.h"   // captured OBJ ribbon icons (6 base + 6 selected-highlight, 16x16 RGBA)
-#include "data/menu_chrome.h"  // BYTE-EXACT BG2 chrome: marble desktop + dark-blue window panels + ribbon box
-#include "data/menu_shop.h"    // the SHOP screen ($0C): its BG2 chrome, narrow digits and text palettes (captured)
-#include "data/menu_loader.h"  // the LOAD screen (mode 0 / screen 0x0E): its BG2 plane + the two ROM
+#include "tables/menu_icons.h"   // captured OBJ ribbon icons (6 base + 6 selected-highlight, 16x16 RGBA)
+#include "tables/menu_chrome.h"  // BYTE-EXACT BG2 chrome: marble desktop + dark-blue window panels + ribbon box
+#include "tables/menu_shop.h"    // the SHOP screen ($0C): its BG2 chrome, narrow digits and text palettes (captured)
+#include "tables/menu_loader.h"  // the LOAD screen (mode 0 / screen 0x0E): its BG2 plane + the two ROM
                                //   string tables it shows (chapter title, era name)
-#include "data/menu_wingrad.h"  // the ROM's WINDOW-GRADIENT lists ($FF:BBF2), run through C2/86DD below
-#include "data/menu_desc.h"   // the ROM's STORED item/equip description strings (CC/2EB1, C2/F2F3)
-#include "data/menu_arrow.h"   // the ribbon selection cursor arrow (OBJ tile 0x22, 16x16, pal7)
-#include "data/menu_saveform.h" // Save-screen (opt5) BG palette: the slot buttons' grey-marble CGRAM
-#include "data/menu_opt0.h"     // opt0 Equip/Status detail: element plaques + 48x48 portrait + equip icons
-#include "data/menu_configgrid.h" // Config screen icon grid: 10 setting icons + checkboxes + speed faces (RGBA)
-#include "data/menu_itemoverlay.h" // the Item target overlay's BG2 window cells ($FF:C0A6, captured from VRAM)
-#include "data/menu_itemdetail.h" // Item screen: the grey selection hand cursor (OBJ tile 0x20, pal0, RGBA)
-#include "data/menu_tech.h"     // Tech screen Single/Dual/Triple category tabs (BG1 tiles 0x164-0x16F)
-#include "data/menu_romdata.h" // BAKED menu ROM data (item/tech names, tech tables, config, categories) -- ROM-free
-#include "data/menu_itemuse.h" // BAKED item-menu Use/Organize data ($7700 props + $CC effect tables) -- ROM-free
-#include "data/menu_equip.h"   // BAKED EQUIP data: the $7A00/$7B00/$7C00 item pages + the bonus/stat tables
-#include "data/menu_techrom.h" // BAKED TECH data: the 37-group boundary/mask tables + the MP index page
+#include "tables/menu_wingrad.h"  // the ROM's WINDOW-GRADIENT lists ($FF:BBF2), run through C2/86DD below
+#include "tables/menu_desc.h"   // the ROM's STORED item/equip description strings (CC/2EB1, C2/F2F3)
+#include "tables/menu_arrow.h"   // the ribbon selection cursor arrow (OBJ tile 0x22, 16x16, pal7)
+#include "tables/menu_saveform.h" // Save-screen (opt5) BG palette: the slot buttons' grey-marble CGRAM
+#include "tables/menu_opt0.h"     // opt0 Equip/Status detail: element plaques + 48x48 portrait + equip icons
+#include "tables/menu_configgrid.h" // Config screen icon grid: 10 setting icons + checkboxes + speed faces (RGBA)
+#include "tables/menu_itemoverlay.h" // the Item target overlay's BG2 window cells ($FF:C0A6, captured from VRAM)
+#include "tables/menu_itemdetail.h" // Item screen: the grey selection hand cursor (OBJ tile 0x20, pal0, RGBA)
+#include "tables/menu_tech.h"     // Tech screen Single/Dual/Triple category tabs (BG1 tiles 0x164-0x16F)
+#include "tables/menu_romdata.h" // BAKED menu ROM data (item/tech names, tech tables, config, categories) -- ROM-free
+#include "tables/menu_itemuse.h" // BAKED item-menu Use/Organize data ($7700 props + $CC effect tables) -- ROM-free
+#include "tables/menu_equip.h"   // BAKED EQUIP data: the $7A00/$7B00/$7C00 item pages + the bonus/stat tables
+#include "tables/menu_techrom.h" // BAKED TECH data: the 37-group boundary/mask tables + the MP index page
 #include "ct_vm.h"   // CtGetName (the engine's $7E2C23 name-buffer analogue)
 
 // Byte at a ROM FILE OFFSET, served from the baked menu_romdata.h tables (item/tech names, tech range/MP/

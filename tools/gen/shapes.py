@@ -67,7 +67,9 @@ def top_count(body):
     return n + item
 
 
-DECL = re.compile(r'((?:static\s+)?(?:const\s+)?[A-Za-z_][\w\s\*]*?\b[A-Za-z_]\w*\s*((?:\[[^\]]*\])+)?)\s*=\s*', re.S)
+# (an anonymous struct type -- `static const struct { short y0, y1; } name[N] = {...}` -- is a declaration too)
+DECL = re.compile(r'((?:static\s+)?(?:const\s+)?(?:struct\s*\{[^{}]*\}\s*|[A-Za-z_][\w\s\*]*?\b)[A-Za-z_]\w*\s*'
+                  r'((?:\[[^\]]*\])+)?)\s*=\s*', re.S)
 
 
 def shape_header(text):

@@ -50,35 +50,38 @@
 #include "motion.h"      // what moves each pixel of the field picture: the higher internal scale, the frames between
 #include "fieldnative.h" // the frames between drawn natively from the map's layers and the sprites' pixels
 #include "tileanim.h"    // FD/DE98 + FD/E022: the location's animated BG tiles
-#include "data/ow_gullmap.h" // ROM tile name -> captured gull atlas slot (derived by pixel identity)
-#include "data/battle_hud.h"  // battle-mode HUD strip: baked chrome/palettes/tilemaps (battle_hud_render.md)
-#include "data/battle_stance.h"  // battle-entry combatant STANCE OBJs: baked tiles/palettes/assembly (battle_stance.md)
-#include "data/battle_anim.h"    // attack/idle keyframes + trajectory tables (battle_actionfx.md A2/A3, stance ADD.4).
+#ifdef CT_DATAFREE
+#include "datapack.h"    // the tables below, loaded from the player's pack (a data-free build)
+#endif
+#include "tables/ow_gullmap.h" // ROM tile name -> captured gull atlas slot (derived by pixel identity)
+#include "tables/battle_hud.h"  // battle-mode HUD strip: baked chrome/palettes/tilemaps (battle_hud_render.md)
+#include "tables/battle_stance.h"  // battle-entry combatant STANCE OBJs: baked tiles/palettes/assembly (battle_stance.md)
+#include "tables/battle_anim.h"    // attack/idle keyframes + trajectory tables (battle_actionfx.md A2/A3, stance ADD.4).
                             //   ctBattleAnimTiles[6]/[7] (GATO idle kf6/kf7) are now anim-engine FIXTURES: the
                             //   pose engine's gather reproduces them byte-exact (ctAnimengSelfcheck / STEP-4).
-#include "data/battle_anim_add.h"// Crono idle variants (T1) + GATO claw-swipe (T2, still used stage-2) + ctGatoIdleTrajV2
+#include "tables/battle_anim_add.h"// Crono idle variants (T1) + GATO claw-swipe (T2, still used stage-2) + ctGatoIdleTrajV2
                             //   (T3): RETIRED by the anim-engine idle tick -- kept as a FIXTURE (unused in the render path).
-#include "data/battle_gato_faces.h" // GATO directional facing rep frames UP/LEFT/RIGHT (battle_pc_approach_facing.md §2):
+#include "tables/battle_gato_faces.h" // GATO directional facing rep frames UP/LEFT/RIGHT (battle_pc_approach_facing.md §2):
                             //   RETIRED by the anim-engine walk facings (idx06-0B) -- kept as a FIXTURE (unused in render).
 // ANIM-ENGINE STAGE 1 (battle_anim_engine.md §B.1): the REAL GATO pose engine -- the E3 sprite-assembly
 // records (positions + tile-gather cell-words, ADDENDUM 1 layout), the resolved per-facing pose windows,
 // and the $7F8000 sheet fixture. Drives GATO idle/walk/facings from ROM data instead of the retired bakes.
-#include "data/animeng_e3_gato.h"
-#include "data/animeng_e4_gato.h"
-#include "data/animeng_sheet_gato.h"
+#include "tables/animeng_e3_gato.h"
+#include "tables/animeng_e4_gato.h"
+#include "tables/animeng_sheet_gato.h"
 // ANIM-ENGINE STAGE 3 (battle_anim_engine.md §B.3): the PC pose engine (Crono + Marle). Same builder/compose
 // as GATO (builder §6: one shared machine); the 4-cell PC records + ROM sheets + resolved windows are these:
-#include "data/animeng_e3_pc.h"     // Crono base $DC27B0 / Marle base $DC9AD8 sprite-assembly records (sparse)
-#include "data/animeng_sheet_pc.h"  // Crono sheet $D272C0 / Marle sheet $D40000 (uncompressed IN ROM -- no fixture)
-#include "data/animeng_e4_pc.h"     // resolved pose selections: idle cycle + attack ladder + foot origins
-#include "data/battle_gato_atkfaces.h" // GATO directional ATTACK poses (rear-up+strike) UP/LEFT/RIGHT (battle_animeng_corpus.md CAPTURE 1)
+#include "tables/animeng_e3_pc.h"     // Crono base $DC27B0 / Marle base $DC9AD8 sprite-assembly records (sparse)
+#include "tables/animeng_sheet_pc.h"  // Crono sheet $D272C0 / Marle sheet $D40000 (uncompressed IN ROM -- no fixture)
+#include "tables/animeng_e4_pc.h"     // resolved pose selections: idle cycle + attack ladder + foot origins
+#include "tables/battle_gato_atkfaces.h" // GATO directional ATTACK poses (rear-up+strike) UP/LEFT/RIGHT (battle_animeng_corpus.md CAPTURE 1)
 // (data/battle_bracket.h is retired: the selection bracket is C1/1115 + the boot's UI tiles, battleBracketRender.)
 // (data/battle_gato_song.h and data/battle_end.h are retired: the anim engine draws the song and the victory/fallen poses.)
-#include "data/battle_settle.h"  // victory SETTLE-IN ladder: the ~72f animated celebration INTO the held pose (C.2)
-#include "data/battle_fx.h"      // action feedback: baked damage-digit tiles/rise-table + the hurt-flash palette (battle_actionfx.md)
-#include "data/battle_hetake.h"  // FOREST scenario: 3x Hetake sprites/anchors/attack/cursor (battle_scenario2.md)
-#include "data/battle_dissolve.h"// enemy-death dissolve: dither matrix + pal4 death recolor (battle_dissolve.md)
-#include "data/battle_marleatk.h"// MARLE crossbow attack: 4 pose keyframes + 79-row trajectory + spark (battle_actionfx.md ADD-MA)
+#include "tables/battle_settle.h"  // victory SETTLE-IN ladder: the ~72f animated celebration INTO the held pose (C.2)
+#include "tables/battle_fx.h"      // action feedback: baked damage-digit tiles/rise-table + the hurt-flash palette (battle_actionfx.md)
+#include "tables/battle_hetake.h"  // FOREST scenario: 3x Hetake sprites/anchors/attack/cursor (battle_scenario2.md)
+#include "tables/battle_dissolve.h"// enemy-death dissolve: dither matrix + pal4 death recolor (battle_dissolve.md)
+#include "tables/battle_marleatk.h"// MARLE crossbow attack: 4 pose keyframes + 79-row trajectory + spark (battle_actionfx.md ADD-MA)
 #include "oam.h"            // CtActorScreenCoords: the maintained integer on-screen pixel (battle_loop.md ADD-T3 staging fix)
 #include "menu.h"
 #include "menu_cost.h"         // the menu open's NMI-off stretch, priced (S0)
@@ -96,15 +99,15 @@
 #include "seq_entry4.h"   // entry 4 (FF 24, the Tyranno Lair: Lavos falls), native
 #include "seq_entry6.h"   // entry 6 (FF 26, the Epoch into Lavos's shell), native
 #include "seq_entry7.h"   // entry 7 (FF 07, the Day of Lavos after the lost final battle), native
-#include "data/ct_charbase.h" // baked $CC:0000 char base-stat table (new-game init; NO runtime ROM needed)
+#include "tables/ct_charbase.h" // baked $CC:0000 char base-stat table (new-game init; NO runtime ROM needed)
 #include "collision.h"   // CtCollisionShapeSolid — the byte-exact engine shape collision (C0/9AD3)
 #include "player.h"      // CtPlayerControl — the byte-exact player input->velocity controller (C0/881E)
 #include "move.h"        // CtPlayerAnimSelect — the lead's FACING/anim arm C0/9E84 (the $9FF7 dispatch)
-#include "data/ct_ng_pan.h"      // new-game 1000 AD intro: the pan's starting camera and its length
-#include "data/atbsel.h"         // new-game ATB battle-mode (Active/Wait) selector: baked byte-exact frames (battle_atbmode.md)
+#include "tables/ct_ng_pan.h"      // new-game 1000 AD intro: the pan's starting camera and its length
+#include "tables/atbsel.h"         // new-game ATB battle-mode (Active/Wait) selector: baked byte-exact frames (battle_atbmode.md)
 #include "world.h"       // M3: the byte-exact OVERWORLD engine (camera/mover/streaming/entries)
 #include "ct_owobj.h"    // the overworld ambient-object block ABI (offsets shared with world.c)
-#include "data/ow_era_placard.h"   // the ERA PLACARD, captured per era id from the oracle OBJ layer
+#include "tables/ow_era_placard.h"   // the ERA PLACARD, captured per era id from the oracle OBJ layer
 #include "ct_owobj.h"        // the overworld object block layout (the placard is one of those objects)
 
 #define CAMW 256
@@ -3086,7 +3089,7 @@ static int wordW(const uint8_t* font, const char* s, int i, int j) {
 // (saves/field_re/tent_keeper_lake.state, --monitor 7E0129,7E0131): $0131 = 0 f26, 1 f47, 2 f66, 3 f99, state 7 at
 // f127 -- four lines typed with no press. 338 of the ROM's 5244 dialogue pages have four lines (none has five); this
 // window held three and SCROLLED the fourth in after an A, an invention.
-#include "data/dlg_cursor.h"   // the decision-box pointing-hand cursor (oracle-lifted)
+#include "tables/dlg_cursor.h"   // the decision-box pointing-hand cursor (oracle-lifted)
 #define TB_X0    8
 #define TB_LINEH 16
 #define TB_LINES 4
@@ -9856,6 +9859,12 @@ int main(int argc, char** argv) {
   if (androidStatus) return androidStatus;
 #endif
   dbgInit();                                     // cache the debug env flags (hot loops read dbg.*)
+#ifdef CT_DATAFREE
+  // A DATA-FREE build holds the generated tables as zeroed storage: fill them from the pack made from the player's
+  // ROM before anything reads one (src/datapack.h, docs/ROM.md). A pack that does not match this build is refused.
+  { char err[512];
+    if (!CtDataPackLoadForArgs(argc, argv, err, sizeof err)) { printf("FAIL: tables: %s\n", err); return 2; } }
+#endif
   // A PLAYER: one frame of SPC per displayed frame, so a translated stage's holds do not run the APU (snes.c, the
   // switch's note: the race's holds left the demo's sound 1.8 s behind). CT_XLAT_HOLDAPU=1 keeps the oracle's way.
   g_ctLogicalHoldApu = getenv("CT_XLAT_HOLDAPU") ? 1 : 0;
@@ -9908,6 +9917,7 @@ int main(int argc, char** argv) {
     }
     if (!strcmp(argv[i], "--walktest") && i + 1 < argc) { walkDir = argv[++i][0]; continue; }  // headless sub-pixel walk
     if ((!strcmp(argv[i], "--assets") || !strcmp(argv[i], "--datonly")) && i + 1 < argc) datpath = argv[++i];
+    else if (!strcmp(argv[i], "--tables") && i + 1 < argc) i++;   // the table pack (a data-free build; read above)
     else if (!strcmp(argv[i], "--scene") && i + 1 < argc) { scene = atoi(argv[++i]); sceneSet = 1; }
     else if (!strcmp(argv[i], "--itemdemo")) g_itemDemo = 1;    // seed a wounded party + Tonic/items to test the item menu
     else if (!strcmp(argv[i], "--boot")) bootNatural = 1;      // THE GAME'S OWN COLD ENTRY (boot_loader.md):

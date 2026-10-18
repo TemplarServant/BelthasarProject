@@ -20,8 +20,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include "title_intro.h"
-#include "data/title_intro.h"
-#include "data/seq_credits.h"
+#include "tables/title_intro.h"
+#include "tables/seq_credits.h"
 
 #define CT_M7_FIELD 1024                 // the mode-7 field is 128 tiles x 8 px on each axis
 #define CT_TI_HOFS  0xFF40               // $210F/$210D's constant during the swing ($7E:5A94)

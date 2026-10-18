@@ -95,6 +95,7 @@ Everything derived from the ROM is generated on your machine:
 |---|---|---|
 | `ct_assets.dat` | [`assets/extract_assets.py`](../assets/extract_assets.py) | The asset container: scene palettes, tilesets, maps, sprites, the font, strings and dialogue, scene scripts, collision, exits. The field and the menus draw from it without the ROM. |
 | `src/data/*.h` | the generators in `tools/` | 47 tables the engine compiles in: battle animation records, menu chrome, the title sequence, the overworld placard, and so on. Of these, 12 are generated from the ROM alone and 35 by oracle runs from power-on (the recipes in `tools/recipes/`). |
+| `ct_tables.dat` | [`tools/gen/pack_tables.py`](../tools/gen/pack_tables.py) | The same 47 headers' tables (223 arrays) as a data file, which a data-free `Belthasar` loads at startup instead of compiling them in (see below). |
 | `src/xlat/*.c` | [`tools/gen/xlat_all.py`](../tools/gen/xlat_all.py) (traces) + [`tools/gen/xlat.py`](../tools/gen/xlat.py) | Five timing-sensitive ROM programs translated instruction by instruction into C (see [ARCHITECTURE.md](ARCHITECTURE.md#translated-stages)). |
 | Oracle states | recipes replayed by the oracle | The savestates the generators and the regression suite start from. Each recipe is a pad script played from power-on, optionally on top of a battery save that another recipe produced. |
 
@@ -102,7 +103,42 @@ At run time `Belthasar` reads `ct_assets.dat`. It reads the ROM itself for battl
 for the sound driver. Without the ROM it still renders the field and the menus, and says what it is missing.
 
 The single entry point is `python tools/setup.py --rom <path>`: verify the ROM, build a bootstrap oracle, replay
-the recipes, generate, build ([README.md](../README.md#2-set-up-from-your-rom)).
+the recipes, generate, pack the tables, build ([README.md](../README.md#2-set-up-from-your-rom)).
+
+## The data-free Belthasar
+
+A prebuilt `Belthasar` has to work for everyone without carrying anything of the game, so it can be built with none of
+the generated tables compiled in: `CT_DATAFREE=1 python tools/build.py Belthasar` (CMake `-DCT_DATAFREE=ON`). It then
+loads them at startup from `ct_tables.dat`, which the setup makes from your dump.
+
+- **How the engine includes a table.** Always through `src/tables/<name>.h`. In a normal build (`ct.exe`, a developer's
+  `Belthasar`) that file only includes `src/data/<name>.h`, so nothing changes. In a data-free build it declares the
+  tables instead, `extern const T name[dims];`, with the header's own types and sizes, and
+  `src/tables/tables_storage.c` defines each one once, zeroed. [`src/datapack.c`](../src/datapack.c) fills them from the
+  pack before `main` reads any. `src/tables/` is generated from the shapes
+  (`python tools/gen/pack_tables.py headers`; `check` says whether it is current) and holds no data.
+- **Where the pack is found.** In order: `--tables <path>`, `$CT_TABLES`, the `--assets` file itself if it carries the
+  table entries, `ct_tables.dat` beside the `--assets` file, `ct_tables.dat` in the working directory.
+- **The pack.** A CTAS container (the `ct_assets.dat` format) holding one entry per table with its bytes exactly as the
+  compiler lays them out for the release's targets (x86-64 and arm64: little-endian, natural alignment, 8-byte
+  pointers), a string pool, and relocations for the pointer members (the strings in `battle_anim.h`, `battle_stance.h`,
+  `battle_settle.h` and five other headers, and the loader's chapter and era names). The full format is in
+  `pack_tables.py`'s docstring.
+- **What the loader refuses.** Any mismatch with the build: another pointer size or byte order, another set of
+  tables, a table of another size, another layout (each table's layout string, every member's name, type and offset,
+  is hashed on both sides), relocations that are not exactly the build's pointer members, and any `#define` the shapes
+  compiled in whose value differs from the one in your headers. It says why and exits; it never runs on a partial or
+  shifted table.
+- **The proof.** `python tools/gen/tables_proof.py` (a tree that holds the generated headers) packs `src/data/*.h`,
+  loads the pack into the data-free storage with the loader the data-free `Belthasar` links, and compares every table
+  with the same table compiled from the real header, byte for byte and padding included (a pointer by its string). It
+  then checks that a pack with one byte flipped differs, and that packs with another pointer size, layout hash or
+  `#define` are refused.
+- **What stays compiled in.** The shapes' numeric `#define`s: 163, of which 62 are the tables' dimensions and the rest
+  constants (tile bases, foot positions, stance ids, the new-game pan's start and length, ROM base addresses, the
+  title's seed registers); 47 of those constants are used by the engine's code, some as array bounds. They are already
+  public in `tools/gen/shapes/`. The data-free build compiles them from the shapes and the loader checks each against
+  the pack; moving the ones that are not array bounds into the pack as run-time values is a later step.
 
 ## What is never distributed, and why
 

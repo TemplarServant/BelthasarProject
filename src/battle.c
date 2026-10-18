@@ -29,13 +29,13 @@ static int battleBuildHitSet(CtBattleHost* h, int group, int primary, int* out, 
 #include "objslot.h"
 void CtHdmaTableBuild(uint8_t* wram128);   // ct_vm.c: `JSL FD/C2C1`, the field's HDMA table builder
 #include "lz.h"          // ct_lz_decompress: the CT "Evil Peer" LZ, used for the enemy sprite SHEET (battle_sheet_decomp.md)
-#include "data/battle_fx.h"   // action-feedback bake: CT_FX_RISE_N / CT_FX_LIFETIME (the popup aging bounds)
-#include "data/battle_anim.h" // baked attack/idle trajectories: ctCronoAttackTraj (A2), ctGatoIdleTraj/Bob (ADD.4)
+#include "tables/battle_fx.h"   // action-feedback bake: CT_FX_RISE_N / CT_FX_LIFETIME (the popup aging bounds)
+#include "tables/battle_anim.h" // baked attack/idle trajectories: ctCronoAttackTraj (A2), ctGatoIdleTraj/Bob (ADD.4)
 // (battle_tracks.h -- the baked CC/F494/F594 track fixture -- is no longer included: the op-18 walker
 //  reads the ROM track/probe/facing tables directly, battle_ai_interp.md §11b.)
-#include "data/battle_dissolve.h"  // enemy-death dissolve: CT_DISSOLVE_STEPS + the matrix (battle_dissolve.md PART 2)
+#include "tables/battle_dissolve.h"  // enemy-death dissolve: CT_DISSOLVE_STEPS + the matrix (battle_dissolve.md PART 2)
 #include "rom_verify.h"
-#include "data/battle_trig.h"  // enemy-movement trig tables: ctBattleAtanTab/SinTab/FaceTab (battle_enemy_move_target.md §A)
+#include "tables/battle_trig.h"  // enemy-movement trig tables: ctBattleAtanTab/SinTab/FaceTab (battle_enemy_move_target.md §A)
 
 // ---------------------------------------------------------------- ROM tables
 static uint8_t* gRom; static long gRomLen;

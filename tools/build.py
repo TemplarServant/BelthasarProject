@@ -23,7 +23,8 @@ kills the three historical FALSE-'Build OK' mechanisms:
      os.utime(now) on the changed sources, rebuild once, re-verify, and FAIL
      loudly ('STALE: ...') if the exe still does not change.
 
-Usage:  python tools/build.py [ct|Belthasar|ct_world|ct_viewer]
+Usage:  python tools/build.py [ct|Belthasar|ct_world|ct_viewer|ct_tables_proof]
+        CT_DATAFREE=1: Belthasar without the generated tables compiled in (docs/ROM.md)
         (no argument = build all configured targets, like before)
 
 Read-only with respect to the engine: it uses CMake's configured targets
@@ -52,7 +53,9 @@ VCVARS_REL = r"VC\Auxiliary\Build\vcvars64.bat"
 CMAKE_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 NINJA_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 
-KNOWN_TARGETS = ("ct", "ct_oracle", "Belthasar", "ct_world", "ct_viewer")
+KNOWN_TARGETS = ("ct", "ct_oracle", "Belthasar", "ct_world", "ct_viewer", "ct_tables_proof")
+# Built only when named: the table pack's byte-for-byte proof (tools/gen/tables_proof.py; EXCLUDE_FROM_ALL in CMake).
+OPTIONAL_TARGETS = ("ct_tables_proof",)
 # The playable host was ct_field until 2026-10-17; the old name still selects it.
 TARGET_ALIASES = {"ct_field": "Belthasar"}
 
@@ -296,15 +299,20 @@ def main(argv):
     # speed. CT_BUILD_TYPE overrides (Debug for a stepping session); the configure is re-run when the
     # type changes, since the cache remembers it.
     btype = os.environ.get("CT_BUILD_TYPE", "RelWithDebInfo")
+    # CT_DATAFREE=1: Belthasar without the generated tables compiled in; it loads them from the pack made from the
+    # player's ROM (ct_tables.dat, docs/ROM.md). Passed both ways so the cache follows the environment.
+    datafree = os.environ.get("CT_DATAFREE", "") not in ("", "0")
     cfg = [cmake, "-S", ROOT, "-B", BUILD, "-G", "Ninja",
-           "-DCMAKE_MAKE_PROGRAM=" + ninja, "-DCMAKE_BUILD_TYPE=" + btype]
+           "-DCMAKE_MAKE_PROGRAM=" + ninja, "-DCMAKE_BUILD_TYPE=" + btype,
+           "-DCT_DATAFREE=" + ("ON" if datafree else "OFF")]
     request_cmake_sources()
-    if run_step(cfg, env, "cmake configure (Ninja, " + btype + ")") != 0:
+    if run_step(cfg, env, "cmake configure (Ninja, " + btype + (", data-free" if datafree else "") + ")") != 0:
         fail("cmake configure step failed (see errors above)")
     source_lists = configured_source_lists()
     if want is not None and want not in source_lists:
         fail("target '{}' is not configured; install SDL2 for graphical targets".format(want), 2)
-    requested = [want] if want is not None else [n for n in KNOWN_TARGETS if n in source_lists]
+    requested = [want] if want is not None else [n for n in KNOWN_TARGETS
+                                                  if n in source_lists and n not in OPTIONAL_TARGETS]
     if not requested:
         fail("CMake did not configure any known targets")
 

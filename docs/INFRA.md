@@ -24,6 +24,15 @@ the bundled CMake/Ninja, configure + compile into `build\`. Targets (from
   that target; another ct*.exe running (the player's `Belthasar` while `ct.exe` is rebuilt) does not block it.
 - **A second tree.** `CT_BUILD_DIR=build_alt python tools/build.py Belthasar` builds into `build_alt\` (gitignored):
   exes to test with while the player's `build\Belthasar.exe` is running. The suite and the tools keep reading `build\`.
+- **Data-free Belthasar.** `CT_DATAFREE=1 python tools/build.py Belthasar` (CMake `-DCT_DATAFREE=ON`; the driver
+  passes ON or OFF on every configure, so the cache follows the environment) builds `Belthasar.exe` with none of the
+  generated tables compiled in: it loads them from `ct_tables.dat` (`python tools/gen/pack_tables.py pack`, which
+  `tools/setup.py` runs) and refuses a pack that does not match it. `ct.exe` and the other targets are unaffected. The
+  design, the pack and the loader's checks: [ROM.md](ROM.md#the-data-free-belthasar).
+- **The table pack's proof.** `python tools/gen/tables_proof.py` builds the optional target `ct_tables_proof`
+  (`python tools/build.py ct_tables_proof`; never part of a plain build) and proves that the data-free storage, filled
+  from a pack of today's `src/data/*.h`, equals the tables compiled from those headers byte for byte, with controls
+  that a corrupt or mismatched pack is caught.
 - **The three historical false-"Build OK" traps it catches** (all observed in this
   project; `build.py`'s own header is authoritative once it lands):
   1. **Locked exe.** With `Belthasar.exe` still running, the link cannot replace the
@@ -87,6 +96,7 @@ Tier contents and the meaning of each pinned baseline: [`docs/TESTING.md`](TESTI
 | Path | What it is |
 |---|---|
 | `src/` | The C engine + harness. `scene.c` field-scene renderer (load ROM/.dat → one compose path); `ct_vm.c` event VM + scheduler + movers + textbox/naming; `collision.c`/`player.c`/`move.c` byte-exact ROM routine ports; `world.c` overworld camera/mover/streamer/ambient VM; `field.c` the interactive app (`Belthasar.exe`); `ct_world.c`/`viewer.c` SDL viewers; `main.c` the ct.exe oracle harness; `assets.c` ct_assets.dat loader; `lz.c` the LZ decompressor. |
+| `src/tables/` | Generated, no data (`tools/gen/pack_tables.py headers`, from the shapes): the header the engine includes for each `src/data/*.h` table (the real header in a normal build, its declarations in a data-free one), the data-free storage `tables_storage.c` with its layout asserts, and `tables_real.c` for the proof. `src/datapack.c` loads `ct_tables.dat` into the storage. |
 | `snes/` | Vendored **LakeSnes** oracle core (the embedded emulator). Do not edit casually — every validator's ground truth runs on it, and any change to its state serialization silently invalidates every `.state` on disk. |
 | `assets/` | Build-time extraction pipeline (Python, dependency-free): ROM → `ct_assets.dat` (`extract_assets.py`, `lz.py`, `gfx.py`, `palettes.py`, `sprites.py`, `maps.py`, `text.py`, `script.py`...). The engine is ROM-independent at runtime; `ct.exe --datverify` proves the bridge byte-identical. |
 | `disasm/`, `disasm/notes/` | The RE substrate: annotated 65816 traces, per-subsystem notes (`events.md`, `scenes.md`, `sprites.md`, `collision.md`...). Trace/dialogue artifacts are gitignored (ROM-derived, regenerable). |

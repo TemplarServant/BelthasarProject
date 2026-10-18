@@ -15,7 +15,9 @@ file the build needs that comes from the game (docs/ROM.md):
      (the overworld snapshots and sprite atlases, the window bitmaps: assets/extract_assets.py pack_world);
   4. assets/extract_assets.py builds ct_assets.dat (the scenes, sprites, scripts and text the engine loads);
   5. the other generators write src/data/*.h and src/xlat/*.c;
-  6. everything is built (tools/build.py).
+  6. tools/gen/pack_tables.py packs the tables of src/data/*.h into ct_tables.dat, the file a data-free Belthasar
+     (CT_DATAFREE) loads them from instead of compiling them in;
+  7. everything is built (tools/build.py).
 
 Each step says what it did. A generator that still needs a capture that is not a recipe yet is reported (see
 docs/ROADMAP.md) and setup exits 1 at the end if any generated file is missing.
@@ -86,6 +88,8 @@ def norm(path):
 def check():
     if run([sys.executable, 'tools/gen/shapes.py', 'check']).returncode:
         print('gen-check: the shapes are stale -- python tools/gen/shapes.py make')
+    if run([sys.executable, 'tools/gen/pack_tables.py', 'check']).returncode:
+        print('gen-check: src/tables/ is stale -- python tools/gen/pack_tables.py headers')
     bad = 0
     saved = {}                                                # every output's bytes in the tree, put back at the end
     gens = sorted(generators(), key=lambda g: stage_of(g) != 'assets')
@@ -178,6 +182,10 @@ def main():
         sys.exit('setup: assets/extract_assets.py failed')
 
     run_stage([g for g in generators() if stage_of(g) != 'assets'])
+
+    say('packing the tables -> ct_tables.dat')
+    if run([sys.executable, 'tools/gen/pack_tables.py', 'pack']).returncode:
+        missing.append('ct_tables.dat')
 
     if not a.no_build:
         say('building everything')

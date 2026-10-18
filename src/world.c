@@ -3,7 +3,7 @@
 #include "ct_owobj.h"   // the ambient-object block ABI (offsets/class shared with field.c)
 #include "vwf.h"      // C2/57DF / 5823: the proportional text (the world map's era label)
 #include "lz.h"       // C6/E028: the world scripts' far call into C3/0002 (ct_lz_decompress_bounded)
-#include "data/ow_anim.h"  // ROM $C3:E000..EFFF: the anim sub-VM's pointer table + bytecode
+#include "tables/ow_anim.h"  // ROM $C3:E000..EFFF: the anim sub-VM's pointer table + bytecode
 #include <string.h>
 #include <stddef.h>   // ptrdiff_t (the draw list maps a block pointer back to its index)
 #include <stdio.h>      // CT_MAILTRACE only (env-gated debug trace in CtWorldSoundRequest)

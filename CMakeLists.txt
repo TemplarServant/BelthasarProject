@@ -26,6 +26,10 @@ endif()
 set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
                  src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
 
+# CT_DATAFREE=ON: Belthasar loads the generated tables (src/data/*.h) from the player's pack instead of compiling them
+# in (docs/ROM.md). ct.exe and the other tools always compile the real headers.
+option(CT_DATAFREE "Belthasar without the generated tables compiled in (loads ct_tables.dat)" OFF)
+
 # ANDROID (docs/ANDROID.md): only the playable host, as the shared library SDL's Java activity loads. The NDK's CMake
 # reaches this file through android/app/build.gradle.
 if(ANDROID)
@@ -101,6 +105,16 @@ if(MSVC)
 endif()
 add_dependencies(ct ct_oracle)
 
+# The table pack's byte-for-byte proof (tools/gen/tables_proof.py): the data-free storage filled from a pack, against
+# the same tables compiled from the real headers. Built only when named, in a tree that holds the generated headers.
+add_executable(ct_tables_proof EXCLUDE_FROM_ALL
+  tests/tables_proof.c src/datapack.c src/tables/tables_storage.c src/tables/tables_real.c)
+target_include_directories(ct_tables_proof PRIVATE src)
+target_compile_definitions(ct_tables_proof PRIVATE CT_DATAFREE)   # tables_real.c includes src/data/ directly
+if(MSVC)
+  target_compile_definitions(ct_tables_proof PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
 # Interactive SDL2 viewer for the C scene engine. Built only when SDL2 is present
 # in third_party/SDL2 (downloaded, git-ignored). The headless 'ct' stays SDL-free;
 # ct_viewer only needs the renderer (scene.c/lz.c/assets.c), not the oracle core.
@@ -141,6 +155,13 @@ if(CT_SDL_INC)
   target_include_directories(Belthasar PRIVATE src ${CT_SDL_INC} snes)
   target_link_libraries(Belthasar ${CT_SDL_LIB})
   target_compile_definitions(Belthasar PRIVATE CT_XLAT_NO_GWARP)   # the gate warp is native (src/seq_gwarp.c)
+  # DATA-FREE (docs/ROM.md): no generated table compiled in. The engine includes them through src/tables/, which then
+  # declares them; src/tables/tables_storage.c defines them zeroed and src/datapack.c fills them at startup from the
+  # pack made from the player's ROM (tools/gen/pack_tables.py -> ct_tables.dat).
+  if(CT_DATAFREE)
+    target_sources(Belthasar PRIVATE src/datapack.c src/tables/tables_storage.c)
+    target_compile_definitions(Belthasar PRIVATE CT_DATAFREE)
+  endif()
   if(MSVC)
     # the host's pictures at the options (the title's mode 7 at the internal resolution): drawn on every core
     set_source_files_properties(src/title_intro.c src/fieldnative.c src/field.c PROPERTIES COMPILE_OPTIONS "/openmp")

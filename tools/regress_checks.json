@@ -2,6 +2,21 @@
   "_comment": "Data file for tools/regress.py. PASS iff every 'expect' substring appears in stdout+stderr (exit codes are NOT trusted - most ct.exe self-checks exit 0 even on mismatch). 'pin' regexes let 'regress.py --pin NAME' re-derive 'expect' from the matching full output lines after an INTENTIONAL, oracle-validated change. 'inputs' are repo-root-relative files that must exist or the check SKIPs. See docs/TESTING.md.",
   "checks": [
     {
+      "name": "tables-datafree-headers-current",
+      "argv": [
+        "python",
+        "tools/gen/pack_tables.py",
+        "check"
+      ],
+      "inputs": [],
+      "expect": [
+        "pack_tables: src/tables/ current"
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "notes": "src/tables/ (the headers the engine includes the generated tables through, their data-free declarations, the storage and its layout asserts) is what tools/gen/pack_tables.py makes from today's shapes. A stale src/tables/ means a data-free Belthasar would declare a table the shapes no longer have, or refuse every pack (docs/ROM.md, 'The data-free Belthasar')."
+    },
+    {
       "name": "boot-sram-load-fields-vs-cartridge",
       "argv": [
         "build/Belthasar.exe",
