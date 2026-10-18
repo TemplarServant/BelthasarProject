@@ -22,6 +22,14 @@ file the build needs that comes from the game (docs/ROM.md):
 Each step says what it did. A generator that still needs a capture that is not a recipe yet is reported (see
 docs/ROADMAP.md) and setup exits 1 at the end if any generated file is missing.
 
+The player's setup (Belthasar's ROM screen, src/launcher.c) runs the same steps without a compiler:
+
+    python tools/setup.py --rom <dump> --no-build --oracle <ct.exe> --workdir <dir> --out <dir>
+
+--oracle uses a ct.exe built beforehand (the release's, compiled from the shapes like step 2's) instead of building one;
+--workdir copies this tree to <dir> first and runs there (the installed one may be read-only); --out copies
+ct_assets.dat and ct_tables.dat to <dir> at the end. Every step prints `setup: progress K/N` for the screen's bar.
+
 --check is the inverse proof for this repository: every generator runs again and its output must equal the file in the
 tree (line endings aside), so a header that cannot be made from the ROM shows up; the asset-stage outputs are compared
 with the captures they replace, and ct_assets.dat is rebuilt from the regenerated ones (into build/setup_check/) and
@@ -139,7 +147,25 @@ def main():
     ap.add_argument('--rom')
     ap.add_argument('--no-build', action='store_true')
     ap.add_argument('--check', action='store_true')
+    ap.add_argument('--oracle', help='a ct.exe built beforehand: used instead of building one')
+    ap.add_argument('--workdir', help='copy this tree to WORKDIR and run there')
+    ap.add_argument('--out', help='copy ct_assets.dat and ct_tables.dat to OUT at the end')
     a = ap.parse_args()
+
+    if a.workdir and os.path.normcase(os.path.abspath(a.workdir)) != os.path.normcase(ROOT):
+        work = os.path.abspath(a.workdir)
+        say('copying the setup to %s' % work)
+        shutil.copytree(ROOT, work, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('.git', '.claude', 'build', 'third_party', '__pycache__', 'saves',
+                                                      '*.sfc', '*.dat', '*.srm', '*.state', '*.wram'))
+        args = [x for x in sys.argv[1:]]
+        i = args.index('--workdir')
+        del args[i:i + 2]
+        for k in ('--rom', '--oracle', '--out'):              # paths the copy must still find, made absolute
+            if k in args:
+                j = args.index(k) + 1
+                args[j] = os.path.abspath(args[j])
+        return subprocess.run([sys.executable, os.path.join(work, 'tools', 'setup.py')] + args, cwd=work).returncode
 
     src = a.rom or (ROM_AT if os.path.exists(ROM_AT) else None)
     if not src:
@@ -159,9 +185,27 @@ def main():
     # A fresh clone has no generated file, and the oracle is compiled with the engine that includes them: the shapes
     # (tools/gen/shapes/: declarations and sizes, no data) stand in for the missing ones so a bootstrap oracle builds.
     run([sys.executable, 'tools/gen/shapes.py', 'install'])
-    say('building the oracle (build/ct.exe)')
-    if run([sys.executable, 'tools/build.py', 'ct']).returncode:
-        sys.exit('setup: the oracle did not build')
+    gens = generators()
+    total = 3 + len(gens)                                  # the oracle, the generators, the extraction, the pack
+    done = [0]
+
+    def progress():
+        done[0] += 1
+        say('progress %d/%d' % (done[0], total))
+
+    oracle = os.path.join(ROOT, 'build', 'ct.exe')
+    if a.oracle:
+        if not os.path.exists(a.oracle):
+            sys.exit('setup: no oracle at %s' % a.oracle)
+        if os.path.normcase(os.path.abspath(a.oracle)) != os.path.normcase(oracle):
+            os.makedirs(os.path.dirname(oracle), exist_ok=True)
+            shutil.copy2(a.oracle, oracle)
+        say('the oracle: %s' % a.oracle)
+    else:
+        say('building the oracle (build/ct.exe)')
+        if run([sys.executable, 'tools/build.py', 'ct']).returncode:
+            sys.exit('setup: the oracle did not build')
+    progress()
 
     missing = []
 
@@ -174,18 +218,21 @@ def main():
             ok, msg = run_generator(g)
             say('%-40s %s' % (', '.join(os.path.basename(o) for o in g['out'])[:40], msg))
             missing.extend(o for o in g['out'] if is_shape(o))
+            progress()
 
-    run_stage([g for g in generators() if stage_of(g) == 'assets'])   # the captures ct_assets.dat packs
+    run_stage([g for g in gens if stage_of(g) == 'assets'])   # the captures ct_assets.dat packs
 
     say('extracting the assets -> ct_assets.dat')
     if run([sys.executable, 'assets/extract_assets.py', ROM_AT, 'ct_assets.dat']).returncode:
         sys.exit('setup: assets/extract_assets.py failed')
+    progress()
 
-    run_stage([g for g in generators() if stage_of(g) != 'assets'])
+    run_stage([g for g in gens if stage_of(g) != 'assets'])
 
     say('packing the tables -> ct_tables.dat')
     if run([sys.executable, 'tools/gen/pack_tables.py', 'pack']).returncode:
         missing.append('ct_tables.dat')
+    progress()
 
     if not a.no_build:
         say('building everything')
@@ -194,6 +241,11 @@ def main():
     if missing:
         say('NOT COMPLETE: %d generated file(s) could not be made: %s (docs/ROADMAP.md)' % (len(missing), ', '.join(missing)))
         return 1
+    if a.out:
+        os.makedirs(a.out, exist_ok=True)
+        for f in ('ct_assets.dat', 'ct_tables.dat'):
+            shutil.copy2(os.path.join(ROOT, f), os.path.join(a.out, f))
+        say('ct_assets.dat and ct_tables.dat -> %s' % a.out)
     say('done. Play: build\\Belthasar.exe --assets ct_assets.dat --boot')
     return 0
 

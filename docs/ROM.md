@@ -87,6 +87,34 @@ to the `ct_assets.dat` it was given. `CT_ROM=<path>` overrides the location for 
 ROM path as a positional argument. The `.gitignore` excludes `*.sfc`, `*.smc`, `*.srm` and `*.dat`, so a ROM,
 save or asset container in the working tree is never committed by accident.
 
+### The player's start: the ROM screen
+
+A player opens `Belthasar` with no arguments, or drops their ROM on it (src/launcher.h; Windows and Linux -- macOS has
+its folder chooser, Android its setup activity). The game then runs from a data folder of the player's own:
+
+| Folder | When |
+|---|---|
+| `CT_DATA_DIR` | set |
+| the executable's own folder | it already holds `ct_assets.dat` and the ROM (a portable copy) |
+| `%APPDATA%\BelthasarProject\Belthasar\` / `~/.local/share/BelthasarProject/Belthasar/` | otherwise |
+
+It holds `Chrono_Trigger_USA_SNES.sfc`, `ct_assets.dat`, `ct_tables.dat` (a data-free build's), the battery save
+`ct_sram.srm`, `ct_settings.ini` and `setup.log`. While any of the game's files is missing, the ROM screen
+(src/launcher_ui.cpp, Dear ImGui; without ImGui the file dropped on the executable and the console) asks for the dump,
+verifies it (`CtRomVerify`), writes it to the folder and runs the setup with no compiler:
+
+    <python> <kit>/tools/setup.py --rom <folder>/Chrono_Trigger_USA_SNES.sfc --no-build --oracle <ct.exe>
+        --workdir <folder>/work --out <folder>
+
+| Piece | A release | A developer's `build/` | Override |
+|---|---|---|---|
+| Python | `setup/python/python.exe` (`setup/python/bin/python3`) beside the executable | `python` / `python3` from the PATH | `CT_PYTHON` |
+| the kit (the repository's tools) | `setup/kit/` | the repository (`build/..`) | `CT_SETUP_KIT` |
+| the oracle (compiled from the shapes) | `setup/ct.exe` | `build/ct.exe` | `CT_SETUP_ORACLE` |
+
+The screen's bar follows the setup's `setup: progress K/N` lines; the whole output goes to `setup.log`. A run with any
+argument starting with `-`, or with `CT_NOPACE` set (the suite's), never reaches the launcher.
+
 ## What the build does with it
 
 Everything derived from the ROM is generated on your machine:
@@ -161,9 +189,6 @@ loads them at startup from `ct_tables.dat`, which the setup makes from your dump
     `battleHudRenderStrip`'s `mathOp[]`/`mathFix[]` and `CtBattleHudRender`'s static `keep[]`) and `CT_MENU_WINLIST_N`
     (`menu_wingrad.h`; `src/menu.c` `mWinGrad`'s static `cache[]` and `built[]`). Both equal a table's dimension
     (`CT_MENU_WINLIST_N` is `ctMenuWinList`'s first), so they say nothing the storage does not.
-
-ls/gen/shapes/`. The data-free build compiles them from the shapes and the loader checks each against
-  the pack; moving the ones that are not array bounds into the pack as run-time values is a later step.
 
 ## What is never distributed, and why
 

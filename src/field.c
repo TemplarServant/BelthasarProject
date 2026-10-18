@@ -46,6 +46,7 @@
 #ifdef __ANDROID__
 #include "android.h"     // where the player's ROM, ct_assets.dat, save and options live on the device
 #endif
+#include "launcher.h"    // the player's start on Windows and Linux: the data folder and the ROM screen
 #include "present.h"     // the window and the backend the picture goes through (SDL_Renderer / OpenGL)
 #include "motion.h"      // what moves each pixel of the field picture: the higher internal scale, the frames between
 #include "fieldnative.h" // the frames between drawn natively from the map's layers and the sprites' pixels
@@ -9857,6 +9858,12 @@ int main(int argc, char** argv) {
 #ifdef __ANDROID__
   int androidStatus = CtAndroidConfigure(&argc, &argv);
   if (androidStatus) return androidStatus;
+#endif
+#if !defined(__APPLE__) && !defined(__ANDROID__)
+  // THE PLAYER'S START (launcher.h): opened with no arguments (or with a file dropped on it), the game runs from the
+  // player's data folder, and the ROM screen makes that folder's data from their dump first. Any '-' argument skips it.
+  { int launcherStatus = CtLauncherConfigure(&argc, &argv);
+    if (launcherStatus) return launcherStatus == 2 ? 0 : launcherStatus; }
 #endif
   dbgInit();                                     // cache the debug env flags (hot loops read dbg.*)
 #ifdef CT_DATAFREE

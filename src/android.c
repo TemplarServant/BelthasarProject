@@ -37,7 +37,7 @@ int CtAndroidConfigure(int* outArgc, char*** outArgv) {
     char msg[1200];
     snprintf(msg, sizeof msg, "The game needs %s and %s in\n%s\n\nOpen the app again to choose them (docs/ANDROID.md).",
              ROM_NAME, ASSETS_NAME, data ? data : "(no storage)");
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Chrono Trigger", msg, NULL);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Belthasar", msg, NULL);
     return 1;
   }
   defaultEnv("CT_ROM", data, ROM_NAME);
