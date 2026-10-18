@@ -54,6 +54,13 @@ uint8_t CtSeqPicReg(CtSeqPic* p, uint8_t adr);
 // The frame: the HDMA's init and first transfer, then lines 1..224 each drawn and followed by its HDMA transfer. rgb is
 // 256 x 224 RGB888 (may be NULL).
 void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t hdmaen, CtSeqPicRead rd, void* ctx, uint8_t* rgb);
+// THE PORT'S WIDESCREEN (a host mod, src/settings.h; never set by a grading harness): g_seqPicWideSide > 0 draws that many
+// columns each side of the 256 into g_seqPicWideOut (RGB, 256 + 2 * side wide, row = line - 1; its middle is left to the
+// caller), as snes/ppu.c's g_ppuWideSide does for the vendored PPU: the layers at their own place past the screen's edge (BG
+// at x + scroll, mode 7 along its matrix), no sprite of their own, and every window read as ppu.c's ppu_winTest reads it
+// while the sides are drawn (a curtain crosses the whole picture). 0 = the hardware's picture, byte for byte.
+extern int g_seqPicWideSide;
+extern uint8_t* g_seqPicWideOut;
 
 // A STAGE's picture: the compositor's state plus what the stage's code sets around it -- the HDMA channels it programmed, HDMAEN,
 // and the data ports' addresses ($2116 / $2115 VRAM, $2121 CGRAM) its DMAs go through.

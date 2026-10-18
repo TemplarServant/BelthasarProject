@@ -1,4 +1,4 @@
-// seq_entry3.c -- SEQUENCE ENTRY 3 FROM THE STORY (`FF 23`), native: the night panorama after the Blackbird.
+// seq_entry3.c -- SEQUENCE ENTRY 3 (`FF 23` from the story, `FF 63` in the attract), native: the night panorama.
 //
 // Scenes 102-107 share one controller (obj0 fn0's continuation): with `$7F0057` bit 2 (the attract) it stages loc 1B1 and
 // calls `FF 63`; with the storyline at D3 it stages the Epoch's world `DD F6 03 91 35` and calls `FF 23` -- the red moon
@@ -19,12 +19,14 @@
 static unsigned rd(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
 static void wr(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
 
-int CtEntry3StageHas(uint8_t operand) { return (operand & 0x1F) == 3 && !(operand & 0x40); }
+int CtEntry3StageHas(uint8_t operand) { return (operand & 0x1F) == 3; }   // `FF 23` (the story) and `FF 63` (the attract)
 
 // MEASURED: `CT_CALLROM_NONMI=1 ct.exe --callrom 7E671F --pokewram 0384=23 --regdb 00 --m8 --x16` from the cartridge
 // inside the opening (saves/blackbird_re/ff23_handoff_f25.state + 12 frames: the overlay in WRAM): 4195 ops, 120000
-// cycles (3520 of them refresh) -- the whole opening is the overlay's decompression.
-long CtEntry3StageSetupCycles(void) { return 120000L; }
+// cycles (3520 of them refresh) -- the whole opening is the overlay's decompression. The attract's arm (`FF 63`), measured
+// in place on the rule's cartridge (`ct.exe --racepiccmp` RACEPICCMP_SPAN=7E671F,7E300D from its hand-off, power-on f8793):
+// 114098. Both open in 18 frames.
+long CtEntry3StageSetupCycles(uint8_t operand) { return (operand & 0x40) ? 114098L : 120000L; }
 
 // $7E:37FA -- the palette records' frame (`LDX $4202 / STX $F0 / JSL FD/FFF7 / LDX $F0 / STX $4202`): FD/E39C over the
 // twelve records at $0520, whose record 0 the task chain below waits on. ⚠ $4202 / $4203 are write-only: the `LDX` reads the
@@ -55,18 +57,21 @@ static unsigned entry3Chain(uint8_t* w, unsigned t, const CtRaceIo* io) {
     case 0x6A51:
       if (w[0x0520]) return t;                                        // 6A53 LDA $0520 / BEQ / RTS
       entry3Fade6ACD(w, 0x50);
-      w[0x0523] = 1; w[0x052F] = 1; w[0x0525] = 1; w[0x0531] = 1;     // 6A5E-6A6B
+      w[0x0523] = w[0x6A5F]; w[0x052F] = w[0x6A5F];                   // 6A5E LDA #imm: 01, the attract's setup patched 06
+      w[0x0525] = 1; w[0x0531] = 1;                                   // 6A66-6A6B
       return 0x6A74;                                                  // 6A6E LDX #6A74 / JMP $39B1
     case 0x6A74:
       if (w[0x0520]) return t;                                        // 6A76 LDA $0520 / BEQ / RTS
       entry3Fade6ACD(w, 0x40);
-      w[0x0523] = 4; w[0x052F] = 4; w[0x0525] = 1; w[0x0531] = 1;     // 6A81-6A8E
+      w[0x0523] = w[0x6A82]; w[0x052F] = w[0x6A82];                   // 6A81 LDA #imm: 04 (the attract's: 08)
+      w[0x0525] = 1; w[0x0531] = 1;                                   // 6A89-6A8E
       return 0x6A97;
     case 0x6A97:
       if (w[0x0520]) return t;
       if (io && io->pic) { CtSeqPicWrite(&io->pic->p, 0x2C, 0x13, 0); CtSeqPicWrite(&io->pic->p, 0x2D, 0x00, 0); }   // 6A9F STX $212C
       entry3Fade6ACD(w, 0x40);
-      w[0x0523] = 3; w[0x052F] = 3; w[0x0525] = 1; w[0x0531] = 1;     // 6AAA-6AB7
+      w[0x0523] = w[0x6AAB]; w[0x052F] = w[0x6AAB];                   // 6AAA LDA #imm: 03 (the attract's: 08)
+      w[0x0525] = 1; w[0x0531] = 1;                                   // 6AB2-6AB7
       w[0x0527] = 0xFF; w[0x0533] = 0xFF; w[0x0528] = 0; w[0x0534] = 0;   // 6ABA-6AC7
       return 0;                                                       // 6ACA JMP $39A7
   }
@@ -107,6 +112,11 @@ static unsigned entry3Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x37FA: wr(w, 0x00F0, 0x4242); entry3Objslot(w, io); return t;   // (the setup's 682B calls FD/FFF7 itself)
     case 0x69AF: entry3Water(w, io); return t;
     case 0x6A51: case 0x6A74: case 0x6A97: return entry3Chain(w, t, io);
+    case 0x424D: case 0x4283: return CtSeqTaskAbort(w, t, io);        // the attract's button (seq_race.c)
+    case 0x6844:                                                      // the attract's curtain: C3/01E4, then HDMA channel 0's
+      CtSeqCurtain01E4(w, slot, io);                                  //   table by the call's parity (684A LDA $0351 / LSR A)
+      if (io && io->pic) io->pic->ch[0].aAdr = (w[0x0351] & 1) ? 0x688A : 0x6891;   // STX $4302
+      return t;
     default:                                                          // 73C6, 6A23: the picture's (stage 2)
       if (io && io->pic) CtEntry3PicTask(io->pic, w, t, io);
       return t;
@@ -118,16 +128,21 @@ static unsigned entry3Hook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo
 int CtEntry3StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (!CtEntry3StageHas(operand)) return -1;
   if (CtSeqStageBegin(w, operand, io) < 0) return -1;
-  // $7E:671F -- the setup (the story's arm, bit 6 clear). Its DMAs (the field's BG1 rows into $7E:1680, the tilemaps) and the
+  // $7E:671F -- the setup, both arms of its `BIT #0040` (the story's `FF 23`, the attract's `FF 63`). Its DMAs (the field's BG1 rows into $7E:1680, the tilemaps) and the
   // PPU are the picture's (seq_entry3pic.c, when the host draws); what the logic reads, in order:
   if (io && io->pic) CtEntry3PicSetupA(io->pic, w);                   // 671F-6772
-  wr(w, 0x0A20, 0x6902); wr(w, 0x0B20, 0x693A);                       // 6777-678E
+  if (!(operand & 0x40)) { wr(w, 0x0A20, 0x6902); wr(w, 0x0B20, 0x693A); }   // 6777-678E: the story's scripts,
+  else { wr(w, 0x0A20, 0x6898); wr(w, 0x0B20, 0x68A1); }              //   6785 the attract's (`BIT #0040`)
   if (CtSeqScript(w, 0x0A00, io, NULL) < 0) return -1;                // 6792 JSR $3749 -- page A runs once in the setup
   wr(w, 0x7841, 0);                                                   // 6795 STZ $7841 -- 16-bit (6775 REP #20): $7842 too
   w[0x3B] = 0;                                                        // 679F INC $3B, then $783C's DMA and STZ $3B
   if (io && io->pic) CtEntry3PicSetupB(io->pic, w, operand);          // 67A1-6805: the DMA, the HDMA, the registers
   w[0x7442] = 0x1C;                                                   // 67A4 STA $7E7442
   w[0x038C] = 0x0E;                                                   // 67B5 LDX #000E / 67DA STA $038C (bit 6 clear)
+  if (operand & 0x40) {                                               // 67BB BIT #40: the attract's arm -- the chain's three
+    w[0x6A5F] = 0x06; w[0x6A82] = 0x08; w[0x6AAB] = 0x08;             //   operands patched (67C4-67D2), HDMA channel 0 (the
+    w[0x038C] = 0x0F;                                                 //   curtain's window) on: 67D6 LDX #000F
+  }
   for (unsigned y = 0; y < 0x90; y += 0x0C) w[0x0520 + y] = 0;        // 6808 JSL $FD:FFEE -> FD/E275
   entry3Fade6ACD(w, 0x50);                                            // 680C LDA #50 / JSR $6ACD
   w[0x0527] = 0; w[0x0533] = 0; w[0x0528] = 0; w[0x0534] = 0;         // 6811-681B

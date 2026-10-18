@@ -21338,8 +21338,8 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "      if (!seqX && !gwX && !menuPhase)",
-          "replace": "      if (!seqX && !gwX)   /* MUT: the catch-all services the menu's staged posts again */",
+          "find": "      if (!gwX && !menuPhase)",
+          "replace": "      if (!gwX)   /* MUT: the catch-all services the menu's staged posts again */",
           "why": "the throttled blip is shipped the frame after the trade and cuts it after one note (the user's report)"
         }
       ]
@@ -28495,19 +28495,19 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "sequence: entry 0 program exited (JML $C0:0000) after 188 frames -> reboot"
+        "sequence: entry 0 (native) ended after 188 frames from C3:0000"
       ],
       "pin": [
-        "^sequence: entry 0 program exited "
+        "^sequence: entry 0 \\(native\\) ended "
       ],
       "timeout_s": 900,
-      "note_pass": "A held in the attract's motorcycle race ends the translated stage through its own abort path (188 frames in, the cartridge's under the rule, not 425)",
+      "note_pass": "A held in the attract's motorcycle race ends the NATIVE stage through its own abort path ($7E:424D: the closing curtain, the post `18 BA 80`, $7F:0062 = 0, $4283's count to the END): 188 frames from C3:0000, the cartridge's for the same press (ct.exe --racepiccmp, attract-race-abort-native-vs-oracle), not 424",
       "mutations": [
         {
-          "file": "src/field.c",
-          "find": "        CtXlatStageHardware(seqX)->input1->currentState = padSerial;\n",
-          "replace": "",
-          "why": "the stage's hardware never sees the pad: the race runs its full 425 frames"
+          "file": "src/seq_race.c",
+          "find": "    case 0x424D: case 0x4283: return CtSeqTaskAbort(w, t, io);        // the attract's button\n",
+          "replace": "    case 0x4283: return CtSeqTaskAbort(w, t, io);   /* MUT: $424D not run */\n",
+          "why": "the button task never looks at the pad: the race runs its full 424 frames"
         }
       ],
       "notes": "USER REPORT (translated from Portuguese): 'when pressing A in the middle of the demo, it was not stopping and leaving'. ORACLE (saves/attract_race_handoff_f6150.state, --monitor 7E0100:2,7E0384:1,7E0000:1): A held at f170-179 -> the stage's $7E:0000 = 1 at f203 and $0384 = 02 (the title) at f224; at f350 -> f383 / f400; at f40 (26 frames into the race) the press is IGNORED and the race runs to f427. The race is a translated program on the vendored hardware (seq_xlat.h), and that hardware reads the pad itself: the auto-joypad read at vblank fills $4218/$4219 and the stage's NMI decodes them. The host now hands the stage's input1 the frame's controller word (the one the field pad latch and the oracle get). The translation was regenerated with the press paths (ct.exe --cputrace CPUTRACE_UNIQUE=1 CPUTRACE_FROM=C30000 CPUTRACE_BTN=0:170,100:10,.. and :40 / :350, plus entry 3 at :50 / :100 / :250 -- sequence_table.md 11.2): 5960 instructions, the abort's sound post $7E:377E among them. CT_AUDIO_FORCE + CT_AUDIO_LOCKSTEP because the abort posts a sound command and waits for the SPC's echo: without the audio system the stage runs on its own driverless SPC and the handshake never returns (a headless-only hang, see attract-race-abort-xlat-core-fallback). The press lands ~150 frames into the port's race (port race from ~f6520 under the audio lockstep). 2026-09-14 (later): the same press headless WITHOUT the audio system now ends the race the same way (190 frames): the silent host lends the stage a driver-uploaded SPC of its own. 2026-09-14, RE-ANCHORED, not re-graded: op 0xDF/0xE1 now reboot at the vblank through C0/0000 instead of running as 0xDD with the field's 15-frame fade-out (field_op_e0_fadechange.md section 4). The ROM's DF force-blanks (C0/0B4E) and loads at once, so every port frame after the attract's DF sites moved: -13 after 01B -> 0AD, -26 after 07D -> 1B1. The graded content was re-measured at the shifted frame and is unchanged. The press moves with the race (6670 -> 6644) and ends it after the same 190 frames. 2026-09-14 (later), RE-ANCHORED, not re-graded: the overworld's fades are its own objects now (ops 0x28/0x29 -> C2/20A2, C2/2105) and bank C2's loader window runs no NMI, so a world's scripts start when the cartridge's do (the attract's world-5 driver went from 37 frames early to 2 late; every overworld leg of the attract is now within 2 frames of the cartridge's) and an op-$05 exit leaves at once instead of after a 15-frame host fade. Port frames after the attract's overworld legs moved: +25 after 1F5, +51 after 1F7, +73 after 1F2, +98 after 1F3 (no audio; the same with the audio lockstep). The graded content was re-measured at the shifted frame. The press moves with the stage (6644 -> 6717). 2026-09-14 (wipes), RE-ANCHORED: op 0xFF 0x92-0x95 now park for the window wipe's 32 frames (C0/21E1 -> C0/22D8 -> C3/01E4, ct_vm.c ctWipeOp/ctWipeFrame) and C0/2848 takes its $011E skip, so a DE/DF-entered location is lit by its own script as on the cartridge. Loc 16E's leg is now exactly the cartridge's (275/275), 01C 460/486 (was 428), 0A5 897/925 (857), 0E6 476/499 (432). Port frames moved: selftest +32 after 16E, +64 after 01C, +164 after 0AD, +204 at 07D, +236 after 07D, +280 after 0E6, +324 after 087; interactive the same (+64 through the 0AD battle, +205 at 07D). The graded content was re-measured at the shifted frame. 2026-09-15, RE-ANCHORED +68 frames, not re-graded: the attract's loc 0DB is now the cartridge's length (171 frames against 172). A transition placed a lead its fn0 did not place (C0/42B8's arrival) only through the explore-mode sync, so in the cutscene Crono sat at (0,0) and his `96 08 13` walk ended at once -- the camera pan and the exit came 56 frames early -- and the door scan (C0/9C5C, the player controller's) ran while the controls were locked. Every port frame after 0DB moved +68 (selftest and the audio lockstep alike); the graded content was re-measured at the shifted frame and is unchanged. 2026-09-15, RE-ANCORADO, not re-graded: a native sequence entry's OPENING now costs the cartridge's 17 black frames (C3/0014 with the NMI off: C3/0557 decompressing $C3:1313 into $7E:3000, the common init's DMAs and $7E:6B04's setup, priced on the load clock). The attract requests the credits (`FF 61`) five times; every port frame after the Nth request moved +17*N (selftest and the audio lockstep alike), and the graded content was re-measured at the shifted frame and is unchanged. Each credits leg is 17 frames closer to the cartridge: 01C 477/486, 112 411/433, 0A5 914/925, 0E6 493/499. ==== 2026-09-15, RE-ANCHORED by the LOAD's own price, not re-graded: ct_lz_load_cost stopped at C0/09DD, and the location it was calibrated on (scene 468) has no BG3 tileset and a 30654-cycle script, so what it left out was inside its rounding there. The load is `092B / 1B53 / 0960 / 6DCF / 7084 / 7F7E / A33B / 09DD / 0A14 / 56D4`: C0/6DCF decompresses the BG3 tileset (record byte +2 -> $F6:2220 -> $7F:5080, then C0/2DC8 DMAs $1000 bytes to VRAM $5000), C0/0A14 its assembly (the same byte -> $F6:21C0 -> $7E:C000) and C0/56D4 the location's SCRIPT (record word +8 -> $FC:F9F0 -> $7F:2000); the object pass then decompresses each sprite sheet C0/5C90's dedup does not already have (g_ctLzSpriteCycles). All of it is priced with the same cycle-exact ct_lz_rom_cycles, and `--loadcost` grades the three new packets against the real C3/0557 too (468 10/10, scene 5 12/12 exact). ORACLE, `--monitor 7E0119:1` from saves/field_re/scene468_stairs_to_120.state: the two 468 loads are 33 black frames each and the 122 load is 40 ($0119 = 00 at f19/f85/f151, the ramp's first INC at f52/f118/f191); the port now holds 32/32/39 where it held 32/32/32. Every frame after a load moved and the graded content was re-measured at the shifted frame. disasm/notes/field_load_cost.md section 6b. ==== 2026-09-16 (later), RE-ANCHORED -20 frames, not re-graded: the object page $0920..$1DFF is saved around a battle (C0/0918) and restored on the return (C0/0905), the boot's shuffle runs with $2989 bit 5 cleared (C1/801C), and a scripted battle (D8 imm2 bit 7) skips the C0/034B regroup -- the attract's 0AD leg is now 907 against the cartridge's 906 (was 927), so every selftest frame after it moved by -20 (sequence_table.md 11.10c/11.10d). ==== 2026-09-19, THE ATTRACT'S FIVE REPORTED DEFECTS (disasm/notes/load_ramp_gate.md 6, battle_hud_band_anim.md 8, field_window_wipe.md, battle_boot_turns.md, ow_player_sprite.md). A sequence's C0/3FD6 stack reset now abandons an in-flight C0/2848 ramp, tail and all, so a `DE` staged inside it leaves $011E = 1 and the next location skips its ramp: 0A5 and 0E6 stay black to their curtain as on the cartridge, and every later frame of the demo comes 8 (0A5 -> 07D) to ~20 frames (1B1 on) earlier. The window wipe's channel reads the table set $0153 names (the sets' pointers never move), a new step every frame, and C0/2848's entry frame flips $0153 once (C0/286C -> C0/0B28 -> FD/C2C1). D1/F83D (the HUD band's COLDATA gradient) and CF/FB7D-FB8C ($EC, the band layout) run at the battle boot; the HUD band is read from HDMA channel 0's table; the overworld lead's pose machine runs only with a $3404 block. This check moved with it. The press moved with the stage it aborts (80@7177:10 -> 80@7157:10, 20 frames): entry 3's abort at 80@7157:10 reproduces the pinned 283 frames exactly (one frame earlier gives 282), and the race's the pinned 190. RE-PIN 2026-09-23 -- the SAME content at frames 8 (legs 0E6 to 06B) or 7 (087 on) earlier: the 07D's enemies are now placed by the cartridge's op 0x8C (disasm/notes/field_op8c_place_from_vars.md) and spread along the logical oracle's paths, which ends that leg's field part 8 frames earlier in the port's count -- the port's op 0xD9 walk is 8 frames short, a residual the wrong spread had been hiding (section 7 of that note). Frame numbers moved, nothing graded changed. (the press moved with its leg: 80@7157 -> 80@7149) RE-PIN 2026-09-23 (op 0xD9 ported: disasm/notes/field_d9_party_walk.md) -- the SAME content, the press moved with its leg: 80@7149 -> 80@7161, --frames +12. The party walk before each demo battle now runs the ROM's own walk programs ($7F3720..) and ends when the cartridge's does, the lead heads the scheduler queue (C0/59D9 prepends $1100 == 0) and a battle stages at the start of the frame after C0/1770's align frame; every later attract frame moved with them. | RE-ANCHORED 2026-09-23 (op 0xD4 through C0/394E + the PC loader's $1101/$018D stores): the attract's first hub is 66 frames like the logical oracle's (was 58) and every hub leave ends its visit, so this vehicle's numbering moved +16 (the Right held from f7161 -> f7177, inside the race) here -- measured on the $0100/$0119/$1E00 timeline of the old binary against the new; the content pinned is the one pinned before. ==== 2026-09-26 (e), RE-PINNED 190 -> 188 AND GRADED: the race now runs under the rule (logical frames, phase-0 NMI-off stretches -- seq_xlat.c CtXlatStageSetRule), and the cartridge under the same rule gives 188 for this press: its stage frame 154 (the port's hand-off f7023 / f6993 in this vehicle), `CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1 ct.exe --hookpc C00000 --from saves/attract_race_handoff_rule_f8247.state --btnscript \"0:173,80:10,0:200\"` -> C0:0000 at f207 = hand-off f19 + 188. (A press at stage frame 150: 184 on both sides; at 160: port 197, cartridge 195 -- the race's open residual, sequence_table.md 11.13 (e).) ==== 2026-09-28, RE-ANCHORED +33, not re-graded: op 0xFF < $90 runs its OWN fade before it jumps (C0/3FBB-3FD1 -- `DEC $19` a frame until 0, the jump on the frame after; the first DEC in the op's frame), for the $C3 sequences as for the $FD warp. The port jumped on the frame after the op whatever $0119 held: the hub's `FF 61` before 0A5 met the C0/2848 ramp at 0D (13 frames short), before 0E6 at 0F (15), the race's and its credits' at 05 (5 + 5), the title after the demo at 0F (15). Measured on the $0100/$0119/$1E00 timeline of the old binary against the new in this check's vehicle; the content at the new frame is the one pinned before. ==== 2026-09-28 (the count after a load), RE-ANCHORED -19 (the press, CT_HOLDBTN; this vehicle is the audio lockstep's): after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs. The port wrote the period there, so a period-4 object's first visit came 3 frames late; every leg with one now ends up to 3 frames earlier. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' $0B8A/$0D00/$1700/$1000 stores; C0/286C's C0/6F79.) The new frame was found by comparing every frame within 5 of the $0100/$0119/$1E00 shift of this check's vehicle. The press lands on the same stage frame: the program still exits after 188 frames. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/attract.json): The press moves with the race's hand-off: this vehicle (selftest with the audio lockstep) hands the race over 4 frames earlier under the rule (f7033 for f7037: exits f7456 after 424 frames for f7461 after 425), so 80@7191 -> 80@7187 is the same stage frame 154. The program exits after 188 frames -- and the rule's cartridge from saves/attract_race_handoff_rule_f8247.state with the press at the same stage frame (`--btnscript 0:173,80:10,0:200`, CT_ORACLE_LOGICAL/VIRTUAL_BEAM + the three switches) reaches C0:0000 at f207 = hand-off f19 + 188, unchanged by the infinitely fast CPU. || RE-ANCHORED 2026-10-07 (the CALL's completion spends one dispatch, ct_vm.c step(): disasm/notes/field_quad_window.md sec. 3). The attract's 112 leg is 4 frames longer (417 -> 421, the cartridge's 433: obj0's two `04` waits), so every port frame after it moved -- measured with the previous binary against this one, per vehicle: --selftest +4 after f4348; the lockstep run +4 from 0DB and +5 from the 07D fight's boot (its `70 01` handshake one NMI longer at the new SPC phase: battle-start at battle f17, was f16); the unlocked run (attract_bg_cmp) +4. Only port frames moved; the content is the old binary's (each check passes on the shifted frame and its neighbours do not, where they differ)."
@@ -28538,68 +28538,22 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "sequence: entry 3 program exited (JML $C0:0000) after 282 frames -> reboot"
+        "sequence: entry 3 (native) ended after 284 frames from C3:0000"
       ],
       "pin": [
-        "^sequence: entry 3 program exited "
+        "^sequence: entry 3 \\(native\\) ended "
       ],
       "timeout_s": 900,
-      "note_pass": "A held during the attract's sequence entry 3 ends it through its abort path (283 frames in, not 299) and the title follows",
+      "note_pass": "A held during the attract's sequence entry 3 ends the NATIVE stage through $7E:424D (the curtain by the setup's patched operand $4259 = 01, then $4283): 284 frames from C3:0000, the cartridge's for the same press (attract-entry3-abort-native-vs-oracle), not 298 -- and the title follows",
       "mutations": [
         {
-          "file": "src/field.c",
-          "find": "        CtXlatStageHardware(seqX)->input1->currentState = padSerial;\n",
-          "replace": "",
-          "why": "the stage never sees the pad: entry 3 runs its full 299 frames and hands over to loc 087"
+          "file": "src/seq_entry3.c",
+          "find": "    case 0x424D: case 0x4283: return CtSeqTaskAbort(w, t, io);        // the attract's button (seq_race.c)\n",
+          "replace": "    case 0x4283: return CtSeqTaskAbort(w, t, io);   /* MUT: $424D not run */\n",
+          "why": "the button task never looks at the pad: entry 3 runs its full 298 frames and hands over to loc 087"
         }
       ],
       "notes": "USER REPORT (translated from Portuguese): 'when pressing A in the middle of the demo, it was not stopping and leaving'. ORACLE (saves/attract_entry3_handoff_f6750.state, entry 3 opens at f17): A at f250-259 -> $7E:0000 = 1 at f283, $0384 = 02 at f298; at f100 -> $0384 = 02 at f149; at f50 the press is ignored and entry 3 runs to loc 087 at f338. Same mechanism and the same regenerated translation as attract-race-abort-to-title. 2026-09-14, RE-ANCHORED, not re-graded: op 0xDF/0xE1 now reboot at the vblank through C0/0000 instead of running as 0xDD with the field's 15-frame fade-out (field_op_e0_fadechange.md section 4). The ROM's DF force-blanks (C0/0B4E) and loads at once, so every port frame after the attract's DF sites moved: -13 after 01B -> 0AD, -26 after 07D -> 1B1. The graded content was re-measured at the shifted frame and is unchanged. The press moves with entry 3 (7357 -> 7331) and ends it after the same 283 frames. 2026-09-14 (later), RE-ANCHORED, not re-graded: the overworld's fades are its own objects now (ops 0x28/0x29 -> C2/20A2, C2/2105) and bank C2's loader window runs no NMI, so a world's scripts start when the cartridge's do (the attract's world-5 driver went from 37 frames early to 2 late; every overworld leg of the attract is now within 2 frames of the cartridge's) and an op-$05 exit leaves at once instead of after a 15-frame host fade. Port frames after the attract's overworld legs moved: +25 after 1F5, +51 after 1F7, +73 after 1F2, +98 after 1F3 (no audio; the same with the audio lockstep). The graded content was re-measured at the shifted frame. The press moves with the stage (7331 -> 7404). 2026-09-14 (wipes), RE-ANCHORED: op 0xFF 0x92-0x95 now park for the window wipe's 32 frames (C0/21E1 -> C0/22D8 -> C3/01E4, ct_vm.c ctWipeOp/ctWipeFrame) and C0/2848 takes its $011E skip, so a DE/DF-entered location is lit by its own script as on the cartridge. Loc 16E's leg is now exactly the cartridge's (275/275), 01C 460/486 (was 428), 0A5 897/925 (857), 0E6 476/499 (432). Port frames moved: selftest +32 after 16E, +64 after 01C, +164 after 0AD, +204 at 07D, +236 after 07D, +280 after 0E6, +324 after 087; interactive the same (+64 through the 0AD battle, +205 at 07D). The graded content was re-measured at the shifted frame. 2026-09-15, RE-ANCHORED +68 frames, not re-graded: the attract's loc 0DB is now the cartridge's length (171 frames against 172). A transition placed a lead its fn0 did not place (C0/42B8's arrival) only through the explore-mode sync, so in the cutscene Crono sat at (0,0) and his `96 08 13` walk ended at once -- the camera pan and the exit came 56 frames early -- and the door scan (C0/9C5C, the player controller's) ran while the controls were locked. Every port frame after 0DB moved +68 (selftest and the audio lockstep alike); the graded content was re-measured at the shifted frame and is unchanged. 2026-09-15, RE-ANCORADO, not re-graded: a native sequence entry's OPENING now costs the cartridge's 17 black frames (C3/0014 with the NMI off: C3/0557 decompressing $C3:1313 into $7E:3000, the common init's DMAs and $7E:6B04's setup, priced on the load clock). The attract requests the credits (`FF 61`) five times; every port frame after the Nth request moved +17*N (selftest and the audio lockstep alike), and the graded content was re-measured at the shifted frame and is unchanged. Each credits leg is 17 frames closer to the cartridge: 01C 477/486, 112 411/433, 0A5 914/925, 0E6 493/499. ==== 2026-09-15, RE-ANCHORED by the LOAD's own price, not re-graded: ct_lz_load_cost stopped at C0/09DD, and the location it was calibrated on (scene 468) has no BG3 tileset and a 30654-cycle script, so what it left out was inside its rounding there. The load is `092B / 1B53 / 0960 / 6DCF / 7084 / 7F7E / A33B / 09DD / 0A14 / 56D4`: C0/6DCF decompresses the BG3 tileset (record byte +2 -> $F6:2220 -> $7F:5080, then C0/2DC8 DMAs $1000 bytes to VRAM $5000), C0/0A14 its assembly (the same byte -> $F6:21C0 -> $7E:C000) and C0/56D4 the location's SCRIPT (record word +8 -> $FC:F9F0 -> $7F:2000); the object pass then decompresses each sprite sheet C0/5C90's dedup does not already have (g_ctLzSpriteCycles). All of it is priced with the same cycle-exact ct_lz_rom_cycles, and `--loadcost` grades the three new packets against the real C3/0557 too (468 10/10, scene 5 12/12 exact). ORACLE, `--monitor 7E0119:1` from saves/field_re/scene468_stairs_to_120.state: the two 468 loads are 33 black frames each and the 122 load is 40 ($0119 = 00 at f19/f85/f151, the ramp's first INC at f52/f118/f191); the port now holds 32/32/39 where it held 32/32/32. Every frame after a load moved and the graded content was re-measured at the shifted frame. disasm/notes/field_load_cost.md section 6b. ==== 2026-09-16 (later), RE-ANCHORED -20 frames, not re-graded: the object page $0920..$1DFF is saved around a battle (C0/0918) and restored on the return (C0/0905), the boot's shuffle runs with $2989 bit 5 cleared (C1/801C), and a scripted battle (D8 imm2 bit 7) skips the C0/034B regroup -- the attract's 0AD leg is now 907 against the cartridge's 906 (was 927), so every selftest frame after it moved by -20 (sequence_table.md 11.10c/11.10d). ==== 2026-09-19, THE ATTRACT'S FIVE REPORTED DEFECTS (disasm/notes/load_ramp_gate.md 6, battle_hud_band_anim.md 8, field_window_wipe.md, battle_boot_turns.md, ow_player_sprite.md). A sequence's C0/3FD6 stack reset now abandons an in-flight C0/2848 ramp, tail and all, so a `DE` staged inside it leaves $011E = 1 and the next location skips its ramp: 0A5 and 0E6 stay black to their curtain as on the cartridge, and every later frame of the demo comes 8 (0A5 -> 07D) to ~20 frames (1B1 on) earlier. The window wipe's channel reads the table set $0153 names (the sets' pointers never move), a new step every frame, and C0/2848's entry frame flips $0153 once (C0/286C -> C0/0B28 -> FD/C2C1). D1/F83D (the HUD band's COLDATA gradient) and CF/FB7D-FB8C ($EC, the band layout) run at the battle boot; the HUD band is read from HDMA channel 0's table; the overworld lead's pose machine runs only with a $3404 block. This check moved with it. The press moved with the stage it aborts (80@7883:10 -> 80@7863:10, 20 frames): entry 3's abort at 80@7863:10 reproduces the pinned 283 frames exactly (one frame earlier gives 282), and the race's the pinned 190. RE-PIN 2026-09-23 -- the SAME content at frames 8 (legs 0E6 to 06B) or 7 (087 on) earlier: the 07D's enemies are now placed by the cartridge's op 0x8C (disasm/notes/field_op8c_place_from_vars.md) and spread along the logical oracle's paths, which ends that leg's field part 8 frames earlier in the port's count -- the port's op 0xD9 walk is 8 frames short, a residual the wrong spread had been hiding (section 7 of that note). Frame numbers moved, nothing graded changed. (the press moved with its leg: 80@7863 -> 80@7855) RE-PIN 2026-09-23 (op 0xD9 ported: disasm/notes/field_d9_party_walk.md) -- the SAME content, the press moved with its leg: 80@7855 -> 80@7868, --frames +13 (the stage itself opens one frame later than its leg, so the press that lands 283 frames in is +13). The party walk before each demo battle now runs the ROM's own walk programs ($7F3720..) and ends when the cartridge's does, the lead heads the scheduler queue (C0/59D9 prepends $1100 == 0) and a battle stages at the start of the frame after C0/1770's align frame; every later attract frame moved with them. | RE-ANCHORED 2026-09-23 (op 0xD4 through C0/394E + the PC loader's $1101/$018D stores): the attract's first hub is 66 frames like the logical oracle's (was 58) and every hub leave ends its visit, so this vehicle's numbering moved +15 here (the Right held from f7868 -> f7883: the hub before entry 3 moved +16 and the stage opens one frame sooner against it, the SPC's phase at its $2143 wait) -- measured, and the exit is the 283 frames pinned before (f7884 gives 284). ==== 2026-09-28, RE-ANCHORED +39, not re-graded: op 0xFF < $90 runs its OWN fade before it jumps (C0/3FBB-3FD1 -- `DEC $19` a frame until 0, the jump on the frame after; the first DEC in the op's frame), for the $C3 sequences as for the $FD warp. The port jumped on the frame after the op whatever $0119 held: the hub's `FF 61` before 0A5 met the C0/2848 ramp at 0D (13 frames short), before 0E6 at 0F (15), the race's and its credits' at 05 (5 + 5), the title after the demo at 0F (15). Measured on the $0100/$0119/$1E00 timeline of the old binary against the new in this check's vehicle; the content at the new frame is the one pinned before. ==== 2026-09-28 (the count after a load), RE-ANCHORED -19 (the press, CT_HOLDBTN; this vehicle is the audio lockstep's): after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs. The port wrote the period there, so a period-4 object's first visit came 3 frames late; every leg with one now ends up to 3 frames earlier. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' $0B8A/$0D00/$1700/$1000 stores; C0/286C's C0/6F79.) The new frame was found by comparing every frame within 5 of the $0100/$0119/$1E00 shift of this check's vehicle. The press lands on the same stage frame: the program still exits after 283 frames. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): OPEN, pinned as it stands so the suite guards it: pressed on the same stage frame 249 as the valve's 80@7903 (now 80@7898), the stage exits after 282 frames against the valve's 283 -- the stage's one-frame offset of attract-entry3-stage-every-frame-under-the-rule (tools/rule_flip/attract.json). || RE-ANCHORED 2026-10-07 (the CALL's completion spends one dispatch, ct_vm.c step(): disasm/notes/field_quad_window.md sec. 3). The attract's 112 leg is 4 frames longer (417 -> 421, the cartridge's 433: obj0's two `04` waits), so every port frame after it moved -- measured with the previous binary against this one, per vehicle: --selftest +4 after f4348; the lockstep run +4 from 0DB and +5 from the 07D fight's boot (its `70 01` handshake one NMI longer at the new SPC phase: battle-start at battle f17, was f16); the unlocked run (attract_bg_cmp) +4. Only port frames moved; the content is the old binary's (each check passes on the shifted frame and its neighbours do not, where they differ). ==== 2026-10-08, RE-ANCHORED (disasm/notes/field_f8_cursor_play_clock.md): the demo's staging spill (C1/BA33, CPU work) is free under the rule -- the rule's cartridge opens both demo actions 2 frames after the cursor find (0AD trigger + 100, 07D + 99) and the port now does -- so every demo action and all that follows it is a frame earlier: on the lockstep vehicle -1 after the 0AD fight's action, -2 after 07D's, -3 after 087's; module frames after the action -1. The --selftest vehicle (fights synchronous) moved +1 from loc 112 and +2 from ~f6369 instead: C0/91F8's auto-scroll derives its step from the play clock $0400, whose ticks the same change corrected. Measured with the old and the new binary on the $0100/$0119/$1E00/$0384/$A013 timeline of each vehicle; the content at the shifted frame is the one pinned before. CT_HOLDBTN moved with the vehicle (+2): the A lands on the same stage frame and the program exits after the same 282 frames. | 2026-10-17: the vehicle reaches entry 3 two frames earlier (f7653; the SPC's exact clock (audio.c apuFrameCycles: an odd frame's line 240 is 4 master cycles short, 17,087.81 APU cycles instead of 17,088) moved the demo's SPC handshakes), so CT_HOLDBTN moved 7904 -> 7902: the A lands on the same stage frame and the program exits after the same 282 frames."
-    },
-    {
-      "name": "attract-race-abort-xlat-core-fallback",
-      "tier": "full",
-      "argv": [
-        "build/Belthasar.exe",
-        "--assets",
-        "ct_assets.dat",
-        "--scene",
-        "433",
-        "--selftest",
-        "--frames",
-        "7180"
-      ],
-      "env": {
-        "SDL_VIDEODRIVER": "dummy",
-        "SDL_AUDIODRIVER": "dummy",
-        "CT_NOPACE": "1",
-        "CT_HOLDBTN": "80@7120:10",
-        "CT_XLAT_BARE_SPC": "1",
-        "CT_NOAUDIO": "1"
-      },
-      "inputs": [
-        "ct_assets.dat",
-        "Chrono_Trigger_USA_SNES.sfc"
-      ],
-      "expect": [
-        "xlat: 00:0500 is not in the translation (its RAM bytes differ) -- run by the core",
-        "xlat: C3:08C9 is not in the translation (no label) -- run by the core",
-        "xlat: C3:08CB is not in the translation (no label) -- run by the core",
-        "xlat: C3:08CF is not in the translation (no label) -- run by the core"
-      ],
-      "pin": [
-        "^xlat: "
-      ],
-      "timeout_s": 900,
-      "note_pass": "a translated stage runs an instruction no trace took through the core itself instead of stopping",
-      "mutations": [
-        {
-          "file": "src/seq_xlat.c",
-          "find": "  st->x.interp = getenv(\"CT_XLAT_STRICT\") ? 0 : 1;",
-          "replace": "  st->x.interp = 0;",
-          "why": "strict translation: the stage stops (-3, $0501 = C9) at the NMI and holds"
-        }
-      ],
-      "notes": "THE TRANSLATION IS A LISTING, NOT A FENCE. C3/08D0, the stage's per-frame vblank routine, points the NMI trampoline at a bare `SEP #20 / CMP $4210 / RTI` while it works ($0501 = C9 at C3:08E2, back to B3 at C3:0941). No oracle trace ever took an NMI inside that window, so $0500 = `JML C3:08C9` and the three instructions it reaches were not in src/xlat/seq_c3.c -- but a press makes a frame's work longer and the port's race (headless, no audio) takes exactly that NMI 156 frames in. Strict, the stage stopped (CT_XLAT_BADBYTES, want B3 got C9) and held. ctXlatInterp now runs such an instruction with cpu_xlatFetch + cpu_xlatExec -- what cpu_runOpcode does, the same core the labels use -- after the host hook and any pending interrupt, as X_BOUNDARY does, names the address once on stderr, and control returns to the labels at the next boundary. ct.exe --xlatcmp keeps interp = 0 (it grades the translation itself); CT_XLAT_STRICT=1 restores the stop in a host. ⚠ This run has NO audio system, so the abort's sound post then waits forever on the stage's own SPC, which has no driver; the check grades the fallback lines only. With the audio system up the same press ends the race (attract-race-abort-to-title). 2026-09-14 (later): a host with no audio system now lends a stage an SPC with the driver on it (field.c, 'THE STAGE'S SPC') -- the old driverless one is what made the handshake spin, the frame long and the NMI land in the window, and without it no headless press reaches the path (eleven press frames tried, none). The check keeps that SPC on purpose through CT_XLAT_BARE_SPC=1: it grades the fallback, not the stage's sound. 2026-09-14 (wipes), RE-ANCHORED: op 0xFF 0x92-0x95 now park for the window wipe's 32 frames (C0/21E1 -> C0/22D8 -> C3/01E4, ct_vm.c ctWipeOp/ctWipeFrame) and C0/2848 takes its $011E skip, so a DE/DF-entered location is lit by its own script as on the cartridge. Loc 16E's leg is now exactly the cartridge's (275/275), 01C 460/486 (was 428), 0A5 897/925 (857), 0E6 476/499 (432). Port frames moved: selftest +32 after 16E, +64 after 01C, +164 after 0AD, +204 at 07D, +236 after 07D, +280 after 0E6, +324 after 087; interactive the same (+64 through the 0AD battle, +205 at 07D). The graded content was re-measured at the shifted frame. 2026-09-15, RE-ANCHORED +68 frames, not re-graded: the attract's loc 0DB is now the cartridge's length (171 frames against 172). A transition placed a lead its fn0 did not place (C0/42B8's arrival) only through the explore-mode sync, so in the cutscene Crono sat at (0,0) and his `96 08 13` walk ended at once -- the camera pan and the exit came 56 frames early -- and the door scan (C0/9C5C, the player controller's) ran while the controls were locked. Every port frame after 0DB moved +68 (selftest and the audio lockstep alike); the graded content was re-measured at the shifted frame and is unchanged. 2026-09-15, RE-ANCORADO, not re-graded: a native sequence entry's OPENING now costs the cartridge's 17 black frames (C3/0014 with the NMI off: C3/0557 decompressing $C3:1313 into $7E:3000, the common init's DMAs and $7E:6B04's setup, priced on the load clock). The attract requests the credits (`FF 61`) five times; every port frame after the Nth request moved +17*N (selftest and the audio lockstep alike), and the graded content was re-measured at the shifted frame and is unchanged. Each credits leg is 17 frames closer to the cartridge: 01C 477/486, 112 411/433, 0A5 914/925, 0E6 493/499. ==== 2026-09-15, RE-ANCHORED by the LOAD's own price, not re-graded: ct_lz_load_cost stopped at C0/09DD, and the location it was calibrated on (scene 468) has no BG3 tileset and a 30654-cycle script, so what it left out was inside its rounding there. The load is `092B / 1B53 / 0960 / 6DCF / 7084 / 7F7E / A33B / 09DD / 0A14 / 56D4`: C0/6DCF decompresses the BG3 tileset (record byte +2 -> $F6:2220 -> $7F:5080, then C0/2DC8 DMAs $1000 bytes to VRAM $5000), C0/0A14 its assembly (the same byte -> $F6:21C0 -> $7E:C000) and C0/56D4 the location's SCRIPT (record word +8 -> $FC:F9F0 -> $7F:2000); the object pass then decompresses each sprite sheet C0/5C90's dedup does not already have (g_ctLzSpriteCycles). All of it is priced with the same cycle-exact ct_lz_rom_cycles, and `--loadcost` grades the three new packets against the real C3/0557 too (468 10/10, scene 5 12/12 exact). ORACLE, `--monitor 7E0119:1` from saves/field_re/scene468_stairs_to_120.state: the two 468 loads are 33 black frames each and the 122 load is 40 ($0119 = 00 at f19/f85/f151, the ramp's first INC at f52/f118/f191); the port now holds 32/32/39 where it held 32/32/32. Every frame after a load moved and the graded content was re-measured at the shifted frame. disasm/notes/field_load_cost.md section 6b. 2026-10-01, CT_NOAUDIO=1 (env only, the grade unchanged): under the rule's switches (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1) Belthasar brings a headless SPC up for the rule's clock (field.c ruleSpc), so this run had an audio system and the premise above -- a host with none, the stage on its bare SPC -- no longer held: the press ended the race as in attract-race-abort-to-title and no xlat line was printed. CT_NOAUDIO=1 keeps the host silent under the switches too; without them it changes nothing (field.c reads it only where --selftest without CT_AUDIO_FORCE already brings no audio up): the four lines are the same in both runs."
     },
     {
       "name": "battle-jsl-audio-keeps-playing",
@@ -28830,19 +28784,19 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "sequence: entry 0 program exited (JML $C0:0000) after 188 frames -> reboot"
+        "sequence: entry 0 (native) ended after 188 frames from C3:0000"
       ],
       "pin": [
-        "^sequence: entry 0 program exited "
+        "^sequence: entry 0 \\(native\\) ended "
       ],
       "timeout_s": 900,
-      "note_pass": "with no audio system at all, a button still ends the attract's race: the stage gets an SPC with the driver on it",
+      "note_pass": "with no audio system at all, a button still ends the attract's race: the native stage's abort posts its sound through the host (raceIoFor's sfx, inert without audio) and counts its own 32 frames",
       "mutations": [
         {
-          "file": "src/field.c",
-          "find": "          if (!stageApu && xrb && !getenv(\"CT_XLAT_BARE_SPC\")) { if (!stageAudio) stageAudio = CtAudioInit(xrb, xrl);\n",
-          "replace": "          if (0) { if (!stageAudio) stageAudio = CtAudioInit(xrb, xrl);\n",
-          "why": "the silent host hands the stage no SPC: it runs on its driverless one and the abort's sound handshake ($7E:377E) never answers -- the race hangs"
+          "file": "src/seq_race.c",
+          "find": "  return 0x4283;                                                      // 427C LDX #4283 / JMP $39B1\n",
+          "replace": "  return task;   /* MUT: the slot never handed to $4283 */\n",
+          "why": "the abort starts the curtain but never counts to the END: the race runs its full 424 frames"
         }
       ],
       "notes": "OPEN POINT CLOSED 2026-09-14: 'headless without the audio system, the race/entry-3 abort hangs waiting on the SPC'. A translated stage drives the host's SPC through its own bus; a host with no audio system (--selftest without CT_AUDIO_FORCE, CT_NOAUDIO) handed it NULL and the stage fell back to its own snes_init APU -- the IPL and no driver. The race's abort posts a command through the overlay's own handshake ($7E:377E: `$1E00..03` -> `$2140..43`, CMP `$2140` until the echo, no timeout), so the stage spun there forever (CT_XLAT_FRAMETRACE: PC 7E:379B-37A1, A=4218). The cartridge always has a driver; field.c now lends a silent host's stage an SPC of its own with the $C7 driver uploaded (CtAudioInit), and the same press ends the race after 190 frames exactly as it does with the audio system up (attract-race-abort-to-title). What it cannot reproduce is the host's own SPC state, which a silent host never had. 2026-09-14, RE-ANCHORED, not re-graded: op 0xDF/0xE1 now reboot at the vblank through C0/0000 instead of running as 0xDD with the field's 15-frame fade-out (field_op_e0_fadechange.md section 4). The ROM's DF force-blanks (C0/0B4E) and loads at once, so every port frame after the attract's DF sites moved: -13 after 01B -> 0AD, -26 after 07D -> 1B1. The graded content was re-measured at the shifted frame and is unchanged. The press moves with the race (6640 -> 6614) and ends it after the same 190 frames. 2026-09-14 (later), RE-ANCHORED, not re-graded: the overworld's fades are its own objects now (ops 0x28/0x29 -> C2/20A2, C2/2105) and bank C2's loader window runs no NMI, so a world's scripts start when the cartridge's do (the attract's world-5 driver went from 37 frames early to 2 late; every overworld leg of the attract is now within 2 frames of the cartridge's) and an op-$05 exit leaves at once instead of after a 15-frame host fade. Port frames after the attract's overworld legs moved: +25 after 1F5, +51 after 1F7, +73 after 1F2, +98 after 1F3 (no audio; the same with the audio lockstep). The graded content was re-measured at the shifted frame. The press moves with the stage (6614 -> 6687). 2026-09-14 (wipes), RE-ANCHORED: op 0xFF 0x92-0x95 now park for the window wipe's 32 frames (C0/21E1 -> C0/22D8 -> C3/01E4, ct_vm.c ctWipeOp/ctWipeFrame) and C0/2848 takes its $011E skip, so a DE/DF-entered location is lit by its own script as on the cartridge. Loc 16E's leg is now exactly the cartridge's (275/275), 01C 460/486 (was 428), 0A5 897/925 (857), 0E6 476/499 (432). Port frames moved: selftest +32 after 16E, +64 after 01C, +164 after 0AD, +204 at 07D, +236 after 07D, +280 after 0E6, +324 after 087; interactive the same (+64 through the 0AD battle, +205 at 07D). The graded content was re-measured at the shifted frame. 2026-09-15, RE-ANCHORED +68 frames, not re-graded: the attract's loc 0DB is now the cartridge's length (171 frames against 172). A transition placed a lead its fn0 did not place (C0/42B8's arrival) only through the explore-mode sync, so in the cutscene Crono sat at (0,0) and his `96 08 13` walk ended at once -- the camera pan and the exit came 56 frames early -- and the door scan (C0/9C5C, the player controller's) ran while the controls were locked. Every port frame after 0DB moved +68 (selftest and the audio lockstep alike); the graded content was re-measured at the shifted frame and is unchanged. 2026-09-15, RE-ANCORADO, not re-graded: a native sequence entry's OPENING now costs the cartridge's 17 black frames (C3/0014 with the NMI off: C3/0557 decompressing $C3:1313 into $7E:3000, the common init's DMAs and $7E:6B04's setup, priced on the load clock). The attract requests the credits (`FF 61`) five times; every port frame after the Nth request moved +17*N (selftest and the audio lockstep alike), and the graded content was re-measured at the shifted frame and is unchanged. Each credits leg is 17 frames closer to the cartridge: 01C 477/486, 112 411/433, 0A5 914/925, 0E6 493/499. ==== 2026-09-15, RE-ANCHORED by the LOAD's own price, not re-graded: ct_lz_load_cost stopped at C0/09DD, and the location it was calibrated on (scene 468) has no BG3 tileset and a 30654-cycle script, so what it left out was inside its rounding there. The load is `092B / 1B53 / 0960 / 6DCF / 7084 / 7F7E / A33B / 09DD / 0A14 / 56D4`: C0/6DCF decompresses the BG3 tileset (record byte +2 -> $F6:2220 -> $7F:5080, then C0/2DC8 DMAs $1000 bytes to VRAM $5000), C0/0A14 its assembly (the same byte -> $F6:21C0 -> $7E:C000) and C0/56D4 the location's SCRIPT (record word +8 -> $FC:F9F0 -> $7F:2000); the object pass then decompresses each sprite sheet C0/5C90's dedup does not already have (g_ctLzSpriteCycles). All of it is priced with the same cycle-exact ct_lz_rom_cycles, and `--loadcost` grades the three new packets against the real C3/0557 too (468 10/10, scene 5 12/12 exact). ORACLE, `--monitor 7E0119:1` from saves/field_re/scene468_stairs_to_120.state: the two 468 loads are 33 black frames each and the 122 load is 40 ($0119 = 00 at f19/f85/f151, the ramp's first INC at f52/f118/f191); the port now holds 32/32/39 where it held 32/32/32. Every frame after a load moved and the graded content was re-measured at the shifted frame. disasm/notes/field_load_cost.md section 6b. ==== 2026-09-16 (later), RE-ANCHORED -20 frames, not re-graded: the object page $0920..$1DFF is saved around a battle (C0/0918) and restored on the return (C0/0905), the boot's shuffle runs with $2989 bit 5 cleared (C1/801C), and a scripted battle (D8 imm2 bit 7) skips the C0/034B regroup -- the attract's 0AD leg is now 907 against the cartridge's 906 (was 927), so every selftest frame after it moved by -20 (sequence_table.md 11.10c/11.10d). ==== 2026-09-19, THE ATTRACT'S FIVE REPORTED DEFECTS (disasm/notes/load_ramp_gate.md 6, battle_hud_band_anim.md 8, field_window_wipe.md, battle_boot_turns.md, ow_player_sprite.md). A sequence's C0/3FD6 stack reset now abandons an in-flight C0/2848 ramp, tail and all, so a `DE` staged inside it leaves $011E = 1 and the next location skips its ramp: 0A5 and 0E6 stay black to their curtain as on the cartridge, and every later frame of the demo comes 8 (0A5 -> 07D) to ~20 frames (1B1 on) earlier. The window wipe's channel reads the table set $0153 names (the sets' pointers never move), a new step every frame, and C0/2848's entry frame flips $0153 once (C0/286C -> C0/0B28 -> FD/C2C1). D1/F83D (the HUD band's COLDATA gradient) and CF/FB7D-FB8C ($EC, the band layout) run at the battle boot; the HUD band is read from HDMA channel 0's table; the overworld lead's pose machine runs only with a $3404 block. This check moved with it. The press moved with the stage it aborts (80@7147:10 -> 80@7127:10, 20 frames): entry 3's abort at 80@7127:10 reproduces the pinned 283 frames exactly (one frame earlier gives 282), and the race's the pinned 190. RE-PIN 2026-09-23 -- the SAME content at frames 8 (legs 0E6 to 06B) or 7 (087 on) earlier: the 07D's enemies are now placed by the cartridge's op 0x8C (disasm/notes/field_op8c_place_from_vars.md) and spread along the logical oracle's paths, which ends that leg's field part 8 frames earlier in the port's count -- the port's op 0xD9 walk is 8 frames short, a residual the wrong spread had been hiding (section 7 of that note). Frame numbers moved, nothing graded changed. (the press moved with its leg: 80@7127 -> 80@7119) RE-PIN 2026-09-23 (op 0xD9 ported: disasm/notes/field_d9_party_walk.md) -- the SAME content, the press moved with its leg: 80@7119 -> 80@7131, --frames +12. The party walk before each demo battle now runs the ROM's own walk programs ($7F3720..) and ends when the cartridge's does, the lead heads the scheduler queue (C0/59D9 prepends $1100 == 0) and a battle stages at the start of the frame after C0/1770's align frame; every later attract frame moved with them. | RE-ANCHORED 2026-09-23 (op 0xD4 through C0/394E + the PC loader's $1101/$018D stores): the attract's first hub is 66 frames like the logical oracle's (was 58) and every hub leave ends its visit, so this vehicle's numbering moved +16 (the Right held from f7131 -> f7147, inside the race) here -- measured on the $0100/$0119/$1E00 timeline of the old binary against the new; the content pinned is the one pinned before. ==== 2026-09-26 (e), RE-PINNED 190 -> 188 AND GRADED: the race now runs under the rule (logical frames, phase-0 NMI-off stretches -- seq_xlat.c CtXlatStageSetRule), and the cartridge under the same rule gives 188 for this press: its stage frame 154 (the port's hand-off f7023 / f6993 in this vehicle), `CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1 ct.exe --hookpc C00000 --from saves/attract_race_handoff_rule_f8247.state --btnscript \"0:173,80:10,0:200\"` -> C0:0000 at f207 = hand-off f19 + 188. (A press at stage frame 150: 184 on both sides; at 160: port 197, cartridge 195 -- the race's open residual, sequence_table.md 11.13 (e).) ==== 2026-09-28, RE-ANCHORED +33, not re-graded: op 0xFF < $90 runs its OWN fade before it jumps (C0/3FBB-3FD1 -- `DEC $19` a frame until 0, the jump on the frame after; the first DEC in the op's frame), for the $C3 sequences as for the $FD warp. The port jumped on the frame after the op whatever $0119 held: the hub's `FF 61` before 0A5 met the C0/2848 ramp at 0D (13 frames short), before 0E6 at 0F (15), the race's and its credits' at 05 (5 + 5), the title after the demo at 0F (15). Measured on the $0100/$0119/$1E00 timeline of the old binary against the new in this check's vehicle; the content at the new frame is the one pinned before. ==== 2026-09-28 (the count after a load), RE-ANCHORED -22 (the press, CT_HOLDBTN): after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs. The port wrote the period there, so a period-4 object's first visit came 3 frames late; every leg with one now ends up to 3 frames earlier. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' $0B8A/$0D00/$1700/$1000 stores; C0/286C's C0/6F79.) The new frame was found by comparing every frame within 5 of the $0100/$0119/$1E00 shift of this check's vehicle. The press lands on the same stage frame: the program still exits after 188 frames. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/attract.json): The silent host (plain selftest) hands the race over 28 frames later under the rule (f7033 for f7005: the hub's `10 18` now priced, the worlds -1 each), so 80@7158 -> 80@7186 is the same stage frame 153 (f7185-f7187 all give 188). The program exits after 188 frames, the cartridge's under the rule (attract-race-abort-to-title). || RE-DRIVEN 2026-10-01 (the post-flip mutation sweep; env only, the expect untouched): under the rule a plain --selftest is NOT a silent host any more -- field.c brings the SPC up headless (`ruleSpc`, every `JSL C7/0004` priced on SPC time: `[audio] SPC700 up` in the output), so the race got the host's SPC and the lend this check exists for never ran (its mutation SURVIVED). CT_NOAUDIO=1 makes the host silent again. That host hands the race over 30 frames sooner (loc 433's load at f6985 against f7015, no loader-clock price), so the press moves 80@7186 -> 80@7156: the same stage frame 153 (measured: f7154..f7157 all give 188, f7158 gives 192). The mutation (no lent SPC) hangs the race again: KILLED. || RE-ANCHORED 2026-10-07 (the CALL's completion spends one dispatch, ct_vm.c step(): disasm/notes/field_quad_window.md sec. 3). The attract's 112 leg is 4 frames longer (417 -> 421, the cartridge's 433: obj0's two `04` waits), so every port frame after it moved -- measured with the previous binary against this one, per vehicle: --selftest +4 after f4348; the lockstep run +4 from 0DB and +5 from the 07D fight's boot (its `70 01` handshake one NMI longer at the new SPC phase: battle-start at battle f17, was f16); the unlocked run (attract_bg_cmp) +4. Only port frames moved; the content is the old binary's (each check passes on the shifted frame and its neighbours do not, where they differ)."
@@ -28874,7 +28828,7 @@
         "reboot: op 0xDF/0xE1 at the vblank -> $0100=1B1, $0105=07D",
         "reboot: op 0xDF/0xE1 at the vblank -> $0100=087, $0105=1B1",
         "reboot: op 0xDF/0xE1 at the vblank -> $0100=1F0, $0105=1B0",
-        "overworld entry: scene 433 -> world 3 at (0,0) ngIntro=0 f8279",
+        "overworld entry: scene 433 -> world 3 at (0,0) ngIntro=0 f8275",
         "ow-op05: C2/1100 -> loc 1B1 tile(0,0) flags=1 ret=1F3/(106,74)"
       ],
       "pin": [
@@ -29312,39 +29266,39 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "pin": [
-        "^owfade: f832[01] ",
-        "^owpal: f83(22|24|30|32|38|40) row [34] ",
-        "^owpal: f91(0[2-9]|1[0-9]|2[01]) row 8 "
+        "^owfade: f831[45] ",
+        "^owpal: f83(16|18|24|26|32|34) row [34] ",
+        "^owpal: f9(09[6-9]|10[0-9]|11[0-5]) row 8 "
       ],
       "expect": [
-        "owfade: f8318 $1C=80 $1D=00 $1BF6=01",
-        "owfade: f8319 $1C=00 $1D=01 $1BF6=01",
-        "owpal: f8320 row 4 = 41F3 2800 3420 3C80 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
-        "owpal: f8322 row 3 = 41F3 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 00B7 00F7 0137 0157",
-        "owpal: f8328 row 4 = 0240 3420 3C80 2800 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
-        "owpal: f8330 row 3 = 0240 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 00F7 0137 0157 00B7",
-        "owpal: f8336 row 4 = 0004 3C80 2800 3420 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
-        "owpal: f8338 row 3 = 0004 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 0137 0157 00B7 00F7",
-        "owpal: f9100 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 0CE7 2BDF 12BB 0D2D 0C63 73BD 56D6 4272",
-        "owpal: f9101 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 10E7 2BDF 12BB 112D 1084 73BD 56D6 4272",
-        "owpal: f9102 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 14E7 2BDF 16BB 152D 14A5 73BD 56D6 4272",
-        "owpal: f9103 row 8 = 0000 18C6 294A 6B5A 3E32 3A0F 2DCC 1928 18E7 2BDF 1ABB 192D 18C6 73BD 56D6 4272",
-        "owpal: f9104 row 8 = 0000 1CE7 294A 6B5A 3E32 3A0F 2DCC 1D28 1CE7 2BDF 1EBB 1D2D 1CE7 73BD 56D6 4272",
-        "owpal: f9105 row 8 = 0000 2108 294A 6B5A 3E32 3A0F 2DCC 2128 2108 2BDF 22BB 212D 2108 73BD 56D6 4272",
-        "owpal: f9106 row 8 = 0000 2529 294A 6B5A 3E32 3A0F 2DCC 2529 2529 2BDF 26BB 252D 2529 73BD 56D6 4272",
-        "owpal: f9107 row 8 = 0000 294A 294A 6B5A 3E32 3A0F 2DCC 294A 294A 2BDF 2ABB 294D 294A 73BD 56D6 4272",
-        "owpal: f9108 row 8 = 0000 2D6B 2D6B 6B5A 3E32 3A0F 2DCC 2D6B 2D6B 2FDF 2EBB 2D6D 2D6B 73BD 56D6 4272",
-        "owpal: f9109 row 8 = 0000 318C 318C 6B5A 3E32 3A0F 31CC 318C 318C 33DF 32BB 318D 318C 73BD 56D6 4272",
-        "owpal: f9110 row 8 = 0000 35AD 35AD 6B5A 3E32 3A0F 35CD 35AD 35AD 37DF 36BB 35AD 35AD 73BD 56D6 4272",
-        "owpal: f9111 row 8 = 0000 39CE 39CE 6B5A 3E32 3A0F 39CE 39CE 39CE 3BDF 3ABB 39CE 39CE 73BD 56D6 4272",
-        "owpal: f9112 row 8 = 0000 3DEF 3DEF 6B5A 3E32 3E0F 3DEF 3DEF 3DEF 3FDF 3EBB 3DEF 3DEF 73BD 56D6 4272",
-        "owpal: f9113 row 8 = 0000 4210 4210 6B5A 4232 4210 4210 4210 4210 43DF 42BB 4210 4210 73BD 56D6 4272",
-        "owpal: f9114 row 8 = 0000 4631 4631 6B5A 4632 4631 4631 4631 4631 47DF 46BB 4631 4631 73BD 56D6 4672",
-        "owpal: f9115 row 8 = 0000 4A52 4A52 6B5A 4A52 4A52 4A52 4A52 4A52 4BDF 4ABB 4A52 4A52 73BD 56D6 4A72",
-        "owpal: f9116 row 8 = 0000 4E73 4E73 6B5A 4E73 4E73 4E73 4E73 4E73 4FDF 4EBB 4E73 4E73 73BD 56D6 4E73",
-        "owpal: f9117 row 8 = 0000 5294 5294 6B5A 5294 5294 5294 5294 5294 53DF 52BB 5294 5294 73BD 56D6 5294",
-        "owpal: f9118 row 8 = 0000 56B5 56B5 6B5A 56B5 56B5 56B5 56B5 56B5 57DF 56BB 56B5 56B5 73BD 56D6 56B5",
-        "owpal: f9119 row 8 = 0000 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF"
+        "owfade: f8314 $1C=80 $1D=00 $1BF6=01",
+        "owfade: f8315 $1C=00 $1D=01 $1BF6=01",
+        "owpal: f8316 row 4 = 41F3 2800 3420 3C80 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
+        "owpal: f8318 row 3 = 41F3 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 00B7 00F7 0137 0157",
+        "owpal: f8324 row 4 = 0240 3420 3C80 2800 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
+        "owpal: f8326 row 3 = 0240 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 00F7 0137 0157 00B7",
+        "owpal: f8332 row 4 = 0004 3C80 2800 3420 38E0 3D22 4182 41E4 526C 56D2 5319 7C1F 7C1F 7C1F 7C1F 7C1F",
+        "owpal: f8334 row 3 = 0004 2529 1DB4 1552 112F 110E 08EE 08CB 0CC9 0888 0066 1021 0137 0157 00B7 00F7",
+        "owpal: f9096 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 0CE7 2BDF 12BB 0D2D 0C63 73BD 56D6 4272",
+        "owpal: f9097 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 10E7 2BDF 12BB 112D 1084 73BD 56D6 4272",
+        "owpal: f9098 row 8 = 0000 14A5 294A 6B5A 3E32 3A0F 2DCC 1928 14E7 2BDF 16BB 152D 14A5 73BD 56D6 4272",
+        "owpal: f9099 row 8 = 0000 18C6 294A 6B5A 3E32 3A0F 2DCC 1928 18E7 2BDF 1ABB 192D 18C6 73BD 56D6 4272",
+        "owpal: f9100 row 8 = 0000 1CE7 294A 6B5A 3E32 3A0F 2DCC 1D28 1CE7 2BDF 1EBB 1D2D 1CE7 73BD 56D6 4272",
+        "owpal: f9101 row 8 = 0000 2108 294A 6B5A 3E32 3A0F 2DCC 2128 2108 2BDF 22BB 212D 2108 73BD 56D6 4272",
+        "owpal: f9102 row 8 = 0000 2529 294A 6B5A 3E32 3A0F 2DCC 2529 2529 2BDF 26BB 252D 2529 73BD 56D6 4272",
+        "owpal: f9103 row 8 = 0000 294A 294A 6B5A 3E32 3A0F 2DCC 294A 294A 2BDF 2ABB 294D 294A 73BD 56D6 4272",
+        "owpal: f9104 row 8 = 0000 2D6B 2D6B 6B5A 3E32 3A0F 2DCC 2D6B 2D6B 2FDF 2EBB 2D6D 2D6B 73BD 56D6 4272",
+        "owpal: f9105 row 8 = 0000 318C 318C 6B5A 3E32 3A0F 31CC 318C 318C 33DF 32BB 318D 318C 73BD 56D6 4272",
+        "owpal: f9106 row 8 = 0000 35AD 35AD 6B5A 3E32 3A0F 35CD 35AD 35AD 37DF 36BB 35AD 35AD 73BD 56D6 4272",
+        "owpal: f9107 row 8 = 0000 39CE 39CE 6B5A 3E32 3A0F 39CE 39CE 39CE 3BDF 3ABB 39CE 39CE 73BD 56D6 4272",
+        "owpal: f9108 row 8 = 0000 3DEF 3DEF 6B5A 3E32 3E0F 3DEF 3DEF 3DEF 3FDF 3EBB 3DEF 3DEF 73BD 56D6 4272",
+        "owpal: f9109 row 8 = 0000 4210 4210 6B5A 4232 4210 4210 4210 4210 43DF 42BB 4210 4210 73BD 56D6 4272",
+        "owpal: f9110 row 8 = 0000 4631 4631 6B5A 4632 4631 4631 4631 4631 47DF 46BB 4631 4631 73BD 56D6 4672",
+        "owpal: f9111 row 8 = 0000 4A52 4A52 6B5A 4A52 4A52 4A52 4A52 4A52 4BDF 4ABB 4A52 4A52 73BD 56D6 4A72",
+        "owpal: f9112 row 8 = 0000 4E73 4E73 6B5A 4E73 4E73 4E73 4E73 4E73 4FDF 4EBB 4E73 4E73 73BD 56D6 4E73",
+        "owpal: f9113 row 8 = 0000 5294 5294 6B5A 5294 5294 5294 5294 5294 53DF 52BB 5294 5294 73BD 56D6 5294",
+        "owpal: f9114 row 8 = 0000 56B5 56B5 6B5A 56B5 56B5 56B5 56B5 56B5 57DF 56BB 56B5 56B5 73BD 56D6 56B5",
+        "owpal: f9115 row 8 = 0000 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF"
       ],
       "timeout_s": 300,
       "note_pass": "the overworld's colour animation is its scripts' own palette rows: 65 M B.C.'s rows 3 and 4 cycle on the cartridge's frames and 1000 A.D.'s row 8 fades to white in the cartridge's 20 steps, colour for colour",
@@ -29382,7 +29336,7 @@
       "argv": [
         "python",
         "tools/attract_bg_cmp.py",
-        "8726",
+        "8722",
         "8455",
         "0",
         "224"
@@ -29397,7 +29351,7 @@
         "^attract-bg-cmp: "
       ],
       "expect": [
-        "attract-bg-cmp: port f8726 vs oracle f8455 rows 0-224 -> 57344 / 57344 identical"
+        "attract-bg-cmp: port f8722 vs oracle f8455 rows 0-224 -> 57344 / 57344 identical"
       ],
       "timeout_s": 300,
       "note_pass": "the attract's time vortex (loc 1B0) is the cartridge's: the fire fills the screen behind the Epoch, BG2 drawn from its map-built tilemap at its own counter",
@@ -29426,7 +29380,7 @@
         "tools/frame_region_cmp.py",
         "saves/attract_cena_inicial.state",
         "8402",
-        "10313",
+        "10309",
         "0",
         "0",
         "256",
@@ -29446,7 +29400,7 @@
         "saves/attract_cena_inicial.state"
       ],
       "expect": [
-        "frame-region-cmp: port f10313 vs oracle f8402 box (0,0)-(256,224) -> 57344 / 57344 identical"
+        "frame-region-cmp: port f10309 vs oracle f8402 box (0,0)-(256,224) -> 57344 / 57344 identical"
       ],
       "pin": [
         "^frame-region-cmp: "
@@ -30243,13 +30197,15 @@
       "argv": [
         "python",
         "tools/entry3_stage_cmp.py",
-        "8858"
+        "8856",
+        "153",
+        "20"
       ],
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
         "tools/entry3_stage_cmp.py",
-        "saves/attract_entry3_handoff_rule_f8859.state"
+        "tools/stage_rule_cmp.py"
       ],
       "expect": [
         "entry3-vram: tiles $2000-$4F7F -> 12160 / 12160 words identical",
@@ -30257,8 +30213,8 @@
         "entry3-vram: bg2 map $6800-$6FFF -> 2048 / 2048 words identical",
         "entry3-vram: bg3 map $7000-$77FF -> 2016 / 2048 words identical",
         "entry3-cgram: 256 / 256 colours identical, per row 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16",
-        "entry3-picture: port f8858 vs cartridge +151 whole -> 57344 / 57344 identical, mean abs diff 0.00",
-        "entry3-frames: port f8725..f8858 vs cartridge +18..+151 -> 134 / 134 stage frames identical (thumbnails)"
+        "entry3-picture: port f8856 vs cartridge +153 whole -> 57344 / 57344 identical, mean abs diff 0.00",
+        "entry3-frames: port f8723..f8856 vs cartridge +20..+153 -> 134 / 134 stage frames identical (thumbnails)"
       ],
       "pin": [
         "^entry3-vram: tiles ",
@@ -30271,50 +30227,14 @@
       ],
       "tier": "full",
       "timeout_s": 1200,
-      "note_pass": "entry 3 under the rule: every stage frame from the hand-off (the opening transition included) and the picture 133 frames later are the cartridge's",
+      "note_pass": "entry 3 (the attract's FF 63, native: seq_entry3.c's bit-6 arm) under the rule: the VRAM and CGRAM it is handed, every stage frame from the hand-off (the opening curtain included) and the picture 133 frames later are the cartridge's -- THIS oracle's power-on run (stage_rule_cmp.py's state), the picture at P+2",
       "notes": "SEQUENCE-TABLE ENTRY 3 AGAINST THE CARTRIDGE, both sides live (disasm/notes/sequence_table.md 11.11). USER REPORT: the attract's entry 3 was BLACK / a repeated-tile pattern where the cartridge shows the Blackbird over the mountains. The translated program (src/xlat/seq_c3.c) needs the PPU as the field left it: it DMA-reads BG1's tilemap rows from $6140 ($7E:674A) and keeps the field's characters. MEASURED with --cputrace on saves/attract_entry3_handoff_f6750.state (CPUTRACE_UNIQUE=1, 160 frames): the state is 17 frames before C3:0000 -- C0/09DD f7 (assembly -> $7E:B000), C0/0A14 f8 (BG3 assembly -> $7E:C000), C0/56D4 f9 (script), the object pass C0/5709-58AA f9, the entry's tilemap fill C0/0A9D f11 (BG1 $6000), C0/2DCA f13 ($6800) / f14 ($7000), the first main-loop tick C0/5A64 f16, `FF 63` -> C0/0B4E -> JML $C3:0000 f17. FOUR DEFECTS, all derived: (1) the port filled the tilemaps on the field frame AFTER the first VM tick, and 06B's `FF 63` runs IN that tick, so the stage got the previous location's tilemaps (the credits' text: BG1 rows of 555A 414B = 'ZU' 'KA'); the ROM's fill is C0/0A50-0AF3, after the object pass and the camera entry and before the tick (fieldEntryTilemapFill at both entry sites). (2) C0/0AB4 `LDA $1D35 / BIT #02` -> C0/7F77 uploads BOTH 32x32 halves of BG2 ($1000 bytes) when the layer is detached -- 06B's $1D35 = 02, and C0/7976 walks the same 32 rows again for the second half when $0BCF = $0BD1 = $10 ($6C00 = $6800 on the cartridge, 1024/1024); the port wrote one half. (3) BG3's tilemap needs the BG3 ASSEMBLY C0/0A14 puts at $7E:C000 ($F6:21C0 + rec[2]*3), which the port never loaded (ct_lz_load_assembly3), gated as C0/0ACC-0AD6 (`$0BCA & 1`, `$01BB == 0`). (4) C0/711D-712A copies the WHOLE $200-byte palette page $2000 -> $2200 (`LDA #01FF / MVN`), OBJ rows included; the port copied $100. And ONE VRAM: the entry never uploads BG1's second half ($6400 keeps the credits' text `183B 1832 1833 ..` from entry 1's page), so the host copies the stage's PPU image back into its field image when a translated stage closes. RESULT: the hand-off's six tile packets 12160/12160, $6000/$6800/$6C00/$7000 1024/1024 each, and the PICTURE at stage frame 132 IDENTICAL on all 57344 pixels (an earlier 4768/57344 grade was the tool decoding the oracle's [pad,B,G,R] bytes in the wrong order on top of the stale tilemaps). NOT MODELLED, counted in the pinned lines: the streamer's column 0 of $6400/$7400 on f16 (C0/86C9 / C0/8747, 31+32 words), the ROM's LZ scratch tail past the BG3 tileset ($57E4-$57FF, 23 words), and OBJ palettes 5-7's weapon colours (9 -- the port's $21BA holds 152EEE0C2A20 at 06B where the cartridge keeps 433's 9D233B0EB409; C2/834D's epilogue re-runs in the port). THE WEAPON ROWS, same pass: the port's $21BA held 152EEE0C2A20 at 06B where the cartridge holds 433's 9D233B0EB409. `--monitor 7E21BA:6 --writer` over the attract: C3:0636 (the race's setup) overwrites the row at f6171 on BOTH machines, and C2:836C repaints it at f6581 / f6718 / f6759 -- the 1B1 and 06B LOADS. --cputrace from PEEK_SAVE f6575: C0/56CB-56D3 `TDC / XBA / LDA #0B / JSL C2/8004` right after the slot-1 runner C0/56C8, C2/8004 `BRA / JSR C2/8C36`, leaf 11 = C2/8C5A, a bare RTS -- the gate is called for its EPILOGUE alone, so every location load repaints the three weapon rows (move.c CtVmC2LoadTail, ct_vm.c after the slot-1 run; the port's gate treated every leaf above 7 as leaf 12, C2/8E1E). CT_WATCH=21BA on the port had named the clobber: the stage's WRAM coming back whole at its exit (field.c), which is the cartridge's own state too -- the repaint was the missing half. CGRAM 256/256 now, and C0/711D's whole-page copy became gradable (the row reaches the PPU only through it). The port runs under the suite's lockstep env: without CT_AUDIO_LOCKSTEP the attract lands a frame apart from run to run (f8984 identical in one run, f8985's picture in the next). RE-PIN 2026-09-17: the tool's port frame 8925 -> 8927: the hand-off (`sequence: op-0xFF 63`, now frame-stamped) moved f8793 -> f8795 under the lockstep with the two D8 battle entries ahead of it staging op + 3 (C0/1770's align wait, battle_effect_orbit.md 6.5); the picture is the same stage frame 132 frames after the hand-off. ==== 2026-09-18, RE-ANCHORED (the battle opening, disasm/notes/battle_boot_turns.md): the ROM's turn machinery (C1/8231 timer pass, C1/82A2 cursor, C1/8461 handler, the main loop placed after the entrance loop) moved this moment from f8927 to f8900; the SAME stage frame (hand-off + 132) shows there -- the hand-off `FF 63 -> JML $C3:0000` is at f8768 now (was f8795): 57344/57344. ==== 2026-09-18, THE PRE-ROLL'S u 9 -> 8 (the zelda3 model, disasm/notes/oracle_logical_frames.md): battleActPreroll counts CD/0018's EIGHT CD/3E75 waits -- 0F33, 0F3F, four sheets, the map's two; CD/0D53's arm is the first frame of the twelve C1/007E waits, not a frame of its own. The logical oracle (CT_ORACLE_LOGICAL, the X-Strike, --hookpc): 0F33 f19, 0F3F f20, 0FD5 f21-24, 0FF8 f25, CD/0D53 f27, C1/4CA2 f39; the real cartridge f23 .. f47 with the lag frames f29 f30 f33 f34 inside, one of which the old 9 carried. Every action with a third-stage load now reaches its first op one frame earlier; this check's lines moved by that and nothing else (classified: frames, rel and span shift only), re-pinned. RE-ANCHORED: port f8899 is IDENTITY with the cartridge's +150 (57344 / 57344; f8898 37367): -1, the 0AD exit. ==== 2026-09-18, THE MAIN LOOP'S TWO-FRAME ITERATION (the zelda3 model; disasm/notes/oracle_logical_frames.md §4). The battle's idle loop waits twice per iteration (C1/109D, C1/10BD): frame A runs the walk dispatch and C1/10BB STZ $E5, frame B C1/10C4 INC $E5 and the tail (timers, cursors, handlers), then the next head's C1/8121 INC $0027. The three rates this file carried -- the logic tick at 2.5 frames, the $A4 INC at 3 of 5, the mode pass at 4 of 5 -- were fits of the REAL cartridge's lagging iterations; the logical oracle runs every iteration in two frames, and the port now does: $A4 is the NMI's CF/E3F8 INC on $A013 = 0 and $E5 != 0, an enemy turn is C1/4058's two waits (CT_BATTLE_ENEMY_THINK 3 -> 2, the demo's C1/4058 3 -> 2), the first head is the entrance loop's end + CT_BATTLE_BOOT_CPU 0. battle-gato-fight-vs-logical-oracle grades the whole GATO fight against the logical oracle frame for frame; the ATB fills ~20% faster than on the lagging cartridge (song end -> attack A 231 against 279). This check moved with it and was re-pinned. RE-ANCHORED: port f8891 is IDENTITY with the cartridge's +150 (f8899 -> f8891, -8). ==== 2026-09-19, THE ATTRACT'S FIVE REPORTED DEFECTS (disasm/notes/load_ramp_gate.md 6, battle_hud_band_anim.md 8, field_window_wipe.md, battle_boot_turns.md, ow_player_sprite.md). A sequence's C0/3FD6 stack reset now abandons an in-flight C0/2848 ramp, tail and all, so a `DE` staged inside it leaves $011E = 1 and the next location skips its ramp: 0A5 and 0E6 stay black to their curtain as on the cartridge, and every later frame of the demo comes 8 (0A5 -> 07D) to ~20 frames (1B1 on) earlier. The window wipe's channel reads the table set $0153 names (the sets' pointers never move), a new step every frame, and C0/2848's entry frame flips $0153 once (C0/286C -> C0/0B28 -> FD/C2C1). D1/F83D (the HUD band's COLDATA gradient) and CF/FB7D-FB8C ($EC, the band layout) run at the battle boot; the HUD band is read from HDMA channel 0's table; the overworld lead's pose machine runs only with a $3404 block. This check moved with it. Port f8891 -> f8872: searched f8866-f8873, f8872 alone gives 57344 / 57344. RE-PIN 2026-09-23 -- the SAME content at frames 8 (legs 0E6 to 06B) or 7 (087 on) earlier: the 07D's enemies are now placed by the cartridge's op 0x8C (disasm/notes/field_op8c_place_from_vars.md) and spread along the logical oracle's paths, which ends that leg's field part 8 frames earlier in the port's count -- the port's op 0xD9 walk is 8 frames short, a residual the wrong spread had been hiding (section 7 of that note). Frame numbers moved, nothing graded changed. (This stage: port f8872 -> f8866, -6.) RE-PIN 2026-09-23 (op 0xD9 ported: disasm/notes/field_d9_party_walk.md) -- the SAME content, port f8866 -> f8877. The party walk before each demo battle now runs the ROM's own walk programs ($7F3720..) and ends when the cartridge's does, the lead heads the scheduler queue (C0/59D9 prepends $1100 == 0) and a battle stages at the start of the frame after C0/1770's align frame; every later attract frame moved with them. | RE-ANCHORED 2026-09-23 (op 0xD4 through C0/394E + the PC loader's $1101/$018D stores): the attract's first hub is 66 frames like the logical oracle's (was 58) and every hub leave ends its visit, so this vehicle's numbering moved +18 here -- measured on the $0100/$0119/$1E00 timeline of the old binary against the new; the content pinned is the one pinned before. ==== 2026-09-25, EVERY STAGE FRAME, not one: after bb50d3b (the field's colour records at $0520) this check read 37367/57344 -- the Blackbird's palace 4 px behind. Not the records' bytes: the frame was one the HOST showed twice. seq_xlat.c stageHook stopped on `inVblank && frames moved`, which is also true for the one step at v=0 h=0 (the counter wraps at the end of line 261, inVblank drops a step later); an instruction boundary there stopped the stage 225 lines early with the previous frame still in the PPU's buffer. snes_runFrame -- what the cartridge's --peek runs -- passes that step inside its `while (inVblank)` loop. Measured (per-frame thumbnails from the hand-off, the stops' v/h): the old binary had such stops at stage frames 79/83/91/101/103/125 (each a whole-picture repeat against the cartridge; the graded +150 = stage 133 clean by chance), bb50d3b's at 43/45/47/81/121/127/129/133: FD/E39C, which the stage runs every frame, walks all twelve records' ticks and takes a longer path on a wrap, so the records the field hands over move every later instruction boundary by a few cycles. The hook is now snes_runFrame's two loops; the stage's frames +62..+150 are all the cartridge's, and patching the hand-off's $0520-$05AF back to the pre-bb50d3b bytes or to the cartridge's own changes nothing. The new line grades every one of them (thumbnails; the frames before +62 are the opening transition C3/02DD draws on the beam, whose clock is the hand-off's history: 11.4). disasm/notes/sequence_table.md 11.12. ==== RE-PIN 2026-09-26 (op 0xA8/0xA9 end the visit, C0/55FB CLC; vmdiff-cathedral-face-op-ends-the-visit): the field before `FF 63` runs its face ops as the ROM does, and the WRAM it hands the stage moves in eleven bytes (CT_XLAT_HANDOFF_WRAM, both binaries, against the cartridge's --peek of the hand-off state at 16/17 frames): $03F2 becomes the cartridge's 09, nine are stack bytes $06EE-$06F6, and $0355 / $0386 are C3/02DD's beam-RNG history -- $0386 = 31 now, 7D before, 7B on the cartridge (neither side matched). 11.4 names $0386 as a byte that moves the opening transition C3/02DD draws on the beam, and stage frame +62 is the first one after it: it now shows the transition's last line where the cartridge shows the stage. The whole picture at +150 and frames +63..+150 are unchanged, identical to the cartridge. History, per CLAUDE.md's one exception -- not a picture defect of the stage. ==== 2026-09-26 (b), BACK TO 89/89 -- and the earlier 88/89 re-pin was WRONG. It was justified as C3/02DD's \"history\" under CLAUDE.md's exception; the exception is the opposite -- the zelda3 model makes the seed deterministic on BOTH sides so they must AGREE (sequence_table.md 11.13). The world now leaves C2/09C5 / C2/0C4D / C2/0CEA-0D08 / C2/048A-04FB's direct-page words as the ROM does, the seed's $0008 input with them, and the hand-off's $0386 moved again; +62 matches, but by the value it happens to reach, not by the cartridge's history: the cartridge under the rule (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1, `--xlatentries boot`) hands entry 3 $0386 = E4, and the port's first 11 of 377 seed calls equal the cartridge's so far. OPEN, in that order: the rest of the seed history (the world's streaming C2/0773-0990, the $C3 overlay NMI's `INC $08` in the native title/credits, the field's writers), then the stage under the rule (the virtual beam on its own C3/02DD, logical frames, the phase-0 start) and this check graded from the hand-off's first frame. ==== 2026-09-26 (d), GRADED FROM THE HAND-OFF, UNDER THE RULE. The reference is now the cartridge from power-on with the virtual beam and logical frames (saves/attract_entry3_handoff_rule_f8859.state, C3:0000 at its f18 with $0386 = E4, the stage's 7E:3000 at v=98 h=350), and every stage frame from the hand-off's own (+18) is compared: the port's seed history is the cartridge's for all 377 calls (attract-seed-history-vs-cartridge), so the opening transition C3/02DD draws is no longer excused -- 134/134 frames, the transition included, and the picture 133 frames after the hand-off whole. The +62 cut is gone. ==== 2026-09-28, RE-ANCHORED +38, not re-graded: op 0xFF < $90 runs its OWN fade before it jumps (C0/3FBB-3FD1 -- `DEC $19` a frame until 0, the jump on the frame after; the first DEC in the op's frame), for the $C3 sequences as for the $FD warp. The port jumped on the frame after the op whatever $0119 held: the hub's `FF 61` before 0A5 met the C0/2848 ramp at 0D (13 frames short), before 0E6 at 0F (15), the race's and its credits' at 05 (5 + 5), the title after the demo at 0F (15). Measured on the $0100/$0119/$1E00 timeline of the old binary against the new in this check's vehicle; the content at the new frame is the one pinned before. ==== 2026-09-28 (the count after a load), RE-ANCHORED -22: after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs. The port wrote the period there, so a period-4 object's first visit came 3 frames late; every leg with one now ends up to 3 frames earlier. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' $0B8A/$0D00/$1700/$1000 stores; C0/286C's C0/6F79.) The new frame was found by comparing every frame within 5 of the $0100/$0119/$1E00 shift of this check's vehicle. The content at the new frame is the one pinned before. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/attract.json): Vehicle L -60 at entry 3's hand-off (f8719 for f8779). entry3_stage_cmp at port f8852 (= hand-off + 133, as f8912 was): the whole picture 57344 / 57344 identical to the cartridge's +151 (mean abs diff 0.00), mountains and sky bands identical, entry3-frames f8719..f8852 vs +18..+151: 134 / 134 stage frames identical -- the valve's result. (This tool's cartridge side is the committed entry-3 hand-off state, not the rule's power-on -- see attract-entry3-stage-every-frame-under-the-rule for the stage under the rule, which diverges only from +38.) ==== RE-ANCHORED 2026-10-03 (the battle exits: the defeat's and the demo's CF/FBE5 + CD/03B4, CD/0415-0438's two waits and SPC poll before C0/1BE6, the demo's pass ending on its drop, the exit's CD/0453 stepped once a frame -- battle_defeat_flow.md): the attract's legs against the rule's cartridge (attract_cena_inicial, $0100 per leg) -- 0AD exact (was 1 short), 087 exact (was 1 short), 07D 1 long (was 1 short: C0/1C89's `70 00` prices 13 NMIs on the port, 12 on the cartridge, OPEN) -- so every port frame after the 0AD's exit moved +1, after the 07D's +3, after the 087's +4. The value at the moved frame is the one pinned before. ==== RE-PINNED 2026-10-03 (battle_defeat_flow.md, the exits): the frames only, the values unchanged -- the moved frame (the attract's legs: +1 after the 0AD's exit, +3 after the 07D's, +4 after the 087's; the headless module: +1, CD/0418's frame). || RE-ANCHORED 2026-10-07 (the CALL's completion spends one dispatch, ct_vm.c step(): disasm/notes/field_quad_window.md sec. 3). The attract's 112 leg is 4 frames longer (417 -> 421, the cartridge's 433: obj0's two `04` waits), so every port frame after it moved -- measured with the previous binary against this one, per vehicle: --selftest +4 after f4348; the lockstep run +4 from 0DB and +5 from the 07D fight's boot (its `70 01` handshake one NMI longer at the new SPC phase: battle-start at battle f17, was f16); the unlocked run (attract_bg_cmp) +4. Only port frames moved; the content is the old binary's (each check passes on the shifted frame and its neighbours do not, where they differ). ==== 2026-10-08, RE-ANCHORED (disasm/notes/field_f8_cursor_play_clock.md): the demo's staging spill (C1/BA33, CPU work) is free under the rule -- the rule's cartridge opens both demo actions 2 frames after the cursor find (0AD trigger + 100, 07D + 99) and the port now does -- so every demo action and all that follows it is a frame earlier: on the lockstep vehicle -1 after the 0AD fight's action, -2 after 07D's, -3 after 087's; module frames after the action -1. The --selftest vehicle (fights synchronous) moved +1 from loc 112 and +2 from ~f6369 instead: C0/91F8's auto-scroll derives its step from the play clock $0400, whose ticks the same change corrected. Measured with the old and the new binary on the $0100/$0119/$1E00/$0384/$A013 timeline of each vehicle; the content at the shifted frame is the one pinned before.",
       "mutations": [
         {
-          "file": "src/seq_xlat.c",
-          "find": "  if (!st->inFrame) {                                 // snes_runFrame's first loop",
-          "replace": "  if (s->inVblank && s->frames != st->stopFrame) { st->stopFrame = s->frames; return 1; } else return 0;   /* MUT: stop on the counter (v=0 h=0 too) */\n  if (!st->inFrame) {",
-          "why": "the old stop: `inVblank && frames moved` is also true at v=0 h=0, one step before inVblank drops -- an instruction boundary there stops the stage 225 lines early and the host shows the frame before again (stage frames 43/45/47/81/121/127/129/133 of this attract)"
-        },
-        {
-          "file": "src/field.c",
-          "find": "  if (!g_fieldVramFillPending || !f->sd || !f->vm) return;",
-          "replace": "  return;   /* MUT: no entry fill (the tilemaps stay the previous location's) */",
-          "why": "C0/0A9D's fill before the first tick is what gives the stage 06B's tilemaps; without it the stage draws the credits' text rows"
-        },
-        {
-          "file": "src/scene.c",
-          "find": "asm12, 512, (d35 & 0x02) ? 2 : 1);   // C0/0AB4-0AC0",
-          "replace": "asm12, 512, 1);   /* MUT: one BG2 half whatever $1D35 */",
-          "why": "C0/0AB4 BIT #02 -> C0/7F77 uploads both halves of a detached BG2; 06B's $1D35 = 02 and its $6C00 equals $6800 on the cartridge"
-        },
-        {
-          "file": "src/field.c",
-          "find": "s7 + 0xB000, s7 + 0xC000, s7[0x1D35], (s7[0x0BCA] & 1) && !s7[0x01BB]); }",
-          "replace": "s7 + 0xB000, NULL, s7[0x1D35], (s7[0x0BCA] & 1) && !s7[0x01BB]); }   /* MUT: no BG3 assembly */",
-          "why": "C0/0A14's $7E:C000 assembly is what C0/7CB5 builds BG3's tilemap from; without it $7000's rows 7-9 stay zero"
-        },
-        {
-          "file": "src/field.c",
-          "find": "if (hw && hw->ppu) memcpy(g_fieldVram, hw->ppu->vram, sizeof g_fieldVram); }",
-          "replace": "if (hw && hw->ppu) (void)0; }   /* MUT: the stage's VRAM does not come back */",
-          "why": "one VRAM: the entry never uploads BG1's second half, so $6400 keeps what entry 1's page left there"
-        },
-        {
-          "file": "src/field.c",
-          "find": "  memcpy(s + 0x2200, s + 0x2000, 0x200);",
-          "replace": "  memcpy(s + 0x2200, s + 0x2000, 0x100);   /* MUT: rows 0-7 only */",
-          "why": "C0/7123 `LDA #01FF / MVN` copies the whole page, OBJ rows included: the weapon rows C2/834D paints at $21BA/$21DA/$21FA reach the live page only through it"
-        },
-        {
-          "file": "src/ct_vm.c",
-          "find": "    CtVmC2LoadTail(sc->mem->s, gRomImg, (int)gRomImgLen, x & 0xFF, g_initLastOp & 0xFF); }",
-          "replace": "    (void)x; }   /* MUT: no C0/56CB gate on the load */",
-          "why": "C0/56CB `LDA #0B / JSL C2/8004` runs the party gate's epilogue on every load; without it the row the race's C3:0636 overwrote stays 152EEE0C2A20 through 06B"
+          "file": "src/seq_entry3.c",
+          "find": "    w[0x6A5F] = 0x06; w[0x6A82] = 0x08; w[0x6AAB] = 0x08;",
+          "replace": "    w[0x6A5F] = 0x01; w[0x6A82] = 0x08; w[0x6AAB] = 0x08;   /* MUT */",
+          "why": "the attract's setup patches the light chain's first `LDA #imm` ($7E:6A5F = 06): with the story's 01 the skyline's colour fade runs another way"
         }
       ],
       "env": {}
@@ -31464,7 +31384,7 @@
         "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f4084",
         "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f5099",
         "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f6369",
-        "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f8014"
+        "loadfade: C0/2848 skipped ($011E) -- $0119=00 vmb=0, main loop resumes at f8010"
       ],
       "pin": [
         "^loadfade: C0/2848 skipped"
@@ -32616,7 +32536,7 @@
       "argv": [
         "python",
         "tools/attract_battle_colour_cmp.py",
-        "3809,6606,6682,6766,6620,9435,7104,7112,9803,9811"
+        "3809,6606,6682,6766,6620,9431,7104,7112,9799,9807"
       ],
       "env": {},
       "inputs": [
@@ -32631,11 +32551,11 @@
         "battle-colours: 07D mid-tech, port f6682 vs cart c4700 box (0,0)-(256,224): 57233 / 57344 identical",
         "battle-colours: 07D mid-tech, port f6766 vs cart c4800 box (0,0)-(256,224): 57329 / 57344 identical",
         "battle-colours: 07D effect load, faded, port f6620 vs cart c4648 box (0,0)-(256,224): 57129 / 57344 identical",
-        "battle-colours: 087 Ice Sword darken, port f9435 vs cart c7505 box (0,0)-(256,224): 57173 / 57344 identical",
+        "battle-colours: 087 Ice Sword darken, port f9431 vs cart c7505 box (0,0)-(256,224): 57173 / 57344 identical",
         "battle-colours: 07D after the tech, port f7104 vs cart c5145 box (0,0)-(256,224): 57120 / 57344 identical",
         "battle-colours: 07D after the tech, port f7112 vs cart c5153 box (0,0)-(256,224): 57344 / 57344 identical",
-        "battle-colours: 087 after the tech, port f9803 vs cart c7889 box (0,0)-(256,224): 56725 / 57344 identical",
-        "battle-colours: 087 after the tech, port f9811 vs cart c7897 box (0,0)-(256,224): 57173 / 57344 identical"
+        "battle-colours: 087 after the tech, port f9799 vs cart c7889 box (0,0)-(256,224): 56725 / 57344 identical",
+        "battle-colours: 087 after the tech, port f9807 vs cart c7897 box (0,0)-(256,224): 57173 / 57344 identical"
       ],
       "pin": [
         "^battle-colours: "
@@ -32707,8 +32627,8 @@
       "expect": [
         "audio-latency: out360 534 samples behind the song loads (1.0 frames)",
         "audio-latency: out8040 536 samples behind the song loads (1.0 frames)",
-        "audio-latency: out8640 537 samples behind the song loads (1.0 frames)",
-        "audio-latency: out9120 534 samples behind the song loads (1.0 frames)",
+        "audio-latency: out8640 535 samples behind the song loads (1.0 frames)",
+        "audio-latency: out9120 536 samples behind the song loads (1.0 frames)",
         "audio-latency: out10680 534 samples behind the song loads (1.0 frames)",
         "audio-latency: the two stages (out8100-9025): at most 597 samples (1.1 frames)",
         "audio-latency: the whole demo (out60-10732): at most 604 samples (1.1 frames)",
@@ -33173,7 +33093,7 @@
         "tools/frame_region_cmp.py",
         "saves/attract_cena_inicial.state",
         "7800",
-        "9713",
+        "9709",
         "88",
         "8",
         "168",
@@ -33193,7 +33113,7 @@
         "saves/attract_cena_inicial.state"
       ],
       "expect": [
-        "frame-region-cmp: port f9713 vs oracle f7800 box (88,8)-(168,136) -> 10137 / 10240 identical"
+        "frame-region-cmp: port f9709 vs oracle f7800 box (88,8)-(168,136) -> 10137 / 10240 identical"
       ],
       "pin": [
         "^frame-region-cmp: "
@@ -33216,7 +33136,7 @@
       "argv": [
         "python",
         "tools/attract_afterimage_cmp.py",
-        "9585:7658,9591:7664,9597:7670"
+        "9581:7658,9587:7664,9593:7670"
       ],
       "env": {},
       "inputs": [
@@ -33226,9 +33146,9 @@
         "tools/attract_afterimage_cmp.py"
       ],
       "expect": [
-        "afterimage: port f9585 vs cart c7658 box (40,0)-(110,130): 9100 / 9100 identical",
-        "afterimage: port f9591 vs cart c7664 box (40,0)-(110,130): 9100 / 9100 identical",
-        "afterimage: port f9597 vs cart c7670 box (40,0)-(110,130): 9100 / 9100 identical"
+        "afterimage: port f9581 vs cart c7658 box (40,0)-(110,130): 9100 / 9100 identical",
+        "afterimage: port f9587 vs cart c7664 box (40,0)-(110,130): 9100 / 9100 identical",
+        "afterimage: port f9593 vs cart c7670 box (40,0)-(110,130): 9100 / 9100 identical"
       ],
       "pin": [
         "^afterimage: "
@@ -33272,7 +33192,7 @@
       "argv": [
         "python",
         "tools/attract_anim_drain_cmp.py",
-        "-54"
+        "-58"
       ],
       "env": {},
       "inputs": [
@@ -33291,12 +33211,12 @@
         "anim-drain: 0A5 bat obj21: cart c3543-c3999 poses 00/01/02 changes 76 longest 10 | port p5551-p6003 poses 00/01/02 changes 78 longest 8",
         "anim-drain: 0A5 bat obj22: cart c3543-c3999 poses 00/01/02 changes 75 longest 10 | port p5551-p6003 poses 00/01/02 changes 78 longest 8",
         "anim-drain: 0A5 bats: 8 / 8 fly through the cartridge's poses, none holding one longer than its longest (11)",
-        "anim-drain: 087 legs from the torso's pose 02: cart c7189 02 01 02 00 01 00 02 01 00 | port p9149 01 02 01 00 01 00 02 01 00 29",
-        "anim-drain: 087 legs port f9212 vs cart c7254 box (64,60)-(152,130): 6160 / 6160 identical",
-        "anim-drain: 087 legs port f9228 vs cart c7270 box (64,60)-(152,130): 6160 / 6160 identical",
-        "anim-drain: 087 legs port f9252 vs cart c7294 box (64,60)-(152,130): 6160 / 6160 identical",
-        "anim-drain: 087 legs port f9268 vs cart c7310 box (64,60)-(152,130): 6160 / 6160 identical",
-        "anim-drain: 087 legs port f9284 vs cart c7326 box (64,60)-(152,130): 6160 / 6160 identical"
+        "anim-drain: 087 legs from the torso's pose 02: cart c7189 02 01 02 00 01 00 02 01 00 | port p9145 01 02 01 00 01 00 02 01 00 29",
+        "anim-drain: 087 legs port f9208 vs cart c7254 box (64,60)-(152,130): 6160 / 6160 identical",
+        "anim-drain: 087 legs port f9224 vs cart c7270 box (64,60)-(152,130): 6160 / 6160 identical",
+        "anim-drain: 087 legs port f9248 vs cart c7294 box (64,60)-(152,130): 6160 / 6160 identical",
+        "anim-drain: 087 legs port f9264 vs cart c7310 box (64,60)-(152,130): 6160 / 6160 identical",
+        "anim-drain: 087 legs port f9280 vs cart c7326 box (64,60)-(152,130): 6160 / 6160 identical"
       ],
       "pin": [
         "^anim-drain: "
@@ -33371,7 +33291,7 @@
       "expect": [
         "title-sync: cartridge, the title after the demo: tick c9144, picture c9147 -> tick - picture = -3",
         "title-sync: port title 1 (opened f5): tick f48, picture f50 -> tick - picture = -2",
-        "title-sync: port title 2 (opened f11005): tick f11027, picture f11029 -> tick - picture = -2"
+        "title-sync: port title 2 (opened f11001): tick f11023, picture f11025 -> tick - picture = -2"
       ],
       "pin": [
         "^title-sync: "
@@ -33884,7 +33804,7 @@
         "tools/frame_region_cmp.py",
         "saves/attract_cena_inicial.state",
         "8732",
-        "10644",
+        "10640",
         "0",
         "0",
         "256",
@@ -33904,7 +33824,7 @@
         "saves/attract_cena_inicial.state"
       ],
       "expect": [
-        "frame-region-cmp: port f10644 vs oracle f8732 box (0,0)-(256,224) -> 57344 / 57344 identical"
+        "frame-region-cmp: port f10640 vs oracle f8732 box (0,0)-(256,224) -> 57344 / 57344 identical"
       ],
       "pin": [
         "^frame-region-cmp: "
@@ -33941,7 +33861,7 @@
         "tools/frame_region_cmp.py",
         "saves/attract_cena_inicial.state",
         "8840",
-        "10752",
+        "10748",
         "0",
         "0",
         "256",
@@ -33961,7 +33881,7 @@
         "saves/attract_cena_inicial.state"
       ],
       "expect": [
-        "frame-region-cmp: port f10752 vs oracle f8840 box (0,0)-(256,224) -> 57344 / 57344 identical"
+        "frame-region-cmp: port f10748 vs oracle f8840 box (0,0)-(256,224) -> 57344 / 57344 identical"
       ],
       "pin": [
         "^frame-region-cmp: "
@@ -37599,7 +37519,7 @@
         "ct_assets.dat"
       ],
       "expect": [
-        "stage-rule-cmp: entry3 port f8725..f9022 vs cartridge +18..+315 under the rule -> 45 / 298 frames identical, differ at +38 +39 +40 +41 +42 +43 +44 +45 +46 +47 +48 +49 +50 +51 +52 +53 ..."
+        "stage-rule-cmp: entry3 port f8723..f9020 vs cartridge +20..+317 under the rule -> 298 / 298 frames identical"
       ],
       "pin": [
         "^stage-rule-cmp: "
@@ -37607,13 +37527,13 @@
       "tier": "full",
       "timeout_s": 600,
       "notes": "Entry 3 (loc 06B's `FF 63`) EVERY frame from the hand-off to the program's exit against the cartridge under the rule from power-on: the translated stage runs C3/02DD under the virtual beam and the stage under logical frames with phase-0 NMI-off stretches, as the oracle does, and the port's seed history is the cartridge's (attract-seed-history-vs-cartridge), so the opening transition is graded like the rest. sequence_table.md 11.13 (e). ==== 2026-09-28, RE-ANCHORED +38, not re-graded: op 0xFF < $90 runs its OWN fade before it jumps (C0/3FBB-3FD1 -- `DEC $19` a frame until 0, the jump on the frame after; the first DEC in the op's frame), for the $C3 sequences as for the $FD warp. The port jumped on the frame after the op whatever $0119 held: the hub's `FF 61` before 0A5 met the C0/2848 ramp at 0D (13 frames short), before 0E6 at 0F (15), the race's and its credits' at 05 (5 + 5), the title after the demo at 0F (15). Measured on the $0100/$0119/$1E00 timeline of the old binary against the new in this check's vehicle; the content at the new frame is the one pinned before. ==== 2026-09-28 (the count after a load), RE-ANCHORED -22: after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs. The port wrote the period there, so a period-4 object's first visit came 3 frames late; every leg with one now ends up to 3 frames earlier. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' $0B8A/$0D00/$1700/$1000 stores; C0/286C's C0/6F79.) The new frame was found by comparing every frame within 5 of the $0100/$0119/$1E00 shift of this check's vehicle. The content at the new frame is the one pinned before. ==== 2026-09-30, THE CARTRIDGE'S STATE IS THIS ORACLE'S (a cached oracle state outlives the oracle that made it -- ow-window-object-routine-and-mask-vs-oracle sat green three days on a 2026-09-18 state; field_window_wipe.md \"The virtual beam\", 2026-09-30). saves/attract_entry3_handoff_rule_f8859.state was made 2026-09-26 (ba39487) from power-on under the rule, and the oracle has moved the attract since. BISECTED with `ct.exe --xlatentries boot` under the rule, C3:0000 at power-on frame (race / entry 3): ba39487 8265 / 8876; a07ca0f (the drain's advancing virtual beam) 8267 / 8879; 30ccdce (the runner's fixed V = 0) 8252 / 8863, unchanged to 863a18f -- both user decisions in CLAUDE.md, so the new frames are the rule's. tools/stage_rule_cmp.py now makes the state itself: --xlatentries boot 9300 names the hand-off P, `PEEK_SAVE --peek boot --frames P-H+1` saves the state (a state's own count starts one later than power-on's: the old race state f8247 ran C3:0000 at its f19 = power-on f8265), and --xlatentries on the state re-measures H; the two power-on runs (~60 s each) are kept under build/_stagerule/ named by ct.exe's sha1 and made again by the next exe -- every link is one (the linker stamps the exe), so the first run after a build costs ~2 min more (a stage-rule-state: line names them, unpinned); --mutate: its one mutation still KILLED on the per-exe state. MEASURED on the 863a18f oracle's state (f8846, its f18, $0386 = E4 at the hand-off as before): 299 / 299 frames identical (attract-entry3-stage-picture-vs-oracle still reads the committed save directly) -- the pinned line unchanged. The committed save is no longer an input of this check. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): OPEN, pinned as it stands so the suite guards it: the stage is 298 / 298 identical ONE FRAME EARLIER: the offset lives in the power-on cartridge's hand-off history (not $0584: the whole cartridge WRAM, SPC and hand-off clock injected change nothing) (tools/rule_flip/attract.json). || MUTATION RE-AIMED 2026-10-01 (the post-flip mutation sweep): the old one (no snes_logicalFresh, so the race's exit's phase hold carries into entry 3) SURVIVED: under the rule the race's exit (7E:3032) notes a phase hold of 4126 cycles, not the valve's 192328 -- the infinitely fast CPU's held work is not 'spent' (snes.c snes_noteNmiWrite subtracts g_ctIfastHeld) -- a sub-frame start the frames cannot show (measured, CT_ORACLE_LOGICAL_TRACE on the port's attract: `frame 424 NMI off at 7E:3032, 4126 cycles into the frame`). It now takes the stage off the rule altogether (st->rule = 0): 67 / 299, KILLED. ==== RE-PINNED 2026-10-03 (battle_defeat_flow.md, the exits): the frames only, the values unchanged -- the moved frame (the attract's legs: +1 after the 0AD's exit, +3 after the 07D's, +4 after the 087's; the headless module: +1, CD/0418's frame). || RE-ANCHORED 2026-10-07 (the CALL's completion spends one dispatch, ct_vm.c step(): disasm/notes/field_quad_window.md sec. 3). The attract's 112 leg is 4 frames longer (417 -> 421, the cartridge's 433: obj0's two `04` waits), so every port frame after it moved -- measured with the previous binary against this one, per vehicle: --selftest +4 after f4348; the lockstep run +4 from 0DB and +5 from the 07D fight's boot (its `70 01` handshake one NMI longer at the new SPC phase: battle-start at battle f17, was f16); the unlocked run (attract_bg_cmp) +4. Only port frames moved; the content is the old binary's (each check passes on the shifted frame and its neighbours do not, where they differ). ==== 2026-10-08, RE-ANCHORED (disasm/notes/field_f8_cursor_play_clock.md): the demo's staging spill (C1/BA33, CPU work) is free under the rule -- the rule's cartridge opens both demo actions 2 frames after the cursor find (0AD trigger + 100, 07D + 99) and the port now does -- so every demo action and all that follows it is a frame earlier: on the lockstep vehicle -1 after the 0AD fight's action, -2 after 07D's, -3 after 087's; module frames after the action -1. The --selftest vehicle (fights synchronous) moved +1 from loc 112 and +2 from ~f6369 instead: C0/91F8's auto-scroll derives its step from the play clock $0400, whose ticks the same change corrected. Measured with the old and the new binary on the $0100/$0119/$1E00/$0384/$A013 timeline of each vehicle; the content at the shifted frame is the one pinned before.",
-      "note_pass": "entry 3 under the rule: all 299 stage frames, hand-off to exit, the cartridge's",
+      "note_pass": "entry 3 under the rule, native: all 298 stage frames, hand-off to exit, the cartridge's (the picture at P+2)",
       "mutations": [
         {
-          "file": "src/seq_xlat.c",
-          "find": "void CtXlatStageSetRule(CtXlatStage* st, int on) { if (st) { st->rule = on; if (on) snes_logicalFresh(); } }",
-          "replace": "void CtXlatStageSetRule(CtXlatStage* st, int on) { if (st) { st->rule = 0; if (on) snes_logicalFresh(); } }  /* MUT: the stage off the rule */",
-          "why": "the stage under the rule (seq_xlat.c CtXlatStageSetRule: st->rule -> snes_logicalResume around every stage frame, logical frames and phase-0 NMI-off stretches, as the oracle's): off it, entry 3 runs the real-time CPU's frames -- 299 of them and 67 / 299 against the pin's 45 / 298 (measured)."
+          "file": "src/seq_race.c",
+          "find": "      if ((r & 0x80) && !c) { r = 0x00; b = 0x03; }                   //   BPL / BCS / TDC",
+          "replace": "      if ((r & 0x80) && !c) { r = 0x00; b = 0x00; }   /* MUT */",
+          "why": "C3/01E4's close clamps with `TDC`: B = $03, so the next refresh's `TAY` walks the rest of the buffer on one step; entry 3 opens with the closing walk ($0350 = 2)"
         }
       ],
       "env": {}
@@ -37630,7 +37550,7 @@
         "ct_assets.dat"
       ],
       "expect": [
-        "stage-rule-cmp: race port f8108..f8531 vs cartridge +19..+442 under the rule -> 63 / 424 frames identical, differ at +74 +75 +76 +77 +78 +79 +80 +81 +82 +83 +84 +85 +86 +87 +88 +89 ..."
+        "stage-rule-cmp: race port f8108..f8531 vs cartridge +21..+444 under the rule -> 424 / 424 frames identical"
       ],
       "pin": [
         "^stage-rule-cmp: "
@@ -37638,8 +37558,189 @@
       "tier": "full",
       "timeout_s": 600,
       "notes": "The race (entry 0, `FF 60`) every frame from the hand-off to its exit against the cartridge under the rule. Identical for its first 55 frames (to stage frame 54), 63 of 425 in all -- a PORT PIN for the rest: the holds fall on the cartridge's frames but a few hundred cycles apart and the first seed call finds the beam 38 cycles later -- the race's per-frame CPU work differs, the prime suspect its SPC handshakes (7E:377E spins on `CMP $2140`, and the stage borrows the host's SPC). sequence_table.md 11.13 (e). Replace with the cartridge's full count when that is closed. ==== 2026-09-28, RE-ANCHORED +32, not re-graded: op 0xFF < $90 runs its OWN fade before it jumps (C0/3FBB-3FD1 -- `DEC $19` a frame until 0, the jump on the frame after; the first DEC in the op's frame), for the $C3 sequences as for the $FD warp. The port jumped on the frame after the op whatever $0119 held: the hub's `FF 61` before 0A5 met the C0/2848 ramp at 0D (13 frames short), before 0E6 at 0F (15), the race's and its credits' at 05 (5 + 5), the title after the demo at 0F (15). Measured on the $0100/$0119/$1E00 timeline of the old binary against the new in this check's vehicle; the content at the new frame is the one pinned before. ==== 2026-09-28 (the count after a load), RE-ANCHORED -22: after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs. The port wrote the period there, so a period-4 object's first visit came 3 frames late; every leg with one now ends up to 3 frames earlier. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' $0B8A/$0D00/$1700/$1000 stores; C0/286C's C0/6F79.) The new frame was found by comparing every frame within 5 of the $0100/$0119/$1E00 shift of this check's vehicle. The content at the new frame is the one pinned before. ==== 2026-09-30, THE CARTRIDGE'S STATE IS THIS ORACLE'S (a cached oracle state outlives the oracle that made it -- ow-window-object-routine-and-mask-vs-oracle sat green three days on a 2026-09-18 state; field_window_wipe.md \"The virtual beam\", 2026-09-30). saves/attract_race_handoff_rule_f8247.state was made 2026-09-26 (ba39487) from power-on under the rule, and the oracle has moved the attract since. BISECTED with `ct.exe --xlatentries boot` under the rule, C3:0000 at power-on frame (race / entry 3): ba39487 8265 / 8876; a07ca0f (the drain's advancing virtual beam) 8267 / 8879; 30ccdce (the runner's fixed V = 0) 8252 / 8863, unchanged to 863a18f -- both user decisions in CLAUDE.md, so the new frames are the rule's. tools/stage_rule_cmp.py now makes the state itself: --xlatentries boot 9300 names the hand-off P, `PEEK_SAVE --peek boot --frames P-H+1` saves the state (a state's own count starts one later than power-on's: the old race state f8247 ran C3:0000 at its f19 = power-on f8265), and --xlatentries on the state re-measures H; the two power-on runs (~60 s each) are kept under build/_stagerule/ named by ct.exe's sha1 and made again by the next exe -- every link is one (the linker stamps the exe), so the first run after a build costs ~2 min more (a stage-rule-state: line names them, unpinned). MEASURED on the 863a18f oracle's state (f8234, its f19, $0386 = 7B at the hand-off as before): 63 / 425 frames identical, the same frames differing -- the pinned line unchanged. The committed save is no longer an input of this check. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/attract.json): Both sides move and the comparison is the valve's: the race (seq entry 0) is 424 frames under the infinitely fast CPU on the cartridge (the rule's power-on state, its hand-off at f19, exit +442) and in the port (hand-off f8102, 60 frames earlier with its leg; `program exited after 424 frames`); the same 63 frames identical and the first difference at +74 as before (the race's open residual, sequence_table.md 11.13 (e)). ==== RE-PINNED 2026-10-03 (battle_defeat_flow.md, the exits): the frames only, the values unchanged -- the moved frame (the attract's legs: +1 after the 0AD's exit, +3 after the 07D's, +4 after the 087's; the headless module: +1, CD/0418's frame). || RE-ANCHORED 2026-10-07 (the CALL's completion spends one dispatch, ct_vm.c step(): disasm/notes/field_quad_window.md sec. 3). The attract's 112 leg is 4 frames longer (417 -> 421, the cartridge's 433: obj0's two `04` waits), so every port frame after it moved -- measured with the previous binary against this one, per vehicle: --selftest +4 after f4348; the lockstep run +4 from 0DB and +5 from the 07D fight's boot (its `70 01` handshake one NMI longer at the new SPC phase: battle-start at battle f17, was f16); the unlocked run (attract_bg_cmp) +4. Only port frames moved; the content is the old binary's (each check passes on the shifted frame and its neighbours do not, where they differ). ==== 2026-10-08, RE-ANCHORED (disasm/notes/field_f8_cursor_play_clock.md): the demo's staging spill (C1/BA33, CPU work) is free under the rule -- the rule's cartridge opens both demo actions 2 frames after the cursor find (0AD trigger + 100, 07D + 99) and the port now does -- so every demo action and all that follows it is a frame earlier: on the lockstep vehicle -1 after the 0AD fight's action, -2 after 07D's, -3 after 087's; module frames after the action -1. The --selftest vehicle (fights synchronous) moved +1 from loc 112 and +2 from ~f6369 instead: C0/91F8's auto-scroll derives its step from the play clock $0400, whose ticks the same change corrected. Measured with the old and the new binary on the $0100/$0119/$1E00/$0384/$A013 timeline of each vehicle; the content at the shifted frame is the one pinned before.",
-      "note_pass": "the race under the rule: identical to the cartridge for its first 55 frames, 63 of 425 in all (tracking pin after that)",
-      "env": {}
+      "note_pass": "the attract's race under the rule, native (seq_race.c's bit-6 arm, the curtain C3/01E4): all 424 stage frames, hand-off to exit, the cartridge's (the picture at P+2)",
+      "env": {},
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "    if (!(rd(r, 0x0397) & 1)) { wr(r, 0x0A20, 0x404D); wr(r, 0x0B20, 0x415E); }",
+          "replace": "    if ((rd(r, 0x0397) & 1)) { wr(r, 0x0A20, 0x404D); wr(r, 0x0B20, 0x415E); }   /* MUT */",
+          "why": "the setup's two camera runs alternate on `$0397` (kept across visits): the other one is another race"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "  if (st == 1 && io && io->pic && io->pic->thread) return 0;",
+          "replace": "  /* MUT: the END on the NMI's frame */",
+          "why": "the END is the main loop's, after a pass parked at 5211 returns: the race would end two frames early"
+        }
+      ]
+    },
+    {
+      "name": "attract-race-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/attract_race_handoff_rule_f8247.state",
+        "0:3000",
+        "19",
+        "60",
+        "440"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/attract_race_handoff_rule_f8247.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 47 frame(s) after the hand-off",
+        "racepiccmp: frame 1: VRAM 0 CGRAM 0 OAM 0 words differ; registers 1 26:80/00; HDMA 0; WRAM 53 bytes",
+        "racepiccmp: native stage ended (1) at frame 378",
+        "racepiccmp: 440 frames -- first state difference 1, first race-WRAM difference -1, first picture difference -1 (0 px)",
+        "racepiccmp: the state differs on 1 frame(s), the last 1"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "the attract's race (FF 60), native: from its setup's NMI to the END (378 NMIs, two past the one that set $0000 -- the main loop's pass parked at 5211) the race's WRAM and every pixel the cartridge's. The one register on frame 1 ($2126, WH0: the cartridge 80) is the setup frame's HDMA: its NMI runs with the NMI off and reaches task $3D72's `STX $4302` after that frame's HDMA init, a CPU-time artefact on a forced-blank frame (CLAUDE.md: not reproduced)",
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "      if (io && io->pic) io->pic->ch[0].aAdr = (w[0x0351] & 1) ? 0x3D64 : 0x3D6B;   // STX $4302",
+          "replace": "      if (io && io->pic) io->pic->ch[0].aAdr = (w[0x0351] & 1) ? 0x3D6B : 0x3D64;   /* MUT */",
+          "why": "task $3D72 points HDMA channel 0 at the half C3/01E4 just wrote ($0351's parity)"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "      unsigned t = (unsigned)(v & 0x1F) + 3 + (unsigned)c; c = t > 0xFF; y = ((unsigned)b << 8) | (t & 0xFF);",
+          "replace": "      unsigned t = (unsigned)(v & 0x1F) + 3; c = t > 0xFF; y = ((unsigned)b << 8) | (t & 0xFF);   /* MUT */",
+          "why": "the run length's ADC takes the carry the CMP #02 left: the close's first run is one longer"
+        }
+      ]
+    },
+    {
+      "name": "attract-entry3-picture-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/attract_entry3_handoff_rule_f8859.state",
+        "0:3000",
+        "18",
+        "63",
+        "320"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/attract_entry3_handoff_rule_f8859.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 18 frame(s) after the hand-off",
+        "racepiccmp: native stage ended (1) at frame 280",
+        "racepiccmp: 320 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)",
+        "racepiccmp: the state differs on 0 frame(s), the last -1"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "the attract's entry 3 (FF 63), native: 280 NMIs from the setup's to the END, VRAM / CGRAM / OAM / the registers / HDMA / the stage's WRAM and every pixel the cartridge's -- the curtain $6844 (C3/01E4), the chain's patched operands",
+      "mutations": [
+        {
+          "file": "src/seq_entry3.c",
+          "find": "      CtSeqCurtain01E4(w, slot, io);                                  //   table by the call's parity (684A LDA $0351 / LSR A)",
+          "replace": "      /* MUT: no C3/01E4 */",
+          "why": "the curtain task runs C3/01E4 every frame: without it the window never opens"
+        }
+      ]
+    },
+    {
+      "name": "attract-race-abort-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/attract_race_handoff_rule_f8247.state",
+        "0:174,80:10,0:3000",
+        "19",
+        "60",
+        "440"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/attract_race_handoff_rule_f8247.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 47 frame(s) after the hand-off",
+        "racepiccmp: native stage ended (1) at frame 142",
+        "racepiccmp: 440 frames -- first state difference 1, first race-WRAM difference -1, first picture difference -1 (0 px)",
+        "racepiccmp: the state differs on 1 frame(s), the last 1"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "A pressed in the attract's race (the press of attract-race-abort-to-title, 155 frames after C3:0000): the native $424D / $4283 and the closing curtain end the stage on the cartridge's NMI, its WRAM and every pixel the cartridge's",
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "  w[0x0350] = w[0x4259];                                              // 4258 LDA #imm / STA $0350",
+          "replace": "  w[0x0350] = 0x01;   /* MUT: the opening curtain */",
+          "why": "the abort closes the curtain by the setup's patched operand ($7E:4259 = 02 for the race)"
+        }
+      ]
+    },
+    {
+      "name": "attract-entry3-abort-native-vs-oracle",
+      "argv": [
+        "build/ct.exe",
+        "--racepiccmp",
+        "saves/attract_entry3_handoff_rule_f8859.state",
+        "0:269,80:10,0:3000",
+        "18",
+        "63",
+        "320"
+      ],
+      "env": {
+        "CT_ORACLE_LOGICAL": "1",
+        "RACEPICCMP_SEEDVRAM": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/attract_entry3_handoff_rule_f8859.state"
+      ],
+      "expect": [
+        "racepiccmp: the stage's setup made its NMI 18 frame(s) after the hand-off",
+        "racepiccmp: native stage ended (1) at frame 267",
+        "racepiccmp: 320 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)",
+        "racepiccmp: the state differs on 0 frame(s), the last -1"
+      ],
+      "pin": [
+        "^racepiccmp: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "note_pass": "A pressed in the attract's entry 3 (the press of attract-entry3-abort-to-title, 251 frames after C3:0000): the native abort ends the stage on the cartridge's NMI, its WRAM and every pixel the cartridge's",
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "    if (--w[0x0399]) return task;                                     // 4283 DEC $0399 / BNE -- 8-bit",
+          "replace": "    if (--w[0x0399] > 1) return task;   /* MUT */",
+          "why": "$4283 counts `$0399` (32) down to the END"
+        }
+      ]
     },
     {
       "name": "seq-gwarp-xlat-lockstep",
@@ -45141,18 +45242,18 @@
         "tools/wide_curtain_cmp.py"
       ],
       "expect": [
-        "wide-curtain: f8164 vanilla edge 41 -> widescreen edge 64 (scaled 64)",
-        "wide-curtain: f8168 vanilla edge 82 -> widescreen edge 128 (scaled 128)",
-        "wide-curtain: f8172 vanilla edge 118 -> widescreen edge 184 (scaled 184)",
-        "wide-curtain: f8176 vanilla edge 157 -> widescreen edge 245 (scaled 244)",
-        "wide-curtain: f8180 vanilla edge 193 -> widescreen edge 301 (scaled 300)",
-        "wide-curtain: f8184 vanilla edge 232 -> widescreen edge 362 (scaled 361)",
-        "wide-curtain: f8500 vanilla edge 222 -> widescreen edge 346 (scaled 346)",
-        "wide-curtain: f8504 vanilla edge 181 -> widescreen edge 282 (scaled 282)",
-        "wide-curtain: f8508 vanilla edge 140 -> widescreen edge 219 (scaled 218)",
-        "wide-curtain: f8512 vanilla edge 101 -> widescreen edge 158 (scaled 157)",
-        "wide-curtain: f8516 vanilla edge 59 -> widescreen edge 92 (scaled 92)",
-        "wide-curtain: f8520 vanilla edge 13 -> widescreen edge 21 (scaled 20)",
+        "wide-curtain: f8164 vanilla edge 51 -> widescreen edge 80 (scaled 79)",
+        "wide-curtain: f8168 vanilla edge 92 -> widescreen edge 144 (scaled 143)",
+        "wide-curtain: f8172 vanilla edge 127 -> widescreen edge 198 (scaled 198)",
+        "wide-curtain: f8176 vanilla edge 166 -> widescreen edge 259 (scaled 258)",
+        "wide-curtain: f8180 vanilla edge 204 -> widescreen edge 318 (scaled 318)",
+        "wide-curtain: f8183 vanilla edge 232 -> widescreen edge 362 (scaled 361)",
+        "wide-curtain: f8500 vanilla edge 212 -> widescreen edge 331 (scaled 330)",
+        "wide-curtain: f8504 vanilla edge 170 -> widescreen edge 265 (scaled 265)",
+        "wide-curtain: f8508 vanilla edge 130 -> widescreen edge 203 (scaled 202)",
+        "wide-curtain: f8512 vanilla edge 89 -> widescreen edge 139 (scaled 139)",
+        "wide-curtain: f8516 vanilla edge 47 -> widescreen edge 74 (scaled 73)",
+        "wide-curtain: f8520 vanilla edge 2 -> widescreen edge 4 (scaled 3)",
         "wide-curtain: 0 of 12 frame(s) off the scaled edge"
       ],
       "pin": [
@@ -45160,14 +45261,14 @@
       ],
       "tier": "full",
       "timeout_s": 600,
-      "note_pass": "the widescreen (a mod) runs the race's curtain across its whole picture, the vanilla edge scaled to it, in the same frames",
+      "note_pass": "the widescreen (a mod) runs the native race's curtain across its whole picture (seq_pic.c's sides, snes/ppu.c's window rule), the vanilla edge scaled to it, in the same frames",
       "notes": "The user, 2026-10-13 (translated from Portuguese): 'in widescreen the race's curtain in the demo does not work as it should'. A translated stage's PPU draws the widescreen's side columns (snes/ppu.c g_ppuWideSide) and decides their windows in ppu_winTest. A curtain -- C3/01E4's window, one edge on the screen's edge and the other crossing it -- only moved across the 256 columns there: the race's left side was lit from its first frame and its right side snapped from dark to lit when the edge came within 16 columns of it (and the reverse on the close; entry 3 the same, mirrored). ppu_winTest's curtain arm now scales the moving edge to the picture (column 0 at its 0, 255 at its last), the field's wipe rule (field.c wideWipeEdge). This check runs the attract to the race's end twice (16:9 and off) and holds every listed frame's widescreen edge to the vanilla one scaled (a pixel of slack); the expect lines pin the spans themselves.",
       "mutations": [
         {
-          "file": "snes/ppu.c",
-          "find": "  if((r >= 255) != (l <= 0)) {                     // a curtain: exactly one edge on the screen's edge",
-          "replace": "  if(0) {                                          // MUT: no curtain arm",
-          "why": "the race's curtain moves across the 256 columns only again: the left side lit from the first frame, the right one snapping at the end"
+          "file": "src/seq_pic.c",
+          "find": "  if ((r >= 255) != (l <= 0)) {",
+          "replace": "  if (0) {   /* MUT: no curtain arm */",
+          "why": "the curtain's moving edge scaled to the wide picture: without it the side it opens from is lit at once"
         }
       ]
     },
@@ -45566,6 +45667,11 @@
       "name": "movetest",
       "cmd": "build/ct.exe --movetest",
       "reason": "Interactive diagnostic with no verdict line ('can the player move?' probe): observed 101s runtime printing per-phase probe rows ('k=19: Right16 dX=0 dY=0 ...') and a $7F4Bxx change census. Superseded by checkctrl / playermove / playerframe, which validate the same layer with countable signatures."
+    },
+    {
+      "name": "attract-race-abort-xlat-core-fallback",
+      "cmd": "build/Belthasar.exe --assets ct_assets.dat --scene 433 --selftest --frames 7180",
+      "reason": "2026-10-18: Belthasar.exe runs the attract's FF 60 / FF 63 on the native stages (seq_race.c / seq_entry3.c, the $0384 bit-6 arm) and links no translated $C3 program (src/xlat/seq_c3.c is ct.exe's, for --xlatcmp), so the field has no translated stage whose core fallback to grade. The native abort is graded by attract-race-abort-to-title and attract-race-abort-native-vs-oracle."
     }
   ]
 }

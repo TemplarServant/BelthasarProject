@@ -83,8 +83,10 @@ What is ported:
   $0C00 by the code at $B574 (C3/09E9's walk: 1024 `LDA $src / STA $dp`, the offsets C3:09D9 x 4 x 2 x $20), and the request
   marked sent (2). Hook `5221` sends $0C00 to VRAM $4000 / $4400 when 4FAD / 5047 raise `$AA` / `$AC`.
 
-Not here: the attract's arm (`$0384` bit 6, `FF 60`): its curtain task `3D72` (C3/01E4 over the virtual beam, C3/02DD) -- the
-native stage does not open that arm yet (the attract runs the translated stage). Paths this drive never takes (their mutations
+The attract's arm (`$0384` bit 6, `FF 60`) since 2026-10-18: the curtain task `3D72` (C3/01E4 native, C3/02DD over the virtual
+beam, HDMA channel 0 on the half it wrote) and the button `424D` -- sequence_table.md sec. 18; graded every frame, the
+attract's race in play 424 / 424 under the rule. Entry 3's `FF 63` the same way (task `6844`). THE WIDESCREEN (a mod): the
+compositor draws the sides too (seq_pic.h g_seqPicWideSide, snes/ppu.c's window rule: a curtain crosses the whole picture). Paths this drive never takes (their mutations
 survive): a sprite past x 255, a repeated source row (a zoom past 1), a column step's carry, $449C's LSR carry, a score on a
 step's exact value at the finish.
 

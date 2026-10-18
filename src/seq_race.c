@@ -14,8 +14,10 @@
 #include "seq_race.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "lz.h"       // the overlay: C3:0000 decompresses it with C3/0557
 #include "seq_racepic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_entry4.h"    // CtSeqRng02DD8: C3/02DD, the curtain's seed
 
 typedef struct { uint8_t* w; int c; const CtRaceIo* io; } R;
 
@@ -628,10 +630,113 @@ void CtSeqMul31BF(uint8_t* w, unsigned d) {
   wr(r, d + 0xF6, s);                                                 // 3200 STA $F6
 }
 
+// C3/01E4 (through C3/000E) -- THE CURTAIN: one call a frame while `$0350` (D = $0300 from here: $50) is 1 (open) or 2 (close).
+// `$51` counts the calls; the first fills the 224-byte state at bank `$54`:`$52` + $1C0 with 00 (open) or FF (close: the
+// 16-bit `LDA $F0 / STA long` then an MVN that drags the byte up the buffer); calls 1-31 seed `$55` by C3/02DD (A = FE, the
+// carry the `CMP #20` left, X's low byte: the caller's X, or the fill's MVN end on the first call) and walk the state: every
+// `Y` lines (Y = (b & 1F) + 3 + C, the step (b' & 3) + 8 + C, b / b' the next two bytes of the chain `[$55]` over $C0:FE00 --
+// each byte read is the next one's index) each line steps by it, saturating at FF (open, `ADC`) or 0 (close, `SBC` with the
+// borrow: step + 1), into the state and through WMDATA into the output half the parity of `$51` names ($52 odd, $52 + E0
+// even). ⚠ The close's clamp is `TDC`: it leaves B = $03, so the next refresh's `TAY` takes Y = $03xx -- the rest of the
+// buffer walks on one step. The 32nd call clears `$50` / `$51`. Every register comes back (C3/01BD's pulls, PLP included).
+// The caller's data bank is $00 (the stage's dispatcher, D = 0 / B = 0): C3/02DD's absolute operands are low RAM and the
+// rule's virtual beam (CtSeqRng02DD8). The field's window wipe (C0/22FA) and the overworld's window object call the same
+// routine; their port is another session's (src/xlat/wipe_c3.c, owwin_c6.c today) -- this is the stages' native one, the one
+// body to swap for a shared one later.
+void CtSeqCurtain01E4(uint8_t* w, unsigned x, const CtRaceIo* io) {
+  uint8_t* d = w + 0x0300;
+  if (!d[0x50]) { d[0x51] = 0; d[0x50] = 0; return; }                // 01F2 LDA $50 / BEQ -> 023B
+  uint8_t a, b = 0;
+  if (d[0x51]) a = d[0x51];                                           // 01F6 LDA $51 / BNE -> 0234
+  else {
+    d[0xF0] = (d[0x50] == 1) ? 0x00 : 0xFF;                           // 01FA STZ $F0 / CMP #01 / LDA #FF / STA $F0
+    unsigned bank = (d[0x54] & 1) ? 0x10000 : 0;                      // 0211 LDA $54 / LSR A / BCC: $7F or $7E
+    unsigned s = (unsigned)(d[0x52] | (d[0x53] << 8)) + 0x01C0;       // 0206 REP #21 / LDA $52 / ADC #01C0 / TAX
+    for (unsigned i = 0; i <= 0xDF; i++) w[bank | ((s + i) & 0xFFFF)] = d[0xF0];   // STA long (16-bit) / MVN, A = DE
+    x = (s + 0xDF) & 0xFFFF;                                          //   X past the MVN's last source byte
+    a = 0x00; b = 0x03;                                               // 0233 TDC (D = $0300)
+  }
+  a++; d[0x51] = a;                                                   // 0234 INC A / STA $51
+  int c = a >= 0x20;                                                  // 0237 CMP #20 / BMI
+  if (!((uint8_t)(a - 0x20) & 0x80)) { d[0x51] = 0; d[0x50] = 0; return; }   // 023B STZ $51 / STZ $50
+  d[0x57] = 0xC0; d[0x56] = 0xFE;                                     // 0242-0248
+  { static int st = -1; if (st < 0) st = getenv("CT_XLAT_SEEDTRACE") ? 1 : 0;   // the seed's inputs, as seq_xlat.c traces them
+    if (st) fprintf(stderr, "seedtrace stage f0 v=0 h=0 A=00FE X=%04X C=%d D=0300 B=00 $0386=%02X $0351=%02X $0008=%02X "
+                    "$00F0=%02X $00F2=%02X $00F4=%02X bus=21\n", x & 0xFFFF, c, w[0x0386], w[0x0351], w[0x0008], w[0x00F0],
+                    w[0x00F2], w[0x00F4]); }
+  d[0x55] = CtSeqRng02DD8(w, 0xFE, &c, x);                            // 024A JSL C3/02DD / STA $55
+  unsigned base = (unsigned)(d[0x52] | (d[0x53] << 8));
+  x = (base + 0x01C0) & 0xFFFF;                                       // 0252 LDA $52 / CLC / ADC #01C0 / TAX
+  unsigned f4 = (x + 0x00E0) & 0xFFFF;                                // 0259 CLC / ADC #00E0 / STA $F4
+  d[0xF4] = (uint8_t)f4; d[0xF5] = (uint8_t)(f4 >> 8);
+  unsigned wm = (d[0x51] & 1) ? base : (base + 0x00E0) & 0xFFFF;      // 025F LDA $51 / LSR A / LDA $52 / BCS / ADC #00E0
+  unsigned wb = (unsigned)(d[0x54] & 1) << 16;                        // 026E STA $2183 (bank $7E / $7F)
+  wm |= wb;
+  if ((d[0x54] & 0xFE) != 0x7E) { static int said; if (!said++) fprintf(stderr, "seqcurtain: UNDERIVED -- the state's bank $%02X\n", d[0x54]); }
+  unsigned db = wb;                                                   // 0273 PHA / PLB: the walk's data bank is $54
+  b = 0x00;                                                           // 0275 TDC / XBA: A = 03, B = 00
+  unsigned y = 1;                                                     // 0277 LDY #0001
+  int close = d[0x50] == 2;                                           // 027A LDA $50 / CMP #02 / BEQ
+  c = d[0x50] >= 2;
+  const uint8_t* rom = io ? io->rom : NULL; long romLen = io ? io->romLen : 0;
+  #define FE(i) ((rom && romLen > 0xFE00 + (long)(i)) ? rom[0xFE00 + (i)] : 0)
+  for (;;) {
+    y = (y - 1) & 0xFFFF;                                             // 0280 / 02AE DEY / BNE
+    if (!y) {
+      uint8_t v = FE(d[0x55]); d[0x55] = v;                           // LDA [$55] / STA $55
+      unsigned t = (unsigned)(v & 0x1F) + 3 + (unsigned)c; c = t > 0xFF; y = ((unsigned)b << 8) | (t & 0xFF);   // AND #1F / ADC #03 / TAY
+      v = FE(d[0x55]); d[0x55] = v;
+      t = (unsigned)(v & 0x03) + 8 + (unsigned)c; c = t > 0xFF; d[0xF2] = (uint8_t)t;   // AND #03 / ADC #08 / STA $F2
+    }
+    uint8_t m = w[db | x], r;
+    if (!close) {
+      unsigned t = (unsigned)m + d[0xF2] + (unsigned)c; c = t > 0xFF; r = (uint8_t)t;   // 0296 LDA $0000,X / ADC $F2
+      if (c) r = 0xFF;                                                //   BCC / LDA #FF
+    } else {
+      int t = (int)m - (int)d[0xF2] - (1 - c); c = t >= 0; r = (uint8_t)t;   // 02C4 LDA $0000,X / SBC $F2
+      if ((r & 0x80) && !c) { r = 0x00; b = 0x03; }                   //   BPL / BCS / TDC
+    }
+    w[wm] = r; wm = (wm + 1) & 0x1FFFF;                               // STA $002180
+    w[db | x] = r;                                                    // STA $0000,X
+    x = (x + 1) & 0xFFFF;                                             // INX / CPX $F4 / BNE
+    c = x >= f4;
+    if (x == f4) break;
+  }
+  #undef FE
+}
+
+// $7E:424D -- THE ATTRACT's BUTTON (a task the attract's scripts add once their curtain is open; D = 0, A 8-bit): any pad bit
+// in `$02` while no curtain runs (`$0350` = 0) starts the closing one -- `$0350` = the operand of 4258's `LDA #imm`, which the
+// setup patched ($7E:4259: 02 for the race, 01 for entry 3) --, posts `18 BA 80` ($1E00-$1E02 through $377E, unless `$0388`),
+// `$0399` = 32, `$7F:0062` = 0 (the world script then sends loc 1B1 to the title) and hands its slot to $4283, which counts
+// `$0399` down and ENDs (`INC $00`). Returns what the slot holds afterwards.
+unsigned CtSeqTaskAbort(uint8_t* w, unsigned task, const CtRaceIo* io) {
+  if (task == 0x4283) {
+    if (--w[0x0399]) return task;                                     // 4283 DEC $0399 / BNE -- 8-bit
+    w[0x0000]++; return task;                                         // 4288 INC $00 (the task stays: the END tears down)
+  }
+  if (!(w[0x02] | w[0x03])) return task;                              // 424F LDX $02 / BEQ (X 16-bit)
+  if (w[0x0350]) return task;                                         // 4253 LDA $0350 / BNE
+  w[0x0350] = w[0x4259];                                              // 4258 LDA #imm / STA $0350
+  if (!w[0x0388]) {                                                   // 425D LDA $0388 / BNE
+    w[0x1E01] = 0xBA; w[0x1E02] = 0x80; w[0x1E00] = 0x18;            // 4262 LDX #80BA / STX $1E01 / LDA #18 / STA $1E00
+    if (io && io->sfx) io->sfx(io->ctx, 0x18, 0xBA, 0x80);            // 426D JSR $377E (the ports, as the bump's)
+  }
+  w[0x0399] = 0x20; w[0x039A] = 0x00;                                 // 4270 LDX #0020 / STX $0399
+  w[0x10062] = 0x00;                                                  // 4276 LDA #00 / STA $7F0062
+  return 0x4283;                                                      // 427C LDX #4283 / JMP $39B1
+}
+
 // ---- the race: entries 0 and 9, $7E:3B48 ----
 
 static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io);
 static unsigned raceHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) { (void)slot; return CtRacePicHook(io->pic, w, h, io); }
+
+// The setup $7E:3B48's own master cycles, NMI off, by its arm: the story's 9521394 (`--callrom 7E3B48`, CT_CALLROM_NONMI=1,
+// $0384 = 20 -- the song's post left to the host's SPC; sequence_table.md sec. 12); the attract's (`FF 60`: bit 5, no song)
+// 10205558, measured in place on the rule's cartridge (`ct.exe --racepiccmp` RACEPICCMP_SPAN=7E3B48,7E300D from its hand-off,
+// power-on f8182; C3:0000 to $7E:3013 is 46 frames there).
+long CtRaceStageSetupCycles(uint8_t operand) { return (operand & 0x40) ? 10205558L : 9521394L; }
 
 int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   R rr = { w, 0, io }, *r = &rr;
@@ -658,7 +763,19 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (!(operand & 0x40)) {                                            // 3C54 BIT #0040 / BNE: the story's scripts
     wr(r, 0x0A20, 0x3F14); wr(r, 0x0B20, 0x400A);
     wr(r, 0x038E, 0x0808); w[0x038C] = 0x3E; wr(r, 0x0382, 0);
-  } else return -1;                                                   // the attract's window arm: not this port's yet
+  } else {                                                            // 3C7C the attract's: the curtain and its window
+    wr(r, 0x038E, 0x0808);
+    wr(r, 0x0354, 0x007E); wr(r, 0x0352, 0xE000); wr(r, 0x0351, 0);   // 3C82-3C8E (`STZ $0351` 16-bit: $0352's low byte too)
+    w[0x4259] = 0x02;                                                 // 3C93 STA $7E4259: $424D's `LDA #imm` -- the close
+    if (io && io->pic) {                                              // 3C9B-3CB0, 16-bit stores: each writes the next register
+      static const uint8_t wr16[][2] = { { 0x23, 0x22 }, { 0x24, 0x00 }, { 0x24, 0x22 }, { 0x25, 0x00 }, { 0x25, 0x22 },
+                                         { 0x26, 0x00 }, { 0x27, 0xFF }, { 0x28, 0x00 }, { 0x2E, 0x17 }, { 0x2F, 0x04 } };
+      for (unsigned k = 0; k < sizeof wr16 / sizeof wr16[0]; k++) CtSeqPicWrite(&io->pic->p, wr16[k][0], wr16[k][1], 0);
+    }
+    wr(r, 0x0397, rd(r, 0x0397) + 1);                                 // 3CB3 LDA $0397 / INC A / STA $0397 -- kept across visits
+    if (!(rd(r, 0x0397) & 1)) { wr(r, 0x0A20, 0x404D); wr(r, 0x0B20, 0x415E); }   // 3CBA LSR / BCS: the two camera runs in turn
+    else { wr(r, 0x0A20, 0x40C3); wr(r, 0x0B20, 0x415E); }
+  }
   if (CtRaceScript(w, 0x0A00, io) < 0) return -1;                     // 3CD8 JSR $3749 -- page A runs once in the setup
   wr(r, 0x35FD, 0x45B0); wr(r, 0x3024, 0x51D1);                       // 3CDB / 3CE1: two words of the overlay
   if (io && io->pic) { CtRacePicSetupB(io->pic, w, io); CtRacePicCgram(io->pic, w); }   // 3CEA-3D44, then $7E:300D's $388B
@@ -682,6 +799,11 @@ static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* 
     case 0x44CE: return CtRaceTask44CE(w) ? t : 0;
     case 0x485D: return CtRaceStep485D(w, io);
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);   // the brightness (the overlay's own)
+    case 0x424D: case 0x4283: return CtSeqTaskAbort(w, t, io);        // the attract's button
+    case 0x3D72:                                                      // the attract's curtain: C3/01E4, then HDMA channel 0's
+      CtSeqCurtain01E4(w, slot, io);                                  //   table by the call's parity (3D78 LDA $0351 / LSR A)
+      if (io && io->pic) io->pic->ch[0].aAdr = (w[0x0351] & 1) ? 0x3D64 : 0x3D6B;   // STX $4302
+      return t;
     default:                                                          // the picture's tasks (stage 2)
       if (io && io->pic) CtRacePicTask(io->pic, w, slot, t, io);
       return t;
@@ -692,6 +814,10 @@ int CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
   int st = CtSeqStageNmiHooks(w, joy, io, (io && io->pic) ? raceHook : NULL, raceTask);
   if (st != 2 && CtSeqStageSong(w, io) > 0) w[0x0388] = 0;           // (the race never changes $038A)
   if (st != 2 && io && io->pic) CtRacePicThread(io->pic, w);         // $7E:3023 the main loop's pass
+  // The END is the main loop's: `3023 JSR $51D1 / 3026 LDA $00 / BEQ` reads `$00` only once the pass returns, and a pass
+  // parked at 5211 (waiting on `$39` for the hook $5221) returns NMIs later -- the NMIs run on meanwhile. MEASURED on the
+  // rule's cartridge, the attract's race: `$0000 = 1` at f441 of its hand-off state, $7E:302A at f443.
+  if (st == 1 && io && io->pic && io->pic->thread) return 0;
   return st;
 }
 

@@ -75,13 +75,17 @@ struct CtXlatStage {
 
 // src/xlat/seq_c3.c is the sequence engine as the attract's `FF 60` (entry 0, the race) and `FF 63` (entry 3)
 // ran it: one program, because both run on the same overlay, NMI, interpreter and library -- only the tasks differ.
-// CT_XLAT_NO_GWARP (the playable host): the gate warp runs native there (src/seq_gwarp.c) and src/xlat/gwarp_fd.c is not built.
+// ct.exe alone builds the translations, as its lockstep tools' references (--xlatcmp, --xlatphase): CT_XLAT_SEQ_C3 the
+// attract's two stages (the playable host runs them natively: seq_race.c, seq_entry3.c, `$0384` bit 6) and, without
+// CT_XLAT_NO_GWARP, the gate warp (the playable host's is src/seq_gwarp.c). Belthasar links no translated program.
 int CtXlatStageHas(uint8_t seqId) {
-#ifdef CT_XLAT_NO_GWARP
-  return seqId == 0x60 || seqId == 0x63;
-#else
-  return seqId == 0x60 || seqId == 0x63 || (seqId >= 0x80 && seqId <= 0x8F);   // $80-$8F: the gate warp (C0/3FE4)
+#ifdef CT_XLAT_SEQ_C3
+  if (seqId == 0x60 || seqId == 0x63) return 1;
 #endif
+#ifndef CT_XLAT_NO_GWARP
+  if (seqId >= 0x80 && seqId <= 0x8F) return 1;                     // $80-$8F: the gate warp (C0/3FE4)
+#endif
+  return 0;
 }
 
 // The hook of a hosted run: stop exactly where snes_runFrame stops (snes/snes.c) -- its two loops, checked at the same
@@ -134,10 +138,14 @@ CtXlatStage* CtXlatStageOpen(const uint8_t* rom, long romLen, const uint8_t* wra
   Cpu* c = s->cpu;
   // C0/3FD3..3FE0 and C0/0B4E, as seq_xlat.h lists them.
   int warp = seqId >= 0x80;
-#ifdef CT_XLAT_NO_GWARP
-  st->prog = CtXlat_seq_c3;
-#else
+#if defined(CT_XLAT_SEQ_C3) && !defined(CT_XLAT_NO_GWARP)
   st->prog = warp ? CtXlat_gwarp_fd : CtXlat_seq_c3;
+#elif defined(CT_XLAT_SEQ_C3)
+  st->prog = CtXlat_seq_c3;
+#elif !defined(CT_XLAT_NO_GWARP)
+  st->prog = CtXlat_gwarp_fd;
+#else
+  (void)warp; st->prog = NULL;                                       // never opened: CtXlatStageHas says no
 #endif
   c->a = seqId; c->x = 0x06FF; c->y = hostY; c->sp = 0x06FF; c->dp = 0x0100; c->db = 0x00;
   c->k = 0xC3; c->pc = 0x0000;

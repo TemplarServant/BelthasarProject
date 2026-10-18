@@ -24,7 +24,7 @@ endif()
 
 # The playable host's sources (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake).
 set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
-                 src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/xlat/seq_c3.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
+                 src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
 
 # ANDROID (docs/ANDROID.md): only the playable host, as the shared library SDL's Java activity loads. The NDK's CMake
 # reaches this file through android/app/build.gradle.
@@ -69,6 +69,7 @@ add_executable(ct
 )
 target_include_directories(ct PRIVATE snes src)
 target_compile_definitions(ct PRIVATE CT_XLAT_HDMA_REF)   # seq_xlat.c's CtXlatHdmaBuild: the translated FD/C2C1, ct.exe's reference only
+target_compile_definitions(ct PRIVATE CT_XLAT_SEQ_C3)   # src/xlat/seq_c3.c: --xlatcmp's lockstep (the play path is native)
 if(UNIX)
   target_link_libraries(ct m)   # lround (ct_vm.c); MSVC's CRT carries libm itself
 endif()
