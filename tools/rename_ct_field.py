@@ -10,10 +10,14 @@ import subprocess
 import sys
 
 root = sys.argv[1]
-files = subprocess.run(['git', 'grep', '-lI', r'\bct_field\b'], cwd=root, capture_output=True, text=True).stdout.split()
-pat = re.compile(rb'\bct_field\b')
+OLD = r'\bct_' + r'field\b'           # in two parts, so a re-run finds nothing here
+KEEP = {'tools/rename_ct_field.py', 'tools/build.py'}   # build.py keeps the old name as an alias (TARGET_ALIASES)
+files = subprocess.run(['git', 'grep', '-lI', OLD], cwd=root, capture_output=True, text=True).stdout.split()
+pat = re.compile(OLD.encode())
 n_files = n_hits = 0
 for f in files:
+    if f in KEEP:
+        continue
     p = root + '/' + f
     b = open(p, 'rb').read()
     nb, k = pat.subn(b'Belthasar', b)
