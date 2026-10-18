@@ -46328,7 +46328,9 @@
         "colcircle: close picture cartridge f170 best port f168 (-2): 0 px differ",
         "colcircle: close picture cartridge f200 best port f198 (-2): 0 px differ",
         "colcircle: close picture cartridge f216 best port f214 (-2): 0 px differ",
-        "colcircle: close f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 00"
+        "colcircle: close f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 00",
+        "colcircle: fixed7 f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 00",
+        "colcircle: fixed9 f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 00"
       ],
       "pin": [
         "^colcircle: "
@@ -46342,7 +46344,7 @@
         "saves/field_re/shop90.lakewram",
         "tools/field_colcircle_cmp.py"
       ],
-      "note_pass": "C0/21E1's entries 4 and 5 (FF 97 / FF 98) are the ROM's: the circle grows and shrinks as the colour window through C3/0077's argument 1, its tables, registers and teardown equal to the cartridge's on every frame, and the picture -- the sub screen's sum limited to the circle, the fixed blue where it is transparent, the sprites' own math after F1's $0BE0 -- pixel for pixel at the field's P + 2",
+      "note_pass": "C0/21E1's entries 4, 5 and 7-0A (FF 97 / FF 98 / FF 99 / FF 9A) are the ROM's: the circle grows and shrinks as the colour window through C3/0077's argument 1, its tables, registers and teardown equal to the cartridge's on every frame, and the picture -- the sub screen's sum limited to the circle, the fixed blue where it is transparent, the sprites' own math after F1's $0BE0 -- pixel for pixel at the field's P + 2",
       "mutations": [
         {
           "file": "src/ct_vm.c",
@@ -46391,9 +46393,27 @@
           "find": "static int sceneEffect(const SceneData* sd) { return sd->fxLiveOn ? sd->fxLive : sd->effect_flags; }",
           "replace": "static int sceneEffect(const SceneData* sd) { return sd->effect_flags; }   /* MUT */",
           "why": "the field's CGADSUB is $0BE0, which op 0xF1 rewrites: the bake follows it"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (st == 7 || st == 9) w8(m, 0x7E0139, (uint8_t)(st + 1));",
+          "replace": "  if (0) w8(m, 0x7E0139, (uint8_t)(st + 1));   /* MUT */",
+          "why": "C0/257D / 2602: entries 7 and 9 run twice (7 -> 8, 9 -> 0A), the circle in both buffers"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "w16(m, 0x7E1D8F, 0xF01D);",
+          "replace": "w16(m, 0x7E1D8F, 0x0000);   /* MUT */",
+          "why": "C0/254D: $1D8F = F01D (16-bit)"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "    w8(m, 0x7E0BD8, 0x13); w8(m, 0x7F1521, 0x13);",
+          "replace": "    w8(m, 0x7E0BD8, 0x17); w8(m, 0x7F1521, 0x17);   /* MUT */",
+          "why": "C0/25BA: entry 9's TS = 13"
         }
       ],
-      "notes": "C0/21E1'S ENTRIES 4 AND 5 (docs/ROADMAP.md F19). `FF 97` (C0/4191: FF 90's stores, $0139 = 04) and `FF 98` ($0139 = 05) hand the main loop the iris's circle as the COLOUR window: C0/232A grows it (WOBJSEL 20, CGWSEL 12, TMW 17, `TSB $28`, the buffer by $53, `LDA #01 / JSL C3/0008`), C0/238A shrinks it and at radius 0 runs C0/23E2. Graded from a quiet capture (loc 005) with scene 051's operands poked on both sides at frame 150; every frame's $0139 / $013C / $0153 / $0128, the shadows and both window buffers. Like 051 the room keeps BG3 on the sub screen (TM 13 / TS 04): the circle limits that sum (field.c fieldColWindowApply on the bake's two screens, scene.c CtFieldSceneScreens), adds the fixed blue where the sub screen is transparent, and F1's $0BE0 = 17 stays after the teardown -- the bake follows $0BE0 (CtFieldSceneSetEffect) and the lead's palette-4+ pixels take BG3's sub pixel. Six pictures at the field's P + 2."
+      "notes": "C0/21E1'S ENTRIES 4 AND 5 (docs/ROADMAP.md F19). `FF 97` (C0/4191: FF 90's stores, $0139 = 04) and `FF 98` ($0139 = 05) hand the main loop the iris's circle as the COLOUR window: C0/232A grows it (WOBJSEL 20, CGWSEL 12, TMW 17, `TSB $28`, the buffer by $53, `LDA #01 / JSL C3/0008`), C0/238A shrinks it and at radius 0 runs C0/23E2. Graded from a quiet capture (loc 005) with scene 051's operands poked on both sides at frame 150; every frame's $0139 / $013C / $0153 / $0128, the shadows and both window buffers. Like 051 the room keeps BG3 on the sub screen (TM 13 / TS 04): the circle limits that sum (field.c fieldColWindowApply on the bake's two screens, scene.c CtFieldSceneScreens), adds the fixed blue where the sub screen is transparent, and F1's $0BE0 = 17 stays after the teardown -- the bake follows $0BE0 (CtFieldSceneSetEffect) and the lead's palette-4+ pixels take BG3's sub pixel. Six pictures at the field's P + 2. FF 99 / FF 9A (C0/2514 / 2589, entries 7/8 and 9/0A: the fixed circles round (7C, 06) with their screen set-up and $1D8D-$1D92) are graded on their state the same way; their picture is not drawn yet (live TM / TS, per-layer window masks, $1D8D's scroll words)."
     }
   ],
   "excluded": [

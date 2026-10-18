@@ -11,10 +11,16 @@ ROM's entry from there:
 
   open   $0139 = 04, $013C = 00: C0/232A grows the circle a step a frame through C3/0077's argument 1 (each line pair
          once: half as tall) into the buffer $0153 picks ($7F:17C8 / $7F:1AC8), WOBJSEL 20 / CGWSEL 12, `TSB $28`;
-  close  $0139 = 05, $013C = 40: C0/238A shrinks it, and at 0 C0/23E2 tears it down.
+  close  $0139 = 05, $013C = 40: C0/238A shrinks it, and at 0 C0/23E2 tears it down;
+  fixed7 $0139 = 07 (`FF 99`): C0/2514's two frames -- the circle round (7C, 06), radius 29, into both buffers, BG3 kept
+         inside window 1, CGWSEL 22, the words $1D8D-$1D92 -- and the window stays;
+  fixed9 $0139 = 09 (`FF 9A`): C0/2589's -- radius 27, BG2 and BG3 in window 1, TM 04 / TS 13, CGADSUB 04.
+         (These two are graded on their state only: their picture needs the field's bake to follow the live TM / TS
+         $7F:1520-1521, per-layer window masks W12SEL / W34SEL, and what $1D8D-$1D92 drive -- not drawn yet.)
 
 Every frame from the poke to 120 on (the cartridge's --monitor, the port's CT_FIELD_MEMMON, the same frame number -- the
-field's WRAM clock): $0139, $013C, $0153, $0128, the window registers' shadows and both 448-byte buffers. Prints, per run,
+field's WRAM clock): $0139, $013C, $0153, $0128, the screen and window registers' shadows ($0BD7-$0BE0, $7F:1520-1523),
+$1D8D-$1D92 and both 448-byte buffers. Prints, per run,
 the frames compared and the first that differs; then three pictures a run, each cartridge `--peek` frame N against the
 port's shots N + d for d in -4..+4 (the field's picture is P + 2: d = -2): the best d and its differing pixels. Loc 005,
 like scene 051, keeps BG3 on the sub screen (TM 13 / TS 04): the circle limits that sum, and adds the fixed blue where the
@@ -34,9 +40,12 @@ AT = 150
 SPAN = 120
 COMMON = '7E013A=87,7E013B=98,7E013D=60,7E0121=9F,7E0122=9F,7E0BE0=17'
 RUNS = (('open', COMMON + ',7E013C=00,7E0139=04', (AT + 30, AT + 60, AT + 100)),
-        ('close', COMMON + ',7E013C=40,7E0139=05', (AT + 20, AT + 50, AT + 66)))
-CART = '7E0139:1,7E013C:1,7E0153:1,7E0128:1,7E0BD9:3,7E0BDE:1,7E0121:2,7F1522:2,7F17C8:448,7F1AC8:448'
-PORT = '0139:1,013C:1,0153:1,0128:1,0BD9:3,0BDE:1,0121:2,11522:2,117C8:1C0,11AC8:1C0'
+        ('close', COMMON + ',7E013C=40,7E0139=05', (AT + 20, AT + 50, AT + 66)),
+        ('fixed7', '7E0139=07', ()),
+        ('fixed9', '7E0139=09', ()))   # (their pictures are not drawn yet: see the docstring)
+CART = ('7E0139:1,7E013C:1,7E0153:1,7E0128:1,7E0BD7:2,7E0BD9:3,7E0BDE:3,7E0121:2,7E1D8D:6,7F1520:4,7F17C8:448,'
+        '7F1AC8:448')
+PORT = '0139:1,013C:1,0153:1,0128:1,0BD7:2,0BD9:3,0BDE:3,0121:2,1D8D:6,11520:4,117C8:1C0,11AC8:1C0'
 
 
 def series(lines, rx, key):

@@ -3545,7 +3545,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // 5 for 0x90/0x97 and 2 otherwise, matching C0/4036's four INXs and C0/41BA's two. The parking
     // subs 0x92-0x95 run above (ctWipeOp). NOT PORTED here: 0x9E (C0/41C8, scene 0AC: `LDA $39 / BEQ` -> `LDA #0C /
     // STA $39` and park; parks until C0/21E1's entry 0C ends in 0D) -- entries 7-0D have no port (docs/ROADMAP.md
-    // F19), so parking on it would hold the scene for good; 0x99-0x9B set 7/9/0B, entries likewise unported. src/move.c's CtFieldRunnerOne has the whole ladder byte-derived and
+    // F19), so parking on it would hold the scene for good; 0x9B sets 0B, likewise unported. src/move.c's CtFieldRunnerOne has the whole ladder byte-derived and
     // graded by --sweepops FF:60.)
     return 1;
   }
@@ -5983,6 +5983,43 @@ static void ctColCircleFrame(CtScene* sc) {
   }
 }
 
+// ---- THE FIXED CIRCLES: C0/21E1's entries 7 / 8 (`FF 99`) and 9 / 0A (`FF 9A`) ------------------------------------------
+// Each is two frames of set-up -- `LDA $39 / CMP #07|#09 / BNE / INC $39`, else `STZ $39`: the same routine runs at 7 and
+// at 8 (9 and 0A), so the circle lands in both buffers of the $53 pair -- and the window then STAYS (nothing in them
+// clears $28 bit 5; a later `FF 9C` -> C0/23E2 does). A circle round (7C, 06), above the picture's top, through C3/0077
+// with argument 0 into the buffer $53 picks.
+//   C0/2514 (7/8): TMW / TSW $7F:1522/1523 = 17 / 00, W12SEL $0BD9 = 00, WOBJSEL $0BDB = 00, W34SEL $0BDA = 03 (BG3 in
+//     window 1, inverted: BG3 kept only inside it), CGWSEL $0BDE = 22 (math prevented inside, the sub screen added), the
+//     radius 29, `TSB $28` #20, and the words $1D8D = 0100, $1D8F = F01D, $1D91 = 01C0 (DP $1D00's, C0/75E9's).
+//   C0/2589 (9/0A): TMW / TSW 17 / 00, W12SEL 20 (BG2 in window 1), WOBJSEL 00, W34SEL 02 (BG3 in window 1), CGWSEL 22,
+//     CGADSUB $0BDF = $0BE0 = 04 (BG3), TM $0BD7 = $7F:1520 = 04, TS $0BD8 = $7F:1521 = 13, $1D8D = 0100, the radius 27.
+static void ctFixedCircleFrame(CtScene* sc) {
+  Mem* m = sc->mem;
+  int st = r8(m, 0x7E0139), nine = st >= 9;
+  w8(m, 0x7F1522, 0x17); w8(m, 0x7F1523, 0x00);                             // 2514-251C / 2589-2591
+  if (!nine) {
+    w8(m, 0x7E0BD9, 0x00); w8(m, 0x7E0BDB, 0x00); w8(m, 0x7E0BDA, 0x03);     // 2520-252A
+    w8(m, 0x7E0BDE, 0x22);                                                   // 252D
+    w8(m, 0x7E0350, 0x7C); w8(m, 0x7E0352, 0x06); w8(m, 0x7E0354, 0x29);     // 2532-253E
+    w8(m, 0x7E0128, r8(m, 0x7E0128) | 0x20);                                // 2541 TSB $28
+    w16(m, 0x7E1D8D, 0x0100); w16(m, 0x7E1D8F, 0xF01D); w16(m, 0x7E1D91, 0x01C0);   // 2545-2556 (16-bit)
+  } else {
+    w8(m, 0x7E0BD9, 0x20); w8(m, 0x7E0BDB, 0x00); w8(m, 0x7E0BDA, 0x02);     // 2595-25A1
+    w8(m, 0x7E0BDE, 0x22);                                                   // 25A4
+    w8(m, 0x7E0BDF, 0x04); w8(m, 0x7E0BE0, 0x04);                            // 25A9-25AE
+    w8(m, 0x7E0BD7, 0x04); w8(m, 0x7F1520, 0x04);                            // 25B1-25B6
+    w8(m, 0x7E0BD8, 0x13); w8(m, 0x7F1521, 0x13);                            // 25BA-25BF
+    w16(m, 0x7E1D8D, 0x0100);                                                // 25C3-25C8 (16-bit)
+    w8(m, 0x7E0350, 0x7C); w8(m, 0x7E0352, 0x06); w8(m, 0x7E0354, 0x27);     // 25CD-25D9
+    w8(m, 0x7E0128, r8(m, 0x7E0128) | 0x20);                                // 25DC TSB $28
+  }
+  uint16_t buf = r8(m, 0x7E0153) ? 0x17C8 : 0x1AC8;                          // 255B / 25E0 LDA $53 / BEQ
+  w16(m, 0x7E0356, buf); w8(m, 0x7E0358, 0x7F);
+  ctIrisCircle(m, 0x00);                                                     // 2577 / 25FC LDA #00 / JSL C3/0008
+  if (st == 7 || st == 9) w8(m, 0x7E0139, (uint8_t)(st + 1));                // 257D / 2602 CMP #07|#09 / BNE / INC $39
+  else w8(m, 0x7E0139, 0);                                                   // 2586 / 260B STZ $39
+}
+
 // ---- THE QUAD WINDOW: C0/21E1's entries 6 and 0E (the combat tutorial's yellow line) ---------------------------------------
 // Op 0xFE (C0/3F26, move.c CtVmScreenFxOp) seeds eight 8.8 channels at $7F:1CE9.. (deltas at $7F:1CF9.., countdown $7F:1CE8)
 // and sets $0139 = 6; `FF 9C` (C0/41C4) sets it to 0E. Entry 6 (C0/2409) is one frame of the line: the channels' high bytes
@@ -6578,11 +6615,13 @@ void CtSceneTick(CtScene* sc) {
   }
   // C0/00B1 JSR C0/21E1, before the pass: `LDA $39 / BEQ / DEC / ASL / TAX / JSR ($21EE,X)` -- 1 the iris opening (C0/220E),
   // 2 closing (C0/2269), 3 the window wipe (C0/22D8), 4 / 5 the circle as the colour window (C0/232A / 238A), 6 the quad
-  // window (C0/2409) and 0E its teardown (C0/23E2). (7-0D -- C0/2514 2589 260E 264F 2329 -- have no port.)
+  // window (C0/2409) and 0E its teardown (C0/23E2), 7-0A the fixed circles (C0/2514 / 2589). (0B-0D -- C0/260E 264F
+  // 2329 -- have no port.)
   if (!sc->sndFrozenTick && !sc->loadFadeIn && body) {
     int st39 = r8(sc->mem, 0x7E0139);
     if (st39 == 1 || st39 == 2) ctIrisFrame(sc);
     else if (st39 == 4 || st39 == 5) ctColCircleFrame(sc);
+    else if (st39 >= 7 && st39 <= 0x0A) ctFixedCircleFrame(sc);
     else if (st39 == 6 || st39 == 0x0E) ctLineFrame(sc);
     else ctWipeFrame(sc);
     // C0/00B4 JSR C0/274D: the caption requests in $0154 bits 2/3/4 and, with none of them, bit 5's C0/2758 -- a chest's box

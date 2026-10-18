@@ -162,3 +162,26 @@ fieldColWindowApply redoes the map's pixels under a window: inside, main +- (sub
 Graded at the field's P + 2 by field_colcircle_cmp.py: six pictures, opening, closing and after the teardown, 0 px.
 MEASURED too (loc 084, TM 04 / TS 13): outside the window the cartridge shows the main screen alone -- there BG3 over the
 backdrop, black.
+
+## 10. The fixed circles: entries 7 / 8 (`FF 99`) and 9 / 0A (`FF 9A`) (2026-10-18)
+
+Sites: `FF 99` in loc 109's script $033 (obj1, offset 0x03B5, after a run of `E6` ops: `AD 10 / FF 99`) and loc 100's $163
+(obj9, 0x08E0); `FF 9A` in loc 001's $043 (obj0 fn0, 0x012C, inside a sequence of `2E 50` colour ops: `AD 40 / 04 02 33 /
+FF 9A / AD 20`). None is reached by a capture here (the port's loc 001 / 109 / 100 entries take other branches).
+
+```
+C0/2514 (7, 8)  TMW/TSW $7F:1522/1523 = 17/00, $0BD9 = 00, $0BDB = 00, $0BDA = 03, CGWSEL $0BDE = 22,
+                $0350/$0352/$0354 = 7C/06/29, TSB $28 #20, (16-bit) $1D8D = 0100, $1D8F = F01D, $1D91 = 01C0,
+                $0356 = $53 ? 17C8 : 1AC8, $0358 = 7F, LDA #00 / JSL C3/0008, then $39 = 7 ? 8 : 0
+C0/2589 (9, A)  TMW/TSW 17/00, $0BD9 = 20, $0BDB = 00, $0BDA = 02, CGWSEL 22, CGADSUB $0BDF = $0BE0 = 04,
+                TM $0BD7 = $7F:1520 = 04, TS $0BD8 = $7F:1521 = 13, (16-bit) $1D8D = 0100, radius 27, the same tail
+```
+
+Two frames each (the routine runs at 7 and 8, so both buffers of the pair hold the circle); the window then stays until a
+teardown (`FF 9C` -> C0/23E2). Ported in ct_vm.c (ctFixedCircleFrame); graded on their state by field_colcircle_cmp.py's
+`fixed7` / `fixed9` runs (the pokes $0139 = 07 / 09 in loc 005): 120 frames each, equal. NOT DRAWN: their picture needs the
+field's bake to follow the live TM / TS ($7F:1520-1521; it follows CGADSUB $0BE0 already), per-layer window masks (W12SEL /
+W34SEL with TMW), and what the words $1D8D-$1D92 drive (DP $1D00, the layer scroll engine C0/75E9). MEASURED in loc 005: the
+cartridge's entry 9 leaves the picture black but for BG3's pixels with the sub screen added; entry 7 rearranges the layers.
+Entries 0B / 0C (C0/260E / 264F, `FF 9B`, and `FF 9E`'s park in loc 0AC) are frame loops of their own (C0/264F waits in
+C0/00DE / C0/EC60; C0/260E ends in `JML C3:0000` with sequence 85): not ported.
