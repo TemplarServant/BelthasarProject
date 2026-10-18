@@ -18920,6 +18920,22 @@ int main(int argc, char** argv) {
     // (No clamp to the canvas: the VM's camera is the ROM's, bounded by the scroll mask the location record gives, and a
     //  mask may run past the map -- loc 1B0's record says 64 rows on a 32-row map. What shows there is the map again;
     //  fieldBaseAt wraps every canvas read below.)
+    // THE PICTURE'S SCROLL IS THE HDMA TABLE'S WORD, not the live camera: BG1's HOFS / VOFS reach the PPU through channels
+    // 1 / 2, whose data FD/C2C1's tail (C5A7 / C6F7) copies from $1D87 / $1D89 into the set it builds ($7F:1508 / 150A, set
+    // B +4; `$0153` bit 0 set after it = set B built last). A frame whose main loop never reaches C0/00C7 keeps the last
+    // set on screen while the camera code before it already stepped: MEASURED, loc 031 from saves/field_re/
+    // s49_chest_walk.state (tools/chest_box_close_cmp.py): at f203 the camera moves a pixel ($1D87 71 -> 72), then a sound
+    // post holds the CPU in C7/09E5 (`--cputrace`) until f245 -- $0153 and both sets frozen -- and the cartridge shows
+    // HOFS 113 for 42 frames (`--hdma`), the port's WRAM the same. The camera is drawn where the shown word puts it.
+    int sprDX = 0, sprDY = 0;
+    if (f.vm && !battlePhase) { const uint8_t* cp = CtSceneMem7E(f.vm);
+      if (cp && !(cp[0x0153] & 0x80)) {
+        unsigned t = (cp[0x0153] & 0x01) ? 4 : 0;
+        int hx = cp[0x11508 + t] | (cp[0x11509 + t] << 8), hy = cp[0x1150A + t] | (cp[0x1150B + t] << 8);
+        int lx = cp[0x1D87] | (cp[0x1D88] << 8), ly = cp[0x1D89] | (cp[0x1D8A] << 8);
+        sprDX = (int16_t)(lx - hx); sprDY = (int16_t)(ly - hy);
+        camx -= sprDX; camy -= sprDY;
+      } }
     lastCamY = camy;                                 // the ROM's raw $1D0E, for the speaker rule below
     // ⭐ THE SNES SHOWS BG LINE `vScroll + 1` ON THE FIRST VISIBLE SCANLINE. BGnVOFS is not the row
     // displayed at the top of the screen -- the PPU fetches row `y + VOFS` for scanline y counting from
@@ -19532,7 +19548,20 @@ int main(int argc, char** argv) {
           pShadow = g_fieldCgram + 0x100 + ((m7e[0x0F81 + pObj * 2] >> 1) & 7) * 32; }   // (the uploaded rows, C0/712E)
         if (f.vm && pObj >= 0) g_bObjPalCur = (CtSceneMem7E(f.vm)[0x0F81 + pObj * 2] >> 1) & 7;   // its OAM palette
         g_motOwn = CtMotSprite(mot, pObj, (int)px, (int)py);
-        int pnp = drawSprite(&assets, fb, sidx, spal, 0, af, (int)px - camx, (int)py - camy, front, tp, bp,
+        // A FRAME WHOSE MAIN LOOP STOPS IN A SOUND UPLOAD NEVER REACHES ITS INTEGRATE: C0/881E (the controller, the camera's
+        // step) runs before the event pass, the lead's `$1800/$1880 += velocity` (C0/AAFD, from C0/A810 at C0/00D3) after
+        // it, and a script's `JSL C7/0004` inside the pass holds the CPU until the upload ends -- where the frame resumes
+        // (FD/C2C1, then A810: the integrate lands then). The host's (px, py) takes the step on the first frame and the
+        // VM commits it on the resume, so the WRAM is the cartridge's; the PICTURE is the words. MEASURED, loc 031
+        // (tools/chest_box_close_cmp.py): $1802 = 1390 f202-244 on both sides while px was 314 from f203 -- the lead drawn
+        // a pixel right of the cartridge's for 42 frames (ROADMAP F14's "one more step").
+        double dpx = px, dpy = py;
+        if (f.vm && pObj >= 0 && CtSceneMainLoopParked(f.vm) && CtSceneActorCount(f.vm) > 1) {
+          const uint8_t* lw = CtSceneMem7E(f.vm);
+          dpx = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;
+          dpy = (lw[0x1880 + pObj * 2] | (lw[0x1881 + pObj * 2] << 8)) / 16.0;
+        }
+        int pnp = drawSprite(&assets, fb, sidx, spal, 0, af, (int)dpx - camx, (int)dpy - camy, front, tp, bp,
                    prot ? prstart : 0, prot ? prspan : 0, prphase, pbstart, pbn, pbbgr,
                    0, pmask, pShadow, &pStenSrc);
         g_bObjPalCur = -1;
