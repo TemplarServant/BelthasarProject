@@ -30,6 +30,17 @@ void CtSceneSetSoundSink(const CtSoundSink* sink) {
   if (sink) gSoundSink = *sink;
   else { gSoundSink.ctx = 0; gSoundSink.post = 0; gSoundSink.port = 0; }
 }
+// THE LOAD'S LAST JSLs. A location load runs its scripts' init (the init runner C0/5709) and obj0's slot 1 (C0/56C8 ->
+// C0/595C) at its END, after the decompressions, with the NMI off: on the cartridge their sound commands reach the SPC in
+// the load's last frame, the one C0/2848 begins in (the Lavos chain's 1D3: `10 0D` from C0/1B8B at f2227 as the load
+// starts, slot 1's `E8 FF` -> `18 FF` at f2249 line 71, C0/2848 at f2249 line 89; tools/sound_post_cmp.py). The port runs
+// the whole load in its first frame and holds the black after it, so a host that prices the load that way
+// (CtSceneLoadPostsMode) gets those JSLs queued here -- the mailbox as each left it, $1E03 included -- and posts them with
+// CtSceneLoadPostsFlush in the load's last frame. The load's own song post (C0/1B8B, at its start) is not queued.
+static int gLoadPostMode = 0, gLoadPostOn = 0, gLoadPostN = 0;
+static uint8_t gLoadPost[32][4];
+void CtSceneLoadPostsMode(int on) { gLoadPostMode = on ? 1 : 0; }
+int  CtSceneLoadPostsPending(void) { return gLoadPostN; }
 static void palSweepB0E6(CtScene* sc);                      // fwd (needs CtScene too)
 static uint8_t vmSoundPort(int k) {
   return gSoundSink.port ? gSoundSink.port(gSoundSink.ctx, k) : 0;   // no APU -> 0 -> waits pass
@@ -4622,6 +4633,7 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
     w8(sc->mem, 0x7E1C80 + (uint32_t)o * 2, (uint8_t)((sc->actors[o].coll << 1) | sc->actors[o].collMap));
     w8(sc->mem, 0x7E1C81 + (uint32_t)o * 2, (uint8_t)sc->actors[o].snap);
   }
+  gLoadPostOn = gLoadPostMode;                       // C0/5709 and C0/56C8 run at the load's end (gLoadPost, above)
   for (int n = 0; n < count; n++) {
     // C0/58ED / 58F0, the init runner's head for EVERY object of the scene ($BD = the object count * 2, inactive ones
     // included -- 58F3's `BMI` comes after): `STZ $1B01,X / STZ $1B80,X` with the REP #20 of 58E2 in force, so two
@@ -4760,6 +4772,7 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
   if (gRomImg) {                                       // (a harness without the ROM image has no bank $D1/$FF to read)
     int x = (count > 0) ? fpPtr(sc, 0, 1) : 0;         // 595C LDA $7F2003 / TAX
     CtVmC2LoadTail(sc->mem->s, gRomImg, (int)gRomImgLen, x & 0xFF, g_initLastOp & 0xFF); }
+  gLoadPostOn = 0;
   if (getenv("CT_SHOWVORTEX"))       // DEBUG: run the emitter's open fn (its fn3 starts with op 0x88) to arm colorFx
     for (int n = 0; n < count; n++) if (sc->actors[n].colorGated) {
       int op3 = fpPtr(sc, n, 3);
@@ -8394,6 +8407,11 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
               fprintf(stderr, "[snd] blen=%-4d rawloc=%-3d cmd=%02X p1=%02X p2=%02X p3=%02X sink=%d\n",
                       blen, L[0] | (L[1] << 8), m[0], m[1], m[2], m[3], gSoundSink.post ? 1 : 0); } }
   int rr = -1;
+  if (gLoadPostOn && gSoundSink.post && mem->s[0x1E00]) {      // the load's last JSLs: queued for its last frame (above)
+    if (gLoadPostN < 32) memcpy(gLoadPost[gLoadPostN++], mem->s + 0x1E00, 4);
+    w8(mem, 0x7E1E00, 0x00);
+    return startLine;                                          // (nothing crossed here: the load's black prices it)
+  }
   if (gSoundSink.post) rr = gSoundSink.post(gSoundSink.ctx, mem->s, startLine);
   // ...and the callee's TEARDOWN, which is unconditional. C7/0150 does `LDX #1E00 / PHX / PLD`, so
   // `$00` inside bank $C7 IS $7E1E00, and the routine has exactly ONE exit -- C7/0192 `SEP #20` /
@@ -8408,6 +8426,14 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
   // would stop being compared instead of comparing equal. w8 claims it unconditionally.
   w8(mem, 0x7E1E00, 0x00);                     // C7/0192-0194
   return rr;
+}
+void CtSceneLoadPostsFlush(CtScene* sc) {           // the load's queued JSLs (gLoadPost), in order, each with its mailbox
+  int n = gLoadPostN; gLoadPostN = 0;
+  if (!sc) return;
+  for (int k = 0; k < n; k++) {
+    for (int b = 3; b >= 0; b--) w8(sc->mem, 0x7E1E00 + (uint32_t)b, gLoadPost[k][b]);
+    (void)vmSoundPostMem(sc->mem, sc->blen, 12);
+  }
 }
 uint8_t* CtSceneMemGlb(CtScene* sc) { return sc->mem->g; }
 uint8_t* CtSceneMemLoc(CtScene* sc) { return sc->mem->l; }

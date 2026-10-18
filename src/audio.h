@@ -69,6 +69,7 @@ int      CtAudioPost(CtAudio* a, uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3)
 // there was nothing to do, and -1 for a command whose handler is not yet
 // derived (the caller may log it; the mailbox is still cleared, as the ROM does).
 int      CtAudioService(CtAudio* a, uint8_t* mem7E);
+extern int g_ctAudioTraceFrame;   // the host's frame number, stamped on CT_SNDPOSTS's lines
 // The LOADER CLOCK (audio.c, song_load_freeze.md section 6): every CtAudioService re-runs the JSL's
 // master cycles -- the listing's instruction costs, the emulated SPC caught up before each port access,
 // the frame's NMI/HDMA/refresh background at its raster position -- and reports what a synchronous

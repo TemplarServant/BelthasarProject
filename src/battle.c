@@ -5569,6 +5569,10 @@ static void battleItemTrace(CtBattleHost* h, const char* ev) {
 // is present -> keep it (C84E-C858); else `LDA $2989 / BIT #20` picks the first present combatant from index 3
 // up (C883-C89B, the demo's deterministic arm) or a random 3..$0A with `LDX #0003 / LDA #0B / JSR C1/AF22`
 // until one is present (C861-C876). Returns the combatant, or -1 for $AF23 = 1.
+static int battleTechC82D(int group) {                                          // C1/C423-C437 / C1/C4E8-C506
+  int g = group & 0x7F;
+  return g == 0x07 || (g >= 0x0B && g <= 0x0F) || g == 0x12 || g == 0x1A;
+}
 static int battlePcRetarget(CtBattleHost* h, int tgt) {
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
   int any = 0;
@@ -12402,10 +12406,14 @@ static void battleDispatchScheduled(CtBattleHost* h) {
       } }
   } else if (slot >= 0 && slot < 8 && s[0xAF02 + slot] != 0xFF) tgt = 3 + slot;
   // A PHYSICAL whose enemy died since the confirm keeps it here: C1/BFDF puts the committed seat in $AECC and C1/D523's
-  // D63F re-validates it (battleComputeDamage) -- the hop through $AE6D, then a random living seat. (A TECH re-derives
-  // its target at C1/C1DD -- C1/C830's own reroll, ported for the demo's arm only: it keeps the first living slot here,
-  // an open stand-in.)
+  // D63F re-validates it (battleComputeDamage) -- the hop through $AE6D, then a random living seat.
   else if (itemId == 0 && techId == 0 && slot >= 0 && slot < 8) tgt = 3 + slot;
+  // A TECH re-derives its target at C1/C1DD from its GROUP (CC/1ACB & 7F, C1/C335's dispatch): the one-enemy groups 07,
+  // 0B-0F, 12 and 1A take C1/C82D (C1/C427 / C1/C506) -- the committed seat $B2AE if present, else a random present seat
+  // 3..$0A by C1/AF22 (the demo's first present one), $AF23 = 1 when none is (battlePcRetarget). Measured on the rule's
+  // cartridge, three Hetakes at 1 HP, Crono's attack on the first and the next PC's tech on the same (battle_sim
+  // `@013:18`): the first falls at f941 and the tech's dispatch writes `$B2AE = 04` at f988 (C1/C898 / C873).
+  else if (techId > 0 && slot >= 0 && slot < 8 && battleTechC82D(battleTechGroup(techId))) tgt = battlePcRetarget(h, 3 + slot);
   else tgt = battleFirstEnemy(s);
   if (tgt < 0) {                                                // degenerate: no enemy alive -> just reload the
     battleAtbLoad(s, atk); battleAtbRearm(s, atk);  //   timer (commit already dequeued)

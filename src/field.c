@@ -11358,7 +11358,8 @@ int main(int argc, char** argv) {
         g_fieldAudio = audio;
         CtWorldSetJsl(owSoundJsl);                    // the overworld pass's inline JSL (C2/2F0F)
         { static CtSoundSink sink; sink.ctx = audio; sink.post = fieldSoundPostVm; sink.port = fieldSoundPort;
-          CtSceneSetSoundSink(&sink); }                        // the VM's six sound ops now reach the SPC
+          CtSceneSetSoundSink(&sink); CtSceneLoadPostsMode(1); }   // the VM's six sound ops now reach the SPC (a load's
+                                                                    //   last ones in its last frame: CtSceneLoadPostsFlush)
         // ...and the BATTLE module's anim-script SFX reach it through the same wire (battle.h's
         // CtBattleSoundSink; disasm/notes/battle_sfx_ops_inputs.md §6). Same `post`, because both sides
         // stage the same $7E:1E00 mailbox on the same WRAM image -- battle.c runs on CtSceneMem7E too.
@@ -12453,6 +12454,9 @@ int main(int argc, char** argv) {
     // later belongs to the other half -- 01C's and 0E6's opening curtains a step behind the cartridge's (their arms:
     // cartridge $0153 = 01 / 00 after 3 / 6 flips, port 00 / 01 after 2 / 5).
     if (loadFadeEntry && !inWorld && f.vm) { uint8_t* rw = CtWramSys(fieldWram()); if (rw) CtHdmaTableBuild(rw); }
+    // THE LOAD'S LAST JSLs -- its init runner's and obj0's slot 1's sound commands (ct_vm.c gLoadPost) -- reach the SPC in
+    // the load's last frame, the one C0/2848 begins in (the port ran the load in its first frame and holds the black after).
+    if (fade != 3 && f.vm && CtSceneLoadPostsPending()) CtSceneLoadPostsFlush(f.vm);
     int inLoadFade = ((fade == 3 || (fade == 2 && loadRamp)) && !inWorld && f.vm != NULL);
     // C0/2824, THE FIELD'S FADE-IN AFTER A MENU, is drawn from the RELOADED field, not the frame the menu froze at its
     // open: C0/01A5 rebuilt the map, C0/7506/7553 the camera from the arrival tile $0102/$0103 and C0/286C drew every
@@ -13747,7 +13751,7 @@ int main(int argc, char** argv) {
         }
       }
       fieldLockGrade(frameNo);                       // same close-the-window grading as the field path
-      fieldByteWatch(frameNo); frameNo++; g_sndTraceFrame = frameNo;
+      fieldByteWatch(frameNo); frameNo++; g_sndTraceFrame = g_ctAudioTraceFrame = frameNo;
       if (worldTest && wtStage == 3) {               // returned to the overworld: the loop is CLOSED
         // THE GUARD'S OWN DENOMINATOR. CtAnimDrawPass bails after 128 links rather than hanging on a
         // malformed $0E81 chain, and that guard once absorbed a real defect in silence: the overworld
@@ -16422,7 +16426,7 @@ int main(int argc, char** argv) {
       presentShot(fb, CAMW, CAMH, frameNo, (CtWramSys(fieldWram())[0x100] | (CtWramSys(fieldWram())[0x101] << 8)), "menu");
       hostPresentMot(pr, fb, CAMW, 0);
       if (!selftest && !g_noPace) hostPace();
-      fieldByteWatch(frameNo); frameNo++; g_sndTraceFrame = frameNo;
+      fieldByteWatch(frameNo); frameNo++; g_sndTraceFrame = g_ctAudioTraceFrame = frameNo;
       if (selftest && frameNo >= selftestFrames) {           // safety: a stuck menu must not spin forever
         if (menuTest) printf("menutest: FAIL (timeout in menuPhase %d)\n", menuPhase);
         // --selftest <out.raw>: the frame just presented, as the field path's end-of-run dump would write it (that
@@ -20231,7 +20235,7 @@ int main(int argc, char** argv) {
     if (!selftest && !g_noPace) hostPace();         // the engine logic (VM delays, anim ticks, the validated px/frame
                                                     //   velocities) is all 60 Hz-based; the SPC is run by the same frames
     fieldLockGrade(frameNo);                          // close the window and grade this frame
-    fieldByteWatch(frameNo); frameNo++; g_sndTraceFrame = frameNo;
+    fieldByteWatch(frameNo); frameNo++; g_sndTraceFrame = g_ctAudioTraceFrame = frameNo;
     if (selftest && !worldTest && frameNo >= selftestFrames) {
       if (getenv("CT_MENUSFX_COUNT")) {                  // ONE summary, at the end -- see the tallies' note
         printf("menusfx-count: %d post(s) from %d row change(s)\n", g_menuSfxPosts, g_menuSfxMoves);

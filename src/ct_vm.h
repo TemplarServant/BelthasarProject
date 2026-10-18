@@ -223,6 +223,11 @@ typedef struct {
   uint8_t (*port)(void* ctx, int k);          // read $2140+k (k = 0..3)
 } CtSoundSink;
 void CtSceneSetSoundSink(const CtSoundSink* sink);   // NULL detaches
+// A location load's last JSLs (its init runner and obj0's slot 1), queued while the mode is on and posted by the flush in
+// the load's last frame (ct_vm.c gLoadPost).
+void CtSceneLoadPostsMode(int on);
+int  CtSceneLoadPostsPending(void);
+void CtSceneLoadPostsFlush(CtScene* sc);
 // THE RULE's infinitely fast CPU for the sound ops' JSLs (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1 by default): the host
 // says 0 for a run whose SPC does not stand for the cartridge's (Belthasar's WRAM-seeded runs), and the VM keeps the
 // real-time tail rule there.
