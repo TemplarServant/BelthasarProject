@@ -46063,6 +46063,185 @@
       "tier": "quick",
       "timeout_s": 30,
       "notes": "THE FRESH CLONE'S BOOTSTRAP: the shapes in tools/gen/shapes/ (declarations and sizes, no data) still declare everything today's generated src/data/*.h and src/xlat/*.c declare. A fresh clone has no generated file, so tools/setup.py builds its first oracle from the shapes; a generator that gains a table without `python tools/gen/shapes.py make` leaves the engine reading a name the shape lacks, and setup fails on every platform (5ebf30b's ctMenuChromeExchTM, PR #2). A developer's tree never notices -- it has the real files. Fix a FAIL by running `python tools/gen/shapes.py make` and committing tools/gen/shapes/; never by re-pinning. SKIPs in a tree with no generated files (it would match nothing)."
+    },
+    {
+      "name": "mixer-sample-exact-vs-dsp",
+      "argv": [
+        "python",
+        "tools/mixer_replay.py",
+        "gato-battle",
+        "nuns-battle",
+        "magus-battle",
+        "save-screen",
+        "shop",
+        "menu-jingle",
+        "world-song",
+        "fuzz"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait_crono_solo.lakewram",
+        "saves/battle_re/gato_wait.state",
+        "saves/field_re/m81_nuns_lake.lakewram",
+        "saves/field_re/m81_nuns_lake.state",
+        "saves/field_re/magus_scene.lakewram",
+        "saves/field_re/magus_scene_lake.state",
+        "saves/field_re/savept084.lakewram",
+        "saves/field_re/savept084_lake.state",
+        "saves/field_re/shop90.lakewram",
+        "saves/field_re/shop90_lake.state",
+        "saves/savepoint_flags.bin"
+      ],
+      "expect": [
+        "mixer: gato-battle: 1607690 samples identical / 1607690",
+        "mixer: gato-battle: reads 178494 identical / 178494, sound RAM identical at 2 / 2 segment ends",
+        "mixer: nuns-battle: 491634 samples identical / 491634",
+        "mixer: nuns-battle: reads 48724 identical / 48724, sound RAM identical at 2 / 2 segment ends",
+        "mixer: magus-battle: 454254 samples identical / 454254",
+        "mixer: magus-battle: reads 43285 identical / 43285, sound RAM identical at 2 / 2 segment ends",
+        "mixer: save-screen: 171236 samples identical / 171236",
+        "mixer: save-screen: reads 17080 identical / 17080, sound RAM identical at 2 / 2 segment ends",
+        "mixer: shop: 171235 samples identical / 171235",
+        "mixer: shop: reads 17416 identical / 17416, sound RAM identical at 2 / 2 segment ends",
+        "mixer: menu-jingle: 138661 samples identical / 138661",
+        "mixer: menu-jingle: reads 11066 identical / 11066, sound RAM identical at 1 / 1 segment ends",
+        "mixer: world-song: 131844 samples identical / 131844",
+        "mixer: world-song: reads 10443 identical / 10443, sound RAM identical at 1 / 1 segment ends",
+        "mixfuzz: 1875277 samples identical / 1875277 (200 cases, seed 1)",
+        "mixfuzz: reads 1875277 identical / 1875277, sound RAM identical after 200 / 200 cases",
+        "mixer: all: 3166554 samples identical / 3166554",
+        "mixer: all: reads 326508 identical / 326508, sound RAM identical at 12 / 12 segment ends, live chunks 779 / 779",
+        "mixer: verdict: SAMPLE-EXACT"
+      ],
+      "pin": [
+        "^mixer: ",
+        "^mixfuzz: "
+      ],
+      "tier": "quick",
+      "timeout_s": 300,
+      "exclusive": true,
+      "notes": "The native mixer src/sound/mixer.c (the port's S-DSP: BRR, Gaussian interpolation, ADSR/GAIN, noise, pitch modulation, echo FIR, volumes) against the vendored snes/dsp.c, SAMPLE FOR SAMPLE. tools/mixer_replay.py runs Belthasar with CT_MIXER_CAPTURE (the S-DSP's state and the SPC's RAM at each segment's start, every register write, RAM change and register read at its APU cycle, the live stream's FNV per 4096 samples) on seven quick-tier runs' own argv/env -- Gato's, the nuns' and Magus's battles, the save screen, a shop, the menu's save jingle, the world map's song -- and replays each into both mixers with every event at the sample it came at (ct.exe --mixreplay). Graded: every output sample, every register read (ENDX/ENVX/OUTX), the sound RAM at each segment's end (the echo writes), and the reference's own stream against the live run's hashes (the replay IS the run's sound). The game never selects GAIN and its output never saturates, so `fuzz` (ct.exe --mixfuzz 200 1: random state, RAM and writes from power-on) grades those paths; its census shows every GAIN mode and clamped samples. The attract (6.1M samples) is mixer-sample-exact-attract-vs-dsp (full tier). Mutations: the Gaussian index, BRR filter 2, the sustain decay, the noise tap, even-sample KON, the PMON depth, the FIR's LSB, the feedback scale, ENDX (the fuzz's reads), GAIN's bent knee (the fuzz), the voice-add saturation (Magus's battle), EDL's latch (the sound RAM): 12 killed. disasm/notes/audio_mixer.md.",
+      "mutations": [
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  int out = (ctMixGauss[0xff - frac] * s0) >> 11;",
+          "replace": "  int out = (ctMixGauss[0x100 - frac] * s0) >> 11;  /* MUT */",
+          "why": "The Gaussian interpolation weighs the oldest of its four samples with entry 0xFF - frac of the console's table (and the newest with entry frac). One entry off moves every interpolated sample of every voice."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 2: s += 2 * old + ((3 * -old) >> 5) - older + (older >> 4); break;",
+          "replace": "      case 2: s += 2 * old + ((3 * -old) >> 4) - older + (older >> 4); break;  /* MUT */",
+          "why": "BRR filter 2 predicts 2*old - 3*old/32 - older + older/16 (61/32 and -15/16). The most used filter of the game's samples (brr-filter2 in the census)."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 2: level -= ((level - 1) >> 8) + 1; break;          // sustain (exponential)",
+          "replace": "      case 2: level -= (level >> 8) + 1; break;  /* MUT */",
+          "why": "The sustain phase decays exponentially by ((level - 1) >> 8) + 1 at its rate: the shape every held note of the game takes."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "    int bit = (m->noise & 1) ^ ((m->noise >> 1) & 1);",
+          "replace": "    int bit = (m->noise & 1) ^ ((m->noise >> 2) & 1);  /* MUT */",
+          "why": "The noise generator is a 15-bit LFSR fed with bit 0 XOR bit 1. The battles' noise voices (noise= in the census) hear another sequence with any other tap."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  if (m->evenSample) {",
+          "replace": "  if (1) {  /* MUT */",
+          "why": "KON and KOFF are taken only on even samples, so a key-on may start a sample late. Taking them every sample starts half of the game's notes one sample early."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  if (ch > 0 && v->pitchMod) pitch += ((m->v[ch - 1].out >> 5) * pitch) >> 10;",
+          "replace": "  if (ch > 0 && v->pitchMod) pitch += ((m->v[ch - 1].out >> 5) * pitch) >> 9;  /* MUT */",
+          "why": "Pitch modulation scales the voice's pitch by the previous voice's output (>> 5, then >> 10). The game uses it (pmod= in the census): twice the depth bends those voices."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  sumL = clamp16(sumL) & ~1;",
+          "replace": "  sumL = clamp16(sumL);  /* MUT */",
+          "why": "The FIR's sum is clamped to 16 bits and its lowest bit cleared before it reaches the output and the feedback. Keeping the bit moves the left echo by one unit -- every song with echo."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  int eL = clamp16(m->echoInL + wrap16((sumL * m->feedback) >> 7)) & ~1;",
+          "replace": "  int eL = clamp16(m->echoInL + wrap16((sumL * m->feedback) >> 6)) & ~1;  /* MUT */",
+          "why": "The echo written back is the echo input plus the FIR's output scaled by EFB / 128. Twice the feedback changes what the buffer holds and every later echo."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "        m->regs[0x7c] |= 1 << ch;                  // ENDX set",
+          "replace": "        ;  /* MUT */",
+          "why": "A block with the end flag sets the voice's ENDX bit, which the SPC can read back. Not setting it leaves the samples alone; the reads differ -- the fuzz's (the game's driver reads no $7C in these runs)."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 3: level += (v->preclamp < 0x600) ? 32 : 8; break;    // bent increase",
+          "replace": "      case 3: level += (v->preclamp < 0x700) ? 32 : 8; break;  /* MUT */",
+          "why": "GAIN's bent line rises by 32 until the level reaches 0x600, then by 8. The game never selects GAIN; the fuzz does (gain-bent= in its census), so this is graded by the fuzz alone."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  m->mixL = clamp16(m->mixL + ((s * v->volL) >> 7));",
+          "replace": "  m->mixL = (int16_t)(m->mixL + ((s * v->volL) >> 7));  /* MUT */",
+          "why": "Each voice's contribution is added to the main mix with saturation at 16 bits. The final output never saturates in the game's runs (clamped=0), but the running sum does in Magus's battle; wrapping instead moves those samples (and the fuzz's loud voices)."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  if (m->echoPos == 0) m->echoLength = m->echoDelay * 4;   // EDL is latched at the buffer's start",
+          "replace": "  m->echoLength = m->echoDelay * 4;  /* MUT */",
+          "why": "A new EDL takes effect only when the echo position comes back to the buffer's start. Applying it at once changes where the buffer wraps after an EDL write mid-buffer."
+        }
+      ]
+    },
+    {
+      "name": "mixer-sample-exact-attract-vs-dsp",
+      "argv": [
+        "python",
+        "tools/mixer_replay.py",
+        "attract"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "mixer: attract: 6100023 samples identical / 6100023",
+        "mixer: attract: reads 675912 identical / 675912, sound RAM identical at 1 / 1 segment ends",
+        "mixer: all: 6100023 samples identical / 6100023",
+        "mixer: all: reads 675912 identical / 675912, sound RAM identical at 1 / 1 segment ends, live chunks 1490 / 1490",
+        "mixer: verdict: SAMPLE-EXACT"
+      ],
+      "pin": [
+        "^mixer: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "exclusive": true,
+      "notes": "mixer-sample-exact-vs-dsp over the WHOLE attract: Belthasar --scene 433 on the paced loop's lockstep vehicle (CT_AUDIO_LOCKSTEP=1) to f11400 (tools/attract_divergence.py's), captured and replayed into snes/dsp.c and src/sound/mixer.c: 6.1M samples, 676k register reads, the sound RAM at the end, all identical; its census has echo with feedback, noise, pitch modulation, every BRR filter and shifts 13-15.",
+      "mutations": [
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  int out = (ctMixGauss[0xff - frac] * s0) >> 11;",
+          "replace": "  int out = (ctMixGauss[0x100 - frac] * s0) >> 11;  /* MUT */",
+          "why": "The Gaussian interpolation weighs the oldest of its four samples with entry 0xFF - frac of the console's table (and the newest with entry frac). One entry off moves every interpolated sample of every voice."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 2: s += 2 * old + ((3 * -old) >> 5) - older + (older >> 4); break;",
+          "replace": "      case 2: s += 2 * old + ((3 * -old) >> 4) - older + (older >> 4); break;  /* MUT */",
+          "why": "BRR filter 2 predicts 2*old - 3*old/32 - older + older/16 (61/32 and -15/16). The most used filter of the game's samples (brr-filter2 in the census)."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 2: level -= ((level - 1) >> 8) + 1; break;          // sustain (exponential)",
+          "replace": "      case 2: level -= (level >> 8) + 1; break;  /* MUT */",
+          "why": "The sustain phase decays exponentially by ((level - 1) >> 8) + 1 at its rate: the shape every held note of the game takes."
+        }
+      ]
     }
   ],
   "excluded": [

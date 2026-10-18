@@ -187,6 +187,8 @@ void dsp_handleState(Dsp* dsp, StateHandler* sh) {
 // against the moment its voice starts).
 static unsigned long ctDspSamples = 0;
 static int ctKonTrace = -1;
+// CT_MIXER_CAPTURE (src/audio.c): every sample the DSP makes, as it goes into the ring. NULL unless asked for.
+void (*g_dspSampleHook)(Dsp* dsp, int16_t l, int16_t r) = NULL;
 void dsp_cycle(Dsp* dsp) {
   ctDspSamples++;
   dsp->sampleOutL = 0;
@@ -208,6 +210,7 @@ void dsp_cycle(Dsp* dsp) {
   // put final sample in the samplebuffer
   dsp->sampleBuffer[(dsp->sampleOffset & 0x3ff) * 2] = dsp->sampleOutL;
   dsp->sampleBuffer[(dsp->sampleOffset++ & 0x3ff) * 2 + 1] = dsp->sampleOutR;
+  if(g_dspSampleHook) g_dspSampleHook(dsp, dsp->sampleOutL, dsp->sampleOutR);
   // CT: CT_DSP_RAWPCM=<path> (debug) -- EVERY sample the DSP makes, in order (int16 L,R), from the process's first: sample
   // n of the file is the one CT_DSP_KONTRACE counts as s=n+1, on the oracle and on the port alike, so a key-on's sound can
   // be cut out of both streams at the same point of its own (no frame mapping, no output FIFO in between).

@@ -33,6 +33,8 @@ BINARY_OK_EXT = ('.png', '.gif', '.mp4')         #   the port running (tools/rel
 KNOWN_OK = {                                     # (path, text on the line) that match, and why they are not the game's
     ('snes/dsp.c', 'gaussValues'): "the S-DSP's gaussian interpolation table: the console's hardware (LakeSnes, MIT), not the "
                         "game; a smooth ramp also occurs in the extracted assets",
+    ('src/sound/mixer.c', 'ctMixGauss'): "the same S-DSP interpolation table in the port's own mixer (src/sound/mixer.c, "
+                        "which replaces snes/dsp.c): the console's hardware, not the game",
     ('disasm/notes/battle_hud_names_blink.md', '// Crono'): "the seven default character names in the game's text "
                                                      "encoding (Crono, Marle, ...): names, not the game's content",
     ('tools/regress_checks.json', '"names: f5 loc=000 $2C23='): "a check's expected output: the default names in the game's text encoding",

@@ -16170,6 +16170,14 @@ int main(int argc, char** argv) {
   // 0 set / 0..2 clear, `$0127` 0..FF, the wave's `$1DF9` / `$1DFD` / `$1DFB`, `$53` bit 7, `$7F:0351`'s parity, the rest
   // random) through the native builder and the translation; prints the first differing byte of any image and a census.
 #ifndef CT_ORACLE_ONLY   // the translated stages and the native sequences: not the cartridge's modes
+  // --mixreplay <capture>: the native mixer (src/sound/mixer.c) against the vendored S-DSP, sample for sample, over a
+  // CT_MIXER_CAPTURE of a real run (src/sound/mixer_replay.c; tools/mixer_replay.py).
+  if (argc == 3 && !strcmp(argv[1], "--mixreplay")) { extern int CtMixerReplayMain(const char* path); return CtMixerReplayMain(argv[2]); }
+  // --mixfuzz <cases> [seed]: the same comparison over random state, RAM and writes from power-on (GAIN, saturation).
+  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--mixfuzz")) {
+    extern int CtMixerFuzzMain(int cases, uint32_t seed);
+    return CtMixerFuzzMain(atoi(argv[2]), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
+  }
   if (argc == 4 && (!strcmp(argv[1], "--hdmabuild") || !strcmp(argv[1], "--hdmabuildxlat"))) {
     long rl = 0; const uint8_t* rom = CtRomImage(&rl);
     static uint8_t w[0x20000];

@@ -93,5 +93,6 @@ void dsp_cycle(Dsp* dsp);
 uint8_t dsp_read(Dsp* dsp, uint8_t adr);
 void dsp_write(Dsp* dsp, uint8_t adr, uint8_t val);
 void dsp_getSamples(Dsp* dsp, int16_t* sampleData, int samplesPerFrame);
+extern void (*g_dspSampleHook)(Dsp* dsp, int16_t l, int16_t r);   // measuring hook, NULL by default
 
 #endif
