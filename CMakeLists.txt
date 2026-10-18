@@ -207,7 +207,7 @@ endif()
 # Keep normal Unix executable names and the .exe aliases used by the shared
 # Python oracle/recipe/regression tools. Both names execute native machine code.
 if(UNIX)
-    foreach(target ct ct_field ct_world ct_viewer)
+    foreach(target ct ct_oracle ct_field ct_world ct_viewer)
         if(TARGET ${target})
             add_custom_command(TARGET ${target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E remove -f "$<TARGET_FILE_DIR:${target}>/${target}.exe"
