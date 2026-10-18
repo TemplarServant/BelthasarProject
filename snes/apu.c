@@ -20,6 +20,11 @@ static const uint8_t bootRom[0x40] = {
 
 static void apu_cycle(Apu* apu);
 
+// Measuring hooks (CT_SPC_COVERAGE / CT_DSP_LOG, src/audio.c): NULL unless asked for, so a run pays one test per
+// instruction and per S-DSP write. The PC is the instruction's about to run; the write is the $F3 one.
+void (*g_apuOpHook)(Apu* apu, uint16_t pc) = NULL;
+void (*g_apuDspWriteHook)(Apu* apu, uint8_t adr, uint8_t val) = NULL;
+
 Apu* apu_init(Snes* snes) {
   Apu* apu = malloc(sizeof(Apu));
   apu->snes = snes;
@@ -74,6 +79,7 @@ int apu_runCycles(Apu* apu, int wantedCycles) {
   int runCycles = 0;
   uint32_t startCycles = apu->cycles;
   while(runCycles < wantedCycles) {
+    if(g_apuOpHook && !apu->spc->resetWanted) g_apuOpHook(apu, apu->spc->pc);
     spc_runOpcode(apu->spc);
     runCycles += (uint32_t) (apu->cycles - startCycles);
     startCycles = apu->cycles;
@@ -172,7 +178,10 @@ void apu_write(Apu* apu, uint16_t adr, uint8_t val) {
       break;
     }
     case 0xf3: {
-      if(apu->dspAdr < 0x80) dsp_write(apu->dsp, apu->dspAdr, val);
+      if(apu->dspAdr < 0x80) {
+        if(g_apuDspWriteHook) g_apuDspWriteHook(apu, apu->dspAdr, val);
+        dsp_write(apu->dsp, apu->dspAdr, val);
+      }
       break;
     }
     case 0xf4:

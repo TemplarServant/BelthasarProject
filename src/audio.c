@@ -16,6 +16,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <process.h>     // getpid: CT_SPC_COVERAGE's per-process file
+#else
+#include <unistd.h>
+#endif
 #include "audio.h"
 #include "snes.h"
 #include "apu.h"
@@ -1383,8 +1388,39 @@ int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
   return 1;
 }
 
+// ---- measuring the driver (disasm/notes/audio_spc_driver.md) -------------------------------------------------------
+// CT_SPC_COVERAGE=<file>: every SPC700 address the driver executed, `ADDR COUNT` a line, written at exit (the listing
+// tools/spc700dis.py --coverage marks). CT_DSP_LOG=<file>: every S-DSP register write, `frame apucycle reg value`.
+static uint32_t* g_spcCov;
+static FILE* g_dspLog;
+static long g_audFrameNo;
+static void spcCovHook(Apu* apu, uint16_t pc) { (void)apu; g_spcCov[pc]++; }
+static void dspLogHook(Apu* apu, uint8_t adr, uint8_t val) {
+  fprintf(g_dspLog, "%ld %llu %02X %02X\n", g_audFrameNo, (unsigned long long)apu->cycles, adr, val);
+}
+static void spcCovWrite(void) {
+  const char* p = getenv("CT_SPC_COVERAGE");
+  char path[1024];
+  if (p && strstr(p, "%d")) { snprintf(path, sizeof path, p, (int)getpid()); p = path; }   // one file per process
+  FILE* f = p ? fopen(p, "w") : NULL;
+  if (!f) return;
+  for (int i = 0; i < 0x10000; i++) if (g_spcCov[i]) fprintf(f, "%04X %u\n", i, g_spcCov[i]);
+  fclose(f);
+}
+static void dspLogClose(void) { if (g_dspLog) fclose(g_dspLog); }
+static void measureInit(void) {
+  static int done;
+  if (done) return;
+  done = 1;
+  const char* c = getenv("CT_SPC_COVERAGE");
+  if (c && *c && (g_spcCov = (uint32_t*)calloc(0x10000, sizeof *g_spcCov))) { g_apuOpHook = spcCovHook; atexit(spcCovWrite); }
+  const char* d = getenv("CT_DSP_LOG");
+  if (d && *d && (g_dspLog = fopen(d, "w"))) { g_apuDspWriteHook = dspLogHook; atexit(dspLogClose); }
+}
+
 CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
   if (!rom || romLen < C7_BASE + 0x6000) return NULL;
+  measureInit();
   CtAudio* a = (CtAudio*)calloc(1, sizeof *a);
   if (!a) return NULL;
   a->shell = (Snes*)calloc(1, sizeof(Snes));          // palTiming = false = NTSC
@@ -1424,6 +1460,7 @@ static double apuFrameCycles(const CtAudio* a) { return APU_CYCLES_PER_FRAME - (
 void CtAudioFrameSkip(CtAudio* a) { if (a) a->evenFrame ^= 1; }
 void CtAudioFrame(CtAudio* a) {
   if (!a) return;
+  g_audFrameNo++;
   { static int ck = -1; static long fr = 0; if (ck < 0) { const char* e = getenv("CT_AUDIO_SPCCLOCK"); ck = (e && *e) ? 1 : 0; }
     if (ck) fprintf(stderr, "spcclock pass%ld total=%lld carry=%.1f" "\n", fr++, g_apuTotal, a->cycleCarry); }
   double want = apuFrameCycles(a) + a->cycleCarry;
