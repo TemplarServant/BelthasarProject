@@ -1519,8 +1519,19 @@ port's shot N - 1 against the cartridge's `--peek` N, 0 px over the fade-in's en
   its tiles go up at P (f86, through the WRAM thunk 7E:9690). The port composes CT_ASSET_SPRITE[0x4F] frame 0 there.
 - **The picked reserve panel stays.** C2/C688-C6A5's C2/EF05 is a rectangle COPY (`MVN` row by row) of the panel to (2, 0x20),
   off screen -- not a blank. The port had hidden it from the pick to the swap.
-- Open in the picture: the hand on the reserve column 2 px off (f130, f160, f190), the pick's frames f148-149, a member's pose at
-  f184 / f214, and the fades a brightness step apart (f94, f238).
+- **The hands.** C2/E964 lays the hand from the graph and C2/C805's `$56`: `LDA $56 / BEQ / LDA #40 / TSB $0773` -- H-flipped
+  (pointing left) on the reserve column (the cartridge's OAM slot 28: (232, 35) tile 20 attr 70). The pick C2/C674 ends `JMP
+  C2/8A31` (C2/C6B0): the Form's slot-6 task C2/8A45, whose C2/8B6E steps `$0DA3` / `$0DA0` (the blink) and lays the second hand
+  at (x + 2, y - 1) with the word the first had at the pick (C2/8A31 `$0DA1 = $0772`: flipped there too). The port ran neither
+  on this screen; `$0DA0` is graded frame for frame now (menu_exchange_cmp, f146-230).
+- **The frame the picture shows.** The cartridge's frame shows what its NMI uploaded -- the OAM (hands, poses), INIDISP, BG3's
+  VOFS, the colour math's double-buffered tables ($A01E picks $9E19 / $9F19 at C2/8654): the main thread's work of the frame
+  before -- but its HDMA reads $9240 while the frame is drawn, after the frame's own main thread (the rule's CPU runs before line
+  0) stepped the task. The port's picture of a frame takes the NMI-fed parts from that frame's state and BG3's HOFS from the
+  step the next frame makes when one is due (menu.c mExchWaveTable), graded at the menus' P + 2 (the port's N - 2 against the
+  peek N, the same WRAM frame): exact through the fade-in and the poses. Open: the two frames after each press (f125-126,
+  f147-148, f169-170, f191-192) and the close's fade (f234-240), where the harness's mapping of a press between --peek and
+  --monitor is not settled -- a display frame, no game state (menu_exchange_cmp: 0 differing).
 
 **OPEN.** (2) The script's `C8 00` arm is the same screen through the same launcher
 code, but no state reaches one of its twelve sites: ungraded. (3) A song post a busy driver holds past S0 + 2 is modelled

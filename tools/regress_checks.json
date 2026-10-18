@@ -20707,7 +20707,7 @@
         "tools/menu_exchange_cmp.py"
       ],
       "expect": [
-        "menu-exchange: 2852 frame-fields, 0 differing",
+        "menu-exchange: 2937 frame-fields, 0 differing",
         "menu-exchange: cartridge mode 5 open f35, cursor f86, fade-in done f95, swap f191 (000302018080808080), field back f319"
       ],
       "pin": [
@@ -20738,10 +20738,16 @@
           "find": "  if (!(m[0x0F11] & 3)) { m[0x0D0C]++; m[0x0D0E]--; m[0x0F10] -= 2; }",
           "replace": "  if (!(m[0x0F11] & 3)) { m[0x0D0C]++; m[0x0D0E]--; m[0x0F10] -= 1; }   /* MUT */",
           "why": "FF/F716 takes $0F10 back by two every fourth step"
+        },
+        {
+          "file": "src/field.c",
+          "find": "                                          menuFormPickTask = 1; }          // ... C2/C6B0 JMP C2/8A31: the Form's slot-6 task",
+          "replace": "                                          menuFormPickTask = 0; }   /* MUT */",
+          "why": "the exchange's first pick starts C2/8A45's blink task"
         }
       ],
       "note_pass": "the party exchange (menu mode 5, screen $07) is the cartridge's frame for frame: Y on the field at storyline 0x49, the song task, the cursor on the two columns, Robo picked from the reserve and swapped for Marle, the close and the field's return -- every byte the screen owns equal over 2267 frame-fields",
-      "notes": "Roadmap G1a item 2 (2026-10-14). disasm/notes/menu2_form_screen.md 2.14. The recipe gato_wait on both sides (its state on the cartridge under the rule, its WRAM dump on the port with its SPC: CT_AUDIO_SEEDSTATE + CT_AUDIO_LOCKSTEP), `7F0000=49, 2982=02, 2983=03, 0126=00` poked on both. The cartridge's milestones are printed on the second line, so a recipe that changed under the check is visible. The picture is not graded here (its BG3 wave, prompt text and hooded figure are OPEN). Re-pin only with both sides read again; the 0 must stay 0. | 2026-10-18: + the BG3 wave's bytes ($0F10-$0F1D, $0D0C-$0D0F, $9240-$925F) from P: C2/CE86's FF/F677 and C2/CE9D at P, FF/F716 every second frame to the close's `11` post (menu.c CtMenuExchWaveInit / Tick); 2852 frame-fields, 0 differing."
+      "notes": "Roadmap G1a item 2 (2026-10-14). disasm/notes/menu2_form_screen.md 2.14. The recipe gato_wait on both sides (its state on the cartridge under the rule, its WRAM dump on the port with its SPC: CT_AUDIO_SEEDSTATE + CT_AUDIO_LOCKSTEP), `7F0000=49, 2982=02, 2983=03, 0126=00` poked on both. The cartridge's milestones are printed on the second line, so a recipe that changed under the check is visible. The picture is not graded here (its BG3 wave, prompt text and hooded figure are OPEN). Re-pin only with both sides read again; the 0 must stay 0. | 2026-10-18: + the BG3 wave's bytes ($0F10-$0F1D, $0D0C-$0D0F, $9240-$925F) from P: C2/CE86's FF/F677 and C2/CE9D at P, FF/F716 every second frame to the close's `11` post (menu.c CtMenuExchWaveInit / Tick); 2852 frame-fields, 0 differing. | 2026-10-18: + $0DA0, the picked hand's blink, f146-230: the exchange's pick runs the Form's slot-6 task (C2/C6B0 JMP C2/8A31 -> C2/8A45 / C2/8B6E); 2937 frame-fields."
     },
     {
       "name": "menu-exchange-picture-vs-oracle",
@@ -20750,26 +20756,48 @@
         "tools/menu_exchange_pic_cmp.py",
         "--drive",
         "88",
+        "92",
+        "94",
+        "96",
         "100",
-        "112",
+        "120",
         "124",
-        "196",
-        "202",
-        "220",
+        "127",
+        "130",
+        "146",
+        "149",
+        "150",
+        "152",
+        "160",
+        "168",
+        "184",
+        "190",
+        "214",
         "232",
         "244"
       ],
       "env": {},
       "expect": [
-        "exchange-picture: cartridge f88 port f87: 0 px differ, 0 outside the figure",
-        "exchange-picture: cartridge f100 port f99: 0 px differ, 0 outside the figure",
-        "exchange-picture: cartridge f112 port f111: 0 px differ, 0 outside the figure",
-        "exchange-picture: cartridge f124 port f123: 0 px differ, 0 outside the figure",
-        "exchange-picture: cartridge f196 port f195: 0 px differ, 0 outside the figure",
-        "exchange-picture: cartridge f202 port f201: 0 px differ, 0 outside the figure",
-        "exchange-picture: cartridge f220 port f219: 0 px differ, 0 outside the figure",
-        "exchange-picture: cartridge f232 port f231: 0 px differ, 0 outside the figure",
-        "exchange-picture: cartridge f244 port f243: 0 px differ, 0 outside the figure"
+        "exchange-picture: cartridge f88 port f86: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f92 port f90: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f94 port f92: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f96 port f94: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f100 port f98: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f120 port f118: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f124 port f122: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f127 port f125: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f130 port f128: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f146 port f144: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f149 port f147: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f150 port f148: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f152 port f150: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f160 port f158: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f168 port f166: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f184 port f182: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f190 port f188: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f214 port f212: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f232 port f230: 0 px differ, 0 outside the figure",
+        "exchange-picture: cartridge f244 port f242: 0 px differ, 0 outside the figure"
       ],
       "pin": [
         "^exchange-picture: "
@@ -20782,7 +20810,7 @@
         "tools/menu_exchange_pic_cmp.py"
       ],
       "note_pass": "the party exchange's picture pixel for pixel against the cartridge -- the BG3 wave, the prompt's text and its hooded figure, the panels and the members -- from the fade-in's last frame through the move, the swap and the close's start",
-      "notes": "tools/menu_exchange_pic_cmp.py (menu_exchange_cmp's recipe and drive; the port's shot N - 1 against the cartridge's peek N). Ported 2026-10-18: BG3 (C2/CE86's FF/F677: FF:E8DC decompressed to the 2bpp characters, the six-row map, palettes 6-7; HOFS by the HDMA $9200 -> $9240[y & 15], VOFS $0D0E + 1; BG3 shows where BG2 leaves colour 0 -- TMW masks it by window 2, empty here); BG1 the prompt (C2/C9E5: string 4 of $FF:CF3B through C2/F905 = C2/57DF / 5823, laid by C2/FBB4); OBJ the figure (C2/F422's block 7: the $E4:F000 header 0x4F at (32, 202), C2/F871's units); and the picked reserve panel stays (C2/EF05 is a copy, not a blank). Frames left out, open: the hand on the reserve column 2 px off (f130, f160, f190: ~150 px), the pick's frames f148-149, a member's pose at f184 / f214, and the fades a brightness step apart (f94, f238).",
+      "notes": "tools/menu_exchange_pic_cmp.py (menu_exchange_cmp's recipe and drive; the port's shot N - 1 against the cartridge's peek N). Ported 2026-10-18: BG3 (C2/CE86's FF/F677: FF:E8DC decompressed to the 2bpp characters, the six-row map, palettes 6-7; HOFS by the HDMA $9200 -> $9240[y & 15], VOFS $0D0E + 1; BG3 shows where BG2 leaves colour 0 -- TMW masks it by window 2, empty here); BG1 the prompt (C2/C9E5: string 4 of $FF:CF3B through C2/F905 = C2/57DF / 5823, laid by C2/FBB4); OBJ the figure (C2/F422's block 7: the $E4:F000 header 0x4F at (32, 202), C2/F871's units); and the picked reserve panel stays (C2/EF05 is a copy, not a blank). 2026-10-18 (later): the hand on the reserve column is H-flipped ($56, C2/E964-E977: the cartridge's OAM attr 70) and the pick runs the Form's blink task (C2/C6B0 JMP C2/8A31; $0DA0 now frame for frame, menu_exchange_cmp) -- f130, f150, f158, f190 exact. Left: a ONE-FRAME transient at every cursor move, pick and blink edge (f125-126, f148, f152, f169-170, f184, f214): the cartridge shows the HDMA-fed BG3 HOFS ($9240) the frame its main thread writes it, but the NMI-fed parts -- the OAM (hands, poses) and the double-buffered colour-math tables ($A01E: $9E19 / $9F19) -- a frame later; the port draws all from one frame's state. And the fades a brightness step apart (f94, f238). | 2026-10-18 (later): graded at the menus' P + 2 (the port's N - 2 against the peek N: the same WRAM frame), and BG3's HOFS from the task's NEXT step when one is due (menu.c mExchWaveTable): the cartridge's NMI uploads the OAM, INIDISP, VOFS and the double-buffered colour tables from the frame before, but its HDMA reads $9240 after the frame's own main thread stepped the task. Exact now through the fade-in (f92-96) and the poses (f184, f214); left: the two frames after each press (f125-126, f147-148, f169-170, f191-192) and the close's fade (f234-240), where the harness's --peek / --monitor frame mapping of the presses is not settled -- a display frame, no game state (menu_exchange_cmp: 0 differing).",
       "mutations": [
         {
           "file": "src/menu.c",
@@ -20801,6 +20829,18 @@
           "find": "  m[0x020C] = (m[0x0D7C] | m[0x0D7D]) ? 5 : 4;",
           "replace": "  m[0x020C] = 5;   /* MUT */",
           "why": "the prompt is string 4 when $0D7C is clear"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "  mHandFlip = m[0x56] != 0;",
+          "replace": "  mHandFlip = 0;   /* MUT */",
+          "why": "the hand is H-flipped on the reserve column ($56)"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "  if (!mExchWaveNext || !rom || romLen < 0x3FF7D8) return;",
+          "replace": "  if (1) return;   /* MUT */",
+          "why": "the HDMA reads the table the next main-thread step writes"
         }
       ]
     },

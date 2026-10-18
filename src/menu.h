@@ -513,6 +513,7 @@ void CtMenuExchValidate(uint8_t* mem);      // C2/C805 alone (the build's, on th
 int  CtMenuExchPick(uint8_t* mem);
 int  CtMenuExchSecond(uint8_t* mem, const uint8_t* glb, int a);
 void CtMenuExchPrompt(uint8_t* mem, const uint8_t* rom, long romLen);
+void CtMenuExchWaveNext(int due);   // the task steps next frame: the picture's HDMA reads that step's table
 void CtMenuExchFigure(int on);   // block 7's figure on screen (from P, when the task C2/F657 uploads its tiles)     // C2/C9E5's prompt: C2/F905 + C2/FBB4 (at S0)
 void CtMenuExchWaveInit(uint8_t* mem, const uint8_t* rom, long romLen);   // C2/CE86's FF/F677 + C2/CE9D: BG3's wave set up
 void CtMenuExchWaveTick(uint8_t* mem, const uint8_t* rom, long romLen);   // FF/F716: the task's step (every second frame)

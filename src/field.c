@@ -15346,7 +15346,8 @@ int main(int argc, char** argv) {
             int aE = aHeld && !prevABtn, bE = bHeld && !prevBBtn;
             if (menuExch68 == 1) {
               if (aE) {
-                if (CtMenuExchPick(s7)) { menuSfx(s7, 0x00, "exch-pick"); menuExch68 = 2; }   // C2/C674
+                if (CtMenuExchPick(s7)) { menuSfx(s7, 0x00, "exch-pick"); menuExch68 = 2;   // C2/C674 ...
+                                          menuFormPickTask = 1; }          // ... C2/C6B0 JMP C2/8A31: the Form's slot-6 task
               } else if (bE) {
                 if (menuExchSong) {                          // C2/CC0E-CC1D: `81 08 01 01` (C2/CBF7), the song down
                   s7[0x1E00] = 0x81; s7[0x1E01] = 0x08; s7[0x1E02] = 0x01; s7[0x1E03] = 0x01;
@@ -15359,6 +15360,7 @@ int main(int argc, char** argv) {
             } else if (menuExch68 == 2) {
               if (aE || bE) {
                 int sw = CtMenuExchSecond(s7, glb, aE);      // C2/C6D0 / C2/C6DE-C70A
+                menuFormPickTask = 0;                        // (as the Form's second pick: the picked hand's task ends)
                 menuSfx(s7, 0x00, "exch-confirm");           // C2/C6DE, shared by A, B and a refused A
                 menuExch68 = 1;                              // C2/C6E5 DEC $68
                 menuFormAnimReq = -1;                        // C2/C6F7: every block's $1811 := 0
@@ -15594,7 +15596,7 @@ int main(int argc, char** argv) {
             if (g_strN >= sn) { g_strN = sn; g_strRun = 0; }
           }
           if (menuScreen != 2) menuItemPinTask = 0;         // ($74 kills slot 6 with the screen)
-          if (menuScreen != 5) menuFormPickTask = 0;
+          if (menuScreen != 5 && !(menuScreen == 0x07 && menuExchOn)) menuFormPickTask = 0;   // (the exchange runs the same task)
           if (menuScreen != 2 || menuItemTgt < 0) menuItemAllTask = 0;   // (C2/B1DC `LDA #40 / JSR C2/8255` kills slot 6
                                                             //   in the B's frame, before the task would run: that frame
                                                             //   has no nav hand only by the run before -- MEASURED f292)
@@ -15876,6 +15878,8 @@ int main(int argc, char** argv) {
                                     CtMenuChrome(fb, 4, menuOpt, 0); CtMenuChromeRibbonWindow(&mh, 0);
                                     CtMenuRenderConfig(&mh, fb, menuCfgCur, menuCfgSub, menuCfgFresh, g_cfgNameN, g_cfgValN); }
         else if (menuScreen == 0x07 && menuExchOn) {       // THE EXCHANGE (screen $07)
+                                    CtMenuExchWaveNext(menuExchWaveP >= 0 && !((frameNo + 1 - menuExchWaveP) & 1) &&
+                                                       menuExchSong != 2 && !menuExchHold);   // (the task's next step)
                                     CtMenuRenderExchange(&mh, fb, !(s7[0x0DA0] & 1)); }
         else if (menuScreen == 5) { CtMenuChrome(fb, 5, menuOpt, 0);
                                     uint8_t fp9[9]; CtMenuFormPanels(s7, glb, fp9);

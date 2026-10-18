@@ -2446,13 +2446,15 @@ enum { ST_PWR = 0, ST_STAM, ST_SPD, ST_MAG, ST_HIT, ST_EV, ST_MDEF };
 // The party-panel SELECTION cursor = the real ROM hand sprite (☞, $FF/9CF0), the SAME hand the name-
 // entry grid uses (h->handCursor, [w u8][h u8] + RGBA; alpha 0 = transparent). (x,y) = the sprite top-
 // left. Falls back to a plain white triangle only when the asset is absent (headless without assets).
+// (mHandCursorFlip: the same 16 x 16 OBJ with its attribute's H flip, bit 6 -- mirrored inside its box.)
+static int mHandFlip;
 static void mHandCursor(const CtMenuHost* h, uint8_t* fb, int x, int y) {
   const uint8_t* s = h ? h->handCursor : NULL;
   if (s) {
     int w = s[0], hh = s[1]; const uint8_t* px = s + 2;
     for (int j = 0; j < hh; j++)
       for (int i = 0; i < w; i++) {
-        const uint8_t* p = px + ((size_t)j * w + i) * 4;
+        const uint8_t* p = px + ((size_t)j * w + (mHandFlip ? w - 1 - i : i)) * 4;
         int dx = x + i, dy = y + j;
         if (p[3] && dx >= 0 && dx < MW && dy >= 0 && dy < MH)
           memcpy(fb + ((size_t)dy * MW + dx) * 3, p, 3);
@@ -3178,6 +3180,26 @@ void CtMenuExchWaveTick(uint8_t* m, const uint8_t* rom, long romLen) {
     c = 0; x += 4; y += 2;
   }
 }
+// THE TABLE THE PICTURE READS. The cartridge's frame shows what its NMI uploaded -- the OAM, BG3's VOFS ($0D0E), INIDISP, the
+// colour math's double-buffered tables: the main thread's work of the frame before -- but the HDMA reads $9240 while the frame
+// is drawn, after this frame's main thread (the rule's CPU runs before line 0) has stepped the task. So the port's picture of a
+// frame, whose NMI-fed parts are that frame's state, takes BG3's HOFS from the step the NEXT frame makes when one is due
+// (CtMenuExchWaveNext, from field.c's schedule of the task).
+static int mExchWaveNext;
+void CtMenuExchWaveNext(int due) { mExchWaveNext = due; }
+static void mExchWaveTable(const uint8_t* m, const uint8_t* rom, long romLen, uint8_t* out) {
+  memcpy(out, m + 0x9240, 32);
+  if (!mExchWaveNext || !rom || romLen < 0x3FF7D8) return;
+  uint8_t f10 = (uint8_t)(m[0x0F10] + 1), f11 = (uint8_t)(m[0x0F11] + 1), d0c = m[0x0D0C];   // FF/F716 on copies
+  if (!(f11 & 3)) { d0c++; f10 -= 2; }
+  int base = d0c | (m[0x0D0D] << 8), w = f10 | (f11 << 8), c = (w >> 15) & 1;
+  int x = (w << 1) & 0x3E, y = m[0x0051] | (m[0x0052] << 8);
+  while (y < 0x20) {
+    int v = (rom[0x3FF759 + x] | (rom[0x3FF75A + x] << 8)) + base + c;
+    out[y] = (uint8_t)v; out[y + 1] = (uint8_t)(v >> 8);
+    c = 0; x += 4; y += 2;
+  }
+}
 // C2/C9AE -- the re-drive when the landed entry is not selectable: a LEFT/RIGHT press hops to the other column when the
 // side it is on has nobody selectable (`$0F0B` / `$0F0C` = 0), else the graph is walked once more along UP (bit 3 of $5A)
 // or DOWN (anything else, a LEFT/RIGHT included): C2/C9CD-C9E0.
@@ -3312,8 +3334,9 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
     // math's: the oracle's --hdma on the screen.)
     if (m[0x0D0E] | m[0x0D0F]) {
       int vofs = (m[0x0D0E] | (m[0x0D0F] << 8)) & 0x3FF;
+      uint8_t tbl[32]; mExchWaveTable(m, h->rom, h->romLen, tbl);    // (the HDMA's table: the next main-thread step's)
       for (int y = 0; y < MH; y++) {
-        int hofs = (m[0x9240 + 2 * (y & 15)] | (m[0x9241 + 2 * (y & 15)] << 8)) & 0x3FF;
+        int hofs = (tbl[2 * (y & 15)] | (tbl[2 * (y & 15) + 1] << 8)) & 0x3FF;
         int by = (y + 1 + vofs) & 0xFF;                               // (the PPU fetches line y + 1 of the BG)
         for (int x = 0; x < MW; x++) {
           if (!zero[y * MW + x]) continue;
@@ -3386,12 +3409,19 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
     mPanelAtkDefOne(h, fb, 0x13 * 8 - MP_X, y + 40, p.charId, 0);
     mBlitPartySpr(h, fb, p.charId, 140, 56 + k * MP_PITCH, 0);      // C2/CE6E[6 + 2k]
   }
-  int c = m[0x54] & 0x0F; if (c > 6) c = 6;                           // the hand: the graph's (x, y)
+  // The hand: the graph's (x, y), its attribute $58-$59 with bit 6 (H flip) set when C2/C805 left $56 != 0 -- the reserve
+  // column (C2/E964-E977 `LDA $56 / BEQ / LDA #40 / TSB $0773`): it points left there. MEASURED, the cartridge's OAM slot 28
+  // on the reserve column: (232, 35) tile 20 attr 70. The picked cell's second hand takes the word the first had at the pick
+  // (C2/8A31 `LDA $0772 / STA $0DA1`, C2/8A8B `LDX $0DA1 / STX $0776`): flipped when the pick was on the reserve column.
+  int c = m[0x54] & 0x0F; if (c > 6) c = 6;
+  mHandFlip = m[0x56] != 0;
   mHandCursor(h, fb, m[0x9380 + c * 6], m[0x9381 + c * 6]);
   if (m[0x0F00] != 0xFF && pickBlink) {
     int pc = m[0x0D9C] & 0x0F; if (pc > 6) pc = 6;
+    mHandFlip = pc >= 3;
     mHandCursor(h, fb, m[0x9380 + pc * 6] + 2, m[0x9381 + pc * 6] - 1);
   }
+  mHandFlip = 0;
 }
 
 void CtMenuRenderForm(const CtMenuHost* h, uint8_t* fb, int cursor, int picked, const uint8_t* panel9,
