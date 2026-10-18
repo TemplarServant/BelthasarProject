@@ -583,6 +583,16 @@ deferred the E0 and the autorun JUMPBACKed into the dialogue forever (the report
 loop). Deterministic (f957 both pin runs). Re-pin only if textbox pacing or the
 walkscript grammar intentionally changes.
 
+### seq-gwarp-{80,81,82,83}-native-vs-oracle (`ct.exe --gwarpcmp`, the gate warp native)
+
+The gate warp (op `FF 80`-`83`, bank $FD) runs native in Belthasar.exe: src/seq_gwarp.c, its logic over the WRAM and its
+picture through src/seq_pic.c. Each check opens it from the Telepod's state at the routine's entry (`PEEK_POKE=7F269C=81..83`
+picks the other three, as the `-xlat-lockstep` checks do) and lays it against the oracle at every stop CtXlatStageFrame makes:
+all of WRAM (stack and direct page included), VRAM / CGRAM / OAM from the setup's poll (frame 112), the display registers
+from the first NMI's frame (114), the picture every frame, and the WRAM the `JML $C0:0000` hands the reboot. The pin is
+`-- IDENTICAL`; re-pinning is only legitimate if the frame counts move (the drive or the state changed), never to absorb a
+difference. Dossier: `disasm/notes/gate_warp_fd_family.md` sec. 11.
+
 ### field-scene8-telepod-touch-trigger (`--scene 8` + `CT_TRIGDBG=1`)
 
 Pins that a CLASS-7 object (`$1100 = 07`: positioned, sprite-less, no loader op) gets

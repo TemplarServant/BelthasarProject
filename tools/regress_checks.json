@@ -37632,20 +37632,20 @@
       ],
       "tier": "full",
       "timeout_s": 900,
-      "notes": "User defects 2026-09-26 #2 ('the temporal flux does not appear') and #20 ('no portal on the way back'): the gate warp was black for its 880 frames. It now runs as its program translated from the ROM on the vendored hardware (seq-gwarp-xlat-lockstep), opened by the field's warp machine where C0/3FD3 jumps, handed the field's VRAM and CGRAM, its picture presented each frame. Graded EVERY frame from the hand-off to the JML $C0:0000 against the cartridge under the rule (tools/gwarp_cmp.py). The jump is in the vblank of the state's f17, so the program's first picture is the cartridge's f18 -- the relation entry 3 has against its real-time reference. gate_warp_fd_family.md sec. 9. ==== 2026-09-28 (the count after a load), +1: after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs; the port wrote the period there. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' stores; C0/286C's C0/6F79.) The warp starts a frame later in the cold start (the demo's gate sequence, every pcprio line +1); all 880 of its frames are still the cartridge's under the rule. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines, SHIFT 44 (the battle fixtures' boot is 11 frames shorter -- the song upload's CPU side is free; the attract / world legs move with the song loads priced on SPC time).",
-      "note_pass": "the gate warp -- the setup, the mode-7 tunnel and the exit -- is the cartridge's picture every frame of its 880",
+      "notes": "User defects 2026-09-26 #2 ('the temporal flux does not appear') and #20 ('no portal on the way back'): the gate warp was black for its 880 frames. It now runs as its program translated from the ROM on the vendored hardware (seq-gwarp-xlat-lockstep), opened by the field's warp machine where C0/3FD3 jumps, handed the field's VRAM and CGRAM, its picture presented each frame. Graded EVERY frame from the hand-off to the JML $C0:0000 against the cartridge under the rule (tools/gwarp_cmp.py). The jump is in the vblank of the state's f17, so the program's first picture is the cartridge's f18 -- the relation entry 3 has against its real-time reference. gate_warp_fd_family.md sec. 9. ==== 2026-09-28 (the count after a load), +1: after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs; the port wrote the period there. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' stores; C0/286C's C0/6F79.) The warp starts a frame later in the cold start (the demo's gate sequence, every pcprio line +1); all 880 of its frames are still the cartridge's under the rule. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines, SHIFT 44 (the battle fixtures' boot is 11 frames shorter -- the song upload's CPU side is free; the attract / world legs move with the song loads priced on SPC time). || 2026-10-18: THE WARP IS NATIVE (src/seq_gwarp.c: its logic over the WRAM, its picture through src/seq_pic.c; gate_warp_fd_family.md sec. 11) -- Belthasar.exe no longer builds src/xlat/gwarp_fd.c. Same 880 / 880 frames against the cartridge; the mutations are the native path's.",
+      "note_pass": "the gate warp -- the setup, the mode-7 tunnel and the exit -- run native, is the cartridge's picture every frame of its 880",
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "      CtXlatStagePicture(gwX, fb, CAMW, CAMH);\n    }",
-          "replace": "      /* MUT: the warp's picture not shown */\n    }",
-          "why": "the tunnel must be presented: without the stage's picture the warp is the old black screen"
+          "find": "      memcpy(fb, g_gwPic, sizeof g_gwPic);",
+          "replace": "      /* MUT: the warp's picture not shown */",
+          "why": "the tunnel must be presented: without the stage's picture the warp is the field's last frame, not the cartridge's tunnel"
         },
         {
-          "file": "src/seq_xlat.c",
-          "find": "    static const uint16_t ent[4] = { 0xFFF1, 0xFFEB, 0xFFE8, 0xFFE5 };",
-          "replace": "    static const uint16_t ent[4] = { 0xFFEB, 0xFFEB, 0xFFE8, 0xFFE5 };   /* MUT */",
-          "why": "FF 80 enters at $FD:FFF1 (FD/DA00, 767 frames of tunnel); $FFEB is FD/DA5F's 255 -- C0/3FE8's own JML"
+          "file": "src/seq_gwarp.c",
+          "find": "  g->entry = op == 0x80 ? 0 : op == 0x81 ? 1 : op == 0x82 ? 2 : 3;",
+          "replace": "  g->entry = op == 0x80 ? 1 : op == 0x81 ? 1 : op == 0x82 ? 2 : 3;   /* MUT */",
+          "why": "FF 80 enters at $FD:FFF1 (FD/DA00, 767 frames of tunnel); FD/DA5F is 255 -- C0/3FE8's own JML"
         }
       ]
     },
@@ -37738,6 +37738,178 @@
       "timeout_s": 600,
       "notes": "`FF 83` (FD/DB1D, 767 + the $2100 pulse): scene 8's Telepod state with the script's operand byte poked (`$7F:269C`, the op reads its operand there through C0/3FB1 `LDA $7F2001,X`), so C0/3FEC.. takes this routine's JML -- the same program the return trips' `FF 81/82/83` run (user defect 2026-09-26 #20), lockstepped every instruction against the oracle. The translation is the union of the four routines' traces. | 2026-10-10 re-pinned on the recipe-made fixture (fxf_scene8_gate_warp_f2300): still IDENTICAL every instruction and frame against the oracle from the same state; only the instruction count moved (the recipe's cutscene parks its main loop 39 frames instead of the capture's 38, see seq-gwarp-xlat-lockstep).",
       "note_pass": "the gate warp's `FF 83` routine, translated, is the cartridge's every instruction"
+    },
+    {
+      "name": "seq-gwarp-80-native-vs-oracle",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--gwarpcmp",
+        "saves/field_re/scene8_gate_warp_f2300.state",
+        "900"
+      ],
+      "env": {},
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/scene8_gate_warp_f2300.state"
+      ],
+      "expect": [
+        "gwarpcmp: FF 80: native JML C0:0000; WRAM / VRAM / CGRAM / OAM graded on 769 frames (from the poll's, 112): 0 / 0 differ (first -1 / -1); registers on 766 (from the first NMI's): 0 differ (first -1); picture 0 frames differ (first -1) -- IDENTICAL",
+        "gwarpcmp: FF 80 exits at frame 880; 702 frames lit, the first 115"
+      ],
+      "pin": [
+        "^gwarpcmp: FF 80: ",
+        "^gwarpcmp: FF 80 exits "
+      ],
+      "timeout_s": 60,
+      "notes": "THE GATE WARP, NATIVE: FD/DA00 (FF 80, the Telepod: 767 frames of loop) -- src/seq_gwarp.c (the program's logic over the 128 KB WRAM, every table from the user's ROM) and its picture through the native compositor src/seq_pic.c, lockstepped against the oracle from the Telepod's state (`ct.exe --gwarpcmp`; the oracle runs to $FD:FFF1). Every frame where CtXlatStageFrame stops (the start of each vblank): all of WRAM -- the stack page and the direct page $0500 included -- VRAM, CGRAM, OAM, the display registers and the picture. WRAM and the PPU's memories are graded from the setup's poll (frame 112: before it the cartridge is inside FD/DB97's NMI-off stretch, which the port does at once); the registers from the first NMI's frame (114); the JML's WRAM at C0:0000. Replaces the translated program in Belthasar.exe (user decision 2026-10-17: no emulation, no ROM code in the shipped host). gate_warp_fd_family.md sec. 11.",
+      "note_pass": "the gate warp's FF 80, native, is the cartridge's WRAM, PPU and picture every frame",
+      "mutations": [
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "  setA(g, DP(0x1B) ^ 0xFF);                                                     // DCFB LDA $1B / EOR #FF",
+          "replace": "  setA(g, DP(0x1B));   /* MUT: the mirror's EOR dropped */",
+          "why": "FD/DCBD's second band scrolls by the counter's MIRROR (3DDCFD EOR #FF): without it $7F:702A / 7022 are the first band's and the tunnel's lower half moves the wrong way"
+        },
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "    nmi(g, w, sp, (uint8_t)(0x22 | (g->v << 6) | g->cy));",
+          "replace": "    nmi(g, w, sp, (uint8_t)(0x22 | g->cy));   /* MUT: V not pushed */",
+          "why": "the NMI's P byte ($06FA) survives every frame of the window's bands (EB8B's 8-bit PHX leaves it): V is the sign of the sine F123's last ADC #$80 met -- WRAM, not the picture"
+        },
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "#define GW_SETUP_FRAMES 112",
+          "replace": "#define GW_SETUP_FRAMES 111   /* MUT */",
+          "why": "FD/DB97's NMI-off stretch crosses 112 vblanks on the cartridge (40,005,322 master cycles from the hand-off): one less and every frame of the tunnel is a frame early"
+        }
+      ]
+    },
+    {
+      "name": "seq-gwarp-81-native-vs-oracle",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--gwarpcmp",
+        "saves/field_re/scene8_gate_warp_f2300.state",
+        "900"
+      ],
+      "env": {
+        "PEEK_POKE": "7F269C=81"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/scene8_gate_warp_f2300.state"
+      ],
+      "expect": [
+        "gwarpcmp: FF 81: native JML C0:0000; WRAM / VRAM / CGRAM / OAM graded on 257 frames (from the poll's, 112): 0 / 0 differ (first -1 / -1); registers on 254 (from the first NMI's): 0 differ (first -1); picture 0 frames differ (first -1) -- IDENTICAL",
+        "gwarpcmp: FF 81 exits at frame 368; 190 frames lit, the first 115"
+      ],
+      "pin": [
+        "^gwarpcmp: FF 81: ",
+        "^gwarpcmp: FF 81 exits "
+      ],
+      "timeout_s": 60,
+      "notes": "THE GATE WARP, NATIVE: FD/DA5F (FF 81: 255 frames, the bands at 20 / A0 / C0) -- src/seq_gwarp.c (the program's logic over the 128 KB WRAM, every table from the user's ROM) and its picture through the native compositor src/seq_pic.c, lockstepped against the oracle from the Telepod's state (`ct.exe --gwarpcmp`; the oracle runs to $FD:FFEB, the script's operand poked at $7F:269C as seq-gwarp-81-xlat-lockstep does). Every frame where CtXlatStageFrame stops (the start of each vblank): all of WRAM -- the stack page and the direct page $0500 included -- VRAM, CGRAM, OAM, the display registers and the picture. WRAM and the PPU's memories are graded from the setup's poll (frame 112: before it the cartridge is inside FD/DB97's NMI-off stretch, which the port does at once); the registers from the first NMI's frame (114); the JML's WRAM at C0:0000. Replaces the translated program in Belthasar.exe (user decision 2026-10-17: no emulation, no ROM code in the shipped host). gate_warp_fd_family.md sec. 11.",
+      "note_pass": "the gate warp's FF 81, native, is the cartridge's WRAM, PPU and picture every frame",
+      "mutations": [
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "    g->c = (uint16_t)((g->c >> 8) | (g->c << 8));                               // EBEE XBA",
+          "replace": "    /* MUT: EBEE XBA dropped */",
+          "why": "FD/EB8B stores the half-width as the high byte of $14 (XBA before the 16-bit STA $7F702C,X): without it the disc's table is the remainders and the window is not the cartridge's"
+        },
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "  { 0xDA61, 0xDA64, 0xDA67, 0xDAA6, 0xDAA9, 0xDAB6, 0xDAB9, 0x0020, 0x00A0, 0x00C0, 0x00FF },   // FD/DA5F (FF 81)",
+          "replace": "  { 0xDA61, 0xDA64, 0xDA67, 0xDAA6, 0xDAA9, 0xDAB6, 0xDAB9, 0x0020, 0x00A0, 0x00C0, 0x0100 },   /* MUT: FD/DAAC's end */",
+          "why": "FD/DA5F's loop ends at $1B = 00FF (DAAC CPY #00FF): one more frame of tunnel and the JML a frame late"
+        }
+      ]
+    },
+    {
+      "name": "seq-gwarp-82-native-vs-oracle",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--gwarpcmp",
+        "saves/field_re/scene8_gate_warp_f2300.state",
+        "900"
+      ],
+      "env": {
+        "PEEK_POKE": "7F269C=82"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/scene8_gate_warp_f2300.state"
+      ],
+      "expect": [
+        "gwarpcmp: FF 82: native JML C0:0000; WRAM / VRAM / CGRAM / OAM graded on 161 frames (from the poll's, 112): 0 / 0 differ (first -1 / -1); registers on 158 (from the first NMI's): 0 differ (first -1); picture 0 frames differ (first -1) -- IDENTICAL",
+        "gwarpcmp: FF 82 exits at frame 272; 94 frames lit, the first 115"
+      ],
+      "pin": [
+        "^gwarpcmp: FF 82: ",
+        "^gwarpcmp: FF 82 exits "
+      ],
+      "timeout_s": 60,
+      "notes": "THE GATE WARP, NATIVE: FD/DABE (FF 82: 159 frames, the bands at 20 / 40 / 60) -- src/seq_gwarp.c (the program's logic over the 128 KB WRAM, every table from the user's ROM) and its picture through the native compositor src/seq_pic.c, lockstepped against the oracle from the Telepod's state (`ct.exe --gwarpcmp`; the oracle runs to $FD:FFE8, the script's operand poked at $7F:269C as seq-gwarp-82-xlat-lockstep does). Every frame where CtXlatStageFrame stops (the start of each vblank): all of WRAM -- the stack page and the direct page $0500 included -- VRAM, CGRAM, OAM, the display registers and the picture. WRAM and the PPU's memories are graded from the setup's poll (frame 112: before it the cartridge is inside FD/DB97's NMI-off stretch, which the port does at once); the registers from the first NMI's frame (114); the JML's WRAM at C0:0000. Replaces the translated program in Belthasar.exe (user decision 2026-10-17: no emulation, no ROM code in the shipped host). gate_warp_fd_family.md sec. 11.",
+      "note_pass": "the gate warp's FF 82, native, is the cartridge's WRAM, PPU and picture every frame",
+      "mutations": [
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "    setA(g, DP(0x1B) ^ 0xFF); g->y = g->c;                                      // F142 LDA $1B / EOR #FF / TAY",
+          "replace": "    setA(g, DP(0x1B)); g->y = g->c;   /* MUT: F144 EOR dropped */",
+          "why": "FD/F123's green is the sine of the counter's complement (F144 EOR #FF): without it the 32 BG colours walk red and green together"
+        },
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "  static const uint16_t plane[4] = { 0x0000, 0x0001, 0x0010, 0x0011 };          // ED0C / ED28 / ED44 / ED60",
+          "replace": "  static const uint16_t plane[4] = { 0x0000, 0x0010, 0x0001, 0x0011 };   /* MUT */",
+          "why": "FD/ECD5 plots the ray picture's four bitplanes at +0 / +1 / +10 / +11 (the 4bpp tile layout): swapped, the sprite characters at VRAM $4000 are the wrong colours"
+        }
+      ]
+    },
+    {
+      "name": "seq-gwarp-83-native-vs-oracle",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--gwarpcmp",
+        "saves/field_re/scene8_gate_warp_f2300.state",
+        "900"
+      ],
+      "env": {
+        "PEEK_POKE": "7F269C=83"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/scene8_gate_warp_f2300.state"
+      ],
+      "expect": [
+        "gwarpcmp: FF 83: native JML C0:0000; WRAM / VRAM / CGRAM / OAM graded on 769 frames (from the poll's, 112): 0 / 0 differ (first -1 / -1); registers on 766 (from the first NMI's): 0 differ (first -1); picture 0 frames differ (first -1) -- IDENTICAL",
+        "gwarpcmp: FF 83 exits at frame 880; 702 frames lit, the first 115"
+      ],
+      "pin": [
+        "^gwarpcmp: FF 83: ",
+        "^gwarpcmp: FF 83 exits "
+      ],
+      "timeout_s": 60,
+      "notes": "THE GATE WARP, NATIVE: FD/DB1D (FF 83: 767 frames + the INIDISP pulse from $FD:DDF5) -- src/seq_gwarp.c (the program's logic over the 128 KB WRAM, every table from the user's ROM) and its picture through the native compositor src/seq_pic.c, lockstepped against the oracle from the Telepod's state (`ct.exe --gwarpcmp`; the oracle runs to $FD:FFE5, the script's operand poked at $7F:269C as seq-gwarp-83-xlat-lockstep does). Every frame where CtXlatStageFrame stops (the start of each vblank): all of WRAM -- the stack page and the direct page $0500 included -- VRAM, CGRAM, OAM, the display registers and the picture. WRAM and the PPU's memories are graded from the setup's poll (frame 112: before it the cartridge is inside FD/DB97's NMI-off stretch, which the port does at once); the registers from the first NMI's frame (114); the JML's WRAM at C0:0000. Replaces the translated program in Belthasar.exe (user decision 2026-10-17: no emulation, no ROM code in the shipped host). gate_warp_fd_family.md sec. 11.",
+      "note_pass": "the gate warp's FF 83, native, is the cartridge's WRAM, PPU and picture every frame",
+      "mutations": [
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "      setA(g, (DP(0x36) + (s >> 8)) & 0x1F); DP(0x36) = A8; g->x = g->c;        // ADC #00 / AND #1F / STA $36 / TAX",
+          "replace": "      setA(g, (DP(0x36) + (s >> 8)) & 0x1F); DP(0x36) = A8; g->x = A8;   /* MUT: TAX without B */",
+          "why": "DB36 TAX moves the whole accumulator: on the first frame its high byte is still FD/EF23's last result ($3F), so the INIDISP of the first NMI's frame is $FE:1CF5 (17), not $FD:DDF5 (0F) -- a register, under a blank window"
+        },
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "      unsigned s = DP(0x35) + 0x98u; DP(0x35) = (uint8_t)s;",
+          "replace": "      unsigned s = DP(0x35) + 0x99u; DP(0x35) = (uint8_t)s;   /* MUT */",
+          "why": "the pulse's phase steps $98 / 256 of a table entry a frame (DB2A ADC #98): any other step and the brightness is not the cartridge's"
+        }
+      ]
     },
     {
       "name": "sweep-band-25a3",

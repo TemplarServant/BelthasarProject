@@ -7477,6 +7477,122 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   return 0;
 }
 
+// --gwarpcmp <state> <frames> -- THE GATE WARP, NATIVE (src/seq_gwarp.c), in lockstep with the oracle. The oracle runs from the
+// state to the warp's entry (C0/3FE8.. `JML $FD:FFF1 / FFEB / FFE8 / FFE5`; PEEK_POKE=7F269C=81.. picks the routine on the
+// Telepod's state); its WRAM there opens the native stage, its VRAM and CGRAM the stage's picture (as the field hands them over).
+// Then frame by frame, stopping where CtXlatStageFrame stops (the start of each vblank): all 128 KB of WRAM, VRAM / CGRAM / OAM
+// and the picture. The setup's frames (the NMI-off stretch before the poll) are WRAM in progress on the cartridge and graded
+// from the poll's frame on; at the program's `JML $C0:0000` the oracle runs to C0:0000 and the WRAM it hands the reboot is
+// compared. GWARPCMP_WRAMAT=<k>: the differing WRAM ranges at frame k.
+#include "seq_gwarp.h"
+static int runGwarpCmp(const char* romPath, const char* statePath, int frames) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) return 2;
+  static uint8_t w[0x20000], rgb[256 * 224 * 3], romImg[0x600000];
+  static CtSeqStagePic sp; static CtSeqPic q;
+  long romLen = 0;
+  { FILE* rf = fopen(romPath, "rb"); if (rf) { romLen = (long)fread(romImg, 1, sizeof romImg, rf); fclose(rf); } }
+  long g0 = 0;
+  for (;; g0++) {
+    uint32_t pc = ((uint32_t)s->cpu->k << 16) | s->cpu->pc;
+    if (pc == 0xFDFFF1 || pc == 0xFDFFEB || pc == 0xFDFFE8 || pc == 0xFDFFE5) break;
+    if (g0 > 400000000L) { printf("gwarpcmp: the warp's entry not reached\n"); return 1; }
+    cpu_runOpcode(s->cpu);
+  }
+  uint8_t op = (uint8_t)s->cpu->a; uint32_t fr0 = s->frames;
+  printf("gwarpcmp: oracle at %02X:%04X (op FF %02X) after %ld instructions, frame %u v=%u h=%u\n", s->cpu->k, s->cpu->pc, op, g0,
+         s->frames, s->vPos, s->hPos);
+  memcpy(w, s->ram, sizeof w);
+  memset(&sp, 0, sizeof sp); CtSeqPicReset(&sp.p);
+  memcpy(sp.p.vram, s->ppu->vram, sizeof sp.p.vram); memcpy(sp.p.cgram, s->ppu->cgram, sizeof sp.p.cgram);
+  memcpy(sp.p.oam, s->ppu->oam, sizeof sp.p.oam); memcpy(sp.p.highOam, s->ppu->highOam, sizeof sp.p.highOam);   // (the field's, until the first NMI's DMA)
+  seqPicFromPpu(&q, s->ppu);
+  printf("gwarpcmp: the registers the warp never writes, on the cartridge at the hand-off: M7SEL $211A=%02X\n", q.r[0x1A]);
+  static CtGwarp gw;
+  if (CtGwarpOpen(&gw, w, op, &sp, romImg, romLen) < 0) { printf("gwarpcmp: open failed\n"); return 1; }
+  int firstW = -1, firstS = -1, firstP = -1, badW = 0, badS = 0, badP = 0, graded = 0, gradedR = 0, badR = 0, firstR = -1, litFrames = 0, firstLit = -1, exitK = -1, wramAt = getenv("GWARPCMP_WRAMAT") ? atoi(getenv("GWARPCMP_WRAMAT")) : -1;
+  for (int k = 1; k <= frames; k++) {
+    int st = CtGwarpFrame(&gw, w, &sp, rgb);
+    if (st) {                                                           // the JML: the oracle to C0:0000, the WRAM it hands over
+      for (long n = 0; n < 50000000L && (((uint32_t)s->cpu->k << 16) | s->cpu->pc) != 0xC00000; n++) cpu_runOpcode(s->cpu);
+      exitK = k;
+      printf("gwarpcmp: the cartridge at C0:0000: frame +%u v=%u h=%u even=%d\n", s->frames - fr0, s->vPos, s->hPos, s->ppu->evenFrame);
+      { int same = 0, black = 0, other = 0;                             // its picture buffer then, a line at a time, against the
+        for (int y = 0; y < 224; y++) {                                 // last frame drawn
+          const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+          int ls = 1, lb = 1;
+          for (int x = 0; x < 256; x++) {
+            const uint8_t* o = b + x * 8 + 4 + s->ppu->pixelOutputFormat; const uint8_t* m = rgb + (y * 256 + x) * 3;
+            if (o[2] != m[0] || o[1] != m[1] || o[0] != m[2]) ls = 0;
+            if (o[0] || o[1] || o[2]) lb = 0;
+          }
+          same += ls; black += lb && !ls; other += !ls && !lb;
+        }
+        printf("gwarpcmp: the cartridge's line buffer at the JML: %d lines the last frame's, %d black, %d other\n", same, black, other); }
+    } else {
+      while (s->inVblank) cpu_runOpcode(s->cpu);
+      uint32_t fr = s->frames;
+      while (!s->inVblank && fr == s->frames) cpu_runOpcode(s->cpu);
+    }
+    int gradeMem = k >= 112 || st;                                       // (GW_SETUP_FRAMES: the poll's frame)
+    int wb = 0; for (int i = 0; i < 0x20000; i++) wb += s->ram[i] != w[i];
+    seqPicFromPpu(&q, s->ppu);
+    int vb = 0, cb = 0, ob = 0;
+    for (int i = 0; i < 0x8000; i++) vb += q.vram[i] != sp.p.vram[i];
+    for (int i = 0; i < 256; i++) { cb += q.cgram[i] != sp.p.cgram[i]; ob += q.oam[i] != sp.p.oam[i]; }
+    for (int i = 0; i < 32; i++) ob += q.highOam[i] != sp.p.highOam[i];
+    // the display registers as the frame's last HDMA line left them (INIDISP as the PPU keeps it: blank + brightness)
+    static const uint8_t live[] = { 0x00, 0x01, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x1A, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A,
+                                    0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33 };
+    int rb = 0; char regs[160] = ""; int rl = 0;
+    for (unsigned i = 0; i < sizeof live; i++) {
+      uint8_t pv = live[i] == 0x00 ? (uint8_t)(sp.p.r[0] & 0x8F) : sp.p.r[live[i]];
+      if (q.r[live[i]] != pv) { rb++; if (rl < 120) rl += sprintf(regs + rl, " %02X:%02X/%02X", live[i], q.r[live[i]], pv); }
+    }
+    for (int i = 0; i < 8; i++) if (q.m7[i] != sp.p.m7[i]) { rb++; if (rl < 120) rl += sprintf(regs + rl, " m7[%d]:%04X/%04X", i, (uint16_t)q.m7[i], (uint16_t)sp.p.m7[i]); }
+    for (int i = 0; i < 3; i++) if (q.fix[i] != sp.p.fix[i]) { rb++; if (rl < 120) rl += sprintf(regs + rl, " fix%d", i); }
+    // (graded from the first NMI's frame, 114: before it the warp has written no mode-7 register and the screen is blank, and
+    // M7A-D still hold the field's; not at the JML, where the cartridge has run on into the reboot's frame with the NMI off)
+    int gradeRegs = k >= 114 && !st;
+    if (gradeRegs) gradedR++;
+    if (gradeRegs && rb) { badR++; if (firstR < 0 || getenv("GWARPCMP_REGS")) { if (firstR < 0) firstR = k; printf("gwarpcmp: frame %d: registers differ (cart/port):%s\n", k, regs); } }
+    if (gradeMem) {
+      graded++;
+      if (wb) { badW++; if (firstW < 0) { firstW = k; printf("gwarpcmp: frame %d: WRAM differs in %d bytes\n", k, wb); } }
+      if (vb || cb || ob) { badS++; if (firstS < 0) { firstS = k; printf("gwarpcmp: frame %d: VRAM %d CGRAM %d OAM %d words differ\n", k, vb, cb, ob); } }
+    }
+    if (k == wramAt || (wb && k == firstW && gradeMem)) {
+      int st0 = -1, shown = 0;
+      for (int i = 0; i <= 0x20000 && shown < 40; i++) { int d = i < 0x20000 && s->ram[i] != w[i];
+        if (d && st0 < 0) st0 = i;
+        if (!d && st0 >= 0) { printf("gwarpcmp:   WRAM $%05X-$%05X cart %02X port %02X\n", st0, i - 1, s->ram[st0], w[st0]); st0 = -1; shown++; } }
+    }
+    if (!st) {
+      int pb = 0;
+      for (int y = 0; y < 224; y++) {
+        const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+        for (int x = 0; x < 256; x++) {
+          const uint8_t* o = b + x * 8 + 4 + s->ppu->pixelOutputFormat; const uint8_t* m = rgb + (y * 256 + x) * 3;
+          if (o[2] != m[0] || o[1] != m[1] || o[0] != m[2]) pb++;
+        }
+      }
+      if (pb) { badP++; if (firstP < 0) { firstP = k; printf("gwarpcmp: frame %d: %d px differ\n", k, pb); } }
+      int lit = 0; for (int i = 0; i < 256 * 224 * 3; i++) if (rgb[i]) { lit = 1; break; }
+      litFrames += lit; if (lit && firstLit < 0) firstLit = k;
+    }
+    if (getenv("GWARPCMP_VERBOSE")) printf("gwarpcmp: f%d $051B=%04X wram %d vram %d cgram %d oam %d\n", k, w[0x51B] | (w[0x51C] << 8), wb, vb, cb, ob);
+    if (st) break;
+  }
+  printf("gwarpcmp: FF %02X: %s; WRAM / VRAM / CGRAM / OAM graded on %d frames (from the poll's, 112): %d / %d differ (first %d / %d); "
+         "registers on %d (from the first NMI's): %d differ (first %d); picture %d frames differ (first %d)%s\n", op,
+         exitK > 0 ? "native JML C0:0000" : "no exit", graded, badW, badS, firstW, firstS, gradedR, badR, firstR, badP, firstP,
+         (exitK > 0 && !badW && !badS && !badR && !badP) ? " -- IDENTICAL" : "");
+  if (exitK > 0) printf("gwarpcmp: FF %02X exits at frame %d; %d frames lit, the first %d\n", op, exitK, litFrames, firstLit);
+  CtOracleDestroy(s); free(rom);
+  return 0;
+}
+
 // --cputrace <state> <frames> <out.txt> -- EVERY instruction the oracle executes, with the bytes it executed.
 // One line per opcode: `KK:PPPP b0 b1 b2 b3 A=.... X=.... Y=.... S=.... D=.... B=.. P=nvmxdizc`, the four bytes read
 // off the bus at the moment of execution (so self-modifying code -- the race's $357B patches its own loop every
@@ -16142,6 +16258,7 @@ int main(int argc, char** argv) {
   const char* seqPpuState = NULL; int seqPpuFrames = 1;
   const char* seqPicState = NULL; int seqPicFrames = 1;
   const char* rpcArgs[5] = { 0 };
+  const char* gwcState = NULL; int gwcFrames = 0;
   const char* cpuTraceState = NULL, *cpuTraceOut = NULL; int cpuTraceFrames = 1;
   const char* xlatCmpState = NULL; int xlatCmpFrames = 1;
   const char* wipeDumpState = NULL; int wipeDumpK = 1; const char* wipeDumpIn = NULL; const char* wipeDumpOut = NULL; const char* wipeDumpMask = NULL; uint32_t wipeDumpEntry = 0xC3000E, wipeDumpExit = 0xC022FE, wipeDumpMaskPc = 0xC000CB;
@@ -16277,6 +16394,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--seqppucmp") && i + 2 < argc) { seqPpuState = argv[++i]; seqPpuFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--seqpiccmp") && i + 2 < argc) { seqPicState = argv[++i]; seqPicFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--racepiccmp") && i + 5 < argc) { for (int k = 0; k < 5; k++) rpcArgs[k] = argv[++i]; }
+    else if (!strcmp(argv[i], "--gwarpcmp") && i + 2 < argc) { gwcState = argv[++i]; gwcFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatphase") && i + 4 < argc) { xlatPhState = argv[++i]; xlatPhPc = (uint32_t)strtoul(argv[++i], NULL, 16); xlatPhExtra = atoi(argv[++i]); xlatPhFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatentries") && i + 2 < argc) { xlatEnState = argv[++i]; xlatEnFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatcmp") && i + 2 < argc) { xlatCmpState = argv[++i]; xlatCmpFrames = atoi(argv[++i]); }
@@ -16529,6 +16647,7 @@ int main(int argc, char** argv) {
   if (fxcState) return CT_NOT_ORACLE(runSweepFxCompose(romPath, fxcState, fxcF0, fxcF1));
   if (seqPpuState) return CT_NOT_ORACLE(runSeqPpuCmp(romPath, seqPpuState, seqPpuFrames));
   if (seqPicState) return CT_NOT_ORACLE(runSeqPicCmp(romPath, seqPicState, seqPicFrames));
+  if (gwcState) return CT_NOT_ORACLE(runGwarpCmp(romPath, gwcState, gwcFrames));
   if (rpcArgs[0]) return CT_NOT_ORACLE(runRacePicCmp(romPath, rpcArgs[0], rpcArgs[1], atoi(rpcArgs[2]), (int)strtol(rpcArgs[3], NULL, 16), atoi(rpcArgs[4])));
   if (cpuTraceState) return CT_NOT_ORACLE(runCpuTrace(romPath, cpuTraceState, cpuTraceFrames, cpuTraceOut));
   if (xlatCmpState) return CT_NOT_ORACLE(runXlatCmp(romPath, xlatCmpState, xlatCmpFrames));
