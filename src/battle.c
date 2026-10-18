@@ -1294,6 +1294,8 @@ static void battleStatusDispatch(CtBattleHost* h, int from);   // fwd: C1/8313-8
 enum { LL_CONT_BOOT = 0, LL_CONT_ITER = 1, LL_CONT_H12 = 2, LL_CONT_DISPATCH = 3 };
 #define BATTLE_LL_HANDLER 13        /* stActHandler for the revive's action 7A (the status handlers are 0..12) */
 static int battleH12Tail(CtBattleHost* h, int cont, int slot);  // fwd: C1/860D-883C, the ATB handler's tail (C1/B223, C1/881C)
+static int battleDeadFlagSweep(CtBattleHost* h, int from, int cont);  // fwd: C1/B223, the dead-flag sweep
+static int battleThinkPending(const CtBattleHost* h);                 // fwd: a turn is inside C1/4058
 static void battleH12TailRest(CtBattleHost* h, int slot);       // fwd: ...its C1/881C part
 static int battleLifelineMsgTick(CtBattleHost* h, int aHeld);   // fwd: CD/01B3 #9, the revive's message (inside C1/B223)
 static void battleDisabledSweep883D(CtBattleHost* h);          // fwd: C1/883D, a disabled PC's pending turn cancelled

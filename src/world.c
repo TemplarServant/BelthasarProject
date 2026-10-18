@@ -1427,6 +1427,7 @@ static int folBoard(uint8_t* ram, uint8_t* B) {
 static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c);
 static void owDactylProps(uint8_t* ram, uint8_t* B, unsigned px, unsigned py);
 static int obEntryScan(uint8_t* ram, uint8_t* B);
+static int obNameBanner(uint8_t* ram, uint8_t* B);
 static int owInlineRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {   // C2/0F63 on a native block: 1 = its script ended (SEC)
   uint16_t cls = obW(B);
   obRun(ram, B, c);
