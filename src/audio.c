@@ -22,6 +22,7 @@
 #include <unistd.h>
 #endif
 #include "audio.h"
+#include "sound/lockstep.h"
 #include "snes.h"
 #include "apu.h"
 #include "spc.h"
@@ -1432,6 +1433,7 @@ CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
   a->ruleIrqLine = -1;                                         // ...and no V-IRQ until the host says one is armed
   a->apu = apu_init(a->shell);
   apu_reset(a->apu);                                   // SPC PC -> $FFC0, the IPL
+  if (CtSndLockstepWanted()) CtSndLockstepAttach(a->apu);   // the C driver beside this SPC (src/sound/lockstep.h)
   a->ready = uploadDriver(a, rom, romLen);
   audReset(a);                                         // the IPL transfer's own output is not the game's
   if (!a->ready) fprintf(stderr, "[audio] $C7 upload did not complete -- running silent\n");
@@ -1665,6 +1667,7 @@ void CtAudioSeedFromApu(CtAudio* a, const Apu* src) {
   if (src->snes && src->snes->ppu) a->evenFrame = src->snes->ppu->evenFrame ? 1 : 0;   // the state's field: the next frame flips it
   a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;
   audReset(a);
+  CtSndLockstepResync(a->apu);
 }
 #define CT_APUSTATE_MAGIC 0x50415443u   /* 'CTAP' LE */
 int CtAudioSaveState(CtAudio* a, const char* path) {
@@ -1692,6 +1695,7 @@ int CtAudioLoadState(CtAudio* a, const char* path) {
     sh_free(sh);
     a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;   // (as CtAudioSeedFromApu: the adopted driver's moment)
     audReset(a);
+    CtSndLockstepResync(a->apu);
   }
   free(buf);
   return ok;

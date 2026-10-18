@@ -46044,6 +46044,135 @@
       ]
     },
     {
+      "name": "snddrv-lockstep-attract",
+      "tier": "quick",
+      "argv": [
+        "build/Belthasar.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "433"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_SNDDRV_LOCKSTEP": "1",
+        "CT_SHOTS": "build/_snddrv_attract",
+        "CT_SHOTS_AT": "11200",
+        "CT_SHOTS_EXIT": "1",
+        "CT_SNDDRV_LOCKSTEP_OUT": ""
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "snddrv-lockstep: ticks 34859 compared 34859 mismatched 0 diverged 0",
+        "snddrv-lockstep: events run 37/60, not run: CA CC CE D3 D5 DE DF E1 E7 E8 E9 EA EC ED EE EF F1 F3 F4 F5 F9 FE FF",
+        "snddrv-lockstep: commands run 12/29, not run: 11 14 15 80 86 87 8E F1 F3 F4 F5 F6 F8 F9 FC FD FF",
+        "snddrv-lockstep: upload kinds run 4/8, not run: 00 01 04 06",
+        "snddrv-lockstep: look-ahead handlers run 4/7, not run: E9 EA F5"
+      ],
+      "pin": [
+        "^snddrv-lockstep: "
+      ],
+      "timeout_s": 120,
+      "note_pass": "the sound driver in C (src/sound/driver.c) equals the cartridge's driver on the vendored SPC700 on every one of the attract's 34859 ticks: the S-DSP writes in order, the status and control writes, the S-DSP registers and the driver's RAM",
+      "notes": "disasm/notes/audio_spc_driver.md, 'The port'. The whole attract (11,200 frames from the cold boot, CT_AUDIO_LOCKSTEP: one SPC frame per engine frame) with CT_SNDDRV_LOCKSTEP=1 (src/sound/lockstep.c): at each $02A0 the C driver replays what the original took since the last tick -- the loop's commands, each poll's ports, timer 1, the S-DSP reads, the upload sessions' headers, bytes and ticks (kinds 2, 3, 5 and 7) -- and the two are compared byte for byte. The tick count may move with the attract's own timing (re-pin then); 'mismatched 0 diverged 0' never. The coverage lines are what the attract alone reaches; the fuzz (snddrv-lockstep-fuzz) reaches the rest. The quick tier's other Belthasar runs were graded the same way when the driver landed (CT_SNDDRV_LOCKSTEP=1 CT_SNDDRV_LOCKSTEP_OUT=build/_snddrv/q_%d.txt python tools/regress.py --quick: 980,727 ticks, 0 mismatched).",
+      "mutations": [
+        {
+          "file": "src/sound/driver.c",
+          "find": "  if (!m) return t;",
+          "replace": "  if (!m) return (uint8_t)(t + 1);   /* MUT */",
+          "why": "the music's tick add is the tempo $47 itself while no modifier is set ($0377)"
+        },
+        {
+          "file": "src/sound/driver.c",
+          "find": "if (M(D_CNT + x) == 2 && !(M(D_TIE_M + s) & M(D_BIT))) {",
+          "replace": "if (M(D_CNT + x) == 3 && !(M(D_TIE_M + s) & M(D_BIT))) {   /* MUT */",
+          "why": "the gate releases the voice when the countdown has become 2 ($03BB CBNE)"
+        },
+        {
+          "file": "src/sound/driver.c",
+          "find": "  M(R_BRR_LOOP + (a >> 1)) ^= (a & 1) ? 0x07 : 0x70;",
+          "replace": "  M(R_BRR_LOOP + (a >> 1)) ^= (a & 1) ? 0x70 : 0x07;   /* MUT */",
+          "why": "$0B5C flips the low nibble on an odd step (XCN of $70) -- RAM only: the RAM compare grades it"
+        },
+        {
+          "file": "src/sound/driver.c",
+          "find": "    port(d, 1, M(A_FADE_N));",
+          "replace": "    port(d, 1, M(A_FADE_N + 2));   /* MUT */",
+          "why": "port 1 is the music fade's ticks left, $F166 ($02D6)"
+        }
+      ]
+    },
+    {
+      "name": "snddrv-lockstep-fuzz",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--snddrvfuzz",
+        "600",
+        "2"
+      ],
+      "env": {
+        "CT_SNDDRV_LOCKSTEP": "1",
+        "CT_SNDDRV_LOCKSTEP_OUT": ""
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "snddrvfuzz: seed 2, 600 actions (commands 187, effects 109, songs 32, constructed 135, sessions 29, boots 32), 21 echo waits missed, 34 recoveries",
+        "snddrv-lockstep: ticks 122567 compared 122567 mismatched 0 diverged 0",
+        "snddrv-lockstep: events run 60/60, not run: -",
+        "snddrv-lockstep: commands run 29/29, not run: -",
+        "snddrv-lockstep: upload kinds run 7/8, not run: 07",
+        "snddrv-lockstep: look-ahead handlers run 7/7, not run: -"
+      ],
+      "pin": [
+        "^snddrvfuzz: ",
+        "^snddrv-lockstep: "
+      ],
+      "timeout_s": 120,
+      "note_pass": "the sound driver in C equals the cartridge's on a constructed command stream that reaches what no game run does: all 60 sequence events, all 29 commands posted, upload kinds 0-6, the 7 look-ahead handlers -- every tick identical",
+      "notes": "src/sound/fuzz.c; disasm/notes/audio_spc_driver.md, 'The port'. A seeded generator drives the original's ports the way the CPU would: the game's own loads (CtAudioLoadSong, $14/$15 on a fresh CtAudio -- see the note on the loader's $10 defragmentation), effect starts on the loaded set, random commands (fades, modifiers, mono, mute, pause, fast, echo delay, S-DSP writes, the meter mode), cold boots (FF F0), upload sessions with every block kind (a block below $1E00, the effect table itself), and constructed songs whose tracks draw from all 60 events with random operands, the pointer-moving ones (loops and their exits, FA, F6, the effect subroutines E9/EA) laid out so every cycle holds a note. The C driver runs beside it in lockstep. Kind 7 (the defragmenter) runs in the attract (snddrv-lockstep-attract). 'mismatched 0 diverged 0' is the verdict; the coverage lines prove the stream reached what it is for.",
+      "mutations": [
+        {
+          "file": "src/sound/driver.c",
+          "find": "    M(P_SWEEP + x) = 0;\n    ww(d, (uint16_t)(T_SWEEP_ACC + x), 0);\n    break;\n  case 0xCF:",
+          "replace": "    ww(d, (uint16_t)(T_SWEEP_ACC + x), 0);\n    break;\n  case 0xCF:   /* MUT */",
+          "why": "event CE ends the pan sweep ($19EE: $0171+X = 0) -- an event no game run reaches"
+        },
+        {
+          "file": "src/sound/driver.c",
+          "find": "  case 0xF9: M(D_MARK) = (uint8_t)(a & 0x0F); break;",
+          "replace": "  case 0xF9: M(D_MARK) = (uint8_t)(a & 0x07); break;   /* MUT */",
+          "why": "event F9's marker is the operand's low nibble ($1CF6)"
+        },
+        {
+          "file": "src/sound/driver.c",
+          "find": "  if ((dest >> 8) < 0x1E) k = 0;",
+          "replace": "  if ((dest >> 8) < 0x1D) k = 0;   /* MUT */",
+          "why": "an upload block below $1E00 is discarded ($1040 CMP Y,#$1E)"
+        },
+        {
+          "file": "src/sound/driver.c",
+          "find": "if (M(D_FLAGS2) & 0x10) { src = 0xC6; reg = 0x49; flag = 0x80; }",
+          "replace": "if (M(D_FLAGS2) & 0x10) { src = 0xC6; reg = 0x49; flag = 0x40; }   /* MUT */",
+          "why": "the meter's second half sets bit 7 of each port ($144E SET1 $A4.7)"
+        },
+        {
+          "file": "src/sound/driver.c",
+          "find": "      for (int y = 0x05; y < 0x80; y += 0x10) dsp(d, (uint8_t)y, (uint8_t)(dspIn(d, (uint8_t)y) & 0x7F));",
+          "replace": "      for (int y = 0x05; y < 0x80; y += 0x10) dsp(d, (uint8_t)y, (uint8_t)(dspIn(d, (uint8_t)y) & 0x7E));   /* MUT */",
+          "why": "command F5's pause clears each ADSR1's enable bit only ($0FC8 AND #$7F)"
+        }
+      ]
+    },
+    {
       "name": "gen-shapes-match-generated",
       "argv": [
         "python",

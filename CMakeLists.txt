@@ -33,7 +33,7 @@ endif()
 
 # The playable host's sources (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake).
 set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
-                 src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
+                 src/move.c src/audio.c src/sound/driver.c src/sound/lockstep.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
 
 # CT_DATAFREE=ON: Belthasar loads the generated tables (src/data/*.h) from the player's pack instead of compiling them
 # in (docs/ROM.md). ct.exe and the other tools always compile the real headers.
@@ -65,6 +65,7 @@ add_executable(ct
   src/world.c src/vwf.c
   src/wipe.c     # the window wipe C3/01E4 + C3/02DD and the overworld's window object, native (ct_vm.c; --wipeaudit)
   src/audio.c
+  src/sound/driver.c src/sound/lockstep.c src/sound/fuzz.c   # the sound driver in C and its lockstep against the SPC700 (CT_SNDDRV_LOCKSTEP)
   src/menu.c src/menu_cost.c   # --shadow: the inventory routines C2/8791 / C2/87D5 (ct_shadow.c)
   src/battle.c   # --sweepaitarget: the first bank-$C1 micro-execution harness needs the battle port
   src/objslot.c  # FD/E39C, the palette-effect records -- one body for the battle and the field VM

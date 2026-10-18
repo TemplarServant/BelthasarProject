@@ -24,6 +24,10 @@ static void apu_cycle(Apu* apu);
 // instruction and per S-DSP write. The PC is the instruction's about to run; the write is the $F3 one.
 void (*g_apuOpHook)(Apu* apu, uint16_t pc) = NULL;
 void (*g_apuDspWriteHook)(Apu* apu, uint8_t adr, uint8_t val) = NULL;
+// The SPC700's own bus reads and writes (src/sound/lockstep.c: the ports, timers and S-DSP reads the driver makes, and
+// what its upload receivers store), NULL unless asked for.
+void (*g_apuReadHook)(Apu* apu, uint16_t adr, uint8_t val) = NULL;
+void (*g_apuWriteHook)(Apu* apu, uint16_t adr, uint8_t val) = NULL;
 
 Apu* apu_init(Snes* snes) {
   Apu* apu = malloc(sizeof(Apu));
@@ -209,12 +213,15 @@ void apu_write(Apu* apu, uint16_t adr, uint8_t val) {
 uint8_t apu_spcRead(void* mem, uint16_t adr) {
   Apu* apu = (Apu*) mem;
   apu_cycle(apu);
-  return apu_read(apu, adr);
+  uint8_t val = apu_read(apu, adr);
+  if(g_apuReadHook) g_apuReadHook(apu, adr, val);
+  return val;
 }
 
 void apu_spcWrite(void* mem, uint16_t adr, uint8_t val) {
   Apu* apu = (Apu*) mem;
   apu_cycle(apu);
+  if(g_apuWriteHook) g_apuWriteHook(apu, adr, val);
   apu_write(apu, adr, val);
 }
 
