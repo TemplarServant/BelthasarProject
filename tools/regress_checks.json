@@ -46322,7 +46322,12 @@
       ],
       "env": {},
       "expect": [
+        "colcircle: open picture cartridge f180 best port f178 (-2): 0 px differ",
+        "colcircle: open picture cartridge f210 best port f208 (-2): 0 px differ",
         "colcircle: open f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 60",
+        "colcircle: close picture cartridge f170 best port f168 (-2): 0 px differ",
+        "colcircle: close picture cartridge f200 best port f198 (-2): 0 px differ",
+        "colcircle: close picture cartridge f216 best port f214 (-2): 0 px differ",
         "colcircle: close f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 00"
       ],
       "pin": [
@@ -46337,7 +46342,7 @@
         "saves/field_re/shop90.lakewram",
         "tools/field_colcircle_cmp.py"
       ],
-      "note_pass": "C0/21E1's entries 4 and 5 (FF 97 / FF 98) are the ROM's: the circle grows and shrinks as the colour window through C3/0077's argument 1, its tables, registers and teardown equal to the cartridge's on every frame",
+      "note_pass": "C0/21E1's entries 4 and 5 (FF 97 / FF 98) are the ROM's: the circle grows and shrinks as the colour window through C3/0077's argument 1, its tables, registers and teardown equal to the cartridge's on every frame, and the picture -- the sub screen's sum limited to the circle, the fixed blue where it is transparent, the sprites' own math after F1's $0BE0 -- pixel for pixel at the field's P + 2",
       "mutations": [
         {
           "file": "src/ct_vm.c",
@@ -46362,9 +46367,33 @@
           "find": "    w8(m, 0x7E013C, r8(m, 0x7E013C) + 1);                                    // 2381 INC $3C",
           "replace": "    w8(m, 0x7E013C, r8(m, 0x7E013C) + 2);   /* MUT */",
           "why": "C0/2381: the radius grows a step a frame"
+        },
+        {
+          "file": "src/field.c",
+          "find": "        if (baked) memcpy(d, pre + bi * 3, 3);",
+          "replace": "        if (0) memcpy(d, pre + bi * 3, 3);   /* MUT */",
+          "why": "outside the window the math is prevented: the bake's sub-screen sum taken off"
+        },
+        {
+          "file": "src/field.c",
+          "find": "      int useSub = (op == 0xFF ? bgSub : sub) && subCov[bi];",
+          "replace": "      int useSub = 0;   /* MUT */",
+          "why": "CGWSEL bit 1: the sub pixel is the operand, the fixed colour only where it is transparent"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  g_colObjMath = (w128[0x11520] & 0x10) && (g_colWinMath & 0x10) && (cgw & 0xC0) == 0;",
+          "replace": "  g_colObjMath = 0;   /* MUT */",
+          "why": "CGADSUB bit 4: the sprites of palettes 4-7 take the math too"
+        },
+        {
+          "file": "src/scene.c",
+          "find": "static int sceneEffect(const SceneData* sd) { return sd->fxLiveOn ? sd->fxLive : sd->effect_flags; }",
+          "replace": "static int sceneEffect(const SceneData* sd) { return sd->effect_flags; }   /* MUT */",
+          "why": "the field's CGADSUB is $0BE0, which op 0xF1 rewrites: the bake follows it"
         }
       ],
-      "notes": "C0/21E1'S ENTRIES 4 AND 5 (docs/ROADMAP.md F19). `FF 97` (C0/4191: FF 90's stores, $0139 = 04) and `FF 98` ($0139 = 05) hand the main loop the iris's circle as the COLOUR window: C0/232A grows it (WOBJSEL 20, CGWSEL 12, TMW 17, `TSB $28`, the buffer by $53, `LDA #01 / JSL C3/0008`), C0/238A shrinks it and at radius 0 runs C0/23E2. Graded from a quiet capture (loc 005) with scene 051's operands poked on both sides at frame 150; every frame's $0139 / $013C / $0153 / $0128, the shadows and both window buffers. The picture is not graded: like 051 the room keeps BG3 on the sub screen (TM 13 / TS 04), whose window-gated math the port's colour window does not draw yet."
+      "notes": "C0/21E1'S ENTRIES 4 AND 5 (docs/ROADMAP.md F19). `FF 97` (C0/4191: FF 90's stores, $0139 = 04) and `FF 98` ($0139 = 05) hand the main loop the iris's circle as the COLOUR window: C0/232A grows it (WOBJSEL 20, CGWSEL 12, TMW 17, `TSB $28`, the buffer by $53, `LDA #01 / JSL C3/0008`), C0/238A shrinks it and at radius 0 runs C0/23E2. Graded from a quiet capture (loc 005) with scene 051's operands poked on both sides at frame 150; every frame's $0139 / $013C / $0153 / $0128, the shadows and both window buffers. Like 051 the room keeps BG3 on the sub screen (TM 13 / TS 04): the circle limits that sum (field.c fieldColWindowApply on the bake's two screens, scene.c CtFieldSceneScreens), adds the fixed blue where the sub screen is transparent, and F1's $0BE0 = 17 stays after the teardown -- the bake follows $0BE0 (CtFieldSceneSetEffect) and the lead's palette-4+ pixels take BG3's sub pixel. Six pictures at the field's P + 2."
     }
   ],
   "excluded": [

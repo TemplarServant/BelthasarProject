@@ -2949,52 +2949,86 @@ static inline int bgWinAt(int x, int y) {
 // write is `E0` then $0121 (C0/EC3D-EC45) -- so the fixed colour is $0121's channels at its intensity, the rest 0. The PPU
 // rule (snes/ppu.c ppu_handlePixel): a main pixel whose layer has its CGADSUB bit -- BG1-3, the OBJs of palettes 4-7 (bit
 // 4), the backdrop (bit 5) -- takes the fixed colour added or subtracted (bit 7), halved (bit 6) unless CGWSEL bit 1 adds
-// the sub screen, here empty (TS $7F:1521 = 00), then clamped in 5 bits. The set this draws is the tutorial's; any other
-// colour-window set is reported once and not drawn.
+// the sub screen, here empty (TS $7F:1521 = 00), then clamped in 5 bits. WITH A SUB SCREEN (`FF 97`'s circle, C0/232A, in a
+// room that keeps BG3 there -- loc 051 / 005: TM 13, TS 04; CGWSEL 12 adds the SUB screen): inside the window the main
+// layers with math take the sub pixel, or the fixed colour where the sub screen is transparent (the PPU's halving skips
+// that case: snes/ppu.c ppu_handlePixel, `secondLayer != 5 || !addSubscreen`); outside it the math is prevented, so the
+// pixel is the main screen alone -- the bake's sum taken off (CtFieldSceneScreens: the bake's main before the math and its
+// sub screen). MEASURED (tools/field_colcircle_cmp.py's pokes, loc 005): the blue half-height circle over the shop, the rest
+// as before; loc 084 (TM 04 / TS 13) black outside it. The set this draws: window 1 for colour, math only inside, no clip;
+// any other colour-window set is reported once and not drawn.
 static int16_t g_colWinL[256], g_colWinR[256];
-static int g_colWinOn = 0, g_colWinHalf = 0;
+static int g_colWinOn = 0, g_colWinHalf = 0, g_colWinAddSub = 0, g_colWinPrevent = 0;
+// THE SPRITES' OWN COLOUR MATH: a main-screen OBJ pixel of palettes 4-7 takes the math when CGADSUB's bit 4 is set -- the
+// field's CGADSUB is $0BE0 (C0/A412 from the map header, op 0xF1 rewrites it) -- with or without a colour window. The bake
+// does the map's layers; this pass does the sprites over them (fieldColWindowApply). MEASURED (loc 005 after `F1 9F 00`'s
+// $0BE0 = 17, tools/field_colcircle_cmp.py): the lead's palette-4+ pixels take BG3's sub pixel once the circle is gone.
+static int g_colObjMath = 0;
 static uint8_t g_colWinMath = 0, g_colWinFix[3];
 static void fieldColWindowRows(const uint8_t* w128) {
-  g_colWinOn = 0;
+  g_colWinOn = 0; g_colObjMath = 0;
   if (!w128) return;
   uint8_t wobj = w128[0x0BDB], cgw = w128[0x0BDE];
+  g_colWinMath = w128[0x0BE0];                                    // the math every pass below uses: CGADSUB, COLDATA, CGWSEL
+  { uint8_t cd = w128[0x0121]; int i5 = cd & 0x1F;
+    g_colWinFix[0] = (uint8_t)((cd & 0x20) ? i5 : 0); g_colWinFix[1] = (uint8_t)((cd & 0x40) ? i5 : 0);
+    g_colWinFix[2] = (uint8_t)((cd & 0x80) ? i5 : 0); }
+  g_colWinHalf = (g_colWinMath & 0x40) && !(cgw & 0x02);
+  g_colWinAddSub = (cgw & 0x02) && w128[0x11521] != 0;            // CGWSEL bit 1 with a sub screen: the sub pixel is added
+  g_colWinPrevent = (cgw >> 4) & 3;                               //   (and the prevent mode: 0 never, 1 outside, 2 inside, 3 always)
+  g_colObjMath = (w128[0x11520] & 0x10) && (g_colWinMath & 0x10) && (cgw & 0xC0) == 0;   // OBJ on the main screen, with math
   if (!(w128[0x0128] & 0x20) || !(wobj & 0xF0)) return;            // HDMA channel 5 off, or no colour window
-  if ((wobj & 0xF0) != 0x20 || (cgw & 0xF0) != 0x10 || w128[0x11521] != 0) {
+  if ((wobj & 0xF0) != 0x20 || (cgw & 0xF0) != 0x10) {
     static int said = 0;
     if (!said) { said = 1; fprintf(stderr, "colwindow: WOBJSEL=%02X CGWSEL=%02X TS=%02X -- not the drawn set (window 1, math "
-                                           "inside, no sub screen), not drawn\n", wobj, cgw, w128[0x11521]); }
+                                           "inside, no clip), not drawn\n", wobj, cgw, w128[0x11521]); }
     return;
   }
   fieldCh5Rows(w128, g_colWinL, g_colWinR);   // (the quad's C3/0EFA buffer and C0/232A's circle alike: channel 5's table)
-  g_colWinMath = w128[0x0BE0];
-  uint8_t cd = w128[0x0121]; int i5 = cd & 0x1F;
-  g_colWinFix[0] = (uint8_t)((cd & 0x20) ? i5 : 0); g_colWinFix[1] = (uint8_t)((cd & 0x40) ? i5 : 0);
-  g_colWinFix[2] = (uint8_t)((cd & 0x80) ? i5 : 0);
-  g_colWinHalf = (g_colWinMath & 0x40) && !(cgw & 0x02);
   g_colWinOn = 1;
 }
 // The math over the composed frame: `objPal` = the OBJ palette of the sprite on top per pixel (0xFF where the BG shows),
 // `cov` = the bake's main-layer bit per map pixel (0 = the backdrop).
+static uint8_t g_fieldCgram[0x200];   // (defined below with its story: what C0/712E last uploaded)
 static void fieldColWindowApply(uint8_t* fb, int cw, int ch, const uint8_t* objPal, const uint8_t* cov, int covW, int covH,
-                                int camx, int camy) {
-  if (!g_colWinOn) return;
+                                int camx, int camy, void* sd) {
+  if (!g_colWinOn && !g_colObjMath) return;
+  const uint8_t* subCov = NULL, *pre = NULL;
+  int bBlend = 0, bSub = 0, bHalf = 0;
+  const uint8_t* sub = (sd && g_colWinAddSub) ? CtFieldSceneScreens(sd, &subCov, &pre, &bBlend, &bSub, &bHalf) : NULL;
+  const uint8_t* bgSub = g_colWinOn ? sub : NULL;               // (the map's pixels are redone only under a window: the bake
+                                                                //  did them for the whole screen)
+  uint16_t c0 = (uint16_t)(g_fieldCgram[0] | (g_fieldCgram[1] << 8));   // the backdrop, CGRAM 0
+  const uint8_t bd[3] = { (uint8_t)((c0 & 31) << 3 | (c0 & 31) >> 2), (uint8_t)(((c0 >> 5) & 31) << 3 | ((c0 >> 5) & 31) >> 2),
+                          (uint8_t)(((c0 >> 10) & 31) << 3 | ((c0 >> 10) & 31) >> 2) };
   for (int y = 0; y < ch && y < 256; y++) {
-    int L = (g_colWinL[y] < 0 ? 0 : g_colWinL[y]) + g_fx, R = (g_colWinR[y] >= CAMW ? CAMW - 1 : g_colWinR[y]) + g_fx;
-    if (R >= cw) R = cw - 1;
-    for (int x = L; x <= R; x++) {
+    int L = 1, R = 0;                                             // (no window: an empty one -- every pixel outside)
+    if (g_colWinOn) {
+      L = (g_colWinL[y] < 0 ? 0 : g_colWinL[y]) + g_fx; R = (g_colWinR[y] >= CAMW ? CAMW - 1 : g_colWinR[y]) + g_fx;
+      if (R >= cw) R = cw - 1;
+    }
+    for (int x = 0; x < cw; x++) {
       uint8_t op = objPal[(size_t)y * g_fw + x];
+      if (op == 0xFF ? !g_colWinOn : !g_colObjMath) continue;
+      int sx = (camx + x) % covW, sy = (camy + y) % covH; if (sx < 0) sx += covW; if (sy < 0) sy += covH;
+      size_t bi = (size_t)sy * covW + sx;
+      int lay = cov ? cov[bi] : 0, inside = x >= L && x <= R;
+      uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
+      if (bgSub && op == 0xFF) {                                  // a map pixel: start from the main screen before the math
+        int baked = (lay & bBlend) && subCov[bi];                 //   (outside the window that is all it shows: the
+        if (baked) memcpy(d, pre + bi * 3, 3);                    //   math is prevented there; with no layer on top the
+        else if (!lay && subCov[bi]) memcpy(d, bd, 3);           //   bake showed the sub pixel, the PPU the backdrop)
+      }
+      if (g_colWinPrevent == 3 || (g_colWinPrevent == 1 && !inside) || (g_colWinPrevent == 2 && inside)) continue;
       int on;
       if (op != 0xFF) on = (g_colWinMath & 0x10) && op >= 4;              // mainLayer 4 (palettes 4-7) / 6 (0-3, never)
-      else {
-        int sx = (camx + x) % covW, sy = (camy + y) % covH; if (sx < 0) sx += covW; if (sy < 0) sy += covH;
-        int lay = cov ? cov[(size_t)sy * covW + sx] : 0;
-        on = lay ? (g_colWinMath & lay) != 0 : (g_colWinMath & 0x20) != 0;
-      }
+      else on = lay ? (g_colWinMath & lay) != 0 : (g_colWinMath & 0x20) != 0;
       if (!on) continue;
-      uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
+      int useSub = (op == 0xFF ? bgSub : sub) && subCov[bi];      // the sub pixel, else the fixed colour (not halved)
       for (int k = 0; k < 3; k++) {
-        int c = d[k] >> 3, r = (g_colWinMath & 0x80) ? c - g_colWinFix[k] : c + g_colWinFix[k];
-        if (g_colWinHalf) r >>= 1;
+        int c = d[k] >> 3, o = useSub ? (sub[bi * 3 + k] >> 3) : g_colWinFix[k];
+        int r = (g_colWinMath & 0x80) ? c - o : c + o;
+        if (useSub ? (g_colWinMath & 0x40) : g_colWinHalf) r >>= 1;
         if (r > 31) r = 31; if (r < 0) r = 0;
         d[k] = (uint8_t)((r << 3) | (r >> 2));
       }
@@ -18854,6 +18888,7 @@ int main(int argc, char** argv) {
         bgDirty |= CtFieldSceneSetScreen(f.sd, 1, bm[0xBE95], bm[0xBE96], tm, ts); }
     }
     if (fieldNmi && f.sd) bgDirty |= CtFieldSceneSetScreen(f.sd, 0, 0, 0, 0, 0);   // the field's frames: the map header's
+    if (fieldNmi && f.sd && f.vm) bgDirty |= CtFieldSceneSetEffect(f.sd, CtSceneMem7E(f.vm)[0x0BE0]);   // ...math: $0BE0
     // The caption plane (fieldVramSink): op 0xE5's style 4 rebuilds BG3 from the map and this NMI uploads it to $1D80
     // (C0/EB2F `CMP #04` -> C0/7F62), so BG3's tilemap is the map's again; while the plane holds, the bake leaves BG3 out.
     if (fieldNmi && f.vm && CtSceneMem7E(f.vm)[0x0146] == 4) g_bg3Plane = 0;
@@ -19041,9 +19076,10 @@ int main(int argc, char** argv) {
     // THE COLOUR WINDOW (fieldColWindowRows): its math needs each pixel's main layer, so while it is up the sprites stamp
     // their OBJ palette (plot's g_bObjPalMask) and the foreground pass below unstamps what it paints back.
     fieldColWindowRows(f.vm ? CtWramSys(fieldWram()) : NULL);
+    if (battlePhase) g_colObjMath = 0;                 // (a fight's sprites are the battle compositor's)
     static uint8_t colObjPal[FIELD_WMAX * CAMH];
     uint8_t* colKeepMask = g_bObjPalMask;
-    if (g_colWinOn) { memset(colObjPal, 0xFF, sizeof colObjPal); g_bObjPalMask = colObjPal; }
+    if (g_colWinOn || g_colObjMath) { memset(colObjPal, 0xFF, sizeof colObjPal); g_bObjPalMask = colObjPal; }
 
     int order[80], oy[80], lay[80], sten[80], n = 0;    // lay = OAM priority-group draw layer
     int nSten = 0;                                      // 0x8E prio-0/1 occluder sprites (sten[k])
@@ -19591,13 +19627,13 @@ int main(int argc, char** argv) {
           uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
           if (showPrio) { d[0] = 255; d[1] = 0; d[2] = 0; } else memcpy(d, f.base + bo * 3, 3);
           mot->own[(size_t)y * g_fw + x] = (uint8_t)CtMotMapOwner(motCov ? motCov[bo] : 1, 1);   // the map's foreground
-          if (g_colWinOn) colObjPal[(size_t)y * g_fw + x] = 0xFF;          // a BG pixel again (the colour window)
+          if (g_colWinOn || g_colObjMath) colObjPal[(size_t)y * g_fw + x] = 0xFF;   // a BG pixel again (the colour math)
         }
     if (bg3Plane)                                      // the caption plane's priority-1 cells: the front layer
       for (int y = 0; y < ch; y++) fieldBg3PlaneRow(fb, y, bg3V + y, bg3H, 1, CtSceneMem7E(f.vm), NULL, 0, 0);
-    if (g_colWinOn) {
+    if (g_colWinOn || g_colObjMath) {
       int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
-      if (cvs && cvW > 0 && cvH > 0) fieldColWindowApply(fb, cw, ch, colObjPal, cvs, cvW, cvH, camx, camy);
+      if (cvs && cvW > 0 && cvH > 0) fieldColWindowApply(fb, cw, ch, colObjPal, cvs, cvW, cvH, camx, camy, f.sd);
     }
     g_bObjPalMask = colKeepMask;
     // The widescreen's sides end at the room's scroll mask when the map holds more than the room (fieldWideMask).

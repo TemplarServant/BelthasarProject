@@ -29,7 +29,9 @@ uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask);
 uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH);   // the bake without BL1/BL2/BL3 bits (a window's)
 // The last bake's MAIN-screen coverage, one byte per pixel: the layer bit (L1 1, L2 2, L3 4) on top, 0 = backdrop.
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt);
-const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half);   // the main screen before the math, when OBJ is sub-only
+const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half);
+const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_t** mainPre, int* blendEn, int* subOp,
+                                   int* half);   // the last bake's sub screen + layer bits, its main before the math   // the main screen before the math, when OBJ is sub-only
 const uint8_t* CtFieldSceneMotionCoverage(void* h);
 // THE MAP AS LAYERS (the frames between, natively -- fieldnative.c): BG1/BG2/BG3 x priority 0/1, each its own picture over
 // ONE period of the layer (sampled modulo its size at the layer's own scroll), with the screen and colour-math setup the
@@ -58,6 +60,7 @@ int   CtFieldSceneTileDma(void* h, int vramWord, const uint8_t* bytes, int n);  
 int   CtFieldSceneSetCgram(void* h, const uint8_t* page);                          // CGRAM 0-127 from the live page $7E:2200
 // The colour math the bake composes with: on = 0 -> the map header's (effect_flags); on = 1 -> these (CGWSEL, CGADSUB: a
 // battle's arena, its NMI's shadows; the layer designations stay the header's). Returns 1 when that changes the inputs.
+int   CtFieldSceneSetEffect(void* h, int cgadsub);   // the field's live CGADSUB ($0BE0); 1 = the bake must redo
 int   CtFieldSceneSetScreen(void* h, int on, int cgwsel, int cgadsub, int tm, int ts);   // a battle's colour math + TM/TS
 int   CtFieldSceneMapFromWram(void* h, const uint8_t* s7e);                        // the maps from $7E:3000.. (a seed's)
 int   CtFieldSceneMapFromWramRect(void* h, const uint8_t* s7e, int x0, int y0, int x1, int y1, int layers);   // a rect of them

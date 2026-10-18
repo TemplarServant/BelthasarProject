@@ -147,9 +147,18 @@ after it = set A `$7F:1133`, set = set B `$7F:13EB`), its `<count> <addr>` entri
 buffer pointer each effect leaves ($0356 for the iris, $0350 for the quad), which entry 4 would have read as its centre.
 The iris and the quad checks hold unchanged.
 
-**Left: the picture in these rooms.** Loc 051 (like loc 005, the graded room) keeps BG3 on the sub screen (TM 13 / TS 04,
-CGWSEL 02 -- the bake adds it everywhere); entry 4's CGWSEL 12 limits that sum to the circle, and inside it the sub screen's
-transparent pixels take the fixed blue. The port's colour window draws only the set with no sub screen (fieldColWindowRows
-names this one once and leaves the picture as it was); it needs the bake's math split by the window (inside: main + BG3 or
-COLDATA; outside: the main screen alone, CtFieldSceneMainScreen's image). MEASURED (loc 084, TM 04 / TS 13): outside the
-window the cartridge shows the main screen alone -- there BG3 over the backdrop, black.
+**The picture in these rooms (2026-10-18, drawn).** Loc 051 (like loc 005, the graded room) keeps BG3 on the sub screen
+(TM 13 / TS 04, CGWSEL 02 -- the bake adds it everywhere); entry 4's CGWSEL 12 limits that sum to the circle, and inside
+it the sub screen's transparent pixels take the fixed blue (the PPU does not halve that case). The bake now keeps its two
+screens (scene.c CtFieldSceneScreens: the sub screen's pixels and layer bits, the main screen before the math), and
+fieldColWindowApply redoes the map's pixels under a window: inside, main +- (sub or COLDATA); outside, the main screen alone
+(prevent 1). Two more things the cartridge showed, both general:
+* **The field's CGADSUB is `$0BE0`**, not the map header's byte: the load copies byte 5 there (C0/A40B-A412) and op 0xF1
+  (C0/3D2C-3D74) and entry 9 (C0/25AE) rewrite it -- `F1 9F 00` leaves 17 after the circle is gone. The bake follows it
+  (CtFieldSceneSetEffect, a re-bake when it changes).
+* **Sprites take the math too**: a main-screen OBJ pixel of palettes 4-7 with CGADSUB bit 4 adds the sub pixel (or the
+  fixed colour) -- gated by the colour window when one is up, by CGWSEL's prevent mode always (g_colObjMath). After the
+  teardown the lead's palette-4+ pixels take BG3's sub pixel on the cartridge (102 px the port had plain).
+Graded at the field's P + 2 by field_colcircle_cmp.py: six pictures, opening, closing and after the teardown, 0 px.
+MEASURED too (loc 084, TM 04 / TS 13): outside the window the cartridge shows the main screen alone -- there BG3 over the
+backdrop, black.
