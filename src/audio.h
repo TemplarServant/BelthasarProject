@@ -26,6 +26,7 @@
 #define CT_AUDIO_H
 
 #include <stdint.h>
+#include "assets.h"
 
 typedef struct CtAudio CtAudio;
 
@@ -35,6 +36,16 @@ typedef struct CtAudio CtAudio;
 // already caches one via CtBattleRom); returns NULL when it is absent or short,
 // so a ROM-less run stays silent instead of failing.
 CtAudio* CtAudioInit(const uint8_t* rom, long romLen);
+// The same, with the sound's data from the asset container (CT_ASSET_SND_*) when it holds them: the driver upload,
+// the songs, samples, instruments and effect sets are then never read from the ROM (which may be NULL).
+CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd);
+int CtAudioFromAssets(const CtAudio* a);   // 1 when the data comes from the container
+// Every datum the loader takes, from the ROM and from the container, side by side: the driver's six blocks (destination,
+// bytes), each song's sequence (its bytes, the 3 read past it, the address that prices the stream), instrument list,
+// percussion and record, each sample (bytes, address), each instrument's three words (ids 0..N), both effect sets, the
+// exception list's verdict for every song id, the heap base and FD/C1EE's channels. Prints the first difference to stderr;
+// returns the number of items compared, or -1 at a difference (or when the container holds no sound).
+long CtAudioDataCompare(const uint8_t* rom, long romLen, const CtAssets* snd);
 void     CtAudioFree(CtAudio* a);
 
 // Non-zero once the six blocks are in ARAM and the driver has been started.

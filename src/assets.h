@@ -50,6 +50,18 @@
                                     //   no flock+fair spawner master); this is the intro cutscene's seed
                                     //   (with master pc=06CD) that field.c overlays on $0B30 ONLY for the
                                     //   --newgame 496-pan, so the dense flock + Leene fair are intro-only.
+// --- the sound (assets/extract_assets.py pack_sound; src/audio.c reads them instead of bank $C7 when present) ---
+#define CT_ASSET_SND_BOOT       28  // id = upload block 0-5: [ARAM dest u16] + the block's bytes (0 = the driver itself)
+#define CT_ASSET_SND_SEQ        29  // id = song: [addr u16] + its sequence block's bytes (ARAM $2000) + the 3 bytes after
+                                    //   them (the upload's last unit reads past the block); addr = the ROM block's size
+                                    //   word, low 16 bits (it prices the stream: a bank-crossing block takes the slow loop)
+#define CT_ASSET_SND_SAMPLE     30  // id = instrument 1..N: [addr u16] + its BRR sample block's bytes
+#define CT_ASSET_SND_INSTR      31  // id = instrument 0..N: [loop u16][$1F40 param u16][$1FC0 param u16] (0 = the
+                                    //   empty entry: index -1, the long,X read wrapped into bank $C8)
+#define CT_ASSET_SND_SONG       32  // id = song: instrument list (32) + percussion (36, ARAM $F120) + record (2)
+#define CT_ASSET_SND_SFXSET     33  // id 0 = set A (field), 1 = set B (battle): the block's bytes
+#define CT_ASSET_SND_MISC       34  // id 0: [song count u8] + the song-exception list through its bit-7 end;
+                                    // id 1: FD/C1EE's HDMA program for the loader clock: DMAP x8, set A x8, set B x8 (u16)
 #define CT_ASSET_WORLDSPR       18  // id = 0; the overworld player sprite atlas captured from the
                                     //   oracle: [n u8] then {facing,parity,moving,w,h u8, ox,oy i8,
                                     //   w*h*4 RGBA} per frame (keys: facing 0-3 U/D/L/R, step

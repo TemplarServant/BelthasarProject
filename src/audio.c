@@ -22,6 +22,7 @@
 #include <unistd.h>
 #endif
 #include "audio.h"
+#include "assets.h"
 #include "sound/lockstep.h"
 #include "snes.h"
 #include "apu.h"
@@ -131,6 +132,9 @@ struct CtAudio {
   uint16_t src[C7_NBLOCKS];          // as read from $C7:0010
   uint16_t dst[C7_NBLOCKS];          // as read from $C7:001C
   uint16_t size[C7_NBLOCKS];         // each block's leading size word
+  const uint8_t* blk[C7_NBLOCKS];    // each block's bytes (after the size word): the ROM's or the container's
+  const CtAssets* snd;               // the asset container the sound's data comes from, or NULL (the ROM)
+  int ninst;                         // the instruments the sample table holds
 };
 
 static void W(CtAudio* a, int k, uint8_t v) { a->apu->inPorts[k] = v; }
@@ -321,6 +325,19 @@ static uint8_t ldRomFD(const CtAudio* a, unsigned off) {             // a byte o
   long p = 0x3D0000L + (long)off;
   return (a && a->rom && p < a->romLen) ? a->rom[p] : 0;
 }
+// FD/C1EE's program as the clock needs it: channel i's DMAP, and its table in set A or set B -- the container's
+// (CT_ASSET_SND_MISC 1) or the immediates read from the ROM.
+static uint8_t ldFdDmap(const CtAudio* a, int i) {
+  uint32_t n = 0; const uint8_t* m = a && a->snd ? CtAssetGet(a->snd, CT_ASSET_SND_MISC, 1, &n) : NULL;
+  if (m && n >= 40) return m[i];
+  return ldRomFD(a, 0xC1F8 + 4 * (unsigned)i);
+}
+static uint16_t ldFdTable(const CtAudio* a, int setB, int i) {
+  uint32_t n = 0; const uint8_t* m = a && a->snd ? CtAssetGet(a->snd, CT_ASSET_SND_MISC, 1, &n) : NULL;
+  if (m && n >= 40) { const uint8_t* t = m + 8 + (setB ? 16 : 0) + 2 * i; return (uint16_t)(t[0] | (t[1] << 8)); }
+  unsigned at = setB ? 0xC298 + 5 * (unsigned)i : 0xC26E + 5 * (unsigned)i;   // FD/C26D / C297 `LDX #tbl / STX $x2`
+  return (uint16_t)(ldRomFD(a, at) | (ldRomFD(a, at + 1) << 8));
+}
 static uint8_t ldHd7F(const LdHdma* hd, unsigned adr) { return hd->wram ? hd->wram[0x10000 + (adr & 0xFFFF)] : 0; }
 // Line 0, h 16 (snes.c: `vPos == 0` -> hdmaInitRequested): FD/C1EE's channels at the set `$0153 & 0F` names, `$0128`'s
 // enabled -- each loads its line count and, indirect, its address. 0 when none is enabled (dma_initHdma returns).
@@ -333,9 +350,8 @@ static long ldHdmaInit(LdHdma* hd, const CtAudio* a) {
     c->enabled = (mask >> i) & 1; c->terminated = 0; c->doTransfer = 0;
     if (!c->enabled) continue;
     any = 1;
-    uint8_t dmap = ldRomFD(a, 0xC1F8 + 4 * i);                      // FD/C1F7 LDA #44 / STA $00 .. FD/C213 LDA #40 / STA $70
-    unsigned at = setB ? 0xC298 + 5 * i : 0xC26E + 5 * i;           // FD/C26D / C297 `LDX #tbl / STX $x2`, eight of each
-    c->tableAdr = (uint16_t)(ldRomFD(a, at) | (ldRomFD(a, at + 1) << 8));
+    uint8_t dmap = ldFdDmap(a, i);                                  // FD/C1F7 LDA #44 / STA $00 .. FD/C213 LDA #40 / STA $70
+    c->tableAdr = ldFdTable(a, setB, i);                            // FD/C26D / C297 `LDX #tbl / STX $x2`, eight of each
     c->indirect = (dmap & 0x40) != 0; c->len = LD_HDMA_LEN[dmap & 7];
     cost += 8;                                                      // the count byte
     c->repCount = ldHd7F(hd, c->tableAdr++);                        // (the table bank: FD/C242 LDA #7F / STA $x4)
@@ -473,20 +489,32 @@ static int waitEcho(CtAudio* a, int k, uint8_t want) {
 }
 
 // ---- the upload ($C7:0038, audio_boot.md §4) --------------------------------
-static int uploadDriver(CtAudio* a, const uint8_t* rom, long romLen) {
-  // Read both tables out of the ROM. (§2: the old apu_upload.md read $001C as a
-  // single "initial target"; it is a 6-entry table parallel to $0010, and every
-  // block pushes its own destination to $2142/$2143 at $C7:00C6/$00CD.)
+// The six blocks: the container's (CT_ASSET_SND_BOOT: [dest u16] + bytes), or both tables read out of the ROM. (§2: the
+// old apu_upload.md read $001C as a single "initial target"; it is a 6-entry table parallel to $0010, and every block
+// pushes its own destination to $2142/$2143 at $C7:00C6/$00CD.)
+static int sndBootLoad(CtAudio* a, const uint8_t* rom, long romLen) {
   for (int b = 0; b < C7_NBLOCKS; b++) {
+    if (a->snd) {
+      uint32_t n = 0; const uint8_t* e = CtAssetGet(a->snd, CT_ASSET_SND_BOOT, (uint32_t)b, &n);
+      if (!e || n < 2 || n - 2 > 0xFFFF) return 0;
+      a->dst[b] = (uint16_t)(e[0] | (e[1] << 8)); a->size[b] = (uint16_t)(n - 2); a->blk[b] = e + 2; a->src[b] = 0;
+      continue;
+    }
     long s = C7_BASE + C7_SRC_TABLE + b * 2, d = C7_BASE + C7_DST_TABLE + b * 2;
-    if (d + 1 >= romLen) return 0;
+    if (!rom || d + 1 >= romLen) return 0;
     a->src[b] = (uint16_t)(rom[s] | (rom[s + 1] << 8));
     a->dst[b] = (uint16_t)(rom[d] | (rom[d + 1] << 8));
     long p = C7_BASE + a->src[b];
     if (p + 1 >= romLen) return 0;
     a->size[b] = (uint16_t)(rom[p] | (rom[p + 1] << 8));
     if (p + 2 + a->size[b] > romLen) return 0;
+    a->blk[b] = rom + p + 2;
   }
+  return 1;
+}
+
+static int uploadDriver(CtAudio* a, const uint8_t* rom, long romLen) {
+  if (!sndBootLoad(a, rom, romLen)) return 0;
 
   // $C7:004D — wait for the IPL's $BBAA ready signature. The CPU parks $FF/$F0
   // in the low ports while it waits; the SPC's boot ROM answers AA/BB.
@@ -505,7 +533,7 @@ static int uploadDriver(CtAudio* a, const uint8_t* rom, long romLen) {
 
   uint8_t idx = 0;
   for (int b = 0; b < C7_NBLOCKS; b++) {
-    const uint8_t* p = rom + C7_BASE + a->src[b] + 2;   // skip the size word
+    const uint8_t* p = a->blk[b];                      // (after the size word)
     idx = 0;                                           // $C7:007D — per BLOCK, not per upload
     for (uint16_t y = 0; y < a->size[b]; y++) {
       W(a, 1, p[y]);      // data byte FIRST ($2141)...
@@ -577,17 +605,121 @@ static int uploadDriver(CtAudio* a, const uint8_t* rom, long romLen) {
 #define C7_SFXSET_B  0x75B0Bu   // driver mode 1 (battle) -- the block the IPL never uploads
 #define C7_IPL_BLK2  0x740B4u   // block 2's [u16 len]; its ARAM destination is $4700
 
+// ---- the sound's data: the asset container's (CT_ASSET_SND_*, assets/extract_assets.py pack_sound) when CtAudioInitWith
+// was given one that holds them, else the ROM's. Every read the loader makes of bank $C7 goes through these.
+static const uint8_t* sndGet(const CtAudio* a, uint32_t type, uint32_t id, uint32_t* n) {
+  return a && a->snd ? CtAssetGet(a->snd, type, id, n) : NULL;
+}
+int CtAudioFromAssets(const CtAudio* a) { return a && a->snd; }
+static unsigned sndInstrWord(const CtAudio* a, unsigned id, int which);   // (below)
+static const uint8_t* sndPerc(const CtAudio* a, int songId);
+static const uint8_t* sndSfxData(const CtAudio* a, int setB, unsigned* len);
+static int sndException(const CtAudio* a, int songId);
+static int sndCmpBytes(const char* what, int id, const uint8_t* x, int nx, const uint8_t* y, int ny) {
+  if (nx == ny && (!nx || (x && y && !memcmp(x, y, (size_t)nx)))) return 1;
+  int k = 0;
+  while (k < nx && k < ny && x && y && x[k] == y[k]) k++;
+  fprintf(stderr, "snd-data: %s %d differs: rom %d bytes, container %d, first at %d\n", what, id, nx, ny, k);
+  return 0;
+}
+long CtAudioDataCompare(const uint8_t* rom, long romLen, const CtAssets* snd) {
+  static CtAudio r, c;                                       // two data sources, no SPC: only the accessors run
+  memset(&r, 0, sizeof r); memset(&c, 0, sizeof c);
+  r.rom = rom; r.romLen = romLen;
+  c.rom = NULL; c.romLen = 0; c.snd = snd;
+  if (!snd || !CtAssetGet(snd, CT_ASSET_SND_BOOT, 0, NULL)) { fprintf(stderr, "snd-data: the container holds no sound\n"); return -1; }
+  while (CtAssetGet(snd, CT_ASSET_SND_SAMPLE, (uint32_t)(c.ninst + 1), NULL)) c.ninst++;
+  if (!sndBootLoad(&r, rom, romLen) || !sndBootLoad(&c, NULL, 0)) { fprintf(stderr, "snd-data: the blocks\n"); return -1; }
+  long items = 0;
+  for (int b = 0; b < C7_NBLOCKS; b++, items++)
+    if (r.dst[b] != c.dst[b] || !sndCmpBytes("block", b, r.blk[b], r.size[b], c.blk[b], c.size[b])) return -1;
+  if (CtAudioSongCount(&r) != CtAudioSongCount(&c) || CtAudioInstrumentCount(&r) != CtAudioInstrumentCount(&c)
+      || CtAudioHeapBase(&r) != CtAudioHeapBase(&c)) { fprintf(stderr, "snd-data: counts / heap base\n"); return -1; }
+  items += 3;
+  for (int s = 0; s < CtAudioSongCount(&r); s++) {
+    int nr = 0, nc = 0;
+    const uint8_t* x = CtAudioSeqBlock(&r, s, &nr); const uint8_t* y = CtAudioSeqBlock(&c, s, &nc);
+    if (!x || !y || !sndCmpBytes("sequence (+3 past it)", s, x, nr + 3, y, nc + 3)) return -1;
+    if ((((x - rom) - 2) & 0xFFFF) != (long)(y[-2] | (y[-1] << 8))) { fprintf(stderr, "snd-data: sequence %d's address\n", s); return -1; }
+    if (!sndCmpBytes("instrument list", s, CtAudioInstrSet(&r, s), 32, CtAudioInstrSet(&c, s), 32)) return -1;
+    if (!sndCmpBytes("percussion", s, sndPerc(&r, s), 36, sndPerc(&c, s), 36)) return -1;
+    int e1 = 0, s1 = 0, e2 = 0, s2 = 0;
+    CtAudioSongRecord(&r, s, &e1, &s1); CtAudioSongRecord(&c, s, &e2, &s2);
+    if (e1 != e2 || s1 != s2) { fprintf(stderr, "snd-data: record %d\n", s); return -1; }
+    items += 5;
+  }
+  for (int i = 1; i <= CtAudioInstrumentCount(&r); i++, items++) {
+    int nr = 0, nc = 0;
+    const uint8_t* x = CtAudioSampleBlock(&r, i, &nr); const uint8_t* y = CtAudioSampleBlock(&c, i, &nc);
+    if (!x || !y || !sndCmpBytes("sample", i, x, nr, y, nc)) return -1;
+    if ((((x - rom) - 2) & 0xFFFF) != (long)(y[-2] | (y[-1] << 8))) { fprintf(stderr, "snd-data: sample %d's address\n", i); return -1; }
+  }
+  for (int i = 0; i <= CtAudioInstrumentCount(&r); i++)
+    for (int w = 0; w < 3; w++, items++)
+      if (sndInstrWord(&r, (unsigned)i, w) != sndInstrWord(&c, (unsigned)i, w)) { fprintf(stderr, "snd-data: instrument %d word %d\n", i, w); return -1; }
+  for (int sb = 0; sb < 2; sb++, items++) {
+    unsigned nr = 0, nc = 0;
+    const uint8_t* x = sndSfxData(&r, sb, &nr); const uint8_t* y = sndSfxData(&c, sb, &nc);
+    if (!sndCmpBytes("effect set", sb, x, (int)nr, y, (int)nc)) return -1;
+  }
+  for (int s = 0; s < 256; s++, items++)
+    if (sndException(&r, s) != sndException(&c, s)) { fprintf(stderr, "snd-data: exception list, song %d\n", s); return -1; }
+  for (int i = 0; i < 8; i++, items += 3)
+    if (ldFdDmap(&r, i) != ldFdDmap(&c, i) || ldFdTable(&r, 0, i) != ldFdTable(&c, 0, i)
+        || ldFdTable(&r, 1, i) != ldFdTable(&c, 1, i)) { fprintf(stderr, "snd-data: FD/C1EE channel %d\n", i); return -1; }
+  return items;
+}
 int CtAudioSongCount(const CtAudio* a) {
+  if (a && a->snd) { uint32_t n = 0; const uint8_t* m = sndGet(a, CT_ASSET_SND_MISC, 0, &n); return m && n ? m[0] : 0; }
   if (!a || !a->rom || (long)C7_SONGCOUNT >= a->romLen) return 0;
   return a->rom[C7_SONGCOUNT];
 }
 int CtAudioInstrumentCount(const CtAudio* a) {
+  if (a && a->snd) return a->ninst;
   if (!a || !a->rom) return 0;
   return (int)((C7_LOOPOFF - C7_SAMPLEPTR) / 3);        // the table's own extent, not a constant
 }
 unsigned CtAudioHeapBase(const CtAudio* a) {
+  if (a && a->snd) return (unsigned)a->size[2] + 0x4700u;   // block 2's length past its destination
   if (!a || !a->rom || (long)(C7_IPL_BLK2 + 2) > a->romLen) return 0;
   return (unsigned)(a->rom[C7_IPL_BLK2] | (a->rom[C7_IPL_BLK2 + 1] << 8)) + 0x4700u;
+}
+// One of an instrument's three words ($C7:0BA4 loop, $C7:0C20 / $C7:0C9C the $1F40 / $1FC0 params), at the loader's
+// own index `(id - 1) * 2`: id 0 reads index -1, the long,X wrap into bank $C8.
+static unsigned sndInstrWord(const CtAudio* a, unsigned id, int which) {
+  if (a->snd) {
+    uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_INSTR, id & 0xFFFF, &n);
+    return e && n >= 6 ? (unsigned)(e[2 * which] | (e[2 * which + 1] << 8)) : 0;
+  }
+  static const unsigned tbl[3] = { C7_LOOPOFF, C7_PARAM1F40, C7_PARAM1FC0 };
+  long tp = (long)tbl[which] + (long)(((id - 1) * 2) & 0xFFFF);
+  return (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+}
+// The song's percussion block (36 bytes, ARAM $F120).
+static const uint8_t* sndPerc(const CtAudio* a, int songId) {
+  if (a->snd) { uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SONG, (uint32_t)songId, &n); return e && n >= 70 ? e + 32 : NULL; }
+  long p = (long)C7_PERC + (long)songId * 36;
+  return (p + 36 <= a->romLen) ? a->rom + p : NULL;
+}
+// An effect set ([u16 len][bytes]): set B is the battle's.
+static const uint8_t* sndSfxData(const CtAudio* a, int setB, unsigned* len) {
+  if (a->snd) { uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SFXSET, setB ? 1u : 0u, &n); *len = n; return e; }
+  long src = setB ? (long)C7_SFXSET_B : (long)C7_SFXSET_A;
+  *len = (unsigned)(a->rom[src] | (a->rom[src + 1] << 8));
+  return a->rom + src + 2;
+}
+// $C7:0734's song-exception list: 1 when the song is on it.
+static int sndException(const CtAudio* a, int songId) {
+  if (a->snd) {
+    uint32_t n = 0; const uint8_t* m = sndGet(a, CT_ASSET_SND_MISC, 0, &n);
+    for (uint32_t k = 1; m && k < n; k++) { if (m[k] & 0x80) break; if (m[k] == (uint8_t)songId) return 1; }
+    return 0;
+  }
+  for (long p = 0x70AD8; p < a->romLen; p++) {
+    if (a->rom[p] & 0x80) break;                                // bit7 = end of list
+    if (a->rom[p] == (uint8_t)songId) return 1;
+  }
+  return 0;
 }
 static long c7ptr24(const CtAudio* a, unsigned tbl, int idx) {   // a 24-bit bank:addr -> flat offset
   long p = (long)tbl + (long)idx * 3;
@@ -599,6 +731,12 @@ static long c7ptr24(const CtAudio* a, unsigned tbl, int idx) {   // a 24-bit ban
 // A [u16 len][payload] block: returns the payload pointer and writes its length. NULL on any bound
 // failure -- callers must not fall back to a table length, because the ROM never does.
 const uint8_t* CtAudioSeqBlock(const CtAudio* a, int songId, int* lenOut) {
+  if (a && a->snd) {
+    uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SEQ, (uint32_t)songId, &n);
+    if (!e || n < 5) return NULL;
+    if (lenOut) *lenOut = (int)n - 5;                  // [addr u16] + the block + the 3 bytes read past it
+    return e + 2;
+  }
   long p = c7ptr24(a, C7_SEQPTR, songId);
   if (p < 0 || p + 2 > a->romLen) return NULL;
   int n = a->rom[p] | (a->rom[p + 1] << 8);
@@ -608,6 +746,12 @@ const uint8_t* CtAudioSeqBlock(const CtAudio* a, int songId, int* lenOut) {
 }
 const uint8_t* CtAudioSampleBlock(const CtAudio* a, int instr, int* lenOut) {
   if (instr < 1 || instr > CtAudioInstrumentCount(a)) return NULL;   // the table is 1-based
+  if (a->snd) {
+    uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SAMPLE, (uint32_t)instr, &n);
+    if (!e || n < 2) return NULL;
+    if (lenOut) *lenOut = (int)n - 2;
+    return e + 2;
+  }
   long p = c7ptr24(a, C7_SAMPLEPTR, instr - 1);
   if (p < 0 || p + 2 > a->romLen) return NULL;
   int n = a->rom[p] | (a->rom[p + 1] << 8);
@@ -616,11 +760,19 @@ const uint8_t* CtAudioSampleBlock(const CtAudio* a, int instr, int* lenOut) {
   return a->rom + p + 2;
 }
 const uint8_t* CtAudioInstrSet(const CtAudio* a, int songId) {
+  if (a && a->snd) { uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SONG, (uint32_t)songId, &n); return e && n >= 70 ? e : NULL; }
   long p = (long)C7_INSTSET + (long)songId * 32;
   return (a && a->rom && p + 32 <= a->romLen) ? a->rom + p : NULL;
 }
 // The per-song record: EDL = byte0's low nibble (the echo delay), and byte1 the opaque $004D scalar.
 int CtAudioSongRecord(const CtAudio* a, int songId, int* edl, int* scalar) {
+  if (a && a->snd) {
+    uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SONG, (uint32_t)songId, &n);
+    if (!e || n < 70) return 0;
+    if (edl) *edl = e[68] & 0x0F;
+    if (scalar) *scalar = e[69];
+    return 1;
+  }
   long p = (long)C7_REC + (long)songId * 2;
   if (!a || !a->rom || p + 2 > a->romLen) return 0;
   if (edl)    *edl    = a->rom[p] & 0x0F;
@@ -771,7 +923,8 @@ static void sndCmdBlk(CtAudio* a, uint8_t* m, unsigned dst, uint8_t cmd) {
 // the bank bump where Y wraps). The size word's own two INYs have the same `BNE / INC $14`.
 enum { SND_SAMPLE = 0, SND_SEQ = 1 };
 static void sndStream(CtAudio* a, uint8_t* m, const uint8_t* src, int n, int kind) {
-  long y = ((long)(src - a->rom) - 2) & 0xFFFF;                     // Y at the size word
+  long y = a->snd ? (long)(src[-2] | (src[-1] << 8))               // Y at the size word (the container keeps its address)
+                  : ((long)(src - a->rom) - 2) & 0xFFFF;
   long head = 0;                                                    // the size word: LDA [$12],Y / STA / (STA / ADC / STA) / INY / BNE
   for (int k = 0; k < 2; k++) { y = (y + 1) & 0xFFFF; head += I_LDA_DPIY_ROM + I_LDA_DP + I_IMPL + (y ? I_BR_T : I_BR_NT + I_INC_DP); }
   int slow = (y + n) > 0xFFFF;                                      // ADC $0C carries: the block crosses its bank
@@ -860,10 +1013,9 @@ static void sndSfxSet(CtAudio* a, uint8_t* m) {
     SM8(m, 0x1E84, 0xE0);
   }
   int setB = M8(m, 0x1E10) != 0;
-  long src = setB ? (long)C7_SFXSET_B : (long)C7_SFXSET_A;
-  unsigned x = (unsigned)(a->rom[src] | (a->rom[src + 1] << 8));
+  unsigned x = 0; const uint8_t* sfx = sndSfxData(a, setB, &x);
   ldRun(I_LDA_DP + (setB ? I_BR_T : I_BR_NT) + 2 * (5 * RA + I_LDA_DP) + 3 * (I_IMM8 + I_LDA_DP) + I_LDA_DP16 + I_IMM16);   // 0952-0970
-  const uint8_t* p = a->rom + src + 2;
+  const uint8_t* p = sfx;
   do {
     for (int k = 0; k < 3; k++) { ldRun(I_LDA_DPIY_ROM + I_STA_BB); Wc(a, 1 + k, p[k]); ldRun(I_IMPL); }   // LDA [$12],Y / STA $214x / INY
     ldRun(I_LDA_DP + I_JSR);                                                // LDA $84 / JSR C7/09DA
@@ -951,8 +1103,15 @@ static int sndDefrag(CtAudio* a, uint8_t* m) {
         sndTok(a, M8(m, 0x1E84));                       // 02EE LDA $84 / 02F0 JSR C7/09DA
         int xr = ((M8(m, 0x1E05) + 1) & 0xFF) << 5;     // 02F8 LDA $05 / INC A / AND #00FF / ASL x5
         for (int yr = 0x20; yr > 0; yr -= 2, xr -= 2) { // 031A DEX / DEX / DEY / DEY / BNE
-          long tp = (long)0x70E0F + xr;                 // 0304 LDA $C70E0F,X
-          unsigned v = (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+          unsigned v = 0;                               // 0304 LDA $C70E0F,X: the song's own instrument list
+          if (a->snd) {                                 //   (word xr/2 - 1 of the set $C7:0E11 + ($05 + 1) * 32 - 32)
+            const uint8_t* set = xr >= 2 ? CtAudioInstrSet(a, (xr >> 5) - 1) : NULL;
+            int w = ((xr - 2) & 0x1F) >> 1;
+            if (set) v = (unsigned)(set[2 * w] | (set[2 * w + 1] << 8));
+          } else {
+            long tp = (long)0x70E0F + xr;
+            v = (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+          }
           SM16(m, 0x1EFE + yr, v);                      // 0308
           SM16(m, 0x1F1E + yr, v);                      // 030B
           SM16(m, 0x1E1E + yr, 0);                      // 0311
@@ -1042,7 +1201,7 @@ static void sndCull(uint8_t* m) {
 // Returns 1 when the song was loaded, 0 when the driver ABORTED it ($C7:0A80) or the load hit an
 // unported boundary, -1 on a structural refusal. Blocking, by the ROM's own design.
 int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
-  if (!a || !a->ready || !m || !a->rom) return -1;   // m == NULL is a real case: the overworld has no VM
+  if (!a || !a->ready || !m || (!a->rom && !a->snd)) return -1;   // m == NULL is a real case: the overworld has no VM
   g_sndUnits = g_sndBytes = g_sndBlocks = 0; g_sndSpcCycles = 0; g_sndSettleCycles = 0; g_sndMovedBytes = 0;
   int nsong = CtAudioSongCount(a);
   if (songId < 0 || songId >= nsong) return -1;                 // $C7:01A5 CMP $C70AE9 / BCS -> drop
@@ -1051,10 +1210,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   // ---- $C7:0734: the song-exception scan, then bit2 for cmd >= $14 ------------------------
   // Implemented as the SCAN, not as "inert": rom[$C7:0AD8] happens to start with $FF on this ROM so
   // the list terminates immediately, but a port that hardcoded that would be encoding an accident.
-  for (long p = 0x70AD8; p < a->romLen; p++) {
-    if (a->rom[p] & 0x80) break;                                // bit7 = end of list
-    if (a->rom[p] == (uint8_t)songId) { SM8(m, 0x1E00, M8(m, 0x1E00) | 4); break; }
-  }
+  if (sndException(a, songId)) SM8(m, 0x1E00, M8(m, 0x1E00) | 4);
   if (cmd >= 0x14) SM8(m, 0x1E00, M8(m, 0x1E00) | 4);
 
   // ---- $C7:0A39: the record, the ECHO-DELAY switch, the port block, the token seed, the abort --
@@ -1214,8 +1370,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
       }
       if (found) {
         unsigned base = M16(m, 0x1E60 + y);
-        long lp = (long)C7_LOOPOFF + (long)(((id - 1) * 2) & 0xFFFF);
-        unsigned loop = (lp + 2 <= a->romLen) ? (unsigned)(a->rom[lp] | (a->rom[lp + 1] << 8)) : 0;
+        unsigned loop = sndInstrWord(a, id, 0);
         SM16(m, ptr, base); SM16(m, ptr + 2, (base + loop) & 0xFFFF);
         ldRun(I_PHX16 + 3 * I_IMPL + I_ABSX_W16_X16 + I_STA_DPI16 + 2 * I_INC_DP16 + I_IMPL + I_LONGX_ROM16 + I_STA_DPI16
               + I_PLX16 + I_BR_T);                              // 039E PHX / DEC / ASL / TAX / LDA $1E60,Y / STA ($12) / INC $12 x2 / CLC / ADC / STA ($12) / PLX / BRA
@@ -1236,15 +1391,13 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   { uint8_t buf[32];
     for (int k = 0; k < 16; k++) {
       unsigned id = M16(m, 0x1F00 + k * 2);
-      long tp = (long)C7_PARAM1F40 + (long)(((id - 1) * 2) & 0xFFFF);
-      unsigned v = (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+      unsigned v = sndInstrWord(a, id, 1);
       buf[k * 2] = (uint8_t)v; buf[k * 2 + 1] = (uint8_t)(v >> 8);
     }
     sndHeadLit(a, m, 0x1F40, 0x02, I_SEP); sndParamStream(a, m, buf);
     for (int k = 0; k < 16; k++) {
       unsigned id = M16(m, 0x1F00 + k * 2);
-      long tp = (long)C7_PARAM1FC0 + (long)(((id - 1) * 2) & 0xFFFF);
-      unsigned v = (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+      unsigned v = sndInstrWord(a, id, 2);
       buf[k * 2] = (uint8_t)v; buf[k * 2 + 1] = (uint8_t)(v >> 8);
     }
     sndHeadLit(a, m, 0x1FC0, 0x02, I_SEP); sndParamStream(a, m, buf);
@@ -1292,8 +1445,8 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
                sndStream(a, m, seq, n, SND_SEQ); } }
 
   // ---- $C7:059A: the 36-byte per-song block -> ARAM $F120 ------------------------------------
-  { long p = (long)C7_PERC + (long)songId * 36;
-    if (p + 36 <= a->romLen) sndPercBlock(a, m, a->rom + p); }
+  { const uint8_t* perc = sndPerc(a, songId);
+    if (perc) sndPercBlock(a, m, perc); }
 
   // ---- $C7:0601: GO. Without this final $E0 the driver never starts playing. ------------------
   sndMark("go", 0);
@@ -1339,7 +1492,7 @@ int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
   ldRun(I_STA_BB);
   for (;;) { ldRun(I_CMP_BB); if (Rc(a, 0) == 0xCC) { ldRun(I_BR_NT); break; } ldRun(I_BR_T); ld.polls++; }   // 0078
   for (int b = 0; b < C7_NBLOCKS; b++) {
-    const uint8_t* src = a->rom + C7_BASE + a->src[b] + 2;
+    const uint8_t* src = a->blk[b];
     // 007D LDA #00 / XBA / LDA $C70010,X / STA $12 / LDA $C70011,X / STA $13 / LDA #C7 / STA $14 / LDY #0 /
     // LDA [$12],Y / CLC / ADC #02 / STA $0C / INY / LDA [$12],Y / ADC #00 / STA $0D / INY
     ldRun(I_IMM8 + I_XBA + 30 + I_LDA_DP + 30 + I_LDA_DP + I_IMM8 + I_LDA_DP + I_IMM16 + I_LDA_DPIY_ROM + I_IMPL +
@@ -1482,14 +1635,19 @@ static void measureInit(void) {
   }
 }
 
-CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
-  if (!rom || romLen < C7_BASE + 0x6000) return NULL;
+CtAudio* CtAudioInit(const uint8_t* rom, long romLen) { return CtAudioInitWith(rom, romLen, NULL); }
+
+CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) {
+  if (snd && !CtAssetGet(snd, CT_ASSET_SND_BOOT, 0, NULL)) snd = NULL;   // a container without the sound: the ROM
+  if (!snd && (!rom || romLen < C7_BASE + 0x6000)) return NULL;
   measureInit();
   CtAudio* a = (CtAudio*)calloc(1, sizeof *a);
   if (!a) return NULL;
   a->shell = (Snes*)calloc(1, sizeof(Snes));          // palTiming = false = NTSC
   if (!a->shell) { free(a); return NULL; }
   a->rom = rom; a->romLen = romLen;
+  a->snd = snd;
+  if (snd) while (CtAssetGet(snd, CT_ASSET_SND_SAMPLE, (uint32_t)(a->ninst + 1), NULL)) a->ninst++;
   a->evenFrame = 1;                                    // power-on: the PPU flips its field at (0,0), the first frame is even
   a->engineMode = 0; a->postLine = 12;
   a->rulePostAt = LD_PAD_WAIT; a->ruleNmiWait = LD_PAD_WAIT;   // the rule: the field's main loop, after its NMI's pad latch

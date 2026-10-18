@@ -59,6 +59,19 @@ T_WORLDINTROSEED = 27  # id = world; the NEW-GAME INTRO object blocks (64 x 0x40
 # T_STRINGS ids: 0=dictionary, 1=item names, 2=world names, 3=location names
 S_DICT, S_ITEMS, S_WORLD, S_LOCATIONS = 0, 1, 2, 3
 
+# --- the sound (disasm/notes/audio_song_data.md, audio_boot.md; src/audio.c reads them through CtSndData) ---
+T_SND_BOOT = 28    # id = upload block 0-5: [ARAM dest u16] + the block's bytes (block 0 = the driver: until it is native)
+T_SND_SEQ = 29     # id = song: its sequence block ($C7:0D18 + id*3 -> [u16 len][bytes]): [addr u16] + the bytes + the 3
+                   #   bytes after it (the upload's last unit reads past the block, size/3 + 1 units; the address -- the
+                   #   size word's, low 16 bits -- prices the stream: a block that crosses its 64 KB bank takes the slow loop)
+T_SND_SAMPLE = 30  # id = instrument 1..N: its BRR sample block ($C7:0AEA + (id-1)*3): [addr u16] + the bytes
+T_SND_INSTR = 31   # id = instrument 0..N: [loop u16][$1F40 param u16][$1FC0 param u16] ($C7:0BA4 / 0C20 / 0C9C at
+                   #   (id-1)*2; id 0 = the empty entry, whose index -1 wraps the long,X read into bank $C8)
+T_SND_SONG = 32    # id = song: its instrument list (32, $C7:0E11) + percussion (36, $C7:1871) + record (2, $C7:241D)
+T_SND_SFXSET = 33  # id 0 = set A (field, $C7:4309), 1 = set B (battle, $C7:5B0B): the [u16 len] block's bytes
+T_SND_MISC = 34    # id 0: [song count u8] + the song-exception list ($C7:0AD8, through its bit-7 end)
+                   # id 1: FD/C1EE's HDMA program as the loader clock reads it: DMAP x8, set A tables x8, set B x8 (u16)
+
 def _strlist(strings):
     """Serialize a list of UTF-8 strings: [count u16][ {u16 len, bytes} ... ]."""
     b = bytearray(struct.pack('<H', len(strings)))
@@ -413,6 +426,43 @@ def pack_sprite_anims(rom, T):
 def pack_mover(rom, T):
     yield (T_MOVER, 0, rom[0xF300:0xF700] + rom[0xF700:0xF800] + rom[0xF800:0xF940])
 
+def pack_sound(rom, T):
+    c7 = 0x70000
+    w = lambda o: rom[o] | rom[o + 1] << 8
+    p24 = lambda o: ((rom[o + 2] - 0xC0) << 16) | w(o)
+    src, dst = c7 + 0x10, c7 + 0x1C
+    for b in range(6):                                   # the IPL upload: sources $C7:0010, destinations $C7:001C
+        at = c7 + w(src + 2 * b)
+        yield (T_SND_BOOT, b, struct.pack('<H', w(dst + 2 * b)) + bytes(rom[at + 2:at + 2 + w(at)]))
+    nsong = rom[c7 + 0x0AE9]
+    for s_ in range(nsong):
+        at = p24(c7 + 0x0D18 + 3 * s_)
+        yield (T_SND_SEQ, s_, struct.pack('<H', at & 0xFFFF) + bytes(rom[at + 2:at + 2 + w(at) + 3]))
+        yield (T_SND_SONG, s_, bytes(rom[c7 + 0x0E11 + 32 * s_:c7 + 0x0E11 + 32 * s_ + 32])
+               + bytes(rom[c7 + 0x1871 + 36 * s_:c7 + 0x1871 + 36 * s_ + 36])
+               + bytes(rom[c7 + 0x241D + 2 * s_:c7 + 0x241D + 2 * s_ + 2]))
+    ninst = (0x0BA4 - 0x0AEA) // 3                       # the pointer table's own extent
+    for i in range(1, ninst + 1):
+        at = p24(c7 + 0x0AEA + 3 * (i - 1))
+        yield (T_SND_SAMPLE, i, struct.pack('<H', at & 0xFFFF) + bytes(rom[at + 2:at + 2 + w(at)]))
+    for i in range(0, ninst + 1):
+        k = ((i - 1) * 2) & 0xFFFF                       # id 0: 0xFFFE, the long,X wrap into bank $C8
+        yield (T_SND_INSTR, i, struct.pack('<HHH', w(c7 + 0x0BA4 + k), w(c7 + 0x0C20 + k), w(c7 + 0x0C9C + k)))
+    for k, at in enumerate((c7 + 0x4309, c7 + 0x5B0B)):
+        yield (T_SND_SFXSET, k, bytes(rom[at + 2:at + 2 + w(at)]))
+    exc = bytearray()
+    o = c7 + 0x0AD8
+    while True:
+        exc.append(rom[o])
+        if rom[o] & 0x80:
+            break
+        o += 1
+    yield (T_SND_MISC, 0, bytes([nsong]) + bytes(exc))
+    fd = 0x3D0000
+    yield (T_SND_MISC, 1, bytes(rom[fd + 0xC1F8 + 4 * i] for i in range(8))
+           + b''.join(struct.pack('<H', w(fd + 0xC26E + 5 * i)) for i in range(8))
+           + b''.join(struct.pack('<H', w(fd + 0xC298 + 5 * i)) for i in range(8)))
+
 def pack_font(rom, T):
     """Dialogue VWF font v2, chars 0xA0-0xF3 (84 glyphs), 12x12 px 2bpp. The ROM stores the
     LEFT 8px as 24-byte cells (0x3F2060 + ch*24) and the RIGHT 4px nibble-packed per char
@@ -618,7 +668,7 @@ PACKERS = [pack_scene_palettes, pack_sprite_palettes, pack_scene_headers,
            pack_pal_anims, pack_tileset12, pack_tileset3, pack_maps,
            pack_strings, pack_dialogue, pack_portraits, pack_namesprites, pack_menufont,
            pack_actors, pack_collision, pack_exits, pack_sprite_anims, pack_font, pack_mover,
-           pack_sprites, pack_scripts, pack_world]
+           pack_sprites, pack_scripts, pack_world, pack_sound]
 
 def build(rom):
     T = {

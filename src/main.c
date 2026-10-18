@@ -16530,6 +16530,18 @@ int main(int argc, char** argv) {
     if (!strcmp(argv[i], "--aram")) { doAram = 1; continue; }
     if (!strcmp(argv[i], "--audiotest")) { doAudioTest = 1; continue; }
     if (!strcmp(argv[i], "--songdirs")) { doSongDirs = 1; continue; }
+    // --sndassets <ct_assets.dat>: every datum the sound loader takes, from the ROM and from the container's CT_ASSET_SND_*
+    // entries side by side (src/audio.c CtAudioDataCompare) -- `snd-data: N items identical`, or the first difference.
+#ifndef CT_ORACLE_ONLY      // (the slim oracle links neither the assets nor the audio)
+    if (!strcmp(argv[i], "--sndassets") && i + 1 < argc) {
+      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("snd-data: cannot open %s\n", argv[i + 1]); return 2; }
+      long n = CtAudioDataCompare(rimg, rl, &as);
+      if (n < 0) { printf("snd-data: DIFFERS (stderr says where)\n"); return 1; }
+      printf("snd-data: %ld items identical (the ROM's and the container's)\n", n);
+      return 0;
+    }
+#endif
     if (!strcmp(argv[i], "--songload") && i + 1 < argc) { songLoadSpec = argv[++i]; continue; }
     if (!strcmp(argv[i], "--at") && i + 1 < argc) { aramAt = argv[++i]; continue; }
     if (!strcmp(argv[i], "--scene") && i + 1 < argc) { sceneIdx = atoi(argv[++i]); continue; }

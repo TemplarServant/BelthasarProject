@@ -11460,7 +11460,9 @@ int main(int argc, char** argv) {
         audioBuf = (int16_t*)calloc((size_t)audioSamplesPerFrame * 2, sizeof(int16_t));
       }
       long arl = 0; const uint8_t* arom = CtBattleRom(&arl);   // the same cached ROM the battle gfx use
-      if (arom) audio = CtAudioInit(arom, arl);
+      // the sound's data from the asset container (CT_ASSET_SND_*: the driver, songs, samples, effect sets) when it holds
+      // them -- the ROM is then not read for the sound; CT_AUDIO_FROM_ROM=1 takes them from the ROM (the comparison)
+      audio = CtAudioInitWith(arom, arl, getenv("CT_AUDIO_FROM_ROM") ? NULL : &assets);
       if (audio && ruleSeeded) CtAudioSeedFromApu(audio, seedSpc->apu);   // (the rule: the image's own SPC)
       if (audio && CtAudioRuleOn() && !g_ruleAudio) CtAudioSetRuleOff(audio, 1);   // (the rule: not this SPC)
       // --loadstate with the snapshot's SPC beside it (`<state>.apu`, written by F5): the restored WRAM already holds the
@@ -11508,8 +11510,8 @@ int main(int argc, char** argv) {
         if (stateApu[0] && !CtAudioLoadState(audio, stateApu))
           fprintf(stderr, "[loadstate] %s did not load -- the SPC stays cold (the music may break)\n", stateApu);
         if (audioDev) SDL_PauseAudioDevice(audioDev, 0);
-        fprintf(stderr, "[audio] SPC700 up: driver in ARAM, %d Hz, %d samples/frame\n",
-                audioHz, audioSamplesPerFrame);
+        fprintf(stderr, "[audio] SPC700 up: driver in ARAM, %d Hz, %d samples/frame, the sound's data from %s\n",
+                audioHz, audioSamplesPerFrame, CtAudioFromAssets(audio) ? "the asset container" : "the ROM");
       } else {
         fprintf(stderr, "[audio] no ROM (CT_ROM) or upload incomplete -- silent\n");
         if (audioDev) SDL_CloseAudioDevice(audioDev);

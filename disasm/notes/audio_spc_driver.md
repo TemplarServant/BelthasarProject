@@ -320,8 +320,15 @@ The C port names every field (`src/sound/driver.c`: D_ the direct page, P_ page 
 
 2. **The mixer**: `snes/dsp.c`'s voices, envelopes, echo and noise behind the voice operations, sample-exact against
    the S-DSP (in parallel).
-3. **The assets**: songs (tracks), samples (BRR), instruments (tuning, ADSR), percussion and the effect sets made by the
-   extractor; block 0's tables (`$15CC`, `$16FF/$1710`, `$1D6D-$1DEE`) among them; the loader reads them instead of bank
-   `$C7`. The uploads' protocol cancels out between two C halves, but the FRAMES the game waits on a busy SPC are part
-   of the game under the rule (CLAUDE.md, "The SPC under the rule"): the native model must charge exactly those.
+3. **The assets** -- the loader's side DONE 2026-10-18: `assets/extract_assets.py pack_sound` makes CT_ASSET_SND_BOOT
+   (the six upload blocks), _SEQ (each song's sequence, with its ROM address -- the upload's bank-crossing loop prices
+   it -- and the 3 bytes its last unit reads past the block), _SAMPLE (BRR, with its address), _INSTR (loop / `$1F40` /
+   `$1FC0` words, id 0 the bank-`$C8` wrap), _SONG (instrument list, percussion, record), _SFXSET (both sets) and _MISC
+   (the song count and exception list; FD/C1EE's channels for the loader clock). `CtAudioInitWith(rom, len, &assets)`
+   reads them when the container holds them (Belthasar does; `CT_AUDIO_FROM_ROM=1` is the reference). Proved by
+   `ct.exe --sndassets` (957 items identical) and `tools/snd_assets_cmp.py` (the attract's S-DSP writes and output
+   identical); the quick tier passes with the sound from the container. Still to do with step 5: block 0's tables
+   (`$15CC`, `$16FF/$1710`, `$1D6D-$1DEE`) as the C driver's own data -- today they reach it in the uploaded block 0,
+   from the container. The uploads' protocol cancels out between two C halves, but the FRAMES the game waits on a busy
+   SPC are part of the game under the rule (CLAUDE.md, "The SPC under the rule"): the native model must charge them.
 4. **Belthasar without the SPC700** and without bank `$C7`.

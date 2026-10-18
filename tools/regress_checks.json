@@ -46543,6 +46543,50 @@
         }
       ],
       "notes": "C0/21E1'S ENTRIES 4 AND 5 (docs/ROADMAP.md F19). `FF 97` (C0/4191: FF 90's stores, $0139 = 04) and `FF 98` ($0139 = 05) hand the main loop the iris's circle as the COLOUR window: C0/232A grows it (WOBJSEL 20, CGWSEL 12, TMW 17, `TSB $28`, the buffer by $53, `LDA #01 / JSL C3/0008`), C0/238A shrinks it and at radius 0 runs C0/23E2. Graded from a quiet capture (loc 005) with scene 051's operands poked on both sides at frame 150; every frame's $0139 / $013C / $0153 / $0128, the shadows and both window buffers. Like 051 the room keeps BG3 on the sub screen (TM 13 / TS 04): the circle limits that sum (field.c fieldColWindowApply on the bake's two screens, scene.c CtFieldSceneScreens), adds the fixed blue where the sub screen is transparent, and F1's $0BE0 = 17 stays after the teardown -- the bake follows $0BE0 (CtFieldSceneSetEffect) and the lead's palette-4+ pixels take BG3's sub pixel. Six pictures at the field's P + 2. FF 99 / FF 9A (C0/2514 / 2589, entries 7/8 and 9/0A: the fixed circles round (7C, 06) with their screen set-up and $1D8D-$1D92) are graded on their state the same way; their picture is not drawn yet (live TM / TS, per-layer window masks, $1D8D's scroll words)."
+    },
+    {
+      "name": "snd-assets-container-equals-rom",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/snd_assets_cmp.py",
+        "4000"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "snd-assets: f4000 228719 S-DSP writes and 2136534 output samples from the container == the ROM's (sha1 1e0be4e77385)"
+      ],
+      "pin": [
+        "^snd-assets: "
+      ],
+      "timeout_s": 300,
+      "note_pass": "the sound's data from ct_assets.dat (CT_ASSET_SND_*) drives the SPC exactly as the ROM's: the attract's first 4000 frames write the same S-DSP registers on the same cycles and output the same samples",
+      "notes": "The user, 2026-10-18 (translated from Portuguese): once ct_assets.dat is extracted the ROM is needed for nothing, through decoded assets, the sound first (memory rom-free-runtime-goal). assets/extract_assets.py pack_sound packs what src/audio.c's loader read from bank $C7 (and FD/C1EE's HDMA program for its clock); CtAudioInitWith reads them when the container holds them. A sequence keeps its ROM address (the upload's bank-crossing loop prices it) and the 3 bytes its last unit reads past the block. CT_AUDIO_FROM_ROM=1 is the reference side. A difference is a packing or accessor defect: never re-pin it."
+    },
+    {
+      "name": "snd-assets-data-identical",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--sndassets",
+        "ct_assets.dat"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "snd-data: 957 items identical (the ROM's and the container's)"
+      ],
+      "pin": [
+        "^snd-data: "
+      ],
+      "timeout_s": 60,
+      "note_pass": "every datum the sound loader takes -- the driver's six blocks, each song's sequence (with the 3 bytes its upload reads past it and the address that prices it), instrument list, percussion and record, each sample and its address, each instrument's three words (with id 0's bank-$C8 wrap), both effect sets, the exception list for every song id, FD/C1EE's channels -- is the same from ct_assets.dat as from the ROM",
+      "notes": "src/audio.c CtAudioDataCompare: two data sources side by side, no SPC. Mutations checked by hand 2026-10-18 (a sample byte, a sequence's address, a sequence's tail byte, instrument 0's wrap word, an FD table word): each is named at its item. A difference is a packing defect (assets/extract_assets.py pack_sound) or an accessor's: never re-pin it."
     }
   ],
   "excluded": [
