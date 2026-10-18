@@ -11,6 +11,7 @@
 CT_TBL_EXTERN CT_TBL_CONST uint8_t techTabTiles[12][64];
 CT_TBL_EXTERN CT_TBL_CONST uint8_t techTabPal[2][16][3];
 CT_TBL_EXTERN CT_TBL_CONST uint16_t techTabX[3];
-#define TECH_TAB_Y 24
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_TECH_TAB_Y;
+#define TECH_TAB_Y ctDef_TECH_TAB_Y
 #endif
 #endif

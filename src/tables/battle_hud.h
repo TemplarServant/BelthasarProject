@@ -8,10 +8,13 @@
 #ifndef CT_BATTLE_HUD_H
 #define CT_BATTLE_HUD_H
 #include <stdint.h>
-#define CT_BHUD_Y0   160
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_BHUD_Y0;
+#define CT_BHUD_Y0 ctDef_CT_BHUD_Y0
 #define CT_BHUD_H     48
-#define CT_BHUD_Y0_TOP 8
-#define CT_BHUD_TILE0 0x100
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_BHUD_Y0_TOP;
+#define CT_BHUD_Y0_TOP ctDef_CT_BHUD_Y0_TOP
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_BHUD_TILE0;
+#define CT_BHUD_TILE0 ctDef_CT_BHUD_TILE0
 CT_TBL_EXTERN CT_TBL_CONST int ctBattleHudRowY[7];
 CT_TBL_EXTERN CT_TBL_CONST int ctBattleHudBoxEnemy[2][2];
 CT_TBL_EXTERN CT_TBL_CONST int ctBattleHudBoxCmd[3][2];

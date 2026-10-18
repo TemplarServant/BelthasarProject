@@ -21,15 +21,18 @@ CT_TBL_EXTERN CT_TBL_CONST CtAnimKeyframe ctBattleAnimKf[CT_ANIM_NKF];
 CT_TBL_EXTERN CT_TBL_CONST uint8_t ctBattleAnimTiles[CT_ANIM_NKF][CT_ANIM_NTILE][32];
 CT_TBL_EXTERN CT_TBL_CONST uint16_t ctBattleAnimPal[8][16];
 typedef struct { int16_t dx; int8_t dy; int8_t poseId; } CtAnimStep;
-#define CT_CRONO_ATK_F0 440
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_CRONO_ATK_F0;
+#define CT_CRONO_ATK_F0 ctDef_CT_CRONO_ATK_F0
 #define CT_CRONO_ATK_N 91
 CT_TBL_EXTERN CT_TBL_CONST CtAnimStep ctCronoAttackTraj[CT_CRONO_ATK_N];
 typedef struct { int16_t dx; int8_t dy; uint8_t arm; uint8_t footDY; } CtGatoIdleStep;
-#define CT_GATO_IDLE_F0 384
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_GATO_IDLE_F0;
+#define CT_GATO_IDLE_F0 ctDef_CT_GATO_IDLE_F0
 #define CT_GATO_IDLE_N 121
 CT_TBL_EXTERN CT_TBL_CONST CtGatoIdleStep ctGatoIdleTraj[CT_GATO_IDLE_N];
 typedef struct { int16_t dx; int8_t dy; uint8_t state; } CtCronoBobStep;
-#define CT_CRONO_BOB_F0 400
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_CRONO_BOB_F0;
+#define CT_CRONO_BOB_F0 ctDef_CT_CRONO_BOB_F0
 #define CT_CRONO_BOB_N 105
 CT_TBL_EXTERN CT_TBL_CONST CtCronoBobStep ctCronoIdleBob[CT_CRONO_BOB_N];
 #endif

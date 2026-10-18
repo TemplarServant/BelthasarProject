@@ -8,7 +8,8 @@
 #pragma once
 #define CT_PLACARD_N 6
 #define CT_PLACARD_MAXW 60
-#define CT_PLACARD_H 16
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_PLACARD_H;
+#define CT_PLACARD_H ctDef_CT_PLACARD_H
 CT_TBL_EXTERN CT_TBL_CONST unsigned short ctPlacardEra[CT_PLACARD_N][3];
 CT_TBL_EXTERN CT_TBL_CONST unsigned char ctPlacardPx[CT_PLACARD_N][16 * CT_PLACARD_MAXW * 4];
 #endif

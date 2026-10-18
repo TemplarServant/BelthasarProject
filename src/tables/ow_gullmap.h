@@ -10,6 +10,7 @@
 #include <stdint.h>
 typedef struct { uint16_t name; uint8_t slot; } CtOwGullFrame;
 CT_TBL_EXTERN CT_TBL_CONST CtOwGullFrame ctOwGullMap[3];
-#define CT_OWGULLMAP_N 3
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_OWGULLMAP_N;
+#define CT_OWGULLMAP_N ctDef_CT_OWGULLMAP_N
 #endif
 #endif

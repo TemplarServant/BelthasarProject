@@ -7,8 +7,11 @@
 #include "ct_tables.h"
 #ifndef CT_NG_PAN_H
 #define CT_NG_PAN_H
-#define NG_PAN_FRAMES 1533
-#define NG_PAN_START_X 376
-#define NG_PAN_START_Y 331
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_NG_PAN_FRAMES;
+#define NG_PAN_FRAMES ctDef_NG_PAN_FRAMES
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_NG_PAN_START_X;
+#define NG_PAN_START_X ctDef_NG_PAN_START_X
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_NG_PAN_START_Y;
+#define NG_PAN_START_Y ctDef_NG_PAN_START_Y
 #endif
 #endif

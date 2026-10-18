@@ -14,7 +14,8 @@ CT_TBL_EXTERN CT_TBL_CONST uint16_t ctMenuChromeLoaderTM[32*CT_MENU_LOADER_TMH];
 typedef struct { short y0, y1; unsigned short vofs; } CtTbl_ctMenuLoaderBand;
 CT_TBL_EXTERN CT_TBL_CONST CtTbl_ctMenuLoaderBand ctMenuLoaderBand[CT_MENU_LOADER_NBAND];
 CT_TBL_EXTERN CT_TBL_CONST uint8_t ctMenuChromeLoaderPal[8][16][3];
-#define CT_LOADER_ICON_TRANSPARENT 0x01000000u
+CT_TBL_EXTERN CT_TBL_CONST unsigned ctDef_CT_LOADER_ICON_TRANSPARENT;
+#define CT_LOADER_ICON_TRANSPARENT ctDef_CT_LOADER_ICON_TRANSPARENT
 CT_TBL_EXTERN CT_TBL_CONST uint32_t ctLoaderIcon[7][16][16];
 CT_TBL_EXTERN CT_TBL_CONST uint8_t ctLoaderVwfTone[4][3];
 CT_TBL_EXTERN CT_TBL_CONST uint32_t ctLoaderNumeral[3][16][16];

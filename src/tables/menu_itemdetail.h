@@ -7,8 +7,10 @@
 #include "ct_tables.h"
 #ifndef GEN_ITEMDETAIL_H
 #define GEN_ITEMDETAIL_H
-#define ITEMCURSOR_W 16
-#define ITEMCURSOR_H 16
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_ITEMCURSOR_W;
+#define ITEMCURSOR_W ctDef_ITEMCURSOR_W
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_ITEMCURSOR_H;
+#define ITEMCURSOR_H ctDef_ITEMCURSOR_H
 CT_TBL_EXTERN CT_TBL_CONST unsigned char itemCursorRGBA[16*16*4];
 CT_TBL_EXTERN CT_TBL_CONST unsigned char itemCursorIdx[16*16];
 CT_TBL_EXTERN CT_TBL_CONST unsigned char itemCursorPal[16*3];

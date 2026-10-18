@@ -10,9 +10,11 @@ In a developer tree (src/data holds the generated headers):
   3. ct_tables_proof is built (tools/build.py ct_tables_proof): the data-free storage (src/tables/tables_storage.c) and
      loader (src/datapack.c) Belthasar links with CT_DATAFREE, beside the same tables compiled from the real headers
      (src/tables/tables_real.c);
-  4. it loads the pack and compares every table byte for byte (padding included; a pointer member by its string);
-  5. the controls: a pack with one table byte flipped must DIFFER, and packs with a wrong pointer size, a wrong layout
-     hash or a changed #define must be REFUSED -- so the comparison and the loader's checks are not vacuous.
+  4. it loads the pack and compares every table byte for byte (padding included; a pointer member by its string), and
+     every #define with the real header's value (a run-time one as the loader filled its variable);
+  5. the controls: packs with one table byte flipped or a run-time #define changed must DIFFER, and packs with a wrong
+     pointer size, a wrong layout hash or a compiled-in #define changed must be REFUSED -- so the comparison and the
+     loader's checks are not vacuous.
 Prints `tables-proof: ... IDENTICAL` and `tables-proof: controls OK`, exit 0; anything else exits 1.
 
 --exe scans an executable for the tables' bytes (every 32-byte window of a table with at least 8 distinct values): a
@@ -145,17 +147,28 @@ def main():
             return bytes(b)
         return blob
 
-    def define(typ, eid, blob):                       # the first #define's value
-        if typ == pt.T_DEFINES:
-            o = 4 + 1 + blob[4]
-            b = bytearray(blob)
-            b[o] ^= 0x01
-            return bytes(b)
-        return blob
+    hs, texts = pt.parse_dir(pt.SHAPES)
+    keep = pt.compiled_in(hs, texts)
+
+    def define(runtime):                              # the value of the first #define of that kind
+        def fn(typ, eid, blob):
+            if typ != pt.T_DEFINES:
+                return blob
+            b, o = bytearray(blob), 4
+            for _ in range(struct.unpack_from('<I', blob, 0)[0]):
+                n = blob[o]
+                if (blob[o + 1:o + 1 + n].decode() not in keep) == runtime:
+                    b[o + 1 + n] ^= 0x01
+                    return bytes(b)
+                o += 1 + n + 8
+            raise SystemExit('tables-proof: FAIL: the pack has no %s #define' % ('run-time' if runtime else 'compiled-in'))
+        return fn
 
     ok = True
     for name, fn, want in (('one table byte flipped', flip, 'DIFFER'), ('4-byte pointers', ptrsize, 'did not load'),
-                           ('a layout hash changed', layout, 'did not load'), ('a #define changed', define, 'did not load')):
+                           ('a layout hash changed', layout, 'did not load'),
+                           ('a compiled-in #define', define(False), 'did not load'),
+                           ('a run-time #define', define(True), 'DIFFER')):
         bad = os.path.join(OUT, 'control.dat')
         open(bad, 'wb').write(rewrite(data, fn))
         q = run([EXE, bad])

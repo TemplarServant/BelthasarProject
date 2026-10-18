@@ -19,8 +19,10 @@ THE PACK is a CTAS container (src/assets.h; the same reader) with four entry typ
     65 id i   one table: [name len u8][name][pad to 4][size u32][layout hash u64][reloc count u32]
               [reloc offsets u32 x n][the table's bytes, exactly as the compiler lays them out]
     66 id 0   the string pool (each string NUL-terminated)
-    67 id 0   the numeric #defines the headers carry: [count u32] {[name len u8][name][value i64]} -- the
-              data-free build compiles the shapes' values; the loader checks each against the pack
+    67 id 0   the numeric #defines the headers carry: [count u32] {[name len u8][name][value i64]} -- in the
+              data-free build a #define the compiler needs as a constant (COMPILED_IN: an array bound) keeps the
+              shapes' value and the loader checks it against the pack; every other one names a variable
+              (`#define X ctDef_X`, of the literal's own C type) the loader fills from the pack
 A table's bytes follow the C layout of the targets the release ships (x86-64 and arm64: little-endian, natural
 alignment, 8-byte pointers; Windows' LLP64 and the others' LP64 agree because no table uses `long`), padding zeroed.
 A pointer member (`const char* name`, the loader's chapter/era strings) holds, in the pack, the u64 offset of its string
@@ -641,6 +643,73 @@ def numeric_defines(hs):
     return out
 
 
+# The #defines a data-free build must keep as compile-time constants because the ENGINE needs them as one, each with the
+# reason (a table's own dimensions are found from the shapes, dim_defines). The MSVC build refuses any other
+# constant-expression use of a run-time #define (an array bound, a case label, a static initializer): a new one is a
+# compile error that names it, to be added here with its reason -- never a silent change.
+COMPILED_IN = {
+    'CT_BHUD_H': 'src/field.c: the bound of battleHudRenderStrip\'s mathOp[]/mathFix[] and of CtBattleHudRender\'s '
+                 'static keep[]',
+    'CT_MENU_WINLIST_N': 'src/menu.c: the bound of mWinGrad\'s static cache[] and built[]',
+}
+DIM_REASON = 'a dimension of a table (the storage a data-free build compiles)'
+
+
+def dim_defines(hs, texts):
+    """The #defines a dimension depends on: any inside a [...] of the shapes (a table's or a typedef member's), and the
+    #defines their values use."""
+    out = set()
+    for text in texts.values():
+        code = re.sub(r'(?m)^[ \t]*#(?:[^\n]*\\\n)*[^\n]*', '', text)
+        for m in re.finditer(r'\[([^\]]*)\]', code):
+            out |= {w for w in re.findall(r'[A-Za-z_]\w*', m.group(1)) if w in hs.defines}
+    todo = list(out)
+    while todo:
+        for kind, s in hs.defines[todo.pop()]:
+            if kind == 'id' and s in hs.defines and s not in out:
+                out.add(s); todo.append(s)
+    return out
+
+
+def compiled_in(hs, texts):
+    """{name: reason} of the numeric #defines a data-free build keeps as constants."""
+    dims = dim_defines(hs, texts)
+    names = {n for _, n, _ in numeric_defines(hs)}
+    for n in COMPILED_IN:
+        if n not in names:
+            raise PackError('COMPILED_IN names %s, which no shape defines' % n)
+    return {n: (DIM_REASON if n in dims else COMPILED_IN[n]) for n in names if n in dims or n in COMPILED_IN}
+
+
+def define_ctype(name, toks):
+    """The C type of a run-time #define's value, the way the compiler types the literal: 'int' or 'unsigned'. Only a
+    literal (optionally negated) is understood; anything else is an error, never a guess."""
+    neg = len(toks) == 2 and toks[0][1] == '-'
+    lit = toks[-1] if neg or len(toks) == 1 else None
+    if lit is None or lit[0] != 'num':
+        raise PackError('#define %s: a run-time #define must be one integer literal, not %r'
+                        % (name, ' '.join(t[1] for t in toks)))
+    s = lit[1]
+    suf = re.search(r'[uUlL]*$', s).group().lower()
+    digits = s[:len(s) - len(suf)]
+    v = int(digits, 8) if re.fullmatch(r'0\d+', digits) else int(digits, 0)
+    decimal = not re.match(r'0', digits) or digits == '0'
+    if suf == 'u' and v <= 0xFFFFFFFF and not neg:
+        return 'unsigned'
+    if suf == '' and v <= 0x7FFFFFFF:
+        return 'int'
+    if suf == '' and not decimal and v <= 0xFFFFFFFF and not neg:
+        return 'unsigned'
+    raise PackError('#define %s: %s is not an int or unsigned int literal (its type would differ between the targets)'
+                    % (name, s))
+
+
+def runtime_defines(hs, texts):
+    """[(header, name, value, ctype)] of the numeric #defines a data-free build reads from the pack."""
+    keep = compiled_in(hs, texts)
+    return [(h, n, v, define_ctype(n, hs.defines[n])) for h, n, v in numeric_defines(hs) if n not in keep]
+
+
 # ---------------------------------------------------------------------------------------------------------------- pack
 def element_of(t):
     """A table's element: its type with every array dimension stripped."""
@@ -758,7 +827,9 @@ def make_headers(hs, texts):
     pass_by = {}
     for h, n in hs.passthrough:
         pass_by.setdefault(h, []).append(n)
-    checks = []
+    keep = compiled_in(hs, texts)
+    runtime = runtime_defines(hs, texts)
+    rt_type = {n: ty for _, n, _, ty in runtime}
     for header, text in sorted(texts.items()):
         out, pos = [], 0
         for t in sorted(by_header.get(header, []), key=lambda t: t.span[0]):
@@ -777,6 +848,13 @@ def make_headers(hs, texts):
         for n in pass_by.get(header, []):             # a pointer table over other tables: not in the storage TU
             m = re.search(r'static\s+const[^;]*\(\s*\*\s*const\s+' + n + r'\b[^;]*;', body)
             body = body[:m.start()] + '#ifndef CT_TBL_STORAGE\n' + m.group() + '\n#endif' + body[m.end():]
+
+        def define_line(m):                           # a run-time #define names the variable the pack fills
+            n = m.group(1)
+            if n not in rt_type:
+                return m.group()
+            return 'CT_TBL_EXTERN CT_TBL_CONST %s ctDef_%s;\n#define %s ctDef_%s' % (rt_type[n], n, n, n)
+        body = re.sub(r'(?m)^[ \t]*#[ \t]*define[ \t]+(\w+)(?:[^\n]*\\\n)*[^\n]*', define_line, body)
         body = re.sub(r'[ \t]+\n', '\n', body)
         body = re.sub(r'\n\s*\n+', '\n', body).strip() + '\n'
         files[header] = (TABLES_DOC + '#ifndef CT_DATAFREE\n#include "../data/%s"\n#else\n#include "ct_tables.h"\n'
@@ -827,10 +905,15 @@ def make_headers(hs, texts):
     lines.append('const unsigned long long ctTableSetHash = 0x%016XULL;'
                  % fnv64('\n'.join(t.layout() for t in sorted(hs.tables, key=lambda t: t.name))))
     lines.append('')
-    lines.append('/* The #defines the shapes compile in; the pack carries the ROM\'s and the loader compares them. */')
+    lines.append('/* The #defines: a compiled-in one (an array bound) with the shapes\' value, which the loader compares with\n'
+                 '   the pack\'s; a run-time one with its variable, which the loader fills from the pack. */')
     lines.append('const CtTableDefine ctTableDefines[] = {')
     for _, name, v in numeric_defines(hs):
-        lines.append('  { "%s", (long long)(%s) },' % (name, name))
+        if name in keep:
+            lines.append('  { "%s", (long long)(%s), NULL, 0 },' % (name, name))
+        else:
+            lines.append('  { "%s", 0, &ctDef_%s, %s },'
+                         % (name, name, 'CT_TBL_DEF_INT' if rt_type[name] == 'int' else 'CT_TBL_DEF_UINT'))
     lines.append('};')
     lines.append('const int ctTableDefineCount = (int)(sizeof ctTableDefines / sizeof ctTableDefines[0]);')
     files['tables_storage.c'] = '\n'.join(lines) + '\n'
@@ -846,10 +929,18 @@ def make_headers(hs, texts):
         real.append('  { "%s", %s, sizeof %s },' % (t.name, t.name, t.name))
     real.append('};')
     real.append('const int ctTablesRealCount = (int)(sizeof ctTablesReal / sizeof ctTablesReal[0]);')
+    real.append('typedef struct { const char* name; long long value; } CtDefineReal;')
+    real.append('const CtDefineReal ctDefinesReal[] = {')
+    for _, name, _ in numeric_defines(hs):
+        real.append('  { "%s", (long long)(%s) },' % (name, name))
+    real.append('};')
+    real.append('const int ctDefinesRealCount = (int)(sizeof ctDefinesReal / sizeof ctDefinesReal[0]);')
     files['tables_real.c'] = '\n'.join(real) + '\n'
     files['ct_tables.h'] = ('/* GENERATED by tools/gen/pack_tables.py headers -- do not edit. A data-free declaration is\n'
                             '   `CT_TBL_EXTERN CT_TBL_CONST T name[n];`: extern const everywhere, a plain definition in\n'
-                            '   tables_storage.c (the one TU that defines both macros empty). */\n'
+                            '   tables_storage.c (the one TU that defines both macros empty). A #define the compiler\n'
+                            '   needs as a constant keeps its value; every other one is `#define X ctDef_X`, a variable\n'
+                            '   declared the same way and filled from the pack. */\n'
                             '#ifndef CT_TABLES_H\n#define CT_TABLES_H\n#include <stdint.h>\n'
                             '#ifndef CT_TBL_EXTERN\n#define CT_TBL_EXTERN extern\n#endif\n'
                             '#ifndef CT_TBL_CONST\n#define CT_TBL_CONST const\n#endif\n#endif\n')

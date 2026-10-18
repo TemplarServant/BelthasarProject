@@ -9,7 +9,8 @@
 #define CT_MENU_WINGRAD_H
 #include <stdint.h>
 #define CT_MENU_WINLIST_N 10
-#define CT_MENU_WINLIST_SHOP 8
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_MENU_WINLIST_SHOP;
+#define CT_MENU_WINLIST_SHOP ctDef_CT_MENU_WINLIST_SHOP
 CT_TBL_EXTERN CT_TBL_CONST uint8_t ctMenuWinList[10][16];
 #endif
 #endif

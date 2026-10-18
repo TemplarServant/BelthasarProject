@@ -19,9 +19,11 @@ typedef struct { const char* pose; uint16_t repF; uint16_t tile; int16_t x; uint
 CT_TBL_EXTERN CT_TBL_CONST CtSparkKf ctMarleSparkKf[CT_MARLESPARK_NKF];
 CT_TBL_EXTERN CT_TBL_CONST uint8_t ctMarleSparkTiles[CT_MARLESPARK_NKF][4][32];
 typedef struct { int16_t dx; int8_t dy; uint8_t pose; } CtMarleAtkStep;
-#define CT_MARLEATK_TRAJ_F0 872
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_MARLEATK_TRAJ_F0;
+#define CT_MARLEATK_TRAJ_F0 ctDef_CT_MARLEATK_TRAJ_F0
 #define CT_MARLEATK_TRAJ_N 79
 CT_TBL_EXTERN CT_TBL_CONST CtMarleAtkStep ctMarleAtkTraj[CT_MARLEATK_TRAJ_N];
-#define CT_MARLEATK_STRIKE_F 939
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_MARLEATK_STRIKE_F;
+#define CT_MARLEATK_STRIKE_F ctDef_CT_MARLEATK_STRIKE_F
 #endif
 #endif

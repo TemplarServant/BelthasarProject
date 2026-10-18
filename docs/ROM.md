@@ -126,18 +126,43 @@ loads them at startup from `ct_tables.dat`, which the setup makes from your dump
   `pack_tables.py`'s docstring.
 - **What the loader refuses.** Any mismatch with the build: another pointer size or byte order, another set of
   tables, a table of another size, another layout (each table's layout string, every member's name, type and offset,
-  is hashed on both sides), relocations that are not exactly the build's pointer members, and any `#define` the shapes
-  compiled in whose value differs from the one in your headers. It says why and exits; it never runs on a partial or
-  shifted table.
+  is hashed on both sides), relocations that are not exactly the build's pointer members, another set of `#define`s, a
+  compiled-in `#define` whose value differs from the one in your headers, and a run-time one whose value does not fit
+  its type. It says why and exits; it never runs on a partial or shifted table.
 - **The proof.** `python tools/gen/tables_proof.py` (a tree that holds the generated headers) packs `src/data/*.h`,
   loads the pack into the data-free storage with the loader the data-free `Belthasar` links, and compares every table
-  with the same table compiled from the real header, byte for byte and padding included (a pointer by its string). It
-  then checks that a pack with one byte flipped differs, and that packs with another pointer size, layout hash or
-  `#define` are refused.
-- **What stays compiled in.** The shapes' numeric `#define`s: 163, of which 62 are the tables' dimensions and the rest
-  constants (tile bases, foot positions, stance ids, the new-game pan's start and length, ROM base addresses, the
-  title's seed registers); 47 of those constants are used by the engine's code, some as array bounds. They are already
-  public in `tools/gen/shapes/`. The data-free build compiles them from the shapes and the loader checks each against
+  with the same table compiled from the real header, byte for byte and padding included (a pointer by its string), and
+  every `#define` with the real header's value (a run-time one as the load- **The `#define`s.** The shapes' numeric `#define`s (163: tile bases, foot positions, stance ids, the new-game pan's
+  start and length, ROM base addresses, the title's seed registers, the tables' dimensions) are values of your ROM too.
+  In a data-free build each one the compiler does not need as a constant is a variable: `src/tables/<name>.h` says
+  `#define NG_PAN_START_X ctDef_NG_PAN_START_X` and declares `ctDef_NG_PAN_START_X` with the literal's own C type (`int`,
+  or `unsigned` for a `u`-suffixed or past-`INT_MAX` hex literal), and the loader fills it from the pack's `#define`
+  entry. 99 are run-time this way, 73 of them used by the engine's code. The MSVC build refuses any constant-expression
+  use of a run-time one (an array bound, a case label, a static initializer), so a new such use is a compile error that
+  names the `#define`, to be listed in `pack_tables.py`'s `COMPILED_IN` with its reason -- never a silent change.
+- **What stays compiled in.** 64 `#define`s, with the shapes' values (the loader checks each against the pack):
+  - the 62 that size a table (a dimension, directly or through another `#define`): the storage a data-free build
+    compiles has those sizes, so the executable states them whatever the headers say. `animeng_e3_gato.h`
+    `CT_ANIMENG_E3_GATO_N`; `animeng_e3_pc.h` `CT_ANIMENG_E3_{CRONO,MARLE,LUCCA,FROG}_N`; `animeng_e4_pc.h`
+    `CT_ANIMENG_CRONO_CRIT_N CT_ANIMENG_LUCCA_ATK_N`; `animeng_sheet_gato.h` `CT_ANIMENG_SHEET_GATO_N`;
+    `animeng_sheet_pc.h` `CT_ANIMENG_SHEET_{CRONO,MARLE,LUCCA,FROG}_N`; `atbsel.h` `CT_ATBSEL_W CT_ATBSEL_HGT
+    CT_ATBSEL_NPAL CT_ATBSEL_PATCH_W CT_ATBSEL_PATCH_H CT_ATBSEL_NLINES CT_ATBSEL_MAXSTEP CT_ATBSEL_EMPTY_W
+    CT_ATBSEL_EMPTY_H`; `battle_anim.h` `CT_ANIM_NOBJ CT_ANIM_NKF CT_ANIM_NTILE CT_CRONO_ATK_N CT_GATO_IDLE_N
+    CT_CRONO_BOB_N`; `battle_anim_add.h` `CTCRONOIDLEADD_NOBJ CTCRONOIDLEADD_NKF CTGATOSWIPE_NOBJ CTGATOSWIPE_NKF
+    CT_GATO_IDLE2_N`; `battle_fx.h` `CT_FX_RISE_N`; `battle_gato_atkfaces.h` `CT_GATO_ATK_NFACE CT_GATO_ATK_NTILE`;
+    `battle_gato_faces.h` `CT_GATO_FACE_NTILE`; `battle_hetake.h` `CT_HETAKE_NSLOT CT_HETAKE_NTILE CT_HETAKE_ATK_N`;
+    `battle_hud_chrome.h` `CT_BHUD_CHROME_NT`; `battle_marleatk.h` `CT_MARLEATK_NOBJ CT_MARLEATK_NKF CT_MARLESPARK_NKF
+    CT_MARLEATK_TRAJ_N`; `battle_settle.h` `CT_SETTLE_NOBJ CT_SETTLE_NKF CT_SETTLE_NTILE CT_SETTLE_CRONO_NSTEP
+    CT_SETTLE_MARLE_NSTEP`; `battle_stance.h` `CT_STANCE_NOBJ CT_STANCE_NACTOR CT_STANCE_NTILE`; `menu_chrome.h`
+    `CT_MENU_CHROME_NTILE CT_MENU_CHROME_TMW CT_MENU_CHROME_TMH`; `menu_itemuse.h` `ITFX_N`; `menu_loader.h`
+    `CT_MENU_LOADER_TMH CT_MENU_LOADER_NBAND CT_LOADER_CHAPTERS`; `ow_anim.h` `CT_OWANIM_SIZE`; `ow_era_placard.h`
+    `CT_PLACARD_N CT_PLACARD_MAXW`. Found from the shapes by `pack_tables.py` (`dim_defines`).
+  - 2 that the engine's code uses as an array bound (`COMPILED_IN`): `CT_BHUD_H` (`battle_hud.h`; `src/field.c`
+    `battleHudRenderStrip`'s `mathOp[]`/`mathFix[]` and `CtBattleHudRender`'s static `keep[]`) and `CT_MENU_WINLIST_N`
+    (`menu_wingrad.h`; `src/menu.c` `mWinGrad`'s static `cache[]` and `built[]`). Both equal a table's dimension
+    (`CT_MENU_WINLIST_N` is `ctMenuWinList`'s first), so they say nothing the storage does not.
+
+ls/gen/shapes/`. The data-free build compiles them from the shapes and the loader checks each against
   the pack; moving the ones that are not array bounds into the pack as run-time values is a later step.
 
 ## What is never distributed, and why

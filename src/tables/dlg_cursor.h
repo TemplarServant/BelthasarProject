@@ -7,8 +7,10 @@
 #include "ct_tables.h"
 #ifndef GEN_DLG_CURSOR_H
 #define GEN_DLG_CURSOR_H
-#define DLGCURSOR_W 16
-#define DLGCURSOR_H 12
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_DLGCURSOR_W;
+#define DLGCURSOR_W ctDef_DLGCURSOR_W
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_DLGCURSOR_H;
+#define DLGCURSOR_H ctDef_DLGCURSOR_H
 CT_TBL_EXTERN CT_TBL_CONST unsigned char dlgCursorRGBA[16 * 12 * 4];
 #endif
 #endif

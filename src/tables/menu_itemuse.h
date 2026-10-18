@@ -9,12 +9,18 @@
 #define CT_MENU_ITEMUSE_H
 #include <stdint.h>
 CT_TBL_EXTERN CT_TBL_CONST uint8_t ctItemProp[0xF3];
-#define ITFX_NONE 0
-#define ITFX_HP   1
-#define ITFX_MP   2
-#define ITFX_FULL 3
-#define ITFX_TAB  4
-#define ITFX_BASE 0xBC
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_ITFX_NONE;
+#define ITFX_NONE ctDef_ITFX_NONE
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_ITFX_HP;
+#define ITFX_HP ctDef_ITFX_HP
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_ITFX_MP;
+#define ITFX_MP ctDef_ITFX_MP
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_ITFX_FULL;
+#define ITFX_FULL ctDef_ITFX_FULL
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_ITFX_TAB;
+#define ITFX_TAB ctDef_ITFX_TAB
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_ITFX_BASE;
+#define ITFX_BASE ctDef_ITFX_BASE
 #define ITFX_N    20
 CT_TBL_EXTERN CT_TBL_CONST uint8_t ctItemFxKind[ITFX_N];
 CT_TBL_EXTERN CT_TBL_CONST uint16_t ctItemFxAmt[ITFX_N];

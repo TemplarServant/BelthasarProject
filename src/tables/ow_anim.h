@@ -8,7 +8,8 @@
 #ifndef CT_OW_ANIM_H
 #define CT_OW_ANIM_H
 #include <stdint.h>
-#define CT_OWANIM_BASE 0xE000u
+CT_TBL_EXTERN CT_TBL_CONST unsigned ctDef_CT_OWANIM_BASE;
+#define CT_OWANIM_BASE ctDef_CT_OWANIM_BASE
 #define CT_OWANIM_SIZE 0x2000u
 CT_TBL_EXTERN CT_TBL_CONST uint8_t ctOwAnimC3[CT_OWANIM_SIZE];
 #endif

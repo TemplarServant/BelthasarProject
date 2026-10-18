@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <limits.h>
 #include "datapack.h"
 
 enum { T_HEADER = 64, T_TABLE = 65, T_POOL = 66, T_DEFINES = 67 };
@@ -80,21 +81,34 @@ int CtDataPackLoad(const char* path, char* err, size_t errLen) {
     { free(d); return fail(err, errLen, "%sthe pack's tables are laid out for another version of the generators", "", 0); }
   if (!pool || (pl && pool[pl - 1] != 0)) { free(d); return fail(err, errLen, "%sbad string pool", "", 0); }
 
-  // The #defines: every one the shapes compiled in must be the ROM's.
+  // The #defines, each exactly once: one compiled in must be the ROM's; a run-time one takes the ROM's.
   if (!defs || dl < 4 || rd32(defs) != (uint32_t)ctTableDefineCount || rd32(h + 20) != (uint32_t)ctTableDefineCount)
     { free(d); return fail(err, errLen, "%sthe pack's #defines are not this build's", "", 0); }
   {
+    unsigned char* seen = (unsigned char*)calloc((size_t)ctTableDefineCount + 1, 1);
+    if (!seen) { free(d); return fail(err, errLen, "%sout of memory", "", 0); }
     const uint8_t* q = defs + 4; const uint8_t* end = defs + dl;
     for (int i = 0; i < ctTableDefineCount; i++) {
-      if (q >= end || q + 1 + q[0] + 8 > end) { free(d); return fail(err, errLen, "%sbad #define list", "", 0); }
+      if (q >= end || q + 1 + q[0] + 8 > end) { free(seen); free(d); return fail(err, errLen, "%sbad #define list", "", 0); }
       char name[256]; memcpy(name, q + 1, q[0]); name[q[0]] = 0;
       long long v = (long long)rd64(q + 1 + q[0]);
       q += 1 + q[0] + 8;
       int k = 0;
       while (k < ctTableDefineCount && strcmp(ctTableDefines[k].name, name)) k++;
-      if (k == ctTableDefineCount) { free(d); return fail(err, errLen, "#define %s is not in this build", name, 0); }
-      if (ctTableDefines[k].value != v) { free(d); return fail(err, errLen, "#define %s differs from this build (pack %lld)", name, (unsigned long long)v); }
+      if (k == ctTableDefineCount) { free(seen); free(d); return fail(err, errLen, "#define %s is not in this build", name, 0); }
+      if (seen[k]++) { free(seen); free(d); return fail(err, errLen, "#define %s is twice in the pack", name, 0); }
+      const CtTableDefine* td = &ctTableDefines[k];
+      if (!td->var) {
+        if (td->value != v) { free(seen); free(d); return fail(err, errLen, "#define %s differs from this build (pack %lld)", name, (unsigned long long)v); }
+      } else if (td->kind == CT_TBL_DEF_INT && v >= INT_MIN && v <= INT_MAX) {
+        *(int*)td->var = (int)v;
+      } else if (td->kind == CT_TBL_DEF_UINT && v >= 0 && v <= (long long)UINT_MAX) {
+        *(unsigned*)td->var = (unsigned)v;
+      } else {
+        free(seen); free(d); return fail(err, errLen, "#define %s: the pack's %lld does not fit its type", name, (unsigned long long)v);
+      }
     }
+    free(seen);
   }
 
   // The tables: one pack entry per registry entry, by name.

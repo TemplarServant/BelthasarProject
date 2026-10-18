@@ -7,8 +7,10 @@
 #include "ct_tables.h"
 #ifndef CT_BATTLE_DISSOLVE_H
 #define CT_BATTLE_DISSOLVE_H
-#define CT_DISSOLVE_STEPS      32
-#define CT_DISSOLVE_RATE_PX    20
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_DISSOLVE_STEPS;
+#define CT_DISSOLVE_STEPS ctDef_CT_DISSOLVE_STEPS
+CT_TBL_EXTERN CT_TBL_CONST int ctDef_CT_DISSOLVE_RATE_PX;
+#define CT_DISSOLVE_RATE_PX ctDef_CT_DISSOLVE_RATE_PX
 CT_TBL_EXTERN CT_TBL_CONST unsigned char ctBattleDissolveDither[8][8];
 #endif
 #endif
