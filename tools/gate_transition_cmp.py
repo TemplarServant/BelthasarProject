@@ -19,7 +19,7 @@ differs by more than 24 -- one INIDISP step does not; 128x112):
     behind the cartridge's (the iris's `$0139 = 1` at label 1065 against 1064 -- the load clock);
   * the op's fade is the field's too (C0/3FBB-3FD1 run in the field's frame): graded at P+2, and by the mean brightness,
     which sees an INIDISP step the pixel threshold does not;
-  * the tunnel and the load are the translated stage's hardware frames, from the one after the jump (`gatewarp: ... takes
+  * the tunnel and the load are the warp stage's frames (src/seq_gwarp.c), from the one after the jump (`gatewarp: ... takes
     over at f<J>`), which the port presents as the cartridge's thumbnails (gwarp_cmp's relation).
 
   gate-transition: DD c<D>; scene 8 + the op's fade at P+2 c<B>..c<J>: <a> / <n> differ, mean within <d>;
@@ -82,10 +82,10 @@ def main():
                                       default=None)
     if L is None:
         print('gate-transition: FAIL -- the cartridge never lit loc 071'); return 1
-    # The stage opens where the port says: `gatewarp: the translated program takes over at f<J>` is the jump's frame (C0/3FD3);
+    # The stage opens where the port says: `gatewarp: the native program takes over at f<J>` is the jump's frame (C0/3FD3);
     # its first picture is J+1, the cartridge's own frame. Up to J it is the field -- scene 8 and the op's own fade (C0/3FBB,
     # C0/3FC1's DEC per frame) -- graded at P+2, and by the mean brightness too: one INIDISP step is below the threshold.
-    j = re.search(r'gatewarp: the translated program takes over at f(\d+)', log)
+    j = re.search(r'gatewarp: the native program takes over at f(\d+)', log)
     if not j:
         print('gate-transition: FAIL -- the port never opened the warp'); return 1
     J = BASE + int(j.group(1))

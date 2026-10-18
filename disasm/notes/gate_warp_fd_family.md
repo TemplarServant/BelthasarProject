@@ -1,6 +1,6 @@
 # op 0xFF operands $80-$83 are the GATE WARP — bank $FD, not the $C3 overlay
 
-2026-09-02, derived. **THE FLOW IS PORTED (2026-09-10, section 6); THE WHOLE WARP RUNS AS ITS TRANSLATED PROGRAM, every frame the cartridge's (2026-09-26, section 9).**
+2026-09-02, derived. **THE FLOW IS PORTED (2026-09-10, section 6); THE WHOLE WARP RUNS AS ITS TRANSLATED PROGRAM, every frame the cartridge's (2026-09-26, section 9); THE WARP IS NATIVE in Belthasar.exe, logic and picture, byte for byte against the oracle (2026-10-18, section 11).**
 The text below is the original derivation, kept as written except where section 6 corrects it.
 When this was written: NOT PORTED, the live VM parks every `FF xx` with `xx < $90` as a "$C3 special
 sequence" (`ct_vm.c` step, `sc->seqReq`), and `field.c` only ever completes sequence 2 (the title).
@@ -379,3 +379,69 @@ The op's fade is the field's (C0/3FBB-3FD1 run in its frame) and is graded at P+
 (one INIDISP step is below the 24 threshold): identical, mean within 0.0. Until 2026-09-29 it was one frame late -- field.c
 held the brightness one pass back (brShown) for the window wipe's first frame; that frame now takes the window the next
 C0/22D8 call writes, which channel 7 reads live (field_window_wipe.md, last section), and the brightness is the frame's own.
+
+## 11. THE WARP IS NATIVE -- src/seq_gwarp.c, logic and picture, byte for byte (2026-10-18)
+
+User decisions 2026-10-09 (no emulation) and 2026-10-17 (Belthasar.exe ships no ROM code; a native compositor for the
+stages' pictures): the translated program of sec. 9 (src/xlat/gwarp_fd.c on the vendored 65816 / PPU) is replaced in the
+playable host by **src/seq_gwarp.c** -- the four routines written in C over the 128 KB WRAM, every table read from the user's
+ROM at run time ($FD:DD96, DDF5, DDB5, ED79, ED81, F001, F081, F101, F181 and the sine $C0:F800), the picture through
+src/seq_pic.c (mode 7, the HDMA channels walked as the hardware walks them, the windows, the colour math). Belthasar.exe no
+longer builds gwarp_fd.c (CMake `CT_XLAT_NO_GWARP`); ct.exe keeps it for the `seq-gwarp-*-xlat-lockstep` checks.
+
+**The whole program, read from the trace's listing** (the translation's 1141 labelled lines are the disassembly):
+
+| routine | what it does |
+|---|---|
+| FD/DB97 | SEI, D = $0500, B = 0, INIDISP $8F, NMI off; FD/EAF4 the vectors at $0500 / $0504 (`JML FD/DE15`, `JML FD/DE87`); FD/EB13 the PPU (mode 7, BG1SC $48, W12SEL 03, WH0-3 00/FF/00/FF, TM 01 TS 10 TMW 01 TSW 10, CGWSEL 22, CGADSUB 41, COLDATA E0); FD/EAA6 flags saved; the plot masks ($FD:ED79 / ED81 -> $0525 / $052D) |
+| DBD7-DBF0 | the mode-7 characters: VMAIN $80, the high bytes of words 0-3FFF -- character n is 64 pixels of colour n |
+| FD/F1ED + F204 | the mode-7 map into $7F:0000 through WMDATA (D = $2100): 128 rows twice, row r = ($F800[4r] + $80) / 2 + column, & $7F |
+| FD/EF6F | $7E:2000-21FF cleared, then 64 BG words `bswap($FD:F081[i]) << 2 | $FD:F001[i]` and 128 OBJ words `bswap($FD:F101[i & F]) << 2` |
+| FD/F24C, DBFB | every sprite Y = F0, high table $55; sprites 0-15 from $FD:DDB5, $0900-0903 = AA (large, 64 x 64; tiles in the first name table) |
+| FD/F1C1 | the map's low bytes by DMA ($7F:0000 x $4000, VMAIN 0) |
+| FD/ECC0, DC1E-DCA0, FD/ECD5 | the sprite picture: $7F:4000-5FFF cleared, 65 rays from the corner (angle x = 0..$40, direction ($F800[x], $F800[x + $40]) / 256 a step, colour -($0C >> 8) & F, $0C stepping by a decreasing $0E), each pixel into the 4bpp tiles at +0 / +1 / +10 / +11 |
+| FD/EC91 | that picture to VRAM $4000 (OBSEL $82's base) |
+| FD/EB8B x 2 | the window table with $23 = 0 (255 empty lines), both builds into $7F:72AC ($24 = 1, then 3) |
+| FD/ED89 | channels 1-4 indirect mode 3 (M7A/B, M7C/D, M7X/Y, BG1 H/V) and 5 indirect mode 1 (WH0/WH1); the tables at $7F:6000 and $74AC; 256 lines of scale `$FF * ($FFFF / ($F0 - (|y| * 2 * $E0 >> 8))) >> 6` as M7A from $7F:601C (B = 0) and as M7D from $7F:681C (C = 0) |
+| FD/EADA | the RDNMI poll, then NMITIMEN $81, INIDISP 0, CLI |
+| FD/DE15 (NMI) | INIDISP $80; CGRAM <- $7E:2000 x $200; OAM <- $0700 x $220; the window pointers $7F:74AD / 74B0 = the buffer EB8B built last ($24's parity); `$1B += 1`, `$1E += 1`; HDMAEN $3E; INIDISP $0F |
+| the loop | [DB1D: INIDISP = $FD:DDF5[$36], $35 += $98]; FD/DCBD (M7X $0080, M7Y `($1B << 2) & 1FF + 70` and its mirror from `$1B ^ FF`, HOFS 0, the OBJ colour ring $7E:2102 rotated left by two words); the band ($23 = $FD:DD96[$1B & 1F] and W12SEL 03 / 00 / 02 / 08); FD/EB8B (the disc of radius $23); FD/F123 (the 32 BG colours' red and green); until `$1B` = the end |
+| exit | FD/EAC8 (blank, HDMA and NMI off, SEI), FD/EAB7 (flags restored), `JML $C0:0000` |
+
+**What the native code had to keep that the dossier's formulas did not say.**
+
+* **The accumulator's high byte.** FD/EF23 ends `XBA / STA $2180 / LDA #00`: B keeps the low byte of the last matrix value
+  ($3F on every visit). The setup returns with it, and FD/DB1D's first `TAX` (DB36, 16-bit X) moves the whole accumulator: the
+  first FF 83 frame's INIDISP is read at `$FD:DDF5 + $3F00` = **$FE:1CF5** (`17`, brightness 7), not $FD:DDF5 (`0F`). The frame
+  shows black either way (W12SEL 03 with the setup's empty window masks all of BG1), but the register is the ROM's. seq_gwarp.c
+  keeps C (16-bit), X, Y and S as the program leaves them.
+* **The stack page is deterministic at every stop.** The NMI pushes K, PC, P, A, X, Y, B, D at $06FD-$06F1; every main iteration
+  then calls FD/EC80 through EB8B, whose JSR and PHX rewrite $06FD-$06FB (and $06FA when X is 16-bit, the r = 0 arm). So the PC the
+  NMI pushed (EAED or EAEF: where the beam caught the wait) never survives a frame, but **P** at $06FA does in the bands with a
+  window (8-bit PHX): `0x22 | V << 6 | C`, with V = the sign bit of the sine F123's last `ADC #80` met ($F800[$1B ^ FF] for X =
+  $3E) and C = 0 (the loop's `CPY #end`) -- C = 1 on the first NMI only (ED89's last `CPX #0100`), V there from the last EF23's
+  16-bit ADC. A, X, Y pushed are $0000 / $0040 / the counter (after the setup: $3F00 / $0100 / $FF * the last quotient's low byte).
+* **The clock.** FD/DB97 is NMI-off work that reads no input and no byte it did not write first, so its length is the listing's:
+  40,005,322 master cycles from the hand-off (C0/3FE8's JML at line 239) to EADF on the cartridge under the rule (`ct.exe
+  --racepiccmp ... RACEPICCMP_SPAN=FDFFF1,FDEADF`; FF 81 40,005,274): the poll is met by the **112th** vblank's flag. The port does
+  the setup in the hand-off's frame and holds 111 more frames black (the cartridge's WRAM is the setup in progress there -- the
+  one stretch not graded byte for byte); frame 113 is the poll's (INIDISP 0, black), frame 114 the first NMI, and the `JML` lands
+  in frame 113 + end: 880 / 368 / 272 / 880. Every NMI-on iteration is free (the infinitely fast CPU): DCBD's M7X/M7Y and W12SEL
+  are the frame's own, the CGRAM / OAM DMA'd in the NMI and the window table the previous iteration's.
+* **The JML's frame draws nothing.** EAC8's `STZ $4200` turns the NMI off inside the vblank; the cartridge runs on in real time
+  and reaches C0:0000 at the next frame's line 54 with the screen in forced blank, its line buffer still the last frame's (all 224
+  lines). The host shows the last picture on that frame (field.c g_gwPic), as it showed the translated stage's buffer.
+* **Untouched by the warp:** M7SEL ($211A, 00 on the cartridge at every hand-off measured -- the compositor's reset value),
+  M7A-D before the first NMI's HDMA (the field's $0100 identity; the screen is blank until HDMA rewrites them on every line), OAM
+  until the first NMI's DMA.
+
+**Graded** -- `ct.exe --gwarpcmp saves/field_re/scene8_gate_warp_f2300.state 900` (+ `PEEK_POKE=7F269C=81/82/83`), checks
+`seq-gwarp-{80,81,82,83}-native-vs-oracle` (quick tier, 1-5 s each, 9 mutations killed):
+
+    gwarpcmp: FF 80: native JML C0:0000; WRAM / VRAM / CGRAM / OAM graded on 769 frames (from the poll's, 112): 0 / 0 differ;
+              registers on 766 (from the first NMI's): 0 differ; picture 0 frames differ -- IDENTICAL   (702 frames lit)
+    FF 81: 257 / 254, IDENTICAL (190 lit)    FF 82: 161 / 158, IDENTICAL (94 lit)    FF 83: 769 / 766, IDENTICAL (702 lit)
+
+and in the host, unchanged from the translated program's: field-scene8-gate-warp-flow (880 frames, loc 071, the selftest's hash
+1F8E6191), gwarp_cmp 880 / 880, gate_transition_cmp 0 / 116 + 0 / 912 + 0 / 300, gate_arrival_cmp 0 px. The SPC now runs its
+frame with the field's (CtAudioFrame) through the warp -- the warp never touches it -- where the translated stage's bus ran it.

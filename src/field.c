@@ -87,6 +87,7 @@
 #include "audio.h"       // the SPC700 sound system: bank-$C7 driver upload + the $2140-43 command channel
 #include "seq_xlat.h"    // a $C3 stage whose output depends on the CPU clock: its program translated from the ROM
 #include "wipe.h"        // the window wipe C3/01E4 + C3/02DD and the overworld's window object C6/E241, native
+#include "seq_gwarp.h"   // the gate warp (op 0xFF $80-$8F, bank $FD), native: its logic and its picture
 #include "seq_race.h"    // the motorcycle race (sequence entry 0, `FF 00` / `FF 09`), native: its logic (stage 1)
 #include "seq_pic.h"     // ... and its picture (stage 2: the native compositor, src/seq_racepic.c)
 #include "seq_ending.h"   // the ending's $C3 stage (FF 2A/2B/2E/2F), native
@@ -5100,6 +5101,11 @@ static int seqOpeningHold(long oc, long os) {
 // draws with the tiles and maps loc 06B left). Only the stages whose picture is ported are given it.
 static CtSeqStagePic g_stagePic;
 static uint16_t g_fieldVram[0x8000];
+// THE GATE WARP's own machine (seq_gwarp.c): its program's state, the WRAM it runs over (the field's, copied at the jump and
+// handed back at its `JML $C0:0000`) and its last picture (the frame of the JML draws none).
+static CtGwarp g_gwarp;
+static uint8_t g_gwWram[0x20000];
+static uint8_t g_gwPic[CAMW * CAMH * 3];
 static void stagePicOpen(void) {
   memset(&g_stagePic, 0, sizeof g_stagePic); CtSeqPicReset(&g_stagePic.p);
   memcpy(g_stagePic.p.vram, g_fieldVram, sizeof g_stagePic.p.vram);
@@ -11616,8 +11622,8 @@ int main(int argc, char** argv) {
   int raceOn = 0, raceEnded = 0;                              // ...as the NATIVE race (seq_race.h): open / END met
   int endOn = 0, endEnded = 0;                                // ...as the NATIVE ending (seq_ending.h: 1), entry 3 (seq_entry3.h: 2)
                                                               //    or entry 4 (seq_entry4.h: 3)
-  CtXlatStage* gwX = NULL;                                    // the GATE WARP ($FD), translated the same way
-  int gwXState = 0;
+  CtGwarp* gwN = NULL;                                        // the GATE WARP ($FD), native (seq_gwarp.c)
+  int gwNState = 0;
   int seqHold = 0;                                            // frames of the SETUP still to run
                                                               //   before the machine's first NMI
                                                               //   (>0 = its index + 1, -1 = not ported)
@@ -11936,7 +11942,7 @@ int main(int argc, char** argv) {
       // and then stage the tail's blip `18 00` under the throttle, never consumed; the DSP keys the trade's sample 02
       // twice. The port keyed it once -- the blip, shipped by the catch-all, cut the second: the user's "when buying or
       // selling a piece of equipment/a sword, it makes no sound" (2026-10-07).
-      if (!seqX && !gwX && !menuPhase)
+      if (!seqX && !gwN && !menuPhase)
       { uint8_t* mm = CtWramSys(fieldWram());
         int gated = inWorld;
         // the main loop's C2/0454 does not run while the world's NMI is held in its pass's JSL (owPassHold / owPassResume)
@@ -12000,7 +12006,7 @@ int main(int argc, char** argv) {
           // posts belong to that slice, so the first slice runs after them -- one pass later, as --vmdiff runs it)
           static int ruleSeededFirst = 1;
           if (ruleSeeded && ruleSeededFirst) { ruleSeededFirst = 0; continue; }
-          if (!seqX && !gwX) CtAudioFrame(audio);           // a translated stage's bus drives the SPC itself
+          if (!seqX) CtAudioFrame(audio);                   // a translated stage's bus drives the SPC itself
           else CtAudioFrameSkip(audio);                      //   (the frame's field flips all the same)
           if (audioDev && audioBuf) {
             // THE LEVEL GATE, from the vendored LakeSnes reference this engine's audio is ported from
@@ -16864,40 +16870,36 @@ int main(int argc, char** argv) {
         if (ffGo) {
           fadeBri = 0;
           gwPhase = 2; gwCtr = 0;
-          // ⭐ THE WARP RUNS AS ITS PROGRAM, translated from the ROM (src/xlat/gwarp_fd.c, gate_warp_fd_family.md sec. 9):
-          // C0/3FD3's quiesce and `LDX #06FF / TXS`, then C0/3FE8.. `JML $FD:FFF1..` on the vendored hardware -- FD/DB97's
-          // setup, the mode-7 tunnel, its own NMI, the flags' save and restore, and the `JML $C0:0000` that ends it. It
-          // borrows the host's SPC (it never talks to it: the music plays on) and is handed the field's VRAM and CGRAM
-          // as a $C3 stage is. CT_GWARP_FLOWONLY=1 keeps the flow-only machine below (black for the ROM's duration).
+          // ⭐ THE WARP RUNS NATIVE (src/seq_gwarp.c, gate_warp_fd_family.md sec. 11): C0/3FD3's quiesce and `LDX #06FF / TXS`,
+          // then C0/3FE8.. `JML $FD:FFF1..` -- FD/DB97's setup, the mode-7 tunnel, its own NMI, the flags' save and restore, and
+          // the `JML $C0:0000` that ends it -- over a copy of the field's WRAM (the program owns the machine until the reboot:
+          // nothing of the field touches it, and its image is what the reboot gets), its picture through the native compositor
+          // (g_stagePic: the field's VRAM, the CGRAM its $7E:2200 shadow -- the console's do not change hands). It never talks to
+          // the SPC: the music plays on. CT_GWARP_FLOWONLY=1 keeps the flow-only machine below (black for the ROM's duration).
           long xrl = 0; const uint8_t* xrb = CtBattleRom(&xrl);
           if (xrb && gw && !getenv("CT_GWARP_FLOWONLY")) {
-            gwX = CtXlatStageOpen(xrb, xrl, gw, (uint8_t)gwOp, audio ? CtAudioApu(audio) : NULL, 0);
-            if (gwX) {
-              printf("gatewarp: the translated program takes over at f%d (JML $FD:%04X)\n", frameNo,
+            memcpy(g_gwWram, gw, sizeof g_gwWram);
+            stagePicOpen();
+            for (int ci = 0; ci < 0x100; ci++)
+              g_stagePic.p.cgram[ci] = (uint16_t)(gw[0x2200 + 2 * ci] | (gw[0x2201 + 2 * ci] << 8));
+            if (CtGwarpOpen(&g_gwarp, g_gwWram, (uint8_t)gwOp, &g_stagePic, xrb, xrl) == 0) {
+              gwN = &g_gwarp;
+              printf("gatewarp: the native program takes over at f%d (JML $FD:%04X)\n", frameNo,
                      gwOp == 0x80 ? 0xFFF1 : gwOp == 0x81 ? 0xFFEB : gwOp == 0x82 ? 0xFFE8 : 0xFFE5);
-              gwPhase = 3; gwXState = 0;
-              CtXlatStageSetRule(gwX, getenv("CT_XLAT_NORULE") ? 0 : 1);   // the rule, as the oracle's
-              Snes* hw = CtXlatStageHardware(gwX);
-              memcpy(hw->ppu->vram, g_fieldVram, sizeof g_fieldVram);
-              for (int ci = 0; ci < 0x100; ci++)
-                hw->ppu->cgram[ci] = (uint16_t)(gw[0x2200 + 2 * ci] | (gw[0x2201 + 2 * ci] << 8));
+              gwPhase = 3; gwNState = 0;
             }
           }
-          if (!gwX && gw) memcpy(gw + 0x10000 + 0x74B3, gw + 0x10000, 0x200);   // FD/EAA6, inside DB97's setup
+          if (!gwN && gw) memcpy(gw + 0x10000 + 0x74B3, gw + 0x10000, 0x200);   // FD/EAA6, inside DB97's setup
         }
-      } else if (gwPhase == 3) {                  // the translated warp: its exit is its `JML $C0:0000`
+      } else if (gwPhase == 3) {                  // the native warp: its exit is its `JML $C0:0000`
         fadeBri = 0;
-        if (gwXState != 0) {
-          if (gwXState == 1 && gw) {
-            memcpy(gw, CtXlatStageWram(gwX), 0x20000);   // the program's WRAM: the flags FD/EAB7 restored, $0100 staged
-            Snes* hw = CtXlatStageHardware(gwX);
-            if (hw && hw->ppu) memcpy(g_fieldVram, hw->ppu->vram, sizeof g_fieldVram);
-            printf("gatewarp: op-0xFF %02X ran %ld frames -> JML C0:0000\n", gwOp, CtXlatStageFrames(gwX));
-          } else {
-            printf("gatewarp: op-0xFF %02X translation stopped (%d) at %06X after %ld frames\n", gwOp, gwXState,
-                   CtXlatStageFailPc(gwX), CtXlatStageFrames(gwX));
+        if (gwNState != 0) {
+          if (gw) {
+            memcpy(gw, g_gwWram, 0x20000);        // the program's WRAM: the flags FD/EAB7 restored, $0100 staged
+            memcpy(g_fieldVram, g_stagePic.p.vram, sizeof g_fieldVram);
+            printf("gatewarp: op-0xFF %02X ran %d frames -> JML C0:0000\n", gwOp, gwN->frames);
           }
-          CtXlatStageClose(gwX); gwX = NULL; gwXState = 0;
+          gwN = NULL; gwNState = 0;
           CtSceneGateWarpDone(f.vm); gwPhase = 0; rebootReq = 1; stageExit = 1;
         }
       } else {                                    // the setup, then the effect's own NMI loop
@@ -20048,17 +20050,13 @@ int main(int argc, char** argv) {
       if (!(ib && (ib[0x010F] & 0x80))) { memset(fb + (size_t)211 * CAMW * 3, 0, (size_t)13 * CAMW * 3); fieldBlank = 1;
         for (int y = 211; y < CAMH; y++) CtMotFixRow(mot, y); }
     }
-    if (gwX) {
-      // THE GATE WARP, translated (the warp machine above opened it): its program to the next vblank on its own clock,
-      // then what its PPU drew -- the mode-7 tunnel. It reads the pad as the $C3 stages do.
-      CtXlatStageHardware(gwX)->input1->currentState = padSerial;
-      { int sw = hostWideW(); g_seqWideW = 0;            // (the widescreen, a mod: its PPU's side columns too)
-        if (sw > CAMW && sw <= FIELD_WMAX) { g_ppuWideSide = (sw - CAMW) / 2; g_ppuWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3); } }
-      { uint32_t apu0 = CtAudioApuCycles(audio);
-        if (gwXState == 0 && (gwXState = CtXlatStageFrame(gwX)) == 1 && audio)
-          CtAudioStageExitFrame(audio, CtAudioApuCycles(audio) - apu0); }   // (its exit frame's remaining SPC: audio.c)
-      if (g_ppuWideSide) { g_seqWideW = CAMW + 2 * g_ppuWideSide; g_ppuWideSide = 0; g_ppuWideOut = NULL; }
-      CtXlatStagePicture(gwX, fb, CAMW, CAMH);
+    if (gwN) {
+      // THE GATE WARP, native (the warp machine above opened it): one frame of its program -- vblank to vblank, as the
+      // cartridge's under the rule -- then its picture. The frame it reaches `JML $C0:0000` inside the vblank draws nothing:
+      // the screen keeps the last picture (g_gwPic). The SPC runs its frame with the field's (CtAudioFrame: it is not a
+      // translated stage's bus).
+      if (gwNState == 0) gwNState = CtGwarpFrame(gwN, g_gwWram, &g_stagePic, g_gwPic);
+      memcpy(fb, g_gwPic, sizeof g_gwPic);
     }
     // ...but only once the sequence is OPEN. Op 0xFF < $90 first runs its own fade inside the field's program (C0/3FBB-3FD1,
     // `DEC $19` a frame, then C0/0B4E's black on the jump's frame -- ffPro above) and only then jumps to C3:0000; until then
@@ -20206,19 +20204,19 @@ int main(int argc, char** argv) {
     }
 
     presentShot(fb, CAMW, CAMH, frameNo, (CtWramSys(fieldWram())[0x100] | (CtWramSys(fieldWram())[0x101] << 8)), "field");
-    if (gwX || (seqId >= 0 && seqOpen != 0)) mot->valid = 0;   // a stage's own picture replaced the field's
+    if (gwN || (seqId >= 0 && seqOpen != 0)) mot->valid = 0;   // a stage's own picture replaced the field's
     { const uint8_t* shown = fb; int shownW = CAMW;
-      if (wideW > CAMW && !gwX && !(seqId >= 0 && seqOpen != 0)) {   // the widescreen: its sides around the finished view
+      if (wideW > CAMW && !gwN && !(seqId >= 0 && seqOpen != 0)) {   // the widescreen: its sides around the finished view
         fieldWideAssemble(g_wide, g_wfb, fb, wideW, wideX, wideXc, motBright, fieldBlank, mot);
         shown = g_wide; shownW = wideW;
-      } else if (g_seqWideW > CAMW && ((seqOpen > 0 && seqX) || gwX)) {   // a translated stage, wide: its own side columns
+      } else if (g_seqWideW > CAMW && seqOpen > 0 && seqX) {   // a translated stage, wide: its own side columns
         const int sx0 = (g_seqWideW - CAMW) / 2;
         for (int y = 0; y < CAMH; y++) {
           memcpy(g_wide + (size_t)y * g_seqWideW * 3, g_seqWide + (size_t)y * g_seqWideW * 3, (size_t)g_seqWideW * 3);
           memcpy(g_wide + ((size_t)y * g_seqWideW + sx0) * 3, fb + (size_t)y * CAMW * 3, (size_t)CAMW * 3);
         }
         shown = g_wide; shownW = g_seqWideW;
-      } else if (g_bwW > CAMW && battlePhase && !gwX && !(seqId >= 0 && seqOpen != 0)) {   // the widescreen battle: the
+      } else if (g_bwW > CAMW && battlePhase && !gwN && !(seqId >= 0 && seqOpen != 0)) {   // the widescreen battle: the
         const int bbr = (battleInidisp & 0x80) ? 0 : (battleInidisp & 0x0F);                     //   arena's sides round the view
         for (int y = 0; y < CAMH; y++) {
           memcpy(g_wide + (size_t)y * g_bwW * 3, g_bwFb + (size_t)y * g_bwW * 3, (size_t)g_bwW * 3);
