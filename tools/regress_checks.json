@@ -41426,11 +41426,11 @@
       "env": {},
       "expect": [
         "epoch-omen: 0 underived native(s)",
-        "epoch-omen: picture port f1060 / cartridge f700 0 px differ",
-        "epoch-omen: picture port f1260 / cartridge f900 0 px differ",
-        "epoch-omen: picture port f1460 / cartridge f1100 0 px differ",
-        "epoch-omen: picture port f1660 / cartridge f1300 0 px differ",
-        "epoch-omen: picture port f1860 / cartridge f1500 0 px differ"
+        "epoch-omen: picture port f1061 / cartridge f700 0 px differ",
+        "epoch-omen: picture port f1261 / cartridge f900 0 px differ",
+        "epoch-omen: picture port f1461 / cartridge f1100 0 px differ",
+        "epoch-omen: picture port f1661 / cartridge f1300 0 px differ",
+        "epoch-omen: picture port f1861 / cartridge f1500 0 px differ"
       ],
       "pin": [
         "^epoch-omen: "
@@ -41454,9 +41454,9 @@
         },
         {
           "file": "src/field.c",
-          "find": "#define OW_HDMA_LINE 1",
-          "replace": "#define OW_HDMA_LINE 0   /* MUT */",
-          "why": "scanline s takes table line s (the cartridge's --hdma trace: entry 9 first on line 9); row y is scanline y + 1"
+          "find": "#define OW_HDMA_LINE 0",
+          "replace": "#define OW_HDMA_LINE 1   /* MUT */",
+          "why": "row y takes unit y of a repeat-mode table (1F5's --hdma trace: scanline s takes unit s - 1); y + 1 is one frame of the wave early"
         },
         {
           "file": "src/field.c",
@@ -44281,14 +44281,14 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "motion: 73 frames moved; pixels off the previous frame: plain 30810/frame, reprojected 5440/frame (17.7%)"
+        "motion: 73 frames moved; pixels off the previous frame: plain 30815/frame, reprojected 5437/frame (17.6%)"
       ],
       "pin": [
         "^motion: \\d+ frames moved"
       ],
       "timeout_s": 600,
       "note_pass": "600 A.D.'s overworld under its mist: the frames between move the map with the camera, not with the mist's own drift (5691 px/frame left of 29752; standing still nothing moves)",
-      "notes": "2026-10-09 (the user: 'the 600ad overworld became shaky'). The mist is BG3 priority 1 half-added over the whole map; its pixels were owned by BG3, whose scroll drifts on its own (C2/75CE..), so with the camera still every frame between slid the whole map by the drift and snapped back. A translucent cloud now keeps the map's owner (worldComposeAt's clouds pass); an opaque one moves with BG3. Before: 152 frames 'moved' (the drift), 25243 -> 13320 px/frame, and with the camera still the reprojection was WORSE than nothing (21791 vs 20987). The frames left high (every 4th, ~20000) are the mist's own step, which no shift explains. RE-PINNED 2026-10-13: C0/2881 -> C0/B0E6, the entry's sweep, is ported whole (ct_vm.c palSweepB0E6: the rising edge's stores, C0/7170, C0/6F9A, C0/AB45, C0/A9CD, C0/CAD9 until it pops, C0/B1B2, C0/EA42, then C0/B271) and runs on every location change too (the user's scene-8 gate return: obj22's box, check field-gate-return-008-dead-npc-box-cancelled-vs-rule-cartridge). A fresh entry now takes its OBJ slots and first animation frames at the load, as the ROM's entry does; every vs-oracle check holds (attract-01b-placement-priority-pair, attract-kill-revive-112, inn-wake, world-exit, field-door-follower). RE-PINNED 2026-10-17 (the place-name banner went native, class $5628 -- check ow-place-name-banner-vs-rule-cartridge): the walk stands on Truce Canyon's entrance f261-f389 ($1B58 = 18), and the banner there is now the ROM's object (one glyph a frame, the OAM's pieces) instead of the host font; plain 30809 -> 30810, reprojected 5432 -> 5440 px/frame, 73 frames moved unchanged."
+      "notes": "2026-10-09 (the user: 'the 600ad overworld became shaky'). The mist is BG3 priority 1 half-added over the whole map; its pixels were owned by BG3, whose scroll drifts on its own (C2/75CE..), so with the camera still every frame between slid the whole map by the drift and snapped back. A translucent cloud now keeps the map's owner (worldComposeAt's clouds pass); an opaque one moves with BG3. Before: 152 frames 'moved' (the drift), 25243 -> 13320 px/frame, and with the camera still the reprojection was WORSE than nothing (21791 vs 20987). The frames left high (every 4th, ~20000) are the mist's own step, which no shift explains. RE-PINNED 2026-10-13: C0/2881 -> C0/B0E6, the entry's sweep, is ported whole (ct_vm.c palSweepB0E6: the rising edge's stores, C0/7170, C0/6F9A, C0/AB45, C0/A9CD, C0/CAD9 until it pops, C0/B1B2, C0/EA42, then C0/B271) and runs on every location change too (the user's scene-8 gate return: obj22's box, check field-gate-return-008-dead-npc-box-cancelled-vs-rule-cartridge). A fresh entry now takes its OBJ slots and first animation frames at the load, as the ROM's entry does; every vs-oracle check holds (attract-01b-placement-priority-pair, attract-kill-revive-112, inn-wake, world-exit, field-door-follower). RE-PINNED 2026-10-17 (the place-name banner went native, class $5628 -- check ow-place-name-banner-vs-rule-cartridge): the walk stands on Truce Canyon's entrance f261-f389 ($1B58 = 18), and the banner there is now the ROM's object (one glyph a frame, the OAM's pieces) instead of the host font; plain 30809 -> 30810, reprojected 5432 -> 5440 px/frame, 73 frames moved unchanged. RE-PINNED 2026-10-18 (the world loader's C2/2BFB clear of $7E:8621-8E20, check ow-1f5-wave-and-light-vs-oracle): the banner's glyph rows started from the field's stale bytes there and drew stray dots above 'Truce Canyon' (131 px, f275-390); now clean, as on the cartridge's zeroed buffer. plain 30810 -> 30815, reprojected 5440 -> 5437."
     },
     {
       "name": "field-motion-sprite-uncovers-a-sprite",
@@ -46192,6 +46192,357 @@
       "tier": "quick",
       "timeout_s": 30,
       "notes": "THE FRESH CLONE'S BOOTSTRAP: the shapes in tools/gen/shapes/ (declarations and sizes, no data) still declare everything today's generated src/data/*.h and src/xlat/*.c declare. A fresh clone has no generated file, so tools/setup.py builds its first oracle from the shapes; a generator that gains a table without `python tools/gen/shapes.py make` leaves the engine reading a name the shape lacks, and setup fails on every platform (5ebf30b's ctMenuChromeExchTM, PR #2). A developer's tree never notices -- it has the real files. Fix a FAIL by running `python tools/gen/shapes.py make` and committing tools/gen/shapes/; never by re-pinning. SKIPs in a tree with no generated files (it would match nothing)."
+    },
+    {
+      "name": "mixer-sample-exact-vs-dsp",
+      "argv": [
+        "python",
+        "tools/mixer_replay.py",
+        "gato-battle",
+        "nuns-battle",
+        "magus-battle",
+        "save-screen",
+        "shop",
+        "menu-jingle",
+        "world-song",
+        "fuzz"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/gato_wait_crono_solo.lakewram",
+        "saves/battle_re/gato_wait.state",
+        "saves/field_re/m81_nuns_lake.lakewram",
+        "saves/field_re/m81_nuns_lake.state",
+        "saves/field_re/magus_scene.lakewram",
+        "saves/field_re/magus_scene_lake.state",
+        "saves/field_re/savept084.lakewram",
+        "saves/field_re/savept084_lake.state",
+        "saves/field_re/shop90.lakewram",
+        "saves/field_re/shop90_lake.state",
+        "saves/savepoint_flags.bin"
+      ],
+      "expect": [
+        "mixer: gato-battle: 1607690 samples identical / 1607690",
+        "mixer: gato-battle: reads 178494 identical / 178494, sound RAM identical at 2 / 2 segment ends",
+        "mixer: nuns-battle: 491634 samples identical / 491634",
+        "mixer: nuns-battle: reads 48724 identical / 48724, sound RAM identical at 2 / 2 segment ends",
+        "mixer: magus-battle: 454254 samples identical / 454254",
+        "mixer: magus-battle: reads 43285 identical / 43285, sound RAM identical at 2 / 2 segment ends",
+        "mixer: save-screen: 171236 samples identical / 171236",
+        "mixer: save-screen: reads 17080 identical / 17080, sound RAM identical at 2 / 2 segment ends",
+        "mixer: shop: 171235 samples identical / 171235",
+        "mixer: shop: reads 17416 identical / 17416, sound RAM identical at 2 / 2 segment ends",
+        "mixer: menu-jingle: 138661 samples identical / 138661",
+        "mixer: menu-jingle: reads 11066 identical / 11066, sound RAM identical at 1 / 1 segment ends",
+        "mixer: world-song: 131844 samples identical / 131844",
+        "mixer: world-song: reads 10443 identical / 10443, sound RAM identical at 1 / 1 segment ends",
+        "mixfuzz: 1875277 samples identical / 1875277 (200 cases, seed 1)",
+        "mixfuzz: reads 1875277 identical / 1875277, sound RAM identical after 200 / 200 cases",
+        "mixer: all: 3166554 samples identical / 3166554",
+        "mixer: all: reads 326508 identical / 326508, sound RAM identical at 12 / 12 segment ends, live chunks 779 / 779",
+        "mixer: verdict: SAMPLE-EXACT"
+      ],
+      "pin": [
+        "^mixer: ",
+        "^mixfuzz: "
+      ],
+      "tier": "quick",
+      "timeout_s": 300,
+      "exclusive": true,
+      "notes": "The native mixer src/sound/mixer.c (the port's S-DSP: BRR, Gaussian interpolation, ADSR/GAIN, noise, pitch modulation, echo FIR, volumes) against the vendored snes/dsp.c, SAMPLE FOR SAMPLE. tools/mixer_replay.py runs Belthasar with CT_MIXER_CAPTURE (the S-DSP's state and the SPC's RAM at each segment's start, every register write, RAM change and register read at its APU cycle, the live stream's FNV per 4096 samples) on seven quick-tier runs' own argv/env -- Gato's, the nuns' and Magus's battles, the save screen, a shop, the menu's save jingle, the world map's song -- and replays each into both mixers with every event at the sample it came at (ct.exe --mixreplay). Graded: every output sample, every register read (ENDX/ENVX/OUTX), the sound RAM at each segment's end (the echo writes), and the reference's own stream against the live run's hashes (the replay IS the run's sound). The game never selects GAIN and its output never saturates, so `fuzz` (ct.exe --mixfuzz 200 1: random state, RAM and writes from power-on) grades those paths; its census shows every GAIN mode and clamped samples. The attract (6.1M samples) is mixer-sample-exact-attract-vs-dsp (full tier). Mutations: the Gaussian index, BRR filter 2, the sustain decay, the noise tap, even-sample KON, the PMON depth, the FIR's LSB, the feedback scale, ENDX (the fuzz's reads), GAIN's bent knee (the fuzz), the voice-add saturation (Magus's battle), EDL's latch (the sound RAM): 12 killed. disasm/notes/audio_mixer.md.",
+      "mutations": [
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  int out = (ctMixGauss[0xff - frac] * s0) >> 11;",
+          "replace": "  int out = (ctMixGauss[0x100 - frac] * s0) >> 11;  /* MUT */",
+          "why": "The Gaussian interpolation weighs the oldest of its four samples with entry 0xFF - frac of the console's table (and the newest with entry frac). One entry off moves every interpolated sample of every voice."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 2: s += 2 * old + ((3 * -old) >> 5) - older + (older >> 4); break;",
+          "replace": "      case 2: s += 2 * old + ((3 * -old) >> 4) - older + (older >> 4); break;  /* MUT */",
+          "why": "BRR filter 2 predicts 2*old - 3*old/32 - older + older/16 (61/32 and -15/16). The most used filter of the game's samples (brr-filter2 in the census)."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 2: level -= ((level - 1) >> 8) + 1; break;          // sustain (exponential)",
+          "replace": "      case 2: level -= (level >> 8) + 1; break;  /* MUT */",
+          "why": "The sustain phase decays exponentially by ((level - 1) >> 8) + 1 at its rate: the shape every held note of the game takes."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "    int bit = (m->noise & 1) ^ ((m->noise >> 1) & 1);",
+          "replace": "    int bit = (m->noise & 1) ^ ((m->noise >> 2) & 1);  /* MUT */",
+          "why": "The noise generator is a 15-bit LFSR fed with bit 0 XOR bit 1. The battles' noise voices (noise= in the census) hear another sequence with any other tap."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  if (m->evenSample) {",
+          "replace": "  if (1) {  /* MUT */",
+          "why": "KON and KOFF are taken only on even samples, so a key-on may start a sample late. Taking them every sample starts half of the game's notes one sample early."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  if (ch > 0 && v->pitchMod) pitch += ((m->v[ch - 1].out >> 5) * pitch) >> 10;",
+          "replace": "  if (ch > 0 && v->pitchMod) pitch += ((m->v[ch - 1].out >> 5) * pitch) >> 9;  /* MUT */",
+          "why": "Pitch modulation scales the voice's pitch by the previous voice's output (>> 5, then >> 10). The game uses it (pmod= in the census): twice the depth bends those voices."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  sumL = clamp16(sumL) & ~1;",
+          "replace": "  sumL = clamp16(sumL);  /* MUT */",
+          "why": "The FIR's sum is clamped to 16 bits and its lowest bit cleared before it reaches the output and the feedback. Keeping the bit moves the left echo by one unit -- every song with echo."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  int eL = clamp16(m->echoInL + wrap16((sumL * m->feedback) >> 7)) & ~1;",
+          "replace": "  int eL = clamp16(m->echoInL + wrap16((sumL * m->feedback) >> 6)) & ~1;  /* MUT */",
+          "why": "The echo written back is the echo input plus the FIR's output scaled by EFB / 128. Twice the feedback changes what the buffer holds and every later echo."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "        m->regs[0x7c] |= 1 << ch;                  // ENDX set",
+          "replace": "        ;  /* MUT */",
+          "why": "A block with the end flag sets the voice's ENDX bit, which the SPC can read back. Not setting it leaves the samples alone; the reads differ -- the fuzz's (the game's driver reads no $7C in these runs)."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 3: level += (v->preclamp < 0x600) ? 32 : 8; break;    // bent increase",
+          "replace": "      case 3: level += (v->preclamp < 0x700) ? 32 : 8; break;  /* MUT */",
+          "why": "GAIN's bent line rises by 32 until the level reaches 0x600, then by 8. The game never selects GAIN; the fuzz does (gain-bent= in its census), so this is graded by the fuzz alone."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  m->mixL = clamp16(m->mixL + ((s * v->volL) >> 7));",
+          "replace": "  m->mixL = (int16_t)(m->mixL + ((s * v->volL) >> 7));  /* MUT */",
+          "why": "Each voice's contribution is added to the main mix with saturation at 16 bits. The final output never saturates in the game's runs (clamped=0), but the running sum does in Magus's battle; wrapping instead moves those samples (and the fuzz's loud voices)."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  if (m->echoPos == 0) m->echoLength = m->echoDelay * 4;   // EDL is latched at the buffer's start",
+          "replace": "  m->echoLength = m->echoDelay * 4;  /* MUT */",
+          "why": "A new EDL takes effect only when the echo position comes back to the buffer's start. Applying it at once changes where the buffer wraps after an EDL write mid-buffer."
+        }
+      ]
+    },
+    {
+      "name": "mixer-sample-exact-attract-vs-dsp",
+      "argv": [
+        "python",
+        "tools/mixer_replay.py",
+        "attract"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "mixer: attract: 6100023 samples identical / 6100023",
+        "mixer: attract: reads 675912 identical / 675912, sound RAM identical at 1 / 1 segment ends",
+        "mixer: all: 6100023 samples identical / 6100023",
+        "mixer: all: reads 675912 identical / 675912, sound RAM identical at 1 / 1 segment ends, live chunks 1490 / 1490",
+        "mixer: verdict: SAMPLE-EXACT"
+      ],
+      "pin": [
+        "^mixer: "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "exclusive": true,
+      "notes": "mixer-sample-exact-vs-dsp over the WHOLE attract: Belthasar --scene 433 on the paced loop's lockstep vehicle (CT_AUDIO_LOCKSTEP=1) to f11400 (tools/attract_divergence.py's), captured and replayed into snes/dsp.c and src/sound/mixer.c: 6.1M samples, 676k register reads, the sound RAM at the end, all identical; its census has echo with feedback, noise, pitch modulation, every BRR filter and shifts 13-15.",
+      "mutations": [
+        {
+          "file": "src/sound/mixer.c",
+          "find": "  int out = (ctMixGauss[0xff - frac] * s0) >> 11;",
+          "replace": "  int out = (ctMixGauss[0x100 - frac] * s0) >> 11;  /* MUT */",
+          "why": "The Gaussian interpolation weighs the oldest of its four samples with entry 0xFF - frac of the console's table (and the newest with entry frac). One entry off moves every interpolated sample of every voice."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 2: s += 2 * old + ((3 * -old) >> 5) - older + (older >> 4); break;",
+          "replace": "      case 2: s += 2 * old + ((3 * -old) >> 4) - older + (older >> 4); break;  /* MUT */",
+          "why": "BRR filter 2 predicts 2*old - 3*old/32 - older + older/16 (61/32 and -15/16). The most used filter of the game's samples (brr-filter2 in the census)."
+        },
+        {
+          "file": "src/sound/mixer.c",
+          "find": "      case 2: level -= ((level - 1) >> 8) + 1; break;          // sustain (exponential)",
+          "replace": "      case 2: level -= (level >> 8) + 1; break;  /* MUT */",
+          "why": "The sustain phase decays exponentially by ((level - 1) >> 8) + 1 at its rate: the shape every held note of the game takes."
+        }
+      ]
+    },
+    {
+      "name": "ow-1f5-wave-and-light-vs-oracle",
+      "argv": [
+        "python",
+        "tools/ow_wave_cmp.py"
+      ],
+      "env": {},
+      "expect": [
+        "owwave: cartridge f1030 best port f1035 (+5): 0 px differ on 0 line(s)",
+        "owwave: cartridge f1040 best port f1045 (+5): 0 px differ on 0 line(s)",
+        "owwave: cartridge f1120 best port f1125 (+5): 0 px differ on 0 line(s)",
+        "owwave: cartridge f1340 best port f1345 (+5): 0 px differ on 0 line(s)",
+        "owwave: cartridge f1430 best port f1435 (+5): 0 px differ on 0 line(s)",
+        "owwave: cartridge f2100 best port f2109 (+9): 0 px differ on 0 line(s)",
+        "owwave: cartridge f2400 best port f2409 (+9): 0 px differ on 0 line(s)",
+        "owwave: table -- install cartridge f993 port f999; ten frames on: pointers 369A169B/369A169B, both buffers equal",
+        "owwave: beams -- 75 frames, window tables and pointers equal on all"
+      ],
+      "pin": [
+        "^owwave: "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/pre_scene_19f.state",
+        "saves/field_re/pre_scene_19f.lakewram",
+        "tools/ow_wave_cmp.py"
+      ],
+      "note_pass": "world 1F5 after the Ocean Palace pixel for pixel with the cartridge at the world's P + 1: the wave over BG1 (C6/E595 / E5C5, HDMA channel 3 over $210E), the light's windows (C6/E448 / E470 / E498 / E4BE with C3/0077's circle) and the colour window that keeps the math inside them",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "        if (x >= 0x200) r = 0xFF00 | ((((~v) + 1) & 0xFFFF) >> 8);  // E604-E611",
+          "replace": "        if (x >= 0x200) r = (v >> 8) & 0xFF;   /* MUT */",
+          "why": "C6/E604-E611: the table's second half is the sine negated"
+        },
+        {
+          "file": "src/world.c",
+          "find": "a8 = ((d352 << 1) + b356 + (d352 >> 15)) & 0xFFFF;",
+          "replace": "a8 = ((d352 << 1) + b356) & 0xFFFF;   /* MUT */",
+          "why": "C6/E531-E533 DEC / ASL / ADC with no CLC: at centre line 0 the beam's stretch starts at the buffer - 1"
+        },
+        {
+          "file": "src/field.c",
+          "find": "        if (L >= 6 || !(cgadsub & (1 << L)) || prevent == 3 || (prevent == 1 && !inWin) || (prevent == 2 && inWin)) continue;",
+          "replace": "        if (L >= 6 || !(cgadsub & (1 << L)) || prevent == 3) continue;   /* MUT */",
+          "why": "CGWSEL prevent 1: the fixed colour only inside the colour window (the clouds grey, the light yellow)"
+        },
+        {
+          "file": "src/field.c",
+          "find": "#define OW_HDMA_LINE 0",
+          "replace": "#define OW_HDMA_LINE 1   /* MUT */",
+          "why": "row y takes unit y of the wave's repeat-mode table"
+        },
+        {
+          "file": "src/field.c",
+          "find": "static void worldClearHdmaArea(uint8_t* wram) { if (wram) memset(wram + 0x8621, 0, 0x800); }",
+          "replace": "static void worldClearHdmaArea(uint8_t* wram) { (void)wram; }   /* MUT */",
+          "why": "C2/2BFB zeroes $7E:8621-8E20 on the world's load: window 1's second buffer starts from 00, not the field's 80s"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  { uint16_t v; if ((en & 0x02) && owHdmaWordAt(wram, (uint8_t)(en & 0x02), 0x26, line - 1 < 0 ? 0 : line - 1, &v)) { *l = v & 0xFF; *r = v >> 8; return 1; } }",
+          "replace": "  /* MUT */",
+          "why": "C6/E448's channel 1 feeds WH0 / WH1 as a pair: the light's first beam"
+        }
+      ],
+      "notes": "WORLD 1F5 AFTER THE OCEAN PALACE (disasm/notes/ocean_palace_aftermath.md sec. 2). From the user's pre-scene capture, no input: the cartridge reaches 1F5 at f869; C6/E595 installs the wave (indirect table $8A4F, channel 3 DMAP 42 over BG1VOFS) and C6/E5C5 writes its 224-line buffer a frame ($9A36 / $9796 by +$24's parity, line k = $26 + the signed sine at phase + 8k); C6/E448 / E470 install channels 1 / 2 (DMAP 41 over $2126 / $2128) and E498 / E4BE write the windows' buffers with C3/0077's circle stretched +$24 lines; CGWSEL 10 keeps the fixed colour inside the colour window (window 1 / 2 per WOBJSEL, WOBJLOG's join). The world's WRAM runs 6 frames behind the cartridge until 1EE and 10 after the way back (the world entry's load clock, a known item), so the pictures are graded at d = +5 and +9 -- P + 1 on that clock."
+    },
+    {
+      "name": "field-colour-circle-c0-232a-238a-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/field_colcircle_cmp.py"
+      ],
+      "env": {},
+      "expect": [
+        "colcircle: open picture cartridge f180 best port f178 (-2): 0 px differ",
+        "colcircle: open picture cartridge f210 best port f208 (-2): 0 px differ",
+        "colcircle: open f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 60",
+        "colcircle: close picture cartridge f170 best port f168 (-2): 0 px differ",
+        "colcircle: close picture cartridge f200 best port f198 (-2): 0 px differ",
+        "colcircle: close picture cartridge f216 best port f214 (-2): 0 px differ",
+        "colcircle: close f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 00",
+        "colcircle: fixed7 f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 00",
+        "colcircle: fixed9 f150-269 120 frames, state and both window buffers equal on every one; at the end $0139 00 $013C 00"
+      ],
+      "pin": [
+        "^colcircle: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/shop90_lake.state",
+        "saves/field_re/shop90.lakewram",
+        "tools/field_colcircle_cmp.py"
+      ],
+      "note_pass": "C0/21E1's entries 4, 5 and 7-0A (FF 97 / FF 98 / FF 99 / FF 9A) are the ROM's: the circle grows and shrinks as the colour window through C3/0077's argument 1, its tables, registers and teardown equal to the cartridge's on every frame, and the picture -- the sub screen's sum limited to the circle, the fixed blue where it is transparent, the sprites' own math after F1's $0BE0 -- pixel for pixel at the field's P + 2",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  ctIrisCircle(m, 0x01);                                                     // 237B LDA #01 / JSL C3/0008",
+          "replace": "  ctIrisCircle(m, 0x00);   /* MUT */",
+          "why": "C0/237B `LDA #01`: C3/0077's argument 1, the half-height circle"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "    if (r8(m, 0x7E013C) == 0) ctLineClose(m);                                // 238A LDA $3C / BEQ ->23E2",
+          "replace": "    if (r8(m, 0x7E013C) == 0) w8(m, 0x7E0139, 0);   /* MUT */",
+          "why": "C0/238A ends in C0/23E2: the window's registers torn down"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "  w8(m, 0x7E0BDB, 0x20); w8(m, 0x7E0BDE, 0x12);                             // 2342-2349",
+          "replace": "  w8(m, 0x7E0BDB, 0x20); w8(m, 0x7E0BDE, 0x02);   /* MUT */",
+          "why": "CGWSEL $12: the math only inside the colour window"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "    w8(m, 0x7E013C, r8(m, 0x7E013C) + 1);                                    // 2381 INC $3C",
+          "replace": "    w8(m, 0x7E013C, r8(m, 0x7E013C) + 2);   /* MUT */",
+          "why": "C0/2381: the radius grows a step a frame"
+        },
+        {
+          "file": "src/field.c",
+          "find": "        if (baked) memcpy(d, pre + bi * 3, 3);",
+          "replace": "        if (0) memcpy(d, pre + bi * 3, 3);   /* MUT */",
+          "why": "outside the window the math is prevented: the bake's sub-screen sum taken off"
+        },
+        {
+          "file": "src/field.c",
+          "find": "      int useSub = (op == 0xFF ? bgSub : sub) && subCov[bi];",
+          "replace": "      int useSub = 0;   /* MUT */",
+          "why": "CGWSEL bit 1: the sub pixel is the operand, the fixed colour only where it is transparent"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  g_colObjMath = (w128[0x11520] & 0x10) && (g_colWinMath & 0x10) && (cgw & 0xC0) == 0;",
+          "replace": "  g_colObjMath = 0;   /* MUT */",
+          "why": "CGADSUB bit 4: the sprites of palettes 4-7 take the math too"
+        },
+        {
+          "file": "src/scene.c",
+          "find": "static int sceneEffect(const SceneData* sd) { return sd->fxLiveOn ? sd->fxLive : sd->effect_flags; }",
+          "replace": "static int sceneEffect(const SceneData* sd) { return sd->effect_flags; }   /* MUT */",
+          "why": "the field's CGADSUB is $0BE0, which op 0xF1 rewrites: the bake follows it"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (st == 7 || st == 9) w8(m, 0x7E0139, (uint8_t)(st + 1));",
+          "replace": "  if (0) w8(m, 0x7E0139, (uint8_t)(st + 1));   /* MUT */",
+          "why": "C0/257D / 2602: entries 7 and 9 run twice (7 -> 8, 9 -> 0A), the circle in both buffers"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "w16(m, 0x7E1D8F, 0xF01D);",
+          "replace": "w16(m, 0x7E1D8F, 0x0000);   /* MUT */",
+          "why": "C0/254D: $1D8F = F01D (16-bit)"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "    w8(m, 0x7E0BD8, 0x13); w8(m, 0x7F1521, 0x13);",
+          "replace": "    w8(m, 0x7E0BD8, 0x17); w8(m, 0x7F1521, 0x17);   /* MUT */",
+          "why": "C0/25BA: entry 9's TS = 13"
+        }
+      ],
+      "notes": "C0/21E1'S ENTRIES 4 AND 5 (docs/ROADMAP.md F19). `FF 97` (C0/4191: FF 90's stores, $0139 = 04) and `FF 98` ($0139 = 05) hand the main loop the iris's circle as the COLOUR window: C0/232A grows it (WOBJSEL 20, CGWSEL 12, TMW 17, `TSB $28`, the buffer by $53, `LDA #01 / JSL C3/0008`), C0/238A shrinks it and at radius 0 runs C0/23E2. Graded from a quiet capture (loc 005) with scene 051's operands poked on both sides at frame 150; every frame's $0139 / $013C / $0153 / $0128, the shadows and both window buffers. Like 051 the room keeps BG3 on the sub screen (TM 13 / TS 04): the circle limits that sum (field.c fieldColWindowApply on the bake's two screens, scene.c CtFieldSceneScreens), adds the fixed blue where the sub screen is transparent, and F1's $0BE0 = 17 stays after the teardown -- the bake follows $0BE0 (CtFieldSceneSetEffect) and the lead's palette-4+ pixels take BG3's sub pixel. Six pictures at the field's P + 2. FF 99 / FF 9A (C0/2514 / 2589, entries 7/8 and 9/0A: the fixed circles round (7C, 06) with their screen set-up and $1D8D-$1D92) are graded on their state the same way; their picture is not drawn yet (live TM / TS, per-layer window masks, $1D8D's scroll words)."
     }
   ],
   "excluded": [

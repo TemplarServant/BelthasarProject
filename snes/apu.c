@@ -28,6 +28,10 @@ void (*g_apuDspWriteHook)(Apu* apu, uint8_t adr, uint8_t val) = NULL;
 // what its upload receivers store), NULL unless asked for.
 void (*g_apuReadHook)(Apu* apu, uint16_t adr, uint8_t val) = NULL;
 void (*g_apuWriteHook)(Apu* apu, uint16_t adr, uint8_t val) = NULL;
+// CT_MIXER_CAPTURE (src/audio.c): every SPC write to its RAM (before it lands, so the hook sees the old byte) and every
+// S-DSP register read with the value the SPC got.
+void (*g_apuRamWriteHook)(Apu* apu, uint16_t adr, uint8_t val) = NULL;
+void (*g_apuDspReadHook)(Apu* apu, uint8_t adr, uint8_t val) = NULL;
 
 Apu* apu_init(Snes* snes) {
   Apu* apu = malloc(sizeof(Apu));
@@ -129,7 +133,9 @@ uint8_t apu_read(Apu* apu, uint16_t adr) {
       return apu->dspAdr;
     }
     case 0xf3: {
-      return dsp_read(apu->dsp, apu->dspAdr & 0x7f);
+      uint8_t v = dsp_read(apu->dsp, apu->dspAdr & 0x7f);
+      if(g_apuDspReadHook) g_apuDspReadHook(apu, apu->dspAdr & 0x7f, v);
+      return v;
     }
     case 0xf4:
     case 0xf5:
@@ -222,6 +228,7 @@ void apu_spcWrite(void* mem, uint16_t adr, uint8_t val) {
   Apu* apu = (Apu*) mem;
   apu_cycle(apu);
   if(g_apuWriteHook) g_apuWriteHook(apu, adr, val);
+  if(g_apuRamWriteHook) g_apuRamWriteHook(apu, adr, val);
   apu_write(apu, adr, val);
 }
 

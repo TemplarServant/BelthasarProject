@@ -166,14 +166,15 @@ def flight(tag='epoch-flight', drive_o=None, drive_p=None, anchor='04', shots=(3
 
 def omen():
     """The Black Omen rising on 1F6 after the first flight (C2:0632: C2/7AFC / 7B20's pictures, C2/7C56 / 7C97's HDMA wave on
-    BG2, C2/7CD8 / 7D5E's steps; TM 15 / TS 12, BG3 added to the sub screen): five pictures, the port 360 frames on."""
+    BG2, C2/7CD8 / 7D5E's steps; TM 15 / TS 12, BG3 added to the sub screen): five pictures, the port 361 frames on -- the
+    world's P + 1 (its WRAM runs 362 frames behind here: the wave buffer's tail at cartridge f698 = port f1060)."""
     os.makedirs(OUT, exist_ok=True)
     drive_o = ['0:60', '100:2'] + ['0:30', '100:2'] * 50
     drive_p = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 50
     shots = (700, 900, 1100, 1300, 1500)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_SHOTS=os.path.join(OUT, 'om'),
-               CT_SHOTS_AT=','.join(str(f + 360) for f in shots), CT_SHOTS_EXIT='1')
+               CT_SHOTS_AT=','.join(str(f + 361) for f in shots), CT_SHOTS_EXIT='1')
     r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(drive_p)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     und = sorted({l.strip() for l in (r.stdout + r.stderr).splitlines() if 'UNDERIVED' in l})
@@ -187,10 +188,10 @@ def omen():
             bs.append(it); t += n
         subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch24.state'), o_raw,
                         '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
-        po = raw_rgb(os.path.join(OUT, 'om_f%d.raw' % (f + 360)), False)
+        po = raw_rgb(os.path.join(OUT, 'om_f%d.raw' % (f + 361)), False)
         oo = raw_rgb(o_raw, True)
         n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
-        print('epoch-omen: picture port f%d / cartridge f%d %d px differ' % (f + 360, f, n))
+        print('epoch-omen: picture port f%d / cartridge f%d %d px differ' % (f + 361, f, n))
     return 0
 
 

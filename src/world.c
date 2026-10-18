@@ -1837,6 +1837,7 @@ void CtWorldObjOp05(uint8_t* ram, const uint8_t* op) {
 // a host without one -- ct_world, the oracle -- names the call and advances, as before).
 static const uint8_t* g_owRom = NULL;   // the host's ROM image (CtWorldSetRom, below)
 static long g_owRomLen = 0;
+static void (*g_owIrisCircle)(uint8_t* wram128, uint8_t arg);   // C3/0077, the host's (CtWorldSetIrisCircle, below)
 static CtWorldOp4EHook g_owWinCall = NULL;
 void CtWorldSetOp4EHook(CtWorldOp4EHook fn) { g_owWinCall = fn; }
 // The picture loaders' body (see their cases in CtWorldObjOp4E): $0300-$0305 as the routine leaves them, then C3/0002.
@@ -1870,6 +1871,98 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
     // $7E:8A42, bank $7E -- the registers here), `TSB $4A` #04, the object's +$22 -> $0350 and +$24 -> $0352 (bank $7E),
     // JSL C3/000E; both: $7E:8A25 / $8A27 = the table half C3/01E4 wrote (+0 or +$E0 by $0351) and +$70. The routine's
     // seed reads the rule's virtual beam (field_window_wipe.md, "The virtual beam").
+    // $C6:E595 / $C6:E5C5 -- THE WAVE OVER BG1 (world 1F5 after the Ocean Palace: MEASURED, the cartridge from
+    // saves/field_re/pre_scene_19f.state, active f993-1580 and f2019-2447). E595, the install: the indirect table $7E:8A4F
+    // = `F0 .. .. F0 .. .. 00` (two 112-line runs; their pointers are the NMI's copy of $8A29 / $8A2B, C2/02B2-02DE),
+    // HDMA channel 3 = DMAP 42 (two writes, indirect, bank 7E) over $210E (BG1's VOFS), `TSB $4A` #08, the object's
+    // +$22-$23 := 0. E5C5, a call a frame: the 224-line table into $7E:9A36 or $7E:9796 by the object's +$24 bit 0 (`LSR /
+    // BCS`), $8A29 = it, $8A2B = it + $E0, +$24 up (16-bit); line k's word = $26 + (+-C0:F900[(phase + 8k) & 3FF] * 4) >> 8
+    // -- the second half of the table negated (`EOR #FFFF / INC / XBA / ORA #FF00`), the first `XBA / AND #00FF` -- then
+    // +$22 += 8. MEASURED: the cartridge's table at f1002 is this one at phase 0x40 ($9A36) and 0x38 ($9796), $26 = 0230.
+    // $C6:E448 / E470 -- THE WINDOW OBJECTS' INSTALLS (world 1F5 after the Ocean Palace: MEASURED, $4A = 0A and the table
+    // $8A35 live f1024-1055 and from f1116, CGWSEL 10 -- the colour math only inside -- and CGADSUB 11 / 13): E448 the
+    // indirect table $7E:8A35 = `F0 .. .. F0 .. .. 00` and HDMA channel 1 = DMAP 41 (two registers, indirect, bank 7E) over
+    // $2126 (WH0 / WH1), `TSB $4A` #02; E470 the same at $8A42, channel 2 over $2128 (WH2 / WH3), `TSB $4A` #04. Their
+    // entries' pointers are the NMI's copies of $8A21 / $8A23 and $8A25 / $8A27 (C2/02B2-02DE).
+    case 0xC6E448:
+      ram[0x8A35] = 0xF0; ram[0x8A38] = 0xF0; ram[0x8A3B] = 0x00;  // E448-E453
+      CtWorldHdmaSet(1, 0x41, 0x26, 0x8A35); ram[0x4A] |= 0x02;    // E457-E46D
+      break;
+    case 0xC6E470:
+      ram[0x8A42] = 0xF0; ram[0x8A45] = 0xF0; ram[0x8A48] = 0x00;  // E470-E47B
+      CtWorldHdmaSet(2, 0x41, 0x28, 0x8A42); ram[0x4A] |= 0x04;    // E47F-E495
+      break;
+    // $C6:E498 / E4BE, a call a frame: the window's table into $8B56 / $8DF6 (channel 1) or $9176 / $9416 (channel 2) by the
+    // object's +$26 bit 0, the pointers $8A21 / $8A23 (or $8A25 / $8A27) = it and it + $E0, +$26 up; then (E4E2) C3/0008's
+    // circle around (+$14, +$18) of radius +$22 into it (the host's C3/0077), and E4FF stretches it +$24 lines: radius 0 -> one
+    // entry (+$14) at line +$18 repeated down +$24 lines (E50F-E52B: the word, then an MVN one byte on); else the circle's
+    // top half (its +$22 rows above the centre) moved +$24 lines down (E52E-E553) and the rows between filled with the
+    // centre's (E555-E563: an MVN a word on). The light that rises over 1F5.
+    case 0xC6E498: case 0xC6E4BE: {
+      unsigned X = ram[0x4E] | (ram[0x4F] << 8);
+      int two = tgt == 0xC6E4BE;
+      unsigned par = ram[(X + 0x26) & 0xFFFF] & 1;
+      unsigned buf = two ? (par ? 0x9416 : 0x9176) : (par ? 0x8DF6 : 0x8B56);   // E49C-E4A7 / E4C2-E4CD
+      obPutW(ram + (two ? 0x8A25 : 0x8A21), (uint16_t)buf);         // E4AA / E4D0
+      obPutW(ram + 0x0356, (uint16_t)buf);                         // E4AE / E4D4
+      obPutW(ram + (two ? 0x8A27 : 0x8A23), (uint16_t)(buf + 0xE0));   // E4B5 / E4DB
+      { unsigned c = (ram[(X + 0x26) & 0xFFFF] | (ram[(X + 0x27) & 0xFFFF] << 8)) + 1;    // E4B9 / E4DF INC $0026,X
+        ram[(X + 0x26) & 0xFFFF] = (uint8_t)c; ram[(X + 0x27) & 0xFFFF] = (uint8_t)(c >> 8); }
+      #define OBW(o) ((unsigned)(ram[(X + (o)) & 0xFFFF] | (ram[(X + (o) + 1) & 0xFFFF] << 8)))
+      obPutW(ram + 0x0350, (uint16_t)OBW(0x14)); obPutW(ram + 0x0352, (uint16_t)OBW(0x18));   // E4E2-E4EB
+      obPutW(ram + 0x0354, (uint16_t)OBW(0x22)); obPutW(ram + 0x0358, 0x007E);                 // E4EE-E4F7
+      if (g_owIrisCircle) g_owIrisCircle(ram, 0x00);                                   // E4FA TDC / E4FB JSL C3/0008
+      unsigned b356 = ram[0x0356] | (ram[0x0357] << 8);
+      if (!OBW(0x22)) {                                            // E50A LDA $0022,X / BNE
+        // (Every ADC of the stretch follows an ASL with no CLC: the carry is the shifted word's bit 15.)
+        unsigned n8 = OBW(0x24), Y = ((OBW(0x18) << 1) + b356 + (OBW(0x18) >> 15)) & 0xFFFF;   // E50F-E51B ASL / ADC
+        obPutW(ram + Y, (uint16_t)OBW(0x14));                      // E51C-E51F
+        unsigned src = Y, dst = (Y + 1) & 0xFFFF, cnt = ((n8 << 1) - 2) & 0xFFFF;   // E522-E528
+        for (unsigned k = 0; k <= cnt; k++) ram[(dst + k) & 0xFFFF] = ram[(src + k) & 0xFFFF];   // E529 MVN $7E,$7E
+      } else {
+        unsigned r352 = ram[0x0352] | (ram[0x0353] << 8);
+        // E52E-E536 `LDA $0352 / DEC A / ASL A / ADC $0356`: at centre line 0 the ASL of FFFF carries, so a8 = the buffer - 1
+        // (MEASURED, ow_wave_cmp at cartridge f1040: without the carry the beam's last lines were one row off).
+        unsigned d352 = (r352 - 1) & 0xFFFF, a8 = ((d352 << 1) + b356 + (d352 >> 15)) & 0xFFFF;
+        unsigned Y = a8, Xd = ((OBW(0x24) << 1) + a8 + (OBW(0x24) >> 15)) & 0xFFFF;   // E538-E541 ASL / ADC $08
+        unsigned n = ram[0x0354] | (ram[0x0355] << 8);             // E542-E545
+        do {                                                       // E547-E553
+          ram[Xd & 0xFFFF] = ram[Y & 0xFFFF]; ram[(Xd + 1) & 0xFFFF] = ram[(Y + 1) & 0xFFFF];
+          Y = (Y - 2) & 0xFFFF; Xd = (Xd + 2) & 0xFFFF; n = (n - 1) & 0xFFFF;
+        } while (n);
+        unsigned cnt = ((OBW(0x24) << 1) + 0xFFFD + (OBW(0x24) >> 15)) & 0xFFFF, src = a8, dst = (a8 + 2) & 0xFFFF;   // E555-E562
+        for (unsigned k = 0; k <= cnt; k++) ram[(dst + k) & 0xFFFF] = ram[(src + k) & 0xFFFF];   // E563 MVN $7E,$7E
+      }
+      #undef OBW
+      break;
+    }
+    case 0xC6E595: {
+      unsigned X = ram[0x4E] | (ram[0x4F] << 8);
+      ram[0x8A4F] = 0xF0; ram[0x8A52] = 0xF0; ram[0x8A55] = 0x00;  // E595-E5A3
+      CtWorldHdmaSet(3, 0x42, 0x0E, 0x8A4F);                       // E5A4-E5B5
+      ram[0x4A] |= 0x08;                                           // E5B8 TSB $4A
+      ram[(X + 0x22) & 0xFFFF] = 0; ram[(X + 0x23) & 0xFFFF] = 0;  // E5BC-E5C1
+      break;
+    }
+    case 0xC6E5C5: {
+      unsigned X = ram[0x4E] | (ram[0x4F] << 8);
+      if (!g_owRom || g_owRomLen < 0xFD00) break;
+      unsigned buf = (ram[(X + 0x24) & 0xFFFF] & 1) ? 0x9796 : 0x9A36;   // E5CA-E5D9
+      obPutW(ram + 0x8A29, (uint16_t)buf); obPutW(ram + 0x8A2B, (uint16_t)(buf + 0xE0));   // E5DC-E5E7
+      { unsigned c = (ram[(X + 0x24) & 0xFFFF] | (ram[(X + 0x25) & 0xFFFF] << 8)) + 1;     // E5EB INC $0024,X (16-bit)
+        ram[(X + 0x24) & 0xFFFF] = (uint8_t)c; ram[(X + 0x25) & 0xFFFF] = (uint8_t)(c >> 8); }
+      unsigned ph = ram[(X + 0x22) & 0xFFFF] | (ram[(X + 0x23) & 0xFFFF] << 8), base = ram[0x26] | (ram[0x27] << 8);
+      for (int k = 0; k < 0xE0; k++, ph = (ph + 8) & 0xFFFF) {     // E5F3-E62E
+        unsigned x = ph & 0x3FF, v = (unsigned)g_owRom[0xF900 + x] * 4, r;
+        if (x >= 0x200) r = 0xFF00 | ((((~v) + 1) & 0xFFFF) >> 8);  // E604-E611
+        else r = (v >> 8) & 0xFF;                                   // E613-E614
+        r = (r + base) & 0xFFFF;                                    // E617 ADC $26
+        ram[(buf + 2 * k) & 0xFFFF] = (uint8_t)r; ram[(buf + 2 * k + 1) & 0xFFFF] = (uint8_t)(r >> 8);
+      }
+      { unsigned p = (ram[(X + 0x22) & 0xFFFF] | (ram[(X + 0x23) & 0xFFFF] << 8)) + 8;     // E630-E639
+        ram[(X + 0x22) & 0xFFFF] = (uint8_t)p; ram[(X + 0x23) & 0xFFFF] = (uint8_t)(p >> 8); }
+      break;
+    }
     case 0xC6E241: case 0xC6E27E: {
       if (tgt == 0xC6E241) CtWorldHdmaSet(2, 0x40, 0x27, 0x8A42);   // E241: channel 2 = window 1's right edge
       int r = g_owWinCall ? g_owWinCall(ram, tgt) : -1;
@@ -1911,6 +2004,9 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
 // The ROM image is the host's (CtWorldSetRom); without one, and for any bank that is neither $7E nor a ROM bank, the
 // read stays where it always was, $7F.
 void CtWorldSetRom(const uint8_t* rom, long len) { g_owRom = rom; g_owRomLen = len; }
+// C3/0077's circle (JSL C3/0008), the host's (CtIrisCircleImage, the field's port over the same 128 KB image layout): the
+// $C6:E498 / E4BE window objects call it. Without one the objects leave their table as it was.
+void CtWorldSetIrisCircle(void (*fn)(uint8_t* wram128, uint8_t arg)) { g_owIrisCircle = fn; }
 static const uint8_t* obScript(const uint8_t* ram, uint8_t bank, uint16_t pc, uint8_t* buf) {
   if (bank == 0x7E) return ram + pc;
   if (bank >= 0xC0 && g_owRom) {

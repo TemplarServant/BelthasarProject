@@ -1396,8 +1396,61 @@ static uint32_t* g_spcCov;
 static FILE* g_dspLog;
 static long g_audFrameNo;
 static void spcCovHook(Apu* apu, uint16_t pc) { (void)apu; g_spcCov[pc]++; }
+// CT_MIXER_CAPTURE=<file>: what the S-DSP was given and what it made, for the native mixer's replay (ct.exe --mixreplay,
+// tools/mixer_replay.py; disasm/notes/audio_mixer.md sec. 9). Binary, little-endian: "CTMX", u32 version 1, then records:
+//   'S' u32 apucycles, u32 n, n bytes of dsp_handleState, 64 KB ARAM -- a segment starts (power-on, a seeded or loaded SPC)
+//   'W' varint dcyc, reg, val      -- an S-DSP register write ($F3), dcyc APU cycles after the previous record
+//   'A' varint dcyc, u16 adr, val  -- an SPC write to its RAM that CHANGES the byte (the DSP's own echo writes are not
+//                                     the SPC's: both replays make them)
+//   'R' varint dcyc, reg, val      -- an S-DSP register read and the value the SPC got
+//   'H' u32 n, u32 fnv             -- the next n samples the DSP made (FNV-1a/32 over int16 L,R), 4096 a record
+// One SPC is followed: the last CtAudio made, seeded or loaded (each starts a new segment).
+static FILE* g_mixCap;
+static const Apu* g_mixApu;
+static uint32_t g_mixLast;              // the APU cycle of the last record
+static uint32_t g_mixHash, g_mixHashN;
+#define MIXCAP_CHUNK 4096
+static void mixPut32(uint32_t v) { uint8_t b[4] = { (uint8_t)v, (uint8_t)(v >> 8), (uint8_t)(v >> 16), (uint8_t)(v >> 24) }; fwrite(b, 1, 4, g_mixCap); }
+static void mixStamp(int tag, const Apu* apu) {
+  uint32_t d = apu->cycles - g_mixLast;
+  g_mixLast = apu->cycles;
+  fputc(tag, g_mixCap);
+  do { uint8_t b = d & 0x7f; d >>= 7; fputc(b | (d ? 0x80 : 0), g_mixCap); } while (d);
+}
+static void mixFlushHash(void) {
+  if (!g_mixHashN) return;
+  fputc('H', g_mixCap); mixPut32(g_mixHashN); mixPut32(g_mixHash);
+  g_mixHash = 2166136261u; g_mixHashN = 0;
+}
+static void mixSampleHook(Dsp* dsp, int16_t l, int16_t r) {
+  if (dsp->apu != g_mixApu) return;
+  uint8_t b[4] = { (uint8_t)l, (uint8_t)((uint16_t)l >> 8), (uint8_t)r, (uint8_t)((uint16_t)r >> 8) };
+  for (int i = 0; i < 4; i++) g_mixHash = (g_mixHash ^ b[i]) * 16777619u;
+  if (++g_mixHashN == MIXCAP_CHUNK) mixFlushHash();
+}
+static void mixRamHook(Apu* apu, uint16_t adr, uint8_t val) {
+  if (apu != g_mixApu || apu->ram[adr] == val) return;
+  mixStamp('A', apu); fputc(adr & 0xff, g_mixCap); fputc(adr >> 8, g_mixCap); fputc(val, g_mixCap);
+}
+static void mixReadHook(Apu* apu, uint8_t adr, uint8_t val) {
+  if (apu != g_mixApu) return;
+  mixStamp('R', apu); fputc(adr, g_mixCap); fputc(val, g_mixCap);
+}
+static void mixSnapshot(const Apu* apu) {   // a segment begins: the DSP's whole state and the RAM it reads
+  if (!g_mixCap) return;
+  mixFlushHash();
+  g_mixApu = apu; g_mixLast = apu->cycles;
+  StateHandler* sh = sh_init(true, NULL, 0);
+  dsp_handleState(apu->dsp, sh);
+  fputc('S', g_mixCap); mixPut32(apu->cycles); mixPut32((uint32_t)sh->offset);
+  fwrite(sh->data, 1, (size_t)sh->offset, g_mixCap); fwrite(apu->ram, 1, 0x10000, g_mixCap);
+  sh_free(sh);
+}
+static void mixCapClose(void) { if (g_mixCap) { mixFlushHash(); fclose(g_mixCap); g_mixCap = NULL; } }
+
 static void dspLogHook(Apu* apu, uint8_t adr, uint8_t val) {
-  fprintf(g_dspLog, "%ld %llu %02X %02X\n", g_audFrameNo, (unsigned long long)apu->cycles, adr, val);
+  if (g_mixCap && apu == g_mixApu) { mixStamp('W', apu); fputc(adr, g_mixCap); fputc(val, g_mixCap); }
+  if (g_dspLog) fprintf(g_dspLog, "%ld %llu %02X %02X\n", g_audFrameNo, (unsigned long long)apu->cycles, adr, val);
 }
 static void spcCovWrite(void) {
   const char* p = getenv("CT_SPC_COVERAGE");
@@ -1417,6 +1470,16 @@ static void measureInit(void) {
   if (c && *c && (g_spcCov = (uint32_t*)calloc(0x10000, sizeof *g_spcCov))) { g_apuOpHook = spcCovHook; atexit(spcCovWrite); }
   const char* d = getenv("CT_DSP_LOG");
   if (d && *d && (g_dspLog = fopen(d, "w"))) { g_apuDspWriteHook = dspLogHook; atexit(dspLogClose); }
+  const char* x = getenv("CT_MIXER_CAPTURE");
+  if (x && *x && (g_mixCap = fopen(x, "wb"))) {
+    static char buf[1 << 20];
+    setvbuf(g_mixCap, buf, _IOFBF, sizeof buf);
+    fwrite("CTMX", 1, 4, g_mixCap); mixPut32(1);
+    g_mixHash = 2166136261u; g_mixHashN = 0;
+    g_apuDspWriteHook = dspLogHook; g_apuRamWriteHook = mixRamHook; g_apuDspReadHook = mixReadHook;
+    g_dspSampleHook = mixSampleHook;
+    atexit(mixCapClose);
+  }
 }
 
 CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
@@ -1434,6 +1497,7 @@ CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
   a->apu = apu_init(a->shell);
   apu_reset(a->apu);                                   // SPC PC -> $FFC0, the IPL
   if (CtSndLockstepWanted()) CtSndLockstepAttach(a->apu);   // the C driver beside this SPC (src/sound/lockstep.h)
+  mixSnapshot(a->apu);
   a->ready = uploadDriver(a, rom, romLen);
   audReset(a);                                         // the IPL transfer's own output is not the game's
   if (!a->ready) fprintf(stderr, "[audio] $C7 upload did not complete -- running silent\n");
@@ -1442,6 +1506,7 @@ CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
 
 void CtAudioFree(CtAudio* a) {
   if (!a) return;
+  if (a->apu == g_mixApu) { mixFlushHash(); g_mixApu = NULL; }
   if (a->apu) apu_free(a->apu);
   free(a->shell);
   free(a);
@@ -1668,6 +1733,7 @@ void CtAudioSeedFromApu(CtAudio* a, const Apu* src) {
   a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;
   audReset(a);
   CtSndLockstepResync(a->apu);
+  mixSnapshot(d);
 }
 #define CT_APUSTATE_MAGIC 0x50415443u   /* 'CTAP' LE */
 int CtAudioSaveState(CtAudio* a, const char* path) {
@@ -1693,6 +1759,7 @@ int CtAudioLoadState(CtAudio* a, const char* path) {
     StateHandler* sh = sh_init(false, buf, (int)hdr[1]);
     apu_handleState(a->apu, sh);
     sh_free(sh);
+    mixSnapshot(a->apu);
     a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;   // (as CtAudioSeedFromApu: the adopted driver's moment)
     audReset(a);
     CtSndLockstepResync(a->apu);

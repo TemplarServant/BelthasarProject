@@ -42,6 +42,8 @@ extern void (*g_apuOpHook)(Apu* apu, uint16_t pc);                       // meas
 extern void (*g_apuDspWriteHook)(Apu* apu, uint8_t adr, uint8_t val);
 extern void (*g_apuReadHook)(Apu* apu, uint16_t adr, uint8_t val);       // the SPC700's bus reads / writes
 extern void (*g_apuWriteHook)(Apu* apu, uint16_t adr, uint8_t val);
+extern void (*g_apuRamWriteHook)(Apu* apu, uint16_t adr, uint8_t val);
+extern void (*g_apuDspReadHook)(Apu* apu, uint8_t adr, uint8_t val);
 uint8_t apu_read(Apu* apu, uint16_t adr);
 void apu_write(Apu* apu, uint16_t adr, uint8_t val);
 uint8_t apu_spcRead(void* mem, uint16_t adr);

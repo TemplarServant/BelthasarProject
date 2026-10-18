@@ -584,7 +584,7 @@ static int worldInit(CtAssets* a, World* w, int id) {
   int nrec = *p++;
   w->wram[0x1B38] = (uint8_t)nrec;
   memcpy(w->wram + 0x7E00, p, (size_t)nrec * 7); p += (size_t)nrec * 7;
-  { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); }
+  { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }
   CtWorldLoadTriggers(w->wram, id);                     // ...and the event / transition cells beside them (C2/2A44)
   memcpy(w->vram + 0x4000, p, 28672); p += 28672;
   if (b[0] >= 2 && p + 0x1000 + 0x1600 <= b + blen) {   // fmt 2: ambient-object VM inputs
@@ -726,8 +726,16 @@ static void worldReloadVram(CtAssets* a, World* w) {
   if (b[0] >= 4 && p + 0x2000 <= b + blen) memcpy(w->vram + 0xE000, p, 0x2000);
   worldLoadObjFromRom(w);
 }
+// C2/2BFB, from the loader (C2/2C7A) and the rebuild (C2/2C96): `PHD / LDA #21 / XBA / LDA #00 / TCD / LDX #8621 / STX $81 /
+// LDA #7E / STA $83 / LDX #0200 / LDA #00` and four `STA $80` a pass over 512 passes -- $7E:8621-8E20 zeroed through WMDATA:
+// the HDMA effects' pointer words $8A21-$8A34, their indirect tables $8A35.. and the window buffers $8B56-$8E20. MEASURED,
+// the rule's cartridge from saves/field_re/pre_scene_19f.state: `ct.exe --cputrace` at f545 (the 1F4 load) runs it, and
+// $8DF6 reads 00 from there where the port kept the field's 80s until 1F5's light wrote it (ow_wave_cmp's beams).
+static void worldClearHdmaArea(uint8_t* wram) { if (wram) memset(wram + 0x8621, 0, 0x800); }
 static void worldReloadMenuScratch(CtAssets* a, World* w) {
   uint32_t blen = 0;
+  worldClearHdmaArea(w->wram);                            // C2/2C96 JSR C2/2BFB
+  if (w->wram) { w->wram[0xA916] = 0x25; w->wram[0xA917] = 0xA9; }   // C2/2C99-2C9E `LDA #A925 / STA $7EA916`
   const uint8_t* b = CtAssetGet(a, CT_ASSET_WORLD, (uint32_t)w->world, &blen);
   if (!b || blen < 20503 || !w->wram) return;
   const uint8_t* p = b + 6 + 6144 + 6144;                 // past the two grids ($4000, $5800: C2/2E72's stash)
@@ -1008,6 +1016,7 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
   w->wram[0x0042] = 0x13;                              // C2/0159 TS = BG1+BG2+OBJ
   CtWorldEnter(&w->cam, &w->mv, px >> 3, py >> 3);
   worldEnterSong(w, px >> 3, py >> 3);
+  worldClearHdmaArea(w->wram);                         // C2/2C7A JSR C2/2BFB, before C2/09C5's two maps
   CtWorldTilemapBuild(&w->stm, w->wram, &w->cam);
   w->entryLatch = 0xFFFF;
   // ⭐ C2/26D6: the overworld's FLAG BLOCK comes from the STORY PAGE, not from the world blob.
@@ -1397,8 +1406,11 @@ static void worldObjLinePieces(const World* w, int y, uint8_t* pix, uint8_t* pri
 // HDMAEN shadow $004A bit 2) walks the table at $7E:8A42: `F0 <p1> F0 <p2> 00` -- 112 lines from p1, 112 from p2 (bank
 // $7E), then the register holds. p1/p2 are the entries the NMI's C2/02C2 copied from $8A25/$8A27. Window 1's left edge is
 // WH0 = the shadow $003B (C2/025F `LDA $3B / STA $2126`). Returns the window's [l, r] on `line` (1..224) and 1, or 0.
+static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line, uint16_t* out);
 static int owWin1Line(const uint8_t* wram, int en, int wh0, int wh1, int line, int* l, int* r) {
   if (!wram) return 0;
+  // (A channel feeding WH0 / WH1 as a pair -- $C6:E448's channel 1, DMAP 41 over $2126: both edges from its entry line - 1.)
+  { uint16_t v; if ((en & 0x02) && owHdmaWordAt(wram, (uint8_t)(en & 0x02), 0x26, line - 1 < 0 ? 0 : line - 1, &v)) { *l = v & 0xFF; *r = v >> 8; return 1; } }
   uint8_t dm, bb; uint16_t tb;                                     // (channel 2 may be another effect's: C2/7C97's BG2VOFS)
   if (!(en & 0x04) || (CtWorldHdmaGet(2, &dm, &bb, &tb) && bb != 0x27)) { *l = wh0; *r = wh1; return 1; }   // off: the pushed edges
   int i = line - 1; if (i < 0) i = 0; if (i > 223) i = 223;
@@ -1425,8 +1437,17 @@ static CtMotFrame* g_mot;                        // (the picture's owners while 
 // AN INDIRECT HDMA CHANNEL'S VALUE ON A LINE (the Black Omen's wave on BG2, C2/7C56 / 7C97): the channel HDMAEN `en` holds
 // whose B-bus target is `bbad`, its table walked from the frame's top -- `n ptr` records, n = 1..80 lines with one transfer
 // (80 = 128), 81..FF = n - 80 lines with one unit a line (two bytes for DMAP mode 2, the write-twice scroll registers), 0 =
-// the end, after which the register holds. Screen row y is table line y + OW_HDMA_LINE (as window 1's, owWin1Line).
-#define OW_HDMA_LINE 1
+// the end, after which the register holds. Screen row y is table line y + OW_HDMA_LINE = y (as window 1's, owWin1Line):
+// MEASURED on world 1F5's wave over BG1 (tools/ow_wave_cmp.py; the cartridge's `--hdma` trace at peek f1120 against the
+// port's buffers: scanline s takes unit s - 1 of the 224-line table, 0 lines differ, every other buffer / shift >= 191) and
+// on the Black Omen's (tools/epoch_board_cmp.py --omen at the world's P + 1: WRAM cartridge f698 = port f1060, so peek
+// f700 = port f1061, 0 px). Both waves move a line a frame, so a one-line index error looks like a one-frame picture lag:
+// before 2026-10-18 the Black Omen read y + 1 and was graded one frame early, which hid it. (Mode 7's matrix keeps its
+// own, OW_M7_LINE.)
+#define OW_HDMA_LINE 0
+// Mode 7 (the gauge, the world map): the matrix tables' entry AND the screen Y of the formula are y + 1 -- measured with
+// the pictures of ow-epoch-gauge / the map checks; not re-derived with the 1F5 trace above.
+#define OW_M7_LINE 1
 static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line, uint16_t* out) {
   for (int ch = 0; ch < 8; ch++) {
     uint8_t dm, bb; uint16_t t;
@@ -1447,6 +1468,20 @@ static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line,
     if (have) { *out = val; return 1; }
   }
   return 0;
+}
+// THE COLOUR WINDOW on line y, column x of the view: WOBJSEL $3A bit 5 window 1 (bit 4 inverts), bit 7 window 2 (bit 6), WOBJLOG
+// $40 bits 2-3 the join of both (0 OR, 1 AND, 2 XOR, 3 XNOR); window 1's edges owWin1Line's, window 2's the pushed $3D / $3E.
+static int owColorWin(const uint8_t* wr, uint8_t en, uint8_t wh0, uint8_t wh1, int y, int x) {
+  const int sel = wr[0x3A], lg = (wr[0x40] >> 2) & 3, e1 = sel & 0x20, e2 = sel & 0x80;
+  if (!e1 && !e2) return 0;
+  int in1 = 0, in2 = 0;
+  if (e1) { int l = wh0, r = wh1; owWin1Line(wr, en, wh0, wh1, y + 1, &l, &r); in1 = (x >= l && x <= r) ^ ((sel & 0x10) != 0); }
+  if (e2) { int l = wr[0x3D], r = wr[0x3E]; uint16_t v;
+            if ((en & 0x04) && owHdmaWordAt(wr, (uint8_t)(en & 0x04), 0x28, y, &v)) { l = v & 0xFF; r = v >> 8; }   // ($C6:E470's)
+            in2 = (x >= l && x <= r) ^ ((sel & 0x40) != 0); }
+  if (!e2) return in1;
+  if (!e1) return in2;
+  return lg == 0 ? (in1 | in2) : lg == 1 ? (in1 & in2) : lg == 2 ? (in1 ^ in2) : !(in1 ^ in2);
 }
 static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int X0) {
   const uint8_t* wram = w->wram;
@@ -1544,18 +1579,19 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
   const int fix[3] = { wr ? (wr[0x0048] & 0x1F) : 0, wr ? (wr[0x0049] & 0x1F) : 0, wr ? (wr[0x0047] & 0x1F) : 0 };   // R, G, B
   uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
   for (int y = 0; y < CAMH; y++) {
-    uint16_t h2 = cs->bg2h, v2 = cs->bg2v, hv;
+    uint16_t h2 = cs->bg2h, v2 = cs->bg2v, v1 = cs->bg1v, hv;
     if (hdmaEn & 0x06) {
       if (owHdmaWordAt(wr, hdmaEn, 0x0F, y + OW_HDMA_LINE, &hv)) h2 = hv;
       if (owHdmaWordAt(wr, hdmaEn, 0x10, y + OW_HDMA_LINE, &hv)) v2 = hv;
     }
+    if ((hdmaEn & 0x08) && owHdmaWordAt(wr, hdmaEn, 0x0E, y + OW_HDMA_LINE, &hv)) v1 = hv;
     if (tsub & 0x10) worldObjLine(w, y, opix, opri, oidx, W, X0); else memset(opix, 0, (size_t)W);
     uint8_t* d = owSubScr + (size_t)y * W * 3;
     for (int x = 0; x < W; x++) {
       int ci[2][2] = { { -1, -1 }, { -1, -1 } };                     // [bg][prio]
       for (int bg = 0; bg < 2; bg++) {
         if (!(tsub & (1 << bg))) continue;
-        uint16_t hofs = bg == 0 ? cs->bg1h : h2, vofs = bg == 0 ? cs->bg1v : v2;
+        uint16_t hofs = bg == 0 ? cs->bg1h : h2, vofs = bg == 0 ? v1 : v2;
         const int mo = owMosaicOn(wr, bg);
         int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
         int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
@@ -1597,7 +1633,7 @@ static void worldComposeGauge(World* w, uint8_t* fb) {
   uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
   uint8_t keep = g_owObsel; g_owObsel = 0x03;
   for (int y = 0; y < CAMH; y++) {
-    int line = y + OW_HDMA_LINE;
+    int line = y + OW_M7_LINE;
     uint16_t v;
     int A = (int16_t)(zp[0x2C] | (zp[0x2D] << 8)), B = (int16_t)(zp[0x2E] | (zp[0x2F] << 8));
     int C = (int16_t)(zp[0x30] | (zp[0x31] << 8)), D = (int16_t)(zp[0x32] | (zp[0x33] << 8));
@@ -1713,7 +1749,7 @@ static void worldComposeMap(World* w, uint8_t* fb) {
       if (v & 0x40) fix[1] = v & 0x1F;
       if (v & 0x80) fix[2] = v & 0x1F;
     }
-    int line = (mo ? y - y % mz : y) + OW_HDMA_LINE;
+    int line = (mo ? y - y % mz : y) + OW_M7_LINE;
     int cH = hs - xc, cV = vs - yc;
     cH = (cH & 0x2000) ? (cH | ~1023) : (cH & 1023);
     cV = (cV & 0x2000) ? (cV | ~1023) : (cV & 1023);
@@ -1796,15 +1832,17 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   for (int y = 0; y < CAMH; y++) {
     uint8_t* dst = fb + (size_t)y * W * 3;
     uint16_t bg2hL = cs->bg2h, bg2vL = cs->bg2v;                 // BG2's scroll on this line: HDMA's when a channel feeds it
+    uint16_t bg1vL = cs->bg1v;                                     // ...and BG1's VOFS (1F5's wave: $C6:E595's channel 3)
     if (hdmaEn & 0x06) { uint16_t hv;
       if (owHdmaWordAt(w->wram, hdmaEn, 0x0F, y + OW_HDMA_LINE, &hv)) bg2hL = hv;
       if (owHdmaWordAt(w->wram, hdmaEn, 0x10, y + OW_HDMA_LINE, &hv)) bg2vL = hv; }
+    if (hdmaEn & 0x08) { uint16_t hv; if (owHdmaWordAt(w->wram, hdmaEn, 0x0E, y + OW_HDMA_LINE, &hv)) bg1vL = hv; }
     for (int x = 0; x < W; x++) {
       int p0 = -1, p1 = -1, p1bg1 = -1, p0bg = 5, p1bg = 5;
       bgCover[y * W + x] = 0;
       for (int bg = 0; bg < 2; bg++) {                 // BG1 over BG2 (both transparent at idx 0)
         if (!(tmain & (1 << bg))) continue;             // $212C bit0 BG1 / bit1 BG2
-        uint16_t hofs = bg == 0 ? cs->bg1h : bg2hL, vofs = bg == 0 ? cs->bg1v : bg2vL;
+        uint16_t hofs = bg == 0 ? cs->bg1h : bg2hL, vofs = bg == 0 ? bg1vL : bg2vL;
         const int mo = owMosaicOn(w->wram, bg);         // (the mosaic: the line's own scroll, the block's first pixel)
         int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
         int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
@@ -2048,21 +2086,22 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   // THE FIXED-COLOUR OPERAND (CGWSEL bit 1 clear), ppu_handlePixel's arm: the main-screen pixel, on a layer CGADSUB enables
   // (0-5; OBJ palettes 0-3 are layer 6 and never math), plus or minus the fixed colour, halved when bit 6 is set (with the
   // fixed colour as operand the half always applies), clamped to 0..31 per channel.
-  // ⚠ CGWSEL's clip / prevent modes 1 and 2 test the COLOUR WINDOW, which this composer does not build: only modes 0 and 3
-  // (window-independent) are evaluated, and a world asking for 1 or 2 is named once instead of guessed.
+  // CGWSEL's clip (bits 6-7) and prevent (bits 4-5) modes 1 and 2 test the COLOUR WINDOW (owColorWin): window 1 and / or 2 as
+  // WOBJSEL $3A enables them for it (bits 5 / 7, inverted by 4 / 6), joined by WOBJLOG $40 bits 2-3 (OR, AND, XOR, XNOR) --
+  // the shadows the NMI pushes (C2/025A-027A). MEASURED, world 1F5 after the Ocean Palace (ct.exe --hdma at f1100 of
+  // saves/field_re/pre_scene_19f.state): CGWSEL prevent 1 -- math only inside -- with window 1 for colour and empty (1..0):
+  // no math anywhere, the clouds grey where the port added the fixed colour (16, 16, 0) and drew them yellow.
   if (mathFix) {
     const int clip = (cgwsel >> 6) & 3, prevent = (cgwsel >> 4) & 3;
-    static uint8_t said = 0;
-    if ((clip == 1 || clip == 2 || prevent == 1 || prevent == 2) && !said) {
-      said = 1; fprintf(stderr, "owcompose: CGWSEL=%02X asks for the colour window -- not modelled\n", cgwsel); }
     const int fix[3] = { w->wram ? (w->wram[0x0048] & 0x1F) : 0, w->wram ? (w->wram[0x0049] & 0x1F) : 0,
                          w->wram ? (w->wram[0x0047] & 0x1F) : 0 };   // R, G, B
     for (int y = 0; y < CAMH; y++) {
       uint8_t* dst = fb + (size_t)y * W * 3;
       for (int x = 0; x < W; x++) {
         int L = mlayer[y * W + x];
-        if (clip == 3) { dst[x * 3] = dst[x * 3 + 1] = dst[x * 3 + 2] = 0; }
-        if (L >= 6 || !(cgadsub & (1 << L)) || prevent == 3) continue;
+        int inWin = (clip == 1 || clip == 2 || prevent == 1 || prevent == 2) && w->wram ? owColorWin(w->wram, hdmaEn, hwh0, hwh1, y, x - X0) : 0;
+        if (clip == 3 || (clip == 1 && !inWin) || (clip == 2 && inWin)) { dst[x * 3] = dst[x * 3 + 1] = dst[x * 3 + 2] = 0; }
+        if (L >= 6 || !(cgadsub & (1 << L)) || prevent == 3 || (prevent == 1 && !inWin) || (prevent == 2 && inWin)) continue;
         for (int ch = 0; ch < 3; ch++) {
           int o5 = dst[x * 3 + ch] >> 3;
           o5 = mathSub ? o5 - fix[ch] : o5 + fix[ch];
@@ -2861,6 +2900,29 @@ static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
 // emitter, which missed the ROM's flat middle rows and its one-pixel-wider top rows.)
 static int16_t g_bgWinL[256], g_bgWinR[256];
 static int g_bgWinOn = 0;
+// WINDOW 1's EDGES AS HDMA CHANNEL 5 HANDS THEM OUT: the channel's table in the set FD/C2C1 built this frame -- `$0153` bit 0
+// clear after it = set A ($7F:1133), set = set B ($7F:13EB) (field_hdma_tables.md: the builder flips the bit after each set,
+// and the window routines write the buffer of the set built next: `LDA $53 / BEQ` -> $17C8 (set A) / $1AC8 (set B)). DMAP 41,
+// indirect: `<count> <addr16>` entries, a count above $80 one word (WH0, WH1) a line for count - $80 lines, else one word
+// held for count lines, 00 the end (the edges hold). Screen row y takes the table's line y (the window measured with the
+// iris: the displayed window is the table written in the same frame). Mode 0's table is `E4 <buf> F0 <buf+C8*2> 00`, so
+// this reads 212 lines of one buffer, as before; a text box's modes 1 / 2 add their own runs.
+static void fieldCh5Rows(const uint8_t* w128, int16_t* L, int16_t* R) {
+  const uint8_t* b7f = w128 + 0x10000;
+  unsigned t = (w128[0x0153] & 0x01) ? 0x13EB : 0x1133, line = 0, l = 0, r = 0;
+  for (int guard = 0; guard < 64 && line < 256; guard++) {
+    unsigned n = b7f[t & 0xFFFF];
+    if (!n) break;
+    unsigned a = (unsigned)(b7f[(t + 1) & 0xFFFF] | (b7f[(t + 2) & 0xFFFF] << 8));
+    t += 3;
+    unsigned cnt = n == 0x80 ? 128 : (n & 0x7F), rep = n > 0x80;
+    for (unsigned k = 0; k < cnt && line < 256; k++, line++) {
+      if (rep || k == 0) { unsigned q = a + (rep ? 2 * k : 0); l = b7f[q & 0xFFFF]; r = b7f[(q + 1) & 0xFFFF]; }
+      L[line] = (int16_t)l; R[line] = (int16_t)r;
+    }
+  }
+  for (; line < 256; line++) { L[line] = (int16_t)l; R[line] = (int16_t)r; }
+}
 static void fieldBgWindowRows(const uint8_t* w128) {
   g_bgWinOn = 0;
   if (!w128) return;
@@ -2871,12 +2933,7 @@ static void fieldBgWindowRows(const uint8_t* w128) {
     if (!said) { said = 1; fprintf(stderr, "bgwindow: W12SEL=%02X TMW=%02X -- not the iris set, not drawn\n", w12, tmw); }
     return;
   }
-  uint16_t base = (uint16_t)(w128[0x0356] | (w128[0x0357] << 8));
-  const uint8_t* bank = w128 + ((w128[0x0358] & 1) ? 0x10000 : 0);
-  for (int y = 0; y < CAMH && y < 256; y++) {
-    uint16_t a = (uint16_t)(base + 2 * (y < 211 ? y : 211));
-    g_bgWinL[y] = bank[a]; g_bgWinR[y] = bank[(uint16_t)(a + 1)];
-  }
+  fieldCh5Rows(w128, g_bgWinL, g_bgWinR);
   g_bgWinOn = 1;
 }
 static inline int bgWinAt(int x, int y) {
@@ -2892,57 +2949,86 @@ static inline int bgWinAt(int x, int y) {
 // write is `E0` then $0121 (C0/EC3D-EC45) -- so the fixed colour is $0121's channels at its intensity, the rest 0. The PPU
 // rule (snes/ppu.c ppu_handlePixel): a main pixel whose layer has its CGADSUB bit -- BG1-3, the OBJs of palettes 4-7 (bit
 // 4), the backdrop (bit 5) -- takes the fixed colour added or subtracted (bit 7), halved (bit 6) unless CGWSEL bit 1 adds
-// the sub screen, here empty (TS $7F:1521 = 00), then clamped in 5 bits. The set this draws is the tutorial's; any other
-// colour-window set is reported once and not drawn.
+// the sub screen, here empty (TS $7F:1521 = 00), then clamped in 5 bits. WITH A SUB SCREEN (`FF 97`'s circle, C0/232A, in a
+// room that keeps BG3 there -- loc 051 / 005: TM 13, TS 04; CGWSEL 12 adds the SUB screen): inside the window the main
+// layers with math take the sub pixel, or the fixed colour where the sub screen is transparent (the PPU's halving skips
+// that case: snes/ppu.c ppu_handlePixel, `secondLayer != 5 || !addSubscreen`); outside it the math is prevented, so the
+// pixel is the main screen alone -- the bake's sum taken off (CtFieldSceneScreens: the bake's main before the math and its
+// sub screen). MEASURED (tools/field_colcircle_cmp.py's pokes, loc 005): the blue half-height circle over the shop, the rest
+// as before; loc 084 (TM 04 / TS 13) black outside it. The set this draws: window 1 for colour, math only inside, no clip;
+// any other colour-window set is reported once and not drawn.
 static int16_t g_colWinL[256], g_colWinR[256];
-static int g_colWinOn = 0, g_colWinHalf = 0;
+static int g_colWinOn = 0, g_colWinHalf = 0, g_colWinAddSub = 0, g_colWinPrevent = 0;
+// THE SPRITES' OWN COLOUR MATH: a main-screen OBJ pixel of palettes 4-7 takes the math when CGADSUB's bit 4 is set -- the
+// field's CGADSUB is $0BE0 (C0/A412 from the map header, op 0xF1 rewrites it) -- with or without a colour window. The bake
+// does the map's layers; this pass does the sprites over them (fieldColWindowApply). MEASURED (loc 005 after `F1 9F 00`'s
+// $0BE0 = 17, tools/field_colcircle_cmp.py): the lead's palette-4+ pixels take BG3's sub pixel once the circle is gone.
+static int g_colObjMath = 0;
 static uint8_t g_colWinMath = 0, g_colWinFix[3];
 static void fieldColWindowRows(const uint8_t* w128) {
-  g_colWinOn = 0;
+  g_colWinOn = 0; g_colObjMath = 0;
   if (!w128) return;
   uint8_t wobj = w128[0x0BDB], cgw = w128[0x0BDE];
+  g_colWinMath = w128[0x0BE0];                                    // the math every pass below uses: CGADSUB, COLDATA, CGWSEL
+  { uint8_t cd = w128[0x0121]; int i5 = cd & 0x1F;
+    g_colWinFix[0] = (uint8_t)((cd & 0x20) ? i5 : 0); g_colWinFix[1] = (uint8_t)((cd & 0x40) ? i5 : 0);
+    g_colWinFix[2] = (uint8_t)((cd & 0x80) ? i5 : 0); }
+  g_colWinHalf = (g_colWinMath & 0x40) && !(cgw & 0x02);
+  g_colWinAddSub = (cgw & 0x02) && w128[0x11521] != 0;            // CGWSEL bit 1 with a sub screen: the sub pixel is added
+  g_colWinPrevent = (cgw >> 4) & 3;                               //   (and the prevent mode: 0 never, 1 outside, 2 inside, 3 always)
+  g_colObjMath = (w128[0x11520] & 0x10) && (g_colWinMath & 0x10) && (cgw & 0xC0) == 0;   // OBJ on the main screen, with math
   if (!(w128[0x0128] & 0x20) || !(wobj & 0xF0)) return;            // HDMA channel 5 off, or no colour window
-  if ((wobj & 0xF0) != 0x20 || (cgw & 0xF0) != 0x10 || w128[0x11521] != 0) {
+  if ((wobj & 0xF0) != 0x20 || (cgw & 0xF0) != 0x10) {
     static int said = 0;
     if (!said) { said = 1; fprintf(stderr, "colwindow: WOBJSEL=%02X CGWSEL=%02X TS=%02X -- not the drawn set (window 1, math "
-                                           "inside, no sub screen), not drawn\n", wobj, cgw, w128[0x11521]); }
+                                           "inside, no clip), not drawn\n", wobj, cgw, w128[0x11521]); }
     return;
   }
-  uint16_t base = (uint16_t)(w128[0x0350] | (w128[0x0351] << 8));
-  const uint8_t* bank = w128 + ((w128[0x0352] & 1) ? 0x10000 : 0);
-  for (int y = 0; y < CAMH && y < 256; y++) {
-    uint16_t a = (uint16_t)(base + 2 * (y < 211 ? y : 211));
-    g_colWinL[y] = bank[a]; g_colWinR[y] = bank[(uint16_t)(a + 1)];
-  }
-  g_colWinMath = w128[0x0BE0];
-  uint8_t cd = w128[0x0121]; int i5 = cd & 0x1F;
-  g_colWinFix[0] = (uint8_t)((cd & 0x20) ? i5 : 0); g_colWinFix[1] = (uint8_t)((cd & 0x40) ? i5 : 0);
-  g_colWinFix[2] = (uint8_t)((cd & 0x80) ? i5 : 0);
-  g_colWinHalf = (g_colWinMath & 0x40) && !(cgw & 0x02);
+  fieldCh5Rows(w128, g_colWinL, g_colWinR);   // (the quad's C3/0EFA buffer and C0/232A's circle alike: channel 5's table)
   g_colWinOn = 1;
 }
 // The math over the composed frame: `objPal` = the OBJ palette of the sprite on top per pixel (0xFF where the BG shows),
 // `cov` = the bake's main-layer bit per map pixel (0 = the backdrop).
+static uint8_t g_fieldCgram[0x200];   // (defined below with its story: what C0/712E last uploaded)
 static void fieldColWindowApply(uint8_t* fb, int cw, int ch, const uint8_t* objPal, const uint8_t* cov, int covW, int covH,
-                                int camx, int camy) {
-  if (!g_colWinOn) return;
+                                int camx, int camy, void* sd) {
+  if (!g_colWinOn && !g_colObjMath) return;
+  const uint8_t* subCov = NULL, *pre = NULL;
+  int bBlend = 0, bSub = 0, bHalf = 0;
+  const uint8_t* sub = (sd && g_colWinAddSub) ? CtFieldSceneScreens(sd, &subCov, &pre, &bBlend, &bSub, &bHalf) : NULL;
+  const uint8_t* bgSub = g_colWinOn ? sub : NULL;               // (the map's pixels are redone only under a window: the bake
+                                                                //  did them for the whole screen)
+  uint16_t c0 = (uint16_t)(g_fieldCgram[0] | (g_fieldCgram[1] << 8));   // the backdrop, CGRAM 0
+  const uint8_t bd[3] = { (uint8_t)((c0 & 31) << 3 | (c0 & 31) >> 2), (uint8_t)(((c0 >> 5) & 31) << 3 | ((c0 >> 5) & 31) >> 2),
+                          (uint8_t)(((c0 >> 10) & 31) << 3 | ((c0 >> 10) & 31) >> 2) };
   for (int y = 0; y < ch && y < 256; y++) {
-    int L = (g_colWinL[y] < 0 ? 0 : g_colWinL[y]) + g_fx, R = (g_colWinR[y] >= CAMW ? CAMW - 1 : g_colWinR[y]) + g_fx;
-    if (R >= cw) R = cw - 1;
-    for (int x = L; x <= R; x++) {
+    int L = 1, R = 0;                                             // (no window: an empty one -- every pixel outside)
+    if (g_colWinOn) {
+      L = (g_colWinL[y] < 0 ? 0 : g_colWinL[y]) + g_fx; R = (g_colWinR[y] >= CAMW ? CAMW - 1 : g_colWinR[y]) + g_fx;
+      if (R >= cw) R = cw - 1;
+    }
+    for (int x = 0; x < cw; x++) {
       uint8_t op = objPal[(size_t)y * g_fw + x];
+      if (op == 0xFF ? !g_colWinOn : !g_colObjMath) continue;
+      int sx = (camx + x) % covW, sy = (camy + y) % covH; if (sx < 0) sx += covW; if (sy < 0) sy += covH;
+      size_t bi = (size_t)sy * covW + sx;
+      int lay = cov ? cov[bi] : 0, inside = x >= L && x <= R;
+      uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
+      if (bgSub && op == 0xFF) {                                  // a map pixel: start from the main screen before the math
+        int baked = (lay & bBlend) && subCov[bi];                 //   (outside the window that is all it shows: the
+        if (baked) memcpy(d, pre + bi * 3, 3);                    //   math is prevented there; with no layer on top the
+        else if (!lay && subCov[bi]) memcpy(d, bd, 3);           //   bake showed the sub pixel, the PPU the backdrop)
+      }
+      if (g_colWinPrevent == 3 || (g_colWinPrevent == 1 && !inside) || (g_colWinPrevent == 2 && inside)) continue;
       int on;
       if (op != 0xFF) on = (g_colWinMath & 0x10) && op >= 4;              // mainLayer 4 (palettes 4-7) / 6 (0-3, never)
-      else {
-        int sx = (camx + x) % covW, sy = (camy + y) % covH; if (sx < 0) sx += covW; if (sy < 0) sy += covH;
-        int lay = cov ? cov[(size_t)sy * covW + sx] : 0;
-        on = lay ? (g_colWinMath & lay) != 0 : (g_colWinMath & 0x20) != 0;
-      }
+      else on = lay ? (g_colWinMath & lay) != 0 : (g_colWinMath & 0x20) != 0;
       if (!on) continue;
-      uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
+      int useSub = (op == 0xFF ? bgSub : sub) && subCov[bi];      // the sub pixel, else the fixed colour (not halved)
       for (int k = 0; k < 3; k++) {
-        int c = d[k] >> 3, r = (g_colWinMath & 0x80) ? c - g_colWinFix[k] : c + g_colWinFix[k];
-        if (g_colWinHalf) r >>= 1;
+        int c = d[k] >> 3, o = useSub ? (sub[bi * 3 + k] >> 3) : g_colWinFix[k];
+        int r = (g_colWinMath & 0x80) ? c - o : c + o;
+        if (useSub ? (g_colWinMath & 0x40) : g_colWinHalf) r >>= 1;
         if (r > 31) r = 31; if (r < 0) r = 0;
         d[k] = (uint8_t)((r << 3) | (r >> 2));
       }
@@ -12279,7 +12365,7 @@ int main(int argc, char** argv) {
           // world opens FORCE-BLANKED at brightness 0, and only a fade object (op 0x29 in the world's own script) lights it.
           // Measured on the forest hop: `$1C = 80 00` written at C2:0147 on the $0100 frame.
           if (wd.wram) { wd.wram[0x1C] = 0x80; wd.wram[0x1D] = 0x00; }
-          { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); }   // bank-$C2 VM scripts
+          { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }   // bank-$C2 VM scripts
           if (ngIntro) {                               // --newgame 496-pan ONLY: swap the BASE (sparse,
             worldOverlayIntroSeed(&wd);
             // ...and the camera of the SAME instant (start_scene.state f0: $20 = 0178, $26 = 014B, $E3 = 2F, $E7 = 29).
@@ -18802,6 +18888,7 @@ int main(int argc, char** argv) {
         bgDirty |= CtFieldSceneSetScreen(f.sd, 1, bm[0xBE95], bm[0xBE96], tm, ts); }
     }
     if (fieldNmi && f.sd) bgDirty |= CtFieldSceneSetScreen(f.sd, 0, 0, 0, 0, 0);   // the field's frames: the map header's
+    if (fieldNmi && f.sd && f.vm) bgDirty |= CtFieldSceneSetEffect(f.sd, CtSceneMem7E(f.vm)[0x0BE0]);   // ...math: $0BE0
     // The caption plane (fieldVramSink): op 0xE5's style 4 rebuilds BG3 from the map and this NMI uploads it to $1D80
     // (C0/EB2F `CMP #04` -> C0/7F62), so BG3's tilemap is the map's again; while the plane holds, the bake leaves BG3 out.
     if (fieldNmi && f.vm && CtSceneMem7E(f.vm)[0x0146] == 4) g_bg3Plane = 0;
@@ -18989,9 +19076,10 @@ int main(int argc, char** argv) {
     // THE COLOUR WINDOW (fieldColWindowRows): its math needs each pixel's main layer, so while it is up the sprites stamp
     // their OBJ palette (plot's g_bObjPalMask) and the foreground pass below unstamps what it paints back.
     fieldColWindowRows(f.vm ? CtWramSys(fieldWram()) : NULL);
+    if (battlePhase) g_colObjMath = 0;                 // (a fight's sprites are the battle compositor's)
     static uint8_t colObjPal[FIELD_WMAX * CAMH];
     uint8_t* colKeepMask = g_bObjPalMask;
-    if (g_colWinOn) { memset(colObjPal, 0xFF, sizeof colObjPal); g_bObjPalMask = colObjPal; }
+    if (g_colWinOn || g_colObjMath) { memset(colObjPal, 0xFF, sizeof colObjPal); g_bObjPalMask = colObjPal; }
 
     int order[80], oy[80], lay[80], sten[80], n = 0;    // lay = OAM priority-group draw layer
     int nSten = 0;                                      // 0x8E prio-0/1 occluder sprites (sten[k])
@@ -19539,13 +19627,13 @@ int main(int argc, char** argv) {
           uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
           if (showPrio) { d[0] = 255; d[1] = 0; d[2] = 0; } else memcpy(d, f.base + bo * 3, 3);
           mot->own[(size_t)y * g_fw + x] = (uint8_t)CtMotMapOwner(motCov ? motCov[bo] : 1, 1);   // the map's foreground
-          if (g_colWinOn) colObjPal[(size_t)y * g_fw + x] = 0xFF;          // a BG pixel again (the colour window)
+          if (g_colWinOn || g_colObjMath) colObjPal[(size_t)y * g_fw + x] = 0xFF;   // a BG pixel again (the colour math)
         }
     if (bg3Plane)                                      // the caption plane's priority-1 cells: the front layer
       for (int y = 0; y < ch; y++) fieldBg3PlaneRow(fb, y, bg3V + y, bg3H, 1, CtSceneMem7E(f.vm), NULL, 0, 0);
-    if (g_colWinOn) {
+    if (g_colWinOn || g_colObjMath) {
       int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
-      if (cvs && cvW > 0 && cvH > 0) fieldColWindowApply(fb, cw, ch, colObjPal, cvs, cvW, cvH, camx, camy);
+      if (cvs && cvW > 0 && cvH > 0) fieldColWindowApply(fb, cw, ch, colObjPal, cvs, cvW, cvH, camx, camy, f.sd);
     }
     g_bObjPalMask = colKeepMask;
     // The widescreen's sides end at the room's scroll mask when the map holds more than the room (fieldWideMask).
