@@ -11771,6 +11771,8 @@ int main(int argc, char** argv) {
   int owPassHold = 0;   // frames the overworld stands still inside its pass's inline JSL (world.c obNative)
   int owPassResume = 0;  // ...and the suspended pass resumes on the frame after them
   int entrySweepPend = 0;   // C0/286C's C0/B0E6 owed by a location change, made on the entry ramp's first frame (fade 2)
+  long loadPostTotal = 0;  // the load's object-pass cycles (g_ctLzSpriteCycles) when its scripts' init was done: where its
+                           //   queued sound JSLs stand from its end (CtSceneLoadPostCycles)
   int loadHold = 0;      // frames still owed to the LOAD itself (fade == 3): the ROM is inside
                          // C0/00F4 with the screen blank and nothing else running at all
   int pendKind = 0;   // transition captured at fade-out start: 0 none, 1 scene->scene door, 2 scene->overworld, 3 overworld->scene
@@ -12328,7 +12330,7 @@ int main(int argc, char** argv) {
           // ...and the object pass's own decompressions, which no table can give: WHICH sprite sheets a location
           // loads depends on its objects' load ops and on C0/5C90's per-scene dedup, so the loaders count them as
           // they run (lz.h, g_ctLzSpriteCycles) and the window holds for them like the rest.
-          if (!inWorld) { lcCyc += g_ctLzSpriteCycles; g_ctLzSpriteCycles = 0; }
+          if (!inWorld) { loadPostTotal = g_ctLzSpriteCycles; lcCyc += g_ctLzSpriteCycles; g_ctLzSpriteCycles = 0; }
           // ROUNDED UP, and that is the ROM's own arithmetic: the window ends inside C0/286C at
           // `JSR C0/EC60`, a wait for the next vblank, so whatever fraction of a frame the work
           // leaves over is spent waiting. Measured on scene 468: the load starts at f20 line 242
@@ -12471,9 +12473,19 @@ int main(int argc, char** argv) {
     // later belongs to the other half -- 01C's and 0E6's opening curtains a step behind the cartridge's (their arms:
     // cartridge $0153 = 01 / 00 after 3 / 6 flips, port 00 / 01 after 2 / 5).
     if (loadFadeEntry && !inWorld && f.vm) { uint8_t* rw = CtWramSys(fieldWram()); if (rw) CtHdmaTableBuild(rw); }
-    // THE LOAD'S LAST JSLs -- its init runner's and obj0's slot 1's sound commands (ct_vm.c gLoadPost) -- reach the SPC in
-    // the load's last frame, the one C0/2848 begins in (the port ran the load in its first frame and holds the black after).
-    if (fade != 3 && f.vm && CtSceneLoadPostsPending()) CtSceneLoadPostsFlush(f.vm);
+    // THE LOAD'S LAST JSLs -- its init runner's and obj0's slot 1's sound commands (ct_vm.c gLoadPost) -- reach the SPC where
+    // the cartridge's CPU reaches them: as many frames before the load's last one (the one C0/2848 begins in) as the object
+    // pass's work after each takes -- the later objects' sprite loads, CT_LOAD_FRAME_CYCLES a frame. (The port ran the load in
+    // its first frame and holds the black after.)
+    if (f.vm && CtSceneLoadPostsPending()) {
+      int np = CtSceneLoadPostsPending(), due = 0;
+      if (fade != 3) due = np;
+      else while (due < np && (loadPostTotal - CtSceneLoadPostCycles(due)) / CT_LOAD_FRAME_CYCLES >= loadHold) due++;
+      if (due) {
+        if (getenv("CT_LOADCOST")) printf("loadpost: f%d %d JSL(s), %d frame(s) before the load's end\n", frameNo, due, fade == 3 ? loadHold : 0);
+        CtSceneLoadPostsFlush(f.vm, due);
+      }
+    }
     int inLoadFade = ((fade == 3 || (fade == 2 && loadRamp)) && !inWorld && f.vm != NULL);
     // C0/2824, THE FIELD'S FADE-IN AFTER A MENU, is drawn from the RELOADED field, not the frame the menu froze at its
     // open: C0/01A5 rebuilt the map, C0/7506/7553 the camera from the arrival tile $0102/$0103 and C0/286C drew every

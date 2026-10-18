@@ -3201,18 +3201,42 @@ void CtBattleAreaBandMem(uint8_t* mem) {
 // band itself is graded by ct.exe --sweepband25a3 (8000/8000, 955 of them $9608 non-zero with two victims or more).
 // pcAtk < 0: an enemy's tech, as before; else the PC caster's seat and pcTgt the target. Other shapes are not ported:
 // traced, nothing written. Returns 0 for C1/C72B, 2 when a shape is not ported (the caller keeps its list), else 1.
+// C1/2332 -- C1/1FDD's routine 6: THE ROW. The victims are the combatants of one side whose feet's y ($1D23) lies within
+// $20 of the centre $9605's (2338-234D: the bounds clamped to 00 / FF), not the centre itself; they go to $99C1.. in seat
+// order after C1/27D9's FF-fill ($9604 != 0: the PCs 0..2, else the enemies 3..A, under the band's gates) and the centre
+// to $99C0 (239E-23A0), whichever side it is on. Area 0B (`06 01 ..`: the dual techs 47 Ayla+Crono and 64 Frog+Lucca).
+static void battleAreaRow2332(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  int c = s[0x9605], cy = battleFootY(h, c);
+  int lo = cy - 0x20 < 0 ? 0 : cy - 0x20, hi = cy + 0x20 > 0xFF ? 0xFF : cy + 0x20;   // 2338-234D $85 / $87
+  for (int i = 0; i < 12; i++) { s[0x99C0 + i] = 0xFF; s[0xA62D + i] = 0xFF; }   // 234F JSR C1/27D9
+  int x0 = 3, x1 = 0x0B;                                                // 2352-2365 $8E / $90
+  if (s[0x9604]) { x0 = 0; x1 = 3; }
+  int y = 0;
+  for (int x = x0; x < x1; x++) {                                       // 2367-239C
+    if (x == c || !s[0x96F5 + x] || (s[0x9FF7 + x] & 0x80) || s[0xA0A8 + x] || s[0xA09B + x]) continue;
+    int fy = battleFootY(h, x);
+    if (fy < lo || fy > hi) continue;                                   // 2383-238E
+    s[0x99C1 + y++] = (uint8_t)x;                                       // 2390-2395
+  }
+  s[0x99C0] = (uint8_t)c;                                               // 239E-23A0
+}
 static int battleAreaC586(CtBattleHost* h, int area, int v3A, int pcAtk, int pcTgt) {
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
   int rec = rom[0x0C2AB0 + area * 2] | (rom[0x0C2AB1 + area * 2] << 8);   // C586-C58E $3B
   int cnt = rom[0x0C0000 + rec];                                        // C594 $14
-  int r0A = 1, r0C = s[0xB18B], r06 = s[0xB2AE], r00 = -1;               // C27B; C59A JSR C1/C74C (C782-C78A)
-  if (pcAtk >= 0) { r0A = 0; r0C = r00 = pcAtk; r06 = pcTgt; }           // C248 STZ $0A; C759-C760 $00 (a single tech)
+  int r0A = 1, r0C = s[0xB18B], r06 = s[0xB2AE], r00 = -1, r02 = -1;    // C27B; C59A JSR C1/C74C (C782-C78A)
+  if (pcAtk >= 0) { r0A = 0; r0C = r00 = pcAtk; r06 = pcTgt; r02 = s[0xAE97]; }   // C248 STZ $0A; C759-C76D $00, $02 (participant 1:
+                                                                         //   battleTechCoActors, the same C1/C74C)
   for (int k = 0, off = 1; k < cnt; k++, off += 3) {                    // the shapes, before anything is written
     int e3D = rom[0x0C0000 + rec + off], e04 = rom[0x0C0001 + rec + off], fn = e04 & 0x7F;
     // C1/C813 / C1/C78D with the band (0 / 4), C1/C7A7 with the radius (1 / 2: area 03, `01 01 09`), and C1/C78D with
     // the radius around the CASTER (areas 02 `01 00 10` / 0A `01 00 19`: Area Bomb 1F, Tail Spin 2E, Black Hole 37 ..).
-    int band = (e3D == 0 || e3D == 4), radius = (e3D == 1 || e3D == 2);
-    if (!((fn == 6 && band) || (fn == 0 && r00 >= 0 && (band || radius)) || (fn == 1 && radius)) || (e04 & 0x80)) {
+    // ...and C1/C7A7 with the row (6, C1/2332: area 0B `06 01 ..`), C1/C7E7 with the radius around participant 1 (area 06
+    // `01 04 ..`: the dual tech 56 Lucca+Robo).
+    int band = (e3D == 0 || e3D == 4), radius = (e3D == 1 || e3D == 2), row = (e3D == 6);
+    if (!((fn == 6 && band) || (fn == 0 && r00 >= 0 && (band || radius)) || (fn == 1 && (radius || row)) ||
+          (fn == 4 && r02 >= 0 && r02 < 0xFF && radius)) || (e04 & 0x80)) {
       if (getenv("CT_BATTLE_TRACE"))
         fprintf(stderr, "areafx f%d area %02X entry %d (%02X %02X): this shape is NOT PORTED -- the list kept\n",
                 h->frames, area, k, e3D, e04);
@@ -3225,10 +3249,12 @@ static int battleAreaC586(CtBattleHost* h, int area, int v3A, int pcAtk, int pcT
     int fn = e04 & 0x7F;
     s[0x9604] = (uint8_t)r0A; s[0x9607] = (uint8_t)e08;
     if (fn == 1) { s[0x9605] = (uint8_t)r06; s[0x9606] = 0; s[0x9608] = 0; }   // C1/C7A7: the target is the centre
+    else if (fn == 4) { s[0x9605] = (uint8_t)r02; s[0x9606] = 0; s[0x9608] = 0; }   // C1/C7E7: participant 1 ($02)
     else { s[0x9605] = (uint8_t)(fn == 0 ? r00 : r0C); s[0x9606] = (uint8_t)r06; s[0x9608] = (uint8_t)e0E; }   // C78D / C813
     s[0x99CC] = (uint8_t)e3D;                                           // C741 STA $99CC
     if (e3D == 1 || e3D == 2) battleAreaRadius2701(h);                  // C746 LDA #07 / JSR C1/0003 -> C1/1FDD[$99CC]:
-    else battleAreaBand25A3(h);                                         //   1, 2 the radius C1/2701; 0, 4 the band C1/25A3
+    else if (e3D == 6) battleAreaRow2332(h);                            //   1, 2 the radius C1/2701; 6 the row C1/2332;
+    else battleAreaBand25A3(h);                                         //   0, 4 the band C1/25A3
     int x = k * 0x0B, y = 0;                                            // C5FE-C60B $2C = $12 * 11 (C1/C90B)
     do {                                                                // C610-C638
       int v = s[0x99C0 + x];
@@ -12465,6 +12491,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
         s[0xB2AE] = (uint8_t)tgt;                                    // C1/BB85
         s[0xAF23] = 0;                                               // C1/C1DD STZ $AF23
         battleTechParticipants(s, rom, techId);                      // C1/C1E1 JSR C1/CB93
+        battleTechCoActors(h, techId);                               // C1/C59A JSR C1/C74C: $02 / $AE97, $04 / $AE98
         areaRes = battleAreaC586(h, area, 0, p0, tgt);
         if (areaRes == 0 && s[0x99C0] == 0xFF && s[0x99C1] == 0xFF && atk >= 0 && atk < 3) {   // C1/C659-C66F
           s[0xAE91] = (uint8_t)atk; s[0xAE92] = 2;                   // C1/C671-C676
