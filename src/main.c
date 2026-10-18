@@ -7751,6 +7751,83 @@ static int runWipeDump(const char* romPath, const char* statePath, int k, const 
   CtOracleDestroy(s); free(rom);
   return 0;
 }
+// --wipeaudit <state|boot> <frames> -- THE NATIVE WINDOW WIPE AGAINST EVERY CALL THE CARTRIDGE MAKES. Runs the oracle and, at
+// each entry into C3/01E4 (C3/000E's JMP from the field's C0/22FA and the world's C6/E27E, or the $C3 stage's own JSL) and
+// into the world's window object C6/E241 / C6/E27E, copies its 128 KB WRAM and runs the native routine on the copy
+// (wipe.h: CtWipeRoutine with the cartridge's own X and data bank; CtOwWindowObject with the target alone -- its X and
+// bank are the port's, so a call where the cartridge's differ shows up as a difference); when the cartridge's RTL lands
+// (the return address the call's JSL pushed, S back where it was) the two WRAMs must agree on every byte but the 32 stack
+// bytes below the caller's S, the pushes the routine leaves dead. A call interrupted on the cartridge (an instruction
+// outside banks C3 / C6 before the RTL: an NMI or IRQ's work is in its WRAM) is counted apart, not graded. One line per
+// call site (target, return address): calls, modes, the registers the routine reads, identical ones; then the verdict.
+#include "wipe.h"
+static int runWipeAudit(const char* romPath, const char* statePath, int frames) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) return 2;
+  int romLen = 0; uint8_t* img = CtReadFile(romPath, &romLen);
+  if (!img) { CtOracleDestroy(s); free(rom); return 2; }
+  static uint8_t work[0x20000];
+  enum { NSITE = 24 };
+  struct { uint32_t target, ret; int n, same, fills, ends, mode1, mode2, other; uint16_t x; uint8_t db; int xVaries, dbVaries; } site[NSITE];
+  int nSite = 0, total = 0, same = 0, interrupted = 0, firstShown = 0;
+  int active = 0; uint32_t target = 0, ret = 0; uint16_t sp0 = 0, x0 = 0; uint8_t db0 = 0; int intr = 0;
+  uint32_t f0 = s->frames;
+  while ((int)(s->frames - f0) < frames) {
+    const Cpu* c = s->cpu;
+    uint32_t pc = ((uint32_t)c->k << 16) | c->pc;
+    if (!active) {
+      if (pc == 0xC301E4 || pc == 0xC6E241 || pc == 0xC6E27E) {
+        active = 1; target = pc; sp0 = c->sp; x0 = c->x; db0 = c->db; intr = 0;
+        const uint8_t* m = s->ram;                                     // the JSL's return: [S+1] PCL, [S+2] PCH, [S+3] K
+        ret = ((uint32_t)m[(uint16_t)(sp0 + 3)] << 16) |
+              (uint16_t)(((m[(uint16_t)(sp0 + 2)] << 8) | m[(uint16_t)(sp0 + 1)]) + 1);
+        memcpy(work, s->ram, sizeof work);
+      }
+    } else if (pc == ret && c->sp == (uint16_t)(sp0 + 3)) {
+      active = 0;
+      int k = 0;
+      for (; k < nSite; k++) if (site[k].target == target && site[k].ret == ret) break;
+      if (k == nSite && nSite < NSITE) { memset(&site[k], 0, sizeof site[k]); site[k].target = target; site[k].ret = ret;
+                                         site[k].x = x0; site[k].db = db0; nSite++; }
+      if (intr) { interrupted++; cpu_runOpcode(s->cpu); continue; }
+      // The mode and the step as the routine finds them (the window object's install sets them itself).
+      uint8_t mode = target == 0xC6E241 ? 0xFF : work[0x0350], step = work[0x0351];
+      int r = target == 0xC301E4 ? CtWipeRoutine(img, romLen, work, x0, db0) : CtOwWindowObject(img, romLen, work, target);
+      int diff = 0, firstAdr = -1;
+      for (int j = 0; j < 0x20000; j++) {
+        if (j <= sp0 && j >= sp0 - 31) continue;                       // the dead stack below the caller's S
+        if (work[j] != s->ram[j]) { diff++; if (firstAdr < 0) firstAdr = j; }
+      }
+      total++;
+      if (k < nSite) {
+        site[k].n++;
+        if (site[k].x != x0) site[k].xVaries = 1;
+        if (site[k].db != db0) site[k].dbVaries = 1;
+        if (target != 0xC6E241) {
+          if (mode == 0) {} else if (step == 0) site[k].fills++; else if (step == 0x1F) site[k].ends++;
+          if (mode == 1) site[k].mode1++; else if (mode == 2) site[k].mode2++; else if (mode) site[k].other++;
+        }
+        if (!r && !diff) site[k].same++;
+      }
+      if (!r && !diff) same++;
+      else if (firstShown++ < 4) {
+        printf("wipeaudit: DIFFERENT -- %06X from %06X at frame %u, X=%04X DB=%02X $0350=%02X $0351=%02X: r=%d, %d byte(s), first $%s:%04X cartridge %02X native %02X\n",
+               target, ret, (unsigned)(s->frames - f0), x0, db0, mode, step, r, diff,
+               firstAdr >= 0x10000 ? "7F" : "7E", firstAdr & 0xFFFF, firstAdr >= 0 ? s->ram[firstAdr] : 0, firstAdr >= 0 ? work[firstAdr] : 0);
+      }
+    } else if (c->k != 0xC3 && !(target != 0xC301E4 && c->k == 0xC6)) intr = 1;
+    cpu_runOpcode(s->cpu);
+  }
+  for (int k = 0; k < nSite; k++)
+    printf("wipeaudit: %06X from %06X: %d call(s) (mode 1 %d, mode 2 %d, other %d; fills %d, ends %d) X=%04X%s DB=%02X%s -> %d / %d identical\n",
+           site[k].target, site[k].ret, site[k].n, site[k].mode1, site[k].mode2, site[k].other, site[k].fills, site[k].ends,
+           site[k].x, site[k].xVaries ? " (varies)" : "", site[k].db, site[k].dbVaries ? " (varies)" : "", site[k].same, site[k].n);
+  printf("wipeaudit: %d / %d calls identical to the cartridge on all 128 KB but the dead stack, %d interrupted (not graded), over %d frames from %s\n",
+         same, total, interrupted, frames, statePath);
+  free(img); CtOracleDestroy(s); free(rom);
+  return same == total ? 0 : 1;
+}
 static int runXlatCmp(const char* romPath, const char* statePath, int frames) {
   uint8_t* romO = NULL, *romP = NULL;
   Snes* o = ctLoadStateOracle(romPath, statePath, &romO);
@@ -16262,6 +16339,7 @@ int main(int argc, char** argv) {
   const char* rpcArgs[5] = { 0 };
   const char* cpuTraceState = NULL, *cpuTraceOut = NULL; int cpuTraceFrames = 1;
   const char* xlatCmpState = NULL; int xlatCmpFrames = 1;
+  const char* wipeAuditState = NULL; int wipeAuditFrames = 0;   // --wipeaudit
   const char* wipeDumpState = NULL; int wipeDumpK = 1; const char* wipeDumpIn = NULL; const char* wipeDumpOut = NULL; const char* wipeDumpMask = NULL; uint32_t wipeDumpEntry = 0xC3000E, wipeDumpExit = 0xC022FE, wipeDumpMaskPc = 0xC000CB;
   const char* xlatEnState = NULL; int xlatEnFrames = 1;
   const char* xlatPhState = NULL; uint32_t xlatPhPc = 0; int xlatPhExtra = 0, xlatPhFrames = 1;
@@ -16399,6 +16477,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--xlatentries") && i + 2 < argc) { xlatEnState = argv[++i]; xlatEnFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatcmp") && i + 2 < argc) { xlatCmpState = argv[++i]; xlatCmpFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--calldump") && i + 6 < argc) { wipeDumpState = argv[++i]; wipeDumpK = atoi(argv[++i]); wipeDumpEntry = (uint32_t)strtoul(argv[++i], NULL, 16); wipeDumpExit = (uint32_t)strtoul(argv[++i], NULL, 16); wipeDumpIn = argv[++i]; wipeDumpOut = argv[++i]; wipeDumpMaskPc = 0; }
+    else if (!strcmp(argv[i], "--wipeaudit") && i + 2 < argc) { wipeAuditState = argv[++i]; wipeAuditFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--wipedump") && i + 4 < argc) { wipeDumpState = argv[++i]; wipeDumpK = atoi(argv[++i]); wipeDumpIn = argv[++i]; wipeDumpOut = argv[++i];
                                                                      if (i + 1 < argc && argv[i + 1][0] != '-') wipeDumpMask = argv[++i]; }
     else if (!strcmp(argv[i], "--cputrace") && i + 3 < argc) { cpuTraceState = argv[++i]; cpuTraceFrames = atoi(argv[++i]); cpuTraceOut = argv[++i]; }
@@ -16650,6 +16729,7 @@ int main(int argc, char** argv) {
   if (rpcArgs[0]) return CT_NOT_ORACLE(runRacePicCmp(romPath, rpcArgs[0], rpcArgs[1], atoi(rpcArgs[2]), (int)strtol(rpcArgs[3], NULL, 16), atoi(rpcArgs[4])));
   if (cpuTraceState) return CT_NOT_ORACLE(runCpuTrace(romPath, cpuTraceState, cpuTraceFrames, cpuTraceOut));
   if (xlatCmpState) return CT_NOT_ORACLE(runXlatCmp(romPath, xlatCmpState, xlatCmpFrames));
+  if (wipeAuditState) return CT_NOT_ORACLE(runWipeAudit(romPath, wipeAuditState, wipeAuditFrames));
   if (wipeDumpState) return CT_NOT_ORACLE(runWipeDump(romPath, wipeDumpState, wipeDumpK, wipeDumpIn, wipeDumpOut, wipeDumpMask, wipeDumpEntry, wipeDumpExit, wipeDumpMaskPc));
   if (xlatEnState) return CT_NOT_ORACLE(runXlatEntries(romPath, xlatEnState, xlatEnFrames));
   if (xlatPhState) return CT_NOT_ORACLE(runXlatPhase(romPath, xlatPhState, xlatPhPc, xlatPhExtra, xlatPhFrames));

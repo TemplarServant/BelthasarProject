@@ -6,8 +6,8 @@ cartridge, on the cartridge's own inputs (field_window_wipe.md sec. 6):
     128 KB WRAM and prints the registers, the beam and PPU2's latch state there (hSecond, bus2 -- the world engine never
     reads the counter ports itself, so C3/02DD's own toggling and the last byte it read are what the next call sees),
     runs to the far call's landing C2:1830 and dumps again, then samples window 1 on every visible line that follows;
-  * `Belthasar --owwincall in <entry> v h hSecond bus2 port` runs the port's translated routine (src/xlat/owwin_c6.c)
-    through the host's call glue (seq_xlat.c CtXlatOwWindowCall) on that WRAM and that state;
+  * `Belthasar --owwincall in <entry> port` runs the port's native routine (src/wipe.c CtOwWindowObject, the call the
+    world's op 4E makes) on that WRAM;
   * `Belthasar --owwinmask out <ch2 on> <wh0> <wh1>` walks the port's channel-2 model (field.c owWin1Line) over the WRAM
     after the call, with the channel's state and WH0/WH1 as the last NMI pushed them (--calldump's `regs now` line: the
     shadows at the call are already the script's next values, and a channel the call enables starts at the next NMI).
@@ -16,12 +16,13 @@ cartridge, on the cartridge's own inputs (field_window_wipe.md sec. 6):
 
 Graded: the whole 128 KB after the install call ($C6:E241, the first C3/01E4 call: the fill) and after the first
 per-frame call ($C6:E27E's second execution -- its first is the pass-through inside E241): byte for byte, the object's
-table ($7E:9176.., 672 bytes) named; and window 1's edges on every sampled line.
+table ($7E:9176.., 672 bytes) named, but the 32 stack bytes below the caller's S the routine leaves dead (dead_stack); and
+window 1's edges on every sampled line.
 
 THE VIRTUAL BEAM (CLAUDE.md's one exception, the zelda3 model, 2026-09-18): the seed C3/02DD reads the H/V counters --
 the world VM's position in the frame, which no C engine has -- so both sides read the virtual beam (snes.c
 g_ctVirtualBeam: `$213C` = `$0351`, `$213D` = 00): the port's call always, the oracle with CT_ORACLE_VIRTUAL_BEAM=1.
-The hSecond / bus2 inputs the harness still passes no longer reach the seed.
+The hSecond / bus2 the cartridge's line prints no longer reach the seed.
 """
 import os
 import re
@@ -37,6 +38,13 @@ CALLS = [('install', 'C6E241', 1), ('frame', 'C6E27E', 2), ('later', 'C6E27E', 3
 
 def run(argv, env=None, timeout=900):
     return subprocess.run(argv, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout).stdout
+
+
+# The stack below the caller's S: the routine's pushes (PHB / PHD / PHP / PHA / PHX / PHY, the fill's PHB) and C3/02DD's
+# return address, dead once it returns -- the native routine has no CPU stack and leaves those bytes alone. 32 bytes
+# cover every push the call makes (13 on the field's call, 16 on the world's: E27E's JSL first).
+def dead_stack(s):
+    return set(range(s - 31, s + 1))
 
 
 def main():
@@ -57,18 +65,19 @@ def main():
         if not m or not os.path.exists(inp) or not os.path.exists(outp):
             print('owwin-step: FAIL -- calldump %s: %s' % (name, d.strip().splitlines()[-1:])); continue
         v, h, hs, b2 = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+        sp = int(re.search(r' S=([0-9A-F]{4}) ', d).group(1), 16); dead = dead_stack(sp)
         if os.path.exists(portp): os.remove(portp)
-        p = run([FIELD, '--assets', 'ct_assets.dat', '--owwincall', inp, entry, str(v), str(h), str(hs), b2, portp],
+        p = run([FIELD, '--assets', 'ct_assets.dat', '--owwincall', inp, entry, portp],
                 env=dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy'))
         if not os.path.exists(portp):
             print('owwin-step: FAIL -- owwincall %s: %s' % (name, p.strip().splitlines()[-1:])); continue
         i0 = open(inp, 'rb').read(); o = open(outp, 'rb').read(); q = open(portp, 'rb').read()
         x = i0[0x4E] | (i0[0x4F] << 8); T = i0[x + 0x24] | (i0[x + 0x25] << 8)
         tab = sum(1 for j in range(T, T + 0x2A0) if o[j] == q[j]); changed = sum(1 for j in range(T, T + 0x2A0) if o[j] != i0[j])
-        whole = sum(1 for j in range(0x20000) if o[j] != q[j])
+        whole = sum(1 for j in range(0x20000) if o[j] != q[j] and j not in dead)
         print('owwin-step: %s $%s (k=%d, v=%d h=%d hSecond=%d bus2=%s) -> table $7E:%04X %d / 672 bytes identical (%d changed by the '
-              'call), $0386 %s, %d byte(s) differ in all 128 KB' % (name, entry, k, v, h, hs, b2, T, tab, changed,
-              'same' if o[0x0386] == q[0x0386] else 'DIFFERENT', whole))
+              'call), $0386 %s, %d byte(s) differ in all 128 KB but the dead stack below S=%04X' % (name, entry, k, v, h, hs, b2, T, tab,
+              changed, 'same' if o[0x0386] == q[0x0386] else 'DIFFERENT', whole, sp))
         orc = {}
         for mo in re.finditer(r'wipedump: line (\d+) W1=(\d+)\.\.(\d+)', d): orc[int(mo.group(1))] = (int(mo.group(2)), int(mo.group(3)))
         rg = re.search(r'regs now -- W1=(\d+)\.\.(\d+) W2=\d+\.\.\d+ hdma ch2=(\d)', d)

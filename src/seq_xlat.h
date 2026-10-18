@@ -87,9 +87,9 @@ uint8_t ctXlatPeek(const CtXlat* x, uint32_t adr);   // the program's own byte, 
 
 // The translated programs.
 int CtXlat_seq_c3(CtXlat* x);    // src/xlat/seq_c3.c -- sequence entry 0 (the race) as the attract runs it
-int CtXlat_wipe_c3(CtXlat* x);
-int CtXlat_hdma_fd(CtXlat* x);   // src/xlat/hdma_fd.c -- the field's HDMA table builder FD/C2C1 (both sets, every mode handler)   // src/xlat/wipe_c3.c -- the field's window wipe C3/01E4 (+ C3/02DD), called through C3/000E
-int CtXlat_owwin_c6(CtXlat* x);  // src/xlat/owwin_c6.c -- the overworld's window object $C6:E241 / $C6:E27E (op 4E), the same C3/01E4 inside
+int CtXlat_wipe_c3(CtXlat* x);  // src/xlat/wipe_c3.c -- the field's window wipe C3/01E4 (+ C3/02DD); ct.exe's --xlatcmp reference (the port runs wipe.c)
+int CtXlat_hdma_fd(CtXlat* x);   // src/xlat/hdma_fd.c -- the field's HDMA table builder FD/C2C1 (both sets, every mode handler)
+int CtXlat_owwin_c6(CtXlat* x);  // src/xlat/owwin_c6.c -- the overworld's window object $C6:E241 / $C6:E27E (op 4E); --xlatcmp reference
 int CtXlat_gwarp_fd(CtXlat* x);  // src/xlat/gwarp_fd.c -- the GATE WARP, op 0xFF 80-83 -> JML $FD:FFF1/FFEB/FFE8/FFE5 (FD/DA00..)
 
 // ---- a translated STAGE inside a host ----------------------------------------------------------------------------
@@ -129,30 +129,6 @@ int CtXlat_gwarp_fd(CtXlat* x);  // src/xlat/gwarp_fd.c -- the GATE WARP, op 0xF
 #define CT_XLAT_GWARP_WMADD   0x007E0
 #define CT_XLAT_GWARP_BUS     0xFD     // the bank of `JML $FD:FFF1`
 
-// ---- a translated ROUTINE inside the field's frame: the window wipe --------------------------------------------------
-// C0/00B1 `JSR C0/21E1` -> C0/21EA `JSR ($21EE,X)` with X = 4 (state 3) -> C0/22D8 -> C0/22FA `JSL C3/000E` -> C3/01E4,
-// once per field frame while a wipe runs (field_window_wipe.md). The routine's only clock-dependent input is C3/02DD's
-// read of the H/V counters ($2137 latch, $213C, $213D twice): the CPU's position in the frame when the field's main loop
-// reaches C0/22FA. MEASURED (--hookpc C302DD, hPos added): V is constant over a wipe's 32 calls (255 on the attract's 16E,
-// 253 on its 01C) and H is NOT (298..396 master cycles into the line on 16E, 1100..1284 on 01C) -- the field NMI's and
-// the main loop head's work differ from frame to frame, and the port has no instruction-level clock for the field
-// engine. So, as the race does (CT_XLAT_HANDOFF_*), every call starts on the clock the cartridge had at its FIRST call
-// from power-on: the attract's 16E, f579. What follows from it (which of the 256 walks through $C0:FE00 each frame takes,
-// so which lines lead) is the cartridge's own on that one call only; the walk's law, the fill, the saturation, the 32
-// calls and $0386's update are exact by construction. ⚠ With the beam held, C3/02DD maps $0386 onto a FIXED POINT (7E)
-// within a few calls, and from there every call takes one walk -- the curtain opens in rectangles where the cartridge's
-// edge moves on every line. The cartridge's H is carried from power-on (a stall before the 01C load still moves its
-// wipe), so no per-call H is derivable short of a cycle-exact machine; disasm/notes/field_window_wipe.md, "The curtain
-// turns SQUARE".
-#define CT_XLAT_WIPE_V   254     // vPos at C3/000E, 16E's first call (saves/attract_cena_inicial.state f577 + PEEK_SAVE; `XLATCMP_AT=C3000E ct.exe --xlatcmp`)
-#define CT_XLAT_WIPE_H   1240    // hPos there (C3/02DD's reads then fall on v=255, h=306; `--hookpc C302DD` measures those)
-// Run C3/000E on the host's 128 KB WRAM with the registers C0/22FA leaves (A = 00FF from `LDA #FF / STA $0BDD`, X = 4,
-// D = $0100, B = 0, M = 1, X = 0, I = 0, S = $06F8 with the JSL's return C0:22FD on the stack) until its RTL reaches
-// C0:22FE; the WRAM comes back with what the routine wrote (the tables at $7F:17C8, $0300's page, $0386). 0 = ran, < 0 =
-// no ROM / a CT_XLAT_* stop (the WRAM is then left as it was).
-int CtXlatWipeCall(const uint8_t* rom, long romLen, uint8_t* wram128, int vPos, int hPos);
-int CtXlatWipePeek(const uint8_t* rom, long romLen, uint8_t* wram128, int vPos, int hPos);   // the same, kept out of the seed trace
-
 // ---- the field's HDMA tables: FD/C2C1 ------------------------------------------------------------------------------
 // `JSL FD/C2C1` -- nine callers (C0/00C7 the main loop's, C0/00E0, C0/01AA, C0/0AFF's two -- the field NMI routine that
 // D1/F4C0 also runs --, C0/0B2E, C0/1905, C0/194D, C0/19B6), every one with D = $0100, B = 0, M = X = 1: `LDA $53 / BIT #01`
@@ -164,22 +140,6 @@ int CtXlatWipePeek(const uint8_t* rom, long romLen, uint8_t* wram128, int vPos, 
 // reference `ct.exe --hdmafuzz` grades the native builder src/hdma_table.c against; every caller runs the native one.
 int CtXlatHdmaBuild(const uint8_t* rom, long romLen, uint8_t* wram128);
 
-// ---- the OVERWORLD's window object: op 4E -> $C6:E241 (install + first call) / $C6:E27E (a call a frame) ------------
-// C2/181C `LDY #0001 / LDA [$58],Y / STA $5B / SEP #20 / LDY #0003 / LDA [$58],Y / STA $5D / JSL C2/1836 (JML [$005B])`, the
-// object VM's far call, reached from its dispatcher with X = op << 1 ($9C) and the world's D = 0, B = 0, I = 1. The routine
-// programs HDMA channel 2 over $2127 (WH1) from the table at $7E:8A42, runs C3/01E4 (through C3/000E) on the object's
-// +$22 mode and +$24 table, and points the table's two entries at the half C3/01E4 wrote ($7E:8A25 / $8A27, which the NMI's
-// C2/02C2 copies into the entries every frame). Measured on the attract's 1F5 (ct.exe --calldump build/_ow_f100.state 1
-// C6E241 C21830): A = E2C6, X = 009C, Y = 0003, S = 06E7, D = 0000, B = 00, M = 1, I = 1, v = 45, h = 768, latched = 1.
-// The beam is the world VM's position in the frame -- line 45 on the first call, 0 / 1 / 258 / 261 on the per-frame
-// ones -- the same underived input as the field's (CT_XLAT_WIPE_*): every call starts on the first call's.
-#define CT_XLAT_OWWIN_V  45
-#define CT_XLAT_OWWIN_H  768
-// `hSecond`: the $213C latch toggle at the call -- -1 = as the last call left it (the world engine never reads the
-// counter ports itself), 0/1 = force (the install, or a harness feeding a measured state).
-// `ppu2Bus`: PPU2 open bus at the call (the last byte a $213x read returned; the high-bit form of a $213C/$213D read keeps
-// its bits 1-7), -1 = as the last call left it.
-int CtXlatOwWindowCall(const uint8_t* rom, long romLen, uint8_t* wram128, uint32_t target, int vPos, int hPos, int hSecond, int ppu2Bus);
 
 
 typedef struct CtXlatStage CtXlatStage;

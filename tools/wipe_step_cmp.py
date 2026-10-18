@@ -3,10 +3,10 @@ r"""The field's WINDOW WIPE (C3/01E4 through C0/22FA, op 0xFF 0x92-0x95) against
 
   * ONE CALL ON THE CARTRIDGE'S OWN INPUTS: `ct.exe --wipedump <state> <k> in out` runs the oracle to the k-th call of
     C3/000E, dumps its 128 KB WRAM and the beam there (vPos, hPos), runs to the RTL's landing C0:22FE and dumps the WRAM
-    again; `Belthasar --wipecall in v h port` runs the port's translated routine (src/xlat/wipe_c3.c, on the vendored
-    hardware) through the host's own call glue (seq_xlat.c CtXlatWipeCall) on that WRAM and that beam. Graded: the two
-    HDMA tables + the working copy at $7F:17C8-$19A7 (the routine's output), DP $0300's page ($50-$57: the counters and the
-    seed pointer) and $0386 (C3/02DD's accumulator), byte for byte.
+    again; `Belthasar --wipecall in port` runs the port's native routine (src/wipe.c CtWipeRoutine, with the registers the
+    field's ct_vm.c ctWipeFrame hands it) on that WRAM. Graded: the two HDMA tables + the working copy at $7F:17C8-$19A7
+    (the routine's output), DP $0300's page ($50-$57: the counters and the seed pointer) and $0386 (C3/02DD's
+    accumulator), byte for byte, and the whole 128 KB but the 32 stack bytes below the caller's S (dead_stack).
   * THE MASK: `Belthasar --wipemask out` gives the window-2 edge the field's HDMA channel 7 hands every scanline from that
     WRAM (field.c fieldWipeWindow: FD/C477's table choice, FD/C1EE's $2128/$2129 by $013C, the E4/F0 line split), and
     `--wipedump` also samples the cartridge's window 2 on every visible line after the routine returns (the frame
@@ -41,6 +41,13 @@ def run(argv, env=None, timeout=900):
     return subprocess.run(argv, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout).stdout
 
 
+# The stack below the caller's S: the routine's pushes (PHB / PHD / PHP / PHA / PHX / PHY, the fill's PHB) and C3/02DD's
+# return address, dead once it returns -- the native routine has no CPU stack and leaves those bytes alone. 32 bytes
+# cover every push the call makes (13 on the field's call, 16 on the world's: E27E's JSL first).
+def dead_stack(s):
+    return set(range(s - 31, s + 1))
+
+
 VB = dict(os.environ, CT_ORACLE_VIRTUAL_BEAM='1')    # the oracle side reads the virtual beam (the docstring)
 
 
@@ -64,19 +71,20 @@ def main():
         if not m or not os.path.exists(inp) or not os.path.exists(outp):
             print('wipe-step: FAIL -- wipedump on %s: %s' % (loc, d.strip().splitlines()[-1:])); continue
         frame, v, h = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        sp = int(re.search(r' S=([0-9A-F]{4}) ', d).group(1), 16); dead = dead_stack(sp)
         if os.path.exists(portp): os.remove(portp)
-        p = run([FIELD, '--assets', 'ct_assets.dat', '--wipecall', inp, str(v), str(h), portp],
+        p = run([FIELD, '--assets', 'ct_assets.dat', '--wipecall', inp, portp],
                 env=dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy'))
         if not os.path.exists(portp):
             print('wipe-step: FAIL -- wipecall on %s: %s' % (loc, p.strip().splitlines()[-1:])); continue
         o = open(outp, 'rb').read(); q = open(portp, 'rb').read(); i0 = open(inp, 'rb').read()
         def same(a, b): return sum(1 for j in range(a, b) if o[j] == q[j])
         tab = same(0x117C8, 0x119A8); pg = same(0x0300, 0x0400); acc = o[0x0386] == q[0x0386]
-        whole = sum(1 for j in range(0x20000) if o[j] != q[j])
+        whole = sum(1 for j in range(0x20000) if o[j] != q[j] and j not in dead)
         changed = sum(1 for j in range(0x117C8, 0x119A8) if o[j] != i0[j])
         print('wipe-step: %s call %d (mode %d, v=%d h=%d) -> tables $7F:17C8-19A7 %d / 480 bytes identical (%d changed by the '
-              'call), page $0300 %d / 256, $0386 %s, %d byte(s) differ in all 128 KB'
-              % (loc, k, o[0x0350], v, h, tab, changed, pg, 'same' if acc else 'DIFFERENT', whole))
+              'call), page $0300 %d / 256, $0386 %s, %d byte(s) differ in all 128 KB but the dead stack below S=%04X'
+              % (loc, k, o[0x0350], v, h, tab, changed, pg, 'same' if acc else 'DIFFERENT', whole, sp))
         # THE MASK: the cartridge's window 2 on the visible lines after the routine returned (wipedump samples them as
         # --hdma's tracer does, from the line the RTL lands on to 224 -- the frame the HDMA channel draws from this call's
         # table), against the edges the port's channel model gives from the WRAM as it stands after C0/00C7 -- the
