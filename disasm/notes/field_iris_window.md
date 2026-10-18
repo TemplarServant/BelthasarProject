@@ -119,3 +119,37 @@ The port, seeded from the cartridge's WRAM at c1500 and run INTERACTIVELY (paced
 keys 6C on voices 6/7 with srcn 02/05, re-keys voice 6 at +120 and +240, and 78 with 07/05. Under --selftest with
 CT_AUDIO_LOCKSTEP the same, and voices 6/7 alone sound on every frame from the key-on to +255 on both sides (RMS 996-2496 at the
 sampled offsets, within a quarter of each other). So the silent open is the ROM's: the circle's op writes $0139-$013D and nothing else (C0/4036).
+
+## 9. The circle as the COLOUR window: C0/21E1's entries 4 and 5 (2026-10-18)
+
+`FF 97` (C0/4191) is `FF 90`'s stores -- centre `$013A / $013B`, target `$013D`, `$013C = 0` -- with `$0139 = 04`; `FF 98`
+(C0/41B0) sets `$0139 = 05`. Script sites (byte scan of the 489 scene scripts, checked by context): scene 051's script $055
+at 0x093C (`FF 97 87 98 60 / F1 9F 00 / AD 0A / FF 98`), scene 055's $057 at 0x072A and 0x0923 (`FF 97 BD 52 1C`), scene
+0A3's $025 at 0x0583 (`FF 97 87 9A 61 / F1 9F 00`).
+
+```
+C0/232A  LDA $3C / CMP $3D / BCS 2384          (2384 STZ $39 / DEC $3C / BRA 2330)
+         TMW $7F:1522/1523 = 17, W12SEL / W34SEL $0BD9/$0BDA = 00, WOBJSEL $0BDB = 20, CGWSEL $0BDE = 12
+         $0350 = $3A, $0352 = $3B, $0354 = $3C, TSB $28 #20, $0356 = $53 ? 17C8 : 1AC8, $0358 = 7F
+         LDA #01 / JSL C3/0008 / INC $3C / RTS
+C0/238A  LDA $3C / BEQ 23E2 / DEC $3C, then the same stores and call / RTS
+```
+
+So the iris's circle (C3/0077, here with ARGUMENT 1: each pair of lines copied once, the circle half as tall) made the
+colour window -- window 1 for colour, math only inside it, the sub screen added -- with the colour `F1 9F 00` leaves
+(`$0121 = $0122 = 9F`, `$0BE0 = 17`: blue 31). Ported in ct_vm.c (ctColCircleFrame); graded by
+tools/field_colcircle_cmp.py (check field-colour-circle-c0-232a-238a-vs-rule-cartridge): scene 051's operands poked on both
+sides into a quiet room (loc 005) at frame 150, then every frame's `$0139 / $013C / $0153 / $0128`, the shadows and both
+448-byte buffers equal to the cartridge's for 120 frames, opening to radius 60 and closing to C0/23E2's teardown.
+
+**The renderers read channel 5's table** (field.c fieldCh5Rows): the set FD/C2C1 built this frame (`$0153` bit 0 clear
+after it = set A `$7F:1133`, set = set B `$7F:13EB`), its `<count> <addr>` entries walked line by line -- instead of a
+buffer pointer each effect leaves ($0356 for the iris, $0350 for the quad), which entry 4 would have read as its centre.
+The iris and the quad checks hold unchanged.
+
+**Left: the picture in these rooms.** Loc 051 (like loc 005, the graded room) keeps BG3 on the sub screen (TM 13 / TS 04,
+CGWSEL 02 -- the bake adds it everywhere); entry 4's CGWSEL 12 limits that sum to the circle, and inside it the sub screen's
+transparent pixels take the fixed blue. The port's colour window draws only the set with no sub screen (fieldColWindowRows
+names this one once and leaves the picture as it was); it needs the bake's math split by the window (inside: main + BG3 or
+COLDATA; outside: the main screen alone, CtFieldSceneMainScreen's image). MEASURED (loc 084, TM 04 / TS 13): outside the
+window the cartridge shows the main screen alone -- there BG3 over the backdrop, black.

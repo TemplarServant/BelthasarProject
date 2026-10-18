@@ -2900,6 +2900,29 @@ static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
 // emitter, which missed the ROM's flat middle rows and its one-pixel-wider top rows.)
 static int16_t g_bgWinL[256], g_bgWinR[256];
 static int g_bgWinOn = 0;
+// WINDOW 1's EDGES AS HDMA CHANNEL 5 HANDS THEM OUT: the channel's table in the set FD/C2C1 built this frame -- `$0153` bit 0
+// clear after it = set A ($7F:1133), set = set B ($7F:13EB) (field_hdma_tables.md: the builder flips the bit after each set,
+// and the window routines write the buffer of the set built next: `LDA $53 / BEQ` -> $17C8 (set A) / $1AC8 (set B)). DMAP 41,
+// indirect: `<count> <addr16>` entries, a count above $80 one word (WH0, WH1) a line for count - $80 lines, else one word
+// held for count lines, 00 the end (the edges hold). Screen row y takes the table's line y (the window measured with the
+// iris: the displayed window is the table written in the same frame). Mode 0's table is `E4 <buf> F0 <buf+C8*2> 00`, so
+// this reads 212 lines of one buffer, as before; a text box's modes 1 / 2 add their own runs.
+static void fieldCh5Rows(const uint8_t* w128, int16_t* L, int16_t* R) {
+  const uint8_t* b7f = w128 + 0x10000;
+  unsigned t = (w128[0x0153] & 0x01) ? 0x13EB : 0x1133, line = 0, l = 0, r = 0;
+  for (int guard = 0; guard < 64 && line < 256; guard++) {
+    unsigned n = b7f[t & 0xFFFF];
+    if (!n) break;
+    unsigned a = (unsigned)(b7f[(t + 1) & 0xFFFF] | (b7f[(t + 2) & 0xFFFF] << 8));
+    t += 3;
+    unsigned cnt = n == 0x80 ? 128 : (n & 0x7F), rep = n > 0x80;
+    for (unsigned k = 0; k < cnt && line < 256; k++, line++) {
+      if (rep || k == 0) { unsigned q = a + (rep ? 2 * k : 0); l = b7f[q & 0xFFFF]; r = b7f[(q + 1) & 0xFFFF]; }
+      L[line] = (int16_t)l; R[line] = (int16_t)r;
+    }
+  }
+  for (; line < 256; line++) { L[line] = (int16_t)l; R[line] = (int16_t)r; }
+}
 static void fieldBgWindowRows(const uint8_t* w128) {
   g_bgWinOn = 0;
   if (!w128) return;
@@ -2910,12 +2933,7 @@ static void fieldBgWindowRows(const uint8_t* w128) {
     if (!said) { said = 1; fprintf(stderr, "bgwindow: W12SEL=%02X TMW=%02X -- not the iris set, not drawn\n", w12, tmw); }
     return;
   }
-  uint16_t base = (uint16_t)(w128[0x0356] | (w128[0x0357] << 8));
-  const uint8_t* bank = w128 + ((w128[0x0358] & 1) ? 0x10000 : 0);
-  for (int y = 0; y < CAMH && y < 256; y++) {
-    uint16_t a = (uint16_t)(base + 2 * (y < 211 ? y : 211));
-    g_bgWinL[y] = bank[a]; g_bgWinR[y] = bank[(uint16_t)(a + 1)];
-  }
+  fieldCh5Rows(w128, g_bgWinL, g_bgWinR);
   g_bgWinOn = 1;
 }
 static inline int bgWinAt(int x, int y) {
@@ -2947,12 +2965,7 @@ static void fieldColWindowRows(const uint8_t* w128) {
                                            "inside, no sub screen), not drawn\n", wobj, cgw, w128[0x11521]); }
     return;
   }
-  uint16_t base = (uint16_t)(w128[0x0350] | (w128[0x0351] << 8));
-  const uint8_t* bank = w128 + ((w128[0x0352] & 1) ? 0x10000 : 0);
-  for (int y = 0; y < CAMH && y < 256; y++) {
-    uint16_t a = (uint16_t)(base + 2 * (y < 211 ? y : 211));
-    g_colWinL[y] = bank[a]; g_colWinR[y] = bank[(uint16_t)(a + 1)];
-  }
+  fieldCh5Rows(w128, g_colWinL, g_colWinR);   // (the quad's C3/0EFA buffer and C0/232A's circle alike: channel 5's table)
   g_colWinMath = w128[0x0BE0];
   uint8_t cd = w128[0x0121]; int i5 = cd & 0x1F;
   g_colWinFix[0] = (uint8_t)((cd & 0x20) ? i5 : 0); g_colWinFix[1] = (uint8_t)((cd & 0x40) ? i5 : 0);
