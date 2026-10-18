@@ -19,10 +19,18 @@ int CtAssetsOpen(CtAssets* a, const char* path) {
   if (fread(d, 1, (size_t)n, f) != (size_t)n) { fclose(f); free(d); return 0; }
   fclose(f);
   if (memcmp(d, "CTAS", 4) != 0) { free(d); return 0; }
+  // A cut-short or damaged container is refused here, not read past its end by CtAssetGet: the directory and every
+  // blob it names must lie inside the file.
+  uint32_t count = rd32(d + 8);
+  if ((uint64_t)12 + (uint64_t)count * 16 > (uint64_t)n) { free(d); return 0; }
+  for (uint32_t i = 0; i < count; i++) {
+    const uint8_t* e = d + 12 + (size_t)i * 16;
+    if ((uint64_t)rd32(e + 8) + rd32(e + 12) > (uint64_t)n) { free(d); return 0; }
+  }
   a->data = d;
   a->len = (int)n;
   a->version = rd32(d + 4);
-  a->count = rd32(d + 8);
+  a->count = count;
   return 1;
 }
 

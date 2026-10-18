@@ -7,7 +7,12 @@ touch controls are drawn over the picture, and a Bluetooth or USB controller wor
 
 - **No game data.** The ROM and `ct_assets.dat` are never packed into the APK. On first launch the app asks for them
   (the system file picker) and copies them into its data folder, `Android/data/org.belthasar.ct/files/`. Every later
-  launch goes straight to the title screen.
+  launch goes straight to the title screen. `ct_assets.dat` is made on a computer: the desktop Belthasar's ROM screen
+  leaves it in its data folder ([ROM.md](ROM.md#the-players-start-the-rom-screen)), or `tools/setup.py` at the root.
+- **Each file is checked before it is kept** (`SetupActivity`): the ROM's size and SHA-1 (as `CtRomVerify`), the
+  container's header and directory (as `CtAssetsOpen`), a save's 8192 bytes. A file that fails is dropped with the
+  reason, the one already there stays, and the game only starts on files that pass; `src/android.c` checks them again
+  before the engine reads them (a file replaced by hand) and says so instead of closing.
 - **It is built from your ROM.** Like the desktop executable, the native library compiles the sources that
   `tools/setup.py` generates from your dump (`src/data/*.h`, `src/xlat/*.c`). An APK you build is for your own devices
   only. Do not distribute it.
