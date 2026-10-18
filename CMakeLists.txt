@@ -22,6 +22,15 @@ if(MSVC)
   add_link_options(/Brepro /INCREMENTAL:NO)
 endif()
 
+# PORTABLE C (MSVC): what gcc 14 and clang 16 refuse by default is an error here too, so a Windows build cannot pass
+# code a Unix clone does not compile (PR #2: three static functions called before their declaration -- C4013 is a
+# level-3 warning, below every target's /W2, so nobody saw it). C4013 a call to an undeclared function, C4431 implicit
+# int, C4047 int <-> pointer, C4133 / C4024 incompatible pointer types (assignment / argument), C4020 too many
+# arguments, C4716 / C4033 a missing return value. /we raises each whatever the /W level.
+if(MSVC)
+  add_compile_options(/we4013 /we4431 /we4047 /we4133 /we4024 /we4020 /we4716 /we4033)
+endif()
+
 # The playable host's sources (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake).
 set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
                  src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
@@ -233,9 +242,13 @@ endif()
 
 # Keep normal Unix executable names and the .exe aliases used by the shared
 # Python oracle/recipe/regression tools. Both names execute native machine code.
+# Every executable this file defines gets one: a hand-kept list forgot ct_oracle (PR #2), and tools/build.py checks
+# each target by its .exe name.
 if(UNIX)
-    foreach(target ct Belthasar ct_world ct_viewer)
-        if(TARGET ${target})
+    get_property(ct_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(target ${ct_targets})
+        get_target_property(ct_target_type ${target} TYPE)
+        if(ct_target_type STREQUAL "EXECUTABLE")
             add_custom_command(TARGET ${target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E remove -f "$<TARGET_FILE_DIR:${target}>/${target}.exe"
                 COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE_NAME:${target}>"
