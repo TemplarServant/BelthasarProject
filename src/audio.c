@@ -21,6 +21,7 @@
 #include "apu.h"
 #include "spc.h"
 #include "dsp.h"
+#include "ppu.h"
 
 // Bank $C7 is HiROM: file offset = 0x70000 + addr (audio_boot.md §0 header).
 #define C7_BASE      0x70000
@@ -98,6 +99,7 @@ struct CtAudio {
   Apu*  apu;
   int   ready;
   double cycleCarry;                 // fractional APU cycles across frames; a clocked JSL's SPC time is DEBITED here
+  int evenFrame;                     // the PPU's field this frame of SPC stands for (ppu.c evenFrame: an odd frame is short)
   int engineMode;                    // 0 field, 1 battle: the background block the loader clock charges
   int postLine;                      // raster line a JSL $C7:0004 begins on (default 12: the runner's early queue, measured)
   int lastFrames, lastEndLine;       // the last clocked JSL: NMIs crossed, the line it returned on
@@ -1388,6 +1390,7 @@ CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
   a->shell = (Snes*)calloc(1, sizeof(Snes));          // palTiming = false = NTSC
   if (!a->shell) { free(a); return NULL; }
   a->rom = rom; a->romLen = romLen;
+  a->evenFrame = 1;                                    // power-on: the PPU flips its field at (0,0), the first frame is even
   a->engineMode = 0; a->postLine = 12;
   a->rulePostAt = LD_PAD_WAIT; a->ruleNmiWait = LD_PAD_WAIT;   // the rule: the field's main loop, after its NMI's pad latch
   a->ruleIrqLine = -1;                                         // ...and no V-IRQ until the host says one is armed
@@ -1408,11 +1411,23 @@ void CtAudioFree(CtAudio* a) {
 
 int CtAudioReady(const CtAudio* a) { return a && a->ready; }
 
+// ONE FRAME's SPC TIME. The console's frame is 262 lines of 1364 master cycles -- but in a non-interlaced odd frame line 240 is
+// 4 cycles short (snes.c: `hPos == 1360 && vPos == 240 && !evenFrame`), and the SPC's time is the master clock's: 17,088 APU
+// cycles an even frame, 17,087.81 an odd one. A constant 17,088 runs the sound processor 0.1 cycle a frame ahead of the
+// console: over a long stage a song's marker crosses a frame boundary early -- the ending's `FF 2A`, page A's `F5 08` 10,850
+// frames in, a frame before the cartridge's (ending-stage-logic-ff2a-ff2f-vs-oracle). (A MEAN of 17,087.90 every frame is not
+// this either: the field flips each frame, the short line is the odd frame's.) The field flips at each frame's start
+// (ppu_handleFrameStart) -- at power-on's (0,0) too: the first frame is even. A frame's slice runs vblank to vblank, so it holds
+// the line 240 of the frame it starts in: its parity is used, then flipped.
+#define APU_CYCLES_PER_MASTER (APU_CYCLES_PER_SEC / (1364.0 * 262.0 * 60.0))
+static double apuFrameCycles(const CtAudio* a) { return APU_CYCLES_PER_FRAME - (a->evenFrame ? 0.0 : 4.0 * APU_CYCLES_PER_MASTER); }
+void CtAudioFrameSkip(CtAudio* a) { if (a) a->evenFrame ^= 1; }
 void CtAudioFrame(CtAudio* a) {
   if (!a) return;
   { static int ck = -1; static long fr = 0; if (ck < 0) { const char* e = getenv("CT_AUDIO_SPCCLOCK"); ck = (e && *e) ? 1 : 0; }
     if (ck) fprintf(stderr, "spcclock pass%ld total=%lld carry=%.1f" "\n", fr++, g_apuTotal, a->cycleCarry); }
-  double want = APU_CYCLES_PER_FRAME + a->cycleCarry;
+  double want = apuFrameCycles(a) + a->cycleCarry;
+  a->evenFrame ^= 1;                                   // (the next slice's frame)
   if (want < 1.0) { a->cycleCarry = want; a->mutedFrame = 1; return; }   // a clocked JSL already ran this frame's SPC time
   a->mutedFrame = 0;
   int n = (int)want;
@@ -1605,6 +1620,7 @@ void CtAudioSeedFromApu(CtAudio* a, const Apu* src) {
   { void* mem = spc->mem; SpcReadHandler r = spc->read; SpcWriteHandler w = spc->write; SpcIdleHandler i = spc->idle;
     memcpy(spc, src->spc, sizeof *spc); spc->mem = mem; spc->read = r; spc->write = w; spc->idle = i; }
   memcpy(dsp, src->dsp, sizeof *dsp); dsp->apu = d;
+  if (src->snes && src->snes->ppu) a->evenFrame = src->snes->ppu->evenFrame ? 1 : 0;   // the state's field: the next frame flips it
   a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;
   audReset(a);
 }
@@ -1690,7 +1706,7 @@ uint32_t CtAudioApuCycles(const CtAudio* a) { return a ? a->apu->cycles : 0; }
 // ran in that last frame.
 void CtAudioStageExitFrame(CtAudio* a, uint32_t ran) {
   if (!a || !a->ready) return;
-  double want = APU_CYCLES_PER_FRAME - (double)ran;
+  double want = apuFrameCycles(a) - (double)ran;
   if (want < 1.0) return;
   int got = apuRun(a, (int)want);
   a->cycleCarry += want - (double)got;                 // (an opcode's overshoot, carried as CtAudioFrame carries it)

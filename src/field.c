@@ -794,53 +794,6 @@ static int worldIntroLoaderSong(const uint8_t* host, uint8_t* songOut) {
   return 0;
 }
 
-static uint8_t wlzRead(const uint8_t* host, const uint16_t* ovA, const uint8_t* ovV, int ovN, int addr) {
-  for (int k = ovN - 1; k >= 0; k--) if (ovA[k] == addr) return ovV[k];      // the script's own op-13 stores
-  if (addr >= 0x1BA7 && addr < 0x1BB7) return host[0x101F0 + (addr - 0x1BA7)]; // C2/26D6, not copied yet
-  if (addr == 0x1BA6) return host[0x10000];
-  if (addr == 0x02AE) return host[0x29AE];                                    // C2/2C50
-  if ((addr >= 0x027C && addr <= 0x027D) || (addr >= 0x0047 && addr <= 0x0049) || (addr >= 0x0280 && addr <= 0x0282) ||
-      (addr >= 0x1B58 && addr <= 0x1B59) || addr == 0x1BF7 || (addr >= 0x02B1 && addr <= 0x02B3)) return 0;   // C2/2C1D
-  return host[addr & 0xFFFF];
-}
-// Does the world's loader script reach the ZONING arm `34 0F 2F` (C2/2F0F) on its first run? When it does, the world's own
-// pass stages and posts the song (world.c obNative, priced on the SPC) and the host must not post it again here. The
-// script is read with the VM's own semantics (world.c obRun): 00 / 10 11 12 13 14 (stores, kept in an overlay) / 09 43 / 35 advance,
-// 36 / 37 call and return, 26 27 4C 4D branch on the byte, 34 is a native; any other op ends the walk with "no". It runs
-// on what C2's loader leaves before the script's first visit: C2/2C1D's zeroing ($027C-$027D, $47-$49, $0280-$0282,
-// $1B58-$1B59, $1BF7, $02B1-$02B3), C2/2C50 ($02AE = $29AE) and C2/26D6's copy ($7F:01F0 x16 -> $1BA7, $7F:0000 -> $1BA6),
-// which the host performs after this call. A cutscene loader (the attract's worlds, the new-game pan) answers "no" and
-// keeps the host's entry post.
-static int worldLoaderZones(const uint8_t* host) {
-  const uint8_t* s7f = host + 0x10000;
-  uint16_t ovA[32]; uint8_t ovV[32]; int ovN = 0;
-  #define WLZ_RD(a) wlzRead(host, ovA, ovV, ovN, (a))
-  int pc = 0x0400, ret = -1;
-  for (int step = 0; step < 512; step++) {
-    const uint8_t* op = s7f + (pc & 0xFFFF);
-    switch (op[0]) {
-      case 0x00: pc += 1; break;
-      case 0x13: if (ovN < 32) { ovA[ovN] = (uint16_t)(op[1] | (op[2] << 8)); ovV[ovN++] = op[3]; } pc += 4; break;
-      case 0x10: if (ovN < 32) { ovA[ovN] = (uint16_t)(op[1] | (op[2] << 8)); ovV[ovN++] = 0; } pc += 3; break;   // `= 0`
-      case 0x11: case 0x12: { int ad = op[1] | (op[2] << 8); uint8_t v = WLZ_RD(ad);                              // INC / DEC
-        if (ovN < 32) { ovA[ovN] = (uint16_t)ad; ovV[ovN++] = (uint8_t)(op[0] == 0x11 ? v + 1 : v - 1); } pc += 3; break; }
-      case 0x14: { int ad = op[1] | (op[2] << 8); uint8_t v = WLZ_RD(ad);                                          // |= imm
-        if (ovN < 32) { ovA[ovN] = (uint16_t)ad; ovV[ovN++] = (uint8_t)(v | op[3]); } pc += 4; break; }
-      case 0x09: case 0x43: pc += 4; break;
-      case 0x35: pc += 3; break;
-      case 0x36: ret = pc + 3; pc = op[1] | (op[2] << 8); break;
-      case 0x37: if (ret < 0) return 0; pc = ret; ret = -1; break;
-      case 0x26: pc += (WLZ_RD(op[1] | (op[2] << 8)) & op[3]) ? (int8_t)op[4] : 5; break;
-      case 0x27: pc += (WLZ_RD(op[1] | (op[2] << 8)) & op[3]) ? 5 : (int8_t)op[4]; break;
-      case 0x4C: pc += (WLZ_RD(op[1] | (op[2] << 8)) < op[3]) ? (int8_t)op[4] : 5; break;
-      case 0x4D: pc += (WLZ_RD(op[1] | (op[2] << 8)) >= op[3]) ? (int8_t)op[4] : 5; break;
-      case 0x34: if (op[1] == 0x0F && op[2] == 0x2F) return 1; pc += 3; break;
-      default: return 0;
-    }
-  }
-  #undef WLZ_RD
-  return 0;
-}
 static int owBootstrapObjects(void);
 static void worldEnterSong(World* w, int cell8x, int cell8y) {
   uint8_t* host = w->wram;                                      // the host image; the world shares it now
@@ -858,14 +811,17 @@ static void worldEnterSong(World* w, int cell8x, int cell8y) {
         printf("owsong: loader script $0104=%02X -> PLAY song %02X (no zoning)\n", host[0x0104], scripted);
       return;
     } }
-  // UNDER THE BOOTSTRAP the loader script runs, and when its dispatch falls through to the zoning arm `34 0F 2F` that is
-  // C2/2F0F itself (world.c obNative): it stages and posts in the world's first pass, priced on the SPC (worldLoaderZones).
-  // A replayed snapshot (which skipped the script) and a cutscene loader keep the host's entry post.
+  // UNDER THE BOOTSTRAP the loader script runs, and it is the only poster: its dispatch either falls through to the zoning
+  // arm `34 0F 2F` -- C2/2F0F itself (world.c obNative), which stages and posts in the world's first pass, priced on the SPC
+  // -- or jumps to another loader, which plays its own song (`3D`, world.c) or none. The ROM has no other entry post: Jackie's
+  // ch24 (1DD -> 1F6 by op DF at the cartridge's f493, and the return from `FF 23` at f1559) posts no `10` at those entries --
+  // the loader taken plays `10 44` 39 frames on, by its own op -- where the host posted the region's `10 03` and held the
+  // world 33-41 frames for its upload. Only a replayed snapshot (which skipped the script) keeps the host's entry post.
   if (!host[0x101ED]) {                                         // C2/2F0F: $7F01ED == 0 -> zone it
     uint8_t region = CtWorldRegion(w->wram, cell8x >> 1, cell8y >> 1);   // C2/2F15-2F24
     song = w->wram[0x1B9B + region];                            // C2/2F25
   }
-  if (!(owBootstrapObjects() && worldLoaderZones(host))) {
+  if (!owBootstrapObjects()) {
   if (!host[0x101ED]) host[0x02AE] = song;
   host[0x1E01] = song;                                          // C2/2F28 / 2F34
   host[0x1E02] = 0xFF; host[0x1E03] = 0x80;                     // C2/2F3F-2F46
@@ -5097,6 +5053,11 @@ static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
 // and the overworld ENTRY all do this inline in the ROM). No audio -> inert, and the mailbox simply
 // stays staged, exactly as it does when the driver latch is down.
 static void fieldSoundFlush(uint8_t* mem7E) { if (g_fieldAudio && mem7E) CtAudioService(g_fieldAudio, mem7E); }
+// The world's main loop, state 2 (C2/24D5: every exit, into a location or another world) -- its two posts before the JML.
+static void owExitSoundPosts(uint8_t* m) {
+  static const uint8_t cmd[2] = { 0x82, 0x83 };
+  for (int k = 0; k < 2; k++) { m[0x1E00] = cmd[k]; m[0x1E01] = 0x00; m[0x1E02] = 0xFF; fieldSoundFlush(m); }   // C2/24E3 / 24F4
+}
 // THE RACE'S SOUND (seq_race.h CtRaceIo, ctx = the host's WRAM): a script's `F6` and the bump's `19 98 80` are the mailbox
 // $1E00-$1E03 the stage already wrote, posted like every other `JSL $C7:0004`; the engine's pitch is the CPU writing the
 // SPC's own input ports ($2141 = pitch, $2140 = $89: `$7E:4BD2` / `4BD7`), on the same SPC.
@@ -12042,6 +12003,7 @@ int main(int argc, char** argv) {
           static int ruleSeededFirst = 1;
           if (ruleSeeded && ruleSeededFirst) { ruleSeededFirst = 0; continue; }
           if (!seqX && !gwX) CtAudioFrame(audio);           // a translated stage's bus drives the SPC itself
+          else CtAudioFrameSkip(audio);                      //   (the frame's field flips all the same)
           if (audioDev && audioBuf) {
             // THE LEVEL GATE, from the vendored LakeSnes reference this engine's audio is ported from
             // (_vendor_LakeSnes/main.c:323 `if (SDL_GetQueuedAudioSize(dev) <= wantedSamples * 4 * 6)`):
@@ -13432,6 +13394,11 @@ int main(int argc, char** argv) {
             // f36 (C2:26E5), `$1BA7 = 00` (C2:12FC) and `$7F01F0 = 00` (C2:26FF) f1825. The port never copied back: the
             // bit stayed set in Porre and the next world entry played the Truce crossing again (the user's report).
             memcpy(wd.wram + 0x101F0, wd.wram + 0x1BA7, 16);
+            // C2/24E3-2501, the same state 2: `LDA #82 / STA $1E00 / STZ $1E01 / LDA #FF / STA $1E02 / JSL C7/0004`, then the
+            // same with $83 ($1E03 as it stands), before the JML. MEASURED, the rule's cartridge on Jackie's ch24 (--peek
+            // PEEK_APUTRACE): `82 00 FF` / `83 00 FF` at C7/0635 on lines 229 / 231 of each exit's frame (f132, f1533, f2562 --
+            // the field's `81` follows); the port posted neither.
+            owExitSoundPosts(wd.wram);
             pendKind = 3; pendDest = dl;
             // C0/42B8's arrival law, as at every other location change here: the location loader places the lead from
             // $0102-$0104 (bit 2 of $0104: $1800 = 00 else 80; bit 3: $1880 = 7F else FF). This was `tile*16+8 / +15`
@@ -13461,6 +13428,7 @@ int main(int argc, char** argv) {
             // -> 1F5, Zeal's sky) and the cartridge goes 1F4 -> 1F5 -> 1EE -> 1F5; the port only knew exits into a location
             // and stayed on 1F4's last frame, black (saves/field_re/pre_scene_19f, the user's own capture).
             memcpy(wd.wram + 0x101F0, wd.wram + 0x1BA7, 16);            // C2/24E0 JSR C2/26F0
+            owExitSoundPosts(wd.wram);                                  // C2/24E3-2501: $82, $83
             memcpy(flagsBuf, wd.wram + 0x10000, 0x200); haveFlagsBuf = 1;
             pendKind = 2; pendWorld = dl - 0x1F0; ngIntro = 0;
             pendWX = wd.wram[0x0102] * 8; pendWY = wd.wram[0x0103] * 8;
@@ -17264,38 +17232,16 @@ int main(int argc, char** argv) {
         // under 06B's second BG1 half, sequence_table.md 11.11), so the image comes back before the stage closes.
         { Snes* hw = CtXlatStageHardware(seqX); if (hw && hw->ppu) memcpy(g_fieldVram, hw->ppu->vram, sizeof g_fieldVram); }
         CtXlatStageClose(seqX); seqX = NULL; seqXState = 0;
-      } else if (seqOpen > 0 && raceOn) {
-        // THE RACE'S END: its script ENDed ($7E:0000 = 1, page A's `FF` after the finish's 128 frames); the main loop at
-        // $7E:3026 leaves for $302A -- NMI off, the driver reset $3177, `JML $C0:0000` -- into the location Johnny's script
-        // staged before the call. (A soft reset, L+R+Select+Start, is C3/0AB5's `JML $00FF00`: the same reboot here.)
-        if (raceEnded) {
+      } else if (seqOpen > 0 && (raceOn || endOn)) {
+        // The native stages' END is taken in the frame of the NMI that ENDed (below, after the frame's picture) -- except the
+        // Day of Lavos' console reset, whose cold init is this frame's (coldResetReq, below).
+        if (endOn == 4 && endEnded) {
           CtRaceIo rio = raceIoFor(w);
-          CtRaceStageClose(w, &rio);
+          CtEntry7StageClose(w, &rio);
           CtSceneSequenceDone(f.vm);
-          rebootReq = 1; stageExit = 1;                              // 7E:303F JML $C0:0000
-          printf("sequence: the race ended (%s) -> reboot into loc %03X\n", raceEnded == 2 ? "soft reset" : "$7E:0000=1",
-                 w[0x0100] | (w[0x0101] << 8));
-          seqOpen = 0; raceOn = 0; raceEnded = 0;
-        }
-      } else if (seqOpen > 0 && endOn) {
-        // THE ENDING'S END: `FF 2B`'s fade $7E:34E3 ($7E:0000 = 1) -> $302A's teardown (the driver reset skipped: bit 5) ->
-        // `JML $C0:0000` into the location obj10 staged; or the soft reset from "The End" (C3/0AB5 `JML $00FF00`).
-        if (endEnded) {
-          CtRaceIo rio = raceIoFor(w);
-          if (endOn == 2) CtEntry3StageClose(w, &rio); else if (endOn == 3) CtEntry4StageClose(w, &rio);
-          else if (endOn == 4) CtEntry7StageClose(w, &rio);
-          else if (endOn == 5) CtEntry6StageClose(w, &rio);
-          else CtEndingStageClose(w, &rio);
-          CtSceneSequenceDone(f.vm);
-          if (endOn == 4) {                                          // $63F5's `JML $00FF00`: the console's reset (C0/FF00 ->
-            coldResetReq = 1; coldResetWhy = "7E:63FA JML 00:FF00"; //   FD/C000) -- the cold init below, not $0100's reboot
-            printf("sequence: the Day of Lavos ended -> reset\n");
-            seqOpen = 0; endOn = 0; endEnded = 0;
-          } else {
-          rebootReq = 1; stageExit = 1;                              // 7E:303F JML $C0:0000
-          printf("sequence: the %s ended (%s) -> reboot into loc %03X\n", endOn == 2 ? "panorama" : endOn == 3 ? "fall" : endOn == 5 ? "Epoch's dive" : "ending",
-                 endEnded == 2 ? "soft reset" : "$7E:0000=1", w[0x0100] | (w[0x0101] << 8));
-          seqOpen = 0; endOn = 0; endEnded = 0; }
+          coldResetReq = 1; coldResetWhy = "7E:63FA JML 00:FF00";   // $63F5's `JML $00FF00`: the console's reset (C0/FF00 ->
+          printf("sequence: the Day of Lavos ended -> reset\n");    //   FD/C000) -- the cold init below, not $0100's reboot
+          seqOpen = 0; endOn = 0; endEnded = 0;
         }
       } else if (seqOpen > 0 && !seqX && titleIntro.done) {   // (titleIntro keeps the LAST machine's done flag)
         // Every other entry's teardown is the PLAIN fade $7E:34E3 -- the title's $34C2 without the
@@ -17314,34 +17260,38 @@ int main(int argc, char** argv) {
     // where the game resumes. We have no reset vector to jump to, so it is expressed in the engine's
     // own terms, the at-black transition machinery, which lands in the same place through the same
     // loader.
+    // (FIELD_REBOOT_PEND: the reboot's at-black pend from $0100-$0104 -- here and in a native stage's END frame, below)
+#define FIELD_REBOOT_PEND(w) do { \
+      /* ⭐ THE REBOOT IS AT FORCED BLANK, and it does not ramp. C2/832F -- the last thing the */ \
+      /* menu shell does before `JML $C0:0000` -- is `LDA #80 / STA $2100`, and C0/005D's first */ \
+      /* call (C0/0B4E) writes INIDISP $80 again, so from the moment a row is chosen until the */ \
+      /* destination fades itself in there is nothing on screen at all. Our transition machine */ \
+      /* ramps fadeBri from wherever it stood, and the modal never touched it, so it stood at 15: */ \
+      /* fifteen frames of the scene UNDERNEATH the shell -- location 0's black map with the lead */ \
+      /* PC standing on it. That is the sprite the user saw fade out after picking a save. */ \
+      fadeBri = 0; \
+      int rl = w[0x0100] | (w[0x0101] << 8), rtx = w[0x0102], rty = w[0x0103], rb = w[0x0104]; \
+      if (rebootLoaded >= 0) { newGame = 0; ngIntroDone = 1; } /* a LOADED game is not */ \
+      else if (ldrDone)      { newGame = 1; } /* the new-game cinematic; a wiped one is */ \
+      if (rl >= 0x1F0) { /* C0/006B `CPX #01F0 / BMI` -> the OVERWORLD */ \
+        haveWorld = worldInit(&assets, &wd, rl - 0x1F0); \
+        if (haveWorld) { pendKind = 2; pendWX = rtx * 8; pendWY = rty * 8; ngIntro = 0; \
+                         memcpy(flagsBuf, w + 0x10000, 0x200); haveFlagsBuf = 1; fade = 1; } \
+      } else { /* a FIELD location: C0/42B8's arrival law */ \
+        pendKind = 1; pendDest = rl; \
+        pendX = (rtx * 256 + ((rb & 0x04) ? 0x00 : 0x80)) / 16.0; \
+        pendY = (rty * 256 + ((rb & 0x08) ? 0x7F : 0xFF)) / 16.0; \
+        pendTileX = rtx; pendTileY = rty; \
+        pendFac = rb & 3; \
+        pendHasFlags = 1; memcpy(pendFlags, w + 0x10000, 0x200); \
+        fade = 1; \
+      } \
+      printf("reboot: JML C0:0000 -> loc %03X tile(%d,%d) bits%02X%s\n", rl, rtx, rty, rb, \
+             rebootLoaded >= 0 ? " [from a save]" : ""); \
+    } while (0)
     if (rebootReq) {
       uint8_t* w = CtWramSys(fieldWram());
-      // ⭐ THE REBOOT IS AT FORCED BLANK, and it does not ramp. C2/832F -- the last thing the
-      // menu shell does before `JML $C0:0000` -- is `LDA #80 / STA $2100`, and C0/005D's first
-      // call (C0/0B4E) writes INIDISP $80 again, so from the moment a row is chosen until the
-      // destination fades itself in there is nothing on screen at all. Our transition machine
-      // ramps fadeBri from wherever it stood, and the modal never touched it, so it stood at 15:
-      // fifteen frames of the scene UNDERNEATH the shell -- location 0's black map with the lead
-      // PC standing on it. That is the sprite the user saw fade out after picking a save.
-      fadeBri = 0;
-      int rl = w[0x0100] | (w[0x0101] << 8), rtx = w[0x0102], rty = w[0x0103], rb = w[0x0104];
-      if (rebootLoaded >= 0) { newGame = 0; ngIntroDone = 1; }   // a LOADED game is not
-      else if (ldrDone)      { newGame = 1; }   // the new-game cinematic; a wiped one is
-      if (rl >= 0x1F0) {                                    // C0/006B `CPX #01F0 / BMI` -> the OVERWORLD
-        haveWorld = worldInit(&assets, &wd, rl - 0x1F0);
-        if (haveWorld) { pendKind = 2; pendWX = rtx * 8; pendWY = rty * 8; ngIntro = 0;
-                         memcpy(flagsBuf, w + 0x10000, 0x200); haveFlagsBuf = 1; fade = 1; }
-      } else {                                              // a FIELD location: C0/42B8's arrival law
-        pendKind = 1; pendDest = rl;
-        pendX = (rtx * 256 + ((rb & 0x04) ? 0x00 : 0x80)) / 16.0;
-        pendY = (rty * 256 + ((rb & 0x08) ? 0x7F : 0xFF)) / 16.0;
-        pendTileX = rtx; pendTileY = rty;
-        pendFac = rb & 3;
-        pendHasFlags = 1; memcpy(pendFlags, w + 0x10000, 0x200);
-        fade = 1;
-      }
-      printf("reboot: JML C0:0000 -> loc %03X tile(%d,%d) bits%02X%s\n", rl, rtx, rty, rb,
-             rebootLoaded >= 0 ? " [from a save]" : "");
+      FIELD_REBOOT_PEND(w);
     }
 
     // ---- THE NAMING SCREEN IS THE SHELL'S: op 0xC8 $C0-$FF opens screen $0D through C0/0CC7, like the shop (the menu
@@ -20325,6 +20275,25 @@ int main(int argc, char** argv) {
       }
       if (mot->valid) CtMotSettle(mot, g_motPic, shown, motBright);
       hostPresentMot(pr, shown, shownW, mot->valid); }
+    // THE NATIVE STAGE'S END, IN ITS OWN FRAME: the NMI that ENDed (the race's page A `FF` after the finish; `FF 2B`'s fade
+    // $7E:34E3; entries 3 / 4 / 6's) set $7E:0000 = 1, and the main loop at $7E:3026 -- free under the rule's CPU -- leaves
+    // for $302A (NMI off, the driver reset $3177 unless $0384 bit 5) and `JML $C0:0000` before its next wait, so C0/0066 reads
+    // $0100 in the same frame (measured, the Epoch's landing into the world: $7E:0000 = 1 and C0/0000 both at f2158). A
+    // soft reset, L+R+Select+Start, is C3/0AB5's `JML $00FF00`: the same reboot here.
+    if (seqOpen > 0 && ((raceOn && raceEnded) || (endOn && endOn != 4 && endEnded))) {
+      uint8_t* w = CtWramSys(fieldWram());
+      CtRaceIo rio = raceIoFor(w);
+      int st = raceOn ? raceEnded : endEnded;
+      if (raceOn) CtRaceStageClose(w, &rio);
+      else if (endOn == 2) CtEntry3StageClose(w, &rio); else if (endOn == 3) CtEntry4StageClose(w, &rio);
+      else if (endOn == 5) CtEntry6StageClose(w, &rio);
+      else CtEndingStageClose(w, &rio);
+      CtSceneSequenceDone(f.vm);
+      printf("sequence: the %s ended (%s) -> reboot into loc %03X\n", raceOn ? "race" : endOn == 2 ? "panorama" : endOn == 3 ? "fall"
+             : endOn == 5 ? "Epoch's dive" : "ending", st == 2 ? "soft reset" : "$7E:0000=1", w[0x0100] | (w[0x0101] << 8));
+      seqOpen = 0; raceOn = 0; raceEnded = 0; endOn = 0; endEnded = 0;
+      FIELD_REBOOT_PEND(w);                                          // 7E:303F JML $C0:0000
+    }
     if (!selftest && !g_noPace) hostPace();         // the engine logic (VM delays, anim ticks, the validated px/frame
                                                     //   velocities) is all 60 Hz-based; the SPC is run by the same frames
     fieldLockGrade(frameNo);                          // close the window and grade this frame

@@ -75,6 +75,7 @@ int      CtAudioService(CtAudio* a, uint8_t* mem7E);
 // upload cost the parked field: the NMIs crossed (frames lost) and the line the RTL landed on.
 struct Apu;
 void      CtAudioSeedFromApu(CtAudio* a, const struct Apu* src);   // adopt a savestate's SPC/DSP/ARAM (the oracle's driver state)
+void      CtAudioFrameSkip(CtAudio* a);   // a displayed frame whose SPC time a translated stage's bus ran: the field still flips
 // The debug snapshot's sound processor (field.c F5/F9): the SPC, the DSP, ARAM and the timers to a file, and back -- the
 // WRAM a restore brings back holds the CPU's side of the APU protocol, which only works against the SPC of the same moment.
 int       CtAudioSaveState(CtAudio* a, const char* path);
