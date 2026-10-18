@@ -2575,3 +2575,12 @@ cartridge's WRAM where its RTL lands, every byte but the 32 dead stack bytes bel
 -- the field's C0/22FA, the world's C6/E241 and C6/E27E, the race stage's 7E/3D72 and 7E/6844 -- pins its calls, modes,
 fills, ends and registers (1015 calls). Byte-for-byte against the cartridge: re-pin only when the attract's call count
 moves for an oracle-verified reason, never for a difference. disasm/notes/field_window_wipe.md, "Native".
+
+### gen-shapes-match-generated (`python tools/gen/shapes.py check`)
+
+Pins the fresh clone's bootstrap: the shapes in `tools/gen/shapes/` must still declare everything today's generated
+`src/data/*.h` and `src/xlat/*.c` declare. A fresh clone has no generated file, so `tools/setup.py` builds its first
+oracle from the shapes; a generator that gains a table without `python tools/gen/shapes.py make` breaks setup on every
+platform while a developer's tree, which has the real files, never notices (5ebf30b's `ctMenuChromeExchTM`, PR #2). A
+FAIL is fixed by `python tools/gen/shapes.py make` and committing `tools/gen/shapes/`, never by re-pinning. It SKIPs in a
+tree with no generated files.

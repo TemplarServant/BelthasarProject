@@ -45767,6 +45767,27 @@
           "why": "FD:C2DF's table runs on into C2E5's: $0126 = 3..5 under bit 0 set reach set B's handlers"
         }
       ]
+    },
+    {
+      "name": "gen-shapes-match-generated",
+      "argv": [
+        "python",
+        "tools/gen/shapes.py",
+        "check"
+      ],
+      "inputs": [
+        "src/data/menu_chrome.h",
+        "tools/gen/shapes.py"
+      ],
+      "expect": [
+        " files match"
+      ],
+      "pin": [
+        "shapes: .*"
+      ],
+      "tier": "quick",
+      "timeout_s": 30,
+      "notes": "THE FRESH CLONE'S BOOTSTRAP: the shapes in tools/gen/shapes/ (declarations and sizes, no data) still declare everything today's generated src/data/*.h and src/xlat/*.c declare. A fresh clone has no generated file, so tools/setup.py builds its first oracle from the shapes; a generator that gains a table without `python tools/gen/shapes.py make` leaves the engine reading a name the shape lacks, and setup fails on every platform (5ebf30b's ctMenuChromeExchTM, PR #2). A developer's tree never notices -- it has the real files. Fix a FAIL by running `python tools/gen/shapes.py make` and committing tools/gen/shapes/; never by re-pinning. SKIPs in a tree with no generated files (it would match nothing)."
     }
   ],
   "excluded": [
