@@ -441,5 +441,8 @@ and slot 1 run at its END, NMI off, where the port ran them in the load's first 
 queues those JSLs (gLoadPost: the mailbox as each left it, `$1E03` included; the load's own song post at C0/1B8B stays at its
 start) and field.c posts them in the load's last frame (CtSceneLoadPostsFlush when the hold ends): port f2250. The attract
 (tools/attract_divergence.py): the 112 visit one frame longer, 422 against the cartridge's 433 (421 before); no other visit
-moved. Left: a song the init posts begins its upload on the cartridge the upload's own length before the load's end
-(the attract's f4220 `10 18`: 14 frames before C0/2848); the port posts it at the end.
+moved. ...and not every queued JSL is the load's last: the init runner's ones come before the LATER objects' init, whose
+sprite loads are the bulk of the load's end (the attract's 0A5: `10 18` at f4220, C0/2848 at f4234; C0/28AA between is the
+door list's clear, cheap). Each queued JSL keeps the object pass's decompression cycles priced so far (g_ctLzSpriteCycles), and
+field.c posts it (total - those) / CT_LOAD_FRAME_CYCLES frames before the load's end: 0A5's at its end-offset (port +1671, the
+load end +1670; at the end it was +1684), 01B's two `10 18` at +2075 / +2074 (end +2073).

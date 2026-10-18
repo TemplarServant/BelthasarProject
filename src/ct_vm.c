@@ -37,10 +37,16 @@ void CtSceneSetSoundSink(const CtSoundSink* sink) {
 // the whole load in its first frame and holds the black after it, so a host that prices the load that way
 // (CtSceneLoadPostsMode) gets those JSLs queued here -- the mailbox as each left it, $1E03 included -- and posts them with
 // CtSceneLoadPostsFlush in the load's last frame. The load's own song post (C0/1B8B, at its start) is not queued.
-static int gLoadPostMode = 0, gLoadPostOn = 0, gLoadPostN = 0;
+// Each queued JSL keeps WHERE in the load it ran: the object pass's decompressions priced so far (g_ctLzSpriteCycles,
+// the sprite loads of the objects whose init ran before it). The host posts it as many frames before the load's end as
+// the work after it takes (CtSceneLoadPostCycles): the attract's 0A5 load posts its `10 18` at f4220 and reaches C0/2848
+// at f4234 -- the later objects' sprite loads -- where the Lavos chain's 1D3 load posts slot 1's `18 FF` on C0/2848's frame.
+static int gLoadPostMode = 0, gLoadPostOn = 0, gLoadPostN = 0, gLoadPostDone = 0;
 static uint8_t gLoadPost[32][4];
+static long gLoadPostCyc[32];
 void CtSceneLoadPostsMode(int on) { gLoadPostMode = on ? 1 : 0; }
-int  CtSceneLoadPostsPending(void) { return gLoadPostN; }
+int  CtSceneLoadPostsPending(void) { return gLoadPostN - gLoadPostDone; }
+long CtSceneLoadPostCycles(int k) { k += gLoadPostDone; return (k >= 0 && k < gLoadPostN) ? gLoadPostCyc[k] : -1; }
 static void palSweepB0E6(CtScene* sc);                      // fwd (needs CtScene too)
 static uint8_t vmSoundPort(int k) {
   return gSoundSink.port ? gSoundSink.port(gSoundSink.ctx, k) : 0;   // no APU -> 0 -> waits pass
@@ -8408,7 +8414,7 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
                       blen, L[0] | (L[1] << 8), m[0], m[1], m[2], m[3], gSoundSink.post ? 1 : 0); } }
   int rr = -1;
   if (gLoadPostOn && gSoundSink.post && mem->s[0x1E00]) {      // the load's last JSLs: queued for its last frame (above)
-    if (gLoadPostN < 32) memcpy(gLoadPost[gLoadPostN++], mem->s + 0x1E00, 4);
+    if (gLoadPostN < 32) { gLoadPostCyc[gLoadPostN] = g_ctLzSpriteCycles; memcpy(gLoadPost[gLoadPostN++], mem->s + 0x1E00, 4); }
     w8(mem, 0x7E1E00, 0x00);
     return startLine;                                          // (nothing crossed here: the load's black prices it)
   }
@@ -8427,10 +8433,13 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
   w8(mem, 0x7E1E00, 0x00);                     // C7/0192-0194
   return rr;
 }
-void CtSceneLoadPostsFlush(CtScene* sc) {           // the load's queued JSLs (gLoadPost), in order, each with its mailbox
-  int n = gLoadPostN; gLoadPostN = 0;
+void CtSceneLoadPostsFlush(CtScene* sc, int count) {   // the next `count` queued JSLs (gLoadPost; < 0 = all), in order, each with
+  int n = gLoadPostN, k0 = gLoadPostDone;              //   its mailbox
+  if (count >= 0 && k0 + count < n) n = k0 + count;
+  gLoadPostDone = n;
+  if (gLoadPostDone >= gLoadPostN) gLoadPostN = gLoadPostDone = 0;
   if (!sc) return;
-  for (int k = 0; k < n; k++) {
+  for (int k = k0; k < n; k++) {
     for (int b = 3; b >= 0; b--) w8(sc->mem, 0x7E1E00 + (uint32_t)b, gLoadPost[k][b]);
     (void)vmSoundPostMem(sc->mem, sc->blen, 12);
   }

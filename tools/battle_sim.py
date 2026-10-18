@@ -16,9 +16,12 @@ r"""ANY BATTLE, port against the rule's cartridge: every enemy formation the ROM
   drive=mash       A every 12 frames from f640 (the default: every PC attacks the first target)
   drive=tech:K     the active PC's K-th tech (battle_ab.drive_tech), then the mash from 300 frames later
   drive=item:ID    item ID (hex) in the bag's first row x5, used on the default target, then the mash
+  drive=combo:ID   the dual / triple tech ID (hex) by its participants (the party: battle_ab.COMBO_GROUP, only this
+                   combo learned) once all are ready, on the default target, then the mash
   drive=f:k,...    keys at cartridge frames (k in a b u d l r L R), e.g. drive=640:d,652:a,664:a,676:a
   hp=N             every staged enemy's curHP := N at frame hpat (default off): makes any enemy killable
   hpat=F           that frame (default 600, the fight booted and its first menu not yet up)
+  poke=0026:80,..  more WRAM bytes ($7E addr:val, hex) set at hpat on both sides (e.g. the battle RNG's index $0026)
   frames=N         run length (default 1500)
   mon=CCEA:1,...   more WRAM regions ($7E addr:len) graded with the rest (the cartridge's --monitor takes 32 in all)
 
@@ -335,9 +338,16 @@ def grade(label, rows_c, rows_p, cth, pth, total, regs=None):
     return lines
 
 
-def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=600, total=1500, verbose=False, mon=()):
+def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=600, total=1500, verbose=False, mon=(), poke=()):
     # placed == []: gato_wait's own fight (GATO as the scene loaded it) -- the baseline the staging is measured against
-    pk = ab.pokes_for(list(party), extra=staging_pokes(placed) if placed else {})
+    combo = int(drive[6:], 16) if drive.startswith('combo:') else None
+    if combo is not None:
+        party = ab.COMBO_GROUP[combo]
+    ex = dict(staging_pokes(placed)) if placed else {}
+    if combo is not None:                                    # battle_ab.combo_pokes: only this combo's learned bit
+        if combo < 0x66: ex[0x283E + (combo - 0x39) // 3] = 0x80 >> ((combo - 0x39) % 3)
+        else: ex[0x284D + (combo - 0x66)] = 0x80
+    pk = ab.pokes_for(list(party), extra=ex)
     if inv:
         for k in range(0x2400, 0x2600): pk.pop(k, None)
         for i, (iid, cnt) in enumerate(inv):
@@ -354,6 +364,9 @@ def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=60
         pk[0x2400], pk[0x2500] = iid, 5
         drv = ab.drive_item(0)
         drv += mash(drv[-1][0] + 300)
+    elif combo is not None:
+        drv = ab.drive_combo(ab.combo_ready(pk, len(party)))
+        drv += mash(drv[-1][0] + 300)
     else:
         drv = [(int(f), k, 2) for f, k in (x.split(':') for x in drive.split(','))]
     timed = None
@@ -362,12 +375,18 @@ def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=60
         for eid, op2, tx, ty in (placed or [(0x92, 0x86, 0, 0)]):   # the slot op 0x83 gives it: (operand2 & 7F) + 1 - 4 (C0/47AC,
             b = cmb_base(3 + (op2 & 0x7F) - 3) + 3      #   C0/0560), combatant = slot + 3; curHP at +3
             timed[1][b], timed[1][b + 1] = hp & 0xFF, hp >> 8
+    if poke:
+        if timed is None: timed = (hpat, {})
+        for a, v in poke: timed[1][a] = v
     want = regions() + [r for r in mon if r not in regions()]
-    regs, rows_c, rows_p, cth, pth, plog = ab.run(pk, drv, total, 'sim_' + tag, regs=want, raw=True, timed=timed)
+    # (the scratch files are named by the run's options too: two checks on one formation run side by side in the suite)
+    import hashlib
+    key = hashlib.sha1(repr((party, inv, drive, hp, hpat, total, sorted(mon), sorted(poke))).encode()).hexdigest()[:8]
+    regs, rows_c, rows_p, cth, pth, plog = ab.run(pk, drv, total, 'sim_' + tag + '_' + key, regs=want, raw=True, timed=timed)
     label = tag + ' [' + (' '.join('%02X %s' % (p[0], names()[p[0]]) for p in placed) or 'GATO as loaded') + ']'
     out = grade(label, rows_c, rows_p, cth, pth, total, regs=want)
     if verbose:
-        for a in (0xAF02, 0x993C, 0x2380):
+        for a in (0xAF02, 0x993C, 0x2380) + tuple(r[0] for r in mon):
             for side, rows in (('cartridge', rows_c), ('port', rows_p)):
                 prev = None
                 for f in sorted(rows):
@@ -386,6 +405,7 @@ def options(args):
     if 'hp' in o: kw['hp'] = int(o['hp'])
     if 'hpat' in o: kw['hpat'] = int(o['hpat'])
     if 'frames' in o: kw['total'] = int(o['frames'])
+    if 'poke' in o: kw['poke'] = [(int(a, 16) & 0xFFFF, int(v, 16)) for a, v in (x.split(':') for x in o['poke'].split(','))]
     if 'mon' in o: kw['mon'] = [(int(a, 16) & 0xFFFF, int(n)) for a, n in (x.split(':') for x in o['mon'].split(','))]
     return kw
 
