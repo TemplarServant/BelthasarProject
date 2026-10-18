@@ -75,8 +75,13 @@ struct CtXlatStage {
 
 // src/xlat/seq_c3.c is the sequence engine as the attract's `FF 60` (entry 0, the race) and `FF 63` (entry 3)
 // ran it: one program, because both run on the same overlay, NMI, interpreter and library -- only the tasks differ.
+// Only ct.exe's lockstep tools (--xlatcmp, --xlatphase) build it (CT_XLAT_SEQ_C3): the playable host runs both stages
+// natively (seq_race.c, seq_entry3.c: the attract's arm, `$0384` bit 6) and links no translated $C3 program.
 int CtXlatStageHas(uint8_t seqId) {
-  return seqId == 0x60 || seqId == 0x63 || (seqId >= 0x80 && seqId <= 0x8F);   // $80-$8F: the gate warp (C0/3FE4)
+#ifdef CT_XLAT_SEQ_C3
+  if (seqId == 0x60 || seqId == 0x63) return 1;
+#endif
+  return seqId >= 0x80 && seqId <= 0x8F;                              // $80-$8F: the gate warp (C0/3FE4)
 }
 
 // The hook of a hosted run: stop exactly where snes_runFrame stops (snes/snes.c) -- its two loops, checked at the same
@@ -130,7 +135,11 @@ CtXlatStage* CtXlatStageOpen(const uint8_t* rom, long romLen, const uint8_t* wra
   Cpu* c = s->cpu;
   // C0/3FD3..3FE0 and C0/0B4E, as seq_xlat.h lists them.
   int warp = seqId >= 0x80;
+#ifdef CT_XLAT_SEQ_C3
   st->prog = warp ? CtXlat_gwarp_fd : CtXlat_seq_c3;
+#else
+  st->prog = CtXlat_gwarp_fd;                                         // (CtXlatStageHas: the warp alone)
+#endif
   c->a = seqId; c->x = 0x06FF; c->y = hostY; c->sp = 0x06FF; c->dp = 0x0100; c->db = 0x00;
   c->k = 0xC3; c->pc = 0x0000;
   c->e = false; c->mf = true; c->xf = false; c->i = true; c->d = false;

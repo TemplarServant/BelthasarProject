@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The widescreen (a mod) against the vanilla picture for a translated stage's curtain: the race's opening and closing.
+r"""The widescreen (a mod) against the vanilla picture for a sequence stage's curtain: the race's opening and closing.
 
     python tools/wide_curtain_cmp.py [frame,frame,...]
 
@@ -22,7 +22,10 @@ import subprocess
 import sys
 
 FIELD = os.path.abspath('build/Belthasar.exe')
-FRAMES = (8164, 8168, 8172, 8176, 8180, 8184, 8500, 8504, 8508, 8512, 8516, 8520)
+# (f8183 is the opening's last frame before its edge comes within 16 columns of the screen's -- from there both window
+#  rules, snes/ppu.c's and seq_pic.c's, read the band left as the road's hidden column and light the side: the mod's known
+#  limit; the curtain is the native stage's since 2026-10-18, on the cartridge's frames)
+FRAMES = (8164, 8168, 8172, 8176, 8180, 8183, 8500, 8504, 8508, 8512, 8516, 8520)
 
 
 def run(ini, out):

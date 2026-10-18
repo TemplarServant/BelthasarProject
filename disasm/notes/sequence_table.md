@@ -2666,3 +2666,61 @@ artefact. In the field (lavos-epoch-ff26-plays-through-in-the-port, from the car
 at f1071 (the cartridge 1070), 31 black frames, the dive, the reboot into 1DA.
 
 **The picture is native (2026-10-17, seq_picture.md sec. 8)**, exact NMI for NMI and in play.
+
+## 18. THE ATTRACT'S ARM, NATIVE -- `FF 60` and `FF 63` (2026-10-18; src/xlat/seq_c3.c out of the play path)
+
+Both attract stages are the story stages' own setups on their other arm: `$0384` bit 6, the setup's own `BIT #0040`. What the
+arm changes, read from the overlay (`tools/wdis.py saves/race_re/race_f300.wram`) and `tools/race_script_walk.py`:
+
+- **The race, $7E:3B48's 3C7C arm** (the story's 3C5C): `$038E` = 0808; the curtain's state pointer `$0352` = $E000, `$0354` =
+  $7E (16-bit `STZ $0351`: $0352's low byte too); `$7E:4259` = 02 -- the operand of task $424D's `LDA #imm`; the windows
+  `$2123-$2125` = 22 and `$2127` = FF by 16-bit stores (each writes the next register too), TMW / TSW 17 / 04; then `$0397`
+  += 1 (16-bit, NOT cleared by the common init: it survives every visit) and its parity picks page A: 404D (even) or 40C3
+  (odd), page B 415E. Both runs are a fixed camera: 412D adds the tasks `42CE 3749 3754 428B 4F54 4D0D 3D72 4447` and the
+  hooks `380B 3843 5221 43F2 44FE`; no 485D / 4339 / 42BD (no race logic, no player). The script pokes `$0350` = 1 (the
+  opening curtain), `$038D` = 0F, adds $424D, posts `18 BA 80`, and at its end pokes `$0350` = 2 (the closing one) and ENDs.
+  Task $4F54's bit-6 arm draws the two bikes only (4F85 / 4F9C: no HUD).
+- **Entry 3, $7E:671F's 6785 / 67BF arms**: pages 6898 / 68A1 (the story's 6902 / 693A); W12SEL FF; the light chain's three
+  immediates patched -- `$7E:6A5F` = 06, `$6A82` = 08, `$6AAB` = 08 (the `LDA #imm` before each record step: the story's 01 / 04
+  / 03) -- and `$038C` = 0F (HDMA channel 0: the curtain's window). 683D writes `$4259` = 01 on both arms: entry 3's abort
+  OPENS its window (its 68B4 starts with the closing walk `$0350` = 2 and 68F0 ends on the opening one).
+- **Task $3D72 / $6844**: `JSL C3/000E` (C3/01E4), then `$4302` (HDMA channel 0's table) = $3D64 / $688A when `$0351` is
+  odd, else $3D6B / $6891 -- the half C3/01E4 just wrote.
+- **Task $424D (both)**: with any pad bit in `$02` and no curtain running (`$0350` = 0): `$0350` = `$4259`'s byte, `18 BA 80`
+  through $377E unless `$0388`, `$0399` = 32, `$7F:0062` = 0 (1B1's script then sends the attract to the title), and its slot
+  to $4283 (`DEC $0399`, at 0 `INC $00`). A press inside a curtain is ignored (sec. 11.2b's "A at f40 is ignored").
+
+**C3/01E4, the curtain** (D = $0300; dis 301E4): `$50` = 0 clears `$51`; the first call fills the 224-byte state at
+`$54`:`$52` + 1C0 with 00 (open) / FF (close) -- 16-bit `LDA $F0 / STA long`, then an MVN that drags the byte up --; calls
+1..31 seed `$55` by C3/02DD (A = FE, the carry `CMP #20` left, X's low byte: the caller's X, or the MVN's end on the first
+call), then walk the state: a run of Y = (b & 1F) + 3 + C lines steps by (b' & 3) + 8 + C (b, b' the next two bytes of the
+chain `[$55]` over $C0:FE00, each byte read the next one's index), saturating at FF (open, `ADC`) or 0 (close, `SBC` with
+the borrow: the step + 1), into the state and through WMDATA into the half `$51`'s parity names. The close's clamp is `TDC`
+(D = $0300): it leaves B = 03, so the next refresh's `TAY` makes a run of $03xx lines -- the rest of the buffer walks on one
+step. The 32nd call clears `$50` / `$51`. Native: seq_race.c CtSeqCurtain01E4 (the stages' body; the field's wipe and the
+world's window object still run the translation, another session's port -- one function to swap).
+
+**The END is the main loop's.** `$0000` = 1 comes from an NMI, but `3023 JSR $51D1 / 3026 LDA $00` reads it only when the
+pass returns, and a pass parked at 5211 (the bike frame waiting on `$39`) returns NMIs later -- the NMIs run on meanwhile.
+Measured on the rule's cartridge: `$0000` = 1 at f441 of the race's hand-off state, $7E:302A at f443. CtRaceStageFrame
+reports the END once the thread is not parked; the story race's END met an idle thread (race-picture-native-vs-oracle
+unchanged at 2738).
+
+**The openings**, measured in place (`ct.exe --racepiccmp` RACEPICCMP_SPAN): the race's setup 10205558 cycles (no song: bit 5),
+C3:0000 -> $7E:3013 46 frames; entry 3's 114098, 18 frames -- CtRaceStageSetupCycles / CtEntry3StageSetupCycles by arm.
+
+**Graded.** `--racepiccmp` from the committed rule states (saves/attract_race_handoff_rule_f8247.state at 19,
+attract_entry3_handoff_rule_f8859.state at 18): the race's WRAM and every pixel equal for its 378 NMIs (one register on frame
+1: the setup frame's HDMA, below), entry 3 everything equal for 280; with a press (the abort checks' frames) too
+(attract-*-picture-native-vs-oracle, attract-*-abort-native-vs-oracle). In play, under the rule from power-on
+(tools/stage_rule_cmp.py, the picture at THE ALIGNMENT's P+2): the race 424 / 424 frames, entry 3 298 / 298 -- the translation
+had 63 / 424 and 45 / 298. tools/entry3_stage_cmp.py on the fresh state: the full picture 57344 / 57344 and 134 / 134 frames.
+The seed's history stays 403 / 403 (the native curtain traces its calls). The attract audit (tools/attract_divergence.py)
+lists the same 44 events before and after.
+
+**Not reproduced (CLAUDE.md, a CPU-time artefact):** the race's setup NMI (`3013 JSL C3/08D0`, NMI off) runs past line 0 of
+the next frame, so task $3D72's `STX $4302` lands after that frame's HDMA init: the cartridge's forced-blank setup frame walks
+$3D64 and leaves `$2126` = 80 where the port's walks $3D6B (00). Invisible (INIDISP $80) and gone at the next frame's init.
+
+**Before**, the play path ran src/xlat/seq_c3.c on the vendored CPU (sec. 11); that translation is ct.exe's now (--xlatcmp,
+`CT_XLAT_SEQ_C3`), and Belthasar.exe links no translated $C3 program.

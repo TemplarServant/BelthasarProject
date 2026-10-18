@@ -7371,6 +7371,10 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     return 0;
   }
   memcpy(w, s->ram, sizeof w);
+  // RACEPICCMP_WRAM=<128 KB file>: the native stage opens on that WRAM instead (the port's own hand-off, Belthasar's
+  // CT_STAGE_HANDOFF_WRAM) -- which of the bytes the port's field hands over the stage reads.
+  { const char* wf = getenv("RACEPICCMP_WRAM"); FILE* f = wf ? fopen(wf, "rb") : NULL;
+    if (f) { size_t n = fread(w, 1, sizeof w, f); fclose(f); printf("racepiccmp: the stage opens on %s (%zu bytes)\n", wf, n); } }
   memset(&sp, 0, sizeof sp); CtSeqPicReset(&sp.p);
   // RACEPICCMP_SEEDVRAM=1: the native VRAM starts as the cartridge's at the hand-off (the field's leftovers the race never
   // writes) -- to tell the race's own uploads from what the port's field does not keep.
@@ -7391,7 +7395,7 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   }
   printf("racepiccmp: the stage's setup made its NMI %d frame(s) after the hand-off\n", waited);
   CtSeqStagePicFrame(&sp, w, NULL);                                   // (the frame the setup's NMI drew: its HDMA's last writes)
-  int firstState = -1, firstPic = -1, firstWram = -1; long picBad = 0;
+  int firstState = -1, firstPic = -1, firstWram = -1, stateFrames = 0, lastState = -1; long picBad = 0;
   for (int k = 1; k <= frames; k++) {
     RPC_PAD();
     while (s->inVblank) rpcOp(s, k);                         // the oracle's NMI k and its hooks done
@@ -7443,6 +7447,7 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     }
     int bad = vb || cb || ob || rb || hb;
     if (bad && firstState < 0) firstState = k;
+    if (bad) { stateFrames++; lastState = k; }
     if (k == firstState && getenv("RACEPICCMP_VRAM")) {
       int st0 = -1;
       for (int i = 0; i <= 0x8000; i++) { int d = i < 0x8000 && q.vram[i] != sp.p.vram[i];
@@ -7473,6 +7478,7 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   }
   #undef RPC_PAD
   printf("racepiccmp: %d frames -- first state difference %d, first race-WRAM difference %d, first picture difference %d (%ld px)\n", frames, firstState, firstWram, firstPic, picBad);
+  printf("racepiccmp: the state differs on %d frame(s), the last %d\n", stateFrames, lastState);   // (a pin of the first alone hides the rest)
   CtOracleDestroy(s); free(rom);
   return 0;
 }

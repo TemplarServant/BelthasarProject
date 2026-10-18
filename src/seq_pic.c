@@ -129,9 +129,27 @@ static void decode(const CtSeqPic* p, Line* L) {
   for (int i = 0; i < 6; i++) L->math[i] = (r[0x31] >> i) & 1;
 }
 
+int g_seqPicWideSide = 0;
+uint8_t* g_seqPicWideOut = NULL;
+// x inside the window's span [l, r]: the hardware's test, or -- while the widescreen's sides are drawn -- snes/ppu.c
+// ppu_winTest's (a narrow band at an edge is no window; a wide span's edge within 16 columns of the screen's runs on to the
+// picture's; a curtain, one edge on the screen's edge, has its moving edge scaled to the picture).
+static int winTest(int x, int l, int r) {
+  if (g_seqPicWideSide <= 0) return x >= l && x <= r;
+  if ((r >= 255 && l >= 240) || (l <= 0 && r <= 15)) return 0;
+  if (r - l < 16) return x >= l && x <= r;
+  if ((r >= 255) != (l <= 0)) {
+    int w = 256 + 2 * g_seqPicWideSide, xp = x + g_seqPicWideSide;
+    int lo = l <= 0 ? -(1 << 20) : (l * (w - 1) + 127) / 255, hi = r >= 255 ? (1 << 20) : (r * (w - 1) + 127) / 255;
+    return xp >= lo && xp <= hi;
+  }
+  int lo = l <= 16 ? -(1 << 20) : l, hi = r >= 239 ? (1 << 20) : r;
+  return x >= lo && x <= hi;
+}
+
 static int winState(const CtSeqPic* p, const Line* L, int layer, int x) {
   if (!L->w1en[layer] && !L->w2en[layer]) return 0;
-  int t1 = x >= p->r[0x26] && x <= p->r[0x27], t2 = x >= p->r[0x28] && x <= p->r[0x29];
+  int t1 = winTest(x, p->r[0x26], p->r[0x27]), t2 = winTest(x, p->r[0x28], p->r[0x29]);
   if (L->w1en[layer] && !L->w2en[layer]) return L->w1inv[layer] ? !t1 : t1;
   if (!L->w1en[layer] && L->w2en[layer]) return L->w2inv[layer] ? !t2 : t2;
   if (L->w1inv[layer]) t1 = !t1;
@@ -279,7 +297,11 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
         if (L->mode == 2 || L->mode == 4 || L->mode == 6) opt(p, L, cl, &lx, &ly);
         px = bgPixel(p, L, lx & 0x3FF, ly & 0x3FF, cl, cp);
       }
-    } else px = L->objPri[x] == cp ? L->objPix[x] : 0;
+    } else {                                                           // (a widescreen column has no sprite: ppu.c's rule,
+      int ox = x;                                                      //  the sub screen's texture repeated 256 along)
+      if ((x < 0 || x > 255) && sub && !L->main[4]) ox = x & 255;
+      px = (ox >= 0 && ox < 256 && L->objPri[ox] == cp) ? L->objPix[ox] : 0;
+    }
     if (px > 0) { layer = cl; break; }
   }
   if (L->direct && layer < 4 && kDepth[L->actMode][layer] == 8) {
@@ -292,6 +314,7 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
   return layer;
 }
 
+static void shade(CtSeqPic* p, Line* L, int x, int line, uint8_t* o);
 static void drawLine(CtSeqPic* p, Line* L, int line, uint8_t* out) {
   decode(p, L);
   if (p->r[0x33] & 0x0B) {                                             // pseudo-hires / interlace / overscan
@@ -300,7 +323,18 @@ static void drawLine(CtSeqPic* p, Line* L, int line, uint8_t* out) {
   }
   sprites(p, L, line - 1);
   if (L->mode == 7) m7Start(p, L, line);
-  for (int x = 0; x < 256; x++) {
+  for (int x = 0; x < 256; x++) shade(p, L, x, line, out + x * 3);
+  if (g_seqPicWideSide > 0 && g_seqPicWideOut && line >= 1 && line <= 224) {   // the widescreen's sides (a mod)
+    uint8_t* row = g_seqPicWideOut + (size_t)(line - 1) * (256 + 2 * g_seqPicWideSide) * 3;
+    for (int c = 0; c < g_seqPicWideSide; c++) {
+      shade(p, L, c - g_seqPicWideSide, line, row + c * 3);
+      shade(p, L, 256 + c, line, row + (g_seqPicWideSide + 256 + c) * 3);
+    }
+  }
+}
+// One column of the line: the main screen, the colour window's clip, the colour math, the brightness.
+static void shade(CtSeqPic* p, Line* L, int x, int line, uint8_t* o) {
+  {
     int r = 0, g = 0, b = 0;
     if (!L->blank) {
       int ml = pixel(p, L, x, line, 0, &r, &g, &b);
@@ -317,9 +351,9 @@ static void drawLine(CtSeqPic* p, Line* L, int line, uint8_t* out) {
         r = r > 31 ? 31 : r < 0 ? 0 : r; g = g > 31 ? 31 : g < 0 ? 0 : g; b = b > 31 ? 31 : b < 0 ? 0 : b;
       }
     }
-    out[x * 3 + 0] = (uint8_t)(((r << 3) | (r >> 2)) * L->bright / 15);
-    out[x * 3 + 1] = (uint8_t)(((g << 3) | (g >> 2)) * L->bright / 15);
-    out[x * 3 + 2] = (uint8_t)(((b << 3) | (b >> 2)) * L->bright / 15);
+    o[0] = (uint8_t)(((r << 3) | (r >> 2)) * L->bright / 15);
+    o[1] = (uint8_t)(((g << 3) | (g >> 2)) * L->bright / 15);
+    o[2] = (uint8_t)(((b << 3) | (b >> 2)) * L->bright / 15);
   }
 }
 

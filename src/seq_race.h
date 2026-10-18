@@ -82,6 +82,13 @@ unsigned CtSeqSine(const CtRaceIo* io, unsigned a);
 // -- bit 7 of $F8, the byte after -- goes into the next ADC.
 void CtSeqMul31BF(uint8_t* w, unsigned d);
 
+// C3/01E4 (C3/000E), THE CURTAIN: one call of the window effect over `$0350-$0357` (D = $0300) with the caller's X (the data
+// bank $00: a stage's task). Writes the state and the output half at `$54`:`$52`, `$0386` through C3/02DD (the rule's virtual
+// beam). seq_race.c.
+void CtSeqCurtain01E4(uint8_t* w, unsigned x, const CtRaceIo* io);
+// $7E:424D / $4283 -- the attract's button task and its count to the END (CtSeqTaskFn's return).
+unsigned CtSeqTaskAbort(uint8_t* w, unsigned task, const CtRaceIo* io);
+
 // $7E:485D, the race's per-frame task, over the 128 KB WRAM image `w` ($7E at 0, $7F at 0x10000; D = $0000). Returns the
 // task that holds this slot afterwards: 0x485D (it stays), 0 (it removed itself, $39A7: Johnny crossed the line first) or
 // another task address that replaces it ($39B1: 0x4677, the player crossed first).
@@ -105,9 +112,11 @@ int CtRaceTask44CE(uint8_t* w);   // the score counted down after the finish; 0 
 // THE STAGE, its logic (stage 1 of the native port): C3:0000 + $7E:3000 for entry 0/9 up to the main loop (the overlay
 // decompressed into $7E:3000, the common init, the setup's race values, page A run once, the first NMI); one NMI a frame
 // (`joy` = the $4218 word: A $0080, X $0040, L $0020, R $0010, B $8000, Y $4000, Select $2000, Start $1000, Up $0800, Down
-// $0400, Left $0200, Right $0100); and the teardown. Open returns -1 for what it does not port (the attract's arm).
-// Frame returns 1 once the script ENDed, 2 on the soft reset, else 0.
+// $0400, Left $0200, Right $0100); and the teardown. Open takes both arms of the setup's `BIT #0040` (the story's `FF 00` /
+// `FF 09`, the attract's `FF 60`: its curtain $3D72 and button $424D). Frame returns 1 once the main loop has seen the END
+// (`$7E:0000` set and the thread's pass returned), 2 on the soft reset, else 0.
 int  CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
+long CtRaceStageSetupCycles(uint8_t operand);   // the setup's own cycles, NMI off, by its arm (seq_race.c)
 int  CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);
 void CtRaceStageClose(uint8_t* w, const CtRaceIo* io);
 

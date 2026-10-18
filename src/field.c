@@ -5110,6 +5110,16 @@ static void stagePicOpen(void) {
 // frame. Its phase is a cold boot's -- the first frame odd (ppu.c ppu_handleFrameStart), the port's frame f the cartridge's f + 2;
 // a run started from a WRAM image keeps that phase from its own first frame.
 static int fieldPpuField(void* c) { (void)c; return !(g_sndTraceFrame & 1); }
+// THE WIDESCREEN (a mod) for a native stage's picture: seq_pic.c draws the sides into g_seqWide (seq_pic.h g_seqPicWideSide,
+// snes/ppu.c's rule) -- black while the stage's opening holds -- and the host shows them round the 256 (g_seqWideW).
+static void stageWideBegin(void) {
+  int sw = hostWideW(); g_seqWideW = 0;
+  if (sw > CAMW && sw <= FIELD_WMAX) {
+    g_seqPicWideSide = (sw - CAMW) / 2; g_seqPicWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3);
+    g_seqWideW = sw;
+  }
+}
+static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideOut = NULL; }
 static CtRaceIo raceIoFor(uint8_t* w) {
   CtRaceIo io; memset(&io, 0, sizeof io);
   long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
@@ -11610,8 +11620,7 @@ int main(int argc, char** argv) {
   int seqFadeAt = 0, seqBri0 = 0;                           // where $7E:34C2's brightness ramp began
   int seqShot = 0;                                            // the parked sequence's frame signature
   int seqOpen = 0;                                            // a NON-title table entry is running
-  CtXlatStage* seqX = NULL;                                   // ...as a TRANSLATED program (seq_xlat.h)
-  int seqXState = 0;                                          //   0 running, 1 exited, < 0 a CT_XLAT_* stop
+  int seqOpenFrame = 0;                                       // ...the frame its C3:0000 ran on
   int raceOn = 0, raceEnded = 0;                              // ...as the NATIVE race (seq_race.h): open / END met
   int endOn = 0, endEnded = 0;                                // ...as the NATIVE ending (seq_ending.h: 1), entry 3 (seq_entry3.h: 2)
                                                               //    or entry 4 (seq_entry4.h: 3)
@@ -11935,7 +11944,7 @@ int main(int argc, char** argv) {
       // and then stage the tail's blip `18 00` under the throttle, never consumed; the DSP keys the trade's sample 02
       // twice. The port keyed it once -- the blip, shipped by the catch-all, cut the second: the user's "when buying or
       // selling a piece of equipment/a sword, it makes no sound" (2026-10-07).
-      if (!seqX && !gwX && !menuPhase)
+      if (!gwX && !menuPhase)
       { uint8_t* mm = CtWramSys(fieldWram());
         int gated = inWorld;
         // the main loop's C2/0454 does not run while the world's NMI is held in its pass's JSL (owPassHold / owPassResume)
@@ -11999,7 +12008,7 @@ int main(int argc, char** argv) {
           // posts belong to that slice, so the first slice runs after them -- one pass later, as --vmdiff runs it)
           static int ruleSeededFirst = 1;
           if (ruleSeeded && ruleSeededFirst) { ruleSeededFirst = 0; continue; }
-          if (!seqX && !gwX) CtAudioFrame(audio);           // a translated stage's bus drives the SPC itself
+          if (!gwX) CtAudioFrame(audio);                    // a translated stage's bus drives the SPC itself
           else CtAudioFrameSkip(audio);                      //   (the frame's field flips all the same)
           if (audioDev && audioBuf) {
             // THE LEVEL GATE, from the vendored LakeSnes reference this engine's audio is ported from
@@ -16958,14 +16967,25 @@ int main(int argc, char** argv) {
         { static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
           if (audio && (ls || g_sndPaced || g_ruleAudio)) seqHold = g_titlePostFrames + g_titleSpinFrames; }
       }
-      // THE RACE, NATIVE (stage 1: its logic). `FF 00` / `FF 09` -- entries 0 and 9 are one routine, $7E:3B48 -- on the
-      // story's call ($0384 bit 6 clear: the attract's `FF 60` keeps its translated stage below): seq_race.c runs the whole
-      // stage over the host's WRAM -- C3:0000's overlay, the common init, the setup, the NMI with the player's pad -- and
+      // CT_STAGE_HANDOFF_WRAM=<path>: the 128 KB a native stage opens on (before its C3:0000), to diff against the cartridge's
+      // (ct.exe --xlatentries / --peek); `stage-handoff: frame F $0384=XX` names the frame (tools/stage_rule_cmp.py).
+      int seqWasOpen = seqOpen;
+      if (seqId != 2 && !seqOpen) { const char* hp = getenv("CT_STAGE_HANDOFF_WRAM");
+        if (hp) { FILE* hf = fopen(hp, "wb"); if (hf) { fwrite(w, 1, 0x20000, hf); fclose(hf); } }
+        // CT_STAGE_HANDOFF_VRAM=<path>: the VRAM a stage opens on (the field's image, g_fieldVram) and the live CGRAM page
+        // $7E:2200 -- 64 KB + 512 bytes, the cartridge --peek's .vram / .oam layout (tools/entry3_stage_cmp.py).
+        const char* vp = getenv("CT_STAGE_HANDOFF_VRAM");
+        if (vp && *vp) { FILE* vf = fopen(vp, "wb");
+          if (vf) { fwrite(g_fieldVram, 2, 0x8000, vf); fwrite(w + 0x2200, 1, 0x200, vf); fclose(vf);
+                    printf("stage-handoff: vram+cgram of loc %03X -> %s\n", scene, vp); } } }
+      // THE RACE, NATIVE. `FF 00` / `FF 09` -- entries 0 and 9 are one routine, $7E:3B48 -- and the attract's `FF 60` ($0384
+      // bit 6: the setup's 3C54 arm -- a fixed camera's two runs in turn, the curtain task $3D72, the button $424D): seq_race.c
+      // runs the whole stage over the host's WRAM -- C3:0000's overlay, the common init, the setup, the NMI with the player's pad -- and
       // ends in the teardown's reboot into the location the script staged (Johnny's `CHANGELOC 10F`). Its opening is priced
-      // like the other entries': the overlay's C3/0557 cycles, the init's DMAs and the setup's own 9521394 (`--callrom 7E3B48`,
+      // like the other entries': the overlay's C3/0557 cycles, the init's DMAs and the setup's own (CtRaceStageSetupCycles, by arm; `--callrom 7E3B48`,
       // CT_CALLROM_NONMI=1, $0384 = 20 to leave the song's handshake to the host's SPC; sequence_table.md sec. 12). Its
       // picture (stage 2) is drawn natively from g_stagePic: every frame the cartridge's (race-picture-native-vs-oracle).
-      if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9) && !(seqId & 0x40)) {
+      if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;
         g_raceOpening = 1; g_raceOpenPostMaster = 0;
@@ -16977,7 +16997,7 @@ int main(int argc, char** argv) {
           if (orb && orl > 0x3E0005) {
             uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
-            long od = 8L * (0x100 + 0x1500 + 0x200), os = 9521394L;
+            long od = 8L * (0x100 + 0x1500 + 0x200), os = CtRaceStageSetupCycles((uint8_t)seqId);
             long sp = (long)g_raceOpenPostMaster;
             if (oc > 0) seqHold = (int)((oc + od + os + sp) / CT_LOAD_FRAME_CYCLES);
             printf("sequence: entry %d (the race) opening at f%d -- %ld + %ld + %ld + the song's %ld cycles = %d black frame(s)\n",
@@ -17011,8 +17031,9 @@ int main(int argc, char** argv) {
       }
       // ENTRY 3 FROM THE STORY, NATIVE (stage 1: its logic). `FF 23` in scenes 102-107, after the Blackbird (their controller's
       // story arm, storyline D3: `DD F6 03 91 35 / FF 23`): the night panorama's two scripts run to their END and the
-      // teardown reboots into the Epoch's world 1F6. The attract's `FF 63` (bit 6) keeps its translated stage. Priced like
-      // the others: the overlay's C3/0557 cycles, the init's DMAs, the setup's 120000 (sequence_table.md sec. 14).
+      // teardown reboots into the Epoch's world 1F6. The attract's `FF 63` (bit 6) is the same stage on its other arm (the
+      // curtain task $6844, the button $424D, the chain's patched operands). Priced like the others: the overlay's C3/0557
+      // cycles, the init's DMAs, the setup's own (sequence_table.md sec. 14).
       if (seqId != 2 && !seqOpen && CtEntry3StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry3pic.c)
@@ -17022,7 +17043,7 @@ int main(int argc, char** argv) {
           if (orb && orl > 0x3E0005) {
             uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
-            long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry3StageSetupCycles();
+            long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry3StageSetupCycles((uint8_t)seqId);
             if (oc > 0) seqHold = seqOpeningHold(oc, os);
             printf("sequence: entry %d (the story's panorama) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
@@ -17113,58 +17134,14 @@ int main(int argc, char** argv) {
             printf("sequence: entry %d opening at f%d -- %ld cycles of C3/0557 + %ld DMA + %ld setup = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
           } }
-        // ⭐ An entry whose output depends on the CPU CLOCK runs as its PROGRAM, translated from the ROM, on the
-        // vendored hardware (seq_xlat.h): the host hands over at C3:0000 with its WRAM and its SPC. It is the
-        // $0384 byte that selects it, the same byte $7E:3003 dispatches on.
-        if (seqOpen < 0 && CtXlatStageHas((uint8_t)seqId)) {
-          long xrl = 0; const uint8_t* xrb = CtBattleRom(&xrl);
-          // THE STAGE'S SPC. A stage runs on the host's (it drives the host's SPC itself); a host with NO audio system
-          // (--selftest, CT_NOAUDIO) used to hand it none, and the stage then ran on its own snes_init APU -- the IPL
-          // alone, no driver. The cartridge always has one: a button during the race or entry 3 posts a sound command
-          // ($7E:377E: `$1E00..03` -> `$2140..43`, then CMP `$2140` for the echo, with no timeout) and the stage spun
-          // there forever. So a silent host lends the stage an SPC of its own with the driver uploaded (CtAudioInit,
-          // the $C7 upload); its output goes nowhere. The one thing it cannot be is the host's SPC state, which a silent
-          // host does not have.
-          static CtAudio* stageAudio = NULL;
-          struct Apu* stageApu = audio ? CtAudioApu(audio) : NULL;
-          // CT_XLAT_BARE_SPC=1 (test): keep the old driverless SPC -- the handshake then never answers, which is the one
-          // headless way to hold a stage's frame open long enough for an NMI to land in C3/08D0's RTI window.
-          if (!stageApu && xrb && !getenv("CT_XLAT_BARE_SPC")) { if (!stageAudio) stageAudio = CtAudioInit(xrb, xrl);
-                                  stageApu = stageAudio ? CtAudioApu(stageAudio) : NULL; }
-          seqX = xrb ? CtXlatStageOpen(xrb, xrl, w, (uint8_t)seqId, stageApu, 0) : NULL;
-          // the rule, as the oracle's (CT_XLAT_NORULE=1: without it -- to measure what it moves, like the oracle's
-          // CT_ORACLE_LOGICAL_LOADS=0)
-          if (seqX) { seqOpen = seqEntry + 1; seqXState = 0; CtXlatStageSetRule(seqX, getenv("CT_XLAT_NORULE") ? 0 : 1); }
-          // THE VRAM THE FIELD LEAVES (sequence_table.md 11.8 / 11.11). Entry 3 ($7E:671F) DMA-reads BG1's tilemap rows
-          // from $6140 (DMAP7 $81, BBAD $39, $580 bytes into $7E:1680) and keeps the field's characters $2000-$37FF as
-          // its own BG1's (BG12NBA $11) -- loc 06B's mountains. The port's field has no VRAM image, so the stage is
-          // handed the one the location load wrote: the tileset's six packets and the BG3 tileset (ct_lz_load_tiles,
-          // C0/0960 / C0/6D2F / C0/6DCF -> C0/2DC8) and the three 64x32 tilemaps (CtFieldSceneVramTilemaps, C0/794E's
-          // law with C0/79CF's words). Measured against the cartridge at the hand-off (--peek of
-          // saves/attract_entry3_handoff_f6750.state, frames 0): the stage's VRAM read diverged at its 17th frame with a
-          // power-on PPU (ct.exe --xlatcmp XLATCMP_SEED=apu) and matched every instruction with the field's.
-          if (seqX && xrb) {
-            Snes* hw = CtXlatStageHardware(seqX);
-            memcpy(hw->ppu->vram, g_fieldVram, sizeof g_fieldVram);      // the field's image (fieldMapHeaderStage, the entry fill)
-            for (int ci = 0; ci < 0x100; ci++)                            // the live CGRAM page $7E:2200 (C0/70E9's copy, the
-              hw->ppu->cgram[ci] = (uint16_t)(w[0x2200 + 2 * ci] | (w[0x2201 + 2 * ci] << 8));   //   NMI's upload)
-            { const char* vp = getenv("CT_XLAT_HANDOFF_VRAM");   // the image the stage got, for --peek's .vram / .oam
-              if (vp && *vp) { FILE* vf = fopen(vp, "wb");
-                if (vf) { fwrite(hw->ppu->vram, 2, 0x8000, vf); fwrite(hw->ppu->cgram, 2, 0x100, vf); fclose(vf);
-                          printf("xlat-handoff: vram+cgram of loc %03X -> %s\n", scene, vp); } } }
-          }
-          // CT_XLAT_HANDOFF_WRAM=<path>: the 128 KB the host hands over, to diff against the cartridge's at C3:0000
-          // (ct.exe --xlatentries ... / --peek), so a byte the field port does not model is found by address.
-          { const char* hp = getenv("CT_XLAT_HANDOFF_WRAM");
-            if (hp) { FILE* hf = fopen(hp, "wb"); if (hf) { fwrite(w, 1, 0x20000, hf); fclose(hf); }
-                      printf("xlat-handoff: frame %d $0384=%02X -> %s\n", frameNo, seqId, hp); } }
-        }
+      }
+      if (seqOpen > 0 && !seqWasOpen && seqId != 2) {
+        seqOpenFrame = frameNo;
+        if (getenv("CT_STAGE_HANDOFF_WRAM")) printf("stage-handoff: frame %d $0384=%02X -> %s\n", frameNo, seqId, getenv("CT_STAGE_HANDOFF_WRAM"));
       }
       if (seqSeen != scene) { seqSeen = scene;
         char seqMsg[96];
-        snprintf(seqMsg, sizeof seqMsg,
-                 seqX ? " = sequence-table entry %d, its program translated from the ROM (src/xlat/seq_c3.c)."
-                      : " = sequence-table entry %d, and the overlay's machine plays it.", seqEntry);
+        snprintf(seqMsg, sizeof seqMsg, " = sequence-table entry %d, and the overlay's machine plays it.", seqEntry);
         printf("sequence: op-0xFF %02X -> JML $C3:0000 ($0384=%d)%s (at f%d)\n", seqId, seqId,
                seqId == 2 ? " = the TITLE screen ($7E:5978), and the overlay's machine plays it."
              : seqOpen > 0 ? seqMsg
@@ -17207,28 +17184,6 @@ int main(int argc, char** argv) {
           // ($34D5). A fourth would mean C3/09A4's watcher had fired, i.e. $0389 was never latched.
           printf("title-sound: %d post(s), $2143 wait %d frame(s)\n", g_titlePosts, g_titleSpinFrames);
         } else if (titleIntro.bri == seqBri0) seqFadeAt = titleIntro.frame;
-      } else if (seqOpen > 0 && seqX && seqXState != 0) {
-        // The translated program handed control back with `JML $C0:0000` -- the same reboot every stage ends in.
-        // Its WRAM IS the machine's state from here (the stage wrote $0384, $0382, $1E00.. and everything the reboot
-        // reads), so it goes back to the host whole. A CT_XLAT_* stop (an address the translation does not have)
-        // hands nothing back and holds, exactly like an unported entry.
-        if (seqXState == 1) {
-          memcpy(w, CtXlatStageWram(seqX), 0x20000);
-          CtSceneSequenceDone(f.vm);
-          rebootReq = 1; stageExit = 1;                              // 7E:303F JML $C0:0000
-          printf("sequence: entry %d program exited (JML $C0:0000) after %ld frames -> reboot\n",
-                 seqOpen - 1, CtXlatStageFrames(seqX));
-          seqOpen = 0;
-        } else {
-          { uint8_t fw = 0, fg = 0; CtXlatStageFailBytes(seqX, &fw, &fg);
-            printf("sequence: entry %d translation stopped (%d) at %06X after %ld frames -- holding (byte want %02X got %02X)\n",
-                   seqOpen - 1, seqXState, CtXlatStageFailPc(seqX), CtXlatStageFrames(seqX), fw, fg); }
-          seqOpen = -1;
-        }
-        // ONE VRAM: what the stage leaves in the PPU is what the field's next load finds (the credits' text tilemap
-        // under 06B's second BG1 half, sequence_table.md 11.11), so the image comes back before the stage closes.
-        { Snes* hw = CtXlatStageHardware(seqX); if (hw && hw->ppu) memcpy(g_fieldVram, hw->ppu->vram, sizeof g_fieldVram); }
-        CtXlatStageClose(seqX); seqX = NULL; seqXState = 0;
       } else if (seqOpen > 0 && (raceOn || endOn)) {
         // The native stages' END is taken in the frame of the NMI that ENDed (below, after the frame's picture) -- except the
         // Day of Lavos' console reset, whose cold init is this frame's (coldResetReq, below).
@@ -17240,7 +17195,7 @@ int main(int argc, char** argv) {
           printf("sequence: the Day of Lavos ended -> reset\n");    //   FD/C000) -- the cold init below, not $0100's reboot
           seqOpen = 0; endOn = 0; endEnded = 0;
         }
-      } else if (seqOpen > 0 && !seqX && titleIntro.done) {   // (titleIntro keeps the LAST machine's done flag)
+      } else if (seqOpen > 0 && titleIntro.done) {   // (titleIntro keeps the LAST machine's done flag)
         // Every other entry's teardown is the PLAIN fade $7E:34E3 -- the title's $34C2 without the
         // two sound commands -- and it ends the same way: `INC $00`, which the main loop at
         // $7E:3026 is polling. So the handover is the same as the title's, minus the music.
@@ -20113,36 +20068,12 @@ int main(int argc, char** argv) {
                 printf("introshot: swing frame %d -> %s\n", titleIntro.frame, ip);
                 if (iat) running = 0; } } }
         }
-      } else if (seqOpen > 0 && seqX) {
-        // A translated stage: run its program to the next vblank on its own clock, then show what its PPU drew.
-        drewSwing = 1;
-        // The stage's own hardware reads the pad: its vblank latches the controller into $4218/$4219 and its NMI
-        // decodes it, exactly as the cartridge's -- so it is handed the frame's controller word, the one the field's
-        // pad latch and the oracle get.
-        CtXlatStageHardware(seqX)->input1->currentState = padSerial;
-        // (the widescreen, a mod: the stage's PPU renders the side columns too -- snes/ppu.c g_ppuWideSide)
-        { int sw = hostWideW(); g_seqWideW = 0;
-          if (sw > CAMW && sw <= FIELD_WMAX) { g_ppuWideSide = (sw - CAMW) / 2; g_ppuWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3); } }
-        { uint32_t apu0 = CtAudioApuCycles(audio);
-          if (seqXState == 0 && (seqXState = CtXlatStageFrame(seqX)) == 1 && audio)
-            CtAudioStageExitFrame(audio, CtAudioApuCycles(audio) - apu0); }   // (its exit frame's remaining SPC: audio.c)
-        if (g_ppuWideSide) { g_seqWideW = CAMW + 2 * g_ppuWideSide; g_ppuWideSide = 0; g_ppuWideOut = NULL; }
-        // CT_XLAT_STAGE_VRAM=<path>,<stage frame>: the stage's VRAM + CGRAM after that frame, beside an oracle --peek's
-        // .vram/.oam from the hand-off state at the same count (tools/entry3_vram_cmp.py) -- which regions the
-        // program's own uploads reached in the port.
-        { static const char* sv = (const char*)1; static long svAt = -1; static char svPath[512];
-          if (sv == (const char*)1) { sv = getenv("CT_XLAT_STAGE_VRAM");
-            if (sv && *sv) { const char* c = strrchr(sv, ','); if (c) { size_t n = (size_t)(c - sv); if (n >= sizeof svPath) n = sizeof svPath - 1;
-                             memcpy(svPath, sv, n); svPath[n] = 0; svAt = atol(c + 1); } } }
-          if (svAt >= 0 && CtXlatStageFrames(seqX) == svAt) { FILE* vf = fopen(svPath, "wb");
-            if (vf) { Snes* hw = CtXlatStageHardware(seqX); fwrite(hw->ppu->vram, 2, 0x8000, vf); fwrite(hw->ppu->cgram, 2, 0x100, vf); fclose(vf);
-                      printf("xlat-stage: vram+cgram after stage frame %ld -> %s\n", svAt, svPath); } } }
-        CtXlatStagePicture(seqX, fb, CAMW, CAMH);
       } else if (seqOpen > 0 && raceOn) {
         // THE RACE: one NMI of its stage (seq_race.c) with the frame's pad as C3/0A8E reads it ($4218: LakeSnes' serial
         // order turned into the register's word), then its picture as that NMI left the PPU (seq_racepic.c; black while
         // the opening holds).
         drewSwing = 1;
+        stageWideBegin();
         if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
         else if (!raceEnded) {
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
@@ -20154,9 +20085,11 @@ int main(int argc, char** argv) {
           if (st) raceEnded = st;
           else CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
         }
+        stageWideEnd();
       } else if (seqOpen > 0 && endOn) {
         // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad, and its picture (entry 10's: black).
         drewSwing = 1;
+        stageWideBegin();
         if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
         else if (!endEnded) {
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
@@ -20173,6 +20106,7 @@ int main(int argc, char** argv) {
                               : CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) endEnded = st;
           else if (stagePic) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
+          else g_seqWideW = 0;                              // (a stage without a picture: no sides)
           if (getenv("CT_STAGEPIC_TRACE")) { long sum = 0; for (int i = 0; i < CAMW * CAMH * 3; i++) sum += fb[i];
             fprintf(stderr, "stagepic: f%d end=%d st=%d INIDISP=%02X TM=%02X hdmaen=%02X sum=%ld cg1=%04X\n", frameNo, endOn, st,
                     g_stagePic.p.r[0], g_stagePic.p.r[0x2C], g_stagePic.hdmaen, sum, g_stagePic.p.cgram[1]); }
@@ -20210,7 +20144,7 @@ int main(int argc, char** argv) {
       if (wideW > CAMW && !gwX && !(seqId >= 0 && seqOpen != 0)) {   // the widescreen: its sides around the finished view
         fieldWideAssemble(g_wide, g_wfb, fb, wideW, wideX, wideXc, motBright, fieldBlank, mot);
         shown = g_wide; shownW = wideW;
-      } else if (g_seqWideW > CAMW && ((seqOpen > 0 && seqX) || gwX)) {   // a translated stage, wide: its own side columns
+      } else if (g_seqWideW > CAMW && (gwX || (seqId >= 0 && seqOpen > 0 && (raceOn || endOn)))) {   // a stage, wide: its side columns
         const int sx0 = (g_seqWideW - CAMW) / 2;
         for (int y = 0; y < CAMH; y++) {
           memcpy(g_wide + (size_t)y * g_seqWideW * 3, g_seqWide + (size_t)y * g_seqWideW * 3, (size_t)g_seqWideW * 3);
@@ -20286,6 +20220,11 @@ int main(int argc, char** argv) {
       else if (endOn == 5) CtEntry6StageClose(w, &rio);
       else CtEndingStageClose(w, &rio);
       CtSceneSequenceDone(f.vm);
+      // ONE VRAM: what the stage left in the PPU is what the field's next load finds (sequence_table.md 11.11: the credits'
+      // text tilemap under 06B's second BG1 half), so a stage that drew takes its image back to the field's.
+      if (raceOn || (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(w[0x0384])))
+        memcpy(g_fieldVram, g_stagePic.p.vram, sizeof g_fieldVram);
+      printf("sequence: entry %d (native) ended after %d frames from C3:0000\n", w[0x0384] & 0x1F, frameNo - seqOpenFrame + 1);
       printf("sequence: the %s ended (%s) -> reboot into loc %03X\n", raceOn ? "race" : endOn == 2 ? "panorama" : endOn == 3 ? "fall"
              : endOn == 5 ? "Epoch's dive" : "ending", st == 2 ? "soft reset" : "$7E:0000=1", w[0x0100] | (w[0x0101] << 8));
       seqOpen = 0; raceOn = 0; raceEnded = 0; endOn = 0; endEnded = 0;
