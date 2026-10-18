@@ -40,8 +40,43 @@ A byte-pattern scan of bank C6 finds the whole family -- four picture loaders an
     C6/E63D  LDA #01 / STA $7F01ED / RTL            C6/E644  TDC / STA $7F01ED / RTL
 
 E04D is the palette: the three op-04 rows after it read $7F:8C00/8C20/8C40 (Lavos red, not the map's blue).
-Still not run: **C6/E595** (HDMA channel 3 over $210E from $7E:8A4F, and C6/E5C5's per-frame 224-line table) -- the
-second 1F4 visit's wave, a picture effect.
+### 2.1 World 1F5's wave and light (2026-10-18, ported: world.c CtWorldObjOp4E)
+
+(Not 1F4's: the cartridge from saves/field_re/pre_scene_19f.state reaches 1F5 at f869 and runs these there, f993-1580 and,
+after 1EE, f2019-2447.)
+
+* **C6/E595**, the wave's install: the indirect table `$7E:8A4F = F0 .. .. F0 .. .. 00` (two 112-line repeat runs; their
+  pointers are the NMI's copies of `$8A29 / $8A2B`, C2/02B2-02DE), HDMA channel 3 = DMAP 42 over `$210E` (BG1VOFS),
+  `TSB $4A` #08, the object's +$22 := 0. **C6/E5C5**, a call a frame: the 224-line table into `$9A36` or `$9796` by +$24's
+  bit 0, `$8A29` = it, `$8A2B` = it + $E0, +$24 up; line k's word = `$26` + the signed sine `C0:F900[(phase + 8k) & 3FF] * 4
+  >> 8` (the second half negated: `EOR #FFFF / INC / XBA / ORA #FF00`), then +$22 += 8. BG1 is drawn through it entirely
+  (its VOFS is the camera's `$26` plus the wave).
+* **C6/E448 / E470**, the light's windows: `$8A35` (`$8A42`) = `F0 .. .. F0 .. .. 00`, channel 1 (2) = DMAP 41 -- two
+  registers, indirect -- over `$2126` (`$2128`): WH0 + WH1 (WH2 + WH3) a line; `TSB $4A` #02 (#04).
+* **C6/E498 / E4BE**, a call a frame: the buffer `$8B56 / $8DF6` (`$9176 / $9416`) by +$26's parity, the pointers
+  `$8A21 / $8A23` (`$8A25 / $8A27`) = it and it + $E0, +$26 up; C3/0008 (C3/0077's circle) around (+$14, +$18) of radius
+  +$22; then E4FF stretches it +$24 lines -- radius 0: the word +$14 at line +$18 repeated down (MVN one byte on); else the
+  circle's top +$22 rows moved +$24 lines down and the rows between filled with the centre's (MVN a word on). Every ADC
+  there follows an ASL with no CLC: at centre line 0 (`DEC A / ASL A` of 0) the carry makes the start the buffer - 1, and
+  the beam's last rows come from the odd address (measured at cartridge f1038: without it the bottom rows were one off).
+* **The colour window**: CGWSEL `$45` = 10 (prevent 1: math only inside), WOBJSEL `$3A` names window 1 / 2 for it,
+  WOBJLOG `$40` bits 2-3 join them; CGADSUB 11 / 13 adds the fixed colour there. With the window empty (`1..0`) the clouds
+  are grey -- the port drew them yellow before it modelled the window (field.c owColorWin).
+* **The C2/2BFB clear**: the world's loader (C2/2C7A) and the rebuild after a screen of its own (C2/2C96) zero
+  `$7E:8621-8E20` through WMDATA (`LDX #8621 / STX $2181`, 512 x four `STA $2180`): every effect's pointers, tables and
+  window buffers. The port kept the field's bytes there (`$8DF6` = 80s until the light wrote it).
+* **The line index**: a repeat-mode HDMA table's unit y is on screen row y (field.c OW_HDMA_LINE = 0). MEASURED: the
+  cartridge's `--hdma` trace of peek f1120 against the port's buffers -- scanline s takes unit s - 1 of `$9A36` written at
+  the port's f1125, 0 lines differ, every other buffer and shift 191 or more. Both this wave and the Black Omen's move a
+  line a frame, so a one-line index error looks like a one-frame lag: the Black Omen's check had graded y + 1 at port
+  f + 360, when the world's P + 1 is f + 361 (its WRAM runs 362 frames behind: the buffer's tail at cartridge f698 = port
+  f1060). Mode 7's matrix keeps y + 1 (OW_M7_LINE), measured separately.
+
+Graded by tools/ow_wave_cmp.py (check ow-1f5-wave-and-light-vs-oracle): seven pictures 0 px -- the light's first beam,
+both beams, the wave alone and after the way back -- the wave's buffers ten frames after each side's install, and the
+windows' buffers and pointers on all 75 frames the beams draw. The pictures are at d = +5 until 1EE and +9 after: the
+world's WRAM is 6 frames behind the cartridge, then 10 -- the way back from 1EE to 1F5 costs the port 4 more frames than
+the cartridge (the world entry's load clock, the same class as 1F1's +2 after the gauge), picture P + 1 on that clock.
 
 ## 3. The rest of the world VM
 

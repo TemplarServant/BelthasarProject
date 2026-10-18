@@ -98,8 +98,10 @@ After the first flight's scene (loc 1DD), 1F6 comes back with the camera cells z
 So the silhouette is BG3 (its own colours dark) ADDED to the sub screen, which is BG2 drawn with a per-line wave: the sea
 seen through a rippling shape. The port's composer had the sub screen fixed as "the main screen under BG3" (TS = 13 in every
 world before); it now builds the sub screen of `$0042` when it differs (field.c owComposeSub) and reads BG2's scroll per
-line from an indirect HDMA channel (owHdmaWordAt; scanline s takes table line s, measured with `ct.exe --hdma`: entry 9 first
-on line 9). The channels' programming is kept as the natives write it (world.c CtWorldHdmaSet; window 1's C6/E241 sets
+line from an indirect HDMA channel (owHdmaWordAt; screen row y takes the table's unit y -- corrected 2026-10-18, see
+ocean_palace_aftermath.md sec. 2.1: the first reading, "entry 9 first on line 9", compared the trace with the buffer one step
+older, which a wave that moves a line a frame cannot tell from a one-line shift; the check now grades port f + 361, the
+world's P + 1). The channels' programming is kept as the natives write it (world.c CtWorldHdmaSet; window 1's C6/E241 sets
 channel 2 to WH1, the rising to BG2VOFS). Before, the six natives were skipped and the port crashed on the BG3 tile 0x3FF the
 unloaded VRAM held (worldBg3Px now wraps the VRAM address at 64 KB, as the PPU does).
 

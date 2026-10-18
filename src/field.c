@@ -584,7 +584,7 @@ static int worldInit(CtAssets* a, World* w, int id) {
   int nrec = *p++;
   w->wram[0x1B38] = (uint8_t)nrec;
   memcpy(w->wram + 0x7E00, p, (size_t)nrec * 7); p += (size_t)nrec * 7;
-  { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); }
+  { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }
   CtWorldLoadTriggers(w->wram, id);                     // ...and the event / transition cells beside them (C2/2A44)
   memcpy(w->vram + 0x4000, p, 28672); p += 28672;
   if (b[0] >= 2 && p + 0x1000 + 0x1600 <= b + blen) {   // fmt 2: ambient-object VM inputs
@@ -726,8 +726,16 @@ static void worldReloadVram(CtAssets* a, World* w) {
   if (b[0] >= 4 && p + 0x2000 <= b + blen) memcpy(w->vram + 0xE000, p, 0x2000);
   worldLoadObjFromRom(w);
 }
+// C2/2BFB, from the loader (C2/2C7A) and the rebuild (C2/2C96): `PHD / LDA #21 / XBA / LDA #00 / TCD / LDX #8621 / STX $81 /
+// LDA #7E / STA $83 / LDX #0200 / LDA #00` and four `STA $80` a pass over 512 passes -- $7E:8621-8E20 zeroed through WMDATA:
+// the HDMA effects' pointer words $8A21-$8A34, their indirect tables $8A35.. and the window buffers $8B56-$8E20. MEASURED,
+// the rule's cartridge from saves/field_re/pre_scene_19f.state: `ct.exe --cputrace` at f545 (the 1F4 load) runs it, and
+// $8DF6 reads 00 from there where the port kept the field's 80s until 1F5's light wrote it (ow_wave_cmp's beams).
+static void worldClearHdmaArea(uint8_t* wram) { if (wram) memset(wram + 0x8621, 0, 0x800); }
 static void worldReloadMenuScratch(CtAssets* a, World* w) {
   uint32_t blen = 0;
+  worldClearHdmaArea(w->wram);                            // C2/2C96 JSR C2/2BFB
+  if (w->wram) { w->wram[0xA916] = 0x25; w->wram[0xA917] = 0xA9; }   // C2/2C99-2C9E `LDA #A925 / STA $7EA916`
   const uint8_t* b = CtAssetGet(a, CT_ASSET_WORLD, (uint32_t)w->world, &blen);
   if (!b || blen < 20503 || !w->wram) return;
   const uint8_t* p = b + 6 + 6144 + 6144;                 // past the two grids ($4000, $5800: C2/2E72's stash)
@@ -1008,6 +1016,7 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
   w->wram[0x0042] = 0x13;                              // C2/0159 TS = BG1+BG2+OBJ
   CtWorldEnter(&w->cam, &w->mv, px >> 3, py >> 3);
   worldEnterSong(w, px >> 3, py >> 3);
+  worldClearHdmaArea(w->wram);                         // C2/2C7A JSR C2/2BFB, before C2/09C5's two maps
   CtWorldTilemapBuild(&w->stm, w->wram, &w->cam);
   w->entryLatch = 0xFFFF;
   // ⭐ C2/26D6: the overworld's FLAG BLOCK comes from the STORY PAGE, not from the world blob.
@@ -1397,8 +1406,11 @@ static void worldObjLinePieces(const World* w, int y, uint8_t* pix, uint8_t* pri
 // HDMAEN shadow $004A bit 2) walks the table at $7E:8A42: `F0 <p1> F0 <p2> 00` -- 112 lines from p1, 112 from p2 (bank
 // $7E), then the register holds. p1/p2 are the entries the NMI's C2/02C2 copied from $8A25/$8A27. Window 1's left edge is
 // WH0 = the shadow $003B (C2/025F `LDA $3B / STA $2126`). Returns the window's [l, r] on `line` (1..224) and 1, or 0.
+static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line, uint16_t* out);
 static int owWin1Line(const uint8_t* wram, int en, int wh0, int wh1, int line, int* l, int* r) {
   if (!wram) return 0;
+  // (A channel feeding WH0 / WH1 as a pair -- $C6:E448's channel 1, DMAP 41 over $2126: both edges from its entry line - 1.)
+  { uint16_t v; if ((en & 0x02) && owHdmaWordAt(wram, (uint8_t)(en & 0x02), 0x26, line - 1 < 0 ? 0 : line - 1, &v)) { *l = v & 0xFF; *r = v >> 8; return 1; } }
   uint8_t dm, bb; uint16_t tb;                                     // (channel 2 may be another effect's: C2/7C97's BG2VOFS)
   if (!(en & 0x04) || (CtWorldHdmaGet(2, &dm, &bb, &tb) && bb != 0x27)) { *l = wh0; *r = wh1; return 1; }   // off: the pushed edges
   int i = line - 1; if (i < 0) i = 0; if (i > 223) i = 223;
@@ -1425,8 +1437,17 @@ static CtMotFrame* g_mot;                        // (the picture's owners while 
 // AN INDIRECT HDMA CHANNEL'S VALUE ON A LINE (the Black Omen's wave on BG2, C2/7C56 / 7C97): the channel HDMAEN `en` holds
 // whose B-bus target is `bbad`, its table walked from the frame's top -- `n ptr` records, n = 1..80 lines with one transfer
 // (80 = 128), 81..FF = n - 80 lines with one unit a line (two bytes for DMAP mode 2, the write-twice scroll registers), 0 =
-// the end, after which the register holds. Screen row y is table line y + OW_HDMA_LINE (as window 1's, owWin1Line).
-#define OW_HDMA_LINE 1
+// the end, after which the register holds. Screen row y is table line y + OW_HDMA_LINE = y (as window 1's, owWin1Line):
+// MEASURED on world 1F5's wave over BG1 (tools/ow_wave_cmp.py; the cartridge's `--hdma` trace at peek f1120 against the
+// port's buffers: scanline s takes unit s - 1 of the 224-line table, 0 lines differ, every other buffer / shift >= 191) and
+// on the Black Omen's (tools/epoch_board_cmp.py --omen at the world's P + 1: WRAM cartridge f698 = port f1060, so peek
+// f700 = port f1061, 0 px). Both waves move a line a frame, so a one-line index error looks like a one-frame picture lag:
+// before 2026-10-18 the Black Omen read y + 1 and was graded one frame early, which hid it. (Mode 7's matrix keeps its
+// own, OW_M7_LINE.)
+#define OW_HDMA_LINE 0
+// Mode 7 (the gauge, the world map): the matrix tables' entry AND the screen Y of the formula are y + 1 -- measured with
+// the pictures of ow-epoch-gauge / the map checks; not re-derived with the 1F5 trace above.
+#define OW_M7_LINE 1
 static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line, uint16_t* out) {
   for (int ch = 0; ch < 8; ch++) {
     uint8_t dm, bb; uint16_t t;
@@ -1447,6 +1468,20 @@ static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line,
     if (have) { *out = val; return 1; }
   }
   return 0;
+}
+// THE COLOUR WINDOW on line y, column x of the view: WOBJSEL $3A bit 5 window 1 (bit 4 inverts), bit 7 window 2 (bit 6), WOBJLOG
+// $40 bits 2-3 the join of both (0 OR, 1 AND, 2 XOR, 3 XNOR); window 1's edges owWin1Line's, window 2's the pushed $3D / $3E.
+static int owColorWin(const uint8_t* wr, uint8_t en, uint8_t wh0, uint8_t wh1, int y, int x) {
+  const int sel = wr[0x3A], lg = (wr[0x40] >> 2) & 3, e1 = sel & 0x20, e2 = sel & 0x80;
+  if (!e1 && !e2) return 0;
+  int in1 = 0, in2 = 0;
+  if (e1) { int l = wh0, r = wh1; owWin1Line(wr, en, wh0, wh1, y + 1, &l, &r); in1 = (x >= l && x <= r) ^ ((sel & 0x10) != 0); }
+  if (e2) { int l = wr[0x3D], r = wr[0x3E]; uint16_t v;
+            if ((en & 0x04) && owHdmaWordAt(wr, (uint8_t)(en & 0x04), 0x28, y, &v)) { l = v & 0xFF; r = v >> 8; }   // ($C6:E470's)
+            in2 = (x >= l && x <= r) ^ ((sel & 0x40) != 0); }
+  if (!e2) return in1;
+  if (!e1) return in2;
+  return lg == 0 ? (in1 | in2) : lg == 1 ? (in1 & in2) : lg == 2 ? (in1 ^ in2) : !(in1 ^ in2);
 }
 static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int X0) {
   const uint8_t* wram = w->wram;
@@ -1544,18 +1579,19 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
   const int fix[3] = { wr ? (wr[0x0048] & 0x1F) : 0, wr ? (wr[0x0049] & 0x1F) : 0, wr ? (wr[0x0047] & 0x1F) : 0 };   // R, G, B
   uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
   for (int y = 0; y < CAMH; y++) {
-    uint16_t h2 = cs->bg2h, v2 = cs->bg2v, hv;
+    uint16_t h2 = cs->bg2h, v2 = cs->bg2v, v1 = cs->bg1v, hv;
     if (hdmaEn & 0x06) {
       if (owHdmaWordAt(wr, hdmaEn, 0x0F, y + OW_HDMA_LINE, &hv)) h2 = hv;
       if (owHdmaWordAt(wr, hdmaEn, 0x10, y + OW_HDMA_LINE, &hv)) v2 = hv;
     }
+    if ((hdmaEn & 0x08) && owHdmaWordAt(wr, hdmaEn, 0x0E, y + OW_HDMA_LINE, &hv)) v1 = hv;
     if (tsub & 0x10) worldObjLine(w, y, opix, opri, oidx, W, X0); else memset(opix, 0, (size_t)W);
     uint8_t* d = owSubScr + (size_t)y * W * 3;
     for (int x = 0; x < W; x++) {
       int ci[2][2] = { { -1, -1 }, { -1, -1 } };                     // [bg][prio]
       for (int bg = 0; bg < 2; bg++) {
         if (!(tsub & (1 << bg))) continue;
-        uint16_t hofs = bg == 0 ? cs->bg1h : h2, vofs = bg == 0 ? cs->bg1v : v2;
+        uint16_t hofs = bg == 0 ? cs->bg1h : h2, vofs = bg == 0 ? v1 : v2;
         const int mo = owMosaicOn(wr, bg);
         int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
         int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
@@ -1597,7 +1633,7 @@ static void worldComposeGauge(World* w, uint8_t* fb) {
   uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
   uint8_t keep = g_owObsel; g_owObsel = 0x03;
   for (int y = 0; y < CAMH; y++) {
-    int line = y + OW_HDMA_LINE;
+    int line = y + OW_M7_LINE;
     uint16_t v;
     int A = (int16_t)(zp[0x2C] | (zp[0x2D] << 8)), B = (int16_t)(zp[0x2E] | (zp[0x2F] << 8));
     int C = (int16_t)(zp[0x30] | (zp[0x31] << 8)), D = (int16_t)(zp[0x32] | (zp[0x33] << 8));
@@ -1713,7 +1749,7 @@ static void worldComposeMap(World* w, uint8_t* fb) {
       if (v & 0x40) fix[1] = v & 0x1F;
       if (v & 0x80) fix[2] = v & 0x1F;
     }
-    int line = (mo ? y - y % mz : y) + OW_HDMA_LINE;
+    int line = (mo ? y - y % mz : y) + OW_M7_LINE;
     int cH = hs - xc, cV = vs - yc;
     cH = (cH & 0x2000) ? (cH | ~1023) : (cH & 1023);
     cV = (cV & 0x2000) ? (cV | ~1023) : (cV & 1023);
@@ -1796,15 +1832,17 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   for (int y = 0; y < CAMH; y++) {
     uint8_t* dst = fb + (size_t)y * W * 3;
     uint16_t bg2hL = cs->bg2h, bg2vL = cs->bg2v;                 // BG2's scroll on this line: HDMA's when a channel feeds it
+    uint16_t bg1vL = cs->bg1v;                                     // ...and BG1's VOFS (1F5's wave: $C6:E595's channel 3)
     if (hdmaEn & 0x06) { uint16_t hv;
       if (owHdmaWordAt(w->wram, hdmaEn, 0x0F, y + OW_HDMA_LINE, &hv)) bg2hL = hv;
       if (owHdmaWordAt(w->wram, hdmaEn, 0x10, y + OW_HDMA_LINE, &hv)) bg2vL = hv; }
+    if (hdmaEn & 0x08) { uint16_t hv; if (owHdmaWordAt(w->wram, hdmaEn, 0x0E, y + OW_HDMA_LINE, &hv)) bg1vL = hv; }
     for (int x = 0; x < W; x++) {
       int p0 = -1, p1 = -1, p1bg1 = -1, p0bg = 5, p1bg = 5;
       bgCover[y * W + x] = 0;
       for (int bg = 0; bg < 2; bg++) {                 // BG1 over BG2 (both transparent at idx 0)
         if (!(tmain & (1 << bg))) continue;             // $212C bit0 BG1 / bit1 BG2
-        uint16_t hofs = bg == 0 ? cs->bg1h : bg2hL, vofs = bg == 0 ? cs->bg1v : bg2vL;
+        uint16_t hofs = bg == 0 ? cs->bg1h : bg2hL, vofs = bg == 0 ? bg1vL : bg2vL;
         const int mo = owMosaicOn(w->wram, bg);         // (the mosaic: the line's own scroll, the block's first pixel)
         int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
         int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
@@ -2048,21 +2086,22 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   // THE FIXED-COLOUR OPERAND (CGWSEL bit 1 clear), ppu_handlePixel's arm: the main-screen pixel, on a layer CGADSUB enables
   // (0-5; OBJ palettes 0-3 are layer 6 and never math), plus or minus the fixed colour, halved when bit 6 is set (with the
   // fixed colour as operand the half always applies), clamped to 0..31 per channel.
-  // ⚠ CGWSEL's clip / prevent modes 1 and 2 test the COLOUR WINDOW, which this composer does not build: only modes 0 and 3
-  // (window-independent) are evaluated, and a world asking for 1 or 2 is named once instead of guessed.
+  // CGWSEL's clip (bits 6-7) and prevent (bits 4-5) modes 1 and 2 test the COLOUR WINDOW (owColorWin): window 1 and / or 2 as
+  // WOBJSEL $3A enables them for it (bits 5 / 7, inverted by 4 / 6), joined by WOBJLOG $40 bits 2-3 (OR, AND, XOR, XNOR) --
+  // the shadows the NMI pushes (C2/025A-027A). MEASURED, world 1F5 after the Ocean Palace (ct.exe --hdma at f1100 of
+  // saves/field_re/pre_scene_19f.state): CGWSEL prevent 1 -- math only inside -- with window 1 for colour and empty (1..0):
+  // no math anywhere, the clouds grey where the port added the fixed colour (16, 16, 0) and drew them yellow.
   if (mathFix) {
     const int clip = (cgwsel >> 6) & 3, prevent = (cgwsel >> 4) & 3;
-    static uint8_t said = 0;
-    if ((clip == 1 || clip == 2 || prevent == 1 || prevent == 2) && !said) {
-      said = 1; fprintf(stderr, "owcompose: CGWSEL=%02X asks for the colour window -- not modelled\n", cgwsel); }
     const int fix[3] = { w->wram ? (w->wram[0x0048] & 0x1F) : 0, w->wram ? (w->wram[0x0049] & 0x1F) : 0,
                          w->wram ? (w->wram[0x0047] & 0x1F) : 0 };   // R, G, B
     for (int y = 0; y < CAMH; y++) {
       uint8_t* dst = fb + (size_t)y * W * 3;
       for (int x = 0; x < W; x++) {
         int L = mlayer[y * W + x];
-        if (clip == 3) { dst[x * 3] = dst[x * 3 + 1] = dst[x * 3 + 2] = 0; }
-        if (L >= 6 || !(cgadsub & (1 << L)) || prevent == 3) continue;
+        int inWin = (clip == 1 || clip == 2 || prevent == 1 || prevent == 2) && w->wram ? owColorWin(w->wram, hdmaEn, hwh0, hwh1, y, x - X0) : 0;
+        if (clip == 3 || (clip == 1 && !inWin) || (clip == 2 && inWin)) { dst[x * 3] = dst[x * 3 + 1] = dst[x * 3 + 2] = 0; }
+        if (L >= 6 || !(cgadsub & (1 << L)) || prevent == 3 || (prevent == 1 && !inWin) || (prevent == 2 && inWin)) continue;
         for (int ch = 0; ch < 3; ch++) {
           int o5 = dst[x * 3 + ch] >> 3;
           o5 = mathSub ? o5 - fix[ch] : o5 + fix[ch];
@@ -12279,7 +12318,7 @@ int main(int argc, char** argv) {
           // world opens FORCE-BLANKED at brightness 0, and only a fade object (op 0x29 in the world's own script) lights it.
           // Measured on the forest hop: `$1C = 80 00` written at C2:0147 on the $0100 frame.
           if (wd.wram) { wd.wram[0x1C] = 0x80; wd.wram[0x1D] = 0x00; }
-          { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); }   // bank-$C2 VM scripts
+          { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }   // bank-$C2 VM scripts
           if (ngIntro) {                               // --newgame 496-pan ONLY: swap the BASE (sparse,
             worldOverlayIntroSeed(&wd);
             // ...and the camera of the SAME instant (start_scene.state f0: $20 = 0178, $26 = 014B, $E3 = 2F, $E7 = 29).
