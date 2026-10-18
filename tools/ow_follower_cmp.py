@@ -12,7 +12,7 @@ pushed by C2/3934 on every step arrival) one entry behind, re-deciding every 8 f
 
   cartridge  build/ct.exe --monitor (the rule: CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1) from
              saves/field_re/catedral_user.state with the drive's --btnscript
-  port       build/ct_field.exe --scene 129 --loadwram saves/field_re/catedral_user.lakewram (the same WRAM) with
+  port       build/Belthasar.exe --scene 129 --loadwram saves/field_re/catedral_user.lakewram (the same WRAM) with
              the same drive as a --walkscript, CT_FIELD_MEMMON on the same bytes
 
 `party3` adds a third member: Marle in party slot 2 (`$2982 = 01`, PEEK_POKE on the cartridge, the same byte in
@@ -89,7 +89,7 @@ def main():
         pmon = ','.join('%04X:%X' % (a, n) for _, a, n in fields)
         ws = ','.join('%s:%d' % (d, n) for d, n in drive) + ',.:60'
         env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_FIELD_MEMMON=pmon)
-        return subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene',
+        return subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene',
                                '129', '--loadwram', lw, '--walkscript', ws,
                                '--selftest', os.path.join(OUT, 'p.raw'), '--frames', str(total)],
                               cwd=ROOT, env=env, capture_output=True, text=True).stdout.splitlines()

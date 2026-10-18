@@ -10290,7 +10290,7 @@ static int battleAnimOpClass(const uint8_t* rom, long romLen, int op) {
   return ANIM_PASS;   // facing/sound/palette/priority/counter -> passthrough (no frame cost)
 }
 
-// ---- --asccensus (ct_field, debug): THE PC ANIM SCRIPTS' OPCODE CENSUS ------------------------------------------------
+// ---- --asccensus (Belthasar, debug): THE PC ANIM SCRIPTS' OPCODE CENSUS ------------------------------------------------
 // Every PC script the ROM can dispatch -- the techs (CD/45A6[tid*7] -> $9877 -> CD/5EF0), the consumables (CD/5C26[sub*7]
 // -> CD/63F0) and the physical selectors (CD/5EC6) -- walked the way the interpreter walks them: the header's word-1
 // mask (the $A0B3 = 0 dispatch) gives the tracks MSB-first, each track runs to its 00/01-class terminator, a `1E ss`

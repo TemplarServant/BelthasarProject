@@ -6,7 +6,7 @@ The user's own snes9x capture before the Mammon Machine scene, spliced into a la
     CT_ORACLE_LOGICAL=1 build/ct.exe Chrono_Trigger_USA_SNES.sfc --monitor 7E0100:2,7F0000:1 \
         --from saves/field_re/pre_scene_19f.state --input "0:6000,100:2,0:38,..." --diff
     CT_NOPACE=1 CT_AUDIO_LOCKSTEP=1 CT_AUDIO_SEEDSTATE=saves/field_re/pre_scene_19f.state CT_LOCTRACE=1 \
-        build/ct_field.exe --assets ct_assets.dat --scene 415 --loadwram saves/field_re/pre_scene_19f.lakewram \
+        build/Belthasar.exe --assets ct_assets.dat --scene 415 --loadwram saves/field_re/pre_scene_19f.lakewram \
         --walkscript "n:6000,a:2,n:38,..."
 
 The rule's cartridge, no input to f6000 then A every 40 frames: `$0100` 19F, 1F4 f508, 1F5 f869, 1EE f1580, 1F5 f1978,

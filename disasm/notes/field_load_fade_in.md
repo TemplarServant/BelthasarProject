@@ -125,7 +125,7 @@ build/ct.exe --monitor "0119:1,0117:1,0100:2,1801:2,1881:2" --from saves/field_r
              --btnscript "81:220" --frames 220 --diff
 build/ct.exe --hookpc 0097 --from saves/field_re/scene468_stairs_to_120.state --btnscript "81:75" --frames 75
 build/ct.exe --hookpc 59D9 --from saves/field_re/scene468_stairs_to_120.state --btnscript "81:72" --frames 72
-CT_RUN=1 CT_FADETRACE=1 build/ct_field.exe --assets ct_assets.dat --scene 468 \
+CT_RUN=1 CT_FADETRACE=1 build/Belthasar.exe --assets ct_assets.dat --scene 468 \
   --loadwram saves/field_re/scene468_stairs_to_120.lakewram --selftest --frames 400 --walkscript "r:400"
 python tools/regress.py --only field-stairs-run-three-flights
 python tools/regress.py --mutate field-stairs-run-three-flights

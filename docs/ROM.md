@@ -82,8 +82,8 @@ them. Routing every ROM read through `ctlib.rom.load()` is on the [roadmap](ROAD
 
 ## Where the ROM goes
 
-By default the programs look for `Chrono_Trigger_USA_SNES.sfc` in the current directory. `ct_field` also looks next
-to the `ct_assets.dat` it was given. `CT_ROM=<path>` overrides the location for `ct_field`, and `ct.exe` takes the
+By default the programs look for `Chrono_Trigger_USA_SNES.sfc` in the current directory. `Belthasar` also looks next
+to the `ct_assets.dat` it was given. `CT_ROM=<path>` overrides the location for `Belthasar`, and `ct.exe` takes the
 ROM path as a positional argument. The `.gitignore` excludes `*.sfc`, `*.smc`, `*.srm` and `*.dat`, so a ROM,
 save or asset container in the working tree is never committed by accident.
 
@@ -98,7 +98,7 @@ Everything derived from the ROM is generated on your machine:
 | `src/xlat/*.c` | [`tools/gen/xlat_all.py`](../tools/gen/xlat_all.py) (traces) + [`tools/gen/xlat.py`](../tools/gen/xlat.py) | Five timing-sensitive ROM programs translated instruction by instruction into C (see [ARCHITECTURE.md](ARCHITECTURE.md#translated-stages)). |
 | Oracle states | recipes replayed by the oracle | The savestates the generators and the regression suite start from. Each recipe is a pad script played from power-on, optionally on top of a battery save that another recipe produced. |
 
-At run time `ct_field` reads `ct_assets.dat`. It reads the ROM itself for battle enemies (graphics and stats) and
+At run time `Belthasar` reads `ct_assets.dat`. It reads the ROM itself for battle enemies (graphics and stats) and
 for the sound driver. Without the ROM it still renders the field and the menus, and says what it is missing.
 
 The single entry point is `python tools/setup.py --rom <path>`: verify the ROM, build a bootstrap oracle, replay

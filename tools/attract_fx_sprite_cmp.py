@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 r"""The effect's sprites against the cartridge: OBJ sheets, frame table, and a program's sprite cloud on screen.
 
-    python tools/attract_fx_sprite_cmp.py <oracle_state> <oracle_frame> <port_frame> -- <ct_field args...>
+    python tools/attract_fx_sprite_cmp.py <oracle_state> <oracle_frame> <port_frame> -- <Belthasar args...>
 
-The port (build/ct_field.exe) runs with CT_DUMPWRAM / CT_DUMPWRAM_AT = <port_frame> (its battle WRAM, taken before
+The port (build/Belthasar.exe) runs with CT_DUMPWRAM / CT_DUMPWRAM_AT = <port_frame> (its battle WRAM, taken before
 that frame's tick, plus `.fxobj` = the effect's OBJ sheets as uploaded, VRAM words $0C00-$17FF) and CT_SHOTS at the
 same frame; the oracle (build/ct.exe --peek) stops at <oracle_frame> and dumps its framebuffer, WRAM, VRAM, OAM and
 CGRAM. Both sides run live (set CT_AUDIO_LOCKSTEP in the environment when the leg needs it). Prints
@@ -22,7 +22,7 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 
 

@@ -37,7 +37,7 @@ States/dumps are auto-detected: raw 128KB `.wram` sidecar, LakeSnes `.state`
 (gzip'd or raw). `.oam` sidecars are accepted in all three sizes ct.exe has
 written (544 canonical / 1056 ppuregs / 1568 peek+CGRAM). `fb2png` accepts the
 oracle 512x480 `[pad,B,G,R]` fb **and** the `[w][h][RGB]` shots from
-ct_field/ct_world (u32 or u16 header).
+Belthasar/ct_world (u32 or u16 header).
 
 ## `ctlib` API one-liners
 

@@ -21,7 +21,7 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 
 
 def bmp(path):

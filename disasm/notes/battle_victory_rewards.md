@@ -161,7 +161,7 @@ level-up (only maxHP grew) — level-up does not heal.
   next=786 st=13180C090B0B12) pc1(g=1 L=11 hp=76 mp=14 next=786 st=050D08110B0919)`. Baseline (no FORCELVL) never
   levels (L1 NEXT 20 > earned 9) so `field-battle-results-reward` is unmoved. Determinism verified ×2.
 
-Repro (our engine): `CT_BATTLE_TRACE=1 CT_BATTLE_MASHA=1 CT_BATTLE_FORCELVL=1 build/ct_field.exe --assets
+Repro (our engine): `CT_BATTLE_TRACE=1 CT_BATTLE_MASHA=1 CT_BATTLE_FORCELVL=1 build/Belthasar.exe --assets
 ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram`.
 
 ---

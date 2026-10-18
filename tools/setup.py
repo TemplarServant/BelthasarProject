@@ -186,7 +186,7 @@ def main():
     if missing:
         say('NOT COMPLETE: %d generated file(s) could not be made: %s (docs/ROADMAP.md)' % (len(missing), ', '.join(missing)))
         return 1
-    say('done. Play: build\\ct_field.exe --assets ct_assets.dat --boot')
+    say('done. Play: build\\Belthasar.exe --assets ct_assets.dat --boot')
     return 0
 
 

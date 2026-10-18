@@ -143,7 +143,7 @@ Neither curtain hold is a lag-frame count: the real-time cartridge holds the sam
   minus BG1's), zeroed at the entry camera.
 
 Tracing: `CT_XFERTRACE=1` prints `xfer: t<tick> C0/1790 AF4E <rect> mask <m> style <s>` (VM) and
-`tilecopy: f<N> ... planes|picture` (ct_field's drain).
+`tilecopy: f<N> ... planes|picture` (Belthasar's drain).
 
 ## 5. Boundaries
 
@@ -179,5 +179,5 @@ Tracing: `CT_XFERTRACE=1` prints `xfer: t<tick> C0/1790 AF4E <rect> mask <m> sty
   each E5 copy (P18-19, P57-58, P122-123, P161-163), by 265 thumbnail px in the band y36-70 (screen y72-140) across
   the width: the room's panels. Frames around the E4 copies are identical. Not derived yet. The panel band points at
   a BG animation machine (FD/E022 or FD/E39C) that runs, or pauses, differently during C0/179A's hold. That is a
-  HYPOTHESIS. Repro: CT_SHOTS_THUMBS on `ct_field --scene 236 --loadwram saves/field_re/s236_lever.lakewram --walkscript
+  HYPOTHESIS. Repro: CT_SHOTS_THUMBS on `Belthasar --scene 236 --loadwram saves/field_re/s236_lever.lakewram --walkscript
   n:11,a:4,n:100,a:4,n:130` against PEEK_THUMBS on the oracle with `--btnscript 0:10,100:4,0:100,100:4,0:130`.

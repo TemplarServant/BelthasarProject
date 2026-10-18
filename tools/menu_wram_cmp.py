@@ -20,7 +20,7 @@ import subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 BYTES = [('0D00', 1), ('0D10', 1), ('0D38', 2)]
 LAST = 69
 

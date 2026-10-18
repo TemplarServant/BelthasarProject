@@ -90,7 +90,7 @@ def port():
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                CT_XLAT_HANDOFF_VRAM=vram, CT_SHOTS=shots, CT_SHOTS_AT=','.join(str(f) for f in frames),
                CT_SHOTS_EXIT='1')
-    subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
+    subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1200)
     return vram, '%s_f%d.raw' % (shots, PORT_FRAME), {f - (PORT_FRAME - ORC_FRAMES): '%s_f%d.raw' % (shots, f) for f in frames}
 

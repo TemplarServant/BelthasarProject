@@ -6,9 +6,9 @@ cartridge, on the cartridge's own inputs (field_window_wipe.md sec. 6):
     128 KB WRAM and prints the registers, the beam and PPU2's latch state there (hSecond, bus2 -- the world engine never
     reads the counter ports itself, so C3/02DD's own toggling and the last byte it read are what the next call sees),
     runs to the far call's landing C2:1830 and dumps again, then samples window 1 on every visible line that follows;
-  * `ct_field --owwincall in <entry> v h hSecond bus2 port` runs the port's translated routine (src/xlat/owwin_c6.c)
+  * `Belthasar --owwincall in <entry> v h hSecond bus2 port` runs the port's translated routine (src/xlat/owwin_c6.c)
     through the host's call glue (seq_xlat.c CtXlatOwWindowCall) on that WRAM and that state;
-  * `ct_field --owwinmask out <ch2 on> <wh0> <wh1>` walks the port's channel-2 model (field.c owWin1Line) over the WRAM
+  * `Belthasar --owwinmask out <ch2 on> <wh0> <wh1>` walks the port's channel-2 model (field.c owWin1Line) over the WRAM
     after the call, with the channel's state and WH0/WH1 as the last NMI pushed them (--calldump's `regs now` line: the
     shadows at the call are already the script's next values, and a channel the call enables starts at the next NMI).
 
@@ -28,7 +28,7 @@ import re
 import subprocess
 
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 SRC = 'saves/attract_cena_inicial.state'
 F0 = 100                                     # the state: the attract 6 frames before the world-5 leg's op 4E
 CALLS = [('install', 'C6E241', 1), ('frame', 'C6E27E', 2), ('later', 'C6E27E', 3)]   # 'later': its edges on lines 101-112 straddle a run

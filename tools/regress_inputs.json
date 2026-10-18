@@ -2163,7 +2163,7 @@
       "path": "saves/battle_re/forest_wait_ambush_active.lakewram",
       "kind": "oracle-wram",
       "regenerable": true,
-      "how": "build/ct.exe --peek saves/battle_re/forest_wait_ambush_active.state out.raw --frames 0, then \"HEADER\nRAM:131072:\" + out.raw.wram (the state's own WRAM, for ct_field --loadwram)",
+      "how": "build/ct.exe --peek saves/battle_re/forest_wait_ambush_active.state out.raw --frames 0, then \"HEADER\nRAM:131072:\" + out.raw.wram (the state's own WRAM, for Belthasar --loadwram)",
       "used_by": [
         "battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge",
         "battle-dissolve-no-flash-vs-rule-cartridge",
@@ -3236,7 +3236,7 @@
       ],
       "kind": "ctfs_state",
       "regenerable": false,
-      "how": "The owner's own ct_field CTFS state build/ct_debug_007.state (2026-10-04): the 600 A.D. inn (loc 0x74), Crono + Lucca, at the 'Register? Yes' prompt, copied -- byte-identical to the first one. Not regenerable from the ROM.",
+      "how": "The owner's own Belthasar CTFS state build/ct_debug_007.state (2026-10-04): the 600 A.D. inn (loc 0x74), Crono + Lucca, at the 'Register? Yes' prompt, copied -- byte-identical to the first one. Not regenerable from the ROM.",
       "sha256": "872ee9229b197ea2707f42aaba739f25526514835b95af05c045961430c45c9b",
       "size": 153972,
       "present_when_recorded": true
@@ -3245,7 +3245,7 @@
       "path": "saves/field_re/inn_sleep_10f.lakewram",
       "kind": "unknown",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_inn_sleep): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_inn_sleep): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-inn-sleep-vs-rule-cartridge"
       ],
@@ -3273,7 +3273,7 @@
       ],
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_loc002_curtain_ctl): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_loc002_curtain_ctl): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "98639f9add67e6d0b6cd0ea18e3e6c42da1e38bd1607f227fb7295895a4d19ba",
       "size": 131093,
       "present_when_recorded": true
@@ -3298,7 +3298,7 @@
       ],
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_loc002_intro_curtain): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_loc002_intro_curtain): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "fed8bf8e19bbe02717c8ff125560c614ac492ed3653c3c57faf4a7112b49ddea",
       "size": 131093,
       "present_when_recorded": true
@@ -3319,7 +3319,7 @@
       "path": "saves/field_re/loc07B_soldiers_seated.lakewram",
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_loc07B_seated): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_loc07B_seated): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-obj-unit-priority-seated-soldiers-vs-oracle"
       ],
@@ -3346,7 +3346,7 @@
       ],
       "kind": "lakewram_wrapper",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_loc13B_teleport): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_loc13B_teleport): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "d6bbf84f36ab6333ce74c6f4ea737610caec0a11e2270a4ec5febff65c5071af",
       "size": 131093,
       "present_when_recorded": true
@@ -3404,7 +3404,7 @@
       "path": "saves/field_re/m81_frog_pre_lake.lakewram",
       "kind": "unknown",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_m81_frog_pre): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_m81_frog_pre): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-manoria-frog-blob"
       ],
@@ -3547,7 +3547,7 @@
       "path": "saves/field_re/predoor_f2f_s5.lakewram",
       "kind": "lakewram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_fair_marle, pad 40:16,10:32): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_fair_marle, pad 40:16,10:32): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-door-follower-lands-on-lead",
         "field-door-up-arrival-facing"
@@ -3561,7 +3561,7 @@
       "used_by": [],
       "kind": "story_flags",
       "regenerable": false,
-      "how": "The $7F:0000-01FF story page of the user's F5 capture build/ct_debug_023.state (loc 07B, 2026-10-09; CtScene 'CTFS' format): CT_DUMPWRAM=p.wram CT_DUMPWRAM_AT=3 build/ct_field.exe --assets ct_assets.dat --scene 123 --loadstate build/ct_debug_023.state --selftest x.raw --frames 10, then bytes 0x10000-0x101FF of p.wram. Storyline 0F, party 00/80/80.",
+      "how": "The $7F:0000-01FF story page of the user's F5 capture build/ct_debug_023.state (loc 07B, 2026-10-09; CtScene 'CTFS' format): CT_DUMPWRAM=p.wram CT_DUMPWRAM_AT=3 build/Belthasar.exe --assets ct_assets.dat --scene 123 --loadstate build/ct_debug_023.state --selftest x.raw --frames 10, then bytes 0x10000-0x101FF of p.wram. Storyline 0F, party 00/80/80.",
       "sha256": "eaee2a546db749764825e028c877f857cd65645685c5abbb9d8446acb7398a32",
       "size": 512,
       "present_when_recorded": true
@@ -3573,7 +3573,7 @@
       ],
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_s07b_table_seat): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_s07b_table_seat): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "dcc4e7d947abd8b10b1ab0f67b890c4daac53237983af45f67e04dd71d20b556",
       "size": 131093,
       "present_when_recorded": true
@@ -3648,7 +3648,7 @@
       ],
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_s236_lever): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_s236_lever): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "9fd830c6a46e2bfa874aafa9726109a36e81852b047a4d99f4b832981916b2e6",
       "size": 131093,
       "present_when_recorded": true
@@ -3764,7 +3764,7 @@
       "path": "saves/field_re/s5_bell_marle.lakewram",
       "kind": "unknown",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_s5_bell_marle): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_s5_bell_marle): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-bell-ball-keeps-frozen-shape",
         "field-bell-marle-regroup-ring",
@@ -3823,7 +3823,7 @@
       ],
       "kind": "state",
       "regenerable": false,
-      "how": "A LakeSnes state on loc 084's save tile (3, 39), made 2026-10-11: the user's F5 ct_debug_032.state (CTFS, loc 0CB) dumped by ct_field CT_DUMPWRAM_AT=1, its $2400-$2FFF (bag, sheets, party, techs) and $7F:0000-01FF (the story flags) spliced into saves/field_re/m81_naga_after_fight_lake.state (tools/ctlib/lake.py), then `ct.exe --teleport 0x84 3 39 0 --frames 120 --out` under CT_ORACLE_LOGICAL=1 (the ROM's own loader).",
+      "how": "A LakeSnes state on loc 084's save tile (3, 39), made 2026-10-11: the user's F5 ct_debug_032.state (CTFS, loc 0CB) dumped by Belthasar CT_DUMPWRAM_AT=1, its $2400-$2FFF (bag, sheets, party, techs) and $7F:0000-01FF (the story flags) spliced into saves/field_re/m81_naga_after_fight_lake.state (tools/ctlib/lake.py), then `ct.exe --teleport 0x84 3 39 0 --frames 120 --out` under CT_ORACLE_LOGICAL=1 (the ROM's own loader).",
       "sha256": "ebb30dfcc77d800910bfaaf8253f433aa268ade2757b3346f5bad739e0754a9c",
       "size": 273125,
       "present_when_recorded": true
@@ -3899,7 +3899,7 @@
       "path": "saves/field_re/scene7_talk_obj13.lakewram",
       "kind": "unknown",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_scene7_talk_obj13): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_scene7_talk_obj13): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "lockstep-box-y-flips-the-window-vs-oracle",
         "lockstep-talk-box-machine-clean"
@@ -3925,7 +3925,7 @@
       "path": "saves/field_re/scene8_gate_c2200.lakewram",
       "kind": "wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_scene8_gate_c2200): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_scene8_gate_c2200): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-gate-transition-vs-cartridge-from-its-wram"
       ],
@@ -4040,7 +4040,7 @@
       "path": "saves/field_re/tech_double.lakewram",
       "kind": "lakewram_wrapper",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_tech_double): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_tech_double): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "menu-tech-dual-list-partner-sprite-and-tab-memory-vs-oracle"
       ],
@@ -4071,7 +4071,7 @@
       "path": "saves/field_re/tent_keeper.lakewram",
       "kind": "lakewram_wrapper",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_tent_keeper): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_tent_keeper): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-bg-seed-tent-keeper-vs-oracle",
         "field-textbox-under-the-rule-vs-logical-oracle",

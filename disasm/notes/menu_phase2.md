@@ -750,7 +750,7 @@ Ranked backlog, largest first: Config (966 -> **0**, resolved below) -> Tech (54
 ## 2026-09-07 — CONFIG SCREEN: 966 differing px -> 0
 
 Pinned by the regression check `menu-config-screen`
-(`CT_MENUOPT=4 CT_MENUSCREEN=4 build/ct_field.exe --assets ct_assets.dat --menutest
+(`CT_MENUOPT=4 CT_MENUSCREEN=4 build/Belthasar.exe --assets ct_assets.dat --menutest
 saves/battle_re/gato_t0.raw.wram`, `fnv32=87DF54C9`). Oracle side of the comparison:
 `build/ct.exe --peek saves/truce_market.state cfg.raw --btnscript` driving `X, Right x3, A`; ours is
 the same state's WRAM through `--menutest`. Oracle y - 8 = our y (the 8-line overscan head).
@@ -819,7 +819,7 @@ Tech (547 -> **0**, resolved below) -> Item (110 -> **0**) -> Status (11 -> **0*
 
 ## 2026-09-07 — TECH SCREEN: 547 differing px -> 0
 
-Pinned by `menu-tech-screen` (`CT_MENUOPT=3 CT_MENUSCREEN=3 build/ct_field.exe --assets ct_assets.dat
+Pinned by `menu-tech-screen` (`CT_MENUOPT=3 CT_MENUSCREEN=3 build/Belthasar.exe --assets ct_assets.dat
 --menutest saves/battle_re/gato_t0.raw.wram`, `fnv32=874F265F`). Oracle side: `build/ct.exe --peek
 saves/truce_market.state t2.raw --btnscript` driving `X, Right x2, A`.
 
@@ -1001,7 +1001,7 @@ ribbon box over the sub-screen. Save is pinned separately by `menusave-ow-open`.
 
 ## 2026-09-07 — FORM (screen 5): 617 -> 236 px, and what the last 236 are
 
-Pinned by `menu-form-screen` (`CT_MENUOPT=4 CT_MENUSCREEN=5 build/ct_field.exe --assets ct_assets.dat
+Pinned by `menu-form-screen` (`CT_MENUOPT=4 CT_MENUSCREEN=5 build/Belthasar.exe --assets ct_assets.dat
 --menutest saves/battle_re/party3_form.raw.wram`, `fnv32=EC77B80C`).
 
 ### ⭐ THE GATE IS WHY FORM WAS MISSING FROM THE TABLE AT ALL

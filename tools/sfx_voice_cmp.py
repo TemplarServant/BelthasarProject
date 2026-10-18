@@ -10,7 +10,7 @@ and CT_DSP_RAWPCM (every sample the DSP makes, in order) and CT_DSP_KONTRACE (ea
 sample count). Each key-on matching --kon is one occurrence of the sound; the i-th on the cartridge is paired with the
 i-th on the port, and the --window samples from each key-on are cut out of each side's raw stream and compared: peak,
 RMS, the samples identical, the largest difference, and where the first difference falls. The cartridge: ct.exe --peek
-from saves/attract_cena_inicial.state; the port: ct_field --scene 433 under CT_AUDIO_LOCKSTEP.
+from saves/attract_cena_inicial.state; the port: Belthasar --scene 433 under CT_AUDIO_LOCKSTEP.
 """
 import argparse
 import os
@@ -19,7 +19,7 @@ import struct
 import subprocess
 
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 STATE = 'saves/attract_cena_inicial.state'
 TMP = os.path.join('build', '_sfxvoice')
 

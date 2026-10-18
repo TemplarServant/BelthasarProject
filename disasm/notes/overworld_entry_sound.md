@@ -266,7 +266,7 @@ for loc 496.
 
 ```
 $ CT_SNDTRACE=1 CT_NAMEAS=Crono TB_AUTOADV=1 CT_OWSONG=1 SDL_VIDEODRIVER=dummy \
-    ./build/ct_field.exe --assets ct_assets.dat --newgame --selftest --frames 2600
+    ./build/Belthasar.exe --assets ct_assets.dat --newgame --selftest --frames 2600
 
 overworld entry: scene 0 -> world 0 at (568,564) ngIntro=1 f32
 owsong: music object at $0EB0 state=01 ctr=00C5

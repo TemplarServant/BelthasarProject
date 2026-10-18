@@ -36,7 +36,7 @@ def main():
     env = dict(os.environ, CT_AUDIO_LOCKSTEP='1', CT_DUMPWRAM=pw, CT_DUMPWRAM_AT=str(pf),
                CT_SHOTS=os.path.join('build', '_07dpal_shot'), CT_SHOTS_AT=str(pf + 1), CT_SHOTS_EXIT='1',
                SDL_AUDIODRIVER='dummy')
-    subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
+    subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
                    env=env, capture_output=True)
     oenv = dict(os.environ)
     oenv.pop('CT_ORACLE_LOGICAL', None)

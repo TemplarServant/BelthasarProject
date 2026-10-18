@@ -30,7 +30,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 STATE = 'saves/attract_cena_inicial.state'
 BATS = range(15, 23)

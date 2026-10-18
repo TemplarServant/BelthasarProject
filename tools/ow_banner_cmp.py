@@ -52,7 +52,7 @@ def port_run(frames):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_FIELD_MEMMON=','.join(MON),
                CT_SHOTS=os.path.join(OUT, 'p'), CT_SHOTS_AT=','.join(str(f) for f in frames),
                CT_OWDUMP=os.path.join(OUT, 'pd'), CT_OWDUMP_AT='%d-%d' % (min(frames), max(frames)))
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '1', '--loadwram',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '1', '--loadwram',
                         os.path.join(ROOT, 'saves', 'field_re', 'ow_w0.lakewram'), '--selftest', '--frames', '250',
                         '--walkscript', DRIVE_P], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     ev = []

@@ -80,7 +80,7 @@ def port():
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                CT_AUDIO_SEEDSTATE=os.path.join(ROOT, STATE), CT_HOLDBTN=','.join(hold),
                CT_FIELD_MEMMON=','.join('%04X:%X' % r for r in REGS))
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
                         '--loadwram', seed, '--selftest', '--frames', str(END), '--walkscript', ','.join(walk)],
                        cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     try:

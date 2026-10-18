@@ -4,7 +4,7 @@ Derived 2026-08-15. Item: "the cat's animation in scene 2 is still not fixed".
 **Nothing here is implemented — this is a derivation.** Every claim carries the command that
 produced it. Claims I could not measure are marked **NOT DERIVED** in §7.
 
-Probe binary: `build/ct.exe` copied to the scratchpad as `ct_probe.exe`; `build/ct_field.exe` copied
+Probe binary: `build/ct.exe` copied to the scratchpad as `ct_probe.exe`; `build/Belthasar.exe` copied
 as `ctf_probe.exe` (never probed with `build/` directly, so a concurrent build cannot be blocked).
 
 ---
@@ -278,7 +278,7 @@ $ VMDIFF_ANIM=1 VMDIFF_ANIMDBG=9 ct_probe --vmdiff saves/slide.state --frames 23
 
 So the divergence is **exclusively the seeded initial state**, and it lasts until the object's own
 script next executes an anim op (118 frames here, 158 on `bed3460`). This is a real engine defect,
-not a harness-only one: `CtSceneSeedFromWram` is the entry point for `--vmdiff`, for `ct_field
+not a harness-only one: `CtSceneSeedFromWram` is the entry point for `--vmdiff`, for `Belthasar
 --loadwram`, and for every WRAM-seeded fixture.
 
 The ROM equivalents to seed are already in the WRAM the function is handed:

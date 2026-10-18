@@ -30,7 +30,7 @@ from ctlib import fb  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_roly')
 CSTATE = 'saves/battle_re/roly_rider_battle.state'
 PSEED = 'saves/battle_re/roly_rider_s119.lakewram'

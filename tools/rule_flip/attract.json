@@ -501,7 +501,7 @@
       "loadcost: world 5 -- 13212266 cycles + 0 DMA = 38 black frame(s) at f2136"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -586,7 +586,7 @@
       "owfade: f6740 $1C=00 $1D=0F $1BF6=00"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -632,7 +632,7 @@
       "owpal: f9115 row 8 = 0000 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF 7FFF"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -675,7 +675,7 @@
       "CAMINFO f4476 $1D0A=0000 $1D0E=000B $1D93=00 $1D96=0F $1D87=0000 $1D89=FF5F $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=00 $1D36=00"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -704,7 +704,7 @@
       "CAMINFO f4266 $1D0A=0000 $1D0E=0036 $1D93=00 $1D96=00 $1D87=0000 $1D89=0160 $1D8B=0000 $1D8D=0160 $1D8F=0000 $1D91=0160 $1D35=00 $1D36=00"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -753,7 +753,7 @@
       "seqbri: f4053 $038D=00"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -776,7 +776,7 @@
       "fmemmon f3809 loc=0AD  0400=001F*  0100=AD00  0117=00*"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -793,7 +793,7 @@
       "title-sound: 26 post(s), $2143 wait 0 frame(s)"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -811,7 +811,7 @@
       "sequence: entry 0 program exited (JML $C0:0000) after 188 frames -> reboot"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -835,7 +835,7 @@
       "sequence: entry 0 program exited (JML $C0:0000) after 188 frames -> reboot"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",

@@ -28,7 +28,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 STATE = os.path.join(ROOT, 'saves', 'field_re', 's1b2_mimic_won_lake.state')
 OUT = os.path.join(ROOT, 'build', '_tent_mimic')
 PRESSES = [60, 182, 304, 426]

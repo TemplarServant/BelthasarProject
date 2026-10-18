@@ -19,7 +19,7 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 STATE = 'saves/attract_loc0AD_flea.state'
 X0, X1, Y0, Y1, DY = 104, 140, 62, 108, 8

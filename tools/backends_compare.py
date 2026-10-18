@@ -4,7 +4,7 @@ r"""The three video backends (SDL_Renderer, OpenGL 3.3, Vulkan) against each oth
     python tools/backends_compare.py [scene]
 
 Not a suite check: it needs a real video driver (the suite runs headless). For each backend and filter it runs
-ct_field with a settings file (CT_SETTINGS) choosing that backend, window x3, fit, square pixels, and CT_OVERLAY_SHOT
+Belthasar with a settings file (CT_SETTINGS) choosing that backend, window x3, fit, square pixels, and CT_OVERLAY_SHOT
 (the overlay's Sync tab at f40; the window, hidden, saved as a BMP), then compares the pictures:
 
     backends: nearest sdl vs opengl 768x672 -> 0 pixels differ (max 0)        (expected: identical)
@@ -44,7 +44,7 @@ def main():
             open(ini, 'w').write('[video]\nbackend=%s\nscale=fit\naspect=pixel\nwindow_scale=3\nfilter=%s\n' % (bk, flt))
             env = dict(os.environ, SDL_AUDIODRIVER='dummy', CT_NOAUDIO='1', CT_SETTINGS=ini, CT_OVERLAY_SHOT=bmp + '@40:3')
             env.pop('SDL_VIDEODRIVER', None)
-            p = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', scene],
+            p = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', scene],
                                env=env, capture_output=True, text=True, errors='replace', timeout=300)
             ran = next((l for l in (p.stdout + p.stderr).splitlines() if l.startswith('[video]')), '[video] ?')
             if flt == 'nearest': print('backends: %-6s -> %s' % (bk, ran[8:]))

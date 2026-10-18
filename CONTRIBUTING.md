@@ -62,7 +62,7 @@ not. It must:
 
    Write or update a dossier in `disasm/notes/` that cites addresses and measured values and lists open questions.
 4. **Build** with `python tools/build.py` and trust its artifact check, not the banner. Close any running
-   `ct_field.exe` first: a locked executable is not replaced.
+   `Belthasar.exe` first: a locked executable is not replaced.
 5. **Run the quick tier**: `python tools/regress.py --quick`. Run the full suite for anything touching shared
    machinery (the VM, the scheduler, loads, the battle loop, audio, `snes/`).
 6. **Add a check** for the behaviour you fixed, in `tools/regress_checks.json`, with expected lines that come from the

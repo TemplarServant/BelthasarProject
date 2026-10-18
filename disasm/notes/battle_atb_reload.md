@@ -20,7 +20,7 @@ SELECTS the action; in our engine a PC can attack twice in a row.
   (span-end) and counts back down to 0.
 
 Method: oracle = `ct.exe --monitor --btnscript --writer` on `gato_press_action.state`; ROM = `tools/dis.py`
-(fileoffset `(bank−0xC0)<<16|addr`, battle bank C1 is 16-bit M=0 X=0). Our engine = `ct_field.exe` headless
+(fileoffset `(bank−0xC0)<<16|addr`, battle bank C1 is 16-bit M=0 X=0). Our engine = `Belthasar.exe` headless
 `CT_BATTLE_SCRIPT`/`CT_BATTLE_TRACE` on `saves/battle_re/gato_t0.raw.wram`. Writer PC = the instr AFTER the store.
 
 ---
@@ -158,17 +158,17 @@ Called at action-completion (span-end). `$B158[a] = 105 − 6·speed + CC2E31[(s
   1997 runs before the scheduled dispatch battleDispatchScheduled at 2075). The ROM's per-obj `$93EE` latch
   (B.2) — which keeps a committed seat out of the ready cycle until reload — has **no equivalent** here.
 
-### C.2 Reproduction (deterministic; copy `build/ct_field.exe`+`SDL2.dll` to a scratch dir first)
+### C.2 Reproduction (deterministic; copy `build/Belthasar.exe`+`SDL2.dll` to a scratch dir first)
 ```
 # Smoking gun — after ONE attack Crono STAYS queued (oracle dequeues him):
 CT_BATTLE_SCRIPT="n:20,a:1,n:3,a:1,n:220" CT_BATTLE_TRACE=1 \
-  <scratch>/ct_field.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
+  <scratch>/Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
   f184 pc-commit  cur=-1  q[0..0]  AFAB(c0 …)     <- dequeued at commit
   f185 pc-act     cur=0   q[0..1]  AFAB(c0 …) A013=1   <- RE-ENQUEUED (step E) while his own attack animates
   f310 act-end    cur=0   q[0..1]  AFAB(c72 …) pcAtk=1 <- reloaded to 72 but STILL queued -> box stays open
 
 # The double attack — press A,A again the moment the box reappears:
-CT_BATTLE_SCRIPT="n:20,a:1,n:3,a:1,n:135,a:1,n:3,a:1,n:400" CT_BATTLE_TRACE=1  <scratch>/ct_field.exe …
+CT_BATTLE_SCRIPT="n:20,a:1,n:3,a:1,n:135,a:1,n:3,a:1,n:400" CT_BATTLE_TRACE=1  <scratch>/Belthasar.exe …
   f180→f310  ATTACK 1  (target-sel f180, commit f184, animate f185, act-end f310)  GATO 76→59  pcAtk=1
   f320       ATTACK 2  target-select with AFAB(c68)  <- timer only 72->68 (4 ticks), NOT a 72-tick recharge
   f325→f502  ATTACK 2 animates+applies  GATO 59→27  pcAtk=2
@@ -253,8 +253,8 @@ python tools/dis.py 11B19 0x40 0 0     # readiness detector: $A6D9,X guard + $95
 python tools/dis.py 11B67 0x50 0 0     # enqueue: consume $95D6 (1B8E), $A6D9/$A6DE/$A6DD (1B83/1BA0/1BA9)
 python tools/dis.py 1BCE1 0x10 0 0     # RELOAD $AFAB,X <- $B158,X (C1:BCEB), X = $B18B
 python tools/dis.py 11620 0x120 0 0    # confirm: DEC $9609 (1629), chosen-action save, dequeue (172A), $93EE clr (1713)
-# (B) our bug (copy ct_field.exe + SDL2.dll to a scratch dir):
+# (B) our bug (copy Belthasar.exe + SDL2.dll to a scratch dir):
 CT_BATTLE_SCRIPT="n:20,a:1,n:3,a:1,n:135,a:1,n:3,a:1,n:400" CT_BATTLE_TRACE=1 \
-  <scratch>/ct_field.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
+  <scratch>/Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 #   pcAtk 0->1 (f310) ->2 (f502) with AFAB(c) only 72->68 between = the double attack; root cause battle.c:1997
 ```

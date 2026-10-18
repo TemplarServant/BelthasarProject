@@ -16,7 +16,7 @@ tick 2 = C1/0000's first frame (D1/F1B0: $7C = 0, one drift, no FD/E39C).
 
 Both sides run the whole attract from power-on to the 07D fight's return: the cartridge UNDER THE RULE (build/ct.exe
 --monitor --from boot, CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 -- the real cartridge's lag frames step $7C and
-the records through NMIs the port does not have, and carry $0153's parity into the fight) and the port (build/ct_field.exe
+the records through NMIs the port does not have, and carry $0153's parity into the fight) and the port (build/Belthasar.exe
 --scene 433, CT_AUDIO_LOCKSTEP=1, CT_FIELD_MEMMON). The fight itself is not graded frame for frame -- its length is its
 own question (the port's is 10 frames short: the boot's CPU frames CT_BATTLE_BOOT_CPU and more) -- only two windows,
 each aligned on its own event:
@@ -34,7 +34,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 ORACLE_FRAMES = 7330          # the rule's cartridge from power-on: the 07D fight's ack is near c7294
 PORT_LAST = 7215              # the port's 07D ack is near f7195 (the attract's lockstep numbering)
 ENTRY_N, TAIL_N = 60, 16

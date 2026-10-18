@@ -19,7 +19,7 @@ too low, in every scene, since the first render.**
 
 A **static** room is the honest fixture (nothing moving but the player's own animation): loc 26,
 `build/ct.exe --peek build/chest26.state ora.raw --btnscript "0:2"` against
-`build/ct_field.exe --scene 26 --at 488 623 --selftest ours.raw --frames 40`, comparing the oracle's image
+`build/Belthasar.exe --scene 26 --at 488 623 --selftest ours.raw --frames 40`, comparing the oracle's image
 rows 8..231 (its 512×480 buffer holds the 224 visible lines starting at row 8) with ours, over 200 rows ×
 256 px:
 

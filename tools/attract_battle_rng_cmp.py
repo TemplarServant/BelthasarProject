@@ -23,7 +23,7 @@ import os
 import re
 import subprocess
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 STATE = 'saves/attract_cena_inicial.state'
 NAMES = ['0AD', '07D', '087']

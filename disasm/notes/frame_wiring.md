@@ -1069,7 +1069,7 @@ not correctness". That was wrong. It is now a block by two defects with a one-li
 
 ### Defect A — the Y-sorted draw list CYCLES in the live engine
 
-`ct_field --assets ct_assets.dat --scene 1 --worldtest` with `CT_FRAMELEGS=1`, instrumented at the
+`Belthasar --assets ct_assets.dat --scene 1 --worldtest` with `CT_FRAMELEGS=1`, instrumented at the
 `B2B2` walk:
 
 ```
@@ -1092,7 +1092,7 @@ does write `$0E00..$0EFF = $80` at `CtSceneCreateIn`, `C0/B204`'s fill included.
 **Why no check could have caught it before.** `--vmdiff` re-seeds the entire WRAM — the draw list with
 it — from the oracle every frame, so a list our own link/unlink corrupts over time is repaired before it
 can ever cycle. `--sweepdraw` builds a synthetic, acyclic list on purpose. The corruption is only
-reachable in a host that maintains the list across frames, i.e. only in `ct_field`.
+reachable in a host that maintains the list across frames, i.e. only in `Belthasar`.
 
 `C0/B2B2`'s loop is unbounded in the ROM because the ROM's chain is always well-formed. A **port-side
 non-convergence guard** now bails at 128 (above any real chain — the list holds at most 64 objects), so
@@ -1102,7 +1102,7 @@ corrupt list and a guard over it is exactly the spot-fix the mandate forbids.
 
 ### Defect B — the battle staging record, independent of A
 
-`ct_field --scene 19 --battletest saves/battle_re/forest_pre.raw.wram` with `CT_BATTLE_MASHA=1`:
+`Belthasar --scene 19 --battletest saves/battle_re/forest_pre.raw.wram` with `CT_BATTLE_MASHA=1`:
 
 ```
 battletest: MISMATCH $29D7 slot2 rec mismatch (want 0A 07 08 0F 04 5E...)
@@ -1205,7 +1205,7 @@ says. **A bisection is only as good as the placement arithmetic**, and mine was 
 ### What still stands, and what the next pass should use
 
 The ONE reproducible fact is the structural one, and it comes from the validator in `ct_vm.c`, not from
-any byte value: with `CT_FRAMELEGS=1`, `ct_field --scene 1 --worldtest` reaches a list where
+any byte value: with `CT_FRAMELEGS=1`, `Belthasar --scene 1 --worldtest` reaches a list where
 
 - a bucket head's object does not have `prev == $80`, and
 - an object sits in a bucket its own `$0A80` does not map to (`obj 00 in bucket 7E but $0A80 wants 00`),
@@ -1385,7 +1385,7 @@ across the earlier passes.
 ### What the fix has to answer first (NOT yet done)
 
 The ROM does not run the field engine while the overworld is up, so it never reads that page while the
-world owns it. Before changing anything, derive: does `ct_field` tick the field VM during a world, and
+world owns it. Before changing anything, derive: does `Belthasar` tick the field VM during a world, and
 is the field scene re-created (re-running `C0/B204`) on the way back? If the answer is "the field VM
 should not be ticking", the fix is a gate, not a relocation — and moving `OWOBJ_BASE` would be pure
 invention, since `$0B30` is the ROM's address.
@@ -1424,19 +1424,19 @@ if (!battlePhase && !inWorld && f.vm) CtSceneTick(f.vm);
 ```
 
 A GATE, not a relocation — `OWOBJ_BASE = $0B30` is the ROM's own address and moving it would be
-invention. Full suite 181/0/0, and `ct_field --scene 1 --worldtest` with `CT_FRAMELEGS=1` passes.
+invention. Full suite 181/0/0, and `Belthasar --scene 1 --worldtest` with `CT_FRAMELEGS=1` passes.
 
 ⚠ **THE GATE IS DERIVED BUT UNGRADED, and the green run does not say otherwise.** The suite was
 181/0/0 *before* this change too, so no check goes red when the `!inWorld` term is removed: the
 corruption it prevents is only observable with the frame legs on, and they are default OFF, and the one
 check that exercises them (`vmdiff-framelegs-party3`) runs `ct.exe`, which never links `field.c`. Closing
-that needs a `ct_field` check with `CT_FRAMELEGS=1` that asserts `CtAnimDrawPass`'s non-convergence guard
+that needs a `Belthasar` check with `CT_FRAMELEGS=1` that asserts `CtAnimDrawPass`'s non-convergence guard
 never trips — today the guard silently absorbs the very fault this gate fixes, so with the guard in
 place even the unfixed engine "passes" the worldtest. That is the next honest piece of work here.
 
 ## ⭐ DEFECT B TRIAGED: it is not a second defect — it is family 4 wearing a different hat
 
-`ct_field --scene 19 --battletest forest_pre` with `CT_BATTLE_MASHA=1` reported `staging 6/7` with the
+`Belthasar --scene 19 --battletest forest_pre` with `CT_BATTLE_MASHA=1` reported `staging 6/7` with the
 legs on. The check only printed what it WANTED, which is a real weakness in a check, so it now prints
 both:
 
@@ -1616,7 +1616,7 @@ family 4 and the battle staging's `$0F01` byte.
 ## ⚠ THE GATE, GRADED — and it turns out NOT to fix defect A
 
 `CtAnimDrawPass`'s non-convergence guard was absorbing the corruption in silence, so the worldtest passed
-either way and the `!inWorld` gate was ungraded. The guard now counts its trips and `ct_field --worldtest`
+either way and the `!inWorld` gate was ungraded. The guard now counts its trips and `Belthasar --worldtest`
 reports them:
 
 ```
@@ -1702,7 +1702,7 @@ worldtest, which removes the world from the picture entirely and asks what chang
 
 ### The plain-scene control: ZERO trips, list well-formed — so it is input, not the world
 
-`ct_field --scene 1 --selftest --frames 18`, dumping the page at the top of every tick:
+`Belthasar --scene 1 --selftest --frames 18`, dumping the page at the top of every tick:
 
 ```
 [pg] t1  heads=0  firstBad=-1 | $0E7E=80 $0E01=80 $0E80=80
@@ -1728,7 +1728,7 @@ the worldtest, which is what a check would need.
 
 ### The input-churn hypothesis is refuted too — both controls are clean
 
-Driving the lead on a plain scene (`CT_DRIVE=d ct_field --scene 1 --selftest --frames 20`, forcing
+Driving the lead on a plain scene (`CT_DRIVE=d Belthasar --scene 1 --selftest --frames 20`, forcing
 `dx/dy` the way `--worldtest` does):
 
 ```
@@ -1915,7 +1915,7 @@ What the next attempt should do differently, in order of cost:
    compass direction. Six blind drives cost more than one lookup would have.
 2. Or pick a donor whose player already stands near a door (`--teleport <loc> <tx> <ty>` through the
    ROM's own loader puts him wherever you want, which is section A step 2).
-3. Or drive `ct_field` instead: it reaches doors routinely (that is what `--worldtest` does), but it is
+3. Or drive `Belthasar` instead: it reaches doors routinely (that is what `--worldtest` does), but it is
    the PORT, so it cannot answer a question about what the ROM does — only the oracle can.
 
 ### Looking before driving: the player DOES move, and stops 17px short

@@ -2,7 +2,7 @@
 """The Epoch's boarding and lift-off on the overworld, the port against the cartridge (disasm/notes/ow_vehicle.md).
 
 Jackie's ch24 (loc 1F6, the party standing on the parked Epoch, storyline D3): A once. The cartridge from its own state
-(saves/downloaded/ctjackie/states/ch24.state, A at f60), the port booted from the same battery save (ct_field --boot,
+(saves/downloaded/ctjackie/states/ch24.state, A at f60), the port booted from the same battery save (Belthasar --boot,
 CT_SRAM, the Load screen, A at f420). Graded:
   - the vehicle machine's timeline -- every change of `$027C $027E $0294` and of the Epoch's state ($42DD +2), counted
     from the frame `$027E` leaves 0 (oracle `--monitor`, port CT_OWVEHTRACE);
@@ -49,7 +49,7 @@ def port_run():
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1', CT_SHOTS=os.path.join(OUT, 'p'),
                CT_SHOTS_AT='%d,%d,%d' % (PRESS_P + 20, PRESS_P + 60, PRESS_P + 90), CT_SHOTS_EXIT='1')
     ws = 'n:133,s:1,n:125,a:1,n:%d,a:2,n:120' % (PRESS_P - 260)
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot',
                         '--walkscript', ws], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     ev = []
     for l in r.stdout.splitlines():
@@ -117,7 +117,7 @@ def flight(tag='epoch-flight', drive_o=None, drive_p=None, anchor='04', shots=(3
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1', CT_SHOTS=os.path.join(OUT, tag),
                CT_SHOTS_AT=','.join(str(f + FLIGHT_SHIFT) for f in shots), CT_SHOTS_EXIT='1')
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(drive_p)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     pe = []
     for l in r.stdout.splitlines():
@@ -174,7 +174,7 @@ def omen():
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_SHOTS=os.path.join(OUT, 'om'),
                CT_SHOTS_AT=','.join(str(f + 360) for f in shots), CT_SHOTS_EXIT='1')
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(drive_p)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     und = sorted({l.strip() for l in (r.stdout + r.stderr).splitlines() if 'UNDERIVED' in l})
     print('epoch-omen: %d underived native(s)%s' % (len(und), (' -- ' + und[0]) if und else ''))
@@ -221,7 +221,7 @@ def gauge():
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1', CT_HOLDBTN='04@%d:2' % (3082 + FLIGHT_SHIFT + 1),   # (CT_HOLDBTN reaches the latch a frame before the walkscript)
                CT_SHOTS=os.path.join(OUT, 'gauge'), CT_SHOTS_AT=','.join(str(f + FLIGHT_SHIFT) for f in GAUGE_SHOTS + [3820]),
                CT_SHOTS_EXIT='1')
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(GAUGE_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     pe = []
     for l in r.stdout.splitlines():
@@ -334,7 +334,7 @@ def world_map():
                CT_SHOTS=os.path.join(OUT, 'map'),
                CT_SHOTS_AT=','.join(str(f + MAP_SHIFT + lost_by(f)) for f in MAP_SHOTS + [frames]),
                CT_SHOTS_EXIT='1')
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(MAP_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     pe = []
     for l in r.stdout.splitlines():
@@ -423,7 +423,7 @@ def dactyl():
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch17.srm'), CT_OWVEHTRACE='1', CT_SHOTS=os.path.join(OUT, 'dactyl'),
                CT_SHOTS_AT=','.join(str(f + 360) for f in DACTYL_SHOTS + [480]), CT_SHOTS_EXIT='1')
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(DACTYL_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     pe = []
     for l in r.stdout.splitlines():

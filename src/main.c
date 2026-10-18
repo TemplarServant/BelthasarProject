@@ -159,7 +159,7 @@ static int runVm(const char* datPath, int scene, int frames) {
 }
 
 // Headless trace of the scene-8 Telepod DEMO through our own VM (pure CtSceneTick +
-// CtSceneTouch, no ct_field player rendering) so its timeline can be compared frame-for-
+// CtSceneTouch, no Belthasar player rendering) so its timeline can be compared frame-for-
 // frame against the oracle (the real ROM). Triggers obj12's touch (the demo), auto-advances
 // the early textboxes, and logs Crono's animation index, his reappear, each sparkle's vanish,
 // and the "ALL: Oh wow" textbox (str 0x68) — all relative to the reappear, the oracle anchor.
@@ -7674,7 +7674,7 @@ static int xlatCmpHook(CtXlat* x) {
 // oracle from the state to the k-th execution of C3:000E (C0/22FA's JSL, once per field frame while a wipe runs), writes
 // its 128 KB WRAM there (in.bin) and prints the registers and the beam (vPos, hPos) at that instant, then runs on to
 // C0:22FE (the RTL's landing) and writes the WRAM again (out.bin). tools/wipe_step_cmp.py hands in.bin and the beam to
-// `ct_field --wipecall` and diffs the port's WRAM against out.bin: the routine translated + the host's call glue, graded
+// `Belthasar --wipecall` and diffs the port's WRAM against out.bin: the routine translated + the host's call glue, graded
 // on the cartridge's exact inputs (field_window_wipe.md sec. 5).
 static int runWipeDump(const char* romPath, const char* statePath, int k, const char* inPath, const char* outPath, const char* maskPath,
                        uint32_t entryPc, uint32_t exitPc, uint32_t maskPc) {
@@ -7754,7 +7754,7 @@ static int runXlatCmp(const char* romPath, const char* statePath, int frames) {
         if (!st) { printf("xlatcmp: CtXlatStageOpen refused $0384=%02X\n", (uint8_t)o->cpu->a); return 2; }
         p = CtXlatStageHardware(st);
         // XLATCMP_WRAM=<128 KB file>: the stage gets THIS WRAM instead of the oracle's -- a host's handoff image
-        // (ct_field CT_XLAT_HANDOFF_WRAM). The first divergence is then the first byte the stage READS that the
+        // (Belthasar CT_XLAT_HANDOFF_WRAM). The first divergence is then the first byte the stage READS that the
         // host does not have right; XLATCMP_PATCH=<adr=val,...> overrides bytes on top, to walk to the next one.
         { const char* hw = getenv("XLATCMP_WRAM");
           if (hw) { FILE* hf = fopen(hw, "rb"); size_t n = hf ? fread(p->ram, 1, sizeof p->ram, hf) : 0; if (hf) fclose(hf);
@@ -13266,13 +13266,13 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
       if (g_patOn) printf("  aputrace f%d END apuc=%u v=%d h=%d spcF4reads=%ld spcpc=%04X\n", f + 1, s->apu->cycles, s->vPos, s->hPos,
                           g_patReads, s->apu->spc->pc);
       // PEEK_PCM=<path>: the S-DSP's output, one frame at a time -- the 534 stereo samples the frame produced (32040 Hz,
-      // int16 L,R), exactly what the LakeSnes reference hands its audio device. ct_field's CT_AUDIO_PCM is the same stream.
+      // int16 L,R), exactly what the LakeSnes reference hands its audio device. Belthasar's CT_AUDIO_PCM is the same stream.
       { static FILE* pcm = (FILE*)1;
         if (pcm == (FILE*)1) { const char* pp = getenv("PEEK_PCM"); pcm = (pp && *pp) ? fopen(pp, "wb") : NULL; }
         if (pcm) { int16_t sb[534 * 2]; dsp_getSamples(s->apu->dsp, sb, 534); fwrite(sb, sizeof sb, 1, pcm); fflush(pcm); } }
       // PEEK_THUMBS=<path> (+ PEEK_THUMBS_EVERY=n, default 2): a 128x112 RGB thumbnail of every n-th frame, appended as
       // [u32 frame][u16 $0100][128*112*3] -- the picture's 224 visible scanlines (the 8 overscan lines above them skipped),
-      // each 4x4 block of the 512x480 buffer averaged. ct_field's CT_SHOTS_THUMBS writes the same records from its 256x224
+      // each 4x4 block of the 512x480 buffer averaged. Belthasar's CT_SHOTS_THUMBS writes the same records from its 256x224
       // frame, so a whole attract can be set side by side (tools/attract_survey.py).
       { static FILE* th = (FILE*)1; static int thn = 2; static uint8_t* thfb = NULL;
         if (th == (FILE*)1) { const char* tp = getenv("PEEK_THUMBS"); th = (tp && *tp) ? fopen(tp, "wb") : NULL;

@@ -38,7 +38,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 STATE = os.path.join(ROOT, 'saves', 'battle_re', 'loc070_imps_roly_pre_lake.state')
 LAKEWRAM = os.path.join(ROOT, 'saves', 'battle_re', 'loc070_imps_roly_pre.lakewram')
 OUT = os.path.join(ROOT, 'build', '_cyclone_victims')

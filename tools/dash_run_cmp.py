@@ -25,7 +25,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_dashrun')
 
 WATCH = [('1802', 2), ('1882', 2), ('1D32', 2), ('1682', 1), ('00F8', 1)]

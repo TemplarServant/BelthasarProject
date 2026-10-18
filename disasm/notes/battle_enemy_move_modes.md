@@ -277,7 +277,7 @@ modes 0/1/4/6/0x0E but is wrong for 2/3/5/7/8/9 — latent, no in-scope user.
 
 ```
 CT_BATTLE_SCANTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  <scratch>/ct_field.exe --assets ct_assets.dat --scene 19 \
+  <scratch>/Belthasar.exe --assets ct_assets.dat --scene 19 \
   --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest o.raw --frames 2400 \
   --walkscript "l:400,." 2>&1 | grep "^scan" | grep -o "mode=[-0-9]*" | sort | uniq -c
     743 mode=-1     (PC rows)
@@ -374,7 +374,7 @@ because of a missing *class*, and GATO walks only because his modes happen to be
 ```
 # --- setup
 mkdir -p "$TMP/ctwf3/idle"
-cp build/ct.exe "$TMP/ctwf3/idle/ct_probe.exe"; cp build/ct_field.exe "$TMP/ctwf3/idle/"; cp build/SDL2.dll "$TMP/ctwf3/idle/"
+cp build/ct.exe "$TMP/ctwf3/idle/ct_probe.exe"; cp build/Belthasar.exe "$TMP/ctwf3/idle/"; cp build/SDL2.dll "$TMP/ctwf3/idle/"
 
 # --- ORACLE: the mode machine (request -> latch -> segments)
 "$TMP/ctwf3/idle/ct_probe.exe" --monitor "974A:8,5E0D:8,5E15:8,98A7:8,A013:1,B18B:1" \
@@ -407,15 +407,15 @@ python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read(); print(' '.join('%0
 python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read(); print(' '.join('%02X'%b for b in d[0x182C0:0x18320]))"   # the $B185 increment loop
 
 # --- OURS: the modes get armed but nothing moves
-CT_BATTLE_SCANTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$TMP/ctwf3/idle/ct_field.exe" \
+CT_BATTLE_SCANTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$TMP/ctwf3/idle/Belthasar.exe" \
   --assets ct_assets.dat --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram \
   --selftest o.raw --frames 2400 --walkscript "l:400,." 2>&1 | grep "^scan" | grep -o "mode=[-0-9]*" | sort | uniq -c
-CT_BATTLE_MVTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$TMP/ctwf3/idle/ct_field.exe" \
+CT_BATTLE_MVTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$TMP/ctwf3/idle/Belthasar.exe" \
   --assets ct_assets.dat --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram \
   --selftest o.raw --frames 2400 --walkscript "l:400,." 2>&1 | grep battlemove | wc -l    # -> 0
 
 # --- OURS: all three seats attack (the "never attack" half does not reproduce)
-CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$TMP/ctwf3/idle/ct_field.exe" \
+CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$TMP/ctwf3/idle/Belthasar.exe" \
   --assets ct_assets.dat --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram \
   --selftest o.raw --frames 2400 --walkscript "l:400,." 2>&1 | grep -E "^hitroll"
 ```
@@ -586,7 +586,7 @@ binary, on the id-`0x8D` fixture:
 
 ```
 CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  <scratch>/ct_field.exe --assets ct_assets.dat --scene 19 \
+  <scratch>/Belthasar.exe --assets ct_assets.dat --scene 19 \
   --battletest saves/forest_re/batalha_nao_comeca.raw.wram
     scan modes:  66 mode=-1 | 396 mode=0 | 12 mode=1 | 72 mode=16 (=0x10) | 48 mode=4
     battlemove:  32 lines -- ALL of them "mode1"; first f204, last f273.
@@ -776,7 +776,7 @@ Forbidden here as everywhere: `if (id == 0x5E)`, `if (id == 0x19)`, a slot or sc
 
 ```
 mkdir -p "$TMP/ctwf3/idle-adv"
-cp build/ct.exe "$TMP/ctwf3/idle-adv/ct_probe.exe"; cp build/ct_field.exe "$TMP/ctwf3/idle-adv/"; cp build/SDL2.dll "$TMP/ctwf3/idle-adv/"
+cp build/ct.exe "$TMP/ctwf3/idle-adv/ct_probe.exe"; cp build/Belthasar.exe "$TMP/ctwf3/idle-adv/"; cp build/SDL2.dll "$TMP/ctwf3/idle-adv/"
 
 # --- ROM
 python tools/dis.py 13714 0x60 0 0       # the mode machine + C1/373B  (note the STA $A2B5 the dossier drops)
@@ -801,7 +801,7 @@ python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read();print(' '.join('%02
 <probe> --monitor "B185:1" --from saves/battle_re/forest_battle_3hetake.state --input "0:60" --diff --writer
 
 # --- OURS
-CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy <scratch>/ct_field.exe \
+CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy <scratch>/Belthasar.exe \
   --assets ct_assets.dat --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram \
   --selftest <scratch>/o.raw --frames 2400 --walkscript "l:400,."            # 0 battlemove lines
 CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 ... --battletest saves/forest_re/batalha_nao_comeca.raw.wram
@@ -828,7 +828,7 @@ CT_BATTLE_TRACE=1     ...                    --battletest saves/battle_re/ambush
 # Class derivation pass (session 3)
 
 Third independent lane, read-only on `src/`. Binaries snapshotted to a scratch dir before any probe
-(`build/ct.exe` -> `ct_probe.exe`, `build/ct_field.exe`, `SDL2.dll`); nothing was built, no suite was
+(`build/ct.exe` -> `ct_probe.exe`, `build/Belthasar.exe`, `SDL2.dll`); nothing was built, no suite was
 run, no `src/` file was touched. Every ROM address below was re-disassembled in THIS lane with
 `tools/dis.py <off> <len> 1 0` (**8-bit A / 16-bit X** — with the default `0 0` the disassembler
 desyncs on this whole family and prints garbage; that is why session 1 had to "hand-decode"), and
@@ -1372,7 +1372,7 @@ its mode census only, with its `CT_BATTLESHOT` output redirected into scratch.
 
 ```
 mkdir -p "$TMP/ctwf4/movers"
-cp build/ct.exe "$TMP/ctwf4/movers/ct_probe.exe"; cp build/ct_field.exe "$TMP/ctwf4/movers/"; cp build/SDL2.dll "$TMP/ctwf4/movers/"
+cp build/ct.exe "$TMP/ctwf4/movers/ct_probe.exe"; cp build/Belthasar.exe "$TMP/ctwf4/movers/"; cp build/SDL2.dll "$TMP/ctwf4/movers/"
 
 # --- ROM (note the trailing "1 0" = 8-bit A / 16-bit X; with "0 0" this whole family
 #     disassembles to garbage -- that is the trap session 1 hit)
@@ -1400,11 +1400,11 @@ python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read();print(' '.join('%02
 <probe> --monitor "1D0F:3,1D26:3,A013:1,B18B:1"                  --from ... --input "0:2500" --diff | grep "A013=01\*"
 
 # --- OURS (snapshot binary; SDL dummy drivers)
-CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 <snap>/ct_field.exe --assets ct_assets.dat --scene 19 \
+CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 <snap>/Belthasar.exe --assets ct_assets.dat --scene 19 \
   --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest <scratch>/o.raw --frames 2400 --walkscript "l:400,."
 #   166 mode=14, ZERO battlemove
 CT_BATTLE_ASCTRACE=1 ... same ...        # home= constant per actor across every turn
-CT_BATTLE_SCANTRACE=1 CT_BATTLE_MVTRACE=1 <snap>/ct_field.exe --assets ct_assets.dat --scene 19 \
+CT_BATTLE_SCANTRACE=1 CT_BATTLE_MVTRACE=1 <snap>/Belthasar.exe --assets ct_assets.dat --scene 19 \
   --battletest saves/forest_re/batalha_nao_comeca.raw.wram        # 72 mode=16, 0 battlemove for it
 # the per-check census of S9 (runs each check's own argv+env once, SCANTRACE only, shots -> scratch)
 ```
@@ -1414,7 +1414,7 @@ CT_BATTLE_SCANTRACE=1 CT_BATTLE_MVTRACE=1 <snap>/ct_field.exe --assets ct_assets
 # Adversarial review (session 3)
 
 Fourth lane, read-only on `src/`, default verdict **not proven**. Binaries snapshotted before any
-probe (`build/ct.exe` -> `ct_probe.exe`, `build/ct_field.exe`, `SDL2.dll`); nothing built, no suite
+probe (`build/ct.exe` -> `ct_probe.exe`, `build/Belthasar.exe`, `SDL2.dll`); nothing built, no suite
 run, no `src/` file touched. **Every ROM address below was re-disassembled in THIS lane** and **every
 oracle number re-measured on a state this lane loaded itself**. Where session 3 and this lane agree I
 say CONFIRMED and give the byte; where they do not I give the disassembly that refutes it.
@@ -1450,7 +1450,7 @@ measured on our engine at all** (V13, demonstrated, not argued).
 | the `$9752 <- $5E15` refresh | `--monitor "5E15:3,9752:3"`: `$9752 = FF FF 01` at f0; `$5E15 = 00 01 00` from f452; `$9752` -> `00 FF 01` at **f461** and `00 01 01` at **f483**. CONFIRMED — and slot 1's target really is combatant 1, `$1D0C/$1D23[1] = 7F/90`, an empty PC seat in this solo fight. |
 | `$A5F4` flips | `--monitor "A5F4:3,9791:3"`: slot0 `0->1` at **f541**, `1->0` at **f621**; `$9791` stays `00 00 00` for the whole window. CONFIRMED. |
 | S6.1/S6.2 acceptance table | re-measured with `--monitor "1D0F:3,1D26:3,9786:3,96DE:3,98A7:3" --input "0:700" --diff`. cmb3: f461 b=`88` fac 2 -> `(70,3D)` @f493; f501 b=`C0` fac 0 -> `(70,35)` @f533; f541 no-arm; f581 b=`60` fac 2 -> `(6A,3A)` @f613; f621 no-arm b=`4E` fac 1; f661 b=`C0` -> `(6A,32)` @f693. cmb4: f483 `F3` -> `(5F,5C)` @f515; f523 `EE` -> `(66,58)`; f563 `EE` -> `(6D,54)`; f603 `00` -> `(74,54)`; f643 -> `(7B,54)`. cmb5 byte-static `(A8,7F)`. **EVERY ROW CONFIRMED.** |
-| ours: forest fight | `CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 ct_field --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram --frames 2400 --walkscript "l:400,."` -> **`166 mode=14`, `0 battlemove`**. CONFIRMED. |
+| ours: forest fight | `CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 Belthasar --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram --frames 2400 --walkscript "l:400,."` -> **`166 mode=14`, `0 battlemove`**. CONFIRMED. |
 | ours: mode `0x10` | `--battletest saves/forest_re/batalha_nao_comeca.raw.wram` -> **`72 mode=16`**, 32 `battlemove` lines **all `mode1`**. CONFIRMED. |
 | S9 census (spot-checked 6 of 7 rows) | `ambush_pre` **with the check's own `CT_BATTLE_MASHA=1`**: `mode=15` x19 first **f185**, `mode=10` x6 first **f1460**. `ambush_pre` without MASHA also `mode=16` first f722. `forest_pre` + MASHA: **0 and 4 only**. `forest_pre` plain: `mode=14` first **f724**. `forest_cyclone` (check's own script): `mode=14` first **f1207**. `gato_t0` (check's own env `CT_BATTLE_SCRIPT=n:900`): **0, 1, 6 only**, 264 battlemove lines. `party3_field.lakewram` + MASHA (bat9's own argv): `mode=10` first **f976**. **S9 CONFIRMED.** |
 | S8.1's flag | `0x13B40-0x13B5B` = `INC $9829,X / $5E1D,X := $5E0D,X / $9831,X := $1D0C,Y / $9839,X := $1D23,Y / STZ $98A7,X`. **No facing write.** The flag is correct. |
@@ -1741,7 +1741,7 @@ runs our engine from it.** I tried the obvious route:
 ```
 ct_probe --peek saves/battle_re/forest_battle_3hetake.state <scratch>/f3h.raw --btnscript "0:1"
    -> writes f3h.raw.wram (131072 bytes)
-ct_field --assets ct_assets.dat --scene 19 --battletest <scratch>/f3h.raw.wram --frames 800
+Belthasar --assets ct_assets.dat --scene 19 --battletest <scratch>/f3h.raw.wram --frames 800
    -> "[battletest] seeded VM from ... lead obj2 at (0,0)" and then ZERO scan/mode/battlemove lines
 ```
 
@@ -2101,7 +2101,7 @@ anything grades it. Do not read the green suite as validation of it.
 ### V16 — commands this lane ran (cwd = repo root; nothing written into `build/` or `src/`)
 
 ```
-mkdir -p "$TMP/ctwf4/movers-adv"; cp build/ct.exe .../ct_probe.exe; cp build/ct_field.exe ...; cp build/SDL2.dll ...
+mkdir -p "$TMP/ctwf4/movers-adv"; cp build/ct.exe .../ct_probe.exe; cp build/Belthasar.exe ...; cp build/SDL2.dll ...
 python tools/dis.py 13714 0x60 1 0     # dispatcher (BEQ 13722, STA 13752, LDA $CCFBAB)
 python tools/dis.py 1379A 0x70 1 0     # class 1 head (operand order)
 python tools/dis.py 13A3D 0x60 1 0 ; python tools/dis.py 13AF7 0xA0 1 0 ; python tools/dis.py 13B90 0x40 1 0
@@ -2124,12 +2124,12 @@ python -c "...rom[0x13ABC:+0x3A] == rom[0x13C46:+0x3A]..."        # the matrix, 
 <probe> --monitor "1D0F:3,1D26:3,9786:3,96DE:3,98A7:3"  --from <same> --input "0:700" --diff   # the acceptance table
 <probe> --peek <same> <scratch>/f3h.raw --btnscript "0:1"     # V13
 
-CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 <snap>/ct_field.exe --assets ct_assets.dat --scene 19 \
+CT_BATTLE_MVTRACE=1 CT_BATTLE_SCANTRACE=1 <snap>/Belthasar.exe --assets ct_assets.dat --scene 19 \
   --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest <scratch>/o.raw --frames 2400 --walkscript "l:400,."
-<snap>/ct_field.exe ... --battletest saves/forest_re/batalha_nao_comeca.raw.wram --frames 2400
-<snap>/ct_field.exe ... --battletest saves/battle_re/{ambush_pre,forest_pre,forest_cyclone,gato_t0}.raw.wram
-<snap>/ct_field.exe ... --scene 130 --loadwram saves/battle_re/party3_field.lakewram --walkscript "l:150"
-<snap>/ct_field.exe ... --battletest <scratch>/f3h.raw.wram --frames 800                       # V13, produces nothing
+<snap>/Belthasar.exe ... --battletest saves/forest_re/batalha_nao_comeca.raw.wram --frames 2400
+<snap>/Belthasar.exe ... --battletest saves/battle_re/{ambush_pre,forest_pre,forest_cyclone,gato_t0}.raw.wram
+<snap>/Belthasar.exe ... --scene 130 --loadwram saves/battle_re/party3_field.lakewram --walkscript "l:150"
+<snap>/Belthasar.exe ... --battletest <scratch>/f3h.raw.wram --frames 800                       # V13, produces nothing
 ```
 
 ---

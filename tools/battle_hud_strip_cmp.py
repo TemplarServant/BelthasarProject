@@ -7,7 +7,7 @@ r"""The port's battle HUD strip against the cartridge's, on the cartridge's own 
 
 1. build/ct.exe --peek <state> --frames <frame> [--btnscript S]: the cartridge's picture and its 128 KB WRAM.
    (With --btnscript the peek runs the whole script and ignores --frames: give the script's length as <frame>.)
-2. build/ct_field.exe with CT_BATTLE_RENDERWRAM=<that .wram>: the port draws the strip from the same bytes -- the
+2. build/Belthasar.exe with CT_BATTLE_RENDERWRAM=<that .wram>: the port draws the strip from the same bytes -- the
    queue $A6D9, the frame rows $0B40, the names $ACBC, the party, the band $C867.
 3. The 48 strip lines ($2989 bit 1: renderY 160..207, else 8..55) are compared pixel for pixel, and the columns of
    every differing pixel are listed as 8-px cells.
@@ -37,7 +37,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 FOREST = 'saves/battle_re/forest_wait_ambush_active.state'
 SUITE = [
     ('forest-empty', FOREST, 400, None),                                         # the base: names + party windows

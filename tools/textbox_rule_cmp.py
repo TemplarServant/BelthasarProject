@@ -59,7 +59,7 @@ def main():
                         '--btnscript', '0:%d,100:1,0:%d' % (press, n)], cwd=ROOT, env=env, capture_output=True)
         penv = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_SHOTS_THUMBS=pt,
                     CT_SHOTS_THUMBS_EVERY='1', CT_AUDIO_SEEDSTATE=ost)
-        subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', str(scene),
+        subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', str(scene),
                         '--loadwram', seed, '--selftest', '--frames', str(n),
                         '--walkscript', 'n:%d,a:1,n:%d' % (press + 1, n - press - 2)], cwd=ROOT, env=penv,
                        capture_output=True)

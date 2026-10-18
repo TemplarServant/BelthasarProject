@@ -8,7 +8,7 @@ C0/1BE6 at the end -- on the attract's battle `70 01` and `70 00`) are SYNCHRONO
 waits in C7's handshake for 14 and 11 frames while the SPC keeps running, and the S-DSP keeps sounding. The port prices
 that time on its loader clock and used to output the frames it had paid for as SILENCE (and to lose all but the last
 two frames of the samples the DSP had emitted meanwhile). This grades the output STREAM on both machines -- the 534
-DSP samples a frame, ct.exe --peek PEEK_PCM against ct_field CT_AUDIO_PCM -- over the 33 frames from each post:
+DSP samples a frame, ct.exe --peek PEEK_PCM against Belthasar CT_AUDIO_PCM -- over the 33 frames from each post:
   * SILENT frames (all zero): the old port's output on every frame the JSL had paid for;
   * CONTINUITY: a stream that advances by exactly its frame joins each frame to the last with a step no bigger than
     the steps inside a frame; one that re-reads the DSP's newest samples (the frame is not the NEXT 534) jumps at every
@@ -24,7 +24,7 @@ import subprocess
 import sys
 
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 STATE = 'saves/attract_cena_inicial.state'
 TMP = 'build/_jslaudio'
 WINDOW = 33

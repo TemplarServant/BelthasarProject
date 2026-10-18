@@ -503,7 +503,7 @@ level, the flag, C2/D266's DEX scan of `$FF:D024` for the chapter, the chapter's
 each a vector `JMP` of 18 -> C2/58B2 -> C2/5DC4): per glyph a fixed 5DC4 prologue/epilogue and C2/5E36's 24 row calls,
 each C2/5E89 = head 120 + (odd code 120 | even 72) + 176 + the arm of `$6A` = pen & 7 (0: 264; 1-4: 308 + 12 n; 5-7:
 408 + 62 (8 - n)); the pen advances by `$C2:60E6`. Every instruction's cost is LakeSnes's, the trace's base per PC
-(tools/cycle_costs.py). The port (src/menu_cost.c, `ct_field --menucost`) and its Python twin (tools/vwf_cost_proto.py)
+(tools/cycle_costs.py). The port (src/menu_cost.c, `Belthasar --menucost`) and its Python twin (tools/vwf_cost_proto.py)
 match the cartridge's C2/D156 to the cycle on five batteries (check menu-open-slot-scan-cycles-vs-oracle).
 
 field.c prices the stretch at C for the field's callers (X, op C8) and uses S0 wherever it used C+16 (C+15: `$0407`,
@@ -526,7 +526,7 @@ location-load model + 190 lines, rounded up) gave 38 / 36: the model's C0/286C c
 lines, measured on door loads) left out the objects C0/B0E6 DRAWS after a menu -- 4 on loc $082, 8 on loc $005,
 ~52,000-70,000 cycles each -- and C0/0A50's BG3 builder (298,554 + a $1000-byte upload) where the map has one.
 
-The walk (src/field_cost.c, `ct_field --reloadcost`; its Python twin tools/pass_cost_proto.py; every block's cost
+The walk (src/field_cost.c, `Belthasar --reloadcost`; its Python twin tools/pass_cost_proto.py; every block's cost
 read off the beam traces by tools/pass_cost_consts.py, arms no trace ran priced by the KEY of an executed instruction
 -- opcode, widths, the region its operand lands in -- tools/ctlib/costtab.py):
 

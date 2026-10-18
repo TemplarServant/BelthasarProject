@@ -53,7 +53,7 @@ int CtAndroidConfigure(int* outArgc, char*** outArgv) {
   char** args = (char**)calloc((size_t)argc + 4, sizeof(char*));
   if (!args) return 1;
   int n = 0, assetsGiven = 0;
-  args[n++] = argc > 0 ? argv[0] : (char*)"ct_field";
+  args[n++] = argc > 0 ? argv[0] : (char*)"Belthasar";
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--assets")) assetsGiven = 1;
     args[n++] = argv[i];

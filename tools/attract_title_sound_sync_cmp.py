@@ -22,7 +22,7 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 STATE = 'saves/attract_cena_inicial.state'
 TICK = '02 v1:srcn=25'

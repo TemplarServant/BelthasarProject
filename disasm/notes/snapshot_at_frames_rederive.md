@@ -78,7 +78,7 @@ So the frame must satisfy three things: (i) grey phase `(frames/12)&1 == 1`, (ii
 ```
 $ CT_BATTLE_CRONOHP=5 CT_BATTLE_SCRIPT="n:600" CT_BATTLE_TRACE=1 CT_BATTLESHOT_HUD=1 \
   CT_BATTLESHOT_AT=228 CT_BATTLESHOT=<scratch>/bg.raw \
-  ./build/ct_field.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
+  ./build/Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 battletrace f248 enemy-think
 battletrace f251 enemy-arrive
 battletrace f278 strike
@@ -160,7 +160,7 @@ The rule is explicit and arithmetic: **AT = (last kill's act-end frame) + 18**.
 
 ```
 $ CT_BATTLE_MASHA=1 CT_BATTLE_TRACE=1 CT_BATTLESHOT_AT=1118 CT_BATTLESHOT=<scratch>/fl.raw \
-  ./build/ct_field.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
+  ./build/Belthasar.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
 battletrace f336 act-end  ... pcAtk=1 ... AF02=FF5E5EFF
 battletrace f581 act-end  ... pcAtk=2 ... AF02=FFFF5EFF
 battletrace f893 act-end  ... pcAtk=3 ... AF02=FFFFFFFF     <-- 3rd/LAST Hetake dies

@@ -97,7 +97,7 @@ invariants, which are checked against the vanilla picture:
 
 | Probe | What it checks |
 |---|---|
-| `CT_NATIVECHECK=1` (environment, `ct_field`) | The native frames-between drawer, at t = 256 and 1x, equals the composed frame pixel for pixel. Used by `field-native-frames-between-equal-the-composed-frame` and the overworld twin. |
+| `CT_NATIVECHECK=1` (environment, `Belthasar`) | The native frames-between drawer, at t = 256 and 1x, equals the composed frame pixel for pixel. Used by `field-native-frames-between-equal-the-composed-frame` and the overworld twin. |
 | [`tools/native_fx_check.py`](../tools/native_fx_check.py) `[roll] [line] [gate]` | The same equality over the effects composed on the map: the staff roll's caption plane, the tutorial's colour window, the gate's iris. |
 | [`tools/widescreen_check.py`](../tools/widescreen_check.py) `[scene ...]` | Runs a scene with widescreen 16:9 and with it off: the middle 256 columns of the wide picture must equal the 256 picture. It also reports the sides. Extra cases cover the caption plane, the colour window, a live battle (`forest`), a room wider than the picture (`5-edge`), and the room wrap turned off (`6-nowrap`). |
 | `CT_WIDESHOTS=<prefix>` (`_EVERY`, `_FROM`) | Saves the presented wide picture every N frames, to sweep a long run by eye for side artefacts. A probe, not a check. |

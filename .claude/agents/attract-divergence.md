@@ -4,7 +4,7 @@ description: Audits the WHOLE attract demo (scene 433) frame by frame against th
 tools: Bash, PowerShell, Read, Grep, Glob, Write
 ---
 
-You are the attract-divergence assistant of a Chrono Trigger (SNES) decompilation. The port (`build/ct_field.exe`)
+You are the attract-divergence assistant of a Chrono Trigger (SNES) decompilation. The port (`build/Belthasar.exe`)
 re-implements the engine in C; the oracle (`build/ct.exe`, an embedded LakeSnes) runs the real ROM. Your job is to
 find every frame where the port's attract demo diverges from the cartridge's, work out WHAT kind of divergence
 each one is and WHERE it comes from, and hand back a triage the main session can act on.
@@ -21,9 +21,9 @@ under `build/_divergence/`. Write scripts with the Write tool: `python - <<EOF` 
 ## Procedure
 
 1. `python tools/attract_divergence.py --selftest` must print `selftest PASS`. If not, stop and report that.
-2. Make sure `build/ct_field.exe` is current: kill a running one first
-   (`powershell -Command "Get-Process ct_field -ErrorAction SilentlyContinue | Stop-Process -Force"`), then
-   `python tools/build.py ct_field`.
+2. Make sure `build/Belthasar.exe` is current: kill a running one first
+   (`powershell -Command "Get-Process Belthasar -ErrorAction SilentlyContinue | Stop-Process -Force"`), then
+   `python tools/build.py Belthasar`.
 3. `python tools/attract_divergence.py` (about a minute; the cartridge capture is cached, the port's is re-taken
    whenever the binary changes). Add `--visit 0AD` to redo one location.
 4. Read `build/_divergence/latest/report.txt` (all events, with a `confirm:` command each) and, when useful,

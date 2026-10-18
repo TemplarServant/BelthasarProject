@@ -45,7 +45,7 @@ def main():
     fx = FIXTURES[sys.argv[1] if len(sys.argv) > 1 else 'forest']
     ofs, end, cmbs = fx['ofs'], fx['end'], fx['cmbs']
     ct = os.path.join('build', 'ct.exe')
-    cf = os.path.join('build', 'ct_field.exe')
+    cf = os.path.join('build', 'Belthasar.exe')
     oenv = {'CT_ORACLE_LOGICAL': '1'}
     oenv.update(fx['oenv'])
     o_lines = run([ct, '--monitor', '7E1D0C:11,7E1D23:11', '--from', fx['state'], '--input', fx['inp'],

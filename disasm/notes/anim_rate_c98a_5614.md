@@ -32,7 +32,7 @@ PEEK_SAVE=1 <probe> --teleport 113 8 10 0 --from saves/jogo_trava_lake.state --f
 <probe> --peek $TMP/ctwf/anim/orc113.state out.raw --btnscript "0:90"   -> the clearing, NO imps
 ```
 
-Our engine at `--scene 113` likewise never activates them (`CT_POSALL=1 ./build/ct_field.exe
+Our engine at `--scene 113` likewise never activates them (`CT_POSALL=1 ./build/Belthasar.exe
 --assets ct_assets.dat --scene 113 --selftest x.raw --frames 600` — obj12/13/14 stay
 `mode=05 moving=0 anim=0/0` for 600 frames; their fn3 is `CALL/REQ`'d from obj1 fn4, which needs the
 post-gate storyline).
@@ -239,7 +239,7 @@ and the three `w[0x1680 + x]` occurrences (`ct_vm.c:3169/3174/3188`) are **reads
 Measured, our engine, loc 112, f100, seeded from the oracle's own WRAM:
 
 ```
-CT_DUMPWRAM_AT=100 CT_DUMPWRAM=out.wram ./build/ct_field.exe --assets ct_assets.dat --scene 112 \
+CT_DUMPWRAM_AT=100 CT_DUMPWRAM=out.wram ./build/Belthasar.exe --assets ct_assets.dat --scene 112 \
     --loadwram saves/jogo_trava_loadwram.state --selftest x.raw --frames 101
 
            ours (f100)                              oracle (f100)
@@ -370,7 +370,7 @@ Probe binary: `cp build/ct.exe "$TMP/ctwf/anim-adv/ct_probe.exe"`; all commands 
 | `CC04 CMP $0F01,X / BNE` | `dis.py CBDC 0x50` | confirmed |
 | oracle obj15 timeline | `<probe> --monitor "7E169E:1,7E169F:1,7E161F:1,7E0F1E:1,7E0F1F:1,7E179E:1,7E191E:1,7E199E:1,7E111E:1" --from saves/jogo_trava_lake.state --frames 150 --diff --writer` | **exact**: f68 `$169E` 00->04 (`C0:2E72`), `$161F`=0F (`C0:CA48`), `$0F1E` 00->80 (`C0:A8F5`); 15f steps; f83/f98 wrap; f100 ->01 (`C0:2E72`) phase 1 dur 0A; f110/f120/f130 |
 | oracle obj12 = mode 0, `$1918/$1998` = 00/E9, 15f steps | `--monitor "7E1698:1,7E1699:1,7E1619:1,7E1798:1,7E1918:1,7E1998:1"` | confirmed |
-| OURS at loc112 f100 | `CT_DUMPWRAM_AT=100 CT_DUMPWRAM=... ./build/ct_field.exe --assets ct_assets.dat --scene 112 --loadwram saves/jogo_trava_loadwram.state --selftest x.raw --frames 101` | obj15 `$1780/$1680/$1681/$1601` = **00/00/00/02** vs oracle 01/01/01/0A — reproduced |
+| OURS at loc112 f100 | `CT_DUMPWRAM_AT=100 CT_DUMPWRAM=... ./build/Belthasar.exe --assets ct_assets.dat --scene 112 --loadwram saves/jogo_trava_loadwram.state --selftest x.raw --frames 101` | obj15 `$1780/$1680/$1681/$1601` = **00/00/00/02** vs oracle 01/01/01/0A — reproduced |
 | `src/ct_vm.c` anim ops write only the C struct | read `:907-911`, `:2405-2410` | true |
 | `CT_FRAMELEGS` defaults **ON** | `src/ct_vm.c:517-521` (`gLegs = (e && *e=='0') ? 0 : 1`) | true (the "DEFAULT OFF" line inside `vmdiff-framelegs-party3`'s note is stale; the pair is still honest because `vmdiff-wmask-party3` sets `CT_FRAMELEGS=0` explicitly) |
 | line citations `field.c:1662 / :8592 / :8598 / :8694`, `ct_vm.c:4570` | grep | all exact |
@@ -438,7 +438,7 @@ VMDIFF_WMASK=1 <probe> --vmdiff saves/jogo_trava_lake.state --frames 200
 therefore changes nothing visible; it changes `--vmdiff` / `--verifyframe` / battle-staging state only.
 
 **R6 — "matching the oracle's f68/f100" is not a match.**
-`CT_POSALL=1 ./build/ct_field.exe --assets ct_assets.dat --scene 112 --loadwram saves/jogo_trava_loadwram.state --selftest x.raw --frames 140`
+`CT_POSALL=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 112 --loadwram saves/jogo_trava_loadwram.state --selftest x.raw --frames 140`
 gives obj15 `anim=1/4` at **f47** and `anim=1/1` at **f79**; obj16 at f63/f95. The oracle arms the same
 two ops at f68/f100. The *interval* is 32 frames on both sides, but our VM is **21 frames EARLY**.
 That is a real, measured, unexplained divergence which the dossier reports as agreement.
@@ -549,7 +549,7 @@ Step 4 (deleting `animTickActor`) additionally moves every pixel canary and ever
 # Repro pass (session 2) — the scene-113 ambush REPRODUCED on both sides, and the rate MEASURED
 
 Third agent, read-only on `src/`, 2026-08-22. Probe binaries snapshotted before anything else
-(`build/ct.exe`, `build/ct_field.exe`, `build/SDL2.dll` -> `$TMP/ctwf2/imp/`), every command run from
+(`build/ct.exe`, `build/Belthasar.exe`, `build/SDL2.dll` -> `$TMP/ctwf2/imp/`), every command run from
 the repo root, every scratch file under `$TMP/ctwf2/imp`.
 
 **Verdict: NOT REPRODUCED — and this time on a proper state.** The scene-113 Blue Imps were put on
@@ -665,7 +665,7 @@ open(r'%TMP%\ctwf2\imp\jt_noambushflag.state','wb').write(lake.wrap(bytes(p)))"
 
 # 4. OURS -- --scene 113 already starts the imps ACTIVE (mode=05, same as the oracle); it only
 #    needs the same LEFT walk to satisfy the same loop
-SDL_VIDEODRIVER=dummy CT_DRAWDBG=1 <ct_field> --assets ct_assets.dat --scene 113 \
+SDL_VIDEODRIVER=dummy CT_DRAWDBG=1 <Belthasar> --assets ct_assets.dat --scene 113 \
         --walkscript "l:900" --selftest x.raw --frames 1000
 ```
 

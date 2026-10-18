@@ -57,9 +57,9 @@ ct.exe) cannot load them directly — you SPLICE the s9x WRAM+CPU into a lake
 
 ## Gotchas
 
-- ct_field F5/F9 `.state` files are a DIFFERENT format (CTFS, our engine's debug
+- Belthasar F5/F9 `.state` files are a DIFFERENT format (CTFS, our engine's debug
   snapshot) — not oracle states. Don't mix them up.
 - The splice resumes the CPU mid-frame wherever s9x saved; the first 1-2 frames can
   be transitional. `--settle N` on --read/--monitor runs N frames first.
-- `--scene N` direct-load in ct_field skips the scene-entry settle (NPC positions
+- `--scene N` direct-load in Belthasar skips the scene-entry settle (NPC positions
   may differ from a real entry); the oracle --teleport goes through the real loader.

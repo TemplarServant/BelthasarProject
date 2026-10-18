@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-r"""Print WRAM bytes of a ct_field run at a chosen frame, as a greppable signature.
+r"""Print WRAM bytes of a Belthasar run at a chosen frame, as a greppable signature.
 
-    python tools/wram_peek.py <frame> <addr:len>[,<addr:len>...] -- <ct_field args...>
+    python tools/wram_peek.py <frame> <addr:len>[,<addr:len>...] -- <Belthasar args...>
 
 e.g.  python tools/wram_peek.py 2880 21BA:6 -- --assets ct_assets.dat --scene 433 --selftest
 prints `wrampeek: f2880 $21BA = 9D 23 3B 0E B4 09`.
 
-ct_field's CT_DUMPWRAM/CT_DUMPWRAM_AT write the engine's LIVE 128 KB image ($7E page, then the $7F
+Belthasar's CT_DUMPWRAM/CT_DUMPWRAM_AT write the engine's LIVE 128 KB image ($7E page, then the $7F
 story page) to a file; this runs it with --frames set just past <frame> and reads the bytes back, so a
 regression check can pin a WRAM value the engine never prints -- and pin it against a number measured
 on the oracle, not against the engine's own output.
@@ -31,7 +31,7 @@ def main():
     dump = 'build/_wrampeek_%d.wram' % os.getpid()
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_DUMPWRAM=dump, CT_DUMPWRAM_AT=str(frame))
-    subprocess.run([os.path.abspath('build/ct_field.exe')] + args, env=env,
+    subprocess.run([os.path.abspath('build/Belthasar.exe')] + args, env=env,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not os.path.exists(dump):
         sys.exit('wrampeek: no dump at f%d (not a field frame?)' % frame)

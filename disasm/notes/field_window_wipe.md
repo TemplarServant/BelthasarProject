@@ -116,7 +116,7 @@ the TM/TS/TMW/TSW HDMA data) -- inside [l, r] the main screen is the backdrop, C
 Applied before the INIDISP brightness, as the PPU does.
 
 **Graded** (tools/wipe_step_cmp.py, check field-window-wipe-routine-and-mask-vs-oracle): `ct.exe --wipedump` hands the
-cartridge's own WRAM and beam at a call to `ct_field --wipecall`; the two tables + working copy (480 bytes), DP $0300's
+cartridge's own WRAM and beam at a call to `Belthasar --wipecall`; the two tables + working copy (480 bytes), DP $0300's
 page and `$0386` are identical on 16E's third call (mode 1) and 01C's fifth (mode 2); `--wipemask` on the WRAM after
 C0/00C7 agrees with the cartridge's window 2 on every sampled line (189 / 189, 188 / 188). Five mutations killed (X, the
 $213C toggle, the return address, the buffer choice, the 212-line table end); the flow check pins $0153 and kills the

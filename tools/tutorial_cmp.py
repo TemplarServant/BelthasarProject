@@ -29,7 +29,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_tutorial')
 SRC = os.path.join(ROOT, 'saves', 'field_re', 'scene254_tutorial.state')
 RULE = dict(os.environ, CT_ORACLE_LOGICAL='1')   # the rule's cartridge (CLAUDE.md): off it the typewriter's CPU time cuts
@@ -62,7 +62,7 @@ def drive(n, phase=0):
 
 
 def walk(n, phase=0):
-    """The same presses in ct_field's --walkscript grammar (`a` raises A on the token's first frame)."""
+    """The same presses in Belthasar's --walkscript grammar (`a` raises A on the token's first frame)."""
     out, t, k = [], 0, phase
     while t < n:
         if k < PER:

@@ -384,17 +384,17 @@ Two effects are superposed and neither can be subtracted out here:
 
 With the lead's motion itself offset by a frame, a one-frame difference in *when the VM reads* cannot
 be separated from it on this scenario. **Do not change the main loop's order on the strength of the
-structural reading alone**: the ~30 `ct_field` checks can only report "nothing broke", which is not
+structural reading alone**: the ~30 `Belthasar` checks can only report "nothing broke", which is not
 the same as "this is now right".
 
 What would isolate it: a scene whose script reads the lead tile **every frame** (no poll cadence), on
 a scenario where the lead is script-driven rather than input-driven (removing the `--playermove`
-phase residue) — or a `ct_field`-side lockstep that replays an oracle WRAM stream, which is the same
+phase residue) — or a `Belthasar`-side lockstep that replays an oracle WRAM stream, which is the same
 host problem recorded for the write mask (`ct.exe` links neither `field.c` nor `battle.c`).
 
 ## `$0F01,X` — the first finding of the CT_FIELDLOCK host, triaged
 
-The common host (`CT_FIELDLOCK`, the oracle inside `ct_field`) reported a whole class of divergence
+The common host (`CT_FIELDLOCK`, the oracle inside `Belthasar`) reported a whole class of divergence
 on its first run, across many objects from frame 0:
 
 ```
@@ -547,7 +547,7 @@ either. `--porttick` (128/136) and `--portrun` (1592/1592) are unchanged by all 
 ### Scope ceiling
 
 `CtAnimTimerTick` is called from the **harnesses only** (`--porttick`, `--sweepc98a`); `src/field.c`
-does not call it and `move.c` is not linked into `ct_field`. So this grades a ported ROM routine,
+does not call it and `move.c` is not linked into `Belthasar`. So this grades a ported ROM routine,
 **not shipped engine behaviour** — which is also why porting the enqueue could not jam the live
 engine. The drain's *body* (`C0/CAD9` → the sprite assembler) remains unported; only its bookkeeping
 is derived above, from reading it. That body is still the blocker for `$0F01` proper.

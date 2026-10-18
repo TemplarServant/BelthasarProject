@@ -9,13 +9,13 @@ C2/57E7 fetches the string with
 
 THE CHECK. Walk each location's event script (scene header -> script id, assets/script.py's op lengths, from every fn
 pointer and on through internal RETURNs), pair each box op with the table its script's 0xB8 sets, and compare the
-ct_assets.dat dialogue entry (what ct_field shows, CtAssetString) with that ROM read decoded exactly as the packer
+ct_assets.dat dialogue entry (what Belthasar shows, CtAssetString) with that ROM read decoded exactly as the packer
 decodes it. A missing entry is the empty window that never types, so never reaches state 7 and never takes the press
 (loc 010's obj9 `BB 26`, the user's F5 capture 2026-09-30).
 
     python tools/dialogue_refs_check.py [ct_assets.dat] [rom]
 prints `dialogue-refs: N/N script boxes read the ROM's string (C2/57E7), T tables, M missing, D differ` twice: for
-`dat` (the pack ct_field loads) and for `extractor` (assets/text.py's scan_dialogue_tables run now, the packer's own
+`dat` (the pack Belthasar loads) and for `extractor` (assets/text.py's scan_dialogue_tables run now, the packer's own
 call) -- so a stale pack and a broken extractor both show.
 """
 import os as _ctos, sys as _ctsys

@@ -209,7 +209,7 @@
         "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2990=84"
       },
       "kind": "lakewram",
-      "doc": "gato_wait.state's WRAM as the oracle has it on load, wrapped for ct_field --loadwram. The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
+      "doc": "gato_wait.state's WRAM as the oracle has it on load, wrapped for Belthasar --loadwram. The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else is the recipe's."
     },
     {
       "path": "saves/battle_re/gato_cyclone.state",
@@ -304,7 +304,7 @@
       "path": "saves/battle_re/forest_pre_wrapped.lakewram",
       "recipe": "fx_forest_pre",
       "kind": "lakewram",
-      "doc": "fx_forest_pre's WRAM for ct_field --loadwram."
+      "doc": "fx_forest_pre's WRAM for Belthasar --loadwram."
     },
     {
       "path": "saves/battle_re/forest_teardown.lakewram",

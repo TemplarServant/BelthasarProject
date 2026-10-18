@@ -8,7 +8,7 @@ the virtual $213C (= $0351) into $0386 -- so its whole history is comparable byt
 
   cartridge  CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1 ct.exe --hookpc C302DD --from boot --frames N
              --hookwatch 7E0008  (and again with 7E0386): one line per frame, the byte AT EACH VISIT
-  port       CT_XLAT_SEEDTRACE=1 ct_field.exe --scene 433 --selftest --frames N: one `seedtrace` line per call
+  port       CT_XLAT_SEEDTRACE=1 Belthasar.exe --scene 433 --selftest --frames N: one `seedtrace` line per call
              (the field's wipe, the world's window object, the translated stage)
 
 For each call it compares the caller's X (which routine), $0008 and $0386 as the routine finds them, and prints
@@ -49,7 +49,7 @@ def main():
     ap.add_argument('--show', type=int, default=4)
     a = ap.parse_args()
     ct = os.path.join('build', 'ct.exe')
-    ctf = os.path.join('build', 'ct_field.exe')
+    ctf = os.path.join('build', 'Belthasar.exe')
     rule = {'CT_ORACLE_VIRTUAL_BEAM': '1', 'CT_ORACLE_LOGICAL': '1'}
     hook = [ct, '--hookpc', 'C302DD', '--from', 'boot', '--frames', str(a.frames), '--hookwatch']
     with cf.ThreadPoolExecutor(3) as ex:

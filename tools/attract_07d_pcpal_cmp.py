@@ -21,7 +21,7 @@ import re
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 STATE = 'saves/attract_07d_battle_f4540.state'
 

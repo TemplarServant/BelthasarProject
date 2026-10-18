@@ -11,7 +11,7 @@ behaviour is derived and checked see [METHODOLOGY.md](METHODOLOGY.md).
 | Program | Sources | What it is |
 |---|---|---|
 | `ct.exe` | `src/main.c` + the engine + `snes/*.c` | **The oracle harness.** Headless. It loads your ROM into the vendored LakeSnes core (the *oracle*) and runs the original game next to the C engine: lockstep differentials (`--vmdiff`), the 512-scene check (`--vm`), micro-execution sweeps of single ROM routines (`--sweep*`), RAM probes (`--peek`, `--monitor`, `--read`, `--followvm`), savestates. Always built; needs no SDL. |
-| `ct_field.exe` | `src/field.c` + the engine + the frontend + `snes/*.c` | **The game.** SDL2. Boots like the cartridge (`--boot`), runs the field, battles, menus, overworld, title and attract, plays the sound, and carries the F1 overlay and the mods. Its many headless flags (`--selftest`, `--battletest`, `--menutest`, `--walkscript`, ...) are what most regression checks drive. It links the LakeSnes core for three things only: the SPC700/DSP that plays the sound driver, the translated stages, and `CT_FIELDLOCK` (the oracle running inside the game for live comparison). |
+| `Belthasar.exe` | `src/field.c` + the engine + the frontend + `snes/*.c` | **The game.** SDL2. Boots like the cartridge (`--boot`), runs the field, battles, menus, overworld, title and attract, plays the sound, and carries the F1 overlay and the mods. Its many headless flags (`--selftest`, `--battletest`, `--menutest`, `--walkscript`, ...) are what most regression checks drive. It links the LakeSnes core for three things only: the SPC700/DSP that plays the sound driver, the translated stages, and `CT_FIELDLOCK` (the oracle running inside the game for live comparison). |
 | `ct_world.exe` | `src/ct_world.c`, `src/world.c` | An overworld viewer: walks the lead over the world map with the C mover and camera. A development tool. |
 | `ct_viewer.exe` | `src/viewer.c`, `src/scene.c` | A field-scene browser over `ct_assets.dat` (`--datonly`) or the ROM. A development tool. |
 
@@ -29,7 +29,7 @@ your ROM (verified: src/rom_verify.c, tools/ctlib/rom.py)
    +--> oracle (ct.exe) + recipes --> oracle states --> tools/gen_*.py --> src/data/*.h --> compiled
    |                                                  \-> tools/gen/xlat.py --> src/xlat/*.c   into the
    |                                                                                          engine
-   +--> read at run time by ct_field: battle enemy data, the sound driver (bank $C7) and song data
+   +--> read at run time by Belthasar: battle enemy data, the sound driver (bank $C7) and song data
 ```
 
 - **`ct_assets.dat`** is one container (`CTAS` magic, a directory of typed entries) that holds what the field
@@ -69,7 +69,7 @@ ambient-object block layout).
 | `player.c` | The lead's input-to-velocity controller (`C0/881E` and its helpers). |
 | `oam.c` | Field sprite assembly into OAM (`C0/B276` onward), checked byte for byte against the oracle. |
 | `objslot.c` | The palette-effect record service (`FD/E39C`), one body shared by the field and the battle. |
-| `field.c` | `ct_field.exe`: the host. The frame loop, the field compositor, location loads, the battle and menu hand-offs, the overworld bridge, the sound host, the widescreen and frames-between composition, and the headless test modes. |
+| `field.c` | `Belthasar.exe`: the host. The frame loop, the field compositor, location loads, the battle and menu hand-offs, the overworld bridge, the sound host, the widescreen and frames-between composition, and the headless test modes. |
 | `field_cost.c` | What the field's reload after a menu costs, priced from the ROM's control flow (`C0/01A5`, `C0/286C`). |
 | `world.c` | The overworld: camera and scroll engine (bank `$C2`), mover, tilemap streaming, the ambient-object VM, party followers. |
 | `battle.c` | The battle module: boot and staging, the ATB and menu pass, the action pipeline, techs and items, the enemy AI, status, effects, rendering, rewards, the exit back to the field. |

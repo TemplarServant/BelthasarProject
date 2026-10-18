@@ -1,6 +1,6 @@
-# Download Dear ImGui (MIT, github.com/ocornut/imgui) into third_party/imgui for ct_field's options overlay (F1).
+# Download Dear ImGui (MIT, github.com/ocornut/imgui) into third_party/imgui for Belthasar's options overlay (F1).
 # Only the core sources and the SDL2 / SDL_Renderer / OpenGL3 / Vulkan backends are kept. Git-ignored like SDL2.
-# Without it ct_field still builds -- the overlay is compiled out (CT_HAVE_IMGUI undefined). Run once:
+# Without it Belthasar still builds -- the overlay is compiled out (CT_HAVE_IMGUI undefined). Run once:
 #   powershell -ExecutionPolicy Bypass -File tools\get_imgui.ps1
 $ErrorActionPreference = 'Stop'
 $ver  = '1.91.5'

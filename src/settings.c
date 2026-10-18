@@ -24,7 +24,7 @@ void CtSettingsDefaults(CtSettings* s) {
   s->linearFilter = 0; s->renderScale = 1; s->vsync = 1; s->renderDriver[0] = 0; s->backend = 0;
   s->wideRoomWrap = 1;
   s->volume = 100; s->mute = 0;
-  // the keyboard ct_field always had (field.c fieldKeyPad): the arrows; A = Z, B = X, X = A, Y = S, L = D, R = C,
+  // the keyboard Belthasar always had (field.c fieldKeyPad): the arrows; A = Z, B = X, X = A, Y = S, L = D, R = C,
   // Select = Backspace, Start = Enter (and the keypad's Enter)
   static const int k0[CT_BTN_COUNT] = {
     SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
@@ -138,7 +138,7 @@ int CtSettingsSave(void) {
   const CtSettings* s = CtSettingsGet();
   FILE* f = fopen(CtSettingsPath(), "w");
   if (!f) return 0;
-  fprintf(f, "; Chrono Trigger (native port) -- options. Edited by the F1 overlay; safe to edit by hand.\n\n");
+  fprintf(f, "; Belthasar -- options. Edited by the F1 overlay; safe to edit by hand.\n\n");
   fprintf(f, "[video]\nbackend=%s\nfullscreen=%d\nwindow_scale=%d\nscale=%s\naspect=%s\nfilter=%s\nwidescreen=%s\nwide_room_wrap=%d\nrender_scale=%d\ninterpolation=%d\nvsync=%d\nrender_driver=%s\n\n",
           s->backend == 1 ? "opengl" : s->backend == 2 ? "vulkan" : "sdl", s->fullscreen, s->windowScale,
           s->scaleMode == CT_SCALE_INTEGER ? "integer" : s->scaleMode == CT_SCALE_STRETCH ? "stretch" : "fit",

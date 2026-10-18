@@ -20,7 +20,7 @@ memory, so they cannot ship; tools/fixtures/<domain>.json says how each one is m
             rawstate  the same savestate without its 16-byte CTLS header (the older captures' form, which several
                       tools read the WRAM out of at offset 0x45)
             wram      the 128 KB WRAM ($7E at 0, $7F at 0x10000)
-            lakewram  the same WRAM as `#lakewram\nRAM:131072:<bytes>` (ct_field --loadwram)
+            lakewram  the same WRAM as `#lakewram\nRAM:131072:<bytes>` (Belthasar --loadwram)
             flags     the 512 story-flag bytes $7F0000-$7F01FF
             srm       the 8 KB battery RAM (the savestate's last block)
             peek      an oracle --peek dump: the 512x480 frame at `path` and its .wram/.vram/.oam sidecars

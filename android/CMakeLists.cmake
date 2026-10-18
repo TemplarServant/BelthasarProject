@@ -2,7 +2,7 @@
 # toolchain sets ANDROID. android/app/build.gradle runs it for each ABI.
 #
 # libSDL2.so is built from SDL's source (tools/get_sdl2_src.ps1 -> third_party/SDL2-src, the version of the Windows dev
-# libraries); libmain.so is ct_field: SDL's Java activity loads both and calls SDL_main (field.c's main, renamed by
+# libraries); libmain.so is Belthasar: SDL's Java activity loads both and calls SDL_main (field.c's main, renamed by
 # SDL_main.h). The F1 overlay (Dear ImGui) draws the options and the virtual gamepad on SDL_Renderer / OpenGL ES.
 set(SDL2_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2-src)
 if(NOT EXISTS ${SDL2_SRC_DIR}/include/SDL.h)

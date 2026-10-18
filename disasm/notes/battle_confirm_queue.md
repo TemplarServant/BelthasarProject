@@ -16,7 +16,7 @@ nothing; canonically the confirmed attack should be SCHEDULED and fire when the 
   (`$A6DD`/`$95D5`) the instant the A edge is seen. The **animation** of the committed action then fires when the
   currently-animating action's freeze ends. There is **no latch-then-drain and no boundary hole** in the ROM.
 
-Method: our engine driven headless via `CT_BATTLE_SCRIPT`/`CT_BATTLE_TRACE` on `ct_field.exe`
+Method: our engine driven headless via `CT_BATTLE_SCRIPT`/`CT_BATTLE_TRACE` on `Belthasar.exe`
 (`saves/battle_re/gato_t0.raw.wram`); the oracle driven via `ct.exe --monitor --btnscript` on
 `gato_press_action.state` (+ `saves/battle_re/gato_wait.state` for Wait mode) + `tools/dis.py`. All addresses are
 ROM/oracle-cited; writer PCs = the PC after the store retires.
@@ -66,14 +66,14 @@ user's *"sometimes"*.
 
 ### A.2 Reproduction (deterministic, our binary)
 
-Copy `build/ct_field.exe` + `build/SDL2.dll` to a scratch dir (a running `build/ct_field.exe` locks the build).
+Copy `build/Belthasar.exe` + `build/SDL2.dll` to a scratch dir (a running `build/Belthasar.exe` locks the build).
 Script grammar: `btn:frames` where `btn ∈ {a,u,d,l,r,b,n}`; index `p = h->frames - CT_BATTLE_INTRO(159) - 1`.
 The first `a` (p=20 → frame 180) enters target-select; the second `a` is the confirm.
 
 ```
 # DROP — confirm on the span-end frame 572 (n = 572-181 = 391):
 CT_BATTLE_SCRIPT="n:20,a:1,n:391,a:1,n:500" CT_BATTLE_TRACE=1 \
-  ct_field.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
+  Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 #   -> pc-act count = 0   (Crono stranded in target-select, $9609=1, never attacks; runs to the f4000 debug cap)
 
 # WORKS — confirm one frame earlier (571, n=390):
@@ -281,7 +281,7 @@ Refactor the current `battleOpenAction` (which conflates dequeue + damage-comput
 
 ## Reproduction commands (paths relative to repo root)
 ```
-# --- (A) our bug (copy ct_field.exe + SDL2.dll to a scratch dir first) ---
+# --- (A) our bug (copy Belthasar.exe + SDL2.dll to a scratch dir first) ---
 CT_BATTLE_SCRIPT="n:20,a:1,n:391,a:1,n:500" CT_BATTLE_TRACE=1 \
   <scratch>/ct_field_probe.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 #   confirm @ frame 572 -> pc-act count 0 (DROP);  n:391->n:390 (frame 571) -> pc-act f574 (WORKS)

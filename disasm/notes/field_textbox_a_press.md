@@ -78,7 +78,7 @@ loads `$0134 = $0216 * 15` instead -- the auto-advance countdown 20A5 decrements
 
 `build/ct.exe --teleport 8 7 6 1 --from saves/truce_market.state --out build/s8t.state` puts the
 lead at (120,111) facing DOWN in front of Taban (obj10) at the fair -- the same tile the port's
-`ct_field --scene 8` starts on. Then
+`Belthasar --scene 8` starts on. Then
 `--monitor "7E0126:1,7E0129:1,7E0134:2,7E01EB:2" --from build/s8t.state --diff`:
 
 | drive | result |

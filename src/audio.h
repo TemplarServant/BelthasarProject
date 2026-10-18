@@ -31,7 +31,7 @@ typedef struct CtAudio CtAudio;
 
 // Boot the sound system: instantiate the SPC700+DSP, let its IPL boot ROM come
 // up, then run bank $C7's upload (audio_boot.md §4) so the Akao driver lands in
-// ARAM byte-identically to the oracle's. `rom` is the 4 MB ROM image (ct_field
+// ARAM byte-identically to the oracle's. `rom` is the 4 MB ROM image (Belthasar
 // already caches one via CtBattleRom); returns NULL when it is absent or short,
 // so a ROM-less run stays silent instead of failing.
 CtAudio* CtAudioInit(const uint8_t* rom, long romLen);

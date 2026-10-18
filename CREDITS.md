@@ -13,7 +13,7 @@ or endorsed by Square Enix or Nintendo.
 
 | Component | Where | Used for | License |
 |---|---|---|---|
-| [LakeSnes](https://github.com/elzo-d/LakeSnes) by angelo_wf (elzo-d) and contributors | `snes/` | The SNES core inside the *oracle* (`ct.exe`) that runs your ROM to grade the port; its SPC700/DSP still play the music in `ct_field` (debt: see [docs/ROADMAP.md](docs/ROADMAP.md)) | MIT ([snes/LICENSE.LakeSnes.txt](snes/LICENSE.LakeSnes.txt)) |
+| [LakeSnes](https://github.com/elzo-d/LakeSnes) by angelo_wf (elzo-d) and contributors | `snes/` | The SNES core inside the *oracle* (`ct.exe`) that runs your ROM to grade the port; its SPC700/DSP still play the music in `Belthasar` (debt: see [docs/ROADMAP.md](docs/ROADMAP.md)) | MIT ([snes/LICENSE.LakeSnes.txt](snes/LICENSE.LakeSnes.txt)) |
 
 ## Libraries fetched at build time (not in the repository)
 

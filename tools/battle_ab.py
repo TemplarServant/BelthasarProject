@@ -26,7 +26,7 @@ The battle's own staging then reads them exactly as it reads a real save.
   cartridge  build/ct.exe under the rule (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1): `--monitor` of every
              combatant's curHP (+03), curMP (+07) and status (+1D..+22: the ailments +1D..+1F, the buffs +20..+22) in the $5E2D + c*0x80 blocks and the action
              bytes ($A013, $95DB, $9609, $AE93, $9877); `--peek` with PEEK_THUMBS every frame;
-  port       build/ct_field.exe --scene 6 --loadwram <the same WRAM> --walkscript a:8 (the A that starts the fight), the
+  port       build/Belthasar.exe --scene 6 --loadwram <the same WRAM> --walkscript a:8 (the A that starts the fight), the
              battle's buttons through CT_BATTLE_SCRIPT with CT_BATTLE_SCRIPT_ABS=1 at the cartridge's frames minus the
              port's `battlephase: begins at field fN`; CT_FIELD_MEMMON of the same bytes (the field host's $7E IS the
              battle's), CT_SHOTS_THUMBS every frame.
@@ -209,7 +209,7 @@ def run(pokes, drive, total, tag, regs=None, raw=False, timed=None):
                     CT_FIELD_MEMMON=','.join('%04X:%X' % (a, n) for a, n in regs),
                     CT_SHOTS_THUMBS=pth, CT_SHOTS_THUMBS_EVERY='1', CT_SHOTS=os.path.join(OUT, tag + '_p'),
                     CT_SHOTS_AT=str(total), CT_SHOTS_EXIT='1')
-        r = subprocess.run([os.path.abspath(os.path.join(BUILD, 'ct_field.exe')), '--assets', 'ct_assets.dat', '--scene', '6',
+        r = subprocess.run([os.path.abspath(os.path.join(BUILD, 'Belthasar.exe')), '--assets', 'ct_assets.dat', '--scene', '6',
                             '--loadwram', lw, '--walkscript', 'a:8'], env=penv, capture_output=True, text=True,
                            errors='replace')
         p = r.stdout

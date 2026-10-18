@@ -32,7 +32,7 @@ import re
 import subprocess
 
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 SRC = 'saves/attract_cena_inicial.state'
 FIX = 'saves/attract_zombor_pre.lakewram'
 STATE = 'build/_z_f7085.state'

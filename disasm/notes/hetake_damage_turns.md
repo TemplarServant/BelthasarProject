@@ -17,7 +17,7 @@ Hetakes. Both harnesses used here **let the enemy reach its turn and land hits**
 * ORACLE — `saves/battle_re/forest_holdleft_pre.state` driven with **hold-LEFT and nothing else**
   (`--input "40:4200"`): PCs never press A, so they never act; the Hetakes attack **11 times** in
   ~3800 battle frames (HP drops listed in §1).
-* OURS — `build/ct_field.exe --scene 19 --battletest saves/battle_re/forest_pre.raw.wram` with
+* OURS — `build/Belthasar.exe --scene 19 --battletest saves/battle_re/forest_pre.raw.wram` with
   `CT_BATTLE_SCRIPT="n:1200"` (idle button script): the Hetakes attack 7 times, then go silent.
 
 Neither run is a "nobody got a turn" false negative.
@@ -188,7 +188,7 @@ so the coincidence breaks and `$AEE4` picks rec **1** (POW 18) where the ROM pic
 
 ```
 CT_BATTLE_TRACE=1 CT_BATTLE_SCRIPT="n:1200" SDL_VIDEODRIVER=dummy \
-  build/ct_field.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
+  build/Belthasar.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
 ```
 ```
 f495  act-end  cronoHP=63   (70 -> 63,  -7)

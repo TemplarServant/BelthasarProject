@@ -30,7 +30,7 @@ while the published pose is `C8`/`C9`, and `C8` is literally `ptrA + 2*stride + 
 
 ```
 P=<scratch>/ct_probe.exe            # copy of build/ct.exe   (NEVER probe with build/ct.exe)
-F=<scratch>/ct_field.exe            # copy of build/ct_field.exe
+F=<scratch>/Belthasar.exe            # copy of build/Belthasar.exe
 # ORACLE (walk LEFT into the ambush, then two A presses = Crono's physical on Hetake0):
 $P --monitor "9907:1,96DB:1,1D0C:1,1D23:1,9877:1" --from saves/battle_crono_solo_lake.state \
    --input "40:120,0:280,100:3,0:20,100:3,0:400" --diff --frames 820
@@ -284,7 +284,7 @@ a frame number.
 
 ## 6. Scratch artefacts (not committed)
 
-`<scratch>/facing/`: `ct_probe.exe`, `ct_field.exe`, `crop.py`, `ours2png.py`, `match.py` (the E3-mask IoU
+`<scratch>/facing/`: `ct_probe.exe`, `Belthasar.exe`, `crop.py`, `ours2png.py`, `match.py` (the E3-mask IoU
 matcher — the tool that makes every pose claim above falsifiable), oracle peeks
 `or_{210,225,245,265,300,662}.raw(+.png)`, ours `w_{5,60,95,105,115,130,190}.raw`, `a_{215..320}.raw`,
 and `fs_*` (a `$2980`-patched SOLO copy of `forest_pre.raw.wram`, used to rule solo-party-ness out as a
@@ -296,8 +296,8 @@ cause before the re-triggered-battle harness trap was found).
 
 Method: every cited ROM address re-disassembled with `python tools/dis.py` from the ROM file offset;
 every oracle value re-measured with my own `--monitor`/`--peek` runs from
-`saves/battle_crono_solo_lake.state`; our side re-measured with my own snapshot of `build/ct_field.exe`.
-Scratch: `%TMP%/ctwf3/facing-adv/` (`ct_probe.exe`, `ct_field.exe`, `crop.py`, `z.py`, oracle peeks
+`saves/battle_crono_solo_lake.state`; our side re-measured with my own snapshot of `build/Belthasar.exe`.
+Scratch: `%TMP%/ctwf3/facing-adv/` (`ct_probe.exe`, `Belthasar.exe`, `crop.py`, `z.py`, oracle peeks
 `or210/or245(.png,_z.png)`, ours `ours60/ours105(_z.png)`, WRAM dumps `s140/s170/s300.wram`,
 `solo_staged.wram`).
 
@@ -370,7 +370,7 @@ reads it back."* The second half is true (grep: `$29B0 + 5*seat` is read only by
 for the FOOT). **The first half implies the datum is correct. It is not.**
 
 ```
-CT_DUMPWRAM=<f>.wram CT_DUMPWRAM_AT=200 SDL_VIDEODRIVER=dummy ct_field.exe --assets ct_assets.dat \
+CT_DUMPWRAM=<f>.wram CT_DUMPWRAM_AT=200 SDL_VIDEODRIVER=dummy Belthasar.exe --assets ct_assets.dat \
   --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest o.raw --frames 260 \
   --walkscript "l:120,."
 ```
@@ -418,7 +418,7 @@ frame numbers is the forest_pre `--battletest` fixture:
 ```
 for f in 225 235 245 255 265 275 290 305; do
   CT_ANIMENG_PCTRACE=1 CT_BATTLE_MASHA=1 CT_BATTLESHOT=e.raw CT_BATTLESHOT_AT=$f SDL_VIDEODRIVER=dummy \
-  ct_field.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram; done
+  Belthasar.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram; done
 ->  pcatk f225 pose=0 idx=0x3B foot=(146,71) arr=(160,71) fac(a2,s2,r1)
     pcatk f235 pose=2 idx=0x21 foot=(128,71) arr=(128,71) fac(a2,s0,r3)
     pcatk f245 pose=3 idx=0x50 foot=(128,71) arr=(128,71) fac(a2,s0,r3)   ... f255 0x51, f265/275 0x52
@@ -521,7 +521,7 @@ The oracle line quoted as `$966E stride = 0x128` in section 1 is really `$966E =
 ## AR.4 Repro commands used in this review
 
 ```
-P=%TMP%/ctwf3/facing-adv/ct_probe.exe ; F=%TMP%/ctwf3/facing-adv/ct_field.exe   # snapshots of build/
+P=%TMP%/ctwf3/facing-adv/ct_probe.exe ; F=%TMP%/ctwf3/facing-adv/Belthasar.exe   # snapshots of build/
 # entry ladder + staging (all values in AR.1)
 $P --monitor "9907:1,96DB:1,9245:8,922D:8,5DF1:6,29B0:5,96A4:5,A4DC:1,966E:2" \
    --from saves/battle_crono_solo_lake.state --input "40:400" --diff --writer --frames 330
@@ -573,14 +573,14 @@ CT_BATTLE_MASHA=1 CT_BATTLESHOT=ours60.raw CT_BATTLESHOT_AT=60 SDL_VIDEODRIVER=d
 "one-frame drain lead".** The ambush script's turns ARE reproduced by our field engine, at the same
 frames, with the correct DOWN facing -- but only in the C struct `sc->actors[].facing`. The ROM
 routine that turns the field facing into the staged pose (`C0/CAD9` -> `C0/CC12`, the animation
-drain) **is ported and does run every frame in `ct_field.exe`** (`src/ct_vm.c:4090` ->
+drain) **is ported and does run every frame in `Belthasar.exe`** (`src/ct_vm.c:4090` ->
 `CtAnimDrainVisit`, `src/move.c:5144`), and it reads WRAM `$1600,X` / `$1680,X` / `$1681,X`.
 `src/ct_vm.c` writes **none** of those three -- `$1600,X` appears in it exactly once, as a READ at
 seed time (`src/ct_vm.c:3127`). So the drain publishes `$0F01` for a facing that never changed, and
 the staging (which runs BEFORE the render mirror, exactly as the ROM's mainloop does) reads it.
 
 Everything below was re-measured this session from my own snapshots
-(`%TMP%\ctwf4\turns\ct_probe.exe`, `ct_field.exe`), on `saves/battle_crono_solo_lake.state` and
+(`%TMP%\ctwf4\turns\ct_probe.exe`, `Belthasar.exe`), on `saves/battle_crono_solo_lake.state` and
 `saves/forest_re/battle_crono_solo.dumpwram`.
 
 ## S3.1 WHICH script grabs Crono at oracle f113: **op 0xD9**, handler **C0/326C**
@@ -655,7 +655,7 @@ jump table at `C0/5D6E`); the routine that copies them into `$7F371F/$7F373F/$7F
 
 ## S3.2 Our engine DOES run it -- the turns are reproduced, in the C struct only
 
-`CT_VMTRACE=1 ct_field --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest
+`CT_VMTRACE=1 Belthasar --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest
 o.raw --frames 260 --walkscript "l:200,."`, obj1 address transitions:
 
 | | 0x0096 | 0x0099 | 0x009C | 0x009F (E7 pan) | **0x00A2 (D9)** | **0x00A9 (D8)** |
@@ -781,7 +781,7 @@ excludes byte +4 for a reason that does not hold here.
 ## S3.6 Repro commands used in this pass
 
 ```sh
-P=%TMP%/ctwf4/turns/ct_probe.exe ; F=%TMP%/ctwf4/turns/ct_field.exe     # snapshots of build/
+P=%TMP%/ctwf4/turns/ct_probe.exe ; F=%TMP%/ctwf4/turns/Belthasar.exe     # snapshots of build/
 # WHO repoints Crono, and to what
 $P --monitor "1184:2,1C04:1,1604:1,0F04:1,011F:1" --from saves/battle_crono_solo_lake.state \
    --input "40:400" --diff --writer --frames 200
@@ -810,7 +810,7 @@ CT_PDBG=1 CT_BATTLE_STAGEDBG=1 CT_DUMPWRAM=q123.wram CT_DUMPWRAM_AT=123 ... --fr
 # Adversarial review (session 3)
 
 Read-only, independent re-run of every probe and re-disassembly of every cited address, on my own
-snapshots (`%TMP%\ctwf4\turns-adv\ct_probe.exe` / `ct_field.exe`, copies of `build/`).
+snapshots (`%TMP%\ctwf4\turns-adv\ct_probe.exe` / `Belthasar.exe`, copies of `build/`).
 
 **VERDICT: the MECHANISM is CONFIRMED (DERIVED) and strengthened by a discriminator the derivation
 did not have. The PROPOSED FIX IS NOT LANDABLE AS WRITTEN: its enumerated site list does not contain
@@ -867,7 +867,7 @@ So the whole S3 timeline, the writers, the canned block and the staged `00` repr
 `docs/DEBUG_SURFACE.md:314` still says). Same run, same frame, the only difference being the drain:
 
 ```
-CT_DUMPWRAM=q123.wram CT_DUMPWRAM_AT=123 ct_field --scene 19 \
+CT_DUMPWRAM=q123.wram CT_DUMPWRAM_AT=123 Belthasar --scene 19 \
   --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest o.raw --frames 130 --walkscript "l:120,."
   CT_FRAMELEGS unset (drain ON) :  $0F05 = 01   $1604=02 $1684=00 $1605=05 $1685=00
   CT_FRAMELEGS=0   (drain OFF) :  $0F05 = 00   $1604=02 $1684=00 $1605=04 $1685=00
@@ -887,7 +887,7 @@ the ROM's own answer for facing 2.** The only wrong input is `$1600,X`; the drai
 ## S3A.4 REFUTED / NOT PROVEN
 
 ### AR3.1 (LOAD-BEARING) the fix's site list misses the site that turns Crono in this fight
-`ct_field.exe`'s op-0xD9 is a **REIMPLEMENTATION, not a port**, and says so in its own comment
+`Belthasar.exe`'s op-0xD9 is a **REIMPLEMENTATION, not a port**, and says so in its own comment
 (`src/ct_vm.c:2455-2500`): *"The ROM saves each PC's IP to the $7F0580 stack and forces the global
 walk routine 0x171F ... our port drives each PC's mover from this visit instead (no repoint)"*.
 Measured on our f123 WRAM dump: **`$1184 = 062F` and `$1C04 = 07`** -- our obj2's IP is never
@@ -1013,7 +1013,7 @@ is both reachable and re-measurable:
 ## S3A.8 Commands used in this review
 
 ```sh
-P=%TMP%/ctwf4/turns-adv/ct_probe.exe ; F=%TMP%/ctwf4/turns-adv/ct_field.exe
+P=%TMP%/ctwf4/turns-adv/ct_probe.exe ; F=%TMP%/ctwf4/turns-adv/Belthasar.exe
 $P --monitor "1184:2,1C04:1,1604:1,0F04:1,011F:1" --from saves/battle_crono_solo_lake.state --input "40:400" --diff --writer --frames 200
 $P --monitor "1604:1,1684:1,1605:1,1685:1,0F05:1,1B04:1" --from saves/battle_crono_solo_lake.state --input "40:400" --diff --writer --frames 200
 $P --monitor "29B0:5,2989:1,9907:1" --from saves/battle_crono_solo_lake.state --input "40:400" --diff --writer --frames 260

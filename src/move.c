@@ -5992,7 +5992,7 @@ int CtAnimRelease(uint8_t* r, int idx) {
 // instead of letting one be guessed in either direction.
 int gCtDrawSkipped;   // objects the B701 gate REFUSED (SEC) on the last pass -- see --sweepdraw
 // How many times the draw walk hit its non-convergence guard, CUMULATIVE over the run. It is reported
-// by ct_field's worldtest so the guard cannot absorb a defect in silence -- which it did once already:
+// by Belthasar's worldtest so the guard cannot absorb a defect in silence -- which it did once already:
 // the guard turned the $0E00 draw-list corruption from a hang into a passing run, and the !inWorld gate
 // that actually fixed that corruption was consequently UNGRADED. A counter is what makes the difference
 // between "the guard is never needed" and "nobody looked".
@@ -6022,7 +6022,7 @@ int CtAnimDrawPass(uint8_t* r, int* unresolved) {
     for (;;) {
       // A PORT-SIDE NON-CONVERGENCE GUARD, not a ROM behaviour -- the ROM's B2B2 loop is unbounded
       // because its $0E81 chain is always well-formed. Ours is not yet: with CT_FRAMELEGS=1 on a LIVE
-      // host (ct_field --scene 1 --worldtest) the chain CYCLES -- measured obj 00 <-> obj 04, with six
+      // host (Belthasar --scene 1 --worldtest) the chain CYCLES -- measured obj 00 <-> obj 04, with six
       // different buckets all claiming obj 0 as their head while obj 4's prev-link says IT is the head.
       // The scene-entry fill is not the culprit (CtObjSceneInit does write $0E00..$0EFF = $80); the
       // list is corrupted DURING the run by unlink/relink leaving stale heads behind. The lockstep
@@ -6632,7 +6632,7 @@ int CtObjSlotFree(uint8_t* r, int idx) {
 // actually branches on, and the byte the ported frame legs (CtAnimTimerTick's CA4F ping-pong and
 // CtFieldFrameLookup's CBA4 arm) already drive 2 -> 1 in the live image. Measured cost of the private
 // copy: --vmdiff on a cutscene seeded mid-B7 (scene 8, the gate) made ZERO ip-steps in 1500 frames
-// because nothing in a headless run ever cleared the flag, and in ct_field the same cutscene ran ~800
+// because nothing in a headless run ever cleared the flag, and in Belthasar the same cutscene ran ~800
 // frames ahead of the ROM (DD at f1638 vs f2447) because the renderer's own playback decided when a
 // B7 was over. The bodies below are the switch cases they used to be, moved verbatim; the ONLY edit is
 // the operand reads, which go through `script` for the same reason CtVmItemFamily's do.

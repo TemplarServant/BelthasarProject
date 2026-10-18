@@ -3,7 +3,7 @@ r"""The widescreen field against the SNES's 256 columns: the view in its middle 
 
     python tools/widescreen_check.py [scene ...]
 
-For each scene (default 5 6 112) runs ct_field twice with a settings file (CT_SETTINGS) -- widescreen 16:9 and off, the
+For each scene (default 5 6 112) runs Belthasar twice with a settings file (CT_SETTINGS) -- widescreen 16:9 and off, the
 window at x1 with the picture at integer scale, so the window's pixels are the picture's -- and saves the frame at f150
 without the overlay (CT_OVERLAY_SHOT ...:9, under the dummy video driver). Then:
 
@@ -57,7 +57,7 @@ def shot(scene, wide, d):
     args, at, extra = case(scene[:-len('-nowrap')] if not wrap else scene)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOAUDIO='1', CT_SETTINGS=ini,
                CT_OVERLAY_SHOT=bmp + '@%d:9' % at, **extra)
-    subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat'] + args,
+    subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat'] + args,
                    env=env, capture_output=True, text=True, errors='replace', timeout=300)
     return read_bmp(bmp) if os.path.exists(bmp) else None
 

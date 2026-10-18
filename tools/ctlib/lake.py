@@ -22,7 +22,7 @@ Payload layout (snes_handleState — see snes/snes.c / snes/cpu.c):
                      + 2 bytes (k, db) + 6 LE words (a x y sp pc dp) = 29 bytes
   ...              : dma/ppu/apu/input/cart state follows.
 
-NOTE: ct_field F5/F9 states are a DIFFERENT format (the raw CtScene struct,
+NOTE: Belthasar F5/F9 states are a DIFFERENT format (the raw CtScene struct,
 handled in C) -- this module is only for the ct.exe (LakeSnes oracle) states.
 """
 import binascii

@@ -225,7 +225,7 @@ static void lfReadEnv(void) {
   static int done = 0; if(done) return; done = 1;
   const char* v = getenv("CT_ORACLE_NMION_HOLD"); g_ctLogicalValve = (v && *v == '0');
   // UNDER THE RULE THE APU STANDS WITH THE BEAM (the zelda3 model: the SPC runs a frame per frame whatever the CPU spent --
-  // the port's own relation, ct_field's g_ctLogicalHoldApu = 0). The oracle ran it through a hold for the valve's sake (a
+  // the port's own relation, Belthasar's g_ctLogicalHoldApu = 0). The oracle ran it through a hold for the valve's sake (a
   // handshake inside a held stretch had to be answered before the valve fired); with no valve, a poll of the APU is a wait
   // (lfInWaitLoop: the plain poll and the counted one) and ends the stretch like any other. Held cycles were SPC time no
   // frame of the port gives: the line-64 cut alone holds ~20 lines of every action frame. CT_ORACLE_HOLDAPU=1 keeps the
@@ -404,7 +404,7 @@ int g_ctLogicalLoads = 0;
 // per displayed frame (the console's relation, and the zelda3 model's -- the SPC there runs a frame per frame whatever
 // the CPU spent), so every held cycle the APU ran became samples no frame plays, queued behind the picture for good:
 // the attract's race holds ~35% of a frame per frame and left the sound 1.8 s late for the rest of the demo (measured,
-// CT_AUDIO_FIFOTRACE). ct_field sets 0: the APU stands with the beam through a hold (and a phase hold), and a CPU that
+// CT_AUDIO_FIFOTRACE). Belthasar sets 0: the APU stands with the beam through a hold (and a phase hold), and a CPU that
 // polls it there is a wait (C7:09E1), which releases the hold like any other.
 int g_ctLogicalHoldApu = 1;
 static unsigned long long lfVbCycles = 0; static long lfVbRefresh = 0;
@@ -440,7 +440,7 @@ void snes_setLogicalFrames(int on) {
 // A translated stage (seq_xlat.c CtXlatStageFrame) runs under the same rule as the oracle -- the logical frame and the
 // phase-0 NMI-off stretches -- one host frame at a time: this switches the rule on and off around each frame WITHOUT
 // resetting its state (the wait ring, the tentative hold's snapshot, a pending phase hold), which belongs to the stage's
-// hardware across frames. The stage's machine is the only one that runs under it in ct_field.
+// hardware across frames. The stage's machine is the only one that runs under it in Belthasar.
 void snes_logicalResume(int on) {
   g_ctLogicalFrames = on; g_ctLogicalLoads = on;
   g_cpuOpHook = on ? lfOpHook : NULL;

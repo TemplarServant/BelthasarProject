@@ -279,7 +279,7 @@ static void memInit(Mem* m, const uint8_t* gmem) {
 // ⚠ Single-threaded assumption: the handler unprotects, single-steps and re-arms, so a store from
 // another thread during that window is missed. Fine for the field engine, not for the SDL audio
 // thread if that ever touches WRAM.
-// Example -- `CT_WATCH=0E81 ct_field --scene 1 --worldtest` prints every writer of object 0's
+// Example -- `CT_WATCH=0E81 Belthasar --scene 1 --worldtest` prints every writer of object 0's
 // draw-list next-pointer, with the two list routines and the A8EC/A8EF one-shot each named.
 #include <windows.h>
 #include <dbghelp.h>
@@ -1041,7 +1041,7 @@ static void npcLoadMirror(Mem* m, int obj, int hdrIdx, int mode) {
 // so in a FRESH load the lead's $1380/$1300/$1480/$1500/$1580 stayed ZERO (measured with
 // CT_DUMPWRAM on scene 2: Crono all-zero, Mom and the cat filled by npcLoadMirror). The frame legs
 // read those tables to drive a PC's $7F0B01,X, so once op 0xAB/0xB7 completed on the byte instead
-// of the renderer's flag, the bedslide's `AB` parked forever in ct_field while --vmdiff (seeded
+// of the renderer's flag, the bedslide's `AB` parked forever in Belthasar while --vmdiff (seeded
 // from the oracle's tables) went CLEAN. Same directGfx arm as C0/4845's ROM-direct path: $1280/$1200
 // from the table entry, no allocator claim.
 // C0/42A1-42AD (slot 0) / C0/4315-4321 (slot 1) / C0/43C8-43D4 (slot 2) -- THE THREE PARTY ARMS'
@@ -2745,7 +2745,7 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     // different, strictly TIGHTER rule -- the one the ROM applies to op 0x96/0x97/0xA0, never to this body.
     // The jump table settles which routine 0x94 is: the word at $C0:5D6E + 0x94*2 is 5215, and C0/5215
     // falls straight into 5228, the body 0x95 BRLs into at 5426. 117 sites across the shipped scenes run
-    // op 0x94. MEASURED on loc 44 (script 425 obj3 fn1 `89 40 / 94 04 / ...`, `ct_field --scene 44
+    // op 0x94. MEASURED on loc 44 (script 425 obj3 fn1 `89 40 / 94 04 / ...`, `Belthasar --scene 44
     // --talk 3`): with the exact-tile rule obj3 walked ON TOP of its target and finished at frame 288,
     // tile (5,9) -- obj2's own tile; with the ROM's rule it stops ADJACENT at frame 264, tile (6,8)
     // against obj2's (5,9). A tile too far and 24 frames late, on every one of those sites.
@@ -3717,7 +3717,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // untouched.
     //
     // Delegated, not transcribed: move.c's CtVmPartyGateFamily is the body --sweepops micro-executes
-    // against the ROM at 60 cases per opcode. `gRomImg` may be NULL in a dat-only ct_field run and
+    // against the ROM at 60 cases per opcode. `gRomImg` may be NULL in a dat-only Belthasar run and
     // that is handled the same way move.c handles it -- every ROM read inside the gate is already
     // bounds-checked against romLen, so a missing image yields the routine's own zero-fill arm
     // rather than a special case invented here.
@@ -4000,7 +4000,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // (CtAnimTimerTick's CA4F arm, CtFieldFrameLookup's CBA4 arm) and forced back to 2 for an
     // off-camera object by A934. Measured cost of the private copy, scene 8's gate cutscene seeded
     // mid-B7: --vmdiff made ZERO ip-steps in 1500 frames (nothing headless ever cleared the flag),
-    // and ct_field ran the same cutscene ~800 frames ahead of the ROM (its `DD 71` at f1638 against
+    // and Belthasar ran the same cutscene ~800 frames ahead of the ROM (its `DD 71` at f1638 against
     // the oracle's f2447 under the same input) because the renderer's clock decided each B7's length.
     //
     // The C fields stay -- the renderer plays from them -- but they are now DERIVED from the bytes
@@ -4959,7 +4959,7 @@ void CtSceneSeedFromWram(CtScene* sc, const uint8_t* w) {
     // besides $1A81 := 0 at 6264) and the first test of the draw-list gate (C0/A88F BMI), the rebuild
     // (C0/B0F3) and the OAM drain (C0/CAD9). It used to be left to the create-time prescan, which runs
     // every object's fn0 BEFORE this seed with whatever story flags the host handed it: under --loadwram
-    // ct_field passed none, so scene 129's obj0 fn0 branched on storyline 0 instead of the state's $12
+    // Belthasar passed none, so scene 129's obj0 fn0 branched on storyline 0 instead of the state's $12
     // and executed `0A 1E` -- the cutscene controller obj15 was dead from frame 1, the nuns were never
     // hidden and the Naga-ettes never shown (defect #15). The seed is the oracle's own bit.
     sc->actors[o].dead = (w[0x1100 + x] & 0x80) ? 1 : 0;
@@ -6645,7 +6645,7 @@ void CtSceneTick(CtScene* sc) {
     // POINTER back to WRAM at the end of every visit (C0/59AB is the same store on the autorun path).
     // Ours kept the ip only in the C struct, so $1180,X in any state we SAVE was whatever the last
     // seed left. That breaks the capture -> oracle workflow the F5 snapshot exists for: splicing a
-    // ct_field debug state onto a lake base sent the ROM to a STALE address and the scene went
+    // Belthasar debug state onto a lake base sent the ROM to a STALE address and the scene went
     // nowhere (measured on the user's own build/ct_debug.state -- obj3 read ip 03CB while its live
     // script sat at 01B0+header, and the oracle just closed the box and stopped). Same family as the
     // loader arms' $1C80/$1A81/$1B01: a C mirror that never reached the RAM the ROM reads.
@@ -7360,7 +7360,7 @@ void CtSceneUpdateFollowers(CtScene* sc) {
       gVmTick, sc->fx[lead], sc->fy[lead], w[0x1D32], w[0x1D33], w[0x01AB], w[0x01AC], w[0x01AD],
       sc->nobj>3?sc->fx[3]:0.0, sc->nobj>3?sc->fy[3]:0.0, w[0x1606], w[0x1608]);
 }
-// --vmdiff's stand-in for the ROM's joypad routine (C2/8500) for the BUTTON byte pair only. ct_field no longer
+// --vmdiff's stand-in for the ROM's joypad routine (C2/8500) for the BUTTON byte pair only. Belthasar no longer
 // calls it: its host runs the NMI's whole pad latch (field.c fieldPadNmi -> player.c CtJoypadPoll, $00F0-$00FB).
 // $00F2 is the HELD buttons and $00F0 the NEWLY-PRESSED ones -- measured on the oracle with
 // `--monitor 7E00F0:4` across a press edge, both carrying the same layout
@@ -8137,7 +8137,7 @@ int CtSceneActorScripted(const CtScene* sc, int i) {
 int CtSceneActorAtB0(const CtScene* sc, int i) { return (i >= 0 && i < sc->nobj && i < 64) ? sc->atB0[i] : 0; }
 int CtSceneActorMode(const CtScene* sc, int i) { return (i >= 0 && i < sc->nobj) ? sc->mode[i] : -1; }  // $1100 probe
 
-// ---- DEBUG save/load of the FULL live scene state (ct_field F5/F9). A whole-struct snapshot of the
+// ---- DEBUG save/load of the FULL live scene state (Belthasar F5/F9). A whole-struct snapshot of the
 // VM (WRAM + scheduler + movers + flags). The only pointers in CtScene are raw/body (the static loaded
 // scene data) and the tileSolid map-hook + ctx -- these are PRESERVED on load (the same scene/asset is
 // already loaded), so only the dynamic state is restored. Same-scene only (nobj must match). Debug-only;

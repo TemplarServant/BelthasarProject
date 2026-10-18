@@ -11,7 +11,7 @@ For each scenario, both sides run live:
   cartridge  build/ct.exe --lifetrace (opcode-stepped) with --pcwatch on the call site, C0/595C, the dispatch
              C0/5977 (X = op*2, Y = the live IP) and C0/597C (the terminator), and --wwatch on the mailbox
              $1E00-$1E03, obj0's $1180/$1C00 and the object count $7F:2000 (live IP = body + count*32)
-  port       build/ct_field.exe with CT_SLOT1TRACE=1 (`slot1: <site> ops OP@ADDR ... end@ADDR obj0 ...`) and
+  port       build/Belthasar.exe with CT_SLOT1TRACE=1 (`slot1: <site> ops OP@ADDR ... end@ADDR obj0 ...`) and
              CT_SNDTRACE=1 (every JSL $C7:0004, field-side and VM-side, in order on stderr)
 Graded, per scenario:
   trail    the ops the runner dispatched, in order, and where it stopped -- identical
@@ -25,7 +25,7 @@ import re
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 
 MASH = ','.join(['100:20,0:40'] * 45)

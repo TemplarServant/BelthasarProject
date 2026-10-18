@@ -224,7 +224,7 @@ typedef struct {
 } CtSoundSink;
 void CtSceneSetSoundSink(const CtSoundSink* sink);   // NULL detaches
 // THE RULE's infinitely fast CPU for the sound ops' JSLs (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1 by default): the host
-// says 0 for a run whose SPC does not stand for the cartridge's (ct_field's WRAM-seeded runs), and the VM keeps the
+// says 0 for a run whose SPC does not stand for the cartridge's (Belthasar's WRAM-seeded runs), and the VM keeps the
 // real-time tail rule there.
 void CtSceneSetRuleIfast(int on);
 int  CtSceneMainLoopParked(const CtScene* sc);   // before the tick: the CPU is still inside a script's `JSL C7/0004` this frame
@@ -236,7 +236,7 @@ int  CtSceneLoadSongPrice(void);      // the last scene load's C0/1B8B post: fra
 // (CC/E387) reads this bit to derive $99E1 (0=ACTIVE/0x40=WAIT) for the Wait freeze gate (73dfa42).
 void CtSceneSetAtbMode(CtScene* sc, int active);
 // DEBUG/test: force `obj` to become active-party member `member` (1 or 2) -- registers the char in
-// $7E2980+member and sets its move-mode -- so the conga-line follow can be exercised in ct_field without
+// $7E2980+member and sets its move-mode -- so the conga-line follow can be exercised in Belthasar without
 // playing through the join dialogue. (The real game does this via op 0xD3 + op 0x5C.)
 void CtSceneDebugMakeFollower(CtScene* sc, int obj, int member, int charId);
 // Held joypad for the script VM ($00F2 in CT layout: A=0x80 X=0x40 L=0x20 R=0x10 B=0x08 Y=0x04
@@ -298,7 +298,7 @@ int  CtSceneDiffWramMasked(const CtScene* sc, const uint8_t* w, int frame,
 // (see the ownership note above); a CtScene is merely one way to reach the pointer --
 // CtSceneCreateIn stores the CtWram straight into sc->mem, so sc->mem IS the CtWram.
 // Taking the wram directly is what lets a lockstep run keep grading across a hop that has NO
-// scene at all: ct_field frees the field scene when it enters the overworld, and every
+// scene at all: Belthasar frees the field scene when it enters the overworld, and every
 // scene-addressed call above then goes quiet on a NULL and grades nothing while the run
 // carries on. Identical results in field mode: same buffers, same bits.
 void CtVmWmaskResetW(CtWram* w7e, const uint8_t* w);
@@ -455,7 +455,7 @@ void CtPolyQuadImage(uint8_t* w128);                  // C3/0EFA (the quad windo
 int  CtSceneActorColorGated(const CtScene* sc, int obj);  // 1 = an op-0x88 colour-gated sprite (Telepod swirl) — clip it to the iris
 int  CtSceneActorScripted(const CtScene* sc, int i); // 1 = a called/scripted fn is running
 int  CtSceneActorMode(const CtScene* sc, int i);     // $1100 move-mode probe (debug)
-int  CtSceneSaveState(const CtScene* sc, const char* path, const double player[4]);  // DEBUG: snapshot the scene + the field player state {px,py,pz,pfac} (ct_field F5)
+int  CtSceneSaveState(const CtScene* sc, const char* path, const double player[4]);  // DEBUG: snapshot the scene + the field player state {px,py,pz,pfac} (Belthasar F5)
 int  CtSceneLoadState(CtScene* sc, const char* path, double player[4]);  // DEBUG: restore (F9); same-scene only. 0=fail, 1=VM only (old/no player), 2=VM+player[] restored
 int  CtSceneStateLoc(const char* path, uint8_t* flags);  // DEBUG: the location ($0100) a snapshot was taken in (+ its $7F:0000 page into flags[0x200] if non-NULL); -1 if not loadable
 void CtSceneAnimFinished(CtScene* sc, int i);       // renderer: the once-anim of actor i ended

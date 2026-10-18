@@ -88,13 +88,13 @@ first missing expectation and the actual nearby output lines.
 - `Chrono_Trigger_USA_SNES.sfc` — your own dump, verified by SHA-1 wherever it is read (`src/rom_verify.c`,
   `tools/ctlib/rom.py`); `python tools/setup.py --rom <file>` puts it in place and does everything below.
 - `ct_assets.dat` and the generated files (`src/data/*.h`, `src/xlat/*.c`) — made by `tools/setup.py` from the ROM
-  and the power-on recipes. `ct_field.exe` checks pass the .dat explicitly via `--assets` (there is no default).
+  and the power-on recipes. `Belthasar.exe` checks pass the .dat explicitly via `--assets` (there is no default).
 - Oracle states and WRAM seeds: the recipe-made ones come from `python tools/fixtures.py make all` (the recipes in
   `tools/recipes/`, listed per domain in `tools/fixtures/<domain>.json`); the rest are private captures from the
   owner's playthrough, which SKIP with their name in a fresh clone. The catalogue, with sha256 pins and each file's
   provenance, is **`tools/regress_inputs.json`**; [TESTING_OVERVIEW.md](TESTING_OVERVIEW.md) counts the checks by
   class (ROM only, recipe fixtures, private captures).
-- Built binaries `build/ct.exe`, `build/ct_field.exe` (via `tools\build.bat` /
+- Built binaries `build/ct.exe`, `build/Belthasar.exe` (via `tools\build.bat` /
   `python tools/build.py`).
 
 **Verify the capture kit before a full run:**
@@ -122,7 +122,7 @@ checks the suite runs in parallel lives in each check's own directory.
 
 `--build` runs `python tools/build.py` (not the old banner-only path). `build.py`
 fails if a `ct*.exe` from this `build/` is still running (file lock). Kill any
-running `ct_field.exe`/`ct.exe` before `--build`.
+running `Belthasar.exe`/`ct.exe` before `--build`.
 
 ## Tiers
 
@@ -177,7 +177,7 @@ the inventory's find, records the slot it found in `$04C7` and zeroes `$04C8`, w
 the 256-slot scans and the add's 8-bit sum, menu.c). Two declared mutations turn it red: the `$04C7` record and the
 remove's emptying of a slot's id.
 
-### field-battletest-gato (`ct_field.exe --battletest`)
+### field-battletest-gato (`Belthasar.exe --battletest`)
 
 The battle-infrastructure phase-1 end-to-end check (op 0xD8 → the C0/1770 transfer
 consumer → C0/024C/0617/0557 staging → the battle module boot → the ROM's own
@@ -199,7 +199,7 @@ whole VM from the pinned oracle capture `saves/battle_re/gato_t0.raw.wram` (raw
 frames. The `battletest: battle fN` line is engine-op-timing sensitive and NOT an
 expectation; the PASS line is the pin. Needs the ROM (enemy stat/name tables).
 
-### field-battlehud-gato (`ct_field.exe --battletest` + `CT_BATTLESHOT`)
+### field-battlehud-gato (`Belthasar.exe --battletest` + `CT_BATTLESHOT`)
 
 Pins the battle-mode HUD strip render (`CtBattleHudRender`, `src/field.c`; geometry/
 palettes/tilemaps baked in `src/data/battle_hud.h`; full derivation in
@@ -262,7 +262,7 @@ The selector's picture is still src/data/atbsel.h's bake (tools/_gen_atbsel.py, 
 box is held to the description window ($FF:C429 op 04, tile row 16) and its line-0 x = 53 column comes from the ACTIVE
 reveal's first frame (see the header). Derivations: disasm/notes/battle_atbmode.md, disasm/notes/naming_screen_sfx.md.
 
-### field-battleloop-gato (`ct_field.exe --battletest` + `CT_BATTLE_MASHA=1`)
+### field-battleloop-gato (`Belthasar.exe --battletest` + `CT_BATTLE_MASHA=1`)
 
 Pins the minimal canonical ATB battle loop (`src/battle.c CtBattleTick`, derived in
 `disasm/notes/battle_loop.md` PART 2 + the two closed ADDENDUM equations) resolving the
@@ -372,7 +372,7 @@ line, never to bless a shifted line. Dossier: `disasm/notes/battle_results_text_
   and from attack-A's single swipe (7 cycles over the 49f rear-up window). fnv32 canary; re-pin
   via `--pin` after re-verifying the flurry render intent.
 
-- **field-battle-animeng-idle-gather** (`ct_field.exe` + `CT_ANIMENG_SELFCHECK=1`) — the ANIM-ENGINE
+- **field-battle-animeng-idle-gather** (`Belthasar.exe` + `CT_ANIMENG_SELFCHECK=1`) — the ANIM-ENGINE
   STAGE 1 acceptance (`battle_anim_engine.md` §B.1 STEP-4). The strongest engine regression + the ONLY
   non-canary battle pin of the stage: the actual `ctAnimengGather` C code, fed the baked E3 cell-words
   (`src/data/animeng_e3_gato.h`) + the `$7F8000` sheet fixture (`src/data/animeng_sheet_gato.h`), must reproduce
@@ -433,7 +433,7 @@ what shifted the 5 fnvs — visually re-verified sane, not a wiring regression. 
   `CT_BATTLESHOT_FIELD[_AT]` hook (self-exits once armed, so the check terminates
   deterministically). Confirms the 3 Hetakes + Crono + Marle composite ON the forest terrain.
 
-### field-menutest-gato (`ct_field.exe --menutest`)
+### field-menutest-gato (`Belthasar.exe --menutest`)
 
 The X-menu phase-1 end-to-end check (the C0/18D9 X edge → the C0/192F gates
 `$011F!=0 && $0162==0 && $0110==0` → 15-frame entry fade + the C0/011B save block →
@@ -467,7 +467,7 @@ location word (C2/CEDC + C2/9875: overworld or `$7F01CE` bit15 = save allowed).
 On the gato field state both REFUSE, matching the oracle's `--monitor` traces
 (menu_open_items.md §3.1/§4.1).
 
-### menusave-ow-open (`ct_field.exe --menutest` + `CT_MENUOPT=5 CT_MENUSCREEN=6`)
+### menusave-ow-open (`Belthasar.exe --menutest` + `CT_MENUOPT=5 CT_MENUSCREEN=6`)
 
 Pins the ENTERED Save screen render as an fnv32 canary (only the f34 fnv line —
 `CT_MENUSCREEN` deliberately breaks the scripted sub-screen drives, the
@@ -481,7 +481,7 @@ summary-text glyphs are the documented 8x8-font boundary (the ROM rasterises
 through C2/EF65's VWF). Re-pin only after an intended save-render change,
 re-verified against the oracle captures.
 
-### camera-reenter-scene5 (`ct_field.exe --scene 1 --reentertest 5`)
+### camera-reenter-scene5 (`Belthasar.exe --scene 1 --reentertest 5`)
 
 `--reentertest N` drives a REAL door transition (pendKind=1 — the same at-black
 block + `camX = px-128` scroll re-seed as an overworld entry, pendKind=3) from
@@ -495,7 +495,7 @@ rooms, so `worldtest`'s Truce-market entry never caught it). Not an fnv pin (the
 fair has ambient NPCs) — it pins the camera coordinates; re-pin only after an
 intentional, oracle-validated camera-model change.
 
-### field-battle-forest-return (`ct_field.exe --scene 19 --loadwram … + CT_RETURN_PROBE_AT`)
+### field-battle-forest-return (`Belthasar.exe --scene 19 --loadwram … + CT_RETURN_PROBE_AT`)
 
 The INTERACTIVE post-victory RETURN (battle_forest_return.md ADDENDUM AD.5) — the
 check the headless `--battletest` path structurally cannot host (it never runs the
@@ -801,7 +801,7 @@ on 75 poked IPs each -- the inline call `$3F59` with seven RNG counters (both ca
 finish `$4211`-`$424C` and its END, every loop at its limits. Every WRAM byte and the post's port writes equal the
 cartridge's (`--callrom 7E3749` / `7E3754`). Full tier (~30 s). Needs the user's capture.
 
-### race-story-plays-through-in-the-port (ct_field, the user's Lab 32 capture)
+### race-story-plays-through-in-the-port (Belthasar, the user's Lab 32 capture)
 
 Johnny's race in the port itself: from saves/race_re/race_user.lakewram (the user's capture, loc 0DF), A at f30 -- the
 second-meeting arm's `CHANGELOC 10F` (f46) and `FF 00` at f66 open the native race (seq_race.c, 44 black frames of opening:
@@ -819,7 +819,7 @@ frame after it is held). Four drives (idle, B boosts, steering with bumps, the c
 frame and the END on the same frame (f2877, f2843, f2841, f2844). The picture's bytes are not graded (stage 2).
 Full tier (~1 min). Needs the user's capture.
 
-### battle-lavos-mimic-fight-vs-rule-cartridge (ct_field, from the oracle's pre-fight state)
+### battle-lavos-mimic-fight-vs-rule-cartridge (Belthasar, from the oracle's pre-fight state)
 
 The Day of Lavos's first mimic fight (scene 467, `D8 91 E0`) from saves/lavos_re/lavos_1d3_wait.* (Jackie's ch26 party in
 front of the shell): up 300 frames into it, then A every 12. Crono kills the slot-3 mimic; Ayla's attack, committed on
@@ -828,7 +828,7 @@ living seat: $26 5C -> 60, seat 9) -- the port used to strike the first living s
 ($2989 bit 0: C1/35A9 returns before the ladder and the 64-frame $5DC9 hold); the ack and the arena 15A. The cartridge:
 $26 = 62 f767, 65 f1075, the ack f1380, 15A f1490 -- the port on each to 3. Quick (~10 s). Needs the local saves.
 
-### lavos-day-chain-in-the-port (ct_field, the oracle's own run from Jackie's ch26)
+### lavos-day-chain-in-the-port (Belthasar, the oracle's own run from Jackie's ch26)
 
 The Day of Lavos in the port, from the End of Time bucket's arrival (saves/lavos_re/lavos_1d2_arrival.*, loc 1D2): up to
 the party, 1F7 (Lavos rises -- its world script's `34 44 7B`, C2/7B44: `$7F00AA` bit 0; without it 1F7 replays), back to
@@ -837,7 +837,7 @@ Every location change on the cartridge's frame to 3 until the fight (the cartrid
 3838); inside the fight the pad meets the menus a frame apart (15A f5570, the cartridge f5500) -- the fight itself is
 battle-lavos-mimic-fight-vs-rule-cartridge. Quick (~13 s). Needs the local saves.
 
-### ending-chain-after-lavos-in-the-port (ct_field, the oracle's own run from Jackie's ch27)
+### ending-chain-after-lavos-in-the-port (Belthasar, the oracle's own run from Jackie's ch27)
 
 After Lavos's core (saves/ending_re/ending_052_f1745.*, loc 052): A every 202 frames through 10F, 002, 04F to the night
 fair 050, the walk to Leene's Square 051 once control is back, the telepods' farewells 055 and down to the square again.
@@ -845,7 +845,7 @@ Every location change and both control returns on the cartridge's frame to 3 (10
 control f11888, 051 f13474, 055 f13986, control f28650, 051 f44407). (The cartridge's $011F = 1 inside each load -- C0/0BC8
 at its start, the fn0's `E3 00` at its end -- is not on screen; the port writes both on one frame.) Full (~70 s).
 
-### tyranno-ff24-chain-plays-through-in-the-port (ct_field, scene 301 from Jackie's ch17)
+### tyranno-ff24-chain-plays-through-in-the-port (Belthasar, scene 301 from Jackie's ch17)
 
 The Tyranno Lair's top from the ROM's own load (saves/tyranno_re/tele301_req.*: ch17 brought in by `--teleport 301 8 30 0
 --method req`): the walk to the trigger row, Azala's talk and the fight driven with A (both enemies' HP poked to 1 at f1700 --
@@ -854,13 +854,13 @@ world 1F3 with the impact's colour fade (world op 49, C2/1B15: $0047-$0049 down 
 later) and 105. The END comes 1732 frames after the op, the cartridge's 1734 (the opening's vblank wait, sequence_table.md
 sec. 15). Quick. Needs the local saves.
 
-### battle-azala-ring-op-eb-in-the-port (ct_field, the same fight unpoked)
+### battle-azala-ring-op-eb-in-the-port (Belthasar, the same fight unpoked)
 
 Azala's technique arms effect program 74 (D1/6CD9), whose loop runs op EB (CD/185F -> D1/EFE3, the ring of 106 point pairs
 around point 0): without it the program stopped and the fight froze with the boulder on screen. Pins the loop's exit and the
 program's end (`stops=0`). Quick. Needs the local saves.
 
-### panorama-story-ff23-plays-through-in-the-port (ct_field, the attract's hand-off with the story's bytes)
+### panorama-story-ff23-plays-through-in-the-port (Belthasar, the attract's hand-off with the story's bytes)
 
 After the Blackbird, scenes 102-107's controller takes its story arm (`$7F0057` bit 2 clear, the storyline D3): `DD F6 03
 91 35` stages the Epoch's world 1F6 and `FF 23` opens entry 3 natively (src/seq_entry3.c, 17 black frames), which runs to
@@ -868,7 +868,7 @@ its END; the teardown reboots into 1F6 (its world natives C2/7B5A / 7B9F) and th
 the cartridge's f1011 from the same state (saves/blackbird_re/ff23_story_f18.*). The picture is black (stage 2). Quick.
 Needs the local saves.
 
-### ending-story-plays-through-in-the-port (ct_field, the oracle's own playthrough)
+### ending-story-plays-through-in-the-port (Belthasar, the oracle's own playthrough)
 
 The game's ending in the port itself: from saves/ending_re/ending_pre_ff2b.lakewram (Leene's Square, the talk to obj9
 made), obj10's `CHANGELOC 02D` and `FF 2B` open the native ending stage (seq_ending.c, 48 black frames: the overlay's C3/0557
@@ -1451,7 +1451,7 @@ property of these two posts.
 
 ### menu-item-descriptions-from-rom (a change that turned NO check red)
 
-`ct_field --assets ct_assets.dat --desctest` -> `desctest: C8 -> "Recovers HP/MP at Save Pts."` etc.
+`Belthasar --assets ct_assets.dat --desctest` -> `desctest: C8 -> "Recovers HP/MP at Save Pts."` etc.
 
 This check exists for a reason worth repeating: the menu's item and equipment DESCRIPTION lines were
 being SYNTHESISED (`"Restores %d HP"` from the effect record, `"Power +2"` from a bonus mask) where the
@@ -1476,7 +1476,7 @@ all; with 8-bit index registers it desyncs two instructions in and the `LDX #2EB
 
 ### field-menu-equip-gearpanel-shows-its-list / field-menu-equip-list-window-rises
 
-`ct_field --scene 8 --play "..."` with `CT_EQUIPDEMO=1 CT_MENUGEOM=1` (+ `CT_MENUGEOM_AT`) ->
+`Belthasar --scene 8 --play "..."` with `CT_EQUIPDEMO=1 CT_MENUGEOM=1` (+ `CT_MENUGEOM_AT`) ->
 `menuequipgeom: sub=N slot=0 cand=3 rules=... rows=...`.
 
 These pin the EQUIP screen's two window LAYOUTS, which the port had collapsed into one: it reused the
@@ -1500,7 +1500,7 @@ Re-pin only after re-measuring the oracle renders -- these are oracle numbers, n
 
 ### field-party-slot-table (a PC is named by SLOT, and what to do when nothing observable changes)
 
-`CT_SLOTTRACE=1 CT_CARRYPARTY=0,1,2 CT_CALLFN="1:6:3:10,..." ct_field --scene 21 --frames 160`
+`CT_SLOTTRACE=1 CT_CARRYPARTY=0,1,2 CT_CALLFN="1:6:3:10,..." Belthasar --scene 21 --frames 160`
 -> `slotop: op=A9 n=04 -> $019B=06 obj=3`.
 
 Second slice of the same delegation as `field-item-op-live-vm`. Ops 0x22/0x24/0xA9/0x95/0xB6 name a PC
@@ -1526,7 +1526,7 @@ and before it no headless driver could enter one.
 
 ### field-party-gate-live-vm (the $C2 family, and a census that chose the fixture)
 
-`CT_BAGDUMP=2 CT_ITEMDEMO=1 CT_ACTIVATE=19:5 ct_field --scene 71 --frames 90`
+`CT_BAGDUMP=2 CT_ITEMDEMO=1 CT_ACTIVATE=19:5 Belthasar --scene 71 --frames 90`
 -> `party: 000180 res=808080808080 0:70/70,8/8 1:65/65,12/12  partyops=1`, where the control run
 without CT_ACTIVATE prints the wounded pair and `partyops=0`.
 
@@ -1547,7 +1547,7 @@ the rest are only reachable through dialogue a headless driver cannot answer.
 
 ### field-item-op-live-vm (the $C1 item family, and grading the runner the GAME executes)
 
-`CT_BAGDUMP=4 CT_ACTIVATE="15:5" ct_field --scene 439 --frames 60` -> `bag: D6:01 ... gold=400 famops=1`.
+`CT_BAGDUMP=4 CT_ACTIVATE="15:5" Belthasar --scene 439 --frames 60` -> `bag: D6:01 ... gold=400 famops=1`.
 
 This one exists for a structural reason, not a scene-specific one. The tree has TWO field-VM opcode
 implementations (`disasm/notes/vm_two_implementations.md`) and the dozen `--sweep*` checks all grade
@@ -1647,7 +1647,7 @@ So the reference is a plain boot run to a frame that happens to be inside the pa
 reads the overlay's own 16-bit frame counter `$7E:0008` out of the `.wram` sidecar and derives
 `setup = probe - $0008`, after checking that the probe really landed on this entry (`$0384`) and this
 page (`$0382`). If the boot's timing ever moves, the probe moves with it. The engine side is
-`ct_field.exe --seqstage <entry> <frames> [page]`, which runs one entry standalone -- the common init,
+`Belthasar.exe --seqstage <entry> <frames> [page]`, which runs one entry standalone -- the common init,
 the setup, then that many NMIs -- and dumps the composed frame to `CT_SEQSHOT`.
 
 Four checks, split by cost:
@@ -1860,7 +1860,7 @@ one is a regression.
 
 The forest ambush lockstep above stops at f282, which is `--vmdiff`'s reach: op D8 runs at f279 on both sides, the
 battle consumer (C0/1770) arms at f280 and the cartridge's objects stand still, and `ct.exe` links no field.c. This
-check continues in the real host: `ct_field --scene 19 --loadwram saves/battle_re/forest_wait_ambush_active.lakewram`
+check continues in the real host: `Belthasar --scene 19 --loadwram saves/battle_re/forest_wait_ambush_active.lakewram`
 (the state's own WRAM) with `CT_FIELD_MEMMON`, pinning the staged interface at the port's f281 (the end of its frame =
 the cartridge's first act of f282): `$29B0`, the eight `$29BF` records, `$019D`, `$0102` -- the logical oracle's bytes.
 Its mutation stages a frame later. Re-pin never: the values are the cartridge's.
@@ -2357,7 +2357,7 @@ changes a single pinned byte:
 | Debug build, `--jobs 4` (the old defaults) | ~500 s |
 | `--jobs min(12, CPUs-2)` (regress.py default) | 252 s |
 | `CMAKE_BUILD_TYPE=RelWithDebInfo` (tools/build.py default; `CT_BUILD_TYPE` overrides) | 135 s |
-| `CT_NOPACE=1` on every non-`--selftest` ct_field check | **102 s** |
+| `CT_NOPACE=1` on every non-`--selftest` Belthasar check | **102 s** |
 
 - **Parallelism.** 4 jobs on a 20-core box. Measured on the quick tier: 4 -> 145 s, 12 -> 88 s, 18 -> 84 s;
   the floor is the slowest single check, and only 4% of the tier is the serial `exclusive` tail.

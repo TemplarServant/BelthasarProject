@@ -182,7 +182,7 @@ Sweep of the approach delay — **only the phase changes, nothing else**:
 
 ```
 CT_VMTRACE=24 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
- ct_field --assets ct_assets.dat --scene 19 --loadwram $TMP/fr_2022.dumpwram \
+ Belthasar --assets ct_assets.dat --scene 19 --loadwram $TMP/fr_2022.dumpwram \
           --selftest o.raw --frames 900 --walkscript ".:<D>,u:60,.:900"
 ```
 
@@ -300,7 +300,7 @@ python tools/ct.py wram "$TMP/fr_2022.state" "$TMP/fr_2022.raw.wram"
 python -c "raw=open(r'$TMP/fr_2022.raw.wram','rb').read();open(r'$TMP/fr_2022.dumpwram','wb').write(b'ctwram v1\nRAM:131072:'+raw)"
 
 CT_VMTRACE=25 CT_CATTRACE=25 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
- build/ct_field.exe --assets ct_assets.dat --scene 19 \
+ build/Belthasar.exe --assets ct_assets.dat --scene 19 \
    --loadwram "$TMP/fr_2022.dumpwram" --selftest o.raw --frames 2500 \
    --walkscript ".:120,u:60,.:2500"
 # -> obj25 addr sticks at 03BB, x climbs to 4900 (tile 306), obj24 addr sticks at 037D, no battle.
@@ -309,7 +309,7 @@ CT_VMTRACE=25 CT_CATTRACE=25 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
 CT_TOUCHAT="24,85" CT_VMTRACE=24 … --frames 800           # obj24 addr sticks at 0367
 
 # the user's own seeds still WORK, because the WRAM restores the mover mid-move:
-build/ct_field.exe --assets ct_assets.dat --scene 19 \
+build/Belthasar.exe --assets ct_assets.dat --scene 19 \
   --loadwram saves/forest_re/batalha_nao_comeca.dumpwram --selftest o.raw --frames 900
 ```
 
@@ -356,7 +356,7 @@ reports (the infinite walk, the L-shaped path, AND the stale-facing "sibling lea
 project ALREADY carries the byte-exact port of those two stores in `src/move.c:1259` / `:1351`.
 
 Everything below was re-run by me, from my own snapshots
-(`%TMP%\ctwf3\nostart-adv\ct_probe.exe` / `ct_field.exe`), on states I built myself.
+(`%TMP%\ctwf3\nostart-adv\ct_probe.exe` / `Belthasar.exe`), on states I built myself.
 
 ## R1. Every ROM citation re-checked -- all HOLD
 
@@ -404,7 +404,7 @@ User's save, `ct_probe --read "11B0+2,11B2+2,1C30+1,1C32+1,011F+1,0100+2,7F0218+
 ## R3. The hang reproduces exactly -- and so does the D=0 pass
 
 ```
-ct_field --assets ct_assets.dat --scene 19 --loadwram ...\fr_2022.dumpwram \
+Belthasar --assets ct_assets.dat --scene 19 --loadwram ...\fr_2022.dumpwram \
          --selftest o.raw --frames 1400 --walkscript ".:<D>,u:60,.:1400"    (CT_VMTRACE=24, CT_BATTLE_TRACE=1)
 ```
 | D | obj24 addr histogram | `battle-start` |
@@ -481,7 +481,7 @@ matters the moment the target's `$1000,X` cadence is > 1 -- obj25's is 2 in our 
 
 From the user's own seed our engine **starts the battle and fights it**:
 ```
-CT_VMTRACE=24 CT_BATTLE_TRACE=1 ct_field --assets ct_assets.dat --scene 19 \
+CT_VMTRACE=24 CT_BATTLE_TRACE=1 Belthasar --assets ct_assets.dat --scene 19 \
   --loadwram saves/forest_re/batalha_nao_comeca.dumpwram --selftest o.raw --frames 1500
 -> obj24 addr: 037D (105 visits) -> 0384 (D8) -> 0387 -> 0356
 -> "battlesfx f159 battle-start id=08 pan=80 (CD/04FD)", three Hetakes, cronoHP 70 -> 46 by f1384

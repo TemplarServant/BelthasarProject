@@ -20,7 +20,7 @@ static void showError(NSString* message) {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp activateIgnoringOtherApps:YES];
     NSAlert* alert = [[NSAlert alloc] init];
-    alert.messageText = @"Chrono Trigger could not start";
+    alert.messageText = @"Belthasar could not start";
     alert.informativeText = message;
     [alert runModal];
 }

@@ -254,7 +254,7 @@ Frame-for-frame identical to the `$7F0054=00` run. **The story flag has no effec
 Drive: `u:100`, then `a:1,i:11` ×100, then `d:300` (walk away at the end).
 
 ```
-SDL_VIDEODRIVER=dummy CT_CARRYPARTY="0,1,128" CT_STORYDBG=1 build/ct_field.exe \
+SDL_VIDEODRIVER=dummy CT_CARRYPARTY="0,1,128" CT_STORYDBG=1 build/Belthasar.exe \
   --assets ct_assets.dat --scene 439 --loadflags <FLAGS> --at 392 143 \
   --selftest --frames 1600 --walkscript "u:100,(a:1,i:11)x100,d:300"
 ```

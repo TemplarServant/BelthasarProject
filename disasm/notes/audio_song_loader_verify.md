@@ -274,7 +274,7 @@ the correct discipline; adopt it.
 Front 1 §14 is right that **the ARAM outcome is invariant** to how the port schedules the APU: every
 byte is a two-way rendezvous. But the **game-visible** outcome is not invariant. The ROM stalls the
 65816 for 35 frames with NMI masked; the field VM does not advance. If `CtAudioService` performs the
-load "instantly" inside one `ct_field` frame, **every location change desyncs the port from the oracle
+load "instantly" inside one `Belthasar` frame, **every location change desyncs the port from the oracle
 by ~35 frames** — and `--vmdiff` is a lockstep comparator.
 
 And the stall length is **not derivable from the ROM**: it is APU-timing dependent. Measured here, the

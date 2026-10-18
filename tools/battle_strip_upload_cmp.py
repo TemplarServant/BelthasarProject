@@ -15,7 +15,7 @@ the dossier's PEEK_POKE), the dossier's drives:
 
   cartridge  build/ct.exe --monitor under the rule (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1): the images and the VRAM
              regions $7820 / $7A00 (`V` regions), and --peek PEEK_THUMBS every frame;
-  port       build/ct_field.exe --scene 6 --loadwram (the same WRAM), the battle's buttons at the cartridge's frames
+  port       build/Belthasar.exe --scene 6 --loadwram (the same WRAM), the battle's buttons at the cartridge's frames
              (CT_BATTLE_SCRIPT_ABS), CT_FIELD_MEMMON of the same images and of its strip VRAM image (`V` regions), and
              CT_SHOTS_THUMBS every frame.
 
@@ -122,7 +122,7 @@ def run_port(drive, total, tag):
                    CT_BATTLE_TRACE='1',
                    CT_FIELD_MEMMON=mm, CT_SHOTS_THUMBS=th, CT_SHOTS_THUMBS_EVERY='1', CT_SHOTS=os.path.join(OUT, tag + '_p'),
                    CT_SHOTS_AT=str(total - 1), CT_SHOTS_EXIT='1')
-        r = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6', '--loadwram',
+        r = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '6', '--loadwram',
                             lw, '--walkscript', 'a:8'], env=env, capture_output=True, text=True, errors='replace')
         p = r.stdout
         # The battle's frame 0 on the field's clock: src/field.c prints it on STDERR, and only under CT_BATTLE_TRACE (read

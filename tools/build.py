@@ -23,7 +23,7 @@ kills the three historical FALSE-'Build OK' mechanisms:
      os.utime(now) on the changed sources, rebuild once, re-verify, and FAIL
      loudly ('STALE: ...') if the exe still does not change.
 
-Usage:  python tools/build.py [ct|ct_field|ct_world|ct_viewer]
+Usage:  python tools/build.py [ct|Belthasar|ct_world|ct_viewer]
         (no argument = build all configured targets, like before)
 
 Read-only with respect to the engine: it uses CMake's configured targets
@@ -41,7 +41,7 @@ import time
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 # CT_BUILD_DIR=<dir under the repo>: build into another tree (e.g. build_alt) -- a second set of exes to test with while the
-# player's build\ct_field.exe is running. Everything else (the suite, the tools) keeps reading build\.
+# player's build\Belthasar.exe is running. Everything else (the suite, the tools) keeps reading build\.
 BUILD = os.path.join(ROOT, os.environ.get("CT_BUILD_DIR") or "build")
 STAMP_PATH = os.path.join(BUILD, ".ctbuildstamp.json")
 VCENV_BAT = os.path.join(BUILD, ".ctvcenv.bat")
@@ -52,7 +52,9 @@ VCVARS_REL = r"VC\Auxiliary\Build\vcvars64.bat"
 CMAKE_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 NINJA_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 
-KNOWN_TARGETS = ("ct", "ct_oracle", "ct_field", "ct_world", "ct_viewer")
+KNOWN_TARGETS = ("ct", "ct_oracle", "Belthasar", "ct_world", "ct_viewer")
+# The playable host was ct_field until 2026-10-17; the old name still selects it.
+TARGET_ALIASES = {"ct_field": "Belthasar"}
 
 
 def fail(reason, code=1):
@@ -250,13 +252,13 @@ def main(argv):
     if len(args) > 1:
         fail("usage: build.py [{}]".format("|".join(KNOWN_TARGETS)), 2)
     if args:
-        want = args[0]
+        want = args[0] = TARGET_ALIASES.get(args[0], args[0])
         if want not in KNOWN_TARGETS:
             fail("unknown target '{}' (know: {})".format(want, ", ".join(KNOWN_TARGETS)), 2)
 
     # ---- pre-flight: refuse to build over a RUNNING exe (the LNK1168 class).
     procs = running_ct_processes() if os.name == "nt" else []
-    # A single-target build links only that exe: another one running (the player's ct_field while ct.exe is rebuilt) is
+    # A single-target build links only that exe: another one running (the player's Belthasar while ct.exe is rebuilt) is
     # not in its way. `ct` also links ct_oracle (CMakeLists.txt: add_dependencies), so a running ct_oracle is in its way.
     if procs and args:
         links = {args[0].lower() + ".exe"} | ({"ct_oracle.exe"} if args[0].lower() == "ct" else set())

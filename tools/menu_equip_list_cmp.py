@@ -29,7 +29,7 @@ from ctlib import fb, peekshots  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 POKE = {0x2401: 0x02, 0x2501: 0x01}          # an Iron Blade in bag slot 1
 # presses: (oracle btnscript mask, oracle press frame); the cartridge reads each one frame later (its pad latch)
 PRESSES = [(0x200, 4), (0x100, 60), (0x100, 100), (0x100, 140), (0x1, 180), (0x100, 220), (0x100, 260), (0x100, 300),

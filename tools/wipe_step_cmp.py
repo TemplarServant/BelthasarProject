@@ -3,11 +3,11 @@ r"""The field's WINDOW WIPE (C3/01E4 through C0/22FA, op 0xFF 0x92-0x95) against
 
   * ONE CALL ON THE CARTRIDGE'S OWN INPUTS: `ct.exe --wipedump <state> <k> in out` runs the oracle to the k-th call of
     C3/000E, dumps its 128 KB WRAM and the beam there (vPos, hPos), runs to the RTL's landing C0:22FE and dumps the WRAM
-    again; `ct_field --wipecall in v h port` runs the port's translated routine (src/xlat/wipe_c3.c, on the vendored
+    again; `Belthasar --wipecall in v h port` runs the port's translated routine (src/xlat/wipe_c3.c, on the vendored
     hardware) through the host's own call glue (seq_xlat.c CtXlatWipeCall) on that WRAM and that beam. Graded: the two
     HDMA tables + the working copy at $7F:17C8-$19A7 (the routine's output), DP $0300's page ($50-$57: the counters and the
     seed pointer) and $0386 (C3/02DD's accumulator), byte for byte.
-  * THE MASK: `ct_field --wipemask out` gives the window-2 edge the field's HDMA channel 7 hands every scanline from that
+  * THE MASK: `Belthasar --wipemask out` gives the window-2 edge the field's HDMA channel 7 hands every scanline from that
     WRAM (field.c fieldWipeWindow: FD/C477's table choice, FD/C1EE's $2128/$2129 by $013C, the E4/F0 line split), and
     `--wipedump` also samples the cartridge's window 2 on every visible line after the routine returns (the frame
     its table masks), as `ct.exe --hdma`'s scanline tracer samples.
@@ -32,7 +32,7 @@ import sys
 
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 SRC = 'saves/attract_cena_inicial.state'
 WIPES = [('16E', 577, 3), ('01C', 768, 5)]      # (loc, frame the state is saved at, which call to grade)
 

@@ -6,7 +6,7 @@ and exits to 1F0 at (37, 32), where world 0's bootstrap has armed event 0 (C2:83
 party out of the water onto the shore by Lucca's house); scene 097 sets $7F:01F3 bit 4 and exits to 1F1 at (35, 3F), world 1's
 event 0 ($7F:0B91). No battery save stands there, so the tool makes one: Jackie's ch04 / ch10 slot 0 with the saved place
 (slot +5F5 / +5F6, the 8 x 8 cell) moved onto the event's cell and the story bit set (slot +603 = $7F:0000), its sum
-recomputed (FF/FBE7's). The cartridge boots it (CT_ORACLE_SRAM, Start, the Load list, A), the port too (ct_field --boot).
+recomputed (FF/FBE7's). The cartridge boots it (CT_ORACLE_SRAM, Start, the Load list, A), the port too (Belthasar --boot).
 
 Graded, from the frame `$0280` becomes 1: every change of `$0280`, the lead's `$0283/$0285` and the followers' `$0287-$028D`
 (cartridge --monitor, port CT_OWVEHTRACE), and pictures (the port's P against the cartridge's --peek P + 1, both counted from
@@ -68,7 +68,7 @@ def main():
     def port(shots):
         env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_SRAM=srm, CT_OWVEHTRACE='1',
                    CT_SHOTS=os.path.join(OUT, tag + '_p'), CT_SHOTS_AT=','.join(str(f) for f in shots), CT_SHOTS_EXIT='1')
-        return subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+        return subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                                DRIVE_P % 900], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     r = port([900])
     for l in r.stdout.splitlines():

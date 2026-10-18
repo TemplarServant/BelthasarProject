@@ -42,7 +42,7 @@ Several instruments, each answering a different question:
   `--sweepdraw` the draw pass, `--sweepcad9` the animation drain, `--sweepaieval` the battle AI's condition walk.
   A sweep that grades a routine says nothing about whether the engine still calls it, so each one has a liveness
   check beside it.
-- **Live lockstep in the game (`CT_FIELDLOCK`, `CT_PROJECT`).** The oracle runs inside `ct_field` and named
+- **Live lockstep in the game (`CT_FIELDLOCK`, `CT_PROJECT`).** The oracle runs inside `Belthasar` and named
   projections of its RAM are compared with the engine's every frame.
 - **Scenario comparators (`tools/*_cmp.py`, about 90 of them).** Each drives both sides through one scenario (a
   fight, a menu, a cutscene) and compares chosen bytes, frames or pictures.

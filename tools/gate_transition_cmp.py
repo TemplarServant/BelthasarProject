@@ -66,7 +66,7 @@ def main():
                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', TB_AUTOADV='1',
                CT_SHOTS_THUMBS=pt, CT_SHOTS_THUMBS_EVERY='1', CT_FIELD_MEMMON='0100:2')
-    log = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '8', '--loadwram',
+    log = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '8', '--loadwram',
                           SEED, '--selftest', os.path.join(OUT, 'p.raw'), '--frames', str(N)],
                          env=env, capture_output=True, text=True, errors='replace').stdout
     m = re.search(r'fmemmon f(\d+) loc=\w+\s+0100=7100\*', log)

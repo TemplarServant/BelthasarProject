@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ctlib import fb, peekshots  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 CT = os.path.join(ROOT, 'build', 'ct.exe')
 
 # name, oracle state, port seed, scene, oracle btnscript (LakeSnes masks), port walkscript, frames, the full-field

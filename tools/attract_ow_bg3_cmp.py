@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 CT = os.path.join(ROOT, 'build', 'ct.exe')
 STATE = 'saves/attract_cena_inicial.state'
 

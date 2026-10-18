@@ -1,6 +1,6 @@
 # Android
 
-The playable host (`ct_field`: the field, the overworld, battles, menus, sound) builds as an Android app. On-screen
+The playable host (`Belthasar`: the field, the overworld, battles, menus, sound) builds as an Android app. On-screen
 touch controls are drawn over the picture, and a Bluetooth or USB controller works too.
 
 ## What the APK does and does not contain
@@ -52,7 +52,7 @@ Install on a phone with USB debugging on:
 
 - `android/app/build.gradle` runs the NDK's CMake on the **root** `CMakeLists.txt`. Its `if(ANDROID)` branch includes
   `android/CMakeLists.cmake`, which builds `libSDL2.so` from `third_party/SDL2-src` and `libmain.so` from the same
-  source list as the desktop `ct_field` (`CT_FIELD_SRC`), plus `src/android.c`. The desktop targets are untouched.
+  source list as the desktop `Belthasar` (`CT_FIELD_SRC`), plus `src/android.c`. The desktop targets are untouched.
 - SDL's Java glue (`org.libsdl.app`) is compiled straight from `third_party/SDL2-src/android-project`.
   `GameActivity` is SDL's activity. `SetupActivity` is the first-run file picker.
 - `src/android.c` (`CtAndroidConfigure`, called first thing in `main`) makes the data folder the working folder. It

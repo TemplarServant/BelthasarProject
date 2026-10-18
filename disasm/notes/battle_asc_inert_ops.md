@@ -9,7 +9,7 @@ All oracle numbers are the LOGICAL oracle (`CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUA
 marked real time. The item fixtures on the cartridge side are `saves/battle_re/gato_elixir.state` with the item swapped
 by `PEEK_POKE` (`2401=C0` Ether, `2401=C6,266E=04` Heal, `2401=C7,2653=00,2654=00,266D=80` Revive; the state's own item
 is the Elixir), driven by `--btnscript 100:8,0:373,20:2,0:10,20:2,0:10,100:2,0:14,100:2,0:14,20:2,0:10,100:2,0:540`
-(Item, the item, Marle). The port's side is `ct_field --battletest` on `gato_elixir.raw.wram` / `ether_restore.raw.wram` /
+(Item, the item, Marle). The port's side is `Belthasar --battletest` on `gato_elixir.raw.wram` / `ether_restore.raw.wram` /
 `heal_cure.raw.wram` / `revive.raw.wram` with `CT_BATTLE_SCRIPT=n:40,d:2,n:8,d:2,n:10,a:2,n:10,a:2,n:10,r:2,n:10,a:2,n:200`
 (Revive: `n:10,d:2,n:8,d:2,n:10,a:2,n:10,a:2,n:14,r:2,n:10,a:2,n:200`). The two sides start the item on different frames
 (oracle `$A013` up f611 for the Elixir / Ether / Revive, f800 for the Heal; port f384, Revive f380), so everything below is

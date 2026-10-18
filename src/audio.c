@@ -59,7 +59,7 @@
 // a computed one. What would close it: count the 09DA tail in MASTER cycles against the emulator's
 // own $2140 access timing, or drive the port's writes from a cycle-accurate CPU model.
 // Bounded spin. The real handshake settles in a handful of quanta; this exists
-// so a protocol mismatch degrades to "no sound" instead of hanging ct_field.
+// so a protocol mismatch degrades to "no sound" instead of hanging Belthasar.
 #define SPIN_LIMIT  200000
 
 // ==== THE HDMA THE RASTER RUNS, FROM ITS CHANNELS (snes/dma.c dma_initHdma / dma_doHdma) =================================

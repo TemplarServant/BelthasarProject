@@ -8,12 +8,12 @@ The two sides are captured once per frame, as 128x112 thumbnails (the same recor
 [u32 frame][u16 $0100][128*112*3 RGB], 2x2 SNES pixels averaged):
 
     cartridge  build/ct.exe --peek saves/attract_cena_inicial.state --frames 9110   PEEK_THUMBS / _EVERY=1
-    port       build/ct_field.exe --assets ct_assets.dat --scene 433                 CT_SHOTS_THUMBS / _EVERY=1
+    port       build/Belthasar.exe --assets ct_assets.dat --scene 433                 CT_SHOTS_THUMBS / _EVERY=1
                (interactive, CT_AUDIO_LOCKSTEP=1, stopped at f11400 by CT_SHOTS_EXIT -- the numbering
                tools/frame_region_cmp.py and every attract check use)
 
 The cartridge capture never changes and is cached under build/_divergence/cache; the port's is re-taken
-whenever build/ct_field.exe or ct_assets.dat changes (or with --fresh-port).
+whenever build/Belthasar.exe or ct_assets.dat changes (or with --fresh-port).
 
 --vehicle selftest captures the port from `--selftest --frames 11400` instead. That run orders a transition's frames
 differently from the interactive one -- the curtain-close blink (disasm/notes/field_window_wipe.md) showed ONLY
@@ -61,7 +61,7 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join('build', 'ct.exe')
-FIELD = os.path.join('build', 'ct_field.exe')
+FIELD = os.path.join('build', 'Belthasar.exe')
 STATE = 'saves/attract_cena_inicial.state'
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 ASSETS = 'ct_assets.dat'

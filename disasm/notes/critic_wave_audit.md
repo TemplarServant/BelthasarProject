@@ -13,7 +13,7 @@ src/field.c         |  62 ++++++++++       src/main.c  |  36 ++++--
 ```
 
 plus two already-**committed** audio implementations (`45a49bf` "THE SOUND SYSTEM BOOTS", `779817c`
-"ct_field GROWS AN APU") and the `--aram` oracle mode (`73ba0dc`). Three fronts (audio-runtime,
+"Belthasar GROWS AN APU") and the `--aram` oracle mode (`73ba0dc`). Three fronts (audio-runtime,
 battle-ice, movement) have live uncommitted engine edits in one shared tree. That is the single largest
 risk in this wave and it is not mentioned in any summary.
 

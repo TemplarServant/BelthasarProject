@@ -12,7 +12,7 @@ field outlined in the ramp's last colour.
 
   cartridge  build/ct.exe --peek from saves/field_re/m81_nuns_lake.state (the rule), A every 12 frames, 10300 frames: the
              field after the ack (Crono and Marle slowed from c3911 / c5673 until the last enemy falls, c9733)
-  port       build/ct_field.exe --loadwram saves/field_re/m81_nuns_lake.lakewram, CT_BATTLE_MASHA, CT_DUMPWRAM at field
+  port       build/Belthasar.exe --loadwram saves/field_re/m81_nuns_lake.lakewram, CT_BATTLE_MASHA, CT_DUMPWRAM at field
              f9000 (Crono slowed from the kiss to the victory)
 
     status-palette: OBJ<r> cartridge <16 words> | port <16 words> -> SAME | DIFFER
@@ -45,7 +45,7 @@ def main():
     pw = os.path.join(OUT, 'p.wram')
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_BATTLE_MASHA='1',
                CT_BATTLE_DEBUGEND='20000', CT_DUMPWRAM=pw, CT_DUMPWRAM_AT='9000')
-    subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '129',
+    subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '129',
                     '--loadwram', 'saves/field_re/m81_nuns_lake.lakewram', '--selftest', os.path.join(OUT, 'p.raw'),
                     '--frames', '9002'], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not os.path.exists(craw + '.wram') or not os.path.exists(pw):

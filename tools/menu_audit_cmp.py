@@ -35,7 +35,7 @@ from ctlib import fb  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 REC = 6 + 128 * 112 * 3
 # LakeSnes serial masks: B=1 Y=2 Sel=4 St=8 Up=10 Down=20 Left=40 Right=80 A=100 X=200 L=400 R=800
 KEY = {0x100: 'a', 0x1: 'b', 0x10: 'u', 0x20: 'd', 0x40: 'l', 0x80: 'r', 0x200: 'm', 0x1100: 'a'}

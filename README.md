@@ -122,7 +122,7 @@ powershell -ExecutionPolicy Bypass -File tools\get_imgui.ps1           :: Dear I
 powershell -ExecutionPolicy Bypass -File tools\get_vulkan_headers.ps1  :: Vulkan headers -> third_party\vulkan (optional backend)
 ```
 
-Without SDL2 only the headless oracle harness `ct.exe` is built. Without ImGui `ct_field` builds with no overlay.
+Without SDL2 only the headless oracle harness `ct.exe` is built. Without ImGui `Belthasar` builds with no overlay.
 Without the Vulkan headers the Vulkan backend is left out. On Linux, use the system SDL2 and place ImGui 1.91.5 in
 `third_party/imgui` yourself.
 
@@ -155,16 +155,16 @@ tools\build.bat              :: or: python tools/build.py [target]
 ```
 
 Prefer `python tools/build.py`: it checks that each target's executable was actually relinked. A running
-`ct_field.exe` locks the file, and the plain batch file prints "Build OK" anyway. Close the game before you rebuild.
+`Belthasar.exe` locks the file, and the plain batch file prints "Build OK" anyway. Close the game before you rebuild.
 
 ### 4. Run
 
 Put the ROM in the repository root as `Chrono_Trigger_USA_SNES.sfc` (or set `CT_ROM=<path>`), then:
 
 ```bat
-build\ct_field.exe --assets ct_assets.dat --boot       :: the cartridge's cold start: title, then load screen or new game
-build\ct_field.exe --assets ct_assets.dat --newgame    :: straight into a new game (naming, then the 1000 A.D. pan)
-build\ct_field.exe --assets ct_assets.dat --scene 5    :: drop into one field scene
+build\Belthasar.exe --assets ct_assets.dat --boot       :: the cartridge's cold start: title, then load screen or new game
+build\Belthasar.exe --assets ct_assets.dat --newgame    :: straight into a new game (naming, then the 1000 A.D. pan)
+build\Belthasar.exe --assets ct_assets.dat --scene 5    :: drop into one field scene
 build\ct_viewer.exe --datonly ct_assets.dat            :: scene browser (Left/Right scene, Space pause, F full map)
 ```
 

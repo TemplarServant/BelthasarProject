@@ -11,7 +11,7 @@ Fixture: `saves/battle_re/party3_field.state` (+ its lakewram) -- scene 130, par
 three PCs stacked on tile (42,44) as obj1 (lead), obj3 (member 2) and obj4 (member 3).
 
 ```
-CT_FIELDLOCK=saves/battle_re/party3_field.state build/ct_field.exe --assets ct_assets.dat --scene 130 \
+CT_FIELDLOCK=saves/battle_re/party3_field.state build/Belthasar.exe --assets ct_assets.dat --scene 130 \
   --loadwram saves/battle_re/party3_field.lakewram --selftest --frames 140 --walkscript "l:30,d:30,r:30,u:30,n:20"
 ```
 

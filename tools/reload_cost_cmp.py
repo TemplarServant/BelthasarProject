@@ -7,8 +7,8 @@ cartridge, leg by leg.
 Each fixture is a menu close on the LOGICAL oracle (CT_ORACLE_LOGICAL=1), from a committed save and a button script
 up to a few frames before the close's RTL. The tool dumps the cartridge's WRAM at C0/0B5D (the NMI-off) and at
 C0/286C (the pass) with `ct.exe --hookpc` + CT_HOOK_DUMPWRAM, and grades:
-  * the pass, `ct_field --passcost` over the WRAM at C0/286C;
-  * the whole stretch, `ct_field --reloadcost` over the WRAM at the RTL with C0/0905's restore applied
+  * the pass, `Belthasar --passcost` over the WRAM at C0/286C;
+  * the whole stretch, `Belthasar --reloadcost` over the WRAM at the RTL with C0/0905's restore applied
     ($7F:2000 -> $7E:0920, $14E0 bytes -- the state the port holds there);
 against the non-refresh cycles the cartridge's beam trace measured (tools/ctlib/beam.py), stored below; `--make`
 re-traces (`ct.exe --cputrace`, CPUTRACE_BEAM=1, ~100 MB a fixture) and re-measures them. The frames the stretch
@@ -28,7 +28,7 @@ from ctlib import beam  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_menuinit')
 
 # tag, save, btnscript to a few frames before the close's RTL, frames to trace from there, caller,

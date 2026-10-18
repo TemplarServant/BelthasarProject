@@ -250,7 +250,7 @@ from what it leaves (gBattleFxFixCarry; --sweepfxcompose takes the oracle PPU's 
 residual of Aura Whirl and Frog Squash (the blue component the port started at 0). Aura Whirl (fx_aura_whirl_c955,
 f0-200, both switches): sprites 0, non-sprite px outside the V-IRQ blank 0, rows' registers 371 -> 130.
 
-**The APU stands with the beam under the rule** (2026-09-30). The oracle ran the SPC through every hold (g_ctLogicalHoldApu = 1) for the valve's sake: a handshake inside a held stretch had to be answered before the valve fired. With no valve a poll of the APU is a wait (lfInWaitLoop: the plain poll and the counted one) and ends the stretch, so under CT_ORACLE_NMION_HOLD=1 the oracle now holds the APU too (lfReadEnv; CT_ORACLE_HOLDAPU=1 keeps the old way) -- the zelda3 model's SPC, a frame per frame whatever the CPU spent, and ct_field's own relation. Measured: the line-64 cut's ~20 held lines of every action frame had become SPC time no port frame has -- battle_status_cmp's lockdrop, under both switches, dropped the tech a frame early on the cartridge (the #FF handshake answered sooner); with the APU standing it is identical. The whole suite under both switches: one check fixed, none broken.
+**The APU stands with the beam under the rule** (2026-09-30). The oracle ran the SPC through every hold (g_ctLogicalHoldApu = 1) for the valve's sake: a handshake inside a held stretch had to be answered before the valve fired. With no valve a poll of the APU is a wait (lfInWaitLoop: the plain poll and the counted one) and ends the stretch, so under CT_ORACLE_NMION_HOLD=1 the oracle now holds the APU too (lfReadEnv; CT_ORACLE_HOLDAPU=1 keeps the old way) -- the zelda3 model's SPC, a frame per frame whatever the CPU spent, and Belthasar's own relation. Measured: the line-64 cut's ~20 held lines of every action frame had become SPC time no port frame has -- battle_status_cmp's lockdrop, under both switches, dropped the tech a frame early on the cartridge (the #FF handshake answered sooner); with the APU standing it is identical. The whole suite under both switches: one check fixed, none broken.
 
 ## 7. The infinitely fast CPU (2026-10-01, CT_ORACLE_IFAST=1 with the rule)
 
@@ -325,7 +325,7 @@ CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1). Measured first, on the oracle (ct.e
     h 807 against the oracle's 137 h 626; in the lockstep (--vmdiff, the gate cutscene against the rule oracle) `EA 18`
     38 frames, RTL line 223 h 834 against C0/3C47 at 221 h 740, and `EA 00` line 75 against 69 (no vblank crossed; the
     residual is the transfer's own, its polls 1812 against the oracle's ~1806).
-  The port (src/audio.c, src/field.c, src/battle.c, src/ct_vm.c, src/main.c, all behind the two switches): ct_field
+  The port (src/audio.c, src/field.c, src/battle.c, src/ct_vm.c, src/main.c, all behind the two switches): Belthasar
   brings its SPC up headless and runs it one frame per frame (a headless fight's too: CtBattleSoundSink.frameSpc after each
   tick); every CtAudioService in engine mode 0/1 starts at max(the caller's post position, the SPC's progress into the
   frame's slice), C7's work on the listing (the exception) and the caller's own free, the NMIs' own waits as beam time
@@ -372,7 +372,7 @@ the field's runner C0/5A46 reads a frozen `$213D`, cuts every pass, and gato_wai
   shifted anchor, and a fixed-frame shot moved -11 is the old picture (same fnv).
 * THE BOOT'S SONG UPLOAD in a WRAM run: a cold driver keeps the old clock (CtAudioSetRuleOff), which charges the battle
   NMI's work inside C0/1BCE's `14 45` -- 59 NMIs where the rule's cartridge takes 53 (f222 line 228 -> C0/1BD2 f275
-  line 240): the field-started fight ran 6 frames late. CT_AUDIO_SEEDSTATE (ct_field) gives such a run the state's own
+  line 240): the field-started fight ran 6 frames late. CT_AUDIO_SEEDSTATE (Belthasar) gives such a run the state's own
   SPC on the rule's clock: 52 NMIs, returning 26 lines short of the cartridge's (advancing the SPC 1-2 frames before the
   post changes nothing) -- the fight one frame early. (A cold driver on the rule's clock gives 53 for gato_wait but 51
   against the cartridge's 42 for forest_wait_ambush_active, where the state's own SPC gives 42: the driver's state is part

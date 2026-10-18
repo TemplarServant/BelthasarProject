@@ -30,7 +30,7 @@ from ctlib import fb  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OSTATE = 'saves/field_re/shop90_lake.state'
 PWRAM = os.path.join(ROOT, 'saves', 'field_re', 'shop90.lakewram')
 OUT = os.path.join(ROOT, 'build', '_shopeq')

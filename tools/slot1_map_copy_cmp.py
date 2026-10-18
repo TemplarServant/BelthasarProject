@@ -37,7 +37,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_slot1map')
 
 STATE = 'saves/field_re/loc002_curtain_ctl.state'

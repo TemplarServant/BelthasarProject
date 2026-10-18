@@ -13,7 +13,7 @@ it is not in this plan.**
   definitions by column-0 brace matching, (b) for a set of line-range GROUPS reports, per group,
   every file-scope symbol it references that is **defined outside** the group. Comments and string
   literals are stripped first. Invocation shown per section below.
-* Build wiring: `src/…` ↔ target mapping read from `CMakeLists.txt` (lines 14–32 = `ct`, line 56 = `ct_field`,
+* Build wiring: `src/…` ↔ target mapping read from `CMakeLists.txt` (lines 14–32 = `ct`, line 56 = `Belthasar`,
   line 46 = `ct_viewer`, line 69 = `ct_world`).
 
 **One known false positive** in the mapper output below: `uint8_t(fn@2477)` in `src/field.c` — the
@@ -28,11 +28,11 @@ column-0 line `static const uint8_t (*ctAnimengGatoSheet(void))[32] {` parses as
 
 | file | lines | bytes | links into |
 |---|---:|---:|---|
-| `src/field.c`  | 7359 | 551 715 | `ct_field` only |
+| `src/field.c`  | 7359 | 551 715 | `Belthasar` only |
 | `src/main.c`   | 5154 | 295 339 | `ct` only |
-| `src/battle.c` | 5075 | 409 761 | `ct_field` only |
-| `src/ct_vm.c`  | 3051 | 231 030 | **`ct` AND `ct_field`** |
-| `src/menu.c`   | 1487 | 102 244 | `ct_field` only |
+| `src/battle.c` | 5075 | 409 761 | `Belthasar` only |
+| `src/ct_vm.c`  | 3051 | 231 030 | **`ct` AND `Belthasar`** |
+| `src/menu.c`   | 1487 | 102 244 | `Belthasar` only |
 | all other `.c` | ~3 500 | — | mixed |
 
 Header census (`ls src/*.h | wc -l` → **67**; classified by counting `^…\(`-shaped declarations vs
@@ -194,11 +194,11 @@ NOT SPLITTABLE.
 
 ```
 python tools/build.py            # trust the per-target artifact table, never the banner
-python tools/regress.py --quick  # 113 of the 137 checks (43 drive build/ct.exe, 94 drive build/ct_field.exe)
+python tools/regress.py --quick  # 113 of the 137 checks (43 drive build/ct.exe, 94 drive build/Belthasar.exe)
 ```
 
-and, before starting, `taskkill`/`Stop-Process` any running `build\ct_field.exe`
-(memory: *ct_field.exe auto-close (build lock)*) — a locked exe silently produces a stale binary.
+and, before starting, `taskkill`/`Stop-Process` any running `build\Belthasar.exe`
+(memory: *Belthasar.exe auto-close (build lock)*) — a locked exe silently produces a stale binary.
 
 A step is DONE only when the quick suite's pass/fail set is **identical** to the pre-step baseline.
 Capture that baseline once, before step 1. Because every move is a pure textual relocation, any
@@ -226,7 +226,7 @@ content-hash/skew trap keeps working across the move.
   — `CtBattleRom` (`battle.c:49`) returns exactly `gRom`/`gRomLen`, so this is provably identical.
 * **Keep in `battle.c`**: `kPcBlock` (396), `kBattleStatDerive` (408), `ENEMY_BLOCK` — they belong to
   staging, not the ROM API.
-* **CMake**: add `src/battle_romdata.c` to the **`ct_field`** target only (line 56). *(If a future
+* **CMake**: add `src/battle_romdata.c` to the **`Belthasar`** target only (line 56). *(If a future
   headless battle-data check is wanted, the same file could also join `ct` — do not do it now.)*
 * **Result**: `battle.c` 5075 → ~4715 lines; a clean, dependency-free "ROM battle data" module.
 
@@ -239,7 +239,7 @@ content-hash/skew trap keeps working across the move.
   once a later step needs them; see steps 3–5, which each drop the `static` on exactly what they need).
 * `ct_vm.c` gains `#include "ct_vm_internal.h"`. **Nothing else changes; no new .c file, no CMake edit.**
 * This is the enabler for steps 3–5. Verify with build + quick suite anyway (it proves the header
-  is self-contained and both `ct` and `ct_field` still compile).
+  is self-contained and both `ct` and `Belthasar` still compile).
 
 ### Step 3 — `src/ct_vm_camera.c` — **RISK: LOW**
 
@@ -247,7 +247,7 @@ content-hash/skew trap keeps working across the move.
 * **Outward deps: ZERO** (mapper output above). Entry points `CtSceneCameraTick/Entry/Input/Px` are
   already public in `ct_vm.h`; the four `cam*` helpers stay `static` in the new file.
 * **New header**: none needed — `ct_vm_internal.h` (step 2) + `ct_vm.h`.
-* **CMake**: `src/ct_vm_camera.c` must be added to **BOTH** `ct` (line 14–32 block) **and** `ct_field`
+* **CMake**: `src/ct_vm_camera.c` must be added to **BOTH** `ct` (line 14–32 block) **and** `Belthasar`
   (line 56). This is the one trap in the whole plan: `ct_vm.c` is the only monolith linked into two
   targets. Forgetting `ct` gives `LNK2019 CtSceneCameraTick` on the headless build.
 * **Result**: ~214 lines out; `field_camera_unification.md`'s mechanism becomes one addressable file.
@@ -259,7 +259,7 @@ content-hash/skew trap keeps working across the move.
 * **Only outward dep**: `opLen` (`ct_vm.c:35`). Drop its `static` and declare it in
   `ct_vm_internal.h` as `int CtVmOpLen(const uint8_t*, int);`, or simply un-`static` `opLen` and
   declare it there. (A rename is optional cosmetics — prefer un-`static` + declare, fewer touched lines.)
-* **CMake**: add to **BOTH** `ct` and `ct_field`.
+* **CMake**: add to **BOTH** `ct` and `Belthasar`.
 * **Result**: ~192 lines out; the oracle-differential bridge stops living inside the engine core.
 
 ### Step 5 — `src/ct_vm_followers.c` — **RISK: LOW**
@@ -281,7 +281,7 @@ content-hash/skew trap keeps working across the move.
   at `field.c:1456`), the 6 functions, and `const Coll* FieldCollCur(void);` (remedy **S4**, for the
   debug trace at 4338–4346). `g_collRam` and `g_fc` stay `static` in the new TU.
 * **Includes**: the new TU needs `"collision.h"`, `"player.h"`, `"ct_vm.h"`.
-* **CMake**: `ct_field` only.
+* **CMake**: `Belthasar` only.
 * **Risk note**: medium only because `Coll` becomes a published type; there is no state export beyond
   the read accessor.
 
@@ -296,7 +296,7 @@ content-hash/skew trap keeps working across the move.
   `worldBg3Px` and `worldDrawAmbientSprites` stay `static` in the new TU.
 * **Includes**: `"world.h"`, `"ct_owobj.h"`, `"assets.h"`, `"era_hud.h"`, `"ct_ng_pan.h"`,
   `"ow_idle.h"`, `"ct_portal_bg3.h"` move out of `field.c` with it.
-* **CMake**: `ct_field` only.
+* **CMake**: `Belthasar` only.
 * **Result**: ~450 lines out; the overworld *presentation* layer sits next to `world.c` (the engine).
 
 ### Step 8 — `src/field_text.c` + `src/field_text.h` — **RISK: MEDIUM**
@@ -312,7 +312,7 @@ content-hash/skew trap keeps working across the move.
   * screens: `drawNameScreen`, `drawAtbSelScreen`; charset: `ctToAscii`, `asciiToCt`, `NAME_GRID`;
   * setters/getter (S2) + `CtTbStyleGet/Set` (S3).
 * **Includes** that move with it: `"atbsel.h"`, plus the CT window/menu-font asset plumbing.
-* **CMake**: `ct_field` only.
+* **CMake**: `Belthasar` only.
 * **Note**: the new TU is **SDL-free** (`awk 'NR<4407 && /SDL_/' src/field.c` → only the
   `#define SDL_MAIN_HANDLED` at line 14). Same for steps 6, 7, 9, 10.
 
@@ -336,10 +336,10 @@ content-hash/skew trap keeps working across the move.
   `battle_gato_atkfaces.h`, `battle_gato_song.h`, `battle_songbeam.h`, `battle_bracket.h`,
   `battle_end.h`, `battle_settle.h`, `battle_fx.h`, `battle_fx_whirl.h`, `battle_fx_ice.h`,
   `battle_fx_song.h`, `battle_hetake.h`, `battle_dissolve.h`, `battle_marleatk.h`).
-* **CMake**: `ct_field` only.
+* **CMake**: `Belthasar` only.
 * **Result**: `field.c` loses 2373 lines and 27 data-blob includes in one move. Verify carefully:
   this step touches the largest set of regression checks (the `field-battle*` family in
-  `tools/regress_checks.json`, all driving `build/ct_field.exe --battletest`).
+  `tools/regress_checks.json`, all driving `build/Belthasar.exe --battletest`).
 
 ### Step 10 — `src/field_battle_bridge.c` + header — **RISK: LOW (after 9)**
 
@@ -347,7 +347,7 @@ content-hash/skew trap keeps working across the move.
   `fieldBattleConsumer`, `MtSnap`/`mtSnapshot`).
 * **Depends on**: `battle_render.h` (step 9) + `field_coll.h`'s `FieldCollCur()` (step 6).
 * **New header** exports `fieldBattleFinish`, `fieldBattleConsumer`, `MtSnap`, `mtSnapshot`.
-* **CMake**: `ct_field` only.
+* **CMake**: `Belthasar` only.
 * **Result**: `field.c` 7359 → **~3600 lines**, of which `main()` is 2953.
 
 ### Steps 11-17 — `src/main.c` → per-family harness TUs — **RISK: LOW each**
@@ -380,7 +380,7 @@ the duplication. Prefer the deletion, it is one line and provably inert.
   13 groups; `animparse` (3022–3371) is technically dep-free but is 350 lines and only reachable via
   `sched`/`choreo`, so the cut buys little for the churn. **Optional bonus step, not recommended now.**
 * **Merging the duplicated dialogue-font helpers** between `main.c` (399–443) and `field.c` (784–…).
-  They live in different targets today (`ct` vs `ct_field`), and unifying them means one shared TU
+  They live in different targets today (`ct` vs `Belthasar`), and unifying them means one shared TU
   linked into both, which changes nothing but widens the blast radius. **Do it only after step 8 and 15
   have both landed and are green.**
 
@@ -432,18 +432,18 @@ upload once, then drive it with the real port writes.** No SPC700 or DSP code ge
 
 Today (`CMakeLists.txt:12`) `file(GLOB SNES_SRC … snes/*.c)` is added **only** to `ct` (line 31), and
 `target_include_directories(ct PRIVATE snes src)` (line 33) is the only target with `snes` on the
-include path. `ct_field` (lines 56–57) links **none** of `snes/` and does not have `snes` in its
+include path. `Belthasar` (lines 56–57) links **none** of `snes/` and does not have `snes` in its
 include dirs. So:
 
 ```cmake
 # line 56 — add the audio module + the minimal vendored APU set
-  add_executable(ct_field src/field.c src/scene.c src/lz.c src/assets.c src/ct_vm.c
+  add_executable(Belthasar src/field.c src/scene.c src/lz.c src/assets.c src/ct_vm.c
     src/collision.c src/player.c src/world.c src/battle.c src/menu.c src/oam.c
     src/audio.c                                  # NEW
     snes/apu.c snes/spc.c snes/dsp.c snes/statehandler.c)   # NEW (minimal APU set)
 
 # line 57 — 'snes' must join the include path (apu.h pulls snes.h/spc.h/dsp.h/statehandler.h)
-  target_include_directories(ct_field PRIVATE src snes ${SDL2_DIR}/include)
+  target_include_directories(Belthasar PRIVATE src snes ${SDL2_DIR}/include)
 ```
 
 `ct` needs **only** `src/audio.c` added to its source list (line 14–32); `snes/*.c` and the `snes`
@@ -452,17 +452,17 @@ include dir are already there via the GLOB and line 33.
 `ct_viewer` and `ct_world` need **no** change (they do not run the engine loop).
 
 **Include-order hazard (structural, must not be got wrong):** `snes/input.h` and `src/input.h` are
-distinct headers with the same basename. Putting `snes` on `ct_field`'s include path creates the
+distinct headers with the same basename. Putting `snes` on `Belthasar`'s include path creates the
 same ambiguity `ct` already lives with (`target_include_directories(ct PRIVATE snes src)`, line 33 —
 and `ct` compiles *both* `src/input.c` and `snes/input.c` today without incident, because a quoted
 `#include "input.h"` resolves relative to the including file first on MSVC and GCC alike).
-**Keep `src` BEFORE `snes` in `ct_field`'s list** as written above, and do not convert any
+**Keep `src` BEFORE `snes` in `Belthasar`'s list** as written above, and do not convert any
 `#include "input.h"` to an angle-bracket include.
 
 **Sequencing against §3:** land `audio.c` **after step 10**. Steps 1–10 restructure `field.c` and
 its CMake line; doing both at once means a red `--quick` run cannot be attributed. Steps 11–17 touch
 only `ct`/`main.c` and are independent of the audio work, so they may interleave freely.
-`SDL_INIT_AUDIO` must be added to `ct_field`'s `SDL_Init` — that is a behavioral change and belongs
+`SDL_INIT_AUDIO` must be added to `Belthasar`'s `SDL_Init` — that is a behavioral change and belongs
 to the audio front, **not** to this plan.
 
 ### 4.4 The two hard constraints I verified (read these before writing a line of `audio.c`)
@@ -478,7 +478,7 @@ to the audio front, **not** to this plan.
    (`grep -oE '\b(spc|dsp|sh|apu|snes|cpu|ppu|dma|cart|input)_[a-zA-Z]+\(' snes/{apu,dsp,spc}.c`)
    shows the external calls are only `spc_*`, `dsp_*`, `sh_*` (statehandler) — **no** `cpu_*`,
    `ppu_*`, `dma_*`, `cart_*`, `snes_*`. So `apu.c + spc.c + dsp.c + statehandler.c` links cleanly
-   without dragging the whole emulator into `ct_field.exe`.
+   without dragging the whole emulator into `Belthasar.exe`.
 
 ### 4.5 What is NOT derived (structural view; see `audio_boot.md` §8 for the mechanism gaps)
 

@@ -30,7 +30,7 @@ def port(n, ws, extra_env=None, args=()):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch%s.srm' % n))
     env.update(extra_env or {})
-    r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot',
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot',
                         '--walkscript', ws] + list(args), cwd=ROOT, env=env, capture_output=True, text=True,
                        errors='replace')
     return r.stdout + r.stderr

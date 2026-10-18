@@ -9,7 +9,7 @@
 //
 //   Arrow keys : walk    X (hold) : run -- pad B, the Dash row ($00F8 bit 1)    Space / Z / Enter : talk / advance (A)
 //   C : menu (the SNES X button; B = X key / Backspace closes it)    Esc : quit
-// Usage: ct_field[.exe] --assets ct_assets.dat [--scene N] [--loadflags <f>]
+// Usage: Belthasar[.exe] --assets ct_assets.dat [--scene N] [--loadflags <f>]
 //        [--selftest [out.raw]] [--talk <obj>] [--gotoexit]
 //   --boot            THE GAME'S OWN COLD ENTRY (disasm/notes/boot_loader.md): run C0/0057's
 //                     SRAM scan, then let scene 0's boot script route -- title, then either
@@ -36,7 +36,7 @@
 #include "assets.h"
 #include "lz.h"          // ct_lz_load_cost: what the ROM pays to load a location
 #include "ct_vm.h"
-#include "ct_cpu_infra.h"    // CT_FIELDLOCK: the oracle, now linked into ct_field too
+#include "ct_cpu_infra.h"    // CT_FIELDLOCK: the oracle, now linked into Belthasar too
 #include "ct_lake_state.h"
 #include "battle.h"      // the battle module boundary (op-0xD8 handoff; phase-1 data-only boot)
 #include "objslot.h"     // FD/E292 + FD/E39C: the location's colour animation records
@@ -4629,10 +4629,10 @@ static CtAudio* g_fieldAudio = NULL;
 // to the sound module. Deliberately thin: ct_vm.c stages the mailbox in its own WRAM and knows
 // nothing about audio, and with no sink installed the polls read 0 so the waits fall straight
 // through -- a headless run must never spin waiting for an APU that is not there.
-// ------------- CT_FIELDLOCK: the ORACLE, running INSIDE ct_field ----------------------------
+// ------------- CT_FIELDLOCK: the ORACLE, running INSIDE Belthasar ----------------------------
 // The zelda3 model, finally possible here. ct.exe hosts the oracle but links neither field.c nor
-// battle.c; ct_field hosts the engine but linked only four of the emulator's files (SPC700/DSP,
-// for audio). Linking the whole LakeSnes core into ct_field builds and runs clean, so both worlds
+// battle.c; Belthasar hosts the engine but linked only four of the emulator's files (SPC700/DSP,
+// for audio). Linking the whole LakeSnes core into Belthasar builds and runs clean, so both worlds
 // now sit in one binary -- the only way to grade the WRAM --vmdiff is structurally blind to:
 // the battle staging ($019D/$01A3, field.c), the battle boot ($AEC6, battle.c), and field.c's own
 // per-frame stores.
@@ -4845,7 +4845,7 @@ static void fieldPadNmi(uint16_t serial) {
 // reached from BOTH the field path and the overworld path.
 //
 // It used to live inline in the field path only, below an `if (g_lockOracle && f.vm)`. The overworld
-// path ends in `continue` and ct_field FREES the field scene when it enters the world (pendKind 2),
+// path ends in `continue` and Belthasar FREES the field scene when it enters the world (pendKind 2),
 // so a field -> overworld hop stopped the oracle dead: the run carried on, ungraded and silent. Both
 // halves of that guard were wrong. The oracle does not need a scene -- and neither do the
 // projections, which read the HOST's $7E ([[ct-wram-lifetime-ownership]]: one CtWram for the whole
@@ -10316,7 +10316,7 @@ int main(int argc, char** argv) {
   // C0/6442 `LDA $7F0000 / CMP op1 / BCS`) evaluated against flags of ZERO takes the wrong arm: scene 129
   // (Manoria) executed `0A 1E` and killed its cutscene controller obj15 before the first frame, so the
   // nuns were never hidden and the Naga-ettes never appeared (defect #15). The lockstep --vmdiff host
-  // always passed the state's $7F page; ct_field passed none.
+  // always passed the state's $7F page; Belthasar passed none.
   if (loadWramPath && !haveFlags) {
     uint8_t* lw = fieldReadLakeWram(loadWramPath);
     if (lw) { memcpy(gmem, lw + 0x10000, 0x200); haveFlags = 1; free(lw); }
@@ -10488,7 +10488,7 @@ int main(int argc, char** argv) {
       menuFontC2 = menuFontC2Buf; } }
 
   // The battle module's ROM tables (enemy stats CC/4700, names CC/6500, field enemy records
-  // E4/F600). OPTIONAL: ct_field itself stays dat-only -- without the ROM the field runs as
+  // E4/F600). OPTIONAL: Belthasar itself stays dat-only -- without the ROM the field runs as
   // before and only a D8 battle stages zeroed enemy stats. Wire the E4/F600 table into the VM
   // so a FRESH op-0x83 load writes the canonical $1201,X byte (a WRAM-seeded scene already
   // carries the oracle's value).
@@ -11385,10 +11385,7 @@ int main(int argc, char** argv) {
   // THE WINDOW AND ITS BACKEND (present.h). A headless run keeps what it always had: SDL's software renderer with the
   // picture under the logical size. An interactive one takes the player's window, backend, driver and vsync.
   CtPresentConfig pc; memset(&pc, 0, sizeof pc);
-  pc.title = "Chrono Trigger - native field (C)"; pc.w = CAMW * 2; pc.h = CAMH * 2; pc.picW = CAMW; pc.picH = CAMH;
-#ifdef __APPLE__
-  pc.title = "Chrono Trigger";
-#endif
+  pc.title = "Belthasar"; pc.w = CAMW * 2; pc.h = CAMH * 2; pc.picW = CAMW; pc.picH = CAMH;
   pc.software = !g_hostInteractive && (selftest || g_noPace); pc.logical = !g_hostInteractive; pc.vsync = 1; pc.sdlDriver = "";
   if (g_hostInteractive) {
     const CtSettings* st = CtSettingsGet();
@@ -12868,7 +12865,7 @@ int main(int argc, char** argv) {
     // world: the 128 KB WRAM image in the format --menutest / --loadwram already read (64 KB of
     // $7E, then 64 KB whose head is the $7F:0000 story page), plus the 8 KB SRAM the save screen's
     // slot rows are drawn from. Reproduce a captured save screen with
-    //   build/ct_field.exe --assets ct_assets.dat --menutest ct_debug.wram   (CT_MENUSCREEN=6)
+    //   build/Belthasar.exe --assets ct_assets.dat --menutest ct_debug.wram   (CT_MENUSCREEN=6)
     // and CT_SRAM=ct_debug.srm for the slots.
     if (!selftest && !f.vm) {
       const Uint8* dks2 = SDL_GetKeyboardState(NULL);
@@ -15224,7 +15221,7 @@ int main(int argc, char** argv) {
               cio.dir = (rHeld && !prevRBtn) ? 0 : (lHeld && !prevLBtn) ? 1     // C2/E9F4's own scan order,
                       : (dHeld && !prevDBtn) ? 2 : (uHeld && !prevUBtn) ? 3 : -1;  // Right, Left, Down, Up
               cio.start = 0;                                 // the button editor's restore-defaults (C2/C188)
-                                                             // is on START, which ct_field does not bind
+                                                             // is on START, which Belthasar does not bind
               menuCfgFresh = 0;
               int cfgBack = CtMenuConfigFrame(s7, &menuCfgCur, &menuCfgSub, &cio);
               if (cio.winLoad) menuWinColour = s7[0x0D8C] & 7;   // C2/C13D -> C2/C511 on cell 6's edit

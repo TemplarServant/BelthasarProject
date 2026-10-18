@@ -181,7 +181,7 @@ python -c "w=open(r'...p113.raw.wram','rb').read(); open(r'...flags113.bin','wb'
 # -> $7F0000 = 0C  (storyline 12), $0155 = 01
 ```
 ```
-CT_EXITDBG=1 ./build/ct_field.exe --assets ct_assets.dat --scene 113 \
+CT_EXITDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 113 \
   --loadflags "$TMP/ctwf/exit/flags113.bin" --at 136 176 \
   --selftest out.raw --frames 800 --walkscript "l:780,."
 exitstage: scene 113 exit 0 @2508FC -> $0112=0070 $0114=1E $0115=0D $0116=0A
@@ -215,7 +215,7 @@ solid -> every arm blocks. At the canonical `py = 215.9375` it reaches `222.9` -
 
 Placed by hand at the oracle's Y, our engine matches the oracle's walk:
 ```
-./build/ct_field.exe --assets ct_assets.dat --scene 112 --loadflags flags113.bin --at 488 216 \
+./build/Belthasar.exe --assets ct_assets.dat --scene 112 --loadflags flags113.bin --at 488 216 \
    --selftest out.raw --frames 100 --walkscript "l:95,."
    -> f0 (488,216) ... 1 px/frame ... stops at x=439
 oracle  --monitor "1802:2" --from orc113.state --input "40:400" --frames 420
@@ -225,7 +225,7 @@ oracle  --monitor "1802:2" --from orc113.state --input "40:400" --frames 420
 
 ### Second, independent case (proves it is not scene 113)
 ```
-CT_EXITDBG=1 ./build/ct_field.exe --assets ct_assets.dat --scene 4 \
+CT_EXITDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 4 \
   --loadflags flags113.bin --at 120 207 --selftest out.raw --frames 200 --walkscript "u:190,."
 exitstage: scene 4 exit 1 @25044F -> $0112=0003 $0114=08 $0115=0C $0116=04
 changeloc: scene 4 -> 3 at f36 tile(8,12) fac0 style0     -> our px = 8*16+8 = 136
@@ -307,17 +307,17 @@ python -c "w=open(r'$S/p113.raw.wram'.replace('/','\\\\'),'rb').read();open(r'$S
 "$P" --monitor "0197:1,1802:2,1882:2,0104:1,0112:8" --from "$S/orc113.state" --input "40:400" --writer --diff --frames 260
 
 # ours: transitions, then FROZEN
-CT_EXITDBG=1 CT_DRIVEDBG=1 ./build/ct_field.exe --assets ct_assets.dat --scene 113 \
+CT_EXITDBG=1 CT_DRIVEDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 113 \
   --loadflags "$S/flags113.bin" --at 136 176 --selftest "$S/o.raw" --frames 400 --walkscript "l:390,."
 
 # ours at the ORACLE's arrival Y -> walks, and stops on the oracle's own tile
-./build/ct_field.exe --assets ct_assets.dat --scene 112 --loadflags "$S/flags113.bin" \
+./build/Belthasar.exe --assets ct_assets.dat --scene 112 --loadflags "$S/flags113.bin" \
   --at 488 216 --selftest "$S/o2.raw" --frames 100 --walkscript "l:95,."
 
 # the bit2 arm (scene 4 -> 3)
 "$P" --teleport 4 7 12 0 --from saves/jogo_trava_lake.state --frames 90 --out "$S/sc4.state"
 "$P" --monitor "0197:1,1802:2,1882:2,0104:1,0100:1" --from "$S/sc4.state" --input "10:300" --diff --frames 160
-CT_EXITDBG=1 ./build/ct_field.exe --assets ct_assets.dat --scene 4 --loadflags "$S/flags113.bin" \
+CT_EXITDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 4 --loadflags "$S/flags113.bin" \
   --at 120 207 --selftest "$S/o3.raw" --frames 200 --walkscript "u:190,."
 
 # ROM
@@ -395,7 +395,7 @@ The dossier explains the freeze as `base + feeler ($70 = 7 px)` reaching `y = 23
 That arithmetic predicts blocking for every `y >= 217`. Measured, it is not what our engine does:
 
     for y in 215 216 217 218 219 220 221 222 223 224; do
-      ./build/ct_field.exe --assets ct_assets.dat --scene 112 --loadflags flags113.bin \
+      ./build/Belthasar.exe --assets ct_assets.dat --scene 112 --loadflags flags113.bin \
          --at 488 $y --selftest t.raw --frames 40 --walkscript "l:35,."
     done
       y=215 -> (453,216)   y=216 -> (453,216)   y=217 -> (453,217)   y=218 -> (453,218)
@@ -548,11 +548,11 @@ constants `$00 / $80 / $7F / $FF` and the test masks `#04 / #08` are literally `
 
     # the freeze-threshold sweep that refutes the 7-px feeler story
     for y in 215 216 217 218 219 220 221 222 223 224; do
-      ./build/ct_field.exe --assets ct_assets.dat --scene 112 --loadflags "$S/flags113.bin" \
+      ./build/Belthasar.exe --assets ct_assets.dat --scene 112 --loadflags "$S/flags113.bin" \
         --at 488 $y --selftest "$S/t.raw" --frames 40 --walkscript "l:35,."; done
 
     # the scene-120 changeloc's own flags byte
-    SDL_VIDEODRIVER=dummy CT_EXITDBG=1 ./build/ct_field.exe --assets ct_assets.dat --scene 120 \
+    SDL_VIDEODRIVER=dummy CT_EXITDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 120 \
       --loadflags saves/s120_lucca_flags.bin --at 600 184 --selftest "$S/s120.raw" \
       --walkscript "a:2,i:14, ... x72" --frames 1300
 

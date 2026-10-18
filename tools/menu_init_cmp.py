@@ -9,7 +9,7 @@ C2/8000's short circuit: no init chain, nothing to measure). C2/8000's frame is 
 timeline moves with the oracle's frame rule, CT_ORACLE_NMION_HOLD), and the init is traced from three frames before it
 (`--cputrace`, CPUTRACE_BEAM=1; C0/0B5D = the last one before C2/8000) and
 measured with tools/ctlib/beam.py: C2/D156 (the save-slot scan, 8127 -> 812A) and the whole NMI-off stretch
-(C0/0B5D, the caller's `STA $4200` that turns the NMI off, -> C2/8087's that turns it on). Printed against the port's model, src/menu_cost.c (`ct_field --menucost`; its Python twin is tools/vwf_cost_proto.py):
+(C0/0B5D, the caller's `STA $4200` that turns the NMI off, -> C2/8087's that turns it on). Printed against the port's model, src/menu_cost.c (`Belthasar --menucost`; its Python twin is tools/vwf_cost_proto.py):
 
     menu-init: <battery> slots 0000 8080 8080: D156 1737858 / model 1737858, stretch 5915532 = 17.053 F -> S0 = C+17
 

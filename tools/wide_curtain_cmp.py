@@ -21,7 +21,7 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 FRAMES = (8164, 8168, 8172, 8176, 8180, 8184, 8500, 8504, 8508, 8512, 8516, 8520)
 
 

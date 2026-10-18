@@ -6,7 +6,7 @@ r"""The title's opening at power-on, port against the cartridge: nothing lit bef
 At power-on loc 1B1's `FF 02` runs op 0xFF's own fade inside the field's program (C0/3FBB-3FD1) and only then jumps to
 C3:0000, whose title setup ($7E:5978) holds the screen black for its song load and spin before the pendulum's opening.
 Both sides run from power-on: the cartridge under the rule (build/ct.exe --peek boot, CT_ORACLE_LOGICAL=1
-CT_ORACLE_VIRTUAL_BEAM=1, PEEK_THUMBS every frame) and the port (build/ct_field.exe --boot, CT_SHOTS_THUMBS every frame).
+CT_ORACLE_VIRTUAL_BEAM=1, PEEK_THUMBS every frame) and the port (build/Belthasar.exe --boot, CT_SHOTS_THUMBS every frame).
 Each side is aligned on its OWN first lit frame (the boot's own length is another question), and the next <frames>
 (default 360) are compared as 128x112 thumbnails (a pixel differs when a channel differs by more than 24):
 
@@ -27,7 +27,7 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_boottitle')
 REC = 6 + 128 * 112 * 3
 

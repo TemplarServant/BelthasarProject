@@ -22,7 +22,7 @@ import subprocess
 import sys
 
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 STATE = 'saves/attract_2300ad_f5800.state'
 ORACLE_FRAME = 131
 PORT_WINDOW = (6678, 6948)

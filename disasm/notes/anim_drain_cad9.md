@@ -14,7 +14,7 @@ release `C0/B701` and the FIFO order `C0/CA76`, §3 the four-slot arena `E952`�
 land in §13 and §14; class 3’s `C0/C73A` — the last one, and the one whose carry this file twice
 called underivable — lands in §15.
 
-⚠ **AND IT IS UNREACHABLE FROM THE LIVE ENGINE.** `move.c` links into `ct_field` but nothing calls
+⚠ **AND IT IS UNREACHABLE FROM THE LIVE ENGINE.** `move.c` links into `Belthasar` but nothing calls
 it: the tables it reads (`$1300/$1380/$1700/$0D00/$0A00/$0A80/$1480/$1500`) are filled by the
 ROM’s OBJECT LOADER, which is not ported. See [`object_loader.md`](object_loader.md) — derived,
 with the chain that porting it entails.
@@ -973,7 +973,7 @@ field-marle-join-walk-anim): the drawn frames are the rule's oracle's on every f
   the zelda3 literal, the FIXED virtual beam V = 0 -- the gate never cuts, on either side (snes.c for the oracle; the
   port's song-load cut `sndCut` is gone). Measured after: 0 cuts over the demo.
 * ~~**The followers' walk-anim phase**~~ (the conga ring's C0/A171 walk tail, party3_field f24/f47) -- **NOT the
-  engine's, measured 2026-09-28**: ct_field (`--loadwram saves/battle_re/party3_field.lakewram --walkscript n:1,l:150`,
+  engine's, measured 2026-09-28**: Belthasar (`--loadwram saves/battle_re/party3_field.lakewram --walkscript n:1,l:150`,
   CT_FIELD_MEMMON 1606:4 / 1686:4 / 0F06:4) against the oracle under the rule (`--btnscript 40:130`,
   CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1): obj3/obj4's timers, anim/phase and DRAWN frames are identical on every
   one of 130 frames -- obj3 steps f24/31/38.., obj4 f47/54.., two apart like the cartridge's (and like the real-beam

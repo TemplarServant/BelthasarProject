@@ -1,8 +1,8 @@
-// settings.h - the player's options for ct_field: what the F1 overlay edits and ct_settings.ini keeps.
+// settings.h - the player's options for Belthasar: what the F1 overlay edits and ct_settings.ini keeps.
 //
 // The options are the HOST's (window, picture, sound volume, controls, how strictly the SNES's timing is kept); the
 // game's own settings (battle speed, the Config screen's button map, Stereo/Mono) stay in the game's SRAM as on the
-// cartridge. Defaults are the behaviour ct_field had before the file existed, so a missing or partial file changes
+// cartridge. Defaults are the behaviour Belthasar had before the file existed, so a missing or partial file changes
 // nothing.
 //
 // HEADLESS RUNS NEVER READ THE FILE (CtSettingsLoad's `interactive` = 0: --selftest, CT_NOPACE, a dummy video driver):

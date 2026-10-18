@@ -327,7 +327,7 @@ Four distinct divergences from §2/§3:
 1. **No set.** It draws one cursor over `$9614` regardless of `$960D`. The hit set (`battleBuildHitSet`,
    `src/battle.c:1315`) is computed only at dispatch, never for the highlight. **This is the user's defect.**
    Reproduced: `CT_BATTLE_SCRIPT="n:40,d:2,n:8,a:2,n:8,a:2,n:120" CT_BATTLESHOT=… CT_BATTLESHOT_AT=230
-   build/ct_field.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_cyclone.raw.wram`
+   build/Belthasar.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_cyclone.raw.wram`
    → trace `techtrace f220 tech-confirm 9609=1 960D=12`; the f230 shot has **one** hand (over the Hetake at
    (104,55)) and none over the second in-radius Hetake at (72,87), while the oracle at the equivalent state
    shows hands on both.

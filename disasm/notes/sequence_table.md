@@ -290,7 +290,7 @@ and **219 of 256 entries differ between the page-1 and page-2 captures**, so it 
 and seeding it would be invention *and* wrong. The bytes are gradeable where the pixels are not, so
 the OAM is diffed against the oracle's own `.oam` sidecar as well (`seq-credits-oam-vs-oracle`).
 
-Harness: `ct_field.exe --seqstage <entry> <frames> [page]` (dumps a frame to `CT_SEQSHOT`, prints the
+Harness: `Belthasar.exe --seqstage <entry> <frames> [page]` (dumps a frame to `CT_SEQSHOT`, prints the
 OAM digest) and `--seqtimeline <entry> <visits>`; `tools/seq_stage_cmp.py` diffs against the oracle
 and finds its own alignment by reading `$7E:0008` out of a probe run. Pinned as
 `seq-credits-timeline` and `seq-credits-oam-vs-oracle` (quick), `seq-credits-vs-oracle` and
@@ -977,7 +977,7 @@ re-reads the same byte every frame forever. Two of them, four bytes apart.
 
 ### The shape of the attract (measured, not assumed)
 
-`build/ct_field.exe --scene 433` and the ROM's own script for that location:
+`build/Belthasar.exe --scene 433` and the ROM's own script for that location:
 
 * **Location `$1B1` = 433 is not a place, it is the attract's RETURN POINT.** Its script body is a
   chain of compares on the story byte `$7F:0062`, and each arm dispatches the next leg and advances
@@ -1846,7 +1846,7 @@ Regenerated with the press paths: add `CPUTRACE_BTN=0:40,100:10,0:400` / `0:170,
   from C3:0000 to the `JML $C0:0000` at frame 425.**
 * `XLATCMP_SEED=stage` (check `seq-race-xlat-stage-handoff`): the port's hardware built by `CtXlatStageOpen` the
   way a host builds it (11.4), against the power-on oracle's first visit. **IDENTICAL, 5,238,668 instructions.**
-* `XLATCMP_WRAM=<the port's own handoff image>` (ct_field `CT_XLAT_HANDOFF_WRAM`): 68,699 bytes differ from the
+* `XLATCMP_WRAM=<the port's own handoff image>` (Belthasar `CT_XLAT_HANDOFF_WRAM`): 68,699 bytes differ from the
   cartridge's, and the lockstep still holds for 721,309 instructions -- the overlay decompression, the common init,
   the setup and 54 frames -- until the first `C3/02DD` reads `$0386`. With `$0386` and `$1E05` (the sound driver's
   present latch, which only an audio-on host seeds) patched, **the whole race is IDENTICAL on the port's own

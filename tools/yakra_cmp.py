@@ -50,7 +50,7 @@ def main():
     env = dict(os.environ, CT_BATTLE_SCRIPT='n:3000', CT_BATTLE_DEBUGEND='1520', CT_NOPACE='1', SDL_AUDIODRIVER='dummy',
                SDL_VIDEODRIVER='dummy', CT_BATTLE_MEMMON='A013:1,AEE3:3,5E30:2,5EB0:2,CE17:2,CCEC:1,CCED:1', CT_BATTLE_ASCIP='1')
     env.pop('CT_ORACLE_LOGICAL', None)
-    pr = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--battletest', fx + '.wram'],
+    pr = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--battletest', fx + '.wram'],
                         env=env, capture_output=True, text=True, errors='replace')
     oenv = dict(os.environ, CT_ORACLE_LOGICAL='1', PEEK_POKE='7E1111=90')
     if RULE:

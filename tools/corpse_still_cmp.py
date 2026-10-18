@@ -31,7 +31,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 CSTATE = 'saves/battle_re/forest_wait_ambush_active.state'
 PSEED = 'saves/battle_re/forest_wait_ambush_active.lakewram'
 REGS = [(0xAF02, 8), (0x98A7, 8), (0x1D0C, 11), (0x1D23, 11), (0xA0FD, 1)]

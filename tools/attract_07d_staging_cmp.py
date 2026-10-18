@@ -23,7 +23,7 @@ def main():
     env = dict(os.environ, CT_BATTLE_MEMMON='29BF:3C,AF02:8', CT_NOPACE='1', SDL_AUDIODRIVER='dummy',
                SDL_VIDEODRIVER='dummy')
     env.pop('CT_ORACLE_LOGICAL', None)
-    pr = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433',
+    pr = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433',
                          '--selftest', '--frames', '6600'], env=env, capture_output=True, text=True, errors='replace')
     orr = subprocess.run([os.path.abspath('build/ct.exe'), '--monitor', '7E29BF:60', '--from',
                           'saves/attract_cena_inicial.state', '--settle', '4480', '--frames', '30', '--diff'],

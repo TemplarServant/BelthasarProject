@@ -675,7 +675,7 @@ Ported (`src/menu.c`, `src/ct_vm.c`, `src/field.c`, `src/data/menu_loader.h`,
 * Screen `$0E`: chrome plane + its own CGRAM baked from the oracle, the cursor rules (default row,
   skip-empty settle), the chapter/era/summary/party text, A = load / new game, and the
   `JML $C0:0000` reboot into `$0100`.
-* `ct_field --boot` = the cold entry: the SRAM scan, then scene 0's own script decides everything.
+* `Belthasar --boot` = the cold entry: the SRAM scan, then scene 0's own script decides everything.
 * The title STAGE and, since the title-intro pass, the WHOLE of what it plays (see the first
   boundary below), plus `--loadcheck <srm>`, which runs FF/FAA3 over an SRAM image and prints each
   slot's unpacked fields.

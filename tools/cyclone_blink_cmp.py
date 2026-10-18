@@ -19,7 +19,7 @@ import re
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 DRIVER = '100:8,0:372,20:2,0:12,100:2,0:12,100:2,0:12,100:2,0:300'
 PORT_SCRIPT = 'n:1000,d:2,n:10,a:2,n:10,a:2,n:10,a:2,n:600'

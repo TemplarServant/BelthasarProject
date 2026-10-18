@@ -19,7 +19,7 @@ Two switches:
 | vehicle | how | scope |
 |---|---|---|
 | `ct.exe --vmdiff` | `VMDIFF_WMASK=1 VMDIFF_CENSUS=1` | the field **VM** only |
-| `ct_field --selftest` | `CT_FIELDLOCK=<state> VMDIFF_WMASK=1 CT_FIELDLOCK_CENSUS=<frame>` | the **live engine**'s own `$7E` |
+| `Belthasar --selftest` | `CT_FIELDLOCK=<state> VMDIFF_WMASK=1 CT_FIELDLOCK_CENSUS=<frame>` | the **live engine**'s own `$7E` |
 
 ---
 

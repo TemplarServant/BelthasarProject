@@ -22,7 +22,7 @@ if(MSVC)
   add_link_options(/Brepro /INCREMENTAL:NO)
 endif()
 
-# The playable host's sources (ct_field below; the Android app's libmain.so, android/CMakeLists.cmake).
+# The playable host's sources (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake).
 set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
                  src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
 
@@ -125,33 +125,33 @@ if(CT_SDL_INC)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_viewer>)
   endif()
   # Native interactive field: VM scheduler (ct_vm.c) + renderer + sprite compositor + SDL.
-  # ct_field also links the SOUND system: src/audio.c drives the vendored SPC700/DSP through bank
+  # Belthasar also links the SOUND system: src/audio.c drives the vendored SPC700/DSP through bank
   # $C7's driver upload (disasm/notes/audio_boot.md); the whole vendored core (snes/*.c) is linked for
   # it and for the translated stages in src/xlat/. `snes` goes AFTER `src` on the include path so an
   # ambiguous name (input.h exists in both) still resolves to the engine's.
   # src/move.c runs live: ct_vm.c drives the ported C0/CAD9 animation tree through it (CtAnimDrainPass,
   # CtAnimDrawPass), the field runner CtFieldRunnerOne (which reaches the object loader CtObjLoad) and
   # most of the VM's op families (CtVm*).
-  add_executable(ct_field ${CT_FIELD_SRC})
-  target_include_directories(ct_field PRIVATE src ${CT_SDL_INC} snes)
-  target_link_libraries(ct_field ${CT_SDL_LIB})
+  add_executable(Belthasar ${CT_FIELD_SRC})
+  target_include_directories(Belthasar PRIVATE src ${CT_SDL_INC} snes)
+  target_link_libraries(Belthasar ${CT_SDL_LIB})
   if(MSVC)
     # the host's pictures at the options (the title's mode 7 at the internal resolution): drawn on every core
     set_source_files_properties(src/title_intro.c src/fieldnative.c src/field.c PROPERTIES COMPILE_OPTIONS "/openmp")
-    target_compile_definitions(ct_field PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(ct_field PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
+    target_compile_definitions(Belthasar PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(Belthasar PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
     if(DEFINED ENV{CT_ASAN})
-      target_compile_options(ct_field PRIVATE /fsanitize=address /Zi)
+      target_compile_options(Belthasar PRIVATE /fsanitize=address /Zi)
     endif()
   endif()
   # THE F1 OPTIONS OVERLAY (src/overlay.cpp, Dear ImGui -- tools/get_imgui.ps1 puts it in third_party/imgui, git-ignored
-  # like SDL2). Without it ct_field builds the stub and has no overlay; nothing else changes.
+  # like SDL2). Without it Belthasar builds the stub and has no overlay; nothing else changes.
   # THE VULKAN BACKEND (src/present_vk.c): the Khronos headers only (tools/get_vulkan_headers.ps1 -> third_party/vulkan,
   # git-ignored); nothing is linked -- the driver's vulkan-1 is loaded at run time through SDL.
   set(VULKAN_INC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan/include)
   if(EXISTS ${VULKAN_INC}/vulkan/vulkan.h)
-    target_compile_definitions(ct_field PRIVATE CT_HAVE_VULKAN)
-    target_include_directories(ct_field PRIVATE ${VULKAN_INC})
+    target_compile_definitions(Belthasar PRIVATE CT_HAVE_VULKAN)
+    target_include_directories(Belthasar PRIVATE ${VULKAN_INC})
   endif()
   set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
   if(EXISTS ${IMGUI_DIR}/imgui.h)
@@ -165,19 +165,19 @@ if(CT_SDL_INC)
       target_include_directories(ct_imgui PUBLIC ${VULKAN_INC})
       target_compile_definitions(ct_imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES)
     endif()
-    target_sources(ct_field PRIVATE src/overlay.cpp)
-    target_compile_definitions(ct_field PRIVATE CT_HAVE_IMGUI)
-    target_include_directories(ct_field PRIVATE ${IMGUI_DIR})
-    target_link_libraries(ct_field ct_imgui)
+    target_sources(Belthasar PRIVATE src/overlay.cpp)
+    target_compile_definitions(Belthasar PRIVATE CT_HAVE_IMGUI)
+    target_include_directories(Belthasar PRIVATE ${IMGUI_DIR})
+    target_link_libraries(Belthasar ct_imgui)
     if(MSVC)
       set_source_files_properties(src/overlay.cpp PROPERTIES COMPILE_OPTIONS "/utf-8")   # its Portuguese labels
     endif()
   else()
-    target_sources(ct_field PRIVATE src/overlay_stub.c)
+    target_sources(Belthasar PRIVATE src/overlay_stub.c)
   endif()
   if(CT_SDL_DLL)
-    add_custom_command(TARGET ct_field POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_field>)
+    add_custom_command(TARGET Belthasar POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:Belthasar>)
   endif()
   # M3-B: interactive overworld camera viewer (live map from a WRAM/VRAM dump + the byte-exact camera).
   add_executable(ct_world src/ct_world.c src/world.c src/vwf.c src/lz.c src/assets.c)   # lz.c: the world scripts' far call C6/E028
@@ -191,23 +191,23 @@ if(CT_SDL_INC)
     add_custom_command(TARGET ct_world POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_world>)
   endif()
-  message(STATUS "SDL2 found: building ct_viewer + ct_field + ct_world")
+  message(STATUS "SDL2 found: building ct_viewer + Belthasar + ct_world")
 else()
-  message(STATUS "SDL2 not in third_party/SDL2 (nor the system's): skipping ct_viewer/ct_field (headless ct still builds)")
+  message(STATUS "SDL2 not in third_party/SDL2 (nor the system's): skipping ct_viewer/Belthasar (headless ct still builds)")
 endif()
 
 # Native Finder resource lookup and writable Application Support paths.
-if(APPLE AND TARGET ct_field)
+if(APPLE AND TARGET Belthasar)
     enable_language(OBJC)
-    target_sources(ct_field PRIVATE src/macos_paths.m src/macos_window.m src/macos_menu.m)
+    target_sources(Belthasar PRIVATE src/macos_paths.m src/macos_window.m src/macos_menu.m)
     set_source_files_properties(src/macos_paths.m src/macos_window.m src/macos_menu.m PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
-    target_link_libraries(ct_field "-framework AppKit")
+    target_link_libraries(Belthasar "-framework AppKit")
 endif()
 
 # Keep normal Unix executable names and the .exe aliases used by the shared
 # Python oracle/recipe/regression tools. Both names execute native machine code.
 if(UNIX)
-    foreach(target ct ct_field ct_world ct_viewer)
+    foreach(target ct Belthasar ct_world ct_viewer)
         if(TARGET ${target})
             add_custom_command(TARGET ${target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E remove -f "$<TARGET_FILE_DIR:${target}>/${target}.exe"

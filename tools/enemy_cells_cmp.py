@@ -5,7 +5,7 @@ r"""The port's enemy sprites against the cartridge's OBJ layer, on the cartridge
 
 1. build/ct.exe --peek <state> --frames <frame> with PEEK_ISOBG=4: the cartridge's OBJ layer alone, plus its
    128 KB WRAM and its OAM (.wram / .oam sidecars).
-2. build/ct_field.exe with CT_BATTLE_RENDERWRAM=<that .wram>: the port draws every combatant from the same WRAM
+2. build/Belthasar.exe with CT_BATTLE_RENDERWRAM=<that .wram>: the port draws every combatant from the same WRAM
    (the published poses $9907, the staged records $29BF, the live CGRAM page $2200) on a black screen.
 3. For every staged enemy slot, the 16x16 rectangles of its OAM entries in the cartridge's shadow -- the entries
    whose names are that combatant's run of the OAM template (CC:F84D -> CC:FAF3, one entry per cell of its record
@@ -35,7 +35,7 @@ from ctlib import oam as ctoam  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 
 
 def main():

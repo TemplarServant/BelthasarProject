@@ -71,7 +71,7 @@ public class SetupActivity extends Activity {
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(pad, pad, pad, pad);
         TextView title = new TextView(this);
-        title.setText("Chrono Trigger - native C port");
+        title.setText("Belthasar");
         title.setTextSize(22);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         col.addView(title);

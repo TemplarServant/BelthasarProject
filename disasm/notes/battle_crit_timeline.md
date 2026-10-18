@@ -207,7 +207,7 @@ harmless today (our HP also lands at span end, so the gate never trips), but it 
 
 Measured, not assumed — `CT_BATTLE_CRITRATE=255 CT_BATTLE_ROUTETRACE=1 CT_BATTLE_TRACE=1`:
 
-* GATO `build/ct_field.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram`
+* GATO `build/Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram`
   (`CT_BATTLE_MASHA=1`): dispatch f195; leap f219-f223 (rel 24-28, 20 px) → **A = 28**.
 * FOREST `--scene 19 --battletest saves/battle_re/forest_pre.raw.wram`
   (`CT_BATTLE_SCRIPT="n:20,a:1,n:3,a:1,n:400"`): dispatch f198; leap f222-f228 (rel 24-30) → **A = 30**.
@@ -244,7 +244,7 @@ general: the ROM's 8 px-quantized atan2 bearing could drift laterally past the b
 
 ```
 CT_BATTLE_CRITRATE=255 CT_BATTLE_MASHA=1 CT_ANIMENG_PCTRACE=1 CT_BATTLESHOT=our_crit.raw \
-CT_BATTLESHOT_AT=310 build/ct_field.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
+CT_BATTLESHOT_AT=310 build/Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
   -> pcatk f310 pose=-1 idx=0x54 foot=(134,136) arr=(134,124) fac(a0,s0,r1) CRIT
 ```
 f310 = rel 115 = **mid-return** (home 144, arrival 124, foot 136) and the drawn assembly is **0x54 = the

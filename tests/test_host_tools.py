@@ -58,7 +58,7 @@ class PackagingChecks(unittest.TestCase):
         self.root = Path(temporary.name)
         self.build = self.root / "build"
         self.build.mkdir()
-        (self.build / "ct_field.exe").write_bytes(b"synthetic engine")
+        (self.build / "Belthasar.exe").write_bytes(b"synthetic engine")
         patch = mock.patch.multiple(package, ROOT=self.root, BUILD=self.build)
         patch.start()
         self.addCleanup(patch.stop)
@@ -79,7 +79,7 @@ class PackagingChecks(unittest.TestCase):
             return package.main()
 
     def test_staging_destinations_are_rejected_before_deletion(self):
-        for relative in ("Chrono Trigger.app", "Previous.app", "nested/Previous.app"):
+        for relative in ("Belthasar.app", "Previous.app", "nested/Previous.app"):
             with self.subTest(output=relative):
                 output = self.build / "macos-staging" / relative
                 marker = self.make_previous_app(output)
@@ -142,7 +142,7 @@ class PackagingChecks(unittest.TestCase):
         marker = self.make_previous_app(output)
         self.assertEqual(self.complete_package_to(output), 0)
         self.assertFalse(marker.exists())
-        self.assertEqual((output / "Contents/MacOS/ChronoTrigger").read_bytes(), b"synthetic engine")
+        self.assertEqual((output / "Contents/MacOS/Belthasar").read_bytes(), b"synthetic engine")
 
     def test_destination_rename_failure_restores_previous_app(self):
         output = (self.root / "saved" / "Previous.app").resolve()

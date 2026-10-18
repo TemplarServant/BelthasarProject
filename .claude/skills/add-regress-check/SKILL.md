@@ -14,7 +14,7 @@ appear in its output.
 ```json
 {
   "name": "field-battletest-gato",
-  "argv": ["build/ct_field.exe", "--assets", "ct_assets.dat", "--battletest"],
+  "argv": ["build/Belthasar.exe", "--assets", "ct_assets.dat", "--battletest"],
   "env": {"CT_BATTLE_DEBUGEND": "1"},          // optional
   "inputs": ["ct_assets.dat", "saves/battle_re/gato_t0.raw.wram"],
   "expect": ["battletest: PASS (staging 18/18, stats OK (Gato HP 76), points 0F)"],
@@ -29,7 +29,7 @@ appear in its output.
 
 1. Make the command deterministic and print a COUNTABLE success line
    (`thing: PASS (a N/N, b OK)` — counts, not adjectives). If you are adding a new
-   selfcheck mode to ct_field/ct.exe, copy the `--worldtest`/`--battletest` pattern.
+   selfcheck mode to Belthasar/ct.exe, copy the `--worldtest`/`--battletest` pattern.
 2. Every file the command needs goes in `inputs` — missing input shows as SKIP
    naming the file (that is how not-yet-seeded checks stay discoverable).
 3. Run it TWICE; byte-identical signature both times. Nondeterministic → fix the

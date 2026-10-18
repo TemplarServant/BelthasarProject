@@ -11,7 +11,7 @@ every later draw comes from another byte of the table (the 0E6 robots' enemy ids
 
   cartridge  CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 ct.exe --peek boot ... PEEK_WRITEWATCH=01F8:1
              (writer C0/0C75 = the seed) and --monitor 7E0100:2 (the location each seed belongs to)
-  port       ct_field.exe --boot on an erased cart (CT_SRAM_FRESH=1, the cartridge's power-on with no battery),
+  port       Belthasar.exe --boot on an erased cart (CT_SRAM_FRESH=1, the cartridge's power-on with no battery),
              CT_F8TRACE=1: one `f8seed: loc <L> C0/0C70 $01F8 = <v>` per location load
 
 Both sides take the power-on route -- scene 0's boot script, then the attract (loc 1B1). `--scene 433` starts the
@@ -47,7 +47,7 @@ def main():
     until = int(a.until, 16)
     os.makedirs(OUT, exist_ok=True)
     ct = os.path.join('build', 'ct.exe')
-    ctf = os.path.join('build', 'ct_field.exe')
+    ctf = os.path.join('build', 'Belthasar.exe')
     srm = os.path.join(OUT, 'fresh.srm')
     with cf.ThreadPoolExecutor(3) as ex:
         fw = ex.submit(run, [ct, '--peek', 'boot', os.path.join(OUT, 'peek'), '--frames', str(a.cart_frames)],

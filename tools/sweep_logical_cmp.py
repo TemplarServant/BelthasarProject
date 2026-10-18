@@ -7,7 +7,7 @@ model, CLAUDE.md's one exception; disasm/notes/oracle_logical_frames.md §4).
 The seed: the cartridge run `--peek <base.state> --btnscript 0:<frames>` in real time -- the same drive that produced
 <seed.raw.wram>, whose bytes are checked identical to the run's WRAM -- saved as a LakeSnes state (PEEK_SAVE, cached
 under build/_sweeps/). The reference: that state run <n> more frames on CT_ORACLE_LOGICAL=1, `--monitor` of the
-per-slot bytes. The port: build/ct_field.exe on CT_BATTLE_RENDERWRAM=<seed> with CT_BATTLE_MVSWEEP=<n> (mv) or
+per-slot bytes. The port: build/Belthasar.exe on CT_BATTLE_RENDERWRAM=<seed> with CT_BATTLE_MVSWEEP=<n> (mv) or
 CT_BATTLE_IDLESWEEP=<n> (idle). A seed of `-` is the base state's own WRAM (<frames> 0): a committed image taken
 apart from the state (bat2.raw.wram differs from bat2_lake.state in 84 bytes, $E5 among them -- the byte the sweep
 reads its iteration phase from) cannot be continued by the state. The sweep frame sf=k is the monitor's f(k-1)
@@ -68,7 +68,7 @@ def main():
         penv.update(CT_BATTLE_MVSWEEP=str(n), CT_BATTLE_MVTRACE='1', CT_BATTLE_WALKTRACE='1')
     else:
         penv.update(CT_BATTLE_IDLETRACE='1', CT_BATTLE_IDLESWEEP=str(n), CT_BATTLE_WALKTRACE='1')
-    p = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat'], env=penv,
+    p = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat'], env=penv,
                        capture_output=True, text=True, errors='replace')
     rows = []
     for l in (p.stdout + p.stderr).splitlines():

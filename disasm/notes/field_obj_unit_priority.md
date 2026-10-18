@@ -78,7 +78,7 @@ Fix (one mechanism, every scene):
   **57344 / 57344 identical**; main (1b28fed) differs in 388 px, all in the two soldiers' lower units
   (x 144-191, y 127-142). Check `field-obj-unit-priority-seated-soldiers-vs-oracle` (two mutations: the
   per-unit stencil off; every class-0 unit on the top byte).
-* The user's capture (`ct_field --scene 123 --loadstate ct_debug_022.state`): the soldiers' region against
+* The user's capture (`Belthasar --scene 123 --loadstate ct_debug_022.state`): the soldiers' region against
   the oracle frame is identical (the only differing pixels are Crono, who stands 6 px apart in the two runs).
 * `regress.py --quick`: 564 pass, 0 fail (5 skips = missing fixtures, unrelated).
 

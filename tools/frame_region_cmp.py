@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 r"""Compare ONE rectangle of a port frame against the cartridge.
 
-    python tools/frame_region_cmp.py <oracle_state> <oracle_frame> <port_frame> <x0> <y0> <x1> <y1> -- <ct_field args...>
+    python tools/frame_region_cmp.py <oracle_state> <oracle_frame> <port_frame> <x0> <y0> <x1> <y1> -- <Belthasar args...>
 
-The port (build/ct_field.exe, run with the given args) dumps its presented frame with CT_SHOTS and stops there
+The port (build/Belthasar.exe, run with the given args) dumps its presented frame with CT_SHOTS and stops there
 (CT_SHOTS_EXIT, so an interactive run -- which has no --frames cap -- ends);
 the oracle (build/ct.exe --peek <oracle_state> --frames <oracle_frame>) dumps its framebuffer. Prints
 
@@ -18,7 +18,7 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 
 

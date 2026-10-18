@@ -57,17 +57,17 @@ python tools/ct.py fb2png out.raw out.png ; python tools/ct.py oam out.raw.oam
 
 # OURS — the same walk-in, full trace
 CT_BATTLE_TRACE=1 CT_BATTLE_ASCTRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  ./build/ct_field.exe --assets ct_assets.dat --scene 19 \
+  ./build/Belthasar.exe --assets ct_assets.dat --scene 19 \
   --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest o.raw --frames 900 --walkscript "l:400,."
 
 # OURS — the composed frame at module frame N (interactive path; NO --selftest; self-exits)
 CT_BATTLESHOT_FIELD=out.raw CT_BATTLESHOT_FIELD_AT=N SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  ./build/ct_field.exe --assets ct_assets.dat --scene 19 \
+  ./build/Belthasar.exe --assets ct_assets.dat --scene 19 \
   --loadwram saves/forest_re/battle_crono_solo.dumpwram --walkscript "l:400,."
 
 # OURS — the LONG phantom (a PC action holds the think). forest_pre has Marle, so a PC can act.
 CT_BATTLE_SCRIPT="n:283,a:2,n:4,a:2,n:2000" CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  ./build/ct_field.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
+  ./build/Belthasar.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
 #   -> battletrace f510 enemy-think / f510 pc-act / f651 act-end / f693 enemy-arrive   == 183 held frames
 CT_BATTLESHOT=out.raw CT_BATTLESHOT_AT=600 CT_BATTLE_SCRIPT="n:283,a:2,n:4,a:2,n:2000" ... --battletest ...
 ```
@@ -362,7 +362,7 @@ one the ROM makes unconditionally.
 
 ## Adversarial review (2026-08-22, independent pass — every probe re-run, every address re-disassembled)
 
-Binaries snapshotted to `%TMP%\ctwf3\phantom-adv\` (`ct_probe.exe`, `ct_field.exe`, `SDL2.dll`); all runs
+Binaries snapshotted to `%TMP%\ctwf3\phantom-adv\` (`ct_probe.exe`, `Belthasar.exe`, `SDL2.dll`); all runs
 with cwd = repo root.
 
 **Verdict: the CONCLUSION survives; two of the four evidence legs do not.** The phantom is real and I
@@ -496,7 +496,7 @@ the deletion **and** recording the ladder's removal as the next step, with `!ani
 
 ### D. Which pinned checks move? (question 5 — read `tools/regress_checks.json`, suite NOT run)
 
-I traced the event timeline of every pinned forest/Hetake scenario with the snapshot `ct_field.exe`:
+I traced the event timeline of every pinned forest/Hetake scenario with the snapshot `Belthasar.exe`:
 
 | scenario | thinks | pinned moment | verdict |
 |---|---|---|---|

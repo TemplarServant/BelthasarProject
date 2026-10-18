@@ -355,7 +355,7 @@ static void dsp_cycleChannel(Dsp* dsp, int ch) {
   dsp->ram[(ch << 4) | 8] = dsp->channel[ch].gain >> 4;
   dsp->ram[(ch << 4) | 9] = sample >> 8;
   dsp->channel[ch].sampleOut = sample;
-  // CT: CT_DSP_VOICEMASK=<hex> (debug, ct.exe and ct_field alike) -- only the voices in the mask reach the main mix and
+  // CT: CT_DSP_VOICEMASK=<hex> (debug, ct.exe and Belthasar alike) -- only the voices in the mask reach the main mix and
   // the echo input, so one sound (an SFX on voices 6/7: C0) can be heard and compared alone on both sides. The voice
   // still runs (its sampleOut still modulates the next voice's pitch).
   { static int ctVoiceMask = -2;

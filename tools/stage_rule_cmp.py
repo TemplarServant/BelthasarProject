@@ -128,7 +128,7 @@ def main():
                CT_XLAT_HANDOFF_WRAM='build/_stagerule_handoff.wram', CT_SHOTS_THUMBS=pth, CT_SHOTS_THUMBS_EVERY='1',
                CT_SHOTS_THUMBS_FROM=str(lo), CT_SHOTS_THUMBS_TO=str(hi), CT_SHOTS='build/_stagerule_shot',
                CT_SHOTS_AT=str(hi), CT_SHOTS_EXIT='1')
-    log = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
+    log = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
                          env=env, capture_output=True, text=True, errors='replace', timeout=1800).stdout
     F = None
     for m in re.finditer(r'xlat-handoff: frame (\d+) \$0384=([0-9A-F]{2})', log):

@@ -310,7 +310,7 @@ the existing `CT_SPAN_PC_NORMAL = 125` is not wrong — it is the **W = 0** inst
 
 ## 5 — WHAT OUR ENGINE DOES INSTEAD (and why the user sees it)
 
-Repro: `CT_BATTLE_MASHA=1 CT_BATTLE_ROUTETRACE=1 build/ct_field.exe --assets ct_assets.dat --scene 19 \
+Repro: `CT_BATTLE_MASHA=1 CT_BATTLE_ROUTETRACE=1 build/Belthasar.exe --assets ct_assets.dat --scene 19 \
 --battletest saves/battle_re/forest_pre.raw.wram 2>&1 | grep pcroute`
 
 | stage | ROM (arrival-anchored) | our engine | src |
@@ -599,7 +599,7 @@ GATO f-1 (`['100:8,0:8']*40`), GATO f-2 #1 and #2 (`['100:8,0:40']*45`), bat3 A/
 - **RUN plays 6-frame entries from arm+1** — bat3 B `24 3B 25 26 3C 27` at f59/65/71/77/83/89 (facing 2);
   GATO `20`@f437 `41`@f443 (facing 0); bat3 A `24`@f50 `3B`@f56 `25`@f62. Never observed wrapping
   (OPEN-3 stands).
-- **Our engine's defect reproduces**: `CT_BATTLE_MASHA=1 CT_BATTLE_ROUTETRACE=1 build/ct_field.exe --assets
+- **Our engine's defect reproduces**: `CT_BATTLE_MASHA=1 CT_BATTLE_ROUTETRACE=1 build/Belthasar.exe --assets
   ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram` prints
   `pcroute f196 rel=1 ... walk=1` ... `pcroute f213 rel=18 live=(128,71) walk=0 ... arr=1`; the extracted
   `ctCronoAttackTraj` poseId ladder is exactly `pose0 rel 0..5 / pose1 6..10 / pose2 11..25 / pose3 26..52 /

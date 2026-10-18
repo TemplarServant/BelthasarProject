@@ -28,7 +28,7 @@ def main():
     os.chdir(root)
     env = dict(os.environ, CT_BATTLE_ASCTRACE='1', CT_NOPACE='1', SDL_AUDIODRIVER='dummy', SDL_VIDEODRIVER='dummy')
     env.pop('CT_ORACLE_LOGICAL', None)
-    pr = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433',
+    pr = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433',
                          '--selftest', '--frames', '7400'], env=env, capture_output=True, text=True, errors='replace')
     oenv = dict(os.environ, CT_ORACLE_LOGICAL='1')
     orr = subprocess.run([os.path.abspath('build/ct.exe'), '--monitor', '7EA124:11,7E9907:11,7EA13A:11',
