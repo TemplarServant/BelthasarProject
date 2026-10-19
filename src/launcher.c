@@ -312,6 +312,63 @@ void CtLauncherSetupFree(CtSetupJob* j) {
   free(j);
 }
 
+#ifdef _WIN32
+#include <commdlg.h>
+#include <shellapi.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "comdlg32.lib")
+#pragma comment(lib, "shell32.lib")
+#endif
+int CtLauncherBrowse(char* out, size_t outLen) {
+  wchar_t file[1024] = L"";
+  OPENFILENAMEW ofn; memset(&ofn, 0, sizeof ofn);
+  ofn.lStructSize = sizeof ofn;
+  ofn.lpstrFilter = L"SNES ROM (*.sfc, *.smc)\0*.sfc;*.smc\0All files (*.*)\0*.*\0";
+  ofn.lpstrFile = file; ofn.nMaxFile = 1024;
+  ofn.lpstrTitle = L"Choose your Chrono Trigger (USA) dump";
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+  if (!GetOpenFileNameW(&ofn)) return 0;
+  return WideCharToMultiByte(CP_UTF8, 0, file, -1, out, (int)outLen, NULL, NULL) > 0;
+}
+void CtLauncherReveal(const char* path) {
+  wchar_t w[1200];
+  if (MultiByteToWideChar(CP_UTF8, 0, path, -1, w, 1200) > 0) ShellExecuteW(NULL, L"open", w, NULL, NULL, SW_SHOWNORMAL);
+}
+#else
+static int chooserRun(const char* cmd, char* out, size_t outLen) {
+  FILE* p = popen(cmd, "r");
+  if (!p) return 0;
+  int ok = fgets(out, (int)outLen, p) != NULL;
+  int rc = pclose(p);
+  if (!ok || rc != 0) return 0;
+  size_t n = strlen(out);
+  while (n && (out[n - 1] == '\n' || out[n - 1] == '\r')) out[--n] = 0;
+  return n > 0;
+}
+int CtLauncherBrowse(char* out, size_t outLen) {
+#ifdef __APPLE__
+  return chooserRun("osascript -e 'POSIX path of (choose file with prompt \"Choose your Chrono Trigger (USA) dump\")' "
+                    "2>/dev/null", out, outLen);
+#else
+  return chooserRun("zenity --file-selection --title='Choose your Chrono Trigger (USA) dump' "
+                    "--file-filter='SNES ROM | *.sfc *.smc *.SFC *.SMC' --file-filter='All files | *' 2>/dev/null",
+                    out, outLen)
+      || chooserRun("kdialog --getopenfilename . '*.sfc *.smc|SNES ROM' 2>/dev/null", out, outLen);
+#endif
+}
+void CtLauncherReveal(const char* path) {
+  pid_t pid = fork();
+  if (pid == 0) {
+#ifdef __APPLE__
+    execlp("open", "open", path, (char*)NULL);
+#else
+    execlp("xdg-open", "xdg-open", path, (char*)NULL);
+#endif
+    _exit(127);
+  }
+}
+#endif
+
 int CtLauncherConfigure(int* argc, char*** argv) {
   if (getenv("CT_NOPACE")) return 0;                         // the harness's unpaced run (the suite's selfchecks)
   for (int i = 1; i < *argc; i++)

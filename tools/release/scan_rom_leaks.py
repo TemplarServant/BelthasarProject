@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""Scan a tree for copyrighted bytes before it is published: nothing from the ROM may ship.
 
-    python tools/release/scan_rom_leaks.py <dir> [--rom ROM] [--corpus FILE ...] [--window 24]
+    python tools/release/scan_rom_leaks.py <dir> [--rom ROM] [--corpus FILE ...] [--window 24] [--binaries]
 
 The corpora are the ROM itself (always; verified) plus any FILE given with --corpus -- the extracted ct_assets.dat (the
 ROM's data decompressed) and the private bakes (src/data/*.h, savestates) are the useful ones, since decompressed
@@ -104,12 +104,36 @@ def find_leak(data, corpora, w):
     return None
 
 
+def corpus_index(corpora, w, stride):
+    """Every content window of the corpora at `stride`, for searching large binaries: a run the binary shares with a
+    corpus is found when it is at least w + stride - 1 bytes long."""
+    idx = {}
+    for name, blob in corpora:
+        for o in range(0, len(blob) - w + 1, stride):
+            win = blob[o:o + w]
+            if len(set(win)) >= 8 and win not in idx:
+                idx[win] = (name, o)
+    return idx
+
+
+def find_leak_indexed(data, idx, w):
+    for i in range(0, len(data) - w + 1):
+        hit = idx.get(data[i:i + w])
+        if hit:
+            return hit[0], hit[1], i
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('dir')
     ap.add_argument('--rom')
     ap.add_argument('--corpus', action='append', default=[])
     ap.add_argument('--window', type=int, default=24)
+    ap.add_argument('--binaries', action='store_true',
+                    help='a release folder: binaries (the executables, the libraries, a bundled runtime) are not '
+                         'findings by themselves; their bytes are searched against an index of the corpora (every '
+                         'shared run of window + 15 bytes or more)')
     a = ap.parse_args()
 
     corpora = [('ROM', romlib.load(a.rom))]
@@ -127,6 +151,7 @@ def main():
         else:
             corpora.append((os.path.basename(c), open(c, 'rb').read()))
 
+    idx = corpus_index(corpora, a.window, 16) if a.binaries else None
     leaks = nfiles = nruns = 0
     for root, dirs, files in os.walk(a.dir):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
@@ -147,13 +172,13 @@ def main():
             if text is not None:
                 runs = runs_from_text(text)
             else:
-                if not (rel.startswith(BINARY_OK_DIR) and rel.lower().endswith(BINARY_OK_EXT)):
+                if not a.binaries and not (rel.startswith(BINARY_OK_DIR) and rel.lower().endswith(BINARY_OK_EXT)):
                     print('binary: %s  %d bytes (not on the allowlist)' % (rel, len(data)))
                     leaks += 1
                 runs = [(0, data)]
             for line, run in runs:
                 nruns += 1
-                hit = find_leak(run, corpora, a.window)
+                hit = find_leak_indexed(run, idx, a.window) if (idx is not None and text is None) else find_leak(run, corpora, a.window)
                 ok = any(rel == kp and line and ks in "".join(lines[max(0, line - 2):line]) for kp, ks in KNOWN_OK)
                 if hit and not ok:
                     leaks += 1

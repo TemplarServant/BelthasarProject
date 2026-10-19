@@ -40,6 +40,12 @@ void CtLauncherSetupFree(CtSetupJob* j);
 // 1 when the data folder holds everything the game needs.
 int CtLauncherReady(const CtLauncher* L);
 
+// The system's own file chooser for the dump (Windows: the common Open dialog; Linux: zenity or kdialog when present).
+// 1 = a file was chosen (its path, UTF-8, in `out`); 0 = cancelled or no chooser.
+int CtLauncherBrowse(char* out, size_t outLen);
+// Show a folder or a file with the system (Explorer / xdg-open / open).
+void CtLauncherReveal(const char* path);
+
 // The screen itself (launcher_ui.cpp with Dear ImGui; launcher_ui_stub.c without): 1 = the data is ready, 0 = quit.
 // `dropped` = a file given on the command line (dropped on the executable), or NULL.
 int CtLauncherUi(CtLauncher* L, const char* dropped);
