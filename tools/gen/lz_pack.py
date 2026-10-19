@@ -37,6 +37,7 @@ def ptr24(rom, at):
 SOURCES = [
     rom_closure.location_streams,          # the location load: maps, tilesets, assemblies, BG3 assemblies, scripts
     rom_closure.sequence_streams,          # the $C3 stages' packets through $FE:0000
+    rom_closure.sprite_streams,            # every sprite record's sheet through $E4:FFE0's gfx table
 ]
 SKIPPED = os.path.join('saves', 'lz_pack.skipped')   # the listed offsets that are not streams (the raw blocks)
 

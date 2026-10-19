@@ -161,3 +161,104 @@ def sequence_tables(rom, raw_offsets):
         ('gate warp: the colour scales ($FD:F181, 64)', 0x3DF181, 0x3DF1C1),
     ]
     return out
+
+
+# The sprites (src/ct_vm.c loadGfxMirror, src/move.c's loaders and anim drain, src/oam.c): every sprite record -- the
+# PCs' and NPCs' at $E4:F000 (5 bytes: gfx, assembly, palette, anim, class; sprite s at F000 + 5s) and the enemies' at
+# $E4:F600 (10 bytes) -- through the meta at $E4:FFE0 (the gfx, assembly, frame-table and duration-table pointer tables).
+# ALL records, not the ones some script names: the closure is the tables'.
+E4 = 0x240000
+SPRITE_RECS = ((E4 + 0xF000, 5, (0xF600 - 0xF000) // 5), (E4 + 0xF600, 10, (0xFFE0 - 0xF600) // 10))
+
+
+def _w(rom, o):
+    return rom[o] | rom[o + 1] << 8
+
+
+def sprite_fields(rom):
+    """The sets of gfx, assembly, palette and anim ids any sprite record names."""
+    g, a, p, n = set(), set(), set(), set()
+    for base, stride, count in SPRITE_RECS:
+        for i in range(count):
+            r = base + stride * i
+            g.add(rom[r]); a.add(rom[r + 1]); p.add(rom[r + 2]); n.add(rom[r + 3])
+    return g, a, p, n
+
+
+def sprite_meta(rom):
+    return tuple(E4 + _w(rom, E4 + 0xFFE0 + 2 * k) for k in range(4))   # gfx, asm, frames, durations
+
+
+def sprite_pointers(rom):
+    """({gfx id: file offset}, {asm id: file offset}) of every id the records name."""
+    gfx_t, asm_t, _, _ = sprite_meta(rom)
+    g, a, _, _ = sprite_fields(rom)
+    gp = {i: ptr24(rom, gfx_t + 3 * i) for i in g}
+    ap = {i: ptr24(rom, asm_t + 3 * i) for i in a}
+    return {k: v for k, v in gp.items() if v is not None}, {k: v for k, v in ap.items() if v is not None}
+
+
+def sprite_streams(rom):
+    """Every gfx pointer: the LZ sheets (lz_pack skips a raw one -- those are blocks, sprite_tables)."""
+    gp, _ = sprite_pointers(rom)
+    return {'sprite sheets ($E4:FFE0 gfx table)': set(gp.values())}
+
+
+def blocks(offsets, ends=()):
+    """[(start, end)] each offset to the next one in its own 64 KB bank (or to the bank's end, or to an `ends` bound
+    that comes first): the raw data a pointer table names, cut at the next datum it names."""
+    out = []
+    srt = sorted(set(offsets))
+    for i, o in enumerate(srt):
+        bank_end = (o & ~0xFFFF) + 0x10000
+        nxt = srt[i + 1] if i + 1 < len(srt) and srt[i + 1] < bank_end else bank_end
+        for e in ends:
+            if o < e < nxt:
+                nxt = e
+        out.append((o, nxt))
+    return out
+
+
+def sprite_tables(rom, raw_offsets):
+    """(name, start, end) of the sprite system's tables: the records, the meta, the four pointer tables to the last id
+    the records name, the palettes, the frame and duration tables every anim's pointers span, the raw graphics (the gfx
+    pointers that are not LZ streams -- `raw_offsets` from lz_pack) and the assemblies, each a block to the next datum."""
+    gfx_t, asm_t, fp_t, dp_t = sprite_meta(rom)
+    g, a, p, n = sprite_fields(rom)
+    fp = [_w(rom, fp_t + 2 * i) for i in range(max(n) + 2)]
+    dp = [_w(rom, dp_t + 2 * i) for i in range(max(n) + 2)]
+    out = [
+        ('sprite records: PCs and NPCs ($E4:F000, 5 each)', E4 + 0xF000, E4 + 0xF000 + 5 * SPRITE_RECS[0][2]),
+        ('sprite records: enemies ($E4:F600, 10 each, the 8-bit id: to $E5:0000)', E4 + 0xF600, E4 + 0xF600 + 10 * 256),
+        ('sprite meta ($E4:FFE0)', E4 + 0xFFE0, E4 + 0xFFE8),
+        ('sprite palettes ($E4:0000, 24 each)', E4, E4 + 24 * (max(p) + 1)),
+        ('sprite gfx pointers', gfx_t, gfx_t + 3 * (max(g) + 1)),
+        ('sprite assembly pointers', asm_t, asm_t + 3 * (max(a) + 1)),
+        ('sprite frame-table pointers', fp_t, fp_t + 2 * (max(n) + 2)),
+        ('sprite duration-table pointers', dp_t, dp_t + 2 * (max(n) + 2)),
+        ('sprite frame tables (bank E4)', E4 + min(fp), E4 + max(fp)),
+        ('sprite duration tables (bank E4)', E4 + min(dp), E4 + max(dp)),
+    ]
+    gp, ap = sprite_pointers(rom)
+    raw = [o for o in gp.values() if o in raw_offsets]
+    for s0, e0 in blocks(raw):
+        out.append(('sprite raw tiles ($%02X:%04X)' % (0xC0 + (s0 >> 16), s0 & 0xFFFF), s0, e0))
+    for s0, e0 in blocks(ap.values()):
+        out.append(('sprite assembly ($%02X:%04X)' % (0xC0 + (s0 >> 16), s0 & 0xFFFF), s0, e0))
+    return out
+
+
+def party_tables(rom):
+    """(name, start, end) of the tables the field's party code reads (src/move.c): the walk-anim dispatcher C0/9ECD's
+    jump table and the handler bodies whose operands it decodes, the triple-tech tables FF/F958 reads, and the weapon
+    palettes the epilogue C2/834D copies -- each extent the reading code's own index range."""
+    cd6cec = 0x0D6CEC
+    return [
+        ('walk-anim jump table ($C0:9FF7, X & 7E)', 0x009FF7, 0x009FF7 + 0x80),
+        ('walk-anim handlers ($C0:A079-A171, their operands)', 0x00A079, 0x00A171),
+        ('triple-tech members ($CC:2953, 5 x 3)', 0x0C2953, 0x0C2953 + 15),
+        ('triple-tech masks ($CC:2983, 5)', 0x0C2983, 0x0C2983 + 5),
+        ('PC bit table ($FF:F9BB, 8-bit index)', 0x3FF9BB, 0x3FF9BB + 0x100),
+        ('weapon palette index ($CD:6CEC, 8-bit index)', cd6cec, cd6cec + 0x100),
+        ('weapon palettes ($D1:4B00, 6 each)', 0x114B00, 0x114B00 + 6 * (max(rom[cd6cec:cd6cec + 0x100]) + 1)),
+    ]

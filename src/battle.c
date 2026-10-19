@@ -19,6 +19,7 @@
 //   Exit (phase 1): C1/8357 controller-2 debug instant-end — zero every enemy curHP ($5FB0,Y) +
 //   set $5FCA,Y=0x80, then TDC/STA $7F01EC (D=0 proven at CF/FB74-78) = outcome 0.
 #include <stdio.h>
+#include "romview.h"
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -205,7 +206,7 @@ const uint8_t* CtBattleRom(long* lenOut) { if (lenOut) *lenOut = gRomLen; return
                                         from the PC-TECH config CD/45A6 and the enemy tables CD/5FF0/CD/61F0. */
 
 const uint8_t* CtBattleFieldEnemyRecs(void) {
-  return (gRom && gRomLen >= (long)(ROM_FIELD_RECS + 256 * 10)) ? gRom + ROM_FIELD_RECS : NULL;
+  return gRom ? CtRomPtr(gRom, gRomLen, ROM_FIELD_RECS, 256 * 10) : NULL;   // (the table: CT_ASSET_TABLE)
 }
 
 // ---------------------------------------------------------------- ENEMY SHEET

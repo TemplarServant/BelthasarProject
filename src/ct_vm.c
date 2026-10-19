@@ -771,7 +771,7 @@ static int legsOn(void) {
   if (gLegs < 0) { const char* e = getenv("CT_FRAMELEGS"); gLegs = (e && *e == '0') ? 0 : 1; }
   return gLegs;
 }
-static uint32_t romU16(uint32_t off) { return (uint32_t)gRomImg[off] | ((uint32_t)gRomImg[off + 1] << 8); }
+static uint32_t romU16(uint32_t off) { return (uint32_t)CtRomByte(gRomImg, gRomImgLen, (long)(off)) | ((uint32_t)CtRomByte(gRomImg, gRomImgLen, (long)(off + 1)) << 8); }
 
 // ============================ THE OBJ PALETTE ALLOCATOR, C0/7170 ============================
 // Ported WHOLE. What stood here before was a stand-in that collapsed the ROM's 12-class dispatch
@@ -826,8 +826,8 @@ static void palUpload(Mem* m, int objX, int attr) {
                                      | (r8(m, 0x7E1401u + (uint32_t)objX) << 8));
   if (src + 24 > (uint32_t)gRomImgLen) return;
   for (int k = 0; k < 24; k++) {
-    w8(m, 0x7E0000u + dst + (uint32_t)k, gRomImg[src + (uint32_t)k]);                 // MVN #1
-    w8(m, 0x7E0000u + dst + 0x200u + (uint32_t)k, gRomImg[src + (uint32_t)k]);        // MVN #2
+    w8(m, 0x7E0000u + dst + (uint32_t)k, CtRomByte(gRomImg, gRomImgLen, (long)(src + (uint32_t)k)));                 // MVN #1
+    w8(m, 0x7E0000u + dst + 0x200u + (uint32_t)k, CtRomByte(gRomImg, gRomImgLen, (long)(src + (uint32_t)k)));        // MVN #2
   }
 }
 
@@ -908,13 +908,14 @@ static void palRelease734C(Mem* m, int obj) {
 // path (C0/4845: $1280/$1200 from the gfx ptr table entry, no allocation).
 static void loadGfxMirror(Mem* m, int obj, const uint8_t* hdr, int directGfx) {
   if (!gRomImg || gRomImgLen < 0x250000) return;
+  if (!hdr) return;
   uint32_t X = 0x7E0000u + (uint32_t)obj * 2;
   uint32_t gfxTab = 0x240000u + romU16(0x24FFE0);      // sprite meta $E4:FFE0 [0]: 3-byte gfx ptrs (LZ)
   uint32_t asmTab = 0x240000u + romU16(0x24FFE2);      // [1]: 3-byte assembly ptrs
   uint32_t fpTab  = 0x240000u + romU16(0x24FFE4);      // [2]: u16 anim frame-table ptrs
   uint32_t dpTab  = 0x240000u + romU16(0x24FFE6);      // [3]: u16 anim duration-table ptrs
   uint32_t ap = asmTab + (uint32_t)hdr[1] * 3;         // assembly ptr -> $1380 word + $1300 bank
-  w8(m, X + 0x1380, gRomImg[ap]); w8(m, X + 0x1381, gRomImg[ap + 1]); w8(m, X + 0x1300, gRomImg[ap + 2]);
+  w8(m, X + 0x1380, CtRomByte(gRomImg, gRomImgLen, (long)(ap))); w8(m, X + 0x1381, CtRomByte(gRomImg, gRomImgLen, (long)(ap + 1))); w8(m, X + 0x1300, CtRomByte(gRomImg, gRomImgLen, (long)(ap + 2)));
   uint32_t po = (uint32_t)hdr[2] * 24;                 // palette offset word $1400 (LE)
   w8(m, X + 0x1400, po & 0xFF); w8(m, X + 0x1401, (po >> 8) & 0xFF);
   uint32_t fy = (uint32_t)hdr[3] * 2;                  // anim set words $1480/$1500/$1580 (LE)
@@ -926,8 +927,8 @@ static void loadGfxMirror(Mem* m, int obj, const uint8_t* hdr, int directGfx) {
   w8(m, X + 0x1201, hdr[4]);                           // size flags
   uint32_t gp = gfxTab + (uint32_t)hdr[0] * 3;
   if (directGfx) {
-    w8(m, X + 0x1280, gRomImg[gp]); w8(m, X + 0x1281, gRomImg[gp + 1]);
-    w8(m, X + 0x1200, gRomImg[gp + 2]);
+    w8(m, X + 0x1280, CtRomByte(gRomImg, gRomImgLen, (long)(gp))); w8(m, X + 0x1281, CtRomByte(gRomImg, gRomImgLen, (long)(gp + 1)));
+    w8(m, X + 0x1200, CtRomByte(gRomImg, gRomImgLen, (long)(gp + 2)));
     return;
   }
   for (int s = 0; s < 16; s++)                         // C0/5C90 pass 1: share an existing set
@@ -945,8 +946,8 @@ static void loadGfxMirror(Mem* m, int obj, const uint8_t* hdr, int directGfx) {
   w8(m, 0x7E0930 + (uint32_t)freeSlot, obj * 2);
   uint32_t cur = (uint32_t)r8(m, 0x7E0071) | ((uint32_t)r8(m, 0x7E0072) << 8);
   w8(m, X + 0x1280, cur & 0xFF); w8(m, X + 0x1281, (cur >> 8) & 0xFF);   // pre-decompress cursor
-  uint32_t src = ((uint32_t)(gRomImg[gp + 2] - 0xC0) << 16) | romU16(gp);   // 3-byte SNES ptr -> file
-  if (gRomImg[gp + 2] >= 0xC0 && src + 2 <= (uint32_t)gRomImgLen) {
+  uint32_t src = ((uint32_t)(CtRomByte(gRomImg, gRomImgLen, (long)(gp + 2)) - 0xC0) << 16) | romU16(gp);   // 3-byte SNES ptr -> file
+  if (CtRomByte(gRomImg, gRomImgLen, (long)(gp + 2)) >= 0xC0 && src + 2 <= (uint32_t)gRomImgLen) {
     static uint8_t scratch[0x10000];                   // measure the decompressed size like the ROM's
                                                        // JSL C30002 job ($0306 -> $71 += size). Only
                                                        // canonical LZ sets reach here (0x82/0x83<0xF8 ids;
@@ -1045,7 +1046,7 @@ static void npcLoadMirror(Mem* m, int obj, int hdrIdx, int mode) {
   // all read $1B01 = 00 where the oracle reads 01. Same family as the PC arms' three stores above.
   w8(m, X + 0x1B01, 0x01);                             // 447F / 45A0 / 46EF
   if (!gRomImg || gRomImgLen < 0x250000) return;       // palette slots assign on first RENDER,
-  loadGfxMirror(m, obj, gRomImg + 0x24F000 + (uint32_t)hdrIdx * 5, mode == 3);   // not at load
+  loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F000 + (long)hdrIdx * 5, 5), mode == 3);   // not at load
 }
 
 // The PC loader C0/448D (op 0x57/0x5C/0x62/0x6A/0x68/0x6C/0x6D via C0/41E4-4214, and op 0x80's three
@@ -1114,7 +1115,7 @@ static void pcLoaderIdStores(Mem* m, int obj, int id) {
 static void pcLoadMirror(Mem* m, int obj, int id) {
   if (!gRomImg || gRomImgLen < 0x250000 || id < 0 || id > 6) return;
   uint32_t X = 0x7E0000u + (uint32_t)obj * 2;
-  loadGfxMirror(m, obj, gRomImg + 0x24F000 + (uint32_t)id * 5, 1);   // C0/449B-4536
+  loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F000 + (long)id * 5, 5), 1);   // C0/449B-4536
   w8(m, X + 0x0C00, 0x20); w8(m, X + 0x0C01, 0x20);                   // 453B LDA #2020 / STA $0C00,X
   w8(m, X + 0x1680, 0x00);                                            // 4543
   w8(m, X + 0x1681, 0x00);                                            // 4548
@@ -1270,7 +1271,7 @@ static void loadMonMirror(Mem* m, int obj, uint8_t id, uint8_t op2) {
   w8(m, X + 0x1681, 0x00);                            // 4588
   w8(m, X + 0x0D00, (uint8_t)(((slot & 0xFE) << 4) | ((slot & 1) << 3)));
   if (gRomImg && gRomImgLen >= 0x250000)
-    loadGfxMirror(m, obj, gRomImg + 0x24F600 + (uint32_t)id * 10, id >= 0xF8);   // C0/477A: F8+ ROM-direct
+    loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F600 + (long)id * 10, 10), id >= 0xF8);   // C0/477A: F8+ ROM-direct
 }
 
 // op 0xA8 face toward object[op/2] (ROM C0/55A0) / 0xA9 face toward PC[op]'s object (C0/5605):
@@ -8187,7 +8188,7 @@ int CtResolveNames(const char* in, int len, char* out, int cap, const CtScene* s
         if (!sc || !sc->mem || !gRomImg) { const char* t = "{item}"; for (; *t && o < cap - 1; t++) out[o++] = *t; continue; }
         uint32_t at = 0x0C0B5Fu + (uint32_t)sc->mem->l[0] * 11u;
         for (int k = 0; k < 10 && at + (uint32_t)k < (uint32_t)gRomImgLen && o < cap - 1; k++) {
-          uint8_t b = gRomImg[at + (uint32_t)k];
+          uint8_t b = CtRomByte(gRomImg, gRomImgLen, (long)(at + (uint32_t)k));
           if (b == 0xEF) break;                             // C2/5D28 `CMP #EF / BEQ`
           out[o++] = (b == 0xFF) ? ' ' : (char)b;
         }

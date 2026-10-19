@@ -46838,7 +46838,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "lz-data: 990 streams identical (bytes and both costs)"
+        "lz-data: 1227 streams identical (bytes and both costs)"
       ],
       "pin": [
         "^lz-data: "
@@ -46860,7 +46860,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "tab-data: 47 tables, 54235 bytes identical"
+        "tab-data: 296 tables, 640686 bytes identical"
       ],
       "pin": [
         "^tab-data: "
@@ -46881,14 +46881,14 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "rom-census: 270 of 1024 pages read (1080 KB) over 1 runs"
+        "rom-census: 183 of 1024 pages read (732 KB) over 1 runs"
       ],
       "pin": [
         "^rom-census: [0-9]+ of 1024"
       ],
       "timeout_s": 1500,
       "note_pass": "the ROM-free runtime's scoreboard: the pages of the ROM the whole attract still reads (CT_ROM_CENSUS), per bank and per reader in the output",
-      "notes": "The goal is 0 (memory rom-free-runtime-goal). Each package that moves a system into ct_assets.dat lowers it: re-pin DOWNWARD with the package's commit. A rise is a regression -- never re-pin it up. Baseline 406 (P0a), 310 after P0b's location streams, 307 after P1; 282 after package A (the location load: bank F6 and E5/F5 read nothing); 270 after package B (the sequence stages: bank FE and the gate warp read nothing)."
+      "notes": "The goal is 0 (memory rom-free-runtime-goal). Each package that moves a system into ct_assets.dat lowers it: re-pin DOWNWARD with the package's commit. A rise is a regression -- never re-pin it up. Baseline 406 (P0a), 310 after P0b's location streams, 307 after P1; 282 after package A (the location load: bank F6 and E5/F5 read nothing); 270 after package B (the sequence stages: bank FE and the gate warp read nothing); 183 after package D (the field sprites and objects: move.c, oam.c and the VM read nothing; what is left is the overworld, F, and the battle, G)."
     },
     {
       "name": "rom-free-container-equals-rom",
@@ -46904,7 +46904,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "rom-free-cmp: f4000 2001 thumbnails and 2136534 output samples identical, container vs ROM (sha1 cf463d87bd99)"
+        "rom-free-cmp: f4000 2001 thumbnails and 2136534 output samples identical, container vs ROM (sha1 58dd1e9fbba9)"
       ],
       "pin": [
         "^rom-free-cmp: "

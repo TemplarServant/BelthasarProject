@@ -11,6 +11,10 @@
 //   C0/B330  stage 2: group by priority ($0F80 & 0x0C) and copy the 4 tiles' {X,Y,tile,attr}
 //            to the group's main pointer (+0x10) and the high byte to its high pointer (+1).
 #include "oam.h"
+#include "romview.h"
+// A byte of the ROM the sprite engine reads (the sprite tables, frames, palettes, tiles): the container's named
+// table when one covers it (CT_ASSET_TABLE, romview.h), else the ROM's.
+#define MR(o) CtRomByte(rom, 0x400000L, (long)(o))
 
 // C0/B309's STAGE 2 -- and it is a COPY, not a computation. That correction is the whole of this
 // routine's 2026-08-08 rewrite, and it fixed two defects that no scenario check could see.
@@ -144,8 +148,8 @@ void CtDecodeSpriteAssembly(const uint8_t* r, const uint8_t* rom, int romLen, in
   int d9 = r[0x0F81 + idx] | r[0x0D01 + idx];              // base attr bits
   for (int t = 0; t < 4; t++) {
     int off = fileoff + 0x20 + t * 2;                      // the 4 tiles' X/Y offsets live at +0x20
-    out[t].xoff = (off + 1 < romLen) ? (int8_t)rom[off] : 0;
-    out[t].yoff = (off + 1 < romLen) ? (int8_t)rom[off + 1] : 0;
+    out[t].xoff = (off + 1 < romLen) ? (int8_t)MR(off) : 0;
+    out[t].yoff = (off + 1 < romLen) ? (int8_t)MR(off + 1) : 0;
     out[t].tile = (uint8_t)(r[0x0D00 + idx] + t * 2);      // sequential even tiles
     out[t].attr = (uint8_t)(d9 | r[(t < 2) ? 0x0C00 + idx : 0x0C01 + idx]);
   }
@@ -222,7 +226,7 @@ int CtMoveDirAngle(uint8_t* r, const uint8_t* rom) {
   // `AA TAX` is governed by the INDEX width, and the callers leave X 16-BIT, so the full index
   // moves; taking only its low byte would collapse three quarters of the table onto one row. All
   // three arms cap the index at $3E0 | $1F = $3FF, so the 1 KB table at $C0:F300 is never overrun.
-  r[0x01EE] = (uint8_t)((r[0x01EE] + rom[0xF300 + ix]) & 0xFF);  // AC1E/AC21/AC22/AC24 (and AC3F.., AC60..)
+  r[0x01EE] = (uint8_t)((r[0x01EE] + MR(0xF300 + ix)) & 0xFF);  // AC1E/AC21/AC22/AC24 (and AC3F.., AC60..)
   return r[0x01EE];
 }
 

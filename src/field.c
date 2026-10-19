@@ -10657,6 +10657,9 @@ int main(int argc, char** argv) {
     if (!romOk) fprintf(stderr, "[rom] note: ROM not found ('%s' + the assets dir). Field + menu are ROM-free "
                                 "(baked tables); only BATTLE enemies (op-0x83 gfx/stats) need it -- CT_ROM=<path>.\n", rp);
     CtWorldSetOp4EHook(owWindowCallHook);                        // op 4E -> $C6:E241 / E27E through the translation
+    // THE ROM'S SMALL TABLES FROM THE CONTAINER (CT_ASSET_TABLE, src/romview.h); CT_TABLES_FROM_ROM=1 keeps the ROM.
+    // (Before the handles below: the enemy records' pointer is the table's.)
+    if (!getenv("CT_TABLES_FROM_ROM")) CtRomViewUse(&assets);
     if (romOk) { CtSceneSetEnemyRecTable(CtBattleFieldEnemyRecs(), 256 * 10);
       long rl = 0; const uint8_t* rb = CtBattleRom(&rl);          // + the full image for the load-op
       CtSceneSetRomImage(rb, rl); } }                             //   gfx/palette allocator mirrors
@@ -10664,8 +10667,6 @@ int main(int argc, char** argv) {
   // from ct_assets.dat when it holds that stream (the bytes and both of C3/0557's costs); CT_LZ_FROM_ROM=1 keeps the ROM.
   { long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
     if (rb && !getenv("CT_LZ_FROM_ROM")) { ct_lz_use_assets(&assets, rb); ct_lz_add_rom_image(CtRomImage(NULL)); } }
-  // THE ROM'S SMALL TABLES FROM THE CONTAINER (CT_ASSET_TABLE, src/romview.h); CT_TABLES_FROM_ROM=1 keeps the ROM.
-  if (!getenv("CT_TABLES_FROM_ROM")) CtRomViewUse(&assets);
   g_ctVramSink = fieldVramSink;                                   // the caption plane's DMAs (move.c) into this VRAM image
 
   // ---- CT_BATTLE_RENDERWRAM=<128KB wram>: render the 3-PC PART-2 battle SURFACE (PC idle stances +
