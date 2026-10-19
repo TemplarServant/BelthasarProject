@@ -1,6 +1,7 @@
 // launcher.c - see launcher.h. Windows and Linux (macOS has src/macos_paths.m, Android src/android.c).
 #include "launcher.h"
 #include "rom_verify.h"
+#include "assets.h"       // CtAssetsFileRomFree: a ROM-free container needs no dump beside it
 #include "SDL.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,8 +40,15 @@ static void setEnv(const char* key, const char* value, int overwrite) {
 #endif
 }
 
+// ct_assets.dat, and the dump only when the container is not a ROM-free one (docs/ROM.md: a ROM-free container is all
+// the engine reads; the dump is the setup's input).
+static int romFreeAssets(const char* dir) {
+  char p[1200];
+  snprintf(p, sizeof p, "%sct_assets.dat", dir);
+  return CtAssetsFileRomFree(p);
+}
 int CtLauncherReady(const CtLauncher* L) {
-  return readable(L->data, ROM_NAME) && readable(L->data, "ct_assets.dat")
+  return readable(L->data, "ct_assets.dat") && (romFreeAssets(L->data) || readable(L->data, ROM_NAME))
 #ifdef CT_DATAFREE
          && readable(L->data, "ct_tables.dat")
 #endif
@@ -60,7 +68,7 @@ static int dataFolder(CtLauncher* L) {
     int portable = 0;
     if (base) {
       snprintf(L->data, sizeof L->data, "%s", base);
-      portable = readable(L->data, "ct_assets.dat") && readable(L->data, ROM_NAME);
+      portable = readable(L->data, "ct_assets.dat") && (romFreeAssets(L->data) || readable(L->data, ROM_NAME));
       SDL_free(base);
     }
     if (!portable) {

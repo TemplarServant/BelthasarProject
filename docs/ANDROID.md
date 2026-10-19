@@ -5,8 +5,11 @@ touch controls are drawn over the picture, and a Bluetooth or USB controller wor
 
 ## What the APK does and does not contain
 
-- **No game data.** The ROM and `ct_assets.dat` are never packed into the APK. On first launch the app asks for them
-  (the system file picker) and copies them into its data folder, `Android/data/org.belthasar.ct/files/`. Every later
+- **No game data.** The ROM and `ct_assets.dat` are never packed into the APK. On first launch the app asks for
+  `ct_assets.dat` (the system file picker) and copies it into its data folder, `Android/data/org.belthasar.ct/files/`.
+  A ROM-free `ct_assets.dat` -- what the current setup makes -- is all the game reads: the app needs no ROM at all
+  ([ROM.md](ROM.md#the-rom-free-runtime)). An older container still needs the ROM beside it, so the ROM button stays for
+  that case. Every later
   launch goes straight to the title screen. `ct_assets.dat` is made on a computer: the desktop Belthasar's ROM screen
   leaves it in its data folder ([ROM.md](ROM.md#the-players-start-the-rom-screen)), or `tools/setup.py` at the root.
 - **Each file is checked before it is kept** (`SetupActivity`): the ROM's size and SHA-1 (as `CtRomVerify`), the
@@ -68,14 +71,14 @@ Install on a phone with USB debugging on:
 
 ## Getting the files onto the device
 
-The first-run screen has three buttons: the ROM (`.sfc`, 4 MB; a 512-byte copier header is accepted),
-`ct_assets.dat` (the one `tools/setup.py` wrote next to the ROM on your computer), and, optionally, a battery save
-(`ct_sram.srm`, 8 KB, from the desktop game). Copy them to the phone first (USB, cloud drive, ...), then pick them.
+The first-run screen has three buttons: `ct_assets.dat` (the one `tools/setup.py` wrote next to the ROM on your
+computer), the ROM (`.sfc`, 4 MB; a 512-byte copier header is accepted -- only for an older `ct_assets.dat`), and,
+optionally, a battery save (`ct_sram.srm`, 8 KB, from the desktop game). Copy them to the phone first (USB, cloud
+drive, ...), then pick them.
 
 Or push them by hand:
 
 ```bat
-adb push Chrono_Trigger_USA_SNES.sfc /sdcard/Android/data/org.belthasar.ct/files/
 adb push ct_assets.dat /sdcard/Android/data/org.belthasar.ct/files/
 adb push ct_sram.srm /sdcard/Android/data/org.belthasar.ct/files/
 ```

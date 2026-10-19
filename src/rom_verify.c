@@ -54,6 +54,7 @@ const uint8_t* CtRomVerify(const uint8_t* data, long* len, const char* what) {
 }
 
 static const uint8_t* s_rom; static long s_romLen; static char s_romHint[520];
+void CtRomSetImage(const uint8_t* img, long len) { s_rom = img; s_romLen = len; }
 void CtRomSetPath(const char* path) { snprintf(s_romHint, sizeof s_romHint, "%s", path ? path : ""); }
 
 static const uint8_t* romTry(const char* path, long* len) {

@@ -31,6 +31,7 @@ def run(frames, every, from_rom, tag):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                CT_SHOTS=os.path.join(d, tag), CT_SHOTS_AT=str(frames), CT_SHOTS_EXIT='1', CT_SHOTS_THUMBS=th,
                CT_SHOTS_THUMBS_EVERY=str(every), CT_AUDIO_PCM=pcm)
+    env.pop('CT_NO_ROM', None)                     # (the comparison is with the dump, by definition)
     for k in FROM_ROM:
         env.pop(k, None)
         if from_rom:

@@ -61,18 +61,24 @@ int CtAndroidConfigure(int* outArgc, char*** outArgv) {
   if (!data || !*data) data = SDL_AndroidGetInternalStoragePath();
   // The setup activity keeps only files that pass these same checks; a file changed behind its back (adb push) is
   // refused here with a message instead of reaching the engine (CtRomImage would exit, a bad container be read).
+  // A ROM-free ct_assets.dat (docs/ROM.md) is all the engine reads; an older container still needs the dump beside it.
+  char ap[1024];
+  snprintf(ap, sizeof ap, "%s/%s", data ? data : ".", ASSETS_NAME);
+  int romFree = data && readable(data, ASSETS_NAME) && CtAssetsFileRomFree(ap);
   const char* bad = !data ? "no storage"
-                  : !readable(data, ROM_NAME) || !readable(data, ASSETS_NAME) ? "missing"
-                  : !romOk(data) ? "the ROM is not the Chrono Trigger (USA) dump"
-                  : !assetsOk(data) ? "ct_assets.dat is damaged or not one" : NULL;
+                  : !readable(data, ASSETS_NAME) ? "missing"
+                  : !assetsOk(data) ? "ct_assets.dat is damaged or not one"
+                  : romFree ? NULL
+                  : !readable(data, ROM_NAME) ? "an older ct_assets.dat: it needs the ROM beside it -- make a new one"
+                  : !romOk(data) ? "the ROM is not the Chrono Trigger (USA) dump" : NULL;
   if (bad) {
     char msg[1200];
-    snprintf(msg, sizeof msg, "The game needs %s and %s in\n%s\n(%s).\n\nOpen the app again to choose them "
-             "(docs/ANDROID.md).", ROM_NAME, ASSETS_NAME, data ? data : "(no storage)", bad);
+    snprintf(msg, sizeof msg, "The game needs %s in\n%s\n(%s).\n\nOpen the app again to choose it "
+             "(docs/ANDROID.md).", ASSETS_NAME, data ? data : "(no storage)", bad);
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Belthasar", msg, NULL);
     return 1;
   }
-  defaultEnv("CT_ROM", data, ROM_NAME);
+  if (readable(data, ROM_NAME)) defaultEnv("CT_ROM", data, ROM_NAME);   // (a ROM-free container needs none)
   defaultEnv("CT_SRAM", data, "ct_sram.srm");
   defaultEnv("CT_SETTINGS", data, "ct_settings.ini");
   if (chdir(data) != 0) return 1;                  // the relative paths the engine still uses (the ROM, the log)

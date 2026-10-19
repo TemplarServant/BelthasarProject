@@ -70,3 +70,18 @@ void CtAssetsClose(CtAssets* a) {
   free((void*)a->data);
   a->data = NULL;
 }
+
+int CtAssetsRomFree(const CtAssets* a) {
+  for (uint32_t k = 0; a && a->data && k < a->count; k++) {
+    const uint8_t* e = a->data + 12 + (size_t)k * 16;
+    if ((uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24) == CT_ASSET_TABLE) return 1;
+  }
+  return 0;
+}
+int CtAssetsFileRomFree(const char* path) {
+  CtAssets a;
+  if (!CtAssetsOpen(&a, path)) return 0;
+  int r = CtAssetsRomFree(&a);
+  CtAssetsClose(&a);
+  return r;
+}

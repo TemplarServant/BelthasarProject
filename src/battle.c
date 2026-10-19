@@ -60,6 +60,39 @@ int CtBattleLoadRom(const char* path) {
   gRom = CtRomCensusWrapMutable(gRom, gRomLen, "battle");   // CT_ROM_CENSUS: the pages this image's readers touch
   return 1;
 }
+static int gRomEmpty;
+int CtBattleUseEmptyRom(void) {
+  if (gRom) return 1;
+  gRomEmpty = 1;
+  uint8_t* buf = (uint8_t*)calloc(1, CT_ROM_SIZE);
+  if (!buf) return 0;
+  gRom = CtRomCensusWrapMutable(buf, CT_ROM_SIZE, "battle");      // CT_ROM_CENSUS: a read past the tables shows
+  gRomLen = CT_ROM_SIZE;
+  CtRomSetImage(gRom, gRomLen);                                  // ... and CtRomImage hands out the same one
+  return 1;
+}
+const uint8_t* CtBattleDumpRom(long* lenOut) {
+  static const uint8_t* dump; static long dumpLen; static int tried;
+  if (gRom && !gRomEmpty) { if (lenOut) *lenOut = gRomLen; return gRom; }
+  if (!tried) {
+    tried = 1;
+    const char* tries[2] = { getenv("CT_ROM"), "Chrono_Trigger_USA_SNES.sfc" };
+    for (int i = 0; i < 2 && !dump; i++) {
+      FILE* f = tries[i] && *tries[i] ? fopen(tries[i], "rb") : NULL;
+      if (!f) continue;
+      fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+      uint8_t* buf = (uint8_t*)malloc((size_t)sz);
+      if (buf && fread(buf, 1, (size_t)sz, f) == (size_t)sz) {
+        long rl = sz; const uint8_t* img = CtRomVerify(buf, &rl, tries[i]);
+        if (img) { if (img != buf) memmove(buf, img, (size_t)rl); dump = buf; dumpLen = rl; buf = NULL;
+                   CtRomApplyMemPatch((uint8_t*)dump, dumpLen); }
+      }
+      free(buf); fclose(f);
+    }
+  }
+  if (lenOut) *lenOut = dump ? dumpLen : 0;
+  return dump;
+}
 const uint8_t* CtBattleRom(long* lenOut) { if (lenOut) *lenOut = gRomLen; return gRom; }
 
 // HiROM file offset = (bank - 0xC0) << 16 | addr16.
@@ -8277,7 +8310,7 @@ static int battleCharmRoll(CtBattleHost* h, int atk, int tgt, int chance) {
   } else if (battleIsPc(tgt) || slot < 0 || slot >= 8) {        // charm targets enemies (PC target -> no item)
     s[0xB3BF] = 0xFF;
   } else {                                                       // SUCCESS: pick + grant the target's charm/drop item
-    const uint8_t* rec = (rr && rl >= (long)(ROM_REWARD_TBL + 256 * 7)) ? rr + ROM_REWARD_TBL + (size_t)eid * 7 : 0;
+    const uint8_t* rec = (rr && rl >= (long)(ROM_REWARD_TBL + 256 * 7)) ? CtRomPtr(rr, rl, ROM_REWARD_TBL + (long)eid * 7, 7) : 0;
     if (rec) {
       if (rec[5] != 0 && !(h->charmTaken[slot] & 1)) { h->charmTaken[slot] |= 1; itemId = rec[5]; }        // bit7: charm rec+5
       else if (rec[4] != 0 && !(h->charmTaken[slot] & 2)) { h->charmTaken[slot] |= 2; itemId = rec[4]; }   // bit6: drop rec+4

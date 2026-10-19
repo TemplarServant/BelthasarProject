@@ -46914,6 +46914,27 @@
       "notes": "The ROM-free runtime's run-level proof (memory rom-free-runtime-goal). Each package adds its CT_*_FROM_ROM switch to tools/rom_free_cmp.py FROM_ROM. A difference is the package's defect: never re-pin it; the sha1 moves only when the attract itself changes (then re-pin with that change)."
     },
     {
+      "name": "rom-free-no-dump-gate",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/rom_free_gate.py"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "tools/rom_free_gate.py"
+      ],
+      "expect": [
+        "rom-free-gate: f11200 5601 thumbnails and 5981334 output samples identical with no dump; 0 pages of the empty image read (sha1 7ff71ef651b4)"
+      ],
+      "pin": [
+        "^rom-free-gate: "
+      ],
+      "timeout_s": 1500,
+      "note_pass": "the ROM-free runtime's gate (package H): Belthasar with NO dump (CT_NO_ROM=1: the empty image, CT_ROM_CENSUS-guarded) plays the whole attract exactly as with one, and reads no page of the empty image",
+      "notes": "Package H of the ROM-free runtime (memory rom-free-runtime-goal). The empty image is src/battle.c CtBattleUseEmptyRom, taken at start-up when no dump is found and the container holds the ROM-free tables. A difference or a page read is the runtime's defect: never re-pin it; the sha1 moves only when the attract itself changes."
+    },
+    {
       "name": "attract-0e6-exit-fade-and-robot-depth-vs-rule-cartridge",
       "tier": "full",
       "argv": [

@@ -942,6 +942,14 @@ typedef struct CtBattleHost {
 // records E4/F600 are read from it). Returns 1 on success; without it the module still runs but
 // stages zeroed enemy stats.
 int CtBattleLoadRom(const char* path);
+// The ROM-free runtime with no dump at all: an EMPTY image (zeros) in place of the ROM, which the engine indexes through
+// romview.h and src/lz.c and never reads (every read is served from the container; CT_ROM_CENSUS guards it). Field's
+// start-up uses it when no dump is found and the container holds the ROM-free tables; 1 = in place.
+int CtBattleUseEmptyRom(void);
+// The DUMP itself for a harness that runs the ROM's code beside the port (the field lockstep's oracle, a state's SPC, the
+// sound's reference): the loaded image, or -- when the engine runs on the empty one -- the dump read from CT_ROM or
+// Chrono_Trigger_USA_SNES.sfc for that tool alone. NULL when there is none (the harness then says so).
+const uint8_t* CtBattleDumpRom(long* lenOut);
 // The anim interpreter's opcode lengths (battleAnimOpLen: C1/7A6B's handlers' advance) for ops 00-FF, -1 where it has
 // none: what tools/gen/anim_oplen.py writes for the closure of the anim scripts (assets/rom_closure_battle.py).
 void CtBattleAnimOpLens(int out[256]);

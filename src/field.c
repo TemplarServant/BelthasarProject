@@ -4772,7 +4772,7 @@ static int      g_lockPrevX = -1, g_lockPrevY = -1;
 static int      g_lockFirstF = -1, g_lockDiffs = 0;
 
 static void fieldLockInit(const char* statePath) {
-  long rl = 0; const uint8_t* rb = CtBattleRom(&rl);      // the ROM the engine already loaded
+  long rl = 0; const uint8_t* rb = CtBattleDumpRom(&rl);  // the dump (the oracle runs the ROM's code), even with no ROM-free one
   if (!rb || rl <= 0) { fprintf(stderr, "[fieldlock] no ROM image -- disabled\n"); return; }
   g_lockRom = (uint8_t*)malloc((size_t)rl);
   if (!g_lockRom) return;
@@ -4794,7 +4794,7 @@ static void fieldLockInit(const char* statePath) {
 // audio bring-up); under the rule a harness whose image IS a state's WRAM hands the port that state's own SPC, DSP and
 // ARAM here, without running the oracle beside it. Loads the state into a scratch oracle and returns it (its ->apu).
 static Snes* fieldSeedStateLoad(const char* statePath) {
-  long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
+  long rl = 0; const uint8_t* rb = CtBattleDumpRom(&rl);   // the dump: the state's SPC runs the ROM's driver
   if (!rb || rl <= 0) { fprintf(stderr, "[seedstate] no ROM image -- ignored\n"); return NULL; }
   uint8_t* rom = (uint8_t*)malloc((size_t)rl);            // the oracle keeps its ROM: this copy lives with it
   if (!rom) return NULL;
@@ -10645,8 +10645,9 @@ int main(int argc, char** argv) {
   // so a FRESH op-0x83 load writes the canonical $1201,X byte (a WRAM-seeded scene already
   // carries the oracle's value).
   { const char* rp = getenv("CT_ROM"); if (!rp) rp = "Chrono_Trigger_USA_SNES.sfc";
-    int romOk = CtBattleLoadRom(rp);                             // default = the ROM in the cwd
-    if (!romOk && datpath) {                                     // NOT in cwd -> try next to the assets file, so
+    const char* noRom = getenv("CT_NO_ROM");                     // the ROM-free gate: run as if no dump were here
+    int romOk = (noRom && *noRom) ? 0 : CtBattleLoadRom(rp);     // default = the ROM in the cwd
+    if (!romOk && datpath && !(noRom && *noRom)) {                                     // NOT in cwd -> try next to the assets file, so
       char alt[520];                                            // running from build/ (`--assets ../ct_assets.dat`)
       const char* s1 = strrchr(datpath, '/'); const char* s2 = strrchr(datpath, '\\');   // still finds the ROM.
       const char* sep = s1 > s2 ? s1 : s2;                       // (else the ROM-dependent char-init/item-names/
@@ -10656,8 +10657,16 @@ int main(int argc, char** argv) {
         romOk = CtBattleLoadRom(alt);
       }
     }
-    if (!romOk) fprintf(stderr, "[rom] note: ROM not found ('%s' + the assets dir). Field + menu are ROM-free "
-                                "(baked tables); only BATTLE enemies (op-0x83 gfx/stats) need it -- CT_ROM=<path>.\n", rp);
+    // THE ROM-FREE RUNTIME (docs/ROM.md): a container made by the ROM-free setup holds every table and stream the
+    // engine reads (CT_ASSET_TABLE / CT_ASSET_LZ), so no dump is needed. The engine still takes an image to index
+    // through romview.h and src/lz.c: an EMPTY one (zeros, never read -- CT_ROM_CENSUS guards it like the dump).
+    if (!romOk) {
+      if (CtAssetsRomFree(&assets) && CtBattleUseEmptyRom())
+        { romOk = 1; fprintf(stderr, "[rom] no dump: running from %s alone (the ROM-free runtime)\n", datpath ? datpath : "ct_assets.dat"); }
+      else
+        fprintf(stderr, "[rom] note: ROM not found ('%s' + the assets dir), and the container is not a ROM-free one: "
+                        "regenerate it (tools/setup.py) or name the dump with CT_ROM=<path>.\n", rp);
+    }
     CtWorldSetOp4EHook(owWindowCallHook);                        // op 4E -> $C6:E241 / E27E through the translation
     // THE ROM'S SMALL TABLES FROM THE CONTAINER (CT_ASSET_TABLE, src/romview.h); CT_TABLES_FROM_ROM=1 keeps the ROM.
     // (Before the handles below: the enemy records' pointer is the table's.)
@@ -10928,8 +10937,8 @@ int main(int argc, char** argv) {
         const uint8_t* e = w + 0x29BF + slot * 12;
         int eid = e[5]; if (eid == 0xFF || e[6] != 0) continue;    // FF = empty high-slot; +6!=0 = not staged
         int ehp = rrom ? (CtRomByte(rrom, 0x400000L, (long)(0x0C4700 + eid * 23)) | (CtRomByte(rrom, 0x400000L, (long)(0x0C4700 + eid * 23 + 1)) << 8)) : -1;
-        const uint8_t* rw2 = rrom ? rrom + 0x0C5E00 + eid * 7 : 0;
-        const uint8_t* as2 = rrom ? rrom + 0x24F600 + eid * 10 : 0;
+        const uint8_t* rw2 = rrom ? CtRomPtr(rrom, 0x400000L, 0x0C5E00 + (long)eid * 7, 7) : 0;
+        const uint8_t* as2 = rrom ? CtRomPtr(rrom, 0x400000L, 0x24F600 + (long)eid * 10, 10) : 0;
         int aip = rrom ? (CtRomByte(rrom, 0x400000L, (long)(0x0C8B08 + eid * 2)) | (CtRomByte(rrom, 0x400000L, (long)(0x0C8B08 + eid * 2 + 1)) << 8)) : -1;
         char enm[16] = ""; CtBattleEnemyName(eid, enm, sizeof enm);
         // the GENERAL-render resolution for this slot (battle_facing_engine.md §5): seed mode/facing ->
@@ -11481,7 +11490,11 @@ int main(int argc, char** argv) {
         audioSamplesPerFrame = audioHz / 60;            // one NTSC frame's worth (snes/dsp.c's 534@32040*32)
         audioBuf = (int16_t*)calloc((size_t)audioSamplesPerFrame * 2, sizeof(int16_t));
       }
-      long arl = 0; const uint8_t* arom = CtBattleRom(&arl);   // the same cached ROM the battle gfx use
+      // the same cached ROM the battle gfx use -- or, for a reference that runs the sound processor's ROM program
+      // (CT_AUDIO_SPC=ref / lockstep, CT_AUDIO_FROM_ROM), the dump itself when the engine runs on the empty image
+      const char* spcMode = getenv("CT_AUDIO_SPC");
+      int audioRef = getenv("CT_AUDIO_FROM_ROM") || (spcMode && (!strcmp(spcMode, "ref") || !strcmp(spcMode, "lockstep")));
+      long arl = 0; const uint8_t* arom = audioRef ? CtBattleDumpRom(&arl) : CtBattleRom(&arl);
       // the sound's data from the asset container (CT_ASSET_SND_*: the driver, songs, samples, effect sets) when it holds
       // them -- the ROM is then not read for the sound; CT_AUDIO_FROM_ROM=1 takes them from the ROM (the comparison)
       audio = CtAudioInitWith(arom, arl, getenv("CT_AUDIO_FROM_ROM") ? NULL : &assets);

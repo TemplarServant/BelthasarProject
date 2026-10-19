@@ -1,5 +1,6 @@
 // ct_shadow.c — see ct_shadow.h and docs/SHADOW_PROPOSAL.md.
 #include <stdlib.h>
+#include "romview.h"
 #include <string.h>
 #include "ct_shadow.h"
 #include "cpu.h"
@@ -225,7 +226,7 @@ static int techPassRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, l
 static int fxGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   int at = w[0x40] | (w[0x41] << 8);
-  return rom && in->dp == 0x0000 && in->db == 0x7E && w[0x42] == 0xD1 && rom[0x110000 + at] == (in->a & 0xFF);
+  return rom && in->dp == 0x0000 && in->db == 0x7E && w[0x42] == 0xD1 && CtRomByte(rom, rl, 0x110000L + at) == (in->a & 0xFF);
 }
 static int fxRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                  CtShadowRegs* out) {

@@ -89,5 +89,9 @@ const uint8_t* CtAssetGet(const CtAssets* a, uint32_t type, uint32_t id, uint32_
 // CT_ASSET_DIALOGUE). Returns a (non-NUL-terminated) pointer + *outLen, or NULL.
 const char* CtAssetString(const CtAssets* a, uint32_t type, uint32_t id, int index, int* outLen);
 void CtAssetsClose(CtAssets* a);
+// 1 when the container is a ROM-free one (it holds the ROM's tables, CT_ASSET_TABLE): the engine then needs no dump at
+// all (docs/ROM.md, the ROM-free runtime). CtAssetsFileRomFree opens `path` to ask.
+int CtAssetsRomFree(const CtAssets* a);
+int CtAssetsFileRomFree(const char* path);
 
 #endif

@@ -46,7 +46,8 @@ public class SetupActivity extends Activity {
 
     private boolean ready() {
         File d = dataDir();
-        return romProblem(new File(d, ROM)) == null && assetsProblem(new File(d, ASSETS)) == null;
+        File assets = new File(d, ASSETS);
+        return assetsProblem(assets) == null && (romFree(assets) || romProblem(new File(d, ROM)) == null);
     }
 
     // null = the supported dump (CtRomVerify: 4 MiB, or 512 bytes more with a copier header, and the image's SHA-1)
@@ -94,6 +95,24 @@ public class SetupActivity extends Activity {
         return null;
     }
 
+    // true = a ROM-free container (it holds the ROM's tables, entry type 37 CT_ASSET_TABLE): the game needs no ROM
+    // (src/assets.c CtAssetsRomFree, docs/ROM.md).
+    static boolean romFree(File f) {
+        if (!f.isFile() || f.length() < 12) return false;
+        try (RandomAccessFile r = new RandomAccessFile(f, "r")) {
+            byte[] head = new byte[12];
+            r.readFully(head);
+            long count = le32(head, 8);
+            if (12 + count * 16 > f.length()) return false;
+            byte[] dir = new byte[(int) (count * 16)];
+            r.readFully(dir);
+            for (int i = 0; i < count; i++) if (le32(dir, i * 16) == 37) return true;
+        } catch (Exception e) {
+            return false;
+        }
+        return false;
+    }
+
     static String sramProblem(File f) {
         if (!f.isFile()) return "missing";
         return f.length() == SRAM_BYTES ? null
@@ -137,10 +156,11 @@ public class SetupActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT_BOLD);
         col.addView(title);
         TextView info = new TextView(this);
-        info.setText("This app does not include the game. Choose your own dump of the US ROM (" + ROM + ", 4 MB) "
-                + "and the " + ASSETS + " made from it on a computer: Belthasar for Windows or Linux makes it when "
-                + "you drop the ROM on it (it is in its data folder, e.g. %APPDATA%\\BelthasarProject\\Belthasar\\), "
-                + "or tools/setup.py. Each file is checked before it is kept. They are copied into:\n"
+        info.setText("This app does not include the game. Choose the " + ASSETS + " made from your own dump of the US "
+                + "ROM on a computer: Belthasar for Windows or Linux makes it when you drop the ROM on it (it is in its "
+                + "data folder, e.g. %APPDATA%\\BelthasarProject\\Belthasar\\), or tools/setup.py. That file is all the "
+                + "game reads; the ROM itself is needed only with an older " + ASSETS + ". Each file is checked before "
+                + "it is kept. They are copied into:\n"
                 + dataDir().getAbsolutePath() + "\n(you can also copy them there by hand with adb push).");
         info.setPadding(0, pad / 2, 0, pad / 2);
         col.addView(info);
@@ -148,8 +168,8 @@ public class SetupActivity extends Activity {
         status.setTypeface(Typeface.MONOSPACE);
         status.setPadding(0, 0, 0, pad / 2);
         col.addView(status);
-        button(col, "Choose the ROM (.sfc)", v -> pick(PICK_ROM));
         button(col, "Choose " + ASSETS, v -> pick(PICK_ASSETS));
+        button(col, "Choose the ROM (.sfc, only for an older " + ASSETS + ")", v -> pick(PICK_ROM));
         button(col, "Import a save (" + SRAM + ", optional)", v -> pick(PICK_SRAM));
         start = button(col, "Start the game", v -> startGame());
         ScrollView sv = new ScrollView(this);
@@ -162,7 +182,8 @@ public class SetupActivity extends Activity {
         File d = dataDir();
         File rom = new File(d, ROM), assets = new File(d, ASSETS), sram = new File(d, SRAM);
         String rp = romProblem(rom), ap = assetsProblem(assets);
-        status.setText("ROM:        " + (rp == null ? "verified" : rp) + "\n"
+        boolean free = ap == null && romFree(assets);
+        status.setText("ROM:        " + (free ? "not needed (a ROM-free " + ASSETS + ")" : rp == null ? "verified" : rp) + "\n"
                      + "ct_assets:  " + (ap == null ? assets.length() + " bytes" : ap) + "\n"
                      + "save:       " + (sram.isFile() ? sram.length() + " bytes" : "none"));
         start.setEnabled(ready());
