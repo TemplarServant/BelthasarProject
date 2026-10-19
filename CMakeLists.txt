@@ -144,7 +144,7 @@ elseif(UNIX)
   endif()
 endif()
 if(CT_SDL_INC)
-  add_executable(ct_viewer src/viewer.c src/scene.c src/lz.c src/assets.c)
+  add_executable(ct_viewer src/viewer.c src/scene.c src/lz.c src/assets.c src/romview.c)
   target_include_directories(ct_viewer PRIVATE src ${CT_SDL_INC})
   target_link_libraries(ct_viewer ${CT_SDL_LIB})
   if(MSVC)
@@ -225,7 +225,7 @@ if(CT_SDL_INC)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:Belthasar>)
   endif()
   # M3-B: interactive overworld camera viewer (live map from a WRAM/VRAM dump + the byte-exact camera).
-  add_executable(ct_world src/ct_world.c src/world.c src/vwf.c src/lz.c src/assets.c)   # lz.c: the world scripts' far call C6/E028
+  add_executable(ct_world src/ct_world.c src/world.c src/vwf.c src/lz.c src/assets.c src/romview.c)   # lz.c: the world scripts' far call C6/E028
   target_include_directories(ct_world PRIVATE src ${CT_SDL_INC})
   target_link_libraries(ct_world ${CT_SDL_LIB})
   if(MSVC)

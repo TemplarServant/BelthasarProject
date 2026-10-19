@@ -3,6 +3,7 @@
 // ranges are in bank C0), and the walk is the ROM's control flow over the WRAM it reads. The Python twin that grades
 // this layout block by block is tools/pass_cost_proto.py.
 #include <stdio.h>
+#include "romview.h"
 #include <stdlib.h>
 #include <string.h>
 #include "field_cost.h"
@@ -19,7 +20,7 @@ static void sb(Walk* c, long a, int v) { c->w[a & 0x1FFFF] = (uint8_t)v; }
 static void sw(Walk* c, long a, int v) { sb(c, a, v); sb(c, a + 1, v >> 8); }
 static int  rom8(Walk* c, int bank, int addr) {
   long o = ((long)(bank & 0x3F) << 16) | (addr & 0xFFFF);
-  return o < c->romLen ? c->rom[o] : 0;
+  return CtRomByte(c->rom, c->romLen, o);                  // (the container's named table when one covers it: romview.h)
 }
 static int  mem8(Walk* c, int bank, int addr) {            // a byte as the CPU reads it at bank:addr
   if (bank == 0x7E || bank == 0x7F) return c->w[((bank - 0x7E) << 16) | (addr & 0xFFFF)];
@@ -614,7 +615,7 @@ static long pack(Walk* c, long addr, int to7F) {           // one `JSL C3:0002`:
   return 18 + ct_lz_rom_cycles(c->rom, (size_t)c->romLen, (size_t)o, to7F);
 }
 static long ptr24(Walk* c, long fileOff) {
-  return c->rom[fileOff] | ((long)c->rom[fileOff + 1] << 8) | ((long)c->rom[fileOff + 2] << 16);
+  return CtRomByte(c->rom, c->romLen, (long)(fileOff)) | ((long)CtRomByte(c->rom, c->romLen, (long)(fileOff + 1)) << 8) | ((long)CtRomByte(c->rom, c->romLen, (long)(fileOff + 2)) << 16);
 }
 
 static long prePass(Walk* c, int loc, int caller, long* vmOut) {
@@ -627,12 +628,12 @@ static long prePass(Walk* c, int loc, int caller, long* vmOut) {
   if (getenv("CT_PASSCOST_DEBUG")) printf("pre: %-6s %ld\n", "0960", k);
   // C0/0960: the tileset's list ($F6:1C00 + t*8), six VRAM packets (C0/6D2F, the sixth $0F80 bytes) and two for
   // bank $7F (C0/6D65)
-  int ts = c->rom[REC + 1];
+  int ts = CtRomByte(c->rom, c->romLen, (long)(REC + 1));
   if (ts == 0xFF) k += 122 + 40;                           // 0960's FF arm, JSR 6DCF
   else {
     k += 1286 + 40;                                        // 0960's body (its six JSRs, the BRL), JSR 6DCF
     for (int i = 0; i < 8; i++) {
-      int idx = c->rom[0x361C00L + (long)ts * 8 + i];
+      int idx = CtRomByte(c->rom, c->romLen, (long)(0x361C00L + (long)ts * 8 + i));
       long src = (idx == 0xFF) ? 0 : ptr24(c, 0x362220L + (long)idx * 3);
       if (i < 6) k += (idx == 0xFF) ? 112 : 578 + pack(c, src, 0) + dma2DC8(i == 5 ? 0x0F80 : 0x1000);
       else if (i == 6) k += ((idx == 0xFF) ? 72 : 498 + pack(c, src, 1)) + 122;
@@ -641,7 +642,7 @@ static long prePass(Walk* c, int loc, int caller, long* vmOut) {
   }
   if (getenv("CT_PASSCOST_DEBUG")) printf("pre: %-6s %ld\n", "6DCF", k);
   // C0/6DCF: the BG3 tileset (record byte 2) -> $7F:5080 + a $1000 DMA; FF sets $BB
-  int b3 = c->rom[REC + 2];
+  int b3 = CtRomByte(c->rom, c->romLen, (long)(REC + 2));
   if (b3 == 0xFF) { k += 160; sb(c, 0x01BB, 1); }
   else k += 824 + pack(c, ptr24(c, 0x362220L + (long)b3 * 3), 1) + dma2DC8(0x1000);
   if (getenv("CT_PASSCOST_DEBUG")) printf("pre: %-6s %ld\n", "7084", k);
@@ -649,7 +650,7 @@ static long prePass(Walk* c, int loc, int caller, long* vmOut) {
   if (getenv("CT_PASSCOST_DEBUG")) printf("pre: %-6s %ld\n", "A33B", k);
   // C0/A33B: the map, decompressed (lz.c) and built (lz.c ct_map_load_cycles: walked, exact on the traces)
   {
-    int mapId = c->rom[REC + 4] | (c->rom[REC + 5] << 8);
+    int mapId = CtRomByte(c->rom, c->romLen, (long)(REC + 4)) | (CtRomByte(c->rom, c->romLen, (long)(REC + 5)) << 8);
     long me = ptr24(c, 0x361E00L + (long)mapId * 3), mo = ((me >> 16) & 0x3F) << 16 | (me & 0xFFFF);
     k += ct_lz_rom_cycles(c->rom, (size_t)c->romLen, (size_t)mo, 0);
     uint8_t* img = (uint8_t*)malloc(0x20000);
@@ -679,7 +680,7 @@ static long prePass(Walk* c, int loc, int caller, long* vmOut) {
   // C0/56D4: the script (record word 8) -> $7F:2000, over the menu's stash (C0/011B's $0920 copy), then C0/5CC7 /
   // C0/5CEC. What the rest of the walk reads there -- the object count $7F:2000, object 0's slot-1 run -- is THIS.
   {
-    int sid = c->rom[REC + 8] | (c->rom[REC + 9] << 8);
+    int sid = CtRomByte(c->rom, c->romLen, (long)(REC + 8)) | (CtRomByte(c->rom, c->romLen, (long)(REC + 9)) << 8);
     long sp = ptr24(c, 0x3CF9F0L + (long)sid * 3);
     k += 7186 + pack(c, sp, 1);
     size_t so = (size_t)(((sp >> 16) & 0x3F) << 16 | (sp & 0xFFFF));

@@ -16,7 +16,9 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
+sys.path.insert(0, os.path.join(ROOT, 'assets'))
 from ctlib import rom as romlib  # noqa: E402
+import rom_closure  # noqa: E402
 
 OUT = os.path.join('saves', 'lz_pack.bin')
 LIST = os.path.join('build', 'lz_pack.list')
@@ -30,23 +32,20 @@ def ptr24(rom, at):
     return (bank - 0xC0) << 16 | rom[at] | rom[at + 1] << 8
 
 
-# (what, table file offset, entries): the location load's four lists (lz.c: ct_lz_load_tiles / _assembly /
-# _assembly3 / _map_to_wram, disasm/notes/field_load_cost.md) -- the extents assets/maps.py reads them with.
+# Each source is a function of the ROM -> {what: set of stream offsets}, a closure over the ROM's own tables
+# (assets/rom_closure.py). The work packages add theirs here.
 SOURCES = [
-    ('location maps', 0x361E00, 202),
-    ('location tilesets', 0x362220, 204),
-    ('location assemblies', 0x362100, 64),
-    ('location BG3 assemblies', 0x3621C0, 19),
+    rom_closure.location_streams,          # the location load: maps, tilesets, assemblies, BG3 assemblies, scripts
 ]
 
 
 def main():
     rom = romlib.load(os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'))
     offs, per = [], []
-    for what, table, n in SOURCES:
-        got = [o for o in (ptr24(rom, table + 3 * k) for k in range(n)) if o is not None]
-        per.append('%s %d' % (what, len(got)))
-        offs.extend(got)
+    for source in SOURCES:
+        for what, got in source(rom).items():
+            per.append('%s %d' % (what, len(got)))
+            offs.extend(got)
     offs = sorted(set(offs))
     os.makedirs(os.path.join(ROOT, 'build'), exist_ok=True)
     os.makedirs(os.path.join(ROOT, 'saves'), exist_ok=True)

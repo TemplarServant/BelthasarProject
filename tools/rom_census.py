@@ -63,10 +63,26 @@ def main():
     ap.add_argument('--map', default=os.path.join(ROOT, 'build', 'Belthasar.map'))
     ap.add_argument('--functions', action='store_true')
     ap.add_argument('--pages', action='store_true')
+    ap.add_argument('--lzmiss', action='store_true', help='the files are CT_LZ_MISSLOG outputs: streams by caller')
     a = ap.parse_args()
     paths = [p for f in a.files for p in (glob.glob(f) or [f]) if os.path.exists(p)]
     syms, base = load_map(a.map)
     addrs = [s[0] for s in syms]
+    if a.lzmiss:                                      # `OFFSET CALLER kind` lines (src/lz.c CT_LZ_MISSLOG)
+        by = collections.defaultdict(set)
+        for p in paths:
+            for line in open(p):
+                f = line.split()
+                if len(f) >= 4 and not f[3].lower().startswith('belthasar'):
+                    continue                          # another executable's callers: Belthasar's map cannot name them
+                if len(f) >= 3:
+                    fn, src = resolve(syms, addrs, base + int(f[1], 16)) if syms else ('?', '?')
+                    by['%s %s %s' % (fn, src, f[2])].add(int(f[0], 16))
+        total = set().union(*by.values()) if by else set()
+        print('lz-miss: %d streams read from the ROM, by caller:' % len(total))
+        for k, offs in sorted(by.items(), key=lambda kv: -len(kv[1])):
+            print('lz-miss: %4d  %s  (banks %s)' % (len(offs), k, ' '.join(sorted({'%02X' % (0xC0 + (o >> 16)) for o in offs}))))
+        return 0
     pages = {}                                        # page -> (function, source) of a first read seen
     for p in paths:
         for line in open(p):

@@ -5459,12 +5459,17 @@ static void fieldWindowFromRom(const uint8_t* s) {
 // arrival from the Telepod (`--monitor 7E203A:6 --writer`, the rule): C0:70A9 writes 6489 x3 at f907, C0:689A (op 0x4E)
 // the three colours at f922, C0:712A copies the page at f927. The port did both steps at the load, so the page it showed
 // kept 6489 there and the gate's rim drew its clouds all one purple.
+// A byte of the location's ROM tables (records, palettes, exits, treasure): the container's named table when one covers
+// it (CT_ASSET_TABLE, romview.h), else the ROM's. (Each user has `rom` / `rl` from CtBattleRom.)
+#define FR(o) CtRomByte(rom, rl, (long)(o))
 static void fieldPaletteRows(uint8_t* s, int loc) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!s || !rom || loc < 0 || loc > 511) return;
   const size_t REC = 0x360000u + (size_t)loc * 14;
-  size_t src = 0x3624C0u + (size_t)rom[REC + 3] * 0xD2;                        // 7084-709E
-  for (int r = 0; r < 7 && src + 0x1E <= (size_t)rl; r++, src += 0x1E) memcpy(s + 0x2022 + r * 0x20, rom + src, 0x1E);
+  size_t src = 0x3624C0u + (size_t)FR(REC + 3) * 0xD2;                         // 7084-709E
+  for (int r = 0; r < 7; r++, src += 0x1E) {                                   // (the scene palettes: CT_ASSET_TABLE)
+    const uint8_t* p = CtRomPtr(rom, rl, (long)src, 0x1E);
+    if (p) memcpy(s + 0x2022 + r * 0x20, p, 0x1E); }
 }
 static void fieldPaletteText(uint8_t* s) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
@@ -5678,7 +5683,7 @@ static void fieldMapHeaderStage(uint8_t* s, int loc) {
     // Its readers: C0/A429 / A44C below (`AND #13` on $0BD7/$0BD8, which C0/0691 copies to $2C66/$2C67 at a battle's boot:
     // CD/0453's bit-2 test for CD/0E61), C0/0A14 and the BG3 tilemap gate. MEASURED, the attract's loc 087 on the
     // cartridge: c7102 `$01BB = 01` (C0:6E26), c7103 `$0BD7 = 13` (C0:A459); the port left it 0 and `$0BD7` 17.
-    if (s && 0x360000u + (size_t)loc * 14 + 2 < (size_t)rl && rimg[0x360000u + (size_t)loc * 14 + 2] == 0xFF) s[0x01BB] = 1;
+    if (s && CtRomByte(rimg, rl, 0x360000L + (long)loc * 14 + 2) == 0xFF) s[0x01BB] = 1;   // (the record: romview.h)
     if (s) ct_lz_load_anim_tiles(rimg, (size_t)rl, loc, s);                    // C0/6D65 / 6D97: packets 6-7 -> $7F:6000 / 7000
     if (s) ct_lz_map_to_wram(rimg, (size_t)rl, loc, s);                         // C0/A521-A66B: the cells at $7E:3000..30C0/7000
     if (s) ct_lz_load_assembly(rimg, (size_t)rl, loc, s + 0xB000);              // C0/09DD -> $7E:B000, kept when FF: after
@@ -5916,7 +5921,7 @@ static int fieldLocationSong(int loc) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   long rec = 0x360000L + (long)loc * 14;              // HiROM: bank $F6 -> file (0xF6-0xC0)<<16
   if (!rom || rec >= rl) return -1;                   // no ROM -> same as "declined": leave $29AE alone
-  uint8_t song = rom[rec];
+  uint8_t song = FR(rec);
   return (song & 0x80) ? -1 : song;                   // C0/1B7D BMI
 }
 
@@ -5940,21 +5945,21 @@ static void fieldStageExit(int sceneNo, int idx) {
   if (!rom || sceneNo < 0 || sceneNo > 511) return;
   const long BASE = 0x250000L;
   if (BASE + 1024 > rl) return;
-  long addr = BASE + (rom[BASE + sceneNo * 2] | (rom[BASE + sceneNo * 2 + 1] << 8));
+  long addr = BASE + (FR(BASE + sceneNo * 2) | (FR(BASE + sceneNo * 2 + 1) << 8));
   long rec = addr + (long)idx * 7;
   if (rec < BASE || rec + 7 > rl) return;
   uint8_t* r = CtWramSys(fieldWram());
   if (!r) return;
-  uint8_t hi = rom[rec + 4];                                    // 9CF5 LDA $E50004,X -> $52
+  uint8_t hi = FR(rec + 4);                                    // 9CF5 LDA $E50004,X -> $52
   if (getenv("CT_EXITDBG"))
     fprintf(stderr, "exitstage: scene %d exit %d @%06lX -> $0112=%02X%02X $0114=%02X $0115=%02X $0116=%02X\n",
-            sceneNo, idx, rec, hi & 1, rom[rec + 3], rom[rec + 5], rom[rec + 6],
+            sceneNo, idx, rec, hi & 1, FR(rec + 3), FR(rec + 5), FR(rec + 6),
             (unsigned)(((hi >> 1) & 0x0F) | (hi & 0x80)));
   r[0x0116] = (uint8_t)(((hi >> 1) & 0x0F) | (hi & 0x80));      // 9CFB LSR / AND #0F / STA, 9D03 AND #80 / TSB
   r[0x0113] = (uint8_t)(hi & 0x01);                             // 9D0A AND #01 / STA $0113 = bit 8 of the dest
-  r[0x0112] = rom[rec + 3];                                     // 9D0F / 9D13
-  r[0x0114] = rom[rec + 5];                                     // 9D16 / 9D1A
-  r[0x0115] = rom[rec + 6];                                     // 9D1D / 9D21
+  r[0x0112] = FR(rec + 3);                                     // 9D0F / 9D13
+  r[0x0114] = FR(rec + 5);                                     // 9D16 / 9D1A
+  r[0x0115] = FR(rec + 6);                                     // 9D1D / 9D21
   r[0x0117] = (uint8_t)(r[0x0117] | 0x80);                      // 9D24-9D29 -- the latch the commit waits on
 }
 
@@ -6018,14 +6023,14 @@ typedef struct { int tile, payload, idx; } CtTreasure;
 static int fieldTreasureList(int loc, CtTreasure* out, int cap) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom || loc < 0 || loc > 511 || rl < CT_TREAS_TAB + 514 * 2) return 0;
-#define CT_TP(i) ((int)(rom[CT_TREAS_TAB + (long)(i) * 2] | (rom[CT_TREAS_TAB + (long)(i) * 2 + 1] << 8)))
+#define CT_TP(i) ((int)(FR(CT_TREAS_TAB + (long)(i) * 2) | (FR(CT_TREAS_TAB + (long)(i) * 2 + 1) << 8)))
   int base = CT_TP(0);                                       // A73C LDA $F5F000 / STA $1D06
   int beg = CT_TP(loc), end = CT_TP(loc + 1);                // A74A/A750  ($1D08 = beg, $1D56 = end)
   if (end <= beg) return 0;                                  // A754 CMP $56 / BEQ -> no treasure here
   for (int guard = 0; guard < 4; guard++) {                  // A75D: word0 == 0 -> word1 IS a location
     long r0 = CT_TREAS_BANK + beg;
-    if (r0 + 4 > rl || rom[r0] || rom[r0 + 1]) break;
-    int alias = rom[r0 + 2] | (rom[r0 + 3] << 8);
+    if (r0 + 4 > rl || FR(r0) || FR(r0 + 1)) break;
+    int alias = FR(r0 + 2) | (FR(r0 + 3) << 8);
     if (alias < 0 || alias > 511) return 0;
     beg = CT_TP(alias); end = CT_TP(alias + 1);              // A767 BRA ->A748 (re-enter at ASL A / TAX)
     if (end <= beg) return 0;
@@ -6034,8 +6039,8 @@ static int fieldTreasureList(int loc, CtTreasure* out, int cap) {
   for (int off = beg; off + 4 <= end && n < cap; off += 4) { // A76D CPX $56 / BCS -> done
     long a = CT_TREAS_BANK + off;
     if (a + 4 > rl) break;
-    out[n].tile    = rom[a] | (rom[a + 1] << 8);
-    out[n].payload = rom[a + 2] | (rom[a + 3] << 8);
+    out[n].tile    = FR(a) | (FR(a + 1) << 8);
+    out[n].payload = FR(a + 2) | (FR(a + 3) << 8);
     out[n].idx     = (off - base) / 4;                       // 1E24 SBC $1D06 / LSR / LSR
     n++;
   }
@@ -6066,14 +6071,14 @@ static void fieldExitPlaneWram(uint8_t* s, int loc) {
   const long BASE = 0x250000L;
   if (BASE + 1026 > rl) return;
   for (int row = 0; row < 0x40; row++) memset(s + 0x7080 + row * 0x100, 0x80, 0x40);   // A66B-A693
-  int beg = rom[BASE + loc * 2] | (rom[BASE + loc * 2 + 1] << 8);                       // A695-A6A9 ($04, $56)
-  int end = rom[BASE + loc * 2 + 2] | (rom[BASE + loc * 2 + 3] << 8);
+  int beg = FR(BASE + loc * 2) | (FR(BASE + loc * 2 + 1) << 8);                       // A695-A6A9 ($04, $56)
+  int end = FR(BASE + loc * 2 + 2) | (FR(BASE + loc * 2 + 3) << 8);
   int mask = s[0x1D1E] | (s[0x1D1F] << 8);
   uint8_t k = 0;                                                                        // A6AD STZ $54
   for (int off = beg; off < end; off += 7, k++) {                                       // A6AF CPX $56 / BCS
     long r = BASE + off;
     if (r + 3 > rl) break;
-    int w = rom[r] | (rom[r + 1] << 8), cnt = rom[r + 2];
+    int w = FR(r) | (FR(r + 1) << 8), cnt = FR(r + 2);
     int x = w & mask;                                                                   // A6C7 / A6E7 (16-bit)
     if (!(cnt & 0x80)) {                                                                // A6BC BMI
       for (int y = cnt;; y--) {
@@ -10658,7 +10663,7 @@ int main(int argc, char** argv) {
   // THE LZ STREAMS FROM THE CONTAINER (CT_ASSET_LZ, src/lz.h): a decompression of the ROM image's stream is served
   // from ct_assets.dat when it holds that stream (the bytes and both of C3/0557's costs); CT_LZ_FROM_ROM=1 keeps the ROM.
   { long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
-    if (rb && !getenv("CT_LZ_FROM_ROM")) ct_lz_use_assets(&assets, rb); }
+    if (rb && !getenv("CT_LZ_FROM_ROM")) { ct_lz_use_assets(&assets, rb); ct_lz_add_rom_image(CtRomImage(NULL)); } }
   // THE ROM'S SMALL TABLES FROM THE CONTAINER (CT_ASSET_TABLE, src/romview.h); CT_TABLES_FROM_ROM=1 keeps the ROM.
   if (!getenv("CT_TABLES_FROM_ROM")) CtRomViewUse(&assets);
   g_ctVramSink = fieldVramSink;                                   // the caption plane's DMAs (move.c) into this VRAM image

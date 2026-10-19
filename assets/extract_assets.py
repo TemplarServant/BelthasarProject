@@ -25,6 +25,7 @@ from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a
 import sys, os, struct, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import maps
+import rom_closure
 import sprites
 import script
 import text
@@ -481,6 +482,7 @@ def rom_tables(rom):
         ('C0 trig step (C0/F900, index (A << 2) & 3FF)', 0x00F900, 0x00FD00),
         ('C0 bit reverse (C0/FD00)', 0x00FD00, 0x00FE00),
         ('C0 noise (C0/FE00, 8-bit index)', 0x00FE00, 0x00FF00),
+        ('C0 bit masks (C0/FF20: 01 02 .. 80, the chest flags)', 0x00FF20, 0x00FF28),
         ('C0 window wave (C0/FF30 + 4k + (step & 3E), k < 16)', 0x00FF30, 0x00FFAE),
         ('location records (F6:0000, 512 x 14)', 0x360000, 0x360000 + 512 * 14),
         ('FD tile-animation pointers (FD:F290, 64 words)', 0x3DF290, 0x3DF310),
@@ -490,7 +492,7 @@ def rom_tables(rom):
         ('FF window tiles (FF:9E10, 8 x 0x280)', 0x3F9E10, 0x3F9E10 + 8 * 0x280),
         ('FF text palettes (FF:B210, 8 x 16)', 0x3FB210, 0x3FB290),
         ('FF naming grid (FF:C9AC, 80)', 0x3FC9AC, 0x3FC9FC),
-    ]
+    ] + rom_closure.location_tables(rom)
 
 def pack_tables(rom, T):
     for _name, a, b in rom_tables(rom):

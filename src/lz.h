@@ -39,6 +39,8 @@ size_t ct_lz_hirom_offset(unsigned addr24);   // 24-bit HiROM address -> file of
 // gives them -- and the ROM is not read. Streams it does not hold still come from `rom`. NULL clears it.
 
 void ct_lz_use_assets(const void* assets, const uint8_t* rom);
+// Another copy of the same ROM image the engine reads through (rom_verify.c's beside battle.c's): served the same way.
+void ct_lz_add_rom_image(const uint8_t* rom);
 // The container's entry for the stream at `start` (NULL = none): its decompressed bytes, length and two costs.
 const uint8_t* ct_lz_asset(size_t start, size_t* outLen, long* cyc7e, long* cyc7f);
 

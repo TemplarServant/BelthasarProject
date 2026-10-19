@@ -203,10 +203,12 @@ check rom-census-attract; it only goes down).
 | the sound: the driver as C, songs, samples, instruments, effect sets, its cost table | CT_ASSET_SND_* (28-35) | `ct.exe --sndassets`, the snd-assets-* and snddrv-* checks |
 | the location load's LZ streams (maps, tilesets, assemblies), decompressed with both of C3/0557's costs | CT_ASSET_LZ (36) | `ct.exe --lzassets` |
 | the small tables: C0's trig, noise and wave tables, the location records, FD's tile-animation and colour-slot programs (their closure over every location), FF's window tiles, text palettes and naming grid | CT_ASSET_TABLE (37) | `ct.exe --tabassets` |
+| the location load (package A): every location's map, tilesets, assemblies, BG3 assemblies and script streams by the closure over the 512 records (assets/rom_closure.py), the pointer tables, the scene palettes, bank F6's colour tables, the exits (E5) and the treasure (F5); lz.c's, field_cost.c's and field.c's readers through romview.h | CT_ASSET_LZ, CT_ASSET_TABLE | `ct.exe --lzassets` / `--tabassets`, `tools/rom_free_cmp.py` (the attract's picture and sound, container vs ROM) |
 
 Each is served in place of the ROM's bytes (src/lz.h `ct_lz_use_assets`, src/romview.h `CtRomByte`/`CtRomPtr`) when
 the container holds it; `CT_LZ_FROM_ROM` / `CT_TABLES_FROM_ROM` / `CT_AUDIO_FROM_ROM` keep the ROM as the reference.
-The census after these: 307 of 1024 pages (it was 406).
+The census after these: 282 of 1024 pages (it was 406). `CT_LZ_MISSLOG` + `tools/rom_census.py --lzmiss` list the LZ
+streams still taken from the ROM, by caller -- the next packages' lists.
 
 ## What is never distributed, and why
 
