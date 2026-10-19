@@ -220,10 +220,10 @@ const uint8_t* CtBattleFieldEnemyRecs(void) {
 long CtBattleEnemySheetSrc(int gfxid) {
   if (!gRom || gfxid < 0 || gfxid > 0xFF) return -1;
   if (gRomLen < (long)(ROM_FIELD_RECS + 256 * 10)) return -1;
-  int bidx = gRom[ROM_FIELD_RECS + (unsigned)gfxid * 10 + 0];   // +0 = battle-sheet index into E4:2000
+  int bidx = CtRomByte(gRom, 0x400000L, (long)(ROM_FIELD_RECS + (unsigned)gfxid * 10 + 0));   // +0 = battle-sheet index into E4:2000
   long ent = (long)ROM_GFX_SRC_TBL + (long)bidx * 3;
   if (ent + 3 > gRomLen) return -1;
-  int bank = gRom[ent + 2], a16 = gRom[ent] | (gRom[ent + 1] << 8);
+  int bank = CtRomByte(gRom, 0x400000L, (long)(ent + 2)), a16 = CtRomByte(gRom, 0x400000L, (long)(ent)) | (CtRomByte(gRom, 0x400000L, (long)(ent + 1)) << 8);
   if (bank < 0xC0) return -1;                                    // must be a HiROM code/data bank
   return ((long)(bank - 0xC0) << 16) | a16;
 }
@@ -260,14 +260,14 @@ int CtBattleDecompressEnemySheet(int gfxid, uint8_t* out, int maxBytes) {
 #define ROM_POSE_CLASS_TBL 0x0CFB91u /* CC/FB91: mode -> pose class (0/1/2); the tick maps class -> $86 base */
 
 static long romRd24(uint32_t off) {   // 24-bit LE ROM pointer -> value; requires gRom valid + in range
-  return (long)gRom[off] | ((long)gRom[off + 1] << 8) | ((long)gRom[off + 2] << 16);
+  return (long)CtRomByte(gRom, 0x400000L, (long)(off)) | ((long)CtRomByte(gRom, 0x400000L, (long)(off + 1)) << 8) | ((long)CtRomByte(gRom, 0x400000L, (long)(off + 2)) << 16);
 }
-static int romRd16(uint32_t off) { return gRom[off] | (gRom[off + 1] << 8); }
+static int romRd16(uint32_t off) { return CtRomByte(gRom, 0x400000L, (long)(off)) | (CtRomByte(gRom, 0x400000L, (long)(off + 1)) << 8); }
 
 int CtBattleEnemyPoseStage(int id, CtEnemyPoseStage* out) {
   if (!out || !gRom || id < 0 || id > 0xFF) return 0;
   if (gRomLen < (long)(ROM_FIELD_RECS + 256 * 10)) return 0;
-  const uint8_t* r = gRom + ROM_FIELD_RECS + (unsigned)id * 10;
+  const uint8_t* r = CtRomPtr(gRom, gRomLen, ROM_FIELD_RECS + (long)id * 10, 10);
   out->animId = r[3]; out->packet = r[1]; out->palIdx = r[2]; out->sizeByte = r[4];
   int an = r[3], pkt = r[1], sh = r[0];
   out->ptrA    = 0xE40000L | romRd16(ROM_POSE_A_TBL + (unsigned)an * 2);   // bank E4 (staging CC/EB23)
@@ -290,12 +290,12 @@ int CtBattleEnemyIdleRest(int id, int mode, int facing) {
   CtEnemyPoseStage st;
   if (!CtBattleEnemyPoseStage(id, &st)) return -1;
   if (mode < 0 || mode > 0xFF || facing < 0 || facing > 3) return -1;
-  int cls  = gRom[ROM_POSE_CLASS_TBL + (unsigned)mode];          // CC/FB91[mode] -> class 0/1/2
+  int cls  = CtRomByte(gRom, 0x400000L, (long)(ROM_POSE_CLASS_TBL + (unsigned)mode));          // CC/FB91[mode] -> class 0/1/2
   int base = (cls == 0) ? 0x0C : (cls == 1) ? 0x04 : 0x18;       // tick class->$86 immediate
   int off  = base + facing * st.stride;                          // $82 = $86 + facing*stride
   uint32_t ptrAflat = 0x240000u | ((uint32_t)st.ptrA & 0xFFFF);  // bank E4 -> flat file offset
   if ((long)(ptrAflat + off) >= gRomLen) return -1;
-  return gRom[ptrAflat + off];                                   // cursor 0 = the rest index
+  return CtRomByte(gRom, 0x400000L, (long)(ptrAflat + off));                                   // cursor 0 = the rest index
 }
 
 // Idle-pose GATHER coverage: decode the idle REST E3 record's cell-words (from the ROM-resolved E3 base +
@@ -318,7 +318,7 @@ int CtBattleEnemyIdleGather(int id, int mode, int facing, int ncell, int* nonbla
   if ((long)(rec + (uint32_t)ncw * 2) > gRomLen) return -1;
   int nb = 0, cov = 0;
   for (int i = 0; i < ncw; i++) {
-    int src = (gRom[rec + i * 2] | (gRom[rec + i * 2 + 1] << 8)) & 0x07FF;   // cell-word: srcTile bits0-10
+    int src = (CtRomByte(gRom, 0x400000L, (long)(rec + i * 2)) | (CtRomByte(gRom, 0x400000L, (long)(rec + i * 2 + 1)) << 8)) & 0x07FF;   // cell-word: srcTile bits0-10
     if (!src) continue;                                                     // word 0 = blank/skip
     nb++;
     if (src < ntiles) cov++;                                                // the sheet has this tile
@@ -370,10 +370,10 @@ void CtBattleStatusScanEx(const uint8_t* mem, int cmb, int* poseCls, int* iconSt
   if (mem && gRom && cmb >= 0 && cmb < 11 && (long)(ROM_STATUS_SCAN_TBL + 4) <= gRomLen) {
     uint32_t base = 0x5E4Au + (uint32_t)cmb * 0x80u;
     for (uint32_t r = ROM_STATUS_SCAN_TBL; (long)(r + 4) <= gRomLen; r += 4) {
-      uint8_t off = gRom[r];
+      uint8_t off = CtRomByte(gRom, 0x400000L, (long)(r));
       if (off & 0x80) break;                               // bit7 = END of the record list
-      if (mem[base + off] & gRom[r + 1]) {                  // +1 = the bit mask
-        uint8_t st = gRom[r + 2], cl = gRom[r + 3];
+      if (mem[base + off] & CtRomByte(gRom, 0x400000L, (long)(r + 1))) {                  // +1 = the bit mask
+        uint8_t st = CtRomByte(gRom, 0x400000L, (long)(r + 2)), cl = CtRomByte(gRom, 0x400000L, (long)(r + 3));
         cls  = (cl == 0xFF) ? 3 : cl;                       // +3 = the POSE CLASS
         icon = (st & 0x80) ? -1 : st;                       // +2 = the icon state (bit7 = none, e.g. DEAD)
         hit = 1;
@@ -423,10 +423,10 @@ int CtBattleStatusIconLive(const uint8_t* mem, int cmb, int* dx, int* dy, int* t
   if (cur > 3) return 0;
   uint32_t r = ROM_STATUS_ICON_TBL + (uint32_t)mem[0xA4D0 + cmb] + (uint32_t)cur * 4u;
   if ((long)(r + 4) > gRomLen) return 0;
-  if (dx)   *dx   = (int)(int8_t)gRom[r];
-  if (dy)   *dy   = (int)(int8_t)gRom[r + 1];
-  if (tile) *tile = 0x100 | gRom[r + 2];
-  if (pal)  *pal  = ((gRom[r + 3] | mem[0xA5E3]) >> 1) & 7;      // FEE88 ORA $A5E3 (0x30: priority bits only)
+  if (dx)   *dx   = (int)(int8_t)CtRomByte(gRom, 0x400000L, (long)(r));
+  if (dy)   *dy   = (int)(int8_t)CtRomByte(gRom, 0x400000L, (long)(r + 1));
+  if (tile) *tile = 0x100 | CtRomByte(gRom, 0x400000L, (long)(r + 2));
+  if (pal)  *pal  = ((CtRomByte(gRom, 0x400000L, (long)(r + 3)) | mem[0xA5E3]) >> 1) & 7;      // FEE88 ORA $A5E3 (0x30: priority bits only)
   return 1;
 }
 // The icon's 4bpp tile data, mirroring CtBattlePcSheetTile's shape. vramTile is the full 0x1xx name.
@@ -443,7 +443,7 @@ const uint8_t* CtBattleShadowTile(int q) {             // q = 0..3 = names $02, 
   if (!gRom || q < 0 || q > 3) return NULL;
   if (q >= 2) return blank;
   uint32_t a = ROM_BATTLE_SHADOW_TILE + (uint32_t)q * 32u;
-  return ((long)(a + 32) <= gRomLen) ? gRom + a : NULL;
+  return CtRomPtr(gRom, gRomLen, a, 32);
 }
 // THE BOOT'S UI OBJ TILES, derived (2026-09-17): the battle boot's DMA channel 7 uploads, CC/E047-E0A1 and CC/E0EB-E147,
 // each 0x40 bytes (two 8x8 tiles) from bank D1 to a VRAM word address: D1/5EC2 -> $0060 (names 06 07, the selection
@@ -461,19 +461,19 @@ const uint8_t* CtBattleUiObjTile(int name) {
     case 0x16: case 0x17: a = 0x115F02L + (name - 0x16) * 32; break;
     default: return NULL;
   }
-  return (gRom && a + 32 <= gRomLen) ? gRom + a : NULL;
+  return gRom ? CtRomPtr(gRom, gRomLen, a, 32) : NULL;
 }
 int CtBattleObjPal1Tail(uint16_t out[16]) {           // colours 13..15 filled; the rest 0 (not derived here)
   if (!gRom || (long)(ROM_BATTLE_OBJPAL1_TAIL + 6) > gRomLen) return 0;
   for (int k = 0; k < 16; k++) out[k] = 0;
   for (int k = 0; k < 3; k++)
-    out[13 + k] = (uint16_t)(gRom[ROM_BATTLE_OBJPAL1_TAIL + k * 2] | (gRom[ROM_BATTLE_OBJPAL1_TAIL + k * 2 + 1] << 8));
+    out[13 + k] = (uint16_t)(CtRomByte(gRom, 0x400000L, (long)(ROM_BATTLE_OBJPAL1_TAIL + k * 2)) | (CtRomByte(gRom, 0x400000L, (long)(ROM_BATTLE_OBJPAL1_TAIL + k * 2 + 1)) << 8));
   return 1;
 }
 const uint8_t* CtBattleStatusIconTile(int vramTile) {
   if (!gRom || vramTile < 0x1A0) return NULL;
   uint32_t a = ROM_STATUS_ICON_SHEET + (uint32_t)(vramTile - 0x1A0) * 32u;
-  return ((long)(a + 32) <= gRomLen) ? gRom + a : NULL;
+  return CtRomPtr(gRom, gRomLen, a, 32);
 }
 
 int CtBattlePcIdleWin(int charId, int facing, uint8_t poses[4], uint8_t dwells[4]) {
@@ -482,7 +482,7 @@ int CtBattlePcIdleWin(int charId, int facing, uint8_t poses[4], uint8_t dwells[4
   if (facing < 0 || facing > 3) return 0;
   uint32_t a = 0x240000u + (uint32_t)pa + (uint32_t)facing * (uint32_t)st + 3u * 4u;   // status class 3
   if ((long)(a + 4) > gRomLen) return 0;
-  for (int i = 0; i < 4; i++) { if (poses) poses[i] = gRom[a + i]; if (dwells) dwells[i] = 0; }
+  for (int i = 0; i < 4; i++) { if (poses) poses[i] = CtRomByte(gRom, 0x400000L, (long)(a + i)); if (dwells) dwells[i] = 0; }
   // dwells: NOT decoded here (the 0 is historical). The idle-tick PC walk (battlePcWalk) reads the per-entry
   // dwell through CtBattlePcWinDwell and clocks the pose itself; this window read is the POSE list only.
   return 1;
@@ -493,7 +493,7 @@ int CtBattlePcWinPose(int charId, int winOff, int entry, int facing) {
   if (facing < 0 || facing > 3 || winOff < 0 || entry < 0) return -1;
   uint32_t a = 0x240000u + (uint32_t)pa + (uint32_t)facing * (uint32_t)st + (uint32_t)(winOff + entry);
   if ((long)(a + 1) > gRomLen) return -1;
-  int v = gRom[a];
+  int v = CtRomByte(gRom, 0x400000L, (long)(a));
   return (v == 0xFF) ? -1 : v;
 }
 // The per-entry DWELL of a PC pose window, straight from ptrB (battle_pc_attack_sequencing.md §2.1):
@@ -508,15 +508,15 @@ int CtBattlePcWinDwell(int charId, int winOff, int entry) {
   if (winOff < 0 || entry < 0) return -1;
   uint32_t a = 0x240000u + (uint32_t)pb + (uint32_t)(winOff + entry);
   if ((long)(a + 1) > gRomLen) return -1;
-  return gRom[a];
+  return CtRomByte(gRom, 0x400000L, (long)(a));
 }
 int CtBattlePcE3Rec(int charId, int idx, uint16_t cw[16], int8_t pos[8]) {
   long e3;
   if (!CtBattlePcPoseStage(charId, &e3, 0, 0, 0, 0)) return 0;
   uint32_t fl = (uint32_t)((((e3 >> 16) - 0xC0) << 16) | (e3 & 0xFFFF)) + (uint32_t)idx * 0x28;
   if ((long)(fl + 0x28) > gRomLen) return 0;
-  for (int i = 0; i < 16; i++) cw[i] = (uint16_t)(gRom[fl + i * 2] | (gRom[fl + i * 2 + 1] << 8));
-  for (int i = 0; i < 8; i++) pos[i] = (int8_t)gRom[fl + 0x20 + i];
+  for (int i = 0; i < 16; i++) cw[i] = (uint16_t)(CtRomByte(gRom, 0x400000L, (long)(fl + i * 2)) | (CtRomByte(gRom, 0x400000L, (long)(fl + i * 2 + 1)) << 8));
+  for (int i = 0; i < 8; i++) pos[i] = (int8_t)CtRomByte(gRom, 0x400000L, (long)(fl + 0x20 + i));
   return 1;
 }
 const uint8_t* CtBattlePcSheetTile(int charId, int src) {
@@ -524,7 +524,7 @@ const uint8_t* CtBattlePcSheetTile(int charId, int src) {
   if (!CtBattlePcPoseStage(charId, 0, &sh, 0, 0, 0) || src <= 0) return NULL;
   uint32_t fl = (uint32_t)((((sh >> 16) - 0xC0) << 16) | (sh & 0xFFFF)) + (uint32_t)src * 0x20;
   if ((long)(fl + 0x20) > gRomLen) return NULL;
-  return gRom + fl;
+  return CtRomPtr(gRom, gRomLen, fl, 0x20);
 }
 int CtBattleEnemyE3Rec(int id, int idx, int type, uint16_t cw[96], int8_t pos[48]) {
   CtEnemyPoseStage st;
@@ -533,13 +533,13 @@ int CtBattleEnemyE3Rec(int id, int idx, int type, uint16_t cw[96], int8_t pos[48
   // record STRIDE from the ROM: CC:F40A = 0028 0050 0078 00F0 for types 0..3 = 4/8/12/24 cells * 10 bytes.
   // (This used to know only 4 and 12; the demo battle's Flea, id $9F, is type 1 = 8 cells and drew nothing.)
   if (type < 0 || type > 3 || (long)(0x0CF40A + type * 2 + 1) >= gRomLen) return 0;
-  int rs = gRom[0x0CF40A + type * 2] | (gRom[0x0CF40A + type * 2 + 1] << 8);
+  int rs = CtRomByte(gRom, 0x400000L, (long)(0x0CF40A + type * 2)) | (CtRomByte(gRom, 0x400000L, (long)(0x0CF40A + type * 2 + 1)) << 8);
   int ncell = rs / 10;                                            // record = [ncell*4 words][ncell dx,dy]
   if (ncell > 24) return 0;                                       // (the caller's buffers hold 24 cells)
   uint32_t fl = (uint32_t)((((st.e3base >> 16) - 0xC0) << 16) | (st.e3base & 0xFFFF)) + (uint32_t)idx * (uint32_t)rs;
   if ((long)(fl + (uint32_t)rs) > gRomLen) return 0;
-  for (int i = 0; i < ncell * 4; i++) cw[i] = (uint16_t)(gRom[fl + i * 2] | (gRom[fl + i * 2 + 1] << 8));
-  for (int i = 0; i < ncell * 2; i++) pos[i] = (int8_t)gRom[fl + (uint32_t)(ncell * 8) + i];
+  for (int i = 0; i < ncell * 4; i++) cw[i] = (uint16_t)(CtRomByte(gRom, 0x400000L, (long)(fl + i * 2)) | (CtRomByte(gRom, 0x400000L, (long)(fl + i * 2 + 1)) << 8));
+  for (int i = 0; i < ncell * 2; i++) pos[i] = (int8_t)CtRomByte(gRom, 0x400000L, (long)(fl + (uint32_t)(ncell * 8) + i));
   return ncell;
 }
 // A COMBATANT'S CELLS, for every record type. Three ROM pieces decide which tile words a cell shows:
@@ -570,9 +570,9 @@ int CtBattleEnemyCells(int cmb, int id, int pose, int type, CtEnemyCell* out, in
   uint16_t cw[96]; int8_t pos[48];
   int n = CtBattleEnemyE3Rec(id, pose, type, cw, pos);
   if (n <= 0) return 0;
-  #define RD16(a) ((int)(gRom[(a)] | (gRom[(a) + 1] << 8)))
+  #define RD16(a) ((int)(CtRomByte(gRom, 0x400000L, (long)((a))) | (CtRomByte(gRom, 0x400000L, (long)((a) + 1)) << 8)))
   int lay = (type == 2 && cmb != 3) ? 5 : type;                      // C1/1CA6-1CB8
-  const uint8_t* b = gRom + ROM_POSE_ROWS_TBL + (uint32_t)lay * 14u;
+  const uint8_t* b = CtRomPtr(gRom, gRomLen, ROM_POSE_ROWS_TBL + (long)lay * 14, 14);
   int W = b[12], rows = b[13];                                       // C1/1CC3-1CCF
   int dst = RD16(ROM_POSE_DEST_TBL + (uint32_t)cmb * 2u);            // C1/1CEB
   int mirror0 = RD16(ROM_OBJ_UPLOAD_SRC) - 2 * RD16(ROM_OBJ_UPLOAD_VRAM);
@@ -592,7 +592,7 @@ int CtBattleEnemyCells(int cmb, int id, int pose, int type, CtEnemyCell* out, in
   for (int c = 0; c < n && m < max; c++) {
     int k = k0 + c;
     if (k < 0 || k >= OAM_TEMPLATE_ENTRIES) continue;
-    int nm = gRom[ROM_OAM_TEMPLATE + (uint32_t)k * 2u];
+    int nm = CtRomByte(gRom, 0x400000L, (long)(ROM_OAM_TEMPLATE + (uint32_t)k * 2u));
     const int sub[4] = { nm, nm + 1, nm + 16, nm + 17 };
     CtEnemyCell* e = &out[m++];
     e->name = (uint8_t)nm; e->dx = pos[2 * c]; e->dy = pos[2 * c + 1];
@@ -604,11 +604,11 @@ int CtBattleEnemyCells(int cmb, int id, int pose, int type, CtEnemyCell* out, in
                                          bat1 CGRAM pal1 colors 1-12 byte-exact; 8 enemies matched) */
 int CtBattleEnemyPalRom(int id, uint16_t out[16]) {
   if (!gRom || id < 0 || id > 0xFF) return 0;
-  int pi = gRom[ROM_FIELD_RECS + (unsigned)id * 10 + 2];
+  int pi = CtRomByte(gRom, 0x400000L, (long)(ROM_FIELD_RECS + (unsigned)id * 10 + 2));
   uint32_t fl = ROM_ENEMY_PAL_TBL + (uint32_t)pi * 24;
   if ((long)(fl + 24) > gRomLen) return 0;
   memset(out, 0, 16 * sizeof(uint16_t));                          // idx 0 transparent; 13-15 unused (<=12 proven)
-  for (int c = 0; c < 12; c++) out[1 + c] = (uint16_t)(gRom[fl + c * 2] | (gRom[fl + c * 2 + 1] << 8));
+  for (int c = 0; c < 12; c++) out[1 + c] = (uint16_t)(CtRomByte(gRom, 0x400000L, (long)(fl + c * 2)) | (CtRomByte(gRom, 0x400000L, (long)(fl + c * 2 + 1)) << 8));
   return 1;
 }
 #define ROM_DWELL_REMAP_TBL 0x0CFBCEu /* CC/FBCE: raw ptrB byte -> dwell TICKS (floor(raw/5) staircase);
@@ -617,18 +617,18 @@ int CtBattleEnemyIdleWin(int id, int mode, int facing, uint8_t poses[8], uint8_t
   CtEnemyPoseStage st;
   if (!CtBattleEnemyPoseStage(id, &st)) return 0;
   if (mode < 0 || mode > 0xFF || facing < 0 || facing > 3) return 0;
-  int cls  = gRom[ROM_POSE_CLASS_TBL + (unsigned)mode];           // CC/FB91[mode]
+  int cls  = CtRomByte(gRom, 0x400000L, (long)(ROM_POSE_CLASS_TBL + (unsigned)mode));           // CC/FB91[mode]
   int base = (cls == 0) ? 0x0C : (cls == 1) ? 0x04 : 0x18;        // = anims 3 / 1 / 6, i.e. anim*4
   int off  = base + facing * st.stride;
   uint32_t a = 0x240000u | ((uint32_t)st.ptrA & 0xFFFF);
   uint32_t b = 0x240000u | ((uint32_t)st.ptrB & 0xFFFF);
   if ((long)(a + off + 8) > gRomLen || (long)(b + base + 8) > gRomLen) return 0;
   for (int i = 0; i < 8; i++) {
-    if (poses) poses[i] = gRom[a + off + i];
+    if (poses) poses[i] = CtRomByte(gRom, 0x400000L, (long)(a + off + i));
     // DWELLS (C1/33F1-3405): ptrB is indexed by the CLASS BASE ONLY ($86 -- facing-independent), and the
     // raw byte passes through the CC/FBCE remap. Verified vs the staged $9799 rows: Imp 0F0A->0302,
     // Hetake 0F/1F->03/06, Diablos 0A->02, GATO walk 0F->03 (5/5 byte-exact, battle_facing_engine.md).
-    if (dwells) dwells[i] = gRom[ROM_DWELL_REMAP_TBL + gRom[b + base + i]];
+    if (dwells) dwells[i] = CtRomByte(gRom, 0x400000L, (long)(ROM_DWELL_REMAP_TBL + CtRomByte(gRom, 0x400000L, (long)(b + base + i))));
   }
   return 1;
 }
@@ -645,7 +645,7 @@ int CtBattleEnemyName(int id, char* out, int cap) {
   if (!out || cap < 1) return 0;
   out[0] = 0;
   if (!gRom || id < 0 || id > 255) return 0;
-  const uint8_t* r = gRom + ROM_ENEMY_NAMES + (size_t)id * 11;
+  const uint8_t* r = CtRomPtr(gRom, gRomLen, ROM_ENEMY_NAMES + (long)id * 11, 11);
   int n = 0;
   // 0xEF is the record's SPACE, not a terminator: the 11 bytes at $CC:6500 + id*11 are the name
   // LEFT-JUSTIFIED and 0xEF-PADDED, and a two-word name carries 0xEF *inside* it -- id 0x0C reads
@@ -694,7 +694,7 @@ static void battleEquipCopy(uint8_t* s, const uint8_t* rom, long romLen,
   for (int i = 0; i < n; i++) {
     long a = 0x0C0000L + off + i;
     if (a >= romLen) break;
-    s[blk + dstOff + i] = rom[a];
+    s[blk + dstOff + i] = CtRomByte(rom, 0x400000L, (long)(a));
   }
 }
 // THE PC ATTACK RECORD, resolved as the ROM resolves it -- per CHARACTER ID, from three ROM tables:
@@ -711,7 +711,7 @@ static void battleEquipCopy(uint8_t* s, const uint8_t* rom, long romLen,
 //   charId 4 Frog   act 0x79 -> rec 0x3A  type 1  POW 8
 //   charId 5 Ayla   act 0x7A -> rec 0x39  type 5  POW 9
 //   charId 6 Magus  act 0x7B -> rec 0x3A  type 1  POW 8
-// The port used to HARDCODE record 0x3A (`rom[ROM_PC_ATK_REC + 0x3A*12 + 9]`), i.e. Crono's, for
+// The port used to HARDCODE record 0x3A (`CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + 0x3A*12 + 9))`), i.e. Crono's, for
 // every PC -- so Marle and Lucca ran the melee formula with the wrong POWER and the wrong variance
 // range, and Ayla would too. There is NO weapon-class branch on the equipped item: the ranged/melee
 // split is entirely this charId -> record chain. MEASURED on bat9 (`--monitor "7EAEEF:1,7EB18C:1,
@@ -723,12 +723,12 @@ static int battlePcAtkRecord(const uint8_t* s, const uint8_t* rom, int atkCmb, i
   int rec = 0x3A;                                            // the ROM's own value for 4 of 7 charIds
   int cid = (s && atkCmb >= 0 && atkCmb < 3) ? s[0xAEFF + atkCmb] : 0xFF;
   if (rom && cid < 8) {
-    int act = rom[ROM_PC_ACTION_SEL + cid];                  // C1/BFFF
-    int r   = rom[ROM_PC_ACT_REC + act * 11 + 5];            // C1/D5CD ($B2C7 = 0: the first entry)
+    int act = CtRomByte(rom, 0x400000L, (long)(ROM_PC_ACTION_SEL + cid));                  // C1/BFFF
+    int r   = CtRomByte(rom, 0x400000L, (long)(ROM_PC_ACT_REC + act * 11 + 5));            // C1/D5CD ($B2C7 = 0: the first entry)
     if (!(r & 0x80)) rec = r;                                // C1/D5D4 BIT #80 = list terminator
   }
-  if (type) *type = rom ? rom[ROM_PC_ATK_REC + rec * 12 + 5] : 1;
-  if (pow)  *pow  = rom ? rom[ROM_PC_ATK_REC + rec * 12 + 9] : 8;
+  if (type) *type = rom ? CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + rec * 12 + 5)) : 1;
+  if (pow)  *pow  = rom ? CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + rec * 12 + 9)) : 8;
   return rec;
 }
 
@@ -770,7 +770,7 @@ static int battlePcAtkRecord(const uint8_t* s, const uint8_t* rom, int atkCmb, i
 static void battleStatBonusPair(uint8_t* s, const uint8_t* rom, long romLen, unsigned blk, int idx) {
   long x = 0x0C0000L + 0x29D7L + (long)idx * 2;                  // B14D-B157: A*2 + $0E
   if (x + 1 >= romLen) return;
-  int amt = rom[x + 1], f = rom[x];                              // B159 $0A / B15F $04
+  int amt = CtRomByte(rom, 0x400000L, (long)(x + 1)), f = CtRomByte(rom, 0x400000L, (long)(x));                              // B159 $0A / B15F $04
   static const struct { int off, cap; } st[7] = { {0x36,0x63}, {0x38,0x10}, {0x37,0x63}, {0x3A,0x63},
                                                   {0x3B,-1}, {0x39,0x63}, {0x3C,0x63} };
   for (int k = 0; k < 7; k++, f = (f << 1) & 0xFF) {             // BPL / ASL $04, seven times
@@ -785,7 +785,7 @@ static void battleStatBonusPair(uint8_t* s, const uint8_t* rom, long romLen, uns
 // (MSB first, plain 8-bit adds, no ceiling).
 static void battleStatBonusRes(uint8_t* s, const uint8_t* rom, long romLen, unsigned blk, long rec) {
   if (rec + 5 >= romLen) return;
-  int f = rom[rec + 5];                                          // CF6C LDA $CC0005,X / BNE
+  int f = CtRomByte(rom, 0x400000L, (long)(rec + 5));                                          // CF6C LDA $CC0005,X / BNE
   if (!f) return;
   int amt = f & 0x0F;
   for (int k = 0; k < 4; k++, f = (f << 1) & 0xFF)
@@ -808,7 +808,7 @@ static void battlePcEquipDerive(uint8_t* s, const uint8_t* rom, long romLen, uns
     int id = (s[blk + eq[k].field] - eq[k].sub) & 0xFF;          // `SEC / SBC #sub` in 8 bits (TDC above)
     long rec = 0x0C0000L + eq[k].base + (long)id * 6;            // C1/C90B: id * 6, `ADC #base`
     if (rec + 5 >= romLen) continue;
-    if (rom[rec + 4]) battleStatBonusPair(s, rom, romLen, blk, rom[rec + 4]);   // JSL FD/B141 ($0E = $29D7)
+    if (CtRomByte(rom, 0x400000L, (long)(rec + 4))) battleStatBonusPair(s, rom, romLen, blk, CtRomByte(rom, 0x400000L, (long)(rec + 4)));   // JSL FD/B141 ($0E = $29D7)
     battleStatBonusRes(s, rom, romLen, blk, rec);                                // JSR C1/CF69
   }
   battleEquipCopy(s, rom, romLen, blk, 0x29, 0x43, 6);         // 1FC08: weapon
@@ -828,7 +828,7 @@ static void battlePcEquipDerive(uint8_t* s, const uint8_t* rom, long romLen, uns
   { int cid = s[blk + 0x00];                                     // (the seat's charId: block +0 is the sheet's)
     int stat = (cid == 1 || cid == 2) ? s[blk + 0x3A] : s[blk + 0x36];
     long rb = 0x0C0000L + (long)blk;
-    if (rb < romLen) s[blk + 0x3D] = (uint8_t)(stat + rom[rb]); }
+    if (rb < romLen) s[blk + 0x3D] = (uint8_t)(stat + CtRomByte(rom, 0x400000L, (long)(rb))); }
 }
 
 // ---- THE SOUND WIRE (battle_sfx_ops.md §4 "what the port needs"). Module-scoped exactly like
@@ -987,7 +987,7 @@ static void battleStageEnemyNames(CtBattleHost* h) {
     uint8_t* dst = s + 0xACBC + k * 24;                             // CC/ED53: dest = $ACBC + $80*12,
     memset(dst, 0xFF, 24);                                          //   $80 = k*2 -> 24-byte stride
     if (gRom && gRomLen >= (long)(ROM_ENEMY_NAMES + 256 * 11))
-      memcpy(dst, gRom + ROM_ENEMY_NAMES + (size_t)ids[k] * 11, 11);   // CC/ED20-ED47 + the ED60 copy
+      CtRomCopy(dst, gRom, gRomLen, ROM_ENEMY_NAMES + (long)ids[k] * 11, 11);   // CC/ED20-ED47 + the ED60 copy
   }
   // CT_BATTLE_STAGEDBG: the built list, one line -- the strip's name rows are exactly these, and
   // NOTHING rewrites them for the rest of the fight (that is the whole mechanism).
@@ -1013,13 +1013,13 @@ static void stageAll(CtBattleHost* h) {
   // (Crono 70 HP). $29AC = 00 there; no writer of it was found (reads only, C1/B743 and FD/B2EC).
   if (s[0x2989] & 0x20 && gRom && gRomLen >= 0x3DBA4AL) {
     s[0xAF1D] = 0; s[0xAEC5] = 3;                                         // FD/B33F-B344
-    memcpy(s + 0x2600, gRom + 0x0C0000, 0x230);                           // FD/B347-B354
+    CtRomCopy(s + 0x2600, gRom, gRomLen, 0x0C0000, 0x230);                           // FD/B347-B354
     for (int x = 0; x < 0x200; x++) s[0x2400 + x] = (uint8_t)x;           // FD/B356-B360
     int ti = s[0x29AC] * 2;                                               // FD/B2EC-B2F3
-    long src = 0x3D0000L | (gRom[0x3DB99C + ti] | (gRom[0x3DB99C + ti + 1] << 8));
+    long src = 0x3D0000L | (CtRomByte(gRom, 0x400000L, (long)(0x3DB99C + ti)) | (CtRomByte(gRom, 0x400000L, (long)(0x3DB99C + ti + 1)) << 8));
     for (int y = 0; y < 0x280 && src + 8 <= gRomLen; y += 0x50, src += 8) {
       s[0x260B + y] = 0x23; s[0x260E + y] = 0x23; s[0x260C + y] = 0x80;   // FD/B2FD-B307
-      memcpy(s + 0x2603 + y, gRom + src, 8);                              // FD/B30C-B32B (four LE words)
+      CtRomCopy(s + 0x2603 + y, gRom, gRomLen, src, 8);                              // FD/B30C-B32B (four LE words)
     }
   }
   // (0b) THE COMMAND-BLOCK / CONFIRM-FIFO STATE a battle starts from. CF/FB94 zero-fills the whole battle page
@@ -1160,7 +1160,7 @@ static void stageAll(CtBattleHost* h) {
     }
     s[b + 0] = id;
     if (gRom && gRomLen >= (long)(ROM_ENEMY_STATS + 256 * 23)) {
-      const uint8_t* rec = gRom + ROM_ENEMY_STATS + (size_t)id * 23;
+      const uint8_t* rec = CtRomPtr(gRom, gRomLen, ROM_ENEMY_STATS + (long)id * 23, 23);
       s[b + 3] = rec[0]; s[b + 4] = rec[1];          // curHP  (FD/B460 writer; GATO $6130 = 0x004C)
       s[b + 5] = rec[0]; s[b + 6] = rec[1];          // maxHP  (FD/B475; the rec HP word duplicated)
       s[b + 0x12] = rec[2];                          // rec+2 -> $5FBF,Y
@@ -1276,7 +1276,7 @@ static int battlePresent(const uint8_t* s, int idx) {
 // menu-display speed byte). Byte-exact vs oracle $B158: Crono +38=13->72, Marle/GATO +38=8->102, empt 105.
 static int battleReload(const uint8_t* rom, int speed, int bs) {
   if (speed > 16) speed = 16;  if (speed < 1) speed = 1;
-  int t = rom ? rom[ROM_RELOAD_TBL + (speed - 1) + (bs & 7) * 16] : 0;
+  int t = rom ? CtRomByte(rom, 0x400000L, (long)(ROM_RELOAD_TBL + (speed - 1) + (bs & 7) * 16)) : 0;
   return 105 - 6 * speed + t;
 }
 // C1/AF22 RNG: rand in [0,maxv] from table $FD/BA61 indexed by $26 (INHERITED from WRAM; =0 at boot),
@@ -1345,7 +1345,7 @@ static int battleRngBase(uint8_t* s, const uint8_t* rom, int maxv, int base) {
   if (!rom || maxv < -1) return 0;   // maxv == -1 IS the ROM's A = 0, and it has state: AF24/AF35
   int count = maxv + 1;                              // the ROM's A at entry is a COUNT, not a max
   uint8_t idx = s[0x26];
-  int r = rom[ROM_RNG_TBL + idx];
+  int r = CtRomByte(rom, 0x400000L, (long)(ROM_RNG_TBL + idx));
   if (count > 0xFF) {                                // the ROM's A is ONE BYTE; a wider range has no ROM
     s[0x26] = (uint8_t)(idx + 1);                    //   shape to copy, so leave the state alone there
     return r % count;
@@ -1390,7 +1390,7 @@ static int battleRng(uint8_t* s, const uint8_t* rom, int maxv) { return battleRn
 static int battleRngCrit(uint8_t* s, const uint8_t* rom, int maxv) {
   if (maxv <= 0 || !rom) return 0;
   uint8_t idx = s[0xB3E6];
-  int r = rom[ROM_RNG_TBL + idx];
+  int r = CtRomByte(rom, 0x400000L, (long)(ROM_RNG_TBL + idx));
   s[0xB3E6] = (uint8_t)(idx + 1);
   return r % (maxv + 1);
 }
@@ -1548,7 +1548,7 @@ static int battleAiCandidate(uint8_t* s, const uint8_t* rom, int x) {
   s[0x0B] = 0;                                                    // AE71 STZ $0B (the offset's high byte)
   int y = s[0xAF1E];                                              // AE73 LDA $AF1E / TAY
   if (s[0xAEFF + y] == 0xFF) { s[0x0D] = 0; return 0xFF; }        // AE77-AE7C -> AED0: absent/dead seat (A = FF)
-  int base = rom[ROM_CMB_BLOCK_TBL + x] | (rom[ROM_CMB_BLOCK_TBL + x + 1] << 8);   // AE80, long,X
+  int base = CtRomByte(rom, 0x400000L, (long)(ROM_CMB_BLOCK_TBL + x)) | (CtRomByte(rom, 0x400000L, (long)(ROM_CMB_BLOCK_TBL + x + 1)) << 8);   // AE80, long,X
   s[0x0C] = (uint8_t)base; s[0x0D] = (uint8_t)(base >> 8);        // AE84 STA $0C -- 16-bit
   int off = (base + s[0x0A]) & 0xFFFF;                            // AE86 CLC / ADC $0A -- 16-bit
   if (!(s[off] & s[0xAF1F])) { s[0x0D] = 0; return s[off]; }      // AE8D LDA $0000,X / AE90 BIT $AF1F
@@ -1667,7 +1667,7 @@ static void battleAiLowestHpEnemy(uint8_t* s, const uint8_t* rom, int excl) {
   do {
     int seat = s[0x0E];
     if (s[0xAEFF + seat] != 0xFF && !(excl && seat == s[0xB18B])) {
-      int b = rom[ROM_CMB_BLOCK_TBL + seat * 2] | (rom[ROM_CMB_BLOCK_TBL + seat * 2 + 1] << 8);
+      int b = CtRomByte(rom, 0x400000L, (long)(ROM_CMB_BLOCK_TBL + seat * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_CMB_BLOCK_TBL + seat * 2 + 1)) << 8);
       int hp = s[b + 3] | (s[b + 4] << 8);
       if (hp != 0 && hp < best) { best = hp; s[0xAECC] = (uint8_t)seat; }
     }
@@ -1875,7 +1875,7 @@ static int battleAiTargetRequest(uint8_t* s, const uint8_t* rom) {
   int x = (s[0xB1D2] | (s[0xB1D3] << 8));                         // AC17 LDX $B1D2 -- 16-bit
   x = (x + 1) & 0xFFFF;                                           // AC1A INX
   s[0xB1D2] = (uint8_t)x; s[0xB1D3] = (uint8_t)(x >> 8);          // AC1B STX $B1D2
-  int value = rom[ROM_AI_SCRIPT_BANK + x];                        // AC1E LDA $CC0000,X
+  int value = CtRomByte(rom, 0x400000L, (long)(ROM_AI_SCRIPT_BANK + x));                        // AC1E LDA $CC0000,X
   int rc = 0;
   if (value & 0x80) {                                             // AC22 BPL -> the resolver path
     s[0xAECC] = s[0xAED8];                                        // AC24/AC27 -- and NO $AD8E copy
@@ -1987,7 +1987,7 @@ static int battleAiPosScan(CtBattleHost* h, int self, int mode) {
     if (mode == 2 && seat == s[0x8A]) continue;                                       // C1/2A52-2A56
     s[0x9870] = (uint8_t)seat;
     if (!s[0x96F5 + seat] || (s[0x9FF7 + seat] & 0x80)) continue;                     // $96F5,X / $9FF7,X BMI
-    { int b = gRom ? (gRom[0x0CF8ED + seat * 2] | (gRom[0x0CF8EE + seat * 2] << 8)) : seat * 0x80;
+    { int b = gRom ? (CtRomByte(gRom, 0x400000L, (long)(0x0CF8ED + seat * 2)) | (CtRomByte(gRom, 0x400000L, (long)(0x0CF8EE + seat * 2)) << 8)) : seat * 0x80;
       if (s[(0x5E4A + b) & 0xFFFF] & 0x80) continue; }                                // CC:F8ED -> $5E4A,X BMI
     unsigned d2 = battlePos2B37(s, self, seat);                                       // JSR C1/2B37
     if (farthest ? (d2 >= best) : (d2 <= best)) {
@@ -2279,7 +2279,7 @@ static void battleAiAdvance(CtBattleHost* h, int slot) {
   int p = aiPtr(s, 0xB1D4, slot);
   long q = aiFlat(p);
   if (q >= romLen) return;
-  aiPtrSet(s, 0xB1D4, slot, p + rom[ROM_AI_ACTION_LEN + rom[q]]);
+  aiPtrSet(s, 0xB1D4, slot, p + CtRomByte(rom, 0x400000L, (long)(ROM_AI_ACTION_LEN + CtRomByte(rom, 0x400000L, (long)(q)))));
 }
 
 static void battleMoveArm(CtBattleHost* h, int slot, int mode, int tgtCmb);   // (defined with the mover)
@@ -2324,9 +2324,9 @@ typedef struct BtAi {
 } BtAi;
 static int aiW(const uint8_t* s, int a) { return s[a] | (s[a + 1] << 8); }
 static void aiWs(uint8_t* s, int a, int v) { s[a] = (uint8_t)v; s[a + 1] = (uint8_t)(v >> 8); }
-static uint8_t aiCC(const BtAi* c, int x) { return c->rom[ROM_AI_SCRIPT_BANK + (x & 0xFFFF)]; }   // LDA $CC0000,X
+static uint8_t aiCC(const BtAi* c, int x) { return CtRomByte(c->rom, 0x400000L, (long)(ROM_AI_SCRIPT_BANK + (x & 0xFFFF))); }   // LDA $CC0000,X
 static int aiBase(const BtAi* c, int x) {                        // LDA $FDA80B,X -- X = the seat*2 the caller made
-  const uint8_t* t = c->rom + ROM_CMB_BLOCK_TBL + (x & 0xFFFF);
+  const uint8_t* t = CtRomPtr(c->rom, 0x400000L, ROM_CMB_BLOCK_TBL + (x & 0xFFFF), 2);
   return t[0] | (t[1] << 8);
 }
 static uint8_t aiInd(const uint8_t* s, int dp, int y) {          // LDA ($dp),Y, DB = $7E: the sum can carry into $7F
@@ -2883,7 +2883,7 @@ static int aiEvalOp(BtAi* c, int op) {
       for (int i = 0; i < 3 && roll >= cut[i]; i++) {
         int p = aiW(s, 0xB1D2);
         x = aiCC(c, p);                                            // LDA $CC0000,X / TAX
-        p = (p + c->rom[ROM_AI_ACTION_LEN + x]) & 0xFFFF;          // LDA $FDBA4A,X / ADC $B1D2
+        p = (p + CtRomByte(c->rom, 0x400000L, (long)(ROM_AI_ACTION_LEN + x))) & 0xFFFF;          // LDA $FDBA4A,X / ADC $B1D2
         aiWs(s, 0xB1D2, p); aiWs(s, 0xB273, p);
       }
       aiWs(s, 0xB1D2, x);                                          // 9944 STX $B1D2 -- a stale X (8C9D replaces it)
@@ -2956,7 +2956,7 @@ static void aiCommit(BtAi* c) {
 static void aiWalk(BtAi* c, int id) {
   uint8_t* s = c->s;
   int t = ROM_AI_PTR_TABLE + ((id << 1) & 0xFFFF);                  // AFD2 REP #20 / ASL A / TAX
-  int x = c->rom[t] | (c->rom[t + 1] << 8), p;
+  int x = CtRomByte(c->rom, 0x400000L, (long)(t)) | (CtRomByte(c->rom, 0x400000L, (long)(t + 1)) << 8), p;
   aiWs(s, 0xB1D2, x); aiWs(s, 0xB1D0, x);                          // AFDA / AFDE
   aiWs(s, 0x0A, 0);                                                // AFE1 TDC / STA $0A (sixteen bits)
   for (int guard = 0; guard < 0x400; guard++) {
@@ -3094,8 +3094,8 @@ int CtBattleAiTurnSweep(uint8_t* mem, const uint8_t* rom, int op, const uint8_t*
 static void battleAiRecordHeader(uint8_t* s, const uint8_t* rom, int cls2, int act) {
   unsigned rec = (cls2 ? ROM_CLS2_ACT_REC : ROM_ENEMY_ACT_REC) + (unsigned)act * 11;
   s[0xB2C3] = (uint8_t)(act * 11); s[0xB2C4] = (uint8_t)((act * 11) >> 8);   // AAD6-AAE3 / AB05-AB12
-  s[0xB18E] = rom[rec + 1]; s[0xB18F] = (uint8_t)act;                          // AAE9-AAF3 / AB18-AB22
-  s[0xB190] = rom[rec + 2]; s[0xB191] = 0;                                     // AAF6-AAFD / AB25-AB2C
+  s[0xB18E] = CtRomByte(rom, 0x400000L, (long)(rec + 1)); s[0xB18F] = (uint8_t)act;                          // AAE9-AAF3 / AB18-AB22
+  s[0xB190] = CtRomByte(rom, 0x400000L, (long)(rec + 2)); s[0xB191] = 0;                                     // AAF6-AAFD / AB25-AB2C
 }
 // C1/C1DD for an ENEMY attacker ($B18B >= 3), run by op 02's decode at C1/9AEB -- the tech's VICTIMS from its GROUP,
 // CC/86C9[$B18C * 2] (and the area byte CC/86CA[..], $0C), into $AD8E / $AD8D. The head: C1/CB93 on $B18C (the PC tech
@@ -3172,7 +3172,7 @@ static void battleAreaRadius2701(CtBattleHost* h) {
     int dx = (battleFootX(h, x) >> 4) - cx, dy = (battleFootY(h, x) >> 4) - cy;   // 2751-277F
     if (dx < 0) dx = -dx;
     if (dy < 0) dy = -dy;
-    int sq = rom ? ((rom[0x0CFB6F + dx] + rom[0x0CFB6F + dy]) & 0xFF) : dx * dx + dy * dy;   // 2784-2795
+    int sq = rom ? ((CtRomByte(rom, 0x400000L, (long)(0x0CFB6F + dx)) + CtRomByte(rom, 0x400000L, (long)(0x0CFB6F + dy))) & 0xFF) : dx * dx + dy * dy;   // 2784-2795
     if (sq <= s[0x9607]) s[0x99C1 + y++] = (uint8_t)x;                  // 2797-27A4
   }
   if (s[0x9604] ? (t < 3) : (t >= 3)) s[0x99C0] = (uint8_t)t;          // C1/27AD
@@ -3226,13 +3226,13 @@ static void battleAreaRow2332(CtBattleHost* h) {
 }
 static int battleAreaC586(CtBattleHost* h, int area, int v3A, int pcAtk, int pcTgt) {
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
-  int rec = rom[0x0C2AB0 + area * 2] | (rom[0x0C2AB1 + area * 2] << 8);   // C586-C58E $3B
-  int cnt = rom[0x0C0000 + rec];                                        // C594 $14
+  int rec = CtRomByte(rom, 0x400000L, (long)(0x0C2AB0 + area * 2)) | (CtRomByte(rom, 0x400000L, (long)(0x0C2AB1 + area * 2)) << 8);   // C586-C58E $3B
+  int cnt = CtRomByte(rom, 0x400000L, (long)(0x0C0000 + rec));                                        // C594 $14
   int r0A = 1, r0C = s[0xB18B], r06 = s[0xB2AE], r00 = -1, r02 = -1;    // C27B; C59A JSR C1/C74C (C782-C78A)
   if (pcAtk >= 0) { r0A = 0; r0C = r00 = pcAtk; r06 = pcTgt; r02 = s[0xAE97]; }   // C248 STZ $0A; C759-C76D $00, $02 (participant 1:
                                                                          //   battleTechCoActors, the same C1/C74C)
   for (int k = 0, off = 1; k < cnt; k++, off += 3) {                    // the shapes, before anything is written
-    int e3D = rom[0x0C0000 + rec + off], e04 = rom[0x0C0001 + rec + off], fn = e04 & 0x7F;
+    int e3D = CtRomByte(rom, 0x400000L, (long)(0x0C0000 + rec + off)), e04 = CtRomByte(rom, 0x400000L, (long)(0x0C0001 + rec + off)), fn = e04 & 0x7F;
     // C1/C813 / C1/C78D with the band (0 / 4), C1/C7A7 with the radius (1 / 2: area 03, `01 01 09`), and C1/C78D with
     // the radius around the CASTER (areas 02 `01 00 10` / 0A `01 00 19`: Area Bomb 1F, Tail Spin 2E, Black Hole 37 ..).
     // ...and C1/C7A7 with the row (6, C1/2332: area 0B `06 01 ..`), C1/C7E7 with the radius around participant 1 (area 06
@@ -3247,7 +3247,7 @@ static int battleAreaC586(CtBattleHost* h, int area, int v3A, int pcAtk, int pcT
     }
   }
   for (int k = 0, off = 1; k < cnt; k++, off += 3) {                    // C5A3-C656
-    int e3D = rom[0x0C0000 + rec + off], e04 = rom[0x0C0001 + rec + off], e2 = rom[0x0C0002 + rec + off];
+    int e3D = CtRomByte(rom, 0x400000L, (long)(0x0C0000 + rec + off)), e04 = CtRomByte(rom, 0x400000L, (long)(0x0C0001 + rec + off)), e2 = CtRomByte(rom, 0x400000L, (long)(0x0C0002 + rec + off));
     int e08 = e2 & 0x7F, e0E = (e2 & 0x80) ? 1 : 0;
     int fn = e04 & 0x7F;
     s[0x9604] = (uint8_t)r0A; s[0x9607] = (uint8_t)e08;
@@ -3306,7 +3306,7 @@ static int battleEnemyVictimsC1DD(CtBattleHost* h, int atk) {
   if (s[(0x5E4B + x) & 0xFFFF] & 0x86) gated = 1;                 // C20A-C211
   if (s[(0x5E4C + x) & 0xFFFF] & 0x18) gated = 1;                 // C214-C21B
   if ((s[(0x5E4E + x) & 0xFFFF] | s[(0x5E53 + x) & 0xFFFF]) & 0x80) gated = 1;   // C21E-C228
-  int grp = rom[0x0C86C9 + act * 2], area = rom[0x0C86CA + act * 2];   // C27D-C287
+  int grp = CtRomByte(rom, 0x400000L, (long)(0x0C86C9 + act * 2)), area = CtRomByte(rom, 0x400000L, (long)(0x0C86CA + act * 2));   // C27D-C287
   int n = s[0xAD8D], v3A = 0, fail = gated;
   if (!fail) {
     if (grp == 0x08 || grp == 0x01) {                             // C437 -> C38F (foes) / C37B -> C44B (own side)
@@ -3457,14 +3457,14 @@ static void aiFDB438(uint8_t* s, const uint8_t* rom, int x) {
   for (int k = 0; k < 0x80; k++) s[(b + k) & 0x1FFFF] = 0;        // FD/B4D6
   #define BLK(o) s[(b + (o)) & 0x1FFFF]
   BLK(0) = (uint8_t)id;
-  BLK(3) = BLK(5) = rom[r + 0]; BLK(4) = BLK(6) = rom[r + 1];
-  BLK(0x12) = rom[r + 2];
+  BLK(3) = BLK(5) = CtRomByte(rom, 0x400000L, (long)(r + 0)); BLK(4) = BLK(6) = CtRomByte(rom, 0x400000L, (long)(r + 1));
+  BLK(0x12) = CtRomByte(rom, 0x400000L, (long)(r + 2));
   s[0x00] = 0; BLK(0x1D) = BLK(0x1E) = BLK(0x1F) = 0;
-  for (int k = 0; k < 5; k++) BLK(0x22 + k) = rom[r + 3 + k];
+  for (int k = 0; k < 5; k++) BLK(0x22 + k) = CtRomByte(rom, 0x400000L, (long)(r + 3 + k));
   s[0x00] = 5;
   BLK(0x20) = BLK(0x25); BLK(0x21) = BLK(0x26);
-  for (int k = 0; k < 12; k++) BLK(0x37 + k) = rom[r + 8 + k];
-  for (int k = 0; k < 3; k++) BLK(0x19 + k) = rom[r + 20 + k];
+  for (int k = 0; k < 12; k++) BLK(0x37 + k) = CtRomByte(rom, 0x400000L, (long)(r + 8 + k));
+  for (int k = 0; k < 3; k++) BLK(0x19 + k) = CtRomByte(rom, 0x400000L, (long)(r + 20 + k));
   s[0x00] = 3;
   #undef BLK
 }
@@ -3752,7 +3752,7 @@ static int battleAiTurn(CtBattleHost* h, int slot, int* tgt) {
       battleAiAdvance(h, slot);
     } else if (q < romLen) {
       aiWs(s, 0xB1D2, p);                                              // C1/8D77 STX $B1D2
-      uint8_t op = rom[q];
+      uint8_t op = CtRomByte(rom, 0x400000L, (long)(q));
       s[0xAEE3] = op;                                                  // C1/8D7A-8D7E
       if (!(op & 0x80)) {                                              // C1/8D81 BPL
         BtAi c = { h, s, rom, 0, 0, 0, 0 };
@@ -3812,7 +3812,7 @@ static int battleCounterTurn(CtBattleHost* h, int k, int v, int by, int* tgt) {
   int id = s[0xAEFF + v];                                              // 86D5 (a fallen one's id: $AF0A, C1/86A5)
   if (id == 0xFF) id = s[0xAF0A + v];
   { int t = ROM_AI_PTR_TABLE + ((id << 1) & 0xFFFF);                   // C1/B488
-    aiWs(s, 0xB1D2, rom[t] | (rom[t + 1] << 8));
+    aiWs(s, 0xB1D2, CtRomByte(rom, 0x400000L, (long)(t)) | (CtRomByte(rom, 0x400000L, (long)(t + 1)) << 8));
     aiB4AA(&c);
     int p = aiW(s, 0xB1D2);
     for (int g = 0; g < 0x2000 && aiCC(&c, p) != 0xFF; g++) p = (p + 1) & 0xFFFF;
@@ -4068,7 +4068,7 @@ static void battleQueueRemoveTeardown(CtBattleHost* h, int seat) {   // == C1/1B
 static void battleHdmaPreset(uint8_t* s, int idx) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom || (long)(0x0EF24E + idx * 2 + 1) >= rl) return;
-  #define CEW(a) (rom[a] | (rom[(a) + 1] << 8))
+  #define CEW(a) (CtRomByte(rom, 0x400000L, (long)(a)) | (CtRomByte(rom, 0x400000L, (long)((a) + 1)) << 8))
   int x2 = CEW(0x0EF24E + (idx & 0xFF) * 2);                                   // CE/EE73
   static const uint16_t dst[9] = { 0xC867, 0xC894, 0xC8C1, 0xC8EE, 0xC91B, 0xC948, 0xC975, 0xC9A2, 0xC9CF };
   long src[9];
@@ -4078,7 +4078,7 @@ static void battleHdmaPreset(uint8_t* s, int idx) {
     long a = src[k] + x2; if (a + 1 >= rl) return;
     long from = 0x0E0000L | CEW(a);
     if (from + 0x1E > rl) return;
-    memcpy(s + dst[k], rom + from, 0x1E);                                        // MVN $7E,$CE (A = 001D)
+    CtRomCopy(s + dst[k], rom, 0x400000L, from, 0x1E);                                        // MVN $7E,$CE (A = 001D)
   }
   #undef CEW
 }
@@ -4155,13 +4155,13 @@ static void battleHudAnimTick(CtBattleHost* h) {
 // C1/0929, C1/0EA4, C1/1308, C1/1597).
 static void battleHudChromeBase(uint8_t* s) {                    // C1/1C3A: `LDA $D15800,X / STA $0B40,X`, X < $180
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-  if (rom && rl >= 0x115800L + 0x180) memcpy(s + 0x0B40, rom + 0x115800, 0x180);
+  if (rom && rl >= 0x115800L + 0x180) CtRomCopy(s + 0x0B40, rom, rl, 0x115800, 0x180);
 }
 static void battleHudChromeWindow(uint8_t* s, int dst, int skip) { // C1/0929: 6 rows of $D1:59FC at $0B40 + $82
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom || rl < 0x1159FCL + 6 * 14) return;
   for (int r = 0; r < 6; r++)                                    // $84 != 0: `INX / INX` -- the first cell dropped
-    memcpy(s + 0x0B40 + r * 0x40 + dst, rom + 0x1159FC + r * 14 + 2 * skip, (size_t)(14 - 2 * skip));
+    CtRomCopy(s + 0x0B40 + r * 0x40 + dst, rom, rl, 0x1159FC + r * 14 + 2 * skip, 14 - 2 * skip);
 }
 
 
@@ -4252,7 +4252,7 @@ static void battleIconDispatch(CtBattleHost* h, int cmb) {
     default: return;
   }
   s[0xA48E + cmb]++; s[0xA499 + cmb] = 0; s[0xA4DB + cmb] = 0xFF; s[0xA4D0 + cmb] = (uint8_t)grp; s[0xA4BA + cmb] = 1;
-  s[0xA4C5 + cmb] = (gRom && (long)(ROM_STATUS_ICON_PERIOD + per) < gRomLen) ? gRom[ROM_STATUS_ICON_PERIOD + per] : 1;
+  s[0xA4C5 + cmb] = (gRom && (long)(ROM_STATUS_ICON_PERIOD + per) < gRomLen) ? CtRomByte(gRom, 0x400000L, (long)(ROM_STATUS_ICON_PERIOD + per)) : 1;
   battleIconTrace(h, cmb, "arm");
 }
 // CC/F102, called from C1/409C at every action OPEN, one instruction before `INC $A013` (C1/40A6): $A44C[0..10] := $55
@@ -4462,13 +4462,13 @@ static void battleStatusPalCycle(CtBattleHost* h) {
   for (int y = 2; y >= 0; y--) {                                   // FE7D7-FE7DE / FE833-FE835
     if (!s[0xA46D + y] || s[0xA101]) continue;                     // FE7E0-FE7E8
     int st = (s[0xA441 + y] << 1) & 0xFF;                          // FE7EC-FE7F0 LDA / ASL (8-bit) / TAX
-    int x = ((rom[ROM_STATUS_PALCYC_BASE + st] | (rom[ROM_STATUS_PALCYC_BASE + st + 1] << 8)) + s[0xA499 + y]) & 0xFFFF;   // FE7F1-FE7FB
+    int x = ((CtRomByte(rom, 0x400000L, (long)(ROM_STATUS_PALCYC_BASE + st)) | (CtRomByte(rom, 0x400000L, (long)(ROM_STATUS_PALCYC_BASE + st + 1)) << 8)) + s[0xA499 + y]) & 0xFFFF;   // FE7F1-FE7FB
     uint8_t pal = BT_OBJPAL(h, y);                                    // $993C,Y
     if (pal == 0x08) continue;                                     // FE7FF-FE804
     int row = (pal << 4) & 0xFF;                                   // FE806-FE80A
     if ((long)ROM_STATUS_PALCYC_RAMP + x + 1 >= rl) continue;
-    s[0x2302 + row] = s[0x2318 + row] = rom[ROM_STATUS_PALCYC_RAMP + x];       // FE80B-FE812
-    s[0x2303 + row] = s[0x2319 + row] = rom[ROM_STATUS_PALCYC_RAMP + x + 1];   // FE815-FE81C
+    s[0x2302 + row] = s[0x2318 + row] = CtRomByte(rom, 0x400000L, (long)(ROM_STATUS_PALCYC_RAMP + x));       // FE80B-FE812
+    s[0x2303 + row] = s[0x2319 + row] = CtRomByte(rom, 0x400000L, (long)(ROM_STATUS_PALCYC_RAMP + x + 1));   // FE815-FE81C
     s[0xA499 + y] = (uint8_t)(s[0xA499 + y] + 2);                  // FE821-FE824
     if (s[0xA499 + y] == 0x7C) s[0xA499 + y] = 0;                  // FE827-FE82E
   }
@@ -4486,8 +4486,8 @@ static void battlePulseFrame(CtBattleHost* h) {
   if (!rom || (long)ROM_BRACKET_PULSE_TBL + 2 * 0x3E > rl) return;
   int m = s[0xA101] ? (s[0x9F46] ^ 0x08) : s[0x9F46];          // FE5BA-FE5C6
   int dst = (m & 0x08) ? 0x23BC : 0x233C;                      // FE5C9-FE5CB
-  s[dst] = rom[ROM_BRACKET_PULSE_TBL + a * 2];                 // FE5CD-FE5D8 / FE5DD-FE5E8
-  s[dst + 1] = rom[ROM_BRACKET_PULSE_TBL + a * 2 + 1];
+  s[dst] = CtRomByte(rom, 0x400000L, (long)(ROM_BRACKET_PULSE_TBL + a * 2));                 // FE5CD-FE5D8 / FE5DD-FE5E8
+  s[dst + 1] = CtRomByte(rom, 0x400000L, (long)(ROM_BRACKET_PULSE_TBL + a * 2 + 1));
 }
 // C1/1115 (called by C1/1153 when a seat is choosing and no target is being picked, and again by C1/18AA): OAM
 // entries 0-3 = CC:F604[k] = [dx, dy, name, attribute] at the chooser's LIVE foot $1D0C/$1D23,$95D5, attribute
@@ -4506,7 +4506,7 @@ static int battleBracketPlace(const CtBattleHost* h, const uint8_t* w, CtBattleO
   int fx = (h && h->mvInited) ? BT_LIVEX(h, seat) & 0xFF : w[0x1D0C + seat];
   int fy = (h && h->mvInited) ? BT_LIVEY(h, seat) & 0xFF : w[0x1D23 + seat];
   for (int k = 0; k < 4; k++) {                                // C1/111B-1148
-    const uint8_t* e = gRom + ROM_BRACKET_OAM_TBL + (uint32_t)k * 4u;
+    const uint8_t* e = CtRomPtr(gRom, gRomLen, ROM_BRACKET_OAM_TBL + (long)k * 4, 4);
     out[k].x = (uint8_t)(e[0] + fx);
     out[k].y = (uint8_t)(e[1] + fy);
     out[k].name = e[2];
@@ -5053,7 +5053,7 @@ static void battleMenuPassTail(CtBattleHost* h, const CtBattleOamEntry* b1115) {
       long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
       int tb = battleBlock(t), id = s[tb + 0];
       s[0x0200] = (uint8_t)id;
-      uint8_t key = (rom && rl > 0x21DE80L + id && rom[0x21DE80L + id]) ? 0xFF : (uint8_t)t;
+      uint8_t key = (rom && rl > 0x21DE80L + id && CtRomByte(rom, 0x400000L, (long)(0x21DE80L + id))) ? 0xFF : (uint8_t)t;
       if (s[0x9F34] && s[0x9F29 + t]) {
         for (int i = 0; i < 4; i++) s[0x0201 + i] = s[tb + 3 + i];   // C1/1A1C: $5E30-33,X
         battleTargetMsgPost(h, key, 0x0B);
@@ -5139,18 +5139,18 @@ int CtBattleMsgLen(const uint8_t* s) {
   long bank = (long)(s[0x020F] - 0xC0) << 16;
   long tp = bank + (s[0x020D] | (s[0x020E] << 8)) + 2L * s[0x020C];
   if (tp + 1 >= rl) return 0;
-  long a = bank + (rom[tp] | (rom[tp + 1] << 8));
+  long a = bank + (CtRomByte(rom, 0x400000L, (long)(tp)) | (CtRomByte(rom, 0x400000L, (long)(tp + 1)) << 8));
   int n = 0, cur = 0x0201;
   for (int guard = 0; guard < 256 && a < rl; guard++) {
-    uint8_t v = rom[a++];
+    uint8_t v = CtRomByte(rom, 0x400000L, (long)(a++));
     if (v == 0x00) break;
-    if (v == 0x12) { if (a < rl && rom[a++] == 0x01) n += 11; continue; }
+    if (v == 0x12) { if (a < rl && CtRomByte(rom, 0x400000L, (long)(a++)) == 0x01) n += 11; continue; }
     if (v == 0x0E) { char b[8]; n += snprintf(b, sizeof b, "%d", s[cur] | (s[cur + 1] << 8)); cur += 2; continue; }
     if (v >= 0x21 && v <= 0x9F) {
       long dp = 0x1EFA00L + (long)(v - 0x21) * 2;
       if (dp + 1 >= rl) continue;
-      long ds = 0x1EFA00L + ((rom[dp] | (rom[dp + 1] << 8)) - 0xFA00);
-      if (ds >= 0 && ds < rl) n += rom[ds];
+      long ds = 0x1EFA00L + ((CtRomByte(rom, 0x400000L, (long)(dp)) | (CtRomByte(rom, 0x400000L, (long)(dp + 1)) << 8)) - 0xFA00);
+      if (ds >= 0 && ds < rl) n += CtRomByte(rom, 0x400000L, (long)(ds));
       continue;
     }
     n++;
@@ -5183,7 +5183,7 @@ static void battleSysMsgFrame(CtBattleHost* h) {
     s[0x0213] = 1;
     h->sysMsgOpenT++;                                          // characters typed
     s[0xCD05] = (h->sysMsgOpenT <= CtBattleMsgLen(s)) ? 0x10 : 0x00;
-    s[0xCCEB] = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? rom[ROM_MSG_DWELL_TBL + idx] : 0xA0;
+    s[0xCCEB] = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_DWELL_TBL + idx)) : 0xA0;
     s[0xCCED]++;
     if (!s[0xCD05]) battleFleeTrace(h, "box-open");
   }
@@ -5371,8 +5371,8 @@ static void battleCombatStart(CtBattleHost* h) {
       s[0x02] = s[0x2C]; s[0x03] = s[0x2D];             // C1/FD78-FD7A LDX $2C / STX $02
       if (rom) {
         long off = ROM_REWARD_TBL + (s[0x2C] | (s[0x2D] << 8));
-        if (rom[off + 5]) s[0xAE5D + x] = 0x80;         // C1/FD7E-FD88
-        if (rom[off + 4]) s[0xAE5D + x] |= 0x40;        // C1/FD8D-FD9A
+        if (CtRomByte(rom, 0x400000L, (long)(off + 5))) s[0xAE5D + x] = 0x80;         // C1/FD7E-FD88
+        if (CtRomByte(rom, 0x400000L, (long)(off + 4))) s[0xAE5D + x] |= 0x40;        // C1/FD8D-FD9A
       }
     }
     s[0x00] = 0x08;                                     // C1/FD9D-FDA3: the loop leaves $00 = 8
@@ -5633,8 +5633,8 @@ static void battleDemoTurn(CtBattleHost* h) {
   s[0x99DD] = s[0x99DE] = s[0x99DF] = 0x00;                                     // C1/B72D-B735
   s[0x9F22] = s[0x9F23] = s[0x9F24] = 0x30;                                     // C1/B738-B740
   { int ti = s[0x29AC] * 2;                                                     // C1/B743-B74E
-    long src = 0x3D0000L | (rom[0x3DB957 + ti] | (rom[0x3DB957 + ti + 1] << 8));
-    for (int y = 0; y < 0x15 && src + y < rl; y++) s[0x93EE + y] = rom[src + y]; }   // C1/B752-B75F
+    long src = 0x3D0000L | (CtRomByte(rom, 0x400000L, (long)(0x3DB957 + ti)) | (CtRomByte(rom, 0x400000L, (long)(0x3DB957 + ti + 1)) << 8));
+    for (int y = 0; y < 0x15 && src + y < rl; y++) s[0x93EE + y] = CtRomByte(rom, 0x400000L, (long)(src + y)); }   // C1/B752-B75F
   // C1/8592-85B1: pop the confirm FIFO ($99D4 BMI = empty).
   if (s[0x99D4] & 0x80) return;
   int seat = s[0x99D4];
@@ -5925,7 +5925,7 @@ static void battleCommitPcAction(CtBattleHost* h, int atk) {
 static int battleTechGroup(int techId) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom || techId <= 0 || techId >= 0x75 || (long)ROM_TECH_TARGET_TBL + techId * 2 >= rl) return 0x01;
-  return rom[ROM_TECH_TARGET_TBL + techId * 2];                  // C1/C9C9
+  return CtRomByte(rom, 0x400000L, (long)(ROM_TECH_TARGET_TBL + techId * 2));                  // C1/C9C9
 }
 
 // battle_multitarget.md §2/§4b: build the HIT SET for a dispatched action from its target GROUP + PRIMARY victim.
@@ -6041,7 +6041,7 @@ int CtBattleCursorOfs(const CtBattleHost* h, int cmb, int* dx, int* dy) {
   int id = h->mem[battleBlock(cmb) + 0];
   long off = (long)ROM_ENEMY_GFXREC + (long)id * 10;
   if (!rom || off + 2 >= romLen) return 0;                       // no ROM -> documented absent-render boundary
-  *dx = battleS8(rom[off + 1]); *dy = battleS8(rom[off + 2]);
+  *dx = battleS8(CtRomByte(rom, 0x400000L, (long)(off + 1))); *dy = battleS8(CtRomByte(rom, 0x400000L, (long)(off + 2)));
   return 1;
 }
 
@@ -6062,9 +6062,9 @@ int CtBattleCursorOfs(const CtBattleHost* h, int cmb, int* dx, int* dy) {
 #define ROM_TECH_LISTBASE 0x0CF38Cu   /* CC/F38C[seat] = 00 14 28 */
 #define ROM_TECH_RECOFS   0x0CF395u   /* CC/F395[seat] words = 0000 008C 0118 */
 #define ROM_TECH_SINGLES  0x3DA89Du   /* FD/A89D[char] = 01 09 11 19 21 29 31 39 (the singles' first id) */
-static int battleTechListBase(const uint8_t* rom, int seat) { return rom ? rom[ROM_TECH_LISTBASE + seat] : seat * 0x14; }
+static int battleTechListBase(const uint8_t* rom, int seat) { return rom ? CtRomByte(rom, 0x400000L, (long)(ROM_TECH_LISTBASE + seat)) : seat * 0x14; }
 static int battleTechRecBase(const uint8_t* rom, int seat) {
-  int o = rom ? (rom[ROM_TECH_RECOFS + seat * 2] | (rom[ROM_TECH_RECOFS + seat * 2 + 1] << 8)) : seat * 0x8C;
+  int o = rom ? (CtRomByte(rom, 0x400000L, (long)(ROM_TECH_RECOFS + seat * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_TECH_RECOFS + seat * 2 + 1)) << 8)) : seat * 0x8C;
   return 0x1A80 + o;
 }
 // C1/CBF6: the accessory's cost scaling -- A2 ceil(c/2), A3 ceil(ceil(c/2)/2) (`LSR / ADC #00` twice).
@@ -6075,12 +6075,12 @@ static int battleTechCostScale(int acc, int c) {
 }
 // C1/CB93: the participants $B2EA/$B2EB/$B2EC = CC/249F[(CC/1BEB[id*11] & 7F) * 3 + 0/1/2] (char ids, FF none).
 static void battleTechParticipants(uint8_t* s, const uint8_t* rom, int id) {
-  int grp = rom[ROM_TECH_META + (unsigned)id * 11] & 0x7F;
-  for (int k = 0; k < 3; k++) s[0xB2EA + k] = rom[0x0C249F + grp * 3 + k];
+  int grp = CtRomByte(rom, 0x400000L, (long)(ROM_TECH_META + (unsigned)id * 11)) & 0x7F;
+  for (int k = 0; k < 3; k++) s[0xB2EA + k] = CtRomByte(rom, 0x400000L, (long)(0x0C249F + grp * 3 + k));
 }
 // C1/CB48 / CB61 / CB7A: participant k's cost CC/253B[CC/1BF0[id*11 + k] & 7F].
 static int battleTechCostK(const uint8_t* rom, int id, int k) {
-  return rom[ROM_TECH_MP_TBL + (rom[ROM_TECH_META + (unsigned)id * 11 + 5 + k] & 0x7F)];
+  return CtRomByte(rom, 0x400000L, (long)(ROM_TECH_MP_TBL + (CtRomByte(rom, 0x400000L, (long)(ROM_TECH_META + (unsigned)id * 11 + 5 + k)) & 0x7F)));
 }
 // C1/CBC3 / CC0B / CC3E: the cost stored by the participant's SEAT ($B1BE[char]: 0 -> +3 with $B3BA, 1 -> +5 with
 // $B3BB, else +6 with $B3BC), scaled by that seat's accessory.
@@ -6091,8 +6091,8 @@ static void battleTechRecMp(uint8_t* s, int rec, int ch, int cost) {
   else                s[rec + 6] = (uint8_t)battleTechCostScale(s[0xB3BC], cost);
 }
 static void battleTechRecHead(uint8_t* s, const uint8_t* rom, int rec, int id) {
-  s[rec + 2] = (uint8_t)(rom[ROM_TECH_TARGET_TBL + id * 2 + 1] & 0x3F);   // C1/C9BC CC/1ACC & 3F
-  s[rec + 1] = rom[ROM_TECH_TARGET_TBL + id * 2];                        // C1/C9C9 CC/1ACB
+  s[rec + 2] = (uint8_t)(CtRomByte(rom, 0x400000L, (long)(ROM_TECH_TARGET_TBL + id * 2 + 1)) & 0x3F);   // C1/C9BC CC/1ACC & 3F
+  s[rec + 1] = CtRomByte(rom, 0x400000L, (long)(ROM_TECH_TARGET_TBL + id * 2));                        // C1/C9C9 CC/1ACB
   s[rec + 0] = (uint8_t)id;
   s[rec + 3] = s[rec + 5] = s[rec + 6] = 0xFF;
 }
@@ -6107,7 +6107,7 @@ static void battleTechBootRecords(CtBattleHost* h) {
     int ch = s[0xAEFF + seat], base = battleTechRecBase(rom, seat);
     // C1/C96A SINGLES: ids FD/A89D[char] .. FD/A89E[char]; the learned bits $2837+char MSB first; the record pointer
     // moves 7 for EVERY id, learned or not.
-    { int id = rom[ROM_TECH_SINGLES + ch], end = rom[ROM_TECH_SINGLES + ch + 1], bits = s[0x2837 + ch], rec = base;
+    { int id = CtRomByte(rom, 0x400000L, (long)(ROM_TECH_SINGLES + ch)), end = CtRomByte(rom, 0x400000L, (long)(ROM_TECH_SINGLES + ch + 1)), bits = s[0x2837 + ch], rec = base;
       for (; id < end; id++, rec += 7, bits = (bits << 1) & 0xFF) {
         if (!(bits & 0x80)) continue;                             // C9AE-C9B2
         battleTechParticipants(s, rom, id);                       // C9B6
@@ -6482,10 +6482,10 @@ static void battleItemBuildList(CtBattleHost* h) {
     int id = s[0x2400 + fi];
     if (!id) { rec += 5; continue; }                           // C1/CE1A -> FD/B01C
     s[0xAF23] = 0;                                             // FD/AF80
-    int sub = id - 0xBC, b0 = (id >= 0xBC) ? rom[ROM_ITEM_BATTLE_TBL + sub * 3] : 0;
+    int sub = id - 0xBC, b0 = (id >= 0xBC) ? CtRomByte(rom, 0x400000L, (long)(ROM_ITEM_BATTLE_TBL + sub * 3)) : 0;
     if (id < 0xBC || !(b0 & 0x80)) { s[0xAF23]++; continue; }  // FD/AFD9 / FD/AFF2 -> FD/B02B
     uint8_t* r = s + 0x1580 + rec;                             // FD/AFF6-B019
-    r[0] = (uint8_t)id; r[1] = rom[ROM_ITEM_TGTGRP_TBL + sub]; r[2] = (uint8_t)(b0 & 0x7F); r[3] = s[0x2500 + fi];
+    r[0] = (uint8_t)id; r[1] = CtRomByte(rom, 0x400000L, (long)(ROM_ITEM_TGTGRP_TBL + sub)); r[2] = (uint8_t)(b0 & 0x7F); r[3] = s[0x2500 + fi];
     rec += 5;                                                  // FD/B01C
   }
 }
@@ -7132,15 +7132,15 @@ static void battleStageAtkHeader(CtBattleHost* h, int atk) {
     memset(s + 0xB328, 0, 0x84);                                // D523 JSL FD/ACFD
     s[0xAE7B] = 0; s[0xAE7C] = 0; s[0xB3BF] = 0;                // D527-D52C
     if (cid < 8) {
-      unsigned act = rom[ROM_PC_ACTION_SEL + cid], rec = ROM_PC_ACT_REC + act * 11u;
+      unsigned act = CtRomByte(rom, 0x400000L, (long)(ROM_PC_ACTION_SEL + cid)), rec = ROM_PC_ACT_REC + act * 11u;
       s[0xB18C] = (uint8_t)act;
       s[0xB2C3] = (uint8_t)(act * 11); s[0xB2C4] = (uint8_t)((act * 11) >> 8);
       s[0xB2C7] = 0; s[0xB2C9] = 0; s[0xB2CA] = 0; s[0xAD9B] = 0;
-      if (rom[rec + 1] & 0x40) s[0xB2CA] |= 0x20;
-      if (rom[rec + 1] & 0x20) s[0xB2CA] |= 0x10;
+      if (CtRomByte(rom, 0x400000L, (long)(rec + 1)) & 0x40) s[0xB2CA] |= 0x20;
+      if (CtRomByte(rom, 0x400000L, (long)(rec + 1)) & 0x20) s[0xB2CA] |= 0x10;
       s[0xB2C8] = (uint8_t)idx;
-      s[0xB2CC] = rom[rec + 8];
-      s[0xB18E] = (uint8_t)(rom[rec + 2] | atk); s[0xB18F] = (uint8_t)act; s[0xB190] = rom[rec + 3]; s[0xB191] = 0;
+      s[0xB2CC] = CtRomByte(rom, 0x400000L, (long)(rec + 8));
+      s[0xB18E] = (uint8_t)(CtRomByte(rom, 0x400000L, (long)(rec + 2)) | atk); s[0xB18F] = (uint8_t)act; s[0xB190] = CtRomByte(rom, 0x400000L, (long)(rec + 3)); s[0xB191] = 0;
     }
   } else {
     // C1/8E03-8E15: `STA $AE4D / STA $AE4E` with A = 0, then `LDA $AEE3 / CMP #02`: 2 -> C1/D7C4 (CC/6FCA ->
@@ -7166,22 +7166,22 @@ static void battleStageAtkHeader(CtBattleHost* h, int atk) {
     s[0xB18C] = (uint8_t)act;
     s[0xB2C3] = (uint8_t)(act * 11); s[0xB2C4] = (uint8_t)((act * 11) >> 8);
     s[0xB2C7] = 0; s[0xB2C9] = 0; s[0xAD9B] = 0;
-    s[0xB2CA] = (rom[rec] & 0x40) ? 0x40 : 0;
-    unsigned r = rom[rec + 4];
+    s[0xB2CA] = (CtRomByte(rom, 0x400000L, (long)(rec)) & 0x40) ? 0x40 : 0;
+    unsigned r = CtRomByte(rom, 0x400000L, (long)(rec + 4));
     s[0xB2C8] = (uint8_t)r;
     if (r == 0xFF) return;
     idx = r;
-    for (int i = 0; i < 12; i++) s[0xAEE6 + i] = rom[tbl + idx * 12 + i];
-    s[0xB2CC] = rom[rec + 7];
+    for (int i = 0; i < 12; i++) s[0xAEE6 + i] = CtRomByte(rom, 0x400000L, (long)(tbl + idx * 12 + i));
+    s[0xB2CC] = CtRomByte(rom, 0x400000L, (long)(rec + 7));
     s[0xAE4D] = s[0xAEED]; s[0xAE4E] = s[0xAEEE];                          // C1/EB0E
     if (s[0xB2CA] & 0xC0) { s[0xAE4D] |= 0x20; s[0xB2CA] &= 0x7F; }       // C1/D85D-D871 / C1/D96A-D97E
     // ($B2C7 / $B2C9 step at D8AA-D8AD, AFTER the kind: battleEnemyExecute)
-    if (rom[rec + 5] != 0xFF && getenv("CT_BATTLE_TRACE"))
+    if (CtRomByte(rom, 0x400000L, (long)(rec + 5)) != 0xFF && getenv("CT_BATTLE_TRACE"))
       fprintf(stderr, "battle-effect2 f%d atk=%d class%d act=%02X second id %02X NOT RUN\n",
-              h->frames, atk, cls2 ? 2 : 1, act, rom[rec + 5]);
+              h->frames, atk, cls2 ? 2 : 1, act, CtRomByte(rom, 0x400000L, (long)(rec + 5)));
     return;
   }
-  for (int i = 0; i < 12; i++) s[0xAEE6 + i] = rom[tbl + idx * 12 + i];   // C1/D5EF / C1/D945
+  for (int i = 0; i < 12; i++) s[0xAEE6 + i] = CtRomByte(rom, 0x400000L, (long)(tbl + idx * 12 + i));   // C1/D5EF / C1/D945
   s[0xAE4D] = s[0xAEED]; s[0xAE4E] = s[0xAEEE];                           // C1/EB0E
   s[0xAE4D] |= s[0xB2CA];                                                 // D629-D62F
   // C1/D63F-D68E, between D629 and the $B18E stores (D691): the command's target in $AECC re-validated -- a seat that
@@ -7449,8 +7449,8 @@ static int battleD2DE(CtBattleHost* h, int atk, int tgt) {
     int cls2 = (s[0xAEE3] == 2);                                   // C0/18E09: the class selector
     unsigned actBase = cls2 ? ROM_CLS2_ACT_REC : ROM_ENEMY_ACT_REC;
     unsigned atkBase = cls2 ? ROM_CLS2_ATK_REC : ROM_ENEMY_ATK_REC;
-    unsigned recIdx = rom ? rom[actBase + act2 * 11 + 4] : 0;      // = $B2C8; bit7 = list terminator
-    int coef = (rom && !(recIdx & 0x80)) ? rom[atkBase + recIdx * 12 + 9] : 18;   // +9 POW ; base C1/E27B
+    unsigned recIdx = rom ? CtRomByte(rom, 0x400000L, (long)(actBase + act2 * 11 + 4)) : 0;      // = $B2C8; bit7 = list terminator
+    int coef = (rom && !(recIdx & 0x80)) ? CtRomByte(rom, 0x400000L, (long)(atkBase + recIdx * 12 + 9)) : 18;   // +9 POW ; base C1/E27B
     base = coef * (s[ab + 0x3D] * 2) / 18;
     if (getenv("CT_BATTLE_TRACE"))
       fprintf(stderr, "battle-formula f%d atk=%d class1 act=%02X type=%d NOT PORTED -> the type-4 sum\n",
@@ -7464,7 +7464,7 @@ static int battleD2DE(CtBattleHost* h, int atk, int tgt) {
   } else {
     // JMP C1/E575 (the attacker's multipliers), C1/D332 JSR C1/E65F (the defence by the header's +6), then
     // C1/D335 JSR C1/DCAD -- the target's `+0x1E &= F9`, the cut, + $B2BE, 0 -> 1.
-    int defsel = battleIsPc(atk) ? (rom ? rom[ROM_PC_ATK_REC + pcRec * 12 + 6] : 0x3E) : s[0xAEEC];
+    int defsel = battleIsPc(atk) ? (rom ? CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + pcRec * 12 + 6)) : 0x3E) : s[0xAEEC];
     base = (int)battleE575(h, atk, (unsigned)base);
     def = (int)battleDefenceE65F(s, tgt, defsel);
   }
@@ -7566,8 +7566,8 @@ static int battleD2DE(CtBattleHost* h, int atk, int tgt) {
 static int battleComputeTechDamage(CtBattleHost* h, int atk, int tgt, int techId) {
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
   int dmg;
-  int type = (rom && techId > 0) ? rom[ROM_PC_ATK_REC + techId * 12 + 5] : -1;   // CC/213F[techId] +5 formula type
-  int pow  = (rom && techId > 0) ? rom[ROM_PC_ATK_REC + techId * 12 + 9] : 0;    //                +9 attack POWER
+  int type = (rom && techId > 0) ? CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + techId * 12 + 5)) : -1;   // CC/213F[techId] +5 formula type
+  int pow  = (rom && techId > 0) ? CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + techId * 12 + 9)) : 0;    //                +9 attack POWER
   if (battleIsPc(atk) && type == 1 && pow > 0) {                 // (a) PC physical tech -- the physical pipeline
     int ab = battleBlock(atk), tb = battleBlock(tgt);
     battleFormulaWake(h, tgt);                                     // C1/E0FF JSR C1/E63B
@@ -7599,7 +7599,7 @@ static int battleComputeTechDamage(CtBattleHost* h, int atk, int tgt, int techId
     base = (int)battleE575(h, atk, (unsigned)base);                // C1/E181 JMP C1/E575
     // the defence by the header's +6 (0x3E for every physical tech header), through C1/E65F whole: the target's
     // status scaling and the FF clamp (battleDefenceE65Fx) -- the raw +0x3E for a target with neither
-    int def  = (int)battleDefenceE65Fx(s, tgt, rom[ROM_PC_ATK_REC + techId * 12 + 6]);
+    int def  = (int)battleDefenceE65Fx(s, tgt, CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + techId * 12 + 6)));
     (void)tb;
     dmg = (base * (256 - def)) >> 8;                              // variance wrapper C1/DCB9 (/256 floor)
     dmg += bonus;                                                  // + $B2BE (C1/DCE0)
@@ -7615,7 +7615,7 @@ static int battleComputeTechDamage(CtBattleHost* h, int atk, int tgt, int techId
     // elemental affinity (C1/E575): a NEUTRAL target -> x1 (GATO water-neutral, oracle flags $5ECB/$5ECE/$5ED3 =
     // 0). The weak/resist multipliers (x1.5/x1.25/x0.8/x0.25) are DERIVED from E575 but UNEXERCISED here (need a
     // non-neutral-target capture, T4b) -- so no unvalidated multiplier is applied (mandate: implement what closes).
-    int defsel = rom[ROM_PC_ATK_REC + techId * 12 + 6];          // CC/213F[id]+6 defsel: 0x3C magic / 0x3E physical
+    int defsel = CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + techId * 12 + 6));          // CC/213F[id]+6 defsel: 0x3C magic / 0x3E physical
     // C1/E678: magic-def x5/2 (physical defsel raw), then the status scaling and the FF CLAMP (battleDefenceE65Fx):
     // a magic defence of 102 or more is x5/2 >= 255 -> 0xFF, where the unclamped cut went to zero or negative
     int def_eff = (int)battleDefenceE65Fx(s, tgt, defsel);
@@ -7663,7 +7663,7 @@ static int battleComputeTechDamage(CtBattleHost* h, int atk, int tgt, int techId
     base = (int)battleE575(h, atk, (unsigned)base);               // C1/E3CA JMP C1/E575
     // JMP C1/E575: the attacker's status multipliers ($5E4E|$5E53, $5E4B -- none on the ported fights), then $16 = $2C;
     // the defence ($18 from CC/213F[id]+6: 3E physical, raw) and C1/DCAD: $16 * (0x100 - $18) / 0x100 + $B2BE.
-    int defsel = rom[ROM_PC_ATK_REC + techId * 12 + 6];
+    int defsel = CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + techId * 12 + 6));
     int def_eff = (int)battleDefenceE65Fx(s, tgt, defsel);       // C1/E65F whole (x5/2, status scaling, FF clamp)
     (void)tb;
     dmg = (int)((((unsigned)base * (unsigned)((0x100 - def_eff) & 0xFFFF)) >> 8) & 0xFFFF);
@@ -7682,7 +7682,7 @@ static int battleComputeTechDamage(CtBattleHost* h, int atk, int tgt, int techId
     int base = pow * (s[ab + 0x36] * 16 + (s[ab + 0x12] * s[ab + 0x12]) / 5) / 20;
     base = (int)battleE575(h, atk, (unsigned)base);               // JMP C1/E575
     int bonus = battleRng(s, rom, s[ab + 0x12] / 3);              // C1/E34D (in the formula, before the cut)
-    int def = (int)battleDefenceE65Fx(s, tgt, rom[ROM_PC_ATK_REC + techId * 12 + 6]);
+    int def = (int)battleDefenceE65Fx(s, tgt, CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + techId * 12 + 6)));
     dmg = battleDcad(h, tgt, (unsigned)base, (unsigned)def, bonus);   // C1/DCAD: the cut, + $B2BE, 0 -> 1
   } else {
     // (b) a formula type this path does not run: base 0 -> the floor -> 1, and named
@@ -7703,11 +7703,11 @@ static int battleComputeTechDamage(CtBattleHost* h, int atk, int tgt, int techId
 // CC/213F[01], $B2CC = 00. X-Strike CC/1BEB[42] = `0A 41 40 04 00 01 40 80 03 03 00` -> group $0A = Crono + Frog,
 // effects CC/213F[01] (Crono) and [40] (Frog), both $B2CC = 03.
 static int battleTechRec(const uint8_t* rom, int techId, int off) {
-  return rom ? rom[ROM_TECH_META + (unsigned)techId * 11 + (unsigned)off] : 0xFF;
+  return rom ? CtRomByte(rom, 0x400000L, (long)(ROM_TECH_META + (unsigned)techId * 11 + (unsigned)off)) : 0xFF;
 }
 static int battleTechParticipantSeat(const uint8_t* s, const uint8_t* rom, int techId, int k) {
   int grp = battleTechRec(rom, techId, 0) & 0x7F;
-  int ch = rom ? rom[0x0C249F + grp * 3 + k] : 0xFF;                    // CC:249F[n*3+k] ($B2EA..$B2EC)
+  int ch = rom ? CtRomByte(rom, 0x400000L, (long)(0x0C249F + grp * 3 + k)) : 0xFF;                    // CC:249F[n*3+k] ($B2EA..$B2EC)
   if (ch == 0xFF || ch >= 7) return -1;
   int seat = s[0xB1BE + ch];                                              // C1/D605 / C1/CC76
   return (seat < 3) ? seat : -1;
@@ -7723,7 +7723,7 @@ static void battleTechCoActors(CtBattleHost* h, int techId) {
   if (!rom) return;
   int grp = battleTechRec(rom, techId, 0) & 0x7F;
   for (int k = 1; k <= 2; k++) {
-    int ch = rom[0x0C249F + grp * 3 + k];                                 // $B2EB / $B2EC
+    int ch = CtRomByte(rom, 0x400000L, (long)(0x0C249F + grp * 3 + k));                                 // $B2EB / $B2EC
     s[0xAE96 + k] = (ch == 0xFF) ? 0xFF : s[0xB1BE + (ch & 0x7F)];        // C1/C762-C77F
   }
 }
@@ -7736,10 +7736,10 @@ static void battleTechSpendMp(CtBattleHost* h, int techId) {
   if (!rom) return;
   for (int k = 0; k < 3; k++) {
     int grp = battleTechRec(rom, techId, 0) & 0x7F;
-    if (rom[0x0C249F + grp * 3 + k] == 0xFF) continue;                   // C1/CC71 CMP #FF
+    if (CtRomByte(rom, 0x400000L, (long)(0x0C249F + grp * 3 + k)) == 0xFF) continue;                   // C1/CC71 CMP #FF
     int seat = battleTechParticipantSeat(s, rom, techId, k);
     if (seat < 0) continue;
-    int cost = rom[ROM_TECH_MP_TBL + (battleTechRec(rom, techId, 5 + k) & 0x7F)];   // C1/CB55-CB5C
+    int cost = CtRomByte(rom, 0x400000L, (long)(ROM_TECH_MP_TBL + (battleTechRec(rom, techId, 5 + k) & 0x7F)));   // C1/CB55-CB5C
     int acc = s[0xB3BA + seat];
     if (acc == 0xA2)      cost = (cost >> 1) + (cost & 1);                           // C1/CBF6-CBFC
     else if (acc == 0xA3) { cost = (cost >> 1) + (cost & 1); cost = (cost >> 1) + (cost & 1); }   // C1/CBFE-CC07
@@ -7761,7 +7761,7 @@ static int battleStatusInflict(CtBattleHost* h, int tgt, int cat, int mask);   /
 static int battleExtraEffect(CtBattleHost* h, int b2cc, int el, int tgt, int dmg) {
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
   if (!rom || !b2cc) return dmg;                                          // C1/EA75 BEQ
-  const uint8_t* e = rom + 0x0C2A05 + (unsigned)b2cc * 3;
+  const uint8_t* e = CtRomPtr(rom, 0x400000L, 0x0C2A05 + (long)b2cc * 3, 3);
   int routine = e[0], m1c = e[1], m1e = e[2];
   if (routine == 11) {                                                    // C1/EFBC `JSR C1/EDBA / JSR C1/EF39`: the
     if (m1e) dmg = (((dmg & 0xFFFF) * m1c) & 0xFFFF) / m1e;              //   scale, then the element -- the Ice Sword
@@ -7926,7 +7926,7 @@ static void battleEnemyExecute(CtBattleHost* h, int atk, int n, const int* list)
   if (!rom || s[0xB2C8] == 0xFF) return;                          // D81D / D92A: no id -> no effect
   int cls2 = (s[0xAEE3] == 2);
   unsigned rec = (cls2 ? ROM_CLS2_ACT_REC : ROM_ENEMY_ACT_REC) + s[0xB18C] * 11u;
-  s[0xAE55] = rom[rec + 2];                                       // D874-D878
+  s[0xAE55] = CtRomByte(rom, 0x400000L, (long)(rec + 2));                                       // D874-D878
   s[0xAE4F] = 0;                                                  // D87D
   for (int i = 0; i < 11; i++) s[0xB29A + i] = 0;                 // D880-D886
   int kind = s[0xAEE6];
@@ -7952,9 +7952,9 @@ static void battleEnemyExecute(CtBattleHost* h, int atk, int n, const int* list)
     }
     h->actValue = h->actTgtVal[0];
   }
-  if (!((s[0xB200] & 0x80) && (rom[rec] & 0x80))) {               // D896-D8A8
+  if (!((s[0xB200] & 0x80) && (CtRomByte(rom, 0x400000L, (long)(rec)) & 0x80))) {               // D896-D8A8
     s[0xB2C7]++; s[0xB2C9]++;                                     // D8AA-D8AD
-    int c = rom[rec] & 7;                                         // D8B1-D8C1
+    int c = CtRomByte(rom, 0x400000L, (long)(rec)) & 7;                                         // D8B1-D8C1
     if (c) battleCombineEB68(s, c);
   }
   s[0xB18E] = s[0xB18F] = s[0xB190] = s[0xB191] = 0;              // D8C4-D8CD
@@ -8052,7 +8052,7 @@ static int battleComputeItemEffect(CtBattleHost* h, int tgt, int itemId) {
   h->actItemMp = 0; h->actItemMpAmt = 0;
   int sub = (itemId >= 0xBC) ? itemId - 0xBC : 0;
   if (!rom || sub <= 0 || tgt < 0 || tgt >= 11) return 0;
-  const uint8_t* r = rom + ROM_ITEM_AMOUNT_TBL + sub * 4;
+  const uint8_t* r = CtRomPtr(rom, 0x400000L, ROM_ITEM_AMOUNT_TBL + (long)sub * 4, 4);
   s[0xB18C] = (uint8_t)sub;                                      // C1/BAAA-BAB0 `SBC #BC / STA $B18C`
   for (int vi = 0; vi < n; vi++) s[0xAD8E + vi] = (uint8_t)h->actTgtList[vi];   // C1/C1DD's list
   s[0xAD8D] = (uint8_t)n;
@@ -8309,7 +8309,7 @@ static int battleCharmRoll(CtBattleHost* h, int atk, int tgt, int chance) {
 // $AFCC/$B00E flag (1E024-E06D), NONE for sleep. The immunity byte block+0x22+cat is staged from the ROM enemy
 // record (stageAll: memcpy block+0x22 <- CC/4700[id*23]+3), so GATO's block+0x23 = 0xFF (immune to ALL +0x1E)
 // blocks the inflict for FREE -> the immunity negative reproduces natively.
-//   The gate is taken from the staged attack header: `s[0xAEE6+i] = rom[tbl + idx*12 + i]` then
+//   The gate is taken from the staged attack header: `s[0xAEE6+i] = CtRomByte(rom, 0x400000L, (long)(tbl + idx*12 + i))` then
 //   `s[0xAE4D] = s[0xAEED]` (C1/EB0E), on the PC and the enemy path alike. CT_BATTLE_STATUSTEST is ONLY an
 //   override, so the three checks pinned on the forced path stay byte-identical.
 //
@@ -8651,12 +8651,12 @@ static int battleTechCharmE9D5(CtBattleHost* h, int atk, int tgt, int chance) {
   if (roll > chance) { s[0xB3BF] = 0xFE; return 0xFE; }           // E9F3-EA00
   int slot = tgt - 3;
   int pick = 0;                                                   // $1A
-  const uint8_t* e = rom ? rom + 0x0C2A05 + (unsigned)s[0xB2CC] * 3 : NULL;
+  const uint8_t* e = rom ? CtRomPtr(rom, 0x400000L, 0x0C2A05 + (long)s[0xB2CC] * 3, 3) : NULL;
   if (e && e[0] == 12) pick = (battleRng(s, rom, 99) < e[1]);     // EA1B-EA20 -> C1/EFC3
   int itemId = 0;
   if (!battleIsPc(tgt) && slot >= 0 && slot < 8 && rom) {
     int eid = s[battleBlock(tgt) + 0];
-    const uint8_t* rec = (rl >= (long)(ROM_REWARD_TBL + 256 * 7)) ? rom + ROM_REWARD_TBL + (size_t)eid * 7 : NULL;
+    const uint8_t* rec = (rl >= (long)(ROM_REWARD_TBL + 256 * 7)) ? CtRomPtr(rom, rl, ROM_REWARD_TBL + (long)eid * 7, 7) : NULL;
     if (rec) {
       if (pick && rec[5] && !(h->charmTaken[slot] & 1)) { h->charmTaken[slot] |= 1; s[0xB3BF]++; itemId = rec[5]; }
       else if (rec[4] && !(h->charmTaken[slot] & 2))   { h->charmTaken[slot] |= 2; s[0xB3BF]++; itemId = rec[4]; }
@@ -8939,7 +8939,7 @@ static void battleTechExecute(CtBattleHost* h, int techId) {
   int b2c3 = techId * 11;                                         // D52F-D53F
   s[0xB2C3] = (uint8_t)b2c3; s[0xB2C4] = (uint8_t)(b2c3 >> 8);
   int grp = battleTechRec(rom, techId, 0) & 0x7F;                 // D543-D570
-  for (int k = 0; k < 3; k++) s[0xB2EA + k] = rom[0x0C249F + grp * 3 + k];
+  for (int k = 0; k < 3; k++) s[0xB2EA + k] = CtRomByte(rom, 0x400000L, (long)(0x0C249F + grp * 3 + k));
   s[0xB2C7] = 0; s[0xB2C9] = 0; s[0xB2CA] = 0; s[0xAD9B] = 0;     // D584-D58D
   int r1 = battleTechRec(rom, techId, 1);
   if (r1 & 0x40) s[0xB2CA] |= 0x20;                               // D590-D5A0
@@ -8954,7 +8954,7 @@ static void battleTechExecute(CtBattleHost* h, int techId) {
     int eff = battleTechRec(rom, techId, 5 + k);                  // D5C0-D5CD
     s[0xB2C8] = (uint8_t)eff;
     if (eff & 0x80) { s[0xB2C7]++; s[0xB2C9]++; continue; }       // D5D4 -> D71E: a SKIP (its MP was paid)
-    for (int i = 0; i < 12; i++) s[0xAEE6 + i] = rom[ROM_PC_ATK_REC + eff * 12 + i];   // D5DB-D5FB
+    for (int i = 0; i < 12; i++) s[0xAEE6 + i] = CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + eff * 12 + i));   // D5DB-D5FB
     int ch = s[0xB2EA + k];
     int seat = (ch == 0xFF) ? 0xFF : s[0xB1BE + (ch & 0x7F)];     // D5FD-D605
     if (seat == 0xFF || seat >= 3) {                              // D608-D60C -> D742
@@ -9068,7 +9068,7 @@ static void battleDeathRoutineStart(CtBattleHost* h, int slot) {   // CF/FE20's 
   h->mem[0xCD00] = (uint8_t)(3 + slot);                           // CD/0043 `STA $CD00` (the corpse; program op 80 0F reads it)
   battleDeathPalCopy(h, slot);                                    // CF/FE4F-FE72
   h->deathSfxDue[slot] = 1;                                       // CD/0046-0050: the $CCEA wait (battleDeathSfxTick)
-  h->dissolveStep[slot] = -((rom && rl > 0x0D00C0) ? rom[0x0D00C0] : 0x0A);   // CD/00BF LDA #0A: CD/3E3B's waits
+  h->dissolveStep[slot] = -((rom && rl > 0x0D00C0) ? CtRomByte(rom, 0x400000L, (long)(0x0D00C0)) : 0x0A);   // CD/00BF LDA #0A: CD/3E3B's waits
   h->dissolvePkt[slot] = 0; h->deathFxAfter[slot] = 0;
 }
 // A DITHER LEVEL IS CD/3ED2's UPLOAD, $400 BYTES A FRAME. CD/00D0-00F8: `LDA $967C,X` (the corpse's cell-layout type, X =
@@ -9081,7 +9081,7 @@ static int battleDissolvePackets(const CtBattleHost* h, int slot) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   int type = h->mem[0x967C + 3 + slot] & 0xFF;
   if (!rom || rl <= 0x0EF166L) return 1;
-  int size = rom[0x0EF156 + (type & 7) * 2] | (rom[0x0EF157 + (type & 7) * 2] << 8);   // CD/00D4-00DF (8-bit A, ASL)
+  int size = CtRomByte(rom, 0x400000L, (long)(0x0EF156 + (type & 7) * 2)) | (CtRomByte(rom, 0x400000L, (long)(0x0EF157 + (type & 7) * 2)) << 8);   // CD/00D4-00DF (8-bit A, ASL)
   int chunk = h->mem[0xCE0F] ? 0x1000 : 0x400;                    // CD/3EF8 `LDA $CE0F / BEQ`
   int n = (size + chunk - 1) / chunk;
   return n > 0 ? n : 1;
@@ -9489,9 +9489,9 @@ static void battlePopupOrigin(const CtBattleHost* h, int tgt, int* cx, int* ry) 
 // E1 (f687-f711, `$A0E8` F8 F8 FA ..): 18 px higher.
 static int battlePopupStep(const CtBattleHost* h, int cmb, int i) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-  if (!rom || rl < 0x115E49L + 0x40 || i < 0 || i >= 0x39 || rom[0x115E10 + i] == 0x80) return 0;
+  if (!rom || rl < 0x115E49L + 0x40 || i < 0 || i >= 0x39 || CtRomByte(rom, 0x400000L, (long)(0x115E10 + i)) == 0x80) return 0;
   int row2 = cmb >= 0 && cmb < 11 && h->mem[0xA0DC + cmb];
-  return (int8_t)(row2 ? rom[0x115E49 + i] : rom[0x115E10 + i]);
+  return (int8_t)(row2 ? CtRomByte(rom, 0x400000L, (long)(0x115E49 + i)) : CtRomByte(rom, 0x400000L, (long)(0x115E10 + i)));
 }
 static void battlePopupRise(CtBattleHost* h, CtFxPopup* p, int cmb) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
@@ -9499,7 +9499,7 @@ static void battlePopupRise(CtBattleHost* h, CtFxPopup* p, int cmb) {
     p->rise = ctBattleFxRiseDY[p->age < CT_FX_RISE_N ? p->age : CT_FX_RISE_N - 1]; return; }
   if (p->age == 0) {                                            // the birth offset: the first curve's net rise, negated
     p->rise = 0;
-    for (int i = 0; i < 0x39 && rom[0x115E10 + i] != 0x80; i++) p->rise -= (int8_t)rom[0x115E10 + i];
+    for (int i = 0; i < 0x39 && CtRomByte(rom, 0x400000L, (long)(0x115E10 + i)) != 0x80; i++) p->rise -= (int8_t)CtRomByte(rom, 0x400000L, (long)(0x115E10 + i));
   }
   p->rise += battlePopupStep(h, cmb, p->age);
 }
@@ -9554,8 +9554,8 @@ static void battlePopupAnimator(CtBattleHost* h) {
     if (!live) s[0xAC5A] = 0;
     return;
   }
-  if (rom[0x115E10 + x] == 0x80) { s[0xAC5A] = 0; return; }                    // CF/E78A-E790 -> CF/E7D3
-  for (int y = 0; y < 11; y++) s[0xA0E7 + y] = s[0xA0DC + y] ? rom[0x115E49 + x] : rom[0x115E10 + x];   // CF/E792-E7AD
+  if (CtRomByte(rom, 0x400000L, (long)(0x115E10 + x)) == 0x80) { s[0xAC5A] = 0; return; }                    // CF/E78A-E790 -> CF/E7D3
+  for (int y = 0; y < 11; y++) s[0xA0E7 + y] = s[0xA0DC + y] ? CtRomByte(rom, 0x400000L, (long)(0x115E49 + x)) : CtRomByte(rom, 0x400000L, (long)(0x115E10 + x));   // CF/E792-E7AD
   s[0xA3D2]++;                                                                 // CF/E7AF
   for (int y = 0; y < 11; y++)                                                 // CF/E7B2-E7CF
     for (int k = 0; k < 4; k++) s[0x922E + 16 * y + 4 * k] = (uint8_t)(s[0x922E + 16 * y + 4 * k] + s[0xA0E7 + y]);
@@ -9660,8 +9660,8 @@ static int battlePcWalkTick(CtBattleHost* h) {
     int ph = 7 - h->pcWalkCounter;
     long ix = ROM_PCWALK_DX + (long)h->pcWalkTrack * 8 + ph, iy = ROM_PCWALK_DY + (long)h->pcWalkTrack * 8 + ph;
     if (ix < romLen && iy < romLen) {
-      BT_LIVEX(h, cmb) = (BT_LIVEX(h, cmb) + battleS8(rom[ix])) & 0xFF;
-      BT_LIVEY(h, cmb) = (BT_LIVEY(h, cmb) + battleS8(rom[iy])) & 0xFF;
+      BT_LIVEX(h, cmb) = (BT_LIVEX(h, cmb) + battleS8(CtRomByte(rom, 0x400000L, (long)(ix)))) & 0xFF;
+      BT_LIVEY(h, cmb) = (BT_LIVEY(h, cmb) + battleS8(CtRomByte(rom, 0x400000L, (long)(iy)))) & 0xFF;
     }
     h->pcWalkCounter--;
     if (h->pcWalkCounter >= 0) return 1;                          // mid-segment: controller idles (C1/54C3 BMI)
@@ -9680,20 +9680,20 @@ static int battlePcWalkTick(CtBattleHost* h) {
   int stop = 0, variant = 0, newCell = adj;
   if (g[adj] == 0xFF) stop = 1;                                   // the chosen cell IS the goal -> rest here
   else {
-    int p1 = (curc + battleS8(rom[ROM_PCWALK_PROBE + dir * 8])) & 0xFF;       // 2-ahead straight
+    int p1 = (curc + battleS8(CtRomByte(rom, 0x400000L, (long)(ROM_PCWALK_PROBE + dir * 8)))) & 0xFF;       // 2-ahead straight
     if (g[p1] == 0xFF) stop = 1;                                  // goal 2 ahead -> rest one clear cell away
     else if ((g[p1] & 0xE0) == 0xE0) variant = 0;                 // path continues straight
     else {
-      int p2 = (curc + battleS8(rom[ROM_PCWALK_PROBE + dir * 8 + 1])) & 0xFF; // 2-ahead diag-left
+      int p2 = (curc + battleS8(CtRomByte(rom, 0x400000L, (long)(ROM_PCWALK_PROBE + dir * 8 + 1)))) & 0xFF; // 2-ahead diag-left
       if (g[p2] == 0xFF) stop = 1;
       else if ((g[p2] & 0xE0) == 0xE0) {
-        int sd = (curc + battleS8(rom[ROM_PCWALK_SIDE + dir * 8])) & 0xFF;    // the left side cell
+        int sd = (curc + battleS8(CtRomByte(rom, 0x400000L, (long)(ROM_PCWALK_SIDE + dir * 8)))) & 0xFF;    // the left side cell
         variant = (g[sd] & 0xE0) ? 3 : 1; newCell = p2;
       } else {
-        int p3 = (curc + battleS8(rom[ROM_PCWALK_PROBE + dir * 8 + 2])) & 0xFF; // 2-ahead diag-right
+        int p3 = (curc + battleS8(CtRomByte(rom, 0x400000L, (long)(ROM_PCWALK_PROBE + dir * 8 + 2)))) & 0xFF; // 2-ahead diag-right
         if (g[p3] == 0xFF) stop = 1;
         else {
-          int sd = (curc + battleS8(rom[ROM_PCWALK_SIDE + dir * 8 + 1])) & 0xFF;
+          int sd = (curc + battleS8(CtRomByte(rom, 0x400000L, (long)(ROM_PCWALK_SIDE + dir * 8 + 1)))) & 0xFF;
           variant = (g[sd] & 0xE0) ? 4 : 2; newCell = p3;         // C1/155AA fall-through (right-diag assumed)
         }
       }
@@ -9701,8 +9701,8 @@ static int battlePcWalkTick(CtBattleHost* h) {
   }
   if (stop) { h->pcWalkActive = 0; return 0; }                    // C1/155FE: $A15B=0, the op completes
   h->pcWalkTrack = dir * 8 + variant;
-  h->pcWalkForbid = rom[ROM_PCWALK_FORBID + h->pcWalkTrack];      // CC/F414 (0xFF pad -> effectively none)
-  h->pcAtkApFac = rom[ROM_PCWALK_FACE + h->pcWalkTrack] & 3;      // CC/F434 -> the $96DB facing stamp
+  h->pcWalkForbid = CtRomByte(rom, 0x400000L, (long)(ROM_PCWALK_FORBID + h->pcWalkTrack));      // CC/F414 (0xFF pad -> effectively none)
+  h->pcAtkApFac = CtRomByte(rom, 0x400000L, (long)(ROM_PCWALK_FACE + h->pcWalkTrack)) & 3;      // CC/F434 -> the $96DB facing stamp
   if (cmb < 3) BT_PCFACING(h, cmb) = h->pcAtkApFac;                 // CC/F434 -> $96DB,X of the WALKER (not seat 0)
   { static int ft = -1; if (ft < 0) { const char* t = getenv("CT_BATTLE_FACETRACE"); ft = (t && *t) ? 1 : 0; }
     if (ft) fprintf(stderr, "pcface WALK f%d fac=%d track=%d\n", h->frames, BT_PCFACING(h, 0), h->pcWalkTrack); }
@@ -9751,7 +9751,7 @@ static void battlePcAtkArm(CtBattleHost* h) {
     int gx = hx, gy = hy;
     { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
       if (rom && 0x0CFB7FL + 9 < rl) {                             // CC/FB7F[4] = (2, 6)
-        int wA = rom[0x0CFB7F + 8], wB = rom[0x0CFB7F + 9];
+        int wA = CtRomByte(rom, 0x400000L, (long)(0x0CFB7F + 8)), wB = CtRomByte(rom, 0x400000L, (long)(0x0CFB7F + 9));
         gx = ((wA * hx + wB * vx) >> 3) & 0xFF; gy = ((wA * hy + wB * vy) >> 3) & 0xFF;
       } }
     int stepX = 0, stepY = 0;
@@ -10012,7 +10012,7 @@ static int battleActStage3(CtBattleHost* h) {
   // whose `$AE94 = 40`, config CD/5526[2 * 7] + 6 = 46): the script's first op at rel 21 (the skipped upload's pre-roll), not
   // 29 -- and $A0B3 = 40 loads the header's word 2 (battleOpen409C).
   if (s[0xAE93] != 0x37 && s[0xAE94] != 0) return 0xFF;
-  return (a >= 0 && a < romLen) ? rom[a] : 0xFF;
+  return (a >= 0 && a < romLen) ? CtRomByte(rom, 0x400000L, (long)(a)) : 0xFF;
 }
 // The run-off action $79 (battle_flee.md 5.2): its config CD/45A6[$79] carries $987C = $86, but the effect that
 // index loads (D1:6240[$86] = two program ids, no sheet) costs ONE packet, not the third staging's -- oracle
@@ -10168,12 +10168,12 @@ static int battleAnimOpLenRom(const uint8_t* rom, long romLen, int op) {
   if (!rom || op < 0 || op > 0xDA) return -1;
   long jte = ROM_ANIM_OP_JT + (long)op * 2;
   if (jte + 1 >= romLen) return -1;
-  int jt = rom[jte] | (rom[jte + 1] << 8);
+  int jt = CtRomByte(rom, 0x400000L, (long)(jte)) | (CtRomByte(rom, 0x400000L, (long)(jte + 1)) << 8);
   long hbase = 0x010000L | jt;                          // the handler lives in bank C1
   for (int i = 0; i < 0x60 && hbase + i + 4 < romLen; i++) {
-    uint8_t b = rom[hbase + i];
-    if (b == 0xA9 && rom[hbase + i + 2] == 0x4C && rom[hbase + i + 3] == 0xBB && rom[hbase + i + 4] == 0x75)
-      return rom[hbase + i + 1];                        // A9 len 4C BB 75 -> the operand+opcode length
+    uint8_t b = CtRomByte(rom, 0x400000L, (long)(hbase + i));
+    if (b == 0xA9 && CtRomByte(rom, 0x400000L, (long)(hbase + i + 2)) == 0x4C && CtRomByte(rom, 0x400000L, (long)(hbase + i + 3)) == 0xBB && CtRomByte(rom, 0x400000L, (long)(hbase + i + 4)) == 0x75)
+      return CtRomByte(rom, 0x400000L, (long)(hbase + i + 1));                        // A9 len 4C BB 75 -> the operand+opcode length
     if (b == 0x4C || b == 0x60 || b == 0x6B) break;     // other JMP / RTS / RTL -> non-canonical advance
   }
   return -1;
@@ -10182,7 +10182,7 @@ static int battleAnimOpHandler(const uint8_t* rom, long romLen, int op) {   // h
   if (!rom || op < 0 || op > 0xDA) return -1;
   long jte = ROM_ANIM_OP_JT + (long)op * 2;
   if (jte + 1 >= romLen) return -1;
-  return rom[jte] | (rom[jte + 1] << 8);
+  return CtRomByte(rom, 0x400000L, (long)(jte)) | (CtRomByte(rom, 0x400000L, (long)(jte + 1)) << 8);
 }
 // Opcode length: ROM-read tail, else the disasm-resolved fallback for handlers that don't use the
 // canonical `LDA #len/JMP $75BB` advance idiom (a `JSR ($7A6B,X)`-dispatched handler instead reads its own
@@ -10304,8 +10304,8 @@ static int battleAnimOpLen(const uint8_t* rom, long romLen, int op) {
 // 1 + n bytes. Every other opcode is fixed-width, so this wrapper just defers to battleAnimOpLen.
 static int battleAnimOpLenAt(const uint8_t* rom, long romLen, long ip) {
   if (!rom || ip < 0 || ip + 1 >= romLen) return -1;
-  int op = rom[ip];
-  if (op == 0x80) return 1 + (rom[ip + 1] & 0x0F);          // C1/621B `ADC #01` on the masked count
+  int op = CtRomByte(rom, 0x400000L, (long)(ip));
+  if (op == 0x80) return 1 + (CtRomByte(rom, 0x400000L, (long)(ip + 1)) & 0x0F);          // C1/621B `ADC #01` on the masked count
   return battleAnimOpLen(rom, romLen, op);
 }
 // Opcode CLASS by handler address (stable; opcodes sharing a handler share a class).
@@ -10336,7 +10336,7 @@ static int battleAnimOpClass(const uint8_t* rom, long romLen, int op) {
 static void ascCensusWalk(const uint8_t* rom, long romLen, long q, int depth, uint8_t* seen, char* order, int* on,
                           char* stop, int stopLen) {
   for (int guard = 0; guard < 512 && q >= 0 && q < romLen; guard++) {
-    int op = rom[q];
+    int op = CtRomByte(rom, 0x400000L, (long)(q));
     if (!seen[op]) { seen[op] = 1; if (*on < 1000) *on += snprintf(order + *on, (size_t)(1024 - *on), "%s%02X", *on ? "," : "", op); }
     int cls = battleAnimOpClass(rom, romLen, op);
     if (cls == ANIM_TRACKEND || cls == ANIM_ENDACT) return;
@@ -10347,8 +10347,8 @@ static void ascCensusWalk(const uint8_t* rom, long romLen, long q, int depth, ui
       return;
     }
     if (op == 0x1E && depth < 3 && q + 1 < romLen) {                   // C1/56CC: CE/0000[ss*2]
-      long tb = (long)ROM_CE_SUPER_TBL + (long)rom[q + 1] * 2;
-      if (tb + 1 < romLen) ascCensusWalk(rom, romLen, (long)ROM_CE_BASE | (rom[tb] | (rom[tb + 1] << 8)), depth + 1,
+      long tb = (long)ROM_CE_SUPER_TBL + (long)CtRomByte(rom, 0x400000L, (long)(q + 1)) * 2;
+      if (tb + 1 < romLen) ascCensusWalk(rom, romLen, (long)ROM_CE_BASE | (CtRomByte(rom, 0x400000L, (long)(tb)) | (CtRomByte(rom, 0x400000L, (long)(tb + 1)) << 8)), depth + 1,
                                          seen, order, on, stop, stopLen);
     }
     q += len;
@@ -10361,11 +10361,11 @@ void CtBattleAscCensus(void) {
   for (int kind = 0; kind < 3; kind++) {
     int lo = kind == 0 ? 1 : 0, hi = kind == 0 ? 0x74 : kind == 1 ? (0xCF - 0xBC) : 0x3F;
     for (int id = lo; id <= hi; id++) {
-      int sel = kind == 0 ? rom[ROM_PC_TEC_ANIM_CFG + (long)id * 7]
-              : kind == 1 ? rom[ROM_ITEM_ANIM_CFG + (long)id * 7] : id;
+      int sel = kind == 0 ? CtRomByte(rom, 0x400000L, (long)(ROM_PC_TEC_ANIM_CFG + (long)id * 7))
+              : kind == 1 ? CtRomByte(rom, 0x400000L, (long)(ROM_ITEM_ANIM_CFG + (long)id * 7)) : id;
       long pte = (kind == 0 ? ROM_PC_TEC_ANIM_TBL : kind == 1 ? ROM_PC_ITM_ANIM_TBL : ROM_PC_ATK_ANIM_TBL) + (long)sel * 2;
       if (pte + 1 >= romLen) continue;
-      int ptr = rom[pte] | (rom[pte + 1] << 8);
+      int ptr = CtRomByte(rom, 0x400000L, (long)(pte)) | (CtRomByte(rom, 0x400000L, (long)(pte + 1)) << 8);
       long hdr = ROM_PC_ANIM_BANK | ptr;
       if (hdr + 4 >= romLen) continue;
       int dup = 0; for (int k = 0; k < nDone; k++) if (donePtr[k] == hdr) dup = 1;
@@ -10373,14 +10373,14 @@ void CtBattleAscCensus(void) {
       int kid = kind == 1 ? id + 0xBC : id;
       if (dup) { printf("asccensus %s %02X sel=%02X CE/%04X same-script\n", kn, kid, sel, ptr); continue; }
       if (nDone < 512) donePtr[nDone++] = hdr;
-      int m1 = (rom[hdr] << 8) | rom[hdr + 1];
+      int m1 = (CtRomByte(rom, 0x400000L, (long)(hdr)) << 8) | CtRomByte(rom, 0x400000L, (long)(hdr + 1));
       uint8_t seen[256]; memset(seen, 0, sizeof seen);
       char order[1024]; order[0] = 0; int on = 0; char stop[32]; stop[0] = 0;
       long tp = hdr + 4; int nt = 0;
       for (int b = 15; b >= 0; b--) {
         if (!(m1 & (1 << b))) continue;
         if (tp + 1 >= romLen) break;
-        long trk = ROM_PC_ANIM_BANK | (rom[tp] | (rom[tp + 1] << 8)); tp += 2; nt++;
+        long trk = ROM_PC_ANIM_BANK | (CtRomByte(rom, 0x400000L, (long)(tp)) | (CtRomByte(rom, 0x400000L, (long)(tp + 1)) << 8)); tp += 2; nt++;
         ascCensusWalk(rom, romLen, trk, 0, seen, order, &on, stop, (int)sizeof stop);
       }
       printf("asccensus %s %02X sel=%02X CE/%04X tracks=%d ops=%s stop=%s\n", kn, kid, sel, ptr, nt, order,
@@ -10401,12 +10401,12 @@ static int battleAnimParse(CtBattleHost* h, int sel, int isTech) {
   if (!rom) return 0;                                   // no ROM -> nothing derivable (never guess)
   long pte = (isTech ? ROM_TEC_ANIM_TBL : ROM_ATK_ANIM_TBL) + (long)(sel & 0xFF) * 2;
   if (pte + 1 >= romLen) return 0;
-  int sp = rom[pte] | (rom[pte + 1] << 8);
+  int sp = CtRomByte(rom, 0x400000L, (long)(pte)) | (CtRomByte(rom, 0x400000L, (long)(pte + 1)) << 8);
   h->animScriptPtr = sp;
   long hdr = 0x0D0000L | sp;                            // script header, bank CD
   if (hdr + 4 >= romLen) return 0;
-  int m1 = (rom[hdr] << 8) | rom[hdr + 1];              // word 1 = (script[0]<<8)|script[1] (C1:4541-454B $81=hi/$80=lo)
-  int m2 = (rom[hdr + 2] << 8) | rom[hdr + 3];          // word 2 = the A0B3!=0 VARIANT mask (script[2..3])
+  int m1 = (CtRomByte(rom, 0x400000L, (long)(hdr)) << 8) | CtRomByte(rom, 0x400000L, (long)(hdr + 1));              // word 1 = (script[0]<<8)|script[1] (C1:4541-454B $81=hi/$80=lo)
+  int m2 = (CtRomByte(rom, 0x400000L, (long)(hdr + 2)) << 8) | CtRomByte(rom, 0x400000L, (long)(hdr + 3));          // word 2 = the A0B3!=0 VARIANT mask (script[2..3])
   // $A0B3 selects between the two masks -- they are ALTERNATIVES, not additive (loader C1/4562-1459B,
   // battle_span_emergence.md §1.3): the `ASL $80` loop walks word 1 and `LDA $A0B3 / BNE` (C1:4566) SKIPS
   // each track load when A0B3!=0 -- but still advances X past word-1's pointers (C1:4584 INX INX) -- then the
@@ -10432,17 +10432,17 @@ static int battleAnimParse(CtBattleHost* h, int sel, int isTech) {
   int roleOf[16]; { int k = 0; for (int b = 15; b >= 0 && k < 16; b--) if (useMask & (1 << b)) roleOf[k++] = 15 - b; }
   for (int t = 0; t < ntracks; t++) {
     if (tp + 1 >= romLen) { clean = 0; break; }
-    int trkp = rom[tp] | (rom[tp + 1] << 8); tp += 2;
+    int trkp = CtRomByte(rom, 0x400000L, (long)(tp)) | (CtRomByte(rom, 0x400000L, (long)(tp + 1)) << 8); tp += 2;
     int role = (t < 16) ? roleOf[t] : -1;
     long q = 0x0D0000L | trkp;
     int tPause = 0, tShow = 0;
     for (int guard = 0; guard < 128 && q < romLen; guard++) {
-      int op = rom[q]; covered[op] = 1;
+      int op = CtRomByte(rom, 0x400000L, (long)(q)); covered[op] = 1;
       int cls = battleAnimOpClass(rom, romLen, op);
       if (cls == ANIM_TRACKEND || cls == ANIM_ENDACT) break;
       int len = battleAnimOpLenAt(rom, romLen, q);        // at the site: op 80 is counted (C1/621B)
       if (len < 0) { clean = 0; battleAiTraceUnknown(h, "anim-op", (uint8_t)op); break; }
-      if (cls == ANIM_PAUSE)    tPause += (len > 1 && q + 1 < romLen) ? rom[q + 1] : 0;
+      if (cls == ANIM_PAUSE)    tPause += (len > 1 && q + 1 < romLen) ? CtRomByte(rom, 0x400000L, (long)(q + 1)) : 0;
       else if (cls == ANIM_SUPER)   h->animHasStrike = 1;
       else if (cls == ANIM_SHOWDMG) { h->animHasShowDmg = 1; tShow = 1; }
       else if (cls == ANIM_PLAY)    h->animPlayAnims++;
@@ -10460,7 +10460,7 @@ static int battleAnimParse(CtBattleHost* h, int sel, int isTech) {
       else if ((op == 0xA9 || op == 0xA8) && role == 3) {
         int hnd = battleAnimOpHandler(rom, romLen, op);
         if ((hnd == 0x6AF0 || hnd == 0x69C3) && len > 1 && q + 1 < romLen)
-          h->animKnockDist = rom[q + 1];
+          h->animKnockDist = CtRomByte(rom, 0x400000L, (long)(q + 1));
       }
       q += len;
     }
@@ -10595,7 +10595,7 @@ static int battleActionSpan(CtBattleHost* h, int atk, int isTech) {
     // false match). Presentation (Crono raising the item) is the documented OPEN -- the WRAM is byte-exact.
     const uint8_t* rom = CtBattleRom(NULL);
     int sub = (h->actItemId >= 0xBC) ? h->actItemId - 0xBC : 0;
-    s[0x9877] = rom ? rom[ROM_ITEM_ANIM_CFG + sub * 7] : 0x01;          // $9877 = CD/5C26[sub*7][0] (Tonic -> 0x01)
+    s[0x9877] = rom ? CtRomByte(rom, 0x400000L, (long)(ROM_ITEM_ANIM_CFG + sub * 7)) : 0x01;          // $9877 = CD/5C26[sub*7][0] (Tonic -> 0x01)
     h->animParsed = 0; h->animHasStrike = 0; h->animHasShowDmg = 0;     // bank-CD/CE presentation = boundary (no parse)
     h->animPauseSum = 0; h->animPlayAnims = 0; h->animScriptPtr = 0;
     return battlePcItemSpan(h->actItemId);                              // pinned per item (Tonic -> 166f, §5)
@@ -10609,7 +10609,7 @@ static int battleActionSpan(CtBattleHost* h, int atk, int isTech) {
     // do NOT parse it as a CD/61F0 enemy-tech script (that would report the wrong bank-CD table). Presentation
     // (the CE/D613 whirlwind + poses) is the documented OPEN -- the WRAM (selector/span/damage/MP) is byte-exact.
     const uint8_t* rom = CtBattleRom(NULL);
-    s[0x9877] = rom ? rom[ROM_PC_TEC_ANIM_CFG + h->actTechId * 7] : (uint8_t)h->actTechId;   // $9877 = config[+0]
+    s[0x9877] = rom ? CtRomByte(rom, 0x400000L, (long)(ROM_PC_TEC_ANIM_CFG + h->actTechId * 7)) : (uint8_t)h->actTechId;   // $9877 = config[+0]
     h->animParsed = 0; h->animHasStrike = 0; h->animHasShowDmg = 0;   // CE presentation = boundary (no CD parse)
     h->animPauseSum = 0; h->animPlayAnims = 0; h->animScriptPtr = 0;
     h->animKnockDist = 0;   // no parse -> no knock. This was the one product left standing: GATO's song (CD/9EDA,
@@ -10633,7 +10633,7 @@ static int battleActionSpan(CtBattleHost* h, int atk, int isTech) {
     // −18 damage (both $AEEB=02, anim/span ONLY). Tables read byte-exact from the ROM (verified this session).
     int cid = s[0x2980 + atk];
     const uint8_t* rom = CtBattleRom(NULL);
-    int weapRanged = rom ? (rom[ROM_WEAPON_RANGED_TBL + (cid & 0xFF)] == 0) : (cid == 1);
+    int weapRanged = rom ? (CtRomByte(rom, 0x400000L, (long)(ROM_WEAPON_RANGED_TBL + (cid & 0xFF))) == 0) : (cid == 1);
     int melee = 1;                                              // $9930 default 1 (C1/49FF)
     if (h->actTarget >= 0 && h->actTarget < 11) {
       int dx = BT_LIVEX(h, atk) - BT_LIVEX(h, h->actTarget);      // live foot Δ (mvLiveX/Y == $1D0C/$1D23, the ROM's test source)
@@ -10646,14 +10646,14 @@ static int battleActionSpan(CtBattleHost* h, int atk, int isTech) {
       if (!weapRanged || melee) melee = battleTargetWalkable(h, atk, h->actTarget);
     }
     s[0x9930] = (uint8_t)melee;                                // C1/49FF's verdict, read by C1/4394 to pick the config
-    int normalSel = rom ? rom[(melee ? ROM_NORMAL_ANIM_TBL : ROM_FAR_ANIM_TBL) + (cid & 0xFF)] : 0x00;
+    int normalSel = rom ? CtRomByte(rom, 0x400000L, (long)((melee ? ROM_NORMAL_ANIM_TBL : ROM_FAR_ANIM_TBL) + (cid & 0xFF))) : 0x00;
     if (h->actCrit) {
       // CRIT (C1/435B: LDA $AE9B / BPL normal): $9877 = CD/400E[cid], range-INDEPENDENT (Crono 0x01/177,
       // Marle 0x0F/146). The whole-screen white FLASH is a per-CRIT-ANIM property (battle_crit.md §C.3):
       // Crono's 0x01 flashes; Marle's 0x0F is ORACLE-PROVEN not to (flat brightness across her whole forced
       // crit anim, §C.3). The `csel != normalSel` proxy now over-fires (her normal is 0x02/0x03 != 0x0F), so
       // exclude 0x0F. Lucca/Frog etc. keep the proxy (dedicated crit anim distinct from normal -> presumed flash).
-      int csel = rom ? rom[ROM_CRIT_ANIM_TBL + (cid & 0xFF)] : normalSel;
+      int csel = rom ? CtRomByte(rom, 0x400000L, (long)(ROM_CRIT_ANIM_TBL + (cid & 0xFF))) : normalSel;
       s[0x9877] = (uint8_t)csel;
       h->actCritFlash = (csel != normalSel) && csel != 0x0F && !h->actPhysScript;   // (a scripted crit flashes by its own ops)
       span = battlePcAnimSpan(csel);
@@ -10690,7 +10690,7 @@ static int battleActionSpan(CtBattleHost* h, int atk, int isTech) {
       // through CD/5EC6 into bank CE; see battle_sfx_ops_inputs.md §4.2).
       long arl = 0; const uint8_t* arom = CtBattleRom(&arl);
       unsigned selOff = (unsigned)((ae93 == 0) ? ROM_ENEMY_ATK_ANIM_A : ROM_ENEMY_ATK_ANIM_B) + (unsigned)id * 6;
-      if (arom && selOff < (unsigned long)arl) s[0x9877] = arom[selOff];
+      if (arom && selOff < (unsigned long)arl) s[0x9877] = CtRomByte(arom, 0x400000L, (long)(selOff));
       else resolved = 0;                                    // no ROM -> never guess a selector
       // The SPAN returned here is only the parse-fail fallback: a parsed script closes the action at its own
       // op 01 plus C1/40D3-41BA's tail (battleAdvanceAction, "THE ENEMY ACTION'S CLOSE"). The Hetake's two
@@ -10704,7 +10704,7 @@ static int battleActionSpan(CtBattleHost* h, int atk, int isTech) {
       // arena, `PEEK_POKE 1111=7B`): tech E9, `$9877 = B0` by C1:469A at c427.
       { long crl = 0; const uint8_t* crom = CtBattleRom(&crl);
         unsigned co = ROM_ENEMY_ACT_CFG + (unsigned)ae93 * 7;
-        s[0x9877] = (crom && (long)co < crl) ? crom[co] : (uint8_t)ae93; }
+        s[0x9877] = (crom && (long)co < crl) ? CtRomByte(crom, 0x400000L, (long)(co)) : (uint8_t)ae93; }
       span = CT_SPAN_ENEMY_AVG;
     }
   }
@@ -11019,7 +11019,7 @@ static void battleMul00A7(uint8_t* s) {
 // $A5/$A6 = $AE (zero-extended), C1/00A7; returns $AA -- the low byte of $AE * sin, over 256 (battleTrigMul's value).
 static int battleTrig01F9(uint8_t* s, int a) {
   int idx = (a << 2) & 0x3FF;
-  unsigned t = gRom ? gRom[0x00F900 + idx] : 0;
+  unsigned t = gRom ? CtRomByte(gRom, 0x400000L, (long)(0x00F900 + idx)) : 0;
   if (idx >= 0x200) t = (0u - t) & 0xFFFF;                         // 1020D EOR #FFFF / INC A
   s[0xA7] = (uint8_t)t; s[0xA8] = (uint8_t)(t >> 8);
   s[0xA5] = s[0xAE]; s[0xA6] = 0;                                  // 10213-10218
@@ -11264,7 +11264,7 @@ static void battleMoveReturn(CtBattleHost* h, int slot) {
 // because class 5 had no handler at all.
 //
 // DERIVED BYTE-FOR-BYTE, and the head is literally class 4's. Realigned at `JSR C1/0222` the two
-// bodies are identical for 0xA1 bytes (rom[0x13ABC:+0x3A] == rom[0x13C46:+0x3A]); the operand setup
+// bodies are identical for 0xA1 bytes (CtRomByte(rom, 0x400000L, (long)(0x13ABC:+0x3A)) == CtRomByte(rom, 0x400000L, (long)(0x13C46:+0x3A))); the operand setup
 // is the same ($D3/$D4 <- the move target $9752,X through $1D0C/$1D23, $D5/$D6 <- self $1D0F/$1D26,X,
 // which also become the segment base $98AF/$98B7). Only three things differ, and all three are here:
 //
@@ -11282,7 +11282,7 @@ static void battleMoveReturn(CtBattleHost* h, int slot) {
 //   3. WHAT "SETTLED" DOES. Class 4 parks (arrival latch + STZ $98A7). Class 5 does NOT park -- it
 //      JMPs to C1/3D40, the ORBIT arm below. That is the wander.
 //
-// The far arm is class 4's tail with two edits (rom[0x13B62:+29] == rom[0x13CD4:+29] exactly): class 5
+// The far arm is class 4's tail with two edits (CtRomByte(rom, 0x400000L, (long)(0x13B62:+29)) == CtRomByte(rom, 0x400000L, (long)(0x13CD4:+29)) exactly): class 5
 // inserts `LDA $A2B5 / CMP #0F / BNE +5 / LDA #01 / STA $9875` after the STZ $9875, and its
 // second-probe skip compares #0F where class 4 compares #03. Plus the mode-0x0D park at C1/3CC6-3CD2.
 static void battleMoveWander(CtBattleHost* h, int slot) {
@@ -11644,7 +11644,7 @@ int CtBattleMoveClassProbe(uint8_t* mem, int slot) {
   }
   int mode = mem[0xA2B5];                        // C1/373B's `STA $A2B5` -- the mode being dispatched
   BT_MVMODE(h, slot) = mode;
-  int cls = (mode < 0x20) ? crom[ROM_MOVE_MODE_CLASS + mode] : -1;
+  int cls = (mode < 0x20) ? CtRomByte(crom, 0x400000L, (long)(ROM_MOVE_MODE_CLASS + mode)) : -1;
   switch (cls) {                                 // the same nine arms C1/3760 holds
     case 2: battleMoveCharge(h, slot);     break;
     case 3: battleMoveAxisCharge(h, slot); break;
@@ -11764,7 +11764,7 @@ static void battleModeMachine3714(CtBattleHost* h, int holdCmb) {   // holdCmb: 
     if (mode & 0x80) continue;                                      // 1374D-13750 BMI
     if (x + 3 == holdCmb) continue;                                 // (the port's think: see battleMoveTick)
     s[0xA2B5] = (uint8_t)mode;                                      // 13752
-    int cls = crom ? crom[ROM_MOVE_MODE_CLASS + mode] : -1;         // 13755-1375C
+    int cls = crom ? CtRomByte(crom, 0x400000L, (long)(ROM_MOVE_MODE_CLASS + mode)) : -1;         // 13755-1375C
     switch (cls) {
       case 0: battleMoveReacquire(h, x);  break;                    // C1/3772
       case 1: battleMoveApproach(h, x);   break;                    // C1/379A
@@ -11896,8 +11896,8 @@ void CtBattlePcLadderFallen(CtBattleHost* h, int seat) {
   int face = CtBattlePcFacing(h->mem, h, seat) & 3;
   long a = (long)ROM_PC_DOWN_TBL + cid * 4 + face;
   if (a >= gRomLen) return;
-  h->pcLadderPose[seat] = gRom[a];
-  BT_PCPUB(h, seat) = gRom[a];                       // the same $9907,X the idle walk reads back (C1/1C66)
+  h->pcLadderPose[seat] = CtRomByte(gRom, 0x400000L, (long)(a));
+  BT_PCPUB(h, seat) = CtRomByte(gRom, 0x400000L, (long)(a));                       // the same $9907,X the idle walk reads back (C1/1C66)
   h->pcLadderWin[seat]  = -1;                     // no ladder for a fallen seat: the pose HOLDS
   if (getenv("CT_BATTLE_TRACE"))
     fprintf(stderr, "pcfallen f%d seat=%d cid=%d face=%d pose=%02X (D1/5F42)" CT_BATTLE_NL,
@@ -12110,7 +12110,7 @@ static void battleMoveInit(CtBattleHost* h) {
       if (id == 0xD8 || id == 0x94 || id == 0xAD) { BT_LIVEY(h, cmb) = (BT_LIVEY(h, cmb) + 1) & 0xFF; BT_MIRY(h, cmb) = BT_LIVEY(h, cmb); }
       { long rl = 0; const uint8_t* crom = CtBattleRom(&rl);
         int ix = (((BT_MVSEGPERIOD(h, slot) >> 1) << 2) + (BT_MVPHASESTEP(h, slot) >> 1)) & 0xFF;
-        int rel = (crom && rl > 0x0CF544L + ix) ? crom[0x0CF544 + ix] : 0x20;
+        int rel = (crom && rl > 0x0CF544L + ix) ? CtRomByte(crom, 0x400000L, (long)(0x0CF544 + ix)) : 0x20;
         BT_MVMODERELOAD(h, slot) = rel;
         BT_MVMODECAD(h, slot) = (rel + slot) & 0xFF; }
       // CC/EB75-EB83, the same loader, byte +4: `LDA $E4F604,X / STA $9700,Y` (the staged flags byte) then `AND #80
@@ -12137,7 +12137,7 @@ static void battleMoveInit(CtBattleHost* h) {
       for (int y = 0; y < 16; y += 2) {
         int id = s[0x9853 + y] | (s[0x9854 + y] << 8);
         for (long x = 0x21DE00L; x + 3 < rl; x += 4) {
-          int w = rom[x] | (rom[x + 1] << 8), k = rom[x + 2] | (rom[x + 3] << 8);
+          int w = CtRomByte(rom, 0x400000L, (long)(x)) | (CtRomByte(rom, 0x400000L, (long)(x + 1)) << 8), k = CtRomByte(rom, 0x400000L, (long)(x + 2)) | (CtRomByte(rom, 0x400000L, (long)(x + 3)) << 8);
           if (w & 0x8000) break;                                     // CC/EC70 BMI
           if (w != id) continue;                                     // CC/EC72 CMP $9853,Y
           if (k == 3) f80 = 1;                                       // CC/EC7B-EC83
@@ -12488,7 +12488,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
     // `$AE91 = 00 02` (C1:C679), `$AE93 = 7B` (C1:C6A3); `$A013 = 01` f955 (C1:40A9); the close f1058 `$A013 = 00`
     // (C1:41BD), `$AF23 = 01` (C1:C730), `$AFAB = 72` (C1:BE2A), Robo's MP 63 kept. tools/caster_radius_dispatch_cmp.py.
     int areaRes = -1;
-    { int area = (rom && techId < 0x75) ? rom[0x0C1ACC + techId * 2] : 0;
+    { int area = (rom && techId < 0x75) ? CtRomByte(rom, 0x400000L, (long)(0x0C1ACC + techId * 2)) : 0;
       int p0 = battleTechParticipantSeat(s, rom, techId, 0);
       if (area && tgt >= 3 && p0 >= 0 && p0 < 3) {
         s[0xB2AE] = (uint8_t)tgt;                                    // C1/BB85
@@ -12576,7 +12576,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
       // participant 0's seat, `$9607 = 10 / 19`. MEASURED, the rule's cartridge (four Hetakes around a lone caster):
       // Area Bomb 1F `$9604-$9608 = 00 00 04 10 00` (`$9605` by C1:C797, `$99CC = 01` C1:C746), `$AD8E = 04 06`; Black
       // Hole 37 `00 00 03 19 00`, `$AD8E = 03 04 06` -- the group's own set gave one victim.
-      { int area = (rom && techId < 0x75) ? rom[0x0C1ACC + techId * 2] : 0;
+      { int area = (rom && techId < 0x75) ? CtRomByte(rom, 0x400000L, (long)(0x0C1ACC + techId * 2)) : 0;
         if (h->actTgtN == 0 && area && tgt >= 3 && actor >= 0 && actor < 3 &&
             (areaRes >= 0 ? areaRes : battleAreaC586(h, area, 0, actor, tgt)) == 1) {   // (the pass above, before C1/BF79)
           s[0xB2AE] = (uint8_t)tgt;                                  // C1/C74C's $06: the ROM's $B2AE is the target
@@ -12687,9 +12687,9 @@ static int battleCounterDecode(CtBattleHost* h, int slot) {
   { long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
     if (s[0xAEFF + atk] == 0xFF) {
       int fid = s[0xAF0A + atk];
-      long p = rom ? aiFlat(rom[ROM_AI_PTR_TABLE + fid * 2] | (rom[ROM_AI_PTR_TABLE + fid * 2 + 1] << 8)) : 0;
-      for (int g = 0; rom && g < 0x2000 && p < romLen && rom[p] != 0xFF; p++, g++) {}   // C1/B488: block 2
-      if (!rom || p + 1 >= romLen || rom[p + 1] != 0x20) return 0;  // 86B4-86C8
+      long p = rom ? aiFlat(CtRomByte(rom, 0x400000L, (long)(ROM_AI_PTR_TABLE + fid * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_AI_PTR_TABLE + fid * 2 + 1)) << 8)) : 0;
+      for (int g = 0; rom && g < 0x2000 && p < romLen && CtRomByte(rom, 0x400000L, (long)(p)) != 0xFF; p++, g++) {}   // C1/B488: block 2
+      if (!rom || p + 1 >= romLen || CtRomByte(rom, 0x400000L, (long)(p + 1)) != 0x20) return 0;  // 86B4-86C8
       s[0xAF02 + slot] = s[0xAF0D + slot];                           // 86BC-86C3
     }
     if (s[battleBlock(atk) + 0x1E] & 0x8F) return 0; }               // C1/86FF-8704
@@ -12893,11 +12893,11 @@ static int battleAscOpFree(const uint8_t* rom, long romLen, int op) {
   for (int hop = 0; hop < 4; hop++) {                    // a handler may end in a tail JMP; FOLLOW it
     int jumped = 0;
     for (int i = 0; i < 0x100 && hb + i + 4 < romLen; i++) {
-      uint8_t b = rom[hb + i];
-      if (b == 0xEE && rom[hb + i + 1] == 0x0F && rom[hb + i + 2] == 0xA0) return 1;   // INC $A00F
+      uint8_t b = CtRomByte(rom, 0x400000L, (long)(hb + i));
+      if (b == 0xEE && CtRomByte(rom, 0x400000L, (long)(hb + i + 1)) == 0x0F && CtRomByte(rom, 0x400000L, (long)(hb + i + 2)) == 0xA0) return 1;   // INC $A00F
       if (b == 0x4C) {                                                                 // JMP abs
-        if (rom[hb + i + 1] == 0xBB && rom[hb + i + 2] == 0x75) return 0;              //   the advance tail
-        hb = 0x010000L | (long)(rom[hb + i + 1] | (rom[hb + i + 2] << 8));             //   a TAIL CALL:
+        if (CtRomByte(rom, 0x400000L, (long)(hb + i + 1)) == 0xBB && CtRomByte(rom, 0x400000L, (long)(hb + i + 2)) == 0x75) return 0;              //   the advance tail
+        hb = 0x010000L | (long)(CtRomByte(rom, 0x400000L, (long)(hb + i + 1)) | (CtRomByte(rom, 0x400000L, (long)(hb + i + 2)) << 8));             //   a TAIL CALL:
         jumped = 1; break;                                                             //   op 02 ends
       }                                                                                //   `JMP C1/4E19`,
       if (b == 0x60 || b == 0x6B) return 0;                                            //   op 1B `JMP C1/561F`
@@ -13069,7 +13069,7 @@ static int battleAscResolvePt(const CtBattleHost* h, int self, int mode, int* gx
     long rl = 0; const uint8_t* rom = CtBattleRom(&rl); //   $A250, the low bytes): (wA * A + wB * obj0) >> 3 per axis, the
     int k = mode - 0x41, a = h->ascRole[0];             //   weights CC/FB7F[2k] / [2k+1] (C1/0089 x2, a 16-bit ADC, C1/011B)
     if (a < 0 || a >= 11 || !rom || 0x0CFB80L + 2 * k >= rl) return 0;
-    int wa = rom[0x0CFB7F + 2 * k], wb = rom[0x0CFB80 + 2 * k];
+    int wa = CtRomByte(rom, 0x400000L, (long)(0x0CFB7F + 2 * k)), wb = CtRomByte(rom, 0x400000L, (long)(0x0CFB80 + 2 * k));
     *gx = ((battleAscCmbX(h, a) * wa + h->mem[0xA240] * wb) >> 3) & 0xFF;
     *gy = ((battleAscCmbY(h, a) * wa + h->mem[0xA250] * wb) >> 3) & 0xFF;
     return 1;
@@ -13114,7 +13114,7 @@ static int battleAscResolvePt(const CtBattleHost* h, int self, int mode, int* gx
     int k = (mode >= 0x39) ? mode - 0x39 : (mode >= 0x32) ? mode - 0x32 : mode - 0x24;
     long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
     if (a < 0 || a >= 11 || b < 0 || b >= 11 || !rom || 0x0CFB80L + 2 * k >= rl) return 0;
-    int wa = rom[0x0CFB7F + 2 * k], wb = rom[0x0CFB80 + 2 * k];
+    int wa = CtRomByte(rom, 0x400000L, (long)(0x0CFB7F + 2 * k)), wb = CtRomByte(rom, 0x400000L, (long)(0x0CFB80 + 2 * k));
     int axp = battleAscCmbX(h, a), ayp = battleAscCmbY(h, a), bxp = battleAscCmbX(h, b), byp = battleAscCmbY(h, b);
     if (mode >= 0x39) {
       int pt[2][2] = { { a, 0 }, { b, 0 } };
@@ -13328,7 +13328,7 @@ static int battleAscAnimEntry(int id, int anim, int facing, int cursor, int* pos
   uint32_t oa = (uint32_t)(anim * 4 + facing * st.stride + cursor);   // C1/42F6: the facing term is on ptrA
   uint32_t ob = (uint32_t)(anim * 4 + cursor);                        // C1/42C9: ptrB has NO facing term
   if ((long)(a + oa) >= rl || (long)(b + ob) >= rl) return 0;
-  *pose = rom[a + oa]; *dwell = rom[b + ob];
+  *pose = CtRomByte(rom, 0x400000L, (long)(a + oa)); *dwell = CtRomByte(rom, 0x400000L, (long)(b + ob));
   return 1;
 }
 // The arm shared by every playAnim op (C1/4D08 body tail, C1/4D5C-4D6C).
@@ -13434,10 +13434,10 @@ static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
                         : isTech == 1 ? ROM_PC_TEC_ANIM_TBL : ROM_PC_ATK_ANIM_TBL)
                        : (isTech ? ROM_TEC_ANIM_TBL    : ROM_ATK_ANIM_TBL)) + (long)(sel & 0xFF) * 2;
   if (pte + 1 >= romLen) return;
-  long hdr = (isPcSide ? ROM_PC_ANIM_BANK : 0x0D0000L) | (long)(rom[pte] | (rom[pte + 1] << 8));
+  long hdr = (isPcSide ? ROM_PC_ANIM_BANK : 0x0D0000L) | (long)(CtRomByte(rom, 0x400000L, (long)(pte)) | (CtRomByte(rom, 0x400000L, (long)(pte + 1)) << 8));
   if (hdr + 4 >= romLen) return;
-  int m1 = (rom[hdr] << 8) | rom[hdr + 1];                          // word 1 = the $A0B3==0 dispatch mask
-  int m2 = (rom[hdr + 2] << 8) | rom[hdr + 3];
+  int m1 = (CtRomByte(rom, 0x400000L, (long)(hdr)) << 8) | CtRomByte(rom, 0x400000L, (long)(hdr + 1));                          // word 1 = the $A0B3==0 dispatch mask
+  int m2 = (CtRomByte(rom, 0x400000L, (long)(hdr + 2)) << 8) | CtRomByte(rom, 0x400000L, (long)(hdr + 3));
   int a0b3 = h->mem[0xA0B3];
   int useMask = (a0b3 == 0) ? m1 : m2;
   int pc1 = 0; for (int b = 0; b < 16; b++) if (m1 & (1 << b)) pc1++;
@@ -13453,7 +13453,7 @@ static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
   for (int k = 1; k <= 2; k++) {
     int v = h->mem[0xAE96 + k];                                     // $AE97 / $AE98
     if ((v & 0x80) && h->actAttacker >= 0 && h->actAttacker < 3)
-      v = rom[ROM_ROLE_COACTOR_TBL + h->actAttacker * 2 + (k - 1)]; // CF173 / CF17F
+      v = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + h->actAttacker * 2 + (k - 1))); // CF173 / CF17F
     h->ascRole[k] = (v & 0x80 || v >= 11) ? -1 : v;
   }
   // Role 3 is $A017 = the top bit of $AE95 (CF/F18A-F198), which C1/AD09 made from $AECC[0] -- the FIRST of the dispatch's
@@ -13471,7 +13471,7 @@ static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
     for (int i = 0; i < 11; i++) s[0xA014 + i] = 0xFF;
     s[0xA014] = (uint8_t)(h->actAttacker & 0xFF);
     for (int j = 1; j <= 2; j++) { int v = s[0xAE96 + j];
-      if ((v & 0x80) && h->actAttacker >= 0 && h->actAttacker < 3) v = rom[ROM_ROLE_COACTOR_TBL + h->actAttacker * 2 + (j - 1)];
+      if ((v & 0x80) && h->actAttacker >= 0 && h->actAttacker < 3) v = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + h->actAttacker * 2 + (j - 1)));
       s[0xA014 + j] = (uint8_t)v; }
     s[0xA017] = (h->ascRole[3] >= 0) ? (uint8_t)h->ascRole[3] : 0xFF;
     for (int i = 1; i < h->actTgtN && k < 7; i++) s[0xA018 + k++] = (uint8_t)h->actTgtList[i];
@@ -13485,7 +13485,7 @@ static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
     if (!(useMask & (1 << b))) continue;
     int t = 15 - b;
     if (tp + 1 >= romLen) break;
-    h->ascIp[t] = (uint32_t)(isPcSide ? ROM_PC_ANIM_BANK : 0x0D0000L) | (uint32_t)(rom[tp] | (rom[tp + 1] << 8));
+    h->ascIp[t] = (uint32_t)(isPcSide ? ROM_PC_ANIM_BANK : 0x0D0000L) | (uint32_t)(CtRomByte(rom, 0x400000L, (long)(tp)) | (CtRomByte(rom, 0x400000L, (long)(tp + 1)) << 8));
     tp += 2;
     h->ascLive[t] = 1; loaded++;
   }
@@ -13541,7 +13541,7 @@ static void battleAscOrbitCmbArm(CtBattleHost* h, int c, int A, int* B, int C, i
 // r = 12 at a = $40 gives +11, at a = $C0 gives -12 (CF:F6B6 / F6BF, --monitor 7EA240:16 --diff).
 static int battleFxSinScaled(const uint8_t* rom, long romLen, int ang, int r) {
   int idx = (ang * 4) & 0x3FF;
-  int v = (0xF900 + idx < romLen) ? rom[0xF900 + idx] : 0;
+  int v = (0xF900 + idx < romLen) ? CtRomByte(rom, 0x400000L, (long)(0xF900 + idx)) : 0;
   if (idx >= 0x200) v = -v;
   return (int)(((uint32_t)((r & 0xFF) * (v & 0xFFFF)) & 0xFFFF) >> 8);
 }
@@ -13953,11 +13953,11 @@ static void battleAscFlashOn(CtBattleHost* h, int t, int k, const uint8_t* rom, 
     if (t < 4) break;
   }
   long base = 0x114D90L + (long)k * 24;                               // C1/5E1D-5E2B: X = k*8 + k*16
-  for (int j = 0; j < 0x18 && base + j < romLen; j++) m[0x2382 + j] = rom[base + j];   // C1/5E32-5E3E
+  for (int j = 0; j < 0x18 && base + j < romLen; j++) m[0x2382 + j] = CtRomByte(rom, 0x400000L, (long)(base + j));   // C1/5E32-5E3E
   for (int j = 0; j < 6; j++) m[0x239A + j] = 0xFF;                   // C1/5E40-5E51
   if (bg)                                                             // C1/5E58-5E7A
     for (int y = m[0x99D3] * 2, j = 0; y < 0x100; y += 2, j = (j + 2) % 24)
-      if (base + j + 1 < romLen) { m[0x2200 + y] = rom[base + j]; m[0x2201 + y] = rom[base + j + 1]; }
+      if (base + j + 1 < romLen) { m[0x2200 + y] = CtRomByte(rom, 0x400000L, (long)(base + j)); m[0x2201 + y] = CtRomByte(rom, 0x400000L, (long)(base + j + 1)); }
 }
 // C1/5E8B (op 6A, op 6C's OFF arm and exit): `$993C := $9888` for the same combatants; on the track path an enemy that
 // is part of the arena (`$99D2`) also gets the live page back from the base page, word `$99D3` up to word $80.
@@ -13987,7 +13987,7 @@ static void battleFxAnimTableLoad(CtBattleHost* h) {
   int cnt = 0, anim = 0;                                           // $80 / $82 (C1/48F2-48F6)
   for (int guard = 0; guard < 0x4000; guard++) {
     long r = 0x0E0000L + (x & 0xFFFF);
-    int b = (r < rl ? rom[r] : 0) & 0xE0;                          // C1/48F8-48FC
+    int b = (r < rl ? CtRomByte(rom, 0x400000L, (long)(r)) : 0) & 0xE0;                          // C1/48F8-48FC
     if (!b) { x += 4; cnt++; continue; }                           // C1/493A
     if (!(b & 0x80)) {
       if (b & 0x40) {                                              // C1/490F-491F
@@ -14032,16 +14032,16 @@ static void battleFxObjFrame(CtBattleHost* h, int o) {
   int x = (cur * 4 + prod + (s[0xA220 + o * 2] | (s[0xA221 + o * 2] << 8))) & 0xFFFF;   // CC/F2E7-F2F2
   long r = 0x0E0000L + x;
   if (r + 3 >= rl) return;
-  int d3 = rom[r + 3], one = 0, end = 0;                           // CC/F2F6-F304
+  int d3 = CtRomByte(rom, 0x400000L, (long)(r + 3)), one = 0, end = 0;                           // CC/F2F6-F304
   if (d3 & 0x80) { one = 1; d3 &= 0x7F; }
   s[0xA1B0 + o] = (uint8_t)d3;                                     // CC/F306
-  s[0xA260 + o * 2] = rom[r + 1]; s[0xA261 + o * 2] = (rom[r + 1] & 0x80) ? 0xFF : 0;   // CC/F30B-F319
-  s[0xA270 + o * 2] = rom[r + 2]; s[0xA271 + o * 2] = (rom[r + 2] & 0x80) ? 0xFF : 0;   // CC/F31C-F32A
-  if (rom[r] & 0xE0) {                                             // CC/F32F-F335
+  s[0xA260 + o * 2] = CtRomByte(rom, 0x400000L, (long)(r + 1)); s[0xA261 + o * 2] = (CtRomByte(rom, 0x400000L, (long)(r + 1)) & 0x80) ? 0xFF : 0;   // CC/F30B-F319
+  s[0xA270 + o * 2] = CtRomByte(rom, 0x400000L, (long)(r + 2)); s[0xA271 + o * 2] = (CtRomByte(rom, 0x400000L, (long)(r + 2)) & 0x80) ? 0xFF : 0;   // CC/F31C-F32A
+  if (CtRomByte(rom, 0x400000L, (long)(r)) & 0xE0) {                                             // CC/F32F-F335
     if (s[0xA1A8 + o] != 2) { s[0xA1A8 + o] = 0; end = 0x80; }     // CC/F33E-F344
     else s[0xA1B8 + o] = 0xFF;                                     // CC/F348
   }
-  int fr = (rom[r] & 0x1F) | end;                                  // CC/F34D-F355
+  int fr = (CtRomByte(rom, 0x400000L, (long)(r)) & 0x1F) | end;                                  // CC/F34D-F355
   if (one) fr |= 0x20;                                             // CC/F358-F361
   s[0xA2C0 + o] = (uint8_t)fr;
 }
@@ -14099,10 +14099,10 @@ static void battleFxPalCycleService(CtBattleHost* h) {
     if (idx > s[0xA3CD + k]) { s[0xA3BD + k] = 0; idx = s[0xA3C9 + k]; }   // CC/F207-F211
     long x = 0x0D0000L + ((((idx << 1) & 0xFF) + (s[0x9882] | (s[0x9883] << 8))) & 0xFFFF);   // CC/F214-F21A
     if (x + 1 >= rl) continue;
-    int p = rom[x], f = rom[x + 1], y = (f & 3) * 8;               // CC/F220-F231
+    int p = CtRomByte(rom, 0x400000L, (long)(x)), f = CtRomByte(rom, 0x400000L, (long)(x + 1)), y = (f & 3) * 8;               // CC/F220-F231
     long src = (f & 0x80) ? (long)ROM_FXPAL7_TBL + p * 14L : (long)ROM_FXPAL3_TBL + p * 6L;
     int n = (f & 0x80) ? 14 : 6;
-    for (int j = 0; j < n && src + j < rl; j++) s[0x2302 + y + j] = rom[src + j];
+    for (int j = 0; j < n && src + j < rl; j++) s[0x2302 + y + j] = CtRomByte(rom, 0x400000L, (long)(src + j));
   }
 }
 // THE TRACKS' OWN MOVERS TICK WITH THE OTHERS, BEFORE THE SCRIPT. The slides (ops 10-12, 98-9D, D3: mover modes 0 / 1) and
@@ -14225,7 +14225,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
     for (int guard = 0; guard < 64; guard++) {
       uint32_t ip = h->ascIp[t];
       if ((long)ip + 1 >= romLen) { h->ascLive[t] = 0; break; }
-      int op = rom[ip];
+      int op = CtRomByte(rom, 0x400000L, (long)(ip));
       int cls = battleAnimOpClass(rom, romLen, op);
       // THE END WAITS OUT THE NUMBERS. C1/4CF7 (op 01 and every op sharing it) is `LDA $A3D1 / BEQ ->4D00 / TDC / JMP C1/75BB`:
       // while a ShowDamage is up the op advances 0 with no INC $A00F -- the track parks on it, the frame spent -- and only a
@@ -14254,7 +14254,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
         if (tr) fprintf(stderr, "asc f%d rel=%d t%d STOP unknown op %02X\n", h->frames, rel, t, op);
         break;
       }
-      int a1 = (len > 1) ? rom[ip + 1] : 0, a2 = (len > 2) ? rom[ip + 2] : 0;
+      int a1 = (len > 1) ? CtRomByte(rom, 0x400000L, (long)(ip + 1)) : 0, a2 = (len > 2) ? CtRomByte(rom, 0x400000L, (long)(ip + 2)) : 0;
       int isFree = battleAscOpFree(rom, romLen, op), adv = 1, gx = 0, gy = 0;
       switch (op) {
         case 0x18: {                                                // 18 rr: WALK to role rr's foot over the arena grid
@@ -14282,7 +14282,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           // STA $1E00 / LDA $A014 / TAX / LDA $1D0C,X / STA $1E02 / JSL C7/0004 / INC $A00F`: cmd 18, the pan is
           // the ACTOR's live X, and the op costs nothing.
           long tb = (op == 0x7C ? 0x0D6D4CL : 0x0D6DACL) + h->mem[0xA4E7];
-          int id = (tb < romLen) ? rom[tb] : 0, a = h->ascRole[0];
+          int id = (tb < romLen) ? CtRomByte(rom, 0x400000L, (long)(tb)) : 0, a = h->ascRole[0];
           int pan = (a >= 0 && a < 11) ? (BT_LIVEX(h, a) & 0xFF) : 0x80;
           if (battleSfxPost(h, 0x18, id, pan) || !gBattleSndOn)
             if (getenv("CT_BATTLE_TRACE"))
@@ -14295,9 +14295,9 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           // $5D9E/$5D9F (advance 4); C0/C1 arm mover mode 3 (the orbit), C2/C3 mode 5 (the ellipse: the sine term's radius
           // halved; on an effect object also its depth against combatant $AB4F). All four land in C1/6D14's split.
           int two = (op == 0xC0 || op == 0xC2), omode = (op <= 0xC1) ? 3 : 5;
-          int oA = (ip + 1 + two < (uint32_t)romLen) ? rom[ip + 1 + two] : 0;
-          int oB = (ip + 2 + two < (uint32_t)romLen) ? rom[ip + 2 + two] : 0;
-          int oC = (ip + 3 + two < (uint32_t)romLen) ? rom[ip + 3 + two] : 0;
+          int oA = (ip + 1 + two < (uint32_t)romLen) ? CtRomByte(rom, 0x400000L, (long)(ip + 1 + two)) : 0;
+          int oB = (ip + 2 + two < (uint32_t)romLen) ? CtRomByte(rom, 0x400000L, (long)(ip + 2 + two)) : 0;
+          int oC = (ip + 3 + two < (uint32_t)romLen) ? CtRomByte(rom, 0x400000L, (long)(ip + 3 + two)) : 0;
           { uint8_t* s = h->mem;
             if (two) { if (battleAscResolve(h, t, a1, &gx, &gy)) { s[0xA2B0] = (uint8_t)gx; s[0xA2B2] = (uint8_t)gy; } }   // C1/762E
             else     { s[0xA2B0] = s[0x5D9E]; s[0xA2B2] = s[0x5D9F]; }                                                 // C1/6F40-6F49
@@ -14505,7 +14505,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           // itself lands in $53 (its high nibble picks D1/F67A's handler) and the next n-1 bytes in $54.. -- the handlers read
           // them there, so bytes past a short request are the previous request's (kept in the WRAM as the ROM keeps them).
           { uint8_t arg[16]; int n = a1 & 0x0F;
-            for (int i = 0; i < n && ip + 1 + i < (uint32_t)romLen; i++) { arg[i] = rom[ip + 1 + i]; h->mem[0x53 + i] = arg[i]; }
+            for (int i = 0; i < n && ip + 1 + i < (uint32_t)romLen; i++) { arg[i] = CtRomByte(rom, 0x400000L, (long)(ip + 1 + i)); h->mem[0x53 + i] = arg[i]; }
             battleFxPalStage(h, arg, n); }
           break;
         case 0x2D: h->mem[0xCFFF] = 1; break;                       // C1/58DE `LDA #01 / STA $CFFF` (costs: no INC $A00F)
@@ -14575,9 +14575,9 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           // forest one; `--writer` attributes both stores to C1:4FB3 / C1:4FBA, this very handler.
           long sp = ROM_ANIM_SPEED_TBL + (long)(op - 8);
           long rt = ROM_ANIM_RATE_TBL  + (long)(op - 8);
-          h->ascSpeed[t] = (sp < romLen && rom[sp] > 0) ? rom[sp] : 1;
-          h->ascRate[t]  = (rt < romLen && rom[rt] > 0) ? rom[rt] : 1;
-          { uint8_t st = (uint8_t)(sp < romLen ? rom[sp] : 1), ra = (uint8_t)(rt < romLen ? rom[rt] : 1);
+          h->ascSpeed[t] = (sp < romLen && CtRomByte(rom, 0x400000L, (long)(sp)) > 0) ? CtRomByte(rom, 0x400000L, (long)(sp)) : 1;
+          h->ascRate[t]  = (rt < romLen && CtRomByte(rom, 0x400000L, (long)(rt)) > 0) ? CtRomByte(rom, 0x400000L, (long)(rt)) : 1;
+          { uint8_t st = (uint8_t)(sp < romLen ? CtRomByte(rom, 0x400000L, (long)(sp)) : 1), ra = (uint8_t)(rt < romLen ? CtRomByte(rom, 0x400000L, (long)(rt)) : 1);
             if (t >= 8) { h->mem[0xA309 + t - 8] = ra; h->mem[0xA32F + t - 8] = st; }   // C1/4FAC-4FB7 (the object)
             else { int cs[11], nc = battleAscCmbs(h, t, cs);                            // C1/4F6B-4F76 (the combatant,
               for (int i = 0; i < nc; i++) { h->mem[0xA2FE + cs[i]] = ra; h->mem[0xA324 + cs[i]] = st; } } }   // track 4: each)
@@ -14635,7 +14635,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
             h->mem[0xA4AF + c] = (uint8_t)(h->mem[0xA4AF + c] + Y); battleAscOffsetMirror(h, c); adv = 0; }
           break; }
         case 0xD8: {                                                 // `D8 xx yy zz`: the SHAKE (C1/74B4 -> mover mode 6)
-          int a3 = (ip + 3 < (uint32_t)romLen) ? rom[ip + 3] : 0;
+          int a3 = (ip + 3 < (uint32_t)romLen) ? CtRomByte(rom, 0x400000L, (long)(ip + 3)) : 0;
           int cs[11], nc = battleAscCmbs(h, t, cs);
           for (int i = 0; i < nc; i++) { int c = cs[i]; uint8_t* s = h->mem;
             s[0xAB1E + c] = (uint8_t)a1; s[0xAB34 + c] = (uint8_t)a2; s[0xAB13 + c] = (uint8_t)(a3 + 1);
@@ -14675,7 +14675,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
         case 0x43: {                                                 // `43 tt xx yy`: the stored point := resolve(tt) + (xx, yy)
           // C1/5A0C: `$80 = tt`, `$5D9E = xx`, `$5D9F = yy`, `JSR C1/762E` (-> $A2B0/$A2B2), then `CLC / LDA $A2B0 / ADC $5D9E /
           // STA $5D9E` and the same for Y -- 8-bit adds; `INC $A00F` (free), advance 4.
-          int a3 = (ip + 3 < (uint32_t)romLen) ? rom[ip + 3] : 0;
+          int a3 = (ip + 3 < (uint32_t)romLen) ? CtRomByte(rom, 0x400000L, (long)(ip + 3)) : 0;
           h->mem[0x5D9E] = (uint8_t)a2; h->mem[0x5D9F] = (uint8_t)a3;
           if (battleAscResolve(h, t, a1, &gx, &gy)) {
             h->mem[0x5D9E] = (uint8_t)(gx + a2); h->mem[0x5D9F] = (uint8_t)(gy + a3);
@@ -14895,10 +14895,10 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           long tb = (long)ROM_CE_SUPER_TBL + (long)a1 * 2;
           if (tb + 1 < romLen) {
             h->ascRet[t] = ip + (uint32_t)len;
-            h->ascIp[t]  = ROM_CE_BASE + (uint32_t)(rom[tb] | (rom[tb + 1] << 8));
+            h->ascIp[t]  = ROM_CE_BASE + (uint32_t)(CtRomByte(rom, 0x400000L, (long)(tb)) | (CtRomByte(rom, 0x400000L, (long)(tb + 1)) << 8));
             adv = 0;
             if (tr) fprintf(stderr, "asc f%d rel=%d t%d SUPER %02X -> CE/%04X\n",
-                            h->frames, rel, t, a1, rom[tb] | (rom[tb + 1] << 8));
+                            h->frames, rel, t, a1, CtRomByte(rom, 0x400000L, (long)(tb)) | (CtRomByte(rom, 0x400000L, (long)(tb + 1)) << 8));
           }
           break; }
         case 0x1F:                                                   // POP back to the caller (C1/56FB)
@@ -15135,10 +15135,10 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           uint8_t* m = h->mem;
           long x = 0x0D0000L + (long)(((m[0x9882] | (m[0x9883] << 8)) + 2 * a1) & 0xFFFF);   // C1/5D1D-5D27
           if (x + 1 >= (long)romLen) break;
-          int p = rom[x], fl = rom[x + 1], y = (fl & 7) * 8;          // C1/5D2B-5D36
+          int p = CtRomByte(rom, 0x400000L, (long)(x)), fl = CtRomByte(rom, 0x400000L, (long)(x + 1)), y = (fl & 7) * 8;          // C1/5D2B-5D36
           long src = (fl & 0x80) ? (long)ROM_FXPAL7_TBL + p * 14L : (long)ROM_FXPAL3_TBL + p * 6L;
           int n = (fl & 0x80) ? 14 : 6;
-          for (int k = 0; k < n && src + k < (long)romLen; k++) m[0x2302 + y + k] = rom[src + k];
+          for (int k = 0; k < n && src + k < (long)romLen; k++) m[0x2302 + y + k] = CtRomByte(rom, 0x400000L, (long)(src + k));
           if (tr) fprintf(stderr, "asc f%d rel=%d t%d PAL60 k=%02X p=%02X f=%02X -> $%04X\n", h->frames, rel, t, a1, p, fl, 0x2302 + y);
           break; }
         // ---- THE VICTIM'S WHITE FLASH. Both edges are opcodes, not a host timer.
@@ -15152,7 +15152,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
         // = the last, $A3C1 = 1, $A3B9 = 1 (live), $A3BD = FF; free, four bytes. Ops 65-68 (C1/5DC1): cycle k off, free.
         case 0x61: case 0x62: case 0x63: case 0x64: {
           uint8_t* m = h->mem; int k = op - 0x61;
-          int a3 = (ip + 3 < (uint32_t)romLen) ? rom[ip + 3] : 0;
+          int a3 = (ip + 3 < (uint32_t)romLen) ? CtRomByte(rom, 0x400000L, (long)(ip + 3)) : 0;
           m[0xA3C5 + k] = (uint8_t)a1; m[0xA3C9 + k] = (uint8_t)a2; m[0xA3CD + k] = (uint8_t)a3;
           m[0xA3C1 + k] = 1; m[0xA3B9 + k] = 1; m[0xA3BD + k] = 0xFF;
           isFree = 1;
@@ -15382,7 +15382,7 @@ static void battleNameBoxFrame(CtBattleHost* h) {
   if (t == 10) {                                                   // CD/02B8-02C4
     long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
     int idx = (s[0x2991] >> 3) & 7;                                // CD/01A5
-    s[0xCCEB] = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? rom[ROM_MSG_DWELL_TBL + idx] : 0xA0;
+    s[0xCCEB] = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_DWELL_TBL + idx)) : 0xA0;
     s[0xCE17] = s[0xCE18]; s[0xCCED]++;
   }
   if (t >= 11) h->nameBoxT = -1;                                   // CD/02C7's wait returned: RTL -> C1/4058
@@ -15558,7 +15558,7 @@ static void battleDeathSfxTick(CtBattleHost* h) {
     if (h->dissolveActive[slot] && !s[0x99D2]) {
       long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
       if (rom && rl > 0x0EEFE9) {
-        for (int x = 9; x >= 1; x--) s[0xCCD8 + x] = rom[0x0EEFE0 + x];   // CD/00AA-00B5
+        for (int x = 9; x >= 1; x--) s[0xCCD8 + x] = CtRomByte(rom, 0x400000L, (long)(0x0EEFE0 + x));   // CD/00AA-00B5
         s[0xCCE5] |= 0x80;                                      // CD/00B7-00BC
       }
     }
@@ -15814,7 +15814,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
                                     : CT_PC_SFX_NO_WALK;
       if (sfxRel >= 0 && rel >= sfxRel) {
         if (srom && ROM_SFX_TBL_7C + wpn < (unsigned long)rl) {
-          uint8_t id = srom[ROM_SFX_TBL_7C + wpn];                 // CD/6D4C[$A4E7]  (C1/61EB)
+          uint8_t id = CtRomByte(srom, 0x400000L, (long)(ROM_SFX_TBL_7C + wpn));                 // CD/6D4C[$A4E7]  (C1/61EB)
           battleSfxPost(h, 0x18, id, pan);                         // cmd $18 (C1/61EB `LDA #18`)
           h->sfxAtkRel = rel;
           if (getenv("CT_BATTLE_TRACE"))
@@ -15825,7 +15825,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
       }
     } else if (rel >= h->sfxAtkRel + CT_PC_SFX_CRIT_2ND) {         // the 7D, anchored on the 7C
       if (srom && ROM_SFX_TBL_7D + wpn < (unsigned long)rl) {
-        uint8_t id = srom[ROM_SFX_TBL_7D + wpn];                   // CD/6DAC[$A4E7]  (C1/61F5)
+        uint8_t id = CtRomByte(srom, 0x400000L, (long)(ROM_SFX_TBL_7D + wpn));                   // CD/6DAC[$A4E7]  (C1/61F5)
         battleSfxPost(h, 0x18, id, pan);                           // cmd $18 (C1/61F5 `LDA #18`)
         if (getenv("CT_BATTLE_TRACE"))
           fprintf(stderr, "battlesfx f%d rel=%d op7D slot=%d wpn=%02X id=%02X pan=%02X\n",
@@ -16165,17 +16165,17 @@ int CtBattleLevelUp(uint8_t* mem, const uint8_t* rom, long romLen,
   while (earned > 0 && lvl < 99) {                        // C1/F950 re-calls F623 while earned XP ($B28C) remains
     if (earned >= next) {                                 // C1/F7F5: earned >= NEXT -> LEVEL UP
       earned -= next; lvl++;                              // C1/F80E earned -= NEXT ; C1/F814 level++
-      next = rom[ROM_XP_THRESH + lvl * 2] | (rom[ROM_XP_THRESH + lvl * 2 + 1] << 8);   // C1/F83D reload NEXT
+      next = CtRomByte(rom, 0x400000L, (long)(ROM_XP_THRESH + lvl * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_XP_THRESH + lvl * 2 + 1)) << 8);   // C1/F83D reload NEXT
       if (apply) {
         mem[b + 0x12] = (uint8_t)lvl;                     // C1/F818 level
         int mhp = mem[b + 0x5] | (mem[b + 0x6] << 8);     // maxHP += first-matching pair gain (C1/F871), clamp 999
-        for (int k = 0; k < 8; k += 2) if (rom[ROM_HP_GROW + id * 8 + k] >= lvl) { mhp += rom[ROM_HP_GROW + id * 8 + k + 1]; break; }
+        for (int k = 0; k < 8; k += 2) if (CtRomByte(rom, 0x400000L, (long)(ROM_HP_GROW + id * 8 + k)) >= lvl) { mhp += CtRomByte(rom, 0x400000L, (long)(ROM_HP_GROW + id * 8 + k + 1)); break; }
         if (mhp > 999) mhp = 999; mem[b + 0x5] = (uint8_t)mhp; mem[b + 0x6] = (uint8_t)(mhp >> 8);
         int mmp = mem[b + 0x9] | (mem[b + 0xA] << 8);     // maxMP += pair gain (C1/F8C0), clamp 99
-        for (int k = 0; k < 8; k += 2) if (rom[ROM_MP_GROW + id * 8 + k] >= lvl) { mmp += rom[ROM_MP_GROW + id * 8 + k + 1]; break; }
+        for (int k = 0; k < 8; k += 2) if (CtRomByte(rom, 0x400000L, (long)(ROM_MP_GROW + id * 8 + k)) >= lvl) { mmp += CtRomByte(rom, 0x400000L, (long)(ROM_MP_GROW + id * 8 + k + 1)); break; }
         if (mmp > 99) mmp = 99; mem[b + 0x9] = (uint8_t)mmp; mem[b + 0xA] = (uint8_t)(mmp >> 8);
         for (int j = 0; j < 6; j++) {                     // core stat = base + rate*(level-1)/100 (C1/F633), clamp 99
-          int v = mem[b + SG[j][0]] + rom[ROM_STAT_RATE + id * 7 + SG[j][1]] * (lvl - 1) / 100;
+          int v = mem[b + SG[j][0]] + CtRomByte(rom, 0x400000L, (long)(ROM_STAT_RATE + id * 7 + SG[j][1])) * (lvl - 1) / 100;
           mem[b + SG[j][2]] = (uint8_t)(v > 99 ? 99 : v);
         }
       }
@@ -16223,7 +16223,7 @@ int CtBattleLevelUp(uint8_t* mem, const uint8_t* rom, long romLen,
 // $7F01E0 is passed in: the port's $7F page is the field's. Every direct-page word the ROM writes is written.
 static uint16_t tpW(const uint8_t* s, int a) { return (uint16_t)(s[a] | (s[a + 1] << 8)); }
 static void tpWs(uint8_t* s, int a, int v) { s[a] = (uint8_t)v; s[a + 1] = (uint8_t)(v >> 8); }
-static uint8_t tpCC(const uint8_t* rom, int x) { return rom[0x0C0000 + (x & 0xFFFF)]; }
+static uint8_t tpCC(const uint8_t* rom, int x) { return CtRomByte(rom, 0x400000L, (long)(0x0C0000 + (x & 0xFFFF))); }
 // C1/F45F
 static void techF45F(uint8_t* s, const uint8_t* rom, uint8_t m7f) {
   int id = s[0xB2D1];
@@ -16273,7 +16273,7 @@ static void techF39A(uint8_t* s, const uint8_t* rom, uint8_t m7f) {
     techF4DF(s, rom);
     tpWs(s, 0x0A, (id << 4) & 0xFFFF);                            // F3D9-F3E2 (16-bit ASL x4)
     int x = ((s[tpW(s, 0x02)] << 1) & 0xFF) + tpW(s, 0x0A);       // F3E7 LDA $0000,X / ASL (8) / ADC $0A (16)
-    int th = rom[0x0C0000 + ((0x26FA + x) & 0xFFFF)] | (rom[0x0C0000 + ((0x26FB + x) & 0xFFFF)] << 8);   // LDA $CC26FA,X
+    int th = CtRomByte(rom, 0x400000L, (long)(0x0C0000 + ((0x26FA + x) & 0xFFFF))) | (CtRomByte(rom, 0x400000L, (long)(0x0C0000 + ((0x26FB + x) & 0xFFFF))) << 8);   // LDA $CC26FA,X
     int b = tpW(s, 0x00), cd = tpW(s, 0x5E5A + b);
     if (th < cd) {                                                // F3F9 CMP $5E5A,X / BCS
       tpWs(s, 0x28, th);                                          // F3FE STA $28
@@ -16543,7 +16543,7 @@ static void battleFbe5HpFloor(CtBattleHost* h) {
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
   if (!rom) return;
   for (int y = 0x0C; y >= 0; y -= 2) {
-    int a = 0x2603 + (rom[0x0CFC1E + y] | (rom[0x0CFC1E + y + 1] << 8));
+    int a = 0x2603 + (CtRomByte(rom, 0x400000L, (long)(0x0CFC1E + y)) | (CtRomByte(rom, 0x400000L, (long)(0x0CFC1E + y + 1)) << 8));
     if (!(s[a] | (s[a + 1] << 8))) {
       s[a] = 1;                                                   // INC $2603,X (16 bits, from 0)
       if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-hpfloor f%d $%04X 0 -> 1 (CF/FCDF)\n", h->frames, a);
@@ -16600,7 +16600,7 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
     case 1: {                                                                        // the dwell
       long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
       int idx = (s[0x2991] >> 3) & 7;                                                 // CD/01A5, Message Speed
-      int dwell = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? rom[ROM_MSG_DWELL_TBL + idx] : 0xA0;
+      int dwell = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_DWELL_TBL + idx)) : 0xA0;
       if (aHeld || h->resultPhaseT >= dwell) {
         h->resultPhase = 2; h->resultPhaseT = 0;
         if (getenv("CT_BATTLE_TRACE"))
@@ -16619,7 +16619,7 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
           // opens 3 to 5 frames later, with the string's cost.
           long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
           int id = h->resultKind[h->resultLine + 1];
-          int snd = (rom && id >= 0 && rl > (long)(ROM_MSG_SND_TBL + id)) ? rom[ROM_MSG_SND_TBL + id] : 0xFF;
+          int snd = (rom && id >= 0 && rl > (long)(ROM_MSG_SND_TBL + id)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_SND_TBL + id)) : 0xFF;
           if (snd != 0xFF) {
             battleSfxPost(h, 0x18, (uint8_t)snd, 0x80);                                // CD/01CB LDX #0080 / JSR CD/3B71
             if (getenv("CT_BATTLE_TRACE"))
@@ -16651,11 +16651,10 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
 //   E4), `$966E / $A2C8,($80+3)` = (E4:2600 + 2P+2 - E4:2600 + 2P) >> 2.
 static void battleLoaderPointers(uint8_t* s) {
   if (!gRom || gRomLen < 0x250000L) return;
-  const uint8_t* e4 = gRom + 0x240000;
-  #define E4W(a) (e4[(a) & 0xFFFF] | (e4[((a) + 1) & 0xFFFF] << 8))
+  #define E4W(a) (CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)((a) & 0xFFFF)) | (CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)(((a) + 1) & 0xFFFF)) << 8))
   for (int y = 0; y < 3; y++) {                                   // CE97E-EA2E
     int c = s[0x2980 + y], a2 = (c << 1) & 0xFF, x = (a2 + c) & 0xFF, y3 = y * 3;
-    for (int k = 0; k < 3; k++) { s[0x1C57 + y3 + k] = e4[0x2000 + x + k]; s[0x1C78 + y3 + k] = e4[0x2300 + x + k]; }
+    for (int k = 0; k < 3; k++) { s[0x1C57 + y3 + k] = CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)(0x2000 + x + k)); s[0x1C78 + y3 + k] = CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)(0x2300 + x + k)); }
     int pa = E4W(0x2600 + a2), pb = E4W(0x2800 + a2);
     s[0x1C99 + y3] = (uint8_t)pa; s[0x1C9A + y3] = (uint8_t)(pa >> 8); s[0x1C9B + y3] = 0xE4;
     s[0x1CBA + y3] = (uint8_t)pb; s[0x1CBB + y3] = (uint8_t)(pb >> 8); s[0x1CBC + y3] = 0xE4;
@@ -16664,15 +16663,15 @@ static void battleLoaderPointers(uint8_t* s) {
     s[0x966E + y] = (uint8_t)st; s[0xA2C8 + y] = (uint8_t)(st >> 8);
   }
   for (int i = 0; i < 8; i++) {                                   // CEA5B-EC26
-    const uint8_t* r = s + 0x29BF + gRom[0x0CF939 + i];
+    const uint8_t* r = s + 0x29BF + CtRomByte(gRom, 0x400000L, (long)(0x0CF939 + i));
     if (r[6] & 0x80) continue;                                    // CEA62 LDA $29C5,X / BPL
     int y3 = i * 3;
     s[0x1C62 + y3] = r[11]; s[0x1C60 + y3] = r[9]; s[0x1C61 + y3] = r[10];   // CEAC4-EACF
     int t = ((r[5] | (r[6] << 8)) * 10) & 0xFFFF;                 // CEAD2-EADF
-    int pidx = e4[(0xF603 + t) & 0xFFFF], ridx = e4[(0xF601 + t) & 0xFFFF];
+    int pidx = CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)((0xF603 + t) & 0xFFFF)), ridx = CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)((0xF601 + t) & 0xFFFF));
     int rx = (ridx * 3) & 0xFFFF;                                  // CEAE9-EAF6
-    s[0x1C81 + y3] = e4[(0x2300 + rx) & 0xFFFF]; s[0x1C82 + y3] = e4[(0x2301 + rx) & 0xFFFF];
-    s[0x1C83 + y3] = e4[(0x2302 + rx) & 0xFFFF];
+    s[0x1C81 + y3] = CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)((0x2300 + rx) & 0xFFFF)); s[0x1C82 + y3] = CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)((0x2301 + rx) & 0xFFFF));
+    s[0x1C83 + y3] = CtRomByte(gRom, gRomLen, (long)(0x240000) + (long)((0x2302 + rx) & 0xFFFF));
     int pa = E4W(0x2600 + pidx * 2), pb = E4W(0x2800 + pidx * 2);  // CEB0A-EB2A
     s[0x1CA2 + y3] = (uint8_t)pa; s[0x1CA3 + y3] = (uint8_t)(pa >> 8); s[0x1CA4 + y3] = 0xE4;
     s[0x1CC3 + y3] = (uint8_t)pb; s[0x1CC4 + y3] = (uint8_t)(pb >> 8); s[0x1CC5 + y3] = 0xE4;
@@ -16682,7 +16681,7 @@ static void battleLoaderPointers(uint8_t* s) {
   if (getenv("CT_BATTLE_TRACE")) {                               // the staged pointers, one combatant per field
     fprintf(stderr, "loaderptrs");
     for (int c = 0; c < 11; c++) {
-      if (c < 3 ? (s[0x2980 + c] & 0x80) : (s[0x29BF + gRom[0x0CF939 + c - 3] + 6] & 0x80)) continue;
+      if (c < 3 ? (s[0x2980 + c] & 0x80) : (s[0x29BF + CtRomByte(gRom, 0x400000L, (long)(0x0CF939 + c - 3)) + 6] & 0x80)) continue;
       int y = c * 3;
       fprintf(stderr, " c%d=%02X%02X%02X/%02X%02X%02X/%02X%02X%02X/%02X%02X%02X/%02X%02X", c,
               s[0x1C59 + y], s[0x1C58 + y], s[0x1C57 + y], s[0x1C7A + y], s[0x1C79 + y], s[0x1C78 + y],
@@ -16763,7 +16762,7 @@ static int battleDeadFlagOne(uint8_t* s, int i, int lifeline) {
   s[blk + 0x02] = (uint8_t)(s[blk + 0x02] & 0xFE);                          // B2D1-B2D6: $5E2F bit0
   if (i < 3) {                                                              // B2D9 BCC ->B2E1: the PC arm
     const uint8_t* rom = CtBattleRom(NULL);
-    int rec = rom ? (rom[ROM_CMD_REC_TBL + 2 * i] | (rom[ROM_CMD_REC_TBL + 2 * i + 1] << 8)) : 0x93EE + 7 * i;   // B2E3-B2ED
+    int rec = rom ? (CtRomByte(rom, 0x400000L, (long)(ROM_CMD_REC_TBL + 2 * i)) | (CtRomByte(rom, 0x400000L, (long)(ROM_CMD_REC_TBL + 2 * i + 1)) << 8)) : 0x93EE + 7 * i;   // B2E3-B2ED
     s[0x06] = (uint8_t)rec; s[0x07] = (uint8_t)(rec >> 8);                  // B2EE STA $06 (sixteen bits)
     if (s[(rec + 1) & 0xFFFF] & 0x10) {                                     // B2F3-B2FA
       s[0xB18B] = (uint8_t)i;                                               // B2FC-B2FD (then JSR C1/BC60 = BRA ->BCE0: RTS)
@@ -17155,9 +17154,9 @@ void CtBattleBegin(CtBattleHost* h) {
   // and Robo's four cells carry attr $3E = palette 7 -- the seat's slot, not a per-character table.
   { uint8_t* s = h->mem;
     if (gRom) {
-      for (int k = 0; k < 8; k++) if ((long)(0x3F9C68 + k) < gRomLen) s[0x2010 + k] = gRom[0x3F9C68 + k];
-      for (int k = 0; k < 8; k++) if ((long)(0x3F9C70 + k) < gRomLen) s[0x2018 + k] = gRom[0x3F9C70 + k];
-      for (int k = 0; k < 6; k++) if ((long)(ROM_BATTLE_OBJPAL1_TAIL + k) < gRomLen) s[0x213A + k] = gRom[ROM_BATTLE_OBJPAL1_TAIL + k];
+      for (int k = 0; k < 8; k++) if ((long)(0x3F9C68 + k) < gRomLen) s[0x2010 + k] = CtRomByte(gRom, 0x400000L, (long)(0x3F9C68 + k));
+      for (int k = 0; k < 8; k++) if ((long)(0x3F9C70 + k) < gRomLen) s[0x2018 + k] = CtRomByte(gRom, 0x400000L, (long)(0x3F9C70 + k));
+      for (int k = 0; k < 6; k++) if ((long)(ROM_BATTLE_OBJPAL1_TAIL + k) < gRomLen) s[0x213A + k] = CtRomByte(gRom, 0x400000L, (long)(ROM_BATTLE_OBJPAL1_TAIL + k));
     }
     for (int k = 0x1FF; k >= 0; k--) s[0x2200 + k] = s[0x2000 + k]; }
   for (int i = 0; i < 3; i++) { BT_OBJPALDEF(h, i) = (uint8_t)(0x0A + 2 * i); BT_OBJPAL(h, i) = BT_OBJPALDEF(h, i);
@@ -17169,8 +17168,8 @@ void CtBattleBegin(CtBattleHost* h) {
       uint8_t* s = h->mem;
       long wi = 0x0D6CEC + s[0x1C48 + seat * 5];
       if (wi >= gRomLen) continue;
-      long src = 0x114B00 + (long)gRom[wi] * 6;
-      for (int k = 0; k < 6; k++) if (src + k < gRomLen) s[0x23BA + seat * 32 + k] = gRom[src + k];
+      long src = 0x114B00 + (long)CtRomByte(gRom, 0x400000L, (long)(wi)) * 6;
+      for (int k = 0; k < 6; k++) if (src + k < gRomLen) s[0x23BA + seat * 32 + k] = CtRomByte(gRom, 0x400000L, (long)(src + k));
     }
   // CC/EF07-EF33, in the boot's JSL CC/ED87 (C1/0023, after CC/E2E4 above): `LDA $D14D80,X / STA $999F,X` for 16 bytes --
   // the damage digits' two 4-colour palettes, which ShowDamage's first visit (C1/5B03-5B1D) copies into OBJ rows 0 and 4
@@ -17179,9 +17178,9 @@ void CtBattleBegin(CtBattleHost* h) {
   // carries both rows (`$235A = FF 7F DF 02 C9 0C`, `$237A = FF 7F 2B 7E 03 10`) where the port had zeros.
   if (gRom && gRomLen > 0x114D90L) {
     uint8_t* s = h->mem;
-    for (int x = 0; x < 16; x++) s[0x999F + x] = gRom[0x114D80 + x];   // CC/EF07-EF14
-    for (int x = 0; x < 6; x++) s[0x235A + x] = gRom[0x1138F2 + x];    // CC/EF16-EF23
-    for (int x = 0; x < 6; x++) s[0x237A + x] = gRom[0x1138FA + x];    // CC/EF25-EF32
+    for (int x = 0; x < 16; x++) s[0x999F + x] = CtRomByte(gRom, 0x400000L, (long)(0x114D80 + x));   // CC/EF07-EF14
+    for (int x = 0; x < 6; x++) s[0x235A + x] = CtRomByte(gRom, 0x400000L, (long)(0x1138F2 + x));    // CC/EF16-EF23
+    for (int x = 0; x < 6; x++) s[0x237A + x] = CtRomByte(gRom, 0x400000L, (long)(0x1138FA + x));    // CC/EF25-EF32
   }
   // Enemies: CC/EA5B `LDX $80 / LDA $CCF939,X / TAX` (the block table = i*12 from $29BF, which is exactly
   // this port's ENEMY_BLOCK stride), CC/EA62 `LDA $29C5,X / BPL` (bit7 set => slot absent, CC/EC26),
@@ -17613,7 +17612,7 @@ static void battleTimerPass(uint8_t* s) {                          // C1/8231-82
 static void battleCursorPass(uint8_t* s) {                         // C1/82A9-8311
   const uint8_t* rom = CtBattleRom(NULL);
   for (int y = 0; y < 13; y++) {                                   // C1/830D CMP #0D
-    uint16_t base = rom ? (uint16_t)(rom[ROM_TIMER_FLAG_BASES + 2 * y] | (rom[ROM_TIMER_FLAG_BASES + 2 * y + 1] << 8))
+    uint16_t base = rom ? (uint16_t)(CtRomByte(rom, 0x400000L, (long)(ROM_TIMER_FLAG_BASES + 2 * y)) | (CtRomByte(rom, 0x400000L, (long)(ROM_TIMER_FLAG_BASES + 2 * y + 1)) << 8))
                         : (uint16_t)(0xAFB6 + 11 * y);             // (the table IS $AFB6 + 11Y; no ROM, no difference)
     for (;;) {
       int cur = s[0xB179 + y];                                     // C1/82B4-82B9
@@ -17854,7 +17853,7 @@ static void battleLifelineMsgPost(CtBattleHost* h) {
   s[0x0200] = s[0xAF0A + s[0xB1FD]];                               // B379-B381
   s[0x020D] = 0x11; s[0x020E] = 0xEF; s[0x020F] = 0xCE;            // CD/01B6-01BE
   { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-    int snd = (rom && rl > (long)(ROM_MSG_SND_TBL + 9)) ? rom[ROM_MSG_SND_TBL + 9] : 0xFF;
+    int snd = (rom && rl > (long)(ROM_MSG_SND_TBL + 9)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_SND_TBL + 9)) : 0xFF;
     if (snd != 0xFF) battleSfxPost(h, 0x18, (uint8_t)snd, 0x80); }  // CD/01C3-01CE
   s[0x020C] = 0x09; s[0xCCED] = 0; s[0x02A1] = 0;                  // CD/025E-0264
   s[0x0210] = 0x00; s[0x0211] = 0xB4; s[0x0212] = 0x7E; s[0x0214] = 0;   // CD/0267-0272
@@ -17897,7 +17896,7 @@ static int battleLifelineMsgTick(CtBattleHost* h, int aHeld) {
   if (h->llMsgClose < 0 && t >= 19) {                              // CD/01DB-01FB: the dwell
     long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
     int idx = (s[0x2991] >> 3) & 7;                                // CD/01A5
-    int dwell = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? rom[ROM_MSG_DWELL_TBL + idx] : 0xA0;
+    int dwell = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_DWELL_TBL + idx)) : 0xA0;
     if (aHeld || t >= 18 + dwell) {
       s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++;                   // CD/01FD-0203
       h->llMsgClose = t;
@@ -18068,7 +18067,7 @@ static void battleForcedPhysicalStage(CtBattleHost* h, int y, int t) {
   s[0xAECC] = (uint8_t)t; s[0xAD8D] = 1; s[0xAECB] = 1;            // BFDF-BFEA
   battleTargetMask(s);                                             // BFED JSR C1/AD09
   s[0xAE94] = 0;                                                   // BFF0 STA $AE94 (AD09's TDC: 0)
-  if (s[0xAEFF + y] != 0xFF && rom) s[0xB18C] = rom[ROM_PC_ACTION_SEL + s[0xAEFF + y]];   // BFF3-C003
+  if (s[0xAEFF + y] != 0xFF && rom) s[0xB18C] = CtRomByte(rom, 0x400000L, (long)(ROM_PC_ACTION_SEL + s[0xAEFF + y]));   // BFF3-C003
   battleShowRecordsClear(s);                                       // (C1/D523's FD/ACFD + the command's FD/ACEE)
   h->actCrit = 0; h->actCritFlash = 0; h->actMiss = 0;
   h->actTechId = 0; h->actItemId = 0; h->actTgtN = 1;
@@ -18135,11 +18134,10 @@ static uint8_t btBus(const uint8_t* s, int bank, int addr) {
   if (bank == 0x7E || bank == 0x7F) return s[((bank - 0x7E) << 16) | addr];
   if ((bank < 0x40 || (bank >= 0x80 && bank < 0xC0)) && addr < 0x2000) return s[addr];
   long o = ((long)(bank & 0x3F) << 16) | addr;
-  return (gRom && o < gRomLen) ? gRom[o] : 0;
+  return (gRom && o < gRomLen) ? CtRomByte(gRom, 0x400000L, (long)(o)) : 0;
 }
 static void battleCellGather(uint8_t* s, int cmb) {
-  const uint8_t* cc = gRom ? gRom + 0x0C0000 : NULL;
-  if (!cc || !gRom || gRomLen < 0x110000) return;
+  if (!gRom || gRomLen < 0x110000) return;
   int type = s[0x967C + cmb];
   if (type == 3) return;                                             // 1C50-1C54
   s[0x0088] = (uint8_t)cmb; s[0x0089] = 0;                           // 1C58 STX $88
@@ -18147,12 +18145,12 @@ static void battleCellGather(uint8_t* s, int cmb) {
   int pose = s[0x967B];
   if (pose == s[0x9907 + cmb]) return;                               // 1C60-1C65
   s[0x9907 + cmb] = (uint8_t)pose;                                   // 1C66
-  int stride = cc[0xF40A + type * 2] | (cc[0xF40B + type * 2] << 8); // 1C6E-1C78
+  int stride = CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF40A + type * 2)) | (CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF40B + type * 2)) << 8); // 1C6E-1C78
   s[0x00A7] = (uint8_t)stride; s[0x00A8] = (uint8_t)(stride >> 8); s[0x00A5] = (uint8_t)pose;
   long prod = (long)pose * stride;                                   // C1/00A7: $A9..$AB, $77 = $A5, $78 = $A8
   s[0x0077] = (uint8_t)pose; s[0x0078] = (uint8_t)(stride >> 8);
   s[0x00A9] = (uint8_t)prod; s[0x00AA] = (uint8_t)(prod >> 8); s[0x00AB] = (uint8_t)(prod >> 16);
-  int x = cc[0xF92D + cmb];                                          // 1C84-1C88
+  int x = CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF92D + cmb));                                          // 1C84-1C88
   int rec = ((s[0x1C78 + x] | (s[0x1C79 + x] << 8)) + (int)(prod & 0xFFFF)) & 0xFFFF;   // 1C89-1C90 (CLC by REP #21)
   int recBank = s[0x1C7A + x];
   int sheet = s[0x1C57 + x] | (s[0x1C58 + x] << 8), sheetBank = s[0x1C59 + x];
@@ -18162,15 +18160,15 @@ static void battleCellGather(uint8_t* s, int cmb) {
   int lo = layout * 0x0E;                                            // C1/0089: $AF = $AD * $AE, $77/$78 = the operands
   s[0x00AD] = (uint8_t)layout; s[0x00AE] = 0x0E; s[0x0077] = (uint8_t)layout; s[0x0078] = 0x0E;
   s[0x00AF] = (uint8_t)lo; s[0x00B0] = (uint8_t)(lo >> 8);
-  int perRow = cc[0xF3C2 + lo], rows = cc[0xF3C3 + lo];              // 1CC3-1CCF
+  int perRow = CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF3C2 + lo)), rows = CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF3C3 + lo));              // 1CC3-1CCF
   int rowPtr = 0xF3B6 + lo;
   s[0x0080] = s[0x0081] = (uint8_t)perRow; s[0x0085] = (uint8_t)rows;
   s[0x0082] = (uint8_t)rowPtr; s[0x0083] = (uint8_t)(rowPtr >> 8); s[0x0084] = 0xCC;
   s[0x0088] = (uint8_t)(cmb * 2); s[0x0089] = 0;                     // 1CD9 ASL $88
   s[0x00AF] = 0x7E;                                                  // 1CE2-1CE4
-  int base = cc[0xF941 + cmb * 2] | (cc[0xF942 + cmb * 2] << 8);
+  int base = CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF941 + cmb * 2)) | (CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF942 + cmb * 2)) << 8);
   for (int row = 0; row < rows; row++) {                             // 1CE7: per row
-    int off = cc[(rowPtr + row * 2) & 0xFFFF] | (cc[(rowPtr + row * 2 + 1) & 0xFFFF] << 8);
+    int off = CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)((rowPtr + row * 2) & 0xFFFF)) | (CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)((rowPtr + row * 2 + 1) & 0xFFFF)) << 8);
     int dst = (base + off) & 0xFFFF;
     for (int k = 0; k < perRow; k++) {                               // 1CF6: per word
       int w = btBus(s, recBank, rec) | (btBus(s, recBank, rec + 1) << 8);
@@ -18183,7 +18181,7 @@ static void battleCellGather(uint8_t* s, int cmb) {
         else {                                                       // 1DD3-1F1A, through C0:FD00
           s[0x008C] = (uint8_t)src; s[0x008D] = (uint8_t)(src >> 8);
           s[0x00AD] = (uint8_t)dst; s[0x00AE] = (uint8_t)(dst >> 8);
-          for (int b = 0; b < 32; b++) s[(dst + b) & 0xFFFF] = gRom[0x00FD00 + btBus(s, sheetBank, src + b)];
+          for (int b = 0; b < 32; b++) s[(dst + b) & 0xFFFF] = CtRomByte(gRom, 0x400000L, (long)(0x00FD00 + btBus(s, sheetBank, src + b)));
         }
       }
       dst = (dst + 0x20) & 0xFFFF;
@@ -18192,9 +18190,9 @@ static void battleCellGather(uint8_t* s, int cmb) {
   }
   s[0x00BA] = (uint8_t)rec; s[0x00BB] = (uint8_t)(rec >> 8);
   s[0x0080] = 0; s[0x0085] = 0;                                      // the counters ran out
-  int n = cc[0xF4FC + type];                                         // 1F3D-1F4A: $80 = the byte count
+  int n = CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF4FC + type));                                         // 1F3D-1F4A: $80 = the byte count
   s[0x0080] = (uint8_t)n; s[0x0081] = 0;
-  int tab = cc[0xF917 + cmb * 2] | (cc[0xF918 + cmb * 2] << 8);      // 1F4C-1F58
+  int tab = CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF917 + cmb * 2)) | (CtRomByte(gRom, gRomLen, (long)(0x0C0000) + (long)(0xF918 + cmb * 2)) << 8);      // 1F4C-1F58
   s[0x0082] = (uint8_t)tab; s[0x0083] = (uint8_t)(tab >> 8);
   for (int i = 0; i < n; i++) {                                      // 1F5F-1F73
     uint8_t v = btBus(s, recBank, rec + i);
@@ -18259,7 +18257,7 @@ static void battlePcWalk(CtBattleHost* h) {
     int cls = 3, icon = -1, lowHp = 0;
     CtBattleStatusScanEx(s, seat, &cls, &icon, &lowHp);
     battleStatusScanStore(h, seat);                              // C1/2F97's stores: $A440, $A441,Y
-    { int b = gRom ? (gRom[0x0CF8ED + seat * 2] | (gRom[0x0CF8EE + seat * 2] << 8)) : seat * 0x80;
+    { int b = gRom ? (CtRomByte(gRom, 0x400000L, (long)(0x0CF8ED + seat * 2)) | (CtRomByte(gRom, 0x400000L, (long)(0x0CF8EE + seat * 2)) << 8)) : seat * 0x80;
       s[0xA2] = (uint8_t)b; s[0xA3] = (uint8_t)(b >> 8);        // C1/2FAF-2FB6 LDA CC:F8ED,X / STY $A2
       s[0x80] = 0; s[0x81] = 0;                                  // C1/2FB8 TDC / STA $80 (16-bit)
       int init = s[0xA09B + seat] ? 0 : 3;                       // C1/2F99-2FA4
@@ -18306,15 +18304,15 @@ static void battlePcWalk(CtBattleHost* h) {
     s[0x82] = (uint8_t)prod; s[0x83] = (uint8_t)(prod >> 8);    // C1/2E9B LDX $A9 / STX $82
     s[0x9679] = (uint8_t)seat;                                   // C1/2E9F STA $9679
     int idx = (BT_PCIDX(h, seat) + 1) & 0xFF;                       // C1/2EA9-2EAE INC before the read
-    int raw = gRom[0x240000 + ((ptrB + idx) & 0xFFFF)];          // C1/2EB1-2EBA LDA E4:($A1FE + idx)
-    if (raw == 0) { idx = 0; raw = gRom[0x240000 + ptrB]; }      // C1/2EBE-2EC3 the terminator -> entry 0
+    int raw = CtRomByte(gRom, 0x400000L, (long)(0x240000 + ((ptrB + idx) & 0xFFFF)));          // C1/2EB1-2EBA LDA E4:($A1FE + idx)
+    if (raw == 0) { idx = 0; raw = CtRomByte(gRom, 0x400000L, (long)(0x240000 + ptrB)); }      // C1/2EBE-2EC3 the terminator -> entry 0
     BT_PCIDX(h, seat) = idx;
     { int q = raw / 5, rm = raw % 5;                             // C1/2EC7-2ED7: $B1/$B2 / $B3, C1/00D7
       s[0xB1] = (uint8_t)raw; s[0xB2] = 0; s[0xB3] = 5;
       s[0x79] = (uint8_t)raw; s[0x7A] = 0; s[0x7B] = 5; s[0xA029] = 0;
       s[0xB5] = (uint8_t)q; s[0xB6] = 0; s[0xB7] = (uint8_t)rm; s[0xB8] = 0;
       BT_PCTIMER(h, seat) = q ? q : 1; }
-    int pose = gRom[0x240000 + ((idx + (int)(prod & 0xFFFF) + ptrA) & 0xFFFF)];   // C1/2EDA-2EEB
+    int pose = CtRomByte(gRom, 0x400000L, (long)(0x240000 + ((idx + (int)(prod & 0xFFFF) + ptrA) & 0xFFFF)));   // C1/2EDA-2EEB
     s[0x967B] = (uint8_t)pose;                                   // C1/2EEF STA $967B
     // ---- C1/2EF2-2F10: the publish rule
     int publish;
@@ -18364,10 +18362,10 @@ static void battleIdleWalk(CtBattleHost* h) {
         // takes $77/$78 as they stand, which C1/00A7 here sets (the routine-level shadow measured them read, S4).
         CtEnemyPoseStage st; int id0 = s[battleBlock(cmb) + 0];
         if (CtBattleEnemyPoseStage(id0, &st)) {
-          int fac = BT_ENFACING(h, slot), cls0 = gRom[ROM_POSE_CLASS_TBL + (unsigned)(BT_MVMODE(h, slot) & 0xFF)];
+          int fac = BT_ENFACING(h, slot), cls0 = CtRomByte(gRom, 0x400000L, (long)(ROM_POSE_CLASS_TBL + (unsigned)(BT_MVMODE(h, slot) & 0xFF)));
           int off0 = (cls0 == 0) ? 0x0C : (cls0 == 1) ? 0x04 : 0x18;          // C1/33AE-33C6 -> $86
           long prod = (long)fac * st.stride;                                 // C1/33A5 JSR C1/00A7: $A5 * ($A8:$A7)
-          int px = gRom[0x0CF82F + slot];                                    // C1/33D7 CC:F82F[slot]
+          int px = CtRomByte(gRom, 0x400000L, (long)(0x0CF82F + slot));                                    // C1/33D7 CC:F82F[slot]
           s[0x009C] = (uint8_t)slot; s[0x009D] = 0;                           // C1/3347 STX $9C
           s[0x00C0] = (uint8_t)st.ptrA; s[0x00C1] = (uint8_t)(st.ptrA >> 8); s[0x00C2] = (uint8_t)(st.ptrA >> 16);   // C1/3385-3392
           s[0x00C3] = (uint8_t)st.ptrB; s[0x00C4] = (uint8_t)(st.ptrB >> 8); s[0x00C5] = (uint8_t)(st.ptrB >> 16);   // C1/3376-3383
@@ -18382,7 +18380,7 @@ static void battleIdleWalk(CtBattleHost* h) {
       { uint8_t ps[8], dw[8]; int id = s[battleBlock(cmb) + 0];    // C1/3370-3405: the $97D9 / $9799 rows
         if (CtBattleEnemyIdleWin(id, BT_MVMODE(h, slot) & 0xFF, BT_ENFACINGPUB(h, slot) & 3, ps, dw))
           for (int i = 0; i < 8; i++) { BT_IDLEPOSE(h, slot, i) = ps[i]; BT_IDLEDWELL(h, slot, i) = dw[i]; } }
-      if (gRom[ROM_POSE_CLASS_TBL + (unsigned)(BT_MVMODE(h, slot) & 0xFF)] == 1)
+      if (CtRomByte(gRom, 0x400000L, (long)(ROM_POSE_CLASS_TBL + (unsigned)(BT_MVMODE(h, slot) & 0xFF))) == 1)
         BT_ENARRIVE(h, slot) = 0;                                     // C1/33B8-33BD: a class-1 window -> STZ $9829,X
       // NOTHING ELSE IS WRITTEN AT THE COMMIT. C1/3364-3405 touches $974A, $96E9, the two rows and (class 1)
       // $9829 -- not $98A7/$9737/$9819/$9791 -- so an in-flight segment and its cadence survive a mode
@@ -18846,8 +18844,8 @@ static int battleC1ActionRoles(CtBattleHost* h) {
   int actor = s[0xAE91];
   s[0xA014] = (uint8_t)actor; s[0xA015] = s[0xAE97]; s[0xA016] = s[0xAE98];
   if (actor < 3 && rom) {
-    if (s[0xA015] & 0x80) s[0xA015] = rom[ROM_ROLE_COACTOR_TBL + actor * 2];
-    if (s[0xA016] & 0x80) s[0xA016] = rom[ROM_ROLE_COACTOR_TBL + actor * 2 + 1];
+    if (s[0xA015] & 0x80) s[0xA015] = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + actor * 2));
+    if (s[0xA016] & 0x80) s[0xA016] = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + actor * 2 + 1));
   }
   { int w = s[0xAE95] | (s[0xAE96] << 8), x = 0;                   // CF18A-CF198
     if (w) { while (!(w & 0x8000)) { w <<= 1; x++; } }
@@ -18859,12 +18857,12 @@ static int battleC1ActionRoles(CtBattleHost* h) {
   int id = s[0xAE93];
   if (rom) {
     long cfg = (long)ROM_PC_TEC_ANIM_CFG + (long)id * 7;
-    s[0x9877] = rom[cfg]; s[0x987A] = rom[cfg + 1]; s[0x987B] = rom[cfg + 2]; s[0x987E] = rom[cfg + 3];
-    s[0x9881] = rom[cfg + 4]; s[0x9884] = rom[cfg + 5]; s[0x987C] = rom[cfg + 6];
-    long a = (long)ROM_D1_ANIM_WORD_TBL + s[0x987E] * 2;  s[0x987F] = rom[a]; s[0x9880] = rom[a + 1];
-    a = (long)ROM_CD_ANIM_WORD_TBL2 + s[0x9881] * 2;      s[0x9882] = rom[a]; s[0x9883] = rom[a + 1];
-    a = (long)ROM_CD_ANIM_WORD_TBL3 + s[0x9884] * 2;      s[0x9885] = rom[a]; s[0x9886] = rom[a + 1];
-    a = (long)ROM_PC_TEC_ANIM_TBL + s[0x9877] * 2;        s[0x9878] = rom[a]; s[0x9879] = rom[a + 1];
+    s[0x9877] = CtRomByte(rom, 0x400000L, (long)(cfg)); s[0x987A] = CtRomByte(rom, 0x400000L, (long)(cfg + 1)); s[0x987B] = CtRomByte(rom, 0x400000L, (long)(cfg + 2)); s[0x987E] = CtRomByte(rom, 0x400000L, (long)(cfg + 3));
+    s[0x9881] = CtRomByte(rom, 0x400000L, (long)(cfg + 4)); s[0x9884] = CtRomByte(rom, 0x400000L, (long)(cfg + 5)); s[0x987C] = CtRomByte(rom, 0x400000L, (long)(cfg + 6));
+    long a = (long)ROM_D1_ANIM_WORD_TBL + s[0x987E] * 2;  s[0x987F] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9880] = CtRomByte(rom, 0x400000L, (long)(a + 1));
+    a = (long)ROM_CD_ANIM_WORD_TBL2 + s[0x9881] * 2;      s[0x9882] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9883] = CtRomByte(rom, 0x400000L, (long)(a + 1));
+    a = (long)ROM_CD_ANIM_WORD_TBL3 + s[0x9884] * 2;      s[0x9885] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9886] = CtRomByte(rom, 0x400000L, (long)(a + 1));
+    a = (long)ROM_PC_TEC_ANIM_TBL + s[0x9877] * 2;        s[0x9878] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9879] = CtRomByte(rom, 0x400000L, (long)(a + 1));
   }
   return actor;
 }
@@ -18911,7 +18909,7 @@ static void battleStatusActOpen(CtBattleHost* h) {
 static void battleFxSheetBuild(CtBattleHost* h, int X) {
   uint8_t* s = h->mem; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom) return;
-  #define FXW(a) ((long)((a) + 1) < rl ? (rom[(a)] | (rom[(a) + 1] << 8)) : 0)
+  #define FXW(a) ((long)((a) + 1) < rl ? (CtRomByte(rom, 0x400000L, (long)((a))) | (CtRomByte(rom, 0x400000L, (long)((a) + 1)) << 8)) : 0)
   int ptr = (((X & 0xFFFF) << 6) + 0x8000) & 0xFFFF;               // CD/11E8-11F5
   int y = 0;                                                       // CD/11F7
   for (int n = 0; n < 0x40; n++, ptr = (ptr + 2) & 0xFFFF) {       // CD/11F9 $67 = 40 .. CD/1213
@@ -18920,7 +18918,7 @@ static void battleFxSheetBuild(CtBattleHost* h, int X) {
     int kind = (w >> 14) & 3;                                      // CD/1200-1206 XBA / LSR x5 / AND #0006
     int y0 = y;
     long src = 0x0F0000L + (((w & 0x1FFF) << 3) & 0xFFFF);          // CD/12B8-12C0: CF:0000 + X
-    for (int k = 0; k < 16; k++) if (0x2D00 + y0 + k < 0x10000 && src + k < rl) s[0x2D00 + y0 + k] = rom[src + k];
+    for (int k = 0; k < 16; k++) if (0x2D00 + y0 + k < 0x10000 && src + k < rl) s[0x2D00 + y0 + k] = CtRomByte(rom, 0x400000L, (long)(src + k));
     if (kind >= 2)                                                 // CD/1229 (and CD/1221 through it): V-flip
       for (int i = 0; i < 4; i++) {
         int lo = 0x2D00 + y0 + 2 * i, hi = 0x2D0E + y0 - 2 * i;
@@ -18928,7 +18926,7 @@ static void battleFxSheetBuild(CtBattleHost* h, int X) {
         s[lo] = s[hi]; s[lo + 1] = s[hi + 1]; s[hi] = t0; s[hi + 1] = t1;
       }
     if (kind & 1)                                                  // CD/127A (CD/1275, CD/1221): H-flip
-      for (int k = 0; k < 16; k++) s[0x2D00 + y0 + k] = rom[0x00FD00 + s[0x2D00 + y0 + k]];
+      for (int k = 0; k < 16; k++) s[0x2D00 + y0 + k] = CtRomByte(rom, 0x400000L, (long)(0x00FD00 + s[0x2D00 + y0 + k]));
     y = y0 + 16;
   }
   #undef FXW
@@ -18957,11 +18955,11 @@ static void battleFxStageCfg(CtBattleHost* h) {
       long x = (id * 6) & 0xFFFF;
       long base = s[0xAE93] ? (long)ROM_ENEMY_ATK_ANIM_B : (long)ROM_ENEMY_ATK_ANIM_A;
       if (base + x + 6 > rl) return;
-      s[0x987A] = rom[base + x + 1]; s[0x987B] = rom[base + x + 2]; s[0x987E] = rom[base + x + 3];
-      s[0x9881] = rom[base + x + 4]; s[0x9884] = rom[base + x + 5];
-      long a = (long)ROM_D1_ANIM_WORD_TBL + s[0x987E] * 2;     s[0x987F] = rom[a]; s[0x9880] = rom[a + 1];   // C1/450A-4515
-      a = (long)ROM_ENEMY_TEC_WORD_TBL2 + s[0x9881] * 2;      s[0x9882] = rom[a]; s[0x9883] = rom[a + 1];   // C1/4518-4521
-      a = (long)ROM_ENEMY_TEC_WORD_TBL3 + s[0x9884] * 2;      s[0x9885] = rom[a]; s[0x9886] = rom[a + 1];   // C1/4524-452D
+      s[0x987A] = CtRomByte(rom, 0x400000L, (long)(base + x + 1)); s[0x987B] = CtRomByte(rom, 0x400000L, (long)(base + x + 2)); s[0x987E] = CtRomByte(rom, 0x400000L, (long)(base + x + 3));
+      s[0x9881] = CtRomByte(rom, 0x400000L, (long)(base + x + 4)); s[0x9884] = CtRomByte(rom, 0x400000L, (long)(base + x + 5));
+      long a = (long)ROM_D1_ANIM_WORD_TBL + s[0x987E] * 2;     s[0x987F] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9880] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/450A-4515
+      a = (long)ROM_ENEMY_TEC_WORD_TBL2 + s[0x9881] * 2;      s[0x9882] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9883] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/4518-4521
+      a = (long)ROM_ENEMY_TEC_WORD_TBL3 + s[0x9884] * 2;      s[0x9885] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9886] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/4524-452D
       return;
     }
     cfg = (long)ROM_ENEMY_ACT_CFG + (long)s[0xAE93] * 7; t2 = ROM_ENEMY_TEC_WORD_TBL2; t3 = ROM_ENEMY_TEC_WORD_TBL3;
@@ -18979,19 +18977,19 @@ static void battleFxStageCfg(CtBattleHost* h) {
     long x = (long)s[0xA4E7] * 15;
     long base = h->actCrit ? 0x0D401FL : s[0x9930] ? 0x0D401AL : 0x0D4015L;
     if (base + x + 5 > rl) return;
-    s[0x987A] = rom[base + x]; s[0x987B] = rom[base + x + 1]; s[0x987E] = rom[base + x + 2];
-    s[0x9881] = rom[base + x + 3]; s[0x9884] = rom[base + x + 4];
-    long a = 0x110000L + s[0x987E] * 2;  s[0x987F] = rom[a]; s[0x9880] = rom[a + 1];   // C1/4401-440C
-    a = 0x0D686EL + s[0x9881] * 2;       s[0x9882] = rom[a]; s[0x9883] = rom[a + 1];   // C1/440F-4418
-    a = 0x0D64B0L + s[0x9884] * 2;       s[0x9885] = rom[a]; s[0x9886] = rom[a + 1];   // C1/441B-4424
+    s[0x987A] = CtRomByte(rom, 0x400000L, (long)(base + x)); s[0x987B] = CtRomByte(rom, 0x400000L, (long)(base + x + 1)); s[0x987E] = CtRomByte(rom, 0x400000L, (long)(base + x + 2));
+    s[0x9881] = CtRomByte(rom, 0x400000L, (long)(base + x + 3)); s[0x9884] = CtRomByte(rom, 0x400000L, (long)(base + x + 4));
+    long a = 0x110000L + s[0x987E] * 2;  s[0x987F] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9880] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/4401-440C
+    a = 0x0D686EL + s[0x9881] * 2;       s[0x9882] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9883] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/440F-4418
+    a = 0x0D64B0L + s[0x9884] * 2;       s[0x9885] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9886] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/441B-4424
     return;
   }
   if (cfg + 7 > rl) return;
-  s[0x987A] = rom[cfg + 1]; s[0x987B] = rom[cfg + 2]; s[0x987E] = rom[cfg + 3];
-  s[0x9881] = rom[cfg + 4]; s[0x9884] = rom[cfg + 5]; s[0x987C] = rom[cfg + 6];
-  long a = (long)ROM_D1_ANIM_WORD_TBL + s[0x987E] * 2;  s[0x987F] = rom[a]; s[0x9880] = rom[a + 1];
-  a = (long)t2 + s[0x9881] * 2;                         s[0x9882] = rom[a]; s[0x9883] = rom[a + 1];
-  a = (long)t3 + s[0x9884] * 2;                         s[0x9885] = rom[a]; s[0x9886] = rom[a + 1];
+  s[0x987A] = CtRomByte(rom, 0x400000L, (long)(cfg + 1)); s[0x987B] = CtRomByte(rom, 0x400000L, (long)(cfg + 2)); s[0x987E] = CtRomByte(rom, 0x400000L, (long)(cfg + 3));
+  s[0x9881] = CtRomByte(rom, 0x400000L, (long)(cfg + 4)); s[0x9884] = CtRomByte(rom, 0x400000L, (long)(cfg + 5)); s[0x987C] = CtRomByte(rom, 0x400000L, (long)(cfg + 6));
+  long a = (long)ROM_D1_ANIM_WORD_TBL + s[0x987E] * 2;  s[0x987F] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9880] = CtRomByte(rom, 0x400000L, (long)(a + 1));
+  a = (long)t2 + s[0x9881] * 2;                         s[0x9882] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9883] = CtRomByte(rom, 0x400000L, (long)(a + 1));
+  a = (long)t3 + s[0x9884] * 2;                         s[0x9885] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9886] = CtRomByte(rom, 0x400000L, (long)(a + 1));
 }
 // CD/1368 with X = sheet: 32 OBJ tiles (32 bytes each) into $7E:2D00..$30FF. The sheet's words are CF:A000 + X*64; the
 // palette-quadrant word CF:E000[X*2] goes twice into $CC9D..$CCA0, so tiles 0-7 and 16-23 take its low byte and 8-15 and
@@ -19006,7 +19004,7 @@ static void battleFxStageCfg(CtBattleHost* h) {
 static void battleFxObjSheetBuild(CtBattleHost* h, int X) {
   uint8_t* s = h->mem; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom) return;
-  #define OSW(a) ((long)((a) + 1) < rl ? (rom[(a)] | (rom[(a) + 1] << 8)) : 0)
+  #define OSW(a) ((long)((a) + 1) < rl ? (CtRomByte(rom, 0x400000L, (long)((a))) | (CtRomByte(rom, 0x400000L, (long)((a) + 1)) << 8)) : 0)
   X &= 0xFF;
   int e = OSW(ROM_OBJSHEET_PALQ + (long)X * 2);                    // CD/1381-138A
   s[0xCC9D] = s[0xCC9F] = (uint8_t)e; s[0xCC9E] = s[0xCCA0] = (uint8_t)(e >> 8);
@@ -19019,13 +19017,13 @@ static void battleFxObjSheetBuild(CtBattleHost* h, int X) {
     long src = (long)ROM_OBJSHEET_POOL + (((w & 0x1FFF) << 3) & 0xFFFF);    // CD/1509-1513
     int d = 0x2D00 + y;
     for (int r = 0; r < 8; r++) {                                  // CD/1488
-      int b0 = src + 2 * r + 1 < rl ? rom[src + 2 * r] : 0, b1 = src + 2 * r + 1 < rl ? rom[src + 2 * r + 1] : 0;
+      int b0 = src + 2 * r + 1 < rl ? CtRomByte(rom, 0x400000L, (long)(src + 2 * r)) : 0, b1 = src + 2 * r + 1 < rl ? CtRomByte(rom, 0x400000L, (long)(src + 2 * r + 1)) : 0;
       s[d + 2 * r] = (uint8_t)b0; s[d + 2 * r + 1] = (uint8_t)b1;
       s[d + 16 + 2 * r] = (uint8_t)((b0 | b1) & mlo); s[d + 17 + 2 * r] = (uint8_t)((b1 | b0) & mhi);
     }
     if (!(w & 0x2000))                                             // CD/1519 BEQ -> CD/1525
       for (int r = 0; r < 8; r++) {                                // CD/152E-15CB
-        int p = src + 16 + r < rl ? rom[src + 16 + r] : 0;
+        int p = src + 16 + r < rl ? CtRomByte(rom, 0x400000L, (long)(src + 16 + r)) : 0;
         int a = ((s[d + 16 + 2 * r] | (s[d + 17 + 2 * r] << 8)) | p) & m;
         a = (((a >> 8) | (a << 8)) & 0xFFFF) | p;
         s[d + 16 + 2 * r] = (uint8_t)a; s[d + 17 + 2 * r] = (uint8_t)(a >> 8);
@@ -19039,7 +19037,7 @@ static void battleFxObjSheetBuild(CtBattleHost* h, int X) {
           s[lo] = s[hi]; s[lo + 1] = s[hi + 1]; s[hi] = t0; s[hi + 1] = t1;
         }
     if (kind == 2 || kind == 6)                                    // CD/1445 / CD/13EE -> CD/144A
-      for (int k = 0; k < 32; k++) s[d + k] = rom[0x00FD00 + s[d + k]];
+      for (int k = 0; k < 32; k++) s[d + k] = CtRomByte(rom, 0x400000L, (long)(0x00FD00 + s[d + k]));
     y += 32;
   }
   #undef OSW
@@ -19056,7 +19054,7 @@ static void battleFxObjSheetPack(CtBattleHost* h) {
   uint8_t* s = h->mem; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom) return;
   battleFxObjSheetBuild(h, s[0xCACE]);                             // CD/1331-133A
-  int va = rom[ROM_OBJSHEET_VRAM + s[0xCACF] * 2] | (rom[ROM_OBJSHEET_VRAM + s[0xCACF] * 2 + 1] << 8);
+  int va = CtRomByte(rom, 0x400000L, (long)(ROM_OBJSHEET_VRAM + s[0xCACF] * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_OBJSHEET_VRAM + s[0xCACF] * 2 + 1)) << 8);
   long vb = (long)va * 2 - 0x1800;                                 // VRAM byte address, relative to fxObjChr
   if (vb >= 0 && vb + 0x400 <= (long)sizeof h->fxObjChr) memcpy(h->fxObjChr + vb, s + 0x2D00, 0x400);   // CD/3ED2
 }
@@ -19098,7 +19096,7 @@ static void battleFxFramesCall(CtBattleHost* h) {                  // C1/4949-49
   if (!rom) return;
   int a650 = s[0xA650] | (s[0xA651] << 8), a652 = s[0xA652] | (s[0xA653] << 8);
   for (int k = 0; k < 4; k++) {                                    // C1/494B .. C1/49F9 ($8C)
-    int y = rom[ROM_FXFRAME_BASE + a650 * 2] | (rom[ROM_FXFRAME_BASE + a650 * 2 + 1] << 8);
+    int y = CtRomByte(rom, 0x400000L, (long)(ROM_FXFRAME_BASE + a650 * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_FXFRAME_BASE + a650 * 2 + 1)) << 8);
     s[0xA05B + a650] = 0;                                          // C1/495E
     int hdr = s[(0x2D00 + a652) & 0xFFFF];
     if (!hdr) break;                                               // C1/4967 BNE / JMP C1/49FE
@@ -19113,8 +19111,8 @@ static void battleFxFramesCall(CtBattleHost* h) {                  // C1/4949-49
         if (0x4503 + y < 0x10000) {
           s[0x4502 + y] = s[(0x2D00 + a652) & 0xFFFF];
           s[0x4503 + y] = (uint8_t)(s[(0x2D01 + a652) & 0xFFFF] | s[0xA5E3]);
-          s[0x4501 + y] = rom[ROM_FXFRAME_GRID + r];
-          s[0x4500 + y] = rom[ROM_FXFRAME_GRID + c];
+          s[0x4501 + y] = CtRomByte(rom, 0x400000L, (long)(ROM_FXFRAME_GRID + r));
+          s[0x4500 + y] = CtRomByte(rom, 0x400000L, (long)(ROM_FXFRAME_GRID + c));
         }
         a652 += 2; y += 4;                                         // C1/49C6-49D2
         s[0xA05B + a650]++;                                        // C1/49D7
@@ -19130,8 +19128,8 @@ static void battleFxOneCells(CtBattleHost* h) {                    // C1/48B3-48
   for (int i = 0; i < 16; i++) {
     int y = i * 8;                                                 // C1/0112: ASL x3
     s[0x5D00 + y] = 0; s[0x5D01 + y] = 0;
-    s[0x5D02 + y] = rom[ROM_FXFRAME_ONECELL + i * 6];
-    s[0x5D03 + y] = (uint8_t)(rom[ROM_FXFRAME_ONECELL + i * 6 + 1] | s[0xA5E3]);
+    s[0x5D02 + y] = CtRomByte(rom, 0x400000L, (long)(ROM_FXFRAME_ONECELL + i * 6));
+    s[0x5D03 + y] = (uint8_t)(CtRomByte(rom, 0x400000L, (long)(ROM_FXFRAME_ONECELL + i * 6 + 1)) | s[0xA5E3]);
     s[0xA07B + i] = 1;
   }
 }
@@ -19167,13 +19165,13 @@ static void battleFxActionLoad(CtBattleHost* h, int fx) {
 static void battleShakeStop(uint8_t* s) { s[0xCCB0] = 0; s[0xCCB8] = 0; s[0xCCC0] = 0; }   // D1/F692-F69B
 static void battleShakeArm(uint8_t* s, const uint8_t* rom) {
   int a54 = s[0x54], a55 = s[0x55], a56 = s[0x56], a57 = s[0x57];
-  s[0xCCB3] = rom[ROM_SHAKE_PERIOD_TBL + ((a54 & 0x1C) >> 2)]; s[0xCCB2] = 0;   // D1/F6B7-F6C5
-  s[0xCCB5] = rom[ROM_SHAKE_STEP_TBL + ((a54 & 0xE0) >> 5)];   s[0xCCB4] = 0;   // D1/F6C8-F6D9
+  s[0xCCB3] = CtRomByte(rom, 0x400000L, (long)(ROM_SHAKE_PERIOD_TBL + ((a54 & 0x1C) >> 2))); s[0xCCB2] = 0;   // D1/F6B7-F6C5
+  s[0xCCB5] = CtRomByte(rom, 0x400000L, (long)(ROM_SHAKE_STEP_TBL + ((a54 & 0xE0) >> 5)));   s[0xCCB4] = 0;   // D1/F6C8-F6D9
   s[0xCCB7] = (uint8_t)(a55 & 0x0F); s[0xCCB6] = (uint8_t)(a55 >> 4);           // D1/F6DC-F6EB
-  s[0xCCBB] = rom[ROM_SHAKE_PERIOD_TBL + ((a56 & 0x1C) >> 2)]; s[0xCCBA] = 0;   // D1/F6EE-F6FC
-  s[0xCCBD] = rom[ROM_SHAKE_STEP_TBL + ((a56 & 0xE0) >> 5)];   s[0xCCBC] = 0;   // D1/F6FF-F710
+  s[0xCCBB] = CtRomByte(rom, 0x400000L, (long)(ROM_SHAKE_PERIOD_TBL + ((a56 & 0x1C) >> 2))); s[0xCCBA] = 0;   // D1/F6EE-F6FC
+  s[0xCCBD] = CtRomByte(rom, 0x400000L, (long)(ROM_SHAKE_STEP_TBL + ((a56 & 0xE0) >> 5)));   s[0xCCBC] = 0;   // D1/F6FF-F710
   s[0xCCBF] = (uint8_t)(a57 & 0x0F); s[0xCCBE] = (uint8_t)(a57 >> 4);           // D1/F713-F722
-  s[0xCCC0] = (uint8_t)(rom[ROM_SHAKE_YMASK_TBL + (a56 & 3)] | rom[ROM_SHAKE_XMASK_TBL + (a54 & 3)]);   // D1/F725-F73B
+  s[0xCCC0] = (uint8_t)(CtRomByte(rom, 0x400000L, (long)(ROM_SHAKE_YMASK_TBL + (a56 & 3))) | CtRomByte(rom, 0x400000L, (long)(ROM_SHAKE_XMASK_TBL + (a54 & 3))));   // D1/F725-F73B
   s[0xCCB0] = (uint8_t)(a54 & 3); s[0xCCB8] = (uint8_t)(a56 & 3);               // D1/F73E-F749
 }
 // One axis of CD/0B64-0BB2 (X: $CCB0..$CCB7) / CD/0BC7-0C17 (Y: $CCB8..$CCBF), `o` = the axis base ($CCB0 / $CCB8):
@@ -19186,7 +19184,7 @@ static int battleShakeAxis(uint8_t* s, const uint8_t* rom, int o, int seed) {
   if (s[o + 2] >= s[o + 3]) {
     int a = (seed < 0) ? s[o + 2] : seed;
     s[o + 2] = 0;
-    s[o + 1] = rom[ROM_FX_RNG_TBL + ((a + s[0x7C] + 1) & 0xFF)];
+    s[o + 1] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_RNG_TBL + ((a + s[0x7C] + 1) & 0xFF)));
   }
   s[o + 4]++;
   if (s[o + 4] >= s[o + 5]) {
@@ -19326,14 +19324,14 @@ static void battleFxPalStage(CtBattleHost* h, const uint8_t* arg, int n) {
     return;
   }
   int X = a53 & 0xF0;                                              // D1/F74D
-  for (int y = 0; y < 8; y++) { s[0xCCC2 + y] = rom[ROM_FX_PALREC_A + X + y]; s[0xCCCE + y] = rom[ROM_FX_PALREC_B + X + y]; }
+  for (int y = 0; y < 8; y++) { s[0xCCC2 + y] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALREC_A + X + y)); s[0xCCCE + y] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALREC_B + X + y)); }
   s[0xCCC1] = s[0xCCCD] = (uint8_t)(((a54 & 0x40) ? 0x10 : 0x00) | 0x40);   // D1/F769-F776
   s[0xCCC7] = s[0xCCD3] = (uint8_t)(a54 & 0x07);                   // D1/F779-F780
   { int x = (a54 & 0x38) >> 1;                                     // D1/F783-F7A2
-    s[0xCCC5] = rom[ROM_FX_PALTICK_TBL + x]; s[0xCCC6] = rom[ROM_FX_PALTICK_TBL + x + 1];
-    s[0xCCD1] = rom[ROM_FX_PALTICK_TBL + x + 2]; s[0xCCD2] = rom[ROM_FX_PALTICK_TBL + x + 3]; }
+    s[0xCCC5] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALTICK_TBL + x)); s[0xCCC6] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALTICK_TBL + x + 1));
+    s[0xCCD1] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALTICK_TBL + x + 2)); s[0xCCD2] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALTICK_TBL + x + 3)); }
   { int x = (a54 & 0x38) >> 2;                                     // D1/F7A5-F7B7
-    s[0xCCC4] = rom[ROM_FX_PALSTEP_TBL + x]; s[0xCCD0] = rom[ROM_FX_PALSTEP_TBL + x + 1]; }
+    s[0xCCC4] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALSTEP_TBL + x)); s[0xCCD0] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALSTEP_TBL + x + 1)); }
   static const uint16_t al[4] = { 0xCCC8, 0xCCC9, 0xCCD4, 0xCCD5 };
   if (a54 & 0x80) {                                                // D1/F7BA BPL
     if (a54 & 0x40) { for (int i = 0; i < 4; i++) if (s[al[i]] == 0) s[al[i]] = 0x80; }   // D1/F7EF-F814
@@ -19394,26 +19392,26 @@ static void battleFxBlocksBuild(CtBattleHost* h, int x73) {
     int li = s[0xC9FE] | (s[0xC9FF] << 8);
     long pa = (long)ROM_FX_LAYOUT_PTR + ((li * 2) & 0xFFFF);
     if (pa + 1 >= rl) return;
-    int lp = rom[pa] | (rom[pa + 1] << 8);                         // CD/10AB $53 (bank $55 = D1)
-    s[0xCAAB] = rom[ROM_BANK_D1 + lp]; s[0xCAAC] = 0;              // CD/10B1 `AND #00FF / STA $CAAB`
-    for (int y = 1; y < 0x21; y++) s[0xCAAD + y] = rom[ROM_BANK_D1 + ((lp + y) & 0xFFFF)];   // CD/10BC: $CAAE..$CACD
+    int lp = CtRomByte(rom, 0x400000L, (long)(pa)) | (CtRomByte(rom, 0x400000L, (long)(pa + 1)) << 8);                         // CD/10AB $53 (bank $55 = D1)
+    s[0xCAAB] = CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + lp)); s[0xCAAC] = 0;              // CD/10B1 `AND #00FF / STA $CAAB`
+    for (int y = 1; y < 0x21; y++) s[0xCAAD + y] = CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + ((lp + y) & 0xFFFF)));   // CD/10BC: $CAAE..$CACD
     lp = (lp + ((s[0xCA01] * 2) + 1)) & 0xFFFF;                    // CD/10C8-10D3
     int col = 0, row = 0, mi = 0, n5F = 1, m63 = 0;                // CD/10D5 16-bit STZ $65 (+$66), STZ $61; $5F = 1
     for (;;) {
       if (--n5F == 0) { n5F = 8; m63 = s[0xCAAE + mi++]; }         // CD/10E0-10EF
       int bit = m63 & 0x80; m63 = (m63 << 1) & 0xFF;               // CD/10F1 ASL $63
       if (bit) {
-        int y = row * 32 + rom[ROM_FX_COL_TBL + ((col + v6F) & 0xFF)];   // CD/10F8-1111
-        int t = rom[ROM_BANK_D1 + lp];                             // CD/1115 LDA [$53]
+        int y = row * 32 + CtRomByte(rom, 0x400000L, (long)(ROM_FX_COL_TBL + ((col + v6F) & 0xFF)));   // CD/10F8-1111
+        int t = CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + lp));                             // CD/1115 LDA [$53]
         if (s[0xCAAB] & 0x80) {                                    // CD/111E: one byte per tile, cycling
           s[0xCAAD]++; lp = (lp + 1) & 0xFFFF;
           if (!(s[0xCAAD] & 0x1F)) lp = (lp - 0x20) & 0xFFFF;
         } else lp = (lp + s[0xCAAB]) & 0xFFFF;                     // CD/113A $53 += stride
         int lo = (((t & 0x38) << 2) + ((t & 0x07) << 1)) & 0xFF;   // CD/1147-1157
         int half = lo >> 1;
-        int m75 = rom[ROM_FX_BIT_TBL + (half & 7)];                // CD/115E
+        int m75 = CtRomByte(rom, 0x400000L, (long)(ROM_FX_BIT_TBL + (half & 7)));                // CD/115E
         int ai = ((half >> 3) + (x73 & 0xFF)) & 0xFF;              // CD/1165-116B (8-bit ADC $73)
-        int v75 = (rom[ROM_FX_TILEATTR_TBL + ai] & m75) ? 0x04 : 0x00;   // CD/116C-117A
+        int v75 = (CtRomByte(rom, 0x400000L, (long)(ROM_FX_TILEATTR_TBL + ai)) & m75) ? 0x04 : 0x00;   // CD/116C-117A
         if (dst + y + 1 < 0x10000) { s[dst + y] = (uint8_t)lo; s[dst + y + 1] = (uint8_t)(((t & 0xC0) ^ v70) | v71 | v75); }
       }
       if (++col == 16) { col = 0; row++; if (--rows <= 0) break; } // CD/1189-119A
@@ -19447,8 +19445,8 @@ static void battleFxPalReload(CtBattleHost* h) {
     int base = k ? 0x203A : 0x2032;
     for (int w = 0; w < 3; w++) {                                  // CD/1013-1024 / CD/103B-104C (Y = 0, 2, 4)
       long a = (long)ROM_FX_PAL_TBL + id * 8 + w * 2;
-      s[base + w * 2] = s[base + 0x200 + w * 2] = rom[a];
-      s[base + w * 2 + 1] = s[base + 0x200 + w * 2 + 1] = rom[a + 1];
+      s[base + w * 2] = s[base + 0x200 + w * 2] = CtRomByte(rom, 0x400000L, (long)(a));
+      s[base + w * 2 + 1] = s[base + 0x200 + w * 2 + 1] = CtRomByte(rom, 0x400000L, (long)(a + 1));
     }
   }
 }
@@ -19504,9 +19502,9 @@ static void battleFxLoadHead(CtBattleHost* h, int fx) {            // f w+2 (gra
   if (!rom) return;
   fx = battleFxLoadRemap(s, fx);
   s[0xCCA2] = (uint8_t)fx;                                         // CD/0F43
-  for (int k = 0; k < 4; k++) s[0xCA93 + k] = rom[ROM_FX_PROGRAM_TBL + fx * 4 + k];   // CD/0F4F-0F5C
+  for (int k = 0; k < 4; k++) s[0xCA93 + k] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PROGRAM_TBL + fx * 4 + k));   // CD/0F4F-0F5C
   s[0xCD1F] = s[0xCD20] = s[0xCD21] = s[0xCD22] = 0xFF;            // CD/0F62-0F68
-  for (int k = 0; k < 6; k++) s[0xC9FC + k] = rom[ROM_FX_LAYOUT_ROW + fx * 6 + k];    // CD/11B8
+  for (int k = 0; k < 6; k++) s[0xC9FC + k] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_LAYOUT_ROW + fx * 6 + k));    // CD/11B8
   s[0xCA33] = s[0xCA00]; s[0xCA34] = s[0xCA01];                    // CD/11DA
   s[0xCA1B] = s[0xCA00]; s[0xCA1C] = s[0xCA01];                    // CD/0F6F
   s[0xCD04] = 0x1F;                                                // CD/0F84
@@ -19520,7 +19518,7 @@ static void battleFxLoadSheet(CtBattleHost* h, int i) {            // f w+2+i, i
   if (i) { s[0xCD0C]++; s[0xCACE]++; }                             // CD/0FDD / CD/0FE3 (the sheet before's)
   battleFxSheetBuild(h, battleFxLoadSheetBase(s) + 2 * i);         // CD/0FA6 JSR CD/11E4 (X = $53 + 2i, CD/0FE0-0FE2)
   if (i == 3) for (int x = 0; x < 0x20; x++) { s[0x2FE0 + x] = 0; s[0x30E0 + x] = 0; }   // CD/0FB3-0FC3
-  int va = rom[ROM_FX_SHEET_VRAM + i * 2] | (rom[ROM_FX_SHEET_VRAM + i * 2 + 1] << 8);   // CD/0FC8
+  int va = CtRomByte(rom, 0x400000L, (long)(ROM_FX_SHEET_VRAM + i * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_FX_SHEET_VRAM + i * 2 + 1)) << 8);   // CD/0FC8
   long vb = (long)va * 2 - 0xA000;                                 // VRAM byte address, relative to fxBg3Chr
   if (vb >= 0 && vb + 0x400 <= (long)sizeof h->fxBg3Chr) memcpy(h->fxBg3Chr + vb, s + 0x2D00, 0x400);   // CD/0FDA
 }
@@ -19541,8 +19539,8 @@ static void battleFxLoadEnd(CtBattleHost* h) {                     // f w+8 (gra
   battleFxPalReload(h);                                            // CD/1004-1051
   if (battleFleeProgTraceOn())
     fprintf(stderr, "fxload f%d fx=%02X layout=%02X%02X%02X%02X%02X%02X pal=%02X/%02X map0=%02X%02X\n", h->frames, fx,
-            rom[ROM_FX_LAYOUT_ROW + fx * 6], rom[ROM_FX_LAYOUT_ROW + fx * 6 + 1], rom[ROM_FX_LAYOUT_ROW + fx * 6 + 2],
-            rom[ROM_FX_LAYOUT_ROW + fx * 6 + 3], rom[ROM_FX_LAYOUT_ROW + fx * 6 + 4], rom[ROM_FX_LAYOUT_ROW + fx * 6 + 5],
+            CtRomByte(rom, 0x400000L, (long)(ROM_FX_LAYOUT_ROW + fx * 6)), CtRomByte(rom, 0x400000L, (long)(ROM_FX_LAYOUT_ROW + fx * 6 + 1)), CtRomByte(rom, 0x400000L, (long)(ROM_FX_LAYOUT_ROW + fx * 6 + 2)),
+            CtRomByte(rom, 0x400000L, (long)(ROM_FX_LAYOUT_ROW + fx * 6 + 3)), CtRomByte(rom, 0x400000L, (long)(ROM_FX_LAYOUT_ROW + fx * 6 + 4)), CtRomByte(rom, 0x400000L, (long)(ROM_FX_LAYOUT_ROW + fx * 6 + 5)),
             s[0xCA95], s[0xCA96], s[0xD000], s[0xD001]);
 }
 static void battleFxLoad(CtBattleHost* h, int fx) {                // every frame of it in one step (the run-off's path)
@@ -19568,9 +19566,9 @@ static void battleFxArmSlots(CtBattleHost* h, int fx) {
   for (int slot = 0; slot < 2; slot++) {
     int id = s[0xCA93 + slot]; if (id == 0xFF) continue;           // CD/0D53
     int X = slot * 0x10;
-    int ptr = rom[ROM_FX_PROGRAM_PTR + id * 2] | (rom[ROM_FX_PROGRAM_PTR + id * 2 + 1] << 8);   // D15DC
+    int ptr = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PROGRAM_PTR + id * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_FX_PROGRAM_PTR + id * 2 + 1)) << 8);   // D15DC
     s[0xCA37 + X] = 0xD1;                                          // D15EB
-    s[0xCA38 + X] = rom[ROM_BANK_D1 + ptr] & 0x0F;                 // D15EE-15F2: the per-frame divider
+    s[0xCA38 + X] = CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + ptr)) & 0x0F;                 // D15EE-15F2: the per-frame divider
     s[0xCA39 + X]++;                                               // D15F5
     s[0xCA35 + X] = (uint8_t)(ptr + 1); s[0xCA36 + X] = (uint8_t)((ptr + 1) >> 8);   // D15FA-15FD
     s[0xCA32 + X]++;                                               // D1603
@@ -19619,7 +19617,7 @@ static void battleFxActionLoadFrame(CtBattleHost* h, int rel) {
 // CD/3C00 (CD/3BFD = the same after `CLC / ADC #40`): the signed product of CE:F48E[a] and w = $5D8E -- `STA $4202`,
 // |w| to $4203, the high byte of the 8x8 product, negated when exactly one of a >= 80 and w < 0 holds.
 static int battleFxTrig(const uint8_t* rom, int a, int w) {
-  int t = rom[ROM_FX_TRIG_TBL + (a & 0xFF)];
+  int t = CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + (a & 0xFF)));
   int wm = (w & 0x80) ? ((-w) & 0xFF) : (w & 0xFF);                // D3C0E-3C10 / D3C37-3C39 `EOR #FF / INC A`
   int p = (t * wm) >> 8;                                           // $4217
   int neg = ((a & 0x80) != 0) != ((w & 0x80) != 0);
@@ -19635,7 +19633,7 @@ static int battleFxAngle(const uint8_t* rom, int x1, int y1, int x2, int y2) {
   if (m48 & 4) m48 += 8;                                           // EE829-EE834 (16-bit)
   if (m4A & 4) m4A += 8;                                           // EE836-EE841
   int idx = ((m4A & 0xFFF8) << 2) + (m48 >> 3);                    // EE843-EE854
-  int t = rom[ROM_FX_ATAN_TBL + idx];                              // EE85B
+  int t = CtRomByte(rom, 0x400000L, (long)(ROM_FX_ATAN_TBL + idx));                              // EE85B
   if (!(s28 & 0x80)) return ((s2A & 0x80) ? (0x80 - t) : (0x80 + t)) & 0xFF;   // EE863-EE876
   return ((s2A & 0x80) ? t : (0 - t)) & 0xFF;                      // EE879-EE882
 }
@@ -19673,8 +19671,8 @@ static void battleFxRaster(CtBattleHost* h, int n) {
   int s09 = battleFxSlope(px[3], px[1], (py[3] - py[1]) & 0xFF);   //           edge 1-3
   static const int16_t none = 0;
   (void)none;
-  long port = (long)(rom[ROM_FX_WINPORT_TBL + (((s[0x7C] & 1) * 2 + (n & 1)) * 2)]
-                   | (rom[ROM_FX_WINPORT_TBL + (((s[0x7C] & 1) * 2 + (n & 1)) * 2) + 1] << 8)) + py[0] * 4;   // CD/38B6
+  long port = (long)(CtRomByte(rom, 0x400000L, (long)(ROM_FX_WINPORT_TBL + (((s[0x7C] & 1) * 2 + (n & 1)) * 2)))
+                   | (CtRomByte(rom, 0x400000L, (long)(ROM_FX_WINPORT_TBL + (((s[0x7C] & 1) * 2 + (n & 1)) * 2) + 1)) << 8)) + py[0] * 4;   // CD/38B6
   int cnt[3], sa[3], sb[3], X, Y;
   if (mode == 0) {
     cnt[0] = (py[2] - py[1]) & 0xFF; sa[0] = s03; sb[0] = s09; cnt[1] = cnt[2] = 0;   // D1/FA32-FA54
@@ -20453,7 +20451,7 @@ int CtBattleFxShapeOpMem(uint8_t* mem, int op, const uint8_t* b, int* adv) {
 // ---- Program ops DE, B7, 8F, 97, C9, E1 (disasm/notes/battle_fx_program_census.md sec. 3; handlers dis.py 0D1918,
 // 0D1F4D, 0D253B, 0D30BE + 0EEA7E/0EE885, 0D1B78, 0D1B9A + 11E70A). `p` is the first operand's address, as in
 // battleFleeProgOp; each returns the value the runner's post-INY steps from.
-#define FXPB(i) rom[ROM_BANK_D1 + ((p + (uint32_t)(i)) & 0xFFFFu)]
+#define FXPB(i) CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + ((p + (uint32_t)(i)) & 0xFFFFu)))
 // DE b (CD/1918 `LDA [$40] / STA $CD29`): the effect's FREEZE byte. The frame service copies it every frame right after the
 // runner (CD/09B2 `LDA $CD29 / STA $A028`), and $A028 gates the combatants' OAM compose (CF/E764 `LDA $A028 / BNE` over
 // `DEC $A012` and `JSR CF/E83A`), the pose engine's publish (C1/4269) and CD/098E's OAM clear (JSL CE/F066). Lightning 2
@@ -20483,12 +20481,11 @@ static uint32_t battleFxOpB7(CtBattleHost* h, const uint8_t* rom, uint32_t p) {
 static uint32_t battleFxOp8F(CtBattleHost* h, const uint8_t* rom, uint32_t p) {
   uint8_t* s = h->mem;
   int b0 = FXPB(0), amp = FXPB(1), b2 = FXPB(2), mask = b0 & 0x1F;
-  const uint8_t* sine = rom + ROM_FX_TRIG_TBL;
   int big = (b2 & 0x80) != 0;
   if (!(s[0x7C] & mask)) s[0xCC90] = (uint8_t)(s[0xCC90] + (big ? (b2 & 0x7F) : b2));
   int x = s[0xCC90];
   for (int y = 0; y < (big ? 0x100 : 0x80); y += 4) {
-    int v = (sine[x] * amp) >> 8;                                  // $4217
+    int v = (CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL) + (long)(x)) * amp) >> 8;                                  // $4217
     if (x & 0x80) v = (-v) & 0xFF;                                 // CD/2580 / CD/25F2 `EOR #FF / INC A`
     s[0x0A00 + y] = (uint8_t)v; s[0x0A01 + y] = (v & 0x80) ? 0xFF : 0x00;
     x = (x + (big ? 4 : 8)) & 0xFF;                                // CD/25AF-25B3 / CD/2622-2626
@@ -20572,7 +20569,7 @@ static uint32_t battleFxOp97(CtBattleHost* h, const uint8_t* rom, int X, uint32_
   if (b2 & 0x80) { s[0xCA77 + x] = (uint8_t)b0; return p + 2; }    // CD/30D8-30DD -> 312D
   int ang = (s[0xCA77 + x] + b1) & 0xFF;                           // CD/30D3 / 30DF-30E3
   s[0xCA77 + x] = (uint8_t)ang; s[0xCAA3] = (uint8_t)ang;          // CD/30E5-30E8
-  s[0xCA9B] = rom[ROM_FX_VEC_TBL + ang * 2]; s[0xCA9C] = rom[ROM_FX_VEC_TBL + ang * 2 + 1];   // CD/30EB-30F3
+  s[0xCA9B] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_VEC_TBL + ang * 2)); s[0xCA9C] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_VEC_TBL + ang * 2 + 1));   // CD/30EB-30F3
   s[0xCA9D] = 0x80; s[0xCA9E] = 0x70;                              // CD/30F6-30F9
   if (s[0xCA9E] < s[0xCA9C]) {                                     // CD/30FF-3105 `CMP / BCS`
     uint8_t t0 = s[0xCA9B], t1 = s[0xCA9C];
@@ -20707,7 +20704,7 @@ static void battleFxTriRasterV(CtBattleHost* h, uint8_t v[6], int wedge) {
   }
   #undef TSW
   int sel = ((s[0x7C] & 1) * 2 + (s[0xCC64] & 1)) * 2;             // CD/38BD-38D0 (CD/3B15-3B28)
-  long port = (long)(rom[ROM_FX_WINPORT_TBL + sel] | (rom[ROM_FX_WINPORT_TBL + sel + 1] << 8));   // CD/38D1 (CD/3B29)
+  long port = (long)(CtRomByte(rom, 0x400000L, (long)(ROM_FX_WINPORT_TBL + sel)) | (CtRomByte(rom, 0x400000L, (long)(ROM_FX_WINPORT_TBL + sel + 1)) << 8));   // CD/38D1 (CD/3B29)
   // CD/38B6 works in the direct page ABOVE the NMI's saved $00-$2A, so these outlive the op: `REP #20 / ASL / ASL /
   // STA $45` (A = $0F = the top line, B = 0 -- every path's `TDC / SEP #20` before `LDA $0F / JSR CD/38B6`) and
   // `LDA $7C / AND #0001 / ASL / STA $47` (oracle, Dark Matter: $47 = 00 / 02 alternating, writer CD:38C5).
@@ -20742,8 +20739,8 @@ static void battleFxTriRaster(CtBattleHost* h, uint8_t v[6]) { battleFxTriRaster
 // CD/3DC3: A = angle a, $45 = scale angle r, $47 = radius z -- `$49 = CE:F48E[r]`, then `CE:F48E[a] LSR` times z (the
 // $4217 byte) times $49 (the $4217 byte again), negated (`EOR #FF / INC A`, CD/3DF6) when a >= 80 (`TYX / BPL`).
 static int battleFxProj(const uint8_t* rom, int a, int r, int z) {
-  int m = ((rom[ROM_FX_TRIG_TBL + (a & 0xFF)] >> 1) * (z & 0xFF)) >> 8;
-  int v = (m * rom[ROM_FX_TRIG_TBL + (r & 0xFF)]) >> 8;
+  int m = ((CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + (a & 0xFF))) >> 1) * (z & 0xFF)) >> 8;
+  int v = (m * CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + (r & 0xFF)))) >> 8;
   return ((a & 0x80) ? -v : v) & 0xFF;
 }
 // CD/28D2 (X = the object, 0/1 -- its bytes interleave): the three vertices of object X's triangle, in the ROM's order --
@@ -20926,7 +20923,7 @@ static void battleFxOpC4(CtBattleHost* h, int X, int b) {
   s[0x49] = s[0x4A] = s[0x4C] = (uint8_t)c; s[0x4B] = (uint8_t)(c << 1);
   if (b == 0) {                                                    // CD/1C98 LDA [$40] / BNE
     int t = 0x0D1C5B;                                              // CD/1C9C JSR CD/1CBF (row 0)
-    s[0x49] = rom[t]; s[0x4A] = rom[t + 1]; s[0x4B] = rom[t + 2]; s[0x4C] = rom[t + 3];
+    s[0x49] = CtRomByte(rom, 0x400000L, (long)(t)); s[0x4A] = CtRomByte(rom, 0x400000L, (long)(t + 1)); s[0x4B] = CtRomByte(rom, 0x400000L, (long)(t + 2)); s[0x4C] = CtRomByte(rom, 0x400000L, (long)(t + 3));
   }
   battleFxWobbleBody(s, rom, X, s[0x49], s[0x4A], s[0x4B], s[0x4C], 0x80, 0x87);   // CD/1CA1 JSR CD/1CD5
   if (s[0x7C] & 1) {                                               // CD/1CA4-1CBB
@@ -20951,7 +20948,7 @@ static void battleFxOpC5(CtBattleHost* h, int X, int b) {
   s[0x4D] = (uint8_t)(0 - s[0xCA5A + X]);                          // CD/1C69-1C6F
   s[0x4E] = (uint8_t)(0 - s[0xCA5C + X]);                          // CD/1C71-1C77
   int t = 0x0D1C5B + ((b << 2) & 0xFF);                            // CD/1C79 BRA CD/1CBF
-  s[0x49] = rom[t]; s[0x4A] = rom[t + 1]; s[0x4B] = rom[t + 2]; s[0x4C] = rom[t + 3];
+  s[0x49] = CtRomByte(rom, 0x400000L, (long)(t)); s[0x4A] = CtRomByte(rom, 0x400000L, (long)(t + 1)); s[0x4B] = CtRomByte(rom, 0x400000L, (long)(t + 2)); s[0x4C] = CtRomByte(rom, 0x400000L, (long)(t + 3));
   battleFxWobbleBody(s, rom, X, s[0x49], s[0x4A], s[0x4B], s[0x4C], s[0x4D], s[0x4E]);
 }
 // Program op A2 o x y z (CD/278E): 3-D object o's init. `LDA [$40] / TAX` (X = o), then `LDY #0001` and the operands:
@@ -20968,7 +20965,7 @@ static void battleFxOpA2(uint8_t* s, int o, int x, int y, int z) {
 // `CPY #002A / BNE`). CD:26B0 = 0000 002A 0054 007E 00A8 00D2 00FC 0126. Two bytes each.
 static void battleFxObjBlock(uint8_t* s, const uint8_t* rom, int k, int restore) {
   int ix = (k << 1) & 0xFF;
-  int off = rom[0x0D26B0 + ix] | (rom[0x0D26B0 + ix + 1] << 8);
+  int off = CtRomByte(rom, 0x400000L, (long)(0x0D26B0 + ix)) | (CtRomByte(rom, 0x400000L, (long)(0x0D26B0 + ix + 1)) << 8);
   for (int y = 0; y < 0x2A; y++) {
     long a = 0xCAD4 + y, b = (0xCB0E + off + y) & 0xFFFF;
     if (restore) s[a] = s[b]; else s[b] = s[a];
@@ -20997,7 +20994,7 @@ static void battleFxOpD7(CtBattleHost* h, int X, int b) {
     int a = b, c = 1;
     for (int i = 0; i < 6; i++) {                                  // CD/1A14-1A4F
       int t = a + s[0x7C] + c; c = t >> 8;                         // CD/0B16 ADC $7C
-      a = rom[ROM_FX_RNG_TBL + (t & 0xFF)] & 0x1F;                 // CD/0B19 LDA $C0FE00,X / AND #1F
+      a = CtRomByte(rom, 0x400000L, (long)(ROM_FX_RNG_TBL + (t & 0xFF))) & 0x1F;                 // CD/0B19 LDA $C0FE00,X / AND #1F
       s[0xCA7A + X + i] = (uint8_t)a;
     }
     return;
@@ -21022,7 +21019,7 @@ static void battleFxOpD7(CtBattleHost* h, int X, int b) {
 // CD/3D90 (A = angle a, $47 = radius r; `PHX / TAX / BPL`): `CE:F48E[a] LSR` times r, the $4217 byte, negated
 // (`EOR #FF / INC A`) when a >= 80.
 static int battleFxRadial(const uint8_t* rom, int a, int r) {
-  int v = ((rom[ROM_FX_TRIG_TBL + (a & 0xFF)] >> 1) * (r & 0xFF)) >> 8;
+  int v = ((CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + (a & 0xFF))) >> 1) * (r & 0xFF)) >> 8;
   return ((a & 0x80) ? -v : v) & 0xFF;
 }
 // CD/3C58 (A = angle a, Y = value y, X and Y 8-bit) and its callers' `LDA $4217 / BCC / EOR #FF / INC A`: $4202 :=
@@ -21030,7 +21027,7 @@ static int battleFxRadial(const uint8_t* rom, int a, int r) {
 // y >= 0 or a < 80 with y < 0 -- negates the product's high byte. CD/3C55 is the same after `CLC / ADC #40`.
 static int battleFxRotMul(const uint8_t* rom, int a, int y) {
   a &= 0xFF; y &= 0xFF;
-  int m = (rom[ROM_FX_TRIG_TBL + a] * ((y & 0x80) ? ((y ^ 0xFF) + 1) & 0xFF : y)) >> 8;
+  int m = (CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + a)) * ((y & 0x80) ? ((y ^ 0xFF) + 1) & 0xFF : y)) >> 8;
   return (((a & 0x80) != 0) != ((y & 0x80) != 0)) ? (-m) & 0xFF : m;
 }
 // CD/3C8F (X/Y 8-bit): the point ($CB06, $CB08, $CB0A) = (x, y, z) turned by the angle $4B about y, then $49 about x,
@@ -21118,9 +21115,9 @@ static void battleFxSpin(CtBattleHost* h, int o, int b) {
   if (!rom) return;
   for (int i = 0; i < 3; i++) {                                    // CD/1EAA-1EF1
     int t = ROM_FX_MODEL_TBL + ((i * 4 + s[0x4F]) & 0xFF);         // CD/1EF8-1EFD
-    s[0xCB06] = rom[t]; s[0xCB07] = 0;                             // CD/1EFE-1F03
-    s[0xCB08] = rom[t + 1]; s[0xCB09] = 0;                         // CD/1F06-1F0B
-    s[0xCB0A] = (uint8_t)(rom[t + 2] + s[0x51]); s[0xCB0B] = 0;    // CD/1F0E-1F16
+    s[0xCB06] = CtRomByte(rom, 0x400000L, (long)(t)); s[0xCB07] = 0;                             // CD/1EFE-1F03
+    s[0xCB08] = CtRomByte(rom, 0x400000L, (long)(t + 1)); s[0xCB09] = 0;                         // CD/1F06-1F0B
+    s[0xCB0A] = (uint8_t)(CtRomByte(rom, 0x400000L, (long)(t + 2)) + s[0x51]); s[0xCB0B] = 0;    // CD/1F0E-1F16
     s[0x49] = s[0xCAF6 + o]; s[0x4A] = 0;                          // CD/1F1B-1F1F
     s[0x4B] = s[0xCAF8 + o]; s[0x4C] = 0;                          // CD/1F21-1F25
     s[0x4D] = s[0xCAFA + o]; s[0x4E] = 0;                          // CD/1F27-1F2B
@@ -21169,7 +21166,7 @@ static int battleFxOpsMisc(CtBattleHost* h, int X, int op, int* pp) {
   uint8_t* s = h->mem; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom) return 1;
   uint32_t p = (uint32_t)*pp;
-  #define MB(i) rom[ROM_BANK_D1 + ((p + (uint32_t)(i)) & 0xFFFFu)]
+  #define MB(i) CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + ((p + (uint32_t)(i)) & 0xFFFFu)))
   switch (op) {
     case 0xD0: case 0xD1: {
       // COMPUTED JUMP. D0 (CD/1ACB): `LDA [$40] / TAX / LDA $5D80,X / AND #0F / ASL A`; D1 (CD/1ABE): the same with `AND #F0 /
@@ -21218,7 +21215,7 @@ static int battleFxOpsMisc(CtBattleHost* h, int X, int op, int* pp) {
       for (unsigned y = 0; y != 0x350; y += 8) {                   // D1/F017 TAY .. F078 CPY #0350 / BNE
         for (int k = 0; k < 2; k++) {                              // x from $47 (F019-F05D -> F07E), y from $45 (-> F0E9)
           int ang = k ? s[0x45] : s[0x47];
-          int hi = ((unsigned)rom[ROM_FX_TRIG_TBL + ang] * (unsigned)r) >> 8;   // STA $4202 / $4203 / LDA $4217
+          int hi = ((unsigned)CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + ang)) * (unsigned)r) >> 8;   // STA $4202 / $4203 / LDA $4217
           if (ang & 0x80) hi = (-hi) & 0xFF;                       // EOR #FF / INC A
           unsigned v = (unsigned)((hi & 0x80) ? (0xFF00 | hi) : hi) + (k ? cy : cx);   // BPL / ORA #FF00 / ADC $4F|$51
           long o = 0xC15D + (long)y + (k ? 2 : 0);                 // STA $C15D,Y / $C161,Y (x), $C15F,Y / $C163,Y (y)
@@ -21271,10 +21268,10 @@ static int battleFxOpsMisc(CtBattleHost* h, int X, int op, int* pp) {
       int b0 = MB(0), b1 = MB(1), b2 = MB(2);
       s[0x49] = (uint8_t)b2;                                       // D1/F47C-F481
       int t = b2 + s[0x7C] + 1;                                    // D1/F483 -> F474
-      int a = (rom[ROM_FX_RNG_TBL + (t & 0xFF)] & b2) + b0;        // D1/F486-F489
+      int a = (CtRomByte(rom, 0x400000L, (long)(ROM_FX_RNG_TBL + (t & 0xFF))) & b2) + b0;        // D1/F486-F489
       s[0x45] = (uint8_t)a;
       t = (a & 0xFF) + s[0x7C] + (a >> 8);                         // D1/F490 -> F474, the carry of F489
-      int a2 = ((rom[ROM_FX_RNG_TBL + (t & 0xFF)] & b2) + b1) & 0xFF;   // D1/F493-F496
+      int a2 = ((CtRomByte(rom, 0x400000L, (long)(ROM_FX_RNG_TBL + (t & 0xFF))) & b2) + b1) & 0xFF;   // D1/F493-F496
       s[0x47] = (uint8_t)a2;
       unsigned ax = (0x10000u - s[0x45]) & 0xFFFF, ay = (0x10000u - (unsigned)a2) & 0xFFFF;   // D1/F49C-F4B3
       s[0xCA5A + X] = (uint8_t)ax; s[0xCA5B + X] = (uint8_t)(ax >> 8);
@@ -21317,7 +21314,7 @@ static int battleFxOpsMisc(CtBattleHost* h, int X, int op, int* pp) {
       // quad n = b's corners: top (sway + B0, 0) and (sway + D0, 0), bottom ($5DA0 - 10, $5DA1) and ($5DA0 + 10, $5DA1)
       // (`STZ` the two top y's; 8-bit adds), then `JSL D1/F9AF` with X = n -- rasterized as window n.
       int n = MB(0), c = s[0x7C];
-      int v = (rom[ROM_FX_TRIG_TBL + c] * 0x28) >> 8;              // D1/EBFF-EC16 / EC1C-EC29 ($4202 = 28, $4203 = sine)
+      int v = (CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + c)) * 0x28) >> 8;              // D1/EBFF-EC16 / EC1C-EC29 ($4202 = 28, $4203 = sine)
       if (c & 0x80) v = (-v) & 0xFF;                               // D1/EC2D-EC2F
       int a = (v + 0xB0) & 0xFF;                                   // D1/EC30-EC33
       s[0xCD0D + n] = (uint8_t)a; s[0xCD0F + n] = 0;
@@ -21405,11 +21402,11 @@ static void battleFxOpB3(CtBattleHost* h) {
   int a45 = s[0x7C], a47 = (s[0x7C] << 2) & 0xFF;                  // CD/1FDA-1FE2
   s[0x46] = 0; s[0x48] = 0;                                        // (the 16-bit STX $45 / STX $47)
   for (unsigned y = 0; y != 0x350; y += 8) {                       // CD/1FE6-2048
-    int a = (rom[ROM_FX_TRIG_TBL + a47] * 0x32) >> 8;              // CD/1FEB-1FFC / 2015-2026
+    int a = (CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + a47)) * 0x32) >> 8;              // CD/1FEB-1FFC / 2015-2026
     if (a47 & 0x80) a = (0 - a) & 0xFF;                            // CD/2000-2002
     unsigned w = (a & 0x80) ? (0xFF00u | (unsigned)a) : (unsigned)a;   // CD/204B-2052 / 2081-2083
     s[0xC15D + y] = s[0xC161 + y] = (uint8_t)w; s[0xC15E + y] = s[0xC162 + y] = (uint8_t)(w >> 8);
-    int c = (rom[ROM_FX_TRIG_TBL + a45] * 0x0F) >> 8;              // CD/205B-206A / 208B-209A
+    int c = (CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + a45)) * 0x0F) >> 8;              // CD/205B-206A / 208B-209A
     if (a45 & 0x80) c = (0 - c) & 0xFF;                            // CD/2008-200E
     int d = (c + 0x20) & 0xFF;                                     // CD/20B1-20B2
     w = (((d & 0x80) ? (0xFF00u | (unsigned)d) : (unsigned)d) + b49) & 0xFFFF;   // CD/20B6-20BB / 20C6-20C8
@@ -21446,13 +21443,14 @@ int CtBattleFxProgOpMem(uint8_t* mem, int X, int opAddr) {
   memset(&scratch, 0, sizeof scratch);
   scratch.mem = mem;
   int p = (opAddr + 1) & 0xFFFF;
-  if (battleFleeProgOp(&scratch, X, rom[ROM_BANK_D1 + (opAddr & 0xFFFF)], &p)) return -1;
+  if (battleFleeProgOp(&scratch, X, CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + (opAddr & 0xFFFF))), &p)) return -1;
   return p & 0xFFFF;
 }
 static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
   uint8_t* s = h->mem; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   uint32_t p = (uint32_t)*pp;
-  #define PB(i) rom[ROM_BANK_D1 + ((p + (uint32_t)(i)) & 0xFFFFu)]
+  #define PB(i) CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + ((p + (uint32_t)(i)) & 0xFFFFu)))
+  #define PBP(n) CtRomPtr(rom, 0x400000L, (long)(ROM_BANK_D1 + (p & 0xFFFFu)), (n))   // the operands, a pointer (n read)
   switch (op) {
     case 0x80:                                                     // CD/2A4A `LDA [$40] / ASL / TAX / JMP ($2A51,X)`
       if (PB(0) == 0x1B) { for (int k = 0; k < 8; k++) s[0x9FFA + k]++; break; }   // CD/2A8B: the hide flags
@@ -21484,7 +21482,7 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
         // else `STZ $46`), then `LDX $43 / REP #20 / LDA $CA60,X` minus it (2BC6 SEC/SBC, subop 0B) or plus it
         // (2BEF CLC/ADC, subop 0A), and `INC $CA79,X` so the next visit takes the next entry of the table.
         int idx = s[0xCA79 + X];
-        int v = (int8_t)rom[ROM_CE_BASE + 0xF1D2u + (unsigned)idx];   // 2BAE / 2BD8 LDA $CEF1D2,X (signed)
+        int v = (int8_t)CtRomByte(rom, 0x400000L, (long)(ROM_CE_BASE + 0xF1D2u + (unsigned)idx));   // 2BAE / 2BD8 LDA $CEF1D2,X (signed)
         int y = (s[0xCA60 + X] | (s[0xCA61 + X] << 8)) + (PB(0) == 0x0A ? v : -v);
         s[0xCA60 + X] = (uint8_t)y; s[0xCA61 + X] = (uint8_t)(y >> 8);
         s[0xCA79 + X] = (uint8_t)(idx + 1);                        // 2BCE / 2BF8 INC $CA79,X
@@ -21715,7 +21713,7 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
       return 0;
     case 0x8E: {                                                   // CD/29E3: an objslot spawn, 7 operands
       int k = PB(5) & 7;                                           // D29E5-29EA: operand 5's low bits pick the slot
-      int R = 0x0550 + rom[ROM_FX_OBJSLOT_TBL + k];                // CD/2A42[k]
+      int R = 0x0550 + CtRomByte(rom, 0x400000L, (long)(ROM_FX_OBJSLOT_TBL + k));                // CD/2A42[k]
       s[R + 0] = PB(0) & 0xF0; s[R + 6] = PB(0) & 0x0F;            // D29F2-29FF: the mode, the sub-mode
       s[R + 1] = PB(1); s[R + 2] = PB(2);                          // D2A02-2A0D: dst, count (CGRAM words)
       s[R + 7] = PB(3); s[R + 8] = PB(4);                          // D2A10-2A19: acc, limit
@@ -21743,7 +21741,7 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
     case 0xC9: *pp = (int)battleFxOpC9(h, p); break;               // CD/1B78 OBJ palettes n <-> n^4
     case 0xE1: *pp = (int)battleFxOpE1(h, p); break;               // CD/1B9A -> D1/E70A OBJ rows 1-3 <-> 5-7
     case 0x85: case 0x86: case 0xA1: case 0xA3: case 0xA4: case 0xAC: case 0xBD: case 0xC3: case 0xD2: case 0xDA: case 0xE0:
-      return battleFxOpsQuadTri(h, X, op, &PB(0), pp);             // (above: CD/2EC8 2EDE 2952 2717 26E0 2460 1E36 1D4D 1AB2 1937 190D)
+      return battleFxOpsQuadTri(h, X, op, PBP(7), pp);             // (above: CD/2EC8 2EDE 2952 2717 26E0 2460 1E36 1D4D 1AB2 1937 190D)
     case 0xC4: battleFxOpC4(h, X, PB(0)); break;                   // CD/1C7B: the anchor wobble around (80, 87)
     case 0xC5: battleFxOpC5(h, X, PB(0)); break;                   // CD/1C63: the anchor wobble around point 0
     case 0xA2: battleFxOpA2(s, PB(0), PB(1), PB(2), PB(3)); *pp = (int)p + 3; break;   // CD/278E, CD/27C2-27C7 $40 += 3
@@ -21753,8 +21751,8 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
     case 0xB1: s[0xCAFC + PB(0)] = (uint8_t)(s[0xCAFC + PB(0)] + PB(1)); *pp = (int)p + 1; break;   // CD/20D8 CLC/ADC, $40 += 1
     case 0xB9: s[0xCA95] = s[0xCA96] = PB(0); battleFxPalReload(h); break;       // CD/1F3C `STA $CA95 / $CA96 / JMP CD/1004`
     case 0xD7: battleFxOpD7(h, X, PB(0)); break;                   // CD/19E5: step the point by the slot's random steps
-    case 0xA8: battleFxOpA8(h, &PB(0)); *pp = (int)p + 8; break;   // CD/27CA: object stepped + rotated, CD/283F $40 += 8
-    case 0xBC: battleFxOpBC(s, &PB(0)); *pp = (int)p + 4; break;   // CD/1E45: rotation steps, CD/1E73-1E79 $40 += 4
+    case 0xA8: battleFxOpA8(h, PBP(9)); *pp = (int)p + 8; break;   // CD/27CA: object stepped + rotated, CD/283F $40 += 8
+    case 0xBC: battleFxOpBC(s, PBP(4)); *pp = (int)p + 4; break;   // CD/1E45: rotation steps, CD/1E73-1E79 $40 += 4
     case 0xBA: battleFxOpBA(h, PB(0)); break;                      // CD/1E91: spin model o<<4, drawn into window o&1
     case 0xBE: battleFxOpBE(h, PB(0)); break;                      // CD/1E27: spin model 20, drawn into window o&1
     case 0xEA:                                                     // CD/1864 `REP #20 / LDA [$40] / STA $2000 / STA $2200 /
@@ -21770,6 +21768,7 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
     default: return 1;
   }
   #undef PB
+  #undef PBP
   return 0;
 }
 // CD/0607 (from CD/08A4 while the HUD band is still, `$CA1E == 0`): a program's block request ($CA17, source $CA18)
@@ -21780,7 +21779,7 @@ static void battleFxTilemapUpload(CtBattleHost* h) {
   if (!rom || !s[0xCA17]) return;                                  // CD/0607
   s[0xCA17] = 0;                                                   // CD/060C
   int a = (s[0xCA16] * 2) & 0xFF; s[0xCA16] = 0;                   // CD/060F-0614
-  int va = rom[ROM_FX_UPLOAD_VRAM + a] | (rom[ROM_FX_UPLOAD_VRAM + a + 1] << 8);   // CD/061A
+  int va = CtRomByte(rom, 0x400000L, (long)(ROM_FX_UPLOAD_VRAM + a)) | (CtRomByte(rom, 0x400000L, (long)(ROM_FX_UPLOAD_VRAM + a + 1)) << 8);   // CD/061A
   int src = s[0xCA18] | (s[0xCA19] << 8);
   if (a == s[0xCD1F]) {                                            // CD/0624
     if (src == (s[0xCD20] | (s[0xCD21] << 8))) return;             // CD/062C BEQ -> skip
@@ -21942,7 +21941,7 @@ static void battleFleeProgSlotRun(CtBattleHost* h, int X) {
   int tr = battleFleeProgTraceOn();
   int p = s[0xCA35 + X] | (s[0xCA36 + X] << 8);                    // D1655-165D ($40/$41; $42 = $CA37 = D1)
   for (int guard = 0; guard < 256; guard++) {
-    int op = rom[ROM_BANK_D1 + (p & 0xFFFF)];                       // D165F LDA [$40]
+    int op = CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + (p & 0xFFFF)));                       // D165F LDA [$40]
     if (op < 0x80) {
       if (op == 0x7F) {                                            // D1663-1672: idle -- one byte, the frame is spent
         p++; s[0xCA35 + X] = (uint8_t)p; s[0xCA36 + X] = (uint8_t)(p >> 8);
@@ -22038,8 +22037,8 @@ static void battleFxPalRecordArm(uint8_t* s, unsigned table) {
   int f55 = (s[0x2C6B] & 0x40) ? 1 : 0;                            // CD/0E38-0E43
   if (!rom || f55 || (long)table + 0x28 >= rl) return;             // CD/0E64-0E66 / CD/0E7C-0E80: `$55` set -> RTS
   int x = (s[0x2A21] & 1) ? 0x20 : 0;                              // CD/0E4C-0E5D (X = $55 * 16, + 20 with $2A21 bit 0)
-  for (int y = 0; y < 8; y++) s[0xCCDA + y] = rom[table + x + y];  // CD/0E69-0E75 / CD/0E81-0E8D
-  s[0xCCD9] = rom[ROM_FX_PALREC_MODE];                             // CD/0E46-0E4A + CD/0E8F-0E91 ($53 = CE:EFFA[$55])
+  for (int y = 0; y < 8; y++) s[0xCCDA + y] = CtRomByte(rom, 0x400000L, (long)(table + x + y));  // CD/0E69-0E75 / CD/0E81-0E8D
+  s[0xCCD9] = CtRomByte(rom, 0x400000L, (long)(ROM_FX_PALREC_MODE));                             // CD/0E46-0E4A + CD/0E8F-0E91 ($53 = CE:EFFA[$55])
   s[0xCCE5] |= 0x80;                                               // CD/0E94-0E99
 }
 static void battleFxLoadPalArm(uint8_t* s) { battleFxPalRecordArm(s, ROM_FX_PALREC_LOAD); }   // CD/0E79
@@ -23256,7 +23255,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     for (int slot = 0; slot < 8; slot++) s[ENEMY_BLOCK(slot) + 0x1D] = 0x80;   // FD/AA98-AAAC
     { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);           // CD/01B6-01CF
       s[0x020D] = 0x11; s[0x020E] = 0xEF; s[0x020F] = 0xCE;
-      int snd = (rom && rl > (long)(ROM_FLEE_MSG_SND_TBL + 8)) ? rom[ROM_FLEE_MSG_SND_TBL + 8] : 0xFF;
+      int snd = (rom && rl > (long)(ROM_FLEE_MSG_SND_TBL + 8)) ? CtRomByte(rom, 0x400000L, (long)(ROM_FLEE_MSG_SND_TBL + 8)) : 0xFF;
       if (snd != 0xFF) battleSfxPost(h, 0x18, (uint8_t)snd, 0x80); }
     s[0x020C] = 0x08; s[0xCCED] = 0; s[0x02A1] = 0; s[0x0214] = 0;  // CD/025E-0272
     s[0x0213] = 0x40;                                               // CD/027C -> CD/027F
