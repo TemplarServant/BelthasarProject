@@ -90,12 +90,29 @@ def runs_from_text(text):
     return out
 
 
+def is_ramp(win):
+    """A window made of STRUCTURE, not content: read as 1, 2 or 4 interleaved sequences (bytes, little-endian words,
+    longs), each one steps by a constant (00 01 02 .., 00 00 01 00 02 00 .., a run of one value) or holds only zero
+    and powers of two (80 40 20 .. 01: bit masks). Identity, index and bit tables: any program and any data may hold
+    them."""
+    def seq_ok(q):
+        d = (q[1] - q[0]) & 0xFF if len(q) > 1 else 0
+        if all(((q[k + 1] - q[k]) & 0xFF) == d for k in range(len(q) - 1)):
+            return True
+        return all(v & (v - 1) == 0 for v in q)
+    return any(all(seq_ok(win[r::st]) for r in range(st)) for st in (1, 2, 4))
+
+
+def content(win):
+    return len(set(win)) >= 8 and not is_ramp(win)
+
+
 def find_leak(data, corpora, w):
     """(corpus name, offset, window start) of the first content window of `data` found in a corpus, else None."""
     step = max(1, w // 2)
     for i in range(0, max(1, len(data) - w + 1), step):
         win = data[i:i + w]
-        if len(win) < w or len(set(win)) < 8:
+        if len(win) < w or not content(win):
             continue
         for name, blob in corpora:
             off = blob.find(win)
@@ -111,7 +128,7 @@ def corpus_index(corpora, w, stride):
     for name, blob in corpora:
         for o in range(0, len(blob) - w + 1, stride):
             win = blob[o:o + w]
-            if len(set(win)) >= 8 and win not in idx:
+            if content(win) and win not in idx:
                 idx[win] = (name, o)
     return idx
 
@@ -119,7 +136,7 @@ def corpus_index(corpora, w, stride):
 def find_leak_indexed(data, idx, w):
     for i in range(0, len(data) - w + 1):
         hit = idx.get(data[i:i + w])
-        if hit:
+        if hit and content(data[i:i + w]):
             return hit[0], hit[1], i
     return None
 
@@ -134,6 +151,9 @@ def main():
                     help='a release folder: binaries (the executables, the libraries, a bundled runtime) are not '
                          'findings by themselves; their bytes are searched against an index of the corpora (every '
                          'shared run of window + 15 bytes or more)')
+    ap.add_argument('--third-party', action='append', default=[], metavar='PREFIX',
+                    help='a path (relative, a file or a folder prefix) that is an upstream runtime shipped as it is -- '
+                         'SDL2.dll, a bundled Python: listed, not searched')
     a = ap.parse_args()
 
     corpora = [('ROM', romlib.load(a.rom))]
@@ -152,12 +172,15 @@ def main():
             corpora.append((os.path.basename(c), open(c, 'rb').read()))
 
     idx = corpus_index(corpora, a.window, 16) if a.binaries else None
-    leaks = nfiles = nruns = 0
+    leaks = nfiles = nruns = nthird = 0
     for root, dirs, files in os.walk(a.dir):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for f in files:
             p = os.path.join(root, f)
             rel = os.path.relpath(p, a.dir).replace('\\', '/')
+            if any(rel == t or rel.startswith(t.rstrip('/') + '/') for t in a.third_party):
+                nthird += 1
+                continue
             data = open(p, 'rb').read()
             nfiles += 1
             text = None
@@ -179,7 +202,8 @@ def main():
             for line, run in runs:
                 nruns += 1
                 hit = find_leak_indexed(run, idx, a.window) if (idx is not None and text is None) else find_leak(run, corpora, a.window)
-                ok = any(rel == kp and line and ks in "".join(lines[max(0, line - 2):line]) for kp, ks in KNOWN_OK)
+                ok = any((rel == kp or rel.endswith('/' + kp)) and line and ks in "".join(lines[max(0, line - 2):line])
+                         for kp, ks in KNOWN_OK)                 # (a release's kit holds the tree under setup/kit/)
                 if hit and not ok:
                     leaks += 1
                     print('leak: %s:%d  %d-byte run, a window at +%d == %s at 0x%X'
@@ -188,8 +212,9 @@ def main():
     if leaks:
         print('NOT CLEAN: %d finding(s) in %d files' % (leaks, nfiles))
         return 1
-    print('clean: %d files, %d byte runs searched against %d corpora (%.1f MB ROM + %.1f MB more)'
-          % (nfiles, nruns, len(corpora), len(corpora[0][1]) / 2**20, more / 2**20))
+    print('clean: %d files, %d byte runs searched against %d corpora (%.1f MB ROM + %.1f MB more)%s'
+          % (nfiles, nruns, len(corpora), len(corpora[0][1]) / 2**20, more / 2**20,
+             '; %d third-party files not searched (%s)' % (nthird, ', '.join(a.third_party)) if nthird else ''))
     return 0
 
 

@@ -22,7 +22,7 @@ The steps, each checked:
      third-party libraries the build takes from third_party/ (git-ignored: SDL2, Dear ImGui, the Vulkan headers);
   2. the shapes: `tools/gen/shapes.py install` puts the generated files' shapes (declarations, every array zero) where
      src/data/*.h and src/xlat/*.c would be;
-  3. the build: `CT_DATAFREE=1 tools/build.py ct Belthasar` in that tree (its own build/);
+  3. the build: `CT_DATAFREE=1 tools/build.py ct` and `... Belthasar` in that tree (its own build/);
   4. the leak scan: tools/release/scan_rom_leaks.py --binaries over the release folder against the ROM (and, when
      present, ct_assets.dat and the developer's src/data tables), so no executable, library or file carries the game;
   5. the archive.
@@ -122,7 +122,8 @@ def main():
     say('3/5 the build: the oracle from the shapes, Belthasar data-free')
     env = dict(os.environ, CT_DATAFREE='1')
     env.pop('CT_BUILD_DIR', None)
-    run([sys.executable, 'tools/build.py', 'ct', 'Belthasar'], tree, env=env, quiet=True)
+    for target in ('ct', 'Belthasar'):                    # (tools/build.py builds one target a call)
+        run([sys.executable, 'tools/build.py', target], tree, env=env, quiet=True)
     b = os.path.join(tree, 'build')
 
     say('4/5 the release folder ->', dist)
@@ -145,13 +146,19 @@ def main():
     with open(os.path.join(dist, 'README.txt'), 'w', encoding='utf-8', newline='\r\n' if WIN else '\n') as fh:
         fh.write(README % {'ver': ver, 'exe': 'Belthasar' + EXE})
 
-    corpora = []
-    for c in (os.path.join(ROOT, 'ct_assets.dat'), os.path.join(ROOT, 'src', 'data')):
+    third = []                                           # upstream runtimes shipped as they are: listed, not searched
+    for f in sorted(os.listdir(dist)):
+        if f.lower().endswith('.dll'):
+            third += ['--third-party', f, '--third-party', 'setup/' + f]
+    if os.path.isdir(os.path.join(dist, 'setup', 'python')):
+        third += ['--third-party', 'setup/python']
+    corpora = []                                         # the game's bytes: the ROM and what it decompresses to
+    for c in (os.path.join(ROOT, 'ct_assets.dat'),):
         if os.path.exists(c):
             corpora += ['--corpus', c]
     say('   the leak scan (the ROM%s)' % (' + ' + ', '.join(os.path.basename(c) for c in corpora[1::2]) if corpora else ''))
     p = run([sys.executable, os.path.join(ROOT, 'tools', 'release', 'scan_rom_leaks.py'), dist, '--rom', a.rom,
-             '--binaries'] + corpora, ROOT, quiet=True)
+             '--binaries'] + corpora + third, ROOT, quiet=True)
     sys.stdout.write('   ' + p.stdout.strip().splitlines()[-1] + '\n')
 
     say('5/5 the archive')
