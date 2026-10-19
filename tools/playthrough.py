@@ -167,7 +167,7 @@ def wram_of(state):
     return open(raw + '.wram', 'rb').read()
 
 
-SHOTS = range(-3, 4)            # the port's frames shot around the leg's end: the picture's offset is reported, not assumed
+SHOTS = range(-6, 7)            # the port's frames shot around the leg's end: the picture's offset is reported, not assumed
 
 
 def port_timeline(start, pad):

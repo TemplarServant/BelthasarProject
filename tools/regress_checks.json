@@ -46988,13 +46988,17 @@
         "tools/playthrough/route.txt"
       ],
       "expect": [
+        "playthrough: 00_newgame oracle-only (power-on, the title, New Game: Battle Mode Active, the name Crono, the opening over 1F0, into 10F [oracle-only])",
         "playthrough: 01_wakeup SAME -- locs 10F 002 | story 00 03 | party 008080 | end picture 0 px at port +1",
         "playthrough: 02_downstairs SAME -- locs 002 001 | story 03 | party 008080 | end picture 0 px at port +0",
         "playthrough: 03_kitchen DIFFERENT -- locs 001 1F0 | story 03 | party 008080 | end picture 378 px at port +0",
         "playthrough: 04_to_fair SAME -- locs 1F0 005 | story 03 | party 008080 | end picture 0 px at port -2",
         "playthrough: 05_bellstairs DIFFERENT -- locs 005 1B7 | story 03 | party 008080 | end picture 323 px at port -2",
-        "playthrough: 06_marle DIFFERENT -- locs 1B7 | story 03 06 08 | party 008080 000180 | end picture 254 px at port +0",
-        "playthrough: 3/6 legs SAME"
+        "playthrough: 06_marle DIFFERENT -- locs 1B7 | story 03 06 08 | party 008080 000180 | end picture 253 px at port +4",
+        "playthrough: 07_merchant DIFFERENT -- locs 1B7 005 | story 08 | party 000180 | end picture 436 px at port -4",
+        "playthrough: 08_candy SAME -- locs 005 1B7 | story 08 | party 000180 | end picture 0 px at port -3",
+        "playthrough: 09_telepod SAME -- locs 1B7 008 | story 08 | party 000180 | end picture 0 px at port -2",
+        "playthrough: 5/9 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
@@ -47009,7 +47013,7 @@
         }
       ],
       "note_pass": "the playthrough route from New Game, leg by leg: the same pad from the same state on the rule's cartridge and on the port -- the location chain, the storyline and the party on the cartridge's frames, and each leg's last picture",
-      "notes": "2026-10-19, the start of the playthrough tests (tools/playthrough.py, tools/playthrough/route.txt: the cartridge's pad from power-on on an erased cartridge, cut into legs and written by looking -- `try`, `walk` with tools/walkto.py). Each leg starts from the cartridge's state where the previous one ended (made from power-on by the tool itself and keyed on the route and the oracle binary); the port is seeded with that WRAM and SPC and plays the same pad one frame later through the walkscript's raw `H` token, which reaches the fight too. Graded: the chains of $0100, $7F:0000 and $2980-$2982 with their frames, and the leg's last picture against the port's frames -3..+3. Residuals pinned: 03 the 1F0 seagulls (the world's ambient birds) sit elsewhere; 05 Crono's walk frame on 1B7's stairs; 06 the red banner's frame beside him. The chains are the cartridge's on every frame, Marle's scene included (story 06 at f856, 08 at f2852, the party at f2948 on both sides)."
+      "notes": "2026-10-19, the start of the playthrough tests (tools/playthrough.py, tools/playthrough/route.txt: the cartridge's pad from power-on on an erased cartridge, cut into legs and written by looking -- `try`, `walk` with tools/walkto.py). Each leg starts from the cartridge's state where the previous one ended (made from power-on by the tool itself and keyed on the route and the oracle binary); the port is seeded with that WRAM and SPC and plays the same pad one frame later through the walkscript's raw `H` token, which reaches the fight too. Graded: the chains of $0100, $7F:0000 and $2980-$2982 with their frames, and the leg's last picture against the port's frames -3..+3. Residuals pinned: 03 the 1F0 seagulls (the world's ambient birds) sit elsewhere; 05 Crono's walk frame on 1B7's stairs; 06 the red banner's frame beside him; 07 the wandering NPCs (the soldier, the man at the fountain, the cat) after the shop's close stand on other steps of their walks -- the reload after the shop. The chains are the cartridge's on every frame, Marle's scene included (story 06 at f856, 08 at f2852, the party at f2948 on both sides)."
     }
   ],
   "excluded": [

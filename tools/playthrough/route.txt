@@ -26,3 +26,16 @@
 80:96,10:46,0:10,100:2,0:60
 20:32,40:24,20:2,0:190,(100:2,0:10)*7,(100:2,0:40)*16
 0:100,8:2,0:100,8:2,0:100,(100:2,0:40)*8
+
+## 07_merchant -- back down to the square (loc 005): a merchant with Marle sets glb[85].7, the twins leave 1B7's stairs
+# scene 5 obj16 (C8 90, the shop at (304,500)): talked to from (19,32) a little to the left, B closes the shop, its line
+0:30,20:48,40:32,20:112,40:48,20:16,10:16,20:30,0:150
+20:144,40:32,20:16,40:32,10:16,80:16,40:16,20:16,40:48,80:32,10:14,0:10,100:2,0:150
+1:2,0:60,1:2,0:150,100:2,0:100
+
+## 08_candy -- up to 1B7 again; at the north stairs Marle wants candy: she goes to the stall, A talks to her when she is done
+0:30,80:32,10:32,80:16,10:16,80:16,10:144,40:16,10:40,0:200
+10:140,80:80,10:80,40:64,10:250,(100:2,0:40)*4,0:300,(100:2,0:40)*13,0:60
+
+## 09_telepod -- around the stall and up the stairs the twins left, 1B7's north exit (loc 008): Taban's call
+0:2,40:16,20:16,40:48,10:96,40:16,10:40,0:250
