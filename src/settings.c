@@ -48,6 +48,7 @@ void CtSettingsDefaults(CtSettings* s) {
 #endif
   s->touchOpacity = 45; s->touchScale = 100;
   s->sync = CT_SYNC_FRAME_PERFECT;
+  s->instantUploads = 0;
 }
 
 CtSettings* CtSettingsGet(void) {
@@ -111,6 +112,7 @@ static void setKey(CtSettings* s, const char* sec, const char* key, const char* 
     else if (!strcmp(key, "size")) s->touchScale = clampi(iv, 50, 150);
   } else if (!strcmp(sec, "timing")) {
     if (!strcmp(key, "sync")) s->sync = !strcmp(val, "free") ? CT_SYNC_FREE : CT_SYNC_FRAME_PERFECT;
+    else if (!strcmp(key, "instant_sound_uploads")) s->instantUploads = iv != 0;
   }
 }
 
@@ -155,7 +157,8 @@ int CtSettingsSave(void) {
     fprintf(f, "pad_%s=%s\n", BTN_KEY[b], pn ? pn : "");
   }
   fprintf(f, "\n[touch]\nvirtual_pad=%d\nopacity=%d\nsize=%d\n", s->touchPad, s->touchOpacity, s->touchScale);
-  fprintf(f, "\n[timing]\nsync=%s\n", s->sync == CT_SYNC_FREE ? "free" : "frame_perfect");
+  fprintf(f, "\n[timing]\nsync=%s\ninstant_sound_uploads=%d\n", s->sync == CT_SYNC_FREE ? "free" : "frame_perfect",
+          s->instantUploads);
   fclose(f);
   return 1;
 }

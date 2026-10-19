@@ -55,6 +55,8 @@ typedef struct CtSettings {
   int touchScale;               // 50..150 (%), the controls' size
   // how the game keeps the SNES's timing
   int sync;                     // CT_SYNC_*
+  int instantUploads;           // a mod: a song's (or a sound set's) upload to the sound processor costs no frames --
+                                //   the game goes on while it lands (the free sync mode has it too); off = the SNES's
 } CtSettings;
 
 CtSettings* CtSettingsGet(void);                 // the live options (defaults until CtSettingsLoad)

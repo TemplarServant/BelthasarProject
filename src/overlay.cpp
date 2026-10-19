@@ -288,6 +288,15 @@ extern "C" int CtOverlayFrame(void) {
       ImGui::TextWrapped("In Free: location loads and the reload after the menu are not black; scripts do not stop while "
                          "music loads; a battle starts and ends without waiting for the sound upload.");
       ImGui::TextDisabled("Takes effect at once. The play clock counts fewer frames, as on a faster console.");
+      ImGui::Spacing();
+      ImGui::Separator();
+      bool iu = s->instantUploads != 0;
+      if (ImGui::Checkbox("Instant sound uploads", &iu)) s->instantUploads = iu;
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("A new song (or a battle's sound set) goes to the sound processor at once: the game does not\n"
+                          "stand still while it uploads, as it did on the SNES. Scenes after a song change start up to\n"
+                          "~0.6 s earlier, and the new song starts with them. Off (the default): the SNES's timing.\n"
+                          "Free sync has it always.");
       ImGui::EndTabItem();
     }
     ImGui::EndTabBar();

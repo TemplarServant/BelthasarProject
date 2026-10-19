@@ -123,6 +123,7 @@ struct CtAudio {
   long lastRuleStart;                // the last rule JSL's start, master cycles past the vblank (traces)
   int ruleNmiOff;                    // the rule: the caller runs with the NMI disabled (CtAudioSetRuleNmiOff) -- the listing's clock
   int ruleOff;                       // the rule does not apply to this instance (CtAudioSetRuleOff): its SPC is not the cartridge's
+  int instant;                       // the mod (CtAudioSetInstant): a JSL's SPC time is not owed to the next frames, its output not played
   int ruleIrqLine;                   // the rule: the V-IRQ line whose handler waits for its H-blank (CtAudioSetRuleIrq; -1 none)
   LdHdma hdma;                       // the HDMA the loader clock walks (CtAudioSetRuleHdma); kept across the JSLs of a chain
   // THE OUTPUT IS THE DSP'S OWN STREAM. snes/dsp.c keeps its last 0x400 samples in a ring and dsp_getSamples reads the
@@ -1949,9 +1950,20 @@ int CtAudioPost(CtAudio* a, uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) {
 }
 
 int g_ctAudioTraceFrame = 0;
+// THE INSTANT UPLOADS (a mod, CtAudioSetInstant; src/field.c hostSoundInstant): a JSL's SPC time -- a song's upload, the
+// title's spin -- happens between two frames. The host freezes no frame for it (field.c), so it is owed to none: no debit
+// from the frames after; and its output, the old song's release under an upload, is not played -- the FIFO is put back
+// where the JSL found it, and the new song starts with the picture. Returns 1 when that applied.
+static int instantJsl(CtAudio* a, unsigned fifoAt) {
+  if (!a->instant) return 0;
+  if (a->fifoLen > fifoAt) a->fifoLen = fifoAt;
+  return 1;
+}
+void CtAudioSetInstant(CtAudio* a, int on) { if (a) a->instant = on ? 1 : 0; }
 int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   if (!a || !mem7E) return 0;      // NULL mem7E = no scene VM (overworld); nothing stages commands there
   uint8_t* mb = mem7E + 0x1E00;                        // $00:1E00 mirrors $7E:1E00
+  unsigned fifoAt = a->fifoLen;
   int rc;
   // THE RULE: a JSL that never touches the ports -- the driver latch down (C7/0157), nothing staged (C7/015B), a command
   // the dispatch drops or that has no derived handler -- is CPU work only: it costs nothing and moves no SPC. (The host's
@@ -2019,7 +2031,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   // The SPC time this JSL consumed is HOST time the field will now lose (the caller freezes for
   // lastFrames): debit it from CtAudioFrame's per-frame budget so the emulated SPC is not advanced
   // twice, once here and once per frozen frame. Nothing to debit for the unclocked callers.
-  a->cycleCarry -= (double)ld.clk * LD_APU_PER_MASTER;
+  if (!instantJsl(a, fifoAt)) a->cycleCarry -= (double)ld.clk * LD_APU_PER_MASTER;
   return rc;
 }
 // $7E:5AAA `LDA $2143 / AND #$0F / BEQ ->5AAA` -- the title setup's own wait, run AFTER the song
@@ -2033,6 +2045,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
 int CtAudioWaitReplyNibble(CtAudio* a, int* frames) {
   if (frames) *frames = 0;
   if (!a || !a->ready) return 0;
+  unsigned fifoAt = a->fifoLen;
   ldStart(a->engineMode, a->postLine);
   int got = 0;
   for (long i = 0; i < SPIN_LIMIT; i++) {
@@ -2043,7 +2056,7 @@ int CtAudioWaitReplyNibble(CtAudio* a, int* frames) {
   ldCatch(a);
   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   ld.active = 0;
-  a->cycleCarry -= (double)ld.clk * LD_APU_PER_MASTER;   // the SPC time this spin already consumed
+  if (!instantJsl(a, fifoAt)) a->cycleCarry -= (double)ld.clk * LD_APU_PER_MASTER;   // the SPC time this spin already consumed
   if (frames) *frames = a->lastFrames;
   return got;
 }

@@ -161,6 +161,9 @@ struct SndMachine* CtAudioMachine(CtAudio* a);   // the sound machine in C (NULL
 // The CPU's side of the ports, outside a JSL (a test harness, a stage's own post): $2140+k written now, and the sound
 // processor run `cycles` (apu_runCycles' way: to the first instruction starting at or after them; returns the cycles run).
 void      CtAudioPortWrite(CtAudio* a, int k, uint8_t v);
+// The instant sound uploads (a mod, src/field.c hostSoundInstant): a JSL's SPC time is not owed to the next frames and
+// its output is not played -- the host freezes no frame for it. Off = the SNES's timing.
+void      CtAudioSetInstant(CtAudio* a, int on);
 // `ct.exe --sndtiming <out>`: the sound machine's cost table (CT_ASSET_SND_TIMING) from the ROM; returns its bytes, 0 = failed.
 int       CtAudioTimingExport(const uint8_t* rom, long romLen, const char* path);
 int       CtAudioRunCycles(CtAudio* a, int cycles);

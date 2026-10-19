@@ -209,6 +209,12 @@ static int g_hostInteractive = 0;
 // game DOES is unchanged: the same scripts in the same order, the same fades, the same designed waits; only the
 // stretches where the console sat busy are gone. FRAME-PERFECT (the default, and always headless) keeps them all.
 static int hostSyncFree(void) { return g_hostInteractive && CtSettingsGet()->sync == CT_SYNC_FREE; }
+// THE INSTANT SOUND UPLOADS (a mod: settings.h instantUploads, the F1 overlay's Sync tab; the free mode has it too): a
+// song's (or a sound set's) upload to the sound processor costs no frames -- the field's scripts, the battle's boot and
+// exit, the world's pass, the menu's exchange and the title do not stand still while it lands, and the sound machine
+// takes the upload's time between two frames (src/audio.c CtAudioSetInstant: none of it owed to the next frames, none of
+// its output played), so the new song starts with the scene. Off (the default, and always headless): the SNES's timing.
+static int hostSoundInstant(void) { return g_hostInteractive && (CtSettingsGet()->sync == CT_SYNC_FREE || CtSettingsGet()->instantUploads); }
 static int hostWideW(void);                      // (the widescreen's picture width, below)
 static void hostDstRect(CtPresenter* pr, SDL_Rect* r) {
   int ow = CAMW, oh = CAMH;
@@ -5142,7 +5148,7 @@ static int fieldSoundPostBattleRule(void* ctx, uint8_t* mem7E, int nmiLine, int 
   CtAudioLastPostRaster(a, &fr, NULL, NULL);
   CtAudioSetRulePost(a, CtAudioRulePadWait(), CtAudioRulePadWait());   // back to the field's own
   CtAudioSetRuleIrq(a, -1);
-  return hostSyncFree() ? 0 : fr;                    // (the free mode: the fight never stalls on its SPC)
+  return hostSoundInstant() ? 0 : fr;                // (instant uploads: the fight never stalls on its SPC)
 }
 static void fieldSoundFrameSpc(void* ctx) { CtAudioFrame((CtAudio*)ctx); }   // a headless fight's frame of SPC (the rule)
 // The event VM's sink: the same JSL, PRICED -- the loader clock's frames crossed and return line, so
@@ -5156,7 +5162,7 @@ static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
   if (g_ruleAudio) CtAudioSetRuleIrq(a, -1);
   if (getenv("CT_SNDTRACE") && c0)
     fprintf(stderr, "[snd] vm f%d cmd=%02X p1=%02X from line %d: %d NMI(s) crossed, returns on line %d\n", g_sndTraceFrame, c0, c1, startLine, fr, el);
-  return (hostSyncFree() ? 0 : fr) * 1024 + el;      // (the free mode: the upload parks nothing)
+  return (hostSoundInstant() ? 0 : fr) * 1024 + el;  // (instant uploads: the upload parks nothing)
 }
 // The `JSL $C7:0004` a stager performs for itself (the field VM's sound ops, the scene-load staging
 // and the overworld ENTRY all do this inline in the ROM). No audio -> inert, and the mailbox simply
@@ -5245,7 +5251,7 @@ static CtRaceIo raceIoFor(uint8_t* w) {
 // C2/CC28). Read only where the SPC keeps the console's clock (lockstep, paced, the rule's audio); elsewhere it never waits.
 static int menuExchBusy(void) {
   static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
-  if (!g_fieldAudio || !(ls || g_sndPaced || g_ruleAudio) || hostSyncFree()) return 0;
+  if (!g_fieldAudio || !(ls || g_sndPaced || g_ruleAudio) || hostSoundInstant()) return 0;
   uint8_t po[4] = { 0, 0, 0, 0 };
   CtAudioPorts(g_fieldAudio, NULL, po);
   return po[1] != 0;
@@ -5268,7 +5274,7 @@ static int owSoundJsl(uint8_t* mem7E) {
   if (g_ruleAudio) CtAudioSetRulePost(a, CtAudioRulePadWait(), CtAudioRulePadWait());
   CtAudioSetPostLine(a, 12);                         // the default (audio.h)
   if (getenv("CT_SNDTRACE")) fprintf(stderr, "[snd] world pass JSL: %d NMI(s) crossed\n", fr);
-  return hostSyncFree() ? 0 : fr;                    // (the free mode: the world never stands still for it)
+  return hostSoundInstant() ? 0 : fr;                // (instant uploads: the world never stands still for it)
 }
 // One `JSL $C7:0004` of the battle's two field-side sound routines, C0/1BAB (enter) and C0/1BE6 (exit).
 // CT_SNDTRACE=1 prints it the way the VM's own posts print, so the pair can be read beside an oracle
@@ -5841,7 +5847,7 @@ static void fieldBattleSndPost(CtAudio* a, uint8_t* bs, const char* site, int en
   // `70 01` set costs 13 NMIs), and Crono held his entrance pose for 85 frames against the cartridge's 51.
   { static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
     int fr = 0; CtAudioLastPostRaster(a, &fr, NULL, NULL);
-    if ((ls || g_sndPaced || g_ruleAudio) && !hostSyncFree()) g_battleSndFrames += fr; }   // (free: the uploads cost nothing)
+    if ((ls || g_sndPaced || g_ruleAudio) && !hostSoundInstant()) g_battleSndFrames += fr; }   // (instant: the uploads cost nothing)
   if (tr) { int fr = 0, el = 0; long long mc = CtAudioLastPostRaster(a, &fr, &el, NULL);
             fprintf(stderr, "[snd] field %s priced: %lld master cycles, %d NMI(s) crossed, returns on line %d\n", site, mc, fr, el); }
 }
@@ -12140,6 +12146,7 @@ int main(int argc, char** argv) {
           // posts belong to that slice, so the first slice runs after them -- one pass later, as --vmdiff runs it)
           static int ruleSeededFirst = 1;
           if (ruleSeeded && ruleSeededFirst) { ruleSeededFirst = 0; continue; }
+          CtAudioSetInstant(audio, hostSoundInstant());   // (the mod: the next frames' uploads cost none)
           CtAudioFrame(audio);
           if (audioDev && audioBuf) {
             // THE LEVEL GATE, from the vendored LakeSnes reference this engine's audio is ported from
@@ -14251,7 +14258,7 @@ int main(int argc, char** argv) {
         // `81 01 FF FF`, C2/CBE0 the `$2143 & 0F` spin, C2/8216. Its JSLs and its spin are the frames before C2/C649 (P).
         if (menuExchOn && menuExchSong == 3 && menuShellF >= menuShellS0) {
           static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
-          const int priced = (ls || g_sndPaced || g_ruleAudio) && !hostSyncFree() && g_fieldAudio;
+          const int priced = (ls || g_sndPaced || g_ruleAudio) && !hostSoundInstant() && g_fieldAudio;
           uint8_t po[4] = { 0, 0, 0, 0 };
           if (priced) CtAudioPorts(g_fieldAudio, NULL, po);
           if (po[1]) { if (menuShellP < menuShellF + 3) menuShellP = menuShellF + 3; }   // C2/CBC5 BEQ not taken: C2/CBC7
@@ -16385,7 +16392,7 @@ int main(int argc, char** argv) {
           if (g_fieldAudio) { int f2 = 0; CtAudioLastPostRaster(g_fieldAudio, &f2, NULL, NULL); fr += f2; }
           g_mnSfxPosts += 2; g_mnSfxEvents += 2; g_mnSfxSeen = 1;
           { static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
-            menuExchHold = ((ls || g_sndPaced || g_ruleAudio) && !hostSyncFree()) ? fr : 0; }
+            menuExchHold = ((ls || g_sndPaced || g_ruleAudio) && !hostSoundInstant()) ? fr : 0; }
           menuExchSong = 2;
           memset(fb, 0, (size_t)CAMW * CAMH * 3);
           if (getenv("CT_MENUSFX")) printf("menusfx-menu: exchange close 11 %02X, 81 10 %02X (C2/CC33) -- %d frame(s)\n",
@@ -17125,7 +17132,8 @@ int main(int argc, char** argv) {
         // Charged where the SPC's state at the post is the console's -- lockstep or a paced host, fieldBattleSndPost's
         // gate; an unpaced run keeps the power-on measurement.
         { static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
-          if (audio && (ls || g_sndPaced || g_ruleAudio)) seqHold = g_titlePostFrames + g_titleSpinFrames; }
+          if (audio && hostSoundInstant()) seqHold = 0;   // (instant uploads: the song lands at once, the picture with it)
+          else if (audio && (ls || g_sndPaced || g_ruleAudio)) seqHold = g_titlePostFrames + g_titleSpinFrames; }
       }
       // CT_STAGE_HANDOFF_WRAM=<path>: the 128 KB a native stage opens on (before its C3:0000), to diff against the cartridge's
       // (ct.exe --xlatentries / --peek); `stage-handoff: frame F $0384=XX` names the frame (tools/stage_rule_cmp.py).

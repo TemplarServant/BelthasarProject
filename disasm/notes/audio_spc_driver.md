@@ -1,8 +1,11 @@
 # The SPC700 sound driver -- the map, read from the ROM to port it to C
 
-**Status (2026-10-18): step 2 DONE -- the driver in C** (`src/sound/driver.c`), identical tick by tick to this
-program on the vendored SPC700 over the attract, the quick tier's runs and a constructed command stream ("The port",
-below). Step 1 was the reading. The user's decision of 2026-10-18: the game must not need the ROM once `ct_assets.dat`
+**Status (2026-10-18): step 5 DONE -- the game plays through the sound machine in C** (`src/sound/machine.c`: the sound
+processor's whole program -- the boot ROM, this driver, its upload receivers -- as C, timed by the listing's cycles, with
+native timers, ports and S-DSP; "The machine", below). No SPC700 runs on Belthasar's play path and no byte of bank
+`$C7`'s code is read: block 0 reaches the container as its data only, the cost table is made at setup. Identical to this
+program on the vendored SPC700 instruction for instruction (the attract, the quick tier, a constructed stream), and
+what the player hears sample for sample. Step 2 was the driver in C tick by tick, step 1 the reading. The user's decision of 2026-10-18: the game must not need the ROM once `ct_assets.dat`
 is extracted, through DECODED assets, and the sound first -- the cartridge's sound driver ran as ROM code on the
 vendored SPC700 (`snes/spc.c`, through `src/audio.c`), which is emulation. This note is the map and, per routine, per
 event and per command, the reading the port was written from.
@@ -340,4 +343,80 @@ The C port names every field (`src/sound/driver.c`: D_ the direct page, P_ page 
    (`$15CC`, `$16FF/$1710`, `$1D6D-$1DEE`) as the C driver's own data -- today they reach it in the uploaded block 0,
    from the container. The uploads' protocol cancels out between two C halves, but the FRAMES the game waits on a busy
    SPC are part of the game under the rule (CLAUDE.md, "The SPC under the rule"): the native model must charge them.
-4. **Belthasar without the SPC700** and without bank `$C7`.
+4. **Belthasar without the SPC700** and without bank `$C7`: DONE, "The machine" below.
+
+## The machine (step 5, 2026-10-18)
+
+The user's decision: the frames the game waits on the sound processor (a song's upload, a command's echo) are the
+vanilla game -- the exact cost, a native SPC700-cycle model of the C driver's paths; an instant upload is a mod (the F1
+overlay's Sync tab). So the C is no longer the driver's tick alone: it is the sound processor's whole program, in its
+own time.
+
+- **The program** (`src/sound/driver.c`, `SndDrvProgram`): the boot ROM (`$FFC0`: the direct page cleared, `$BBAA`, the
+  blocks with their running index, `JMP [$0000+X]`), the driver's boot (`$0200`), its main loop (`$0299`: the poll
+  `$0B96`, timer 0's count, the tick), the commands with the PUSH/RET dispatch written as switches, the song start
+  (`$0BE6`: its `MOV SP,#$FF / JMP $0299` a `longjmp` to the loop) and its refusal wait, the effects' start, the upload
+  session `$100E` with every receiver (kinds 0-7, token by token, their self-modified store operands kept where the
+  driver keeps them), the reset path `FF F0` (`$12D0`: back to the boot ROM). It runs in a coroutine
+  (`src/sound/coro.c`: a fiber on Windows, a thread elsewhere -- one side at a time, as deterministic as a call).
+- **The time** (`src/sound/timing.h`): every routine marks the address it reaches (`AT(pc)`); the walker charges the
+  instructions from the last mark with the cost table -- straight on, a conditional branch taken when the mark is its
+  target, a jump or call followed, a return landing on the mark. So every basic block the original runs has a mark: a
+  branch's fall-through where its target is also reached, the return address after each CALL, a mark inside each loop
+  other than its head (two loops without one, the octave's `$070E` and three more, were found by the lockstep). An
+  access the outside sees goes through a helper naming its instruction (`dspW`, `portR`, `timerR`, `ctlW`, `ramW`...),
+  so it happens at the cycle the original makes it: the instruction's start + the access's index + 1, apu.c's count.
+  The cost table holds, per reachable instruction, its length, kind, cycles (a branch both ways), target, its accesses
+  to `$F0-$FF` (which cycle, which register, read or write) and its stores' cycles -- measured once on the vendored
+  SPC700 (`SndTimingBuild`: each address run alone, neutral, then 64 random trials for both ways of a branch).
+- **The machine** (`src/sound/machine.c`): the program's RAM is the S-DSP's (the native mixer renders from it and writes
+  the echo into it); the three timers (`$F1`, `$FA-$FC`, the 128/16-cycle prescaler, the 4-bit counters, steps at the
+  cycles before an access); the four ports each way; the S-DSP brought up to an access's cycle before every S-DSP access
+  and every store it may read. `SndMachineRun(n)` is `apu_runCycles`: the program stops before the first instruction
+  that starts at or after now + n (its clock's `want`; the coroutine yields there), so a handshake costs the SPC time it
+  costs on the vendored core, to the cycle, and the host's port writes and reads land in the same order. The SPC700's
+  reset (8 cycles) is the first run's.
+- **Where it is not exact -- MEASURED, and no game data reaches it**: the S-DSP reading the driver's own working RAM
+  (the direct page and page 1, the fades, the queue, the state arrays and the save area, `$F15F-$FFFF`). The original
+  writes that RAM at its cycles while the S-DSP reads it; the C program writes its state between two marks. It takes a
+  voice keyed on an instrument whose sample is not loaded (its directory entry zero: the direct page played as a sample)
+  or a raw S-DSP write putting the echo buffer there -- the fuzz's constructed songs and random commands: 5, 2 and 29
+  sample differences in the 600-action fuzz with seeds 2, 7 and 11 (23.8M, 22.6M and 25.6M samples), counted apart by
+  the lockstep and levelled at the next `$0299`. The attract, the quick tier and every game load never do it.
+- **The seeded and saved machine**: a run from an oracle state (`CtAudioSeedFromApu`, `CT_AUDIO_SEEDSTATE`) starts on
+  the vendored core and hands over at its next `$0299` (`CtSndMachineAdoptApu`: the RAM, the ports, the timers with
+  their phase, the S-DSP field for field). A savestate cannot write down a coroutine's stack, so the machine keeps a
+  restore point -- its whole state at the main loop's top, retaken there once the record has grown -- and the host's
+  inputs since (port writes, runs); loading is the restore point taken back and the record replayed (`SndMachineSave` /
+  `SndMachineLoad`; Belthasar's `.apu` files, "CTSM"). `CT_SNDDRV_SAVETEST=37` saves and loads in place every 37th run
+  of the fuzz: 33,866 loads, the lockstep identical after each.
+- **The data**: `CT_ASSET_SND_TIMING` is the cost table, made at setup from the player's ROM (`ct.exe --sndtiming`,
+  `tools/gen/snd_timing.py`, the asset stage); its code map (3,188 instructions reachable: block 0's 3,156 from `$0200`
+  and the six dispatch tables, the boot ROM's 32) says which of block 0's bytes are code -- `pack_sound` zeroes them, so
+  the container's block 0 is its 608 bytes of data (the operand counts, the flush list, the dispatch words, the pitch and
+  length tables, the built-in pulse sample). The vendored core (the reference) takes its block 0 from the ROM.
+- **The host** (`src/audio.c`): `CT_AUDIO_SPC=machine` (Belthasar's default), `ref` (the vendored core: ct.exe's default,
+  the tools' reference), `lockstep` (both, compared; the game hears the reference). The S-DSP's debug traces are the
+  machine's too (`CT_DSP_KONTRACE`, `CT_DSP_RAWPCM`, `CT_DSP_VOICEMASK`, `CT_DSP_LOG`: one sample count a process).
+  `CT_MIXER_CAPTURE` and `CT_SPC_COVERAGE` are the vendored core's: run them with `CT_AUDIO_SPC=ref`.
+- **The lockstep v2** (`src/sound/lockstep.c`, `CT_AUDIO_SPC=lockstep`): the host runs the vendored core, then the machine
+  to the same time; four hooks queue the original's instructions (address, cycle) and accesses (S-DSP writes and reads,
+  port and timer reads, port and control writes, the stores into `$1E00-$F15E`; the SPC700's dummy read before a store
+  dropped); the machine's trace and observer take them in order, every field equal; at each run's end the same stop, the
+  same ports, the same samples; the RAM at the main loop's top after each tick (the registers' mirror, the stack and the
+  scratch aside). A mismatch is reported with the events before it and the machine joins again at the next `$0299`.
+  `CT_SNDLS_REJOIN=<n>` re-adopts every n runs (the adoption's own check: 12,728 re-joins, identical);
+  `CT_SNDLS_WATCH=<adr>:<len>`, `CT_SNDLS_RAMWATCH=<adr>`, `CT_SNDLS_SAMPDUMP=<first>:<n>` are its debugging aids.
+- **Results**: the attract 47,434,100 instructions, 9,204,254 accesses, 5,993,224 samples and 34,866 RAM checks
+  identical; the fuzz (600 actions, seed 2) 190,578,577 instructions, 60/60 events, 29/29 commands, 8/8 upload kinds, 7/7
+  look-ahead handlers; the attract's PCM (`CT_AUDIO_PCM`) machine against reference identical (5,981,334 samples) with the
+  picture; the quick tier's 412 Belthasar runs, the 58 with sound PCM-identical (26.8M samples), all 412 printing the same.
+- **The mod**: `instant_sound_uploads` (settings, the F1 overlay's Sync tab; the free mode has it too): the uploads park
+  nothing (field.c `hostSoundInstant`: the field's scripts, the battle's boot and exit, the world's pass, the menu's
+  exchange, the title's 37 + 6) and the machine takes their time between two frames (`CtAudioSetInstant`: not owed to the
+  next frames, its output -- the old song's release -- not played), so the new song starts with the scene. Off by default
+  and always headless: the vanilla game byte-identical.
+- **Pinned**: `snddrv-lockstep-attract`, `snddrv-lockstep-fuzz` (with the save test), `snddrv-songs-direct`,
+  `snd-machine-pcm-attract` (quick) and `snd-machine-pcm-quick` (full), `snd-assets-data-identical` (958 items: the cost
+  table and block 0's data), `snd-assets-container-equals-rom`; mutations of the walker's cost, a loop's mark, the timer
+  prescaler, the reset's cycles, the S-DSP's catch-up, the savestate's timers and the driver's logic each fail them.
