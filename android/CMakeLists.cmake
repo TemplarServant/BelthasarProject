@@ -23,6 +23,7 @@ add_library(main SHARED ${CT_FIELD_SRC} src/android.c)
 target_include_directories(main PRIVATE src ${SDL2_SRC_DIR}/include snes)
 target_compile_options(main PRIVATE -O2 -Wno-everything)
 target_compile_definitions(main PRIVATE CT_XLAT_NO_GWARP)   # the gate warp is native (src/seq_gwarp.c)
+target_compile_definitions(main PRIVATE CT_AUDIO_SPC_DEFAULT=1)   # the sound machine in C, as the desktop's (no ROM code runs)
 target_link_libraries(main SDL2 m log android)
 
 # The frames between and the higher internal resolution draw on every core (field.c's MSVC /openmp, here libomp,

@@ -44157,15 +44157,15 @@
       ],
       "expect": [
         "sync: frame_perfect scene 433 6 black at f2058 | world 5 38 black at f2136 | scene 366 16 black at f2407 | scene 28 31 black at f2804 | scene 27 37 black at f3167 | scene 173 23 black at f3483",
-        "sync: free          scene 433 0 black at f2058 | world 5 0 black at f2100 | scene 366 0 black at f2333 | scene 28 0 black at f2714 | scene 27 0 black at f3046 | scene 173 0 black at f3325",
-        "sync: same locations in the same order (6 loads); free: 0 black frames; it reaches the last one 158 frames sooner"
+        "sync: free          scene 433 0 black at f2015 | world 5 0 black at f2057 | scene 366 0 black at f2290 | scene 28 0 black at f2671 | scene 27 0 black at f3003 | scene 173 0 black at f3282",
+        "sync: same locations in the same order (6 loads); free: 0 black frames; it reaches the last one 201 frames sooner"
       ],
       "pin": [
         "^sync: "
       ],
       "timeout_s": 900,
       "note_pass": "the free sync mode: the attract loads the same locations in the same order, with none of the black frames the SNES spent decompressing and uploading",
-      "notes": "2026-10-09 (the user's options, phase 3; the decision of the same day: the SNES's timing artefacts only where they change the game). tools/sync_free_check.py runs the attract's first 3600 frames under both modes (CT_SETTINGS, the interactive presentation forced by CT_OVERLAY_SHOT) and lists every load. Free = field.c hostSyncFree(): the field VM's song uploads park nothing, a load's and the menu reload's black are skipped, the battle's boot / exit uploads and its own posts cost no frames, the overworld's inline JSL neither. Frame-perfect (the default, always headless) is unchanged -- the rest of the suite."
+      "notes": "2026-10-09 (the user's options, phase 3; the decision of the same day: the SNES's timing artefacts only where they change the game). tools/sync_free_check.py runs the attract's first 3600 frames under both modes (CT_SETTINGS, the interactive presentation forced by CT_OVERLAY_SHOT) and lists every load. Free = field.c hostSyncFree(): the field VM's song uploads park nothing, a load's and the menu reload's black are skipped, the battle's boot / exit uploads and its own posts cost no frames, the overworld's inline JSL neither. Frame-perfect (the default, always headless) is unchanged -- the rest of the suite. Re-pinned 2026-10-19: since sound step 5 (42163cf) the free mode also makes the sound uploads instant (field.c hostSoundInstant: free or the F1 'Instant sound uploads' mod), so every load comes 43 frames sooner -- measured: frame-perfect with instant_sound_uploads=1 alone reaches scene 433 at f2015 too; the frame-perfect line is the same as before."
     },
     {
       "name": "field-motion-owners-explain-the-attract-motion",
