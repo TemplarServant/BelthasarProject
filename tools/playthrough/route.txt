@@ -1,0 +1,41 @@
+# The playthrough route: the cartridge's pad from power-on (erased cartridge) to "The End". See tools/playthrough.py.
+
+## 00_newgame -- power-on, the title, New Game: Battle Mode Active, the name Crono, the opening over 1F0, into 10F [oracle-only]
+# Start at the title; A on ACTIVE; Start closes the name prompt, Start accepts "Crono"; the pan to 10F (f2447).
+0:300,8:2,0:198,100:2,0:200,8:2,0:100,8:2,0:1794
+
+## 01_wakeup -- Mom wakes Crono; her lines with A until he is up (story 03)
+(100:2,0:58)*30
+
+## 02_downstairs -- control back at f132; down the stairs to the kitchen (loc 001)
+0:140,20:16,40:16,20:16,40:48,20:16,80:48,10:16,0:120
+
+## 03_kitchen -- Mom in the corridor: her lines, Lucca's name (Start closes the prompt, Start accepts), out the door
+0:30,20:24,(100:2,0:38)*6,0:100,8:2,0:100,8:2,0:100,(100:2,0:38)*8,0:60
+40:16,20:80,40:16,20:16,10:16,20:40,0:150
+
+## 04_to_fair -- on the overworld, up to Leene Square (its label shows on the tile), A enters (loc 005)
+0:10,10:60,40:30,10:60,80:12,10:30,0:30,100:2,0:200
+
+## 05_bellstairs -- around the fountain and up the square's stairs into 1B7 (Leene's Bell)
+0:30,10:176,40:32,10:48,80:16,10:160,40:16,10:32,80:16,10:80,0:200
+
+## 06_marle -- up the steps: Marle runs into Crono; the pendant (obj15 at tile (30,8), A from (30,10): $2400 = D6);
+# her loop passes (28,13) every ~250 frames -- Crono waits at (28,12) facing down; her lines, her name (Start, Start)
+10:120,80:40,0:100,(100:2,0:48)*16,0:100
+80:96,10:46,0:10,100:2,0:60
+20:32,40:24,20:2,0:190,(100:2,0:10)*7,(100:2,0:40)*16
+0:100,8:2,0:100,8:2,0:100,(100:2,0:40)*8
+
+## 07_merchant -- back down to the square (loc 005): a merchant with Marle sets glb[85].7, the twins leave 1B7's stairs
+# scene 5 obj16 (C8 90, the shop at (304,500)): talked to from (19,32) a little to the left, B closes the shop, its line
+0:30,20:48,40:32,20:112,40:48,20:16,10:16,20:30,0:150
+20:144,40:32,20:16,40:32,10:16,80:16,40:16,20:16,40:48,80:32,10:14,0:10,100:2,0:150
+1:2,0:60,1:2,0:150,100:2,0:100
+
+## 08_candy -- up to 1B7 again; at the north stairs Marle wants candy: she goes to the stall, A talks to her when she is done
+0:30,80:32,10:32,80:16,10:16,80:16,10:144,40:16,10:40,0:200
+10:140,80:80,10:80,40:64,10:250,(100:2,0:40)*4,0:300,(100:2,0:40)*13,0:60
+
+## 09_telepod -- around the stall and up the stairs the twins left, 1B7's north exit (loc 008): Taban's call
+0:2,40:16,20:16,40:48,10:96,40:16,10:40,0:250
