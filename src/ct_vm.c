@@ -1724,6 +1724,12 @@ typedef struct { int addr; int ret[8]; int prio, dc, tb, wait;
 // (The tent of horrors, loc 1B2: Bekkler waits in his talk fn1 on obj0's game, `04 00 33`; the game's end calls his fn3
 // at priority 0, `04 16 03`. Polled every visit, his fn3 never ran and the two waited on each other for good.)
 static int ssParked(const CtSS* s) { return s->waitObj >= 0 && s->callAddr >= 0 && s->addr == s->callAddr + 3; }
+// What a pre-empt PUSHES into the return slot: the ROM's $1180,X (C0/6168 / 6005 / 60CC, the invokes C0/5AC5 / 3154,
+// C0/5B41), which for a parked waiter is the 04/07's OWN byte, not the op after it. The RETURN then lands ON the call,
+// and the op decides on the latch as it always does (C0/6109): still set -> the poll; cleared -> a fresh install. The
+// latch is cleared under the waiter when the pre-empting function runs a 04/07 of its own (the poll arm on ITS operands,
+// below), so returning to "past the call" -- what the port pushed before -- skipped a call the ROM makes again.
+static int ssPushAddr(const CtSS* s) { return ssParked(s) ? s->callAddr : s->addr; }
                                                  // call-and-WAIT until the callee finishes
 // Per-frame, transient -- outside the struct: the debug savestate writes CtScene raw, so its layout must not move.
 static uint8_t g_ranB0[64];                   // op 0xB0 / 0xAF dispatched in THIS frame's pass (C0/3002 ran)
@@ -3033,7 +3039,7 @@ static void reqOp(CtScene* sc, int target, int function, int priority) {
   // so Marle's post-bump fn5 (`02 06 55` from fn2, prio 5) never ran and she stood still instead of
   // pacing "looking for the pendant".
   if (ts->addr >= 0 && ts->prio < priority) { if (ts->ret[priority] == 0) ts->ret[priority] = fpPtr(sc, target, function); return; }
-  if (ts->addr >= 0) ts->ret[ts->prio] = ts->addr;
+  if (ts->addr >= 0) ts->ret[ts->prio] = ssPushAddr(ts);          // C0/6005 / 60CC / 6168: $1180 (a waiter's 04 byte)
   ts->addr = fpPtr(sc, target, function); ts->prio = priority;
   // A PREEMPTING FUNCTION DROPS THE TARGET'S IN-FLIGHT MOVE. All three install arms end the same
   // four stores, in this order: `STA $1180,X / STA $1C00,X / STZ $1A80,X / STZ $1A01,X` --
@@ -3141,6 +3147,13 @@ void CtSceneMenuReloadObjects(CtScene* sc) {
 }
 
 static int ctWipeOp(CtScene* sc, int sub);
+// THE POLL'S VERDICT (C0/61B4-61D6, the comment in step() below): 1 = keep waiting on `tgt` for a call made at priority
+// `pr`, 0 = released. One body for the parked poll and for a 04/07 met with the latch already set.
+static int ssCallBusy(const CtScene* sc, int tgt, int pr) {
+  if (tgt < 0 || tgt >= sc->nobj) return 0;        // no such object: $1100,X reads 80 (unloaded), 61B7 BMI -> released
+  const CtSS* t = &sc->st[tgt];
+  return !sc->actors[tgt].dead && t->addr >= 0 && t->prio <= pr;
+}
 static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
   CtSS* s = &sc->st[obj]; const uint8_t* B = sc->body; int blen = sc->blen, addr = s->addr;
   if (ssParked(s)) {                               // 0x04/0x07, IP on the call: wait for the callee's function
@@ -3155,8 +3168,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // sparkle's ~180f convergence-to-gate mover -- while obj20 is still looping fn5 at prio 3; the
     // early release revealed Marle-inside-the-gate ~195 frames too soon. Verified vs the oracle:
     // it parks at this CALL f592..f772.) Also release if the callee was deactivated (0x0A/0x0B).
-    const CtSS* t = &sc->st[s->waitObj];
-    if (!sc->actors[s->waitObj].dead && t->addr >= 0 && t->prio <= s->waitPrio) return 1;
+    if (ssCallBusy(sc, s->waitObj, s->waitPrio)) return 1;
     s->waitObj = -1;             // RELEASE: the visit goes on (ROM SEC/continue)...
     // ...BUT THE POLL IS ITSELF ONE OF THE VISIT'S FIVE DISPATCHES. The parked IP is the 04's own byte (61A4 `TYX / CLC`),
     // so the visit that finds the call complete dispatches the 04 again, and its completion exit 61E0 `INX x3 / SEC`
@@ -3823,6 +3835,27 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // party of Crono and Lucca hosts Lucca in obj3 ($0199 = 06), and the 600 A.D. inn's bedroom
     // (loc 0x75, obj0 `07 02 13`) woke the empty Marle object instead of her (move.c's graded
     // runner already reads it this way).
+    // ⭐ A 04/07 MET WITH THE LATCH ALREADY SET POLLS, ON ITS OWN OPERANDS -- it installs nothing. The latch $7F0980,X is
+    // one byte per object (s->waitObj >= 0), and the op reads it before anything else: C0/6109 `LDX $6D / LDA $7F0980,X /
+    // BEQ ->611A (install) / BRL ->61A7`, and 0x07's C0/6214 `BNE ->6232` -> 6236 `LDA $7F2001,X / TAX / LDA $97,X` (no
+    // empty-slot test) -> `BRL 61AF`. The poll (61A7-61E8) takes the target and the priority from the op in hand, waits
+    // (61E6 `TYX / CLC`, the IP on the op) while that priority >= the target's $1C00, and on release clears the latch
+    // (61D8-61DC) and steps past the op (61E0 `INX x3 / SEC`). The latch is still set here when a higher-priority
+    // function pre-empted a parked waiter (C0/6168, 5AC5, 3154 push the 04's byte and leave $7F0980 alone) and this op
+    // belongs to the new function. MEASURED (the rule's cartridge, saves/scene8_duas_animacoes.state, the Telepod, Up
+    // held then A on f22): the touch's fn2 of obj11 parks on `04 06 36` (Crono's fn6, the raised arms, priority 3); A
+    // pre-empts it with fn1 (the same code, priority 1), whose own `04 06 36` polls -- obj11 waits f26-f43 while the
+    // first fn6 plays and goes on at f46. The port installed the call again: Crono raised his arms a second time at f47
+    // (the user, 2026-10-19, translated from Portuguese: "sometimes Crono raises his arms, lowers them and raises them
+    // again"). disasm/notes/call_wait_latch_preempt.md sec. 4.
+    if ((op == 0x04 || op == 0x07) && s->waitObj >= 0) {
+      int t = (op == 0x04) ? B[addr + 1] / 2 : vmSlotTarget(sc->mem, op, B[addr + 1]) / 2;   // 61AB / 623B
+      int p = (B[addr + 2] & 0xF0) >> 4;                                                    // 61C6-61D0
+      s->waitObj = t; s->waitPrio = p; s->callAddr = addr; s->addr = addr + 3;              // parked on this op
+      if (ssCallBusy(sc, t, p)) return 1;                                                   // 61E6 TYX / CLC
+      s->waitObj = -1;                                                                      // 61D8-61DC latch := 0
+      return 0;                                                                             // 61E0 INX x3 / SEC
+    }
     int tgt;
     if (op <= 0x04) tgt = B[addr + 1] / 2;
     else {
@@ -3997,11 +4030,11 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     if (sc->rgBase < 0) { s->addr = nxt; return 0; }  // block never materialized -> do not park forever
     for (int i = 0; i < nf; i++) {                 // 349F / 34F6: the C0/32C8 release, per follower
       int o = fol[i]; CtSS* fs = &sc->st[o];
-      if (fs->addr >= 0) fs->ret[fs->prio] = fs->addr;   // 32E8: push the current IP onto $7F0580,X
+      if (fs->addr >= 0) fs->ret[fs->prio] = ssPushAddr(fs);   // 32E8: push the current IP ($1180) onto $7F0580,X
       fs->addr = sc->rgBase;                             // 3519 LDA #16FF / 351C STA $1180,X
       fs->prio = 0;                                      // 3521 LDA #00 / 3523 STA $1C00,X
       ctSetDc(sc, o, 0);                                 // 352C STZ $1001,X
-      fs->waitObj = -1; fs->wait = 0; fs->nm = 0;
+      fs->wait = 0; fs->nm = 0;                          // (the call latch $7F0980 survives: 32C8 does not touch it)
       sc->hasTask[o] = 0; sc->cycles[o] = 0;             // 3526 STZ $1A80,X / 3529 STZ $1A01,X
       sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
     }
@@ -4133,14 +4166,14 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       int o = v / 2;
       if (!(v & 1) && o < sc->nobj && sc->d9Base >= 0) {
         CtSS* ps = &sc->st[o];
-        if (ps->addr >= 0) ps->ret[ps->prio] = ps->addr;           // 32E8 / 336D / 33F4 STA $7F0580,X
+        if (ps->addr >= 0) ps->ret[ps->prio] = ssPushAddr(ps);     // 32E3 LDA $1180,X / 32E8 / 336D / 33F4 STA $7F0580,X
         ps->addr = sc->d9Base + 0x20 * k;                          // 32EE / 3373 / 33FA #171F / #173F / #175F
         { uint32_t ipw = (uint32_t)(ps->addr + sc->header);        // 32F1 STA $1180,X -- in WRAM NOW: a lead that
           w8(m, 0x7E1180 + (uint32_t)o * 2, ipw & 0xFF);           //   already had this frame's visit (it heads the
           w8(m, 0x7E1181 + (uint32_t)o * 2, (ipw >> 8) & 0xFF); }  //   queue) commits no visit-end mirror until next frame
         ps->prio = 0;                                              // 32F6 LDA #00 / STA $1C00,X
         ctSetDc(sc, o, 0);                                         // 3301 STZ $1001,X
-        ps->waitObj = -1; ps->wait = 0; ps->nm = 0;
+        ps->wait = 0; ps->nm = 0;                                  // (the call latch $7F0980 survives: not 32C8's)
         sc->hasTask[o] = 0; sc->cycles[o] = 0;                     // 32FB STZ $1A80,X / 32FE STZ $1A01,X
         sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
         sc->folRoamPrev[o] = 0;                                    // those STZs ARE the follower's walk-cycle release:
@@ -4991,7 +5024,9 @@ void CtSceneSeedFromWram(CtScene* sc, const uint8_t* w) {
           if (ra > 0 && ra + 2 < sc->blen && (sc->body[ra] == 0x04 || sc->body[ra] == 0x07)) {
             int tgt = (sc->body[ra] == 0x04) ? sc->body[ra + 1] / 2 : (w[0x0197 + sc->body[ra + 1]] & 0x7F) / 2;
             if (tgt < sc->nobj) { s->waitObj = tgt; s->waitPrio = (sc->body[ra + 2] & 0xF0) >> 4;
-                                  s->callAddr = ra; s->ret[p] = ra + 3; }
+                                  s->callAddr = ra; }   // ret[p] stays ON the 04: the RETURN polls there
+                                                         // (or installs anew if a 04 of the pre-empting
+                                                         // function cleared the latch first)
           }
           break;
         }
@@ -7678,11 +7713,11 @@ void CtSceneBattleReturn(CtScene* sc) {
   for (int i = 0; i < nf; i++) {                       // C0/5B1F: prioritized VM CALL of the RETURN block
     int o = fol[i]; CtSS* s = &sc->st[o];
     if (s->prio < 1) continue;                         // 5B26: only CALL if current prio >= 1 (idle=7 passes)
-    if (s->addr >= 0) s->ret[s->prio] = s->addr;       // 5B41: PUSH current IP under the current priority level
+    if (s->addr >= 0) s->ret[s->prio] = ssPushAddr(s); // 5B41: PUSH current IP ($1180) under the current priority level
     s->addr = sc->rgBase;                              // 5B4C: IP := the regroup block (our addr = op position)
     s->prio = 0;                                       // 5B54: priority := 0
     ctSetDc(sc, o, 0);                                 // 5B5F STZ $1001,X -- eligible on the next build
-    s->waitObj = -1; s->wait = 0; s->nm = 0;
+    s->wait = 0; s->nm = 0;                            // (the call latch $7F0980 is not 5B1F's: it survives, as a pre-empt's)
     sc->hasTask[o] = 0; sc->cycles[o] = 0;             // 5B59/5B5C: STZ $1A80 (velocity) / $1A01 (ticket)
     sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
   }
@@ -7905,7 +7940,7 @@ void CtSceneActivate(CtScene* sc, int obj) {
   if (obj < 0 || obj >= sc->nobj) return;
   CtSS* st = &sc->st[obj];
   if (!CtVmInvokeGate(CtSceneMem7E(sc), obj, st->prio, 2)) return;   // C0/5AC5, CMP #02
-  if (st->addr >= 0) st->ret[st->prio] = st->addr;     // save current to resume after
+  if (st->addr >= 0) st->ret[st->prio] = ssPushAddr(st);   // save current ($1180) to resume after
   int fn = fpPtr(sc, obj, 1);
   if (fn < 0 || fn >= sc->blen) return;
   st->addr = fn; st->prio = 1; st->tb = 0;
@@ -7949,7 +7984,7 @@ void CtSceneTouch(CtScene* sc, int obj) {
   // activate, both branching to the routine's own shared bail. So the port carries ONE predicate and
   // passes the immediate, exactly as the ROM does.
   if (!CtVmInvokeGate(CtSceneMem7E(sc), obj, st->prio, 3)) return;   // C0/3154, CMP #03
-  if (st->addr >= 0) st->ret[st->prio] = st->addr;     // push the running fn to its return slot
+  if (st->addr >= 0) st->ret[st->prio] = ssPushAddr(st);   // push the running fn ($1180) to its return slot
   int fn = fpPtr(sc, obj, 2);
   if (fn < 0 || fn >= sc->blen) return;
 

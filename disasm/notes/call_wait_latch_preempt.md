@@ -61,4 +61,52 @@ Graded by field-tent-mimic-won-bekkler-preempt-vs-rule-cartridge (tools/tent_mim
 cartridge's frame; the mutation back to "poll every visit" leaves every event after the call 'never'.
 
 Not modelled: the $1C00 mirror of the C-side priority (the port's $1C00 bytes keep the seed's value; the per-object
-priority lives in CtSS), and the in-function 04-with-latch quirk above.
+priority lives in CtSS). The in-function 04-with-latch quirk is modelled since 2026-10-19 (sec. 4).
+
+## 4. The 04 met with the latch set (the Telepod's double raise)
+
+The user, 2026-10-19 (translated from Portuguese): "on climbing the pod in scene 8, picking up the pendant to go after
+Marle, sometimes Crono does the arms-raising animation, lowers them and raises them again". Their guess -- the port fires
+the event on both the touch and the A button where the cartridge only on the touch -- is not it: obj11's fn1 (A) and fn2
+(touch) are the SAME code (`ct.py script 8 --obj 11`: `1/2 @0x028A`), and the cartridge runs it from either.
+
+### The ROM
+
+`C0/6109 LDX $6D / LDA $7F0980,X / BEQ ->611A / BRL ->61A7`: with the latch set the op skips the install and goes to the
+poll, which takes the target (61AB) and the priority (61C6-61D0) from THE OP IN HAND. 0x07 the same (C0/6214 `BNE ->6232`,
+6236 `LDA $7F2001,X / TAX / LDA $97,X` with no empty-slot test, `BRL 61AF`). Poll: the target's $1100 / $1000 bit 7 ->
+released; else wait (61E6 `TYX / CLC`) while the priority >= the target's $1C00; released = `STA $7F0980,X` 00 (61D8-61DC),
+`INX x3 / SEC` (61E0). The pushes (C0/6005 / 60CC / 6168, the invokes C0/5AC5 / C0/3154, C0/5B41, C0/32E8) store $1180,X,
+which for a parked waiter is the 04's own byte; none of them touches $7F0980.
+
+### The scene
+
+obj11 fn1 = fn2 (`0x028A`): `EB 30 00 / CA D6 / 04 06 36` (Crono's fn6 at priority 3: `E3 00 / B7 20 06`, the raised
+arms, anim 32 held while $7F0B07 counts 5 -> 1, ~21 frames) `/ 91 / 04 06 47 / ...`. Measured on the rule's cartridge
+(saves/scene8_duas_animacoes.state, spliced from the user's snes9x capture over saves/field_re/scene8_gate_cutscene.state;
+`--monitor 7E1196:2,7E1186:2,7E1786:2,7E1686:2 --input "10:21,110:1,10:3,0:120"`, Up held, A on the 22nd frame):
+
+| f | obj11 ($1196) | obj3 ($1186) | |
+|---|---|---|---|
+| 16 | 062A | 0497 | the touch installs fn2 (priority 2) |
+| 21 | 062F (on `04 06 36`) | 04AA | the call installed, latch 1 |
+| 22 | 062D | 04AC | A: fn1 (priority 1) pre-empts, ret[2] = 062F; fn1 runs `EB` |
+| 26 | 062F | 04AC | fn1's own `04 06 36`: latch set -> POLL (obj3 at priority 3: wait) |
+| 43 | 062F | 0497 | Crono's fn6 returns |
+| 46 | 0633 | 0497 | released: latch 0, past the call -- ONE raise |
+
+The port installed fn1's call afresh: it waited on the equal priority until f43 and then ran Crono's fn6 again, f47-f68.
+
+### The fix (src/ct_vm.c)
+
+- The op 0x02-0x07 arm: a 04/07 with `s->waitObj >= 0` (the port's latch) polls on its own operands (ssCallBusy, the same
+  verdict as the parked poll), parked on itself; released -> latch cleared, IP past the op, the visit goes on.
+- ssPushAddr: every pre-empt pushes the ROM's $1180 -- for a parked waiter the 04's byte (callAddr), not the op after it --
+  so the RETURN lands on the call and the op decides on the latch (poll, or a fresh install if the pre-empting function's
+  own 04 released it). The WRAM seed keeps a pre-empted waiter's return slot on the 04 for the same reason.
+- CtSceneBattleReturn (C0/5B1F) and the D9/DA release (C0/32C8) no longer clear the latch: neither touches $7F0980.
+
+Validated: 106 pad variants from the capture on both sides (Up/A timings, held A, diagonals, side steps; the obj3/obj11
+IPs and Crono's anim bytes): the three A-on-f22 variants went from Crono's fn6 run twice on the port (once on the cartridge)
+to the cartridge's sequence; the other 103 are unchanged.
+

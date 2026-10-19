@@ -606,6 +606,17 @@ from the first NMI's frame (114), the picture every frame, and the WRAM the `JML
 `-- IDENTICAL`; re-pinning is only legitimate if the frame counts move (the drive or the state changed), never to absorb a
 difference. Dossier: `disasm/notes/gate_warp_fd_family.md` sec. 11.
 
+### field-telepod-latch-a-on-raised-arms-vs-rule-cartridge (`python tools/telepod_latch_cmp.py`)
+
+Pins op 0x04/0x07 met with the caller's wait latch (`$7F0980,X`) ALREADY set: C0/6109 `BRL 61A7` polls on the op's
+own operands and installs nothing. On the Telepod the pod's touch function (obj11 fn2, priority 2) parks on `04 06 36`
+(Crono's fn6, the raised arms); A on the frame fn6 starts pre-empts it with fn1 (the same code, priority 1), whose own
+call meets the latch and waits for the fn6 already playing. The port used to install it afresh and Crono raised his arms
+twice (the user's report, 2026-10-19). Seeded by `saves/field_re/scene8_pod_latch.state` (the user's snes9x capture
+spliced over `scene8_gate_cutscene.state`); the cartridge under the rule against the port from the same WRAM and SPC, six
+events on the cartridge's frame plus the count of fn6 runs. Re-pin only if the capture or the drive changes, never to
+absorb a difference. Dossier: `disasm/notes/call_wait_latch_preempt.md` sec. 4.
+
 ### field-scene8-telepod-touch-trigger (`--scene 8` + `CT_TRIGDBG=1`)
 
 Pins that a CLASS-7 object (`$1100 = 07`: positioned, sprite-less, no loader op) gets

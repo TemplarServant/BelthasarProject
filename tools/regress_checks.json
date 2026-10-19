@@ -43450,6 +43450,44 @@
       ]
     },
     {
+      "name": "field-telepod-latch-a-on-raised-arms-vs-rule-cartridge",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/telepod_latch_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/scene8_pod_latch.state"
+      ],
+      "expect": [
+        "telepod-latch: obj11 parks on the call (028F) cartridge f21 port f21",
+        "telepod-latch: Crono's fn6 holds the raised arms (010C) cartridge f22 port f22",
+        "telepod-latch: A: obj11 runs fn1 again (028D) cartridge f22 port f22",
+        "telepod-latch: Crono's fn6 returns (00F7) cartridge f43 port f43",
+        "telepod-latch: obj11 past the call, on its next (0293) cartridge f46 port f46",
+        "telepod-latch: Crono's fn7 walks to (4,5) (0115) cartridge f51 port f51",
+        "telepod-latch: Crono's fn6 runs cartridge 1 port 1",
+        "telepod-latch: 6/6 events on the cartridge's frame"
+      ],
+      "pin": [
+        "^telepod-latch: "
+      ],
+      "timeout_s": 60,
+      "note_pass": "an A press on the frame Crono raises his arms on the Telepod pre-empts the pod's touch function with its A function; that function's own call meets the latch still set and polls: Crono raises his arms once, as on the cartridge",
+      "notes": "The user, 2026-10-19 (translated from Portuguese): 'sometimes Crono raises his arms, lowers them and raises them again' on climbing the Telepod. obj11 fn1 = fn2 (EB 30 00 / CA D6 / 04 06 36 ...); the touch's fn2 (priority 2) parks on 04 06 36 (Crono's fn6, priority 3, latch $7F0980 = 1); A on f22 pre-empts it with fn1 (priority 1, C0/5AC5), whose own 04 06 36 meets the latch: C0/6109 BRL 61A7, the poll on its own operands -- it waits f26-f43 and goes on at f46. Measured on the rule's cartridge (saves/field_re/scene8_pod_latch.state, the user's snes9x capture spliced over scene8_gate_cutscene.state, --monitor 7E1196:2,7E1186:2). The port installed the call afresh and ran Crono's fn6 again, f47-f68. ct_vm.c: the 0x02-0x07 arm's latch branch, ssPushAddr; disasm/notes/call_wait_latch_preempt.md sec. 4.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "    if ((op == 0x04 || op == 0x07) && s->waitObj >= 0) {",
+          "replace": "    if (0) {                                          /* MUT */",
+          "why": "A 04 met with the latch set installs afresh (the old model): obj11's fn1 waits for the fn6 already playing, then runs it again -- Crono's fn6 runs twice, obj11 leaves the call at f70."
+        }
+      ]
+    },
+    {
       "name": "field-tent-hostage-80pt-counter-switch-flames-vs-rule-cartridge",
       "tier": "full",
       "argv": [
