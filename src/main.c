@@ -16548,6 +16548,15 @@ int main(int argc, char** argv) {
       printf("snd-data: %ld items identical (the ROM's and the container's)\n", n);
       return 0;
     }
+    // --sndtiming <out>: the sound machine's cost table from the ROM (CT_ASSET_SND_TIMING; src/sound/timing.h), the setup's
+    // generator tools/gen/snd_timing.py -- the reachable instructions of block 0 and the boot ROM timed on the vendored SPC700.
+    if (!strcmp(argv[i], "--sndtiming") && i + 1 < argc) {
+      long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      int n = CtAudioTimingExport(rimg, rl, argv[i + 1]);
+      if (!n) { printf("snd-timing: FAILED\n"); return 1; }
+      printf("snd-timing: %d bytes -> %s\n", n, argv[i + 1]);
+      return 0;
+    }
 #endif
     if (!strcmp(argv[i], "--songload") && i + 1 < argc) { songLoadSpec = argv[++i]; continue; }
     if (!strcmp(argv[i], "--at") && i + 1 < argc) { aramAt = argv[++i]; continue; }

@@ -66,6 +66,8 @@ typedef struct SndClock {
   uint16_t errTo;
   void (*trace)(void* ctx, uint16_t pc, uint64_t cyc);   // each instruction charged (the lockstep)
   void* traceCtx;
+  void (*loopTop)(void* ctx);   // the main loop's top ($0299) about to run: the program is between two passes
+  void* loopTopCtx;
 } SndClock;
 
 // The program's entries: the boot ROM ($FFC0), the driver's main loop ($0299), the SPC700's reset (its 8 cycles --

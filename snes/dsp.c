@@ -185,7 +185,7 @@ void dsp_handleState(Dsp* dsp, StateHandler* sh) {
 // CT: CT_DSP_KONTRACE=1 -- every key-on ($4C) write, stamped with the samples the DSP has produced since the process
 // began: 534 a frame at 32040 Hz on the oracle and on the port alike, so s/534 lines up two runs' frames (a sound command
 // against the moment its voice starts).
-static unsigned long ctDspSamples = 0;
+unsigned long ctDspSamples = 0;   // (src/sound/machine.c counts its samples here too: one count a process)
 static int ctKonTrace = -1;
 // CT_MIXER_CAPTURE (src/audio.c): every sample the DSP makes, as it goes into the ring. NULL unless asked for.
 void (*g_dspSampleHook)(Dsp* dsp, int16_t l, int16_t r) = NULL;
@@ -214,9 +214,12 @@ void dsp_cycle(Dsp* dsp) {
   // CT: CT_DSP_RAWPCM=<path> (debug) -- EVERY sample the DSP makes, in order (int16 L,R), from the process's first: sample
   // n of the file is the one CT_DSP_KONTRACE counts as s=n+1, on the oracle and on the port alike, so a key-on's sound can
   // be cut out of both streams at the same point of its own (no frame mapping, no output FIFO in between).
-  { static FILE* raw = (FILE*)1;
-    if(raw == (FILE*)1) { const char* p = getenv("CT_DSP_RAWPCM"); raw = (p && *p) ? fopen(p, "wb") : NULL; }
-    if(raw) { int16_t s2[2] = { (int16_t)dsp->sampleOutL, (int16_t)dsp->sampleOutR }; fwrite(s2, sizeof s2, 1, raw); } }
+  dsp_ctRawPcm((int16_t)dsp->sampleOutL, (int16_t)dsp->sampleOutR);
+}
+void dsp_ctRawPcm(int16_t l, int16_t r) {   // (the sound machine's samples go to the same file, in order)
+  static FILE* raw = (FILE*)1;
+  if(raw == (FILE*)1) { const char* p = getenv("CT_DSP_RAWPCM"); raw = (p && *p) ? fopen(p, "wb") : NULL; }
+  if(raw) { int16_t s2[2] = { l, r }; fwrite(s2, sizeof s2, 1, raw); }
 }
 
 static int clamp16(int val) {

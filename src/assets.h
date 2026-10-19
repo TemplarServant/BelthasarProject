@@ -62,6 +62,9 @@
 #define CT_ASSET_SND_SFXSET     33  // id 0 = set A (field), 1 = set B (battle): the block's bytes
 #define CT_ASSET_SND_MISC       34  // id 0: [song count u8] + the song-exception list through its bit-7 end;
                                     // id 1: FD/C1EE's HDMA program for the loader clock: DMAP x8, set A x8, set B x8 (u16)
+#define CT_ASSET_SND_TIMING     35  // id 0: the sound machine's cost table (src/sound/timing.h "SNDT": the reachable
+                                    //   instructions' cycles and accesses, block 0's code map), made at setup by
+                                    //   `ct.exe --sndtiming` (tools/gen/snd_timing.py); block 0 (SND_BOOT 0) then keeps only its data
 #define CT_ASSET_WORLDSPR       18  // id = 0; the overworld player sprite atlas captured from the
                                     //   oracle: [n u8] then {facing,parity,moving,w,h u8, ox,oy i8,
                                     //   w*h*4 RGBA} per frame (keys: facing 0-3 U/D/L/R, step

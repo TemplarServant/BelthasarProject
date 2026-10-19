@@ -126,6 +126,7 @@ static void charge(SndDrv* d, uint16_t pc, int taken) {
   SndClock* c = &d->clk;
   const SndIns* in = &c->tim->ins[pc];
   while (c->cyc >= c->want && c->boundary) c->boundary(c->boundaryCtx);   // the host's time: stop before it
+  if (pc == 0x0299 && c->loopTop) c->loopTop(c->loopTopCtx);
   if (c->trace) c->trace(c->traceCtx, pc, c->cyc);
   c->cyc += taken ? in->cycTaken : in->cyc;
 }

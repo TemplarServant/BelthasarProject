@@ -39,4 +39,15 @@ typedef struct SndTiming { SndIns ins[0x10000]; } SndTiming;
 // only; the game reads the table from the asset container.
 int SndTimingBuild(SndTiming* t, const uint8_t* image, uint16_t lo, uint16_t hi);
 
+// THE ASSET (CT_ASSET_SND_TIMING, made at setup by `ct.exe --sndtiming` from the player's ROM): the entries of the
+// instructions the program can reach -- block 0's from $0200 and its six dispatch tables, the boot ROM's from $FFC0 --
+// and block 0's code map (which of its bytes are an instruction's: the container's block 0 keeps only the others, its
+// data). "SNDT", u32 version 1, u16 block start, u16 block length, the map (a bit a byte, LSB first), u32 n, then n
+// entries of u16 address + 24 bytes (SndIns in order).
+// SndTimingExport: the asset from a 64 KB image (block 0 at blo, blen bytes; the boot ROM at $FFC0); a malloc'd buffer.
+long SndTimingExport(const uint8_t* image, uint16_t blo, uint16_t blen, uint8_t** out);
+int  SndTimingRead(SndTiming* t, const uint8_t* in, long len);   // zeroed first: an address not in it has len 0
+// Block 0's code map from the asset: 1 if byte `adr` is part of an instruction (0 if not, or outside the block).
+int  SndTimingIsCode(const uint8_t* in, long len, uint16_t adr);
+
 #endif

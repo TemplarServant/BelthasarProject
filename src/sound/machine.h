@@ -28,6 +28,22 @@ typedef struct SndTimer {
   uint64_t next;        // the cycle of the next prescaler step (every 128 cycles; timer 2 every 16)
 } SndTimer;
 
+// THE SAVESTATE: a coroutine's stack cannot be written down, so the machine keeps a restore point -- its whole state at
+// the main loop's top ($0299, between two passes: nothing of the program's is pending), or power-on -- and the host's
+// inputs since (its port writes and its runs). Loading one is the restore point taken back and the inputs replayed:
+// the program goes the same way to the same instruction, cycle for cycle. A new restore point is taken at the loop's
+// top once the record has grown.
+typedef struct SndLogEntry { uint64_t t; uint8_t kind, k, v; } SndLogEntry;   // 'W' port k = v; 'R' a run to cycle t
+typedef struct SndRestore {
+  int kind;             // 0 power-on, 1 the main loop's top
+  uint64_t cycles, mixed;
+  uint8_t ram[0x10000];
+  CtMixer mx;
+  SndTimer t[3];
+  uint8_t in[4], out[4], romReadable;
+  int16_t newest[1024 * 2]; uint32_t newestPos;
+} SndRestore;
+
 typedef struct SndMachine {
   SndDrv d;             // the program and the RAM
   CtMixer mx;           // the S-DSP (its RAM = d.m)
@@ -41,6 +57,7 @@ typedef struct SndMachine {
   void (*sink)(void* ctx, const int16_t* lr, int n);   // the samples, as rendered
   void* sinkCtx;
   int sinkPerSample;    // the sink called for each sample (the lockstep looks at the voices after each)
+  int traces;           // the machine is the process's S-DSP for the debug traces (CT_DSP_KONTRACE, CT_DSP_RAWPCM)
   SndCoro* co;
   int started;
   // an observer of every access the outside sees (the lockstep): 'D' S-DSP write, 'd' S-DSP read, 'P' port write,
@@ -48,6 +65,9 @@ typedef struct SndMachine {
   void (*obs)(void* ctx, char kind, uint8_t a, uint8_t v, uint64_t io);
   void (*ramObs)(void* ctx, uint16_t adr, uint8_t v, uint64_t io);   // each store the S-DSP may read (same ctx)
   void* obsCtx;
+  SndRestore* restore;  // the savestate's restore point and the host's inputs since
+  SndLogEntry* log; long logN, logCap;
+  int replaying;
 } SndMachine;
 
 // The state a machine is handed at its main loop's top ($0299) -- a running driver's (src/audio.c's seeding from an
@@ -73,6 +93,9 @@ uint64_t SndMachineCycles(const SndMachine* m);
 void SndMachineSync(SndMachine* m);                         // the S-DSP rendered up to the next instruction's start
 void SndMachineNewest(const SndMachine* m, int16_t* out, int n);   // the newest n samples, oldest first (n <= 1024)
 int  SndMachineVoicesSounding(const SndMachine* m);          // voices with a nonzero envelope
+// The savestate (see SndRestore): written to / read from a buffer the caller frees (free()). Load returns 0 on a bad one.
+int  SndMachineSave(const SndMachine* m, uint8_t** buf, long* len);
+int  SndMachineLoad(SndMachine* m, const uint8_t* buf, long len);
 // The machine's trace of each instruction it charges, and of each access (the lockstep): NULL to stop.
 void SndMachineSetTrace(SndMachine* m, void (*trace)(void* ctx, uint16_t pc, uint64_t cyc), void* ctx);
 void SndMachineSetObserver(SndMachine* m, void (*obs)(void* ctx, char kind, uint8_t a, uint8_t v, uint64_t io), void* ctx);

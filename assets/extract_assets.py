@@ -69,6 +69,9 @@ T_SND_INSTR = 31   # id = instrument 0..N: [loop u16][$1F40 param u16][$1FC0 par
                    #   (id-1)*2; id 0 = the empty entry, whose index -1 wraps the long,X read into bank $C8)
 T_SND_SONG = 32    # id = song: its instrument list (32, $C7:0E11) + percussion (36, $C7:1871) + record (2, $C7:241D)
 T_SND_SFXSET = 33  # id 0 = set A (field, $C7:4309), 1 = set B (battle, $C7:5B0B): the [u16 len] block's bytes
+T_SND_TIMING = 35  # id 0: the sound machine's cost table (saves/snd_timing.bin, tools/gen/snd_timing.py: ct.exe --sndtiming;
+                   # src/sound/timing.h "SNDT"). With it block 0 (T_SND_BOOT 0, the driver) keeps only its data: the bytes its
+                   # code map marks as an instruction's are zero -- the game runs the driver in C
 T_SND_MISC = 34    # id 0: [song count u8] + the song-exception list ($C7:0AD8, through its bit-7 end)
                    # id 1: FD/C1EE's HDMA program as the loader clock reads it: DMAP x8, set A tables x8, set B x8 (u16)
 
@@ -426,14 +429,34 @@ def pack_sprite_anims(rom, T):
 def pack_mover(rom, T):
     yield (T_MOVER, 0, rom[0xF300:0xF700] + rom[0xF700:0xF800] + rom[0xF800:0xF940])
 
+def snd_code_map(timing):
+    """Block 0's code map in the cost table (src/sound/timing.h): (start, length, the bit per byte)."""
+    if len(timing) < 12 or timing[:4] != b'SNDT':
+        raise ValueError('saves/snd_timing.bin: not a cost table')
+    blo, blen = struct.unpack_from('<HH', timing, 8)
+    return blo, blen, timing[12:12 + (blen + 7) // 8]
+
+
 def pack_sound(rom, T):
     c7 = 0x70000
     w = lambda o: rom[o] | rom[o + 1] << 8
     p24 = lambda o: ((rom[o + 2] - 0xC0) << 16) | w(o)
     src, dst = c7 + 0x10, c7 + 0x1C
+    tp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'saves', 'snd_timing.bin')
+    timing = open(tp, 'rb').read() if os.path.exists(tp) else None
+    if timing:
+        yield (T_SND_TIMING, 0, timing)
     for b in range(6):                                   # the IPL upload: sources $C7:0010, destinations $C7:001C
         at = c7 + w(src + 2 * b)
-        yield (T_SND_BOOT, b, struct.pack('<H', w(dst + 2 * b)) + bytes(rom[at + 2:at + 2 + w(at)]))
+        blk = bytearray(rom[at + 2:at + 2 + w(at)])
+        if b == 0 and timing:                            # the driver: its data only, its code's bytes zero
+            blo, blen, cmap = snd_code_map(timing)
+            if blo != w(dst) or blen != len(blk):
+                raise ValueError('saves/snd_timing.bin is not this ROM\'s block 0')
+            for k in range(blen):
+                if cmap[k >> 3] >> (k & 7) & 1:
+                    blk[k] = 0
+        yield (T_SND_BOOT, b, struct.pack('<H', w(dst + 2 * b)) + bytes(blk))
     nsong = rom[c7 + 0x0AE9]
     for s_ in range(nsong):
         at = p24(c7 + 0x0D18 + 3 * s_)

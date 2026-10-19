@@ -112,6 +112,7 @@ def main():
             os.remove(cap)
         e = dict(os.environ, **env)
         e['CT_MIXER_CAPTURE'] = cap
+        e['CT_AUDIO_SPC'] = 'ref'   # the capture is the vendored S-DSP's (Belthasar's own is the sound machine)
         argv = [os.path.join(ROOT, argv[0])] + argv[1:]
         subprocess.run(argv, env=e, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=900)
         if not os.path.exists(cap) or os.path.getsize(cap) < 8:

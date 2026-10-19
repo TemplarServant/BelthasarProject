@@ -104,3 +104,68 @@ int SndTimingBuild(SndTiming* t, const uint8_t* image, uint16_t lo, uint16_t hi)
   spc_free(spc);
   return 1;
 }
+
+// --- the asset (timing.h SndTimingExport) ----------------------------------------------------------------------------
+// The program's reach: from block 0's entry, from each word of its six PUSH/RET dispatch tables (tools/spc700dis.py
+// DISPATCH: the sequence events, the look-ahead's, commands $10-$1F and the routines before them, commands $80-$8F /
+// $F0-$FF, the upload kinds) and from the boot ROM's $FFC0 -- branches, jumps and calls followed, the fall-through but
+// after the instructions that have none.
+static const struct { uint16_t adr, n; } kDispatch[] = {
+  { 0x1554, 60 }, { 0x1608, 60 }, { 0x1680, 16 }, { 0x16A0, 16 }, { 0x16C0, 32 }, { 0x1544, 8 },
+};
+static int noFallThrough(uint8_t op) { return op == 0x5F || op == 0x1F || op == 0x6F || op == 0x7F || op == 0x2F || op == 0x0F || op == 0xEF || op == 0xFF; }
+
+long SndTimingExport(const uint8_t* image, uint16_t blo, uint16_t blen, uint8_t** out) {
+  SndTiming* t = (SndTiming*)calloc(1, sizeof *t);
+  uint8_t* seen = (uint8_t*)calloc(0x10000, 1);
+  uint8_t* code = (uint8_t*)calloc(0x10000, 1);
+  uint16_t* todo = (uint16_t*)malloc(0x10000 * sizeof *todo);
+  if (!t || !seen || !code || !todo) { free(t); free(seen); free(code); free(todo); return 0; }
+  SndTimingBuild(t, image, blo, (uint16_t)(blo + blen));
+  SndTimingBuild(t, image, 0xFFC0, 0x0000);
+  long nt = 0;
+  todo[nt++] = blo; todo[nt++] = 0xFFC0;
+  for (size_t k = 0; k < sizeof kDispatch / sizeof kDispatch[0]; k++)
+    for (int i = 0; i < kDispatch[k].n; i++) {
+      uint16_t a = (uint16_t)(kDispatch[k].adr + 2 * i);
+      uint16_t w = (uint16_t)(image[a] | image[(uint16_t)(a + 1)] << 8);
+      if (w && nt < 0x10000) todo[nt++] = w;
+    }
+#define INSIDE(pc) (((uint16_t)((pc) - blo) < blen) || (pc) >= 0xFFC0)
+  while (nt) {
+    unsigned pc = todo[--nt];
+    while (INSIDE(pc) && !seen[pc]) {
+      const SndIns* in = &t->ins[pc];
+      seen[pc] = 1;
+      for (int b = 0; b < in->len; b++) code[(uint16_t)(pc + b)] = 1;
+      if ((in->kind == SND_INS_COND || in->kind == SND_INS_JUMP) && nt < 0x10000) todo[nt++] = in->target;
+      if (noFallThrough(image[pc])) break;
+      pc = (uint16_t)(pc + in->len);
+    }
+  }
+  long n = 0;
+  for (unsigned a = 0; a < 0x10000; a++) n += seen[a];
+  long map = (blen + 7) / 8, len = 12 + map + 4 + n * 26;
+  uint8_t* b = (uint8_t*)calloc(1, (size_t)len);
+  if (b) {
+    uint32_t hdr[2] = { 0x54444E53u, 1 };
+    memcpy(b, hdr, 8);
+    b[8] = (uint8_t)blo; b[9] = (uint8_t)(blo >> 8); b[10] = (uint8_t)blen; b[11] = (uint8_t)(blen >> 8);
+    for (unsigned k = 0; k < blen; k++) if (code[(uint16_t)(blo + k)]) b[12 + k / 8] |= (uint8_t)(1u << (k & 7));
+    long o = 12 + map;
+    b[o] = (uint8_t)n; b[o + 1] = (uint8_t)(n >> 8); b[o + 2] = (uint8_t)(n >> 16); b[o + 3] = (uint8_t)(n >> 24); o += 4;
+    for (unsigned a = 0; a < 0x10000; a++) {
+      if (!seen[a]) continue;
+      const SndIns* in = &t->ins[a];
+      uint8_t* p = b + o;
+      p[0] = (uint8_t)a; p[1] = (uint8_t)(a >> 8);
+      p[2] = in->kind; p[3] = in->len; p[4] = in->cyc; p[5] = in->cycTaken; p[6] = (uint8_t)in->target; p[7] = (uint8_t)(in->target >> 8);
+      p[8] = in->nio; memcpy(p + 9, in->ioIdx, 4); memcpy(p + 13, in->ioReg, 4); memcpy(p + 17, in->ioWrite, 4);
+      p[21] = in->nw; memcpy(p + 22, in->wIdx, 4);
+      o += 26;
+    }
+  }
+  free(t); free(seen); free(code); free(todo);
+  *out = b;
+  return b ? len : 0;
+}

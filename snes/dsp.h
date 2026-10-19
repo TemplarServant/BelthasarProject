@@ -93,6 +93,10 @@ void dsp_cycle(Dsp* dsp);
 uint8_t dsp_read(Dsp* dsp, uint8_t adr);
 void dsp_write(Dsp* dsp, uint8_t adr, uint8_t val);
 void dsp_getSamples(Dsp* dsp, int16_t* sampleData, int samplesPerFrame);
-extern void (*g_dspSampleHook)(Dsp* dsp, int16_t l, int16_t r);   // measuring hook, NULL by default
+extern void (*g_dspSampleHook)(Dsp* dsp, int16_t l, int16_t r);
+// CT: the debug traces' process-wide state, shared with the sound machine (src/sound/machine.c): the samples made so far
+// (CT_DSP_KONTRACE's s=), the CT_DSP_RAWPCM file.
+extern unsigned long ctDspSamples;
+void dsp_ctRawPcm(int16_t l, int16_t r);   // measuring hook, NULL by default
 
 #endif

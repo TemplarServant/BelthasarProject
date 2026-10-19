@@ -561,9 +561,11 @@ static int waitEcho(CtAudio* a, int k, uint8_t want) {
 // The six blocks: the container's (CT_ASSET_SND_BOOT: [dest u16] + bytes), or both tables read out of the ROM. (§2: the
 // old apu_upload.md read $001C as a single "initial target"; it is a 6-entry table parallel to $0010, and every block
 // pushes its own destination to $2142/$2143 at $C7:00C6/$00CD.)
+// Block 0 is the driver: the container keeps only its data (the code's bytes zero -- the game runs the driver in C, the
+// sound machine); the vendored core (the reference, the lockstep's original) takes its block 0 from the ROM.
 static int sndBootLoad(CtAudio* a, const uint8_t* rom, long romLen) {
   for (int b = 0; b < C7_NBLOCKS; b++) {
-    if (a->snd) {
+    if (a->snd && !(b == 0 && a->spc != SPC_MACHINE && rom && romLen > C7_BASE + 0x40)) {
       uint32_t n = 0; const uint8_t* e = CtAssetGet(a->snd, CT_ASSET_SND_BOOT, (uint32_t)b, &n);
       if (!e || n < 2 || n - 2 > 0xFFFF) return 0;
       a->dst[b] = (uint16_t)(e[0] | (e[1] << 8)); a->size[b] = (uint16_t)(n - 2); a->blk[b] = e + 2; a->src[b] = 0;
@@ -700,8 +702,30 @@ long CtAudioDataCompare(const uint8_t* rom, long romLen, const CtAssets* snd) {
   while (CtAssetGet(snd, CT_ASSET_SND_SAMPLE, (uint32_t)(c.ninst + 1), NULL)) c.ninst++;
   if (!sndBootLoad(&r, rom, romLen) || !sndBootLoad(&c, NULL, 0)) { fprintf(stderr, "snd-data: the blocks\n"); return -1; }
   long items = 0;
-  for (int b = 0; b < C7_NBLOCKS; b++, items++)
+  // block 0: its data the ROM's, its code's bytes zero (the cost table's code map); the table itself the ROM's
+  uint32_t tn = 0;
+  const uint8_t* tm = CtAssetGet(snd, CT_ASSET_SND_TIMING, 0, &tn);
+  if (!tm) { fprintf(stderr, "snd-data: the container holds no cost table (CT_ASSET_SND_TIMING)\n"); return -1; }
+  { const char* tp = "build/_snd_timing_check.bin";
+    long n = CtAudioTimingExport(rom, romLen, tp);
+    FILE* f = n > 0 ? fopen(tp, "rb") : NULL;
+    uint8_t* x = f ? (uint8_t*)malloc((size_t)n) : NULL;
+    int same = x && fread(x, 1, (size_t)n, f) == (size_t)n && n == (long)tn && !memcmp(x, tm, (size_t)n);
+    if (f) fclose(f);
+    free(x); remove(tp);
+    if (!same) { fprintf(stderr, "snd-data: the cost table is not the ROM's\n"); return -1; }
+    items++; }
+  for (int b = 0; b < C7_NBLOCKS; b++, items++) {
+    if (b == 0) {
+      if (r.dst[0] != c.dst[0] || r.size[0] != c.size[0]) { fprintf(stderr, "snd-data: block 0's place\n"); return -1; }
+      for (int k = 0; k < r.size[0]; k++) {
+        int code = SndTimingIsCode(tm, (long)tn, (uint16_t)(r.dst[0] + k));
+        if (c.blk[0][k] != (code ? 0 : r.blk[0][k])) { fprintf(stderr, "snd-data: block 0 byte $%04X (%s)\n", r.dst[0] + k, code ? "code" : "data"); return -1; }
+      }
+      continue;
+    }
     if (r.dst[b] != c.dst[b] || !sndCmpBytes("block", b, r.blk[b], r.size[b], c.blk[b], c.size[b])) return -1;
+  }
   if (CtAudioSongCount(&r) != CtAudioSongCount(&c) || CtAudioInstrumentCount(&r) != CtAudioInstrumentCount(&c)
       || CtAudioHeapBase(&r) != CtAudioHeapBase(&c)) { fprintf(stderr, "snd-data: counts / heap base\n"); return -1; }
   items += 3;
@@ -1710,14 +1734,33 @@ static void measureInit(void) {
   }
 }
 
+static void machineDspLog(void* c, char k, uint8_t reg, uint8_t val, uint64_t io) {
+  (void)c;
+  if (k == 'D' && g_dspLog) fprintf(g_dspLog, "%ld %llu %02X %02X%c", g_audFrameNo, (unsigned long long)io, reg, val, 10);
+}
+
 // THE SOUND MACHINE's COST TABLE (sound/timing.h): each instruction of block 0 (the driver) and of the boot ROM, timed
 // on the vendored SPC700 -- once a process.
+// The container's (CT_ASSET_SND_TIMING, made at setup from the player's ROM: ct.exe --sndtiming); without it, measured
+// here from block 0's code -- the ROM's (the tools' way).
 static const SndTiming* sndTiming(CtAudio* a, const uint8_t* rom, long romLen) {
   static SndTiming* t;
   static int tried;
   if (tried) return t;
   tried = 1;
-  if (!sndBootLoad(a, rom, romLen) || (long)a->dst[0] + a->size[0] > 0xFFC0) return NULL;
+  uint32_t n = 0;
+  const uint8_t* e = a->snd ? CtAssetGet(a->snd, CT_ASSET_SND_TIMING, 0, &n) : NULL;
+  if (e) {
+    SndTiming* nt = (SndTiming*)calloc(1, sizeof *nt);
+    if (nt && SndTimingRead(nt, e, (long)n)) { t = nt; return t; }
+    free(nt);
+    fprintf(stderr, "[audio] the container's sound cost table is unreadable\n");
+  }
+  int keep = a->spc;
+  a->spc = SPC_REF;                                    // (block 0's code: the ROM's)
+  int ok = rom && sndBootLoad(a, rom, romLen) && (long)a->dst[0] + a->size[0] <= 0xFFC0;
+  a->spc = keep;
+  if (!ok) return NULL;
   uint8_t* img = (uint8_t*)calloc(0x10000, 1);
   SndTiming* nt = (SndTiming*)calloc(1, sizeof *nt);
   if (!img || !nt) { free(img); free(nt); return NULL; }
@@ -1727,6 +1770,26 @@ static const SndTiming* sndTiming(CtAudio* a, const uint8_t* rom, long romLen) {
   else free(nt);
   free(img);
   return t;
+}
+
+// `ct.exe --sndtiming <out>`: the cost table's asset (timing.h) from the ROM's block 0 and the boot ROM -- the setup's
+// generator for CT_ASSET_SND_TIMING (tools/gen/snd_timing.py).
+int CtAudioTimingExport(const uint8_t* rom, long romLen, const char* path) {
+  static CtAudio r;
+  memset(&r, 0, sizeof r);
+  if (!sndBootLoad(&r, rom, romLen) || (long)r.dst[0] + r.size[0] > 0xFFC0) return 0;
+  uint8_t* img = (uint8_t*)calloc(0x10000, 1);
+  if (!img) return 0;
+  memcpy(img + r.dst[0], r.blk[0], r.size[0]);
+  memcpy(img + 0xFFC0, apu_bootRom(), 0x40);
+  uint8_t* out = NULL;
+  long n = SndTimingExport(img, r.dst[0], r.size[0], &out);
+  free(img);
+  FILE* f = n > 0 ? fopen(path, "wb") : NULL;
+  int ok = f && fwrite(out, 1, (size_t)n, f) == (size_t)n;
+  if (f) fclose(f);
+  free(out);
+  return ok ? (int)n : 0;
 }
 
 CtAudio* CtAudioInit(const uint8_t* rom, long romLen) { return CtAudioInitWith(rom, romLen, NULL); }
@@ -1753,7 +1816,11 @@ CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) {
     const SndTiming* tim = sndTiming(a, rom, romLen);
     a->mach = tim ? SndMachineNew(tim) : NULL;
     if (!a->mach) { fprintf(stderr, "[audio] the sound machine has no cost table -- the reference SPC700 runs\n"); a->spc = SPC_REF; }
-    else if (a->spc == SPC_MACHINE) SndMachineSetSink(a->mach, machineSink, a);
+    else if (a->spc == SPC_MACHINE) {
+      SndMachineSetSink(a->mach, machineSink, a);
+      a->mach->traces = 1;
+      if (g_dspLog) SndMachineSetObserver(a->mach, machineDspLog, a);   // CT_DSP_LOG, the vendored hook's line
+    }
     else CtSndLockstepAttach(a->apu, a->mach, 1);
   }
   mixSnapshot(a->apu);
@@ -2000,8 +2067,19 @@ void CtAudioSeedFromApu(CtAudio* a, const Apu* src) {
   mixSnapshot(d);
 }
 #define CT_APUSTATE_MAGIC 0x50415443u   /* 'CTAP' LE */
+// The sound machine's savestate (sound/machine.h: its restore point and the host's inputs since), "CTSM"; the reference's
+// is the vendored core's state, "CTAP" -- either loads into the machine (the reference's then runs to $0299 first).
 int CtAudioSaveState(CtAudio* a, const char* path) {
   if (!a || !a->apu || !path) return 0;
+  if (machineRuns(a)) {
+    uint8_t* b = NULL; long n = 0;
+    if (!SndMachineSave(a->mach, &b, &n)) return 0;
+    FILE* f = fopen(path, "wb");
+    int ok = f && fwrite(b, 1, (size_t)n, f) == (size_t)n;
+    if (f) fclose(f);
+    free(b);
+    return ok;
+  }
   StateHandler* sh = sh_init(true, NULL, 0);
   apu_handleState(a->apu, sh);
   FILE* f = fopen(path, "wb");
@@ -2016,6 +2094,19 @@ int CtAudioLoadState(CtAudio* a, const char* path) {
   FILE* f = fopen(path, "rb");
   if (!f) return 0;
   uint32_t hdr[2] = { 0, 0 }; uint8_t* buf = NULL;
+  if (fread(hdr, 4, 1, f) == 1 && hdr[0] == 0x4D535443u) {   // the machine's
+    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    int ok = 0;
+    if (a->mach && a->spc == SPC_MACHINE && n > 0 && (buf = (uint8_t*)malloc((size_t)n)) && fread(buf, 1, (size_t)n, f) == (size_t)n) {
+      audReset(a);
+      ok = SndMachineLoad(a->mach, buf, n);
+      if (ok) { a->machPending = 0; a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0; audReset(a); }
+    }
+    if (!ok) fprintf(stderr, "[loadstate] %s: a sound machine state, this SPC cannot take it\n", path);
+    fclose(f); free(buf);
+    return ok;
+  }
+  fseek(f, 0, SEEK_SET);
   int ok = fread(hdr, 4, 2, f) == 2 && hdr[0] == CT_APUSTATE_MAGIC && hdr[1] > 0 && hdr[1] < (1u << 20)
            && (buf = (uint8_t*)malloc(hdr[1])) != NULL && fread(buf, 1, hdr[1], f) == hdr[1];
   fclose(f);

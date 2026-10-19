@@ -160,6 +160,8 @@ struct Apu* CtAudioApu(CtAudio* a);
 // The CPU's side of the ports, outside a JSL (a test harness, a stage's own post): $2140+k written now, and the sound
 // processor run `cycles` (apu_runCycles' way: to the first instruction starting at or after them; returns the cycles run).
 void      CtAudioPortWrite(CtAudio* a, int k, uint8_t v);
+// `ct.exe --sndtiming <out>`: the sound machine's cost table (CT_ASSET_SND_TIMING) from the ROM; returns its bytes, 0 = failed.
+int       CtAudioTimingExport(const uint8_t* rom, long romLen, const char* path);
 int       CtAudioRunCycles(CtAudio* a, int cycles);
 uint32_t  CtAudioApuCycles(const CtAudio* a);               // the SPC's own cycle count (a stage's share of a frame)
 void      CtAudioStageExitFrame(CtAudio* a, uint32_t ran);  // a translated stage left mid-frame: the frame's remaining SPC

@@ -3,6 +3,18 @@
   "generators": [
     {
       "out": [
+        "saves/snd_timing.bin"
+      ],
+      "cmd": [
+        "tools/gen/snd_timing.py"
+      ],
+      "stage": "assets",
+      "status": "power-on",
+      "compare": "ct_assets.dat",
+      "compare_doc": "T_SND_TIMING (35): the sound machine's cost table, ct.exe --sndtiming from the ROM's block 0 and the boot ROM (src/sound/timing_build.c); `ct.exe --sndassets ct_assets.dat` checks the packed table against a fresh one and block 0's data byte for byte."
+    },
+    {
+      "out": [
         "src/data/battle_trig.h"
       ],
       "cmd": [
