@@ -767,7 +767,7 @@ ticks at cartridge f9144 9150 9156 .. 9218 and port f11068 11074 11080 .. 11142.
 6-frame cadence and envelope. Checks: `title-sequence-sound-reaches-driver` (re-pinned 3 -> 13 posts)
 and `attract-title-after-credits-posts-its-song`.
 
-### 12.1 The title's opening price: the song-to-tick half PORTED (2026-09-27), the part before the post OPEN
+### 12.1 The title's opening price: the song-to-tick half PORTED (2026-09-27), the part before the post measured in 12.2
 
 With the sound back, the repeated title's picture and audio can be measured against each other. They
 disagree. The picture is at port = cartridge +1940, identical frame for frame (thumbnails, f9150..f9635).
@@ -806,3 +806,36 @@ both titles, cartridge -3 after the demo (tools/attract_title_sound_sync_cmp.py,
 The part BEFORE the post (the overlay's decompression, the driver reset, the setup's work: ~28 frames on the boot, 33
 after the demo) is still not priced: the port posts on the op's own frame, so every title opens that much short of the
 ROM. Pricing it re-times the power-on title and every attract check after it.
+
+### 12.2 The part before the post: MEASURED and implemented, NOT applied (2026-10-19)
+
+Found again by the attract audit's boot vehicle: the closing loc 1B1 visit was 30 frames short (black 232 frames
+against the cartridge's 262) -- the second title's song post came on the op's frame, the cartridge's 32 frames later.
+
+Measured on the rule's cartridge (`--hookpc`, CT_ORACLE_LOGICAL=1), the same on both titles:
+
+| | after the demo (attract_cena_inicial + 8895) | power-on (`--from boot`) |
+|---|---|---|
+| C3/0014 (`$4200 = 01`) | f9 line 228 | f64 line 228 |
+| `JML $7E:3000` | f26 line 98 | -- |
+| `$7E:5978` (the setup) | f26 line 148 | f81 line 148 |
+| `$5AA5` / the JSL C7:0004 | f42 line 107 / 108 | f97 line 107 |
+
+That is 32 vblanks crossed between the op and the post. The setup's cost to the post, measured by `CT_CALLROM_NONMI=1
+ct.exe --callrom 7E5978 --pokewram 0384=02,5AA5=60 --regdb 00 --m8 --x16 --rega 0004 --regx 0004 --regy 0090` from the
+state at +8921 (an RTS poked at `$5AA5`: the post is the setup's own tail, `5AA5 LDA #30 / JSR $375F / 5AAA` spin
+`/ RTS`, and the call returns there with A = 2190, the hook's register file): 210007 ops, 5,662,552 cycles, against the
+hooks' 5,662,872. With the opening formula every native entry uses (sequence_table.md sec. 15: the overlay's C3/0557
+x 1364 / 1324, 580, the common init's 54196, the setup, the jump 4449 cycles into its vblank) the post lands
+floor(11,623,200 / 357,368) = 32 frames after the op.
+
+**Implemented** (field.c: `seqTitlePrePostFrames`, the post made by the frame loop at op + 32 through a helper that is
+the open's current sound block; title_intro.c `CtTitleIntroSetupPrePostCycles`). With it the closing 1B1 is 264 frames
+against 262 (the 2 left were there before: the port's `FF 02` runs 2 frames after the fade-out ends, and its
+post-to-picture gap is 2 frames shorter than the cartridge's 24), and the boot vehicle's audit goes from 28 events to 24.
+
+**Not applied.** It moves everything after the power-on title 33 frames later: 105 checks failed, almost all of them
+runs that pass through the title -- walkscripts with presses on fixed frames into the title, the loader and the menus,
+Jackie's saves booted through the loader, and every attract check whose tool carries a port-cartridge offset. These
+are black frames of an NMI-off decompression, which change nothing the player does (the user's rule of 2026-10-09);
+applying it is a re-timing of about a hundred checks. The patch is kept at build/_wip_title_opening.patch.
