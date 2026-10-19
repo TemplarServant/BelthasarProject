@@ -41,6 +41,7 @@ The app writes these files under `~/Library/Application Support/BelthasarProject
 | `ct_sram.srm` | Cartridge saves |
 | `ct_settings.ini` | Settings and control mappings |
 | `latest.log` | Latest Finder launch output |
+| `ct_debug_*`, `ct_debug_log.txt` | F5 captures and their log |
 
 `CT_ROM`, `CT_SRAM` and `CT_SETTINGS` overrides remain available. Running
 `build/Belthasar` directly keeps the existing command line behavior. The
