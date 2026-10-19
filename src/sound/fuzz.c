@@ -32,8 +32,8 @@ static Apu* g_apu;
 static uint8_t g_wram[0x20000];
 static long g_waitMiss;
 
-static void spc(int cycles) { apu_runCycles(g_apu, cycles); }
-static void wr(int k, uint8_t v) { g_apu->inPorts[k] = v; }
+static void spc(int cycles) { CtAudioRunCycles(g_au, cycles); }
+static void wr(int k, uint8_t v) { CtAudioPortWrite(g_au, k, v); }
 static int waitOut(int k, uint8_t v) {   // the driver's echo on out-port k
   for (long i = 0; i < 400000; i += 16) { if (g_apu->outPorts[k] == v) return 1; spc(16); }
   g_waitMiss++;
@@ -291,7 +291,7 @@ static void coldWram(void) { memset(g_wram, 0, sizeof g_wram); CtAudioSeedMailbo
 // command and id from the page, not from its arguments): the driver read the stream as commands and upload headers, and
 // its kind-7 mover ran over its own code.
 int CtSndSongs(const uint8_t* rom, long romLen, uint8_t cmd, int nspec, char** spec) {
-  if (!CtSndLockstepWanted()) { fprintf(stderr, "snddrvsongs: needs CT_SNDDRV_LOCKSTEP=1\n"); return 2; }
+  if (!CtSndLockstepWanted()) { fprintf(stderr, "snddrvsongs: needs CT_AUDIO_SPC=lockstep\n"); return 2; }
   long bad = 0, loads = 0;
   for (int i = 0; i < nspec; i++) {
     g_au = CtAudioInit(rom, romLen);
@@ -355,7 +355,7 @@ static const uint8_t* g_rom; static long g_romLen;
 int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed) {
   g_rom = rom; g_romLen = romLen;
   g_rs = seed ? seed : 1u;
-  if (!CtSndLockstepWanted()) { fprintf(stderr, "snddrvfuzz: needs CT_SNDDRV_LOCKSTEP=1\n"); return 2; }
+  if (!CtSndLockstepWanted()) { fprintf(stderr, "snddrvfuzz: needs CT_AUDIO_SPC=lockstep\n"); return 2; }
   g_au = CtAudioInit(rom, romLen);
   if (!g_au) { printf("snddrvfuzz: FAIL (CtAudioInit)\n"); return 3; }
   g_apu = CtAudioApu(g_au);

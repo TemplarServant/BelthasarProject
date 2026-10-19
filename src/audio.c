@@ -24,6 +24,8 @@
 #include "audio.h"
 #include "assets.h"
 #include "sound/lockstep.h"
+#include "sound/machine.h"
+#include "sound/timing.h"
 #include "snes.h"
 #include "apu.h"
 #include "spc.h"
@@ -103,7 +105,11 @@ struct CtAudio {
   Snes* shell;      // zeroed stand-in: dsp_getSamples reads exactly one field of
                     // it (dsp->apu->snes->palTiming, snes/dsp.c:586) and nothing
                     // in apu.c/spc.c/dsp.c ever touches another. No snes.c needed.
-  Apu*  apu;
+  Apu*  apu;                         // the vendored SPC700 + S-DSP: the reference (CT_AUDIO_SPC=ref), the lockstep's original,
+                                     //   and the stretch a seeded state runs before the machine takes over at $0299
+  SndMachine* mach;                  // the sound machine in C (sound/machine.h): the game's (CT_AUDIO_SPC=machine)
+  int spc;                           // SPC_REF / SPC_MACHINE / SPC_BOTH (the lockstep: both, the game hears the reference)
+  int machPending;                   // the machine takes over at the vendored core's next $0299 (a seeded or loaded state)
   int   ready;
   double cycleCarry;                 // fractional APU cycles across frames; a clocked JSL's SPC time is DEBITED here
   int evenFrame;                     // the PPU's field this frame of SPC stands for (ppu.c evenFrame: an odd frame is short)
@@ -137,8 +143,32 @@ struct CtAudio {
   int ninst;                         // the instruments the sample table holds
 };
 
-static void W(CtAudio* a, int k, uint8_t v) { a->apu->inPorts[k] = v; }
-static uint8_t R(CtAudio* a, int k)         { return a->apu->outPorts[k]; }
+// ==== THE SOUND PROCESSOR (sound step 5, 2026-10-18) ==========================================================================
+// The game's is the sound machine in C (sound/machine.h: the boot ROM, the driver and its receivers as C, timed by the
+// listing's cycles, the timers, the ports, the native S-DSP) -- no SPC700. The vendored core (snes/apu.c, spc.c, dsp.c)
+// is the reference: CT_AUDIO_SPC=ref runs it instead, CT_AUDIO_SPC=lockstep runs both and compares them instruction by
+// instruction (sound/lockstep.h; the game hears the reference). Belthasar's default is the machine (CT_AUDIO_SPC_DEFAULT,
+// CMakeLists.txt), the tools' the reference. A run seeded from an oracle state (CtAudioSeedFromApu) or a reference
+// savestate starts on the vendored core and hands over at its next pass over the main loop's top ($0299).
+enum { SPC_REF = 0, SPC_MACHINE = 1, SPC_BOTH = 2 };
+#ifndef CT_AUDIO_SPC_DEFAULT
+#define CT_AUDIO_SPC_DEFAULT SPC_REF
+#endif
+static int spcModeWanted(void) {
+  static int m = -1;
+  if (m < 0) {
+    const char* e = getenv("CT_AUDIO_SPC");
+    m = !e || !*e ? CT_AUDIO_SPC_DEFAULT : !strcmp(e, "ref") ? SPC_REF : !strcmp(e, "machine") ? SPC_MACHINE
+      : !strcmp(e, "lockstep") ? SPC_BOTH : CT_AUDIO_SPC_DEFAULT;
+  }
+  return m;
+}
+static int machineRuns(const CtAudio* a) { return a->spc == SPC_MACHINE && !a->machPending; }
+static void W(CtAudio* a, int k, uint8_t v) {
+  if (a->spc != SPC_MACHINE || a->machPending) a->apu->inPorts[k] = v;
+  if (a->spc != SPC_REF) SndMachinePortWrite(a->mach, k, v);
+}
+static uint8_t R(CtAudio* a, int k) { return machineRuns(a) ? SndMachinePortRead(a->mach, k) : a->apu->outPorts[k]; }
 static int ctStepCycles(void) {   // experiment hook: CT_AUDIO_QUANTUM overrides the 96 above
   static int n = -1;
   if (n < 0) { const char* e = getenv("CT_AUDIO_QUANTUM"); n = e ? atoi(e) : 16; }
@@ -149,30 +179,69 @@ static long g_sndSettleCycles;   // ...of which the post-echo SETTLE (the 65816'
 static long g_sndMovedBytes;     // bytes the DEFRAGMENTER had the SPC move (command $07): its cost is the SPC's memmove, not a handshake
 // Take every sample the DSP emitted since the last take (snes/dsp.c writes sampleBuffer[(sampleOffset & 0x3ff) * 2]
 // then sampleOffset++). More than the ring's 0x400 between two takes cannot be recovered; apuRun never lets that happen.
+static void fifoPut(CtAudio* a, const int16_t* lr, int n) {
+  for (int i = 0; i < n; i++) {
+    if (a->fifoLen == CT_AUD_FIFO) { a->fifoHead = (a->fifoHead + 1) % CT_AUD_FIFO; a->fifoLen--; a->fifoDropped++; }
+    unsigned w = (a->fifoHead + a->fifoLen) % CT_AUD_FIFO;
+    a->fifo[w * 2] = lr[i * 2]; a->fifo[w * 2 + 1] = lr[i * 2 + 1];
+    a->fifoLen++;
+  }
+}
+static void machineSink(void* c, const int16_t* lr, int n) { fifoPut((CtAudio*)c, lr, n); }
 static void audTake(CtAudio* a) {
+  if (machineRuns(a)) return;                          // (the machine's samples come through its sink)
   Dsp* dsp = a->apu->dsp;
   unsigned n = (uint16_t)(dsp->sampleOffset - a->dspRead);
   if (n > 0x400) { a->fifoDropped += n - 0x400; a->dspRead = (uint16_t)(dsp->sampleOffset - 0x400); n = 0x400; }
+  int16_t buf[0x400 * 2];
   for (unsigned i = 0; i < n; i++) {
     unsigned r = ((unsigned)a->dspRead + i) & 0x3FF;
-    if (a->fifoLen == CT_AUD_FIFO) { a->fifoHead = (a->fifoHead + 1) % CT_AUD_FIFO; a->fifoLen--; a->fifoDropped++; }
-    unsigned w = (a->fifoHead + a->fifoLen) % CT_AUD_FIFO;
-    a->fifo[w * 2] = dsp->sampleBuffer[r * 2]; a->fifo[w * 2 + 1] = dsp->sampleBuffer[r * 2 + 1];
-    a->fifoLen++;
+    buf[i * 2] = dsp->sampleBuffer[r * 2]; buf[i * 2 + 1] = dsp->sampleBuffer[r * 2 + 1];
   }
+  fifoPut(a, buf, (int)n);
+  if (a->spc == SPC_BOTH && n) CtSndLockstepSamples(a->apu, buf, (int)n, ((uint64_t)a->apu->cycles + 31) / 32 - n);
   a->dspRead = dsp->sampleOffset;
 }
 // apu_runCycles, taking the samples as it goes: 0x400 samples are 32768 APU cycles, so a run is cut into pieces well
 // under that. Returns the cycles run, like apu_runCycles.
 static long long g_apuTotal;   // CT_AUDIO_SPCCLOCK: every SPC cycle this CtAudio ran, printed per CtAudioFrame
-static int apuRun(CtAudio* a, int cycles) {
+void CtSndMachineAdoptApu(SndMachine* m, const Apu* apu);   // (sound/lockstep.c)
+static int refRun(CtAudio* a, int cycles, int toLoop) {   // toLoop: stop at $0299 (the machine takes over)
   int ran = 0;
   while (ran < cycles) {
+    if (toLoop && a->apu->spc->pc == 0x0299 && !a->apu->spc->resetWanted) break;
     int chunk = cycles - ran; if (chunk > 16000) chunk = 16000;
-    ran += apu_runCycles(a->apu, chunk);
+    ran += apu_runCycles(a->apu, toLoop ? 1 : chunk);
     audTake(a);
   }
+  return ran;
+}
+static int apuRun(CtAudio* a, int cycles) {
+  int ran;
+  if (a->spc == SPC_MACHINE) {
+    ran = 0;
+    if (a->machPending) {   // the seeded stretch, up to the main loop's top
+      ran = refRun(a, cycles, 1);
+      if (ran >= cycles) { g_apuTotal += ran; return ran; }
+      CtSndMachineAdoptApu(a->mach, a->apu);
+      SndMachineSetSink(a->mach, machineSink, a);
+      a->machPending = 0;
+    }
+    ran += SndMachineRun(a->mach, cycles - ran);
+  } else {
+    uint32_t start = a->apu->cycles;
+    if (a->spc == SPC_BOTH) CtSndLockstepRunStart(a->apu);
+    ran = refRun(a, cycles, 0);
+    if (a->spc == SPC_BOTH) {
+      int mr = 0;
+      if (CtSndLockstepActive(a->apu)) mr = SndMachineRun(a->mach, (int)(uint32_t)(start + (uint32_t)cycles - (uint32_t)SndMachineCycles(a->mach)));
+      CtSndLockstepRunEnd(a->apu, ran, mr);
+    }
+  }
   g_apuTotal += ran;
+  { static int rt = -1; if (rt < 0) rt = getenv("CT_AUDIO_RUNTRACE") ? 1 : 0;   // every run: asked, ran, the ports after
+    if (rt) { uint8_t o[4]; for (int k = 0; k < 4; k++) o[k] = R(a, k);
+              fprintf(stderr, "spcrun %d %d %02X%02X%02X%02X%c", cycles, ran, o[0], o[1], o[2], o[3], 10); } }
   return ran;
 }
 static void audReset(CtAudio* a) { a->fifoHead = a->fifoLen = 0; a->dspRead = a->apu->dsp->sampleOffset; }
@@ -411,7 +480,7 @@ static void ldWalk(long cycles) {        // wall time passes: the raster walks a
       if (ld.hd && ld.vPos == 225 && ld.hd->nmiOn) ld.hd->on = 1;      // the NMI, taken inside C7: `$0128` to $420C
       if (ld.vPos == 225) { ld.nmis++;                                    // vblank: the NMI is taken
         { static int lf = -1; if (lf < 0) { const char* e = getenv("CT_AUDIO_LDFRAMES"); lf = (e && *e) ? 1 : 0; }
-          if (lf && g_ldA) { ldCatch(g_ldA); const uint8_t* r = g_ldA->apu->ram;
+          if (lf && g_ldA) { ldCatch(g_ldA); const uint8_t* r = CtAudioAram(g_ldA);
             fprintf(stderr, "ldframe nmi%d $83=%02X $97=%02X%02X clk=%lld cpu=%lld refresh=%lld hdma=%lld irq=%lld polls=%ld\n", ld.nmis, r[0x83], r[0x98], r[0x97], ld.clk, ld.dbgCpu, ld.dbgBg[0], ld.dbgBg[1], ld.dbgBg[3], ld.polls);
             ld.dbgCpu = 0; ld.dbgBg[0] = ld.dbgBg[1] = ld.dbgBg[3] = 0; } }
         if (ld.ifast) ld.stolen += ld.nmiWait;                          //   (the rule: its work free, its waits the beam's)
@@ -1641,6 +1710,25 @@ static void measureInit(void) {
   }
 }
 
+// THE SOUND MACHINE's COST TABLE (sound/timing.h): each instruction of block 0 (the driver) and of the boot ROM, timed
+// on the vendored SPC700 -- once a process.
+static const SndTiming* sndTiming(CtAudio* a, const uint8_t* rom, long romLen) {
+  static SndTiming* t;
+  static int tried;
+  if (tried) return t;
+  tried = 1;
+  if (!sndBootLoad(a, rom, romLen) || (long)a->dst[0] + a->size[0] > 0xFFC0) return NULL;
+  uint8_t* img = (uint8_t*)calloc(0x10000, 1);
+  SndTiming* nt = (SndTiming*)calloc(1, sizeof *nt);
+  if (!img || !nt) { free(img); free(nt); return NULL; }
+  memcpy(img + a->dst[0], a->blk[0], a->size[0]);
+  memcpy(img + 0xFFC0, apu_bootRom(), 0x40);
+  if (SndTimingBuild(nt, img, a->dst[0], (uint16_t)(a->dst[0] + a->size[0])) && SndTimingBuild(nt, img, 0xFFC0, 0x0000)) t = nt;
+  else free(nt);
+  free(img);
+  return t;
+}
+
 CtAudio* CtAudioInit(const uint8_t* rom, long romLen) { return CtAudioInitWith(rom, romLen, NULL); }
 
 CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) {
@@ -1660,7 +1748,14 @@ CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) {
   a->ruleIrqLine = -1;                                         // ...and no V-IRQ until the host says one is armed
   a->apu = apu_init(a->shell);
   apu_reset(a->apu);                                   // SPC PC -> $FFC0, the IPL
-  if (CtSndLockstepWanted()) CtSndLockstepAttach(a->apu);   // the C driver beside this SPC (src/sound/lockstep.h)
+  a->spc = spcModeWanted();
+  if (a->spc != SPC_REF) {                             // the sound machine, powered on beside it
+    const SndTiming* tim = sndTiming(a, rom, romLen);
+    a->mach = tim ? SndMachineNew(tim) : NULL;
+    if (!a->mach) { fprintf(stderr, "[audio] the sound machine has no cost table -- the reference SPC700 runs\n"); a->spc = SPC_REF; }
+    else if (a->spc == SPC_MACHINE) SndMachineSetSink(a->mach, machineSink, a);
+    else CtSndLockstepAttach(a->apu, a->mach, 1);
+  }
   mixSnapshot(a->apu);
   a->ready = uploadDriver(a, rom, romLen);
   audReset(a);                                         // the IPL transfer's own output is not the game's
@@ -1671,6 +1766,7 @@ CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) {
 void CtAudioFree(CtAudio* a) {
   if (!a) return;
   if (a->apu == g_mixApu) { mixFlushHash(); g_mixApu = NULL; }
+  if (a->mach) { if (a->spc == SPC_BOTH) CtSndLockstepDetach(a->apu); SndMachineFree(a->mach); }
   if (a->apu) apu_free(a->apu);
   free(a->shell);
   free(a);
@@ -1701,6 +1797,7 @@ void CtAudioFrame(CtAudio* a) {
   int n = (int)want;
   int ran = apuRun(a, n);                              // overshoots by at most one opcode
   a->cycleCarry = want - (double)ran;                  // carry it, so long runs do not drift
+  if (a->spc == SPC_BOTH) CtSndLockstepRam(a->apu);
 }
 
 void CtAudioSamples(CtAudio* a, int16_t* out, int samples) {
@@ -1745,7 +1842,8 @@ void CtAudioSamples(CtAudio* a, int16_t* out, int samples) {
     for (; i < n; i++) { unsigned r = (a->fifoHead + i) % CT_AUD_FIFO; fr[i * 2] = a->fifo[r * 2]; fr[i * 2 + 1] = a->fifo[r * 2 + 1]; }
     for (; i < 534; i++) { fr[i * 2] = fr[(n - 1) * 2]; fr[i * 2 + 1] = fr[(n - 1) * 2 + 1]; }
     a->fifoHead = (a->fifoHead + n) % CT_AUD_FIFO; a->fifoLen = 0;
-  } else dsp_getSamples(a->apu->dsp, fr, 534);
+  } else if (machineRuns(a)) SndMachineNewest(a->mach, fr, 534);
+  else dsp_getSamples(a->apu->dsp, fr, 534);
   // CT_AUDIO_PCM=<path>: the frame as played at 32040 Hz (int16 L,R), 534 samples a frame -- a drained frame's 536 read
   // down to 534 by the nearest sample, centred (both ends kept, two skipped inside the frame), so frame k of the file is
   // output frame k and its boundaries are the output's: the same stream as ct.exe --peek's PEEK_PCM, side by side.
@@ -1839,6 +1937,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   mb[0x00] = 0x00;                                     // $C7:0192 — STZ $1E00 on every exit
   ldRun(296);                                          // $0192-$01A0: the epilogue's pulls and the RTL
   ldCatch(a);                                          // the SPC is level with the CPU at the RTL
+  if (a->spc == SPC_BOTH) CtSndLockstepRam(a->apu);
   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   if (ldTrace() && ld.polls) { fprintf(stderr, "[ldtrace] polls per token:"); for (int k = 0; k <= 64; k++) if (ldHist[k]) fprintf(stderr, " %d:%ld", k, ldHist[k]);
     fprintf(stderr, "  | %lld master, %d NMIs, line %d\n", ld.clk, ld.nmis, ld.vPos); memset(ldHist, 0, sizeof ldHist); }
@@ -1896,7 +1995,8 @@ void CtAudioSeedFromApu(CtAudio* a, const Apu* src) {
   if (src->snes && src->snes->ppu) a->evenFrame = src->snes->ppu->evenFrame ? 1 : 0;   // the state's field: the next frame flips it
   a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;
   audReset(a);
-  CtSndLockstepResync(a->apu);
+  if (a->spc == SPC_MACHINE) a->machPending = 1;       // the machine takes over at its $0299
+  else if (a->spc == SPC_BOTH) CtSndLockstepAdoptNext(a->apu);
   mixSnapshot(d);
 }
 #define CT_APUSTATE_MAGIC 0x50415443u   /* 'CTAP' LE */
@@ -1926,7 +2026,8 @@ int CtAudioLoadState(CtAudio* a, const char* path) {
     mixSnapshot(a->apu);
     a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;   // (as CtAudioSeedFromApu: the adopted driver's moment)
     audReset(a);
-    CtSndLockstepResync(a->apu);
+    if (a->spc == SPC_MACHINE) a->machPending = 1;
+    else if (a->spc == SPC_BOTH) CtSndLockstepAdoptNext(a->apu);
   }
   free(buf);
   return ok;
@@ -1969,9 +2070,11 @@ void CtAudioSeedMailboxPage(const CtAudio* a, uint8_t* mem7E) {
   m[0x1E00] = 0x00;
 }
 
-const uint8_t* CtAudioAram(const CtAudio* a) { return a ? a->apu->ram : NULL; }
+const uint8_t* CtAudioAram(const CtAudio* a) { return !a ? NULL : machineRuns(a) ? a->mach->d.m : a->apu->ram; }
 struct Apu* CtAudioApu(CtAudio* a) { return a ? a->apu : NULL; }
-uint32_t CtAudioApuCycles(const CtAudio* a) { return a ? a->apu->cycles : 0; }
+void CtAudioPortWrite(CtAudio* a, int k, uint8_t v) { if (a) W(a, k & 3, v); }
+int CtAudioRunCycles(CtAudio* a, int cycles) { return a ? apuRun(a, cycles) : 0; }
+uint32_t CtAudioApuCycles(const CtAudio* a) { return !a ? 0 : machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles; }
 // A TRANSLATED STAGE'S EXIT FRAME. A stage's bus runs this SPC itself while it is open (the host's slice is skipped,
 // field.c `!seqX && !gwX`), one frame of SPC per stage frame -- and the frame it leaves in (`JML C0:0000`) its bus ran
 // only up to the jump. The cartridge's SPC does not stop there: the rest of that frame's 17,088 cycles run on while the
@@ -1992,17 +2095,20 @@ void CtAudioStageExitFrame(CtAudio* a, uint32_t ran) {
 uint32_t CtAudioAramFnv(const CtAudio* a) {
   if (!a) return 0;
   uint32_t h = 2166136261u;
-  for (int i = 0; i < 0x10000; i++) h = (h ^ a->apu->ram[i]) * 16777619u;
+  const uint8_t* r = CtAudioAram(a);
+  for (int i = 0; i < 0x10000; i++) h = (h ^ r[i]) * 16777619u;
   return h;
 }
 
 void CtAudioPorts(const CtAudio* a, uint8_t in[4], uint8_t out[4]) {
   if (!a) return;
+  if (machineRuns(a)) { for (int i = 0; i < 4; i++) { if (in) in[i] = a->mach->in[i]; if (out) out[i] = a->mach->out[i]; } return; }
   for (int i = 0; i < 4; i++) { if (in) in[i] = a->apu->inPorts[i]; if (out) out[i] = a->apu->outPorts[i]; }
 }
 
 int CtAudioVoicesSounding(const CtAudio* a) {
   if (!a) return 0;
+  if (machineRuns(a)) return SndMachineVoicesSounding(a->mach);
   int n = 0;
   for (int c = 0; c < 8; c++) if (a->apu->dsp->channel[c].gain) n++;
   return n;

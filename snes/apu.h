@@ -36,6 +36,7 @@ struct Apu {
 Apu* apu_init(Snes* snes);
 void apu_free(Apu* apu);
 void apu_reset(Apu* apu);
+const uint8_t* apu_bootRom(void);   // the 64-byte boot ROM at $FFC0 (src/audio.c: the sound machine's cost table)
 void apu_handleState(Apu* apu, StateHandler* sh);
 int apu_runCycles(Apu* apu, int wantedCycles);
 extern void (*g_apuOpHook)(Apu* apu, uint16_t pc);                       // measuring hooks, NULL by default

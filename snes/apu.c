@@ -20,6 +20,8 @@ static const uint8_t bootRom[0x40] = {
 
 static void apu_cycle(Apu* apu);
 
+const uint8_t* apu_bootRom(void) { return bootRom; }
+
 // Measuring hooks (CT_SPC_COVERAGE / CT_DSP_LOG, src/audio.c): NULL unless asked for, so a run pays one test per
 // instruction and per S-DSP write. The PC is the instruction's about to run; the write is the $F3 one.
 void (*g_apuOpHook)(Apu* apu, uint16_t pc) = NULL;

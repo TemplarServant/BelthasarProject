@@ -5180,8 +5180,7 @@ static void raceSndPost(void* c) {
 static void raceSndSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)a; (void)b; (void)d; fieldSoundFlush((uint8_t*)c); }
 static void raceSndApu(void* c, uint8_t pitch) {
   (void)c;
-  struct Apu* apu = g_fieldAudio ? CtAudioApu(g_fieldAudio) : NULL;
-  if (apu) { apu->inPorts[1] = pitch; apu->inPorts[0] = 0x89; }
+  if (g_fieldAudio) { CtAudioPortWrite(g_fieldAudio, 1, pitch); CtAudioPortWrite(g_fieldAudio, 0, 0x89); }
 }
 // A script's `F5` (C3/0C2A) reads the SPC's output port 2 -- the song's marker -- off the host's own sound processor.
 static uint8_t raceSndPort(void* c, int n) {

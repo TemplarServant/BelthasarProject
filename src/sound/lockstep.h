@@ -1,23 +1,40 @@
 // ============================================================================
-// sound/lockstep.h -- the C sound driver (sound/driver.c) run beside the original on the vendored SPC700, tick by tick.
+// sound/lockstep.h -- the sound machine in C (sound/machine.h) run beside the original on the vendored SPC700 and S-DSP,
+// instruction by instruction.
 //
-// CT_SNDDRV_LOCKSTEP=1 on Belthasar or ct.exe: every CtAudio's SPC (src/audio.c) is watched. Each time the original
-// leaves its timer-0 wait (the loop at $0299/$029C reaches $02A0) the C driver replays what the original took since
-// the last tick -- the commands the loop took, the ports at each poll, the timer and S-DSP reads, the upload sessions'
-// headers, bytes and ticks -- and the two are compared: the S-DSP writes in order (KON and KOFF among them), the
-// status ports, the control writes, the S-DSP register file, and the driver's RAM byte for byte. A mismatch is
-// reported and both are put level again (the C driver takes the original's state) so a run counts every tick.
-// The report goes to stdout at exit (CT_SNDDRV_LOCKSTEP_OUT=<file> appends it there, `%d` = the process id).
+// CT_AUDIO_SPC=lockstep on Belthasar or ct.exe (src/audio.c): every CtAudio runs both, with the same calls from the host
+// (the same port writes, the same runs); the game hears the original. They are compared as they run:
+//   - the instructions: each one the machine charges against the one the SPC700 starts, address and cycle;
+//   - every access the outside sees, in order, with its value and cycle: the S-DSP writes and reads, the port writes and
+//     reads, the timer reads, the control writes ($F1, $FA-$FC);
+//   - where each run stops (the cycle) and the ports the CPU then reads;
+//   - every sample the two S-DSPs make;
+//   - the RAM, byte for byte (but the registers' mirror $F0-$FF), at each frame's end and each song load's.
+// The machine joins at power-on, or -- after a seeded or loaded SPC, or a mismatch -- at the original's next pass over
+// the main loop's top ($0299), adopting its state there. The report goes to stdout at exit (CT_SNDDRV_LOCKSTEP_OUT=<file>
+// appends it there, `%d` = the process id).
 // ============================================================================
 #ifndef CT_SOUND_LOCKSTEP_H
 #define CT_SOUND_LOCKSTEP_H
 
-struct Apu;
+#include <stdint.h>
 
-int  CtSndLockstepWanted(void);              // CT_SNDDRV_LOCKSTEP is set
-void CtSndLockstepAttach(struct Apu* apu);    // watch this SPC (before its IPL upload: the boot is the first sync)
-void CtSndLockstepResync(struct Apu* apu);    // its state was replaced (a savestate): level again at the next tick
-void CtSndLockstepReport(void);               // the summary line (also at exit)
+struct Apu;
+struct SndMachine;
+
+void CtSndLockstepAttach(struct Apu* apu, struct SndMachine* m, int atPowerOn);   // compare these two
+void CtSndLockstepDetach(struct Apu* apu);
+void CtSndLockstepAdoptNext(struct Apu* apu);       // the original's state was replaced: the machine joins at $0299
+int  CtSndLockstepActive(const struct Apu* apu);    // the machine runs (it has joined)
+// One run of both: the original ran to its stop (ranRef); call before the machine runs, then after it.
+void CtSndLockstepRunStart(struct Apu* apu);
+void CtSndLockstepRunEnd(struct Apu* apu, int ranRef, int ranMachine);
+void CtSndLockstepSamples(struct Apu* apu, const int16_t* lr, int n, uint64_t firstIndex);   // the original's samples
+void CtSndLockstepPorts(struct Apu* apu);           // the ports the CPU reads, compared
+void CtSndLockstepRam(struct Apu* apu);             // the RAM, compared
+int  CtSndLockstepWanted(void);                    // CT_AUDIO_SPC=lockstep
+void CtSndLockstepReport(void);
 long CtSndLockstepMismatches(void);
+long CtSndLockstepCompared(void);                   // instructions compared
 
 #endif
