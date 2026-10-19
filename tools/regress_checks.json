@@ -46687,6 +46687,61 @@
         }
       ],
       "notes": "ROADMAP F2 (closed 2026-10-18). From power-on on both sides (the cartridge under the rule, `ct.exe --monitor 7E0100:2,7E168C:1,7E160C:2,7E118C:2 --from boot --frames 7700 --diff --writer`; the port --boot on an erased cart): at loc 0E6 Robo (obj6) waits in fn7 (`AD 20` from c7637, $168C = 08), and at c7669 the wait's last pass and `4F 0C 0F / 4F 25 10 / 02 00 33 / 00` spend the visit's five ops -- the RETURN restores his prio-7 ip 06A2, a B0 -- so $168C stays 08 and $160C ticks to 0303; at c7670 the B0 runs and C0:A21C (A1E9's idle chain) zeroes $168C, $160C = 0305. The port's frames are the cartridge's less 53 here (f7584 = c7637, f7616 = c7669, f7617 = c7670); every pinned value is the cartridge's. Before, the port ran the conga whenever the ip sat on a B0 (ct_vm.c CtSceneUpdateFollowers) and zeroed $168C in the RETURN's frame."
+    },
+    {
+      "name": "field-idle-counter-and-blink-roll-vs-rule-cartridge",
+      "argv": [
+        "build/Belthasar.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "468",
+        "--loadwram",
+        "saves/field_re/scene468_stairs_to_120.lakewram",
+        "--selftest",
+        "--frames",
+        "1400",
+        "--walkscript",
+        "n:1400"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_FIELD_MEMMON": "0158:2,01F8:1,1682:1"
+      },
+      "expect": [
+        "fmemmon f532 loc=1D4  0158=0083*  01F8=11*  1682=00",
+        "fmemmon f660 loc=1D4  0158=8083*  01F8=12*  1682=21*",
+        "fmemmon f788 loc=1D4  0158=0080*  01F8=13*  1682=00*",
+        "fmemmon f1300 loc=1D4  0158=0082*  01F8=17*  1682=00"
+      ],
+      "pin": [
+        "^fmemmon f(532|660|788|1300) "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/scene468_stairs_to_120.lakewram"
+      ],
+      "note_pass": "the lead's idle counter $0158 counts the field's frames (C0/EC60) and the ROM's idle chain rolls the blink from it -- at 2FF and every 128 frames after, $01F8 and the blink anim 21 on the cartridge's frames",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      int c = ((iw[0x0158] | (iw[0x0159] << 8)) + 1) & 0x83FF;",
+          "replace": "      int c = (iw[0x0158] | (iw[0x0159] << 8));   /* MUT */",
+          "why": "C0/EC60 `LDA $0158 / INC A / AND #83FF / STA $0158`: the field frame's wait counts it"
+        },
+        {
+          "file": "src/field.c",
+          "find": "                    g_collRam[0x011F] = ls[0x011F]; g_collRam[0x0162] = ls[0x0162]; }",
+          "replace": "                    }   /* MUT */",
+          "why": "A1F7 `LDA $1F / BEQ ->A211`: the free-roam lead's idle chain needs the explore flag"
+        }
+      ],
+      "notes": "THE IDLE COUNTER (2026-10-18). C0/EC60, the wait every field loop ends its frame in, opens with `LDA $0158 / INC A / AND #83FF / STA $0158` (writer C0:EC6C); C0/0C1A zeroes it at a load, the lead's walk / run arms C0/A171 / A18C on every step; the idle chain C0/A1E9 reads it: at 2FF (and, once A22A's `TSB #8000` set bit 15, at every 128th frame) it rolls $FE00[++$01F8] -- < 8 starts the blink (anim 21), else idle. The port never counted it, and its free-roam lead ran 9E84 on the collision page without $0158 / $01F8 / $011F: no roll ever, the blink never seen, the $FE00 cursor two steps short per 256 idle frames. The rule's cartridge (`ct.exe --monitor 7E0158:2,7E01F8:1,7E1682:1 --from saves/field_re/scene468_stairs_to_120.state --input 0:1400`) and the port, the same lines: rolls at f532 (01F8 11), f660 (12, the blink: $1682 = 21), f788 (13, back to 00) ... f1300 (17)."
     }
   ],
   "excluded": [
