@@ -155,6 +155,19 @@ base, op 2D's carry, the $01F0 staging of the move-toward-an-actor body, C0/ACFD
 $B242 record. Re-pin only a change in the counts with
 mismatched still 0, after confirming the oracle's run itself changed.
 
+### playthrough-legs-vs-rule-cartridge (`python tools/playthrough.py cmp all`, the playthrough)
+
+One route from power-on (an erased cartridge) to the end of the game, `tools/playthrough/route.txt`: the rule cartridge's
+pad in the `--btnscript` grammar, cut into legs (`## 06_marle -- note`). Each leg starts from the cartridge's state where
+the previous one ended -- the tool plays the route from power-on itself and keys the states (saves/playthrough/) on the
+route and the oracle binary, so nothing is downloaded -- and is played on both sides from that state: the port seeded with
+its WRAM and SPC, the same pad one frame later as the walkscript's raw `H` tokens. Graded per leg: the chains of the
+location, the storyline, the party, the gold, Crono's HP and the control byte, and the leg's last picture against the
+port's frames -6..+6. A DIFFERENT leg is a residual to fix (its line is pinned, as everywhere in the suite); `diff <leg>`
+writes the picture comparison. Writing legs: `try <leg> "<pad>"` (the picture in build/_playthrough/try.png), `walk <leg>
+"<prefix>" <x> <y> [--exit]` (tools/walkto.py from that point). The route is the work of many sessions: it grows leg by
+leg, and every leg added is a stretch of the game the port is graded on from then on.
+
 ### shadow-route-magus-fight (`ct.exe --shadow --btnfile tools/shadow_routes/magus_fight.btn`, a route)
 
 The shadow's first route (docs/SHADOW_PROPOSAL.md, S2). The oracle boots with a public battery save,
