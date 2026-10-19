@@ -12654,6 +12654,11 @@ int main(int argc, char** argv) {
     // feed the same variables the SDL keys feed, they add no behaviour of their own.
     int wsB = 0, wsStart = 0, wsMenu = 0;   // wsMenu = the X key, i.e. OPEN THE MENU
     int wsAHeld = 0;                        // 'A' = A HELD for the token's span (its first frame is the edge)
+    // 'H<hex>:N' = THE RAW PAD for N frames, in the oracle's --btnscript order (B=1 Y=2 Sel=4 Start=8 Up=10 Down=20
+    // Left=40 Right=80 A=100 X=200 L=400 R=800): the controller word holds exactly that mask, so a route written for the
+    // cartridge (tools/playthrough.py) drives the port with the same bytes -- combinations, Y/L/R/Select included. The
+    // host's own edges and levels are fed from it as the letters feed them (an edge on the token's first frame).
+    uint16_t wsMask = 0;
     // ---- --play: THE GOAL-DIRECTED DRIVER --------------------------------------------------------
     // --walkscript is a flat per-frame direction list: it cannot say "walk to that tile", it has no
     // repeat operator (a missing one manufactured false numbers in a dossier), and when it achieves
@@ -12745,9 +12750,24 @@ int main(int argc, char** argv) {
       int at = 0;
       while (*p) {
         char c = *p++;
+        unsigned hm = 0;
+        if (c == 'H') hm = (unsigned)strtoul(p, (char**)&p, 16);
         if (*p == ':') p++;
         int n = (int)strtol(p, (char**)&p, 10);
         if (frameNo >= at && frameNo < at + n) {
+          if (c == 'H') {
+            int first = frameNo == at;
+            wsMask = (uint16_t)hm;
+            if (hm & 0x080) wsDx = 1; else if (hm & 0x040) wsDx = -1;
+            if (hm & 0x020) wsDy = 1; else if (hm & 0x010) wsDy = -1;
+            if (first) { if (hm & 0x010) upPressed = 1;   if (hm & 0x020) downPressed = 1;
+                         if (hm & 0x040) leftPressed = 1; if (hm & 0x080) rightPressed = 1; }
+            if (hm & 0x100) { wsAHeld = 1; if (first) talkPressed = 1; }
+            if (first && (hm & 0x001)) wsB = 1;
+            if (first && (hm & 0x008)) wsStart = 1;
+            if (first && (hm & 0x200)) wsMenu = 1;
+            break;
+          }
           // u/d also raise the D-PAD EDGE on the token's first frame, exactly as 'a' raises A.
           // A decision box's option cursor reads `upPressed`/`downPressed` (the choice-cursor block
           // below), and those were set ONLY by SDL keys -- the drive grammar's direction is a LEVEL
@@ -12790,7 +12810,8 @@ int main(int argc, char** argv) {
     }
     // The frame's controller word -- the one the oracle is handed below, on either side of the hop -- and the
     // NMI's pad latch made from it (fieldPadNmi: C2/84D2, one frame behind, as on the console).
-    const uint16_t padSerial = fieldLockInputBits(walkScript || playScript, wsDx, wsDy, talkPressed, wsB, wsStart, wsMenu, frameNo);
+    const uint16_t padSerial = (uint16_t)(fieldLockInputBits(walkScript || playScript, wsDx, wsDy, talkPressed, wsB, wsStart, wsMenu, frameNo)
+                                          | wsMask);
 
     // ---- X-BUTTON MENU entry. TWO POLLS, ONE MENU -- because the ROM has two modules and ONE menu
     // program: both reach it through `JSL $C2:8000` with A = 1 (the five call sites in the whole ROM
@@ -18296,7 +18317,10 @@ int main(int argc, char** argv) {
         // never reaches here as an end (it only sets running=0), so window X can't resolve the battle.
         // Route the A key (Z/Space) as the command EDGE into the loop -- the field talk/menu pipeline is
         // already frozen in battle, so A only feeds the battle here (CT_BATTLE_MASHA also auto-A's inside).
-        const uint16_t bkp = fieldKeyPad();
+        // ...and a route's raw pad (the walkscript's `H` token, the same controller word the field's latch gets): the one
+        // scripted input that reaches the fight, so a playthrough route drives it as it drives the field. The letter tokens
+        // stay field-only (the headless fights they meet are driven by CT_BATTLE_MASHA / CT_BATTLE_SCRIPT).
+        const uint16_t bkp = (uint16_t)(fieldKeyPad() | wsMask);
         int aHeld = (bkp & PAD_A) ? 1 : 0;
         int uHeld = (bkp & PAD_UP) ? 1 : 0, dHeld = (bkp & PAD_DOWN) ? 1 : 0;
         int lHeld = (bkp & PAD_LEFT) ? 1 : 0, rHeld = (bkp & PAD_RIGHT) ? 1 : 0;   // T3.1 target nav

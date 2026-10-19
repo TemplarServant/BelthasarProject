@@ -46970,6 +46970,46 @@
         }
       ],
       "notes": "2026-10-19, the attract audit's boot vehicle, events [15] and [17] of loc 0E6. (1) THE FADE: the exit's $0117 = 80 drain (C0/0C76 -> 0C97 `DEC $19`, ct_vm.c CtSceneTick) decremented the byte but not sc->bright, which stands for it, so the frame drew field.c's copy of $0119 read before the tick -- every door/positional exit fade one step late; seen here because the camera pans through the fade (the scroll matched at the field's P+2 and the brightness at P+1: 14.5% px). (2) THE DEPTH: obj10 and obj11 stand on one column; the draw list walks obj11 first (front), but the host's lead obj3 ($0F00 = 00, off screen, unlinked by C0/A921) is drawn by the port and is not in the list, which threw the whole frame back on the Y sort (412 px a frame). Now an object outside the list is not drawn (C0/B2A5 emits the walk alone), and the menu's reload rebuilds the list as C0/286C does (7155 / E935 / B204 / A7E9 / B0E6, ct_vm.c CtSceneMenuReloadObjects) -- the stale list was why this was reverted before (field_draw_list_order.md sec. 4). Cartridge frame + 2103 = port frame on this vehicle."
+    },
+    {
+      "name": "playthrough-legs-vs-rule-cartridge",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/playthrough.py",
+        "cmp",
+        "all"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "expect": [
+        "playthrough: 01_wakeup SAME -- locs 10F 002 | story 00 03 | party 008080 | end picture 0 px at port +1",
+        "playthrough: 02_downstairs SAME -- locs 002 001 | story 03 | party 008080 | end picture 0 px at port +0",
+        "playthrough: 03_kitchen DIFFERENT -- locs 001 1F0 | story 03 | party 008080 | end picture 378 px at port +0",
+        "playthrough: 04_to_fair SAME -- locs 1F0 005 | story 03 | party 008080 | end picture 0 px at port -2",
+        "playthrough: 05_bellstairs DIFFERENT -- locs 005 1B7 | story 03 | party 008080 | end picture 323 px at port -2",
+        "playthrough: 06_marle DIFFERENT -- locs 1B7 | story 03 06 08 | party 008080 000180 | end picture 254 px at port +0",
+        "playthrough: 3/6 legs SAME"
+      ],
+      "pin": [
+        "^playthrough: [0-9]"
+      ],
+      "timeout_s": 1800,
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            if (hm & 0x100) { wsAHeld = 1; if (first) talkPressed = 1; }",
+          "replace": "            /* MUT */",
+          "why": "the route's A no longer reaches the port's host: Mom's lines, the names and Marle's scene stall, and every chain from 01 on parts from the cartridge's"
+        }
+      ],
+      "note_pass": "the playthrough route from New Game, leg by leg: the same pad from the same state on the rule's cartridge and on the port -- the location chain, the storyline and the party on the cartridge's frames, and each leg's last picture",
+      "notes": "2026-10-19, the start of the playthrough tests (tools/playthrough.py, tools/playthrough/route.txt: the cartridge's pad from power-on on an erased cartridge, cut into legs and written by looking -- `try`, `walk` with tools/walkto.py). Each leg starts from the cartridge's state where the previous one ended (made from power-on by the tool itself and keyed on the route and the oracle binary); the port is seeded with that WRAM and SPC and plays the same pad one frame later through the walkscript's raw `H` token, which reaches the fight too. Graded: the chains of $0100, $7F:0000 and $2980-$2982 with their frames, and the leg's last picture against the port's frames -3..+3. Residuals pinned: 03 the 1F0 seagulls (the world's ambient birds) sit elsewhere; 05 Crono's walk frame on 1B7's stairs; 06 the red banner's frame beside him. The chains are the cartridge's on every frame, Marle's scene included (story 06 at f856, 08 at f2852, the party at f2948 on both sides)."
     }
   ],
   "excluded": [
