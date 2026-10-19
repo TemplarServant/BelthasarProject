@@ -4,6 +4,7 @@
 // so the WRAM after a call is the cartridge's. D = $0200 throughout (57DF / 5823 `PHD / LDA #0200 / TCD`); the
 // absolutes $0231-$023A are the same bytes. Long pointers read through the HiROM bus (rd).
 #include "vwf.h"
+#include "romview.h"
 #include <stdio.h>
 
 typedef struct { uint8_t* w; const uint8_t* rom; long romLen; int bad; } Vwf;
@@ -16,7 +17,7 @@ static uint8_t rd(Vwf* v, uint32_t a) {
   if (!(b & 0x40) && o < 0x2000) return v->w[o];                      // banks 00-3F / 80-BF: the low WRAM
   if ((b & 0x40) || o >= 0x8000) {                                     // HiROM
     long r = ((long)(b & 0x3F) << 16) | o;
-    return r < v->romLen ? v->rom[r] : 0;
+    return r < v->romLen ? CtRomByte(v->rom, 0x400000L, (long)(r)) : 0;
   }
   return 0;
 }

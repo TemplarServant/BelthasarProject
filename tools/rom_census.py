@@ -73,6 +73,7 @@ def main():
     ap.add_argument('--functions', action='store_true')
     ap.add_argument('--pages', action='store_true')
     ap.add_argument('--lzmiss', action='store_true', help='the files are CT_LZ_MISSLOG outputs: streams by caller')
+    ap.add_argument('--viewmiss', action='store_true', help='the files are CT_ROMVIEW_MISSLOG outputs: pages by caller')
     a = ap.parse_args()
     paths = [p for f in a.files for p in (glob.glob(f) or [f]) if os.path.exists(p)]
     syms, base = load_map(a.map)
@@ -91,6 +92,20 @@ def main():
         print('lz-miss: %d streams read from the ROM, by caller:' % len(total))
         for k, offs in sorted(by.items(), key=lambda kv: -len(kv[1])):
             print('lz-miss: %4d  %s  (banks %s)' % (len(offs), k, ' '.join(sorted({'%02X' % (0xC0 + (o >> 16)) for o in offs}))))
+        return 0
+    if a.viewmiss:                                    # `PAGE CALLER kind exe` lines (src/romview.c CT_ROMVIEW_MISSLOG)
+        by = collections.defaultdict(set)
+        for p in paths:
+            for line in open(p):
+                f = line.split()
+                if len(f) < 4 or not f[3].lower().startswith('belthasar'):
+                    continue
+                fn, src = resolve(syms, addrs, base + int(f[1], 16)) if syms else ('?', '?')
+                by['%s %s' % (fn, src)].add(int(f[0], 16))
+        total = set().union(*by.values()) if by else set()
+        print('view-miss: %d pages read past the tables, by caller:' % len(total))
+        for k, pgs in sorted(by.items(), key=lambda kv: -len(kv[1])):
+            print('view-miss: %4d  %s  (%s)' % (len(pgs), k, ' '.join('%02X:%04X' % (0xC0 + (o >> 16), o & 0xFFFF) for o in sorted(pgs))))
         return 0
     pages = {}                                        # page -> (function, source) of a first read seen
     harness = []                                      # runs that read the whole image (an oracle / a reference inside) or ask for the ROM (CT_*_FROM_ROM)

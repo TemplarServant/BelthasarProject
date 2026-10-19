@@ -16,6 +16,8 @@ void CtRomViewUse(const CtAssets* as);
 uint8_t CtRomByte(const uint8_t* rom, long romLen, long off);
 // `len` bytes at `off`: the table's own when one covers them all, else rom + off (NULL outside the ROM).
 const uint8_t* CtRomPtr(const uint8_t* rom, long romLen, long off, long len);
+// `n` bytes from `off` into dst, byte by byte through CtRomByte.
+void CtRomCopy(uint8_t* dst, const uint8_t* rom, long romLen, long off, long n);
 // 1 when a table covers `off`.
 int CtRomViewHas(long off);
 // The whole check for ct.exe --tabassets: every table byte against the ROM's. Returns the bytes compared, -1 at a

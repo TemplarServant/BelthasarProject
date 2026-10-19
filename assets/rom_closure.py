@@ -262,3 +262,175 @@ def party_tables(rom):
         ('weapon palette index ($CD:6CEC, 8-bit index)', cd6cec, cd6cec + 0x100),
         ('weapon palettes ($D1:4B00, 6 each)', 0x114B00, 0x114B00 + 6 * (max(rom[cd6cec:cd6cec + 0x100]) + 1)),
     ]
+
+
+FF, C2, CC, DE = 0x3F0000, 0x020000, 0x0C0000, 0x1E0000
+
+
+def word_table(rom, at, bank):
+    """A table of 16-bit pointers into `bank` that ends where its first target begins: (entries, end)."""
+    ts, o = [], at
+    while o < bank + min(ts + [0x10000]) and o + 1 < len(rom):
+        ts.append(_w(rom, o))
+        o += 2
+    return ts, o
+
+
+# C2/EF7E's codes 01-0F and the operand bytes their handlers (C2:EFD4) step over: 02 05 06 07 two, 03 0B four, 04 three
+# (a long pointer to another string, which C2/EF7E walks), 08 09 0A one, 0C three; 0D-0F are an RTS.
+MENU_STRING_OPERANDS = {0x01: 0, 0x02: 2, 0x03: 4, 0x04: 3, 0x05: 2, 0x06: 2, 0x07: 2, 0x08: 1, 0x09: 1, 0x0A: 1,
+                        0x0B: 4, 0x0C: 3, 0x0D: 0, 0x0E: 0, 0x0F: 0}
+
+
+def menu_string(rom, a, seen, out, depth=0):
+    """C2/EF7E's string from `a` to its 00 (read), its includes walked too; returns the 0C codes' cap indices."""
+    s0, caps = a, []
+    while a < len(rom) and rom[a]:
+        c = rom[a]
+        a += 1
+        if c >= 0x10:
+            continue
+        if c == 0x04 and depth < 4 and rom[a + 2] >= 0xC0:      # (a string in WRAM is not the ROM's)
+            inc = ((rom[a + 2] - 0xC0) << 16) | _w(rom, a)
+            if inc not in seen:
+                seen.add(inc)
+                caps += menu_string(rom, inc, seen, out, depth + 1)
+        if c == 0x0C:
+            caps.append(rom[a])
+        a += MENU_STRING_OPERANDS[c]
+    out.append(('menu string ($%02X:%04X, C2/EF7E)' % (0xC0 + (s0 >> 16), s0 & 0xFFFF), s0, a + 1))
+    return caps
+
+
+def window_program(rom, a):
+    """C2/ED31's program from `a`: [op][FF:BD18[op] + 1 operand bytes] until a byte with bit 7 (the end, read)."""
+    while not rom[a] & 0x80:
+        a += 1 + rom[FF + 0xBD18 + rom[a]] + 1
+    return a + 1
+
+
+def until0(rom, a):
+    while rom[a]:
+        a += 1
+    return a + 1
+
+
+def hdma_runs(rom, a, width):
+    """An HDMA-style table read as [n, `width` bytes] entries until n = 0 (that byte read too)."""
+    while rom[a]:
+        a += 1 + width
+    return a + 1
+
+
+def menu_tables(rom):
+    """(name, start, end) of the tables the menus and their text read (src/menu.c, menu_cost.c, vwf.c and field.c's
+    menu and treasure text), each extent the reading code's own index range or the closure of a program it walks."""
+    out = []
+    t = lambda name, a, b: out.append((name, a, b))
+    # the menu strings: $FF:C457's table (to its first string), every string by C2/EF7E's codes, its includes
+    ss, end = word_table(rom, FF + 0xC457, FF)
+    t('menu string pointers ($FF:C457)', FF + 0xC457, end)
+    seen, caps = set(), []
+    for p in ss:
+        if FF + p not in seen:
+            seen.add(FF + p)
+            caps += menu_string(rom, FF + p, seen, out)
+    t('stat caps ($FF:CF33, the 0C codes\' cap index, LV and the stats)', FF + 0xCF33, FF + 0xCF33 + max(caps + [7]) + 1)
+    t('item classes: record bases, strides ($FF:CF0E, CF18)', FF + 0xCF0E, FF + 0xCF18 + 5)
+    t('Tab stat offsets and caps ($FF:CF2B, CF32, X 1-6)', FF + 0xCF2B, FF + 0xCF32 + 7)
+    # the VWF's strings (C2/57DF): the exchange prompt's $FF:CF3B and the save slots' $FF:D3FE, each to its 00
+    for at in (0xCF3B, 0xD03E, 0xD3FE):                  # (+ the save slots' chapter titles, $FF:D03E)
+        ps, end = word_table(rom, FF + at, FF)
+        t('VWF string pointers ($FF:%04X)' % at, FF + at, end)
+        for p in ps:
+            t('VWF string ($FF:%04X)' % p, FF + p, until0(rom, FF + p))
+    t('save-slot chapter thresholds ($FF:D024, X < 1A)', FF + 0xD024, FF + 0xD024 + 0x1A)
+    t('save-slot header shifts ($C2:D329, slot < 3)', C2 + 0xD329, C2 + 0xD329 + 3)
+    # the VWF's font and tables: FF:2060 + code x 24 (left eight) and FF:3860 + (code >> 1) x 24 (right four), the
+    # code 8-bit; C2:5FE6 / C2:6066 column offsets (x = 2 * (pen >> 3) + 4 at most), C2:60E6 advances (code - A0)
+    t('VWF font ($FF:2060, $FF:3860)', FF + 0x2060, FF + 0x3860 + 0x80 * 24)
+    t('VWF column offsets and advances ($C2:5FE6-61E5)', C2 + 0x5FE6, C2 + 0x60E6 + 0x100)
+    # the portraits and element plaques (C2/EC38, C2/A273), for the eight ids
+    tiles = [rom[FF + 0xCE70 + i] for i in range(8)]
+    pals = [_w(rom, FF + 0xCE78 + 2 * i) for i in range(8)]
+    xs = [rom[C2 + 0xA2C6 + i] for i in range(8)]
+    t('portrait tiles, palettes ($FF:CE70, CE78)', FF + 0xCE70, FF + 0xCE88)
+    t('plaque index ($C2:A2C6)', C2 + 0xA2C6, C2 + 0xA2CE)
+    t('plaque words, palettes ($FF:CE88, CE92 + x)', FF + 0xCE88, FF + 0xCE92 + max(xs) + 2)
+    for i in range(8):
+        t('portrait %d ($FF:0000 + 32 (tile - 1), 36 tiles)' % i, FF + 32 * (tiles[i] - 1), FF + 32 * (tiles[i] - 1) + 36 * 32)
+        t('portrait %d palette' % i, FF + pals[i], FF + pals[i] + 32)
+    for x in set(xs):
+        wd, ep = _w(rom, FF + 0xCE88 + x), _w(rom, FF + 0xCE92 + x)
+        if (wd & 0x3FF) >= 0x100:
+            a = FF + 0xD5E4 + 32 * ((wd & 0x3FF) - 0x100)
+            t('plaque ($FF:D5E4, 12 tiles)', a, a + 12 * 32)
+            t('plaque palette', FF + ep, FF + ep + 32)
+    # the cursor graphs (a length byte, then 6-byte cells) the menus load
+    for g in (0xB63D, 0xB6B0, 0xB731, 0xB77A, 0xB7A5):
+        t('cursor graph ($FF:%04X)' % g, FF + g, FF + g + 1 + rom[FF + g])
+    # the window programs (C2/ED31) and their operand lengths ($FF:BD18, ops 00-14: C2:ED59's eleven handlers)
+    t('window program operand lengths ($FF:BD18)', FF + 0xBD18, FF + 0xBD18 + 0x15)
+    t('save prompt window program ($FF:C16F)', FF + 0xC16F, window_program(rom, FF + 0xC16F))
+    t('window cell pattern ($C2:EEF5, 4 x 4)', C2 + 0xEEF5, C2 + 0xEEF5 + 16)
+    # the menus' HDMA tables: the ribbon's window ($FF:BAAA, 5-byte groups; $FF:BAE3, 2-byte) and the save screen's
+    # register record ($FF:BCE6, $2123-$212F); the shop's scroll and mode tables (a count byte, then [n, value])
+    t('ribbon window ($FF:BAAA)', FF + 0xBAAA, hdma_runs(rom, FF + 0xBAAA, 4))
+    t('save prompt window ($FF:BAE3)', FF + 0xBAE3, hdma_runs(rom, FF + 0xBAE3, 1))
+    t('save screen registers ($FF:BCE6)', FF + 0xBCE6, FF + 0xBCE6 + 13)
+    for a, wdt in ((0xB8A4, 2), (0xB9CA, 2), (0xB8CA, 2), (0xB9F0, 2), (0xBB33, 1)):
+        t('shop HDMA ($FF:%04X)' % a, FF + a, hdma_runs(rom, FF + a + 1, wdt))
+    # the item and tech pop-up: the curve ($FF:CEBA: HP from 0, MP from 2A, each to a byte with bit 7), the digits'
+    # 2bpp tiles ($FF:9390, 10 x 16), the column offsets ($C2:90F8, positions 0-3), the two palettes
+    a = FF + 0xCEBA + 0x2A
+    while not rom[a] & 0x80:
+        a += 1
+    t('pop-up curve ($FF:CEBA)', FF + 0xCEBA, a + 1)
+    t('pop-up digits ($FF:9390)', FF + 0x9390, FF + 0x9390 + 160)
+    t('pop-up columns ($C2:90F8)', C2 + 0x90F8, C2 + 0x90F8 + 4)
+    t('pop-up palettes ($FF:CB9C, CBAC)', FF + 0xCB9C, FF + 0xCBAC + 8)
+    # the party's places on the menus' screens
+    t('item screen party ($C2:B045, 3 words)', C2 + 0xB045, C2 + 0xB045 + 6)
+    t('tech screen partners ($C2:BB1A, 3)', C2 + 0xBB1A, C2 + 0xBB1A + 3)
+    t('tech target party ($C2:BF2F, 3 words)', C2 + 0xBF2F, C2 + 0xBF2F + 6)
+    t('Tab stat bytes ($C2:B315, X 0-6)', C2 + 0xB315, C2 + 0xB315 + 7)
+    t('gear slot labels ($C2:A3BA, 4 x 10)', C2 + 0xA3BA, C2 + 0xA3BA + 40)
+    t('item classes ($C2:88A7)', C2 + 0x88A7, C2 + 0x88A7 + 5)
+    # the item names (11 bytes an id, the id 8-bit) and records ($CC: FF:CF0E[class] + index x FF:CF18[class])
+    t('item names ($CC:0B5E, 11 x 256)', CC + 0x0B5E, CC + 0x0B5E + 11 * 256)
+    cls = list(rom[C2 + 0x88A7:C2 + 0x88A7 + 5]) + [0x100]
+    for c in range(5):
+        base, stride = _w(rom, FF + 0xCF0E + 2 * c), rom[FF + 0xCF18 + c]
+        t('item records, class %d' % c, CC + base, CC + base + (cls[c + 1] - cls[c]) * stride)
+    # the shops: $CC:2C6D's pointers (to its first list), each list 32 bytes (C2/DAF5)
+    ls, end = word_table(rom, CC + 0x2C6D, CC)
+    t('shop list pointers ($CC:2C6D)', CC + 0x2C6D, end)
+    for p in set(ls):
+        t('shop list ($CC:%04X)' % p, CC + p, CC + p + 32)
+    # the exchange screen (C2/C7AC): its graph above, FF/F677's map rows, palettes, FF/F716's wave, $FF:D57A
+    t('exchange map rows ($FF:F6F2, 6 words)', FF + 0xF6F2, FF + 0xF6F2 + 12)
+    t('exchange palettes ($FF:F6FE 8, $FF:F706 16)', FF + 0xF6FE, FF + 0xF706 + 16)
+    t('exchange wave ($FF:F759, x <= 7A)', FF + 0xF759, FF + 0xF759 + 0x7C)
+    t('exchange HDMA seed ($FF:D57A, 12)', FF + 0xD57A, FF + 0xD57A + 12)
+    # the treasure messages ($DE:FF00, three) and the dictionary they use ($DE:FA00: 128 [len][bytes] substrings)
+    ms = [_w(rom, DE + 0xFF00 + 2 * i) for i in range(3)]
+    t('treasure messages ($DE:FF00)', DE + 0xFF00, DE + 0xFF06)
+    for p in ms:
+        t('treasure message', DE + p, until0(rom, DE + p))
+    t('text dictionary pointers ($DE:FA00, 128)', DE + 0xFA00, DE + 0xFA00 + 256)
+    for i in range(128):
+        ds = DE + _w(rom, DE + 0xFA00 + 2 * i)
+        t('text dictionary entry', ds, ds + 1 + rom[ds])
+    # the field's caption records ($FD:A000, C0/3E84's operand & 7F: 128 runs, each to a byte with bit 7)
+    a = 0x3DA000
+    for _ in range(128):
+        while not rom[a] & 0x80:
+            a += 1
+        a += 1
+    t('caption records ($FD:A000, 128)', 0x3DA000, a)
+    return out
+
+
+def menu_streams(rom):
+    """The menus' LZ streams: the exchange's BG3 characters ($FF:E8DC, FF/F677's C3/0002)."""
+    return {'menu LZ streams': {FF + 0xE8DC}}

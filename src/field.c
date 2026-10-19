@@ -6186,15 +6186,15 @@ static int fieldCtDecodeAt(long off, char* out, int cap) {
   int o = 0;
   if (!rom || !out || cap < 2) return 0;
   for (long a = off; a >= 0 && a < rl && o < cap - 1; a++) {
-    uint8_t v = rom[a];
+    uint8_t v = CtRomByte(rom, 0x400000L, (long)(a));
     if (v == 0x00) break;
     if (v >= 0x21 && v <= 0x9F) {
       long dp = CT_TREAS_DICT + (long)(v - 0x21) * 2;
       if (dp + 2 > rl) continue;
-      long ds = CT_TREAS_DICT + ((rom[dp] | (rom[dp + 1] << 8)) - 0xFA00);
+      long ds = CT_TREAS_DICT + ((CtRomByte(rom, 0x400000L, (long)(dp)) | (CtRomByte(rom, 0x400000L, (long)(dp + 1)) << 8)) - 0xFA00);
       if (ds < 0 || ds + 1 > rl) continue;
-      for (int k = 0, dn = rom[ds]; k < dn && ds + 1 + k < rl && o < cap - 1; k++)
-        if (rom[ds + 1 + k] >= 0xA0) out[o++] = fieldCtChar(rom[ds + 1 + k]);
+      for (int k = 0, dn = CtRomByte(rom, 0x400000L, (long)(ds)); k < dn && ds + 1 + k < rl && o < cap - 1; k++)
+        if (CtRomByte(rom, 0x400000L, (long)(ds + 1 + k)) >= 0xA0) out[o++] = fieldCtChar(CtRomByte(rom, 0x400000L, (long)(ds + 1 + k)));
       continue;
     }
     if (v >= 0xA0) out[o++] = fieldCtChar(v);
@@ -6207,10 +6207,10 @@ static int fieldTreasureMessage(int result, int itemId, int value, char* out, in
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   if (!rom || !out || cap < 8 || rl < CT_TREAS_MSGTAB + 16 || result < 0 || result > 2) return 0;
   long ptr = CT_TREAS_MSGTAB + (long)result * 2;
-  long off = 0x1E0000L + (rom[ptr] | (rom[ptr + 1] << 8));
+  long off = 0x1E0000L + (CtRomByte(rom, 0x400000L, (long)(ptr)) | (CtRomByte(rom, 0x400000L, (long)(ptr + 1)) << 8));
   int o = 0;
   for (long a = off; a < rl && o < cap - 1; a++) {
-    uint8_t v = rom[a];
+    uint8_t v = CtRomByte(rom, 0x400000L, (long)(a));
     if (v == 0x00) break;                                          // terminator
     if (v == 0x06) { o = fieldCtAppend(out, o, cap, "\n   "); continue; }   // newline + 3 spaces
     if (v == 0x0D || v == 0x0E || v == 0x0F) {                     // {num}: the gold amount
@@ -6226,11 +6226,11 @@ static int fieldTreasureMessage(int result, int itemId, int value, char* out, in
     if (v >= 0x21 && v <= 0x9F) {                                  // dictionary substring
       long dp = CT_TREAS_DICT + (long)(v - 0x21) * 2;
       if (dp + 2 > rl) continue;
-      long ds = CT_TREAS_DICT + ((rom[dp] | (rom[dp + 1] << 8)) - 0xFA00);
+      long ds = CT_TREAS_DICT + ((CtRomByte(rom, 0x400000L, (long)(dp)) | (CtRomByte(rom, 0x400000L, (long)(dp + 1)) << 8)) - 0xFA00);
       if (ds < 0 || ds + 1 > rl) continue;
-      int dn = rom[ds];                                            // [len][tokens], no nested refs
+      int dn = CtRomByte(rom, 0x400000L, (long)(ds));                                            // [len][tokens], no nested refs
       for (int k = 0; k < dn && ds + 1 + k < rl && o < cap - 1; k++) {
-        uint8_t t = rom[ds + 1 + k];
+        uint8_t t = CtRomByte(rom, 0x400000L, (long)(ds + 1 + k));
         if (t >= 0x9F) out[o++] = fieldCtChar(t);
       }
       continue;
@@ -7573,7 +7573,7 @@ static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_
     // Dual/Triple Tech lines -- battle_top_message_box.md sec. 0): decoded from the ROM for any $020C, and TYPED -- C2/0009
     // renders one character per CD/04DF step ($0213 = 1), so the line grows by what the typewriter has reached.
     long tp = 0x0C3A09L + 2L * h->mem[0x020C];
-    if (rom && tp + 1 < romLen) fieldCtDecodeAt(0x0C0000L + (rom[tp] | (rom[tp + 1] << 8)), line, (int)sizeof line);
+    if (rom && tp + 1 < romLen) fieldCtDecodeAt(0x0C0000L + (CtRomByte(rom, 0x400000L, (long)(tp)) | (CtRomByte(rom, 0x400000L, (long)(tp + 1)) << 8)), line, (int)sizeof line);
     typed = h->sysMsgOpenT;
   } else if (h->mem[0xCCEC] == 0x10 && h->mem[0x020F] == 0xCE && h->mem[0x020D] == 0x11 && h->mem[0x020E] == 0xEF
              && (h->mem[0x020C] == 0x0B || h->mem[0x020C] == 0x0C)) {
@@ -7583,7 +7583,7 @@ static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_
     int o = 0, id = h->mem[0x0200];
     for (int i = 0; i < 11 && rom && o < 60; i++) {
       long a = 0x0C6500L + 11L * id + i;
-      uint8_t c = (a < romLen) ? rom[a] : 0xEF;
+      uint8_t c = (a < romLen) ? CtRomByte(rom, 0x400000L, (long)(a)) : 0xEF;
       line[o++] = (c == 0xEF) ? ' ' : fieldCtChar(c);
     }
     line[o] = 0;
@@ -7613,7 +7613,7 @@ static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_
     // THE ENEMY TECH'S NAME BOX, CD/0295 -> C2/0003 over table CC:CBC9 (battle.c battleNameBoxPost): the same window
     // while $CCEC = $10 -- "NeedleSpin / Yakra's needle attack." is CC:CBC9[06]. Read and decoded from the ROM.
     long tp = 0x0CCBC9L + 2L * h->mem[0x020C];
-    if (rom && tp + 1 < romLen) fieldCtDecodeAt(0x0C0000L + (rom[tp] | (rom[tp + 1] << 8)), line, (int)sizeof line);
+    if (rom && tp + 1 < romLen) fieldCtDecodeAt(0x0C0000L + (CtRomByte(rom, 0x400000L, (long)(tp)) | (CtRomByte(rom, 0x400000L, (long)(tp + 1)) << 8)), line, (int)sizeof line);
   } else {
     // still in the 3+64+7 hold -- the hold battleResultsTick waits out, so without the 64 when C1/35A9 returned early
     // ($2989 bit 0: no celebration). Gated on the full 72 here, a no-celebration fight ran its first line unseen: the
@@ -14934,7 +14934,7 @@ int main(int argc, char** argv) {
                 // C2/8F55 waits on $E8 while C2/9016 floats the number up FF/CEBA, one entry a frame (the Item's own run)
                 long rlp = 0; const uint8_t* rp = CtBattleRom(&rlp);
                 int nx = menuTechPopCurve + 1;
-                if (!rp || rlp <= 0x3FCEBA + nx || (rp[0x3FCEBA + nx] & 0x80)) {
+                if (!rp || rlp <= 0x3FCEBA + nx || (CtRomByte(rp, rlp, 0x3FCEBA + nx) & 0x80)) {
                   int more = 0;
                   if (menuTechPopPool == 1) for (int k = 0; k < 3; k++) if (menuTechPopAmt[k][1] >= 0) more = 1;
                   if (more) { menuTechPopPool = 2; nx = 0x2A; fieldMenuSfxCmd19(s7, 0x07, "tech-heal-mp"); }
@@ -15198,7 +15198,7 @@ int main(int argc, char** argv) {
             } else if (menuItemTgt >= 0 && menuItemPopCurve >= 0) {   // C2/8F55 waits on $E8 while C2/9016 floats the
               long rlp = 0; const uint8_t* rp = CtBattleRom(&rlp);    //   number up FF/CEBA, one entry a frame; no input
               int nx = menuItemPopCurve + 1;
-              if (!rp || rlp <= 0x3FCEBA + nx || (rp[0x3FCEBA + nx] & 0x80)) {   // the run's FF: nothing drawn
+              if (!rp || rlp <= 0x3FCEBA + nx || (CtRomByte(rp, rlp, 0x3FCEBA + nx) & 0x80)) {   // the run's FF: nothing drawn
                 if (menuItemPopPool == 1 && (menuItemPopBits & 2)) {  // C2/902C: the MP number next, from $2A, in
                   menuItemPopPool = 2; nx = 0x2A;                     //   the same frame, with its own chime (C2/9047)
                   fieldMenuSfxCmd19(s7, 0x07, "heal-mp");

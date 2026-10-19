@@ -497,10 +497,23 @@ def rom_tables(rom):
         ('FF window tiles (FF:9E10, 8 x 0x280)', 0x3F9E10, 0x3F9E10 + 8 * 0x280),
         ('FF text palettes (FF:B210, 8 x 16)', 0x3FB210, 0x3FB290),
         ('FF naming grid (FF:C9AC, 80)', 0x3FC9AC, 0x3FC9FC),
-    ] + rom_closure.location_tables(rom) + rom_closure.sequence_tables(rom, _lz_skipped()) + rom_closure.sprite_tables(rom, _lz_skipped()) + rom_closure.party_tables(rom)
+    ] + rom_closure.location_tables(rom) + rom_closure.sequence_tables(rom, _lz_skipped()) + rom_closure.sprite_tables(rom, _lz_skipped()) + rom_closure.party_tables(rom) + rom_closure.menu_tables(rom)
+
+def table_spans(rom):
+    """rom_tables' extents merged where they overlap or touch: one entry per span, so a read the union covers is
+    always inside ONE table (src/romview.c serves a CtRomPtr span only from a single table)."""
+    out = []
+    for _name, a, b in sorted(rom_tables(rom), key=lambda t: (t[1], t[2])):
+        if b <= a:
+            continue
+        if out and a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
 
 def pack_tables(rom, T):
-    for _name, a, b in rom_tables(rom):
+    for a, b in table_spans(rom):
         yield (T_TABLE, a, bytes(rom[a:b]))
 
 def pack_lz(rom, T):

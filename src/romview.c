@@ -43,15 +43,58 @@ static const RomTable* find(long off) {
 
 int CtRomViewHas(long off) { return find(off) != NULL; }
 
+// CT_ROMVIEW_MISSLOG=<file> (`%d` = the process id): every read of a ROM image no table covered, once per 4 KB page and
+// caller: `PAGE CALLER kind exe` (CALLER = the calling instruction relative to the executable; tools/rom_census.py
+// --viewmiss names it through build/Belthasar.map). CT_ROM_CENSUS sees these reads inside CtRomByte; this says whose.
+#ifdef _MSC_VER
+#include <intrin.h>
+__declspec(dllimport) void* __stdcall GetModuleHandleA(const char* name);
+__declspec(dllimport) unsigned long __stdcall GetModuleFileNameA(void* m, char* p, unsigned long n);
+__declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
+#define VIEW_CALLER() ((uintptr_t)_ReturnAddress() - (uintptr_t)GetModuleHandleA(NULL))
+#define VIEW_PID() ((int)GetCurrentProcessId())
+#else
+#include <unistd.h>
+#define VIEW_CALLER() ((uintptr_t)__builtin_return_address(0))
+#define VIEW_PID() ((int)getpid())
+#endif
+static int g_missOn = -1;
+static void viewMiss(long off, uintptr_t caller, const char* kind) {
+  static FILE* f; static uint64_t seen[8192]; static int nseen; static char exe[64] = "?";
+  if (g_missOn < 0) {
+    const char* p = getenv("CT_ROMVIEW_MISSLOG"); char path[1024];
+    g_missOn = 0;
+    if (p && strstr(p, "%d")) { snprintf(path, sizeof path, p, VIEW_PID()); p = path; }
+    if (p && *p && (f = fopen(p, "w")) != NULL) g_missOn = 1;
+#ifdef _MSC_VER
+    { char m[512] = ""; GetModuleFileNameA(NULL, m, sizeof m); const char* b = m;
+      for (const char* q = m; *q; q++) if (*q == '\\' || *q == '/') b = q + 1;
+      snprintf(exe, sizeof exe, "%s", b); }
+#endif
+  }
+  if (!g_missOn) return;
+  uint64_t key = ((uint64_t)(off >> 12) << 40) ^ (uint64_t)caller;
+  for (int i = 0; i < nseen; i++) if (seen[i] == key) return;
+  if (nseen < 8192) seen[nseen++] = key;
+  fprintf(f, "%06lX %llX %s %s\n", (unsigned long)(off & ~0xFFFL), (unsigned long long)caller, kind, exe);
+  fflush(f);
+}
+
+void CtRomCopy(uint8_t* dst, const uint8_t* rom, long romLen, long off, long n) {
+  for (long i = 0; i < n; i++) dst[i] = CtRomByte(rom, romLen, off + i);
+}
+
 const uint8_t* CtRomPtr(const uint8_t* rom, long romLen, long off, long len) {
   const RomTable* t = g_ntab ? find(off) : NULL;
   if (t && off + len <= t->start + t->len) return t->bytes + (off - t->start);
+  if (g_missOn && g_ntab && rom && romLen > 0x100000) viewMiss(off, VIEW_CALLER(), "ptr");
   return (rom && off >= 0 && off + len <= romLen) ? rom + off : NULL;
 }
 
 uint8_t CtRomByte(const uint8_t* rom, long romLen, long off) {
   const RomTable* t = g_ntab ? find(off) : NULL;
   if (t) return t->bytes[off - t->start];
+  if (g_missOn && g_ntab && rom && romLen > 0x100000) viewMiss(off, VIEW_CALLER(), "byte");
   return (rom && off >= 0 && off < romLen) ? rom[off] : 0;
 }
 

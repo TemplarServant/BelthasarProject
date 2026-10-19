@@ -8,6 +8,7 @@
 // byte-exact menu pixels are deliberately out of phase-1 scope; the deliverable is the SYSTEM
 // (entry gates, canonical data, layout, exit restore — those ARE pinned).
 #include <string.h>
+#include "romview.h"
 #include <stdio.h>
 #include <stdlib.h>   // atoi (config number-strip values)
 #include "menu.h"
@@ -224,8 +225,8 @@ void CtMenuChromeRibbonWindow(const CtMenuHost* h, int on) {
   if (!on || !h || !h->rom || h->romLen < 0x3FBAAAL + 64) return;
   for (int y = 0; y < MH; y++) { mRibbonW2[y][0] = 1; mRibbonW2[y][1] = 0; }
   long a = 0x3FBAAAL; int line = 0;
-  for (int g = 0; g < 16 && h->rom[a]; g++, a += 5) {
-    int n = h->rom[a] & 0x7F, l = h->rom[a + 3], r = h->rom[a + 4];
+  for (int g = 0; g < 16 && CtRomByte(h->rom, 0x400000L, (long)(a)); g++, a += 5) {
+    int n = CtRomByte(h->rom, 0x400000L, (long)(a)) & 0x7F, l = CtRomByte(h->rom, 0x400000L, (long)(a + 3)), r = CtRomByte(h->rom, 0x400000L, (long)(a + 4));
     for (int k = 0; k < n && line < MH; k++, line++) { mRibbonW2[line][0] = (int16_t)l; mRibbonW2[line][1] = (int16_t)r; }
   }
   mRibbonW2On = 1;
@@ -251,7 +252,7 @@ void CtMenuWindowColourLoad(const CtMenuHost* h, int v, int dimV) {
   v &= 7;
   if (!h || !h->rom || h->romLen < 0x3FB210L + 0x80) { mWinLoaded = 0; mWinColour = mWinDim = -1; return; }
   if (dimV >= 0 && (dimV & 7) != mWinDim) {                                  // C2/A0E7 over FF/B210's words
-    const uint8_t* c = h->rom + 0x3FB210L + (long)(dimV & 7) * 16;
+    const uint8_t* c = CtRomPtr(h->rom, h->romLen, 0x3FB210L + (long)(dimV & 7) * 16, 16);
     for (int i = 0; i < 8; i++) {
       int w = ((c[2 * i] | (c[2 * i + 1] << 8)) >> 1) & 0x3DEF;
       mWinDimRow[i][0] = (uint8_t)mExp5(w & 31); mWinDimRow[i][1] = (uint8_t)mExp5((w >> 5) & 31);
@@ -260,7 +261,7 @@ void CtMenuWindowColourLoad(const CtMenuHost* h, int v, int dimV) {
   }
   mWinDim = dimV < 0 ? -1 : (dimV & 7);
   if (mWinLoaded && v == mWinColour) return;
-  const uint8_t* t = h->rom + 0x3F9E10L + (long)v * 0x280;
+  const uint8_t* t = CtRomPtr(h->rom, h->romLen, 0x3F9E10L + (long)v * 0x280, 0x280);
   for (int k = 0; k < 20; k++)
     for (int y = 0; y < 8; y++) {
       int p0 = t[k * 32 + 2 * y], p1 = t[k * 32 + 2 * y + 1], p2 = t[k * 32 + 16 + 2 * y];
@@ -271,7 +272,7 @@ void CtMenuWindowColourLoad(const CtMenuHost* h, int v, int dimV) {
                                            | (((p3 >> b) & 1) << 3));
       }
     }
-  const uint8_t* c = h->rom + 0x3FB210L + (long)v * 16;                     // C2/ED08
+  const uint8_t* c = CtRomPtr(h->rom, h->romLen, 0x3FB210L + (long)v * 16, 16);                     // C2/ED08
   for (int i = 0; i < 8; i++) {
     int w = c[2 * i] | (c[2 * i + 1] << 8);
     mWinRow[i][0] = (uint8_t)mExp5(w & 31); mWinRow[i][1] = (uint8_t)mExp5((w >> 5) & 31);
@@ -296,7 +297,7 @@ static uint8_t mSlotTile[8][20][64], mSlotRow[8][8][3];
 static int mSlotSetOk[8];
 static void mSlotSetLoad(const CtMenuHost* h, int v) {
   if (v <= 0 || v > 7 || mSlotSetOk[v] || !h || !h->rom || h->romLen < 0x3FB210L + 0x80) return;
-  const uint8_t* t = h->rom + 0x3F9E10L + (long)v * 0x280;
+  const uint8_t* t = CtRomPtr(h->rom, h->romLen, 0x3F9E10L + (long)v * 0x280, 0x280);
   for (int k = 0; k < 20; k++)
     for (int y = 0; y < 8; y++) {
       int p0 = t[k * 32 + 2 * y], p1 = t[k * 32 + 2 * y + 1], p2 = t[k * 32 + 16 + 2 * y], p3 = p0 | p1 | p2;
@@ -306,7 +307,7 @@ static void mSlotSetLoad(const CtMenuHost* h, int v) {
                                                | (((p3 >> b) & 1) << 3));
       }
     }
-  const uint8_t* c = h->rom + 0x3FB210L + (long)v * 16;
+  const uint8_t* c = CtRomPtr(h->rom, h->romLen, 0x3FB210L + (long)v * 16, 16);
   for (int i = 0; i < 8; i++) {
     int w = c[2 * i] | (c[2 * i + 1] << 8);
     mSlotRow[v][i][0] = (uint8_t)mExp5(w & 31); mSlotRow[v][i][1] = (uint8_t)mExp5((w >> 5) & 31);
@@ -626,7 +627,7 @@ static void mNumR(const CtMenuHost* h, uint8_t* fb, int v, int xRight, int y);
 // MEASURED (itemtab3 drive: Crono's Speed poked to 0x10): the ribbon's Status preview shows two stars, not "16".
 static const uint8_t kStatCap[7] = { 0, 2, 1, 5, 3, 4, 6 };
 static void mStatCap(const CtMenuHost* h, uint8_t* fb, int v, int cap, int xRight, int y) {
-  int lim = (h->rom && h->romLen > 0x3FCF33L + 8) ? h->rom[0x3FCF33L + (cap & 7)] : 0x100;
+  int lim = (h->rom && h->romLen > 0x3FCF33L + 8) ? CtRomByte(h->rom, 0x400000L, (long)(0x3FCF33L + (cap & 7))) : 0x100;
   if (v >= lim) { mCodeAt(h, fb, 0x2F, xRight - 16, y); mCodeAt(h, fb, 0x2F, xRight - 8, y); }   // 2F0FA-2F107
   else mNumR(h, fb, v, xRight, y);
 }
@@ -717,7 +718,7 @@ static void mDrawRibbon(const CtMenuHost* h, uint8_t* fb, int menuOpt) {
 
 // ---------------------------------------------------------- ITEM screen (PHASE 3 part 1)
 // The item-name table: ROM $CC/0B5E (HiROM file offset 0x0C0B5E), FIXED 11-byte records,
-// name(id) = decode(rom[0x0C0B5E + id*11 .. +11]). Base+stride derived + ROM-verified via
+// name(id) = decode(CtRomByte(rom, 0x400000L, (long)(0x0C0B5E + id*11 .. +11))). Base+stride derived + ROM-verified via
 // assets/text.py item_names() (base 0xC0B5E, 11-byte stride): id 189=Tonic, 200=Shelter,
 // 214(0xD6)=Pendant — all three round-trip byte-for-byte. The records use CT's "mapped" text
 // encoding (assets/text.py _font8): 0xA0-0xB9='A'-'Z', 0xBA-0xD3='a'-'z', 0xD4-0xDD='0'-'9',
@@ -926,7 +927,7 @@ static void mItemRow(const CtMenuHost* h, uint8_t* fb, const int* ids, const int
   // C2/AE83). Only the item entry (name) is coloured -- the ":" separator and count stay white.
   mDim = CtMenuItemUsable(id) ? 3 : 0;
   if (h->rom && h->romLen > 0x0C0B5EL + 11L * id)         // C2/B05A-B061: the WHOLE 11-byte record $CC:0B5E + 11 id
-    mCodeAt(h, fb, h->rom[0x0C0B5EL + 11L * id], 40, y);  //   from x40 in the row's attr -- byte 0 = the type icon
+    mCodeAt(h, fb, CtRomByte(h->rom, 0x400000L, (long)(0x0C0B5EL + 11L * id)), 40, y);  //   from x40 in the row's attr -- byte 0 = the type icon
                                                           //   (a weapon's sword 0x20 ..; FF = a blank tile)
   mText(h, fb, nm, 48, y);                                // name at x48 (yellow if usable)
   mDim = 0;
@@ -1077,7 +1078,7 @@ void CtMenuRenderItemOverlay(const CtMenuHost* h, uint8_t* fb, int tgt, const ui
   for (int k = 0; k < 3; k++) {                             // OBJ: the party at C2:B045, prio 2
     CtMenuPanel p;
     if (!CtMenuPanelData(h->mem, k, &p)) continue;
-    int w = (h->rom && h->romLen > 0x2B045 + 6) ? (h->rom[0x2B045 + 2 * k] | (h->rom[0x2B046 + 2 * k] << 8)) : 0;
+    int w = (h->rom && h->romLen > 0x2B045 + 6) ? (CtRomByte(h->rom, 0x400000L, (long)(0x2B045 + 2 * k)) | (CtRomByte(h->rom, 0x400000L, (long)(0x2B046 + 2 * k)) << 8)) : 0;
     mBlitPartySpr(h, fb, p.charId, (w >> 8) & 0xFF, w & 0xFF, 0);
   }
   if (multiBits >= 0) {
@@ -1099,11 +1100,11 @@ void CtMenuRenderItemOverlay(const CtMenuHost* h, uint8_t* fb, int tgt, const ui
     mBlitRGBA(fb, itemCursorRGBA, ITEMCURSOR_W, ITEMCURSOR_H, MI_NAVX(0x0C + tgt), MI_NAVY(0x0C + tgt));
   // C2/9016's pop-up: every member with an amount, the digits at the member's sprite word minus the curve FF/CEBA
   if (popCurve >= 0 && popAmt && h->rom && h->romLen > 0x3FCEBA + 0x60) {
-    int dy = h->rom[0x3FCEBA + popCurve];
+    int dy = CtRomByte(h->rom, 0x400000L, (long)(0x3FCEBA + popCurve));
     for (int k = 0; k < 3; k++) {
       int amt = popAmt[k][popPool == 2 ? 1 : 0];
       if (amt < 0) continue;
-      int w = h->rom[0x2B045 + 2 * k] | (h->rom[0x2B046 + 2 * k] << 8);
+      int w = CtRomByte(h->rom, 0x400000L, (long)(0x2B045 + 2 * k)) | (CtRomByte(h->rom, 0x400000L, (long)(0x2B046 + 2 * k)) << 8);
       mItemPopDigits(h, fb, amt, popPool == 2 ? 1 : 3, (w >> 8) & 0xFF, (w & 0xFF) - dy, popPal);
     }
   }
@@ -1151,15 +1152,15 @@ static void mItemPopDigits(const CtMenuHost* h, uint8_t* fb, int value, int posi
   int dig[4] = { value % 10, (value / 10) % 10, (value / 100) % 10, (value / 1000) % 10 };
   uint8_t pal[4][3];
   for (int i = 1; i < 4; i++) {
-    int c = h->rom[palOff + 2 * i] | (h->rom[palOff + 1 + 2 * i] << 8);
+    int c = CtRomByte(h->rom, 0x400000L, (long)(palOff + 2 * i)) | (CtRomByte(h->rom, 0x400000L, (long)(palOff + 1 + 2 * i)) << 8);
     pal[i][0] = (uint8_t)mExp5(c & 31); pal[i][1] = (uint8_t)mExp5((c >> 5) & 31); pal[i][2] = (uint8_t)mExp5((c >> 10) & 31);
   }
   int drawn = 0, x = 0;
   for (int pos = positions; pos >= 0; pos--) {
     int d = dig[pos];
     if (!d && pos && !drawn) continue;
-    if (!drawn) x = cx + (int8_t)h->rom[0x290F8 + pos];
-    const uint8_t* t = h->rom + 0x3F9390L + 16L * d;
+    if (!drawn) x = cx + (int8_t)CtRomByte(h->rom, 0x400000L, (long)(0x290F8 + pos));
+    const uint8_t* t = CtRomPtr(h->rom, h->romLen, 0x3F9390L + 16L * d, 16);
     for (int r = 0; r < 8; r++)
       for (int b = 0; b < 8; b++) {
         int p0 = (t[2 * r] >> (7 - b)) & 1, p1 = (t[2 * r + 1] >> (7 - b)) & 1;
@@ -1357,7 +1358,7 @@ int CtMenuItemTabMask(const uint8_t* rom, long romLen, const uint8_t* mem, int a
   int pid = mem[0x2980 + tgtSlot];
   if (pid & 0x80) return 0;
   const uint8_t* sh = mem + 0x2600 + (size_t)(pid & 7) * 0x50;
-  return sh[0x0B + rom[0x3FCF2BL + x]] < rom[0x3FCF32L + x] ? 2 : 0;    // C2/B293-B2A3
+  return sh[0x0B + CtRomByte(rom, 0x400000L, (long)(0x3FCF2BL + x))] < CtRomByte(rom, 0x400000L, (long)(0x3FCF32L + x)) ? 2 : 0;    // C2/B293-B2A3
 }
 // C2/9137 on a sheet whose working copy C2/8820 just re-took: C2/916E's eleven derived bytes to +0x36..+0x40 and its
 // clamped current HP to +3 (no C2/813C: the HP bar's scale is not this routine's).
@@ -1378,10 +1379,10 @@ void CtMenuItemTabApply(const uint8_t* rom, long romLen, uint8_t* mem, int tgtSl
   int pid = mem[0x2980 + tgtSlot];
   if (pid & 0x80) return;
   uint8_t* sh = mem + 0x2600 + (size_t)(pid & 7) * 0x50;
-  int o = 0x0B + rom[0x3FCF2BL + x];
+  int o = 0x0B + CtRomByte(rom, 0x400000L, (long)(0x3FCF2BL + x));
   int w = (sh[o] | (sh[o + 1] << 8)) + 1;                              // C2/B2FC INC $000B,X (16-bit)
   sh[o] = (uint8_t)(w & 0xFF); sh[o + 1] = (uint8_t)((w >> 8) & 0xFF);
-  int b = 0x2F + rom[0x2B315L + x];
+  int b = 0x2F + CtRomByte(rom, 0x400000L, (long)(0x2B315L + x));
   if (sh[b] < 0x63) sh[b]++;                                           // C2/B303-B30B
   mSheet9137(sh);                                                      // C2/B30E JSR C2/8820 / C2/B311 JSR C2/9137
 }
@@ -2517,11 +2518,11 @@ static void mRomTiles4(uint8_t* fb, const CtMenuHost* h, long src, int cols, int
   if (!h->rom || src < 0 || src + 32L * cols * rows > h->romLen || palSrc < 0 || palSrc + 32 > h->romLen) return;
   uint8_t pal[16][3];
   for (int i = 0; i < 16; i++) {
-    int c = h->rom[palSrc + 2 * i] | (h->rom[palSrc + 2 * i + 1] << 8);
+    int c = CtRomByte(h->rom, 0x400000L, (long)(palSrc + 2 * i)) | (CtRomByte(h->rom, 0x400000L, (long)(palSrc + 2 * i + 1)) << 8);
     pal[i][0] = (uint8_t)mExp5(c & 31); pal[i][1] = (uint8_t)mExp5((c >> 5) & 31); pal[i][2] = (uint8_t)mExp5((c >> 10) & 31);
   }
   for (int t = 0; t < cols * rows; t++) {
-    const uint8_t* b = h->rom + src + 32L * t;
+    const uint8_t* b = CtRomPtr(h->rom, h->romLen, src + 32L * t, 32);
     for (int r = 0; r < 8; r++)
       for (int x = 0; x < 8; x++) {
         int bit = 7 - x;
@@ -2538,12 +2539,12 @@ static void mDetailArt(const CtMenuHost* h, uint8_t* fb, int charId) {
   if (!h->rom || h->romLen < 0x3FD5E4L + 4 * 0x180) return;
   const long FF = 0x3F0000L;
   int id = charId & 7;
-  int tile = h->rom[FF + 0xCE70 + id];                                      // + 0x200
-  long pp = h->rom[FF + 0xCE78 + 2 * id] | (h->rom[FF + 0xCE79 + 2 * id] << 8);
+  int tile = CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE70 + id));                                      // + 0x200
+  long pp = CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE78 + 2 * id)) | (CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE79 + 2 * id)) << 8);
   mRomTiles4(fb, h, FF + 32L * (tile - 1), 6, 6, 120, 24, FF + pp);       // tile 0x201 = FF/0000
-  int x = h->rom[0x2A2C6 + id];
-  int w = h->rom[FF + 0xCE88 + x] | (h->rom[FF + 0xCE89 + x] << 8);
-  long ep = h->rom[FF + 0xCE92 + x] | (h->rom[FF + 0xCE93 + x] << 8);
+  int x = CtRomByte(h->rom, 0x400000L, (long)(0x2A2C6 + id));
+  int w = CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE88 + x)) | (CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE89 + x)) << 8);
+  long ep = CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE92 + x)) | (CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE93 + x)) << 8);
   if ((w & 0x3FF) >= 0x100) mRomTiles4(fb, h, FF + 0xD5E4 + 32L * ((w & 0x3FF) - 0x100), 6, 2, 176, 24, FF + ep);
 }
 // The opt0 (Equip/Status) DETAIL in the RIGHT window: the portrait and plaque (mDetailArt), then name (176,48), LEVEL
@@ -2649,7 +2650,7 @@ static void mPanelAtkDef(const CtMenuHost* h, uint8_t* fb, int textInset, int fo
 static void mSlotLabel(const CtMenuHost* h, uint8_t* fb, int slot, int y) {
   if (!h || !h->rom || h->romLen < 0x2A3BA + 40 || !h->drawGlyph) return;
   if (y < mClipTop || y >= mClipBot) return;
-  const uint8_t* r = h->rom + 0x2A3BA + (slot & 3) * 10;
+  const uint8_t* r = CtRomPtr(h->rom, h->romLen, 0x2A3BA + (slot & 3) * 10, 10);
   for (int k = 0; k < 10; k++) {
     if (!r[k]) break;                                                   // C2/EF7E: 00 ends the string
     if (r[k] != 0xFF && r[k] != 0xEF) h->drawGlyph(fb, r[k], 24 + 8 * k, y);
@@ -2715,7 +2716,7 @@ static void mEquipCandRows(const CtMenuHost* h, uint8_t* fb, const uint8_t* cand
   // 79-87 when it was placed from the text's 76).
   if (hand && rom && rl > 0x3FB732L + 12 * 6) { int row = cell - scroll;
     if (row >= 0 && row < 8) { long r = 0x3FB732L + (long)(4 + row) * 6;
-                               mHandCursor(h, fb, rom[r], rom[r + 1] + yOff); } }
+                               mHandCursor(h, fb, CtRomByte(rom, 0x400000L, (long)(r)), CtRomByte(rom, 0x400000L, (long)(r + 1)) + yOff); } }
 }
 // `stage` = where the panel's own build stands. 0: the gear select (substate 2). 1: C2/A321's frame, the last of the
 // entry slide -- the left column built (BE6D's copies, uploaded by FBE3/FBFF), the right detail still the member
@@ -3090,7 +3091,7 @@ void CtMenuExchEntry(uint8_t* mem) {
 // overwrites the hand X with 38 (C2/CB18); screen 7 keeps the table's 08 / E8.
 void CtMenuExchGraph(uint8_t* mem, const uint8_t* rom, long romLen) {
   if (!mem || !rom || romLen < 0x3FB77A + 43) return;
-  memcpy(mem + 0x9380, rom + 0x3FB77B, 42);
+  CtRomCopy(mem + 0x9380, rom, romLen, 0x3FB77B, 42);
 }
 // THE EXCHANGE'S BG3 WAVE. C2/C7AC's C2/CE86 (at P) runs `JSL FF/F677` and queues two VRAM DMAs through C2/8385 (C2/CE96:
 // $7E:B000 -> VRAM $7000, $600 bytes, BG3's characters; $FF:FC14: $7E:4E00 -> VRAM $6800, $1000 bytes, BG3's map), and its
@@ -3111,16 +3112,16 @@ void CtMenuExchWaveInit(uint8_t* m, const uint8_t* rom, long romLen) {
   m[0x0D0E] = 0xFF; m[0x0D0F] = 0x01;                              // 3FF694-3FF697
   int y = 0x4E00;
   for (int k = 0; k < 6; k++) {                                    // 3FF69A-3FF6CA
-    int row = y, v = rom[0x3FF6F2 + 2 * k] | (rom[0x3FF6F3 + 2 * k] << 8);
+    int row = y, v = CtRomByte(rom, 0x400000L, (long)(0x3FF6F2 + 2 * k)) | (CtRomByte(rom, 0x400000L, (long)(0x3FF6F3 + 2 * k)) << 8);
     for (int i = 0; i < 16; i++, v++, y += 2) { m[y] = (uint8_t)v; m[y + 1] = (uint8_t)(v >> 8); }
     for (int i = 0; i < 0x20; i++) m[y + i] = m[row + i];          // 3FF6BA-3FF6BF MVN, $20 bytes
     y += 0x20;
   }
   for (int i = 0; i < 0x680; i++) m[0x4F80 + i] = m[0x4E00 + i];   // 3FF6CC-3FF6D5: byte by byte, over itself
-  memcpy(m + 0x94B0, rom + 0x3FF706, 16);                          // 3FF6D8-3FF6E1
-  memcpy(m + 0x9100, rom + 0x3FF6FE, 8);                           // 3FF6E4-3FF6ED
+  CtRomCopy(m + 0x94B0, rom, romLen, 0x3FF706, 16);                          // 3FF6D8-3FF6E1
+  CtRomCopy(m + 0x9100, rom, romLen, 0x3FF6FE, 8);                           // 3FF6E4-3FF6ED
   m[0x0F10] = 0; m[0x0F11] = 0;                                    // 2CEA8 STZ $0F10 (16-bit)
-  memcpy(m + 0x0F12, rom + 0x3FD57A, 12);                          // 2CEB4-2CEBD MVN $7E,$FF
+  CtRomCopy(m + 0x0F12, rom, romLen, 0x3FD57A, 12);                          // 2CEB4-2CEBD MVN $7E,$FF
 }
 // THE PROMPT'S TEXT (C2/C9E5, substate 0 at S0: C2/CA6D-CAD5). The string -- 4, "Who'll you" 05 "replace?", or 5 when `$0D7C`
 // (16-bit) is set, "Can't" 05 "do that." -- from the table $FF:CF3B, drawn by C2/F905 into the 4bpp strip $7E:5E00: `$0214 = 81`,
@@ -3175,7 +3176,7 @@ void CtMenuExchWaveTick(uint8_t* m, const uint8_t* rom, long romLen) {
   int w = m[0x0F10] | (m[0x0F11] << 8), c = (w >> 15) & 1;         // 3FF739-3FF73C ASL A
   int x = (w << 1) & 0x3E, y = m[0x0051] | (m[0x0052] << 8);       // 3FF73D-3FF741
   while (y < 0x20) {                                               // 3FF743-3FF755
-    int v = (rom[0x3FF759 + x] | (rom[0x3FF75A + x] << 8)) + base + c;
+    int v = (CtRomByte(rom, 0x400000L, (long)(0x3FF759 + x)) | (CtRomByte(rom, 0x400000L, (long)(0x3FF75A + x)) << 8)) + base + c;
     m[0x9240 + y] = (uint8_t)v; m[0x9241 + y] = (uint8_t)(v >> 8);
     c = 0; x += 4; y += 2;
   }
@@ -3195,7 +3196,7 @@ static void mExchWaveTable(const uint8_t* m, const uint8_t* rom, long romLen, ui
   int base = d0c | (m[0x0D0D] << 8), w = f10 | (f11 << 8), c = (w >> 15) & 1;
   int x = (w << 1) & 0x3E, y = m[0x0051] | (m[0x0052] << 8);
   while (y < 0x20) {
-    int v = (rom[0x3FF759 + x] | (rom[0x3FF75A + x] << 8)) + base + c;
+    int v = (CtRomByte(rom, 0x400000L, (long)(0x3FF759 + x)) | (CtRomByte(rom, 0x400000L, (long)(0x3FF75A + x)) << 8)) + base + c;
     out[y] = (uint8_t)v; out[y + 1] = (uint8_t)(v >> 8);
     c = 0; x += 4; y += 2;
   }
@@ -3652,9 +3653,9 @@ void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int
       // (menu_audit_cmp.py techdual, Aura Whirl): block 1 (Marle) at 681C with +0x18 = 00, block 0 and block 2 at 40.
       if (h->rom && h->romLen > 0x2BB1A + 3) {
         if (i == 0 && CtMenuSprChar7() == part[0])
-          mBlitPartySprPose(h, fb, part[0], CtMenuSprShown7(), 0x1C, h->rom[0x2BB1A], 0);
+          mBlitPartySprPose(h, fb, part[0], CtMenuSprShown7(), 0x1C, CtRomByte(h->rom, 0x400000L, (long)(0x2BB1A)), 0);
         else if (i > 0)
-          mBlitPartySprPose(h, fb, part[i], CtMenuSprShown(part[i]), 0x1C, h->rom[0x2BB1A + i], 0);
+          mBlitPartySprPose(h, fb, part[i], CtMenuSprShown(part[i]), 0x1C, CtRomByte(h->rom, 0x400000L, (long)(0x2BB1A + i)), 0);
       }
     }
     // C2/BDEB (every frame of the list, C2/B724): on the SINGLE tab, with the highlighted tech the not-learned one
@@ -3708,7 +3709,7 @@ void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int
   { int i = row - scroll;
     if (g_techHandCell >= 0) i = g_techHandCell;              // (C2/B471's frame: $54 is already the target cell)
     if (row >= 0 && i >= 0 && i < 14 && row < n && h->rom && h->romLen > 0x3FB7A6L + 14 * 6)
-      mHandCursor(h, fb, h->rom[0x3FB7A6L + i * 6], h->rom[0x3FB7A6L + i * 6 + 1]); }
+      mHandCursor(h, fb, CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + i * 6)), CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + i * 6 + 1))); }
   // CHAR-SELECT (selSlot >= 0): the hand rests on a party panel instead, and the list is a PREVIEW.
   // This screen has no right-hand detail column -- the oracle draws the three tabs there.
   if (selSlot >= 0 && selSlot < 3) mHandCursor(h, fb, 8, 8 + selSlot * MP_PITCH + 27);
@@ -3767,7 +3768,7 @@ void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int ta
                    pp.mp);
   }
   if (CtMenuSprChar7() == (charId & 7) && h->rom && h->romLen > 0x2BB1A + 3)   // block 7 at $19CE (0x1C, 0x38): its
-    mBlitPartySprPose(h, fb, charId & 7, CtMenuSprShown7(), 0x1C, h->rom[0x2BB1A], 0);   //   own animation (the cast's)
+    mBlitPartySprPose(h, fb, charId & 7, CtMenuSprShown7(), 0x1C, CtRomByte(h->rom, 0x400000L, (long)(0x2BB1A)), 0);   //   own animation (the cast's)
   (void)castPose;
   mTechTabs(fb, tab);
   for (int k = 0; k < 3; k++) {                                    // C2/BEDC: the party in the list's window
@@ -3776,18 +3777,18 @@ void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int ta
     if (shown) { p.hp = shown[k][0]; p.mp = shown[k][1]; }
     mCharPanel(h, fb, MP_X + 112, 48 + 32 * k, &p, 8, 0);
     if (h->rom && h->romLen > 0x2BF2F + 6) {
-      int w = h->rom[0x2BF2F + 2 * k] | (h->rom[0x2BF30 + 2 * k] << 8);
+      int w = CtRomByte(h->rom, 0x400000L, (long)(0x2BF2F + 2 * k)) | (CtRomByte(h->rom, 0x400000L, (long)(0x2BF30 + 2 * k)) << 8);
       mBlitPartySpr(h, fb, p.charId, (w >> 8) & 0xFF, w & 0xFF, 0);
     }
   }
   if (tgt >= 0 && tgt < 3 && h->rom && h->romLen > 0x3FB7A6L + 14 * 6)
-    mHandCursor(h, fb, h->rom[0x3FB7A6L + (8 + tgt) * 6], h->rom[0x3FB7A6L + (8 + tgt) * 6 + 1]);
+    mHandCursor(h, fb, CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + (8 + tgt) * 6)), CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + (8 + tgt) * 6 + 1)));
   if (popCurve >= 0 && popAmt && h->rom && h->romLen > 0x3FCEBA + 0x60) {   // C2/9016 at each anchor
-    int dy = h->rom[0x3FCEBA + popCurve];
+    int dy = CtRomByte(h->rom, 0x400000L, (long)(0x3FCEBA + popCurve));
     for (int k = 0; k < 3; k++) {
       int amt = popAmt[k][popPool == 2 ? 1 : 0];
       if (amt < 0) continue;
-      int w = h->rom[0x2BF2F + 2 * k] | (h->rom[0x2BF30 + 2 * k] << 8);
+      int w = CtRomByte(h->rom, 0x400000L, (long)(0x2BF2F + 2 * k)) | (CtRomByte(h->rom, 0x400000L, (long)(0x2BF30 + 2 * k)) << 8);
       mItemPopDigits(h, fb, amt, popPool == 2 ? 1 : 3, (w >> 8) & 0xFF, (w & 0xFF) - dy, 0x3FCB9CL);   // C2/8F55's
     }
   }
@@ -4773,7 +4774,7 @@ static void mRomWindowCells(const CtMenuHost* h, uint16_t* tm, const uint8_t* a,
   for (int c = 0; c < w; c++) { v_ = c == 0 ? t : c == w - 1 ? (t | 3) : ((c & 1) ? t + 1 : t + 2); WC(c, hh - 1); }
   for (int r = 1; r < hh - 1; r++)                            // C2/EE7F + C2/EF2B
     for (int c = 1; c < w - 1; c++) {
-      v_ = (base & 0xFF00) | ((h->rom[0x2EEF5L + 4 * ((r - 1) & 3) + ((c - 1) & 3)] + (base & 0xFF)) & 0xFF);
+      v_ = (base & 0xFF00) | ((CtRomByte(h->rom, 0x400000L, (long)(0x2EEF5L + 4 * ((r - 1) & 3) + ((c - 1) & 3))) + (base & 0xFF)) & 0xFF);
       WC(c, r);
     }
 #undef WC
@@ -4794,8 +4795,8 @@ void CtMenuRenderSavePrompt(const CtMenuHost* h, uint8_t* fb, int sel) {
   // (C2/C511 / C2/ED08). The port used to blit a colour-0 picture of it.
   static uint16_t tm[CT_MENU_CHROME_TMW * CT_MENU_CHROME_TMH];
   memset(tm, 0, sizeof tm);
-  if (h->rom && h->romLen > 0x3FC16FL + 17 && h->rom[0x3FC16FL + 10] == 0x04)
-    mRomWindowCells(h, tm, h->rom + 0x3FC16FL + 11, h->mem ? h->mem[0x0D8C] : 0);
+  if (h->rom && h->romLen > 0x3FC16FL + 17 && CtRomByte(h->rom, 0x400000L, (long)(0x3FC16FL + 10)) == 0x04)
+    mRomWindowCells(h, tm, CtRomPtr(h->rom, h->romLen, 0x3FC16FL + 11, 6), h->mem ? h->mem[0x0D8C] : 0);
   memset(mHalfBand, 0, sizeof mHalfBand);
   if (svLastCursor >= 0)
     for (int i = 0; i < CT_MENU_SAVE_SLOTS; i++)
@@ -4809,9 +4810,9 @@ void CtMenuRenderSavePrompt(const CtMenuHost* h, uint8_t* fb, int sel) {
   if (h->rom && h->romLen > 0x3FBCEBL) {
     for (int y = 0; y < MH; y++) { mRibbonW2[y][0] = 1; mRibbonW2[y][1] = 0; }
     long t = 0x3FBAE3L; int line = 0;
-    for (int g = 0; g < 16 && h->rom[t] && line < MH; g++, t += 2) {
-      int n = h->rom[t] & 0x7F, r = h->rom[t + 1];
-      for (int k = 0; k < n && line < MH; k++, line++) { mRibbonW2[line][0] = h->rom[0x3FBCEBL]; mRibbonW2[line][1] = (int16_t)r; }
+    for (int g = 0; g < 16 && CtRomByte(h->rom, 0x400000L, (long)(t)) && line < MH; g++, t += 2) {
+      int n = CtRomByte(h->rom, 0x400000L, (long)(t)) & 0x7F, r = CtRomByte(h->rom, 0x400000L, (long)(t + 1));
+      for (int k = 0; k < n && line < MH; k++, line++) { mRibbonW2[line][0] = CtRomByte(h->rom, 0x400000L, (long)(0x3FBCEBL)); mRibbonW2[line][1] = (int16_t)r; }
     }
     mRibbonW2On = 1;
   }
@@ -5367,22 +5368,22 @@ static int mShopClass(int id, int* idx) {                                       
 static long mShopItemRec(const uint8_t* rom, long romLen, int id) {
   if (!rom || romLen < 0x400000) return -1;
   int idx, c = mShopClass(id, &idx);
-  long base = rom[0x3FCF0E + c * 2] | (rom[0x3FCF0E + c * 2 + 1] << 8);        // 288CA LDA $FFCF0E,X
-  long stride = rom[0x3FCF18 + c];                                               // 288BD LDA $FFCF18,X
+  long base = CtRomByte(rom, 0x400000L, (long)(0x3FCF0E + c * 2)) | (CtRomByte(rom, 0x400000L, (long)(0x3FCF0E + c * 2 + 1)) << 8);        // 288CA LDA $FFCF0E,X
+  long stride = CtRomByte(rom, 0x400000L, (long)(0x3FCF18 + c));                                               // 288BD LDA $FFCF18,X
   return 0x0C0000L + ((base + idx * stride) & 0xFFFF);                           // 288CE ADC $4216
 }
 static int mShopRawPrice(const uint8_t* rom, long romLen, int id) {             // $7800[id*2] (C2/98DD)
   long a = mShopItemRec(rom, romLen, id);
-  return a < 0 ? 0 : (rom[a + 1] | (rom[a + 2] << 8));
+  return a < 0 ? 0 : (CtRomByte(rom, 0x400000L, (long)(a + 1)) | (CtRomByte(rom, 0x400000L, (long)(a + 2)) << 8));
 }
 static int mShopFlags(const uint8_t* rom, long romLen, int id) {                // $7700[id] (C2/98C0 AND #1E)
   long a = mShopItemRec(rom, romLen, id);
-  return a < 0 ? 0 : (rom[a] & 0x1E);
+  return a < 0 ? 0 : (CtRomByte(rom, 0x400000L, (long)(a)) & 0x1E);
 }
 static int mShopEqMask(const uint8_t* rom, long romLen, int id) {               // $7A00[id] (C2/98C9 +3)
   if ((id & 0xFF) >= 0xBC) return 0;                                             // C2/9906 STZ $7ABC + a 0x34-byte
   long a = mShopItemRec(rom, romLen, id);                                        //  MVN: ids BC..F1 equip no one
-  return a < 0 ? 0 : rom[a + 3];                                                 //  (measured: Tonic, $1811 stays 0)
+  return a < 0 ? 0 : CtRomByte(rom, 0x400000L, (long)(a + 3));                                                 //  (measured: Tonic, $1811 stays 0)
 }
 // C2/DB9F: price = ceil(P * M / 256) with M = word $7F:01CD (0x0100 in every game state), >= 1, and 65000 when
 // the product reaches 2^24. `INC $3F` is a 16-bit INC, so ceil() of 0xFFFF.xx wraps to 0 -- and then becomes 1.
@@ -5499,8 +5500,8 @@ static void mShopDescTick(CtMenuShop* s) {
 static void mShopWeaponPal(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom, long romLen) {
   for (int c = 0; c < 7; c++) {
     int wpn = mem[0x2600 + c * 0x50 + 0x29];
-    long a = (rom && romLen > 0x0D6CEC + 0x100) ? 0x110000L + 0x4B00 + 6L * rom[0x0D6CEC + wpn] : -1;   // $D1:xxxx
-    for (int k = 0; k < 3; k++) s->wpnPal[c][k] = (a > 0 && a + 2 * k + 1 < romLen) ? (uint16_t)(rom[a + 2 * k] | (rom[a + 2 * k + 1] << 8)) : 0;
+    long a = (rom && romLen > 0x0D6CEC + 0x100) ? 0x110000L + 0x4B00 + 6L * CtRomByte(rom, 0x400000L, (long)(0x0D6CEC + wpn)) : -1;   // $D1:xxxx
+    for (int k = 0; k < 3; k++) s->wpnPal[c][k] = (a > 0 && a + 2 * k + 1 < romLen) ? (uint16_t)(CtRomByte(rom, 0x400000L, (long)(a + 2 * k)) | (CtRomByte(rom, 0x400000L, (long)(a + 2 * k + 1)) << 8)) : 0;
   }
   s->wpnOn = 1;
 }
@@ -5637,8 +5638,8 @@ void CtMenuShopOpen(CtMenuShop* s, const uint8_t* mem, const uint8_t* glb, const
   // C2/DAF5: the list = 32 bytes from $CC:[$CC:2C6D + 2*shop] to $7E:1000; C2/DCBE counts to the first 0.
   if (rom && romLen >= 0x400000) {
     long t = 0x0C2C6DL + s->shopNo * 2;
-    long a = 0x0C0000L + (rom[t] | (rom[t + 1] << 8));
-    for (int k = 0; k < 32; k++) s->list[k] = rom[a + k];
+    long a = 0x0C0000L + (CtRomByte(rom, 0x400000L, (long)(t)) | (CtRomByte(rom, 0x400000L, (long)(t + 1)) << 8));
+    for (int k = 0; k < 32; k++) s->list[k] = CtRomByte(rom, 0x400000L, (long)(a + k));
   }
   while (s->nList < 32 && s->list[s->nList]) s->nList++;
   for (int k = s->nList; k < 32; k++) s->list[k] = 0;                            // C2/DCBE zeroes the tail
@@ -5679,8 +5680,8 @@ static int mShopGraphStep(CtMenuShop* s, const CtMenuShopIn* in) {
 // MVN` = exactly that many bytes over $9380 -- 0x72 = 19 cells, 0x48 = 12 cells, the rest of $9380 untouched).
 static void mShopNavLoad(CtMenuShop* s, const uint8_t* rom, long romLen, long rec) {
   if (!rom || romLen <= rec + 1) return;
-  int n = rom[rec];
-  for (int i = 0; i < n && i < (int)sizeof s->nav; i++) ((uint8_t*)s->nav)[i] = rom[rec + 1 + i];
+  int n = CtRomByte(rom, 0x400000L, (long)(rec));
+  for (int i = 0; i < n && i < (int)sizeof s->nav; i++) ((uint8_t*)s->nav)[i] = CtRomByte(rom, 0x400000L, (long)(rec + 1 + i));
 }
 // C2/EA53 on a list: no scroll range -> an edge WRAPS (Down -> $0DDB, Up -> $0DDC) and a cell past the last item
 // returns to $0DDB; a scroll range -> report the edge (the caller scrolls by one row).
@@ -5774,23 +5775,23 @@ static int mShopRam(const CtMenuShop* s, const uint8_t* mem, int addr) {
 static void mShopStr(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom, long romLen, int id, int base, int x, int y) {
   if (!rom || romLen < 0x400000) return;
   long t = 0x3FC457L + id * 2;
-  long a = 0x3F0000L + (rom[t] | (rom[t + 1] << 8));
+  long a = 0x3F0000L + (CtRomByte(rom, 0x400000L, (long)(t)) | (CtRomByte(rom, 0x400000L, (long)(t + 1)) << 8));
   int pos = base + y * 32 + x, line = pos, attr = 0, f88 = 0;                     // C2/ED90; $7E = 0 (see mShopGlyph)
   for (int guard = 0; guard < 256 && a < romLen; guard++) {
-    int c = rom[a++];
+    int c = CtRomByte(rom, 0x400000L, (long)(a++));
     if (c == 0x00) return;
     if (c >= 0x10) { mShopGlyph(s, &pos, c, attr, f88); continue; }
     switch (c) {
       case 0x01: line += (f88 & 0x80) ? 32 : 64; pos = line; break;             // 2EFF4 (words: 0x40 / 0x80 bytes)
-      case 0x02: line = pos = base + (rom[a] | (rom[a + 1] << 8)) / 2; a += 2; break;
-      case 0x06: attr = (attr & ~0x1C) | (mShopRam(s, mem, rom[a] | (rom[a + 1] << 8)) & 0x1C); a += 2; break;
-      case 0x08: { int n = rom[a++]; while (n--) mShopGlyph(s, &pos, 0xFF, attr, f88); } break;
-      case 0x09: f88 = rom[a++]; break;
-      case 0x0A: attr = rom[a++]; break;
+      case 0x02: line = pos = base + (CtRomByte(rom, 0x400000L, (long)(a)) | (CtRomByte(rom, 0x400000L, (long)(a + 1)) << 8)) / 2; a += 2; break;
+      case 0x06: attr = (attr & ~0x1C) | (mShopRam(s, mem, CtRomByte(rom, 0x400000L, (long)(a)) | (CtRomByte(rom, 0x400000L, (long)(a + 1)) << 8)) & 0x1C); a += 2; break;
+      case 0x08: { int n = CtRomByte(rom, 0x400000L, (long)(a++)); while (n--) mShopGlyph(s, &pos, 0xFF, attr, f88); } break;
+      case 0x09: f88 = CtRomByte(rom, 0x400000L, (long)(a++)); break;
+      case 0x0A: attr = CtRomByte(rom, 0x400000L, (long)(a++)); break;
       case 0x0C: {                                                               // C2/F0D1
-        int ci = rom[a], ad = rom[a + 1] | (rom[a + 2] << 8); a += 3;
+        int ci = CtRomByte(rom, 0x400000L, (long)(a)), ad = CtRomByte(rom, 0x400000L, (long)(a + 1)) | (CtRomByte(rom, 0x400000L, (long)(a + 2)) << 8); a += 3;
         int v = mShopRam(s, mem, ad);
-        if (v >= rom[0x3FCF33L + ci]) {                                          // 2F0E9 CMP $FFCF33,X / BCS
+        if (v >= CtRomByte(rom, 0x400000L, (long)(0x3FCF33L + ci))) {                                          // 2F0E9 CMP $FFCF33,X / BCS
           mShopB1(s, pos / 32, pos % 32, (attr << 8) | 0x2F); pos++;
           mShopB1(s, pos / 32, pos % 32, (attr << 8) | 0x2F); pos++;
         } else mShopDigits(s, &pos, (unsigned)v, 2, attr);                       // F114 fmt 11
@@ -5807,7 +5808,7 @@ static void mShopGearRows(CtMenuShop* s, const uint8_t* rom, long romLen) {
   for (int i = 0; i < 4; i++) {
     int pos = (0x3664 - 0x2E00) / 2 + i * 64;
     long rec = 0x0C0B5EL + 11L * s->copy[kGear[i]];
-    for (int k = 0; k < 11; k++) mShopGlyph(s, &pos, (rom && rec + k < romLen) ? rom[rec + k] : 0xFF, 0, 0x0B);
+    for (int k = 0; k < 11; k++) mShopGlyph(s, &pos, (rom && rec + k < romLen) ? CtRomByte(rom, 0x400000L, (long)(rec + k)) : 0xFF, 0, 0x0B);
   }
 }
 // C2/A3ED X=3624: rows 32+2i / 33+2i, eleven cells from column 18 -- attr 00 on the gear row $0077, 1C on the others.
@@ -5829,7 +5830,7 @@ static void mShopEqRows(CtMenuShop* s, const uint8_t* rom, long romLen) {
     if (id) y++;                                                                 // 2A583 BEQ / INY
     int row = 7 + 2 * r;
     for (int k = 0; k < 10; k++) {
-      int c = id ? ((rom && 0x0C0B5EL + 11L * id + 1 + k < romLen) ? rom[0x0C0B5EL + 11L * id + 1 + k] : 0xFF) : 0xFF;
+      int c = id ? ((rom && 0x0C0B5EL + 11L * id + 1 + k < romLen) ? CtRomByte(rom, 0x400000L, (long)(0x0C0B5EL + 11L * id + 1 + k)) : 0xFF) : 0xFF;
       if (c == 0xFF) s->b3[row - 1][3 + k] = 0x20FF;                            // EF97's FF: the cell above too
       s->b3[row][3 + k] = (uint16_t)(0x2000 | c);
     }
@@ -5935,7 +5936,7 @@ static int mShopPageKey(CtMenuShop* s, const CtMenuShopIn* in, int* scroll);
 static void mShopEqRow8(CtMenuShop* s, const uint8_t* rom, long romLen, int i) {
   int id = (i >= 0 && i < 0xF3) ? s->eqCand[i] : 0;
   for (int k = 0; k < 10; k++) {
-    int c = id ? ((rom && 0x0C0B5EL + 11L * id + 1 + k < romLen) ? rom[0x0C0B5EL + 11L * id + 1 + k] : 0xFF) : 0xFF;
+    int c = id ? ((rom && 0x0C0B5EL + 11L * id + 1 + k < romLen) ? CtRomByte(rom, 0x400000L, (long)(0x0C0B5EL + 11L * id + 1 + k)) : 0xFF) : 0xFF;
     if (c == 0xFF) s->b3[22][3 + k] = 0x20FF;
     s->b3[23][3 + k] = (uint16_t)(0x2000 | c);
   }
@@ -6297,9 +6298,9 @@ static int shopHdma(const CtMenuHost* h, long rec, int bytes, int L) {
   if (!h->rom || h->romLen <= rec + 2) return 0;
   long a = rec + 1; int line = 1, v = 0;
   for (int g = 0; g < 40 && a + bytes < h->romLen; g++) {
-    int n = h->rom[a];
+    int n = CtRomByte(h->rom, 0x400000L, (long)(a));
     if (!n) break;
-    v = (bytes == 2) ? (h->rom[a + 1] | (h->rom[a + 2] << 8)) : h->rom[a + 1];
+    v = (bytes == 2) ? (CtRomByte(h->rom, 0x400000L, (long)(a + 1)) | (CtRomByte(h->rom, 0x400000L, (long)(a + 2)) << 8)) : CtRomByte(h->rom, 0x400000L, (long)(a + 1));
     if (L < line + n) return v;
     line += n; a += 1 + bytes;
   }
@@ -6324,7 +6325,7 @@ static void sbNum(ShopBg1* b, int col, int row, uint32_t v, int digits, int attr
 // C2/F2DC: the 11-byte name record $CC:0B5E + 11*id (its first byte is the category icon glyph).
 static void sbItemName(ShopBg1* b, const CtMenuHost* h, int col, int row, int id, int attr) {
   if (!h->rom || h->romLen < 0x0C0B5EL + 11L * 256) return;
-  sbCodes(b, col, row, h->rom + 0x0C0B5EL + 11L * (id & 0xFF), 11, attr);
+  sbCodes(b, col, row, CtRomPtr(h->rom, h->romLen, 0x0C0B5EL + 11L * (id & 0xFF), 11), 11, attr);
 }
 // The menu's string interpreter as the shop uses it (C2/ED31's `06` string command -> the $FF:C457 table, ids
 // $33-$3C): 00 end, 02 goto [word, relative to $2E00], 03 number [addr16, fmt, bank] (C2/F114), 04 include
@@ -6343,29 +6344,29 @@ static void sbRomStr(ShopBg1* b, const CtMenuHost* h, const CtMenuShop* s, long 
   if (!h->rom || depth > 3) return;
   int pos = row * 32 + col;
   for (int guard = 0; guard < 96 && a > 0 && a < h->romLen; guard++) {
-    int c = h->rom[a++];
+    int c = CtRomByte(h->rom, 0x400000L, (long)(a++));
     if (c == 0x00) return;
-    if (c == 0x02) { pos = (h->rom[a] | (h->rom[a + 1] << 8)) / 2; a += 2; continue; }
+    if (c == 0x02) { pos = (CtRomByte(h->rom, 0x400000L, (long)(a)) | (CtRomByte(h->rom, 0x400000L, (long)(a + 1)) << 8)) / 2; a += 2; continue; }
     if (c == 0x03) {
-      int addr = h->rom[a] | (h->rom[a + 1] << 8), fmt = h->rom[a + 2]; a += 4;
+      int addr = CtRomByte(h->rom, 0x400000L, (long)(a)) | (CtRomByte(h->rom, 0x400000L, (long)(a + 1)) << 8), fmt = CtRomByte(h->rom, 0x400000L, (long)(a + 2)); a += 4;
       int digits = (((fmt ^ 0x80) >> 4) & 7) + 1;
       sbNum(b, pos % 32, pos / 32, sbRomNumVal(h, s, addr), digits, 0x20);
       pos += digits; continue;
     }
     if (c == 0x04) {
-      long inc = ((long)h->rom[a + 2] - 0xC0) * 0x10000L + (h->rom[a] | (h->rom[a + 1] << 8)); a += 3;
+      long inc = ((long)CtRomByte(h->rom, 0x400000L, (long)(a + 2)) - 0xC0) * 0x10000L + (CtRomByte(h->rom, 0x400000L, (long)(a)) | (CtRomByte(h->rom, 0x400000L, (long)(a + 1)) << 8)); a += 3;
       sbRomStr(b, h, s, inc, pos % 32, pos / 32, depth + 1);
-      while (inc < h->romLen && h->rom[inc]) inc++;                               // (the include's cursor is
+      while (inc < h->romLen && CtRomByte(h->rom, 0x400000L, (long)(inc))) inc++;                               // (the include's cursor is
       continue;                                                                    //  not carried: its callers goto)
     }
-    if (c == 0x08) { int n = h->rom[a++]; for (int k = 0; k < n; k++) sbPut(b, (pos + k) % 32, (pos + k) / 32, 0x20FF); pos += n; continue; }
+    if (c == 0x08) { int n = CtRomByte(h->rom, 0x400000L, (long)(a++)); for (int k = 0; k < n; k++) sbPut(b, (pos + k) % 32, (pos + k) / 32, 0x20FF); pos += n; continue; }
     sbPut(b, pos % 32, pos / 32, (0x20 << 8) | c); pos++;
   }
 }
 static long sbRomStrAddr(const CtMenuHost* h, int id) {                        // $FF:C457 word table
   long t = 0x3FC457L + id * 2;
   if (!h->rom || h->romLen <= t + 1) return -1;
-  return 0x3F0000L + (h->rom[t] | (h->rom[t + 1] << 8));
+  return 0x3F0000L + (CtRomByte(h->rom, 0x400000L, (long)(t)) | (CtRomByte(h->rom, 0x400000L, (long)(t + 1)) << 8));
 }
 static int shopBg1V(const CtMenuHost* h, const CtMenuShop* s, int L, int col, int qtyOpen) {
   if (!s->equipHdma && shopHdma(h, SHOP_HDMA_MODE_MAIN, 1, L) == 0x02 && col >= 1) {   // mode 2: entry col-1
