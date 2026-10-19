@@ -942,6 +942,9 @@ typedef struct CtBattleHost {
 // records E4/F600 are read from it). Returns 1 on success; without it the module still runs but
 // stages zeroed enemy stats.
 int CtBattleLoadRom(const char* path);
+// The anim interpreter's opcode lengths (battleAnimOpLen: C1/7A6B's handlers' advance) for ops 00-FF, -1 where it has
+// none: what tools/gen/anim_oplen.py writes for the closure of the anim scripts (assets/rom_closure_battle.py).
+void CtBattleAnimOpLens(int out[256]);
 void CtBattleAscCensus(void);                 // --asccensus: every PC anim script's opcodes (debug)
 const uint8_t* CtBattleRom(long* lenOut);        // the cached ROM (NULL if not loaded)
 // How many times an effect program slot was killed by an opcode this port has not derived, over the whole process.

@@ -15,6 +15,18 @@
     },
     {
       "out": [
+        "saves/anim_oplen.bin"
+      ],
+      "cmd": [
+        "tools/gen/anim_oplen.py"
+      ],
+      "stage": "assets",
+      "status": "rom",
+      "compare": "ct_assets.dat",
+      "compare_doc": "The battle anim interpreter's opcode lengths (ct.exe --animoplen, src/battle.c battleAnimOpLen over C1/7A6B's handlers): not packed, it sizes the anim scripts' closure (assets/rom_closure_battle.py), so ct_assets.dat proves it."
+    },
+    {
+      "out": [
         "saves/lz_pack.bin"
       ],
       "cmd": [

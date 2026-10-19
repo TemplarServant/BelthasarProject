@@ -12,6 +12,10 @@
 
 // From now on, serve reads from `as`'s CT_ASSET_TABLE entries (NULL: the ROM only).
 void CtRomViewUse(const CtAssets* as);
+// CT_ROM_MEMPATCH (tools/battle_status_cmp.py's in-memory instrumentation of the image, src/rom_verify.h) applies to the
+// tables as it does to the image: `apply` (CtRomApplyMemPatch) runs over a scratch image of the tables, which then read
+// their patched copies. Only that tool's runs set it.
+void CtRomViewPatch(int (*apply)(uint8_t* img, long len));
 // The byte at ROM file offset `off`: a table's, else rom[off] (0 outside both).
 uint8_t CtRomByte(const uint8_t* rom, long romLen, long off);
 // `len` bytes at `off`: the table's own when one covers them all, else rom + off (NULL outside the ROM).

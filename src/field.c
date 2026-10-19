@@ -1720,13 +1720,13 @@ static long owMapLzCycles(const uint8_t* rom, size_t rl, int world) {
   if (!rom || world < 0 || world > 7) return 0;
   size_t hp = ct_lz_hirom_offset(0xC6FD00) + (size_t)world * 2;
   if (hp + 2 > rl) return 0;
-  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)rom[hp] | ((unsigned)rom[hp + 1] << 8)));
+  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)CtRomByte(rom, 0x400000L, (long)(hp)) | ((unsigned)CtRomByte(rom, 0x400000L, (long)(hp + 1)) << 8)));
   long cyc = 0;
   for (int k = 0; k < 7; k++) {
-    if (hdr + (size_t)k >= rl || (rom[hdr + k] & 0x80)) continue;
-    size_t e = ct_lz_hirom_offset(0xC6FE20) + (size_t)rom[hdr + k] * 3;
+    if (hdr + (size_t)k >= rl || (CtRomByte(rom, 0x400000L, (long)(hdr + k)) & 0x80)) continue;
+    size_t e = ct_lz_hirom_offset(0xC6FE20) + (size_t)CtRomByte(rom, 0x400000L, (long)(hdr + k)) * 3;
     if (e + 3 > rl) continue;
-    unsigned src = (unsigned)rom[e] | ((unsigned)rom[e + 1] << 8) | ((unsigned)rom[e + 2] << 16);
+    unsigned src = (unsigned)CtRomByte(rom, 0x400000L, (long)(e)) | ((unsigned)CtRomByte(rom, 0x400000L, (long)(e + 1)) << 8) | ((unsigned)CtRomByte(rom, 0x400000L, (long)(e + 2)) << 16);
     cyc += ct_lz_rom_cycles(rom, rl, ct_lz_hirom_offset(src), 1);
   }
   return cyc;
@@ -8883,7 +8883,7 @@ static void battleFxObjRender(uint8_t* fb, const CtBattleHost* h, int cmb, int b
     if (!h->fxObjShown[o].on) continue;                           // CF/EDDF $A1D8 / CF/EF13 $A1B0
     int f = h->fxObjShown[o].frame;
     int cnt = m[0xA05B + f];                                      // CF/EF21
-    int base = rom[ROM_FXFRAME_BASE_F + f * 2] | (rom[ROM_FXFRAME_BASE_F + f * 2 + 1] << 8);   // CF/EF2E
+    int base = CtRomByte(rom, 0x400000L, (long)(ROM_FXFRAME_BASE_F + f * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_FXFRAME_BASE_F + f * 2 + 1)) << 8);   // CF/EF2E
     for (int c = cnt - 1; c >= 0; c--) {
       const uint8_t* cell = m + 0x4500 + base + c * 4;
       if (0x4500 + base + c * 4 + 3 >= 0x10000) continue;
@@ -10661,7 +10661,7 @@ int main(int argc, char** argv) {
     CtWorldSetOp4EHook(owWindowCallHook);                        // op 4E -> $C6:E241 / E27E through the translation
     // THE ROM'S SMALL TABLES FROM THE CONTAINER (CT_ASSET_TABLE, src/romview.h); CT_TABLES_FROM_ROM=1 keeps the ROM.
     // (Before the handles below: the enemy records' pointer is the table's.)
-    if (!getenv("CT_TABLES_FROM_ROM")) CtRomViewUse(&assets);
+    if (!getenv("CT_TABLES_FROM_ROM")) { CtRomViewUse(&assets); CtRomViewPatch(CtRomApplyMemPatch); }
     if (romOk) { CtSceneSetEnemyRecTable(CtBattleFieldEnemyRecs(), 256 * 10);
       long rl = 0; const uint8_t* rb = CtBattleRom(&rl);          // + the full image for the load-op
       CtSceneSetRomImage(rb, rl); } }                             //   gfx/palette allocator mirrors
@@ -10738,7 +10738,7 @@ int main(int argc, char** argv) {
           int m = w[0xA101] ? (w[0x9F46] ^ 0x08) : w[0x9F46];
           int c = ((m & 0x08) ? 0x1BC : 0x13C);                   // $23BC / $233C in the page
           int pa = (a == 0) ? 0x3D : a - 1;
-          hh.fxCgram[c] = rr0[0x115980 + pa * 2]; hh.fxCgram[c + 1] = rr0[0x115980 + pa * 2 + 1];
+          hh.fxCgram[c] = CtRomByte(rr0, 0x400000L, (long)(0x115980 + pa * 2)); hh.fxCgram[c + 1] = CtRomByte(rr0, 0x400000L, (long)(0x115980 + pa * 2 + 1));
         } }
       hh.fxKnockTarget = -1; hh.mvPendAtk = -1; hh.fxAtkPose = -1;   // inert action state (mvInited=0 -> the
                                                                      //   general enemy render reads the SEED's
@@ -10902,7 +10902,7 @@ int main(int argc, char** argv) {
         // G1 fix, §1.3: Crono 0x00 / Lucca 0x05 / Frog 0x08; Marle's 0x0F is her separate ranged path).
         int fac = CtBattlePcFacing(w, NULL, k);   // entry law from the staged feet (no host)
         int stance = pcStanceIdx(cid, fac);
-        int sel = (cid == 1) ? 0x0F : (rrom ? rrom[0x0D4007 + cid] : -1);
+        int sel = (cid == 1) ? 0x0F : (rrom ? CtRomByte(rrom, 0x400000L, (long)(0x0D4007 + cid)) : -1);
         printf("renderwram: seat%d cid=%d hp=%d mp=%d namePal=%d pose=$%02X facing=%d stanceIdx=$%02X sel=$%02X\n",
                k, cid, hp, mp, npal, w[0x9907 + k], fac, stance & 0xFF, sel & 0xFF);
       }
@@ -10927,10 +10927,10 @@ int main(int argc, char** argv) {
       for (int slot = 0; slot < 8; slot++) {
         const uint8_t* e = w + 0x29BF + slot * 12;
         int eid = e[5]; if (eid == 0xFF || e[6] != 0) continue;    // FF = empty high-slot; +6!=0 = not staged
-        int ehp = rrom ? (rrom[0x0C4700 + eid * 23] | (rrom[0x0C4700 + eid * 23 + 1] << 8)) : -1;
+        int ehp = rrom ? (CtRomByte(rrom, 0x400000L, (long)(0x0C4700 + eid * 23)) | (CtRomByte(rrom, 0x400000L, (long)(0x0C4700 + eid * 23 + 1)) << 8)) : -1;
         const uint8_t* rw2 = rrom ? rrom + 0x0C5E00 + eid * 7 : 0;
         const uint8_t* as2 = rrom ? rrom + 0x24F600 + eid * 10 : 0;
-        int aip = rrom ? (rrom[0x0C8B08 + eid * 2] | (rrom[0x0C8B08 + eid * 2 + 1] << 8)) : -1;
+        int aip = rrom ? (CtRomByte(rrom, 0x400000L, (long)(0x0C8B08 + eid * 2)) | (CtRomByte(rrom, 0x400000L, (long)(0x0C8B08 + eid * 2 + 1)) << 8)) : -1;
         char enm[16] = ""; CtBattleEnemyName(eid, enm, sizeof enm);
         // the GENERAL-render resolution for this slot (battle_facing_engine.md §5): seed mode/facing ->
         // idle window rest pose (the $97D9 cursor-0 law). ded= the id has a dedicated renderer instead.
@@ -10945,8 +10945,8 @@ int main(int argc, char** argv) {
         printf("renderwram: enemy slot%d id=$%02X rel=(%d,%d) prio=%d HP=%d dissolve=%d XP=%d G=%d TP=%d ai=$CC%04X ai0=%02X%02X%02X%02X name='%s'%s\n",
                slot, eid, e[0], e[1], e[4], ehp, as2 ? as2[4] : -1,
                rw2 ? (rw2[0] | (rw2[1] << 8)) : -1, rw2 ? (rw2[2] | (rw2[3] << 8)) : -1, rw2 ? rw2[6] : -1,
-               aip & 0xFFFF, rrom ? rrom[0x0C0000 + (aip & 0xFFFF)] : 0, rrom ? rrom[0x0C0000 + (aip & 0xFFFF) + 1] : 0,
-               rrom ? rrom[0x0C0000 + (aip & 0xFFFF) + 2] : 0, rrom ? rrom[0x0C0000 + (aip & 0xFFFF) + 3] : 0, enm, gen);
+               aip & 0xFFFF, rrom ? CtRomByte(rrom, 0x400000L, (long)(0x0C0000 + (aip & 0xFFFF))) : 0, rrom ? CtRomByte(rrom, 0x400000L, (long)(0x0C0000 + (aip & 0xFFFF) + 1)) : 0,
+               rrom ? CtRomByte(rrom, 0x400000L, (long)(0x0C0000 + (aip & 0xFFFF) + 2)) : 0, rrom ? CtRomByte(rrom, 0x400000L, (long)(0x0C0000 + (aip & 0xFFFF) + 3)) : 0, enm, gen);
       }
       uint32_t rfnv = 2166136261u;
       for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) rfnv = (rfnv ^ rfb[i]) * 16777619u;

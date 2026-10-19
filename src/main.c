@@ -16573,6 +16573,17 @@ int main(int argc, char** argv) {
       printf("lzpack: %u streams (%ld bytes), %ld skipped (not a stream)\n", count, bytes, skipped);
       return 0;
     }
+    // --animoplen <out>: the battle anim interpreter's opcode lengths (CtBattleAnimOpLens), one signed byte per op 00-FF
+    // (-1 = none) -- tools/gen/anim_oplen.py's saves/anim_oplen.bin, the anim scripts' closure walks with it.
+    if (!strcmp(argv[i], "--animoplen") && i + 1 < argc) {
+      if (!CtBattleLoadRom("Chrono_Trigger_USA_SNES.sfc")) { printf("animoplen: no ROM\n"); return 1; }
+      int len[256]; uint8_t b[256]; int n = 0; CtBattleAnimOpLens(len);
+      for (int k = 0; k < 256; k++) { b[k] = (uint8_t)(len[k] < 0 ? 0xFF : len[k]); if (len[k] > 0) n++; }
+      FILE* f = fopen(argv[i + 1], "wb"); if (!f) { printf("animoplen: cannot write %s\n", argv[i + 1]); return 1; }
+      fwrite(b, 1, 256, f); fclose(f);
+      printf("animoplen: %d opcodes sized\n", n);
+      return 0;
+    }
     // --lzassets <ct_assets.dat>: every CT_ASSET_LZ entry against the ROM's own stream at its offset -- the bytes and
     // both costs. `lz-data: N streams identical (bytes and both costs)`, or the first that is not.
     if (!strcmp(argv[i], "--lzassets") && i + 1 < argc) {

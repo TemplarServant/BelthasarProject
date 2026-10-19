@@ -4551,7 +4551,7 @@ static void battleTechResolve(CtBattleHost* h, int seat);
 #define BS_R16(s, a)  (BS_R(s, a) | (BS_R(s, (a) + 1) << 8))
 #define ROM_BS_CC(a)  (0x0C0000L + (long)(a))
 #define ROM_BS_D1(a)  (0x110000L + (long)(a))
-static int bsRom8(long a) { long rl = 0; const uint8_t* r = CtBattleRom(&rl); return (r && a >= 0 && a < rl) ? r[a] : 0; }
+static int bsRom8(long a) { long rl = 0; const uint8_t* r = CtBattleRom(&rl); return (r && a >= 0 && a < rl) ? CtRomByte(r, rl, a) : 0; }
 static int bsRom16(long a) { return bsRom8(a) | (bsRom8(a + 1) << 8); }
 static uint8_t bsX12(uint8_t a) { uint8_t a4 = (uint8_t)(a << 2); return (uint8_t)((uint8_t)(a4 << 1) + a4); }   // `ASL / ASL / STA $80 / ASL / CLC / ADC $80` (8-bit)
 
@@ -8153,7 +8153,7 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
       { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
         uint8_t eid = s[tb + 0];
         if (rr && rl >= (long)(ROM_REWARD_TBL + 256 * 7)) {
-          const uint8_t* rec = rr + ROM_REWARD_TBL + (size_t)eid * 7;
+          const uint8_t* rec = CtRomPtr(rr, rl, ROM_REWARD_TBL + (long)eid * 7, 7);
           h->rewXp += rec[0] | (rec[1] << 8);                 // +0..1 XP (u16) -> $B28C
           h->rewGp += rec[2] | (rec[3] << 8);                 // +2..3 Gold (u16) -> $B2A5
           h->rewTp += rec[6];                                 // +6 TP (u8) -> $B2DB
@@ -8701,15 +8701,15 @@ static void battleCombineEB68(uint8_t* s, int n) {
 static void battleTechCoReloadBDB3(CtBattleHost* h, int techId) {
   uint8_t* s = h->mem; const uint8_t* rr = CtBattleRom(NULL);
   if (!rr) return;
-  int grp = rr[ROM_TECH_META + (unsigned)techId * 11] & 0x7F;
+  int grp = CtRomByte(rr, 0x400000L, (long)(ROM_TECH_META + (unsigned)techId * 11)) & 0x7F;
   for (int k = 1; k < 3; k++) {
-    int ch = rr[0x0C249F + grp * 3 + k];
+    int ch = CtRomByte(rr, 0x400000L, (long)(0x0C249F + grp * 3 + k));
     if (ch == 0xFF) break;                                      // C1/BE4B-BE52 / the k=2 twin: FF ends the list
     int ps = s[0xB1BE + (ch & 0x7F)];
     if (ps > 2) continue;
     s[0xB188 + ps] = 0;                                         // C1/BE5A-BE5F (LDA #01 / STA, then STZ)
     battleAtbLoad(s, ps);                                       // C1/BE62-BE68 $AFAB = $B158, C1/BD6F
-    int f = (k == 1) ? (rr[0x0C2BDC + techId] & 0x0F) : (rr[0x0C2BEB + techId] & 0x0F);
+    int f = (k == 1) ? (CtRomByte(rr, 0x400000L, (long)(0x0C2BDC + techId)) & 0x0F) : (CtRomByte(rr, 0x400000L, (long)(0x0C2BEB + techId)) & 0x0F);
     if (s[0xAFAB + ps] != 0xFF) {
       int v = s[0xAFAB + ps] + (s[0xAFAB + ps] * f) / 10;       // C1/C90B * f, C1/C92A / 10, CLC / ADC
       s[0xAFAB + ps] = (uint8_t)(v > 0xFF ? 0xFF : v);         //   BCC / LDA #FF
@@ -10353,6 +10353,10 @@ static void ascCensusWalk(const uint8_t* rom, long romLen, long q, int depth, ui
     }
     q += len;
   }
+}
+void CtBattleAnimOpLens(int out[256]) {
+  long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
+  for (int op = 0; op < 256; op++) out[op] = rom ? battleAnimOpLen(rom, romLen, op) : -1;
 }
 void CtBattleAscCensus(void) {
   long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
@@ -12426,7 +12430,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
     // fallen, DROPS the action -- `$AF23 = 1`, no $A013 span, no effect, the item stays spent (measured: Marle marked
     // dead after a Tonic's confirm).
     { const uint8_t* rr = CtBattleRom(NULL);
-      int grp = itemId > 0 ? (rr ? rr[ROM_ITEM_TGTGRP_TBL + (itemId - 0xBC)] : 0x80) : battleTechGroup(techId);
+      int grp = itemId > 0 ? (rr ? CtRomByte(rr, 0x400000L, (long)(ROM_ITEM_TGTGRP_TBL + (itemId - 0xBC))) : 0x80) : battleTechGroup(techId);
       int g = grp & 0x7F, fallen = (s[battleBlock(tgt) + 0x1D] & 0x80) != 0;
       if ((g == 0x00 && fallen) || (g == 0x03 && !fallen)) {
         s[0xAF23] = 1;
@@ -12465,7 +12469,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
     s[0xAE93] = (uint8_t)itemId;                               // $AE93 = item id (§3.1)
     s[0xAE94] = 0;                                             // C1/BB23 STZ $AE94 (C1/4844's upload gate reads it)
     { const uint8_t* rr = CtBattleRom(NULL);                   // C1/BABE JSR C1/C1DD: the victims from the item's group
-      int grp = rr ? rr[ROM_ITEM_TGTGRP_TBL + (itemId - 0xBC)] : 0x80;   //   (CC/1BB5): one PC, or every seat (01)
+      int grp = rr ? CtRomByte(rr, 0x400000L, (long)(ROM_ITEM_TGTGRP_TBL + (itemId - 0xBC))) : 0x80;   //   (CC/1BB5): one PC, or every seat (01)
       h->actTgtN = battleBuildHitSet(h, grp & 0x7F, tgt, h->actTgtList, 8); }
     h->actValue = battleComputeItemEffect(h, tgt, itemId);     // heal = negative delta (Tonic -50), staged $B328 (§4)
   } else if (techId > 0) {
@@ -16485,7 +16489,7 @@ static void battleBuildResults(CtBattleHost* h) {
       if (id >= 7) continue;
       // Message 5 (FD/ADBF, `$B2B3,X` bit 3): the seat's techs, C1/F4DF's list $B3CE[seat*8 ..] -- the tech levels
       // the pass raised ($2830[id], each entry `base + the level before it`).
-      int base = rr ? rr[0x0C276A + ((id << 1) & 0xFF)] : 0;
+      int base = rr ? CtRomByte(rr, 0x400000L, (long)(0x0C276A + ((id << 1) & 0xFF))) : 0;
       for (int t = h->mem[0x2830 + id]; t < tpv[0x2830 + id] && h->resultN < CT_BATTLE_RESULT_MAX; t++) {
         h->resultKind[h->resultN] = 5; h->resultVal[h->resultN] = (id << 8) | ((base + t) & 0xFF); h->resultN++;
       }
@@ -17280,7 +17284,7 @@ void CtBattleBegin(CtBattleHost* h) {
   // CC/E391-E399: the strip's LAYOUT `$9F20 := CC/FBC5[$2992]` (00 02 01 01 02 02 ..; 02 on every save in the repo) -- the
   // party rows' columns, the HP/MP headers and whether the gauges are drawn (C1/0299, C1/05A7).
   { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
-    if (rr && 0x0CFBC5L + s[0x2992] < rl) s[0x9F20] = rr[0x0CFBC5L + s[0x2992]]; }
+    if (rr && 0x0CFBC5L + s[0x2992] < rl) s[0x9F20] = CtRomByte(rr, 0x400000L, (long)(0x0CFBC5L + s[0x2992])); }
   battleMoveInit(h);   // battle_enemy_move_target.md §A.2: stage the live positions ($1D0C/$1D23 = the staged
                        //   foot) + box extents; clear the mover (no walk pending). Render reads the live pos.
   memcpy(h->frontCmp, s + 0xA5CD, sizeof h->frontCmp);   // the draw list's flags as the loaders left them (CC/EB86's
@@ -18715,7 +18719,7 @@ void CtBattleVictoryRewards(CtBattleHost* h) {      // C1/83D2-83F2
       for (int seat = 0; seat < 3; seat++) {
         uint8_t id = s[0x2980 + seat];
         if (id >= 7) continue;
-        int base = rr ? rr[0x0C276A + ((id << 1) & 0xFF)] : 0;
+        int base = rr ? CtRomByte(rr, 0x400000L, (long)(0x0C276A + ((id << 1) & 0xFF))) : 0;
         for (int t = lc0[id]; t < s[0x2830 + id] && techLearnedN[seat] < 8; t++)
           techLearned[seat][techLearnedN[seat]++] = base + t;
       } }
@@ -18759,7 +18763,7 @@ void CtBattleVictoryRewards(CtBattleHost* h) {      // C1/83D2-83F2
           fprintf(stderr, " pc%d(n=%d bits=%02X lc=%d next=%d tid=", seat,
                   techLearnedN[seat], s[0x2837+id], s[0x2830+id], s[sb+0x2D]|(s[sb+0x2E]<<8));
           for (int k=0;k<techLearnedN[seat];k++) fprintf(stderr, "%s%02X", k?",":"", techLearned[seat][k]);
-          int bits = s[0x2837+id], start = mr?mr[0x02BD40+id]:0, endr = mr?mr[0x02BD40+id+1]:0, first=1;
+          int bits = s[0x2837+id], start = mr?CtRomByte(mr, 0x400000L, (long)(0x02BD40+id)):0, endr = mr?CtRomByte(mr, 0x400000L, (long)(0x02BD40+id+1)):0, first=1;
           fprintf(stderr, " list=");
           for (int k=0; mr && (start+k)<endr && k<8; k++) if (bits & (0x80>>k)) {   // == battleTechBuildList scan
             fprintf(stderr, "%s%02X", first?"":",", start+k); first=0; }

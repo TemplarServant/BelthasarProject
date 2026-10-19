@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 sys.path.insert(0, os.path.join(ROOT, 'assets'))
 from ctlib import rom as romlib  # noqa: E402
 import rom_closure  # noqa: E402
+import rom_closure_battle  # noqa: E402
 
 OUT = os.path.join('saves', 'lz_pack.bin')
 LIST = os.path.join('build', 'lz_pack.list')
@@ -40,6 +41,7 @@ SOURCES = [
     rom_closure.sprite_streams,            # every sprite record's sheet through $E4:FFE0's gfx table
     rom_closure.menu_streams,              # the menus' own streams (the exchange's BG3 characters)
     rom_closure.world_streams,             # the overworld's packets ($C6:FDF0-FFFF tables) and the time gauge's
+    rom_closure_battle.stage_streams,      # the battle effects' frames (D1, through the anim configs' $987E)
 ]
 SKIPPED = os.path.join('saves', 'lz_pack.skipped')   # the listed offsets that are not streams (the raw blocks)
 

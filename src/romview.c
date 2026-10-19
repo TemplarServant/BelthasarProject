@@ -5,7 +5,8 @@
 #include <string.h>
 
 typedef struct { long start, len; const uint8_t* bytes; } RomTable;
-static RomTable g_tab[512];
+#define ROMVIEW_MAX 16384                              // (the battle's scripts alone are ~700 runs)
+static RomTable g_tab[ROMVIEW_MAX];
 static int g_ntab;
 
 static int tabCmp(const void* a, const void* b) {
@@ -28,7 +29,20 @@ static int collect(const CtAssets* as, RomTable* out, int cap) {
   return n;
 }
 
-void CtRomViewUse(const CtAssets* as) { g_ntab = as ? collect(as, g_tab, 512) : 0; }
+void CtRomViewUse(const CtAssets* as) { g_ntab = as ? collect(as, g_tab, ROMVIEW_MAX) : 0; }
+
+void CtRomViewPatch(int (*apply)(uint8_t* img, long len)) {
+  const char* mp = getenv("CT_ROM_MEMPATCH");
+  if (apply && g_ntab && mp && *mp) {
+    long top = 0;
+    for (int k = 0; k < g_ntab; k++) if (g_tab[k].start + g_tab[k].len > top) top = g_tab[k].start + g_tab[k].len;
+    uint8_t* img = (uint8_t*)calloc((size_t)top, 1);
+    if (!img) return;
+    for (int k = 0; k < g_ntab; k++) memcpy(img + g_tab[k].start, g_tab[k].bytes, (size_t)g_tab[k].len);
+    apply(img, top);
+    for (int k = 0; k < g_ntab; k++) g_tab[k].bytes = img + g_tab[k].start;
+  }
+}
 
 static const RomTable* find(long off) {
   int lo = 0, hi = g_ntab - 1;
@@ -99,8 +113,8 @@ uint8_t CtRomByte(const uint8_t* rom, long romLen, long off) {
 }
 
 long CtRomViewCompare(const uint8_t* rom, long romLen, const CtAssets* as) {
-  static RomTable t[512];
-  int n = collect(as, t, 512);
+  static RomTable t[ROMVIEW_MAX];
+  int n = collect(as, t, ROMVIEW_MAX);
   long bytes = 0;
   if (!n) { printf("tab-data: the container holds no table\n"); return -1; }
   for (int k = 0; k < n; k++) {
