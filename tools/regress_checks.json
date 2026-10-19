@@ -46642,6 +46642,51 @@
       "timeout_s": 60,
       "note_pass": "every datum the sound loader takes -- the driver's six blocks, each song's sequence (with the 3 bytes its upload reads past it and the address that prices it), instrument list, percussion and record, each sample and its address, each instrument's three words (with id 0's bank-$C8 wrap), both effect sets, the exception list for every song id, FD/C1EE's channels -- is the same from ct_assets.dat as from the ROM",
       "notes": "src/audio.c CtAudioDataCompare: two data sources side by side, no SPC. Mutations checked by hand 2026-10-18 (a sample byte, a sequence's address, a sequence's tail byte, instrument 0's wrap word, an FD table word): each is named at its item. A difference is a packing defect (assets/extract_assets.py pack_sound) or an accessor's: never re-pin it."
+    },
+    {
+      "name": "attract-0e6-robo-idle-on-the-b0s-dispatch-vs-rule-cartridge",
+      "argv": [
+        "build/Belthasar.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--boot"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_SRAM": "build/_f2/fresh.srm",
+        "CT_SRAM_FRESH": "1",
+        "CT_FIELD_MEMMON": "0100:2,168C:1,160C:2,118C:2",
+        "CT_SHOTS": "build/_f2/x",
+        "CT_SHOTS_AT": "7620",
+        "CT_SHOTS_EXIT": "1"
+      },
+      "expect": [
+        "fmemmon f7584 loc=0E6  0100=E600  168C=08*  160C=0305  118C=7808*",
+        "fmemmon f7616 loc=0E6  0100=E600  168C=08  160C=0303*  118C=A206*",
+        "fmemmon f7617 loc=0E6  0100=E600  168C=00*  160C=0305*  118C=A206"
+      ],
+      "pin": [
+        "^fmemmon f76(1[67]|84) "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "note_pass": "the attract's loc 0E6: Robo's conga (op 0xB0's C0/3002 -> A26B -> the idle chain A1E9) runs on the frame its B0 is dispatched, not the frame his fn7 RETURNs onto it -- $168C / $160C the cartridge's",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "    int roaming = CT_FOL_ON_B0(o) && !g_landedB0[o] && w[0x0138] == 0;",
+          "replace": "    int roaming = CT_FOL_ON_B0(o) && w[0x0138] == 0;   /* MUT */",
+          "why": "C0/A26B's only callers are inside op 0xB0: a follower whose visit ends on the RETURN onto its B0 gets no conga that frame"
+        }
+      ],
+      "notes": "ROADMAP F2 (closed 2026-10-18). From power-on on both sides (the cartridge under the rule, `ct.exe --monitor 7E0100:2,7E168C:1,7E160C:2,7E118C:2 --from boot --frames 7700 --diff --writer`; the port --boot on an erased cart): at loc 0E6 Robo (obj6) waits in fn7 (`AD 20` from c7637, $168C = 08), and at c7669 the wait's last pass and `4F 0C 0F / 4F 25 10 / 02 00 33 / 00` spend the visit's five ops -- the RETURN restores his prio-7 ip 06A2, a B0 -- so $168C stays 08 and $160C ticks to 0303; at c7670 the B0 runs and C0:A21C (A1E9's idle chain) zeroes $168C, $160C = 0305. The port's frames are the cartridge's less 53 here (f7584 = c7637, f7616 = c7669, f7617 = c7670); every pinned value is the cartridge's. Before, the port ran the conga whenever the ip sat on a B0 (ct_vm.c CtSceneUpdateFollowers) and zeroed $168C in the RETURN's frame."
     }
   ],
   "excluded": [
