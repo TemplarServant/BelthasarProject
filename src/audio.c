@@ -1950,20 +1950,23 @@ int CtAudioPost(CtAudio* a, uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) {
 }
 
 int g_ctAudioTraceFrame = 0;
-// THE INSTANT UPLOADS (a mod, CtAudioSetInstant; src/field.c hostSoundInstant): a JSL's SPC time -- a song's upload, the
-// title's spin -- happens between two frames. The host freezes no frame for it (field.c), so it is owed to none: no debit
-// from the frames after; and its output, the old song's release under an upload, is not played -- the FIFO is put back
-// where the JSL found it, and the new song starts with the picture. Returns 1 when that applied.
+// THE INSTANT UPLOADS (a mod, CtAudioSetInstant; src/field.c hostSoundInstant): a JSL that crosses frames -- a song's
+// upload, a sound set's, the title's spin -- happens between two frames. The host freezes no frame for it (field.c), so
+// its time from the post on is owed to none: only the stretch before the post (the frame's own, the rule's start) is
+// debited from the frames after; and the output from the post on, the old song's release under the upload, is not
+// played -- the FIFO is put back where the post found it -- so the new song starts with the picture. A JSL inside its
+// frame (a sound effect's post) is the vanilla one. Returns 1 when that applied (the debit made).
 static int instantJsl(CtAudio* a, unsigned fifoAt) {
-  if (!a->instant) return 0;
+  if (!a->instant || ld.nmis <= 0) return 0;
   if (a->fifoLen > fifoAt) a->fifoLen = fifoAt;
+  a->cycleCarry -= (double)ld.clk0 * LD_APU_PER_MASTER;
   return 1;
 }
 void CtAudioSetInstant(CtAudio* a, int on) { if (a) a->instant = on ? 1 : 0; }
 int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   if (!a || !mem7E) return 0;      // NULL mem7E = no scene VM (overworld); nothing stages commands there
   uint8_t* mb = mem7E + 0x1E00;                        // $00:1E00 mirrors $7E:1E00
-  unsigned fifoAt = a->fifoLen;
+  unsigned fifoAt;
   int rc;
   // THE RULE: a JSL that never touches the ports -- the driver latch down (C7/0157), nothing staged (C7/015B), a command
   // the dispatch drops or that has no derived handler -- is CPU work only: it costs nothing and moves no SPC. (The host's
@@ -1983,6 +1986,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
     if (sp && (mb[0x05] & 0x80) && mb[0x00]) printf("sndpost f%d cmd=%02X p1=%02X\n", g_ctAudioTraceFrame, mb[0x00], mb[0x01]); }
   if (!ldStartRule(a))                                 // (the rule: from where the SPC and the CPU's last wait stand)
     ldStart(a->engineMode, a->postLine);               // the JSL begins: the clock runs until the RTL
+  fifoAt = a->fifoLen;                                 // (the output up to the post: the instant mod keeps it)
   ldRun(ld.ifast ? 740 - 54 : 740);                    // JSL 54 (the caller's: free under the rule) + C7/0004 JMP 18 + the $0140 prologue 264 (PHB PHD PHP REP REP PHA PHX PHY SEP LDA PHA PLB) + $0150-$0173 dispatch 404 (LDX PHX PLD SEP ... JMP ($0AD9,X))
   uint8_t cmd = mb[0x00];
   // The two early tests BRANCH TO THE COMMON EXIT, they do not return before it: C7/0157

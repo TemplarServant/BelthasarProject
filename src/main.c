@@ -16230,14 +16230,14 @@ int main(int argc, char** argv) {
     printf("hdmabuildcmp: %ld calls, %ld exact, %ld written bytes, %ld wrong\n", calls, exact, written, bad);
     return bad ? 1 : 0;
   }
-  // --snddrvfuzz <actions> [seed] (with CT_SNDDRV_LOCKSTEP=1): the sound driver in C against the original on a
+  // --snddrvfuzz <actions> [seed] (with CT_AUDIO_SPC=lockstep): the sound machine in C against the original on a
   // constructed command stream (src/sound/fuzz.c); the lockstep's report is the verdict.
   if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--snddrvfuzz")) {
     extern int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed);
     long rl = 0; const uint8_t* rom = CtRomImage(&rl);
     return CtSndFuzz(rom, rl, strtol(argv[2], NULL, 0), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
   }
-  // --snddrvsongs <cmd> <id|id+id...>... (with CT_SNDDRV_LOCKSTEP=1): the game's song loader called directly on a fresh
+  // --snddrvsongs <cmd> <id|id+id...>... (with CT_AUDIO_SPC=lockstep): the game's song loader called directly on a fresh
   // CtAudio per argument, each load's ARAM against its ROM blocks and the driver playing it (src/sound/fuzz.c).
   if (argc >= 4 && !strcmp(argv[1], "--snddrvsongs")) {
     extern int CtSndSongs(const uint8_t* rom, long romLen, uint8_t cmd, int nspec, char** spec);

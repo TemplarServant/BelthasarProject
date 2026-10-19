@@ -608,12 +608,6 @@ static uint16_t sfxPtr(SndDrv* d, uint8_t a, uint8_t y) {   // $1BBC: the effect
   return v;
 }
 
-static void loopPop(int x, uint8_t* sp) {   // the loop slot steps back; below the track's base it wraps to the top
-  uint8_t base = (uint8_t)(x * 2 - 1);
-  (*sp)--;
-  if (*sp == base) *sp = (uint8_t)(base + 4);
-}
-
 // ===================================================================================================================
 // The sequence events $C4-$FF ($073D through the table at $1554). `a` is the first operand (0 for an event without
 // one, whose $A5 then holds the event's index). Returns 1 when the track ended (the step stops).

@@ -301,7 +301,7 @@ static void randomCommand(void) {
 
 static void coldWram(void) { memset(g_wram, 0, sizeof g_wram); CtAudioSeedMailboxPage(g_au, g_wram); }   // nothing resident
 
-// `ct.exe --snddrvsongs <cmd> <ids...>` (with CT_SNDDRV_LOCKSTEP=1): the game's loader (CtAudioLoadSong) called directly,
+// `ct.exe --snddrvsongs <cmd> <ids...>` (with CT_AUDIO_SPC=lockstep): the game's loader (CtAudioLoadSong) called directly,
 // the fuzz's way -- the mailbox page cold and unposted -- each id on a fresh CtAudio; "24+49" loads 24 then 49 on the same
 // one (the song change, the defragmenter's case). After each load: the sequence at $2000 byte for byte against its ROM
 // block, the heap packed from its base and every resident instrument there byte for byte, the whole song's set resident;

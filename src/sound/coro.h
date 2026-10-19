@@ -1,7 +1,8 @@
 // ============================================================================
 // sound/coro.h -- a coroutine: the sound processor's program runs as one, so it can stop in the middle of a tick (at a
 // port read the CPU has not decided yet) and go on when the CPU's time reaches it. Strict hand-over: exactly one side
-// runs at a time, so it is as deterministic as a function call. Windows: fibers; elsewhere: a thread and semaphores.
+// runs at a time, so it is as deterministic as a function call. Windows: fibers; Linux and macOS: ucontext; Android: a
+// thread taking turns (slower: tens of microseconds a switch).
 // ============================================================================
 #ifndef CT_SOUND_CORO_H
 #define CT_SOUND_CORO_H

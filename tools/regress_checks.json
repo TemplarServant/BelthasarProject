@@ -46643,9 +46643,9 @@
         },
         {
           "file": "src/sound/timing_build.c",
-          "find": "  { 0x1554, 60 }, { 0x1608, 60 },",
-          "replace": "  { 0x1554, 59 }, { 0x1608, 60 },   /* MUT */",
-          "why": "the cost table reaches event $FF's handler through the event table's 60th word: a table one short is not the ROM's"
+          "find": "      in->cyc = in->cycTaken = (uint8_t)(nt >= 0 ? nt : tk);",
+          "replace": "      in->cyc = in->cycTaken = (uint8_t)((nt >= 0 ? nt : tk) + (op == 0xE4));   /* MUT */",
+          "why": "an instruction costs the bus accesses the core makes for it: MOV A,dp one cycle more is not the ROM's table (the machine would run the driver slow)"
         }
       ]
     },

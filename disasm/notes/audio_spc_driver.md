@@ -286,7 +286,10 @@ The C port names every field (`src/sound/driver.c`: D_ the direct page, P_ page 
 
 ## The port (steps 2-5)
 
-**Step 2 DONE (2026-10-18): the driver in C**, `src/sound/driver.c` / `driver.h`, validated tick by tick.
+**Step 2 DONE (2026-10-18): the driver in C**, `src/sound/driver.c` / `driver.h`, validated tick by tick. (Superseded
+by step 5, "The machine" below: the tick-level API and the `CT_SNDDRV_LOCKSTEP` lockstep described here are gone; the
+same routines now run as the sound processor's whole program, compared instruction by instruction with
+`CT_AUDIO_SPC=lockstep`. This paragraph is kept for its history and its findings.)
 
 - The driver as game code: the state in `SndDrv::m`, the cartridge's ARAM layout (the lockstep compares it byte for
   byte), every field named; block 0's tables read from where the loader put them (today the ARAM image). The outside
