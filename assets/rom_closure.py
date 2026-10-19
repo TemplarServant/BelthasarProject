@@ -116,3 +116,48 @@ def location_streams(rom):
         'location BG3 assemblies': ps(ASM3_PTRS, b3s),
         'location scripts': ps(SCRIPT_PTRS, scripts),
     }
+
+
+# The $C3 sequence stages (src/seq_*.c, disasm/notes/sequence_table.md, seq_picture.md): the overlay's packet table
+# $FE:0000 (3-byte pointers, X = its index; C3:0000 takes the overlay at X = 3, the stages' $7E:3691 / $7E:36AA the rest).
+# It ends where the first block it points to in its own bank begins.
+SEQ_TABLE = 0x3E0000
+
+
+def sequence_table_entries(rom):
+    """[(x, file offset)] of the $FE:0000 table's pointers into the ROM's banks."""
+    first = min(rom[SEQ_TABLE + x] | rom[SEQ_TABLE + x + 1] << 8
+                for x in range(0, 0x100, 3) if rom[SEQ_TABLE + x + 2] == 0xFE)
+    out = []
+    for x in range(0, first - 2, 3):
+        o = ptr24(rom, SEQ_TABLE + x)
+        if o is not None:
+            out.append((x, o))
+    return out, first
+
+
+def sequence_streams(rom):
+    """{what: offsets} the stages decompress through the table ($7E:3691 / C3:0000): every entry (lz_pack skips a raw one)."""
+    ents, _ = sequence_table_entries(rom)
+    return {'sequence packets ($FE:0000 table)': {o for _, o in ents}}
+
+
+def sequence_tables(rom, raw_offsets):
+    """(name, start, end): the table itself, the raw blocks $7E:36AA copies (the table's bank-FE targets that are not LZ
+    streams -- `raw_offsets`, from tools/gen/lz_pack.py -- each to the next target), $D2:0000's zero run, and the gate
+    warp's FD tables (src/seq_gwarp.c: the index ranges its loops and masks give)."""
+    ents, first = sequence_table_entries(rom)
+    fe = sorted({o for _, o in ents if o >> 16 == 0x3E})
+    out = [('sequence packet table ($FE:0000)', SEQ_TABLE, SEQ_TABLE + first)]
+    for i, o in enumerate(fe):
+        if o in raw_offsets:
+            end = fe[i + 1] if i + 1 < len(fe) else SEQ_TABLE + 0x10000
+            out.append(('sequence raw block ($FE:%04X)' % (o & 0xFFFF), o, end))
+    out += [
+        ('$D2:0000 (32 bytes the stages copy)', 0x120000, 0x120020),
+        ('gate warp: radii, sprites, brightness ($FD:DD96-DE14)', 0x3DDD96, 0x3DDE15),
+        ('gate warp: the plot bit masks ($FD:ED79, 16)', 0x3DED79, 0x3DED89),
+        ('gate warp: the colours ($FD:F001-F120)', 0x3DF001, 0x3DF121),
+        ('gate warp: the colour scales ($FD:F181, 64)', 0x3DF181, 0x3DF1C1),
+    ]
+    return out

@@ -14,6 +14,7 @@
 // main thread $8930 scales the world's sheet by page B's r0 (C3/0307) and reformats it ($B574). disasm/notes/seq_picture.md
 // sec. 9.
 #include "seq_endingpic.h"
+#include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include "seq_racepic.h"
 #include "seq_entry7pic.h"
 #include "seq_ending.h"
@@ -110,7 +111,7 @@ void CtEndingPicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
 // the five at $9C4E by the RNG ($3448 & 3: never past the fourth). Its frame count 1.
 static uint8_t rng3448(uint8_t* w, const CtRaceIo* io) {             // $7E:3448: $039B + 1, the byte at C0/FE00 + it
   uint8_t x = ++w[0x039B];
-  return (io && io->rom && io->romLen > 0xFE00 + 0xFF) ? io->rom[0xFE00 + x] : 0;
+  return io ? CtRomByte(io->rom, io->romLen, 0xFE00 + x) : 0;
 }
 static void star9BD8(uint8_t* w, unsigned x, const CtRaceIo* io) {
   unsigned a;

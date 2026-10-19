@@ -17177,7 +17177,7 @@ int main(int argc, char** argv) {
           seqOpen = seqEntry + 1; raceOn = 1; raceEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
-            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtRaceStageSetupCycles((uint8_t)seqId);
             long sp = (long)g_raceOpenPostMaster;
@@ -17202,7 +17202,7 @@ int main(int argc, char** argv) {
           seqOpen = seqEntry + 1; endOn = 1; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
-            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEndingStageSetupCycles((uint8_t)seqId);
             if (oc > 0) seqHold = seqOpeningHold(oc, os);
@@ -17223,7 +17223,7 @@ int main(int argc, char** argv) {
           seqOpen = seqEntry + 1; endOn = 2; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
-            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry3StageSetupCycles((uint8_t)seqId);
             if (oc > 0) seqHold = seqOpeningHold(oc, os);
@@ -17243,7 +17243,7 @@ int main(int argc, char** argv) {
           seqOpen = seqEntry + 1; endOn = 3; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
-            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry4StageSetupCycles();
             if (oc > 0) seqHold = seqOpeningHold(oc, os);
@@ -17263,7 +17263,7 @@ int main(int argc, char** argv) {
           seqOpen = seqEntry + 1; endOn = 4; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
-            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry7StageSetupCycles();
             if (oc > 0) seqHold = seqOpeningHold(oc, os);
@@ -17283,7 +17283,7 @@ int main(int argc, char** argv) {
           seqOpen = seqEntry + 1; endOn = 5; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
-            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);
+            uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry6StageSetupCycles();
             if (oc > 0) seqHold = seqOpeningHold(oc, os);
@@ -17308,7 +17308,7 @@ int main(int argc, char** argv) {
         // quiesced CPU (CT_LOAD_FRAME_CYCLES) -- the same clock the location loads are priced on.
         if (seqOpen > 0) { long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
-            uint32_t osrc = 0xC30000u | orb[0x3E0003] | ((uint32_t)orb[0x3E0004] << 8);       // C3/0056 LDA $FE0003
+            uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);       // C3/0056 LDA $FE0003
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);      // dst $7E: the even arm
             long od = 8L * (0x100 + ((seqId & 0x80) ? 0x14E0 : 0x1500) + 0x200);         // $3092 / $30BD / $3843 DMAs
             long os = CtTitleIntroStageSetupCycles(seqEntry);

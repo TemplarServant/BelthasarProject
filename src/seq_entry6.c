@@ -14,6 +14,7 @@
 // call C3/02DD with A 16 bits wide, whose `CMP $2137` / `SBC $213D` read $2138 (OAM data) and $213E as words: PPU state the
 // stage-1 port does not hold. Nothing the logic reads comes from them (page B's r5 and $0386 are theirs alone).
 #include "seq_entry6.h"
+#include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include "seq_entry6pic.h"   // the picture (stage 2), when the host draws it (io->pic)
 #include "seq_racepic.h"
 #include "objslot.h"
@@ -121,7 +122,8 @@ static void entry6Copies(uint8_t* w, const CtRaceIo* io) {
 // $7E:7EE8 / $7ED1 -- the task list replaced: `MVN $7E,$D2` 32 bytes from $D2:0000 into $0920, then 12 ($7EDC) or 10
 // ($7EC7) bytes of the overlay's own table over it.
 static void entry6Tasks(uint8_t* w, unsigned tbl, unsigned n, const CtRaceIo* io) {
-  if (io && io->rom && io->romLen > 0x120020) memcpy(w + 0x0920, io->rom + 0x120000, 0x20);   // 7EF8-7F01
+  { const uint8_t* z = io ? CtRomPtr(io->rom, io->romLen, 0x120000, 0x20) : NULL;   // 7EF8-7F01 ($D2:0000: a table)
+    if (z) memcpy(w + 0x0920, z, 0x20); }
   memmove(w + 0x0920, w + tbl, n);                                    // 7EEB-7EF4 / 7ED4-7EDA
 }
 

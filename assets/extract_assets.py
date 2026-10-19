@@ -471,6 +471,11 @@ def _fd_obj_slot_ends(rom):
                 n = (r0 & 0x0F) + 1; mdesc = max(mdesc, 0x3DFA77 + x + n - 1); x += n
     return mset + 1, mdesc + 1
 
+def _lz_skipped():
+    """The offsets tools/gen/lz_pack.py listed that are not LZ streams (saves/lz_pack.skipped): the raw blocks."""
+    p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'saves', 'lz_pack.skipped')
+    return {int(l, 16) for l in open(p) if l.strip()} if os.path.exists(p) else set()
+
 def rom_tables(rom):
     """(name, start, end) of every small table the engine reads through src/romview.h."""
     ta_end = _fd_tile_anim_end(rom)
@@ -492,7 +497,7 @@ def rom_tables(rom):
         ('FF window tiles (FF:9E10, 8 x 0x280)', 0x3F9E10, 0x3F9E10 + 8 * 0x280),
         ('FF text palettes (FF:B210, 8 x 16)', 0x3FB210, 0x3FB290),
         ('FF naming grid (FF:C9AC, 80)', 0x3FC9AC, 0x3FC9FC),
-    ] + rom_closure.location_tables(rom)
+    ] + rom_closure.location_tables(rom) + rom_closure.sequence_tables(rom, _lz_skipped())
 
 def pack_tables(rom, T):
     for _name, a, b in rom_tables(rom):

@@ -6,6 +6,7 @@
 // The overlay's code is read from the WRAM image it was decompressed into ($7E:3000.., `tools/wdis.py`).
 // disasm/notes/seq_picture.md sec. 4.
 #include "seq_racepic.h"
+#include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <string.h>
 #include <stdio.h>
 #include "lz.h"
@@ -19,9 +20,9 @@ static void unpack(uint8_t* w, const CtRaceIo* io, unsigned x) {
   static uint8_t out[0x10000];
   if (!io || !io->rom) return;
   long t = 0x3E0000L + (long)x;                                       // $FE:0000 + X (HiROM: file 0x3E0000)
-  if (t + 3 > io->romLen) return;
-  w[0x0300] = io->rom[t]; w[0x0301] = io->rom[t + 1]; w[0x0302] = io->rom[t + 2];
-  unsigned src = (unsigned)(io->rom[t] | (io->rom[t + 1] << 8) | (io->rom[t + 2] << 16));
+  uint8_t b0 = CtRomByte(io->rom, io->romLen, t), b1 = CtRomByte(io->rom, io->romLen, t + 1), b2 = CtRomByte(io->rom, io->romLen, t + 2);
+  w[0x0300] = b0; w[0x0301] = b1; w[0x0302] = b2;
+  unsigned src = (unsigned)(b0 | (b1 << 8) | (b2 << 16));
   size_t n = ct_lz_decompress_bounded(io->rom, (size_t)io->romLen, out, sizeof out, ct_lz_hirom_offset(src));
   unsigned d = rw(w, 0x0303), b = (unsigned)(w[0x0305] & 1) << 16;
   for (size_t i = 0; i < n; i++) w[b | ((d + (unsigned)i) & 0xFFFF)] = out[i];   // (WMADD's 17 bits: a bank's end runs on)
@@ -182,7 +183,7 @@ static void hook44FE(CtSeqStagePic* sp, uint8_t* w) {
 static void hook4643(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io, int fromRom) {
   sp->vmain = 0x02; sp->vaddr = 0x0B00;
   for (unsigned i = 0; i < 0x13; i++) {
-    uint8_t v = fromRom ? ((io && io->rom && io->romLen > 0x120000L + (long)i) ? io->rom[0x120000L + i] : 0) : w[0xC995 + i];
+    uint8_t v = fromRom ? (io ? CtRomByte(io->rom, io->romLen, 0x120000L + i) : 0) : w[0xC995 + i];
     unsigned a = sp->vaddr & 0x7FFF;
     sp->p.vram[a] = (uint16_t)((sp->p.vram[a] & 0xFF00) | v);
     sp->vaddr = (uint16_t)(sp->vaddr + 128);                            // (VMAIN 02: the step on the low byte, 128 words)
@@ -856,10 +857,8 @@ void CtSeqPicRows37A6(uint8_t* w) { rows37A6(w); }
 void CtSeqPicCopy36AA(uint8_t* w, const CtRaceIo* io, unsigned x, unsigned y) {
   if (!io || !io->rom) return;
   long t = 0x3E0000L + (long)x;
-  if (t + 2 > io->romLen) return;
-  unsigned src = (unsigned)(io->rom[t] | (io->rom[t + 1] << 8)), n = rw(w, 0xF0) & 0xFFFF, b = (unsigned)(w[0x0305] & 1) << 16;
-  for (unsigned i = 0; i < n; i++) {
-    long r = 0x3E0000L + (long)((src + i) & 0xFFFF);
-    w[b | ((y + i) & 0xFFFF)] = (r < io->romLen) ? io->rom[r] : 0;
-  }
+  unsigned src = (unsigned)(CtRomByte(io->rom, io->romLen, t) | (CtRomByte(io->rom, io->romLen, t + 1) << 8));
+  unsigned n = rw(w, 0xF0) & 0xFFFF, b = (unsigned)(w[0x0305] & 1) << 16;
+  for (unsigned i = 0; i < n; i++)                                  // (the raw blocks: CT_ASSET_TABLE)
+    w[b | ((y + i) & 0xFFFF)] = CtRomByte(io->rom, io->romLen, 0x3E0000L + (long)((src + i) & 0xFFFF));
 }

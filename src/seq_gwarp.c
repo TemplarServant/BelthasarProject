@@ -22,6 +22,7 @@
 // depend on any data (CLAUDE.md, NMI-off loads), so its frame count is the listing's, measured once; every NMI-on iteration
 // is free (the infinitely fast CPU): its writes land in the vblank, before the frame's HDMA starts.
 #include "seq_gwarp.h"
+#include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <string.h>
 #include <stdio.h>
 
@@ -53,7 +54,7 @@ static uint8_t rom8(const CtGwarp* g, uint32_t a) {           // a 24-bit addres
     return 0;
   }
   long o = ((long)(bank & 0x3F) << 16) | (long)(a & 0xFFFF);
-  return o < g->romLen ? g->rom[o] : 0;
+  return CtRomByte(g->rom, g->romLen, o);                     // (its tables: CT_ASSET_TABLE, romview.h)
 }
 static uint32_t wa(uint32_t a24) { return (((a24 >> 16) & 1) << 16) | (a24 & 0xFFFF); }   // $7E/$7F:xxxx in the image
 #define DP(o) w[0x0500 + (o)]

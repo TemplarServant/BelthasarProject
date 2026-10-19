@@ -13,6 +13,7 @@
 // they draw from ($3448: `$039B` + 1, the byte at C0/FE00 + it), the WRAM palette fade $6439 and the end. The picture (the
 // setup's VRAM packets, the CGRAM shadow it builds, the text sprites $64BF, the sparkles' sprites C3/0DBC, the PPU) is stage 2.
 #include "seq_entry7.h"
+#include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include "seq_entry7pic.h"   // the picture (stage 2), when the host draws it (io->pic)
 #include "seq_racepic.h"
 #include "objslot.h"
@@ -42,7 +43,7 @@ static void entry7Objslot(uint8_t* w, const CtRaceIo* io) {
 // carry stands).
 static uint8_t rng3448(uint8_t* w, const CtRaceIo* io) {
   uint8_t x = ++w[0x039B];
-  return (io && io->rom && io->romLen > 0xFE00 + 0xFF) ? io->rom[0xFE00 + x] : 0;
+  return io ? CtRomByte(io->rom, io->romLen, 0xFE00 + x) : 0;
 }
 
 // $7E:65AE -- one sparkle drawn anew, its record at X: x = rnd & 7F + 40, y = E0 while the word `$0044` is set (the text is

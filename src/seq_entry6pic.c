@@ -7,6 +7,7 @@
 // the tasks $7F7D, $7FCB (C3/0077's circle), $8079, $835B, $7BF2 -- their draws use C3/02DD with a 16-bit A, which reads $2138 and
 // $213E. disasm/notes/seq_picture.md sec. 8.
 #include "seq_entry6pic.h"
+#include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include "seq_racepic.h"
 #include <stdio.h>
 
@@ -25,7 +26,7 @@ static void setup7A68(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
   ww(w, 0x004C, 0x0001); ww(w, 0x004E, 0x84F6);
   uint8_t a = 0;
   for (unsigned k = 0; k < 0xE0; k++) {                               // 7A98 .. 7AAC
-    uint8_t s = (io && io->rom && io->romLen > 0xF900 + 3 * k) ? io->rom[0xF900 + 3 * k] : 0;
+    uint8_t s = io ? CtRomByte(io->rom, io->romLen, 0xF900 + 3 * k) : 0;
     a = (uint8_t)(s >> 1); w[0x00F0] = a;
     w[0xE260 + k] = (uint8_t)(0xFF - a);
   }

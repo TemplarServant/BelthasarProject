@@ -16547,12 +16547,13 @@ int main(int argc, char** argv) {
     // --sndassets <ct_assets.dat>: every datum the sound loader takes, from the ROM and from the container's CT_ASSET_SND_*
     // entries side by side (src/audio.c CtAudioDataCompare) -- `snd-data: N items identical`, or the first difference.
 #ifndef CT_ORACLE_ONLY      // (the slim oracle links neither the assets nor the audio)
-    // --lzpack <list> <out>: the LZ streams at the file offsets listed (hex, one a line; tools/gen/lz_pack.py makes the
+    // --lzpack <list> <out> [skipped]: the LZ streams at the file offsets listed (hex, one a line; tools/gen/lz_pack.py makes the
     // list from the ROM's own pointer tables) decompressed by src/lz.c with both of C3/0557's costs, for
     // assets/extract_assets.py (CT_ASSET_LZ). `lzpack: N streams (M bytes), K skipped`.
     if (!strcmp(argv[i], "--lzpack") && i + 2 < argc) {
       long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
       FILE* li = fopen(argv[i + 1], "r"); FILE* lo = fopen(argv[i + 2], "wb");
+      FILE* ls = (i + 3 < argc && argv[i + 3][0] != '-') ? fopen(argv[i + 3], "w") : NULL;   // the offsets that are not streams
       if (!li || !lo) { printf("lzpack: cannot open the list or the output\n"); return 2; }
       static uint8_t buf[0x40000];
       uint32_t count = 0; long bytes = 0, skipped = 0; char line[64];
@@ -16561,14 +16562,14 @@ int main(int argc, char** argv) {
         if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
         uint32_t off = (uint32_t)strtoul(line, NULL, 16);
         size_t n = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
-        if (!n) { skipped++; continue; }
+        if (!n) { skipped++; if (ls) fprintf(ls, "%06X\n", off); continue; }
         int32_t c0 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), c1 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
         uint32_t nn = (uint32_t)n;
         fwrite(&off, 4, 1, lo); fwrite(&nn, 4, 1, lo); fwrite(&c0, 4, 1, lo); fwrite(&c1, 4, 1, lo); fwrite(buf, 1, n, lo);
         count++; bytes += (long)n;
       }
       fseek(lo, 4, SEEK_SET); fwrite(&count, 4, 1, lo);
-      fclose(li); fclose(lo);
+      fclose(li); fclose(lo); if (ls) fclose(ls);
       printf("lzpack: %u streams (%ld bytes), %ld skipped (not a stream)\n", count, bytes, skipped);
       return 0;
     }

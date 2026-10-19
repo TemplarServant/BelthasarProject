@@ -12,6 +12,7 @@
 // 4CD0) -- so the carry is one variable here, threaded through in program order, and every helper sets it the way the
 // instruction does. N is derived where a branch reads it (BMI/BPL after LDA/CMP/SBC/ADC: bit 15 of the result, M = 16).
 #include "seq_race.h"
+#include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -338,7 +339,7 @@ static void pgw16(R* r, unsigned page, unsigned off, unsigned v) { wr(r, page + 
 static void call3F59(R* r, unsigned page, const CtRaceIo* io) {
   uint8_t c = (uint8_t)(r->w[0x039B] + 1);
   r->w[0x039B] = c;
-  unsigned v = (io && io->rom && io->romLen > 0xFE00 + c) ? io->rom[0xFE00 + c] : 0;
+  unsigned v = io ? CtRomByte(io->rom, io->romLen, 0xFE00 + c) : 0;
   unsigned x = v & 0x0002;
   pgw16(r, page, 0x20, rd(r, 0x3F66 + x));
 }
@@ -462,8 +463,9 @@ void CtRaceTask42BD(uint8_t* w) {
 
 // The overlay, decompressed where C3:0000 puts it: `LDA $FE0003` (= C3:1313) -> $0300, `$7E:3000` -> $0303, JSL C3/0557.
 static int seqOverlay(uint8_t* w, const CtRaceIo* io) {
-  if (!io || !io->rom || io->romLen < 0x3E0006) return -1;
-  const uint8_t* p = io->rom + 0x3E0003;
+  if (!io || !io->rom) return -1;
+  const uint8_t* p = CtRomPtr(io->rom, io->romLen, 0x3E0003, 3);    // the $FE:0000 table (CT_ASSET_TABLE)
+  if (!p) return -1;
   uint32_t a = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
   size_t n = ct_lz_decompress_bounded(io->rom, (size_t)io->romLen, w + 0x3000, 0x10000 - 0x3000, ct_lz_hirom_offset(a));
   w[0x0300] = p[0]; w[0x0301] = p[1]; w[0x0302] = p[2];
@@ -609,7 +611,7 @@ unsigned CtSeqTaskFade(uint8_t* w, unsigned slot, unsigned task, const CtRaceIo*
 
 unsigned CtSeqSine(const CtRaceIo* io, unsigned a) {
   unsigned x = a & 0x03FF;
-  unsigned v = (io && io->rom && io->romLen > 0xF900 + 0x3FF) ? io->rom[0xF900 + x] : 0;
+  unsigned v = io ? CtRomByte(io->rom, io->romLen, 0xF900 + x) : 0;
   return x >= 0x0200 ? v : ((v ^ 0xFFFF) + 1) & 0xFFFF;
 }
 
@@ -679,7 +681,7 @@ void CtSeqCurtain01E4(uint8_t* w, unsigned x, const CtRaceIo* io) {
   int close = d[0x50] == 2;                                           // 027A LDA $50 / CMP #02 / BEQ
   c = d[0x50] >= 2;
   const uint8_t* rom = io ? io->rom : NULL; long romLen = io ? io->romLen : 0;
-  #define FE(i) ((rom && romLen > 0xFE00 + (long)(i)) ? rom[0xFE00 + (i)] : 0)
+  #define FE(i) CtRomByte(rom, romLen, 0xFE00 + (long)(i))
   for (;;) {
     y = (y - 1) & 0xFFFF;                                             // 0280 / 02AE DEY / BNE
     if (!y) {

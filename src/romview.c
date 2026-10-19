@@ -5,7 +5,7 @@
 #include <string.h>
 
 typedef struct { long start, len; const uint8_t* bytes; } RomTable;
-static RomTable g_tab[64];
+static RomTable g_tab[512];
 static int g_ntab;
 
 static int tabCmp(const void* a, const void* b) {
@@ -28,7 +28,7 @@ static int collect(const CtAssets* as, RomTable* out, int cap) {
   return n;
 }
 
-void CtRomViewUse(const CtAssets* as) { g_ntab = as ? collect(as, g_tab, 64) : 0; }
+void CtRomViewUse(const CtAssets* as) { g_ntab = as ? collect(as, g_tab, 512) : 0; }
 
 static const RomTable* find(long off) {
   int lo = 0, hi = g_ntab - 1;
@@ -56,8 +56,8 @@ uint8_t CtRomByte(const uint8_t* rom, long romLen, long off) {
 }
 
 long CtRomViewCompare(const uint8_t* rom, long romLen, const CtAssets* as) {
-  RomTable t[64];
-  int n = collect(as, t, 64);
+  static RomTable t[512];
+  int n = collect(as, t, 512);
   long bytes = 0;
   if (!n) { printf("tab-data: the container holds no table\n"); return -1; }
   for (int k = 0; k < n; k++) {

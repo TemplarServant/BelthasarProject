@@ -36,7 +36,9 @@ def ptr24(rom, at):
 # (assets/rom_closure.py). The work packages add theirs here.
 SOURCES = [
     rom_closure.location_streams,          # the location load: maps, tilesets, assemblies, BG3 assemblies, scripts
+    rom_closure.sequence_streams,          # the $C3 stages' packets through $FE:0000
 ]
+SKIPPED = os.path.join('saves', 'lz_pack.skipped')   # the listed offsets that are not streams (the raw blocks)
 
 
 def main():
@@ -53,7 +55,7 @@ def main():
         f.write('# tools/gen/lz_pack.py: %s\n' % ', '.join(per))
         f.writelines('%06X\n' % o for o in offs)
     exe = os.path.join(ROOT, 'build', 'ct.exe')
-    p = subprocess.run([exe, '--lzpack', LIST, OUT], cwd=ROOT, capture_output=True, text=True, timeout=300)
+    p = subprocess.run([exe, '--lzpack', LIST, OUT, SKIPPED], cwd=ROOT, capture_output=True, text=True, timeout=300)
     sys.stdout.write(p.stdout)
     if p.returncode or not os.path.exists(os.path.join(ROOT, OUT)):
         sys.stderr.write(p.stderr[-2000:])

@@ -204,10 +204,11 @@ check rom-census-attract; it only goes down).
 | the location load's LZ streams (maps, tilesets, assemblies), decompressed with both of C3/0557's costs | CT_ASSET_LZ (36) | `ct.exe --lzassets` |
 | the small tables: C0's trig, noise and wave tables, the location records, FD's tile-animation and colour-slot programs (their closure over every location), FF's window tiles, text palettes and naming grid | CT_ASSET_TABLE (37) | `ct.exe --tabassets` |
 | the location load (package A): every location's map, tilesets, assemblies, BG3 assemblies and script streams by the closure over the 512 records (assets/rom_closure.py), the pointer tables, the scene palettes, bank F6's colour tables, the exits (E5) and the treasure (F5); lz.c's, field_cost.c's and field.c's readers through romview.h | CT_ASSET_LZ, CT_ASSET_TABLE | `ct.exe --lzassets` / `--tabassets`, `tools/rom_free_cmp.py` (the attract's picture and sound, container vs ROM) |
+| the sequence stages and the gate warp (package B): the $FE:0000 packet table's streams (lz_pack.py) and raw blocks (the targets `ct.exe --lzpack` reports as not streams, each to the next target), $D2:0000, the gate warp's FD tables (their index ranges from src/seq_gwarp.c) | CT_ASSET_LZ, CT_ASSET_TABLE | `ct.exe --lzassets` / `--tabassets`, the stage checks, `tools/rom_free_cmp.py` |
 
 Each is served in place of the ROM's bytes (src/lz.h `ct_lz_use_assets`, src/romview.h `CtRomByte`/`CtRomPtr`) when
 the container holds it; `CT_LZ_FROM_ROM` / `CT_TABLES_FROM_ROM` / `CT_AUDIO_FROM_ROM` keep the ROM as the reference.
-The census after these: 282 of 1024 pages (it was 406). `CT_LZ_MISSLOG` + `tools/rom_census.py --lzmiss` list the LZ
+The census after these: 270 of 1024 pages (it was 406). `CT_LZ_MISSLOG` + `tools/rom_census.py --lzmiss` list the LZ
 streams still taken from the ROM, by caller -- the next packages' lists.
 
 ## What is never distributed, and why

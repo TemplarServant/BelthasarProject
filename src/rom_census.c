@@ -25,6 +25,7 @@ typedef struct {
 static CensusImage g_img[CENSUS_MAX_IMAGES];
 static int g_nimg;
 static uintptr_t g_exeBase;
+static char g_exeName[64] = "?";          // the executable's base name: a link map resolves only its own code
 
 static void censusWrite(void) {
   const char* p = getenv("CT_ROM_CENSUS");
@@ -39,11 +40,17 @@ static void censusWrite(void) {
     ); p = path; }
   FILE* f = fopen(p, "w");
   if (!f) return;
+#ifdef _WIN32
+  { extern __declspec(dllimport) char* __stdcall GetCommandLineA(void);
+    fprintf(f, "# %s\n", GetCommandLineA()); }               // which run (tools/rom_census.py sets apart the harness's)
+#endif
+  { extern char** environ; char** e = environ;               // ...and its CT_ switches (an oracle or a reference inside)
+    for (; e && *e; e++) if (!strncmp(*e, "CT_", 3)) fprintf(f, "# env %s\n", *e); }
   for (int k = 0; k < g_nimg; k++) {
     CensusImage* c = &g_img[k];
     for (long pg = 0; pg * CENSUS_PAGE < c->len; pg++)
-      if (c->seen[pg]) fprintf(f, "%06lX %s %llX\n", (unsigned long)(pg * CENSUS_PAGE), c->name,
-                               (unsigned long long)(c->code[pg] - g_exeBase));
+      if (c->seen[pg]) fprintf(f, "%06lX %s %llX %s\n", (unsigned long)(pg * CENSUS_PAGE), c->name,
+                               (unsigned long long)(c->code[pg] - g_exeBase), g_exeName);
   }
   fclose(f);
 }
@@ -101,6 +108,9 @@ uint8_t* CtRomCensusWrapMutable(uint8_t* img, long len, const char* name) {
   if (!g_nimg) {
 #ifdef _WIN32
     g_exeBase = (uintptr_t)GetModuleHandleA(NULL);
+    { char path[512] = ""; GetModuleFileNameA(NULL, path, sizeof path); const char* b = path;
+      for (const char* q = path; *q; q++) if (*q == '\\' || *q == '/') b = q + 1;
+      snprintf(g_exeName, sizeof g_exeName, "%s", b); }
     AddVectoredExceptionHandler(1, censusHandler);
 #else
     struct sigaction sa; memset(&sa, 0, sizeof sa);
