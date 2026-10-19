@@ -1723,6 +1723,9 @@ typedef struct { int addr; int ret[8]; int prio, dc, tb, wait;
 // at priority 0, `04 16 03`. Polled every visit, his fn3 never ran and the two waited on each other for good.)
 static int ssParked(const CtSS* s) { return s->waitObj >= 0 && s->callAddr >= 0 && s->addr == s->callAddr + 3; }
                                                  // call-and-WAIT until the callee finishes
+// Per-frame, transient -- outside the struct: the debug savestate writes CtScene raw, so its layout must not move.
+static uint8_t g_ranB0[64];                   // op 0xB0 / 0xAF dispatched in THIS frame's pass (C0/3002 ran)
+static uint8_t g_landedB0[64];                // this frame's visit ENDED on a B0 it did not dispatch (no conga)
 struct CtScene {
   uint8_t* raw; int rawLen, nobj, header, blen;
   const uint8_t* body;
@@ -2025,11 +2028,20 @@ static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
     // $0197/$0199/$019B = 02/06/08, i.e. objects 1, 3, 4 -- where the paraphrase says 1, 2, 3.
     // The operand is the ALREADY-DOUBLED slot index; measured over the 504 shipped scenes it is 0 at
     // all 30 of this op's sites, 0/2 for op 0x24 and 0/2/4 for op 0xA9, never odd.
+    // ⭐ THE LEAD'S TILE IS HIS WORDS' HIGH BYTE AS THE PASS FINDS THEM: `LDA $1801,X` / `LDA $1881,X` (C0/65B2-65BA) --
+    // last frame's commit, because the frame's own step lands later, at C0/A810 (C0/00D3, after the event pass). The port's
+    // host hands the lead's new position to fx/fy before the tick; the WRAM words take it only at the tick's A810 mirror,
+    // so the bytes are the ROM's. MEASURED, loc 120 below the castle stairs (saves/field_re/scene468_stairs_to_120.state,
+    // Down from f180, the port's keys a frame after): obj0's `22 00 09 0A` at f205 stores row 0A on the cartridge (the
+    // word 0AFF before the step to 0B0F) and Lucca's poll sees 0B from f209 -- her box at f211; reading fx stored 0B at
+    // f205 and opened it at f208 (ROADMAP F3).
     int po = vmSlotTarget(m, op, B[addr + 1]) / 2;            // TILE x/y -> op2/op3.
     if (po >= 0 && po < sc->nobj) {                           // drives the "wait for Crono to reach
-      w8(m, LOC + B[addr + 2] * 2, ((int)sc->fx[po] >> 4) & 0xFF);   // the spot" dialogue triggers
-      w8(m, LOC + B[addr + 3] * 2, ((int)sc->fy[po] >> 4) & 0xFF);   // (scene 1: Mom). LIVE pos = fx/fy
-    }                                                          // (the integrator updates fx, NOT actors[].x)
+      uint32_t X2 = (uint32_t)po * 2;                         // the spot" dialogue triggers (scene 1: Mom)
+      int wx = r8(m, 0x7E1800 + X2) | (r8(m, 0x7E1801 + X2) << 8), wy = r8(m, 0x7E1880 + X2) | (r8(m, 0x7E1881 + X2) << 8);
+      w8(m, LOC + B[addr + 2] * 2, (wx >> 8) & 0xFF);
+      w8(m, LOC + B[addr + 3] * 2, (wy >> 8) & 0xFF);
+    }
     return;
   }
   if (op == 0x21) {                                           // GetObjCoords (C0/65B0): object[op1/2]'s TILE
@@ -3146,6 +3158,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
   if (addr < 0 || addr >= blen) { s->addr = -1; return 1; }
   uint8_t op = B[addr]; int ln = opLen(B, addr);
   if (obj >= 0 && obj < 64) sc->atB0[obj] = (op == 0xB0 || op == 0xAF);   // both run C0/3002 (0xAF: C0/2FFD)
+  if (obj >= 0 && obj < 64 && (op == 0xB0 || op == 0xAF)) g_ranB0[obj] = 1;
   { dbgFlags(); if (gEnvTraceAll && (obj == gEnvTraceAllObj || gEnvTraceAllObj < 0))   // DEBUG: trace ops (incl branches); <0 = all objs
       fprintf(stderr, "  [run obj%d] t%d @%04X op=%02X p%d\n", obj, gVmTick, addr, op, s->prio); }
   if (gEnvTrace &&
@@ -6709,6 +6722,8 @@ void CtSceneTick(CtScene* sc) {
               sc->actors[trObj].cadPause, sc->mode[trObj] & 0xFF,
               (ts->addr >= 0 && ts->addr < sc->blen) ? sc->body[ts->addr] : 0xEE,
               sc->mem->l[0x13], sc->mem->l[0x12], sc->mem->l[0x15], sc->mem->l[0x14]); } }
+  if (!sndResuming) { memset(g_ranB0, 0, sizeof g_ranB0); memset(g_landedB0, 0, sizeof g_landedB0); }   // (a resumed
+                                                                // pass keeps what its first half dispatched)
   for (int qi = sndResuming ? sc->sndResumeN : 0; qi < nq; qi++) {   // no cut: C0/5A5D on the fixed virtual beam
     int n = order[qi];
     CtSS* s = &sc->st[n];
@@ -6737,6 +6752,7 @@ void CtSceneTick(CtScene* sc) {
     // (The old comment's "scene-1 Mom obj15 12/22/11" cannot be a per-visit ROM opcode count.)
     for (int k = 0; k < 5; k++)
       if (step(sc, n)) break;
+    if (n < 64) g_landedB0[n] = !g_ranB0[n] && s->addr >= 0 && s->addr < sc->blen && sc->body[s->addr] == 0xB0;
     // ⭐ C0/5ABC-5ABF `REP #20 / TXA / LDX $6D / STA $1180,X` -- the runner writes the object's SCRIPT
     // POINTER back to WRAM at the end of every visit (C0/59AB is the same store on the autorun path).
     // Ours kept the ip only in the C struct, so $1180,X in any state we SAVE was whatever the last
@@ -7347,8 +7363,7 @@ void CtSceneUpdateFollowers(CtScene* sc) {
   // Not modelled: a visit the runner's raster budget skipped (C0/5A5D) -- this pass runs once per frame.
   // Op 0xAF runs the same C0/3002 (C0/2FFD `JSR 3002 / INX`) and leaves the ip one byte PAST itself: a follower whose
   // visit last ran it (atB0, set for 0xB0 and 0xAF alike) sits right after an 0xAF.
-  #define CT_FOL_ON_B0(o) (sc->st[o].addr >= 0 && sc->st[o].addr < sc->blen && (sc->body[sc->st[o].addr] == 0xB0 \
-                           || (sc->atB0[o] && sc->st[o].addr >= 1 && sc->body[sc->st[o].addr - 1] == 0xAF)))
+  #define CT_FOL_ON_B0(o) (sc->st[o].addr >= 0 && sc->st[o].addr < sc->blen && (sc->body[sc->st[o].addr] == 0xB0                            || (sc->atB0[o] && sc->st[o].addr >= 1 && sc->body[sc->st[o].addr - 1] == 0xAF)))
   int haveAny = 0;
   for (int o = 0; o < sc->nobj; o++)
     if ((sc->mode[o] == 1 || sc->mode[o] == 2) && o != lead && sc->actors[o].hasPos && !sc->actors[o].dead)
@@ -7390,7 +7405,13 @@ void CtSceneUpdateFollowers(CtScene* sc) {
     for (int k = 0; k < sc->nobj; k++)
       if (k != lead && sc->mode[k] == member && sc->actors[k].hasPos && !sc->actors[k].dead) { o = k; break; }
     if (o < 0) continue;
-    int roaming = CT_FOL_ON_B0(o) && w[0x0138] == 0;    // C0/3002: the op ran, and $0138 let it through
+    // C0/3002 RUNS WHEN THE OP IS DISPATCHED: A26B / A2CE have no other caller. A follower whose visit this frame ENDED
+    // on its B0 without dispatching it -- a RETURN onto the B0 with the five-op budget spent (C0/5AB6) -- gets no conga
+    // that frame; its next visit runs it (landedB0). MEASURED, the attract's loc 0E6 (the rule's cartridge from boot, `--monitor 7E168C --writer` and
+    // `--followvm --obj 6`): Robo's fn7 ends `AD 20 / 4F 0C 0F / 4F 25 10 / 02 00 33 / 00` -- the wait's last pass plus
+    // four ops spend the visit at c7669, the ip lands on 06A2's B0, and C0:A21C (A1E9's idle chain, reached from the B0)
+    // zeroes $168C at c7670; the port zeroed it in the RETURN's frame (ROADMAP F2).
+    int roaming = CT_FOL_ON_B0(o) && !g_landedB0[o] && w[0x0138] == 0;   // C0/3002: the op ran, and $0138 let it through
     // ...BUT NOT A TICKET THE NEW FUNCTION HAS ALREADY ISSUED. This pass runs after the whole runner, so on the frame a
     // follower leaves its B0 its new function has had its visit: the REQ that moved it (op 0x02-0x07's preempt arm,
     // C0/6031+6034 = reqOp) cleared $1A80/$1A01 BEFORE that visit, and a move op in it armed a fresh pair, which C0/A810

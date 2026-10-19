@@ -551,3 +551,46 @@ does not call it and `move.c` is not linked into `Belthasar`. So this grades a p
 **not shipped engine behaviour** — which is also why porting the enqueue could not jam the live
 engine. The drain's *body* (`C0/CAD9` → the sprite assembler) remains unported; only its bookkeeping
 is derived above, from reading it. That body is still the blocker for `$0F01` proper.
+
+## The lead's words in the event pass: op 0x22 reads last frame's commit (2026-10-18, ROADMAP F3 closed)
+
+The ROM's frame: C0/881E (the controller: the lead's velocity, the camera's step) -> C0/00C4 the event pass -> C0/00D3
+C0/A810, whose C0/AAFD adds the velocity to `$1800/$1880` (the commit). So op 0x22 / 0x21 (C0/65EB / 65B0 -> 65B2 `LDA
+$1801,X` / `LDA $1881,X`) reads the lead's tile as LAST frame left it. The port's host steps the lead before the tick
+(fieldPlayerCollide -> CtSceneSetActorPosF: fx/fy), and the tick mirrors fx/fy into `$1800/$1880` only at its A810 point --
+so the WRAM words in the pass are the ROM's; the live op read fx/fy, a step ahead. It reads the words now (ct_vm.c, op
+0x22 / 0x21's live arm; the init pass already did).
+
+MEASURED, loc 120 below the castle stairs (saves/field_re/scene468_stairs_to_120.state, Down from f180; the port's keys a
+frame after the oracle's): the lead 0AFF -> 0B0F at f205; obj0's `22 00 09 0A` (every 4 frames) stores row 0A at f205 on
+the cartridge and 0B at f209; Lucca's touch-driven poll (her fn2 RETURN restoring slot 7 at 0A68) posts `C1` at f211 and
+`$0129` = 01 at f211, the window at f216, the typewriter f226, state 7 f232 -- the port the same on every frame (it had
+stored 0B at f205 and opened the box at f208: the "4 frames early" of F3, one of them the key phase). Check
+lockstep-scene120-stairs-entry-lucca, now pinned to the cartridge's values. ct.exe's `--vmdiff` injector writes the lead's
+and followers' words as well as fx/fy (it injects the previous frame's commit, which is what the pass reads).
+
+## The idle counter $0158 and the blink roll (2026-10-18)
+
+`C0/EC60` -- the wait every field loop ends its frame in (the main loop's C0/00BA, the fades', the return's, the styles')
+-- opens with `REP #20 / LDA $0158 / INC A / AND #83FF / STA $0158` (writer C0:EC6C). C0/0C1A zeroes it at a load (it
+does not count through the load's NMI-off frames), the lead's walk / run arms C0/A171 / A18C on every step. The idle chain
+C0/A1E9 (A1F7 `LDA $1F / BEQ ->A211`, A1FD `LDA $58` 16-bit) rolls at 2FF and -- once A22A's `TSB #8000` set bit 15 --
+at every 128th frame: `INC $F8 / LDA $FE00,X`, < 8 the blink (anim 21), else idle.
+
+The port never counted $0158, and its free-roam lead ran C0/9E84 on the collision page without $0158 / $01F8 / $011F
+(field.c, CtPlayerAnimSelect after C0/881E): no roll, no blink, the $FE00 cursor two draws short per 256 idle frames. Now
+field.c counts it on every field frame that reaches the wait (not in a fight, the world or a menu, not on a frame parked
+in a sound upload, not in the load's black) and hands the lead's 9E84 the scene's $0158 / $01F8 / $011F / $0162.
+MEASURED (scene468_stairs_to_120, no input, both sides): rolls at f532 / f660 (the blink, $1682 = 21) / f788 / ... f1300,
+$01F8 11..17 -- check field-idle-counter-and-blink-roll-vs-rule-cartridge. (The zero at the load lands a frame late in the
+port -- f26 for the cartridge's f25 -- under the load's black.)
+
+### Loc 434's decision box (ROADMAP F15): the capture's phase
+
+Under the rule with `ct.exe` (not CT_FIELDLOCK's real-time oracle) and the port's keys a frame after, the s434 capture is
+the cartridge's frame for frame through f579 ($0129, $0162, $0100). After the decision obj10's idle loop (cadence 4) posts
+its `BB` at f582 in the port, f583 on the cartridge: every cadence counter of the port runs a frame ahead from f0, because
+on THIS capture the cartridge's first frame after the state runs no main-loop iteration (`--monitor 7E1000` f0 = the saved
+bytes, `$0153` unflipped), where the scene468 capture's does (f0 already decremented, as the port). Input-driven events
+match, cadence-driven ones are a frame early -- the capture's phase, not the engine: a port start that skips its first
+iteration (as the fixtures' `pad` does for the recipes) would grade it.

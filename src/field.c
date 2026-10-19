@@ -17887,10 +17887,16 @@ int main(int argc, char** argv) {
           // first locked frame drew that.
           uint8_t* ls = (f.vm && CtSceneActorAtB0(f.vm, pObj)) ? CtSceneMem7E(f.vm) : NULL;
           if (ls) { g_collRam[0x1682] = ls[0x1680 + pObj * 2]; g_collRam[0x1683] = ls[0x1681 + pObj * 2];
-                    g_collRam[0x1603] = ls[0x1601 + pObj * 2]; }
+                    g_collRam[0x1603] = ls[0x1601 + pObj * 2];
+                    // ...and the two DP bytes 9E84's arms keep: the idle counter $0158/$0159 (A171 / A18C `STZ $58` on a
+                    // step, A22A `TSB $58` #8000 at the blink's roll; C0/EC60 counts it) and the $FE00 cursor $01F8 the
+                    // roll advances (A231 INC $F8) -- the scene's, which every other reader shares.
+                    g_collRam[0x0158] = ls[0x0158]; g_collRam[0x0159] = ls[0x0159]; g_collRam[0x01F8] = ls[0x01F8];
+                    g_collRam[0x011F] = ls[0x011F]; g_collRam[0x0162] = ls[0x0162]; }   // (A1E9's `LDA $62` / A1F7's `LDA $1F`)
           CtPlayerAnimSelect(g_collRam, fRom, (int)fRomLen, 2);   // C0/9E29's head: JSR C0/9E84
           if (ls) { ls[0x1680 + pObj * 2] = g_collRam[0x1682]; ls[0x1681 + pObj * 2] = g_collRam[0x1683];
-                    ls[0x1601 + pObj * 2] = g_collRam[0x1603]; }
+                    ls[0x1601 + pObj * 2] = g_collRam[0x1603];
+                    ls[0x0158] = g_collRam[0x0158]; ls[0x0159] = g_collRam[0x0159]; ls[0x01F8] = g_collRam[0x01F8]; }
           pfac = g_collRam[0x1600 + 2] & 3;
         } else { static int once; if (!once++)
           fprintf(stderr, "[lead] no ROM image: C0/9E84's facing arm cannot run -- the lead's facing will hold\n"); } }
@@ -18141,6 +18147,17 @@ int main(int argc, char** argv) {
     else if (gameOver && !battlePhase && f.vm) {      // ...what the defeat's passes DO run: C0/02A0's `JSR C0/00EB` (the camera,
       if (goPhase == 2) CtSceneDefeatFadeFrame(f.vm);  //   FD/C2C1, FD/E39C -- the room's colour animation goes on) and the fade's
       else CtSceneReturnWaitFrame(f.vm);               //   C0/881E + FD/FFF7
+    }
+    // C0/EC60, THE FIELD FRAME'S WAIT, opens with `REP #20 / LDA $0158 / INC A / AND #83FF / STA $0158`: every loop of the
+    // field -- the main loop's C0/00BA, the fades', the return's, the styles' -- ends its frame there, so $0158 counts the
+    // field's frames (writer C0:EC6C, `--monitor 7E0158 --writer`). C0/0C1A zeroes it at a load and the lead's walk / run
+    // arms C0/A171 / A18C on every step; the idle chain C0/A1FD reads it (the blink at 2FF, C0/A22A's TSB #8000 and the
+    // $FE00 roll every 128 frames after). The port never counted it, so the ROM's idle chain (ct_vm.c's op B0 ->
+    // CtPlayerAnimSelect on this WRAM) never reached the blink. A frame parked in a sound upload never reaches the wait.
+    if (f.vm && !battlePhase && !inWorld && !menuPhase && !CtSceneMainLoopParked(f.vm) && fade != 3) {   // (the load's NMI-off frames: no wait)
+      uint8_t* iw = CtSceneMem7E(f.vm);
+      int c = ((iw[0x0158] | (iw[0x0159] << 8)) + 1) & 0x83FF;
+      iw[0x0158] = (uint8_t)c; iw[0x0159] = (uint8_t)(c >> 8);
     }
     // THE SCRIPTED LEAD IS DRAWN WHERE THIS FRAME'S C0/A810 PUT HIM. The follow above (the lead's position while the script
     // drives him) read the VM before its tick, i.e. the previous frame's commit, and the lead is drawn from px/py -- one

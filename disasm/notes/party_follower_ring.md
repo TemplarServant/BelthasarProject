@@ -383,3 +383,15 @@ one frame label later (the monitors' f0 differ by a frame); before the fix it he
 Port (src/ct_vm.c): op 0xAF takes op 0xB0's branch (lead anim arm, touch probe) and then steps the ip (2FFD's INX);
 `atB0[]` is set for both; the follower gate `CT_FOL_ON_B0` accepts an ip on a `B0` or one byte past an `AF` whose visit
 just ran it. Pinned by `field-follower-on-op-af-follows-vs-oracle`.
+
+## The conga runs on the B0's DISPATCH (2026-10-18, ROADMAP F2 closed)
+
+C0/A26B / A2CE (and through them the idle chain C0/A1E9-A21F) have exactly one caller each, inside op 0xB0's C0/3002 --
+so a follower's frame of the conga is a frame its visit DISPATCHES the B0. The port ran it whenever the ip sat on a B0
+(CtSceneUpdateFollowers). MEASURED, the attract's loc 0E6 (the rule's cartridge from boot, `--monitor 7E168C:1,7E160C:2
+--writer` and `--followvm --obj 6`): Robo's fn7 waits `AD 20` from c7637 ($168C = 08), and at c7669 the wait's last pass
+plus `4F 0C 0F / 4F 25 10 / 02 00 33 / 00` spend the visit's five ops (C0/5AB6 `DEC $67` on every SEC op): the RETURN
+lands the ip on his prio-7 B0 at 06A2 and the visit ends; $168C stays 08, $160C ticks to 0303; at c7670 the B0 runs and
+C0:A21C zeroes $168C ($160C 0305). The port now skips the conga for a follower whose visit this frame ENDED on a B0 it did
+not dispatch (ct_vm.c g_landedB0; the flags live outside struct CtScene, which the debug savestate writes raw). Check
+attract-0e6-robo-idle-on-the-b0s-dispatch-vs-rule-cartridge (port f7616/f7617 = c7669/c7670).
