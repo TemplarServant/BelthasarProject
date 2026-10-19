@@ -7,7 +7,7 @@ r"""Every frame of the attract demo, port against cartridge: WHERE they diverge,
 The two sides are captured once per frame, as 128x112 thumbnails (the same record both harnesses write:
 [u32 frame][u16 $0100][128*112*3 RGB], 2x2 SNES pixels averaged):
 
-    cartridge  build/ct.exe --peek saves/attract_cena_inicial.state --frames 9110   PEEK_THUMBS / _EVERY=1
+    cartridge  build/ct.exe --peek saves/attract_cena_inicial.state --frames 9110   PEEK_THUMBS / _EVERY=1, CT_ORACLE_LOGICAL=1
     port       build/Belthasar.exe --assets ct_assets.dat --scene 433                 CT_SHOTS_THUMBS / _EVERY=1
                (interactive, CT_AUDIO_LOCKSTEP=1, stopped at f11400 by CT_SHOTS_EXIT -- the numbering
                tools/frame_region_cmp.py and every attract check use)
@@ -100,12 +100,14 @@ def _cached(path, key):
 
 def capture_cart(cache, fresh):
     path = os.path.join(cache, 'cart_every1.bin')
-    key = _stamp(STATE, ROM) + '|frames=%d' % CART_FRAMES
+    key = _stamp(STATE, ROM) + '|frames=%d|rule=1' % CART_FRAMES   # (the rule's cartridge: a cache taken without it is stale)
     if not fresh and _cached(path, key):
         return path
     print('attract-divergence: capturing the cartridge, every frame to f%d ...' % CART_FRAMES, flush=True)
     t0 = time.time()
-    env = dict(os.environ, PEEK_THUMBS=path, PEEK_THUMBS_EVERY='1')
+    # THE RULE'S CARTRIDGE (CLAUDE.md, the zelda3 model): the logical oracle is the truth every check grades against;
+    # a real-time capture puts the battles' lag frames into the timing (the 07D fight came out 56 frames 'longer').
+    env = dict(os.environ, PEEK_THUMBS=path, PEEK_THUMBS_EVERY='1', CT_ORACLE_LOGICAL='1')
     subprocess.run([CT, '--peek', STATE, os.path.join(cache, 'cart_last.raw'), '--frames', str(CART_FRAMES)],
                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not os.path.exists(path) or os.path.getsize(path) < DT.itemsize * 100:
