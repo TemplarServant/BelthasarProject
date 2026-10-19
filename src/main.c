@@ -780,10 +780,11 @@ static int runDatField(const char* datPath, int scene) {
     printf("  actor obj=%u sprite=%u pos=(%u,%u) facing=%u  idle=%df walk=%df\n",
            p[0], spr, x, y, p[7], an ? an[0] : 0, an ? an[1 + an[0] * 5] : 0);
   }
-  for (int i = 0; i < nexi && i < 4; i++) {
+  for (int i = 0; i < nexi; i++) {                      // every exit, with its box (the packed record's +4 / +6)
     const uint8_t* p = exi + 1 + (size_t)i * 16;
     uint32_t x = p[0] | (p[1] << 8), y = p[2] | (p[3] << 8), dest = p[9] | (p[10] << 8);
-    printf("  exit at (%u,%u) -> %s %u\n", x, y, p[8] ? "scene" : "world", dest);
+    printf("  exit at (%u,%u) size %ux%u -> %s %u\n", x, y, p[4] | (p[5] << 8), p[6] | (p[7] << 8),
+           p[8] ? "scene" : "world", dest);
   }
   CtAssetsClose(&a);
   return 0;

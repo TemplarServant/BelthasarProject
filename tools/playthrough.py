@@ -130,6 +130,48 @@ def ensure_states(legs, upto):
         print('playthrough: %s played on the cartridge (%d frames)' % (lg['name'], lg['frames']))
 
 
+def route_bfs(w, s, g, z):
+    """4-way BFS over the location's tiles on plane z: walkable = shape != 1 ($7E:30C0 >> 2) and plane ($7E:7040 & 3) == z
+    -- the ROM's own planes; a partial shape is tried (the cartridge decides). A list of tiles from s to g, or None."""
+    from collections import deque
+
+    def ok(tx, ty):
+        if not (0 <= tx < 64 and 0 <= ty < 64):
+            return False
+        o = (ty << 8) | tx
+        return ((w[0x30C0 + o] >> 2) & 0x3F) != 1 and (w[0x7040 + o] & 3) == z
+    prev = {s: None}
+    q = deque([s])
+    while q:
+        c = q.popleft()
+        if c == g:
+            break
+        for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            n = (c[0] + d[0], c[1] + d[1])
+            if n not in prev and (ok(*n) or n == g):
+                prev[n] = c
+                q.append(n)
+    if g not in prev:
+        return None
+    out, c = [], g
+    while c is not None:
+        out.append(c)
+        c = prev[c]
+    return out[::-1]
+
+
+def path_pad(path):
+    M = {(1, 0): 0x80, (-1, 0): 0x40, (0, 1): 0x20, (0, -1): 0x10}
+    out = []
+    for p0, p1 in zip(path, path[1:]):
+        m = M[(p1[0] - p0[0], p1[1] - p0[1])]
+        if out and out[-1][0] == m:
+            out[-1] = (m, out[-1][1] + 16)
+        else:
+            out.append((m, 16))
+    return out
+
+
 def find(legs, name):
     for i, lg in enumerate(legs):
         if lg['name'] == name:
@@ -301,6 +343,54 @@ def main():
         for k, v in chains(oracle_timeline(start, pad)).items():
             print('%-5s %s' % (k, ' '.join('%s@%d' % (x, f) for f, x in v)))
         print('try: %d frames from %s -> %s (picture build/_playthrough/try.png)' % (sum(n for _, n in pad), start, out))
+    elif a[0] == 'route':
+        # route <leg> "<prefix pad>" <tile x> <tile y> [--exit] [--max N]: follow a BFS over the location's tiles -- the
+        # cartridge's own planes, $7E:30C0 (shape: 1 = solid) and $7E:7040 (z = & 3) on the lead's plane $0155 -- from the
+        # lead's tile, a few tiles at a time (16 frames a tile), recomputed from where the lead stands after each stretch;
+        # when control is gone ($011F = 0: a visible enemy, a scene) A is mashed until it is back. Prints the whole pad.
+        i = find(legs, a[1])
+        if i > 0:
+            ensure_states(legs, i - 1)
+        pad = expand(a[2]) or [(0, 1)]
+        gx, gy = int(a[3]), int(a[4])
+        want_exit = '--exit' in a
+        cap = int(a[a.index('--max') + 1]) if '--max' in a else 300
+        start = start_of(legs, i)
+        cur = os.path.join(TMP, 'route.state')
+        oracle_play(start, pad, cur)
+        loc0 = None
+        for it in range(cap):
+            w = wram_of(cur)
+            loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
+            if loc0 is None:
+                loc0 = loc
+            if loc != loc0:
+                print('route: loc %03X reached after %d stretches' % (loc, it)); break
+            lead = w[0x0197]
+            tx, ty, z = w[0x1801 + lead], w[0x1881 + lead], w[0x0155]
+            if w[0x011F] == 0:                       # a fight or a scene: A until control is back
+                step = [(0x100, 2), (0, 18), (0x100, 2), (0, 18)]
+            elif (tx, ty) == (gx, gy) and not want_exit:
+                print('route: at (%d,%d)' % (tx, ty)); break
+            else:
+                path = route_bfs(w, (tx, ty), (gx, gy), z)
+                if not path:
+                    print('route: no tile path from (%d,%d) on plane %d' % (tx, ty, z)); break
+                if len(path) == 1 and want_exit:   # on the goal tile: push on in the last direction
+                    step = [(pad[-1][0] if pad[-1][0] in (0x10, 0x20, 0x40, 0x80) else 0x20, 16)]
+                else:
+                    step = path_pad(path[:4])
+            pad = pad + step
+            nxt = os.path.join(TMP, 'route_n.state')
+            oracle_play(cur, step, nxt)
+            os.replace(nxt, cur)
+        merged = []
+        for mk, n in pad:
+            if merged and merged[-1][0] == mk and mk != 0x100:
+                merged[-1][1] += n
+            else:
+                merged.append([mk, n])
+        print('pad: %s' % btnscript([tuple(x) for x in merged]))
     elif a[0] == 'walk':
         # walk <leg> "<prefix pad>" <tx> <ty> [--exit] [--lead=HEX]: the prefix from the leg's start, then tools/walkto.py
         # (the oracle's own collision, A* order) to the pixel or through the exit box; prints the whole pad.

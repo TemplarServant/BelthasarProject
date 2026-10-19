@@ -4149,7 +4149,9 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
     // stepped its +22 and the port did not: world 0's clouds ran one frame behind for the whole of every entry (the ferry
     // from the Truce pay, saves/ferry_re: every fourth frame one px apart).
     if (cls == 0x75C3 || cls == 0x75FD || cls == 0x7702 || cls == 0x77F2) {
-      if (c) owBg3Drift(c, ram, cls, B + 0x22);
+      if (c && owBg3Drift(c, ram, cls, B + 0x22)) {          // the visit's `$24` / `$2A` are WRAM in the ROM: kept there too
+        obPutW(ram + 0x24, c->bg3h); obPutW(ram + 0x2A, c->bg3v);
+      }
       int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
       continue;
     }

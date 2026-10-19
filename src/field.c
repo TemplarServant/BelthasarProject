@@ -1086,6 +1086,17 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
     // C2/2C1D's zeroing block, the part the object scripts key off: the world comes up as a
     // CUTSCENE and its own script opts into free roam with `13 7C 02 01`.
     w->wram[0x027C] = 0;
+    // 2C20-2C38 and 2C44-2C4D: the module's second byte, the scanner's state ($0280-$0282), the banner's name and its
+    // clear request ($1B58 / $1B59), `$1BF7`, and the scanner's three finds ($1B32 / $1B34 / $1B36 = FFFF); 2C57-2C59
+    // `LDA #04 / TRB $0294`. The port carried the field's values in: the playthrough's leg 14 (Truce Canyon onto 1F1)
+    // came up with the field's `$1B58` = 0A and `$0282` = 02, and the banner wrote "Leene Square" over the lead where the
+    // cartridge (`--monitor 7E1B58 --writer`: 00 at f2372, C2:2C35) shows none.
+    w->wram[0x027D] = 0;
+    w->wram[0x0280] = w->wram[0x0281] = w->wram[0x0282] = 0;
+    w->wram[0x1B58] = w->wram[0x1B59] = 0;
+    w->wram[0x1BF7] = 0;
+    memset(w->wram + 0x1B32, 0xFF, 6);
+    w->wram[0x0294] &= (uint8_t)~0x04;
     // 2C3B-2C41 `STZ $02B1 / $02B2 / $02B3`: the lead's and the two followers' idle counters (the fidget at $F0,
     // C2/35BD / C2/3C97 / 3CB7) start from zero on every world load, not from what the field left there.
     w->wram[0x02B1] = w->wram[0x02B2] = w->wram[0x02B3] = 0;

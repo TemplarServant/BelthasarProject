@@ -250,3 +250,15 @@ $1B31` -- the cursor of C2/2336 (`LDX $1B30 / LDA $C0FE00,X / INC $1B30`), the b
 (C2/7598) take. The port's world entry did not clear it and carried the field's value in. MEASURED (the playthrough's leg 03,
 Crono's house onto 1F0, `--monitor 7E1B30 --writer`): 00 at f1116 (C2:2332), then 02, 04, .. at each gull; the port started
 from 40 and every gull flew elsewhere. field.c's world init clears it in the ROM's order.
+
+## The world load's zeroing block, C2/2C1D (2026-10-19)
+
+`STZ $027C / $027D / $47 / $48 / $49 / $0280 / $0281 / $0282 / $1B58 / $1B59 / $1BF7 / $02B1 / $02B2 / $02B3`, then
+`LDX #FFFF / STX $1B32 / $1B34 / $1B36`, `$02AE = $7E29AE`, `LDA #04 / TRB $0294` -- the scanner's state, the banner's name
+and clear request, the scanner's three finds. The port wrote only $027C and $02B1-3 and carried the field's other bytes in.
+MEASURED (the playthrough's leg 14, Truce Canyon onto 1F1, `--monitor 7E1B58,7E1B32,7E0282 --writer`): 00 / FFFF / 00 at
+f2372 (C2:2C35 / 2C4A / 2C32); the port kept the field's `$1B58` = 0A and `$0282` = 02, and the banner (C2/5628) wrote
+"Leene Square" over the lead. field.c's world init now writes the whole block.
+
+The BG3 drift (C2/75C3 / 75FD / 7702 / 77F2) stores `$24` / `$2A` back into WRAM (C2/7737-774F); the port kept them in its
+camera only. world.c's object pass writes them after each visit (no picture change: the renderer reads the camera).
