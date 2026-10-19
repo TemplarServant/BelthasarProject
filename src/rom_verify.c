@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rom_verify.h"
+#include "rom_census.h"
 
 static uint32_t rol(uint32_t x, int n) { return (x << n) | (x >> (32 - n)); }
 
@@ -66,7 +67,7 @@ static const uint8_t* romTry(const char* path, long* len) {
   const uint8_t* img = CtRomVerify(buf, &n, path);
   if (!img) { free(buf); return NULL; }
   *len = n;
-  return img;                                                   // kept for the process' lifetime
+  return CtRomCensusWrap(img, n, "rom_verify");                 // kept for the process' lifetime (CT_ROM_CENSUS: guarded)
 }
 
 const uint8_t* CtRomImage(long* len) {

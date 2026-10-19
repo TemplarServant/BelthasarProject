@@ -35,6 +35,7 @@ void CtHdmaTableBuild(uint8_t* wram128);   // ct_vm.c: `JSL FD/C2C1`, the field'
 //  reads the ROM track/probe/facing tables directly, battle_ai_interp.md §11b.)
 #include "tables/battle_dissolve.h"  // enemy-death dissolve: CT_DISSOLVE_STEPS + the matrix (battle_dissolve.md PART 2)
 #include "rom_verify.h"
+#include "rom_census.h"
 #include "tables/battle_trig.h"  // enemy-movement trig tables: ctBattleAtanTab/SinTab/FaceTab (battle_enemy_move_target.md §A)
 
 // ---------------------------------------------------------------- ROM tables
@@ -55,6 +56,7 @@ int CtBattleLoadRom(const char* path) {
   gRom = buf; gRomLen = rl;
   CtRomSetPath(path);                                // the process-wide image (rom_verify.h) finds it here too
   CtRomApplyMemPatch(gRom, gRomLen);                 // a measuring tool's instrumentation (CT_ROM_MEMPATCH), after the check
+  gRom = CtRomCensusWrapMutable(gRom, gRomLen, "battle");   // CT_ROM_CENSUS: the pages this image's readers touch
   return 1;
 }
 const uint8_t* CtBattleRom(long* lenOut) { if (lenOut) *lenOut = gRomLen; return gRom; }

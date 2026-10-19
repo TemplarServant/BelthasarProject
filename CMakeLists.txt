@@ -33,7 +33,7 @@ endif()
 
 # The playable host's sources (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake).
 set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
-                 src/move.c src/audio.c src/sound/driver.c src/sound/lockstep.c src/sound/machine.c src/sound/coro.c src/sound/timing.c src/sound/timing_build.c src/sound/mixer.c src/sound/mixer_dsp.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
+                 src/move.c src/audio.c src/sound/driver.c src/sound/lockstep.c src/sound/machine.c src/sound/coro.c src/sound/timing.c src/sound/timing_build.c src/sound/mixer.c src/sound/mixer_dsp.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
 
 # CT_DATAFREE=ON: Belthasar loads the generated tables (src/data/*.h) from the player's pack instead of compiling them
 # in (docs/ROM.md). ct.exe and the other tools always compile the real headers.
@@ -48,7 +48,7 @@ endif()
 
 add_executable(ct
   src/main.c
-  src/ct_cpu_infra.c src/rom_verify.c
+  src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c
   src/ct_shadow.c  # --shadow: the routine-level shadow (docs/SHADOW_PROPOSAL.md)
   src/ct_lake_state.c
   src/harness_drive.c
@@ -103,7 +103,7 @@ endif()
 # reader, the state loader and --fb's play script. `ct` depends on it, so the two are always built together.
 add_executable(ct_oracle
   src/main.c
-  src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/harness_drive.c
+  src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/ct_lake_state.c src/harness_drive.c
   ${SNES_SRC}
 )
 target_compile_definitions(ct_oracle PRIVATE CT_ORACLE_ONLY)
@@ -214,6 +214,9 @@ if(CT_SDL_INC)
     endif()
   else()
     target_sources(Belthasar PRIVATE src/overlay_stub.c src/launcher_ui_stub.c)
+  endif()
+  if(MSVC)   # the link map: tools/rom_census.py names the function behind each ROM read (CT_ROM_CENSUS)
+    target_link_options(Belthasar PRIVATE "/MAP:$<TARGET_FILE_DIR:Belthasar>/Belthasar.map")
   endif()
   # THE PLAYER'S START (src/launcher.h): the data folder, and the ROM screen that makes the game's data from their dump.
   target_sources(Belthasar PRIVATE src/launcher.c)
