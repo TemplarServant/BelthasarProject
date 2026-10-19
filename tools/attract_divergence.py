@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""Every frame of the attract demo, port against cartridge: WHERE they diverge, and of WHAT kind.
 
-    python tools/attract_divergence.py [--out DIR] [--vehicle lockstep|selftest] [--fresh-port] [--fresh-cart]
+    python tools/attract_divergence.py [--out DIR] [--vehicle lockstep|selftest|boot] [--fresh-port] [--fresh-cart]
                                         [--visit LOC] [--selftest]
 
 The two sides are captured once per frame, as 128x112 thumbnails (the same record both harnesses write:
@@ -127,7 +127,11 @@ def capture_port(cache, fresh, vehicle):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SHOTS_THUMBS=path, CT_SHOTS_THUMBS_EVERY='1')
     argv = [FIELD, '--assets', ASSETS, '--scene', '433']
-    if vehicle == 'lockstep':
+    if vehicle == 'boot':      # from power-on on an erased cart: the play clock and the seeds the cartridge's demo has
+        argv = [FIELD, '--assets', ASSETS, '--boot']
+        env.update(CT_AUDIO_LOCKSTEP='1', CT_SRAM=os.path.join(cache, 'fresh.srm'), CT_SRAM_FRESH='1',
+                   CT_SHOTS=os.path.join(cache, 'port_last'), CT_SHOTS_AT=str(PORT_FRAMES), CT_SHOTS_EXIT='1')
+    elif vehicle == 'lockstep':
         env.update(CT_AUDIO_LOCKSTEP='1', CT_SHOTS=os.path.join(cache, 'port_last'), CT_SHOTS_AT=str(PORT_FRAMES),
                    CT_SHOTS_EXIT='1')
     else:
@@ -653,11 +657,13 @@ def main():
     ap.add_argument('--cache', default=os.path.join('build', '_divergence', 'cache'))
     ap.add_argument('--fresh-port', action='store_true')
     ap.add_argument('--fresh-cart', action='store_true')
-    ap.add_argument('--vehicle', choices=('lockstep', 'selftest'), default='lockstep',
+    ap.add_argument('--vehicle', choices=('lockstep', 'selftest', 'boot'), default='lockstep',
                     help='lockstep (default): the interactive run with CT_AUDIO_LOCKSTEP=1, the numbering every attract '
                          'check uses. selftest: `--selftest --frames N`, which orders a transition\'s frames differently '
                          '(the curtain-close blink showed only there) but fights the demo battles synchronously, so its '
-                         'battle legs are not comparable.')
+                         'battle legs are not comparable. boot: `--boot` on an erased cart, so the port reaches the '
+                         'demo with the cartridge play clock ($0400, the F8 cursor) -- a cold `--scene 433` starts 22 '
+                         'ticks behind, which put e.g. the 01C auto-scroll shake (C0/91FD reads $0400) out of phase.')
     ap.add_argument('--visit', help='only this location (hex, e.g. 0AD)')
     ap.add_argument('--selftest', action='store_true')
     a = ap.parse_args()
