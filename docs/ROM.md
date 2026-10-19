@@ -95,13 +95,16 @@ its folder chooser, Android its setup activity). The game then runs from a data 
 | Folder | When |
 |---|---|
 | `CT_DATA_DIR` | set |
-| the executable's own folder | it already holds `ct_assets.dat` and the ROM (a portable copy) |
+| the executable's own folder | it already holds a ROM-free `ct_assets.dat` (or an older one with the ROM beside it): a portable copy |
 | `%APPDATA%\BelthasarProject\Belthasar\` / `~/.local/share/BelthasarProject/Belthasar/` | otherwise |
 
-It holds `Chrono_Trigger_USA_SNES.sfc`, `ct_assets.dat`, `ct_tables.dat` (a data-free build's), the battery save
-`ct_sram.srm`, `ct_settings.ini` and `setup.log`. While any of the game's files is missing, the ROM screen
-(src/launcher_ui.cpp, Dear ImGui; without ImGui the file dropped on the executable and the console) asks for the dump,
-verifies it (`CtRomVerify`), writes it to the folder and runs the setup with no compiler:
+It holds `ct_assets.dat`, `ct_tables.dat` (a data-free build's), the battery save `ct_sram.srm`, `ct_settings.ini`,
+`setup.log` and the copy of the dump the setup read (`Chrono_Trigger_USA_SNES.sfc`; the game itself does not need it
+once a ROM-free `ct_assets.dat` is there). While any of the game's files is missing, the setup screen
+(src/launcher_ui.cpp: a desktop form drawn with Dear ImGui -- the ROM file with Browse... and drag-and-drop, the data
+folder, the progress, Make the game data / Cancel / Try again / Play; without ImGui the file dropped on the executable
+and the console) asks for the dump, verifies it (`CtRomVerify`), writes it to the folder and runs the setup with no
+compiler ([RELEASE.md](RELEASE.md) builds the folder that holds the pieces below):
 
     <python> <kit>/tools/setup.py --rom <folder>/Chrono_Trigger_USA_SNES.sfc --no-build --oracle <ct.exe>
         --workdir <folder>/work --out <folder>
