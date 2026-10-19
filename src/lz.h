@@ -34,6 +34,14 @@ long ct_lz_rom_cycles(const uint8_t* data, size_t dataLen, size_t start, int dst
 
 size_t ct_lz_hirom_offset(unsigned addr24);   // 24-bit HiROM address -> file offset
 
+// THE STREAMS FROM THE ASSET CONTAINER (CT_ASSET_LZ): once set, a decompression or a cost asked of `rom` (the ROM image
+// the engine reads) at an offset the container holds is served from it -- the bytes and both costs as the ROM's stream
+// gives them -- and the ROM is not read. Streams it does not hold still come from `rom`. NULL clears it.
+
+void ct_lz_use_assets(const void* assets, const uint8_t* rom);
+// The container's entry for the stream at `start` (NULL = none): its decompressed bytes, length and two costs.
+const uint8_t* ct_lz_asset(size_t start, size_t* outLen, long* cyc7e, long* cyc7f);
+
 // What C0/A33B spends BUILDING the map after it decompresses it: the four plane copies and the
 // RLE fill, walked over the decompressed image `m` the way the ROM walks it, plus the routine's
 // fixed half (its 4032-byte MVN, derived, and a one-shot constant measured over five locations).

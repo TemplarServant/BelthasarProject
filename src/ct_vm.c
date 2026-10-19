@@ -2,6 +2,7 @@
 // run_func (the init subset: flow + memory + actor ops). Run over the packed bytecode it
 // reproduces the field actor placement the Python VM packs as CT_ASSET_ACTORS.
 #include <stdio.h>
+#include "romview.h"     // the ROM's small tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -1973,7 +1974,8 @@ static int fpPtr(CtScene* sc, int obj, int fn) {
 
 // memory + actor effects (the non-control ops), mirroring runFunc; coord ops also move
 // the live float position. Reused by _step for the main-loop body.
-#define kRandAngle (CtRomImage(NULL) + 0x00FE00)       // C0/FE00, the ROM's own table, read from the user's dump (op-0x7F RNG + AE2D)
+// C0/FE00, the ROM's own table (op-0x7F RNG + AE2D): the container's (CT_ASSET_TABLE), else the user's dump
+#define kRandAngle(i) (CtRomViewHas(0x00FE00) ? CtRomByte(NULL, 0, 0x00FE00 + (i)) : CtRomImage(NULL)[0x00FE00 + (i)])
 static int mvRandAngle(Mem* m);
 static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
   CtVmActor* a = &sc->actors[obj]; const uint8_t* B = sc->body; Mem* m = sc->mem; int ps;
@@ -2395,7 +2397,7 @@ static void mvIssueRegs(CtScene* sc, int obj, int anim) {
 static int mvRandAngle(Mem* m) {
   int c = (r8(m, 0x7E01F8) + 1) & 0xFF;                  // AE29 INC $F8 (8-bit: SEP #10 / M 8-bit)
   w8(m, 0x7E01F8, (uint8_t)c);
-  return kRandAngle[c];                                  // AE2D LDA $FE00,X
+  return kRandAngle(c);                                  // AE2D LDA $FE00,X
 }
 // ROM C0/5B95 (OBJECT-only -- it reads NO $7E/$7F map tile): a mover with collision enabled ($1C80
 // bit1, sc->coll) is blocked when the destination tile in its heading holds another SOLID object.

@@ -15,6 +15,18 @@
     },
     {
       "out": [
+        "saves/lz_pack.bin"
+      ],
+      "cmd": [
+        "tools/gen/lz_pack.py"
+      ],
+      "stage": "assets",
+      "status": "rom",
+      "compare": "ct_assets.dat",
+      "compare_doc": "T_LZ (36): the LZ streams the ROM's own pointer tables name, decompressed by src/lz.c with both of C3/0557's costs (ct.exe --lzpack); `ct.exe --lzassets ct_assets.dat` checks each against the ROM's stream."
+    },
+    {
+      "out": [
         "src/data/battle_trig.h"
       ],
       "cmd": [

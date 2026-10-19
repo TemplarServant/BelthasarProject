@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lz.h"
+#include "assets.h"
 
 #define LZ_NO_CAP ((size_t)-1)
 
@@ -38,8 +39,27 @@ static int lz_copy_bytes(const uint8_t* data, size_t dataLen, uint8_t* out, size
   return 1;
 }
 
+static const CtAssets* g_lzAssets;
+static const uint8_t* g_lzRom;
+void ct_lz_use_assets(const void* assets, const uint8_t* rom) { g_lzAssets = (const CtAssets*)assets; g_lzRom = rom; }
+const uint8_t* ct_lz_asset(size_t start, size_t* outLen, long* cyc7e, long* cyc7f) {
+  uint32_t n = 0;
+  const uint8_t* e = g_lzAssets ? CtAssetGet(g_lzAssets, CT_ASSET_LZ, (uint32_t)start, &n) : NULL;
+  if (!e || n < 12) return NULL;
+  uint32_t len = (uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24);
+  if (len + 12 != n) return NULL;
+  if (outLen) *outLen = len;
+  if (cyc7e) *cyc7e = (long)(int32_t)(e[4] | e[5] << 8 | e[6] << 16 | (uint32_t)e[7] << 24);
+  if (cyc7f) *cyc7f = (long)(int32_t)(e[8] | e[9] << 8 | e[10] << 16 | (uint32_t)e[11] << 24);
+  return e + 12;
+}
+
 size_t ct_lz_decompress_bounded(const uint8_t* data, size_t dataLen,
                                 uint8_t* out, size_t outCap, size_t start) {
+  if (data && data == g_lzRom) {                 // the ROM's stream: the container's copy, when it holds one
+    size_t n = 0; const uint8_t* e = ct_lz_asset(start, &n, NULL, NULL);
+    if (e) { if (n > outCap) return 0; memcpy(out, e, n); return n; }
+  }
   if (start + 2 >= dataLen) return 0;
   size_t compressed_size = ((size_t)data[start + 1] << 8) | data[start];
   size_t byte_pos = start + 2;
@@ -157,6 +177,10 @@ size_t ct_lz_hirom_offset(unsigned addr24) {
 }
 
 long ct_lz_rom_cycles(const uint8_t* data, size_t dataLen, size_t start, int dstBankOdd) {
+  if (data && data == g_lzRom) {
+    long c7e = 0, c7f = 0;
+    if (ct_lz_asset(start, NULL, &c7e, &c7f)) return dstBankOdd ? c7f : c7e;
+  }
   if (!data || start + 2 >= dataLen) return 0;
   size_t base = start;
   size_t x = base + 2;

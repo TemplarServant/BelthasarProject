@@ -190,6 +190,24 @@ loads them at startup from `ct_tables.dat`, which the setup makes from your dump
     (`menu_wingrad.h`; `src/menu.c` `mWinGrad`'s static `cache[]` and `built[]`). Both equal a table's dimension
     (`CT_MENU_WINLIST_N` is `ctMenuWinList`'s first), so they say nothing the storage does not.
 
+## The ROM-free runtime
+
+The goal (2026-10-18): once `ct_assets.dat` is extracted, the game needs the ROM for nothing -- each system reads
+DECODED assets made from the dump at setup, never the ROM image. Where it stands is measured, not guessed:
+`CT_ROM_CENSUS` guards the ROM images by page and records which code reads each one, and
+`python tools/rom_census_attract.py` prints how many of the ROM's 1024 pages the whole attract still reads (the
+check rom-census-attract; it only goes down).
+
+| Done | Asset types | Checked by |
+|---|---|---|
+| the sound: the driver as C, songs, samples, instruments, effect sets, its cost table | CT_ASSET_SND_* (28-35) | `ct.exe --sndassets`, the snd-assets-* and snddrv-* checks |
+| the location load's LZ streams (maps, tilesets, assemblies), decompressed with both of C3/0557's costs | CT_ASSET_LZ (36) | `ct.exe --lzassets` |
+| the small tables: C0's trig, noise and wave tables, the location records, FD's tile-animation and colour-slot programs (their closure over every location), FF's window tiles, text palettes and naming grid | CT_ASSET_TABLE (37) | `ct.exe --tabassets` |
+
+Each is served in place of the ROM's bytes (src/lz.h `ct_lz_use_assets`, src/romview.h `CtRomByte`/`CtRomPtr`) when
+the container holds it; `CT_LZ_FROM_ROM` / `CT_TABLES_FROM_ROM` / `CT_AUDIO_FROM_ROM` keep the ROM as the reference.
+The census after these: 307 of 1024 pages (it was 406).
+
 ## What is never distributed, and why
 
 The game's program, graphics, music, text and data are copyrighted by Square Enix. Anything that contains them, in

@@ -19,6 +19,7 @@
 #include "harness_drive.h"
 #include "boot.h"
 #include "lz.h"
+#include "romview.h"
 #include "scene.h"
 #include "assets.h"
 #include "ct_vm.h"
@@ -16546,6 +16547,73 @@ int main(int argc, char** argv) {
     // --sndassets <ct_assets.dat>: every datum the sound loader takes, from the ROM and from the container's CT_ASSET_SND_*
     // entries side by side (src/audio.c CtAudioDataCompare) -- `snd-data: N items identical`, or the first difference.
 #ifndef CT_ORACLE_ONLY      // (the slim oracle links neither the assets nor the audio)
+    // --lzpack <list> <out>: the LZ streams at the file offsets listed (hex, one a line; tools/gen/lz_pack.py makes the
+    // list from the ROM's own pointer tables) decompressed by src/lz.c with both of C3/0557's costs, for
+    // assets/extract_assets.py (CT_ASSET_LZ). `lzpack: N streams (M bytes), K skipped`.
+    if (!strcmp(argv[i], "--lzpack") && i + 2 < argc) {
+      long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      FILE* li = fopen(argv[i + 1], "r"); FILE* lo = fopen(argv[i + 2], "wb");
+      if (!li || !lo) { printf("lzpack: cannot open the list or the output\n"); return 2; }
+      static uint8_t buf[0x40000];
+      uint32_t count = 0; long bytes = 0, skipped = 0; char line[64];
+      fwrite("CTLZ", 1, 4, lo); fwrite(&count, 4, 1, lo);
+      while (fgets(line, sizeof line, li)) {
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
+        uint32_t off = (uint32_t)strtoul(line, NULL, 16);
+        size_t n = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
+        if (!n) { skipped++; continue; }
+        int32_t c0 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), c1 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
+        uint32_t nn = (uint32_t)n;
+        fwrite(&off, 4, 1, lo); fwrite(&nn, 4, 1, lo); fwrite(&c0, 4, 1, lo); fwrite(&c1, 4, 1, lo); fwrite(buf, 1, n, lo);
+        count++; bytes += (long)n;
+      }
+      fseek(lo, 4, SEEK_SET); fwrite(&count, 4, 1, lo);
+      fclose(li); fclose(lo);
+      printf("lzpack: %u streams (%ld bytes), %ld skipped (not a stream)\n", count, bytes, skipped);
+      return 0;
+    }
+    // --lzassets <ct_assets.dat>: every CT_ASSET_LZ entry against the ROM's own stream at its offset -- the bytes and
+    // both costs. `lz-data: N streams identical (bytes and both costs)`, or the first that is not.
+    if (!strcmp(argv[i], "--lzassets") && i + 1 < argc) {
+      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("lz-data: cannot open %s\n", argv[i + 1]); return 2; }
+      static uint8_t buf[0x40000];
+      long n = 0;
+      for (uint32_t k = 0; k < as.count; k++) {
+        const uint8_t* e = as.data + 12 + (size_t)k * 16;
+        uint32_t type = (uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24);
+        uint32_t off = (uint32_t)(e[4] | e[5] << 8 | e[6] << 16 | (uint32_t)e[7] << 24);
+        if (type != CT_ASSET_LZ) continue;
+        ct_lz_use_assets(&as, NULL);                       // read the container's entry, not the ROM's
+        size_t an = 0; long a0 = 0, a1 = 0; const uint8_t* ab = ct_lz_asset(off, &an, &a0, &a1);
+        ct_lz_use_assets(NULL, NULL);
+        size_t rn = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
+        long r0 = ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), r1 = ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
+        if (!ab || an != rn || memcmp(ab, buf, rn) || a0 != r0 || a1 != r1) {
+          printf("lz-data: the stream at %06X differs: container %zu bytes / %ld / %ld, ROM %zu / %ld / %ld\n",
+                 off, an, a0, a1, rn, r0, r1);
+          return 1;
+        }
+        n++;
+      }
+      printf("lz-data: %ld streams identical (bytes and both costs)\n", n);
+      return 0;
+    }
+    // --tabassets <ct_assets.dat>: every CT_ASSET_TABLE (the ROM's small tables, src/romview.h) byte for byte against
+    // the ROM. `tab-data: N tables, M bytes identical`.
+    if (!strcmp(argv[i], "--tabassets") && i + 1 < argc) {
+      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("tab-data: cannot open %s\n", argv[i + 1]); return 2; }
+      long nb = CtRomViewCompare(rimg, rl, &as);
+      if (nb < 0) return 1;
+      int nt = 0;
+      for (uint32_t k = 0; k < as.count; k++) {
+        const uint8_t* e = as.data + 12 + (size_t)k * 16;
+        if ((uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24) == CT_ASSET_TABLE) nt++;
+      }
+      printf("tab-data: %d tables, %ld bytes identical\n", nt, nb);
+      return 0;
+    }
     if (!strcmp(argv[i], "--sndassets") && i + 1 < argc) {
       CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
       if (!CtAssetsOpen(&as, argv[i + 1])) { printf("snd-data: cannot open %s\n", argv[i + 1]); return 2; }

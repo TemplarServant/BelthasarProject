@@ -74,6 +74,10 @@ T_SND_TIMING = 35  # id 0: the sound machine's cost table (saves/snd_timing.bin,
                    # code map marks as an instruction's are zero -- the game runs the driver in C
 T_SND_MISC = 34    # id 0: [song count u8] + the song-exception list ($C7:0AD8, through its bit-7 end)
                    # id 1: FD/C1EE's HDMA program as the loader clock reads it: DMAP x8, set A tables x8, set B x8 (u16)
+T_TABLE = 37       # id = a ROM table's start file offset: its bytes (pack_tables: each table's extent from the code
+                   #   that reads it, or by the closure over every location); src/romview.h serves the reads it covers
+T_LZ = 36          # id = an LZ stream's ROM file offset: [out len u32][cost $7E u32][cost $7F u32] + the stream decompressed
+                   #   (saves/lz_pack.bin, tools/gen/lz_pack.py: ct.exe --lzpack over the ROM's own pointer tables)
 
 def _strlist(strings):
     """Serialize a list of UTF-8 strings: [count u16][ {u16 len, bytes} ... ]."""
@@ -426,6 +430,87 @@ def pack_sprite_anims(rom, T):
                 b += bytes([sf[0] & 0xFF, sf[1] & 0xFF, sf[2] & 0xFF, sf[3] & 0xFF, delay & 0xFF])
         yield (T_SPRITEANIM, si, bytes(b))
 
+def _fd_tile_anim_end(rom):
+    """FD/DE98's program (FD:F310..): the last byte any location's records read (tileanim.c, the same walk)."""
+    mx = 0
+    for loc in range(512):
+        idx = rom[0x360001 + loc * 14] & 0x3F
+        x = rom[0x3DF290 + idx * 2] | rom[0x3DF291 + idx * 2] << 8
+        for _ in range(12):
+            t = 0x3DF310 + x
+            fc = rom[t]; mx = max(mx, t); x += 1
+            if fc == 0x80:
+                continue
+            mx = max(mx, 0x3DF310 + x + 1); x += 2
+            if fc == 2:
+                mx = max(mx, 0x3DF310 + x + 1); x += 2; mx = max(mx, 0x3DF310 + x + 3); x += 4
+            elif fc == 4:
+                mx = max(mx, 0x3DF310 + x + 3); x += 4; mx = max(mx, 0x3DF310 + x + 7); x += 8
+            else:
+                mx = max(mx, 0x3DF310 + x + 7); x += 8; mx = max(mx, 0x3DF310 + x + 15); x += 16
+    return mx + 1
+
+def _fd_obj_slot_ends(rom):
+    """FD/E292's set table (FD:F9C7) and descriptor stream (FD:FA77): the ends any location's walk reaches."""
+    mset = mdesc = 0
+    for loc in range(512):
+        ti = (rom[0x360003 + loc * 14] << 1) & 0xFF
+        mset = max(mset, 0x3DF9C8 + ti)
+        x = rom[0x3DF9C7 + ti] | rom[0x3DF9C8 + ti] << 8
+        for _ in range(6):
+            d = 0x3DFA77 + x
+            m = rom[d] & 0xF0; mdesc = max(mdesc, d)
+            if m == 0:
+                x += 1; continue
+            r0 = rom[d]; x += 3; mdesc = max(mdesc, 0x3DFA77 + x); x += 1
+            if m not in (0x10, 0x80):
+                continue
+            mdesc = max(mdesc, 0x3DFA77 + x + 2); x += 3
+            if m == 0x80:
+                n = (r0 & 0x0F) + 1; mdesc = max(mdesc, 0x3DFA77 + x + n - 1); x += n
+    return mset + 1, mdesc + 1
+
+def rom_tables(rom):
+    """(name, start, end) of every small table the engine reads through src/romview.h."""
+    ta_end = _fd_tile_anim_end(rom)
+    os_set_end, os_desc_end = _fd_obj_slot_ends(rom)
+    return [
+        ('C0 atan 32x32 (C0/F300)', 0x00F300, 0x00F700),
+        ('C0 facing (C0/F700)', 0x00F700, 0x00F800),
+        ('C0 sine (C0/F800)', 0x00F800, 0x00F940),
+        ('C0 trig step (C0/F900, index (A << 2) & 3FF)', 0x00F900, 0x00FD00),
+        ('C0 bit reverse (C0/FD00)', 0x00FD00, 0x00FE00),
+        ('C0 noise (C0/FE00, 8-bit index)', 0x00FE00, 0x00FF00),
+        ('C0 window wave (C0/FF30 + 4k + (step & 3E), k < 16)', 0x00FF30, 0x00FFAE),
+        ('location records (F6:0000, 512 x 14)', 0x360000, 0x360000 + 512 * 14),
+        ('FD tile-animation pointers (FD:F290, 64 words)', 0x3DF290, 0x3DF310),
+        ('FD tile-animation program (FD:F310, its closure)', 0x3DF310, ta_end),
+        ('FD colour-slot sets (FD:F9C7, its closure)', 0x3DF9C7, os_set_end),
+        ('FD colour-slot descriptors (FD:FA77, its closure)', 0x3DFA77, os_desc_end),
+        ('FF window tiles (FF:9E10, 8 x 0x280)', 0x3F9E10, 0x3F9E10 + 8 * 0x280),
+        ('FF text palettes (FF:B210, 8 x 16)', 0x3FB210, 0x3FB290),
+        ('FF naming grid (FF:C9AC, 80)', 0x3FC9AC, 0x3FC9FC),
+    ]
+
+def pack_tables(rom, T):
+    for _name, a, b in rom_tables(rom):
+        yield (T_TABLE, a, bytes(rom[a:b]))
+
+def pack_lz(rom, T):
+    lp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'saves', 'lz_pack.bin')
+    if not os.path.exists(lp):
+        return
+    d = open(lp, 'rb').read()
+    if d[:4] != b'CTLZ':
+        raise ValueError('saves/lz_pack.bin: not an LZ pack')
+    n, = struct.unpack_from('<I', d, 4)
+    o = 8
+    for _ in range(n):
+        off, ln, c0, c1 = struct.unpack_from('<IIii', d, o)
+        o += 16
+        yield (T_LZ, off, struct.pack('<Iii', ln, c0, c1) + d[o:o + ln])
+        o += ln
+
 def pack_mover(rom, T):
     yield (T_MOVER, 0, rom[0xF300:0xF700] + rom[0xF700:0xF800] + rom[0xF800:0xF940])
 
@@ -691,7 +776,7 @@ PACKERS = [pack_scene_palettes, pack_sprite_palettes, pack_scene_headers,
            pack_pal_anims, pack_tileset12, pack_tileset3, pack_maps,
            pack_strings, pack_dialogue, pack_portraits, pack_namesprites, pack_menufont,
            pack_actors, pack_collision, pack_exits, pack_sprite_anims, pack_font, pack_mover,
-           pack_sprites, pack_scripts, pack_world, pack_sound]
+           pack_sprites, pack_scripts, pack_world, pack_sound, pack_lz, pack_tables]
 
 def build(rom):
     T = {

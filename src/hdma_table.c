@@ -23,6 +23,7 @@
 // takes the carry the channel-7 builder's `LSR A` left (bit 0 of $7F:0351, C43C / C47A), each next one the previous
 // one's. Everywhere else the ROM sets the carry (CLC / SEC / CMP / ASL) before it reads it.
 #include "hdma_table.h"
+#include "romview.h"
 #include <stddef.h>
 
 typedef struct {
@@ -43,7 +44,7 @@ static void dp16(H* h, unsigned d, unsigned v) { dp8(h, d, v); dp8(h, d + 1, v >
 static unsigned ldp8(H* h, unsigned d) { return h->w[0x0100 + d]; }
 static unsigned ldp16(H* h, unsigned d) { return ldp8(h, d) | (ldp8(h, d + 1) << 8); }
 static unsigned romC0(H* h, unsigned a) {                                                                 // LDA $C0xxxx,X (16-bit)
-  return (a + 1 < (unsigned long)h->romLen) ? (unsigned)(h->rom[a] | (h->rom[a + 1] << 8)) : 0;
+  return (unsigned)(CtRomByte(h->rom, h->romLen, (long)a) | (CtRomByte(h->rom, h->romLen, (long)a + 1) << 8));   // (romview.h)
 }
 static unsigned adc16(H* h, unsigned a, unsigned v) { unsigned s = (a & 0xFFFF) + (v & 0xFFFF) + (unsigned)h->c; h->c = s > 0xFFFF; return s & 0xFFFF; }
 

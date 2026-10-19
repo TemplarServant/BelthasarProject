@@ -46826,6 +46826,71 @@
       "exclusive": true,
       "note_pass": "every Belthasar run of the quick tier sounds sample for sample and prints line for line the same on the game's sound machine as on the vendored SPC700 it replaced",
       "notes": "tools/snd_machine_cmp.py quick: each quick-tier check whose argv is build/Belthasar.exe, run twice (CT_AUDIO_SPC=ref / =machine) with CT_AUDIO_PCM, CT_NOPACE and CT_AUDIO_LOCKSTEP (the sound's own clock: a run paced by the wall clock plays as many frames as the host had time for, the reference's against itself neither); its own output files moved apart. The stdout compared but the engine's name, the sound RAM's hash (the machine keeps no code and no stack in it: the driver is C) and the wall-clock pacing line. A difference is the machine's defect: never re-pin it."
+    },
+    {
+      "name": "lz-assets-data-identical",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--lzassets",
+        "ct_assets.dat"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "lz-data: 488 streams identical (bytes and both costs)"
+      ],
+      "pin": [
+        "^lz-data: "
+      ],
+      "timeout_s": 120,
+      "note_pass": "every LZ stream ct_assets.dat holds (CT_ASSET_LZ, tools/gen/lz_pack.py over the ROM's own pointer tables) decompresses to the ROM stream's bytes and prices both of C3/0557's arms as src/lz.c does on the ROM",
+      "notes": "P0b of the ROM-free runtime (memory rom-free-runtime-goal). The count grows as packages add their tables to lz_pack.py SOURCES: re-pin the count then; a difference is never re-pinned."
+    },
+    {
+      "name": "tab-assets-data-identical",
+      "tier": "quick",
+      "argv": [
+        "build/ct.exe",
+        "--tabassets",
+        "ct_assets.dat"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "tab-data: 15 tables, 18983 bytes identical"
+      ],
+      "pin": [
+        "^tab-data: "
+      ],
+      "timeout_s": 60,
+      "note_pass": "every small ROM table ct_assets.dat holds (CT_ASSET_TABLE: C0's trig, noise and wave tables, the location records, FD's tile-animation and colour-slot programs by their closure, FF's window tiles, text palettes and naming grid) is the ROM's byte for byte",
+      "notes": "P1 of the ROM-free runtime. src/romview.h serves the reads these cover. The count grows as packages add tables (extract_assets.py rom_tables): re-pin then; a difference is never re-pinned."
+    },
+    {
+      "name": "rom-census-attract",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/rom_census_attract.py"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "rom-census: 307 of 1024 pages read (1228 KB) over 1 runs"
+      ],
+      "pin": [
+        "^rom-census: [0-9]+ of 1024"
+      ],
+      "timeout_s": 1500,
+      "note_pass": "the ROM-free runtime's scoreboard: the pages of the ROM the whole attract still reads (CT_ROM_CENSUS), per bank and per reader in the output",
+      "notes": "The goal is 0 (memory rom-free-runtime-goal). Each package that moves a system into ct_assets.dat lowers it: re-pin DOWNWARD with the package's commit. A rise is a regression -- never re-pin it up. Baseline 406 (P0a), 310 after P0b's location streams, 307 after P1."
     }
   ],
   "excluded": [

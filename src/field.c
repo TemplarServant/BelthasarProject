@@ -22,6 +22,7 @@
 #define SDL_MAIN_HANDLED
 #endif
 #include "rom_verify.h"
+#include "romview.h"     // the ROM's small tables from ct_assets.dat (CT_ASSET_TABLE)
 #include "SDL.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -3649,7 +3650,8 @@ static int nameBuildFrames(void) {
 // 0x3FC9AC), index = row*10 + col, in CT charset bytes (cGlyph maps 0xA0+ directly). The
 // player moves a cursor over it; A types a char (max 5), B backspaces, accept confirms ->
 // the 5-char name is written to the char's $7E:2C23 buffer (here CtSetName).
-#define NAME_GRID (CtRomImage(NULL) + 0x3FC9AC)          // the ROM's own table, from the user's dump
+// the ROM's own naming grid (FF:C9AC, 80 bytes): the container's (CT_ASSET_TABLE), else the user's dump
+#define NAME_GRID (CtRomViewHas(0x3FC9AC) ? CtRomPtr(NULL, 0, 0x3FC9AC, 80) : CtRomImage(NULL) + 0x3FC9AC)
 // CT charset byte -> ASCII (inverse of parse_character) so typed names stay plain ASCII in
 // the name table (every grid char has an ASCII form).
 static char ctToAscii(uint8_t c) {
@@ -5405,7 +5407,7 @@ static uint8_t g_winRom[256 * 80 * 3];
 static int g_winRomColour = -1;
 static void fieldWindowFromRom(const uint8_t* s) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-  if (!s || !rom || rl < 0x3FB210L + 0x80) return;               // no ROM: the lift stays
+  if (!s || !CtRomPtr(rom, rl, 0x3F9E10L, 8 * 0x280) || !CtRomPtr(rom, rl, 0x3FB210L, 0x80)) return;   // no ROM: the lift stays
   int v = s[0x2991] & 7;
   if (v == g_winRomColour) return;
   uint16_t map[320]; int n = 0;                                   // C0/29F7, write for write
@@ -5427,8 +5429,8 @@ static void fieldWindowFromRom(const uint8_t* s) {
   }
   W29F7(0xF8, 0x20); for (int k = 0; k < 15; k++) { W29F7(0xF9, 0x20); W29F7(0xFA, 0x20); } W29F7(0xFB, 0x20);
 #undef W29F7
-  const uint8_t* tl = rom + 0x3F9E10L + (long)v * 0x280;          // C0/6E5C's source
-  const uint8_t* cw = rom + 0x3FB210L + (long)v * 16;             // C0/70E9: colour p of row 0 = word p of the record
+  const uint8_t* tl = CtRomPtr(rom, rl, 0x3F9E10L + (long)v * 0x280, 0x280);   // C0/6E5C's source
+  const uint8_t* cw = CtRomPtr(rom, rl, 0x3FB210L + (long)v * 16, 16);   // C0/70E9: colour p of row 0 = word p of the record
   for (int y = 0; y < 80; y++) {
     int ramp = (y >= 79) ? 0 : (y < 40) ? 8 - y / 5 : -((y - 40) / 5);
     for (int x = 0; x < 256; x++) {
@@ -5466,9 +5468,11 @@ static void fieldPaletteRows(uint8_t* s, int loc) {
 }
 static void fieldPaletteText(uint8_t* s) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-  if (!s || !rom) return;
-  { size_t t = 0x3FB210u + (size_t)(s[0x2991] & 7) * 16 + 2;                    // 70E9-7107
-    if (t + 0x1E <= (size_t)rl) memcpy(s + 0x2002, rom + t, 0x1E); }
+  if (!s) return;
+  { long t = 0x3FB210L + (long)(s[0x2991] & 7) * 16 + 2;                       // 70E9-7107
+    const uint8_t* src = CtRomPtr(rom, rl, t, 0x1E);
+    if (!src) return;
+    memcpy(s + 0x2002, src, 0x1E); }
   fieldWindowFromRom(s);                                                       // (C0/6E5C / C0/29F7, same load)
   s[0x2012] = 0x63; s[0x2013] = 0x0C; s[0x2014] = 0xC6; s[0x2015] = 0x18; s[0x2016] = 0x9C; s[0x2017] = 0x73;   // 7108-7119
   memcpy(s + 0x2200, s + 0x2000, 0x200);                                       // 711D-712A: `LDA #01FF / MVN $7E,$7E`, the whole page (the OBJ rows carry C2/834D's weapon colours)
@@ -6781,8 +6785,7 @@ static void battleHudRenderStrip(uint8_t* fb, const uint8_t* mem, const uint8_t*
   //    bit 6 halves. MEASURED: GATO's p600 (colour 0) and the tank's c3000 (colour 6) give the cartridge's strip on every
   //    pixel outside the BG3 glyph ink.
   long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
-  const uint8_t* winTiles = (rom && romLen >= 0x3F9E10L + 8 * 0x280)
-                          ? rom + 0x3F9E10L + (long)(mem[0x2991] & 7) * 0x280 : NULL;   // C0/6E5C's source
+  const uint8_t* winTiles = CtRomPtr(rom, romLen, 0x3F9E10L + (long)(mem[0x2991] & 7) * 0x280, 0x280);   // C0/6E5C's source
   uint8_t mathOp[CT_BHUD_H], mathFix[CT_BHUD_H][3];
   {
     int sy0 = CT_BHUD_Y0 + g_bhudStripDy, acc = 0, ind = 0, n = 0, rep = 0, a = 0xC948;
@@ -10652,6 +10655,12 @@ int main(int argc, char** argv) {
     if (romOk) { CtSceneSetEnemyRecTable(CtBattleFieldEnemyRecs(), 256 * 10);
       long rl = 0; const uint8_t* rb = CtBattleRom(&rl);          // + the full image for the load-op
       CtSceneSetRomImage(rb, rl); } }                             //   gfx/palette allocator mirrors
+  // THE LZ STREAMS FROM THE CONTAINER (CT_ASSET_LZ, src/lz.h): a decompression of the ROM image's stream is served
+  // from ct_assets.dat when it holds that stream (the bytes and both of C3/0557's costs); CT_LZ_FROM_ROM=1 keeps the ROM.
+  { long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
+    if (rb && !getenv("CT_LZ_FROM_ROM")) ct_lz_use_assets(&assets, rb); }
+  // THE ROM'S SMALL TABLES FROM THE CONTAINER (CT_ASSET_TABLE, src/romview.h); CT_TABLES_FROM_ROM=1 keeps the ROM.
+  if (!getenv("CT_TABLES_FROM_ROM")) CtRomViewUse(&assets);
   g_ctVramSink = fieldVramSink;                                   // the caption plane's DMAs (move.c) into this VRAM image
 
   // ---- CT_BATTLE_RENDERWRAM=<128KB wram>: render the 3-PC PART-2 battle SURFACE (PC idle stances +

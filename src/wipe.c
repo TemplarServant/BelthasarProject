@@ -5,6 +5,7 @@
 // reads the carry the previous line's `CPX $F4` (or the mode's `CMP #02`) left. D = $0300 throughout (C3/01EC `LDA #0300
 // / TCD`), so `$50`.. are $0350.. and `$F0`.. are $03F0..; C3/02DD's absolutes go through the caller's data bank.
 #include "wipe.h"
+#include "romview.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -16,7 +17,7 @@ static uint8_t rd(const WipeBus* b, uint32_t a) {
   if (!(k & 0x40) && o < 0x2000) return b->w[o];                      // banks 00-3F / 80-BF: the low WRAM
   if ((k & 0x40) || o >= 0x8000) {                                     // HiROM
     long r = ((long)(k & 0x3F) << 16) | o;
-    return (b->rom && r < b->romLen) ? b->rom[r] : 0;
+    return CtRomByte(b->rom, b->romLen, r);                            // (romview.h)
   }
   return 0;
 }

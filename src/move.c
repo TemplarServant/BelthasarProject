@@ -1,5 +1,6 @@
 // move.c — the CT field actor movement tick (the move-step handler). See move.h + field_tick.md.
 #include <stdio.h>
+#include "romview.h"     // the ROM's small tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <stdlib.h>
 #include "move.h"
 #include "oam.h"   // CtMoveDirAngle (the atan2 heading, C0/ABA2)
@@ -122,7 +123,7 @@ void CtBuildVelocityPriority(uint8_t* r, const uint8_t* rom, int idx) {
       // test at ADB4 exists at all: the ADFA arm simply has no BMI.
       if ((r[0x1C80 + idx] & 1) && (r[0x01E5] & 0x80)) {  // ADB4 BMI ->AE27
         r[0x01F8] = (uint8_t)(r[0x01F8] + 1);             // AE29 INC $F8
-        r[0x01EE] = rom[0xFE00 + r[0x01F8]];              // AE2D LDA $FE00,X / AE31 STA $EE
+        r[0x01EE] = CtRomByte(rom, 0x10000, 0xFE00 + r[0x01F8]);   // AE2D LDA $FE00,X / AE31 STA $EE
         continue;                                          // AE34 BRL ->AE37 -- run the second copy
       }
     } else if (r[0x01E5] & 0x80) {
@@ -1131,7 +1132,7 @@ static void ctAnimIdleChain(uint8_t* r, const uint8_t* rom, int romLen, int y) {
   r[0x0158] = (uint8_t)v; r[0x0159] = (uint8_t)(v >> 8);
   int t = (r[0x01F8] + 1) & 0xFF;                                 // A22F SEP #20 / A231 INC $F8
   r[0x01F8] = (uint8_t)t;
-  int a = (0xFE00 + t < romLen) ? rom[0xFE00 + t] : 0;            // A233 LDA $F8 / TAX / A236 LDA $FE00,X
+  int a = CtRomByte(rom, romLen, 0xFE00 + t);                     // A233 LDA $F8 / TAX / A236 LDA $FE00,X
                                                                   //   DB = $00 and bank $00:$FE00 mirrors
                                                                   //   $C0:$FE00 = file offset $FE00.
   if (a >= 0x08) { ctAnimMode(r, y, 0x00); return; }              // A239 CMP #08 / A23B BCS ->A211
@@ -3430,7 +3431,7 @@ int CtVmRandOp7F(uint8_t* r, const uint8_t* rom, int romLen, const uint8_t* scri
         r[0x01F8] = (uint8_t)t;                             // 6D0E STA $F8
         // DB = $00 and bank $00:$FE00 mirrors $C0:$FE00 = file offset $FE00, the same convention
         // every other rom[] read in this file uses.
-        int b = (0xFE00 + t < romLen) ? rom[0xFE00 + t] : 0;         // 6D11 LDA $FE00,X
+        int b = CtRomByte(rom, romLen, 0xFE00 + t);                 // 6D11 LDA $FE00,X
         r[0x01D9] = (uint8_t)b;                             // 6D14 STA $D9
         int v = script[ip + 1];           // 6D18
         r[0x10200 + ((v * 2) & 0xFFFF)] = (uint8_t)b;       // 6D21 ASL A / 6D27 STA $7F0200,X (8-bit)

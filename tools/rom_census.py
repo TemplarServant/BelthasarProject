@@ -28,7 +28,7 @@ PACKAGE = {                                   # the plan's work packages, by the
     'ct_vm.c': 'D sprites / P1', 'lz.c': 'A scene load', 'field_cost.c': 'A scene load', 'field.c': 'field (A/E/P1)',
     'menu.c': 'E text+menus', 'menu_cost.c': 'E text+menus', 'vwf.c': 'E text+menus', 'world.c': 'F overworld',
     'tileanim.c': 'P1 small tables', 'hdma_table.c': 'P1 small tables', 'wipe.c': 'P1 small tables',
-    'audio.c': 'sound', 'title_intro.c': 'B sequences', 'scene.c': 'A scene load', 'ct_shadow.c': 'debug',
+    'audio.c': 'sound', 'romview.c': 'a table read no CT_ASSET_TABLE covers (the reader is its caller)', 'title_intro.c': 'B sequences', 'scene.c': 'A scene load', 'ct_shadow.c': 'debug',
 }
 
 

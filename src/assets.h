@@ -65,6 +65,11 @@
 #define CT_ASSET_SND_TIMING     35  // id 0: the sound machine's cost table (src/sound/timing.h "SNDT": the reachable
                                     //   instructions' cycles and accesses, block 0's code map), made at setup by
                                     //   `ct.exe --sndtiming` (tools/gen/snd_timing.py); block 0 (SND_BOOT 0) then keeps only its data
+#define CT_ASSET_LZ             36  // id = an LZ stream's ROM file offset (its size word): the stream DECOMPRESSED, and what
+                                    //   C3/0557 spends on it: [out len u32][cycles $7E u32][cycles $7F u32] + the bytes
+                                    //   (tools/gen/lz_pack.py: ct.exe --lzpack; src/lz.c serves it for the ROM's stream)
+#define CT_ASSET_TABLE          37  // id = a ROM table's start file offset: its bytes (assets/extract_assets.py pack_tables, the
+                                    //   extent from the code that reads it); src/romview.h serves reads it covers
 #define CT_ASSET_WORLDSPR       18  // id = 0; the overworld player sprite atlas captured from the
                                     //   oracle: [n u8] then {facing,parity,moving,w,h u8, ox,oy i8,
                                     //   w*h*4 RGBA} per frame (keys: facing 0-3 U/D/L/R, step
