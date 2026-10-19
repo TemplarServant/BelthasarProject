@@ -110,3 +110,33 @@ Validated: 106 pad variants from the capture on both sides (Up/A timings, held A
 IPs and Crono's anim bytes): the three A-on-f22 variants went from Crono's fn6 run twice on the port (once on the cartridge)
 to the cartridge's sequence; the other 103 are unchanged.
 
+## 5. The install drops the lead's step (a lateral press on the Telepod touch)
+
+Found 2026-10-19 by a 106-pad sweep of the same capture: Left or Right held around the touch made the port's Crono end
+fn7's MOVETO (`96 04 05`) a step late and obj11 leave its `04 06 47` 4 frames late (f77 against f73).
+
+### The ROM
+
+The lead's step is computed before the event pass (C0/00A7 `JSR C0/881E`: d-pad, collision C0/8A6D -> `$1D32/$1D33`) and
+moved after it (C0/00D3 `JSR C0/A810` -> AAFD: `AB06 LDA $1A01,X / BEQ ->AB0B RTS`, else `AB10-AB3F $1800 += $1900`). In
+between, the lead's own op B0 ARMS it: C0/3040 `LDA #01 / STA $1A01,X / JSR C0/9E29` (9E53/9E5D copy the velocity into
+`$1900/$1980`). Every install on an object ends `STZ $1A80,X / STZ $1A01,X` (sec. 1: C0/6034 / 60FD / 6199; op D9 32FE;
+C0/3526, C0/5B5C, the invokes C0/5AC5 / 3154). So an object visited AFTER the lead in the same pass that installs a
+function on him drops the step: A810 does not move him that frame, and the velocity stays in `$1900` unused.
+
+MEASURED on the rule's cartridge (`--monitor 7E1A07:1,7E1906:1,7E1806:2 --writer`, pad `10:20,40:5,10:20`): f18-f20
+`$1A07` by C0:AB10, `$1806` by C0:AB28 (the walk up); f21 -- the touch -- `$1906 = F0` by C0:9E56, `$1A07 = 00` by
+C0:619C (obj11's fn2, `04 06 36`), `$1806` stays 3704 with no AB28. The F0 sits in `$1906` until fn7's MOVETO.
+
+### The port's defect and fix
+
+The host (field.c, fieldPlayerCollide with applyMove) moves the lead BEFORE CtSceneTick and wrote the position into the
+VM, so the step always landed: `$1806 = 2704` from f21. Fix: ct_vm.c `vmTicketStop` is the invokes' `STZ $1A80/$1A01` on
+another object (reqOp, op D9, the regroup calls, the activate and touch invokes) and drops the lead's ticket the B0 lead
+arm records (`g_leadTk`, the 3040 store); the host hands the step's origin over (`CtSceneLeadStepFrom`), and the tick puts
+the lead back there right before the integrate leg (after the party trail, whose push C0/9E3F runs inside B0 and so sees
+the step) -- C0/A810's `BEQ`. field.c re-reads the lead's words after the tick (`CtSceneLeadStepDropped`). The camera
+request is C0/881E's and stands, as on the cartridge.
+
+Graded by field-telepod-lateral-touch-drops-the-lead-step-vs-rule-cartridge (tools/telepod_step_drop_cmp.py): Left and
+Right, four events each on the cartridge's frame and Crono's `$1806/$1886` identical on 120/120 frames (5/10 before).

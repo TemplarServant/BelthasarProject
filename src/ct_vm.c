@@ -3018,6 +3018,28 @@ static void reqScratch(CtScene* sc, int op, int tgt, int pr) {
   int e3 = (int)(X & 0xFF) << 4;
   w8(sc->mem, 0x7E01E3, e3 & 0xFF); w8(sc->mem, 0x7E01E4, (e3 >> 8) & 0xFF);
 }
+// ---- THE LEAD'S STEP TICKET (C0/3040 arms it, any later `STZ $1A01,X` in the same pass drops it) ----------------
+// The ROM moves the lead in C0/A810's integrate (AB06 `LDA $1A01,X / BEQ` -> AB10-AB3F `$1800 += $1900`), AFTER the event
+// pass: C0/881E computes the step ($1D32/$1D33) before the VM, the lead's own op B0 arms it (3040 `LDA #01 / STA $1A01,X`,
+// 9E29 -> 9E53/9E5D copy the velocity into $1900/$1980), and every invoke that later in the same pass installs a function on
+// the lead ends `STZ $1A01,X` (op 0x02-0x07 C0/6034 / 60FD / 6199, op D9 32FE, ...) -- the step is gone and A810 does not move
+// him that frame. MEASURED on the rule's cartridge (saves/field_re/scene8_pod_latch.state, Up then Left on the Telepod touch,
+// `--monitor 7E1A07,7E1906,7E1806 --writer`): at f21 $1906 = F0 by C0:9E56, $1A07 = 00 by C0:619C (obj11's `04 06 36`), and
+// $1806 stays 3704 (no C0:AB28) -- the stale F0 sits there until fn7's MOVETO. The port's host (field.c) moves the lead
+// before the tick; it hands the step's origin here (CtSceneLeadStepFrom) and the integrate leg takes it back when the
+// ticket was dropped. Transient per-frame state: statics, not CtScene members (a member breaks every --loadstate .state).
+static int g_leadTk = -1;                  // -1 = the lead's 3040 arm has not run this pass, 1 = armed, 0 = dropped
+static int g_leadFromOk, g_leadFromTick; static double g_leadFromX, g_leadFromY;
+static int gVmTick;                        // trace timestamps (and the step origin's frame)
+static void vmTicketStop(CtScene* sc, int o) {   // `STZ $1A80,X / STZ $1A01,X` on another object's op
+  sc->hasTask[o] = 0; sc->cycles[o] = 0;
+  if (o == sc->playerObj && g_leadTk == 1) g_leadTk = 0;
+}
+void CtSceneLeadStepFrom(CtScene* sc, double x, double y) {
+  (void)sc; g_leadFromOk = 1; g_leadFromTick = gVmTick; g_leadFromX = x; g_leadFromY = y;   // this frame's, the tick to come
+}
+static int g_leadTakenTick = -1;           // the tick that took the step back
+int CtSceneLeadStepDropped(const CtScene* sc) { (void)sc; return g_leadTakenTick == gVmTick; }
 static void reqOp(CtScene* sc, int target, int function, int priority) {
   if (target >= sc->nobj || function >= 16 || priority >= 8) return;
   // ROM C0/5FC8-5FD0: refuse if $1100 bit7 (inactive) or $1000 bit7 (cadence paused).
@@ -3053,7 +3075,7 @@ static void reqOp(CtScene* sc, int target, int function, int priority) {
   // the previous move's heading and facing, and -- with a pure-axis heading pointing away from the
   // new target -- never landed an axis: scene 19's obj25 walked right off the map, obj24's
   // `04 32 34` CALL never completed, and its `D8 00 00` BATTLE three ops later never ran.
-  sc->hasTask[target] = 0; sc->cycles[target] = 0;                 // C0/6031+6034 / 60FA+60FD / 6196+6199
+  vmTicketStop(sc, target);                                        // C0/6031+6034 / 60FA+60FD / 6196+6199
   // do NOT reset ts->dc: the ROM
   // REQ/CALL leaves $1001 alone, so the callee first runs on its EXISTING cadence phase (the queue is
   // already built this frame), not next frame -- the callee's one-cadence-cycle defer. (There is no
@@ -3061,7 +3083,6 @@ static void reqOp(CtScene* sc, int target, int function, int priority) {
   // the 0x94/96/97 move-step takes its ticket from the $1000 cadence (moveAnim), not a separate counter.)
 }
 
-static int gVmTick;                                // trace timestamps only
 
 // The SCENE-ENTRY sweep, C0/B0E6 -> C0/B127. NOT the per-frame pass, and it must not be unified
 // with it: the ROM has two boxes and they differ on three terms. C0/B127 does
@@ -3357,6 +3378,8 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
         ctAnimSyncActor(&sc->actors[obj], sc->mem->s, (int)X); sc->actors[obj].animGen++;
       }
     }
+    if (op != 0xB2 && r8(sc->mem, 0x7E0138) == 0 && CtSceneActorMode((const CtScene*)sc, obj) == 0 && obj == sc->playerObj)
+      g_leadTk = 1;                                          // 3040 LDA #01 / STA $1A01,X: the lead's step armed
     if (op != 0xB2 && sc->touchHit >= 0 && sc->touchHit < sc->nobj
         && r8(sc->mem, 0x7E0138) == 0                      // C0/3002's $0138 early-out
         && CtSceneActorMode((const CtScene*)sc, obj) == 0) { // state 0 = the LEAD PC only
@@ -4035,7 +4058,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       fs->prio = 0;                                      // 3521 LDA #00 / 3523 STA $1C00,X
       ctSetDc(sc, o, 0);                                 // 352C STZ $1001,X
       fs->wait = 0; fs->nm = 0;                          // (the call latch $7F0980 survives: 32C8 does not touch it)
-      sc->hasTask[o] = 0; sc->cycles[o] = 0;             // 3526 STZ $1A80,X / 3529 STZ $1A01,X
+      vmTicketStop(sc, o);                               // 3526 STZ $1A80,X / 3529 STZ $1A01,X
       sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
     }
     w8(m, LOC + 0xFF * 2, (uint8_t)(3 - nf));      // 34E8 #02 (slot 2 absent) / 3535 #01 (both released)
@@ -4174,7 +4197,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
         ps->prio = 0;                                              // 32F6 LDA #00 / STA $1C00,X
         ctSetDc(sc, o, 0);                                         // 3301 STZ $1001,X
         ps->wait = 0; ps->nm = 0;                                  // (the call latch $7F0980 survives: not 32C8's)
-        sc->hasTask[o] = 0; sc->cycles[o] = 0;                     // 32FB STZ $1A80,X / 32FE STZ $1A01,X
+        vmTicketStop(sc, o);                                       // 32FB STZ $1A80,X / 32FE STZ $1A01,X
         sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
         sc->folRoamPrev[o] = 0;                                    // those STZs ARE the follower's walk-cycle release:
       }                                                            //   the conga's handover must not clear the new move again
@@ -6597,6 +6620,7 @@ void CtSceneTick(CtScene* sc) {
   if (!sc->loadFadeIn && body) tbMachineTick(sc);
 
   gVmTick++;
+  g_leadTk = -1;                                         // no B0 visit of the lead yet in this pass
   // THE SONG-UPLOAD FREEZE, decided FIRST (the sndWait fields; song_load_freeze.md section 6). While the
   // ROM's main loop is parked inside `JSL $C7:0004` only the NMI's work happens -- the upload flush
   // below, the fade counter's INIDISP, the deferred copies -- and none of the main-loop legs: not the
@@ -6846,6 +6870,11 @@ void CtSceneTick(CtScene* sc) {
   // integrate, the C98A anim leg) and by the drain. field.c used to call it AFTER CtSceneTick, one frame
   // late for all three consumers.
   CtSceneUpdateFollowers(sc);
+  // THE LEAD'S STEP, AT C0/A810: the host moved him before the pass (field.c, C0/881E's step); a ticket an invoke dropped
+  // after his B0 (vmTicketStop) means AB06's `BEQ` -- no integrate this frame, he stands where the frame began.
+  if (g_leadTk == 0 && g_leadFromOk && g_leadFromTick == gVmTick - 1 && sc->playerObj >= 0 && sc->playerObj < sc->nobj)
+    { CtSceneSetActorPosF(sc, sc->playerObj, g_leadFromX, g_leadFromY); g_leadTakenTick = gVmTick; }
+  g_leadFromOk = 0;
   // ⭐ C0/A810's OBJECT LOOP IS UNCONDITIONAL. A810 reads the object count into $BD and A819 walks
   // EVERY index every frame, dispatching on $1100,X (A81E CMP #03 / A822 CMP #08 / A826 CMP #07) --
   // there is no movement-ticket gate anywhere in it. Mode 7 goes to A86B `JSR C0/A947`, whose ONLY
@@ -7718,7 +7747,7 @@ void CtSceneBattleReturn(CtScene* sc) {
     s->prio = 0;                                       // 5B54: priority := 0
     ctSetDc(sc, o, 0);                                 // 5B5F STZ $1001,X -- eligible on the next build
     s->wait = 0; s->nm = 0;                            // (the call latch $7F0980 is not 5B1F's: it survives, as a pre-empt's)
-    sc->hasTask[o] = 0; sc->cycles[o] = 0;             // 5B59/5B5C: STZ $1A80 (velocity) / $1A01 (ticket)
+    vmTicketStop(sc, o);                               // 5B59/5B5C: STZ $1A80 (velocity) / $1A01 (ticket)
     sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
   }
 }
@@ -7945,7 +7974,7 @@ void CtSceneActivate(CtScene* sc, int obj) {
   if (fn < 0 || fn >= sc->blen) return;
   st->addr = fn; st->prio = 1; st->tb = 0;
   ctSetDc(sc, obj, 0);                                 // the activate path's STZ $1001,X (C0/3264ff family)
-  sc->hasTask[obj] = 0; sc->cycles[obj] = 0;           // talking STOPS the NPC's in-flight move: else the
+  vmTicketStop(sc, obj);                               // talking STOPS the NPC's in-flight move: else the
                                                        // preempted pacing move's hasTask lingers and she keeps
                                                        // the WALK anim through the dialogue (Marle "thank
                                                        // goodness, my pendant"). She re-issues + resumes on return.
@@ -7990,7 +8019,7 @@ void CtSceneTouch(CtScene* sc, int obj) {
 
   st->addr = fn; st->prio = 2; st->tb = 0;              // ROM C0/319F: fn2 at PRIORITY 2
   ctSetDc(sc, obj, 0);                                  // 31AA STZ $1001,X (beside the 1A80/1A01 zeroes below)
-  sc->hasTask[obj] = 0; sc->cycles[obj] = 0;            // the touch STOPS the actor's in-flight move (no lingering walk anim)
+  vmTicketStop(sc, obj);                               // the touch STOPS the actor's in-flight move (no lingering walk anim)
 }
 
 int CtSceneTextbox(const CtScene* sc, int* tableAddr, int* strIndex) {

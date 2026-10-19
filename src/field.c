@@ -17970,6 +17970,7 @@ int main(int argc, char** argv) {
                                                     // screen / the ATB selector is up / after a game-over (input freeze)
       dx = cdx; dy = cdy; prun = crun;
       if (worldTest && wtStage == 2) { dx = 0; dy = 1; }   // scripted: walk out the market's south exit
+      double stepFromX = px, stepFromY = py;           // where C0/A810 leaves him if the step's ticket is dropped
       moved = fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, dx, dy, prun, 1, &camReqX, &camReqY);   // engine 8-way feelers + 9923 actor collision
       // The five ROM bytes C0/9E3F reads, copied out of this host's collision scratch page into the
       // scene's WRAM at their real addresses: the post-collision velocity, the PRE-ADJUST direction intent
@@ -18029,6 +18030,7 @@ int main(int argc, char** argv) {
       if (f.vm && (dx || dy)) CtSceneActorSetFacing(f.vm, pObj, pfac);   // the lead's own facing (a follower's
                                                                  // comes from the velocity it is handed, not
                                                                  // from a history of the lead's facing)
+      if (f.vm && (px != stepFromX || py != stepFromY)) CtSceneLeadStepFrom(f.vm, stepFromX, stepFromY);   // (ct_vm.c, the ticket)
       if (f.vm) CtSceneSetActorPosF(f.vm, pObj, px, py);   // the lead PC tracks the player so a later
                                                                  // script that drives Crono (the curtain
                                                                  // activate -> raise-arms) doesn't snap
@@ -18284,6 +18286,14 @@ int main(int argc, char** argv) {
       uint8_t* iw = CtSceneMem7E(f.vm);
       int c = ((iw[0x0158] | (iw[0x0159] << 8)) + 1) & 0x83FF;
       iw[0x0158] = (uint8_t)c; iw[0x0159] = (uint8_t)(c >> 8);
+    }
+    // THE LEAD'S DROPPED STEP. The host moved him above (C0/881E's step), but an invoke later in the event pass -- op 0x04
+    // installing a function on him (C0/6199 `STZ $1A01,X`) -- dropped the ticket his B0 armed (C0/3044), so C0/A810 did not
+    // integrate it: the tick put him back (ct_vm.c vmTicketStop), and the host's copy follows the words.
+    if (f.vm && !battlePhase && CtSceneLeadStepDropped(f.vm)) {
+      const uint8_t* lw = CtSceneMem7E(f.vm);
+      px = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;
+      py = (lw[0x1880 + pObj * 2] | (lw[0x1881 + pObj * 2] << 8)) / 16.0;
     }
     // THE SCRIPTED LEAD IS DRAWN WHERE THIS FRAME'S C0/A810 PUT HIM. The follow above (the lead's position while the script
     // drives him) read the VM before its tick, i.e. the previous frame's commit, and the lead is drawn from px/py -- one

@@ -617,6 +617,17 @@ spliced over `scene8_gate_cutscene.state`); the cartridge under the rule against
 events on the cartridge's frame plus the count of fn6 runs. Re-pin only if the capture or the drive changes, never to
 absorb a difference. Dossier: `disasm/notes/call_wait_latch_preempt.md` sec. 4.
 
+### field-telepod-lateral-touch-drops-the-lead-step-vs-rule-cartridge (`python tools/telepod_step_drop_cmp.py`)
+
+Pins that an invoke which installs a function on the LEAD after his op B0 armed this frame's step drops it. C0/3040
+`STA $1A01,X` arms the ticket and C0/9E29 copies the controller's velocity into `$1900/$1980`; the install's `STZ $1A01,X`
+(op 0x02-0x07: C0/6034 / 60FD / 6199; op D9 32FE; ...) clears it later in the same event pass, and C0/A810's integrate
+(AB06 `BEQ`) does not move him. On the Telepod a Left or Right press on the touch frame: the cartridge's Crono stays on
+`$1806 = 3704` with a stale `$1906 = F0`; the port's host had already moved him 1 px, so his fn7 MOVETO took one more step
+and obj11 left its `04 06 47` 4 frames late. Per pad (Left, Right) four events and Crono's `$1806/$1886` over 120 frames,
+the cartridge under the rule against the port from the same WRAM and SPC (`saves/field_re/scene8_pod_latch.state`).
+Re-pin only if the capture or the drive changes. Dossier: `disasm/notes/call_wait_latch_preempt.md` sec. 5.
+
 ### field-scene8-telepod-touch-trigger (`--scene 8` + `CT_TRIGDBG=1`)
 
 Pins that a CLASS-7 object (`$1100 = 07`: positioned, sprite-less, no loader op) gets

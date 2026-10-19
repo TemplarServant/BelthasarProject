@@ -43488,6 +43488,47 @@
       ]
     },
     {
+      "name": "field-telepod-lateral-touch-drops-the-lead-step-vs-rule-cartridge",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/telepod_step_drop_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/scene8_pod_latch.state"
+      ],
+      "expect": [
+        "telepod-step: left obj11 parks on the call (028F) cartridge f21 port f21",
+        "telepod-step: left Crono's fn7 walks to (4,5) (0115) cartridge f50 port f50",
+        "telepod-step: left Crono's fn7 arrives, idle (00F7) cartridge f73 port f73",
+        "telepod-step: left obj11 past `04 06 47` (0296) cartridge f73 port f73",
+        "telepod-step: left Crono's position identical on 120/120 frames",
+        "telepod-step: right obj11 parks on the call (028F) cartridge f21 port f21",
+        "telepod-step: right Crono's fn7 walks to (4,5) (0115) cartridge f50 port f50",
+        "telepod-step: right Crono's fn7 arrives, idle (00F7) cartridge f73 port f73",
+        "telepod-step: right obj11 past `04 06 47` (0296) cartridge f73 port f73",
+        "telepod-step: right Crono's position identical on 120/120 frames",
+        "telepod-step: 10/10 events on the cartridge's frame"
+      ],
+      "pin": [
+        "^telepod-step: "
+      ],
+      "timeout_s": 90,
+      "note_pass": "Left or Right held on the frame Crono touches the Telepod: the touch's call on him drops the step his B0 armed, he stays where the frame began, and his fn7 and obj11's next call land on the cartridge's frames",
+      "notes": "Found 2026-10-19 by a 106-pad sweep of the user's Telepod capture (saves/field_re/scene8_pod_latch.state): a lateral press around the touch made the port's Crono finish fn7's MOVETO (`96 04 05`) a step late and obj11 leave its `04 06 47` 4 frames late. THE ROM: C0/881E computes the step before the event pass; the lead's op B0 arms it (C0/3040 `LDA #01 / STA $1A01,X`, C0/9E29 -> 9E56 the velocity into $1900); obj11's touch function, later in the same pass, installs Crono's fn6 with `04 06 36`, whose install ends `STZ $1A01,X` (C0/6199); C0/A810's integrate (AB06 `LDA $1A01,X / BEQ`) then does not move him. Measured on the rule's cartridge (`--monitor 7E1A07,7E1906,7E1806 --writer`, Up 20 / Left 5): f21 $1906 = F0 by C0:9E56, $1A07 = 00 by C0:619C, $1806 stays 3704 (no C0:AB28); the stale F0 stays until fn7. THE PORT moved the lead in the host before the tick (field.c, fieldPlayerCollide) and kept the step: $1806 = 2704 from f21, one more MOVETO step. FIX: ct_vm.c vmTicketStop (an invoke's STZ $1A80/$1A01 on another object drops the lead's armed ticket), the B0 lead arm records it, and the tick takes the host's step back (CtSceneLeadStepFrom) before the integrate leg; field.c re-reads the lead's words after the tick. Graded per pad (Left, Right): four events and Crono's $1806/$1886 frame by frame over 120 frames. Residuals outside the grade (identical with and without the fix, and with plain Up): $1607 at f0 (the seed), one-frame $1180 mirrors at f16 (obj11) and f21/f49 (Crono).",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (o == sc->playerObj && g_leadTk == 1) g_leadTk = 0;",
+          "replace": "  /* MUT */",
+          "why": "The install no longer drops the lead's step (the old model): Crono keeps the host's lateral step, stands 1 px off, and fn7 / obj11's next call land a frame early or 4 frames late (5/10)."
+        }
+      ]
+    },
+    {
       "name": "field-tent-hostage-80pt-counter-switch-flames-vs-rule-cartridge",
       "tier": "full",
       "argv": [
