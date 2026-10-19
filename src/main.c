@@ -557,6 +557,9 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
         prevPcY[k] = w[0x1880 + ox2] | (w[0x1881 + ox2] << 8);
         if (px < 0) { px = prevPcX[k]; py = prevPcY[k]; }
         CtSceneSetActorPosF(sc, o, px / 16.0, py / 16.0);
+        { uint8_t* sm = CtSceneMem7E(sc);                // ...and their words, as the pass reads them (C0/65B2)
+          sm[0x1800 + ox2] = (uint8_t)px; sm[0x1801 + ox2] = (uint8_t)(px >> 8);
+          sm[0x1880 + ox2] = (uint8_t)py; sm[0x1881 + ox2] = (uint8_t)(py >> 8); }
         CtVmWmaskExclude(0x7E1800 + (uint32_t)ox2, 2);   // emitted BY the injector, like the lead's
         CtVmWmaskExclude(0x7E1880 + (uint32_t)ox2, 2);
       }
@@ -575,6 +578,9 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
         prevPcY[0] = w[0x1880 + lx] | (w[0x1881 + lx] << 8);
         if (ox < 0) { ox = prevPcX[0]; oy = prevPcY[0]; }       // frame 1 with no seed captured
         CtSceneSetActorPosF(sc, lead, ox / 16.0, oy / 16.0);    // sub-pixel: $1800 IS the position
+        { uint8_t* sm = CtSceneMem7E(sc);                       // ...and the words themselves: op 0x22 / 0x21 read
+          sm[0x1800 + lx] = (uint8_t)ox; sm[0x1801 + lx] = (uint8_t)(ox >> 8);   // $1801 / $1881 (C0/65B2), the
+          sm[0x1880 + lx] = (uint8_t)oy; sm[0x1881 + lx] = (uint8_t)(oy >> 8); } // commit the pass sees
         // The tick mirrors fx/fy back into these exact bytes (mode<3), so they would enter the
         // mask and compare equal BY CONSTRUCTION. The exclusion is emitted HERE, by the code that
         // does the injecting, so it cannot rot into a stale parallel table.

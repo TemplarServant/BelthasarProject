@@ -551,3 +551,20 @@ does not call it and `move.c` is not linked into `Belthasar`. So this grades a p
 **not shipped engine behaviour** — which is also why porting the enqueue could not jam the live
 engine. The drain's *body* (`C0/CAD9` → the sprite assembler) remains unported; only its bookkeeping
 is derived above, from reading it. That body is still the blocker for `$0F01` proper.
+
+## The lead's words in the event pass: op 0x22 reads last frame's commit (2026-10-18, ROADMAP F3 closed)
+
+The ROM's frame: C0/881E (the controller: the lead's velocity, the camera's step) -> C0/00C4 the event pass -> C0/00D3
+C0/A810, whose C0/AAFD adds the velocity to `$1800/$1880` (the commit). So op 0x22 / 0x21 (C0/65EB / 65B0 -> 65B2 `LDA
+$1801,X` / `LDA $1881,X`) reads the lead's tile as LAST frame left it. The port's host steps the lead before the tick
+(fieldPlayerCollide -> CtSceneSetActorPosF: fx/fy), and the tick mirrors fx/fy into `$1800/$1880` only at its A810 point --
+so the WRAM words in the pass are the ROM's; the live op read fx/fy, a step ahead. It reads the words now (ct_vm.c, op
+0x22 / 0x21's live arm; the init pass already did).
+
+MEASURED, loc 120 below the castle stairs (saves/field_re/scene468_stairs_to_120.state, Down from f180; the port's keys a
+frame after the oracle's): the lead 0AFF -> 0B0F at f205; obj0's `22 00 09 0A` (every 4 frames) stores row 0A at f205 on
+the cartridge and 0B at f209; Lucca's touch-driven poll (her fn2 RETURN restoring slot 7 at 0A68) posts `C1` at f211 and
+`$0129` = 01 at f211, the window at f216, the typewriter f226, state 7 f232 -- the port the same on every frame (it had
+stored 0B at f205 and opened the box at f208: the "4 frames early" of F3, one of them the key phase). Check
+lockstep-scene120-stairs-entry-lucca, now pinned to the cartridge's values. ct.exe's `--vmdiff` injector writes the lead's
+and followers' words as well as fx/fy (it injects the previous frame's commit, which is what the pass reads).

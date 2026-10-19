@@ -2025,11 +2025,20 @@ static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
     // $0197/$0199/$019B = 02/06/08, i.e. objects 1, 3, 4 -- where the paraphrase says 1, 2, 3.
     // The operand is the ALREADY-DOUBLED slot index; measured over the 504 shipped scenes it is 0 at
     // all 30 of this op's sites, 0/2 for op 0x24 and 0/2/4 for op 0xA9, never odd.
+    // ⭐ THE LEAD'S TILE IS HIS WORDS' HIGH BYTE AS THE PASS FINDS THEM: `LDA $1801,X` / `LDA $1881,X` (C0/65B2-65BA) --
+    // last frame's commit, because the frame's own step lands later, at C0/A810 (C0/00D3, after the event pass). The port's
+    // host hands the lead's new position to fx/fy before the tick; the WRAM words take it only at the tick's A810 mirror,
+    // so the bytes are the ROM's. MEASURED, loc 120 below the castle stairs (saves/field_re/scene468_stairs_to_120.state,
+    // Down from f180, the port's keys a frame after): obj0's `22 00 09 0A` at f205 stores row 0A on the cartridge (the
+    // word 0AFF before the step to 0B0F) and Lucca's poll sees 0B from f209 -- her box at f211; reading fx stored 0B at
+    // f205 and opened it at f208 (ROADMAP F3).
     int po = vmSlotTarget(m, op, B[addr + 1]) / 2;            // TILE x/y -> op2/op3.
     if (po >= 0 && po < sc->nobj) {                           // drives the "wait for Crono to reach
-      w8(m, LOC + B[addr + 2] * 2, ((int)sc->fx[po] >> 4) & 0xFF);   // the spot" dialogue triggers
-      w8(m, LOC + B[addr + 3] * 2, ((int)sc->fy[po] >> 4) & 0xFF);   // (scene 1: Mom). LIVE pos = fx/fy
-    }                                                          // (the integrator updates fx, NOT actors[].x)
+      uint32_t X2 = (uint32_t)po * 2;                         // the spot" dialogue triggers (scene 1: Mom)
+      int wx = r8(m, 0x7E1800 + X2) | (r8(m, 0x7E1801 + X2) << 8), wy = r8(m, 0x7E1880 + X2) | (r8(m, 0x7E1881 + X2) << 8);
+      w8(m, LOC + B[addr + 2] * 2, (wx >> 8) & 0xFF);
+      w8(m, LOC + B[addr + 3] * 2, (wy >> 8) & 0xFF);
+    }
     return;
   }
   if (op == 0x21) {                                           // GetObjCoords (C0/65B0): object[op1/2]'s TILE
