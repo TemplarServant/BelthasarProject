@@ -68,7 +68,7 @@ and its `$0E01/$0F00/$1100`):
   - 0A5 f5855-6293, at y 423;
   - 0E6 f7759-7875, at x -48.
 
-## 4. What meets the guard (measured 2026-09-29, open)
+## 4. What meets the guard (measured 2026-09-29; closed in sec. 5)
 
 - **The host's lead with `$0F00` clear.** The port draws the lead by its own predicate (CtSceneActorHidden), not by the
   latch. The ROM does not draw it: C0/A921 unlinked it, and C0/B309 never meets it.
@@ -92,3 +92,31 @@ and its `$0E01/$0F00/$1100`):
 
 **What closes it:** the whole C0/286C object re-init at the reload, with B0E6 and B127's six stores. Then the lead and the
 class-7 triggers can follow the ROM's predicate (in the list or not drawn), and the guard goes.
+
+## 5. Closed: the ROM's predicate, and the menu's reload rebuilds the list (2026-10-19)
+
+Found by the attract audit's boot vehicle, 0E6 event [15]: obj10 and obj11 stand on one column (`$1801` both C8) at
+cartridge c5577-5581 / port p7680-7684 (the stretch's offset 2103). The cartridge's OAM puts obj11 at #28 and obj10 at #32
+(the list walks obj11 first); the port drew obj10 in front, 412 px a frame. The list in the port's WRAM was the cartridge's
+byte for byte -- the frame had fallen back on the Y sort because the host's lead obj3 (`$0F00 = 00`, off screen) was drawn
+and is not in it.
+
+**The port now:**
+
+- **The list decides what is drawn.** C0/B2A5 emits the walk and nothing else, so a drawn object the list does not hold is
+  dropped from the compose (field.c; `CT_DRAWLISTDBG=1` names each one). Only a malformed chain keeps the Y sort.
+- **The menu's reload runs C0/286C's object legs** (ct_vm.c CtSceneMenuReloadObjects, after the host's C0/6F79):
+  `2875 C0/7155` (palette owners), `2878 C0/E935` (arena owners), `287B C0/B204` (the list page), `287E C0/A7E9`
+  (`$0F00/$0F01` pairs) and `2881 C0/B0E6` (the sweep: index order, no party tail). C0/70E9 (`2887`) moved after them, in
+  the ROM's order.
+
+**Results:**
+
+- 0E6 c5577-5581: 0 px (was 42, then 412 a frame).
+- menu-resume-fade-in-vs-oracle: stand 353 -> 40 px, walk 187 -> 40 px -- the stale list was what made sec. 4's attempt
+  worse; with it rebuilt the fade-in is closer than before.
+- field-bg-seed-party3-vs-oracle: 91 of 91 frames -> 0 (p3field's class-7 obj0 is no longer drawn).
+- In the whole attract the objects dropped are the three off-screen leads of sec. 3 (01B, 0A5, 0E6) and nothing else.
+
+Graded by attract-0e6-exit-fade-and-robot-depth-vs-rule-cartridge (tools/attract_0e6_exit_cmp.py), which also pins the same
+stretch's exit fade (the drain C0/0C97 now keeps sc->bright with `$0119`).
