@@ -44,7 +44,9 @@ STATES = os.path.join(ROOT, 'saves', 'playthrough')
 TMP = os.path.join(ROOT, 'build', '_playthrough')
 RULE = dict(os.environ, CT_ORACLE_LOGICAL='1')
 # What is graded: the location, the storyline, the party. (The port's memmon names $7F:xxxx as 1xxxx.)
-MON = [('loc', '7E0100', '0100', 2), ('story', '7F0000', '10000', 1), ('party', '7E2980', '2980', 3)]
+MON = [('loc', '7E0100', '0100', 2), ('story', '7F0000', '10000', 1), ('party', '7E2980', '2980', 3),
+       ('gold', '7E2C53', '2C53', 3), ('hp', '7E2603', '2603', 2),          # gold (C1/D0A2), Crono's current HP ($2600 + 3)
+       ('ctrl', '7E011F', '011F', 1)]                                        # the player's control (op E3; a fight takes it)
 
 
 # ------------------------------------------------------------------------------------------------------------ the route
@@ -242,6 +244,11 @@ def chains(tl):
     return ch
 
 
+def le(v):
+    """A little-endian byte string (the monitors print memory order) as a decimal number."""
+    return str(int(''.join(v[i:i + 2] for i in range(len(v) - 2, -2, -2)), 16))
+
+
 def fmt(ch, k):
     return ' '.join(v for _, v in ch[k])
 
@@ -258,8 +265,9 @@ def cmp_leg(legs, i, verbose):
     o, p = chains(oracle_timeline(start, lg['pad'])), chains(ptl)
     k, npx = picture_grade(oracle_picture(start, lg['pad']), pics)
     same = all([v for _, v in o[k2]] == [v for _, v in p[k2]] for k2 in o) and npx == 0
-    print('playthrough: %s %s -- locs %s | story %s | party %s | end picture %s' % (
+    print('playthrough: %s %s -- locs %s | story %s | party %s | gold %s | hp %s (%d) | ctrl %d | end picture %s' % (
         lg['name'], 'SAME' if same else 'DIFFERENT', fmt(o, 'loc'), fmt(o, 'story'), fmt(o, 'party'),
+        le(o['gold'][-1][1]), le(o['hp'][-1][1]), len(o['hp']), len(o['ctrl']),
         '%d px at port %+d' % (npx, k) if k is not None else 'none'))
     if not same or verbose:
         for k2 in o:

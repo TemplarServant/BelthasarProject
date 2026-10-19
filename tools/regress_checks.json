@@ -46989,16 +46989,20 @@
       ],
       "expect": [
         "playthrough: 00_newgame oracle-only (power-on, the title, New Game: Battle Mode Active, the name Crono, the opening over 1F0, into 10F [oracle-only])",
-        "playthrough: 01_wakeup SAME -- locs 10F 002 | story 00 03 | party 008080 | end picture 0 px at port +1",
-        "playthrough: 02_downstairs SAME -- locs 002 001 | story 03 | party 008080 | end picture 0 px at port +0",
-        "playthrough: 03_kitchen DIFFERENT -- locs 001 1F0 | story 03 | party 008080 | end picture 378 px at port +0",
-        "playthrough: 04_to_fair SAME -- locs 1F0 005 | story 03 | party 008080 | end picture 0 px at port -2",
-        "playthrough: 05_bellstairs DIFFERENT -- locs 005 1B7 | story 03 | party 008080 | end picture 323 px at port -2",
-        "playthrough: 06_marle DIFFERENT -- locs 1B7 | story 03 06 08 | party 008080 000180 | end picture 253 px at port +4",
-        "playthrough: 07_merchant DIFFERENT -- locs 1B7 005 | story 08 | party 000180 | end picture 436 px at port -4",
-        "playthrough: 08_candy SAME -- locs 005 1B7 | story 08 | party 000180 | end picture 0 px at port -3",
-        "playthrough: 09_telepod SAME -- locs 1B7 008 | story 08 | party 000180 | end picture 0 px at port -2",
-        "playthrough: 5/9 legs SAME"
+        "playthrough: 01_wakeup DIFFERENT -- locs 10F 002 | story 00 03 | party 008080 | gold 400 | hp 70 (1) | ctrl 3 | end picture 0 px at port +1",
+        "playthrough: 02_downstairs SAME -- locs 002 001 | story 03 | party 008080 | gold 400 | hp 70 (1) | ctrl 2 | end picture 0 px at port +0",
+        "playthrough: 03_kitchen DIFFERENT -- locs 001 1F0 | story 03 | party 008080 | gold 400 | hp 70 (1) | ctrl 3 | end picture 378 px at port +0",
+        "playthrough: 04_to_fair SAME -- locs 1F0 005 | story 03 | party 008080 | gold 400 | hp 70 (1) | ctrl 1 | end picture 0 px at port -2",
+        "playthrough: 05_bellstairs DIFFERENT -- locs 005 1B7 | story 03 | party 008080 | gold 400 | hp 70 (1) | ctrl 1 | end picture 323 px at port -2",
+        "playthrough: 06_marle DIFFERENT -- locs 1B7 | story 03 06 08 | party 008080 000180 | gold 400 | hp 70 (1) | ctrl 5 | end picture 253 px at port +4",
+        "playthrough: 07_merchant DIFFERENT -- locs 1B7 005 | story 08 | party 000180 | gold 400 | hp 70 (1) | ctrl 1 | end picture 436 px at port -4",
+        "playthrough: 08_candy SAME -- locs 005 1B7 | story 08 | party 000180 | gold 400 | hp 70 (1) | ctrl 5 | end picture 0 px at port -3",
+        "playthrough: 09_telepod SAME -- locs 1B7 008 | story 08 | party 000180 | gold 400 | hp 70 (1) | ctrl 1 | end picture 0 px at port -2",
+        "playthrough: 10_demo SAME -- locs 008 | story 08 0A | party 000180 008080 | gold 400 | hp 70 (1) | ctrl 3 | end picture 0 px at port +0",
+        "playthrough: 11_gate SAME -- locs 008 | story 0A 0C | party 008080 | gold 400 | hp 70 (1) | ctrl 3 | end picture 0 px at port +0",
+        "playthrough: 12_after_her SAME -- locs 008 071 | story 0C 40 0C | party 008080 | gold 400 | hp 70 (1) | ctrl 4 | end picture 0 px at port -1",
+        "playthrough: 13_canyon SAME -- locs 071 070 | story 0C | party 008080 | gold 436 | hp 62 (2) | ctrl 4 | end picture 0 px at port +0",
+        "playthrough: 8/13 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
@@ -47013,7 +47017,7 @@
         }
       ],
       "note_pass": "the playthrough route from New Game, leg by leg: the same pad from the same state on the rule's cartridge and on the port -- the location chain, the storyline and the party on the cartridge's frames, and each leg's last picture",
-      "notes": "2026-10-19, the start of the playthrough tests (tools/playthrough.py, tools/playthrough/route.txt: the cartridge's pad from power-on on an erased cartridge, cut into legs and written by looking -- `try`, `walk` with tools/walkto.py). Each leg starts from the cartridge's state where the previous one ended (made from power-on by the tool itself and keyed on the route and the oracle binary); the port is seeded with that WRAM and SPC and plays the same pad one frame later through the walkscript's raw `H` token, which reaches the fight too. Graded: the chains of $0100, $7F:0000 and $2980-$2982 with their frames, and the leg's last picture against the port's frames -3..+3. Residuals pinned: 03 the 1F0 seagulls (the world's ambient birds) sit elsewhere; 05 Crono's walk frame on 1B7's stairs; 06 the red banner's frame beside him; 07 the wandering NPCs (the soldier, the man at the fountain, the cat) after the shop's close stand on other steps of their walks -- the reload after the shop. The chains are the cartridge's on every frame, Marle's scene included (story 06 at f856, 08 at f2852, the party at f2948 on both sides)."
+      "notes": "2026-10-19, the start of the playthrough tests (tools/playthrough.py, tools/playthrough/route.txt: the cartridge's pad from power-on on an erased cartridge, cut into legs and written by looking -- `try`, `walk` with tools/walkto.py). Each leg starts from the cartridge's state where the previous one ended (made from power-on by the tool itself and keyed on the route and the oracle binary); the port is seeded with that WRAM and SPC and plays the same pad one frame later through the walkscript's raw `H` token, which reaches the fight too. Graded: the chains of $0100, $7F:0000 and $2980-$2982 with their frames, and the leg's last picture against the port's frames -3..+3. Residuals pinned: 03 the 1F0 seagulls (the world's ambient birds) sit elsewhere; 05 Crono's walk frame on 1B7's stairs; 06 the red banner's frame beside him; 07 the wandering NPCs (the soldier, the man at the fountain, the cat) after the shop's close stand on other steps of their walks -- the reload after the shop; 01 the location load's default control: the cartridge's $011F reads 1 from 002's load (f511) until its script's `E3 00` (f541), the port's stays 0. Legs 10-13: the Telepod scene, the gate (the native warp's $7F:0000 scratch sampled from the warp's own WRAM, g_memmonStage), 600 A.D.'s first fight -- the cartridge's frames. Graded since: gold ($2C53), Crono's HP ($2603) and the control ($011F) chains. The chains are the cartridge's on every frame, Marle's scene included (story 06 at f856, 08 at f2852, the party at f2948 on both sides)."
     }
   ],
   "excluded": [

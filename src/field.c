@@ -439,6 +439,10 @@ static void fieldSoundFlush(uint8_t* mem7E);   // the `JSL $C7:0004` a stager pe
 // --frames cap (only --selftest does, and --selftest fights a battle synchronously), so a headless tool that
 // needs an INTERACTIVE battle's frames otherwise has to kill the process.
 static int g_shotsExit = 0;
+// The WRAM a stage that runs over its own copy owns this frame (the gate warp's g_gwWram), NULL = the field's: what the
+// memmon below reads, so a byte the program keeps in WRAM (the warp's $7F:0000 scratch, FD/EAA6) is sampled as the
+// cartridge's --monitor samples it.
+static const uint8_t* g_memmonStage = NULL;
 static void presentShot(const uint8_t* fb, int w, int h, int frameNo, int loc, const char* mode) {
   static const char* pre = (const char*)1; static const char* at; static int every, luma;
   if (pre == (const char*)1) { pre = getenv("CT_SHOTS"); at = getenv("CT_SHOTS_AT");
@@ -452,7 +456,7 @@ static void presentShot(const uint8_t* fb, int w, int h, int frameNo, int loc, c
   // changed (`*` marks the changed regions), in every mode. CT_BATTLE_MEMMON is the battle host's twin. An address
   // above FFFF is FLAT, i.e. bank $7F: `10052` = $7F0052 (a story flag), `10236` = $7F0236 (script local $1B).
   { static const char* fm = (const char*)1; if (fm == (const char*)1) fm = getenv("CT_FIELD_MEMMON");
-    const uint8_t* m7 = fm && *fm ? CtWramSys(fieldWram()) : NULL;   // the flat 128 KB image ($7E, then $7F)
+    const uint8_t* m7 = fm && *fm ? (g_memmonStage ? g_memmonStage : CtWramSys(fieldWram())) : NULL;   // flat 128 KB
     if (m7) {
       static uint8_t prev[0x20000]; static int primed = 0;
       static char line[32768]; int n = snprintf(line, sizeof line, "fmemmon f%d loc=%03X", frameNo, loc), changed = !primed;
@@ -20291,6 +20295,7 @@ int main(int argc, char** argv) {
       if (gwNState == 0) gwNState = CtGwarpFrame(gwN, g_gwWram, &g_stagePic, g_gwPic);
       memcpy(fb, g_gwPic, sizeof g_gwPic);
     }
+    g_memmonStage = gwN ? g_gwWram : NULL;
     // ...but only once the sequence is OPEN. Op 0xFF < $90 first runs its own fade inside the field's program (C0/3FBB-3FD1,
     // `DEC $19` a frame, then C0/0B4E's black on the jump's frame -- ffPro above) and only then jumps to C3:0000; until then
     // the picture is the field's, fading. The title's branch below had no seqOpen test, so at power-on (loc 1B1's `FF 02`

@@ -39,3 +39,17 @@
 
 ## 09_telepod -- around the stall and up the stairs the twins left, 1B7's north exit (loc 008): Taban's call
 0:2,40:16,20:16,40:48,10:96,40:16,10:40,0:250
+
+## 10_demo -- the Telepod demonstration: Taban's and Lucca's lines, up to the left pod, Crono is sent across (story 0A)
+(100:2,0:40)*30,10:64,40:64,10:16,80:16,40:16,0:30,10:30,(100:2,0:40)*16,0:120
+
+## 11_gate -- Marle (obj14 at the bottom of tile (7,11), talked to from right above): she steps on the pod, the pendant,
+# the gate opens and she vanishes (story 0C at f5441, control back)
+80:80,20:46,0:10,(100:2,0:40)*130
+
+## 12_after_her -- Crono steps on the left pod after her (obj11 at (4,5): DD 71): the gate warp, 600 A.D., loc 071
+40:32,10:70,0:30,(100:2,0:40)*78,0:120
+
+## 13_canyon -- the gate's clearing (071): left into the blue imps, the fight with A (won at f2395), out to 070
+0:200,20:10,40:160,(100:2,0:18)*105,0:30,10:32,40:128,10:16,40:30,0:150
+
