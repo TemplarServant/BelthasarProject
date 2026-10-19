@@ -276,6 +276,20 @@ static void hostApplyVideo(CtPresenter* pr) {
   }
   CtPresentSetVsync(pr, st->vsync);                   // (the filter is the draw's: hostDrawPicture)
 }
+// THE MOUSE CURSOR (host UI, no ROM side): the game draws no pointer, so the system one hides while the game runs --
+// at once in fullscreen, after HOST_CURSOR_IDLE_MS without motion in a window (a move brings it back). The F1 overlay
+// shows it (its SDL backend sets the cursor while it draws). Touch's synthesized mouse events are not motion.
+#define HOST_CURSOR_IDLE_MS 2000
+static Uint32 g_hostCursorMoveMs;
+static void hostCursorEvent(const SDL_Event* e) {
+  if (e->type == SDL_MOUSEMOTION && e->motion.which != SDL_TOUCH_MOUSEID) g_hostCursorMoveMs = SDL_GetTicks();
+}
+static void hostCursorUpdate(CtPresenter* pr) {
+  if (!g_hostInteractive) return;
+  int fs = (SDL_GetWindowFlags(CtPresentWindow(pr)) & SDL_WINDOW_FULLSCREEN) != 0;
+  int show = !fs && SDL_GetTicks() - g_hostCursorMoveMs < HOST_CURSOR_IDLE_MS;
+  if (show != (SDL_ShowCursor(SDL_QUERY) == SDL_ENABLE)) SDL_ShowCursor(show ? SDL_ENABLE : SDL_DISABLE);
+}
 static void dbgInit(void) {
   static int done; if (done) return; done = 1;   // once (guarded like ct_vm.c's dbgFlags)
   dbg.fadeTrace = getenv("CT_FADETRACE"); dbg.owIdleShot = getenv("CT_OWIDLE_SHOT");
@@ -9937,6 +9951,7 @@ static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
   if (dev) SDL_PauseAudioDevice(dev, 1);
   int open = 1, quit = 0;
   g_hostInOptions = 1; CtTouchPadReset();            // the overlay takes the fingers (no button stays held)
+  SDL_ShowCursor(SDL_ENABLE);                        // the overlay is clicked
   while (open) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
@@ -9963,6 +9978,7 @@ static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
 #endif
   CtSettingsSave();
   g_hostInOptions = 0; CtTouchPadReset();
+  g_hostCursorMoveMs = SDL_GetTicks();               // the cursor's idle time starts at the close
   g_hostT0 = -1.0; g_hostFrames = 0;                 // the pause is not a stall to catch up on
   if (dev) { SDL_ClearQueuedAudio(dev); SDL_PauseAudioDevice(dev, 0); }
   return quit;
@@ -11975,6 +11991,7 @@ int main(int argc, char** argv) {
     g_touchOn = g_hostInteractive && CtTouchPadEnabled(g_padUsed);
     CtTouchPadNewFrame();
     while (SDL_PollEvent(&e)) {
+      hostCursorEvent(&e);
       if (e.type == SDL_QUIT) running = 0;           // window X: quit ONLY (never resolves a battle -- see battlePhase)
       else if (e.type == SDL_CONTROLLERDEVICEADDED) fieldPadOpen();
       else if (e.type == SDL_CONTROLLERDEVICEREMOVED) {
@@ -12023,6 +12040,7 @@ int main(int argc, char** argv) {
         if (pb & PAD_B) nmDel = 1;                          // B: backspace
       }
     }
+    hostCursorUpdate(pr);
     // The stick's d-pad has no events: its edges are the transitions of the level it reads.
     { static uint16_t stickPrev = 0; uint16_t sp = fieldStickPad(), se = (uint16_t)(sp & ~stickPrev); stickPrev = sp;
       if (se && !g_padUsed) { g_padUsed = 1; CtTouchPadReset(); }
