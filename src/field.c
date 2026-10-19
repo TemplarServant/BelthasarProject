@@ -16487,7 +16487,6 @@ int main(int argc, char** argv) {
             // C0/28F9 -> the $FA arm C0/297D; $7E:5735/5835/5935 F2F4/F6F8/FAFC -> F3F5/F7F9/FBFD.
             // (The render's copy of the map was never closed -- the reload does not rebuild it -- so this is the WRAM.)
             fieldDoorListApply("reload", frameNo);
-            fieldPaletteText(CtWramSys(fieldWram()));    // C0/2887 JSR C0/70E9 (the reload's C0/01C9 was the rows)
             fieldChestPrebumpWram(CtWramSys(fieldWram()), CtWramGlb(fieldWram()), scene, f.C.cw, f.C.ch);   // 0A50 -> A712
             // ...and C0/286C's next leg, `286F JSR C0/0A50`: the camera from the saved arrival tile (C0/74A6 -> C0/7506 /
             // C0/7553 on $0102/$0103 -- NOT the camera the menu found: a scripted scroll does not survive the menu), the
@@ -16499,6 +16498,8 @@ int main(int argc, char** argv) {
               CtSceneLayerScrollLoad(f.vm, m1, m2, m3); }
             fieldEntryTilemapFill(&f, scene);
             fieldPassObjSlots();                         // C0/2872 JSR C0/6F79
+            CtSceneMenuReloadObjects(f.vm);              // C0/2875-2881: 7155 / E935 / B204 / A7E9 / B0E6 (the list rebuilt)
+            fieldPaletteText(CtWramSys(fieldWram()));    // C0/2887 JSR C0/70E9 (the reload's C0/01C9 was the rows)
           }
           if (menuTest && f.vm) {                            // resume-instant fidelity vs the press instant
             mtSnapshot(f.vm, px, py, pz, pfac, &mtPost);
@@ -19272,8 +19273,8 @@ int main(int argc, char** argv) {
     // the party tail, $0199 then $0197 (A846-A867) -- the last relinked is in front, whatever its exact Y. The VM keeps
     // that list byte for byte while the frame legs run (ct_vm.c, C0/A810's legs), so the key below is the list's own
     // walk; a Y sort put two objects on one `$1880` in index order (0E6: obj11 over the party's obj6, where the
-    // cartridge's OAM has obj6 at #40, obj14 at #44, obj11 at #48). A PORT-SIDE GUARD, not the ROM: a drawn object the
-    // list does not hold, or a malformed chain, keeps the frame on the Y sort (CT_DRAWLISTDBG counts those frames).
+    // cartridge's OAM has obj6 at #40, obj14 at #44, obj11 at #48). An object the list does not hold is not drawn (below);
+    // A PORT-SIDE GUARD, not the ROM: a malformed chain keeps the frame on the Y sort (CT_DRAWLISTDBG names both).
     if (CtSceneFrameLegsOn() && f.vm && n > 1 && !(dbg.drawListOff && *dbg.drawListOff == '0')) {   // CT_DRAWLIST=0: the Y sort (A/B)
       const uint8_t* m7 = CtSceneMem7E(f.vm);
       int dkey[64], ok = 1, pos = 0;
@@ -19283,21 +19284,31 @@ int main(int argc, char** argv) {
           if ((o & 1) || o / 2 >= 64 || dkey[o / 2] != 1 || ++g > 64) { ok = 0; break; }
           dkey[o / 2] = -(pos++);                        // walked first = front = drawn last
         }
-      // What meets the guard (field_draw_list_order.md sec. 4): the host's lead with $0F00 clear (the attract, always off
-      // screen), and class-7 triggers the port draws because `placed` is `$0F00 != 0` -- C0/A947 stores their latch and
-      // never links them (A86B), C0/B0E6 skips them, so the ROM draws none. Putting either behind the list instead was
-      // tried and REVERTED: it also exposed that the menu's reload does not rebuild the list (C0/286C -> B204 / A7E9 /
-      // B0E6 relink every object in index order, no party tail) -- the fade then layered by the stale list.
-      int miss = -1;
-      for (int k = 0; ok && k < n; k++) {
-        int o = order[k] < 0 ? pObj : order[k];
-        if (o < 0 || o >= 64 || dkey[o] == 1) { ok = 0; miss = o; }
+      // ...AND WHAT THE LIST DOES NOT HOLD, THE ROM DOES NOT DRAW: C0/B2A5 emits the walk and nothing else. What the port
+      // drew outside it (field_draw_list_order.md sec. 4): the host's lead with $0F00 clear (C0/A921 unlinked him; the
+      // attract, off screen) and class-7 triggers, whose latch C0/A947 stores without ever linking them (A86B; C0/B0E6
+      // skips them, B0F8). Each one used to throw the WHOLE frame back on the Y sort -- 0E6's exit, obj10 over obj11 on
+      // one column where the cartridge's OAM (and the list) has obj11 in front: 412 px at cartridge c5578-5581. The
+      // menu's reload rebuilds the list now as C0/286C does (CtSceneMenuReloadObjects), which is what made dropping them
+      // break the menu's fade-in before. A malformed chain is the one port-side guard left: that frame keeps the Y sort.
+      if (ok) {
+        int w = 0;
+        for (int k = 0; k < n; k++) {
+          int o = order[k] < 0 ? pObj : order[k];
+          if (o < 0 || o >= 64 || dkey[o] == 1) {
+            if (dbg.drawListDbg)
+              fprintf(stderr, "[drawlist] f%d loc=%03X obj%d (lead %d) is not in $0E00's list: not drawn ($0E01=%02X $0F00=%02X $1100=%02X)\n",
+                      frameNo, m7[0x0100] | (m7[0x0101] << 8), o, pObj, o >= 0 && o < 64 ? m7[0x0E01 + o * 2] : 0,
+                      o >= 0 && o < 64 ? m7[0x0F00 + o * 2] : 0, o >= 0 && o < 64 ? m7[0x1100 + o * 2] : 0);
+            if (sten[k]) nSten--;
+            continue;
+          }
+          order[w] = order[k]; oy[w] = dkey[o]; lay[w] = lay[k]; sten[w] = sten[k]; w++;
+        }
+        n = w;
       }
-      if (ok) for (int k = 0; k < n; k++) oy[k] = dkey[order[k] < 0 ? pObj : order[k]];
       if (!ok && dbg.drawListDbg)
-        fprintf(stderr, "[drawlist] f%d loc=%03X the Y sort: obj%d (lead %d) is drawn and not in $0E00's list ($0E01=%02X $0F00=%02X $1100=%02X)\n",
-                frameNo, m7[0x0100] | (m7[0x0101] << 8), miss, pObj, miss >= 0 && miss < 64 ? m7[0x0E01 + miss * 2] : 0,
-                miss >= 0 && miss < 64 ? m7[0x0F00 + miss * 2] : 0, miss >= 0 && miss < 64 ? m7[0x1100 + miss * 2] : 0);
+        fprintf(stderr, "[drawlist] f%d loc=%03X the Y sort: $0E00's chain is malformed\n", frameNo, m7[0x0100] | (m7[0x0101] << 8));
     }
     // primary key = OAM priority group (gC sprites draw over the default layer, e.g. the save
     // sparkle over the NPC on it); secondary = the draw list's walk (above), else Y. insertion sort, stable for ties.

@@ -3124,6 +3124,20 @@ static void palSweepB0E6(CtScene* sc) {
   if (legsOn()) CtAnimDrawPass(m->s, NULL);                      // B124 BRL C0/B271
 }
 void CtScenePalSweepEntry(CtScene* sc) { if (sc) palSweepB0E6(sc); }
+// THE MENU'S RELOAD RUNS C0/286C WHOLE, and its object legs after the camera (C0/0A50) and the OBJ slots (C0/6F79, the
+// host's fieldPassObjSlots) are `2875 JSR C0/7155` (the eight palette owners $0B80-0B87 := 80), `2878 JSR C0/E935` (the
+// arena owners $0BC0-0BC7), `287B JSR C0/B204` (the whole draw-list page $0E00-0EFF := 80), `287E JSR C0/A7E9` (one
+// (00, FF) pair per object from $0F00) and `2881 JSR C0/B0E6` -- the sweep relinks every object in the camera's box in
+// INDEX order, with no party tail. The C0/01A5 MVN had put back the list from before the menu (the lead at its band's
+// head, where the party tail left him) and the port kept it until the object pass relinked: the fade-in layered by the
+// stale list (field_draw_list_order.md sec. 4).
+void CtSceneMenuReloadObjects(CtScene* sc) {
+  if (!sc) return;
+  uint8_t* r = sc->mem->s;
+  memset(r + 0x0B80, 0x80, 8);                                   // C0/7155
+  CtObjSceneInit(r, sc->nobj);                                   // C0/6F79 (again: the host's) / E935 / B204 / A7E9
+  palSweepB0E6(sc);                                              // C0/B0E6
+}
 
 static int ctWipeOp(CtScene* sc, int sub);
 static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
@@ -6598,7 +6612,12 @@ void CtSceneTick(CtScene* sc) {
   if (!sc->sndFrozenTick && !sc->loadFadeIn && head && (d117 & 0x80)) {
     int fc = r8(sc->mem, 0x7E0119);
     if (fc != 0 && !(fc & 0x80)) {
+      // 0C97 DEC $19 -- and sc->bright with it: it stands for $0119's low nibble, and the picture is its frame's $0119
+      // (the NMI's C0/EC4E). Left at 15, the frame drew the host's copy of the byte from BEFORE the tick, one step late:
+      // MEASURED on the attract's loc 0E6 exit (a pan through the fade, $0117 = 80 at cartridge --monitor f5672 / boot
+      // port f7777), the port's first dim picture was one frame after the cartridge's while its scroll matched.
       w8(sc->mem, 0x7E0119, fc - 1);
+      sc->bright = (fc - 1) & 0x0F;
     } else {
       CtSceneExitCommit(sc);
       return;                                            // the main loop is left (see CtSceneExitCommit)
