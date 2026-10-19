@@ -19,6 +19,7 @@
 
 #include "audio.h"
 #include "sound/lockstep.h"
+#include "sound/machine.h"
 #include "apu.h"
 #include "dsp.h"
 
@@ -32,14 +33,31 @@ static Apu* g_apu;
 static uint8_t g_wram[0x20000];
 static long g_waitMiss;
 
-static void spc(int cycles) { CtAudioRunCycles(g_au, cycles); }
+// CT_SNDDRV_SAVETEST=<n>: every n-th run of the harness's (mid-session, mid-tick, mid-wait alike) the sound machine is
+// saved and loaded back in place -- its restore point and the inputs since replayed -- and the lockstep goes on comparing
+// it with the original: a savestate that is not exact shows as a mismatch after it.
+static long g_saveEvery = -1, g_saveRuns, g_saves, g_saveFails;
+static void saveTest(void) {
+  SndMachine* m = CtAudioMachine(g_au);
+  if (!m || !CtSndLockstepActive(CtAudioApu(g_au))) return;
+  uint8_t* b = NULL; long n = 0;
+  if (!SndMachineSave(m, &b, &n)) { g_saveFails++; return; }
+  if (!SndMachineLoad(m, b, n)) g_saveFails++;
+  g_saves++;
+  free(b);
+}
+static void spc(int cycles) {
+  CtAudioRunCycles(g_au, cycles);
+  if (g_saveEvery < 0) { const char* e = getenv("CT_SNDDRV_SAVETEST"); g_saveEvery = e ? atol(e) : 0; }
+  if (g_saveEvery > 0 && ++g_saveRuns % g_saveEvery == 0) saveTest();
+}
 static void wr(int k, uint8_t v) { CtAudioPortWrite(g_au, k, v); }
 static int waitOut(int k, uint8_t v) {   // the driver's echo on out-port k
   for (long i = 0; i < 400000; i += 16) { if (g_apu->outPorts[k] == v) return 1; spc(16); }
   g_waitMiss++;
   return 0;
 }
-static void frames(int n) { while (n-- > 0) CtAudioFrame(g_au); }
+static void frames(int n) { while (n-- > 0) { CtAudioFrame(g_au); if (g_saveEvery > 0 && ++g_saveRuns % g_saveEvery == 0) saveTest(); } }
 
 // Before each action the original must be in its main loop ($0299-$029F, the PC the harness may look at: it is the
 // original's side): a session an echo was missed in is ended (its end marker, or the header token it still waits for),
@@ -397,6 +415,7 @@ int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed) {
   printf("snddrvfuzz: seed %u, %ld actions (commands %ld, effects %ld, songs %ld, constructed %ld, sessions %ld, boots %ld), "
          "%ld echo waits missed, %ld recoveries\n", seed, actions, counts[0], counts[1], counts[2], counts[3], counts[4], counts[5],
          g_waitMiss, g_recover);
+  if (g_saveEvery > 0) printf("snddrvfuzz: %ld savestates saved and loaded back in place, %ld failed%c", g_saves, g_saveFails, 10);
   CtSndLockstepReport();
-  return CtSndLockstepMismatches() ? 1 : 0;
+  return (CtSndLockstepMismatches() || g_saveFails) ? 1 : 0;
 }

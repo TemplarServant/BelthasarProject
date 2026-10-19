@@ -57,6 +57,10 @@ static long g_rwAdr = -2;
 static uint32_t* g_rwV; static long g_rwVn, g_rwVcap; static uint64_t g_rwVfirst;
 static int g_on;
 static long g_mismatch, g_ops, g_acc, g_samples, g_ramChecks, g_runs, g_joins, g_details, g_drvRam;
+// What the comparison covered (the original's side, while the machine ran beside it): the sequence events dispatched
+// ($073D with the event in A), the commands run ($0BAC with the command at $8D), the upload kinds ($1035: the kind in A,
+// the destination's page in Y -- below $1E00 counted as kind 0, the discard), the look-ahead's handlers ($0793's RET).
+static uint32_t g_evRun[60], g_cmdRun[256], g_kindRun[8], g_laRun[7];
 static FILE* g_out;
 static int g_reported;
 static void (*g_prevOp)(Apu*, uint16_t);
@@ -291,6 +295,18 @@ static void opHook(Apu* apu, uint16_t pc) {
     if (!s->snap[i].ram) s->snap[i].ram = (uint8_t*)malloc(0x10000);
     if (s->snap[i].ram) { memcpy(s->snap[i].ram, apu->ram, 0x10000); s->snap[i].cyc = apu->cycles; s->snapN++; }
   }
+  if (s->active) {
+    switch (pc) {
+    case 0x073D: if (apu->spc->a >= 0xC4) g_evRun[apu->spc->a - 0xC4]++; break;
+    case 0x0BAC: g_cmdRun[apu->ram[0x8D]]++; break;
+    case 0x1035: if (apu->spc->a != 0xE0) g_kindRun[apu->spc->y < 0x1E ? 0 : (apu->spc->a & 7)]++; break;
+    case 0x1B86: case 0x1BD9: case 0x1BDD: case 0x1BFC: case 0x1C39: case 0x1CC9: case 0x1D2A:
+      if (s->prevPc == 0x0793) { static const uint16_t la[7] = { 0x1B86, 0x1BD9, 0x1BDD, 0x1BFC, 0x1C39, 0x1CC9, 0x1D2A };
+                                 for (int k = 0; k < 7; k++) if (la[k] == pc) g_laRun[k]++; }
+      break;
+    default: break;
+    }
+  }
   s->curPc = pc;
   s->prevPc = pc;
   if (s->active) push(s, 'O', 0, 0, pc, apu->cycles);
@@ -508,6 +524,22 @@ void CtSndLockstepReport(void) {
            "%ld joins; %ld mismatches; %ld sample differences while a voice played the driver's own RAM\n", g_ops, g_acc,
            g_samples, g_runs, g_ramChecks, g_joins, g_mismatch, g_drvRam);
   say("%s", line);
+  char miss[600]; int m = 0, run = 0;
+  miss[0] = 0;
+  for (int i = 0; i < 60; i++) { if (g_evRun[i]) run++; else m += snprintf(miss + m, sizeof miss - (size_t)m, " %02X", 0xC4 + i); }
+  snprintf(line, sizeof line, "snddrv-lockstep: events run %d/60, not run:%s%c", run, m ? miss : " -", 10); say("%s", line);
+  m = 0; run = 0; miss[0] = 0;
+  static const uint8_t cmds[] = { 0x10, 0x11, 0x14, 0x15, 0x18, 0x19, 0x80, 0x81, 0x82, 0x83, 0x85, 0x86, 0x87, 0x88, 0x89,
+                                  0x8E, 0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF8, 0xF9, 0xFC, 0xFD, 0xFE, 0xFF };
+  for (size_t i = 0; i < sizeof cmds; i++) { if (g_cmdRun[cmds[i]]) run++; else m += snprintf(miss + m, sizeof miss - (size_t)m, " %02X", cmds[i]); }
+  snprintf(line, sizeof line, "snddrv-lockstep: commands run %d/%d, not run:%s%c", run, (int)sizeof cmds, m ? miss : " -", 10); say("%s", line);
+  m = 0; run = 0; miss[0] = 0;
+  for (int i = 0; i < 8; i++) { if (g_kindRun[i]) run++; else m += snprintf(miss + m, sizeof miss - (size_t)m, " %02X", i); }
+  snprintf(line, sizeof line, "snddrv-lockstep: upload kinds run %d/8, not run:%s%c", run, m ? miss : " -", 10); say("%s", line);
+  m = 0; run = 0; miss[0] = 0;
+  static const char* const laName[7] = { "DC/E4-E7", "E9", "EA", "F6", "F5", "E3", "FA" };
+  for (int i = 0; i < 7; i++) { if (g_laRun[i]) run++; else m += snprintf(miss + m, sizeof miss - (size_t)m, " %s", laName[i]); }
+  snprintf(line, sizeof line, "snddrv-lockstep: look-ahead handlers run %d/7, not run:%s%c", run, m ? miss : " -", 10); say("%s", line);
 }
 long CtSndLockstepMismatches(void) { return g_mismatch; }
 int CtSndLockstepWanted(void) { const char* e = getenv("CT_AUDIO_SPC"); return e && !strcmp(e, "lockstep"); }

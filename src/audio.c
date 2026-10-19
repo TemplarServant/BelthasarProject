@@ -2163,6 +2163,7 @@ void CtAudioSeedMailboxPage(const CtAudio* a, uint8_t* mem7E) {
 
 const uint8_t* CtAudioAram(const CtAudio* a) { return !a ? NULL : machineRuns(a) ? a->mach->d.m : a->apu->ram; }
 struct Apu* CtAudioApu(CtAudio* a) { return a ? a->apu : NULL; }
+struct SndMachine* CtAudioMachine(CtAudio* a) { return a ? a->mach : NULL; }
 void CtAudioPortWrite(CtAudio* a, int k, uint8_t v) { if (a) W(a, k & 3, v); }
 int CtAudioRunCycles(CtAudio* a, int cycles) { return a ? apuRun(a, cycles) : 0; }
 uint32_t CtAudioApuCycles(const CtAudio* a) { return !a ? 0 : machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles; }

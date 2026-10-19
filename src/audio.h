@@ -157,6 +157,7 @@ const uint8_t* CtAudioAram(const CtAudio* a);      // 64KB, for --aram-style dif
 // The SPC itself, for a translated stage (src/seq_xlat.h) to borrow: while the stage runs, its bus drives this APU
 // and the host must not advance it with CtAudioFrame -- its samples are still read with CtAudioSamples.
 struct Apu* CtAudioApu(CtAudio* a);
+struct SndMachine* CtAudioMachine(CtAudio* a);   // the sound machine in C (NULL under CT_AUDIO_SPC=ref)
 // The CPU's side of the ports, outside a JSL (a test harness, a stage's own post): $2140+k written now, and the sound
 // processor run `cycles` (apu_runCycles' way: to the first instruction starting at or after them; returns the cycles run).
 void      CtAudioPortWrite(CtAudio* a, int k, uint8_t v);
