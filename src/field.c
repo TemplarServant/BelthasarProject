@@ -5000,11 +5000,18 @@ static uint16_t fieldLockInputBits(int scripted, int dx, int dy, int a, int b, i
 // The BATTLE counts its own frames against the cartridge's battle states label for label (the run-away counter
 // reads `$4218` a frame late, battle.c), so it keeps the auto-read register of the frame before: g_padAutoRead.
 static uint16_t g_padAutoRead = 0;   // the battle's $4218 | $4219 << 8: the previous frame's controller
+// CT_WS_BATTLE_LEAD=1 (HARNESS ONLY, a route drive): the battle takes THIS frame's word instead. A route drives the port's
+// keys one frame after the cartridge's (the convention above, the field's), and the battle's word is then a frame later
+// again: on the cartridge a press at c lands in $EE at c + 1, on such a drive at c + 2 -- one frame, and a 4-frame menu pass
+// when the press sits at a pass's edge (the playthrough's leg 20: Crono's target-select and confirm 4 frames late, the
+// enemies' due turns ahead of his attack, the RNG stream apart from there). Under the lead the fight meets the cartridge's
+// presses on the cartridge's frames; nothing changes for a human or for CT_BATTLE_SCRIPT drives.
+static uint16_t g_padNow = 0;
 static void fieldPadNmi(uint16_t serial) {
   static uint16_t prevPort = 0;
   uint16_t port = 0;                               // snes_doAutoJoypad: bit N of the serial word -> bit 15-N
   for (int i = 0; i < 16; i++) if (serial & (1u << i)) port |= (uint16_t)(1u << (15 - i));
-  g_padAutoRead = prevPort;
+  g_padAutoRead = prevPort; g_padNow = port;
   CtJoypadPoll(CtWramSys(fieldWram()), port);
   prevPort = port;
 }
@@ -18416,7 +18423,8 @@ int main(int argc, char** argv) {
                  // battle input taken from the level state -- every command still comes off aEdge.
                  | (aHeld ? CT_BIN_AH : 0)
                  | (lrHeld ? CT_BIN_LRH : 0);                  // L+R level: the run-away counter's only input
-        liveHost.joyAutoRead = g_padAutoRead;            // CF/E6E0 reads $4218/$4219 itself
+        { static int wsLead = -1; if (wsLead < 0) { const char* e = getenv("CT_WS_BATTLE_LEAD"); wsLead = (e && *e == '1'); }
+          liveHost.joyAutoRead = (wsLead && walkScript) ? g_padNow : g_padAutoRead; }   // CF/E6E0 reads $4218/$4219 itself
         // CD/0900 in the battle's NMI, which runs before this frame's main loop: `LDA $CD02 / BEQ ->0922` -- with $CD02
         // set, `LDA $CD:3FFF` (a ROM zero) `BEQ ->0912 / LDA $BB00 / LSR A`; else `LDA $BB00` -- `STA $2100`.
         { const uint8_t* bm = CtSceneMem7E(f.vm);

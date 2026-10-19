@@ -6617,6 +6617,7 @@ static void battleItemSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
 // frame ($00F2 layout: bits 7-4 = A X L R = the word's bits 7-4, bits 3-0 = B Y Select Start = its bits 15-12).
 static int battleBootIntro(const CtBattleHost* h);
 static void battleOpenAction(CtBattleHost* h, int atk, int reactive);
+static void battleRollDrop(CtBattleHost* h, int id);       // FD/AC08-AC4B, at the death (below)
 static void battleArriveDecode(CtBattleHost* h, int atk);   // C1/8DA4-8E15 (below)
 // C1/ACF2 -- THE ACTION HEADER of an enemy's command: `TDC / STA $AE90 / LDA $B18B / STA $AE91 / LDA $AEE3 / STA $AE92 /
 // LDA $AEE4 / STA $AE93`. Called by the turn (C1/8DA4) once the op's handler has returned -- after an enemy TECH's name
@@ -8200,13 +8201,14 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
           //  (d) rand(0..99) < 0x5A (90)          -- a FLAT 90% roll on the MAIN $26 stream (FD/AC21 LDA #64
           //                                          / JSL C1/FDCB = C1/AF22 / CMP #5A / BCS skip).
           // The ROM rolls (d) PER drop-eligible DEATH, BEFORE the dedup (FD/AC2D) -> N draws for N such deaths
-          // (3 for the forest, one Tonic stored). We RECORD each eligible death here and DEFER the roll to
-          // victory (battleResolveDrops) so the $26 draws don't perturb mid-battle combat variance -- a
-          // $26-POSITION-only deviation (our combat is not $26-lockstep, so the mid-battle position is moot);
-          // the per-death roll COUNT + death-order + dedup are all preserved.
-          if (rec[4] != 0 && rec[4] != rec[5] &&              // (a)+(b)+(c): has a drop, distinct from charm
-              h->dropPendN < (int)(sizeof h->dropPend / sizeof h->dropPend[0]))
-            h->dropPend[h->dropPendN++] = rec[4];             // candidate drop, one per eligible death (ordered)
+          // (3 for the forest, one Tonic stored) -- and so does this, at the death (battleRollDrop). It used to
+          // DEFER the roll to the victory while the combat was not $26-lockstep with the cartridge; on a lockstep
+          // drive the deferred draw moved every later one. MEASURED (the playthrough's leg 20, Guardia Forest's
+          // first ambush, `--cputrace` of the rule's cartridge): the Hetake's death draws at FD:AC21 (`LDA #64 /
+          // JSL C1/FDCB`, $26 A9 -> AA, f1648); the port drew it at the victory (f1980) and the fight's every
+          // later roll was one entry off -- the second ambush's target choices, damage and length all apart.
+          if (rec[4] != 0 && rec[4] != rec[5])                // (a)+(b)+(c): has a drop, distinct from charm
+            battleRollDrop(h, rec[4]);
           // THE OTHER ARM, previously dropped: drop == charm (and nonzero) routes to the GUARANTEED list.
           // FD/AC10 `CMP $CC5E05,X / BEQ ->FD/AC4D`, and FD/AC4D-AC6A walks $B2AA[0..2] with a dedup
           // (`CMP $10 / BEQ done`) and stores UNCONDITIONALLY -- no $AE5D gate, no rand(0..99) roll; those
@@ -16444,6 +16446,18 @@ void CtBattleVictoryTechPass(uint8_t* mem, const uint8_t* rom, int tp, uint8_t m
 // (90); dedup identical ids (FD/AC32). Same roll COUNT + death-order + dedup as the ROM -- the ONLY deviation
 // is the $26 POSITION (victory-time, so the draws don't shift mid-battle combat variance / any pin). Called
 // once at victory-entry (battleBuildResults); deterministic ($26 is fixed at that point).
+static void battleRollDrop(CtBattleHost* h, int id) {
+  long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
+  int roll = battleRng(h->mem, rr, 99);                       // FD/AC1F-AC23 `LDA #64 / JSL C1/FDCB` -- rand(0..99)
+  int took = (roll < 0x5A);                                   // FD/AC27 CMP #5A / BCS skip
+  if (took) {
+    int seen = 0;
+    for (int di = 0; di < h->rewDropN; di++) if (h->rewDrops[di] == id) seen = 1;    // dedup (FD/AC2D-AC32)
+    if (!seen && h->rewDropN < 3) h->rewDrops[h->rewDropN++] = id;
+  }
+  const char* tr = getenv("CT_BATTLE_TRACE");
+  if (tr && *tr) fprintf(stderr, "battle-drop f%d drop%02X roll=%d(<90) took=%d dropN=%d\n", h->frames, id, roll, took, h->rewDropN);
+}
 static void battleResolveDrops(CtBattleHost* h) {
   long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
   const char* tr = getenv("CT_BATTLE_TRACE");

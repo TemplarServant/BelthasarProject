@@ -31,6 +31,7 @@ printed (the offset, informational). One line a leg:
 import hashlib
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -41,7 +42,7 @@ FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 ROM = os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc')
 ROUTE = os.path.join(ROOT, 'tools', 'playthrough', 'route.txt')
 STATES = os.path.join(ROOT, 'saves', 'playthrough')
-TMP = os.path.join(ROOT, 'build', '_playthrough')
+TMP = os.environ.get('PT_TMP') or os.path.join(ROOT, 'build', '_playthrough')   # PT_TMP: a second run's own scratch
 RULE = dict(os.environ, CT_ORACLE_LOGICAL='1')
 # What is graded: the location, the storyline, the party. (The port's memmon names $7F:xxxx as 1xxxx.)
 MON = [('loc', '7E0100', '0100', 2), ('story', '7F0000', '10000', 1), ('party', '7E2980', '2980', 3),
@@ -160,6 +161,54 @@ def route_bfs(w, s, g, z):
     return out[::-1]
 
 
+def route_walk(cur, pad, gx, gy, want_exit, cap):
+    """From the state `cur` (advanced in place), follow a BFS over the location's tiles -- the cartridge's own planes,
+    $7E:30C0 (shape: 1 = solid) and $7E:7040 (z = & 3) on the lead's plane $0155 -- a few tiles at a time (16 frames a
+    tile), recomputed from where the lead stands after each stretch; when control is gone ($011F = 0: a visible enemy, a
+    scene) A is mashed until it is back; a stretch that leaves the lead where it stood is followed by a half-tile nudge
+    across it (a partial tile's corner). Returns pad + the stretches, merged."""
+    loc0, last, nudge = None, None, 0
+    for it in range(cap):
+        w = wram_of(cur)
+        loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
+        if loc0 is None:
+            loc0 = loc
+        if loc != loc0:
+            print('route: loc %03X reached after %d stretches' % (loc, it)); break
+        lead = w[0x0197]
+        tx, ty, z = w[0x1801 + lead], w[0x1881 + lead], w[0x0155]
+        here = (w[0x1800 + lead] | (w[0x1801 + lead] << 8), w[0x1880 + lead] | (w[0x1881 + lead] << 8))
+        if w[0x011F] == 0:                           # a fight or a scene: A until control is back
+            step = [(0x100, 2), (0, 18), (0x100, 2), (0, 18)]
+        elif (tx, ty) == (gx, gy) and not want_exit:
+            print('route: at (%d,%d)' % (tx, ty)); break
+        else:
+            path = route_bfs(w, (tx, ty), (gx, gy), z)
+            if not path:
+                print('route: no tile path from (%d,%d) on plane %d' % (tx, ty, z)); break
+            if len(path) == 1 and want_exit:       # on the goal tile: push on in the last direction
+                step = [(pad[-1][0] if pad and pad[-1][0] in (0x10, 0x20, 0x40, 0x80) else 0x20, 16)]
+            else:
+                step = path_pad(path[:4])
+            if here == last:                       # stuck: half a tile across the way it wanted to go
+                d = step[0][0]
+                side = (0x40, 0x80) if d in (0x10, 0x20) else (0x10, 0x20)
+                step = [(side[nudge & 1], 8)] + step
+                nudge += 1
+        last = here if w[0x011F] else None
+        pad = pad + step
+        nxt = cur + '.n'
+        oracle_play(cur, step, nxt)
+        os.replace(nxt, cur)
+    merged = []
+    for mk, n in pad:
+        if merged and merged[-1][0] == mk and mk != 0x100:
+            merged[-1][1] += n
+        else:
+            merged.append([mk, n])
+    return [tuple(x) for x in merged]
+
+
 def path_pad(path):
     M = {(1, 0): 0x80, (-1, 0): 0x40, (0, 1): 0x20, (0, -1): 0x10}
     out = []
@@ -229,7 +278,7 @@ def port_timeline(start, pad):
     end = sum(n for _, n in pad)
     at = [end + k for k in SHOTS if end + k > 0]
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
-               CT_AUDIO_SEEDSTATE=start, CT_FIELD_MEMMON=','.join('%s:%d' % (p, n) for _, _, p, n in MON),
+               CT_AUDIO_SEEDSTATE=start, CT_WS_BATTLE_LEAD='1', CT_FIELD_MEMMON=','.join('%s:%d' % (p, n) for _, _, p, n in MON),
                CT_SHOTS=os.path.join(TMP, 'p'), CT_SHOTS_AT=','.join(map(str, at)), CT_SHOTS_EXIT='1')
     r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
                         '--walkscript', walkscript(pad)], cwd=ROOT, env=env, capture_output=True, text=True,
@@ -344,53 +393,23 @@ def main():
             print('%-5s %s' % (k, ' '.join('%s@%d' % (x, f) for f, x in v)))
         print('try: %d frames from %s -> %s (picture build/_playthrough/try.png)' % (sum(n for _, n in pad), start, out))
     elif a[0] == 'route':
-        # route <leg> "<prefix pad>" <tile x> <tile y> [--exit] [--max N]: follow a BFS over the location's tiles -- the
-        # cartridge's own planes, $7E:30C0 (shape: 1 = solid) and $7E:7040 (z = & 3) on the lead's plane $0155 -- from the
-        # lead's tile, a few tiles at a time (16 frames a tile), recomputed from where the lead stands after each stretch;
-        # when control is gone ($011F = 0: a visible enemy, a scene) A is mashed until it is back. Prints the whole pad.
+        # route <leg> "<prefix pad>" <tile x> <tile y> [--exit] [--max N]: the prefix from the leg's start, then route_walk.
         i = find(legs, a[1])
         if i > 0:
             ensure_states(legs, i - 1)
         pad = expand(a[2]) or [(0, 1)]
-        gx, gy = int(a[3]), int(a[4])
-        want_exit = '--exit' in a
-        cap = int(a[a.index('--max') + 1]) if '--max' in a else 300
-        start = start_of(legs, i)
         cur = os.path.join(TMP, 'route.state')
-        oracle_play(start, pad, cur)
-        loc0 = None
-        for it in range(cap):
-            w = wram_of(cur)
-            loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
-            if loc0 is None:
-                loc0 = loc
-            if loc != loc0:
-                print('route: loc %03X reached after %d stretches' % (loc, it)); break
-            lead = w[0x0197]
-            tx, ty, z = w[0x1801 + lead], w[0x1881 + lead], w[0x0155]
-            if w[0x011F] == 0:                       # a fight or a scene: A until control is back
-                step = [(0x100, 2), (0, 18), (0x100, 2), (0, 18)]
-            elif (tx, ty) == (gx, gy) and not want_exit:
-                print('route: at (%d,%d)' % (tx, ty)); break
-            else:
-                path = route_bfs(w, (tx, ty), (gx, gy), z)
-                if not path:
-                    print('route: no tile path from (%d,%d) on plane %d' % (tx, ty, z)); break
-                if len(path) == 1 and want_exit:   # on the goal tile: push on in the last direction
-                    step = [(pad[-1][0] if pad[-1][0] in (0x10, 0x20, 0x40, 0x80) else 0x20, 16)]
-                else:
-                    step = path_pad(path[:4])
-            pad = pad + step
-            nxt = os.path.join(TMP, 'route_n.state')
-            oracle_play(cur, step, nxt)
-            os.replace(nxt, cur)
-        merged = []
-        for mk, n in pad:
-            if merged and merged[-1][0] == mk and mk != 0x100:
-                merged[-1][1] += n
-            else:
-                merged.append([mk, n])
-        print('pad: %s' % btnscript([tuple(x) for x in merged]))
+        oracle_play(start_of(legs, i), pad, cur)
+        pad = route_walk(cur, pad, int(a[3]), int(a[4]), '--exit' in a,
+                         int(a[a.index('--max') + 1]) if '--max' in a else 300)
+        print('pad: %s' % btnscript(pad))
+    elif a[0] == 'goto':
+        # goto <state> <tile x> <tile y> <out.state> [--exit] [--max N]: route_walk from any state (authoring between
+        # stretches); writes the end state, prints the stretch's pad.
+        shutil.copyfile(a[1], a[4])
+        pad = route_walk(a[4], [], int(a[2]), int(a[3]), '--exit' in a,
+                         int(a[a.index('--max') + 1]) if '--max' in a else 300)
+        print('pad: %s' % btnscript(pad))
     elif a[0] == 'walk':
         # walk <leg> "<prefix pad>" <tx> <ty> [--exit] [--lead=HEX]: the prefix from the leg's start, then tools/walkto.py
         # (the oracle's own collision, A* order) to the pixel or through the exit box; prints the whole pad.
