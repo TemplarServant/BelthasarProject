@@ -39,6 +39,7 @@ SOURCES = [
     rom_closure.sequence_streams,          # the $C3 stages' packets through $FE:0000
     rom_closure.sprite_streams,            # every sprite record's sheet through $E4:FFE0's gfx table
     rom_closure.menu_streams,              # the menus' own streams (the exchange's BG3 characters)
+    rom_closure.world_streams,             # the overworld's packets ($C6:FDF0-FFFF tables) and the time gauge's
 ]
 SKIPPED = os.path.join('saves', 'lz_pack.skipped')   # the listed offsets that are not streams (the raw blocks)
 

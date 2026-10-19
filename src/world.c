@@ -3,6 +3,7 @@
 #include "ct_owobj.h"   // the ambient-object block ABI (offsets/class shared with field.c)
 #include "vwf.h"      // C2/57DF / 5823: the proportional text (the world map's era label)
 #include "lz.h"       // C6/E028: the world scripts' far call into C3/0002 (ct_lz_decompress_bounded)
+#include "romview.h"  // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE): every read of g_owRom goes through it
 #include "tables/ow_anim.h"  // ROM $C3:E000..EFFF: the anim sub-VM's pointer table + bytecode
 #include <string.h>
 #include <stddef.h>   // ptrdiff_t (the draw list maps a block pointer back to its index)
@@ -15,10 +16,23 @@
 // reading out of bounds.
 // ...and from the ROM itself for another bank (the world map's markers run scripts in bank $C2, C2:6A18 / 6A20).
 static const uint8_t* g_owRom; static long g_owRomLen;   // (defined with CtWorldSetRom below)
+// A byte of the ROM, through romview.h: the container's table when one covers it, else the image's.
+static uint8_t owRB(long o) { return CtRomByte(g_owRom, g_owRomLen, o); }
+// The 8-byte window a script reader decodes an op from: the op's bytes through owRB. A table that covers the op's first
+// byte ends where the program the closure walked ends (assets/rom_closure.py world_scripts), so the window's bytes past
+// it are no op's operands and read 0 -- were one an operand, the container and the ROM would part (tools/rom_free_cmp.py).
+static void owRomWin(uint8_t* buf, long o) {
+  int tab = CtRomViewHas(o);
+  for (int k = 0; k < 8; k++) buf[k] = (!tab || CtRomViewHas(o + k)) ? owRB(o + k) : 0;
+}
 static const uint8_t* ctWorldAnimRom(uint8_t bank, uint16_t pc) {
   if (bank != 0xC3) {
+    static uint8_t win[4][8]; static int next;                // (a descriptor and its piece are read at once)
     long o = ((long)(bank & 0x3F) << 16) + pc;
-    return (bank >= 0xC0 && g_owRom && o + 8 <= g_owRomLen) ? g_owRom + o : NULL;
+    if (bank < 0xC0 || !g_owRom || o + 8 > g_owRomLen) return NULL;
+    uint8_t* b = win[next++ & 3];
+    owRomWin(b, o);
+    return b;
   }
   if (pc < CT_OWANIM_BASE || (uint32_t)pc + 4u > CT_OWANIM_BASE + CT_OWANIM_SIZE) return NULL;
   return ctOwAnimC3 + (pc - CT_OWANIM_BASE);
@@ -293,7 +307,7 @@ static const uint8_t* g_owRom;   // (defined with CtWorldSetRom below)
 static long g_owRomLen;
 static int owSine(int i) {
   i &= 0x3FF;
-  int v = (g_owRom && 0xF900 + i < g_owRomLen) ? g_owRom[0xF900 + i] : 0;
+  int v = g_owRom ? owRB(0xF900 + i) : 0;
   return i >= 0x200 ? -v : v;
 }
 // THE DRIFT OBJECT'S VISIT (C2/75C3 / C2/75FD / C2/7702 / C2/77F2): the drift, then `$24 += $1BF1` / `$2A += $1BF3` and
@@ -1845,7 +1859,7 @@ void CtWorldSetOp4EHook(CtWorldOp4EHook fn) { g_owWinCall = fn; }
 // the destination $<bank>:<dst> into $0303-$0305, then the packet decompressed there.
 static void owFarLzTo(uint8_t* ram, uint8_t bank, uint16_t dst, uint16_t tbl, uint16_t x) {
   if (!g_owRom || g_owRomLen < 0x60000L + tbl + x + 3) return;
-  const uint8_t* p = g_owRom + 0x60000L + tbl + x;
+  uint8_t p[3] = { owRB(0x60000L + tbl + x), owRB(0x60000L + tbl + x + 1), owRB(0x60000L + tbl + x + 2) };
   ram[0x0300] = p[0]; ram[0x0301] = p[1]; ram[0x0302] = p[2];
   ram[0x0303] = (uint8_t)dst; ram[0x0304] = (uint8_t)(dst >> 8); ram[0x0305] = bank;
   uint32_t a = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
@@ -1953,7 +1967,7 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
         ram[(X + 0x24) & 0xFFFF] = (uint8_t)c; ram[(X + 0x25) & 0xFFFF] = (uint8_t)(c >> 8); }
       unsigned ph = ram[(X + 0x22) & 0xFFFF] | (ram[(X + 0x23) & 0xFFFF] << 8), base = ram[0x26] | (ram[0x27] << 8);
       for (int k = 0; k < 0xE0; k++, ph = (ph + 8) & 0xFFFF) {     // E5F3-E62E
-        unsigned x = ph & 0x3FF, v = (unsigned)g_owRom[0xF900 + x] * 4, r;
+        unsigned x = ph & 0x3FF, v = (unsigned)owRB(0xF900 + x) * 4, r;
         if (x >= 0x200) r = 0xFF00 | ((((~v) + 1) & 0xFFFF) >> 8);  // E604-E611
         else r = (v >> 8) & 0xFF;                                   // E613-E614
         r = (r + base) & 0xFFFF;                                    // E617 ADC $26
@@ -2011,7 +2025,7 @@ static const uint8_t* obScript(const uint8_t* ram, uint8_t bank, uint16_t pc, ui
   if (bank == 0x7E) return ram + pc;
   if (bank >= 0xC0 && g_owRom) {
     long o = ((long)(bank - 0xC0) << 16) | pc;
-    for (int k = 0; k < 8; k++) buf[k] = (o + k < g_owRomLen) ? g_owRom[o + k] : 0;
+    owRomWin(buf, o);
     return buf;
   }
   return ram + 0x10000 + pc;
@@ -2036,7 +2050,7 @@ static const uint8_t* obScript(const uint8_t* ram, uint8_t bank, uint16_t pc, ui
 static void owW16(uint8_t* ram, int a, unsigned v) { ram[a] = (uint8_t)v; ram[a + 1] = (uint8_t)(v >> 8); }
 static unsigned owRomW(unsigned bankC2off) {
   long o = 0x020000L + (long)bankC2off;
-  return (g_owRom && o + 1 < g_owRomLen) ? (unsigned)(g_owRom[o] | (g_owRom[o + 1] << 8)) : 0u;
+  return (g_owRom && o + 1 < g_owRomLen) ? (unsigned)(owRB(o) | (owRB(o + 1) << 8)) : 0u;
 }
 static void owRebuildScratch(uint8_t* ram, int bg) {
   int x = bg * 2;
@@ -2679,7 +2693,7 @@ static int obFadeStep(uint8_t* d, const uint8_t* T) {                  // C2/1FC
   return m;
 }
 static int obRowFade(uint8_t* ram, uint8_t* B) {
-  const uint8_t* T = (g_owRom && g_owRomLen >= 0x022062 + 0x40) ? g_owRom + 0x022062 : NULL;   // $C2:2062
+  const uint8_t* T = (g_owRom && g_owRomLen >= 0x022062 + 0x40) ? CtRomPtr(g_owRom, g_owRomLen, 0x022062, 0x40) : NULL;   // $C2:2062
   if (!T) {
     static int said = 0;
     if (!said) { said = 1; fprintf(stderr, "owobj: class $1E38 needs the ROM's $C2:2062 step table -- no ROM, not run\n"); }
@@ -3155,7 +3169,7 @@ static int obEpochShadow(uint8_t* ram, uint8_t* B) {
 // disasm/notes/ow_vehicle.md sec. 7. Record `$029A/$029C` (position), `$029E` (bits 0-1 aboard, 5 landing, 6 riding, 7 present);
 // `$1BF0` aloft. The lead's module 3 (C2/347B) rides it; the boarding manager's vehicle-B arm (box C2:325C) boards it. Classes:
 // $4CC5 the lead's Dactyl, $504B its shadow, $5097 x 2 the followers' Dactyls (+24 = the slot), $5494 x 2 their shadows.
-static uint8_t owRomC0(unsigned a) { return (g_owRom && a < (unsigned)g_owRomLen) ? g_owRom[a] : 0; }
+static uint8_t owRomC0(unsigned a) { return (g_owRom && a < (unsigned)g_owRomLen) ? owRB(a) : 0; }
 static unsigned owTrig2277(unsigned a) {                               // C2/2277 (sin); C2/2273 = it of a + 40 (cos)
   a &= 0xFF;
   if (a == 0x40) return 0x0080;
@@ -3491,7 +3505,7 @@ static int obDactylMateShadow(uint8_t* ram, uint8_t* B) {
 static void owLzTo(uint8_t* ram, uint32_t src, uint8_t bank, uint16_t dst);   // (with the time gauge, below)
 static unsigned owRomW6(unsigned off) {                                // a word of bank $C6
   long o = 0x060000L + (long)off;
-  return (g_owRom && o + 1 < g_owRomLen) ? (unsigned)(g_owRom[o] | (g_owRom[o + 1] << 8)) : 0u;
+  return (g_owRom && o + 1 < g_owRomLen) ? (unsigned)(owRB(o) | (owRB(o + 1) << 8)) : 0u;
 }
 // C2/658E: the colours the map drops (the sea's, the lava's): 0F, 2F and 24-2B; on 1F3 40-4E instead.
 static uint8_t owMapFilter(const uint8_t* ram, uint8_t a) {
@@ -3626,7 +3640,7 @@ void CtWorldMapEnter(uint8_t* ram, uint8_t* vram) {
   // C2/63DF -> C2/27DE: the world's seven char packets (C6:FD00[world] -> [$ED], C6:FE20) into $7F:9000 + k x 1000
   { unsigned h = owRomW6(0xFD00 + 2 * w);
     for (int k = 0; k < 7; k++) {
-      uint8_t pk = g_owRom ? g_owRom[0x060000 + h + (unsigned)k] : 0x80;
+      uint8_t pk = g_owRom ? owRB(0x060000 + h + (unsigned)k) : 0x80;
       if (pk & 0x80) continue;
       unsigned t = 0xFE20 + 3u * pk;
       uint32_t src = (uint32_t)owRomW6(t) | ((uint32_t)(owRomW6(t + 2) & 0xFF) << 16);
@@ -3666,9 +3680,9 @@ void CtWorldMapEnter(uint8_t* ram, uint8_t* vram) {
   if (vram) for (unsigned r = 0; r < 32; r++) for (unsigned c = 0; c < 32; c++) vram[2 * (r * 0x80 + c)] = ram[0xF000 + r * 0x20 + c];
   ram[0x00] = 0; obPutW(ram + 0x0A, (uint16_t)(0xF000 + 32 * 0x20)); obPutW(ram + 0x0C, 0x1000);
   // the markers' tiles, CGRAM 0, the markers' palette
-  if (vram && g_owRom) { memcpy(vram + 2 * 0x6000, g_owRom + 0x06F500, 0x20); memcpy(vram + 2 * 0x6020, g_owRom + 0x06F520, 0x20); }
+  if (vram && g_owRom) { CtRomCopy(vram + 2 * 0x6000, g_owRom, g_owRomLen, 0x06F500, 0x20); CtRomCopy(vram + 2 * 0x6020, g_owRom, g_owRomLen, 0x06F520, 0x20); }
   obPutW(ram + 0x0920, 0);
-  if (g_owRom) memcpy(ram + 0x0A20, g_owRom + 0x06F540, 0x21);
+  if (g_owRom) CtRomCopy(ram + 0x0A20, g_owRom, g_owRomLen, 0x06F540, 0x21);
   uint8_t* P = ram + 0x0B30;
   obAllocNative(ram, P, 0x666C);
   CtWorldSpawnVm(ram, 0xC2, 0x69F8);
@@ -3976,7 +3990,7 @@ void CtWorldGaugeEnter(uint8_t* ram, uint8_t* vram) {
   }
   obPutW(ram + 0x0C, 0x0020); obPutW(ram + 0x08, 0x4060); obPutW(ram + 0x0A, 0x9800); ram[0x00] = 0;
   for (unsigned i = 0; i < 0x400; i++) {                               // C2/7361: C6:F700's nybbles -> $7F:9000
-    uint8_t b = g_owRom && 0x6F700 + i < (unsigned)g_owRomLen ? g_owRom[0x6F700 + i] : 0;
+    uint8_t b = g_owRom && 0x6F700 + i < (unsigned)g_owRomLen ? owRB(0x6F700 + i) : 0;
     ram[0x19000 + 2 * i] = (uint8_t)(b >> 4); ram[0x19001 + 2 * i] = (uint8_t)(b & 0x0F);
   }
   if (vram) for (unsigned i = 0; i < 0x800; i++) vram[2 * i + 1] = ram[0x19000 + i];   // C2/722C: $2119 (the high bytes)
@@ -4281,8 +4295,8 @@ static int obNameBanner(uint8_t* ram, uint8_t* B) {
   case 0:                                                               // 563F
     B[2]++; B[OWOBJ_ATTR] = 0xB0; B[0x10] = 0; B[0x11] = 0;
     if (g_owRom) {                                                      // C2/5775: C2:57C2 -> $7E:8600 (4), C2:57C6 -> $8604 (MVN $18)
-      memcpy(ram + 0x8600, g_owRom + 0x257C2, 4);
-      memcpy(ram + 0x8604, g_owRom + 0x257C6, 0x19);
+      CtRomCopy(ram + 0x8600, g_owRom, g_owRomLen, 0x257C2, 4);
+      CtRomCopy(ram + 0x8604, g_owRom, g_owRomLen, 0x257C6, 0x19);
     }
     obPutW(B + OWOBJ_ANIM, 0x8600); B[OWOBJ_ANIMBK] = 0x7E;             // 5656-5660
     /* fall through */
@@ -4327,11 +4341,11 @@ void CtWorldLoadTriggers(uint8_t* ram, int world) {
   static uint8_t pk[0x10000];
   if (!g_owRom || world < 0 || world > 7) return;
   long hp = 0x060000L + 0xFD00 + 2 * world;
-  unsigned hdr = (unsigned)(g_owRom[hp] | (g_owRom[hp + 1] << 8));
-  uint8_t idx = g_owRom[0x060000L + hdr + 0x15];
+  unsigned hdr = (unsigned)(owRB(hp) | (owRB(hp + 1) << 8));
+  uint8_t idx = owRB(0x060000L + hdr + 0x15);
   if (idx & 0x80) return;                                              // 2A55 BMI: no packet
   long e = 0x060000L + 0xFFC0 + 3L * idx;
-  uint32_t src = (uint32_t)(g_owRom[e] | (g_owRom[e + 1] << 8) | (g_owRom[e + 2] << 16));
+  uint32_t src = (uint32_t)(owRB(e) | (owRB(e + 1) << 8) | ((uint32_t)owRB(e + 2) << 16));
   memset(pk, 0, sizeof pk);
   if (!ct_lz_decompress_bounded(g_owRom, (size_t)g_owRomLen, pk, 0xFC00u, ct_lz_hirom_offset(src))) return;
   unsigned x = 1u + 7u * (pk[0] ? pk[0] : 0x10000u);                  // past the entrances (2A8B-2AC7)
@@ -4376,7 +4390,7 @@ void CtWorldNmiVramQueue(uint8_t* ram, uint8_t* vram) {
       uint16_t a = (uint16_t)(src + i);                              // the A-bus address wraps inside its bank
       uint8_t v = 0;
       if (bank == 0x7E || bank == 0x7F) v = ram[((bank & 1) << 16) | a];
-      else if ((bank & 0x40) && g_owRom) { long o = ((long)(bank & 0x3F) << 16) | a; if (o < g_owRomLen) v = g_owRom[o]; }
+      else if ((bank & 0x40) && g_owRom) { long o = ((long)(bank & 0x3F) << 16) | a; if (o < g_owRomLen) v = owRB(o); }
       else if (a < 0x2000) v = ram[a];                               // the low-RAM mirror
       unsigned word = (w + (i >> 1) * inc) & 0x7FFF;                 // VMAIN $80: the word steps after the high byte
       vram[word * 2 + (i & 1)] = v;

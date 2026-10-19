@@ -915,7 +915,8 @@ static const uint8_t* worldRomPacket(const uint8_t* rom, long romLen, uint32_t t
                                      size_t* len) {
   size_t t = ct_lz_hirom_offset(table) + (size_t)idx * 3;
   if (!rom || t + 3 > (size_t)romLen) return NULL;
-  uint32_t a = rom[t] | (rom[t + 1] << 8) | ((uint32_t)rom[t + 2] << 16);
+  uint32_t a = CtRomByte(rom, romLen, (long)t) | (CtRomByte(rom, romLen, (long)t + 1) << 8) |
+               ((uint32_t)CtRomByte(rom, romLen, (long)t + 2) << 16);
   *len = ct_lz_decompress_bounded(rom, (size_t)romLen, out, cap, ct_lz_hirom_offset(a));   // JSL C3:0002 = C3/0557
   return *len ? out : NULL;
 }
@@ -925,8 +926,9 @@ static void worldLoadObjFromRom(World* w) {
   uint8_t* f7 = w->wram + 0x10000;
   size_t h = ct_lz_hirom_offset(0xC6FD00) + (size_t)w->world * 2;
   if (h + 2 > (size_t)romLen) return;
-  uint32_t ed = 0xC60000 | rom[h] | (rom[h + 1] << 8);                        // C2/274D LDA $C6FD00,X -> $ED
-  const uint8_t* E = rom + ct_lz_hirom_offset(ed);
+  uint32_t ed = 0xC60000 | CtRomByte(rom, romLen, (long)h) | (CtRomByte(rom, romLen, (long)h + 1) << 8);   // C2/274D LDA $C6FD00,X -> $ED
+  uint8_t E[0x10];                                                           // the header's bytes the loader reads ($ED+$0A..$0F)
+  CtRomCopy(E, rom, romLen, (long)ct_lz_hirom_offset(ed), (long)sizeof E);
   static uint8_t buf[0x10000]; size_t n;
   // C2/2768: four packets ($C6:FDF0 table, ids [$ED+$0C..$0F]) into $7F:9000/$A000/$B000/$C000; a set bit 7 keeps what is there
   for (int k = 0; k < 4; k++) {
@@ -961,7 +963,7 @@ static void worldLoadObjFromRom(World* w) {
   // After it the loader DMAs $7F:8C00 to CGRAM itself, which is the cgw fill below.
   for (int k = 0; k < 0x201; k++) w->wram[0x0920 + k] = f7[0x8C00 + k];
   { size_t t = ct_lz_hirom_offset(0xC6F620);
-    if (t + 0x21 <= (size_t)romLen) memcpy(w->wram + 0x0B00, rom + t, 0x21); }
+    if (t + 0x21 <= (size_t)romLen) CtRomCopy(w->wram + 0x0B00, rom, romLen, (long)t, 0x21); }
   // C2/2930: the PALETTE-ANIMATION packet ($C6:FEA0 table, id [$ED+$0B]) into $7E:C000; a set bit 7 keeps what is there.
   // Its rows are the frames the world's script copies into the shadow with op 0x04 (world.c obPalRow): world 0's row 2 sea
   // at $C000/$C020/$C040/$C060. The same routine family's C2/2902 ([$ED+7], $C6:FE20 -> $7E:B800) is not made here.

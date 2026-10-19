@@ -434,3 +434,269 @@ def menu_tables(rom):
 def menu_streams(rom):
     """The menus' LZ streams: the exchange's BG3 characters ($FF:E8DC, FF/F677's C3/0002)."""
     return {'menu LZ streams': {FF + 0xE8DC}}
+
+
+# The overworld (src/world.c, the world paths of src/lz.c and src/field.c; disasm/notes/ow_objvm.md, ow_event_cells.md,
+# field_load_cost.md). The world header table $C6:FD00 (a word per world, 8 worlds: C2/274D `LDA $C6FD00,X`) names each
+# world's header, 0x17 bytes: +00..06 the seven char packets (C2/27DE), +08..16 the packets of the loader's sites (src/lz.c
+# CT_OW_SITES), each an index into one of the ten 3-byte pointer tables C2's loaders and natives read ($C6:FDF0 .. FFE0,
+# zero-padded, each to the next one). Every packet a world or a script names is in those tables: the Black Omen's loaders
+# C2/7AFC / 7B20 index $C6:FE20 / FF40 by a script operand, so the tables are taken whole.
+C6 = 0x060000
+WORLD_HDRS = C6 + 0xFD00
+WORLD_HDR_LEN = 0x17
+WORLD_PACKET_TABLES = (0xFDF0, 0xFE20, 0xFEA0, 0xFF00, 0xFF20, 0xFF40, 0xFF80, 0xFFA0, 0xFFC0, 0xFFE0, 0x10000)
+# C2/71F9's three packets (the time gauge, C2/7389: C2:7220[i] = {source, destination}, the source bank the caller's):
+# C3 for i = 0, C6 for 1 and 2.
+GAUGE_PACKETS = ((0, 0xC3), (1, 0xC6), (2, 0xC6))
+
+
+def world_headers(rom):
+    """[file offset] of the eight worlds' headers."""
+    return [C6 + _w(rom, WORLD_HDRS + 2 * w) for w in range(8)]
+
+
+def world_packet_pointers(rom):
+    """{file offset of a pointer entry: stream offset} over the ten tables, every non-empty entry."""
+    out = {}
+    for a, b in zip(WORLD_PACKET_TABLES, WORLD_PACKET_TABLES[1:]):
+        for e in range(C6 + a, C6 + b - 2, 3):
+            o = ptr24(rom, e)
+            if o is not None:
+                out[e] = o
+    return out
+
+
+def world_streams(rom):
+    """{what: offsets}: every world packet the tables name, and the gauge's three."""
+    gauge = {((bank - 0xC0) << 16) | _w(rom, C2 + 0x7220 + 4 * i) for i, bank in GAUGE_PACKETS}
+    return {'world packets ($C6:FDF0-FFFF tables)': set(world_packet_pointers(rom).values()),
+            'time gauge packets (C2:7220)': gauge}
+
+
+def _handler_lengths(rom, table, count):
+    """{op: (length, rel)} of a bank-C2 dispatcher's handlers (`JSR (table,X)`, the returned A = the bytes to advance),
+    each handler followed through its branches: the largest `LDA #n / [CLC] / RTS` it returns, and for a branch op the
+    operand index of the `LDY #k [/ INY] / LDA [..],Y / BPL / ORA #FF00 / CLC / RTS` that returns the displacement. A
+    handler that only returns 0 parks (length 0)."""
+    import disasm65816 as D
+    res = {}
+    for i in range(count):
+        a = _w(rom, C2 + table + 2 * i)
+        rets, rel, seen, work = [], None, set(), [(C2 + a, 0, 0, None, ())]
+        while work:
+            p, m, x, ldy, prev = work.pop()
+            while (p, m, x) not in seen and len(seen) < 4096:
+                seen.add((p, m, x))
+                op = rom[p]
+                mnem, mode = D.TABLE[op]
+                ln = D.oplen(mode, m, x)
+                v = int.from_bytes(rom[p + 1:p + 1 + ln], 'little')
+                if op == 0xC2:
+                    m, x = (0 if v & 0x20 else m), (0 if v & 0x10 else x)
+                elif op == 0xE2:
+                    m, x = (1 if v & 0x20 else m), (1 if v & 0x10 else x)
+                if mnem == 'LDY' and mode == 'immX':
+                    ldy = v
+                elif mnem == 'INY' and ldy is not None:
+                    ldy += 1
+                if mnem == 'RTS':
+                    q = [e for e in prev if e[0] != 'CLC']
+                    if q and q[-1][:2] == ('LDA', 'immM'):
+                        rets.append(q[-1][2])
+                    if len(prev) >= 2 and prev[-1][0] == 'CLC' and prev[-2] == ('ORA', 'immM', 0xFF00):
+                        rel = ldy
+                    break
+                if mnem in ('RTL', 'RTI', 'BRK', 'STP'):
+                    break
+                prev = (prev + ((mnem, mode, v),))[-3:]
+                nxt = p + 1 + ln
+                if mode == 'rel':
+                    tgt = (p & ~0xFFFF) | ((nxt + (v - 256 if v >= 0x80 else v)) & 0xFFFF)
+                    if mnem == 'BRA':
+                        p = tgt
+                        continue
+                    work.append((tgt, m, x, ldy, ()))
+                elif mnem == 'JMP' and mode == 'abs':
+                    p = (p & ~0xFFFF) | v
+                    continue
+                p = nxt
+        res[i] = (max(rets) if rets else 0, rel)
+    return res
+
+
+# The object VM (C2/0F63, the table C2:0F91, 0x53 ops): 1A jumps to its operand + 1, 36 calls its operand (and returns to
+# +3), 37 returns, 52 frees the block, 06 and 41 return 0 for ever; 09 / 43 start a script at (operand, bank); 03 sends
+# operand-8 tiles (32 bytes each) from (operand, bank) to VRAM, 04 a 32-byte palette row from (operand, bank).
+OBJVM_ENDS = (0x06, 0x37, 0x41, 0x52)
+
+
+def objvm_walk(rom, entries, mem7f=None):
+    """Walk the object VM's scripts from `entries` [(bank, pc)]: ([(start, end)] of ROM script bytes, [(start, end)] of
+    the ROM data ops 03 / 04 name). A $7F script reads `mem7f` = (a 64 KB image, (lo, hi)) and is followed only inside
+    [lo, hi), the packet that holds it."""
+    L = _handler_lengths(rom, 0x0F91, 0x53)
+    spans, data, seen = [], [], set()
+    work = list(entries)
+    while work:
+        bank, pc = work.pop()
+        while (bank, pc) not in seen:
+            if bank >= 0xC0:
+                o = ((bank - 0xC0) << 16) | pc
+                rd = lambda k, o=o: rom[o + k]
+            elif bank == 0x7F and mem7f is not None and mem7f[1][0] <= pc < mem7f[1][1]:
+                o = None
+                rd = lambda k, pc=pc: mem7f[0][(pc + k) & 0xFFFF]
+            else:
+                break
+            seen.add((bank, pc))
+            op = rd(0)
+            if op not in L:
+                break
+            ln, rel = L[op]
+            if op in OBJVM_ENDS or ln == 0:
+                if o is not None:
+                    spans.append((o, o + 1))
+                break
+            if op in (0x1A, 0x36):                    # (they return 1 to their new $58; the operand is `LDY #0001 / LDA [$58],Y`,
+                ln = 3                                # 16-bit, and 36's return address is +3: C2/1848 `ADC #0003 / STA $0005,X`)
+            ops = [rd(k) for k in range(ln)]
+            if o is not None:
+                spans.append((o, o + ln))
+            if op == 0x1A:
+                pc = (ops[1] | ops[2] << 8) + 1 & 0xFFFF
+                continue
+            if op == 0x36:
+                work.append((bank, ops[1] | ops[2] << 8))
+            elif op in (0x09, 0x43):
+                work.append((ops[3], ops[1] | ops[2] << 8))
+            elif op == 0x03 and ops[3] >= 0xC0:
+                s = ((ops[3] - 0xC0) << 16) | ops[1] | ops[2] << 8
+                data.append((s, s + 32 * (ops[8] | ops[9] << 8)))
+            elif op == 0x04 and ops[3] >= 0xC0:
+                s = ((ops[3] - 0xC0) << 16) | ops[1] | ops[2] << 8
+                data.append((s, s + 32))
+            if rel is not None:
+                r = ops[ln - 1]
+                work.append((bank, pc + (r - 256 if r >= 0x80 else r) & 0xFFFF))
+            pc = pc + ln & 0xFFFF
+    return spans, data
+
+
+def animvm_walk(rom, entries):
+    """The anim sub-VM's bank-C2 scripts (C2/0E1D, the table C2:0E4A, 8 ops) from `entries` (bank C2): [(start, end)] of
+    the bytecode and of the frames op 4 names (C2/0D08: a piece count, then 4 bytes a piece). Op 3 is the jump."""
+    L = _handler_lengths(rom, 0x0E4A, 8)
+    out, seen, work = [], set(), list(entries)
+    while work:
+        pc = work.pop()
+        while pc not in seen:
+            seen.add(pc)
+            o = C2 + pc
+            op = rom[o]
+            if op not in L:
+                break
+            ln, rel = L[op]
+            if op == 3:                               # the jump: its operand from the op (C2/0E91's BIT #0080 / ORA)
+                out.append((o, o + 2))
+                r = rom[o + 1]
+                pc = pc + (r - 256 if r >= 0x80 else r) & 0xFFFF
+                continue
+            if ln == 0:
+                out.append((o, o + 1))
+                break
+            out.append((o, o + ln))
+            if op == 4:
+                d = C2 + _w(rom, o + 1)
+                out.append((d, d + 1 + 4 * rom[d]))
+            pc = pc + ln & 0xFFFF
+    return out
+
+
+# The bank-C2 scripts the engine starts itself (C2/04D9 and the natives' script installs): the world's entry and return
+# (field.c: C2:2EC1 / 2EC4 / 2EC7 / 2ED0), the boarding manager's C2:31A8, the Epoch's C2:4A9B / 4AAD / 4B8C / 4C8F, the
+# world map's C2:69F8 / 69FF / 6A0A, the time gauge's C2:74AE / 74B3 / 74B8 / 7504; and the world map's markers' anim
+# scripts C2:6A18 / 6A20 (+0D = C2).
+OW_C2_SCRIPTS = (0x2EC1, 0x2EC4, 0x2EC7, 0x2ED0, 0x31A8, 0x4A9B, 0x4AAD, 0x4B8C, 0x4C8F, 0x69F8, 0x69FF, 0x6A0A,
+                 0x74AE, 0x74B3, 0x74B8, 0x7504)
+OW_C2_ANIMS = (0x6A18, 0x6A20)
+
+
+def world_scripts(rom):
+    """[(start, end)] the overworld's scripts read from the ROM: the bank-C2 ones above and, from every world's own script
+    packet ($C6:FFE0[header +16] at $7F:0400, C2/2A3F), what they start or read in the ROM's banks."""
+    from ctlib import lz
+    spans, data = objvm_walk(rom, [(0xC2, e) for e in OW_C2_SCRIPTS])
+    for h in world_headers(rom):
+        i = rom[h + 0x16]
+        if i & 0x80:
+            continue
+        blob = lz.decompress(rom, ptr24(rom, C6 + 0xFFE0 + 3 * i))
+        mem = bytearray(0x10000)
+        mem[0x400:0x400 + len(blob)] = blob[:0xFC00]
+        s, d = objvm_walk(rom, [(0x7F, 0x400)], (mem, (0x400, 0x400 + len(blob))))
+        spans += s
+        data += d
+    return spans + data + animvm_walk(rom, OW_C2_ANIMS)
+
+
+def world_tables(rom):
+    """(name, start, end) of the tables the overworld reads (src/world.c, src/field.c's world loader, src/lz.c's world
+    costs), each extent the reading code's own index range or the closure of a program it walks."""
+    out = []
+    t = lambda name, a, b: out.append((name, a, b))
+    t('world header pointers ($C6:FD00, 8 worlds)', WORLD_HDRS, WORLD_HDRS + 16)
+    for w, h in enumerate(world_headers(rom)):
+        t('world %d header (0x17 bytes)' % w, h, h + WORLD_HDR_LEN)
+    for a, b in zip(WORLD_PACKET_TABLES, WORLD_PACKET_TABLES[1:]):
+        t('world packet pointers ($C6:%04X)' % a, C6 + a, C6 + b)
+    t('time gauge packets (C2:7220, 3 x {source, destination})', C2 + 0x7220, C2 + 0x7220 + 12)
+    for a, b in world_scripts(rom):
+        t('overworld script ($%02X:%04X)' % (0xC0 + (a >> 16), a & 0xFFFF), a, b)
+    # bank C2's tables, each from its reader (a word read at the largest index: + 2)
+    t('BG tilemap rebuild words (C2:0556/055C/0562, layer 0-2)', C2 + 0x0556, C2 + 0x0562 + 4 + 2)
+    t('row fade steps (C2:2062, d & 3F and d < 40)', C2 + 0x2062, C2 + 0x2062 + 0x40)
+    t('boarding boxes (C2:324C/3254/325C, 8 bytes)', C2 + 0x324C, C2 + 0x325C + 8)
+    t('Epoch velocities (C2:4899/489B + 4 dir, dir < 4)', C2 + 0x4899, C2 + 0x489B + 12 + 2)
+    t('Epoch poses (C2:48C5/48C9 + facing & 3)', C2 + 0x48C5, C2 + 0x48C9 + 3 + 2)
+    t('Epoch boxes (C2:4946/494E, 8 bytes)', C2 + 0x4946, C2 + 0x494E + 8)
+    t('Dactyl velocities (C2:5037/5039 + 4 dir) and poses (C2:5047 + dir)', C2 + 0x5037, C2 + 0x5047 + 3 + 2)
+    t('Dactyl shadow (C2:508F/5091 + 4 $1BF0, $1BF0 < 2)', C2 + 0x508F, C2 + 0x5091 + 4 + 2)
+    t('Dactyl follower places (C2:543C/543E + i, i < 20)', C2 + 0x543C, C2 + 0x543E + 0x1C + 2)
+    t('Dactyl follower poses (C2:548C + 4 (slot - 1) + facing)', C2 + 0x548C, C2 + 0x548C + 7 + 2)
+    t('place-name banner frame (C2:57C2 4, C2:57C6 0x19)', C2 + 0x57C2, C2 + 0x57C6 + 0x19)
+    t('world map era label places (C2:68E4 + 2 world)', C2 + 0x68E4, C2 + 0x68E4 + 14 + 2)
+    t('world map era label ids (C2:69F0 + world)', C2 + 0x69F0, C2 + 0x69F0 + 7 + 2)
+    t('time gauge eras (C2:6C97 / C2:6CA5 + 2 i, i < 7)', C2 + 0x6C97, C2 + 0x6CA5 + 12 + 2)
+    t('time gauge needle (C2:6CB3 + 2 B[22], < 7)', C2 + 0x6CB3, C2 + 0x6CB3 + 12 + 2)
+    t('time gauge triangle (C2:6F2D + c, c < 6)', C2 + 0x6F2D, C2 + 0x6F2D + 5 + 2)
+    t('time gauge markers (C2:71DD/71DE, 71EB/71EC + 2 k, k < 7)', C2 + 0x71DD, C2 + 0x71EC + 12 + 2)
+    t('time gauge VRAM rows (C2:72B8 + 2 k, k < 16)', C2 + 0x72B8, C2 + 0x72B8 + 32)
+    t('time gauge tile list (C2:7321 + j, j < 40; C2:7360)', C2 + 0x7321, C2 + 0x7360 + 2)
+    # bank C6's: the world map's tiles, palette and zoom, the loader's object counts, the gauge's nybbles
+    t('world map marker tiles and palette (C6:F500 0x40, C6:F540 0x21)', C6 + 0xF500, C6 + 0xF540 + 0x21)
+    t('world map zoom (C6:F560 / C6:F5A0 + k, k even < 40)', C6 + 0xF560, C6 + 0xF5A0 + 0x3E + 2)
+    t('world object counts (C6:F620, C2/2D2D MVN 0x21)', C6 + 0xF620, C6 + 0xF620 + 0x21)
+    t('time gauge nybbles (C6:F700, 0x400)', C6 + 0xF700, C6 + 0xF700 + 0x400)
+    # the place names (C2/57DF with $0D = $C6:F400): the ids the banner and the map's label name, each name to its 00
+    ids = place_name_ids(rom)
+    t('place name pointers ($C6:F400, to the largest id)', C6 + 0xF400, C6 + 0xF400 + 2 * (max(ids) + 1))
+    for i in ids:
+        p = C6 + _w(rom, C6 + 0xF400 + 2 * i)
+        t('place name %02X' % i, p, until0(rom, p))
+    return out
+
+
+def place_name_ids(rom):
+    """The ids the place names are drawn for: every entrance's name byte (+2 of its 7-byte record, C2/6263 -> `$1B58`) in
+    every world's trigger packet ($C6:FFC0[header +15], C2/2A44: a count, then the records), and the world map's labels
+    (C2:69F0[world], C2/6965 -- 6B / 6C give way to 6F before their story flags)."""
+    from ctlib import lz
+    ids = {rom[C2 + 0x69F0 + w] for w in range(8)} | {0x6F}
+    for h in world_headers(rom):
+        i = rom[h + 0x15]
+        if i & 0x80:
+            continue
+        pk = lz.decompress(rom, ptr24(rom, C6 + 0xFFC0 + 3 * i))
+        ids |= {pk[1 + 7 * k + 2] for k in range(pk[0] or 0x10000) if 1 + 7 * k + 2 < len(pk)}
+    return sorted(ids)
