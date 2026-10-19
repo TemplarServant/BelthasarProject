@@ -143,6 +143,7 @@ extern "C" int CtOverlayFrame(void) {
   if (g_vk) ImGui_ImplVulkan_NewFrame(); else
 #endif
   if (g_gl) ImGui_ImplOpenGL3_NewFrame(); else ImGui_ImplSDLRenderer2_NewFrame();
+  ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;   // the options are clicked: the cursor is ImGui's
   ImGui_ImplSDL2_NewFrame();
   ImGui::NewFrame();
   const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -318,6 +319,9 @@ extern "C" void CtOverlayTouchDraw(const CtTouchDraw* d) {
   if (g_vk) ImGui_ImplVulkan_NewFrame(); else
 #endif
   if (g_gl) ImGui_ImplOpenGL3_NewFrame(); else ImGui_ImplSDLRenderer2_NewFrame();
+  // the pad's frame leaves the cursor alone: the host hides it during play (field.c, hostCursorUpdate), and the SDL
+  // backend's NewFrame would show it again every frame
+  ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
   ImGui_ImplSDL2_NewFrame();
   ImGui::NewFrame();
   ImDrawList* dl = ImGui::GetForegroundDrawList();
