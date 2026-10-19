@@ -344,3 +344,13 @@ The *behaviour* the old label described is real -- `C0/9AA1` returns SEC (solid,
 plane byte has bit7 clear, so **the plane alone makes every chest tile impassable**, independent of the
 tile's own props -- which is exactly why the mislabel survived. Off-map is done by the `$1D1E/$1D1F` mask,
 not by this plane. Full derivation: [field_treasure_chests.md](field_treasure_chests.md).
+
+## The edge clamp's bounds are the location's (2026-10-19)
+
+C0/9175 gates each axis of the step with C0/5B63 / 5B71 / 5B79 / 5B86 against `$1D1A-$1D1D` -- the scroll-mask bounds the
+loader writes (field_camera_unification.md), in tiles. The field host had filled them with the map's 0..w-1 / 0..h-1 in its
+collision scratch, so the lead walked past a bound the ROM holds him at. MEASURED (the playthrough's leg 05, loc 005, up the
+north stairs at x 16F0): `$1D1A-$1D1D` = 00 2F 13 2F; C0/8A6D leaves `$1D30` = F0 and 9175's `$1D1C + 1 >= $1881,X` zeroes
+the step at y 14FF, five frames before the exit fires; the port's lead walked on to 14BF. The host now hands the bytes in
+the scene's WRAM. C0/8A6D is in the shadow's registry since (ct_shadow.c), with C0/9CA1's exit staging ($0112-$0117,
+$1D52) declared the field host's: 515 / 515 calls on that leg, 710 / 710 on the menu route.

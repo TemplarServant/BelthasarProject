@@ -457,6 +457,13 @@ static int g_shotsExit = 0;
 // memmon below reads, so a byte the program keeps in WRAM (the warp's $7F:0000 scratch, FD/EAA6) is sampled as the
 // cartridge's --monitor samples it.
 static const uint8_t* g_memmonStage = NULL;
+// C0/EC60's head, `LDA $0158 / INC A / AND #83FF / STA $0158`: the field frame's wait counts the lead's idle frames. The
+// main loop's call is in the frame loop below; the menu's two field loops (the fade before it, the resume) call it too.
+static void fieldWaitEC60(uint8_t* w) {
+  if (!w) return;
+  int c = ((w[0x0158] | (w[0x0159] << 8)) + 1) & 0x83FF;
+  w[0x0158] = (uint8_t)c; w[0x0159] = (uint8_t)(c >> 8);
+}
 static void presentShot(const uint8_t* fb, int w, int h, int frameNo, int loc, const char* mode) {
   static const char* pre = (const char*)1; static const char* at; static int every, luma;
   if (pre == (const char*)1) { pre = getenv("CT_SHOTS"); at = getenv("CT_SHOTS_AT");
@@ -1035,6 +1042,12 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
   // left by the field ($0B28 = $25, measured on the attract) made the 1000 A.D. row-8 fade quit on its first step.
   memset(w->wram + 0x0920, 0, 0x0B30 - 0x0920);
   worldLoadObjFromRom(w);                              // C2/2768 + C2/2B61 + C2/2882: the sprites and their palettes
+  // C2/23AB JSR C2/232D, between C2/26A8 and C2/0BF6: `STZ $1B30 / STZ $1B31` -- the cursor of the objects' random byte
+  // C2/2336 (`LDX $1B30 / LDA $C0FE00,X / INC $1B30`) starts at 0 on every world load. MEASURED (the playthrough's leg 03,
+  // out of Crono's house onto 1F0, the rule's cartridge `--monitor 7E1B30 --writer`): 00 at f1116 (C2:2332), then 02, 04,
+  // ... as the gulls aim (C2/7575) and launch (C2/7598); the port carried the field's 40 in, and every gull took another
+  // X and heading.
+  w->wram[0x1B30] = 0; w->wram[0x1B31] = 0;
   CtWorldDrawListInit(w->wram);                        // C2/0BF6 (C2:23AE): the draw list's node template
   CtWorldDrawListReset(w->wram);
   CtWorldOamBuild(w->wram, w->cam.bg2h, w->cam.bg2v);                            // an empty list: every entry parked at Y = $E0
@@ -2530,8 +2543,15 @@ static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz
                                                            // byte: C0/8925 `LDA $00F8 / BIT #02` picks accumulator
                                                            // delta 0x20 (2px/frame) instead of 0x10 (walk). The
                                                            // caller hands the scene's own latched bit (crun).
-  ram[0x1D1A] = 0; ram[0x1D1B] = (uint8_t)(c->cw - 1);     // 9175 edge clamp = the map tile bounds
-  ram[0x1D1C] = 0; ram[0x1D1D] = (uint8_t)(c->ch - 1);
+  // C0/9175's EDGE CLAMP READS $1D1A-$1D1D, the location's scroll-mask bounds in tiles (the loader's; collision.md,
+  // field_camera_unification.md) -- not the map's. The host used the map's 0..w-1 / 0..h-1, so the lead walked past a
+  // bound the ROM holds him at. MEASURED (the playthrough's leg 05, loc 005 walking up the north stairs at x 16F0, the
+  // shadow's C0/8A6D dump of the cartridge): `$1D1A-$1D1D` = 00 2F 13 2F, 8A6D leaves `$1D30` = F0, and 9175's
+  // `$1D1C + 1 >= $1881,X` (14 >= 14) zeroes the step at y 14FF; the port's lead walked on to 14BF before the exit
+  // fired. With a scene, the bytes the loader left in its WRAM; the world map (no scene) keeps the map's.
+  { const uint8_t* vw = vm ? CtSceneMem7E(vm) : NULL;
+    if (vw) { ram[0x1D1A] = vw[0x1D1A]; ram[0x1D1B] = vw[0x1D1B]; ram[0x1D1C] = vw[0x1D1C]; ram[0x1D1D] = vw[0x1D1D]; }
+    else { ram[0x1D1A] = 0; ram[0x1D1B] = (uint8_t)(c->cw - 1); ram[0x1D1C] = 0; ram[0x1D1D] = (uint8_t)(c->ch - 1); } }
   g_collPairCommit = 0;
   CtPlayerControl(ram);                                     // C0/881E: seed + d-pad + 8A6D + 9175 -> $1D32/$1D33
   // THE COMMIT'S PAIR. C0/9D54-9D67 (`$6C` == 0) writes the plane $0155 and the lead's OAM priority pair `$0C00/$0C01,X`
@@ -12966,7 +12986,12 @@ int main(int argc, char** argv) {
     //  power-on: `C8 C0` parks at f217 with $0119 still climbing, 0F at f219, the first `DEC $19` at f220.)
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneShop(f.vm) >= 0
         && (CtSceneShop(f.vm) & 0x80) && !inLoadFade) {
-      menuPhase = 1; menuT = -1; menuOpt = 0; menuScreen = 0x0C; menuShopOn = 1;   // (C0/0CCE is the next frame's)
+      // THE FADE'S FIRST DEC IS THIS FRAME'S. The op parks in the event pass of frame N (C0/00C4), this host sees it at the
+      // head of N+1, and C0/0C76 -> C0/0CCE runs at that same head (C0/00A4): `DEC $19` on N+1. MEASURED (the playthrough's
+      // legs 06 / 07, the rule's cartridge): Marle's naming parks at f2306 on both sides ($0117 = 40) and $0119 = 0E at
+      // f2307; the shop's at f875 / 0E at f876. menuT = -1 put the port's first DEC one frame later (and the menu, the
+      // idle counter's fade frames and the resume with it). The same C0/0CCE for the five C8 screens below.
+      menuPhase = 1; menuT = 0; menuOpt = 0; menuScreen = 0x0C; menuShopOn = 1;   // (C0/0CCE is the next frame's)
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_SHOPTRACE")) printf("shop: f%d op C8 %02X -> shop %02X (mode 2, screen $0C)\n",
                                          frameNo, CtSceneShop(f.vm), CtSceneShop(f.vm) & 0x3F);
@@ -12980,7 +13005,7 @@ int main(int argc, char** argv) {
     // Portuguese: "pressing action on the save sparkle does not open the save menu" -- the op was skipped.)
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneSavePoint(f.vm) >= 0
         && !inLoadFade) {
-      menuPhase = 1; menuT = -1; menuOpt = 5; menuScreen = 0x0B; menuSavePtOn = 1;   // (C0/0CCE is the next frame's)
+      menuPhase = 1; menuT = 0; menuOpt = 5; menuScreen = 0x0B; menuSavePtOn = 1;   // (C0/0CCE is the next frame's)
       menuSaveCur = 0; menuSavePrompt = 0; menuSaveDoWrite = 0;                      // C2/D0E5: the cursor on slot 1
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_SHOPTRACE")) printf("savepoint: f%d op C8 %02X -> mode 6, screen $0B\n", frameNo, CtSceneSavePoint(f.vm));
@@ -12990,7 +13015,7 @@ int main(int argc, char** argv) {
     // bit6` (C0/19EB-19F7) is the op's handshake. No `$0407 = FF` on this path (the Y path's is C0/19A7, before 19C7).
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneExchange(f.vm)
         && !inLoadFade) {
-      menuPhase = 1; menuT = -1; menuScreen = 0x07; menuExchOn = 2; menuExch68 = 0;   // (C0/0CCE is the next frame's)
+      menuPhase = 1; menuT = 0; menuScreen = 0x07; menuExchOn = 2; menuExch68 = 0;   // (C0/0CCE is the next frame's)
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_SHOPTRACE")) printf("exchange: f%d op C8 00 -> mode 5, screen $07\n", frameNo);
     }
@@ -13000,7 +13025,7 @@ int main(int argc, char** argv) {
     // 01 .. 0F over f168-182), $0119 0E .. 00 over f183-197, C = f198 ($0A00 = 00).
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneLoader(f.vm) >= 0
         && !ldrDone && ldrRebootPend == -2 && !inLoadFade) {
-      menuPhase = 1; menuT = -1; menuOpt = 0; menuScreen = 0x0E; menuLoaderOn = 1; ldrShot = -1;   // (C0/0CCE: next frame)
+      menuPhase = 1; menuT = 0; menuOpt = 0; menuScreen = 0x0E; menuLoaderOn = 1; ldrShot = -1;   // (C0/0CCE: next frame)
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_NAMETRACE")) printf("loader: f%d op C8 %02X -> mode 0, screen $0E\n", frameNo, CtSceneLoader(f.vm));
     }
@@ -13019,7 +13044,7 @@ int main(int argc, char** argv) {
     // = 01 at f608 (P), $0D10 = 02 at f610. (CT_NAMEAS under --selftest is the harness's bypass, further down.)
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneNaming(f.vm) >= 0
         && !inLoadFade && !(selftest && dbg.nameAs && *dbg.nameAs)) {
-      menuPhase = 1; menuT = -1; menuOpt = 0; menuScreen = 0x0D; menuNameOn = 1;   // (C0/0CCE is the next frame's)
+      menuPhase = 1; menuT = 0; menuOpt = 0; menuScreen = 0x0D; menuNameOn = 1;   // (C0/0CCE is the next frame's)
       menuNameId = CtSceneNaming(f.vm) & 0x3F; menuName68 = 0; menuNameOut = 0;
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_NAMETRACE")) printf("naming: f%d op C8 %02X -> mode 3, screen $0D, $0A01 = %02X\n",
@@ -14078,6 +14103,7 @@ int main(int argc, char** argv) {
       if (menuT >= 1 && menuT <= 15) {                       // `JSL FD/FFF7` (the colour records); the IRQ's tiles
         CtHdmaTableBuild(s7);                                // step in the field's own render below
         fieldColourRecords(s7);
+        fieldWaitEC60(s7);                                   // C0/2839 JSR C0/EC60: the idle counter $0158 counts on
       }
     }
     if (menuPhase && !fieldResume) {                         // NO f.vm: on the overworld there is no scene
@@ -14126,6 +14152,9 @@ int main(int argc, char** argv) {
           if (!menuShopOn && !menuNameOn && !menuLoaderOn && !menuSavePtOn && menuExchOn != 2) CtHdmaTableBuild(s7);
           else fieldColourRecords(s7);
           fieldIrqTiles(f.sd, s7, frameNo);
+          // ...ending in `JSR C0/EC60` (C0/1953 / C0/0CE5): the idle counter $0158 counts the fade's frames. MEASURED (the
+          // playthrough's leg 06, Marle's naming): the cartridge's $0158 runs 0340 -> 034F through it; the port held 0340.
+          if (!inWorld) fieldWaitEC60(s7);
         }
         int bri = 15 - menuT; if (bri > 15) bri = 15; if (bri < 0) bri = 0;
         // ...and the byte itself: C0/1949 / C0/0CD4 / C0/19B2 `DEC $19` (MEASURED, the exchange's Y: $0119 0E at f21 ..
@@ -16618,13 +16647,18 @@ int main(int argc, char** argv) {
         if (menuPhase == 4) s7[0x0D10] = (uint8_t)menuBri;  // C2/83F5 / C2/83E5 (the RTL frame leaves it to C0/0905)
       } else if (menuPhase == 5) {                           // the reload: black, NMI off, no input, no clock
         memset(fb, 0, (size_t)CAMW * CAMH * 3);
-        if (++menuReloadT >= menuReloadW || hostSyncFree()) { menuPhase = 3; menuT = 0; }   // (free: no reload black)   // C0/2824's first INC is the next frame's
+        if (++menuReloadT >= menuReloadW || hostSyncFree()) {   // (free: no reload black)   // C0/2824's first INC is the next frame's
+          menuPhase = 3; menuT = 0;
+          // C0/286C's tail, `28A1 JSR C0/0B28 / 28A4 JSR C0/EC60`: the reload's last wait counts one idle frame too.
+          if (f.vm && !inWorld) fieldWaitEC60(s7);
+        }
       } else {                                               // resume fade-in (C0/2824: 15 frames, field
         menuT++;                                             // still frozen - synchronous EC60 loop)
         if (f.vm && menuT >= 1 && menuT <= 15) {              // C0/2829-2839: INC $19, C0/881E, C0/00DE = `JSL FD/C2C1 /
           CtHdmaTableBuild(s7);                              //   JSL FD/FFF7`, then the NMI wait -- and the IRQ's tiles
           fieldColourRecords(s7);
           fieldIrqTiles(f.sd, s7, frameNo);
+          if (!inWorld) fieldWaitEC60(s7);                   // C0/2839 JSR C0/EC60: the idle counter counts the resume too
         }
         int bri = menuT; if (bri > 15) bri = 15;
         if (f.vm && !inWorld) s7[0x0119] = (uint8_t)bri;     // C0/2829 INC $19 (MEASURED: 01 .. 0F over the resume, C0:282B)
@@ -18932,7 +18966,11 @@ int main(int argc, char** argv) {
     int bgDirty = layerMoved;
     // The FIELD's frames only: the battle's page is its own (battle.c draws its fades and flashes from it through its
     // own factors), and the menu and the overworld are other programs.
-    int fieldNmi = f.sd && f.vm && !battlePhase && !inWorld && !menuPhase;
+    // ...the resume after a menu included (C0/2824 runs under the field's own NMI and IRQ: its frames step the animated tiles
+    // as the main loop's do -- C0/ECDB's `$0153` gate, which the loop's C0/00DE flips). MEASURED (the playthrough's leg 06,
+    // Marle's naming): the cartridge's $051D runs C1 -> E9 from the resume to f2600, the port's stood still through the
+    // ramp and came out 8 steps behind -- the bell's banner on another frame for the rest of the visit.
+    int fieldNmi = f.sd && f.vm && !battlePhase && !inWorld && (!menuPhase || fieldResume);
     // C0/712E, the NMI that ends this frame: the page goes to CGRAM (g_fieldCgram) unless a style tilemap takes that NMI
     // (CtFieldNmiTilemapArm on the $46 this frame left). The other programs' NMIs upload their page every frame.
     if (f.vm) {

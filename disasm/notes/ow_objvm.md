@@ -242,3 +242,11 @@ of the rest. `World.camShow` / `posShowX/Y` are latched there and worldCompose d
 attract_bg_cmp.py): world 5's flyover port f2240 vs cartridge f206 56100 / 56320 (with the pass's camera the best frame was
 f2239 at 55723, its palette rows a pass behind), world 7 port f4520 vs f3076 56267 / 57344 (was 55382). The "one scanline up"
 (dy = -1) residual is not this: with the latch dy 0 still reads 39805.
+
+## The objects' random cursor starts at 0 on every world load (2026-10-19)
+
+C2/23A8, the world loader's init: `JSR C2/26A8 / JSR C2/232D / JSR C2/0BF6 / JSR C2/0471`. C2/232D is `STZ $1B30 / STZ
+$1B31` -- the cursor of C2/2336 (`LDX $1B30 / LDA $C0FE00,X / INC $1B30`), the byte the gulls' aim (C2/7575) and launch
+(C2/7598) take. The port's world entry did not clear it and carried the field's value in. MEASURED (the playthrough's leg 03,
+Crono's house onto 1F0, `--monitor 7E1B30 --writer`): 00 at f1116 (C2:2332), then 02, 04, .. at each gull; the port started
+from 40 and every gull flew elsewhere. field.c's world init clears it in the ROM's order.

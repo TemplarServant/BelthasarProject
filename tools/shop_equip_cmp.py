@@ -91,7 +91,7 @@ def run_port(thumbs, shots=()):
         if m in HOLD:
             hold.append('%X@%d:1' % (HOLD[m], f + PRESS - HOLD_LEAD))
             continue
-        pf = f if f == 10 else f + PRESS             # the talk A is a FIELD press: the same frame on both sides
+        pf = f + PRESS                               # the talk A too (every key the cartridge's + 1; until 2026-10-19 the talk kept its frame)
         if pf > t:
             walk.append('n:%d' % (pf - t))
         walk.append('%s:1' % KEY[m])

@@ -604,3 +604,16 @@ on a close; shopsell's close f591: `$0DA0` / `$0DA3` frozen at 01 / 00); and the
 48 cycles shorter from the rule's boot (the five posts' APU phase -66, the two DMA legs' sync +12 / +6 -- the open legs of
 section 9, not the rule's), S0 unchanged. tools/menu_init_cmp.py finds C2/8000's frame (`--hookpc C28000`) instead of
 assuming it: the rule's boot reaches loc 0's `C8 41` two frames sooner.
+
+## The C8 screens' fade starts on the frame the host sees the park (2026-10-19)
+
+Op C8 parks in the event pass of frame N (C0/00C4, `$0117 = 40`); C0/0C76 -> C0/0CCE runs at the head of N+1 (C0/00A4) and
+its first `DEC $19` is that frame's. The host sees the park at the head of N+1 too, but started `menuT = -1`, so its first
+DEC was N+2 -- for the shop, the naming, the save point, the exchange's C8 00 and the loader. MEASURED (the playthrough,
+keys the cartridge's + 1): Marle's naming parks at f2306 on both sides, `$0119` = 0E at f2307 on the cartridge, f2308 in
+the port; the shop's park f875, 0E at f876. Now `menuT = 0`. The drives built before pressed the talk's A on the cartridge's
+own frame (menu_shell_cmp's shops, menu_audit_cmp's 0x1100, shop_equip_cmp, naming_cmp's `D - 1`): the port parked a frame
+early there and the late fade hid it. They take the +1 of every other key now, and their checks pass as before.
+
+And the resume (C0/2824) runs under the field's NMI and IRQ: field.c's `fieldNmi` takes it, so the animated tiles step
+(C0/ECDB) on its frames -- `$051D` was 8 steps behind after the naming's return.

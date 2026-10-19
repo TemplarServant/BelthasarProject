@@ -46,7 +46,13 @@ RULE = dict(os.environ, CT_ORACLE_LOGICAL='1')
 # What is graded: the location, the storyline, the party. (The port's memmon names $7F:xxxx as 1xxxx.)
 MON = [('loc', '7E0100', '0100', 2), ('story', '7F0000', '10000', 1), ('party', '7E2980', '2980', 3),
        ('gold', '7E2C53', '2C53', 3), ('hp', '7E2603', '2603', 2),          # gold (C1/D0A2), Crono's current HP ($2600 + 3)
-       ('ctrl', '7E011F', '011F', 1)]                                        # the player's control (op E3; a fight takes it)
+       ('ctrl', '7E011F', '011F', 1),                                        # the player's control (op E3; a fight takes it)
+       ('bri', '7E0119', '0119', 1)]                                         # the brightness: not graded, it gates `ctrl`
+# A LOAD'S INSIDE IS NOT GRADED. A location load runs with the NMI off: C0/0BC4 sets $011F = 1 at its start and the new
+# scene's fn0 may take it back before the fade-in (002: 1 at f511, `E3 00` at f541, the ramp from f551) -- CPU time on a
+# black screen with no joypad, which the port does in one go (CLAUDE.md: timing artefacts are not reproduced). So the
+# control byte is graded only on frames whose $0119 is not 0: the frames a player can see and act on.
+GRADED = [k for k, _, _, _ in MON if k != 'bri']
 
 
 # ------------------------------------------------------------------------------------------------------------ the route
@@ -235,9 +241,11 @@ def loc_of(v):
 
 def chains(tl):
     """The distinct values of each graded byte, in order, with the frame each one appeared."""
-    ch = {k: [] for k, _, _, _ in MON}
+    ch = {k: [] for k in GRADED}
     for f, kv in tl:
         for k in ch:
+            if k == 'ctrl' and kv['bri'] == '00':
+                continue
             v = loc_of(kv[k]) if k == 'loc' else kv[k]
             if not ch[k] or ch[k][-1][1] != v:
                 ch[k].append((f, v))

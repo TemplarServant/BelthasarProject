@@ -16,8 +16,9 @@ press a frame after the pad latch).
 the drive's battery; Start at +13 and +115 -- the title takes the second) against the port's `--boot` (a fresh battery or
 a copy of the drive's; Start at 133). The two are aligned on the park of an op: `C8 C0` (the naming; boot, bootfast) or
 `C8 41` (the load shell; bootldr, loadlist) -- the cartridge's from `--monitor` ($0125 / $0117), the port's from
-CT_NAMETRACE -- with D = cartridge park - (port park + 1): the port's field VM runs a frame ahead of its menu pictures
-(the shop's park is the port's f10 and the cartridge's f11, and its fade grades 0 px that way). Port frame p is the
+CT_NAMETRACE -- with D = cartridge park - port park (until 2026-10-19 `- (port park + 1)`: the port started the C8 fade
+one frame after its park, a frame later than C0/0CCE does, and the extra frame hid that these drives press the port's
+keys unshifted -- the shop's park is the port's f10 and the cartridge's f11). Port frame p is the
 cartridge's frame p + D, its thumbnail p + D + 2, and a key the cartridge gets at t the port gets at t - D + 1. Presses
 are listed in the cartridge's frames (from the f120 state). The load list sits 7 lines off the thumbnail grid (its BG V
 scroll: tools/boot_loader_cmp.py grades its settled picture), so `loadlist` grades its timing, not its pixels.
@@ -184,8 +185,7 @@ def oracle_park(st, anchor, script, frames):
 
 def run_boot(name, peeks):
     """A drive from power-on. The two sides are aligned on the park of the anchor's op (C8 41 the loader, C8 C0 the
-    naming): the cartridge's from `--monitor`, the port's from CT_NAMETRACE, D = cartridge park - (port park + 1) -- the
-    port's field VM runs a frame ahead of its menu pictures (the shop's park: port f10, cartridge f11)."""
+    naming): the cartridge's from `--monitor`, the port's from CT_NAMETRACE, D = cartridge park - port park."""
     presses, f0, f1 = DRIVES[name]
     battery, anchor = BOOT.get(name, (None, 'naming'))
     end = f1 + 10
@@ -212,7 +212,7 @@ def run_boot(name, peeks):
     if opark is None or ppark is None:
         print('naming-cmp: %s: no %s park (cartridge %s, port %s)' % (name, anchor, opark, ppark))
         return
-    D = opark - (ppark + 1)
+    D = opark - ppark
     if battery:
         open(srm, 'wb').write(open(os.path.join(ROOT, battery), 'rb').read())
     env = dict(os.environ, CT_ORACLE_LOGICAL='1', PEEK_THUMBS=ot, PEEK_THUMBS_EVERY='1')
@@ -291,7 +291,7 @@ def run_park(name, peeks):
     if opark is None or ppark is None:
         print('naming-cmp: %s: no park (cartridge %s, port %s)' % (name, opark, ppark))
         return
-    D = opark - (ppark + 1)
+    D = opark - ppark
     pt = os.path.join(out, 'p.thumbs')
     ot = os.path.join(out, 'o.thumbs')
     for f in (ot, pt):

@@ -9,6 +9,7 @@
 #include "dma.h"
 #include "battle.h"
 #include "move.h"
+#include "collision.h"
 #include "menu.h"
 #include "oam.h"
 #include "vwf.h"
@@ -162,6 +163,22 @@ static int timerRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long
                     CtShadowRegs* out) {
   (void)e; (void)in; (void)out; CtAnimTimerTick(w, rom, (int)romLen, w[0x016D]); return CT_SH_RETURNS;
 }
+// C0/8A6D, the lead's tile collision (CtPlayerCollide): run by C0/881E's `JSR C0/8A6D` (C0/8847) on the DP $1D00, the
+// feelers on the WRAM planes $7E:30C0 / $7E:7000 / $7E:7040 (ct.exe installs no host tile fetch).
+static int collGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; (void)w; return in->dp == 0x1D00 && in->db == 0x00;
+}
+// C0/9C5C's positional exit, C0/9CA1 -> 9D2C: the exit table at $E5:0000 stages the destination $0112-$0116 and the
+// latch $0117 bit 7 (with $1D52 its scratch). The port stages exits in the field host (field.c, the exit and door list),
+// not in CtCollisionCommit (collision.h), so those bytes are not this entry's to grade.
+static const CtShadowSkip s_collSkip[] = {
+  { 0x0112, 0x0117, "C0/9CA1's positional exit staging: the field host's" },
+  { 0x1D52, 0x1D52, "C0/9CA1's scratch" },
+  { 0, 0, NULL } };
+static int collRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                   CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)in; (void)out; CtPlayerCollide(w); return CT_SH_RETURNS;
+}
 static int pAnimRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                     CtShadowRegs* out) {
   (void)e; (void)in; (void)out; CtPlayerAnimSelect(w, rom, (int)romLen, w[0x016D]); return CT_SH_RETURNS;
@@ -302,6 +319,7 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC0A9CD, "draw-list link (CtObjListLink)", 0x00, 0x00, 0, 0, fieldGuard, linkRun, 0, NULL },
   { 0xC0C98A, "anim timer (CtAnimTimerTick)", 0x30, 0x30, 0, 0, fieldGuard, timerRun, 0, NULL },
   { 0xC09E84, "player anim (CtPlayerAnimSelect)", 0x30, 0x30, 0, 0, fieldGuard, pAnimRun, 0, NULL },
+  { 0xC08A6D, "player collision (CtPlayerCollide)", 0x00, 0x00, 0, 0, collGuard, collRun, 0, s_collSkip },
   { 0xC0B701, "anim release (CtAnimRelease)", 0x30, 0x20, 0, 0, fieldGuard, releaseRun, CT_SH_C, NULL },
   { 0xC0CAD9, "anim drain visit (CtAnimDrainVisit)", 0x30, 0x30, 0, 0, fieldGuard, drainRun, CT_SH_C, NULL },
   { 0xC0305D, "arrival snap (ctArriveSnap305D)", 0x00, 0x00, 0, 0, fieldGuard, snapRun, CT_SH_C, NULL },

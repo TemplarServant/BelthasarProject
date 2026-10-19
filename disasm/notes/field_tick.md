@@ -594,3 +594,12 @@ on THIS capture the cartridge's first frame after the state runs no main-loop it
 bytes, `$0153` unflipped), where the scene468 capture's does (f0 already decremented, as the port). Input-driven events
 match, cadence-driven ones are a frame early -- the capture's phase, not the engine: a port start that skips its first
 iteration (as the fixtures' `pad` does for the recipes) would grade it.
+
+## The idle counter in the menu's field loops (2026-10-19)
+
+C0/EC60 is the wait of every FIELD loop, so `$0158` counts in the fade before a menu (C0/193E `DEC $19 / JSL FD/C2C1 / JSR
+C0/EC60`; the C8 screens' C0/0CD4-0CE5 the same), on C0/286C's tail (`28A1 JSR C0/0B28 / 28A4 JSR C0/EC60`) and through
+the resume (C0/2824 `INC $19 / .. / JSR C0/EC60`), and not under the menu program, its own fade or the NMI-off reload. The
+port counted in the main loop only. MEASURED (the playthrough's leg 06, Marle's naming): the cartridge's `$0158` 0340 ->
+034F through the fade and on through the resume; the port stood at 0340 and Crono's idle chain ran on another clock. Now
+field.c fieldWaitEC60 in the menu phases 1 and 3 and on the reload's last frame: leg 06 frame for frame.

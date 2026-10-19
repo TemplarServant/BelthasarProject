@@ -456,8 +456,9 @@ def run_port(d, outdir, thumbs, shots=(), dump_at=None, name=None):
         if m in HOLD:
             hold.append('%X@%d:1' % (HOLD[m], f + MENU_PRESS))
             continue
-        pf = f + (0 if m == 0x1100 else 1 if m == 0x200 else MENU_PRESS)   # the cartridge reads it a frame later (the
-                                                                          #   menu: see MENU_PRESS; a field talk: none)
+        pf = f + (1 if m in (0x1100, 0x200) else MENU_PRESS)   # the cartridge reads it a frame later (the menu: see
+        # MENU_PRESS); a field talk too, as every field key (ct-frame-alignment) -- until 2026-10-19 the talk took the
+        # cartridge's own frame, which the port's C8 fade, then a frame late, hid
         if pf > t:
             walk.append('n:%d' % (pf - t))
         walk.append('%s:1' % KEY[m])
