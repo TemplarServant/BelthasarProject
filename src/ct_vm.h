@@ -234,7 +234,7 @@ void CtSceneSetSoundSink(const CtSoundSink* sink);   // NULL detaches
 void CtSceneLoadPostsMode(int on);
 int  CtSceneLoadPostsPending(void);
 long CtSceneLoadPostCycles(int k);                   // the k-th pending one's object-pass cycles (g_ctLzSpriteCycles) when it ran
-void CtSceneLoadPostsFlush(CtScene* sc, int count);  // the next `count` pending ones (< 0: all)
+int  CtSceneLoadPostsFlush(CtScene* sc, int count);  // the next `count` pending ones (< 0: all); frames << 10 | line, -1 = none priced
 // THE RULE's infinitely fast CPU for the sound ops' JSLs (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1 by default): the host
 // says 0 for a run whose SPC does not stand for the cartridge's (Belthasar's WRAM-seeded runs), and the VM keeps the
 // real-time tail rule there.

@@ -8635,16 +8635,23 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
   w8(mem, 0x7E1E00, 0x00);                     // C7/0192-0194
   return rr;
 }
-void CtSceneLoadPostsFlush(CtScene* sc, int count) {   // the next `count` queued JSLs (gLoadPost; < 0 = all), in order, each with
+int CtSceneLoadPostsFlush(CtScene* sc, int count) {    // the next `count` queued JSLs (gLoadPost; < 0 = all), in order, each with
   int n = gLoadPostN, k0 = gLoadPostDone;              //   its mailbox
   if (count >= 0 && k0 + count < n) n = k0 + count;
   gLoadPostDone = n;
   if (gLoadPostDone >= gLoadPostN) gLoadPostN = gLoadPostDone = 0;
-  if (!sc) return;
+  if (!sc) return -1;
+  // ...AND PRICED, like every other JSL: each one from the line the one before it returned on (vmSoundPostAcc). A song an
+  // init script plays is uploaded INSIDE the load, with the NMI off, and the cartridge's black lasts as long as the upload:
+  // loc 071's obj init `EA 1B` (the gate's clearing, entered from 070 with Marle and Lucca) posts `10 1B` at f7378 and the
+  // SPC takes it to f7408; the ramp begins at f7425, 63 frames after the commit. The flush threw the price away and the
+  // port lit the clearing at f7394 -- its scene, its gate and the warp to 1000 A.D. all ~31 frames early.
+  int ln = 12, fr = 0, seen = 0;
   for (int k = k0; k < n; k++) {
     for (int b = 3; b >= 0; b--) w8(sc->mem, 0x7E1E00 + (uint32_t)b, gLoadPost[k][b]);
-    (void)vmSoundPostMem(sc->mem, sc->blen, 12);
+    seen |= vmSoundPostAcc(sc->mem, sc->blen, &ln, &fr);
   }
+  return seen ? fr * 1024 + ln : -1;
 }
 uint8_t* CtSceneMemGlb(CtScene* sc) { return sc->mem->g; }
 uint8_t* CtSceneMemLoc(CtScene* sc) { return sc->mem->l; }

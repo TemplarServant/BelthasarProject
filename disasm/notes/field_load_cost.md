@@ -402,6 +402,21 @@ Result: loc 0 after the reset holds 38 black frames (2,460,030 CPU + 11,307,920 
 frames after the reset, as on the cartridge. Loads that do not change the song re-post in ~5,500 cycles and do not
 move. Check: attract-battle-abort-reset.
 
+### ...and an init script's song is the load's too (2026-10-20)
+
+The load's LAST JSLs -- the init runner's (C0/5709) and obj0's slot 1 (C0/56C8) -- are queued while the port loads and
+posted by `CtSceneLoadPostsFlush` as many frames before the load's end as the object pass's work after them takes. Their
+price was thrown away: a song one of those scripts plays is uploaded inside the load, NMI off, and the cartridge's black
+lasts as long as the upload. MEASURED, the playthrough's leg 29 (the rule's cartridge, `--monitor` 0100/0119/011F/1E00/29AE
+from leg 28's end): 070 -> 071 commits at f7362; the clearing has no song of its own (its record's byte is FF, C0/1B7D
+`BMI`), its obj init's `EA 1B` posts `10 1B` at f7378 and `$1E00` holds it to f7408 (the upload), slot 1's `18 FF` then,
+and the ramp's first INC at f7425 -- 63 frames. The port held its 30 (`loadcost: scene 113 -- 9900948 cycles + 228520 DMA`),
+flushed both JSLs at f7385 and lit the clearing at f7394: the gate's scene and the warp to 1000 A.D. 31 / 39 frames early.
+The flush now prices them like every other JSL (vmSoundPostAcc, each from the line the one before returned on) and the
+host's load hold adds the frames they crossed (field.c, `loadpost:` under CT_LOADCOST): the ramp at f7425 and 008 at f10149,
+the cartridge's frames. Not covered: a priced post that falls due on the load's very last frame (the hold has already
+ended when the flush runs; the 1D3 load's `18 FF` is such a post, and costs nothing).
+
 ## 6. Repro
 
 ```

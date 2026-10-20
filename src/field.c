@@ -12684,8 +12684,12 @@ int main(int argc, char** argv) {
       if (fade != 3) due = np;
       else while (due < np && (loadPostTotal - CtSceneLoadPostCycles(due)) / CT_LOAD_FRAME_CYCLES >= loadHold) due++;
       if (due) {
-        if (getenv("CT_LOADCOST")) printf("loadpost: f%d %d JSL(s), %d frame(s) before the load's end\n", frameNo, due, fade == 3 ? loadHold : 0);
-        CtSceneLoadPostsFlush(f.vm, due);
+        int sp = CtSceneLoadPostsFlush(f.vm, due);
+        // The frames those JSLs crossed are the load's too (an init script's song upload): the black holds for them, as
+        // it holds for C0/1B8B's above, and the SPC time they ran ahead is what those frames stand still for (audio.c).
+        if (sp >= 0 && fade == 3) loadHold += sp >> 10;
+        if (getenv("CT_LOADCOST")) printf("loadpost: f%d %d JSL(s), %d frame(s) before the load's end, %d crossed\n", frameNo,
+                                          due, fade == 3 ? loadHold : 0, sp >= 0 ? sp >> 10 : 0);
       }
     }
     int inLoadFade = ((fade == 3 || (fade == 2 && loadRamp)) && !inWorld && f.vm != NULL);
