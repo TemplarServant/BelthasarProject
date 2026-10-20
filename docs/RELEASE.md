@@ -49,7 +49,10 @@ On Linux the Python is the player's `python3` unless `--python DIR` names one to
 - binaries -- the executables -- are not findings by themselves; their bytes are searched against an index of the
   corpora (every 16th window), which finds any run of 40 bytes or more they share with the ROM or `ct_assets.dat`;
 - windows that are structure, not content, never count: one value repeated, a ramp (`00 01 02 ..`), a word ramp
-  (`00 00 01 00 ..`), bit masks (`80 40 20 ..`) -- identity, index and bit tables any program holds;
+  (`00 00 01 00 ..`), bit masks (`80 40 20 ..`), two such pieces end to end (a padding run, then a ramp:
+  `00 00 .. 00 01 02 ..`, found in the Linux `ct` against `ct_assets.dat`) -- identity, index and bit tables any
+  program holds. Made two pieces: 12 of the ROM's 243,536 content windows (every 16th) and 128 of `ct_assets.dat`'s
+  505,857 stop counting;
 - the upstream runtimes shipped as they are -- `SDL2.dll`, the bundled Python -- are listed with `--third-party` and
   not searched (their own matches are ramps and zero runs against the container).
 

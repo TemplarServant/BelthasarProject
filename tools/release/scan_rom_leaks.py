@@ -93,14 +93,16 @@ def runs_from_text(text):
 def is_ramp(win):
     """A window made of STRUCTURE, not content: read as 1, 2 or 4 interleaved sequences (bytes, little-endian words,
     longs), each one steps by a constant (00 01 02 .., 00 00 01 00 02 00 .., a run of one value) or holds only zero
-    and powers of two (80 40 20 .. 01: bit masks). Identity, index and bit tables: any program and any data may hold
-    them."""
+    and powers of two (80 40 20 .. 01: bit masks); or two such byte pieces end to end (a padding run, then an index
+    table: 00 00 .. 00 01 02 03 ..). Identity, index and bit tables: any program and any data may hold them."""
     def seq_ok(q):
         d = (q[1] - q[0]) & 0xFF if len(q) > 1 else 0
         if all(((q[k + 1] - q[k]) & 0xFF) == d for k in range(len(q) - 1)):
             return True
         return all(v & (v - 1) == 0 for v in q)
-    return any(all(seq_ok(win[r::st]) for r in range(st)) for st in (1, 2, 4))
+    if any(all(seq_ok(win[r::st]) for r in range(st)) for st in (1, 2, 4)):
+        return True
+    return any(seq_ok(win[:k]) and seq_ok(win[k:]) for k in range(2, len(win) - 1))
 
 
 def content(win):
