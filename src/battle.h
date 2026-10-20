@@ -107,7 +107,12 @@
 // f1218->f1237, f1413->f1432 = dark 20 / 19 / 19). CD/025E+CD/027F carry two `JSR CD/3E7D` (2 derived
 // frames) plus a variable-cost bank-C2 VWF pass whose length was not decomposed -- see the dossier's
 // Open question 4. Pinned at the modal 3 (period 195).
-#define CT_BATTLE_RESULT_BUILD  3
+// UNDER THE RULE (the infinitely fast CPU) the build costs no frame: CD/025E's VWF pass is NMI-on work; the frames are
+// CD/027F's two waits -- the post on frame 0, `$CCEC = 10` on frame 2, CD/020A on 3-18, the dwell from 19. MEASURED, the
+// rule's cartridge (the playthrough's leg 20; a GATO fight): posts and boxes two frames apart, the next post 16 after a
+// close, a held A taken on post + 19 (disasm/notes/battle_results_box_timing.md, 2026-10-19). The 3 above was the
+// pre-rule picture's.  So: the close's 16, this build, the next box's 16 and the first test the frame after.
+#define CT_BATTLE_RESULT_BUILD  2
 // CD/019D: the 8-entry message-DWELL table, indexed `($2991 >> 3) & 7` (CD/01A5: `LDA $2991 / LSR x3 /
 // AND #07 / TAX / LDA $CD019D,X`) -- $2991 bits 3-5 are the config menu's Message Speed (C2/9332 unpacks
 // the same field into $0D90). Read from the ROM at run time, NEVER hard-coded: the last entry is 0xFF,

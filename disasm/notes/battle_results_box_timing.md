@@ -491,3 +491,14 @@ id), C1/F5DD `$B30F = 1` and C1/F5E8 sets Marle's `$B2B4` bit 2 (08 -> 0C). The 
 dual-tech learn, line or sound exists yet.
 Check `field-battle-results-line-sfx` (3 mutations killed).
 
+## 2026-10-19 -- the dwell takes a held A from the post + 19, every line (the rule's cartridge)
+
+CD/01B3 per line: the post on frame 0 (`$020C` = the line, CD/01C3's sound), CD/027F's two waits (`$CCEC = 10` on frame 2), CD/020A's 16
+(frames 3-18), the dwell from 19 (`LDA $F8 / BPL` after each frame's wait). Under the rule CD/025E's VWF build is NMI-on work and
+costs no frame. MEASURED: the playthrough's leg 20 -- posts 3074 / 3135 / 8424 / 8459, boxes +2, line 0 of the second ambush closed
+by an A held over 8443-8444 (post + 19), the next post 16 after the close; a GATO fight (Crono solo, A every 12 frames): post 2549,
+box 2551, close 2569 on the A that rose there (post + 20). The port tested from post + 21 on the first line (its box at the stager's
+return + 4) and post + 20 after (CT_BATTLE_RESULT_BUILD 3): it lost the A at post + 19 and the fight ended one A later. Now the
+first box is the stager's return + 2 (hold - 2) and the build 2: leg 20's second ambush returns on the cartridge's frame (8744),
+battle_module_tail_cmp's Black Hole on GATO is +0 on every quantity (was +3). battle-end-pc-stands moved to f2662: the port's
+victory is 11 frames early in that drive (`$A5A9` f2471 against f2482) -- a separate gap the late dwell had hidden.

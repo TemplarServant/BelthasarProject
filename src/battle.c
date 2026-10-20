@@ -16626,12 +16626,18 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
   // $2989 bit 0, no line; --hookpc) C1/8186 and C1/356D f1345, C1/83F9 and CF/FBE5 f1348, CD/03B4 f1351 -- the port
   // dismissed at the box's frame, V+7; tools/battle_module_tail_cmp.py (Black Hole on GATO) C1/F93E's XP f1422, which the
   // port applied at the box's frame, f1426.
-  if (!h->handoffLeft && h->resultPhase < 0 && h->victoryHold >= hold - 4 && h->victoryHold < hold) {
+  if (!h->handoffLeft && h->resultPhase < 0 && h->victoryHold >= hold - 4 && h->victoryHold < hold - 2) {
     CtBattleVictoryRewards(h);                                   // C1/83D2-83F2 (once)
     if (h->resultN <= 0 || h->resultLine < 0) { h->resultPhase = 3; h->resultPhaseT = 0;
       battleTrace(h, "victory-dismiss"); battleModuleTail(h, 0); battleFbe5Begin(h); return; }
   }
-  if (h->victoryHold < hold || h->handoffLeft > 0) return;
+  // THE FIRST LINE'S DWELL TAKES A HELD A FROM POST + 19, as every later line's does (CD/01B3: the post on frame 0, the box
+  // on 2, CD/020A on 3-18): the model below counts 17 frames from the box's frame to the first A test, so the first box is
+  // hold - 2's (the stager returned, and the post went out, at hold - 4). MEASURED, the rule's cartridge (the playthrough's leg 20, the second forest
+  // ambush, an A held over f8443-8444): the first line's post (`$020C` = 00) f8424, the A taken (the next post f8459 = +16
+  // after the close); the port opened at hold and tested from post + 21, missed it, and closed on the next A 20 frames later
+  // -- the fight's return 20 frames late. (battle_module_tail_cmp's Black Hole on GATO: `$29AD` +3 -> +0 with it.)
+  if (h->victoryHold < hold - 2 || h->handoffLeft > 0) return;
   CtBattleVictoryRewards(h);                                     // C1/83D2-83F2, then 83F5 JSL FD/AD17 (once)
   if (h->resultN <= 0 || h->resultLine < 0) {                    // no reward line at all -> straight to the handoff
     if (h->resultPhase < 0) { h->resultPhase = 3; h->resultPhaseT = 0;
@@ -22400,7 +22406,12 @@ int CtBattleTick(CtBattleHost* h, int endRequest, int input) {
   int r = battleTickBody(h, endRequest, input);
   if (h && h->mem && h->iterHead) {                            // frame B's tail is done: the next head, unless the tail
     h->iterHead = 0;                                           //   is inside an action (the head then waits for its end)
-    if (!h->mem[0xA013] && h->demoDispatchAt < 0 && !r && !battleThinkPending(h)) battleIterHead(h);
+    // ...not once the fight is over: C1/8133's defeat and C1/817A's victory leave the loop for good (C1/8143 / C1/8186), so
+    // no C1/8120 follows them. MEASURED, the rule's cartridge (the playthrough's leg 20, the first forest ambush): `$0027`
+    // stops at DE on the victory's frame (f3005); the port ran one more head (DF), every later fight's iteration parity was
+    // the other one, and the second ambush's turn scanner (C1/82A2, odd iterations) ran 2 frames off the cartridge's.
+    if (!h->mem[0xA013] && h->demoDispatchAt < 0 && !r && !battleThinkPending(h) && !h->victoryHold && !h->defeatT)
+      battleIterHead(h);
   }
   { static int pt = -1; if (pt < 0) { const char* t = getenv("CT_BATTLE_POSTRACE"); pt = (t && *t) ? 1 : 0; }
     if (pt && h && h->mvInited) {                              // debug: every combatant's live foot ($1D0C/$1D23's

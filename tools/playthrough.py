@@ -94,6 +94,21 @@ def btnscript(pad):
     return ','.join('%X:%d' % (mk, n) for mk, n in pad)
 
 
+def compact(pad):
+    """The pad in the route's grammar with a repeated pair folded: `(100:2,0:18)*12`."""
+    toks = ['%X:%d' % (mk, n) for mk, n in pad]
+    out, i = [], 0
+    while i < len(toks):
+        n = 1
+        while i + 2 * n + 1 < len(toks) and toks[i + 2 * n] == toks[i] and toks[i + 2 * n + 1] == toks[i + 1]:
+            n += 1
+        if n >= 3:
+            out.append('(%s,%s)*%d' % (toks[i], toks[i + 1], n)); i += 2 * n
+        else:
+            out.append(toks[i]); i += 1
+    return ','.join(out)
+
+
 def walkscript(pad):
     # one frame later on the port (its keys are the cartridge's + 1); a pad of 0 is an idle token
     return ','.join(['.:1'] + ['H%X:%d' % (mk, n) if mk else '.:%d' % n for mk, n in pad])
@@ -140,7 +155,7 @@ def route_bfs(w, s, g, z):
         if not (0 <= tx < 64 and 0 <= ty < 64):
             return False
         o = (ty << 8) | tx
-        return ((w[0x30C0 + o] >> 2) & 0x3F) != 1 and (w[0x7040 + o] & 3) == z
+        return ((w[0x30C0 + o] >> 2) & 0x3F) != 1 and ((w[0x7040 + o] & 3) == z or (w[0x7040 + o] & 3) >= 2)   # 2/3: stairs
     prev = {s: None}
     q = deque([s])
     while q:
@@ -165,10 +180,13 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
     """From the state `cur` (advanced in place), follow a BFS over the location's tiles -- the cartridge's own planes,
     $7E:30C0 (shape: 1 = solid) and $7E:7040 (z = & 3) on the lead's plane $0155 -- a few tiles at a time (16 frames a
     tile), recomputed from where the lead stands after each stretch; when control is gone ($011F = 0: a visible enemy, a
-    scene) A is mashed until it is back; a stretch that leaves the lead where it stood is followed by a half-tile nudge
+    scene) the fight is played by tools/battle_pilot.py's Pilot (attack, a Tonic under 35%) and a scene's boxes take A
+    until control is back; a stretch that leaves the lead where it stood is followed by a half-tile nudge
     across it (a partial tile's corner). Returns pad + the stretches, merged."""
-    loc0, last, nudge = None, None, 0
-    for it in range(cap):
+    from battle_pilot import Pilot, in_fight
+    pilot = Pilot()
+    loc0, last, nudge, it, scene = None, None, 0, 0, 0
+    while it < cap:
         w = wram_of(cur)
         loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
         if loc0 is None:
@@ -178,8 +196,14 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
         lead = w[0x0197]
         tx, ty, z = w[0x1801 + lead], w[0x1881 + lead], w[0x0155]
         here = (w[0x1800 + lead] | (w[0x1801 + lead] << 8), w[0x1880 + lead] | (w[0x1881 + lead] << 8))
-        if w[0x011F] == 0:                           # a fight or a scene: A until control is back
-            step = [(0x100, 2), (0, 18), (0x100, 2), (0, 18)]
+        if w[0x011F] == 0 and in_fight(w):           # a fight: the pilot (not counted against the cap)
+            step, note = pilot.step(w)
+            if note:
+                print('route: fight: %s' % note)
+            it -= 1
+        elif w[0x011F] == 0:                         # a scene (or a fight's first frames): wait, and A every third stretch
+            scene += 1                               # (a box waits for it; an A each time would re-touch what the lead
+            step = [(0x100, 2), (0, 38)] if scene % 3 == 0 else [(0, 40)]   # faces -- the sanctum's organ, played again)
         elif (tx, ty) == (gx, gy) and not want_exit:
             print('route: at (%d,%d)' % (tx, ty)); break
         else:
@@ -196,10 +220,13 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
                 step = [(side[nudge & 1], 8)] + step
                 nudge += 1
         last = here if w[0x011F] else None
+        if w[0x011F]:
+            scene = 0
         pad = pad + step
         nxt = cur + '.n'
         oracle_play(cur, step, nxt)
         os.replace(nxt, cur)
+        it += 1
     merged = []
     for mk, n in pad:
         if merged and merged[-1][0] == mk and mk != 0x100:
@@ -402,14 +429,14 @@ def main():
         oracle_play(start_of(legs, i), pad, cur)
         pad = route_walk(cur, pad, int(a[3]), int(a[4]), '--exit' in a,
                          int(a[a.index('--max') + 1]) if '--max' in a else 300)
-        print('pad: %s' % btnscript(pad))
+        print('pad: %s' % compact(pad))
     elif a[0] == 'goto':
         # goto <state> <tile x> <tile y> <out.state> [--exit] [--max N]: route_walk from any state (authoring between
         # stretches); writes the end state, prints the stretch's pad.
         shutil.copyfile(a[1], a[4])
         pad = route_walk(a[4], [], int(a[2]), int(a[3]), '--exit' in a,
                          int(a[a.index('--max') + 1]) if '--max' in a else 300)
-        print('pad: %s' % btnscript(pad))
+        print('pad: %s' % compact(pad))
     elif a[0] == 'walk':
         # walk <leg> "<prefix pad>" <tx> <ty> [--exit] [--lead=HEX]: the prefix from the leg's start, then tools/walkto.py
         # (the oracle's own collision, A* order) to the pixel or through the exit box; prints the whole pad.
