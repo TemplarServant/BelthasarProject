@@ -3026,8 +3026,9 @@ static void reqScratch(CtScene* sc, int op, int tgt, int pr) {
 // him that frame. MEASURED on the rule's cartridge (saves/field_re/scene8_pod_latch.state, Up then Left on the Telepod touch,
 // `--monitor 7E1A07,7E1906,7E1806 --writer`): at f21 $1906 = F0 by C0:9E56, $1A07 = 00 by C0:619C (obj11's `04 06 36`), and
 // $1806 stays 3704 (no C0:AB28) -- the stale F0 sits there until fn7's MOVETO. The port's host (field.c) moves the lead
-// before the tick; it hands the step's origin here (CtSceneLeadStepFrom) and the integrate leg takes it back when the
-// ticket was dropped. Transient per-frame state: statics, not CtScene members (a member breaks every --loadstate .state).
+// before the tick; it hands the step's origin here (CtSceneLeadStepFrom) and the integrate leg takes it back when no
+// ticket stands (vmLeadStepAtA810: never armed, or dropped). Transient per-frame state: statics, not CtScene members
+// (a member breaks every --loadstate .state).
 static int g_leadTk = -1;                  // -1 = the lead's 3040 arm has not run this pass, 1 = armed, 0 = dropped
 static int g_leadFromOk, g_leadFromTick; static double g_leadFromX, g_leadFromY;
 static int gVmTick;                        // trace timestamps (and the step origin's frame)
@@ -3038,8 +3039,18 @@ static void vmTicketStop(CtScene* sc, int o) {   // `STZ $1A80,X / STZ $1A01,X` 
 void CtSceneLeadStepFrom(CtScene* sc, double x, double y) {
   (void)sc; g_leadFromOk = 1; g_leadFromTick = gVmTick; g_leadFromX = x; g_leadFromY = y;   // this frame's, the tick to come
 }
-static int g_leadTakenTick = -1;           // the tick that took the step back
+static int g_leadTakenTick = -1;           // the tick that took the lead's step back
 int CtSceneLeadStepDropped(const CtScene* sc) { (void)sc; return g_leadTakenTick == gVmTick; }
+// C0/A810 for the lead's host step, at the integrate leg (CtSceneTick, around the party trail).
+//   unarmed  (-1): the lead's op B0 did not run this pass -- he sat on B2 (C0/3543 `TYX / CLC`) or another op, or the
+//                  queue build left him out (C0/59F0: his countdown $1001 not expired) -- so $1A01 is 0 and AB06's BEQ
+//                  skips him. Taken back BEFORE the party trail: with no 9E29 there is no ring push either.
+//   dropped   (0): an invoke after his B0 zeroed $1A01 (vmTicketStop). Taken back AFTER the trail: 9E29 pushed.
+static void vmLeadStepAtA810(CtScene* sc, int dropped) {
+  if (sc->playerObj < 0 || sc->playerObj >= sc->nobj) return;
+  if (g_leadTk != (dropped ? 0 : -1) || !g_leadFromOk || g_leadFromTick != gVmTick - 1) return;
+  CtSceneSetActorPosF(sc, sc->playerObj, g_leadFromX, g_leadFromY); g_leadTakenTick = gVmTick; g_leadFromOk = 0;
+}
 static void reqOp(CtScene* sc, int target, int function, int priority) {
   if (target >= sc->nobj || function >= 16 || priority >= 8) return;
   // ROM C0/5FC8-5FD0: refuse if $1100 bit7 (inactive) or $1000 bit7 (cadence paused).
@@ -6620,7 +6631,6 @@ void CtSceneTick(CtScene* sc) {
   if (!sc->loadFadeIn && body) tbMachineTick(sc);
 
   gVmTick++;
-  g_leadTk = -1;                                         // no B0 visit of the lead yet in this pass
   // THE SONG-UPLOAD FREEZE, decided FIRST (the sndWait fields; song_load_freeze.md section 6). While the
   // ROM's main loop is parked inside `JSL $C7:0004` only the NMI's work happens -- the upload flush
   // below, the fade counter's INIDISP, the deferred copies -- and none of the main-loop legs: not the
@@ -6803,6 +6813,7 @@ void CtSceneTick(CtScene* sc) {
               sc->actors[trObj].cadPause, sc->mode[trObj] & 0xFF,
               (ts->addr >= 0 && ts->addr < sc->blen) ? sc->body[ts->addr] : 0xEE,
               sc->mem->l[0x13], sc->mem->l[0x12], sc->mem->l[0x15], sc->mem->l[0x14]); } }
+  if (!sndResuming) g_leadTk = -1;                      // no B0 visit of the lead yet in this pass (a resumed one had it)
   if (!sndResuming) { memset(g_ranB0, 0, sizeof g_ranB0); memset(g_landedB0, 0, sizeof g_landedB0); }   // (a resumed
                                                                 // pass keeps what its first half dispatched)
   for (int qi = sndResuming ? sc->sndResumeN : 0; qi < nq; qi++) {   // no cut: C0/5A5D on the fixed virtual beam
@@ -6869,11 +6880,13 @@ void CtSceneTick(CtScene* sc) {
   // part of the runner above, and its $1900/$1980/$1600/$1680 stores are consumed by C0/A810 below (AAFD
   // integrate, the C98A anim leg) and by the drain. field.c used to call it AFTER CtSceneTick, one frame
   // late for all three consumers.
+  // THE LEAD'S STEP, AT C0/A810 (AB06 `LDA $1A01,X / BEQ`): the host moved him before the pass (field.c, C0/881E's step);
+  // it stands only on a ticket his B0 armed this pass and nothing dropped (vmLeadStepAtA810).
+  // (A song upload that parks the pass after his B0 keeps the ticket to the return frame, where A810 runs: the host does
+  // not move him while parked, and the step he took on the posting frame commits there -- CtSceneMainLoopParked.)
+  vmLeadStepAtA810(sc, 0);
   CtSceneUpdateFollowers(sc);
-  // THE LEAD'S STEP, AT C0/A810: the host moved him before the pass (field.c, C0/881E's step); a ticket an invoke dropped
-  // after his B0 (vmTicketStop) means AB06's `BEQ` -- no integrate this frame, he stands where the frame began.
-  if (g_leadTk == 0 && g_leadFromOk && g_leadFromTick == gVmTick - 1 && sc->playerObj >= 0 && sc->playerObj < sc->nobj)
-    { CtSceneSetActorPosF(sc, sc->playerObj, g_leadFromX, g_leadFromY); g_leadTakenTick = gVmTick; }
+  vmLeadStepAtA810(sc, 1);
   g_leadFromOk = 0;
   // ⭐ C0/A810's OBJECT LOOP IS UNCONDITIONAL. A810 reads the object count into $BD and A819 walks
   // EVERY index every frame, dispatching on $1100,X (A81E CMP #03 / A822 CMP #08 / A826 CMP #07) --

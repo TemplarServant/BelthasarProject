@@ -628,6 +628,16 @@ and obj11 left its `04 06 47` 4 frames late. Per pad (Left, Right) four events a
 the cartridge under the rule against the port from the same WRAM and SPC (`saves/field_re/scene8_pod_latch.state`).
 Re-pin only if the capture or the drive changes. Dossier: `disasm/notes/call_wait_latch_preempt.md` sec. 5.
 
+### field-lead-walks-only-on-his-b0-ticket-vs-rule-cartridge (`python tools/lead_step_ticket_cmp.py`)
+
+Pins that the free lead moves only on the `$1A01,X` ticket his own op B0 arms in the pass (C0/3040), which C0/A810's
+integrate reads (AB06 `BEQ`). Three seeds of `saves/field_re/scene8_pod_latch.state`, the same WRAM poked on both sides,
+Left held: Crono parked on a `B2` (C0/3543, no arm: he stands), Crono's period `$1000 = 04` (the queue build enqueues him
+one frame in four: one step in four), and a song upload posted mid-walk (the step his B0 armed lands on the JSL's return
+frame). The port's host moved the lead on every frame he was not scripted. Crono's `$1806/$1886` over 70 frames per case.
+The port's poked countdown is one higher (its first tick from a seed runs an event pass the cartridge's first --monitor
+frame does not). Dossier: `disasm/notes/call_wait_latch_preempt.md` sec. 6.
+
 ### field-scene8-telepod-touch-trigger (`--scene 8` + `CT_TRIGDBG=1`)
 
 Pins that a CLASS-7 object (`$1100 = 07`: positioned, sprite-less, no loader op) gets

@@ -140,3 +140,27 @@ request is C0/881E's and stands, as on the cartridge.
 
 Graded by field-telepod-lateral-touch-drops-the-lead-step-vs-rule-cartridge (tools/telepod_step_drop_cmp.py): Left and
 Right, four events each on the cartridge's frame and Crono's `$1806/$1886` identical on 120/120 frames (5/10 before).
+
+## 6. The lead walks only on his own B0's ticket (the general rule)
+
+Sec. 5 is one case of a rule: C0/A810 moves the free lead only on the `$1A01,X` his op B0 arms in this pass, and nothing
+else arms it for him. Simulated 2026-10-19 on seeds of the same capture (PEEK_POKE on both sides, Left held):
+
+- **B2** (`$1186` = 0473): C0/3543 `TYX / CLC / RTS`, no arm -- the cartridge never moves him; the port walked.
+- **Period 4** (`$1006` = 04): the queue build C0/59F0 enqueues him one frame in four -- the cartridge steps on those
+  frames only; the port stepped every frame.
+- **Song upload mid-walk** (obj4 on obj11's `EA 18`): the posting frame's B0 arms (`$1A07 = 01` by C0:3047, no AB28),
+  the JSL parks the pass, and A810 integrates on the return frame (f44, AB10/AB28, one step). The port already matched:
+  the host does not move a parked lead (CtSceneMainLoopParked) and the posting frame's step commits on the resume.
+- **Install before his B0**: impossible -- the queue PREPENDS the lead (C0/5A01 `LDA $1100,X / BEQ ->5A31`, 5A3B/5A3D),
+  so he is visited first in every pass he is queued for.
+- **`$0138` != 0 on a main-loop frame**: not reachable -- C0/1770 is its only armer and its loop C0/1781-178E runs until
+  it is 0 (the port seeds a nonzero `$0138` as an ALIGN frame and clears it; the cartridge, poked into the main loop,
+  keeps it and the lead stands).
+
+Fix: ct_vm.c `vmLeadStepAtA810` takes the host's step back when no ticket stands -- BEFORE the party trail when B0 did
+not run (no 9E29, so no ring push), AFTER it when an invoke dropped the ticket (9E29 pushed). A resumed pass keeps the
+ticket its first half armed. Graded by field-lead-walks-only-on-his-b0-ticket-vs-rule-cartridge
+(tools/lead_step_ticket_cmp.py): 3/3 (1/3 before). Harness note: the port's first tick from a seed runs an event pass
+the cartridge's first `--monitor` frame does not (the state was saved after its pass; a poked `$1001` reads the same at
+f0), so a poked countdown is one higher on the port's side.

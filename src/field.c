@@ -18287,9 +18287,10 @@ int main(int argc, char** argv) {
       int c = ((iw[0x0158] | (iw[0x0159] << 8)) + 1) & 0x83FF;
       iw[0x0158] = (uint8_t)c; iw[0x0159] = (uint8_t)(c >> 8);
     }
-    // THE LEAD'S DROPPED STEP. The host moved him above (C0/881E's step), but an invoke later in the event pass -- op 0x04
-    // installing a function on him (C0/6199 `STZ $1A01,X`) -- dropped the ticket his B0 armed (C0/3044), so C0/A810 did not
-    // integrate it: the tick put him back (ct_vm.c vmTicketStop), and the host's copy follows the words.
+    // THE LEAD'S STEP AS C0/A810 TOOK IT. The host moved him above (C0/881E's step), but A810 integrates it only on the
+    // ticket his op B0 armed this pass (C0/3044) -- not when he sat on another op (B2) or was not queued, nor when an
+    // invoke later in the pass dropped it (C0/6199 `STZ $1A01,X`): the tick put his words back (ct_vm.c vmLeadStepAtA810),
+    // and the host's copy follows them.
     if (f.vm && !battlePhase && CtSceneLeadStepDropped(f.vm)) {
       const uint8_t* lw = CtSceneMem7E(f.vm);
       px = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;

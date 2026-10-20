@@ -174,8 +174,9 @@ void CtSceneActor(const CtScene* sc, int obj, int* placed, int* sprite, int* x, 
 void CtSceneSetActorPos(CtScene* sc, int obj, int x, int y);  // sync an actor's pos (PC1 = the player)
 void CtSceneSetActorPosF(CtScene* sc, int obj, double x, double y);  // sub-pixel variant (the per-frame lead
                                                               // sync; the ROM's $1800/$1880 keep the fraction)
-// The lead's step: the host moved him from (x, y) this frame (C0/881E's step, before the tick); the tick takes it back at
-// C0/A810 when an invoke after his B0 dropped the ticket (`STZ $1A01,X`), and says so after the tick.
+// The lead's step: the host moved him from (x, y) this frame (C0/881E's step, before the tick); C0/A810 integrates it only
+// on the ticket his op B0 armed this pass (C0/3040) and nothing dropped (`STZ $1A01,X`) -- else the tick takes it back --
+// and a song upload that parks the pass keeps the ticket to the return frame. Dropped = the tick took the step back.
 void CtSceneLeadStepFrom(CtScene* sc, double x, double y);
 int  CtSceneLeadStepDropped(const CtScene* sc);
 int CtSceneLeadScriptPlaced(const CtScene* sc, int obj, double* x, double* y);  // 1 = the lead's fn0 placed it
