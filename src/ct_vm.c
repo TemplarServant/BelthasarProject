@@ -1948,6 +1948,21 @@ struct CtScene {
                                // barrier + E3 01 restore control. -1 = none.
   int d9Base;                  // body-offset of op 0xD9's first walk program ($7F3720 = IP 171F; slot k at +0x20*k).
 };
+// The followers, as the ROM finds them: the party slots $0199 / $019B (the object * 2; bit 7 = the slot is empty) --
+// slot 1 first, and slot 2 only when slot 1 is filled (C0/345F / 34E2 for op DA, C0/0355 / 036D for the battle return).
+// The object init (C0/426A) and the party ops (D4, C0/394E) keep the bytes in WRAM. Both callers used to take the objects
+// of move-mode 1 and 2 instead, and a member who has left the party keeps his mode: in 078 after Yakra `D4 04` empties
+// slot 2 ($019B 0A -> 8A) and the DA that follows releases Lucca alone on the cartridge ($7F03FE := 2, control back 20
+// frames later), where the port released Frog too ($7F03FE := 1) and waited for his walk (57 frames; the playthrough's
+// leg 27). Returns the count, the objects in fol[].
+static int ctPartyFollowers(CtScene* sc, int fol[2]) {
+  int s1 = r8(sc->mem, 0x7E0199), s2 = r8(sc->mem, 0x7E019B), nf = 0;
+  if (!(s1 & 0x80) && (s1 >> 1) < sc->nobj) {
+    fol[nf++] = s1 >> 1;
+    if (!(s2 & 0x80) && (s2 >> 1) < sc->nobj) fol[nf++] = s2 >> 1;
+  }
+  return nf;
+}
 
 // $1001,X -- THE CADENCE COUNTDOWN, a real WRAM byte, not a private counter. The ROM's queue build
 // tests and decrements it (C0/59F0-59F6), every enqueue arm reloads it from the period $1000,X
@@ -4025,14 +4040,8 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // it -- after the walk -- instead of instantly, and the barrier seed is the same `3 - nFollowers`
     // law CtSceneBattleReturn already uses.
     Mem* m = sc->mem;
-    int fol[2] = { -1, -1 }, nf = 0;               // followers = move-mode 1 then 2 (the C0/0330 $99/$9B
-    for (int want = 1; want <= 2; want++)          //   pair CtSceneBattleReturn derives; the raw $0197/
-      for (int o = 0; o < sc->nobj; o++)           //   $0199/$019B bytes are NOT live party slots here --
-        if (o != sc->playerObj && sc->mode[o] == want          // memBoot seeds them 0x80 and field.c
-            && !sc->actors[o].dead && sc->actors[o].hasPos) {  // reuses them as collision scratch)
-          if (nf < 2) fol[nf++] = o;
-          break;
-        }
+    int fol[2] = { -1, -1 };
+    int nf = ctPartyFollowers(sc, fol);            // 345F `LDA $99 / BPL`, 34E2 `LDA $9B / BPL`
     // 3461 BPL -> 3463 INX / CLC: no follower -- the IP steps past it and the VISIT ENDS (CLC; move.c's arm had it). This
     // arm kept running: loc 070's ambush (obj22 fn1 `E3 00 / DA / E3 00 / AD 05`, cadence 4) reached its wait on the
     // DA's own visit, 4 frames before the cartridge (rule oracle: IP 035E f42 -> 0360 f46), and its fight began 8 early.
@@ -7741,12 +7750,8 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
 // caller's epilogue (field.c). Idempotent-safe: does nothing if rgBase wasn't installed.
 void CtSceneBattleReturn(CtScene* sc) {
   if (!sc || sc->rgBase < 0) return;
-  int fol[2] = { -1, -1 }, nf = 0;                    // the follower objects (move-mode 1 then 2, C0/0330 $99/$9B)
-  for (int want = 1; want <= 2; want++)
-    for (int o = 0; o < sc->nobj; o++)
-      if (o != sc->playerObj && sc->mode[o] == want && !sc->actors[o].dead && sc->actors[o].hasPos) {
-        if (nf < 2) fol[nf++] = o; break;
-      }
+  int fol[2] = { -1, -1 };
+  int nf = ctPartyFollowers(sc, fol);                  // 0355 `LDA $99 / BPL`, 036D `LDA $9B / BPL`
   w8(sc->mem, LOC + 0xFF * 2, (3 - nf) & 0xFF);      // loc[0xFF] seed = 3 - nFollowers (the barrier target 3)
   if (nf == 0) {                                       // C0/0359: no followers -> restore control directly
     sc->explore = 1; w8(sc->mem, 0x7E011F, 1); w8(sc->mem, 0x7F03FE, 3);   // 0359 LDA #01 / STA $1F / LDA #03 / STA $7F03FE
