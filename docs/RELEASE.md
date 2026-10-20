@@ -21,6 +21,12 @@ It runs on the platform it packages for (a Windows package on Windows, a Linux o
 
 The release must be built from a **committed** tree: step 1 takes `HEAD`, not the working copy.
 
+On Linux the build takes the system SDL2 (`libsdl2-dev`), cmake, ninja and gcc; `third_party/` holds only Dear ImGui
+1.91.5 (`python3 tools/get_imgui.py`) and the Vulkan headers 1.3.296 (`include/` of KhronosGroup/Vulkan-Headers). The
+executables need the glibc of the machine that built them or newer, so build on the oldest distribution the package is
+for (Ubuntu 24.04: glibc 2.38 for Belthasar). The player installs `libsdl2-2.0-0` and `python3`; `zenity` or `kdialog`
+gives the setup screen its Browse... (dropping the file on the window works without them).
+
 ## What is inside
 
     Belthasar-<version>-windows-x64/

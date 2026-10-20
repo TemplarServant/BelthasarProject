@@ -11,6 +11,7 @@
 #include <windows.h>
 #include <direct.h>
 #define CT_SEP "\\"
+#define CT_EXE ".exe"
 #else
 #include <unistd.h>
 #include <signal.h>
@@ -18,6 +19,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #define CT_SEP "/"
+#define CT_EXE ""
 #endif
 
 static const char* const ROM_NAME = "Chrono_Trigger_USA_SNES.sfc";
@@ -140,8 +142,8 @@ static void setupPaths(char* python, char* kit, char* oracle, size_t n) {
   }
   if ((e = getenv("CT_SETUP_ORACLE")) && *e) snprintf(oracle, n, "%s", e);
   else {
-    snprintf(p, sizeof p, "%ssetup" CT_SEP "ct.exe", b);
-    if (!fileExists(p)) snprintf(p, sizeof p, "%sct.exe", b);
+    snprintf(p, sizeof p, "%ssetup" CT_SEP "ct" CT_EXE, b);
+    if (!fileExists(p)) snprintf(p, sizeof p, "%sct" CT_EXE, b);
     snprintf(oracle, n, "%s", p);
   }
   if ((e = getenv("CT_PYTHON")) && *e) snprintf(python, n, "%s", e);
@@ -237,8 +239,8 @@ CtSetupJob* CtLauncherSetupStart(const CtLauncher* L, char* msg, size_t msgLen) 
   CtSetupJob* j = (CtSetupJob*)calloc(1, sizeof *j);
   if (!j) return NULL;
   const char* argv[] = { python, script, "--rom", L->rom, "--no-build", "--oracle", oracle, "--workdir", work,
-                         "--out", out };
-  int argc = (int)(sizeof argv / sizeof argv[0]);
+                         "--out", out, NULL };                 // (execvp's list ends in NULL)
+  int argc = (int)(sizeof argv / sizeof argv[0]) - 1;
   char logPath[1200];
   snprintf(logPath, sizeof logPath, "%ssetup.log", L->data);
   j->log = fopen(logPath, "w");
