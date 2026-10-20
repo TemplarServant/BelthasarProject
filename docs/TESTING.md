@@ -165,7 +165,8 @@ its WRAM and SPC, the same pad one frame later as the walkscript's raw `H` token
 location, the storyline, the party, the gold, Crono's HP and the control byte, and the leg's last picture against the
 port's frames -6..+6. A DIFFERENT leg is a residual to fix (its line is pinned, as everywhere in the suite); `diff <leg>`
 writes the picture comparison. Writing legs: `try <leg> "<pad>"` (the picture in build/_playthrough/try.png), `walk <leg>
-"<prefix>" <x> <y> [--exit]` (tools/walkto.py from that point). The route is the work of many sessions: it grows leg by
+"<prefix>" <x> <y> [--exit]` (tools/walkto.py from that point), `scene <leg> "<prefix>"` (a scene played by its message
+boxes: an A only when one waits, a few frames in -- a fixed-cadence A turns a frame's difference into a box's). The route is the work of many sessions: it grows leg by
 leg, and every leg added is a stretch of the game the port is graded on from then on.
 
 ### shadow-route-magus-fight (`ct.exe --shadow --btnfile tools/shadow_routes/magus_fight.btn`, a route)

@@ -4,6 +4,7 @@ r"""The playthrough: one route from power-on to "The End", played on the rule's 
     python tools/playthrough.py try  <leg> "<pad>"     play <pad> on the cartridge from the leg's start (authoring)
     python tools/playthrough.py play <leg>|all          play the route's legs on the cartridge, writing their end states
     python tools/playthrough.py cmp  <leg>|all [-v]     each leg on both sides from its start state, compared
+    python tools/playthrough.py scene <leg> "<pad>"     authoring: the pad, then a scene played by its boxes (A when one waits)
 
 THE ROUTE (tools/playthrough/route.txt) is the cartridge's pad, frame by frame, in the --btnscript grammar (`hexbtn:frames`,
 LakeSnes serial order: B=1 Y=2 Sel=4 Start=8 Up=10 Down=20 Left=40 Right=80 A=100 X=200 L=400 R=800), cut into LEGS:
@@ -185,7 +186,7 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
     across it (a partial tile's corner). Returns pad + the stretches, merged."""
     from battle_pilot import Pilot, in_fight
     pilot = Pilot()
-    loc0, last, nudge, it, scene = None, None, 0, 0, 0
+    loc0, last, nudge, it, scene, waited = None, None, 0, 0, 0, 0
     while it < cap:
         w = wram_of(cur)
         loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
@@ -201,9 +202,9 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
             if note:
                 print('route: fight: %s' % note)
             it -= 1
-        elif w[0x011F] == 0:                         # a scene (or a fight's first frames): wait, and A every third stretch
-            scene += 1                               # (a box waits for it; an A each time would re-touch what the lead
-            step = [(0x100, 2), (0, 38)] if scene % 3 == 0 else [(0, 40)]   # faces -- the sanctum's organ, played again)
+        elif w[0x011F] == 0 or w[0x0129]:            # a scene (or a fight's first frames): its boxes (box_step); never an
+            scene += 1                               # A on a box that is not waiting -- it re-touches what the lead faces
+            step, waited = box_step(w, waited)       # (the sanctum's organ, played again)
         elif (tx, ty) == (gx, gy) and not want_exit:
             print('route: at (%d,%d)' % (tx, ty)); break
         else:
@@ -233,6 +234,51 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
             merged[-1][1] += n
         else:
             merged.append([mk, n])
+    return [tuple(x) for x in merged]
+
+
+BOX_SLACK = 6                   # frames a box waits (state 7) before the press: room for a load a frame or two apart
+
+
+def box_step(w, waited):
+    """One step through a scene, keyed on the message box (C0/1F87, field_textbox_a_press.md): A only when the box waits
+    for it -- `$0129` = 7 with `$0134` = FFFF (no auto-advance countdown), or a decision box (`$0162` != 0) -- and only
+    after it has waited BOX_SLACK frames, so the press lands inside the wait on both sides when they are a frame or two
+    apart (a fixed-cadence press that met a box on its first waiting frame missed it on the side a frame late, and the
+    rest of the scene ran a box apart). Returns (pad, waited)."""
+    waiting = w[0x0129] == 7 and ((w[0x0134] | (w[0x0135] << 8)) == 0xFFFF or w[0x0162] != 0)
+    if not waiting:
+        return [(0, 4)], 0
+    if waited < BOX_SLACK:
+        return [(0, 2)], waited + 2
+    return [(0x100, 2), (0, 4)], 0
+
+
+def scene_play(cur, pad, cap, quiet=60):
+    """From the state `cur` (advanced in place), play a scene by its boxes (box_step) until the player has had control
+    with no box for `quiet` frames, or `cap` frames. Returns pad + the scene's, merged."""
+    waited, calm, n, step_pad = 0, 0, 0, []
+    while n < cap:
+        w = wram_of(cur)
+        if w[0x011F] and w[0x0129] == 0:
+            calm += 4
+            if calm >= quiet:
+                break
+            step = [(0, 4)]
+        else:
+            calm = 0
+            step, waited = box_step(w, waited)
+        nxt = cur + '.n'
+        oracle_play(cur, step, nxt)
+        os.replace(nxt, cur)
+        step_pad += step
+        n += sum(k for _, k in step)
+    merged = []
+    for mk, k in pad + step_pad:
+        if merged and merged[-1][0] == mk and mk != 0x100:
+            merged[-1][1] += k
+        else:
+            merged.append([mk, k])
     return [tuple(x) for x in merged]
 
 
@@ -430,6 +476,18 @@ def main():
         pad = route_walk(cur, pad, int(a[3]), int(a[4]), '--exit' in a,
                          int(a[a.index('--max') + 1]) if '--max' in a else 300)
         print('pad: %s' % compact(pad))
+    elif a[0] == 'scene':
+        # scene <leg> "<prefix pad>" [--max N]: the prefix from the leg's start, then the scene played by its boxes
+        # (scene_play) until the player has control again; prints the whole pad.
+        i = find(legs, a[1])
+        if i > 0:
+            ensure_states(legs, i - 1)
+        pad = expand(a[2]) or [(0, 1)]
+        cur = os.path.join(TMP, 'scene.state')
+        oracle_play(start_of(legs, i), pad, cur)
+        pad = scene_play(cur, pad, int(a[a.index('--max') + 1]) if '--max' in a else 30000)
+        print('pad: %s' % compact(pad))
+        print('scene: %d frames, end state %s' % (sum(n for _, n in pad), cur))
     elif a[0] == 'goto':
         # goto <state> <tile x> <tile y> <out.state> [--exit] [--max N]: route_walk from any state (authoring between
         # stretches); writes the end state, prints the stretch's pad.

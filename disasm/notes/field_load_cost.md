@@ -428,3 +428,30 @@ CT_HOOK_CYCLES=1 build/ct.exe --hookpc 0097 --from saves/field_re/scene468_stair
 python tools/regress.py --only field-load-cost-vs-rom
 python tools/regress.py --mutate field-load-cost-vs-rom
 ```
+
+### The object pass's own work changes the game, through the play clock (2026-10-20)
+
+Leg 31 of the playthrough (the trial) measured what the open item above costs. Each location load runs with the NMI off,
+and the NMI is what counts the play clock (`$0400`, frames): the clock stands for exactly the load's NMI-off stretch, and
+C0/0C70 seeds the field's random cursor `$01F8` (op 0x7F, C0:FE00) from `$0400` at the next load. A load the port prices a
+frame short leaves its clock a frame ahead for good. The trial's four loads (the fair's flashbacks, 1B7 and back to the
+courtroom 01B), the clock's standing spans on the rule's cartridge against the port:
+
+| load | cartridge | port | port's price |
+|---|---|---|---|
+| 01B -> 1B7 (scene 439) | f3469-f3513, 44 | 43 | 13,799,774 + 228,520 DMA = 41 black |
+| 1B7 -> 01B (scene 27) | f3849-f3890, 41 | 39 | 12,391,294 + 228,520 DMA = 37 black |
+| 01B -> 1B7 | f6378-f6423, 45 | 43 | 41 |
+| 1B7 -> 01B | f6664-f6705, 41 | 39 | 37 |
+
+By the jury the port's `$0400` reads 05 where the cartridge's reads 00, the courtroom's load seeds `$01F8` = 0D for 09, and
+the juror obj18's fn3 (`7F 06 / 12 06 80 02 ..`, the vote when neither `glb[84]` bit decides) rolls "guilty" where the
+cartridge's rolls "not guilty": obj18 walks left to (3,14) at f7754 where the cartridge's walks right to (12,14) at
+f7749, and every box of the trial after it comes later.
+
+WHERE THE FRAMES ARE (`--cputrace` CPUTRACE_BEAM=1 of the 1B7 load from C0/56D4, tools/cycle_prof.py C0:56D4 -> C0:2848):
+3,824,670 cycles, of which bank C3 -- the script's and thirteen sprite sheets' decompressions, which the port prices --
+3,424,900, and the rest 400,000: C0 334,222 (C0/2E1x the sprite sheets' VRAM DMA 51k; C0/5C9x the per-scene dedup 35k;
+C0/58Fx-591x the init runner 36k; the loaders C0/45xx-46xx, 4Bxx ~70k; C0/57xx, B2xx ...), FD 52,260 (FD/DF7x-DFBx), C2 and
+FF 13k. That 400k is 1.15 load frames -- what the port is short here. Pricing it means walking those routines per object
+the way lz.c walks the decompressor; until then the playthrough's legs with several big loads drift on the play clock.

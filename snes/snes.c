@@ -87,6 +87,7 @@ void snes_reset(Snes* snes, bool hard) {
   snes->openBus = 0;
 }
 
+static void lfRestoredMarks(Snes* snes);
 void snes_handleState(Snes* snes, StateHandler* sh) {
   sh_handleBools(sh,
     &snes->palTiming, &snes->hIrqEnabled, &snes->vIrqEnabled, &snes->nmiEnabled, &snes->inNmi, &snes->irqCondition,
@@ -110,6 +111,7 @@ void snes_handleState(Snes* snes, StateHandler* sh) {
   input_handleState(snes->input1, sh);
   input_handleState(snes->input2, sh);
   cart_handleState(snes->cart, sh);
+  if(!sh->saving) lfRestoredMarks(snes);
 }
 
 static unsigned g_runFrameCalls = 0;   // (the harness frame, for the traces below)
@@ -455,6 +457,22 @@ void snes_logicalFresh(void) {
   lfFill = 0; lfPos = 0; lfWroteNow = 0; lfHoldNow = 0;
   lfSnapFrame = lfNoHoldFrame = 0xffffffffu; lfRollbackPending = 0;
   lfPhaseHold = 0; lfPhasePending = 0; lfVbCycles = 0; lfVbRefresh = 0;
+}
+// ...AND A RESTORED STATE IS AT A LOGICAL FRAME'S START. The phase hold measures the CPU work since the step into line 225
+// from three marks (lfVbCycles / lfVbRefresh / lfVbIfast) that live outside the savestate. A state saved after
+// snes_runFrame sits right there -- the run stops on the instruction that set inVblank at V=225 (V=240 on an overscan
+// frame) -- and loading it left the marks at 0 or at another run's values: when the first frame after the load turned the
+// NMI off before any vblank (a location load committed on that frame), its phase hold read the whole machine's cycle count
+// (`102365085092 cycles into the frame`) and the load ended frames off. MEASURED, the playthrough's trial (leg 31): a
+// state saved on f9436, the courtroom load's commit, resumed into a different trial (40641 bytes apart a frame later)
+// where the same run without the cut held 4126 cycles. So the marks are put back where that step left them: the
+// instruction's own tail is this line's hPos, the refresh comes at H=536, and nothing of the frame ran on the infinitely
+// fast CPU yet. A state that is not at a vblank's start (the valve's own snapshot, V=224) keeps the marks it has.
+static void lfRestoredMarks(Snes* snes) {
+  if(!snes->inVblank || (snes->vPos != 225 && snes->vPos != 240)) return;
+  lfVbCycles = snes->cycles - snes->hPos;
+  lfVbRefresh = g_cycTagCycles[4] - (snes->hPos >= 536 ? 40 : 0);
+  lfVbIfast = g_ctIfastHeld;
 }
 
 // ...EXCEPT THE CPU's SIDE OF THE APU PROTOCOL (user decision 2026-10-01, CLAUDE.md): while the CPU runs the sound driver's
