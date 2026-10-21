@@ -164,7 +164,26 @@ static long vram6F9A(Walk* c, int x) {
   long k = 174;                                            // V6F9A
   int t = b8(c, 0x1100 + x);
   if (t != 3 && t != 4) return k + 40;                     // V6FB9
-  if (b8(c, 0x1201 + x) & 3) { unpriced(c, "VRAM slot: C0/7008"); return k; }
+  if (b8(c, 0x1201 + x) & 3) {
+    // C0/6FC1 BEQ not taken, `BRA C0/7008` (100 with the head): a class 1-3 object takes TWO adjacent slots, the pairs
+    // $0C/$0D .. $16/$17 of $0B88 in order (`LDA $0B88,X / BPL / LDA $0B89,X / BPL`, then `INX / INX / CPX #18 / BMI`).
+    // The claim is C0/6FCC's (618) with the second `STA $0B89,X` (+26), on the even slot.
+    k += 100;
+    for (int s = 0x0C; s < 0x18; s += 2) {
+      k += 26;                                             // LDA $0B88,X
+      if (b8(c, 0x0B88 + s) & 0x80) {
+        k += BR_NT + 26;                                   // ...free: LDA $0B89,X
+        if (b8(c, 0x0B89 + s) & 0x80) {
+          k += BR_NT + 644;
+          sb(c, 0x0B88 + s, x); sb(c, 0x0B89 + s, x); sw(c, 0x0D00 + x, s << 4); sw(c, 0x1700 + x, s << 5);
+          return k;
+        }
+      }
+      k += BR_T + 36 + (s + 2 < 0x18 ? BR_T : BR_NT);      // BPL taken, INX / INX / CPX #18, BMI
+    }
+    unpriced(c, "VRAM slot pairs exhausted (C0/7054)");
+    return k;
+  }
   k += 88;                                                 // V6FBA
   for (int s = 0x19; s > 0; s--) {
     k += 26;                                               // V6FC7
@@ -503,7 +522,39 @@ static long b309(Walk* c, int x) {
     sw(c, cur, w16(c, cur) + 0x20);
     return k;
   }
-  if (cls) { unpriced(c, "B701: class 1/2 drawn"); return 0; }
+  if (cls == 3) {
+    // C0/B701 `CMP #02 / BNE` -> C0/B785 `BRL C0/C73A` (40 + 168 to it): the 24-entry template's OAM rows. C0/C73A to
+    // C0/C7C9 is 7272 on every run traced (loc 01C's object $1A, seven frames: six C0/C6E7 calls, no branch); then by
+    // the screen Y $C5 / $C6 (= $0A80,X & 01FF) over the 24 entries of $7F:4BC4 + $1700,X + 8i:
+    //   $C6 = 0, $C5 >= 80  C0/C7DE: each Y + $C5, 220 a pass                           5950 in all, traced
+    //   $C6 = 0, $C5 <  80  C0/C7FB: the same, a result past 7F clamped to E0 unless >= E0 (BPL / CMP / BCS)
+    //   $C6 != 0            C0/C820: 24 unrolled, a carry or a result past 7F set to E0 (BCS / BPL)
+    // Then C0/B30C's BCC to the class's OAM leg C0/B5AF and by the group ($0F80 & 0C): C0/B6AA (4, traced: 9932 with
+    // the 24-pass C0/B61F copy), C0/B5CB (0: the BEQ taken, no BRL, -72), C0/B653 (8: BNE not taken + BRL, -6); its
+    // cursors $0181/5/9 += 6 and $01DB/D/F += $60.
+    int c5 = b8(c, 0x0A80 + x), c6 = b8(c, 0x0A81 + x) & 1, xt = w16(c, 0x1700 + x);
+    long k = 40 + 168 + 7272, t;
+    if (!c6 && (c5 & 0x80)) t = 5950;
+    else if (!c6) {
+      t = 196 + 23 * BR_T + BR_NT + 66;
+      for (int i = 0; i < 24; i++) {
+        int v = (b8(c, 0x14BC4 + xt + 8 * i) + c5) & 0xFF;
+        t += 220 + (!(v & 0x80) ? 18 : v >= 0xE0 ? 42 : 48);
+      }
+    } else {
+      t = 126 + 66;
+      for (int i = 0; i < 24; i++) {
+        int s = b8(c, 0x14BC4 + xt + 8 * i) + c5, v = s & 0xFF;
+        t += 64 + ((s > 0xFF || !(v & 0x80)) ? 62 : 68);
+      }
+    }
+    int g = b8(c, 0x0F80 + x) & 0x0C;
+    k += t + 9932 - (g == 0 ? 72 : (g & 4) ? 0 : 6);
+    int hi = g == 0 ? 0x0181 : (g & 4) ? 0x0185 : 0x0189, cur = g == 0 ? 0x01DB : (g & 4) ? 0x01DD : 0x01DF;
+    sw(c, hi, w16(c, hi) + 6); sw(c, cur, w16(c, cur) + 0x60);
+    return k;
+  }
+  if (cls) { unpriced(c, "B701: class 2 drawn (C0/B4B8)"); return 0; }
   if (s & 0x80) { unpriced(c, "B701: $1B00"); return 0; }
   long k = 232 + b8ca(c, x);                               // B309_HEAD
   for (int i = 0; i < 4; i++) if (b8(c, 0x0BC0 + i) == x) { unpriced(c, "E9E2 finds a slot"); return k; }

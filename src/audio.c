@@ -517,7 +517,15 @@ static void ldCatch(CtAudio* a) {        // snes_catchupApu: run the SPC up to t
   int n = (int)ld.owed;
   if (n > 0) { int ran = apuRun(a, n); ld.owed -= (double)ran; g_sndSpcCycles += ran; }
 }
-static void    Wc(CtAudio* a, int k, uint8_t v) { ldCatch(a); W(a, k, v); }   // snes_cpuWrite -> writeBBus $2140+k
+static void    Wc(CtAudio* a, int k, uint8_t v) {   // snes_cpuWrite -> writeBBus $2140+k
+  ldCatch(a); W(a, k, v);
+  // CT_AUDIO_PORTTRACE=1: every CPU store to the ports with the SPC's cycle count and its PC -- the port's side of the
+  // oracle's PEEK_APUTRACE (`aputrace fN CPU $2140 = ..  apuc=..`), to set the two processors' interleaving side by side
+  { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
+    if (pt && a->apu) fprintf(stderr, "porttrace CPU $214%d = %02X apuc=%llu out=%02X%02X%02X%02X\n", k, v,
+                              machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles,
+                              R(a, 0), R(a, 1), R(a, 2), R(a, 3)); }
+}
 static uint8_t Rc(CtAudio* a, int k)            { ldCatch(a); return R(a, k); }   // snes_cpuRead  -> readBBus
 static void ldStart(int mode, int vPos) {
   memset(&ld, 0, sizeof ld); ld.active = 1; ld.mode = (mode >= 0 && mode <= 2) ? mode : 0;
@@ -545,7 +553,11 @@ static int ldStartRule(CtAudio* a) {
 }
 // the $400-poll loops the ROM uses outside the token (C7/0A6E, C7/0603, C7/062F): CMP $2140, BEQ, DEX, BNE
 static int ldPoll400(CtAudio* a, uint8_t want) {
-  for (int px = 0; px < 0x400; px++) { ldRun(I_CMP_BB); if (Rc(a, 0) == want) { ldRun(I_BR_T); return 1; } ldRun(I_BR_NT + I_IMPL + I_BR_T); ld.polls++; }
+  for (int px = 0; px < 0x400; px++) { ldRun(I_CMP_BB); if (Rc(a, 0) == want) {
+      { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
+        if (pt && a->apu) fprintf(stderr, "porttrace ECHO %02X seen apuc=%llu after %d polls\n", want,
+                                  machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles, px); }
+      ldRun(I_BR_T); return 1; } ldRun(I_BR_NT + I_IMPL + I_BR_T); ld.polls++; }
   return 0;
 }
 
@@ -803,18 +815,26 @@ static const uint8_t* sndSfxData(const CtAudio* a, int setB, unsigned* len) {
   return a->rom + src + 2;
 }
 // $C7:0734's song-exception list: 1 when the song is on it.
-static int sndException(const CtAudio* a, int songId) {
+// The scan itself (C7/0740-074B): 1 on a match; *walked = the entries passed before the one that stopped it (the price).
+static int sndExceptionWalk(const CtAudio* a, int songId, int* walked) {
+  int n0 = 0;
+  if (walked) *walked = 0;
   if (a->snd) {
     uint32_t n = 0; const uint8_t* m = sndGet(a, CT_ASSET_SND_MISC, 0, &n);
-    for (uint32_t k = 1; m && k < n; k++) { if (m[k] & 0x80) break; if (m[k] == (uint8_t)songId) return 1; }
+    for (uint32_t k = 1; m && k < n; k++, n0++) {
+      if (m[k] & 0x80) break;
+      if (m[k] == (uint8_t)songId) { if (walked) *walked = n0; return 1; } }
+    if (walked) *walked = n0;
     return 0;
   }
-  for (long p = 0x70AD8; p < a->romLen; p++) {
+  for (long p = 0x70AD8; p < a->romLen; p++, n0++) {
     if (a->rom[p] & 0x80) break;                                // bit7 = end of list
-    if (a->rom[p] == (uint8_t)songId) return 1;
+    if (a->rom[p] == (uint8_t)songId) { if (walked) *walked = n0; return 1; }
   }
+  if (walked) *walked = n0;
   return 0;
 }
+static int sndException(const CtAudio* a, int songId) { return sndExceptionWalk(a, songId, NULL); }
 static long c7ptr24(const CtAudio* a, unsigned tbl, int idx) {   // a 24-bit bank:addr -> flat offset
   long p = (long)tbl + (long)idx * 3;
   if (!a || !a->rom || p + 3 > a->romLen) return -1;
@@ -1277,18 +1297,31 @@ static void sndParamStream(CtAudio* a, uint8_t* m, const uint8_t* src) {
 }
 // $C7:0A12 -- the echo-buffer cull: from slot 0 up, the first resident whose END high byte has
 // reached the new ESA page is evicted, and everything from there to slot $1F is cleared.
+// C7/0A12, on the loader clock: `LDA $63,X / BEQ ->0A37` (an empty slot ends the walk), `CMP $F2 / BCS ->0A29` (a sample
+// ending past the new echo buffer's page), `INX INX / CPX #0020 / BNE`; from that slot to the table's end
+// `STA $20,X / STA $40,X / STA $62,X / INX / CPX #0020 / BNE` zeroes the three tables BYTE by byte. 3,812 master cycles from
+// C7/0A57's JSR to C7/0A5A on the rule's cartridge (route leg 15, the world -> 078: 6 slots passed, the 7th culled), as here.
 static void sndCull(uint8_t* m) {
   unsigned esa = M8(m, 0x1EF2);
+  ldRun(I_PHP + I_SEP + I_IMM16);                                     // 0A12 PHP / SEP #20 / LDX #0000
   for (int s = 0; s < 16; s++) {
-    if (M8(m, 0x1E63 + s * 2) >= esa) {                 // $1E60[s+1] high byte = this sample's end
+    unsigned end = M8(m, 0x1E63 + s * 2);                             // $1E60[s+1] high byte = this sample's end
+    ldRun(I_LDA_DPX);                                                 // 0A18 LDA $63,X
+    if (!end) { ldRun(I_BR_T + I_PLP + I_RTS); return; }              // 0A1A BEQ ->0A37 / PLP / RTS
+    ldRun(I_BR_NT + I_LDA_DP);                                        // 0A1C CMP $F2
+    if (end >= esa) {
+      ldRun(I_BR_T + I_IMM8);                                         // 0A1E BCS ->0A29 / LDA #00
+      for (int x = s * 2; x < 0x20; x++) ldRun(3 * I_LDA_DPX + I_IMPL + I_IMM16 + (x < 0x1F ? I_BR_T : I_BR_NT));
       for (int k = s; k < 16; k++) {
         SM16(m, 0x1E20 + k * 2, 0); SM16(m, 0x1E40 + k * 2, 0);
         SM16(m, 0x1E62 + k * 2, 0);
       }
+      ldRun(I_PLP + I_RTS);                                           // 0A37 PLP / RTS
       return;
     }
-    if (M16(m, 0x1E20 + s * 2) == 0) return;            // first empty slot ends the scan
+    ldRun(I_BR_NT + 2 * I_IMPL + I_IMM16 + (s < 15 ? I_BR_T : I_BR_NT));   // 0A20 INX INX / CPX #0020 / BNE
   }
+  ldRun(I_BR_T + I_PLP + I_RTS);                                      // 0A27 BRA ->0A37
 }
 
 // The loader proper. `cmd` is the mailbox command ($10/$11/$14/$15); `m` is the engine's $7E page.
@@ -1305,26 +1338,33 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   // and the driver took the stream's tokens for commands -- an upload session whose garbage headers reached the kind-7
   // mover and ran it over the driver's own code. (CtAudioService's page already holds them: no change there.)
   SM8(m, 0x1E00, cmd); SM8(m, 0x1E01, (unsigned)songId);
-  ldRun(18 + I_LDA_DP + 30 + I_BR_NT + I_JSR + 250 + I_RTS + I_JSR + 276 + I_RTS + 2 * I_LDA_DP);   // $01A1-$01B3: SEP, LDA $01, CMP $C70AE9, BCS, JSR C7/0734 (the exception scan, 1 entry), JSR C7/0A39 (the record: 14 instructions), LDA/STA $05
+  ldRun(I_SEP + I_LDA_DP + 30 + I_BR_NT + I_JSR);              // $01A1-$01AB: SEP, LDA $01, CMP $C70AE9, BCS, JSR C7/0734
 
-  // ---- $C7:0734: the song-exception scan, then bit2 for cmd >= $14 ------------------------
+  // ---- $C7:0734: bit2 for cmd >= $14, else the song-exception scan ---------------------------
   // Implemented as the SCAN, not as "inert": rom[$C7:0AD8] happens to start with $FF on this ROM so
   // the list terminates immediately, but a port that hardcoded that would be encoding an accident.
-  if (sndException(a, songId)) SM8(m, 0x1E00, M8(m, 0x1E00) | 4);
-  if (cmd >= 0x14) SM8(m, 0x1E00, M8(m, 0x1E00) | 4);
+  { int walked = 0, hit = cmd >= 0x14 ? 1 : sndExceptionWalk(a, songId, &walked);
+    ldRun(I_PHP + I_SEP + I_LDA_DP + I_IMM8);                   // 0734 PHP / SEP #20 / LDA $00 / CMP #14
+    if (cmd >= 0x14) ldRun(I_BR_T);                             // 073B BCS ->074D
+    else ldRun(I_BR_NT + I_IMM16 + walked * (30 + I_BR_NT + I_LDA_DP + I_BR_NT + I_IMPL + I_BR_T)   // 073D LDX; per entry LDA long,X / BMI / CMP $01 / BEQ / INX / BRA
+               + 30 + (hit ? I_BR_NT + I_LDA_DP + I_BR_T : I_BR_T));   // the entry that stops it: the match (BEQ) or the end (BMI)
+    if (hit) { ldRun(I_IMM8 + 2 * I_LDA_DP); SM8(m, 0x1E00, M8(m, 0x1E00) | 4); }   // 074D LDA #04 / ORA $00 / STA $00
+    ldRun(I_PLP + I_RTS); }                                     // 0753 PLP / RTS
 
   // ---- $C7:0A39: the record, the ECHO-DELAY switch, the port block, the token seed, the abort --
   int edl = 0, scalar = 0;
   CtAudioSongRecord(a, songId, &edl, &scalar);
   SM8(m, 0x1E02, scalar);
   SM8(m, 0x1E03, edl);
-  ldRun(I_LDA_DP + I_BR_NT);                                    // $0A53 CMP $F0 / $0A55 BEQ
+  ldRun(I_JSR + I_PHP + I_SEP + I_LDA_DP16 + I_IMM16 + 2 * I_IMPL + I_SEP + 2 * (30 + I_LDA_DP) + I_IMM8);   // 01AE JSR C7/0A39: 0A39-0A51, the record's 12
+  ldRun(I_LDA_DP);                                              // $0A53 CMP $F0
   if (edl != (int)M8(m, 0x1EF0)) {                              // $0A53 CMP $F0 -- BEFORE the port block
-    ldRun(I_JSR + 60 + 240 + I_RTS);                            // $0A57 JSR C7/09FD: the ESA rewrite, then the cull's slot walk (C7/0A12)
+    ldRun(I_BR_NT + I_JSR + I_PHP + I_SEP + I_LDA_DP + 3 * I_IMPL + I_IMM8 + 3 * I_IMPL + I_LDA_DP + I_JSR);   // 0A55 BEQ / JSR C7/09FD: 09FD-0A0D, the ESA page
     SM8(m, 0x1EF0, edl);
     SM8(m, 0x1EF2, (0xF1 - edl * 8) & 0xFF);                    // ESA page; buffer = [ESA*$100,$F100)
-    sndCull(m);                                                 // $09FD -> $0A12
-  }
+    sndCull(m);                                                 // $0A0D JSR C7/0A12, the cull's slot walk
+    ldRun(I_PLP + I_RTS);                                       // 0A10 PLP / RTS
+  } else ldRun(I_BR_T);                                         // 0A55 BEQ ->0A5A
   for (int attempt = 0; ; attempt++) {                          // $0A5A, resent unboundedly on timeout
     ldRun(I_LDA_DP + I_STA_BB); Wc(a, 3, M8(m, 0x1E03));        // 0A5A LDA $03 / 0A5C STA $2143
     ldRun(I_LDA_DP + I_STA_BB); Wc(a, 2, M8(m, 0x1E02));        // 0A5F / 0A61
@@ -1341,9 +1381,11 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   SM8(m, 0x1E84, (uint8_t)((M8(m, 0x1E00) + 1) & 0x7F));        // $0A7B THE TOKEN SEED
   if (Rc(a, 1) & 0x80) {                                        // $0A80 the driver refused the song
     uint8_t t = M8(m, 0x1E84);
-    if (ld.ifast) {                                             // the rule: C7/0A85-0A8E on the clock, `DEC A / CMP $2140 /
-      ldRun(I_BR_NT + I_LDA_DP + I_STA_BB); Wc(a, 0, t);        //   BEQ` a wait while the old echo stands (off the rule the
-      ldRun(I_IMPL);                                            //   SPC is stepped outside the clock, as it always was)
+    if (ld.active) {                                            // C7/0A85-0A8E on the clock, `DEC A / CMP $2140 / BEQ` a wait
+      ldRun(I_BR_NT + I_LDA_DP + I_STA_BB); Wc(a, 0, t);        //   while the old echo stands: CPU time on any clocked JSL --
+      ldRun(I_IMPL);                                            //   the rule's and the loader's (a location load's song post:
+                                                                //   loc 070's 24 lines until the driver's timer routine writes
+                                                                //   its port 0, SPC $02DD); unclocked callers step the SPC
       sndSpin(a, 0, (uint8_t)(t - 1), 0);
     } else {
       W(a, 0, t);
@@ -1352,6 +1394,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
     SM8(m, 0x1E00, 0);                                          // $1E05 is deliberately NOT set
     return 0;
   }
+  ldRun(I_BR_T + I_PLP + I_RTS + 2 * I_LDA_DP);                 // 0A83 BPL ->0A96 / PLP / RTS; 01B1 LDA $01 / STA $05
   SM8(m, 0x1E05, (unsigned)songId);                             // $01B3 -- BUSY, and the id register
 
   // ---- $C7:01B5-$0375: the instrument-set DIFF ---------------------------------------------
@@ -1555,9 +1598,9 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   ldRun(I_STA_BB); Wc(a, 0, 0xE0);                              // 0609 STA $2140
   if (ld.active) ldPoll400(a, 0xE0);                            // 060C CMP $2140 / BEQ / DEX / BNE
   else for (long c = 0; c < 0x400L * 16; c += ctStepCycles()) { if (R(a, 0) == 0xE0) break; step(a); }
-  ldRun(I_LDA_DP + I_JSR + 240 + I_RTS);                        // 0614 STA $05 / 0616 JSR C7/0A12 (the cull's slot walk, ~240)
+  ldRun(I_LDA_DP + I_JSR);                                      // 0614 STA $05 / 0616 JSR C7/0A12
   SM8(m, 0x1E05, 0xE0);                                         // $0614 -- READY again
-  sndCull(m);                                                   // $0616
+  sndCull(m);                                                   // $0616: the cull's slot walk, priced as it walks
   SM8(m, 0x1E00, 0);                                            // $0192
   return 1;
 }
@@ -1859,6 +1902,10 @@ void CtAudioFrame(CtAudio* a) {
   { static int ck = -1; static long fr = 0; if (ck < 0) { const char* e = getenv("CT_AUDIO_SPCCLOCK"); ck = (e && *e) ? 1 : 0; }
     if (ck) fprintf(stderr, "spcclock pass%ld total=%lld carry=%.1f" "\n", fr++, g_apuTotal, a->cycleCarry); }
   double want = apuFrameCycles(a) + a->cycleCarry;
+  { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;   // (CT_AUDIO_PORTTRACE: each slice's start)
+    if (pt && a->apu) fprintf(stderr, "porttrace FRAME apuc=%llu carry=%.1f spcpc=%04X\n",
+                              machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles,
+                              a->cycleCarry, machineRuns(a) ? 0 : a->apu->spc->pc); }
   a->evenFrame ^= 1;                                   // (the next slice's frame)
   if (want < 1.0) { a->cycleCarry = want; a->mutedFrame = 1; return; }   // a clocked JSL already ran this frame's SPC time
   a->mutedFrame = 0;
@@ -1984,6 +2031,9 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   // tools/sound_post_cmp.py, which reads the cartridge's $2140 command writes (C7/0635, a song's C7/0A6E) and their $2141.
   { static int sp = -1; if (sp < 0) sp = getenv("CT_SNDPOSTS") ? 1 : 0;
     if (sp && (mb[0x05] & 0x80) && mb[0x00]) printf("sndpost f%d cmd=%02X p1=%02X\n", g_ctAudioTraceFrame, mb[0x00], mb[0x01]); }
+  { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
+    if (pt && (mb[0x05] & 0x80) && mb[0x00]) fprintf(stderr, "porttrace JSL cmd=%02X %02X mode=%d rule=%d off=%d nmioff=%d\n", mb[0x00], mb[0x01],
+                                                    a->engineMode, CtAudioRuleOn(), a->ruleOff, a->ruleNmiOff); }
   if (!ldStartRule(a))                                 // (the rule: from where the SPC and the CPU's last wait stand)
     ldStart(a->engineMode, a->postLine);               // the JSL begins: the clock runs until the RTL
   fifoAt = a->fifoLen;                                 // (the output up to the post: the instant mod keeps it)
@@ -2183,6 +2233,14 @@ struct Apu* CtAudioApu(CtAudio* a) { return a ? a->apu : NULL; }
 struct SndMachine* CtAudioMachine(CtAudio* a) { return a ? a->mach : NULL; }
 void CtAudioPortWrite(CtAudio* a, int k, uint8_t v) { if (a) W(a, k & 3, v); }
 int CtAudioRunCycles(CtAudio* a, int cycles) { return a ? apuRun(a, cycles) : 0; }
+// The SPC time of `master` CPU cycles that come BEFORE a post inside this frame's slice (a location load's CPU work from the
+// vblank to its first `JSL C7/0004`): run now, and owed by the slice (cycleCarry), so the SPC gets no time twice.
+void CtAudioAdvance(CtAudio* a, long master) {
+  if (!a || master <= 0) return;
+  double want = (double)master * LD_APU_PER_MASTER;
+  int ran = apuRun(a, (int)want);
+  a->cycleCarry -= (double)ran;
+}
 uint32_t CtAudioApuCycles(const CtAudio* a) { return !a ? 0 : machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles; }
 // A TRANSLATED STAGE'S EXIT FRAME. A stage's bus runs this SPC itself while it is open (the host's slice is skipped,
 // field.c `!seqX && !gwX`), one frame of SPC per stage frame -- and the frame it leaves in (`JML C0:0000`) its bus ran

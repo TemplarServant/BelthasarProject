@@ -5214,6 +5214,10 @@ static void fieldSoundFrameSpc(void* ctx) { CtAudioFrame((CtAudio*)ctx); }   // 
 // The event VM's sink: the same JSL, PRICED -- the loader clock's frames crossed and return line, so
 // the VM can lose the frames a synchronous song upload costs the ROM (song_load_freeze.md section 6).
 static int g_sndTraceFrame = 0;   // CT_SNDTRACE: the field loop's frame, stamped on every post below
+static int g_loadSpcLead = 0;   // this iteration loads a location: its sound posts run before the SPC's slice (below)
+static int g_owExitPosted = 0;  // the world's exit posts ($82, $83) ran this iteration: the load follows on the next
+#define LOAD_SPC_LEAD (5751L + 3060L)   // master cycles from the vblank to C0/1B73's JSL C7:0004 (the traces' mean)
+#define OW_EXIT_SPC_LEAD 3868L          // master cycles from the $83's RTL (C2/2505) to C0/1B73's JSL (the world's exit)
 // The wall cycles a load's sound JSLs took, from what the sink reports for them (CtSceneLoadSongPrice /
 // CtSceneLoadPostsFlush: NMIs crossed << 10 | the end line, for a clock that began on line 12): the elapsed lines are the
 // (end - 12) + 262k whose run from line 12 reaches line 225 exactly that many times; 1364 cycles a line.
@@ -5242,9 +5246,23 @@ static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
 // stays staged, exactly as it does when the driver latch is down.
 static void fieldSoundFlush(uint8_t* mem7E) { if (g_fieldAudio && mem7E) CtAudioService(g_fieldAudio, mem7E); }
 // The world's main loop, state 2 (C2/24D5: every exit, into a location or another world) -- its two posts before the JML.
+// WHERE THEY START (the rule): the NMI's pad latch waits out the auto-joypad read (C2/84F9 `BIT $4212 / BNE` exits on line
+// 228 h 152, the pad wait + 20), the main loop runs free to C2/246D's `STA $4200` = 00, and from there the NMI is off and
+// the CPU's cycles are real: C2/2470 -> C2/24F0's JSL is 2,178 master (C2/26F0's flag copy among them), and the $83's JSL
+// at C2/2501 enters C7:0004 156 past the $82's RTL. MEASURED, the rule's cartridge on route leg 15 (the world -> 078):
+// C7:0004 on line 229 h 966 and line 231 h 1012. The field's own post position (the pad wait) put the $82 85 APU cycles
+// early, and the driver, a step further into it, echoed the $83 and the $81 ~80 cycles sooner than the cartridge's.
+#define OW_EXIT_POST_AT (CtAudioRulePadWait() + 20 + 2178)
+#define OW_EXIT_POST_GAP 156L
 static void owExitSoundPosts(uint8_t* m) {
   static const uint8_t cmd[2] = { 0x82, 0x83 };
-  for (int k = 0; k < 2; k++) { m[0x1E00] = cmd[k]; m[0x1E01] = 0x00; m[0x1E02] = 0xFF; fieldSoundFlush(m); }   // C2/24E3 / 24F4
+  if (g_ruleAudio && g_fieldAudio) CtAudioSetRulePost(g_fieldAudio, OW_EXIT_POST_AT, CtAudioRulePadWait());
+  for (int k = 0; k < 2; k++) {
+    m[0x1E00] = cmd[k]; m[0x1E01] = 0x00; m[0x1E02] = 0xFF; fieldSoundFlush(m);   // C2/24E3 / 24F4
+    if (!k && g_ruleAudio && g_fieldAudio) CtAudioAdvance(g_fieldAudio, OW_EXIT_POST_GAP);   // C2/24F4-2501, the JSL
+  }
+  if (g_ruleAudio && g_fieldAudio) CtAudioSetRulePost(g_fieldAudio, CtAudioRulePadWait(), CtAudioRulePadWait());
+  g_owExitPosted = 1;
 }
 // THE RACE'S SOUND (seq_race.h CtRaceIo, ctx = the host's WRAM): a script's `F6` and the bump's `19 98 80` are the mailbox
 // $1E00-$1E03 the stage already wrote, posted like every other `JSL $C7:0004`; the engine's pitch is the CPU writing the
@@ -5338,13 +5356,19 @@ static int owSoundJsl(uint8_t* mem7E) {
   { static int mt = -1; if (mt < 0) { const char* e = getenv("CT_MAILTRACE"); mt = (e && *e) ? 1 : 0; }
     if (mt) fprintf(stderr, "mailtrace   ENTRY staged $1E00=%02X %02X %02X %02X (song %02X) -- C2/2F0F in the world's pass\n",
                     mem7E[0x1E00], mem7E[0x1E01], mem7E[0x1E02], mem7E[0x1E03], mem7E[0x1E01]); }
-  if (g_ruleAudio) CtAudioSetRulePost(a, 0, 0);
+  // ...and the background those NMIs leave the JSL is the WORLD's: the HDMA is $420C = $4A (C2/0326, written by the full
+  // NMI only), none when $4A = 0, and nothing else but the DRAM refresh. MEASURED, the rule's cartridge on route leg 15 (the
+  // world entry's `10 02` at f1419): the transfer's lines lose the refresh only (40 a line) and the NMIs met run
+  // C2/015E-0344 at no beam cost. The field's mean HDMA charged here instead ran the 4,935-unit upload ~9,300 APU cycles
+  // long and left the driver a step off the cartridge's for the rest of the visit (the castle's $83 and $81, the world's
+  // exit, echoed ~80 cycles sooner). ($4A != 0 is not derived for this clock -- the world's channels: the mean stays.)
+  if (g_ruleAudio) { CtAudioSetRulePost(a, 0, 0); if (!mem7E[0x4A]) CtAudioSetRuleHdma(a, mem7E, 1, 0, 0, -1); }
   CtAudioSetPostLine(a, 225);
   CtAudioService(a, mem7E);
   CtAudioLastPostRaster(a, &fr, NULL, NULL);
   { static int mt = -1; if (mt < 0) { const char* e = getenv("CT_MAILTRACE"); mt = (e && *e) ? 1 : 0; }
     if (mt) fprintf(stderr, "mailtrace   ENTRY posted -> $1E00=%02X (00 = the driver consumed it)\n", mem7E[0x1E00]); }
-  if (g_ruleAudio) CtAudioSetRulePost(a, CtAudioRulePadWait(), CtAudioRulePadWait());
+  if (g_ruleAudio) { CtAudioSetRulePost(a, CtAudioRulePadWait(), CtAudioRulePadWait()); CtAudioSetRuleHdma(a, NULL, 0, 0, 0, -1); }
   CtAudioSetPostLine(a, 12);                         // the default (audio.h)
   if (getenv("CT_SNDTRACE")) fprintf(stderr, "[snd] world pass JSL: %d NMI(s) crossed\n", fr);
   return hostSoundInstant() ? 0 : fr;                // (instant uploads: the world never stands still for it)
@@ -12247,6 +12271,32 @@ int main(int argc, char** argv) {
         { static int lockstep = -1;
           if (lockstep < 0) lockstep = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
           if (lockstep || g_sndPaced || ruleSpc) { ticks = 1; audioAcc = 0.0; } }   // (the rule: a frame of SPC a frame)
+        // THE LOAD'S SOUND POSTS COME BEFORE THIS FRAME'S SPC. The cartridge commits in the main loop after a vblank and
+        // its load -- NMI off, phase 0 -- reaches C0/1B73's `JSL C7/0004` (the $81, then C0/1B8B's $10) 8,800 master
+        // cycles past THAT vblank; the port loads one iteration after the commit, so it used to post after the iteration's
+        // whole slice: a frame late in SPC time (loc 070, the canyon: the cartridge's $81 at APU 487,669,749, the port's at
+        // 487,686,514 -- PEEK_APUTRACE against CT_AUDIO_PORTTRACE from the same seed). The driver answers by where it
+        // stands in its own loop, so the handshake's length was another load's: 070's $10 lands while the driver is
+        // still inside the $81 (SPC $0894 reads the new command), is not echoed in C7/0A6E's $400 polls, is re-posted, and
+        // then waits on the token until the driver's timer routine writes port 0 ($02DD) -- 76 lines on the cartridge,
+        // 10 on the port, and one black frame. So the iteration that loads a location runs its slice AFTER the load: the
+        // posts start where the cartridge's do (CtAudioAdvance, the CPU work before the JSL) and the slice is owed to the
+        // next iteration. A change C0/0C9A commits ($0117 bit 7, the drain) leads by LOAD_SPC_LEAD from the vblank. A load
+        // from the world (pendKind 3) is the same stretch: C2's state 2 posts $82 and $83 (C2/24E3-2501, owExitSoundPosts)
+        // and JMLs to C0:0000, whose load reaches C0/1B73 3,868 master cycles past the $83's RTL (C2/2505 -> C0/0B5A ->
+        // C0/0B86 -> the JSL; the rule's cartridge on route leg 15, the world -> 078: $83 at APU 579,158,986, $81 at
+        // 579,159,442). The port posts the pair at the end of the world's iteration and loads on the next, so that
+        // iteration's slice went between them: the $81 a frame of SPC late and loc 078 a black frame short. A reboot (C3's
+        // `JML C0:0000`, ops DF / E1) and a world-to-world exit (pendKind 2) are not measured and keep the plain order.
+        { static int owed = 0;
+          uint8_t* rw = CtWramSys(fieldWram());
+          int rf = rw && (rw[0x0117] & 0x80) && !inWorld && f.vm && !gwPhase;
+          int fb = rf ? rw[0x0119] : fadeBri - FADE_STEP;
+          int owLoad = g_owExitPosted && !rf && fade == 1 && fb <= 0 && pendKind == 3;
+          g_loadSpcLead = 0; g_owExitPosted = 0;
+          if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad) && !hostSyncFree()) {
+            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : 1; }
+          else if (owed) { ticks += owed; owed = 0; } }
         if (ticks != 1) paceIrregular++;
         for (int t = 0; t < ticks; t++) {
           // (the rule, an SPC seeded from the lockstep oracle's state: the state stands at a vblank and the first frame's
@@ -12406,6 +12456,11 @@ int main(int argc, char** argv) {
           fieldFree(&f);
           coldResetHold = 0;                          // a location is being loaded: C0/0097 runs again after it
           g_ctLzSpriteCycles = 0;                     // ...and this load's object pass owns the sprite decompressions
+          // the CPU work from the vblank to C0/1B73's JSL: C0/0B86 stands at line 229 h ~295 on every field-to-field load
+          // traced (5,751 master: the pad latch's 4,224, then the NMI-off stretch's start), and C0/0B86 -> the JSL is
+          // 3,018-3,102 (C0/00F4's head, C0/092B, C0/1B53's arm)
+          if (g_loadSpcLead && audio) CtAudioAdvance(audio, g_loadSpcLead == 2 ? OW_EXIT_SPC_LEAD : LOAD_SPC_LEAD);
+          g_loadSpcLead = 0;
           if (!fieldLoad(&assets, &f, pendDest, gm)) running = 0;
           else {
             noPcShot = -1;              // a RELOAD re-arms the no-PC grade below: the New Game

@@ -579,8 +579,14 @@ Traced on the attract under the rule (`--peek boot` states, CPUTRACE_FROM=C00B86
 - C0/E687's default arm (a graphics bank but 7F / D2-D4): C0/E6B6, the D4 arm's body reading $D5, 18 less (a taken BNE
   for the not-taken BNE + BRL).
 - C0/CAD9 class 3: `CMP #02 / BEQ` not taken, `CLC / RTS`, 308 cycles, nothing drawn (01C's object $1A).
-STILL REFUSED: class 2 (C0/D4F7), class 3's draw C0/B701 -> C0/C73A (01C: the pass reaches it), the VRAM slot arm C0/7008
-(1B0), C0/7283 (a full share scan without a match), $0126 / $1DF9 / $1DFD / $0153 bit 7 / $0BE9 / $0351 bit 0.
+STILL REFUSED: class 2 (C0/D4F7), C0/7283 (a full share scan without a match), $0126 / $1DF9 / $1DFD / $0153 bit 7 /
+$0BE9 / $0351 bit 0. Priced since (2026-10-21, src/field_cost.c):
+- class 3's draw, C0/B701 -> C0/B785 `BRL C0/C73A`: 7,272 to C0/C7C9 on every run traced (01C's object $1A, seven frames),
+  then the 24 template Y's by the screen Y $C5 / $C6 -- C0/C7DE (5,950 traced), C0/C7FB (the clamp to E0) or C0/C820 (24
+  unrolled) -- and the OAM leg by the group `$0F80 & 0C`: C0/B6AA (9,932 traced), C0/B5CB (-72), C0/B653 (-6); the cursors
+  $0181/5/9 += 6 and $01DB/D/F += $60.
+- C0/7008, the VRAM slot pairs (a class 1-3 object, 1B0): the pairs $0C/$0D .. $16/$17 of $0B88 in order, the claim
+  C0/6FCC's 618 with the second `STA $0B89,X` (+26).
 
 ### The attract against the cartridge, after sections 9-10 (2026-10-21)
 
@@ -594,3 +600,42 @@ across the demo (HEAD: 86 -> 61). The route (tools/playthrough.py cmp): 28/32 le
 equals the cartridge's stall (001 -> 1F0 41, 070 -> 1F1 40, 078 -> 1F1 40 twice).
 LEFT: those four +-1s; class 3's draw C0/C73A (01C) and the VRAM slot arm C0/7008 (1B0), still on the old price; the
 cold reset's load (`fromReset`) not graded against a cartridge reset here (its fixture state is not in this checkout).
+
+## 11. The load's sound handshakes, against the cartridge's SPC (2026-10-21)
+
+With the CPU work of sections 9-10 exact, the loads left a frame off (route: 001 +1, 008 -3, 070 -1, 078 -1) were all the
+C7 handshake: the driver answers a command by where it stands in its own loop, so a post a few hundred APU cycles off can
+take a different path (an echo missed in C7/0A6E's $400 polls, a re-post, a wait on the token until the driver's timer
+routine writes port 0 at SPC $02DD). Measured with PEEK_APUTRACE (the oracle) against CT_AUDIO_PORTTRACE (the port) from the
+same seed (a route leg's CT_AUDIO_SEEDSTATE), store by store on the SPC's cycle count:
+- **The load's posts come before the frame's SPC slice.** The cartridge commits after a vblank and its load (NMI off, phase 0)
+  reaches C0/1B73's `JSL C7/0004` 8,811 master cycles past it (5,751 to C0/0B86 -- the pad latch's 4,224, then the NMI-off
+  stretch's start -- and 3,018-3,102 to the JSL); the port loads one iteration after the commit, so it posted after that
+  iteration's whole slice, a frame late in SPC time. The iteration that loads now runs its slice after the load
+  (CtAudioAdvance for the CPU work before the JSL, the slice owed to the next iteration). 070: the $81 at APU 487,669,848
+  against the cartridge's 669,749; its refused $10 re-posted at 673,594 against 673,662.
+- **The refused song's token spin is clocked on the loader too** (C7/0A85-0A8E, `DEC A / CMP $2140 / BEQ`): 070's 24 lines
+  until $02DD writes the port.
+- **From the world** (pendKind 3) the same stretch starts at C2's state 2: `STA $4200` = 00 at C2/246D (line 228 h 152, the
+  pad latch's C2/84F9 poll), the $82 at C2/24F0 (C7:0004 on line 229 h 966 = 6,422 past the vblank), the $83 156 cycles past
+  its RTL, and C0/1B73's JSL 3,868 past the $83's RTL (C2/2505 -> C0/0B5A -> C0/0B86). The port posted the pair at the field
+  pad latch's position and loaded on the next iteration with a whole slice between them.
+- **The song loader's head, instruction by instruction**: C7/0734 (the exception scan, 214 on the empty table), C7/0A39's
+  record (238), C7/09FD + C7/0A12 (the echo-buffer page and the slot cull: 3,812 on 078's song, 6 slots passed and 26 bytes
+  zeroed BYTE by byte) -- the port had a flat 340 for the last; C7/0A96's PLP / RTS and C0/01B1's `LDA $01 / STA $05` now
+  charged after the token, where they run. The cull's empty-slot test is `$63,X` (the sample end's high byte), as the ROM's.
+- **The world pass's own upload** (C2/2F0F's song, posted from inside the world's NMI): the NMIs it meets are C2/0178's skip
+  (`$4C` bit 0 clear) at no beam cost, and the HDMA is `$420C = $4A` -- 0 there: the transfer's lines lose the DRAM refresh
+  only. The port charged the field's mean HDMA, and leg 15's 4,935-unit upload ran 9,800 APU cycles long; the driver stood a
+  step off the cartridge's for the rest of that world visit, and the castle's $83 / $81 echoed ~80 cycles sooner. After:
+  the upload ends 44 cycles off, and the castle's $82 / $83 / $81 / $10 / re-post / first token within 5-33.
+
+Results (tools/load_cost_cmp.py over the route, commit -> first ramp INC): 44 of 50 loads take the cartridge's frames (37
+before) -- 001, 008, 070, 078, 081, 077 and leg 31's 1B7 now equal; left 0C6 +1 (after Yakra), 071 +2 (leg 29), 015 -1
+(leg 30), 047 +1 (leg 31), and 083 / 084, which the port's walk does not reach (legs 24-25, DIFFERENT before this too). The
+attract from power-on (`--boot`, its SPC the cartridge's own history): every load equal but 1201 +1 (the 0AD fight's exit);
+HEAD's B101@7324 -1 and 8700 +1 are gone. The `--scene 433` vehicle starts its SPC cold inside 1B1, so its driver's phase
+is not the cartridge's: there 1C00 and 7D00 now read +1 against the cartridge (01C's `10 FF` lands where its slot cull and
+handshake fall differently) -- a vehicle artefact, the same handshakes equal on `--boot`. The suite's checks on that vehicle
+were re-pinned by their segment's shift (+1 from f2823, +2 from f6308; `--selftest` +2 from f4083), the pinned values found
+again byte for byte.
