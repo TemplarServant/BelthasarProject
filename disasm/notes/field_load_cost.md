@@ -634,8 +634,8 @@ Results (tools/load_cost_cmp.py over the route, commit -> first ramp INC): 44 of
 before) -- 001, 008, 070, 078, 081, 077 and leg 31's 1B7 now equal; left 0C6 +1 (after Yakra), 071 +2 (leg 29), 015 -1
 (leg 30), 047 +1 (leg 31), and 083 / 084, which the port's walk does not reach (legs 24-25, DIFFERENT before this too). The
 attract from power-on (`--boot`, its SPC the cartridge's own history): every load equal but 1201 +1 (the 0AD fight's exit);
-HEAD's B101@7324 -1 and 8700 +1 are gone. The `--scene 433` vehicle starts its SPC cold inside 1B1, so its driver's phase
-is not the cartridge's: there 1C00 and 7D00 now read +1 against the cartridge (01C's `10 FF` lands where its slot cull and
-handshake fall differently) -- a vehicle artefact, the same handshakes equal on `--boot`. The suite's checks on that vehicle
-were re-pinned by their segment's shift (+1 from f2823, +2 from f6308; `--selftest` +2 from f4083), the pinned values found
-again byte for byte.
+HEAD's B101@7324 -1 and 8700 +1 are gone. The `--scene 433` vehicle started its SPC cold inside 1B1, so its driver's phase
+was not the cartridge's: there 1C00 and 7D00 read +1 against the cartridge (01C's `10 FF` lands where its slot cull and
+handshake fall differently) -- a vehicle artefact, the same handshakes equal on `--boot`. Since then (same day) a cold
+`--scene 433` plays the power-on itself (docs/TESTING.md, "The attract vehicle"): it is `--boot` on a blank cart numbered
+from that run's frame 27, and every attract load takes the cartridge's frames but 1201's.

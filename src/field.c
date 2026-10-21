@@ -4718,13 +4718,16 @@ static const char* fieldSramPath(void) {
   const char* p = getenv("CT_SRAM");
   return (p && *p) ? p : "ct_sram.srm";
 }
+static int g_sramForceFresh = 0;                  // the attract vehicle (`--scene 433` from cold): a blank cart
+#define ATTRACT_LOC 433                           // loc 1B1: where scene 0's boot script (0x001B) sends a blank cart
+#define ATTRACT_FRAME0 27                         // ...and the power-on run's frame the cold start's frame 0 stands for
 static uint8_t* fieldSram(void) {
   if (!g_sramReady) {
     memset(g_sram, 0xFF, sizeof g_sram);          // an erased cart
     // CT_SRAM_FRESH=1 boots from the erased cart and ignores any file on disk. A save-write check has
     // to be idempotent -- without it the second run finds the slot it wrote on the first and takes the
     // occupied branch, so the check would pass once and then report a different truth for ever after.
-    if (!getenv("CT_SRAM_FRESH")) {
+    if (!getenv("CT_SRAM_FRESH") && !g_sramForceFresh) {
       FILE* f = fopen(fieldSramPath(), "rb");
       if (f) { size_t n = fread(g_sram, 1, sizeof g_sram, f); (void)n; fclose(f); }
     }
@@ -10591,6 +10594,21 @@ int main(int argc, char** argv) {
     if (!sceneSet) scene = 0;          // flag glb[0x61]($7F0061)=1 set, so scene 0 runs the new-game setup
     gmem[0x61] = 1; haveFlags = 1;     // (Crono naming + $54 bit7 + party init), NOT the attract demo (-> 433).
   }
+  // ---- `--scene 433` from cold: THE ATTRACT AS THE POWER-ON REACHES IT ----------------------------
+  // A cold `--scene` start (no seed, no snapshot, no placement, no test harness) into the location the power-on itself
+  // enters -- the attract, loc 1B1: a blank cart's reset (C0/000E) runs scene 0's boot script, whose 0x001B arm
+  // (`glb[0x60] == 0`) routes there -- plays that power-on: the reset's driver upload, scene 0, and 1B1's load with its
+  // sound posts (C0/1B73 / C0/1B8B). Started in 1B1 directly, the SPC began cold there -- no scene 0, no load posts, the
+  // driver's phase not the cartridge's -- and the attract's loads took a frame more where the driver met a post
+  // differently (1C00 and 7D00 +1 against the cartridge, which the power-on vehicle `--boot` matched; the cold run also
+  // posted a `18 FF` the cartridge never does). The frames keep the cold start's numbering: its frame 0 is the power-on
+  // run's 27 (1B1's first ramp, f2064 there and f2091 here), so the 27 before are numbered -27..-1. The cart is a blank
+  // one, as CT_SRAM_FRESH's, whatever ct.srm holds: the attract is a blank cart's.
+  int vehicleFrameBase = 0;
+  if (sceneSet && scene == ATTRACT_LOC && !loadWramPath && !loadStatePath && !newGame && !bootNatural && atX < 0 &&
+      !worldTest && !battleTest && !menuTest && reenterDest < 0) {
+    bootNatural = 1; scene = 0; vehicleFrameBase = -ATTRACT_FRAME0; g_sramForceFresh = 1;
+  }
   // ---- --boot: THE GAME'S OWN COLD ENTRY (disasm/notes/boot_loader.md) --------------------------
   // The ROM's reset lands in C0/000E, and the FIRST thing it does after the sound driver is up is
   //   C0/0057  LDA #09 / JSL $C2:8004
@@ -11691,7 +11709,7 @@ int main(int argc, char** argv) {
   int pLeadHold = 0, pLeadShown = -1, pLeadHoldAf = -1;   // the battle epilogue's $0F01 for the lead, held for the drain
   unsigned pRng = 0x2C9E3D1Bu;      // advanced each frame -> the random idle-blink trigger (ROM gates on $FE00[$F8])
   int owExitWait = 0, owExitOff = 0;              // the overworld's state 3 (C2/2402): NMIs left before $0100, and the record
-  int owEnterCd = 0, running = 1, frameNo = 0;   // the OVERWORLD entry debounce (an A press held across an
+  int owEnterCd = 0, running = 1, frameNo = vehicleFrameBase;   // the OVERWORLD entry debounce (an A press held across an
   int gameOver = 0;                // battle outcome-1 with $2A1F bit5 clear -> the C0/02A0 DEFEAT sequence
   int goPhase = 0;                 //   0 = not in it; 1 = (a) awaiting a button edge, world still
                                    //   ticking; 2 = (b) the screen fade, world still ticking

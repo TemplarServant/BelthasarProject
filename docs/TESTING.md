@@ -138,6 +138,17 @@ Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_check
   tier (`lockstep-talk-box-machine-clean`, `lockstep-scene120-stairs-entry-lucca`), which run only here. A full run
   takes 15-80 minutes, mostly depending on the oracle cache.
 
+## The attract vehicle (`Belthasar --scene 433` from cold)
+
+Most attract checks run `Belthasar.exe --assets ct_assets.dat --scene 433` with no seed. Since 2026-10-21 that start PLAYS
+THE POWER-ON (src/field.c, `ATTRACT_LOC`): the reset's driver upload, scene 0's boot script and 1B1's load with its sound
+posts, on a blank cart whatever ct.srm holds -- the same run as `--boot` on an erased cart, numbered so that its frame 0 is
+the power-on run's frame 27 (the 27 before print as f-27..f-1). Its SPC therefore has the cartridge's history: before, it
+started cold inside 1B1 and its driver's phase was its own, so a sound handshake could land a frame off where the
+cartridge's did not (1C00 and 7D00 +1). Every attract load now takes the cartridge's frames but 1201's (+1, the 0AD
+fight's exit). A `--scene 433` with `--loadwram`, `--loadstate`, `--at`, `--newgame` or a test harness is still the plain
+cold start.
+
 ### shadow-attract (`ct.exe --shadow --frames 9000`, the routine-level shadow)
 
 The routine-level shadow (docs/SHADOW_PROPOSAL.md, phases S0 and S1's field VM). The oracle plays the attract demo
