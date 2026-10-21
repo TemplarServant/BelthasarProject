@@ -252,9 +252,14 @@ static void constructedSong(void) {
   b[nb++] = (Block){ 3, SONG_AT, g_song, (int)sizeof g_song };
   // (the bytes stored go to the sequence area $2800-$2EFF, which every song load rewrites: the game's loader keeps its
   // own account of what lies above it, and a block there behind its back would make its defragmenter move garbage)
-  if (rn(2)) b[nb++] = (Block){ (uint8_t)(rn(2) ? 0 : 4 + 2 * rn(2)), (uint16_t)(0x3000 + rn(0x1000)), junk, 1 + rn(64) };
-  if (rn(3) == 0) b[nb++] = (Block){ (uint8_t)(1 + rn(3)), (uint16_t)(0x2800 + rn(0x600)), junk, 1 + rn(64) };
-  if (rn(4) == 0) b[nb++] = (Block){ (uint8_t)(1 + rn(3)), (uint16_t)(rn(2) ? 0x1D00 + rn(0xE0) : 0x0400 + rn(0x1800)), junk, 1 + rn(32) };   // below $1E00: kept out
+  // (each field drawn in its own statement, left to right: an initializer list's order is unspecified, and MSVC and gcc
+  //  drew them differently -- the same seed was two streams)
+  if (rn(2)) { uint8_t k = (uint8_t)(rn(2) ? 0 : 4 + 2 * rn(2)); uint16_t d = (uint16_t)(0x3000 + rn(0x1000)); int n = 1 + rn(64);
+    b[nb++] = (Block){ k, d, junk, n }; }
+  if (rn(3) == 0) { uint8_t k = (uint8_t)(1 + rn(3)); uint16_t d = (uint16_t)(0x2800 + rn(0x600)); int n = 1 + rn(64);
+    b[nb++] = (Block){ k, d, junk, n }; }
+  if (rn(4) == 0) { uint8_t k = (uint8_t)(1 + rn(3)); uint16_t d = (uint16_t)(rn(2) ? 0x1D00 + rn(0xE0) : 0x0400 + rn(0x1800));
+    int n = 1 + rn(32); b[nb++] = (Block){ k, d, junk, n }; }   // below $1E00: kept out
   if (rn(4) == 0) b[nb++] = (Block){ 3, 0x2F00, g_apu->ram + 0x2F00, 0x100 };   // the effect table, as it is
   session((uint8_t)((c + 1) & 0x7F), b, nb);
 }
@@ -387,7 +392,8 @@ int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed) {
     int r = rn(100);
     if (getenv("CT_SNDDRV_FUZZ_TRACE")) { fprintf(stderr, "action %ld: %d", i, r); fputc(10, stderr); fflush(stderr); }
     if (r < 30) { randomCommand(); counts[0]++; }
-    else if (r < 45) { uint8_t s; if (validSfx(&s)) post(rn(2) ? 0x18 : 0x19, s, (uint8_t)rnd(), 0); counts[1]++; }
+    else if (r < 45) { uint8_t s; if (validSfx(&s)) { int hi = rn(2); uint8_t p2 = (uint8_t)rnd();   // (in order: see above)
+        post(hi ? 0x18 : 0x19, s, p2, 0); } counts[1]++; }
     else if (r < 70) { constructedSong(); counts[3]++; frames(60 + rn(240)); }
     else if (r < 76) { uploadCmd(); counts[4]++; }
     else if (r < 82) {   // command FF F0 and the driver uploaded again, then the game's own loads of two songs (the change: the defragmenter)

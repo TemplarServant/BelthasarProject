@@ -47,7 +47,8 @@ def main():
     if sa != 'container':
         print('snd-assets: ct_assets.dat holds no sound entries (CT_ASSET_SND_*): both runs read the ROM')
         return 1
-    da, db = open(a, 'rb').read(), open(b, 'rb').read()
+    # (the log is a text file: Windows writes CRLF, so the hash is taken over LF lines -- the same on every platform)
+    da, db = (open(p, 'rb').read().replace(b'\r\n', b'\n') for p in (a, b))
     pa, pb = open(a + '.pcm', 'rb').read(), open(b + '.pcm', 'rb').read()
     n = da.count(b'\n')
     if pa != pb:

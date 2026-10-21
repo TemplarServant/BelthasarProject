@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <limits.h>
 #include <time.h>
 #include <math.h>
 #ifdef __APPLE__
@@ -2826,8 +2827,11 @@ static void hostDebugPictures(int n) {
           CtSettingsGet()->renderScale, CtSettingsGet()->interpolate);
   fclose(lf);
 }
+static int g_presentFrame0 = 0;                   // the first present's number: the main loop's first frame (the attract
+                                                  //   vehicle's -27), so the probes below name the frames as CT_SHOTS does
 static void hostPresentMot(CtPresenter* pr, const uint8_t* fb, int w, int motion) {
-  static int frameNo = 0;
+  static int frameNo = INT_MIN;
+  if (frameNo == INT_MIN) frameNo = g_presentFrame0;
   g_lastShown = fb; g_lastShownW = w;
   { static const char* ws = (const char*)1; static int wsEvery = 0, wsFrom = 0;   // CT_WIDESHOTS=<prefix> (probe): every
     if (ws == (const char*)1) { ws = getenv("CT_WIDESHOTS");                     //   CT_WIDESHOTS_EVERY (60) presented frames
@@ -10609,6 +10613,7 @@ int main(int argc, char** argv) {
       !worldTest && !battleTest && !menuTest && reenterDest < 0) {
     bootNatural = 1; scene = 0; vehicleFrameBase = -ATTRACT_FRAME0; g_sramForceFresh = 1;
   }
+  g_presentFrame0 = vehicleFrameBase;
   // ---- --boot: THE GAME'S OWN COLD ENTRY (disasm/notes/boot_loader.md) --------------------------
   // The ROM's reset lands in C0/000E, and the FIRST thing it does after the sound driver is up is
   //   C0/0057  LDA #09 / JSL $C2:8004
