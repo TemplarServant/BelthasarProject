@@ -57,6 +57,10 @@ long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc);
 int  ct_lz_world_packets(const uint8_t* rom, size_t romLen, int world,
                          uint32_t* srcOut, uint8_t* dstOut, int max);
 long ct_lz_world_cost(const uint8_t* rom, size_t romLen, int world, int* outPackets);
+// The whole world load, C0/0B5A -> C2/23CC (the NMI back on), in non-refresh cycles: the packets with their sites, C2/2A44's
+// lists, C2/09C5 over each BG's camera cells ($E3/$E7 = the camera >> 3), and the fixed rest (lz.c). -1 (*why) off the walk.
+long ct_lz_world_load_cycles(const uint8_t* rom, size_t romLen, int world, const uint16_t e3[2], const uint16_t e7[2],
+                             int* outPackets, const char** why);
 // C2/2C93's rebuild after the X menu: the entry's packets minus the four that survive the menu (lz.c).
 long ct_lz_world_return_cost(const uint8_t* rom, size_t romLen, int world, int* outPackets);
 

@@ -62,10 +62,12 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join('build', 'ct.exe')
 FIELD = os.path.join('build', 'Belthasar.exe')
-STATE = 'saves/attract_cena_inicial.state'
+# ATTRACT_DIV_STATE / ATTRACT_DIV_CART_FRAMES: another start for the cartridge's side -- `boot` (power-on, ct.exe's own) with
+# ~11500 frames covers the port's 11400 where the attract state is not at hand
+STATE = os.environ.get('ATTRACT_DIV_STATE', 'saves/attract_cena_inicial.state')
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 ASSETS = 'ct_assets.dat'
-CART_FRAMES = 9110
+CART_FRAMES = int(os.environ.get('ATTRACT_DIV_CART_FRAMES', '9110'))
 PORT_FRAMES = 11400
 DT = np.dtype([('f', '<u4'), ('loc', '<u2'), ('img', 'u1', (112, 128, 3))])
 

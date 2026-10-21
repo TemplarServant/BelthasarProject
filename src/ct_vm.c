@@ -17,6 +17,7 @@
 #include "rom_verify.h"
 #include "objslot.h"       // FD/E39C, the palette-effect records op 0x88 arms (the battle's body)
 #include "lz.h"
+#include "field_cost.h"     // ct_vm_op_cycles: the load's object pass, op by op
 #include "tables/ct_regroup.h"          // baked ROM battle-RETURN regroup script templates (tools/_gen_regroup.py)
 #include "wipe.h"                     // CtWipeRoutine: the window wipe C3/01E4 and its seed C3/02DD, native
 #define CTPI 3.14159265358979323846
@@ -1045,6 +1046,14 @@ static void npcLoadMirror(Mem* m, int obj, int hdrIdx, int mode) {
   // freshly loaded NPC was not a blocker at all: measured on a fresh `--scene 5`, objs 19/20/24/25/26
   // all read $1B01 = 00 where the oracle reads 01. Same family as the PC arms' three stores above.
   w8(m, X + 0x1B01, 0x01);                             // 447F / 45A0 / 46EF
+  // ...and the two the arms make on the way in: `STA $1101,X` = the load op's operand (C0/448A for 0x81, C0/4564 in
+  // C0/4557 for 0x82 -- the raw operand, not the record index, which is operand + 7) and, in C0/4557 alone,
+  // `LDA #7F / STA $1200,X` (C0/4579): the sheet's bank, whatever C0/5C90 then finds. Op 0x81 takes its bank from the
+  // record (loadGfxMirror's direct arm). Without them the port kept a previous location's bytes there: on the bell
+  // stairs (1B7, from the fair) objects 29-31's $1200 read 00 / E6 / 07 where the cartridge's read 7F, and C0/CAD9's
+  // tile copy C0/E687 reads that bank (measured: CT_LOADWALK_DUMP against `ct --hookpc 286C` CT_HOOK_DUMPWRAM).
+  w8(m, X + 0x1101, (uint8_t)(mode == 4 ? hdrIdx - 7 : hdrIdx));
+  if (mode == 4) w8(m, X + 0x1200, 0x7F);
   if (!gRomImg || gRomImgLen < 0x250000) return;       // palette slots assign on first RENDER,
   loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F000 + (long)hdrIdx * 5, 5), mode == 3);   // not at load
 }
@@ -1413,6 +1422,21 @@ static void vmObjEnableOp(Mem* m, CtVmActor* actors, int nobj, int* mode, const 
 
 static void ctTileCopyQueue(CtScene* sc, int sl, int st, int el, int eb, int dl, int dt, int flags);   // fwd (needs CtScene)
 static int g_initLastOp = -1;   // C0/5906 TXY: the offset of the last op the init runner dispatched (C0/56CB's Y)
+// THE OBJECT PASS'S CPU TIME. While a location load runs its scripts' init (C0/5709) and obj0's slot 1 (C0/595C), every op
+// they dispatch is priced as the ROM runs it -- the runner's dispatch (CT_VM_DISPATCH) and the handler's arm on the WRAM
+// it is about to read (field_cost.c ct_vm_op_cycles) -- into g_ctLzSpriteCycles, the load's object-pass clock, next to
+// the sprite sheets the loaders decompress. gOpCostWhy names the first op priced on a path the walk does not decide.
+static int gOpCostOn = 0;
+static const char* gOpCostWhy = NULL;
+static long gOpCostSum = 0; static int gOpCostN = 0;   // (the ops' share and count, for CT_LOADCOST)
+static void vmOpCost(Mem* m, const uint8_t* B, int blen, int addr, int obj) {
+  if (!gOpCostOn || !gRomImg) return;
+  long c = CT_VM_DISPATCH + ct_vm_op_cycles(gRomImg, gRomImgLen, m->s, B, blen, addr, obj, &gOpCostWhy);
+  g_ctLzSpriteCycles += c; gOpCostSum += c; gOpCostN++;
+  if (getenv("CT_OPCOST_TRACE")) fprintf(stderr, "opcost obj%d @%04X op %02X %ld\n", obj, addr, B[addr], c);
+}
+const char* CtSceneLoadCostWhy(void) { return gOpCostWhy; }
+long CtSceneLoadOpCycles(int* n) { if (n) *n = gOpCostN; return gOpCostSum; }
 static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int start, Mem* mem,
                     CtVmActor* actors, int* explore, int* bright, int* stopAddr, int* stopOp, CtScene* sc) {
   CtVmActor* a = &actors[obj];
@@ -1424,6 +1448,7 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
   while (addr >= 0 && addr < blen && ops < 6000) {
     uint8_t op = B[addr];
     if (op != 0x00) g_initLastOp = addr;               // 5900 BEQ / 5906 TXY: every dispatched op
+    if (op != 0x00) vmOpCost(mem, B, blen, addr, obj); // 5910 JSR ($5D6E,X): what it costs, before it runs
     if (initDbg == obj)
       fprintf(stderr, "[init obj%d] @%04X op=%02X (%02X %02X %02X)" "\n", obj, addr, op,
               addr + 1 < blen ? B[addr + 1] : 0, addr + 2 < blen ? B[addr + 2] : 0, addr + 3 < blen ? B[addr + 3] : 0);
@@ -1580,7 +1605,8 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
       npcLoadMirror(mem, obj, B[addr + 1], 3); a->facing = 1; }                                                                    // + gfx/palette allocator claims ($E4:F000 + id*5)
     else if (op == 0x82) { a->sprite = B[addr + 1] + 7; a->defined = 1; a->solid = 1; a->moveMode = 4; a->dead = 0; // op 0x82 C0/4559: $1100=4
       w8(mem, 0x7E1100 + (uint32_t)obj * 2, 0x04);                                                                              // 4559 STA $1100,X
-      npcLoadMirror(mem, obj, B[addr + 1] + 7, 4); a->facing = 1; }                                                                // header $E4:F000 + (id+7)*5 (C0/45A8 E4F024,X = id*5)
+      npcLoadMirror(mem, obj, B[addr + 1] + 7, 4); a->facing = 1;                                                                  // header $E4:F000 + (id+7)*5 (C0/45A8 E4F024,X = id*5)
+      w8(mem, 0x7E0173, (r8(mem, 0x7E0173) + 1) & 0xFF); }                                                                         // 4665 / 46D9 INC $73, both arms
     else if (op == 0x83) { a->sprite = B[addr + 1] + 256; a->defined = 1; a->solid = 1; a->dead = 0;
       a->moveMode = (B[addr + 2] & 0x80) ? 6 : 5;      // op 0x83 C0/46DF: $1100=5 (via C0/4557), operand2
       loadMonMirror(mem, obj, B[addr + 1], B[addr + 2]); a->facing = 1; }   // bit7 -> 6 (C0/47EC-47F4); + the $7E per-object mirror
@@ -4701,7 +4727,9 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
     // load game in 600ad, the music starts and stops". Oracle, boot -> title -> load (PEEK_WRITEWATCH=1E00:4):
     // at each of f19, f46, f413, f444 `$1E00 = 81` by C0/1B73, `$1E00 = 00` by C7/0196, THEN `= 10` by
     // C0/1B8B and its own C7/0196. With no sink (CT_NOAUDIO, ct.exe) this is inert and the WRAM is unchanged.
-    (void)vmSoundPostMem(sc->mem, sc->blen, 12);
+    // Its time is the load's too: the cartridge's C0/1B73 JSL is ~15k cycles of C7 (the bell stairs, 1B7: 14,670 from
+    // the JSL to its RTL, `ct --cputrace` CPUTRACE_BEAM), and the $10 below starts on the line it returns on.
+    int songLn = 12, songFr = 0, songAny = vmSoundPostAcc(sc->mem, sc->blen, &songLn, &songFr);
     if (g_carrySong >= 0) {
       w8(sc->mem, 0x7E29AE, g_carrySong & 0xFF);
       w8(sc->mem, 0x7E1E01, g_carrySong & 0xFF); w8(sc->mem, 0x7E1E00, 0x10);
@@ -4711,8 +4739,9 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
       // demo-battle RESET into loc 0 (saves/attract_demo_battle_f1850.state, A from f20): the `10 00` JSL runs from f57
       // line 246 to f68 line 142 -- 10.6 frames of the load's 12.2 (C0:0066 f57 line 241 -> C0:0094 f70 line 22) --
       // with no NMI and no HDMA behind it. The host adds its price to the load's black frames (CtSceneLoadSongPrice).
-      g_loadSongPrice = vmSoundPostMem(sc->mem, sc->blen, 12);                   // C0/1B8B
+      songAny |= vmSoundPostAcc(sc->mem, sc->blen, &songLn, &songFr);            // C0/1B8B
     }
+    if (songAny) g_loadSongPrice = (songFr << 10) | songLn;
   }
   sc->bright = 15; sc->brightTarget = 15;
   sc->explore = 1; sc->moveLock = 0;                 // default free; the scene's startup
@@ -4749,6 +4778,9 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
     w8(sc->mem, 0x7E1C81 + (uint32_t)o * 2, (uint8_t)sc->actors[o].snap);
   }
   gLoadPostOn = gLoadPostMode;                       // C0/5709 and C0/56C8 run at the load's end (gLoadPost, above)
+  w8(sc->mem, 0x7E0173, 0);                          // C0/58DC STZ $73: op 0x82's party-slot counter (C0/4665 / 46D9)
+  gOpCostOn = gLoadPostMode; gOpCostWhy = NULL;      // a load the host prices: its ops are priced as they run
+  gOpCostSum = 0; gOpCostN = 0;
   for (int n = 0; n < count; n++) {
     // C0/58ED / 58F0, the init runner's head for EVERY object of the scene ($BD = the object count * 2, inactive ones
     // included -- 58F3's `BMI` comes after): `STZ $1B01,X / STZ $1B80,X` with the REP #20 of 58E2 in force, so two
@@ -4887,7 +4919,7 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
   if (gRomImg) {                                       // (a harness without the ROM image has no bank $D1/$FF to read)
     int x = (count > 0) ? fpPtr(sc, 0, 1) : 0;         // 595C LDA $7F2003 / TAX
     CtVmC2LoadTail(sc->mem->s, gRomImg, (int)gRomImgLen, x & 0xFF, g_initLastOp & 0xFF); }
-  gLoadPostOn = 0;
+  gLoadPostOn = 0; gOpCostOn = 0;
   if (getenv("CT_SHOWVORTEX"))       // DEBUG: run the emitter's open fn (its fn3 starts with op 0x88) to arm colorFx
     for (int n = 0; n < count; n++) if (sc->actors[n].colorGated) {
       int op3 = fpPtr(sc, n, 3);
@@ -7730,6 +7762,7 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
     if (at < 0 || at >= sc->blen) { why = "off"; break; }
     if (sc->body[at] == 0x00) { why = "end"; break; }  // 5967 LDA / BEQ ->597C
     if (tr && ln < (int)sizeof line - 16) ln += snprintf(line + ln, sizeof line - ln, " %02X@%04X", sc->body[at], at);
+    vmOpCost(sc->mem, sc->body, sc->blen, at, 0);       // (a load's: priced as C0/5977 dispatches it)
     step(sc, 0);                                        // 5977 JSR ($5D6E,X) -- its carry is ignored
     if (sc->st[0].addr == at) { why = "parked"; break; } // the ROM would never leave C0/595C
   }

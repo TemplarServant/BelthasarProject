@@ -5214,6 +5214,19 @@ static void fieldSoundFrameSpc(void* ctx) { CtAudioFrame((CtAudio*)ctx); }   // 
 // The event VM's sink: the same JSL, PRICED -- the loader clock's frames crossed and return line, so
 // the VM can lose the frames a synchronous song upload costs the ROM (song_load_freeze.md section 6).
 static int g_sndTraceFrame = 0;   // CT_SNDTRACE: the field loop's frame, stamped on every post below
+// The wall cycles a load's sound JSLs took, from what the sink reports for them (CtSceneLoadSongPrice /
+// CtSceneLoadPostsFlush: NMIs crossed << 10 | the end line, for a clock that began on line 12): the elapsed lines are the
+// (end - 12) + 262k whose run from line 12 reaches line 225 exactly that many times; 1364 cycles a line.
+static long loadSinkWall(int sp) {
+  int nmi = sp >> 10, el = sp & 1023;
+  for (int k = 0; k < 400; k++) {
+    long e = (long)el - 12 + 262L * k;
+    if (e < 0) continue;
+    int hits = (12 + e >= 225) ? (int)((12 + e - 225) / 262) + 1 : 0;
+    if (hits == nmi) return e * 1364L;
+  }
+  return 0;
+}
 static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
   CtAudio* a = (CtAudio*)ctx; int fr = 0, el = startLine;
   uint8_t c0 = mem7E ? mem7E[0x1E00] : 0, c1 = mem7E ? mem7E[0x1E01] : 0;
@@ -11972,6 +11985,10 @@ int main(int argc, char** argv) {
   int entrySweepPend = 0;   // C0/286C's C0/B0E6 owed by a location change, made on the entry ramp's first frame (fade 2)
   long loadPostTotal = 0;  // the load's object-pass cycles (g_ctLzSpriteCycles) when its scripts' init was done: where its
                            //   queued sound JSLs stand from its end (CtSceneLoadPostCycles)
+  CtLoadCost loadWalk; long loadWalkCyc = -1;   // the location load walked (field_cost.c) on the WRAM fieldLoad left
+  long load9dc3 = 1928;    // ...and C0/9DC3's arm on the arrival tile (ct_load_9dc3_cycles), the host's half
+  long loadW = 0; int loadW0 = 0;   // a walked load's CPU + sound-driver work from the NMI-off, and the hold it gave
+  memset(&loadWalk, 0, sizeof loadWalk);
   int loadHold = 0;      // frames still owed to the LOAD itself (fade == 3): the ROM is inside
                          // C0/00F4 with the screen blank and nothing else running at all
   int pendKind = 0;   // transition captured at fade-out start: 0 none, 1 scene->scene door, 2 scene->overworld, 3 overworld->scene
@@ -12409,6 +12426,15 @@ int main(int argc, char** argv) {
             if (f.vm) { uint8_t m1, m2, m3; CtFieldSceneMapHeader(f.sd, &m1, &m2, &m3);   // C0/A385-A4FB: the new
                         CtSceneLayerScrollLoad(f.vm, m1, m2, m3); }                         //   map's BG2/BG3 scroll (the map
                                                                                             //   was staged in fieldLoad)
+            // THE LOAD, PRICED as the ROM runs it (field_cost.c ct_field_load_cycles), on the WRAM the load left -- once the
+            // map header's layer bytes are in (C0/A385-A4FB's $0BC9/$0BCA, which decide C0/286C's BG3 builder: 315,802
+            // cycles on loc 002) and before the host's own halves of C0/286C below write their part of the pass into it
+            // (the doors, the chests' cells, the tilemap): the walk takes those arms itself, on the bytes the pass starts from.
+            { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl);
+              loadWalkCyc = (rimg && f.vm) ? ct_field_load_cycles(rimg, rl, CtWramSys(fieldWram()), pendDest, &loadWalk) : -1;
+              const char* dw = getenv("CT_LOADWALK_DUMP");   // CT_LOADWALK_DUMP=<prefix>: the WRAM the walk read, per load
+              if (dw && *dw) { char fn[512]; snprintf(fn, sizeof fn, "%s_%03X.wram", dw, pendDest);
+                FILE* fo = fopen(fn, "wb"); if (fo) { fwrite(CtWramSys(fieldWram()), 1, 0x20000, fo); fclose(fo); } } }
             if (f.vm) fieldDoorListApply("load", frameNo);   // C0/286C's first JSR (the list C0/28AA just emptied)
             fieldPaletteText(CtWramSys(fieldWram()));    // C0/2887 JSR C0/70E9: the text palette and the page copy
             fieldChestPrebumpWram(CtWramSys(fieldWram()), CtWramGlb(fieldWram()), scene, f.C.cw, f.C.ch);   // 0A50 -> A712
@@ -12422,6 +12448,7 @@ int main(int argc, char** argv) {
             pIdleCtr = 0; pBlink = 0; pAnimMode = 0;        // reset the field idle-blink timer on a scene change
             fieldArrivalTileMode(&f.C, px, py, f.vm);       // C0/9DC3: $1D34, $0155 and the PCs' pairs from the ARRIVAL tile
                                                             //   (else a ladder's climb flag walks through the door)
+            load9dc3 = ct_load_9dc3_cycles(g_collRam[0x1D58], g_collRam[0x1D6A], g_collRam[0x1D30]);   // ...and its arm's cost
             if (f.vm) pz = CtSceneMem7E(f.vm)[0x0155] & 3;  // pz mirrors the byte C0/9DC3 just stored
             // The lead starts where its fn0 LAST wrote $1800/$1880: C0/42B8's arrival, or a later `8B`/`8D`
             // in the same fn0 (ct_vm.c pcLeadInitArm). The plane and $1D34 above stay the arrival tile's --
@@ -12518,6 +12545,7 @@ int main(int argc, char** argv) {
         // 35.1 load frames on world 0, 26.2 on world 2. What is still measured is the REST of C2's
         // window -- its setup, DMA and palettes -- taken as the difference on world 0 between the
         // whole 44-frame window and those 35.1 frames.
+        // (Superseded 2026-10-21 by the walked price, ct_lz_world_load_cycles below; this remainder is only the fallback.)
         #define CT_OW_LOAD_REST  3087224L   /* 8.90 load frames, measured on world 0 */
         // ⭐ NO ENTRY RAMP OF OUR OWN any more. The 44 frames above run from the commit to the world counter's first tick,
         // i.e. the first NMI -- the first object pass. What lights the world after that is the world's own script: every
@@ -12528,7 +12556,14 @@ int main(int argc, char** argv) {
         // later op of it the same 37 early).
         if (pendKind) {
           long lcDma = 0, lcCyc = 0; long rl = 0; const uint8_t* rimg = CtBattleRom(&rl);
-          if (rimg && !inWorld) lcCyc = ct_lz_load_cost(rimg, (size_t)rl, pendDest, &lcDma, NULL);
+          // ⭐ WALKED (field_cost.c): every leg of C0/0B5D -> C0/0B38 on the WRAM the load left, the object pass's ops as
+          // the VM ran them (g_ctLzSpriteCycles, below) and C0/9DC3's arm (load9dc3). ct_lz_load_cost (the packets and a
+          // measured first pass) stays only for a load the walk refuses (loadWalk.why: a leg it does not decide).
+          int walked = 0;
+          if (rimg && !inWorld) {
+            if (loadWalkCyc >= 0) { lcCyc = loadWalk.total + load9dc3; walked = 1; }
+            else lcCyc = ct_lz_load_cost(rimg, (size_t)rl, pendDest, &lcDma, NULL);
+          }
           // ...and the object pass's own decompressions, which no table can give: WHICH sprite sheets a location
           // loads depends on its objects' load ops and on C0/5C90's per-scene dedup, so the loaders count them as
           // they run (lz.h, g_ctLzSpriteCycles) and the window holds for them like the rest.
@@ -12546,34 +12581,61 @@ int main(int argc, char** argv) {
           long lcWall = coldResetWall; coldResetWall = 0;   // ...and its JSL C7:0000
           // ...and C0/1B8B's song JSL, inside the load: its whole-frame boundaries and the lines around them.
           { int sp = (!inWorld && f.vm) ? CtSceneLoadSongPrice() : -1;
-            // The sink reports (NMIs crossed, end line) for a clock that began on line 12: the elapsed lines are the
-            // (end - 12) + 262k whose run from line 12 reaches line 225 exactly that many times.
-            if (sp >= 0) { int nmi = sp >> 10, el = sp & 1023;
-              for (int k = 0; k < 400; k++) { long e = (long)el - 12 + 262L * k; if (e < 0) continue;
-                int hits = (12 + e >= 225) ? (int)((12 + e - 225) / 262) + 1 : 0;
-                if (hits == nmi) { lcWall += e * 1364L; break; } } } }
-          { double lf = (double)(lcCyc + lcDma) / CT_LOAD_FRAME_CYCLES + (double)lcWall / 357368.0;
-            loadHold = (int)lf; if ((double)loadHold < lf) loadHold++; }
+            if (sp >= 0) lcWall += loadSinkWall(sp); }
+          if (walked) {
+            // THE ROM'S FRAMES (CLAUDE.md, NMI-off loads): the stretch from C0/0B5A starts at phase 0, so its CPU work W
+            // crosses floor(W / F) boundaries before C0/0B38's `LDA $4210 / BPL` -- which falls through inside the vblank's
+            // first 37 lines and waits a frame more past them (ct_nmi_wait_frames) -- and C0/0B3F's NMI is followed by
+            // C0/EC60's wait: the first `INC $19` is ct_nmi_wait_frames(W) + 1 frames after the commit. The port loads one
+            // iteration after the commit and ramps the frame after its last black one: loadHold + 2 frames.
+            long W = lcCyc + (long)((double)lcWall * (double)CT_LOAD_FRAME_CYCLES / 357368.0);
+            loadHold = ct_nmi_wait_frames(W) - 1;
+            loadW = W; loadW0 = loadHold;                // (the queued posts' SPC time joins W when they are flushed)
+          } else {
+            loadW = 0;
+            double lf = (double)(lcCyc + lcDma) / CT_LOAD_FRAME_CYCLES + (double)lcWall / 357368.0;
+            loadHold = (int)lf; if ((double)loadHold < lf) loadHold++;
+          }
           // A load's window begins on the frame the load runs (scene 468: load f20 line 242, first ramp INC f52 = the
           // 31 black frames plus the load frame). A reset's window begins on the RESET's frame (C0/000E at f35 line 255),
           // and the port loads one iteration after it -- that iteration is the window's second frame, not its first.
           if (fromReset && loadHold > 0) loadHold--;
           if (inWorld && rimg) {                        // bank C2's loader (see above)
             int owN = 0;
-            lcCyc = ct_lz_world_cost(rimg, (size_t)rl, haveWorld ? wd.world : 0, &owN) + CT_OW_LOAD_REST;
-            loadHold = (int)((lcCyc + CT_LOAD_FRAME_CYCLES - 1) / CT_LOAD_FRAME_CYCLES);
-            // UNDER THE RULE (NMI-on work never costs frames, user decision 2026-09-30 -- CLAUDE.md; on with
-            // CT_ORACLE_NMION_HOLD=1 during the migration): the window's last frame was not the load's. C2's loader turns
-            // the NMI on at C2/23CC (`LDA #81 / STA $4200`) and waits (C2/23CF JSR C2/046E -> C2/0346); the first NMI's
-            // object pass then builds the screen's tilemap (C2/0A5A / C2/0A8D) -- NMI-on CPU work that runs past line 224
-            // by 1.28-1.66 frames on every world entry measured (the rule's oracle, CT_ORACLE_LOGICAL_TRACE: `held 458588
-            // .. 592276 cycles, released at C2:034B`, the attract's 1F5, 1F7, 1F2, 1F3 and 1F0), which the old valve ran
-            // as ONE real-time frame (`ROLLED BACK` at C2:0AAD / 0ADB / 0ABE / 0AA2 / 0AD4, then a held remainder under a
-            // frame) and the rule holds. CT_OW_LOAD_REST, the whole window less the decompression, was measured on the
-            // valve (the Truce market's exit: the world's first C2/23D2 at f86) and so carried that frame; the rule's
-            // first C2/23D2 is f85 (--hookpc C223D2 from saves/truce_market.state, btnscript 0:10,20:60,0:200; C2/23CC
-            // at f83 on both), and every world leg of the attract is one frame shorter on the rule's oracle.
-            if (fieldRuleNmiOnHold() && loadHold > 0) loadHold--;
+            // ⭐ WALKED (2026-10-21, ct_lz_world_load_cycles): the whole stretch from C0/0B5A to C2/23CC's `STA $4200`,
+            // priced over the world's packets and the camera's cells ($E3/$E7 = the camera >> 3, as world.c seeds them).
+            // It starts at phase 0 (CLAUDE.md, NMI-off loads) and C2/23CC turns the NMI on: inside the vblank's 37 lines
+            // RDNMI is still up and the NMI is taken at once, past them at the next vblank -- the same edge as the field's
+            // C0/0B38 poll, so the first world NMI is ct_nmi_wait_frames(W) frames after the commit's (the attract's five:
+            // 35 / 37 / 33 / 36 / 41, the cartridge's play clock to the frame), and the port's black frames are one less.
+            // The old price (the decompressions + CT_OW_LOAD_REST, a remainder measured on the valve) held every world
+            // 3-4 frames long. The measured remainder stays only for a world the walk refuses.
+            const char* owWhy = NULL;
+            uint16_t e3[2] = { (uint16_t)(wd.cam.bg1h >> 3), (uint16_t)(wd.cam.bg2h >> 3) };
+            uint16_t e7[2] = { (uint16_t)(wd.cam.bg1v >> 3), (uint16_t)(wd.cam.bg2v >> 3) };
+            long owW = ct_lz_world_load_cycles(rimg, (size_t)rl, haveWorld ? wd.world : 0, e3, e7, &owN, &owWhy);
+            if (owW >= 0) {
+              lcCyc = owW;
+              loadHold = ct_nmi_wait_frames(owW) - 1;
+              if (getenv("CT_LOADCOST")) printf("loadwalk: world %d -- %ld cycles, %d packet(s), cells %02X/%02X %02X/%02X\n",
+                                                haveWorld ? wd.world : 0, owW, owN, e3[0], e7[0], e3[1], e7[1]);
+            } else {
+              if (getenv("CT_LOADCOST")) printf("loadwalk: world %d -- NOT WALKED: %s\n", haveWorld ? wd.world : 0, owWhy ? owWhy : "?");
+              lcCyc = ct_lz_world_cost(rimg, (size_t)rl, haveWorld ? wd.world : 0, &owN) + CT_OW_LOAD_REST;
+              loadHold = (int)((lcCyc + CT_LOAD_FRAME_CYCLES - 1) / CT_LOAD_FRAME_CYCLES);
+              // UNDER THE RULE (NMI-on work never costs frames, user decision 2026-09-30 -- CLAUDE.md; on with
+              // CT_ORACLE_NMION_HOLD=1 during the migration): the window's last frame was not the load's. C2's loader turns
+              // the NMI on at C2/23CC (`LDA #81 / STA $4200`) and waits (C2/23CF JSR C2/046E -> C2/0346); the first NMI's
+              // object pass then builds the screen's tilemap (C2/0A5A / C2/0A8D) -- NMI-on CPU work that runs past line 224
+              // by 1.28-1.66 frames on every world entry measured (the rule's oracle, CT_ORACLE_LOGICAL_TRACE: `held 458588
+              // .. 592276 cycles, released at C2:034B`, the attract's 1F5, 1F7, 1F2, 1F3 and 1F0), which the old valve ran
+              // as ONE real-time frame (`ROLLED BACK` at C2:0AAD / 0ADB / 0ABE / 0AA2 / 0AD4, then a held remainder under a
+              // frame) and the rule holds. CT_OW_LOAD_REST, the whole window less the decompression, was measured on the
+              // valve (the Truce market's exit: the world's first C2/23D2 at f86) and so carried that frame; the rule's
+              // first C2/23D2 is f85 (--hookpc C223D2 from saves/truce_market.state, btnscript 0:10,20:60,0:200; C2/23CC
+              // at f83 on both), and every world leg of the attract is one frame shorter on the rule's oracle.
+              if (fieldRuleNmiOnHold() && loadHold > 0) loadHold--;
+            }
           }
           // ...and the port loads one iteration AFTER the commit, with the full price. C0/0C9A commits and then `LDX #06FF /
           // TXS / BRL C0/0000`, so the cartridge's window starts in the commit's iteration; the port learns the destination
@@ -12586,6 +12648,8 @@ int main(int argc, char** argv) {
           // the world-0 REST was fitted on a positional exit (the Truce market's, "44 frames from the commit") and reads one
           // late there. Charging every load from its commit instead read ~40 attract checks one frame EARLY. Closing both =
           // pricing the object/script load exactly, then charging every load from its commit.
+          // ⭐ DONE for a load the walk covers (2026-10-21, `walked` above): its frames ARE counted from the commit, the
+          // ROM's way. This accounting stays for a load the walk refuses and for the world. field_load_cost.md section 9.
 
           owEnterCd = 20; pendKind = 0; loadFadeF0 = frameNo;
           { const uint8_t* lw = CtWramSys(fieldWram());   // 284B `BNE ->2866`, read once, here
@@ -12594,6 +12658,13 @@ int main(int argc, char** argv) {
           if (loadHold > 0) { fade = 3; fadeBri = 0; }
           else if (inWorld) { fade = 0; fadeBri = 15; }  // the world lights itself (its fade object), see above
           else { fade = 2; fadeBri = 0; loadFadeEntry = 1; loadRamp = 1; }
+          int opsN = 0;
+          if ((selftest || getenv("CT_LOADCOST")) && !inWorld)
+            printf("loadwalk: scene %d -- packets %ld anim %ld objects %ld party %ld pass %ld 9dc3 %ld vm %ld (ops %ld x%d)%s%s%s%s\n",
+                   scene, loadWalk.packets, loadWalk.anim, loadWalk.objects, loadWalk.party, loadWalk.pass, load9dc3, loadPostTotal,
+                   CtSceneLoadOpCycles(NULL), (CtSceneLoadOpCycles(&opsN), opsN),
+                   loadWalk.why ? " -- NOT WALKED: " : "", loadWalk.why ? loadWalk.why : "",
+                   CtSceneLoadCostWhy() ? " -- op: " : "", CtSceneLoadCostWhy() ? CtSceneLoadCostWhy() : "");
           if (selftest || getenv("CT_LOADCOST")) {
             if (lcWall) printf("loadcost: %s %d -- %ld cycles + %ld DMA + %ld on the loader clock = %d black frame(s) at f%d\n",
                                inWorld ? "world" : "scene", inWorld ? (haveWorld ? wd.world : -1) : scene,
@@ -12687,7 +12758,13 @@ int main(int argc, char** argv) {
         int sp = CtSceneLoadPostsFlush(f.vm, due);
         // The frames those JSLs crossed are the load's too (an init script's song upload): the black holds for them, as
         // it holds for C0/1B8B's above, and the SPC time they ran ahead is what those frames stand still for (audio.c).
-        if (sp >= 0 && fade == 3) loadHold += sp >> 10;
+        // A walked load's W takes their time whole -- the fraction too: the hold is ct_nmi_wait_frames of the new W.
+        if (sp >= 0 && fade == 3 && loadW > 0) {
+          loadW += (long)((double)loadSinkWall(sp) * (double)CT_LOAD_FRAME_CYCLES / 357368.0);
+          int h = ct_nmi_wait_frames(loadW) - 1;
+          loadHold += h - loadW0; loadW0 = h;
+        }
+        else if (sp >= 0 && fade == 3) loadHold += sp >> 10;
         if (getenv("CT_LOADCOST")) printf("loadpost: f%d %d JSL(s), %d frame(s) before the load's end, %d crossed\n", frameNo,
                                           due, fade == 3 ? loadHold : 0, sp >= 0 ? sp >> 10 : 0);
       }

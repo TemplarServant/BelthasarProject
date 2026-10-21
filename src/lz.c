@@ -396,7 +396,7 @@ long ct_map_build_cycles(const uint8_t* m, size_t len) {
 
 // C0/A33B WALKED -- everything the map load costs besides its decompression, cycle for cycle (the traces' costs,
 // tools/map_cost_proto.py is the twin; exact against the cartridge on loc $082 and $005). The model above stands in
-// for it only where the walk stops (a map whose header bytes 2-3 set up layer scrolls: C0/A463 / C0/A4B3, no trace).
+// for it only where the walk stops (a map the RLE plane runs past).
 //   the header parse C0/A33B-A508: map byte 1's bits 7-4 ($0BCA, $0BC9, $36, ..), $01BB (C0/0BE8 clears it on every
 //     location entry; C0/6DCF's FF arm -- record byte 2 = FF -- sets it), bytes 2 and 3 zero;
 //   C0/7399: each of the six plane dimensions -> a mask by a CMP #40 / #20 / #30 chain, then the record's bounds
@@ -420,11 +420,21 @@ long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc) {
   if (!m) return -1;
   size_t len = ct_lz_decompress_bounded(rom, romLen, m, 0x20000, src);
   long k = -1;
-  if (len < 8 || m[2] || m[3]) goto out;                  /* C0/A463 / C0/A4B3: not traced */
+  if (len < 8) goto out;
   {
     const int b1 = m[1], bb = RB(REC + 2) == 0xFF;
     k = 780 + ((b1 & 0x80) ? 68 : 44) + 32 + 56 + 32 + 50 + 32 + ((b1 & 0x10) ? 64 : 18) + 952   /* the header */
       + (bb ? 76 : 18) + 240 + (bb ? 76 : 18) + 334;
+    /* header bytes 2 and 3 (C0/A463 / C0/A4B3), the layers' scroll speeds: a non-zero byte costs 182; its low field (bits
+       0-2) a shift loop of 118 + 54 a step past the first, its sign (bit 3) 58; its high field (bits 4-6) 166 + 54 a
+       step, its sign (bit 7) 58 -- walked from the ROM on the traces' costs (tools/load_cost_consts.py) */
+    for (int i = 2; i < 4; i++) {
+      int b = m[i], lo = b & 7, hi = (b >> 4) & 7;
+      if (!b) continue;
+      k += 182;
+      if (lo) k += 118 + 54L * (lo - 1) + ((b & 0x08) ? 58 : 0);
+      if (hi) k += 166 + 54L * (hi - 1) + ((b & 0x80) ? 58 : 0);
+    }
     const int dims[6] = { ((m[0] & 3) + 1) << 4, ((m[0] & 0x0C) + 4) << 2, (m[0] & 0x30) + 0x10,
                           ((m[0] & 0xC0) >> 2) + 0x10, ((m[1] & 3) + 1) << 4, ((m[1] & 0x0C) + 4) << 2 };
     for (int i = 0; i < 6; i++)                            /* C0/7399 */
@@ -625,6 +635,73 @@ long ct_lz_world_cost(const uint8_t* rom, size_t romLen, int world, int* outPack
   for (int i = 0; i < n; i++)
     cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset(src[i]), dst[i] == 0x7F);
   if (outPackets) *outPackets = n;
+  return cyc;
+}
+
+// C2/09C5, the world's first screen (C2/2C81 and C2/2C88, one call per BG), less its fixed part: what the camera's cells
+// decide. `LDA $E3,X / LSR / BCS / DEC / BPL / LDA #005F` picks the start column $08 (odd: 18; even: 42; even and zero:
+// 54) and `LDA $20,X / BIT #0008 / BEQ` its pixel offset (odd: 60, even: 48) -- the same on $E7 / $26 for the row $0A.
+// The 18 columns (C2/0A46 .. 0A64) each build 16 rows: the row offset `$0A * 0x60` wraps at 0x1800 (C2/0A99 BCC not
+// taken + TDC: +6) in every column when $0A >= 48, the column at 0x60 (C2/0A52: +6, once) when $08 >= 78, and C2/0ADC's
+// VRAM column `$0C >> 3` takes the second screen (C2/0AE4 not taken, CLC / ADC #03E0: +24) for every column at 32 or
+// past. The rest of the routine (its 36 DMAs of 64 bytes) is fixed, up to their 8-cycle alignment (a timing artefact,
+// within 30 cycles a call on the traces).
+static long owFirstScreenVar(unsigned e3, unsigned e7) {
+  long c = 0;
+  unsigned h = e3 >> 1, v = e7 >> 1, col, row;
+  if (e3 & 1) { c += 18 + 60; col = h; } else { c += (h ? 42 : 54) + 48; col = h ? h - 1 : 0x5F; }
+  if (e7 & 1) { c += 18 + 60; row = v; } else { c += (v ? 42 : 54) + 48; row = v ? v - 1 : 0x3F; }
+  if (row >= 48) c += 18 * 6;
+  if (col >= 78) c += 6;
+  unsigned px = ((e3 << 3) - ((e3 & 1) ? 8 : 16)) & 0x1FF;
+  for (int k = 0; k < 18; k++, px = (px + 0x10) & 0x1FF)
+    if ((px >> 3) >= 32) c += 24;
+  return c;
+}
+
+// THE WORLD LOAD, C0/0B5A (the NMI's off) -> C2/23CC (`LDA #81 / STA $4200`, the NMI back on), walked. Five traces of the
+// attract's world loads (worlds 5, 7, 2, 3, 0 under the rule, CPUTRACE_BEAM from C0/0C9A or the reboot's C0/0000) split it
+// into what the data decides and what it does not:
+//   - every packet: C3/0557's decompression (ct_lz_rom_cycles, exact) + the vector's JMP (18) + its site's C2 path
+//     (C2/278C-27A2 and its copies: 282, against the skip's taken BMI: 276). Only C2/2CC1's sites 27A2 / 280C / 284F ever
+//     skip (bit 7 of the world header's byte, worlds 2, 3, 5, 7); the others always run.
+//   - C2/2A44 after its packet (site 2A6D, $C6:FFC0, to $7F:0400): four counted lists copied through $2180 -- entries
+//     of 7, 3, 3 and 2 bytes, 506 / 234 / 234 / 166 cycles each (C2/2A8E, 2AE4, 2B1A, 2B4D).
+//   - C2/09C5 twice (owFirstScreenVar over each BG's cells $E3/$E7).
+//   - THE REST, fixed: C0's reset path, C2/0031-003D, C2/23A8's VRAM clear (one DMA past a frame long), C2/0BF6, the
+//     non-skippable sites' own code ... = WORLD_LOAD_FIXED, the world-5 trace less the above (2041796), which then
+//     predicts worlds 7, 2, 3 and 0 to -22, -36, -6 and +60 cycles.
+// -1 (and *why) when a list count is 0 (a 65536-pass loop no trace ran) or the packet does not decompress.
+#define WORLD_LOAD_FIXED 2041796L
+long ct_lz_world_load_cycles(const uint8_t* rom, size_t romLen, int world, const uint16_t e3[2], const uint16_t e7[2],
+                             int* outPackets, const char** why) {
+  uint32_t src[32]; uint8_t dst[32];
+  int n = ct_lz_world_packets(rom, romLen, world, src, dst, 32);
+  if (outPackets) *outPackets = n;
+  if (n <= 0) { if (why) *why = "no packets"; return -1; }
+  long cyc = WORLD_LOAD_FIXED;
+  for (int i = 0; i < n; i++)
+    cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset(src[i]), dst[i] == 0x7F) + 18 + 276;
+  // C2/2A44's lists: the packet the 2A6D site decompressed (header byte $15 into $C6:FFC0)
+  size_t hp = ct_lz_hirom_offset(0xC6FD00) + (size_t)world * 2;
+  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)RB(hp) | ((unsigned)RB(hp + 1) << 8)));
+  unsigned idx = RB(hdr + 0x15);
+  if (idx & 0x80) { if (why) *why = "C2/2A44: no packet (the lists read $7F:0400 as it stands)"; return -1; }
+  size_t e = ct_lz_hirom_offset(0xC6FFC0) + (size_t)idx * 3;
+  uint8_t* img = (uint8_t*)malloc(0x10000);
+  if (!img) return -1;
+  size_t len = ct_lz_decompress_bounded(rom, romLen, img, 0x10000,
+                   ct_lz_hirom_offset((unsigned)RB(e) | ((unsigned)RB(e + 1) << 8) | ((unsigned)RB(e + 2) << 16)));
+  static const int kSize[4] = { 7, 3, 3, 2 }, kCyc[4] = { 506, 234, 234, 166 };
+  size_t p = 0;
+  for (int l = 0; l < 4; l++) {
+    unsigned cnt = p < len ? img[p] : 0;
+    if (!cnt) { free(img); if (why) *why = "C2/2A44: a list count of 0"; return -1; }
+    cyc += (long)cnt * kCyc[l];
+    p += 1 + (size_t)cnt * kSize[l];
+  }
+  free(img);
+  for (int b = 0; b < 2; b++) cyc += owFirstScreenVar(e3[b], e7[b]);
   return cyc;
 }
 

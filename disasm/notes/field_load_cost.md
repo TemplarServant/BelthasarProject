@@ -455,3 +455,142 @@ WHERE THE FRAMES ARE (`--cputrace` CPUTRACE_BEAM=1 of the 1B7 load from C0/56D4,
 C0/58Fx-591x the init runner 36k; the loaders C0/45xx-46xx, 4Bxx ~70k; C0/57xx, B2xx ...), FD 52,260 (FD/DF7x-DFBx), C2 and
 FF 13k. That 400k is 1.15 load frames -- what the port is short here. Pricing it means walking those routines per object
 the way lz.c walks the decompressor; until then the playthrough's legs with several big loads drift on the play clock.
+
+## 9. The whole load, walked (2026-10-21)
+
+The open item above is closed: every leg of the load from the NMI-off write to C0/2848's first vblank wait is walked from
+the ROM, its branches decided on the WRAM they read, each instruction LakeSnes's cost off the cartridge's beam traces
+(src/field_cost.c `ct_field_load_cycles` + `ct_vm_op_cycles`; the constants re-derived by tools/load_cost_consts.py; graded by
+tools/load_cost_cmp.py). Per leg, against the cartridge's traces of the route's loads:
+
+| leg | what decides it | grade |
+|---|---|---|
+| C0/0B5D -> 0B86, 0B86's variables, C0/00F4's and C0/56A6's own instructions, 092B, 7084, 7F7E, 6F79, 7155, E935, 5929, C2/8004's JSL, 595C's head (206), 28AA, the JSRs | nothing: LOAD_FIXED 9,070 (+18 on a location >= $100: C0/092F) | the remainder, 9,057 / 9,093 on 1B7 / 005 (the DMAs' sync) |
+| C0/1B53 | `$7F01ED` set: 252; the record's song FF: 372; else 516 | exact |
+| C0/0960 -> C0/56D4 (the packets) | loadPackets, shared with the menu reload: lz.c's decompressions, the map build, the uploads | exact to the DMA sync (+-10) on every load |
+| the map's header bytes 2-3 (C0/A463 / C0/A4B3) | 182 a non-zero byte; its low field 118 + 54 a step (+58 bit 3), its high field 166 + 54 a step (+58 bit 7) | loc 008: exact |
+| FD:DE98 (FD:FFFA) | the record's byte 1 & 3F -> 12 entries at FD:F310: 4194 + 3258 a kind 2, 5096 a kind 4, 3812 any other | exact on every load (8 configurations) |
+| FD:E292 (FD:FFF4) | the record's byte 3 -> 6 entries at FD:FA77: 2202 + 632 a 10, 1020 an 80, 370 any other | exact (5 configurations) |
+| C0/B192, B204, A7E9 | 578 + 80 N, 11966 + 78 N, 326 + 66 N (N = $7F:2000) | exact |
+| C0/5709's fills | 8190 + 1124 N + its three DMAs 50,886 | exact |
+| the init runner C0/58ED-5924 | 460 N + 12 (an object whose $1100/$1101 word is negative: 214) | exact |
+| each op it dispatches | CT_VM_DISPATCH 152 + the handler's arm (below) | exact on every op of the traced loads |
+| C0/9DC3 (5926's BRL) | the arrival tile's shape (C0/9AD3 with $66 = 80 / $68 = FF) and $6A: a 64-entry table | exact |
+| obj0's slot 1 (C0/595C) | 206 + 152 an op + the handler | exact |
+| C2/8004 (A = 0B) | the party: each slot 98 / 1174, the double techs (FF:F958: 5 pairs over the learned bits $2837), C2/82E1's seven weapons | exact |
+| C0/2848 -> C0/0B38 (the pass) | pass286C, now with class 1 (below) | exact to the DMA sync on the traced loads |
+
+The ops. A handler with no branch is its straight path (VM_OP_STRAIGHT, 107 of them). The branchy ones walked: 82 (C0/5C90's
+scans, 92 a slot: a hit at k 3064 + 92 k, a miss at the free slot j 5166 + 92 j incl. the decompressor vector's JMP; $73's
+three stores -6 / +6), 83 (3778 + 92 k / 5916 + 92 j / 3812 from the table; +58 for the 06 arm), the placements 8B 8C 8D
+($0F80 bit 7) and 8E (the operand's), the PC loaders 57 5C 62 6A 68 6C 6D 80 (the entry; the party slot -- lead 3470, slot
+1 3662, slot 2 3712, none 370 -- the arrival's bits 2-3, a follower copying the lead +102, $78 +58), the comparisons 12-16
+(the op's own cycles + the $6467 comparator's arm), 18, 0B, 1A, AC, F0, 6F (64 a shift), 4E (46 a byte), 33, E4 (C0/AF4E:
+per layer 778 + 46 dx (dy + 1) + 440 dy, per property bit 822 + 266 dx (dy + 1) + 558 dy) and D2 (C2/8004 with leaf 0: the
+epilogue's cost + 522 / 630 / 738 / 960 by the slot found), and 83's size-3 arm (C0/47E9 JSR C0/E12A: +74, then 6690 +
+the $0C00-byte DMA at 8 a byte + frame 0's 96 tiles through the pieces' model + 48 template reads, 12 more a negative row). Any other branchy op is charged its fall-through path and named
+(`loadwalk: ... -- op: op XX`).
+
+The pass's sprites. C0/B0E6 loops `JSR C0/CAD9` while it returns carry set (C0/B10C), so a class-1 object (16x32) runs
+BOTH halves inside the pass: C0/D28A (the frame, C0/E97A's two arena slots, the first 16 tiles) and C0/D30D (the other 16,
+the queue's entry -- two $200-byte rows, 4096 cycles more in C0/B1B2 than class 0's two $100-byte ones -- and the template's
+8 rows, 12 more each negative one). C0/B701 then draws it through C0/BCDC (class 1's B8CA: 8 rows, three arms by the screen
+Y) and C0/B3DF's eight OAM entries; C0/E9FF finds nothing (C0/EA42 has released the pair). The arena grants are general
+(C0/E952: 340 + 86 a taken slot; C0/E97A: 410 + 86 / 124 a position passed), and C0/EA42's release too. Canyon 070 (a class-1
+object): the pass 1,317,307 against the cartridge's 1,317,306.
+
+THE PORT'S WRAM. The walk reads the port's image once the location is loaded (field.c, after the map header's layer bytes
+are in -- $0BCA decides C0/286C's BG3 builder, 315,802 cycles on loc 002 -- and before the host's halves of the pass write
+the doors, the chests and the tilemap). Two port divergences it found, both fixed to the ROM's stores: C0/4557 (ops 82 and
+83) `STA $1101,X` = the operand and `LDA #7F / STA $1200,X`, and C0/4476 (op 81) `STA $1101,X` -- the NPC mirror made none,
+so a location's objects kept a previous location's $1200 (1B7's objects 29-31: 00 / E6 / 07 against 7F; C0/E687 reads it).
+$0173 is kept as the ROM keeps it (C0/58DC STZ, op 82's INC).
+
+THE FRAMES. The stretch starts at phase 0 (CLAUDE.md), so its CPU work W crosses floor(W / F) boundaries before C0/0B38's
+RDNMI read, which falls through inside the vblank's first 37 lines; C0/0B3F's NMI, then C0/EC60: the first ramp INC is
+`ct_nmi_wait_frames(W) + 1` frames after the commit (field_cost.h). The port loads one iteration after its commit and ramps
+the frame after its last black one: loadHold = ct_nmi_wait_frames(W) - 1. W adds the sound driver's time on the loader
+clock (the song posts, now both: C0/1B73's $81 was posted and its price dropped), and the init scripts' and slot 1's
+queued posts when they are flushed in the load's last frames: their SPC time joins W whole and the hold is recomputed
+(it used to add their whole frames only -- Yakra's 0C6, a 12.68M-cycle song upload in its init, read a frame long).
+
+WHAT IS LEFT. On the route's loads the CPU work agrees with the cartridge's to tens of cycles (the DMA sync); the frames
+that still differ are the SOUND DRIVER's: C0/1B8B's $10 on the cartridge waits in C7/0A8B (`CMP $2140 / BEQ`) until the
+SPC echoes -- 60 lines on the forest's 074 from the world map (79,352 cycles), 10 on others -- where the port's SPC answers in
+2-4 whatever line it is posted on: the two SPCs are not in the same state at the load. And a song upload (loc 001's,
+3.07M cycles) prices 2% long on the port's SPC (+63k). Those decide d on 074, 075, 081, 070 and 001. The pass's arms still
+refused (charged ct_lz_load_cost instead): $1D35 bit 2 (C0/7CB5's wide BG3 build, C0/7F77, C0/87F1's arms: loc 008),
+class 2 (C0/D4F7), class 1 with $1780 = 3 (C0/CF21), a drawn object with $1B00 bit 7.
+
+## 10. The world load, walked (2026-10-21)
+
+C2's loader, C0/0B5A (the NMI off, on the commit's frame or the reboot's C0/0000) -> C2/23CC (`LDA #81 / STA $4200`),
+beam-traced on the attract's five world loads under the rule (`--peek boot --frames <commit-10>` with PEEK_SAVE, then
+`--cputrace` CPUTRACE_BEAM=1, 60 frames): worlds 5, 7, 2, 3, 0 at c2225, c5021, c7846, c9984, c10587 (`--monitor 7E0100:2
+--from boot --settle 0`). W = 12,182,050 / 12,557,060 / 11,161,000 / 12,402,158 / 14,266,940 non-refresh cycles, of which
+C3 (the decompressions) 10,125,456 / 10,506,734 / 9,101,598 / 10,339,704 / 12,176,280 -- ct_lz_world_cost + 18 a packet
+(the vector's JMP), exact -- and the rest C2's own code and DMA, 2.05-2.09M. The old price charged the decompressions plus
+CT_OW_LOAD_REST = 3,087,224 (the window's remainder measured on world 0 under the valve, which carried a frame): every world
+1.0M (3 frames) long, and the black ceil(C / F) - 1, 3-4 frames longer than the cartridge's on all five.
+
+WHAT VARIES (per-PC counts and costs across the five traces): only
+- the packets: a site's C2 path is 282 cycles (C2/278C-27A2 and its copies), its skip 6 more than the BMI's not-taken arm, so
+  a packet costs 276 over a skip. Only C2/2CC1's sites 27A2 / 280C / 284F ever skip (bit 7 of the world header's byte, read
+  off the ROM for all eight worlds: 2 skips three, 3 / 5 / 7 one, 0 / 1 / 4 / 6 none);
+- C2/2A44's lists after its packet (site 2A6D: header byte $15 into $C6:FFC0, to $7F:0400): four counted lists copied through
+  $2180, entries of 7, 3, 3 and 2 bytes at 506 / 234 / 234 / 166 cycles (C2/2A8E, 2AE4, 2B1A, 2B4D) -- counts 14/1/20/25/80
+  in the first list, 2 in world 0's last;
+- C2/09C5's two first-screen builds (C2/2C81 / 2C88, one a BG) over the camera's cells $E3/$E7: the start column's and row's
+  odd/even arms, the row wrap at $0A >= 48 (6 in each of the 18 columns), the column wrap at $08 >= 78, and C2/0ADC's second
+  screen (24 a column at VRAM column 32 or past) -- 366 on world 5's cells B9/7B, 510 on B0/72;
+- the DMAs' 8-cycle alignment: up to ~30 cycles a call (a timing artefact).
+The rest is fixed: WORLD_LOAD_FIXED = 2,041,796, world 5's trace less the above. It then predicts worlds 7, 2, 3, 0 to -22,
+-36, -6, +60 cycles (src/lz.c ct_lz_world_load_cycles).
+
+THE FRAMES. The stretch starts at phase 0; C2/23CC turns the NMI on, and inside the vblank's first 37 lines RDNMI is still up
+and the NMI is taken at once (world 5: C2/23CC on line 255, the play clock ticks that frame), past them at the next vblank --
+the field's C0/0B38 edge, so the first world NMI is ct_nmi_wait_frames(W) frames after the commit: 35 / 37 / 33 / 36 / 41,
+the cartridge's play clock ($0400) to the frame, and the port's black is one less (field.c). The port's five world legs now
+match the cartridge's stall and visible span exactly (the attract under the rule, `--monitor 7E0100:2,7E0400:1`).
+
+A TRACE ARTEFACT on the way: C2/23A8's VRAM clear is ONE DMA of 540,076 cycles, past a frame, inside one traced instruction,
+so tools/ctlib/beam.py's unwrap (v going down = one frame) lost a frame there and its refresh count read 264 lines short --
+10,560 cycles too many, ~8 lines, on every world. beam.load now also counts the frames the step's cycle stamp says it
+crossed. (No field load has such a DMA; its traces read the same.)
+
+Still measured: CT_OW_RETURN_REST (C2/2C93's rebuild after the X menu, field.c) and the loader's song (above).
+
+### The pass's wide layers and three more arms (2026-10-21)
+
+Traced on the attract under the rule (`--peek boot` states, CPUTRACE_FROM=C00B86): 16E (c2492, $1D35 bits 1 and 2, BG3 on),
+087 (c9115, bit 2, no BG3), 01C (c2880 + its load, a class-3 object).
+- $1D35 bit 1 (BG2 wide): besides C0/794E's build (b78EC), C0/0AB4 uploads through C0/7F77 -- `LDX #1000 / STX $4E / BRA
+  7F67`, C0/7F62's 0x800 bytes doubled, +16384 + 18 -- with the BEQ not taken and the BRA (+12), and C0/87F1 skips its BG2
+  row C0/8365 (-9936: 087 against 16E). Unpriced before (16E, 0AD).
+- $1D35 bit 2 (BG3 wide): C0/7CB5 -> C0/7CE7, 32 rows of C0/7D66 at column 0 then, by $0BD3 / $0BD5, 7D0D (both $10: the
+  same 32), 7D28 (32 at column $20) or 7D45 (rows 32-63, `$1D86 := 2`). Rows start on even columns: 9114 even, 9132 odd,
+  583,872 for the 64; the loops 11,576 (7D0D, 16E's trace to the cycle), 11,916 (7D28) and 11,998 (7D45) from the same
+  instructions. C0/0AE1's upload is C0/7F77 (+16402, the BRA -6), and C0/87F1 skips its BG3 row C0/83A5 (-8996: the
+  standard against 087). 16E's whole load: the port 6,034,257 cycles, the cartridge 6,034,256; its d 19 on both.
+- $0BC9 bit 7 with bit 1 clear: C0/87F1 runs C0/8385 (C0/8365 on the half camera $1D14 / $1D16): +12 when its C0/7BA9 row
+  ($1D16 - 1) is odd like the standard's; an even row is refused (C0/7BA9's even arm, no trace).
+- C0/72B4 (palette classes 5 / 6) is C0/721C instruction for instruction with other bounds: its share scan costs C0/721C's
+  (087's pass: the port 1,585,059, the cartridge 1,585,082).
+- C0/E687's default arm (a graphics bank but 7F / D2-D4): C0/E6B6, the D4 arm's body reading $D5, 18 less (a taken BNE
+  for the not-taken BNE + BRL).
+- C0/CAD9 class 3: `CMP #02 / BEQ` not taken, `CLC / RTS`, 308 cycles, nothing drawn (01C's object $1A).
+STILL REFUSED: class 2 (C0/D4F7), class 3's draw C0/B701 -> C0/C73A (01C: the pass reaches it), the VRAM slot arm C0/7008
+(1B0), C0/7283 (a full share scan without a match), $0126 / $1DF9 / $1DFD / $0153 bit 7 / $0BE9 / $0351 bit 0.
+
+### The attract against the cartridge, after sections 9-10 (2026-10-21)
+
+tools/attract_divergence.py with the cartridge from power-on (ATTRACT_DIV_STATE=boot ATTRACT_DIV_CART_FRAMES=11500): every
+visit's length is now the cartridge's to a frame (1F5 267/267, 16E 275/275, 01C 487/487, 0AD 858/858, 1F7 389/389, 07D
+975/975, 1F2 322/322, 1B1 602/603, 087 831/832, 1F3 268/268, 1F0 266/266); HEAD had 1F5 267/271, 1F7 389/392, 1B1 602/609,
+1F2 322/325, 1F3 268/271, 1F0 266/269. The same 25 picture events on both builds. Commit -> first ramp INC per field load
+(the cartridge's `--monitor 7E0100:2,7E0119:1 --from boot --settle 0` against the port's CT_FIELD_MEMMON): equal on all but
+four -- 112 +1, the 0A5 leg +1, one 1B1 reload -1, 087 +1 -- so the port runs 91 -> 87 frames ahead of the cartridge
+across the demo (HEAD: 86 -> 61). The route (tools/playthrough.py cmp): 28/32 legs SAME (25 before); every world entry on it
+equals the cartridge's stall (001 -> 1F0 41, 070 -> 1F1 40, 078 -> 1F1 40 twice).
+LEFT: those four +-1s; class 3's draw C0/C73A (01C) and the VRAM slot arm C0/7008 (1B0), still on the old price; the
+cold reset's load (`fromReset`) not graded against a cartridge reset here (its fixture state is not in this checkout).
