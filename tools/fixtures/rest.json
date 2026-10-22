@@ -408,6 +408,13 @@
       "recipe": "fxr_porre_pay_prompt",
       "kind": "state",
       "doc": "the Porre pay prompt waiting"
+    },
+    {
+      "path": "saves/battle_re/hetake_dissolve_anim_ppu.state",
+      "recipe": "fx_forest_bat3",
+      "pad": "0:250",
+      "kind": "state",
+      "doc": "the three Hetakes' fight 250 frames on with no command: the three in the idle poses 00 / 01 / 07 (f239-f288)"
     }
   ]
 }

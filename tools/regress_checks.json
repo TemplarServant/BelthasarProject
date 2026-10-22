@@ -42915,21 +42915,22 @@
         "saves/battle_re/hetake_dissolve_anim_ppu.state"
       ],
       "expect": [
-        "enemy-cells-cmp: slot0 id=5E type=0 pose=00 cells=4 on-screen=4 px 1006/1008 identical",
-        "enemy-cells-cmp: slot1 id=5E type=0 pose=07 cells=4 on-screen=4 px 869/928 identical",
-        "enemy-cells-cmp: slot2 id=5E type=0 pose=01 cells=4 on-screen=4 px 1024/1024 identical",
-        "enemy-cells-cmp: f12 total 2899/2960 identical"
+        "enemy-cells-cmp: slot0 id=5E type=0 pose=00 cells=4 on-screen=4 px 1008/1008 identical",
+        "enemy-cells-cmp: slot1 id=5E type=0 pose=01 cells=4 on-screen=4 px 1024/1024 identical",
+        "enemy-cells-cmp: slot2 id=5E type=0 pose=07 cells=4 on-screen=4 px 928/928 identical",
+        "enemy-cells-cmp: f12 total 2960/2960 identical",
+        "enemy-cells-cmp: bracket seat0 A4EF=05 cells=4 px 768/768 identical"
       ],
       "pin": [
         "^enemy-cells-cmp: "
       ],
       "timeout_s": 300,
       "note_pass": "the three Hetakes of the user's cartridge save in their own idle poses (00 / 07 / 01): the cartridge's cells",
-      "notes": "The user, 2026-10-07: 'check the hetake, whether at the moment of the deadly attack it is at a position different from the dissolve's default position' and the cartridge save hetake_dissolve_anim.state (saves/battle_re/hetake_dissolve_anim.s9x.state): Crono's blow under way on the middle Hetake, the three on $9907 = 00 / 07 / 01 -- the Hetake's idle walk publishes poses like every enemy's (C1:1C69; on the cartridge from this save: 00 -> 01 -> 02 -> 01 ..., and pose 07, the squat, on the struck one). field.c's dedicated battleHetakeRender drew one baked pose for every idle frame and the corpse from it; the Hetake is now drawn by the generic renderer (the published pose, the ROM chain E4:F600 -> E3 -> the LZ sheet, the live foot + $A4A4/$A4AF). This check: the cartridge's isolated OBJ layer at frame 12 against the port's render of the same WRAM. Before: 1487/2960 px (the baked pose on all three). Now slot 2 (alone) 1024/1024; slots 0 and 1 carry Crono's pixels on the cartridge, over them, that the static WRAM render does not draw. THE FIXTURE: tools/s9x_to_lake.py <the s9x save> saves/battle_re/forest_battle_3hetake.state <out> --ppu -- WRAM, CPU, SRAM AND the VRAM / OAM / CGRAM (without --ppu the state keeps the base's tiles: the Hetakes' cells showed another fight's, 825/2960).",
+      "notes": "The user, 2026-10-07: 'check the hetake, whether at the moment of the deadly attack it is at a position different from the dissolve's default position' and the cartridge save hetake_dissolve_anim.state (saves/battle_re/hetake_dissolve_anim.s9x.state): Crono's blow under way on the middle Hetake, the three on $9907 = 00 / 07 / 01 -- the Hetake's idle walk publishes poses like every enemy's (C1:1C69; on the cartridge from this save: 00 -> 01 -> 02 -> 01 ..., and pose 07, the squat, on the struck one). field.c's dedicated battleHetakeRender drew one baked pose for every idle frame and the corpse from it; the Hetake is now drawn by the generic renderer (the published pose, the ROM chain E4:F600 -> E3 -> the LZ sheet, the live foot + $A4A4/$A4AF). This check: the cartridge's isolated OBJ layer at frame 12 against the port's render of the same WRAM. Before: 1487/2960 px (the baked pose on all three). Now slot 2 (alone) 1024/1024; slots 0 and 1 carry Crono's pixels on the cartridge, over them, that the static WRAM render does not draw. THE FIXTURE: tools/s9x_to_lake.py <the s9x save> saves/battle_re/forest_battle_3hetake.state <out> --ppu -- WRAM, CPU, SRAM AND the VRAM / OAM / CGRAM (without --ppu the state keeps the base's tiles: the Hetakes' cells showed another fight's, 825/2960). || MOVED 2026-10-22 TO THE RECIPE TWIN (saves/battle_re/hetake_dissolve_anim_ppu.state = tools/recipes/fx_forest_bat3.json + 250 frames with no command: the three Hetakes' fight on the rule's cartridge from the recipe chain, with its own VRAM / OAM / CGRAM; the owner's s9x splice is retired). At f12 of the tool the three stand in the idle poses 00 / 01 / 07 -- the capture's set (its 00 / 07 / 01 by slot), published by the idle walk at f239-f288 -- and no PC is over them (the capture's Crono was mid-blow over slots 0 and 1): every cell of the three and the seat's bracket is the cartridge's, 2960/2960 and 768/768. The mutation (one idle pose for all) had gone STALE (field.c's line now also keeps a type-3 combatant's pose); re-derived on the current line, it is KILLED on the twin (regress.py --mutate, 2026-10-22).",
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "    int rest = h->mvInited ? h->idlePub[slot] : mem[0x9907 + 3 + slot];",
+          "find": "    int rest = etype == 3 ? pub : h->mvInited ? BT_IDLEPUB(h, slot) : pub;",
           "replace": "    int rest = 0x01;   // MUT: one pose for every idle frame (the retired baked Hetake)",
           "why": "every enemy drawn in one fixed idle pose: the Hetakes in 00 and 07 come out as 01"
         }
