@@ -15,8 +15,9 @@ static const uint8_t* g_set[256];
 
 static uint32_t rd32(const uint8_t* p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 
-// ct_wide.dat (LE): "CTWD", u32 version 2, u32 locations, u32 sets; per set u8 set + 128*64 pixels; per location u16
-// location, u8 w, u8 h, 4*w*h u16, u8 slot set[6], u16 metatiles, per metatile u16 id + 4 x (u16 chip, u8 pal, u8 flags).
+// ct_wide.dat (LE): "CTWD", u32 version 3, u32 locations, u32 sets; per set u8 set + 128*64 pixels; per location u16
+// location, u8 w, u8 h, 4*w*h u16, u8 slot set[6], u16 metatiles, per metatile u16 id + 4 x (u16 chip, u8 pal, u8 flags),
+// u8 has palette (+ 128 u16 BGR555).
 static void widextLoad(void) {
   g_loaded = 1;
   const char* path = getenv("CT_WIDE_DAT");
@@ -24,7 +25,7 @@ static void widextLoad(void) {
   if (!f) return;
   fseek(f, 0, SEEK_END); long len = ftell(f); fseek(f, 0, SEEK_SET);
   uint8_t* d = len > 16 ? (uint8_t*)malloc((size_t)len) : NULL;
-  if (!d || fread(d, 1, (size_t)len, f) != (size_t)len || memcmp(d, "CTWD", 4) || rd32(d + 4) != 2) {
+  if (!d || fread(d, 1, (size_t)len, f) != (size_t)len || memcmp(d, "CTWD", 4) || rd32(d + 4) != 3) {
     free(d); fclose(f); return;
   }
   fclose(f);
@@ -51,6 +52,8 @@ static void widextLoad(void) {
     if (!ids || !corners) { free(p); free(ids); free(corners); break; }
     for (int m = 0; m < e.nMeta; m++) { ids[m] = (uint16_t)(d[o] | d[o + 1] << 8); memcpy(corners + m * 16, d + o + 2, 16); o += 18; }
     e.metaIds = ids; e.metaCorners = corners;
+    if (o + 1 > len) { free(p); free(ids); free(corners); break; }
+    if (d[o++]) { if (o + 256 > len) { free(p); free(ids); free(corners); break; } e.pal555 = d + o; o += 256; }
     if (loc < WIDEXT_LOCATIONS && !g_ext[loc].planes) g_ext[loc] = e;
     else { free(p); free(ids); free(corners); }
   }
