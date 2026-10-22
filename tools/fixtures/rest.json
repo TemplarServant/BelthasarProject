@@ -292,6 +292,26 @@
       "scene": 198,
       "frames": 1,
       "doc": "the port's own CtScene state one frame after seeding loc 0C6 from the recipe's WRAM: the Chancellor's scene just begun"
+    },
+    {
+      "path": "saves/crononame.state",
+      "recipe": "name_crono",
+      "kind": "state",
+      "doc": "the new game's Crono naming screen, nothing typed (the recipe that already stood in for it in the generators)"
+    },
+    {
+      "path": "saves/battle_re/hud_close_s13.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "(100:2,0:10)*170,100:2,0:9",
+      "kind": "wram",
+      "doc": "its own provenance: GATO's fight from the recipe twin of gato_t0 won by mashing A, the victory tail's band close armed by CD/03D6 ($CA1E = 80) with $CA1F down to 13 = 0D (f2051)"
+    },
+    {
+      "path": "saves/battle_re/atb_partial.raw.wram",
+      "recipe": "gato_inbattle",
+      "pad": "0:10,100:2,0:10,100:2,0:443",
+      "kind": "wram",
+      "doc": "GATO's fight: Crono attacks (A, A), Marle's turn comes up with the target picker's flag ($960A = 1, $95D5 = 01, $A6D9 = FF 01 FF) while Crono's gauge refills -- f467, $99DD = 32 against $9F22 = 48: the ATB bar's partial path (one full cell + a partial), the capture's own values; the cartridge's picture of this frame shows the same bar (its HUD rebuild caught up, f466-f470)"
     }
   ]
 }
