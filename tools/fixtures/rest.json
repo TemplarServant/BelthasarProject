@@ -228,6 +228,38 @@
       "pad": "0:2624",
       "kind": "wram",
       "doc": "f2624 of forest_wait_ambush_active: slot 5 in class-5 mode 0F eleven frames before its orbit FLIPS ($A5F4 1 -> 0 at f2635), slot 2 a Beetle in mode 01 starting a segment (the capture's f4620 / f4631, hence the name)"
+    },
+    {
+      "path": "saves/battle_re/bat4.raw.wram",
+      "recipe": "fxr_pt_12_after_her",
+      "pad": "0:200,20:10,40:160,0:437",
+      "kind": "wram",
+      "doc": "600 A.D., the Gate's clearing (loc 071): the playthrough's leg 13 walk into the three Blue Imps with no A -- the fight's command lull with the capture's own poses ($9907 = 37 FF FF 00 00 0A), queue ($A6D9 = 00 FF FF), RNG cursor ($26 = 2C) and strip-top battle byte ($2989 = 88)"
+    },
+    {
+      "path": "saves/battle_re/loc070_imps_roly_pre_lake.state",
+      "recipe": "fxr_loc070_imps_roly",
+      "kind": "state",
+      "doc": "loc 070, Crono walking down onto the respawned Blue Imps and Roly, Cyclone learned"
+    },
+    {
+      "path": "saves/battle_re/loc070_imps_roly_pre.lakewram",
+      "recipe": "fxr_loc070_imps_roly",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/battle_re/roly_rider_s119.lakewram",
+      "recipe": "fxr_roly_s119",
+      "kind": "lakewram",
+      "doc": "loc 077 above the Roly Riders' trigger, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/battle_re/roly_rider_battle.state",
+      "recipe": "fxr_roly_s119",
+      "pad": "20:40,0:200",
+      "kind": "state",
+      "doc": "its own provenance: Down 40 into the ambush, 240 frames on (the fight under way)"
     }
   ]
 }
