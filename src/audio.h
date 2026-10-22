@@ -167,7 +167,9 @@ void      CtAudioSetInstant(CtAudio* a, int on);
 // `ct.exe --sndtiming <out>`: the sound machine's cost table (CT_ASSET_SND_TIMING) from the ROM; returns its bytes, 0 = failed.
 int       CtAudioTimingExport(const uint8_t* rom, long romLen, const char* path);
 int       CtAudioRunCycles(CtAudio* a, int cycles);
-void CtAudioAdvance(CtAudio* a, long master);   // run the SPC for CPU work before a post, owed by the frame's slice
+void CtAudioAdvance(CtAudio* a, long master);
+void CtAudioFrameOrigin(CtAudio* a, long master);   // the frame grid begins `master` cycles earlier (no SPC is run)
+CtAudio* CtAudioInitPowerOn(const uint8_t* rom, long romLen, const CtAssets* snd);   // the SPC at power-on: no upload yet   // run the SPC for CPU work before a post, owed by the frame's slice
 uint32_t  CtAudioApuCycles(const CtAudio* a);               // the SPC's own cycle count (a stage's share of a frame)
 void      CtAudioStageExitFrame(CtAudio* a, uint32_t ran);  // a translated stage left mid-frame: the frame's remaining SPC
 // The reset's `JSL $C7:0000` (C0/0053) on the RUNNING driver: F0 hands the SPC to its IPL and the driver is uploaded

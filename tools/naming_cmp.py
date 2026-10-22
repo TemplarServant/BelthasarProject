@@ -14,7 +14,7 @@ press a frame after the pad latch).
 
 `boot*` / `loadlist` -- from a cartridge's power-on (`ct.exe --fb` to f120 with CT_ORACLE_SRAM = a zeroed battery, or
 the drive's battery; Start at +13 and +115 -- the title takes the second) against the port's `--boot` (a fresh battery or
-a copy of the drive's; Start at 133). The two are aligned on the park of an op: `C8 C0` (the naming; boot, bootfast) or
+a copy of the drive's; Start at 198, the power-on's title: boot_loader.md sec. 10). The two are aligned on the park of an op: `C8 C0` (the naming; boot, bootfast) or
 `C8 41` (the load shell; bootldr, loadlist) -- the cartridge's from `--monitor` ($0125 / $0117), the port's from
 CT_NAMETRACE -- with D = cartridge park - port park (until 2026-10-19 `- (port park + 1)`: the port started the C8 fade
 one frame after its park, a frame later than C0/0CCE does, and the extra frame hid that these drives press the port's
@@ -205,7 +205,7 @@ def run_boot(name, peeks):
     else:
         penv['CT_SRAM_FRESH'] = '1'
     base = [M.FIELD, '--assets', 'ct_assets.dat', '--boot', '--selftest', os.path.join(out, '_p_end.raw')]
-    r = subprocess.run(base + ['--frames', '400', '--walkscript', 'n:133,s:1,n:266'], cwd=ROOT, env=penv,
+    r = subprocess.run(base + ['--frames', '465', '--walkscript', 'n:198,s:1,n:266'], cwd=ROOT, env=penv,
                        capture_output=True, text=True).stdout
     ppark = next((int(l.split()[1][1:]) for l in r.splitlines()
                   if l.startswith(anchor + ':') and 'parked' in l), None)
@@ -219,7 +219,7 @@ def run_boot(name, peeks):
     subprocess.run([M.CT, '--peek', st, os.path.join(out, '_o_end.raw'), '--btnscript',
                     M.oracle_script(BOOT_START + presses, end)], cwd=ROOT, env=env, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL)
-    walk, t = ['n:133', 's:1'], 134
+    walk, t = ['n:198', 's:1'], 199
     for m, f in presses:
         pf = f - D + 1
         if pf > t:

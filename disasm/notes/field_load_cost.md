@@ -639,3 +639,25 @@ was not the cartridge's: there 1C00 and 7D00 read +1 against the cartridge (01C'
 handshake fall differently) -- a vehicle artefact, the same handshakes equal on `--boot`. Since then (same day) a cold
 `--scene 433` plays the power-on itself (docs/TESTING.md, "The attract vehicle"): it is `--boot` on a blank cart numbered
 from that run's frame 27, and every attract load takes the cartridge's frames but 1201's.
+
+## 12. Stage ends, the title's opening and the attract from power-on (2026-10-21)
+
+- **An overlay machine's END is its own frame's** (src/field.c, beside the native stages' END): `$34C2` / `$34E3` set
+  `$7E:0000` in the NMI that took the brightness to 0 and the main loop at `$7E:3026` -- free under the rule -- leaves for
+  `$302A` and `JML C0:0000` before its next wait. The rule's cartridge on the attract's third credits: `$038D = 00` and the
+  field's NMI vector on f4550, the location load's `10` at f4551. The port took the END at the next frame's head: 112's
+  visit a frame long, and each credits' a frame late (three in the attract).
+- **...and its load is that frame's** (STAGE_END_SPC_LEAD, $3177 skipped by `$0384` bit 5): the NMI's work to `7E:302A`
+  4,252, 302A -> 303B 218, C0:0000 -> C0/0B86 -> the first JSL 4,008 (C0/0B86 on line 229 h 40, C7:0004 on 231 h 348).
+- **The title's opening, priced** (`FF 02`, entry 2): one NMI-off stretch from C3:0014 (line 228 h 376) to `$7E:3019`'s
+  NMI on -- C3:0014 -> the first `$377E` 5,950,182, the last `$377E`'s return -> `$3775`'s song JSL 5,669,358, the spin's
+  end -> `$3019` 302,722; the reset's five sends, the song and the `$5AAA` spin on the loader clock's QUIET background (no
+  NMI, no HDMA: the song 12,412,290 against the cartridge's 12,415,078, where the field background gave 13,308,887). The
+  hold is the stretch's frames, floor((4,468 + W) / 357,368): the cartridge's 74 (f65 -> f139). The port held 43 (the
+  song and the spin only): the title's swing and everything after it ran 31 frames early.
+
+The attract from power-on (`--boot`, its SPC the cartridge's since boot_loader.md sec. 10), commit -> first ramp INC of
+every load: on the cartridge's frames from B101 (f50) to B101 (f7324) -- 6E01, 1C00, 1B00, AD00, 1201, DB00, A500 --
+then 7D00 +1 (the 07D load's refused `10`: the driver echoes it 175 APU cycles after the post on the cartridge, 3,073 in
+the port, the `10` itself +72) and 8700 +1, both visits with a fight. The SPC's frame grid drifts ~0.01 APU cycle a frame
+against the cartridge's (+65 by f6300; not located).

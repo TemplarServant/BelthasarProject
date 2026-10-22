@@ -41,7 +41,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--until', default='0E6', help='the location whose seed ends the comparison (hex)')
     ap.add_argument('--cart-frames', type=int, default=7530)   # the 0E6 seed is c7485, its robots' op 0x7F c7515-7516
-    ap.add_argument('--port-frames', type=int, default=7480)   # the port's 0E6 load is f7434
+    ap.add_argument('--port-frames', type=int, default=7541)   # the port's 0E6 load is f7495 (from power-on)
     ap.add_argument('--show', action='store_true', help='print every seed, not only the ones that differ')
     a = ap.parse_args()
     until = int(a.until, 16)
@@ -82,8 +82,11 @@ def main():
             cart.append((loc_at(f - 1), v, f))
         elif pc == 'C0/6D10' and cart:
             steps.setdefault(len(cart) - 1, []).append(v)
+    # Under the rule --boot starts at the power-on: the reset's own load is the one `reboot: JML C0:0000` pends, after the
+    # port's start-up has built scene 0 once (its seed is not a C0/0B86 the cartridge runs) -- grade from the reboot on.
+    po = re.search(r'^power-on:.*\n(?:.*\n)*?reboot: JML C0:0000.*$', ptxt, re.M)
     port = [(int(m.group(1), 16), int(m.group(2), 16)) for m in
-            re.finditer(r'f8seed: loc ([0-9A-F]{3}) C0/0C70 \$01F8 = ([0-9A-F]{2})', ptxt)]
+            re.finditer(r'f8seed: loc ([0-9A-F]{3}) C0/0C70 \$01F8 = ([0-9A-F]{2})', ptxt[po.end():] if po else ptxt)]
     if not cart or not locs:
         print('f8-cursor: FAIL -- no cartridge seeds (%d) or no location timeline (%d)' % (len(cart), len(locs)))
         return 1

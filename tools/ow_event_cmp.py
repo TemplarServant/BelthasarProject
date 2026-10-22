@@ -31,7 +31,7 @@ SCEN = {
     'w1': dict(srm='ch10', cell=(0x35, 0x3F), flag=(0x1F3, 0x10), shots=(30, 60, 90)),
 }
 DRIVE_O = '0:300,8:2,0:120,100:2,0:%d'      # Start f300, the Load list, A f422 (memory: ctjackie-saves)
-DRIVE_P = 'n:133,s:1,n:125,a:1,n:%d'
+DRIVE_P = 'n:198,s:1,n:125,a:1,n:%d'   # Start on the power-on's title (boot_loader.md sec. 10)
 
 
 def make_srm(tag, sc):

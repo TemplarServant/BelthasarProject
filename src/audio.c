@@ -1614,7 +1614,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
 // before C0/0057 -- the host holds the screen black for them.
 int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
   if (master) *master = 0; if (frames) *frames = 0;
-  if (!a || !a->rom) return 0;
+  if (!a || (!a->rom && !a->snd)) return 0;
   ldStart(2, 0);
   ldRun(I_PHP + 28 + I_PHP + 2 * I_SEP + 3 * 28 + I_SEP + I_IMM8 + I_PHP + 26 + I_IMM16 + 28 + 34 + I_IMM16);  // 0038-004D prologue
   int ok = 0;
@@ -1838,7 +1838,12 @@ int CtAudioTimingExport(const uint8_t* rom, long romLen, const char* path) {
 
 CtAudio* CtAudioInit(const uint8_t* rom, long romLen) { return CtAudioInitWith(rom, romLen, NULL); }
 
-CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) {
+static CtAudio* audioInit(const uint8_t* rom, long romLen, const CtAssets* snd, int powerOn);
+CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) { return audioInit(rom, romLen, snd, 0); }
+// THE POWER-ON's SPC: the boot ROM running from its first cycle, the driver NOT uploaded -- the reset's `JSL $C7:0000`
+// (CtAudioColdBoot, on the loader clock) does that, as C0/0053 does on the cartridge. The blocks are read (sndBootLoad).
+CtAudio* CtAudioInitPowerOn(const uint8_t* rom, long romLen, const CtAssets* snd) { return audioInit(rom, romLen, snd, 1); }
+static CtAudio* audioInit(const uint8_t* rom, long romLen, const CtAssets* snd, int powerOn) {
   if (snd && !CtAssetGet(snd, CT_ASSET_SND_BOOT, 0, NULL)) snd = NULL;   // a container without the sound: the ROM
   if (!snd && (!rom || romLen < C7_BASE + 0x6000)) return NULL;
   measureInit();
@@ -1868,7 +1873,7 @@ CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) {
     else CtSndLockstepAttach(a->apu, a->mach, 1);
   }
   mixSnapshot(a->apu);
-  a->ready = uploadDriver(a, rom, romLen);
+  a->ready = powerOn ? sndBootLoad(a, rom, romLen) : uploadDriver(a, rom, romLen);
   audReset(a);                                         // the IPL transfer's own output is not the game's
   if (!a->ready) fprintf(stderr, "[audio] $C7 upload did not complete -- running silent\n");
   return a;
@@ -2235,6 +2240,8 @@ void CtAudioPortWrite(CtAudio* a, int k, uint8_t v) { if (a) W(a, k & 3, v); }
 int CtAudioRunCycles(CtAudio* a, int cycles) { return a ? apuRun(a, cycles) : 0; }
 // The SPC time of `master` CPU cycles that come BEFORE a post inside this frame's slice (a location load's CPU work from the
 // vblank to its first `JSL C7/0004`): run now, and owed by the slice (cycleCarry), so the SPC gets no time twice.
+// The frame grid starts `master` cycles before this point: the next slices run that much less SPC (none is run here).
+void CtAudioFrameOrigin(CtAudio* a, long master) { if (a && master > 0) a->cycleCarry -= (double)master * LD_APU_PER_MASTER; }
 void CtAudioAdvance(CtAudio* a, long master) {
   if (!a || master <= 0) return;
   double want = (double)master * LD_APU_PER_MASTER;

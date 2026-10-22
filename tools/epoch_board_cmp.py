@@ -25,7 +25,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JK = os.path.join(ROOT, 'saves', 'downloaded', 'ctjackie')
 OUT = os.path.join(ROOT, 'build', '_epoch_board')
-PRESS_O, PRESS_P = 60, 420
+PRESS_O, PRESS_P = 60, 420 + 65   # +65: --boot starts at the power-on (boot_loader.md sec. 10), its title 65 frames later
 PLACARD = (8, 48, 192, 208)               # x0, x1, y0, y1 of the era placard (port coordinates)
 
 
@@ -48,7 +48,7 @@ def port_run():
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1', CT_SHOTS=os.path.join(OUT, 'p'),
                CT_SHOTS_AT='%d,%d,%d' % (PRESS_P + 20, PRESS_P + 60, PRESS_P + 90), CT_SHOTS_EXIT='1')
-    ws = 'n:133,s:1,n:125,a:1,n:%d,a:2,n:120' % (PRESS_P - 260)
+    ws = 'n:198,s:1,n:125,a:1,n:%d,a:2,n:120' % (PRESS_P - 325)
     r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot',
                         '--walkscript', ws], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     ev = []
@@ -98,8 +98,8 @@ def picture(n_port, n_oracle, mask):
 
 
 FLIGHT_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '80:40', '20:16', '0:20', '100:2', '0:150']
-FLIGHT_P = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:42', 'r:40', 'd:16', 'n:20', 'a:2', 'n:150']
-FLIGHT_SHIFT = 358
+FLIGHT_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:42', 'r:40', 'd:16', 'n:20', 'a:2', 'n:150']
+FLIGHT_SHIFT = 358 + 65   # (+65: the power-on's title)
 
 
 def flight(tag='epoch-flight', drive_o=None, drive_p=None, anchor='04', shots=(3100, 3130, 3200, 3300), frames=3330):
@@ -170,11 +170,11 @@ def omen():
     world's P + 1 (its WRAM runs 362 frames behind here: the wave buffer's tail at cartridge f698 = port f1060)."""
     os.makedirs(OUT, exist_ok=True)
     drive_o = ['0:60', '100:2'] + ['0:30', '100:2'] * 50
-    drive_p = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 50
+    drive_p = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 50
     shots = (700, 900, 1100, 1300, 1500)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_SHOTS=os.path.join(OUT, 'om'),
-               CT_SHOTS_AT=','.join(str(f + 361) for f in shots), CT_SHOTS_EXIT='1')
+               CT_SHOTS_AT=','.join(str(f + 361 + 65) for f in shots), CT_SHOTS_EXIT='1')
     r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(drive_p)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     und = sorted({l.strip() for l in (r.stdout + r.stderr).splitlines() if 'UNDERIVED' in l})
@@ -188,16 +188,16 @@ def omen():
             bs.append(it); t += n
         subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch24.state'), o_raw,
                         '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
-        po = raw_rgb(os.path.join(OUT, 'om_f%d.raw' % (f + 361)), False)
+        po = raw_rgb(os.path.join(OUT, 'om_f%d.raw' % (f + 361 + 65)), False)
         oo = raw_rgb(o_raw, True)
         n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
-        print('epoch-omen: picture port f%d / cartridge f%d %d px differ' % (f + 361, f, n))
+        print('epoch-omen: picture port f%d / cartridge f%d %d px differ' % (f + 361 + 65, f, n))
     return 0
 
 
 GAUGE_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '2:2', '0:98', '10:2', '0:88', '100:2', '0:520']
 GAUGE_SHOTS = [3182, 3202, 3242, 3580, 3610]   # the gauge (needle turning, turning, still), the arrival on 1F1 (P+2)
-GAUGE_P = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:143', 'u:2', 'n:88', 'a:2', 'n:600']
+GAUGE_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:143', 'u:2', 'n:88', 'a:2', 'n:600']
 
 
 def gauge():
@@ -296,9 +296,9 @@ def gauge():
 
 MAP_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '4:2', '0:240', '1:2', '0:250']
 MAP_SEL, MAP_B = 3082, 3324                       # Select and B on the cartridge's clock
-MAP_SHIFT = 359    # the world's own scripts run 359 frames behind from the free flight (the VM in $0C30 ends at f3074 / f3433)
+MAP_SHIFT = 359 + 65    # the world's own scripts run 359 frames behind from the free flight (the VM in $0C30 ends at f3074 / f3433)
 MAP_SHOTS = [3100, 3105, 3200, 3215, 3250, 3300, 3340, 3355, 3412, 3430, 3445, 3470]   # the mosaic and fade, the zoom, the map, B, the way back
-MAP_P = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:600']
+MAP_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:600']
 
 
 def world_map():
@@ -399,7 +399,7 @@ def world_map():
 
 
 DACTYL_O = ['0:60', '20:8', '0:20', '100:2', '0:90', '80:40', '0:20', '40:40', '0:20', '100:2', '0:160']
-DACTYL_P = ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'd:8', 'n:20', 'a:2', 'n:90', 'r:40', 'n:20', 'l:40', 'n:20', 'a:2', 'n:160']
+DACTYL_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'd:8', 'n:20', 'a:2', 'n:90', 'r:40', 'n:20', 'l:40', 'n:20', 'a:2', 'n:160']
 DACTYL_SHOTS = [120, 160, 200, 240, 300, 330, 370, 440]
 
 
@@ -423,7 +423,7 @@ def dactyl():
                                           w(q[0:4]), w(q[4:8]), w(q[8:12]), w(q[12:16]))))
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch17.srm'), CT_OWVEHTRACE='1', CT_SHOTS=os.path.join(OUT, 'dactyl'),
-               CT_SHOTS_AT=','.join(str(f + 360) for f in DACTYL_SHOTS + [480]), CT_SHOTS_EXIT='1')
+               CT_SHOTS_AT=','.join(str(f + 360 + 65) for f in DACTYL_SHOTS + [480]), CT_SHOTS_EXIT='1')
     r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(DACTYL_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     pe = []
@@ -453,25 +453,25 @@ def dactyl():
                 print('dactyl:   +%d cartridge %s port %s' % (d, '/'.join(oi[d]) if d in oi else '-', '/'.join(pi[d]) if d in pi else '-'))
                 n += 1
                 if n >= 12: break
-    off = (pt - ot) if (ot is not None and pt is not None) else 359
+    off = (pt - ot) if (ot is not None and pt is not None) else 359 + 65
     for f in DACTYL_SHOTS:                               # the port's picture P is the cartridge's --peek P + 1 on the clock of
                                                          # the boarding (its A reaches the latch a frame later than the port's)
         o_raw = os.path.join(OUT, 'dactyl_o%d.raw' % f)
         bs, t = [], 0
         for it in DACTYL_O:
             b, n = it.split(':'); n = int(n)
-            if t + n >= f + 360 - off + 1: bs.append('%s:%d' % (b, f + 360 - off + 1 - t)); break
+            if t + n >= f + 360 + 65 - off + 1: bs.append('%s:%d' % (b, f + 360 + 65 - off + 1 - t)); break
             bs.append(it); t += n
         subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch17.state'), o_raw,
                         '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
-        po = raw_rgb(os.path.join(OUT, 'dactyl_f%d.raw' % (f + 360)), False)
+        po = raw_rgb(os.path.join(OUT, 'dactyl_f%d.raw' % (f + 360 + 65)), False)
         oo = raw_rgb(o_raw, True)
         # the lava's four colours cycle on the world's own clock since the save's load -- a frame the port and the cartridge's
         # state do not share (the cartridge's state was taken some frames after its load): a pixel both sides draw in one of
         # them is the lava, whatever its phase
         lava = {(189, 41, 0), (189, 57, 0), (189, 74, 0), (189, 82, 0)}
         n = sum(1 for y in range(8, 216) for x in range(256) if po(x, y) != oo(x, y) and not (po(x, y) in lava and oo(x, y) in lava))
-        print('dactyl: picture port f%d %d px differ (the lava cycle aside)' % (f + 360, n))
+        print('dactyl: picture port f%d %d px differ (the lava cycle aside)' % (f + 360 + 65, n))
     return 0
 
 
@@ -490,7 +490,7 @@ def main():
     if '--land' in sys.argv:                          # A every 32 frames: the Epoch lands at once, the party steps out, boards
         os.makedirs(OUT, exist_ok=True)               # again and lifts off (the cartridge's f3101-f3229)
         return flight('epoch-land', ['0:60', '100:2'] + ['0:30', '100:2'] * 110,
-                      ['n:133', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:28', 'a:2'] + ['n:30', 'a:2'] * 16,
+                      ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:28', 'a:2'] + ['n:30', 'a:2'] * 16,
                       anchor='05', shots=(3110, 3152, 3170, 3200, 3330), frames=3330)
     o = rel(oracle_timeline())
     p = rel(port_run())

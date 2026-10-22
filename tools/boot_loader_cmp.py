@@ -42,7 +42,7 @@ def main():
     praw = 'build/_bootldr/%s_p.raw' % tag
     penv = dict(os.environ, CT_SRAM=srm, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy')
     subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--selftest', praw,
-                    '--frames', '260', '--walkscript', 'n:133,s:1,n:126'], env=penv, stdout=subprocess.DEVNULL,
+                    '--frames', '325', '--walkscript', 'n:198,s:1,n:126'], env=penv, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL, timeout=600)
     w = open(oraw + '.wram', 'rb').read()
     ow, oh, o = fb.load(oraw)

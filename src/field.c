@@ -4724,7 +4724,7 @@ static const char* fieldSramPath(void) {
 }
 static int g_sramForceFresh = 0;                  // the attract vehicle (`--scene 433` from cold): a blank cart
 #define ATTRACT_LOC 433                           // loc 1B1: where scene 0's boot script (0x001B) sends a blank cart
-#define ATTRACT_FRAME0 27                         // ...and the power-on run's frame the cold start's frame 0 stands for
+#define ATTRACT_FRAME0 91                         // ...and the power-on run's frame the cold start's frame 0 stands for
 static uint8_t* fieldSram(void) {
   if (!g_sramReady) {
     memset(g_sram, 0xFF, sizeof g_sram);          // an erased cart
@@ -5223,8 +5223,28 @@ static void fieldSoundFrameSpc(void* ctx) { CtAudioFrame((CtAudio*)ctx); }   // 
 static int g_sndTraceFrame = 0;   // CT_SNDTRACE: the field loop's frame, stamped on every post below
 static int g_loadSpcLead = 0;   // this iteration loads a location: its sound posts run before the SPC's slice (below)
 static int g_owExitPosted = 0;  // the world's exit posts ($82, $83) ran this iteration: the load follows on the next
+static int g_titleOpenSpc = 0;     // this iteration opens the title (`FF 02`): its sound posts come before the frame's slice
+static int g_stageRebootLoad = 0;  // an overlay machine's END rebooted this iteration (no $3177): the load follows on the next
 #define LOAD_SPC_LEAD (5751L + 3060L)   // master cycles from the vblank to C0/1B73's JSL C7:0004 (the traces' mean)
 #define OW_EXIT_SPC_LEAD 3868L          // master cycles from the $83's RTL (C2/2505) to C0/1B73's JSL (the world's exit)
+#define STAGE_END_SPC_LEAD (4252L + 218L + 4008L)   // the vblank -> C0/1B73's JSL out of an overlay machine's END (below)
+// THE RESET (C0/000E), MEASURED on the rule's cartridge from power-on (--cputrace boot, CPUTRACE_BEAM): FD:C000 at c 128,
+// C0/000E at 2,108, C0/0053's `JSL C7:0000` at 676,798 (the clears' DMA); the upload to C7/00FF and its tail to C0:0057
+// (CtAudioColdBoot); C0/0057's C2/8D6A SRAM scan to C0/005D, 102,888 on a blank cart; C0/005D -> C0/0066 -> C0/0B86 ->
+// the first location JSL at C0/1B73, 3,946 more.
+#define LD_FRAME_MASTER 357368L        // a frame, 262 lines of 1,364 master cycles
+// THE TITLE's OPENING (entry 2, `FF 02`), one NMI-off stretch from C3:0014 (`STA $4200 = 01`, line 228 h 376 past the
+// vblank) to $7E:3019's `STA $4200 = A1`. MEASURED, the rule's cartridge from power-on (--cputrace, CPUTRACE_FROM=C30000):
+// C3:0014 -> the first $377E of $3177's driver reset 5,950,182 (C3/0557's overlay, $7E:3063's init, 30E9); the last $377E's
+// return (30F6) -> $3775's JSL C7:0004 for the song 5,669,358 ($7E:5978's setup and its decompressions); the spin's end
+// ($5AB1) -> $3019's NMI on 302,722. The JSLs and the spin are the loader clock's own.
+#define TITLE_OPEN_AT 4468L
+#define TITLE_RESET_LEAD 5950182L
+#define TITLE_SONG_LEAD 5669358L
+#define TITLE_TAIL 302722L
+#define POWERON_TO_C7 676798L          // power-on (c 0) -> C0/0053's JSL C7:0000: the SPC's time before the upload
+#define RESET_SRAM_SCAN 102888L        // C0/0057 -> C0/005D, the blank cart's scan (CPU work in the reset's black)
+#define RESET_LOAD_SPC_LEAD (RESET_SRAM_SCAN + 3946L)   // the upload's RTL -> the reset load's first JSL C7:0004
 // The wall cycles a load's sound JSLs took, from what the sink reports for them (CtSceneLoadSongPrice /
 // CtSceneLoadPostsFlush: NMIs crossed << 10 | the end line, for a clock that began on line 12): the elapsed lines are the
 // (end - 12) + 262k whose run from line 12 reaches line 225 exactly that many times; 1364 cycles a line.
@@ -5975,10 +5995,12 @@ static void titleSoundMail(void* ctx, int off, uint8_t v) {
 // $7E:5AAA -- the setup's wait for the driver. It costs the ROM's CPU just over six frames, so the
 // engine loses them the same way the field VM loses a song upload's (song_load_freeze.md §6).
 static int g_titleSpinFrames = 0;
+static long long g_titleWall = 0;          // the title opening's sound JSLs and spin: their master cycles (the hold's W)
 static void titleSoundWait(void* ctx) {
   int fr = 0;
   if (ctx) {
     int ok = CtAudioWaitReplyNibble((CtAudio*)ctx, &fr);
+    g_titleWall += CtAudioLastPostRaster((CtAudio*)ctx, NULL, NULL, NULL);
     { static int mt = -1; if (mt < 0) { const char* e = getenv("CT_MAILTRACE"); mt = (e && *e) ? 1 : 0; }
       if (mt) fprintf(stderr, "mailtrace   TITLE $2143 wait -> %s after %d frame(s)\n",
                       ok ? "driver answered" : "GAVE UP", fr); }
@@ -5997,7 +6019,7 @@ static void titleSoundPost(void* ctx) {
   if (ctx) CtAudioService((CtAudio*)ctx, m);
   { static int mt = -1; if (mt < 0) { const char* e = getenv("CT_MAILTRACE"); mt = (e && *e) ? 1 : 0; }
     int fr = 0, el = 0; long long mc = ctx ? CtAudioLastPostRaster((CtAudio*)ctx, &fr, &el, NULL) : 0;
-    g_titlePostFrames = fr;
+    g_titlePostFrames = fr; g_titleWall += mc;
     if (mt) fprintf(stderr, "mailtrace   TITLE posted -> $1E00=%02X (00 = the driver consumed it) priced %lld cycles, %d NMI(s)\n",
                     m[0x1E00], mc, fr); }
 }
@@ -10605,9 +10627,10 @@ int main(int argc, char** argv) {
   // sound posts (C0/1B73 / C0/1B8B). Started in 1B1 directly, the SPC began cold there -- no scene 0, no load posts, the
   // driver's phase not the cartridge's -- and the attract's loads took a frame more where the driver met a post
   // differently (1C00 and 7D00 +1 against the cartridge, which the power-on vehicle `--boot` matched; the cold run also
-  // posted a `18 FF` the cartridge never does). The frames keep the cold start's numbering: its frame 0 is the power-on
-  // run's 27 (1B1's first ramp, f2064 there and f2091 here), so the 27 before are numbered -27..-1. The cart is a blank
-  // one, as CT_SRAM_FRESH's, whatever ct.srm holds: the attract is a blank cart's.
+  // posted a `18 FF` the cartridge never does). The frames keep the cold start's numbering from the title's first tick on:
+  // its frame 0 is the power-on run's 91 (the power-on's frames are the cartridge's since the reset is ported: 1B1's first
+  // ramp after the title at f2155 there, f2064 here), so the 91 before -- the reset, scene 0, 1B1's load and the title's
+  // opening -- are numbered -91..-1. The cart is a blank one, as CT_SRAM_FRESH's, whatever ct.srm holds.
   int vehicleFrameBase = 0;
   if (sceneSet && scene == ATTRACT_LOC && !loadWramPath && !loadStatePath && !newGame && !bootNatural && atX < 0 &&
       !worldTest && !battleTest && !menuTest && reenterDest < 0) {
@@ -11594,6 +11617,11 @@ int main(int argc, char** argv) {
   if (!seedSpc && wramSeeded && CtAudioRuleOn()) { const char* sp = getenv("CT_AUDIO_SEEDSTATE"); if (sp && *sp) seedSpc = fieldSeedStateLoad(sp); }
   int ruleSpc = CtAudioRuleOn() && !getenv("CT_NOAUDIO") && (!wramSeeded || seedSpc);
   int ruleSeeded = ruleSpc && wramSeeded && seedSpc;           // the SPC is the lockstep oracle's / the state's
+  // THE POWER-ON (--boot from cold, under the rule): the machine starts at the reset, not at scene 0 lit. The SPC powers on
+  // in its boot ROM and the reset's C0/0053 uploads the driver on the loader clock -- the cartridge's 33 black frames before
+  // loc 0's first NMI (below, before the frame loop) -- where the cold start used to upload it at once and light scene 0 on
+  // frame 0: the port's picture 34 frames early, and its SPC ~12 frames younger than the cartridge's at every later post.
+  int powerOn = bootNatural && !wramSeeded && ruleSpc;
   g_ruleAudio = CtAudioRuleOn() && (!wramSeeded || seedSpc);    // ...and a WRAM run with a device keeps the old clock
   CtSceneSetRuleIfast(g_ruleAudio);                             //   (the VM's tail rule with it)
   if ((audioOn && (!selftest || getenv("CT_AUDIO_FORCE")) && !getenv("CT_NOAUDIO")) || ruleSpc) {
@@ -11615,7 +11643,8 @@ int main(int argc, char** argv) {
       long arl = 0; const uint8_t* arom = audioRef ? CtBattleDumpRom(&arl) : CtBattleRom(&arl);
       // the sound's data from the asset container (CT_ASSET_SND_*: the driver, songs, samples, effect sets) when it holds
       // them -- the ROM is then not read for the sound; CT_AUDIO_FROM_ROM=1 takes them from the ROM (the comparison)
-      audio = CtAudioInitWith(arom, arl, getenv("CT_AUDIO_FROM_ROM") ? NULL : &assets);
+      audio = powerOn ? CtAudioInitPowerOn(arom, arl, getenv("CT_AUDIO_FROM_ROM") ? NULL : &assets)
+                      : CtAudioInitWith(arom, arl, getenv("CT_AUDIO_FROM_ROM") ? NULL : &assets);
       if (audio && ruleSeeded) CtAudioSeedFromApu(audio, seedSpc->apu);   // (the rule: the image's own SPC)
       if (audio && CtAudioRuleOn() && !g_ruleAudio) CtAudioSetRuleOff(audio, 1);   // (the rule: not this SPC)
       // --loadstate with the snapshot's SPC beside it (`<state>.apu`, written by F5): the restored WRAM already holds the
@@ -11651,7 +11680,7 @@ int main(int argc, char** argv) {
         // command that fieldLoad staged. So the current scene's song is re-staged once, right after
         // the seed -- the same $F6 record through the same path, just replayed at the point the ROM
         // would have reached it. Later scene loads need nothing: by then the page is live.
-        if (!ruleSeeded && !stateApu[0]) { int song = fieldLocationSong(scene);   // (a seeded SPC already plays the image's song)
+        if (!ruleSeeded && !stateApu[0] && !powerOn) { int song = fieldLocationSong(scene);   // (a seeded SPC already plays the image's song; the power-on's is the reset's load's, below)
           uint8_t* mm = CtSceneMem7E(f.vm);
           if (ruleSpc) CtAudioSetEngineMode(audio, 2);         // (the rule: a location load's JSLs run with the NMI off)
           mm[0x1E01] = 0x00; mm[0x1E02] = 0xFF; mm[0x1E03] = 0xFF; mm[0x1E00] = 0x81;
@@ -12082,6 +12111,31 @@ int main(int argc, char** argv) {
   int atbSelRow = 0;
   int atbTypeStep = 1 << 20;
 
+  int powerOnLoad = 0;                               // the load below is the power-on's (its window begins on frame 0)
+  if (powerOn && audio && CtAudioReady(audio)) {
+    uint8_t* cw = CtWramSys(fieldWram());
+    // THE FRAME GRID. A slice runs vblank to vblank and frame k's posts follow the vblank that opens it; power-on (c 0) is
+    // line 0, inside the frame the first vblank (line 225, 37 lines before the next line 0) closes -- the labels' frame 1,
+    // so frame 0 has no SPC at all. MEASURED, the rule's cartridge from power-on (PEEK_APUTRACE): every END f<k> from f3 on
+    // at APU k x 17,088 - 2,414, the 1B1 load's `81` at END f50 + 460 and its script's `10 00` at END f56 + 278; the port
+    // ran its slices from c 0 and posted the same frames' commands 19,502 cycles later.
+    CtAudioFrameOrigin(audio, LD_FRAME_MASTER + (262L - 225L) * 1364L);
+    CtAudioAdvance(audio, POWERON_TO_C7);            // FD:C000, C0/000E's clears: the SPC runs from its own power-on
+    long long um = 0; int uf = 0;
+    if (CtAudioColdBoot(audio, &um, &uf)) coldResetWall = POWERON_TO_C7 + (long)um;
+    CtAudioSeedMailboxPage(audio, cw);
+    coldResetCyc = RESET_SRAM_SCAN;
+    printf("power-on: C0/0053 JSL C7:0000 uploaded the driver from the SPC's boot ROM: %lld master cycles, %d frame(s)\n", um, uf);
+    coldResetHold = 1; fadeBri = 0; powerOnLoad = 1;
+    { int rl = cw[0x0100] | (cw[0x0101] << 8), rtx = cw[0x0102], rty = cw[0x0103], rb = cw[0x0104];
+      pendKind = 1; pendDest = rl;
+      pendX = (rtx * 256 + ((rb & 0x04) ? 0x00 : 0x80)) / 16.0;
+      pendY = (rty * 256 + ((rb & 0x08) ? 0x7F : 0xFF)) / 16.0;
+      pendTileX = rtx; pendTileY = rty; pendFac = rb & 3;
+      pendHasFlags = 1; memcpy(pendFlags, cw + 0x10000, 0x200);
+      fade = 1;
+      printf("reboot: JML C0:0000 -> loc %03X tile(%d,%d) bits%02X\n", rl, rtx, rty, rb); }
+  }
   while (running && !g_shotsExit) {
     fieldIrqPreFlip = 0;                             // set by this frame's return-chain wait, if any (the battle's ack)
     // C0/000E, THE COLD INIT, reached from a running game this frame (the demo battle's CF/E702, the defeat's C0/02CA):
@@ -12316,9 +12370,16 @@ int main(int argc, char** argv) {
           int rf = rw && (rw[0x0117] & 0x80) && !inWorld && f.vm && !gwPhase;
           int fb = rf ? rw[0x0119] : fadeBri - FADE_STEP;
           int owLoad = g_owExitPosted && !rf && fade == 1 && fb <= 0 && pendKind == 3;
-          g_loadSpcLead = 0; g_owExitPosted = 0;
-          if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad) && !hostSyncFree()) {
-            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : 1; }
+          int stLoad = g_stageRebootLoad && !rf && fade == 1 && fb <= 0 && pendKind == 1;
+          // THE TITLE's OPENING the same way: the iteration that opens `FF 02` (the op's own fade over -- ffPro 2 -- or it
+          // jumped in its own frame) posts the driver reset and the song inside the NMI-off stretch that starts after the
+          // vblank (TITLE_OPEN_AT, below at the open), so its slice is owed like a load's.
+          int tlOpen = f.vm && CtSceneSequence(f.vm) == 2 && !seqOpen &&
+                       (ffPro == 2 || (ffPro == 0 && !CtSceneFfFading(f.vm)));
+          g_loadSpcLead = 0; g_owExitPosted = 0; g_stageRebootLoad = 0; g_titleOpenSpc = 0;
+          if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad || stLoad) && !hostSyncFree()) {
+            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? 3 : 1; }
+          else if (audio && g_ruleAudio && tlOpen && !hostSyncFree()) { owed += ticks; ticks = 0; g_titleOpenSpc = 1; }
           else if (owed) { ticks += owed; owed = 0; } }
         if (ticks != 1) paceIrregular++;
         for (int t = 0; t < ticks; t++) {
@@ -12482,7 +12543,9 @@ int main(int argc, char** argv) {
           // the CPU work from the vblank to C0/1B73's JSL: C0/0B86 stands at line 229 h ~295 on every field-to-field load
           // traced (5,751 master: the pad latch's 4,224, then the NMI-off stretch's start), and C0/0B86 -> the JSL is
           // 3,018-3,102 (C0/00F4's head, C0/092B, C0/1B53's arm)
-          if (g_loadSpcLead && audio) CtAudioAdvance(audio, g_loadSpcLead == 2 ? OW_EXIT_SPC_LEAD : LOAD_SPC_LEAD);
+          if (g_loadSpcLead && audio)
+            CtAudioAdvance(audio, g_loadSpcLead == 2 ? OW_EXIT_SPC_LEAD : g_loadSpcLead == 3 ? STAGE_END_SPC_LEAD : LOAD_SPC_LEAD);
+          else if (coldResetCyc && audio) CtAudioAdvance(audio, RESET_LOAD_SPC_LEAD);   // a reset's load: the scan and C0/005D first
           g_loadSpcLead = 0;
           if (!fieldLoad(&assets, &f, pendDest, gm)) running = 0;
           else {
@@ -12677,7 +12740,11 @@ int main(int argc, char** argv) {
           // A load's window begins on the frame the load runs (scene 468: load f20 line 242, first ramp INC f52 = the
           // 31 black frames plus the load frame). A reset's window begins on the RESET's frame (C0/000E at f35 line 255),
           // and the port loads one iteration after it -- that iteration is the window's second frame, not its first.
-          if (fromReset && loadHold > 0) loadHold--;
+          // The power-on's stretch starts on frame 0 at c 0 and the port loads in that same iteration -- where a load's hold
+          // (ct_nmi_wait_frames - 1) counts from the iteration AFTER the cartridge's stretch began: one frame more.
+          if (powerOnLoad) loadHold++;
+          else if (fromReset && loadHold > 0) loadHold--;
+          powerOnLoad = 0;
           if (inWorld && rimg) {                        // bank C2's loader (see above)
             int owN = 0;
             // ⭐ WALKED (2026-10-21, ct_lz_world_load_cycles): the whole stretch from C0/0B5A to C2/23CC's `STA $4200`,
@@ -17399,13 +17466,23 @@ int main(int argc, char** argv) {
         CtTitleIntroReset(&titleIntro);                     // $7E:3000 -> `JSR ($3043,X)` = $7E:5978
         seqOpen = seqEntry + 1;
         seqCommonInitWram(w, (uint8_t)seqId);
-        CtTitleIntroDriverReset(&titleIntro, (uint8_t)seqId);   // 30E9 JSR $3177, before the entry's setup
-        // (the rule: the setup's JSL and its spin run with the NMI off -- C3/0014 `STA $4200 = 01`, the NMI on only at
-        // 7E:3019 `STA $4200 = A1` after them, measured on the IFAST oracle from the f8900 state: no NMI in frames 0-36,
-        // the JSL frame 21 line 108 to frame 36 -- so they keep the listing's clock, NMI-off work's own rule)
+        // (the rule: the reset's sends, the setup's JSL and its spin run with the NMI off -- C3/0014 `STA $4200 = 01`, the
+        // NMI on only at 7E:3019 `STA $4200 = A1` after them, measured on the IFAST oracle from the f8900 state: no NMI in
+        // frames 0-36, the JSL frame 21 line 108 to frame 36 -- so they keep the listing's clock, NMI-off work's own rule)
         if (audio) CtAudioSetRuleNmiOff(audio, 1);
+        // ...on the quiet background: C3:0014 left no NMI and no HDMA (the cartridge's song upload 12,415,078 against the
+        // field background's 13,308,887 -- its NMI block and HDMA mean, 7 %)
+        if (audio && g_ruleAudio) CtAudioSetEngineMode(audio, 2);
+        g_titleWall = 0;
+        int titleTimed = audio && g_titleOpenSpc;            // the iteration's slice waits (above): the posts are the stretch's
+        if (titleTimed) CtAudioAdvance(audio, TITLE_OPEN_AT + TITLE_RESET_LEAD);
+        CtTitleIntroDriverReset(&titleIntro, (uint8_t)seqId);   // 30E9 JSR $3177, before the entry's setup
+        if (titleTimed) CtAudioAdvance(audio, TITLE_SONG_LEAD);
         CtTitleIntroSetupSound(&titleIntro); seqHold = CT_TITLE_SETUP_HOLD;
         if (audio) CtAudioSetRuleNmiOff(audio, 0);
+        if (audio && g_ruleAudio) CtAudioSetEngineMode(audio, 0);
+        if (titleTimed) CtAudioAdvance(audio, TITLE_TAIL);
+        g_titleOpenSpc = 0;
         // ...and THE HOLD IS THE SETUP'S OWN WAITS, not a constant. $3775 `JSL $C7:0004` is synchronous (the loader keeps
         // the CPU until the driver has the song -- song_load_freeze.md) and $5AAA then spins on $2143, both with the NMI
         // off, so the animation starts when they end: U + S frames after the post. How long U is depends on what the
@@ -17418,6 +17495,11 @@ int main(int argc, char** argv) {
         // gate; an unpaced run keeps the power-on measurement.
         { static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
           if (audio && hostSoundInstant()) seqHold = 0;   // (instant uploads: the song lands at once, the picture with it)
+          else if (titleTimed) {
+            // the whole stretch at phase 0 past the vblank: its frames are the boundaries it crosses (the cartridge's 74)
+            long long W = TITLE_OPEN_AT + TITLE_RESET_LEAD + TITLE_SONG_LEAD + TITLE_TAIL + g_titleWall;
+            seqHold = (int)(W / LD_FRAME_MASTER);
+          }
           else if (audio && (ls || g_sndPaced || g_ruleAudio)) seqHold = g_titlePostFrames + g_titleSpinFrames; }
       }
       // CT_STAGE_HANDOFF_WRAM=<path>: the 128 KB a native stage opens on (before its C3:0000), to diff against the cartridge's
@@ -17623,20 +17705,8 @@ int main(int argc, char** argv) {
           w[0x10000 + 0x60] = 1;
           printf("sequence: START -> $7F0060=1, reboot into loc %03X\n", w[0x0100] | (w[0x0101] << 8));
         }
-        // The main loop at $7E:3026 polls $7E:0000 and only then tears down, so the reboot lands the
-        // frame AFTER the fade's last -- which is what the oracle shows ($7E:0000 at f77, the task
-        // list wiped at f79).
-        if (titleIntro.done) {
-          CtTitleIntroDriverReset(&titleIntro, (uint8_t)seqId);   // 302A's teardown `JSR $3177`, before the reboot
-          CtSceneSequenceDone(f.vm);
-          rebootReq = 1; stageExit = 1;                              // 7E:303B JML $C0:0000, $0100 unchanged
-          seqOpen = 0;
-          printf("sequence: $7E:34C2 fade done ($038D %02X->00, %d frames) -> $7E:0000=1, reboot\n",
-                 seqBri0, titleIntro.frame - seqFadeAt);
-          // THREE and only three: the setup's song ($7E:5AA5), the exit's fade ($34AB) and the stop
-          // ($34D5). A fourth would mean C3/09A4's watcher had fired, i.e. $0389 was never latched.
-          printf("title-sound: %d post(s), $2143 wait %d frame(s)\n", g_titlePosts, g_titleSpinFrames);
-        } else if (titleIntro.bri == seqBri0) seqFadeAt = titleIntro.frame;
+        // (The fade's END -- $34C2 sets $7E:0000 -- is taken in its own frame, below with the native stages'.)
+        if (!titleIntro.done && titleIntro.bri == seqBri0) seqFadeAt = titleIntro.frame;
       } else if (seqOpen > 0 && (raceOn || endOn)) {
         // The native stages' END is taken in the frame of the NMI that ENDed (below, after the frame's picture) -- except the
         // Day of Lavos' console reset, whose cold init is this frame's (coldResetReq, below).
@@ -17648,17 +17718,7 @@ int main(int argc, char** argv) {
           printf("sequence: the Day of Lavos ended -> reset\n");    //   FD/C000) -- the cold init below, not $0100's reboot
           seqOpen = 0; endOn = 0; endEnded = 0;
         }
-      } else if (seqOpen > 0 && titleIntro.done) {   // (titleIntro keeps the LAST machine's done flag)
-        // Every other entry's teardown is the PLAIN fade $7E:34E3 -- the title's $34C2 without the
-        // two sound commands -- and it ends the same way: `INC $00`, which the main loop at
-        // $7E:3026 is polling. So the handover is the same as the title's, minus the music.
-        CtTitleIntroDriverReset(&titleIntro, (uint8_t)seqId);     // 302A's `JSR $3177` (skipped for $0384 bit 5)
-        CtSceneSequenceDone(f.vm);
-        rebootReq = 1; stageExit = 1;                                // 7E:303B JML $C0:0000, $0100 unchanged
-        printf("sequence: entry %d done ($7E:34E3 -> $7E:0000=1) after %d frames -> reboot\n",
-               seqOpen - 1, titleIntro.frame + 1);
-        seqOpen = 0;
-      }
+      }   // (every other entry's END, the plain fade $7E:34E3, is taken in its own frame too: below)
     }
     // ---- the shared REBOOT: C0/0000 -> C0/005D -> C0/0066 `LDX $0100`. The location word (and its
     // arrival tile $0102/$0103 + arrival bits $0104 -- record 3 of a save covers $0100..$010F) IS
@@ -18830,7 +18890,7 @@ int main(int argc, char** argv) {
       uint8_t* cw = CtWramSys(fieldWram());
       memset(cw + 0x0000, 0, 0x0500); memset(cw + 0x0700, 0, 0xE900); memset(cw + 0x15080, 0, 0x5080);
       // The DMA's own time (dma.c dma_doDma: a transfer's 8-cycle overhead, 8 per channel, 8 per byte).
-      coldResetCyc = 8L * (0x0500 + 0xE900 + 0x5080) + 3L * 16;
+      coldResetCyc = 8L * (0x0500 + 0xE900 + 0x5080) + 3L * 16 + RESET_SRAM_SCAN;
       if (audio) { long long um = 0; int uf = 0;
         if (CtAudioColdBoot(audio, &um, &uf)) coldResetWall = (long)um;
         CtAudioSeedMailboxPage(audio, cw);
@@ -20574,6 +20634,8 @@ int main(int argc, char** argv) {
           CtTitleIntroTick(&titleIntro);
           CtTitleIntroRender(&titleIntro, fb, CAMW, CAMH);
           hostTitleDrew(&titleIntro);
+          { static int bt = -1, lastBri = -1; if (bt < 0) bt = getenv("CT_SEQBRITRACE") ? 1 : 0;   // (CT_SEQBRITRACE, the title's)
+            if (bt && titleIntro.bri != lastBri) { lastBri = titleIntro.bri; printf("seqbri: f%d $038D=%02X\n", frameNo, lastBri); } }
           if (selftest && introShot != titleIntro.frame &&
               (titleIntro.frame == 0 || titleIntro.frame == 100 || titleIntro.frame == 400 ||
                titleIntro.frame == CtTitleIntroFrames() - 1)) {
@@ -20733,6 +20795,37 @@ int main(int argc, char** argv) {
       }
       if (mot->valid) CtMotSettle(mot, g_motPic, shown, motBright);
       hostPresentMot(pr, shown, shownW, mot->valid); }
+    // THE OVERLAY MACHINE'S END, IN ITS OWN FRAME. The title's exit fade $7E:34C2 and every other entry's plain fade
+    // $7E:34E3 end the same way: `INC $00` in the NMI that took the brightness to 0, and the main loop at $7E:3026 --
+    // free under the rule's CPU, the same loop as the native stages' below -- leaves for $302A (the driver reset $3177)
+    // and `JML $C0:0000` before its next wait. MEASURED, the rule's cartridge from power-on: the attract's credits (entry
+    // 1, `FF 61` after the 0AD fight) write $038D = 00 at f4550 and the NMI vector is the field's on that same frame
+    // (`--monitor 7E038D:1,7E0500:4`), the location load's `10` at f4551. The port took the END at the next frame's head
+    // and loaded a frame later: 112's visit 1 frame long. (The old reading, "$7E:0000 at f77, the task list wiped at
+    // f79", was the title's on the oracle before the rule.)
+    if (seqOpen > 0 && !raceOn && !endOn && titleIntro.done) {   // (titleIntro keeps the LAST machine's done flag)
+      uint8_t* w = CtWramSys(fieldWram());
+      CtTitleIntroDriverReset(&titleIntro, (uint8_t)seqId);     // 302A's teardown `JSR $3177` (skipped for $0384 bit 5)
+      CtSceneSequenceDone(f.vm);
+      if (seqId == 2) {
+        printf("sequence: $7E:34C2 fade done ($038D %02X->00, %d frames) -> $7E:0000=1, reboot\n",
+               seqBri0, titleIntro.frame - seqFadeAt);
+        // THREE and only three: the setup's song ($7E:5AA5), the exit's fade ($34AB) and the stop
+        // ($34D5). A fourth would mean C3/09A4's watcher had fired, i.e. $0389 was never latched.
+        printf("title-sound: %d post(s), $2143 wait %d frame(s)\n", g_titlePosts, g_titleSpinFrames);
+      } else
+        printf("sequence: entry %d done ($7E:34E3 -> $7E:0000=1) after %d frames -> reboot\n",
+               seqOpen - 1, titleIntro.frame + 1);
+      // ...and the load is that same frame's: the reboot's NMI-off stretch runs straight from the END, so its sound posts
+      // start STAGE_END_SPC_LEAD past the vblank -- the NMI's work to `7E:302A` (line 228 h 160, 4,252), 302A -> 303B's
+      // `JML C0:0000` (218, $3177 skipped by $0384 bit 5) and C0:0000 -> C0/0B86 -> C0/1B73's JSL (4,008); the rule's
+      // cartridge on the attract's third credits (power-on f4549, --cputrace: C0/0B86 on line 229 h 40, C7:0004 on 231 h
+      // 348). The deferral above (the load's posts before the frame's slice) takes it; a teardown that runs $3177 posts
+      // its own four commands first and is not measured: it keeps the plain order.
+      if (seqId & 0x20) g_stageRebootLoad = 1;
+      seqOpen = 0;
+      FIELD_REBOOT_PEND(w);                                          // 7E:303B JML $C0:0000, $0100 unchanged
+    }
     // THE NATIVE STAGE'S END, IN ITS OWN FRAME: the NMI that ENDed (the race's page A `FF` after the finish; `FF 2B`'s fade
     // $7E:34E3; entries 3 / 4 / 6's) set $7E:0000 = 1, and the main loop at $7E:3026 -- free under the rule's CPU -- leaves
     // for $302A (NMI off, the driver reset $3177 unless $0384 bit 5) and `JML $C0:0000` before its next wait, so C0/0066 reads

@@ -3,7 +3,7 @@ r"""Real battery saves across the story (Jackie's, saves/downloaded/ctjackie) lo
 
     python tools/jackie_census_cmp.py
 
-Each save is booted the player's way (`--boot`, CT_SRAM, the Load screen: `n:133,s:1,n:125,a:1`), then left 300 frames and
+Each save is booted the player's way (`--boot`, CT_SRAM, the Load screen: `n:198,s:1,n:125,a:1`), then left 300 frames and
 given A every 40 frames for 1200 (on a world map that enters what the party stands on). Graded:
 
 - `census chNN <loc> clean` -- the run printed no "PARKED" / "UNDERIVED" / "not run" line. The saves are the ones whose world
@@ -23,7 +23,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JK = os.path.join(ROOT, 'saves', 'downloaded', 'ctjackie')
 OUT = os.path.join(ROOT, 'build', '_jackie')
-LOAD = 'n:133,s:1,n:125,a:1'
+LOAD = 'n:198,s:1,n:125,a:1'   # Start on the power-on's title (boot_loader.md sec. 10): 133 + 65
 
 
 def port(n, ws, extra_env=None, args=()):
@@ -41,19 +41,19 @@ def main():
     mash = LOAD + ',n:300,' + ','.join(['a:2,n:38'] * 30)
     for n in ('02', '10', '13', '16', '19', '21', '24'):
         shot = os.path.join(OUT, 'c%s_%d' % (n, os.getpid()))
-        out = port(n, mash, {'CT_SHOTS': shot, 'CT_SHOTS_AT': '1800', 'CT_SHOTS_EXIT': '1'})
+        out = port(n, mash, {'CT_SHOTS': shot, 'CT_SHOTS_AT': '1865', 'CT_SHOTS_EXIT': '1'})
         bad = sorted({l.strip() for l in out.splitlines()
                       if 'PARKED' in l or 'UNDERIVED' in l or ' not run' in l})
-        loc = [l.split('loc=')[1].split()[0] for l in out.splitlines() if l.startswith('shots: f1800')]
+        loc = [l.split('loc=')[1].split()[0] for l in out.splitlines() if l.startswith('shots: f1865')]
         print('census ch%s %s %s' % (n, loc[0] if loc else '?', 'clean' if not bad else 'GAPS: ' + ' | '.join(bad)))
         try:
-            os.remove(shot + '_f1800.raw')
+            os.remove(shot + '_f1865.raw')
         except OSError:
             pass
 
     # op 4F: the world's map buffers against the cartridge
     ow = os.path.join(OUT, 'ow16_%d' % os.getpid())
-    port('16', LOAD + ',n:300', {'CT_OWDUMP': ow, 'CT_OWDUMP_AT': '420', 'CT_SHOTS': ow + 's', 'CT_SHOTS_AT': '421',
+    port('16', LOAD + ',n:300', {'CT_OWDUMP': ow, 'CT_OWDUMP_AT': '485', 'CT_SHOTS': ow + 's', 'CT_SHOTS_AT': '486',
                                  'CT_SHOTS_EXIT': '1'})
     oraw = os.path.join(OUT, 'o16_%d.raw' % os.getpid())
     subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc'), '--peek',
@@ -65,7 +65,7 @@ def main():
         print('map ch16 diffs %d' % sum(1 for a in range(0x4000, 0x7000) if p[a] != o[a]))
     except OSError as e:
         print('map ch16 missing (%s)' % e)
-    for f in (ow, ow + 's_f421.raw', oraw, oraw + '.wram', oraw + '.vram', oraw + '.oam'):
+    for f in (ow, ow + 's_f486.raw', oraw, oraw + '.wram', oraw + '.vram', oraw + '.oam'):
         try:
             os.remove(f)
         except OSError:
