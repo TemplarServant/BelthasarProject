@@ -147,8 +147,8 @@ the power-on run's frame 91 (the 91 before -- the reset, scene 0, 1B1's load and
 f-91..f-1). Since the power-on itself is ported (boot_loader.md sec. 10), `--boot`'s frames are the cartridge's: the
 vehicle's frame f is the cartridge's frame f + 91. Its SPC therefore has the cartridge's history: before, it
 started cold inside 1B1 and its driver's phase was its own, so a sound handshake could land a frame off where the
-cartridge's did not (1C00 and 7D00 +1). Every attract load now takes the cartridge's frames up to f7324; 7D00 and 8700
-(visits with a fight) are +1 (disasm/notes/field_load_cost.md sec. 12). A `--boot` drive presses Start on the title at
+cartridge's did not (1C00 and 7D00 +1). Every attract load now takes the cartridge's frames but 8700's (+1, the 087
+fight's exit upload; disasm/notes/field_load_cost.md sec. 13). A `--boot` drive presses Start on the title at
 frame 198 (`n:198,s:1,...`; 133 before the power-on). The power-on needs the SPC: with `CT_NOAUDIO` the run boots scene 0
 lit at once and keeps its own (earlier) frames. A `--scene 433` with `--loadwram`, `--loadstate`, `--at`, `--newgame` or a test harness is still the plain
 cold start.

@@ -660,4 +660,33 @@ The attract from power-on (`--boot`, its SPC the cartridge's since boot_loader.m
 every load: on the cartridge's frames from B101 (f50) to B101 (f7324) -- 6E01, 1C00, 1B00, AD00, 1201, DB00, A500 --
 then 7D00 +1 (the 07D load's refused `10`: the driver echoes it 175 APU cycles after the post on the cartridge, 3,073 in
 the port, the `10` itself +72) and 8700 +1, both visits with a fight. The SPC's frame grid drifts ~0.01 APU cycle a frame
-against the cartridge's (+65 by f6300; not located).
+against the cartridge's (+65 by f6300): located in section 13.
+
+## 13. The SPC's frame grid, the init scripts' posts and the DF / E1 reboot (2026-10-22)
+
+Measured on the attract from power-on: the rule's cartridge (PEEK_APUTRACE, each frame's END) against the port
+(CT_AUDIO_PORTTRACE, each slice's `FRAME n=<frame> apuc=.. carry=..`; the port's grid is apuc + carry).
+
+- **The grid drift was an opcode's overshoot.** apuRun ends an opcode past what it is asked (LakeSnes's apu_cycle
+  counts the opcode's cycles one by one, apuCatchupCycles carries the remainder: no drift). The frame slice and
+  CtAudioAdvance carried the overshoot; the loader clock's catch-ups (ldCatch) did not -- a JSL, the title's $2143 spin
+  and the driver's cold upload debited `clk x APU/master` from the frame's budget, not the cycles the SPC ran -- so
+  every sound handshake left the SPC a few cycles ahead for good: +100 APU cycles over the attract's 7,616 frames
+  (5-9 a load). The stretch now debits what its catch-ups ran (ld.ran): +3 cycles over the same frames.
+- **A load's init-script posts sit where the ROM runs them.** Without the drift 0AD's load read +1: its two `10 18`
+  (op EA, C0/3C41, from the objects' init) post on the cartridge 10 and 7 frames before the load's end (f3586 / f3589,
+  main loop f3596), the port flushed them 4 and 2 frames before -- it counted only the object pass's work after each
+  post (CtSceneLoadPostCycles), and the ROM runs C0/9DC3's arm, slot 1, C2/8004 and C0/2848's pass to C0/0B38 after the
+  init runner too. The walk prices all of them (loadWalk.party / .pass, load9dc3): on a walked load they join the
+  work after each post. The second post then finds the driver free (the cartridge's 56,196 APU cycles between them,
+  the port's 51,265 had met it busy: three re-posts and a frame).
+- **Ops DF / E1's reboot leads like a commit** (REBOOT_SPC_LEAD): C0/3B71's spin returns after the field NMI's pad
+  latch, then C0/3B79-3B8F, C0/0B4E, `BRL C0:0000`, C0/0B5A and C0/0B86 on line 229 h 190 (5,646 past the vblank;
+  the rule's cartridge, the attract's hub DF at f7324, --cputrace), C0/1B8B's JSL on 231 h 498. The port posted the
+  load's `10 18` after the frame's slice: 75 APU cycles past the next frame's vblank against the cartridge's 491 past
+  this one's, and 1B1's load a frame short (B101@7324 -1).
+
+Result, the attract from power-on, commit -> first ramp INC: every load on the cartridge's frames but 8700 (+1). That
+one is the 087 fight's exit upload (C0/1BE6's chain, f9912-9924): it starts 2 APU cycles from the cartridge's and
+carries the same 8,200 port writes, but the battle NMI's waits split it at other points (the cartridge's two pauses of
+69 and 47 lines, the port's three of 83, 47 and 70) and it ends ~4,000 APU cycles late, past the vblank. Not modelled.
