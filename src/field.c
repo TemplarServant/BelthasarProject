@@ -52,6 +52,7 @@
 #include "present.h"     // the window and the backend the picture goes through (SDL_Renderer / OpenGL)
 #include "motion.h"      // what moves each pixel of the field picture: the higher internal scale, the frames between
 #include "fieldnative.h" // the frames between drawn natively from the map's layers and the sprites' pixels
+#include "widext.h"      // a mod: the Steam release's widescreen margins from the player's ct_wide.dat
 #include "tileanim.h"    // FD/DE98 + FD/E022: the location's animated BG tiles
 #ifdef CT_DATAFREE
 #include "datapack.h"    // the tables below, loaded from the player's pack (a data-free build)
@@ -4657,6 +4658,7 @@ typedef struct {
   const uint8_t* exits; int nexits;
   double spawnX, spawnY; int spawnZ;
   int mx0, my0, mx1, my1;         // the scroll mask in px = the CAMERA bounds (engine $1D1A-$1D1D);
+  int loc;                        // the location fieldLoad opened (the Steam margins' key, fieldWideExtPic)
 } Field;                          // a scene map holds many rooms -- the camera stays in THIS one
 // The canvas pixel the screen shows at map pixel (x, y): the BG tilemap repeats the map (C0/7612 `AND $1E` / `AND $1F`
 // over the metatile column and row), so a camera whose screen runs past the canvas reads the map again from its start.
@@ -4678,6 +4680,33 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
   int roomW = f->mx1 - f->mx0;
   if (roomW > f->W || (roomW == f->W && roomW < w && CtSettingsGet()->wideRoomWrap)) { *x0 = -(1 << 30); *x1 = 1 << 30; }
   else { *x0 = f->mx0; *x1 = f->mx1; }
+}
+// THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
+// release draws there, from the player's own ct_wide.dat, baked once per location with the room's own BG1/BG2 tiles
+// (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
+typedef struct { void* sd; int loc, w, h, xo; uint8_t* rgb; uint8_t* cov; } FieldWideExtPic;
+static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
+  static FieldWideExtPic p;
+  if (!CtSettingsGet()->wideSteamMargins || !f->sd) return NULL;
+  if (p.sd == f->sd && p.loc == f->loc) return p.rgb ? &p : NULL;
+  free(p.rgb); free(p.cov); memset(&p, 0, sizeof p);
+  p.sd = f->sd; p.loc = f->loc;
+  CtWideExt e;
+  if (!CtWideExtGet(f->loc, &e)) return NULL;
+  p.w = e.w; p.h = e.h; p.xo = (e.w - f->mx1 / 16) / 2;
+  p.rgb = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16 * 3); p.cov = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16);
+  if (!p.rgb || !p.cov || !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, p.rgb, p.cov)) {
+    free(p.rgb); free(p.cov); p.rgb = p.cov = NULL; return NULL;
+  }
+  return &p;
+}
+// The margins' pixel at map pixel (mx, my); 0 = nothing drawn there.
+static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* out) {
+  int ex = mx + p->xo * 16, W = p->w * 16;
+  if (ex < 0 || ex >= W || my < 0 || my >= p->h * 16) return 0;
+  size_t q = (size_t)my * W + ex;
+  if (!p->cov[q]) return 0;
+  memcpy(out, p->rgb + q * 3, 3); return 1;
 }
 // PAST A ROOM'S EDGE (the widescreen, where fieldWideMask keeps the edge): the map there holds other rooms -- but a layer
 // that scrolls on its own, detached from the map (BG2 / BG3 with an offset: 1B0's lava under the Epoch, 0AD's stars), is a
@@ -6539,6 +6568,7 @@ static void fieldByteWatch(int frameNo) {
 }
 static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
   memset(f, 0, sizeof *f);
+  f->loc = scene;
   f->sd = CtFieldSceneOpen(a, scene, 0);
   // C0/A782-A7A8: the plane builder bumps an ALREADY-OPENED chest's metatile as it walks this
   // location's records, which is why a re-entered room shows its chests open. It runs BEFORE the
@@ -20107,6 +20137,8 @@ int main(int argc, char** argv) {
     // The widescreen's sides end at the room's scroll mask when the map holds more than the room (fieldWideMask).
     if (wideW > CAMW) {
       int wm0, wm1; fieldWideMask(&f, wideW, &wm0, &wm1);
+      const FieldWideExtPic* wext = fieldWideExtPic(&f);   // (the Steam margins, a mod: they take the room's edge back)
+      if (wext) { wm0 = f.mx0; wm1 = f.mx1; }
       static CtSceneLayers beyondL; int det = 0;     // (past the edge: the layers scrolling on their own -- fieldBeyondPixel)
       if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
           !CtFieldSceneLayers(f.sd, &beyondL)) det = 0;
@@ -20118,6 +20150,7 @@ int main(int argc, char** argv) {
           int ux = camx + x;
           if (ux >= wm0 && ux < wm1) continue;
           uint8_t* d = fb + ((size_t)y * wideW + x) * 3;
+          if (wext && fieldWideExtPixel(wext, ux, camy + y, d)) { mot->own[y * wideW + x] = CT_MOT_FIXED; continue; }
           if (det) { int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
                      mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); }
           else { memset(d, 0, 3); mot->own[y * wideW + x] = CT_MOT_BG1; }

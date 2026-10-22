@@ -188,6 +188,13 @@ extern "C" int CtOverlayFrame(void) {
                           "the sides show the map wrapping round, as the camera would see it -- sometimes repeating what\n"
                           "is in the middle. Off: black past the room's edges. A room inside a larger map (Crono's\n"
                           "house) is always black past its edge: other rooms are there.");
+      bool sm = s->wideSteamMargins != 0;
+      if (ImGui::Checkbox("Steam margins (needs your Steam copy)", &sm)) s->wideSteamMargins = sm;
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("A mod: past a room's edge the sides show the strip the Steam release draws there (its widescreen\n"
+                          "rooms), with the room's own tiles. Its data come from your own copy of the Steam release: run\n"
+                          "tools/steam_wide.py on its folder once to write ct_wide.dat next to ct_assets.dat. Rooms without\n"
+                          "margins, or without the file, keep the sides as above. Nothing else in the game changes.");
       bool ip = s->interpolate != 0;
       if (ImGui::Checkbox("Frames between (60+ fps)", &ip)) s->interpolate = ip;
       if (ImGui::IsItemHovered())

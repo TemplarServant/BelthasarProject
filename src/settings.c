@@ -88,6 +88,7 @@ static void setKey(CtSettings* s, const char* sec, const char* key, const char* 
     else if (!strcmp(key, "render_scale")) s->renderScale = clampi(iv, 1, 4);
     else if (!strcmp(key, "interpolation")) s->interpolate = iv != 0;
     else if (!strcmp(key, "wide_room_wrap")) s->wideRoomWrap = iv != 0;
+    else if (!strcmp(key, "steam_margins")) s->wideSteamMargins = iv != 0;
     else if (!strcmp(key, "widescreen")) s->widescreen = !strcmp(val, "16:9") ? CT_WIDE_16_9 : !strcmp(val, "16:10") ? CT_WIDE_16_10 :
                                                          !strcmp(val, "21:9") ? CT_WIDE_21_9 : CT_WIDE_OFF;
     else if (!strcmp(key, "vsync")) s->vsync = iv != 0;
@@ -141,12 +142,12 @@ int CtSettingsSave(void) {
   FILE* f = fopen(CtSettingsPath(), "w");
   if (!f) return 0;
   fprintf(f, "; Belthasar -- options. Edited by the F1 overlay; safe to edit by hand.\n\n");
-  fprintf(f, "[video]\nbackend=%s\nfullscreen=%d\nwindow_scale=%d\nscale=%s\naspect=%s\nfilter=%s\nwidescreen=%s\nwide_room_wrap=%d\nrender_scale=%d\ninterpolation=%d\nvsync=%d\nrender_driver=%s\n\n",
+  fprintf(f, "[video]\nbackend=%s\nfullscreen=%d\nwindow_scale=%d\nscale=%s\naspect=%s\nfilter=%s\nwidescreen=%s\nwide_room_wrap=%d\nsteam_margins=%d\nrender_scale=%d\ninterpolation=%d\nvsync=%d\nrender_driver=%s\n\n",
           s->backend == 1 ? "opengl" : s->backend == 2 ? "vulkan" : "sdl", s->fullscreen, s->windowScale,
           s->scaleMode == CT_SCALE_INTEGER ? "integer" : s->scaleMode == CT_SCALE_STRETCH ? "stretch" : "fit",
           s->aspect == CT_ASPECT_4_3 ? "4:3" : "pixel", s->linearFilter ? "linear" : "nearest",
           s->widescreen == CT_WIDE_16_9 ? "16:9" : s->widescreen == CT_WIDE_16_10 ? "16:10" : s->widescreen == CT_WIDE_21_9 ? "21:9" : "off",
-          s->wideRoomWrap, s->renderScale, s->interpolate, s->vsync,
+          s->wideRoomWrap, s->wideSteamMargins, s->renderScale, s->interpolate, s->vsync,
           s->renderDriver);
   fprintf(f, "[sound]\nvolume=%d\nmute=%d\n\n", s->volume, s->mute);
   fprintf(f, "[controls]\npad_stick=%d\n", s->padStick);

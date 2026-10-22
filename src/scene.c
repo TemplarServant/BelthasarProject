@@ -835,6 +835,27 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
   return sd->bakeSub;
 }
 // The main-screen coverage of the last bake (see SceneData.bakeCov); NULL before the first.
+// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in four planes drawn with this scene's own
+// BG1/BG2 tiles and palette, plane 3 first up to plane 0, each plane's priority-0 corners before its priority-1 ones. Ids
+// 0 (none) and 512 and up (tiles this scene does not have) draw nothing. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel
+// (BL1 where drawn); both are cleared first.
+int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, uint8_t* rgb, uint8_t* cov) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || !sd->meta12 || !sd->chips12 || !planes || w <= 0 || hgt <= 0) return 0;
+  int W = w * 16, H = hgt * 16, n = w * hgt;
+  memset(rgb, 0, (size_t)W * H * 3); memset(cov, 0, (size_t)W * H);
+  uint16_t* t = (uint16_t*)malloc(sizeof(uint16_t) * (size_t)n);
+  if (!t) return 0;
+  for (int prio = 0; prio < 2; prio++)
+    for (int k = 3; k >= 0; k--) {
+      for (int i = 0; i < n; i++) { uint16_t v = planes[(size_t)k * n + i]; t[i] = (v == 0 || v >= 512) ? 0xFFFF : v; }
+      draw_layer(rgb, cov, W, H, t, w, hgt, sd->meta12, 512, sd->chips12, sd->pres12, 768, sd->pal, prio, BL1, NULL,
+                 NULL, 0, 0, 0, 0, 0, NULL);
+    }
+  free(t);
+  return 1;
+}
+
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->bakeCov) return NULL;

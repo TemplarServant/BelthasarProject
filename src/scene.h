@@ -27,6 +27,9 @@ void* CtFieldSceneOpen(const CtAssets* a, int index, int frame);
 void  CtFieldSceneClose(void* h);
 uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask);
 uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH);   // the bake without BL1/BL2/BL3 bits (a window's)
+// A mod's picture (widext.h): four planes of w x h metatile ids drawn with this scene's BG1/BG2 tiles into rgb
+// ((16 w) x (16 h) x 3) and cov (1 = drawn); 1 = done.
+int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, uint8_t* rgb, uint8_t* cov);
 // The last bake's MAIN-screen coverage, one byte per pixel: the layer bit (L1 1, L2 2, L3 4) on top, 0 = backdrop.
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt);
 const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half);

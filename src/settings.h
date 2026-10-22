@@ -39,6 +39,8 @@ typedef struct CtSettings {
   int interpolate;              // the frames between: the field drawn at the screen's rate between two 60 Hz frames
   int widescreen;               // CT_WIDE_*: the field's picture wider than the SNES's 256 (the rest pillarboxed)
   int wideRoomWrap;             // widescreen: a room as wide as its map shows the map wrapping in the sides (else black)
+  int wideSteamMargins;         // a mod: past a room's edge, the Steam release's margins from the player's ct_wide.dat
+                                //   (tools/steam_wide.py, widext.h); off = the sides as above
   int vsync;
   int backend;                  // present.h CT_BACKEND_*: SDL_Renderer / OpenGL / Vulkan (next start)
   char renderDriver[32];        // SDL_Renderer driver ("" = SDL's choice; "direct3d", "direct3d11", "opengl", "software")
