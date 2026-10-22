@@ -1,7 +1,7 @@
 """The sound commands, port against cartridge, command for command.
 
   python tools/sound_post_cmp.py <state> <scene> <walkscript> <frames>
-  python tools/sound_post_cmp.py --attract <frames>     # the demo: the cartridge from saves/attract_cena_inicial.state,
+  python tools/sound_post_cmp.py --attract <frames>     # the demo: the cartridge from saves/attract_cena_inicial_rule.state,
                                                         #   the port from its boot (--scene 433 --selftest)
 
 The cartridge: the oracle from <state> (CT_ORACLE_LOGICAL=1) under the walkscript's pad, PEEK_APUTRACE over the whole run;
@@ -17,7 +17,7 @@ import os, subprocess, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 ATTRACT = sys.argv[1] == '--attract'
-if ATTRACT: state, scene, ws, frames = 'saves/attract_cena_inicial.state', '433', '', int(sys.argv[2])
+if ATTRACT: state, scene, ws, frames = 'saves/attract_cena_inicial_rule.state', '433', '', int(sys.argv[2])   # power-on + 2159 (attract_rule.json)
 else: state, scene, ws, frames = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 pad = {'r': 0x80, 'l': 0x40, 'd': 0x20, 'u': 0x10, 'n': 0, 'a': 0x100, 'b': 0x01, 'x': 0x200, 'y': 0x02}
 

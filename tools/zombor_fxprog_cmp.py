@@ -6,9 +6,9 @@ screen-shake requests (`80 45 ..` = D1/F6B4, `80 51` = D1/F692).
 
     python tools/zombor_fxprog_cmp.py
 
-  * cartridge: build/_z_f7085.state (the 087 leg's start; tools/zombor_orbit_cmp.py makes it), `ct.exe --monitor` of the
-    slot ($CA32 active, $CA35 pointer, $CA5A..$CA61 anchor + offset), the records $0580..$05AF, $CD3C and the shake bytes
-    $CCB0..$CCC0 over 800 frames (cached as build/_z_orc_fxprog2.txt);
+  * cartridge: saves/attract_087_leg_rule.state (the 087 leg's start under the rule, made by a recipe: tools/fixtures/
+    attract_rule.json), `ct.exe --monitor` under the rule of the slot ($CA32 active, $CA35 pointer, $CA5A..$CA61 anchor +
+    offset), the records $0580..$05AF, $CD3C and the shake bytes $CCB0..$CCC0 over 800 frames;
   * port: saves/attract_zombor_pre.lakewram under CT_AUDIO_LOCKSTEP (the battle boot priced as the cartridge's) with
     CT_BATTLE_SHAKETRACE=1 (the same bytes as the frame leaves the objslot service).
 
@@ -23,10 +23,10 @@ import subprocess
 
 CT = os.path.abspath('build/ct.exe')
 FIELD = os.path.abspath('build/Belthasar.exe')
-SRC = 'saves/attract_cena_inicial.state'
+SRC = 'saves/attract_087_leg_rule.state'      # the 087 leg's start under the rule (tools/fixtures/attract_rule.json)
 FIX = 'saves/attract_zombor_pre.lakewram'
-STATE = 'build/_z_f7085.state'
-ORC = 'build/_z_orc_fxprog2.txt'
+STATE = SRC
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 MON = '7ECA32:1,7ECA35:2,7ECA5A:8,7E0580:48,7ECD3C:1,7ECCB0:17'
 
 
@@ -54,11 +54,8 @@ def first(r, pred, after=0):
 def main():
     if not os.path.exists(SRC) or not os.path.exists(FIX):
         print('zombor-fxprog: SKIP -- missing %s or %s' % (SRC, FIX)); return
-    if not os.path.exists(STATE):
-        run([CT, '--peek', SRC, 'build/_ztmp.raw', '--frames', '7085'], env=dict(os.environ, PEEK_SAVE=STATE))
-    if not os.path.exists(ORC):
-        open(ORC, 'w').write(run([CT, '--monitor', MON, '--from', STATE, '--frames', '800']))
-    o = rows(open(ORC).read(), r'\s*f(\d+)\s+(.*)')
+    o = rows(subprocess.run([CT, '--monitor', MON, '--from', STATE, '--frames', '800'], env=dict(os.environ, **RULE),
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1200).stdout, r'\s*f(\d+)\s+(.*)')
     pt = run([FIELD, '--assets', 'ct_assets.dat', '--scene', '135', '--loadwram', FIX, '--frames', '700'],
              env=dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                       CT_BATTLE_SHAKETRACE='1', CT_SHOTS='build/_zfx', CT_SHOTS_AT='700', CT_SHOTS_EXIT='1'))

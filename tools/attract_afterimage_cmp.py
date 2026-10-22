@@ -9,9 +9,11 @@ clock (the rule's migration: the 087 fight -73 frames under the infinitely fast 
 The user, 2026-09-27: "in the skill on zombor, crono is not leaving a 'trail'" (disasm/notes/battle_afterimage.md). The
 tech's script arms the trail on Crono's track with `A4 05 03` (C1/691B); CF/ED18 records his point every 5 frames and
 CF/E92C draws his current cells at the four recorded points on one frame in 3 (cartridge c7643, 7646, ... 7679). One
-interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) shoots the port's frames, ct.exe --peek the cartridge's
-(saves/attract_cena_inicial.state), port = cartridge + 1979 here; each pair's box (40,0)-(110,130) -- Crono's dash and
-the copies behind him -- is compared.
+interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) shoots the port's frames, ct.exe --peek the cartridge's under
+the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from saves/attract_cena_inicial_rule.state: the attract from power-on + 2159, made
+by a recipe -- tools/fixtures/attract_rule.json), port = cartridge + 2066 here (the fight's picture diagonal); each pair's box
+(40,0)-(110,130) -- Crono's dash and the copies behind him -- is compared. (The cartridge frames above are the owner's
+real-time capture's, saves/attract_cena_inicial.state, which this tool read until 2026-10-22.)
 """
 import os
 import struct
@@ -20,8 +22,9 @@ import sys
 
 FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
-PAIRS = [(9653, 7658), (9659, 7664), (9665, 7670)]
+STATE = 'saves/attract_cena_inicial_rule.state'
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
+PAIRS = [(9561, 7495), (9567, 7501), (9573, 7507)]
 BOX = (40, 0, 110, 130)
 
 
@@ -39,7 +42,7 @@ def main():
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
     for _, c in PAIRS:
         procs.append(subprocess.Popen([CT, '--peek', STATE, os.path.join(tmp, 'o%d.raw' % c), '--frames', str(c)],
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                                      env=dict(os.environ, **RULE), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     for pr in procs:
         pr.wait()
     x0, y0, x1, y1 = BOX

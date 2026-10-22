@@ -2,22 +2,6 @@
   "doc": "State files from the owner's playthrough that checks still read and no recipe makes yet (docs/ROADMAP.md 1.1). They exist on one machine only: a check on them SKIPs anywhere else. The list only shrinks -- tools/input_provenance.py (the check inputs-come-from-recipes-or-sources) fails on a check that reads a state file from none of recipe / third-party / this list, and on an entry here no check reads any more. Rewrite it with `python tools/input_provenance.py --write` after moving checks onto recipe-made twins.",
   "captures": [
     {
-      "path": "saves/attract_cena_inicial.state",
-      "checks": 43
-    },
-    {
-      "path": "saves/attract_entry3_handoff_rule_f8859.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/attract_loc0AD_flea.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/attract_race_handoff_rule_f8247.state",
-      "checks": 2
-    },
-    {
       "path": "saves/battle_re/ambush_pre.raw.wram",
       "checks": 2
     },

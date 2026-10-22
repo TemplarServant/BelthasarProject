@@ -49,8 +49,8 @@ under `build/_divergence/`. Write scripts with the Write tool: `python - <<EOF` 
        title intro, which the cartridge capture starts after). Say so and why.
    * **Find the mechanism on the cartridge**: `ct.exe --monitor <addr:len,...> --from <state> --frames N --diff --writer`
      names the writer PC of every change; `python tools/dis.py <hexoffset> <len>` disassembles it
-     (offset = (bank-0xC0)<<16 | addr). A state near the event: `PEEK_SAVE=<out.state> ct.exe --peek
-     saves/attract_cena_inicial.state <tmp.raw> --frames <cartridge frame - 20>`.
+     (offset = (bank-0xC0)<<16 | addr). A state near the event: `CT_ORACLE_LOGICAL=1 PEEK_SAVE=<out.state> ct.exe --peek
+     saves/attract_cena_inicial_rule.state <tmp.raw> --frames <cartridge frame - 20>` (the recipe-made start the tool reads).
    * **Find the port's side**: the relevant `CT_*TRACE` variable in docs/DEBUG_SURFACE.md, or the port's own
      WRAM via `CT_SHOTS_PAL`/`CT_OWCAMTRACE`/`CT_BATTLE_*TRACE`.
    * **Check it is not already known**: grep `disasm/notes/` and the memory index for the location and the

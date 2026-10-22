@@ -14,13 +14,18 @@ r"""The field's WINDOW WIPE (C3/01E4 through C0/22FA, op 0xFF 0x92-0x95) against
 
     python tools/wipe_step_cmp.py
 
-Both wipes of the attract's opening are graded: loc 16E's `FF 94` (mode 1, the right edge, from f578 of
-saves/attract_cena_inicial.state) and loc 01C's `FF 93` (mode 2, the right edge, from f769).
+Both wipes of the attract's opening are graded: loc 16E's `FF 94` (mode 1, the right edge, from f574 of
+saves/attract_cena_inicial_rule.state -- the attract from power-on + 2159 under the rule, made by a recipe:
+tools/fixtures/attract_rule.json) and loc 01C's `FF 93` (mode 2, the right edge, from f765). (Until 2026-10-22 the owner's
+real-time capture saves/attract_cena_inicial.state, f578 and f769: its 16E and 01C loads come 4 frames later.)
 
 THE VIRTUAL BEAM (CLAUDE.md's one exception, the zelda3 model, 2026-09-18): the seed C3/02DD reads the beam counters, and
 the beam there is the CPU's cycle-exact history -- no C engine has it. Both sides now read the virtual beam (snes.c
 g_ctVirtualBeam: `$213C` = `$0351`, `$213D` = 00): the port's call always, the oracle with CT_ORACLE_VIRTUAL_BEAM=1 from
-power-on of the capture on (the 16E wipe's `$0386` reaches the 01C wipe, so the states are the virtual run's). The two
+the state on (the 16E wipe's `$0386` reaches the 01C wipe, so the states are the virtual run's). The state itself is the
+rule's run from power-on; the frames after it run in real time with the virtual beam, so the routine returns inside the
+visible frame and the lines after it can be sampled (under the whole rule the field's main loop runs from the vblank's
+start and its call returns before line 0). The two
 states are THIS oracle's, made on every run (~4 s): a copy kept from an older oracle outlives its rule (the main checkout's
 dated from 2026-09-18 and differed in 17 / 20 bytes from the 2026-09-30 oracle's -- field_window_wipe.md "The virtual
 beam", 2026-09-30).
@@ -33,8 +38,8 @@ import sys
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 CT = os.path.abspath('build/ct.exe')
 FIELD = os.path.abspath('build/Belthasar.exe')
-SRC = 'saves/attract_cena_inicial.state'
-WIPES = [('16E', 577, 3), ('01C', 768, 5)]      # (loc, frame the state is saved at, which call to grade)
+SRC = 'saves/attract_cena_inicial_rule.state'
+WIPES = [('16E', 573, 3), ('01C', 764, 5)]      # (loc, frame the state is saved at, which call to grade)
 
 
 def run(argv, env=None, timeout=900):

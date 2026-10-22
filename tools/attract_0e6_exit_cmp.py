@@ -3,18 +3,21 @@ r"""The attract's loc 0E6 exit, port against the rule's cartridge, whole picture
 
     python tools/attract_0e6_exit_cmp.py [--port <Belthasar.exe>]
 
-The cartridge: build/ct.exe --peek saves/attract_cena_inicial.state --frames N under CT_ORACLE_LOGICAL=1, one run per
-frame (in parallel). The port: Belthasar --boot on an erased cart with CT_AUDIO_LOCKSTEP=1 (the attract audit's boot
-vehicle), one run that shoots every frame below. In this stretch the port's frame is the cartridge's + 2103 (the field's
-P+2 on the boot vehicle's offset: `$0117 = 80` at the cartridge's --monitor f5672 and the port's fmemmon f7777).
+The cartridge: build/ct.exe --peek saves/attract_cena_inicial_rule.state --frames N under CT_ORACLE_LOGICAL=1, one run per
+frame (in parallel) -- the attract from power-on + 2159 under the rule, made by a recipe (tools/fixtures/attract_rule.json).
+The port: Belthasar --boot on an erased cart with CT_AUDIO_LOCKSTEP=1 (the attract audit's boot vehicle), one run that
+shoots every frame below. The port's frame is the cartridge's + 2157: --boot's frames are the power-on's, the state starts
+2159 frames in, and the field's picture is the cartridge's P+2 (docs/TESTING.md, THE ALIGNMENT). (Until 2026-10-22 the
+cartridge was the owner's real-time capture saves/attract_cena_inicial.state run under the rule, another history: c5577-5581
+and c5674-5679 there, + 2156.)
 
 Two things are graded, each against the cartridge's own picture, pixel for pixel over 256x224:
-  robots  c5577-5581: obj10 and obj11 stand on one column; the draw list ($0E00, C0/B2A5) has obj11 in front, and the
+  robots  c5576-5580: obj10 and obj11 stand on one column; the draw list ($0E00, C0/B2A5) has obj11 in front, and the
           host's lead (obj3, `$0F00 = 00`, off screen) is not in it -- the ROM does not draw him (field_draw_list_order.md).
-  fade    c5674-5679: the exit's drain C0/0C97 `DEC $19` through a pan; the picture is that frame's $0119.
+  fade    c5673-5678: the exit's drain C0/0C97 `DEC $19` through a pan; the picture is that frame's $0119.
 Prints one line per frame and a summary:
 
-    0e6-exit: robots c5577..5581 0 px; fade c5674..5679 0 px (6 frames, $0119 14 -> 9)
+    0e6-exit: robots c5576..5580 0 px; fade c5673..5678 0 px (6 frames, $0119 14 -> 9)
 """
 import os
 import struct
@@ -23,10 +26,10 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
-OFFSET = 2103 + 53   # +53: --boot from the power-on (boot_loader.md sec. 10: +61 at 1F5) less the 8 frames the loads took out before 0E6
-ROBOTS = list(range(5577, 5582))
-FADE = list(range(5674, 5680))
+STATE = 'saves/attract_cena_inicial_rule.state'
+OFFSET = 2159 - 2    # the state's power-on frames, less the field's picture lead (P+2)
+ROBOTS = list(range(5576, 5581))
+FADE = list(range(5673, 5679))
 TMP = os.path.abspath('build/_0e6_exit')
 
 

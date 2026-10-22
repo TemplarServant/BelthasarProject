@@ -6,12 +6,12 @@ the VRAM + CGRAM the field hands the translated stage, and the stage's PICTURE, 
 
 Both sides are derived live, nothing here is a pinned constant:
 
-  * the cartridge UNDER THE RULE: saves/attract_entry3_handoff_rule_f8859.state is the attract from power-on with the
-    virtual beam and logical frames, 18 frames before `FF 63` (C3:0000 at f18). `ct.exe --peek <state> out --frames 18`
+  * the cartridge UNDER THE RULE: the attract from power-on with the virtual beam and logical frames, 18 frames before
+    `FF 63` (C3:0000 at f18) -- by default this ct.exe's own (stage_rule_cmp.py), with --committed the recipe-made
+    saves/attract_entry3_handoff_f6750.state (tools/fixtures/attract.json: power-on + 8776 under the rule). `ct.exe --peek <state> out --frames 18`
     (with CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1) dumps the PPU's VRAM at the hand-off (out.vram; out.oam = OAM
     then CGRAM) and `--frames 151` the picture 133 stage frames later (out: 512 x 2*lines [pad,B,G,R], line y at image
-    row (y+8)*2 -- ctlib/fb.py's decode). (The real-beam capture saves/attract_entry3_handoff_f6750.state is the older
-    reference: its hand-off is f17 and its opening transition is the beam's, not the rule's.)
+    row (y+8)*2 -- ctlib/fb.py's decode).
   * the port: the attract from scene 433 with CT_STAGE_HANDOFF_VRAM (the 64 KB image + the 256 CGRAM words the host
     built for the stage: ct_lz_load_tiles, CtFieldSceneVramTilemaps, fieldPalettePages -- field.c) and CT_SHOTS_AT
     on the frame that presents the same stage frame (f8927 today: the hand-off is at f8795 under the suite's
@@ -37,15 +37,15 @@ import sys
 
 # UNDER THE RULE (CLAUDE.md's exception, the zelda3 model -- sequence_table.md 11.13): the cartridge from POWER-ON with
 # the virtual beam and logical frames (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1), saved 18 frames before its `FF 63`
-# (`PEEK_SAVE=... ct.exe --peek boot out --frames 8859`; --xlatentries on it: C3:0000 f18 with $0386 = E4, the stage's
-# 7E:3000 f35 at v=98 h=350). The port's seed history is the cartridge's call for call (seed_history_cmp.py), so the
-# opening transition C3/02DD draws is graded too: every stage frame from the hand-off's own.
-STATE = 'saves/attract_entry3_handoff_rule_f8859.state'
-# ...but that state is the 2026-09-26 oracle's, made before the drain's and the runner's virtual beam moved the attract (a
-# state outlives the oracle that made it: stage_rule_cmp.py's docstring), and the stage's colours follow the palette records
-# the field hands over (sequence_table.md 11.12). So by default the state is THIS oracle's, made from power-on by
-# stage_rule_cmp.py (cached under build/_stagerule by ct.exe's sha1; C3:0000 on its f18 as well); `--committed` reads the
-# file above. The port's picture P is the cartridge's P+2 (THE ALIGNMENT, docs/TESTING.md): the check passes the frames so.
+# (recipe attract_entry3_handoff, power_on 8776; --xlatentries on it: C3:0000 f18 with $0386 = E4). The port's seed history
+# is the cartridge's call for call (seed_history_cmp.py), so the opening transition C3/02DD draws is graded too: every stage
+# frame from the hand-off's own. (Until 2026-10-22 this was saves/attract_entry3_handoff_rule_f8859.state, saved by hand
+# 2026-09-26 under an earlier rule; the recipe's state is the same moment under today's.)
+STATE = 'saves/attract_entry3_handoff_f6750.state'
+# ...but a recipe's state is the oracle's that made it (a state outlives the oracle that made it: stage_rule_cmp.py's
+# docstring), and the stage's colours follow the palette records the field hands over (sequence_table.md 11.12). So by
+# default the state is THIS oracle's, made from power-on by stage_rule_cmp.py (cached under build/_stagerule by ct.exe's
+# sha1; C3:0000 on its f18 as well); `--committed` reads the file above. The port's picture P is the cartridge's P+2 (THE ALIGNMENT, docs/TESTING.md): the check passes the frames so.
 if '--committed' in sys.argv: sys.argv.remove('--committed')
 else:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
