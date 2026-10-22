@@ -6,7 +6,11 @@ r"""The demo battles' colours against the cartridge: the entry frame and the fra
 The user, 2026-09-27: "when the battle with flea starts in the demo, the characters vanish for 1 or more frames" and "after
 the frog's skill ends in Magus's castle, and the ice skill on zombor, the screen is darkening for a moment"
 (disasm/notes/battle_arena_cgram.md). One interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) shoots the port's
-frames; ct.exe --peek shoots the cartridge's (saves/attract_cena_inicial.state), and each pair's box is compared:
+frames; ct.exe --peek shoots the cartridge's under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from
+saves/attract_cena_inicial_rule.state: the attract from power-on + 2159, made by a recipe -- tools/fixtures/attract_rule.json),
+and each pair's box is compared. (The cartridge frames below are the owner's real-time capture's, saves/attract_cena_inicial.state,
+which this tool read until 2026-10-22; the rule's are in PAIRS: the fights' picture diagonal p - 2066, P+1, and p - 2067 in
+087's, whose visit is a frame longer in the port.)
 
   0AD entry     port f3810 = the battle's first frame, cart c1744: the PCs' box (Crono, (112,128)-(128,194)). The
                 first compose read h->fxCgram before any battle NMI filled it -- zeros: black PCs for one frame.
@@ -19,8 +23,8 @@ frames; ct.exe --peek shoots the cartridge's (saves/attract_cena_inicial.state),
                 f6831 / c4800 (the tech: CGWSEL 00, no sub screen added -- the glow gone, not green; the user's item #6).
   087 after     port f9900 / c7889 and f9908 / c7897: no record at all ($2C66 = 13, C0/6DCF's $01BB).
 
-The counts are the port's residual against the cartridge at those frames (the 07D's candle glow and sprites, the 087's
-~1300 px of Zombor's area) -- pinned exactly, so a change in either direction is seen.
+The counts are pinned exactly, so a change in either direction is seen. (Against the real-time capture they were residuals --
+the 07D's candle glow and sprites, the 087's ~1300 px of Zombor's area; against the rule's cartridge every pair is whole.)
 """
 import os
 import struct
@@ -29,28 +33,32 @@ import sys
 
 FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
+STATE = 'saves/attract_cena_inicial_rule.state'
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 PAIRS = [   # (label, port frame, cart frame, box)
-    ('0AD entry, the PCs', 3810, 1744, (112, 128, 128, 194)),
-    ('07D before the tech', 6639, 4630, (0, 0, 256, 224)),
-    ('07D mid-tech', 6708, 4700, (0, 0, 256, 224)),
-    ('07D mid-tech', 6808, 4800, (0, 0, 256, 224)),
-    ('07D effect load, faded', 6659, 4648, (0, 0, 256, 224)),
-    ('087 Ice Sword darken', 9503, 7505, (0, 0, 256, 224)),
-    ('07D after the tech', 7148, 5145, (0, 0, 256, 224)),
-    ('07D after the tech', 7156, 5153, (0, 0, 256, 224)),
-    ('087 after the tech', 9878, 7889, (0, 0, 256, 224)),
-    ('087 after the tech', 9886, 7897, (0, 0, 256, 224)),
+    ('0AD entry, the PCs', 3807, 1741, (112, 128, 128, 194)),
+    ('07D before the tech', 6594, 4528, (0, 0, 256, 224)),
+    ('07D mid-tech', 6670, 4604, (0, 0, 256, 224)),
+    ('07D mid-tech', 6754, 4688, (0, 0, 256, 224)),
+    ('07D effect load, faded', 6608, 4542, (0, 0, 256, 224)),
+    ('087 Ice Sword darken', 9411, 7344, (0, 0, 256, 224)),
+    ('07D after the tech', 7092, 5026, (0, 0, 256, 224)),
+    ('07D after the tech', 7100, 5034, (0, 0, 256, 224)),
+    ('087 after the tech', 9779, 7712, (0, 0, 256, 224)),
+    ('087 after the tech', 9787, 7720, (0, 0, 256, 224)),
 ]
 
 
 def main():
     global PAIRS
     # an optional comma list replaces the port frames, in PAIRS order: the port's numbering moves with the attract's clock
-    # (the rule's migration: the fights' boots and returns under the infinitely fast CPU), the cartridge's does not
+    # (the rule's migration: the fights' boots and returns under the infinitely fast CPU); a second one the cartridge's
     if len(sys.argv) > 1:
         pfs = [int(v) for v in sys.argv[1].split(',')]
         PAIRS = [(l, pf, c, b) for (l, _, c, b), pf in zip(PAIRS, pfs)]
+    if len(sys.argv) > 2:
+        cfs = [int(v) for v in sys.argv[2].split(',')]
+        PAIRS = [(l, p, cf, b) for (l, p, _, b), cf in zip(PAIRS, cfs)]
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
     tmp = os.path.join('build', '_battlecolour')
     os.makedirs(tmp, exist_ok=True)
@@ -62,7 +70,7 @@ def main():
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
     for _, _, c, _ in PAIRS:
         procs.append(subprocess.Popen([CT, '--peek', STATE, os.path.join(tmp, 'o%d.raw' % c), '--frames', str(c)],
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                                      env=dict(os.environ, **RULE), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     for pr in procs:
         pr.wait()
     for label, pf, cf, (x0, y0, x1, y1) in PAIRS:
