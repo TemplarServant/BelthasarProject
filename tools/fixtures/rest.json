@@ -1,0 +1,79 @@
+{
+  "doc": "The rest of the private captures (docs/ROADMAP.md 1.1): the forest and GATO's fights outside the big families, the ferry, the 600 A.D. Cathedral and sanctum, the fair's decisions, the flag pages, the Dragon Tank -- recipes prefixed fxr_ (tools/recipes/).",
+  "fixtures": [
+    {
+      "path": "saves/field_re/m81_nuns_lake.state",
+      "recipe": "fxr_m81_nuns",
+      "kind": "state",
+      "doc": "the Cathedral (loc 081): the nuns walking to their spots before they turn into Naga-ettes"
+    },
+    {
+      "path": "saves/field_re/m81_nuns_lake.lakewram",
+      "recipe": "fxr_m81_nuns",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/field_re/m81_nuns_ppu_lake.state",
+      "recipe": "fxr_m81_nuns",
+      "kind": "state",
+      "doc": "the same state: the capture's --ppu splice existed only to give its WRAM a matching VRAM, which a recipe state has"
+    },
+    {
+      "path": "saves/field_re/m81_naga_after_fight_lake.state",
+      "recipe": "fxr_m81_naga_after_fight",
+      "kind": "state",
+      "doc": "loc 081 after the Naga-ette fight, Lucca's 'Aack!' scene ahead"
+    },
+    {
+      "path": "saves/field_re/m81_naga_after_fight.lakewram",
+      "recipe": "fxr_m81_naga_after_fight",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/m81_frog_lake.lakewram",
+      "recipe": "fxf_m81_frog",
+      "kind": "lakewram",
+      "doc": "Frog's cutscene after the fight (the WRAM of saves/field_re/m81_frog.state's twin)"
+    },
+    {
+      "path": "saves/field_re/catedral_user.state",
+      "recipe": "cathedral_entry",
+      "kind": "state",
+      "doc": "Crono and Lucca at the 600 A.D. Cathedral's south door (loc 081, storyline 12): the capture's place, reached by the recipe chain"
+    },
+    {
+      "path": "saves/field_re/catedral_user.lakewram",
+      "recipe": "cathedral_entry",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/catedral_world.lakewram",
+      "recipe": "cathedral_entry",
+      "pad": "20:40,0:200",
+      "kind": "lakewram",
+      "doc": "the capture's own provenance: from the south door Down 40, then 200 frames -- out onto the 600 A.D. overworld"
+    },
+    {
+      "path": "saves/field_re/inn600_tele.state",
+      "recipe": "fxr_inn600_tele",
+      "kind": "state",
+      "doc": "the 600 A.D. inn's counter, Crono and Lucca"
+    },
+    {
+      "path": "saves/field_re/inn600_yesno.state",
+      "recipe": "fxr_inn600_yesno",
+      "kind": "state",
+      "doc": "the inn's night after Yes"
+    },
+    {
+      "path": "saves/battle_re/bat8.raw.wram",
+      "recipe": "fxr_m81_nuns",
+      "pad": "0:528",
+      "kind": "wram",
+      "doc": "the Naga-ette fight's command phase with no input: 94 frames after the battle's start (c434), Crono ready (AFAB 00) and Lucca's gauge at 24, the capture's own values ($9907 = C7 31 for the two PCs, the four Naga-ettes at full HP)"
+    }
+  ]
+}
