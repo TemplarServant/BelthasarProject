@@ -260,6 +260,38 @@
       "pad": "20:40,0:200",
       "kind": "state",
       "doc": "its own provenance: Down 40 into the ambush, 240 frames on (the fight under way)"
+    },
+    {
+      "path": "saves/field_re/savept084_lake.state",
+      "recipe": "fxr_savept084",
+      "kind": "state",
+      "doc": "loc 084 on the save point's tile"
+    },
+    {
+      "path": "saves/field_re/savept084.lakewram",
+      "recipe": "fxr_savept084",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/fall_stairs083_lake.state",
+      "recipe": "fxr_fall_stairs083",
+      "kind": "state",
+      "doc": "loc 083 at the top of the staircase the playthrough's fall left as a conveyor"
+    },
+    {
+      "path": "saves/field_re/fall_stairs083.lakewram",
+      "recipe": "fxr_fall_stairs083",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/yakra_defeat_039.state",
+      "recipe": "fxr_yakra_scene",
+      "kind": "ctfs",
+      "scene": 198,
+      "frames": 1,
+      "doc": "the port's own CtScene state one frame after seeding loc 0C6 from the recipe's WRAM: the Chancellor's scene just begun"
     }
   ]
 }
