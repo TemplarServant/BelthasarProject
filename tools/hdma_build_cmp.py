@@ -37,8 +37,9 @@ DRIVES = [
     ('naga', 'saves/field_re/m81_naga_after_fight_lake.state', '0:300,100:1,0:460', 760, {'CT_HOOK_DUMPCALLS_FROM': '250'}),
     # Mom's box flipped to the TOP by Y (C0/1985 `EOR #03`: mode 1), then closed by A -- the top window's ramp
     ('top-box', 'saves/intro_box.state', '0:10,2:1,0:30,100:1,0:80', 125, {}),
-    # the attract: loc 16E's window wipe (`FF 94`) and the field around it
-    ('attract', 'saves/attract_cena_inicial.state', '0:900', 900, {'CT_HOOK_DUMPCALLS_FROM': '540'}),
+    # the attract: loc 16E's window wipe (`FF 94`) and the field around it (the attract from power-on + 2159 under the rule,
+    # made by a recipe -- tools/fixtures/attract_rule.json; until 2026-10-22 the owner's real-time capture attract_cena_inicial.state)
+    ('attract', 'saves/attract_cena_inicial_rule.state', '0:900', 900, {'CT_HOOK_DUMPCALLS_FROM': '540'}),
     # the attract's 07D demo battle: the exit tail's C0/0AFF builds twice a frame with `$53` bit 7 (FD:C401 / C95D)
     ('demo-battle', 'saves/attract_07d_battle_f4540.state', '0:660', 660, {'CT_HOOK_DUMPCALLS_FROM': '600'}),
     # Jackie's ch08 save, the End of Time: `$1DF9` = 1 -- the window wave on channel 3 and in the tail (C5E2 / C732)

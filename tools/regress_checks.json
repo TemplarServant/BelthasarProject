@@ -33414,7 +33414,7 @@
       "inputs": [
         "Chrono_Trigger_USA_SNES.sfc",
         "ct_assets.dat",
-        "saves/attract_cena_inicial.state",
+        "saves/attract_cena_inicial_rule.state",
         "tools/attract_demo_walk_cmp.py"
       ],
       "expect": [
@@ -33428,7 +33428,7 @@
       ],
       "timeout_s": 900,
       "note_pass": "each demo battle's idle tick dispatches the walk once, before the demo's turn, as the cartridge's does",
-      "notes": "ADDED 2026-09-27 (the user's F5 in the attract's 07D battle: 'one bat has a different animation from the other, that does not happen on the cartridge'). A demo battle is one pass of the main loop: the demo's turn (C1/8461 -> C1/B725 -> C1/B967) returns only once the action has run, into C1/83AE, whose `LDA $2989 / BIT #20` ends the fight instead of `JMP C1/8120` -- so the idle tick's walk (C1/10A9 -> C1/2D9F) never runs after the action. The port ran one more frame A between the action's end and its demo end in all three demo battles (0AD f366, 07D f619, 087 f523); at the 07D that dispatch committed the right Vamp's idle window and published pose 00 over the tech's closing 01 for the teardown's ~36 frames (cartridge c5140-5176; attract-battle-colours after the tech +391 px). battleIterFrameA is closed while h->demoPass is set. Cartridge: --hookpc C12DA4 (A = the group), one visit per battle. disasm/notes/battle_enemy_cells.md sec. 7.",
+      "notes": "ADDED 2026-09-27 (the user's F5 in the attract's 07D battle: 'one bat has a different animation from the other, that does not happen on the cartridge'). A demo battle is one pass of the main loop: the demo's turn (C1/8461 -> C1/B725 -> C1/B967) returns only once the action has run, into C1/83AE, whose `LDA $2989 / BIT #20` ends the fight instead of `JMP C1/8120` -- so the idle tick's walk (C1/10A9 -> C1/2D9F) never runs after the action. The port ran one more frame A between the action's end and its demo end in all three demo battles (0AD f366, 07D f619, 087 f523); at the 07D that dispatch committed the right Vamp's idle window and published pose 00 over the tech's closing 01 for the teardown's ~36 frames (cartridge c5140-5176; attract-battle-colours after the tech +391 px). battleIterFrameA is closed while h->demoPass is set. Cartridge: --hookpc C12DA4 (A = the group), one visit per battle. disasm/notes/battle_enemy_cells.md sec. 7. RE-SEEDED 2026-10-22 (nothing on one machine only, docs/ROADMAP.md 1.1): the cartridge side runs under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM) from saves/attract_cena_inicial_rule.state (tools/fixtures/attract_rule.json: the power-on + 2159, the vehicle's own history) in place of the owner's real-time capture saves/attract_cena_inicial.state. The same --hookpc over 7700 frames; the counts are the ones pinned before (one grp0 dispatch per demo battle, 3 / 3).",
       "mutations": [
         {
           "file": "src/battle.c",
@@ -33622,7 +33622,7 @@
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/attract_cena_inicial.state",
+        "saves/attract_cena_inicial_rule.state",
         "tools/attract_07d_staging_cmp.py"
       ],
       "expect": [
@@ -33630,8 +33630,8 @@
         "staging-cmp: slot1 port 0C0B0D0B040500000220D37F (205,187) cartridge 0C0B0D0B040500000220D37F (205,187) identical",
         "staging-cmp: slot2 port 0507000F015100000300F67F (80,127) cartridge 0507000F015100000300F67F (80,127) identical",
         "staging-cmp: slot3 port 09070F0F015100000300F67F (159,127) cartridge 09070F0F015100000300F67F (159,127) identical",
-        "staging-cmp: slot4 port 0707080F0057000001C0C47F (120,127) cartridge 0707080F0157000001C0C47F (120,127) DIFFER",
-        "staging-cmp: the 07D enemy records $29BF: 4 / 5 identical"
+        "staging-cmp: slot4 port 0707080F0057000001C0C47F (120,127) cartridge 0707080F0057000001C0C47F (120,127) identical",
+        "staging-cmp: the 07D enemy records $29BF: 5 / 5 identical"
       ],
       "pin": [
         "^staging-cmp: "
@@ -33652,7 +33652,7 @@
           "why": "the tile from the var's HIGH byte (the old 12.4 reading): every 8C-placed object goes to tile 0"
         }
       ],
-      "notes": "THE VICTIMS WERE NEVER MOVED BY THE TECH; THEY WERE STAGED WRONG (the open item of battle_tech_damage_type6.md 5). The oracle's $1D0C/$1D23 do not change from the battle boot (CC/EA90/EA9E = 16*tile + fine of these records) to the end; the records are the field objects' positions at the entry (C0/057C-05A1), and the 07D's script places the Sorcerer and spawns the Hench and the Vamps with op 0x8C = C0/4BC3: the TILE is the LOW byte of each scene var (filled by op 0x21's 8-bit stores) and $1800 is kept. The port read the var with its big-endian r16 and took >> 4 as pixels: 8 px left and a tile high, and the enemies spread out of that point. MEASURED: after the fix the four enemies' paths are the LOGICAL oracle's frame for frame (spawn at (120,415) f4395, arrival (33,471) (205,475) (80,415) (159,415) f4424; port f6434-f6463) and these five records equal the cartridge's C0:0589 write. disasm/notes/field_op8c_place_from_vars.md. ==== 2026-09-27 (d), RE-PINNED: the anim drain C0/CA76 stops at the ROM's line $6B on the zelda3 model's virtual beam that advances with the pass's visits (the user's decision; src/ct_vbeam.h, two visits a pass) -- the port had passed 0xF0 (no deadline) and emptied the queue every frame -- and the facing tail C0/554B's `STZ $1601,X` (the walk-anim timer) runs for all ten facing opcodes in the live VM (move.c CtVmFacingFamily; it stored the facing of five and nothing else). disasm/notes/anim_drain_cad9.md sec. 16. 5/5 -> 4/5 against the real cartridge. The rule's oracle (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1, the same `--monitor 7E29BF:60`, f169) stages slot 3 in pose 01 and slot 4 in 00 -- the port's five records are that oracle's, byte for byte; slot 4's 01 on the real cartridge is its real beam's schedule."
+      "notes": "THE VICTIMS WERE NEVER MOVED BY THE TECH; THEY WERE STAGED WRONG (the open item of battle_tech_damage_type6.md 5). The oracle's $1D0C/$1D23 do not change from the battle boot (CC/EA90/EA9E = 16*tile + fine of these records) to the end; the records are the field objects' positions at the entry (C0/057C-05A1), and the 07D's script places the Sorcerer and spawns the Hench and the Vamps with op 0x8C = C0/4BC3: the TILE is the LOW byte of each scene var (filled by op 0x21's 8-bit stores) and $1800 is kept. The port read the var with its big-endian r16 and took >> 4 as pixels: 8 px left and a tile high, and the enemies spread out of that point. MEASURED: after the fix the four enemies' paths are the LOGICAL oracle's frame for frame (spawn at (120,415) f4395, arrival (33,471) (205,475) (80,415) (159,415) f4424; port f6434-f6463) and these five records equal the cartridge's C0:0589 write. disasm/notes/field_op8c_place_from_vars.md. ==== 2026-09-27 (d), RE-PINNED: the anim drain C0/CA76 stops at the ROM's line $6B on the zelda3 model's virtual beam that advances with the pass's visits (the user's decision; src/ct_vbeam.h, two visits a pass) -- the port had passed 0xF0 (no deadline) and emptied the queue every frame -- and the facing tail C0/554B's `STZ $1601,X` (the walk-anim timer) runs for all ten facing opcodes in the live VM (move.c CtVmFacingFamily; it stored the facing of five and nothing else). disasm/notes/anim_drain_cad9.md sec. 16. 5/5 -> 4/5 against the real cartridge. The rule's oracle (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1, the same `--monitor 7E29BF:60`, f169) stages slot 3 in pose 01 and slot 4 in 00 -- the port's five records are that oracle's, byte for byte; slot 4's 01 on the real cartridge is its real beam's schedule. RE-SEEDED 2026-10-22 (nothing on one machine only, docs/ROADMAP.md 1.1): the cartridge side runs under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM) from saves/attract_cena_inicial_rule.state (tools/fixtures/attract_rule.json: the power-on + 2159, the vehicle's own history) in place of the owner's real-time capture saves/attract_cena_inicial.state. The write C0:0589 lands at f4425 on the rule's run (f4496 on the capture), so the window is --settle 4410 --frames 30. Slot 4's record is now identical too, 5 / 5 (was 4 / 5): its byte 4, the Vamp's published pose at the staging, is 00 on the rule's cartridge as on the port -- the capture's 01 was its own history (the anim's phase in real time), not the staging's mechanism."
     },
     {
       "name": "vmdiff-07d-field-sorcerer-placement",
@@ -46097,7 +46097,7 @@
         "saves/field_re/tent_keeper_lake.state",
         "saves/field_re/m81_naga_after_fight_lake.state",
         "saves/intro_box.state",
-        "saves/attract_cena_inicial.state",
+        "saves/attract_cena_inicial_rule.state",
         "saves/attract_07d_battle_f4540.state",
         "saves/downloaded/ctjackie/states/ch08.state"
       ],
@@ -46112,14 +46112,14 @@
         "hdma-build: wave-box 170 calls (0 interrupted, set aside) -> exact 170/170, written 47370 bytes, 0 wrong",
         "hdma-build: wave-top-box 125 calls (0 interrupted, set aside) -> exact 125/125, written 31416 bytes, 0 wrong",
         "hdma-build: odd-0351 60 calls (0 interrupted, set aside) -> exact 60/60, written 13680 bytes, 0 wrong",
-        "hdma-build: census set A modes 0/1/2 498/42/204, set B modes 0/1/2 497/40/206, $0127 10 values (2 <= 0A), wave ch3 555 (under a box 204) ch2 104 tail 659, $53 bit 7 28, $0351 odd 60"
+        "hdma-build: census set A modes 0/1/2 499/42/204, set B modes 0/1/2 496/40/206, $0127 10 values (2 <= 0A), wave ch3 555 (under a box 204) ch2 104 tail 659, $53 bit 7 28, $0351 odd 60"
       ],
       "pin": [
         "^hdma-build: "
       ],
       "timeout_s": 200,
       "note_pass": "FD/C2C1 native (src/hdma_table.c) builds the cartridge's own tables on every call of ten drives: textboxes top and bottom, the attract, the demo battle's exit tail, the window wave on ch2 / ch3 / under a box, $7F:0351 odd",
-      "notes": "disasm/notes/field_hdma_tables.md. The oracle (rule on) dumps the WRAM at each FD/C2C1 entry and at its RTL (ct.exe --hookpc FDC2C1, CT_HOOK_DUMPCALLS, CT_HOOK_DUMPEXIT=FDC2D2,FDC2DE); ct.exe --hdmabuildcmp runs the native builder on each entry image: EXACT = all 128 KB equal outside the stack page $0600-$06FF; WRITTEN = with the tables ($7F:0F80-$1E26) and DP $01D9-$01EF poisoned twice, every byte the builder writes equals the cartridge's (a builder that writes nothing cannot pass on the calls that rewrite unchanged tables). Three drives poke an input the ROM then runs itself: $0139 = 0C (C0/264F sets $1DFD = 11), $1DF9 = 01 under a box (the run lists CC5E / CCB8), $7F:0351 = 01. Re-pin only if a drive's frame window is moved on purpose; a 'wrong' count is a builder defect.",
+      "notes": "disasm/notes/field_hdma_tables.md. The oracle (rule on) dumps the WRAM at each FD/C2C1 entry and at its RTL (ct.exe --hookpc FDC2C1, CT_HOOK_DUMPCALLS, CT_HOOK_DUMPEXIT=FDC2D2,FDC2DE); ct.exe --hdmabuildcmp runs the native builder on each entry image: EXACT = all 128 KB equal outside the stack page $0600-$06FF; WRITTEN = with the tables ($7F:0F80-$1E26) and DP $01D9-$01EF poisoned twice, every byte the builder writes equals the cartridge's (a builder that writes nothing cannot pass on the calls that rewrite unchanged tables). Three drives poke an input the ROM then runs itself: $0139 = 0C (C0/264F sets $1DFD = 11), $1DF9 = 01 under a box (the run lists CC5E / CCB8), $7F:0351 = 01. Re-pin only if a drive's frame window is moved on purpose; a 'wrong' count is a builder defect. RE-SEEDED 2026-10-22 (nothing on one machine only, docs/ROADMAP.md 1.1): the `attract` drive starts from saves/attract_cena_inicial_rule.state (tools/fixtures/attract_rule.json: the power-on + 2159 under the rule) in place of the owner's real-time capture saves/attract_cena_inicial.state; the same 900 frames and dump window give the same line, 204 calls exact, 14484 bytes written, 0 wrong. The census moves one call between the sets, set A mode 0 498 -> 499 and set B mode 0 497 -> 496: the attract drive's 204 calls split 102 / 102 between the sets on the rule's run where the capture's split 101 / 103 (measured: the old state through the same drive) -- which set a call builds follows $0153, which the field's frames and C0/2848's entry flip, so the split is the state's history; every call is exact on both. The other drives' captures belong to other families.",
       "mutations": [
         {
           "file": "src/hdma_table.c",
@@ -47114,11 +47114,11 @@
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/attract_cena_inicial.state",
+        "saves/attract_cena_inicial_rule.state",
         "tools/attract_0e6_exit_cmp.py"
       ],
       "expect": [
-        "0e6-exit: robots c5577..5581 0 px; fade c5674..5679 0 px (6 frames, $0119 14 -> 9)"
+        "0e6-exit: robots c5576..5580 0 px; fade c5673..5678 0 px (6 frames, $0119 14 -> 9)"
       ],
       "pin": [
         "^0e6-exit: robots "
@@ -47138,7 +47138,7 @@
           "why": "the depth by Y instead of the draw list's walk: obj10 over obj11 on one column, where the list (and the cartridge's OAM) has obj11 in front"
         }
       ],
-      "notes": "2026-10-19, the attract audit's boot vehicle, events [15] and [17] of loc 0E6. (1) THE FADE: the exit's $0117 = 80 drain (C0/0C76 -> 0C97 `DEC $19`, ct_vm.c CtSceneTick) decremented the byte but not sc->bright, which stands for it, so the frame drew field.c's copy of $0119 read before the tick -- every door/positional exit fade one step late; seen here because the camera pans through the fade (the scroll matched at the field's P+2 and the brightness at P+1: 14.5% px). (2) THE DEPTH: obj10 and obj11 stand on one column; the draw list walks obj11 first (front), but the host's lead obj3 ($0F00 = 00, off screen, unlinked by C0/A921) is drawn by the port and is not in the list, which threw the whole frame back on the Y sort (412 px a frame). Now an object outside the list is not drawn (C0/B2A5 emits the walk alone), and the menu's reload rebuilds the list as C0/286C does (7155 / E935 / B204 / A7E9 / B0E6, ct_vm.c CtSceneMenuReloadObjects) -- the stale list was why this was reverted before (field_draw_list_order.md sec. 4). Cartridge frame + 2103 = port frame on this vehicle. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the boot vehicle's 0E6 is 53 frames later than at 9dcdf62 (the power-on's +61 at 1F5, less the 8 frames the location loads' cost took out of the visits before 0E6), not 61: with OFFSET = 2103 + 53 the 11 frames are 9dcdf62's pictures pixel for pixel and the robots and fade read 0 px again. Tool constant only."
+      "notes": "2026-10-19, the attract audit's boot vehicle, events [15] and [17] of loc 0E6. (1) THE FADE: the exit's $0117 = 80 drain (C0/0C76 -> 0C97 `DEC $19`, ct_vm.c CtSceneTick) decremented the byte but not sc->bright, which stands for it, so the frame drew field.c's copy of $0119 read before the tick -- every door/positional exit fade one step late; seen here because the camera pans through the fade (the scroll matched at the field's P+2 and the brightness at P+1: 14.5% px). (2) THE DEPTH: obj10 and obj11 stand on one column; the draw list walks obj11 first (front), but the host's lead obj3 ($0F00 = 00, off screen, unlinked by C0/A921) is drawn by the port and is not in the list, which threw the whole frame back on the Y sort (412 px a frame). Now an object outside the list is not drawn (C0/B2A5 emits the walk alone), and the menu's reload rebuilds the list as C0/286C does (7155 / E935 / B204 / A7E9 / B0E6, ct_vm.c CtSceneMenuReloadObjects) -- the stale list was why this was reverted before (field_draw_list_order.md sec. 4). Cartridge frame + 2103 = port frame on this vehicle. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the boot vehicle's 0E6 is 53 frames later than at 9dcdf62 (the power-on's +61 at 1F5, less the 8 frames the location loads' cost took out of the visits before 0E6), not 61: with OFFSET = 2103 + 53 the 11 frames are 9dcdf62's pictures pixel for pixel and the robots and fade read 0 px again. Tool constant only. RE-SEEDED 2026-10-22 (nothing on one machine only, docs/ROADMAP.md 1.1): the cartridge is saves/attract_cena_inicial_rule.state (tools/fixtures/attract_rule.json: the power-on + 2159 under the rule, the boot vehicle's own history) in place of the owner's capture saves/attract_cena_inicial.state run under the rule. The port's frames are the same (p7733-7737, p7830-7835); the cartridge's are one lower, c5576-5580 and c5673-5678, found by comparing each whole port frame with every cartridge frame within 8 of it: one identical frame each (the next best 57039 and 30943 or less), port = cartridge + 2157 = the state's 2159 power-on frames less the field's P+2 -- a constant now, where the capture's +2156 had to be measured. 0 px on all eleven, $0119 14 -> 9 as before."
     },
     {
       "name": "playthrough-legs-vs-rule-cartridge",

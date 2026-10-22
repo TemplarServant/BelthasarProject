@@ -7,8 +7,10 @@ The field writes them at the battle's entry (C0/0557-0616): tile = $1801,Y - $F0
 $0A00,Y & 0F / $0A80,Y & 0F of each enemy's field object, then the pose, id, mode byte and tail. So they are the
 enemies' FIELD positions at that moment -- which the 07D's script sets with op 0x8C (C0/4BC3) out of scene vars
 filled by op 0x21 (disasm/notes/field_op8c_place_from_vars.md), and the battle's $1D0C/$1D23 are 16*tile + fine
-of these bytes (CC/EA82-EA9B). The cartridge: saves/attract_cena_inicial.state, `--monitor 7E29BF:60` over the
-write (C0:0589, f4496). The port: the attract (scene 433, --selftest) with CT_BATTLE_MEMMON, the first line of the
+of these bytes (CC/EA82-EA9B). The cartridge, under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM):
+saves/attract_cena_inicial_rule.state (the attract from power-on + 2159, made by a recipe -- tools/fixtures/attract_rule.json),
+`--monitor 7E29BF:60` over the write (C0:0589, f4425; f4496 on the owner's real-time capture saves/attract_cena_inicial.state,
+which this tool read until 2026-10-22). The port: the attract (scene 433, --selftest) with CT_BATTLE_MEMMON, the first line of the
 battle whose formation $AF02 is the 07D's (05 05 51 51 57).
 """
 import os
@@ -26,7 +28,8 @@ def main():
     pr = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433',
                          '--selftest', '--frames', '6600'], env=env, capture_output=True, text=True, errors='replace')
     orr = subprocess.run([os.path.abspath('build/ct.exe'), '--monitor', '7E29BF:60', '--from',
-                          'saves/attract_cena_inicial.state', '--settle', '4480', '--frames', '30', '--diff'],
+                          'saves/attract_cena_inicial_rule.state', '--settle', '4410', '--frames', '30', '--diff'],
+                         env=dict(os.environ, CT_ORACLE_LOGICAL='1', CT_ORACLE_VIRTUAL_BEAM='1'),
                          capture_output=True, text=True, errors='replace')
     port = None
     for l in (pr.stdout + pr.stderr).splitlines():
