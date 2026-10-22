@@ -5743,8 +5743,24 @@ static void fieldMapFromWram(Field* f, const uint8_t* sw, const char* tag) {
 // fades' (C0/193E, C0/0CCE, C0/2824), which is why the tiles keep stepping under the menu's fades. Returns 1 when a
 // character changed. CT_TILEANIMTRACE=1: one line per call.
 static int fieldTileAnimRun(void* sd, uint8_t* w, int frameNo);
+// THE DECISION BOX'S HAND, C0/ED15's first job: `LDA $63 / BMI ->ED24 / JSR C0/F05E`. F05E (DP = $2100, VMAIN = 80) puts
+// the pointing hand into BG3 at the window line $0163 names (0 -> F08B, 1 -> F0F0, 2 -> F0D0, 3 -> F0AB, each clearing the
+// other lines' cells) and, for any other value -- C0/1AFE retires the confirmed cursor to 4 -- clears all four
+// (F079-F082) and sets $0163 = 80 (F086-F088), so the hand is gone from the NMI after the confirm's successor on and the
+// routine idles. It runs in the IRQ's forced blank only on a frame whose $0153 bit 0 is clear (C0/ECFC-ED03; a set bit
+// runs FD/FFFD's tile animation instead). The port's renderer draws the hand from g_dlgHandRow, the line F05E last wrote
+// (-1: none). MEASURED, the rule's cartridge on saves/field_re/s439_marle_choice_lake.state (A every 100 frames from f100):
+// `$0163 = 80` by C0:F08A at f202 and f502, the frames after the confirms, and the hand off the screen from them.
+static int g_dlgHandRow = -1;
+static void fieldIrqHand(uint8_t* w) {
+  if (w[0x0163] & 0x80) return;
+  if (w[0x0163] < 4) { g_dlgHandRow = w[0x0163]; return; }
+  g_dlgHandRow = -1;
+  w[0x0163] = 0x80;
+}
 static int fieldIrqTiles(void* sd, uint8_t* w, int frameNo) {
-  if (!w || (w[0x010F] & 0x80) || !(w[0x0153] & 0x01)) return 0;
+  if (!w || (w[0x010F] & 0x80)) return 0;
+  if (!(w[0x0153] & 0x01)) { fieldIrqHand(w); return 0; }      // C0/ED03 JSR C0/ED15
   return fieldTileAnimRun(sd, w, frameNo);
 }
 // THE BATTLE'S IRQ, D1/FE97 -- D1/F1B0 installs it with the fight's NMI (D1/E77C), CD/0418 keeps it beside the exit tail's
@@ -20188,15 +20204,13 @@ int main(int argc, char** argv) {
       // ...and it keeps its TEXT while it shrinks, clipped by the window band (tbAnimBand), which is
       // what the oracle does: mid-ramp its box still reads its own page with the top rows cut off.
       // Zeroing the reveal the moment the ramp starts emptied the window and left only the cursor.
-      // THE HAND exists once the cursor is LIVE: C0/2029-202F set $0163 = $0164 and $0162 = 2 on state 7's first
-      // tick, and nothing draws a cursor line before $0163 holds one. (⚠ OPEN, not derived: the oracle shows the hand
-      // TWO frames after $0162 = 2 -- s439, $0162 = 02 at f141, the hand on screen from f143 -- and the routine that
-      // puts it on screen is not found: it is not the line upload ($0136 stays 0) and not C0/F05E, which never runs
-      // on the field. The port draws it from the arming frame.)
-      const uint8_t* hx = f.vm ? CtSceneMem7E(f.vm) : NULL;
-      (void)pl;
-      drawChoiceBox(fb, font, tbStr, tbStrLen, tbSlotPos, tbSlotN, ss, se, choiceSel,
-                    onOpt && hx && hx[0x0162] >= 2, tbTop <= TB_TOPY, onOpt ? oF : -1);
+      // THE HAND is the one C0/F05E last put into BG3 from the field's IRQ (fieldIrqHand): at window line $0163 once
+      // C0/2029-202F arm the cursor ($0163 = $0164, $0162 = 2, state 7's first tick), gone after C0/1AFE retires it.
+      // (Until 2026-10-22 it was drawn while $0162 >= 2, through the close ramp after a confirm; the cartridge clears
+      // it the frame after: s439 on the recipe twin, the close at port f502 against the cartridge's f504.)
+      (void)pl; (void)choiceSel;
+      drawChoiceBox(fb, font, tbStr, tbStrLen, tbSlotPos, tbSlotN, ss, se, onOpt ? g_dlgHandRow - oF : 0,
+                    onOpt && g_dlgHandRow >= 0, tbTop <= TB_TOPY, onOpt ? oF : -1);
       tbCream = 0; g_tbTextCgram = NULL;
       tbAnimBand = 1 << 20;
     } else if (tbActive || tbClose) {          // tbClose: the window survives the VM's flag for the ramp.

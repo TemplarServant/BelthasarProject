@@ -74,6 +74,77 @@
       "pad": "0:528",
       "kind": "wram",
       "doc": "the Naga-ette fight's command phase with no input: 94 frames after the battle's start (c434), Crono ready (AFAB 00) and Lucca's gauge at 24, the capture's own values ($9907 = C7 31 for the two PCs, the four Naga-ettes at full HP)"
+    },
+    {
+      "path": "saves/field_re/s439_marle_choice_lake.state",
+      "recipe": "fxr_s439_marle_choice",
+      "kind": "state",
+      "doc": "loc 1B7 (scene 439): Marle with the pendant, 4 frames before her str 0x29 box"
+    },
+    {
+      "path": "saves/field_re/s439_marle_choice.lakewram",
+      "recipe": "fxr_s439_marle_choice",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/s439_marle_join_lake.state",
+      "recipe": "fxr_s439_marle_join",
+      "kind": "state",
+      "doc": "Marle's fn1 parked at 05EA, two ops before her walk onto Crono"
+    },
+    {
+      "path": "saves/field_re/s439_marle_join.lakewram",
+      "recipe": "fxr_s439_marle_join",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/formlock_flags.bin",
+      "recipe": "fxr_power_on",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F0000=08,7F01DF=20"
+      },
+      "kind": "flags",
+      "doc": "the synthetic page field-menu-form-* were built on (its regress_inputs entry's own generator): storyline 08 and $7F:01DF = 20, Lucca locked for the Form screen -- byte for byte"
+    },
+    {
+      "path": "saves/field_re/chest26_opened.flags",
+      "recipe": "fxr_power_on",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F0001=40"
+      },
+      "kind": "flags",
+      "doc": "the synthetic page field-chest-preopened-* were built on: storyline 00 and $7F:0001 bit 6 (loc 026's chest opened) -- byte for byte"
+    },
+    {
+      "path": "saves/s120_lucca_flags.bin",
+      "recipe": "fxr_power_on",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F0000=10,7F0054=80,7F00A9=02"
+      },
+      "kind": "flags",
+      "doc": "the synthetic page field-scene120-lucca-e0-fadechange was built on: storyline 10, $7F:0054 = 80, $7F:00A9 = 02 -- byte for byte"
+    },
+    {
+      "path": "saves/savepoint_flags.bin",
+      "recipe": "fxr_power_on",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F0000=08,7F0055=88,7F01CF=80"
+      },
+      "kind": "flags",
+      "doc": "the synthetic page field-menu-save-* were built on: storyline 08, $7F:0055 = 88, $7F:01CF = 80 -- byte for byte"
+    },
+    {
+      "path": "saves/forest_arrival_flags.bin",
+      "recipe": "fxf_scene8_taban_moving",
+      "pad": "(100:3,0:15)*70",
+      "kind": "flags",
+      "doc": "its own provenance: the Telepod scene after Taban's moves (fxf_scene8_taban_moving), A mashed 70 times -- storyline 0C, $7F0054 = 08, the same nine flag bytes; $7F0055 reads B2 where the capture's read 84 (the recipe chain's own fair: the merchant's and the candy's bits), a byte field-op55-storyline-to-local does not read"
     }
   ]
 }

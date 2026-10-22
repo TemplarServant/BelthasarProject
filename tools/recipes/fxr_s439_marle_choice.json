@@ -1,0 +1,20 @@
+{
+  "name": "fxr_s439_marle_choice",
+  "from": "fair_pendant",
+  "doc": "Stands in for saves/field_re/s439_marle_choice_lake.state (the owner's capture of Marle's pendant dialogue, loc 1B7 = scene 439): marle_joins's drive cut at 166 frames -- Crono has given Marle the pendant (A at f153) and her fn1 stands on 05AD, 4 frames before it reaches 05B0 (`C0` str 0x29) and requests the box, as the capture's drives expect (their [tbop] REQUEST at f4; the capture stood parked on 05B0 itself).",
+  "steps": [
+    [
+      "pad",
+      "20:20,40:46,0:2,20:50,40:27,0:2,40:2,0:4,100:2,0:11"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1B7",
+    "wram": {
+      "0x10000": "0x06",
+      "0x1186": "0xAD",
+      "0x1187": "0x05",
+      "0x0129": "0x00"
+    }
+  }
+}

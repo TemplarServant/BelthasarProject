@@ -64,15 +64,18 @@ DRIVES = {
     # MARLE'S NAMING at the fair (`C8 C1`: $299F | $71 non-zero, so C2/E1ED goes straight to C2/E201 -- no selector, no
     # prompt, $68 0 -> 1, P = S0 + 4). Both sides mash the field A through the dialog until the op parks; the drive is
     # aligned on the parks (see run_park) and runs Right, Down, Start ("Marle" accepted) -> the close, the reload, the
-    # field's fade-in. Frames are the cartridge's from saves/field_re/s439_marle_choice_lake.state (park f572). The
+    # field's fade-in. Frames are the cartridge's from saves/field_re/s439_marle_choice_lake.state (the recipe twin since
+    # 2026-10-22: park f603 -- the capture's f572 plus the cartridge's 45-frame hold on the join's song load (`10 06`),
+    # a song the capture's sound processor already held, less the dialog's own pace from that state; the window opens
+    # at the fade's end, f619 = park + 16: under the fade the two dims of different field pictures differ). The
     # window starts after C0/0CC7's fade (which dims two different field pictures: the dialogs do not keep step) and ends
     # before the field's return (one frame early in the port: the reload after the menu, an open item).
-    'marle': ([(0x80, 630), (0x20, 650), (0x8, 680)], 579, 722),
+    'marle': ([(0x80, 661), (0x20, 681), (0x8, 711)], 619, 753),
 }
 # name: (cartridge state, port WRAM seed, port scene, the last frame the cartridge's dialog is mashed on)
 # boot drives: (battery, the op whose park aligns the two sides); a drive not listed is (None, 'naming')
 BOOT = {'bootldr': (None, 'loader'), 'loadlist': ('saves/field_re/colsave3.srm', 'loader')}
-PARK = {'marle': ('saves/field_re/s439_marle_choice_lake.state', 'saves/field_re/s439_marle_choice.lakewram', 439, 565)}
+PARK = {'marle': ('saves/field_re/s439_marle_choice_lake.state', 'saves/field_re/s439_marle_choice.lakewram', 439, 610)}
 
 
 def run(name, peeks):
@@ -271,8 +274,10 @@ def run_park(name, peeks):
             if v125 >= 0xC0 and v117 & 0x40:
                 opark = int(s[0][1:])
                 break
+    # the port's sound processor is the cartridge state's (CT_AUDIO_SEEDSTATE): the dialog's song load costs the SPC time
+    # it costs the cartridge from that state
     penv = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_NAMETRACE='1',
-                CT_SRAM=os.path.join(out, '_p.srm'), CT_SRAM_FRESH='1')
+                CT_SRAM=os.path.join(out, '_p.srm'), CT_SRAM_FRESH='1', CT_AUDIO_SEEDSTATE=ost)
     base = [M.FIELD, '--assets', 'ct_assets.dat', '--scene', str(scene), '--loadwram', seed, '--selftest',
             os.path.join(out, '_p_end.raw')]
 
