@@ -18,8 +18,10 @@ The state is the rule's oracle's own (PEEK_SAVE at a frame's end), so the cartri
 pass as the port's first tick does: the poked countdowns are the same on both sides, and the port's walk starts one
 frame later ('.:1': its keys are the oracle's + 1, as every *_cmp tool here). (The owner's snes9x capture this replaced,
 2026-10-22, was saved mid-frame: its first --monitor frame ran no pass, and the port's countdowns were poked one higher.)
-The song case's countdown is 06: with 04, 05 or 07 the upload of song 18 ends one frame early on the port (38 frames
-against the cartridge's 39) -- the song-load pricing's known residual (C7/0A12's cull priced flat), not this mechanism.
+The song case's countdown is 05 (the capture's): on today's song-load pricing (C7's dispatch by path, origin/main
+4bdb397) the upload of song 18 ends one frame apart from the cartridge's with 06 or 07 (with 04, 05, 08, 09 on its frame;
+before 4bdb397 it was 04, 05, 07 that missed) -- the song-load pricing's phase residual (memory spc-phase-sensitivity),
+not this mechanism.
 Per case:
 
     lead-step: <case> Crono's position identical on <k>/<n> frames (moved on <m> frames)
@@ -40,7 +42,7 @@ REGS = '1806:2,1886:2'
 # (name, cartridge pokes, port pokes) -- flat WRAM offsets
 CASES = [('b2', '1186=73,1187=04', '1186=73,1187=04'),
          ('period4', '1006=04', '1006=04'),
-         ('song', '1188=3D,1189=06,1009=06', '1188=3D,1189=06,1009=06')]
+         ('song', '1188=3D,1189=06,1009=05', '1188=3D,1189=06,1009=05')]
 
 
 def parse(text, rx, norm):
