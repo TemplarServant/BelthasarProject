@@ -574,6 +574,7 @@ typedef struct CtBattleHost {
   int fxTeardownRuns;        // teardowns run this battle (the battle-end trace prints it)
   int bootApuFrames;         // frames the field's C0/1BAB post (JSL C7:0004) cost: the boot's first wait, before its 18 setup passes
   int bootSyncFree;          // the free sync mode: that post was priced at NO frames (not left unpriced -- a fixture's case)
+  int bootPostDue;           // that post is still to come (C1/0000 runs two frames after the field's staging): priced, not a fixture
   int renderFramesAbs;       // a host that never ran a boot (field.c's WRAM render host): its frames ARE the render clock
   int sndStall;              // THE RULE (CtBattleSoundSink.postRule): frames the main thread still sits in a JSL C7/0004 the
                              //   SPC kept past the vblank -- the NMI's service runs, the main loop does not

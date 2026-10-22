@@ -82,8 +82,9 @@ the oracle on the twin; each such re-pin carries a dated note in the check. The 
 - **The attract's first cut** (`saves/attract_cena_inicial.state`; 42 checks + 7 tools): those checks run the
   cartridge in real time, not under the rule, and pin frames of the owner's real-time run. The fix is to move their
   oracle side to the rule (where the power-on twin is exact) and re-anchor.
-- **GATO's fight before the first A** (`saves/battle_re/gato_wait.state`; 35 checks): three checks depend on the sound
-  processor's phase inside the capture, which a recipe does not reproduce; the WRAM twin passes the rest.
+- ~~**GATO's fight before the first A**~~ (`saves/battle_re/gato_wait.state`): recipe-made since 2026-10-22
+  (`tools/fixtures/gato.json`). The three checks that hung on the capture's sound phase showed a real port bug on the
+  twin (the battle-entry upload posted two SPC frames early), fixed in the engine, not re-pinned.
 
 ## The leak scanner
 

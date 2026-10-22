@@ -62,14 +62,6 @@
       "checks": 7
     },
     {
-      "path": "saves/battle_re/gato_wait.state",
-      "checks": 59
-    },
-    {
-      "path": "saves/battle_re/gato_wait_crono_solo.lakewram",
-      "checks": 2
-    },
-    {
       "path": "saves/battle_re/hetake_dissolve_anim_ppu.state",
       "checks": 1
     },

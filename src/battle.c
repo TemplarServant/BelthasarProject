@@ -22522,7 +22522,7 @@ static int battleRuleNmiOnHold(void) {
   static int v = -1; if (v < 0) { const char* e = getenv("CT_ORACLE_NMION_HOLD"); v = !(e && *e == '0'); } return v;
 }
 static int battleBootBandArm(const CtBattleHost* h) {
-  int priced = h->bootApuFrames > 0 || h->bootSyncFree;          // (free: the upload cost none, the boot's own frames stay)
+  int priced = h->bootApuFrames > 0 || h->bootSyncFree || h->bootPostDue;   // (free: the upload cost none, the boot's own frames stay)
   if (battleRuleNmiOnHold()) return priced ? 2 + h->bootApuFrames + 3 + 1 : CT_BHUD_ARM_FRAME - 11;
   return priced ? 1 + h->bootApuFrames + 18 : CT_BHUD_ARM_FRAME;
 }
@@ -22617,7 +22617,7 @@ static int battleBootIntro(const CtBattleHost* h) {
 // whose upload is priced (bootApuFrames) keeps the module's frames as before -- its arm is not the pinned one.
 int CtBattleRenderClock(const CtBattleHost* h) {
   if (!h) return 0;
-  if (h->renderFramesAbs || h->bootApuFrames > 0 || h->bootSyncFree) return h->frames;   // (a seed rendered at a chosen frame: no boot ran)
+  if (h->renderFramesAbs || h->bootApuFrames > 0 || h->bootSyncFree || h->bootPostDue) return h->frames;   // (a seed rendered at a chosen frame: no boot ran)
   return h->frames + CT_BHUD_ARM_FRAME - battleBootBandArm(h);
 }
 // C1/8461, THE ATB'S HANDLER (C1/B92D[12]), run by the dispatch (battleStatusDispatch) on $B186 bit 0 -- after the status
