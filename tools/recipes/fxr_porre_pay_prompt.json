@@ -1,0 +1,14 @@
+{
+  "name": "fxr_porre_pay_prompt",
+  "from": "fxr_porre_office",
+  "doc": "Stands in for saves/ferry_re/porre_pay_prompt.state, as disasm/notes/ow_ferry.md sec. 7 made it: Right 2 frames and A beside the Porre counter: 'A one-way ticket is 10G. Want one?', 80 frames on.",
+  "steps": [
+    [
+      "pad",
+      "80:2,0:10,100:4,0:80"
+    ]
+  ],
+  "expect": {
+    "loc": "0x038"
+  }
+}

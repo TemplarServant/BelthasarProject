@@ -384,6 +384,30 @@
       "recipe": "fxr_forest_ambush_alone",
       "kind": "wram",
       "doc": "Guardia Forest's Beetles and Avian Chaos ambush with Crono alone, the enemies walking in"
+    },
+    {
+      "path": "saves/ferry_re/office_at_clerk.lakewram",
+      "recipe": "fxr_truce_office",
+      "kind": "lakewram",
+      "doc": "the Truce ticket office (012), Crono below the counter, storyline 03"
+    },
+    {
+      "path": "saves/ferry_re/truce_pay_prompt.state",
+      "recipe": "fxr_truce_pay_prompt",
+      "kind": "state",
+      "doc": "the Truce pay prompt waiting, the cursor on Yes"
+    },
+    {
+      "path": "saves/ferry_re/porre_office_at_counter.lakewram",
+      "recipe": "fxr_porre_office",
+      "kind": "lakewram",
+      "doc": "the Porre ticket office (038) after the crossing, Crono beside obj10"
+    },
+    {
+      "path": "saves/ferry_re/porre_pay_prompt.state",
+      "recipe": "fxr_porre_pay_prompt",
+      "kind": "state",
+      "doc": "the Porre pay prompt waiting"
     }
   ]
 }

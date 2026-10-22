@@ -1,0 +1,21 @@
+{
+  "name": "fxr_truce_office",
+  "from": "ow_w0",
+  "doc": "Stands in for saves/ferry_re/office_at_clerk.lakewram, as disasm/notes/ow_ferry.md sec. 7 made it: from ow_w0 (Crono alone on the 1000 A.D. overworld, storyline 03, 600 G) the path DDLLLLDDDRRRRDRRRRRRR in 8-px steps to (496,328), right and up to (504,320) where the banner shows, A into the Truce ticket office (loc 012); then right a tile and up (tools/playthrough.py route_walk's path) to (0770,39BF), the capture's spot below the counter.",
+  "steps": [
+    [
+      "pad",
+      "20:16,40:32,20:24,80:32,20:8,80:64,10:8,0:10,100:2,0:150,80:16,10:75,0:20"
+    ]
+  ],
+  "expect": {
+    "loc": "0x012",
+    "wram": {
+      "0x10000": "0x03",
+      "0x1802": "0x70",
+      "0x1803": "0x07",
+      "0x1882": "0xBF",
+      "0x1883": "0x39"
+    }
+  }
+}
