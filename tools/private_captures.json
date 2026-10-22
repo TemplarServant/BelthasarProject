@@ -46,14 +46,6 @@
       "checks": 2
     },
     {
-      "path": "saves/battle_re/bat9.raw.wram",
-      "checks": 8
-    },
-    {
-      "path": "saves/battle_re/bat9_lake.state",
-      "checks": 3
-    },
-    {
       "path": "saves/battle_re/forest_wait_ambush_active.lakewram",
       "checks": 4
     },
@@ -83,22 +75,6 @@
     },
     {
       "path": "saves/battle_re/loc070_imps_roly_pre_lake.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/party3_field.lakewram",
-      "checks": 52
-    },
-    {
-      "path": "saves/battle_re/party3_field.state",
-      "checks": 60
-    },
-    {
-      "path": "saves/battle_re/party3_form.raw.wram",
-      "checks": 7
-    },
-    {
-      "path": "saves/battle_re/party3_freshsheet.lakewram",
       "checks": 1
     },
     {

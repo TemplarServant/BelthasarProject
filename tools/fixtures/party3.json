@@ -1,0 +1,45 @@
+{
+  "doc": "The Cathedral's three-member party (Crono, Lucca, Frog in the 600 A.D. Cathedral's inner hall, loc 082): the Diablos fight (fx_bat9) and the field after it (fx_party3_field), recipes from power-on with the owner's party bytes poked in (the sheets his game's own fights left, documented in fx_bat9), plus the variants the captures' own provenance made from them.",
+  "fixtures": [
+    {
+      "path": "saves/battle_re/bat9_lake.state",
+      "recipe": "fx_bat9",
+      "kind": "rawstate",
+      "doc": "The Diablos fight with Crono's command menu up (the capture is a raw LakeSnes state, no CTLS header)."
+    },
+    {
+      "path": "saves/battle_re/bat9.raw.wram",
+      "recipe": "fx_bat9",
+      "pad": "0:1",
+      "kind": "wram",
+      "doc": "bat9_lake's WRAM one frame later (the capture differs from bat9_lake.state's by the frame counter $0400 + 1 and that frame's own work: its provenance was a 1-frame --peek of it)."
+    },
+    {
+      "path": "saves/battle_re/party3_field.state",
+      "recipe": "fx_party3_field",
+      "kind": "state",
+      "doc": "The field after the Diablos fight: loc 082, Crono, Lucca and Frog, control back (the capture's own recipe from bat9_lake: A mashed 8 of every 20 frames 115 times, then 300 frames)."
+    },
+    {
+      "path": "saves/battle_re/party3_field.lakewram",
+      "recipe": "fx_party3_field",
+      "kind": "lakewram",
+      "doc": "party3_field.state's WRAM for Belthasar --loadwram."
+    },
+    {
+      "path": "saves/battle_re/party3_form.raw.wram",
+      "recipe": "fx_party3_field",
+      "pad": "0:4,200:3,0:40,80:2,0:6,80:2,0:6,80:2,0:6,80:2,0:6,100:2,0:40",
+      "kind": "wram",
+      "doc": "The X menu's Form screen open on party3_field (X, Right x4, A: the capture's own recorded pad), so the menu-open stat pass has run."
+    },
+    {
+      "path": "saves/battle_re/party3_freshsheet.lakewram",
+      "recipe": "fx_party3_field",
+      "env": {"PEEK_POKE": "26E1=FF,26E2=FF,26E3=FF,26E4=FF,26E5=FF,26E6=FF,26E7=FF,26E8=FF,26E9=FF,26EA=FF,26EB=FF,26EC=FF,26ED=FF,26EE=FF,2781=FF,2782=FF,2783=FF,2784=FF,2785=FF,2786=FF,2787=FF,2788=FF,2789=FF,278A=FF,278B=FF,278C=FF,278D=FF,278E=FF"},
+      "pad": "0:0",
+      "kind": "lakewram",
+      "doc": "party3_field with Lucca's and Frog's sheet bytes +0x41..+0x4E set to FF (the capture differs from party3_field.lakewram by exactly those 28 bytes): a fresh sheet whose battle block the fight must build itself."
+    }
+  ]
+}

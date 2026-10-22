@@ -1285,7 +1285,7 @@ shop) and their frame-only lines moved with it -- nothing inside the menu change
 USER REPORT 2026-09-24 (translated from Portuguese): *"when using a tonic, it is possible to exceed the character's maximum HP"*. The item appliers
 clamp to the sheet's +$3F (effective max HP), which only the menu's open pass (C2/8139 -> C2/9875 -> C2/99B2: all
 seven sheets recomputed and written back) makes true; outside the menu the word holds something else (1028-1029 on
-party3_field). `-sheets-` compares the seven sheets after the open and a Tonic on Lucca (40 -> 88, both sides).
+party3_field). `-sheets-` compares the seven sheets after the open and a Tonic on Lucca (39 -> 88 on the recipe twin, both sides).
 `-wram-` grades the menu program's own bytes every frame of one X menu against the logical oracle: the RNG cursor
 $0D00 (C2/842F, from S0), the brightness shadow $0D10, and $0D38 -- which also pins the callers' RAM discipline (the
 field's C0/011B / C0/0905, the overworld's C2/2E23 / C2/2E72) the port did not have.
