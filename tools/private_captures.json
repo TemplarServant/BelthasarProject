@@ -2,18 +2,6 @@
   "doc": "State files from the owner's playthrough that checks still read and no recipe makes yet (docs/ROADMAP.md 1.1). They exist on one machine only: a check on them SKIPs anywhere else. The list only shrinks -- tools/input_provenance.py (the check inputs-come-from-recipes-or-sources) fails on a check that reads a state file from none of recipe / third-party / this list, and on an entry here no check reads any more. Rewrite it with `python tools/input_provenance.py --write` after moving checks onto recipe-made twins.",
   "captures": [
     {
-      "path": "saves/field_re/catedral_party3.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/magus_scene.lakewram",
-      "checks": 3
-    },
-    {
-      "path": "saves/field_re/magus_scene_lake.state",
-      "checks": 3
-    },
-    {
       "path": "saves/field_re/pre_scene_19f.lakewram",
       "checks": 2
     },
