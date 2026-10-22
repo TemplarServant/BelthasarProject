@@ -1,0 +1,20 @@
+{
+  "name": "fxr_scene8_pod",
+  "from": "fxr_pt_11_gate",
+  "doc": "Stands in for saves/field_re/scene8_pod_latch.state (the owner's snes9x capture below the Telepod's left pod after Marle vanished, spliced over scene8_gate_cutscene.state): the playthrough's leg 11 end (loc 008, storyline 0C, control back), Crono walked left 44 and up 33 frames -- at (0437,07E9) below the left pod (obj11 at tile (4,5)), the capture's (0437,07EC) but for a quarter pixel of sub-position; Up from here touches the pod (obj11's fn2) in about 21 frames, as the capture's drives expect.",
+  "steps": [
+    [
+      "pad",
+      "40:44,10:33,0:6"
+    ]
+  ],
+  "expect": {
+    "loc": "0x008",
+    "wram": {
+      "0x10000": "0x0C",
+      "0x011F": "0x01",
+      "0x1196": "0x29",
+      "0x1197": "0x06"
+    }
+  }
+}

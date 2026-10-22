@@ -312,6 +312,12 @@
       "pad": "0:10,100:2,0:10,100:2,0:443",
       "kind": "wram",
       "doc": "GATO's fight: Crono attacks (A, A), Marle's turn comes up with the target picker's flag ($960A = 1, $95D5 = 01, $A6D9 = FF 01 FF) while Crono's gauge refills -- f467, $99DD = 32 against $9F22 = 48: the ATB bar's partial path (one full cell + a partial), the capture's own values; the cartridge's picture of this frame shows the same bar (its HUD rebuild caught up, f466-f470)"
+    },
+    {
+      "path": "saves/field_re/scene8_pod_latch.state",
+      "recipe": "fxr_scene8_pod",
+      "kind": "state",
+      "doc": "loc 008 after Marle vanished, Crono below the left pod"
     }
   ]
 }

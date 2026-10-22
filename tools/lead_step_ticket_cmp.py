@@ -6,17 +6,21 @@ r"""The lead walks only on the ticket his op B0 armed: three seeds of the Telepo
 C0/881E computes the lead's step before the event pass; C0/A810 moves him after it, on `$1A01,X` (AB06 `BEQ`), and the
 only arm of that ticket for a free lead is his own op B0: C0/3002 -> 3040 `LDA #01 / STA $1A01,X` (9E29 the velocity).
 The port's host moves the lead before the tick; ct.exe vmLeadStepAtA810 takes the step back when no ticket stands.
-Each case is the user's Telepod capture (saves/field_re/scene8_pod_latch.state) with WRAM poked on both sides (the
-cartridge's PEEK_POKE, the port's seed), Left held from the first frame:
+Each case is the Telepod state (saves/field_re/scene8_pod_latch.state, made by tools/recipes/fxr_scene8_pod.json) with
+WRAM poked on both sides (the cartridge's PEEK_POKE, the port's seed), Left held from the first frame:
 
   b2      Crono's $1180 on a `B2` (0473): C0/3543 `TYX / CLC / RTS`, no arm -- the cartridge never moves him.
   period4 Crono's $1000 = 04: the queue build (C0/59F0) enqueues him one frame in four -- one step every four frames.
   song    obj4 on obj11's `EA 18` (063D), queued mid-walk: the song upload parks the pass after Crono's B0 armed the step;
           C0/A810 integrates it on the frame the JSL returns, 39 frames later.
 
-The port's first tick from a seed runs an event pass where the cartridge's first --monitor frame completes the frame
-the state was saved in (no pass: the poked $1001 reads the same at f0), so its walk starts one frame later ('.:1', as
-every *_cmp tool here) and a poked countdown $1001 is one higher on the port's side. Per case:
+The state is the rule's oracle's own (PEEK_SAVE at a frame's end), so the cartridge's first --monitor frame runs an event
+pass as the port's first tick does: the poked countdowns are the same on both sides, and the port's walk starts one
+frame later ('.:1': its keys are the oracle's + 1, as every *_cmp tool here). (The owner's snes9x capture this replaced,
+2026-10-22, was saved mid-frame: its first --monitor frame ran no pass, and the port's countdowns were poked one higher.)
+The song case's countdown is 06: with 04, 05 or 07 the upload of song 18 ends one frame early on the port (38 frames
+against the cartridge's 39) -- the song-load pricing's known residual (C7/0A12's cull priced flat), not this mechanism.
+Per case:
 
     lead-step: <case> Crono's position identical on <k>/<n> frames (moved on <m> frames)
     lead-step: <k>/<n> cases identical
@@ -35,8 +39,8 @@ FRAMES = 70
 REGS = '1806:2,1886:2'
 # (name, cartridge pokes, port pokes) -- flat WRAM offsets
 CASES = [('b2', '1186=73,1187=04', '1186=73,1187=04'),
-         ('period4', '1006=04', '1006=04,1007=02'),
-         ('song', '1188=3D,1189=06,1009=05', '1188=3D,1189=06,1009=06')]
+         ('period4', '1006=04', '1006=04'),
+         ('song', '1188=3D,1189=06,1009=06', '1188=3D,1189=06,1009=06')]
 
 
 def parse(text, rx, norm):
