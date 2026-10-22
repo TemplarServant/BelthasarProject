@@ -133,6 +133,11 @@ void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY);
 // C0/A385-A4FB: a location load's BG2/BG3 scroll setup from the map header md[1..3] (call after
 // CtSceneCameraEntry), and the per-frame result: BG2/BG3 offsets from BG1 in pixels.
 void CtSceneLayerScrollLoad(CtScene* sc, uint8_t md1, uint8_t md2, uint8_t md3);
+// ...a location load's own order: the decode's WRAM half before the object init (C0/A33B is C0/00F4's leg, after C0/7F7E's
+// clear of the $1D page), and after the init only the C0/286C entry -- the camera law and C0/74AC's window -- so an init op's
+// store into the page (op 0x29's `TSB $1D35 / $1D36`) stays.
+void CtWramLayerScrollDecode(uint8_t* s, uint8_t md1, uint8_t md2, uint8_t md3);
+void CtSceneLoadCameraEntry(CtScene* sc, int arrTileX, int arrTileY);
 void CtSceneLayerOffsets(const CtScene* sc, int* bg2x, int* bg2y, int* bg3x, int* bg3y);
 void CtSceneLayerOffsetsOf(const CtScene* sc, const uint8_t* page, int* bg2x, int* bg2y, int* bg3x, int* bg3y);   // the same, from a copy of the object page (a battle: $7F:2000 - $0920)
 // The SCENE-ENTRY OBJ palette sweep (ROM C0/2881 -> C0/B0E6). Call it on a fresh scene entry AFTER

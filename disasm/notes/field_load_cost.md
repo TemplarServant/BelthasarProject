@@ -579,8 +579,8 @@ Traced on the attract under the rule (`--peek boot` states, CPUTRACE_FROM=C00B86
 - C0/E687's default arm (a graphics bank but 7F / D2-D4): C0/E6B6, the D4 arm's body reading $D5, 18 less (a taken BNE
   for the not-taken BNE + BRL).
 - C0/CAD9 class 3: `CMP #02 / BEQ` not taken, `CLC / RTS`, 308 cycles, nothing drawn (01C's object $1A).
-STILL REFUSED: class 2 (C0/D4F7), C0/7283 (a full share scan without a match), $0126 / $1DF9 / $1DFD / $0153 bit 7 /
-$0BE9 / $0351 bit 0. Priced since (2026-10-21, src/field_cost.c):
+STILL REFUSED: class 2 (C0/D4F7), C0/7283 (a full share scan without a match), $0126 / $1DF9 / $1DFD / $0153 bit 7
+($0BE9 and the channel-7 parity, which is $7F:0351, are priced since: sec. 13). Priced since (2026-10-21, src/field_cost.c):
 - class 3's draw, C0/B701 -> C0/B785 `BRL C0/C73A`: 7,272 to C0/C7C9 on every run traced (01C's object $1A, seven frames),
   then the 24 template Y's by the screen Y $C5 / $C6 -- C0/C7DE (5,950 traced), C0/C7FB (the clamp to E0) or C0/C820 (24
   unrolled) -- and the OAM leg by the group `$0F80 & 0C`: C0/B6AA (9,932 traced), C0/B5CB (-72), C0/B653 (-6); the cursors
@@ -660,4 +660,100 @@ The attract from power-on (`--boot`, its SPC the cartridge's since boot_loader.m
 every load: on the cartridge's frames from B101 (f50) to B101 (f7324) -- 6E01, 1C00, 1B00, AD00, 1201, DB00, A500 --
 then 7D00 +1 (the 07D load's refused `10`: the driver echoes it 175 APU cycles after the post on the cartridge, 3,073 in
 the port, the `10` itself +72) and 8700 +1, both visits with a fight. The SPC's frame grid drifts ~0.01 APU cycle a frame
-against the cartridge's (+65 by f6300; not located).
+against the cartridge's (+65 by f6300; not located -- located in sec. 14).
+
+## 13. The staff roll's and the ending's loads: op 29, `$0BE9`, `$7F:0351` and the E1 reboot (2026-10-22)
+
+Three loads the walk refused (`pass: $0153 bit 7 / $0BE9 / $0351 bit 0`, and `op 29: its arms are not walked`) and charged
+the old estimate, which crossed a frame the cartridge's stretch does not since 5fde1d2 put the load's song handshake on the
+loader clock: 05C / 05D (the staff roll, field-caption-plane-staff-roll-vs-rule-cartridge, d = -1 / -2) and 059 (the
+ending, ending-story-plays-through-in-the-port, 32 black frames for the cartridge's 31-frame equivalent). Beam-traced on
+the rule's cartridge (`--cputrace` CPUTRACE_BEAM=1 CPUTRACE_FROM=C00B86; 05C from saves/field_re/s5b_roll_f2280.state, 05D
+from its f538, 059 from saves/ending_re/ending_pre_ff2b.state's f5600) and summed as tools/load_cost_cmp.py does:
+
+- **Op 29 (C0/3E84)**, the caption plane's setup, from the dispatch's JSR to its RTS: the head 264; C0/6E27's $0300-$0305
+  234, the font `$FD:0000 -> $7F:5080` (the vector's JMP + C3/0557: 149,744 on the trace = 18 + ct_lz_rom_cycles), 242,
+  C0/2DC8's $0400 bytes (8,624 traced, dma2DC8 8,628); 80; C0/75A0 94,536 (`MVN $7E,$D2` of $20 at 44 a byte, six doublings
+  to $800 at 46); C0/3E99-3EB9 244 (the operand's BMI: 18 + 70 against 12 + 76, the same); C0/3EBB's scan of `$FD:A000` for
+  record xx & 7F -- 52 a record passed, 72 a byte, 112 its end byte -- then 58 + 114. 05C (record 8, 296 bytes scanned):
+  276,188 traced, the walk 276,192 (the DMA's sync).
+- **`$0BE9`** is read once, at C0/0AF6 (an absolute-operand scan of banks C0 / C2 / FD; its writers are op 29's C0/3EA6 /
+  3EB1 and C0/0C6D's clear): `LDA $0BE9 / BEQ` not taken and `STA $1D86` for the taken BEQ PASS_REST holds, +20.
+- **`$0351 bit 0`** was the wrong byte: nothing in the pass reads `$7E:0351` (the wipe's); FD:C2C1's channel 7 reads
+  `$7F:0351` (C439 / C477, DB = $7F; src/hdma_table.c). Its arm with C2C1's set: set B (the BNE not taken, 12) takes C477's
+  BCC on an even parity (18), set A (taken, 18) leaves C439's BCS (12) -- 3,306 cycles both ways on 05C's pass and the main
+  loop's next call, the configuration PASS_REST and C0/01A5's call were measured on; an odd parity is +6 on set A and -6 on
+  set B (field_cost.c hdmaCh7Arm, both calls). `$0153 bit 7` (FD/C3F8's battle-exit arm) stays refused.
+- **The port's `$1D35` was not the cartridge's.** C0/7F7E clears the $1D page and C0/A33B's A385-A4FB decodes the header
+  into it (C0/A3AD `STZ $36`, C0/A45B `STA $35`: trace lines 3584 / 3669) BEFORE the object init, whose `29 88` then sets
+  `TSB $1D36 / $1D35` (line 18662), and C0/286C reads `$1D35` = 04 (C0/0AE1; C0/87F1 skips its BG3 row). The port decoded the
+  header and re-cleared the page after the init (CtSceneCameraEntry + CtSceneLayerScrollLoad at the load), so its pass saw
+  00 and the walk priced the BG3 row (+8,996). Now the decode is fieldLoad's, before the init (CtWramLayerScrollDecode), and
+  after it only the C0/286C entry runs (CtSceneLoadCameraEntry: the camera law and C0/74AC's window). The menu's reload
+  (C0/01A5, field.c's mSave path) keeps the old order: its slot-1 run is the only script between; so does a `--loadstate`
+  start's entry (a harness: the snapshot's page re-cleared as before -- field-defeat-holds-the-room-... is pinned on it).
+
+Result, the cartridge's CPU work against the walk's (non-refresh, C7 apart): 05C 5,964,794 / 5,964,793 (the pass 1,109,430
+/ 1,109,431), 05D 6,407,990 / 6,407,999, 059 11,051,750 / 11,051,655 (its pass -47: eight drawn objects' DMAs; the walk on
+the cartridge's own 286C WRAM gives the same). 05C 17 black frames, 05D 18, 059 31 (resume f5652): both checks at their
+original pins.
+
+**The DF / E1 reboot's posts before the frame's slice** (field.c REBOOT_SPC_LEAD, g_opRebootLoad). What runs before C0/3B71's
+spin is NMI-on work, free under the rule, so the stretch starts where the vblank's NMI returns: C0/EC5F's RTI on line 228 h
+162 (4,254 from line 225: the pad latch), C0/3B76 `JSR C0/0B4E` -> C0:0000 -> C0/0B86 on line 229 h 200 (+1,402), C0/1B73's
+`JSL C7:0004` on line 231 h 480 (+3,008): 8,664. (DF is `LDA #01 / STA $1E / BRA 3B4B`: the same path.) PEEK_APUTRACE against
+CT_AUDIO_PORTTRACE: 05C's `81` 287,621,647 on the cartridge (f24's END 287,621,197), the port 287,638,328 after its whole
+slice before, 287,621,664 now; the `10` 287,621,817 / 287,621,835. 05D's `81` 296,507,355 / 296,507,367, its `10`
+296,507,575 on both.
+
+## 14. The SPC's frame grid, and the DF / E1 reboot's posts (2026-10-22)
+
+**The drift of sec. 12, located.** The port's SPC runs a frame's slice per frame (CtAudioFrame: 17,088 APU cycles an even
+frame, 17,087.81 an odd one, the last opcode's overshoot carried in `cycleCarry`) and, inside a clocked JSL (the loader
+clock `ld`: a load's posts, the rule's posts, a spin), as far as the CPU's clock has run (ldCatch, snes_catchupApu's twin).
+The next slices are then debited by the JSL's SPC time -- and that debit was the CLOCK's, `ld.clk x the rate`, not what
+the SPC ran: ldCatch leaves the SPC up to an opcode past the clock (`ld.owed` < 0) or a fraction short, and the remainder
+was dropped with the stretch. LakeSnes's catch-up keeps it (apuCatchupCycles): the cartridge's SPC stands at master x the
+rate forever. MEASURED, CT_AUDIO_PORTTRACE's slice starts (`FRAME apuc`) against PEEK_APUTRACE's frame ENDs, the attract
+from power-on (vehicle frame + 91 = the cartridge's): the grid +9 APU cycles off the cartridge's for 2,000 frames, then +16
+after the posts of f2148-2150, +22 after 1B1's `10 18` upload (f2159-2190), ... +76 by f6000 -- 0.0166 cycle a frame, all
+of it at JSLs (the cartridge's own frame: 17,087.904 cycles on both stretches).
+At the 07D load (f6349) the location's `10 18` (C0/1B8B; refused, the song plays) reached the driver 86 cycles late. The
+cartridge's driver read it in its idle poll ($0B98, 18 cycles after the post) and echoed it at $0D3E 168 cycles after; the
+port's driver had just begun its timer tick (the 17 DSP writes of $02B0, then $02DD) and echoed 3,055 cycles after, the
+token spin (C7/0A85-0A8E) ran to the tick after, and the NMI-off stretch crossed one more vblank: 49 black frames for 48.
+The whole 07D visit then ran a frame late on the vehicle -- the iterations' grid, $0153's parity (FD/C2C1) and with it the
+frames FD/E022 steps the tiles on.
+FIX (src/audio.c ldSpcRan): the slices are debited by the cycles the SPC ran, the remainder carried as CtAudioFrame carries
+a slice's. The grid stays within 3 cycles of the cartridge's through the whole demo; the 07D `10 18` lands 11 cycles after
+the cartridge's (the idle poll, the echo +168 on both sides) and the load takes the cartridge's 48 frames.
+
+**The DF / E1 reboot's load.** With the grid exact, the 07D -> 1B1 exit (f7324) came out a frame short (6 black frames
+for 7): its load's `10 18` went to the driver after the frame's whole slice -- a frame of SPC late -- since an op DF / E1
+reboot kept the plain order (sec. 11 measured C0/0C9A commits, the world's exit and the overlay END only). The cartridge
+(--cputrace boot, CPUTRACE_BEAM): C0/3B71's spin leaves on the vblank after the visit (line 228 h 148, after the NMI's pad
+latch), C0/3B76 `JSR C0/0B4E` (the NMI off), 3B79-3B95 store the location left and the staged one and `BRL C0:0000`,
+C0/005D's C0/0B4E, C0/0B86 on line 229 h 186 = 5,642 master cycles past the vblank -- 102 sooner than a C0/0C9A commit's
+(C0/0C9D-0CC4 store the facing and the $1801 / $1881 words first; 07D's load reaches C0/0B86 on 229 h 288) -- and C0/1B8B's
+JSL on 231 h 440. The port defers that iteration's slice as it does the others' (field.c g_opRebootLoad, sec. 13's REBOOT_SPC_LEAD,
+measured on the staff roll's 05C: 8,664; this exit's own measure, 5,642 + LOAD_SPC_LEAD's C0/0B86 -> JSL mean = 8,702, is
+2 APU cycles from it -- the two traces were derived apart, the same mechanism): 1B1's load 7 frames, the cartridge's. (Op DF is `LDA #01 / STA $1E / BRA` into
+E1's C0/3B4B: the same stretch.)
+
+Results, the attract from power-on against the rule's cartridge (tools/attract_divergence.py with ATTRACT_DIV_STATE=boot
+ATTRACT_DIV_CART_FRAMES=11500): every visit's length the cartridge's but 087's (831 / 832); every load's commit and
+commit -> first ramp INC the cartridge's (HEAD: 7D00 +1, 1B1 602 / 603 after it). The Frog Squash's box at port f6820
+against --peek boot f6912 (the vehicle's diagonal: picture P = peek P + 92): 12,320 / 12,320, the candles included.
+- attract_cena_inicial.state is NOT this history. Its $051D (FD/E022's step count) has the other parity at the 07D load (4A
+  against the power-on's F5), so its candles step on the other frames: its f4755 against --peek boot's f6912 is 12,297 /
+  12,320 in that box, the 23 pixels of the left flame -- no port frame can give it the 12,320. Its SPC differs as well: the
+  driver's $02DD that ends its 07D `10 18`'s token spin comes 4,759 APU cycles after the post (the power-on's 767): a
+  49-frame load with a black frame between
+  C0/286C's $0153 flip (f4238) and the first ramp INC (f4240), and its commit a frame earlier than the power-on's: the two
+  cartridges agree again from the ramp (f4240 = power-on f6397). A check that grades a field animation's phase on the
+  --scene 433 vehicle compares with --peek boot (attract-07d-frog-squash-colours-vs-oracle, re-targeted).
+- LEFT: 087's visit +1, at its exit. C0/1C89's `70 00 88 00` (C7/08E3's transfer) crosses 13 NMIs on the port, 12 on the
+  cartridge. Its `FE` is posted on the same APU cycle on both sides (169,355,849 / 850) and the driver's ticks fall on the
+  same cycles (+-13), but the cartridge's tick is still running when the `FE` arrives (read in the tick's own poll, $0894,
+  echoed 1,399 cycles later) where the port's has ended (echo +88): the battle song stands a sequence step apart -- the
+  fight's own sound timing (the battle entry's upload, its posts), not a load's.

@@ -654,17 +654,32 @@ static long b204(int n) { return 11898 + (long)n * 60 + (n - 1) * BR_T + BR_NT +
 // once the walked legs are taken out: 874,914 / 874,876 / 874,902 on loc $082 / $005 / $078 -- the spread is the
 // DMA legs' sync to the master clock; the mean.
 #define PASS_REST 874897L
+
+// FD:C2C1's set and its channel 7 (src/hdma_table.c): C2C1 `LDA $53 / BIT #01 / BNE C2D3` -- bit 0 clear builds set B
+// (the BNE not taken, 12), set builds set A (taken, 18) -- and the channel's `LDA $0351 / LSR A` reads $7F:0351 (DB =
+// $7F; $7E:0351 is the wipe's, which nothing in the pass reads): set A's C439 `BCS`, set B's C477 `BCC`, 18 taken / 12
+// not. With the parity even the two sets cost the same (set A 18 + 12, set B 12 + 18: 3,306 cycles each on the 05C
+// load's pass and the main loop's next call), the configuration PASS_REST and the reload's C0/01A5 call were measured
+// on; an odd parity takes set A's BCS (+6) and leaves set B's BCC (-6).
+static long hdmaCh7Arm(Walk* c) {
+  if (!(b8(c, 0x10351) & 1)) return 0;
+  return (b8(c, 0x0153) & 1) ? 6 : -6;
+}
 #define PASS_BG3  (298554L + 17000 + 248)   // C0/7CB5 (the BG3 builder), C0/7F62 (its upload), C0/0AD8-0AF3's arm
 
 static long pass286C(Walk* c, int loc) {
   // The configuration the traces cover: every arm below is the ROM's, taken on the flags it reads.
   if (b8(c, 0x0126) != 0)   { unpriced(c, "pass: $0126 != 0 (the FD:C2DF/C2E5 handlers 1-2)"); return -1; }
   if (b8(c, 0x1DF9) || b8(c, 0x1DFD)) { unpriced(c, "pass: $1DF9 / $1DFD (the HDMA handlers' effect arms)"); return -1; }
-  if ((b8(c, 0x0153) & 0x80) || b8(c, 0x0BE9) || (b8(c, 0x0351) & 1)) {
-    unpriced(c, "pass: $0153 bit 7 / $0BE9 / $0351 bit 0"); return -1;
-  }
+  // $0153 bit 7 is FD/C3F8's battle-exit arm (C0/0AFF sets it around its own two calls): no trace of a pass ran it
+  if (b8(c, 0x0153) & 0x80) { unpriced(c, "pass: $0153 bit 7 (FD/C3F8's battle-exit arm)"); return -1; }
   int n = b8(c, 0x12000);
   long k = PASS_REST, d0, d1, d2, d3;
+  // C0/0AF6 `LDA $0BE9 / BEQ`: op 0x29's plane size (C0/3EA6 / 3EB1, the only writers besides C0/0C6D's clear) goes to
+  // BG3SC's size byte -- the BEQ not taken and `STA $1D86` for the taken BEQ PASS_REST holds: 12 + 26 - 18. C0/0AF6 is
+  // $0BE9's only reader (an absolute-operand scan of banks C0 / C2 / FD).
+  if (b8(c, 0x0BE9)) { k += 20; sb(c, 0x1D86, b8(c, 0x0BE9)); }
+  k += hdmaCh7Arm(c);                                      // C0/0B28's FD:C2C1 (below)
   k += (d0 = doors28E1(c));
   k += (d1 = chestsA712(c, w16(c, 0x0100) & 0x1FF));   // C0/A742 `LDA $0100 / AND #01FF` (the loader's own location)
   k += (d2 = camera(c));
@@ -864,7 +879,7 @@ static long prePass(Walk* c, int loc, int caller, long* vmOut) {
   long k = 610;                                            // C0/0B5D -> C0/01A5 (0B4E's tail, 0B64, 0B75, D = $0100)
   // C0/01A5 -> C0/0960: C0/0905 (the $7F:2000 -> $7E:0920 MVN, 246,000), FD:C2C1, FD:C1EE, the three fill marks;
   // FD:C1EE's table by `$0153 & 0F` after FD:C2C1's flip of bit 0 (the port's $0153 is the menu's, as restored)
-  k += 251060 + ((((b8(c, 0x0153) ^ 1) & 0x0F) == 0) ? BR_T : BR_NT + 18);
+  k += 251060 + ((((b8(c, 0x0153) ^ 1) & 0x0F) == 0) ? BR_T : BR_NT + 18) + hdmaCh7Arm(c);
   sb(c, 0x0153, b8(c, 0x0153) ^ 1);
   k += loadPackets(c, loc);
   sb(c, 0x1DF9, b8(c, 0x11D26));                           // C0/01FF `LDA $7F1D26 / STA $1DF9`
@@ -1085,6 +1100,28 @@ long ct_vm_op_cycles(const uint8_t* rom, long romLen, const uint8_t* w, const ui
     case 0x6F: { int n = OPB(1) ? OPB(1) : 256; return 460 + 64L * (n - 1); }   // C0/6C5B-6C5E: LSR / DEC / BNE, n times
     case 0xF0: return (OPB(1) & 0x0F) ? 402 : 322;              // C0/3CDB `BEQ`: the low nibble zero sets $19 instead
     case 0x33: return 2938;                                     // C0/3740 / 374D: two 24-byte MVNs from bank E4
+    // ---- C0/3E84 (29 xx), the caption plane's setup (field_caption_plane.md): the head (the dispatch's JSR, PHY, `TSB
+    // $1D36 / $1D35`, two STZ, JSR) 264; C0/6E27: $0300-$0305 (234 to the JSL), the font `$FD:0000 -> $7F:5080` (the
+    // vector's JMP + C3/0557), 242, C0/2DC8's $0400 bytes to VRAM; RTS + JSR 80; C0/75A0: 92, `MVN $7E,$D2` of $20 (44 a
+    // byte), six `LDX / LDA` (36) and `MVN $7E,$7E` doubling it to $800 (2016 bytes at 46), 84; C0/3E99-3EB9 244 (the BMI's
+    // two arms cost the same: 18 + AND / STA / LDA / STA against 12 + STA / LDA / STA / BRA). Then C0/3EBB's scan of the
+    // ASCII records at $FD:A000 for record xx & 7F: a record passed 52 (LDA / CMP / BEQ not taken), each byte 72 (LDA
+    // $FDA000,X / BMI not taken / INX / BRA), its end byte 112 (BMI taken / INX / INC $DD / BRA) for 72; the match 58 and
+    // C0/3ECF-3ED5 114. The cartridge's 05C load (s5b_roll_f2280, record 8): 276,188, this 276,192 (the DMA's sync).
+    case 0x29: {
+      long k = 264 + 234 + 18 + ct_lz_rom_cycles(rom, (size_t)romLen, 0x3D0000, 1) + 242 + dma2DC8(0x400) + 80
+             + 92 + 32 * 44 + 6 * 36 + 2016L * 46 + 84 + 244 + 58 + 114;
+      int rec = OPB(1) & 0x7F;
+      long x = 0x3DA000L;
+      for (int r = 0; r < rec; r++) {
+        k += 52;
+        for (int guard = 0; guard < 0x10000; guard++, x++) {
+          if (CtRomByte(rom, romLen, x) & 0x80) { k += 112; x++; break; }
+          k += 72;
+        }
+      }
+      return k;
+    }
     // ---- C0/3D97 (E4) -> C0/AF4E: the map copy `E4 x0 y0 x1 y1 dx dy flags`, dx = x1 - x0 and dy = y1 - y0 (8-bit, $DB / $DD).
     // Flags 0 return at once (C0/AF50); each of bits 0-5 copies one layer (C0/B096: a row's dx + 1 bytes by `MVN $7E,$7E`,
     // 46 a byte, then the next row), bits 6 and 7 one property bit of $7E:30C0 cell by cell (C0/AFAB / C0/B023)

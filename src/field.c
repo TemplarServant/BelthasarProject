@@ -5228,6 +5228,14 @@ static int g_stageRebootLoad = 0;  // an overlay machine's END rebooted this ite
 #define LOAD_SPC_LEAD (5751L + 3060L)   // master cycles from the vblank to C0/1B73's JSL C7:0004 (the traces' mean)
 #define OW_EXIT_SPC_LEAD 3868L          // master cycles from the $83's RTL (C2/2505) to C0/1B73's JSL (the world's exit)
 #define STAGE_END_SPC_LEAD (4252L + 218L + 4008L)   // the vblank -> C0/1B73's JSL out of an overlay machine's END (below)
+static int g_opRebootLoad = 0;     // ops DF / E1 rebooted at this vblank (C0/3B4B's spin): the load follows on the next
+// THE DF / E1 REBOOT (C0/3B98 `LDA #01 / STA $1E / BRA 3B4B`, C0/3B4B): what runs before the spin's `LDA $4210 / BPL` is
+// NMI-on work, free under the rule, so the stretch starts where the vblank's NMI returns. MEASURED, the rule's cartridge,
+// the staff roll 05B -> 05C (saves/field_re/s5b_roll_f2280.state, --cputrace CPUTRACE_BEAM from f22): the NMI's RTI (C0/EC5F)
+// on line 228 h 162 (4,254 from line 225: its pad latch), C0/3B76 `JSR C0/0B4E` -> C0:0000 -> C0/0B86 on line 229 h 200
+// (+1,402), C0/0B86 -> C0/1B73's `JSL C7:0004` on line 231 h 480 (+3,008); PEEK_APUTRACE: f24's END at APU 287,621,197,
+// the $81 on $2140 at 287,621,647 (C7's own cycles after the JSL on top).
+#define REBOOT_SPC_LEAD (4254L + 1402L + 3008L)
 // THE RESET (C0/000E), MEASURED on the rule's cartridge from power-on (--cputrace boot, CPUTRACE_BEAM): FD:C000 at c 128,
 // C0/000E at 2,108, C0/0053's `JSL C7:0000` at 676,798 (the clears' DMA); the upload to C7/00FF and its tail to C0:0057
 // (CtAudioColdBoot); C0/0057's C2/8D6A SRAM scan to C0/005D, 102,888 on a blank cart; C0/005D -> C0/0066 -> C0/0B86 ->
@@ -6654,6 +6662,12 @@ static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
   // scripts may already write into what they laid: loc 01B's pokes `4A` $7F:0401/0421/../04A1 = 00 (C0:67D7, the
   // attract f1118, the loader's own frame) stop its six animations on their first frame.
   fieldBgAnimLoad(CtWramSys(fieldWram()), scene);
+  // C0/A33B's layer-scroll decode (C0/A385-A4FB: $0BCA, $0BC9, $1D36, $1D35, the speeds) is the same leg, over the $1D page
+  // C0/7F7E cleared (CtWramLocationLoad above) -- and BEFORE the init, whose ops may write the page: fn0's `29 xx` (C0/3E84)
+  // `TSB $1D36 / $1D35`, which the C0/286C pass then reads (the staff roll's 05C on the cartridge: $1D35 = 04 at C0/0AE1).
+  // The host's entry after the init (CtSceneLoadCameraEntry) places the camera only.
+  { uint8_t m1, m2, m3; CtFieldSceneMapHeader(f->sd, &m1, &m2, &m3);
+    CtWramLayerScrollDecode(CtWramSys(fieldWram()), m1, m2, m3); }
   f->vm = raw ? CtSceneCreateIn(fieldWram(), raw, (int)rl, gmem, scene) : NULL;
   if (g_fieldAudio) CtAudioSetEngineMode(g_fieldAudio, 0);
   // CHARACTER-SHEET init ($7E2600). The ROM seeds the 8 char records ONCE at new game (C2/956E:
@@ -11328,10 +11342,13 @@ int main(int argc, char** argv) {
     { int L = CtScenePlayerObj(f.vm);                    // (--at is the harness's own placement and wins)
       if (atX >= 0 || !CtSceneLeadScriptPlaced(f.vm, L, &px, &py))
         CtSceneSetActorPosF(f.vm, L, px, py); }            // the ROM's C0/5709 lead placement
-    CtSceneCameraEntry(f.vm, arrTX, arrTY);              //   the C0/7506 entry law -- cam =
-    { uint8_t m1, m2, m3; CtFieldSceneMapHeader(f.sd, &m1, &m2, &m3);   // C0/A385-A4FB: BG2/BG3 own scroll
-      CtSceneLayerScrollLoad(f.vm, m1, m2, m3); }                         //   (the map header's md[1..3]; the map itself
-                                                                          //   and byte 4 were staged in fieldLoad)
+    if (!stateRestored)                                  // a fresh load: the C0/7506 entry law alone (C0/A385-A4FB's BG2/BG3
+      CtSceneLoadCameraEntry(f.vm, arrTX, arrTY);        //   scroll was decoded in fieldLoad, before the init, with the map)
+    else {                                               // a --loadstate snapshot: the $1D page re-cleared and re-decoded
+      CtSceneCameraEntry(f.vm, arrTX, arrTY);            //   over the restored one, as this entry always did for it
+      uint8_t m1, m2, m3; CtFieldSceneMapHeader(f.sd, &m1, &m2, &m3);
+      CtSceneLayerScrollLoad(f.vm, m1, m2, m3);
+    }
     fieldDoorListApply("load", g_sndTraceFrame);         // C0/286C's first JSR (the list C0/28AA just emptied)
     fieldPaletteText(CtWramSys(fieldWram()));            // C0/2887 JSR C0/70E9: the text palette and the page copy
     fieldChestPrebumpWram(CtWramSys(fieldWram()), CtWramGlb(fieldWram()), scene, f.C.cw, f.C.ch);   // ...then 0A50 -> A712
@@ -12364,22 +12381,24 @@ int main(int argc, char** argv) {
         // and JMLs to C0:0000, whose load reaches C0/1B73 3,868 master cycles past the $83's RTL (C2/2505 -> C0/0B5A ->
         // C0/0B86 -> the JSL; the rule's cartridge on route leg 15, the world -> 078: $83 at APU 579,158,986, $81 at
         // 579,159,442). The port posts the pair at the end of the world's iteration and loads on the next, so that
-        // iteration's slice went between them: the $81 a frame of SPC late and loc 078 a black frame short. A reboot (C3's
-        // `JML C0:0000`, ops DF / E1) and a world-to-world exit (pendKind 2) are not measured and keep the plain order.
+        // iteration's slice went between them: the $81 a frame of SPC late and loc 078 a black frame short. The reboot of
+        // ops DF / E1 the same (REBOOT_SPC_LEAD: the staff roll's 05C, the cartridge's $81 450 APU cycles into the slice, the
+        // port's after the whole of it); a world-to-world exit (pendKind 2) is not measured and keeps the plain order.
         { static int owed = 0;
           uint8_t* rw = CtWramSys(fieldWram());
           int rf = rw && (rw[0x0117] & 0x80) && !inWorld && f.vm && !gwPhase;
           int fb = rf ? rw[0x0119] : fadeBri - FADE_STEP;
           int owLoad = g_owExitPosted && !rf && fade == 1 && fb <= 0 && pendKind == 3;
           int stLoad = g_stageRebootLoad && !rf && fade == 1 && fb <= 0 && pendKind == 1;
+          int rbLoad = g_opRebootLoad && !rf && fade == 1 && fb <= 0 && pendKind == 1;
           // THE TITLE's OPENING the same way: the iteration that opens `FF 02` (the op's own fade over -- ffPro 2 -- or it
           // jumped in its own frame) posts the driver reset and the song inside the NMI-off stretch that starts after the
           // vblank (TITLE_OPEN_AT, below at the open), so its slice is owed like a load's.
           int tlOpen = f.vm && CtSceneSequence(f.vm) == 2 && !seqOpen &&
                        (ffPro == 2 || (ffPro == 0 && !CtSceneFfFading(f.vm)));
-          g_loadSpcLead = 0; g_owExitPosted = 0; g_stageRebootLoad = 0; g_titleOpenSpc = 0;
-          if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad || stLoad) && !hostSyncFree()) {
-            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? 3 : 1; }
+          g_loadSpcLead = 0; g_owExitPosted = 0; g_stageRebootLoad = 0; g_titleOpenSpc = 0; g_opRebootLoad = 0;
+          if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad || stLoad || rbLoad) && !hostSyncFree()) {
+            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? 3 : rbLoad ? 4 : 1; }
           else if (audio && g_ruleAudio && tlOpen && !hostSyncFree()) { owed += ticks; ticks = 0; g_titleOpenSpc = 1; }
           else if (owed) { ticks += owed; owed = 0; } }
         if (ticks != 1) paceIrregular++;
@@ -12545,7 +12564,8 @@ int main(int argc, char** argv) {
           // traced (5,751 master: the pad latch's 4,224, then the NMI-off stretch's start), and C0/0B86 -> the JSL is
           // 3,018-3,102 (C0/00F4's head, C0/092B, C0/1B53's arm)
           if (g_loadSpcLead && audio)
-            CtAudioAdvance(audio, g_loadSpcLead == 2 ? OW_EXIT_SPC_LEAD : g_loadSpcLead == 3 ? STAGE_END_SPC_LEAD : LOAD_SPC_LEAD);
+            CtAudioAdvance(audio, g_loadSpcLead == 2 ? OW_EXIT_SPC_LEAD : g_loadSpcLead == 3 ? STAGE_END_SPC_LEAD :
+                                  g_loadSpcLead == 4 ? REBOOT_SPC_LEAD : LOAD_SPC_LEAD);
           else if (coldResetCyc && audio) CtAudioAdvance(audio, RESET_LOAD_SPC_LEAD);   // a reset's load: the scan and C0/005D first
           g_loadSpcLead = 0;
           if (!fieldLoad(&assets, &f, pendDest, gm)) running = 0;
@@ -12563,11 +12583,9 @@ int main(int argc, char** argv) {
             // $0104 = 01): the oracle's $1D0E = 2 (16 px) = (9-8)*2; ours was 4 (32 px), so every BG1 row sat
             // 16 px higher than the cartridge's. Each staging site now carries the tile it staged; an entry
             // that has none (a --reentertest spawn) keeps the foot-derived tile.
-            if (f.vm) CtSceneCameraEntry(f.vm, pendTileX >= 0 ? pendTileX : (int)px / 16,
-                                                pendTileY >= 0 ? pendTileY : (int)py / 16);
-            if (f.vm) { uint8_t m1, m2, m3; CtFieldSceneMapHeader(f.sd, &m1, &m2, &m3);   // C0/A385-A4FB: the new
-                        CtSceneLayerScrollLoad(f.vm, m1, m2, m3); }                         //   map's BG2/BG3 scroll (the map
-                                                                                            //   was staged in fieldLoad)
+            // (the map header's BG2/BG3 scroll, C0/A385-A4FB, was decoded in fieldLoad before the init: CtWramLayerScrollDecode)
+            if (f.vm) CtSceneLoadCameraEntry(f.vm, pendTileX >= 0 ? pendTileX : (int)px / 16,
+                                                    pendTileY >= 0 ? pendTileY : (int)py / 16);
             // THE LOAD, PRICED as the ROM runs it (field_cost.c ct_field_load_cycles), on the WRAM the load left -- once the
             // map header's layer bytes are in (C0/A385-A4FB's $0BC9/$0BCA, which decide C0/286C's BG3 builder: 315,802
             // cycles on loc 002) and before the host's own halves of C0/286C below write their part of the pass into it
@@ -17342,6 +17360,7 @@ int main(int argc, char** argv) {
       w[0x0102] = w[0x0114]; w[0x0103] = w[0x0115];       // 3B89 LDX $14 / 3B8B STX $02
       w[0x0104] = w[0x0116];                              // 3B8D LDA $16 / 3B8F STA $04
       CtSceneRebootDone(f.vm); rebootReq = 1;
+      g_opRebootLoad = 1;                                 // its load's posts before the next slice (REBOOT_SPC_LEAD)
       printf("reboot: op 0xDF/0xE1 at the vblank -> $0100=%03X, $0105=%03X\n",
              w[0x0100] | (w[0x0101] << 8), w[0x0105] | (w[0x0106] << 8));
     }

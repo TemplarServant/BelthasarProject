@@ -5681,9 +5681,7 @@ void CtSceneCameraTick(CtScene* sc) {
 // the field host on a fresh scene entry (a WRAM/state seed carries the live camera instead). Note the Y
 // far-pin threshold is $1D1D-6 (asymmetric vs X's -8) and the far pins sit at mx1-256 / my1-224 = one px
 // past the scroll-reachable maxima (an entry camera can legally rest there; walking can't reach it).
-void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
-  if (!sc) return;
-  uint8_t* s = sc->mem->s;
+static void cameraLaw7506(uint8_t* s, int arrTileX, int arrTileY) {
   int x0 = s[0x1D1A], x1 = s[0x1D1B], y0 = s[0x1D1C], y1 = s[0x1D1D];
   int caxX;
   if      (arrTileX <= x0 + 8) caxX = x0 * 2;                 // left pin  (7516/7522)
@@ -5702,6 +5700,11 @@ void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
   // Crono (obj10 at y 159, C0/1FCD's speaker test against 128) moved from the top to the bottom.
   camPut16(s, 0x1D0A, caxX); camPut16(s, 0x1D0C, caxX + 0x20);
   camPut16(s, 0x1D0E, caxY); camPut16(s, 0x1D10, caxY + 0x1C);
+}
+void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
+  if (!sc) return;
+  uint8_t* s = sc->mem->s;
+  cameraLaw7506(s, arrTileX, arrTileY);
   s[0x1D93] = s[0x1D96] = 0;                                  // phases 0 (16-aligned)
   camPut16(s, 0x1D87, 0); camPut16(s, 0x1D89, 0);             // step counters zeroed at entry
   s[0x1D3B] = s[0x1D3C] = 0;                                  // fraction accumulators zeroed
@@ -5737,19 +5740,42 @@ void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
 // VERIFIED against the live bytes, not only the listing: loc 0AD md[2]=$56 -> $1D37=20 $1D38=10
 // ((+2,+1) px/f; the oracle's BG2 scroll went (182,91) -> (362,181) in 90 frames), loc 16E
 // md[2]=$D0 md[3]=$F0 -> $1D38=F0 $1D3A=C0, $1D36=02 (measured: BG1 -1, BG2 -2, BG3 -5 px/f).
-void CtSceneLayerScrollLoad(CtScene* sc, uint8_t md1, uint8_t md2, uint8_t md3) {
-  if (!sc) return;
-  uint8_t* s = sc->mem->s;
-  s[0x0BCA] = (md1 & 0x80) ? 0x01 : 0x00;                     // A38B BPL / LDA #01 / STA $0BCA (BG3 present)
-  s[0x0BC9] = (md1 & 0x40) ? 0x80 : 0x00;                     // A397 BIT #40 / LDA #80 / STA $0BC9 (the half-camera map mode)
-  // C0/74AC-74C5, which the entry (74A6) runs after 7506/7553 when `$0BC9` is negative: BG2's streamer window at HALF the
-  // camera, `$12 = ($0A >> 1) & FE`, `$14 = $12 + 20`, `$16 = $0E >> 1`, `$18 = $16 + 1C` (chip units). The port decodes the
-  // header after its camera entry, so the window is taken here, from the camera that entry just placed.
+// C0/74AC-74C5, which the entry (74A6) runs after 7506/7553 when `$0BC9` is negative: BG2's streamer window at HALF the
+// camera, `$12 = ($0A >> 1) & FE`, `$14 = $12 + 20`, `$16 = $0E >> 1`, `$18 = $16 + 1C` (chip units), from the camera the
+// entry law just placed.
+static void layerHalfWindow74AC(uint8_t* s) {
   if (s[0x0BC9] & 0x80) {
     s[0x1D12] = (uint8_t)((s[0x1D0A] >> 1) & 0xFE); s[0x1D14] = (uint8_t)(s[0x1D12] + 0x20);
     s[0x1D16] = (uint8_t)(s[0x1D0E] >> 1);          s[0x1D18] = (uint8_t)(s[0x1D16] + 0x1C);
   }
+}
+void CtSceneLayerScrollLoad(CtScene* sc, uint8_t md1, uint8_t md2, uint8_t md3) {
+  if (!sc) return;
+  uint8_t* s = sc->mem->s;
+  CtWramLayerScrollDecode(s, md1, md2, md3);
+  layerHalfWindow74AC(s);                                     // (decoded after the camera entry: the window is taken here)
   s[0x1D94] = s[0x1D97] = 0;                                  // BG2's phases, zeroed with the rest of the $1D page
+}
+// The location load's C0/286C entry, after its object init: the camera law (C0/7506 / 7553) and C0/74AC's window. What
+// CtSceneCameraEntry adds -- C0/7F7E's clear of the $1D page -- ran BEFORE the init (memLocationLoad, C0/7F95), and the
+// header's decode with it (CtWramLayerScrollDecode, C0/A385-A4FB inside C0/A33B): an init op's own store into the page
+// stays, as the cartridge's does. MEASURED, the staff roll's 05C (s5b_roll_f2280 under the rule, --cputrace from C0/0B86):
+// C0/A3AD `STZ $36` and C0/A45B `STA $35` at the load's line 3584 / 3669, fn0's `29 88` -> C0/3E87 / 3E8A `TSB $1D36 / $1D35`
+// at 18662, and C0/286C reads `$1D35` = 04 (C0/0AE1, and C0/87F1 skips its BG3 row). Clearing after the init put 00 there
+// and the load's walk priced the BG3 row C0/87F1 does not run (+8,996).
+void CtSceneLoadCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
+  if (!sc) return;
+  uint8_t* s = sc->mem->s;
+  cameraLaw7506(s, arrTileX, arrTileY);
+  s[0x0138] = 0;                                              // (outside the page: CtSceneCameraEntry's)
+  sc->bgD2x = sc->bgD2y = sc->bgD3x = sc->bgD3y = 0;          // every layer built at this camera (C0/0A50)
+  layerHalfWindow74AC(s);
+}
+// C0/A385-A4FB, the WRAM half: what the header decides, before the location's object init (C0/A33B is C0/00F4's leg).
+void CtWramLayerScrollDecode(uint8_t* s, uint8_t md1, uint8_t md2, uint8_t md3) {
+  if (!s) return;
+  s[0x0BCA] = (md1 & 0x80) ? 0x01 : 0x00;                     // A38B BPL / LDA #01 / STA $0BCA (BG3 present)
+  s[0x0BC9] = (md1 & 0x40) ? 0x80 : 0x00;                     // A397 BIT #40 / LDA #80 / STA $0BC9 (the half-camera map mode)
   s[0x1D36] = (md1 & 0x20) ? 0x04 : 0x00;                     // A3A9-A3B3
   if (md1 & 0x10) s[0x1D36] |= 0x02;                          // A3B7-A3BF
   s[0x1D35] = s[0x1D36];                                      // A459
