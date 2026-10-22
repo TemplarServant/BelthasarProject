@@ -153,7 +153,10 @@ started cold inside 1B1 and its driver's phase was its own, so a sound handshake
 cartridge's did not (1C00 and 7D00 +1). Every attract load now takes the cartridge's frames, and every visit its length
 but 087's (+1, its battle exit's `70 00`; disasm/notes/field_load_cost.md secs. 13-15). A check that grades the vehicle's
 picture or a field animation's phase compares with the power-on cartridge (`--peek boot`, picture P = peek P + 92):
-saves/attract_cena_inicial.state is another history, its $051D tile-step count of the other parity from the 07D load on. A `--boot` drive presses Start on the title at
+saves/attract_cena_inicial.state (the owner's real-time capture, which no check reads since 2026-10-22) is another history, its
+$051D tile-step count of the other parity from the 07D load on. Its recipe-made stand-in, saves/attract_cena_inicial_rule.state
+(tools/fixtures/attract_rule.json), IS the power-on's history: a --peek of q frames from it is --peek boot of 2159 + q, so the
+vehicle's picture p is that state's p - 2067 on the field (p - 2066 in a fight, P+1; one less after 087's visit). A `--boot` drive presses Start on the title at
 frame 198 (`n:198,s:1,...`; 133 before the power-on). The power-on needs the SPC: with `CT_NOAUDIO` the run boots scene 0
 lit at once and keeps its own (earlier) frames. A `--scene 433` with `--loadwram`, `--loadstate`, `--at`, `--newgame` or a test harness is still the plain
 cold start.
@@ -1891,7 +1894,8 @@ The attract's three demo battles (0AD, 07D, 087) share ONE battle RNG stream: C1
 the boot's two shuffles and the AI init (C1/80E8 -> C1/8C09) draw from it, and C1/8443 hands the final `$26` back.
 A draw one fight misses rotates the next fight's turn order. The tool runs both sides live -- the port's attract
 (`--scene 433 --selftest`, `CT_BATTLE_MEMMON` + `CT_BATTLE_TRACE`) and the cartridge's `--monitor
-7EB163:11,7EB185:1,7E29AD:1 --writer` from `saves/attract_cena_inicial.state` -- and grades per fight the turn order
+7EB163:11,7EB185:1,7E29AD:1 --writer` under the rule from `saves/attract_cena_inicial_rule.state` (recipe-made,
+tools/fixtures/attract_rule.json) -- and grades per fight the turn order
 `$B163`, the first cursor pass's `$B185` (C1:82EE) and the `$29AD` handback (C1:8448): nine values. Frames are NOT
 compared. Its three mutations are the three mechanisms it pins (disasm/notes/battle_boot_turns.md §7): the boot
 eval drawing before the demo bit comes back, op 04 (C1/98C5), and C1/FD5E's multiplies leaving `$2E` = 0 for the
@@ -1915,7 +1919,7 @@ track 4). Re-pin only if the action's length changes with an oracle-verified rea
 The 07D's field places its enemies and its sprite-133 object with op 0x8C (C0/4BC3: the TILE is the low byte of a
 scene var, `$1800` is kept) out of vars that op 0x21/0x22 fill with an object's tile bytes, and a PC's load op
 writes the party table `$0197` itself (C0/42B3). disasm/notes/field_op8c_place_from_vars.md. The first check runs
-the attract and the cartridge (`--monitor 7E29BF:60` from `saves/attract_cena_inicial.state`) and compares the five
+the attract and the cartridge (`--monitor 7E29BF:60` under the rule from `saves/attract_cena_inicial_rule.state`) and compares the five
 staged enemy records byte for byte; the second is the field lockstep from `saves/attract_07d_field_f4320.state`
 (PEEK_SAVE of the attract at f4320), whose first divergence is now f81 -- the party's op 0xD9 walk, an OPEN
 residual (the port's walk ends 8 frames early); a LATER first divergence after a D9 port is an improvement to
