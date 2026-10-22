@@ -6428,7 +6428,7 @@
         "--loadwram",
         "saves/field_re/magus_scene.lakewram",
         "--walkscript",
-        "d:60,n:28,a:2,n:600"
+        "d:60,n:28,a:2,n:900"
       ],
       "env": {
         "SDL_VIDEODRIVER": "dummy",
@@ -6436,11 +6436,11 @@
         "CT_NOPACE": "1",
         "CT_POKEWRAM": "2841=80",
         "CT_BATTLE_SCRIPT_ABS": "1",
-        "CT_BATTLE_SCRIPT": "n:169,d:2,n:10,a:2,n:10,d:2,n:10,a:2,n:10,a:2,n:900",
+        "CT_BATTLE_SCRIPT": "n:169,d:2,n:10,a:2,n:10,d:2,n:10,d:2,n:10,a:2,n:10,a:2,n:900",
         "CT_FIELD_MEMMON": "0598:4,CCEA:1",
         "CT_AUDIO_SEEDSTATE": "saves/field_re/magus_scene_lake.state",
         "CT_SHOTS": "build/_xstrike",
-        "CT_SHOTS_AT": "830",
+        "CT_SHOTS_AT": "1000",
         "CT_SHOTS_EXIT": "1"
       },
       "inputs": [
@@ -6450,13 +6450,15 @@
         "saves/field_re/magus_scene_lake.state"
       ],
       "expect": [
-        "fmemmon f795 loc=0CB  0598=00101010  CCEA=00*",
-        "fmemmon f797 loc=0CB  0598=40C00F10*  CCEA=00",
-        "fmemmon f812 loc=0CB  0598=00C00F10*  CCEA=00"
+        "fmemmon f946 loc=0CB  0598=50101010*  CCEA=01",
+        "fmemmon f961 loc=0CB  0598=00101010*  CCEA=00*",
+        "fmemmon f963 loc=0CB  0598=40C00F10*  CCEA=00",
+        "fmemmon f978 loc=0CB  0598=00C00F10*  CCEA=00"
       ],
       "pin": [
         "^fmemmon f\\d+ loc=0CB  0598=(40C00F10|00C00F10)\\*",
-        "^fmemmon f\\d+ loc=0CB  0598=00101010  CCEA=00\\*"
+        "^fmemmon f\\d+ loc=0CB  0598=00101010\\*?  CCEA=00\\*",
+        "^fmemmon f\\d+ loc=0CB  0598=50101010\\*  CCEA=01"
       ],
       "mutations": [
         {
@@ -6464,12 +6466,18 @@
           "find": "    if (h->deathSfxDue[slot] == 1 && h->deathCceaSeen) continue;",
           "replace": "    /* MUT: no $CCEA wait */",
           "why": "the death's fade record staged two frames after the death, overwritten by the X-Strike clean-up's: no red"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "int held = g_fxPalArmedPreNmi ? (e & 0x80) : 0;",
+          "replace": "int held = 0;   /* MUT: the main loop's CD/0453 record goes live in its own frame */",
+          "why": "the X-Strike clean-up's record ($0598 = 50 10 10 10) live at f945, a frame before the cartridge's CD:0C5D (f946)"
         }
       ],
       "tier": "quick",
       "timeout_s": 60,
       "note_pass": "an enemy X-Strike kills dissolves red: the death's fade waits for the tech's clean-up ($CCEA) as on the cartridge",
-      "notes": "The user, 2026-10-11 (translated from Portuguese): 'X-Strike, on killing any enemy, does not dissolve in red but in the normal colour'. CD/0043 (the death routine CF/FE20 runs per corpse) waits `JSR CD/3E75 / JSL CD/04AA` until $CCEA == 0 before the #95 post and CD/00A5's fade record 10 ($0598 = 40 C0 0F 10, OBJ palette 4 toward red). $CCEA is the effect program's flag: CD/1609 `INC $CCEA` when the program ends, CD/0497 `STZ $CCEA` after CD/0453's clean-up, whose own colour record (50 10 10 10) is the same record 10. The port waited a fixed two frames (true in the forest fights, where $CCEA is already 0), so after X-Strike its fade started at once and the clean-up's record overwrote it two frames later. The drive: the user's snes9x capture magus_scene.state (loc 0CB, the Diablos about to fight; spliced on a loc 0CB teleport base), X-Strike learned by CT_POKEWRAM 2841=80 (PEEK_POKE on the cartridge), A at d+28 starts the fight, Crono attacks, then Comb / X-Strike / A. The rule's cartridge: the Diablos dies f775 (its palette copied), $CCEA 01 f726-795, the clean-up's record f781-795, the death's record f798-813. The port: f774, $CCEA 0 at f795, the record f797-812 (one frame ahead: its input convention); the corpse dissolves red on both. The dither's start waits on the same flag (battleAdvanceDissolves)."
+      "notes": "The user, 2026-10-11 (translated from Portuguese): 'X-Strike, on killing any enemy, does not dissolve in red but in the normal colour'. CD/0043 (the death routine CF/FE20 runs per corpse) waits `JSR CD/3E75 / JSL CD/04AA` until $CCEA == 0 before the #95 post and CD/00A5's fade record 10 ($0598 = 40 C0 0F 10, OBJ palette 4 toward red). $CCEA is the effect program's flag: CD/1609 `INC $CCEA` when the program ends, CD/0497 `STZ $CCEA` after CD/0453's clean-up, whose own colour record (50 10 10 10) is the same record 10. The port waited a fixed two frames (true in the forest fights, where $CCEA is already 0), so after X-Strike its fade started at once and the clean-up's record overwrote it two frames later. The drive: the user's snes9x capture magus_scene.state (loc 0CB, the Diablos about to fight; spliced on a loc 0CB teleport base), X-Strike learned by CT_POKEWRAM 2841=80 (PEEK_POKE on the cartridge), A at d+28 starts the fight, Crono attacks, then Comb / X-Strike / A. The rule's cartridge: the Diablos dies f775 (its palette copied), $CCEA 01 f726-795, the clean-up's record f781-795, the death's record f798-813. The port: f774, $CCEA 0 at f795, the record f797-812 (one frame ahead: its input convention); the corpse dissolves red on both. The dither's start waits on the same flag (battleAdvanceDissolves). || MOVED 2026-10-22 TO THE RECIPE TWIN (saves/field_re/magus_scene* = tools/recipes/fxr_magus_scene.json: the owner's own way into the cult's room -- the sanctum hall's door (53,12), 0C8, 0CB -- with the party, its stats and tech bytes and the cultists' box timing of the capture; the owner's snes9x splice is retired). The drive RE-ANCHORED on the twin against the rule's cartridge from the same recipe state: its RNG cursor ($26 = 5C, the capture's 24) gives another ATB order, and Crono's Tech list opens on the Crono+Lucca combo (9EE3 = 3C 12 83 02), so X-Strike (42) is one Down further -- the script is the capture's with one more `d` (n:169 d a d d a a, battle frames; the cartridge's keys at field f366 / 378 / 390 / 402 / 414 / 426). The rule's cartridge (ct.exe --monitor 7E0598:4,7ECCEA:1,7EAF02:4,7ECCE5:1, PEEK_POKE 2841=80): X-Strike (`$AE93 = 42`) f696, `$CCEA = 1` f891, the Diablos delisted f940, the clean-up's record armed f945 (CD:0E9C) and live f946 (CD:0C5D), `$CCEA = 0` f961, the death's record armed f962 and live f963-f977 -- and the port on every one of those frames since the fix of the same date: the main loop's CD/0453 armed its t 4 record ahead of the port's NMI section, so it went live a frame early (f945); C1/10A0 calls CD/0009 after the frame's NMI, so the record is the next NMI's (battle.c battleFxPalCommit, g_fxPalArmedPreNmi). The corpse dissolves red on both sides."
     },
     {
       "name": "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge",
@@ -46348,21 +46356,21 @@
       ],
       "expect": [
         "mixer: gato-battle: 1607688 samples identical / 1607688",
-        "mixer: gato-battle: reads 177408 identical / 177408, sound RAM identical at 2 / 2 segment ends",
+        "mixer: gato-battle: reads 177396 identical / 177396, sound RAM identical at 2 / 2 segment ends",
         "mixer: nuns-battle: 491633 samples identical / 491633",
-        "mixer: nuns-battle: reads 48700 identical / 48700, sound RAM identical at 2 / 2 segment ends",
-        "mixer: magus-battle: 454254 samples identical / 454254",
-        "mixer: magus-battle: reads 43306 identical / 43306, sound RAM identical at 2 / 2 segment ends",
+        "mixer: nuns-battle: reads 48286 identical / 48286, sound RAM identical at 2 / 2 segment ends",
+        "mixer: magus-battle: 545033 samples identical / 545033",
+        "mixer: magus-battle: reads 53314 identical / 53314, sound RAM identical at 2 / 2 segment ends",
         "mixer: save-screen: 171235 samples identical / 171235",
-        "mixer: save-screen: reads 17080 identical / 17080, sound RAM identical at 2 / 2 segment ends",
+        "mixer: save-screen: reads 18125 identical / 18125, sound RAM identical at 2 / 2 segment ends",
         "mixer: shop: 171235 samples identical / 171235",
         "mixer: shop: reads 17416 identical / 17416, sound RAM identical at 2 / 2 segment ends",
         "mixer: menu-jingle: 138661 samples identical / 138661",
         "mixer: menu-jingle: reads 11066 identical / 11066, sound RAM identical at 1 / 1 segment ends",
         "mixer: world-song: 130117 samples identical / 130117",
         "mixer: world-song: reads 10254 identical / 10254, sound RAM identical at 1 / 1 segment ends",
-        "mixer: all: 3164823 samples identical / 3164823",
-        "mixer: all: reads 325230 identical / 325230, sound RAM identical at 12 / 12 segment ends, live chunks 778 / 778",
+        "mixer: all: 3255602 samples identical / 3255602",
+        "mixer: all: reads 335857 identical / 335857, sound RAM identical at 12 / 12 segment ends, live chunks 800 / 800",
         "mixer: verdict: SAMPLE-EXACT",
         "mixfuzz: 1875277 samples identical / 1875277 (200 cases, seed 1)",
         "mixfuzz: reads 1875277 identical / 1875277, sound RAM identical after 200 / 200 cases"
@@ -46374,7 +46382,7 @@
       "tier": "quick",
       "timeout_s": 300,
       "exclusive": true,
-      "notes": "The native mixer src/sound/mixer.c (the port's S-DSP: BRR, Gaussian interpolation, ADSR/GAIN, noise, pitch modulation, echo FIR, volumes) against the vendored snes/dsp.c, SAMPLE FOR SAMPLE. tools/mixer_replay.py runs Belthasar with CT_MIXER_CAPTURE (the S-DSP's state and the SPC's RAM at each segment's start, every register write, RAM change and register read at its APU cycle, the live stream's FNV per 4096 samples) on seven quick-tier runs' own argv/env -- Gato's, the nuns' and Magus's battles, the save screen, a shop, the menu's save jingle, the world map's song -- and replays each into both mixers with every event at the sample it came at (ct.exe --mixreplay). Graded: every output sample, every register read (ENDX/ENVX/OUTX), the sound RAM at each segment's end (the echo writes), and the reference's own stream against the live run's hashes (the replay IS the run's sound). The game never selects GAIN and its output never saturates, so `fuzz` (ct.exe --mixfuzz 200 1: random state, RAM and writes from power-on) grades those paths; its census shows every GAIN mode and clamped samples. The attract (6.1M samples) is mixer-sample-exact-attract-vs-dsp (full tier). Mutations: the Gaussian index, BRR filter 2, the sustain decay, the noise tap, even-sample KON, the PMON depth, the FIR's LSB, the feedback scale, ENDX (the fuzz's reads), GAIN's bent knee (the fuzz), the voice-add saturation (Magus's battle), EDL's latch (the sound RAM): 12 killed. disasm/notes/audio_mixer.md. RE-PINNED 2026-10-19 (the results' cadence, the rule's cartridge): every results line's dwell takes a held A from its post + 19 (CD/01B3: the post on frame 0, CD/027F's two waits -- `$CCEC = 10` on frame 2 --, CD/020A's 16, the dwell from 19; under the rule the VWF build costs no frame). MEASURED on the playthrough's leg 20 (the forest ambushes: posts 3074 / 8424, boxes +2, an A held at 8443 closing line 0, the next post 16 later) and on the GATO fight of this check family (post 2549, box 2551, close 2569). The port tested from post + 21 (the first line) / + 20 (the rest: CT_BATTLE_RESULT_BUILD 3 -> 2). The fight ends 3-5 frames earlier with it; battle_module_tail_cmp (Black Hole on GATO) went from +3 to +0 on every quantity. And no C1/8120 head after the victory or the defeat (`$0027` stops on the victory's frame on the cartridge). RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): every replay still sample-exact; only the borrowed runs' input moved -- world-song 3 frames shorter (its first world-0 load 40 black frames, was 43; ce84bdb), GATO's and Magus's song JSL (cmd 10) priced instruction by instruction in C7 (5fde1d2: the SPC 7 / 25 APU cycles later from that post, one more driver tick of 17 reads in GATO's run, one more sample in Magus's). RE-PINNED 2026-10-22 (disasm/notes/field_load_cost.md sec. 13): every replay still sample-exact; only the borrowed runs' input moved -- a clocked JSL now debits the SPC cycles it ran, so the runs' SPC stands a few cycles from where it stood at each post and their lengths move by 1-2 samples (GATO's 2, the nuns', Magus's and the save screen's 1; GATO's reads 17 fewer, one driver tick). ==== RE-PINNED 2026-10-22 (saves/battle_re/gato_wait.state is the recipe twin now (tools/fixtures/gato.json: fx_a_battle_gato_press_action + the capture's pokes; its SPC is the cartridge's from power-on, where the old capture's still held song 06 with song 42 posted); C0/1BAB's battle-entry post now goes out on C1/0000's frame, two after the consumer C0/188C (src/field.c battleEntryPostIn): the cartridge posts `14` at f223 line 230, apuc 413,303,076 from gato_wait's twin (97,535,696 from the old capture); the port posted 34,171 APU cycles -- two SPC frames -- earlier on both, now 413,303,079 / 97,535,699, so the battle song's driver phase is the cartridge's): the counts of samples and reads moved with the new SPC state and the entry post's phase (gato-battle, nuns-battle, magus-battle); every segment still SAMPLE-EXACT with the sound RAM identical at its ends.",
+      "notes": "The native mixer src/sound/mixer.c (the port's S-DSP: BRR, Gaussian interpolation, ADSR/GAIN, noise, pitch modulation, echo FIR, volumes) against the vendored snes/dsp.c, SAMPLE FOR SAMPLE. tools/mixer_replay.py runs Belthasar with CT_MIXER_CAPTURE (the S-DSP's state and the SPC's RAM at each segment's start, every register write, RAM change and register read at its APU cycle, the live stream's FNV per 4096 samples) on seven quick-tier runs' own argv/env -- Gato's, the nuns' and Magus's battles, the save screen, a shop, the menu's save jingle, the world map's song -- and replays each into both mixers with every event at the sample it came at (ct.exe --mixreplay). Graded: every output sample, every register read (ENDX/ENVX/OUTX), the sound RAM at each segment's end (the echo writes), and the reference's own stream against the live run's hashes (the replay IS the run's sound). The game never selects GAIN and its output never saturates, so `fuzz` (ct.exe --mixfuzz 200 1: random state, RAM and writes from power-on) grades those paths; its census shows every GAIN mode and clamped samples. The attract (6.1M samples) is mixer-sample-exact-attract-vs-dsp (full tier). Mutations: the Gaussian index, BRR filter 2, the sustain decay, the noise tap, even-sample KON, the PMON depth, the FIR's LSB, the feedback scale, ENDX (the fuzz's reads), GAIN's bent knee (the fuzz), the voice-add saturation (Magus's battle), EDL's latch (the sound RAM): 12 killed. disasm/notes/audio_mixer.md. RE-PINNED 2026-10-19 (the results' cadence, the rule's cartridge): every results line's dwell takes a held A from its post + 19 (CD/01B3: the post on frame 0, CD/027F's two waits -- `$CCEC = 10` on frame 2 --, CD/020A's 16, the dwell from 19; under the rule the VWF build costs no frame). MEASURED on the playthrough's leg 20 (the forest ambushes: posts 3074 / 8424, boxes +2, an A held at 8443 closing line 0, the next post 16 later) and on the GATO fight of this check family (post 2549, box 2551, close 2569). The port tested from post + 21 (the first line) / + 20 (the rest: CT_BATTLE_RESULT_BUILD 3 -> 2). The fight ends 3-5 frames earlier with it; battle_module_tail_cmp (Black Hole on GATO) went from +3 to +0 on every quantity. And no C1/8120 head after the victory or the defeat (`$0027` stops on the victory's frame on the cartridge). RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): every replay still sample-exact; only the borrowed runs' input moved -- world-song 3 frames shorter (its first world-0 load 40 black frames, was 43; ce84bdb), GATO's and Magus's song JSL (cmd 10) priced instruction by instruction in C7 (5fde1d2: the SPC 7 / 25 APU cycles later from that post, one more driver tick of 17 reads in GATO's run, one more sample in Magus's). RE-PINNED 2026-10-22 (disasm/notes/field_load_cost.md sec. 13): every replay still sample-exact; only the borrowed runs' input moved -- a clocked JSL now debits the SPC cycles it ran, so the runs' SPC stands a few cycles from where it stood at each post and their lengths move by 1-2 samples (GATO's 2, the nuns', Magus's and the save screen's 1; GATO's reads 17 fewer, one driver tick). ==== RE-PINNED 2026-10-22 (saves/battle_re/gato_wait.state is the recipe twin now (tools/fixtures/gato.json: fx_a_battle_gato_press_action + the capture's pokes; its SPC is the cartridge's from power-on, where the old capture's still held song 06 with song 42 posted); C0/1BAB's battle-entry post now goes out on C1/0000's frame, two after the consumer C0/188C (src/field.c battleEntryPostIn): the cartridge posts `14` at f223 line 230, apuc 413,303,076 from gato_wait's twin (97,535,696 from the old capture); the port posted 34,171 APU cycles -- two SPC frames -- earlier on both, now 413,303,079 / 97,535,699, so the battle song's driver phase is the cartridge's): the counts of samples and reads moved with the new SPC state and the entry post's phase (gato-battle, nuns-battle, magus-battle); every segment still SAMPLE-EXACT with the sound RAM identical at its ends. || RE-PINNED 2026-10-22 (recipes-rest, after merging the five families' main eaa4ae7): the magus-battle run now reads the recipe twin of saves/field_re/magus_scene* with its re-anchored X-Strike drive (a longer run: 545033 samples, 53314 reads); gato-battle (177408 -> 177396 reads), nuns-battle (48700 -> 48286) and save-screen (17080 -> 18125) are what this merged tree gives from the recipe fixtures -- the same with and without the CD/0453 record fix of this date (a build with its mutation gives the same counts). Every sample, read and segment-end sound RAM identical in both mixers, SAMPLE-EXACT.",
       "mutations": [
         {
           "file": "src/sound/mixer.c",
@@ -47122,14 +47130,14 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 629 check(s) read 239 state file(s): 224 made by recipes, 11 third-party, 4 private capture(s) read by 5 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 629 check(s) read 239 state file(s): 225 made by recipes, 11 third-party, 3 private capture(s) read by 3 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"
       ],
       "timeout_s": 60,
       "note_pass": "every state file a check reads comes from a recipe (tools/fixtures/, made from the ROM), a public source (tools/third_party_saves.json, verified by SHA-256) or the shrinking list of the owner's captures still waiting for their recipes (tools/private_captures.json): no check depends on a file that exists on one machine only and is not on that list",
-      "notes": "2026-10-22, the owner: nothing may depend exclusively on one machine. The suite on a fresh clone (the cloud sessions) SKIPs every check whose input is not there -- before this, 336 of 952 checks, and the number grew because nothing stopped a new check pinned on a local capture. This check fails on such a check (UNCLASSIFIED: give it a recipe or a public source) and on a list entry no check reads (STALE). Re-pin only when the private count goes DOWN (a check moved onto a recipe-made twin, docs/ROADMAP.md 1.1) or the recipe / third-party counts change with it. RE-PINNED 2026-10-22 (the attract family): saves/attract_cena_inicial.state, attract_loc0AD_flea.state, attract_race_handoff_rule_f8247.state and attract_entry3_handoff_rule_f8859.state are off the private list -- their checks read the recipe-made twins of tools/fixtures/attract_rule.json (and attract.json's attract_entry3_handoff_f6750.state) -- so 115 -> 119 recipe files, 113 -> 109 private captures, 324 -> 277 checks still on one (47 checks read no private capture any more; slot1-runner and the HDMA census keep other families' captures)."
+      "notes": "2026-10-22, the owner: nothing may depend exclusively on one machine. The suite on a fresh clone (the cloud sessions) SKIPs every check whose input is not there -- before this, 336 of 952 checks, and the number grew because nothing stopped a new check pinned on a local capture. This check fails on such a check (UNCLASSIFIED: give it a recipe or a public source) and on a list entry no check reads (STALE). Re-pin only when the private count goes DOWN (a check moved onto a recipe-made twin, docs/ROADMAP.md 1.1) or the recipe / third-party counts change with it. RE-PINNED 2026-10-22 (the attract family): saves/attract_cena_inicial.state, attract_loc0AD_flea.state, attract_race_handoff_rule_f8247.state and attract_entry3_handoff_rule_f8859.state are off the private list -- their checks read the recipe-made twins of tools/fixtures/attract_rule.json (and attract.json's attract_entry3_handoff_f6750.state) -- so 115 -> 119 recipe files, 113 -> 109 private captures, 324 -> 277 checks still on one (47 checks read no private capture any more; slot1-runner and the HDMA census keep other families' captures). || RE-PINNED 2026-10-22 (recipes-rest): saves/field_re/magus_scene.lakewram and magus_scene_lake.state made by tools/recipes/fxr_magus_scene.json and taken off tools/private_captures.json -- the rest family has no private capture left; on the merged main: 225 made by recipes, 3 private (other families' catedral_party3 and pre_scene_19f) read by 3 checks."
     }
   ],
   "excluded": [
