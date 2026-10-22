@@ -47072,14 +47072,14 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 629 check(s) read 239 state file(s): 115 made by recipes, 11 third-party, 113 private capture(s) read by 324 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 629 check(s) read 239 state file(s): 183 made by recipes, 11 third-party, 45 private capture(s) read by 231 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"
       ],
       "timeout_s": 60,
       "note_pass": "every state file a check reads comes from a recipe (tools/fixtures/, made from the ROM), a public source (tools/third_party_saves.json, verified by SHA-256) or the shrinking list of the owner's captures still waiting for their recipes (tools/private_captures.json): no check depends on a file that exists on one machine only and is not on that list",
-      "notes": "2026-10-22, the owner: nothing may depend exclusively on one machine. The suite on a fresh clone (the cloud sessions) SKIPs every check whose input is not there -- before this, 336 of 952 checks, and the number grew because nothing stopped a new check pinned on a local capture. This check fails on such a check (UNCLASSIFIED: give it a recipe or a public source) and on a list entry no check reads (STALE). Re-pin only when the private count goes DOWN (a check moved onto a recipe-made twin, docs/ROADMAP.md 1.1) or the recipe / third-party counts change with it."
+      "notes": "2026-10-22, the owner: nothing may depend exclusively on one machine. The suite on a fresh clone (the cloud sessions) SKIPs every check whose input is not there -- before this, 336 of 952 checks, and the number grew because nothing stopped a new check pinned on a local capture. This check fails on such a check (UNCLASSIFIED: give it a recipe or a public source) and on a list entry no check reads (STALE). Re-pin only when the private count goes DOWN (a check moved onto a recipe-made twin, docs/ROADMAP.md 1.1) or the recipe / third-party counts change with it. || RE-PINNED 2026-10-22 (recipes-rest, branch claude/recipes-rest-4b0bb3): 68 of the 70 private captures of the 'rest' family made by recipes (tools/fixtures/rest.json, tools/recipes/fxr_*.json) and taken off tools/private_captures.json -- 115 -> 183 made by recipes, 113 -> 45 private captures, read by 324 -> 231 checks. Left private: saves/field_re/magus_scene* (the recipe twin tools/recipes/fxr_magus_scene.json runs the X-Strike fight in another ATB order). Other families' branches lower these counts again when merged."
     }
   ],
   "excluded": [

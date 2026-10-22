@@ -18,34 +18,6 @@
       "checks": 2
     },
     {
-      "path": "saves/battle_re/ambush_pre.raw.wram",
-      "checks": 2
-    },
-    {
-      "path": "saves/battle_re/atb_partial.raw.wram",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/bat2.raw.wram",
-      "checks": 2
-    },
-    {
-      "path": "saves/battle_re/bat2_lake.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/battle_re/bat3.raw.wram",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/bat4.raw.wram",
-      "checks": 4
-    },
-    {
-      "path": "saves/battle_re/bat8.raw.wram",
-      "checks": 2
-    },
-    {
       "path": "saves/battle_re/bat9.raw.wram",
       "checks": 8
     },
@@ -54,36 +26,12 @@
       "checks": 3
     },
     {
-      "path": "saves/battle_re/forest_wait_ambush_active.lakewram",
-      "checks": 4
-    },
-    {
-      "path": "saves/battle_re/forest_wait_ambush_active.state",
-      "checks": 7
-    },
-    {
       "path": "saves/battle_re/gato_wait.state",
       "checks": 59
     },
     {
       "path": "saves/battle_re/gato_wait_crono_solo.lakewram",
       "checks": 2
-    },
-    {
-      "path": "saves/battle_re/hetake_dissolve_anim_ppu.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/hud_close_s13.raw.wram",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/loc070_imps_roly_pre.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/loc070_imps_roly_pre_lake.state",
-      "checks": 1
     },
     {
       "path": "saves/battle_re/party3_field.lakewram",
@@ -102,38 +50,6 @@
       "checks": 1
     },
     {
-      "path": "saves/battle_re/roly_rider_battle.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/roly_rider_s119.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/battle_re/wa2158.raw.wram",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/wa2510.raw.wram",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/wa4620.raw.wram",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/wincolour/tank_c2.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/wincolour/tank_c4.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/battle_re/wincolour/tank_c6.state",
-      "checks": 1
-    },
-    {
       "path": "saves/blackbird_re/ff23_handoff_f25.state",
       "checks": 2
     },
@@ -144,10 +60,6 @@
     {
       "path": "saves/blackbird_re/ff23_story_f18.state",
       "checks": 2
-    },
-    {
-      "path": "saves/crononame.state",
-      "checks": 1
     },
     {
       "path": "saves/ending_re/ending_052_f1745.lakewram",
@@ -182,99 +94,7 @@
       "checks": 4
     },
     {
-      "path": "saves/epoch_jump_01c.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/ferry_re/office_at_clerk.lakewram",
-      "checks": 3
-    },
-    {
-      "path": "saves/ferry_re/porre_office_at_counter.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/ferry_re/porre_pay_prompt.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/ferry_re/truce_pay_prompt.state",
-      "checks": 1
-    },
-    {
       "path": "saves/field_re/catedral_party3.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/catedral_user.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/catedral_user.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/field_re/catedral_world.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/field_re/chest26_opened.flags",
-      "checks": 2
-    },
-    {
-      "path": "saves/field_re/door_009.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/fall_stairs083.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/fall_stairs083_lake.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/gate_return_600ad_to_008.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/inn600_tele.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/inn600_yesno.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/inn_lucca_007.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/lucca_af_s129.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/field_re/m81_frog_lake.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/m81_naga_after_fight.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/field_re/m81_naga_after_fight_lake.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/field_re/m81_nuns_lake.lakewram",
-      "checks": 9
-    },
-    {
-      "path": "saves/field_re/m81_nuns_lake.state",
-      "checks": 5
-    },
-    {
-      "path": "saves/field_re/m81_nuns_ppu_lake.state",
       "checks": 1
     },
     {
@@ -292,90 +112,6 @@
     {
       "path": "saves/field_re/pre_scene_19f.state",
       "checks": 2
-    },
-    {
-      "path": "saves/field_re/s434_decision.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/field_re/s434_decision_lake.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/s439_marle_choice.lakewram",
-      "checks": 8
-    },
-    {
-      "path": "saves/field_re/s439_marle_choice_lake.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/field_re/s439_marle_join.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/s439_marle_join_lake.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/savept084.lakewram",
-      "checks": 3
-    },
-    {
-      "path": "saves/field_re/savept084_lake.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/field_re/scene468_stairs_to_120.lakewram",
-      "checks": 5
-    },
-    {
-      "path": "saves/field_re/scene468_stairs_to_120.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/field_re/scene8_pod_latch.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/field_re/tank/tele01c.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/tank/tele01c.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/wide_box_07a.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/field_re/yakra_defeat_039.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/forest_arrival_flags.bin",
-      "checks": 1
-    },
-    {
-      "path": "saves/forest_exit.lakewram",
-      "checks": 3
-    },
-    {
-      "path": "saves/forest_exit.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/forest_re/batalha_nao_comeca.raw.wram",
-      "checks": 1
-    },
-    {
-      "path": "saves/formlock_flags.bin",
-      "checks": 2
-    },
-    {
-      "path": "saves/intro_box.state",
-      "checks": 1
     },
     {
       "path": "saves/lavos_re/cockpit_1b0_f1700.lakewram",
@@ -432,14 +168,6 @@
     {
       "path": "saves/race_re/race_user.state",
       "checks": 9
-    },
-    {
-      "path": "saves/s120_lucca_flags.bin",
-      "checks": 1
-    },
-    {
-      "path": "saves/savepoint_flags.bin",
-      "checks": 4
     },
     {
       "path": "saves/tyranno_re/ff24_handoff_f27.state",
