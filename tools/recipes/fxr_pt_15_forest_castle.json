@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_15_forest_castle",
+  "from": "fxr_pt_14_canyon_out",
+  "doc": "The playthrough's leg 15_forest_castle (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Guardia Forest (077): north through the trees to the top exit, onto 1F1 at the forest's north",
+  "steps": [
+    [
+      "pad",
+      "0:1,40:16,10:176,40:16,10:16,40:80,20:16,40:16,20:16,40:32,20:16,40:48,10:112,80:32,10:16,80:48,10:16,80:32,10:16,80:32,10:112,40:16,10:16,40:16,10:16,40:32,10:16,40:48,10:112,80:16,10:16,80:16,10:16,80:80,10:64,40:16,10:16,40:16,0:300,10:48,0:30,100:2,0:400"
+    ]
+  ]
+}

@@ -145,6 +145,89 @@
       "pad": "(100:3,0:15)*70",
       "kind": "flags",
       "doc": "its own provenance: the Telepod scene after Taban's moves (fxf_scene8_taban_moving), A mashed 70 times -- storyline 0C, $7F0054 = 08, the same nine flag bytes; $7F0055 reads B2 where the capture's read 84 (the recipe chain's own fair: the merchant's and the candy's bits), a byte field-op55-storyline-to-local does not read"
+    },
+    {
+      "path": "saves/field_re/door_009.state",
+      "recipe": "fxr_cathedral_door_open",
+      "kind": "ctfs",
+      "scene": 129,
+      "frames": 1,
+      "doc": "the port's own CtScene state (the F5 format) one frame after seeding loc 081 from the recipe's WRAM: the organ's door open, Crono below it"
+    },
+    {
+      "path": "saves/field_re/inn_lucca_007.state",
+      "recipe": "fxr_inn600_prompt",
+      "kind": "ctfs",
+      "scene": 116,
+      "frames": 1,
+      "doc": "the port's own CtScene state one frame after seeding loc 074 from the recipe's WRAM: the innkeeper's 'Register? Yes' waiting for its A"
+    },
+    {
+      "path": "saves/field_re/lucca_af_s129.lakewram",
+      "recipe": "fxr_lucca_af_s129",
+      "kind": "lakewram",
+      "doc": "loc 081 after the teleport, Crono leading, Lucca following on op 0xAF"
+    },
+    {
+      "path": "saves/battle_re/forest_wait_ambush_active.state",
+      "recipe": "fxr_forest_ambush",
+      "kind": "state",
+      "doc": "the Beetles and Avian Chaos ambush in Guardia Forest (loc 013) under way, control off, before the party walk (op D9) and the fight (op D8 at +229)"
+    },
+    {
+      "path": "saves/battle_re/forest_wait_ambush_active.lakewram",
+      "recipe": "fxr_forest_ambush",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/battle_re/ambush_pre.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:2",
+      "kind": "wram",
+      "doc": "two frames on (the capture's own distance from forest_wait_ambush_active: its play clock $0400 + 2, obj0 on 059D, $1001 = 03 04 03)"
+    },
+    {
+      "path": "saves/battle_re/bat2_lake.state",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:366",
+      "kind": "state",
+      "doc": "the ambush's fight at f366, a command lull: the capture's own poses ($9907 = CB 37 FF FF 00 08 for the PCs and the first enemies), queue ($A6D9 = 00 FF FF), mover state ($974A = FF 01 01 FF FF 0F, $5E0D = 00 01 01 00 00 0F) and RNG cursor ($26 = 4F); Marle's gauge two ticks behind the capture's (1A against 18)"
+    },
+    {
+      "path": "saves/battle_re/bat2.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:366",
+      "kind": "wram",
+      "doc": "the same frame's WRAM (the capture's bat2.raw.wram was the f0 image of bat2_lake.state)"
+    },
+    {
+      "path": "saves/battle_re/bat3.raw.wram",
+      "recipe": "fx_forest_bat3",
+      "pad": "0:11",
+      "kind": "wram",
+      "doc": "the three Hetakes' fight 11 frames into the recipe twin of bat3_lake.state: the capture's poses ($9907 = C9 DD FF 01 01 07), queue ($A6D9 = 00 FF FF) and RNG cursor ($26 = 26); Marle's gauge ten ticks behind the capture's"
+    },
+    {
+      "path": "saves/battle_re/wa2158.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:1907",
+      "kind": "wram",
+      "doc": "the ambush's fight at f1907 of forest_wait_ambush_active: slot 5 (Avian Chaos) with $5E0D = 0A requested over a live $974A = 0F and a segment in flight -- the class-6 orbit's mid-segment commit lands on the next frame (the name keeps the capture's frame, 2158, where its own fight met the same situation)"
+    },
+    {
+      "path": "saves/battle_re/wa2510.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:1937",
+      "kind": "wram",
+      "doc": "f1937 of forest_wait_ambush_active: slot 5 in class-6 mode 0A seven frames before its pass is grid-blocked and REWINDS the orbit ($A61D := 1 at f1944; the capture met it at f2517, hence the name)"
+    },
+    {
+      "path": "saves/battle_re/wa4620.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:2624",
+      "kind": "wram",
+      "doc": "f2624 of forest_wait_ambush_active: slot 5 in class-5 mode 0F eleven frames before its orbit FLIPS ($A5F4 1 -> 0 at f2635), slot 2 a Beetle in mode 01 starting a segment (the capture's f4620 / f4631, hence the name)"
     }
   ]
 }
