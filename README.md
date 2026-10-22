@@ -145,8 +145,10 @@ The setup flow (about 15-20 minutes the first time; later runs reuse what did no
 
 `python tools/setup.py --check` regenerates every generated file and compares it with what is in place.
 
-The regression suite's state fixtures are made the same way: `python tools/fixtures.py make all` (see
-[docs/TESTING_OVERVIEW.md](docs/TESTING_OVERVIEW.md)).
+The regression suite's state fixtures are made the same way: `python tools/fetch_saves.py` first (the public battery
+saves several recipes start from, downloaded from their sources and verified by SHA-256: tools/third_party_saves.json),
+then `python tools/fixtures.py make all` (see [docs/TESTING_OVERVIEW.md](docs/TESTING_OVERVIEW.md)). No state file the
+suite reads may exist on one machine only: `python tools/input_provenance.py` says where each one comes from.
 
 ### 3. Build
 

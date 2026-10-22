@@ -160,6 +160,12 @@ invent anything that is not a read of the beam counters or a CPU-overrun frame.
 
 - Build: `tools\build.bat`, or `python tools/build.py [target]` (per-target artifact verification — trust the artifact check, never the banner).
 - Regression suite: `python tools/regress.py` (`--quick` = fast tier); parses printed signatures, NOT exit codes — see `docs/TESTING.md`.
+- **Nothing may depend on one machine only** (the owner, 2026-10-22). On a fresh clone (a cloud session too): `python
+  tools/fetch_saves.py` (public battery saves, verified by SHA-256) then `python tools/fixtures.py make all` (states from
+  the ROM by recipes). A new check reads its states from a recipe (`tools/fixtures/`) or a public source
+  (`tools/third_party_saves.json`), never a local capture: `tools/input_provenance.py` (check
+  `inputs-come-from-recipes-or-sources`) fails otherwise, and `tools/private_captures.json` (the owner's captures still
+  waiting for recipes, docs/ROADMAP.md 1.1) only shrinks. A run where those checks SKIP has not tested them.
 - `docs/INFRA.md` = build/layout/oracle-workflow guide; `docs/DEBUG_SURFACE.md` = every `ct.exe` CLI mode + every debug env var.
 - `tools/ct.py` (+ `tools/ctlib/`) = the agent-facing scripted wrapper over the oracle harness.
 - **RE playbooks** (step-by-step, command-exact — follow them literally): `.claude/skills/`

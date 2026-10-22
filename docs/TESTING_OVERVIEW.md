@@ -67,7 +67,8 @@ By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest sing
 |---|---|---|
 | **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | 581 of 818, together with B1 |
 | **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 118 fixture files. | (counted in the 581) |
-| **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet. 68 files; they SKIP with their name in a fresh clone. | 237 |
+| **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet, listed in `tools/private_captures.json` (113 files on 2026-10-22, read by 324 checks); they SKIP with their name in a fresh clone. The list only shrinks: `tools/input_provenance.py` (the check `inputs-come-from-recipes-or-sources`) fails on a check reading a state file from none of A / B1 / B2. | 324 (2026-10-22) |
+| **B3: public battery saves** | Other players' 8 KB `.srm` files (zdiemer's vendored set, Jackie's Game Saves), downloaded and verified by `python tools/fetch_saves.py` from `tools/third_party_saves.json`; Jackie's loaded states are recipes (`tools/recipes/jackie_*.json`). | (with B1) |
 
 How a fixture became a recipe's twin: the twin is made, every check that reads it runs, and it is kept when they pass
 unchanged. A check whose expectation is specific to the old capture was re-pinned only when it compares the port with

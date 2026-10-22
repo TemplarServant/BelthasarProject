@@ -46,7 +46,14 @@ recipe's output reproduces the file byte for byte, or every difference is explai
 
 ### 1.1 Checks still on private captures (L)
 
-236 checks read one of 68 captures from the owner's playthrough; in a fresh clone they SKIP with the file named. Each
+**2026-10-22:** 324 checks read one of 113 captures from the owner's playthrough (`tools/private_captures.json`; the count had
+grown from 236 / 68 as new checks were pinned on local captures); in a fresh clone -- a cloud session too -- they SKIP with
+the file named. Since then the check `inputs-come-from-recipes-or-sources` (`tools/input_provenance.py`) fails on a check
+reading a state file that is neither a recipe's, a public source's (`tools/third_party_saves.json`, `tools/fetch_saves.py`)
+nor on that list, which only shrinks. Jackie's loaded states (ch08 / ch16 / ch17 / ch24) are recipes now, byte-identical to
+the hand-made ones. The largest families left: `party3_field` (~110 check reads), `gato_wait` (59),
+`attract_cena_inicial` (43), then the late-game chains (lavos_re, ending_re, race_re, tyranno_re, blackbird_re), which
+Jackie's saves plus a pad can reach. (2026-10-11:) 236 checks read one of 68 captures from the owner's playthrough. Each
 fixture's entry in `tools/regress_inputs.json` and each blocked attempt in `tools/fixtures/<domain>.json` /
 `tools/recipes/fx*_*.json` (`"NOT YET USED"`) says why. The families, largest first:
 

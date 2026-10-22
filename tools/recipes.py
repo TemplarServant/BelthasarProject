@@ -28,6 +28,8 @@ Steps:
                          run `frames` frames with no pad -- how several captures were made from an earlier state
   ["sram", "<recipe>"]   the battery RAM of another recipe's state at power-on (CT_ORACLE_SRAM): only valid before
                          power_on / boot_to_bedroom
+  ["sram_file", "<path>"]  a third-party battery save at power-on, the same way: a file tools/fetch_saves.py downloads
+                         and verifies (tools/third_party_saves.json: its URL and SHA-256), never one of the owner's
 "expect" asserts the result: "loc" ($0100) and "wram" {"0xADDR": "0xVALUE", ...}; a recipe whose result does not
 match fails loudly rather than handing a wrong state to a generator or a check.
 
@@ -96,6 +98,8 @@ def key_of(recipes, name, rom_sha, tag):
         for st in r.get('steps', []):
             if st[0] == 'sram':
                 body.append(('sram', key_of(recipes, st[1], rom_sha, tag)))
+            elif st[0] == 'sram_file':
+                body.append(('sram_file', hashlib.sha256(open(sram_file(st[1]), 'rb').read()).hexdigest()))
     return hashlib.sha1(json.dumps([body, rom_sha, tag]).encode()).hexdigest()
 
 
@@ -139,6 +143,14 @@ def check_expect(r, path):
     return bad
 
 
+def sram_file(rel):
+    """A third-party battery save's path (tools/fetch_saves.py brings it), or a clear stop when it is not there."""
+    p = os.path.join(ROOT, rel)
+    if not os.path.exists(p):
+        sys.exit('recipes: %s is missing -- python tools/fetch_saves.py downloads it' % rel)
+    return p
+
+
 def write_srm(st):
     """<state>.srm: the battery RAM of a recipe's state -- the CTLS payload's last block (cart_handleState), as
     tools/gen/menu_loader.py reads it. An `sram` step boots the oracle with it (CT_ORACLE_SRAM)."""
@@ -167,6 +179,9 @@ def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
         if op == 'sram':
             srm = make(recipes, step[1], rom_path, rom_sha, tag, False, depth + 1)
             env['CT_ORACLE_SRAM'] = srm + '.srm' if os.path.exists(srm + '.srm') else write_srm(srm)
+            continue
+        if op == 'sram_file':
+            env['CT_ORACLE_SRAM'] = sram_file(step[1])
             continue
         if op == 'power_on':
             p = run([rom_path, '--fb', tmp + '.raw', '--frames', str(step[1])], dict(env, PEEK_SAVE=tmp + '.state'), log)

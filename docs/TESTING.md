@@ -90,8 +90,11 @@ first missing expectation and the actual nearby output lines.
 - `ct_assets.dat` and the generated files (`src/data/*.h`, `src/xlat/*.c`) — made by `tools/setup.py` from the ROM
   and the power-on recipes. `Belthasar.exe` checks pass the .dat explicitly via `--assets` (there is no default).
 - Oracle states and WRAM seeds: the recipe-made ones come from `python tools/fixtures.py make all` (the recipes in
-  `tools/recipes/`, listed per domain in `tools/fixtures/<domain>.json`); the rest are private captures from the
-  owner's playthrough, which SKIP with their name in a fresh clone. The catalogue, with sha256 pins and each file's
+  `tools/recipes/`, listed per domain in `tools/fixtures/<domain>.json`), after `python tools/fetch_saves.py` (the public
+  battery saves some recipes start from: `tools/third_party_saves.json`, each file's URL and SHA-256); the rest are
+  private captures from the owner's playthrough (`tools/private_captures.json`), which SKIP with their name in a fresh
+  clone. The check `inputs-come-from-recipes-or-sources` (`tools/input_provenance.py`) fails on a check that reads a state
+  file from none of the three, and on a private entry no check reads: the private list only shrinks. The catalogue, with sha256 pins and each file's
   provenance, is **`tools/regress_inputs.json`**; [TESTING_OVERVIEW.md](TESTING_OVERVIEW.md) counts the checks by
   class (ROM only, recipe fixtures, private captures).
 - Built binaries `build/ct.exe`, `build/Belthasar.exe` (via `tools\build.bat` /
