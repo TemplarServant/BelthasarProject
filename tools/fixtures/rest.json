@@ -348,6 +348,14 @@
       "recipe": "fxr_intro_box",
       "kind": "state",
       "doc": "loc 002, Mom's first box waiting at the bottom"
+    },
+    {
+      "path": "saves/field_re/wide_box_07a.state",
+      "recipe": "fxr_chamber_touch",
+      "kind": "ctfs",
+      "scene": 122,
+      "frames": 1,
+      "doc": "the port's own snapshot (F5) in loc 07A, the Queen's chamber: obj 24's scene (Marle comes back), between its first two boxes"
     }
   ]
 }

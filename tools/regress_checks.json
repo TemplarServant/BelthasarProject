@@ -45390,7 +45390,10 @@
       "name": "wide-box-is-the-vanilla-box-at-a-rooms-edge",
       "argv": [
         "python",
-        "tools/wide_box_cmp.py"
+        "tools/wide_box_cmp.py",
+        "saves/field_re/wide_box_07a.state",
+        "122",
+        "100"
       ],
       "inputs": [
         "ct_assets.dat",
@@ -45399,7 +45402,7 @@
         "tools/wide_box_cmp.py"
       ],
       "expect": [
-        "wide-box: f262 box rows 8-87, widescreen (398 wide) vs vanilla: 0 differing pixel(s)"
+        "wide-box: f100 box rows 8-87, widescreen (398 wide) vs vanilla: 0 differing pixel(s)"
       ],
       "pin": [
         "^wide-box: "
@@ -45407,7 +45410,7 @@
       "tier": "full",
       "timeout_s": 300,
       "note_pass": "the widescreen (a mod) shows the dialogue box exactly as the vanilla picture does, where the camera stops at a room's edge and the box moves to the middle",
-      "notes": "The user, 2026-10-13 (translated from Portuguese): 'remnants of the background over the dialogue box' in widescreen, captured with F5 in loc 07A (saves/field_re/wide_box_07a.state = ct_debug_040.state). 07A's camera stops at the room's left edge, so the 256 view stands at x0 = 0 of the 398-wide picture and fieldWideAssemble moves the view's screen-fixed pixels to the middle (xc = 71). It told them from the world BY COLOUR: a view pixel equal to the world's pixel under it stayed with the world. The box's darkest pixels -- BG3 colour 0 on the backdrop, (0,0,8), rows 78-86 -- equal the black floor under them, so they stayed at x0 and the middle showed the room past the edge through them (64 pixels at f262). drawCtWindow already records the box's rows as CT_MOT_FIXED in the frame's owner record; the assembly now takes that record too (and the record covers only the rows the opening band draws). The vanilla picture is untouched (the assembly is the widescreen's).",
+      "notes": "The user, 2026-10-13 (translated from Portuguese): 'remnants of the background over the dialogue box' in widescreen, captured with F5 in loc 07A (saves/field_re/wide_box_07a.state = ct_debug_040.state). 07A's camera stops at the room's left edge, so the 256 view stands at x0 = 0 of the 398-wide picture and fieldWideAssemble moves the view's screen-fixed pixels to the middle (xc = 71). It told them from the world BY COLOUR: a view pixel equal to the world's pixel under it stayed with the world. The box's darkest pixels -- BG3 colour 0 on the backdrop, (0,0,8), rows 78-86 -- equal the black floor under them, so they stayed at x0 and the middle showed the room past the edge through them (64 pixels at f262). drawCtWindow already records the box's rows as CT_MOT_FIXED in the frame's owner record; the assembly now takes that record too (and the record covers only the rows the opening band draws). The vanilla picture is untouched (the assembly is the widescreen's). || MOVED 2026-10-22 TO A RECIPE TWIN (saves/field_re/wide_box_07a.state = the port's own F5 snapshot made by tools/fixtures/rest.json, kind ctfs, from tools/recipes/fxr_chamber_touch.json: the playthrough's leg 27 cut in loc 07A, the Queen's chamber, in obj 24's scene with storyline 1C -- the capture's room, storyline and party; the owner's ct_debug_040 snapshot is retired) and to frame 100: 07A's camera stands at the room's left edge as on the capture (x0 = 0 of the 398-wide picture), and the scene's fifth box opens at the TOP ($0126 = 01, rows 8-87, as the capture's) at f70 of the tool's drive; at f100 the widescreen's 256 middle columns are the vanilla box's pixel for pixel. The mutation (the assembly by colour alone) is KILLED on the twin (regress.py --mutate, 2026-10-22): the box's darkest pixels over the black floor stay with the world again. (The scene's other boxes open at the bottom over the lit floor, where the colour test never meets the box's (0,0,8): at the tool's old f262 the mutation survived.)",
       "mutations": [
         {
           "file": "src/field.c",
