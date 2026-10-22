@@ -186,14 +186,6 @@
       "checks": 1
     },
     {
-      "path": "saves/field_re/magus_scene.lakewram",
-      "checks": 3
-    },
-    {
-      "path": "saves/field_re/magus_scene_lake.state",
-      "checks": 3
-    },
-    {
       "path": "saves/field_re/pre_scene_19f.lakewram",
       "checks": 2
     },
