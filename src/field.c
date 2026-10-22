@@ -4714,6 +4714,30 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* 
   if (!p->cov[q]) return 0;
   memcpy(out, p->rgb + q * 3, 3); return 1;
 }
+// ...and over them the room's BG3 (the fog, a light), as the bake composes it (fieldnative.c, the same rules): the margins
+// are BG1/BG2; BG3 priority 1 on the main screen covers them; BG3 on the sub screen goes into the colour math where the
+// main layer is in it (CGADSUB: add or subtract, halved or not). BG3 is sampled at its own offset, past the edge as in it.
+static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int o3y, uint8_t* d) {   // (layer bits: BG1 1, BG2 2, BG3 4)
+  const uint8_t* b[2] = { NULL, NULL };            // [0] BG3 priority 0, [1] priority 1 (CtSceneLayers 0 and 5)
+  for (int k = 0; k < 2; k++) {
+    int i = k ? 5 : 0;
+    if (!L->rgb[i] || L->w[i] <= 0 || L->h[i] <= 0) continue;
+    int lx = ((mx + o3x) % L->w[i] + L->w[i]) % L->w[i], ly = ((my + o3y) % L->h[i] + L->h[i]) % L->h[i];
+    size_t q = (size_t)ly * L->w[i] + lx;
+    if (L->cov[i][q]) b[k] = L->rgb[i] + q * 3;
+  }
+  int mainBit = L->mainT & (1 | 2);
+  if ((L->mainT & 4) && b[1]) { memcpy(d, b[1], 3); mainBit = 4; }
+  if (!(L->subT & 4)) return;
+  const uint8_t* s = b[1] ? b[1] : b[0];
+  if (!s || !(mainBit & L->blendEn)) return;
+  for (int ch = 0; ch < 3; ch++) {
+    int c = d[ch] >> 3, v = s[ch] >> 3, r = L->subOp ? c - v : c + v;
+    if (L->half) r >>= 1;
+    if (r < 0) r = 0; if (r > 31) r = 31;
+    d[ch] = (uint8_t)((r << 3) | (r >> 2));
+  }
+}
 // PAST A ROOM'S EDGE (the widescreen, where fieldWideMask keeps the edge): the map there holds other rooms -- but a layer
 // that scrolls on its own, detached from the map (BG2 / BG3 with an offset: 1B0's lava under the Epoch, 0AD's stars), is a
 // backdrop the room only shows a window of, and it goes on past the edge. Those layers are drawn there, the top one that
@@ -20148,6 +20172,7 @@ int main(int argc, char** argv) {
       static CtSceneLayers beyondL; int det = 0;     // (past the edge: the layers scrolling on their own -- fieldBeyondPixel)
       if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
           !CtFieldSceneLayers(f.sd, &beyondL)) det = 0;
+      int wextL = wext && f.sd && CtFieldSceneLayers(f.sd, &beyondL);   // (the room's BG3 over the margins: fieldWideExtBg3)
       g_wideBeyond = det;
       for (int y = 0; y < ch; y++)
         for (int x = 0; x < wideW; x++) {
@@ -20156,7 +20181,10 @@ int main(int argc, char** argv) {
           int ux = camx + x;
           if (ux >= wm0 && ux < wm1) continue;
           uint8_t* d = fb + ((size_t)y * wideW + x) * 3;
-          if (wext && fieldWideExtPixel(wext, ux, camy + y, d)) { mot->own[y * wideW + x] = CT_MOT_FIXED; continue; }
+          if (wext && fieldWideExtPixel(wext, ux, camy + y, d)) {
+            if (wextL) fieldWideExtBg3(&beyondL, ux, camy + y, mot->o3x, mot->o3y, d);
+            mot->own[y * wideW + x] = CT_MOT_FIXED; continue;
+          }
           if (det) { int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
                      mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); }
           else { memset(d, 0, 3); mot->own[y * wideW + x] = CT_MOT_BG1; }
