@@ -13,7 +13,8 @@ post plus the spin (src/field.c, the title's opening).
 Port: the interactive attract (--scene 433, CT_AUDIO_LOCKSTEP=1): CT_DSP_KONTRACE's key-ons at their own sample frame
 (from the first presented frame) and CT_SHOTS_LUMA's picture: for each title, the
 frame of the first tick (`02 v1:srcn=25`) less the first lit frame (mean > 3). Cartridge: the attract state's second
-title (the demo's end; the state begins after the power-on one): a state 8950 frames in (PEEK_SAVE), then its key-ons
+title (the demo's end; the state begins after the power-on one): under the rule, a state 8761 frames in (PEEK_SAVE; 8950 on
+the owner's real-time capture until 2026-10-22, whose demo ends 189 frames later), then its key-ons
 (CT_DSP_KONTRACE, 534 samples a frame) and thumbnails (PEEK_THUMBS) over 400 frames.
 """
 import os
@@ -24,9 +25,11 @@ import sys
 
 FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
+STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json;
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}   # until 2026-10-22 the owner's real-time capture)
 TICK = '02 v1:srcn=25'
 LIT = 3
+START = 8761      # the cartridge's state this many frames into STATE: before the title after the demo
 
 
 def main():
@@ -63,14 +66,14 @@ def main():
         if lit is None or tick is None:
             sys.exit('title-sync: REFUSING -- the port title at f%d has no %s' % (t0, 'picture' if lit is None else 'tick'))
         res.append((t0, tick, lit))
-    st = os.path.join(tmp, 'c8950.state')
-    subprocess.run([CT, '--peek', STATE, os.path.join(tmp, 'c8950.raw'), '--frames', '8950'],
-                   env=dict(os.environ, PEEK_SAVE=st), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    st = os.path.join(tmp, 'c%d.state' % START)
+    subprocess.run([CT, '--peek', STATE, os.path.join(tmp, 'c%d.raw' % START), '--frames', str(START)],
+                   env=dict(os.environ, PEEK_SAVE=st, **RULE), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     th = os.path.join(tmp, 'cart.thumbs')
     if os.path.exists(th):
         os.remove(th)
     cr = subprocess.run([CT, '--peek', st, os.path.join(tmp, 'c9350.raw'), '--frames', '400'],
-                        env=dict(os.environ, CT_DSP_KONTRACE='1', PEEK_THUMBS=th, PEEK_THUMBS_EVERY='1'),
+                        env=dict(os.environ, CT_DSP_KONTRACE='1', PEEK_THUMBS=th, PEEK_THUMBS_EVERY='1', **RULE),
                         capture_output=True, text=True, errors='replace')
     ctick = next((int(m.group(1)) for m in re.finditer(r'dspkon s=\d+ f=(\d+) val=([0-9A-F]+)((?: v\d:srcn=[0-9A-F]+)*)',
                                                        cr.stdout + cr.stderr)
@@ -85,7 +88,7 @@ def main():
     if ctick is None or clit is None:
         sys.exit('title-sync: REFUSING -- the cartridge title has no %s' % ('tick' if ctick is None else 'picture'))
     print('title-sync: cartridge, the title after the demo: tick c%d, picture c%d -> tick - picture = %d' %
-          (8950 + ctick, 8950 + clit, ctick - clit))
+          (START + ctick, START + clit, ctick - clit))
     for k, (t0, tick, lit) in enumerate(res):
         print('title-sync: port title %d (opened f%d): tick f%d, picture f%d -> tick - picture = %d' %
               (k + 1, t0, tick, lit, tick - lit))
