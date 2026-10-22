@@ -1,0 +1,20 @@
+{
+  "name": "fxr_forest_alone",
+  "from": "fxr_pt_03_kitchen",
+  "doc": "Guardia Forest (loc 013) with Crono alone, storyline 03: the playthrough's leg 03 end (out of Crono's house onto the 1000 A.D. overworld, party 00 80 80), leg 04's walk up towards Leene Square (to its cell, (01A8,00E0)), 8 px down to where the fair's exit leaves the party, then forest_entry's walk west to Guardia Forest's south entry cell and A: loc 013, Crono (obj2) at the south edge (1380,2DFF), $26 = A0.",
+  "steps": [
+    [
+      "pad",
+      "0:10,10:60,40:30,10:60,80:12,10:30,0:30,20:8,0:4,20:16,40:16,20:32,40:48,20:16,40:16,20:16,40:32,10:16,40:48,10:16,10:8,0:4,100:2,0:150"
+    ]
+  ],
+  "expect": {
+    "loc": "0x013",
+    "wram": {
+      "0x10000": "0x03",
+      "0x2981": "0x80",
+      "0x1804": "0x80",
+      "0x1805": "0x13"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_10_demo",
+  "from": "fxr_pt_09_telepod",
+  "doc": "The playthrough's leg 10_demo (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): the Telepod demonstration: Taban's and Lucca's lines, up to the left pod, Crono is sent across (story 0A)",
+  "steps": [
+    [
+      "pad",
+      "(100:2,0:40)*30,10:64,40:64,10:16,80:16,40:16,0:30,10:30,(100:2,0:40)*16,0:120"
+    ]
+  ]
+}

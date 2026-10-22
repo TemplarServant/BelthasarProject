@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_04_to_fair",
+  "from": "fxr_pt_03_kitchen",
+  "doc": "The playthrough's leg 04_to_fair (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): on the overworld, up to Leene Square (its label shows on the tile), A enters (loc 005)",
+  "steps": [
+    [
+      "pad",
+      "0:10,10:60,40:30,10:60,80:12,10:30,0:30,100:2,0:200"
+    ]
+  ]
+}

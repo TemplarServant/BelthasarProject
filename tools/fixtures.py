@@ -24,6 +24,10 @@ memory, so they cannot ship; tools/fixtures/<domain>.json says how each one is m
             flags     the 512 story-flag bytes $7F0000-$7F01FF
             srm       the 8 KB battery RAM (the savestate's last block)
             peek      an oracle --peek dump: the 512x480 frame at `path` and its .wram/.vram/.oam sidecars
+            ctfs      the PORT's own CtScene state (Belthasar --loadstate; F5's format): Belthasar --scene <scene> seeded
+                      from the WRAM above (--loadwram), saved at frame <frames> (default 1) by CT_SAVESTATE_AT, after
+                      the optional <walkscript>. A CTFS image is sizeof(CtScene)'s: remake it (--force) after a struct
+                      change, as the owner's F5 snapshots had to be re-taken
 `make` writes a fixture only when it is missing, unless --force: the owner's private fixtures stay in place until a
 check has been moved onto its recipe-made twin (docs/ROADMAP.md 1.1).
 """
@@ -100,6 +104,21 @@ def build(e):
     elif k == 'peek':
         pairs = [(raw, dst)] + [(raw + x, dst + x) for x in ('.wram', '.vram', '.oam') if os.path.exists(raw + x)]
         return pairs
+    elif k == 'ctfs':
+        lw = tag + '.lakewram'
+        open(lw, 'wb').write(b'#lakewram\nRAM:131072:' + wram)
+        at = int(e.get('frames', 1))
+        if os.path.exists(out):
+            os.remove(out)
+        args = [os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', str(e['scene']),
+                '--loadwram', lw, '--selftest', '--frames', str(at + 2)]
+        if e.get('walkscript'):
+            args += ['--walkscript', e['walkscript']]
+        p = subprocess.run(args, cwd=ROOT, env=dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
+                                                     CT_NOPACE='1', CT_SAVESTATE_AT=str(at), CT_SAVESTATE=out),
+                           capture_output=True, text=True, errors='replace')
+        if not os.path.exists(out) or open(out, 'rb').read(4) != b'CTFS':
+            raise SystemExit('fixtures: %s: Belthasar wrote no CTFS state\n%s' % (e['path'], p.stderr[-800:]))
     else:
         raise SystemExit('fixtures: %s: unknown kind %s' % (e['path'], k))
     return [(out, dst)]

@@ -3,7 +3,8 @@ r"""The widescreen (a mod) against the vanilla picture for a screen-fixed overla
 
     python tools/wide_box_cmp.py [state] [scene] [frame]
 
-Loads a port scene snapshot (F5's CtSceneSaveState; default saves/field_re/wide_box_07a.state, loc 07A = scene 122),
+Loads a port scene snapshot (F5's CtSceneSaveState; default saves/field_re/wide_box_07a.state, loc 07A = scene 122, made
+by tools/fixtures/rest.json from tools/recipes/fxr_chamber_touch.json; its top box is open at f100),
 presses A every 30 frames so the cutscene's next box opens, and captures the PRESENTED frame (CT_OVERLAY_SHOT: the
 picture the player sees, the widescreen's assembly included) twice -- once with the settings at 16:9, once with the
 widescreen off -- at the same frame. The box is screen-fixed: in the wide picture it stands in the middle, and its 256
@@ -52,7 +53,7 @@ def shot(ini, state, scene, frame, tag):
 def main():
     state = sys.argv[1] if len(sys.argv) > 1 else 'saves/field_re/wide_box_07a.state'
     scene = int(sys.argv[2]) if len(sys.argv) > 2 else 122
-    frame = int(sys.argv[3]) if len(sys.argv) > 3 else 262
+    frame = int(sys.argv[3]) if len(sys.argv) > 3 else 100
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
     base = ('[video]\nbackend=sdl\nfullscreen=0\nwindow_scale=1\nscale=fit\naspect=pixel\nfilter=nearest\n'
             'wide_room_wrap=1\nrender_scale=1\ninterpolation=0\nvsync=0\n')

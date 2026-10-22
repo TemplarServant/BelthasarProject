@@ -1,0 +1,20 @@
+{
+  "name": "fxr_m81_nuns",
+  "from": "cathedral_entry",
+  "doc": "Stands in for saves/field_re/m81_nuns_lake.state (the owner's snes9x capture animacao_freiras_naga_ettes spliced onto a loc 081 base): frog_joins's drive cut at 813 frames -- Crono has checked the glint below the altar and the nuns (obj9-12) walk to their spots; with no input from here the controller obj15 deactivates them at +224 ($1112 04 -> 80), as on the capture (its own +224).",
+  "steps": [
+    [
+      "pad",
+      "10:100,0:60,10:150,0:60,10:60,0:60,20:2,0:4,100:2,0:60,(100:2,0:20)*11,100:2,0:11"
+    ]
+  ],
+  "expect": {
+    "loc": "0x081",
+    "wram": {
+      "0x10000": "0x12",
+      "0x1112": "0x04",
+      "0x1113": "0x32",
+      "0x2981": "0x02"
+    }
+  }
+}

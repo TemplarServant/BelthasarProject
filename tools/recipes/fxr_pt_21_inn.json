@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_21_inn",
+  "from": "fxr_pt_20_forest_fights",
+  "doc": "The playthrough's leg 21_inn (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): the innkeeper (11,26) from (11,28): \"That'll be 10 G. Register? Yes.\" -- the night, both healed (83, 76);",
+  "steps": [
+    [
+      "pad",
+      "40:48,10:8,0:10,100:2,0:120,(100:2,0:38)*15,100:2,0:300,20:32,40:48,10:16,0:150,20:48,80:16,20:64,80:96,20:16,10:16,0:200,10:16,40:48,20:16,40:64,10:16,40:32,20:16,40:16,20:16,40:16,20:16,40:32,10:16,40:16,10:48,0:30,100:2,0:300"
+    ]
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "fxr_yakra_scene",
+  "from": "fxr_pt_25_sanctum_switches",
+  "doc": "Stands in for the state behind saves/field_re/yakra_defeat_039.state (the owner's F5 snapshot in loc 0C6, Crono, Lucca and Frog, before the Chancellor becomes Yakra): the playthrough's leg 26 cut at 7712 frames -- into 0C6 (f7284), up the aisle until the Chancellor's scene takes control (f7556), its first box read and closed (f7702), the next not yet open: a moment with no box up, which a CtScene snapshot carries whole (the host's typewriter is not in it).",
+  "steps": [
+    [
+      "pad",
+      "40:16,10:224,0:80,100:2,0:118,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:426,100:2,0:16,100:2,0:222,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:402,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:318,100:2,0:16,100:2,0:262,100:2,0:16,100:2,0:390,20:2,0:10,100:2,0:16,100:2,0:16,20:2,0:10,20:2,0:10,100:2,0:10,100:2,0:16,100:2,0:522,100:2,0:16,100:2,0:190,100:2,0:16,100:2,0:222,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:974,40:16,10:128,0:80,100:2,0:126,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:562,100:2,0:16,100:2,0:206,100:2,0:16,100:2,0:186,100:2,0:16,100:2,0:958,80:16,10:128,0:100,10:160,0:140,100:2,0:20"
+    ]
+  ],
+  "expect": {
+    "loc": "0x0C6",
+    "wram": {
+      "0x10000": "0x15",
+      "0x011F": "0x00",
+      "0x0129": "0x00"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "fxr_tank_c4",
+  "from": "fxr_jackie_rescue",
+  "doc": "The Dragon Tank's bridge in Window Color 4 (tools/battle_hud_strip_cmp.py --colours): fxr_tele01c's teleport with $2991 = 84 poked first, so the ROM's own load (C0/6E5C, C0/70E9) puts the field window's tiles and colours of that setting in VRAM and CGRAM.",
+  "steps": [
+    [
+      "poke",
+      "7E2991=84"
+    ],
+    [
+      "teleport",
+      28,
+      44,
+      9,
+      2,
+      60,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x01C",
+    "wram": {
+      "0x2991": "0x84"
+    }
+  }
+}

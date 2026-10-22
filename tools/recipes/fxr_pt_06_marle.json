@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_06_marle",
+  "from": "fxr_pt_05_bellstairs",
+  "doc": "The playthrough's leg 06_marle (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): up the steps: Marle runs into Crono; the pendant (obj15 at tile (30,8), A from (30,10): $2400 = D6);",
+  "steps": [
+    [
+      "pad",
+      "10:120,80:40,0:100,(100:2,0:48)*16,0:100,80:96,10:46,0:10,100:2,0:60,20:32,40:24,20:2,0:190,(100:2,0:10)*7,(100:2,0:40)*16,0:100,8:2,0:100,8:2,0:100,(100:2,0:40)*8"
+    ]
+  ]
+}

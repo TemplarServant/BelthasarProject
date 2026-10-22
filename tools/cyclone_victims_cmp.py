@@ -12,8 +12,9 @@ are the $99C0 the dispatch's area pass rebuilds around the action's target (C1/C
 C1/C600-C63E copies into $AD8E / $AECC (battle_multitarget.md sec. 3.1, tools/radius_dispatch_cmp.py).
 
 The cartridge: saves/battle_re/loc070_imps_roly_pre_lake.state -- loc 070 reloaded by the ROM's own loader after the
-bat6 fight was won (its group of two Blue Imps + a Roly respawned), Crono 60 frames into a walk down onto them. Down for
-60 frames (the ambush, obj22's fn1), then Down, A, A, A from the cartridge frame 331 (Tech, Cyclone, the primary =
+bat6 fight was won (its group of two Blue Imps + a Roly respawned), Crono 60 frames into a walk down onto them (the recipe
+twin since 2026-10-22, tools/recipes/fxr_loc070_imps_roly.json: its scene runs 7 frames after the capture's). Down for
+60 frames (the ambush, obj22's fn1), then Down, A, A, A from the cartridge frame 338 (Tech, Cyclone, the primary =
 enemy slot 2): the select confirms while a Blue Imp's attack is running (its AI op 01 sets $B1FC bit 1), and the
 Cyclone dispatches after it. The port: the same WRAM (saves/battle_re/loc070_imps_roly_pre.lakewram, --loadwram) and
 SPC, the same walk and the same keys on the same frames.
@@ -42,21 +43,21 @@ FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 STATE = os.path.join(ROOT, 'saves', 'battle_re', 'loc070_imps_roly_pre_lake.state')
 LAKEWRAM = os.path.join(ROOT, 'saves', 'battle_re', 'loc070_imps_roly_pre.lakewram')
 OUT = os.path.join(ROOT, 'build', '_cyclone_victims')
-WALK = 60                     # Down onto the group (the ambush at f42 on both sides)
-KEYS_C = 331                  # the cartridge frame of the menu's Down (Crono ready f271 + 60)
-KEYS_P = KEYS_C               # the port's: the same frame (Crono ready f271 on both sides)
+WALK = 60                     # Down onto the group (the ambush at f49 on both sides)
+KEYS_C = 338                  # the cartridge frame of the menu's Down (Crono ready f278 + 60)
+KEYS_P = KEYS_C               # the port's: the same frame (Crono ready f278 on both sides)
 FRAMES = 1100
 # the three enemy blocks' curHP: slot 2 / slot 3 (the Blue Imps) and slot 6 (the Roly) -> combatants 5, 6, 9
 HP = [(5, 0x60B0), (6, 0x6130), (9, 0x62B0)]
 
 
-# Graded up to the D8 (f130): after it the battle's boot rewrites these arrays on its own schedule (the port stages the
+# Graded up to the D8 (f137): after it the battle's boot rewrites these arrays on its own schedule (the port stages the
 # fight's WRAM at once, the cartridge over its boot's frames -- nothing on screen differs; Crono's ready is an event).
-# obj22's IP from f42: on f38 the cartridge mirrors the called fn1's first byte (035B), the $1180 mirror no check grades.
-AMBUSH = [('obj22 ip', 0x11AC, 2, 42), ('obj23 x', 0x182E, 2, 0), ('obj23 y', 0x18AE, 2, 0), ('obj24 x', 0x1830, 2, 0),
+# obj22's IP from f49: on f45 the cartridge mirrors the called fn1's first byte (035B), the $1180 mirror no check grades.
+AMBUSH = [('obj22 ip', 0x11AC, 2, 49), ('obj23 x', 0x182E, 2, 0), ('obj23 y', 0x18AE, 2, 0), ('obj24 x', 0x1830, 2, 0),
           ('obj24 y', 0x18B0, 2, 0), ('obj25 x', 0x1832, 2, 0), ('obj25 y', 0x18B2, 2, 0), ('loc[6]', 0x1020C, 1, 0),
           ('loc[7]', 0x1020E, 1, 0), ('D8 $2989', 0x2989, 1, 0)]
-AMBUSH_END = 131
+AMBUSH_END = 138
 
 
 def regs():

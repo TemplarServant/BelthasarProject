@@ -1,0 +1,17 @@
+{
+  "name": "fxr_pt_27_castle_return",
+  "from": "fxr_pt_26_yakra",
+  "doc": "The playthrough's leg 27_castle_return (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): 078: the throne room's scene (Frog leaves; storyline 1C, glb[161] bit 2), the Queen; Lucca: \"Where did Princess Nadia disappear?\" -- the hall's right door (608,128) into the east tower (1D4), its three floors to 07A, the Queen's chamber: the touch tiles (40,46)/(41,46) (objs 25/26, storyline 1C..20: loc[12] = 1) start obj 24's scene -- Marle comes back (\"So let's go home, Crono!\"), Marle joins (party 00 02 01, storyline 21). LEFT: the loads into 1D4 / 07A hold a black frame more on the port (field_load_cost.md sec. 7), the touch runs a frame early, the camera ends 1 px high",
+  "steps": [
+    [
+      "pad",
+      "(100:2,0:38)*15,0:30,80:16,10:16,10:4,0:10,(100:2,0:38)*12,0:30,80:16,10:32,80:16,10:16,80:48,10:272,80:16,10:16,0:120,80:16,10:16,0:150,80:16,10:16,0:150,80:16,10:16,0:200,20:48,40:32,20:48,20:128,40:176,10:240,80:32,10:16,0:100,40:64,20:16,0:80,(100:2,0:58)*41,0:60"
+    ]
+  ],
+  "expect": {
+    "loc": "0x07A",
+    "wram": {
+      "0x10000": "0x21"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_09_telepod",
+  "from": "fxr_pt_08_candy",
+  "doc": "The playthrough's leg 09_telepod (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): around the stall and up the stairs the twins left, 1B7's north exit (loc 008): Taban's call",
+  "steps": [
+    [
+      "pad",
+      "0:2,40:16,20:16,40:48,10:96,40:16,10:40,0:250"
+    ]
+  ]
+}

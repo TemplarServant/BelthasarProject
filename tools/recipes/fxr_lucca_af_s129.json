@@ -1,0 +1,22 @@
+{
+  "name": "fxr_lucca_af_s129",
+  "from": "fx_party3_field",
+  "doc": "Stands in for the state behind saves/field_re/lucca_af_s129.lakewram, its own provenance (--teleport 129 8 25 0 --method jmp --frames 120 from saves/battle_re/party3_field.state, whose recipe twin is fx_party3_field): the Cathedral (loc 081) with Crono, Lucca and Frog after the Diablos, Lucca's fn0 just past its op 0xAF.",
+  "steps": [
+    [
+      "teleport",
+      129,
+      8,
+      25,
+      0,
+      120,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x081",
+    "wram": {
+      "0x10000": "0x15"
+    }
+  }
+}

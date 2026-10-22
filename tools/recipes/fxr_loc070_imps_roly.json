@@ -1,0 +1,27 @@
+{
+  "name": "fxr_loc070_imps_roly",
+  "from": "fxr_pt_14_canyon_out",
+  "doc": "Stands in for saves/battle_re/loc070_imps_roly_pre_lake.state, its own provenance on the playthrough: Truce Canyon (loc 070) reloaded by the ROM's own loader (--teleport 112 12 18 1, method jmp, 200 frames) after the canyon's fights, where Crono has learned Cyclone (the playthrough's leg 14 ends in Guardia Forest with $2837 bit 7), its group of two Blue Imps and a Roly respawned; then Down 60 frames toward them, as the capture's drive.",
+  "steps": [
+    [
+      "teleport",
+      112,
+      12,
+      18,
+      1,
+      200,
+      "jmp"
+    ],
+    [
+      "pad",
+      "20:60"
+    ]
+  ],
+  "expect": {
+    "loc": "0x070",
+    "wram": {
+      "0x10000": "0x0C",
+      "0x2837": "0x80"
+    }
+  }
+}

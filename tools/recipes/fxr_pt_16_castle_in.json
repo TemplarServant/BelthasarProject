@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_16_castle_in",
+  "from": "fxr_pt_15_forest_castle",
+  "doc": "The playthrough's leg 16_castle_in (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): the hall (078): A through the soldiers and Leene (storyline 0F), up the middle stairs into 1E0",
+  "steps": [
+    [
+      "pad",
+      "(100:2,0:38)*39,0:120,10:288,40:32,10:80,40:16,10:16,40:16,10:32,40:48,10:288,80:16,10:16,10:60,0:200"
+    ]
+  ]
+}

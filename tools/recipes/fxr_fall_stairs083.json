@@ -1,0 +1,22 @@
+{
+  "name": "fxr_fall_stairs083",
+  "from": "fxr_savept084",
+  "doc": "Stands in for saves/field_re/fall_stairs083_lake.state, its own provenance: from the save point's state (loc 084, the playthrough's sanctum) the ROM's own loader into loc 083 above the staircase that is a conveyor for good (--teleport 0x83 32 35 1, method jmp, 120 frames). Which staircase is a slide is the room's fn1 (scene 131 obj0 0x00E9: `53 FE 00 0B / 67 18 0B`, glb[254] bits 3/4 = the trap that was sprung): the playthrough fell down the right one (obj31's 0x0769 sets bit 3: the conveyor copied at tile (31,36)), the owner's game the left one (bit 4: (10,36), where the capture stood at (11,35)); the twin stands at the top of its own slide, (32,35).",
+  "steps": [
+    [
+      "teleport",
+      131,
+      32,
+      35,
+      1,
+      120,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x083",
+    "wram": {
+      "0x10000": "0x15"
+    }
+  }
+}

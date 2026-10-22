@@ -1,0 +1,14 @@
+{
+  "name": "fxr_inn600_yesno",
+  "from": "fxr_inn600_tele",
+  "doc": "Stands in for saves/field_re/inn600_yesno.state, its own provenance: from the inn's counter, Up to the innkeeper, A, Yes, the night (loc 10F).",
+  "steps": [
+    [
+      "pad",
+      "10:16,0:30,100:2,0:120,100:2,0:120,0:10"
+    ]
+  ],
+  "expect": {
+    "loc": "0x10F"
+  }
+}
