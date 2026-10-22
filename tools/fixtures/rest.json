@@ -415,6 +415,47 @@
       "pad": "0:250",
       "kind": "state",
       "doc": "the three Hetakes' fight 250 frames on with no command: the three in the idle poses 00 / 01 / 07 (f239-f288)"
+    },
+    {
+      "path": "saves/field_re/tank/tele01c.state",
+      "recipe": "fxr_tele01c",
+      "kind": "state",
+      "doc": "the Dragon Tank's bridge (01C), storyline 2E, before the tank's arrival"
+    },
+    {
+      "path": "saves/field_re/tank/tele01c.lakewram",
+      "recipe": "fxr_tele01c",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/battle_re/wincolour/tank_c2.state",
+      "recipe": "fxr_tank_c2",
+      "pad": "0:20,40:310,(100:2,0:14)*44,40:400,(100:2,0:14)*97,100:2,0:12",
+      "kind": "state",
+      "doc": "the Dragon Tank's fight in Window Color 2: tools/dragon_tank_cmp.py's drive cut to its first 3000 frames"
+    },
+    {
+      "path": "saves/battle_re/wincolour/tank_c4.state",
+      "recipe": "fxr_tank_c4",
+      "pad": "0:20,40:310,(100:2,0:14)*44,40:400,(100:2,0:14)*97,100:2,0:12",
+      "kind": "state",
+      "doc": "the Dragon Tank's fight in Window Color 4: tools/dragon_tank_cmp.py's drive cut to its first 3000 frames"
+    },
+    {
+      "path": "saves/battle_re/wincolour/tank_c6.state",
+      "recipe": "fxr_tele01c",
+      "pad": "0:20,40:310,(100:2,0:14)*44,40:400,(100:2,0:14)*97,100:2,0:12",
+      "kind": "state",
+      "doc": "the Dragon Tank's fight in Window Color 6: tools/dragon_tank_cmp.py's drive cut to its first 3000 frames"
+    },
+    {
+      "path": "saves/epoch_jump_01c.state",
+      "recipe": "fxr_attract_01c",
+      "kind": "ctfs",
+      "scene": 28,
+      "frames": 44,
+      "doc": "the port's own snapshot (F5) in the attract's loc 01C, Crono mid-jump onto the Epoch"
     }
   ]
 }
