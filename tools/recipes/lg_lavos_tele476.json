@@ -1,0 +1,19 @@
+{
+  "name": "lg_lavos_tele476",
+  "from": "lg_lavos_ch27_aa77",
+  "doc": "Stands in for saves/lavos_re/tele476_aa77.*: the glb[170] = 77 state brought to scene 476 (loc 1DC) by `ct.exe --teleport 476 7 8 0 --method jmp`, 2 frames -- as the capture was made; byte for byte the same file.",
+  "steps": [
+    [
+      "teleport",
+      476,
+      7,
+      8,
+      0,
+      2,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1DC"
+  }
+}

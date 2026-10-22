@@ -1,0 +1,18 @@
+{
+  "name": "lg_blackbird_story_poked",
+  "from": "attract_entry3_handoff",
+  "doc": "Stands in for saves/blackbird_re/ff23_story_poked.state (and the captures made from it): the attract's own hand-off at loc 06B under today's rule (attract_entry3_handoff, power-on + 8776) with the story's two bytes put back -- $7F0057 bit 2 (the attract) cleared, the storyline $7F0000 = D3 -- as the capture was made from the older rule's f8859 state: scene 107's controller then takes the story's arm, `DD F6` on f21 and `FF 23` on f26 (the capture's frames; sequence_table.md sec. 14).",
+  "steps": [
+    [
+      "poke",
+      "7F0057=00,7F0000=D3"
+    ]
+  ],
+  "expect": {
+    "loc": "0x06B",
+    "wram": {
+      "0x10000": "0xD3",
+      "0x10057": "0x00"
+    }
+  }
+}

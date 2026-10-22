@@ -1,0 +1,11 @@
+{
+  "name": "lg_tyranno_ff24_handoff",
+  "from": "lg_tyranno_tele301",
+  "doc": "Stands in for saves/tyranno_re/ff24_handoff_f27.state: from scene 301 the Tyranno chain's own drive (Up 300 frames to the trigger row, then A for 2 frames every 30: Azala's talk and the fight), at f1700 of it both enemies' HP poked to 1 ($5FB0 the Black Tyranno, $61B0 Azala -- the documented test poke, the party of ch17 loses on A alone), the A grid on to 2600 frames: the frame before obj21 fn3's `FF 24` (the hand-off, the op on its next frame, as the capture's).",
+  "steps": [
+    ["pad", "10:300,(100:2,0:28)*46,100:2,0:18"],
+    ["poke", "5FB0=01,5FB1=00,61B0=01,61B1=00"],
+    ["pad", "0:10,(100:2,0:28)*86,100:2,0:8"]
+  ],
+  "expect": {"loc": "0x12D", "wram": {"0x0384": "0x02"}}
+}

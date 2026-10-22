@@ -27739,7 +27739,7 @@
       ],
       "expect": [
         "racepiccmp: the stage's setup made its NMI 75 frame(s) after the hand-off",
-        "racepiccmp: frame 1: VRAM 6765 CGRAM 0 OAM 0 words differ; registers 0; HDMA 0; WRAM 184 bytes",
+        "racepiccmp: frame 1: VRAM 6765 CGRAM 0 OAM 0 words differ; registers 0; HDMA 0; WRAM 185 bytes",
         "racepiccmp: native stage ended (1) at frame 2738",
         "racepiccmp: 3000 frames -- first state difference 1, first race-WRAM difference -1, first picture difference -1 (0 px)"
       ],
@@ -27750,7 +27750,7 @@
       "timeout_s": 600,
       "note_pass": "the story race's picture, native, with the native VRAM as the port leaves it (the field's leftovers not copied): 6765 VRAM words differ and not one pixel",
       "mutations": [],
-      "notes": "The sibling of race-picture-native-vs-oracle without RACEPICCMP_SEEDVRAM: the VRAM words the race never writes (the field's leftovers the port's field does not keep) differ, and the picture is equal on every frame of the race -- no region the race displays shows them."
+      "notes": "The sibling of race-picture-native-vs-oracle without RACEPICCMP_SEEDVRAM: the VRAM words the race never writes (the field's leftovers the port's field does not keep) differ, and the picture is equal on every frame of the race -- no region the race displays shows them. ==== 2026-10-22, RE-PINNED (frame 1's WRAM count only): the state is now the recipe-made twin of the capture (lg_race_lab32). Frame 1's WRAM count is every byte of the 128 KB the stage's copy and the cartridge's differ in -- the field's own bytes the stage does not own ($0119, $0152, $0200, $0300s, the palette records $0524.., the field stack $06D1.., $1E0C..), RACEPICCMP_WRAMAT=1 -- which the twin's field leaves one more of (184 -> 185); the race's own WRAM differs on no frame (first race-WRAM difference -1) and every pixel is the cartridge's, as before."
     },
     {
       "name": "entry3-picture-native-vs-oracle",
@@ -27772,7 +27772,7 @@
         "saves/blackbird_re/ff23_handoff_f25.state"
       ],
       "expect": [
-        "racepiccmp: the stage's setup made its NMI 20 frame(s) after the hand-off",
+        "racepiccmp: the stage's setup made its NMI 19 frame(s) after the hand-off",
         "racepiccmp: native stage ended (1) at frame 582",
         "racepiccmp: 600 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
       ],
@@ -27782,7 +27782,7 @@
       "tier": "full",
       "timeout_s": 600,
       "note_pass": "entry 3 from the story (FF 23, the night panorama after the Blackbird), its picture native end to end: 582 NMIs from the setup's to the END, VRAM / CGRAM / OAM / the registers / HDMA / the stage's WRAM and every pixel the cartridge's",
-      "notes": "SEQUENCE ENTRY 3's PICTURE (src/seq_entry3pic.c over the native compositor; disasm/notes/seq_picture.md sec. 5). The stage draws with the FIELD's VRAM (the location's tiles $2000-$4FFF, BG1's map rows read back from $6140, BG2's maps $6800 / $6A00 -- measured by clearing each region of the seed: those three alone change the picture), so RACEPICCMP_SEEDVRAM is the console's VRAM at the hand-off, as the field host hands its own image (g_fieldVram). Ported: the setup's two reads (a mode-1 DMA from $2134 / $2135 fills $7E:1400 with 00 01; $2139 / $213A in turn with VMAIN $80 read the field's BG1 rows into $7E:1680, the first word twice), $783C's upload as BG1's map at $0000, the HDMA records $7E:685E, the registers; hook $66DD (BG3's offset row from $0043, the BG3 H / BG1 V scrolls); tasks $73C6 (the PPU's multiplier) and $6A23 (BG1's per-line scroll table at $F000, swapped every frame); the mosaic and TM writes of the logic's tasks. Two stage-1 bytes fixed on the way: `STZ $7841` is 16-bit ($7842 too), and $37FA's `LDX $4202` reads the open bus ($F0 = $4242). Not exercised here: the mosaic $69AF steps ($C4 is 0 on the story's arm; its write is ported, its mutation survives).",
+      "notes": "SEQUENCE ENTRY 3's PICTURE (src/seq_entry3pic.c over the native compositor; disasm/notes/seq_picture.md sec. 5). The stage draws with the FIELD's VRAM (the location's tiles $2000-$4FFF, BG1's map rows read back from $6140, BG2's maps $6800 / $6A00 -- measured by clearing each region of the seed: those three alone change the picture), so RACEPICCMP_SEEDVRAM is the console's VRAM at the hand-off, as the field host hands its own image (g_fieldVram). Ported: the setup's two reads (a mode-1 DMA from $2134 / $2135 fills $7E:1400 with 00 01; $2139 / $213A in turn with VMAIN $80 read the field's BG1 rows into $7E:1680, the first word twice), $783C's upload as BG1's map at $0000, the HDMA records $7E:685E, the registers; hook $66DD (BG3's offset row from $0043, the BG3 H / BG1 V scrolls); tasks $73C6 (the PPU's multiplier) and $6A23 (BG1's per-line scroll table at $F000, swapped every frame); the mosaic and TM writes of the logic's tasks. Two stage-1 bytes fixed on the way: `STZ $7841` is 16-bit ($7842 too), and $37FA's `LDX $4202` reads the open bus ($F0 = $4242). Not exercised here: the mosaic $69AF steps ($C4 is 0 on the story's arm; its write is ported, its mutation survives). ==== 2026-10-22, RE-PINNED (the cartridge's own count, the port unchanged: 582 NMIs, 0 differing): saves/blackbird_re/ff23_handoff_f25.state is now made by a recipe (tools/fixtures/lategame.json, lg_blackbird_story_poked: the attract's hand-off under TODAY's rule, power-on + 8776, with the story's two bytes poked) instead of the older rule's f8859 capture. On it the cartridge's setup makes its NMI 19 frames after the hand-off, not 20: C3:0000 -> $7E:3010 costs the same (6074428 cycles, the capture's 6074890), but the common init's vblank wait ($3010 -> JSR $31B0) is reached at v224 h898 and catches line 225 in the same frame, where the capture reached it at h1356 and waited one more (RACEPICCMP_SPAN=C30000,7E3013: 17 frames, the capture's 18) -- a beam edge of the opening, the CPU-timing class.",
       "mutations": [
         {
           "file": "src/seq_entry3pic.c",
@@ -27835,7 +27835,7 @@
         "python",
         "tools/frame_region_cmp.py",
         "saves/blackbird_re/ff23_story_f18.state",
-        "205",
+        "204",
         "200",
         "0",
         "0",
@@ -27853,7 +27853,7 @@
       ],
       "env": {
         "CT_ORACLE_LOGICAL": "1",
-        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:205",
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:204",
         "CT_AUDIO_LOCKSTEP": "1",
         "CT_AUDIO_SEEDSTATE": "saves/blackbird_re/ff23_story_f18.state"
       },
@@ -27865,7 +27865,7 @@
         "tools/frame_region_cmp.py"
       ],
       "expect": [
-        "frame-region-cmp: port f200 vs oracle f205 box (0,0)-(256,224) -> 56614 / 57344 identical"
+        "frame-region-cmp: port f200 vs oracle f204 box (0,0)-(256,224) -> 56614 / 57344 identical"
       ],
       "pin": [
         "^frame-region-cmp: "
@@ -27886,7 +27886,7 @@
         }
       ],
       "note_pass": "the story's panorama as the port plays it: the native picture drawn from the field's VRAM, 56614 / 57344 pixels the cartridge's (a ratchet: the seed's early call and the field's colour cycles one step behind are the field's, not the picture's)",
-      "notes": "A RATCHET. The port plays the story drive (scene 107 from ff23_story_f18) and presents frame 200; the cartridge's frame that matches is f205: P+2 and 3 frames more -- the FF 23 call comes 3 frames early because the seed (ff23_story_f18) was captured inside the location load's ramp C0/2848 ($0119 = 01 rising to 04 by C0:284F on the cartridge), which a seeded start does not resume, so the op's own fade (C0/3FBB) starts from 01 instead of 04: an artefact of this seed, not of a played load. (The opening itself is the cartridge's 18 frames since 2026-10-17: seqOpeningHold, the jump's vblank wait $31B0 priced; before it the stage ran 6 frames early.) The 730 pixels left are the water's and the city's colours: palette records 2-11, the field's own colour cycles FD/E39C keeps running, one step behind the cartridge's in the port from the first frame (sequence_table.md sec. 14, OPEN). The picture's own code is exact NMI for NMI (entry3-picture-native-vs-oracle)."
+      "notes": "A RATCHET. The port plays the story drive (scene 107 from ff23_story_f18) and presents frame 200; the cartridge's frame that matches is f205: P+2 and 3 frames more -- the FF 23 call comes 3 frames early because the seed (ff23_story_f18) was captured inside the location load's ramp C0/2848 ($0119 = 01 rising to 04 by C0:284F on the cartridge), which a seeded start does not resume, so the op's own fade (C0/3FBB) starts from 01 instead of 04: an artefact of this seed, not of a played load. (The opening itself is the cartridge's 18 frames since 2026-10-17: seqOpeningHold, the jump's vblank wait $31B0 priced; before it the stage ran 6 frames early.) The 730 pixels left are the water's and the city's colours: palette records 2-11, the field's own colour cycles FD/E39C keeps running, one step behind the cartridge's in the port from the first frame (sequence_table.md sec. 14, OPEN). The picture's own code is exact NMI for NMI (entry3-picture-native-vs-oracle). ==== 2026-10-22, RE-PINNED (the cartridge's frame only; the count is the same 56614): ff23_story_f18 is now made by a recipe from today's rule's attract hand-off (tools/fixtures/lategame.json). On it the cartridge's FF 23 opening is 17 frames, not the old capture's 18 (its vblank wait $31B0 reached at v224 h898 instead of h1356: entry3-picture-native-vs-oracle's note), so the frame that matches the port's f200 is f204 (f203 37525, f205 38181, f206 45938 identical); the port's opening keeps the formula's 18 -- a one-frame edge of the CPU-timing class, the same 56614 pixels."
     },
     {
       "name": "entry4-picture-native-vs-oracle",
@@ -40954,7 +40954,7 @@
       "expect": [
         "loctrace: -> loc 10F tile(8,8) facing=0 style=0",
         "loctrace: -> loc 0DF tile(39,14) facing=0 style=0",
-        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 + the song's 10180919 cycles = 73 black frame(s)",
+        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 + the song's 10225561 cycles = 73 black frame(s)",
         "sequence: op-0xFF 00 -> JML $C3:0000 ($0384=0) = sequence-table entry 0, and the overlay's machine plays it. (at f66)",
         "sequence: entry 0 (native) ended after 2811 frames from C3:0000",
         "sequence: the race ended ($7E:0000=1) -> reboot into loc 10F",
@@ -40975,7 +40975,7 @@
         }
       ],
       "note_pass": "Johnny's race in Lab 32 plays through in the port (its logic, stage 1; its picture, stage 2, graded by race-story-picture-*-in-the-port-vs-oracle): the race's END, the reboot into the staged loc 10F, and 10F's return to 0DF at the cartridge's tile",
-      "notes": "Roadmap G1a item 1 (the $C3 sequences): the first one a playthrough meets. From the user's capture (saves/race_re/race_user.*). The cartridge's own path: 10F at f2877, 0DF (39,14) at f2913; the port reaches 0DF 28 frames earlier -- the setup's song handshake is not charged yet (timing only). | 2026-10-17: the song's price 10,177,261 -> 10,180,575 cycles (the SPC's exact clock: the driver's tick phase at the post), the same 73 black frames. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the song's price 10,180,575 -> 10,177,822 cycles (5fde1d2: the song loader's head priced instruction by instruction), the same 73 black frames as the cartridge's opening (NMI off f66, on f139); every frame unchanged. RE-PINNED 2026-10-22 (disasm/notes/field_load_cost.md sec. 13: a clocked JSL debits the SPC cycles it ran; an op DF / E1 reboot's load posts before the frame's slice): the song's price 10,177,822 -> 10,180,919 cycles (the driver's tick phase at the post), the same 73 black frames as the cartridge's; every frame unchanged."
+      "notes": "Roadmap G1a item 1 (the $C3 sequences): the first one a playthrough meets. From the user's capture (saves/race_re/race_user.*). The cartridge's own path: 10F at f2877, 0DF (39,14) at f2913; the port reaches 0DF 28 frames earlier -- the setup's song handshake is not charged yet (timing only). | 2026-10-17: the song's price 10,177,261 -> 10,180,575 cycles (the SPC's exact clock: the driver's tick phase at the post), the same 73 black frames. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the song's price 10,180,575 -> 10,177,822 cycles (5fde1d2: the song loader's head priced instruction by instruction), the same 73 black frames as the cartridge's opening (NMI off f66, on f139); every frame unchanged. RE-PINNED 2026-10-22 (disasm/notes/field_load_cost.md sec. 13: a clocked JSL debits the SPC cycles it ran; an op DF / E1 reboot's load posts before the frame's slice): the song's price 10,177,822 -> 10,180,919 cycles (the driver's tick phase at the post), the same 73 black frames as the cartridge's; every frame unchanged. ==== 2026-10-22, RE-PINNED (the song's price only): saves/race_re/race_user.* is now made by a recipe (tools/fixtures/lategame.json, lg_race_lab32: Jackie's ch22 brought to scene 223 at the capture's tile by the ROM's loader) instead of the owner's snes9x capture. The cartridge's path from it is the capture's to the frame (CHANGELOC 10F f47, FF 00 f66, END f2877, 0DF f2913); the port's song post is priced on the SPC seeded from the state (CT_AUDIO_SEEDSTATE), whose driver tick phase at the post is the twin's: 10,180,919 -> 10,225,561 cycles, the same 73 black frames as the cartridge's opening; every other line unchanged."
     },
     {
       "name": "race-story-picture-midrace-in-the-port-vs-oracle",
@@ -41112,7 +41112,7 @@
         "endingstage: FF 2B song markers cartridge 829 2029 3950 4910 port 829 2029 3950 4910",
         "endingstage: FF 2E 10948 frames compared, 0 differing, END cartridge fNone port fNone (same)",
         "endingstage: FF 2E song markers cartridge 115 2037 4192 7788 port 115 2037 4192 7788",
-        "seqstage: FF 23 582 frames compared, 0 differing, END cartridge f601 port f601 (same)",
+        "seqstage: FF 23 582 frames compared, 0 differing, END cartridge f600 port f600 (same)",
         "seqstage: FF 24 1711 frames compared, 0 differing, END cartridge f1735 port f1735 (same)"
       ],
       "pin": [
@@ -41189,7 +41189,7 @@
         }
       ],
       "note_pass": "the ending's $C3 stage (entries 10/11/14/15 = $7E:8538) runs natively (src/seq_ending.c on seq_race.c's shared machine): its two scripts, the waits on the song's markers (`F5`, the SPC's port 2), the fades and the END, the tasks and hooks whose work the logic reads (the orbit, the credits' pager, the rolling text, the planet, the backdrops' list resets) and the NMI's song change with its upload frames -- `FF 2B` for 4747 frames and `FF 2E` for 10948, byte for byte with the cartridge; and entry 3 from the story (`FF 23`, after the Blackbird) for 582 frames, the END on the same frame; and entry 4 (`FF 24`, the Tyranno Lair: Lavos falls) for 1711 frames with its stars' RNG and tables, the END on the same frame",
-      "notes": "Roadmap G1a item 1 (the $C3 sequences): the ending a playthrough meets (sequence_table.md sec. 13). The cartridge runs saves/ending_re/ending_pre_ff2b.state (reached by the oracle from Jackie's ch27, memory note endgame-oracle-route) under the rule; the port runs ct.exe --seqstage from the cartridge's state at the hand-off (f130), its SPC seeded into CtAudio; frame k = the cartridge's k + 179, the SPC 50 frames ahead. The picture is stage 2. FF 23: the attract's own hand-off (saves/attract_entry3_handoff_rule_f8859.state) with $7F0057 bit 2 cleared and the storyline set to D3, so scene 107's controller takes the story's arm (saves/blackbird_re). FF 24: Jackie's ch17 brought to scene 301 (`--teleport 301 8 30 0 --method req`), walked to the trigger row, the fight won with both enemies' HP poked to 1 and the talk advanced with A (saves/tyranno_re); the extra regions $0386 and the star bytes of $0C00-$0FFF."
+      "notes": "Roadmap G1a item 1 (the $C3 sequences): the ending a playthrough meets (sequence_table.md sec. 13). The cartridge runs saves/ending_re/ending_pre_ff2b.state (reached by the oracle from Jackie's ch27, memory note endgame-oracle-route) under the rule; the port runs ct.exe --seqstage from the cartridge's state at the hand-off (f130), its SPC seeded into CtAudio; frame k = the cartridge's k + 179, the SPC 50 frames ahead. The picture is stage 2. FF 23: the attract's own hand-off (saves/attract_entry3_handoff_rule_f8859.state) with $7F0057 bit 2 cleared and the storyline set to D3, so scene 107's controller takes the story's arm (saves/blackbird_re). FF 24: Jackie's ch17 brought to scene 301 (`--teleport 301 8 30 0 --method req`), walked to the trigger row, the fight won with both enemies' HP poked to 1 and the talk advanced with A (saves/tyranno_re); the extra regions $0386 and the star bytes of $0C00-$0FFF. ==== 2026-10-22, RE-PINNED (drive 23's END frame only, the same on both sides): the late game's states are now made by recipes (tools/fixtures/lategame.json); the ending's (2B, 2E), entry 4's and entry 7's hand-offs are the captures' WRAM byte for byte, so their lines are unchanged. Drive 23's hand-off now comes from the attract's hand-off under today's rule (lg_blackbird_story_poked), on which the cartridge's FF 23 opening is a frame shorter (the common init's vblank wait $31B0 reached at v224 h898, not the old capture's h1356: entry3-picture-native-vs-oracle's note), so SHIFT is 18 (tools/ending_stage_cmp.py) and the END comes on f600 on both sides: 582 frames compared, 0 differing, as before."
     },
     {
       "name": "lavos-day-ff07-stage-logic-vs-oracle",

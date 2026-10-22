@@ -1,0 +1,14 @@
+{
+  "name": "lg_end_handoff_f130",
+  "from": "lg_end_pre_ff2b",
+  "doc": "Stands in for saves/ending_re/ending_handoff_f130.state: ending_pre_ff2b + 130 frames, the hand-off (`FF 2B` on its next frame).",
+  "steps": [
+    [
+      "pad",
+      "0:130"
+    ]
+  ],
+  "expect": {
+    "loc": "0x051"
+  }
+}

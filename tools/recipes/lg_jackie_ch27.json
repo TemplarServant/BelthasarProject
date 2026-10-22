@@ -1,0 +1,9 @@
+{
+  "name": "lg_jackie_ch27",
+  "doc": "Jackie's battery save ch27 (tools/third_party_saves.json) loaded the player's way under the rule, as tools/recipes/jackie_ch24.json: power-on 133 frames with the save, Start at +300, the Load list, A on slot 0, then 300 frames.",
+  "steps": [
+    ["sram_file", "saves/downloaded/ctjackie/srm/ch27.srm"],
+    ["power_on", 133],
+    ["pad", "0:300,8:2,0:120,100:2,0:300"]
+  ]
+}
