@@ -1,0 +1,7 @@
+{
+  "name": "lg_tyranno_tele301",
+  "from": "jackie_ch17",
+  "doc": "Stands in for saves/tyranno_re/tele301_req.*: Jackie's ch17 (world 1F3, storyline 93) brought to scene 301 (loc 12D, the Tyranno Lair's top) through the ROM's own loader, `ct.exe --teleport 301 8 30 0 --method req`, 300 frames -- as the capture was made; byte for byte the same file.",
+  "steps": [["teleport", 301, 8, 30, 0, 300, "req"]],
+  "expect": {"loc": "0x12D", "wram": {"0x10000": "0x93"}}
+}

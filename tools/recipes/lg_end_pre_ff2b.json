@@ -1,0 +1,17 @@
+{
+  "name": "lg_end_pre_ff2b",
+  "from": "lg_end_lucca_square",
+  "doc": "Stands in for saves/ending_re/ending_pre_ff2b.*: from Lucca's square, down 146, left 40 to face obj9 at (21,14), A, then A every 202 frames 15 times and 150 frames more: the talk made, obj10's `FF 2B` (entry 11, the ending) at f131 -- the session's state's WRAM, byte for byte.",
+  "steps": [
+    [
+      "pad",
+      "20:146,40:40,100:2,(0:200,100:2)*15,0:150"
+    ]
+  ],
+  "expect": {
+    "loc": "0x051",
+    "wram": {
+      "0x10000": "0xD6"
+    }
+  }
+}
