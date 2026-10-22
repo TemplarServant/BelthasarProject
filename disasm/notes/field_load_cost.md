@@ -786,3 +786,43 @@ against --peek boot f6912 (the vehicle's diagonal: picture P = peek P + 92): 12,
   same cycles (+-13), but the cartridge's tick is still running when the `FE` arrives (read in the tick's own poll, $0894,
   echoed 1,399 cycles later) where the port's has ended (echo +88): the battle song stands a sequence step apart -- the
   fight's own sound timing (the battle entry's upload, its posts), not a load's.
+
+## 16. 087's exit, found: four sound timings the drivers' paths showed (2026-10-22)
+
+Sec. 15's LEFT item, followed to its causes. The method: every driver port event of both sides from power-on (the
+cartridge's PEEK_APUTRACE `SPC reads $F4 = .. at pc ..` / `SPC $F4 := ..`, the port's CT_AUDIO_SPC=ref
+CT_AUDIO_PORTTRACE), aligned as sequences of (value, PC) with their cycles beside them. Where the two drivers first take
+different paths -- the idle poll $0B98 on one side, a tick's poll $0894 or the timer routine $02DD on the other -- the CPU
+side of that post is the defect. Four, in the order they appeared:
+
+- **The NMI's wait before a post is wall time** (audio.c ldStartRule). A post the NMI leaves at a raster position -- the field
+  pad latch's line 228, the battle NMI's line-64 cut (CD/09AA) -- started C7 after `ldRun(postAt - at)`: the clock walked to
+  postAt as CPU work and charged the DRAM refresh and the HDMA it met (4,360 + 5,729 cycles on the battle's walk to line 64),
+  so the 087 fight's `18 72` / `18 A3` / `18 75` / `18 76` / `18 FF` reached C7 on line 71, 474 APU cycles after the rule's
+  cartridge's (C7:0004 on line 64 h 220, its `STA $2143` on h 874: --cputrace of f9494). The beam now walks there
+  (ldWalk), its stolen time dropped: the posts within 10 cycles. The pad latch's posts lose the 160 they were charged.
+- **C7's dispatch by the command's path** (disasm/notes/patches/c7_dispatch_preamble_listing.diff, the half not in since
+  5fde1d2): the flat 686 was the song path's; a `$18-$2F` post is 552 (the cartridge's `18 72`: 654 from C7:0004 to its
+  first store = 552 + the refresh + C7/061C's head), `>= $80` 480, and the epilogue C7/0192-01A0 304 (charged 296).
+- **The boot's post on C1/0000's frame** (disasm/notes/patches/battle_boot_post_c1_0000.diff, now in: field.c
+  fieldBattleBootPost, battleBootPostAt). The three demo fights' `70 01` -- the battle's sample set -- reached the driver
+  34,172-34,180 APU cycles (two frames) before the cartridge's: the port posted on the consumer's frame, the cartridge's
+  C0/1BAB runs from C1/0000 two frames on (the 087: `$0138` = 00 f9359, the records staged f9361, C0/1BDF's JSL f9362 line
+  228 h 146). battleBootBandArm's `2 + apu + 3 + 1` already counted those frames: the band's arm stays, the post moves. Now
+  the three entries' `FE` within 3 cycles, the first battle post (`18 08`) within 4. (Sec. 15 of battle_ai_interp.md read it
+  as needing the dispatch's exact price with it: both are in.)
+- **A title exit that runs the teardown** (field.c STAGE_TEARDOWN_SPC_LEAD): the attract's first title at f2149 posts
+  $3177's five resets, then the reboot's load posts `81` / `10` -- 1,443 APU cycles after the last reset on the cartridge,
+  after the frame's whole slice in the port (14,566 late): the first point where the two drivers parted, the world-5 song
+  read in the timer routine instead of the idle poll. From the last reset's echo poll (`7E:37A5 RTS`, line 260 h 934) to
+  C0/1B73's `JSL C7:0004` (line 1 h 990) is 4,148 cycles: the load's posts now follow the teardown by that, the frame's
+  slice owed as for the other stage ENDs.
+- **C0/0304's object init and slot 1 at ack + 2** (field.c fieldBattleResume stage 2): kept on the ack's frame while the
+  SPC after `70 00` was not the cartridge's; run where the ROM runs them (C0/032D / C0/0330 after C0/0327's wait), the
+  0AD's slot-1 `EA 18` posts at f4304 as the cartridge's -- it had been two frames early, the 0AD's return the next
+  divergence.
+
+Result, the attract from power-on (tools: the loads' commit -> first ramp INC against the rule's cartridge): every load on
+the cartridge's frames, 8700 included -- the 087 exit's `FE` now finds the driver in the cartridge's state. Left, frame-free:
+a walked load's init-script posts flush at a frame's granularity (0AD's `10 18` 8,000 cycles after the cartridge's, mid-frame
+there), and the driver paths part again at f4944 / f5377 / f5410 without moving a frame of the demo.

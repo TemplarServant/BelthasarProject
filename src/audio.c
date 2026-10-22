@@ -559,7 +559,12 @@ static int ldStartRule(CtAudio* a) {
   long at = spcPos % frame;                                          // a post past an earlier one's frames counts its own
   long pos = 225L * LD_MASTER_PER_LINE + at;                         // the vblank's line 225, h 0, + the offset
   pos %= frame; ld.vPos = (int)(pos / LD_MASTER_PER_LINE); ld.hPos = (int)(pos % LD_MASTER_PER_LINE);
-  if (a->rulePostAt > at && a->rulePostAt < frame) ldRun(a->rulePostAt - at);   // the NMI's waits: the SPC runs on
+  // The NMI's waits: the SPC runs on and the BEAM walks to postAt -- a raster position (the pad latch's line 228, the battle
+  // NMI's line-64 cut), so the stretch is wall time, postAt - at exactly. The CPU is waiting through it: the refresh and the
+  // HDMA it meets steal nothing from code (ldRun charged them as if the CPU had run: the battle's line-64 posts reached C7
+  // on line 71, 10,089 cycles of refresh + HDMA late -- the 087 fight's `18 72` / `18 A3` ... 474 APU cycles after the
+  // rule's cartridge's, now within 10. The field NMI's pad-latch posts lose the 160 of refresh they were charged).
+  if (a->rulePostAt > at && a->rulePostAt < frame) { ldWalk(a->rulePostAt - at); ld.stolen = 0; ld.irqPending = 0; }
   a->lastRuleStart = at > a->rulePostAt ? at : a->rulePostAt;
   ld.clk0 = ld.clk; ld.cpu0 = ld.dbgCpuAll;
   return 1;
@@ -2057,8 +2062,33 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   if (!ldStartRule(a))                                 // (the rule: from where the SPC and the CPU's last wait stand)
     ldStart(a->engineMode, a->postLine);               // the JSL begins: the clock runs until the RTL
   fifoAt = a->fifoLen;                                 // (the output up to the post: the instant mod keeps it)
-  ldRun(ld.ifast ? 740 - 54 : 740);                    // JSL 54 (the caller's: free under the rule) + C7/0004 JMP 18 + the $0140 prologue 264 (PHB PHD PHP REP REP PHA PHX PHY SEP LDA PHA PLB) + $0150-$0173 dispatch 404 (LDX PHX PLD SEP ... JMP ($0AD9,X))
   uint8_t cmd = mb[0x00];
+  // THE DISPATCH, by the command's path (disasm/notes/patches/c7_dispatch_preamble_listing.diff; the cartridge's --cputrace,
+  // enemy B9's exit: C7/0004 at v226 h1206, C7/0157 at v227 h222 -- 380 -- and C7/01A1 at h528 -- 686 for a song command;
+  // the 087 fight's `18 72` under the rule: C7/0004 on line 64 h 220, C7/061C's `STA $2143` at h 874): the JSL 54 (the
+  // caller's -- free under the rule), C7/0004 `JMP $0140` 18 and the prologue C7/0140-0155 362 (PHB PHD PHP REP REP PHA
+  // PHX PHY SEP LDA #00 PHA PLB LDX #1E00 PHX PLD SEP), then C7/0157 `LDA $05 / BPL ->0192` / `LDA $00 / BEQ ->0192` /
+  // `BMI ->017A` (>= $80: `JMP C7/061C`) / `CMP #10 / BCC ->0192` / `CMP #18 / BCS ->0176` / C7/0169-0173 the $0AD9 table
+  // (AND ASL XBA LDA PHA XBA PHA PLX `JMP ($0AD9,X)`) | C7/0176 `CMP #30 / BCS / JMP 061C` | 017D `CMP #40 / BCS / JMP
+  // 071D` | 0184 `CMP #70 / BNE / JMP 08E3` | 018B `CMP #71 / BNE / JMP 0755`. (The flat 686 was the song path's.)
+  { long d = (ld.ifast ? 0 : 54) + 18 + 362 + I_LDA_DP;
+    if (!(mb[0x05] & 0x80)) d += I_BR_T;
+    else { d += I_BR_NT + I_LDA_DP;
+      if (cmd == 0x00) d += I_BR_T;
+      else { d += I_BR_NT;
+        if (cmd & 0x80) d += I_BR_T + 18;
+        else { d += I_BR_NT + I_IMM8;
+          if (cmd < 0x10) d += I_BR_T;
+          else { d += I_BR_NT + I_IMM8;
+            if (cmd < 0x18) d += I_BR_NT + 2 * I_IMM8 + I_XBA + I_IMM8 + I_PHP + I_XBA + I_PHP + I_PLX16 + 36;
+            else { d += I_BR_T + I_IMM8;
+              if (cmd < 0x30) d += I_BR_NT + 18;
+              else { d += I_BR_T + I_IMM8;
+                if (cmd < 0x40) d += I_BR_NT + 18;
+                else { d += I_BR_T + I_IMM8;
+                  if (cmd == 0x70) d += I_BR_NT + 18;
+                  else d += I_BR_T + I_IMM8 + (cmd == 0x71 ? I_BR_NT + 18 : I_BR_T); } } } } } } }
+    ldRun(d); }
   // The two early tests BRANCH TO THE COMMON EXIT, they do not return before it: C7/0157
   // `LDA $05 / BPL ->0192` and C7/015B `LDA $00 / BEQ ->0192`, and $0192 is the `STZ $00`
   // teardown. Ours used to `return 0` ahead of the clear at the bottom of this function, so a
@@ -2088,7 +2118,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   else if (cmd == 0x71)        rc = -1;                // $018B -> $C7:0755:  NOT DERIVED
   else                         rc = 0;                 // falls to $0192
   mb[0x00] = 0x00;                                     // $C7:0192 — STZ $1E00 on every exit
-  ldRun(296);                                          // $0192-$01A0: the epilogue's pulls and the RTL
+  ldRun(I_SEP + I_LDA_DP + 2 * I_SEP + 3 * I_PLX16 + I_PLP + I_PLX16 + I_PLP + 42);   // $0192 SEP / STZ $00 / REP / REP / PLY PLX PLA (16) / PLP / PLD / PLB / RTL = 304
   ldCatch(a);                                          // the SPC is level with the CPU at the RTL
   if (a->spc == SPC_BOTH) CtSndLockstepRam(a->apu);
   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;

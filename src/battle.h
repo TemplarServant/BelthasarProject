@@ -572,6 +572,7 @@ typedef struct CtBattleHost {
                              //   (0 = idle, so a host zeroed without CtBattleBegin -- the mover sweeps -- is idle too)
   int fxTeardownLong;        // ...and its path: 1 = the full one (CD/0473-0494), 0 = $99D2 bit 7 / $CD07 skip to CD/0497
   int fxTeardownRuns;        // teardowns run this battle (the battle-end trace prints it)
+  int bootPostPending;       // 1 from the module's start until the host posts C0/1BAB's JSL on C1/0000's frame (the rule)
   int bootApuFrames;         // frames the field's C0/1BAB post (JSL C7:0004) cost: the boot's first wait, before its 18 setup passes
   int bootSyncFree;          // the free sync mode: that post was priced at NO frames (not left unpriced -- a fixture's case)
   int renderFramesAbs;       // a host that never ran a boot (field.c's WRAM render host): its frames ARE the render clock

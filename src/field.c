@@ -5229,6 +5229,11 @@ static int g_stageRebootLoad = 0;  // an overlay machine's END rebooted this ite
 #define LOAD_SPC_LEAD (5751L + 3060L)   // master cycles from the vblank to C0/1B73's JSL C7:0004 (the traces' mean)
 #define OW_EXIT_SPC_LEAD 3868L          // master cycles from the $83's RTL (C2/2505) to C0/1B73's JSL (the world's exit)
 #define STAGE_END_SPC_LEAD (4252L + 218L + 4008L)   // the vblank -> C0/1B73's JSL out of an overlay machine's END (below)
+// ...and an END that runs the teardown $3177 (its five driver resets, $7E:377E's own posts and echo polls): from the last
+// echo's poll exit `7E:37A5 RTS` to C0/1B73's `JSL C7:0004` -- 303B's `JML C0:0000`, C0/0B5A, C0/0B86 -- 4,148 master cycles
+// (the rule's cartridge from power-on, the attract's first title's exit at f2149, --cputrace: 37A5 on line 260 h 934,
+// C0/0B86 on 261 h 638, C7:0004 on line 1 h 990 of the next frame). The teardown's posts leave the SPC at that exit.
+#define STAGE_TEARDOWN_SPC_LEAD 4148L
 // ops DF / E1's reboot (C0/3B71's spin -> C0/3B79-3B8F -> C0/0B4E -> `BRL C0:0000` -> C0/0B5A -> C0/0B86): the field NMI's
 // pad latch, then the NMI-off stretch to C0/0B86 on line 229 h 190 = 5,646 past the vblank (the rule's cartridge, the attract's
 // hub DF at power-on f7324, --cputrace), and C0/0B86 -> the JSL as LOAD_SPC_LEAD's (its 1B8B: line 231 h 498 = 8,682)
@@ -5988,6 +5993,36 @@ static void fieldBattleSndPost(CtAudio* a, uint8_t* bs, const char* site, int en
     if ((ls || g_sndPaced || g_ruleAudio) && !hostSoundInstant()) g_battleSndFrames += fr; }   // (instant: the uploads cost nothing)
   if (tr) { int fr = 0, el = 0; long long mc = CtAudioLastPostRaster(a, &fr, &el, NULL);
             fprintf(stderr, "[snd] field %s priced: %lld master cycles, %d NMI(s) crossed, returns on line %d\n", site, mc, fr, el); }
+}
+// C0/1BAB's post, the battle's sample set or song (C0/1BCE `14` / C0/1BDF `70`) -- the boot's first wait; returns the NMIs
+// its JSL crossed (bootApuFrames).
+static int fieldBattleBootPost(CtAudio* audio, CtScene* vm) {
+  g_battleSndFrames = 0;
+  // THE LINE THE BOOT'S JSL STARTS ON. C1/0000's prologue runs from the frame's start (the consumer C0/1770 is the
+  // main loop's first leg, C0/18D9) to C0/1BAB's `JSL $C7:0004` -- MEASURED at vPos 142 on the cartridge's two demo
+  // battles (`--hookpc 1BAB`: the 0AD at f47 of build/_z_0ad_1700.state, the 087 at f12 of the f7325 state) -- and the
+  // loader's price (13 NMIs for the `70 01` set) is counted from there. Without it the clock kept the line of the
+  // VM's LAST sound post, whichever op that was, and the price drifted by a frame with the field's own timing.
+  if (audio) CtAudioSetPostLine(audio, 142);
+  // ...AND ITS BACKGROUND IS THE BATTLE'S. C1/0000 has set the battle's NMI up before C0/1BAB's JSL, so the frames the
+  // upload spans carry the battle NMI + its DMA and the battle's eight HDMA channels, not the field's (the cycle-tag
+  // probe, gato_wait `CT_HOOK_CYCLES=1 --hookpc C709E5`: the post f222 on the field's 11.8k NMI, then from f224 nmi
+  // 26-30k + dma 4-10k, hdma 17.9k -- LD_BG[1]). Priced on the field's block the song's upload came out 55 NMIs,
+  // 1.35M cycles short of the cartridge's 59 (f222 -> C7:0196's clear at f281).
+  // (Under the rule only, CT_ORACLE_NMION_HOLD=1, during the migration: the old boot's 18 setup frames were fitted
+  // over the field block's short price -- battle.c battleBootBandArm.)
+  { const char* e = getenv("CT_ORACLE_NMION_HOLD"); if (audio && !(e && *e == '0')) CtAudioSetEngineMode(audio, 1); }
+  { uint8_t* bs = CtSceneMem7E(vm);
+    if (!(bs[0x2A1F] & 0x40)) {                  // C0/1BB7 LDA $7E2A1F / BIT #40 / BNE
+      bs[0x1E10] = 0xFF;                         // C0/1BBF -- the driver normalises FF -> 1
+      bs[0x1E01] = bs[0x01FA];                   //   at C7/04D0 (measured); $01FA = the battle
+      bs[0x1E00] = 0x14;                         //   song id, seeded $45 by C0/0C58
+      fieldBattleSndPost(audio, bs, "C0/1BCE", 1);      // C0/1BCE JSL $C7:0004
+    } else {
+      bs[0x1E01] = 0x01; bs[0x1E00] = 0x70;      // C0/1BD5-1BDC
+      fieldBattleSndPost(audio, bs, "C0/1BDF", 1);      // C0/1BDF JSL $C7:0004
+    } }
+  return (int)g_battleSndFrames;
 }
 // ---- the TITLE SEQUENCE's own mailbox ($7E:34AB / $7E:34C2, title_intro.md §6.6) -----------------
 // The overlay stages into the same $7E:1E00 the field and the battle use -- it is one mailbox, and
@@ -9501,17 +9536,19 @@ static void fieldBattleResume(CtScene* vm, CtBattleHost* h, int stage) {
   int loc = (s[0x0100] | (s[0x0101] << 8)) & 0x1FF;
   if (stage < 0) g_resumeRebuildLoc = loc;                // (the WRAM half next frame: fieldResumeRebuildRun)
   if (stage == 0) fieldResumeRebuild(s, loc, 1);          // 0316 C0/A33B
-  // C0/032D JSR C0/56D4 / C0/0330 JSR C0/595C -- the cartridge's are after C0/0327's wait (obj0 slot 1's `EA 18` posts
-  // `$1E01 = 18` at the 0AD's ack + 2, f2146). ⚠ BOUNDARY, kept on the ack's frame (as before C0/0304 was staged): run at
-  // ack + 2 the port's SPC answers the location's next post, `18 BA` (the cartridge's f2222, in its own frame), in 13
-  // NMIs -- its `10 18` returns on line 22 there, on line 243 at the ack, the cartridge's in-frame -- and the 0AD's fade
-  // ends 13 frames late (f2271 against f2258). The SPC's state after C0/1BE6's `70 00`, OPEN (audio, not this tail).
-  if (stage <= 0) {
+  // C0/032D JSR C0/56D4 / C0/0330 JSR C0/595C -- after C0/0327's wait, in stage 2 below (obj0 slot 1's `EA 18` posts
+  // `$1E01 = 18` at the 0AD's ack + 2: f2146 of attract_cena_inicial, f4304 of the attract from power-on). They ran on the
+  // ack's frame while the SPC after C0/1BE6's `70 00` was not the cartridge's (run at ack + 2, the location's next post
+  // `18 BA` took 13 NMIs and the 0AD's fade ended 13 frames late); with the boot's post on C1/0000's frame, C7's dispatch
+  // priced by path and the battle NMI's line-64 posts on line 64 (audio.c ldStartRule), the driver answers both on the
+  // cartridge's cycles (field_load_cost.md sec. 16).
+  if (stage == 1) fieldResumeRebuild(s, loc, 2);          // 0324 C0/09DD
+  if (stage == 2) fieldResumeRebuild(s, loc, 4);          // 032A C0/0A14
+  if (stage < 0 || stage == 2) {
     CtSceneScriptImage(vm);                               // 032D JSR C0/56D4: the image C0/0918 overwrote
     CtSceneRunObj0Slot1(vm, "C0/0330");                   // 0330 JSR C0/595C
   }
-  if (stage == 1) fieldResumeRebuild(s, loc, 2);          // 0324 C0/09DD
-  if (stage == 2) fieldResumeRebuild(s, loc, 4 | 8);      // 032A C0/0A14, 0333-033F DP=$1D00 / JSR C0/A712
+  if (stage == 2) fieldResumeRebuild(s, loc, 8);          // 0333-033F DP=$1D00 / JSR C0/A712
   // C0/034B `LDA $7E2A1F / BIT #80 / BNE ->035D`: a SCRIPTED battle (D8's imm2 bit 7 -- the attract's demo fights,
   // `D8 B0 C0`) skips the regroup and the control restore: only `$7F03FE = 3` (C0/035D). The port called the
   // followers' walk-to-the-lead for every outcome-0 return, so after the demo's X-Strike obj5 walked (op 95) for
@@ -11780,6 +11817,7 @@ int main(int argc, char** argv) {
   int battleReturnWait = -1;  // under the rule: which of the chain's five C0/00EB this frame ends in (0 = the ack's), else -1
   int fieldIrqPreFlip = 0;    // this frame's line-211 IRQ came before its main thread's C0/00DE flip (see the return chain)
   int battleExitPoll = 0;     // the module is in CD/0428-0436's SPC poll (CtBattleExitPoll), before CD/043E's chain
+  int battleBootPostAt = -1;  // the rule: the host frame C1/0000 posts C0/1BAB's JSL (the entry + 2)
   int battleTailLeft = 0;     // frames of the module's exit tail still to run before the ack (CD/043E's upload + CD/0444)
   // THE RESET (C0:FF00 -> FD:C000 -> C0/000E), taken by the attract's demo battle on a button (battle.c
   // battleDemoAbortFrame). coldResetHold: the field frame loop is
@@ -12397,7 +12435,7 @@ int main(int argc, char** argv) {
                        (ffPro == 2 || (ffPro == 0 && !CtSceneFfFading(f.vm)));
           g_loadSpcLead = 0; g_owExitPosted = 0; g_stageRebootLoad = 0; g_dfRebootLoad = 0; g_titleOpenSpc = 0;
           if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad || stLoad || dfLoad) && !hostSyncFree()) {
-            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? 3 : dfLoad ? 4 : 1; }
+            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? (g_stageRebootLoad == 2 ? 5 : 3) : dfLoad ? 4 : 1; }
           else if (audio && g_ruleAudio && tlOpen && !hostSyncFree()) { owed += ticks; ticks = 0; g_titleOpenSpc = 1; }
           else if (owed) { ticks += owed; owed = 0; } }
         if (ticks != 1) paceIrregular++;
@@ -12564,7 +12602,7 @@ int main(int argc, char** argv) {
           // 3,018-3,102 (C0/00F4's head, C0/092B, C0/1B53's arm)
           if (g_loadSpcLead && audio)
             CtAudioAdvance(audio, g_loadSpcLead == 2 ? OW_EXIT_SPC_LEAD : g_loadSpcLead == 3 ? STAGE_END_SPC_LEAD :
-                                  g_loadSpcLead == 4 ? REBOOT_SPC_LEAD : LOAD_SPC_LEAD);
+                                  g_loadSpcLead == 4 ? REBOOT_SPC_LEAD : g_loadSpcLead == 5 ? STAGE_TEARDOWN_SPC_LEAD : LOAD_SPC_LEAD);
           else if (coldResetCyc && audio) CtAudioAdvance(audio, RESET_LOAD_SPC_LEAD);   // a reset's load: the scan and C0/005D first
           g_loadSpcLead = 0;
           if (!fieldLoad(&assets, &f, pendDest, gm)) running = 0;
@@ -18629,6 +18667,10 @@ int main(int argc, char** argv) {
     //  ROM's op 0xB0 runs it; the song-upload / copy freezes gate it there exactly as they gate the runner)
     if (f.vm) {                                          // the $0117 transfer consumer (ROM C0/1770-18D6):
       int ran = 0;                                       // inert unless the event VM set $0117 (op 0xD8/0xE5)
+      if (battlePhase && battleBootPostAt >= 0 && frameNo >= battleBootPostAt) {
+        battleBootPostAt = -1;                           // C0/18A7 `JSL C1:0000` -> C0/1BAB (see the entry)
+        liveHost.bootApuFrames = fieldBattleBootPost(audio, f.vm); liveHost.bootPostPending = 0;
+      }
       if (battlePhase) {
         // ---- subsequent battle frame: field FROZEN above, compose still runs below. Advance the live
         // host ONE module frame; battleEndReq = F8 (C1/8357 controller-2 debug instant-end). SDL_QUIT
@@ -18861,34 +18903,17 @@ int main(int argc, char** argv) {
           // ct_vm.c's D8 handler). bit6 SET takes C0/1BD5 instead: `70 01`, the battle SFX set with NO
           // battle song (C7/08E3) -- the attract's demo battle keeps song $18 playing. Oracle,
           // build/_loc0AD.state: f142 `$1E01 = 01` by C0/1BDA, `$1E00 = 70` by C0/1BDF.
-          g_battleSndFrames = 0;
-          // THE LINE THE BOOT'S JSL STARTS ON. C1/0000's prologue runs from the frame's start (the consumer C0/1770 is the
-          // main loop's first leg, C0/18D9) to C0/1BAB's `JSL $C7:0004` -- MEASURED at vPos 142 on the cartridge's two demo
-          // battles (`--hookpc 1BAB`: the 0AD at f47 of build/_z_0ad_1700.state, the 087 at f12 of the f7325 state) -- and the
-          // loader's price (13 NMIs for the `70 01` set) is counted from there. Without it the clock kept the line of the
-          // VM's LAST sound post, whichever op that was, and the price drifted by a frame with the field's own timing.
-          if (audio) CtAudioSetPostLine(audio, 142);
-          // ...AND ITS BACKGROUND IS THE BATTLE'S. C1/0000 has set the battle's NMI up before C0/1BAB's JSL, so the frames the
-          // upload spans carry the battle NMI + its DMA and the battle's eight HDMA channels, not the field's (the cycle-tag
-          // probe, gato_wait `CT_HOOK_CYCLES=1 --hookpc C709E5`: the post f222 on the field's 11.8k NMI, then from f224 nmi
-          // 26-30k + dma 4-10k, hdma 17.9k -- LD_BG[1]). Priced on the field's block the song's upload came out 55 NMIs,
-          // 1.35M cycles short of the cartridge's 59 (f222 -> C7:0196's clear at f281).
-          // (Under the rule only, CT_ORACLE_NMION_HOLD=1, during the migration: the old boot's 18 setup frames were fitted
-          // over the field block's short price -- battle.c battleBootBandArm.)
-          { const char* e = getenv("CT_ORACLE_NMION_HOLD"); if (audio && !(e && *e == '0')) CtAudioSetEngineMode(audio, 1); }
-          { uint8_t* bs = CtSceneMem7E(f.vm);
-            if (!(bs[0x2A1F] & 0x40)) {                  // C0/1BB7 LDA $7E2A1F / BIT #40 / BNE
-              bs[0x1E10] = 0xFF;                         // C0/1BBF -- the driver normalises FF -> 1
-              bs[0x1E01] = bs[0x01FA];                   //   at C7/04D0 (measured); $01FA = the battle
-              bs[0x1E00] = 0x14;                         //   song id, seeded $45 by C0/0C58
-              fieldBattleSndPost(audio, bs, "C0/1BCE", 1);      // C0/1BCE JSL $C7:0004
-            } else {
-              bs[0x1E01] = 0x01; bs[0x1E00] = 0x70;      // C0/1BD5-1BDC
-              fieldBattleSndPost(audio, bs, "C0/1BDF", 1);      // C0/1BDF JSL $C7:0004
-            } }
+          // UNDER THE RULE THE POST IS C1/0000's, TWO FRAMES ON. The consumer C0/177D (the align loop) waits, C0/1790-1797 waits,
+          // C0/179A's transition dispatch returns, and C0/188C (C0/024C, C0/2C41, C0/00DE) waits once more before C0/18A7 `JSL
+          // C1:0000` -> C0/1BAB. MEASURED, the rule's cartridge: GATO (gato_wait with enemy 07, --cputrace) C0/177D f219, C0/179A
+          // f220, C0/188C f221, C0/1BCE's JSL f222 line 228; the attract's 087 from power-on `$0138` = 00 f9359, the records
+          // staged f9361, C1:0000 and C0/1BDF's JSL f9362 line 228 h 146 (the 0AD and the 07D alike: `70 01`'s `FE` 34,175 APU
+          // cycles -- two frames -- after the port's). The boot's arm already counts them (battleBootBandArm's `2 + apu + 3 +
+          // 1`); the port posted on the entry's frame, so its SPC took the set or the song two frames early.
+          if (fieldRuleNmiOnHold()) { battleBootPostAt = frameNo + 2; liveHost.bootPostPending = 1; liveHost.bootApuFrames = 0; }
+          else liveHost.bootApuFrames = fieldBattleBootPost(audio, f.vm);
           // THE BOOT'S FIRST WAIT is that JSL (sequence_table.md 11.10): the cartridge's C1/0000 runs at `70`+2 and its
           // eighteen setup passes only after C7/0004 returns -- 13 frames for the demo's `70 01` sample set, ~55 for a song.
-          liveHost.bootApuFrames = (int)g_battleSndFrames;
           liveHost.bootSyncFree = hostSyncFree();      // (free: priced at none, not unpriced -- the boot's own frames stay)
           // Arm mode-entry isolation: a held A at entry must be released before the first command edge;
           // prevBattleA=1 makes the current hold a NON-edge, battleAReleased=0 blocks until A goes up.
@@ -20834,9 +20859,10 @@ int main(int argc, char** argv) {
       // start STAGE_END_SPC_LEAD past the vblank -- the NMI's work to `7E:302A` (line 228 h 160, 4,252), 302A -> 303B's
       // `JML C0:0000` (218, $3177 skipped by $0384 bit 5) and C0:0000 -> C0/0B86 -> C0/1B73's JSL (4,008); the rule's
       // cartridge on the attract's third credits (power-on f4549, --cputrace: C0/0B86 on line 229 h 40, C7:0004 on 231 h
-      // 348). The deferral above (the load's posts before the frame's slice) takes it; a teardown that runs $3177 posts
-      // its own four commands first and is not measured: it keeps the plain order.
-      if (seqId & 0x20) g_stageRebootLoad = 1;
+      // 348). The deferral above (the load's posts before the frame's slice) takes it. A teardown that runs $3177 posts its
+      // five resets first, in this frame, and the load's follow them by STAGE_TEARDOWN_SPC_LEAD (the attract's first title:
+      // the load's `81` 1,443 APU cycles after the teardown's on the cartridge, the frame's whole slice after it in the port).
+      g_stageRebootLoad = (seqId & 0x20) ? 1 : 2;
       seqOpen = 0;
       FIELD_REBOOT_PEND(w);                                          // 7E:303B JML $C0:0000, $0100 unchanged
     }

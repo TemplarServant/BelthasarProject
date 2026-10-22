@@ -1309,7 +1309,7 @@ vblank the CPU met inside C7. OPEN: the loader clock prices HDMA from a per-engi
 channel set the NMI leaves and its tables (LakeSnes dma_doHdma: 8 + 8 a live channel + 8 a byte + the table reloads)
 is the general form, and the exit chain needs it.
 
-**The boot's post on C1/0000's frame: measured, NOT in (2026-10-09).** The patch (post at the consumer's frame + 2,
+**The boot's post on C1/0000's frame: measured, NOT in (2026-10-09); IN since 2026-10-22, with the dispatch's price (field_load_cost.md sec. 16).** The patch (post at the consumer's frame + 2,
 `bootPostPending` holding the band's arm) makes GATO's driver phase the cartridge's and enemy 07 IDENTICAL, but moves the
 attract's 087 fight a frame (attract-087-ice-sword-afterimage exact at port f9586, not f9585; the demo's second title
 f11006). The 087 on the rule's cartridge (PEEK_SAVE c7150, --monitor 7E0117,7E0138,7ECA1E + --hookpc): `$0117` = 21
