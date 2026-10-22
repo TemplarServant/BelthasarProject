@@ -1948,8 +1948,8 @@
     {
       "path": "saves/battle_re/bat9.raw.wram",
       "kind": "oracle_wram",
-      "regenerable": false,
-      "how": "A flat 128 KB WRAM image ($7E at offset 0, $7F at 0x10000) -- the file `ct.exe --peek` writes alongside its framebuffer as `<out>.wram`. CATALOGUED 2026-08-30 to close the one-command gate: before this, 37 of the 62 declared fixtures had no sha256 at all, so tools/preflight.py hard-failed on 'EXTRA' and exited WITHOUT RUNNING A SINGLE CHECK. ⚠ ITS PROVENANCE WAS NOT RECORDED WHEN THE CHECK WAS ADDED and is NOT reconstructed here -- writing a plausible-looking recipe would be worse than admitting the gap, because the next reader would trust it. What the sha256 above DOES guarantee is the thing the gate exists for: this is the exact byte sequence the consuming check(s) were pinned against, so a silent substitution or a regeneration with different contents now shows up as MISMATCH instead of as a quietly different green. If this file is lost, the check must be RE-DERIVED from the ROM/oracle, not re-guessed. Consumed by: field-battle-bat9-3pc-hud, field-battle-bat9-frog-bracket, field-battle-hud-strip-bottom, field-battle-no-gato-in-other-fights, field-battle-results-box-opposite-bottom, field-battle-zorder-bat9-oam.",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fx_bat9, pad 0:1)",
       "used_by": [
         "battle-results-band-24-lines",
         "battle-results-text-origin",
@@ -1960,21 +1960,21 @@
         "field-battle-results-box-opposite-bottom",
         "field-battle-zorder-bat9-oam"
       ],
-      "sha256": "e5a1d728c378dd049c699df651c72937e77b6c065310de00cf2c12409e703532",
+      "sha256": "7b3ea445d6663cb74b34e19d8d2233f494ba7d76da29d469c334d90b812118eb",
       "size": 131072,
       "present_when_recorded": true
     },
     {
       "path": "saves/battle_re/bat9_lake.state",
       "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fx_bat9)",
       "used_by": [
         "battle-enemy-cells-bat9-vs-oracle",
         "battle-hud-strip-command-windows-vs-oracle",
         "sweep-band-25a3"
       ],
-      "sha256": "c480f7e5efb79976cd649b62ba0481e6022d785e907647cf4b5ab08d9e6aef1c",
+      "sha256": "c6bb01779ef11e4955234eb172c1fbd75b2f47ca98dedc33d598c2cc604ff437",
       "size": 273109,
       "present_when_recorded": true
     },
@@ -2758,8 +2758,8 @@
       ],
       "kind": "lakewram_wrapper",
       "regenerable": true,
-      "how": "3-PC (Crono+Lucca+Frog) POST-VICTORY FIELD state at loc $082 (Manoria corridor), produced ENTIRELY from the oracle -- no hand-editing. bat9_lake.state is the project's only 3-PC capture and sits mid-battle; driving it to victory yields the field. Recipe: (1) BS=$(python -c \"print(','.join(['100:8','0:12']*115)+',0:300')\") ; (2) PEEK_SAVE=saves/battle_re/party3_field.state ./build/ct.exe --peek saves/battle_re/bat9_lake.state build/party3_field.raw --btnscript \"$BS\" ; (3) wrap the 128 KB dump: open(dst,'wb').write(b'HEADER\n'+b'RAM:131072:'+open('build/party3_field.raw.wram','rb').read()). NOTE A=0x100 in the LakeSnes serial-order grammar (0x80 is Right) -- see DEBUG_SURFACE.md. Verify: loc $0100=0082, $011F=01 (control restored), $2980-82 = 00 02 04, $AF02 all zero. The Diablos die by f1829 and the field resumes at f2304.",
-      "sha256": "0bdf340e250cd6f564cbba642d1a737461718c780ad94a1d23d0a58f97b3fc66",
+      "how": "tools/fixtures.py (recipe fx_party3_field)",
+      "sha256": "4fa21769c84d512865c958c78a903e4f3322da62ed42107d460e7d9a53ba7e0b",
       "size": 131093,
       "present_when_recorded": true
     },
@@ -2829,8 +2829,8 @@
       ],
       "kind": "lakestate",
       "regenerable": true,
-      "how": "CTLS savestate companion of party3_field.lakewram (same capture, see that entry's recipe): PEEK_SAVE=saves/battle_re/party3_field.state ./build/ct.exe --peek saves/battle_re/bat9_lake.state build/party3_field.raw --btnscript \"$BS\" with BS=$(python -c \"print(','.join(['100:8','0:12']*115)+',0:300')\"). 3-PC post-victory FIELD state at loc $082. Verify: $0100=0082, $011F=01, $2980-82 = 00 02 04.",
-      "sha256": "c78f50aefb89d7a4b23b8ceb4a159934220206cab572fbcce8c27e800a36e202",
+      "how": "tools/fixtures.py (recipe fx_party3_field)",
+      "sha256": "851d8cd0e53af36f6978305b398427d247223434c15dc5d4e2dc78f66fa76523",
       "size": 273125,
       "present_when_recorded": true
     },
@@ -2847,21 +2847,21 @@
       ],
       "kind": "oracle_wram",
       "regenerable": true,
-      "how": "The oracle's own WRAM with the Form screen (option 4) OPEN, so the check grades the RENDER and not the menu-open stat pass. Regenerate: build/ct.exe --peek saves/battle_re/party3_field.state out.raw --btnscript \"0:4,200:3,0:40,80:2,0:6,80:2,0:6,80:2,0:6,80:2,0:6,100:2,0:40\" (X, Right x4, A) and take out.raw.wram. WHY THE POST-OPEN CAPTURE AND NOT THE FIELD ONE: the ROM RECOMPUTES each character's derived attack/defence at menu open -- C2/9137 MVNs 11 bytes from $7E:9B1C into sheet+0x36 (writer C2:9160), built by C2/916E out of the equipment via C2/9261 with the caps at FF/CF33 and a per-charId pass through the C2/91DB jump table -- and a raw FIELD capture carries stale values (party3_field has Frog's +0x3D reading 229 where the menu computes 18). That stat engine is the same C1/CF15 + FD/B033 subsystem battle.c already names as a boundary, so this fixture keeps the boundary OUT of the pixel check instead of pinning a frame that shows its symptom.",
-      "sha256": "c8de27c7d2681511583020697d0474bdf40d94dcec1a1cc83bdcf29ca806ee44",
+      "how": "tools/fixtures.py (recipe fx_party3_field, pad 0:4,200:3,0:40,80:2,0:6,80:2,0:6,80:2,0:6,80:2,0:6,100:2,0:40)",
+      "sha256": "8df6e15a825c8b61883079a9600d40a2ec213859e846b0ecbfa963fe758ddbba",
       "size": 131072,
       "present_when_recorded": true
     },
     {
       "path": "saves/battle_re/party3_freshsheet.lakewram",
       "kind": "lake_wram",
-      "regenerable": false,
-      "how": "A 128 KB WRAM image with the 18-byte LakeSnes header (`--loadwram` takes this form). CATALOGUED 2026-08-30 to close the one-command gate: before this, 37 of the 62 declared fixtures had no sha256 at all, so tools/preflight.py hard-failed on 'EXTRA' and exited WITHOUT RUNNING A SINGLE CHECK. ⚠ ITS PROVENANCE WAS NOT RECORDED WHEN THE CHECK WAS ADDED and is NOT reconstructed here -- writing a plausible-looking recipe would be worse than admitting the gap, because the next reader would trust it. What the sha256 above DOES guarantee is the thing the gate exists for: this is the exact byte sequence the consuming check(s) were pinned against, so a silent substitution or a regeneration with different contents now shows up as MISMATCH instead of as a quietly different green. If this file is lost, the check must be RE-DERIVED from the ROM/oracle, not re-guessed. Consumed by: field-battle-lucca-type2.",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fx_party3_field), PEEK_POKE as tools/fixtures/party3.json",
       "used_by": [
         "field-battle-lucca-type2"
       ],
-      "sha256": "d66751e97f1cfe2a1e6b0a16a32718651a3d496d344919a9b61f2a08509aa39b",
-      "size": 131090,
+      "sha256": "3c4dedf3415aaa133877c20fcbaa069a9932258a23413fcc552bbb24ef671ec5",
+      "size": 131093,
       "present_when_recorded": true
     },
     {

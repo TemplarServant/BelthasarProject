@@ -76,9 +76,10 @@ the oracle in the same run (and that comparison holds on the twin) or after its 
 the oracle on the twin; each such re-pin carries a dated note in the check. The biggest private families left, and why
 (details in each fixture's entry and in [ROADMAP.md](ROADMAP.md#11-checks-still-on-private-captures-l)):
 
-- **The cathedral's three-member party** (`saves/battle_re/party3_field.*`, `bat9`, `party3_form`; ~60 checks): the
-  closest recipe twin (`fx_party3_field`) passes 49 of 80; the rest show real port-vs-oracle differences on the new
-  state (menu pictures, the door list, the reload cost, the follower ring) -- findings to fix, not re-pins.
+- ~~**The cathedral's three-member party**~~ (`saves/battle_re/party3_field.*`, `bat9*`, `party3_form`,
+  `party3_freshsheet`; 81 checks): recipe-made since 2026-10-22 (`tools/fixtures/party3.json`). The owner's route was
+  read off the capture's follower ring ($7F:0C00), which the earlier twin had missed; 27 checks were re-pinned, each
+  re-graded against the oracle on the twin (dated notes in the checks).
 - **The attract's first cut** (`saves/attract_cena_inicial.state`; 42 checks + 7 tools): those checks run the
   cartridge in real time, not under the rule, and pin frames of the owner's real-time run. The fix is to move their
   oracle side to the rule (where the power-on twin is exact) and re-anchor.
