@@ -29,6 +29,9 @@ uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask);
 uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH);   // the bake without BL1/BL2/BL3 bits (a window's)
 // A mod's picture (widext.h): four planes of w x h metatile ids drawn with this scene's palette and the given chip sets
 // and metatile definitions (else this scene's) into rgb ((16 w) x (16 h) x 3) and cov (1 = drawn); 1 = done.
+// The widescreen's still backdrop (a mod): layers BL2 2 / BL3 4 mirrored past the 256 view at canvas column vx instead of
+// repeated (field.c fieldWideStill); 0 = the plain bake. 1 = changed (re-bake).
+int CtFieldSceneSetStill(void* h, int bits, int vx);
 int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
                         const uint16_t* metaIds, const uint8_t* metaCorners, uint8_t* rgb, uint8_t* cov);
 // The last bake's MAIN-screen coverage, one byte per pixel: the layer bit (L1 1, L2 2, L3 4) on top, 0 = backdrop.
@@ -45,6 +48,7 @@ typedef struct CtSceneLayers {
   int mainT, subT, blendEn, subOp, half;   // BL1 1 / BL2 2 / BL3 4 bits, as the bake uses them
   uint8_t backdrop[3];
   int beyond;                              // (host, the widescreen) the layers drawn past the room's edge: field.c fieldBeyondLayers
+  int still, viewX;                        // (host, the widescreen) the still backdrop's layers and the 256 view's picture column
 } CtSceneLayers;
 int CtFieldSceneLayers(void* h, CtSceneLayers* out);   // 1 = filled (built on demand, again after each bake)
 int CtFieldSceneLayerOffsetsBaked(void* h, int* o2x, int* o2y, int* o3x, int* o3y);   // the offsets the bake drew at   // per pixel the layer bit its picture comes from (motion.h); the coverage's size

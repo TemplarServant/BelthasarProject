@@ -180,7 +180,8 @@ extern "C" int CtOverlayFrame(void) {
                           "more picture at the sides; menus and boxes stay in the middle. Outside the original camera's\n"
                           "area the game runs nothing extra: an object seen only in the extra strip is animated in the\n"
                           "picture only. In a room wider than the screen the picture stops at the room's edges (no black\n"
-                          "strip) and the text box and the HUD stay in the middle.");
+                          "strip) and the text box and the HUD stay in the middle. A backdrop that never moves on the\n"
+                          "screen (the prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it.");
       bool rw = s->wideRoomWrap != 0;
       if (ImGui::Checkbox("Narrow rooms: continue the map at the sides", &rw)) s->wideRoomWrap = rw;
       if (ImGui::IsItemHovered())

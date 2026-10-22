@@ -4714,6 +4714,26 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* 
   if (!p->cov[q]) return 0;
   memcpy(out, p->rgb + q * 3, 3); return 1;
 }
+// THE WIDESCREEN'S STILL BACKDROP (a mod): a layer the ROM detaches from the camera ($1D36 bit 1 BG2 / bit 2 BG3: the map
+// header's md[1] bits 4/5, C0/A3A9-A3BF) and moves neither at a speed of its own ($1D37/$1D38, $1D39/$1D3A: md[2]/md[3])
+// nor by op E6's drift ($1D26-$1D29) never moves on the screen: the 256 columns the screen shows are all of it there is to
+// see, painted for them -- the Skywalk's sky (01C, 05A, 15B: a 256-px BG2, its cloud band cut off at both ends). Past them
+// the PPU would repeat its period, a seam at each edge of the view, so the widescreen's sides mirror it there instead:
+// the bake (scene.c CtFieldSceneSetStill), the layers drawn past the room's edge (fieldStillCol), the frames between
+// (fieldnative.c). A layer that moves shows all of its period in time, painted to repeat: it repeats.
+static int g_wideStill, g_wideStillVx;           // this frame's still layers (BL2 2, BL3 4) and its 256 view's map column
+static int fieldWideStillBits(const uint8_t* pg) {
+  int det = pg[0x1D36], bits = 0;
+  if ((det & 0x02) && !pg[0x1D37] && !pg[0x1D38] && !pg[0x1D26] && !pg[0x1D27]) bits |= 2;
+  if ((det & 0x04) && !pg[0x1D39] && !pg[0x1D3A] && !pg[0x1D28] && !pg[0x1D29]) bits |= 4;
+  return bits;
+}
+// The map column layer `bit` is sampled at for map column mx: a still backdrop's, mirrored at the view's edges.
+static int fieldStillCol(int bit, int mx) {
+  if (!(g_wideStill & bit)) return mx;
+  int s = ((mx - g_wideStillVx) % 512 + 512) % 512;
+  return g_wideStillVx + (s < 256 ? s : 511 - s);
+}
 // ...and over them the room's BG3 (the fog, the snow, a light), as the bake composes it (fieldnative.c, the same rules): the
 // margins stand for BG1/BG2 on both screens; each screen takes its top layer -- BG3 priority 1, then BG1/BG2, then BG3
 // priority 0 -- and where the main one is in the colour math (CGADSUB) the sub one is added or subtracted, halved or not
@@ -4724,7 +4744,7 @@ static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int
   for (int k = 0; k < 2; k++) {
     int i = k ? 5 : 0;
     if (!L->rgb[i] || L->w[i] <= 0 || L->h[i] <= 0) continue;
-    int lx = ((mx + o3x) % L->w[i] + L->w[i]) % L->w[i], ly = ((my + o3y) % L->h[i] + L->h[i]) % L->h[i];
+    int lx = ((fieldStillCol(4, mx) + o3x) % L->w[i] + L->w[i]) % L->w[i], ly = ((my + o3y) % L->h[i] + L->h[i]) % L->h[i];
     size_t q = (size_t)ly * L->w[i] + lx;
     if (L->cov[i][q]) b[k] = L->rgb[i] + q * 3;
   }
@@ -4757,7 +4777,7 @@ static int fieldBeyondPixel(const CtSceneLayers* L, int det, int mx, int my, int
   for (int i = 5; i >= 0; i--) {
     if (!(det & bitOf[i]) || !(L->mainT & bitOf[i]) || !L->rgb[i] || L->w[i] <= 0 || L->h[i] <= 0) continue;
     int ox = bitOf[i] == 2 ? o2x : o3x, oy = bitOf[i] == 2 ? o2y : o3y;
-    int lx = ((mx + ox) % L->w[i] + L->w[i]) % L->w[i], ly = ((my + oy) % L->h[i] + L->h[i]) % L->h[i];
+    int lx = ((fieldStillCol(bitOf[i], mx) + ox) % L->w[i] + L->w[i]) % L->w[i], ly = ((my + oy) % L->h[i] + L->h[i]) % L->h[i];
     size_t q = (size_t)ly * L->w[i] + lx;
     if (!L->cov[i][q]) continue;
     memcpy(out, L->rgb[i] + q * 3, 3); return bitOf[i];
@@ -19391,12 +19411,6 @@ int main(int argc, char** argv) {
     // (C0/EB2F `CMP #04` -> C0/7F62), so BG3's tilemap is the map's again; while the plane holds, the bake leaves BG3 out.
     if (fieldNmi && f.vm && CtSceneMem7E(f.vm)[0x0146] == 4) g_bg3Plane = 0;
     if (f.sd) bgDirty |= CtFieldSceneSetVramLayers(f.sd, (g_bg3Plane && !battlePhase) ? 0x04 : 0);
-    if (f.sd && bgDirty) {
-      int nw = 0, nh = 0; uint8_t* nprio = NULL;
-      uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);
-      if (nb) { free(f.base); free(f.prio); f.base = nb; f.prio = nprio; f.W = nw; f.H = nh; }
-      else free(nprio);
-    }
 
     // ---- compose: camera crop + Y-sorted live NPCs (animated) + the player ----
     // field_camera_unification.md PART G.2: the render camera is a READ of the ONE VM camera, EVERY frame,
@@ -19453,6 +19467,20 @@ int main(int argc, char** argv) {
                       cs[0x1D87] | (cs[0x1D88] << 8), cs[0x1D89] | (cs[0x1D8A] << 8), cs[0x1D8B] | (cs[0x1D8C] << 8),
                       cs[0x1D8D] | (cs[0x1D8E] << 8), cs[0x1D8F] | (cs[0x1D90] << 8), cs[0x1D91] | (cs[0x1D92] << 8),
                       cs[0x1D35], cs[0x1D36]);
+    }
+    // (the bake waits for the camera: the widescreen's still backdrop is mirrored about this frame's view, fieldWideStill)
+    g_wideStill = 0;
+    if (f.sd && f.vm && hostWideW() > CAMW) {
+      const uint8_t* pg = CtSceneMem7E(f.vm);
+      if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
+      g_wideStill = fieldWideStillBits(pg); g_wideStillVx = camx;
+    }
+    if (f.sd) bgDirty |= CtFieldSceneSetStill(f.sd, g_wideStill, g_wideStillVx);
+    if (f.sd && bgDirty) {
+      int nw = 0, nh = 0; uint8_t* nprio = NULL;
+      uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);
+      if (nb) { free(f.base); free(f.prio); f.base = nb; f.prio = nprio; f.W = nw; f.H = nh; }
+      else free(nprio);
     }
     // THE WIDESCREEN FIELD (settings.h widescreen; g_fw): the same passes draw a wider picture with the camera wideX
     // pixels further left, so the 256 columns in its middle are the view as always; the view goes back to `fb` for the
@@ -20213,6 +20241,7 @@ int main(int argc, char** argv) {
       if (mot->valid && (hostInterp(pr) || getenv("CT_NATIVECHECK")) && CtFieldSceneLayers(f.sd, &motLayers[g_motIdx])) {
         mot->native = &motLayers[g_motIdx];
         motLayers[g_motIdx].beyond = wideW > CAMW ? g_wideBeyond : 0;
+        motLayers[g_motIdx].still = wideW > CAMW ? g_wideStill : 0; motLayers[g_motIdx].viewX = wideX;
         if (bg3Plane || g_bgWinOn || g_colWinOn) {     // ...and what is composed over them: the iris, the colour window, the captions
           CtFieldNativeFx* fx = &motFx[g_motIdx];
           fx->viewX = wideX; fx->irisOn = g_bgWinOn; fx->colOn = g_colWinOn; fx->capOn = bg3Plane;
