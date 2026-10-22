@@ -835,24 +835,44 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
   return sd->bakeSub;
 }
 // The main-screen coverage of the last bake (see SceneData.bakeCov); NULL before the first.
-// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in four planes drawn with this scene's own
-// BG1/BG2 tiles and palette, plane 3 first up to plane 0, each plane's priority-0 corners before its priority-1 ones. Ids
-// 0 (none) and 512 and up (tiles this scene does not have) draw nothing. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel
-// (BL1 where drawn); both are cleared first.
-int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, uint8_t* rgb, uint8_t* cov) {
+// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in four planes drawn with this scene's
+// palette and the Steam release's tiles -- its chip sets where slotChips names one (else this scene's), its definitions of
+// the metatiles in metaIds (4 corners of u16 chip, u8 palette row, u8 flags H 1 / V 2 / priority 4 at metaCorners + 16 i)
+// over this scene's -- plane 3 first up to plane 0, each whole. Ids 0 (none) and 512 and up (tiles the Steam release
+// added) draw nothing. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel (BL1 where drawn); both are cleared first.
+// (Study knobs: CT_WIDE_EXT_ORDER = the planes, first drawn first; CT_WIDE_EXT_PRIOSPLIT=1 = every plane's priority-0
+// corners before any priority-1 one.)
+int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
+                        const uint16_t* metaIds, const uint8_t* metaCorners, uint8_t* rgb, uint8_t* cov) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->meta12 || !sd->chips12 || !planes || w <= 0 || hgt <= 0) return 0;
   int W = w * 16, H = hgt * 16, n = w * hgt;
   memset(rgb, 0, (size_t)W * H * 3); memset(cov, 0, (size_t)W * H);
   uint16_t* t = (uint16_t*)malloc(sizeof(uint16_t) * (size_t)n);
-  if (!t) return 0;
-  for (int prio = 0; prio < 2; prio++)
-    for (int k = 3; k >= 0; k--) {
-      for (int i = 0; i < n; i++) { uint16_t v = planes[(size_t)k * n + i]; t[i] = (v == 0 || v >= 512) ? 0xFFFF : v; }
-      draw_layer(rgb, cov, W, H, t, w, hgt, sd->meta12, 512, sd->chips12, sd->pres12, 768, sd->pal, prio, BL1, NULL,
-                 NULL, 0, 0, 0, 0, 0, NULL);
+  uint8_t* chips = (uint8_t*)malloc(768 * 64); uint8_t* pres = (uint8_t*)malloc(768); Meta* metas = (Meta*)malloc(512 * sizeof(Meta));
+  if (!t || !chips || !pres || !metas) { free(t); free(chips); free(pres); free(metas); return 0; }
+  memcpy(chips, sd->chips12, 768 * 64); memcpy(pres, sd->pres12, 768); memcpy(metas, sd->meta12, 512 * sizeof(Meta));
+  for (int sl = 0; sl < 6; sl++)
+    if (slotChips && slotChips[sl]) { memcpy(chips + (size_t)sl * 128 * 64, slotChips[sl], 128 * 64); memset(pres + sl * 128, 1, 128); }
+  for (int m = 0; m < nMeta; m++) {
+    if (metaIds[m] >= 512) continue;
+    for (int k = 0; k < 4; k++) {
+      const uint8_t* e = metaCorners + (size_t)m * 16 + k * 4;
+      Corner* c = &metas[metaIds[m]].c[k];
+      c->chip = (uint16_t)(e[0] | e[1] << 8); c->base = (uint8_t)(e[2] * 16);
+      c->fx = e[3] & 1; c->fy = (e[3] >> 1) & 1; c->prio = (e[3] >> 2) & 1;
     }
-  free(t);
+  }
+  const char* ord = getenv("CT_WIDE_EXT_ORDER"); if (!ord || !*ord) ord = "3210";
+  int split = getenv("CT_WIDE_EXT_PRIOSPLIT") && atoi(getenv("CT_WIDE_EXT_PRIOSPLIT"));
+  for (int pass = 0; pass < (split ? 2 : 1); pass++)
+    for (const char* c = ord; *c >= '0' && *c <= '3'; c++) {
+      int k = *c - '0';
+      for (int i = 0; i < n; i++) { uint16_t v = planes[(size_t)k * n + i]; t[i] = (v == 0 || v >= 512) ? 0xFFFF : v; }
+      for (int prio = split ? pass : 0; prio < (split ? pass + 1 : 2); prio++)
+        draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, sd->pal, prio, BL1, NULL, NULL, 0, 0, 0, 0, 0, NULL);
+    }
+  free(t); free(chips); free(pres); free(metas);
   return 1;
 }
 

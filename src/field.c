@@ -4682,8 +4682,8 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
   else { *x0 = f->mx0; *x1 = f->mx1; }
 }
 // THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
-// release draws there, from the player's own ct_wide.dat, baked once per location with the room's own BG1/BG2 tiles
-// (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
+// release draws there, from the player's own ct_wide.dat, baked once per location with the Steam release's tiles and the
+// room's palette (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
 typedef struct { void* sd; int loc, w, h, xo; uint8_t* rgb; uint8_t* cov; } FieldWideExtPic;
 static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   static FieldWideExtPic p;
@@ -4695,13 +4695,19 @@ static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   if (!CtWideExtGet(f->loc, &e)) return NULL;
   p.w = e.w; p.h = e.h; p.xo = (e.w - f->mx1 / 16) / 2;
   p.rgb = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16 * 3); p.cov = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16);
-  if (!p.rgb || !p.cov || !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, p.rgb, p.cov)) {
+  if (!p.rgb || !p.cov || !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, p.rgb, p.cov)) {
     free(p.rgb); free(p.cov); p.rgb = p.cov = NULL; return NULL;
   }
   return &p;
 }
 // The margins' pixel at map pixel (mx, my); 0 = nothing drawn there.
 static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* out) {
+  static int dx = -99999, dy, dxl, dxr;            // CT_WIDE_EXT_DX / _DY (+ _DXL / _DXR per side): pixels added to the
+  if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;    //   margins' place (study knobs)
+                      dy = getenv("CT_WIDE_EXT_DY") ? atoi(getenv("CT_WIDE_EXT_DY")) : 0;
+                      dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
+                      dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
+  mx -= dx + (mx < 0 ? dxl : dxr); my -= dy;
   int ex = mx + p->xo * 16, W = p->w * 16;
   if (ex < 0 || ex >= W || my < 0 || my >= p->h * 16) return 0;
   size_t q = (size_t)my * W + ex;
