@@ -356,6 +356,14 @@
       "scene": 122,
       "frames": 1,
       "doc": "the port's own snapshot (F5) in loc 07A, the Queen's chamber: obj 24's scene (Marle comes back), between its first two boxes"
+    },
+    {
+      "path": "saves/field_re/gate_return_600ad_to_008.state",
+      "recipe": "fxr_gate_return",
+      "kind": "ctfs",
+      "scene": 113,
+      "frames": 1,
+      "doc": "the port's own snapshot (F5) in loc 071 beside the 600 A.D. gate, the clearing's scene over"
     }
   ]
 }

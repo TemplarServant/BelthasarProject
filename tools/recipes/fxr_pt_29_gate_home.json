@@ -1,0 +1,17 @@
+{
+  "name": "fxr_pt_29_gate_home",
+  "from": "fxr_pt_28_castle_out",
+  "doc": "The playthrough's leg 29_gate_home (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Truce Canyon (070): up and east along the canyon (the imps on the way: a fight, played by the pilot; Crono, at 1 HP since Yakra, falls and gets up with 1), the exit (31,11) into the gate's clearing (071): the scene (\"How do we get home?\", Lucca's Gate Key) -- A through it; the gate to 1000 A.D., the Telepod (008): Lucca stays (storyline 27, party 00 01 81) the canyon by `route 29_gate_home \"0:2\" 31 11 --exit`, the last steps Down + Right into the box",
+  "steps": [
+    [
+      "pad",
+      "0:2,40:16,10:16,40:16,10:16,40:16,10:32,40:144,10:128,80:16,10:16,80:16,10:64,80:64,10:64,0:80,100:2,0:118,100:2,0:90,100:2,0:16,100:2,0:730,20:2,0:10,20:2,0:10,100:2,0:16,100:2,0:16,20:2,0:10,100:2,0:834,100:2,0:16,100:2,0:810,100:2,0:16,100:2,0:702,100:2,0:16,100:2,0:502,100:2,0:16,100:2,0:734,100:2,0:16,100:2,0:1338,80:16,10:32,80:16,10:16,80:32,10:16,80:16,10:16,80:160,20:128,80:80,20:16,80:64,0:100,(100:2,0:38)*115,0:100"
+    ]
+  ],
+  "expect": {
+    "loc": "0x008",
+    "wram": {
+      "0x10000": "0x27"
+    }
+  }
+}
