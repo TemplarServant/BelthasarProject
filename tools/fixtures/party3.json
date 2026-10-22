@@ -40,6 +40,14 @@
       "pad": "0:0",
       "kind": "lakewram",
       "doc": "party3_field with Lucca's and Frog's sheet bytes +0x41..+0x4E set to FF (the capture differs from party3_field.lakewram by exactly those 28 bytes): a fresh sheet whose battle block the fight must build itself."
+    },
+    {
+      "path": "saves/field_re/catedral_party3.lakewram",
+      "recipe": "cathedral_entry",
+      "env": {"PEEK_POKE": "2982=01"},
+      "pad": "0:0",
+      "kind": "lakewram",
+      "doc": "catedral_user.lakewram (tools/fixtures/rest.json: cathedral_entry, Crono and Lucca at the 600 A.D. Cathedral's south door) with Marle in party slot 2 ($2982 = 01) -- the capture's own provenance, and the byte tools/ow_follower_cmp.py party3 pokes on the cartridge's side (PEEK_POKE on catedral_user.state)."
     }
   ]
 }
