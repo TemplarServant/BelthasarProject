@@ -1,0 +1,18 @@
+{
+  "doc": "The attract demo under the rule, for the checks that read the owner's real-time captures until 2026-10-22 (docs/ROADMAP.md 1.1). Each is the power-on cartridge under the rule (CT_ORACLE_LOGICAL), the history the port's --scene 433 vehicle plays since 404971a (its frame f = the power-on's f + 91, a picture P = --peek boot P + 92). Frames below are counted from power-on: fxa_attract_cena_inicial is power-on + 2159, so a pad 0:N from it stands at power-on + 2159 + N.",
+  "fixtures": [
+    {
+      "path": "saves/attract_cena_inicial_rule.state",
+      "recipe": "fxa_attract_cena_inicial",
+      "kind": "state",
+      "doc": "stands in for saves/attract_cena_inicial.state (the owner's real-time snes9x capture): loc 1B1 fading in at power-on + 2159 under the rule. A --peek of q frames from here is --peek boot of 2159 + q, so the vehicle's port frame p is this state's frame p - 2067."
+    },
+    {
+      "path": "saves/attract_race_handoff_rule_f8164.state",
+      "recipe": "fxa_attract_cena_inicial",
+      "pad": "0:6005",
+      "kind": "state",
+      "doc": "stands in for saves/attract_race_handoff_rule_f8247.state (saved under an earlier rule): loc 1B1 at power-on + 8164, the state from which the field hands the motorcycle race ($0384 = 60) to C3:0000 at its f19 (ct.exe --xlatentries), the hand-off --racepiccmp's argument 19 names. (The entry-3 twin of saves/attract_entry3_handoff_rule_f8859.state is attract.json's saves/attract_entry3_handoff_f6750.state: power-on + 8776, C3:0000 at its f18.)"
+    }
+  ]
+}
