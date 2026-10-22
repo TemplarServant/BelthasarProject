@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 CT = os.path.abspath('build/ct.exe')
 STATE = 'saves/attract_cena_inicial.state'
-OFFSET = 2103 + 61   # +61: --boot from the power-on (boot_loader.md sec. 10; its 0E6 visit 61 frames later)
+OFFSET = 2103 + 53   # +53: --boot from the power-on (boot_loader.md sec. 10: +61 at 1F5) less the 8 frames the loads took out before 0E6
 ROBOTS = list(range(5577, 5582))
 FADE = list(range(5674, 5680))
 TMP = os.path.abspath('build/_0e6_exit')

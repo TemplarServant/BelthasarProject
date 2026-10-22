@@ -10,8 +10,8 @@ what the driver already holds (power-on 35 + 6 frames, after the demo 15 + 6). T
 count) and the second title's tick came ~20 frames before its pendulum; it now holds the loader clock's price of the
 post plus the spin (src/field.c, the title's opening).
 
-Port: the interactive attract (--scene 433, CT_AUDIO_LOCKSTEP=1): CT_DSP_KONTRACE's key-ons stamped with the output
-frame (CT_AUDIO_FIFOTRACE=1; the output frame is the presented frame) and CT_SHOTS_LUMA's picture: for each title, the
+Port: the interactive attract (--scene 433, CT_AUDIO_LOCKSTEP=1): CT_DSP_KONTRACE's key-ons at their own sample frame
+(from the first presented frame) and CT_SHOTS_LUMA's picture: for each title, the
 frame of the first tick (`02 v1:srcn=25`) less the first lit frame (mean > 3). Cartridge: the attract state's second
 title (the demo's end; the state begins after the power-on one): a state 8950 frames in (PEEK_SAVE), then its key-ons
 (CT_DSP_KONTRACE, 534 samples a frame) and thumbnails (PEEK_THUMBS) over 400 frames.
@@ -38,20 +38,24 @@ def main():
                CT_SHOTS_AT='11200', CT_SHOTS_EXIT='1')
     pr = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', '433'], env=env, capture_output=True, text=True,
                         errors='replace')
-    out, ticks, lum, titles = 0, [], {}, []
+    # The tick: the key-on's own sample frame (`dspkon s=.. f=..`, as on the cartridge's side), counted from the first
+    # presented frame. Since 404971a the title's opening runs its SPC time as one priced stretch -- a single slice queues
+    # the whole upload's output, played over the muted frames after it -- so the output index a key-on is generated in
+    # is not the frame it is heard on. The power-on run's frames start below 0 (f-91): the patterns take a sign.
+    ticks, lum, titles = [], {}, []
     for l in pr.stderr.splitlines():
-        m = re.match(r'audiofifo out(\d+)', l)
-        if m:
-            out = int(m.group(1)); continue
-        if 'dspkon' in l and TICK in l:
-            ticks.append(out)
+        m = re.search(r'dspkon s=\d+ f=(\d+) ', l)
+        if m and TICK in l:
+            ticks.append(int(m.group(1)))
     for l in pr.stdout.splitlines():
-        m = re.match(r'shotluma: f(\d+) loc=\S+ \S+ mean=(\d+)', l)
+        m = re.match(r'shotluma: f(-?\d+) loc=\S+ \S+ mean=(\d+)', l)
         if m:
             lum[int(m.group(1))] = int(m.group(2))
-        m = re.search(r'op-0xFF 02 -> JML \$C3:0000 .* \(at f(\d+)\)', l)
+        m = re.search(r'op-0xFF 02 -> JML \$C3:0000 .* \(at f(-?\d+)\)', l)
         if m:
             titles.append(int(m.group(1)))
+    f0 = min(lum) if lum else 0
+    ticks = [t + f0 for t in ticks]
     res = []
     for t0 in titles:
         lit = next((f for f in range(t0, t0 + 200) if lum.get(f, 0) > LIT), None)

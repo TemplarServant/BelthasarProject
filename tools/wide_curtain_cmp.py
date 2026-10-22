@@ -22,10 +22,10 @@ import subprocess
 import sys
 
 FIELD = os.path.abspath('build/Belthasar.exe')
-# (f8170 is the opening's last frame before its edge comes within 16 columns of the screen's -- from there both window
+# (f8167 is the opening's last frame before its edge comes within 16 columns of the screen's -- from there both window
 #  rules, snes/ppu.c's and seq_pic.c's, read the band left as the road's hidden column and light the side: the mod's known
 #  limit; the curtain is the native stage's since 2026-10-18, on the cartridge's frames)
-FRAMES = (8151, 8155, 8159, 8163, 8167, 8170, 8487, 8491, 8495, 8499, 8503, 8507)
+FRAMES = (8148, 8152, 8156, 8160, 8164, 8167, 8484, 8488, 8492, 8496, 8500, 8504)
 
 
 def run(ini, out):

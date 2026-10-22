@@ -232,6 +232,7 @@ void CtSceneSetSoundSink(const CtSoundSink* sink);   // NULL detaches
 // A location load's last JSLs (its init runner and obj0's slot 1), queued while the mode is on and posted by the flush in
 // the load's last frame (ct_vm.c gLoadPost).
 void CtSceneLoadPostsMode(int on);
+void CtSceneLoadOpsPriced(int on);                   // a host that prices its loads: the init pass's ops are CPU time
 int  CtSceneLoadPostsPending(void);
 long CtSceneLoadPostCycles(int k);                   // the k-th pending one's object-pass cycles (g_ctLzSpriteCycles) when it ran
 long CtSceneLoadOpCycles(int* n);                   // ...the ops' share of it (and how many)

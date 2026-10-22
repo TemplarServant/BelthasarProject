@@ -1426,7 +1426,10 @@ static int g_initLastOp = -1;   // C0/5906 TXY: the offset of the last op the in
 // they dispatch is priced as the ROM runs it -- the runner's dispatch (CT_VM_DISPATCH) and the handler's arm on the WRAM
 // it is about to read (field_cost.c ct_vm_op_cycles) -- into g_ctLzSpriteCycles, the load's object-pass clock, next to
 // the sprite sheets the loaders decompress. gOpCostWhy names the first op priced on a path the walk does not decide.
-static int gOpCostOn = 0;
+// The pricing is the host's choice (CtSceneLoadOpsPriced), not the sound sink's: the ops are CPU work whether or not an SPC
+// listens -- tied to the sink, a --loadwram run without the state's SPC priced none and loc 120's load came a frame short.
+static int gOpCostOn = 0, gOpCostMode = 0;
+void CtSceneLoadOpsPriced(int on) { gOpCostMode = on ? 1 : 0; }
 static const char* gOpCostWhy = NULL;
 static long gOpCostSum = 0; static int gOpCostN = 0;   // (the ops' share and count, for CT_LOADCOST)
 static void vmOpCost(Mem* m, const uint8_t* B, int blen, int addr, int obj) {
@@ -4779,7 +4782,7 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
   }
   gLoadPostOn = gLoadPostMode;                       // C0/5709 and C0/56C8 run at the load's end (gLoadPost, above)
   w8(sc->mem, 0x7E0173, 0);                          // C0/58DC STZ $73: op 0x82's party-slot counter (C0/4665 / 46D9)
-  gOpCostOn = gLoadPostMode; gOpCostWhy = NULL;      // a load the host prices: its ops are priced as they run
+  gOpCostOn = gOpCostMode; gOpCostWhy = NULL;       // a load the host prices: its ops are priced as they run
   gOpCostSum = 0; gOpCostN = 0;
   for (int n = 0; n < count; n++) {
     // C0/58ED / 58F0, the init runner's head for EVERY object of the scene ($BD = the object count * 2, inactive ones

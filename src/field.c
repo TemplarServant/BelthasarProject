@@ -11624,6 +11624,7 @@ int main(int argc, char** argv) {
   int powerOn = bootNatural && !wramSeeded && ruleSpc;
   g_ruleAudio = CtAudioRuleOn() && (!wramSeeded || seedSpc);    // ...and a WRAM run with a device keeps the old clock
   CtSceneSetRuleIfast(g_ruleAudio);                             //   (the VM's tail rule with it)
+  if (f.vm) CtSceneLoadOpsPriced(1);   // the loads are walked (ct_field_load_cycles): their ops are CPU time, SPC or not
   if ((audioOn && (!selftest || getenv("CT_AUDIO_FORCE")) && !getenv("CT_NOAUDIO")) || ruleSpc) {
     SDL_AudioSpec want, have;
     memset(&want, 0, sizeof want);
@@ -12895,10 +12896,14 @@ int main(int argc, char** argv) {
     // the cartridge's CPU reaches them: as many frames before the load's last one (the one C0/2848 begins in) as the object
     // pass's work after each takes -- the later objects' sprite loads, CT_LOAD_FRAME_CYCLES a frame. (The port ran the load in
     // its first frame and holds the black after.)
+    // A WALKED load's hold runs on through C0/2848's pass to C0/0B38 (loadWalk.pass), and the JSLs come before it: the Lavos
+    // chain's 1D3 posts slot 1's `18 FF` at C0/56C8 on f2249, then the pass runs 7 frames with the NMI still off (to the
+    // NMI on at f2256) -- so the pass is part of every queued post's lead.
     if (f.vm && CtSceneLoadPostsPending()) {
       int np = CtSceneLoadPostsPending(), due = 0;
+      long passAfter = loadWalkCyc >= 0 ? loadWalk.pass : 0;
       if (fade != 3) due = np;
-      else while (due < np && (loadPostTotal - CtSceneLoadPostCycles(due)) / CT_LOAD_FRAME_CYCLES >= loadHold) due++;
+      else while (due < np && (loadPostTotal - CtSceneLoadPostCycles(due) + passAfter) / CT_LOAD_FRAME_CYCLES >= loadHold) due++;
       if (due) {
         int sp = CtSceneLoadPostsFlush(f.vm, due);
         // The frames those JSLs crossed are the load's too (an init script's song upload): the black holds for them, as
@@ -17416,17 +17421,8 @@ int main(int argc, char** argv) {
           }
           if (!gwN && gw) memcpy(gw + 0x10000 + 0x74B3, gw + 0x10000, 0x200);   // FD/EAA6, inside DB97's setup
         }
-      } else if (gwPhase == 3) {                  // the native warp: its exit is its `JML $C0:0000`
-        fadeBri = 0;
-        if (gwNState != 0) {
-          if (gw) {
-            memcpy(gw, g_gwWram, 0x20000);        // the program's WRAM: the flags FD/EAB7 restored, $0100 staged
-            memcpy(g_fieldVram, g_stagePic.p.vram, sizeof g_fieldVram);
-            printf("gatewarp: op-0xFF %02X ran %d frames -> JML C0:0000\n", gwOp, gwN->frames);
-          }
-          gwN = NULL; gwNState = 0;
-          CtSceneGateWarpDone(f.vm); gwPhase = 0; rebootReq = 1; stageExit = 1;
-        }
+      } else if (gwPhase == 3) {                  // the native warp: its exit (`JML $C0:0000`) is taken in its own frame,
+        fadeBri = 0;                              //   after the picture (below, with the native stages' END)
       } else {                                    // the setup, then the effect's own NMI loop
         fadeBri = 0;
         gwCtr++;
@@ -20849,6 +20845,20 @@ int main(int argc, char** argv) {
              : endOn == 5 ? "Epoch's dive" : "ending", st == 2 ? "soft reset" : "$7E:0000=1", w[0x0100] | (w[0x0101] << 8));
       seqOpen = 0; raceOn = 0; raceEnded = 0; endOn = 0; endEnded = 0;
       FIELD_REBOOT_PEND(w);                                          // 7E:303F JML $C0:0000
+    }
+    // THE GATE WARP'S EXIT, IN ITS OWN FRAME too: FD's tail (FD/EAB7's restore, FD/EAC8's blank) ends in `JML $C0:0000`
+    // inside the frame its program reached it (CtGwarpFrame above), and C0/0066 reads $0100 straight after -- the rule's
+    // cartridge from scene8_gate_cutscene: FD/EABD's tail on f996, C0/0066 on f997 line 6 (--hookpc 0066). Taken at the
+    // next frame's head, the reboot's load ran a frame late; the load's price (10,961,781 against the cartridge's
+    // 10,961,814 cycles) had hidden it while it was a frame short.
+    if (gwN && gwNState != 0) {
+      uint8_t* w = CtWramSys(fieldWram());
+      memcpy(w, g_gwWram, 0x20000);                                  // the program's WRAM: the flags FD/EAB7 restored, $0100 staged
+      memcpy(g_fieldVram, g_stagePic.p.vram, sizeof g_fieldVram);
+      printf("gatewarp: op-0xFF %02X ran %d frames -> JML C0:0000\n", gwOp, gwN->frames);
+      gwN = NULL; gwNState = 0;
+      CtSceneGateWarpDone(f.vm); gwPhase = 0;
+      FIELD_REBOOT_PEND(w);
     }
     if (!selftest && !g_noPace) hostPace();         // the engine logic (VM delays, anim ticks, the validated px/frame
                                                     //   velocities) is all 60 Hz-based; the SPC is run by the same frames

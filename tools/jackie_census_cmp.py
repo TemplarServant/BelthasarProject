@@ -73,7 +73,7 @@ def main():
 
     # the lead after the Ocean Palace
     out = port('23', LOAD + ',n:300,d:40,n:30,d:200', None,
-               ('--selftest', os.path.join(OUT, 's23_%d.raw' % os.getpid()), '--frames', '900'))
+               ('--selftest', os.path.join(OUT, 's23_%d.raw' % os.getpid()), '--frames', '965'))   # (900 + 65: the power-on boot, 404971a)
     line = [l for l in out.splitlines() if l.startswith('selftest: scene 371')]
     print('lead ch23 %s' % (line[0].split('player')[1].strip() if line else 'none'))
     try:
