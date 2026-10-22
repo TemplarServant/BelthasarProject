@@ -4714,10 +4714,12 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* 
   if (!p->cov[q]) return 0;
   memcpy(out, p->rgb + q * 3, 3); return 1;
 }
-// ...and over them the room's BG3 (the fog, a light), as the bake composes it (fieldnative.c, the same rules): the margins
-// are BG1/BG2; BG3 priority 1 on the main screen covers them; BG3 on the sub screen goes into the colour math where the
-// main layer is in it (CGADSUB: add or subtract, halved or not). BG3 is sampled at its own offset, past the edge as in it.
-static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int o3y, uint8_t* d) {   // (layer bits: BG1 1, BG2 2, BG3 4)
+// ...and over them the room's BG3 (the fog, the snow, a light), as the bake composes it (fieldnative.c, the same rules): the
+// margins stand for BG1/BG2 on both screens; each screen takes its top layer -- BG3 priority 1, then BG1/BG2, then BG3
+// priority 0 -- and where the main one is in the colour math (CGADSUB) the sub one is added or subtracted, halved or not
+// (Death Peak's snow, Denadoro's mist: BG3 priority 1 over a sub screen of BG1/BG2, averaged). BG3 is sampled at its own
+// offset, past the edge as in it. (Layer bits: BG1 1, BG2 2, BG3 4.)
+static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int o3y, uint8_t* d) {
   const uint8_t* b[2] = { NULL, NULL };            // [0] BG3 priority 0, [1] priority 1 (CtSceneLayers 0 and 5)
   for (int k = 0; k < 2; k++) {
     int i = k ? 5 : 0;
@@ -4726,13 +4728,20 @@ static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int
     size_t q = (size_t)ly * L->w[i] + lx;
     if (L->cov[i][q]) b[k] = L->rgb[i] + q * 3;
   }
-  int mainBit = L->mainT & (1 | 2);
-  if ((L->mainT & 4) && b[1]) { memcpy(d, b[1], 3); mainBit = 4; }
-  if (!(L->subT & 4)) return;
-  const uint8_t* s = b[1] ? b[1] : b[0];
-  if (!s || !(mainBit & L->blendEn)) return;
+  uint8_t ext[3]; memcpy(ext, d, 3);
+  const uint8_t* m = NULL; int mb = 0;
+  if ((L->mainT & 4) && b[1]) { m = b[1]; mb = 4; }
+  else if (L->mainT & 3) { m = ext; mb = L->mainT & 3; }
+  else if ((L->mainT & 4) && b[0]) { m = b[0]; mb = 4; }
+  const uint8_t* sb = NULL;
+  if ((L->subT & 4) && b[1]) sb = b[1];
+  else if (L->subT & 3) sb = ext;
+  else if ((L->subT & 4) && b[0]) sb = b[0];
+  if (!m) { if (sb) memcpy(d, sb, 3); return; }
+  memcpy(d, m, 3);
+  if (!sb || !(mb & L->blendEn)) return;
   for (int ch = 0; ch < 3; ch++) {
-    int c = d[ch] >> 3, v = s[ch] >> 3, r = L->subOp ? c - v : c + v;
+    int c = d[ch] >> 3, v = sb[ch] >> 3, r = L->subOp ? c - v : c + v;
     if (L->half) r >>= 1;
     if (r < 0) r = 0; if (r > 31) r = 31;
     d[ch] = (uint8_t)((r << 3) | (r >> 2));
