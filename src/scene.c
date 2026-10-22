@@ -835,15 +835,15 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
   return sd->bakeSub;
 }
 // The main-screen coverage of the last bake (see SceneData.bakeCov); NULL before the first.
-// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in four planes drawn with the Steam
-// release's palette (pal555: 128 BGR555 colours; NULL = this scene's) and tiles -- its chip sets where slotChips names one (else this scene's), its definitions of
+// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in four planes drawn with this scene's
+// palette and the Steam release's tiles -- its chip sets where slotChips names one (else this scene's), its definitions of
 // the metatiles in metaIds (4 corners of u16 chip, u8 palette row, u8 flags H 1 / V 2 / priority 4 at metaCorners + 16 i)
 // over this scene's -- plane 3 first up to plane 0, each whole. Ids 0 (none) and 512 and up (tiles the Steam release
 // added) draw nothing. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel (BL1 where drawn); both are cleared first.
 // (Study knobs: CT_WIDE_EXT_ORDER = the planes, first drawn first; CT_WIDE_EXT_PRIOSPLIT=1 = every plane's priority-0
 // corners before any priority-1 one.)
 int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
-                        const uint16_t* metaIds, const uint8_t* metaCorners, const uint8_t* pal555, uint8_t* rgb, uint8_t* cov) {
+                        const uint16_t* metaIds, const uint8_t* metaCorners, uint8_t* rgb, uint8_t* cov) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->meta12 || !sd->chips12 || !planes || w <= 0 || hgt <= 0) return 0;
   int W = w * 16, H = hgt * 16, n = w * hgt;
@@ -863,9 +863,6 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
       c->fx = e[3] & 1; c->fy = (e[3] >> 1) & 1; c->prio = (e[3] >> 2) & 1;
     }
   }
-  uint8_t pal[128][3];                             // the Steam release's colours, else this scene's (CT_WIDE_EXT_ROMPAL=1)
-  if (pal555 && !getenv("CT_WIDE_EXT_ROMPAL")) for (int i = 0; i < 128; i++) snes_rgb((uint16_t)(pal555[2 * i] | pal555[2 * i + 1] << 8), pal[i]);
-  else memcpy(pal, sd->pal, sizeof pal);
   const char* ord = getenv("CT_WIDE_EXT_ORDER"); if (!ord || !*ord) ord = "3210";
   int split = getenv("CT_WIDE_EXT_PRIOSPLIT") && atoi(getenv("CT_WIDE_EXT_PRIOSPLIT"));
   for (int pass = 0; pass < (split ? 2 : 1); pass++)
@@ -873,7 +870,7 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
       int k = *c - '0';
       for (int i = 0; i < n; i++) { uint16_t v = planes[(size_t)k * n + i]; t[i] = (v == 0 || v >= 512) ? 0xFFFF : v; }
       for (int prio = split ? pass : 0; prio < (split ? pass + 1 : 2); prio++)
-        draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, pal, prio, BL1, NULL, NULL, 0, 0, 0, 0, 0, NULL);
+        draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, sd->pal, prio, BL1, NULL, NULL, 0, 0, 0, 0, 0, NULL);
     }
   free(t); free(chips); free(pres); free(metas);
   return 1;

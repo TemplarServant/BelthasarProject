@@ -26,11 +26,7 @@ metatile its margins use (`ChipTable/ChipTable_<assembly>`, 3 bytes a corner: ch
 
 ct_wide.dat (all LE): b"CTWD", u32 version 2, u32 locations, u32 sets; per set: u8 set, 128 x 64 chip pixels (0..15);
 per location: u16 location, u8 w, u8 h, 4 * w * h u16, u8 slot set[6] (0xFF none), u16 metatiles, per metatile: u16 id,
-4 corners x (u16 chip, u8 palette, u8 flags: H 1, V 2, priority 4), u8 has palette, then 128 u16 colours (BGR555) when 1.
-
-The palette is the Steam release's for the location (`palette_bin/plt<palette>`, its first 128 colours): it recoloured
-rooms (0x014's rows 3-7 differ from the ROM's), and its margins are drawn for its colours -- ground they hide under its
-dark greens shows bright or teal under the ROM's. Only the margins take it; the room keeps the ROM's.
+4 corners x (u16 chip, u8 palette, u8 flags: H 1, V 2, priority 4).
 """
 import argparse
 import gzip
@@ -117,9 +113,7 @@ def margins(f, files):
                 v = asm[o] | asm[o + 1] << 8
                 corners.append((v & 0x3FF, (v >> 12) & 15, (1 if v & 0x400 else 0) | (2 if v & 0x800 else 0) | (4 if asm[o + 2] & 1 else 0)))
             metas.append((t, corners))
-        pe = files.get('Game/field/palette_bin/plt%d.bin' % hd[4])
-        pal = _block(f, *pe)[2:2 + 256] if pe else b''
-        out[loc] = (w, h, planes, slots, metas, pal if len(pal) == 256 else b'')
+        out[loc] = (w, h, planes, slots, metas)
     return out
 
 
@@ -134,25 +128,24 @@ def main():
         files = directory(f)
         m = margins(f, files)
         sets = {}
-        for loc, (_, _, _, slots, _, _) in m.items():
+        for loc, (_, _, _, slots, _) in m.items():
             for s in slots:
                 if s != 0xFF and s not in sets:
                     sets[s] = chip_set(f, files, s)
         sets = {s: px for s, px in sets.items() if px}
     if a.list:
-        for loc, (w, h, _, _, metas, _) in sorted(m.items()):
+        for loc, (w, h, _, _, metas) in sorted(m.items()):
             print('location %03X: %dx%d cells, %d metatiles' % (loc, w, h, len(metas)))
     with open(a.out, 'wb') as o:
-        o.write(b'CTWD' + struct.pack('<III', 3, len(m), len(sets)))
+        o.write(b'CTWD' + struct.pack('<III', 2, len(m), len(sets)))
         for s, px in sorted(sets.items()):
             o.write(struct.pack('<B', s) + px)
-        for loc, (w, h, planes, slots, metas, pal) in sorted(m.items()):
+        for loc, (w, h, planes, slots, metas) in sorted(m.items()):
             o.write(struct.pack('<HBB', loc, w, h) + planes)
             o.write(bytes(s if s in sets else 0xFF for s in slots))
             o.write(struct.pack('<H', len(metas)))
             for t, corners in metas:
                 o.write(struct.pack('<H', t) + b''.join(struct.pack('<HBB', c, p, fl) for c, p, fl in corners))
-            o.write(bytes([1]) + pal if pal else bytes([0]))
     print('steam-wide: %d locations with margins, %d chip sets -> %s' % (len(m), len(sets), a.out))
 
 
