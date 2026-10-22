@@ -303,11 +303,11 @@ typedef struct { const uint16_t* tiles; int lw, lh; const Meta* metas; int nmeta
                  const uint8_t* chips; const uint8_t* present; int nchips;
                  const uint8_t* tprio; int tpw, tph; int sox, soy; int mapRing; const uint16_t* held; } LInfo;
 
-// The canvas column a still backdrop's column c shows (CtFieldSceneSetStill): the 256 view [vx, vx + 256) is itself, a
-// column past either edge takes the view's column mirrored at that edge (period 512). The canvas is a ring of W columns:
-// a column is on the view's nearer side.
-static int stillCol(int c, int vx, int W) {
-  int s = ((c - vx) % W + W) % W;
+// The canvas column a still backdrop's column c shows (CtFieldSceneSetStill): the 256 columns from vw show the view's
+// [vx, vx + 256) -- the same columns when the view is in the picture's middle -- and a column past either edge the one
+// mirrored at that edge (period 512). The canvas is a ring of W columns: a column is on the nearer side.
+static int stillCol(int c, int vx, int vw, int W) {
+  int s = ((c - vw) % W + W) % W;
   if (s >= 256 + (W - 256) / 2) s -= W;
   s = (s % 512 + 512) % 512;
   if (s >= 256) s = 511 - s;
@@ -315,7 +315,7 @@ static int stillCol(int c, int vx, int W) {
 }
 
 static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint8_t pal[128][3],
-                      LInfo* l1, LInfo* l2, LInfo* l3, uint8_t* priomask, int still, int stillVx) {
+                      LInfo* l1, LInfo* l2, LInfo* l3, uint8_t* priomask, int still, int stillVx, int stillVw) {
   int order_bit[6] = { BL3, BL2, BL1, BL2, BL1, BL3 };
   int order_prio[6] = { 0, 0, 0, 1, 1, 1 };
   LInfo* order_l[6] = { l3, l2, l1, l2, l1, l3 };
@@ -334,7 +334,7 @@ static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint
                L->tprio, L->tpw, L->tph, L->sox, L->soy, L->mapRing, L->held);
     if (!tp) continue;
     for (int x = 0; x < W; x++) {
-      int sx = stillCol(x, stillVx, W);
+      int sx = stillCol(x, stillVx, stillVw, W);
       for (int y = 0; y < H; y++) {
         size_t s = (size_t)y * W + sx, d = (size_t)y * W + x;
         if (!tc[s]) continue;
@@ -369,7 +369,8 @@ typedef struct {
   int l2ox, l2oy, l3ox, l3oy;
   uint8_t mapBuilt;            // $1D35 & 6 as the field last passed it: bit1 BG2, bit2 BG3 built from the map (see draw_layer)
   uint8_t vramOff;             // CtFieldSceneSetVramLayers: layers whose VRAM tilemap is no longer the map's (BL3: the caption plane)
-  uint8_t stillBits; int stillVx; // CtFieldSceneSetStill (a mod, the widescreen): layers mirrored about the 256 view at column stillVx
+  uint8_t stillBits; int stillVx, stillVw;   // CtFieldSceneSetStill (a mod, the widescreen): the still backdrop's layers,
+                                             //   the view's canvas column and the one its middle 256 stand at
   int sm_l, sm_t, sm_r, sm_b, sm_full;
   // retained chip/palette animation source: lets the field re-apply the BG animation for
   // any frame (flags waving, water, fire) instead of freezing it at the load-time frame.
@@ -570,8 +571,8 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   // sprite. Measured: the oracle's live BG1 tilemap at loc $081 has 392 priority-bit entries, the
   // pews at metatiles (4..6, 18..19) carry them (tileset 11 metas 213/214/216/229/200/232), and the
   // oracle draws the nuns (obj10/obj11, $0C00 = $0C01 = 0x20 = OBJ prio 2) BEHIND those pews.
-  draw_pass(main_px, main_cov, W, H, main_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx);
-  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx);
+  draw_pass(main_px, main_cov, W, H, main_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
+  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
 
   // THE COLOUR MATH IS THE PPU'S, IN 5 BITS (snes/ppu.c ppu_handlePixel): add or subtract the sub-screen colour, halve,
   // THEN clamp to 0..31. The palette holds conv5 values, so >> 3 recovers each channel's 5 bits exactly. The 8-bit
@@ -1010,15 +1011,15 @@ int CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3y,
   return 1;
 }
 
-// THE WIDESCREEN'S STILL BACKDROP (a mod: field.c fieldWideStill): the layers (BL2 2 / BL3 4) the bake mirrors about the
-// 256 view at canvas column vx instead of repeating them past it; 0 = none, the bake as the PPU repeats a layer. Returns 1
-// when that changed (re-bake).
-int CtFieldSceneSetStill(void* h, int bits, int vx) {
+// THE WIDESCREEN'S STILL BACKDROP (a mod: field.c fieldWideStill): the layers (BL2 2 / BL3 4) the bake holds to the wide
+// picture -- the 256 view's columns (canvas column vx on) drawn from canvas column vw, the picture's middle -- and mirrors
+// past them instead of repeating; 0 = none, the bake as the PPU repeats a layer. Returns 1 when that changed (re-bake).
+int CtFieldSceneSetStill(void* h, int bits, int vx, int vw) {
   SceneData* sd = (SceneData*)h;
   if (!sd) return 0;
-  bits &= BL2 | BL3; if (!bits) vx = 0;
-  if (sd->stillBits == bits && sd->stillVx == vx) return 0;
-  sd->stillBits = (uint8_t)bits; sd->stillVx = vx;
+  bits &= BL2 | BL3; if (!bits) vx = vw = 0;
+  if (sd->stillBits == bits && sd->stillVx == vx && sd->stillVw == vw) return 0;
+  sd->stillBits = (uint8_t)bits; sd->stillVx = vx; sd->stillVw = vw;
   return 1;
 }
 

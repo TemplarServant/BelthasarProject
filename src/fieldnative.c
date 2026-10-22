@@ -100,11 +100,13 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   const int bright = cur->bright, wide = w > 256;
   int act[6];
   for (int i = 0; i < 6; i++) act[i] = ((mainT | subT) & bitOf[i]) != 0;
-  // a still backdrop (field.c fieldWideStill): its layer column at the view's column 0, in 1/k pixels -- mirrored past the view
-  long stillK[6]; int still[6];
+  // a still backdrop (field.c fieldWideStill): held to the picture -- its layer column at the view's column 0 (stillK) shown
+  // at the picture's middle 256 (from stillA), in 1/k pixels -- and mirrored past them
+  long stillK[6], stillA[6]; int still[6];
   for (int i = 0; i < 6; i++) {
     still[i] = bitOf[i] != BL1 && (L->still & bitOf[i]);
-    stillK[i] = still[i] ? (long)(cur->camX + (bitOf[i] == BL2 ? cur->o2x : cur->o3x) + L->viewX) * k : 0;
+    long o = still[i] ? cur->camX + (bitOf[i] == BL2 ? cur->o2x : cur->o3x) : 0;
+    stillK[i] = (o + L->viewX) * k; stillA[i] = (o + (w - 256) / 2) * k;
   }
   // the columns, once for every row: each layer's x, the 1x column, the scroll mask (the widescreen's sides)
   static int* tab; static size_t tabN;
@@ -117,7 +119,7 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
     inT[X] = !wide || (cx >= cur->mx0 && cx < cur->mx1);
     for (int i = 0; i < 6; i++) {
       long u = offXk[i] + X;
-      if (still[i]) { long p = 512L * k, s = ((u - stillK[i]) % p + p) % p; u = stillK[i] + (s < 256L * k ? s : p - 1 - s); }
+      if (still[i]) { long p = 512L * k, s = ((u - stillA[i]) % p + p) % p; u = stillK[i] + (s < 256L * k ? s : p - 1 - s); }
       tab[i * W + X] = act[i] ? wrapi(fdiv(u, k), L->w[i]) : 0;
     }
   }

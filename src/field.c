@@ -4681,6 +4681,25 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
   if (roomW > f->W || (roomW == f->W && roomW < w && CtSettingsGet()->wideRoomWrap)) { *x0 = -(1 << 30); *x1 = 1 << 30; }
   else { *x0 = f->mx0; *x1 = f->mx1; }
 }
+// THE WIDESCREEN'S CAMERA (a mod): where the 256 view stands in a picture `w` wide whose ROM camera is at camx. The wider
+// picture keeps inside the room, never showing past its scroll mask -- in a room wider than the picture it stops at the
+// room's edges while the ROM's camera goes on to its own (the view then stands off the picture's middle); a room wider
+// than 256 but narrower than the picture is shown whole, centred. A room as wide as its map (fieldWideMask: it wraps) or
+// no wider than 256 keeps the view in the middle. The ROM's camera, and everything it decides, are untouched: only where
+// the picture is cut moves.
+static int fieldWideViewX(const Field* f, int w, int camx) {
+  int x = (w - CAMW) / 2, wm0, wm1;
+  fieldWideMask(f, w, &wm0, &wm1);
+  int roomW = wm1 - wm0;
+  if (wm0 > -(1 << 29) && roomW > CAMW) {
+    int L = camx - x;                                // the picture's left edge, in map pixels
+    if (roomW >= w) { if (L < wm0) L = wm0; if (L > wm1 - w) L = wm1 - w; }
+    else L = wm0 - (w - roomW) / 2;
+    int nx = camx - L;
+    if (nx >= 0 && nx <= w - CAMW) x = nx;
+  }
+  return x;
+}
 // THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
 // release draws there, from the player's own ct_wide.dat, baked once per location with the Steam release's tiles and the
 // room's palette (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
@@ -4721,17 +4740,23 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* 
 // the PPU would repeat its period, a seam at each edge of the view, so the widescreen's sides mirror it there instead:
 // the bake (scene.c CtFieldSceneSetStill), the layers drawn past the room's edge (fieldStillCol), the frames between
 // (fieldnative.c). A layer that moves shows all of its period in time, painted to repeat: it repeats.
-static int g_wideStill, g_wideStillVx;           // this frame's still layers (BL2 2, BL3 4) and its 256 view's map column
+// It stands still on the WIDE screen: its 256 columns in the picture's middle, where the view is unless the widescreen's
+// camera has stopped at a room's edge (fieldWideViewX). There the ROM's camera walks on, the view slides across the
+// stopped picture, and a backdrop held to the view slid with it over a bridge that stood still (the owner, 2026-10-22);
+// held to the picture it stands, and the view shows it shifted by the view's distance from the middle.
+static int g_wideStill, g_wideStillVx, g_wideStillVw;   // this frame's still layers (BL2 2, BL3 4), the 256 view's map
+                                                        //   column, and the map column of the picture's middle 256
 static int fieldWideStillBits(const uint8_t* pg) {
   int det = pg[0x1D36], bits = 0;
   if ((det & 0x02) && !pg[0x1D37] && !pg[0x1D38] && !pg[0x1D26] && !pg[0x1D27]) bits |= 2;
   if ((det & 0x04) && !pg[0x1D39] && !pg[0x1D3A] && !pg[0x1D28] && !pg[0x1D29]) bits |= 4;
   return bits;
 }
-// The map column layer `bit` is sampled at for map column mx: a still backdrop's, mirrored at the view's edges.
+// The map column layer `bit` is sampled at for map column mx: a still backdrop's, held to the picture's middle and
+// mirrored past it.
 static int fieldStillCol(int bit, int mx) {
   if (!(g_wideStill & bit)) return mx;
-  int s = ((mx - g_wideStillVx) % 512 + 512) % 512;
+  int s = ((mx - g_wideStillVw) % 512 + 512) % 512;
   return g_wideStillVx + (s < 256 ? s : 511 - s);
 }
 // ...and over them the room's BG3 (the fog, the snow, a light), as the bake composes it (fieldnative.c, the same rules): the
@@ -19468,40 +19493,27 @@ int main(int argc, char** argv) {
                       cs[0x1D8D] | (cs[0x1D8E] << 8), cs[0x1D8F] | (cs[0x1D90] << 8), cs[0x1D91] | (cs[0x1D92] << 8),
                       cs[0x1D35], cs[0x1D36]);
     }
-    // (the bake waits for the camera: the widescreen's still backdrop is mirrored about this frame's view, fieldWideStill)
-    g_wideStill = 0;
-    if (f.sd && f.vm && hostWideW() > CAMW) {
-      const uint8_t* pg = CtSceneMem7E(f.vm);
-      if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
-      g_wideStill = fieldWideStillBits(pg); g_wideStillVx = camx;
-    }
-    if (f.sd) bgDirty |= CtFieldSceneSetStill(f.sd, g_wideStill, g_wideStillVx);
-    if (f.sd && bgDirty) {
-      int nw = 0, nh = 0; uint8_t* nprio = NULL;
-      uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);
-      if (nb) { free(f.base); free(f.prio); f.base = nb; f.prio = nprio; f.W = nw; f.H = nh; }
-      else free(nprio);
-    }
     // THE WIDESCREEN FIELD (settings.h widescreen; g_fw): the same passes draw a wider picture with the camera wideX
     // pixels further left, so the 256 columns in its middle are the view as always; the view goes back to `fb` for the
     // box and the rest below. The battle's picture is its own (the arena's scroll, its layers): pillarboxed.
     int wideW = (!battlePhase && !battleTest) ? hostWideW() : CAMW, wideX = (wideW - CAMW) / 2;
     const int wideXc = wideX;                        // (the screen's middle: where the screen-fixed overlays go)
-    // THE WIDESCREEN'S CAMERA (a mod): the wider picture keeps inside the room, never showing past its scroll mask -- in a
-    // room wider than the picture it stops at the room's edges while the ROM's camera goes on to its own (the 256 view
-    // then stands off the picture's middle: wideX is where it is); a room wider than 256 but narrower than the picture is
-    // shown whole, centred. A room as wide as its map (fieldWideMask: it wraps) or no wider than 256 keeps the view in
-    // the middle. The ROM's camera, and everything it decides, are untouched: only where the picture is cut moves.
-    if (wideW > CAMW && f.vm) {
-      int wm0, wm1; fieldWideMask(&f, wideW, &wm0, &wm1);
-      int roomW = wm1 - wm0;
-      if (wm0 > -(1 << 29) && roomW > CAMW) {
-        int L = camx - wideX;                        // the picture's left edge, in map pixels
-        if (roomW >= wideW) { if (L < wm0) L = wm0; if (L > wm1 - wideW) L = wm1 - wideW; }
-        else L = wm0 - (wideW - roomW) / 2;
-        int nx = camx - L;
-        if (nx >= 0 && nx <= wideW - CAMW) wideX = nx;
-      }
+    if (wideW > CAMW && f.vm) wideX = fieldWideViewX(&f, wideW, camx);   // (the widescreen's camera)
+    // (the bake waits for the widescreen's camera: the still backdrop is held to the picture, fieldWideStill -- the field's,
+    //  or in a fight the arena's, as wide as the host's)
+    g_wideStill = 0;
+    if (f.sd && f.vm && hostWideW() > CAMW) {
+      const uint8_t* pg = CtSceneMem7E(f.vm);
+      if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
+      int pw = hostWideW(), vx = battlePhase ? fieldWideViewX(&f, pw, camx) : wideX;
+      g_wideStill = fieldWideStillBits(pg); g_wideStillVx = camx; g_wideStillVw = camx - vx + (pw - CAMW) / 2;
+    }
+    if (f.sd) bgDirty |= CtFieldSceneSetStill(f.sd, g_wideStill, g_wideStillVx, g_wideStillVw);
+    if (f.sd && bgDirty) {
+      int nw = 0, nh = 0; uint8_t* nprio = NULL;
+      uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);
+      if (nb) { free(f.base); free(f.prio); f.base = nb; f.prio = nprio; f.W = nw; f.H = nh; }
+      else free(nprio);
     }
     g_bwW = 0;
     uint8_t* fbView = fb;
@@ -20417,13 +20429,7 @@ int main(int argc, char** argv) {
           int bx0 = (bwW - CAMW) / 2;
           int bwm0, bwm1; fieldWideMask(&f, bwW, &bwm0, &bwm1);
           g_bwXc = bx0;
-          { int roomW = bwm1 - bwm0;                    // (the widescreen's camera, as the field's: inside the room)
-            if (bwm0 > -(1 << 29) && roomW > CAMW) {
-              int L = camx - bx0;
-              if (roomW >= bwW) { if (L < bwm0) L = bwm0; if (L > bwm1 - bwW) L = bwm1 - bwW; }
-              else L = bwm0 - (bwW - roomW) / 2;
-              if (camx - L >= 0 && camx - L <= bwW - CAMW) bx0 = camx - L;
-            } }
+          bx0 = fieldWideViewX(&f, bwW, camx);          // (the widescreen's camera, as the field's: inside the room)
           static uint8_t bcov[FIELD_WMAX * CAMH];
           static CtSceneLayers bBeyondL; int bdet = 0;
           if (bwm0 > -(1 << 29) && f.sd && (bdet = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
