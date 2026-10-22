@@ -20,6 +20,13 @@
       "pad": "0:1599",
       "kind": "state",
       "doc": "stands in for saves/attract_loc0AD_flea.state (the owner's real-time capture at loc 0AD before Flea's entrance): power-on + 3758 under the rule, 50 frames before the port's f3716 (Flea's overlapping entrance pose, identical on this state's f48-f52) -- so this state's f + 3666 is the vehicle's frame on the field"
+    },
+    {
+      "path": "saves/attract_087_leg_rule.state",
+      "recipe": "fxa_attract_cena_inicial",
+      "pad": "0:6953",
+      "kind": "state",
+      "doc": "the 087 leg's start under the rule (power-on + 9112, 3 frames before $0100 = 087 -- the Zombor fight's leg): stands in for build/_z_f7085.state, which the Zombor tools (zombor_orbit_cmp.py and its kin) made by running the owner's real-time capture saves/attract_cena_inicial.state to f7085, the same 3 frames before its own 087 load (f7088 there, f6956 from the rule's fxa_attract_cena_inicial)"
     }
   ]
 }
