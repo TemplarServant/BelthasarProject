@@ -13,6 +13,13 @@
       "pad": "0:6005",
       "kind": "state",
       "doc": "stands in for saves/attract_race_handoff_rule_f8247.state (saved under an earlier rule): loc 1B1 at power-on + 8164, the state from which the field hands the motorcycle race ($0384 = 60) to C3:0000 at its f19 (ct.exe --xlatentries), the hand-off --racepiccmp's argument 19 names. (The entry-3 twin of saves/attract_entry3_handoff_rule_f8859.state is attract.json's saves/attract_entry3_handoff_f6750.state: power-on + 8776, C3:0000 at its f18.)"
+    },
+    {
+      "path": "saves/attract_loc0AD_flea_rule.state",
+      "recipe": "fxa_attract_cena_inicial",
+      "pad": "0:1599",
+      "kind": "state",
+      "doc": "stands in for saves/attract_loc0AD_flea.state (the owner's real-time capture at loc 0AD before Flea's entrance): power-on + 3758 under the rule, 50 frames before the port's f3716 (Flea's overlapping entrance pose, identical on this state's f48-f52) -- so this state's f + 3666 is the vehicle's frame on the field"
     }
   ]
 }
