@@ -159,6 +159,34 @@
       "recipe": "lg_race_lab32",
       "kind": "lakewram",
       "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/lavos_re/cockpit_1b0_f1700.state",
+      "recipe": "lg_epoch_1f0",
+      "pad": "0:30,2:2,0:60,10:2,0:100,(100:2,0:30)*47,100:2",
+      "kind": "state",
+      "doc": "the owner's gauge drive to f1700: the Epoch's cockpit (loc 1B0) in the party's lines"
+    },
+    {
+      "path": "saves/lavos_re/cockpit_1b0_f1700.lakewram",
+      "recipe": "lg_epoch_1f0",
+      "pad": "0:30,2:2,0:60,10:2,0:100,(100:2,0:30)*47,100:2",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/lavos_re/ff26_pre_f2760.state",
+      "recipe": "lg_epoch_1f0",
+      "pad": "0:30,2:2,0:60,10:2,0:100,(100:2,0:30)*80,100:2,0:5",
+      "kind": "state",
+      "doc": "the drive to f2761: `FF 26` on its f10, as the capture's (f2760 there: the twin's op comes a frame later)"
+    },
+    {
+      "path": "saves/lavos_re/ff26_handoff_f10.state",
+      "recipe": "lg_epoch_1f0",
+      "pad": "0:30,2:2,0:60,10:2,0:100,(100:2,0:30)*80,100:2,0:15",
+      "kind": "state",
+      "doc": "ten frames on: the hand-off, `FF 26` on its next frame"
     }
   ]
 }

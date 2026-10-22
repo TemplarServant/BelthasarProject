@@ -28175,7 +28175,7 @@
       ],
       "expect": [
         "racepiccmp: the stage's setup made its NMI 32 frame(s) after the hand-off",
-        "racepiccmp: native stage ended (1) at frame 1611",
+        "racepiccmp: native stage ended (1) at frame 1609",
         "racepiccmp: 1700 frames -- first state difference -1, first race-WRAM difference -1, first picture difference -1 (0 px)"
       ],
       "pin": [
@@ -28184,7 +28184,7 @@
       "tier": "full",
       "timeout_s": 900,
       "note_pass": "entry 6 (FF 26, the Epoch into Lavos's shell), its picture native end to end: 1611 NMIs to the END (the cartridge's frame), VRAM / CGRAM / OAM / the registers / HDMA / the stage's WRAM and every pixel the cartridge's",
-      "notes": "SEQUENCE ENTRY 6's PICTURE (src/seq_entry6pic.c; disasm/notes/seq_picture.md sec. 8). The setup $7E:78DD with $7A68; the hooks $81C4 / $824A / $7F58 and the PPU halves of $7A35 / $79F8; the main thread $8278 (C3/0307 and $B574, the race's); $82D1's shared $357B with its pre-routines $8042 / $801F; the sprites: $7F7D (the Epoch's glow through $3A97, a list drawer with a 9-bit x), $8205's own draw (C3/0D5E, missing from the logic), $7FCB (the window circle C3/0077 into $E060.. and its HDMA bytes), $8079 (the lightning's sprites rewritten through WMDATA), $835B (the explosion's frames), $7BF2 (the opening of an HDMA table, channel 0's $4302). C3/02DD with a 16-bit A reads, under the data bank $00, $2138 (OAM at the OAM address the compositor now keeps) and $213E (STAT77) as its words' high bytes; under $7E (8079's `PHK / PLB`) it reads WRAM $7E:2137.. instead. The logic's $37FA keeps the open bus $4242 on its caller's direct page ($00F0 for the task, $0AF0 / $0BF0 for a script's call). The harness answers `F5` with the oracle's SPC. Unseeded the picture is the same. Not exercised by this run (their mutations survive): CMP $2137's open-bus low byte deciding a carry, a sprite past x 255 in $3A97, a circle's edge past $FF in C3/0077.",
+      "notes": "SEQUENCE ENTRY 6's PICTURE (src/seq_entry6pic.c; disasm/notes/seq_picture.md sec. 8). The setup $7E:78DD with $7A68; the hooks $81C4 / $824A / $7F58 and the PPU halves of $7A35 / $79F8; the main thread $8278 (C3/0307 and $B574, the race's); $82D1's shared $357B with its pre-routines $8042 / $801F; the sprites: $7F7D (the Epoch's glow through $3A97, a list drawer with a 9-bit x), $8205's own draw (C3/0D5E, missing from the logic), $7FCB (the window circle C3/0077 into $E060.. and its HDMA bytes), $8079 (the lightning's sprites rewritten through WMDATA), $835B (the explosion's frames), $7BF2 (the opening of an HDMA table, channel 0's $4302). C3/02DD with a 16-bit A reads, under the data bank $00, $2138 (OAM at the OAM address the compositor now keeps) and $213E (STAT77) as its words' high bytes; under $7E (8079's `PHK / PLB`) it reads WRAM $7E:2137.. instead. The logic's $37FA keeps the open bus $4242 on its caller's direct page ($00F0 for the task, $0AF0 / $0BF0 for a script's call). The harness answers `F5` with the oracle's SPC. Unseeded the picture is the same. Not exercised by this run (their mutations survive): CMP $2137's open-bus low byte deciding a carry, a sprite past x 255 in $3A97, a circle's edge past $FF in C3/0077. ==== 2026-10-22, RE-PINNED (the cartridge's END frame only): ff26_pre_f2760 is now made by a recipe (tools/fixtures/lategame.json, lg_epoch_1f0: Jackie's ch27 out of Lavos by the shell's Epoch to the End of Time -- the owner's story bytes but two -- the Epoch's vehicle bytes as the capture's, world 1F0 by the ROM's loader, the owner's gauge drive; `FF 26` on its f10 as before). The stage's END on it comes at frame 1609 (the old capture's 1611): page B's `F5 04` waits on the SPC's marker, which the twin's song reaches two frames sooner after the hand-off. The port's stage is the cartridge's on every one of the 1700 frames (state, WRAM and picture, 0 differences), as before.",
       "mutations": [
         {
           "file": "src/seq_entry6pic.c",
@@ -41290,8 +41290,8 @@
       ],
       "env": {},
       "expect": [
-        "seqstage: FF 26 1611 frames compared, 140 differing, END cartridge f1653 port f1655 (DIFFERENT)",
-        "  first: f1513 092E o=242 p=0 092F o=123 p=0 0B20 o=174 p=159"
+        "seqstage: FF 26 1609 frames compared, 140 differing, END cartridge f1651 port f1654 (DIFFERENT)",
+        "  first: f1511 092E o=242 p=0 092F o=123 p=0 0B20 o=174 p=159 0B24 o=1 p=0"
       ],
       "pin": [
         "^seqstage: FF 26 ",
@@ -41326,7 +41326,7 @@
           "why": "page B's r6 follows $0B38 = 0400 / r0 + 3 (+ the SBC's carry) while $7FC4 runs"
         }
       ],
-      "notes": "THE EPOCH INTO LAVOS'S SHELL, ENTRY 6 (disasm/notes/sequence_table.md sec. 17; src/seq_entry6.c). The user's Epoch capture (saves/epoch_re/epoch_user.state, spliced from the snes9x state over Jackie's ch09: world 1F0, storyline D6), Y (the time gauge), Up (1999 A.D.), A, then A every 32 frames: the cockpit (loc 1B0), obj10's question, obj11 fn3's lines, `CHANGELOC 1DA`, `FF 26` at f2770 of that drive (saves/lavos_re/ff26_pre_f2760.state: f10). The native stage from the cartridge's own hand-off (f10), SHIFT 42 / HOLD 33. Graded: the shadows, the task list, both pages, palette records 0-1, page A's copies $0A30-$0A35 and $0B38. Page B's r5 and $0386-7 are skipped: the Epoch's shake and the lightning draw from C3/02DD with A 16 bits wide, whose word reads take $2138 (OAM data) and $213E -- PPU state stage 1 does not hold, and nothing the logic reads comes from them. PINNED RESIDUAL: byte for byte to f1512; at f1513 page B's `F5 04` (the SPC's marker after the `DB18` post) passes on the cartridge and two frames later in the port -- the port's SPC answers late, and HOLD 31 / 35 move it non-monotonically (memory spc-phase-sensitivity); everything after rides two frames late, the END f1655 against f1653. A timing artefact (CLAUDE.md 2026-10-09). Re-pin only from a fix that moves it toward the cartridge."
+      "notes": "THE EPOCH INTO LAVOS'S SHELL, ENTRY 6 (disasm/notes/sequence_table.md sec. 17; src/seq_entry6.c). The user's Epoch capture (saves/epoch_re/epoch_user.state, spliced from the snes9x state over Jackie's ch09: world 1F0, storyline D6), Y (the time gauge), Up (1999 A.D.), A, then A every 32 frames: the cockpit (loc 1B0), obj10's question, obj11 fn3's lines, `CHANGELOC 1DA`, `FF 26` at f2770 of that drive (saves/lavos_re/ff26_pre_f2760.state: f10). The native stage from the cartridge's own hand-off (f10), SHIFT 42 / HOLD 33. Graded: the shadows, the task list, both pages, palette records 0-1, page A's copies $0A30-$0A35 and $0B38. Page B's r5 and $0386-7 are skipped: the Epoch's shake and the lightning draw from C3/02DD with A 16 bits wide, whose word reads take $2138 (OAM data) and $213E -- PPU state stage 1 does not hold, and nothing the logic reads comes from them. PINNED RESIDUAL: byte for byte to f1512; at f1513 page B's `F5 04` (the SPC's marker after the `DB18` post) passes on the cartridge and two frames later in the port -- the port's SPC answers late, and HOLD 31 / 35 move it non-monotonically (memory spc-phase-sensitivity); everything after rides two frames late, the END f1655 against f1653. A timing artefact (CLAUDE.md 2026-10-09). Re-pin only from a fix that moves it toward the cartridge. ==== 2026-10-22, RE-MEASURED ON THE RECIPE-MADE TWIN (the finding unchanged, still pinned as DIFFERENT): ff26_pre_f2760 / ff26_handoff_f10 are now made by a recipe (lg_epoch_1f0, tools/fixtures/lategame.json) instead of the owner's capture. The same residual, at the same place: byte for byte to f1510, then page B's `F5 04` (the SPC's marker after the `DB18` post) passes on the cartridge and later in the port (092E/092F, 0B20, 0B24 at f1511), and the rest rides behind -- 140 frames differing, as on the capture; the END gap is 3 frames on the twin (cartridge f1651, port f1654; the capture's 1653 / 1655): the marker's lateness follows the seeded SPC's phase (memory spc-phase-sensitivity), which the twin's history sets differently. Still a timing artefact (CLAUDE.md 2026-10-09); re-pin only from a fix that moves it toward the cartridge."
     },
     {
       "name": "lavos-epoch-ff26-plays-through-in-the-port",
@@ -41353,7 +41353,7 @@
         "CT_SHOTS": "build/_ff26_chain"
       },
       "expect": [
-        "sequence: entry 6 (the Epoch into Lavos) opening at f1071 -- 5728360 + 49152 + 5216178 cycles = 32 black frame(s)",
+        "sequence: entry 6 (the Epoch into Lavos) opening at f1072 -- 5728360 + 49152 + 5216178 cycles = 32 black frame(s)",
         "sequence: the Epoch's dive ended ($7E:0000=1) -> reboot into loc 1DA",
         "reboot: JML C0:0000 -> loc 1DA tile(7,58) bits00"
       ],
@@ -41379,7 +41379,7 @@
           "why": "obj11's `48 42 21 00 0E` loop waits for the song's marker on port 2: without the SPC's port it never ends, `FF 26` never comes"
         }
       ],
-      "notes": "The cockpit (loc 1B0) from the cartridge's own WRAM at f1700 of the Epoch drive (no box open: the port cannot resume a box mid-way), A every 32 frames. Before: obj11 fn3's `48 42 21 00 0E / 67 0F 0E / 12 0E 03 04 03` -- a pointer read of $00:2142, the SPC's port 2 (the song's marker) -- read nothing in the port (ctFlatAddr24 has no I/O), the loop never ended and the cockpit hung. Now ops 0x48 / 0x49 on $2140-$2143 read the SPC's output ports (g_ctApuOut, filled by field.c from src/audio.c before the VM's tick). `FF 26` at f1071 (the cartridge: 1070 frames after the same point), 31 black frames, the dive, `$7E:0000 = 1`, and the reboot into 1DA that obj11 staged."
+      "notes": "The cockpit (loc 1B0) from the cartridge's own WRAM at f1700 of the Epoch drive (no box open: the port cannot resume a box mid-way), A every 32 frames. Before: obj11 fn3's `48 42 21 00 0E / 67 0F 0E / 12 0E 03 04 03` -- a pointer read of $00:2142, the SPC's port 2 (the song's marker) -- read nothing in the port (ctFlatAddr24 has no I/O), the loop never ended and the cockpit hung. Now ops 0x48 / 0x49 on $2140-$2143 read the SPC's output ports (g_ctApuOut, filled by field.c from src/audio.c before the VM's tick). `FF 26` at f1071 (the cartridge: 1070 frames after the same point), 31 black frames, the dive, `$7E:0000 = 1`, and the reboot into 1DA that obj11 staged. ==== 2026-10-22, RE-PINNED (the op's frame only): cockpit_1b0_f1700 is now made by a recipe (lg_epoch_1f0 + the owner's gauge drive cut at f1700, tools/fixtures/lategame.json). From it the cartridge's `FF 26` comes 1071 frames on (the capture's 1070) and the port's at f1072 (was f1071): the same one frame after the cartridge's, the same 32 black frames, the dive and the reboot into 1DA unchanged."
     },
     {
       "name": "ow-epoch-boarding-and-liftoff-vs-oracle",
