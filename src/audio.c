@@ -341,6 +341,7 @@ typedef struct {
   int nmis;                   // frame boundaries crossed (NMIs taken while the main loop was parked)
   long stolen;                // background cycles queued at the raster: the CPU sits them out
   double owed, hdmaFrac;      // APU cycles owed (snes->apuCatchupCycles); HDMA per-line fraction carry
+  long long ran;              // APU cycles the catch-ups ran (an opcode's overshoot included): what the stretch debits
   int mode;                   // 0 = field, 1 = battle: which background block the raster inserts
   long long budget;           // runaway guard: a broken handshake must not spin the raster forever
   long polls;                 // $2140 polls taken across the run (a measurement aid)
@@ -523,24 +524,11 @@ static void ldRun(long cycles) {         // the loader's CPU spends `cycles` -- 
   if (ld.stolen > 0) { long b = ld.stolen; ld.stolen = 0; ldWalk(b); }   // an event met at the chunk's end
   if (ld.irqPending) ldIrqWait();                                         // (the rule only: irqPending is never set off it)
 }
-// THE SPC CYCLES A CLOCKED STRETCH RAN (what the frame slices are debited by). The SPC runs whole instructions, so at the
-// RTL ldCatch has left it up to one opcode PAST the CPU's clock (or a fraction short): `ld.owed` is that remainder. The
-// console's SPC is never off its clock -- LakeSnes's snes_catchupApu keeps the remainder in apuCatchupCycles across every
-// access, so its SPC stands at master x apuCyclesPerMaster forever. The port debited the CLOCK's time, ld.clk x the rate,
-// and dropped the remainder with the stretch: every JSL that ran the SPC put it a few cycles ahead of its frame grid for
-// good. MEASURED (CT_AUDIO_PORTTRACE's slice starts against PEEK_APUTRACE's frame ENDs, the attract from power-on): the
-// grid +9 APU cycles off the cartridge's for 2,000 frames, then +76 by f6000 as the demo's JSLs came (+7 at the posts of
-// f2148-2150, +6 across 1B1's `10 18` upload f2159-2190, ...), so the 07D load's `10 18` (f6350) reached the driver 86
-// cycles late -- just after its timer tick began instead of before it: echoed 3,055 cycles after the post against the
-// cartridge's 168 -- and the load took 49 frames against 48: the whole 07D visit a frame late. Debiting what ran keeps the
-// remainder in cycleCarry, as CtAudioFrame keeps a slice's: the grid then stays within 3 cycles of the cartridge's through
-// the whole demo (disasm/notes/field_load_cost.md sec. 13).
-static double ldSpcRan(void) { return (double)ld.clk * LD_APU_PER_MASTER - ld.owed; }
 static void ldCatch(CtAudio* a) {        // snes_catchupApu: run the SPC up to the CPU's clock before a port access
   if (!ld.active) return;
   ld.owed += (double)(ld.clk - ld.lastClk) * LD_APU_PER_MASTER; ld.lastClk = ld.clk;
   int n = (int)ld.owed;
-  if (n > 0) { int ran = apuRun(a, n); ld.owed -= (double)ran; g_sndSpcCycles += ran; }
+  if (n > 0) { int ran = apuRun(a, n); ld.owed -= (double)ran; ld.ran += ran; g_sndSpcCycles += ran; }
 }
 static void    Wc(CtAudio* a, int k, uint8_t v) {   // snes_cpuWrite -> writeBBus $2140+k
   ldCatch(a); W(a, k, v);
@@ -1704,7 +1692,7 @@ int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
   ldCatch(a);
   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   ld.active = 0;
-  a->cycleCarry -= ldSpcRan();               // the SPC time it already ran
+  a->cycleCarry -= (double)ld.ran;                                    // the SPC time it already ran
   a->ready = 1;
   if (master) *master = a->lastMaster; if (frames) *frames = a->lastFrames;
   return 1;
@@ -1935,7 +1923,7 @@ void CtAudioFrame(CtAudio* a) {
     if (ck) fprintf(stderr, "spcclock pass%ld total=%lld carry=%.1f" "\n", fr++, g_apuTotal, a->cycleCarry); }
   double want = apuFrameCycles(a) + a->cycleCarry;
   { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;   // (CT_AUDIO_PORTTRACE: each slice's start)
-    if (pt && a->apu) fprintf(stderr, "porttrace FRAME apuc=%llu carry=%.1f spcpc=%04X\n",
+    if (pt && a->apu) fprintf(stderr, "porttrace FRAME n=%ld apuc=%llu carry=%.1f spcpc=%04X\n", g_audFrameNo,
                               machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles,
                               a->cycleCarry, machineRuns(a) ? 0 : a->apu->spc->pc); }
   a->evenFrame ^= 1;                                   // (the next slice's frame)
@@ -2117,7 +2105,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   // The SPC time this JSL consumed is HOST time the field will now lose (the caller freezes for
   // lastFrames): debit it from CtAudioFrame's per-frame budget so the emulated SPC is not advanced
   // twice, once here and once per frozen frame. Nothing to debit for the unclocked callers.
-  if (!instantJsl(a, fifoAt)) a->cycleCarry -= ldSpcRan();
+  if (!instantJsl(a, fifoAt)) a->cycleCarry -= (double)ld.ran;
   return rc;
 }
 // $7E:5AAA `LDA $2143 / AND #$0F / BEQ ->5AAA` -- the title setup's own wait, run AFTER the song
@@ -2142,7 +2130,7 @@ int CtAudioWaitReplyNibble(CtAudio* a, int* frames) {
   ldCatch(a);
   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   ld.active = 0;
-  if (!instantJsl(a, fifoAt)) a->cycleCarry -= ldSpcRan();   // the SPC time this spin already consumed
+  if (!instantJsl(a, fifoAt)) a->cycleCarry -= (double)ld.ran;        // the SPC time this spin already ran
   if (frames) *frames = a->lastFrames;
   return got;
 }

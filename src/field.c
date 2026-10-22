@@ -5224,18 +5224,17 @@ static int g_sndTraceFrame = 0;   // CT_SNDTRACE: the field loop's frame, stampe
 static int g_loadSpcLead = 0;   // this iteration loads a location: its sound posts run before the SPC's slice (below)
 static int g_owExitPosted = 0;  // the world's exit posts ($82, $83) ran this iteration: the load follows on the next
 static int g_titleOpenSpc = 0;     // this iteration opens the title (`FF 02`): its sound posts come before the frame's slice
+static int g_dfRebootLoad = 0;     // op 0xDF / 0xE1 rebooted this iteration (C0/3B71's spin saw the vblank): the load follows
 static int g_stageRebootLoad = 0;  // an overlay machine's END rebooted this iteration (no $3177): the load follows on the next
 #define LOAD_SPC_LEAD (5751L + 3060L)   // master cycles from the vblank to C0/1B73's JSL C7:0004 (the traces' mean)
 #define OW_EXIT_SPC_LEAD 3868L          // master cycles from the $83's RTL (C2/2505) to C0/1B73's JSL (the world's exit)
 #define STAGE_END_SPC_LEAD (4252L + 218L + 4008L)   // the vblank -> C0/1B73's JSL out of an overlay machine's END (below)
-static int g_opRebootLoad = 0;     // ops DF / E1 rebooted at this vblank (C0/3B4B's spin): the load follows on the next
-// THE DF / E1 REBOOT (C0/3B98 `LDA #01 / STA $1E / BRA 3B4B`, C0/3B4B): what runs before the spin's `LDA $4210 / BPL` is
-// NMI-on work, free under the rule, so the stretch starts where the vblank's NMI returns. MEASURED, the rule's cartridge,
-// the staff roll 05B -> 05C (saves/field_re/s5b_roll_f2280.state, --cputrace CPUTRACE_BEAM from f22): the NMI's RTI (C0/EC5F)
-// on line 228 h 162 (4,254 from line 225: its pad latch), C0/3B76 `JSR C0/0B4E` -> C0:0000 -> C0/0B86 on line 229 h 200
-// (+1,402), C0/0B86 -> C0/1B73's `JSL C7:0004` on line 231 h 480 (+3,008); PEEK_APUTRACE: f24's END at APU 287,621,197,
-// the $81 on $2140 at 287,621,647 (C7's own cycles after the JSL on top).
-#define REBOOT_SPC_LEAD (4254L + 1402L + 3008L)
+// ops DF / E1's reboot (C0/3B71's spin -> C0/3B79-3B8F -> C0/0B4E -> `BRL C0:0000` -> C0/0B5A -> C0/0B86): the field NMI's
+// pad latch, then the NMI-off stretch to C0/0B86 on line 229 h 190 = 5,646 past the vblank (the rule's cartridge, the attract's
+// hub DF at power-on f7324, --cputrace), and C0/0B86 -> the JSL as LOAD_SPC_LEAD's (its 1B8B: line 231 h 498 = 8,682)
+// (A second instance, the staff roll's E1 05B -> 05C from s5b_roll_f2280: the NMI's RTI on line 228 h 162, C0/0B86 on 229
+//  h 200, C0/1B73's JSL on 231 h 480 = 8,664; its $81 450 APU cycles into the slice on both sides -- 18 master apart.)
+#define REBOOT_SPC_LEAD (5646L + 3060L)
 // THE RESET (C0/000E), MEASURED on the rule's cartridge from power-on (--cputrace boot, CPUTRACE_BEAM): FD:C000 at c 128,
 // C0/000E at 2,108, C0/0053's `JSL C7:0000` at 676,798 (the clears' DMA); the upload to C7/00FF and its tail to C0:0057
 // (CtAudioColdBoot); C0/0057's C2/8D6A SRAM scan to C0/005D, 102,888 on a blank cart; C0/005D -> C0/0066 -> C0/0B86 ->
@@ -12381,24 +12380,24 @@ int main(int argc, char** argv) {
         // and JMLs to C0:0000, whose load reaches C0/1B73 3,868 master cycles past the $83's RTL (C2/2505 -> C0/0B5A ->
         // C0/0B86 -> the JSL; the rule's cartridge on route leg 15, the world -> 078: $83 at APU 579,158,986, $81 at
         // 579,159,442). The port posts the pair at the end of the world's iteration and loads on the next, so that
-        // iteration's slice went between them: the $81 a frame of SPC late and loc 078 a black frame short. The reboot of
-        // ops DF / E1 the same (REBOOT_SPC_LEAD: the staff roll's 05C, the cartridge's $81 450 APU cycles into the slice, the
-        // port's after the whole of it); a world-to-world exit (pendKind 2) is not measured and keeps the plain order.
+        // iteration's slice went between them: the $81 a frame of SPC late and loc 078 a black frame short. Ops DF / E1's reboot
+        // the same (REBOOT_SPC_LEAD); C3's `JML C0:0000` and a world-to-world exit (pendKind 2) are not measured and keep the
+        // plain order.
         { static int owed = 0;
           uint8_t* rw = CtWramSys(fieldWram());
           int rf = rw && (rw[0x0117] & 0x80) && !inWorld && f.vm && !gwPhase;
           int fb = rf ? rw[0x0119] : fadeBri - FADE_STEP;
           int owLoad = g_owExitPosted && !rf && fade == 1 && fb <= 0 && pendKind == 3;
           int stLoad = g_stageRebootLoad && !rf && fade == 1 && fb <= 0 && pendKind == 1;
-          int rbLoad = g_opRebootLoad && !rf && fade == 1 && fb <= 0 && pendKind == 1;
+          int dfLoad = g_dfRebootLoad && !rf && fade == 1 && fb <= 0 && pendKind == 1;
           // THE TITLE's OPENING the same way: the iteration that opens `FF 02` (the op's own fade over -- ffPro 2 -- or it
           // jumped in its own frame) posts the driver reset and the song inside the NMI-off stretch that starts after the
           // vblank (TITLE_OPEN_AT, below at the open), so its slice is owed like a load's.
           int tlOpen = f.vm && CtSceneSequence(f.vm) == 2 && !seqOpen &&
                        (ffPro == 2 || (ffPro == 0 && !CtSceneFfFading(f.vm)));
-          g_loadSpcLead = 0; g_owExitPosted = 0; g_stageRebootLoad = 0; g_titleOpenSpc = 0; g_opRebootLoad = 0;
-          if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad || stLoad || rbLoad) && !hostSyncFree()) {
-            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? 3 : rbLoad ? 4 : 1; }
+          g_loadSpcLead = 0; g_owExitPosted = 0; g_stageRebootLoad = 0; g_dfRebootLoad = 0; g_titleOpenSpc = 0;
+          if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad || stLoad || dfLoad) && !hostSyncFree()) {
+            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? 3 : dfLoad ? 4 : 1; }
           else if (audio && g_ruleAudio && tlOpen && !hostSyncFree()) { owed += ticks; ticks = 0; g_titleOpenSpc = 1; }
           else if (owed) { ticks += owed; owed = 0; } }
         if (ticks != 1) paceIrregular++;
@@ -12914,14 +12913,15 @@ int main(int argc, char** argv) {
     // the cartridge's CPU reaches them: as many frames before the load's last one (the one C0/2848 begins in) as the object
     // pass's work after each takes -- the later objects' sprite loads, CT_LOAD_FRAME_CYCLES a frame. (The port ran the load in
     // its first frame and holds the black after.)
-    // A WALKED load's hold runs on through C0/2848's pass to C0/0B38 (loadWalk.pass), and the JSLs come before it: the Lavos
-    // chain's 1D3 posts slot 1's `18 FF` at C0/56C8 on f2249, then the pass runs 7 frames with the NMI still off (to the
-    // NMI on at f2256) -- so the pass is part of every queued post's lead.
     if (f.vm && CtSceneLoadPostsPending()) {
       int np = CtSceneLoadPostsPending(), due = 0;
-      long passAfter = loadWalkCyc >= 0 ? loadWalk.pass : 0;
       if (fade != 3) due = np;
-      else while (due < np && (loadPostTotal - CtSceneLoadPostCycles(due) + passAfter) / CT_LOAD_FRAME_CYCLES >= loadHold) due++;
+      else {
+        // ...and on a walked load, everything the ROM runs after the init runner: C0/9DC3's arm (C0/5926), slot 1 and C2/8004
+        // (C0/56C8 / C0/56CF) and C0/2848's pass to C0/0B38 -- the frames the hold still counts after the object pass.
+        long tail = loadW > 0 ? loadWalk.party + loadWalk.pass + load9dc3 : 0;
+        while (due < np && (loadPostTotal - CtSceneLoadPostCycles(due) + tail) / CT_LOAD_FRAME_CYCLES >= loadHold) due++;
+      }
       if (due) {
         int sp = CtSceneLoadPostsFlush(f.vm, due);
         // The frames those JSLs crossed are the load's too (an init script's song upload): the black holds for them, as
@@ -17359,8 +17359,7 @@ int main(int argc, char** argv) {
       w[0x0100] = w[0x0112]; w[0x0101] = w[0x0113];       // 3B85 LDX $12 / 3B87 STX $00
       w[0x0102] = w[0x0114]; w[0x0103] = w[0x0115];       // 3B89 LDX $14 / 3B8B STX $02
       w[0x0104] = w[0x0116];                              // 3B8D LDA $16 / 3B8F STA $04
-      CtSceneRebootDone(f.vm); rebootReq = 1;
-      g_opRebootLoad = 1;                                 // its load's posts before the next slice (REBOOT_SPC_LEAD)
+      CtSceneRebootDone(f.vm); rebootReq = 1; g_dfRebootLoad = 1;   // (its load's posts lead by REBOOT_SPC_LEAD)
       printf("reboot: op 0xDF/0xE1 at the vblank -> $0100=%03X, $0105=%03X\n",
              w[0x0100] | (w[0x0101] << 8), w[0x0105] | (w[0x0106] << 8));
     }

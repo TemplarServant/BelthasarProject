@@ -148,7 +148,7 @@ f-91..f-1). Since the power-on itself is ported (boot_loader.md sec. 10), `--boo
 vehicle's frame f is the cartridge's frame f + 91. Its SPC therefore has the cartridge's history: before, it
 started cold inside 1B1 and its driver's phase was its own, so a sound handshake could land a frame off where the
 cartridge's did not (1C00 and 7D00 +1). Every attract load now takes the cartridge's frames, and every visit its length
-but 087's (+1, its battle exit's `70 00`; disasm/notes/field_load_cost.md sec. 13). A check that grades the vehicle's
+but 087's (+1, its battle exit's `70 00`; disasm/notes/field_load_cost.md secs. 13-15). A check that grades the vehicle's
 picture or a field animation's phase compares with the power-on cartridge (`--peek boot`, picture P = peek P + 92):
 saves/attract_cena_inicial.state is another history, its $051D tile-step count of the other parity from the 07D load on. A `--boot` drive presses Start on the title at
 frame 198 (`n:198,s:1,...`; 133 before the power-on). The power-on needs the SPC: with `CT_NOAUDIO` the run boots scene 0

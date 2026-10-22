@@ -660,9 +660,38 @@ The attract from power-on (`--boot`, its SPC the cartridge's since boot_loader.m
 every load: on the cartridge's frames from B101 (f50) to B101 (f7324) -- 6E01, 1C00, 1B00, AD00, 1201, DB00, A500 --
 then 7D00 +1 (the 07D load's refused `10`: the driver echoes it 175 APU cycles after the post on the cartridge, 3,073 in
 the port, the `10` itself +72) and 8700 +1, both visits with a fight. The SPC's frame grid drifts ~0.01 APU cycle a frame
-against the cartridge's (+65 by f6300; not located -- located in sec. 14).
+against the cartridge's (+65 by f6300): located in section 13.
 
-## 13. The staff roll's and the ending's loads: op 29, `$0BE9`, `$7F:0351` and the E1 reboot (2026-10-22)
+## 13. The SPC's frame grid, the init scripts' posts and the DF / E1 reboot (2026-10-22)
+
+Measured on the attract from power-on: the rule's cartridge (PEEK_APUTRACE, each frame's END) against the port
+(CT_AUDIO_PORTTRACE, each slice's `FRAME n=<frame> apuc=.. carry=..`; the port's grid is apuc + carry).
+
+- **The grid drift was an opcode's overshoot.** apuRun ends an opcode past what it is asked (LakeSnes's apu_cycle
+  counts the opcode's cycles one by one, apuCatchupCycles carries the remainder: no drift). The frame slice and
+  CtAudioAdvance carried the overshoot; the loader clock's catch-ups (ldCatch) did not -- a JSL, the title's $2143 spin
+  and the driver's cold upload debited `clk x APU/master` from the frame's budget, not the cycles the SPC ran -- so
+  every sound handshake left the SPC a few cycles ahead for good: +100 APU cycles over the attract's 7,616 frames
+  (5-9 a load). The stretch now debits what its catch-ups ran (ld.ran): +3 cycles over the same frames.
+- **A load's init-script posts sit where the ROM runs them.** Without the drift 0AD's load read +1: its two `10 18`
+  (op EA, C0/3C41, from the objects' init) post on the cartridge 10 and 7 frames before the load's end (f3586 / f3589,
+  main loop f3596), the port flushed them 4 and 2 frames before -- it counted only the object pass's work after each
+  post (CtSceneLoadPostCycles), and the ROM runs C0/9DC3's arm, slot 1, C2/8004 and C0/2848's pass to C0/0B38 after the
+  init runner too. The walk prices all of them (loadWalk.party / .pass, load9dc3): on a walked load they join the
+  work after each post. The second post then finds the driver free (the cartridge's 56,196 APU cycles between them,
+  the port's 51,265 had met it busy: three re-posts and a frame).
+- **Ops DF / E1's reboot leads like a commit** (REBOOT_SPC_LEAD): C0/3B71's spin returns after the field NMI's pad
+  latch, then C0/3B79-3B8F, C0/0B4E, `BRL C0:0000`, C0/0B5A and C0/0B86 on line 229 h 190 (5,646 past the vblank;
+  the rule's cartridge, the attract's hub DF at f7324, --cputrace), C0/1B8B's JSL on 231 h 498. The port posted the
+  load's `10 18` after the frame's slice: 75 APU cycles past the next frame's vblank against the cartridge's 491 past
+  this one's, and 1B1's load a frame short (B101@7324 -1).
+
+Result, the attract from power-on, commit -> first ramp INC: every load on the cartridge's frames but 8700 (+1). That
+one is the 087 fight's exit upload (C0/1BE6's chain, f9912-9924): it starts 2 APU cycles from the cartridge's and
+carries the same 8,200 port writes, but the battle NMI's waits split it at other points (the cartridge's two pauses of
+69 and 47 lines, the port's three of 83, 47 and 70) and it ends ~4,000 APU cycles late, past the vblank. Not modelled.
+
+## 14. The staff roll's and the ending's loads: op 29, `$0BE9`, `$7F:0351` and the E1 reboot (2026-10-22)
 
 Three loads the walk refused (`pass: $0153 bit 7 / $0BE9 / $0351 bit 0`, and `op 29: its arms are not walked`) and charged
 the old estimate, which crossed a frame the cartridge's stretch does not since 5fde1d2 put the load's song handshake on the
@@ -698,7 +727,7 @@ Result, the cartridge's CPU work against the walk's (non-refresh, C7 apart): 05C
 the cartridge's own 286C WRAM gives the same). 05C 17 black frames, 05D 18, 059 31 (resume f5652): both checks at their
 original pins.
 
-**The DF / E1 reboot's posts before the frame's slice** (field.c REBOOT_SPC_LEAD, g_opRebootLoad). What runs before C0/3B71's
+**The DF / E1 reboot's posts before the frame's slice** (field.c REBOOT_SPC_LEAD, g_dfRebootLoad -- sec. 13's mechanism; this is a second instance of it). What runs before C0/3B71's
 spin is NMI-on work, free under the rule, so the stretch starts where the vblank's NMI returns: C0/EC5F's RTI on line 228 h
 162 (4,254 from line 225: the pad latch), C0/3B76 `JSR C0/0B4E` -> C0:0000 -> C0/0B86 on line 229 h 200 (+1,402), C0/1B73's
 `JSL C7:0004` on line 231 h 480 (+3,008): 8,664. (DF is `LDA #01 / STA $1E / BRA 3B4B`: the same path.) PEEK_APUTRACE against
@@ -706,9 +735,9 @@ CT_AUDIO_PORTTRACE: 05C's `81` 287,621,647 on the cartridge (f24's END 287,621,1
 slice before, 287,621,664 now; the `10` 287,621,817 / 287,621,835. 05D's `81` 296,507,355 / 296,507,367, its `10`
 296,507,575 on both.
 
-## 14. The SPC's frame grid, and the DF / E1 reboot's posts (2026-10-22)
+## 15. The SPC's frame grid, and the DF / E1 reboot's posts (2026-10-22)
 
-**The drift of sec. 12, located.** The port's SPC runs a frame's slice per frame (CtAudioFrame: 17,088 APU cycles an even
+**The drift of sec. 12, located** (found apart from sec. 13, the same fix: sec. 13's ld.ran). The port's SPC runs a frame's slice per frame (CtAudioFrame: 17,088 APU cycles an even
 frame, 17,087.81 an odd one, the last opcode's overshoot carried in `cycleCarry`) and, inside a clocked JSL (the loader
 clock `ld`: a load's posts, the rule's posts, a spin), as far as the CPU's clock has run (ldCatch, snes_catchupApu's twin).
 The next slices are then debited by the JSL's SPC time -- and that debit was the CLOCK's, `ld.clk x the rate`, not what
@@ -724,7 +753,7 @@ port's driver had just begun its timer tick (the 17 DSP writes of $02B0, then $0
 token spin (C7/0A85-0A8E) ran to the tick after, and the NMI-off stretch crossed one more vblank: 49 black frames for 48.
 The whole 07D visit then ran a frame late on the vehicle -- the iterations' grid, $0153's parity (FD/C2C1) and with it the
 frames FD/E022 steps the tiles on.
-FIX (src/audio.c ldSpcRan): the slices are debited by the cycles the SPC ran, the remainder carried as CtAudioFrame carries
+FIX (src/audio.c, ld.ran -- sec. 13): the slices are debited by the cycles the SPC ran, the remainder carried as CtAudioFrame carries
 a slice's. The grid stays within 3 cycles of the cartridge's through the whole demo; the 07D `10 18` lands 11 cycles after
 the cartridge's (the idle poll, the echo +168 on both sides) and the load takes the cartridge's 48 frames.
 
@@ -735,8 +764,8 @@ reboot kept the plain order (sec. 11 measured C0/0C9A commits, the world's exit 
 latch), C0/3B76 `JSR C0/0B4E` (the NMI off), 3B79-3B95 store the location left and the staged one and `BRL C0:0000`,
 C0/005D's C0/0B4E, C0/0B86 on line 229 h 186 = 5,642 master cycles past the vblank -- 102 sooner than a C0/0C9A commit's
 (C0/0C9D-0CC4 store the facing and the $1801 / $1881 words first; 07D's load reaches C0/0B86 on 229 h 288) -- and C0/1B8B's
-JSL on 231 h 440. The port defers that iteration's slice as it does the others' (field.c g_opRebootLoad, sec. 13's REBOOT_SPC_LEAD,
-measured on the staff roll's 05C: 8,664; this exit's own measure, 5,642 + LOAD_SPC_LEAD's C0/0B86 -> JSL mean = 8,702, is
+JSL on 231 h 440. The port defers that iteration's slice as it does the others' (field.c g_dfRebootLoad, sec. 13's REBOOT_SPC_LEAD (8,706),
+sec. 14's staff roll 05C: 8,664; this exit's own measure, 5,642 + LOAD_SPC_LEAD's C0/0B86 -> JSL mean = 8,702, is
 2 APU cycles from it -- the two traces were derived apart, the same mechanism): 1B1's load 7 frames, the cartridge's. (Op DF is `LDA #01 / STA $1E / BRA` into
 E1's C0/3B4B: the same stretch.)
 
