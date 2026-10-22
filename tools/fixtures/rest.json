@@ -364,6 +364,26 @@
       "scene": 113,
       "frames": 1,
       "doc": "the port's own snapshot (F5) in loc 071 beside the 600 A.D. gate, the clearing's scene over"
+    },
+    {
+      "path": "saves/forest_exit.state",
+      "recipe": "fxr_forest_alone",
+      "pad": "80:6,20:14,0:20",
+      "kind": "state",
+      "doc": "Guardia Forest (013), Crono alone (storyline 03) a step above the south exit, (13E0,2EDF)"
+    },
+    {
+      "path": "saves/forest_exit.lakewram",
+      "recipe": "fxr_forest_alone",
+      "pad": "80:6,20:14,0:20",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/forest_re/batalha_nao_comeca.raw.wram",
+      "recipe": "fxr_forest_ambush_alone",
+      "kind": "wram",
+      "doc": "Guardia Forest's Beetles and Avian Chaos ambush with Crono alone, the enemies walking in"
     }
   ]
 }
