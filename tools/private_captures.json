@@ -134,52 +134,8 @@
       "checks": 1
     },
     {
-      "path": "saves/blackbird_re/ff23_handoff_f25.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/blackbird_re/ff23_story_f18.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/blackbird_re/ff23_story_f18.state",
-      "checks": 2
-    },
-    {
       "path": "saves/crononame.state",
       "checks": 1
-    },
-    {
-      "path": "saves/ending_re/ending_052_f1745.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/ending_re/ending_052_f1745.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/ending_re/ending_handoff_f130.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/ending_re/ending_handoff_f130_ff2a.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/ending_re/ending_handoff_f6837.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/ending_re/ending_handoff_f6837_ff2f.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/ending_re/ending_pre_ff2b.lakewram",
-      "checks": 3
-    },
-    {
-      "path": "saves/ending_re/ending_pre_ff2b.state",
-      "checks": 4
     },
     {
       "path": "saves/epoch_jump_01c.state",
@@ -378,80 +334,12 @@
       "checks": 1
     },
     {
-      "path": "saves/lavos_re/cockpit_1b0_f1700.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/lavos_re/cockpit_1b0_f1700.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/lavos_re/ff07_handoff_f10.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/lavos_re/ff07_pre_f1530.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/lavos_re/ff26_handoff_f10.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/lavos_re/ff26_pre_f2760.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/lavos_re/lavos_1d2_arrival.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/lavos_re/lavos_1d2_arrival.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/lavos_re/lavos_1d3_wait.lakewram",
-      "checks": 1
-    },
-    {
-      "path": "saves/lavos_re/lavos_1d3_wait.state",
-      "checks": 1
-    },
-    {
-      "path": "saves/lavos_re/tele476_aa77.lakewram",
-      "checks": 2
-    },
-    {
-      "path": "saves/lavos_re/tele476_aa77.state",
-      "checks": 2
-    },
-    {
-      "path": "saves/race_re/race_user.lakewram",
-      "checks": 3
-    },
-    {
-      "path": "saves/race_re/race_user.state",
-      "checks": 9
-    },
-    {
       "path": "saves/s120_lucca_flags.bin",
       "checks": 1
     },
     {
       "path": "saves/savepoint_flags.bin",
       "checks": 4
-    },
-    {
-      "path": "saves/tyranno_re/ff24_handoff_f27.state",
-      "checks": 3
-    },
-    {
-      "path": "saves/tyranno_re/tele301_req.lakewram",
-      "checks": 3
-    },
-    {
-      "path": "saves/tyranno_re/tele301_req.state",
-      "checks": 3
     }
   ]
 }
