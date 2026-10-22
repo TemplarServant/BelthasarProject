@@ -318,6 +318,36 @@
       "recipe": "fxr_scene8_pod",
       "kind": "state",
       "doc": "loc 008 after Marle vanished, Crono below the left pod"
+    },
+    {
+      "path": "saves/field_re/scene468_stairs_to_120.state",
+      "recipe": "fxf_scene468_stairs",
+      "kind": "state",
+      "doc": "loc 1D4, the east tower's last flight (storyline 10)"
+    },
+    {
+      "path": "saves/field_re/scene468_stairs_to_120.lakewram",
+      "recipe": "fxf_scene468_stairs",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/field_re/s434_decision_lake.state",
+      "recipe": "fxf_s434_decision",
+      "kind": "state",
+      "doc": "loc 1B2, the Tent of Horrors below Bekkler (storyline 03)"
+    },
+    {
+      "path": "saves/field_re/s434_decision.lakewram",
+      "recipe": "fxf_s434_decision",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/intro_box.state",
+      "recipe": "fxr_intro_box",
+      "kind": "state",
+      "doc": "loc 002, Mom's first box waiting at the bottom"
     }
   ]
 }

@@ -19025,27 +19025,11 @@
     {
       "name": "lockstep-decision-box-s434-clean",
       "argv": [
-        "build/Belthasar.exe",
-        "--assets",
-        "ct_assets.dat",
-        "--scene",
-        "434",
-        "--loadwram",
-        "saves/field_re/s434_decision.lakewram",
-        "--selftest",
-        "--frames",
-        "800",
-        "--walkscript",
-        "u:8,n:6,a:1,n:185,a:1,n:65,a:1,n:65,a:1,n:125,a:1,n:105,a:1,n:205,a:1,n:100"
+        "python",
+        "tools/textbox_bytes_cmp.py",
+        "s434"
       ],
-      "env": {
-        "SDL_VIDEODRIVER": "dummy",
-        "SDL_AUDIODRIVER": "dummy",
-        "CT_NOPACE": "1",
-        "CT_TBOPDBG": "1",
-        "CT_PROJECT": "box",
-        "CT_FIELDLOCK": "saves/field_re/s434_decision_lake.state"
-      },
+      "env": {},
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
@@ -19053,12 +19037,12 @@
         "saves/field_re/s434_decision_lake.state"
       ],
       "expect": [
-        "project: box     CLEAN over 799 frames"
+        "textbox-bytes: s434 f1-f869: 0 of 869 frame(s) differ"
       ],
       "tier": "quick",
-      "timeout_s": 120,
+      "timeout_s": 180,
       "note_pass": "the decision box at scene 434 (a prompt page, then the options) runs the cartridge's machine frame by frame, the page ramp included",
-      "notes": "field-decision-box-flow-vs-oracle's drive under the lockstep. It read 'apart f391..f514' before 2026-09-24: a pressed page ran 1FB4 on the press frame (C0/2086 returns; the clear is the NEXT frame's), and the typewriter had an invented setup iteration.",
+      "notes": "field-decision-box-flow-vs-oracle's drive under the lockstep. It read 'apart f391..f514' before 2026-09-24: a pressed page ran 1FB4 on the press frame (C0/2086 returns; the clear is the NEXT frame's), and the typewriter had an invented setup iteration. || MOVED 2026-10-22 TO THE RECIPE TWIN AND OFF THE LOCKSTEP PROJECTION (saves/field_re/s434_decision* = tools/recipes/fxf_s434_decision.json: the ROM's loader into the Tent of Horrors from the recipe-made Truce market; the owner's capture is retired; the check keeps its name). The decision box's four bytes ($0129 / $0126 / $0131 / $0134) are graded as field-textbox-typewriter-vs-oracle grades s439's: tools/textbox_bytes_cmp.py s434 -- the rule's cartridge on --monitor, the port on CT_FIELD_MEMMON from the same state, the WRAM at the same frame number, the port's keys the cartridge's + 1 (Up 8 frames, then A at the drive's frames), the port's SPC seeded -- and they are equal on all 869 frames: the boxes open at f98, f394 (the decision, its cursor 08-0C at f458-f462) and f582, the last closing at f770-f781, on both sides. docs/ROADMAP.md 2.F15 is gone on the twin: the box after the decision opens at f582 on the port as on the cartridge (the capture's phase -- its first frame ran no main-loop iteration -- put it a frame apart). The lockstep projection (its in-process oracle runs in real time, and its whole frame before the port's with the same pad) read the twin apart f582..f626 and reconverged.",
       "mutations": [
         {
           "file": "src/ct_vm.c",
@@ -19066,6 +19050,9 @@
           "replace": "  (void)0;   // MUT: the page's 1FB4 on the press frame",
           "why": "the page ramp one state ahead of the oracle from the press frame"
         }
+      ],
+      "pin": [
+        "^textbox-bytes: s434 "
       ]
     },
     {
@@ -37009,7 +36996,7 @@
         "door-list: walk end -> same",
         "door-list: walk port 4 append(s), C0/28E1 at f199 reload list 2935 reopened 1",
         "door-list: walk cartridge C0/28C0 4 visit(s), C0/28E1 1 visit(s)",
-        "door-list: load list f0-f195: 26 frame(s) differ [f20-f45]",
+        "door-list: load list f0-f195: 27 frame(s) differ [f20-f46]",
         "door-list: load end list - cartridge",
         "door-list: load end list - port",
         "door-list: load end -> same",
@@ -37053,7 +37040,7 @@
           "why": "The probe one sub-pixel above the lead's $1880 reaches the door's row on the step 2B20 -> 2B00, one step before the cartridge: the walk's list leads by a frame and appends 5 times against 4."
         }
       ],
-      "notes": "python tools/door_list_cmp.py (disasm/notes/field_door_list.md): three drives, the logical oracle's --monitor against the port's CT_FIELD_MEMMON every frame, the list $7F:1CC8 and the $2935 door's six cells. reload = party3_field as captured (the right-hand $FA door open and listed), X f4 / B f60. walk = the same with that door closed and the list empty (PEEK_POKE of the values the reload's own decompress and C0/28AA write), run right and up into it, X f130 / B f190. load = the scene-468 stairs with 2935 poked into the list. PINNED RESIDUAL RUNS, each the port's frame model and not the list: the menu program's own use of $7E:3000 (reload f21-f90, walk f147-f220; the port's menu leaves the map alone); the reload's NMI-off frames (f91-f101, f221-f231: the ROM decompresses the map closed across them and reaches C0/28E1 at f102/f232; the port does the reload's work at the RTL frame, f69/f199, and holds black); the load's (f19-f45: the port runs the load's legs at the window's start, the ROM reaches C0/28AA at its end); and f98-f99 in walk, the DOOR REQUEST's existing two-frame lead (the port raises it one step early, 5 requests against the cartridge's 4, and consumes it in the same frame where the ROM's C0/0C76 runs one iteration later -- the render bump and the door sound were already there). A new run after the reload or the load, or an end line that reads DIFFER, is the list. Re-pin only when one of those named frame models is ported, re-verifying the end lines.\n\n2026-09-25 RE-PIN: THE WALK'S RESIDUAL IS CLOSED (field_door_list.md sec. 7). It was two mechanisms. (1) fieldPlayerCollide seeded the probe's $1880 as py*16-1, a stale foot anchor: py is the word/16 since the lead sync went sub-pixel, so C0/9D35's door row reached $29 on the step 2B20 -> 2B00 where the cartridge's reaches it on 2B00 -> 2AE0 (5 requests against 4). (2) the door consumer ran at the end of the frame; C0/0C76 runs at C0/00A4, ahead of the controller C0/881E, so the ROM consumes a request one iteration after raising it. Now: list 0 frames differ, cells only the menu window f147-f231, 4 appends = the cartridge's 4 C0/28C0 visits, and the door sound (19/53/81) is posted at f100 on both sides. ==== RE-PIN 2026-09-26 (the exit drain reads the HEAD's $0117; field_door_list.md sec. 7.1): C0/0C76 runs at C0/00A4, before the controller C0/881E whose accepted step stages a positional exit, so the first DEC of $0119 is the iteration AFTER the stage and the commit is stage + 16 -- the logical cartridge's (scene 468: stages f4/f70/f136, commits f20/f86/f152; the forest's south exit: stage f12, $0100 = 01F0 at f28). The port's drain took its first DEC in the staging frame and committed at stage + 15; every positional exit's commit moves one frame later, onto the cartridge's. The load drive: the port's loads at f20/f87/f154 (were f19/f85/f151) and the list's differing run 26 frames [f20-f45] (was 27 [f19-f45]) -- the first load now on the cartridge's frame, the later ones one and two late (scene 468's price, as in field-stairs-run-three-flights). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/field.json): Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot). RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the stairs' three loads now start on the logical cartridge's frames f20/f86/f152 (were f20/f87/f154): scene 468's walked load no longer over-rounds."
+      "notes": "python tools/door_list_cmp.py (disasm/notes/field_door_list.md): three drives, the logical oracle's --monitor against the port's CT_FIELD_MEMMON every frame, the list $7F:1CC8 and the $2935 door's six cells. reload = party3_field as captured (the right-hand $FA door open and listed), X f4 / B f60. walk = the same with that door closed and the list empty (PEEK_POKE of the values the reload's own decompress and C0/28AA write), run right and up into it, X f130 / B f190. load = the scene-468 stairs with 2935 poked into the list. PINNED RESIDUAL RUNS, each the port's frame model and not the list: the menu program's own use of $7E:3000 (reload f21-f90, walk f147-f220; the port's menu leaves the map alone); the reload's NMI-off frames (f91-f101, f221-f231: the ROM decompresses the map closed across them and reaches C0/28E1 at f102/f232; the port does the reload's work at the RTL frame, f69/f199, and holds black); the load's (f19-f45: the port runs the load's legs at the window's start, the ROM reaches C0/28AA at its end); and f98-f99 in walk, the DOOR REQUEST's existing two-frame lead (the port raises it one step early, 5 requests against the cartridge's 4, and consumes it in the same frame where the ROM's C0/0C76 runs one iteration later -- the render bump and the door sound were already there). A new run after the reload or the load, or an end line that reads DIFFER, is the list. Re-pin only when one of those named frame models is ported, re-verifying the end lines.\n\n2026-09-25 RE-PIN: THE WALK'S RESIDUAL IS CLOSED (field_door_list.md sec. 7). It was two mechanisms. (1) fieldPlayerCollide seeded the probe's $1880 as py*16-1, a stale foot anchor: py is the word/16 since the lead sync went sub-pixel, so C0/9D35's door row reached $29 on the step 2B20 -> 2B00 where the cartridge's reaches it on 2B00 -> 2AE0 (5 requests against 4). (2) the door consumer ran at the end of the frame; C0/0C76 runs at C0/00A4, ahead of the controller C0/881E, so the ROM consumes a request one iteration after raising it. Now: list 0 frames differ, cells only the menu window f147-f231, 4 appends = the cartridge's 4 C0/28C0 visits, and the door sound (19/53/81) is posted at f100 on both sides. ==== RE-PIN 2026-09-26 (the exit drain reads the HEAD's $0117; field_door_list.md sec. 7.1): C0/0C76 runs at C0/00A4, before the controller C0/881E whose accepted step stages a positional exit, so the first DEC of $0119 is the iteration AFTER the stage and the commit is stage + 16 -- the logical cartridge's (scene 468: stages f4/f70/f136, commits f20/f86/f152; the forest's south exit: stage f12, $0100 = 01F0 at f28). The port's drain took its first DEC in the staging frame and committed at stage + 15; every positional exit's commit moves one frame later, onto the cartridge's. The load drive: the port's loads at f20/f87/f154 (were f19/f85/f151) and the list's differing run 26 frames [f20-f45] (was 27 [f19-f45]) -- the first load now on the cartridge's frame, the later ones one and two late (scene 468's price, as in field-stairs-run-three-flights). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/field.json): Under the switches the oracle these tools start with CT_ORACLE_LOGICAL=1 alone holds the beam where the CPU's last wait left it (the infinitely fast CPU), so the event runner's deadline C0/5A46 (`LDA $213D` twice, `CMP #00F0 / BPL`, `CMP $69 / BCS ->5A90`) reads the held real counter -- line 228, right after the NMI's pad latch C2/84F7 -- which is past $69 = 0x48 every frame: the runner stops before its first object and the field never moves (measured: saves/field_re/loc002_intro_curtain.state under the three switches + LOGICAL, obj10's cadence $1015 reaches 00 at f10 and its ip $1194 stays 0761 forever; with CT_ORACLE_VIRTUAL_BEAM=1 it steps to 0791 at f10 exactly as the valve oracle does). CLAUDE.md defines that read as the rule's fixed virtual beam V = 0 on both sides, i.e. the rule's oracle is CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 (snes.c g_ctVirtualBeam = 2: C3/02DD, C0/5A46, C0/CA82); the port already reads V = 0 there. The premise 'the logical oracle without the virtual beam' does not hold under the rule; with the virtual beam (env_rule, laid over only when both switches are set, as vmdiff-scene8-gate-cutscene) the check passes with its lines unchanged. At the flip the rule's oracle default should carry the virtual beam (then this env_rule is moot). RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the stairs' three loads now start on the logical cartridge's frames f20/f86/f152 (were f20/f87/f154): scene 468's walked load no longer over-rounds. || RE-PINNED 2026-10-22 ON THE RECIPE TWIN (saves/field_re/scene468_stairs_to_120.* = tools/recipes/fxf_scene468_stairs.json; the owner's capture is retired): the load drive's list differs on 27 frames [f20-f46] where the capture's differed on 26 [f20-f45] -- the run is the port's atomic load against the cartridge's NMI-off load, whose C0/28AA reset lands inside it. On the twin the first load posts a song (the twin's playing song is queen_vanishes's, not the stairs'): its f20 ends in the sound driver (C7/0A71, the handshake's real time) where the capture's ends in C3/05EB, and C0/286C / C0/28AA run one frame later in the load (--hookpc: f48 vs the capture's f47); the next two loads start on the same frames (f113 / f186 under --hookpc), the port's C0/28E1 stays at f20 / f86 / f152, the end list is the same and every other line is unchanged. docs/ROADMAP.md 2.F17 is this run's length: not the port's load clock (the port's loads begin on the cartridge's frames from either state)."
     },
     {
       "name": "field-dash-run-vs-logical-oracle",
@@ -45971,14 +45958,14 @@
         "hdma-build: wave-box 170 calls (0 interrupted, set aside) -> exact 170/170, written 47370 bytes, 0 wrong",
         "hdma-build: wave-top-box 125 calls (0 interrupted, set aside) -> exact 125/125, written 31416 bytes, 0 wrong",
         "hdma-build: odd-0351 60 calls (0 interrupted, set aside) -> exact 60/60, written 13680 bytes, 0 wrong",
-        "hdma-build: census set A modes 0/1/2 498/42/204, set B modes 0/1/2 498/40/205, $0127 10 values (2 <= 0A), wave ch3 555 (under a box 204) ch2 104 tail 659, $53 bit 7 28, $0351 odd 60"
+        "hdma-build: census set A modes 0/1/2 498/40/204, set B modes 0/1/2 498/42/205, $0127 10 values (2 <= 0A), wave ch3 555 (under a box 204) ch2 104 tail 659, $53 bit 7 28, $0351 odd 60"
       ],
       "pin": [
         "^hdma-build: "
       ],
       "timeout_s": 200,
       "note_pass": "FD/C2C1 native (src/hdma_table.c) builds the cartridge's own tables on every call of ten drives: textboxes top and bottom, the attract, the demo battle's exit tail, the window wave on ch2 / ch3 / under a box, $7F:0351 odd",
-      "notes": "disasm/notes/field_hdma_tables.md. The oracle (rule on) dumps the WRAM at each FD/C2C1 entry and at its RTL (ct.exe --hookpc FDC2C1, CT_HOOK_DUMPCALLS, CT_HOOK_DUMPEXIT=FDC2D2,FDC2DE); ct.exe --hdmabuildcmp runs the native builder on each entry image: EXACT = all 128 KB equal outside the stack page $0600-$06FF; WRITTEN = with the tables ($7F:0F80-$1E26) and DP $01D9-$01EF poisoned twice, every byte the builder writes equals the cartridge's (a builder that writes nothing cannot pass on the calls that rewrite unchanged tables). Three drives poke an input the ROM then runs itself: $0139 = 0C (C0/264F sets $1DFD = 11), $1DF9 = 01 under a box (the run lists CC5E / CCB8), $7F:0351 = 01. Re-pin only if a drive's frame window is moved on purpose; a 'wrong' count is a builder defect. || RE-PINNED 2026-10-22 ON THE RECIPE TWIN (the naga drive's saves/field_re/m81_naga_after_fight_lake.state = tools/recipes/fxr_m81_naga_after_fight.json; the owner's capture is retired): the naga drive's 256 calls are all exact, 0 wrong; only its written-byte count moved (23720 -> 23654) with the state. || (2026-10-22, the same re-pin: the census line's set-B mode tally moved 497/40/206 -> 498/40/205 with the naga drive's state.)",
+      "notes": "disasm/notes/field_hdma_tables.md. The oracle (rule on) dumps the WRAM at each FD/C2C1 entry and at its RTL (ct.exe --hookpc FDC2C1, CT_HOOK_DUMPCALLS, CT_HOOK_DUMPEXIT=FDC2D2,FDC2DE); ct.exe --hdmabuildcmp runs the native builder on each entry image: EXACT = all 128 KB equal outside the stack page $0600-$06FF; WRITTEN = with the tables ($7F:0F80-$1E26) and DP $01D9-$01EF poisoned twice, every byte the builder writes equals the cartridge's (a builder that writes nothing cannot pass on the calls that rewrite unchanged tables). Three drives poke an input the ROM then runs itself: $0139 = 0C (C0/264F sets $1DFD = 11), $1DF9 = 01 under a box (the run lists CC5E / CCB8), $7F:0351 = 01. Re-pin only if a drive's frame window is moved on purpose; a 'wrong' count is a builder defect. || RE-PINNED 2026-10-22 ON THE RECIPE TWIN (the naga drive's saves/field_re/m81_naga_after_fight_lake.state = tools/recipes/fxr_m81_naga_after_fight.json; the owner's capture is retired): the naga drive's 256 calls are all exact, 0 wrong; only its written-byte count moved (23720 -> 23654) with the state. || (2026-10-22, the same re-pin: the census line's set-B mode tally moved 497/40/206 -> 498/40/205 with the naga drive's state.) || RE-PINNED 2026-10-22 ON THE RECIPE TWIN (the top-box and wave-top-box drives' saves/intro_box.state = tools/recipes/fxr_intro_box.json: Mom's first box waiting at the bottom of loc 002 in the opening, from the new game's pan; the owner's capture is retired): both drives' 125 calls are exact, 0 wrong, with the capture's written-byte counts (12364 / 31416); only the census line's mode-1 tally swapped sets (set A 42 -> 40, set B 40 -> 42: the twin's frame parity of $0153, the set the builder writes, against the Y flip).",
       "mutations": [
         {
           "file": "src/hdma_table.c",
@@ -46742,9 +46729,9 @@
         "saves/field_re/scene468_stairs_to_120.lakewram",
         "--selftest",
         "--frames",
-        "1400",
+        "4560",
         "--walkscript",
-        "n:1400"
+        "n:4560"
       ],
       "env": {
         "SDL_VIDEODRIVER": "dummy",
@@ -46753,13 +46740,13 @@
         "CT_FIELD_MEMMON": "0158:2,01F8:1,1682:1"
       },
       "expect": [
-        "fmemmon f532 loc=1D4  0158=0083*  01F8=11*  1682=00",
-        "fmemmon f660 loc=1D4  0158=8083*  01F8=12*  1682=21*",
-        "fmemmon f788 loc=1D4  0158=0080*  01F8=13*  1682=00*",
-        "fmemmon f1300 loc=1D4  0158=0082*  01F8=17*  1682=00"
+        "fmemmon f561 loc=1D4  0158=0083*  01F8=27*  1682=00",
+        "fmemmon f4273 loc=1D4  0158=8081*  01F8=44*  1682=00",
+        "fmemmon f4401 loc=1D4  0158=0082*  01F8=45*  1682=21*",
+        "fmemmon f4529 loc=1D4  0158=8082*  01F8=46*  1682=00*"
       ],
       "pin": [
-        "^fmemmon f(532|660|788|1300) "
+        "^fmemmon f(561|4273|4401|4529) "
       ],
       "tier": "full",
       "timeout_s": 600,
@@ -46783,7 +46770,7 @@
           "why": "A1F7 `LDA $1F / BEQ ->A211`: the free-roam lead's idle chain needs the explore flag"
         }
       ],
-      "notes": "THE IDLE COUNTER (2026-10-18). C0/EC60, the wait every field loop ends its frame in, opens with `LDA $0158 / INC A / AND #83FF / STA $0158` (writer C0:EC6C); C0/0C1A zeroes it at a load, the lead's walk / run arms C0/A171 / A18C on every step; the idle chain C0/A1E9 reads it: at 2FF (and, once A22A's `TSB #8000` set bit 15, at every 128th frame) it rolls $FE00[++$01F8] -- < 8 starts the blink (anim 21), else idle. The port never counted it, and its free-roam lead ran 9E84 on the collision page without $0158 / $01F8 / $011F: no roll ever, the blink never seen, the $FE00 cursor two steps short per 256 idle frames. The rule's cartridge (`ct.exe --monitor 7E0158:2,7E01F8:1,7E1682:1 --from saves/field_re/scene468_stairs_to_120.state --input 0:1400`) and the port, the same lines: rolls at f532 (01F8 11), f660 (12, the blink: $1682 = 21), f788 (13, back to 00) ... f1300 (17)."
+      "notes": "THE IDLE COUNTER (2026-10-18). C0/EC60, the wait every field loop ends its frame in, opens with `LDA $0158 / INC A / AND #83FF / STA $0158` (writer C0:EC6C); C0/0C1A zeroes it at a load, the lead's walk / run arms C0/A171 / A18C on every step; the idle chain C0/A1E9 reads it: at 2FF (and, once A22A's `TSB #8000` set bit 15, at every 128th frame) it rolls $FE00[++$01F8] -- < 8 starts the blink (anim 21), else idle. The port never counted it, and its free-roam lead ran 9E84 on the collision page without $0158 / $01F8 / $011F: no roll ever, the blink never seen, the $FE00 cursor two steps short per 256 idle frames. The rule's cartridge (`ct.exe --monitor 7E0158:2,7E01F8:1,7E1682:1 --from saves/field_re/scene468_stairs_to_120.state --input 0:1400`) and the port, the same lines: rolls at f532 (01F8 11), f660 (12, the blink: $1682 = 21), f788 (13, back to 00) ... f1300 (17). || MOVED 2026-10-22 TO THE RECIPE TWIN (saves/field_re/scene468_stairs_to_120.lakewram = tools/recipes/fxf_scene468_stairs.json: the ROM's loader into the east tower's last flight from queen_vanishes; the owner's capture is retired) and to 4560 frames: the twin's $FE00 cursor stands at $01F8 = 26 (the capture's 10), so the rolls take entries 27..46 -- the first at f561 (the capture's f532: $0158 starts at 00CF, the capture's 00EB), every 128 frames after, and the blink's entry (< 8) is 45 = 07, at f4401 ($1682 = 21), back to 00 at f4529. The rule's cartridge (`ct.exe --monitor 7E0158:2,7E01F8:1,7E1682:1 --from saves/field_re/scene468_stairs_to_120.state --input 0:4600`) and the port write the same lines on every roll, f561 through f4529."
     },
     {
       "name": "snd-machine-pcm-attract",

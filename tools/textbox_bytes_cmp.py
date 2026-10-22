@@ -33,15 +33,23 @@ CT = os.path.join(ROOT, 'build', 'ct.exe')
 FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 WATCH = [('0129', 1), ('0126', 1), ('0131', 1), ('0134', 2)]
 
-# name: (cartridge state, port WRAM seed, scene, the cartridge's press frames (A), frames)
+# name: (cartridge state, port WRAM seed, scene, the cartridge's press frames (A), frames
+#        [, a direction held from the cartridge's f0: (cartridge pad, port walkscript key, frames)])
 DRIVES = {
     's439': ('saves/field_re/s439_marle_choice_lake.state', 'saves/field_re/s439_marle_choice.lakewram', 439,
              [100, 200, 300, 400, 500, 600, 700], 1100),
+    's434': ('saves/field_re/s434_decision_lake.state', 'saves/field_re/s434_decision.lakewram', 434,
+             [13, 199, 265, 331, 457, 563, 769], 870, ('10', 'u', 8)),
 }
 
 
-def script(presses, total, shift, btn, idle, sep):
+def script(presses, total, shift, btn, idle, sep, held=None, key=None):
     out, t = [], 0
+    if held:
+        if shift:
+            out.append(idle % shift)
+        out.append('%s:%d' % (key, held[2]))
+        t = shift + held[2]
     for f in presses:
         f += shift
         if f > t:
@@ -52,9 +60,10 @@ def script(presses, total, shift, btn, idle, sep):
     return sep.join(out)
 
 
-def cartridge(st, presses, total):
+def cartridge(st, presses, total, held=None):
     p = subprocess.run([CT, '--monitor', ','.join('7E%s:%d' % w for w in WATCH), '--from', st, '--btnscript',
-                        script(presses, total, 0, '100:1', '0:%d', ','), '--frames', str(total)], cwd=ROOT,
+                        script(presses, total, 0, '100:1', '0:%d', ',', held, held and held[0]), '--frames', str(total)],
+                       cwd=ROOT,
                        env=dict(os.environ, CT_ORACLE_LOGICAL='1', SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy'),
                        capture_output=True, text=True, errors='replace')
     rows = {}
@@ -65,11 +74,12 @@ def cartridge(st, presses, total):
     return rows
 
 
-def port(st, seed, scene, presses, total):
+def port(st, seed, scene, presses, total, held=None):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_SEEDSTATE=st,
                CT_FIELD_MEMMON=','.join('%s:%d' % w for w in WATCH))
     p = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(scene), '--loadwram', seed, '--selftest',
-                        '--frames', str(total), '--walkscript', script(presses, total, 1, 'a:1', 'n:%d', ',')],
+                        '--frames', str(total), '--walkscript', script(presses, total, 1, 'a:1', 'n:%d', ',', held,
+                                                                          held and held[1])],
                        cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     rows, cur = {}, None
     ch = {}
@@ -88,8 +98,9 @@ def main():
     for name in names:
         if name not in DRIVES:
             sys.exit('textbox-bytes: no drive %s' % name)
-        st, seed, scene, presses, total = DRIVES[name]
-        c, p = cartridge(st, presses, total), port(st, seed, scene, presses, total)
+        st, seed, scene, presses, total = DRIVES[name][:5]
+        held = DRIVES[name][5] if len(DRIVES[name]) > 5 else None
+        c, p = cartridge(st, presses, total, held), port(st, seed, scene, presses, total, held)
         frames = [f for f in range(1, total) if f in c]
         bad = [f for f in frames if c[f] != p.get(f)]
         print('textbox-bytes: %s f1-f%d: %d of %d frame(s) differ%s' % (name, total - 1, len(bad), len(frames),

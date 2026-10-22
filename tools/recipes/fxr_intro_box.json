@@ -1,0 +1,22 @@
+{
+  "name": "fxr_intro_box",
+  "from": "ow_intro_pan",
+  "doc": "Stands in for saves/intro_box.state (the owner's capture of Mom's first box in the opening): from the new game's overworld pan (ow_intro_pan) 1540 frames of nothing, A every 12 frames 46 times (the wake-up text, into loc 002), then nothing: Mom (obj8 at @058A) opens her box at the bottom ($0126 = 02) at f2160, types its first line and waits from f2209 ($0129 = 07, $0131 = 01) -- cut at f2215, storyline 00, as the capture.",
+  "steps": [
+    [
+      "pad",
+      "0:1540,(100:2,0:10)*46,0:123"
+    ]
+  ],
+  "expect": {
+    "loc": "0x002",
+    "wram": {
+      "0x10000": "0x00",
+      "0x0129": "0x07",
+      "0x0126": "0x02",
+      "0x0131": "0x01",
+      "0x1190": "0x8A",
+      "0x1191": "0x05"
+    }
+  }
+}
