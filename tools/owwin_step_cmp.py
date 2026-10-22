@@ -22,7 +22,9 @@ window 1's edges on every sampled line.
 THE VIRTUAL BEAM (CLAUDE.md's one exception, the zelda3 model, 2026-09-18): the seed C3/02DD reads the H/V counters --
 the world VM's position in the frame, which no C engine has -- so both sides read the virtual beam (snes.c
 g_ctVirtualBeam: `$213C` = `$0351`, `$213D` = 00): the port's call always, the oracle with CT_ORACLE_VIRTUAL_BEAM=1.
-The hSecond / bus2 the cartridge's line prints no longer reach the seed.
+The hSecond / bus2 the cartridge's line prints no longer reach the seed. The state is the rule's run from power-on; the
+frames after it run in real time with the virtual beam, so the world VM's call returns inside the visible frame and window 1
+can be sampled on the lines that follow (under the whole rule its main loop runs from the vblank's start).
 """
 import os
 import re
@@ -30,8 +32,9 @@ import subprocess
 
 CT = os.path.abspath('build/ct.exe')
 FIELD = os.path.abspath('build/Belthasar.exe')
-SRC = 'saves/attract_cena_inicial.state'
-F0 = 100                                     # the state: the attract 6 frames before the world-5 leg's op 4E
+SRC = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json)
+F0 = 99                                      # the state: the attract 6 frames before the world-5 leg's op 4E (100 on the owner's
+                                             # real-time capture, until 2026-10-22: its 1F5 load comes a frame later)
 CALLS = [('install', 'C6E241', 1), ('frame', 'C6E27E', 2), ('later', 'C6E27E', 3)]   # 'later': its edges on lines 101-112 straddle a run
                                                                                   # boundary, which the 112-line split must place
 
