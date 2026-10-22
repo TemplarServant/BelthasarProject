@@ -5,7 +5,7 @@
 #define CT_WIDEXT_H
 #include <stdint.h>
 
-// One location's margins: four planes of w*h metatile ids (0 = none) drawn from plane 3 (the ground) up to plane 0.
+// One location's margins: four planes of w*h cells (0 = none, v = metatile v - 1) drawn from plane 3 up to plane 0.
 // Column c is the room's metatile column c - x, x = (w - (right + 1)) / 2 (`right` the scroll mask's last column); row
 // r is the room's row r. They are drawn with the Steam release's tiles: its chip sets for BG1/BG2 slots 0-5 (128 chips
 // of 64 pixels, 0..15; NULL = the ROM's slot) and its definitions of the metatiles the margins use (metaIds[i]'s four

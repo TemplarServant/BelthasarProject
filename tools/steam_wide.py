@@ -12,10 +12,13 @@ own purchase, so it is written next to the player's ct_assets.dat and is never c
 
 The archive ("ARC1"): each block XORed with an LCG keystream seeded by the block's file offset, then a big-endian length
 and gzip -- the format as GitExl/CTViewer reads it (src/filesystem/resourcesbin.rs, MIT; credited to RiverNyxx's
-CTExplore). A margins map: [w, h] (16-px cells) then four planes of w*h little-endian u16 metatile ids into the
-location's own BG1/BG2 tile assembly (0 = nothing); it spans the room's columns -x .. right+x and rows 0 .. bottom, where
-x = (w - (right + 1)) / 2 (6 for a room as narrow as the screen). Ids of 512 and up are tiles the Steam release added
-(`map_bin/cgext*.bin`): not read here, the port draws nothing for them.
+CTExplore). A margins map: [w, h] (16-px cells) then four planes of w*h little-endian u16 cells: 0 = nothing, v = the
+location's BG1/BG2 metatile v - 1 (the Steam executable's drawer, 0x54FD5C: page (v - 1) >> 8, tile (v - 1) & 255 of a
+16 x 16 sheet; pages 2 and up are tiles the Steam release added, `map_bin/cgext*.bin`, not read here: the port draws
+nothing for them). It spans the room's columns -x .. right+x and rows 0 .. bottom, where x = (w - (right + 1)) / 2 (6
+for a room as narrow as the screen); the planes are drawn 3, 2, 1, 0. After them an optional u16 flag and a fifth plane
+(15 locations; the loader 0x4DAE30) are not read yet. Checked against the owner's Steam 16:9 screenshots of 0x014
+(scroll top and bottom): the strips they show, 99.9% of their pixels.
 
 The margins are drawn with the Steam release's own tiles: it redefined metatiles the margins use (Guardia Forest's 268,
 284, 300, 316: a closed canopy where the SNES's were partly empty) and loads chip sets the SNES's tileset leaves empty
@@ -102,7 +105,7 @@ def margins(f, files):
         slots = list(_block(f, *bs)[:6]) if bs else [0xFF] * 6
         ce = files.get('Game/field/ChipTable/ChipTable_%04d.dat' % assembly)
         asm = _block(f, *ce) if ce else b''
-        ids = sorted(set(v for v in struct.unpack('<%dH' % (4 * w * h), planes) if 0 < v < 512))
+        ids = sorted(set(v - 1 for v in struct.unpack('<%dH' % (4 * w * h), planes) if 0 < v <= 512))
         metas = []
         for t in ids:
             if (t + 1) * 12 > len(asm):

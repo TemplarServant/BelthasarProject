@@ -838,8 +838,8 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
 // A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in four planes drawn with this scene's
 // palette and the Steam release's tiles -- its chip sets where slotChips names one (else this scene's), its definitions of
 // the metatiles in metaIds (4 corners of u16 chip, u8 palette row, u8 flags H 1 / V 2 / priority 4 at metaCorners + 16 i)
-// over this scene's -- plane 3 first up to plane 0, each whole. Ids 0 (none) and 512 and up (tiles the Steam release
-// added) draw nothing. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel (BL1 where drawn); both are cleared first.
+// over this scene's -- plane 3 first up to plane 0, each whole. A cell v is metatile v - 1 (the Steam executable's
+// drawer, 0x54FD5C); 0 (none) and v - 1 of 512 and up (tiles the Steam release added) draw nothing. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel (BL1 where drawn); both are cleared first.
 // (Study knobs: CT_WIDE_EXT_ORDER = the planes, first drawn first; CT_WIDE_EXT_PRIOSPLIT=1 = every plane's priority-0
 // corners before any priority-1 one.)
 int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
@@ -868,7 +868,7 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
   for (int pass = 0; pass < (split ? 2 : 1); pass++)
     for (const char* c = ord; *c >= '0' && *c <= '3'; c++) {
       int k = *c - '0';
-      for (int i = 0; i < n; i++) { uint16_t v = planes[(size_t)k * n + i]; t[i] = (v == 0 || v >= 512) ? 0xFFFF : v; }
+      for (int i = 0; i < n; i++) { uint16_t v = planes[(size_t)k * n + i]; t[i] = (v == 0 || v > 512) ? 0xFFFF : (uint16_t)(v - 1); }
       for (int prio = split ? pass : 0; prio < (split ? pass + 1 : 2); prio++)
         draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, sd->pal, prio, BL1, NULL, NULL, 0, 0, 0, 0, 0, NULL);
     }
