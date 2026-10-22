@@ -2566,9 +2566,9 @@
     },
     {
       "path": "saves/battle_re/gato_wait.state",
-      "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "kind": "rawstate",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fx_a_battle_gato_press_action; tools/fixtures/gato.json)",
       "used_by": [
         "battle-defeat-exit-vs-oracle",
         "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge",
@@ -2611,7 +2611,7 @@
         "battle-enemy-census-feet-vs-oracle",
         "battle-gato-long-feet-vs-oracle"
       ],
-      "sha256": "233ca7485cf1004a5bdeb00a4627026cff1c7a15787e19eb51011e0da0ee1352",
+      "sha256": "e9af8fe7f4bd29a0416dd727b8392894c4ca85b5b3ace63448512995f22060be",
       "size": 273109,
       "present_when_recorded": true
     },
@@ -2622,8 +2622,8 @@
       ],
       "kind": "lakewram",
       "regenerable": true,
-      "how": "saves/battle_re/gato_wait.state's WRAM with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single learned, MP 99), behind the 21-byte #lakewram header -- what battle_ab.run writes for the port.",
-      "sha256": "a2d2f38f3a0e8f6bb899e8084f230df5b3ea7e0b278d153b684758c43279be0d",
+      "how": "tools/fixtures.py (recipe fx_a_battle_gato_press_action; tools/fixtures/gato.json): gato_wait's WRAM with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single learned, MP 99), behind the 21-byte #lakewram header -- what battle_ab.run writes for the port.",
+      "sha256": "19428103b18fe75ec5cd4dafabfc9b2b0ad13c2923fb3d28e4f72860c1f48679",
       "size": 131093,
       "present_when_recorded": true
     },
