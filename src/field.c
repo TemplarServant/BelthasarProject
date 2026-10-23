@@ -4759,8 +4759,11 @@ static int fieldStillCol(int bit, int mx) {
 // ...and over them the room's BG3 (the fog, the snow, a light), as the bake composes it (fieldnative.c, the same rules): the
 // margins stand for BG1/BG2 on both screens; each screen takes its top layer -- BG3 priority 1, then BG1/BG2, then BG3
 // priority 0 -- and where the main one is in the colour math (CGADSUB) the sub one is added or subtracted, halved or not
-// (Death Peak's snow, Denadoro's mist: BG3 priority 1 over a sub screen of BG1/BG2, averaged). BG3 is sampled at its own
-// offset, past the edge as in it. (Layer bits: BG1 1, BG2 2, BG3 4.)
+// (Death Peak's snow: BG3 priority 1 over a sub screen of BG1/BG2, averaged). BG3 is sampled at its own offset, past the
+// edge as in it -- only when it scrolls on its own (fieldBeyondLayers: Death Peak's snow, $1D8F/$1D91 moving). A BG3 that
+// scrolls with the map is the map's, and past the room's edge it belongs to other rooms, as BG1/BG2 do: Crono's house
+// (002) put the glow of another room's lamp in its margins (the owner, 2026-10-23). The Steam release draws BG3 inside the
+// room's scroll mask only (0x4DE2F0's BG3 layer, 0x4DF5D0 over the mask). (Layer bits: BG1 1, BG2 2, BG3 4.)
 static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int o3y, uint8_t* d) {
   const uint8_t* b[2] = { NULL, NULL };            // [0] BG3 priority 0, [1] priority 1 (CtSceneLayers 0 and 5)
   for (int k = 0; k < 2; k++) {
@@ -20218,7 +20221,8 @@ int main(int argc, char** argv) {
       static CtSceneLayers beyondL; int det = 0;     // (past the edge: the layers scrolling on their own -- fieldBeyondPixel)
       if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
           !CtFieldSceneLayers(f.sd, &beyondL)) det = 0;
-      int wextL = wext && f.sd && CtFieldSceneLayers(f.sd, &beyondL);   // (the room's BG3 over the margins: fieldWideExtBg3)
+      int wextL = wext && f.sd && (fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y) & 4) &&
+                  CtFieldSceneLayers(f.sd, &beyondL);   // (the room's BG3 over the margins when it scrolls on its own: fieldWideExtBg3)
       g_wideBeyond = det;
       for (int y = 0; y < ch; y++)
         for (int x = 0; x < wideW; x++) {
