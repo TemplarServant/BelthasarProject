@@ -17,9 +17,10 @@ Two more cases (in the default set) need a seed and a frame of their own: `roll`
 tools/tutorial_cmp.py's seed), f100. Both wrote their rows with the 256 picture's stride into the wide one (2026-10-10).
 And `forest`, a live battle (scene 19 from saves/battle_re/forest_pre_wrapped.lakewram, A mashed), f300: the arena is
 composed wide round the battle's own 256 view. A room as wide as its map shows the map wrapping in the sides (settings
-wide_room_wrap, the default); `6-nowrap` is scene 6 with the option off -- black past the room's edges. A room wider than
-the picture stops the widescreen's camera at its edges (the forest's fight at f300): the world's view then stands off the
-middle, and the line says where (the screen-fixed boxes stay at the middle: what still differs there).
+wide_room_wrap, the default); `6-nowrap` is scene 6 with the option off -- black past the room's edges. The widescreen's
+camera is the Steam release's (2026-10-23): the view stays in the middle at a room's edge too, and the side past the
+edge is black (`5-edge`, the fair with Crono at its left edge; the forest's fight at f300). Should the view ever stand
+off the middle, the line says where (the screen-fixed boxes stay at the middle: what still differs there).
 """
 import os
 import subprocess

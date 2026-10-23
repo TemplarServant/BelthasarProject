@@ -4681,24 +4681,19 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
   if (roomW > f->W || (roomW == f->W && roomW < w && CtSettingsGet()->wideRoomWrap)) { *x0 = -(1 << 30); *x1 = 1 << 30; }
   else { *x0 = f->mx0; *x1 = f->mx1; }
 }
-// THE WIDESCREEN'S CAMERA (a mod): where the 256 view stands in a picture `w` wide whose ROM camera is at camx. The wider
-// picture keeps inside the room, never showing past its scroll mask -- in a room wider than the picture it stops at the
-// room's edges while the ROM's camera goes on to its own (the view then stands off the picture's middle); a room wider
-// than 256 but narrower than the picture is shown whole, centred. A room as wide as its map (fieldWideMask: it wraps) or
-// no wider than 256 keeps the view in the middle. The ROM's camera, and everything it decides, are untouched: only where
-// the picture is cut moves.
+// THE WIDESCREEN'S CAMERA (a mod) is the Steam release's (Chrono Trigger.exe, 2023; ROADMAP X4): where the 256 view
+// stands in a picture `w` wide whose ROM camera is at camx -- always the picture's middle. The Steam field is the SNES's
+// picture on one node, scaled 1.875 x 5/3 into a 568 x 320 design and placed at (0x7FA108, 0) (0x5889D0-0x5889FE), where
+// 0x7FA108 = (the design's width - 480) / 2 + its origin (0x40EBE5-0x40EC3F): the 256 columns centred, whatever the
+// room. Its sides are the ROM's camera's own surroundings: past a room's scroll mask it draws the room's margins
+// (mapext_<location>, 4 to 6 columns a side for wide rooms as for narrow ones: fieldWideExtPic), so its picture never
+// stops at a room's edge -- the ROM's camera does, and the picture with it. Here the sides past the edge are the Steam
+// margins when the player has them, else what fieldWideMask leaves there (black, or the map wrapping). The ROM's camera,
+// and everything it decides, are untouched. (Until 2026-10-23 the picture stopped at a wide room's edges and the view slid
+// off the middle; the Steam release never does.)
 static int fieldWideViewX(const Field* f, int w, int camx) {
-  int x = (w - CAMW) / 2, wm0, wm1;
-  fieldWideMask(f, w, &wm0, &wm1);
-  int roomW = wm1 - wm0;
-  if (wm0 > -(1 << 29) && roomW > CAMW) {
-    int L = camx - x;                                // the picture's left edge, in map pixels
-    if (roomW >= w) { if (L < wm0) L = wm0; if (L > wm1 - w) L = wm1 - w; }
-    else L = wm0 - (w - roomW) / 2;
-    int nx = camx - L;
-    if (nx >= 0 && nx <= w - CAMW) x = nx;
-  }
-  return x;
+  (void)f; (void)camx;
+  return (w - CAMW) / 2;
 }
 // THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
 // release draws there, from the player's own ct_wide.dat, baked once per location with the Steam release's tiles and the
@@ -4740,10 +4735,10 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* 
 // the PPU would repeat its period, a seam at each edge of the view, so the widescreen's sides mirror it there instead:
 // the bake (scene.c CtFieldSceneSetStill), the layers drawn past the room's edge (fieldStillCol), the frames between
 // (fieldnative.c). A layer that moves shows all of its period in time, painted to repeat: it repeats.
-// It stands still on the WIDE screen: its 256 columns in the picture's middle, where the view is unless the widescreen's
-// camera has stopped at a room's edge (fieldWideViewX). There the ROM's camera walks on, the view slides across the
-// stopped picture, and a backdrop held to the view slid with it over a bridge that stood still (the owner, 2026-10-22);
-// held to the picture it stands, and the view shows it shifted by the view's distance from the middle.
+// It stands still on the WIDE screen: its 256 columns in the picture's middle, which is where the view is (fieldWideViewX,
+// the Steam release's camera). (While the widescreen's camera stopped at a room's edge, the view slid across the stopped
+// picture and a backdrop held to the view slid over a bridge that stood still -- the owner, 2026-10-22; held to the
+// picture's middle it stood. With the view always there the two are one.)
 static int g_wideStill, g_wideStillVx, g_wideStillVw;   // this frame's still layers (BL2 2, BL3 4), the 256 view's map
                                                         //   column, and the map column of the picture's middle 256
 static int fieldWideStillBits(const uint8_t* pg) {
