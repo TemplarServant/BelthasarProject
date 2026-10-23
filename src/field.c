@@ -4709,12 +4709,14 @@ static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   if (!CtWideExtGet(f->loc, &e)) return NULL;
   p.w = e.w; p.h = e.h; p.xo = (e.w - f->mx1 / 16) / 2;
   p.rgb = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16 * 3); p.cov = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16);
-  if (!p.rgb || !p.cov || !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, p.rgb, p.cov)) {
+  if (!p.rgb || !p.cov || !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet,
+                                               p.rgb, p.cov)) {
     free(p.rgb); free(p.cov); p.rgb = p.cov = NULL; return NULL;
   }
   return &p;
 }
-// The margins' pixel at map pixel (mx, my); 0 = nothing drawn there.
+// The margins' pixel at map pixel (mx, my): its layer (scene.c CtFieldSceneBakeExt: 1 under the sprites, 2 or 4 over
+// them), 0 = nothing drawn there.
 static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* out) {
   static int dx = -99999, dy, dxl, dxr;            // CT_WIDE_EXT_DX / _DY (+ _DXL / _DXR per side): pixels added to the
   if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;    //   margins' place (study knobs)
@@ -4726,7 +4728,7 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* 
   if (ex < 0 || ex >= W || my < 0 || my >= p->h * 16) return 0;
   size_t q = (size_t)my * W + ex;
   if (!p->cov[q]) return 0;
-  memcpy(out, p->rgb + q * 3, 3); return 1;
+  memcpy(out, p->rgb + q * 3, 3); return p->cov[q];
 }
 // THE WIDESCREEN'S STILL BACKDROP (a mod): a layer the ROM detaches from the camera ($1D36 bit 1 BG2 / bit 2 BG3: the map
 // header's md[1] bits 4/5, C0/A3A9-A3BF) and moves neither at a speed of its own ($1D37/$1D38, $1D39/$1D3A: md[2]/md[3])
@@ -20225,7 +20227,11 @@ int main(int argc, char** argv) {
           int ux = camx + x;
           if (ux >= wm0 && ux < wm1) continue;
           uint8_t* d = fb + ((size_t)y * wideW + x) * 3;
-          if (wext && fieldWideExtPixel(wext, ux, camy + y, d)) {
+          uint8_t ext[3]; int el = wext ? fieldWideExtPixel(wext, ux, camy + y, ext) : 0;
+          if (el) {                                    // a sprite stands over the margins' low layer, under the high one
+            int own = mot->own[y * wideW + x];
+            if ((own & 0x7F) >= CT_MOT_SPR && (el == 1 || (own & CT_MOT_FRONT))) continue;
+            memcpy(d, ext, 3);
             if (wextL) fieldWideExtBg3(&beyondL, ux, camy + y, mot->o3x, mot->o3y, d);
             mot->own[y * wideW + x] = CT_MOT_FIXED; continue;
           }

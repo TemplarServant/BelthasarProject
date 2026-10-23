@@ -865,16 +865,18 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
   if (blendEn) *blendEn = sd->bakeBlend; if (subOp) *subOp = sd->bakeSubOp; if (half) *half = sd->bakeHalf;
   return sd->bakeSub;
 }
-// The main-screen coverage of the last bake (see SceneData.bakeCov); NULL before the first.
-// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in four planes drawn with this scene's
+// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in five planes drawn with this scene's
 // palette and the Steam release's tiles -- its chip sets where slotChips names one (else this scene's), its definitions of
 // the metatiles in metaIds (4 corners of u16 chip, u8 palette row, u8 flags H 1 / V 2 / priority 4 at metaCorners + 16 i)
-// over this scene's -- plane 3 first up to plane 0, each whole. A cell v is metatile v - 1 (the Steam executable's
-// drawer, 0x54FD5C); 0 (none) and v - 1 of 512 and up (tiles the Steam release added) draw nothing. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel (BL1 where drawn); both are cleared first.
-// (Study knobs: CT_WIDE_EXT_ORDER = the planes, first drawn first; CT_WIDE_EXT_PRIOSPLIT=1 = every plane's priority-0
-// corners before any priority-1 one.)
+// over this scene's, and its pixel sheets for the pages in pageSheet (256 x 256 CGRAM indices, 0 = nothing; an index past
+// the BG palettes draws nothing). A cell v is tile v - 1, page (v - 1) >> 8 (the Steam executable's drawer, 0x54FD5C); 0
+// draws nothing, nor does a page past 1 without a sheet. The planes are the Steam release's layers, drawn from the bottom
+// up: plane 3 (BG2's low-priority tiles) and plane 2 (BG1's) mark cov BL1, under the sprites; planes 1 and 0 (the
+// priority-1 layer) mark BL2, over them; plane 4, opaque (its cells fill with colour 0 first: 0x550260), drawn with BG3,
+// marks BL3. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel (0 = nothing); both are cleared first.
 int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
-                        const uint16_t* metaIds, const uint8_t* metaCorners, uint8_t* rgb, uint8_t* cov) {
+                        const uint16_t* metaIds, const uint8_t* metaCorners, const uint8_t* const pageSheet[8],
+                        uint8_t* rgb, uint8_t* cov) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->meta12 || !sd->chips12 || !planes || w <= 0 || hgt <= 0) return 0;
   int W = w * 16, H = hgt * 16, n = w * hgt;
@@ -894,19 +896,37 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
       c->fx = e[3] & 1; c->fy = (e[3] >> 1) & 1; c->prio = (e[3] >> 2) & 1;
     }
   }
-  const char* ord = getenv("CT_WIDE_EXT_ORDER"); if (!ord || !*ord) ord = "3210";
-  int split = getenv("CT_WIDE_EXT_PRIOSPLIT") && atoi(getenv("CT_WIDE_EXT_PRIOSPLIT"));
-  for (int pass = 0; pass < (split ? 2 : 1); pass++)
-    for (const char* c = ord; *c >= '0' && *c <= '3'; c++) {
-      int k = *c - '0';
-      for (int i = 0; i < n; i++) { uint16_t v = planes[(size_t)k * n + i]; t[i] = (v == 0 || v > 512) ? 0xFFFF : (uint16_t)(v - 1); }
-      for (int prio = split ? pass : 0; prio < (split ? pass + 1 : 2); prio++)
-        draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, sd->pal, prio, BL1, NULL, NULL, 0, 0, 0, 0, 0, NULL);
+  static const int order[5] = { 3, 2, 1, 0, 4 };
+  for (int o = 0; o < 5; o++) {
+    int k = order[o]; uint8_t bit = k >= 2 && k < 4 ? BL1 : k < 2 ? BL2 : BL3;
+    const uint16_t* pl = planes + (size_t)k * n;
+    for (int i = 0; i < n; i++) {
+      int v = pl[i], pg = (v - 1) >> 8;
+      t[i] = (v == 0 || pg >= 2 || (pageSheet && pageSheet[pg])) ? 0xFFFF : (uint16_t)(v - 1);
+      if (v == 0) continue;
+      int x0 = (i % w) * 16, y0 = (i / w) * 16;
+      if (k == 4)                                      // opaque: colour 0 under the tile
+        for (int y = 0; y < 16; y++)
+          for (int x = 0; x < 16; x++) { size_t q = (size_t)(y0 + y) * W + x0 + x; memcpy(rgb + q * 3, sd->pal[0], 3); cov[q] = bit; }
+      const uint8_t* s = pageSheet && pg < 8 ? pageSheet[pg] : NULL;
+      if (!s) continue;
+      int tt = (v - 1) & 255, sx = (tt & 15) * 16, sy = (tt >> 4) * 16;
+      for (int y = 0; y < 16; y++)
+        for (int x = 0; x < 16; x++) {
+          int ci = s[(sy + y) * 256 + sx + x];
+          if (!ci || ci >= 128) continue;
+          size_t q = (size_t)(y0 + y) * W + x0 + x;
+          memcpy(rgb + q * 3, sd->pal[ci], 3); cov[q] = bit;
+        }
     }
+    for (int prio = 0; prio < 2; prio++)
+      draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, sd->pal, prio, bit, NULL, NULL, 0, 0, 0, 0, 0, NULL);
+  }
   free(t); free(chips); free(pres); free(metas);
   return 1;
 }
 
+// The main-screen coverage of the last bake (see SceneData.bakeCov); NULL before the first.
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->bakeCov) return NULL;
