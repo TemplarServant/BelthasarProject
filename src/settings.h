@@ -41,6 +41,8 @@ typedef struct CtSettings {
   int wideRoomWrap;             // widescreen: a room as wide as its map shows the map wrapping in the sides (else black)
   int wideSteamMargins;         // a mod: past a room's edge, the Steam release's margins from the player's ct_wide.dat
                                 //   (tools/steam_wide.py, widext.h); off = the sides as above
+  int fillBottomLines;          // a mod: the field's and the fights' bottom 13 lines (211-223), which the ROM's V-IRQ
+                                //   blanks to upload VRAM, drawn like the rest; off = black, as on the SNES
   int vsync;
   int backend;                  // present.h CT_BACKEND_*: SDL_Renderer / OpenGL / Vulkan (next start)
   char renderDriver[32];        // SDL_Renderer driver ("" = SDL's choice; "direct3d", "direct3d11", "opengl", "software")

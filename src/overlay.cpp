@@ -197,6 +197,12 @@ extern "C" int CtOverlayFrame(void) {
                           "rooms), with the room's own tiles. Its data come from your own copy of the Steam release: run\n"
                           "tools/steam_wide.py on its folder once to write ct_wide.dat next to ct_assets.dat. Rooms without\n"
                           "margins, or without the file, keep the sides as above. Nothing else in the game changes.");
+      bool fb = s->fillBottomLines != 0;
+      if (ImGui::Checkbox("Fill the bottom lines", &fb)) s->fillBottomLines = fb;
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("A mod: the field and the fights draw their last 13 lines (211-223), which the original game\n"
+                          "leaves black -- it turns the screen off there to copy graphics, hidden by old TVs' borders.\n"
+                          "Off: the black strip at the bottom, as on the SNES. Nothing else in the game changes.");
       bool ip = s->interpolate != 0;
       if (ImGui::Checkbox("Frames between (60+ fps)", &ip)) s->interpolate = ip;
       if (ImGui::IsItemHovered())

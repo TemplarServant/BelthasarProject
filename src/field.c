@@ -4724,6 +4724,9 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* 
                       dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
                       dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
   mx -= dx + (mx < 0 ? dxl : dxr); my -= dy;
+  if (my == p->h * 16) my--;   // (the line just past the room's bottom: the composite's origin is camy + 1, so with the
+                               //  bottom lines drawn -- settings.h fillBottomLines -- the last one shows it; the margins
+                               //  hold the room's rows only, and repeat their last there)
   int ex = mx + p->xo * 16, W = p->w * 16;
   if (ex < 0 || ex >= W || my < 0 || my >= p->h * 16) return 0;
   size_t q = (size_t)my * W + ex;
@@ -20742,7 +20745,10 @@ int main(int argc, char** argv) {
     // Applied after the whole composition (map, sprites, window, fade) and before the overlays that
     // replace the buffer (the $FD sequences, the loader screen), so the selftest hash and the on-screen
     // frame carry it alike. The C2 program's screens (naming, the ATB selector, the menu) have no such IRQ.
-    if (!inWorld && seqId < 0 && ldrCur < 0 && nameId < 0 && !atbGate) {
+    // (A MOD, settings.h fillBottomLines: the player may have those lines drawn like the rest -- the composition above
+    //  already put the map, the sprites and the window there. Interactive runs only: the suite never reads the settings.)
+    if (!inWorld && seqId < 0 && ldrCur < 0 && nameId < 0 && !atbGate &&
+        !(g_hostInteractive && CtSettingsGet()->fillBottomLines)) {
       const uint8_t* ib = f.vm ? CtSceneMem7E(f.vm) : NULL;
       if (!(ib && (ib[0x010F] & 0x80))) { memset(fb + (size_t)211 * CAMW * 3, 0, (size_t)13 * CAMW * 3); fieldBlank = 1;
         for (int y = 211; y < CAMH; y++) CtMotFixRow(mot, y); }
