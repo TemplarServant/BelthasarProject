@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""Set BelthasarProject up from your own ROM: verify it, extract the assets, rebuild the oracle states, generate the data, build.
 
-    python tools/setup.py --rom <path to your Chrono Trigger (USA) dump> [--no-build] [--jobs N]
+    python tools/setup.py --rom <path to your Chrono Trigger (USA) dump> [--no-build]
     python tools/setup.py --check            regenerate every generated file and compare with the one in the tree
 
 The repository carries none of the game. This is the one command that makes, on your machine and from your dump, every

@@ -70,16 +70,24 @@ committed and pushed. Measured 2026-10-23 (Ubuntu 24.04, gcc, Python 3.13):
   shallow `git clone` of the tag: the cloud proxy refuses github.com's archive links), runs `tools/fetch_saves.py`,
   installs the shapes and builds every target. Each step is skipped when its result is already there. Its last line
   says whether the container has the ROM's data, a ROM not yet set up, or no ROM.
-- **The ROM is not in the container.** It is never committed here (docs/ROM.md). A session that has it at the root
-  (`Chrono_Trigger_USA_SNES.sfc`) or at `$CT_ROM` runs `python3 tools/setup.py --rom <path>` (15-20 min) and
-  `python3 tools/fixtures.py make all`; the container is new each time, so that cost recurs per container. Without the
+- **The ROM is not in the container.** It is never committed here (docs/ROM.md). The owner attaches it to a message
+  in the session's chat; it lands at `/root/.claude/uploads/<session>/<id>-<name>.sfc`, for that session only. The
+  agent then runs `python3 tools/setup.py --rom <that path>` (it verifies the hash and copies the ROM to the root,
+  where `.gitignore` keeps it out of every commit) and `python3 tools/fixtures.py make all`. The container is new each
+  time, so the attachment and that cost recur per container. Without the
   ROM only the shapes build exists: `python3 tools/regress.py` gives 5 pass, 3 fail, 945 skip (`--quick`: 608 skip) -- the 3 FAILs
   (`field-battle-animeng-idle-gather`, `field-battle-animeng-pc-gather`, `menu-window-gradient-vs-hdma`) read
   generated tables that are still shapes, and are not a regression. Engine work that changes behaviour cannot be
   validated without the ROM (the mandate's `--vmdiff` / `--vm` and the suite need the oracle on it).
 - **Network.** The environment's policy decides which hosts answer. Under the default policy `fantasyanime.com` is
   refused, so the 27 Jackie saves of `tools/third_party_saves.json` do not fetch (51 of 78 do) and the checks and
-  recipes that read them SKIP; adding that host to the environment's allowed domains fixes it.
+  recipes that read them SKIP; adding that host to the environment's allowed domains fixes it (from the next session:
+  a running one keeps the policy it started with). Where a host is out of reach, the owner attaches the archives (a
+  zip of them, or the files) and `python3 tools/fetch_saves.py --from <zip or directory>` takes each missing one from
+  there by its file name -- verified by the same SHA-256, so a wrong copy is refused, not used.
+- **Time, measured on a 4-core container (2026-10-23).** `tools/setup.py` 21 min; `tools/fixtures.py make all` 64 min
+  more (one recipe at a time). Both reuse what is already made (a second `make all`: 0.04 s), so a resumed container
+  pays nothing; a new one pays both.
 - **Windows-only pieces.** `tools\build.bat` and the `tools/*.ps1` fetchers do not run here: `python3 tools/build.py`
   and `python3 tools/get_imgui.py` are the same steps. The agent's memory index (`MEMORY.md`) is not in a cloud
   container either: the rules live in `CLAUDE.md`, `.claude/no-invention-mandate.md`, `.claude/skills/` and
