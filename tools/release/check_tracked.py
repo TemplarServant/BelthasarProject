@@ -28,8 +28,8 @@ from export_public import excluded  # noqa: E402
 from scan_rom_leaks import BINARY_OK_DIR, BINARY_OK_EXT, decode_text  # noqa: E402
 
 UPSTREAM = {                                     # binaries that are someone else's program, shipped as they are
-    'android/gradle/wrapper/gradle-wrapper.jar': "Gradle's wrapper (Apache-2.0); the CI checks it against Gradle's "
-                                                 "published checksums (gradle/actions/wrapper-validation)",
+    'android/gradle/wrapper/gradle-wrapper.jar': "Gradle's wrapper (Apache-2.0), SDL2 2.32.10's android-project copy byte "
+                                                 "for byte; the CI pins its SHA-256 (gradle/actions/wrapper-validation)",
 }
 
 

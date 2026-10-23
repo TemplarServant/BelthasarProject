@@ -34,8 +34,12 @@ jobs:
           python-version: '3.13'
       - name: No tracked file is the game's, by name or kind
         run: python tools/release/check_tracked.py
-      - name: The Gradle wrapper is Gradle's own
-        uses: gradle/actions/wrapper-validation@v4
+      - name: The Gradle wrapper is the known one
+        uses: gradle/actions/wrapper-validation@v6
+        with:
+          # android/gradle/wrapper/gradle-wrapper.jar is SDL2 2.32.10's android-project/gradle/wrapper/gradle-wrapper.jar,
+          # byte for byte (an old wrapper SDL ships, not on Gradle's published list); any other jar fails.
+          allow-checksums: 2c23278a62dc9f96ab11bee897d9f53e6479d6419135e4560ce822a6431df5e5
 
   build:
     name: Build + ROM-free checks (${{ matrix.os }})

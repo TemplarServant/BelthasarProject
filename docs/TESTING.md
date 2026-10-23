@@ -152,7 +152,8 @@ The repository is public and the ROM never comes near it, so GitHub's runners te
   tracked file is one `tools/release/export_public.py` keeps out of the public tree (the ROM, `ct_assets.dat`,
   savestates, captures, battery saves, `src/data/*.h`, `src/xlat/*.c`, ...), and no tracked file is a binary but the
   README's pictures in `docs/media/` and the upstream files the script names. Gradle's own action checks the Gradle
-  wrapper's jar against Gradle's published checksums. This is the half of the leak check that needs no ROM: the byte
+  wrapper's jar: Gradle's published checksums, plus the one pinned in the workflow -- the jar is SDL2 2.32.10's
+  `android-project` copy byte for byte, an old wrapper that is not on Gradle's list. This is the half of the leak check that needs no ROM: the byte
   search, `tools/release/scan_rom_leaks.py`, needs the ROM and stays CONTRIBUTING.md's step before a pull request.
 - **The build on Linux, Windows and macOS** (`ubuntu-24.04` gcc, `windows-2022` MSVC, `macos-15` clang): the shapes
   (`tools/gen/shapes.py install`) in place of the generated files, then `tools/build.py` (every target, its artifact
