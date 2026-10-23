@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Setting up (the ROM, building, the release)
+    url: https://github.com/TemplarServant/BelthasarProject/blob/main/README.md#quick-start
+    about: How to set the game up from your own ROM, before opening an issue about it.

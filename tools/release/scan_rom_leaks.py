@@ -105,6 +105,17 @@ def is_ramp(win):
     return any(seq_ok(win[:k]) and seq_ok(win[k:]) for k in range(2, len(win) - 1))
 
 
+def decode_text(data):
+    """The file's text, or None for a binary: a NUL byte, or bytes that are neither UTF-8 nor control-free Latin-1."""
+    if b'\0' in data:
+        return None
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:                      # a Latin-1 comment is still text; control bytes are not
+        t = data.decode('latin-1')
+        return None if any(c < ' ' and c not in '\t\r\n\f' for c in t) else t
+
+
 def content(win):
     return len(set(win)) >= 8 and not is_ramp(win)
 
@@ -185,14 +196,7 @@ def main():
                 continue
             data = open(p, 'rb').read()
             nfiles += 1
-            text = None
-            if b'\0' not in data:
-                try:
-                    text = data.decode('utf-8')
-                except UnicodeDecodeError:          # a Latin-1 comment is still text; control bytes are not
-                    t = data.decode('latin-1')
-                    if not any(c < ' ' and c not in '\t\r\n\f' for c in t):
-                        text = t
+            text = decode_text(data)
             lines = (text or '').split(chr(10))
             if text is not None:
                 runs = runs_from_text(text)

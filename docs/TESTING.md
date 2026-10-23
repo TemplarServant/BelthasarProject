@@ -131,9 +131,9 @@ running `Belthasar.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-22: **953** checks, **3** excluded; `--list` prints the current set).
+(2026-10-23: **954** checks, **3** excluded; `--list` prints the current set).
 
-- **quick** (**616** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**617** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **316** slower checks — whole fights and attract legs against the logical oracle, the
@@ -142,6 +142,29 @@ Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_check
   `lockstep-scene120-stairs-entry-lucca`), the race / ending / Lavos / Tyranno / panorama chains,
   `jackie-saves-census-vs-oracle`, `ocean-palace-aftermath-chain-vs-oracle` and the four `battle-*-feet-vs-oracle`
   checks. A full run takes 15-80 minutes, mostly depending on the oracle cache.
+
+## The GitHub CI (`.github/workflows/ci.yml`)
+
+The repository is public and the ROM never comes near it, so GitHub's runners test what needs no ROM. On every push to
+`main` and every pull request:
+
+- **No game file in the tree** (`tools/release/check_tracked.py`, also the quick check `tree-tracks-no-game-file`): no
+  tracked file is one `tools/release/export_public.py` keeps out of the public tree (the ROM, `ct_assets.dat`,
+  savestates, captures, battery saves, `src/data/*.h`, `src/xlat/*.c`, ...), and no tracked file is a binary but the
+  README's pictures in `docs/media/` and the upstream files the script names. Gradle's own action checks the Gradle
+  wrapper's jar: Gradle's published checksums, plus the one pinned in the workflow -- the jar is SDL2 2.32.10's
+  `android-project` copy byte for byte, an old wrapper that is not on Gradle's list. This is the half of the leak check that needs no ROM: the byte
+  search, `tools/release/scan_rom_leaks.py`, needs the ROM and stays CONTRIBUTING.md's step before a pull request.
+- **The build on Linux, Windows and macOS** (`ubuntu-24.04` gcc, `windows-2022` MSVC, `macos-15` clang): the shapes
+  (`tools/gen/shapes.py install`) in place of the generated files, then `tools/build.py` (every target, its artifact
+  check), and last the data-free `Belthasar` (`CT_DATAFREE=1`), the game a release ships.
+- **The suite without the ROM**: `tools/regress.py` (2026-10-23: 5 pass, 0 fail, 949 skip) and
+  `python -m unittest discover -s tests`. The job fails if a check FAILs or if none PASSes. Every SKIP is a check the run
+  has not tested: a check that grades the game declares the ROM or a state made from it among its `inputs`, so it never
+  runs on the shapes' zeros. The Android build (the NDK, SDL2's source) is not in the CI yet.
+
+The suite with the ROM (after `tools/setup.py` and `tools/fixtures.py make all`) stays the gate for behaviour; a green
+CI says the tree builds and carries no game file, not that the game is right.
 
 ## The attract vehicle (`Belthasar --scene 433` from cold)
 

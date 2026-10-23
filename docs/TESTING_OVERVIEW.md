@@ -23,7 +23,7 @@ mutations. `tools/regress.py` has no per-check logic.
 
 | | |
 |---|---|
-| Checks | **953** (a clean-room clone, 2026-10-23: 953 pass) |
+| Checks | **954** (a clean-room clone, 2026-10-23: 953 pass; the 954th, `tree-tracks-no-game-file`, needs no ROM) |
 | Quick tier | 616 (the pre-commit tier, chosen by measured runtime) |
 | Full tier | 316 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
 | Untiered | 21 (run only in the full run) |
