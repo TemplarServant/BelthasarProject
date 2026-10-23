@@ -159,15 +159,56 @@ def write_srm(st):
     return st + '.srm'
 
 
+class _Lock:
+    """An exclusive lock on <OUT>/<name>.lock, held across processes (two checks of a parallel suite asking for the same
+    recipe must not build it into the same files at once); the OS drops it when its holder dies."""
+    def __init__(self, path):
+        self.f = open(path, 'a+')
+        if os.name == 'nt':
+            import msvcrt
+            import time
+            while True:
+                try:
+                    self.f.seek(0)
+                    msvcrt.locking(self.f.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.2)
+        else:
+            import fcntl
+            fcntl.flock(self.f, fcntl.LOCK_EX)
+
+    def release(self):
+        if os.name == 'nt':
+            import msvcrt
+            self.f.seek(0)
+            msvcrt.locking(self.f.fileno(), msvcrt.LK_UNLCK, 1)
+        self.f.close()
+
+
 def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
     r = recipes[name]
     os.makedirs(OUT, exist_ok=True)
     st = os.path.join(OUT, name + '.state')
     meta = os.path.join(OUT, name + '.key')
     key = key_of(recipes, name, rom_sha, tag)
-    if not force and os.path.exists(st) and os.path.exists(meta) and open(meta).read() == key:
+
+    def cached():
+        return os.path.exists(st) and os.path.exists(meta) and open(meta).read() == key
+    if not force and cached():
         print('%srecipe %s: cached' % ('  ' * depth, name))
         return st
+    lock = _Lock(os.path.join(OUT, name + '.lock'))
+    try:
+        if not force and cached():                        # another process built it while this one waited
+            print('%srecipe %s: cached' % ('  ' * depth, name))
+            return st
+        return _build(recipes, name, r, st, meta, key, rom_path, rom_sha, tag, depth)
+    finally:
+        lock.release()
+
+
+def _build(recipes, name, r, st, meta, key, rom_path, rom_sha, tag, depth):
     parent = r.get('from')
     src = make(recipes, parent, rom_path, rom_sha, tag, False, depth + 1) if parent else None
     print('%srecipe %s: building' % ('  ' * depth, name), flush=True)

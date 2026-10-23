@@ -46,9 +46,11 @@ recipe's output reproduces the file byte for byte, or every difference is explai
 
 ### 1.1 Checks still on private captures (L)
 
-**Now (2026-10-22, 9b19b7c):** 2 checks read the one capture left, `saves/field_re/pre_scene_19f.{state,lakewram}` (the
-user's state before the Ocean Palace aftermath; `tools/private_captures.json`); in a fresh clone -- a cloud session too --
-they SKIP with the file named, and a clean-room clone runs 951 pass, 2 skip. Every other state a check reads is made by a
+**Now (2026-10-23): none.** The last capture, `saves/field_re/pre_scene_19f.{state,lakewram}`, is made by the recipe
+`lg_ocean_palace_19f` (Jackie's ch22 played through the Ocean Palace); `tools/private_captures.json` is empty. A clean-room
+clone ran 951 pass, 0 skip; of its 2 failures one was two checks building the same recipe at once (recipes.py now locks a
+recipe while it builds) and one, `field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge`, runs the port's
+sound on wall-clock time (no `CT_AUDIO_LOCKSTEP`) and fails under load -- open. Every other state a check reads is made by a
 recipe (226 files, `python tools/fixtures.py make all`) or is a public save (`python tools/fetch_saves.py`, 78 files). The
 check `inputs-come-from-recipes-or-sources` (`tools/input_provenance.py`) fails on a check reading a state file that is
 neither a recipe's, a public source's (`tools/third_party_saves.json`) nor on that list, which only shrinks.
@@ -69,7 +71,7 @@ fixture's entry in `tools/regress_inputs.json` and each blocked attempt in `tool
 | ~~The ferry (`ferry_re` x4), flag pages, forest ambush/exit, `bat2`/`bat4`/`bat8`, `loc070_imps_roly_pre`, `hud_close_s13`, `hetake_dissolve_anim_ppu`, `atb_partial`~~ **Done (2026-10-22):** recipes (`tools/fixtures/rest.json`; the ferry's four states from `fxr_truce_office`) | -- | -- | -- |
 | ~~Missing even privately (`catedral_*`, `door_009`, `inn600_*`, `inn_lucca_007`, `lucca_af_s129`, `roly_rider_*`)~~ **Done (2026-10-22):** recipes (`tools/fixtures/rest.json`, the playthrough's legs among them) | -- | -- | -- |
 | ~~The late-game chains (lavos_re, ending_re, race_re, tyranno_re, blackbird_re)~~ **Done (2026-10-22):** recipes from Jackie's public saves (`tools/fixtures/lategame.json`) | -- | -- | -- |
-| The Ocean Palace's aftermath (`saves/field_re/pre_scene_19f.{state,lakewram}`, the user's state before the Mammon Machine scene) | 2 (`ocean-palace-aftermath-chain-vs-oracle`, `ow-1f5-wave-and-light-vs-oracle`) | The last capture; a route from Jackie's ch22 toward it is work in progress (`tools/recipes/lg_ocean_palace_wip.json`, not used yet) | Finish the route, then move both checks onto the twin |
+| ~~The Ocean Palace's aftermath (`saves/field_re/pre_scene_19f.{state,lakewram}`, the user's state before the Mammon Machine scene)~~ **Done (2026-10-23):** the recipe `lg_ocean_palace_19f` | 2 (`ocean-palace-aftermath-chain-vs-oracle`, `ow-1f5-wave-and-light-vs-oracle`) | The last capture; a route from Jackie's ch22 toward it is work in progress (`tools/recipes/lg_ocean_palace_wip.json`, not used yet) | Finish the route, then move both checks onto the twin |
 
 ### 1.2 Smaller release leftovers (S each)
 

@@ -84,9 +84,10 @@ It is **not yet verified playable from start to finish**.
 
 ### Not done
 
-- **Two checks still need a private state.** Everything the build needs is made from your ROM. Of the 953
-  regression checks, 951 run in a fresh clone from your ROM, the recipes and the public battery saves; two read the
-  owner's capture `saves/field_re/pre_scene_19f.*`, which no recipe makes yet, and SKIP. See
+- **One check depends on the machine's speed.** Every state the 953 regression checks read is made from your ROM by a
+  recipe or is a public save: a clean-room clone (2026-10-23) ran 951 pass, 0 skip -- setup 19 min, the public saves 1.5
+  min, `tools/fixtures.py make all` 16 min, the suite 62 min. `field-defeat-holds-the-room-and-the-fight-sprites-vs-rule-cartridge`
+  runs the port's sound on wall-clock time (no `CT_AUDIO_LOCKSTEP`) and fails under load. See
   [docs/ROADMAP.md](docs/ROADMAP.md#1-the-public-release-and-what-it-left-open).
 - **The vendored core stays as the reference.** `Belthasar` runs no emulated hardware: the sound driver, the `$C3`
   sequence stages, the gate warp, the window wipe, the overworld window and the HDMA table builder are native C. The
