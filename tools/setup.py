@@ -220,6 +220,13 @@ def main():
             missing.extend(o for o in g['out'] if is_shape(o))
             progress()
 
+    # every recipe the generators need, built once and side by side (tools/recipes.py make_many: a chain in order, the
+    # chains in parallel); each generator's own `recipes.py make` then finds its states cached
+    need = sorted({r for g in gens for r in g.get('recipes', [])})
+    if need:
+        say('replaying the %d recipes the generators need' % len(need))
+        run([sys.executable, 'tools/recipes.py', 'make'] + need)
+
     run_stage([g for g in gens if stage_of(g) == 'assets'])   # the captures ct_assets.dat packs
 
     say('extracting the assets -> ct_assets.dat')

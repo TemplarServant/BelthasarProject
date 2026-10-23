@@ -2,7 +2,7 @@
 r"""Oracle states rebuilt from power-on: the recipes that replace captured savestates.
 
     python tools/recipes.py list
-    python tools/recipes.py make <name>... | all      [--rom ROM] [--force]
+    python tools/recipes.py make <name>... | all      [--rom ROM] [--force] [--jobs N]
     python tools/recipes.py show <name>                (the chain of steps, flattened)
 
 A savestate holds the console's whole memory -- the game's graphics, code and text -- so none may be published. What
@@ -221,12 +221,49 @@ def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
     return st
 
 
+def deps_of(recipes, name):
+    """The recipes `name` needs built first: its parent and the recipes its `sram` steps boot from."""
+    r = recipes[name]
+    d = [r['from']] if r.get('from') else []
+    return d + [st[1] for st in r.get('steps', []) if st[0] == 'sram']
+
+
+def make_many(recipes, names, rom_path, rom_sha, tag, jobs, force=False):
+    """make() every recipe in `names` and the chains under them, `jobs` at a time: a recipe starts once the recipes it
+    depends on are built, so the independent chains run side by side (each recipe's files are its own: no two jobs
+    touch the same state). `force` rebuilds the named ones only, as make() does. Returns {name: state}."""
+    from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+    need, todo = set(), list(names)
+    while todo:
+        n = todo.pop()
+        if n not in need:
+            need.add(n)
+            todo += deps_of(recipes, n)
+    done, out, running = set(), {}, {}
+    pending = set(need)
+    with ThreadPoolExecutor(max(1, jobs)) as ex:
+        while pending or running:
+            for n in sorted(p for p in pending if set(deps_of(recipes, p)) <= done):
+                pending.discard(n)
+                running[ex.submit(make, recipes, n, rom_path, rom_sha, tag, force and n in names)] = n
+            if not running:
+                sys.exit('recipes: a dependency cycle among %s' % ', '.join(sorted(pending)))
+            fin, _ = wait(running, return_when=FIRST_COMPLETED)
+            for f in fin:
+                n = running.pop(f)
+                out[n] = f.result()          # a failed recipe's SystemExit surfaces here
+                done.add(n)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('cmd', choices=['list', 'make', 'show', 'try'])
     ap.add_argument('names', nargs='*')
     ap.add_argument('--rom')
     ap.add_argument('--force', action='store_true')
+    ap.add_argument('--jobs', type=int, default=os.cpu_count() or 1,
+                    help='recipes built side by side (default: the CPU count); a chain still builds in order')
     a = ap.parse_args()
     recipes = load_all()
     if a.cmd == 'list':
@@ -256,7 +293,9 @@ def main():
     for n in names:
         if n not in recipes:
             sys.exit('recipes: no recipe %s' % n)
-        print('%s -> %s' % (n, os.path.relpath(make(recipes, n, rom_path, rom_sha, tag, a.force), ROOT)))
+    built = make_many(recipes, names, rom_path, rom_sha, tag, a.jobs, a.force)
+    for n in names:
+        print('%s -> %s' % (n, os.path.relpath(built[n], ROOT)))
     return 0
 
 

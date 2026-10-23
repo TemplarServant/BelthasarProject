@@ -2,7 +2,7 @@
 r"""The regression suite's state fixtures, made from recipes (no savestate is ever published).
 
     python tools/fixtures.py list [--domain D]
-    python tools/fixtures.py make  [all | <path>...] [--domain D] [--force]
+    python tools/fixtures.py make  [all | <path>...] [--domain D] [--force] [--jobs N]
     python tools/fixtures.py diff  [<path>...]          (how far a recipe-made fixture is from the file on disk)
 
 Many checks in tools/regress_checks.json start from a state of the game (saves/...). Those files hold the game's
@@ -29,7 +29,9 @@ memory, so they cannot ship; tools/fixtures/<domain>.json says how each one is m
                       the optional <walkscript>. A CTFS image is sizeof(CtScene)'s: remake it (--force) after a struct
                       change, as the owner's F5 snapshots had to be re-taken
 `make` writes a fixture only when it is missing, unless --force: the owner's private fixtures stay in place until a
-check has been moved onto its recipe-made twin (docs/ROADMAP.md 1.1).
+check has been moved onto its recipe-made twin (docs/ROADMAP.md 1.1). It builds the recipes the fixtures need side by
+side (tools/recipes.py make_many: a recipe starts once the ones it depends on are built), then the fixtures' own runs,
+--jobs at a time (default: the CPU count): a fresh clone's `make all` costs about its longest recipe chain, not the sum.
 """
 import argparse
 import glob
@@ -42,6 +44,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
+import recipes as recipelib  # noqa: E402
 from recipes import expand  # noqa: E402  (a pad's `(a:n,b:m)*K` groups, as in a recipe's pad step)
 TMP = os.path.join(ROOT, 'build', 'fixtures')
 
@@ -64,21 +67,15 @@ def payload(state):
 
 
 def build(e):
-    """Make the fixture into a temporary place; returns the list of (tmp, final path)."""
+    """Make the fixture into a temporary place (its recipe already built); returns the list of (tmp, final path)."""
     os.makedirs(TMP, exist_ok=True)
-    r = subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'recipes.py'), 'make', e['recipe']], cwd=ROOT,
-                       capture_output=True, text=True)
-    if r.returncode:
-        raise SystemExit('fixtures: recipe %s failed:\n%s' % (e['recipe'], r.stdout[-800:] + r.stderr[-800:]))
     state = os.path.join(ROOT, 'build', 'recipes', e['recipe'] + '.state')
-    tag = os.path.join(TMP, os.path.basename(e['path']).replace('.', '_'))
+    tag = os.path.join(TMP, e['path'].replace('/', '_').replace('.', '_'))    # the whole path: fixtures build in parallel
     raw = tag + '.raw'
     if e.get('pad') or e['kind'] == 'peek':
         env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_ORACLE_LOGICAL='1',
                    PEEK_SAVE=tag + '.state', **e.get('env', {}))
         rom = os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc')
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from recipes import expand
         pad = expand(e.get('pad') or '0:0')
         p = subprocess.run([CT, rom, '--peek', state, raw, '--btnscript', pad], cwd=ROOT, env=env,
                            capture_output=True, text=True, errors='replace')
@@ -130,6 +127,7 @@ def main():
     ap.add_argument('paths', nargs='*')
     ap.add_argument('--domain')
     ap.add_argument('--force', action='store_true')
+    ap.add_argument('--jobs', type=int, default=os.cpu_count() or 1)
     a = ap.parse_args()
     fx = load(a.domain)
     if a.paths and a.paths != ['all']:
@@ -139,23 +137,33 @@ def main():
             print('%-52s %-9s %-26s %s' % (e['path'], e['kind'], e['recipe'] + (' +pad' if e.get('pad') else ''),
                                           'present' if os.path.exists(os.path.join(ROOT, e['path'])) else 'missing'))
         return 0
+    todo = []
     for e in fx:
-        dst = os.path.join(ROOT, e['path'])
-        if a.cmd == 'make' and os.path.exists(dst) and not a.force:
+        if a.cmd == 'make' and os.path.exists(os.path.join(ROOT, e['path'])) and not a.force:
             print('fixture %s: present (kept)' % e['path'])
-            continue
-        pairs = build(e)
-        if a.cmd == 'diff':
+        else:
+            todo.append(e)
+    if not todo:
+        return 0
+    # the recipes first, side by side (each chain in order), then the fixtures' own runs
+    allr = recipelib.load_all()
+    rom_path = os.path.abspath(os.environ.get('CT_ROM') or recipelib.romlib.find_default())
+    rom_sha = recipelib.hashlib.sha1(recipelib.romlib.load(rom_path)).hexdigest()
+    recipelib.make_many(allr, sorted({e['recipe'] for e in todo}), rom_path, rom_sha, recipelib.oracle_tag(), a.jobs)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max(1, a.jobs)) as ex:
+        for e, pairs in zip(todo, ex.map(build, todo)):
+            if a.cmd == 'diff':
+                for tmp, fin in pairs:
+                    x = open(tmp, 'rb').read()
+                    y = open(fin, 'rb').read() if os.path.exists(fin) else b''
+                    n = sum(1 for i in range(min(len(x), len(y))) if x[i] != y[i]) + abs(len(x) - len(y))
+                    print('fixture %s: %s' % (os.path.relpath(fin, ROOT), 'identical' if n == 0 else '%d bytes differ' % n))
+                continue
             for tmp, fin in pairs:
-                x = open(tmp, 'rb').read()
-                y = open(fin, 'rb').read() if os.path.exists(fin) else b''
-                n = sum(1 for i in range(min(len(x), len(y))) if x[i] != y[i]) + abs(len(x) - len(y))
-                print('fixture %s: %s' % (os.path.relpath(fin, ROOT), 'identical' if n == 0 else '%d bytes differ' % n))
-            continue
-        for tmp, fin in pairs:
-            os.makedirs(os.path.dirname(fin), exist_ok=True)
-            shutil.copyfile(tmp, fin)
-        print('fixture %s: made from %s' % (e['path'], e['recipe']))
+                os.makedirs(os.path.dirname(fin), exist_ok=True)
+                shutil.copyfile(tmp, fin)
+            print('fixture %s: made from %s' % (e['path'], e['recipe']))
     return 0
 
 
