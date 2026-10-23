@@ -84,9 +84,8 @@ It is **not yet verified playable from start to finish**.
 
 ### Not done
 
-- **Two checks still need a private state.** Everything the build needs is made from your ROM. Of the 953
-  regression checks, 951 run in a fresh clone from your ROM, the recipes and the public battery saves; two read the
-  owner's capture `saves/field_re/pre_scene_19f.*`, which no recipe makes yet, and SKIP. See
+- **No check needs a private state any more** (since 2026-10-23). Everything the build needs is made from your ROM, and
+  all 953 regression checks run in a fresh clone from your ROM, the recipes and the public battery saves. See
   [docs/ROADMAP.md](docs/ROADMAP.md#1-the-public-release-and-what-it-left-open).
 - **The vendored core stays as the reference.** `Belthasar` runs no emulated hardware: the sound driver, the `$C3`
   sequence stages, the gate warp, the window wipe, the overworld window and the HDMA table builder are native C. The

@@ -23,7 +23,7 @@ mutations. `tools/regress.py` has no per-check logic.
 
 | | |
 |---|---|
-| Checks | **953** (a clean-room clone: 951 pass, 2 skip) |
+| Checks | **953** (a clean-room clone, 2026-10-23: 953 pass) |
 | Quick tier | 616 (the pre-commit tier, chosen by measured runtime) |
 | Full tier | 316 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
 | Untiered | 21 (run only in the full run) |
@@ -65,16 +65,16 @@ By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest sing
 
 | Class | What it needs | Checks (2026-10-22) |
 |---|---|---|
-| **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | 951 of 953, together with B1 and B3 |
-| **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 233 fixture entries in 10 domain files; 226 of the 239 state files the checks read. | (counted in the 951) |
-| **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet, listed in `tools/private_captures.json`: 2 files (`saves/field_re/pre_scene_19f.{state,lakewram}`), read by 2 checks; they SKIP with their name in a fresh clone. The list only shrinks: `tools/input_provenance.py` (the check `inputs-come-from-recipes-or-sources`) fails on a check reading a state file from none of A / B1 / B2 / B3. | 2 |
+| **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | 953, together with B1 and B3 |
+| **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 233 fixture entries in 10 domain files; 228 of the 239 state files the checks read. | (counted in the 953) |
+| **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet, listed in `tools/private_captures.json`: empty since 2026-10-23 (the last, `saves/field_re/pre_scene_19f.{state,lakewram}`, is made by the recipe `lg_ocean_palace_19f`); a check on one would SKIP with its name in a fresh clone. The list only shrinks: `tools/input_provenance.py` (the check `inputs-come-from-recipes-or-sources`) fails on a check reading a state file from none of A / B1 / B2 / B3. | 0 |
 | **B3: public battery saves** | Other players' 8 KB `.srm` files (zdiemer's set and Jackie's Game Saves: 78 files), downloaded by pinned URL and verified by SHA-256 by `python tools/fetch_saves.py` from `tools/third_party_saves.json`; Jackie's loaded states are recipes (`tools/recipes/jackie_*.json`). | (with B1) |
 
 How a fixture became a recipe's twin: the twin is made, every check that reads it runs, and it is kept when they pass
 unchanged. A check whose expectation is specific to the old capture was re-pinned only when it compares the port with
 the oracle in the same run (and that comparison holds on the twin) or after its pinned value was re-validated against
-the oracle on the twin; each such re-pin carries a dated note in the check. One capture is left, `pre_scene_19f` (the Ocean Palace's
-aftermath; [ROADMAP.md](ROADMAP.md#11-checks-still-on-private-captures-l)). The largest families moved on 2026-10-22,
+the oracle on the twin; each such re-pin carries a dated note in the check. The last capture, `pre_scene_19f` (the Ocean Palace's
+aftermath), moved on 2026-10-23 ([ROADMAP.md](ROADMAP.md#11-checks-still-on-private-captures-l)). The largest families moved on 2026-10-22,
 for the record:
 
 - ~~**The cathedral's three-member party**~~ (`saves/battle_re/party3_field.*`, `bat9*`, `party3_form`,

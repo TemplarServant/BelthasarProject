@@ -855,7 +855,8 @@ and the party at the end (`02 04 01 | 80 85 81 03 05 80`: Lucca, Frog, Marle, wi
 Last Village box's own timing ("A tidal wave!": its `03 08` pause, `06` 121 frames after state 7, then `07`, then `0D` with
 no press). Before 2026-10-14 the port stopped black on overworld 1F4 (op 03), had no world-to-world exit, kept Crono in the
 Last Village, waited for A on self-closing boxes and listed Marle twice on the exchange screen. Untiered (full run
-only, ~2.5 min). Needs the user's capture (SKIPs without it: a private capture, tools/private_captures.json).
+only, ~2.5 min). The state is made by the recipe lg_ocean_palace_19f (Jackie's ch22 played through the Ocean Palace,
+since 2026-10-23; until then the user's capture).
 
 ### race-step-485d-vs-oracle (`tools/race_step_cmp.py --poked`)
 
@@ -2379,12 +2380,12 @@ actors; a stateless recompute can't hit it, per the check's own code comments) a
 `velocity-trig-circle` (89 of 1166 samples off the trig circle, all with a zeroed
 component = collision-clipped, per the check's own tally).
 
-## Missing-input checks (currently SKIP)
+## Missing-input checks (SKIP)
 
-In a fresh clone, after `python tools/fetch_saves.py` and `python tools/fixtures.py make all`,
-only the two checks that read the private `saves/field_re/pre_scene_19f.{state,lakewram}`
-(`tools/private_captures.json`) SKIP: `ocean-palace-aftermath-chain-vs-oracle` and
-`ow-1f5-wave-and-light-vs-oracle` (clean-clone run of 2026-10-22: 951 pass, 2 skip).
+None. In a fresh clone, after `python tools/fetch_saves.py` and `python tools/fixtures.py make all`, every check runs
+(clean-clone run of 2026-10-23: 953 pass). The last two that SKIPped, `ocean-palace-aftermath-chain-vs-oracle` and
+`ow-1f5-wave-and-light-vs-oracle`, read `saves/field_re/pre_scene_19f.{state,lakewram}`, made by the recipe
+`lg_ocean_palace_19f` since 2026-10-23 (`tools/private_captures.json` is empty).
 
 The two checks this section used to list now read recipe-made inputs:
 `follower-conga-2member` (`two_member.state`, recipe `telepod_show`) and
