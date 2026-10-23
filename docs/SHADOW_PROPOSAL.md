@@ -17,9 +17,10 @@ proposals.
   across runs. Three declared mutations are all killed: the cursor's `INC $26` (84 of 92 calls red, the first at
   7E:0026), the draw in A, and X's high byte.
 - About 46 s for the 9000 frames with one entry.
-- The battery saves for S2 are on disk under `saves/public/` (gitignored): 51 files, copied from zdiemer's
-  repository at the commit in `saves/public/UPSTREAM_COMMIT.txt`, with their origins (fantasyanime.com,
-  games.technoplaza.net, zophar.net) in `saves/public/SOURCES.md` and their hashes in `saves/public/SHA256SUMS`.
+- The battery saves for S2 are under `saves/public/` (gitignored): 51 files from zdiemer's repository (their origins:
+  fantasyanime.com, games.technoplaza.net, zophar.net). Since 2026-10-22 they are fetched by
+  `python tools/fetch_saves.py`, each from a URL pinned to one upstream commit and verified by SHA-256
+  (`tools/third_party_saves.json`).
 
 ## Why
 

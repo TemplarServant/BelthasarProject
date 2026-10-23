@@ -19,6 +19,17 @@ peek dumps; it never alters engine behavior (see the no-invention mandate in
 | `python tools/parse_ppu_state.py [state]` | The definitive snes9x v11 container parser (block split, big-endian SnapPPU decode, FIL $21xx shadow). Library for everything s9x. |
 | `python tools/ct.py <subcommand>` | Multi-command CLI over `ctlib` (below). |
 | `python assets/script.py <rom> scene\|disasm\|talk ...` | Scene-script object extraction / raw disasm / dialogue simulation (the event-VM plumbing `ctlib.script` builds on). |
+| `python tools/setup.py --rom <file>` | The single entry point from your ROM: verify it, build a bootstrap oracle from the shapes, replay the recipes, extract `ct_assets.dat`, generate `src/data/*.h` and `src/xlat/*.c`, pack `ct_tables.dat`, build. `--check` regenerates and compares; `--no-build`, `--oracle`, `--workdir`, `--out` serve the player's setup screen. |
+| `python tools/fetch_saves.py [--verify]` | Downloads the public battery saves (`tools/third_party_saves.json`: 78 files, each by a pinned URL, verified by SHA-256). Run it before `fixtures.py`. |
+| `python tools/fixtures.py {list,make,diff} [paths]` | The suite's state fixtures, made from recipes (`tools/fixtures/<domain>.json` -> `tools/recipes/`); `make all` makes every one. |
+| `python tools/input_provenance.py [--list] [--write]` | Where every state file a check reads comes from (recipe, public source, or `tools/private_captures.json`); the check `inputs-come-from-recipes-or-sources`. |
+| `python tools/playthrough.py cmp all` | The playthrough: one route from power-on (`tools/playthrough/route.txt`), graded leg by leg against the rule's cartridge; `try`, `walk`, `scene`, `diff` help write and inspect legs. |
+| `python tools/walkto.py` | Oracle-driven pathfinder for building fixtures and legs: a d-pad drive that walks the lead to a target pixel or through an exit, probing the oracle itself. |
+| `python tools/attract_divergence.py [--vehicle boot] [--visit LOC]` | The whole attract demo against the rule's cartridge, frame by frame; `build/_divergence/latest/report.html`. The `attract-divergence` agent runs it. |
+| `python tools/battle_ab.py` | The battle census: fights enemies on both sides and compares spans, effects and the return to the field. |
+| `python tools/rom_free_gate.py` | The ROM-free gate (the check `rom-free-no-dump-gate`): the whole attract with no dump (`CT_NO_ROM=1`) and with it; pictures and sound identical, no page of the empty image read. |
+| `python tools/release/package.py` | Builds a player's release folder and archive from the committed tree, data-free and leak-scanned ([docs/RELEASE.md](../docs/RELEASE.md)). |
+| `python tools/release/scan_rom_leaks.py <dir> [--corpus ct_assets.dat] [--binaries]` | Searches a tree (or a release folder) for byte runs shared with the ROM or the extracted assets; must print `clean` ([docs/ROM.md](../docs/ROM.md#the-leak-scanner)). |
 
 ## `ct.py` subcommands
 
@@ -64,8 +75,10 @@ script.disassemble(r, scene, obj=N)   # fn-pointer table + annotated listing (an
 
 ## Legacy `_*.py` probes → ctlib replacement
 
-The underscore-prefixed scripts are **unmaintained one-off probes** kept for
-provenance. They stay untouched; new work goes through `ctlib`/`ct.py`.
+The underscore-prefixed scripts are **unmaintained one-off probes**. They are
+local and untracked (`.gitignore` ignores `tools/_*`), so a fresh clone does not
+have them; the table below records what each cluster did and where its logic went.
+New work goes through `ctlib`/`ct.py`.
 
 | Legacy cluster (probes) | Canonical source lifted | ctlib replacement |
 |---|---|---|
@@ -85,7 +98,7 @@ provenance. They stay untouched; new work goes through `ctlib`/`ct.py`.
 Recipe kept from `_jt.py`: the event-op jump table is at `C0/5D6E`
 (handler ptr = word at `0x5D6E + op*2`; see `JSR ($5D6E,X)` at `C0/5AB1`).
 
-Other notable single-purpose keepers: `_sprdump.py` (only decoder of
-`saves/*.spr`), `_taban.py` (live `$7F2000` runtime-script walker),
-`gen_namemsg.py` / `gen_namewin.py` / `owbpal0.py`
-(asset-pipeline regenerators).
+Other notable single-purpose keepers: `gen_namemsg.py` / `gen_namewin.py` /
+`owbpal0.py` (asset-pipeline regenerators, tracked); and, local only,
+`_sprdump.py` (the only decoder of `saves/*.spr`) and `_taban.py` (a live
+`$7F2000` runtime-script walker).

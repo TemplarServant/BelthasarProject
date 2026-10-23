@@ -26,10 +26,11 @@ under `build/_divergence/`. Write scripts with the Write tool: `python - <<EOF` 
    `python tools/build.py Belthasar`.
 3. `python tools/attract_divergence.py` (about a minute; the cartridge capture is cached, the port's is re-taken
    whenever the binary changes). Add `--visit 0AD` to redo one location.
-   Then `python tools/attract_divergence.py --vehicle boot`: the port from power-on on an erased cart, which reaches the
-   demo with the cartridge's play clock ($0400, the F8 cursor). A cold `--scene 433` starts 22 ticks behind, and an event
-   that is there in the default run but GONE from boot (e.g. 01C's auto-scroll shake, C0/91FD reading $0400) is that
-   offset, not an engine defect. The cartridge side is captured under the rule (CT_ORACLE_LOGICAL=1) since 2026-10-18.
+   Then `python tools/attract_divergence.py --vehicle boot`: the port from power-on on an erased cart. Since 2026-10-21 a
+   cold `--scene 433` plays the power-on too (its frame 0 is the boot's frame 91, `ATTRACT_FRAME0` in src/field.c), so
+   both vehicles reach the demo with the cartridge's play clock ($0400, the F8 cursor) and should agree; an event that
+   is in one run and not the other is a finding to explain, not a known offset (before that date a cold start sat 22
+   ticks behind). The cartridge side is captured under the rule (CT_ORACLE_LOGICAL=1) since 2026-10-18.
 4. Read `build/_divergence/latest/report.txt` (all events, with a `confirm:` command each) and, when useful,
    `events.json`. `report.html` is for the user.
 5. Triage, most severe first. For each event, or each group of events that plausibly share one mechanism:

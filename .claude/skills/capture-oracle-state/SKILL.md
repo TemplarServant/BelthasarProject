@@ -19,11 +19,13 @@ ct.exe) cannot load them directly — you SPLICE the s9x WRAM+CPU into a lake
 2. Make a base lake state of that scene through the ROM's own loader:
    ```
    cp build/ct.exe "$TMP/ct_probe.exe"
-   ct_probe --teleport <loc> <tx> <ty> <facing> --from candy_shop_lake.state --out "$TMP/base_locN.state"
+   ct_probe --teleport <loc> <tx> <ty> <facing> --from two_member.state --out "$TMP/base_locN.state"
    ```
-   (`candy_shop_lake.state` in the repo root is a good donor for 1000AD-era,
-   storyline 0x08 captures; pick a donor with a compatible storyline if the
-   teleport lands wrong. tx/ty ≈ the capture's player tile.)
+   (`two_member.state`, made by the recipe `telepod_show` in
+   `tools/fixtures/field.json` -- loc 1B7, storyline 0x08, two members -- is a
+   good donor for 1000AD-era captures; any recipe-made state from
+   `python tools/fixtures.py make all` will do. Pick a donor with a compatible
+   storyline if the teleport lands wrong. tx/ty ≈ the capture's player tile.)
 3. Splice:
    ```
    python tools/s9x_to_lake.py "user_capture.state" "$TMP/base_locN.state" my_repro.state
@@ -54,6 +56,13 @@ ct.exe) cannot load them directly — you SPLICE the s9x WRAM+CPU into a lake
 - Record the EXACT repro command line (state + btnscript + env) in the dossier in
   `disasm/notes/` — a state without its command line is half useless.
 - Root-level scratch states are fine short-term (also gitignored).
+- A state is fine for derivation, but a state a regression check READS must be
+  made by a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`) or come
+  from a public source (`tools/third_party_saves.json`):
+  `python tools/input_provenance.py` (the check
+  `inputs-come-from-recipes-or-sources`) fails on a check that reads a local
+  capture. Write the recipe that reaches the same moment from power-on before
+  pinning a check on it.
 
 ## Gotchas
 

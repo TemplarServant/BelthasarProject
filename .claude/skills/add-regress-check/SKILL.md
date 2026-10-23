@@ -1,6 +1,6 @@
 ---
 name: add-regress-check
-description: Pin a newly validated behavior into the one-command regression suite (tools/regress.py + tools/regress_checks.json). Use at the end of any engine milestone, after a fix is oracle-validated, or when a capture that seeds a SKIP check becomes available.
+description: Pin a newly validated behavior into the one-command regression suite (tools/regress.py + tools/regress_checks.json). Use at the end of any engine milestone, after a fix is oracle-validated, or when a recipe makes the state a new check needs.
 ---
 
 # add-regress-check — pin it or it rots
@@ -30,15 +30,24 @@ appear in its output.
 1. Make the command deterministic and print a COUNTABLE success line
    (`thing: PASS (a N/N, b OK)` — counts, not adjectives). If you are adding a new
    selfcheck mode to Belthasar/ct.exe, copy the `--worldtest`/`--battletest` pattern.
-2. Every file the command needs goes in `inputs` — missing input shows as SKIP
-   naming the file (that is how not-yet-seeded checks stay discoverable).
+2. Every file the command needs goes in `inputs` — a missing input shows as SKIP
+   naming the file. A STATE the check reads must come from a recipe
+   (`tools/fixtures/<domain>.json` -> `tools/recipes/`, made by
+   `python tools/fixtures.py make all`) or a public source
+   (`tools/third_party_saves.json`, `python tools/fetch_saves.py`), never a local
+   capture: `python tools/input_provenance.py` (the check
+   `inputs-come-from-recipes-or-sources`) fails otherwise. Add the input to
+   `tools/regress_inputs.json` (`--refresh-input-hashes`).
 3. Run it TWICE; byte-identical signature both times. Nondeterministic → fix the
    check or don't add it.
-4. Time it → tier + timeout_s. Add the entry.
-5. `python tools/regress.py --only <name>` → PASS.
+4. Time it → tier + timeout_s. Add the entry, with at least one `mutations` entry
+   (a deliberate defect in the code it covers).
+5. `python tools/regress.py --only <name>` → PASS, and
+   `python tools/regress.py --mutate <name>` → every mutation turns it red (a
+   survivor means the check grades nothing there).
 6. `python tools/regress.py --quick` → previous count + yours, 0 fail.
 7. Document the check in `docs/TESTING.md` (one short paragraph: what it pins,
-   which capture seeds it, when re-pinning is legitimate).
+   which recipe seeds it, when re-pinning is legitimate).
 
 ## Kinds of pins (know which you are writing)
 
