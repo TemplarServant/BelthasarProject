@@ -160,6 +160,8 @@ invent anything that is not a read of the beam counters or a CPU-overrun frame.
 ## Infrastructure (pointers)
 
 - Build: `tools\build.bat`, or `python tools/build.py [target]` (per-target artifact verification — trust the artifact check, never the banner).
+- Cloud sessions (claude.ai/code, Linux): `.claude/hooks/session-start.sh` prepares the container and builds; the ROM is
+  not in it and the memory index is not either -- see `docs/INFRA.md` "Cloud sessions" for what runs there and what does not.
 - Regression suite: `python tools/regress.py` (`--quick` = fast tier); parses printed signatures, NOT exit codes — see `docs/TESTING.md`.
 - **Nothing may depend on one machine only** (the owner, 2026-10-22). On a fresh clone (a cloud session too): `python
   tools/fetch_saves.py` (public battery saves, verified by SHA-256) then `python tools/fixtures.py make all` (states from

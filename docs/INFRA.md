@@ -60,6 +60,31 @@ about two things MSVC lets through: a call to a function declared later (an impl
 declaration: add a prototype above the caller) and a hex constant ending in `E` glued
 to `+`/`-` (`0x96DE+SLOT` is one invalid preprocessing number: write `0x96DE + SLOT`).
 
+## Cloud sessions (claude.ai/code)
+
+A cloud session is a fresh Linux container with a fresh clone, reclaimed after a while: anything worth keeping is
+committed and pushed. Measured 2026-10-23 (Ubuntu 24.04, gcc, Python 3.13):
+
+- **The hook.** `.claude/hooks/session-start.sh` (registered in `.claude/settings.json`, runs only when
+  `CLAUDE_CODE_REMOTE=true`) installs `libsdl2-dev`, fetches Dear ImGui (`tools/get_imgui.py` falls back to a
+  shallow `git clone` of the tag: the cloud proxy refuses github.com's archive links), runs `tools/fetch_saves.py`,
+  installs the shapes and builds every target. Each step is skipped when its result is already there. Its last line
+  says whether the container has the ROM's data, a ROM not yet set up, or no ROM.
+- **The ROM is not in the container.** It is never committed here (docs/ROM.md). A session that has it at the root
+  (`Chrono_Trigger_USA_SNES.sfc`) or at `$CT_ROM` runs `python3 tools/setup.py --rom <path>` (15-20 min) and
+  `python3 tools/fixtures.py make all`; the container is new each time, so that cost recurs per container. Without the
+  ROM only the shapes build exists: `python3 tools/regress.py` gives 5 pass, 3 fail, 945 skip (`--quick`: 608 skip) -- the 3 FAILs
+  (`field-battle-animeng-idle-gather`, `field-battle-animeng-pc-gather`, `menu-window-gradient-vs-hdma`) read
+  generated tables that are still shapes, and are not a regression. Engine work that changes behaviour cannot be
+  validated without the ROM (the mandate's `--vmdiff` / `--vm` and the suite need the oracle on it).
+- **Network.** The environment's policy decides which hosts answer. Under the default policy `fantasyanime.com` is
+  refused, so the 27 Jackie saves of `tools/third_party_saves.json` do not fetch (51 of 78 do) and the checks and
+  recipes that read them SKIP; adding that host to the environment's allowed domains fixes it.
+- **Windows-only pieces.** `tools\build.bat` and the `tools/*.ps1` fetchers do not run here: `python3 tools/build.py`
+  and `python3 tools/get_imgui.py` are the same steps. The agent's memory index (`MEMORY.md`) is not in a cloud
+  container either: the rules live in `CLAUDE.md`, `.claude/no-invention-mandate.md`, `.claude/skills/` and
+  `disasm/notes/`.
+
 ## Regression suite
 
 **`python tools/regress.py`** — the one-command suite. Checks are declared as *data* in
