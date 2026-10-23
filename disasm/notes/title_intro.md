@@ -809,6 +809,11 @@ ROM. Pricing it re-times the power-on title and every attract check after it.
 
 ### 12.2 The part before the post: MEASURED and implemented, NOT applied (2026-10-19)
 
+> **Superseded (2026-10-21, 404971a):** the title's opening (`FF 02`) is now priced in the port as one NMI-off stretch,
+> the cartridge's 74 frames from power-on (f65 -> f139), with the suite re-anchored -- see
+> [field_load_cost.md](field_load_cost.md) sec. 12 and [boot_loader.md](boot_loader.md) sec. 10. The patch below
+> (build/_wip_title_opening.patch) is the earlier, unapplied version; this section stays as its record.
+
 Found again by the attract audit's boot vehicle: the closing loc 1B1 visit was 30 frames short (black 232 frames
 against the cartridge's 262) -- the second title's song post came on the op's frame, the cartridge's 32 frames later.
 

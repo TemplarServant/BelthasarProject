@@ -8,13 +8,14 @@ env var) and [`TESTING.md`](TESTING.md) (regression tiers and pinned baselines).
 
 ## Build
 
-**`tools\build.bat`** — the historical driver: VS 2022 Build Tools (`vcvars64.bat`) +
-the bundled CMake/Ninja, configure + compile into `build\`. Targets (from
-`CMakeLists.txt`): `ct.exe` (headless oracle harness, always built);
+**`tools\build.bat`** — a thin wrapper that calls `tools/build.py`. On Windows the build
+uses VS 2022 Build Tools (`vcvars64.bat`) + the bundled CMake/Ninja, configure + compile
+into `build\`. Targets (from `CMakeLists.txt`): `ct.exe` (headless oracle harness, always
+built, with `ct_oracle.exe`, the oracle alone that keys the suite's oracle cache);
 `ct_viewer.exe`, `Belthasar.exe`, `ct_world.exe` (SDL2 apps, built **only** when
-`third_party/SDL2` is present — fetch once with `tools\get_sdl2.ps1`).
+SDL2 is present — on Windows fetch it once with `tools\get_sdl2.ps1`).
 
-**`tools/build.py`** — the verifying replacement driver (design):
+**`tools/build.py`** — the build driver:
 
 - **Honest per-target verification.** After the CMake/Ninja run it checks each expected
   artifact in `build\` actually exists and was freshly (re)linked, instead of trusting
@@ -34,7 +35,7 @@ the bundled CMake/Ninja, configure + compile into `build\`. Targets (from
   from a pack of today's `src/data/*.h`, equals the tables compiled from those headers byte for byte, with controls
   that a corrupt or mismatched pack is caught.
 - **The three historical false-"Build OK" traps it catches** (all observed in this
-  project; `build.py`'s own header is authoritative once it lands):
+  project; `build.py`'s own header is authoritative):
   1. **Locked exe.** With `Belthasar.exe` still running, the link cannot replace the
      binary — yet "Build OK" was printed while the on-disk exe stayed the OLD build
      (documented in the project memory: *"build.bat 'Build OK' LIES when Belthasar.exe
@@ -42,19 +43,19 @@ the bundled CMake/Ninja, configure + compile into `build\`. Targets (from
   2. **SDL2 silently absent.** Without `third_party/SDL2`, CMake *configures the SDL
      targets away* (`STATUS "SDL2 not in third_party/SDL2: skipping..."`) — the build
      "succeeds" but `Belthasar.exe`/`ct_world.exe`/`ct_viewer.exe` are stale or missing.
-  3. **Unconditional banner.** `build.bat`'s final `echo Build OK: build\ct.exe` names
-     only `ct.exe` and never verifies **any** artifact's existence or freshness.
+  3. **Unconditional banner.** The old `build.bat`'s final `echo Build OK: build\ct.exe`
+     named only `ct.exe` and never verified **any** artifact's existence or freshness.
 
 Rule of thumb inherited from those traps: after any build, trust the **artifact check**,
 never the banner.
 
-**Linux (gcc/clang) — a compile check, not the reference build.** `tools/build.py` is
-Windows-only, but plain CMake builds all four targets on Linux: install `libsdl2-dev`
-(the SDL2 targets fall back to the system SDL2 when `third_party/SDL2` is absent), then
-`cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build build -j`.
-The binaries have no `.exe` suffix; `regress_checks.json` calls `build/ct*.exe`, so link
-them (`ln -sf ct build/ct.exe`, same for the others) before `python tools/regress.py`.
-Without the ROM and `ct_assets.dat` nearly every check SKIPs. gcc is stricter than MSVC
+**Linux and macOS (gcc/clang) — not the reference build.** `python3 tools/build.py`
+works there too: it takes `cmake` and `ninja` from the PATH and the system SDL2 (install
+`libsdl2-dev` on Linux; the SDL2 targets fall back to it when `third_party/SDL2` is
+absent), and `python3 tools/get_imgui.py` fetches Dear ImGui. The binaries keep their
+Unix names, and CMake adds `build/<target>.exe` aliases beside them, so
+`regress_checks.json`'s `build/ct*.exe` and the tools run unchanged. Without the ROM and
+`ct_assets.dat` nearly every check SKIPs. gcc is stricter than MSVC
 about two things MSVC lets through: a call to a function declared later (an implicit
 declaration: add a prototype above the caller) and a hex constant ending in `E` glued
 to `+`/`-` (`0x96DE+SLOT` is one invalid preprocessing number: write `0x96DE + SLOT`).
@@ -85,8 +86,6 @@ the oracle inputs in the repo root.
   `build/preflight.json`. Soft-MISSes on optional captures do not hard-fail the
   gate; hash mismatches and regress FAILs do. No CI service is required — this is
   the local/agent one-command gate.
-- **Memory index.** [`MEMORY.md`](../MEMORY.md) is the agent/human nav map (docs,
-  skills, oracle one-liners, gotchas).
 - `--list`, `--only <names>`, `--build` (drive the build first) round out the surface.
 
 Tier contents and the meaning of each pinned baseline: [`docs/TESTING.md`](TESTING.md).
@@ -102,7 +101,7 @@ Tier contents and the meaning of each pinned baseline: [`docs/TESTING.md`](TESTI
 | `disasm/`, `disasm/notes/` | The RE substrate: annotated 65816 traces, per-subsystem notes (`events.md`, `scenes.md`, `sprites.md`, `collision.md`...). Trace/dialogue artifacts are gitignored (ROM-derived, regenerable). |
 | `tools/` | Canonical tooling: `build.bat`/`build.py`, `regress.py` + `regress_checks.json`, `dis.py`, `s9x_to_lake.py`, `disasm65816.py`, `get_sdl2.ps1`, `ct.py` (agent-facing wrapper), and the `ctlib/` helper library. One-off probe scripts use the `tools/_*.py` underscore convention and are gitignored (tracked exceptions like `tools/owbpal0.py` stay tracked). |
 | `build/` | CMake/Ninja output (gitignored): `ct.exe`, `Belthasar.exe`, `ct_world.exe`, `ct_viewer.exe`. |
-| `saves/` | ROM-derived savestates/captures (gitignored; the regenerable ones come from recipes: `python tools/fixtures.py make all`). |
+| `saves/` | ROM-derived savestates/captures (gitignored; the regenerable ones come from recipes: `python tools/fetch_saves.py`, then `python tools/fixtures.py make all`). |
 | repo root | **Scratch capture convention:** oracle work dumps its debris at the root — `.state` savestates, `.bin`/`.oam`/`.vram` WRAM/OAM/VRAM captures, `.raw` framebuffers, `.png` probe shots, `SHOT*`, probe `.txt`/`.json`. All root-anchored-gitignored; the ROM (`Chrono_Trigger_USA_SNES.sfc`, user-supplied) also lives here. |
 | `third_party/SDL2/` | SDL2 dev libs (auto-fetched, gitignored). |
 | `docs/` | This guide, `DEBUG_SURFACE.md`, `TESTING.md`. |
@@ -118,15 +117,16 @@ truth (see the mandate in `CLAUDE.md`). The core loop: **disassemble** the ROM r
 from the oracle's WRAM, steps both sides per frame, and reports the FIRST scheduler
 divergence (IP/prio; positions too with `--withpos`). Success is the printed line
 `CLEAN: no scheduler divergence over N frames` (plus a frame-0 seed-fidelity check and
-a script-vs-`$7F2000` image check) — the exit code is always 0, so parse the line.
+a script-vs-`$7F2000` image check). It exits 1 on a divergence, but the suite grades the
+printed line, never the exit code.
 Per-object drilldown via `VMDIFF_TRACK`/`VMDIFF_MVFLAGS`/`VMDIFF_ANIM`, button
 injection via `CT_BTN` (oracle receives only the A bit — asymmetric by design).
 
 **`ct.exe --vm <dat>`** — the 512-scene check. Without `--scene`, cross-checks the C
 scene-VM's actor placement against the Python-packed actors for all 512 scenes and
-prints `512 OK, 0 mismatch` style counts (current baseline: 507 OK with the --newgame
-work); with `--scene N` it live-ticks one scene and dumps placements. Exit code always
-0 — parse the counts.
+prints `512 OK, 0 mismatch` style counts (pinned baseline: 512 OK, 0 mismatch); with
+`--scene N` it live-ticks one scene and dumps placements. It exits 1 on a mismatch; the
+suite parses the counts.
 
 **`ct.exe --monitor <regions> --from <state>`** — the generic WRAM probe: stream chosen
 regions per frame (up to 32 regions × 0x400 bytes), `--diff` to emit only on change,

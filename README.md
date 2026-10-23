@@ -78,24 +78,24 @@ It is **not yet verified playable from start to finish**.
 | Battle | Works | ATB, the menu pass, physical attacks, techs (single, dual, triple), items, status effects, enemy AI from the ROM's condition tables, counters, death dissolve, rewards, level-up, running away. Enemy census: 253 of 255 enemy fights identical to the cartridge under the timing rule. |
 | Menus | Works | All six X-menu screens (Item, Equip, Tech, Config, Save, Form), shops, the load screen. Saving writes the 8 KB battery image to `ct_sram.srm`. |
 | Overworld | Works | Camera and tilemap streaming, the ambient-object VM (birds, boats), the ferry, party followers, zoned music. |
-| Sound | Works, with debt | The bank `$C7` driver upload, the song loader, the command channel. The SPC700 itself still runs on LakeSnes's SPC700/DSP core (see [Not done](#not-done)). |
+| Sound | Works | The bank `$C7` driver upload, the song loader, the command channel, and the sound processor's program itself as C (`src/sound/`), sample-exact against the vendored SPC700/DSP it replaced. |
 | Title and attract | Works | The title sequence is the overlay's own machine; the attract demo is audited against the cartridge frame by frame. |
 | Mods (F1) | Works | Widescreen, internal resolution, frames between (60+ fps), free sync. Opt-in; with every option at its default the game is the vanilla game. |
 
 ### Not done
 
-- **Part of the suite still needs private states.** Everything the build needs is made from your ROM, and 587 of
-  the 869 regression checks run from it; the other 282 read a state from the owner's playthrough that no recipe
-  reproduces yet, and SKIP in a fresh clone. See [docs/ROADMAP.md](docs/ROADMAP.md#1-the-public-release-and-what-it-left-open).
-- **Some pieces still run on emulated hardware.** The sound processor runs on LakeSnes's SPC700/DSP. Five
-  timing-sensitive stages (the motorcycle race and other `$C3` sequences, the window wipe, an overworld window, the
-  gate warp, an HDMA table builder) are ROM programs translated instruction by instruction and run over the vendored
-  65816/PPU. The project's rule is that nothing in the port should be emulation, so these are debt to replace with
-  native C.
+- **Two checks still need a private state.** Everything the build needs is made from your ROM. Of the 953
+  regression checks, 951 run in a fresh clone from your ROM, the recipes and the public battery saves; two read the
+  owner's capture `saves/field_re/pre_scene_19f.*`, which no recipe makes yet, and SKIP. See
+  [docs/ROADMAP.md](docs/ROADMAP.md#1-the-public-release-and-what-it-left-open).
+- **The vendored core stays as the reference.** `Belthasar` runs no emulated hardware: the sound driver, the `$C3`
+  sequence stages, the gate warp, the window wipe, the overworld window and the HDMA table builder are native C. The
+  vendored LakeSnes core remains the oracle, the sound's reference (`CT_AUDIO_SPC=ref`) and the in-game lockstep
+  (`CT_FIELDLOCK`); the translated programs in `src/xlat/` are `ct.exe`'s references only (`--xlatcmp`).
 - **Open divergences.** A list of known differences from the cartridge (a few frames of timing in some battle
   exits and location loads, a handful of pictures) is kept in [docs/ROADMAP.md](docs/ROADMAP.md#2-engine).
-- **No continuous-playthrough check.** Each subsystem is graded on its own scenes; nobody has yet graded the whole
-  game end to end.
+- **The playthrough is graded only partway.** `tools/playthrough.py` grades one route against the cartridge leg by
+  leg, from New Game to the prison after the trial (leg 32); the rest of the game is not on it yet.
 
 ## Quick start
 
@@ -123,8 +123,8 @@ powershell -ExecutionPolicy Bypass -File tools\get_vulkan_headers.ps1  :: Vulkan
 ```
 
 Without SDL2 only the headless oracle harness `ct.exe` is built. Without ImGui `Belthasar` builds with no overlay.
-Without the Vulkan headers the Vulkan backend is left out. On Linux, use the system SDL2 and place ImGui 1.91.5 in
-`third_party/imgui` yourself.
+Without the Vulkan headers the Vulkan backend is left out. On Linux and macOS, use the system SDL2 and fetch ImGui
+with `python3 tools/get_imgui.py`.
 
 ### 2. Set up from your ROM
 
@@ -141,7 +141,8 @@ The setup flow (about 15-20 minutes the first time; later runs reuse what did no
    generators need;
 4. generates the asset captures, extracts `ct_assets.dat` (`assets/extract_assets.py`), then generates
    `src/data/*.h` and `src/xlat/*.c` (`tools/gen/manifest*.json`);
-5. builds everything.
+5. packs the generated tables into `ct_tables.dat` (`tools/gen/pack_tables.py`);
+6. builds everything.
 
 `python tools/setup.py --check` regenerates every generated file and compares it with what is in place.
 
@@ -156,12 +157,14 @@ suite reads may exist on one machine only: `python tools/input_provenance.py` sa
 tools\build.bat              :: or: python tools/build.py [target]
 ```
 
-Prefer `python tools/build.py`: it checks that each target's executable was actually relinked. A running
-`Belthasar.exe` locks the file, and the plain batch file prints "Build OK" anyway. Close the game before you rebuild.
+`tools\build.bat` calls `tools/build.py`, which checks that each target's executable was actually relinked and
+refuses to build while a `build\ct*.exe` is running (a running `Belthasar.exe` locks the file). Close the game before
+you rebuild.
 
 ### 4. Run
 
-Put the ROM in the repository root as `Chrono_Trigger_USA_SNES.sfc` (or set `CT_ROM=<path>`), then:
+After the setup, `ct_assets.dat` at the root is all the game reads; the ROM (`Chrono_Trigger_USA_SNES.sfc` at the
+root, or `CT_ROM=<path>`) is the input of the setup and of `ct.exe`:
 
 ```bat
 build\Belthasar.exe --assets ct_assets.dat --boot       :: the cartridge's cold start: title, then load screen or new game
@@ -170,8 +173,9 @@ build\Belthasar.exe --assets ct_assets.dat --scene 5    :: drop into one field s
 build\ct_viewer.exe --datonly ct_assets.dat            :: scene browser (Left/Right scene, Space pause, F full map)
 ```
 
-The field and menu draw from `ct_assets.dat`. Battles (enemy graphics and stats) and the sound driver read the
-ROM. The battery save lives in `ct_sram.srm` (`CT_SRAM` sets another path; `CT_SRAM_FRESH=1` boots an erased cart).
+With a ROM-free `ct_assets.dat` (what the setup makes) the game reads nothing from the ROM: the field, battles,
+menus, the overworld and the sound all come from the container ([docs/ROM.md](docs/ROM.md#the-rom-free-runtime)).
+The battery save lives in `ct_sram.srm` (`CT_SRAM` sets another path; `CT_SRAM_FRESH=1` boots an erased cart).
 
 ### Controls
 
@@ -202,7 +206,7 @@ another path). Headless runs never read that file, so the test suite always sees
 
 The mods do things the cartridge does not do, on purpose: they are outside the ROM-accuracy rule. Each is off by
 default, and with everything off the game is byte-identical to the vanilla engine. What each mod covers, and what
-it does not cover yet (menus are pillarboxed, translated stages have no frames between), is in
+it does not cover yet (menus are pillarboxed, the `$C3` sequence stages and the gate warp have no frames between), is in
 [docs/ROADMAP.md](docs/ROADMAP.md#4-mods).
 
 ## How it is checked
@@ -214,7 +218,7 @@ watch any RAM the cartridge has (`--peek`, `--monitor`, `--read`). Timing is gra
 zelda3's model: lag frames, beam-counter races and CPU cycle counts are removed on both sides, so the comparison is
 deterministic.
 
-`python tools/regress.py` runs the regression suite: 869 checks (595 in the `--quick` tier). A check passes when its
+`python tools/regress.py` runs the regression suite: 953 checks (616 in the `--quick` tier). A check passes when its
 expected output lines appear, never because of an exit code, and a check whose inputs are missing is reported as
 SKIP. Most checks also carry mutations: deliberate defects that the check must catch. A check that still passes with
 its mutation applied is treated as a blind spot, not as coverage.
@@ -235,10 +239,15 @@ for the suite.
 | [docs/TESTING.md](docs/TESTING.md) | The suite in detail: tiers, pins, per-check notes |
 | [docs/INFRA.md](docs/INFRA.md) | Build, repository layout, the oracle workflow, state formats |
 | [docs/DEBUG_SURFACE.md](docs/DEBUG_SURFACE.md) | Every `ct.exe` mode and every debug environment variable |
-| [tools/README.md](tools/README.md) | The tooling index (`dis.py`, `ct.py`, `ctlib`) |
+| [docs/RELEASE.md](docs/RELEASE.md) | The player's release package: how it is built and scanned, the setup screen |
+| [docs/ANDROID.md](docs/ANDROID.md) | The Android build (experimental) |
+| [docs/MACOS.md](docs/MACOS.md) | The macOS build and app bundle (experimental) |
+| [docs/SHADOW_PROPOSAL.md](docs/SHADOW_PROPOSAL.md) | Shadow mode: routine-level validation against the oracle |
+| [docs/CAPTURES_WANTED.md](docs/CAPTURES_WANTED.md) | Historical (2026-08): the snes9x captures once requested, now replaced by recipes |
+| [tools/README.md](tools/README.md) | The tooling index (`dis.py`, `ct.py`, `ctlib`, setup, fixtures, release) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Ground rules and workflow for contributors |
 | [CLAUDE.md](CLAUDE.md) | The project mandate as given to the coding agents, with the owner's dated decisions |
-| [disasm/notes/](disasm/notes/) | About 270 reverse-engineering dossiers, one per mechanism |
+| [disasm/notes/](disasm/notes/) | About 280 reverse-engineering dossiers, one per mechanism |
 | [.claude/skills/](.claude/skills/) | Step-by-step playbooks: derive, implement, pin, capture, triage |
 
 ## Credits and license

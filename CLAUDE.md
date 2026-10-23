@@ -2,7 +2,7 @@
 
 Re-implements the Chrono Trigger (SNES USA) field engine in portable C, validated frame-by-frame
 against a LakeSnes **oracle** embedded in `build/ct.exe`. Build: `tools\build.bat`. The RE notes live
-in the memory index (`MEMORY.md`).
+in `disasm/notes/`; the agent's memory index (`MEMORY.md`) lives outside the repository.
 
 ---
 
@@ -60,9 +60,10 @@ resolution and a higher FPS." -- the user (translated from Portuguese).
 to be reproduced unless they influence the way the game works. My future goal is to simplify systems that at the moment
 are more complex than they should be on current hardware." -- the user (translated from Portuguese).
 
-- The port is native C. No solution may run ROM code on a CPU core or emulate hardware cycle by cycle. Existing pieces that do
-  (the `src/xlat/` stages on the vendored cpu/ppu/dma -- seq_c3, wipe_c3, owwin_c6, gwarp_fd, hdma_fd -- and the vendored
-  SPC700 for audio) are debt to replace with native C; ask before a large rewrite.
+- The port is native C. No solution may run ROM code on a CPU core or emulate hardware cycle by cycle. Belthasar runs none of
+  the pieces that did any more: the `src/xlat/` stages (seq_c3, wipe_c3, owwin_c6, gwarp_fd, hdma_fd) and the vendored
+  SPC700 were replaced by native C (2026-10-17/18). `src/xlat/` and the vendored core stay only as references (`ct.exe
+  --xlatcmp` / `--hdmafuzz`, `CT_AUDIO_SPC=ref`); ask before a large rewrite.
 - The ROM and the oracle remain the truth for BEHAVIOUR (logic, state, RNG, data, what the player sees happen). Timing
   artefacts of the SNES's limits (a song upload parking the main loop, HDMA/refresh stealing cycles, lag, a hand-back a frame
   off because a handshake ended 242 cycles past a vblank) need not be reproduced unless they change how the game works.

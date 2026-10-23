@@ -19,17 +19,17 @@ Every check is data in [`tools/regress_checks.json`](../tools/regress_checks.jso
 environment, the input files it needs, the lines its output must contain, a tier, a timeout, notes, and usually
 mutations. `tools/regress.py` has no per-check logic.
 
-### Current numbers (2026-10-10)
+### Current numbers (2026-10-22)
 
 | | |
 |---|---|
-| Checks | **807** |
-| Quick tier | 570 (the pre-commit tier, chosen by measured runtime) |
-| Full tier | 235 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
-| Untiered | 2 (run only in the full run) |
-| Excluded candidates | 2, each with the reason it has no stable signature |
-| Checks with mutations | 635, carrying 1,680 mutations in all |
-| Checks that must run alone | 56 (`exclusive`: one at a time in declared order, in one worker beside the parallel batch) |
+| Checks | **953** (a clean-room clone: 951 pass, 2 skip) |
+| Quick tier | 616 (the pre-commit tier, chosen by measured runtime) |
+| Full tier | 316 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
+| Untiered | 21 (run only in the full run) |
+| Excluded candidates | 3, each with the reason it has no stable signature |
+| Checks with mutations | 765, carrying 2,050 mutations in all |
+| Checks that must run alone | 60 (`exclusive`: one at a time in declared order, in one worker beside the parallel batch) |
 
 By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest single check sets the floor.
 
@@ -63,26 +63,29 @@ By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest sing
 
 ## Where a check's state comes from
 
-| Class | What it needs | Checks (2026-10-11) |
+| Class | What it needs | Checks (2026-10-22) |
 |---|---|---|
-| **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | 581 of 818, together with B1 |
-| **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 118 fixture files. | (counted in the 581) |
-| **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet, listed in `tools/private_captures.json` (113 files on 2026-10-22, read by 324 checks); they SKIP with their name in a fresh clone. The list only shrinks: `tools/input_provenance.py` (the check `inputs-come-from-recipes-or-sources`) fails on a check reading a state file from none of A / B1 / B2. | 324 (2026-10-22) |
-| **B3: public battery saves** | Other players' 8 KB `.srm` files (zdiemer's vendored set, Jackie's Game Saves), downloaded and verified by `python tools/fetch_saves.py` from `tools/third_party_saves.json`; Jackie's loaded states are recipes (`tools/recipes/jackie_*.json`). | (with B1) |
+| **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | 951 of 953, together with B1 and B3 |
+| **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 233 fixture entries in 10 domain files; 226 of the 239 state files the checks read. | (counted in the 951) |
+| **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet, listed in `tools/private_captures.json`: 2 files (`saves/field_re/pre_scene_19f.{state,lakewram}`), read by 2 checks; they SKIP with their name in a fresh clone. The list only shrinks: `tools/input_provenance.py` (the check `inputs-come-from-recipes-or-sources`) fails on a check reading a state file from none of A / B1 / B2 / B3. | 2 |
+| **B3: public battery saves** | Other players' 8 KB `.srm` files (zdiemer's set and Jackie's Game Saves: 78 files), downloaded by pinned URL and verified by SHA-256 by `python tools/fetch_saves.py` from `tools/third_party_saves.json`; Jackie's loaded states are recipes (`tools/recipes/jackie_*.json`). | (with B1) |
 
 How a fixture became a recipe's twin: the twin is made, every check that reads it runs, and it is kept when they pass
 unchanged. A check whose expectation is specific to the old capture was re-pinned only when it compares the port with
 the oracle in the same run (and that comparison holds on the twin) or after its pinned value was re-validated against
-the oracle on the twin; each such re-pin carries a dated note in the check. The biggest private families left, and why
-(details in each fixture's entry and in [ROADMAP.md](ROADMAP.md#11-checks-still-on-private-captures-l)):
+the oracle on the twin; each such re-pin carries a dated note in the check. One capture is left, `pre_scene_19f` (the Ocean Palace's
+aftermath; [ROADMAP.md](ROADMAP.md#11-checks-still-on-private-captures-l)). The largest families moved on 2026-10-22,
+for the record:
 
 - ~~**The cathedral's three-member party**~~ (`saves/battle_re/party3_field.*`, `bat9*`, `party3_form`,
   `party3_freshsheet`; 81 checks): recipe-made since 2026-10-22 (`tools/fixtures/party3.json`). The owner's route was
   read off the capture's follower ring ($7F:0C00), which the earlier twin had missed; 27 checks were re-pinned, each
   re-graded against the oracle on the twin (dated notes in the checks).
-- **The attract's first cut** (`saves/attract_cena_inicial.state`; 42 checks + 7 tools): those checks run the
-  cartridge in real time, not under the rule, and pin frames of the owner's real-time run. The fix is to move their
-  oracle side to the rule (where the power-on twin is exact) and re-anchor.
+- ~~**The attract's first cut**~~ (`saves/attract_cena_inicial.state`; 42 checks + 7 tools): off the private list since
+  2026-10-22. Those checks ran the cartridge in real time and pinned frames of the owner's real-time run; their oracle
+  side now runs the rule from recipe-made states (`tools/fixtures/attract_rule.json`), re-anchored.
+- ~~**The rest family and the late game**~~: recipe-made since 2026-10-22 (`tools/fixtures/rest.json`,
+  `tools/fixtures/lategame.json`, the late game from Jackie's public saves).
 - ~~**GATO's fight before the first A**~~ (`saves/battle_re/gato_wait.state`): recipe-made since 2026-10-22
   (`tools/fixtures/gato.json`). The three checks that hung on the capture's sound phase showed a real port bug on the
   twin (the battle-entry upload posted two SPC frames early), fixed in the engine, not re-pinned.

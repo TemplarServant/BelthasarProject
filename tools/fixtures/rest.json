@@ -456,6 +456,18 @@
       "scene": 28,
       "frames": 44,
       "doc": "the port's own snapshot (F5) in the attract's loc 01C, Crono mid-jump onto the Epoch"
+    },
+    {
+      "path": "saves/field_re/magus_scene_lake.state",
+      "recipe": "fxr_magus_scene",
+      "kind": "state",
+      "doc": "the Magus cult's room in the sanctum (0CB), the party above the cultists' trigger, no box open"
+    },
+    {
+      "path": "saves/field_re/magus_scene.lakewram",
+      "recipe": "fxr_magus_scene",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
     }
   ]
 }

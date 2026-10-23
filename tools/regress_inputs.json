@@ -3050,9 +3050,9 @@
         "ow-party-follower-slot2-walks-the-trail-vs-rule-cartridge"
       ],
       "kind": "lake_wram",
-      "regenerable": false,
-      "how": "catedral_user.lakewram with $7E:2982 (party slot 2) = 01, Marle: byte 21 + 0x2982 of the file -- byte-identical to the first one. Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git).",
-      "sha256": "9650f51b6a59192c9a06ef6833aa4ff4b4cf32fb5bf0e4c411cde78aad0e3c21",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe cathedral_entry, PEEK_POKE 2982=01 as tools/fixtures/party3.json)",
+      "sha256": "2a4cbe0386311be731b71c6769765bf3362859de374306a9c096f18c1d2adc04",
       "size": 131093,
       "present_when_recorded": true
     },

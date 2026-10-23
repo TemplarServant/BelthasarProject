@@ -1,7 +1,7 @@
 {
   "name": "fxf_scene468_stairs",
   "from": "queen_vanishes",
-  "doc": "Stands in for saves/field_re/scene468_stairs_to_120.state (a teleport into the east tower's last flight with storyline 10): the ROM's own loader (--teleport 468 8 39 2, method jmp, 240 frames) from the Queen's chamber after Marle vanished (queen_vanishes, storyline 10) -- loc 1D4, Crono at tile (8,39) facing left above the flight's exit to the castle's main floor, where Lucca waits. NOT YET USED: field-door-list-vs-logical-oracle's load leg differs on 27 frames [f20-f46] from it instead of the capture's 26 [f20-f45] (the cartridge's NMI-off loads cost one frame more from this state; the port's load clock does not follow), so saves/field_re/scene468_stairs_to_120.* stay the capture for now; the other four checks pass on it unchanged.",
+  "doc": "Stands in for saves/field_re/scene468_stairs_to_120.state (a teleport into the east tower's last flight with storyline 10): the ROM's own loader (--teleport 468 8 39 2, method jmp, 240 frames) from the Queen's chamber after Marle vanished (queen_vanishes, storyline 10) -- loc 1D4, Crono at tile (8,39) facing left above the flight's exit to the castle's main floor, where Lucca waits. USED since 2026-10-22 (tools/fixtures/rest.json makes saves/field_re/scene468_stairs_to_120.*; the owner's capture is retired): field-door-list-vs-logical-oracle was re-pinned on it, its load leg differing on 27 frames [f20-f46] where the capture's differed on 26 [f20-f45] (the port's atomic load against the cartridge's NMI-off load; docs/ROADMAP.md F17); the other checks pass on it unchanged.",
   "steps": [
     [
       "teleport",
