@@ -1,0 +1,108 @@
+# The ROM-free CI (docs/TESTING.md, "The GitHub CI"). The repository is public and the ROM never comes near it, so a
+# runner here builds from the shapes (tools/gen/shapes.py: every generated file's declarations, every array zero) and
+# runs what needs no ROM: the build on three systems, the suite's ROM-free checks, the host-tool tests, the data-free
+# Belthasar, and the tree's leak check by name and kind. Everything that grades the game SKIPs here: the suite with the
+# ROM (tools/regress.py after tools/setup.py) stays the gate for behaviour.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  tree:
+    name: No game file in the tree
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: No tracked file is the game's, by name or kind
+        run: python tools/release/check_tracked.py
+      - name: The Gradle wrapper is Gradle's own
+        uses: gradle/actions/wrapper-validation@v4
+
+  build:
+    name: Build + ROM-free checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    env:
+      VULKAN_HEADERS: v1.3.296           # tools/get_vulkan_headers.ps1's version
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Python packages
+        run: python -m pip install --disable-pip-version-check numpy
+
+      - name: Toolchain and SDL2 (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libsdl2-dev ninja-build
+      - name: Toolchain and SDL2 (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja pkg-config sdl2
+      - name: SDL2 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File tools\get_sdl2.ps1
+
+      - name: Dear ImGui
+        run: python tools/get_imgui.py
+      - name: Vulkan headers (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File tools\get_vulkan_headers.ps1
+      - name: Vulkan headers (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: |
+          git clone -q --depth 1 --branch "$VULKAN_HEADERS" https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/vkh"
+          mkdir -p third_party/vulkan
+          cp -R "$RUNNER_TEMP/vkh/include" third_party/vulkan/
+          cp "$RUNNER_TEMP/vkh/LICENSE.md" third_party/vulkan/ 2>/dev/null || true
+
+      - name: The shapes in place of the generated files
+        run: python tools/gen/shapes.py install
+      - name: Build every target
+        run: python tools/build.py
+
+      - name: The suite's ROM-free checks
+        run: |
+          set -o pipefail
+          python tools/regress.py 2>&1 | tee "$RUNNER_TEMP/regress.txt"
+      - name: The suite graded something
+        if: always()
+        run: |
+          line=$(grep -E '^regress: [0-9]+ pass' "$RUNNER_TEMP/regress.txt" | tail -1 || true)
+          {
+            echo "### ROM-free suite (${{ matrix.os }})"
+            echo
+            echo "\`${line:-no summary line: the suite did not finish}\`"
+            echo
+            echo "Every SKIP needs the ROM or a state made from it: this run has not tested those checks."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$line" | grep -Eq '^regress: [1-9][0-9]* pass, 0 fail' || { echo "::error::no check passed, or one failed: $line"; exit 1; }
+
+      - name: Host-tool tests
+        run: python -m unittest discover -s tests -v
+      - name: The data-free Belthasar (the release's game)
+        run: CT_DATAFREE=1 python tools/build.py Belthasar

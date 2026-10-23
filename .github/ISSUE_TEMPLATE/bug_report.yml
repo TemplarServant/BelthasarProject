@@ -1,0 +1,73 @@
+name: Divergence or bug
+description: Belthasar does something the cartridge does not, or a mod misbehaves.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. This form follows [CONTRIBUTING.md, "Reporting a divergence"](https://github.com/TemplarServant/BelthasarProject/blob/main/CONTRIBUTING.md#reporting-a-divergence).
+
+        **Do not attach the ROM, `ct_assets.dat`, savestates, battery saves, F5 snapshots (`ct_debug.*`) or RAM
+        dumps**: they contain the game's data. A location and a way to get there are enough for most reports.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see or hear in Belthasar. If a screenshot helps, keep it to what shows the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the cartridge does
+      description: The same moment on the original game -- real hardware, the oracle (`ct.exe --peek`), or an emulator (say which).
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where
+      description: >-
+        The location, the story point, the party. Press F5 at the moment: it appends a line to `ct_debug_log.txt` with
+        the frame, the location (`loc`) and the lead's position, and that line is safe to paste.
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How to get there
+      description: The steps, or better a pad script from power-on or from a named save point. Does it happen every time?
+    validations:
+      required: true
+  - type: dropdown
+    id: mods
+    attributes:
+      label: F1 options
+      description: >-
+        The options that change the game (widescreen, internal resolution, frames between, free sync, ...). Try
+        again with the defaults: if it goes away, it is a mod issue.
+      options:
+        - All at their defaults
+        - Some changed, and it happens with the defaults too
+        - Some changed, and it goes away with the defaults
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Build and platform
+      description: The release name or the commit you built, and your operating system.
+    validations:
+      required: true
+  - type: checkboxes
+    id: rom
+    attributes:
+      label: The ROM
+      options:
+        - label: My ROM passed the check (the programs refuse any other dump; see docs/ROM.md).
+          required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Which options you changed, the log (`latest.log`), anything that helps.

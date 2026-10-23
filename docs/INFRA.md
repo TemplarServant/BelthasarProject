@@ -75,9 +75,8 @@ committed and pushed. Measured 2026-10-23 (Ubuntu 24.04, gcc, Python 3.13):
   agent then runs `python3 tools/setup.py --rom <that path>` (it verifies the hash and copies the ROM to the root,
   where `.gitignore` keeps it out of every commit) and `python3 tools/fixtures.py make all`. The container is new each
   time, so the attachment and that cost recur per container. Without the
-  ROM only the shapes build exists: `python3 tools/regress.py` gives 5 pass, 3 fail, 945 skip (`--quick`: 608 skip) -- the 3 FAILs
-  (`field-battle-animeng-idle-gather`, `field-battle-animeng-pc-gather`, `menu-window-gradient-vs-hdma`) read
-  generated tables that are still shapes, and are not a regression. Engine work that changes behaviour cannot be
+  ROM only the shapes build exists: `python3 tools/regress.py` gives 5 pass, 0 fail, 949 skip (`--quick`: 612 skip), the
+  same as the GitHub CI ([TESTING.md](TESTING.md#the-github-ci-githubworkflowsciyml)). Engine work that changes behaviour cannot be
   validated without the ROM (the mandate's `--vmdiff` / `--vm` and the suite need the oracle on it).
 - **Network.** The environment's policy decides which hosts answer. Under the default policy `fantasyanime.com` is
   refused, so the 27 Jackie saves of `tools/third_party_saves.json` do not fetch (51 of 78 do) and the checks and

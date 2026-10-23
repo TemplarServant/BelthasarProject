@@ -9338,6 +9338,9 @@
       "argv": [
         "build/Belthasar.exe"
       ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
       "env": {
         "CT_ANIMENG_SELFCHECK": "1",
         "CT_NOPACE": "1",
@@ -9351,12 +9354,15 @@
       ],
       "tier": "quick",
       "timeout_s": 30,
-      "notes": "ANIM-ENGINE STAGE 1 (battle_anim_engine.md §B.1 STEP-4): the strongest engine regression. The actual ctAnimengGather C code, fed the baked E3 cell-words (animeng_e3_gato.h) + $7F8000 sheet fixture (animeng_sheet_gato.h), reproduces the RETIRED idle bake ctBattleAnimTiles[6]/[7] (kf6 rest / kf7 swap) byte-for-byte over the GATO tile window 0x68-0x9F (56/56 each) -- and those tiles are the oracle idle VRAM (validated 48/48 vs the LakeSnes oracle this session). Also asserts the facing-1 idle WINDOW is the period-120 claw-swap (idx04 rest cursor / idx05 swap cursor). A gather/layout/sheet regression breaks this. Byte-exact-vs-fixture pin: only legitimately changes if the E3 layout (ADDENDUM 1) or the sheet capture is re-derived."
+      "notes": "ANIM-ENGINE STAGE 1 (battle_anim_engine.md §B.1 STEP-4): the strongest engine regression. The actual ctAnimengGather C code, fed the baked E3 cell-words (animeng_e3_gato.h) + $7F8000 sheet fixture (animeng_sheet_gato.h), reproduces the RETIRED idle bake ctBattleAnimTiles[6]/[7] (kf6 rest / kf7 swap) byte-for-byte over the GATO tile window 0x68-0x9F (56/56 each) -- and those tiles are the oracle idle VRAM (validated 48/48 vs the LakeSnes oracle this session). Also asserts the facing-1 idle WINDOW is the period-120 claw-swap (idx04 rest cursor / idx05 swap cursor). A gather/layout/sheet regression breaks this. Byte-exact-vs-fixture pin: only legitimately changes if the E3 layout (ADDENDUM 1) or the sheet capture is re-derived. ==== INPUT 2026-10-23 (the GitHub CI, docs/TESTING.md 'The GitHub CI'): the ROM, like field-battle-animeng-pc2-gather -- the check grades tables tools/setup.py generates from it and compiles in. On a fresh clone's shapes (every array zero) it used to run on zeros: it FAILed (signature missing), not a regression. Without the ROM it SKIPs now, which is what a run without the ROM has tested."
     },
     {
       "name": "field-battle-animeng-attack-gather",
       "argv": [
         "build/Belthasar.exe"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc"
       ],
       "env": {
         "CT_ANIMENG_SELFCHECK": "1",
@@ -9371,12 +9377,15 @@
       ],
       "tier": "quick",
       "timeout_s": 30,
-      "notes": "ANIM-ENGINE STAGE 2 (battle_anim_engine.md §B.2 STEP-3e): the engine-vs-fixture check extended to an ATTACK pose. The actual ctAnimengGather C code, fed the baked E3 cell-words (animeng_e3_gato.h) + $7F8000 sheet fixture, reproduces the RETIRED directional-attack bake ctGatoAtkTiles0 (UP rear-up, E3 idx0x11) AND the front claw-swipe bake ctGatoSwipeTiles[0] (GS1, E3 idx0x15) byte-for-byte over 0x68-0x9F (56/56 each). Every GATO attack/song assembly index was pinned this session from the ROM and cross-validated byte-exact vs BOTH the corpus captures (crono_left/right/up + gato_mid) AND these retired bakes (rear-up 0x11/0x15/0x19/0x1D, strike 0x1A/0x1E, song sway 0x0D/0x0E/0x0F). Byte-exact-vs-fixture pin: only legitimately changes if the E3 layout or the sheet capture is re-derived."
+      "notes": "ANIM-ENGINE STAGE 2 (battle_anim_engine.md §B.2 STEP-3e): the engine-vs-fixture check extended to an ATTACK pose. The actual ctAnimengGather C code, fed the baked E3 cell-words (animeng_e3_gato.h) + $7F8000 sheet fixture, reproduces the RETIRED directional-attack bake ctGatoAtkTiles0 (UP rear-up, E3 idx0x11) AND the front claw-swipe bake ctGatoSwipeTiles[0] (GS1, E3 idx0x15) byte-for-byte over 0x68-0x9F (56/56 each). Every GATO attack/song assembly index was pinned this session from the ROM and cross-validated byte-exact vs BOTH the corpus captures (crono_left/right/up + gato_mid) AND these retired bakes (rear-up 0x11/0x15/0x19/0x1D, strike 0x1A/0x1E, song sway 0x0D/0x0E/0x0F). Byte-exact-vs-fixture pin: only legitimately changes if the E3 layout or the sheet capture is re-derived. ==== INPUT 2026-10-23 (the GitHub CI, docs/TESTING.md 'The GitHub CI'): the ROM, like field-battle-animeng-pc2-gather -- the check grades tables tools/setup.py generates from it and compiles in. On a fresh clone's shapes (every array zero) it used to run on zeros: it PASSed, zeros against zeros -- a pass that graded nothing. Without the ROM it SKIPs now, which is what a run without the ROM has tested."
     },
     {
       "name": "field-battle-animeng-pc-gather",
       "argv": [
         "build/Belthasar.exe"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc"
       ],
       "env": {
         "CT_ANIMENG_SELFCHECK": "1",
@@ -9391,7 +9400,7 @@
       ],
       "tier": "quick",
       "timeout_s": 30,
-      "notes": "ANIM-ENGINE STAGE 3 (battle_anim_engine.md §B.3): the PC engine-vs-fixture check. The actual ctAnimengPcGather C code, fed the PC E3 cell-words (animeng_e3_pc.h: Crono base $DC27B0, Marle base $DC9AD8) + the ROM sheets (animeng_sheet_pc.h: Crono $D272C0, Marle $D40000 -- PC sprites are uncompressed IN ROM, no fixture), reproduces the RETIRED bakes byte-for-byte: Crono STANCE (E3 idx0xC6) + Marle STANCE (0xDA) tiles == ctBattleStanceObjTiles (16/16 each) with the E3 (dx,dy) == the stance CELL positions (4/4 each), AND the Crono STRIKE (A4 = idx0x51) tiles == ctBattleAnimTiles[3] (16/16). Every PC index (idle C6/4F/C7, attack 0x20/41/50/51/8B/47, Marle 0x37/8C/8D/D9) was pinned this session from the ROM + live $9907/$967B captures and cross-validated byte-exact vs the live VRAM (Crono idle 10/10 + strike 9/9, Marle idle 11/11). Byte-exact-vs-fixture pin: only changes if the PC E3 layout or a sheet is re-derived."
+      "notes": "ANIM-ENGINE STAGE 3 (battle_anim_engine.md §B.3): the PC engine-vs-fixture check. The actual ctAnimengPcGather C code, fed the PC E3 cell-words (animeng_e3_pc.h: Crono base $DC27B0, Marle base $DC9AD8) + the ROM sheets (animeng_sheet_pc.h: Crono $D272C0, Marle $D40000 -- PC sprites are uncompressed IN ROM, no fixture), reproduces the RETIRED bakes byte-for-byte: Crono STANCE (E3 idx0xC6) + Marle STANCE (0xDA) tiles == ctBattleStanceObjTiles (16/16 each) with the E3 (dx,dy) == the stance CELL positions (4/4 each), AND the Crono STRIKE (A4 = idx0x51) tiles == ctBattleAnimTiles[3] (16/16). Every PC index (idle C6/4F/C7, attack 0x20/41/50/51/8B/47, Marle 0x37/8C/8D/D9) was pinned this session from the ROM + live $9907/$967B captures and cross-validated byte-exact vs the live VRAM (Crono idle 10/10 + strike 9/9, Marle idle 11/11). Byte-exact-vs-fixture pin: only changes if the PC E3 layout or a sheet is re-derived. ==== INPUT 2026-10-23 (the GitHub CI, docs/TESTING.md 'The GitHub CI'): the ROM, like field-battle-animeng-pc2-gather -- the check grades tables tools/setup.py generates from it and compiles in. On a fresh clone's shapes (every array zero) it used to run on zeros: it FAILed (signature missing), not a regression. Without the ROM it SKIPs now, which is what a run without the ROM has tested."
     },
     {
       "name": "field-battle-forest-return",
@@ -21174,7 +21183,9 @@
         "build/Belthasar.exe",
         "--wingradtest"
       ],
-      "inputs": [],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
       "expect": [
         "wingrad: opt0 status 0..15:+0 16..27:+8 28..39:+7 40..51:+6 52..63:+5 64..75:+4 76..87:+3 88..99:+2 100..111:+1 112..123:+0 124..135:-1 136..147:-2 148..159:-3 160..171:-4 172..183:-5 184..195:-6 196..207:-7 208..223:+0",
         "wingrad: opt1 item   0..15:+0 16..17:+8 18..19:+7 20..21:+6 22..23:+5 24..25:+4 26..27:+3 28..29:+2 30..31:+1 32..33:+0 34..35:-1 36..37:-2 38..39:-3 40..41:-4 42..43:-5 44..45:-6 46..47:-7 48..49:+8 50..51:+7 52..53:+6 54..55:+5 56..57:+4 58..59:+3 60..61:+2 62..63:+1 64..65:+0 66..67:-1 68..69:-2 70..71:-3 72..73:-4 74..75:-5 76..77:-6 78..79:-7 80..87:+8 88..95:+7 96..103:+6 104..111:+5 112..119:+4 120..127:+3 128..135:+2 136..143:+1 144..151:+0 152..159:-1 160..167:-2 168..175:-3 176..183:-4 184..191:-5 192..199:-6 200..207:-7 208..223:+0",
@@ -21208,7 +21219,7 @@
           "why": "C2/871E BEQ splits the two arms: a zero kind emits ONE entry of `h` lines carrying the neutral pair $7E:9DF9 (02 E0). Treating the 16-line top/bottom margins as ramps shifts every window"
         }
       ],
-      "notes": "THE MENU WINDOW GRADIENT IS GENERATED, AND THIS GRADES THE GENERATOR AGAINST THE OSCILLOSCOPE. The dark menu windows are shaded by HDMA channel 0 writing $2131/$2132 (CGADSUB + COLDATA) once per scanline: a grey fixed colour ADDED on the way down each window and SUBTRACTED on the way out -- one 16-step ramp +8..-7 in 5-BIT colour space that RESETS and HEIGHT-NORMALISES per window. C2/86DD builds that table from a WINDOW LIST of [kind, height] pairs (kind 0 = flat band, 1 = ramp, 0x80 = end) at ROM $FF:BBF2, one per ribbon option, copied to $7E:9D99 by the bank-FF block copier C2/F362 (writer C2:F376, measured). The per-step line count is hi($A01B += height*16) with $A01C zeroed after each step, so the step size is height/16 with the remainder CARRIED -- which is why 192 -> 12 scanlines, 160 -> 10, 144 -> 9, 128 -> 8, 80 -> 5, 48 -> 3 and 32 -> 2 all fall out of ONE routine. EVERY EXPECTED BAND HERE WAS MEASURED ON THE ORACLE'S OWN HARDWARE with `ct.exe --hdma saves/com_jogo_salvo.state --btnscript \"0:20,200:2,0:40[,80:2,0:8]*N\"`, whose `scanline trace` section reports the fixed colour and sub flag the PPU actually saw each line (one line later than the table entry -- the HDMA latency). Compared row by row against this generator: 224/224 scanlines identical on ALL SIX options. WHAT IT REPLACED: three baked tables, each one instance of this machine -- ctMenuWinGrad (the status screen's single 192 ramp), ctMenuItemGrad and ctMenuSaveGrad5. Every screen that was not special-cased was painted with the STATUS list, so the Tech, Config and Form windows ran one continuous 192-line ramp down the whole screen instead of restarting per box: on the Form screen the third party panel and the Exchange window faded to black, which is what made a party exchange unreadable. Switching the whole chrome to the generated ramp plus the exact 5-bit COLDATA model took the opt-0 frame from 24.3% to 59.3% pixel-identical against the oracle capture scratchpad/menu/or_opt0.png (pixels off by more than 4: 10257 -> 5187), and the generator reproduces the pixel-exactly-derived ctMenuSaveGrad5 at all 224 rows with ZERO mismatches -- which is the independent proof that the transcription is right. NOT GRADED, ON PURPOSE: the fractional carry ($A01C is zeroed, not the whole accumulator). Every ramp height in the six X-menu lists is a multiple of 16 (192/160/144/128/80/48/32), so the remainder is always zero and a mutation that drops the carry SURVIVES. That is a fact about the lists, not about the routine -- the lists after $FF:BC38 (the shop screens, which this port does not reach) begin `flat 8` and would exercise it. Do not add a mutation for it without a reachable witness. THE CALL SITE IS GRADED ELSEWHERE: this mode calls the generator directly, so a mutation that feeds the WRONG list to the chrome painter cannot be seen here. It lives on menu-ribbon-select-colors, which hashes a rendered opt-4 (Form) frame.",
+      "notes": "THE MENU WINDOW GRADIENT IS GENERATED, AND THIS GRADES THE GENERATOR AGAINST THE OSCILLOSCOPE. The dark menu windows are shaded by HDMA channel 0 writing $2131/$2132 (CGADSUB + COLDATA) once per scanline: a grey fixed colour ADDED on the way down each window and SUBTRACTED on the way out -- one 16-step ramp +8..-7 in 5-BIT colour space that RESETS and HEIGHT-NORMALISES per window. C2/86DD builds that table from a WINDOW LIST of [kind, height] pairs (kind 0 = flat band, 1 = ramp, 0x80 = end) at ROM $FF:BBF2, one per ribbon option, copied to $7E:9D99 by the bank-FF block copier C2/F362 (writer C2:F376, measured). The per-step line count is hi($A01B += height*16) with $A01C zeroed after each step, so the step size is height/16 with the remainder CARRIED -- which is why 192 -> 12 scanlines, 160 -> 10, 144 -> 9, 128 -> 8, 80 -> 5, 48 -> 3 and 32 -> 2 all fall out of ONE routine. EVERY EXPECTED BAND HERE WAS MEASURED ON THE ORACLE'S OWN HARDWARE with `ct.exe --hdma saves/com_jogo_salvo.state --btnscript \"0:20,200:2,0:40[,80:2,0:8]*N\"`, whose `scanline trace` section reports the fixed colour and sub flag the PPU actually saw each line (one line later than the table entry -- the HDMA latency). Compared row by row against this generator: 224/224 scanlines identical on ALL SIX options. WHAT IT REPLACED: three baked tables, each one instance of this machine -- ctMenuWinGrad (the status screen's single 192 ramp), ctMenuItemGrad and ctMenuSaveGrad5. Every screen that was not special-cased was painted with the STATUS list, so the Tech, Config and Form windows ran one continuous 192-line ramp down the whole screen instead of restarting per box: on the Form screen the third party panel and the Exchange window faded to black, which is what made a party exchange unreadable. Switching the whole chrome to the generated ramp plus the exact 5-bit COLDATA model took the opt-0 frame from 24.3% to 59.3% pixel-identical against the oracle capture scratchpad/menu/or_opt0.png (pixels off by more than 4: 10257 -> 5187), and the generator reproduces the pixel-exactly-derived ctMenuSaveGrad5 at all 224 rows with ZERO mismatches -- which is the independent proof that the transcription is right. NOT GRADED, ON PURPOSE: the fractional carry ($A01C is zeroed, not the whole accumulator). Every ramp height in the six X-menu lists is a multiple of 16 (192/160/144/128/80/48/32), so the remainder is always zero and a mutation that drops the carry SURVIVES. That is a fact about the lists, not about the routine -- the lists after $FF:BC38 (the shop screens, which this port does not reach) begin `flat 8` and would exercise it. Do not add a mutation for it without a reachable witness. THE CALL SITE IS GRADED ELSEWHERE: this mode calls the generator directly, so a mutation that feeds the WRONG list to the chrome painter cannot be seen here. It lives on menu-ribbon-select-colors, which hashes a rendered opt-4 (Form) frame. ==== INPUT 2026-10-23 (the GitHub CI, docs/TESTING.md 'The GitHub CI'): the ROM, like field-battle-animeng-pc2-gather -- the check grades tables tools/setup.py generates from it and compiles in. On a fresh clone's shapes (every array zero) it used to run on zeros: it FAILed (signature missing: a flat +0 ramp), not a regression. Without the ROM it SKIPs now, which is what a run without the ROM has tested.",
       "env": {
         "CT_NOPACE": "1",
         "SDL_AUDIODRIVER": "dummy"
@@ -47140,6 +47151,33 @@
       "timeout_s": 60,
       "note_pass": "every state file a check reads comes from a recipe (tools/fixtures/, made from the ROM), a public source (tools/third_party_saves.json, verified by SHA-256) or the shrinking list of the owner's captures still waiting for their recipes (tools/private_captures.json): no check depends on a file that exists on one machine only and is not on that list",
       "notes": "2026-10-22, the owner: nothing may depend exclusively on one machine. The suite on a fresh clone (the cloud sessions) SKIPs every check whose input is not there -- before this, 336 of 952 checks, and the number grew because nothing stopped a new check pinned on a local capture. This check fails on such a check (UNCLASSIFIED: give it a recipe or a public source) and on a list entry no check reads (STALE). Re-pin only when the private count goes DOWN (a check moved onto a recipe-made twin, docs/ROADMAP.md 1.1) or the recipe / third-party counts change with it. RE-PINNED 2026-10-22 (the attract family): saves/attract_cena_inicial.state, attract_loc0AD_flea.state, attract_race_handoff_rule_f8247.state and attract_entry3_handoff_rule_f8859.state are off the private list -- their checks read the recipe-made twins of tools/fixtures/attract_rule.json (and attract.json's attract_entry3_handoff_f6750.state) -- so 115 -> 119 recipe files, 113 -> 109 private captures, 324 -> 277 checks still on one (47 checks read no private capture any more; slot1-runner and the HDMA census keep other families' captures). || RE-PINNED 2026-10-22 (recipes-rest): saves/field_re/magus_scene.lakewram and magus_scene_lake.state made by tools/recipes/fxr_magus_scene.json and taken off tools/private_captures.json -- the rest family has no private capture left; on the merged main: 225 made by recipes, 3 private (other families' catedral_party3 and pre_scene_19f) read by 3 checks. RE-PINNED 2026-10-22 (the five recipe families merged with 4bdb397, graded in a clean-room clone -- setup from the ROM, the public saves fetched, every fixture made by its recipe): after all five families: 2 private captures left (pre_scene_19f, read by 2 checks), 226 states made by recipes, 11 public battery saves. ==== 2026-10-23, RE-PINNED DOWN TO ZERO (the late game's last two): saves/field_re/pre_scene_19f.* is made by the recipe lg_ocean_palace_19f (Jackie's ch22 played through the Ocean Palace to the aftermath; ocean-palace-aftermath-chain-vs-oracle and ow-1f5-wave-and-light-vs-oracle pass on it with their pins unchanged). No check reads a private capture any more: tools/private_captures.json is empty, and any new check on a local capture fails here as UNCLASSIFIED."
+    },
+    {
+      "name": "tree-tracks-no-game-file",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/release/check_tracked.py"
+      ],
+      "inputs": [
+        "tools/release/check_tracked.py",
+        "tools/release/export_public.py",
+        "tools/release/scan_rom_leaks.py"
+      ],
+      "expect": [
+        "tracked: clean: "
+      ],
+      "timeout_s": 60,
+      "note_pass": "no tracked file is the ROM, the extracted assets, a savestate, a capture, a battery save or a generated table by its name (tools/release/export_public.py's EXCLUDE), and no tracked file is a binary but the README's pictures and the named upstream files -- the ROM-free half of the leak check, run by the GitHub CI on every push and pull request",
+      "notes": "2026-10-23 (the GitHub CI, docs/TESTING.md 'The GitHub CI'): the repository is public, and a runner without the ROM cannot run tools/release/scan_rom_leaks.py, which searches every file's bytes against the ROM. This check is the part that needs no ROM: names and kinds. It reads `git ls-files`, so a file staged for the next commit counts. The byte search stays CONTRIBUTING.md's step before a pull request.",
+      "mutations": [
+        {
+          "file": "tools/release/check_tracked.py",
+          "find": "        if f.startswith(BINARY_OK_DIR) and f.lower().endswith(BINARY_OK_EXT):",
+          "replace": "        if False:  # MUT: no binary is allowed",
+          "why": "the README's pictures in docs/media/ are binaries: with their allowance gone the check must report them, which proves it tells a binary from a text file at all"
+        }
+      ]
     }
   ],
   "excluded": [
