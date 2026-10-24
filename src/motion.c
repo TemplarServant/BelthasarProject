@@ -71,7 +71,8 @@ static double fitOne(int c, const double* v, int n, double cur) {
 }
 // Each object's history, by its key (the frames it was seen in a row).
 typedef struct { int scene, last, n; double x[FIT_N], y[FIT_N]; double qx, qy; int okx, oky; double fx, fy; } FitSpr;
-static FitSpr g_fitSpr[256];
+#define FIT_KEYS 2048                              // (the overworld's keys: block * 16 + piece)
+static FitSpr g_fitSpr[FIT_KEYS];
 static int g_fitFrame;
 void CtMotFit(CtMotFrame* m) {
   m->qFrac = 0; g_fitFrame++;
@@ -139,7 +140,7 @@ void CtMotFit(CtMotFrame* m) {
   // by the camera's continuous place, so the two never part by a fraction
   for (int i = 0; i < m->nspr; i++) {
     int key = m->sprKey[i];
-    if (key < 0 || key >= 256) continue;
+    if (key < 0 || key >= FIT_KEYS) continue;
     FitSpr* s = &g_fitSpr[key];
     if (s->last == g_fitFrame) {                   // (a key twice in one frame -- an object of several sprites, the
       m->qsx[i] = m->sprX[i] + s->fx; m->qsy[i] = m->sprY[i] + s->fy; continue; }   //  Blackbird's three: the first one's)
@@ -148,12 +149,14 @@ void CtMotFit(CtMotFrame* m) {
     s->scene = m->scene; s->last = g_fitFrame;
     if (s->n == FIT_N) { memmove(s->x, s->x + 1, (FIT_N - 1) * sizeof(double)); memmove(s->y, s->y + 1, (FIT_N - 1) * sizeof(double)); s->n--; }
     s->x[s->n] = m->sprX[i]; s->y[s->n] = m->sprY[i]; s->n++;
-    int withCam = s->n > 1 && s->n <= g_fit.n;
-    for (int k = 1; withCam && k < s->n; k++) {
+    int withCam = s->n > 1 && s->n <= g_fit.n, camMoved = 0;   // (and the camera moved in it: a still object while a
+    for (int k = 1; withCam && k < s->n; k++) {                //  still camera settles is the map's, not the screen's)
       int gk = g_fit.n - s->n + k;
       if (s->x[k] - s->x[k - 1] != g_fit.cam[0][gk] - g_fit.cam[0][gk - 1] ||
           s->y[k] - s->y[k - 1] != g_fit.cam[1][gk] - g_fit.cam[1][gk - 1]) withCam = 0;
+      if (g_fit.cam[0][gk] != g_fit.cam[0][gk - 1] || g_fit.cam[1][gk] != g_fit.cam[1][gk - 1]) camMoved = 1;
     }
+    withCam = withCam && camMoved;
     if (withCam) { m->qsx[i] = m->sprX[i] + (qc[0] - cam[0]); m->qsy[i] = m->sprY[i] + (qc[1] - cam[1]);
                    s->qx = m->qsx[i]; s->qy = m->qsy[i]; s->okx = s->oky = 1; }   // (its own goes on from there)
     else { m->qsx[i] = fitQ(&s->qx, &s->okx, NULL, s->x, s->n, m->sprX[i], 1); m->qsy[i] = fitQ(&s->qy, &s->oky, NULL, s->y, s->n, m->sprY[i], 1); }
@@ -184,7 +187,7 @@ void CtMotSettle(CtMotFrame* m, const uint8_t* pic, const uint8_t* fb, int brigh
   for (int i = 0; i < m->w * CT_MOT_H; i++) {
     if (m->own[i] == CT_MOT_FIXED) continue;
     const uint8_t* a = pic + i * 3; const uint8_t* b = fb + i * 3;
-    if (dim(a[0], bright) != b[0] || dim(a[1], bright) != b[1] || dim(a[2], bright) != b[2]) m->own[i] = CT_MOT_FIXED;
+    if (dim(a[0], bright) != b[0] || dim(a[1], bright) != b[1] || dim(a[2], bright) != b[2]) { m->own[i] = CT_MOT_FIXED; m->world[i] = 0; }
   }
 }
 
@@ -284,6 +287,7 @@ void CtMotRaster(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_t* f
                     sx[CT_MOT_SPR + i] = RK(sdx - cdx); sy[CT_MOT_SPR + i] = RK(sdy - cdy); continue; }
       }
     }
+    if (frac) { sx[CT_MOT_SPR + i] = RK(-cdx); sy[CT_MOT_SPR + i] = RK(-cdy); continue; }   // (new, or a jump: its map place)
     sx[CT_MOT_SPR + i] = shiftOf(dx, t, k); sy[CT_MOT_SPR + i] = shiftOf(dy, t, k);
   }
   #undef RK

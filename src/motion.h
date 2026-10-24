@@ -13,6 +13,7 @@
 #ifndef CT_MOTION_H
 #define CT_MOTION_H
 #include <stdint.h>
+#include <string.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -87,7 +88,8 @@ static inline void CtMotTag(CtMotFrame* m, int x, int y, int own) {
   if (m && (unsigned)x < (unsigned)m->w && (unsigned)y < CT_MOT_H) m->own[y * m->w + x] = (uint8_t)own;
 }
 static inline void CtMotFixRow(CtMotFrame* m, int y) {           // a screen-fixed row (the text box, the blank lines)
-  if (m && (unsigned)y < CT_MOT_H) { uint8_t* r = m->own + y * m->w; for (int x = 0; x < m->w; x++) r[x] = CT_MOT_FIXED; }
+  if (m && (unsigned)y < CT_MOT_H) { uint8_t* r = m->own + y * m->w; for (int x = 0; x < m->w; x++) r[x] = CT_MOT_FIXED;
+                                    memset(m->world + y * m->w, 0, (size_t)m->w); }   // (screen-fixed: no world pixel left there)
 }
 int  CtMotSprite(CtMotFrame* m, int key, int x, int y);   // the next drawn object: its owner tag (0 = the list is full)
 static inline void CtMotSpritePixel(CtMotFrame* m, int x, int y, int r, int g, int b, int own) {   // (a sprite's pixel)

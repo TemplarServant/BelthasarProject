@@ -388,12 +388,14 @@ typedef struct {
 } OwGhost;
 static OwGhost g_owGhost[OW_GHOST_KEYS];
 static int g_owGhostFrame;
-static void owGhostReset(void) { memset(g_owGhost, 0, sizeof g_owGhost); }
+static int g_owGhostLive;                         // (any entry in use: a headless latch need not clear the table)
+static void owGhostReset(void) { if (g_owGhostLive) memset(g_owGhost, 0, sizeof g_owGhost); g_owGhostLive = 0; }
 static void owGhosts(World* w) {
   g_owGhostFrame++;
   const int W = hostWideW();
   if (!g_hostInteractive || W <= CAMW) { owGhostReset(); return; }
   const int X0 = (W - CAMW) / 2, f = g_owGhostFrame;
+  g_owGhostLive = 1;
   const double sx = w->cam.bg2h, sy = w->cam.bg2v;
   // this build's objects: their places and their pieces (relative to the object)
   for (int i = 0; i < w->wideShowN; i++) {
@@ -423,7 +425,7 @@ static void owGhosts(World* w) {
     g->px = g->wx; g->py = g->wy; g->wx += vx; g->wy += vy; g->age++;
     int ox = (int)floor(g->wx - sx), oy = (int)floor(g->wy - sy);
     if (ox < -X0 - 48 || ox > CAMW + X0 + 48 || oy < -48 || oy > CAMH + 48 || g->age > 600) { g->poseN = 0; g->ghost = 0; continue; }
-    const OwGhostPose* ps = &g->pose[((g->poseAt - (g->age % g->poseN)) % OW_GHOST_POSES + OW_GHOST_POSES) % OW_GHOST_POSES];
+    const OwGhostPose* ps = &g->pose[((g->poseAt - g->poseN + 1 + (g->age - 1) % g->poseN) % OW_GHOST_POSES + 2 * OW_GHOST_POSES) % OW_GHOST_POSES];   // (oldest to newest, in turn)
     for (int i = 0; i < ps->n && w->wideShowN < CT_OW_WIDE_MAX; i++) {
       CtWorldPiece q = ps->pc[i];
       q.x = (int16_t)(q.x + ox); q.y = (int16_t)(q.y + oy); q.ox = (int16_t)ox; q.oy = (int16_t)oy;
@@ -2277,6 +2279,7 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   memset(sx, 0, sizeof sx); memset(sy, 0, sizeof sy);
   for (int i = 0; i < cur->nspr && CT_MOT_SPR + i < 256; i++) {
     int j = 0; while (j < prev->nspr && prev->sprKey[j] != cur->sprKey[i]) j++;
+    sx[CT_MOT_SPR + i] = (int)-FLK(cdx); sy[CT_MOT_SPR + i] = (int)-FLK(cdy);   // (new, or a jump: its map place at t)
     if (j < prev->nspr) {                             // (new, or a jump: where this frame has it on the screen)
       int wx = owWrapD(cur->sprX[i] - prev->sprX[j], 1536), wy = owWrapD(cur->sprY[i] - prev->sprY[j], 1024);
       if (abs(wx) <= 32 && abs(wy) <= 32) {
@@ -4787,9 +4790,9 @@ static int fieldWideBg2Dy(void) {
 // owner, 2026-10-24). The bits (2 BG2, 4 BG3) of `bits` the room's front layers cover over its whole scroll mask, sampled
 // every 4 pixels; kept per location and bake.
 static int fieldHiddenBg(const Field* f, int bits) {
-  static const void* lastSd; static int lastLoc = -1, lastBits = -1, lastHid;
+  static const void* lastSd; static const void* lastBase; static int lastLoc = -1, lastBits = -1, lastHid;
   if (!f->sd || !(bits & 6)) return 0;
-  if (f->sd == lastSd && f->loc == lastLoc && bits == lastBits) return lastHid;
+  if (f->sd == lastSd && f->base == lastBase && f->loc == lastLoc && bits == lastBits) return lastHid;   // (a re-bake: again)
   CtSceneLayers L; int o2x, o2y, o3x, o3y;
   if (!CtFieldSceneLayers(f->sd, &L) || !CtFieldSceneLayerOffsetsBaked(f->sd, &o2x, &o2y, &o3x, &o3y)) return 0;
   static const int bitOf[6] = { 4, 2, 1, 2, 1, 4 };
@@ -4814,7 +4817,7 @@ static int fieldHiddenBg(const Field* f, int bits) {
       }
     if (covered) hid |= b;
   }
-  lastSd = f->sd; lastLoc = f->loc; lastBits = bits; lastHid = hid;
+  lastSd = f->sd; lastBase = f->base; lastLoc = f->loc; lastBits = bits; lastHid = hid;
   return hid;
 }
 // WHERE THE STEAM RELEASE DRAWS OVER A ROOM'S BACKGROUND (part of the widescreen, a mod; the owner, 2026-10-24): the
@@ -17927,6 +17930,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEndingStageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         if (CtEndingPicHas((uint8_t)seqId)) { stagePicOpen(); rio.pic = &g_stagePic; }
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEndingStageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 1; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17948,6 +17952,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEntry3StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry3pic.c)
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry3StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 2; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17968,6 +17973,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEntry4StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry4pic.c)
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry4StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 3; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17988,6 +17994,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEntry7StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry7pic.c)
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry7StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 4; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -18008,6 +18015,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEntry6StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry6pic.c)
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry6StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 5; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -21106,8 +21114,9 @@ int main(int argc, char** argv) {
         // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad, and its picture (entry 10's: black).
         drewSwing = 1;
         stageWideBegin(endOn == 2 ? 1 : 0);                 // (entry 3: its BG1, the field's machinery as one screen, stays out)
-        if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
+        if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
         else if (!endEnded) {
+          raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
                                             0x0080, 0x0040, 0x0020, 0x0010 };
           uint16_t joy = 0;
@@ -21127,6 +21136,7 @@ int main(int argc, char** argv) {
             fprintf(stderr, "stagepic: f%d end=%d st=%d INIDISP=%02X TM=%02X hdmaen=%02X sum=%ld cg1=%04X\n", frameNo, endOn, st,
                     g_stagePic.p.r[0], g_stagePic.p.r[0x2C], g_stagePic.hdmaen, sum, g_stagePic.p.cgram[1]); }
         }
+        stageWideEnd();                                     // (entry 3's skip must not reach the gate warp's sides)
       } else if (seqOpen > 0) {
         // Any other ported table entry, on the same engine and in the same order: tick first (the
         // vblank hooks latch what THIS frame renders with), then draw the latch.

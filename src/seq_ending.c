@@ -416,7 +416,9 @@ int CtEndingStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   wr(w, 0x038E, 0x0101);                                              // 871C LDX #0101 / STX $038E: a fade step every frame
   // $7E:300D .. 301E: $388B (CGRAM), $31B0 (the vblank), JSL C3/08D0 (one NMI, run here), NMI on, STZ $00, STZ $0392
   if (io && io->pic) CtRacePicCgram(io->pic, w);                      // 300D JSR $388B
+  g_ctRaceOpenNmi = 1;   // (the setup's last NMI: its posts wait for the opening's black frames, seq_race.h)
   CtSeqStageNmiHooks(w, 0, io, endingHook, endingTask);
+  g_ctRaceOpenNmi = 0;
   wr(w, 0x0000, 0); wr(w, 0x0392, 0);
   if (io && io->pic) CtEndingPicThread(io->pic, w);                   // 3023: the main loop's first pass
   return 0;

@@ -26,7 +26,7 @@ static void widextLoad(void) {
   FILE* f = fopen(path && *path ? path : "ct_wide.dat", "rb");
   if (!f) return;
   fseek(f, 0, SEEK_END); long len = ftell(f); fseek(f, 0, SEEK_SET);
-  uint8_t* d = len > 16 ? (uint8_t*)malloc((size_t)len) : NULL;
+  uint8_t* d = len >= 20 ? (uint8_t*)malloc((size_t)len) : NULL;
   if (!d || fread(d, 1, (size_t)len, f) != (size_t)len || memcmp(d, "CTWD", 4) || rd32(d + 4) != 3) {
     free(d); fclose(f); return;
   }
@@ -36,7 +36,7 @@ static void widextLoad(void) {
   long o = 20;
   for (uint32_t i = 0; i < nset && o + 1 + WIDEXT_SET_BYTES <= len; i++) { g_set[d[o]] = d + o + 1; o += 1 + WIDEXT_SET_BYTES; }
   const uint8_t* sheets = d + o;
-  if (o + (long)nsheet * WIDEXT_SHEET_BYTES > len) return;
+  if ((long long)o + (long long)nsheet * WIDEXT_SHEET_BYTES > (long long)len) return;   // (64-bit: a bad count cannot wrap)
   o += (long)nsheet * WIDEXT_SHEET_BYTES;
   for (uint32_t i = 0; i < nloc && o + 4 <= len; i++) {
     int loc = d[o] | d[o + 1] << 8, w = d[o + 2], h = d[o + 3], n = 5 * w * h;

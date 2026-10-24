@@ -61,7 +61,10 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   memset(sx, 0, sizeof sx); memset(sy, 0, sizeof sy);
   for (int i = 0; i < cur->nspr && i < 120; i++) {
     int j = 0; while (j < prev->nspr && prev->sprKey[j] != cur->sprKey[i]) j++;
-    if (j < prev->nspr) {                                 // (new, or a jump: where this frame has it on the screen)
+    // (new, or a jump: at its map place, where the map is at t -- with the camera trailing its drawn place, the screen's
+    //  place stood a fraction off the floor)
+    sx[CT_MOT_SPR + i] = (int)-FLK(cdx); sy[CT_MOT_SPR + i] = (int)-FLK(cdy);
+    if (j < prev->nspr) {
       int wx = cur->sprX[i] - prev->sprX[j], wy = cur->sprY[i] - prev->sprY[j];
       if (abs(wx) <= 32 && abs(wy) <= 32) {
         // (its map place at t, floor(sprX - back * wx), less the screen's at t, camXk, against where this frame drew it:
