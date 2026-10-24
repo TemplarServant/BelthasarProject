@@ -180,16 +180,9 @@ extern "C" int CtOverlayFrame(void) {
                           "more picture at the sides; menus and boxes stay in the middle. Outside the original camera's\n"
                           "area the game runs nothing extra: an object seen only in the extra strip is animated in the\n"
                           "picture only. The camera is the Steam release's: the original picture always stays in the\n"
-                          "middle, so past a room's edge the sides are black, or the Steam margins (below). A backdrop\n"
-                          "that never moves on the screen (the prison skywalk's sky) is painted for 256 columns: the\n"
-                          "sides mirror it, not repeat it.");
-      bool rw = s->wideRoomWrap != 0;
-      if (ImGui::Checkbox("Narrow rooms: continue the map at the sides", &rw)) s->wideRoomWrap = rw;
-      if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("In a narrow room as wide as its own map (the sky of the fight with Flea, GATO's room, the Telepod)\n"
-                          "the sides show the map wrapping round, as the camera would see it -- sometimes repeating what\n"
-                          "is in the middle. Off: black past the room's edges. A room inside a larger map (Crono's\n"
-                          "house) is always black past its edge: other rooms are there.");
+                          "middle, so past a room's edge the sides are black, or the Steam margins (below); only a\n"
+                          "background (a sky, the stars) goes on there. A backdrop that never moves on the screen (the\n"
+                          "prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it.");
       bool sm = s->wideSteamMargins != 0;
       if (ImGui::Checkbox("Steam margins (needs your Steam copy)", &sm)) s->wideSteamMargins = sm;
       if (ImGui::IsItemHovered())

@@ -38,7 +38,6 @@ typedef struct CtSettings {
   int renderScale;              // the internal picture, x 256x224 (1..4): the field's sub-pixel positions (motion.h)
   int interpolate;              // the frames between: the field drawn at the screen's rate between two 60 Hz frames
   int widescreen;               // CT_WIDE_*: the field's picture wider than the SNES's 256 (the rest pillarboxed)
-  int wideRoomWrap;             // widescreen: a room as wide as its map shows the map wrapping in the sides (else black)
   int wideSteamMargins;         // a mod: past a room's edge, the Steam release's margins from the player's ct_wide.dat
                                 //   (tools/steam_wide.py, widext.h); off = the sides as above
   int fillBottomLines;          // a mod: the field's and the fights' bottom 13 lines (211-223), which the ROM's V-IRQ

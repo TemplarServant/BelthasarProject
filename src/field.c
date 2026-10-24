@@ -4670,15 +4670,15 @@ static inline size_t fieldBaseAt(const Field* f, int x, int y) {
 // THE WIDESCREEN'S SIDES (a mod) end at the room's horizontal scroll mask when the map holds more than the room: past it
 // are tiles the camera never shows -- other rooms (Crono's house, 002: a 1024-wide map, the room 256..512) -- so the sides
 // are black there, moving with the camera as the room's edge does. A room as wide as its whole map (the mask spans the
-// map's width: Flea's starfield 0AD, the fair's 006, Magus's hall 07D, the canyon 112) has only itself past its edge --
-// the map wraps there, as the camera would see it -- and the sides show it. [x0, x1) = the columns the sides may show.
-// (settings.h wideRoomWrap: the player may keep those sides black too.) Only a room NARROWER than the picture `w` wraps: a
-// wider one keeps its edges, and the widescreen's camera stops at them (no side past the room at all -- the fair's 005,
-// 768 wide, would otherwise show its own far end past its edge). A mask wider than the map is the ROM's camera wrapping
-// the map itself (1B1's 0..1024 over a 256 map): no edge.
+// map's width: Flea's 0AD, the fair's 006, the machine's fall in 0DB) ends at its edge too: the map wrapping there showed
+// the room again beside itself -- 0DB's chamber three times over in the attract (the owner, 2026-10-23, who removed the
+// option that wrapped them, wide_room_wrap). What goes on past the edge is the layers scrolling on their own (the
+// background: fieldBeyondPixel), the Steam margins, or black. [x0, x1) = the columns the sides may show. A mask wider than
+// the map is the ROM's camera wrapping the map itself (1B1's 0..1024 over a 256 map): no edge.
 static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
+  (void)w;
   int roomW = f->mx1 - f->mx0;
-  if (roomW > f->W || (roomW == f->W && roomW < w && CtSettingsGet()->wideRoomWrap)) { *x0 = -(1 << 30); *x1 = 1 << 30; }
+  if (roomW > f->W) { *x0 = -(1 << 30); *x1 = 1 << 30; }
   else { *x0 = f->mx0; *x1 = f->mx1; }
 }
 // THE WIDESCREEN'S CAMERA (a mod) is the Steam release's (Chrono Trigger.exe, 2023; ROADMAP X4): where the 256 view
@@ -4767,7 +4767,7 @@ static int fieldStillCol(int bit, int mx) {
 // margins stand for BG1/BG2 on both screens; each screen takes its top layer -- BG3 priority 1, then BG1/BG2, then BG3
 // priority 0 -- and where the main one is in the colour math (CGADSUB) the sub one is added or subtracted, halved or not
 // (Death Peak's snow: BG3 priority 1 over a sub screen of BG1/BG2, averaged). BG3 is sampled at its own offset, past the
-// edge as in it -- only when it scrolls on its own (fieldBeyondLayers: Death Peak's snow, $1D8F/$1D91 moving). A BG3 that
+// edge as in it -- only when it is a background (fieldBeyondLayers: Death Peak's snow, $1D35 bit 2). A BG3 that
 // scrolls with the map is the map's, and past the room's edge it belongs to other rooms, as BG1/BG2 do: Crono's house
 // (002) put the glow of another room's lamp in its margins (the owner, 2026-10-23). The Steam release draws BG3 inside the
 // room's scroll mask only (0x4DE2F0's BG3 layer, 0x4DF5D0 over the mask). (Layer bits: BG1 1, BG2 2, BG3 4.)
@@ -4799,11 +4799,16 @@ static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int
     d[ch] = (uint8_t)((r << 3) | (r >> 2));
   }
 }
-// PAST A ROOM'S EDGE (the widescreen, where fieldWideMask keeps the edge): the map there holds other rooms -- but a layer
-// that scrolls on its own, detached from the map (BG2 / BG3 with an offset: 1B0's lava under the Epoch, 0AD's stars), is a
-// backdrop the room only shows a window of, and it goes on past the edge. Those layers are drawn there, the top one that
-// is opaque (else the backdrop colour); with none, the side is black. Bits as the bake's (BL2 2, BL3 4).
-static int fieldBeyondLayers(int o2x, int o2y, int o3x, int o3y) { return ((o2x | o2y) ? 2 : 0) | ((o3x | o3y) ? 4 : 0); }
+// PAST A ROOM'S EDGE (the widescreen, where fieldWideMask keeps the edge): the map there holds other rooms -- but a
+// BACKGROUND, a layer the ROM detaches from the camera or scrolls at a speed of its own, is a backdrop the room only shows
+// a window of, and it goes on past the edge. The ROM marks them: C0/A33B's layer decode sets $1D36 (detached: bit 1 BG2,
+// bit 2 BG3 -- the skywalk's sky 01C, Flea's stars 0AD) and $1D35 (its own speed -- 0AD's stars, Death Peak's snow 104).
+// Those layers are drawn there, the top one that is opaque (else the backdrop colour); with none, the side is black. A
+// layer merely offset from BG1 is the room's: 0DB's chamber in the attract, shaken by the machine's fall ($1D35 = $1D36 =
+// 0), went on past its edge three times over under the old rule (an offset made a backdrop; the owner, 2026-10-23).
+// Bits as the bake's (BL2 2, BL3 4); g_wideBg is this frame's (the field's page, or the fight's saved one).
+static int g_wideBg;
+static int fieldBeyondLayers(void) { return g_wideBg; }
 static int fieldBeyondPixel(const CtSceneLayers* L, int det, int mx, int my, int o2x, int o2y, int o3x, int o3y, uint8_t* out) {
   static const int bitOf[6] = { 4, 2, 1, 2, 1, 4 };
   for (int i = 5; i >= 0; i--) {
@@ -19508,10 +19513,11 @@ int main(int argc, char** argv) {
     if (wideW > CAMW && f.vm) wideX = fieldWideViewX(&f, wideW, camx);   // (the widescreen's camera)
     // (the bake waits for the widescreen's camera: the still backdrop is held to the picture, fieldWideStill -- the field's,
     //  or in a fight the arena's, as wide as the host's)
-    g_wideStill = 0;
+    g_wideStill = 0; g_wideBg = 0;
     if (f.sd && f.vm && hostWideW() > CAMW) {
       const uint8_t* pg = CtSceneMem7E(f.vm);
       if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
+      g_wideBg = (pg[0x1D35] | pg[0x1D36]) & 0x06;
       int pw = hostWideW(), vx = battlePhase ? fieldWideViewX(&f, pw, camx) : wideX;
       g_wideStill = fieldWideStillBits(pg); g_wideStillVx = camx; g_wideStillVw = camx - vx + (pw - CAMW) / 2;
     }
@@ -20230,9 +20236,9 @@ int main(int argc, char** argv) {
       const int wrapRoom = wm0 < -(1 << 29);
       if (wext) { wm0 = f.mx0; wm1 = f.mx1; }
       static CtSceneLayers beyondL; int det = 0;     // (past the edge: the layers scrolling on their own -- fieldBeyondPixel)
-      if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
+      if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers()) != 0 &&
           !CtFieldSceneLayers(f.sd, &beyondL)) det = 0;
-      int wextL = wext && f.sd && (fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y) & 4) &&
+      int wextL = wext && f.sd && (fieldBeyondLayers() & 4) &&
                   CtFieldSceneLayers(f.sd, &beyondL);   // (the room's BG3 over the margins when it scrolls on its own: fieldWideExtBg3)
       g_wideBeyond = det;
       for (int y = 0; y < ch; y++)
@@ -20471,7 +20477,7 @@ int main(int argc, char** argv) {
           static uint8_t bcov[FIELD_WMAX * CAMH];
           static CtSceneLayers bBeyondL; int bdet = 0;
           const FieldWideExtPic* bext = fieldWideExtPic(&f);   // (the Steam margins, a mod: the fight's sides as the field's)
-          if (bwm0 > -(1 << 29) && f.sd && (bdet = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
+          if (bwm0 > -(1 << 29) && f.sd && (bdet = fieldBeyondLayers()) != 0 &&
               !CtFieldSceneLayers(f.sd, &bBeyondL)) bdet = 0;
           // The row's battle scroll (the shake, a line wave). The HUD band's rows carry no arena records (arenaRow != 3: the
           // view's HUD covers them), but their sides are the arena: they take the nearest arena row's, towards the screen's

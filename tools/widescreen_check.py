@@ -16,8 +16,8 @@ Two more cases (in the default set) need a seed and a frame of their own: `roll`
 05B's roll from tools/caption_plane_cmp.py's seed), f450; and `line`, the tutorial's colour window (scene 254's line from
 tools/tutorial_cmp.py's seed), f100. Both wrote their rows with the 256 picture's stride into the wide one (2026-10-10).
 And `forest`, a live battle (scene 19 from saves/battle_re/forest_pre_wrapped.lakewram, A mashed), f300: the arena is
-composed wide round the battle's own 256 view. A room as wide as its map shows the map wrapping in the sides (settings
-wide_room_wrap, the default); `6-nowrap` is scene 6 with the option off -- black past the room's edges. The widescreen's
+composed wide round the battle's own 256 view. A room as wide as its map ends at its edge like any other (the option
+that wrapped the map there, wide_room_wrap, was removed 2026-10-23): black past it but for a background layer. The widescreen's
 camera is the Steam release's (2026-10-23): the view stays in the middle at a room's edge too, and the side past the
 edge is black (`5-edge`, the fair with Crono at its left edge; the forest's fight at f300). Should the view ever stand
 off the middle, the line says where (the screen-fixed boxes stay at the middle: what still differs there).
@@ -52,10 +52,8 @@ def case(scene):
 
 def shot(scene, wide, d):
     ini = os.path.join(d, 'w%s_%s.ini' % (wide, scene)); bmp = os.path.join(d, 'w%s_%s.bmp' % (wide, scene))
-    wrap = 0 if scene.endswith('-nowrap') else 1           # `<case>-nowrap`: the option that keeps a narrow room's sides black
-    open(ini, 'w').write('[video]\nwindow_scale=1\nscale=integer\naspect=pixel\nfilter=nearest\nwidescreen=%s\nwide_room_wrap=%d\n'
-                         % (wide, wrap))
-    args, at, extra = case(scene[:-len('-nowrap')] if not wrap else scene)
+    open(ini, 'w').write('[video]\nwindow_scale=1\nscale=integer\naspect=pixel\nfilter=nearest\nwidescreen=%s\n' % wide)
+    args, at, extra = case(scene)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOAUDIO='1', CT_SETTINGS=ini,
                CT_OVERLAY_SHOT=bmp + '@%d:9' % at, **extra)
     subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat'] + args,
@@ -64,7 +62,7 @@ def shot(scene, wide, d):
 
 
 def main():
-    scenes = sys.argv[1:] or ['5', '5-edge', '6', '6-nowrap', '112', 'roll', 'line', 'forest']
+    scenes = sys.argv[1:] or ['5', '5-edge', '6', '112', 'roll', 'line', 'forest']
     d = tempfile.mkdtemp(prefix='ct_wide_')
     for sc in scenes:
         a, b = shot(sc, '16:9', d), shot(sc, 'off', d)
