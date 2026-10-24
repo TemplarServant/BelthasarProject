@@ -4752,6 +4752,25 @@ static int fieldHiddenBg(const Field* f, int bits) {
   lastSd = f->sd; lastLoc = f->loc; lastBits = bits; lastHid = hid;
   return hid;
 }
+// WHERE THE STEAM RELEASE DRAWS OVER A ROOM'S BACKGROUND (part of the widescreen, a mod; the owner, 2026-10-24): the
+// locations whose background layers (the map header's md[1..3]: BG2 / BG3 detached or scrolling on their own) the
+// sides would carry past the room's edge, but beside whose edge the Steam release's widescreen draws scenery of its own
+// over them -- 1 the left side, 2 the right, 3 both. Facts from an analysis of that release's widescreen data
+// (build/_steamre/bgcover.py: the room's rows whose first column past the edge holds a margin cell); none of its data
+// is here. Without the Steam margins drawn (the option off, or no ct_wide.dat) such a side ends black past the edge like
+// the room's own end: the skywalk's sky (01C) stood loose past its tower wall, where the Steam release has the tower
+// and the cliff. Elsewhere a background goes on -- the Blackbird's clouds (16E), Flea's stars (0AD).
+static const struct { uint16_t loc; uint8_t sides; } kSteamCovers[] = {
+  {0x008, 3}, {0x014, 3}, {0x01C, 3}, {0x020, 3}, {0x053, 3}, {0x055, 3}, {0x06B, 3}, {0x071, 3}, {0x085, 3}, {0x087, 3},
+  {0x0AC, 3}, {0x0B0, 3}, {0x0DD, 2}, {0x0F4, 3}, {0x0F5, 3}, {0x0F6, 3}, {0x0F7, 3}, {0x104, 3}, {0x106, 3}, {0x107, 3},
+  {0x109, 3}, {0x110, 3}, {0x133, 3}, {0x15D, 3}, {0x16B, 3}, {0x16D, 2}, {0x16F, 3}, {0x188, 3}, {0x189, 3}, {0x18A, 3},
+  {0x18B, 3}, {0x1A6, 3}, {0x1AD, 3}, {0x1B0, 3}, {0x1BE, 3}, {0x1C1, 3}, {0x1C9, 3}, {0x1CB, 3}, {0x1D2, 3}, {0x1D3, 3},
+  {0x1E1, 3}, {0x1EF, 3},
+};
+static int fieldSteamCovers(int loc) {
+  for (size_t i = 0; i < sizeof kSteamCovers / sizeof kSteamCovers[0]; i++) if (kSteamCovers[i].loc == loc) return kSteamCovers[i].sides;
+  return 0;
+}
 // THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
 // release draws there, from the player's own ct_wide.dat, baked once per location with the Steam release's tiles and the
 // room's palette (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
@@ -20323,7 +20342,10 @@ int main(int argc, char** argv) {
           !CtFieldSceneLayers(f.sd, &beyondL)) det = 0;
       int haveL = wext && f.sd && CtFieldSceneLayers(f.sd, &beyondL);   // (the room's layers under / over the margins)
       int wextL = haveL && (fieldBeyondLayers() & 4);   // (the room's BG3 over the margins when it scrolls on its own: fieldWideExtBg3)
-      g_wideBeyond = det;
+      // (each side's: without the margins drawn, a side the Steam release draws over has none -- fieldSteamCovers)
+      int detL = det, detR = det;
+      if (!wext) { int cv = fieldSteamCovers(f.loc); if (cv & 1) detL = 0; if (cv & 2) detR = 0; }
+      g_wideBeyond = detL | (detR << 8);
       for (int y = 0; y < ch; y++)
         for (int x = 0; x < wideW; x++) {
           if (x == wideX) x += CAMW;
@@ -20345,7 +20367,8 @@ int main(int argc, char** argv) {
             mot->own[y * wideW + x] = CT_MOT_FIXED; mot->world[y * wideW + x] = (el & 8) ? 2 : 1; continue;
           }
           if (wrapRoom) continue;                      // (the map wrapping, as the composition drew it)
-          if (det) { int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
+          const int detS = ux < wm0 ? detL : detR;
+          if (detS) { int b = fieldBeyondPixel(&beyondL, detS, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
                      mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); }
           else if (wext) {                             // (under the margins where they draw nothing: the room's BG2 going on,
             int b = haveL ? fieldBeyondPixel(&beyondL, 2, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d) : 0;   //  else

@@ -181,7 +181,8 @@ extern "C" int CtOverlayFrame(void) {
                           "area the game runs nothing extra: an object seen only in the extra strip is animated in the\n"
                           "picture only. The camera is the Steam release's: the original picture always stays in the\n"
                           "middle, so past a room's edge the sides are black, or the Steam margins (below); only a\n"
-                          "background (a sky, the stars) goes on there. A backdrop that never moves on the screen (the\n"
+                          "background (a sky, the stars) goes on there, and not where the Steam release draws scenery over\n"
+                          "it (the skywalk past its tower: black without the margins). A backdrop that never moves on the screen (the\n"
                           "prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it. Magus's\n"
                           "castle's sky is drawn 5 lines higher, so the band over it stays off the screen.");
       bool sm = s->wideSteamMargins != 0;
