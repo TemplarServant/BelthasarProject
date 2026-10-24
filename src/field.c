@@ -4724,9 +4724,6 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* 
                       dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
                       dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
   mx -= dx + (mx < 0 ? dxl : dxr); my -= dy;
-  if (my == p->h * 16) my--;   // (the line just past the room's bottom: the composite's origin is camy + 1, so with the
-                               //  bottom lines drawn -- settings.h fillBottomLines -- the last one shows it; the margins
-                               //  hold the room's rows only, and repeat their last there)
   int ex = mx + p->xo * 16, W = p->w * 16;
   if (ex < 0 || ex >= W || my < 0 || my >= p->h * 16) return 0;
   size_t q = (size_t)my * W + ex;
@@ -20249,6 +20246,21 @@ int main(int argc, char** argv) {
       mot->mx0 = wm0; mot->mx1 = wm1;
       for (int y = 0; y < ch; y++) memcpy(fbView + (size_t)y * CAMW * 3, fb + ((size_t)y * wideW + wideX) * 3, (size_t)CAMW * 3);
       fb = fbView; camx += wideX;
+    }
+    // THE BOTTOM LINES DRAWN (a mod, settings.h fillBottomLines): the composite's origin is camy + 1, so with the camera
+    // at a room's bottom the last line shows the map row just past the room -- the next room, or the map wrapping to its
+    // top (Leene's Square 006, 256 tall in a 256 map: its first row of trees under the path; the owner, 2026-10-23). The
+    // SNES never shows those lines (its V-IRQ blanks 211-223); the mod repeats the room's last row there, the whole wide
+    // row, and the frames between take them as screen-fixed. (Only when that row is itself one of the mod's lines: a room
+    // shorter than the screen shows what lies past it in the lines above too, as the SNES does.)
+    if (g_hostInteractive && CtSettingsGet()->fillBottomLines && f.vm && !battleCompose) {
+      int last = f.my1 - 1 - camy;                    // the screen line of the room's last row
+      if (last >= 210 && last < CAMH - 1)
+        for (int y = last + 1; y < CAMH; y++) {
+          memcpy(fb + (size_t)y * CAMW * 3, fb + (size_t)last * CAMW * 3, (size_t)CAMW * 3);
+          if (wideW > CAMW) memcpy(g_wfb + (size_t)y * wideW * 3, g_wfb + (size_t)last * wideW * 3, (size_t)wideW * 3);
+          CtMotFixRow(mot, y);
+        }
     }
     g_fw = CAMW; g_fx = 0;
     // The picture is composed: its owners are recorded. What draws from here on (the box, the wipe, the battle's own
