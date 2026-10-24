@@ -8,7 +8,7 @@ void CtMotBegin(CtMotFrame* m, int w) {
   m->nspx = 0; m->native = NULL; m->owNative = NULL; m->nativeFx = NULL;
   m->valid = 0; m->w = w < 1 ? 1 : w > CT_MOT_W ? CT_MOT_W : w; m->mx0 = -(1 << 30); m->mx1 = 1 << 30; m->nspr = 0; m->canvas = NULL; m->cW = m->cH = 0; m->bright = 15;
   m->camX = m->camY = m->bg3X = m->bg3Y = 0; m->o2x = m->o2y = m->o3x = m->o3y = 0; m->canvasX0 = m->canvasY0 = 0;
-  memset(m->own, CT_MOT_FIXED, sizeof m->own);
+  memset(m->own, CT_MOT_FIXED, sizeof m->own); memset(m->world, 0, sizeof m->world);
 }
 
 int CtMotSprite(CtMotFrame* m, int key, int x, int y) {

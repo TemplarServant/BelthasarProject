@@ -4727,6 +4727,11 @@ static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   }
   return &p;
 }
+// The backdrop, CGRAM 0 (the field's last upload, C0/712E), as RGB: what shows under the margins where nothing is drawn.
+static void fieldBackdropRgb(uint8_t* out) {
+  uint16_t c0 = (uint16_t)(g_fieldCgram[0] | (g_fieldCgram[1] << 8));
+  for (int ch = 0; ch < 3; ch++) { int v = (c0 >> (5 * ch)) & 31; out[ch] = (uint8_t)((v << 3) | (v >> 2)); }
+}
 // The margins' pixel at map pixel (mx, my) -- BG2's plane at (mx + o2x, my + o2y), under the rest, unless bg2 is 0: its
 // layer (scene.c CtFieldSceneBakeExt: 1 under the sprites, 2 or 4 over them; 8 = BG2's plane, under them too -- a fight's
 // colour math takes it as BG2: Zombor's dimmed sky, 087's margins' sky in BG2's plane, stayed bright as BG1), 0 = nothing. A BG2 the ROM marks
@@ -4747,8 +4752,9 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, 
     if (p->cov[q]) { memcpy(out, pal + p->rgb[q * 3] * 3, 3); return p->cov[q]; }
   }
   if (!bg2) return 0;
-  ex += o2x; my += o2y;                              // (BG2's plane, at BG2's scroll)
-  if (ex < 0 || ex >= W || my < 0 || my >= H) return 0;
+  ex += o2x; my += o2y;                              // (BG2's plane, at BG2's scroll -- wrapping down the map's height as
+  my = ((my % H) + H) % H;                           //  the layer does: 0A5's sky at the top of its scroll left a black band)
+  if (ex < 0 || ex >= W) return 0;
   size_t q = (size_t)my * W + ex;
   if (!p->cov2[q]) return 0;
   memcpy(out, pal + p->rgb2[q * 3] * 3, 3); return 8;
@@ -5502,14 +5508,14 @@ static void stagePicOpen(void) {
 static int fieldPpuField(void* c) { (void)c; return !(g_sndTraceFrame & 1); }
 // THE WIDESCREEN (a mod) for a native stage's picture: seq_pic.c draws the sides into g_seqWide (seq_pic.h g_seqPicWideSide,
 // snes/ppu.c's rule) -- black while the stage's opening holds -- and the host shows them round the 256 (g_seqWideW).
-static void stageWideBegin(void) {
-  int sw = hostWideW(); g_seqWideW = 0;
+static void stageWideBegin(int skip) {
+  int sw = hostWideW(); g_seqWideW = 0; g_seqPicWideSkip = skip;
   if (sw > CAMW && sw <= FIELD_WMAX) {
     g_seqPicWideSide = (sw - CAMW) / 2; g_seqPicWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3);
     g_seqWideW = sw;
   }
 }
-static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideOut = NULL; }
+static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideSkip = 0; g_seqPicWideOut = NULL; }
 static CtRaceIo raceIoFor(uint8_t* w) {
   CtRaceIo io; memset(&io, 0, sizeof io);
   long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
@@ -19867,9 +19873,8 @@ int main(int argc, char** argv) {
     // the ROM's ticker (animTickActor) on a play state of its own -- the ROM's $0F01 is not stepped off screen, and a
     // frozen pose sliding along the side read as broken. Picture only: nothing is written (no $0F01, no 'anim finished').
     if (wideX > 0 && f.vm && !battleCompose)
-      for (int o = 0; o < nact && o < 64; o++) {
-        if (o == pObj) continue;
-        int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);
+      for (int o = 0; o < nact && o < 64; o++) {   // (the lead too: a scene walks it out of the window like any object --
+        int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);   //  Crono in 0BA's attract, gone in the left side)
         int shown = sideShown[o]; sideShown[o] = 0;
         if (pl) { memset(&sidePlay[o], 0, sizeof sidePlay[o]); continue; }   // latched: the ROM's, in the list below
         const uint8_t* w7 = CtSceneMem7E(f.vm);
@@ -20254,8 +20259,8 @@ int main(int argc, char** argv) {
       static CtSceneLayers beyondL; int det = 0;     // (past the edge: the layers scrolling on their own -- fieldBeyondPixel)
       if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers()) != 0 &&
           !CtFieldSceneLayers(f.sd, &beyondL)) det = 0;
-      int wextL = wext && f.sd && (fieldBeyondLayers() & 4) &&
-                  CtFieldSceneLayers(f.sd, &beyondL);   // (the room's BG3 over the margins when it scrolls on its own: fieldWideExtBg3)
+      int haveL = wext && f.sd && CtFieldSceneLayers(f.sd, &beyondL);   // (the room's layers under / over the margins)
+      int wextL = haveL && (fieldBeyondLayers() & 4);   // (the room's BG3 over the margins when it scrolls on its own: fieldWideExtBg3)
       g_wideBeyond = det;
       for (int y = 0; y < ch; y++)
         for (int x = 0; x < wideW; x++) {
@@ -20275,11 +20280,16 @@ int main(int argc, char** argv) {
             if ((own & 0x7F) >= CT_MOT_SPR && ((el & 9) || (own & CT_MOT_FRONT))) continue;
             memcpy(d, ext, 3);
             if (wextL) fieldWideExtBg3(&beyondL, ux, camy + y, mot->o3x, mot->o3y, d);
-            mot->own[y * wideW + x] = CT_MOT_FIXED; continue;
+            mot->own[y * wideW + x] = CT_MOT_FIXED; mot->world[y * wideW + x] = 1; continue;
           }
           if (wrapRoom) continue;                      // (the map wrapping, as the composition drew it)
           if (det) { int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
                      mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); }
+          else if (wext) {                             // (under the margins where they draw nothing: the room's BG2 going on,
+            int b = haveL ? fieldBeyondPixel(&beyondL, 2, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d) : 0;   //  else
+            if (!b) fieldBackdropRgb(d);                //  the backdrop -- 0A5's sky at the top of its scroll, a BG2 row the
+            mot->own[y * wideW + x] = b ? CT_MOT_BG2 : CT_MOT_BG1;   //  margins leave empty, stood as a black band)
+          }
           else { memset(d, 0, 3); mot->own[y * wideW + x] = CT_MOT_BG1; }
         }
       mot->mx0 = wrapRoom ? -(1 << 30) : wm0; mot->mx1 = wrapRoom ? 1 << 30 : wm1;   // (the frames between: no edge in a
@@ -20533,7 +20543,8 @@ int main(int argc, char** argv) {
                 // backdrop to CtBattleFxLayerComposeWide and the X-Strike's white flash stopped at the 256 columns with
                 // wide_room_wrap off (the user, 2026-10-13).
                 if (bdet) bcov[i] = (uint8_t)fieldBeyondPixel(&bBeyondL, bdet, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, g_bwFb + i * 3);
-                else { memset(g_bwFb + i * 3, 0, 3); bcov[i] = 0; }
+                else if (bext) { fieldBackdropRgb(g_bwFb + i * 3); bcov[i] = 0; }   // (the backdrop under
+                else { memset(g_bwFb + i * 3, 0, 3); bcov[i] = 0; }                                       //  the margins)
                 continue; }
               memcpy(g_bwFb + i * 3, f.base + fieldBaseAt(&f, ax, ay) * 3, 3);
               // (the arena's layer there, wrapping as the map does -- past a room as wide as its map is the map again)
@@ -20890,7 +20901,7 @@ int main(int argc, char** argv) {
         // order turned into the register's word), then its picture as that NMI left the PPU (seq_racepic.c; black while
         // the opening holds).
         drewSwing = 1;
-        stageWideBegin();
+        stageWideBegin(0);
         if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
         else if (!raceEnded) {
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
@@ -20906,7 +20917,7 @@ int main(int argc, char** argv) {
       } else if (seqOpen > 0 && endOn) {
         // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad, and its picture (entry 10's: black).
         drewSwing = 1;
-        stageWideBegin();
+        stageWideBegin(endOn == 2 ? 1 : 0);                 // (entry 3: its BG1, the field's machinery as one screen, stays out)
         if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
         else if (!endEnded) {
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,

@@ -117,9 +117,10 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
     x1T[X] = X / k;
     long cx = fdiv(camXk + X, k);
     inT[X] = !wide || (cx >= cur->mx0 && cx < cur->mx1);
-    // (past the edge at t: the frame's own column showing that map column, when the frame drew it screen-fixed -- the
-    //  Steam margins, field.c. A pixel inside the room in the frame can fall past its edge at t -- the camera a pixel
-    //  behind, 01C's shake -- and took the self-scrolling sky there, a column of cloud in the margins; the owner, 2026-10-23)
+    // (the frame's own column showing map column cx: a world pixel the frame drew screen-fixed -- the Steam margins,
+    //  field.c, CtMotFrame.world -- is taken from there, so it moves with the camera at t. Copied at the screen's place
+    //  they stepped at 60 Hz beside a room drawn at t -- the owner, 2026-10-23 -- and a room column that fell past the
+    //  edge at t, 01C's shake, took the self-scrolling sky instead of them, a column of cloud in the margins)
     long xs = cx - cur->camX;
     fxT[X] = xs >= 0 && xs < w ? (int)xs : -1;
     for (int i = 0; i < 6; i++) {
@@ -150,11 +151,15 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
     }
     const uint8_t* spRow = sp + (size_t)Y * W * 3; const uint8_t* spfRow = spf + (size_t)Y * W; const uint8_t* sppRow = spp + (size_t)Y * W;
     const int capY = fx && fx->capOn ? wrapi(fdiv(capYk + Y, k), fx->capH) : 0;
+    const long ys = fdiv(camYk + Y, k) - cur->camY;    // (the frame's row showing this one's map row at t: the world pixels)
+    const uint8_t* worldRow = ys >= 0 && ys < CT_MOT_H ? cur->world + (size_t)ys * w : NULL;
+    const uint8_t* fbWorld = worldRow ? fb + (size_t)ys * w * 3 : NULL;
+    const uint8_t* worldHere = cur->world + (size_t)y1 * w;
     for (int X = 0; X < W; X++, o += 3) {
       int x1 = x1T[X];
-      if (ownRow[x1] == CT_MOT_FIXED) { memcpy(o, fbRow + x1 * 3, 3); continue; }
+      if (worldRow && fxT[X] >= 0 && worldRow[fxT[X]]) { memcpy(o, fbWorld + fxT[X] * 3, 3); continue; }
+      if (ownRow[x1] == CT_MOT_FIXED && !worldHere[x1]) { memcpy(o, fbRow + x1 * 3, 3); continue; }
       if (!inT[X]) {                                     // the widescreen's sides end at the scroll mask -- but for the layers
-        if (fxT[X] >= 0 && ownRow[fxT[X]] == CT_MOT_FIXED) { memcpy(o, fbRow + fxT[X] * 3, 3); continue; }   // (the margins)
         uint8_t c[3] = { 0, 0, 0 };                      //   scrolling on their own (field.c fieldBeyondPixel)
         if (L->beyond) {
           int i = 5;
