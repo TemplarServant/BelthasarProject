@@ -9,14 +9,14 @@ ones `--mutate` KILLED are in `tools/regress_checks.json`.
 
 | | before | after |
 |---|---|---|
-| mutations | 2051 | 2213 |
-| STALE mutations (their `find` gone from the source) | 226, in 160 checks | 25 |
-| checks whose every mutation was STALE | 48 | -- |
-| checks with no mutation | 188 | 28 |
+| checks | 954 | 946 (8 removed, below) |
+| mutations | 2051 | 2193 |
+| STALE mutations (their `find` gone from the source) | 226, in 160 checks | 3 |
+| checks with no mutation | 188 | 27 |
 
-363 mutations were proven this way: 201 re-targeted ones (of 223 tried: 70 by `tools/mutation_retarget.py`, 153
-re-derived from the code that does the same thing now) and 162 new ones for 160 checks (of 172 tried). The ones that
-did not prove are listed below and were left as they were.
+365 mutations were proven: 201 re-targeted ones (of 223 tried: 70 by `tools/mutation_retarget.py`, 153 re-derived
+from the code that does the same thing now), 162 new ones for 160 checks (of 172 tried) and 2 more for the checks
+fixed below.
 
 ## How they had drifted
 
@@ -27,44 +27,47 @@ did not prove are listed below and were left as they were.
 - **Line endings.** 18 edits were recorded from a CRLF working copy; on an LF checkout (Linux, macOS, the CI, a cloud
   session) they read STALE and nowhere else. `--mutate` now fits a find to the file both ways.
 
-## Still open (a person's call)
+## What was decided (the owner, 2026-10-24)
 
-**Re-derived, not proven -- kept as they were (STALE)**: the re-targeted edit SURVIVED or did not build, so either the
-re-derivation missed or the check no longer grades the mechanism. Each needs a look at the code and the check together:
-field-battleloop-gato [0], field-stairs-run-three-flights [1], field-battle-entrance-ladder-hold [1] (build),
-battle-gato-death-skips-the-death-routine-no-sound [0], battle-naga-ettes-walk-as-the-cartridge-through-their-turns [0],
-battle-flame-toss-band-vs-rule-cartridge [0], field-savepoint-a-opens-the-save-screen-vs-rule-cartridge [0],
-field-organ-door-opens-live [0], field-battle-idle-walk-boot [4] (build), field-battle-class5-flip-seed [0] [3],
-field-battle-class6-rewind-seed [1] [2] [3], field-battle-hud-name-after-victory [0],
-sweepmoveclass-3760-classes-2378 [0] (build), boot-load-save-sound-sequence [0] (build),
-attract-battle-sfx-bracket-vs-oracle [3], attract-0ad-battle-boot-exit-return-vs-oracle [4],
-attract-title-tick-with-its-pendulum-vs-cartridge [0], menu-window-colour-field-textbox-vs-oracle [2],
-field-e5-copy-service-vs-logical-oracle [3].
+- **Removed: 22 mutations** that were STALE and, re-derived on today's code, survived or did not build -- neither form
+  proved anything. Each check's notes name what was removed; eight checks are left with no mutation by it.
+- **Removed: 8 checks** that graded the oracle against a formula written in the harness, or measured the oracle itself,
+  and ran no code of the port (a port that differs from the formula passed them): field-camera-truce-inn,
+  npc-move-integration, tile-prio-recompute, oam-stage1-assembly, velocity-trig-circle, wram-loadcensus-clearlist,
+  wram-loadcensus-natural-door, oracle-button-grammar. They are in `excluded` with that reason.
+- **Fixed: 3 checks that graded less than they said.**
+  - field-battle-atb-no-double: its expect (`gatoHP=59 pcAtk=1`) was printed by the first attack's end too, so Crono
+    attacking twice still passed. It now expects the state after the enemy's third attack (`gatoHP=59 pcAtk=1
+    enAtk=3`); its mutation removes the turn latch and Crono does attack twice (GATO 59 -> 25, pcAtk=2): the old
+    expect was still printed five times, the new one is not.
+  - field-battle-victory-settle: anchored on `strike#6+161`, which the retimed fight had moved mid-fight. It is
+    anchored on the moment itself now, `victory+19` (victoryHold 20, as first pinned); the shots at victory+1..+55
+    differ from the held pose in Crono's and Marle's boxes and +72 on equal it, so +19 is a pose of the settle-in
+    ladder. A second mutation plays the ladder at double speed.
+  - field-battle-song-spotlight -> **field-battle-song-pose-and-notes**: its shot draws the combatants on black and
+    never the arena, so the spotlight -- the arena's own colour math since 2026-10-07 -- was not in its hash. It is
+    named for what it grades (the singer's pose and the notes); the spotlight is graded against the cartridge by
+    battle-gato-song-spotlight-is-the-arena-colour-math-vs-rule-cartridge.
+- **Fixed in the harness:** an anchored shot (`CT_BATTLESHOT_ON`) had its picture overwritten by the battle's
+  post-resolve dump, which only stood aside for `CT_BATTLESHOT_AT`. The printed fnv the checks grade was right; the
+  `.raw` a person opens was the resolve frame. It stands aside for both now.
 
-**The mechanism is gone** (STALE, to retire or replace): field-battle-enemy-death-sfx [0] (the 2-frame countdown is now
-a flag posted on its first pass), slot1-runner-battle-menu-vs-oracle [1] (the two events it ordered are frames apart
-now), battle-jsl-audio-keeps-playing [1] (the per-piece take exists only on the reference SPC core, not the native sound
-machine the check runs).
+## Still open
 
-**A new mutation SURVIVED -- the check stays without one**: field-battle-ambush-generic-dissolve,
-field-battle-atb-no-double, field-battle-crit-beatB-dead-suppressed, field-battle-crit-flash2,
-field-battle-cyclone-fx-not-replayed, field-battle-gato-facing-right, seq-pic-ending-vs-oracle,
-audio-song-loader-defrag, vmdiff-forest-battle-entry, rom-census-attract.
+**The mechanism is gone** (3 STALE mutations, to retire or replace): field-battle-enemy-death-sfx [0] (the 2-frame
+countdown is now a flag posted on its first pass), slot1-runner-battle-menu-vs-oracle [1] (the two events it ordered
+are frames apart now), battle-jsl-audio-keeps-playing [1] (the per-piece take exists only on the reference SPC core,
+not the native sound machine the check runs).
 
-**No code of the port to mutate** (14): the checks grade the oracle against a formula written in the harness, or measure
-the oracle itself -- field-camera-truce-inn, npc-move-integration, tile-prio-recompute, oam-stage1-assembly,
-velocity-trig-circle, wram-loadcensus-clearlist, wram-loadcensus-natural-door, oracle-button-grammar -- or a generated
-file, a manifest or a tool against itself -- tables-datafree-headers-current, gen-shapes-match-generated,
-inputs-come-from-recipes-or-sources, oracle-peekshots-equal-a-peek-per-frame, field-worldtest-audio (a NULL guard:
-every break is the crash), lockstep-forest-projections-clean (the drive writes none of the four projections). The first
-eight test a derivation, not the port: if the port's code differs from the harness's formula, they do not notice.
-seq-gwarp-81/82/83-xlat-lockstep and seq-gwarp-xlat-lockstep keep no mutation, as their notes intend.
+**A new mutation SURVIVED -- the check has none** (9): field-battle-ambush-generic-dissolve,
+field-battle-crit-beatB-dead-suppressed, field-battle-crit-flash2, field-battle-cyclone-fx-not-replayed,
+field-battle-gato-facing-right, seq-pic-ending-vs-oracle, audio-song-loader-defrag, vmdiff-forest-battle-entry,
+rom-census-attract. The edit broke the mechanism the check is named for and the check still passed: either the edit
+missed the path the check's run takes, or the check does not see that mechanism. Each needs the check's output read
+under the edit to tell which.
 
-**Checks that grade less than they say** (found while deriving):
-
-- field-battle-atb-no-double: its expect line (`gatoHP=59 pcAtk=1`) is printed by the first attack's span end too, so
-  Crono attacking twice would still pass; it needs an expect line that the double attack changes.
-- field-battle-victory-settle: its anchor (strike #6 + 161 = f1348) falls mid-fight now, not on the victory settle-in
-  its notes describe.
-- field-battle-song-spotlight: the battleshot frame draws the sprites on black and never composes the arena, so the BG3
-  cone the check is named for is not in its hash.
+**No code of the port to mutate** (6): tables-datafree-headers-current, gen-shapes-match-generated,
+inputs-come-from-recipes-or-sources and oracle-peekshots-equal-a-peek-per-frame grade a generated file, a manifest or a
+tool against itself; field-worldtest-audio guards a NULL dereference (every break is the crash);
+lockstep-forest-projections-clean's drive writes none of the four projections it compares. seq-gwarp-81/82/83-xlat-lockstep
+and seq-gwarp-xlat-lockstep keep no mutation, as their notes intend.

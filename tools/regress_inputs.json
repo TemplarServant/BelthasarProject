@@ -347,8 +347,8 @@
         "field-battle-song-note-motion",
         "field-battle-song-notes-drift",
         "field-battle-song-notes-orbit",
+        "field-battle-song-pose-and-notes",
         "field-battle-song-sfx-and-flinch",
-        "field-battle-song-spotlight",
         "field-battle-stale-deadflag-enemies-act",
         "field-battle-status-icon-in-span",
         "field-battle-status-immunity",
@@ -385,7 +385,6 @@
         "field-bg-seed-loc13B-colour-cycle-vs-oracle",
         "field-bg-seed-party3-vs-oracle",
         "field-bg-seed-tent-keeper-vs-oracle",
-        "field-camera-truce-inn",
         "field-caption-plane-staff-roll-vs-rule-cartridge",
         "field-cat-anime-once-duration",
         "field-chest-already-open-is-empty",
@@ -604,13 +603,10 @@
         "menu-x-refused-off-the-field-main-loop",
         "move-dir-angle",
         "newgame-pan-camera-vs-oracle",
-        "npc-move-integration",
         "oam-build-field",
-        "oam-stage1-assembly",
         "options-free-sync-skips-the-hardware-waits",
         "options-widescreen-view-equals-the-256-picture",
         "oracle-bootcheck",
-        "oracle-button-grammar",
         "oracle-callrom-carry-clc",
         "oracle-callrom-carry-sec",
         "oracle-logical-frame-gato-and-xstrike",
@@ -716,12 +712,10 @@
         "sweepstatfetch-e9a8-d174",
         "sweeptouch-player-redirect",
         "sweepvram-b1b2-upload",
-        "tile-prio-recompute",
         "title-intro-logo-vs-oracle",
         "title-intro-machine-vs-oracle-wram",
         "title-intro-swing-vs-oracle",
         "title-sequence-sound-reaches-driver",
-        "velocity-trig-circle",
         "verifyframe-oam-lockstep",
         "verifyframe-oam-ourlist",
         "vm-activation-pass-0F00",
@@ -752,9 +746,7 @@
         "vmdiff-withpos-bedslide",
         "vmdiff-wmask-party3",
         "wide-box-is-the-vanilla-box-at-a-rooms-edge",
-        "wide-race-curtain-crosses-the-whole-picture",
-        "wram-loadcensus-clearlist",
-        "wram-loadcensus-natural-door"
+        "wide-race-curtain-crosses-the-whole-picture"
       ],
       "kind": "rom",
       "regenerable": false,
@@ -1138,8 +1130,8 @@
         "field-battle-song-note-motion",
         "field-battle-song-notes-drift",
         "field-battle-song-notes-orbit",
+        "field-battle-song-pose-and-notes",
         "field-battle-song-sfx-and-flinch",
-        "field-battle-song-spotlight",
         "field-battle-stale-deadflag-enemies-act",
         "field-battle-status-icon-in-span",
         "field-battle-status-immunity",
@@ -2044,8 +2036,8 @@
       "regenerable": true,
       "how": "tools/fixtures.py (recipe fx_forest_holdleft)",
       "used_by": [
-        "vmdiff-forest-battle-entry",
-        "battle-forest-feet-vs-oracle"
+        "battle-forest-feet-vs-oracle",
+        "vmdiff-forest-battle-entry"
       ],
       "sha256": "8c91ece34a919e733859aae35a3aae77f16ae9ee8f959d220cf2039a722018d9",
       "size": 273109,
@@ -2056,6 +2048,7 @@
       "used_by": [
         "battle-ai-pointer-forest-op00-turns-vs-oracle",
         "battle-enemy-close-op01-forest-vs-oracle",
+        "battle-forest-feet-vs-oracle",
         "battle-pc-crit-vs-logical-oracle",
         "field-battle-crit-beatB-dead-suppressed",
         "field-battle-crit-leap-mid",
@@ -2088,8 +2081,7 @@
         "field-battle-sched-a4-cadence",
         "field-battle-tech-learn",
         "field-battle-zorder-forest-live",
-        "field-battleloop-forest",
-        "battle-forest-feet-vs-oracle"
+        "field-battleloop-forest"
       ],
       "kind": "raw_wram",
       "regenerable": true,
@@ -2442,9 +2434,12 @@
       "used_by": [
         "battle-ai-pointer-gato-op00-turn-vs-oracle",
         "battle-bracket-rebuild-live-foot",
+        "battle-enemy-census-feet-vs-oracle",
         "battle-fx-teardown-after-program-vs-oracle",
         "battle-gato-death-skips-the-death-routine-no-sound",
+        "battle-gato-feet-vs-oracle",
         "battle-gato-fight-vs-logical-oracle",
+        "battle-gato-long-feet-vs-oracle",
         "battle-loader-pointers-gato",
         "battle-pc-marle-far-vs-logical-oracle",
         "battle-pc-physical-vs-logical-oracle",
@@ -2486,8 +2481,8 @@
         "field-battle-song-note-motion",
         "field-battle-song-notes-drift",
         "field-battle-song-notes-orbit",
+        "field-battle-song-pose-and-notes",
         "field-battle-song-sfx-and-flinch",
-        "field-battle-song-spotlight",
         "field-battle-status-icon-in-span",
         "field-battle-status-immunity",
         "field-battle-status-inflict",
@@ -2507,10 +2502,7 @@
         "menu-save-screen-real",
         "menu-status-screen",
         "menu-tech-screen",
-        "menusave-ow-open",
-        "battle-gato-feet-vs-oracle",
-        "battle-enemy-census-feet-vs-oracle",
-        "battle-gato-long-feet-vs-oracle"
+        "menusave-ow-open"
       ],
       "kind": "raw_wram",
       "regenerable": true,
@@ -2579,13 +2571,16 @@
         "battle-enemy-area-band-vs-oracle",
         "battle-enemy-census-counter-eval-vs-oracle",
         "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
         "battle-enemy-census-mechanisms-vs-oracle",
         "battle-enemy-census-movers-vs-oracle",
         "battle-enemy-counter-path-vs-oracle",
         "battle-enemy-turn-handlers-vs-oracle",
         "battle-fx-load-stage-vs-logical-oracle",
         "battle-gato-entry-stands-still-vs-rule-cartridge",
+        "battle-gato-feet-vs-oracle",
         "battle-gato-fight-vs-logical-oracle",
+        "battle-gato-long-feet-vs-oracle",
         "battle-gato-song-spotlight-is-the-arena-colour-math-vs-rule-cartridge",
         "battle-hud-aura-stash-strip-vs-oracle",
         "battle-hud-item-list-gap-strip-vs-oracle",
@@ -2610,10 +2605,7 @@
         "battle-yakra-fight-vs-logical-oracle",
         "field-battle-topbox-tech-description",
         "oracle-logical-frame-gato-and-xstrike",
-        "oracle-peekshots-equal-a-peek-per-frame",
-        "battle-gato-feet-vs-oracle",
-        "battle-enemy-census-feet-vs-oracle",
-        "battle-gato-long-feet-vs-oracle"
+        "oracle-peekshots-equal-a-peek-per-frame"
       ],
       "sha256": "e9af8fe7f4bd29a0416dd727b8392894c4ca85b5b3ace63448512995f22060be",
       "size": 273109,
@@ -3272,8 +3264,8 @@
     {
       "path": "saves/field_re/loc002_curtain_ctl.lakewram",
       "used_by": [
-        "field-slot1-map-copies-vs-logical-oracle",
-        "field-e5-copy-service-vs-logical-oracle"
+        "field-e5-copy-service-vs-logical-oracle",
+        "field-slot1-map-copies-vs-logical-oracle"
       ],
       "kind": "lake_wram",
       "regenerable": true,
@@ -3285,8 +3277,8 @@
     {
       "path": "saves/field_re/loc002_curtain_ctl.state",
       "used_by": [
-        "field-slot1-map-copies-vs-logical-oracle",
-        "field-e5-copy-service-vs-logical-oracle"
+        "field-e5-copy-service-vs-logical-oracle",
+        "field-slot1-map-copies-vs-logical-oracle"
       ],
       "kind": "lake_state",
       "regenerable": true,
@@ -4255,7 +4247,6 @@
       "path": "saves/ow_w0.state",
       "used_by": [
         "field-arrival-gate-vs-oracle",
-        "field-camera-truce-inn",
         "menu-overworld-save-screen-vs-oracle",
         "menu-save-overwrite-prompt-frames-vs-oracle",
         "menu-save-slot-colours-and-post-save-frames-vs-oracle",
@@ -4356,10 +4347,7 @@
         "audio-song-directory",
         "field-load-cost-world-vs-rom",
         "field-load-cost-world2-skips",
-        "oracle-button-grammar",
-        "ow-field-return",
-        "wram-loadcensus-clearlist",
-        "wram-loadcensus-natural-door"
+        "ow-field-return"
       ],
       "kind": "lake_state",
       "regenerable": true,
@@ -4682,10 +4670,10 @@
     {
       "path": "tools/battle_ab.py",
       "used_by": [
-        "battle-module-tail-vs-oracle",
-        "battle-enemy-census-mechanisms-vs-oracle",
         "battle-enemy-census-feet-vs-oracle",
-        "battle-gato-long-feet-vs-oracle"
+        "battle-enemy-census-mechanisms-vs-oracle",
+        "battle-gato-long-feet-vs-oracle",
+        "battle-module-tail-vs-oracle"
       ],
       "kind": "tool",
       "regenerable": true,
@@ -4700,9 +4688,9 @@
       "regenerable": false,
       "how": "tools/battle_feet_cmp.py (in the repo): a fight's feet, port against the rule's oracle",
       "used_by": [
+        "battle-enemy-census-feet-vs-oracle",
         "battle-forest-feet-vs-oracle",
         "battle-gato-feet-vs-oracle",
-        "battle-enemy-census-feet-vs-oracle",
         "battle-gato-long-feet-vs-oracle"
       ],
       "sha256": "1f702f6f0e1538b1d70cceae77c207a411363f40cc83b97b1a8991769060201c",
@@ -5065,8 +5053,8 @@
     {
       "path": "tools/ow_follower_cmp.py",
       "used_by": [
-        "ow-party-follower-walks-the-trail-vs-rule-cartridge",
-        "ow-party-follower-slot2-walks-the-trail-vs-rule-cartridge"
+        "ow-party-follower-slot2-walks-the-trail-vs-rule-cartridge",
+        "ow-party-follower-walks-the-trail-vs-rule-cartridge"
       ],
       "kind": "tool",
       "regenerable": true,

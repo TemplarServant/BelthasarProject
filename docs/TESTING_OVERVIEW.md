@@ -23,12 +23,12 @@ mutations. `tools/regress.py` has no per-check logic.
 
 | | |
 |---|---|
-| Checks | **954** (a clean-room clone, 2026-10-23: 953 pass; the 954th, `tree-tracks-no-game-file`, needs no ROM) |
+| Checks | **946** (2026-10-24: every one PASS with the ROM; 8 removed that day, docs/MUTATION_AUDIT.md) |
 | Quick tier | 616 (the pre-commit tier, chosen by measured runtime) |
 | Full tier | 316 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
 | Untiered | 21 (run only in the full run) |
 | Excluded candidates | 3, each with the reason it has no stable signature |
-| Checks with mutations | 926, carrying 2,213 mutations in all; 25 of them STALE (2026-10-24, [MUTATION_AUDIT.md](MUTATION_AUDIT.md)) |
+| Checks with mutations | 919, carrying 2,193 mutations in all; 3 of them STALE (2026-10-24, [MUTATION_AUDIT.md](MUTATION_AUDIT.md)) |
 | Checks that must run alone | 60 (`exclusive`: one at a time in declared order, in one worker beside the parallel batch) |
 
 By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest single check sets the floor.

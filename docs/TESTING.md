@@ -153,9 +153,9 @@ running `Belthasar.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-23: **954** checks, **3** excluded; `--list` prints the current set).
+(2026-10-24: **946** checks, **11** excluded; `--list` prints the current set).
 
-- **quick** (**617** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**613** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
 - **full** (all of them): adds **316** slower checks — whole fights and attract legs against the logical oracle, the
@@ -180,7 +180,7 @@ The repository is public and the ROM never comes near it, so GitHub's runners te
 - **The build on Linux, Windows and macOS** (`ubuntu-24.04` gcc, `windows-2022` MSVC, `macos-15` clang): the shapes
   (`tools/gen/shapes.py install`) in place of the generated files, then `tools/build.py` (every target, its artifact
   check), and last the data-free `Belthasar` (`CT_DATAFREE=1`), the game a release ships.
-- **The suite without the ROM**: `tools/regress.py` (2026-10-23: 5 pass, 0 fail, 949 skip) and
+- **The suite without the ROM**: `tools/regress.py` (2026-10-24: 5 pass, 0 fail, 941 skip) and
   `python -m unittest discover -s tests`. The job fails if a check FAILs or if none PASSes. Every SKIP is a check the run
   has not tested: a check that grades the game declares the ROM or a state made from it among its `inputs`, so it never
   runs on the shapes' zeros. The Android build (the NDK, SDL2's source) is not in the CI yet.
@@ -637,15 +637,15 @@ and returns leftward (f3080, facing 2). MASH fights never walk (when-hit counter
 so every older pin is untouched by construction. DOWN (facing 1) remains the
 committed idle bake; the within-facing walk-cycle tile stream is the P4 boundary.
 
-### field-battle-song-spotlight (the GATO song darken + BG3 beam)
+### field-battle-song-pose-and-notes (GATO's singing pose and the notes; was field-battle-song-spotlight)
 
-The song tech ($9877=0x10) screen effect (battle_song_spotlight.md). The spotlight is the
-arena's own colour math (`CtBattleFxLayerCompose`, src/field.c): the song program's BG3 beam on
-the SUB screen added to BG1/BG2 over lines 0-160, with the room's palettes faded down under it.
-The check pins the mid-hold shot (f1100, rel 113). History: the first version was a hand-made
-overlay (`battleSongFxRender`: a measured k=0.476 darken and a baked opaque cone from
-`src/data/battle_songbeam.h`) drawn over that composite; it was retired on 2026-10-07 (27149 ->
-625 of 57344 px against the cartridge at f1100).
+The song tech ($9877=0x10), mid-hold (`strike#2+85`): GATO's front singing pose with its sway and the up-to-5 note
+sprites (battle_song_spotlight.md). The battleshot composes the combatants and the action feedback on black, so the
+spotlight is NOT in this hash: since 2026-10-07 the spotlight is the arena's own colour math (`CtBattleFxLayerCompose`,
+src/field.c -- the song program's BG3 beam on the SUB screen added to BG1/BG2 over lines 0-160, the room's palettes
+faded under it), and `battle-gato-song-spotlight-is-the-arena-colour-math-vs-rule-cartridge` grades it against the
+cartridge (tools/gato_song_cmp.py). Until 2026-10-24 this check was named for the spotlight and its notes still said it
+pinned the cone; it was renamed to what it grades (docs/MUTATION_AUDIT.md).
 
 ### field-scene120-lucca-e0-fadechange (op-0xE0 fade-changeloc, the "She's Princess Nadia!" loop)
 
@@ -2419,11 +2419,9 @@ intX$2C 270/270  intY$2D 270/270  velX$32 270/270  velY$33 270/270
 - `porttick-autonomous-mover`: 152/153 owned-actor frames -- the mode's scope-limited value (it
   owns the autonomous tick only), not a shortfall.
 
-Two pinned residuals are *documented-expected* (not under investigation):
-`tile-prio-recompute` (94/94 mismatches — the ROM's $0C00/$0C01 is stateful for idle
-actors; a stateless recompute can't hit it, per the check's own code comments) and
-`velocity-trig-circle` (89 of 1166 samples off the trig circle, all with a zeroed
-component = collision-clipped, per the check's own tally).
+(`tile-prio-recompute` and `velocity-trig-circle`, which pinned two documented residuals here, were removed on
+2026-10-24 with the six other checks that graded the oracle against a formula in the harness and ran no code of the
+port: tools/regress_checks.json `excluded`, docs/MUTATION_AUDIT.md.)
 
 ## Missing-input checks (SKIP)
 

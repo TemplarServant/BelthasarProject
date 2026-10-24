@@ -20591,9 +20591,10 @@ int main(int argc, char** argv) {
     // disambiguation at the site that sets it), else a spurious pre-battle shot fires on frame 0.
     if (battleTest && btBattleFrame && btBattleFrame == frameNo) {
       const char* bsp = getenv("CT_BATTLESHOT");
-      // CT_BATTLESHOT_AT (V2/V3 verify hook, see fieldBattleConsumer/battleShotAtCb) already claimed this
-      // SAME path for a MID-FIGHT frame; skip this post-resolve dump so it doesn't overwrite that capture.
-      if (bsp && !getenv("CT_BATTLESHOT_AT")) {
+      // CT_BATTLESHOT_AT or CT_BATTLESHOT_ON (V2/V3 verify hook, see fieldBattleConsumer/battleShotAtCb) already
+      // claimed this SAME path for a MID-FIGHT frame; skip this post-resolve dump so it doesn't overwrite that capture
+      // (with only _AT tested, every anchored shot's file was this resolve frame -- its printed fnv was right, its picture not).
+      if (bsp && !getenv("CT_BATTLESHOT_AT") && !getenv("CT_BATTLESHOT_ON")) {
         // STATE-DRIVEN phase (change 4: keyed EXACTLY on $95D5!=0xFF, battle_hud_render.md ADDENDUM 3 §D +
         // ADDENDUM 4 §H -- "NEITHER gate references $A013", and the layout is command 3-box "INCLUDING
         // during target-select"). The former extra `$95DB==0 && $9609==0` gate here disagreed with the
