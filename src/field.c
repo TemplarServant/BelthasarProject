@@ -20312,6 +20312,26 @@ int main(int argc, char** argv) {
           CtMotFixRow(mot, y);
         }
     }
+    // A BACKGROUND'S FLAT TOP LINES (part of the widescreen, a mod): a room whose BG2 begins its map with a row of one
+    // flat tile shows it as a band at the top of the picture when the camera reaches it -- Magus's castle (0A5) at the top
+    // of its scroll: 5 dark grey lines over the sky, the cartridge's own picture (oracle: the middle identical), across the
+    // wide picture a band (the owner, 2026-10-24: gone when the widescreen is on). The top lines (at most 15) drawn wholly
+    // by BG2 in one colour, the whole wide row, take the first line below them that is not, screen-fixed for the frames
+    // between.
+    if (g_hostInteractive && wideW > CAMW && f.vm && !battleCompose) {
+      int k = 0;
+      for (; k < 16; k++) {
+        const uint8_t* r = g_wfb + (size_t)k * wideW * 3; const uint8_t* ow = mot->own + (size_t)k * wideW; int x = 0;
+        while (x < wideW && ow[x] == CT_MOT_BG2 && !memcmp(r + x * 3, r, 3)) x++;
+        if (x < wideW) break;
+      }
+      if (k > 0 && k < 16)
+        for (int y = 0; y < k; y++) {
+          memcpy(fb + (size_t)y * CAMW * 3, fb + (size_t)k * CAMW * 3, (size_t)CAMW * 3);
+          memcpy(g_wfb + (size_t)y * wideW * 3, g_wfb + (size_t)k * wideW * 3, (size_t)wideW * 3);
+          CtMotFixRow(mot, y);
+        }
+    }
     g_fw = CAMW; g_fx = 0;
     // The picture is composed: its owners are recorded. What draws from here on (the box, the wipe, the battle's own
     // layers) is screen-fixed -- CtMotSettle finds it by colour before the frame is shown.
