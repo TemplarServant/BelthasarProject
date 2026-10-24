@@ -4698,7 +4698,12 @@ static int fieldWideViewX(const Field* f, int w, int camx) {
 // THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
 // release draws there, from the player's own ct_wide.dat, baked once per location with the Steam release's tiles and the
 // room's palette (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
-typedef struct { void* sd; int loc, w, h, xo; uint8_t* rgb; uint8_t* cov; } FieldWideExtPic;
+// A FILL: 266 of the 412 locations' margins are one tile everywhere -- the dark around an interior (Crono's house 002:
+// 0x8C), the black of space (Flea's 0AD: 285) -- not scenery. Where the port has something of the room's own past the
+// edge (the map wrapping in a room as wide as its map, a layer scrolling on its own: fieldBeyondPixel) that shows; the
+// fill only stands where the side would be black. (With the fill over the wrap, 0AD's sides went black until its fight,
+// whose arena wrapped -- the owner, 2026-10-23.)
+typedef struct { void* sd; int loc, w, h, xo, fill; uint8_t* rgb; uint8_t* cov; } FieldWideExtPic;
 static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   static FieldWideExtPic p;
   if (!CtSettingsGet()->wideSteamMargins || !f->sd) return NULL;
@@ -4708,6 +4713,8 @@ static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   CtWideExt e;
   if (!CtWideExtGet(f->loc, &e)) return NULL;
   p.w = e.w; p.h = e.h; p.xo = (e.w - f->mx1 / 16) / 2;
+  { int v0 = 0; p.fill = 1;                         // (one tile in every drawn cell of every plane)
+    for (int i = 0; i < 5 * e.w * e.h && p.fill; i++) { int v = e.planes[i]; if (v) { if (!v0) v0 = v; else if (v != v0) p.fill = 0; } } }
   p.rgb = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16 * 3); p.cov = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16);
   if (!p.rgb || !p.cov || !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet,
                                                p.rgb, p.cov)) {
@@ -20217,6 +20224,10 @@ int main(int argc, char** argv) {
     if (wideW > CAMW) {
       int wm0, wm1; fieldWideMask(&f, wideW, &wm0, &wm1);
       const FieldWideExtPic* wext = fieldWideExtPic(&f);   // (the Steam margins, a mod: they take the room's edge back)
+      // A room as wide as its map (fieldWideMask: it wraps) keeps the map going where the margins draw nothing: their
+      // pixels go over it, as over the black of a room inside a larger map. (With the margins replacing the wrap, Flea's
+      // 0AD -- one sparse tile of stars a side -- went near black until its fight, whose arena wraps; the owner, 2026-10-23.)
+      const int wrapRoom = wm0 < -(1 << 29);
       if (wext) { wm0 = f.mx0; wm1 = f.mx1; }
       static CtSceneLayers beyondL; int det = 0;     // (past the edge: the layers scrolling on their own -- fieldBeyondPixel)
       if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
@@ -20232,6 +20243,11 @@ int main(int argc, char** argv) {
           if (ux >= wm0 && ux < wm1) continue;
           uint8_t* d = fb + ((size_t)y * wideW + x) * 3;
           uint8_t ext[3]; int el = wext ? fieldWideExtPixel(wext, ux, camy + y, ext) : 0;
+          if (el && wext->fill) {                      // a fill: the room's own continuation first (FieldWideExtPic)
+            if (wrapRoom) continue;
+            if (det) { uint8_t bp[3]; int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, bp);
+                       if (b) { memcpy(d, bp, 3); mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); continue; } }
+          }
           if (el) {                                    // a sprite stands over the margins' low layer, under the high one
             int own = mot->own[y * wideW + x];
             if ((own & 0x7F) >= CT_MOT_SPR && (el == 1 || (own & CT_MOT_FRONT))) continue;
@@ -20239,11 +20255,13 @@ int main(int argc, char** argv) {
             if (wextL) fieldWideExtBg3(&beyondL, ux, camy + y, mot->o3x, mot->o3y, d);
             mot->own[y * wideW + x] = CT_MOT_FIXED; continue;
           }
+          if (wrapRoom) continue;                      // (the map wrapping, as the composition drew it)
           if (det) { int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
                      mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); }
           else { memset(d, 0, 3); mot->own[y * wideW + x] = CT_MOT_BG1; }
         }
-      mot->mx0 = wm0; mot->mx1 = wm1;
+      mot->mx0 = wrapRoom ? -(1 << 30) : wm0; mot->mx1 = wrapRoom ? 1 << 30 : wm1;   // (the frames between: no edge in a
+                                                                                        //  wrapping room, the margins fixed)
       for (int y = 0; y < ch; y++) memcpy(fbView + (size_t)y * CAMW * 3, fb + ((size_t)y * wideW + wideX) * 3, (size_t)CAMW * 3);
       fb = fbView; camx += wideX;
     }
@@ -20452,6 +20470,7 @@ int main(int argc, char** argv) {
           bx0 = fieldWideViewX(&f, bwW, camx);          // (the widescreen's camera, as the field's: inside the room)
           static uint8_t bcov[FIELD_WMAX * CAMH];
           static CtSceneLayers bBeyondL; int bdet = 0;
+          const FieldWideExtPic* bext = fieldWideExtPic(&f);   // (the Steam margins, a mod: the fight's sides as the field's)
           if (bwm0 > -(1 << 29) && f.sd && (bdet = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
               !CtFieldSceneLayers(f.sd, &bBeyondL)) bdet = 0;
           // The row's battle scroll (the shake, a line wave). The HUD band's rows carry no arena records (arenaRow != 3: the
@@ -20472,6 +20491,11 @@ int main(int argc, char** argv) {
             for (int x = 0; x < bwW; x++) {
               int ux = camx - bx0 + x, sy = camy + y; size_t i = (size_t)y * bwW + x;
               int ax = ux + bwD[y * 2], ay = sy + bwD[y * 2 + 1];   // (the map moves under the room's edge with the shake)
+              if (bext && (ax < f.mx0 || ax >= f.mx1) && !(bext->fill && bwm0 < -(1 << 29))) {   // (the Steam margins
+                uint8_t bp[3]; int b = bext->fill && bdet ?                                       //  past the room's edge,
+                  fieldBeyondPixel(&bBeyondL, bdet, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, bp) : 0;   // as the field's)
+                if (b) { memcpy(g_bwFb + i * 3, bp, 3); bcov[i] = (uint8_t)b; continue; }
+                if (fieldWideExtPixel(bext, ax, ay, g_bwFb + i * 3)) { bcov[i] = 1; continue; } }
               if (ax < bwm0 || ax >= bwm1) {             // the room's end (its self-scrolling layers go on: fieldBeyondPixel)
                 // ...and its coverage is the layer drawn there (1 BG1, 2 BG2, 4 BG3, 0 the backdrop), so the fight's colour
                 // math reaches it as it reaches that layer in the view: marked 0, the sides past a narrow room's edge were
