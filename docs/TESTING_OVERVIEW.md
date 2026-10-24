@@ -28,7 +28,7 @@ mutations. `tools/regress.py` has no per-check logic.
 | Full tier | 316 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
 | Untiered | 21 (run only in the full run) |
 | Excluded candidates | 3, each with the reason it has no stable signature |
-| Checks with mutations | 765, carrying 2,050 mutations in all |
+| Checks with mutations | 926, carrying 2,213 mutations in all; 25 of them STALE (2026-10-24, [MUTATION_AUDIT.md](MUTATION_AUDIT.md)) |
 | Checks that must run alone | 60 (`exclusive`: one at a time in declared order, in one worker beside the parallel batch) |
 
 By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest single check sets the floor.
@@ -50,7 +50,9 @@ By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest sing
 - **Mutations.** `python tools/regress.py --mutate NAME` applies each of the check's declared mutations (an exact
   find-and-replace in a source file), rebuilds, re-runs the check, and requires it to FAIL. A mutation that survives
   means the check does not grade that line, whatever its notes say. The source is always restored afterwards. Do
-  not edit files while a mutation run is going: the restore writes back the original.
+  not edit files while a mutation run is going: the restore writes back the original. A refactor leaves mutations
+  STALE (their find is gone): `python tools/mutation_retarget.py` lists them and re-targets the ones it only moved;
+  [MUTATION_AUDIT.md](MUTATION_AUDIT.md) is the audit of 2026-10-24 and what it left open.
 
 ## Speed
 

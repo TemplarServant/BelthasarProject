@@ -356,6 +356,7 @@ def do_mutate(data, names):
     by_name = {c["name"]: c for c in data["checks"]}
     todo = []
     for n in names:
+        n, _, only = n.partition("@")      # NAME@0,2: only those mutations (the ones a change touched)
         c = by_name.get(n)
         if not c:
             print("mutate: no such check '%s'" % n)
@@ -363,17 +364,22 @@ def do_mutate(data, names):
         if not c.get("mutations"):
             print("mutate: check '%s' declares no mutations -- nothing to prove" % n)
             return 2
-        todo.append(c)
+        todo.append((c, {int(i) for i in only.split(",")} if only else None))
 
     killed = survived = 0
-    for check in todo:
+    bad_base = []
+    for check, only in todo:
         name = check["name"]
         base = run_check(check)
         if base["status"] != "PASS":
-            print("mutate: %s -- BASELINE IS %s, fix that first" % (name, base["status"]))
-            return 2
-        print("mutate: %s -- baseline PASS, %d mutation(s)" % (name, len(check["mutations"])))
+            print("mutate: %s -- BASELINE IS %s, fix that first (skipped)" % (name, base["status"]))
+            bad_base.append(name)
+            continue
+        print("mutate: %s -- baseline PASS, %d mutation(s)%s" % (name, len(check["mutations"]),
+              " (only %s)" % ",".join(map(str, sorted(only))) if only else ""))
         for mi, m in enumerate(check["mutations"]):
+            if only is not None and mi not in only:
+                continue
             # A mutation is a SET of edits: one behaviour may live at more than one site, and an
             # edit that only covers one of them tests a path the check may never take. The first
             # full --mutate-all run caught exactly that: the "same-world skip" mutation patched only
@@ -393,12 +399,18 @@ def do_mutate(data, names):
                 # has nothing to do with the source drifting. Fit the pattern to the file instead:
                 # try it verbatim, then with \n -> \r\n (translating "replace" the same way, so a
                 # mutation never converts a CRLF file to LF and blows up the next git diff).
+                # And the other way: a find recorded from a CRLF working copy carries \r\n, and an LF checkout (Linux,
+                # macOS, the CI, a cloud session) has none -- 13 menu mutations read STALE there and nowhere else.
                 find, repl = e["find"], e["replace"]
                 if find not in s and "\n" in find:
                     crlf = find.replace("\r\n", "\n").replace("\n", "\r\n")
+                    lf = find.replace("\r\n", "\n")
                     if crlf in s:
                         find = crlf
                         repl = repl.replace("\r\n", "\n").replace("\n", "\r\n")
+                    elif lf in s:
+                        find = lf
+                        repl = repl.replace("\r\n", "\n")
                 resolved.append((path, find, repl))
                 n_hits = s.count(find)
                 if n_hits != 1:
@@ -429,8 +441,9 @@ def do_mutate(data, names):
                 survived += 1
                 print("  [%d] SURVIVED %s  <-- the check does NOT grade this" % (mi, m.get("why", "")))
         do_build()   # back to the restored source
-    print("mutate: %d killed, %d survived" % (killed, survived))
-    return 1 if survived else 0
+    print("mutate: %d killed, %d survived" % (killed, survived)
+          + ("; %d baseline(s) not PASS: %s" % (len(bad_base), ", ".join(bad_base)) if bad_base else ""))
+    return 1 if survived or bad_base else 0
 
 
 _TEXT_INPUTS = (".py", ".c", ".h", ".json", ".md", ".txt")

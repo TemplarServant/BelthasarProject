@@ -15,6 +15,8 @@ python tools/regress.py --clear-oracle-cache    # empty build/_oracle_cache
 python tools/regress.py --check-inputs          # presence + sha256 vs tools/regress_inputs.json
 python tools/regress.py --refresh-input-hashes  # rewrite sha256/size pins from disk
 python tools/regress.py --mutate NAME           # prove NAME actually GRADES something
+python tools/regress.py --mutate NAME@0,2       # only those of its mutations (the ones a change touched)
+python tools/mutation_retarget.py [--write]     # list STALE mutations, re-target the ones a refactor only moved
 python tools/regress.py --mutate-all            # every check that declares mutations
 
 # One-command local gate (build + inputs + quick regress → build/preflight.json):

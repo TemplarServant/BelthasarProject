@@ -238,6 +238,7 @@ for the suite.
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is left, by area, with where to start |
 | [docs/TESTING_OVERVIEW.md](docs/TESTING_OVERVIEW.md) | The regression suite at a glance |
 | [docs/TESTING.md](docs/TESTING.md) | The suite in detail: tiers, pins, per-check notes |
+| [docs/MUTATION_AUDIT.md](docs/MUTATION_AUDIT.md) | Which checks are proven to grade something, and what is still open |
 | [docs/INFRA.md](docs/INFRA.md) | Build, repository layout, the oracle workflow, state formats |
 | [docs/DEBUG_SURFACE.md](docs/DEBUG_SURFACE.md) | Every `ct.exe` mode and every debug environment variable |
 | [docs/RELEASE.md](docs/RELEASE.md) | The player's release package: how it is built and scanned, the setup screen |
