@@ -59,6 +59,26 @@ every check from the repo root. Exit status is 1 iff any check FAILed (SKIPs don
 - **One oracle run for many frames** (`PEEK_SHOTS`, `tools/ctlib/peekshots.py`): a tool that graded N frames by running
   `--peek` N times from the state (N^2/2 emulated frames) runs it once. Byte-identical to the per-frame peeks
   (`tools/peekshots_selftest.py`). menu_shell_cmp 716 s -> 18 s, menu_equip_list_cmp 352 s -> 5 s.
+- **One port run for many checks** (2026-10-24). Checks that run the same command -- argv, env and env_rule -- share
+  ONE process, and each is graded on its output (`tools/regress.py` run_group); a check with a missing input still
+  SKIPs on its own. Many checks used to replay the same long run of the port to look at a different moment of it: 49
+  ran the attract demo from power-on (`--scene 433`), each to its own frame with its own probes, 28% of the quick tier.
+  `tools/regress_share.py NAME ...` gives a group one command -- the probes' env merged, `--frames` the largest, or
+  `--argv` (frame_region_cmp.py takes several rectangles for one port run) -- only after proving, run against run, that
+  every check grades the merged output as it grades its own: every expect line is there, its pin regexes take the same
+  lines, and no expect line occurs more often (another probe printing it would let a mutation survive). `--partition`
+  splits a set into the groups that pass; a check whose graded lines come from its own last frames or from where its run
+  ends stays alone. A group's timeout is its members' sum. Then `--mutate` the members. The suite still runs every check;
+  only its repetitions are gone. Measured 2026-10-24 (a 4-core cloud container, 3 jobs, every check PASS): the 954
+  checks run in 893 processes; 31 `--scene 433` checks in 4 runs (615 s -> 106 s) and 16 attract frame_region_cmp
+  checks in 1 port run; the quick tier 16.4 -> 10.0 minutes. The 89 mutations of the 46 regrouped checks: every one the
+  checks killed before is killed after (3 survived and 14 were STALE before as well).
+- **The cache keys on what the oracle reads** (2026-10-24). A run's key held every environment variable but the
+  operating system's own (a list that grew one volatile variable at a time: WT_SESSION, VSCODE_GIT_IPC_HANDLE ...), so a
+  variable only the port reads (CT_AUDIO_LOCKSTEP, CT_SHOTS ...) split the same cartridge run into several entries, and
+  a host variable that changes per command (a cloud container's trace id) made every run of a tool miss the last. The
+  key now holds the variables whose name is in the oracle binary as a C string (`getenv("CT_ORACLE_LOGICAL")`; no oracle
+  source builds a name at run time), so it moves exactly with what the cartridge run can see.
 - **Longest first**: the parallel batch is submitted in the order of the last run's durations
   (`build/_regress_times.json`), so the slowest check never starts last.
 - **Re-pin without re-running**: every run saves its failures with their full output in `build/_regress_last.json`;

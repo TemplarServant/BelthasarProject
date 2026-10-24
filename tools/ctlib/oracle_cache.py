@@ -8,7 +8,11 @@ one of them goes into the key:
     oracle alone: main.c's four modes + snes/*.c + the CPU infra and state loader, CMakeLists.txt), so a rebuilt oracle
     (snes/*.c, src/main.c, ct_cpu_infra.c ...) misses and an edit to the port (battle.c, ct_vm.c, field.c ...) does not;
   * the arguments and the working directory, minus the OUTPUT paths (`--peek <state> <OUT>`, and the env outputs below);
-  * the environment, minus the operating system's own variables (PATH, TEMP, ...) -- CT_*, PEEK_*, VMDIFF_* ... all in;
+  * the environment variables the binary can read: a name it holds as a C string (`getenv("CT_ORACLE_LOGICAL")` puts
+    "CT_ORACLE_LOGICAL\0" in it; no oracle source builds a name at run time), minus the operating system's own (PATH,
+    TEMP, ...). A variable only the port reads (CT_AUDIO_LOCKSTEP, CT_SHOTS ...) or the host sets (a per-command trace
+    id) does not split the cache: before 2026-10-24 every variable was in, and a cloud container's per-command
+    TRACEPARENT made every run of one tool miss the last;
   * the CONTENT of every argument or environment value that names an existing file (a state, a .lakewram, the ROM given
     by --rom, CT_ORACLE_SRAM ...), and of the ROM ct.exe opens by default in the working directory.
 
@@ -128,6 +132,17 @@ def _exe_sha(path):
     return h
 
 
+def _reads(path, name):
+    """Can the executable at `path` read the environment variable `name`? Its name is in the binary as a C string."""
+    st = os.stat(path)
+    k = ('strings', os.path.abspath(path), st.st_size, st.st_mtime_ns)
+    b = _hash_memo.get(k)
+    if b is None:
+        with open(path, 'rb') as fh:
+            b = _hash_memo[k] = fh.read()
+    return (name.encode('utf-8', 'replace') + b'\0') in b
+
+
 def _abs(p, cwd):
     return p if os.path.isabs(p) else os.path.join(cwd, p)
 
@@ -173,7 +188,7 @@ def _want_size(role):
 def _key(argv, env, cwd):
     oi = mode_of(argv)[1]
     out_args = {oi} if oi is not None else set()
-    keyenv = {k: v for k, v in env.items() if k.upper() not in _OS_VARS and k not in ENV_OUTS}
+    keyenv = {k: v for k, v in env.items() if k.upper() not in _OS_VARS and k not in ENV_OUTS and _reads(argv[0], k)}
     parts = {'exe': _exe_sha(argv[0]), 'argv': [a for i, a in enumerate(argv[1:], 1) if i not in out_args], 'cwd': cwd,
              'env': sorted(keyenv.items()), 'files': []}
     for tag, v in [('a%d' % i, a) for i, a in enumerate(argv[1:], 1) if i not in out_args] + sorted(keyenv.items()):

@@ -21,6 +21,8 @@ substring in its "expect" list appears in the combined stdout+stderr.
 All checks are read-only (verified: no included check writes files), so they run as
 parallel subprocesses. A check declaring "exclusive": true (it writes a file) runs in
 the exclusive lane: one at a time, in declared order, in one worker beside the batch.
+Checks that run the same command (argv, env and env_rule: run_key) share ONE process and each is graded on its
+output (run_group); tools/regress_share.py proves when several checks can be given the same command.
 Checks whose declared inputs are missing are SKIPped with the missing file named (they stay in the suite so the needed capture stays discoverable).
 
 Exit status: 1 iff any check FAILed (SKIPs do not fail the suite).
@@ -134,6 +136,29 @@ def run_check(check):
         return {"status": "ERROR", "secs": time.time() - t0,
                 "note": "cannot exec: %s" % e, "out": ""}
     return grade(check, out, time.time() - t0)
+
+
+def run_key(check):
+    """Two checks with this key run the same process: the same argv, env and env_rule."""
+    return json.dumps([check["argv"], check.get("env") or {}, check.get("env_rule") or {}], sort_keys=True)
+
+
+def run_group(group):
+    """ONE PROCESS FOR CHECKS THAT RUN THE SAME COMMAND (run_key): a run is a pure function of its argv and env, so the
+    first check that can run (all its inputs present) runs it and every other one is graded on the same output. A check
+    with a missing input SKIPs on its own. tools/regress_share.py proves when checks can be given the same env.
+    Returns [(check, result)]."""
+    out = [(c, run_check(c)) for c in group if missing_inputs(c)]
+    live = [c for c in group if not missing_inputs(c)]
+    if live:
+        r = run_check(live[0])
+        out.append((live[0], r))
+        for c in live[1:]:
+            if r["status"] == "ERROR" or r.get("note", "").startswith("TIMEOUT"):
+                out.append((c, dict(r)))
+            else:
+                out.append((c, grade(c, r.get("out", ""), r["secs"])))
+    return out
 
 
 def grade(check, out, secs):
@@ -675,12 +700,21 @@ def main():
             times = json.load(f)
     except (OSError, ValueError):
         times = {}
-    par = sorted((c for c in checks if not c.get("exclusive")), key=lambda c: -times.get(c["name"], 1e9))
-    ser = [c for c in checks if c.get("exclusive")]
+    groups = {}
+    for c in checks:
+        groups.setdefault(run_key(c), []).append(c)
+    groups = list(groups.values())
+    par = sorted((g for g in groups if not any(c.get("exclusive") for c in g)),
+                 key=lambda g: -max(times.get(c["name"], 1e9) for c in g))
+    ser = [g for g in groups if any(c.get("exclusive") for c in g)]
+    nshared = sum(len(g) - 1 for g in groups)
+    if nshared:
+        print("regress: %d checks in %d processes (%d share another check's run)" % (len(checks), len(groups), nshared))
 
-    def report(c, r):
-        results[c["name"]] = r
-        print("%-4s %s (%.1fs)" % (r["status"], c["name"], r["secs"]), flush=True)
+    def report(pairs):
+        for c, r in pairs:
+            results[c["name"]] = r
+            print("%-4s %s (%.1fs)" % (r["status"], c["name"], r["secs"]), flush=True)
 
     # THE EXCLUSIVE LANE: the exclusive checks run one at a time, in their declared order, in ONE worker of the pool,
     # alongside the parallel batch -- not after it. "exclusive" means a check that writes a file, and the files they
@@ -688,14 +722,14 @@ def main():
     # 2026-10-16, no read-only check names any of them, and none is graded on wall-clock time (all CT_NOPACE). Serial
     # after the batch they were 112 s of the quick tier's 272 s.
     def lane():
-        for c in ser:
-            report(c, run_check(c))
+        for g in ser:
+            report(run_group(g))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
         lane_fut = ex.submit(lane) if ser else None       # first: the lane is the longest single job of the batch
-        futs = {ex.submit(run_check, c): c for c in par}
+        futs = [ex.submit(run_group, g) for g in par]
         for fut in concurrent.futures.as_completed(futs):
-            report(futs[fut], fut.result())
+            report(fut.result())
         if lane_fut:
             lane_fut.result()
     total = time.time() - t0
