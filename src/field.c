@@ -374,12 +374,70 @@ typedef struct {
 } World;
 // The OAM the raster shows is the PREVIOUS build (C2/0184 DMAs it at the next NMI): take it, with the picture's record of
 // that build (its keys and its uncut pieces), at the same moment.
+// THE WIDESCREEN'S OWN GULLS (a mod; the owner, 2026-10-24). A world object that checks its own visibility (C2/78A1: the
+// view plus 16 px) is killed by its script as it leaves the screen -- the new-game pan's gulls, gone the moment they reach
+// the extra strip. The widescreen draws such an object on, in the picture only, where the ROM let it go OUTSIDE the
+// original 256 columns: at its last step (the last two frames' world places) and with its last poses in turn (the flaps),
+// until it leaves the wide picture. Nothing is run or written: the game killed it, the strip shows where it was going.
+enum { OW_GHOST_KEYS = 256, OW_GHOST_POSES = 8, OW_GHOST_PIECES = 6 };
+typedef struct { int n; CtWorldPiece pc[OW_GHOST_PIECES]; } OwGhostPose;
+typedef struct {
+  int seen, ghost, age;                             // seen: the frame it was last in the build; ghost: drawn on by the strip
+  double wx, wy, px, py;                            // its world place this frame and the frame before
+  OwGhostPose pose[OW_GHOST_POSES]; int poseN, poseAt;
+} OwGhost;
+static OwGhost g_owGhost[OW_GHOST_KEYS];
+static int g_owGhostFrame;
+static void owGhostReset(void) { memset(g_owGhost, 0, sizeof g_owGhost); }
+static void owGhosts(World* w) {
+  g_owGhostFrame++;
+  const int W = hostWideW();
+  if (!g_hostInteractive || W <= CAMW) { owGhostReset(); return; }
+  const int X0 = (W - CAMW) / 2, f = g_owGhostFrame;
+  const double sx = w->cam.bg2h, sy = w->cam.bg2v;
+  // this build's objects: their places and their pieces (relative to the object)
+  for (int i = 0; i < w->wideShowN; i++) {
+    const CtWorldPiece* P = &w->wideShow[i];
+    if (P->key < 0 || P->key >= OW_GHOST_KEYS) continue;
+    OwGhost* g = &g_owGhost[P->key];
+    if (g->seen != f) {
+      if (g->seen != f - 1 || g->ghost) { g->poseN = 0; g->poseAt = 0; g->wx = P->ox + sx; g->wy = P->oy + sy; }
+      g->px = g->wx; g->py = g->wy; g->wx = P->ox + sx; g->wy = P->oy + sy;
+      g->seen = f; g->ghost = 0; g->age = 0;
+      g->poseAt = (g->poseAt + 1) % OW_GHOST_POSES; if (g->poseN < OW_GHOST_POSES) g->poseN++;
+      g->pose[g->poseAt].n = 0;
+    }
+    OwGhostPose* ps = &g->pose[g->poseAt];
+    if (ps->n < OW_GHOST_PIECES) { CtWorldPiece q = *P; q.x = (int16_t)(P->x - P->ox); q.y = (int16_t)(P->y - P->oy); ps->pc[ps->n++] = q; }
+  }
+  // the ones the build lost: drawn on where the ROM let them go past the 256 columns and they were moving
+  for (int k = 0; k < OW_GHOST_KEYS; k++) {
+    OwGhost* g = &g_owGhost[k];
+    if (g->seen == f || !g->poseN) continue;
+    if (!g->ghost) {
+      double vx = g->wx - g->px, vy = g->wy - g->py, ox = g->wx - sx;
+      if (g->seen != f - 1 || (ox >= 0 && ox < CAMW) || (fabs(vx) < 0.25 && fabs(vy) < 0.25) || fabs(vx) > 8 || fabs(vy) > 8) { g->poseN = 0; continue; }
+      g->ghost = 1;
+    }
+    double vx = g->wx - g->px, vy = g->wy - g->py;
+    g->px = g->wx; g->py = g->wy; g->wx += vx; g->wy += vy; g->age++;
+    int ox = (int)floor(g->wx - sx), oy = (int)floor(g->wy - sy);
+    if (ox < -X0 - 48 || ox > CAMW + X0 + 48 || oy < -48 || oy > CAMH + 48 || g->age > 600) { g->poseN = 0; g->ghost = 0; continue; }
+    const OwGhostPose* ps = &g->pose[((g->poseAt - (g->age % g->poseN)) % OW_GHOST_POSES + OW_GHOST_POSES) % OW_GHOST_POSES];
+    for (int i = 0; i < ps->n && w->wideShowN < CT_OW_WIDE_MAX; i++) {
+      CtWorldPiece q = ps->pc[i];
+      q.x = (int16_t)(q.x + ox); q.y = (int16_t)(q.y + oy); q.ox = (int16_t)ox; q.oy = (int16_t)oy;
+      w->wideShow[w->wideShowN++] = q;
+    }
+  }
+}
 static void owLatchShow(World* w) {
   memcpy(w->oamShow, w->wram + 0x0700, sizeof w->oamShow);
   memcpy(w->oamKeyShow, CtWorldOamKeys(), sizeof w->oamKeyShow);
   memcpy(w->oamPosShow, CtWorldOamObjPos(), sizeof w->oamPosShow);
   const CtWorldPiece* p; int n = CtWorldOamWide(&p);
   memcpy(w->wideShow, p, (size_t)n * sizeof *p); w->wideShowN = n;
+  owGhosts(w);
 }                             //   worldEnterAt, the moment the world state goes live
 
 // ⭐ THE FERRY IS THE WORLD'S OWN BOOTSTRAP, not a captured boat. Both ticket offices pay with the same `E0 F0 03 3F 28` (loc
@@ -1053,6 +1111,7 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
   CtWorldDrawListInit(w->wram);                        // C2/0BF6 (C2:23AE): the draw list's node template
   CtWorldDrawListReset(w->wram);
   CtWorldOamBuild(w->wram, w->cam.bg2h, w->cam.bg2v);                            // an empty list: every entry parked at Y = $E0
+  owGhostReset();                                      // (a new world: no gull of the last one goes on)
   owLatchShow(w);
   w->wram[0x0041] = 0x17;                              // C2/0155 TM = BG1+BG2+BG3+OBJ
   w->wram[0x0042] = 0x13;                              // C2/0159 TS = BG1+BG2+OBJ
