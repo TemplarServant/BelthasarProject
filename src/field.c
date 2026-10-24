@@ -4715,6 +4715,43 @@ static int fieldWideBg2Dy(void) {
   for (size_t i = 0; i < sizeof kSky / sizeof kSky[0]; i++) if (kSky[i].loc == loc) return kSky[i].dy;
   return 0;
 }
+// A BACKGROUND THE ROOM HIDES (part of the widescreen, a mod): a layer that scrolls on its own ($1D35 / $1D36: one the
+// sides would carry past the room's edge) but that the room's layers in front of it cover everywhere is no sky -- the
+// SNES shows it only through a window: the Telepod's warp in 008 (BG3, its swirl, behind BG1 and BG2 but where the gate's
+// iris takes them off). Past the edge it showed through the Steam margins' see-through pixels, moving in the trees (the
+// owner, 2026-10-24). The bits (2 BG2, 4 BG3) of `bits` the room's front layers cover over its whole scroll mask, sampled
+// every 4 pixels; kept per location and bake.
+static int fieldHiddenBg(const Field* f, int bits) {
+  static const void* lastSd; static int lastLoc = -1, lastBits = -1, lastHid;
+  if (!f->sd || !(bits & 6)) return 0;
+  if (f->sd == lastSd && f->loc == lastLoc && bits == lastBits) return lastHid;
+  CtSceneLayers L; int o2x, o2y, o3x, o3y;
+  if (!CtFieldSceneLayers(f->sd, &L) || !CtFieldSceneLayerOffsetsBaked(f->sd, &o2x, &o2y, &o3x, &o3y)) return 0;
+  static const int bitOf[6] = { 4, 2, 1, 2, 1, 4 };
+  int x0 = f->mx0, x1 = f->mx1, y0 = f->my0, y1 = f->my1;
+  if (x1 - x0 > 2048) x1 = x0 + 2048;
+  if (y1 - y0 > 2048) y1 = y0 + 2048;
+  int hid = 0;
+  for (int b = 2; b <= 4; b += 2) {
+    if (!(bits & b)) continue;
+    const int front = b == 4 ? 3 : 1;              // (the layers in front of it on the main screen)
+    int covered = x1 > x0 && y1 > y0;
+    for (int my = y0; covered && my < y1; my += 4)
+      for (int mx = x0; covered && mx < x1; mx += 4) {
+        int any = 0;
+        for (int i = 0; i < 6 && !any; i++) {
+          if (!(bitOf[i] & front) || !(L.mainT & bitOf[i]) || !L.cov[i] || L.w[i] <= 0 || L.h[i] <= 0) continue;
+          int ox = bitOf[i] == 2 ? o2x : 0, oy = bitOf[i] == 2 ? o2y : 0;
+          int lx = ((mx + ox) % L.w[i] + L.w[i]) % L.w[i], ly = ((my + oy) % L.h[i] + L.h[i]) % L.h[i];
+          any = L.cov[i][(size_t)ly * L.w[i] + lx] != 0;
+        }
+        if (!any) covered = 0;
+      }
+    if (covered) hid |= b;
+  }
+  lastSd = f->sd; lastLoc = f->loc; lastBits = bits; lastHid = hid;
+  return hid;
+}
 // THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
 // release draws there, from the player's own ct_wide.dat, baked once per location with the Steam release's tiles and the
 // room's palette (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
@@ -19561,6 +19598,7 @@ int main(int argc, char** argv) {
       const uint8_t* pg = CtSceneMem7E(f.vm);
       if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
       g_wideBg = (pg[0x1D35] | pg[0x1D36]) & 0x06;
+      if (!battlePhase) g_wideBg &= ~fieldHiddenBg(&f, g_wideBg);   // (one the room covers everywhere: no sky)
       int pw = hostWideW(), vx = battlePhase ? fieldWideViewX(&f, pw, camx) : wideX;
       g_wideStill = fieldWideStillBits(pg); g_wideStillVx = camx; g_wideStillVw = camx - vx + (pw - CAMW) / 2;
     }
