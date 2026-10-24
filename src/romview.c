@@ -84,6 +84,9 @@ static void viewMiss(long off, uintptr_t caller, const char* kind) {
     { char m[512] = ""; GetModuleFileNameA(NULL, m, sizeof m); const char* b = m;
       for (const char* q = m; *q; q++) if (*q == '\\' || *q == '/') b = q + 1;
       snprintf(exe, sizeof exe, "%s", b); }
+#else
+    { char m[512]; ssize_t n = readlink("/proc/self/exe", m, sizeof m - 1);
+      if (n > 0) { m[n] = 0; const char* b = strrchr(m, '/'); snprintf(exe, sizeof exe, "%.63s", b ? b + 1 : m); } }
 #endif
   }
   if (!g_missOn) return;

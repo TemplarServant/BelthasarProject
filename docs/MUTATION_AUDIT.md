@@ -10,13 +10,13 @@ ones `--mutate` KILLED are in `tools/regress_checks.json`.
 | | before | after |
 |---|---|---|
 | checks | 954 | 946 (8 removed, below) |
-| mutations | 2051 | 2193 |
-| STALE mutations (their `find` gone from the source) | 226, in 160 checks | 3 |
-| checks with no mutation | 188 | 27 |
+| mutations | 2051 | 2198 |
+| STALE mutations (their `find` gone from the source) | 226, in 160 checks | 0 |
+| checks with no mutation | 188 | 19 |
 
 365 mutations were proven: 201 re-targeted ones (of 223 tried: 70 by `tools/mutation_retarget.py`, 153 re-derived
-from the code that does the same thing now), 162 new ones for 160 checks (of 172 tried) and 2 more for the checks
-fixed below.
+from the code that does the same thing now), 162 new ones for 160 checks (of 172 tried), 2 more for the checks
+fixed below and 8 for the checks whose first new mutation had survived (below).
 
 ## How they had drifted
 
@@ -52,19 +52,49 @@ fixed below.
   post-resolve dump, which only stood aside for `CT_BATTLESHOT_AT`. The printed fnv the checks grade was right; the
   `.raw` a person opens was the resolve frame. It stands aside for both now.
 
+## The mechanism is gone: 3 STALE mutations retired
+
+Each check's notes say why (MUTATION RETIRED); the check keeps its other mutations.
+
+- field-battle-enemy-death-sfx [0]: the 2-frame countdown it shortened is now a flag posted on its first pass.
+- slot1-runner-battle-menu-vs-oracle [1]: the two events it swapped are frames apart now, so no order is left to swap.
+- battle-jsl-audio-keeps-playing [1]: the per-piece take exists only on the reference SPC core, not on the native sound
+  machine the check runs.
+
+## The 9 whose new mutation survived, one by one
+
+Each one's output was read under the edit. Eight were checks that no longer saw their mechanism; one is a mechanism that
+is gone.
+
+- **field-battle-ambush-generic-dissolve**: its anchor (`strike#…`) had drifted past the dissolve, so the shot showed
+  the arena after it. Anchored on `act-end#1+18`, inside the dissolve; a mutation of the dither's threshold kills it.
+- **field-battle-crit-beatB-dead-suppressed -> field-battle-crit-beatB-flash-hetake**: the premise was already refuted
+  (disasm/notes/battle_crit_beatb_flash.md: the victim is alive at beat B and flashes), and the retimed fight had moved
+  its fixed frame off the flash too. Renamed for what it grades and anchored on `pc-act#1+92`, the white frame; a
+  mutation of op 0x69's colour record kills it.
+- **field-battle-crit-flash2**: the same drift; anchored on `pc-act#1+91`, killed by the same op-0x69 mutation.
+- **field-battle-gato-facing-right**: the first mutation edited a path the run never takes. A mutation of the facing the
+  idle window is chosen by (C1/336A's published facing) kills it.
+- **seq-pic-ending-vs-oracle**: the earlier mutations hit compositor paths the ending does not use; a mutation of the
+  sprite palette field kills it.
+- **audio-song-loader-defrag**: blind. It expected only a summary the loader prints whether or not it defragments. It
+  expects the five loads' heap state (`firstFree` / `lastOcc`), the bytes moved and the heap invariant now; skipping
+  the defragmentation kills it.
+- **vmdiff-forest-battle-entry -> vmdiff-forest-idle-wanderers**: `--vmdiff` cannot hold a direction, so the ambush and
+  its op-0xE7 seek it was named for are never reached (field-battle-forest-seek-glide grades the seek); and without
+  `--withpos` it compared only each object's priority. With `--withpos` the wandering objects' positions are compared
+  every frame, still clean against the cartridge, and swapping op 0x96's operands kills it.
+- **rom-census-attract**: blind off Windows. src/rom_census.c named the executable only through `GetModuleFileNameA`,
+  so on Linux every census line ended in `?` and tools/rom_census.py, which counts only Belthasar's reads, dropped them
+  all: the CI and the cloud sessions passed it whatever the run read. The name comes from `/proc/self/exe` there now
+  (src/lz.c's CT_LZ_MISSLOG and src/romview.c's CT_ROMVIEW_MISSLOG had the same gap); disabling the LZ container makes
+  the attract read 183 pages and fails it.
+- **field-battle-cyclone-fx-not-replayed**: the mechanism it guards is gone. It pinned a fix for a tech's effect being
+  replayed from a stale `actTechId`; that id is read only on the PC paths now and nothing replays it, and even breaking
+  the wipe the check's picture shows (CC/F06B) leaves its output identical. Left in place, without a mutation, for the
+  owner to decide whether to remove it.
+
 ## Still open
-
-**The mechanism is gone** (3 STALE mutations, to retire or replace): field-battle-enemy-death-sfx [0] (the 2-frame
-countdown is now a flag posted on its first pass), slot1-runner-battle-menu-vs-oracle [1] (the two events it ordered
-are frames apart now), battle-jsl-audio-keeps-playing [1] (the per-piece take exists only on the reference SPC core,
-not the native sound machine the check runs).
-
-**A new mutation SURVIVED -- the check has none** (9): field-battle-ambush-generic-dissolve,
-field-battle-crit-beatB-dead-suppressed, field-battle-crit-flash2, field-battle-cyclone-fx-not-replayed,
-field-battle-gato-facing-right, seq-pic-ending-vs-oracle, audio-song-loader-defrag, vmdiff-forest-battle-entry,
-rom-census-attract. The edit broke the mechanism the check is named for and the check still passed: either the edit
-missed the path the check's run takes, or the check does not see that mechanism. Each needs the check's output read
-under the edit to tell which.
 
 **No code of the port to mutate** (6): tables-datafree-headers-current, gen-shapes-match-generated,
 inputs-come-from-recipes-or-sources and oracle-peekshots-equal-a-peek-per-frame grade a generated file, a manifest or a

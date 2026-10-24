@@ -280,6 +280,10 @@ exactly: white on the first slash, not white on the second, and only in *some* f
 that fixture the victim is alive at beat B, the alive branch is taken, and f290 renders the victim white
 (verified by render). The check grades a *flashing* beat B under a name that says the opposite.
 
+**Renamed 2026-10-24: `field-battle-crit-beatB-flash-hetake`** (docs/MUTATION_AUDIT.md). The retimed fight had
+also moved its fixed frame off the flash; it is anchored on `pc-act#1+92` now, the frame the victim shows white, and a
+mutation of op 0x69's colour record kills it.
+
 ---
 
 ## 5 — THE FIX (minimal, mandate-safe) — host arm, not the interpreter

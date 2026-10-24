@@ -113,6 +113,9 @@ uint8_t* CtRomCensusWrapMutable(uint8_t* img, long len, const char* name) {
       snprintf(g_exeName, sizeof g_exeName, "%s", b); }
     AddVectoredExceptionHandler(1, censusHandler);
 #else
+    { char path[512]; ssize_t n = readlink("/proc/self/exe", path, sizeof path - 1);   // the name, as on Windows:
+      if (n > 0) { path[n] = 0; const char* b = strrchr(path, '/');                     // tools/rom_census.py counts
+        snprintf(g_exeName, sizeof g_exeName, "%.63s", b ? b + 1 : path); } }           // only Belthasar's reads
     struct sigaction sa; memset(&sa, 0, sizeof sa);
     sa.sa_sigaction = censusHandler; sa.sa_flags = SA_SIGINFO;
     sigaction(SIGSEGV, &sa, &g_oldSegv);
