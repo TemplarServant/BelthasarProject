@@ -155,12 +155,96 @@ def margins(f, files):
     return out
 
 
+STEAM_APP = 613830                                       # Chrono Trigger on Steam
+
+
+def _steam_roots():
+    """The Steam installations this machine may have: the registry's on Windows, the usual folders elsewhere."""
+    roots = []
+    if sys.platform == 'win32':
+        try:
+            import winreg
+            for hive, key, name in ((winreg.HKEY_CURRENT_USER, r'Software\Valve\Steam', 'SteamPath'),
+                                    (winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\WOW6432Node\Valve\Steam', 'InstallPath'),
+                                    (winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Valve\Steam', 'InstallPath')):
+                try:
+                    with winreg.OpenKey(hive, key) as k:
+                        roots.append(winreg.QueryValueEx(k, name)[0])
+                except OSError:
+                    pass
+        except ImportError:
+            pass
+        roots += [r'C:\Program Files (x86)\Steam', r'C:\Program Files\Steam']
+    else:
+        home = os.path.expanduser('~')
+        roots += [os.path.join(home, p) for p in ('.steam/steam', '.local/share/Steam',
+                                                  '.var/app/com.valvesoftware.Steam/.local/share/Steam',
+                                                  'Library/Application Support/Steam')]
+    return roots
+
+
+def find_steam():
+    """The folder of an installed Steam copy of Chrono Trigger (its resources.bin an ARC1 archive), or None.
+    CT_STEAM_DIR names one directly. Every library of every Steam installation found is looked in (libraryfolders.vdf),
+    then the usual library folders on each drive (Windows)."""
+    env = os.environ.get('CT_STEAM_DIR')
+    cands = [env] if env else []
+    libs = []
+    for root in _steam_roots():
+        root = os.path.normpath(root)
+        if not os.path.isdir(root):
+            continue
+        libs.append(root)
+        vdf = os.path.join(root, 'steamapps', 'libraryfolders.vdf')
+        try:
+            import re
+            libs += [p.replace('\\\\', '\\') for p in re.findall(r'"path"\s+"([^"]+)"', open(vdf, encoding='utf-8', errors='replace').read())]
+        except OSError:
+            pass
+    if sys.platform == 'win32':
+        libs += ['%s:\\SteamLibrary' % d for d in 'CDEFGHIJ']
+    for lib in libs:
+        sa = os.path.join(lib, 'steamapps')
+        inst = 'Chrono Trigger'
+        try:
+            import re
+            m = re.search(r'"installdir"\s+"([^"]+)"', open(os.path.join(sa, 'appmanifest_%d.acf' % STEAM_APP), encoding='utf-8', errors='replace').read())
+            if m:
+                inst = m.group(1)
+        except OSError:
+            pass
+        cands.append(os.path.join(sa, 'common', inst))
+    seen = set()
+    for c in cands:
+        if not c or os.path.normcase(c) in seen:
+            continue
+        seen.add(os.path.normcase(c))
+        rb = os.path.join(c, 'resources.bin') if os.path.isdir(c) else c
+        try:
+            with open(rb, 'rb') as f:
+                if _keystream_xor(f.read(16), 0)[:4] == b'ARC1':
+                    return c
+        except OSError:
+            pass
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('steam')
+    ap.add_argument('steam', nargs='?', help="the Steam release's Chrono Trigger folder or its resources.bin (default: look for it)")
     ap.add_argument('-o', '--out', default='ct_wide.dat')
     ap.add_argument('--list', action='store_true')
+    ap.add_argument('--find', action='store_true', help='only say where the Steam copy is')
     a = ap.parse_args()
+    if not a.steam or a.find:
+        found = find_steam()
+        if a.find:
+            print('steam-wide: %s' % (found or 'no Steam copy of Chrono Trigger found'))
+            return 0 if found else 1
+        if not found:
+            sys.exit('steam-wide: no Steam copy of Chrono Trigger found (name its folder, or CT_STEAM_DIR)')
+        a.steam = found
+        print('steam-wide: the Steam copy at %s' % found)
     src = os.path.join(a.steam, 'resources.bin') if os.path.isdir(a.steam) else a.steam
     with open(src, 'rb') as f:
         files = directory(f)
@@ -203,4 +287,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

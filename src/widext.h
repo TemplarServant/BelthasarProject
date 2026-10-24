@@ -4,6 +4,9 @@
 #ifndef CT_WIDEXT_H
 #define CT_WIDEXT_H
 #include <stdint.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // One location's margins: five planes of w*h cells (0 = none, v = metatile v - 1 of page (v - 1) >> 8), the Steam
 // release's map layers: plane 3 with BG2's low-priority tiles, plane 2 with BG1's, planes 1 and 0 the priority-1 layer
@@ -21,5 +24,10 @@ typedef struct {
 } CtWideExt;
 
 int CtWideExtGet(int location, CtWideExt* out);   // 1 = ct_wide.dat (CT_WIDE_DAT overrides the path) has this location
+int CtWideExtAvailable(void);                     // 1 = a ct_wide.dat was read (the setup writes one from a Steam copy it finds)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

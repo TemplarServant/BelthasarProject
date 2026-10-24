@@ -61,6 +61,10 @@ executable with 64 ROM bytes inside must be found.
 
 ## The setup screen
 
+The setup the screen runs also makes `ct_wide.dat` when the player has the Steam release installed (the widescreen's
+Steam margins, [WIDESCREEN.md](WIDESCREEN.md)): an optional step that never fails the setup. The release ships none of
+the Steam data, only the kit's `tools/steam_wide.py` that reads the player's own copy.
+
 The first run shows the setup screen (src/launcher_ui.cpp): a desktop form with the system's UI font -- the ROM file
 (Browse... opens the system's own chooser; dropping the file on the window works too), the game data's folder (Open
 folder), the progress with the setup's step and the elapsed time, and Make the game data / Cancel / Try again / Play.

@@ -2,6 +2,7 @@
 // on the SDL_Renderer the game presents with. See overlay.h. Edits settings.h's options; the host applies them.
 #include "overlay.h"
 #include "settings.h"
+#include "widext.h"
 #include "touchpad.h"
 #include "imgui.h"
 #include "backends/imgui_impl_sdl2.h"
@@ -185,13 +186,17 @@ extern "C" int CtOverlayFrame(void) {
                           "it (the skywalk past its tower: black without the margins). A backdrop that never moves on the screen (the\n"
                           "prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it. Magus's\n"
                           "castle's sky is drawn 5 lines higher, so the band over it stays off the screen.");
-      bool sm = s->wideSteamMargins != 0;
+      const bool haveWide = CtWideExtAvailable() != 0;   // (no ct_wide.dat: the option stays off and greyed)
+      bool sm = haveWide && s->wideSteamMargins != 0;
+      if (!haveWide) ImGui::BeginDisabled();
       if (ImGui::Checkbox("Steam margins (needs your Steam copy)", &sm)) s->wideSteamMargins = sm;
-      if (ImGui::IsItemHovered())
+      if (!haveWide) ImGui::EndDisabled();
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         ImGui::SetTooltip("A mod: past a room's edge the sides show the strip the Steam release draws there (its widescreen\n"
-                          "rooms), with the room's own tiles. Its data come from your own copy of the Steam release: run\n"
-                          "tools/steam_wide.py on its folder once to write ct_wide.dat next to ct_assets.dat. Rooms without\n"
-                          "margins, or without the file, keep the sides as above. Nothing else in the game changes.");
+                          "rooms), with the room's own tiles. Its data come from your own copy of the Steam release: the\n"
+                          "setup reads it when it finds one installed and writes ct_wide.dat next to the game's data (or\n"
+                          "run tools/steam_wide.py on its folder). Without that file the option stays off. Rooms without\n"
+                          "margins keep the sides as above. Nothing else in the game changes.");
       bool fb = s->fillBottomLines != 0;
       if (ImGui::Checkbox("Fill the bottom lines", &fb)) s->fillBottomLines = fb;
       if (ImGui::IsItemHovered())

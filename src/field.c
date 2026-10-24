@@ -4821,7 +4821,7 @@ static int fieldHiddenBg(const Field* f, int bits) {
 // locations whose background layers (the map header's md[1..3]: BG2 / BG3 detached or scrolling on their own) the
 // sides would carry past the room's edge, but beside whose edge the Steam release's widescreen draws scenery of its own
 // over them -- 1 the left side, 2 the right, 3 both. Facts from an analysis of that release's widescreen data
-// (build/_steamre/bgcover.py: the room's rows whose first column past the edge holds a margin cell); none of its data
+// (tools/steam_bgcover.py prints this table: the room's rows whose first column past the edge holds a margin cell); none of its data
 // is here. Without the Steam margins drawn (the option off, or no ct_wide.dat) such a side ends black past the edge like
 // the room's own end: the skywalk's sky (01C) stood loose past its tower wall, where the Steam release has the tower
 // and the cliff. Elsewhere a background goes on -- the Blackbird's clouds (16E), Flea's stars (0AD).

@@ -67,6 +67,10 @@ static void widextLoad(void) {
   }
 }
 
+int CtWideExtAvailable(void) {
+  if (!g_loaded) widextLoad();
+  return g_file != NULL;
+}
 int CtWideExtGet(int location, CtWideExt* out) {
   if (!g_loaded) widextLoad();
   if (location < 0 || location >= WIDEXT_LOCATIONS || !g_ext[location].planes) return 0;

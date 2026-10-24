@@ -17,7 +17,10 @@ file the build needs that comes from the game (docs/ROM.md):
   5. the other generators write src/data/*.h and src/xlat/*.c;
   6. tools/gen/pack_tables.py packs the tables of src/data/*.h into ct_tables.dat, the file a data-free Belthasar
      (CT_DATAFREE) loads them from instead of compiling them in;
-  7. everything is built (tools/build.py).
+  7. OPTIONAL, a mod's data: if a Steam copy of Chrono Trigger is installed (or --steam names its folder),
+     tools/steam_wide.py reads its widescreen margins into ct_wide.dat (the option "Steam margins"); without one the
+     step says so and the option stays off. --no-steam skips it;
+  8. everything is built (tools/build.py).
 
 Each step says what it did. A generator that still needs a capture that is not a recipe yet is reported (see
 docs/ROADMAP.md) and setup exits 1 at the end if any generated file is missing.
@@ -28,7 +31,7 @@ The player's setup (Belthasar's ROM screen, src/launcher.c) runs the same steps 
 
 --oracle uses a ct.exe built beforehand (the release's, compiled from the shapes like step 2's) instead of building one;
 --workdir copies this tree to <dir> first and runs there (the installed one may be read-only); --out copies
-ct_assets.dat and ct_tables.dat to <dir> at the end. Every step prints `setup: progress K/N` for the screen's bar.
+ct_assets.dat and ct_tables.dat (and ct_wide.dat when step 7 made one) to <dir> at the end. Every step prints `setup: progress K/N` for the screen's bar.
 
 --check is the inverse proof for this repository: every generator runs again and its output must equal the file in the
 tree (line endings aside), so a header that cannot be made from the ROM shows up; the asset-stage outputs are compared
@@ -150,6 +153,8 @@ def main():
     ap.add_argument('--oracle', help='a ct.exe built beforehand: used instead of building one')
     ap.add_argument('--workdir', help='copy this tree to WORKDIR and run there')
     ap.add_argument('--out', help='copy ct_assets.dat and ct_tables.dat to OUT at the end')
+    ap.add_argument('--steam', help="the Steam release's Chrono Trigger folder (default: look for an installed one)")
+    ap.add_argument('--no-steam', action='store_true', help="skip the Steam margins (the mod's optional data)")
     a = ap.parse_args()
 
     if a.workdir and os.path.normcase(os.path.abspath(a.workdir)) != os.path.normcase(ROOT):
@@ -161,7 +166,7 @@ def main():
         args = [x for x in sys.argv[1:]]
         i = args.index('--workdir')
         del args[i:i + 2]
-        for k in ('--rom', '--oracle', '--out'):              # paths the copy must still find, made absolute
+        for k in ('--rom', '--oracle', '--out', '--steam'):   # paths the copy must still find, made absolute
             if k in args:
                 j = args.index(k) + 1
                 args[j] = os.path.abspath(args[j])
@@ -186,7 +191,7 @@ def main():
     # (tools/gen/shapes/: declarations and sizes, no data) stand in for the missing ones so a bootstrap oracle builds.
     run([sys.executable, 'tools/gen/shapes.py', 'install'])
     gens = generators()
-    total = 3 + len(gens)                                  # the oracle, the generators, the extraction, the pack
+    total = 4 + len(gens)                                  # the oracle, the generators, the extraction, the pack, Steam
     done = [0]
 
     def progress():
@@ -234,6 +239,22 @@ def main():
         missing.append('ct_tables.dat')
     progress()
 
+    # the Steam margins (a mod's data, optional): never a reason to fail the setup
+    wide = os.path.join(ROOT, 'ct_wide.dat')
+    if a.no_steam:
+        say('the Steam margins: skipped (--no-steam)')
+    else:
+        sys.path.insert(0, os.path.join(ROOT, 'tools'))
+        import steam_wide
+        where = a.steam or steam_wide.find_steam()
+        if not where:
+            say('the Steam margins: no Steam copy of Chrono Trigger found -- the option stays off (optional)')
+        else:
+            say('the Steam margins: reading %s -> ct_wide.dat' % where)
+            if run([sys.executable, 'tools/steam_wide.py', where, '-o', wide]).returncode or not os.path.exists(wide):
+                say('the Steam margins: could not read that copy -- the option stays off (optional)')
+    progress()
+
     if not a.no_build:
         say('building everything')
         if run([sys.executable, 'tools/build.py']).returncode:
@@ -246,6 +267,9 @@ def main():
         for f in ('ct_assets.dat', 'ct_tables.dat'):
             shutil.copy2(os.path.join(ROOT, f), os.path.join(a.out, f))
         say('ct_assets.dat and ct_tables.dat -> %s' % a.out)
+        if not a.no_steam and os.path.exists(wide):
+            shutil.copy2(wide, os.path.join(a.out, 'ct_wide.dat'))
+            say('ct_wide.dat -> %s' % a.out)
     say('done. Play: build\\Belthasar.exe --assets ct_assets.dat --boot')
     return 0
 
