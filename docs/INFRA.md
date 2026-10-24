@@ -86,7 +86,10 @@ committed and pushed. Measured 2026-10-23 (Ubuntu 24.04, gcc, Python 3.13):
   there by its file name -- verified by the same SHA-256, so a wrong copy is refused, not used.
 - **Time, measured on a 4-core container (2026-10-23).** `tools/setup.py` 21 min; `tools/fixtures.py make all` 64 min
   more (one recipe at a time). Both reuse what is already made (a second `make all`: 0.04 s), so a resumed container
-  pays nothing; a new one pays both.
+  pays nothing; a new one pays both. With the ROM and the 78 saves, `python3 tools/regress.py` graded all 953 checks
+  PASS on that container (2026-10-23; the 954th, `tree-tracks-no-game-file`, came after and passes too); the one check `playthrough-legs-vs-rule-cartridge` alone takes 72 min there,
+  so `--quick` (or `--only`) is the tier to iterate with. A container restart keeps the working tree (the ROM, the
+  generated files, `saves/`) but stops background jobs: commit before a long run.
 - **Windows-only pieces.** `tools\build.bat` and the `tools/*.ps1` fetchers do not run here: `python3 tools/build.py`
   and `python3 tools/get_imgui.py` are the same steps. The agent's memory index (`MEMORY.md`) is not in a cloud
   container either: the rules live in `CLAUDE.md`, `.claude/no-invention-mandate.md`, `.claude/skills/` and
