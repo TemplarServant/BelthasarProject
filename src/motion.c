@@ -36,24 +36,31 @@ static double fitSlope(const double* v, int n, int whole) {
   for (int i = 0; i < n; i++) { double r = v[i] - (a + b * i); if (r > 0.75 || r < -0.75) return 0; }   // not steady
   return b;
 }
-// The continuous place: the last one advanced by the slope, kept inside [the drawn one, +1) -- the drawn one is the whole
-// part of where the thing really is, so a step re-phases it and the advance per frame stays the slope. It never jumps: where
-// the history is no steady slope (a pan changing its speed, a stop) it goes on at the last few frames' mean rate from where
-// it was -- given up, it snapped back to the drawn pixel and restarted half a pixel on, a jolt each time the trial's pan
-// changed speed (the owner, 2026-10-24) -- and where the rate is whole pixels a frame or none it settles on the drawn
-// place, an eighth of a pixel a frame. *steady (may be NULL): a steady sub-pixel slope was found.
+// The continuous place: the last one advanced by the slope, TRAILING the drawn one -- never past it, never a whole pixel
+// behind (for a motion up the axis inside (drawn - 1, drawn], down it [drawn, drawn + 1)), so a step re-phases it and the
+// advance per frame stays the slope. Led instead (the drawn one its whole part), an object that stopped -- at a wall --
+// was drawn up to a pixel past it between the frames and came back (the owner, 2026-10-24); trailing, it reaches the
+// drawn place and stays. It never jumps: where the history is no steady slope (a pan changing its speed, a stop) it goes
+// on at the last few frames' mean rate from where it was, and where the rate is whole pixels a frame or none it closes on
+// the drawn place an eighth of a pixel a frame. On the drawn place and stepping whole pixels (a pan starting from still,
+// a walk of 1 or 2 px a frame) it stays on it. *steady (may be NULL): a steady sub-pixel slope was found.
 static double fitQ(double* qs, int* have, int* steady, const double* v, int n, double cur, int whole) {
   double b = fitSlope(v, n, whole), rate = b;
   if (steady) *steady = b != 0;
+  const double step = n >= 2 ? v[n - 1] - v[n - 2] : 0;
+  if (!*have) { *qs = cur; *have = 1; return cur; }
+  if (b == 0 && fabs(*qs - v[n - 2]) < 1e-9 && step != 0 && step == floor(step)) { *qs = cur; return cur; }
   if (b == 0) {
     rate = fitSlope(v, n, 0);                      // (a whole-pixel slope, steady)
     if (rate == 0 && n >= 2) { int m = n < 5 ? n : 5; rate = (v[n - 1] - v[n - m]) / (m - 1); }
   }
-  double q = *have ? *qs + rate : cur;
-  if (q < cur) q = cur;
-  if (q > cur + 0.999) q = cur + 0.999;
-  if (fabs(rate - floor(rate + 0.5)) < 0.02) q = q - cur > 0.125 ? q - 0.125 : cur;
-  *qs = q; *have = 1;
+  double q = *qs + rate;
+  const int dir = rate > 1e-9 ? 1 : rate < -1e-9 ? -1 : step > 0 ? 1 : step < 0 ? -1 : 0;
+  if (dir > 0) { if (q > cur) q = cur; if (q < cur - 0.999) q = cur - 0.999; }
+  else if (dir < 0) { if (q < cur) q = cur; if (q > cur + 0.999) q = cur + 0.999; }
+  else { if (q > cur + 0.999) q = cur + 0.999; if (q < cur - 0.999) q = cur - 0.999; }
+  if (fabs(rate - floor(rate + 0.5)) < 0.02) q = fabs(q - cur) > 0.125 ? q + (q < cur ? 0.125 : -0.125) : cur;
+  *qs = q;
   return q;
 }
 static double fitOne(int c, const double* v, int n, double cur) {
@@ -111,6 +118,11 @@ void CtMotFit(CtMotFrame* m) {
       if (tied && i == g_fit.n) { g_fit.qOk[c] = 0; q[c] = now[c] + (cam[c & 1] - qc[c & 1]); continue; }
     }
     if (c >= 4) { q[c] = fitOne(c, g_fit.v[c], g_fit.n, now[c]); continue; }
+    // (an offset the same all along the history -- a layer that scrolls with the camera -- keeps it exactly: its place is
+    //  the camera's continuous one plus the offset, never a fraction of its own off the camera's -- a seam across the
+    //  overworld's mountain, tiles out of step with the map when a pan turned; the owner, 2026-10-24)
+    { int same = 1; for (int i = 1; same && i < g_fit.n; i++) same = g_fit.v[c][i] == g_fit.v[c][0];
+      if (same) { g_fit.qOk[c] = 0; q[c] = now[c]; continue; } }
     // (BG2's / BG3's place on the map -- the camera and the offset together -- is what is fitted, its whole part the drawn
     //  one: fitted apart, the camera's fraction and the offset's added past a pixel and the layer stood a pixel off at the
     //  frame itself -- the Blackbird's clouds, 16E)
@@ -153,12 +165,12 @@ static double qAt(double qp, double qc, double cur, double tt, int step, double 
 }
 void CtMotCamShift(const CtMotFrame* cur, const CtMotFrame* prev, double tt, int dcx, int dcy, double* dx, double* dy) {
   *dx = -(1.0 - tt) * dcx; *dy = -(1.0 - tt) * dcy;
-  if (!cur->qFrac || !prev->qFrac) return;
+  if (!cur->qFrac || !prev->qFrac || g_ctMotNoFrac) return;
   *dx = qAt(prev->qcx, cur->qcx, cur->camX, tt, dcx, *dx); *dy = qAt(prev->qcy, cur->qcy, cur->camY, tt, dcy, *dy);
 }
 void CtMotSprShift(const CtMotFrame* cur, int i, const CtMotFrame* prev, int j, double tt, int wx, int wy, double* dx, double* dy) {
   *dx = -(1.0 - tt) * wx; *dy = -(1.0 - tt) * wy;
-  if (!cur->qFrac || !prev->qFrac || j < 0) return;
+  if (!cur->qFrac || !prev->qFrac || g_ctMotNoFrac || j < 0) return;
   *dx = qAt(prev->qsx[j], cur->qsx[i], cur->sprX[i], tt, wx, *dx); *dy = qAt(prev->qsy[j], cur->qsy[i], cur->sprY[i], tt, wy, *dy);
 }
 
@@ -219,7 +231,8 @@ static int wins(int a, int b) {                    // does owner `a` cover owner
 
 void CtMotRaster(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_t* fb, int w, int t, int k, uint8_t* out) {
   if (k < 1) k = 1;
-  if (t >= 256 || !cur || !prev || !cur->valid || !prev->valid || cur->scene != prev->scene || cur->w != w || prev->w != w) {
+  if (!cur || !prev || !cur->valid || !prev->valid || cur->scene != prev->scene || cur->w != w || prev->w != w ||
+      (t >= 256 && (!cur->qFrac || !prev->qFrac || g_ctMotNoFrac))) {   // (at 256 the frame itself, but for the continuous places)
     upscale(fb, w, k, out); return; }
   int dcx = cur->camX - prev->camX, dcy = cur->camY - prev->camY;
   if (abs(dcx) > JUMP || abs(dcy) > JUMP) { upscale(fb, w, k, out); return; }

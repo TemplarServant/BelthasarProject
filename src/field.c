@@ -2188,7 +2188,7 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   const int W = w1 * k, H = CAMH * k, X0k = N->X0 * k;
   double o2x = cur->o2x - back * (cur->o2x - prev->o2x), o2y = cur->o2y - back * (cur->o2y - prev->o2y);
   double o3x = cur->o3x - back * (cur->o3x - prev->o3x), o3y = cur->o3y - back * (cur->o3y - prev->o3y);
-  if (cur->qFrac && prev->qFrac) {
+  if (cur->qFrac && prev->qFrac && !g_ctMotNoFrac) {
     o2x = prev->q2x + (cur->q2x - prev->q2x) * tt; o2y = prev->q2y + (cur->q2y - prev->q2y) * tt;
     o3x = prev->q3x + (cur->q3x - prev->q3x) * tt; o3y = prev->q3y + (cur->q3y - prev->q3y) * tt;
   }
@@ -2685,9 +2685,13 @@ static void hostUploadPictureAt(CtPresenter* pr, const uint8_t* fb, int w, int t
   if (g_hostPicN < n) { free(g_hostPic); g_hostPic = (uint8_t*)malloc(n); g_hostPicN = g_hostPic ? n : 0; }
   if (!g_hostPic) { hostUpload(pr, fb, w, CAMH); return; }
   // the frames between: natively where the frame allows it (fieldnative.c), else the reprojection
-  if (!(t < 256 && !getenv("CT_NATIVE_OFF") && (CtFieldRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic) ||
-                                                owRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic))))
+  // (between two frames, the newest one too: the continuous places trail the drawn ones, so t = 256 is theirs as well --
+  //  not interpolating, the frame as drawn)
+  const int noFrac = g_ctMotNoFrac; if (!interp) g_ctMotNoFrac = 1;
+  if (!((t < 256 || interp) && !getenv("CT_NATIVE_OFF") && (CtFieldRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic) ||
+                                                           owRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic))))
     CtMotRaster(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic);
+  g_ctMotNoFrac = noFrac;
   hostUpload(pr, g_hostPic, w * k, CAMH * k);
 }
 static void hostUploadPicture(CtPresenter* pr, const uint8_t* fb) { hostUploadPictureAt(pr, fb, CAMW, 256, 0); }
@@ -2797,7 +2801,7 @@ static void motCheck(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_
           static uint8_t big[FIELD_WMAX * 4 * CAMH * 4 * 3];   // ...and the frames between at 4x: _mot_t000.ppm .. _mot_t256.ppm
           int step = getenv("CT_MOTDUMP_STEP") ? atoi(getenv("CT_MOTDUMP_STEP")) : 64; if (step < 1) step = 64;   // (every t-th)
           for (int t = 0; t <= 256; t = t < 256 && t + step > 256 ? 256 : t + step) { char path[64]; snprintf(path, sizeof path, "build/_mot_t%03d.ppm", t);
-            if (!(t < 256 && (CtFieldRasterNative(cur, prev, fb, w, t, 4, big) || owRasterNative(cur, prev, fb, w, t, 4, big)))) CtMotRaster(cur, prev, fb, w, t, 4, big);
+            if (!(CtFieldRasterNative(cur, prev, fb, w, t, 4, big) || owRasterNative(cur, prev, fb, w, t, 4, big))) CtMotRaster(cur, prev, fb, w, t, 4, big);
             FILE* pf = fopen(path, "wb"); if (!pf) continue;
             fprintf(pf, "P6\n%d %d\n255\n", w * 4, CAMH * 4); fwrite(big, 1, (size_t)w * 4 * CAMH * 4 * 3, pf); fclose(pf); } } }
       if (g_motCheck > 1) printf("motion: f%d cam (%d,%d) %d objects: plain %ld, reprojected %ld\n", frameNo,
@@ -2880,6 +2884,7 @@ static void hostPresentMot(CtPresenter* pr, const uint8_t* fb, int w, int motion
       if (kind >= 0) { ms[kind] += hostNowMs() - t0;
         if (++n[kind] % 200 == 0) printf("native-bench: %s %d wide, %.2f ms a draw (%ld draws)\n", kind ? "overworld" : "field", w, ms[kind] / n[kind], n[kind]); }
     }
+    if (nc) g_ctMotNoFrac = 1;                      // (the drawers' own fidelity: the frame's whole places, no continuous ones)
     if (nc && cur->valid && !cur->native && cur->owNative && owRasterNative(cur, &g_motBuf[g_motIdx ^ 1], fb, w, 256, 1, nb)) {
       static long owFrames, owBad, owPx;              // (the overworld's, apart: the field's line keeps its own count)
       long d = 0; for (int i = 0; i < w * CAMH; i++) if (memcmp(nb + i * 3, fb + i * 3, 3)) d++;
@@ -2918,7 +2923,8 @@ static void hostPresentMot(CtPresenter* pr, const uint8_t* fb, int w, int motion
           for (int i = 0; i < 6; i++) printf(" %dx%d", L->w[i], L->h[i]);
           printf("\n"); } }
       if (ncFrames % 500 == 0) printf("nativecheck: %ld frames, %ld differ, %ld px\n", ncFrames, ncBad, ncPx);
-    } }
+    }
+    if (nc) g_ctMotNoFrac = 0; }
   motCheck(cur, &g_motBuf[g_motIdx ^ 1], fb, w, frameNo++);
   if (g_hostSkipPresent) { g_hostPresentSkips++; hostUploadPictureAt(pr, fb, w, 256, 0); g_motIdx ^= 1; return; }
   int interp = hostInterp(pr), presents = 0;
@@ -20373,7 +20379,10 @@ int main(int argc, char** argv) {
           else if (wext) {                             // (under the margins where they draw nothing: the room's BG2 going on,
             int b = haveL ? fieldBeyondPixel(&beyondL, 2, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d) : 0;   //  else
             if (!b) fieldBackdropRgb(d);                //  the backdrop -- 0A5's sky at the top of its scroll, a BG2 row the
-            mot->own[y * wideW + x] = b ? CT_MOT_BG2 : CT_MOT_BG1;   //  margins leave empty, stood as a black band)
+            //  margins leave empty, stood as a black band. The frames between take the BG2 pixel at BG2's place at t and
+            //  the backdrop where it is: as the native drawer's own past-the-edge pixels they were black there -- a dark
+            //  column in the grass beside 087's edge while the camera moved into Zombor's fight, the owner 2026-10-24)
+            mot->own[y * wideW + x] = CT_MOT_FIXED; mot->world[y * wideW + x] = b ? 2 : 0;
           }
           else { memset(d, 0, 3); mot->own[y * wideW + x] = CT_MOT_BG1; }
         }

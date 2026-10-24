@@ -37,7 +37,7 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   double camXt = cur->camX + cdx, camYt = cur->camY + cdy;
   double o2x = cur->o2x - back * (cur->o2x - prev->o2x), o2y = cur->o2y - back * (cur->o2y - prev->o2y);
   double o3x = cur->o3x - back * (cur->o3x - prev->o3x), o3y = cur->o3y - back * (cur->o3y - prev->o3y);
-  if (cur->qFrac && prev->qFrac) {
+  if (cur->qFrac && prev->qFrac && !g_ctMotNoFrac) {
     o2x = prev->q2x + (cur->q2x - prev->q2x) * tt; o2y = prev->q2y + (cur->q2y - prev->q2y) * tt;
     o3x = prev->q3x + (cur->q3x - prev->q3x) * tt; o3y = prev->q3y + (cur->q3y - prev->q3y) * tt;
   }
@@ -146,7 +146,7 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   long capXk = 0, capYk = 0;
   if (fx && fx->capOn) {
     double bx = cur->bg3X - back * (cur->bg3X - prev->bg3X), by = cur->bg3Y - back * (cur->bg3Y - prev->bg3Y);
-    if (cur->qFrac && prev->qFrac) { bx = prev->qbx + (cur->qbx - prev->qbx) * tt; by = prev->qby + (cur->qby - prev->qby) * tt; }
+    if (cur->qFrac && prev->qFrac && !g_ctMotNoFrac) { bx = prev->qbx + (cur->qbx - prev->qbx) * tt; by = prev->qby + (cur->qby - prev->qby) * tt; }
     if (fabs(bx - cur->bg3X) > 32 || fabs(by - cur->bg3Y) > 32) { bx = cur->bg3X; by = cur->bg3Y; }
     capXk = (long)floor(bx * k + 1e-9); capYk = (long)floor(by * k + 1e-9);
   }
