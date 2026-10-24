@@ -404,6 +404,12 @@
       "doc": "the Porre ticket office (038) after the crossing, Crono beside obj10"
     },
     {
+      "path": "saves/ferry_re/porre_office_at_counter.state",
+      "recipe": "fxr_porre_office",
+      "kind": "state",
+      "doc": "the same moment as the cartridge's whole state: the exit graded against it (ow-lead-faces-the-exit-arrival-byte-porre-office's notes)"
+    },
+    {
       "path": "saves/ferry_re/porre_pay_prompt.state",
       "recipe": "fxr_porre_pay_prompt",
       "kind": "state",

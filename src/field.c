@@ -5999,11 +5999,12 @@ static void fieldBattleSndPost(CtAudio* a, uint8_t* bs, const char* site, int en
   // The price is the driver's answer to THIS post, and the driver's state at the post is the console's only when the SPC
   // advances with the engine's frames: under CT_AUDIO_LOCKSTEP (one SPC frame per engine frame) or on a PACED real-time
   // host, which runs one SPC frame per engine frame too (the host clock, hostPace). An UNPACED headless run (CT_NOPACE,
-  // --selftest) advances the SPC by wall clock too, a handful of ticks for hundreds of frames, and its answer is
-  // nowhere -- that is what made a return hold move by five frames between two runs of the same fixture -- so there
-  // the price stays uncharged. It used to be charged ONLY in lockstep, which is not how anybody plays: the attract's
-  // 07D, interactive, armed its HUD band at the fallback 69 where the cartridge arms it at 1 + 13 + 18 = 32 (the demo's
-  // `70 01` set costs 13 NMIs), and Crono held his entrance pose for 85 frames against the cartridge's 51.
+  // --selftest) runs one SPC frame per engine frame as well (since 2026-10-24; it followed the wall clock before, which
+  // made a return hold move by five frames between two runs of the same fixture), but off the rule's audio its driver
+  // is a cold one seeded from nothing, not the console's, so there the price stays uncharged. It used to be charged
+  // ONLY in lockstep, which is not how anybody plays: the attract's 07D, interactive, armed its HUD band at the fallback
+  // 69 where the cartridge arms it at 1 + 13 + 18 = 32 (the demo's `70 01` set costs 13 NMIs), and Crono held his
+  // entrance pose for 85 frames against the cartridge's 51.
   { static int ls = -1; if (ls < 0) ls = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
     int fr = 0; CtAudioLastPostRaster(a, &fr, NULL, NULL);
     if ((ls || g_sndPaced || g_ruleAudio) && !hostSoundInstant()) g_battleSndFrames += fr; }   // (instant: the uploads cost nothing)
@@ -12404,21 +12405,14 @@ int main(int argc, char** argv) {
       //  * "the sound sometimes cracks": `if (audioAcc < 1.0) audioAcc = 1.0;` forced one tick per ITERATION and
       //    destroyed the fraction -- 16.667 ms of audio per 16 ms pass, relieved by a 266.7 ms SDL_ClearQueuedAudio
       //    that spliced mid-note. The reference's own level gate (below) replaced that valve, and stays.
-      // An UNPACED run (CT_NOPACE, --selftest with CT_AUDIO_FORCE) has no clock to follow and keeps the wall-clock
-      // accumulator (fraction carried, 4 per pass at most) -- so a headless check's driver barely runs (530 frames in
-      // ~0.5 s -> 24 ticks). CT_AUDIO_LOCKSTEP=1 (debug) gives it the paced host's relation: one SPC frame per engine
-      // frame, so "entry + N frames" means the same thing on both sides.
-      { static Uint32 audioT0 = 0; static double audioAcc = 0.0;
-        static long paceTicks = 0, paceQueued = 0, paceSkipped = 0, paceMaxQ = 0, paceIrregular = 0;
-        Uint32 nowMs = SDL_GetTicks();
-        if (!audioT0) audioT0 = nowMs;
-        audioAcc += (double)(nowMs - audioT0) * 60.0 / 1000.0;
-        audioT0 = nowMs;
-        int ticks = (int)audioAcc; if (ticks > 4) ticks = 4;   // unpaced: the fraction carries over
-        audioAcc -= ticks;
-        { static int lockstep = -1;
-          if (lockstep < 0) lockstep = getenv("CT_AUDIO_LOCKSTEP") ? 1 : 0;
-          if (lockstep || g_sndPaced || ruleSpc) { ticks = 1; audioAcc = 0.0; } }   // (the rule: a frame of SPC a frame)
+      // An UNPACED run (CT_NOPACE, --selftest with CT_AUDIO_FORCE) runs the same: one SPC frame per engine frame. Until
+      // 2026-10-24 the runs that were not under the rule's audio (a WRAM-seeded run without the cartridge's SPC) followed
+      // the wall clock there (a fraction carried, 4 per pass at most), so their driver barely ran (530 frames in ~0.5 s
+      // -> 24 ticks) and everything that waits on it depended on the machine's speed and load: the same run of the same
+      // binary landed an exit's arrival on f174, f178, f180 or f181. (Which posts are PRICED is another matter, and it
+      // stays as it was: a paced host, the rule's audio or CT_AUDIO_LOCKSTEP -- fieldBattleSndPost.)
+      { static long paceTicks = 0, paceQueued = 0, paceSkipped = 0, paceMaxQ = 0, paceIrregular = 0;
+        int ticks = 1;
         // THE LOAD'S SOUND POSTS COME BEFORE THIS FRAME'S SPC. The cartridge commits in the main loop after a vblank and
         // its load -- NMI off, phase 0 -- reaches C0/1B73's `JSL C7/0004` (the $81, then C0/1B8B's $10) 8,800 master
         // cycles past THAT vblank; the port loads one iteration after the commit, so it used to post after the iteration's
