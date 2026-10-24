@@ -71,6 +71,18 @@ void CtMotFit(CtMotFrame* m) {
     for (int i = 1; held && i < g_fit.n; i++)
       if (g_fit.v[c][i] + g_fit.cam[c & 1][i] != g_fit.v[c][0] + g_fit.cam[c & 1][0]) held = 0;
     if (held) { g_fit.qOk[c] = 0; q[c] = now[c]; continue; }
+    // A layer that steps only on the frames the camera moves (a parallax: Magus's castle 0A5, its sky at half the
+    // camera's speed) stops with the camera: the fit's slope ran on past the pan's end and the sky crept up to a pixel
+    // between the frames, falling back on each one (the owner, 2026-10-24).
+    if (c < 4 && g_fit.n > 1 && g_fit.cam[c & 1][g_fit.n - 1] == g_fit.cam[c & 1][g_fit.n - 2]) {
+      int tied = 0, i = 1;
+      for (; i < g_fit.n; i++) {
+        if (g_fit.v[c][i] == g_fit.v[c][i - 1]) continue;
+        if (g_fit.cam[c & 1][i] == g_fit.cam[c & 1][i - 1]) break;
+        tied = 1;
+      }
+      if (tied && i == g_fit.n) { g_fit.qOk[c] = 0; q[c] = now[c]; continue; }
+    }
     q[c] = fitOne(c, g_fit.v[c], g_fit.n, now[c]);
   }
   m->q2x = q[0]; m->q2y = q[1]; m->q3x = q[2]; m->q3y = q[3]; m->qbx = q[4]; m->qby = q[5];

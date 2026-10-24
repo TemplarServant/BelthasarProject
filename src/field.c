@@ -20296,7 +20296,7 @@ int main(int argc, char** argv) {
             if ((own & 0x7F) >= CT_MOT_SPR && ((el & 9) || (own & CT_MOT_FRONT))) continue;
             memcpy(d, ext, 3);
             if (wextL) fieldWideExtBg3(&beyondL, ux, camy + y, mot->o3x, mot->o3y, d);
-            mot->own[y * wideW + x] = CT_MOT_FIXED; mot->world[y * wideW + x] = 1; continue;
+            mot->own[y * wideW + x] = CT_MOT_FIXED; mot->world[y * wideW + x] = (el & 8) ? 2 : 1; continue;
           }
           if (wrapRoom) continue;                      // (the map wrapping, as the composition drew it)
           if (det) { int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);

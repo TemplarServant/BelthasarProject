@@ -41,6 +41,7 @@ typedef struct CtMotFrame {
   uint8_t own[CT_MOT_W * CT_MOT_H];
   // 1 = a WORLD pixel the frame drew screen-fixed (own FIXED): the widescreen's Steam margins past a room's edge. The frames
   // between take it at the map place it shows at t -- it moves with the camera -- not at the screen's (fieldnative.c).
+  // 2 = one of the margins' BG2 plane, which scrolls with BG2 (Magus's castle 0A5: its sky at half the camera's speed).
   uint8_t world[CT_MOT_W * CT_MOT_H];
   int camX, camY;                         // the map canvas pixel the screen's (0,0) shows
   int o2x, o2y, o3x, o3y;                 // BG2's and BG3's own scroll on top of it (canvas pixel p shows BGn pixel p + o)
