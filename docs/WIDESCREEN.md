@@ -30,7 +30,8 @@ What the sides show where the room ends, in order:
    (`Game/field/mapext_bin/mapext_<location>.bin`: four planes plus an optional fifth, drawn with the Steam release's
    tiles in the ROM's palette). Plane 3 is BG2's low layer and scrolls with BG2; planes 2 / 1-0 are BG1's low / high
    layers; the fifth is opaque with BG3. A margin of one cell everywhere (266 of 412 locations: the dark around an
-   interior) is a fill and yields to the room's own continuation.
+   interior) is a fill and yields to the room's own continuation. The margins have 4 to 6 columns a side; past them
+   (a 16:9 side is 71 px: the fair's 005 has 64) the side goes on as below, never as the room's own layers again.
 2. **A background** -- a layer the ROM marks as detached from the camera or scrolling on its own (`$1D35` / `$1D36`,
    from the map header md[1..3]) -- goes on: the Blackbird's clouds (16E), Flea's stars (0AD), Death Peak's snow (104).
    A still backdrop (detached, no speed: the skywalk's 01C sky) is painted for 256 columns and is **mirrored** about the
@@ -86,6 +87,9 @@ owners (`motion.c` `CtMotRaster`). Every moving thing is placed at a **continuou
   settles on the drawn place when the motion is whole pixels a frame. It never jumps.
 - A layer whose offset is the same all along the history moves exactly with the camera; one held to the screen stays
   there; a parallax that only steps when the camera moves stops with it.
+- A layer that moves on its own while the camera moves the other way (the 1000 A.D. intro's clouds, 1F0: the camera
+  climbing a pixel every 4 frames, the clouds' drift going down one every 8) is no steady line on the map; its own
+  offset is, so it is placed at its offset's continuous place plus the camera's.
 - The Steam margins are world pixels (`CtMotFrame.world`): plane 3 at BG2's place at `t`, the rest at the camera's.
 - `CT_NATIVECHECK=1` grades the drawers at the frame's whole places (`g_ctMotNoFrac`): the native picture at t = 256
   equals the composed frame, 0 px, through the attract, widescreen included.

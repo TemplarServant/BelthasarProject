@@ -413,11 +413,18 @@ static void owGhosts(World* w) {
     if (ps->n < OW_GHOST_PIECES) { CtWorldPiece q = *P; q.x = (int16_t)(P->x - P->ox); q.y = (int16_t)(P->y - P->oy); ps->pc[ps->n++] = q; }
   }
   // the ones the build lost: drawn on where the ROM let them go past the 256 columns and they were moving
+  static int gtr = -1; if (gtr < 0) gtr = getenv("CT_GHOSTTRACE") ? 1 : 0;   // (probe) each lost object and what became of it
   for (int k = 0; k < OW_GHOST_KEYS; k++) {
     OwGhost* g = &g_owGhost[k];
     if (g->seen == f || !g->poseN) continue;
     if (!g->ghost) {
       double vx = g->wx - g->px, vy = g->wy - g->py, ox = g->wx - sx;
+      if (gtr) { const OwGhostPose* lp = &g->pose[g->poseAt]; int y0 = 999, y1 = -999;
+                 for (int i = 0; i < lp->n; i++) { if (lp->pc[i].y < y0) y0 = lp->pc[i].y; if (lp->pc[i].y > y1) y1 = lp->pc[i].y; }
+                 printf("ghost: pieces %d dy %d..%d ", lp->n, y0, y1); }
+      if (gtr) printf("ghost: f%d key %d lost at %.0f,%.0f v %.2f,%.2f seen f%d -> %s\n", f, k, ox, g->wy - sy, vx, vy, g->seen,
+                      g->seen != f - 1 ? "gap" : (ox >= 0 && ox < CAMW) ? "inside" : (fabs(vx) < 0.25 && fabs(vy) < 0.25) ? "still" :
+                      (fabs(vx) > 8 || fabs(vy) > 8) ? "fast" : "ghost");
       if (g->seen != f - 1 || (ox >= 0 && ox < CAMW) || (fabs(vx) < 0.25 && fabs(vy) < 0.25) || fabs(vx) > 8 || fabs(vy) > 8) { g->poseN = 0; continue; }
       g->ghost = 1;
     }
@@ -4902,6 +4909,16 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, 
   size_t q = (size_t)my * W + ex;
   if (!p->cov2[q]) return 0;
   memcpy(out, pal + p->rgb2[q * 3] * 3, 3); return 8;
+}
+// Is map column mx inside the margins' own columns (the Steam release's 4 to 6 a side)? Past them the margins have no say:
+// the 16:9 side is 71 px, wider than the 64 of a room with 4 (the fair, 005).
+static int fieldWideExtInCols(const FieldWideExtPic* p, int mx) {
+  static int dx = -99999, dxl, dxr;                 // (fieldWideExtPixel's study knobs, the same place)
+  if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;
+                      dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
+                      dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
+  const int ex = mx - (dx + (mx < 0 ? dxl : dxr)) + p->xo * 16;
+  return ex >= 0 && ex < p->w * 16;
 }
 // THE WIDESCREEN'S STILL BACKDROP (a mod): a layer the ROM detaches from the camera ($1D36 bit 1 BG2 / bit 2 BG3: the map
 // header's md[1] bits 4/5, C0/A3A9-A3BF) and moves neither at a speed of its own ($1D37/$1D38, $1D39/$1D3A: md[2]/md[3])
@@ -14261,6 +14278,10 @@ int main(int argc, char** argv) {
           if (ct) printf("owcam t%d $24=%04X $2A=%04X $20=%04X $26=%04X $E3=%04X $E7=%04X ng=%d f%d loc%03X\n", worldTick, wd.cam.bg3h, wd.cam.bg3v, wd.cam.bg1h, wd.cam.bg1v,
                          wd.wram[0xE3] | (wd.wram[0xE4] << 8), wd.wram[0xE7] | (wd.wram[0xE8] << 8), ngIntroT, frameNo,
                          wd.wram[0x0100] | (wd.wram[0x0101] << 8));
+          { static int bt = -2; if (bt == -2) { const char* e = getenv("CT_OWBLKTRACE"); bt = e && *e ? (int)strtol(e, NULL, 16) : -1; }
+            if (bt >= 0 && wd.wram) printf("owblk t%d ng=%d $%04X=%04X x=%04X y=%04X $22=%04X $28=%04X\n", worldTick, ngIntroT, bt,
+                                            wd.wram[bt] | (wd.wram[bt + 1] << 8), wd.wram[bt + 0x14] | (wd.wram[bt + 0x15] << 8),
+                                            wd.wram[bt + 0x18] | (wd.wram[bt + 0x19] << 8), wd.cam.bg2h, wd.cam.bg2v); }   // (probe) one block a frame
           if (ct && wd.cam.bg3hLineOn) {                   // the per-line BG3 H table (world.c owBg3WaveTick): phase + lines 0-7
             printf("owbg3line t%d phase=%04X", worldTick, wd.cam.wavePhase);
             for (int l = 0; l < 8; l++) printf(" %04X", wd.cam.bg3hLine[l]);
@@ -20478,7 +20499,9 @@ int main(int argc, char** argv) {
           const int detS = ux < wm0 ? detL : detR;
           if (detS) { int b = fieldBeyondPixel(&beyondL, detS, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
                      mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); }
-          else if (wext) {                             // (under the margins where they draw nothing: the room's BG2 going on,
+          // (past the margins' own columns, the room's end: black. The room's BG2 going on there was the room again -- the
+          //  fair's 005, 4 columns a side for a 71-px side: 7 px of the stalls from its other end, the owner 2026-10-24)
+          else if (wext && fieldWideExtInCols(wext, ux)) {   // (under the margins where they draw nothing: the room's BG2 going on,
             int b = haveL ? fieldBeyondPixel(&beyondL, 2, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d) : 0;   //  else
             if (!b) fieldBackdropRgb(d);                //  the backdrop -- 0A5's sky at the top of its scroll, a BG2 row the
             //  margins leave empty, stood as a black band. The frames between take the BG2 pixel at BG2's place at t and

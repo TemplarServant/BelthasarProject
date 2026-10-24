@@ -22,7 +22,8 @@ int CtMotSprite(CtMotFrame* m, int key, int x, int y) {
 int g_ctMotNoFrac;                                 // (CT_MOTCHECK: the owners against the frame as drawn -- whole pixels)
 #define FIT_N 32                                   // (frames: a run of 2 px with a 1 every 16 -- the Magus hall -- fits whole)
 // (channels 0-5 the layers' offsets, 6-7 the camera's place)
-static struct { int scene, n; double v[6][FIT_N]; double cam[2][FIT_N]; double q[8]; int qOk[8], steady[8]; } g_fit;
+// (qo: BG2's / BG3's offsets fitted on their own, where the place on the map is no steady line -- below)
+static struct { int scene, n; double v[6][FIT_N]; double cam[2][FIT_N]; double q[8]; int qOk[8], steady[8]; double qo[4]; int qoOk[4]; } g_fit;
 // The slope over the history (least squares); 0 = not one steady sub-pixel slope. whole: a slope of whole pixels a frame
 // is none either (the camera and the objects: a step every frame needs no fit, and its phase would put them off).
 static double fitSlope(const double* v, int n, int whole) {
@@ -78,8 +79,8 @@ void CtMotFit(CtMotFrame* m) {
   m->qFrac = 0; g_fitFrame++;
   m->qcx = m->camX; m->qcy = m->camY;
   for (int i = 0; i < m->nspr; i++) { m->qsx[i] = m->sprX[i]; m->qsy[i] = m->sprY[i]; }
-  if (!m->valid) { g_fit.n = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); return; }
-  if (g_fit.scene != m->scene) { g_fit.scene = m->scene; g_fit.n = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); }
+  if (!m->valid) { g_fit.n = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); memset(g_fit.qoOk, 0, sizeof g_fit.qoOk); return; }
+  if (g_fit.scene != m->scene) { g_fit.scene = m->scene; g_fit.n = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); memset(g_fit.qoOk, 0, sizeof g_fit.qoOk); }
   double now[6] = { m->o2x, m->o2y, m->o3x, m->o3y, m->bg3X, m->bg3Y }, cam[2] = { m->camX, m->camY };
   if (g_fit.n == FIT_N) { for (int c = 0; c < 6; c++) memmove(g_fit.v[c], g_fit.v[c] + 1, (FIT_N - 1) * sizeof(double));
                           for (int c = 0; c < 2; c++) memmove(g_fit.cam[c], g_fit.cam[c] + 1, (FIT_N - 1) * sizeof(double)); g_fit.n--; }
@@ -92,7 +93,7 @@ void CtMotFit(CtMotFrame* m) {
     if (a - p > 32 || p - a > 32) {
       for (int k = 0; k < 6; k++) g_fit.v[k][0] = now[k];
       for (int k = 0; k < 2; k++) g_fit.cam[k][0] = cam[k];
-      g_fit.n = 1; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady);
+      g_fit.n = 1; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); memset(g_fit.qoOk, 0, sizeof g_fit.qoOk);
     }
   }
   // the camera first: the layers' and the objects' rules below read it
@@ -132,10 +133,26 @@ void CtMotFit(CtMotFrame* m) {
     //  frame itself -- the Blackbird's clouds, 16E)
     double wv[FIT_N];
     for (int i = 0; i < g_fit.n; i++) wv[i] = g_fit.v[c][i] + g_fit.cam[c & 1][i];
+    // ...unless the two go opposite ways: the sum of two steady steppers is then no steady line (the 1000 A.D. intro's
+    // clouds, 1F0: the camera climbing a pixel every 4 frames, the drift C2/75C3 adds going down one every 8 -- the drawn
+    // place goes -1, +1, -1 and the fit took it for no slope, so the clouds stepped whole pixels all the way up; the owner,
+    // 2026-10-24). The offset's own fit then goes on the camera's continuous place; the two trail their drawn places from
+    // either side, so their sum stays inside a pixel of the drawn one (else, the same way round, the sum's own fit holds).
+    if (fitSlope(wv, g_fit.n, 0) == 0 && fitSlope(g_fit.v[c], g_fit.n, 0) != 0) {
+      if (!g_fit.qoOk[c]) { g_fit.qo[c] = g_fit.qOk[c] ? g_fit.q[c] - qc[c & 1] : now[c]; g_fit.qoOk[c] = 1; }
+      const double qo = fitQ(&g_fit.qo[c], &g_fit.qoOk[c], NULL, g_fit.v[c], g_fit.n, now[c], 0);
+      if (fabs(qo + qc[c & 1] - (now[c] + cam[c & 1])) < 0.999) {
+        q[c] = qo; g_fit.q[c] = qo + qc[c & 1]; g_fit.qOk[c] = 1; g_fit.steady[c] = 1; continue; }
+    }
+    g_fit.qoOk[c] = 0;
     q[c] = fitOne(c, wv, g_fit.n, now[c] + cam[c & 1]) - qc[c & 1];
   }
   m->q2x = q[0]; m->q2y = q[1]; m->q3x = q[2]; m->q3y = q[3]; m->qbx = q[4]; m->qby = q[5];
   m->qcx = qc[0]; m->qcy = qc[1];
+  { static int tr = -1; if (tr < 0) tr = getenv("CT_MOTFITTRACE") ? 1 : 0;   // (probe) the fit's places, a line a frame
+    if (tr) printf("motfit: g%d n%d cam %d,%d q %.3f,%.3f st %d%d | bg3 %d,%d q3 %.3f,%.3f st %d%d\n", g_fitFrame, g_fit.n,
+                   m->camX, m->camY, qc[0], qc[1], g_fit.steady[6], g_fit.steady[7], m->o3x + m->camX, m->o3y + m->camY,
+                   q[2] + qc[0], q[3] + qc[1], g_fit.steady[2], g_fit.steady[3]); }
   // the objects: each its own history; one that has moved with the camera all along (the lead a scroll follows) is placed
   // by the camera's continuous place, so the two never part by a fraction
   for (int i = 0; i < m->nspr; i++) {
