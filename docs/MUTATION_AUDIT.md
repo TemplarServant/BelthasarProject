@@ -9,10 +9,10 @@ ones `--mutate` KILLED are in `tools/regress_checks.json`.
 
 | | before | after |
 |---|---|---|
-| checks | 954 | 946 (8 removed, below) |
+| checks | 954 | 945 (9 removed, below) |
 | mutations | 2051 | 2198 |
 | STALE mutations (their `find` gone from the source) | 226, in 160 checks | 0 |
-| checks with no mutation | 188 | 19 |
+| checks with no mutation | 188 | 18 |
 
 365 mutations were proven: 201 re-targeted ones (of 223 tried: 70 by `tools/mutation_retarget.py`, 153 re-derived
 from the code that does the same thing now), 162 new ones for 160 checks (of 172 tried), 2 more for the checks
@@ -63,8 +63,8 @@ Each check's notes say why (MUTATION RETIRED); the check keeps its other mutatio
 
 ## The 9 whose new mutation survived, one by one
 
-Each one's output was read under the edit. Eight were checks that no longer saw their mechanism; one is a mechanism that
-is gone.
+Each one's output was read under the edit. Eight were checks that no longer saw their mechanism; one guarded a
+mechanism that is gone.
 
 - **field-battle-ambush-generic-dissolve**: its anchor (`strike#…`) had drifted past the dissolve, so the shot showed
   the arena after it. Anchored on `act-end#1+18`, inside the dissolve; a mutation of the dither's threshold kills it.
@@ -89,10 +89,10 @@ is gone.
   all: the CI and the cloud sessions passed it whatever the run read. The name comes from `/proc/self/exe` there now
   (src/lz.c's CT_LZ_MISSLOG and src/romview.c's CT_ROMVIEW_MISSLOG had the same gap); disabling the LZ container makes
   the attract read 183 pages and fails it.
-- **field-battle-cyclone-fx-not-replayed**: the mechanism it guards is gone. It pinned a fix for a tech's effect being
+- **field-battle-cyclone-fx-not-replayed**: the mechanism it guarded is gone. It pinned a fix for a tech's effect being
   replayed from a stale `actTechId`; that id is read only on the PC paths now and nothing replays it, and even breaking
-  the wipe the check's picture shows (CC/F06B) leaves its output identical. Left in place, without a mutation, for the
-  owner to decide whether to remove it.
+  the wipe the check's picture shows (CC/F06B) left its output identical. Removed (the owner): it is in `excluded`
+  with that reason.
 
 ## Still open
 

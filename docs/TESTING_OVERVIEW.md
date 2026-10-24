@@ -23,9 +23,9 @@ mutations. `tools/regress.py` has no per-check logic.
 
 | | |
 |---|---|
-| Checks | **946** (2026-10-24: every one PASS with the ROM; 8 removed that day, docs/MUTATION_AUDIT.md) |
-| Quick tier | 616 (the pre-commit tier, chosen by measured runtime) |
-| Full tier | 316 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
+| Checks | **945** (2026-10-24: every one PASS with the ROM; 9 removed that day, docs/MUTATION_AUDIT.md) |
+| Quick tier | 612 (the pre-commit tier, chosen by measured runtime) |
+| Full tier | 312 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
 | Untiered | 21 (run only in the full run) |
 | Excluded candidates | 3, each with the reason it has no stable signature |
 | Checks with mutations | 927, carrying 2,198 mutations in all; none STALE (2026-10-24, [MUTATION_AUDIT.md](MUTATION_AUDIT.md)) |

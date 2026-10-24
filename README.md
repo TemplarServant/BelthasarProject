@@ -87,7 +87,7 @@ It is **not yet verified playable from start to finish**.
 ### Not done
 
 - **No check needs a private state any more** (since 2026-10-23). Everything the build needs is made from your ROM, and
-  all 946 regression checks run in a fresh clone from your ROM, the recipes and the public battery saves. See
+  all 945 regression checks run in a fresh clone from your ROM, the recipes and the public battery saves. See
   [docs/ROADMAP.md](docs/ROADMAP.md#1-the-public-release-and-what-it-left-open).
 - **The vendored core stays as the reference.** `Belthasar` runs no emulated hardware: the sound driver, the `$C3`
   sequence stages, the gate warp, the window wipe, the overworld window and the HDMA table builder are native C. The
@@ -219,7 +219,7 @@ watch any RAM the cartridge has (`--peek`, `--monitor`, `--read`). Timing is gra
 zelda3's model: lag frames, beam-counter races and CPU cycle counts are removed on both sides, so the comparison is
 deterministic.
 
-`python tools/regress.py` runs the regression suite: 946 checks (613 in the `--quick` tier). A check passes when its
+`python tools/regress.py` runs the regression suite: 945 checks (612 in the `--quick` tier). A check passes when its
 expected output lines appear, never because of an exit code, and a check whose inputs are missing is reported as
 SKIP. Most checks also carry mutations: deliberate defects that the check must catch. A check that still passes with
 its mutation applied is treated as a blind spot, not as coverage.

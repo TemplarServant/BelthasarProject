@@ -153,7 +153,7 @@ running `Belthasar.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-24: **946** checks, **11** excluded; `--list` prints the current set).
+(2026-10-24: **945** checks, **12** excluded; `--list` prints the current set).
 
 - **quick** (**613** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
