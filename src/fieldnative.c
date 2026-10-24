@@ -110,9 +110,9 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   }
   // the columns, once for every row: each layer's x, the 1x column, the scroll mask (the widescreen's sides)
   static int* tab; static size_t tabN;
-  if (tabN < (size_t)W * 9) { free(tab); tab = (int*)malloc((size_t)W * 9 * sizeof(int)); tabN = tab ? (size_t)W * 9 : 0; }
+  if (tabN < (size_t)W * 10) { free(tab); tab = (int*)malloc((size_t)W * 10 * sizeof(int)); tabN = tab ? (size_t)W * 10 : 0; }
   if (!tab) return 0;
-  int* x1T = tab + 6 * W; int* inT = tab + 7 * W; int* fxT = tab + 8 * W;
+  int* x1T = tab + 6 * W; int* inT = tab + 7 * W; int* fxT = tab + 8 * W; int* fcT = tab + 9 * W;
   for (int X = 0; X < W; X++) {
     x1T[X] = X / k;
     long cx = fdiv(camXk + X, k);
@@ -123,6 +123,9 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
     //  edge at t, 01C's shake, took the self-scrolling sky instead of them, a column of cloud in the margins)
     long xs = cx - cur->camX;
     fxT[X] = xs >= 0 && xs < w ? (int)xs : -1;
+    fcT[X] = xs < 0 ? 0 : xs >= w ? w - 1 : (int)xs;   // (a side column the frame never drew -- the picture's edge, a step of
+                                                        //  the camera at t -- takes the frame's nearest: 01C's shake left a
+                                                        //  column of the sky at the picture's left edge, the owner 2026-10-24)
     for (int i = 0; i < 6; i++) {
       long u = offXk[i] + X;
       if (still[i]) { long p = 512L * k, s = ((u - stillA[i]) % p + p) % p; u = stillK[i] + (s < 256L * k ? s : p - 1 - s); }
@@ -159,6 +162,7 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
       int x1 = x1T[X];
       if (worldRow && fxT[X] >= 0 && worldRow[fxT[X]]) { memcpy(o, fbWorld + fxT[X] * 3, 3); continue; }
       if (ownRow[x1] == CT_MOT_FIXED && !worldHere[x1]) { memcpy(o, fbRow + x1 * 3, 3); continue; }
+      if (!inT[X] && worldRow && fxT[X] < 0 && worldRow[fcT[X]]) { memcpy(o, fbWorld + fcT[X] * 3, 3); continue; }
       if (!inT[X]) {                                     // the widescreen's sides end at the scroll mask -- but for the layers
         uint8_t c[3] = { 0, 0, 0 };                      //   scrolling on their own (field.c fieldBeyondPixel)
         if (L->beyond) {
