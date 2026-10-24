@@ -21,7 +21,9 @@ kills the three historical FALSE-'Build OK' mechanisms:
      hashes (sha1) are compared against build/.ctbuildstamp.json; a changed
      source whose exe hash did NOT change is the skew trap: auto-heal by
      os.utime(now) on the changed sources, rebuild once, re-verify, and FAIL
-     loudly ('STALE: ...') if the exe still does not change.
+     loudly ('STALE: ...') if the exe still does not change -- unless the re-run
+     provably compiled every changed source (its object is newer than the bump):
+     then the edit changes no code (a comment) and the build is certified.
 
 Usage:  python tools/build.py [ct|Belthasar|ct_world|ct_viewer|ct_tables_proof]
         CT_DATAFREE=1: Belthasar without the generated tables compiled in (docs/ROM.md)
@@ -217,6 +219,16 @@ def run_step(cmd, env, label):
         return 127
 
 
+def object_path(target, relpath):
+    """The object Ninja compiles `relpath` (a source of `target`) into, or None: CMake's
+    build/CMakeFiles/<target>.dir/<relpath>.o (.obj with MSVC)."""
+    base = os.path.join(BUILD, "CMakeFiles", target + ".dir", relpath.replace("/", os.sep))
+    for ext in (".o", ".obj"):
+        if os.path.isfile(base + ext):
+            return base + ext
+    return None
+
+
 # ----------------------------------------------------------------------- stamp
 def load_stamp():
     try:
@@ -361,7 +373,16 @@ def main(argv):
             # With no earlier content hash, an identical rebuilt exe is valid.
             previous_sources = stamp.get(n, {}).get("sources", {})
             if post == stamp.get(n, {}).get("exe") and any(p in previous_sources for p in files):
-                status[n] = ("STALE", files)
+                # An edit that changes no code (a comment, on lines that keep their numbers) leaves the exe byte for byte:
+                # that is not the skew trap when the re-run provably COMPILED every changed source -- its object is
+                # newer than the bump. A source that is not compiled itself (a header) cannot be proven that way.
+                objs = [object_path(n, p) for p in files]
+                if all(o and os.path.getmtime(o) >= now - 1 for o in objs):
+                    status[n] = ("UP-TO-DATE", "the edit to {} changes no code: recompiled, the exe is the same"
+                                 .format(", ".join(files)))
+                    stamp[n] = {"exe": post, "sources": cur_src[n], "when": time.strftime("%Y-%m-%d %H:%M:%S")}
+                else:
+                    status[n] = ("STALE", files)
             # else: healed; final status decided below from pre/post hashes
 
     # ---- final statuses + stamp update for every target that verified.
@@ -384,7 +405,7 @@ def main(argv):
             if s == "BUILT":
                 line = "BUILT        ({} updated)".format(rel(exe_path[n]))
             elif s == "UP-TO-DATE":
-                line = "UP-TO-DATE"
+                line = "UP-TO-DATE" + ("   ({})".format(detail) if detail else "")
             elif s == "STALE":
                 ok = False
                 line = "STALE        (exe did NOT change after rebuilding)"
