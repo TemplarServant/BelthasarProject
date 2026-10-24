@@ -1,7 +1,7 @@
 {
   "name": "fxf_s434_decision",
   "from": "truce_market",
-  "doc": "Stands in for saves/field_re/s434_decision_lake.state, its own provenance from the recipe-made Truce market: the ROM's own loader (--teleport 434 8 8 0, method jmp, 240 frames) puts Crono in the Tent of Horrors (loc 1B2) at tile (8,8) facing up, one step below Bekkler's tile (storyline 3, 600 G). NOT YET USED: lockstep-decision-box-s434-clean diverges on it at f582 (obj10's 4-frame idle loop sits one frame earlier against obj11's dialogue end than in the capture, so its next box opens at f582 on the cartridge and f583 in the port), so saves/field_re/s434_decision* stay the capture for now.",
+  "doc": "Stands in for saves/field_re/s434_decision_lake.state, its own provenance from the recipe-made Truce market: the ROM's own loader (--teleport 434 8 8 0, method jmp, 240 frames) puts Crono in the Tent of Horrors (loc 1B2) at tile (8,8) facing up, one step below Bekkler's tile (storyline 3, 600 G). USED since 2026-10-22 (tools/fixtures/rest.json makes saves/field_re/s434_decision*; the owner's capture is retired): lockstep-decision-box-s434-clean grades the decision box's bytes on it with tools/textbox_bytes_cmp.py s434 under the rule, 0 of 869 frames differ. Before that it was not used: the in-process lockstep diverged on it at f582 (obj10's 4-frame idle loop one frame earlier against obj11's dialogue end than in the capture).",
   "steps": [
     [
       "teleport",

@@ -1,0 +1,18 @@
+{
+  "name": "fxr_forest_after_hetakes",
+  "from": "fx_forest_bat3",
+  "doc": "Guardia Forest (loc 013), the game started after the attract demo: the three Hetakes' fight (fx_forest_bat3) won by mashing A (2 frames of every 12), control back at f1097, 47 frames later.",
+  "steps": [
+    [
+      "pad",
+      "(100:2,0:10)*92,0:40"
+    ]
+  ],
+  "expect": {
+    "loc": "0x013",
+    "wram": {
+      "0x011F": "0x01",
+      "0x2981": "0x01"
+    }
+  }
+}

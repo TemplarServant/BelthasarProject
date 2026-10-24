@@ -82,6 +82,8 @@ static const char* lzExe(void) {               // the executable's base name: a 
     GetModuleFileNameA(NULL, path, sizeof path);
 #else
     char path[512] = "?";
+    ssize_t n = readlink("/proc/self/exe", path, sizeof path - 1);
+    if (n > 0) path[n] = 0; else strcpy(path, "?");
 #endif
     const char* b = path;
     for (const char* q = path; *q; q++) if (*q == '\\' || *q == '/') b = q + 1;

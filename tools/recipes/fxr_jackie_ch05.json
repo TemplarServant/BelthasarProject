@@ -1,0 +1,24 @@
+{
+  "name": "fxr_jackie_ch05",
+  "doc": "Jackie's battery save ch05 (the prison cell, storyline 2D; tools/third_party_saves.json) loaded the player's way under the rule, as jackie_ch08: power-on 133 frames with the save, Start at +300, the Load list, A on slot 0, then 300 frames.",
+  "steps": [
+    [
+      "sram_file",
+      "saves/downloaded/ctjackie/srm/ch05.srm"
+    ],
+    [
+      "power_on",
+      133
+    ],
+    [
+      "pad",
+      "0:300,8:2,0:120,100:2,0:300"
+    ]
+  ],
+  "expect": {
+    "loc": "0x047",
+    "wram": {
+      "0x10000": "0x2D"
+    }
+  }
+}

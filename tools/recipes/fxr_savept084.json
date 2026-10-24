@@ -1,0 +1,28 @@
+{
+  "name": "fxr_savept084",
+  "from": "fxr_pt_25_sanctum_switches",
+  "doc": "Stands in for saves/field_re/savept084_lake.state, its own provenance on the playthrough: the sanctum's upper hall (loc 084, the playthrough's leg 25 end: Crono, Lucca, Frog, storyline 15) reloaded by the ROM's own loader on the save point's tile (3,39) facing up (--teleport 0x84 3 39 0, method jmp, 120 frames), with the capture's first bag slot poked in ($2400 = C8, $2500 = 02: two Shelters, which the playthrough's party never bought -- the shelter check uses one).",
+  "steps": [
+    [
+      "poke",
+      "7E2400=C8,7E2500=02"
+    ],
+    [
+      "teleport",
+      132,
+      3,
+      39,
+      0,
+      120,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x084",
+    "wram": {
+      "0x10000": "0x15",
+      "0x2400": "0xC8",
+      "0x2500": "0x02"
+    }
+  }
+}

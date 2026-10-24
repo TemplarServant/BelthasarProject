@@ -1,0 +1,17 @@
+{
+  "name": "fxr_attract_01c",
+  "from": "fxr_power_on",
+  "doc": "The attract demo from power-on (no input) to its frame 3000: loc 01C, where the demo's Crono jumps onto the Epoch (f3026-f3053 on the rule's cartridge), 26 frames before the jump.",
+  "steps": [
+    [
+      "pad",
+      "0:2999"
+    ]
+  ],
+  "expect": {
+    "loc": "0x01C",
+    "wram": {
+      "0x10000": "0x00"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "lg_race_lab32",
+  "from": "lg_jackie_ch22",
+  "doc": "Stands in for saves/race_re/race_user.* (the owner's snes9x capture at Lab 32's west end, spliced over a base teleported to scene 223): Jackie's ch22 (storyline BD, party Crono / Lucca / Frog -- the capture's; its story bytes differ from the capture's in three flags, $7F00CD $7F00EC $7F01CF, none the race reads) brought to scene 223 (loc 0DF) at the capture's tile (43,6) facing up, Johnny (obj8) ahead, by the ROM's loader (`ct.exe --teleport 223 43 6 0`, 240 frames -- the capture's base's own teleport). $7F0054 bit 7 (the second meeting) and $7F0136 = 01 as the capture's: A at f30 -> CHANGELOC 10F f47, `FF 00` f66, the race's END f2877, 0DF f2913 -- the capture's frames.",
+  "steps": [
+    [
+      "teleport",
+      223,
+      43,
+      6,
+      0,
+      240,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x0DF",
+    "wram": {
+      "0x10000": "0xBD",
+      "0x10136": "0x01"
+    }
+  }
+}

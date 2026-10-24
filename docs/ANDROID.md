@@ -17,7 +17,7 @@ touch controls are drawn over the picture, and a Bluetooth or USB controller wor
   reason, the one already there stays, and the game only starts on files that pass; `src/android.c` checks them again
   before the engine reads them (a file replaced by hand) and says so instead of closing.
 - **It is built from your ROM.** Like the desktop executable, the native library compiles the sources that
-  `tools/setup.py` generates from your dump (`src/data/*.h`, `src/xlat/*.c`). An APK you build is for your own devices
+  `tools/setup.py` generates from your dump (`src/data/*.h`). An APK you build is for your own devices
   only. Do not distribute it.
 
 ## Requirements (Windows)
@@ -30,7 +30,7 @@ touch controls are drawn over the picture, and a Bluetooth or USB controller wor
 | A JDK 17+ | Android Studio's bundled one: `C:\Program Files\Android\Android Studio\jbr` |
 | SDL2's **source** (2.32.10) | `powershell -ExecutionPolicy Bypass -File tools\get_sdl2_src.ps1` -> `third_party\SDL2-src` |
 | Dear ImGui | `tools\get_imgui.ps1` (it is already there if the desktop build has the F1 overlay) |
-| The generated sources | `python tools/setup.py <your ROM>` (docs/ROM.md), as for the desktop build |
+| The generated sources | `python tools/setup.py --rom <your ROM>` (docs/ROM.md), as for the desktop build |
 
 The Gradle wrapper downloads Gradle 8.14.3 and the Android Gradle Plugin 8.13 on first use, unless they are already
 in `%USERPROFILE%\.gradle`.

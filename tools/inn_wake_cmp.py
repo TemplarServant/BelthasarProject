@@ -10,11 +10,12 @@ Crono and Lucca, slot 1 is obj3 ($0199 = 06), not obj2 (Marle's empty object). T
 The user's report: "when sleeping at the inn with lucca in the party, there was a bug" (saves/field_re/inn_lucca_007.state).
 
   cartridge  build/ct.exe --peek saves/field_re/inn600_yesno.state (the rule): the inn's night (loc 0x10F)
-             after Yes, A pressed once, PEEK_THUMBS every frame. The state comes from catedral_user.state
-             (story 0x12, Crono + Lucca) teleported to loc 0x74 (--teleport 0x74 11 28 0 --method jmp
-             --frames 240 -> inn600_tele.state), then `10:16,0:30,100:2,0:120,100:2,0:120,0:10`.
-  port       build/Belthasar.exe --loadstate saves/field_re/inn_lucca_007.state (the user's CTFS state at the
-             "Register? Yes" prompt), A at f5, CT_SHOTS_THUMBS every frame, the SPC seeded from
+             after Yes, A pressed once, PEEK_THUMBS every frame. The state (tools/recipes/fxr_inn600_yesno.json)
+             is the Cathedral's south door (story 0x12, Crono + Lucca) teleported to loc 0x74 (--teleport 0x74 11 28
+             0 --method jmp --frames 240 -> inn600_tele.state), then `10:16,0:30,100:2,0:120,100:2,0:120,0:10`.
+  port       build/Belthasar.exe --loadstate saves/field_re/inn_lucca_007.state (its own CtScene state at the
+             "Register? Yes" prompt, made from fxr_inn600_prompt's WRAM; until 2026-10-22 the user's F5 state),
+             A at f5, CT_SHOTS_THUMBS every frame, the SPC seeded from
              inn600_tele.state under the rule (CT_AUDIO_SEEDSTATE): the song load `EA 02` costs the SPC's
              44 frames on both sides (a cold driver priced it at 4).
 

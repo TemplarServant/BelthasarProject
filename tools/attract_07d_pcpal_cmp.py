@@ -13,8 +13,9 @@ so Robo was drawn pink.
 Port: the live battle path (`--scene 433`, no --selftest), CT_BATTLE_PCPALTRACE=1, the last palette printed per seat
 before field frame 6900 (6230 until 2026-09-16: the 0AD battle now pays its exit tail and return). Cartridge: saves/attract_07d_battle_f4540.state + 40 frames, CGRAM from the --peek .oam
 sidecar (544 bytes OAM + high table, then 512 bytes CGRAM); OBJ palette p = CGRAM words 128 + 16p.
-FIXTURE PROVENANCE: build/ct.exe --peek saves/attract_cena_inicial.state ... --frames 3300 with PEEK_SAVE, then
---peek of that state --frames 1240 with PEEK_SAVE (attract frame 4540, loc 07D, 41 frames after the battle's `70 01`).
+FIXTURE PROVENANCE: made by a recipe today (tools/fixtures/attract.json: fxa_attract_cena_inicial + pad 0:4451); first
+captured as build/ct.exe --peek saves/attract_cena_inicial.state ... --frames 3300 with PEEK_SAVE, then --peek of that
+state --frames 1240 with PEEK_SAVE (attract frame 4540, loc 07D, 41 frames after the battle's `70 01`).
 """
 import os
 import re

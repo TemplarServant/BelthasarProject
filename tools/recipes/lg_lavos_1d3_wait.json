@@ -1,0 +1,17 @@
+{
+  "name": "lg_lavos_1d3_wait",
+  "from": "lg_lavos_1d2_arrival",
+  "doc": "Stands in for saves/lavos_re/lavos_1d3_wait.*: from the arrival, right 40, up 450, 40 still, then A every 40 frames 87 times (1F7: Lavos rises, back to 1D2, the talk in 1D3) -- the oracle's run of 2026-10-14 (saves/field_re/lavos_f4000.state); byte for byte the capture.",
+  "steps": [
+    [
+      "pad",
+      "80:40,10:450,0:40,(100:2,0:38)*87"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1D3",
+    "wram": {
+      "0x10000": "0xD5"
+    }
+  }
+}

@@ -1,5 +1,12 @@
 # Captures wanted — the savestates that are actually blocking work
 
+> **Historical (2026-08).** This page records the snes9x captures requested from the owner in August 2026. It is
+> superseded by recipes: since 2026-10-22 every state a check reads is made from power-on by a recipe
+> (`tools/fixtures/`, `python tools/fixtures.py make all`) or is a public battery save (`python tools/fetch_saves.py`),
+> except one capture still waiting for its recipe ([ROADMAP.md](ROADMAP.md#11-checks-still-on-private-captures-l)). Do
+> not ask for new captures here; write a recipe. Several items below have been ported since (the vehicles of 2.5, for
+> example: ROADMAP G1a item 3).
+
 > **2026-08-15 — all four §2 requests DELIVERED and verified.**
 > `grupo_3_mapa` (loc 082, party 00,02,04, `$011F`=1 free roam) — the Form gate computes `$0F0B` = 2
 > and `$0067 = 05` PERSISTS: the entered Form screen has been captured for the first time.

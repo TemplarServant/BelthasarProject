@@ -1,0 +1,17 @@
+{
+  "name": "lg_lavos_1d2_arrival",
+  "from": "lg_jackie_ch26",
+  "doc": "Stands in for saves/lavos_re/lavos_1d2_arrival.*: Jackie's ch26 (the End of Time) walked to the bucket (`0:20,80:70,10:88,80:90,0:10`), A, then A every 40 frames 50 times: the Day of Lavos's arrival at loc 1D2 -- the oracle's own run of 2026-10-14 (the session's command, replayed); byte for byte the capture.",
+  "steps": [
+    [
+      "pad",
+      "0:20,80:70,10:88,80:90,0:10,100:2,0:40,(100:2,0:38)*50"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1D2",
+    "wram": {
+      "0x10000": "0xD5"
+    }
+  }
+}

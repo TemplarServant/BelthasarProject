@@ -44,7 +44,7 @@ Several instruments, each answering a different question:
   check beside it.
 - **Live lockstep in the game (`CT_FIELDLOCK`, `CT_PROJECT`).** The oracle runs inside `Belthasar` and named
   projections of its RAM are compared with the engine's every frame.
-- **Scenario comparators (`tools/*_cmp.py`, about 90 of them).** Each drives both sides through one scenario (a
+- **Scenario comparators (`tools/*_cmp.py`, about 130 of them).** Each drives both sides through one scenario (a
   fight, a menu, a cutscene) and compares chosen bytes, frames or pictures.
 - **The battle census (`tools/battle_ab.py`).** Fights every enemy on both sides and compares spans, effects and
   the return to the field. Current: 253 of 255 identical.
@@ -145,8 +145,9 @@ the behaviour is preferred.
 
 Consequences:
 
-- The pieces that still run ROM code or hardware on the vendored cores (the translated stages in `src/xlat/` and
-  the SPC700) are debt to replace with native C.
+- The pieces that ran ROM code or hardware on the vendored cores (the translated stages in `src/xlat/` and the
+  SPC700) were replaced by native C in 2026-10-17/18. The vendored core is now only the oracle and a reference
+  (`ct.exe --xlatcmp`, `CT_AUDIO_SPC=ref`).
 - A timing-only residual of a frame, traced to hardware speed, is documented and left alone rather than chased
   with cycle pricing.
 

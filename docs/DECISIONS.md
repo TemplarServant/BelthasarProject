@@ -29,6 +29,41 @@ The binding text of the rules is in [CLAUDE.md](../CLAUDE.md). The timing model 
 
 **Where:** [WIDESCREEN.md](WIDESCREEN.md); ROADMAP X4-X11.
 
+## 2026-10-21: The attract vehicle plays the power-on
+
+**Decision.** The suite's attract vehicle, a cold `Belthasar --scene 433` with no seed, had been recorded as the owner's
+call ("Decisions waiting for the owner"). It started inside loc 1B1 with a cold sound processor,
+22 ticks of the play clock off the cartridge's, while only `--boot` matched the cartridge from power-on. Since
+2026-10-21 that start plays the power-on itself on a blank cart: the reset's driver upload, scene 0's boot script and
+1B1's load with its sound posts. Its frame 0 is the power-on run's frame 91 (`ATTRACT_FRAME0`, `src/field.c`); the 91
+frames before print as f-91..f-1.
+
+**Why.** A sound handshake could land a frame off where the cartridge's did not (1C00 and 7D00 +1, and a `18 FF` post
+the cartridge never makes), because the vehicle's SPC had its own history.
+
+**Consequences.** The vehicle's frame f is the cartridge's power-on frame f + 91, and every attract load takes the
+cartridge's frames. Checks re-anchored: 35 in 014bb4e, 43 in 404971a (the power-on ported: `--boot` and the cold
+start begin at the reset).
+
+**Where.** `src/field.c` (`ATTRACT_LOC`, `ATTRACT_FRAME0`); [TESTING.md](TESTING.md#the-attract-vehicle-belthasar---scene-433-from-cold);
+[disasm/notes/boot_loader.md](../disasm/notes/boot_loader.md) sec. 10.
+
+## 2026-10-18: The sound processor in C
+
+**Decision (owner).** The game must not need the ROM once `ct_assets.dat` is extracted, and the sound came first: the
+cartridge's sound driver ran as ROM code on the vendored SPC700, which is emulation (2026-10-09). The frames the game
+waits on the sound processor (a song's upload, a command's echo) are part of the vanilla game, so the C keeps their
+exact cost. An instant upload is a mod (the F1 overlay's Sync tab, off by default).
+
+**What was done.** The sound processor's whole program in C: the driver routine by routine (`src/sound/driver.c`),
+run on its own clock with the timers and ports (`src/sound/machine.c`), and the S-DSP (`src/sound/mixer.c`); the
+songs, samples, instruments and effect sets as assets. Its PCM is identical to the vendored core's
+(`snd-machine-pcm-attract`, `snd-machine-pcm-quick`), and it is the default in `Belthasar` and on Android (753c98e,
+2026-10-19). The vendored SPC700/DSP stays as the reference (`CT_AUDIO_SPC=ref`, `CT_AUDIO_SPC=lockstep`).
+
+**Where.** `src/sound/`, `src/audio.c`; [disasm/notes/audio_spc_driver.md](../disasm/notes/audio_spc_driver.md),
+[disasm/notes/audio_mixer.md](../disasm/notes/audio_mixer.md).
+
 ## 2026-10-10: Public release as BelthasarProject
 
 **Decision (owner).** Publish the project so others can collaborate:
@@ -294,9 +329,5 @@ register and WRAM init ported and checked against the oracle (`M1`).
 
 ## Decisions waiting for the owner
 
-- **The suite's attract vehicle.** The suite starts the attract demo cold at scene 433 (`--scene 433`), which skips
-  scene 0 and the first load, so the play clock's random cursor starts a constant 22 ticks off the cartridge's. Only
-  `--boot` matches the cartridge from power-on. Switching the vehicle means re-anchoring about 66 checks. Recorded as
-  the owner's call.
-- **Replacing the vendored SPC700.** Under the 2026-10-09 decision the audio is debt, and what is acceptable for its
-  replacement is to be asked.
+None at present. The last two were settled: the suite's attract vehicle (2026-10-21) and the replacement of the
+vendored SPC700 (2026-10-18), both above.

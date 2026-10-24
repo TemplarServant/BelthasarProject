@@ -1,0 +1,20 @@
+{
+  "name": "fxr_porre_office",
+  "from": "fxr_truce_pay_prompt",
+  "doc": "Stands in for saves/ferry_re/porre_office_at_counter.lakewram, as disasm/notes/ow_ferry.md sec. 7 made it: the Truce prompt paid (A), the crossing to Porre (2000 frames, inside the Porre ticket office, loc 038, 590 G), then right two tiles and up (tools/playthrough.py route_walk's path) to (3780,2A0F) beside obj10, the capture's spot.",
+  "steps": [
+    [
+      "pad",
+      "100:4,0:2000,80:32,10:47,0:20"
+    ]
+  ],
+  "expect": {
+    "loc": "0x038",
+    "wram": {
+      "0x1802": "0x80",
+      "0x1803": "0x37",
+      "0x1882": "0x0F",
+      "0x1883": "0x2A"
+    }
+  }
+}

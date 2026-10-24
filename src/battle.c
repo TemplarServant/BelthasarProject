@@ -19409,13 +19409,24 @@ staged:
 // routine falls to CD/0C1F (`LDA $CCC0 / BEQ`) and CD/0C48: `LDA $CCE5 / BEQ rts / BPL` -> bit 0: MVN $CCC1 x18 ->
 // $0580 (records 8/9), `$CCE5 &= FE`; bit 7: MVN $CCD9 x18 -> $0598 (records 10/11), `$CCE5 &= 7F`. The waves (D1/F6B4's
 // $CCB0..$CCC0 machine) are not derived: while one is on, nothing here runs.
+// A record the main loop's CD/0009 arms (CD/0453's t 4, CD/0E61) is staged AFTER the frame's NMI: C1/10A0 calls CD/0009
+// once C1/109D's wait has returned, so the NMI that publishes it is the next frame's. The port's tick runs that CD/0009
+// (battleFxTeardown, the main loop's call) ahead of its NMI section; the record it arms waits for the next tick's commit.
+// MEASURED, the rule's cartridge (fxr_magus_scene, the X-Strike drive): `$CCE5 = 80` f945 (CD:0E9C), `$0598 = 50 10 10 10`
+// f946 (CD:0C5D); the port committed it at f945. (CD/0E79's load arm, staged by the action after the NMI section, and
+// the death routine's own JSL CD04AA, stepped after it too, were already a tick apart: f707 / f708 on both sides.)
+static int g_fxTeardownPreNmi, g_fxPalArmedPreNmi;
 static void battleFxPalCommit(CtBattleHost* h) {
   uint8_t* s = h->mem;
   battleShakeFrame(h);                                             // CD/0B51-0C47 (the shake's two axes and $CCC0)
   int e = s[0xCCE5];
   if (!e) return;                                                  // CD/0C4B
+  int held = g_fxPalArmedPreNmi ? (e & 0x80) : 0;                 // armed this frame by the main loop's CD/0453: this
+  g_fxPalArmedPreNmi = 0;                                          //   NMI ran before it, so it sees $CCE5 without bit 7
+  e &= ~held;
+  if (!e) return;
   if (e & 0x80) { memmove(s + 0x0598, s + 0xCCD9, 0x0C); s[0xCCE5] = (uint8_t)(e & 0x7F); }   // CD/0C4F-0C65 (`LDA #000B`: 12 bytes)
-  else          { memmove(s + 0x0580, s + 0xCCC1, 0x18); s[0xCCE5] = (uint8_t)(e & 0xFE); }   // CD/0C69-0C7F
+  else          { memmove(s + 0x0580, s + 0xCCC1, 0x18); s[0xCCE5] = (uint8_t)((e & 0xFE) | held); }   // CD/0C69-0C7F
   if (battleFleeProgTraceOn()) fprintf(stderr, "fxpal f%d commit CCE5=%02X -> %02X\n", h->frames, e, s[0xCCE5]);
 }
 // CD/0B1E (after the runner, CD/09B8): while $99D2 is 01..7F, a live record 8..11 whose range runs past $99D3 is cut to it.
@@ -22171,7 +22182,7 @@ static int battleFxTeardownStep(CtBattleHost* h) {
       int a = s[0xCCA2];                                           // CD/0E9D
       int sec = !(a == 0x86 || (a >= 0x7B && a <= 0x7F));
       if (sec && ((s[0x2A21] & 1) || ((s[0x2C66] | s[0x2C67]) & 0x04)))   // CD/0476-0487 -> CD/0E61
-        battleFxPalRecordArm(s, ROM_FX_PALREC_TEARDOWN);
+        { battleFxPalRecordArm(s, ROM_FX_PALREC_TEARDOWN); if (g_fxTeardownPreNmi && (s[0xCCE5] & 0x80)) g_fxPalArmedPreNmi = 1; }
     }
   }
   if (h->fxTeardownLong && t == 5) battleShadowStage(s);           // CD/048F JSR CD/0CF6
@@ -22837,7 +22848,9 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // ...AND IT DOES NOT EXIST BEFORE THE MAIN LOOP: the entrance loop's tail C1/3711 is `STZ $E5 / STZ $A4` (battleCombatStart)
   // and nothing sets $E5 again before the first iteration's C1/10C4. The cartridge's $A4 reads 00 from the staging to the
   // first iteration on every fight measured (0AD: first INC f1858, CF:E479; 07D f4615; the forest f327).
+  g_fxTeardownPreNmi = 1;                                      // (battleFxPalCommit: its t 4 record waits a frame)
   int fxTd = (h->mvInited && h->frames > battleBootIntro(h) && !sndStalled) ? battleFxTeardown(h) : 0;
+  g_fxTeardownPreNmi = 0;
   if (h->mvInited && h->frames > battleBootIntro(h)) {
     battleUploadService(h);                                    // the NMI's CF/E3F8, every frame from the main loop on
     if (!sndStalled) h->schedWalk = battleIterFrameA(h, fxTd); // frame A: C1/109D's wait has returned

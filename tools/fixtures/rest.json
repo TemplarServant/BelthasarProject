@@ -1,0 +1,473 @@
+{
+  "doc": "The rest of the private captures (docs/ROADMAP.md 1.1): the forest and GATO's fights outside the big families, the ferry, the 600 A.D. Cathedral and sanctum, the fair's decisions, the flag pages, the Dragon Tank -- recipes prefixed fxr_ (tools/recipes/).",
+  "fixtures": [
+    {
+      "path": "saves/field_re/m81_nuns_lake.state",
+      "recipe": "fxr_m81_nuns",
+      "kind": "state",
+      "doc": "the Cathedral (loc 081): the nuns walking to their spots before they turn into Naga-ettes"
+    },
+    {
+      "path": "saves/field_re/m81_nuns_lake.lakewram",
+      "recipe": "fxr_m81_nuns",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/field_re/m81_nuns_ppu_lake.state",
+      "recipe": "fxr_m81_nuns",
+      "kind": "state",
+      "doc": "the same state: the capture's --ppu splice existed only to give its WRAM a matching VRAM, which a recipe state has"
+    },
+    {
+      "path": "saves/field_re/m81_naga_after_fight_lake.state",
+      "recipe": "fxr_m81_naga_after_fight",
+      "kind": "state",
+      "doc": "loc 081 after the Naga-ette fight, Lucca's 'Aack!' scene ahead"
+    },
+    {
+      "path": "saves/field_re/m81_naga_after_fight.lakewram",
+      "recipe": "fxr_m81_naga_after_fight",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/m81_frog_lake.lakewram",
+      "recipe": "fxf_m81_frog",
+      "kind": "lakewram",
+      "doc": "Frog's cutscene after the fight (the WRAM of saves/field_re/m81_frog.state's twin)"
+    },
+    {
+      "path": "saves/field_re/catedral_user.state",
+      "recipe": "cathedral_entry",
+      "kind": "state",
+      "doc": "Crono and Lucca at the 600 A.D. Cathedral's south door (loc 081, storyline 12): the capture's place, reached by the recipe chain"
+    },
+    {
+      "path": "saves/field_re/catedral_user.lakewram",
+      "recipe": "cathedral_entry",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/catedral_world.lakewram",
+      "recipe": "cathedral_entry",
+      "pad": "20:40,0:200",
+      "kind": "lakewram",
+      "doc": "the capture's own provenance: from the south door Down 40, then 200 frames -- out onto the 600 A.D. overworld"
+    },
+    {
+      "path": "saves/field_re/inn600_tele.state",
+      "recipe": "fxr_inn600_tele",
+      "kind": "state",
+      "doc": "the 600 A.D. inn's counter, Crono and Lucca"
+    },
+    {
+      "path": "saves/field_re/inn600_yesno.state",
+      "recipe": "fxr_inn600_yesno",
+      "kind": "state",
+      "doc": "the inn's night after Yes"
+    },
+    {
+      "path": "saves/battle_re/bat8.raw.wram",
+      "recipe": "fxr_m81_nuns",
+      "pad": "0:528",
+      "kind": "wram",
+      "doc": "the Naga-ette fight's command phase with no input: 94 frames after the battle's start (c434), Crono ready (AFAB 00) and Lucca's gauge at 24, the capture's own values ($9907 = C7 31 for the two PCs, the four Naga-ettes at full HP)"
+    },
+    {
+      "path": "saves/field_re/s439_marle_choice_lake.state",
+      "recipe": "fxr_s439_marle_choice",
+      "kind": "state",
+      "doc": "loc 1B7 (scene 439): Marle with the pendant, 4 frames before her str 0x29 box"
+    },
+    {
+      "path": "saves/field_re/s439_marle_choice.lakewram",
+      "recipe": "fxr_s439_marle_choice",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/s439_marle_join_lake.state",
+      "recipe": "fxr_s439_marle_join",
+      "kind": "state",
+      "doc": "Marle's fn1 parked at 05EA, two ops before her walk onto Crono"
+    },
+    {
+      "path": "saves/field_re/s439_marle_join.lakewram",
+      "recipe": "fxr_s439_marle_join",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/formlock_flags.bin",
+      "recipe": "fxr_power_on",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F0000=08,7F01DF=20"
+      },
+      "kind": "flags",
+      "doc": "the synthetic page field-menu-form-* were built on (its regress_inputs entry's own generator): storyline 08 and $7F:01DF = 20, Lucca locked for the Form screen -- byte for byte"
+    },
+    {
+      "path": "saves/field_re/chest26_opened.flags",
+      "recipe": "fxr_power_on",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F0001=40"
+      },
+      "kind": "flags",
+      "doc": "the synthetic page field-chest-preopened-* were built on: storyline 00 and $7F:0001 bit 6 (loc 026's chest opened) -- byte for byte"
+    },
+    {
+      "path": "saves/s120_lucca_flags.bin",
+      "recipe": "fxr_power_on",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F0000=10,7F0054=80,7F00A9=02"
+      },
+      "kind": "flags",
+      "doc": "the synthetic page field-scene120-lucca-e0-fadechange was built on: storyline 10, $7F:0054 = 80, $7F:00A9 = 02 -- byte for byte"
+    },
+    {
+      "path": "saves/savepoint_flags.bin",
+      "recipe": "fxr_power_on",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F0000=08,7F0055=88,7F01CF=80"
+      },
+      "kind": "flags",
+      "doc": "the synthetic page field-menu-save-* were built on: storyline 08, $7F:0055 = 88, $7F:01CF = 80 -- byte for byte"
+    },
+    {
+      "path": "saves/forest_arrival_flags.bin",
+      "recipe": "fxf_scene8_taban_moving",
+      "pad": "(100:3,0:15)*70",
+      "kind": "flags",
+      "doc": "its own provenance: the Telepod scene after Taban's moves (fxf_scene8_taban_moving), A mashed 70 times -- storyline 0C, $7F0054 = 08, the same nine flag bytes; $7F0055 reads B2 where the capture's read 84 (the recipe chain's own fair: the merchant's and the candy's bits), a byte field-op55-storyline-to-local does not read"
+    },
+    {
+      "path": "saves/field_re/door_009.state",
+      "recipe": "fxr_cathedral_door_open",
+      "kind": "ctfs",
+      "scene": 129,
+      "frames": 1,
+      "doc": "the port's own CtScene state (the F5 format) one frame after seeding loc 081 from the recipe's WRAM: the organ's door open, Crono below it"
+    },
+    {
+      "path": "saves/field_re/inn_lucca_007.state",
+      "recipe": "fxr_inn600_prompt",
+      "kind": "ctfs",
+      "scene": 116,
+      "frames": 1,
+      "doc": "the port's own CtScene state one frame after seeding loc 074 from the recipe's WRAM: the innkeeper's 'Register? Yes' waiting for its A"
+    },
+    {
+      "path": "saves/field_re/lucca_af_s129.lakewram",
+      "recipe": "fxr_lucca_af_s129",
+      "kind": "lakewram",
+      "doc": "loc 081 after the teleport, Crono leading, Lucca following on op 0xAF"
+    },
+    {
+      "path": "saves/battle_re/forest_wait_ambush_active.state",
+      "recipe": "fxr_forest_ambush",
+      "kind": "state",
+      "doc": "the Beetles and Avian Chaos ambush in Guardia Forest (loc 013) under way, control off, before the party walk (op D9) and the fight (op D8 at +229)"
+    },
+    {
+      "path": "saves/battle_re/forest_wait_ambush_active.lakewram",
+      "recipe": "fxr_forest_ambush",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/battle_re/ambush_pre.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:2",
+      "kind": "wram",
+      "doc": "two frames on (the capture's own distance from forest_wait_ambush_active: its play clock $0400 + 2, obj0 on 059D, $1001 = 03 04 03)"
+    },
+    {
+      "path": "saves/battle_re/bat2_lake.state",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:366",
+      "kind": "state",
+      "doc": "the ambush's fight at f366, a command lull: the capture's own poses ($9907 = CB 37 FF FF 00 08 for the PCs and the first enemies), queue ($A6D9 = 00 FF FF), mover state ($974A = FF 01 01 FF FF 0F, $5E0D = 00 01 01 00 00 0F) and RNG cursor ($26 = 4F); Marle's gauge two ticks behind the capture's (1A against 18)"
+    },
+    {
+      "path": "saves/battle_re/bat2.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:366",
+      "kind": "wram",
+      "doc": "the same frame's WRAM (the capture's bat2.raw.wram was the f0 image of bat2_lake.state)"
+    },
+    {
+      "path": "saves/battle_re/bat3.raw.wram",
+      "recipe": "fx_forest_bat3",
+      "pad": "0:11",
+      "kind": "wram",
+      "doc": "the three Hetakes' fight 11 frames into the recipe twin of bat3_lake.state: the capture's poses ($9907 = C9 DD FF 01 01 07), queue ($A6D9 = 00 FF FF) and RNG cursor ($26 = 26); Marle's gauge ten ticks behind the capture's"
+    },
+    {
+      "path": "saves/battle_re/wa2158.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:1907",
+      "kind": "wram",
+      "doc": "the ambush's fight at f1907 of forest_wait_ambush_active: slot 5 (Avian Chaos) with $5E0D = 0A requested over a live $974A = 0F and a segment in flight -- the class-6 orbit's mid-segment commit lands on the next frame (the name keeps the capture's frame, 2158, where its own fight met the same situation)"
+    },
+    {
+      "path": "saves/battle_re/wa2510.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:1937",
+      "kind": "wram",
+      "doc": "f1937 of forest_wait_ambush_active: slot 5 in class-6 mode 0A seven frames before its pass is grid-blocked and REWINDS the orbit ($A61D := 1 at f1944; the capture met it at f2517, hence the name)"
+    },
+    {
+      "path": "saves/battle_re/wa4620.raw.wram",
+      "recipe": "fxr_forest_ambush",
+      "pad": "0:2624",
+      "kind": "wram",
+      "doc": "f2624 of forest_wait_ambush_active: slot 5 in class-5 mode 0F eleven frames before its orbit FLIPS ($A5F4 1 -> 0 at f2635), slot 2 a Beetle in mode 01 starting a segment (the capture's f4620 / f4631, hence the name)"
+    },
+    {
+      "path": "saves/battle_re/bat4.raw.wram",
+      "recipe": "fxr_pt_12_after_her",
+      "pad": "0:200,20:10,40:160,0:437",
+      "kind": "wram",
+      "doc": "600 A.D., the Gate's clearing (loc 071): the playthrough's leg 13 walk into the three Blue Imps with no A -- the fight's command lull with the capture's own poses ($9907 = 37 FF FF 00 00 0A), queue ($A6D9 = 00 FF FF), RNG cursor ($26 = 2C) and strip-top battle byte ($2989 = 88)"
+    },
+    {
+      "path": "saves/battle_re/loc070_imps_roly_pre_lake.state",
+      "recipe": "fxr_loc070_imps_roly",
+      "kind": "state",
+      "doc": "loc 070, Crono walking down onto the respawned Blue Imps and Roly, Cyclone learned"
+    },
+    {
+      "path": "saves/battle_re/loc070_imps_roly_pre.lakewram",
+      "recipe": "fxr_loc070_imps_roly",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/battle_re/roly_rider_s119.lakewram",
+      "recipe": "fxr_roly_s119",
+      "kind": "lakewram",
+      "doc": "loc 077 above the Roly Riders' trigger, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/battle_re/roly_rider_battle.state",
+      "recipe": "fxr_roly_s119",
+      "pad": "20:40,0:200",
+      "kind": "state",
+      "doc": "its own provenance: Down 40 into the ambush, 240 frames on (the fight under way)"
+    },
+    {
+      "path": "saves/field_re/savept084_lake.state",
+      "recipe": "fxr_savept084",
+      "kind": "state",
+      "doc": "loc 084 on the save point's tile"
+    },
+    {
+      "path": "saves/field_re/savept084.lakewram",
+      "recipe": "fxr_savept084",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/fall_stairs083_lake.state",
+      "recipe": "fxr_fall_stairs083",
+      "kind": "state",
+      "doc": "loc 083 at the top of the staircase the playthrough's fall left as a conveyor"
+    },
+    {
+      "path": "saves/field_re/fall_stairs083.lakewram",
+      "recipe": "fxr_fall_stairs083",
+      "kind": "lakewram",
+      "doc": "the same frame's WRAM"
+    },
+    {
+      "path": "saves/field_re/yakra_defeat_039.state",
+      "recipe": "fxr_yakra_scene",
+      "kind": "ctfs",
+      "scene": 198,
+      "frames": 1,
+      "doc": "the port's own CtScene state one frame after seeding loc 0C6 from the recipe's WRAM: the Chancellor's scene just begun"
+    },
+    {
+      "path": "saves/crononame.state",
+      "recipe": "name_crono",
+      "kind": "state",
+      "doc": "the new game's Crono naming screen, nothing typed (the recipe that already stood in for it in the generators)"
+    },
+    {
+      "path": "saves/battle_re/hud_close_s13.raw.wram",
+      "recipe": "fx_gato_t0",
+      "pad": "(100:2,0:10)*170,100:2,0:9",
+      "kind": "wram",
+      "doc": "its own provenance: GATO's fight from the recipe twin of gato_t0 won by mashing A, the victory tail's band close armed by CD/03D6 ($CA1E = 80) with $CA1F down to 13 = 0D (f2051)"
+    },
+    {
+      "path": "saves/battle_re/atb_partial.raw.wram",
+      "recipe": "gato_inbattle",
+      "pad": "0:10,100:2,0:10,100:2,0:443",
+      "kind": "wram",
+      "doc": "GATO's fight: Crono attacks (A, A), Marle's turn comes up with the target picker's flag ($960A = 1, $95D5 = 01, $A6D9 = FF 01 FF) while Crono's gauge refills -- f467, $99DD = 32 against $9F22 = 48: the ATB bar's partial path (one full cell + a partial), the capture's own values; the cartridge's picture of this frame shows the same bar (its HUD rebuild caught up, f466-f470)"
+    },
+    {
+      "path": "saves/field_re/scene8_pod_latch.state",
+      "recipe": "fxr_scene8_pod",
+      "kind": "state",
+      "doc": "loc 008 after Marle vanished, Crono below the left pod"
+    },
+    {
+      "path": "saves/field_re/scene468_stairs_to_120.state",
+      "recipe": "fxf_scene468_stairs",
+      "kind": "state",
+      "doc": "loc 1D4, the east tower's last flight (storyline 10)"
+    },
+    {
+      "path": "saves/field_re/scene468_stairs_to_120.lakewram",
+      "recipe": "fxf_scene468_stairs",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/field_re/s434_decision_lake.state",
+      "recipe": "fxf_s434_decision",
+      "kind": "state",
+      "doc": "loc 1B2, the Tent of Horrors below Bekkler (storyline 03)"
+    },
+    {
+      "path": "saves/field_re/s434_decision.lakewram",
+      "recipe": "fxf_s434_decision",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/intro_box.state",
+      "recipe": "fxr_intro_box",
+      "kind": "state",
+      "doc": "loc 002, Mom's first box waiting at the bottom"
+    },
+    {
+      "path": "saves/field_re/wide_box_07a.state",
+      "recipe": "fxr_chamber_touch",
+      "kind": "ctfs",
+      "scene": 122,
+      "frames": 1,
+      "doc": "the port's own snapshot (F5) in loc 07A, the Queen's chamber: obj 24's scene (Marle comes back), between its first two boxes"
+    },
+    {
+      "path": "saves/field_re/gate_return_600ad_to_008.state",
+      "recipe": "fxr_gate_return",
+      "kind": "ctfs",
+      "scene": 113,
+      "frames": 1,
+      "doc": "the port's own snapshot (F5) in loc 071 beside the 600 A.D. gate, the clearing's scene over"
+    },
+    {
+      "path": "saves/forest_exit.state",
+      "recipe": "fxr_forest_alone",
+      "pad": "80:6,20:14,0:20",
+      "kind": "state",
+      "doc": "Guardia Forest (013), Crono alone (storyline 03) a step above the south exit, (13E0,2EDF)"
+    },
+    {
+      "path": "saves/forest_exit.lakewram",
+      "recipe": "fxr_forest_alone",
+      "pad": "80:6,20:14,0:20",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/forest_re/batalha_nao_comeca.raw.wram",
+      "recipe": "fxr_forest_ambush_alone",
+      "kind": "wram",
+      "doc": "Guardia Forest's Beetles and Avian Chaos ambush with Crono alone, the enemies walking in"
+    },
+    {
+      "path": "saves/ferry_re/office_at_clerk.lakewram",
+      "recipe": "fxr_truce_office",
+      "kind": "lakewram",
+      "doc": "the Truce ticket office (012), Crono below the counter, storyline 03"
+    },
+    {
+      "path": "saves/ferry_re/truce_pay_prompt.state",
+      "recipe": "fxr_truce_pay_prompt",
+      "kind": "state",
+      "doc": "the Truce pay prompt waiting, the cursor on Yes"
+    },
+    {
+      "path": "saves/ferry_re/porre_office_at_counter.lakewram",
+      "recipe": "fxr_porre_office",
+      "kind": "lakewram",
+      "doc": "the Porre ticket office (038) after the crossing, Crono beside obj10"
+    },
+    {
+      "path": "saves/ferry_re/porre_pay_prompt.state",
+      "recipe": "fxr_porre_pay_prompt",
+      "kind": "state",
+      "doc": "the Porre pay prompt waiting"
+    },
+    {
+      "path": "saves/battle_re/hetake_dissolve_anim_ppu.state",
+      "recipe": "fx_forest_bat3",
+      "pad": "0:250",
+      "kind": "state",
+      "doc": "the three Hetakes' fight 250 frames on with no command: the three in the idle poses 00 / 01 / 07 (f239-f288)"
+    },
+    {
+      "path": "saves/field_re/tank/tele01c.state",
+      "recipe": "fxr_tele01c",
+      "kind": "state",
+      "doc": "the Dragon Tank's bridge (01C), storyline 2E, before the tank's arrival"
+    },
+    {
+      "path": "saves/field_re/tank/tele01c.lakewram",
+      "recipe": "fxr_tele01c",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    },
+    {
+      "path": "saves/battle_re/wincolour/tank_c2.state",
+      "recipe": "fxr_tank_c2",
+      "pad": "0:20,40:310,(100:2,0:14)*44,40:400,(100:2,0:14)*97,100:2,0:12",
+      "kind": "state",
+      "doc": "the Dragon Tank's fight in Window Color 2: tools/dragon_tank_cmp.py's drive cut to its first 3000 frames"
+    },
+    {
+      "path": "saves/battle_re/wincolour/tank_c4.state",
+      "recipe": "fxr_tank_c4",
+      "pad": "0:20,40:310,(100:2,0:14)*44,40:400,(100:2,0:14)*97,100:2,0:12",
+      "kind": "state",
+      "doc": "the Dragon Tank's fight in Window Color 4: tools/dragon_tank_cmp.py's drive cut to its first 3000 frames"
+    },
+    {
+      "path": "saves/battle_re/wincolour/tank_c6.state",
+      "recipe": "fxr_tele01c",
+      "pad": "0:20,40:310,(100:2,0:14)*44,40:400,(100:2,0:14)*97,100:2,0:12",
+      "kind": "state",
+      "doc": "the Dragon Tank's fight in Window Color 6: tools/dragon_tank_cmp.py's drive cut to its first 3000 frames"
+    },
+    {
+      "path": "saves/epoch_jump_01c.state",
+      "recipe": "fxr_attract_01c",
+      "kind": "ctfs",
+      "scene": 28,
+      "frames": 44,
+      "doc": "the port's own snapshot (F5) in the attract's loc 01C, Crono mid-jump onto the Epoch"
+    },
+    {
+      "path": "saves/field_re/magus_scene_lake.state",
+      "recipe": "fxr_magus_scene",
+      "kind": "state",
+      "doc": "the Magus cult's room in the sanctum (0CB), the party above the cultists' trigger, no box open"
+    },
+    {
+      "path": "saves/field_re/magus_scene.lakewram",
+      "recipe": "fxr_magus_scene",
+      "kind": "lakewram",
+      "doc": "the same, for Belthasar --loadwram"
+    }
+  ]
+}

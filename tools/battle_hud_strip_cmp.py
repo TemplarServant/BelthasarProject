@@ -40,13 +40,14 @@ CT = os.path.join(ROOT, 'build', 'ct.exe')
 FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 FOREST = 'saves/battle_re/forest_wait_ambush_active.state'
 SUITE = [
-    ('forest-empty', FOREST, 400, None),                                         # the base: names + party windows
-    ('forest-crono', FOREST, 440, None),                                         # seat 0 alone: "Chaos" at cols 7..11
-    ('forest-both', FOREST, 515, None),                                          # seats 0 and 1
-    ('forest-crono-picker', FOREST, 540, '0:520,100:2,0:18'),                    # $9609 = 1: the windows stay, no name
-    ('forest-crono-dequeued', FOREST, 954, '0:520,100:2,0:30,100:2,0:400'),      # seat 1 alone: "Beetl" / "Avian"
+    # (the recipe twin of FOREST, 2026-10-22, runs the capture's fight 50 frames earlier: its frames are the capture's - 50)
+    ('forest-empty', FOREST, 350, None),                                         # the base: names + party windows
+    ('forest-crono', FOREST, 390, None),                                         # seat 0 alone: "Chaos" at cols 7..11
+    ('forest-both', FOREST, 465, None),                                          # seats 0 and 1
+    ('forest-crono-picker', FOREST, 490, '0:470,100:2,0:18'),                    # $9609 = 1: the windows stay, no name
+    ('forest-crono-dequeued', FOREST, 904, '0:470,100:2,0:30,100:2,0:400'),      # seat 1 alone: "Beetl" / "Avian"
     ('gato-marle-alone', 'saves/gato_inbattle.state', 824, '0:600,100:2,0:20,100:2,0:200'),  # the old "picker" bake
-    ('bat9-frog-active', 'saves/battle_re/bat9_lake.state', 189, '0:21,80:2,0:6,80:2,0:12,80:2,0:140'),  # seats 0 + 2
+    ('bat9-frog-active', 'saves/battle_re/bat9_lake.state', 333, '0:315,80:2,0:12'),  # seats 0 + 2: Frog queued f309, R
 ]
 COLOURS = [('tank-colour%d' % v, 'saves/battle_re/wincolour/tank_c%d.state' % v, 2, None) for v in (2, 4, 6)]
 

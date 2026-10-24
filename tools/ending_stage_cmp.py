@@ -50,10 +50,13 @@ DRIVES = {
                shift=53, hold=54, total=4100, wait=(0x9669, 0x925E)),
     # entry 3 from the story (`FF 23`, scenes 102-107 after the Blackbird) -- the attract's own hand-off with the story's two
     # bytes put back ($7F0057 bit 2 clear, the storyline D3): scene 107's controller then takes the story's arm, `DD F6 03
-    # 91 35 / FF 23`, on the cartridge (saves/blackbird_re/ff23_story_poked.state; the hand-off at f25, FF 23 on f26)
+    # 91 35 / FF 23`, on the cartridge (the recipe lg_blackbird_story_poked: the attract's hand-off under today's rule, power-on
+    # + 8776, the two bytes poked; the hand-off at f25, FF 23 on f26). SHIFT 18 since 2026-10-22: from today's rule the
+    # opening's vblank wait ($7E:3010 -> $31B0) is reached at v224 h898 and catches line 225 -- 17 frames from the jump; the
+    # older rule's capture reached it at h1356, 462 cycles later, and waited a frame more (SHIFT 19)
     '23': dict(state=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'), handoff=0,
                hstate=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'),
-               shift=19, hold=20, total=650, tag='seqstage',
+               shift=18, hold=19, total=650, tag='seqstage',
                # (palette records 0 and 1, which the moon's light chain waits on and arms -- FD/E39C's, task $37FA; records 2-11, the
                # field's own colour cycles, are a step behind in the port: open, sequence_table.md sec. 14)
                extra=[(0x0520, 0x18)]),

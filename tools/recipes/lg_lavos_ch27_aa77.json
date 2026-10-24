@@ -1,0 +1,17 @@
+{
+  "name": "lg_lavos_ch27_aa77",
+  "from": "lg_jackie_ch27",
+  "doc": "Jackie's ch27 (loc 1DA, the Lavos shell, all level 99) with glb[170] at 77 ($7F00AA bit 5 set: the lost final battle's arm of scene 476's obj1, sequence_table.md sec. 16) -- byte for byte the hand-made saves/lavos_re/ch27_aa77.state.",
+  "steps": [
+    [
+      "poke",
+      "7F00AA=77"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1DA",
+    "wram": {
+      "0x100AA": "0x77"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "fxr_forest_ambush",
+  "from": "fxr_forest_after_hetakes",
+  "doc": "Stands in for saves/battle_re/forest_wait_ambush_active.state (the owner's capture of the Beetles and Avian Chaos ambush in Guardia Forest, loc 013, in the game started after the attract demo): after the Hetakes the party walks (a BFS route over the cartridge's own planes, tools/playthrough.py route_walk) to tile (21,22), steps right, up to row 19 and left into obj24, the ambush's touch trigger at tile (20,19) (op B2): the lead stops at (15B0,13F0), the capture's place, and control drops (f61 of this step). Cut at 148 frames: obj24 on 08A4 (its `04` call waiting) and obj25 on 08E5 as on the capture, obj0's 16-frame loop on 0592 with $1001-$1003 = 01 04 01 as on the capture. The scene's later steps run a little shorter than the capture's (obj25's approach starts from where this Marle stands): op D8's battle request at +229 here, +279 on the capture.",
+  "steps": [
+    [
+      "pad",
+      "40:32,10:128,80:16,10:16,80:32,10:16,80:16,10:16,80:32,10:16,80:128,10:48"
+    ],
+    [
+      "pad",
+      "80:16,10:32,40:30,0:70"
+    ]
+  ],
+  "expect": {
+    "loc": "0x013",
+    "wram": {
+      "0x011F": "0x00",
+      "0x11B0": "0xA4",
+      "0x11B1": "0x08",
+      "0x11B2": "0xE5",
+      "0x11B3": "0x08",
+      "0x1804": "0xB0",
+      "0x1805": "0x15",
+      "0x1884": "0xF0",
+      "0x1885": "0x13",
+      "0x1180": "0x92"
+    }
+  }
+}

@@ -47,9 +47,6 @@ def main():
     if '--btnscript' in sys.argv:
         extra = ['--btnscript', sys.argv[sys.argv.index('--btnscript') + 1]]
     rom = _romlib.load('Chrono_Trigger_USA_SNES.sfc')
-    if state == 'build/_z_f7085.state' and not os.path.exists(state):   # the attract 087's leg (fxobj_cmp.py)
-        subprocess.run([CT, '--peek', 'saves/attract_cena_inicial.state', 'build/_ztmp.raw', '--frames', '7085'],
-                       env=dict(os.environ, PEEK_SAVE=state), capture_output=True)
     tmp = 'build/_ecc_%d' % os.getpid()
     peek = tmp + '.raw'
     env = dict(os.environ, PEEK_ISOBG='4')

@@ -85,7 +85,7 @@ consumers re-fired on the enemy's turn:
 at f2871 — **15 `techfx` lines where the cast alone prints 6**, and a pixel scan for `ctBattleWhirlPal`
 entries in x 90..180 / y 95..180 found **124 opaque whirl pixels at f2931** (the song's rel 60 =
 `CT_WHIRL_REL0`) and 0 one frame earlier. After the fix: **6 techfx lines, 0 whirl pixels** at f2929 /
-f2931 / f2960. Check `field-battle-cyclone-fx-not-replayed`.
+f2931 / f2960. Check `field-battle-cyclone-fx-not-replayed` (removed 2026-10-24: the replay path is gone, docs/MUTATION_AUDIT.md).
 
 ## D. Leak 3 — a per-slot BAKE standing in for the id-driven chain
 

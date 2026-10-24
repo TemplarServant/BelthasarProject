@@ -1,0 +1,18 @@
+{
+  "name": "fxr_s439_marle_join",
+  "from": "fxr_s439_marle_choice",
+  "doc": "Stands in for saves/field_re/s439_marle_join_lake.state, its own provenance from the choice: A mashed through both decisions (option 0 of str 0x2B = the join), Start through the naming screen the join opens, A through the boxes after it -- 1184 frames; Marle's fn1 parked at 05EA, two ops before her walk onto Crono (`0D 00 / 0E 02 / 95 00`).",
+  "steps": [
+    [
+      "pad",
+      "(100:2,0:28)*24,(8:2,0:28)*10,(100:2,0:28)*5,100:2,0:12"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1B7",
+    "wram": {
+      "0x1186": "0xEA",
+      "0x1187": "0x05"
+    }
+  }
+}

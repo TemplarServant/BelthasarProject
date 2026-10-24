@@ -12,7 +12,7 @@ the POLL on its own operands -- it waits for the fn6 already playing and goes on
 afresh and Crono raised his arms a second time. (ct_vm.c: the 0x02-0x07 arm's latch branch, ssPushAddr;
 disasm/notes/call_wait_latch_preempt.md sec. 4.)
 
-The cartridge: saves/field_re/scene8_pod_latch.state (the user's snes9x capture, spliced over scene8_gate_cutscene.state),
+The cartridge: saves/field_re/scene8_pod_latch.state (tools/recipes/fxr_scene8_pod.json: Crono below the left pod after Marle vanished),
 `--monitor` with Up held 25 frames and A on the 22nd. The port: the same WRAM (--loadwram) and SPC (CT_AUDIO_SEEDSTATE),
 the pad one frame later (its keys are the oracle's + 1), CT_FIELD_MEMMON. Each event's frame on both sides, then the
 count of Crono's fn6 runs:

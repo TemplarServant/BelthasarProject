@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_03_kitchen",
+  "from": "fxr_pt_02_downstairs",
+  "doc": "The playthrough's leg 03_kitchen (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Mom in the corridor: her lines, Lucca's name (Start closes the prompt, Start accepts), out the door",
+  "steps": [
+    [
+      "pad",
+      "0:30,20:24,(100:2,0:38)*6,0:100,8:2,0:100,8:2,0:100,(100:2,0:38)*8,0:60,40:16,20:80,40:16,20:16,10:16,20:40,0:150"
+    ]
+  ]
+}

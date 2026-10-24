@@ -7,7 +7,9 @@ r"""Every frame of the attract demo, port against cartridge: WHERE they diverge,
 The two sides are captured once per frame, as 128x112 thumbnails (the same record both harnesses write:
 [u32 frame][u16 $0100][128*112*3 RGB], 2x2 SNES pixels averaged):
 
-    cartridge  build/ct.exe --peek saves/attract_cena_inicial.state --frames 9110   PEEK_THUMBS / _EVERY=1, CT_ORACLE_LOGICAL=1
+    cartridge  build/ct.exe --peek saves/attract_cena_inicial_rule.state --frames 9110   PEEK_THUMBS / _EVERY=1, CT_ORACLE_LOGICAL=1
+               (the attract from power-on + 2159 under the rule, made by a recipe: tools/fixtures/attract_rule.json; until
+               2026-10-22 the owner's real-time capture saves/attract_cena_inicial.state, another history)
     port       build/Belthasar.exe --assets ct_assets.dat --scene 433                 CT_SHOTS_THUMBS / _EVERY=1
                (interactive, CT_AUDIO_LOCKSTEP=1, stopped at f11400 by CT_SHOTS_EXIT -- the numbering
                tools/frame_region_cmp.py and every attract check use)
@@ -64,7 +66,7 @@ CT = os.path.join('build', 'ct.exe')
 FIELD = os.path.join('build', 'Belthasar.exe')
 # ATTRACT_DIV_STATE / ATTRACT_DIV_CART_FRAMES: another start for the cartridge's side -- `boot` (power-on, ct.exe's own) with
 # ~11500 frames covers the port's 11400 where the attract state is not at hand
-STATE = os.environ.get('ATTRACT_DIV_STATE', 'saves/attract_cena_inicial.state')
+STATE = os.environ.get('ATTRACT_DIV_STATE', 'saves/attract_cena_inicial_rule.state')
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 ASSETS = 'ct_assets.dat'
 CART_FRAMES = int(os.environ.get('ATTRACT_DIV_CART_FRAMES', '9110'))

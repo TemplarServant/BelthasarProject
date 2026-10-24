@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_20_forest_fights",
+  "from": "fxr_pt_19_to_forest",
+  "doc": "The playthrough's leg 20_forest_fights (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Guardia Forest's three ambushes for levels (Crono and Lucca die to the Naga-ettes at level 1):",
+  "steps": [
+    [
+      "pad",
+      "40:16,20:16,40:48,20:16,40:64,20:80,80:16,20:64,80:32,20:16,80:80,20:16,80:32,20:16,80:32,20:32,80:240,10:32,0:30,(100:2,0:38)*120,40:48,20:64,40:48,20:16,40:80,20:64,40:32,20:32,(100:2,0:18)*136,10:16,40:192,20:16,40:48,20:32,40:32,20:16,40:96,10:8,40:48,20:16,40:64,20:16,(100:2,0:18)*86,80:96,10:16,80:16,10:16,80:96,20:224,0:150,20:16,80:48,20:16,80:16,10:16,80:64,0:30,100:2,0:200"
+    ]
+  ]
+}

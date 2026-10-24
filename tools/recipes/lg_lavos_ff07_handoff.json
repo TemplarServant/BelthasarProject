@@ -1,0 +1,14 @@
+{
+  "name": "lg_lavos_ff07_handoff",
+  "from": "lg_lavos_ff07_pre",
+  "doc": "Stands in for saves/lavos_re/ff07_handoff_f10.state: ff07_pre + 10 frames, the hand-off (`FF 07` on its next frame); byte for byte the capture.",
+  "steps": [
+    [
+      "pad",
+      "0:10"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1DC"
+  }
+}

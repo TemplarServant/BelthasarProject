@@ -1,7 +1,7 @@
 # TESTING — the one-command regression suite
 
 ```
-python tools/regress.py               # full suite, 4 parallel jobs
+python tools/regress.py               # full suite, min(12, CPUs-2) parallel jobs
 python tools/regress.py --quick       # tier "quick" only
 python tools/regress.py --list        # list every check + tier + command
 python tools/regress.py --only vmdiff-bedslide render-scene1-snapshot
@@ -15,6 +15,8 @@ python tools/regress.py --clear-oracle-cache    # empty build/_oracle_cache
 python tools/regress.py --check-inputs          # presence + sha256 vs tools/regress_inputs.json
 python tools/regress.py --refresh-input-hashes  # rewrite sha256/size pins from disk
 python tools/regress.py --mutate NAME           # prove NAME actually GRADES something
+python tools/regress.py --mutate NAME@0,2       # only those of its mutations (the ones a change touched)
+python tools/mutation_retarget.py [--write]     # list STALE mutations, re-target the ones a refactor only moved
 python tools/regress.py --mutate-all            # every check that declares mutations
 
 # One-command local gate (build + inputs + quick regress → build/preflight.json):
@@ -59,6 +61,26 @@ every check from the repo root. Exit status is 1 iff any check FAILed (SKIPs don
 - **One oracle run for many frames** (`PEEK_SHOTS`, `tools/ctlib/peekshots.py`): a tool that graded N frames by running
   `--peek` N times from the state (N^2/2 emulated frames) runs it once. Byte-identical to the per-frame peeks
   (`tools/peekshots_selftest.py`). menu_shell_cmp 716 s -> 18 s, menu_equip_list_cmp 352 s -> 5 s.
+- **One port run for many checks** (2026-10-24). Checks that run the same command -- argv, env and env_rule -- share
+  ONE process, and each is graded on its output (`tools/regress.py` run_group); a check with a missing input still
+  SKIPs on its own. Many checks used to replay the same long run of the port to look at a different moment of it: 49
+  ran the attract demo from power-on (`--scene 433`), each to its own frame with its own probes, 28% of the quick tier.
+  `tools/regress_share.py NAME ...` gives a group one command -- the probes' env merged, `--frames` the largest, or
+  `--argv` (frame_region_cmp.py takes several rectangles for one port run) -- only after proving, run against run, that
+  every check grades the merged output as it grades its own: every expect line is there, its pin regexes take the same
+  lines, and no expect line occurs more often (another probe printing it would let a mutation survive). `--partition`
+  splits a set into the groups that pass; a check whose graded lines come from its own last frames or from where its run
+  ends stays alone. A group's timeout is its members' sum. Then `--mutate` the members. The suite still runs every check;
+  only its repetitions are gone. Measured 2026-10-24 (a 4-core cloud container, 3 jobs, every check PASS): the 954
+  checks run in 893 processes; 31 `--scene 433` checks in 4 runs (615 s -> 106 s) and 16 attract frame_region_cmp
+  checks in 1 port run; the quick tier 16.4 -> 10.0 minutes. The 89 mutations of the 46 regrouped checks: every one the
+  checks killed before is killed after (3 survived and 14 were STALE before as well).
+- **The cache keys on what the oracle reads** (2026-10-24). A run's key held every environment variable but the
+  operating system's own (a list that grew one volatile variable at a time: WT_SESSION, VSCODE_GIT_IPC_HANDLE ...), so a
+  variable only the port reads (CT_AUDIO_LOCKSTEP, CT_SHOTS ...) split the same cartridge run into several entries, and
+  a host variable that changes per command (a cloud container's trace id) made every run of a tool miss the last. The
+  key now holds the variables whose name is in the oracle binary as a C string (`getenv("CT_ORACLE_LOGICAL")`; no oracle
+  source builds a name at run time), so it moves exactly with what the cartridge run can see.
 - **Longest first**: the parallel batch is submitted in the order of the last run's durations
   (`build/_regress_times.json`), so the slowest check never starts last.
 - **Re-pin without re-running**: every run saves its failures with their full output in `build/_regress_last.json`;
@@ -79,8 +101,8 @@ cutscene's lockstep needs its oracle under the rule then). Without both switches
 Selfchecks now return a meaningful process exit (0 = success criteria, 1 = mismatch,
 2+ = setup). The suite **still** never trusts exit codes for PASS/FAIL: a check
 **PASSes iff every literal substring in its `expect` list appears in the combined
-stdout+stderr**. That keeps known baselines like `--vm` `507 OK, 5 mismatch` (process
-exit 1) green until the pin is intentionally changed. On FAIL the runner prints the
+stdout+stderr**. That keeps a pinned residual count (a known mismatch, process exit 1)
+green until the pin is intentionally changed. On FAIL the runner prints the
 first missing expectation and the actual nearby output lines.
 
 ## Prerequisites (all in the repo root)
@@ -131,15 +153,40 @@ running `Belthasar.exe`/`ct.exe` before `--build`.
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
 Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-12: **831** checks, **2** excluded; `--list` prints the current set).
+(2026-10-24: **945** checks, **12** excluded; `--list` prints the current set).
 
-- **quick** (**588** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (**613** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
-- **full** (all of them): adds **241** slower checks — whole fights and attract legs against the logical oracle, the
-  long menu and shop audits, the widescreen and other mod checks, the ROM-boot drive validators — and the two with no
-  tier (`lockstep-talk-box-machine-clean`, `lockstep-scene120-stairs-entry-lucca`), which run only here. A full run
-  takes 15-80 minutes, mostly depending on the oracle cache.
+- **full** (all of them): adds **316** slower checks — whole fights and attract legs against the logical oracle, the
+  long menu and shop audits, the widescreen and other mod checks, the ROM-boot drive validators — and the **21** with
+  no tier, which run only here: the two lockstep checks (`lockstep-talk-box-machine-clean`,
+  `lockstep-scene120-stairs-entry-lucca`), the race / ending / Lavos / Tyranno / panorama chains,
+  `jackie-saves-census-vs-oracle`, `ocean-palace-aftermath-chain-vs-oracle` and the four `battle-*-feet-vs-oracle`
+  checks. A full run takes 15-80 minutes, mostly depending on the oracle cache.
+
+## The GitHub CI (`.github/workflows/ci.yml`)
+
+The repository is public and the ROM never comes near it, so GitHub's runners test what needs no ROM. On every push to
+`main` and every pull request:
+
+- **No game file in the tree** (`tools/release/check_tracked.py`, also the quick check `tree-tracks-no-game-file`): no
+  tracked file is one `tools/release/export_public.py` keeps out of the public tree (the ROM, `ct_assets.dat`,
+  savestates, captures, battery saves, `src/data/*.h`, `src/xlat/*.c`, ...), and no tracked file is a binary but the
+  README's pictures in `docs/media/` and the upstream files the script names. Gradle's own action checks the Gradle
+  wrapper's jar: Gradle's published checksums, plus the one pinned in the workflow -- the jar is SDL2 2.32.10's
+  `android-project` copy byte for byte, an old wrapper that is not on Gradle's list. This is the half of the leak check that needs no ROM: the byte
+  search, `tools/release/scan_rom_leaks.py`, needs the ROM and stays CONTRIBUTING.md's step before a pull request.
+- **The build on Linux, Windows and macOS** (`ubuntu-24.04` gcc, `windows-2022` MSVC, `macos-15` clang): the shapes
+  (`tools/gen/shapes.py install`) in place of the generated files, then `tools/build.py` (every target, its artifact
+  check), and last the data-free `Belthasar` (`CT_DATAFREE=1`), the game a release ships.
+- **The suite without the ROM**: `tools/regress.py` (2026-10-24: 5 pass, 0 fail, 941 skip) and
+  `python -m unittest discover -s tests`. The job fails if a check FAILs or if none PASSes. Every SKIP is a check the run
+  has not tested: a check that grades the game declares the ROM or a state made from it among its `inputs`, so it never
+  runs on the shapes' zeros. The Android build (the NDK, SDL2's source) is not in the CI yet.
+
+The suite with the ROM (after `tools/setup.py` and `tools/fixtures.py make all`) stays the gate for behaviour; a green
+CI says the tree builds and carries no game file, not that the game is right.
 
 ## The attract vehicle (`Belthasar --scene 433` from cold)
 
@@ -153,7 +200,10 @@ started cold inside 1B1 and its driver's phase was its own, so a sound handshake
 cartridge's did not (1C00 and 7D00 +1). Every attract load now takes the cartridge's frames, and every visit its length
 but 087's (+1, its battle exit's `70 00`; disasm/notes/field_load_cost.md secs. 13-15). A check that grades the vehicle's
 picture or a field animation's phase compares with the power-on cartridge (`--peek boot`, picture P = peek P + 92):
-saves/attract_cena_inicial.state is another history, its $051D tile-step count of the other parity from the 07D load on. A `--boot` drive presses Start on the title at
+saves/attract_cena_inicial.state (the owner's real-time capture, which no check reads since 2026-10-22) is another history, its
+$051D tile-step count of the other parity from the 07D load on. Its recipe-made stand-in, saves/attract_cena_inicial_rule.state
+(tools/fixtures/attract_rule.json), IS the power-on's history: a --peek of q frames from it is --peek boot of 2159 + q, so the
+vehicle's picture p is that state's p - 2067 on the field (p - 2066 in a fight, P+1; one less after 087's visit). A `--boot` drive presses Start on the title at
 frame 198 (`n:198,s:1,...`; 133 before the power-on). The power-on needs the SPC: with `CT_NOAUDIO` the run boots scene 0
 lit at once and keeps its own (earlier) frames. A `--scene 433` with `--loadwram`, `--loadstate`, `--at`, `--newgame` or a test harness is still the plain
 cold start.
@@ -167,7 +217,8 @@ the VM handlers, as `--sweepops`) and the registers the caller reads. Registered
 A's low byte and X), C0/ACFD (`CtBuildVelocityPriority`; 3150 calls), C1/DC64 (not reached by the attract), the 211
 field-script opcode handlers of `g_ctVmOps` through `CtFieldRunnerOne` (the IP back in X and the carry), and the battle
 AI's walk C1/AFD2, its 41 condition handlers and the commit C1/8C3E, run whole (`CtBattleAiWalkWhole` / `CondWhole`).
-30100 calls reach 99 of the 257 entries; 0 mismatched. `skipped` counts handler bodies another handler runs
+146388 calls reach 116 of the 281 entries; 0 mismatched (the pin of 2026-10-22; 30100 calls and 99 of 257 entries
+when the check was written). `skipped` counts handler bodies another handler runs
 as a subroutine with the same X and Y (op 95's C0/5410 inside op B6), graded at the caller's entry; `unported` counts
 the cases `CtFieldRunnerOne` traps (the sound posts E8/EA/EB/EC, some FF and 83). Needs only the ROM. Eight declared
 mutations (`--mutate shadow-attract`) all turn it red: the RNG cursor, the draw in A, X's high byte, op 10's jump
@@ -196,9 +247,9 @@ The shadow's first route (docs/SHADOW_PROPOSAL.md, S2). The oracle boots with a 
 gitignored, and `SOURCES.md` / `SHA256SUMS` there say where each came from), loads slot 1 (Magus' Castle) and plays the
 route file for 16270 frames: down the dark stairway (the Vamp ambush, fought by attacking), up into Magus's hall, the
 summoning, and the fight, attacked until the party falls. Every timing is this project's, written leg by leg with
-`tools/shadow_route.py`. 88644 calls reach 87 entries, 0 mismatched; it grades what the attract cannot reach, C1/DC64's
-hit roll (11 calls) and AI conditions 08, 0B, 11 and 18. One declared mutation (the hit roll's `$18` record) turns it
-red. The route is frame-timed
+`tools/shadow_route.py`. 348503 calls reach 107 entries, 0 mismatched (the current pin; 88644 calls and 87 entries when
+the route was first written); it grades what the attract cannot reach, C1/DC64's hit roll (11 calls) and AI conditions
+08, 0B, 11 and 18. Ten declared mutations turn it red, the first of them the hit roll's `$18` record. The route is frame-timed
 under the logical rule: a change in the counts with mismatched 0 means the oracle's run changed; re-pin only after
 confirming that, and the last line's location (`00AC`) says whether the route still ends in the fight's room.
 
@@ -208,8 +259,8 @@ The shadow's menu route: from the same save, the X-menu's Item screen (four Toni
 Edge in place of the Slasher and back, the first helm and armour candidates), 3360 frames, quick tier. It grades the
 inventory routines C2/8791 (4 calls) and C2/87D5 (8) on all 128 KB, A and X. Its first run found a port defect: C2/87FA,
 the inventory's find, records the slot it found in `$04C7` and zeroes `$04C8`, which `mInvFind` did not (now fixed with
-the 256-slot scans and the add's 8-bit sum, menu.c). Two declared mutations turn it red: the `$04C7` record and the
-remove's emptying of a slot's id.
+the 256-slot scans and the add's 8-bit sum, menu.c). Four declared mutations turn it red, among them the `$04C7` record
+and the remove's emptying of a slot's id.
 
 ### field-battletest-gato (`Belthasar.exe --battletest`)
 
@@ -307,9 +358,9 @@ The loop runs the ATB timers (`$AFAB+idx` −1/tick with the FD/B807 speed reloa
 `$B158`), opens a PC command (`$95D5`/`$95DB`/`$9609`), applies the closed damage
 equation (`$AEEF` from ROM `CC/213F[0x3A]`/`CC/89C6[1]`, `base·(256−def)/256 + rand`),
 HP/death, and the real victory writer (`$7F01EC=0`, C1/817A). It prints
-`battleloop: victory f296 pcAttacks=6 cronoHP=44 marleHP=65` — victory at module frame
-296, 6 PC attacks landed, final party HPs (Crono took two GATO counters, Marle
-untouched, matching dossier S4) — plus the existing `battletest: PASS` line (the field
+`battleloop: victory f1949 pcAttacks=4 cronoHP=48 marleHP=36` — the victory's module frame,
+the PC attacks landed and the final party HPs (the current pin; the first one, matching dossier S4,
+was `victory f296 pcAttacks=6 cronoHP=44 marleHP=65`) — plus the existing `battletest: PASS` line (the field
 script's op-0x16 victory branch pays the 15 Silver Points `$7F0052=0x0F`). Per-hit
 damage is byte-exact vs the dossier's observed table (Crono→GATO 16/17, Marle→GATO 8,
 GATO→Crono 13). Deterministic (the RNG index `$26` is inherited from WRAM=0 and the
@@ -317,9 +368,9 @@ omitted miss-roll never advances it). The victory-frame/attack-count/HP line is 
 pin; re-pin via `--pin` ONLY after an intentional loop-timing/damage change re-verified
 against `battle_loop.md`'s per-hit numbers.
 
-### field-battle-{confirm-boundary,nameseed,lowhp-blink-*,victory-*} (the derived-fixes round)
+### field-battle-{confirm-boundary,lowhp-blink-*,victory-*} (the derived-fixes round)
 
-Six checks pinning the four behaviors added in the derived-fixes round (dossiers
+Five checks pinning three behaviors added in the derived-fixes round (dossiers
 `disasm/notes/battle_confirm_queue.md`, `battle_hud_names_blink.md`,
 `battle_hp_timing.md`, `battle_gato_idle_victory.md`):
 
@@ -330,11 +381,6 @@ Six checks pinning the four behaviors added in the derived-fixes round (dossiers
   Scheduled` land Crono's hit (`gatoHP=59 pcAtk=1` — GATO 76→59, from the `CT_BATTLE_TRACE`
   stderr). A regression drops the confirm → pcAtk stays 0 → the substring vanishes. Byte-
   deterministic; re-pin only if the confirm damage legitimately changes.
-- **field-battle-nameseed** — the battle-HUD party NAME seed `$7E2C23` (the blank-names-in-
-  fresh-play fix). `CT_NAMESEED=1 --scene 19` loads a FRESH scene (NO wram overwrite, unlike
-  the wram-seeded battle checks), verifies the Crono/Marle/Lucca 6-byte CT-glyph records
-  byte-exact vs the dossier §C1 table, prints `nameseed: PASS`, and exits. Re-pin only if
-  the seed table changes.
 - **field-battle-lowhp-blink-white / -grey** — the low-HP HP/MP-digit FLASH. `CT_BATTLE_
   CRONOHP=5` (critical, ≤ maxHP/8) + a HUD battleshot at f240 (WHITE phase) vs f252 (GREY
   phase, 12f later). The two `battleshot: fXXX fnv=` values MUST DIFFER = the 12-frame blink
@@ -574,8 +620,8 @@ Seed `gato_t0.raw.wram`. Re-pin only after re-verifying the miss law + presentat
 ### field-battle-pc-approach-early / -late (Crono runs to the victim)
 
 The PC physical-attack APPROACH mover (battle_pc_approach_facing.md PART 1): Crono's
-swing travels to the victim at 2px/f on the baked CC/F494 track primitives
-(`src/data/battle_tracks.h`), stops adjacent (victim foot+8), strikes, springs home 4px/f.
+swing travels to the victim at 2px/f on the CC/F494/F594 track primitives (read from the ROM's
+tables directly, battle_ai_interp.md §11b; the baked `src/data/battle_tracks.h` is no longer used), stops adjacent (victim foot+8), strikes, springs home 4px/f.
 Forest MASHA fight, first attack dispatch f168 (32px LEFT): shots at f172 (rel 4,
 offset 26px out) and f181 (rel 13, 8px out) pin two DISTINCT mid-travel frames — the
 travel itself (the old baked hop drew one fixed position). The C1/5480 grid
@@ -591,16 +637,15 @@ and returns leftward (f3080, facing 2). MASH fights never walk (when-hit counter
 so every older pin is untouched by construction. DOWN (facing 1) remains the
 committed idle bake; the within-facing walk-cycle tile stream is the P4 boundary.
 
-### field-battle-song-spotlight (the GATO song darken + BG3 beam)
+### field-battle-song-pose-and-notes (GATO's singing pose and the notes; was field-battle-song-spotlight)
 
-The song tech ($9877=0x10) screen effect (battle_song_spotlight.md): BG palettes
-half-faded (k=0.476) while sprites/HUD read-out stay full, plus the real BG3
-light-cone graphic (`src/data/battle_songbeam.h`, decoded from the effect-ON oracle VRAM
-at tileAdr $5000/map $7C00, bigTiles 2bpp) colour-math-ADDED over the darkened arena,
-anchored to the singer's live foot. Window rel 42–236 of the 311f span (24f in /
-145f hold / 22f out). The check pins the mid-hold shot (f1100, rel 113). The
-bank-C3/FD tech-effect dispatch entry is the dossier E.1 boundary; our command-box
-chrome stays bright (E.4 residual, documented at `battleSongFxRender`).
+The song tech ($9877=0x10), mid-hold (`strike#2+85`): GATO's front singing pose with its sway and the up-to-5 note
+sprites (battle_song_spotlight.md). The battleshot composes the combatants and the action feedback on black, so the
+spotlight is NOT in this hash: since 2026-10-07 the spotlight is the arena's own colour math (`CtBattleFxLayerCompose`,
+src/field.c -- the song program's BG3 beam on the SUB screen added to BG1/BG2 over lines 0-160, the room's palettes
+faded under it), and `battle-gato-song-spotlight-is-the-arena-colour-math-vs-rule-cartridge` grades it against the
+cartridge (tools/gato_song_cmp.py). Until 2026-10-24 this check was named for the spotlight and its notes still said it
+pinned the cone; it was renamed to what it grades (docs/MUTATION_AUDIT.md).
 
 ### field-scene120-lucca-e0-fadechange (op-0xE0 fade-changeloc, the "She's Princess Nadia!" loop)
 
@@ -633,8 +678,8 @@ Pins op 0x04/0x07 met with the caller's wait latch (`$7F0980,X`) ALREADY set: C0
 own operands and installs nothing. On the Telepod the pod's touch function (obj11 fn2, priority 2) parks on `04 06 36`
 (Crono's fn6, the raised arms); A on the frame fn6 starts pre-empts it with fn1 (the same code, priority 1), whose own
 call meets the latch and waits for the fn6 already playing. The port used to install it afresh and Crono raised his arms
-twice (the user's report, 2026-10-19). Seeded by `saves/field_re/scene8_pod_latch.state` (the user's snes9x capture
-spliced over `scene8_gate_cutscene.state`); the cartridge under the rule against the port from the same WRAM and SPC, six
+twice (the user's report, 2026-10-19). Seeded by `saves/field_re/scene8_pod_latch.state` (a recipe twin of the user's snes9x
+capture spliced over `scene8_gate_cutscene.state`: recipe `fxr_scene8_pod`, tools/fixtures/rest.json); the cartridge under the rule against the port from the same WRAM and SPC, six
 events on the cartridge's frame plus the count of fn6 runs. Re-pin only if the capture or the drive changes, never to
 absorb a difference. Dossier: `disasm/notes/call_wait_latch_preempt.md` sec. 4.
 
@@ -791,12 +836,13 @@ index to (0,0). Dossier: `disasm/notes/field_doors_occluders_decisionbox.md`.
 
 ### field-stairs-fall-camera-follows-vs-rule-cartridge (`--scene 131 --loadwram fall_stairs083.lakewram --walkscript d:200`)
 
-The user's snes9x capture at the top of loc 083's stairs, which a script has turned into a conveyor (`$7E:7000` = 0D).
+A recipe twin of the user's snes9x capture at the top of loc 083's stairs, which a script has turned into a conveyor (`$7E:7000` = 0D).
 Down held: the cartridge's lead falls while `$011F` is 0, and the camera follows through the momentum C0/88E5 turns
 into the scroll request (the collision C0/8A6D still runs on `$0120`). Pins the port's camera steps during the fall
 (38 f5, 39 f11, 3C f23, 40 f39; the cartridge's 1-2 frames later). Two mechanisms: the host runs the controller with
 explore off (no d-pad; the lead integrated only while its script sits at op B0), and the collision fetch reads the
-prop planes from the scene's WRAM (the host's packed copy had lost the conveyor bits). Needs the private capture.
+prop planes from the scene's WRAM (the host's packed copy had lost the conveyor bits). Input made by recipe
+`fxr_fall_stairs083` (tools/fixtures/rest.json).
 
 ### battle-hypno-wave-rings-rotate-vs-rule-cartridge
 
@@ -815,15 +861,18 @@ entries 0-3 only, C0/B262's hides). The owner's F5 at the Chancellor (loc 0C6), 
 change between the ack (f2412) and f2700, the room's own colour animation going on from the ack's next frame (C0/00EB,
 `$2278` a step every 7 frames -- no C0/0304 reload hold), and the f2700 frame's FNV (the party fallen, Yakra standing). Before, the VM
 ticked through the wait -- the scene played on as if the fight were won -- and the field's objects were drawn standing.
-Needs the owner's F5 snapshot (a CTFS image, tied to sizeof(CtScene)).
+Its input, saves/field_re/yakra_defeat_039.state, is a CTFS image (tied to sizeof(CtScene)) made by recipe
+`fxr_yakra_scene` (tools/fixtures/rest.json) in place of the owner's F5 snapshot.
 
 ### field-battle-discards-an-open-box-vs-rule-cartridge
 
 A fight requested while a dialogue box is open: op D8 (C0/3A83) and C0/1770 do not look at the box, and the staging
 C0/024C drops it -- C0/0257-0263 `STZ $0129 / $0126 / $0127`, no close ramp; the box's script advances after the return.
-The user's magus_scene capture (the cult's box opens by itself as the party walks down), the request poked at f87 with
+The magus_scene state, a recipe twin of the user's snes9x capture (the cult's box opens by itself as the party walks
+down), the request poked at f87 with
 `CT_POKEWRAM_AT`: pins the three bytes cleared at f92 (the rule's cartridge, the same poke: at the poke + 6). Before, the
-port kept the box through the fight and drew it over the arena -- the user's report. Needs the private capture.
+port kept the box through the fight and drew it over the arena -- the user's report. Input made by recipe
+`fxr_magus_scene` (tools/fixtures/rest.json).
 
 ### battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge
 
@@ -850,24 +899,27 @@ frames to f9600 on both sides. Graded: the location chain `19F 1F4 1F5 1EE 1F5 1
 and the party at the end (`02 04 01 | 80 85 81 03 05 80`: Lucca, Frog, Marle, with Marle's reserve entry marked), and the
 Last Village box's own timing ("A tidal wave!": its `03 08` pause, `06` 121 frames after state 7, then `07`, then `0D` with
 no press). Before 2026-10-14 the port stopped black on overworld 1F4 (op 03), had no world-to-world exit, kept Crono in the
-Last Village, waited for A on self-closing boxes and listed Marle twice on the exchange screen. Full tier (~2.5 min).
-Needs the user's capture (SKIPs without it).
+Last Village, waited for A on self-closing boxes and listed Marle twice on the exchange screen. Untiered (full run
+only, ~2.5 min). The state is made by the recipe lg_ocean_palace_19f (Jackie's ch22 played through the Ocean Palace,
+since 2026-10-23; until then the user's capture).
 
 ### race-step-485d-vs-oracle (`tools/race_step_cmp.py --poked`)
 
 The motorcycle race's per-frame task `$7E:485D`, native (src/seq_race.c), against the cartridge call by call: from the
-user's Lab 32 capture (saves/race_re/race_user.state) four drives (idle, B boosts, steering with bumps, the camera) are
+recipe twin of the user's Lab 32 capture (saves/race_re/race_user.state, recipe `lg_race_lab32`) four drives (idle, B
+boosts, steering with bumps, the camera) are
 walked in 37-frame segments and at every stop the task runs once on both sides from the same frame (`ct.exe --callrom
 7E485D --writes` with CT_CALLROM_ALLWRITES=1, against `ct.exe --racestep`); 22 more frames have the finish's two arms and
 the eight bump codes poked in (the win with every jackpot score, Johnny's win). Every WRAM byte and APU port write equal:
-`racestep: <drive> N stops, 0 differing`. Full tier (~1.5 min). Needs the user's capture.
+`racestep: <drive> N stops, 0 differing`. Untiered (full run only, ~1.5 min). Input made by recipe
+(tools/fixtures/lategame.json).
 
 ### race-task-4339-vs-oracle (`tools/race_step_cmp.py --task 4339 --poked`)
 
 The race's camera task `$7E:4339` (src/seq_race.c CtRaceTask4339): the story's L/R turn of the camera (`$0044` != 0), the
 steering masks `$00B6/$00B8` the race task steers by, the camera's height (X/A every second frame). The same walk as
 race-step-485d-vs-oracle (261 calls) plus 61 poked frames: L/R at every counter edge on both frame parities, and the angle
-on every quarter boundary. Full tier (~1.5 min). Needs the user's capture.
+on every quarter boundary. Untiered (full run only, ~1.5 min). Input made by recipe `lg_race_lab32`.
 
 ### race-scripts-vs-oracle (`tools/race_scripts_cmp.py`)
 
@@ -875,25 +927,27 @@ The race's two `$C3` script tasks, `$7E:3749` (page `$0A00`) and `$7E:3754` (pag
 natively over their WRAM pages (src/seq_race.c CtRaceScript): along the idle drive's start (every 13 frames to f900) and
 on 75 poked IPs each -- the inline call `$3F59` with seven RNG counters (both camera intros), the countdown's sounds, the
 finish `$4211`-`$424C` and its END, every loop at its limits. Every WRAM byte and the post's port writes equal the
-cartridge's (`--callrom 7E3749` / `7E3754`). Full tier (~30 s). Needs the user's capture.
+cartridge's (`--callrom 7E3749` / `7E3754`). Untiered (full run only, ~30 s). Input made by recipe `lg_race_lab32`.
 
-### race-story-plays-through-in-the-port (Belthasar, the user's Lab 32 capture)
+### race-story-plays-through-in-the-port (Belthasar, a recipe twin of the user's Lab 32 capture)
 
-Johnny's race in the port itself: from saves/race_re/race_user.lakewram (the user's capture, loc 0DF), A at f30 -- the
-second-meeting arm's `CHANGELOC 10F` (f46) and `FF 00` at f66 open the native race (seq_race.c, 44 black frames of opening:
-the overlay's C3/0557 cycles, the init's DMAs, the setup's 9521394), which runs to its END and reboots into 10F, whose
-script returns to 0DF at (39,14) -- the cartridge's path. The picture is black (stage 2). Quick (~3 s).
+Johnny's race in the port itself: from saves/race_re/race_user.lakewram (a recipe twin of the user's capture, loc 0DF,
+recipe `lg_race_lab32`), A at f30 -- the second-meeting arm's `CHANGELOC 10F` (f46) and `FF 00` at f66 open the native race
+(seq_race.c, 73 black frames of opening: the overlay's C3/0557 cycles, the init's DMAs, the setup's 9521394 and the song's
+upload), which runs to its END and reboots into 10F, whose script returns to 0DF at (39,14) -- the cartridge's path. The
+picture is graded by race-story-picture-midrace-in-the-port-vs-oracle and race-story-picture-finish-in-the-port-vs-oracle.
+Untiered (full run only, ~3 s).
 
 ### race-stage-logic-vs-oracle (`tools/race_stage_cmp.py`)
 
 The motorcycle race's LOGIC end to end, native (src/seq_race.c CtRaceStageOpen / CtRaceStageFrame): the overlay
 decompressed into $7E:3000, the common init, the setup's race values, page A's run inside the setup, then one NMI a frame
 (the clock, the task snapshot, the pad and the pause, the tasks $3749 $3754 $42BD $4F54-logic $4339 $485D in order) to the
-script's END. The cartridge plays the user's Lab 32 capture under the rule; the port runs `ct.exe --racestage` from the
+script's END. The cartridge plays the recipe twin of the user's Lab 32 capture under the rule; the port runs `ct.exe --racestage` from the
 cartridge's WRAM at the hand-off with the same pad (its frame k = the cartridge's k + the setup's frames, the pad read one
 frame after it is held). Four drives (idle, B boosts, steering with bumps, the camera): every race byte equal on every
 frame and the END on the same frame (f2877, f2843, f2841, f2844). The picture's bytes are not graded (stage 2).
-Full tier (~1 min). Needs the user's capture.
+Untiered (full run only, ~1 min). Input made by recipe `lg_race_lab32`.
 
 ### battle-lavos-mimic-fight-vs-rule-cartridge (Belthasar, from the oracle's pre-fight state)
 
@@ -902,7 +956,8 @@ front of the shell): up 300 frames into it, then A every 12. Crono kills the slo
 it, is re-targeted at the dispatch by C1/D63F (the hop through $AE6D, then `LDX #0003 / LDA #0B / JSR C1/AF22` until a
 living seat: $26 5C -> 60, seat 9) -- the port used to strike the first living slot; the victory has no celebration
 ($2989 bit 0: C1/35A9 returns before the ladder and the 64-frame $5DC9 hold); the ack and the arena 15A. The cartridge:
-$26 = 62 f767, 65 f1075, the ack f1380, 15A f1490 -- the port on each to 3. Quick (~10 s). Needs the local saves.
+$26 = 62 f767, 65 f1075, the ack f1380, 15A f1490 -- the port on each to 3. Untiered (full run only, ~10 s). Input made
+by recipe `lg_lavos_1d3_wait` (tools/fixtures/lategame.json).
 
 ### lavos-day-chain-in-the-port (Belthasar, the oracle's own run from Jackie's ch26)
 
@@ -911,7 +966,8 @@ the party, 1F7 (Lavos rises -- its world script's `34 44 7B`, C2/7B44: `$7F00AA`
 1D2, the talk in 1D3, the first mimic arena 15B, then the walk into Lavos and A only: the first fight and its arena 15A.
 Every location change on the cartridge's frame to 3 until the fight (the cartridge: 961, 2057, 2226, 2481, 3225, 3456,
 3838); inside the fight the pad meets the menus a frame apart (15A f5570, the cartridge f5500) -- the fight itself is
-battle-lavos-mimic-fight-vs-rule-cartridge. Quick (~13 s). Needs the local saves.
+battle-lavos-mimic-fight-vs-rule-cartridge. Untiered (full run only, ~13 s). Input made by recipe
+`lg_lavos_1d2_arrival` (tools/fixtures/lategame.json).
 
 ### ending-chain-after-lavos-in-the-port (Belthasar, the oracle's own run from Jackie's ch27)
 
@@ -919,30 +975,32 @@ After Lavos's core (saves/ending_re/ending_052_f1745.*, loc 052): A every 202 fr
 fair 050, the walk to Leene's Square 051 once control is back, the telepods' farewells 055 and down to the square again.
 Every location change and both control returns on the cartridge's frame to 3 (10F f82, 002 f1040, 04F f2038, 050 f8054,
 control f11888, 051 f13474, 055 f13986, control f28650, 051 f44407). (The cartridge's $011F = 1 inside each load -- C0/0BC8
-at its start, the fn0's `E3 00` at its end -- is not on screen; the port writes both on one frame.) Full (~70 s).
+at its start, the fn0's `E3 00` at its end -- is not on screen; the port writes both on one frame.) Untiered (full run
+only, ~70 s). Input made by recipe `lg_end_core_defeated` (tools/fixtures/lategame.json).
 
 ### tyranno-ff24-chain-plays-through-in-the-port (Belthasar, scene 301 from Jackie's ch17)
 
 The Tyranno Lair's top from the ROM's own load (saves/tyranno_re/tele301_req.*: ch17 brought in by `--teleport 301 8 30 0
 --method req`): the walk to the trigger row, Azala's talk and the fight driven with A (both enemies' HP poked to 1 at f1700 --
-a fixture: the party loses on A alone), `FF 24` natively (src/seq_entry4.c, 22 black frames) to its END, the reboot into 301,
-world 1F3 with the impact's colour fade (world op 49, C2/1B15: $0047-$0049 down by 4 a frame, the cartridge's shape 3 frames
-later) and 105. The END comes 1732 frames after the op, the cartridge's 1734 (the opening's vblank wait, sequence_table.md
-sec. 15). Quick. Needs the local saves.
+a fixture: the party loses on A alone), `FF 24` natively (src/seq_entry4.c, 23 black frames) to its END, the reboot into 301,
+world 1F3 with the impact's colour fade (world op 49, C2/1B15: $0047-$0049 down by 4 a frame) and 105. The END comes 1734
+frames after C3:0000, the cartridge's 1734 (sequence_table.md sec. 15); since the re-pin of 2026-10-22 the fade and 105 are
+on the cartridge's frames. Untiered (full run only). Input made by recipe `lg_tyranno_tele301` (tools/fixtures/lategame.json).
 
 ### battle-azala-ring-op-eb-in-the-port (Belthasar, the same fight unpoked)
 
 Azala's technique arms effect program 74 (D1/6CD9), whose loop runs op EB (CD/185F -> D1/EFE3, the ring of 106 point pairs
 around point 0): without it the program stopped and the fight froze with the boulder on screen. Pins the loop's exit and the
-program's end (`stops=0`). Quick. Needs the local saves.
+program's end (`stops=0`). Untiered (full run only). Input made by recipe `lg_tyranno_tele301`.
 
 ### panorama-story-ff23-plays-through-in-the-port (Belthasar, the attract's hand-off with the story's bytes)
 
 After the Blackbird, scenes 102-107's controller takes its story arm (`$7F0057` bit 2 clear, the storyline D3): `DD F6 03
-91 35` stages the Epoch's world 1F6 and `FF 23` opens entry 3 natively (src/seq_entry3.c, 17 black frames), which runs to
-its END; the teardown reboots into 1F6 (its world natives C2/7B5A / 7B9F) and the world script goes on to 1DD at f1010 --
-the cartridge's f1011 from the same state (saves/blackbird_re/ff23_story_f18.*). The picture is black (stage 2). Quick.
-Needs the local saves.
+91 35` stages the Epoch's world 1F6 and `FF 23` opens entry 3 natively (src/seq_entry3.c, 18 black frames), which runs to
+its END; the teardown reboots into 1F6 (its world natives C2/7B5A / 7B9F) and the world script goes on to 1DD at f1007
+(the pin of 2026-10-22; its notes record the port 3 frames early at FF 23's opening, f5 against the cartridge's f8) from
+saves/blackbird_re/ff23_story_f18.*. The picture is graded by entry3-story-picture-in-the-port-vs-oracle. Untiered
+(full run only). Input made by recipe `lg_blackbird_story_poked` (tools/fixtures/lategame.json).
 
 ### ending-story-plays-through-in-the-port (Belthasar, the oracle's own playthrough)
 
@@ -950,7 +1008,8 @@ The game's ending in the port itself: from saves/ending_re/ending_pre_ff2b.lakew
 made), obj10's `CHANGELOC 02D` and `FF 2B` open the native ending stage (seq_ending.c, 48 black frames: the overlay's C3/0557
 cycles, the init's DMAs, the setup's 10986252), which runs to its END and reboots into 02D; the field's chain 105 -> 059
 -> 05A follows (the cartridge's), and scene 90's `FF 2E` opens at f6840 (the cartridge: f6838) with its 52. The picture is
-black (stage 2). Quick (~7 s). Needs the local saves.
+graded by ending-ff2b-story-picture-in-the-port-vs-oracle and ending-ff2e-story-picture-in-the-port-vs-oracle. Untiered
+(full run only, ~7 s). Input made by recipe `lg_end_pre_ff2b` (tools/fixtures/lategame.json).
 
 ### ending-stage-logic-vs-oracle (`tools/ending_stage_cmp.py`)
 
@@ -964,15 +1023,16 @@ Jackie's ch27): `FF 2B` (Leene's Square) from its hand-off at f130 -- 4747 frame
 the END (f4925) on the same frames -- and `FF 2E` (scene 90, "The End") from f6837 -- 10948 frames, 0 differing, the
 markers on the same frames. The port runs `ct.exe --seqstage` from the cartridge's state at each hand-off (its SPC and its
 PPU's field bit seeded from it). The picture's bytes (the hooks' scratch in page A, the HDMA shadow $038C, the two RNGs)
-are not graded (stage 2). Full tier (~2 min). Needs the local saves.
+are not graded (stage 2). Untiered (full run only, ~2 min). Inputs made by recipes (tools/fixtures/lategame.json).
 
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
-Real battery saves across the story (saves/downloaded/ctjackie, local and gitignored -- SKIPs without them), booted the
+Real battery saves across the story (saves/downloaded/ctjackie, gitignored; fetched by `python tools/fetch_saves.py`
+from tools/third_party_saves.json, and ch16's state made by recipe `jackie_ch16`), booted the
 player's way and pressed through with A. Seven saves whose world scripts needed what the 2026-10-14 census found missing
 (ops 24, 44/45, 4F and the native C2/7BC4) must run without a PARKED/UNDERIVED line; ch16's world map buffers after op 4F
 equal the cartridge's (`map ch16 diffs 0`); ch23 (loc 173, after the Ocean Palace) pins the frame with the lead drawn --
-the lead is `$0197`'s object, not the first fn0 with op 0x57 (Crono's own load). Full tier (~2 min).
+the lead is `$0197`'s object, not the first fn0 with op 0x57 (Crono's own load). Untiered (full run only, ~2 min).
 
 ### menu-exchange-vs-oracle (`tools/menu_exchange_cmp.py`)
 
@@ -980,8 +1040,10 @@ The party exchange (menu mode 5, screen `$07`): the field's Y at storyline 0x49 
 `81 01 FF`, the cursor walks the two columns, Robo is picked from the reserve and swapped for Marle, B closes it (the song put
 back, the field reloaded with the new party). The recipe gato_wait on both sides (`7F0000=49, 2982=02, 2983=03, 0126=00`;
 the port's SPC is the state's, in lockstep): the party, the roster `$0F02-$0F0C`, the picks, the cursor, the song bytes,
-`$0D10` and `$0119`, each while the screen owns it -- 0 differing over 2267 frame-fields. Quick tier (~2 s). The picture is
-not graded (its BG3 wave, the prompt text and the hooded figure are OPEN). disasm/notes/menu2_form_screen.md 2.14.
+`$0D10` and `$0119`, each while the screen owns it -- 0 differing over 2937 frame-fields (2267 when first pinned; the BG3
+wave's bytes and `$0DA0` were added 2026-10-18). Quick tier (~2 s). The picture is graded by
+menu-exchange-picture-vs-oracle (full tier, `tools/menu_exchange_pic_cmp.py`: 0 px differ on its frames).
+disasm/notes/menu2_form_screen.md 2.14.
 
 ### battle-victory-teardown-frames-vs-oracle (`tools/battle_victory_teardown_cmp.py`)
 
@@ -996,21 +1058,24 @@ only after looking at both sides' frames; the zeros must stay zeros. disasm/note
 
 An enemy a tech kills: CD/0043, the death routine, waits until `$CCEA` is 0 (the tech's effect program has ended and
 CD/0453 has cleaned up) before the #95 post and the red fade record 10 (`$0598 = 40 C0 0F 10`); the clean-up's own colour
-record is the same record 10. The user's magus_scene capture (the Diablos fight), X-Strike learned by `CT_POKEWRAM`:
+record is the same record 10. The magus_scene state, a recipe twin of the user's snes9x capture (the Diablos fight),
+X-Strike learned by `CT_POKEWRAM`:
 pins `$CCEA` cleared at f795 and the death's record f797-812 (the rule's cartridge: f796, f798-813). Before, the port
 waited a fixed two frames, its fade started at once and the clean-up's record overwrote it: the corpse dissolved in its
-own colours. Needs the private capture.
+own colours. Input made by recipe `fxr_magus_scene` (tools/fixtures/rest.json).
 
 ### field-savepoint-a-opens-the-save-screen-vs-rule-cartridge / field-shelter-only-on-the-save-point-vs-rule-cartridge
 
 The save point. Its object (the same script in every location that has one) sets `$7F01CF` bit 7 while the lead stands
 on its tile and, on A (the pad's `$00F8` bit 7, op `31`), runs `C8 40`: mode 6, screen `$0B` (C2/D4F0), the Save screen
 without the ribbon, whose B closes the menu (C2/82B2). The first check holds A on the tile of
-`saves/field_re/savept084_lake.state` (the user's game state on loc 084's save tile, made through the ROM's loader) and
+`saves/field_re/savept084_lake.state` (a recipe twin of the user's game state on loc 084's save tile, made through the
+ROM's loader) and
 pins the park, the menu's C frame, the save's jingle (slot 1 written) and the script's resume; the frames are the
 rule's cartridge's (the park 3 frames apart, every step after it equal; the screen 0 px from the cartridge's). The second
 tries the Shelter off the tile (refused: C2/9969 clears `$77C8` bit 1 when `$0D34 != 0`), then on it: the party's HP
-and MP restored on the cartridge's values, a frame ahead (the port's input convention). Both need the private capture.
+and MP restored on the cartridge's values, a frame ahead (the port's input convention). Both read the input made by
+recipe `fxr_savept084` (tools/fixtures/rest.json).
 
 ### sweep-band-25a3 (`ct.exe --sweepband25a3`) / battle-flame-toss-band-vs-rule-cartridge
 
@@ -1018,7 +1083,8 @@ The band C1/25A3 (C1/1FDD's routine 0: Slash, Lucca's Flame Toss, the enemies' a
 8000 fuzzed cases over four battle states, all of WRAM compared but the direct page; the tally counts the cases with two
 victims or more on each side and each `$9608` arm, and the check fails if any is zero. The live check plays the Manoria
 nuns fight with Flame Toss learned (`CT_POKEWRAM 2839=80`) and pins the staging `$9604-$9608 = 00 01 04 02 01` and the
-victim `$AD8E = 04` the rule's cartridge shows for the same target. Both need private battle captures.
+victim `$AD8E = 04` the rule's cartridge shows for the same target. Both read battle states made by recipes
+(`fxr_m81_nuns` in tools/fixtures/rest.json, the sweep's four states in tools/fixtures/battle.json).
 
 ### field-organ-door-opens-live (`--scene 129 --loadwram m81_naga_after_fight.lakewram --walkscript …`)
 
@@ -1030,8 +1096,8 @@ bit 4 on the tile ahead and C0/0D3E took the request; `changeloc: scene 129 -> 1
 host's collision planes (`f->C`) take a scripted copy by re-reading the destination rect from the WRAM
 (`fieldCollFromWramRect`); its old copy of its own packed cells dropped the door flag (zb bit 5), so the exit took
 the party through the door shut. A `--loadstate` / F9 hides this (it re-reads every plane from the WRAM), which is
-why `field-loadstate-keeps-the-door-the-organ-opened` passed throughout. Needs the private capture
-`saves/field_re/m81_naga_after_fight.lakewram`. The request's frame is the port's own drive's; re-pin it only for a
+why `field-loadstate-keeps-the-door-the-organ-opened` passed throughout. Its input `saves/field_re/m81_naga_after_fight.lakewram` is made by recipe
+`fxr_m81_naga_after_fight` (tools/fixtures/rest.json). The request's frame is the port's own drive's; re-pin it only for a
 change that moves the walk or the scene before it.
 
 ### field-scene200-prio0-occluder-order (`--scene 200 --at 632 143`)
@@ -1262,9 +1328,10 @@ under the rule and the port seeded from its WRAM (`saves/field_re/inn_sleep_10f.
 teleporting `base_loc6` to the counter, poking the keeper's five stores and teleporting to his destination) and grades
 the return (frame, location, tile, facing), the beds and the wake-up walk of obj1/obj2 frame for frame. The walk found
 two more mechanisms: the init pass lacked the result-word loads 0x19/0x1C and wrote the PC loader's own `$1100,X` only
-after every fn0 (Marle took Crono's bed), and the host's scripted-lead follow rounded the lead's words. PINNED
-RESIDUAL: the walk starts one frame early in the port (loc 00C's reload is priced short, the open load-clock item); the
-comparison aligns each side on its first step. Op 0xE2's own handler is graded by `sweepops-player-script-opcodes`
+after every fn0 (Marle took Crono's bed), and the host's scripted-lead follow rounded the lead's words. The walk
+starts on the same frame on both sides (f335) since the re-pin of 2026-10-22: the walked load (field_cost.c) prices loc
+00C's reload to the cartridge's frame, which closed the earlier pinned residual (the port's walk one frame early); the
+comparison still aligns each side on its first step. Op 0xE2's own handler is graded by `sweepops-player-script-opcodes`
 (its seeding was blind at first: two mutations survived a zeroed local array).
 
 ### menu-shell-open-close-vs-logical-oracle — the menu shell's open and close
@@ -1275,8 +1342,9 @@ the NMI off, the screen's substate 0 (the ribbon builder's yields, the shop's C2
 input call at P+1 dropping A/B/L/R, and on the way out C2/83CA's fade-out over the frozen image, the RTL, the field's
 reload and C0/2824's fade-in. `tools/menu_shell_cmp.py` compares the brightness level of every frame on the X menu and
 the shop against the LOGICAL oracle (the real-time one has lag frames in both builds) -- 0 frames differ. The reload
-window is deliberately not graded: its length comes from the location load model, which prices C0/286C 2-3 frames
-short after a menu (loc $082: 38 vs 40; loc $005: 35 vs 38), an open item of that model. ⚠ The same work re-anchored
+window is not graded here: its length comes from the location load model, graded by field-reload-cost-vs-oracle (the
+reload's frames now equal the cartridge's: 39/39 and 38/38 at loc $082, 37/37 at loc $005; it was 2-3 frames short
+when this check was written). ⚠ The same work re-anchored
 46 menu checks: every drive's first wait after the menu opens grew by the shell's delta (19 field X, 18 overworld, 22
 shop) and their frame-only lines moved with it -- nothing inside the menu changed.
 
@@ -1285,7 +1353,7 @@ shop) and their frame-only lines moved with it -- nothing inside the menu change
 USER REPORT 2026-09-24 (translated from Portuguese): *"when using a tonic, it is possible to exceed the character's maximum HP"*. The item appliers
 clamp to the sheet's +$3F (effective max HP), which only the menu's open pass (C2/8139 -> C2/9875 -> C2/99B2: all
 seven sheets recomputed and written back) makes true; outside the menu the word holds something else (1028-1029 on
-party3_field). `-sheets-` compares the seven sheets after the open and a Tonic on Lucca (40 -> 88, both sides).
+party3_field). `-sheets-` compares the seven sheets after the open and a Tonic on Lucca (39 -> 88 on the recipe twin, both sides).
 `-wram-` grades the menu program's own bytes every frame of one X menu against the logical oracle: the RNG cursor
 $0D00 (C2/842F, from S0), the brightness shadow $0D10, and $0D38 -- which also pins the callers' RAM discipline (the
 field's C0/011B / C0/0905, the overworld's C2/2E23 / C2/2E72) the port did not have.
@@ -1385,8 +1453,9 @@ running op 0x96. Two port inventions made him walk a different path from the ROM
 that crosses the Telepod: (1) the heading was HELD while both axes were short of the target tile, but
 `C0/4F61` re-reads `$1801/$1881` and recomputes at `4FAB` on every step issue (oracle: obj10 re-aims at
 f2/f6/f14); (2) the arrival snap corrected ONE AXIS per visit, but `C0/305D` sets both velocities in one
-call (`3079` falls into the same Y test at `3089`) — it is diagonal. Both fixtures are the user's snes9x
-captures converted with `tools/s9x_to_lake.py`; `--withpos` grades POSITION, so this pins the mover
+call (`3079` falls into the same Y test at `3089`) — it is diagonal. Both fixtures were the user's snes9x
+captures converted with `tools/s9x_to_lake.py`; today each is a recipe twin of the user's snes9x capture
+(`fxf_scene8_taban_moving` / `fxf_scene8_taban_moving2`, tools/fixtures/field.json). `--withpos` grades POSITION, so this pins the mover
 sub-pixel for sub-pixel over 600 frames. **-moveto2 is the control**: it was already CLEAN before the fix,
 so it proves the change did not move a case that was already right. Dossier:
 `disasm/notes/field_moveto_reaim_and_snap.md`, which also records what came back clean first (1728
@@ -1674,9 +1743,9 @@ the real `$7E:1E00` mailbox and the real emulated Akao driver. `posted -> $1E00=
 anti-vacuity half: the driver clears the command byte only when it has actually read it, so the check
 cannot pass by staging into a mailbox nobody services.
 
-The check also pins a COUNT -- `title-sound: 3 post(s), $2143 wait 6 frame(s)` -- because an extra
-`staged` line would not fail a substring match. Three posts is the invariant: the setup's song,
-`$34AB`'s fade and `$34D5`'s stop. The `6` is the setup's own spin (`$7E:5AAA LDA $2143 / AND #$0F /
+The check also pins a COUNT -- `title-sound: 13 post(s), $2143 wait 6 frame(s)` -- because an extra
+`staged` line would not fail a substring match. (It was 3 posts -- the setup's song, `$34AB`'s fade and
+`$34D5`'s stop -- until the re-pin of 2026-10-22 for the power-on boot, disasm/notes/boot_loader.md sec. 10.) The `6` is the setup's own spin (`$7E:5AAA LDA $2143 / AND #$0F /
 BEQ`) and is **measured by the port's own emulated driver, not baked** -- the oracle spins boot
 133..139, just over six frames, and the port's SPC answers on the same schedule.
 
@@ -1881,7 +1950,7 @@ cartridge's `--lifetrace` (C0/5977 dispatches) against the port's `CT_SLOT1TRACE
 where it stops, obj0's IP/priority untouched, and for the battles the mailbox from the first
 C0/1BE6 driver-mode post through the first post after the runner (`70 00`, `10 18`, `18 BA` at 0AD).
 Frames are NOT compared: the cartridge spends ~13-19 frames in the reload chain, the port none.
-Seeds: `saves/attract_loc0AD_flea.state`, `saves/battle_re/party3_field.{state,lakewram}`,
+Seeds: `saves/attract_loc0AD_flea_rule.state`, `saves/battle_re/party3_field.{state,lakewram}`,
 `saves/grupo_3_mapa.state`, `saves/battle_re/party3_form.raw.wram`. Re-pin only if the oracle side
 itself changes (a new trail means the cartridge ran different ops — find out why first).
 
@@ -1891,7 +1960,8 @@ The attract's three demo battles (0AD, 07D, 087) share ONE battle RNG stream: C1
 the boot's two shuffles and the AI init (C1/80E8 -> C1/8C09) draw from it, and C1/8443 hands the final `$26` back.
 A draw one fight misses rotates the next fight's turn order. The tool runs both sides live -- the port's attract
 (`--scene 433 --selftest`, `CT_BATTLE_MEMMON` + `CT_BATTLE_TRACE`) and the cartridge's `--monitor
-7EB163:11,7EB185:1,7E29AD:1 --writer` from `saves/attract_cena_inicial.state` -- and grades per fight the turn order
+7EB163:11,7EB185:1,7E29AD:1 --writer` under the rule from `saves/attract_cena_inicial_rule.state` (recipe-made,
+tools/fixtures/attract_rule.json) -- and grades per fight the turn order
 `$B163`, the first cursor pass's `$B185` (C1:82EE) and the `$29AD` handback (C1:8448): nine values. Frames are NOT
 compared. Its three mutations are the three mechanisms it pins (disasm/notes/battle_boot_turns.md §7): the boot
 eval drawing before the demo bit comes back, op 04 (C1/98C5), and C1/FD5E's multiplies leaving `$2E` = 0 for the
@@ -1915,30 +1985,31 @@ track 4). Re-pin only if the action's length changes with an oracle-verified rea
 The 07D's field places its enemies and its sprite-133 object with op 0x8C (C0/4BC3: the TILE is the low byte of a
 scene var, `$1800` is kept) out of vars that op 0x21/0x22 fill with an object's tile bytes, and a PC's load op
 writes the party table `$0197` itself (C0/42B3). disasm/notes/field_op8c_place_from_vars.md. The first check runs
-the attract and the cartridge (`--monitor 7E29BF:60` from `saves/attract_cena_inicial.state`) and compares the five
+the attract and the cartridge (`--monitor 7E29BF:60` under the rule from `saves/attract_cena_inicial_rule.state`) and compares the five
 staged enemy records byte for byte; the second is the field lockstep from `saves/attract_07d_field_f4320.state`
-(PEEK_SAVE of the attract at f4320), whose first divergence is now f81 -- the party's op 0xD9 walk, an OPEN
-residual (the port's walk ends 8 frames early); a LATER first divergence after a D9 port is an improvement to
-re-pin. The third peeks the port's WRAM just after the 07D load (selftest f5830) for obj8 and `$0197`, the
+(PEEK_SAVE of the attract at f4320), whose first divergence is now f176 of 200 (the pin, graded against the rule's
+oracle; it was f81 when this was written -- the party's op 0xD9 walk, an OPEN residual: the port's walk ended 8 frames
+early); a LATER first divergence after a D9 port is an improvement to re-pin. The third peeks the port's WRAM just after the 07D load (selftest f5830) for obj8 and `$0197`, the
 cartridge's load values. Re-pin none of them on the port's word: the values are the cartridge's.
 
 ### vmdiff-gato-d9-release-vs-oracle / vmdiff-forest-ambush-d9-vs-oracle / attract-demo-battle-midwalk-seed-stages-vs-oracle
 
 Op 0xD9 (C0/326C) releases the party onto the walk programs C0/5CEC copies to `$7F3720/3740/3760`, and the scheduler
 queue (C0/59D9) runs the lead first (disasm/notes/field_d9_party_walk.md). The two locksteps run the GATO approach
-(`saves/gato_t0.state`, first divergence f144 = the battle boot) and the forest ambush
-(`saves/battle_re/forest_wait_ambush_active.state`, f282) through the walk; before the port they diverged at f41 and
-f247, on the release. The third seeds the attract's demo battle from the cartridge's WRAM taken mid-walk and pins the
+(`saves/gato_t0.state`, first divergence f143 = the battle boot) and the forest ambush
+(`saves/battle_re/forest_wait_ambush_active.state`, f232) through the walk; before the port they diverged at f41 and
+f247, on the release. (Both seeds are recipe-made now: on the owner's captures the pins were f144 and f282; the forest
+twin's scene runs 50 frames shorter, so its op D8 comes at f229.) The third seeds the attract's demo battle from the cartridge's WRAM taken mid-walk and pins the
 staged party records (`$29B0`), the cartridge's bytes. A LATER first divergence is an improvement to re-pin; an earlier
 one is a regression.
 
 ### field-forest-ambush-stages-vs-oracle
 
-The forest ambush lockstep above stops at f282, which is `--vmdiff`'s reach: op D8 runs at f279 on both sides, the
-battle consumer (C0/1770) arms at f280 and the cartridge's objects stand still, and `ct.exe` links no field.c. This
+The forest ambush lockstep above stops at f232, which is `--vmdiff`'s reach: op D8 runs at f229 on both sides, the
+battle consumer (C0/1770) arms at f230 and the cartridge's objects stand still, and `ct.exe` links no field.c. This
 check continues in the real host: `Belthasar --scene 19 --loadwram saves/battle_re/forest_wait_ambush_active.lakewram`
-(the state's own WRAM) with `CT_FIELD_MEMMON`, pinning the staged interface at the port's f281 (the end of its frame =
-the cartridge's first act of f282): `$29B0`, the eight `$29BF` records, `$019D`, `$0102` -- the logical oracle's bytes.
+(the state's own WRAM) with `CT_FIELD_MEMMON`, pinning the staged interface on the port's f229-f231 (the recipe twin's
+frames; on the owner's capture it was f279 / f281 / f282): `$29B0`, the eight `$29BF` records, `$019D`, `$0102` -- the logical oracle's bytes.
 Its mutation stages a frame later. Re-pin never: the values are the cartridge's.
 
 ### battle-hud-strip-command-windows-vs-oracle (`python tools/battle_hud_strip_cmp.py --suite`) / battle-hud-live-forest-ambush-vs-oracle
@@ -1960,7 +2031,7 @@ The strip's windows in the player's Window Color (`$2991 & 7`). No battle code l
 F0..FF / 3FC..3FF and CGRAM row 0 are the field window's, as the location load left them (C0/6E5C, C0/70E9), and the
 bodies' gradient is HDMA channel 5's records (D1/F83D) -- disasm/notes/battle_hud_render.md, "THE WINDOW COLOR". The
 check is the --suite comparison on the Dragon Tank's fight (loc 01C) loaded in colours 2, 4 and 6
-(saves/battle_re/wincolour/, local; the tool's docstring has the recipe). Colour 0 is the --suite check's. Re-pin never:
+(saves/battle_re/wincolour/tank_c2/c4/c6.state, made by recipes in tools/fixtures/rest.json). Colour 0 is the --suite check's. Re-pin never:
 the strip is the cartridge's on all 12288 px of each state.
 
 ### sweep-bganim-machines / field-bg-seed-{tent-keeper,party3,loc13B-colour-cycle}-vs-oracle (the field's background)
@@ -2314,8 +2385,9 @@ Three different kinds of `expect` line exist. Know which one you broke:
 
 1. **Oracle lockstep first-divergence frames** (`vmdiff-*`): `--vmdiff` seeds our VM
    from the oracle's WRAM and reports the FIRST scheduler divergence. The pinned
-   frames (im_so_sorry **f141**, bedslide **f51**, DEMO8 **f109**, S5 **f114**) are
-   oracle baselines recorded across many commits. **An EARLIER first divergence is a
+   frames are oracle baselines recorded across many commits (im_so_sorry f141, bedslide f51,
+   DEMO8 f109 and S5 f114 when this was written; today im_so_sorry, bedslide and S5 are
+   CLEAN and DEMO8 first diverges at **f132**). **An EARLIER first divergence is a
    regression** — full stop. A LATER divergence (or CLEAN) is an improvement: verify
    it against the oracle, then re-pin with `--pin` and say so in the commit.
 2. **fnv32 render snapshots** (`render-scene1/5-snapshot`): the hash pins the whole
@@ -2331,44 +2403,37 @@ Three different kinds of `expect` line exist. Know which one you broke:
 `--pin NAME` runs the check and rewrites its `expect` list from the full output lines
 matching its `pin` regexes. It refuses to rewrite if any regex matches nothing.
 
-### The playermove open question (do not "fix" the pin)
+### The playermove question (settled 2026-07-24)
 
-`playermove-input-velocity` (`ct.exe --playermove`) is pinned at the line observed
-2026-07-01:
+`playermove-input-velocity` (`ct.exe --playermove`) was pinned on 2026-07-01 at a line with
+shortfalls (`intX$2C 269/270 … accX$2E 222/270 accY$30 134/270 velX$32 269/270`) and treated as a
+baseline under investigation, with two siblings pinned the same way. It was settled on 2026-07-24
+(disasm/notes/movement_pinned_open.md; each check's notes): both shortfalls were mis-specified
+comparisons, not engine divergence. The current pins:
 
 ```
-intX$2C 269/270  intY$2D 270/270  accX$2E 222/270  accY$30 134/270  velX$32 269/270  velY$33 270/270
+intX$2C 270/270  intY$2D 270/270  velX$32 270/270  velY$33 270/270
 ```
 
-Memory and commit messages record this check as **270/270 byte-exact**, but the
-current build diverges on the accumulator fields. Two siblings show the same drift
-and are pinned the same way: `playerframe-endtoend` (applied-velocity **196/270**,
-position still 270/270) and `porttick-autonomous-mover` (**128/136** owned-actor
-frames). These pins are **baselines under investigation** — they exist so any
-*further* drift is caught. PASS is not a pass claim. Someone needs to determine
-whether this is a real engine regression or harness drift; until then, do not re-pin
-these to make a red run green.
+- `playerframe-endtoend`: position 270/270, applied-velocity 269/270.
+- `porttick-autonomous-mover`: 152/153 owned-actor frames -- the mode's scope-limited value (it
+  owns the autonomous tick only), not a shortfall.
 
-Two more pinned residuals are *documented-expected* (not under investigation):
-`tile-prio-recompute` (94/94 mismatches — the ROM's $0C00/$0C01 is stateful for idle
-actors; a stateless recompute can't hit it, per the check's own code comments) and
-`velocity-trig-circle` (89 of 1166 samples off the trig circle, all with a zeroed
-component = collision-clipped, per the check's own tally).
+(`tile-prio-recompute` and `velocity-trig-circle`, which pinned two documented residuals here, were removed on
+2026-10-24 with the six other checks that graded the oracle against a formula in the harness and ran no code of the
+port: tools/regress_checks.json `excluded`, docs/MUTATION_AUDIT.md.)
 
-## Missing-input checks (currently SKIP)
+## Missing-input checks (SKIP)
 
-These stay in the suite so the runner names exactly what capture would revive them:
+None. In a fresh clone, after `python tools/fetch_saves.py` and `python tools/fixtures.py make all`, every check runs
+(clean-clone run of 2026-10-23: 953 pass). The last two that SKIPped, `ocean-palace-aftermath-chain-vs-oracle` and
+`ow-1f5-wave-and-light-vs-oracle`, read `saves/field_re/pre_scene_19f.{state,lakewram}`, made by the recipe
+`lg_ocean_palace_19f` since 2026-10-23 (`tools/private_captures.json` is empty).
 
-- `follower-conga-2member` — `ct.exe --followtest --from two_member.state --input 81`
-  (the scene-8 2-member conga-follower byte-exact check from commits f33346d/0fdc830).
-  **Seed it**: capture a Snes9x savestate in scene 8 with a 2-member party, convert
-  with `python tools/s9x_to_lake.py`, save as `two_member.state` in the repo root.
-- `stairs-scene13-slope` — `ct.exe --stairtest saves/scene13_stairs.wram`
-  (commit 78670ce; clean output is `stairtest: first velocity divergence at frame -1`).
-  **Seed it**: stand the player at the scene-13 stairs and dump the 128 KB WRAM
-  (e.g. `ct.exe --peek <state> out.raw` writes `out.raw.wram`), save it as
-  `saves/scene13_stairs.wram`. `build/ow_wram.bin` is an overworld capture — wrong
-  scene, do not use it.
+The two checks this section used to list now read recipe-made inputs:
+`follower-conga-2member` (`two_member.state`, recipe `telepod_show`) and
+`stairs-scene13-slope` (`saves/scene13_stairs.wram`, recipe `fxf_scene13_stairs`), both in
+tools/fixtures/field.json.
 
 Known-but-unseedable (recorded in `excluded`/notes, no suite entry possible today):
 the Porre boat-ride oracle states (`Chrono_Trigger_USA_SNES.001-.009`) are absent, and
@@ -2379,9 +2444,11 @@ lines.
 
 `tools/regress_checks.json` `excluded` records what was triaged out and the observed
 reason — currently `--checksort` (a statefulness *experiment* that by design prints
-1392/3780 known mismatches; no success signature exists) and `--movetest` (an
+1392/3780 known mismatches; no success signature exists), `--movetest` (an
 interactive can-the-player-move diagnostic with no verdict line; ~101 s; superseded by
-checkctrl/playermove/playerframe).
+checkctrl/playermove/playerframe) and `attract-race-abort-xlat-core-fallback` (2026-10-18:
+Belthasar runs the attract's FF 60 / FF 63 on the native stages and links no translated $C3
+program, so there is no translated stage left for it to grade).
 
 ## Determinism
 
@@ -2417,8 +2484,9 @@ explicitly as an input dimension instead.
 - `field-newgame-pan` requires `CT_NAMEAS=Crono` and `TB_AUTOADV=1` (declared in its
   `env` — the runner sets them for you). Without `CT_NAMEAS` the naming screen never
   confirms and the check silently captures scene 0 instead of scene 2.
-- A typo'd `ct.exe` mode flag is **silently ignored** and falls through to the default
-  M0 harness — keep `argv` exact in the JSON.
+- An unknown or incomplete `ct.exe` flag fails hard (`ct: unknown or incomplete flag '…'`,
+  exit 2; it used to be silently ignored and fall through to the default M0 harness) — keep
+  `argv` exact in the JSON anyway.
 - Timeouts (`timeout_s`) are set at roughly 5x the observed runtime (minimum 30 s);
   a TIMEOUT is reported as FAIL.
 
@@ -2446,7 +2514,8 @@ changes a single pinned byte:
   `CT_NOPACE=1` drops the governor and vsync; the loop is the same sequence of ticks.
   `field-battle-bat9-return`: 38.1 s -> 3.4 s, same output. `audio-pacing-no-drift` is deliberately excluded.
 
-Rule of thumb after this: `--quick` ~35 s, the full tier ~100 s. If a check suddenly costs ~60 fps worth of
+The rule of thumb after this (2026-09-06, a suite of ~374 checks) was `--quick` ~35 s, the full tier ~100 s;
+the current timings are in "Speed" above. If a check suddenly costs ~60 fps worth of
 wall clock (frames/60 seconds), it is missing `CT_NOPACE` or `--selftest`.
 
 ### battle-cyclone-every-victim-after-an-enemy-attack-vs-rule-cartridge (`python tools/cyclone_victims_cmp.py`)
@@ -2512,8 +2581,7 @@ instead of the enemy. disasm/notes/battle_ai_interp.md sec. 25.3.
 ### field-dragon-tank-bridge-vs-rule-cartridge (`python tools/dragon_tank_cmp.py`)
 
 The Dragon Tank's bridge (loc 01C) from its arrival to its reward lines, port against the rule's cartridge on the same
-drive (seed saves/field_re/tank/tele01c.state / .lakewram, gitignored -- SKIP without them; how it was made is the tool's
-docstring). Four lines: the tank box at the arrival (c1440) and at the hurt flash (c2160), Crono's attack anims ($9877
+drive (seed saves/field_re/tank/tele01c.state / .lakewram, made by recipe `fxr_tele01c`, tools/fixtures/rest.json). Six lines: the tank box at the arrival (c1440) and at the hurt flash (c2160), the railing at c7400 (the VRAM chips the WRAM map emptied, and its box), Crono's attack anims ($9877
 whenever he acts: the far 0E of C1/4A71's walk test against the head and the grinder) and the reward lines (XP and Gold,
 no TP line before Spekkio). The boxes are graded at the project's alignment (memory ct-frame-alignment-p2): the
 arrival's port frame 1438 against the cartridge's 1440 (P+2, clean: 16384/16384 -- the field's WRAM is the cartridge's

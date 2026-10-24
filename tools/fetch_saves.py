@@ -3,6 +3,9 @@ r"""The third-party battery saves the suite and the recipes start from, download
 
     python tools/fetch_saves.py             download what is missing or wrong, verify every file
     python tools/fetch_saves.py --verify    only check the files on disk against tools/third_party_saves.json
+    python tools/fetch_saves.py --from <zip or directory>
+                                            take a missing file from a local copy (found by its file name, at any
+                                            depth) instead of its URL -- where a host is out of reach; the hash decides
 
 A battery save (the cartridge's 8 KB SRAM) is a player's progress -- the party, the items, the story flags -- not game
 data, but these are other people's files: they are never committed. tools/third_party_saves.json lists each one with its
@@ -46,10 +49,24 @@ def fetch(url):
         return r.read()
 
 
+def local_copies(src):
+    """{file name: a function returning its bytes} for every file in a zip or under a directory."""
+    if zipfile.is_zipfile(src):
+        z = zipfile.ZipFile(src)
+        return {os.path.basename(n): (lambda n=n: z.read(n)) for n in z.namelist() if not n.endswith('/')}
+    found = {}
+    for d, _, names in os.walk(src):
+        for n in names:
+            found.setdefault(n, (lambda p=os.path.join(d, n): open(p, 'rb').read()))
+    return found
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--verify', action='store_true', help='check the files on disk only; download nothing')
+    ap.add_argument('--from', dest='src', help='a zip or directory holding copies of the files (matched by name)')
     a = ap.parse_args()
+    local = local_copies(a.src) if a.src else {}
     files = json.load(io.open(MANIFEST, encoding='utf-8'))['files']
     ok = got = bad = 0
     for f in files:
@@ -62,6 +79,13 @@ def main():
             bad += 1
             continue
         data = open(os.path.join(ROOT, f['path']), 'rb').read() if good(f['path'], f['sha256']) else None
+        if data is None and os.path.basename(f['path']) in local:
+            data = local[os.path.basename(f['path'])]()
+            if sha256(data) != f['sha256']:
+                print('fetch-saves: HASH MISMATCH %s in %s -- not used' % (os.path.basename(f['path']), a.src))
+                data = None
+            else:
+                write(f['path'], data)
         if data is None:
             try:
                 data = fetch(f['url'])

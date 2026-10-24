@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_12_after_her",
+  "from": "fxr_pt_11_gate",
+  "doc": "The playthrough's leg 12_after_her (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Crono steps on the left pod after her (obj11 at (4,5): DD 71): the gate warp, 600 A.D., loc 071",
+  "steps": [
+    [
+      "pad",
+      "40:32,10:70,0:30,(100:2,0:40)*78,0:120"
+    ]
+  ]
+}

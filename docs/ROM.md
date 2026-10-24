@@ -131,11 +131,12 @@ Everything derived from the ROM is generated on your machine:
 | `ct_assets.dat` | [`assets/extract_assets.py`](../assets/extract_assets.py) | The asset container: scene palettes, tilesets, maps, sprites, the font, strings and dialogue, scene scripts, collision, exits. The field and the menus draw from it without the ROM. |
 | `src/data/*.h` | the generators in `tools/` | 47 tables the engine compiles in: battle animation records, menu chrome, the title sequence, the overworld placard, and so on. Of these, 12 are generated from the ROM alone and 35 by oracle runs from power-on (the recipes in `tools/recipes/`). |
 | `ct_tables.dat` | [`tools/gen/pack_tables.py`](../tools/gen/pack_tables.py) | The same 47 headers' tables (223 arrays) as a data file, which a data-free `Belthasar` loads at startup instead of compiling them in (see below). |
-| `src/xlat/*.c` | [`tools/gen/xlat_all.py`](../tools/gen/xlat_all.py) (traces) + [`tools/gen/xlat.py`](../tools/gen/xlat.py) | Five timing-sensitive ROM programs translated instruction by instruction into C (see [ARCHITECTURE.md](ARCHITECTURE.md#translated-stages)). |
+| `src/xlat/*.c` | [`tools/gen/xlat_all.py`](../tools/gen/xlat_all.py) (traces) + [`tools/gen/xlat.py`](../tools/gen/xlat.py) | Five timing-sensitive ROM programs translated instruction by instruction into C, compiled into `ct.exe` only, as references for their native replacements (see [ARCHITECTURE.md](ARCHITECTURE.md#translated-stages)). |
 | Oracle states | recipes replayed by the oracle | The savestates the generators and the regression suite start from. Each recipe is a pad script played from power-on, optionally on top of a battery save that another recipe produced. |
 
-At run time `Belthasar` reads `ct_assets.dat`. It reads the ROM itself for battle enemies (graphics and stats) and
-for the sound driver. Without the ROM it still renders the field and the menus, and says what it is missing.
+At run time `Belthasar` reads only `ct_assets.dat`: the container the setup makes is a ROM-free one, and the game
+needs no dump beside it ([The ROM-free runtime](#the-rom-free-runtime)). An older container, made before the ROM-free
+runtime, still needs the ROM beside it.
 
 The single entry point is `python tools/setup.py --rom <path>`: verify the ROM, build a bootstrap oracle, replay
 the recipes, generate, pack the tables, build ([README.md](../README.md#2-set-up-from-your-rom)).
@@ -167,7 +168,10 @@ loads them at startup from `ct_tables.dat`, which the setup makes from your dump
 - **The proof.** `python tools/gen/tables_proof.py` (a tree that holds the generated headers) packs `src/data/*.h`,
   loads the pack into the data-free storage with the loader the data-free `Belthasar` links, and compares every table
   with the same table compiled from the real header, byte for byte and padding included (a pointer by its string), and
-  every `#define` with the real header's value (a run-time one as the load- **The `#define`s.** The shapes' numeric `#define`s (163: tile bases, foot positions, stance ids, the new-game pan's
+  every `#define` with the real header's value (a run-time one as the loader filled its variable). Its controls: packs
+  with one table byte flipped or a run-time `#define` changed must differ, and packs with a wrong pointer size, a wrong
+  layout hash or a compiled-in `#define` changed must be refused.
+- **The `#define`s.** The shapes' numeric `#define`s (163: tile bases, foot positions, stance ids, the new-game pan's
   start and length, ROM base addresses, the title's seed registers, the tables' dimensions) are values of your ROM too.
   In a data-free build each one the compiler does not need as a constant is a variable: `src/tables/<name>.h` says
   `#define NG_PAN_START_X ctDef_NG_PAN_START_X` and declares `ctDef_NG_PAN_START_X` with the literal's own C type (`int`,
@@ -265,8 +269,10 @@ python tools/release/scan_rom_leaks.py <dir> [--rom ROM] [--corpus ct_assets.dat
   occurs in a corpus. A table of zeros is not content.
 - **Result.** One line per leak, with the file, line, length and corpus offset. The exit code is 1 when anything
   leaked and 0 when the tree is clean.
-- **Known coincidences.** A short list of `(path, line)` pairs is accepted with a written reason. Today it has one
-  entry: the S-DSP's interpolation table in `snes/dsp.c`, which is the console's hardware and not the game's data.
+- **Known coincidences.** A short list of `(path, line)` pairs is accepted with a written reason (`KNOWN_OK`). Today
+  it has four entries: the S-DSP's interpolation table in `snes/dsp.c` and the same table in the port's mixer
+  (`src/sound/mixer.c`), which are the console's hardware and not the game's data, and the default character names
+  in the game's text encoding in one note and in one check's expected line.
 
 Run it on an exported tree before every publication, and on your branch before you open a pull request (see
 [CONTRIBUTING.md](../CONTRIBUTING.md)).

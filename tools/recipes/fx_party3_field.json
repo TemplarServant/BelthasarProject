@@ -1,7 +1,7 @@
 {
   "name": "fx_party3_field",
   "from": "fx_bat9",
-  "doc": "Stands in for saves/battle_re/party3_field.state/.lakewram (the suite's three-member party in the field): from the Diablos fight in the Cathedral's inner hall (fx_bat9) A is mashed (8 frames held of every 20, 115 times) until the fight is won, then 300 frames: the field resumes in loc 082 with Crono, Lucca and Frog, control back ($011F = 01) -- the capture's own recipe (its regress_inputs entry). Crono 26/96 and Lucca 39/88 at level 3, Frog 120/128, 1105 G, the bag Pendant + Heal (the capture: 25, 40, 128).",
-  "steps": [["pad", "(100:8,0:12)*115,0:300"]],
+  "doc": "Stands in for saves/battle_re/party3_field.state/.lakewram (the suite's three-member party in the field): from the Diablos fight in the Cathedral's inner hall (fx_bat9) A is mashed (8 frames held of every 20) until the fight is won and the field resumes in loc 082 with Crono, Lucca and Frog (control back, $011F = 01, at f2608), then 300 frames more -- the capture's own recipe (its regress_inputs entry: 300 frames after its resume at f2304). The capture was made before the rule (2026-10-01): its own recorded pad, replayed on the rule's cartridge from bat9_lake.state itself, is still in the fight at f2604 (Crono 34, Lucca 48, the sheets not yet written back), so its post-fight bytes (Crono 25/96, Lucca 40/88, the fight's length) are not reachable under the rule from any start. Here: Crono, Lucca, Frog at (687,704) as the capture's, 1105 G, the bag Pendant + Heal, the opened-door list 2935.",
+  "steps": [["pad", "(100:8,0:12)*130,0:308"]],
   "expect": {"loc": "0x082", "wram": {"0x2980": "0x00", "0x2981": "0x02", "0x2982": "0x04", "0x011F": "0x01", "0x2C53": "0x51", "0x2C54": "0x04"}}
 }

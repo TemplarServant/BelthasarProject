@@ -25,7 +25,8 @@ import sys
 
 CT = os.path.abspath('build/ct.exe')
 FIELD = os.path.abspath('build/Belthasar.exe')
-STATE = 'saves/attract_cena_inicial.state'
+STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json;
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}   # until 2026-10-22 the owner's real-time capture)
 TMP = 'build/_jslaudio'
 WINDOW = 33
 FRAME = 534 * 2 * 2
@@ -61,7 +62,7 @@ def main():
     os.makedirs(TMP, exist_ok=True)
     # The cartridge: the posts' frames, then its stream.
     mon = subprocess.run([CT, '--monitor', '7E1E00:2', '--from', STATE, '--btnscript', '0:2300', '--frames', '2300', '--diff',
-                          '--writer'], capture_output=True, text=True, timeout=900).stdout
+                          '--writer'], env=dict(os.environ, **RULE), capture_output=True, text=True, timeout=900).stdout
     opost = {}
     for ln in mon.splitlines():
         m = re.match(r'\s*f(\d+)\s+7E1E00=70(0[01])\*\(C0:(1BDF|1C89)\)', ln)
@@ -71,7 +72,7 @@ def main():
         sys.exit('jslaudio: REFUSING -- the cartridge run did not post both battle commands (%r)' % opost)
     opcm = os.path.join(TMP, 'o.pcm')
     subprocess.run([CT, '--peek', STATE, os.path.join(TMP, 'o.raw'), '--btnscript', '0:2300'],
-                   env=dict(os.environ, PEEK_PCM=opcm), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=900)
+                   env=dict(os.environ, PEEK_PCM=opcm, **RULE), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=900)
     # The port: the interactive loop (a --selftest battle is fought synchronously, with no audio ticks), one SPC frame
     # per engine frame.
     ppcm = os.path.join(TMP, 'p.pcm')

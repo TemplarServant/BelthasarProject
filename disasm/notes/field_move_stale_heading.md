@@ -539,7 +539,7 @@ Adding the R4 stores changes every scenario in which a REQ/CALL preempts a live 
   **vm-activation-pass-0F00**, **vmdiff-wmask-party3**, **vmdiff-framelegs-party3**,
   **vmdiff-draw-visibility**, **vmdiff-oam-lockstep**;
 * **vmdiff-DEMO8**, **vmdiff-S5**, **vmdiff-bedslide**, **vmdiff-withpos-bedslide**,
-  **vmdiff-im_so_sorry**, **vmdiff-forest-battle-entry**, **field-cat-anime-once-duration**;
+  **vmdiff-im_so_sorry**, **vmdiff-forest-idle-wanderers** (then vmdiff-forest-battle-entry), **field-cat-anime-once-duration**;
 * the two that the `src/ct_vm.c:2695` note already names as sensitive to this exact gate:
   **field-battle-ambush-generic-dissolve**, **camera-reenter-scene5**;
 * scene-5/439 movers: **render-scene5-snapshot**, **field-solid-liveness-fair**,
