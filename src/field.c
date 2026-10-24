@@ -2198,7 +2198,8 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   // each the floor of its whole sum, camera and offset together, as fieldnative.c does: a layer held to the screen lands
   // exactly, never a quarter pixel off with a column of its other side at the edge
   #define FLK(p) ((long)floor((p) * k + 1e-9))
-  const double camXt = cs->bg1h - back * dcx, camYt = cs->bg1v - back * dcy;
+  double cdx, cdy; CtMotCamShift(cur, prev, tt, dcx, dcy, &cdx, &cdy);   // (its continuous place: CtMotFit)
+  const double camXt = cs->bg1h + cdx, camYt = cs->bg1v + cdy;
   const long c1x = FLK(camXt), c1y = FLK(camYt);
   const long c2x = FLK(camXt + o2x) + (long)(cs->bg2h - cs->bg1h - cur->o2x) * k;
   const long c2y = FLK(camYt + o2y) + (long)(cs->bg2v - cs->bg1v - cur->o2y) * k;
@@ -2220,7 +2221,8 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
     if (j < prev->nspr) {                             // (new, or a jump: where this frame has it on the screen)
       int wx = owWrapD(cur->sprX[i] - prev->sprX[j], 1536), wy = owWrapD(cur->sprY[i] - prev->sprY[j], 1024);
       if (abs(wx) <= 32 && abs(wy) <= 32) {
-        sx[CT_MOT_SPR + i] = (int)(FLK(-back * wx) - FLK(-back * dcx)); sy[CT_MOT_SPR + i] = (int)(FLK(-back * wy) - FLK(-back * dcy)); }
+        double sdx, sdy; CtMotSprShift(cur, i, prev, j, tt, wx, wy, &sdx, &sdy);
+        sx[CT_MOT_SPR + i] = (int)(FLK(sdx) - FLK(cdx)); sy[CT_MOT_SPR + i] = (int)(FLK(sdy) - FLK(cdy)); }
     }
   }
   #undef FLK
@@ -2772,7 +2774,8 @@ static void motCheck(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_
   static uint8_t back[FIELD_WMAX * CAMH * 3];
   if (g_motPrevOk && g_motPrevW == w && cur->valid && prev->valid) {
     g_ctMotNoFrac = 1; CtMotRaster(cur, prev, fb, w, 0, 1, back); g_ctMotNoFrac = 0;
-    if (memcmp(back, fb, (size_t)w * CAMH * 3)) {       // something moved
+    if (memcmp(back, fb, (size_t)w * CAMH * 3) ||       // something moved (or the frame CT_MOTDUMP names: a still frame
+        (getenv("CT_MOTDUMP") && atoi(getenv("CT_MOTDUMP")) == frameNo)) {   //  still has frames between, a slow pan's)
       long plain = 0, rep = 0;
       for (int i = 0; i < w * CAMH; i++) {
         const uint8_t* p = g_motPrevFb + i * 3;
@@ -2802,6 +2805,8 @@ static void motCheck(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_
       if (g_motCheck > 2) printf("motion:   cam %d,%d -> %d,%d o2 %d,%d -> %d,%d o3 %d,%d -> %d,%d bg3 %d,%d -> %d,%d\n",
                                  prev->camX, prev->camY, cur->camX, cur->camY, prev->o2x, prev->o2y, cur->o2x, cur->o2y,
                                  prev->o3x, prev->o3y, cur->o3x, cur->o3y, prev->bg3X, prev->bg3Y, cur->bg3X, cur->bg3Y);
+      if (g_motCheck > 3) { printf("motion:   q cam %.3f,%.3f spr", cur->qcx, cur->qcy);
+                            for (int i = 0; i < cur->nspr && i < 12; i++) printf(" %d@%d,%d(%.3f,%.3f)", cur->sprKey[i], cur->sprX[i], cur->sprY[i], cur->qsx[i], cur->qsy[i]); printf("\n"); }
     }
   }
   memcpy(g_motPrevFb, fb, (size_t)w * CAMH * 3); g_motPrevOk = 1; g_motPrevW = w;

@@ -33,7 +33,8 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   const double tt = t / 256.0, back = 1.0 - tt;
   const int W = w * k, H = 224 * k;
   // the camera and the layers' own offsets at t, in 1/k pixels
-  double camXt = cur->camX - back * dcx, camYt = cur->camY - back * dcy;
+  double cdx, cdy; CtMotCamShift(cur, prev, tt, dcx, dcy, &cdx, &cdy);   // (its continuous place: CtMotFit)
+  double camXt = cur->camX + cdx, camYt = cur->camY + cdy;
   double o2x = cur->o2x - back * (cur->o2x - prev->o2x), o2y = cur->o2y - back * (cur->o2y - prev->o2y);
   double o3x = cur->o3x - back * (cur->o3x - prev->o3x), o3y = cur->o3y - back * (cur->o3y - prev->o3y);
   if (cur->qFrac && prev->qFrac) {
@@ -65,7 +66,8 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
       if (abs(wx) <= 32 && abs(wy) <= 32) {
         // (its map place at t, floor(sprX - back * wx), less the screen's at t, camXk, against where this frame drew it:
         // the whole pixels cancel)
-        sx[CT_MOT_SPR + i] = (int)(FLK(-back * wx) - FLK(-back * dcx)); sy[CT_MOT_SPR + i] = (int)(FLK(-back * wy) - FLK(-back * dcy));
+        double sdx, sdy; CtMotSprShift(cur, i, prev, j, tt, wx, wy, &sdx, &sdy);
+        sx[CT_MOT_SPR + i] = (int)(FLK(sdx) - FLK(cdx)); sy[CT_MOT_SPR + i] = (int)(FLK(sdy) - FLK(cdy));
       }
     }
   }

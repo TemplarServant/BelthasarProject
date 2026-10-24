@@ -51,6 +51,12 @@ typedef struct CtMotFrame {
   // last frames, CtMotFit), which the frames between follow instead of the last step.
   int qFrac;
   double q2x, q2y, q3x, q3y, qbx, qby;
+  // ...and THE CAMERA and EACH OBJECT the same way: a pan or a walk at less than a pixel a frame (the attract's Blackbird,
+  // the camera at 0.75 px a frame and the ship at 0.25; the trial's pan, a pixel every 4 frames) steps on the frames its
+  // whole pixel moves, and the frames between went a pixel in one frame and stood in the others. qcx / qcy: the camera's
+  // continuous place; qsx / qsy: each object's (its own where it moves in whole pixels a frame, or not steadily).
+  double qcx, qcy;
+  double qsx[CT_MOT_MAXSPR], qsy[CT_MOT_MAXSPR];
   int nspr;
   int sprKey[CT_MOT_MAXSPR];              // the object (its index; the lead is its object too)
   int sprX[CT_MOT_MAXSPR], sprY[CT_MOT_MAXSPR];   // its map position this frame
@@ -72,6 +78,11 @@ void CtMotBegin(CtMotFrame* m, int w);    // a new frame `w` pixels wide: every 
 // of the same location (a history kept here). A layer whose recent offsets are not one steady slope keeps its own.
 void CtMotFit(CtMotFrame* cur);
 extern int g_ctMotNoFrac;                 // 1 = CtMotRaster ignores the continuous offsets (the owners' check)
+// Between prev and cur at tt (0..1): the camera's place less cur's (dx, dy) and object i's (j its index in prev) less where
+// cur has it -- the continuous places where CtMotFit fitted them, else the straight line of the step (dcx/dcy, wx/wy: the
+// caller's, an overworld's across its wrap).
+void CtMotCamShift(const CtMotFrame* cur, const CtMotFrame* prev, double tt, int dcx, int dcy, double* dx, double* dy);
+void CtMotSprShift(const CtMotFrame* cur, int i, const CtMotFrame* prev, int j, double tt, int wx, int wy, double* dx, double* dy);
 static inline void CtMotTag(CtMotFrame* m, int x, int y, int own) {
   if (m && (unsigned)x < (unsigned)m->w && (unsigned)y < CT_MOT_H) m->own[y * m->w + x] = (uint8_t)own;
 }
