@@ -182,8 +182,7 @@ extern "C" int CtOverlayFrame(void) {
                           "picture only. The camera is the Steam release's: the original picture always stays in the\n"
                           "middle, so past a room's edge the sides are black, or the Steam margins (below); only a\n"
                           "background (a sky, the stars) goes on there. A backdrop that never moves on the screen (the\n"
-                          "prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it. A flat\n"
-                          "band at the top of a sky (Magus's castle) is filled with the sky's first line.");
+                          "prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it.");
       bool sm = s->wideSteamMargins != 0;
       if (ImGui::Checkbox("Steam margins (needs your Steam copy)", &sm)) s->wideSteamMargins = sm;
       if (ImGui::IsItemHovered())
