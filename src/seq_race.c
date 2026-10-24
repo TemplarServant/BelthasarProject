@@ -732,6 +732,7 @@ unsigned CtSeqTaskAbort(uint8_t* w, unsigned task, const CtRaceIo* io) {
 // ---- the race: entries 0 and 9, $7E:3B48 ----
 
 static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io);
+int g_ctRaceOpenNmi;
 static unsigned raceHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) { (void)slot; return CtRacePicHook(io->pic, w, h, io); }
 
 // The setup $7E:3B48's own master cycles, NMI off, by its arm: the story's 9521394 (`--callrom 7E3B48`, CT_CALLROM_NONMI=1,
@@ -782,7 +783,9 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   wr(r, 0x35FD, 0x45B0); wr(r, 0x3024, 0x51D1);                       // 3CDB / 3CE1: two words of the overlay
   if (io && io->pic) { CtRacePicSetupB(io->pic, w, io); CtRacePicCgram(io->pic, w); }   // 3CEA-3D44, then $7E:300D's $388B
   // $7E:300D .. 301E: $388B (CGRAM), $31B0 (the vblank), JSL C3/08D0 (one NMI, run here), NMI on, STZ $00, STZ $0392
+  g_ctRaceOpenNmi = 1;
   CtSeqStageNmiHooks(w, 0, io, (io && io->pic) ? raceHook : NULL, raceTask);
+  g_ctRaceOpenNmi = 0;
   wr(r, 0x0000, 0); wr(r, 0x0392, 0);
   if (io && io->pic) CtRacePicThread(io->pic, w);                    // 3023: the main loop's first pass
   return 0;

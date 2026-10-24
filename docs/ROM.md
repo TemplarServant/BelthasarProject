@@ -115,6 +115,10 @@ compiler ([RELEASE.md](RELEASE.md) builds the folder that holds the pieces below
 | the kit (the repository's tools) | `setup/kit/` | the repository (`build/..`) | `CT_SETUP_KIT` |
 | the oracle (compiled from the shapes) | `setup/ct.exe` | `build/ct.exe` | `CT_SETUP_ORACLE` |
 
+The setup also looks for an installed Steam copy of Chrono Trigger and, when it finds one, writes `ct_wide.dat` (the
+widescreen's optional Steam margins, [WIDESCREEN.md](WIDESCREEN.md#getting-the-steam-margins)) beside the game's data;
+without one it says so and goes on (`--steam <folder>` names one, `--no-steam` skips the step).
+
 The screen's bar follows the setup's `setup: progress K/N` lines; the whole output goes to `setup.log`. A run with any
 argument starting with `-`, or with `CT_NOPACE` set (the suite's), never reaches the launcher.
 

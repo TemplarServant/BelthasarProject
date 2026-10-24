@@ -303,17 +303,46 @@ typedef struct { const uint16_t* tiles; int lw, lh; const Meta* metas; int nmeta
                  const uint8_t* chips; const uint8_t* present; int nchips;
                  const uint8_t* tprio; int tpw, tph; int sox, soy; int mapRing; const uint16_t* held; } LInfo;
 
+// The canvas column a still backdrop's column c shows (CtFieldSceneSetStill): the 256 columns from vw show the view's
+// [vx, vx + 256) -- the same columns when the view is in the picture's middle -- and a column past either edge the one
+// mirrored at that edge (period 512). The canvas is a ring of W columns: a column is on the nearer side.
+static int stillCol(int c, int vx, int vw, int W) {
+  int s = ((c - vw) % W + W) % W;
+  if (s >= 256 + (W - 256) / 2) s -= W;
+  s = (s % 512 + 512) % 512;
+  if (s >= 256) s = 511 - s;
+  return ((vx + s) % W + W) % W;
+}
+
 static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint8_t pal[128][3],
-                      LInfo* l1, LInfo* l2, LInfo* l3, uint8_t* priomask) {
+                      LInfo* l1, LInfo* l2, LInfo* l3, uint8_t* priomask, int still, int stillVx, int stillVw) {
   int order_bit[6] = { BL3, BL2, BL1, BL2, BL1, BL3 };
   int order_prio[6] = { 0, 0, 0, 1, 1, 1 };
   LInfo* order_l[6] = { l3, l2, l1, l2, l1, l3 };
   for (int i = 0; i < 6; i++) {
     if (!(targets & order_bit[i])) continue;
     LInfo* L = order_l[i];
-    draw_layer(px, cov, W, H, L->tiles, L->lw, L->lh, L->metas, L->nmeta,
-               L->chips, L->present, L->nchips, pal, order_prio[i], (uint8_t)order_bit[i], priomask,
+    // a still backdrop (a mod): drawn apart, then every canvas column takes the one stillCol gives it
+    uint8_t* tp = NULL; uint8_t* tc = NULL; uint8_t* tm = NULL;
+    if ((still & order_bit[i]) && W > 256) {
+      tp = (uint8_t*)malloc((size_t)W * H * 3); tc = (uint8_t*)calloc((size_t)W * H, 1);
+      tm = priomask ? (uint8_t*)calloc((size_t)W * H, 1) : NULL;
+      if (!tp || !tc || (priomask && !tm)) { free(tp); free(tc); free(tm); tp = tc = tm = NULL; }
+    }
+    draw_layer(tp ? tp : px, tp ? tc : cov, W, H, L->tiles, L->lw, L->lh, L->metas, L->nmeta,
+               L->chips, L->present, L->nchips, pal, order_prio[i], (uint8_t)order_bit[i], tp ? tm : priomask,
                L->tprio, L->tpw, L->tph, L->sox, L->soy, L->mapRing, L->held);
+    if (!tp) continue;
+    for (int x = 0; x < W; x++) {
+      int sx = stillCol(x, stillVx, stillVw, W);
+      for (int y = 0; y < H; y++) {
+        size_t s = (size_t)y * W + sx, d = (size_t)y * W + x;
+        if (!tc[s]) continue;
+        memcpy(px + d * 3, tp + s * 3, 3); cov[d] = tc[s];
+        if (tm && tm[s]) priomask[d] = 1;
+      }
+    }
+    free(tp); free(tc); free(tm);
   }
 }
 
@@ -340,6 +369,8 @@ typedef struct {
   int l2ox, l2oy, l3ox, l3oy;
   uint8_t mapBuilt;            // $1D35 & 6 as the field last passed it: bit1 BG2, bit2 BG3 built from the map (see draw_layer)
   uint8_t vramOff;             // CtFieldSceneSetVramLayers: layers whose VRAM tilemap is no longer the map's (BL3: the caption plane)
+  uint8_t stillBits; int stillVx, stillVw;   // CtFieldSceneSetStill (a mod, the widescreen): the still backdrop's layers,
+                                             //   the view's canvas column and the one its middle 256 stand at
   int sm_l, sm_t, sm_r, sm_b, sm_full;
   // retained chip/palette animation source: lets the field re-apply the BG animation for
   // any frame (flags waving, water, fire) instead of freezing it at the load-time frame.
@@ -540,8 +571,8 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   // sprite. Measured: the oracle's live BG1 tilemap at loc $081 has 392 priority-bit entries, the
   // pews at metatiles (4..6, 18..19) carry them (tileset 11 metas 213/214/216/229/200/232), and the
   // oracle draws the nuns (obj10/obj11, $0C00 = $0C01 = 0x20 = OBJ prio 2) BEHIND those pews.
-  draw_pass(main_px, main_cov, W, H, main_t, palc, &li1, &li2, &li3, priomask);
-  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask);
+  draw_pass(main_px, main_cov, W, H, main_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
+  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
 
   // THE COLOUR MATH IS THE PPU'S, IN 5 BITS (snes/ppu.c ppu_handlePixel): add or subtract the sub-screen colour, halve,
   // THEN clamp to 0..31. The palette holds conv5 values, so >> 3 recovers each channel's 5 bits exactly. The 8-bit
@@ -834,6 +865,74 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
   if (blendEn) *blendEn = sd->bakeBlend; if (subOp) *subOp = sd->bakeSubOp; if (half) *half = sd->bakeHalf;
   return sd->bakeSub;
 }
+// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in five planes drawn with this scene's
+// palette and the Steam release's tiles -- its chip sets where slotChips names one (else this scene's), its definitions of
+// the metatiles in metaIds (4 corners of u16 chip, u8 palette row, u8 flags H 1 / V 2 / priority 4 at metaCorners + 16 i)
+// over this scene's, and its pixel sheets for the pages in pageSheet (256 x 256 CGRAM indices, 0 = nothing; an index past
+// the BG palettes draws nothing). A cell v is tile v - 1, page (v - 1) >> 8 (the Steam executable's drawer, 0x54FD5C); 0
+// draws nothing, nor does a page past 1 without a sheet. The planes are the Steam release's layers, drawn from the bottom
+// up: plane 3 (BG2's low-priority tiles) and plane 2 (BG1's) mark cov BL1, under the sprites; planes 1 and 0 (the
+// priority-1 layer) mark BL2, over them; plane 4, opaque (its cells fill with colour 0 first: 0x550260), drawn with BG3,
+// marks BL3. Only the planes in planeMask (bit k = plane k) are drawn. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel
+// (0 = nothing); both are cleared first. A pixel's first byte is its CGRAM INDEX (0..127), not a colour: the caller colours
+// it with the scene's live palette (CtFieldScenePalette), so the margins follow its fades and cycles as the room does --
+// a fight's darkening through the CGRAM left them bright beside Zombor's room (087; the owner, 2026-10-23).
+int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
+                        const uint16_t* metaIds, const uint8_t* metaCorners, const uint8_t* const pageSheet[8],
+                        int planeMask, uint8_t* rgb, uint8_t* cov) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || !sd->meta12 || !sd->chips12 || !planes || w <= 0 || hgt <= 0) return 0;
+  int W = w * 16, H = hgt * 16, n = w * hgt;
+  memset(rgb, 0, (size_t)W * H * 3); memset(cov, 0, (size_t)W * H);
+  uint16_t* t = (uint16_t*)malloc(sizeof(uint16_t) * (size_t)n);
+  uint8_t* chips = (uint8_t*)malloc(768 * 64); uint8_t* pres = (uint8_t*)malloc(768); Meta* metas = (Meta*)malloc(512 * sizeof(Meta));
+  if (!t || !chips || !pres || !metas) { free(t); free(chips); free(pres); free(metas); return 0; }
+  memcpy(chips, sd->chips12, 768 * 64); memcpy(pres, sd->pres12, 768); memcpy(metas, sd->meta12, 512 * sizeof(Meta));
+  for (int sl = 0; sl < 6; sl++)
+    if (slotChips && slotChips[sl]) { memcpy(chips + (size_t)sl * 128 * 64, slotChips[sl], 128 * 64); memset(pres + sl * 128, 1, 128); }
+  for (int m = 0; m < nMeta; m++) {
+    if (metaIds[m] >= 512) continue;
+    for (int k = 0; k < 4; k++) {
+      const uint8_t* e = metaCorners + (size_t)m * 16 + k * 4;
+      Corner* c = &metas[metaIds[m]].c[k];
+      c->chip = (uint16_t)(e[0] | e[1] << 8); c->base = (uint8_t)(e[2] * 16);
+      c->fx = e[3] & 1; c->fy = (e[3] >> 1) & 1; c->prio = (e[3] >> 2) & 1;
+    }
+  }
+  uint8_t ipal[128][3]; memset(ipal, 0, sizeof ipal);   // (the index palette: colour i is (i, 0, 0))
+  for (int i = 0; i < 128; i++) ipal[i][0] = (uint8_t)i;
+  static const int order[5] = { 3, 2, 1, 0, 4 };
+  for (int o = 0; o < 5; o++) {
+    int k = order[o]; uint8_t bit = k >= 2 && k < 4 ? BL1 : k < 2 ? BL2 : BL3;
+    if (!(planeMask & (1 << k))) continue;
+    const uint16_t* pl = planes + (size_t)k * n;
+    for (int i = 0; i < n; i++) {
+      int v = pl[i], pg = (v - 1) >> 8;
+      t[i] = (v == 0 || pg >= 2 || (pageSheet && pageSheet[pg])) ? 0xFFFF : (uint16_t)(v - 1);
+      if (v == 0) continue;
+      int x0 = (i % w) * 16, y0 = (i / w) * 16;
+      if (k == 4)                                      // opaque: colour 0 under the tile
+        for (int y = 0; y < 16; y++)
+          for (int x = 0; x < 16; x++) { size_t q = (size_t)(y0 + y) * W + x0 + x; memcpy(rgb + q * 3, ipal[0], 3); cov[q] = bit; }
+      const uint8_t* s = pageSheet && pg < 8 ? pageSheet[pg] : NULL;
+      if (!s) continue;
+      int tt = (v - 1) & 255, sx = (tt & 15) * 16, sy = (tt >> 4) * 16;
+      for (int y = 0; y < 16; y++)
+        for (int x = 0; x < 16; x++) {
+          int ci = s[(sy + y) * 256 + sx + x];
+          if (!ci || ci >= 128) continue;
+          size_t q = (size_t)(y0 + y) * W + x0 + x;
+          memcpy(rgb + q * 3, ipal[ci], 3); cov[q] = bit;
+        }
+    }
+    for (int prio = 0; prio < 2; prio++)
+      draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, ipal, prio, bit, NULL, NULL, 0, 0, 0, 0, 0, NULL);
+  }
+  free(t); free(chips); free(pres); free(metas);
+  return 1;
+}
+
+const uint8_t* CtFieldScenePalette(void* h) { SceneData* sd = (SceneData*)h; return sd ? &sd->pal[0][0] : NULL; }
 // The main-screen coverage of the last bake (see SceneData.bakeCov); NULL before the first.
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt) {
   SceneData* sd = (SceneData*)h;
@@ -936,6 +1035,18 @@ int CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3y,
   mapBuilt &= 0x06;
   if (sd->l2ox == bg2x && sd->l2oy == bg2y && sd->l3ox == bg3x && sd->l3oy == bg3y && sd->mapBuilt == mapBuilt) return 0;
   sd->l2ox = bg2x; sd->l2oy = bg2y; sd->l3ox = bg3x; sd->l3oy = bg3y; sd->mapBuilt = (uint8_t)mapBuilt;
+  return 1;
+}
+
+// THE WIDESCREEN'S STILL BACKDROP (a mod: field.c fieldWideStill): the layers (BL2 2 / BL3 4) the bake holds to the wide
+// picture -- the 256 view's columns (canvas column vx on) drawn from canvas column vw, the picture's middle -- and mirrors
+// past them instead of repeating; 0 = none, the bake as the PPU repeats a layer. Returns 1 when that changed (re-bake).
+int CtFieldSceneSetStill(void* h, int bits, int vx, int vw) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd) return 0;
+  bits &= BL2 | BL3; if (!bits) vx = vw = 0;
+  if (sd->stillBits == bits && sd->stillVx == vx && sd->stillVw == vw) return 0;
+  sd->stillBits = (uint8_t)bits; sd->stillVx = vx; sd->stillVw = vw;
   return 1;
 }
 

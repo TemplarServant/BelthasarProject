@@ -20010,6 +20010,7 @@ static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattle
 }
 static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uint8_t* mem, const CtBattleHost* h, int x0, int wide) {
   static BtFxRegs wideRegs[256]; static uint8_t wideOk[256], wideHud[256];
+  static uint8_t widePre[256 * 1024 * 3];                       // (the wide rows before their math: a band's edge line's undone)
   if (wide) { memset(wideOk, 0, sizeof wideOk); memset(wideHud, 0, sizeof wideHud); }
   if (!wide && W > 0 && H > 0 && W <= 256 && H <= 256) memset(gBattleFxFront, 0, (size_t)W * H);
   if (!wide) memset(gBattleFxRow, 0, sizeof gBattleFxRow);
@@ -20099,33 +20100,45 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
     {
       BtFxRegs R; R.TM = TM; R.TS = TS; R.TMW = TMW; R.TSW = TSW; R.cgwsel = cgwsel; R.cgadsub = cgadsub;
       R.fixR = fixR; R.fixG = fixG; R.fixB = fixB; R.hs3 = hs3; R.vs3 = vs3; memcpy(R.reg, reg, sizeof R.reg);
+      if (wide && line < 256 && W <= 1024) memcpy(widePre + (size_t)line * W * 3, fb + (size_t)line * W * 3, (size_t)W * 3);
       btFxRowPixels(fb, W, cov, h, x0, wide, line, &R);
     }
   }
   // THE WIDESCREEN'S SIDES OF THE HUD'S BAND: its rows are the HUD's own in the middle (CtBattleHudRender), but beside it
   // the side shows the arena -- which takes the arena's effect as the nearest arena row has it (a tech's flash covers the
   // whole screen, not the screen less the HUD's rows).
-  // (the arena's own layer set: the TM most arena rows carry -- a band's edge line with its own, the HUD's border, is not
-  //  the arena whose effect the side shows)
-  int tmBulk = -1;
-  if (wide) { int cnt[256] = { 0 }, bestN = 0;
-    for (int l = 0; l < H && l < 256; l++) if (wideOk[l] && ++cnt[wideRegs[l].TM & 0xFF] > bestN) { bestN = cnt[wideRegs[l].TM & 0xFF]; tmBulk = wideRegs[l].TM; } }
+  // (the arena's own setup: the TM, CGWSEL and CGADSUB most arena rows carry -- a band's edge line with its own, the HUD's
+  //  border, is not the arena whose effect the side shows. By TM alone the opening HUD's shading edge -- the arena's TM,
+  //  its own math -- passed, a dark line under the HUD in the sides moving down with it; Zombor, the owner 2026-10-23)
+  int tmBulk = -1, sigBulk = -1;
+  #define BT_FX_SIG(R) (((R).TM & 0xFF) | (((R).cgwsel & 0xFF) << 8) | (((R).cgadsub & 0xFF) << 16))
+  if (wide) { static int sigs[256], cnts[256]; int ns = 0, bestN = 0;
+    for (int l = 0; l < H && l < 256; l++) {
+      if (!wideOk[l]) continue;
+      int s = BT_FX_SIG(wideRegs[l]), k = 0;
+      while (k < ns && sigs[k] != s) k++;
+      if (k == ns) { sigs[ns] = s; cnts[ns++] = 0; }
+      if (++cnts[k] > bestN) { bestN = cnts[k]; sigBulk = s; tmBulk = wideRegs[l].TM; }
+    } }
   if (wide)
     for (int line = 0; line < H && line < 256; line++) {
       // (the band's rows, and its border lines: an arena row touching the band whose layer set is not the arena's -- the
       //  HUD's edge line under the top HUD, TM 05 without math)
       int band = !wideOk[line] && wideHud[line];
-      if (!band && wideOk[line] && wideRegs[line].TM != tmBulk)
+      if (!band && wideOk[line] && BT_FX_SIG(wideRegs[line]) != sigBulk)
         for (int e = -1; e <= 1; e += 2) { int n = line + e;
           if (n >= 0 && n < H && n < 256 && !wideOk[n] && wideHud[n]) band = 1; }
       if (!band) continue;
       int best = -1, dir = line < H / 2 ? 1 : -1;            // (towards the screen's middle first: the arena the band
       for (int d = 1; d < 256 && best < 0; d++) {             //  borders, not the margin rows past it)
         int a = line + dir * d, b = line - dir * d;
-        if (a >= 0 && a < H && a < 256 && wideOk[a] && wideRegs[a].TM == tmBulk) best = a;
-        else if (b >= 0 && b < H && b < 256 && wideOk[b] && wideRegs[b].TM == tmBulk && d > 64) best = b;
+        if (a >= 0 && a < H && a < 256 && wideOk[a] && BT_FX_SIG(wideRegs[a]) == sigBulk) best = a;
+        else if (b >= 0 && b < H && b < 256 && wideOk[b] && BT_FX_SIG(wideRegs[b]) == sigBulk && d > 64) best = b;
       }
-      if (best >= 0) btFxRowPixels(fb, W, cov, h, x0, wide, line, &wideRegs[best]);
+      if (best < 0) continue;
+      if (wideOk[line] && W <= 1024)                          // (an edge line the pass above drew with its own math -- the
+        memcpy(fb + (size_t)line * W * 3, widePre + (size_t)line * W * 3, (size_t)W * 3);   //  shading under the opening HUD: undone)
+      btFxRowPixels(fb, W, cov, h, x0, wide, line, &wideRegs[best]);
     }
   for (int line = H; line <= 224; line++) {                        // the runs below the picture: channel 3, for the carry
     const uint8_t* rd = mem;

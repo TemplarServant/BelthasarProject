@@ -33,10 +33,11 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   const double tt = t / 256.0, back = 1.0 - tt;
   const int W = w * k, H = 224 * k;
   // the camera and the layers' own offsets at t, in 1/k pixels
-  double camXt = cur->camX - back * dcx, camYt = cur->camY - back * dcy;
+  double cdx, cdy; CtMotCamShift(cur, prev, tt, dcx, dcy, &cdx, &cdy);   // (its continuous place: CtMotFit)
+  double camXt = cur->camX + cdx, camYt = cur->camY + cdy;
   double o2x = cur->o2x - back * (cur->o2x - prev->o2x), o2y = cur->o2y - back * (cur->o2y - prev->o2y);
   double o3x = cur->o3x - back * (cur->o3x - prev->o3x), o3y = cur->o3y - back * (cur->o3y - prev->o3y);
-  if (cur->qFrac && prev->qFrac) {
+  if (cur->qFrac && prev->qFrac && !g_ctMotNoFrac) {
     o2x = prev->q2x + (cur->q2x - prev->q2x) * tt; o2y = prev->q2y + (cur->q2y - prev->q2y) * tt;
     o3x = prev->q3x + (cur->q3x - prev->q3x) * tt; o3y = prev->q3y + (cur->q3y - prev->q3y) * tt;
   }
@@ -60,12 +61,16 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   memset(sx, 0, sizeof sx); memset(sy, 0, sizeof sy);
   for (int i = 0; i < cur->nspr && i < 120; i++) {
     int j = 0; while (j < prev->nspr && prev->sprKey[j] != cur->sprKey[i]) j++;
-    if (j < prev->nspr) {                                 // (new, or a jump: where this frame has it on the screen)
+    // (new, or a jump: at its map place, where the map is at t -- with the camera trailing its drawn place, the screen's
+    //  place stood a fraction off the floor)
+    sx[CT_MOT_SPR + i] = (int)-FLK(cdx); sy[CT_MOT_SPR + i] = (int)-FLK(cdy);
+    if (j < prev->nspr) {
       int wx = cur->sprX[i] - prev->sprX[j], wy = cur->sprY[i] - prev->sprY[j];
       if (abs(wx) <= 32 && abs(wy) <= 32) {
         // (its map place at t, floor(sprX - back * wx), less the screen's at t, camXk, against where this frame drew it:
         // the whole pixels cancel)
-        sx[CT_MOT_SPR + i] = (int)(FLK(-back * wx) - FLK(-back * dcx)); sy[CT_MOT_SPR + i] = (int)(FLK(-back * wy) - FLK(-back * dcy));
+        double sdx, sdy; CtMotSprShift(cur, i, prev, j, tt, wx, wy, &sdx, &sdy);
+        sx[CT_MOT_SPR + i] = (int)(FLK(sdx) - FLK(cdx)); sy[CT_MOT_SPR + i] = (int)(FLK(sdy) - FLK(cdy));
       }
     }
   }
@@ -100,23 +105,51 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   const int bright = cur->bright, wide = w > 256;
   int act[6];
   for (int i = 0; i < 6; i++) act[i] = ((mainT | subT) & bitOf[i]) != 0;
+  // a still backdrop (field.c fieldWideStill): held to the picture -- its layer column at the view's column 0 (stillK) shown
+  // at the picture's middle 256 (from stillA), in 1/k pixels -- and mirrored past them
+  long stillK[6], stillA[6]; int still[6];
+  for (int i = 0; i < 6; i++) {
+    still[i] = bitOf[i] != BL1 && (L->still & bitOf[i]);
+    long o = still[i] ? cur->camX + (bitOf[i] == BL2 ? cur->o2x : cur->o3x) : 0;
+    stillK[i] = (o + L->viewX) * k; stillA[i] = (o + (w - 256) / 2) * k;
+  }
   // the columns, once for every row: each layer's x, the 1x column, the scroll mask (the widescreen's sides)
   static int* tab; static size_t tabN;
-  if (tabN < (size_t)W * 8) { free(tab); tab = (int*)malloc((size_t)W * 8 * sizeof(int)); tabN = tab ? (size_t)W * 8 : 0; }
+  if (tabN < (size_t)W * 12) { free(tab); tab = (int*)malloc((size_t)W * 12 * sizeof(int)); tabN = tab ? (size_t)W * 12 : 0; }
   if (!tab) return 0;
-  int* x1T = tab + 6 * W; int* inT = tab + 7 * W;
+  int* x1T = tab + 6 * W; int* inT = tab + 7 * W; int* fxT = tab + 8 * W; int* fcT = tab + 9 * W;
+  int* fx2T = tab + 10 * W; int* fc2T = tab + 11 * W;
   for (int X = 0; X < W; X++) {
     x1T[X] = X / k;
     long cx = fdiv(camXk + X, k);
     inT[X] = !wide || (cx >= cur->mx0 && cx < cur->mx1);
-    for (int i = 0; i < 6; i++) tab[i * W + X] = act[i] ? wrapi(fdiv(offXk[i] + X, k), L->w[i]) : 0;
+    // (the frame's own column showing map column cx: a world pixel the frame drew screen-fixed -- the Steam margins,
+    //  field.c, CtMotFrame.world -- is taken from there, so it moves with the camera at t. Copied at the screen's place
+    //  they stepped at 60 Hz beside a room drawn at t -- the owner, 2026-10-23 -- and a room column that fell past the
+    //  edge at t, 01C's shake, took the self-scrolling sky instead of them, a column of cloud in the margins)
+    long xs = cx - cur->camX;
+    fxT[X] = xs >= 0 && xs < w ? (int)xs : -1;
+    fcT[X] = xs < 0 ? 0 : xs >= w ? w - 1 : (int)xs;   // (a side column the frame never drew -- the picture's edge, a step of
+                                                        //  the camera at t -- takes the frame's nearest: 01C's shake left a
+                                                        //  column of the sky at the picture's left edge, the owner 2026-10-24)
+    // (the margins' BG2 plane -- world 2 -- at BG2's place at t: the frame's column showing BG2's column there. Taken at the
+    //  camera's, 0A5's sky climbed a pixel between two frames and fell back on the next, at the end of its pan -- the owner,
+    //  2026-10-24)
+    long xs2 = fdiv(offXk[1] + X, k) - (cur->camX + cur->o2x);
+    fx2T[X] = xs2 >= 0 && xs2 < w ? (int)xs2 : -1;
+    fc2T[X] = xs2 < 0 ? 0 : xs2 >= w ? w - 1 : (int)xs2;
+    for (int i = 0; i < 6; i++) {
+      long u = offXk[i] + X;
+      if (still[i]) { long p = 512L * k, s = ((u - stillA[i]) % p + p) % p; u = stillK[i] + (s < 256L * k ? s : p - 1 - s); }
+      tab[i * W + X] = act[i] ? wrapi(fdiv(u, k), L->w[i]) : 0;
+    }
   }
   // the iris, the colour window, the caption plane (the frame's own; the caption plane at its scroll at t)
   const CtFieldNativeFx* fx = (const CtFieldNativeFx*)cur->nativeFx;
   long capXk = 0, capYk = 0;
   if (fx && fx->capOn) {
     double bx = cur->bg3X - back * (cur->bg3X - prev->bg3X), by = cur->bg3Y - back * (cur->bg3Y - prev->bg3Y);
-    if (cur->qFrac && prev->qFrac) { bx = prev->qbx + (cur->qbx - prev->qbx) * tt; by = prev->qby + (cur->qby - prev->qby) * tt; }
+    if (cur->qFrac && prev->qFrac && !g_ctMotNoFrac) { bx = prev->qbx + (cur->qbx - prev->qbx) * tt; by = prev->qby + (cur->qby - prev->qby) * tt; }
     if (fabs(bx - cur->bg3X) > 32 || fabs(by - cur->bg3Y) > 32) { bx = cur->bg3X; by = cur->bg3Y; }
     capXk = (long)floor(bx * k + 1e-9); capYk = (long)floor(by * k + 1e-9);
   }
@@ -133,14 +166,27 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
     }
     const uint8_t* spRow = sp + (size_t)Y * W * 3; const uint8_t* spfRow = spf + (size_t)Y * W; const uint8_t* sppRow = spp + (size_t)Y * W;
     const int capY = fx && fx->capOn ? wrapi(fdiv(capYk + Y, k), fx->capH) : 0;
+    const long ys = fdiv(camYk + Y, k) - cur->camY;    // (the frame's row showing this one's map row at t: the world pixels)
+    const uint8_t* worldRow = ys >= 0 && ys < CT_MOT_H ? cur->world + (size_t)ys * w : NULL;
+    const uint8_t* fbWorld = worldRow ? fb + (size_t)ys * w * 3 : NULL;
+    const uint8_t* worldHere = cur->world + (size_t)y1 * w;
+    const long ys2 = fdiv(offYk[1] + Y, k) - (cur->camY + cur->o2y);   // (...and BG2's row there: the margins' BG2 plane)
+    const uint8_t* world2Row = ys2 >= 0 && ys2 < CT_MOT_H ? cur->world + (size_t)ys2 * w : NULL;
+    const uint8_t* fbWorld2 = world2Row ? fb + (size_t)ys2 * w * 3 : NULL;
     for (int X = 0; X < W; X++, o += 3) {
       int x1 = x1T[X];
-      if (ownRow[x1] == CT_MOT_FIXED) { memcpy(o, fbRow + x1 * 3, 3); continue; }
+      if (worldRow && fxT[X] >= 0 && worldRow[fxT[X]] == 1) { memcpy(o, fbWorld + fxT[X] * 3, 3); continue; }
+      if (world2Row && fx2T[X] >= 0 && world2Row[fx2T[X]] == 2) { memcpy(o, fbWorld2 + fx2T[X] * 3, 3); continue; }
+      if (ownRow[x1] == CT_MOT_FIXED && !worldHere[x1]) { memcpy(o, fbRow + x1 * 3, 3); continue; }
+      if (!inT[X] && worldRow && fxT[X] < 0 && worldRow[fcT[X]] == 1) { memcpy(o, fbWorld + fcT[X] * 3, 3); continue; }
+      if (!inT[X] && world2Row && (fx2T[X] < 0 || world2Row[fx2T[X]] != 2) && world2Row[fc2T[X]] == 2) { memcpy(o, fbWorld2 + fc2T[X] * 3, 3); continue; }
+      if (!inT[X] && worldHere[x1]) { memcpy(o, fbRow + x1 * 3, 3); continue; }   // (where the two planes meet: the frame's own)
       if (!inT[X]) {                                     // the widescreen's sides end at the scroll mask -- but for the layers
         uint8_t c[3] = { 0, 0, 0 };                      //   scrolling on their own (field.c fieldBeyondPixel)
-        if (L->beyond) {
+        const int bey = fdiv(camXk + X, k) < cur->mx0 ? (L->beyond & 0xFF) : (L->beyond >> 8) & 0xFF;   // (left side's, right's)
+        if (bey) {
           int i = 5;
-          for (; i >= 0; i--) if ((L->beyond & bitOf[i]) && (mainT & bitOf[i]) && act[i] && crow[i][tab[i * W + X]]) break;
+          for (; i >= 0; i--) if ((bey & bitOf[i]) && (mainT & bitOf[i]) && act[i] && crow[i][tab[i * W + X]]) break;
           if (i >= 0) memcpy(c, lrow[i] + tab[i * W + X] * 3, 3); else memcpy(c, L->backdrop, 3);
         }
         o[0] = dimc(c[0], bright); o[1] = dimc(c[1], bright); o[2] = dimc(c[2], bright);

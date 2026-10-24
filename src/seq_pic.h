@@ -60,6 +60,9 @@ void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t hdmaen, CtSeqP
 // at x + scroll, mode 7 along its matrix), no sprite of their own, and every window read as ppu.c's ppu_winTest reads it
 // while the sides are drawn (a curtain crosses the whole picture). 0 = the hardware's picture, byte for byte.
 extern int g_seqPicWideSide;
+// The layers (bit n = BG n+1) the sides leave out: a stage's SCENE layer, whose map is one screen wide, would show the same
+// picture again past each edge (entry 3's BG1, the machinery over the ocean, BG1SC 00) -- a background layer runs on.
+extern int g_seqPicWideSkip;
 extern uint8_t* g_seqPicWideOut;
 
 // A STAGE's picture: the compositor's state plus what the stage's code sets around it -- the HDMA channels it programmed, HDMAEN,

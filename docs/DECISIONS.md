@@ -10,6 +10,25 @@ The binding text of the rules is in [CLAUDE.md](../CLAUDE.md). The timing model 
 
 ---
 
+## 2026-10-23 / 2026-10-24: The widescreen follows the Steam release
+
+**Decision (owner).** "All our widescreen must be based on it" -- the Steam release (2018-2023):
+
+- **Its camera, not its phone heritage.** The 256 columns always centred on the ROM's camera, and past a room's edge
+  its margins (the scenery expansion). Not its 192-line crop or its own vertical camera, made for a phone's screen: the
+  port keeps 224 lines and the ROM's vertical camera. The owner draws the art the margins leave short.
+- **Backgrounds go on, scenes do not.** Past an edge only a layer the ROM marks as a background continues; a scene is
+  never copied or mirrored ("in the attract's scene where the robot falls on the party, no"). Where the Steam release
+  draws scenery over a background, without its margins the side ends black (42 locations, numbers only).
+- **The Steam data stay the player's.** `ct_wide.dat` is made from the player's own copy, on the player's machine; the
+  setup does it when it finds one, and the option is off without it. The reader of the Steam archive and the
+  location list are published (the owner, 2026-10-24); no Steam data are.
+- **Art direction where the cartridge's picture would show a seam in the wide one** (Magus's castle's sky 5 lines
+  higher; the Black Omen panorama's machinery left out of the sides), and the frames between place every moving thing
+  at a continuous place that never runs ahead of the game.
+
+**Where:** [WIDESCREEN.md](WIDESCREEN.md); ROADMAP X4-X11.
+
 ## 2026-10-21: The attract vehicle plays the power-on
 
 **Decision.** The suite's attract vehicle, a cold `Belthasar --scene 433` with no seed, had been recorded as the owner's

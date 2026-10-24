@@ -116,6 +116,10 @@ int CtRaceTask44CE(uint8_t* w);   // the score counted down after the finish; 0 
 // `FF 09`, the attract's `FF 60`: its curtain $3D72 and button $424D). Frame returns 1 once the main loop has seen the END
 // (`$7E:0000` set and the thread's pass returned), 2 on the soft reset, else 0.
 int  CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
+// 1 while a stage's Open (the race's, the ending's, entries 3, 4, 6, 7) runs the setup's last NMI ($7E:3013 JSL C3/08D0):
+// on the cartridge it runs at the END of the setup's NMI-off stretch, after the opening's black frames, so a host defers
+// what it posts (the attract's race page 404D: its curtain sound).
+extern int g_ctRaceOpenNmi;
 long CtRaceStageSetupCycles(uint8_t operand);   // the setup's own cycles, NMI off, by its arm (seq_race.c)
 int  CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);
 void CtRaceStageClose(uint8_t* w, const CtRaceIo* io);

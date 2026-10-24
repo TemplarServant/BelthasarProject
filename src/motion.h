@@ -13,6 +13,7 @@
 #ifndef CT_MOTION_H
 #define CT_MOTION_H
 #include <stdint.h>
+#include <string.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -39,6 +40,10 @@ typedef struct CtMotFrame {
   int w;                                  // the picture's width (256, or the widescreen field's); 224 lines
   int scene;                              // the location: a change between two frames = nothing moves between them
   uint8_t own[CT_MOT_W * CT_MOT_H];
+  // 1 = a WORLD pixel the frame drew screen-fixed (own FIXED): the widescreen's Steam margins past a room's edge. The frames
+  // between take it at the map place it shows at t -- it moves with the camera -- not at the screen's (fieldnative.c).
+  // 2 = one of the margins' BG2 plane, which scrolls with BG2 (Magus's castle 0A5: its sky at half the camera's speed).
+  uint8_t world[CT_MOT_W * CT_MOT_H];
   int camX, camY;                         // the map canvas pixel the screen's (0,0) shows
   int o2x, o2y, o3x, o3y;                 // BG2's and BG3's own scroll on top of it (canvas pixel p shows BGn pixel p + o)
   int bg3X, bg3Y;                         // the caption plane's scroll
@@ -47,6 +52,12 @@ typedef struct CtMotFrame {
   // last frames, CtMotFit), which the frames between follow instead of the last step.
   int qFrac;
   double q2x, q2y, q3x, q3y, qbx, qby;
+  // ...and THE CAMERA and EACH OBJECT the same way: a pan or a walk at less than a pixel a frame (the attract's Blackbird,
+  // the camera at 0.75 px a frame and the ship at 0.25; the trial's pan, a pixel every 4 frames) steps on the frames its
+  // whole pixel moves, and the frames between went a pixel in one frame and stood in the others. qcx / qcy: the camera's
+  // continuous place; qsx / qsy: each object's (its own where it moves in whole pixels a frame, or not steadily).
+  double qcx, qcy;
+  double qsx[CT_MOT_MAXSPR], qsy[CT_MOT_MAXSPR];
   int nspr;
   int sprKey[CT_MOT_MAXSPR];              // the object (its index; the lead is its object too)
   int sprX[CT_MOT_MAXSPR], sprY[CT_MOT_MAXSPR];   // its map position this frame
@@ -68,11 +79,17 @@ void CtMotBegin(CtMotFrame* m, int w);    // a new frame `w` pixels wide: every 
 // of the same location (a history kept here). A layer whose recent offsets are not one steady slope keeps its own.
 void CtMotFit(CtMotFrame* cur);
 extern int g_ctMotNoFrac;                 // 1 = CtMotRaster ignores the continuous offsets (the owners' check)
+// Between prev and cur at tt (0..1): the camera's place less cur's (dx, dy) and object i's (j its index in prev) less where
+// cur has it -- the continuous places where CtMotFit fitted them, else the straight line of the step (dcx/dcy, wx/wy: the
+// caller's, an overworld's across its wrap).
+void CtMotCamShift(const CtMotFrame* cur, const CtMotFrame* prev, double tt, int dcx, int dcy, double* dx, double* dy);
+void CtMotSprShift(const CtMotFrame* cur, int i, const CtMotFrame* prev, int j, double tt, int wx, int wy, double* dx, double* dy);
 static inline void CtMotTag(CtMotFrame* m, int x, int y, int own) {
   if (m && (unsigned)x < (unsigned)m->w && (unsigned)y < CT_MOT_H) m->own[y * m->w + x] = (uint8_t)own;
 }
 static inline void CtMotFixRow(CtMotFrame* m, int y) {           // a screen-fixed row (the text box, the blank lines)
-  if (m && (unsigned)y < CT_MOT_H) { uint8_t* r = m->own + y * m->w; for (int x = 0; x < m->w; x++) r[x] = CT_MOT_FIXED; }
+  if (m && (unsigned)y < CT_MOT_H) { uint8_t* r = m->own + y * m->w; for (int x = 0; x < m->w; x++) r[x] = CT_MOT_FIXED;
+                                    memset(m->world + y * m->w, 0, (size_t)m->w); }   // (screen-fixed: no world pixel left there)
 }
 int  CtMotSprite(CtMotFrame* m, int key, int x, int y);   // the next drawn object: its owner tag (0 = the list is full)
 static inline void CtMotSpritePixel(CtMotFrame* m, int x, int y, int r, int g, int b, int own) {   // (a sprite's pixel)

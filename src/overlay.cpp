@@ -2,6 +2,7 @@
 // on the SDL_Renderer the game presents with. See overlay.h. Edits settings.h's options; the host applies them.
 #include "overlay.h"
 #include "settings.h"
+#include "widext.h"
 #include "touchpad.h"
 #include "imgui.h"
 #include "backends/imgui_impl_sdl2.h"
@@ -179,15 +180,29 @@ extern "C" int CtOverlayFrame(void) {
         ImGui::SetTooltip("The field, the world map, battles, the title and the special sequences (the race, the gate) show\n"
                           "more picture at the sides; menus and boxes stay in the middle. Outside the original camera's\n"
                           "area the game runs nothing extra: an object seen only in the extra strip is animated in the\n"
-                          "picture only. In a room wider than the screen the picture stops at the room's edges (no black\n"
-                          "strip) and the text box and the HUD stay in the middle.");
-      bool rw = s->wideRoomWrap != 0;
-      if (ImGui::Checkbox("Narrow rooms: continue the map at the sides", &rw)) s->wideRoomWrap = rw;
+                          "picture only. The camera is the Steam release's: the original picture always stays in the\n"
+                          "middle, so past a room's edge the sides are black, or the Steam margins (below); only a\n"
+                          "background (a sky, the stars) goes on there, and not where the Steam release draws scenery over\n"
+                          "it (the skywalk past its tower: black without the margins). A backdrop that never moves on the screen (the\n"
+                          "prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it. Magus's\n"
+                          "castle's sky is drawn 5 lines higher, so the band over it stays off the screen.");
+      const bool haveWide = CtWideExtAvailable() != 0;   // (no ct_wide.dat: the option stays off and greyed)
+      bool sm = haveWide && s->wideSteamMargins != 0;
+      if (!haveWide) ImGui::BeginDisabled();
+      if (ImGui::Checkbox("Steam margins (needs your Steam copy)", &sm)) s->wideSteamMargins = sm;
+      if (!haveWide) ImGui::EndDisabled();
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("A mod: past a room's edge the sides show the strip the Steam release draws there (its widescreen\n"
+                          "rooms), with the room's own tiles. Its data come from your own copy of the Steam release: the\n"
+                          "setup reads it when it finds one installed and writes ct_wide.dat next to the game's data (or\n"
+                          "run tools/steam_wide.py on its folder). Without that file the option stays off. Rooms without\n"
+                          "margins keep the sides as above. Nothing else in the game changes.");
+      bool fb = s->fillBottomLines != 0;
+      if (ImGui::Checkbox("Fill the bottom lines", &fb)) s->fillBottomLines = fb;
       if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("In a narrow room as wide as its own map (the sky of the fight with Flea, GATO's room, the Telepod)\n"
-                          "the sides show the map wrapping round, as the camera would see it -- sometimes repeating what\n"
-                          "is in the middle. Off: black past the room's edges. A room inside a larger map (Crono's\n"
-                          "house) is always black past its edge: other rooms are there.");
+        ImGui::SetTooltip("A mod: the field and the fights draw their last 13 lines (211-223), which the original game\n"
+                          "leaves black -- it turns the screen off there to copy graphics, hidden by old TVs' borders.\n"
+                          "Off: the black strip at the bottom, as on the SNES. Nothing else in the game changes.");
       bool ip = s->interpolate != 0;
       if (ImGui::Checkbox("Frames between (60+ fps)", &ip)) s->interpolate = ip;
       if (ImGui::IsItemHovered())

@@ -129,7 +129,7 @@ static void decode(const CtSeqPic* p, Line* L) {
   for (int i = 0; i < 6; i++) L->math[i] = (r[0x31] >> i) & 1;
 }
 
-int g_seqPicWideSide = 0;
+int g_seqPicWideSide = 0, g_seqPicWideSkip = 0;
 uint8_t* g_seqPicWideOut = NULL;
 // x inside the window's span [l, r]: the hardware's test, or -- while the widescreen's sides are drawn -- snes/ppu.c
 // ppu_winTest's (a narrow band at an edge is no window; a wide span's edge within 16 columns of the screen's runs on to the
@@ -285,6 +285,7 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
     int cl = kLayers[L->actMode][i], cp = kPrio[L->actMode][i];
     int on = sub ? L->sub[cl] && (!L->subWin[cl] || !winState(p, L, cl, x))
                  : L->main[cl] && (!L->mainWin[cl] || !winState(p, L, cl, x));
+    if ((x < 0 || x > 255) && (g_seqPicWideSkip >> cl & 1)) on = 0;   // (a scene layer: no copy of it in the sides)
     if (!on) continue;
     if (cl < 4) {
       int lx = x, ly = y;

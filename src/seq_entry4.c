@@ -213,7 +213,9 @@ int CtEntry4StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   wr(w, 0x038E, 0x0606);                                              // 54CB LDX #0606 / STX $038E
   if (io && io->pic) { CtEntry4PicSetupB(io->pic); CtRacePicCgram(io->pic, w); }   // 54C1-54E9, then 300D JSR $388B
   // $7E:300D .. 301E: $388B, $31B0, JSL C3/08D0 (one NMI, run here, without C3/09A4), NMI on, STZ $00, STZ $0392
+  g_ctRaceOpenNmi = 1;   // (the setup's last NMI: its posts wait for the opening's black frames, seq_race.h)
   CtSeqStageNmiHooks(w, 0, io, entry4Hook, entry4Task);
+  g_ctRaceOpenNmi = 0;
   wr(w, 0x0000, 0); wr(w, 0x0392, 0);
   return 0;
 }

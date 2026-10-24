@@ -204,7 +204,9 @@ int CtEntry6StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   // (79CD JSR $8278: `LDA $21 / BNE -> RTS`; then the PPU)
   if (io && io->pic) { CtEntry6PicSetupB(io->pic); CtRacePicCgram(io->pic, w); }   // 79D0-79F7, then 300D JSR $388B
   // $7E:300D .. 301E: $388B, $31B0, JSL C3/08D0 (one NMI, run here, without C3/09A4), NMI on, STZ $00, STZ $0392
+  g_ctRaceOpenNmi = 1;   // (the setup's last NMI: its posts wait for the opening's black frames, seq_race.h)
   CtSeqStageNmiHooks(w, 0, io, entry6Hook, entry6Task);
+  g_ctRaceOpenNmi = 0;
   wr(w, 0x0000, 0); wr(w, 0x0392, 0);
   if (io && io->pic) CtEntry6PicThread(w);                            // 3023: the main loop's first pass ($3024 = $8278)
   return 0;

@@ -52,6 +52,7 @@
 #include "present.h"     // the window and the backend the picture goes through (SDL_Renderer / OpenGL)
 #include "motion.h"      // what moves each pixel of the field picture: the higher internal scale, the frames between
 #include "fieldnative.h" // the frames between drawn natively from the map's layers and the sprites' pixels
+#include "widext.h"      // a mod: the Steam release's widescreen margins from the player's ct_wide.dat
 #include "tileanim.h"    // FD/DE98 + FD/E022: the location's animated BG tiles
 #ifdef CT_DATAFREE
 #include "datapack.h"    // the tables below, loaded from the player's pack (a data-free build)
@@ -373,12 +374,79 @@ typedef struct {
 } World;
 // The OAM the raster shows is the PREVIOUS build (C2/0184 DMAs it at the next NMI): take it, with the picture's record of
 // that build (its keys and its uncut pieces), at the same moment.
+// THE WIDESCREEN'S OWN GULLS (a mod; the owner, 2026-10-24). A world object that checks its own visibility (C2/78A1: the
+// view plus 16 px) is killed by its script as it leaves the screen -- the new-game pan's gulls, gone the moment they reach
+// the extra strip. The widescreen draws such an object on, in the picture only, where the ROM let it go OUTSIDE the
+// original 256 columns: at its last step (the last two frames' world places) and with its last poses in turn (the flaps),
+// until it leaves the wide picture. Nothing is run or written: the game killed it, the strip shows where it was going.
+enum { OW_GHOST_KEYS = 256, OW_GHOST_POSES = 8, OW_GHOST_PIECES = 6 };
+typedef struct { int n; CtWorldPiece pc[OW_GHOST_PIECES]; } OwGhostPose;
+typedef struct {
+  int seen, ghost, age;                             // seen: the frame it was last in the build; ghost: drawn on by the strip
+  double wx, wy, px, py;                            // its world place this frame and the frame before
+  OwGhostPose pose[OW_GHOST_POSES]; int poseN, poseAt;
+} OwGhost;
+static OwGhost g_owGhost[OW_GHOST_KEYS];
+static int g_owGhostFrame;
+static int g_owGhostLive;                         // (any entry in use: a headless latch need not clear the table)
+static void owGhostReset(void) { if (g_owGhostLive) memset(g_owGhost, 0, sizeof g_owGhost); g_owGhostLive = 0; }
+static void owGhosts(World* w) {
+  g_owGhostFrame++;
+  const int W = hostWideW();
+  if (!g_hostInteractive || W <= CAMW) { owGhostReset(); return; }
+  const int X0 = (W - CAMW) / 2, f = g_owGhostFrame;
+  g_owGhostLive = 1;
+  const double sx = w->cam.bg2h, sy = w->cam.bg2v;
+  // this build's objects: their places and their pieces (relative to the object)
+  for (int i = 0; i < w->wideShowN; i++) {
+    const CtWorldPiece* P = &w->wideShow[i];
+    if (P->key < 0 || P->key >= OW_GHOST_KEYS) continue;
+    OwGhost* g = &g_owGhost[P->key];
+    if (g->seen != f) {
+      if (g->seen != f - 1 || g->ghost) { g->poseN = 0; g->poseAt = 0; g->wx = P->ox + sx; g->wy = P->oy + sy; }
+      g->px = g->wx; g->py = g->wy; g->wx = P->ox + sx; g->wy = P->oy + sy;
+      g->seen = f; g->ghost = 0; g->age = 0;
+      g->poseAt = (g->poseAt + 1) % OW_GHOST_POSES; if (g->poseN < OW_GHOST_POSES) g->poseN++;
+      g->pose[g->poseAt].n = 0;
+    }
+    OwGhostPose* ps = &g->pose[g->poseAt];
+    if (ps->n < OW_GHOST_PIECES) { CtWorldPiece q = *P; q.x = (int16_t)(P->x - P->ox); q.y = (int16_t)(P->y - P->oy); ps->pc[ps->n++] = q; }
+  }
+  // the ones the build lost: drawn on where the ROM let them go past the 256 columns and they were moving
+  static int gtr = -1; if (gtr < 0) gtr = getenv("CT_GHOSTTRACE") ? 1 : 0;   // (probe) each lost object and what became of it
+  for (int k = 0; k < OW_GHOST_KEYS; k++) {
+    OwGhost* g = &g_owGhost[k];
+    if (g->seen == f || !g->poseN) continue;
+    if (!g->ghost) {
+      double vx = g->wx - g->px, vy = g->wy - g->py, ox = g->wx - sx;
+      if (gtr) { const OwGhostPose* lp = &g->pose[g->poseAt]; int y0 = 999, y1 = -999;
+                 for (int i = 0; i < lp->n; i++) { if (lp->pc[i].y < y0) y0 = lp->pc[i].y; if (lp->pc[i].y > y1) y1 = lp->pc[i].y; }
+                 printf("ghost: pieces %d dy %d..%d ", lp->n, y0, y1); }
+      if (gtr) printf("ghost: f%d key %d lost at %.0f,%.0f v %.2f,%.2f seen f%d -> %s\n", f, k, ox, g->wy - sy, vx, vy, g->seen,
+                      g->seen != f - 1 ? "gap" : (ox >= 0 && ox < CAMW) ? "inside" : (fabs(vx) < 0.25 && fabs(vy) < 0.25) ? "still" :
+                      (fabs(vx) > 8 || fabs(vy) > 8) ? "fast" : "ghost");
+      if (g->seen != f - 1 || (ox >= 0 && ox < CAMW) || (fabs(vx) < 0.25 && fabs(vy) < 0.25) || fabs(vx) > 8 || fabs(vy) > 8) { g->poseN = 0; continue; }
+      g->ghost = 1;
+    }
+    double vx = g->wx - g->px, vy = g->wy - g->py;
+    g->px = g->wx; g->py = g->wy; g->wx += vx; g->wy += vy; g->age++;
+    int ox = (int)floor(g->wx - sx), oy = (int)floor(g->wy - sy);
+    if (ox < -X0 - 48 || ox > CAMW + X0 + 48 || oy < -48 || oy > CAMH + 48 || g->age > 600) { g->poseN = 0; g->ghost = 0; continue; }
+    const OwGhostPose* ps = &g->pose[((g->poseAt - g->poseN + 1 + (g->age - 1) % g->poseN) % OW_GHOST_POSES + 2 * OW_GHOST_POSES) % OW_GHOST_POSES];   // (oldest to newest, in turn)
+    for (int i = 0; i < ps->n && w->wideShowN < CT_OW_WIDE_MAX; i++) {
+      CtWorldPiece q = ps->pc[i];
+      q.x = (int16_t)(q.x + ox); q.y = (int16_t)(q.y + oy); q.ox = (int16_t)ox; q.oy = (int16_t)oy;
+      w->wideShow[w->wideShowN++] = q;
+    }
+  }
+}
 static void owLatchShow(World* w) {
   memcpy(w->oamShow, w->wram + 0x0700, sizeof w->oamShow);
   memcpy(w->oamKeyShow, CtWorldOamKeys(), sizeof w->oamKeyShow);
   memcpy(w->oamPosShow, CtWorldOamObjPos(), sizeof w->oamPosShow);
   const CtWorldPiece* p; int n = CtWorldOamWide(&p);
   memcpy(w->wideShow, p, (size_t)n * sizeof *p); w->wideShowN = n;
+  owGhosts(w);
 }                             //   worldEnterAt, the moment the world state goes live
 
 // ⭐ THE FERRY IS THE WORLD'S OWN BOOTSTRAP, not a captured boat. Both ticket offices pay with the same `E0 F0 03 3F 28` (loc
@@ -1052,6 +1120,7 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
   CtWorldDrawListInit(w->wram);                        // C2/0BF6 (C2:23AE): the draw list's node template
   CtWorldDrawListReset(w->wram);
   CtWorldOamBuild(w->wram, w->cam.bg2h, w->cam.bg2v);                            // an empty list: every entry parked at Y = $E0
+  owGhostReset();                                      // (a new world: no gull of the last one goes on)
   owLatchShow(w);
   w->wram[0x0041] = 0x17;                              // C2/0155 TM = BG1+BG2+BG3+OBJ
   w->wram[0x0042] = 0x13;                              // C2/0159 TS = BG1+BG2+OBJ
@@ -2187,7 +2256,7 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   const int W = w1 * k, H = CAMH * k, X0k = N->X0 * k;
   double o2x = cur->o2x - back * (cur->o2x - prev->o2x), o2y = cur->o2y - back * (cur->o2y - prev->o2y);
   double o3x = cur->o3x - back * (cur->o3x - prev->o3x), o3y = cur->o3y - back * (cur->o3y - prev->o3y);
-  if (cur->qFrac && prev->qFrac) {
+  if (cur->qFrac && prev->qFrac && !g_ctMotNoFrac) {
     o2x = prev->q2x + (cur->q2x - prev->q2x) * tt; o2y = prev->q2y + (cur->q2y - prev->q2y) * tt;
     o3x = prev->q3x + (cur->q3x - prev->q3x) * tt; o3y = prev->q3y + (cur->q3y - prev->q3y) * tt;
   }
@@ -2197,7 +2266,8 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   // each the floor of its whole sum, camera and offset together, as fieldnative.c does: a layer held to the screen lands
   // exactly, never a quarter pixel off with a column of its other side at the edge
   #define FLK(p) ((long)floor((p) * k + 1e-9))
-  const double camXt = cs->bg1h - back * dcx, camYt = cs->bg1v - back * dcy;
+  double cdx, cdy; CtMotCamShift(cur, prev, tt, dcx, dcy, &cdx, &cdy);   // (its continuous place: CtMotFit)
+  const double camXt = cs->bg1h + cdx, camYt = cs->bg1v + cdy;
   const long c1x = FLK(camXt), c1y = FLK(camYt);
   const long c2x = FLK(camXt + o2x) + (long)(cs->bg2h - cs->bg1h - cur->o2x) * k;
   const long c2y = FLK(camYt + o2y) + (long)(cs->bg2v - cs->bg1v - cur->o2y) * k;
@@ -2216,10 +2286,12 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   memset(sx, 0, sizeof sx); memset(sy, 0, sizeof sy);
   for (int i = 0; i < cur->nspr && CT_MOT_SPR + i < 256; i++) {
     int j = 0; while (j < prev->nspr && prev->sprKey[j] != cur->sprKey[i]) j++;
+    sx[CT_MOT_SPR + i] = (int)-FLK(cdx); sy[CT_MOT_SPR + i] = (int)-FLK(cdy);   // (new, or a jump: its map place at t)
     if (j < prev->nspr) {                             // (new, or a jump: where this frame has it on the screen)
       int wx = owWrapD(cur->sprX[i] - prev->sprX[j], 1536), wy = owWrapD(cur->sprY[i] - prev->sprY[j], 1024);
       if (abs(wx) <= 32 && abs(wy) <= 32) {
-        sx[CT_MOT_SPR + i] = (int)(FLK(-back * wx) - FLK(-back * dcx)); sy[CT_MOT_SPR + i] = (int)(FLK(-back * wy) - FLK(-back * dcy)); }
+        double sdx, sdy; CtMotSprShift(cur, i, prev, j, tt, wx, wy, &sdx, &sdy);
+        sx[CT_MOT_SPR + i] = (int)(FLK(sdx) - FLK(cdx)); sy[CT_MOT_SPR + i] = (int)(FLK(sdy) - FLK(cdy)); }
     }
   }
   #undef FLK
@@ -2682,9 +2754,13 @@ static void hostUploadPictureAt(CtPresenter* pr, const uint8_t* fb, int w, int t
   if (g_hostPicN < n) { free(g_hostPic); g_hostPic = (uint8_t*)malloc(n); g_hostPicN = g_hostPic ? n : 0; }
   if (!g_hostPic) { hostUpload(pr, fb, w, CAMH); return; }
   // the frames between: natively where the frame allows it (fieldnative.c), else the reprojection
-  if (!(t < 256 && !getenv("CT_NATIVE_OFF") && (CtFieldRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic) ||
-                                                owRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic))))
+  // (between two frames, the newest one too: the continuous places trail the drawn ones, so t = 256 is theirs as well --
+  //  not interpolating, the frame as drawn)
+  const int noFrac = g_ctMotNoFrac; if (!interp) g_ctMotNoFrac = 1;
+  if (!((t < 256 || interp) && !getenv("CT_NATIVE_OFF") && (CtFieldRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic) ||
+                                                           owRasterNative(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic))))
     CtMotRaster(&g_motBuf[g_motIdx], &g_motBuf[g_motIdx ^ 1], fb, w, t, k, g_hostPic);
+  g_ctMotNoFrac = noFrac;
   hostUpload(pr, g_hostPic, w * k, CAMH * k);
 }
 static void hostUploadPicture(CtPresenter* pr, const uint8_t* fb) { hostUploadPictureAt(pr, fb, CAMW, 256, 0); }
@@ -2771,7 +2847,8 @@ static void motCheck(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_
   static uint8_t back[FIELD_WMAX * CAMH * 3];
   if (g_motPrevOk && g_motPrevW == w && cur->valid && prev->valid) {
     g_ctMotNoFrac = 1; CtMotRaster(cur, prev, fb, w, 0, 1, back); g_ctMotNoFrac = 0;
-    if (memcmp(back, fb, (size_t)w * CAMH * 3)) {       // something moved
+    if (memcmp(back, fb, (size_t)w * CAMH * 3) ||       // something moved (or the frame CT_MOTDUMP names: a still frame
+        (getenv("CT_MOTDUMP") && atoi(getenv("CT_MOTDUMP")) == frameNo)) {   //  still has frames between, a slow pan's)
       long plain = 0, rep = 0;
       for (int i = 0; i < w * CAMH; i++) {
         const uint8_t* p = g_motPrevFb + i * 3;
@@ -2793,7 +2870,7 @@ static void motCheck(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_
           static uint8_t big[FIELD_WMAX * 4 * CAMH * 4 * 3];   // ...and the frames between at 4x: _mot_t000.ppm .. _mot_t256.ppm
           int step = getenv("CT_MOTDUMP_STEP") ? atoi(getenv("CT_MOTDUMP_STEP")) : 64; if (step < 1) step = 64;   // (every t-th)
           for (int t = 0; t <= 256; t = t < 256 && t + step > 256 ? 256 : t + step) { char path[64]; snprintf(path, sizeof path, "build/_mot_t%03d.ppm", t);
-            if (!(t < 256 && (CtFieldRasterNative(cur, prev, fb, w, t, 4, big) || owRasterNative(cur, prev, fb, w, t, 4, big)))) CtMotRaster(cur, prev, fb, w, t, 4, big);
+            if (!(CtFieldRasterNative(cur, prev, fb, w, t, 4, big) || owRasterNative(cur, prev, fb, w, t, 4, big))) CtMotRaster(cur, prev, fb, w, t, 4, big);
             FILE* pf = fopen(path, "wb"); if (!pf) continue;
             fprintf(pf, "P6\n%d %d\n255\n", w * 4, CAMH * 4); fwrite(big, 1, (size_t)w * 4 * CAMH * 4 * 3, pf); fclose(pf); } } }
       if (g_motCheck > 1) printf("motion: f%d cam (%d,%d) %d objects: plain %ld, reprojected %ld\n", frameNo,
@@ -2801,6 +2878,8 @@ static void motCheck(const CtMotFrame* cur, const CtMotFrame* prev, const uint8_
       if (g_motCheck > 2) printf("motion:   cam %d,%d -> %d,%d o2 %d,%d -> %d,%d o3 %d,%d -> %d,%d bg3 %d,%d -> %d,%d\n",
                                  prev->camX, prev->camY, cur->camX, cur->camY, prev->o2x, prev->o2y, cur->o2x, cur->o2y,
                                  prev->o3x, prev->o3y, cur->o3x, cur->o3y, prev->bg3X, prev->bg3Y, cur->bg3X, cur->bg3Y);
+      if (g_motCheck > 3) { printf("motion:   q cam %.3f,%.3f spr", cur->qcx, cur->qcy);
+                            for (int i = 0; i < cur->nspr && i < 12; i++) printf(" %d@%d,%d(%.3f,%.3f)", cur->sprKey[i], cur->sprX[i], cur->sprY[i], cur->qsx[i], cur->qsy[i]); printf("\n"); }
     }
   }
   memcpy(g_motPrevFb, fb, (size_t)w * CAMH * 3); g_motPrevOk = 1; g_motPrevW = w;
@@ -2874,6 +2953,7 @@ static void hostPresentMot(CtPresenter* pr, const uint8_t* fb, int w, int motion
       if (kind >= 0) { ms[kind] += hostNowMs() - t0;
         if (++n[kind] % 200 == 0) printf("native-bench: %s %d wide, %.2f ms a draw (%ld draws)\n", kind ? "overworld" : "field", w, ms[kind] / n[kind], n[kind]); }
     }
+    if (nc) g_ctMotNoFrac = 1;                      // (the drawers' own fidelity: the frame's whole places, no continuous ones)
     if (nc && cur->valid && !cur->native && cur->owNative && owRasterNative(cur, &g_motBuf[g_motIdx ^ 1], fb, w, 256, 1, nb)) {
       static long owFrames, owBad, owPx;              // (the overworld's, apart: the field's line keeps its own count)
       long d = 0; for (int i = 0; i < w * CAMH; i++) if (memcmp(nb + i * 3, fb + i * 3, 3)) d++;
@@ -2912,7 +2992,8 @@ static void hostPresentMot(CtPresenter* pr, const uint8_t* fb, int w, int motion
           for (int i = 0; i < 6; i++) printf(" %dx%d", L->w[i], L->h[i]);
           printf("\n"); } }
       if (ncFrames % 500 == 0) printf("nativecheck: %ld frames, %ld differ, %ld px\n", ncFrames, ncBad, ncPx);
-    } }
+    }
+    if (nc) g_ctMotNoFrac = 0; }
   motCheck(cur, &g_motBuf[g_motIdx ^ 1], fb, w, frameNo++);
   if (g_hostSkipPresent) { g_hostPresentSkips++; hostUploadPictureAt(pr, fb, w, 256, 0); g_motIdx ^= 1; return; }
   int interp = hostInterp(pr), presents = 0;
@@ -4657,6 +4738,7 @@ typedef struct {
   const uint8_t* exits; int nexits;
   double spawnX, spawnY; int spawnZ;
   int mx0, my0, mx1, my1;         // the scroll mask in px = the CAMERA bounds (engine $1D1A-$1D1D);
+  int loc;                        // the location fieldLoad opened (the Steam margins' key, fieldWideExtPic)
 } Field;                          // a scene map holds many rooms -- the camera stays in THIS one
 // The canvas pixel the screen shows at map pixel (x, y): the BG tilemap repeats the map (C0/7612 `AND $1E` / `AND $1F`
 // over the metatile column and row), so a camera whose screen runs past the canvas reads the map again from its start.
@@ -4668,28 +4750,254 @@ static inline size_t fieldBaseAt(const Field* f, int x, int y) {
 // THE WIDESCREEN'S SIDES (a mod) end at the room's horizontal scroll mask when the map holds more than the room: past it
 // are tiles the camera never shows -- other rooms (Crono's house, 002: a 1024-wide map, the room 256..512) -- so the sides
 // are black there, moving with the camera as the room's edge does. A room as wide as its whole map (the mask spans the
-// map's width: Flea's starfield 0AD, the fair's 006, Magus's hall 07D, the canyon 112) has only itself past its edge --
-// the map wraps there, as the camera would see it -- and the sides show it. [x0, x1) = the columns the sides may show.
-// (settings.h wideRoomWrap: the player may keep those sides black too.) Only a room NARROWER than the picture `w` wraps: a
-// wider one keeps its edges, and the widescreen's camera stops at them (no side past the room at all -- the fair's 005,
-// 768 wide, would otherwise show its own far end past its edge). A mask wider than the map is the ROM's camera wrapping
-// the map itself (1B1's 0..1024 over a 256 map): no edge.
+// map's width: Flea's 0AD, the fair's 006, the machine's fall in 0DB) ends at its edge too: the map wrapping there showed
+// the room again beside itself -- 0DB's chamber three times over in the attract (the owner, 2026-10-23, who removed the
+// option that wrapped them, wide_room_wrap). What goes on past the edge is the layers scrolling on their own (the
+// background: fieldBeyondPixel), the Steam margins, or black. [x0, x1) = the columns the sides may show. A mask wider than
+// the map is the ROM's camera wrapping the map itself (1B1's 0..1024 over a 256 map): no edge.
 static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
+  (void)w;
   int roomW = f->mx1 - f->mx0;
-  if (roomW > f->W || (roomW == f->W && roomW < w && CtSettingsGet()->wideRoomWrap)) { *x0 = -(1 << 30); *x1 = 1 << 30; }
+  if (roomW > f->W) { *x0 = -(1 << 30); *x1 = 1 << 30; }
   else { *x0 = f->mx0; *x1 = f->mx1; }
 }
-// PAST A ROOM'S EDGE (the widescreen, where fieldWideMask keeps the edge): the map there holds other rooms -- but a layer
-// that scrolls on its own, detached from the map (BG2 / BG3 with an offset: 1B0's lava under the Epoch, 0AD's stars), is a
-// backdrop the room only shows a window of, and it goes on past the edge. Those layers are drawn there, the top one that
-// is opaque (else the backdrop colour); with none, the side is black. Bits as the bake's (BL2 2, BL3 4).
-static int fieldBeyondLayers(int o2x, int o2y, int o3x, int o3y) { return ((o2x | o2y) ? 2 : 0) | ((o3x | o3y) ? 4 : 0); }
+// THE WIDESCREEN'S CAMERA (a mod) is the Steam release's (Chrono Trigger.exe, 2023; ROADMAP X4): where the 256 view
+// stands in a picture `w` wide whose ROM camera is at camx -- always the picture's middle. The Steam field is the SNES's
+// picture on one node, scaled 1.875 x 5/3 into a 568 x 320 design and placed at (0x7FA108, 0) (0x5889D0-0x5889FE), where
+// 0x7FA108 = (the design's width - 480) / 2 + its origin (0x40EBE5-0x40EC3F): the 256 columns centred, whatever the
+// room. Its sides are the ROM's camera's own surroundings: past a room's scroll mask it draws the room's margins
+// (mapext_<location>, 4 to 6 columns a side for wide rooms as for narrow ones: fieldWideExtPic), so its picture never
+// stops at a room's edge -- the ROM's camera does, and the picture with it. Here the sides past the edge are the Steam
+// margins when the player has them, else what fieldWideMask leaves there (black, or the map wrapping). The ROM's camera,
+// and everything it decides, are untouched. (Until 2026-10-23 the picture stopped at a wide room's edges and the view slid
+// off the middle; the Steam release never does.)
+static int fieldWideViewX(const Field* f, int w, int camx) {
+  (void)f; (void)camx;
+  return (w - CAMW) / 2;
+}
+// THE WIDESCREEN'S SKY OFFSETS (part of the widescreen, a mod; art direction, the owner 2026-10-24): a room whose BG2
+// map begins with rows of one flat colour over its sky shows them as a band when the ROM's camera reaches them -- Magus's
+// castle (0A5): 32 rows of dark grey over the sky, 5 lines of it at the top of the attract's and the story's pan (the
+// cartridge's own picture), a band across the wide picture. In the widescreen the sky is drawn that many lines higher for
+// the whole visit, so the pan ends with the band just above the screen and both layers stop together (the camera held
+// above the band instead stopped the sky while the castle still moved -- the owner, 2026-10-24). The ROM's camera and
+// layers are untouched; the lines are BG2's offset in the picture only. 0 = none.
+static int fieldWideBg2Dy(void) {
+  static const struct { uint16_t loc; int8_t dy; } kSky[] = { { 0x0A5, 5 } };
+  if (!g_hostInteractive || hostWideW() <= CAMW) return 0;
+  const uint8_t* s = CtWramSys(fieldWram());
+  const int loc = s[0x100] | (s[0x101] << 8);
+  for (size_t i = 0; i < sizeof kSky / sizeof kSky[0]; i++) if (kSky[i].loc == loc) return kSky[i].dy;
+  return 0;
+}
+// A BACKGROUND THE ROOM HIDES (part of the widescreen, a mod): a layer that scrolls on its own ($1D35 / $1D36: one the
+// sides would carry past the room's edge) but that the room's layers in front of it cover everywhere is no sky -- the
+// SNES shows it only through a window: the Telepod's warp in 008 (BG3, its swirl, behind BG1 and BG2 but where the gate's
+// iris takes them off). Past the edge it showed through the Steam margins' see-through pixels, moving in the trees (the
+// owner, 2026-10-24). The bits (2 BG2, 4 BG3) of `bits` the room's front layers cover over its whole scroll mask, sampled
+// every 4 pixels; kept per location and bake.
+static int fieldHiddenBg(const Field* f, int bits) {
+  static const void* lastSd; static const void* lastBase; static int lastLoc = -1, lastBits = -1, lastHid;
+  if (!f->sd || !(bits & 6)) return 0;
+  if (f->sd == lastSd && f->base == lastBase && f->loc == lastLoc && bits == lastBits) return lastHid;   // (a re-bake: again)
+  CtSceneLayers L; int o2x, o2y, o3x, o3y;
+  if (!CtFieldSceneLayers(f->sd, &L) || !CtFieldSceneLayerOffsetsBaked(f->sd, &o2x, &o2y, &o3x, &o3y)) return 0;
+  static const int bitOf[6] = { 4, 2, 1, 2, 1, 4 };
+  int x0 = f->mx0, x1 = f->mx1, y0 = f->my0, y1 = f->my1;
+  if (x1 - x0 > 2048) x1 = x0 + 2048;
+  if (y1 - y0 > 2048) y1 = y0 + 2048;
+  int hid = 0;
+  for (int b = 2; b <= 4; b += 2) {
+    if (!(bits & b)) continue;
+    const int front = b == 4 ? 3 : 1;              // (the layers in front of it on the main screen)
+    int covered = x1 > x0 && y1 > y0;
+    for (int my = y0; covered && my < y1; my += 4)
+      for (int mx = x0; covered && mx < x1; mx += 4) {
+        int any = 0;
+        for (int i = 0; i < 6 && !any; i++) {
+          if (!(bitOf[i] & front) || !(L.mainT & bitOf[i]) || !L.cov[i] || L.w[i] <= 0 || L.h[i] <= 0) continue;
+          int ox = bitOf[i] == 2 ? o2x : 0, oy = bitOf[i] == 2 ? o2y : 0;
+          int lx = ((mx + ox) % L.w[i] + L.w[i]) % L.w[i], ly = ((my + oy) % L.h[i] + L.h[i]) % L.h[i];
+          any = L.cov[i][(size_t)ly * L.w[i] + lx] != 0;
+        }
+        if (!any) covered = 0;
+      }
+    if (covered) hid |= b;
+  }
+  lastSd = f->sd; lastBase = f->base; lastLoc = f->loc; lastBits = bits; lastHid = hid;
+  return hid;
+}
+// WHERE THE STEAM RELEASE DRAWS OVER A ROOM'S BACKGROUND (part of the widescreen, a mod; the owner, 2026-10-24): the
+// locations whose background layers (the map header's md[1..3]: BG2 / BG3 detached or scrolling on their own) the
+// sides would carry past the room's edge, but beside whose edge the Steam release's widescreen draws scenery of its own
+// over them -- 1 the left side, 2 the right, 3 both. Facts from an analysis of that release's widescreen data
+// (tools/steam_bgcover.py prints this table: the room's rows whose first column past the edge holds a margin cell); none of its data
+// is here. Without the Steam margins drawn (the option off, or no ct_wide.dat) such a side ends black past the edge like
+// the room's own end: the skywalk's sky (01C) stood loose past its tower wall, where the Steam release has the tower
+// and the cliff. Elsewhere a background goes on -- the Blackbird's clouds (16E), Flea's stars (0AD).
+static const struct { uint16_t loc; uint8_t sides; } kSteamCovers[] = {
+  {0x008, 3}, {0x014, 3}, {0x01C, 3}, {0x020, 3}, {0x053, 3}, {0x055, 3}, {0x06B, 3}, {0x071, 3}, {0x085, 3}, {0x087, 3},
+  {0x0AC, 3}, {0x0B0, 3}, {0x0DD, 2}, {0x0F4, 3}, {0x0F5, 3}, {0x0F6, 3}, {0x0F7, 3}, {0x104, 3}, {0x106, 3}, {0x107, 3},
+  {0x109, 3}, {0x110, 3}, {0x133, 3}, {0x15D, 3}, {0x16B, 3}, {0x16D, 2}, {0x16F, 3}, {0x188, 3}, {0x189, 3}, {0x18A, 3},
+  {0x18B, 3}, {0x1A6, 3}, {0x1AD, 3}, {0x1B0, 3}, {0x1BE, 3}, {0x1C1, 3}, {0x1C9, 3}, {0x1CB, 3}, {0x1D2, 3}, {0x1D3, 3},
+  {0x1E1, 3}, {0x1EF, 3},
+};
+static int fieldSteamCovers(int loc) {
+  for (size_t i = 0; i < sizeof kSteamCovers / sizeof kSteamCovers[0]; i++) if (kSteamCovers[i].loc == loc) return kSteamCovers[i].sides;
+  return 0;
+}
+// THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
+// release draws there, from the player's own ct_wide.dat, baked once per location with the Steam release's tiles and the
+// room's palette (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
+// A FILL: 266 of the 412 locations' margins are one tile everywhere -- the dark around an interior (Crono's house 002:
+// 0x8C), the black of space (Flea's 0AD: 285) -- not scenery. Where the port has something of the room's own past the
+// edge (the map wrapping in a room as wide as its map, a layer scrolling on its own: fieldBeyondPixel) that shows; the
+// fill only stands where the side would be black. (With the fill over the wrap, 0AD's sides went black until its fight,
+// whose arena wrapped -- the owner, 2026-10-23.)
+// Plane 3 is BG2's low tiles: the Steam release draws it into its BG2 layer, which scrolls with BG2 -- Magus's castle
+// (0A5), whose sky is a BG2 at half BG1's speed, showed its margins' clouds at BG1's place, off the sky beside them (the
+// owner, 2026-10-23). So it is baked apart (rgb2/cov2) and read at BG2's own scroll (fieldWideExtPixel's o2x / o2y).
+typedef struct { void* sd; int loc, w, h, xo, fill; uint8_t* rgb; uint8_t* cov; uint8_t* rgb2; uint8_t* cov2; } FieldWideExtPic;
+static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
+  static FieldWideExtPic p;
+  if (!CtSettingsGet()->wideSteamMargins || !f->sd) return NULL;
+  if (p.sd == f->sd && p.loc == f->loc) return p.rgb ? &p : NULL;
+  free(p.rgb); free(p.cov); free(p.rgb2); free(p.cov2); memset(&p, 0, sizeof p);
+  p.sd = f->sd; p.loc = f->loc;
+  CtWideExt e;
+  if (!CtWideExtGet(f->loc, &e)) return NULL;
+  p.w = e.w; p.h = e.h; p.xo = (e.w - f->mx1 / 16) / 2;
+  { int v0 = 0; p.fill = 1;                         // (one tile in every drawn cell of every plane)
+    for (int i = 0; i < 5 * e.w * e.h && p.fill; i++) { int v = e.planes[i]; if (v) { if (!v0) v0 = v; else if (v != v0) p.fill = 0; } } }
+  size_t px = (size_t)e.w * 16 * e.h * 16;
+  p.rgb = (uint8_t*)malloc(px * 3); p.cov = (uint8_t*)malloc(px); p.rgb2 = (uint8_t*)malloc(px * 3); p.cov2 = (uint8_t*)malloc(px);
+  if (!p.rgb || !p.cov || !p.rgb2 || !p.cov2 ||
+      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, 0x17, p.rgb, p.cov) ||
+      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, 0x08, p.rgb2, p.cov2)) {
+    free(p.rgb); free(p.cov); free(p.rgb2); free(p.cov2); p.rgb = p.cov = p.rgb2 = p.cov2 = NULL; return NULL;
+  }
+  return &p;
+}
+// The backdrop, CGRAM 0 (the field's last upload, C0/712E), as RGB: what shows under the margins where nothing is drawn.
+static void fieldBackdropRgb(uint8_t* out) {
+  uint16_t c0 = (uint16_t)(g_fieldCgram[0] | (g_fieldCgram[1] << 8));
+  for (int ch = 0; ch < 3; ch++) { int v = (c0 >> (5 * ch)) & 31; out[ch] = (uint8_t)((v << 3) | (v >> 2)); }
+}
+// The margins' pixel at map pixel (mx, my) -- BG2's plane at (mx + o2x, my + o2y), under the rest, unless bg2 is 0: its
+// layer (scene.c CtFieldSceneBakeExt: 1 under the sprites, 2 or 4 over them; 8 = BG2's plane, under them too -- a fight's
+// colour math takes it as BG2: Zombor's dimmed sky, 087's margins' sky in BG2's plane, stayed bright as BG1), 0 = nothing. A BG2 the ROM marks
+// a background (fieldBeyondLayers) is drawn live instead: the margins hold one still picture of it, and it moves -- the
+// Epoch's lava (1B0, its own speed) showed a block of the margins' clouds at the top of the sides (the owner, 2026-10-23).
+static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, int o2y, int bg2, uint8_t* out) {
+  static int dx = -99999, dy, dxl, dxr;            // CT_WIDE_EXT_DX / _DY (+ _DXL / _DXR per side): pixels added to the
+  if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;    //   margins' place (study knobs)
+                      dy = getenv("CT_WIDE_EXT_DY") ? atoi(getenv("CT_WIDE_EXT_DY")) : 0;
+                      dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
+                      dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
+  mx -= dx + (mx < 0 ? dxl : dxr); my -= dy;
+  int ex = mx + p->xo * 16, W = p->w * 16, H = p->h * 16;
+  const uint8_t* pal = CtFieldScenePalette(p->sd);   // (a pixel holds its CGRAM index: the live palette colours it)
+  if (!pal) return 0;
+  if (ex >= 0 && ex < W && my >= 0 && my < H) {
+    size_t q = (size_t)my * W + ex;
+    if (p->cov[q]) { memcpy(out, pal + p->rgb[q * 3] * 3, 3); return p->cov[q]; }
+  }
+  if (!bg2) return 0;
+  ex += o2x; my += o2y;                              // (BG2's plane, at BG2's scroll -- wrapping down the map's height as
+  my = ((my % H) + H) % H;                           //  the layer does: 0A5's sky at the top of its scroll left a black band)
+  if (ex < 0 || ex >= W) return 0;
+  size_t q = (size_t)my * W + ex;
+  if (!p->cov2[q]) return 0;
+  memcpy(out, pal + p->rgb2[q * 3] * 3, 3); return 8;
+}
+// Is map column mx inside the margins' own columns (the Steam release's 4 to 6 a side)? Past them the margins have no say:
+// the 16:9 side is 71 px, wider than the 64 of a room with 4 (the fair, 005).
+static int fieldWideExtInCols(const FieldWideExtPic* p, int mx) {
+  static int dx = -99999, dxl, dxr;                 // (fieldWideExtPixel's study knobs, the same place)
+  if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;
+                      dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
+                      dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
+  const int ex = mx - (dx + (mx < 0 ? dxl : dxr)) + p->xo * 16;
+  return ex >= 0 && ex < p->w * 16;
+}
+// THE WIDESCREEN'S STILL BACKDROP (a mod): a layer the ROM detaches from the camera ($1D36 bit 1 BG2 / bit 2 BG3: the map
+// header's md[1] bits 4/5, C0/A3A9-A3BF) and moves neither at a speed of its own ($1D37/$1D38, $1D39/$1D3A: md[2]/md[3])
+// nor by op E6's drift ($1D26-$1D29) never moves on the screen: the 256 columns the screen shows are all of it there is to
+// see, painted for them -- the Skywalk's sky (01C, 05A, 15B: a 256-px BG2, its cloud band cut off at both ends). Past them
+// the PPU would repeat its period, a seam at each edge of the view, so the widescreen's sides mirror it there instead:
+// the bake (scene.c CtFieldSceneSetStill), the layers drawn past the room's edge (fieldStillCol), the frames between
+// (fieldnative.c). A layer that moves shows all of its period in time, painted to repeat: it repeats.
+// It stands still on the WIDE screen: its 256 columns in the picture's middle, which is where the view is (fieldWideViewX,
+// the Steam release's camera). (While the widescreen's camera stopped at a room's edge, the view slid across the stopped
+// picture and a backdrop held to the view slid over a bridge that stood still -- the owner, 2026-10-22; held to the
+// picture's middle it stood. With the view always there the two are one.)
+static int g_wideStill, g_wideStillVx, g_wideStillVw;   // this frame's still layers (BL2 2, BL3 4), the 256 view's map
+                                                        //   column, and the map column of the picture's middle 256
+static int fieldWideStillBits(const uint8_t* pg) {
+  int det = pg[0x1D36], bits = 0;
+  if ((det & 0x02) && !pg[0x1D37] && !pg[0x1D38] && !pg[0x1D26] && !pg[0x1D27]) bits |= 2;
+  if ((det & 0x04) && !pg[0x1D39] && !pg[0x1D3A] && !pg[0x1D28] && !pg[0x1D29]) bits |= 4;
+  return bits;
+}
+// The map column layer `bit` is sampled at for map column mx: a still backdrop's, held to the picture's middle and
+// mirrored past it.
+static int fieldStillCol(int bit, int mx) {
+  if (!(g_wideStill & bit)) return mx;
+  int s = ((mx - g_wideStillVw) % 512 + 512) % 512;
+  return g_wideStillVx + (s < 256 ? s : 511 - s);
+}
+// ...and over them the room's BG3 (the fog, the snow, a light), as the bake composes it (fieldnative.c, the same rules): the
+// margins stand for BG1/BG2 on both screens; each screen takes its top layer -- BG3 priority 1, then BG1/BG2, then BG3
+// priority 0 -- and where the main one is in the colour math (CGADSUB) the sub one is added or subtracted, halved or not
+// (Death Peak's snow: BG3 priority 1 over a sub screen of BG1/BG2, averaged). BG3 is sampled at its own offset, past the
+// edge as in it -- only when it is a background (fieldBeyondLayers: Death Peak's snow, $1D35 bit 2). A BG3 that
+// scrolls with the map is the map's, and past the room's edge it belongs to other rooms, as BG1/BG2 do: Crono's house
+// (002) put the glow of another room's lamp in its margins (the owner, 2026-10-23). The Steam release draws BG3 inside the
+// room's scroll mask only (0x4DE2F0's BG3 layer, 0x4DF5D0 over the mask). (Layer bits: BG1 1, BG2 2, BG3 4.)
+static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int o3y, uint8_t* d) {
+  const uint8_t* b[2] = { NULL, NULL };            // [0] BG3 priority 0, [1] priority 1 (CtSceneLayers 0 and 5)
+  for (int k = 0; k < 2; k++) {
+    int i = k ? 5 : 0;
+    if (!L->rgb[i] || L->w[i] <= 0 || L->h[i] <= 0) continue;
+    int lx = ((fieldStillCol(4, mx) + o3x) % L->w[i] + L->w[i]) % L->w[i], ly = ((my + o3y) % L->h[i] + L->h[i]) % L->h[i];
+    size_t q = (size_t)ly * L->w[i] + lx;
+    if (L->cov[i][q]) b[k] = L->rgb[i] + q * 3;
+  }
+  uint8_t ext[3]; memcpy(ext, d, 3);
+  const uint8_t* m = NULL; int mb = 0;
+  if ((L->mainT & 4) && b[1]) { m = b[1]; mb = 4; }
+  else if (L->mainT & 3) { m = ext; mb = L->mainT & 3; }
+  else if ((L->mainT & 4) && b[0]) { m = b[0]; mb = 4; }
+  const uint8_t* sb = NULL;
+  if ((L->subT & 4) && b[1]) sb = b[1];
+  else if (L->subT & 3) sb = ext;
+  else if ((L->subT & 4) && b[0]) sb = b[0];
+  if (!m) { if (sb) memcpy(d, sb, 3); return; }
+  memcpy(d, m, 3);
+  if (!sb || !(mb & L->blendEn)) return;
+  for (int ch = 0; ch < 3; ch++) {
+    int c = d[ch] >> 3, v = sb[ch] >> 3, r = L->subOp ? c - v : c + v;
+    if (L->half) r >>= 1;
+    if (r < 0) r = 0; if (r > 31) r = 31;
+    d[ch] = (uint8_t)((r << 3) | (r >> 2));
+  }
+}
+// PAST A ROOM'S EDGE (the widescreen, where fieldWideMask keeps the edge): the map there holds other rooms -- but a
+// BACKGROUND, a layer the ROM detaches from the camera or scrolls at a speed of its own, is a backdrop the room only shows
+// a window of, and it goes on past the edge. The ROM marks them: C0/A33B's layer decode sets $1D36 (detached: bit 1 BG2,
+// bit 2 BG3 -- the skywalk's sky 01C, Flea's stars 0AD) and $1D35 (its own speed -- 0AD's stars, Death Peak's snow 104).
+// Those layers are drawn there, the top one that is opaque (else the backdrop colour); with none, the side is black. A
+// layer merely offset from BG1 is the room's: 0DB's chamber in the attract, shaken by the machine's fall ($1D35 = $1D36 =
+// 0), went on past its edge three times over under the old rule (an offset made a backdrop; the owner, 2026-10-23).
+// Bits as the bake's (BL2 2, BL3 4); g_wideBg is this frame's (the field's page, or the fight's saved one).
+static int g_wideBg;
+static int fieldBeyondLayers(void) { return g_wideBg; }
 static int fieldBeyondPixel(const CtSceneLayers* L, int det, int mx, int my, int o2x, int o2y, int o3x, int o3y, uint8_t* out) {
   static const int bitOf[6] = { 4, 2, 1, 2, 1, 4 };
   for (int i = 5; i >= 0; i--) {
     if (!(det & bitOf[i]) || !(L->mainT & bitOf[i]) || !L->rgb[i] || L->w[i] <= 0 || L->h[i] <= 0) continue;
     int ox = bitOf[i] == 2 ? o2x : o3x, oy = bitOf[i] == 2 ? o2y : o3y;
-    int lx = ((mx + ox) % L->w[i] + L->w[i]) % L->w[i], ly = ((my + oy) % L->h[i] + L->h[i]) % L->h[i];
+    int lx = ((fieldStillCol(bitOf[i], mx) + ox) % L->w[i] + L->w[i]) % L->w[i], ly = ((my + oy) % L->h[i] + L->h[i]) % L->h[i];
     size_t q = (size_t)ly * L->w[i] + lx;
     if (!L->cov[i][q]) continue;
     memcpy(out, L->rgb[i] + q * 3, 3); return bitOf[i];
@@ -5309,11 +5617,30 @@ static void owExitSoundPosts(uint8_t* m) {
 // While the race OPENS (g_raceOpening), its posts are inside the setup's NMI-off stretch -- the song $2C's `JSR $375F` at
 // $7E:3B51 -- and their SPC time, the C7 code's real cycles waiting on the driver, is part of that stretch: summed here.
 static int g_raceOpening = 0; static long long g_raceOpenPostMaster = 0;
+// ...but what the setup's LAST NMI posts ($7E:3013 JSL C3/08D0, seq_race.h g_ctRaceOpenNmi) the cartridge sends at the
+// stretch's END, after the black frames: kept here ($1E00-$1E03 as the script wrote them) and posted as the hold runs out.
+// Posted at the opening, the attract's second race (page 404D posts its curtain sound in that NMI) sounded it 45 frames
+// early, on the heels of the overworld's own curtain sound -- "twice" (the owner, 2026-10-24; the cartridge's post comes
+// 61 frames after the overworld's exit, the port's came 16 after).
+static uint8_t g_raceDeferred[8][4]; static int g_raceDeferredN;
 static void raceSndPost(void* c) {
+  if (g_ctRaceOpenNmi) { if (g_raceDeferredN < 8) memcpy(g_raceDeferred[g_raceDeferredN++], (uint8_t*)c + 0x1E00, 4);
+                        ((uint8_t*)c)[0x1E00] = 0; return; }   // ($C7:0192's STZ $00, as the JSL's own exit: the host's catch-all must not send it)
   fieldSoundFlush((uint8_t*)c);
   if (g_raceOpening && g_fieldAudio) g_raceOpenPostMaster += CtAudioLastPostRaster(g_fieldAudio, NULL, NULL, NULL);
 }
-static void raceSndSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)a; (void)b; (void)d; fieldSoundFlush((uint8_t*)c); }
+static void raceSndSfx(void* c, uint8_t a, uint8_t b, uint8_t d) {
+  (void)a; (void)b; (void)d;
+  if (g_ctRaceOpenNmi) { if (g_raceDeferredN < 8) memcpy(g_raceDeferred[g_raceDeferredN++], (uint8_t*)c + 0x1E00, 4);
+                        ((uint8_t*)c)[0x1E00] = 0; return; }   // ($C7:0192's STZ $00, as the JSL's own exit: the host's catch-all must not send it)
+  fieldSoundFlush((uint8_t*)c);
+}
+static void raceSndDeferredFlush(uint8_t* w) {          // (the hold's end: the setup's last NMI's posts, in order)
+  if (!g_raceDeferredN || !w) return;
+  uint8_t keep[4]; memcpy(keep, w + 0x1E00, 4);
+  for (int i = 0; i < g_raceDeferredN; i++) { memcpy(w + 0x1E00, g_raceDeferred[i], 4); fieldSoundFlush(w); }
+  memcpy(w + 0x1E00, keep, 4); g_raceDeferredN = 0;
+}
 static void raceSndApu(void* c, uint8_t pitch) {
   (void)c;
   if (g_fieldAudio) { CtAudioPortWrite(g_fieldAudio, 1, pitch); CtAudioPortWrite(g_fieldAudio, 0, 0x89); }
@@ -5361,14 +5688,14 @@ static void stagePicOpen(void) {
 static int fieldPpuField(void* c) { (void)c; return !(g_sndTraceFrame & 1); }
 // THE WIDESCREEN (a mod) for a native stage's picture: seq_pic.c draws the sides into g_seqWide (seq_pic.h g_seqPicWideSide,
 // snes/ppu.c's rule) -- black while the stage's opening holds -- and the host shows them round the 256 (g_seqWideW).
-static void stageWideBegin(void) {
-  int sw = hostWideW(); g_seqWideW = 0;
+static void stageWideBegin(int skip) {
+  int sw = hostWideW(); g_seqWideW = 0; g_seqPicWideSkip = skip;
   if (sw > CAMW && sw <= FIELD_WMAX) {
     g_seqPicWideSide = (sw - CAMW) / 2; g_seqPicWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3);
     g_seqWideW = sw;
   }
 }
-static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideOut = NULL; }
+static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideSkip = 0; g_seqPicWideOut = NULL; }
 static CtRaceIo raceIoFor(uint8_t* w) {
   CtRaceIo io; memset(&io, 0, sizeof io);
   long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
@@ -6556,6 +6883,7 @@ static void fieldByteWatch(int frameNo) {
 }
 static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
   memset(f, 0, sizeof *f);
+  f->loc = scene;
   f->sd = CtFieldSceneOpen(a, scene, 0);
   // C0/A782-A7A8: the plane builder bumps an ALREADY-OPENED chest's metatile as it walks this
   // location's records, which is why a re-entered room shows its chests open. It runs BEFORE the
@@ -13944,6 +14272,10 @@ int main(int argc, char** argv) {
           if (ct) printf("owcam t%d $24=%04X $2A=%04X $20=%04X $26=%04X $E3=%04X $E7=%04X ng=%d f%d loc%03X\n", worldTick, wd.cam.bg3h, wd.cam.bg3v, wd.cam.bg1h, wd.cam.bg1v,
                          wd.wram[0xE3] | (wd.wram[0xE4] << 8), wd.wram[0xE7] | (wd.wram[0xE8] << 8), ngIntroT, frameNo,
                          wd.wram[0x0100] | (wd.wram[0x0101] << 8));
+          { static int bt = -2; if (bt == -2) { const char* e = getenv("CT_OWBLKTRACE"); bt = e && *e ? (int)strtol(e, NULL, 16) : -1; }
+            if (bt >= 0 && wd.wram) printf("owblk t%d ng=%d $%04X=%04X x=%04X y=%04X $22=%04X $28=%04X\n", worldTick, ngIntroT, bt,
+                                            wd.wram[bt] | (wd.wram[bt + 1] << 8), wd.wram[bt + 0x14] | (wd.wram[bt + 0x15] << 8),
+                                            wd.wram[bt + 0x18] | (wd.wram[bt + 0x19] << 8), wd.cam.bg2h, wd.cam.bg2v); }   // (probe) one block a frame
           if (ct && wd.cam.bg3hLineOn) {                   // the per-line BG3 H table (world.c owBg3WaveTick): phase + lines 0-7
             printf("owbg3line t%d phase=%04X", worldTick, wd.cam.wavePhase);
             for (int l = 0; l < 8; l++) printf(" %04X", wd.cam.bg3hLine[l]);
@@ -17585,7 +17917,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;
-        g_raceOpening = 1; g_raceOpenPostMaster = 0;
+        g_raceOpening = 1; g_raceOpenPostMaster = 0; g_raceDeferredN = 0;
         int opened = CtRaceStageOpen(w, (uint8_t)seqId, &rio) == 0;
         g_raceOpening = 0;
         if (opened) {
@@ -17613,6 +17945,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEndingStageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         if (CtEndingPicHas((uint8_t)seqId)) { stagePicOpen(); rio.pic = &g_stagePic; }
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEndingStageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 1; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17634,6 +17967,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEntry3StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry3pic.c)
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry3StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 2; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17654,6 +17988,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEntry4StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry4pic.c)
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry4StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 3; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17674,6 +18009,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEntry7StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry7pic.c)
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry7StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 4; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17694,6 +18030,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && CtEntry6StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry6pic.c)
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry6StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 5; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -19259,6 +19596,7 @@ int main(int argc, char** argv) {
       const uint8_t* pg = CtSceneMem7E(f.vm);
       if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
       int o2x, o2y, o3x, o3y; CtSceneLayerOffsetsOf(f.vm, pg, &o2x, &o2y, &o3x, &o3y);
+      if (!battlePhase) o2y += fieldWideBg2Dy();     // (the widescreen's sky offset, a mod: fieldWideBg2Dy)
       layerMoved = CtFieldSceneSetLayerOffsets(f.sd, o2x, o2y, o3x, o3y, pg[0x1D35]);
     }
     int bgDirty = layerMoved;
@@ -19332,12 +19670,6 @@ int main(int argc, char** argv) {
     // (C0/EB2F `CMP #04` -> C0/7F62), so BG3's tilemap is the map's again; while the plane holds, the bake leaves BG3 out.
     if (fieldNmi && f.vm && CtSceneMem7E(f.vm)[0x0146] == 4) g_bg3Plane = 0;
     if (f.sd) bgDirty |= CtFieldSceneSetVramLayers(f.sd, (g_bg3Plane && !battlePhase) ? 0x04 : 0);
-    if (f.sd && bgDirty) {
-      int nw = 0, nh = 0; uint8_t* nprio = NULL;
-      uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);
-      if (nb) { free(f.base); free(f.prio); f.base = nb; f.prio = nprio; f.W = nw; f.H = nh; }
-      else free(nprio);
-    }
 
     // ---- compose: camera crop + Y-sorted live NPCs (animated) + the player ----
     // field_camera_unification.md PART G.2: the render camera is a READ of the ONE VM camera, EVERY frame,
@@ -19400,21 +19732,24 @@ int main(int argc, char** argv) {
     // box and the rest below. The battle's picture is its own (the arena's scroll, its layers): pillarboxed.
     int wideW = (!battlePhase && !battleTest) ? hostWideW() : CAMW, wideX = (wideW - CAMW) / 2;
     const int wideXc = wideX;                        // (the screen's middle: where the screen-fixed overlays go)
-    // THE WIDESCREEN'S CAMERA (a mod): the wider picture keeps inside the room, never showing past its scroll mask -- in a
-    // room wider than the picture it stops at the room's edges while the ROM's camera goes on to its own (the 256 view
-    // then stands off the picture's middle: wideX is where it is); a room wider than 256 but narrower than the picture is
-    // shown whole, centred. A room as wide as its map (fieldWideMask: it wraps) or no wider than 256 keeps the view in
-    // the middle. The ROM's camera, and everything it decides, are untouched: only where the picture is cut moves.
-    if (wideW > CAMW && f.vm) {
-      int wm0, wm1; fieldWideMask(&f, wideW, &wm0, &wm1);
-      int roomW = wm1 - wm0;
-      if (wm0 > -(1 << 29) && roomW > CAMW) {
-        int L = camx - wideX;                        // the picture's left edge, in map pixels
-        if (roomW >= wideW) { if (L < wm0) L = wm0; if (L > wm1 - wideW) L = wm1 - wideW; }
-        else L = wm0 - (wideW - roomW) / 2;
-        int nx = camx - L;
-        if (nx >= 0 && nx <= wideW - CAMW) wideX = nx;
-      }
+    if (wideW > CAMW && f.vm) wideX = fieldWideViewX(&f, wideW, camx);   // (the widescreen's camera)
+    // (the bake waits for the widescreen's camera: the still backdrop is held to the picture, fieldWideStill -- the field's,
+    //  or in a fight the arena's, as wide as the host's)
+    g_wideStill = 0; g_wideBg = 0;
+    if (f.sd && f.vm && hostWideW() > CAMW) {
+      const uint8_t* pg = CtSceneMem7E(f.vm);
+      if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
+      g_wideBg = (pg[0x1D35] | pg[0x1D36]) & 0x06;
+      if (!battlePhase) g_wideBg &= ~fieldHiddenBg(&f, g_wideBg);   // (one the room covers everywhere: no sky)
+      int pw = hostWideW(), vx = battlePhase ? fieldWideViewX(&f, pw, camx) : wideX;
+      g_wideStill = fieldWideStillBits(pg); g_wideStillVx = camx; g_wideStillVw = camx - vx + (pw - CAMW) / 2;
+    }
+    if (f.sd) bgDirty |= CtFieldSceneSetStill(f.sd, g_wideStill, g_wideStillVx, g_wideStillVw);
+    if (f.sd && bgDirty) {
+      int nw = 0, nh = 0; uint8_t* nprio = NULL;
+      uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);
+      if (nb) { free(f.base); free(f.prio); f.base = nb; f.prio = nprio; f.W = nw; f.H = nh; }
+      else free(nprio);
     }
     g_bwW = 0;
     uint8_t* fbView = fb;
@@ -19739,9 +20074,8 @@ int main(int argc, char** argv) {
     // the ROM's ticker (animTickActor) on a play state of its own -- the ROM's $0F01 is not stepped off screen, and a
     // frozen pose sliding along the side read as broken. Picture only: nothing is written (no $0F01, no 'anim finished').
     if (wideX > 0 && f.vm && !battleCompose)
-      for (int o = 0; o < nact && o < 64; o++) {
-        if (o == pObj) continue;
-        int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);
+      for (int o = 0; o < nact && o < 64; o++) {   // (the lead too: a scene walks it out of the window like any object --
+        int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);   //  Crono in 0BA's attract, gone in the left side)
         int shown = sideShown[o]; sideShown[o] = 0;
         if (pl) { memset(&sidePlay[o], 0, sizeof sidePlay[o]); continue; }   // latched: the ROM's, in the list below
         const uint8_t* w7 = CtSceneMem7E(f.vm);
@@ -19752,7 +20086,10 @@ int main(int argc, char** argv) {
         // and a frame after an object that walks in from the sides crosses into the band, so one the sides drew last frame
         // stays theirs until the ROM latches it. MEASURED (the attract's 087, 16:9): Zombor, drawn in the left columns,
         // crossed the band at f9139 with `$0F16`/`$0F18` still 00 (they read 80 from f9140) and no one drew him.
-        if (sx >= wideX - 32 && sx < wideX + CAMW + 32 && !shown) continue;
+        // An object the ROM has not latched, whose sprite cannot reach the 256 view (24 px either side of its foot), is the
+        // sides' whatever the band says: the ROM's two tiles end short of 32 px -- Crono in the attract's robot fight
+        // (0BA) at 32 px left of the view, unlatched, was in neither picture for 3 frames (the owner, 2026-10-24).
+        if (sx > wideX - 24 && sx < wideX + CAMW + 24 && !shown) continue;
         if (sx < -48 || sx >= wideW + 48 || sy < -16 || sy >= CAMH + 64) continue;
         int tf = (w7[0x0C00 + o * 2] & 0x30) == 0x30, bf = (w7[0x0C01 + o * 2] & 0x30) == 0x30;
         int am, ai, ail, alp, ast, agen = CtSceneActorAnim(f.vm, o, &am, &ai, &ail, &alp, &ast);
@@ -20117,10 +20454,21 @@ int main(int argc, char** argv) {
     // The widescreen's sides end at the room's scroll mask when the map holds more than the room (fieldWideMask).
     if (wideW > CAMW) {
       int wm0, wm1; fieldWideMask(&f, wideW, &wm0, &wm1);
+      const FieldWideExtPic* wext = fieldWideExtPic(&f);   // (the Steam margins, a mod: they take the room's edge back)
+      // A room as wide as its map (fieldWideMask: it wraps) keeps the map going where the margins draw nothing: their
+      // pixels go over it, as over the black of a room inside a larger map. (With the margins replacing the wrap, Flea's
+      // 0AD -- one sparse tile of stars a side -- went near black until its fight, whose arena wraps; the owner, 2026-10-23.)
+      const int wrapRoom = wm0 < -(1 << 29);
+      if (wext) { wm0 = f.mx0; wm1 = f.mx1; }
       static CtSceneLayers beyondL; int det = 0;     // (past the edge: the layers scrolling on their own -- fieldBeyondPixel)
-      if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
+      if (wm0 > -(1 << 29) && f.sd && (det = fieldBeyondLayers()) != 0 &&
           !CtFieldSceneLayers(f.sd, &beyondL)) det = 0;
-      g_wideBeyond = det;
+      int haveL = wext && f.sd && CtFieldSceneLayers(f.sd, &beyondL);   // (the room's layers under / over the margins)
+      int wextL = haveL && (fieldBeyondLayers() & 4);   // (the room's BG3 over the margins when it scrolls on its own: fieldWideExtBg3)
+      // (each side's: without the margins drawn, a side the Steam release draws over has none -- fieldSteamCovers)
+      int detL = det, detR = det;
+      if (!wext) { int cv = fieldSteamCovers(f.loc); if (cv & 1) detL = 0; if (cv & 2) detR = 0; }
+      g_wideBeyond = detL | (detR << 8);
       for (int y = 0; y < ch; y++)
         for (int x = 0; x < wideW; x++) {
           if (x == wideX) x += CAMW;
@@ -20128,13 +20476,54 @@ int main(int argc, char** argv) {
           int ux = camx + x;
           if (ux >= wm0 && ux < wm1) continue;
           uint8_t* d = fb + ((size_t)y * wideW + x) * 3;
-          if (det) { int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
+          uint8_t ext[3]; int el = wext ? fieldWideExtPixel(wext, ux, camy + y, mot->o2x, mot->o2y, !(det & 2), ext) : 0;
+          if (el && wext->fill) {                      // a fill: the room's own continuation first (FieldWideExtPic)
+            if (wrapRoom) continue;
+            if (det) { uint8_t bp[3]; int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, bp);
+                       if (b) { memcpy(d, bp, 3); mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); continue; } }
+          }
+          if (el) {                                    // a sprite stands over the margins' low layer, under the high one
+            int own = mot->own[y * wideW + x];
+            if ((own & 0x7F) >= CT_MOT_SPR && ((el & 9) || (own & CT_MOT_FRONT))) continue;
+            memcpy(d, ext, 3);
+            if (wextL) fieldWideExtBg3(&beyondL, ux, camy + y, mot->o3x, mot->o3y, d);
+            mot->own[y * wideW + x] = CT_MOT_FIXED; mot->world[y * wideW + x] = (el & 8) ? 2 : 1; continue;
+          }
+          if (wrapRoom) continue;                      // (the map wrapping, as the composition drew it)
+          const int detS = ux < wm0 ? detL : detR;
+          if (detS) { int b = fieldBeyondPixel(&beyondL, detS, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
                      mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); }
+          // (past the margins' own columns, the room's end: black. The room's BG2 going on there was the room again -- the
+          //  fair's 005, 4 columns a side for a 71-px side: 7 px of the stalls from its other end, the owner 2026-10-24)
+          else if (wext && fieldWideExtInCols(wext, ux)) {   // (under the margins where they draw nothing: the room's BG2 going on,
+            int b = haveL ? fieldBeyondPixel(&beyondL, 2, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d) : 0;   //  else
+            if (!b) fieldBackdropRgb(d);                //  the backdrop -- 0A5's sky at the top of its scroll, a BG2 row the
+            //  margins leave empty, stood as a black band. The frames between take the BG2 pixel at BG2's place at t and
+            //  the backdrop where it is: as the native drawer's own past-the-edge pixels they were black there -- a dark
+            //  column in the grass beside 087's edge while the camera moved into Zombor's fight, the owner 2026-10-24)
+            mot->own[y * wideW + x] = CT_MOT_FIXED; mot->world[y * wideW + x] = b ? 2 : 0;
+          }
           else { memset(d, 0, 3); mot->own[y * wideW + x] = CT_MOT_BG1; }
         }
-      mot->mx0 = wm0; mot->mx1 = wm1;
+      mot->mx0 = wrapRoom ? -(1 << 30) : wm0; mot->mx1 = wrapRoom ? 1 << 30 : wm1;   // (the frames between: no edge in a
+                                                                                        //  wrapping room, the margins fixed)
       for (int y = 0; y < ch; y++) memcpy(fbView + (size_t)y * CAMW * 3, fb + ((size_t)y * wideW + wideX) * 3, (size_t)CAMW * 3);
       fb = fbView; camx += wideX;
+    }
+    // THE BOTTOM LINES DRAWN (a mod, settings.h fillBottomLines): the composite's origin is camy + 1, so with the camera
+    // at a room's bottom the last line shows the map row just past the room -- the next room, or the map wrapping to its
+    // top (Leene's Square 006, 256 tall in a 256 map: its first row of trees under the path; the owner, 2026-10-23). The
+    // SNES never shows those lines (its V-IRQ blanks 211-223); the mod repeats the room's last row there, the whole wide
+    // row, and the frames between take them as screen-fixed. (Only when that row is itself one of the mod's lines: a room
+    // shorter than the screen shows what lies past it in the lines above too, as the SNES does.)
+    if (g_hostInteractive && CtSettingsGet()->fillBottomLines && f.vm && !battleCompose) {
+      int last = f.my1 - 1 - camy;                    // the screen line of the room's last row
+      if (last >= 210 && last < CAMH - 1)
+        for (int y = last + 1; y < CAMH; y++) {
+          memcpy(fb + (size_t)y * CAMW * 3, fb + (size_t)last * CAMW * 3, (size_t)CAMW * 3);
+          if (wideW > CAMW) memcpy(g_wfb + (size_t)y * wideW * 3, g_wfb + (size_t)last * wideW * 3, (size_t)wideW * 3);
+          CtMotFixRow(mot, y);
+        }
     }
     g_fw = CAMW; g_fx = 0;
     // The picture is composed: its owners are recorded. What draws from here on (the box, the wipe, the battle's own
@@ -20147,6 +20536,7 @@ int main(int argc, char** argv) {
       if (mot->valid && (hostInterp(pr) || getenv("CT_NATIVECHECK")) && CtFieldSceneLayers(f.sd, &motLayers[g_motIdx])) {
         mot->native = &motLayers[g_motIdx];
         motLayers[g_motIdx].beyond = wideW > CAMW ? g_wideBeyond : 0;
+        motLayers[g_motIdx].still = wideW > CAMW ? g_wideStill : 0; motLayers[g_motIdx].viewX = wideX;
         if (bg3Plane || g_bgWinOn || g_colWinOn) {     // ...and what is composed over them: the iris, the colour window, the captions
           CtFieldNativeFx* fx = &motFx[g_motIdx];
           fx->viewX = wideX; fx->irisOn = g_bgWinOn; fx->colOn = g_colWinOn; fx->capOn = bg3Plane;
@@ -20320,16 +20710,11 @@ int main(int argc, char** argv) {
           int bx0 = (bwW - CAMW) / 2;
           int bwm0, bwm1; fieldWideMask(&f, bwW, &bwm0, &bwm1);
           g_bwXc = bx0;
-          { int roomW = bwm1 - bwm0;                    // (the widescreen's camera, as the field's: inside the room)
-            if (bwm0 > -(1 << 29) && roomW > CAMW) {
-              int L = camx - bx0;
-              if (roomW >= bwW) { if (L < bwm0) L = bwm0; if (L > bwm1 - bwW) L = bwm1 - bwW; }
-              else L = bwm0 - (bwW - roomW) / 2;
-              if (camx - L >= 0 && camx - L <= bwW - CAMW) bx0 = camx - L;
-            } }
+          bx0 = fieldWideViewX(&f, bwW, camx);          // (the widescreen's camera, as the field's: inside the room)
           static uint8_t bcov[FIELD_WMAX * CAMH];
           static CtSceneLayers bBeyondL; int bdet = 0;
-          if (bwm0 > -(1 << 29) && f.sd && (bdet = fieldBeyondLayers(mot->o2x, mot->o2y, mot->o3x, mot->o3y)) != 0 &&
+          const FieldWideExtPic* bext = fieldWideExtPic(&f);   // (the Steam margins, a mod: the fight's sides as the field's)
+          if (bwm0 > -(1 << 29) && f.sd && (bdet = fieldBeyondLayers()) != 0 &&
               !CtFieldSceneLayers(f.sd, &bBeyondL)) bdet = 0;
           // The row's battle scroll (the shake, a line wave). The HUD band's rows carry no arena records (arenaRow != 3: the
           // view's HUD covers them), but their sides are the arena: they take the nearest arena row's, towards the screen's
@@ -20349,13 +20734,28 @@ int main(int argc, char** argv) {
             for (int x = 0; x < bwW; x++) {
               int ux = camx - bx0 + x, sy = camy + y; size_t i = (size_t)y * bwW + x;
               int ax = ux + bwD[y * 2], ay = sy + bwD[y * 2 + 1];   // (the map moves under the room's edge with the shake)
+              if (bext && (ax < f.mx0 || ax >= f.mx1) && !(bext->fill && bwm0 < -(1 << 29))) {   // (the Steam margins
+                uint8_t bp[3]; int b = (bdet & 2) ?                                               //  past the room's edge:
+                  fieldBeyondPixel(&bBeyondL, bdet & 2, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, bp) : 0;   // a BG2 background
+                if (b) { memcpy(g_bwFb + i * 3, bp, 3); bcov[i] = (uint8_t)b; continue; }   // first -- its layer takes the fight's
+                int bel = fieldWideExtPixel(bext, ax, ay, mot->o2x, mot->o2y, !(bdet & 2), g_bwFb + i * 3);
+                if (bel && (bdet & 4))                   // (the room's BG3 over them as the field's bake composes it, the
+                  fieldWideExtBg3(&bBeyondL, ax, ay, mot->o3x, mot->o3y, g_bwFb + i * 3);   //  arena's f.base: 087's sky band,
+                if (bel) {                               //  half-blended in the room, stood bright in the margins)
+                                                         // (its layer for the fight's colour math: the room's own at its
+                  int ex = ax < f.mx0 ? f.mx0 : f.mx1 - 1;   //  edge on that row -- the margins go on from it; Zombor's dimmed
+                  bcov[i] = (cvs && cvW > 0 && cvH > 0)      //  sky stayed bright past 087's edge, drawn as BG1 / BG2 tiles)
+                    ? cvs[(size_t)((sy % cvH + cvH) % cvH) * cvW + (size_t)((ex % cvW + cvW) % cvW)] : (uint8_t)(bel == 8 ? 2 : 1);
+                  continue; } }
+                // (colour math as in the view: Zombor's dimmed sky, BG3 (087), stayed bright where the margins drew it)
               if (ax < bwm0 || ax >= bwm1) {             // the room's end (its self-scrolling layers go on: fieldBeyondPixel)
                 // ...and its coverage is the layer drawn there (1 BG1, 2 BG2, 4 BG3, 0 the backdrop), so the fight's colour
                 // math reaches it as it reaches that layer in the view: marked 0, the sides past a narrow room's edge were
                 // backdrop to CtBattleFxLayerComposeWide and the X-Strike's white flash stopped at the 256 columns with
                 // wide_room_wrap off (the user, 2026-10-13).
                 if (bdet) bcov[i] = (uint8_t)fieldBeyondPixel(&bBeyondL, bdet, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, g_bwFb + i * 3);
-                else { memset(g_bwFb + i * 3, 0, 3); bcov[i] = 0; }
+                else if (bext) { fieldBackdropRgb(g_bwFb + i * 3); bcov[i] = 0; }   // (the backdrop under
+                else { memset(g_bwFb + i * 3, 0, 3); bcov[i] = 0; }                                       //  the margins)
                 continue; }
               memcpy(g_bwFb + i * 3, f.base + fieldBaseAt(&f, ax, ay) * 3, 3);
               // (the arena's layer there, wrapping as the map does -- past a room as wide as its map is the map again)
@@ -20635,7 +21035,10 @@ int main(int argc, char** argv) {
     // Applied after the whole composition (map, sprites, window, fade) and before the overlays that
     // replace the buffer (the $FD sequences, the loader screen), so the selftest hash and the on-screen
     // frame carry it alike. The C2 program's screens (naming, the ATB selector, the menu) have no such IRQ.
-    if (!inWorld && seqId < 0 && ldrCur < 0 && nameId < 0 && !atbGate) {
+    // (A MOD, settings.h fillBottomLines: the player may have those lines drawn like the rest -- the composition above
+    //  already put the map, the sprites and the window there. Interactive runs only: the suite never reads the settings.)
+    if (!inWorld && seqId < 0 && ldrCur < 0 && nameId < 0 && !atbGate &&
+        !(g_hostInteractive && CtSettingsGet()->fillBottomLines)) {
       const uint8_t* ib = f.vm ? CtSceneMem7E(f.vm) : NULL;
       if (!(ib && (ib[0x010F] & 0x80))) { memset(fb + (size_t)211 * CAMW * 3, 0, (size_t)13 * CAMW * 3); fieldBlank = 1;
         for (int y = 211; y < CAMH; y++) CtMotFixRow(mot, y); }
@@ -20710,9 +21113,10 @@ int main(int argc, char** argv) {
         // order turned into the register's word), then its picture as that NMI left the PPU (seq_racepic.c; black while
         // the opening holds).
         drewSwing = 1;
-        stageWideBegin();
-        if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
+        stageWideBegin(0);
+        if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
         else if (!raceEnded) {
+          raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
                                             0x0080, 0x0040, 0x0020, 0x0010 };
           uint16_t joy = 0;
@@ -20726,9 +21130,10 @@ int main(int argc, char** argv) {
       } else if (seqOpen > 0 && endOn) {
         // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad, and its picture (entry 10's: black).
         drewSwing = 1;
-        stageWideBegin();
-        if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
+        stageWideBegin(endOn == 2 ? 1 : 0);                 // (entry 3: its BG1, the field's machinery as one screen, stays out)
+        if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
         else if (!endEnded) {
+          raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
                                             0x0080, 0x0040, 0x0020, 0x0010 };
           uint16_t joy = 0;
@@ -20748,6 +21153,7 @@ int main(int argc, char** argv) {
             fprintf(stderr, "stagepic: f%d end=%d st=%d INIDISP=%02X TM=%02X hdmaen=%02X sum=%ld cg1=%04X\n", frameNo, endOn, st,
                     g_stagePic.p.r[0], g_stagePic.p.r[0x2C], g_stagePic.hdmaen, sum, g_stagePic.p.cgram[1]); }
         }
+        stageWideEnd();                                     // (entry 3's skip must not reach the gate warp's sides)
       } else if (seqOpen > 0) {
         // Any other ported table entry, on the same engine and in the same order: tick first (the
         // vblank hooks latch what THIS frame renders with), then draw the latch.
@@ -20792,6 +21198,9 @@ int main(int argc, char** argv) {
         const int bbr = (battleInidisp & 0x80) ? 0 : (battleInidisp & 0x0F);                     //   arena's sides round the view
         for (int y = 0; y < CAMH; y++) {
           memcpy(g_wide + (size_t)y * g_bwW * 3, g_bwFb + (size_t)y * g_bwW * 3, (size_t)g_bwW * 3);
+          if (bbr < 15)                                  // (the screen's brightness, $2100, as the view takes it: a fight's
+            for (int i = 0; i < g_bwW * 3; i++) {        //  fade left the arena's sides at full light)
+              uint8_t* q = g_wide + (size_t)y * g_bwW * 3 + i; *q = (uint8_t)(bbr <= 0 ? 0 : *q * bbr / 15); }
           if (g_bwX == g_bwXc) { memcpy(g_wide + ((size_t)y * g_bwW + g_bwX) * 3, fb + (size_t)y * CAMW * 3, (size_t)CAMW * 3); continue; }
           // (the camera stopped at the room's edge: the world -- the arena, the fighters -- where it stands, the boxes and
           //  the HUD at the middle; under a box the world is the view before the boxes)
