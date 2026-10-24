@@ -19901,7 +19901,10 @@ int main(int argc, char** argv) {
         // and a frame after an object that walks in from the sides crosses into the band, so one the sides drew last frame
         // stays theirs until the ROM latches it. MEASURED (the attract's 087, 16:9): Zombor, drawn in the left columns,
         // crossed the band at f9139 with `$0F16`/`$0F18` still 00 (they read 80 from f9140) and no one drew him.
-        if (sx >= wideX - 32 && sx < wideX + CAMW + 32 && !shown) continue;
+        // An object the ROM has not latched, whose sprite cannot reach the 256 view (24 px either side of its foot), is the
+        // sides' whatever the band says: the ROM's two tiles end short of 32 px -- Crono in the attract's robot fight
+        // (0BA) at 32 px left of the view, unlatched, was in neither picture for 3 frames (the owner, 2026-10-24).
+        if (sx > wideX - 24 && sx < wideX + CAMW + 24 && !shown) continue;
         if (sx < -48 || sx >= wideW + 48 || sy < -16 || sy >= CAMH + 64) continue;
         int tf = (w7[0x0C00 + o * 2] & 0x30) == 0x30, bf = (w7[0x0C01 + o * 2] & 0x30) == 0x30;
         int am, ai, ail, alp, ast, agen = CtSceneActorAnim(f.vm, o, &am, &ai, &ail, &alp, &ast);
