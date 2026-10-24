@@ -4703,39 +4703,55 @@ static int fieldWideViewX(const Field* f, int w, int camx) {
 // edge (the map wrapping in a room as wide as its map, a layer scrolling on its own: fieldBeyondPixel) that shows; the
 // fill only stands where the side would be black. (With the fill over the wrap, 0AD's sides went black until its fight,
 // whose arena wrapped -- the owner, 2026-10-23.)
-typedef struct { void* sd; int loc, w, h, xo, fill; uint8_t* rgb; uint8_t* cov; } FieldWideExtPic;
+// Plane 3 is BG2's low tiles: the Steam release draws it into its BG2 layer, which scrolls with BG2 -- Magus's castle
+// (0A5), whose sky is a BG2 at half BG1's speed, showed its margins' clouds at BG1's place, off the sky beside them (the
+// owner, 2026-10-23). So it is baked apart (rgb2/cov2) and read at BG2's own scroll (fieldWideExtPixel's o2x / o2y).
+typedef struct { void* sd; int loc, w, h, xo, fill; uint8_t* rgb; uint8_t* cov; uint8_t* rgb2; uint8_t* cov2; } FieldWideExtPic;
 static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   static FieldWideExtPic p;
   if (!CtSettingsGet()->wideSteamMargins || !f->sd) return NULL;
   if (p.sd == f->sd && p.loc == f->loc) return p.rgb ? &p : NULL;
-  free(p.rgb); free(p.cov); memset(&p, 0, sizeof p);
+  free(p.rgb); free(p.cov); free(p.rgb2); free(p.cov2); memset(&p, 0, sizeof p);
   p.sd = f->sd; p.loc = f->loc;
   CtWideExt e;
   if (!CtWideExtGet(f->loc, &e)) return NULL;
   p.w = e.w; p.h = e.h; p.xo = (e.w - f->mx1 / 16) / 2;
   { int v0 = 0; p.fill = 1;                         // (one tile in every drawn cell of every plane)
     for (int i = 0; i < 5 * e.w * e.h && p.fill; i++) { int v = e.planes[i]; if (v) { if (!v0) v0 = v; else if (v != v0) p.fill = 0; } } }
-  p.rgb = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16 * 3); p.cov = (uint8_t*)malloc((size_t)e.w * 16 * e.h * 16);
-  if (!p.rgb || !p.cov || !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet,
-                                               p.rgb, p.cov)) {
-    free(p.rgb); free(p.cov); p.rgb = p.cov = NULL; return NULL;
+  size_t px = (size_t)e.w * 16 * e.h * 16;
+  p.rgb = (uint8_t*)malloc(px * 3); p.cov = (uint8_t*)malloc(px); p.rgb2 = (uint8_t*)malloc(px * 3); p.cov2 = (uint8_t*)malloc(px);
+  if (!p.rgb || !p.cov || !p.rgb2 || !p.cov2 ||
+      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, 0x17, p.rgb, p.cov) ||
+      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, 0x08, p.rgb2, p.cov2)) {
+    free(p.rgb); free(p.cov); free(p.rgb2); free(p.cov2); p.rgb = p.cov = p.rgb2 = p.cov2 = NULL; return NULL;
   }
   return &p;
 }
-// The margins' pixel at map pixel (mx, my): its layer (scene.c CtFieldSceneBakeExt: 1 under the sprites, 2 or 4 over
-// them), 0 = nothing drawn there.
-static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, uint8_t* out) {
+// The margins' pixel at map pixel (mx, my) -- BG2's plane at (mx + o2x, my + o2y), under the rest, unless bg2 is 0: its
+// layer (scene.c CtFieldSceneBakeExt: 1 under the sprites, 2 or 4 over them; 8 = BG2's plane, under them too -- a fight's
+// colour math takes it as BG2: Zombor's dimmed sky, 087's margins' sky in BG2's plane, stayed bright as BG1), 0 = nothing. A BG2 the ROM marks
+// a background (fieldBeyondLayers) is drawn live instead: the margins hold one still picture of it, and it moves -- the
+// Epoch's lava (1B0, its own speed) showed a block of the margins' clouds at the top of the sides (the owner, 2026-10-23).
+static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, int o2y, int bg2, uint8_t* out) {
   static int dx = -99999, dy, dxl, dxr;            // CT_WIDE_EXT_DX / _DY (+ _DXL / _DXR per side): pixels added to the
   if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;    //   margins' place (study knobs)
                       dy = getenv("CT_WIDE_EXT_DY") ? atoi(getenv("CT_WIDE_EXT_DY")) : 0;
                       dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
                       dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
   mx -= dx + (mx < 0 ? dxl : dxr); my -= dy;
-  int ex = mx + p->xo * 16, W = p->w * 16;
-  if (ex < 0 || ex >= W || my < 0 || my >= p->h * 16) return 0;
+  int ex = mx + p->xo * 16, W = p->w * 16, H = p->h * 16;
+  const uint8_t* pal = CtFieldScenePalette(p->sd);   // (a pixel holds its CGRAM index: the live palette colours it)
+  if (!pal) return 0;
+  if (ex >= 0 && ex < W && my >= 0 && my < H) {
+    size_t q = (size_t)my * W + ex;
+    if (p->cov[q]) { memcpy(out, pal + p->rgb[q * 3] * 3, 3); return p->cov[q]; }
+  }
+  if (!bg2) return 0;
+  ex += o2x; my += o2y;                              // (BG2's plane, at BG2's scroll)
+  if (ex < 0 || ex >= W || my < 0 || my >= H) return 0;
   size_t q = (size_t)my * W + ex;
-  if (!p->cov[q]) return 0;
-  memcpy(out, p->rgb + q * 3, 3); return p->cov[q];
+  if (!p->cov2[q]) return 0;
+  memcpy(out, pal + p->rgb2[q * 3] * 3, 3); return 8;
 }
 // THE WIDESCREEN'S STILL BACKDROP (a mod): a layer the ROM detaches from the camera ($1D36 bit 1 BG2 / bit 2 BG3: the map
 // header's md[1] bits 4/5, C0/A3A9-A3BF) and moves neither at a speed of its own ($1D37/$1D38, $1D39/$1D3A: md[2]/md[3])
@@ -20248,7 +20264,7 @@ int main(int argc, char** argv) {
           int ux = camx + x;
           if (ux >= wm0 && ux < wm1) continue;
           uint8_t* d = fb + ((size_t)y * wideW + x) * 3;
-          uint8_t ext[3]; int el = wext ? fieldWideExtPixel(wext, ux, camy + y, ext) : 0;
+          uint8_t ext[3]; int el = wext ? fieldWideExtPixel(wext, ux, camy + y, mot->o2x, mot->o2y, !(det & 2), ext) : 0;
           if (el && wext->fill) {                      // a fill: the room's own continuation first (FieldWideExtPic)
             if (wrapRoom) continue;
             if (det) { uint8_t bp[3]; int b = fieldBeyondPixel(&beyondL, det, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, bp);
@@ -20256,7 +20272,7 @@ int main(int argc, char** argv) {
           }
           if (el) {                                    // a sprite stands over the margins' low layer, under the high one
             int own = mot->own[y * wideW + x];
-            if ((own & 0x7F) >= CT_MOT_SPR && (el == 1 || (own & CT_MOT_FRONT))) continue;
+            if ((own & 0x7F) >= CT_MOT_SPR && ((el & 9) || (own & CT_MOT_FRONT))) continue;
             memcpy(d, ext, 3);
             if (wextL) fieldWideExtBg3(&beyondL, ux, camy + y, mot->o3x, mot->o3y, d);
             mot->own[y * wideW + x] = CT_MOT_FIXED; continue;
@@ -20498,10 +20514,19 @@ int main(int argc, char** argv) {
               int ux = camx - bx0 + x, sy = camy + y; size_t i = (size_t)y * bwW + x;
               int ax = ux + bwD[y * 2], ay = sy + bwD[y * 2 + 1];   // (the map moves under the room's edge with the shake)
               if (bext && (ax < f.mx0 || ax >= f.mx1) && !(bext->fill && bwm0 < -(1 << 29))) {   // (the Steam margins
-                uint8_t bp[3]; int b = bext->fill && bdet ?                                       //  past the room's edge,
-                  fieldBeyondPixel(&bBeyondL, bdet, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, bp) : 0;   // as the field's)
-                if (b) { memcpy(g_bwFb + i * 3, bp, 3); bcov[i] = (uint8_t)b; continue; }
-                if (fieldWideExtPixel(bext, ax, ay, g_bwFb + i * 3)) { bcov[i] = 1; continue; } }
+                uint8_t bp[3]; int b = (bdet & 2) ?                                               //  past the room's edge:
+                  fieldBeyondPixel(&bBeyondL, bdet & 2, ax, ay, mot->o2x, mot->o2y, mot->o3x, mot->o3y, bp) : 0;   // a BG2 background
+                if (b) { memcpy(g_bwFb + i * 3, bp, 3); bcov[i] = (uint8_t)b; continue; }   // first -- its layer takes the fight's
+                int bel = fieldWideExtPixel(bext, ax, ay, mot->o2x, mot->o2y, !(bdet & 2), g_bwFb + i * 3);
+                if (bel && (bdet & 4))                   // (the room's BG3 over them as the field's bake composes it, the
+                  fieldWideExtBg3(&bBeyondL, ax, ay, mot->o3x, mot->o3y, g_bwFb + i * 3);   //  arena's f.base: 087's sky band,
+                if (bel) {                               //  half-blended in the room, stood bright in the margins)
+                                                         // (its layer for the fight's colour math: the room's own at its
+                  int ex = ax < f.mx0 ? f.mx0 : f.mx1 - 1;   //  edge on that row -- the margins go on from it; Zombor's dimmed
+                  bcov[i] = (cvs && cvW > 0 && cvH > 0)      //  sky stayed bright past 087's edge, drawn as BG1 / BG2 tiles)
+                    ? cvs[(size_t)((sy % cvH + cvH) % cvH) * cvW + (size_t)((ex % cvW + cvW) % cvW)] : (uint8_t)(bel == 8 ? 2 : 1);
+                  continue; } }
+                // (colour math as in the view: Zombor's dimmed sky, BG3 (087), stayed bright where the margins drew it)
               if (ax < bwm0 || ax >= bwm1) {             // the room's end (its self-scrolling layers go on: fieldBeyondPixel)
                 // ...and its coverage is the layer drawn there (1 BG1, 2 BG2, 4 BG3, 0 the backdrop), so the fight's colour
                 // math reaches it as it reaches that layer in the view: marked 0, the sides past a narrow room's edge were
@@ -20947,6 +20972,9 @@ int main(int argc, char** argv) {
         const int bbr = (battleInidisp & 0x80) ? 0 : (battleInidisp & 0x0F);                     //   arena's sides round the view
         for (int y = 0; y < CAMH; y++) {
           memcpy(g_wide + (size_t)y * g_bwW * 3, g_bwFb + (size_t)y * g_bwW * 3, (size_t)g_bwW * 3);
+          if (bbr < 15)                                  // (the screen's brightness, $2100, as the view takes it: a fight's
+            for (int i = 0; i < g_bwW * 3; i++) {        //  fade left the arena's sides at full light)
+              uint8_t* q = g_wide + (size_t)y * g_bwW * 3 + i; *q = (uint8_t)(bbr <= 0 ? 0 : *q * bbr / 15); }
           if (g_bwX == g_bwXc) { memcpy(g_wide + ((size_t)y * g_bwW + g_bwX) * 3, fb + (size_t)y * CAMW * 3, (size_t)CAMW * 3); continue; }
           // (the camera stopped at the room's edge: the world -- the arena, the fighters -- where it stands, the boxes and
           //  the HUD at the middle; under a box the world is the view before the boxes)

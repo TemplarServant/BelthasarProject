@@ -873,10 +873,13 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
 // draws nothing, nor does a page past 1 without a sheet. The planes are the Steam release's layers, drawn from the bottom
 // up: plane 3 (BG2's low-priority tiles) and plane 2 (BG1's) mark cov BL1, under the sprites; planes 1 and 0 (the
 // priority-1 layer) mark BL2, over them; plane 4, opaque (its cells fill with colour 0 first: 0x550260), drawn with BG3,
-// marks BL3. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel (0 = nothing); both are cleared first.
+// marks BL3. Only the planes in planeMask (bit k = plane k) are drawn. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel
+// (0 = nothing); both are cleared first. A pixel's first byte is its CGRAM INDEX (0..127), not a colour: the caller colours
+// it with the scene's live palette (CtFieldScenePalette), so the margins follow its fades and cycles as the room does --
+// a fight's darkening through the CGRAM left them bright beside Zombor's room (087; the owner, 2026-10-23).
 int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
                         const uint16_t* metaIds, const uint8_t* metaCorners, const uint8_t* const pageSheet[8],
-                        uint8_t* rgb, uint8_t* cov) {
+                        int planeMask, uint8_t* rgb, uint8_t* cov) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->meta12 || !sd->chips12 || !planes || w <= 0 || hgt <= 0) return 0;
   int W = w * 16, H = hgt * 16, n = w * hgt;
@@ -896,9 +899,12 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
       c->fx = e[3] & 1; c->fy = (e[3] >> 1) & 1; c->prio = (e[3] >> 2) & 1;
     }
   }
+  uint8_t ipal[128][3]; memset(ipal, 0, sizeof ipal);   // (the index palette: colour i is (i, 0, 0))
+  for (int i = 0; i < 128; i++) ipal[i][0] = (uint8_t)i;
   static const int order[5] = { 3, 2, 1, 0, 4 };
   for (int o = 0; o < 5; o++) {
     int k = order[o]; uint8_t bit = k >= 2 && k < 4 ? BL1 : k < 2 ? BL2 : BL3;
+    if (!(planeMask & (1 << k))) continue;
     const uint16_t* pl = planes + (size_t)k * n;
     for (int i = 0; i < n; i++) {
       int v = pl[i], pg = (v - 1) >> 8;
@@ -907,7 +913,7 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
       int x0 = (i % w) * 16, y0 = (i / w) * 16;
       if (k == 4)                                      // opaque: colour 0 under the tile
         for (int y = 0; y < 16; y++)
-          for (int x = 0; x < 16; x++) { size_t q = (size_t)(y0 + y) * W + x0 + x; memcpy(rgb + q * 3, sd->pal[0], 3); cov[q] = bit; }
+          for (int x = 0; x < 16; x++) { size_t q = (size_t)(y0 + y) * W + x0 + x; memcpy(rgb + q * 3, ipal[0], 3); cov[q] = bit; }
       const uint8_t* s = pageSheet && pg < 8 ? pageSheet[pg] : NULL;
       if (!s) continue;
       int tt = (v - 1) & 255, sx = (tt & 15) * 16, sy = (tt >> 4) * 16;
@@ -916,16 +922,17 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
           int ci = s[(sy + y) * 256 + sx + x];
           if (!ci || ci >= 128) continue;
           size_t q = (size_t)(y0 + y) * W + x0 + x;
-          memcpy(rgb + q * 3, sd->pal[ci], 3); cov[q] = bit;
+          memcpy(rgb + q * 3, ipal[ci], 3); cov[q] = bit;
         }
     }
     for (int prio = 0; prio < 2; prio++)
-      draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, sd->pal, prio, bit, NULL, NULL, 0, 0, 0, 0, 0, NULL);
+      draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, ipal, prio, bit, NULL, NULL, 0, 0, 0, 0, 0, NULL);
   }
   free(t); free(chips); free(pres); free(metas);
   return 1;
 }
 
+const uint8_t* CtFieldScenePalette(void* h) { SceneData* sd = (SceneData*)h; return sd ? &sd->pal[0][0] : NULL; }
 // The main-screen coverage of the last bake (see SceneData.bakeCov); NULL before the first.
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt) {
   SceneData* sd = (SceneData*)h;

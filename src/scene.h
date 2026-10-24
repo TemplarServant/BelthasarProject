@@ -36,7 +36,9 @@ uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH)
 int CtFieldSceneSetStill(void* h, int bits, int vx, int vw);
 int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
                         const uint16_t* metaIds, const uint8_t* metaCorners, const uint8_t* const pageSheet[8],
-                        uint8_t* rgb, uint8_t* cov);
+                        int planeMask, uint8_t* rgb, uint8_t* cov);
+// The scene's live BG palette, 128 x RGB (it follows CtFieldSceneSetCgram and the palette cycles).
+const uint8_t* CtFieldScenePalette(void* h);
 // The last bake's MAIN-screen coverage, one byte per pixel: the layer bit (L1 1, L2 2, L3 4) on top, 0 = backdrop.
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt);
 const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half);
