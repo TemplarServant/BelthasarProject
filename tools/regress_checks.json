@@ -43565,7 +43565,7 @@
       "expect": [
         "loctrace: -> loc 10F tile(8,8) facing=0 style=0",
         "loctrace: -> loc 0DF tile(39,14) facing=0 style=0",
-        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 + the song's 10219516 cycles = 73 black frame(s)",
+        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 + the song's 10144684 cycles = 73 black frame(s)",
         "sequence: op-0xFF 00 -> JML $C3:0000 ($0384=0) = sequence-table entry 0, and the overlay's machine plays it. (at f66)",
         "sequence: entry 0 (native) ended after 2811 frames from C3:0000",
         "sequence: the race ended ($7E:0000=1) -> reboot into loc 10F",
