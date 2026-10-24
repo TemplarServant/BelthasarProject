@@ -4695,6 +4695,21 @@ static int fieldWideViewX(const Field* f, int w, int camx) {
   (void)f; (void)camx;
   return (w - CAMW) / 2;
 }
+// THE WIDESCREEN'S SKY OFFSETS (part of the widescreen, a mod; art direction, the owner 2026-10-24): a room whose BG2
+// map begins with rows of one flat colour over its sky shows them as a band when the ROM's camera reaches them -- Magus's
+// castle (0A5): 32 rows of dark grey over the sky, 5 lines of it at the top of the attract's and the story's pan (the
+// cartridge's own picture), a band across the wide picture. In the widescreen the sky is drawn that many lines higher for
+// the whole visit, so the pan ends with the band just above the screen and both layers stop together (the camera held
+// above the band instead stopped the sky while the castle still moved -- the owner, 2026-10-24). The ROM's camera and
+// layers are untouched; the lines are BG2's offset in the picture only. 0 = none.
+static int fieldWideBg2Dy(void) {
+  static const struct { uint16_t loc; int8_t dy; } kSky[] = { { 0x0A5, 5 } };
+  if (!g_hostInteractive || hostWideW() <= CAMW) return 0;
+  const uint8_t* s = CtWramSys(fieldWram());
+  const int loc = s[0x100] | (s[0x101] << 8);
+  for (size_t i = 0; i < sizeof kSky / sizeof kSky[0]; i++) if (kSky[i].loc == loc) return kSky[i].dy;
+  return 0;
+}
 // THE STEAM MARGINS (a mod: settings.h wideSteamMargins, widext.h; ROADMAP X4): past a room's edge, the strip the Steam
 // release draws there, from the player's own ct_wide.dat, baked once per location with the Steam release's tiles and the
 // room's palette (CtFieldSceneBakeExt). Its column c is the room's metatile column c - xo. NULL: the option off, or no margins here.
@@ -19397,6 +19412,7 @@ int main(int argc, char** argv) {
       const uint8_t* pg = CtSceneMem7E(f.vm);
       if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
       int o2x, o2y, o3x, o3y; CtSceneLayerOffsetsOf(f.vm, pg, &o2x, &o2y, &o3x, &o3y);
+      if (!battlePhase) o2y += fieldWideBg2Dy();     // (the widescreen's sky offset, a mod: fieldWideBg2Dy)
       layerMoved = CtFieldSceneSetLayerOffsets(f.sd, o2x, o2y, o3x, o3y, pg[0x1D35]);
     }
     int bgDirty = layerMoved;
