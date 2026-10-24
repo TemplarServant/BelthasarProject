@@ -1,7 +1,7 @@
 {
   "name": "fxr_jackie_rescue",
   "from": "fxr_jackie_ch05",
-  "doc": "From Jackie's ch05 (the prison cell, storyline 2D): the cell's wait, the guards ('We're here to take you to your place of execution.'), the walk to the guillotine and Lucca's rescue played by their boxes (tools/playthrough.py scene_play: A only when a box waits) -- storyline 2E, party Crono + Lucca, control in loc 01E.",
+  "doc": "From Jackie's ch05 (the prison cell, storyline 2D): the cell's wait, the guards' arrival box, the walk to the guillotine and Lucca's rescue played by their boxes (tools/playthrough.py scene_play: A only when a box waits) -- storyline 2E, party Crono + Lucca, control in loc 01E.",
   "steps": [
     [
       "pad",

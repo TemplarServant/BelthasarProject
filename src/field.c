@@ -12680,7 +12680,7 @@ int main(int argc, char** argv) {
             // entry above, so the objects in the window are latched ($0F00,X = 80, C0:B175) before any script's first
             // visit. Without it, an object that dies on its first visit was never latched, C0/A910's falling edge never
             // came, and its box was not cancelled: scene 8's obj22 (`0A 2C` then fn1's `BB 84`) on the return from 600 A.D.
-            // -- "I guess even HER inventions have to work, sometimes." with no one talked to (the user, 2026-10-13).
+            // -- obj22's line about Lucca's inventions boxed with no one talked to (the user, 2026-10-13).
             // MEASURED, the rule's cartridge (scene 8, storyline 24): `$0F2C = 80` (C0:B178) before obj22's first visit;
             // its death and `$0129 = 0D` (C0:A934) two frames later.
             // It runs where C0/286C does, C0/2848's first JSR, on the first frame of the entry ramp (fade 2, the frame of the
