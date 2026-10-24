@@ -20,7 +20,7 @@ int CtMotSprite(CtMotFrame* m, int key, int x, int y) {
 
 // ---- the continuous places: the self-scrolling layers, the camera, the objects (motion.h CtMotFit) -----------------------
 int g_ctMotNoFrac;                                 // (CT_MOTCHECK: the owners against the frame as drawn -- whole pixels)
-#define FIT_N 12
+#define FIT_N 32                                   // (frames: a run of 2 px with a 1 every 16 -- the Magus hall -- fits whole)
 // (channels 0-5 the layers' offsets, 6-7 the camera's place)
 static struct { int scene, n; double v[6][FIT_N]; double cam[2][FIT_N]; double q[8]; int qOk[8], steady[8]; } g_fit;
 // The slope over the history (least squares); 0 = not one steady sub-pixel slope. whole: a slope of whole pixels a frame
@@ -32,6 +32,9 @@ static double fitSlope(const double* v, int n, int whole) {
   double den = n * sxx - sx * sx; if (den == 0) return 0;
   double b = (n * sxy - sx * sy) / den, a = (sy - b * sx) / n;
   if (b == 0 || b > 2.0 || b < -2.0) return 0;     // still, or fast: whole pixels a frame need no fit
+  // (one step in the history is a start, not a slope: a run starting from still read as 0.04 px a frame and the party
+  //  stayed two pixels behind the camera's pan into the Magus hall -- the owner, 2026-10-24)
+  { int steps = 0; for (int i = 1; i < n; i++) if (v[i] != v[i - 1]) steps++; if (steps < 2) return 0; }
   if (whole && fabs(b - floor(b + 0.5)) < 0.02) return 0;
   for (int i = 0; i < n; i++) { double r = v[i] - (a + b * i); if (r > 0.75 || r < -0.75) return 0; }   // not steady
   return b;
