@@ -110,13 +110,18 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   }
   // the columns, once for every row: each layer's x, the 1x column, the scroll mask (the widescreen's sides)
   static int* tab; static size_t tabN;
-  if (tabN < (size_t)W * 8) { free(tab); tab = (int*)malloc((size_t)W * 8 * sizeof(int)); tabN = tab ? (size_t)W * 8 : 0; }
+  if (tabN < (size_t)W * 9) { free(tab); tab = (int*)malloc((size_t)W * 9 * sizeof(int)); tabN = tab ? (size_t)W * 9 : 0; }
   if (!tab) return 0;
-  int* x1T = tab + 6 * W; int* inT = tab + 7 * W;
+  int* x1T = tab + 6 * W; int* inT = tab + 7 * W; int* fxT = tab + 8 * W;
   for (int X = 0; X < W; X++) {
     x1T[X] = X / k;
     long cx = fdiv(camXk + X, k);
     inT[X] = !wide || (cx >= cur->mx0 && cx < cur->mx1);
+    // (past the edge at t: the frame's own column showing that map column, when the frame drew it screen-fixed -- the
+    //  Steam margins, field.c. A pixel inside the room in the frame can fall past its edge at t -- the camera a pixel
+    //  behind, 01C's shake -- and took the self-scrolling sky there, a column of cloud in the margins; the owner, 2026-10-23)
+    long xs = cx - cur->camX;
+    fxT[X] = xs >= 0 && xs < w ? (int)xs : -1;
     for (int i = 0; i < 6; i++) {
       long u = offXk[i] + X;
       if (still[i]) { long p = 512L * k, s = ((u - stillA[i]) % p + p) % p; u = stillK[i] + (s < 256L * k ? s : p - 1 - s); }
@@ -149,6 +154,7 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
       int x1 = x1T[X];
       if (ownRow[x1] == CT_MOT_FIXED) { memcpy(o, fbRow + x1 * 3, 3); continue; }
       if (!inT[X]) {                                     // the widescreen's sides end at the scroll mask -- but for the layers
+        if (fxT[X] >= 0 && ownRow[fxT[X]] == CT_MOT_FIXED) { memcpy(o, fbRow + fxT[X] * 3, 3); continue; }   // (the margins)
         uint8_t c[3] = { 0, 0, 0 };                      //   scrolling on their own (field.c fieldBeyondPixel)
         if (L->beyond) {
           int i = 5;
