@@ -5538,11 +5538,30 @@ static void owExitSoundPosts(uint8_t* m) {
 // While the race OPENS (g_raceOpening), its posts are inside the setup's NMI-off stretch -- the song $2C's `JSR $375F` at
 // $7E:3B51 -- and their SPC time, the C7 code's real cycles waiting on the driver, is part of that stretch: summed here.
 static int g_raceOpening = 0; static long long g_raceOpenPostMaster = 0;
+// ...but what the setup's LAST NMI posts ($7E:3013 JSL C3/08D0, seq_race.h g_ctRaceOpenNmi) the cartridge sends at the
+// stretch's END, after the black frames: kept here ($1E00-$1E03 as the script wrote them) and posted as the hold runs out.
+// Posted at the opening, the attract's second race (page 404D posts its curtain sound in that NMI) sounded it 45 frames
+// early, on the heels of the overworld's own curtain sound -- "twice" (the owner, 2026-10-24; the cartridge's post comes
+// 61 frames after the overworld's exit, the port's came 16 after).
+static uint8_t g_raceDeferred[8][4]; static int g_raceDeferredN;
 static void raceSndPost(void* c) {
+  if (g_ctRaceOpenNmi) { if (g_raceDeferredN < 8) memcpy(g_raceDeferred[g_raceDeferredN++], (uint8_t*)c + 0x1E00, 4);
+                        ((uint8_t*)c)[0x1E00] = 0; return; }   // ($C7:0192's STZ $00, as the JSL's own exit: the host's catch-all must not send it)
   fieldSoundFlush((uint8_t*)c);
   if (g_raceOpening && g_fieldAudio) g_raceOpenPostMaster += CtAudioLastPostRaster(g_fieldAudio, NULL, NULL, NULL);
 }
-static void raceSndSfx(void* c, uint8_t a, uint8_t b, uint8_t d) { (void)a; (void)b; (void)d; fieldSoundFlush((uint8_t*)c); }
+static void raceSndSfx(void* c, uint8_t a, uint8_t b, uint8_t d) {
+  (void)a; (void)b; (void)d;
+  if (g_ctRaceOpenNmi) { if (g_raceDeferredN < 8) memcpy(g_raceDeferred[g_raceDeferredN++], (uint8_t*)c + 0x1E00, 4);
+                        ((uint8_t*)c)[0x1E00] = 0; return; }   // ($C7:0192's STZ $00, as the JSL's own exit: the host's catch-all must not send it)
+  fieldSoundFlush((uint8_t*)c);
+}
+static void raceSndDeferredFlush(uint8_t* w) {          // (the hold's end: the setup's last NMI's posts, in order)
+  if (!g_raceDeferredN || !w) return;
+  uint8_t keep[4]; memcpy(keep, w + 0x1E00, 4);
+  for (int i = 0; i < g_raceDeferredN; i++) { memcpy(w + 0x1E00, g_raceDeferred[i], 4); fieldSoundFlush(w); }
+  memcpy(w + 0x1E00, keep, 4); g_raceDeferredN = 0;
+}
 static void raceSndApu(void* c, uint8_t pitch) {
   (void)c;
   if (g_fieldAudio) { CtAudioPortWrite(g_fieldAudio, 1, pitch); CtAudioPortWrite(g_fieldAudio, 0, 0x89); }
@@ -17805,7 +17824,7 @@ int main(int argc, char** argv) {
       if (seqId != 2 && !seqOpen && (seqEntry == 0 || seqEntry == 9)) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;
-        g_raceOpening = 1; g_raceOpenPostMaster = 0;
+        g_raceOpening = 1; g_raceOpenPostMaster = 0; g_raceDeferredN = 0;
         int opened = CtRaceStageOpen(w, (uint8_t)seqId, &rio) == 0;
         g_raceOpening = 0;
         if (opened) {
@@ -20996,8 +21015,9 @@ int main(int argc, char** argv) {
         // the opening holds).
         drewSwing = 1;
         stageWideBegin(0);
-        if (seqHold > 0) seqHold--;                         // still inside C3:0000's opening: no NMI
+        if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
         else if (!raceEnded) {
+          raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
                                             0x0080, 0x0040, 0x0020, 0x0010 };
           uint16_t joy = 0;
