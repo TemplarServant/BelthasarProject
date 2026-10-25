@@ -62,7 +62,7 @@ static void entry3Build(const CtSeqPic* p) {
 // the machine's field location 06B (where the story calls `FF 23`) has margins whose cells are tiles that release added
 // for this scene -- its three sheets cgext107_0-2 (pages 2-4): the wings' pointed ends past the machine (plane 2, BG1's
 // low layer), the sky's glow on (plane 0, the field's BG1 rows 3-4 the stage shows through BG2 above line 70) and the
-// planet (plane 3, BG2's). Its column c is the room's metatile column c - x, x = (w - 16) / 2. A cell of the room's own
+// planet (plane 3, BG2's: not drawn -- see the planet below). Its column c is the room's metatile column c - x, x = (w - 16) / 2. A cell of the room's own
 // metatiles (the sky's, rows 0-2) is left to the rules below. NULL = not drawn.
 static const CtWideExt* g_e3Steam;
 static CtWideExt g_e3SteamExt;
@@ -86,14 +86,38 @@ static int steamPx(int plane, int x, int y, int dpage) {
 // wider than its 96) the bend goes on: the edge column, lowered along its own slope (g_e3Slope, pixels a column).
 static int g_e3SkyVofs;
 static float g_e3Slope[2];
+// The Steam art was painted for the field location 06B's rows of the palette; the stage draws the same colours from other
+// rows and fades those: its sky is 4:15 (the art's 2:10, the same 000010) and its planet's row is 7 (the art's dark edge is
+// on row 1, which nothing fades). Each such index takes the stage's row of the same colour -- the nearest for the edge --
+// so the sides go grey with the middle in the flash and fade in with it.
+static int horizonIndex(int v) {
+  switch (v) {
+    case 0x2A: return 0x4F;                                          // (the sky: 2:10 -> 4:15, 000010 both)
+    case 0x11: return 0x79; case 0x12: return 0x7A; case 0x13: return 0x77;   // (the planet's dark edge: row 1 -> row 7)
+  }
+  return v;
+}
+// THE SEAM AT THE 256: the stage cuts the sky's map at the line HDMA channel 3 switches BG2 to the planet, so the middle's
+// glow ends there, a few rows above where the art's own glow ends at its inner columns (drawn for the field, where the
+// glow shows whole). The sides' bend is lifted by that much -- the art's last glow row at its inner column onto the
+// middle's last sky line (measured each frame: g_e3LastSky, the previous frame's) -- so the two meet without a step.
+// The band itself is the middle's height too: the art's rows from its glow's first row (g_e3GlowTop) to its last are laid
+// over the middle's, from the sky map's row 48 (the glow's first tile row) to that last sky line; the sky above moves with
+// the band's top.
+static int g_e3LastSky = 70, g_e3SkyNow, g_e3GlowEnd[2], g_e3GlowTop[2];
 static int horizonPx(int x, int ys) {
-  const int ew = (g_e3Steam->w - 16) / 2 * 16;
+  const int ew = (g_e3Steam->w - 16) / 2 * 16, k = x >= 0;
+  if (g_e3GlowEnd[k] > g_e3GlowTop[k] && g_e3LastSky > 48) {
+    if (ys < 48) ys += g_e3GlowTop[k] - 48;
+    else ys = g_e3GlowTop[k] + (ys - 48) * (g_e3GlowEnd[k] - g_e3GlowTop[k]) / (g_e3LastSky - 48);
+  }
   int xe = x, dy = 0;
   if (x < -ew) { xe = -ew; dy = (int)((-ew - x) * g_e3Slope[0] + 0.5f); }
   else if (x >= 256 + ew) { xe = 255 + ew; dy = (int)((x - 255 - ew) * g_e3Slope[1] + 0.5f); }
   int v = steamPx(0, xe, ys - dy, 0);
-  if (v) return v;
-  return steamPx(0, xe, ys - dy, 2) > 0 ? steamPx(0, xe, ys - dy, 2) : 0;
+  if (v) return v > 0 ? horizonIndex(v) : v;
+  v = steamPx(0, xe, ys - dy, 2);
+  return v > 0 ? horizonIndex(v) : 0;
 }
 // The glow's lowest row in a column (its sky rows 48-79), for the slope past the art.
 static int glowBottom(int x) {
@@ -111,12 +135,24 @@ void CtSceneArtEntry3Set(int steam, int own) {
     g_e3Slope[1] = (glowBottom(255 + ew) - glowBottom(255 + ew - 16)) / 16.0f;
     if (g_e3Slope[0] < 0) g_e3Slope[0] = 0;
     if (g_e3Slope[1] < 0) g_e3Slope[1] = 0;
+    for (int k = 0; k < 2; k++) {                                     // (the glow's last row at the inner columns)
+      g_e3GlowEnd[k] = 0; g_e3GlowTop[k] = 0;
+      for (int y = 48; y < 96; y++) {
+        int v = steamPx(0, k ? 256 : -1, y, 0);
+        if (v > 0 && (v >> 4) == 3) { if (!g_e3GlowTop[k]) g_e3GlowTop[k] = y; g_e3GlowEnd[k] = y; }   // (row 3: the glow)
+      }
+    }
   }
 }
 
 int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
   const int mx = *pmx;
-  if (layer < 0) { entry3Build(p); return -1; }                      // (a new frame)
+  if (layer < 0) {                                                   // (a new frame)
+    entry3Build(p);
+    if (g_e3SkyNow) g_e3LastSky = g_e3SkyNow;
+    g_e3SkyNow = 0;
+    return -1;
+  }
   // THE SKY: above line 70 BG2 is the field's map $6000 (HDMA channel 3 switches BG2SC $60 -> $6A there), one screen
   // wide: the red moon in its rows 0-3, columns 14-22, over tile $101's sky. Past the 256 that map would repeat the moon
   // on both sides; there the sky's rows take the moonless column 0 (the night's own tile).
@@ -128,9 +164,9 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
     x = mx - hs;
     if (x >= 0 && x < 256) return -1;
     if (g_e3Steam) {                                                 // (the Steam release's glow and planet, a mod)
-      const int ew = (g_e3Steam->w - 16) / 2 * 16, sky = (p->r[0x08] & 0xFC) == 0x60;
+      const int sky = (p->r[0x08] & 0xFC) == 0x60;
       const int line = (my - p->vofs[1]) & 0x3FF;
-      if (sky) g_e3SkyVofs = p->vofs[1];
+      if (sky) { g_e3SkyVofs = p->vofs[1]; if (line > g_e3SkyNow) g_e3SkyNow = line; }
       int h = horizonPx(mx, (line + g_e3SkyVofs) & 255);
       if (h > 0) return pri ? 0 : h;
       if (h < 0 && !sky) {                                           // (the sky's rows on a planet's line: the night's tile)
@@ -140,11 +176,8 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
         int c = tilePixel(p, chr, e, mx & 7, ys & 7);
         return pri ? 0 : (c ? (int)((e >> 10) & 7) * 16 + c : 0);
       }
-      if (!sky) {                                                    // the planet, below the bend (mirrored past the art)
-        int rx = mx < -ew ? -2 * ew - 1 - mx : mx >= 256 + ew ? 2 * (256 + ew) - 1 - mx : mx;
-        int v = steamPx(3, rx, my & 511, 0);
-        if (v > 0) return pri ? 0 : v;
-      }
+      // (Below the bend the planet is the stage's own, mirrored about the screen's edge as below: the Steam art's planet,
+      //  plane 3, is drawn anew and does not join the stage's clouds at the 256 -- a seam the whole scene long.)
     }
     if ((p->r[0x08] & 0xFC) == 0x60 && (my & 255) < 32) { *pmx = mx & 7; return -1; }
     *pmx = (x < 0 ? -1 - x : 511 - x) + hs;
