@@ -4916,7 +4916,7 @@ static int fieldSteamCovers(int loc) {
 // Plane 3 is BG2's low tiles: the Steam release draws it into its BG2 layer, which scrolls with BG2 -- Magus's castle
 // (0A5), whose sky is a BG2 at half BG1's speed, showed its margins' clouds at BG1's place, off the sky beside them (the
 // owner, 2026-10-23). So it is baked apart (rgb2/cov2) and read at BG2's own scroll (fieldWideExtPixel's o2x / o2y).
-typedef struct { void* sd; int loc, w, h, xo, fill; uint8_t* rgb; uint8_t* cov; uint8_t* rgb2; uint8_t* cov2; } FieldWideExtPic;
+typedef struct { void* sd; int loc, w, h, xo, fill, mx0, mx1; uint8_t* rgb; uint8_t* cov; uint8_t* rgb2; uint8_t* cov2; } FieldWideExtPic;
 static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   static FieldWideExtPic p;
   if (!CtSettingsGet()->wideSteamMargins || !f->sd) return NULL;
@@ -4925,7 +4925,7 @@ static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   p.sd = f->sd; p.loc = f->loc;
   CtWideExt e;
   if (!CtWideExtGet(f->loc, &e)) return NULL;
-  p.w = e.w; p.h = e.h; p.xo = (e.w - f->mx1 / 16) / 2;
+  p.w = e.w; p.h = e.h; p.xo = (e.w - f->mx1 / 16) / 2; p.mx0 = f->mx0; p.mx1 = f->mx1;
   { int v0 = 0; p.fill = 1;                         // (one tile in every drawn cell of every plane)
     for (int i = 0; i < 5 * e.w * e.h && p.fill; i++) { int v = e.planes[i]; if (v) { if (!v0) v0 = v; else if (v != v0) p.fill = 0; } } }
   size_t px = (size_t)e.w * 16 * e.h * 16;
@@ -4942,6 +4942,23 @@ static void fieldBackdropRgb(uint8_t* out) {
   uint16_t c0 = (uint16_t)(g_fieldCgram[0] | (g_fieldCgram[1] << 8));
   for (int ch = 0; ch < 3; ch++) { int v = (c0 >> (5 * ch)) & 31; out[ch] = (uint8_t)((v << 3) | (v >> 2)); }
 }
+// Is map column mx inside the margins' own columns (the Steam release's 4 to 6 a side)? Past them the margins have no say:
+// the 16:9 side is 71 px, wider than the 64 of a room with 4 (the fair, 005). They are xo columns beside each edge of the
+// room's scroll mask. (The margins' array is laid from the map's column 0 to the mask's right edge + xo: a room that
+// does not begin at the map's left edge has the map's other rooms in it on its left -- Crono's room, 002, whose 21:9
+// left side showed the house's stairs from the BG2 under the margins' empty cells there; the owner, 2026-10-26.)
+// (*lo: the left side's first map column of them, *hi: the right side's first past them.)
+static void fieldWideExtCols(const FieldWideExtPic* p, int* lo, int* hi) {
+  static int dx = -99999, dxl, dxr;                 // (fieldWideExtPixel's study knobs, the same place)
+  if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;
+                      dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
+                      dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
+  *lo = p->mx0 - p->xo * 16 + dx + dxl; *hi = p->mx1 + p->xo * 16 + dx + dxr;
+}
+static int fieldWideExtInCols(const FieldWideExtPic* p, int mx) {
+  int lo, hi; fieldWideExtCols(p, &lo, &hi);
+  return mx >= lo && mx < hi;
+}
 // The margins' pixel at map pixel (mx, my) -- BG2's plane at (mx + o2x, my + o2y), under the rest, unless bg2 is 0: its
 // layer (scene.c CtFieldSceneBakeExt: 1 under the sprites, 2 or 4 over them; 8 = BG2's plane, under them too -- a fight's
 // colour math takes it as BG2: Zombor's dimmed sky, 087's margins' sky in BG2's plane, stayed bright as BG1), 0 = nothing. A BG2 the ROM marks
@@ -4953,7 +4970,8 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, 
                       dy = getenv("CT_WIDE_EXT_DY") ? atoi(getenv("CT_WIDE_EXT_DY")) : 0;
                       dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
                       dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
-  mx -= dx + (mx < 0 ? dxl : dxr); my -= dy;
+  if (!fieldWideExtInCols(p, mx)) return 0;         // (past its own columns: nothing of the margins)
+  mx -= dx + (mx < p->mx0 ? dxl : dxr); my -= dy;
   int ex = mx + p->xo * 16, W = p->w * 16, H = p->h * 16;
   const uint8_t* pal = CtFieldScenePalette(p->sd);   // (a pixel holds its CGRAM index: the live palette colours it)
   if (!pal) return 0;
@@ -4968,20 +4986,6 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, 
   size_t q = (size_t)my * W + ex;
   if (!p->cov2[q]) return 0;
   memcpy(out, pal + p->rgb2[q * 3] * 3, 3); return 8;
-}
-// Is map column mx inside the margins' own columns (the Steam release's 4 to 6 a side)? Past them the margins have no say:
-// the 16:9 side is 71 px, wider than the 64 of a room with 4 (the fair, 005).
-// (*lo: the left side's first map column of them, *hi: the right side's first past them.)
-static void fieldWideExtCols(const FieldWideExtPic* p, int* lo, int* hi) {
-  static int dx = -99999, dxl, dxr;                 // (fieldWideExtPixel's study knobs, the same place)
-  if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;
-                      dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
-                      dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
-  *lo = dx + dxl - p->xo * 16; *hi = (p->w - p->xo) * 16 + dx + dxr;
-}
-static int fieldWideExtInCols(const FieldWideExtPic* p, int mx) {
-  int lo, hi; fieldWideExtCols(p, &lo, &hi);
-  return mx < 0 ? mx >= lo : mx < hi;
 }
 // THE WIDESCREEN'S STILL BACKDROP (a mod): a layer the ROM detaches from the camera ($1D36 bit 1 BG2 / bit 2 BG3: the map
 // header's md[1] bits 4/5, C0/A3A9-A3BF) and moves neither at a speed of its own ($1D37/$1D38, $1D39/$1D3A: md[2]/md[3])
