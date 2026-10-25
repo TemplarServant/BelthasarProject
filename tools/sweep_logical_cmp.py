@@ -7,8 +7,8 @@ model, CLAUDE.md's one exception; disasm/notes/oracle_logical_frames.md §4).
 The seed: the cartridge run `--peek <base.state> --btnscript 0:<frames>` under the rule (CT_ORACLE_LOGICAL=1; in real
 time until 2026-10-22, when the seeds became recipe-made fixtures, tools/fixtures/rest.json, which the rule makes) -- the
 same drive that produced <seed.raw.wram>, whose bytes are checked identical to the run's WRAM -- saved as a LakeSnes
-state (PEEK_SAVE, cached under build/_sweeps_rule/). The reference: that state run <n> more frames on CT_ORACLE_LOGICAL=1, `--monitor` of the
-per-slot bytes. The port: build/Belthasar.exe on CT_BATTLE_RENDERWRAM=<seed> with CT_BATTLE_MVSWEEP=<n> (mv) or
+state (PEEK_SAVE, cached under build/_sweeps_rule/ by the base state's content). The reference: that state run <n>
+more frames on CT_ORACLE_LOGICAL=1, `--monitor` of the per-slot bytes. The port: build/Belthasar.exe on CT_BATTLE_RENDERWRAM=<seed> with CT_BATTLE_MVSWEEP=<n> (mv) or
 CT_BATTLE_IDLESWEEP=<n> (idle). A seed of `-` is the base state's own WRAM (<frames> 0): a committed image taken
 apart from the state (bat2.raw.wram differs from bat2_lake.state in 84 bytes, $E5 among them -- the byte the sweep
 reads its iteration phase from) cannot be continued by the state. The sweep frame sf=k is the monitor's f(k-1)
@@ -22,6 +22,7 @@ read 00 / 02 at the monitor's f0 -- the NMI's INC and C1/10BB), and f(k) for the
        on the oracle's frame k -- the walk dispatch C1/10A9, one group per iteration on its frame A
 The port's own trace lines are echoed after the verdict, so a check can pin their detail as well.
 """
+import hashlib
 import os
 import re
 import subprocess
@@ -36,18 +37,23 @@ def main():
     slots = [int(s) for s in sys.argv[6:]]
     ct = os.path.abspath('build/ct.exe')
     os.makedirs('build/_sweeps_rule', exist_ok=True)
-    tag = 'build/_sweeps_rule/%s_%d' % (os.path.splitext(os.path.basename(base))[0], frames)
+    # the cached seed is named by the base state's CONTENT: a fixture re-made from its recipe (fixtures.py make --force)
+    # keeps its path, and a seed cut from the old bytes is another fight's WRAM (2026-10-25: four checks red on it)
+    name = '%s_%d' % (os.path.splitext(os.path.basename(base))[0], frames)
+    digest = hashlib.sha1(open(base, 'rb').read()).hexdigest()[:12]
+    tag = 'build/_sweeps_rule/%s_%s' % (name, digest)
     env = dict(os.environ)
     if not os.path.exists(tag + '.state'):
         subprocess.run([ct, '--peek', base, tag + '.raw', '--btnscript', '0:%d' % frames],
                        env=dict(env, PEEK_SAVE=tag + '.state', CT_ORACLE_LOGICAL='1'), capture_output=True)
+    shown = os.path.basename(seed) if seed != '-' else name + '.raw.wram'   # the seed's name, not the cache's digest
     if seed == '-':
         seed = tag + '.raw.wram'
     a = open(tag + '.raw.wram', 'rb').read(); b = open(seed, 'rb').read()
     lag = 1 if frames > 0 else 0
     diff = sum(1 for i in range(min(len(a), len(b))) if a[i] != b[i]) + abs(len(a) - len(b))
     print('sweep-logical: seed %s = the cartridge\'s WRAM after %d frames of %s: %s' % (
-        os.path.basename(seed), frames, os.path.basename(base), 'identical' if diff == 0 else '%d bytes differ' % diff))
+        shown, frames, os.path.basename(base), 'identical' if diff == 0 else '%d bytes differ' % diff))
     mon = '7E974A:8,7E1D0C:11,7E1D23:11' if mode == 'mv' else '7E969C:8,7E9694:8'
     r = subprocess.run([ct, '--monitor', mon, '--from', tag + '.state' if frames > 0 else base, '--frames', str(n + 2), '--diff'],
                        env=dict(env, CT_ORACLE_LOGICAL='1'), capture_output=True, text=True, errors='replace')
