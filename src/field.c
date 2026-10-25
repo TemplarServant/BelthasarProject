@@ -3465,12 +3465,55 @@ static int drawCtWindowPpu(uint8_t* fb, int top, int y0c, int y1c) {
   }
   return 1;
 }
+// THE BOXES WITH THE BOTTOM LINES DRAWN (a mod, settings.h fillBottomLines): the picture is 224 lines tall instead of the
+// SNES's 211, and a screen-fixed box -- the dialogue window, the fight's HUD strip and its message window -- keeps its place
+// in it in proportion: the share of the free height above it stays what it was, so a box at the top moves a line at most
+// and one at the bottom keeps its bottom margin (the bottom dialogue window 131..210 -> 144..223). The box is drawn as
+// ever, at its own lines and with the per-line tables those lines carry, over the picture raised by the shift; lowering it
+// back puts the picture where it was and the box `dy` lines down. g_fillBoxOn is set per frame by the compose (the
+// interactive run with the mod on, where the V-IRQ would have blanked the lines); off, nothing here runs.
+static int g_fillBoxOn, g_fillBoxDy;               // (Dy: the box being drawn's, for drawCtWindow's screen-fixed rows)
+static uint8_t g_fillBoxSave[CAMW * CAMH * 3];
+static int fillBoxDyOf(int top, int h) {
+  const int room = 211 - h;
+  if (!g_fillBoxOn || room <= 0 || top < 0) return 0;
+  int dy = (13 * top + room / 2) / room;
+  return dy > 13 ? 13 : dy;
+}
+// ...and in a fight the lines a lowered box leaves -- the top `dy` of its own band, which the SNES never shows as the arena
+// -- show the arena, so they take the arena's shake and its effects as the nearest arena line has them (as the widescreen's
+// sides of the band do): rows[y] = 1 for those lines, both boxes' sides (the HUD's and the message window's, $2989 bit 1).
+static void fillBoxArenaRows(const uint8_t* mem, uint8_t* rows) {
+  memset(rows, 0, CAMH);
+  if (!g_fillBoxOn || !mem) return;
+  const int bottom = (mem[0x2989] & 0x02) != 0;
+  const int top[2] = { bottom ? CT_BHUD_Y0 : CT_BHUD_Y0_TOP, bottom ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM };
+  const int h[2] = { CT_BHUD_H, CT_BRESULT_H };
+  for (int k = 0; k < 2; k++)
+    for (int y = top[k], dy = fillBoxDyOf(top[k], h[k]); y < top[k] + dy && y < CAMH; y++) rows[y] = 1;
+}
+static int fillBoxBegin(uint8_t* fb, int top, int h) {
+  const int row = CAMW * 3;
+  int dy = fillBoxDyOf(top, h);
+  if (dy <= 0) return 0;
+  memcpy(g_fillBoxSave, fb, (size_t)row * CAMH);
+  memmove(fb, fb + (size_t)dy * row, (size_t)(CAMH - dy) * row);
+  g_fillBoxDy = dy;
+  return dy;
+}
+static void fillBoxEnd(uint8_t* fb, int dy) {
+  const int row = CAMW * 3;
+  if (dy <= 0) return;
+  memmove(fb + (size_t)dy * row, fb, (size_t)(CAMH - dy) * row);
+  memcpy(fb, g_fillBoxSave, (size_t)dy * row);
+  g_fillBoxDy = 0;
+}
 static void drawCtWindow(uint8_t* fb, int top, int h) {
   int mid = top + h / 2;
   int y0c = mid - tbAnimBand, y1c = mid + tbAnimBand;
-  for (int y = top; y < top + h && y < CAMH; y++)                                // (the box is screen-fixed: the rows
+  for (int y = top; y < top + h && y + g_fillBoxDy < CAMH; y++)                  // (the box is screen-fixed: the rows
     if (y >= 0 && y >= y0c && y < y1c)                                           //  its opening band draws)
-      memset(g_motBuf[g_motIdx].own + y * g_motBuf[g_motIdx].w + g_motViewX, CT_MOT_FIXED, CAMW);
+      memset(g_motBuf[g_motIdx].own + (y + g_fillBoxDy) * g_motBuf[g_motIdx].w + g_motViewX, CT_MOT_FIXED, CAMW);
   if (h == TB_H && drawCtWindowPpu(fb, top, y0c, y1c)) return;     // the field box: the PPU's own picture
   if (tbWinPx && tbWinH > 24) {
     // blit the real window: rows map 1:1 when h == native height; otherwise 9-patch rows
@@ -19802,6 +19845,13 @@ int main(int argc, char** argv) {
     // line wave move each row of the field picture by that row's (dx, dy). The field picture is ONE canvas of both layers,
     // so a row whose two layers move apart cannot be drawn from it: such a row keeps the staged view and is reported once.
     static int16_t arenaD[CAMH * 4]; static uint8_t arenaRow[CAMH];
+    // (the bottom lines drawn, a mod: the screen-fixed boxes keep their place in the taller picture -- fillBoxBegin. Where
+    //  the V-IRQ blank would have run: the field and the fights, $010F bit 7 clear.)
+    { const uint8_t* ib = f.vm ? CtSceneMem7E(f.vm) : NULL;
+      g_fillBoxOn = g_hostInteractive && CtSettingsGet()->fillBottomLines && !inWorld && !(ib && (ib[0x010F] & 0x80)); }
+    static uint8_t fillArena[CAMH];                    // (...and the lines a lowered box of the fight's leaves: the arena's)
+    fillBoxArenaRows(f.vm && battlePhase ? CtSceneMem7E(f.vm) : NULL, fillArena);
+    memcpy(gBattleFxArenaRows, fillArena, CAMH);
     // Only while the battle module runs (the interactive battlePhase): the scroll records and the channels are the battle
     // NMI's. The headless --battletest shot is composed after the synchronous run has ended, when they are not.
     int arenaShift = f.vm && battlePhase;
@@ -19816,6 +19866,15 @@ int main(int argc, char** argv) {
                             "rows like it keep the staged view\n", frameNo, y, arenaD[y * 4], arenaD[y * 4 + 1], arenaD[y * 4 + 2], arenaD[y * 4 + 3]); }
           arenaD[y * 4] = arenaD[y * 4 + 1] = 0;
         }
+      for (int y = 0; y < ch; y++) {                   // (the mod's lines: the nearest arena row's, towards the middle first)
+        if (!fillArena[y] || arenaRow[y] == 3) continue;
+        int dir = y < CAMH / 2 ? 1 : -1;
+        for (int d = 1; d < CAMH; d++) {
+          int a = y + dir * d, b = y - dir * d, s = (a >= 0 && a < CAMH && arenaRow[a] == 3) ? a
+                                                    : (b >= 0 && b < CAMH && arenaRow[b] == 3) ? b : -1;
+          if (s >= 0) { arenaD[y * 4] = arenaD[s * 4]; arenaD[y * 4 + 1] = arenaD[s * 4 + 1]; break; }
+        }
+      }
       if (getenv("CT_BATTLE_SHAKETRACE")) {               // the rows the battle scroll moves this frame
         int nz = 0, fy = -1;
         for (int y = 0; y < ch; y++) if (arenaD[y * 4] | arenaD[y * 4 + 1]) { nz++; if (fy < 0) fy = y; }
@@ -20621,15 +20680,19 @@ int main(int argc, char** argv) {
       // (Until 2026-10-22 it was drawn while $0162 >= 2, through the close ramp after a confirm; the cartridge clears
       // it the frame after: s439 on the recipe twin, the close at port f502 against the cartridge's f504.)
       (void)pl; (void)choiceSel;
+      int fdy = fillBoxBegin(fb, tbTop, TB_H);
       drawChoiceBox(fb, font, tbStr, tbStrLen, tbSlotPos, tbSlotN, ss, se, onOpt ? g_dlgHandRow - oF : 0,
                     onOpt && g_dlgHandRow >= 0, tbTop <= TB_TOPY, onOpt ? oF : -1);
+      fillBoxEnd(fb, fdy);
       tbCream = 0; g_tbTextCgram = NULL;
       tbAnimBand = 1 << 20;
     } else if (tbActive || tbClose) {          // tbClose: the window survives the VM's flag for the ramp.
       tbCream = 1; g_tbTextCgram = f.vm ? g_fieldCgram : NULL;   // isChoice is 0 whenever tbActive is 0, so a closing choice
       tbAnimBand = tbAnim >= 40 ? (1 << 20) : tbAnim;   // box lands here too and shrinks as a plain window
+      int fdy = fillBoxBegin(fb, tbTop, TB_H);
       drawCtWindow(fb, tbTop, TB_H);           // the text is what VRAM holds, clipped by the band (as a decision
       drawTbSlots(fb, font, tbStr, tbStrLen, tbSlotPos, tbSlotN, tbTop);   // box's always was)
+      fillBoxEnd(fb, fdy);
       tbCream = 0; g_tbTextCgram = NULL;
       tbAnimBand = 1 << 20;
     }
@@ -20878,7 +20941,9 @@ int main(int argc, char** argv) {
       g_bObjPalMask = NULL; g_bObjPalCur = -1;
       memcpy(g_bWorld, fb, sizeof g_bWorld);           // (the widescreen: what the screen-fixed boxes below cover)
       { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
-        if (!defeatHold) battleResultsRender(fb, &liveHost, font, rr, rl); }   // battle_results_window.md §V: victory results box (top)
+        int fdy = defeatHold ? 0 : fillBoxBegin(fb, (bmem[0x2989] & 0x02) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM, CT_BRESULT_H);
+        if (!defeatHold) battleResultsRender(fb, &liveHost, font, rr, rl);   // battle_results_window.md §V: victory results box (top)
+        fillBoxEnd(fb, fdy); }
     }
     if (endFeetSwap) memcpy(CtSceneMem7E(f.vm) + 0x1D0C, endFeetField, sizeof endFeetField);
 
@@ -20902,7 +20967,9 @@ int main(int argc, char** argv) {
       // therefore the arm frame, instead of hiding both inside a whole-frame hash.
       uint8_t* bpre = getenv("CT_BATTLESHOT_FIELD") ? (uint8_t*)malloc((size_t)CAMW * CAMH * 3) : NULL;
       if (bpre) memcpy(bpre, fb, (size_t)CAMW * CAMH * 3);
+      int fdy = fillBoxBegin(fb, CT_BHUD_Y0 + ((bs2[0x2989] & 0x02) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0)), CT_BHUD_H);
       CtBattleHudRender(fb, bs2, CtBattleStripVram(&liveHost));
+      fillBoxEnd(fb, fdy);
       if (bpre) {
         int bt = -1, bb2 = -1;
         for (int y = 0; y < CAMH; y++)

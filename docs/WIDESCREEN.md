@@ -10,7 +10,7 @@ says what each option draws that the SNES does not, and why. The history of each
 |---|---|---|
 | Widescreen 16:9 / 16:10 / 21:9 | `widescreen` | more picture at the sides of the field, the world map, fights and the special sequences |
 | Steam margins | `steam_margins` | past a room's edge, the strip the Steam release draws there (needs a Steam copy; greyed without one) |
-| Fill the bottom lines | `fill_bottom_lines` | the field's and the fights' lines 211-223, which the SNES blanks, drawn |
+| Fill the bottom lines | `fill_bottom_lines` | the field's and the fights' lines 211-223, which the SNES blanks, drawn; the dialogue window, the fight's HUD and its message window lowered in proportion |
 | Frames between (60+ fps) | `interpolation` | pictures between two game frames on a faster display |
 
 ## The camera: the Steam release's

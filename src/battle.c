@@ -19881,6 +19881,7 @@ static int battleFxWinState(int en1, int inv1, int en2, int inv2, int logic, int
   switch (logic & 3) { case 0: return t1 || t2; case 1: return t1 && t2; case 2: return t1 != t2; default: return t1 == t2; }
 }
 uint8_t gBattleFxRowModelled[256];                                 // per row: 1 = this compositor's model covers it
+uint8_t gBattleFxArenaRows[256];                                   // (a mod's: the band rows the view shows as arena, battle.h)
 // THE LINE CUTS (user decision 2026-09-30, option A; CLAUDE.md): every raster wait of the NMI's service (CD/3B82 -- the
 // line-64 wait CD/09AA and the background program's op C1, CD/1D93) ends at a line, and under the rule the service's writes
 // after it land on that line. Cut k keeps WRAM as it stood at its wait's exit: the HDMA runs of the lines below cut 0 and
@@ -20011,7 +20012,9 @@ static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattle
 static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uint8_t* mem, const CtBattleHost* h, int x0, int wide) {
   static BtFxRegs wideRegs[256]; static uint8_t wideOk[256], wideHud[256];
   static uint8_t widePre[256 * 1024 * 3];                       // (the wide rows before their math: a band's edge line's undone)
-  if (wide) { memset(wideOk, 0, sizeof wideOk); memset(wideHud, 0, sizeof wideHud); }
+  int arenaRows = 0;                                               // (the view's band rows shown as arena: the same rule)
+  if (!wide) for (int l = 0; l < 256 && l < H; l++) arenaRows |= gBattleFxArenaRows[l];
+  if (wide || arenaRows) { memset(wideOk, 0, sizeof wideOk); memset(wideHud, 0, sizeof wideHud); }
   if (!wide && W > 0 && H > 0 && W <= 256 && H <= 256) memset(gBattleFxFront, 0, (size_t)W * H);
   if (!wide) memset(gBattleFxRow, 0, sizeof gBattleFxRow);
   if (!fb || !cov || !mem || !h || !h->mvInited || W <= 0 || H <= 0) return;
@@ -20083,7 +20086,7 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
     // blocks ($C02B / $C02F, the window gradient) and are drawn by CtBattleHudRender, so they are not this compositor's.
     gBattleFxRowModelled[line] = ch[2].base == 0xBE8D && (ch[3].base == 0xBE95 || (ch[3].base >= 0xBB05 && ch[3].base < 0xBB05 + 0x180))
                                  && !(cgwsel & 0x01) && (!(addSub && (TS & 0x1B)) || subRest);
-    if (wide && line < 256) {                                      // (the widescreen: each arena row's registers, for the
+    if ((wide || arenaRows) && line < 256) {                       // (the widescreen: each arena row's registers, for the
       BtFxRegs* R = &wideRegs[line]; wideOk[line] = gBattleFxRowModelled[line];   //  HUD's band rows below)
       wideHud[line] = ch[2].base == 0xC02B || ch[2].base == 0xC02F || ch[3].base == 0xC02B || ch[3].base == 0xC02F;
       R->TM = TM; R->TS = TS; R->TMW = TMW; R->TSW = TSW; R->cgwsel = cgwsel; R->cgadsub = cgadsub;
@@ -20112,7 +20115,7 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
   //  its own math -- passed, a dark line under the HUD in the sides moving down with it; Zombor, the owner 2026-10-23)
   int tmBulk = -1, sigBulk = -1;
   #define BT_FX_SIG(R) (((R).TM & 0xFF) | (((R).cgwsel & 0xFF) << 8) | (((R).cgadsub & 0xFF) << 16))
-  if (wide) { static int sigs[256], cnts[256]; int ns = 0, bestN = 0;
+  if (wide || arenaRows) { static int sigs[256], cnts[256]; int ns = 0, bestN = 0;
     for (int l = 0; l < H && l < 256; l++) {
       if (!wideOk[l]) continue;
       int s = BT_FX_SIG(wideRegs[l]), k = 0;
@@ -20138,6 +20141,23 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
       if (best < 0) continue;
       if (wideOk[line] && W <= 1024)                          // (an edge line the pass above drew with its own math -- the
         memcpy(fb + (size_t)line * W * 3, widePre + (size_t)line * W * 3, (size_t)W * 3);   //  shading under the opening HUD: undone)
+      btFxRowPixels(fb, W, cov, h, x0, wide, line, &wideRegs[best]);
+    }
+  // THE BAND ROWS THE VIEW SHOWS AS ARENA (the bottom lines drawn, a mod: a lowered HUD or message window leaves the top of
+  // its band to the arena, field.c fillBoxArenaRows): the same rule as the widescreen's sides of the band -- the effect of
+  // the nearest arena row of the arena's own setup, towards the screen's middle first -- and the sprites there take that
+  // row's math too.
+  if (!wide && arenaRows)
+    for (int line = 0; line < H && line < 256; line++) {
+      if (!gBattleFxArenaRows[line] || wideOk[line]) continue;
+      int best = -1, dir = line < H / 2 ? 1 : -1;
+      for (int d = 1; d < 256 && best < 0; d++) {
+        int a = line + dir * d, b = line - dir * d;
+        if (a >= 0 && a < H && a < 256 && wideOk[a] && BT_FX_SIG(wideRegs[a]) == sigBulk) best = a;
+        else if (b >= 0 && b < H && b < 256 && wideOk[b] && BT_FX_SIG(wideRegs[b]) == sigBulk && d > 64) best = b;
+      }
+      if (best < 0) continue;
+      gBattleFxRow[line] = gBattleFxRow[best];
       btFxRowPixels(fb, W, cov, h, x0, wide, line, &wideRegs[best]);
     }
   for (int line = H; line <= 224; line++) {                        // the runs below the picture: channel 3, for the carry

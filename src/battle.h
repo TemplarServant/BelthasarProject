@@ -992,6 +992,9 @@ void CtBattleArenaScrollDelta(const uint8_t* mem, int H, int16_t* d, uint8_t* ar
 // The battle effect layer over an arena composite `fb` (W x H RGB888, row y = PPU line y+1): the HDMA tables in `mem`,
 // BG3 from h->fxBg3Map/fxBg3Chr, windows + colour math. field.c draws it before the sprites; ct --sweepfxcompose grades it.
 void CtBattleFxLayerCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uint8_t* mem, const CtBattleHost* h);
+// The bottom lines drawn (a mod): rows a lowered HUD or message window leaves to the arena (field.c fillBoxArenaRows); the
+// view's compose gives them the nearest arena row's effect. All zero otherwise.
+extern uint8_t gBattleFxArenaRows[256];
 // The widescreen's arena (a mod): the same compose over a wider picture whose view starts at column x0 -- see battle.c.
 void CtBattleFxLayerComposeWide(uint8_t* fb, int W, int H, const uint8_t* cov, const uint8_t* mem, const CtBattleHost* h, int x0);
 // ...and after the sprites: BG3's front pixels come back from `atCompose` (the fb as the compositor left it), and those

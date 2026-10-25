@@ -202,7 +202,10 @@ extern "C" int CtOverlayFrame(void) {
       if (ImGui::IsItemHovered())
         ImGui::SetTooltip("A mod: the field and the fights draw their last 13 lines (211-223), which the original game\n"
                           "leaves black -- it turns the screen off there to copy graphics, hidden by old TVs' borders.\n"
-                          "Off: the black strip at the bottom, as on the SNES. Nothing else in the game changes.");
+                          "The dialogue window and the fights' HUD and message window move down in proportion to the\n"
+                          "taller picture: a box at the bottom keeps its margin to the new bottom edge, one at the top\n"
+                          "stays (a line at most). Off: the black strip at the bottom and the boxes where the SNES has\n"
+                          "them. Nothing else in the game changes.");
       bool ip = s->interpolate != 0;
       if (ImGui::Checkbox("Frames between (60+ fps)", &ip)) s->interpolate = ip;
       if (ImGui::IsItemHovered())
