@@ -106,8 +106,11 @@ from the field location where the story calls `FF 23`, 06B, whose Steam margins 
 of tiles that release drew for it (`cgext107_0`-`2`, pages 2-4): plane 2 the wings' pointed ends past the machine (80
 px a side, BG1's low layer), plane 0 the glow (the field's rows 3-4), plane 3 the planet (BG2). With the Steam margins
 on, the stage's sides draw them (`CtSceneArtEntry3Set`, the attract's 1B1 too: the same machine). The planet is round
-there: the glow bends down towards the sides (the planet's dark edge under it, plane 0's cells two pages on --
-`cgext107_2` -- is left out: the owner, 2026-10-25), laid at the sky rows' own place on every line (the line plus the sky lines' V scroll); past the art's own 96
+there: the glow bends down towards the sides, laid at the sky rows' own place on every line (the line plus the sky
+lines' V scroll). Under it lies the air's band, plane 0's cells two pages on (`cgext107_2`, palette 1's 1-3 -- the stage's
+own CGRAM 0x11-0x13, the same colours), ADDED to the planet under it: the Steam capture's light blue under the glow's
+white line is exactly band + planet ((65,82,115) + (8,56,112) = its (73,138,227)). The band runs ~5 px past the glow's
+cells into the sheet's next tile row, which no map cell names; it is read on from there as one picture. Past the art's own 96
 columns (a 21:9 side is 133) the bend goes on along the edge column's slope. The stage cuts the sky's map at line 70
 (HDMA channel 3), the glow's last rows with it; the Steam release shows the field 06B, the glow whole, and its art is
 drawn against that -- so with the sides drawn the glow's rows go on below the switch line, the middle's too, one band as
@@ -117,9 +120,11 @@ a palette row the stage never fades (2:10); it takes the stage's row of the same
 flash with the middle. The sky's
 rows of the room's own metatiles keep the rules above (one moon).
 
-The attract's `FF 63` opens the machine from its middle with mode 2's offset per tile (each of the 32 columns' H offset
-a step further from the middle); past the screen's edge the offsets go on as the line through the two entries nearest
-that edge (`optSide` in `src/seq_pic.c`, only while a stage's art draws its sides), so the sides open with it. (Until 2026-10-25 this
+Both `FF 23` and the attract's `FF 63` move the machine with mode 2's offset per tile: a triangle wave of 32 entries
+in BG3's map that the stage scrolls through BG3's H scroll. Past the screen's edge the sides read the same row on, at
+their columns' place in that map (it wraps at 32 entries, as in the middle; `optSide` in `src/seq_pic.c`, only while a
+stage's art draws its sides), so the wave travels through the sides with the middle. (Before 2026-10-25 they carried
+the line through the two edge entries on, which ran off the triangle: the sides jumped and stretched, the owner.) (Until 2026-10-25 this
 document said the Steam release had no art for the scene: its `Game/special` folder has none, the margins of 06B do.)
 
 ## The special scenes past their 256

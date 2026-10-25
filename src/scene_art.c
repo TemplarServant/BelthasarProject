@@ -67,20 +67,23 @@ static void entry3Build(const CtSeqPic* p) {
 static const CtWideExt* g_e3Steam;
 static CtWideExt g_e3SteamExt;
 static int g_e3Own = 1;                                               // the scene adjustments' own art
-// The Steam sheet's CGRAM index at the room's pixel (x, y) of a plane, its cell's page moved on by dpage: 0 = nothing
-// there, -1 = not a sheet's cell (the room's own metatiles).
+// The Steam sheet's CGRAM index at the room's pixel (x, y) of a plane, its cell's page moved on by dpage (| 0x80: the
+// sheet's tile row under the cell's): 0 = nothing there, -1 = not a sheet's cell (the room's own metatiles).
 static int steamPx(int plane, int x, int y, int dpage) {
   const CtWideExt* e = g_e3Steam;
   int c = (x >> 4) + (e->w - 16) / 2, r = y >> 4;
   if (c < 0 || c >= e->w || r < 0 || r >= e->h) return 0;
   unsigned v = e->planes[(size_t)plane * e->w * e->h + (size_t)r * e->w + c];
   if (!v) return 0;
-  unsigned t = v - 1, page = (t >> 8) + (unsigned)dpage;
-  if ((t >> 8) < 1 || page > 7 || !e->pageSheet[page]) return -1;
-  return e->pageSheet[page][(((t >> 4) & 15) * 16 + (y & 15)) * 256 + (t & 15) * 16 + (x & 15)];
+  unsigned t = v - 1, page = (t >> 8) + (unsigned)(dpage & 0x7F), trow = ((t >> 4) & 15) + (dpage & 0x80 ? 1 : 0);
+  if ((t >> 8) < 1 || page > 7 || !e->pageSheet[page] || trow > 15) return -1;
+  return e->pageSheet[page][(trow * 16 + (y & 15)) * 256 + (t & 15) * 16 + (x & 15)];
 }
 // THE ROUND PLANET (the Steam release's art): its glow (plane 0's cells, sheet 0) bends down towards the sides, over the
-// planet (the same cells two pages on, sheet 2, are the planet's dark edge under it -- left out, the owner 2026-10-25). The stage shows the sky's map
+// planet; the same cells two pages on (sheet 2) are the air's band under the glow, palette 1's 1-3 -- the stage's own CGRAM
+// 0x11-0x13, the same colours -- ADDED to what lies under it: the Steam picture's light blue under the glow's white line is
+// the band plus the planet, (65,82,115) + (8,56,112) = the screenshot's (73,138,227) -- the owner 2026-10-25: "should
+// be shown correctly", not dropped and not drawn flat. The stage shows the sky's map
 // above line 70 only (HDMA channel 3), so in the sides the bend is laid at the sky's own rows on every line -- the row of
 // line l is l + the sky lines' V scroll -- and the planet shows only below it. Past the art's own columns (a 21:9 side is
 // wider than its 96) the bend goes on: the edge column, lowered along its own slope (g_e3Slope, pixels a column).
@@ -106,14 +109,35 @@ static int skyMapPixel(const CtSeqPic* p, int col, int ys) {
   int c = tilePixel(p, chr, e, col & 7, ys & 7);
   return c ? (int)((e >> 10) & 7) * 16 + c : 0;
 }
-static int horizonPx(int x, int ys) {
+// The glow's index at the side's column x and sky row ys (> 0), 0 = none there, -1 = not a sheet's cell; *band the air's
+// band index there (0 = none), under the glow. The band runs ~5 pixels past the glow's cells (sky rows 3-4) into the
+// sheet's next tile row, which no cell of the map names: below the cells it is read on from that row, as one picture.
+static int horizonPx(int x, int ys, int* band) {
   const int ew = (g_e3Steam->w - 16) / 2 * 16;
   int xe = x, dy = 0;
   if (x < -ew) { xe = -ew; dy = (int)((-ew - x) * g_e3Slope[0] + 0.5f); }
   else if (x >= 256 + ew) { xe = 255 + ew; dy = (int)((x - 255 - ew) * g_e3Slope[1] + 0.5f); }
-  // (the glow only: the planet's dark edge under it, sheet 2, is left out -- the owner, 2026-10-25)
-  int v = steamPx(0, xe, ys - dy, 0);
+  int v = steamPx(0, xe, ys - dy, 0), b = steamPx(0, xe, ys - dy, 2);
+  if (b <= 0 && ys - dy >= 80) b = steamPx(0, xe, ys - dy - 16, 0x82);   // (the band's tail, the sheet's next row)
+  *band = b > 0 ? b : 0;
   return v > 0 ? horizonIndex(v) : v;
+}
+// BG2's CGRAM index at its map place (mx, my), from the map it shows on the line (0 = see-through).
+static int bg2Index(const CtSeqPic* p, int mx, int my) {
+  const unsigned sc = p->r[0x08], chr = (unsigned)(p->r[0x0B] >> 4) << 12;
+  mx &= 0x3FF; my &= 0x3FF;
+  unsigned ta = ((sc & 0xFC) << 8) + (unsigned)((my >> 3) & 31) * 32 + (unsigned)((mx >> 3) & 31);
+  if ((mx & 256) && (sc & 1)) ta += 0x400;
+  if ((my & 256) && (sc & 2)) ta += (sc & 1) ? 0x800 : 0x400;
+  uint16_t e = p->vram[ta & 0x7FFF];
+  int c = tilePixel(p, chr, e, mx & 7, my & 7);
+  return c ? (int)((e >> 10) & 7) * 16 + c : 0;
+}
+// The band added to the colour under it (colour math's add, each channel held at 31), in direct colour.
+static int bandOver(const CtSeqPic* p, int band, int under) {
+  uint16_t a = p->cgram[band & 0xFF], b = p->cgram[under & 0xFF];
+  int r = (a & 31) + (b & 31), g = ((a >> 5) & 31) + ((b >> 5) & 31), bl = ((a >> 10) & 31) + ((b >> 10) & 31);
+  return 0x10000 | (r > 31 ? 31 : r) | (g > 31 ? 31 : g) << 5 | (bl > 31 ? 31 : bl) << 10;
 }
 // The glow's lowest row in a column (its sky rows 48-79), for the slope past the art.
 static int glowBottom(int x) {
@@ -153,9 +177,14 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
     const int sky = (p->r[0x08] & 0xFC) == 0x60, line = (my - p->vofs[1]) & 0x3FF;
     const int ys = (line + g_e3SkyVofs) & 255;
     if (g_e3Steam && (x < 0 || x >= 256)) {                          // (the Steam release's glow, bent, a mod)
-      int h = horizonPx(x, ys);
+      int band, h = horizonPx(x, ys, &band);
       if (h > 0) return pri ? 0 : h;
       if (h < 0 && !sky) { int c = skyMapPixel(p, 0, ys); return pri ? 0 : c; }   // (the night's tile on a planet's line)
+      if (band) {                                                    // (the air's band over the sky or the planet)
+        if (pri) return 0;
+        int under = sky ? skyMapPixel(p, 0, ys) : bg2Index(p, (x < 0 ? -1 - x : 511 - x) + hs, my);
+        return bandOver(p, band, under);
+      }
     } else if (!sky && ys >= 48 && ys < 80) {                        // (the glow whole, the middle's and the mirrored sides')
       int c = skyMapPixel(p, x < 0 ? -1 - x : x >= 256 ? 511 - x : x, ys);
       if (c) return pri ? 0 : c;

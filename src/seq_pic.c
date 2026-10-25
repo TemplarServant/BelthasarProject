@@ -262,24 +262,19 @@ static void opt(const CtSeqPic* p, const Line* L, int layer, int* lx, int* ly) {
   if (v & valid) *ly = (v & 0x3FF) + (y - p->vofs[layer]);
 }
 
-// THE OFFSET PER TILE PAST THE SCREEN'S EDGE (mode 2; a stage's art past its edge, a mod): the 32 columns' offsets carried
-// on as a line through the two entries nearest that edge, so a stretch made with them -- the attract's FF 63, the machine
-// opening from its middle -- goes on into the sides. x is the screen column, y the line; *mx / *my the layer's place
-// (unwrapped, as g_seqPicArt takes it). 1 = an offset applied.
+// THE OFFSET PER TILE PAST THE SCREEN'S EDGE (mode 2; a stage's art past its edge, a mod): the offsets row is read on past
+// the 32 columns as the hardware reads it in the middle -- at the column's place in BG3's map, which wraps at 32 entries --
+// so a wave the stage scrolls through BG3's hofs (entry 3's FF 23 and the attract's FF 63: a triangle of 32 entries) goes on
+// into the sides with the middle's motion. x is the screen column, y the line; *mx / *my the layer's place (unwrapped, as
+// g_seqPicArt takes it). 1 = an offset applied.
 static int floorDiv8(int v) { return v >= 0 ? v / 8 : -((7 - v) / 8); }
 static int optSigned(uint16_t v) { int s = v & 0x3FF; return s >= 512 ? s - 1024 : s; }
 static int optSide(const CtSeqPic* p, const Line* L, int layer, int x, int y, int* mx, int* my) {
   int hs = p->hofs[layer] & 0x3FF, valid = layer == 0 ? 0x2000 : 0x4000, done = 0;
-  int column = floorDiv8(x + (hs & 7)), e = column - 1, ea = e < 0 ? 0 : 30, eb = ea + 1;
-  uint16_t ha = optValue(p, L, ea, 0), hb = optValue(p, L, eb, 0), va = optValue(p, L, ea, 1), vb = optValue(p, L, eb, 1);
-  if ((ha & valid) && (hb & valid)) {
-    int h = optSigned(ha) + (optSigned(hb) - optSigned(ha)) * (e - ea);
-    *mx = (h & ~7) + column * 8 + ((x + hs) & 7); done = 1;
-  }
-  if ((va & valid) && (vb & valid)) {
-    int v = optSigned(va) + (optSigned(vb) - optSigned(va)) * (e - ea);
-    *my = (v + y) & 0x3FF; done = 1;
-  }
+  int column = floorDiv8(x + (hs & 7));
+  uint16_t h = optValue(p, L, column - 1, 0), v = optValue(p, L, column - 1, 1);
+  if (h & valid) { *mx = (optSigned(h) & ~7) + column * 8 + ((x + hs) & 7); done = 1; }
+  if (v & valid) { *my = (optSigned(v) + y) & 0x3FF; done = 1; }
   return done;
 }
 
