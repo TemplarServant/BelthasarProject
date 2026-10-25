@@ -15,7 +15,8 @@ executable's, and reads it again when it changes -- paint here with the game ope
 
 Mouse: left paints with the selected block (drag to paint more), right picks the block under the cursor, middle drags the
 view; wheel scrolls (Shift: sideways, Ctrl: zoom). Tools (keys): P pencil, R rectangle, F fill (bucket), E erase (the cell
-goes back to 1000 A.D.'s own block). Ctrl+Z undo, Ctrl+Y redo, Ctrl+S save, G grid, B the patch's border, H highlight the
+emptied: nothing on BG1, the open sea on BG2 -- each layer's commonest block past the patch), T restore (back to 1000
+A.D.'s own block). Ctrl+Z undo, Ctrl+Y redo, Ctrl+S save, G grid, B the patch's border, H highlight the
 painted cells, 1 / 2 the layer painted (BG1 overlay / BG2 ground), V the other layer shown or hidden.
 """
 import argparse, os, struct, sys
@@ -127,6 +128,13 @@ class Editor:
         self.wid, self.w = wid, World(blob)
         src = EXT_WORLDS.get(wid)
         self.ext = World(self.assets[(CT_ASSET_WORLD, src)]).grid if src is not None else None
+        self.blank = [0, 0]                                   # (erase: each layer's commonest block past the patch)
+        if self.ext is not None:
+            for layer in (0, 1):
+                n = {}
+                for o in range(GW * GH):
+                    if self.w.grid[1][o] == 0: n[self.ext[layer][o]] = n.get(self.ext[layer][o], 0) + 1
+                self.blank[layer] = max(n, key=n.get) if n else 0
         self.cache = {}
         self.world_var.set(wid)
         self.compose_all(); self.draw_palette(); self.status()
@@ -249,13 +257,13 @@ class Editor:
         self.paint_at(c)
 
     def paint_at(self, c):
-        blk = None if self.tool == 'erase' else self.sel
+        blk = None if self.tool == 'restore' else self.blank[self.layer] if self.tool == 'erase' else self.sel
         if self.set_cell(c[0], c[1], blk, self.stroke): self.refresh_cells([c])
 
     def on_drag(self, e):
         c = self.cell_of(e)
         if not c: return
-        if self.tool in ('pencil', 'erase') and self.stroke is not None:
+        if self.tool in ('pencil', 'erase', 'restore') and self.stroke is not None:
             self.paint_at(c)
         elif self.tool == 'rect' and self.rect0:
             self.canvas.delete('rect'); z = self.zoom
@@ -317,7 +325,8 @@ class Editor:
         self.world_var = tk.IntVar(value=7)
         tk.OptionMenu(bar, self.world_var, *range(8), command=lambda v: self.load_world(int(v))).pack(side='left')
         self.tool_var = tk.StringVar(value='pencil')
-        for t, label in (('pencil', 'Pencil (P)'), ('rect', 'Rectangle (R)'), ('fill', 'Fill (F)'), ('erase', 'Erase (E)')):
+        for t, label in (('pencil', 'Pencil (P)'), ('rect', 'Rectangle (R)'), ('fill', 'Fill (F)'), ('erase', 'Erase (E)'),
+                         ('restore', 'Restore (T)')):
             tk.Radiobutton(bar, text=label, value=t, variable=self.tool_var, indicatoron=0, padx=6,
                            command=lambda: setattr(self, 'tool', self.tool_var.get())).pack(side='left')
         self.layer_var = tk.IntVar(value=1)
@@ -357,7 +366,7 @@ class Editor:
         self.canvas.bind('<Motion>', self.hover)
 
         self.stat = tk.Label(r, anchor='w'); self.stat.pack(side='bottom', fill='x')
-        keys = {'p': 'pencil', 'r': 'rect', 'f': 'fill', 'e': 'erase'}
+        keys = {'p': 'pencil', 'r': 'rect', 'f': 'fill', 'e': 'erase', 't': 'restore'}
         for k, t in keys.items(): r.bind(k, lambda e, t=t: self.set_tool(t))
         r.bind('1', lambda e: self.set_layer(0)); r.bind('2', lambda e: self.set_layer(1))
         r.bind('g', lambda e: self.toggle('grid_on')); r.bind('b', lambda e: self.toggle('border_on'))

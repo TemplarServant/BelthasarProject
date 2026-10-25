@@ -86,7 +86,7 @@ art direction for the wide picture, scene by scene, where what the sides show by
   terrain blocks past the patch are the same in both worlds; where the patch was redrawn the coast does not join yet
   (the owner adjusts it later, 2026-10-25). `CtWorldStream.ext`, `CtWorldTilemapView`.
   **The map editor** paints those cells: `python tools/map_editor.py` (RPG Maker style: a block palette, the map with
-  zoom and scrolling, BG2 ground / BG1 overlay, pencil, rectangle, fill, erase -- back to 1000 A.D.'s block --, pick,
+  zoom and scrolling, BG2 ground / BG1 overlay, pencil, rectangle, fill, erase -- nothing on BG1, the open sea on BG2 --, restore -- back to 1000 A.D.'s block --, pick,
   undo, the patch's border; the ROM's patch is locked). It draws from the player's ct_assets.dat and saves block
   numbers only to `ct_mapedits.dat` (CT_MAPEDITS, else the working folder, else the executable's), which Belthasar
   reads every 60 frames: paint with the game open and the sides follow (`owExtGrids` in `src/field.c`).
