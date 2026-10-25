@@ -23,6 +23,7 @@
 #include "../data/battle_settle.h"
 #include "../data/battle_stance.h"
 #include "../data/battle_trig.h"
+#include "../data/coll_slope.h"
 #include "../data/ct_charbase.h"
 #include "../data/ct_ng_pan.h"
 #include "../data/ct_regroup.h"
@@ -132,6 +133,9 @@ const CtTableReal ctTablesReal[] = {
   { "ctCfgDefaults", ctCfgDefaults, sizeof ctCfgDefaults },
   { "ctCfgNav", ctCfgNav, sizeof ctCfgNav },
   { "ctCharBase", ctCharBase, sizeof ctCharBase },
+  { "ctCollSlopeBF5", ctCollSlopeBF5, sizeof ctCollSlopeBF5 },
+  { "ctCollSlopeC0B", ctCollSlopeC0B, sizeof ctCollSlopeC0B },
+  { "ctCollSlopeC21", ctCollSlopeC21, sizeof ctCollSlopeC21 },
   { "ctCredBgPtr", ctCredBgPtr, sizeof ctCredBgPtr },
   { "ctCredFont", ctCredFont, sizeof ctCredFont },
   { "ctCredOamPtr", ctCredOamPtr, sizeof ctCredOamPtr },
@@ -378,6 +382,7 @@ const CtDefineReal ctDefinesReal[] = {
   { "CT_STANCE_NOBJ", (long long)(CT_STANCE_NOBJ) },
   { "CT_STANCE_NACTOR", (long long)(CT_STANCE_NACTOR) },
   { "CT_STANCE_NTILE", (long long)(CT_STANCE_NTILE) },
+  { "CT_COLL_SLOPE_N", (long long)(CT_COLL_SLOPE_N) },
   { "CT_CHARBASE_STRIDE", (long long)(CT_CHARBASE_STRIDE) },
   { "CT_CHARBASE_COUNT", (long long)(CT_CHARBASE_COUNT) },
   { "NG_PAN_FRAMES", (long long)(NG_PAN_FRAMES) },

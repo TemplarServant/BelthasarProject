@@ -29,6 +29,7 @@
 #include "battle_settle.h"
 #include "battle_stance.h"
 #include "battle_trig.h"
+#include "coll_slope.h"
 #include "ct_charbase.h"
 #include "ct_ng_pan.h"
 #include "ct_regroup.h"
@@ -311,148 +312,151 @@ CT_TBL_CHECK(t248, sizeof(ctBattleStanceObjTiles) == 5120);
 CT_TBL_CHECK(t249, sizeof(ctCfgDefaults) == 12);
 CT_TBL_CHECK(t250, sizeof(ctCfgNav) == 126);
 CT_TBL_CHECK(t251, sizeof(ctCharBase) == 640);
-CT_TBL_CHECK(t252, sizeof(ctCredBgPtr) == 10);
-CT_TBL_CHECK(t253, sizeof(ctCredFont) == 2048);
-CT_TBL_CHECK(t254, sizeof(ctCredOamPtr) == 10);
-CT_TBL_CHECK(t255, sizeof(ctCredText) == 386);
-CT_TBL_CHECK(t256, sizeof(ctCronoAttackTraj) == 364);
-CT_TBL_CHECK(t257, sizeof(ctCronoIdleAddKf) == 72);
-CT_TBL_CHECK(t258, sizeof(ctCronoIdleAddObj) == 144);
-CT_TBL_CHECK(t259, sizeof(ctCronoIdleAddTiles) == 15360);
-CT_TBL_CHECK(t260, sizeof(ctCronoIdleBob) == 420);
-CT_TBL_CHECK(t261, sizeof(ctCronoIdleStateToKf) == 3);
-CT_TBL_CHECK(t262, sizeof(ctEqAyla) == 200);
-CT_TBL_CHECK(t263, sizeof(ctEqBonusIdx) == 242);
-CT_TBL_CHECK(t264, sizeof(ctEqBonusSet) == 512);
-CT_TBL_CHECK(t265, sizeof(ctEqMask) == 242);
-CT_TBL_CHECK(t266, sizeof(ctEqPower) == 148);
-CT_TBL_CHECK(t267, sizeof(ctEqRange) == 8);
-CT_TBL_CHECK(t268, sizeof(ctEqSheetOff) == 4);
-CT_TBL_CHECK(t269, sizeof(ctEqStatCap) == 7);
-CT_TBL_CHECK(t270, sizeof(ctEqStatOff) == 7);
-CT_TBL_CHECK(t271, sizeof(ctGatoAtkCell) == 360);
-CT_TBL_CHECK(t272, sizeof(ctGatoAtkFace) == 72);
-CT_TBL_CHECK(t273, sizeof(ctGatoAtkTiles0) == 5120);
-CT_TBL_CHECK(t274, sizeof(ctGatoAtkTiles1) == 5120);
-CT_TBL_CHECK(t275, sizeof(ctGatoAtkTiles2) == 5120);
-CT_TBL_CHECK(t276, sizeof(ctGatoAtkTiles3) == 5120);
-CT_TBL_CHECK(t277, sizeof(ctGatoAtkTiles4) == 5120);
-CT_TBL_CHECK(t278, sizeof(ctGatoFaceCell) == 216);
-CT_TBL_CHECK(t279, sizeof(ctGatoFaceKf) == 48);
-CT_TBL_CHECK(t280, sizeof(ctGatoFaceTiles0) == 5120);
-CT_TBL_CHECK(t281, sizeof(ctGatoFaceTiles1) == 5120);
-CT_TBL_CHECK(t282, sizeof(ctGatoFaceTiles2) == 5120);
-CT_TBL_CHECK(t283, sizeof(ctGatoIdleTraj) == 726);
-CT_TBL_CHECK(t284, sizeof(ctGatoIdleTrajV2) == 720);
-CT_TBL_CHECK(t285, sizeof(ctGatoSwipeKf) == 72);
-CT_TBL_CHECK(t286, sizeof(ctGatoSwipeObj) == 432);
-CT_TBL_CHECK(t287, sizeof(ctGatoSwipeTiles) == 15360);
-CT_TBL_CHECK(t288, sizeof(ctHetakeAtkTraj) == 50);
-CT_TBL_CHECK(t289, sizeof(ctHetakeAttackKf) == 24);
-CT_TBL_CHECK(t290, sizeof(ctHetakeAttackTiles) == 256);
-CT_TBL_CHECK(t291, sizeof(ctHetakeCursor) == 12);
-CT_TBL_CHECK(t292, sizeof(ctHetakeIdle) == 84);
-CT_TBL_CHECK(t293, sizeof(ctHetakeObjPal) == 32);
-CT_TBL_CHECK(t294, sizeof(ctHetakeObjTiles) == 4096);
-CT_TBL_CHECK(t295, sizeof(ctItemCat) == 3072);
-CT_TBL_CHECK(t296, sizeof(ctItemDesc) == 8712);
-CT_TBL_CHECK(t297, sizeof(ctItemFxAll) == 20);
-CT_TBL_CHECK(t298, sizeof(ctItemFxAmt) == 40);
-CT_TBL_CHECK(t299, sizeof(ctItemFxKind) == 20);
-CT_TBL_CHECK(t300, sizeof(ctItemFxPool) == 20);
-CT_TBL_CHECK(t301, sizeof(ctItemNav) == 90);
-CT_TBL_CHECK(t302, sizeof(ctItemOverlayWinTM) == 448);
-CT_TBL_CHECK(t303, sizeof(ctItemProp) == 243);
-CT_TBL_CHECK(t304, sizeof(ctLoaderChapThr) == 26);
-CT_TBL_CHECK(t305, sizeof(ctLoaderChapter) == 216);
-CT_TBL_CHECK(t306, sizeof(ctLoaderEra) == 64);
-CT_TBL_CHECK(t307, sizeof(ctLoaderEraOf) == 512);
-CT_TBL_CHECK(t308, sizeof(ctLoaderIcon) == 7168);
-CT_TBL_CHECK(t309, sizeof(ctLoaderNumeral) == 3072);
-CT_TBL_CHECK(t310, sizeof(ctLoaderVwfTone) == 12);
-CT_TBL_CHECK(t311, sizeof(ctMarleAtkKf) == 128);
-CT_TBL_CHECK(t312, sizeof(ctMarleAtkObj) == 192);
-CT_TBL_CHECK(t313, sizeof(ctMarleAtkTiles) == 20480);
-CT_TBL_CHECK(t314, sizeof(ctMarleAtkTraj) == 316);
-CT_TBL_CHECK(t315, sizeof(ctMarleSparkKf) == 64);
-CT_TBL_CHECK(t316, sizeof(ctMarleSparkTiles) == 512);
-CT_TBL_CHECK(t317, sizeof(ctMenuArrow) == 1024);
-CT_TBL_CHECK(t318, sizeof(ctMenuChromeEnteredTM) == 10752);
-CT_TBL_CHECK(t319, sizeof(ctMenuChromeEquipListTM) == 1792);
-CT_TBL_CHECK(t320, sizeof(ctMenuChromeEquipTM) == 1792);
-CT_TBL_CHECK(t321, sizeof(ctMenuChromeExchTM) == 1792);
-CT_TBL_CHECK(t322, sizeof(ctMenuChromeLoaderPal) == 384);
-CT_TBL_CHECK(t323, sizeof(ctMenuChromeLoaderTM) == 4096);
-CT_TBL_CHECK(t324, sizeof(ctMenuChromePal) == 384);
-CT_TBL_CHECK(t325, sizeof(ctMenuChromeRibbonTM) == 10752);
-CT_TBL_CHECK(t326, sizeof(ctMenuChromeSavePal) == 384);
-CT_TBL_CHECK(t327, sizeof(ctMenuChromeShopEquipTM) == 1792);
-CT_TBL_CHECK(t328, sizeof(ctMenuChromeShopTM) == 1792);
-CT_TBL_CHECK(t329, sizeof(ctMenuChromeTile) == 15360);
-CT_TBL_CHECK(t330, sizeof(ctMenuFontC9FC) == 256);
-CT_TBL_CHECK(t331, sizeof(ctMenuIconBase) == 6144);
-CT_TBL_CHECK(t332, sizeof(ctMenuIconSel) == 6144);
-CT_TBL_CHECK(t333, sizeof(ctMenuLoaderBand) == 18);
-CT_TBL_CHECK(t334, sizeof(ctMenuWinList) == 160);
-CT_TBL_CHECK(t335, sizeof(ctOrgLen) == 5);
-CT_TBL_CHECK(t336, sizeof(ctOrgStart) == 5);
-CT_TBL_CHECK(t337, sizeof(ctOwAnimC3) == 8192);
-CT_TBL_CHECK(t338, sizeof(ctOwGullMap) == 12);
-CT_TBL_CHECK(t339, sizeof(ctPlacardEra) == 36);
-CT_TBL_CHECK(t340, sizeof(ctPlacardPx) == 23040);
-CT_TBL_CHECK(t341, sizeof(ctRegroupD9) == 32);
-CT_TBL_CHECK(t342, sizeof(ctRegroupReturn) == 32);
-CT_TBL_CHECK(t343, sizeof(ctRegroupTail) == 6);
-CT_TBL_CHECK(t344, sizeof(ctRomC2) == 2163);
-CT_TBL_CHECK(t345, sizeof(ctRomCC) == 6685);
-CT_TBL_CHECK(t346, sizeof(ctRomCfg) == 380);
-CT_TBL_CHECK(t347, sizeof(ctRomMaxCnt) == 8);
-CT_TBL_CHECK(t348, sizeof(ctShopNarrowTiles) == 2176);
-CT_TBL_CHECK(t349, sizeof(ctShopTextPal) == 96);
-CT_TBL_CHECK(t350, sizeof(ctTechBound) == 38);
-CT_TBL_CHECK(t351, sizeof(ctTechCastPose) == 7);
-CT_TBL_CHECK(t352, sizeof(ctTechDesc) == 3904);
-CT_TBL_CHECK(t353, sizeof(ctTechFx) == 117);
-CT_TBL_CHECK(t354, sizeof(ctTechGroupMask) == 37);
-CT_TBL_CHECK(t355, sizeof(ctTechMpCost) == 256);
-CT_TBL_CHECK(t356, sizeof(ctTechMpIdx) == 444);
-CT_TBL_CHECK(t357, sizeof(ctTechNextCap) == 8);
-CT_TBL_CHECK(t358, sizeof(ctTechNib) == 117);
-CT_TBL_CHECK(t359, sizeof(ctTechRng) == 272);
-CT_TBL_CHECK(t360, sizeof(ctTechTabWin) == 6);
-CT_TBL_CHECK(t361, sizeof(ctTitleM7Chr) == 9600);
-CT_TBL_CHECK(t362, sizeof(ctTitleM7Map) == 216);
-CT_TBL_CHECK(t363, sizeof(ctTitlePal0) == 512);
-CT_TBL_CHECK(t364, sizeof(ctTitlePkg) == 467);
-CT_TBL_CHECK(t365, sizeof(ctTitleScript) == 148);
-CT_TBL_CHECK(t366, sizeof(ctTitleSeedCell) == 38);
-CT_TBL_CHECK(t367, sizeof(ctTitleSeedCtr) == 32);
-CT_TBL_CHECK(t368, sizeof(ctTitleSeedOam) == 544);
-CT_TBL_CHECK(t369, sizeof(ctTitleSeedPalShadow) == 512);
-CT_TBL_CHECK(t370, sizeof(ctTitleSeedReg) == 32);
-CT_TBL_CHECK(t371, sizeof(ctTitleSeedScratch) == 10);
-CT_TBL_CHECK(t372, sizeof(ctTitleSeedSlide) == 10);
-CT_TBL_CHECK(t373, sizeof(ctTitleSeedTask) == 32);
-CT_TBL_CHECK(t374, sizeof(ctTitleSeedTgt) == 10);
-CT_TBL_CHECK(t375, sizeof(ctTitleSeedVbl) == 16);
-CT_TBL_CHECK(t376, sizeof(ctTitleSeedWave) == 128);
-CT_TBL_CHECK(t377, sizeof(ctTitleSin) == 1024);
-CT_TBL_CHECK(t378, sizeof(ctTitleSlidePkg) == 10);
-CT_TBL_CHECK(t379, sizeof(ctTitleSlideSpd) == 10);
-CT_TBL_CHECK(t380, sizeof(ctTitleVram) == 24576);
-CT_TBL_CHECK(t381, sizeof(dlgCursorRGBA) == 768);
-CT_TBL_CHECK(t382, sizeof(gen_opt0_icon_accessory) == 64);
-CT_TBL_CHECK(t383, sizeof(gen_opt0_icon_armor) == 64);
-CT_TBL_CHECK(t384, sizeof(gen_opt0_icon_helm) == 64);
-CT_TBL_CHECK(t385, sizeof(gen_opt0_icon_tiles) == 640);
-CT_TBL_CHECK(t386, sizeof(gen_opt0_icon_weapon) == 64);
-CT_TBL_CHECK(t387, sizeof(gen_opt0_pal0) == 64);
-CT_TBL_CHECK(t388, sizeof(itemCursorIdx) == 256);
-CT_TBL_CHECK(t389, sizeof(itemCursorPal) == 48);
-CT_TBL_CHECK(t390, sizeof(itemCursorRGBA) == 1024);
-CT_TBL_CHECK(t391, sizeof(techTabPal) == 96);
-CT_TBL_CHECK(t392, sizeof(techTabTiles) == 768);
-CT_TBL_CHECK(t393, sizeof(techTabX) == 6);
+CT_TBL_CHECK(t252, sizeof(ctCollSlopeBF5) == 22);
+CT_TBL_CHECK(t253, sizeof(ctCollSlopeC0B) == 22);
+CT_TBL_CHECK(t254, sizeof(ctCollSlopeC21) == 22);
+CT_TBL_CHECK(t255, sizeof(ctCredBgPtr) == 10);
+CT_TBL_CHECK(t256, sizeof(ctCredFont) == 2048);
+CT_TBL_CHECK(t257, sizeof(ctCredOamPtr) == 10);
+CT_TBL_CHECK(t258, sizeof(ctCredText) == 386);
+CT_TBL_CHECK(t259, sizeof(ctCronoAttackTraj) == 364);
+CT_TBL_CHECK(t260, sizeof(ctCronoIdleAddKf) == 72);
+CT_TBL_CHECK(t261, sizeof(ctCronoIdleAddObj) == 144);
+CT_TBL_CHECK(t262, sizeof(ctCronoIdleAddTiles) == 15360);
+CT_TBL_CHECK(t263, sizeof(ctCronoIdleBob) == 420);
+CT_TBL_CHECK(t264, sizeof(ctCronoIdleStateToKf) == 3);
+CT_TBL_CHECK(t265, sizeof(ctEqAyla) == 200);
+CT_TBL_CHECK(t266, sizeof(ctEqBonusIdx) == 242);
+CT_TBL_CHECK(t267, sizeof(ctEqBonusSet) == 512);
+CT_TBL_CHECK(t268, sizeof(ctEqMask) == 242);
+CT_TBL_CHECK(t269, sizeof(ctEqPower) == 148);
+CT_TBL_CHECK(t270, sizeof(ctEqRange) == 8);
+CT_TBL_CHECK(t271, sizeof(ctEqSheetOff) == 4);
+CT_TBL_CHECK(t272, sizeof(ctEqStatCap) == 7);
+CT_TBL_CHECK(t273, sizeof(ctEqStatOff) == 7);
+CT_TBL_CHECK(t274, sizeof(ctGatoAtkCell) == 360);
+CT_TBL_CHECK(t275, sizeof(ctGatoAtkFace) == 72);
+CT_TBL_CHECK(t276, sizeof(ctGatoAtkTiles0) == 5120);
+CT_TBL_CHECK(t277, sizeof(ctGatoAtkTiles1) == 5120);
+CT_TBL_CHECK(t278, sizeof(ctGatoAtkTiles2) == 5120);
+CT_TBL_CHECK(t279, sizeof(ctGatoAtkTiles3) == 5120);
+CT_TBL_CHECK(t280, sizeof(ctGatoAtkTiles4) == 5120);
+CT_TBL_CHECK(t281, sizeof(ctGatoFaceCell) == 216);
+CT_TBL_CHECK(t282, sizeof(ctGatoFaceKf) == 48);
+CT_TBL_CHECK(t283, sizeof(ctGatoFaceTiles0) == 5120);
+CT_TBL_CHECK(t284, sizeof(ctGatoFaceTiles1) == 5120);
+CT_TBL_CHECK(t285, sizeof(ctGatoFaceTiles2) == 5120);
+CT_TBL_CHECK(t286, sizeof(ctGatoIdleTraj) == 726);
+CT_TBL_CHECK(t287, sizeof(ctGatoIdleTrajV2) == 720);
+CT_TBL_CHECK(t288, sizeof(ctGatoSwipeKf) == 72);
+CT_TBL_CHECK(t289, sizeof(ctGatoSwipeObj) == 432);
+CT_TBL_CHECK(t290, sizeof(ctGatoSwipeTiles) == 15360);
+CT_TBL_CHECK(t291, sizeof(ctHetakeAtkTraj) == 50);
+CT_TBL_CHECK(t292, sizeof(ctHetakeAttackKf) == 24);
+CT_TBL_CHECK(t293, sizeof(ctHetakeAttackTiles) == 256);
+CT_TBL_CHECK(t294, sizeof(ctHetakeCursor) == 12);
+CT_TBL_CHECK(t295, sizeof(ctHetakeIdle) == 84);
+CT_TBL_CHECK(t296, sizeof(ctHetakeObjPal) == 32);
+CT_TBL_CHECK(t297, sizeof(ctHetakeObjTiles) == 4096);
+CT_TBL_CHECK(t298, sizeof(ctItemCat) == 3072);
+CT_TBL_CHECK(t299, sizeof(ctItemDesc) == 8712);
+CT_TBL_CHECK(t300, sizeof(ctItemFxAll) == 20);
+CT_TBL_CHECK(t301, sizeof(ctItemFxAmt) == 40);
+CT_TBL_CHECK(t302, sizeof(ctItemFxKind) == 20);
+CT_TBL_CHECK(t303, sizeof(ctItemFxPool) == 20);
+CT_TBL_CHECK(t304, sizeof(ctItemNav) == 90);
+CT_TBL_CHECK(t305, sizeof(ctItemOverlayWinTM) == 448);
+CT_TBL_CHECK(t306, sizeof(ctItemProp) == 243);
+CT_TBL_CHECK(t307, sizeof(ctLoaderChapThr) == 26);
+CT_TBL_CHECK(t308, sizeof(ctLoaderChapter) == 216);
+CT_TBL_CHECK(t309, sizeof(ctLoaderEra) == 64);
+CT_TBL_CHECK(t310, sizeof(ctLoaderEraOf) == 512);
+CT_TBL_CHECK(t311, sizeof(ctLoaderIcon) == 7168);
+CT_TBL_CHECK(t312, sizeof(ctLoaderNumeral) == 3072);
+CT_TBL_CHECK(t313, sizeof(ctLoaderVwfTone) == 12);
+CT_TBL_CHECK(t314, sizeof(ctMarleAtkKf) == 128);
+CT_TBL_CHECK(t315, sizeof(ctMarleAtkObj) == 192);
+CT_TBL_CHECK(t316, sizeof(ctMarleAtkTiles) == 20480);
+CT_TBL_CHECK(t317, sizeof(ctMarleAtkTraj) == 316);
+CT_TBL_CHECK(t318, sizeof(ctMarleSparkKf) == 64);
+CT_TBL_CHECK(t319, sizeof(ctMarleSparkTiles) == 512);
+CT_TBL_CHECK(t320, sizeof(ctMenuArrow) == 1024);
+CT_TBL_CHECK(t321, sizeof(ctMenuChromeEnteredTM) == 10752);
+CT_TBL_CHECK(t322, sizeof(ctMenuChromeEquipListTM) == 1792);
+CT_TBL_CHECK(t323, sizeof(ctMenuChromeEquipTM) == 1792);
+CT_TBL_CHECK(t324, sizeof(ctMenuChromeExchTM) == 1792);
+CT_TBL_CHECK(t325, sizeof(ctMenuChromeLoaderPal) == 384);
+CT_TBL_CHECK(t326, sizeof(ctMenuChromeLoaderTM) == 4096);
+CT_TBL_CHECK(t327, sizeof(ctMenuChromePal) == 384);
+CT_TBL_CHECK(t328, sizeof(ctMenuChromeRibbonTM) == 10752);
+CT_TBL_CHECK(t329, sizeof(ctMenuChromeSavePal) == 384);
+CT_TBL_CHECK(t330, sizeof(ctMenuChromeShopEquipTM) == 1792);
+CT_TBL_CHECK(t331, sizeof(ctMenuChromeShopTM) == 1792);
+CT_TBL_CHECK(t332, sizeof(ctMenuChromeTile) == 15360);
+CT_TBL_CHECK(t333, sizeof(ctMenuFontC9FC) == 256);
+CT_TBL_CHECK(t334, sizeof(ctMenuIconBase) == 6144);
+CT_TBL_CHECK(t335, sizeof(ctMenuIconSel) == 6144);
+CT_TBL_CHECK(t336, sizeof(ctMenuLoaderBand) == 18);
+CT_TBL_CHECK(t337, sizeof(ctMenuWinList) == 160);
+CT_TBL_CHECK(t338, sizeof(ctOrgLen) == 5);
+CT_TBL_CHECK(t339, sizeof(ctOrgStart) == 5);
+CT_TBL_CHECK(t340, sizeof(ctOwAnimC3) == 8192);
+CT_TBL_CHECK(t341, sizeof(ctOwGullMap) == 12);
+CT_TBL_CHECK(t342, sizeof(ctPlacardEra) == 36);
+CT_TBL_CHECK(t343, sizeof(ctPlacardPx) == 23040);
+CT_TBL_CHECK(t344, sizeof(ctRegroupD9) == 32);
+CT_TBL_CHECK(t345, sizeof(ctRegroupReturn) == 32);
+CT_TBL_CHECK(t346, sizeof(ctRegroupTail) == 6);
+CT_TBL_CHECK(t347, sizeof(ctRomC2) == 2163);
+CT_TBL_CHECK(t348, sizeof(ctRomCC) == 6685);
+CT_TBL_CHECK(t349, sizeof(ctRomCfg) == 380);
+CT_TBL_CHECK(t350, sizeof(ctRomMaxCnt) == 8);
+CT_TBL_CHECK(t351, sizeof(ctShopNarrowTiles) == 2176);
+CT_TBL_CHECK(t352, sizeof(ctShopTextPal) == 96);
+CT_TBL_CHECK(t353, sizeof(ctTechBound) == 38);
+CT_TBL_CHECK(t354, sizeof(ctTechCastPose) == 7);
+CT_TBL_CHECK(t355, sizeof(ctTechDesc) == 3904);
+CT_TBL_CHECK(t356, sizeof(ctTechFx) == 117);
+CT_TBL_CHECK(t357, sizeof(ctTechGroupMask) == 37);
+CT_TBL_CHECK(t358, sizeof(ctTechMpCost) == 256);
+CT_TBL_CHECK(t359, sizeof(ctTechMpIdx) == 444);
+CT_TBL_CHECK(t360, sizeof(ctTechNextCap) == 8);
+CT_TBL_CHECK(t361, sizeof(ctTechNib) == 117);
+CT_TBL_CHECK(t362, sizeof(ctTechRng) == 272);
+CT_TBL_CHECK(t363, sizeof(ctTechTabWin) == 6);
+CT_TBL_CHECK(t364, sizeof(ctTitleM7Chr) == 9600);
+CT_TBL_CHECK(t365, sizeof(ctTitleM7Map) == 216);
+CT_TBL_CHECK(t366, sizeof(ctTitlePal0) == 512);
+CT_TBL_CHECK(t367, sizeof(ctTitlePkg) == 467);
+CT_TBL_CHECK(t368, sizeof(ctTitleScript) == 148);
+CT_TBL_CHECK(t369, sizeof(ctTitleSeedCell) == 38);
+CT_TBL_CHECK(t370, sizeof(ctTitleSeedCtr) == 32);
+CT_TBL_CHECK(t371, sizeof(ctTitleSeedOam) == 544);
+CT_TBL_CHECK(t372, sizeof(ctTitleSeedPalShadow) == 512);
+CT_TBL_CHECK(t373, sizeof(ctTitleSeedReg) == 32);
+CT_TBL_CHECK(t374, sizeof(ctTitleSeedScratch) == 10);
+CT_TBL_CHECK(t375, sizeof(ctTitleSeedSlide) == 10);
+CT_TBL_CHECK(t376, sizeof(ctTitleSeedTask) == 32);
+CT_TBL_CHECK(t377, sizeof(ctTitleSeedTgt) == 10);
+CT_TBL_CHECK(t378, sizeof(ctTitleSeedVbl) == 16);
+CT_TBL_CHECK(t379, sizeof(ctTitleSeedWave) == 128);
+CT_TBL_CHECK(t380, sizeof(ctTitleSin) == 1024);
+CT_TBL_CHECK(t381, sizeof(ctTitleSlidePkg) == 10);
+CT_TBL_CHECK(t382, sizeof(ctTitleSlideSpd) == 10);
+CT_TBL_CHECK(t383, sizeof(ctTitleVram) == 24576);
+CT_TBL_CHECK(t384, sizeof(dlgCursorRGBA) == 768);
+CT_TBL_CHECK(t385, sizeof(gen_opt0_icon_accessory) == 64);
+CT_TBL_CHECK(t386, sizeof(gen_opt0_icon_armor) == 64);
+CT_TBL_CHECK(t387, sizeof(gen_opt0_icon_helm) == 64);
+CT_TBL_CHECK(t388, sizeof(gen_opt0_icon_tiles) == 640);
+CT_TBL_CHECK(t389, sizeof(gen_opt0_icon_weapon) == 64);
+CT_TBL_CHECK(t390, sizeof(gen_opt0_pal0) == 64);
+CT_TBL_CHECK(t391, sizeof(itemCursorIdx) == 256);
+CT_TBL_CHECK(t392, sizeof(itemCursorPal) == 48);
+CT_TBL_CHECK(t393, sizeof(itemCursorRGBA) == 1024);
+CT_TBL_CHECK(t394, sizeof(techTabPal) == 96);
+CT_TBL_CHECK(t395, sizeof(techTabTiles) == 768);
+CT_TBL_CHECK(t396, sizeof(techTabX) == 6);
 
 /* Where each table holds pointers: the offsets inside one element (the type under every dimension). */
 static const unsigned ctTblPtr_ctBattleAnimKf[] = { 0, 8 };
@@ -549,6 +553,9 @@ const CtTableDesc ctTableDescs[] = {
   { "ctCfgDefaults", (void*)ctCfgDefaults, sizeof ctCfgDefaults, 0x6F09557DAA9363D1ULL, 1, NULL, 0 },
   { "ctCfgNav", (void*)ctCfgNav, sizeof ctCfgNav, 0x06D418BD8151C7E0ULL, 1, NULL, 0 },
   { "ctCharBase", (void*)ctCharBase, sizeof ctCharBase, 0x6B1C2519DC694C8DULL, 1, NULL, 0 },
+  { "ctCollSlopeBF5", (void*)ctCollSlopeBF5, sizeof ctCollSlopeBF5, 0x010F61CFED428A28ULL, 1, NULL, 0 },
+  { "ctCollSlopeC0B", (void*)ctCollSlopeC0B, sizeof ctCollSlopeC0B, 0x2273C21576032D60ULL, 1, NULL, 0 },
+  { "ctCollSlopeC21", (void*)ctCollSlopeC21, sizeof ctCollSlopeC21, 0xECC60FA6A9BC85D9ULL, 1, NULL, 0 },
   { "ctCredBgPtr", (void*)ctCredBgPtr, sizeof ctCredBgPtr, 0x8B397FF0C4CD42ABULL, 2, NULL, 0 },
   { "ctCredFont", (void*)ctCredFont, sizeof ctCredFont, 0xB69118EC66606B4FULL, 2, NULL, 0 },
   { "ctCredOamPtr", (void*)ctCredOamPtr, sizeof ctCredOamPtr, 0xF3985C54057BDB33ULL, 2, NULL, 0 },
@@ -693,7 +700,7 @@ const CtTableDesc ctTableDescs[] = {
   { "techTabX", (void*)techTabX, sizeof techTabX, 0xAEE8A310BE855BD6ULL, 2, NULL, 0 },
 };
 const int ctTableDescCount = (int)(sizeof ctTableDescs / sizeof ctTableDescs[0]);
-const unsigned long long ctTableSetHash = 0x2B119B9164C3A47BULL;
+const unsigned long long ctTableSetHash = 0x3CE7EF98C55AE19BULL;
 
 /* The #defines: a compiled-in one (an array bound) with the shapes' value, which the loader compares with
    the pack's; a run-time one with its variable, which the loader fills from the pack. */
@@ -798,6 +805,7 @@ const CtTableDefine ctTableDefines[] = {
   { "CT_STANCE_NOBJ", (long long)(CT_STANCE_NOBJ), NULL, 0 },
   { "CT_STANCE_NACTOR", (long long)(CT_STANCE_NACTOR), NULL, 0 },
   { "CT_STANCE_NTILE", (long long)(CT_STANCE_NTILE), NULL, 0 },
+  { "CT_COLL_SLOPE_N", (long long)(CT_COLL_SLOPE_N), NULL, 0 },
   { "CT_CHARBASE_STRIDE", 0, &ctDef_CT_CHARBASE_STRIDE, CT_TBL_DEF_INT },
   { "CT_CHARBASE_COUNT", 0, &ctDef_CT_CHARBASE_COUNT, CT_TBL_DEF_INT },
   { "NG_PAN_FRAMES", 0, &ctDef_NG_PAN_FRAMES, CT_TBL_DEF_INT },

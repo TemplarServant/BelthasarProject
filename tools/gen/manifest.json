@@ -84,6 +84,15 @@
     },
     {
       "out": [
+        "src/data/coll_slope.h"
+      ],
+      "cmd": [
+        "tools/gen/coll_slope.py"
+      ],
+      "status": "rom"
+    },
+    {
+      "out": [
         "src/data/menu_techrom.h"
       ],
       "cmd": [

@@ -40,7 +40,7 @@ pack carries it from the real header; the loader refuses a pack whose hash diffe
 a generator (a member added, a count changed) never lands in the wrong place. tables_storage.c also asserts at compile
 time that the compiler's sizeof/offsetof agree with this file's layout model.
 
-Only what the 47 headers use is understood: integer types, `char` arrays (string initializers), `const char*` members,
+Only what the 48 headers use is understood: integer types, `char` arrays (string initializers), `const char*` members,
 structs (named by typedef or anonymous), arrays of any of them, initializers with brace elision, integer expressions
 over the headers' own #defines. Anything else is an error, never a guess.
 """

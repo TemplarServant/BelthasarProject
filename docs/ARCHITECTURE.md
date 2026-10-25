@@ -39,7 +39,7 @@ your ROM (verified: src/rom_verify.c, tools/ctlib/rom.py)
   decompressed scene scripts, actor tables, collision and exits, and the LZ streams and tables of the battle, the
   menus, the overworld and the sound. `ct.exe --datverify` checks that a scene rendered from the container matches one
   rendered from the ROM.
-- **`src/data/*.h`** (47 headers) are tables compiled into the engine: battle animation records and sheets, menu
+- **`src/data/*.h`** (48 headers) are tables compiled into the engine: battle animation records and sheets, menu
   chrome, the title sequence's data, the overworld era placard, and so on. Each comes from a generator in
   `tools/`. They are ROM-derived and are generated locally (see [ROM.md](ROM.md)).
 - **`src/xlat/*.c`** are ROM programs translated into C, compiled into `ct.exe` only as references for the native

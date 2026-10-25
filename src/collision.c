@@ -8,17 +8,13 @@ int g_collPairCommit = 0;
 #include <stdio.h>
 #include <stdlib.h>
 
-// ROM slope tables at C0/9BF5 / 9C0B / 9C21 (HiROM file offsets 0x9BF5 / 0x9C0B / 0x9C21), verified
-// byte-for-byte. 22 entries, indexed by (shape - 2) for slope shapes (orig shape 2..0x17).
+// ROM slope tables at C0/9BF5 / 9C0B / 9C21 (HiROM file offsets 0x9BF5 / 0x9C0B / 0x9C21), generated from the ROM
+// (tools/gen/coll_slope.py; a data-free build loads them from the player's pack). 22 entries, indexed by (shape - 2)
+// for slope shapes (orig shape 2..0x17).
 //   bf5: bit7 = negate-X-after-shift (EOR #$FF); bits0-6 = LSR count (1..3).
 //   c0b: 8-bit constant ADDed after the shift.    c21: EOR sign (0x00 keep / 0xFF invert).
 // Final bit7 == 0 -> WALKABLE tail, == 1 -> SOLID tail.
-static const uint8_t kSlopeBF5[22] = {
-  0x82,0x02,0x02,0x82,0x81,0x01,0x01,0x81,0x83,0x03,0x03,0x83,0x81,0x01,0x01,0x81,0x83,0x03,0x03,0x83,0x82,0x02 };
-static const uint8_t kSlopeC0B[22] = {
-  0x3D,0x03,0x03,0x3D,0x7D,0x03,0xC3,0x3D,0x3E,0x23,0x03,0x1D,0x3D,0xC3,0x03,0x7D,0x1E,0x03,0x23,0x3D,0x3D,0x03 };
-static const uint8_t kSlopeC21[22] = {
-  0x00,0x00,0xFF,0xFF,0x00,0x00,0xFF,0xFF,0x00,0x00,0xFF,0xFF,0x00,0x00,0xFF,0xFF,0x00,0x00,0xFF,0xFF,0x00,0x00 };
+#include "tables/coll_slope.h"
 
 // Pure shape-solidity verdict (the walk-vs-solid TAIL decision of C0/9AD3, byte-exact). `shapeFull` =
 // (byte0 & 0xFC) >> 2 (0..0x3F). `subX` = $1D66, `subY` = $1D68: the sub-tile position low bytes (0..255,
@@ -44,12 +40,12 @@ int CtCollisionShapeSolid(int shapeFull, int subX, int subY) {
       default:   return 0;                                          // 0x1C conveyor + >=0x1D -> walk
     }
   }
-  uint8_t sel = kSlopeBF5[shape], cnt = (uint8_t)(sel & 0x7F), a = (uint8_t)subX;   // SLOPE eval (9AF8-9B40)
+  uint8_t sel = ctCollSlopeBF5[shape], cnt = (uint8_t)(sel & 0x7F), a = (uint8_t)subX;   // SLOPE eval (9AF8-9B40)
   do { a >>= 1; } while (--cnt);
   if (sel & 0x80) a ^= 0xFF;
-  a = (uint8_t)(a + kSlopeC0B[shape]);
+  a = (uint8_t)(a + ctCollSlopeC0B[shape]);
   a = (uint8_t)(a - s56);
-  a ^= kSlopeC21[shape];
+  a ^= ctCollSlopeC21[shape];
   return (a & 0x80) ? 1 : 0;                                        // BMI -> solid
 }
 
