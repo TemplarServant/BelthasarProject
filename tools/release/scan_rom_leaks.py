@@ -39,7 +39,13 @@ KNOWN_OK = {                                     # (path, text on the line) that
                                                      "encoding (Crono, Marle, ...): names, not the game's content",
     ('tools/regress_checks.json', '"names: f5 loc=000 $2C23='): "a check's expected output: the default names in the game's text encoding",
 }
+KNOWN_BIN = {                                    # byte runs a binary shares with a corpus, and why they are not the game's
+    bytes.fromhex('ff73737bffffffe7ff6b7373ff5a5a63ff39424aff313942ff293139ff181010ff'):
+        "src/menu.c mDetailRight's eqIconDimPal, written in the engine's source, ends with the same 8 colours as the "
+        "pack's gen_opt0_pal0 (tools/gen/tables_proof.py KNOWN): found against a ct_assets.dat with the tables inside",
+}
 SKIP_DIRS = {'.git', '__pycache__'}
+IDENT = re.compile(rb'[A-Za-z0-9_]+\x00*')        # a C identifier (a #define's name the pack and the binary both hold)
 
 HEX_LIT = re.compile(r'0[xX]([0-9A-Fa-f]{1,4})\b')
 ASM_BYTE = re.compile(r'\$([0-9A-Fa-f]{2})\b')
@@ -148,8 +154,9 @@ def corpus_index(corpora, w, stride):
 
 def find_leak_indexed(data, idx, w):
     for i in range(0, len(data) - w + 1):
-        hit = idx.get(data[i:i + w])
-        if hit and content(data[i:i + w]):
+        win = data[i:i + w]
+        hit = idx.get(win)
+        if hit and content(win) and not IDENT.fullmatch(win) and not any(win in k for k in KNOWN_BIN):
             return hit[0], hit[1], i
     return None
 
