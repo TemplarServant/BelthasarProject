@@ -2,6 +2,10 @@
 #include "seq_pic.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 // The layer order of each mode, front to back (0-3 the BGs, 4 the OBJ, 5 none), with the priority each entry takes; 8 is mode
 // 1 with BG3's priority bit ($2105 bit 3), 9 mode 7 with EXTBG ($2133 bit 6). The bit depth of each BG by mode (5 = none).
@@ -97,11 +101,13 @@ typedef struct {
   int clip, prevent, addSub, direct, subtract, half, math[6];
   int m7sx, m7sy;
   uint8_t objPix[256], objPri[256];
+  uint8_t lum[32];                  // a 5-bit channel at the line's brightness, as 8 bits (shade)
 } Line;
 
 static void decode(const CtSeqPic* p, Line* L) {
   const uint8_t* r = p->r;
   L->blank = (r[0x00] & 0x80) != 0; L->bright = r[0x00] & 0x0F;
+  for (int v = 0; v < 32; v++) L->lum[v] = (uint8_t)(((v << 3) | (v >> 2)) * L->bright / 15);
   L->objSize = r[0x01] >> 5; L->objAdr1 = (r[0x01] & 7) << 13; L->objAdr2 = L->objAdr1 + (((r[0x01] & 0x18) + 8) << 9);
   L->objPrioRot = (r[0x03] & 0x80) != 0; L->oamIndex = L->objPrioRot ? (p->oamAdr & 0xFE) : 0;   // (the OAM address now)
   L->mode = r[0x05] & 7;
@@ -302,6 +308,32 @@ static int m7Pixel(const CtSeqPic* p, const Line* L, int x, int layer, int pri) 
 
 // The colour of one screen (main or sub) at x: the first opaque layer in the mode's order; returns its layer (0-3 a BG, 4 an
 // OBJ of palettes 4-7, 6 one of palettes 0-3, 5 the backdrop).
+// One BG layer's pixel at x of the line (y), at the priority cp: the stage's art, offset per tile, mode 7, the fetch.
+static int bgLayer(const CtSeqPic* p, const Line* L, int x, int y, int cl, int cp, int sub) {
+  int px = 0;
+  int lx = x, ly = y;
+  if (L->mosaicOn[cl] && L->mosaic > 1) { lx -= lx % L->mosaic; ly -= (ly - p->mosaicStart) % L->mosaic; }
+  int art = -1, artOn = g_seqPicArt && g_seqPicWideSide > 0 && L->mode < 5, optOut = 0, amx = 0, amy = 0;
+  if (artOn) {                                                       // (a stage's art past its edge, a mod)
+    int hs = p->hofs[cl] & 0x3FF;
+    if (hs >= 512) hs -= 1024;
+    amx = lx + hs; amy = (ly + p->vofs[cl]) & 0x3FF;
+    if ((x < 0 || x > 255) && L->mode == 2) optOut = optSide(p, L, cl, x, ly, &amx, &amy);
+    art = g_seqPicArt(p, cl, &amx, amy, cp);
+    lx = amx - hs;                                                  // (it may send the layer to another of its places)
+  }
+  if (art >= 0) px = art;
+  else if (optOut) px = bgPixel(p, L, amx & 0x3FF, amy & 0x3FF, cl, cp);
+  else if (L->mode == 7) px = m7Pixel(p, L, lx, cl, cp);
+  else {
+    lx += p->hofs[cl];
+    if (L->mode == 5 || L->mode == 6) { lx *= 2; lx += (sub || L->mosaicOn[cl]) ? 0 : 1; }
+    ly += p->vofs[cl];
+    if ((L->mode == 2 || L->mode == 4 || L->mode == 6) && !(artOn && (x < 0 || x > 255))) opt(p, L, cl, &lx, &ly);
+    px = bgPixel(p, L, lx & 0x3FF, ly & 0x3FF, cl, cp);
+  }
+  return px;
+}
 static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* rr, int* gg, int* bb) {
   int layer = 5, px = 0;
   for (int i = 0; i < kCount[L->actMode]; i++) {
@@ -312,27 +344,7 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
       on = 0;                                                          // (a scene layer: no copy of it in the sides)
     if (!on) continue;
     if (cl < 4) {
-      int lx = x, ly = y;
-      if (L->mosaicOn[cl] && L->mosaic > 1) { lx -= lx % L->mosaic; ly -= (ly - p->mosaicStart) % L->mosaic; }
-      int art = -1, artOn = g_seqPicArt && g_seqPicWideSide > 0 && L->mode < 5, optOut = 0, amx = 0, amy = 0;
-      if (artOn) {                                                       // (a stage's art past its edge, a mod)
-        int hs = p->hofs[cl] & 0x3FF;
-        if (hs >= 512) hs -= 1024;
-        amx = lx + hs; amy = (ly + p->vofs[cl]) & 0x3FF;
-        if ((x < 0 || x > 255) && L->mode == 2) optOut = optSide(p, L, cl, x, ly, &amx, &amy);
-        art = g_seqPicArt(p, cl, &amx, amy, cp);
-        lx = amx - hs;                                                  // (it may send the layer to another of its places)
-      }
-      if (art >= 0) px = art;
-      else if (optOut) px = bgPixel(p, L, amx & 0x3FF, amy & 0x3FF, cl, cp);
-      else if (L->mode == 7) px = m7Pixel(p, L, lx, cl, cp);
-      else {
-        lx += p->hofs[cl];
-        if (L->mode == 5 || L->mode == 6) { lx *= 2; lx += (sub || L->mosaicOn[cl]) ? 0 : 1; }
-        ly += p->vofs[cl];
-        if ((L->mode == 2 || L->mode == 4 || L->mode == 6) && !(artOn && (x < 0 || x > 255))) opt(p, L, cl, &lx, &ly);
-        px = bgPixel(p, L, lx & 0x3FF, ly & 0x3FF, cl, cp);
-      }
+      px = bgLayer(p, L, x, y, cl, cp, sub);
     } else {                                                           // (a widescreen column has no sprite: ppu.c's rule;
       int ox = x;                                                      //  the sub screen's texture repeated 256 along if set)
       if ((x < 0 || x > 255) && sub && !L->main[4] && g_seqPicWideSubTexture) ox = x & 255;
@@ -353,7 +365,10 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
 }
 
 static void shade(CtSeqPic* p, Line* L, int x, int line, uint8_t* o);
-static void drawLine(CtSeqPic* p, Line* L, int line, uint8_t* out) {
+// A line in two halves: what it takes from the registers as they stand (the layers' setup, the sprites' evaluation -- which
+// advances the OAM address and the overflow flags --, mode 7's start), in the line's order; then its pixels, which read only
+// the registers and the memories, so lines can be drawn at once (CtSeqPicFrame, the widescreen's sides).
+static void linePrep(CtSeqPic* p, Line* L, int line) {
   decode(p, L);
   if (p->r[0x33] & 0x0B) {                                             // pseudo-hires / interlace / overscan
     static int said = 0;
@@ -361,6 +376,13 @@ static void drawLine(CtSeqPic* p, Line* L, int line, uint8_t* out) {
   }
   sprites(p, L, line - 1);
   if (L->mode == 7) m7Start(p, L, line);
+}
+static void linePixels(CtSeqPic* p, Line* L, int line, uint8_t* out);
+static void drawLine(CtSeqPic* p, Line* L, int line, uint8_t* out) {
+  linePrep(p, L, line);
+  linePixels(p, L, line, out);
+}
+static void linePixels(CtSeqPic* p, Line* L, int line, uint8_t* out) {
   for (int x = 0; x < 256; x++) shade(p, L, x, line, out + x * 3);
   if (g_seqPicWideSide > 0 && g_seqPicWideOut && line >= 1 && line <= 224) {   // the widescreen's sides (a mod)
     uint8_t* row = g_seqPicWideOut + (size_t)(line - 1) * (256 + 2 * g_seqPicWideSide) * 3;
@@ -389,9 +411,7 @@ static void shade(CtSeqPic* p, Line* L, int x, int line, uint8_t* o) {
         r = r > 31 ? 31 : r < 0 ? 0 : r; g = g > 31 ? 31 : g < 0 ? 0 : g; b = b > 31 ? 31 : b < 0 ? 0 : b;
       }
     }
-    o[0] = (uint8_t)(((r << 3) | (r >> 2)) * L->bright / 15);
-    o[1] = (uint8_t)(((g << 3) | (g >> 2)) * L->bright / 15);
-    o[2] = (uint8_t)(((b << 3) | (b >> 2)) * L->bright / 15);
+    o[0] = L->lum[r]; o[1] = L->lum[g]; o[2] = L->lum[b];
   }
 }
 
@@ -455,7 +475,55 @@ void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t en, CtSeqPicRe
   p->rangeOver = p->timeOver = 0;                                      // (and the sprite flags cleared: ppu.c handleFrameStart)
   if (g_seqPicArt && g_seqPicWideSide > 0) { int z = 0; g_seqPicArt(p, -1, &z, 0, 0); } // (the scene adjustments' art: a new frame, a mod)
   if (rd) { hdmaInit(ch, en, w, rd, ctx); hdmaRun(p, ch, en, w, rd, ctx, 0); }
+  if (g_seqPicWideSide > 0 && g_seqPicWideOut && rgb) {
+    // THE WIDESCREEN'S PICTURE ON EVERY CORE (a mod: the vanilla picture is drawn as below, a line at a time). Twice the
+    // columns at 21:9 and a stage's art past its edge cost ~13 ms a frame drawn alone (entry 3, the owner: "very slow").
+    // The lines' setup and the HDMA walk run in the line's order and keep each line's registers; the pixels of all the
+    // lines are then drawn at once, each worker on its own copy of the picture (the memories copied once a frame, a
+    // line's registers before its pixels). HDMA writes registers only (no data port), so the copies hold the frame.
+    static Line Ls[225];
+    static struct { uint8_t r[0x40]; uint16_t hofs[4], vofs[4]; int16_t m7[8]; uint8_t fix[3], mosaicStart; } regs[225];
+    for (int line = 1; line <= 224; line++) {
+      linePrep(p, &Ls[line], line);
+      memcpy(regs[line].r, p->r, sizeof p->r); memcpy(regs[line].hofs, p->hofs, sizeof p->hofs);
+      memcpy(regs[line].vofs, p->vofs, sizeof p->vofs); memcpy(regs[line].m7, p->m7, sizeof p->m7);
+      memcpy(regs[line].fix, p->fix, sizeof p->fix); regs[line].mosaicStart = p->mosaicStart;
+      if (g_seqPicArt) { int z = line; g_seqPicArt(p, -2, &z, 0, 0); }  // (the art sees the line's registers in order)
+      if (rd) hdmaRun(p, ch, en, w, rd, ctx, line);
+    }
+    enum { kMaxWorkers = 64 };
+    static CtSeqPic* copies[kMaxWorkers];
+    int workers = 1;
+#ifdef _OPENMP
+    workers = omp_get_max_threads();
+    if (workers > kMaxWorkers) workers = kMaxWorkers;
+#endif
+    for (int k = 0; k < workers; k++) {
+      if (!copies[k] && !(copies[k] = (CtSeqPic*)malloc(sizeof(CtSeqPic)))) { workers = k; break; }
+      memcpy(copies[k], p, sizeof(CtSeqPic));
+    }
+    if (workers < 1) {                                                 // (no memory for a copy: the picture as it stands)
+      for (int line = 1; line <= 224; line++) linePixels(p, &Ls[line], line, rgb + (size_t)(line - 1) * 256 * 3);
+    } else {
+      int line;
+      #pragma omp parallel for schedule(dynamic, 4) num_threads(workers)
+      for (line = 1; line <= 224; line++) {
+        int k = 0;
+#ifdef _OPENMP
+        k = omp_get_thread_num();
+#endif
+        CtSeqPic* q = copies[k];
+        memcpy(q->r, regs[line].r, sizeof q->r); memcpy(q->hofs, regs[line].hofs, sizeof q->hofs);
+        memcpy(q->vofs, regs[line].vofs, sizeof q->vofs); memcpy(q->m7, regs[line].m7, sizeof q->m7);
+        memcpy(q->fix, regs[line].fix, sizeof q->fix); q->mosaicStart = regs[line].mosaicStart;
+        linePixels(q, &Ls[line], line, rgb + (size_t)(line - 1) * 256 * 3);
+      }
+    }
+    if (!(p->r[0x00] & 0x80)) { p->oamAdr = p->oamAdrWritten; p->oamInHigh = p->oamInHighWritten; p->oamSecond = 0; }   // the vblank
+    return;
+  }
   for (int line = 1; line <= 224; line++) {
+    if (g_seqPicArt && g_seqPicWideSide > 0) { int z = line; g_seqPicArt(p, -2, &z, 0, 0); }
     drawLine(p, &L, line, rgb ? rgb + (size_t)(line - 1) * 256 * 3 : scratch);
     if (rd) hdmaRun(p, ch, en, w, rd, ctx, line);
   }

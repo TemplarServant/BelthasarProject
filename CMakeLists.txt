@@ -181,7 +181,7 @@ if(CT_SDL_INC)
   endif()
   if(MSVC)
     # the host's pictures at the options (the title's mode 7 at the internal resolution): drawn on every core
-    set_source_files_properties(src/title_intro.c src/fieldnative.c src/field.c PROPERTIES COMPILE_OPTIONS "/openmp")
+    set_source_files_properties(src/title_intro.c src/fieldnative.c src/field.c src/seq_pic.c PROPERTIES COMPILE_OPTIONS "/openmp")
     # ...loaded at the first parallel region, after main() has set OMP_WAIT_POLICY (src/field.c, issue #6): the
     # runtime reads it when the DLL loads, before main() when it is a plain import
     target_link_options(Belthasar PRIVATE /DELAYLOAD:vcomp140.dll)

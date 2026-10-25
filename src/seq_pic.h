@@ -76,7 +76,8 @@ extern int g_seqPicWideSubTexture;
 // + its H scroll as a signed 10-bit value, my = y + its V scroll (0-1023), the mosaic applied -- and pri the pass's priority.
 // It returns a CGRAM index (0 = nothing there at that priority), 0x10000 | a BGR15 colour (art of its own colours, still under
 // the colour math and the brightness) or -1: the layer's own pixel, at *mx (which it may move to
-// another place of the layer). Called once with layer -1 at each frame's start.
+// another place of the layer). Called once with layer -1 at each frame's start, and with layer -2 at each line in the line's
+// order, the line's registers standing (*mx = the line) -- the lines' pixels may then be drawn at once, in any order.
 typedef int (*CtSeqPicArtFn)(const CtSeqPic* p, int layer, int* mx, int my, int pri);
 extern CtSeqPicArtFn g_seqPicArt;
 

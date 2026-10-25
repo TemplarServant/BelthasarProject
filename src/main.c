@@ -9,6 +9,7 @@
 //
 // Usage: ct[.exe] [rom-path] [--frames N] [--dump]
 #include <stdio.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rom_verify.h"
@@ -7505,7 +7506,10 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
                                      else if (getenv("RACEPICCMP_ART") || getenv("RACEPICCMP_STEAM")) {
                                        CtSceneArtEntry3Set(getenv("RACEPICCMP_STEAM") != NULL, getenv("RACEPICCMP_ART") != NULL);
                                        g_seqPicArt = CtSceneArtEntry3; } }
-    CtSeqStagePicFrame(&sp, w, rgb);
+    { static double benchT; static int benchN; clock_t t0 = clock();   // (RACEPICCMP_BENCH: the compositor's time a frame)
+      CtSeqStagePicFrame(&sp, w, rgb);
+      if (getenv("RACEPICCMP_BENCH")) { benchT += (double)(clock() - t0) / CLOCKS_PER_SEC; benchN++;
+        if (benchN % 100 == 0) printf("racepiccmp: bench %d frames, %.2f ms a frame\n", benchN, 1000.0 * benchT / benchN); } }
     g_seqPicWideSide = 0; g_seqPicWideOut = NULL; g_seqPicArt = NULL; g_seqPicWideSkip = 0; g_seqPicWideSkipModes = 0; g_seqPicWideSubTexture = 0;
     uint32_t fr = s->frames;
     while (!s->inVblank && fr == s->frames) rpcOp(s, k);

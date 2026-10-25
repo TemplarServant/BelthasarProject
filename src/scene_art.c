@@ -136,7 +136,11 @@ void CtSceneArtEntry3Set(int steam, int own) {
 
 int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
   const int mx = *pmx;
-  if (layer < 0) { entry3Build(p); return -1; }                      // (a new frame)
+  if (layer == -1) { entry3Build(p); return -1; }                    // (a new frame)
+  if (layer == -2) {                                                 // (a line, in order: the sky lines' V scroll)
+    if ((p->r[0x08] & 0xFC) == 0x60) g_e3SkyVofs = p->vofs[1];
+    return -1;
+  }
   // THE SKY: above line 70 BG2 is the field's map $6000 (HDMA channel 3 switches BG2SC $60 -> $6A there), one screen
   // wide: the red moon in its rows 0-3, columns 14-22, over tile $101's sky. Past the 256 that map would repeat the moon
   // on both sides; there the sky's rows take the moonless column 0 (the night's own tile).
@@ -147,7 +151,6 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
     if (hs >= 512) hs -= 1024;
     x = mx - hs;
     const int sky = (p->r[0x08] & 0xFC) == 0x60, line = (my - p->vofs[1]) & 0x3FF;
-    if (sky) g_e3SkyVofs = p->vofs[1];
     const int ys = (line + g_e3SkyVofs) & 255;
     if (g_e3Steam && (x < 0 || x >= 256)) {                          // (the Steam release's glow, bent, a mod)
       int h = horizonPx(x, ys);
