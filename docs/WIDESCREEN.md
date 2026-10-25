@@ -117,7 +117,11 @@ middle) and meets the art's at 74, so the band is one across the picture (the ow
 -- a dark one under its white line -- gives way to the band, which lies under it there too: drawn, it stood as a pixel's
 gap between the white and the band (the owner). On a sky line (above the switch) the band is added to the planet as it
 would lie there (the planet's map at the planet lines' V scroll), not to the night's black. Past the art's own 96
-columns (a 21:9 side is 133) the bend goes on along the edge column's slope. The stage cuts the sky's map at line 70
+columns (a 21:9 side is 133) the bend goes on along the planet's limb: the glow's lowest row, the middle's and the
+art's, lies on one curve (70 in the middle, 74 at the 256, 78 at 76 columns out), fitted each frame as q0 + q2 (x -
+127.5)^2; from ~80 columns out the art's cells cut the glow's lowest rows (they stay at row 79, a flat edge that made
+21:9 run on flat -- the owner, 2026-10-25), so past the art's last uncut column a column is that column lowered by the
+curve. 16:9 (71 columns a side) never reaches the cut and is unchanged. The stage cuts the sky's map at line 70
 (HDMA channel 3), the glow's last rows with it; the Steam release shows the field 06B, the glow whole, and its art is
 drawn against that -- so with the sides drawn the glow's rows go on below the switch line, the middle's too, one band as
 on Steam (the owner's reference, a Steam 16:9 capture, 2026-10-25). Below it the planet is the stage's own, mirrored

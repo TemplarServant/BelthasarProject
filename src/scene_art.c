@@ -3,6 +3,7 @@
 #include "scene_art.h"
 #include "widext.h"
 #include <string.h>
+#include <math.h>
 
 // A stamp: the scene's own pixels from (su, sy) of its layer, w x h, laid at (du, dy) of the art (mirrored when flip), its
 // see-through pixels leaving what is under them.
@@ -94,7 +95,11 @@ static int bandRow(int x, int y) {
 // be shown correctly", not dropped and not drawn flat. The stage shows the sky's map
 // above line 70 only (HDMA channel 3), so in the sides the bend is laid at the sky's own rows on every line -- the row of
 // line l is l + the sky lines' V scroll -- and the planet shows only below it. Past the art's own columns (a 21:9 side is
-// wider than its 96) the bend goes on: the edge column, lowered along its own slope (g_e3Slope, pixels a column).
+// wider than its 96) the bend goes on (the owner, 2026-10-25: at 21:9 "the atmosphere's curve does not go on"): the glow's
+// lowest row, the middle's and the art's, lies on one curve -- 70 in the middle, 74 at the 256, 78 at 76 columns out --
+// the planet's limb, fitted each frame as Q(x) = q0 + q2 (x - 127.5)^2; past the art's last column whose glow its cells do
+// not cut (from ~80 columns out its lowest rows fall past the cells' and stay at 79: a flat edge) a column is that column
+// lowered by Q(x) - Q(that column).
 static int g_e3SkyVofs;
 // The planet's map and V scroll (its lines', below the switch): under the band on a sky line the planet is read as it would
 // lie there, so the band's first row, where the middle's glow ends above line 70, is not the band over the night's black.
@@ -104,7 +109,8 @@ static int bg2Index(const CtSeqPic* p, unsigned sc, int mx, int my);
 static int planetUnder(const CtSeqPic* p, int sky, int mx, int line, int my) {
   return sky ? bg2Index(p, g_e3PlanetSc, mx, (line + g_e3PlanetVofs) & 0x3FF) : bg2Index(p, p->r[0x08], mx, my);
 }
-static float g_e3Slope[2];
+static int g_e3Clip[2];                                               // (the art's last uncut column, left / right)
+static double g_e3Q0 = 70, g_e3Q2;
 // The Steam art was painted for the field location 06B's rows of the palette; the stage draws the same colours from other
 // rows and fades those: its sky is 4:15 (the art's 2:10, the same 000010, on a row nothing fades). Such an index takes the
 // stage's row of the same colour, so the sides go grey with the middle in the flash and fade in with it.
@@ -130,10 +136,12 @@ static int skyMapPixel(const CtSeqPic* p, int col, int ys) {
 // the band, which lies under it there too: drawn, it stood as a pixel's gap between the white and the band (the owner,
 // 2026-10-25: "1 pixel extra between the horizon's upper and lower parts").
 static int horizonPx(int x, int ys, int* band) {
-  const int ew = (g_e3Steam->w - 16) / 2 * 16;
   int xe = x, dy = 0;
-  if (x < -ew) { xe = -ew; dy = (int)((-ew - x) * g_e3Slope[0] + 0.5f); }
-  else if (x >= 256 + ew) { xe = 255 + ew; dy = (int)((x - 255 - ew) * g_e3Slope[1] + 0.5f); }
+  if (x < g_e3Clip[0] || x > g_e3Clip[1]) {
+    xe = x < 0 ? g_e3Clip[0] : g_e3Clip[1];
+    const double u = x - 127.5, ue = xe - 127.5;
+    dy = (int)floor(g_e3Q2 * (u * u - ue * ue) + 0.5);
+  }
   int v = steamPx(0, xe, ys - dy, 0);
   *band = bandRow(xe, ys - dy);
   if (v > 0 && *band && steamPx(0, xe, ys - dy + 1, 0) <= 0) v = 0;   // (the glow's lowest row: the band's)
@@ -177,11 +185,22 @@ static void bandProfile(int side, int x) {
   g_e3ProfN[side] = n;
 }
 static void midGlowBottoms(const CtSeqPic* p) {
+  double n = 0, su = 0, sg = 0, suu = 0, sug = 0;                   // (the limb's fit: the glow's lowest row on u^2)
   for (int x = 0; x < 256; x++) {
     int b = -1;
     for (int y = 48; y < 80; y++) if (skyMapPixel(p, x, y)) b = y;
     g_e3MidGb[x] = (int8_t)b;
+    if (b >= 0) { double u = (x - 127.5) * (x - 127.5); n++; su += u; sg += b; suu += u * u; sug += u * b; }
   }
+  for (int x = g_e3Clip[0]; x < 0; x++) {
+    double u = (x - 127.5) * (x - 127.5), b = glowBottom(x); n++; su += u; sg += b; suu += u * u; sug += u * b;
+  }
+  for (int x = 256; x <= g_e3Clip[1]; x++) {
+    double u = (x - 127.5) * (x - 127.5), b = glowBottom(x); n++; su += u; sg += b; suu += u * u; sug += u * b;
+  }
+  const double det = n * suu - su * su;
+  if (det > 0) { g_e3Q2 = (n * sug - su * sg) / det; g_e3Q0 = (sg - g_e3Q2 * su) / n; }
+  if (g_e3Q2 < 0) g_e3Q2 = 0;
 }
 
 void CtSceneArtEntry3Set(int steam, int own) {
@@ -189,10 +208,9 @@ void CtSceneArtEntry3Set(int steam, int own) {
   g_e3Own = own;
   if (g_e3Steam) {
     const int ew = (g_e3Steam->w - 16) / 2 * 16;
-    g_e3Slope[0] = (glowBottom(-ew) - glowBottom(-ew + 16)) / 16.0f;
-    g_e3Slope[1] = (glowBottom(255 + ew) - glowBottom(255 + ew - 16)) / 16.0f;
-    if (g_e3Slope[0] < 0) g_e3Slope[0] = 0;
-    if (g_e3Slope[1] < 0) g_e3Slope[1] = 0;
+    g_e3Clip[0] = -1; g_e3Clip[1] = 256;                             // (the columns whose glow ends inside the cells)
+    while (g_e3Clip[0] > -ew && glowBottom(g_e3Clip[0] - 1) < 79) g_e3Clip[0]--;
+    while (g_e3Clip[1] < 255 + ew && glowBottom(g_e3Clip[1] + 1) < 79) g_e3Clip[1]++;
     bandProfile(0, -1); bandProfile(1, 256);
   }
 }
