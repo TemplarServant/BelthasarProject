@@ -1,7 +1,7 @@
 // android.c - see android.h. Built only for Android (CMakeLists.txt's ANDROID branch).
 #include "android.h"
 #include "assets.h"
-#include "rom_verify.h"
+#include "datapack.h"
 #include "SDL.h"
 #include "SDL_system.h"
 #include <stdint.h>
@@ -10,7 +10,6 @@
 #include <string.h>
 #include <unistd.h>
 
-static const char* const ROM_NAME = "Chrono_Trigger_USA_SNES.sfc";
 static const char* const ASSETS_NAME = "ct_assets.dat";
 
 static int readable(const char* dir, const char* name) {
@@ -22,20 +21,6 @@ static int readable(const char* dir, const char* name) {
   return 1;
 }
 
-static int romOk(const char* dir) {                // CtRomVerify on the file, as the engine will read it
-  char p[1024];
-  snprintf(p, sizeof p, "%s/%s", dir, ROM_NAME);
-  FILE* f = fopen(p, "rb");
-  if (!f) return 0;
-  long cap = CT_ROM_SIZE + 0x200 + 1;
-  uint8_t* buf = (uint8_t*)malloc((size_t)cap);
-  long n = buf ? (long)fread(buf, 1, (size_t)cap, f) : 0;
-  fclose(f);
-  int ok = buf && n < cap && CtRomVerify(buf, &n, p) != NULL;
-  free(buf);
-  return ok;
-}
-
 static int assetsOk(const char* dir) {             // CtAssetsOpen: the header, the directory, every blob in the file
   char p[1024];
   snprintf(p, sizeof p, "%s/%s", dir, ASSETS_NAME);
@@ -43,6 +28,14 @@ static int assetsOk(const char* dir) {             // CtAssetsOpen: the header, 
   if (!CtAssetsOpen(&a, p)) return 0;
   CtAssetsClose(&a);
   return 1;
+}
+
+static int tablesThere(const char* dir) {          // inside ct_assets.dat (today's setup), or an earlier one's ct_tables.dat
+  char p[1024];
+  snprintf(p, sizeof p, "%s/%s", dir, ASSETS_NAME);
+  if (CtDataPackFileHasTables(p)) return 1;
+  snprintf(p, sizeof p, "%s/ct_tables.dat", dir);
+  return CtDataPackFileHasTables(p);
 }
 
 static void defaultEnv(const char* key, const char* dir, const char* name) {
@@ -60,17 +53,15 @@ int CtAndroidConfigure(int* outArgc, char*** outArgv) {
   if (!data || !*data) data = SDL_AndroidGetExternalStoragePath();
   if (!data || !*data) data = SDL_AndroidGetInternalStoragePath();
   // The setup activity keeps only files that pass these same checks; a file changed behind its back (adb push) is
-  // refused here with a message instead of reaching the engine (CtRomImage would exit, a bad container be read).
-  // A ROM-free ct_assets.dat (docs/ROM.md) is all the engine reads; an older container still needs the dump beside it.
+  // refused here with a message instead of reaching the engine. The app is a DATA-FREE build (android/CMakeLists.cmake):
+  // a ROM-free ct_assets.dat with the tables inside (docs/ROM.md) is all it reads -- it never takes a ROM.
   char ap[1024];
   snprintf(ap, sizeof ap, "%s/%s", data ? data : ".", ASSETS_NAME);
-  int romFree = data && readable(data, ASSETS_NAME) && CtAssetsFileRomFree(ap);
   const char* bad = !data ? "no storage"
                   : !readable(data, ASSETS_NAME) ? "missing"
                   : !assetsOk(data) ? "ct_assets.dat is damaged or not one"
-                  : romFree ? NULL
-                  : !readable(data, ROM_NAME) ? "an older ct_assets.dat: it needs the ROM beside it -- make a new one"
-                  : !romOk(data) ? "the ROM is not the Chrono Trigger (USA) dump" : NULL;
+                  : !CtAssetsFileRomFree(ap) ? "an older ct_assets.dat that needs the ROM -- make a new one"
+                  : !tablesThere(data) ? "it has no tables -- make a new one with today's Belthasar" : NULL;
   if (bad) {
     char msg[1200];
     snprintf(msg, sizeof msg, "The game needs %s in\n%s\n(%s).\n\nOpen the app again to choose it "
@@ -78,10 +69,9 @@ int CtAndroidConfigure(int* outArgc, char*** outArgv) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Belthasar", msg, NULL);
     return 1;
   }
-  if (readable(data, ROM_NAME)) defaultEnv("CT_ROM", data, ROM_NAME);   // (a ROM-free container needs none)
   defaultEnv("CT_SRAM", data, "ct_sram.srm");
   defaultEnv("CT_SETTINGS", data, "ct_settings.ini");
-  if (chdir(data) != 0) return 1;                  // the relative paths the engine still uses (the ROM, the log)
+  if (chdir(data) != 0) return 1;                  // the relative paths the engine still uses (ct_wide.dat, the log)
   { char log[1024];
     snprintf(log, sizeof log, "%s/latest.log", data);
     if (freopen(log, "w", stdout)) { dup2(fileno(stdout), fileno(stderr)); setvbuf(stdout, NULL, _IOLBF, 0); } }

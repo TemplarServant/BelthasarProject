@@ -10,7 +10,7 @@ if(NOT EXISTS ${SDL2_SRC_DIR}/include/SDL.h)
 endif()
 foreach(gen src/data/title_intro.h)
   if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${gen})
-    message(FATAL_ERROR "${gen} is missing: run tools/setup.py with your ROM first (docs/ROM.md)")
+    message(FATAL_ERROR "${gen} is missing: python tools/gen/shapes.py install (or tools/setup.py with your ROM)")
   endif()
 endforeach()
 
@@ -19,8 +19,12 @@ set(SDL_STATIC OFF CACHE BOOL "" FORCE)
 set(SDL_TEST OFF CACHE BOOL "" FORCE)
 add_subdirectory(${SDL2_SRC_DIR} ${CMAKE_CURRENT_BINARY_DIR}/SDL2)
 
-add_library(main SHARED ${CT_FIELD_SRC} src/android.c)
+# DATA-FREE, always (docs/ANDROID.md): no generated table is compiled in -- src/datapack.c fills them at startup from
+# the tables inside the player's ct_assets.dat -- so an APK built from the shapes (tools/gen/shapes.py) holds no byte
+# of the game and is the one the release ships.
+add_library(main SHARED ${CT_FIELD_SRC} src/android.c src/datapack.c src/tables/tables_storage.c)
 target_include_directories(main PRIVATE src ${SDL2_SRC_DIR}/include snes)
+target_compile_definitions(main PRIVATE CT_DATAFREE)
 target_compile_options(main PRIVATE -O2 -Wno-everything)
 target_compile_definitions(main PRIVATE CT_XLAT_NO_GWARP)   # the gate warp is native (src/seq_gwarp.c)
 target_compile_definitions(main PRIVATE CT_AUDIO_SPC_DEFAULT=1)   # the sound machine in C, as the desktop's (no ROM code runs)

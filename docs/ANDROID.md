@@ -5,20 +5,22 @@ touch controls are drawn over the picture, and a Bluetooth or USB controller wor
 
 ## What the APK does and does not contain
 
-- **No game data.** The ROM and `ct_assets.dat` are never packed into the APK. On first launch the app asks for
-  `ct_assets.dat` (the system file picker) and copies it into its data folder, `Android/data/org.belthasar.ct/files/`.
-  A ROM-free `ct_assets.dat` -- what the current setup makes -- is all the game reads: the app needs no ROM at all
-  ([ROM.md](ROM.md#the-rom-free-runtime)). An older container still needs the ROM beside it, so the ROM button stays for
-  that case. Every later
-  launch goes straight to the title screen. `ct_assets.dat` is made on a computer: the desktop Belthasar's ROM screen
-  leaves it in its data folder ([ROM.md](ROM.md#the-players-start-the-rom-screen)), or `tools/setup.py` at the root.
-- **Each file is checked before it is kept** (`SetupActivity`): the ROM's size and SHA-1 (as `CtRomVerify`), the
-  container's header and directory (as `CtAssetsOpen`), a save's 8192 bytes. A file that fails is dropped with the
-  reason, the one already there stays, and the game only starts on files that pass; `src/android.c` checks them again
-  before the engine reads them (a file replaced by hand) and says so instead of closing.
-- **It is built from your ROM.** Like the desktop executable, the native library compiles the sources that
-  `tools/setup.py` generates from your dump (`src/data/*.h`). An APK you build is for your own devices
-  only. Do not distribute it.
+- **No game data.** The APK is built DATA-FREE (`android/CMakeLists.cmake`: `CT_DATAFREE`, always), like the desktop
+  release's `Belthasar`: no table made from the ROM is compiled in, so an APK built from the shapes
+  (`tools/gen/shapes.py install`) holds no byte of the game, and that APK is the one a release ships
+  ([RELEASE.md](RELEASE.md)). On first launch the app asks for the game's data and copies it into its data folder,
+  `Android/data/org.belthasar.ct/files/`. Every later launch goes straight to the title screen.
+- **The data is made on a computer, from your own dump.** The desktop Belthasar's ROM screen
+  ([ROM.md](ROM.md#the-players-start-the-rom-screen)) leaves in its data folder `ct_assets.dat` -- the game's data with
+  the tables inside (`tools/gen/pack_tables.py into`) -- and, when it found a Steam copy, `ct_wide.dat` (the Steam
+  margins, [WIDESCREEN.md](WIDESCREEN.md)). Those two and the battery save `ct_sram.srm` are all the app takes; it never
+  takes the ROM, which only the setup reads. The app and the desktop setup should be the same release: a container
+  whose tables are laid out for another version is refused with a message.
+- **Each file is known by its content and checked before it is kept** (`SetupActivity`): a ROM-free `ct_assets.dat`
+  (the header and directory, as `CtAssetsOpen`; the tables inside, or an earlier setup's `ct_tables.dat` beside it), a
+  `ct_wide.dat` (`CTWD`, version 3), a save's 8192 bytes. A file that fails is dropped with the reason, the one already
+  there stays, and the game only starts on files that pass; `src/android.c` checks them again before the engine reads
+  them (a file replaced by hand) and says so instead of closing.
 
 ## Requirements (Windows)
 
@@ -30,7 +32,7 @@ touch controls are drawn over the picture, and a Bluetooth or USB controller wor
 | A JDK 17+ | Android Studio's bundled one: `C:\Program Files\Android\Android Studio\jbr` |
 | SDL2's **source** (2.32.10) | `powershell -ExecutionPolicy Bypass -File tools\get_sdl2_src.ps1` -> `third_party\SDL2-src` |
 | Dear ImGui | `tools\get_imgui.ps1` (it is already there if the desktop build has the F1 overlay) |
-| The generated sources | `python tools/setup.py --rom <your ROM>` (docs/ROM.md), as for the desktop build |
+| `src/data/*.h` | a tree `tools/setup.py` set up (docs/ROM.md), or, with no ROM, their shapes: `python tools/gen/shapes.py install` (what a release builds from) |
 
 The Gradle wrapper downloads Gradle 8.14.3 and the Android Gradle Plugin 8.13 on first use, unless they are already
 in `%USERPROFILE%\.gradle`.
@@ -44,7 +46,10 @@ set JAVA_HOME=C:\Program Files\Android\Android Studio\jbr
 gradlew.bat assembleDebug
 ```
 
-The APK is `android\app\build\outputs\apk\debug\app-debug.apk`. It holds `arm64-v8a` (phones) and `x86_64` (the
+The APK is `android\app\build\outputs\apk\debug\app-debug.apk`. A release's APK comes from
+`python tools/release/package.py --android` (`assembleRelease`, signed with the release key: `android/keystore.properties`
+or the `ANDROID_KEYSTORE_*` variables, android/app/build.gradle) -- in practice from the release workflow
+([RELEASE.md](RELEASE.md#the-release-workflow)). It holds `arm64-v8a` (phones) and `x86_64` (the
 emulator); `abiFilters` in `android/app/build.gradle` picks them. The native code is compiled with `-O2` even in the
 debug build, so it runs at full speed.
 
@@ -60,31 +65,32 @@ Install on a phone with USB debugging on:
 
 - `android/app/build.gradle` runs the NDK's CMake on the **root** `CMakeLists.txt`. Its `if(ANDROID)` branch includes
   `android/CMakeLists.cmake`, which builds `libSDL2.so` from `third_party/SDL2-src` and `libmain.so` from the same
-  source list as the desktop `Belthasar` (`CT_FIELD_SRC`), plus `src/android.c`. The desktop targets are untouched.
+  source list as the desktop `Belthasar` (`CT_FIELD_SRC`), plus `src/android.c` and the data-free loader
+  (`src/datapack.c`, `src/tables/tables_storage.c`). The desktop targets are untouched.
 - SDL's Java glue (`org.libsdl.app`) is compiled straight from `third_party/SDL2-src/android-project`.
   `GameActivity` is SDL's activity. `SetupActivity` is the first-run file picker.
 - `src/android.c` (`CtAndroidConfigure`, called first thing in `main`) makes the data folder the working folder. It
-  points `CT_ROM`, `CT_SRAM` and `CT_SETTINGS` there, sends stdout/stderr to `latest.log` in it, and starts the game
+  points `CT_SRAM` and `CT_SETTINGS` there, sends stdout/stderr to `latest.log` in it, and starts the game
   with `--assets ct_assets.dat --boot` (the title screen).
 - The picture goes through SDL_Renderer on OpenGL ES. The OpenGL 3.3 and Vulkan backends of the desktop are not
   offered on Android.
 
 ## Getting the files onto the device
 
-The first-run screen has three buttons: `ct_assets.dat` (the one `tools/setup.py` wrote next to the ROM on your
-computer), the ROM (`.sfc`, 4 MB; a 512-byte copier header is accepted -- only for an older `ct_assets.dat`), and,
-optionally, a battery save (`ct_sram.srm`, 8 KB, from the desktop game). Copy them to the phone first (USB, cloud
-drive, ...), then pick them.
+Copy `ct_assets.dat` from the desktop Belthasar's data folder (`%APPDATA%\BelthasarProject\Belthasar\` on Windows,
+`~/.local/share/BelthasarProject/Belthasar/` on Linux) to the phone -- USB, a cloud drive, ... -- with `ct_wide.dat`
+and `ct_sram.srm` if you want them, then press *Choose the game's files* and pick them, all at once or one by one.
 
 Or push them by hand:
 
 ```bat
 adb push ct_assets.dat /sdcard/Android/data/org.belthasar.ct/files/
+adb push ct_wide.dat /sdcard/Android/data/org.belthasar.ct/files/
 adb push ct_sram.srm /sdcard/Android/data/org.belthasar.ct/files/
 ```
 
-To pick other files later, clear the app's storage (Settings > Apps > Chrono Trigger (C) > Storage). Saves live in
-the same folder, so back up `ct_sram.srm` before you clear it.
+To pick other files later, clear the app's storage (Settings > Apps > Belthasar > Storage). Saves live in the same
+folder, so back up `ct_sram.srm` before you clear it.
 
 ## Controls
 

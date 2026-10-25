@@ -24,8 +24,10 @@ android {
         applicationId 'org.belthasar.ct'
         minSdk 21
         targetSdk 34
-        versionCode 1
-        versionName '0.1'
+        // tools/release/package.py --android passes the release's: the commit count (it only grows, so each release
+        // installs over the one before) and the package's version
+        versionCode((project.findProperty('ctVersionCode') ?: '1').toString().toInteger())
+        versionName((project.findProperty('ctVersionName') ?: 'dev').toString())
         externalNativeBuild {
             cmake {
                 arguments '-DANDROID_STL=c++_static'

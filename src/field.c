@@ -10510,7 +10510,16 @@ int main(int argc, char** argv) {
   // A DATA-FREE build holds the generated tables as zeroed storage: fill them from the pack made from the player's
   // ROM before anything reads one (src/datapack.h, docs/ROM.md). A pack that does not match this build is refused.
   { char err[512];
-    if (!CtDataPackLoadForArgs(argc, argv, err, sizeof err)) { printf("FAIL: tables: %s\n", err); return 2; } }
+    if (!CtDataPackLoadForArgs(argc, argv, err, sizeof err)) {
+      printf("FAIL: tables: %s\n", err);
+#ifdef __ANDROID__
+      char msg[700];                             // (no console on a phone: say it, as android.c does for a missing file)
+      snprintf(msg, sizeof msg, "The game's tables could not be read: %s.\n\nMake ct_assets.dat again with the "
+               "Belthasar of this version (docs/ANDROID.md).", err);
+      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Belthasar", msg, NULL);
+#endif
+      return 2;
+    } }
 #endif
   // A PLAYER: one frame of SPC per displayed frame, so a translated stage's holds do not run the APU (snes.c, the
   // switch's note: the race's holds left the demo's sound 1.8 s behind). CT_XLAT_HOLDAPU=1 keeps the oracle's way.
