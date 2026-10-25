@@ -1,0 +1,182 @@
+# The release (docs/RELEASE.md, "The release workflow"). Two steps, both started by hand:
+#   mode=build    the three packages from the shapes -- Windows, Linux, and the Android APK signed with the repository's
+#                 release key (the ANDROID_KEYSTORE_* / ANDROID_KEY_* secrets) -- as this run's artifacts. A runner has
+#                 no ROM, so they are built with --no-scan: someone with the ROM downloads them and runs the leak scan
+#                 (and the package checks) before anything is published.
+#   mode=publish  the artifacts of the build run `run_id`, byte for byte, as a GitHub release `version` at that run's
+#                 commit (a prerelease), with `notes` as its text.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: build the packages, or publish a build run's
+        type: choice
+        options: [build, publish]
+        default: build
+      version:
+        description: the release's version and tag, e.g. v0.5.0-preview
+        required: true
+      run_id:
+        description: (publish) the build run whose artifacts to publish
+        required: false
+      title:
+        description: (publish) the release's title
+        required: false
+      notes:
+        description: (publish) the release's text (Markdown)
+        required: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  desktop:
+    name: Package (${{ matrix.os }})
+    if: inputs.mode == 'build'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    env:
+      VULKAN_HEADERS: v1.3.296           # tools/get_vulkan_headers.ps1's version
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Toolchain and SDL2 (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libsdl2-dev ninja-build
+      - name: SDL2 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File tools\get_sdl2.ps1
+      - name: Dear ImGui
+        run: python tools/get_imgui.py
+      - name: Vulkan headers (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File tools\get_vulkan_headers.ps1
+      - name: Vulkan headers (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          git clone -q --depth 1 --branch "$VULKAN_HEADERS" https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/vkh"
+          mkdir -p third_party/vulkan
+          cp -R "$RUNNER_TEMP/vkh/include" third_party/vulkan/
+          cp "$RUNNER_TEMP/vkh/LICENSE.md" third_party/vulkan/ 2>/dev/null || true
+      - name: The package (no ROM here, so no leak scan yet)
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          extra=""
+          if [ "$RUNNER_OS" = Linux ]; then extra="--no-python"; fi
+          python tools/release/package.py --out "$RUNNER_TEMP/release" --version "$VERSION" --no-scan $extra
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/release/*.zip
+            ${{ runner.temp }}/release/*.tar.gz
+          if-no-files-found: error
+
+  android:
+    name: Package (Android)
+    if: inputs.mode == 'build'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SDL2_SRC: '2.32.10'                # tools/get_sdl2_src.ps1's version
+      NDK: '28.2.13676358'               # android/app/build.gradle's ndkVersion
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0                 # the APK's versionCode is the commit count
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: The Android SDK's pieces (the NDK, CMake 3.22.1, platform 36)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK" "cmake;3.22.1" "platforms;android-36" > /dev/null
+      - name: SDL2's source
+        run: |
+          mkdir "$RUNNER_TEMP/sdl2src"
+          curl -sSL -o "$RUNNER_TEMP/sdl2src/SDL2.zip" "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_SRC/SDL2-$SDL2_SRC.zip"
+          unzip -q "$RUNNER_TEMP/sdl2src/SDL2.zip" -d "$RUNNER_TEMP/sdl2src"
+          test -f "$RUNNER_TEMP/sdl2src/SDL2-$SDL2_SRC/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java"
+          mkdir -p third_party
+          mv "$RUNNER_TEMP/sdl2src/SDL2-$SDL2_SRC" third_party/SDL2-src
+      - name: Dear ImGui
+        run: python tools/get_imgui.py
+      - name: The release key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_B64" || { echo "::error::the ANDROID_KEYSTORE_BASE64 secret is not set"; exit 1; }
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/belthasar-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/belthasar-release.jks" >> "$GITHUB_ENV"
+      - name: The APK (no ROM here, so no leak scan yet)
+        env:
+          VERSION: ${{ inputs.version }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: python tools/release/package.py --android --out "$RUNNER_TEMP/release" --version "$VERSION" --no-scan
+      - name: The APK is signed with the release key
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$apksigner" verify --print-certs "$RUNNER_TEMP"/release/*.apk | tee "$RUNNER_TEMP/release/apk-signer.txt"
+          rm -f "$RUNNER_TEMP/belthasar-release.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-Android
+          path: |
+            ${{ runner.temp }}/release/*.apk
+            ${{ runner.temp }}/release/apk-signer.txt
+          if-no-files-found: error
+
+  publish:
+    name: Publish ${{ inputs.version }}
+    if: inputs.mode == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write                    # the tag and the release
+      actions: read                      # the build run's artifacts
+    steps:
+      - name: The build run's artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          pattern: package-*
+          merge-multiple: true
+          path: dist
+      - name: The release, at the build run's commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          VERSION: ${{ inputs.version }}
+          TITLE: ${{ inputs.title }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq .head_sha)
+          test -n "$sha"
+          rm -f dist/apk-signer.txt
+          ls -l dist
+          (cd dist && sha256sum *)
+          printf '%s\n' "$NOTES" > notes.md
+          gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --target "$sha" --prerelease \
+            --title "${TITLE:-$VERSION}" --notes-file notes.md

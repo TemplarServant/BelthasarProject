@@ -2,6 +2,7 @@
 r"""Build a player's release of Belthasar from the public tree: no byte of the game inside, checked.
 
     python tools/release/package.py [--out build/release] [--rom ROM] [--python DIR | --no-python] [--keep]
+                                    [--version V] [--no-scan] [--android]
 
 What a player downloads (docs/RELEASE.md) is a folder -- zipped on Windows, a .tar.gz on Linux:
 
@@ -14,7 +15,7 @@ What a player downloads (docs/RELEASE.md) is a folder -- zipped on Windows, a .t
         LICENSE, CREDITS.md, README.txt
 
 The player opens Belthasar, chooses their own dump on its setup screen (src/launcher_ui.cpp), and the setup makes
-ct_assets.dat and ct_tables.dat in their data folder; from then on the game reads only those (docs/ROM.md, the ROM-free
+ct_assets.dat (the tables inside) in their data folder; from then on the game reads only that (docs/ROM.md, the ROM-free
 runtime).
 
 The steps, each checked:
@@ -26,7 +27,16 @@ The steps, each checked:
   4. the leak scan: tools/release/scan_rom_leaks.py --binaries over the release folder against the ROM (and, when
      present, ct_assets.dat and the developer's src/data tables), so no executable, library or file carries the game;
   5. the archive.
-The version is `git describe --tags --always --dirty`.
+The version is `git describe --tags --always --dirty`, or --version's.
+
+--android packages the Android app instead (docs/ANDROID.md): steps 1-2 as above (third_party/SDL2-src too), then the
+APK built by Gradle in that tree (assembleRelease: always data-free, android/CMakeLists.cmake; signed when the release
+key is configured, android/app/build.gradle), copied to <out>/Belthasar-<version>-android.apk and scanned unpacked
+(libSDL2.so listed as an upstream runtime).
+
+--no-scan skips step 4's scan (a CI runner has no ROM): the package is not checked until someone with the ROM runs
+`python tools/release/scan_rom_leaks.py <the unpacked package> --rom ROM --binaries --corpus ct_assets.dat ...` on it
+(docs/RELEASE.md, "The release workflow").
 """
 import argparse
 import os
@@ -40,7 +50,7 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 WIN = os.name == 'nt'
 EXE = '.exe' if WIN else ''
-THIRD = ('SDL2', 'imgui', 'vulkan')                       # what CMakeLists.txt takes from third_party/
+THIRD = ('SDL2', 'SDL2-src', 'imgui', 'vulkan')           # what CMakeLists.txt takes from third_party/
 # A bundled Python: the standard library the setup needs, without what it never imports.
 PY_SKIP = {'test', 'tests', 'idlelib', 'tkinter', 'turtledemo', 'ensurepip', 'site-packages', '__pycache__',
            'lib2to3', 'pydoc_data', 'unittest', 'venv', 'distutils', 'msilib', 'curses', 'dbm', 'sqlite3', 'xmlrpc'}
@@ -90,6 +100,58 @@ def copy_python(src, dst):
             shutil.copy2(os.path.join(root, f), os.path.join(out, f))
 
 
+def scan(a, dist, third):
+    """Step 4's leak scan of the folder `dist` against the ROM and ct_assets.dat; `third` = --third-party args."""
+    if a.no_scan:
+        say('   the leak scan: SKIPPED (--no-scan) -- this package is not checked yet')
+        return
+    corpora = []                                         # the game's bytes: the ROM and what it decompresses to
+    for c in (os.path.join(ROOT, 'ct_assets.dat'),):
+        if os.path.exists(c):
+            corpora += ['--corpus', c]
+    say('   the leak scan (the ROM%s)' % (' + ' + ', '.join(os.path.basename(c) for c in corpora[1::2]) if corpora else ''))
+    p = run([sys.executable, os.path.join(ROOT, 'tools', 'release', 'scan_rom_leaks.py'), dist, '--rom', a.rom,
+             '--binaries'] + corpora + third, ROOT, quiet=True)
+    sys.stdout.write('   ' + p.stdout.strip().splitlines()[-1] + '\n')
+
+
+def git_count():
+    p = subprocess.run(['git', 'rev-list', '--count', 'HEAD'], cwd=ROOT, capture_output=True, text=True)
+    return int(p.stdout.strip() or '1')
+
+
+def android(a, ver, out, tree):
+    """--android: the APK from the shapes tree (steps 3-4 for Android)."""
+    say('3/4 the APK (Gradle assembleRelease: data-free, android/CMakeLists.cmake)')
+    gw = os.path.join(tree, 'android', 'gradlew.bat' if WIN else 'gradlew')
+    if not WIN:
+        os.chmod(gw, 0o755)
+    run([gw, '--no-daemon', '-q', 'assembleRelease', '-PctVersionCode=%d' % git_count(), '-PctVersionName=%s' % ver],
+        os.path.join(tree, 'android'), quiet=True)
+    apks = os.path.join(tree, 'android', 'app', 'build', 'outputs', 'apk', 'release')
+    signed = os.path.join(apks, 'app-release.apk')
+    src = signed if os.path.exists(signed) else os.path.join(apks, 'app-release-unsigned.apk')
+    if not os.path.exists(src):
+        raise SystemExit('package: FAILED: no APK in %s' % apks)
+    apk = os.path.join(out, 'Belthasar-%s-android.apk' % ver)
+    shutil.copy2(src, apk)
+    say('4/4 %s (%s)' % (apk, 'signed' if src == signed else 'UNSIGNED: no release key configured'))
+    unpacked = os.path.join(out, 'apk-unpacked')
+    if os.path.exists(unpacked):
+        shutil.rmtree(unpacked)
+    with zipfile.ZipFile(apk) as z:
+        z.extractall(unpacked)
+    third = []
+    for abi in os.listdir(os.path.join(unpacked, 'lib')):
+        third += ['--third-party', 'lib/%s/libSDL2.so' % abi]
+    scan(a, unpacked, third)
+    if not a.keep:
+        shutil.rmtree(unpacked, ignore_errors=True)
+        shutil.rmtree(tree, ignore_errors=True)
+    say('done: %s (%.1f MB)' % (apk, os.path.getsize(apk) / 2**20))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--out', default=os.path.join(ROOT, 'build', 'release'))
@@ -97,9 +159,12 @@ def main():
     ap.add_argument('--python', help='the Python installation to bundle (default: the one running this, on Windows)')
     ap.add_argument('--no-python', action='store_true', help='bundle none: the player\'s python3 runs the setup')
     ap.add_argument('--keep', action='store_true', help='keep <out>/tree (the build tree) afterwards')
+    ap.add_argument('--version', help='the package\'s version (default: git describe)')
+    ap.add_argument('--no-scan', action='store_true', help='skip the leak scan (no ROM here; scan the package later)')
+    ap.add_argument('--android', action='store_true', help='the Android app (an APK) instead of the desktop package')
     a = ap.parse_args()
 
-    ver = version()
+    ver = (a.version or version()).replace('/', '-')
     arch = {'amd64': 'x64', 'x86_64': 'x64', 'arm64': 'arm64', 'aarch64': 'arm64'}.get(platform.machine().lower(), platform.machine())
     osname = 'windows' if WIN else 'macos' if sys.platform == 'darwin' else 'linux'
     name = 'Belthasar-%s-%s-%s' % (ver, osname, arch)
@@ -118,6 +183,8 @@ def main():
             shutil.copytree(s, os.path.join(tree, 'third_party', t))
     say('2/5 the shapes in place of the generated files')
     run([sys.executable, 'tools/gen/shapes.py', 'install'], tree, quiet=True)
+    if a.android:
+        return android(a, ver, out, tree)
 
     say('3/5 the build: the oracle from the shapes, Belthasar data-free')
     env = dict(os.environ, CT_DATAFREE='1')
@@ -152,14 +219,7 @@ def main():
             third += ['--third-party', f, '--third-party', 'setup/' + f]
     if os.path.isdir(os.path.join(dist, 'setup', 'python')):
         third += ['--third-party', 'setup/python']
-    corpora = []                                         # the game's bytes: the ROM and what it decompresses to
-    for c in (os.path.join(ROOT, 'ct_assets.dat'),):
-        if os.path.exists(c):
-            corpora += ['--corpus', c]
-    say('   the leak scan (the ROM%s)' % (' + ' + ', '.join(os.path.basename(c) for c in corpora[1::2]) if corpora else ''))
-    p = run([sys.executable, os.path.join(ROOT, 'tools', 'release', 'scan_rom_leaks.py'), dist, '--rom', a.rom,
-             '--binaries'] + corpora + third, ROOT, quiet=True)
-    sys.stdout.write('   ' + p.stdout.strip().splitlines()[-1] + '\n')
+    scan(a, dist, third)
 
     say('5/5 the archive')
     if WIN:
@@ -198,6 +258,12 @@ Your data folder (saves, options, the made data) is shown on the setup screen:
   Linux:   ~/.local/share/BelthasarProject/Belthasar/
 
 F1 opens the options. The source code and the documentation: https://github.com/TemplarServant/BelthasarProject
+
+Android
+-------
+The Android app (Belthasar-<version>-android.apk, the same release) does not make the game's data: copy ct_assets.dat
+from your data folder -- and ct_wide.dat (the Steam margins) and ct_sram.srm (your save) if you want them -- to the
+phone, open the app and choose them.
 """
 
 if __name__ == '__main__':

@@ -1,9 +1,11 @@
 # Release packages
 
-A player's release of Belthasar is a folder -- zipped on Windows, a `.tar.gz` on Linux -- with **no byte of the
-game** inside. The player opens Belthasar, chooses their own dump of Chrono Trigger (USA) on its setup screen, and the
-game's data is made from it on their computer, once. From then on Belthasar reads only that data; the ROM is not needed
-to play ([ROM.md](ROM.md#the-rom-free-runtime)).
+A player's release of Belthasar is a folder -- zipped on Windows, a `.tar.gz` on Linux -- and an Android APK, with
+**no byte of the game** inside. The player opens Belthasar, chooses their own dump of Chrono Trigger (USA) on its setup screen, and the
+game's data is made from it on their computer, once: one file, `ct_assets.dat` (the tables inside), plus `ct_wide.dat`
+when a Steam copy is installed. From then on Belthasar reads only that data; the ROM is not needed to play
+([ROM.md](ROM.md#the-rom-free-runtime)). The APK takes the same files, copied from the computer
+([ANDROID.md](ANDROID.md)): a phone does not run the setup.
 
 ## Building one
 
@@ -27,6 +29,29 @@ executables need the glibc of the machine that built them or newer, so build on 
 for (Ubuntu 24.04: glibc 2.38 for Belthasar). The player installs `libsdl2-2.0-0` and `python3`; `zenity` or `kdialog`
 gives the setup screen its Browse... (dropping the file on the window works without them).
 
+`--android` packages the APK instead: the same steps 1-2 (with `third_party/SDL2-src`), then Gradle's `assembleRelease`
+in that tree (always data-free, `android/CMakeLists.cmake`), signed with the release key when it is configured
+(`android/keystore.properties`, or the `ANDROID_KEYSTORE_PATH` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` /
+`ANDROID_KEY_PASSWORD` variables), and the scan over the unpacked APK (`lib/*/libSDL2.so` listed as upstream). Its
+`versionCode` is the commit count, so each release installs over the one before.
+
+## The release workflow
+
+`.github/workflows/release.yml`, started by hand (Actions > Release > Run workflow), builds and publishes a release in
+two runs, so nothing is published that was not scanned against the ROM, and the ROM never comes near GitHub:
+
+1. **`mode=build`, `version=vX.Y.Z-...`**: the Windows and Linux packages and the APK, from the shapes, with
+   `--no-scan`, as the run's artifacts. The APK is signed with the repository's secrets `ANDROID_KEYSTORE_BASE64` (the
+   `.jks`, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`; `apksigner verify` prints
+   the certificate (`apk-signer.txt` in the artifact). Keep a copy of the `.jks` outside GitHub: a secret cannot be
+   read back, and an APK signed with another key does not install over the old one.
+2. **The checks, on a machine with the ROM**: download the artifacts, unpack each package and run
+   `python tools/release/scan_rom_leaks.py <dir> --rom <ROM> --binaries --corpus ct_assets.dat` (with the
+   `--third-party` names step 4 lists: `SDL2.dll`, `setup/SDL2.dll`, `setup/python`; for the APK `lib/<abi>/libSDL2.so`)
+   -- it must say `clean`; run each desktop package's setup against the dump, and its game with no ROM present.
+3. **`mode=publish`, `version`, `run_id` (the build run), `title`, `notes`**: those artifacts, byte for byte, as a
+   prerelease tagged `version` at the build run's commit.
+
 ## What is inside
 
     Belthasar-<version>-windows-x64/
@@ -36,6 +61,8 @@ gives the setup screen its Browse... (dropping the file on the window works with
         setup/kit/               the public tree: tools/setup.py and everything it runs
         setup/python/            a Python runtime: the packager's own, pruned of what the setup never imports (PSF licence)
         LICENSE, CREDITS.md, README.txt
+
+    Belthasar-<version>-android.apk  the app (data-free; arm64-v8a and x86_64), signed with the release key
 
 On Linux the Python is the player's `python3` unless `--python DIR` names one to bundle. macOS keeps its own start
 (src/macos_paths.m, a folder chooser) and is not packaged by this script yet.
