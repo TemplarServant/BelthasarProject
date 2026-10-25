@@ -47139,6 +47139,46 @@
       ]
     },
     {
+      "name": "field-frames-between-take-the-engines-rates",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/motion_engine_rate.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "tools/motion_engine_rate.py"
+      ],
+      "expect": [
+        "motion-rate: camera engine: 1934 steps, mean |err| 0.001 px, >0.1px 0.4%, >0.25px 0.1%",
+        "motion-rate: camera fit: 1934 steps, mean |err| 0.028 px, >0.1px 6.4%, >0.25px 3.8%",
+        "motion-rate: objects engine: 9189 steps, mean |err| 0.036 px, >0.1px 10.0%, >0.25px 4.2%",
+        "motion-rate: objects fit: 9189 steps, mean |err| 0.303 px, >0.1px 71.0%, >0.25px 43.9%"
+      ],
+      "pin": [
+        "^motion-rate: "
+      ],
+      "timeout_s": 900,
+      "note_pass": "the frames between (a mod) move the field's camera and objects at the engine's own rate: the camera's remainder ($1D3B/$1D3C) and each object's 12.4 words ($1800/$1880,X) -- over the attract the shown step is off the engine's by more than 0.1 px on 0.4% of the camera's steps and 10% of the objects' (the trailing rule re-phasing a motion's first frames), against 6.4% and 71% for the fit over the history alone",
+      "notes": "2026-10-24 (the owner asked whether the 60+ fps could read the engine's sub-pixel instead of fitting the history). Measured on the cartridge first (ct.exe --monitor over the attract): the camera's 4.4 remainder C0/92CA carries explains every sub-pixel pan (01B 0.625 then 0.25 px a frame, 0E6 0.5, 1B0 0.25), and 93% of the objects' steps are not whole pixels (15/16, 23/16, 31/16 a frame). CtMotEngine (motion.c) takes the ROM's whole camera and its $7E page for the field's frame; CtMotFit uses the step of the sixteenths as the rate wherever the drawn place stepped as their whole part did, the history's fit otherwise (the layers, the overworld, the fight, a picture held behind its camera). tools/motion_engine_rate.py runs the attract twice with CT_MOTFITTRACE=2 -- the default and CT_MOTENGINE=0 -- and grades both runs' continuous steps against the engine run's words. Vanilla is untouched: the continuous places only move the in-between pictures.",
+      "mutations": [
+        {
+          "file": "src/motion.c",
+          "find": "    qc[c] = fitOne(6 + c, g_fit.cam[c], g_fit.n, cam[c], ek ? &er : NULL);",
+          "replace": "    qc[c] = fitOne(6 + c, g_fit.cam[c], g_fit.n, cam[c], NULL);   /* MUT: the camera's rate fitted, not the engine's */",
+          "why": "without the engine's rate the camera's continuous place is the history's fit again, so the 'camera engine' line grades like the 'camera fit' one (6.4% of the steps off by more than 0.1 px)"
+        },
+        {
+          "file": "src/motion.c",
+          "find": "      m->qsx[i] = fitQ(&s->qx, &s->okx, NULL, s->x, s->n, m->sprX[i], 1, kx ? &rx : NULL);",
+          "replace": "      m->qsx[i] = fitQ(&s->qx, &s->okx, NULL, s->x, s->n, m->sprX[i], 1, NULL);   /* MUT: X fitted, not the word's */",
+          "why": "an object's X rate fitted from its drawn history instead of its 12.4 word: the 'objects engine' line's error rises toward the fit's"
+        }
+      ]
+    },
+    {
       "name": "field-native-frames-between-equal-the-composed-frame",
       "tier": "full",
       "argv": [

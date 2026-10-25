@@ -61,6 +61,13 @@ typedef struct CtMotFrame {
   int nspr;
   int sprKey[CT_MOT_MAXSPR];              // the object (its index; the lead is its object too)
   int sprX[CT_MOT_MAXSPR], sprY[CT_MOT_MAXSPR];   // its map position this frame
+  // THE ENGINE'S OWN FRACTIONS (the field; CtMotEngine): the camera's whole place as the ROM keeps it and the same place
+  // in sixteenths -- the whole one * 16 + the remainder C0/92CA carries in $1D3B/$1D3C -- and each object's 12.4 words
+  // ($1800/$1880,X), so CtMotFit takes a motion's rate from the engine where the drawn steps agree with it, and fits
+  // the history only where they do not or there is none. camE 0 / a word -1: none.
+  int camE, camEW[2], camEX[2];
+  const uint8_t* w7;                      // the field's $7E page while the frame composes (CtMotSprite reads it), or NULL
+  int sprWx[CT_MOT_MAXSPR], sprWy[CT_MOT_MAXSPR];
   int bright;                             // 0..15, the brightness applied after the picture (the canvas fill takes it)
   const uint8_t* canvas; int cW, cH;      // the map canvas (RGB, wrapped) the uncovered pixels come from
   int canvasX0, canvasY0;                 // ...the canvas pixel under the screen's (0,0) (the field's: the camera)
@@ -75,6 +82,9 @@ typedef struct CtMotFrame {
 } CtMotFrame;
 
 void CtMotBegin(CtMotFrame* m, int w);    // a new frame `w` pixels wide: every pixel screen-fixed, no objects
+// The field's frame: the engine's camera (camWX/camWY, the ROM's whole place) and its $7E page, read for the camera's
+// remainder now and for each object's words as CtMotSprite records it (motion.h CtMotFrame.camE).
+void CtMotEngine(CtMotFrame* m, const uint8_t* w7, int camWX, int camWY);
 // The continuous offsets of the self-scrolling layers for `cur` (the frame just composed), from a fit over the last frames
 // of the same location (a history kept here). A layer whose recent offsets are not one steady slope keeps its own.
 void CtMotFit(CtMotFrame* cur);

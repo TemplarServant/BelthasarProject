@@ -9,12 +9,26 @@ void CtMotBegin(CtMotFrame* m, int w) {
   m->nspx = 0; m->native = NULL; m->owNative = NULL; m->nativeFx = NULL;
   m->valid = 0; m->w = w < 1 ? 1 : w > CT_MOT_W ? CT_MOT_W : w; m->mx0 = -(1 << 30); m->mx1 = 1 << 30; m->nspr = 0; m->canvas = NULL; m->cW = m->cH = 0; m->bright = 15;
   m->camX = m->camY = m->bg3X = m->bg3Y = 0; m->o2x = m->o2y = m->o3x = m->o3y = 0; m->canvasX0 = m->canvasY0 = 0;
+  m->camE = 0; m->w7 = NULL;
   memset(m->own, CT_MOT_FIXED, sizeof m->own); memset(m->world, 0, sizeof m->world);
+}
+
+void CtMotEngine(CtMotFrame* m, const uint8_t* w7, int camWX, int camWY) {
+  static int on = -1; if (on < 0) on = !(getenv("CT_MOTENGINE") && !strcmp(getenv("CT_MOTENGINE"), "0"));   // (measurement:
+  if (!m || !w7 || !on) return;                                                                            //  the fit alone)
+  m->w7 = w7; m->camE = 1;
+  m->camEW[0] = camWX; m->camEX[0] = camWX * 16 + (int8_t)w7[0x1D3B];   // (the remainder: a signed nibble, C0/92CA)
+  m->camEW[1] = camWY; m->camEX[1] = camWY * 16 + (int8_t)w7[0x1D3C];
 }
 
 int CtMotSprite(CtMotFrame* m, int key, int x, int y) {
   if (!m || m->nspr >= CT_MOT_MAXSPR) return CT_MOT_FIXED;
   m->sprKey[m->nspr] = key; m->sprX[m->nspr] = x; m->sprY[m->nspr] = y;
+  m->sprWx[m->nspr] = m->sprWy[m->nspr] = -1;
+  if (m->w7 && key >= 0 && key < 0x40) {           // (a field object: its 12.4 words)
+    m->sprWx[m->nspr] = m->w7[0x1800 + key * 2] | (m->w7[0x1801 + key * 2] << 8);
+    m->sprWy[m->nspr] = m->w7[0x1880 + key * 2] | (m->w7[0x1881 + key * 2] << 8);
+  }
   return CT_MOT_SPR + m->nspr++;
 }
 
@@ -23,7 +37,9 @@ int g_ctMotNoFrac;                                 // (CT_MOTCHECK: the owners a
 #define FIT_N 32                                   // (frames: a run of 2 px with a 1 every 16 -- the Magus hall -- fits whole)
 // (channels 0-5 the layers' offsets, 6-7 the camera's place)
 // (qo: BG2's / BG3's offsets fitted on their own, where the place on the map is no steady line -- below)
-static struct { int scene, n; double v[6][FIT_N]; double cam[2][FIT_N]; double q[8]; int qOk[8], steady[8]; double qo[4]; int qoOk[4]; } g_fit;
+// (eOk / eW / eX: the last frame's engine camera, CtMotFrame.camE)
+static struct { int scene, n; double v[6][FIT_N]; double cam[2][FIT_N]; double q[8]; int qOk[8], steady[8]; double qo[4]; int qoOk[4];
+                int eOk, eW[2], eX[2]; } g_fit;
 // The slope over the history (least squares); 0 = not one steady sub-pixel slope. whole: a slope of whole pixels a frame
 // is none either (the camera and the objects: a step every frame needs no fit, and its phase would put them off).
 static double fitSlope(const double* v, int n, int whole) {
@@ -48,13 +64,17 @@ static double fitSlope(const double* v, int n, int whole) {
 // on at the last few frames' mean rate from where it was, and where the rate is whole pixels a frame or none it closes on
 // the drawn place an eighth of a pixel a frame. On the drawn place and stepping whole pixels (a pan starting from still,
 // a walk of 1 or 2 px a frame) it stays on it. *steady (may be NULL): a steady sub-pixel slope was found.
-static double fitQ(double* qs, int* have, int* steady, const double* v, int n, double cur, int whole) {
-  double b = fitSlope(v, n, whole), rate = b;
+// known (may be NULL): the engine's own rate this frame -- the camera's remainder, an object's 12.4 words -- which
+// stands for the fit's slope: it is there from the motion's first frame and follows a change of speed, a stop or a turn
+// on the frame it happens, where the fit needs two steps and a steady history.
+static double fitQ(double* qs, int* have, int* steady, const double* v, int n, double cur, int whole, const double* known) {
+  double b = known ? (whole && fabs(*known - floor(*known + 0.5)) < 0.02 ? 0 : *known) : fitSlope(v, n, whole), rate = b;
   if (steady) *steady = b != 0;
   const double step = n >= 2 ? v[n - 1] - v[n - 2] : 0;
   if (!*have) { *qs = cur; *have = 1; return cur; }
   if (b == 0 && fabs(*qs - v[n - 2]) < 1e-9 && step != 0 && step == floor(step)) { *qs = cur; return cur; }
-  if (b == 0) {
+  if (b == 0 && known) rate = *known;
+  else if (b == 0) {
     rate = fitSlope(v, n, 0);                      // (a whole-pixel slope, steady)
     if (rate == 0 && n >= 2) { int m = n < 5 ? n : 5; rate = (v[n - 1] - v[n - m]) / (m - 1); }
   }
@@ -67,11 +87,22 @@ static double fitQ(double* qs, int* have, int* steady, const double* v, int n, d
   *qs = q;
   return q;
 }
-static double fitOne(int c, const double* v, int n, double cur) {
-  return fitQ(&g_fit.q[c], &g_fit.qOk[c], &g_fit.steady[c], v, n, cur, c >= 6);
+static double fitOne(int c, const double* v, int n, double cur, const double* known) {
+  return fitQ(&g_fit.q[c], &g_fit.qOk[c], &g_fit.steady[c], v, n, cur, c >= 6, known);
+}
+// The engine's rate of an object's 12.4 word (w, the last frame's pw), when the drawn place stepped as its whole part
+// did (dv): a drawn place the engine's does not explain -- a picture held a frame behind its camera, a
+// re-seed -- has none, and the fit goes on.
+static int engineRate16(int w, int pw, double dv, double* rate) {
+  if (w < 0 || pw < 0) return 0;
+  const int d = (int16_t)(w - pw);                 // (a 16-bit word: its step wraps)
+  if (d > 32 * 16 || d < -32 * 16) return 0;
+  if (dv != ((pw + d) >> 4) - (pw >> 4)) return 0; // (>> 4 floors: the whole part below 0 too)
+  *rate = d / 16.0;
+  return 1;
 }
 // Each object's history, by its key (the frames it was seen in a row).
-typedef struct { int scene, last, n; double x[FIT_N], y[FIT_N]; double qx, qy; int okx, oky; double fx, fy; } FitSpr;
+typedef struct { int scene, last, n; double x[FIT_N], y[FIT_N]; double qx, qy; int okx, oky; double fx, fy; int wx, wy; } FitSpr;   // (wx/wy: its last 12.4 words)
 #define FIT_KEYS 2048                              // (the overworld's keys: block * 16 + piece)
 static FitSpr g_fitSpr[FIT_KEYS];
 static int g_fitFrame;
@@ -79,8 +110,8 @@ void CtMotFit(CtMotFrame* m) {
   m->qFrac = 0; g_fitFrame++;
   m->qcx = m->camX; m->qcy = m->camY;
   for (int i = 0; i < m->nspr; i++) { m->qsx[i] = m->sprX[i]; m->qsy[i] = m->sprY[i]; }
-  if (!m->valid) { g_fit.n = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); memset(g_fit.qoOk, 0, sizeof g_fit.qoOk); return; }
-  if (g_fit.scene != m->scene) { g_fit.scene = m->scene; g_fit.n = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); memset(g_fit.qoOk, 0, sizeof g_fit.qoOk); }
+  if (!m->valid) { g_fit.n = 0; g_fit.eOk = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); memset(g_fit.qoOk, 0, sizeof g_fit.qoOk); return; }
+  if (g_fit.scene != m->scene) { g_fit.scene = m->scene; g_fit.n = 0; g_fit.eOk = 0; memset(g_fit.qOk, 0, sizeof g_fit.qOk); memset(g_fit.steady, 0, sizeof g_fit.steady); memset(g_fit.qoOk, 0, sizeof g_fit.qoOk); }
   double now[6] = { m->o2x, m->o2y, m->o3x, m->o3y, m->bg3X, m->bg3Y }, cam[2] = { m->camX, m->camY };
   if (g_fit.n == FIT_N) { for (int c = 0; c < 6; c++) memmove(g_fit.v[c], g_fit.v[c] + 1, (FIT_N - 1) * sizeof(double));
                           for (int c = 0; c < 2; c++) memmove(g_fit.cam[c], g_fit.cam[c] + 1, (FIT_N - 1) * sizeof(double)); g_fit.n--; }
@@ -98,7 +129,16 @@ void CtMotFit(CtMotFrame* m) {
   }
   // the camera first: the layers' and the objects' rules below read it
   double qc[2];
-  for (int c = 0; c < 2; c++) qc[c] = fitOne(6 + c, g_fit.cam[c], g_fit.n, cam[c]);
+  for (int c = 0; c < 2; c++) {
+    // (the remainder is cut toward zero, so the whole place is the ROM's own word, not the sixteenths' floor)
+    const int d = m->camE ? m->camEX[c] - g_fit.eX[c] : 0;
+    double er = d / 16.0;
+    const int ek = m->camE && g_fit.eOk && g_fit.n > 1 && d <= 32 * 16 && d >= -32 * 16 &&
+                   cam[c] - g_fit.cam[c][g_fit.n - 2] == m->camEW[c] - g_fit.eW[c];
+    qc[c] = fitOne(6 + c, g_fit.cam[c], g_fit.n, cam[c], ek ? &er : NULL);
+  }
+  g_fit.eOk = m->camE;
+  if (m->camE) for (int c = 0; c < 2; c++) { g_fit.eW[c] = m->camEW[c]; g_fit.eX[c] = m->camEX[c]; }
   double q[6];
   for (int c = 0; c < 6; c++) {
     // BG2's / BG3's offset over the canvas that only undoes the camera (camera + offset the same all along the history: a
@@ -122,7 +162,7 @@ void CtMotFit(CtMotFrame* m) {
       }
       if (tied && i == g_fit.n) { g_fit.qOk[c] = 0; q[c] = now[c] + (cam[c & 1] - qc[c & 1]); continue; }
     }
-    if (c >= 4) { q[c] = fitOne(c, g_fit.v[c], g_fit.n, now[c]); continue; }
+    if (c >= 4) { q[c] = fitOne(c, g_fit.v[c], g_fit.n, now[c], NULL); continue; }
     // (an offset the same all along the history -- a layer that scrolls with the camera -- keeps it exactly: its place is
     //  the camera's continuous one plus the offset, never a fraction of its own off the camera's -- a seam across the
     //  overworld's mountain, tiles out of step with the map when a pan turned; the owner, 2026-10-24)
@@ -140,19 +180,20 @@ void CtMotFit(CtMotFrame* m) {
     // either side, so their sum stays inside a pixel of the drawn one (else, the same way round, the sum's own fit holds).
     if (fitSlope(wv, g_fit.n, 0) == 0 && fitSlope(g_fit.v[c], g_fit.n, 0) != 0) {
       if (!g_fit.qoOk[c]) { g_fit.qo[c] = g_fit.qOk[c] ? g_fit.q[c] - qc[c & 1] : now[c]; g_fit.qoOk[c] = 1; }
-      const double qo = fitQ(&g_fit.qo[c], &g_fit.qoOk[c], NULL, g_fit.v[c], g_fit.n, now[c], 0);
+      const double qo = fitQ(&g_fit.qo[c], &g_fit.qoOk[c], NULL, g_fit.v[c], g_fit.n, now[c], 0, NULL);
       if (fabs(qo + qc[c & 1] - (now[c] + cam[c & 1])) < 0.999) {
         q[c] = qo; g_fit.q[c] = qo + qc[c & 1]; g_fit.qOk[c] = 1; g_fit.steady[c] = 1; continue; }
     }
     g_fit.qoOk[c] = 0;
-    q[c] = fitOne(c, wv, g_fit.n, now[c] + cam[c & 1]) - qc[c & 1];
+    q[c] = fitOne(c, wv, g_fit.n, now[c] + cam[c & 1], NULL) - qc[c & 1];
   }
   m->q2x = q[0]; m->q2y = q[1]; m->q3x = q[2]; m->q3y = q[3]; m->qbx = q[4]; m->qby = q[5];
   m->qcx = qc[0]; m->qcy = qc[1];
   { static int tr = -1; if (tr < 0) tr = getenv("CT_MOTFITTRACE") ? 1 : 0;   // (probe) the fit's places, a line a frame
-    if (tr) printf("motfit: g%d n%d cam %d,%d q %.3f,%.3f st %d%d | bg3 %d,%d q3 %.3f,%.3f st %d%d\n", g_fitFrame, g_fit.n,
+    if (tr) printf("motfit: g%d n%d cam %d,%d q %.3f,%.3f st %d%d | bg3 %d,%d q3 %.3f,%.3f st %d%d | e %d %d,%d\n", g_fitFrame, g_fit.n,
                    m->camX, m->camY, qc[0], qc[1], g_fit.steady[6], g_fit.steady[7], m->o3x + m->camX, m->o3y + m->camY,
-                   q[2] + qc[0], q[3] + qc[1], g_fit.steady[2], g_fit.steady[3]); }
+                   q[2] + qc[0], q[3] + qc[1], g_fit.steady[2], g_fit.steady[3], m->camE, m->camE ? m->camEX[0] : 0,
+                   m->camE ? m->camEX[1] : 0); }
   // the objects: each its own history; one that has moved with the camera all along (the lead a scroll follows) is placed
   // by the camera's continuous place, so the two never part by a fraction
   for (int i = 0; i < m->nspr; i++) {
@@ -162,7 +203,7 @@ void CtMotFit(CtMotFrame* m) {
     if (s->last == g_fitFrame) {                   // (a key twice in one frame -- an object of several sprites, the
       m->qsx[i] = m->sprX[i] + s->fx; m->qsy[i] = m->sprY[i] + s->fy; continue; }   //  Blackbird's three: the first one's)
     if (s->scene != m->scene || s->last != g_fitFrame - 1 || s->n == 0 ||
-        fabs(m->sprX[i] - s->x[s->n - 1]) > 32 || fabs(m->sprY[i] - s->y[s->n - 1]) > 32) { s->n = 0; s->okx = s->oky = 0; }
+        fabs(m->sprX[i] - s->x[s->n - 1]) > 32 || fabs(m->sprY[i] - s->y[s->n - 1]) > 32) { s->n = 0; s->okx = s->oky = 0; s->wx = s->wy = -1; }
     s->scene = m->scene; s->last = g_fitFrame;
     if (s->n == FIT_N) { memmove(s->x, s->x + 1, (FIT_N - 1) * sizeof(double)); memmove(s->y, s->y + 1, (FIT_N - 1) * sizeof(double)); s->n--; }
     s->x[s->n] = m->sprX[i]; s->y[s->n] = m->sprY[i]; s->n++;
@@ -176,7 +217,17 @@ void CtMotFit(CtMotFrame* m) {
     withCam = withCam && camMoved;
     if (withCam) { m->qsx[i] = m->sprX[i] + (qc[0] - cam[0]); m->qsy[i] = m->sprY[i] + (qc[1] - cam[1]);
                    s->qx = m->qsx[i]; s->qy = m->qsy[i]; s->okx = s->oky = 1; }   // (its own goes on from there)
-    else { m->qsx[i] = fitQ(&s->qx, &s->okx, NULL, s->x, s->n, m->sprX[i], 1); m->qsy[i] = fitQ(&s->qy, &s->oky, NULL, s->y, s->n, m->sprY[i], 1); }
+    else {
+      double rx, ry;
+      const int kx = s->n > 1 && engineRate16(m->sprWx[i], s->wx, s->x[s->n - 1] - s->x[s->n - 2], &rx);
+      const int ky = s->n > 1 && engineRate16(m->sprWy[i], s->wy, s->y[s->n - 1] - s->y[s->n - 2], &ry);
+      m->qsx[i] = fitQ(&s->qx, &s->okx, NULL, s->x, s->n, m->sprX[i], 1, kx ? &rx : NULL);
+      m->qsy[i] = fitQ(&s->qy, &s->oky, NULL, s->y, s->n, m->sprY[i], 1, ky ? &ry : NULL);
+    }
+    s->wx = m->sprWx[i]; s->wy = m->sprWy[i];
+    { static int tr2 = -1; if (tr2 < 0) tr2 = getenv("CT_MOTFITTRACE") && atoi(getenv("CT_MOTFITTRACE")) >= 2;   // (probe)
+      if (tr2) printf("motobj: g%d k%d at %d,%d q %.4f,%.4f w %d,%d\n", g_fitFrame, key, m->sprX[i], m->sprY[i],
+                      m->qsx[i], m->qsy[i], m->sprWx[i], m->sprWy[i]); }
     s->fx = m->qsx[i] - m->sprX[i]; s->fy = m->qsy[i] - m->sprY[i];
   }
   m->qFrac = 1;
