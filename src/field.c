@@ -10491,6 +10491,13 @@ static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
 }
 
 int main(int argc, char** argv) {
+#ifdef _OPENMP
+  // THE HOST'S PICTURE THREADS SLEEP BETWEEN PICTURES (issue #6). The pictures at the options (frames between, the
+  // internal resolution) are drawn with `omp parallel for`; MSVC's runtime keeps its workers spinning after each region,
+  // and at one region per present they never stop: every core busy (18 of 20 measured, 0.4.0, frames between on a
+  // 170 Hz screen) for ~1 core of real work. PASSIVE parks them on the next region instead. The player's own setting wins.
+  if (!getenv("OMP_WAIT_POLICY")) _putenv("OMP_WAIT_POLICY=PASSIVE");
+#endif
 #ifdef __APPLE__
   int macStatus = CtMacConfigure(&argc, &argv);
   if (macStatus) return macStatus == 2 ? 0 : macStatus;
