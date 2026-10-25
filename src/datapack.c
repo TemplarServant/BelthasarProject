@@ -72,11 +72,12 @@ int CtDataPackLoad(const char* path, char* err, size_t errLen) {
   const uint8_t* pool = entry(&p, T_POOL, 0, &pl);
   const uint8_t* defs = entry(&p, T_DEFINES, 0, &dl);
   if (!h || hl < 32 || memcmp(h, "CTTB", 4)) { free(d); return fail(err, errLen, "'%s' holds no tables", path, 0); }
-  if (rd32(h + 4) != PACK_VERSION) { free(d); return fail(err, errLen, "%spack format %llu, this build reads 1", "", rd32(h + 4)); }
-  if (rd32(h + 8) != sizeof(void*)) { free(d); return fail(err, errLen, "%spack made for %llu-byte pointers", "", rd32(h + 8)); }
+  const uint32_t hVer = rd32(h + 4), hPtr = rd32(h + 8), hTables = rd32(h + 16);   // (read before d is freed)
+  if (hVer != PACK_VERSION) { free(d); return fail(err, errLen, "%spack format %llu, this build reads 1", "", hVer); }
+  if (hPtr != sizeof(void*)) { free(d); return fail(err, errLen, "%spack made for %llu-byte pointers", "", hPtr); }
   if (rd32(h + 12) != 1) { free(d); return fail(err, errLen, "%spack is not little-endian", "", 0); }
-  if (rd32(h + 16) != (uint32_t)ctTableDescCount)
-    { free(d); return fail(err, errLen, "%spack holds %llu tables, this build has others", "", rd32(h + 16)); }
+  if (hTables != (uint32_t)ctTableDescCount)
+    { free(d); return fail(err, errLen, "%spack holds %llu tables, this build has others", "", hTables); }
   if (rd64(h + 24) != ctTableSetHash)
     { free(d); return fail(err, errLen, "%sthe pack's tables are laid out for another version of the generators", "", 0); }
   if (!pool || (pl && pool[pl - 1] != 0)) { free(d); return fail(err, errLen, "%sbad string pool", "", 0); }
