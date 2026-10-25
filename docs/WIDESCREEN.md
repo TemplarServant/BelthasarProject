@@ -58,8 +58,10 @@ that is live and stands only in the extra columns is drawn by the widescreen its
 animation stepped by the port's model of the ROM's ticker on a play state of its own, nothing written to the game
 (`sidePlay` in `src/field.c`; an unlatched object whose sprite cannot reach the view is the sides' -- Crono in the robot
 fight). On the world map, an object killed by its own visibility test (C2/78A1: the view plus 16 px -- the new-game
-pan's gulls) is drawn on past the 256 columns at its last step and with its last poses until it leaves the wide picture
-(`owGhosts`); the game's state is not changed.
+pan's gulls) is drawn on past the 256 columns until it leaves the wide picture: when its script stood on op 0x31 (move +
+animate, the gulls' whole flight) a copy of its block takes that op's steps -- its 16.16 velocity and its anim sub-VM,
+the flaps and the 30-frame glide at their own dwell (`owGhosts`, world.c `CtWorldGhostStep`); the game's state is not
+changed.
 
 ## The special sequences and fights
 

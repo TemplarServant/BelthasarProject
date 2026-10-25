@@ -180,6 +180,9 @@ typedef struct CtWorldPiece { int16_t x, y; uint16_t word; uint8_t size; int key
 #define CT_OW_WIDE_MAX 256
 const int* CtWorldOamKeys(void);                                    // [128], the last build's (the OBJECT: block)
 const int16_t* CtWorldOamObjPos(void);                              // [128][2], that object's place on screen
+int CtWorldOamBlock(int blk, uint8_t* out);                         // (the widescreen's ghosts) block blk as the last build drew
+                                                                    //   it (64 bytes into out); 1 = its script stood on op 0x31
+int CtWorldGhostStep(uint8_t* B, int key, uint16_t scrollH, uint16_t scrollV, CtWorldPiece* out, int max, int* ox, int* oy);
 int CtWorldOamWide(const CtWorldPiece** out);                       // the last build's pieces, their count   // the $22/$28 BG2 scroll the port keeps in CtWorldCam
 int  CtWorldObjShown(int blockAddr);        // != 0 iff that block enqueued a frame THIS frame
 // THE LEAD BLOCK'S OWN ANIMATION -- C2/3404's C2/1CDA installs (stand every idle frame, walk on a press, the

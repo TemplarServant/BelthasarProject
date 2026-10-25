@@ -867,6 +867,17 @@ static int16_t g_owOamPos[128][2];
 const int16_t* CtWorldOamObjPos(void) { return &g_owOamPos[0][0]; }
 static CtWorldPiece g_owWide[CT_OW_WIDE_MAX];
 static int g_owWideN;
+// THE WIDESCREEN'S GHOSTS (a mod, the picture only: field.c owGhosts). Each block the build drew, as it stood when drawn, and
+// whether its script stood on op 0x31 (move + animate): a gull's whole flight is `31 01 / 34 A1 78 / 23 00 00 FB` -- a step
+// of its 16.16 velocity and of its anim sub-VM a frame, until C2/78A1 finds it off the view and the script ends it.
+static uint8_t g_owWideBlk[64][OWOBJ_STRIDE];
+static uint8_t g_owWideFlies[64];
+static const uint8_t* obScript(const uint8_t* ram, uint8_t bank, uint16_t pc, uint8_t* buf);
+int CtWorldOamBlock(int blk, uint8_t* out) {
+  if (blk < 0 || blk >= 64) return 0;
+  memcpy(out, g_owWideBlk[blk], OWOBJ_STRIDE);
+  return g_owWideFlies[blk];
+}
 const int* CtWorldOamKeys(void) { return g_owOamKey; }
 int CtWorldOamWide(const CtWorldPiece** out) { *out = g_owWide; return g_owWideN; }
 void CtWorldOamBuild(uint8_t* ram, uint16_t scrollH, uint16_t scrollV) {   // $22 / $28 = CtWorldCam bg2h / bg2v
@@ -906,6 +917,11 @@ void CtWorldOamBuild(uint8_t* ram, uint16_t scrollH, uint16_t scrollV) {   // $2
     owW16s(ram, 0x0C, cx); owW16s(ram, 0x0E, cy);          // 0D3D STA $0C / 0D42 STA $0E (0D65 / 0D80 when wrapped)
     int nodeIx = (n >= 0xB000 && n < 0xB400) ? (n - 0xB000) >> 4 : -1;
     int blk = nodeIx >= 0 ? g_owNodeBlk[nodeIx] : -1;
+    if (blk >= 0 && blk < 64) {                            // (the picture's record: the block as drawn)
+      const uint8_t* B = ram + OWOBJ_BASE + blk * OWOBJ_STRIDE; uint8_t ob[8];
+      memcpy(g_owWideBlk[blk], B, OWOBJ_STRIDE);
+      g_owWideFlies[blk] = obW(B) == OWOBJ_CLASS_VM && obScript(ram, B[0x09], obW(B + OWOBJ_PC), ob)[0] == 0x31;
+    }
     for (int k = 0; k < count; k++) {
       const uint8_t* q = owAnimPtr(ram, bank, (uint16_t)(desc + 1 + k * 4));
       if (!q) break;
@@ -944,20 +960,57 @@ void CtWorldOamBuild(uint8_t* ram, uint16_t scrollH, uint16_t scrollV) {   // $2
     }
   }
 }
+// One frame of a ghost (a copy of a block the build lost while it flew, CtWorldOamBlock): op 0x31's step -- C2/0F38 and the
+// anim sub-VM, with nothing written but the copy -- and the pieces C2/0D08 would draw for it at that scroll, uncut. Returns
+// their count (0: the anim shows nothing this frame); *ox / *oy get its place on the screen.
+static int obAnimRun(uint8_t* ram, uint8_t* B, int live);
+int CtWorldGhostStep(uint8_t* B, int key, uint16_t scrollH, uint16_t scrollV, CtWorldPiece* out, int max, int* ox, int* oy) {
+  obIntegrate(B);
+  int desc = obAnimRun(NULL, B, 0);
+  uint16_t cx = obW(B + OWOBJ_XPOS), cy = obW(B + OWOBJ_YPOS);
+  if (B[OWOBJ_ATTR] & 0x80) {                              // 0D44: world coordinates, wrapped as C2/0D08 does
+    uint16_t v = (uint16_t)(cx - scrollH);
+    if (v & 0x8000) { if (v < 0xFD00) v = (uint16_t)(v + 0x600); }
+    else if (v >= 0x0300) v = (uint16_t)(v - 0x600);
+    cx = v;
+    v = (uint16_t)(cy - scrollV);
+    if (v & 0x8000) { if (v < 0xFE00) v = (uint16_t)(v + 0x400); }
+    else if (v >= 0x0200) v = (uint16_t)(v - 0x400);
+    cy = v;
+  }
+  *ox = (int16_t)cx; *oy = (int16_t)cy;
+  const uint8_t* d = desc >= 0 ? owAnimPtr(NULL, B[OWOBJ_ANIMBK], (uint16_t)desc) : NULL;
+  if (!d) return 0;
+  uint16_t base = (uint16_t)(obW(B + 0x10) & 0x3FFF), palpri = (uint16_t)((B[OWOBJ_ATTR] << 8) & 0x3E00);
+  uint8_t size = (B[0x11] & 0x40) ? 1 : 0;
+  int n = 0;
+  for (int k = 0; k < d[0] && n < max; k++) {
+    const uint8_t* q = owAnimPtr(NULL, B[OWOBJ_ANIMBK], (uint16_t)(desc + 1 + k * 4));
+    if (!q) break;
+    CtWorldPiece* P = &out[n++];
+    P->x = (int16_t)((int8_t)q[0] + (int16_t)cx); P->y = (int16_t)((int8_t)q[1] + (int16_t)cy);
+    P->size = size; P->key = key; P->ox = (int16_t)cx; P->oy = (int16_t)cy;
+    P->word = (uint16_t)(((q[2] | (q[3] << 8)) + base) | palpri);
+  }
+  return n;
+}
 int CtWorldObjShown(int blockAddr) {
   int off = blockAddr - OWOBJ_BASE;
   if (off < 0 || off >= (OWOBJ_END - OWOBJ_BASE) || (off % OWOBJ_STRIDE)) return 0;
   return g_owShown[off / OWOBJ_STRIDE];
 }
-static void obAnimTick(uint8_t* ram, uint8_t* B) {         // C2/0E1D
+// live 0 (the widescreen's ghosts, a block copy -- CtWorldGhostStep): the same steps with no RAM written, no draw list, no
+// VRAM queue; returns the descriptor the frame shows (-1: none this frame).
+static int obAnimRun(uint8_t* ram, uint8_t* B, int live) {   // C2/0E1D
+  int shown = -1;
   B[OWOBJ_ANIMCTR]++;                                      // (kept: the captured-atlas frame picker reads it)
   uint16_t pc = obW(B + OWOBJ_ANIM);
-  if (!pc || !B[OWOBJ_ANIMBK]) return;                     // no sequence installed (op 0x30 sets both)
+  if (!pc || !B[OWOBJ_ANIMBK]) return -1;                  // no sequence installed (op 0x30 sets both)
   // ⚠ STILL 64 HERE, ON PURPOSE. This is the ANIM sub-VM (C2/0E1D), a different dispatcher from
   // obRun's, and its loop was never measured -- only obRun's was (C2/0F73). Lifting a budget on the
   // strength of a neighbour's derivation is exactly the kind of guess the mandate forbids.
   for (int guard = 0; guard < 64; guard++) {               // (the ROM loops until a handler returns 0)
-    const uint8_t* op = owAnimPtr(ram, B[OWOBJ_ANIMBK], pc);
+    const uint8_t* op = owAnimPtr(live ? ram : NULL, B[OWOBJ_ANIMBK], pc);
     if (!op) break;
     int adv;
     switch (op[0]) {
@@ -972,7 +1025,8 @@ static void obAnimTick(uint8_t* ram, uint8_t* B) {         // C2/0E1D
         if (B[OWOBJ_ATTR] & 0x40) { adv = 0; }                              // 0EAA BIT #40 -> HOLD
         else if (B[OWOBJ_DWELL] == 0) { B[OWOBJ_DWELL] = op[3]; adv = 0; }  // 0EB3 load from +3
         else adv = (--B[OWOBJ_DWELL] == 0) ? 4 : 0;                         // 0EBD DEC / 0EC4 len 4
-        if (adv == 0) owDrawListEnqueue(ram, B, (uint16_t)(op[1] | (op[2] << 8)));   // 0ED6 JSR C2/0B53
+        if (adv == 0) { shown = op[1] | (op[2] << 8);
+                        if (live) owDrawListEnqueue(ram, B, (uint16_t)shown); }   // 0ED6 JSR C2/0B53
         break;
       case 0x05:                                                            // C2/0EDC
         if (B[OWOBJ_DWELL] == 0) { B[OWOBJ_DWELL] = op[1]; adv = 0; break; }
@@ -984,6 +1038,7 @@ static void obAnimTick(uint8_t* ram, uint8_t* B) {         // C2/0E1D
         // C2/0405 (CtWorldNmiVramQueue) DMAs the queue at the next NMI. The attract 1F0's Epoch starts its anim
         // ($1E -> C3:E582) with it: `$7E:C940` (the loader's C2/27BC packet) to VRAM word $1800. Parking here left
         // the Epoch invisible and its trail drawing tiles $180.. that never arrived.
+        if (!live) { adv = 8; break; }
         uint8_t x = ram[0x5F];
         ram[0x5E]++;
         ram[(uint8_t)(0x62 + x)] = op[1];
@@ -1001,7 +1056,9 @@ static void obAnimTick(uint8_t* ram, uint8_t* B) {         // C2/0E1D
     pc = (uint16_t)(pc + adv);                             // 0E39 CLC / ADC $52
   }
   obPutW(B + OWOBJ_ANIM, pc);                              // 0E42 STA $000B,X
+  return shown;
 }
+static void obAnimTick(uint8_t* ram, uint8_t* B) { obAnimRun(ram, B, 1); }
 // The CURRENT frame of an object's anim sub-VM, decoded from the ROM descriptor its +0B parks on.
 // The descriptor format is the decoder C2/0D08's: [u8 pieceCount] then pieceCount x 4 bytes
 // { s8 dX, s8 dY, u16 word2 }, where word2 bits0-8 are the tile NAME (added to the object's own
