@@ -16,10 +16,12 @@ file(GLOB SNES_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/snes/*.c")
 # writes -- so a rebuild that changed nothing (a touch, the restore at the end of a --mutate run) threw the whole cache
 # away. /Brepro drops the stamps from the objects; incremental linking pads the image differently on every link, so
 # it goes too. The linker still writes a fresh identity per link (the PE stamp, the PDB GUID, the repro hash: 69 bytes,
-# the code identical), which the cache's key leaves out (oracle_cache._exe_sha).
+# the code identical), which the cache's key leaves out (oracle_cache._exe_sha). /PDBALTPATH:%_PDB% names the PDB by
+# its file name alone: the full path of the build tree sat in the image and moved .rdata by its length, so the same code
+# built in another folder (a mutation lab, build/_mutlabs/<k>; tools/regress.py --mutate) keyed apart.
 if(MSVC)
   add_compile_options(/Brepro)
-  add_link_options(/Brepro /INCREMENTAL:NO)
+  add_link_options(/Brepro /INCREMENTAL:NO /PDBALTPATH:%_PDB%)
 endif()
 
 # The playable host's sources (ct_field below; the Android app's libmain.so, android/CMakeLists.cmake).

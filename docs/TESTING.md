@@ -16,6 +16,7 @@ python tools/regress.py --check-inputs          # presence + sha256 vs tools/reg
 python tools/regress.py --refresh-input-hashes  # rewrite sha256/size pins from disk
 python tools/regress.py --mutate NAME           # prove NAME actually GRADES something
 python tools/regress.py --mutate-all            # every check that declares mutations
+python tools/regress.py --mutate NAME --mutate-jobs 4   # mutants at once, each in a lab (default min(8, CPUs/2); 0 = in place)
 
 # One-command local gate (build + inputs + quick regress → build/preflight.json):
 python tools/preflight.py
@@ -46,7 +47,9 @@ every check from the repo root. Exit status is 1 iff any check FAILed (SKIPs don
 - **The link identity is not the key** (2026-10-16). MSVC writes a fresh identity into every link (the PE stamp, the
   PDB GUID, the repro hash: 69 bytes) even of the same objects, so a rebuild that changed nothing -- a touch, the
   restore after `--mutate` -- used to miss everything. CMakeLists.txt builds with `/Brepro` and `/INCREMENTAL:NO` (the
-  code bytes are then identical) and `oracle_cache._exe_sha` hashes the image with those 69 bytes zeroed.
+  code bytes are then identical) and `oracle_cache._exe_sha` hashes the image with those 69 bytes zeroed. With
+  `/PDBALTPATH:%_PDB%` the image names its PDB by file name only, so the same code built in another folder (a mutation
+  lab) is the same bytes too.
 - **The exclusive lane** (2026-10-16). `"exclusive": true` checks (they write a file) run one at a time in their declared
   order in ONE worker of the pool, beside the parallel batch; they used to run serially after it (112 s of the quick
   tier's 272 s). Audited: the files they write are shared only among themselves, none is graded on wall-clock time.
@@ -1700,6 +1703,39 @@ falsify:
 `python tools/regress.py --mutate NAME` (or `--mutate-all`) runs the baseline, then for each
 mutation applies every edit, rebuilds, re-runs the check, and **requires it to FAIL**. The source is
 always restored and rebuilt (`finally`). Exit status is 1 if any mutation SURVIVED.
+
+**In parallel, in mutation labs** (`--mutate-jobs N`, default min(8, CPUs/2); 2026-10-16). Each mutant runs in a
+LAB, `build/_mutlabs/<k>` (`tools/ctlib/mutlabs.py`): a copy of the working tree -- its uncommitted
+edits and its ignored inputs too (the ROM, `ct_assets.dat`, `saves/`, `third_party/`, `src/xlat/`,
+`src/data/`, the loose states at the root, `build/recipes/`) -- with its own `build/`. A run first
+syncs every lab with the working tree (a manifest of stats: after the first copy, ~0.3 s a lab), then
+each job takes a free lab, applies the edits THERE, builds it (`tools/build.py`, every target), runs
+the check with cwd = the lab, and restores the lab. A check's baseline runs in a lab too, and its
+mutants are queued once it PASSes; the slowest checks (`build/_regress_times.json`) go first.
+
+- **The working tree is never edited.** Other sessions and the player can build and run in it during
+  a mutation run; an edit made meanwhile is not in this run (the labs synced at its start).
+- **The oracle cache is shared.** The labs' checks use `build/_oracle_cache` with
+  `CT_ORACLE_CACHE_ALIAS=<lab>|<repo>`: a path under the lab in an argument, the environment or the
+  cwd keys as the same path under the repo (`oracle_cache._canon`), and `ct_oracle.exe` is the same
+  bytes wherever it is built (CMakeLists.txt `/PDBALTPATH:%_PDB%`: the full PDB path used to sit in
+  the image and move .rdata by its length). So a port mutant's cartridge side is a hit on its
+  baseline's runs, and the baseline's on the suite's.
+- **The verdicts and their lines are the serial path's** (KILLED / SURVIVED / STALE / BUILD FAILED),
+  printed one line per job as it lands and then in full, per check, in the order given. A baseline
+  that does not PASS is reported and its mutants skipped; the other checks go on and the exit status
+  is 2.
+- `--mutate-jobs 0` is the old path: one mutant at a time, in the working tree itself (don't edit
+  files meanwhile -- the restore writes back the original).
+- A lab is ~0.7 GB (0.4 GB of sources and inputs, its build); it persists between runs, and deleting
+  `build/_mutlabs` only costs the first copy (~20 s for 4 labs) and a full build per lab again.
+- The labs' exes live under `build/`, but `tools/build.py` refuses a link only over an exe running
+  IN its own `build/`, so a mutation run never blocks a build of the working tree.
+- **Measured** (2026-10-16, 20 CPUs; `attract-battle-abort-reset`, `battle-enemy-census-mechanisms-vs-oracle`,
+  `slot1-runner-battle-menu-vs-oracle` (exclusive), `shadow-route-menu-items-equip`: 23 mutations, 16 killed, 7 STALE,
+  so 16 builds + runs; the oracle cache warm): in place (`--mutate-jobs 0`) 686 s; 4 labs 239 s (329 s when the labs are
+  made from nothing); 8 labs 194 s (271 s from nothing). Every run printed the same verdict lines, `missed:` lines
+  included. The oracle cache held 20 entries before and after every lab run: each cartridge run of a lab was a hit.
 
 - **KILLED** — the check noticed. It also prints which `expect` line went missing, which is usually
   the fastest description of what the check actually grades.

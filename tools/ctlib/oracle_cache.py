@@ -8,6 +8,8 @@ one of them goes into the key:
     oracle alone: main.c's four modes + snes/*.c + the CPU infra and state loader, CMakeLists.txt), so a rebuilt oracle
     (snes/*.c, src/main.c, ct_cpu_infra.c ...) misses and an edit to the port (battle.c, ct_vm.c, field.c ...) does not;
   * the arguments and the working directory, minus the OUTPUT paths (`--peek <state> <OUT>`, and the env outputs below);
+    under CT_ORACLE_CACHE_ALIAS=<root>|<as root> (a mutation lab: tools/ctlib/mutlabs.py) a path under <root> in any of
+    them, or in the environment, keys as the same path under <as root>;
   * the environment, minus the operating system's own variables (PATH, TEMP, ...) -- CT_*, PEEK_*, VMDIFF_* ... all in;
   * the CONTENT of every argument or environment value that names an existing file (a state, a .lakewram, the ROM given
     by --rom, CT_ORACLE_SRAM ...), and of the ROM ct.exe opens by default in the working directory.
@@ -53,7 +55,7 @@ _OS_VARS = {
     'SESSIONNAME', 'PROMPT', 'PSMODULEPATH', 'PWD', 'OLDPWD', 'SHLVL', 'TERM', 'SHELL', 'LANG', 'MSYSTEM', 'ORIGINAL_PATH',
     'EXEPATH', 'MSYS', 'MINGW_PREFIX', 'MSYSTEM_PREFIX', 'HOSTNAME', 'INFOPATH', 'MANPATH', 'ACLOCAL_PATH',
     'PKG_CONFIG_PATH', 'CONFIG_SITE', 'DISPLAY', 'PYTHONPATH', 'PYTHONIOENCODING', 'PYTHONUTF8', 'PYTHONHASHSEED',
-    'CT_ORACLE_CACHE', 'CT_ORACLE_VERIFY', 'ONEDRIVE', 'ONEDRIVECONSUMER', 'DRIVERDATA', 'CHROME_CRASHPAD_PIPE_NAME', '_', 'TERM_PROGRAM',
+    'CT_ORACLE_CACHE', 'CT_ORACLE_CACHE_ALIAS', 'CT_ORACLE_VERIFY', 'ONEDRIVE', 'ONEDRIVECONSUMER', 'DRIVERDATA', 'CHROME_CRASHPAD_PIPE_NAME', '_', 'TERM_PROGRAM',
     'TERM_PROGRAM_VERSION', 'COLORTERM', 'WT_SESSION', 'WT_PROFILE_ID', 'VSCODE_GIT_IPC_HANDLE', 'GIT_ASKPASS',
     'SDL_VIDEODRIVER', 'SDL_AUDIODRIVER',
 }
@@ -170,12 +172,30 @@ def _want_size(role):
     return _SIZES['']
 
 
+def _alias(env):
+    """CT_ORACLE_CACHE_ALIAS=<root>|<as root>: a run made under <root> keys as if it were made under <as root>. A mutation
+    lab (tools/ctlib/mutlabs.py) is a copy of the repo at build/_mutlabs/<k>; its checks run there with their own paths, and
+    under the alias the same run keys the same in every lab and at the repo itself. (None when unset.)"""
+    root, sep, as_root = (env.get('CT_ORACLE_CACHE_ALIAS') or '').partition('|')
+    return (os.path.normcase(os.path.normpath(root)), as_root) if sep and root and as_root else None
+
+
+def _canon(s, alias):
+    """s with the alias's root, when s is a path under it, replaced by the root it stands for (the rest kept as written)."""
+    if alias and isinstance(s, str):
+        t = os.path.normcase(s.replace('/', os.sep))
+        if t == alias[0] or t.startswith(alias[0] + os.sep):
+            return alias[1] + s[len(alias[0]):]
+    return s
+
+
 def _key(argv, env, cwd):
     oi = mode_of(argv)[1]
     out_args = {oi} if oi is not None else set()
     keyenv = {k: v for k, v in env.items() if k.upper() not in _OS_VARS and k not in ENV_OUTS}
-    parts = {'exe': _exe_sha(argv[0]), 'argv': [a for i, a in enumerate(argv[1:], 1) if i not in out_args], 'cwd': cwd,
-             'env': sorted(keyenv.items()), 'files': []}
+    al = _alias(env)
+    parts = {'exe': _exe_sha(argv[0]), 'argv': [_canon(a, al) for i, a in enumerate(argv[1:], 1) if i not in out_args],
+             'cwd': _canon(cwd, al), 'env': sorted((k, _canon(v, al)) for k, v in keyenv.items()), 'files': []}
     for tag, v in [('a%d' % i, a) for i, a in enumerate(argv[1:], 1) if i not in out_args] + sorted(keyenv.items()):
         if isinstance(v, str) and v and len(v) < 1024:
             p = _abs(v, cwd)

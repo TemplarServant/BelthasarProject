@@ -134,11 +134,13 @@ def running_ct_processes():
     except Exception:
         return None
     hits = []
-    prefix = os.path.normcase(BUILD) + os.sep
+    # only an exe IN build/ locks this link: one deeper (a mutation lab's, build/_mutlabs/<k>/build/; tools/regress.py
+    # --mutate) is another build tree's
+    here = os.path.normcase(os.path.normpath(BUILD))
     for line in p.stdout.splitlines():
         pid, _, path = line.partition("|")
         path = path.strip()
-        if path and os.path.normcase(os.path.normpath(path)).startswith(prefix):
+        if path and os.path.normcase(os.path.dirname(os.path.normpath(path))) == here:
             hits.append((pid.strip(), path))
     return hits
 

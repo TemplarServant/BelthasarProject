@@ -49,8 +49,10 @@ By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest sing
   "fixed" by re-pinning.
 - **Mutations.** `python tools/regress.py --mutate NAME` applies each of the check's declared mutations (an exact
   find-and-replace in a source file), rebuilds, re-runs the check, and requires it to FAIL. A mutation that survives
-  means the check does not grade that line, whatever its notes say. The source is always restored afterwards. Do
-  not edit files while a mutation run is going: the restore writes back the original.
+  means the check does not grade that line, whatever its notes say. Each mutant runs in a mutation lab, a copy of
+  the working tree under `build/_mutlabs/` with its own build, up to eight at once (`--mutate-jobs N`); the working tree
+  itself is never edited. `--mutate-jobs 0` is the old in-place path: there the source is restored afterwards, and
+  files must not be edited while it runs.
 
 ## Speed
 

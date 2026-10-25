@@ -13,6 +13,8 @@ already-built binaries in build/ and the oracle inputs in the repo root.
     python tools/regress.py --build       # tools/build.py first (exit code + Build OK)
     python tools/regress.py --check-inputs  # verify tools/regress_inputs.json presence/sha256
     python tools/regress.py --refresh-input-hashes  # rewrite sha256/size for present files
+    python tools/regress.py --mutate NAME...  # prove NAME grades its declared mutations, in labs at once
+    python tools/regress.py --mutate-all --mutate-jobs 4
 
 CRITICAL harness fact: most ct.exe self-checks return exit code 0 even on mismatch.
 This suite therefore NEVER trusts exit codes -- a check PASSes iff every literal
@@ -33,6 +35,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import queue
 import re
 import subprocess
 import sys
@@ -43,11 +46,11 @@ CHECKS_JSON = os.path.join(ROOT, "tools", "regress_checks.json")
 INPUTS_JSON = os.path.join(ROOT, "tools", "regress_inputs.json")
 TIMES_JSON = os.path.join(ROOT, "build", "_regress_times.json")   # each check's last duration: longest first
 LAST_JSON = os.path.join(ROOT, "build", "_regress_last.json")     # the last run's failures, with output (--repin-failed)
-CACHE_SITE = os.path.join(ROOT, "tools", "oracle_cache_site")
 ORACLE_CACHE = None      # set by main() unless --no-oracle-cache: build/_oracle_cache
 
 sys.path.insert(0, os.path.join(ROOT, "tools", "ctlib"))
 import oracle_cache  # noqa: E402
+import mutlabs  # noqa: E402
 sys.path.pop(0)
 
 
@@ -63,26 +66,27 @@ def load_checks():
         return json.load(f)
 
 
-def resolve_argv(argv):
+def resolve_argv(argv, root=ROOT):
     """CreateProcess does not resolve 'build/ct.exe' against the subprocess cwd on
     Windows -- make argv[0] absolute against the repo root when it exists there."""
     if argv[0] in ("python", "python3"):
         return [sys.executable] + list(argv[1:])
-    exe = os.path.normpath(os.path.join(ROOT, argv[0]))
+    exe = os.path.normpath(os.path.join(root, argv[0]))
     if os.path.exists(exe):
         return [exe] + list(argv[1:])
     return list(argv)
 
 
-def missing_inputs(check):
+def missing_inputs(check, root=ROOT):
     return [p for p in check.get("inputs", [])
-            if not os.path.exists(os.path.join(ROOT, p))]
+            if not os.path.exists(os.path.join(root, p))]
 
 
-def run_check(check):
-    """Returns dict: status PASS/FAIL/SKIP/ERROR, secs, note, out, first_miss."""
+def run_check(check, root=ROOT):
+    """Returns dict: status PASS/FAIL/SKIP/ERROR, secs, note, out, first_miss.
+    root: the tree the check runs in -- the repo, or a mutation lab (tools/ctlib/mutlabs.py), a copy of it."""
     t0 = time.time()
-    miss = missing_inputs(check)
+    miss = missing_inputs(check, root)
     if miss:
         return {"status": "SKIP", "secs": 0.0,
                 "note": "missing input: " + ", ".join(miss), "out": ""}
@@ -90,7 +94,11 @@ def run_check(check):
     if ORACLE_CACHE:
         # the oracle cache (tools/ctlib/oracle_cache.py): a check's own oracle runs and its tools' (sitecustomize)
         env["CT_ORACLE_CACHE"] = ORACLE_CACHE
-        env["PYTHONPATH"] = os.pathsep.join([CACHE_SITE] + [p for p in [os.environ.get("PYTHONPATH")] if p])
+        env["PYTHONPATH"] = os.pathsep.join([os.path.join(root, "tools", "oracle_cache_site")]
+                                            + [p for p in [os.environ.get("PYTHONPATH")] if p])
+        if root != ROOT:
+            # a lab's runs key as the repo's (oracle_cache._alias): the cartridge side of a mutant is the baseline's hit
+            env["CT_ORACLE_CACHE_ALIAS"] = root + "|" + ROOT
     for k, v in (check.get("env") or {}).items():
         env[k] = str(v)
     # "env_rule": what a check needs only under the infinitely fast CPU's migration switches (CT_ORACLE_NMION_HOLD=1 AND
@@ -104,13 +112,13 @@ def run_check(check):
         # Popen + communicate instead of run(): on a timeout the WHOLE TREE is killed. A check whose argv is a
         # python tool spawns build\ct*.exe as a grandchild; run() kills only the python child, the exe survives as
         # an orphan, holds build\'s file lock, and every later build of a --mutate run fails "inconclusive".
-        argv = resolve_argv(check["argv"])
+        argv = resolve_argv(check["argv"], root)
         if ORACLE_CACHE and os.path.basename(argv[0]).lower() == "ct.exe" and oracle_cache.mode_of(argv)[0]:
-            r = oracle_cache.run(argv, dict(cwd=ROOT, env=env, capture_output=True, text=True, errors="replace"),
+            r = oracle_cache.run(argv, dict(cwd=root, env=env, capture_output=True, text=True, errors="replace"),
                                  _cache_real_run(env, timeout), cache=ORACLE_CACHE)
             out = (r.stdout or "") + (r.stderr or "")
             return grade(check, out, time.time() - t0)
-        p = subprocess.Popen(argv, cwd=ROOT, env=env,
+        p = subprocess.Popen(argv, cwd=root, env=env,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace")
         try:
             so, se = p.communicate(timeout=timeout)
@@ -276,6 +284,19 @@ def do_repin_failed(data):
     return rc or (1 if skipped else 0)
 
 
+def _build(root=ROOT):
+    """tools/build.py of the tree at root, every target. (ok, its output, seconds)"""
+    env = dict(os.environ)
+    if root != ROOT:
+        env.pop("CT_BUILD_DIR", None)    # a lab's checks run its build/ct*.exe: it builds there whatever the shell says
+    t0 = time.time()
+    p = subprocess.run([sys.executable, os.path.join(root, "tools", "build.py")], cwd=root, env=env,
+                       capture_output=True, text=True, errors="replace", timeout=600)
+    out = (p.stdout or "") + (p.stderr or "")
+    ok = p.returncode == 0 and ("Build OK" in out or "BUILT" in out or "UP-TO-DATE" in out)
+    return ok, out, time.time() - t0
+
+
 def do_build():
     """Drive tools/build.py (honest artifact check). Prefer its exit code.
 
@@ -283,15 +304,9 @@ def do_build():
     ct*.exe from this build/ is still running (locked). Fall back message if the
     banner is missing despite exit 0.
     """
-    script = os.path.join(ROOT, "tools", "build.py")
     print("regress: building (python tools/build.py)...")
-    t0 = time.time()
-    p = subprocess.run([sys.executable, script], cwd=ROOT, capture_output=True,
-                       text=True, errors="replace", timeout=600)
-    out = (p.stdout or "") + (p.stderr or "")
-    ok = p.returncode == 0 and ("Build OK" in out or "BUILT" in out or "UP-TO-DATE" in out)
-    print("regress: build %s (%.1fs, exit %d)" % (
-        "OK" if ok else "FAILED", time.time() - t0, p.returncode))
+    ok, out, secs = _build()
+    print("regress: build %s (%.1fs)" % ("OK" if ok else "FAILED", secs))
     if not ok:
         for l in out.splitlines()[-25:]:
             print("    | %s" % l)
@@ -310,7 +325,64 @@ def _write_exact(path, s):
         f.write(s)
 
 
-def do_mutate(data, names):
+def _resolve_mutation(root, m):
+    """The edits of mutation m in the tree at root: (stale, originals, resolved). stale is why the mutation cannot be
+    applied (None when it can); originals [(path, text)] restore every file it touches; resolved [(path, find, replace)]
+    carry the file's REAL line endings."""
+    # A mutation is a SET of edits: one behaviour may live at more than one site, and an
+    # edit that only covers one of them tests a path the check may never take. The first
+    # full --mutate-all run caught exactly that: the "same-world skip" mutation patched only
+    # the door-exit overworld entry and SURVIVED, because that scenario enters through the
+    # other site. Single find/replace stays as sugar for the common one-site case.
+    originals, resolved = [], []
+    for e in m.get("edits") or [m]:
+        path = os.path.join(root, e["file"])
+        s = _read_exact(path)
+        originals.append((path, s))
+        # LINE ENDINGS: this repo's working copy is CRLF (see the line-endings trap in the
+        # memory index) but a JSON "find" carries \n. A single-line find never notices; a
+        # multi-line one matches ZERO times and the mutation reads STALE for a reason that
+        # has nothing to do with the source drifting. Fit the pattern to the file instead:
+        # try it verbatim, then with \n -> \r\n (translating "replace" the same way, so a
+        # mutation never converts a CRLF file to LF and blows up the next git diff).
+        find, repl = e["find"], e["replace"]
+        if find not in s and "\n" in find:
+            crlf = find.replace("\r\n", "\n").replace("\n", "\r\n")
+            if crlf in s:
+                find = crlf
+                repl = repl.replace("\r\n", "\n").replace("\n", "\r\n")
+        resolved.append((path, find, repl))
+        n_hits = s.count(find)
+        if n_hits != 1:
+            return "'find' matches %d times in %s (expected 1)" % (n_hits, e["file"]), originals, resolved
+    return None, originals, resolved
+
+
+def _apply_mutation(resolved):
+    for path, find, repl in resolved:    # apply every edit, re-reading as we go so two
+        _write_exact(path, _read_exact(path).replace(find, repl))  # edits to the SAME file compose
+
+
+def _verdict_lines(mi, m, v):
+    """The report of mutant mi: v is ("STALE", reason) | ("BUILD", build output) | ("RUN", run_check's result)."""
+    kind, x = v
+    if kind == "STALE":
+        return ["  [%d] STALE -- %s. The mutation text drifted from the source; re-derive it." % (mi, x)]
+    if kind == "BUILD":
+        return ["  [%d] BUILD FAILED under the mutation -- inconclusive" % mi]
+    if x["status"] == "FAIL":
+        lines = ["  [%d] KILLED   %s" % (mi, m.get("why", ""))]
+        if x.get("first_miss"):
+            lines.append("       missed: %s" % x["first_miss"][:120])
+        return lines
+    return ["  [%d] SURVIVED %s  <-- the check does NOT grade this" % (mi, m.get("why", ""))]
+
+
+def _killed(v):
+    return v[0] == "RUN" and v[1]["status"] == "FAIL"
+
+
+def do_mutate(data, names, jobs=0):
     """MUTATION TESTING: prove each named check actually GRADES something.
 
     A check may declare the edits that are supposed to break it:
@@ -326,7 +398,9 @@ def do_mutate(data, names):
     harness instead of in a person's head: a surviving mutation is an obligation of
     proof, not a verdict.
 
-    The source file is ALWAYS restored (finally), and rebuilt, before returning.
+    jobs > 0: that many mutants at once, each in a mutation lab (_mutate_in_labs); the working tree is never edited.
+    jobs == 0: one at a time in the working tree itself. The source file is ALWAYS restored (finally), and rebuilt,
+    before returning.
     """
     by_name = {c["name"]: c for c in data["checks"]}
     todo = []
@@ -339,7 +413,10 @@ def do_mutate(data, names):
             print("mutate: check '%s' declares no mutations -- nothing to prove" % n)
             return 2
         todo.append(c)
+    if jobs > 0:
+        return _mutate_in_labs(todo, jobs)
 
+    t0 = time.time()
     killed = survived = 0
     for check in todo:
         name = check["name"]
@@ -349,63 +426,127 @@ def do_mutate(data, names):
             return 2
         print("mutate: %s -- baseline PASS, %d mutation(s)" % (name, len(check["mutations"])))
         for mi, m in enumerate(check["mutations"]):
-            # A mutation is a SET of edits: one behaviour may live at more than one site, and an
-            # edit that only covers one of them tests a path the check may never take. The first
-            # full --mutate-all run caught exactly that: the "same-world skip" mutation patched only
-            # the door-exit overworld entry and SURVIVED, because that scenario enters through the
-            # other site. Single find/replace stays as sugar for the common one-site case.
-            edits = m.get("edits") or [m]
-            stale = None
-            originals = []
-            resolved = []          # (path, find, replace) with the file's REAL line endings
-            for e in edits:
-                path = os.path.join(ROOT, e["file"])
-                s = _read_exact(path)
-                originals.append((path, s))
-                # LINE ENDINGS: this repo's working copy is CRLF (see the line-endings trap in the
-                # memory index) but a JSON "find" carries \n. A single-line find never notices; a
-                # multi-line one matches ZERO times and the mutation reads STALE for a reason that
-                # has nothing to do with the source drifting. Fit the pattern to the file instead:
-                # try it verbatim, then with \n -> \r\n (translating "replace" the same way, so a
-                # mutation never converts a CRLF file to LF and blows up the next git diff).
-                find, repl = e["find"], e["replace"]
-                if find not in s and "\n" in find:
-                    crlf = find.replace("\r\n", "\n").replace("\n", "\r\n")
-                    if crlf in s:
-                        find = crlf
-                        repl = repl.replace("\r\n", "\n").replace("\n", "\r\n")
-                resolved.append((path, find, repl))
-                n_hits = s.count(find)
-                if n_hits != 1:
-                    stale = "'find' matches %d times in %s (expected 1)" % (n_hits, e["file"])
-                    break
+            stale, originals, resolved = _resolve_mutation(ROOT, m)
             if stale:
-                print("  [%d] STALE -- %s. The mutation text drifted from the source; re-derive it."
-                      % (mi, stale))
+                v = ("STALE", stale)
+            else:
+                try:
+                    _apply_mutation(resolved)
+                    v = ("RUN", run_check(check)) if do_build() else ("BUILD", "")
+                finally:
+                    for path, s in originals:
+                        _write_exact(path, s)
+            for l in _verdict_lines(mi, m, v):
+                print(l)
+            if _killed(v):
+                killed += 1
+            else:
                 survived += 1
-                continue
+        do_build()   # back to the restored source
+    print("mutate: %d killed, %d survived (%.1fs)" % (killed, survived, time.time() - t0))
+    return 1 if survived else 0
+
+
+def _mutate_in_labs(todo, jobs):
+    """--mutate in `jobs` MUTATION LABS at once (tools/ctlib/mutlabs.py: copies of the working tree at
+    build/_mutlabs/<k>, each with its own build/). Every lab is synced with the working tree first; then a check's
+    baseline and, once it PASSes, each of its mutants is one job: take a free lab, apply the edits there, build it, run
+    the check in it (cwd = the lab), restore the lab. The working tree is never edited, so other sessions and the player
+    build and run in it meanwhile. The oracle cache is the repo's, keyed as the repo's (CT_ORACLE_CACHE_ALIAS), and
+    ct_oracle.exe is the same bytes in every lab (CMakeLists.txt /PDBALTPATH), so a port mutant's cartridge side is a
+    hit on its baseline's runs.
+
+    The verdicts and their lines are the serial path's, printed per check in the order given once all are in (and one
+    line per job as it lands). A baseline that does not PASS is reported and its mutants skipped; the other checks go
+    on, and the exit status is 2."""
+    t0 = time.time()
+    pool = mutlabs.labs(ROOT, jobs)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        copied = list(ex.map(lambda lab: lab.sync(), pool))
+    print("mutate: %d lab(s) in %s synced with the working tree (%d file(s) copied, %.1fs)"
+          % (jobs, mutlabs.LABS_DIR, sum(copied), time.time() - t0), flush=True)
+    free = queue.Queue()
+    for lab in pool:
+        free.put(lab)
+
+    def job(check, mi):
+        lab = free.get()
+        try:
+            if mi is None:
+                ok, out, _ = _build(lab.root)
+                return ("RUN", run_check(check, lab.root)) if ok else ("BUILD", out)
+            stale, originals, resolved = _resolve_mutation(lab.root, check["mutations"][mi])
+            if stale:
+                return ("STALE", stale)
             try:
-                for path, find, repl in resolved:    # apply every edit, re-reading as we go so two
-                    _write_exact(path, _read_exact(path).replace(find, repl))  # edits to the SAME file compose
-                if not do_build():
-                    print("  [%d] BUILD FAILED under the mutation -- inconclusive" % mi)
-                    survived += 1
-                    continue
-                res = run_check(check)
+                _apply_mutation(resolved)
+                ok, out, _ = _build(lab.root)
+                return ("RUN", run_check(check, lab.root)) if ok else ("BUILD", out)
             finally:
                 for path, s in originals:
                     _write_exact(path, s)
-            if res["status"] == "FAIL":
+                    lab.touched(os.path.relpath(path, lab.root))
+        finally:
+            free.put(lab)
+
+    try:
+        with open(TIMES_JSON, encoding="utf-8") as f:
+            times = json.load(f)
+    except (OSError, ValueError):
+        times = {}
+    verdicts = {c["name"]: {} for c in todo}
+    base_bad = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        pending = {}
+        for c in sorted(todo, key=lambda c: -times.get(c["name"], 1e9)):    # the slowest checks' mutants start first
+            pending[ex.submit(job, c, None)] = (c, None)
+        try:
+            while pending:
+                done, _ = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+                for fut in done:
+                    check, mi = pending.pop(fut)
+                    name = check["name"]
+                    v = fut.result()
+                    if mi is not None:
+                        verdicts[name][mi] = v
+                        print("mutate: %s %s" % (name, _verdict_lines(mi, check["mutations"][mi], v)[0].strip()),
+                              flush=True)
+                    elif v[0] == "BUILD" or v[1]["status"] != "PASS":
+                        base_bad[name] = "BUILD FAILED" if v[0] == "BUILD" else v[1]["status"]
+                        print("mutate: %s -- BASELINE IS %s, fix that first" % (name, base_bad[name]), flush=True)
+                        if v[0] == "BUILD":
+                            for l in v[1].splitlines()[-25:]:
+                                print("    | %s" % l)
+                    else:
+                        print("mutate: %s -- baseline PASS, %d mutation(s) queued" % (name, len(check["mutations"])),
+                              flush=True)
+                        for i in range(len(check["mutations"])):
+                            pending[ex.submit(job, check, i)] = (check, i)
+        except BaseException:
+            for fut in pending:      # Ctrl-C / a job's error: the queued jobs never start; a running one restores
+                fut.cancel()         # its lab on the way out (job's finally)
+            raise
+    for lab in pool:
+        lab.save()
+
+    print()
+    killed = survived = 0
+    for check in todo:
+        name = check["name"]
+        if name in base_bad:
+            print("mutate: %s -- BASELINE IS %s, fix that first" % (name, base_bad[name]))
+            continue
+        print("mutate: %s -- baseline PASS, %d mutation(s)" % (name, len(check["mutations"])))
+        for mi, m in enumerate(check["mutations"]):
+            v = verdicts[name][mi]
+            for l in _verdict_lines(mi, m, v):
+                print(l)
+            if _killed(v):
                 killed += 1
-                print("  [%d] KILLED   %s" % (mi, m.get("why", "")))
-                if res.get("first_miss"):
-                    print("       missed: %s" % res["first_miss"][:120])
             else:
                 survived += 1
-                print("  [%d] SURVIVED %s  <-- the check does NOT grade this" % (mi, m.get("why", "")))
-        do_build()   # back to the restored source
-    print("mutate: %d killed, %d survived" % (killed, survived))
-    return 1 if survived else 0
+    print("mutate: %d killed, %d survived (%d lab(s), %.1fs)" % (killed, survived, jobs, time.time() - t0))
+    return 2 if base_bad else (1 if survived else 0)
 
 
 _TEXT_INPUTS = (".py", ".c", ".h", ".json", ".md", ".txt")
@@ -603,6 +744,13 @@ def main():
                          "rebuild, and require the check to FAIL (a survivor is reported)")
     ap.add_argument("--mutate-all", action="store_true",
                     help="--mutate every check that declares mutations")
+    # MUTATION LABS (tools/ctlib/mutlabs.py): each mutant builds and runs in its own copy of the working tree, so N run at
+    # once and the tree itself is never edited. MEASURED (4 checks, 23 mutations, 16 of them built and run, 20 CPUs,
+    # 2026-10-16): in place 686 s; 4 labs 239 s; 8 labs 194 s -- a mutant is a build on every core plus a check, so the
+    # labs share the compiler past that. CPUs/2 capped at 8; a lab is ~0.7 GB on disk.
+    ap.add_argument("--mutate-jobs", type=int, default=max(2, min(8, _cpus // 2)), metavar="N",
+                    help="mutants at once, each in a lab at build/_mutlabs/<k> (default min(8, CPUs/2)); 0 = one at a "
+                         "time in the working tree itself (the old path)")
     args = ap.parse_args()
 
     if args.check_inputs:
@@ -633,7 +781,7 @@ def main():
         if not names:
             print("mutate: no check declares mutations yet")
             sys.exit(2)
-        sys.exit(do_mutate(data, names))
+        sys.exit(do_mutate(data, names, max(0, args.mutate_jobs)))
 
     if args.quick:
         checks = [c for c in checks if c.get("tier") == "quick"]
