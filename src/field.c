@@ -19786,6 +19786,18 @@ int main(int argc, char** argv) {
     // with per-row diffs of EXACTLY 0 for every pure-map row (10..25) and for the player's body rows
     // (143..165) once shifted. Found by the scene-254 render A/B.
     camy += 1;                                       // ...so the composite's vertical origin is camy + 1
+    // THE BOTTOM LINES DRAWN (a mod, settings.h fillBottomLines): with the origin at camy + 1 and the ROM's camera at a
+    // room's bottom (camy = the room's end - 224), the last line shows the map row just past the room -- the next room, or
+    // the map wrapping to its top (Leene's Square 006: its first row of trees under the path; the owner, 2026-10-23). The
+    // SNES never shows it (its V-IRQ blanks 211-223). Repeating the room's last row there read as a doubled line (Guardia
+    // Forest 013 entered from the south; the owner, 2026-10-25), so the mod holds the picture's origin instead: the room's
+    // last row stays on the last line, and the camera's last step down moves the picture no further (the objects, drawn
+    // from the same origin, move on the screen instead). Only when that row would be one of the mod's lines, and never
+    // above the room's top; the fights compose their arena as the SNES does.
+    if (g_hostInteractive && CtSettingsGet()->fillBottomLines && f.vm && !battlePhase && !gameOver) {
+      int last = f.my1 - 1 - camy;                    // the screen line of the room's last row
+      if (last >= 210 && last < CAMH - 1 && camy - (CAMH - 1 - last) >= f.my0) camy -= CAMH - 1 - last;
+    }
     if (dbg.camInfo) {
       fprintf(stderr, "CAMINFO W=%d H=%d mask[%d,%d]x[%d,%d] camx=%d camy=%d\n",
                       f.W, f.H, f.mx0, f.mx1, f.my0, f.my1, camx, camy);
@@ -20596,21 +20608,6 @@ int main(int argc, char** argv) {
                                                                                         //  wrapping room, the margins fixed)
       for (int y = 0; y < ch; y++) memcpy(fbView + (size_t)y * CAMW * 3, fb + ((size_t)y * wideW + wideX) * 3, (size_t)CAMW * 3);
       fb = fbView; camx += wideX;
-    }
-    // THE BOTTOM LINES DRAWN (a mod, settings.h fillBottomLines): the composite's origin is camy + 1, so with the camera
-    // at a room's bottom the last line shows the map row just past the room -- the next room, or the map wrapping to its
-    // top (Leene's Square 006, 256 tall in a 256 map: its first row of trees under the path; the owner, 2026-10-23). The
-    // SNES never shows those lines (its V-IRQ blanks 211-223); the mod repeats the room's last row there, the whole wide
-    // row, and the frames between take them as screen-fixed. (Only when that row is itself one of the mod's lines: a room
-    // shorter than the screen shows what lies past it in the lines above too, as the SNES does.)
-    if (g_hostInteractive && CtSettingsGet()->fillBottomLines && f.vm && !battleCompose) {
-      int last = f.my1 - 1 - camy;                    // the screen line of the room's last row
-      if (last >= 210 && last < CAMH - 1)
-        for (int y = last + 1; y < CAMH; y++) {
-          memcpy(fb + (size_t)y * CAMW * 3, fb + (size_t)last * CAMW * 3, (size_t)CAMW * 3);
-          if (wideW > CAMW) memcpy(g_wfb + (size_t)y * wideW * 3, g_wfb + (size_t)last * wideW * 3, (size_t)wideW * 3);
-          CtMotFixRow(mot, y);
-        }
     }
     g_fw = CAMW; g_fx = 0;
     // The picture is composed: its owners are recorded. What draws from here on (the box, the wipe, the battle's own

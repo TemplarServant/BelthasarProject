@@ -72,8 +72,11 @@ picture round the battle's own 256 view, its colour math and the HUD's bands by 
 
 ## Fill the bottom lines
 
-The SNES's V-IRQ blanks lines 211-223 of the field and of fights (old TVs hid them). The option draws them; at a
-room's bottom the last line repeats the room's last row instead of showing the map past it.
+The SNES's V-IRQ blanks lines 211-223 of the field and of fights (old TVs hid them). The option draws them. The SNES
+shows the row `camy + 1` on line 0, so with the ROM's camera at a room's bottom the last line is one row past the room
+(the next room, or the map wrapping to its top). In the field the option holds the picture's origin there instead: the
+room's last row stays on line 223, and the camera's last pixel down moves the objects on the screen, not the picture
+(2026-10-25; until then the line repeated the room's last row, which read as a doubled line).
 
 ## The frames between
 
