@@ -54,6 +54,8 @@ typedef struct CtSceneLayers {
   uint8_t backdrop[3];
   int beyond;                              // (host, the widescreen) the layers drawn past the room's edge: field.c fieldBeyondLayers -- the left side's in bits 0-7, the right's in 8-15
   int still, viewX;                        // (host, the widescreen) the still backdrop's layers and the 256 view's picture column
+  int cut, cutL, cutR;                     // (host, the widescreen) `beyond` ends on the left side (cut bit 0) left of map column
+                                           //   cutL, on the right (bit 1) from cutR on: field.c fieldSteamCovers past the margins
 } CtSceneLayers;
 int CtFieldSceneLayers(void* h, CtSceneLayers* out);   // 1 = filled (built on demand, again after each bake)
 int CtFieldSceneLayerOffsetsBaked(void* h, int* o2x, int* o2y, int* o3x, int* o3y);   // the offsets the bake drew at   // per pixel the layer bit its picture comes from (motion.h); the coverage's size

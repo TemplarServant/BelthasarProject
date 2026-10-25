@@ -183,7 +183,9 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
       if (!inT[X] && worldHere[x1]) { memcpy(o, fbRow + x1 * 3, 3); continue; }   // (where the two planes meet: the frame's own)
       if (!inT[X]) {                                     // the widescreen's sides end at the scroll mask -- but for the layers
         uint8_t c[3] = { 0, 0, 0 };                      //   scrolling on their own (field.c fieldBeyondPixel)
-        const int bey = fdiv(camXk + X, k) < cur->mx0 ? (L->beyond & 0xFF) : (L->beyond >> 8) & 0xFF;   // (left side's, right's)
+        const long mx = fdiv(camXk + X, k);           // (left side's, right's -- none past the margins it ends at: L->cut)
+        const int bey = mx < cur->mx0 ? ((L->cut & 1) && mx < L->cutL ? 0 : L->beyond & 0xFF)
+                                      : ((L->cut & 2) && mx >= L->cutR ? 0 : (L->beyond >> 8) & 0xFF);
         if (bey) {
           int i = 5;
           for (; i >= 0; i--) if ((bey & bitOf[i]) && (mainT & bitOf[i]) && act[i] && crow[i][tab[i * W + X]]) break;

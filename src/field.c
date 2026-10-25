@@ -1733,8 +1733,7 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
         uint16_t hofs = bg == 0 ? cs->bg1h : h2, vofs = bg == 0 ? v1 : v2;
         const int mo = owMosaicOn(wr, bg);
         int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
-        int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
-        uint16_t chip = stm->tilemap[bg][(col & 0x1F) + ((col & 0x20) << 5) + row * 0x20];
+        uint16_t chip = CtWorldStreamChip(stm, bg, wx, wy);
         int t = chip & 0x3FF, pb = ((chip >> 10) & 7) * 16, tx = wx & 7, ty = wy & 7;
         if (chip & 0x4000) tx = 7 - tx;
         if (chip & 0x8000) ty = 7 - ty;
@@ -1984,8 +1983,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
         uint16_t hofs = bg == 0 ? cs->bg1h : bg2hL, vofs = bg == 0 ? bg1vL : bg2vL;
         const int mo = owMosaicOn(w->wram, bg);         // (the mosaic: the line's own scroll, the block's first pixel)
         int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
-        int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
-        uint16_t chip = stm->tilemap[bg][(col & 0x1F) + ((col & 0x20) << 5) + row * 0x20];
+        uint16_t chip = CtWorldStreamChip(stm, bg, wx, wy);
         int t = chip & 0x3FF, pb = ((chip >> 10) & 7) * 16;
         int tx = wx & 7, ty = wy & 7;
         if (chip & 0x4000) tx = 7 - tx;
@@ -2349,8 +2347,7 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
       for (int bg = 0; bg < 2; bg++) {
         if (!(tmain & (1 << bg))) continue;
         int wx = (int)owFdiv((bg ? c2x : c1x) + X - X0k, k), wy = bg ? wy2 : wy1;
-        int col = (wx >> 3) & 0x3F, row = (wy >> 3) & 0x1F;
-        uint16_t chip = N->stm->tilemap[bg][(col & 0x1F) + ((col & 0x20) << 5) + row * 0x20];
+        uint16_t chip = CtWorldStreamChip(N->stm, bg, wx, wy);
         int tl = chip & 0x3FF, pb = ((chip >> 10) & 7) * 16, tx = wx & 7, ty = wy & 7;
         if (chip & 0x4000) tx = 7 - tx;
         if (chip & 0x8000) ty = 7 - ty;
@@ -2714,6 +2711,7 @@ static uint8_t g_bWorld[CAMW * CAMH * 3];         // the battle's view before it
 static uint8_t g_bMotCanvas[CAMW * CAMH * 3];     // the battle's frames between: the arena before the combatants
 static uint8_t g_bwBand[CAMH];                    // (the rows whose wide arena borrows an arena row's scroll: the HUD band's)
 static int g_wideBeyond;                          // (this frame's fieldBeyondLayers past the room's edge, for the native drawer)
+static int g_wideCut, g_wideCutL, g_wideCutR;     // (...and where it ends on each side: CtSceneLayers.cut)
 static uint8_t g_seqWide[FIELD_WMAX * CAMH * 3];  // a translated stage's picture, wide (its PPU's side columns); 0 = none
 static int g_seqWideW;
 static uint8_t g_motPic[FIELD_WMAX * CAMH * 3];  // the picture as the compositor left it, before the overlays
@@ -4973,13 +4971,17 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, 
 }
 // Is map column mx inside the margins' own columns (the Steam release's 4 to 6 a side)? Past them the margins have no say:
 // the 16:9 side is 71 px, wider than the 64 of a room with 4 (the fair, 005).
-static int fieldWideExtInCols(const FieldWideExtPic* p, int mx) {
+// (*lo: the left side's first map column of them, *hi: the right side's first past them.)
+static void fieldWideExtCols(const FieldWideExtPic* p, int* lo, int* hi) {
   static int dx = -99999, dxl, dxr;                 // (fieldWideExtPixel's study knobs, the same place)
   if (dx == -99999) { dx = getenv("CT_WIDE_EXT_DX") ? atoi(getenv("CT_WIDE_EXT_DX")) : 0;
                       dxl = getenv("CT_WIDE_EXT_DXL") ? atoi(getenv("CT_WIDE_EXT_DXL")) : 0;
                       dxr = getenv("CT_WIDE_EXT_DXR") ? atoi(getenv("CT_WIDE_EXT_DXR")) : 0; }
-  const int ex = mx - (dx + (mx < 0 ? dxl : dxr)) + p->xo * 16;
-  return ex >= 0 && ex < p->w * 16;
+  *lo = dx + dxl - p->xo * 16; *hi = (p->w - p->xo) * 16 + dx + dxr;
+}
+static int fieldWideExtInCols(const FieldWideExtPic* p, int mx) {
+  int lo, hi; fieldWideExtCols(p, &lo, &hi);
+  return mx < 0 ? mx >= lo : mx < hi;
 }
 // THE WIDESCREEN'S STILL BACKDROP (a mod): a layer the ROM detaches from the camera ($1D36 bit 1 BG2 / bit 2 BG3: the map
 // header's md[1] bits 4/5, C0/A3A9-A3BF) and moves neither at a speed of its own ($1D37/$1D38, $1D39/$1D3A: md[2]/md[3])
@@ -20582,6 +20584,14 @@ int main(int argc, char** argv) {
       // (each side's: without the margins drawn, a side the Steam release draws over has none -- fieldSteamCovers)
       int detL = det, detR = det;
       if (!wext) { int cv = fieldSteamCovers(f.loc); if (cv & 1) detL = 0; if (cv & 2) detR = 0; }
+      // (...and with them drawn, such a side has none past their own columns: a 16:9 side ends inside them, a 21:9 one
+      //  did not, and the skywalk's sky stood loose again past its tower wall, 01C -- the owner's "past 16:9 the side
+      //  repeats", 2026-10-25)
+      int cutL = -(1 << 30), cutR = 1 << 30; g_wideCut = 0;
+      if (wext) { int cv = fieldSteamCovers(f.loc), lo, hi; fieldWideExtCols(wext, &lo, &hi);
+                  if (cv & 1) { g_wideCut |= 1; cutL = lo; }
+                  if (cv & 2) { g_wideCut |= 2; cutR = hi; } }
+      g_wideCutL = cutL; g_wideCutR = cutR;
       g_wideBeyond = detL | (detR << 8);
       for (int y = 0; y < ch; y++)
         for (int x = 0; x < wideW; x++) {
@@ -20604,7 +20614,7 @@ int main(int argc, char** argv) {
             mot->own[y * wideW + x] = CT_MOT_FIXED; mot->world[y * wideW + x] = (el & 8) ? 2 : 1; continue;
           }
           if (wrapRoom) continue;                      // (the map wrapping, as the composition drew it)
-          const int detS = ux < wm0 ? detL : detR;
+          const int detS = ux < wm0 ? (ux < cutL ? 0 : detL) : (ux >= cutR ? 0 : detR);
           if (detS) { int b = fieldBeyondPixel(&beyondL, detS, ux, camy + y, mot->o2x, mot->o2y, mot->o3x, mot->o3y, d);
                      mot->own[y * wideW + x] = (uint8_t)(b == 2 ? CT_MOT_BG2 : b == 4 ? CT_MOT_BG3 : CT_MOT_BG1); }
           // (past the margins' own columns, the room's end: black. The room's BG2 going on there was the room again -- the
@@ -20635,6 +20645,8 @@ int main(int argc, char** argv) {
       if (mot->valid && (hostInterp(pr) || getenv("CT_NATIVECHECK")) && CtFieldSceneLayers(f.sd, &motLayers[g_motIdx])) {
         mot->native = &motLayers[g_motIdx];
         motLayers[g_motIdx].beyond = wideW > CAMW ? g_wideBeyond : 0;
+        motLayers[g_motIdx].cut = wideW > CAMW ? g_wideCut : 0;
+        motLayers[g_motIdx].cutL = g_wideCutL; motLayers[g_motIdx].cutR = g_wideCutR;
         motLayers[g_motIdx].still = wideW > CAMW ? g_wideStill : 0; motLayers[g_motIdx].viewX = wideX;
         if (bg3Plane || g_bgWinOn || g_colWinOn) {     // ...and what is composed over them: the iris, the colour window, the captions
           CtFieldNativeFx* fx = &motFx[g_motIdx];

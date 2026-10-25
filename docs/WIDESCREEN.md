@@ -35,16 +35,21 @@ What the sides show where the room ends, in order:
 2. **A background** -- a layer the ROM marks as detached from the camera or scrolling on its own (`$1D35` / `$1D36`,
    from the map header md[1..3]) -- goes on: the Blackbird's clouds (16E), Flea's stars (0AD), Death Peak's snow (104).
    A still backdrop (detached, no speed: the skywalk's 01C sky) is painted for 256 columns and is **mirrored** about the
-   view, not repeated (X4b). Three exceptions:
+   view, not repeated (X4b). Four exceptions:
    - a background the room's front layers **cover everywhere** is no sky -- the SNES shows it only through a window: the
      Telepod's warp swirl in 008 (`fieldHiddenBg`);
    - **without the Steam margins drawn**, a side where the Steam release draws scenery over the background ends black:
      `kSteamCovers` in `src/field.c`, 42 locations, location numbers and sides only, printed by
      `tools/steam_bgcover.py` from a Steam copy (the skywalk past its tower wall, 01C);
+   - **with the Steam margins drawn**, such a side ends black past the margins' own columns: a 16:9 side ends inside
+     them, a 21:9 one reaches past them, where the skywalk's sky showed again beyond its tower wall (01C);
    - Magus's castle (0A5): its BG2 map begins with 32 flat grey rows over the sky; with the widescreen the sky is drawn
      5 lines higher for the whole visit, so the pan ends with that band just above the screen (`fieldWideBg2Dy`, art
      direction).
 3. Otherwise **black**, as the room's own end.
+
+The world map's sides are composed from a picture-only map of 128 columns round the camera (`CtWorldTilemapView`):
+the streamed 64-column ring (512 px) is narrower than a 21:9 picture, whose left edge showed the far side of the ring.
 
 The Steam release has no margins for the world maps (they are the SNES's own size) nor for the special sequences but
 one (the Epoch's cockpit into Lavos): past the world map's edge, and beside the Black Omen panorama's machinery, the

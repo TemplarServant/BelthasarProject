@@ -72,6 +72,7 @@ void CtWorldMoverSeed(CtWorldMover* m, const uint8_t* ram);
 // column / 0x80 row x2 screens) -- so the few slot bytes NOT freshly written carry the ring's
 // previous contents into VRAM (deterministic; modeled). Cursors: $E3/$E5 = per-BG 8px column
 // (wrap 192), $E7/$E9 = 8px row (wrap 128).
+#define CT_WORLD_VIEW_W 128
 typedef struct CtWorldStream {
   uint16_t tilemap[2][0x800];  // BG1/BG2 64x32 word maps (screen 0 at +0x000, screen 1 at +0x400)
   uint16_t e3[2], e7[2];       // per-BG streaming cursors
@@ -81,7 +82,18 @@ typedef struct CtWorldStream {
   // land in VRAM at the start of frame k+1. Modeled as a 1-frame pending queue.
   struct { uint8_t bg, isRow; uint16_t addr; int stage; } pend[8];
   int nPend;
+  // The widescreen's picture-only maps (CtWorldTilemapView, a mod): CT_WORLD_VIEW_W x 32 words a BG, row-major, wrapping
+  // at CT_WORLD_VIEW_W columns as `tilemap` wraps at 64 -- the 21:9 picture and its fine scroll need more than 64
+  // columns (512 px), and with 64 its left edge showed the far side of the ring. NULL: `tilemap`, the streamed layout.
+  uint16_t (*view)[CT_WORLD_VIEW_W * 32];
 } CtWorldStream;
+// The map's tile (BG1 bg = 0, BG2 1) at layer pixel (wx, wy): the streamed 64x32 layout or the picture's wider one.
+static inline uint16_t CtWorldStreamChip(const CtWorldStream* st, int bg, int wx, int wy) {
+  int row = (wy >> 3) & 0x1F;
+  if (st->view) return st->view[bg][row * CT_WORLD_VIEW_W + ((wx >> 3) & (CT_WORLD_VIEW_W - 1))];
+  int col = (wx >> 3) & 0x3F;
+  return st->tilemap[bg][(col & 0x1F) + ((col & 0x20) << 5) + row * 0x20];
+}
 
 // Seed from live WRAM + VRAM (LakeSnes ppu->vram, word-addressed).
 void CtWorldStreamSeed(CtWorldStream* st, const uint8_t* ram, const uint16_t* vram);
@@ -90,7 +102,8 @@ void CtWorldStreamSeed(CtWorldStream* st, const uint8_t* ram, const uint16_t* vr
 // produces) and align the cursors -- for when no live VRAM exists (e.g. ct_assets.dat mode).
 // Window-correct: every tilemap slot gets the world column/row nearest the camera window.
 void CtWorldTilemapBuild(CtWorldStream* st, uint8_t* ram, const CtWorldCam* c);
-// The same tilemaps as a PICTURE-only build (the RAM untouched, no cursors kept): what the widescreen's sides show.
+// The same maps as a PICTURE-only build (the RAM untouched, no cursors kept): what the widescreen's sides show, in the
+// wider layout (st->view, CT_WORLD_VIEW_W columns round the camera).
 void CtWorldTilemapView(CtWorldStream* st, const uint8_t* ram, const CtWorldCam* c);
 
 // M3-D: LOCATION ENTRY. 7-byte records at $7E:7E00 (count $1B38, from desc[0x15]):

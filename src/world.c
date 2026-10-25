@@ -461,9 +461,26 @@ void CtWorldTilemapBuild(CtWorldStream* st, uint8_t* ram, const CtWorldCam* c) {
   if (ram) { owRebuildScratch(ram, 0); owRebuildScratch(ram, 1); }
 }
 // The picture's own tilemaps around the camera (the widescreen's sides): the same build, read-only on the RAM.
+// Its columns stand round the camera as the streamed build's (16 tiles left of it of 64) stand, scaled to the wider ring:
+// 48 left of the camera's column, 80 from it on -- the widest picture's side (144 px) and its fine scroll inside.
 void CtWorldTilemapView(CtWorldStream* st, const uint8_t* ram, const CtWorldCam* c) {
+  static uint16_t view[2][CT_WORLD_VIEW_W * 32];
   if (!ram) return;
-  for (int bg = 0; bg < 2; bg++) owTilemapBuildBg(st, ram, c, bg);
+  st->view = view;
+  for (int bg = 0; bg < 2; bg++) {
+    uint16_t H = bg ? c->bg2h : c->bg1h, V = bg ? c->bg2v : c->bg1v;
+    int baseC = (H >> 3) - 48, baseR = (V >> 3) - 2;
+    for (int i = 0; i < CT_WORLD_VIEW_W; i++) {
+      int wcol = ((baseC + i) % 192 + 192) % 192, tc = (baseC + i) & (CT_WORLD_VIEW_W - 1);
+      for (int j = 0; j < 32; j++) {
+        int wrow = ((baseR + j) % 128 + 128) % 128, tr = (baseR + j) & 0x1F;
+        int block = ram[OW_GRID[bg] + (wrow >> 1) * 96 + (wcol >> 1)];
+        view[bg][tr * CT_WORLD_VIEW_W + tc] = owDefWord(ram, bg, block, ((wrow & 1) * 2 + (wcol & 1)) * 2);
+      }
+    }
+    st->e3[bg] = (uint16_t)(H >> 3);
+    st->e7[bg] = (uint16_t)(V >> 3);
+  }
 }
 static void owTilemapBuildBg(CtWorldStream* st, const uint8_t* ram, const CtWorldCam* c, int bg) {
   {
