@@ -32,7 +32,9 @@ The player's setup (Belthasar's ROM screen, src/launcher.c) runs the same steps 
 --oracle uses a ct.exe built beforehand (the release's, compiled from the shapes like step 2's) instead of building one;
 --workdir copies this tree to <dir> first and runs there (the installed one may be read-only); --out writes
 ct_assets.dat with the tables of ct_tables.dat inside (tools/gen/pack_tables.py into: the player keeps one file) and
-ct_wide.dat when step 7 made one to <dir> at the end. Every step prints `setup: progress K/N` for the screen's bar.
+ct_wide.dat when step 7 made one to <dir> at the end -- without --out, to build/player/ (the root keeps ct_assets.dat
+and ct_tables.dat apart; the Android app takes only the one file). Every step prints `setup: progress K/N` for the
+screen's bar.
 
 --check is the inverse proof for this repository: every generator runs again and its output must equal the file in the
 tree (line endings aside), so a header that cannot be made from the ROM shows up; the asset-stage outputs are compared
@@ -270,21 +272,24 @@ def main():
     if missing:
         say('NOT COMPLETE: %d generated file(s) could not be made: %s (docs/ROADMAP.md)' % (len(missing), ', '.join(missing)))
         return 1
-    if a.out and os.path.realpath(a.out) == os.path.realpath(ROOT):
+    # The player's files: ct_assets.dat with the tables inside (pack_tables.py into; the release's Belthasar and the
+    # Android app take only it) and ct_wide.dat. To --out; in this tree, to build/player/ -- the root keeps the
+    # developer's two files, and a phone still gets the one it reads.
+    out = a.out or os.path.join(ROOT, 'build', 'player')
+    if os.path.realpath(out) == os.path.realpath(ROOT):
         say('--out is this tree: ct_assets.dat and ct_tables.dat stay as they are')
-    elif a.out:
-        os.makedirs(a.out, exist_ok=True)
-        # the player's one file: ct_assets.dat with the tables inside (pack_tables.py into; the Android app takes only it)
+    else:
+        os.makedirs(out, exist_ok=True)
         if run([sys.executable, 'tools/gen/pack_tables.py', 'into', '--assets', os.path.join(ROOT, 'ct_assets.dat'),
-                '--pack', os.path.join(ROOT, 'ct_tables.dat'), '--out', os.path.join(a.out, 'ct_assets.dat')]).returncode:
-            sys.exit('setup: could not write the tables into %s' % os.path.join(a.out, 'ct_assets.dat'))
-        old = os.path.join(a.out, 'ct_tables.dat')         # an earlier setup's separate pack: the one inside wins
+                '--pack', os.path.join(ROOT, 'ct_tables.dat'), '--out', os.path.join(out, 'ct_assets.dat')]).returncode:
+            sys.exit('setup: could not write the tables into %s' % os.path.join(out, 'ct_assets.dat'))
+        old = os.path.join(out, 'ct_tables.dat')           # an earlier setup's separate pack: the one inside wins
         if os.path.exists(old):
             os.remove(old)
-        say('ct_assets.dat (the tables inside) -> %s' % a.out)
+        say('ct_assets.dat (the tables inside) -> %s%s' % (out, '' if a.out else '  (the file a phone takes)'))
         if not a.no_steam and os.path.exists(wide):
-            shutil.copy2(wide, os.path.join(a.out, 'ct_wide.dat'))
-            say('ct_wide.dat -> %s' % a.out)
+            shutil.copy2(wide, os.path.join(out, 'ct_wide.dat'))
+            say('ct_wide.dat -> %s' % out)
     say('done. Play: build\\Belthasar.exe --assets ct_assets.dat --boot')
     return 0
 

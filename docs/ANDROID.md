@@ -78,7 +78,8 @@ Install on a phone with USB debugging on:
 ## Getting the files onto the device
 
 Copy `ct_assets.dat` from the desktop Belthasar's own folder (beside `Belthasar.exe` / `Belthasar`; versions up to
-0.5.0 kept it in `%APPDATA%\BelthasarProject\Belthasar\` or `~/.local/share/BelthasarProject/Belthasar/`) to the phone -- USB, a cloud drive, ... -- with `ct_wide.dat`
+0.5.0 kept it in `%APPDATA%\BelthasarProject\Belthasar\` or `~/.local/share/BelthasarProject/Belthasar/`; a developer's
+`python tools/setup.py` leaves it in `build/player/` -- not the root's `ct_assets.dat`, which has no tables) to the phone -- USB, a cloud drive, ... -- with `ct_wide.dat`
 and `ct_sram.srm` if you want them, then press *Choose the game's files* and pick them, all at once or one by one.
 
 Or push them by hand:
