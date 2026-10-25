@@ -85,6 +85,11 @@ art direction for the wide picture, scene by scene, where what the sides show by
   geography (world 0's block grids from ct_assets.dat) drawn with 1999's own blocks, tiles and colours -- 92-95% of the
   terrain blocks past the patch are the same in both worlds; where the patch was redrawn the coast does not join yet
   (the owner adjusts it later, 2026-10-25). `CtWorldStream.ext`, `CtWorldTilemapView`.
+  **The map editor** paints those cells: `python tools/map_editor.py` (RPG Maker style: a block palette, the map with
+  zoom and scrolling, BG2 ground / BG1 overlay, pencil, rectangle, fill, erase -- back to 1000 A.D.'s block --, pick,
+  undo, the patch's border; the ROM's patch is locked). It draws from the player's ct_assets.dat and saves block
+  numbers only to `ct_mapedits.dat` (CT_MAPEDITS, else the working folder, else the executable's), which Belthasar
+  reads every 60 frames: paint with the game open and the sides follow (`owExtGrids` in `src/field.c`).
 - **Magus's castle (0A5):** the sky is drawn 5 lines higher for the whole visit (BG2's offset in the picture only,
   `fieldWideBg2Dy`), so the pan ends with the band of flat grey over it just above the screen (the owner, 2026-10-24).
 - **The machine rising over the planet (sequence entry 3: `FF 23` after the Blackbird, `FF 63` in the attract):** its

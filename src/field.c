@@ -681,6 +681,46 @@ static uint32_t ctFnv32(const uint8_t* p, size_t n) {          // FNV-1a, the su
 // CtWram is laid out as a flat 128 KB ($7E at 0, bank $7F at 0x10000), which is exactly the view
 // world.c wants for its `ram + 0x10000 + pc` script reads, so the world simply uses it. NOT freed
 // here: it outlives every world and every scene, as WRAM does.
+// THE PLAYER'S PAINTED CELLS (the scene adjustments, a mod): tools/map_editor.py paints blocks into the cells past a world
+// map's own patch and saves them to ct_mapedits.dat ("CTME", u32 version 1, u32 count, per edit: u8 world, u8 layer (0 BG1,
+// 1 BG2), u8 x, u8 y (the 96 x 64 grid), u8 block, u8 0) -- read from CT_MAPEDITS, else the working folder, else the
+// executable's. The sides' grids are the extension's (1000 A.D.'s) with those cells over them, made again whenever the
+// world changes or the file does (it is read every 60 frames: paint with the game open). Block numbers only, no picture.
+static FILE* mapEditsOpen(void) {
+  const char* e = getenv("CT_MAPEDITS");
+  if (e && *e) return fopen(e, "rb");
+  FILE* f = fopen("ct_mapedits.dat", "rb");
+  if (!f) { char* base = SDL_GetBasePath(); char path[1024];
+            snprintf(path, sizeof path, "%sct_mapedits.dat", base ? base : ""); SDL_free(base); f = fopen(path, "rb"); }
+  return f;
+}
+static void owExtGrids(const World* w, const uint8_t* out[2]) {
+  static uint8_t grid[2][6144], file[1 << 20];
+  static long fileLen = -1;
+  static int lastWorld = -1, tick;
+  static const uint8_t* lastBase;
+  int changed = w->world != lastWorld || w->ext1000[0] != lastBase;
+  if (changed || ++tick >= 60) {
+    tick = 0;
+    static uint8_t now[1 << 20];
+    long n = 0;
+    FILE* f = mapEditsOpen();
+    if (f) { n = (long)fread(now, 1, sizeof now, f); fclose(f); }
+    if (n != fileLen || memcmp(now, file, (size_t)(n > 0 ? n : 0))) { memcpy(file, now, (size_t)(n > 0 ? n : 0)); fileLen = n; changed = 1; }
+  }
+  if (changed) {
+    lastWorld = w->world; lastBase = w->ext1000[0];
+    memcpy(grid[0], w->ext1000[0], 6144); memcpy(grid[1], w->ext1000[1], 6144);
+    if (fileLen >= 12 && !memcmp(file, "CTME", 4)) {
+      uint32_t cnt = (uint32_t)(file[8] | file[9] << 8 | file[10] << 16 | (uint32_t)file[11] << 24);
+      for (uint32_t i = 0; i < cnt && 12 + 6L * (long)(i + 1) <= fileLen; i++) {
+        const uint8_t* q = file + 12 + 6 * i;
+        if (q[0] == w->world && q[1] < 2 && q[2] < 96 && q[3] < 64) grid[q[1]][q[3] * 96 + q[2]] = q[4];
+      }
+    }
+  }
+  out[0] = grid[0]; out[1] = grid[1];
+}
 static int worldInit(CtAssets* a, World* w, int id) {
   if (w->vram) free(w->vram);
   uint8_t* keepWram = CtWramSys(fieldWram());
@@ -14523,7 +14563,9 @@ int main(int argc, char** argv) {
         nat->stm = owWideW > CAMW ? &owViewStm : &wd.stm;
         if (owWideW > CAMW) {
           const int ext = CtSettingsGet()->sceneAdjust && wd.ext1000[0];   // (past 1999's patch: 1000 A.D., a mod)
-          owViewStm.ext[0] = ext ? wd.ext1000[0] : NULL; owViewStm.ext[1] = ext ? wd.ext1000[1] : NULL;
+          const uint8_t* eg[2] = { NULL, NULL };
+          if (ext) owExtGrids(&wd, eg);
+          owViewStm.ext[0] = eg[0]; owViewStm.ext[1] = eg[1];
           CtWorldTilemapView(&owViewStm, wd.wram, cs);
           g_mot = owMot; g_owNatRec = nat; worldComposeAt(&wd, g_wfb, owWideW, owWideX, &owViewStm); g_mot = NULL; g_owNatRec = NULL;
           memcpy(g_motPic, g_wfb, (size_t)owWideW * CAMH * 3);
