@@ -4,6 +4,17 @@ plugins {
     id 'com.android.application'
 }
 
+// The release signing key (belthasar-release.jks, never committed): android/keystore.properties on the owner's machine,
+// or the ANDROID_KEYSTORE_* / ANDROID_KEY_* environment variables a CI runner fills from the repository's secrets.
+// Without either the release build stays unsigned.
+def signingProps = new Properties()
+def signingFile = rootProject.file('keystore.properties')
+if (signingFile.exists()) {
+    signingFile.withInputStream { signingProps.load(it) }
+}
+def signingValue = { String key, String env -> signingProps.getProperty(key) ?: System.getenv(env) }
+def releaseStore = signingValue('storeFile', 'ANDROID_KEYSTORE_PATH')
+
 android {
     namespace 'org.belthasar.ct'
     compileSdk 36
@@ -23,9 +34,22 @@ android {
             }
         }
     }
+    signingConfigs {
+        if (releaseStore) {
+            release {
+                storeFile rootProject.file(releaseStore)
+                storePassword signingValue('storePassword', 'ANDROID_KEYSTORE_PASSWORD')
+                keyAlias signingValue('keyAlias', 'ANDROID_KEY_ALIAS')
+                keyPassword signingValue('keyPassword', 'ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
+            if (releaseStore) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     externalNativeBuild {

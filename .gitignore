@@ -114,3 +114,9 @@ tools/_*
 # agent worktrees + session scratch
 .claude/worktrees/
 /scratchpad/
+
+# Android release signing key and its passwords: never committed
+*.jks
+*.keystore
+keystore.properties
+belthasar-release-senha.txt
