@@ -79,21 +79,19 @@ static int steamPx(int plane, int x, int y, int dpage) {
   if ((t >> 8) < 1 || page > 7 || !e->pageSheet[page]) return -1;
   return e->pageSheet[page][(((t >> 4) & 15) * 16 + (y & 15)) * 256 + (t & 15) * 16 + (x & 15)];
 }
-// THE ROUND PLANET (the Steam release's art): its glow (plane 0's cells, sheet 0) and under it the planet's dark edge (the
-// same cells two pages on, sheet 2) bend down towards the sides, over the planet (plane 3). The stage shows the sky's map
+// THE ROUND PLANET (the Steam release's art): its glow (plane 0's cells, sheet 0) bends down towards the sides, over the
+// planet (the same cells two pages on, sheet 2, are the planet's dark edge under it -- left out, the owner 2026-10-25). The stage shows the sky's map
 // above line 70 only (HDMA channel 3), so in the sides the bend is laid at the sky's own rows on every line -- the row of
 // line l is l + the sky lines' V scroll -- and the planet shows only below it. Past the art's own columns (a 21:9 side is
 // wider than its 96) the bend goes on: the edge column, lowered along its own slope (g_e3Slope, pixels a column).
 static int g_e3SkyVofs;
 static float g_e3Slope[2];
 // The Steam art was painted for the field location 06B's rows of the palette; the stage draws the same colours from other
-// rows and fades those: its sky is 4:15 (the art's 2:10, the same 000010) and its planet's row is 7 (the art's dark edge is
-// on row 1, which nothing fades). Each such index takes the stage's row of the same colour -- the nearest for the edge --
-// so the sides go grey with the middle in the flash and fade in with it.
+// rows and fades those: its sky is 4:15 (the art's 2:10, the same 000010, on a row nothing fades). Such an index takes the
+// stage's row of the same colour, so the sides go grey with the middle in the flash and fade in with it.
 static int horizonIndex(int v) {
   switch (v) {
     case 0x2A: return 0x4F;                                          // (the sky: 2:10 -> 4:15, 000010 both)
-    case 0x11: return 0x79; case 0x12: return 0x7A; case 0x13: return 0x77;   // (the planet's dark edge: row 1 -> row 7)
   }
   return v;
 }
@@ -113,15 +111,14 @@ static int horizonPx(int x, int ys) {
   int xe = x, dy = 0;
   if (x < -ew) { xe = -ew; dy = (int)((-ew - x) * g_e3Slope[0] + 0.5f); }
   else if (x >= 256 + ew) { xe = 255 + ew; dy = (int)((x - 255 - ew) * g_e3Slope[1] + 0.5f); }
+  // (the glow only: the planet's dark edge under it, sheet 2, is left out -- the owner, 2026-10-25)
   int v = steamPx(0, xe, ys - dy, 0);
-  if (v) return v > 0 ? horizonIndex(v) : v;
-  v = steamPx(0, xe, ys - dy, 2);
-  return v > 0 ? horizonIndex(v) : 0;
+  return v > 0 ? horizonIndex(v) : v;
 }
 // The glow's lowest row in a column (its sky rows 48-79), for the slope past the art.
 static int glowBottom(int x) {
   int b = 48;
-  for (int y = 48; y < 80; y++) if (steamPx(0, x, y, 0) > 0 || steamPx(0, x, y, 2) > 0) b = y;
+  for (int y = 48; y < 80; y++) if (steamPx(0, x, y, 0) > 0) b = y;
   return b;
 }
 
