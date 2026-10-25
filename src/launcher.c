@@ -68,9 +68,79 @@ int CtLauncherReady(const CtLauncher* L) {
       ;
 }
 
-// The data folder: CT_DATA_DIR; else the executable's own folder when it already holds the game's data (a portable
-// copy, or a developer's build/ beside the setup's output); else the player's per-user folder (%APPDATA%\Belthasar\,
-// ~/.local/share/Belthasar/).
+// The per-user folder versions up to 0.5.0 kept the data in (SDL_GetPrefPath's, built by hand: that call creates it):
+// %APPDATA%\BelthasarProject\Belthasar\, $XDG_DATA_HOME or ~/.local/share/BelthasarProject/Belthasar/. Read once, below.
+static int oldDataFolder(char* out, size_t n) {
+#ifdef _WIN32
+  const char* app = getenv("APPDATA");
+  if (!app || !*app) return 0;
+  snprintf(out, n, "%s\\BelthasarProject\\Belthasar\\", app);
+#else
+  const char* xdg = getenv("XDG_DATA_HOME"); const char* home = getenv("HOME");
+  if (xdg && *xdg) snprintf(out, n, "%s/BelthasarProject/Belthasar/", xdg);
+  else if (home && *home) snprintf(out, n, "%s/.local/share/BelthasarProject/Belthasar/", home);
+  else return 0;
+#endif
+  return 1;
+}
+
+static int copyFile(const char* from, const char* to) {
+  FILE* i = fopen(from, "rb");
+  if (!i) return 0;
+  FILE* o = fopen(to, "wb");
+  int ok = o != NULL;
+  char buf[65536];
+  size_t got;
+  while (ok && (got = fread(buf, 1, sizeof buf, i)) > 0) ok = fwrite(buf, 1, got, o) == got;
+  if (ferror(i)) ok = 0;
+  fclose(i);
+  if (o && fclose(o) != 0) ok = 0;
+  if (!ok) remove(to);
+  return ok;
+}
+
+// A data folder that holds none of the player's files takes the old per-user folder's: the save, the options, the dump,
+// and the made data when it is this version's (an older one would only be made again). Copied, never moved: the old
+// folder is left as it was.
+static void takeOldData(const CtLauncher* L) {
+  static const char* const mine[] = { "ct_sram.srm", "ct_settings.ini", "ct_assets.dat", NULL };
+  for (int i = 0; mine[i]; i++) if (readable(L->data, mine[i])) return;
+  if (readable(L->data, ROM_NAME)) return;
+  char old[1100];
+  if (!oldDataFolder(old, sizeof old)) return;
+  char from[1200], to[1200];
+  const char* const keep[] = { "ct_sram.srm", "ct_settings.ini", ROM_NAME, NULL };
+  for (int i = 0; keep[i]; i++) {                  // (copyFile does nothing for a file the old folder lacks)
+    snprintf(from, sizeof from, "%s%s", old, keep[i]); snprintf(to, sizeof to, "%s%s", L->data, keep[i]);
+    copyFile(from, to);
+  }
+  snprintf(from, sizeof from, "%sct_assets.dat", old);
+  int current = CtAssetsFileRomFree(from);
+#ifdef CT_DATAFREE
+  current = current && CtDataPackFileHasTables(from) && CtDataPackFileMatches(from);
+#endif
+  if (current) {
+    snprintf(to, sizeof to, "%sct_assets.dat", L->data);
+    if (copyFile(from, to)) {
+      snprintf(from, sizeof from, "%sct_wide.dat", old); snprintf(to, sizeof to, "%sct_wide.dat", L->data);
+      copyFile(from, to);
+    }
+  }
+}
+
+static int writable(const char* dir) {
+  char p[1200];
+  snprintf(p, sizeof p, "%s.belthasar-write-test", dir);
+  FILE* f = fopen(p, "wb");
+  if (!f) return 0;
+  int ok = fputc('x', f) != EOF;
+  if (fclose(f) != 0) ok = 0;
+  remove(p);
+  return ok;
+}
+
+// The data folder: CT_DATA_DIR; else the executable's own folder -- the game, its data, the save and the options travel
+// together (the owner's decision, 2026-10-25: no per-user folder). Its first start takes an older version's files.
 static int dataFolder(CtLauncher* L) {
   const char* env = getenv("CT_DATA_DIR");
   if (env && *env) {
@@ -78,18 +148,9 @@ static int dataFolder(CtLauncher* L) {
     snprintf(L->data, sizeof L->data, "%s%s", env, (env[n - 1] == '/' || env[n - 1] == '\\') ? "" : CT_SEP);
   } else {
     char* base = SDL_GetBasePath();
-    int portable = 0;
-    if (base) {
-      snprintf(L->data, sizeof L->data, "%s", base);
-      portable = readable(L->data, "ct_assets.dat") && (romFreeAssets(L->data) || readable(L->data, ROM_NAME));
-      SDL_free(base);
-    }
-    if (!portable) {
-      char* pref = SDL_GetPrefPath("BelthasarProject", "Belthasar");
-      if (!pref) return 0;
-      snprintf(L->data, sizeof L->data, "%s", pref);
-      SDL_free(pref);
-    }
+    if (!base) return 0;
+    snprintf(L->data, sizeof L->data, "%s", base);
+    SDL_free(base);
   }
   snprintf(L->rom, sizeof L->rom, "%s%s", L->data, ROM_NAME);
   return 1;
@@ -393,6 +454,15 @@ int CtLauncherConfigure(int* argc, char*** argv) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Belthasar", "No folder for the game's data could be found.", NULL);
     return 1;
   }
+  if (!writable(L.data)) {                                   // e.g. under Program Files: say so, never write elsewhere
+    char m[1400];
+    snprintf(m, sizeof m, "Belthasar keeps the game's data, your save and your options in its own folder, and this folder "
+             "cannot be written:\n\n%s\n\nMove the Belthasar folder somewhere you can write to (your Documents, your "
+             "Desktop, another drive) and open it from there.", L.data);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Belthasar", m, NULL);
+    return 1;
+  }
+  takeOldData(&L);
   if (dropped || !CtLauncherReady(&L)) {
     int r = CtLauncherUi(&L, dropped);
     if (!r) return 2;

@@ -253,16 +253,17 @@ First run
    (about 15-20 minutes; nothing is downloaded).
 4. Click Play. From then on Belthasar starts straight into the game; it reads only its own data, not the ROM.
 
-Your data folder (saves, options, the made data) is shown on the setup screen:
-  Windows: %%APPDATA%%\\BelthasarProject\\Belthasar\\
-  Linux:   ~/.local/share/BelthasarProject/Belthasar/
+Belthasar keeps everything in its own folder, beside %(exe)s: the made data (ct_assets.dat), your save
+(ct_sram.srm) and your options (ct_settings.ini). Unpack it somewhere you can write to (not Program Files); to move or
+back it up, move or copy the whole folder. Coming from 0.5.0 or older: on its first start it copies your save, options
+and dump from the old folder (%%APPDATA%%\\BelthasarProject\\Belthasar\\ or ~/.local/share/BelthasarProject/Belthasar/).
 
 F1 opens the options. The source code and the documentation: https://github.com/TemplarServant/BelthasarProject
 
 Android
 -------
 The Android app (Belthasar-<version>-android.apk, the same release) does not make the game's data: copy ct_assets.dat
-from your data folder -- and ct_wide.dat (the Steam margins) and ct_sram.srm (your save) if you want them -- to the
+from the desktop Belthasar's folder -- and ct_wide.dat (the Steam margins) and ct_sram.srm (your save) if you want them -- to the
 phone, open the app and choose them.
 """
 

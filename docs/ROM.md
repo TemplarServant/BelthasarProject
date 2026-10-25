@@ -90,13 +90,13 @@ save or asset container in the working tree is never committed by accident.
 ### The player's start: the ROM screen
 
 A player opens `Belthasar` with no arguments, or drops their ROM on it (src/launcher.h; Windows and Linux -- macOS has
-its folder chooser, Android its setup activity). The game then runs from a data folder of the player's own:
-
-| Folder | When |
-|---|---|
-| `CT_DATA_DIR` | set |
-| the executable's own folder | it already holds a ROM-free `ct_assets.dat` (or an older one with the ROM beside it): a portable copy |
-| `%APPDATA%\BelthasarProject\Belthasar\` / `~/.local/share/BelthasarProject/Belthasar/` | otherwise |
+its folder chooser, Android its setup activity). The game then runs from its data folder: `CT_DATA_DIR` when set, else
+**the executable's own folder** -- the game, its data, the save and the options travel together (the owner's decision,
+2026-10-25). A folder that cannot be written (under Program Files, say) is refused with a message asking the player to
+move Belthasar; nothing is written anywhere else. Versions up to 0.5.0 used a per-user folder
+(`%APPDATA%\BelthasarProject\Belthasar\`, `~/.local/share/BelthasarProject/Belthasar/`): on its first start, a folder
+that holds none of the player's files copies that one's save, options and dump in, and its `ct_assets.dat` and
+`ct_wide.dat` when they are this version's (src/launcher.c `takeOldData`). The old folder is left as it was.
 
 It holds `ct_assets.dat` (with the tables a data-free build loads inside it: one file, which the Android app takes
 as it is, [ANDROID.md](ANDROID.md)), the battery save `ct_sram.srm`, `ct_settings.ini`,

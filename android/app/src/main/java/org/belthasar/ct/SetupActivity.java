@@ -158,7 +158,7 @@ public class SetupActivity extends Activity {
         TextView info = new TextView(this);
         info.setText("This app does not include the game. Its data is made on a computer from your own dump of the US "
                 + "ROM: Belthasar for Windows or Linux makes it when you choose the ROM on its first screen. Copy from "
-                + "its data folder (e.g. %APPDATA%\\BelthasarProject\\Belthasar\\ or "
+                + "Belthasar's own folder (beside Belthasar.exe; up to 0.5.0, %APPDATA%\\BelthasarProject\\Belthasar\\ or "
                 + "~/.local/share/BelthasarProject/Belthasar/) to this device:\n"
                 + "  " + ASSETS + "  the game's data (needed)\n"
                 + "  " + WIDE + "  the Steam release's widescreen margins (optional; made when Steam's copy is installed)\n"
