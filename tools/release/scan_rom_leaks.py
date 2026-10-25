@@ -38,6 +38,8 @@ KNOWN_OK = {                                     # (path, text on the line) that
     ('disasm/notes/battle_hud_names_blink.md', '// Crono'): "the seven default character names in the game's text "
                                                      "encoding (Crono, Marle, ...): names, not the game's content",
     ('tools/regress_checks.json', '"names: f5 loc=000 $2C23='): "a check's expected output: the default names in the game's text encoding",
+    ('tools/release/scan_rom_leaks.py', "bytes.fromhex('ff73737b"): "KNOWN_BIN's own run: the 8 colours src/menu.c "
+                        "already writes (eqIconDimPal), named here so the binaries' copy is not a finding",
 }
 KNOWN_BIN = {                                    # byte runs a binary shares with a corpus, and why they are not the game's
     bytes.fromhex('ff73737bffffffe7ff6b7373ff5a5a63ff39424aff313942ff293139ff181010ff'):
