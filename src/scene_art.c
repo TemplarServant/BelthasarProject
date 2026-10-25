@@ -96,6 +96,14 @@ static int bandRow(int x, int y) {
 // line l is l + the sky lines' V scroll -- and the planet shows only below it. Past the art's own columns (a 21:9 side is
 // wider than its 96) the bend goes on: the edge column, lowered along its own slope (g_e3Slope, pixels a column).
 static int g_e3SkyVofs;
+// The planet's map and V scroll (its lines', below the switch): under the band on a sky line the planet is read as it would
+// lie there, so the band's first row, where the middle's glow ends above line 70, is not the band over the night's black.
+static unsigned g_e3PlanetSc = 0x6A;
+static int g_e3PlanetVofs;
+static int bg2Index(const CtSeqPic* p, unsigned sc, int mx, int my);
+static int planetUnder(const CtSeqPic* p, int sky, int mx, int line, int my) {
+  return sky ? bg2Index(p, g_e3PlanetSc, mx, (line + g_e3PlanetVofs) & 0x3FF) : bg2Index(p, p->r[0x08], mx, my);
+}
 static float g_e3Slope[2];
 // The Steam art was painted for the field location 06B's rows of the palette; the stage draws the same colours from other
 // rows and fades those: its sky is 4:15 (the art's 2:10, the same 000010, on a row nothing fades). Such an index takes the
@@ -118,7 +126,9 @@ static int skyMapPixel(const CtSeqPic* p, int col, int ys) {
   return c ? (int)((e >> 10) & 7) * 16 + c : 0;
 }
 // The glow's index at the side's column x and sky row ys (> 0), 0 = none there, -1 = not a sheet's cell; *band the air's
-// band index there (0 = none), under the glow.
+// band index there (0 = none), under the glow. The glow's lowest row -- a dark one under its white line -- gives way to
+// the band, which lies under it there too: drawn, it stood as a pixel's gap between the white and the band (the owner,
+// 2026-10-25: "1 pixel extra between the horizon's upper and lower parts").
 static int horizonPx(int x, int ys, int* band) {
   const int ew = (g_e3Steam->w - 16) / 2 * 16;
   int xe = x, dy = 0;
@@ -126,11 +136,12 @@ static int horizonPx(int x, int ys, int* band) {
   else if (x >= 256 + ew) { xe = 255 + ew; dy = (int)((x - 255 - ew) * g_e3Slope[1] + 0.5f); }
   int v = steamPx(0, xe, ys - dy, 0);
   *band = bandRow(xe, ys - dy);
+  if (v > 0 && *band && steamPx(0, xe, ys - dy + 1, 0) <= 0) v = 0;   // (the glow's lowest row: the band's)
   return v > 0 ? horizonIndex(v) : v;
 }
-// BG2's CGRAM index at its map place (mx, my), from the map it shows on the line (0 = see-through).
-static int bg2Index(const CtSeqPic* p, int mx, int my) {
-  const unsigned sc = p->r[0x08], chr = (unsigned)(p->r[0x0B] >> 4) << 12;
+// BG2's CGRAM index at its map place (mx, my) of the map sc (BG2SC; 0 = see-through).
+static int bg2Index(const CtSeqPic* p, unsigned sc, int mx, int my) {
+  const unsigned chr = (unsigned)(p->r[0x0B] >> 4) << 12;
   mx &= 0x3FF; my &= 0x3FF;
   unsigned ta = ((sc & 0xFC) << 8) + (unsigned)((my >> 3) & 31) * 32 + (unsigned)((mx >> 3) & 31);
   if ((mx & 256) && (sc & 1)) ta += 0x400;
@@ -153,16 +164,16 @@ static int glowBottom(int x) {
 }
 
 // THE BAND UNDER THE MIDDLE'S GLOW (the owner, 2026-10-25: "the band in the middle too"). The art has no cells over the
-// 256 (the stage draws its own glow there), so the band the art lays under its innermost column's glow -- its rows below
-// that glow's lowest, 4 of them -- goes on under the middle's glow, below each column's own lowest glow row: the middle's
-// glow bends as the art's does (its lowest row 74 at the edges, 70 in the middle), and at the 256 the two meet, both
-// ending at 74.
+// 256 (the stage draws its own glow there), so the band the art lays under its innermost column's glow -- its rows from
+// that glow's lowest (which gives way to it, as in the sides), 5 of them -- goes on under the middle's glow, from each
+// column's own lowest glow row: the middle's glow bends as the art's does (its lowest row 74 at the edges, 70 in the
+// middle), and at the 256 the two meet, both ending at 74.
 static uint8_t g_e3Prof[2][8];                                        // (the band's rows under the glow, left / right)
 static int g_e3ProfN[2];
 static int8_t g_e3MidGb[256];                                         // (the middle's lowest glow row, a column; -1 none)
 static void bandProfile(int side, int x) {
   int gb = glowBottom(x), n = 0;
-  while (n < 8 && bandRow(x, gb + 1 + n)) { g_e3Prof[side][n] = (uint8_t)bandRow(x, gb + 1 + n); n++; }
+  while (n < 8 && bandRow(x, gb + n)) { g_e3Prof[side][n] = (uint8_t)bandRow(x, gb + n); n++; }
   g_e3ProfN[side] = n;
 }
 static void midGlowBottoms(const CtSeqPic* p) {
@@ -191,6 +202,7 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
   if (layer == -1) { entry3Build(p); if (g_e3Steam) midGlowBottoms(p); return -1; }                    // (a new frame)
   if (layer == -2) {                                                 // (a line, in order: the sky lines' V scroll)
     if ((p->r[0x08] & 0xFC) == 0x60) g_e3SkyVofs = p->vofs[1];
+    else { g_e3PlanetSc = p->r[0x08]; g_e3PlanetVofs = p->vofs[1]; }
     return -1;
   }
   // THE SKY: above line 70 BG2 is the field's map $6000 (HDMA channel 3 switches BG2SC $60 -> $6A there), one screen
@@ -204,25 +216,24 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
     x = mx - hs;
     const int sky = (p->r[0x08] & 0xFC) == 0x60, line = (my - p->vofs[1]) & 0x3FF;
     const int ys = (line + g_e3SkyVofs) & 255;
+    if (g_e3Steam && x >= 0 && x < 256 && g_e3MidGb[x] >= 0) {      // (the band under the middle's glow, its lowest row on)
+      const int side = x >= 128, k = ys - g_e3MidGb[x];
+      if (k >= 0 && k < g_e3ProfN[side]) {
+        if (pri) return 0;
+        return bandOver(p, g_e3Prof[side][k], planetUnder(p, sky, mx, line, my));
+      }
+    }
     if (g_e3Steam && (x < 0 || x >= 256)) {                          // (the Steam release's glow, bent, a mod)
       int band, h = horizonPx(x, ys, &band);
       if (h > 0) return pri ? 0 : h;
       if (h < 0 && !sky) { int c = skyMapPixel(p, 0, ys); return pri ? 0 : c; }   // (the night's tile on a planet's line)
       if (band) {                                                    // (the air's band over the sky or the planet)
         if (pri) return 0;
-        int under = sky ? skyMapPixel(p, 0, ys) : bg2Index(p, (x < 0 ? -1 - x : 511 - x) + hs, my);
-        return bandOver(p, band, under);
+        return bandOver(p, band, planetUnder(p, sky, (x < 0 ? -1 - x : 511 - x) + hs, line, my));
       }
     } else if (!sky && ys >= 48 && ys < 80) {                        // (the glow whole, the middle's and the mirrored sides')
       int c = skyMapPixel(p, x < 0 ? -1 - x : x >= 256 ? 511 - x : x, ys);
       if (c) return pri ? 0 : c;
-    }
-    if (g_e3Steam && x >= 0 && x < 256 && g_e3MidGb[x] >= 0) {      // (the band under the middle's glow)
-      const int side = x >= 128, k = ys - g_e3MidGb[x] - 1;
-      if (k >= 0 && k < g_e3ProfN[side]) {
-        if (pri) return 0;
-        return bandOver(p, g_e3Prof[side][k], sky ? skyMapPixel(p, x, ys) : bg2Index(p, mx, my));
-      }
     }
     if (x >= 0 && x < 256) return -1;
     // (Below the bend the planet is the stage's own, mirrored about the screen's edge as below: the Steam art's planet,

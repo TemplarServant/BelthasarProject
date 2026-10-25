@@ -111,9 +111,12 @@ lines' V scroll). Under it lies the air's band, plane 0's cells two pages on (`c
 own CGRAM 0x11-0x13, the same colours), ADDED to the planet under it: the Steam capture's light blue under the glow's
 white line is exactly band + planet ((65,82,115) + (8,56,112) = its (73,138,227)). The band runs ~5 px past the glow's
 cells into the sheet's next tile row, which no map cell names; it is read on from there as one picture. The art has no
-cells over the 256, so the band goes on under the middle's own glow with the art's innermost column's profile (its 4 rows
-below the glow), under each column's lowest glow row: the middle's glow bends too (74 at the edges, 70 in the middle) and
-meets the art's at 74, so the band is one across the picture (the owner, 2026-10-25). Past the art's own 96
+cells over the 256, so the band goes on under the middle's own glow with the art's innermost column's profile (its 5 rows
+from the glow's lowest), from each column's lowest glow row: the middle's glow bends too (74 at the edges, 70 in the
+middle) and meets the art's at 74, so the band is one across the picture (the owner, 2026-10-25). The glow's lowest row
+-- a dark one under its white line -- gives way to the band, which lies under it there too: drawn, it stood as a pixel's
+gap between the white and the band (the owner). On a sky line (above the switch) the band is added to the planet as it
+would lie there (the planet's map at the planet lines' V scroll), not to the night's black. Past the art's own 96
 columns (a 21:9 side is 133) the bend goes on along the edge column's slope. The stage cuts the sky's map at line 70
 (HDMA channel 3), the glow's last rows with it; the Steam release shows the field 06B, the glow whole, and its art is
 drawn against that -- so with the sides drawn the glow's rows go on below the switch line, the middle's too, one band as
