@@ -33,6 +33,10 @@ extern const int ctTableDefineCount;
 // Fill every table from the pack at `path`. Returns 1, or 0 with the reason in err (the tables are then unusable).
 int CtDataPackLoad(const char* path, char* err, size_t errLen);
 
+// 1 = the CTAS container at `path` carries the tables (their header entry): a ct_tables.dat, or a ct_assets.dat the
+// player's setup wrote them into (tools/gen/pack_tables.py pack --into).
+int CtDataPackFileHasTables(const char* path);
+
 // Belthasar's startup: find the pack and load it. In order: `--tables <path>`, $CT_TABLES, the --assets/--datonly
 // file itself when it carries the tables, ct_tables.dat beside it, ct_tables.dat in the working directory.
 // Returns 1, or 0 with the reason in err.

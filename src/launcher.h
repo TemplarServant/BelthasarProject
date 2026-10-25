@@ -1,7 +1,7 @@
 // launcher.h -- the player's start on Windows and Linux: where the game's data lives, and the ROM screen that makes it.
 //
 // BelthasarProject ships none of the game (docs/ROM.md). A player who opens Belthasar with no arguments (or drops a file
-// on it) gets a data folder of their own: their ROM, the ct_assets.dat and ct_tables.dat made from it, their saves and
+// on it) gets a data folder of their own: their ROM, the ct_assets.dat made from it (the tables inside), their saves and
 // options. While that folder lacks any of them, the ROM screen (src/launcher_ui.cpp) asks for the dump, verifies it
 // (CtRomVerify) and runs the setup (tools/setup.py) without a compiler: the bundled Python, the bundled oracle.
 // A developer's or the suite's run (any argument starting with '-', or CT_NOPACE set) never reaches it.

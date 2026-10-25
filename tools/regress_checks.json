@@ -17,6 +17,26 @@
       "notes": "src/tables/ (the headers the engine includes the generated tables through, their data-free declarations, the storage and its layout asserts) is what tools/gen/pack_tables.py makes from today's shapes. A stale src/tables/ means a data-free Belthasar would declare a table the shapes no longer have, or refuse every pack (docs/ROM.md, 'The data-free Belthasar')."
     },
     {
+      "name": "tables-pack-inside-assets-identical",
+      "argv": [
+        "python",
+        "tools/gen/tables_proof.py"
+      ],
+      "inputs": [
+        "ct_assets.dat",
+        "ct_tables.dat"
+      ],
+      "expect": [
+        "tables-proof: the file carries the tables: yes",
+        "tables-proof: inside ct_assets.dat IDENTICAL",
+        "tables-proof: ct_assets.dat without them refused",
+        "tables-proof: controls OK"
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "notes": "The player's one file (docs/ROM.md, 'The data-free Belthasar'; docs/ANDROID.md): the setup's --out writes the table pack INSIDE ct_assets.dat (tools/gen/pack_tables.py into) and the data-free Belthasar -- the release's desktop game and the Android app -- loads it from there (src/datapack.c CtDataPackFileHasTables, CtDataPackLoadForArgs). tools/gen/tables_proof.py builds ct_tables_proof (the data-free storage and loader beside the tables compiled from the real headers) and compares every table and #define after loading the pack alone and after loading it from inside ct_assets.dat; ct_assets.dat without the tables must be refused. The strings are compared after the loader has freed the file (it keeps only the string pool), so a pointer left into the freed file shows here. Needs the ROM's data (SKIP without)."
+    },
+    {
       "name": "boot-sram-load-fields-vs-cartridge",
       "argv": [
         "build/Belthasar.exe",

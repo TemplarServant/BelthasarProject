@@ -36,7 +36,7 @@ static const uint8_t* entry(const Pack* p, uint32_t type, uint32_t id, uint32_t*
   return NULL;
 }
 
-static int has_tables(const char* path) {
+int CtDataPackFileHasTables(const char* path) {
   FILE* f = fopen(path, "rb");
   if (!f) return 0;
   uint8_t h[12];
@@ -111,6 +111,12 @@ int CtDataPackLoad(const char* path, char* err, size_t errLen) {
     free(seen);
   }
 
+  // The strings the tables point to, in their own block: the file itself is freed after the load (it may be the whole
+  // ct_assets.dat when the tables ride inside it).
+  char* keep = (char*)malloc(pl ? pl : 1);
+  if (!keep) { free(d); return fail(err, errLen, "%sout of memory", "", 0); }
+  if (pl) memcpy(keep, pool, pl);
+
   // The tables: one pack entry per registry entry, by name.
   for (int t = 0; t < ctTableDescCount; t++) {
     const CtTableDesc* td = &ctTableDescs[t];
@@ -120,35 +126,36 @@ int CtDataPackLoad(const char* path, char* err, size_t errLen) {
       uint32_t l = 0; const uint8_t* c = entry(&p, T_TABLE, id, &l);
       if (c && l >= 1 && c[0] == nl && l >= 1 + nl && !memcmp(c + 1, td->name, nl)) { b = c; bl = l; }
     }
-    if (!b) { free(d); return fail(err, errLen, "table %s is not in the pack", td->name, 0); }
+    if (!b) { free(d); free(keep); return fail(err, errLen, "table %s is not in the pack", td->name, 0); }
     size_t o = (1 + nl + 3) & ~(size_t)3;
-    if (o + 16 > bl) { free(d); return fail(err, errLen, "table %s: truncated", td->name, 0); }
+    if (o + 16 > bl) { free(d); free(keep); return fail(err, errLen, "table %s: truncated", td->name, 0); }
     uint32_t size = rd32(b + o), nrel = rd32(b + o + 12);
     uint64_t layout = rd64(b + o + 4);
-    if (size != td->size) { free(d); return fail(err, errLen, "table %s: the pack's is %llu bytes", td->name, size); }
-    if (layout != td->layout) { free(d); return fail(err, errLen, "table %s: another layout", td->name, 0); }
+    if (size != td->size) { free(d); free(keep); return fail(err, errLen, "table %s: the pack's is %llu bytes", td->name, size); }
+    if (layout != td->layout) { free(d); free(keep); return fail(err, errLen, "table %s: another layout", td->name, 0); }
     const uint8_t* rel = b + o + 16;
     const uint8_t* src = rel + (size_t)nrel * 4;
-    if ((uint64_t)(src - b) + size != bl) { free(d); return fail(err, errLen, "table %s: truncated", td->name, 0); }
+    if ((uint64_t)(src - b) + size != bl) { free(d); free(keep); return fail(err, errLen, "table %s: truncated", td->name, 0); }
     // the relocations are exactly this build's pointer members, in order: every element's, NULL ones included
     uint32_t nElem = td->elemSize ? (uint32_t)(td->size / td->elemSize) : 0;
-    if (nrel != nElem * (uint32_t)td->nPtr) { free(d); return fail(err, errLen, "table %s: its pointers are not this build's", td->name, 0); }
+    if (nrel != nElem * (uint32_t)td->nPtr) { free(d); free(keep); return fail(err, errLen, "table %s: its pointers are not this build's", td->name, 0); }
     memcpy(td->data, src, size);
     for (uint32_t r = 0; r < nrel; r++) {
       uint32_t at = rd32(rel + (size_t)r * 4);
       if (at != (r / td->nPtr) * td->elemSize + td->ptrOffs[r % td->nPtr])
-        { free(d); return fail(err, errLen, "table %s: its pointers are not this build's", td->name, 0); }
+        { free(d); free(keep); return fail(err, errLen, "table %s: its pointers are not this build's", td->name, 0); }
       uint64_t so = rd64(src + at);
       const char* s = NULL;
       if (so != UINT64_MAX) {
-        if (so >= pl) { free(d); return fail(err, errLen, "table %s: string out of the pool", td->name, 0); }
-        s = (const char*)pool + so;
+        if (so >= pl) { free(d); free(keep); return fail(err, errLen, "table %s: string out of the pool", td->name, 0); }
+        s = keep + so;
       }
       memcpy((uint8_t*)td->data + at, &s, sizeof s);
     }
   }
   snprintf(g_packPath, sizeof g_packPath, "%s", path);
-  return 1;                                        // d stays allocated: the tables point into its pool
+  free(d);
+  return 1;                                        // keep stays allocated: the tables point into it
 }
 
 int CtDataPackLoadForArgs(int argc, char** argv, char* err, size_t errLen) {
@@ -161,7 +168,7 @@ int CtDataPackLoadForArgs(int argc, char** argv, char* err, size_t errLen) {
   if (explicitPath && *explicitPath) return CtDataPackLoad(explicitPath, err, errLen);
   char sib[1024];
   if (assets) {
-    if (has_tables(assets)) return CtDataPackLoad(assets, err, errLen);
+    if (CtDataPackFileHasTables(assets)) return CtDataPackLoad(assets, err, errLen);
     const char* s1 = strrchr(assets, '/'); const char* s2 = strrchr(assets, '\\');
     const char* sep = s1 > s2 ? s1 : s2;
     size_t dir = sep ? (size_t)(sep - assets) + 1 : 0;

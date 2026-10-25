@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
   if (argc < 2) { printf("usage: ct_tables_proof <pack>\n"); return 2; }
   char err[512];
   if (!CtDataPackLoad(argv[1], err, sizeof err)) { printf("tables-proof: FAIL: the pack did not load: %s\n", err); return 1; }
+  printf("tables-proof: the file carries the tables: %s\n", CtDataPackFileHasTables(argv[1]) ? "yes" : "NO");
   if (ctTablesRealCount != ctTableDescCount) {
     printf("tables-proof: FAIL: %d tables compiled from the headers, %d in the data-free build\n", ctTablesRealCount, ctTableDescCount);
     return 1;

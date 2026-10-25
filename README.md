@@ -142,7 +142,8 @@ The setup flow (about 15-20 minutes the first time; later runs reuse what did no
    generators need;
 4. generates the asset captures, extracts `ct_assets.dat` (`assets/extract_assets.py`), then generates
    `src/data/*.h` and `src/xlat/*.c` (`tools/gen/manifest*.json`);
-5. packs the generated tables into `ct_tables.dat` (`tools/gen/pack_tables.py`);
+5. packs the generated tables into `ct_tables.dat` (`tools/gen/pack_tables.py`; a player's setup writes them inside
+   the `ct_assets.dat` of their data folder instead);
 6. builds everything.
 
 `python tools/setup.py --check` regenerates every generated file and compares it with what is in place.

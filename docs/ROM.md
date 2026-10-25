@@ -98,7 +98,8 @@ its folder chooser, Android its setup activity). The game then runs from a data 
 | the executable's own folder | it already holds a ROM-free `ct_assets.dat` (or an older one with the ROM beside it): a portable copy |
 | `%APPDATA%\BelthasarProject\Belthasar\` / `~/.local/share/BelthasarProject/Belthasar/` | otherwise |
 
-It holds `ct_assets.dat`, `ct_tables.dat` (a data-free build's), the battery save `ct_sram.srm`, `ct_settings.ini`,
+It holds `ct_assets.dat` (with the tables a data-free build loads inside it: one file, which the Android app takes
+as it is, [ANDROID.md](ANDROID.md)), the battery save `ct_sram.srm`, `ct_settings.ini`,
 `setup.log` and the copy of the dump the setup read (`Chrono_Trigger_USA_SNES.sfc`; the game itself does not need it
 once a ROM-free `ct_assets.dat` is there). While any of the game's files is missing, the setup screen
 (src/launcher_ui.cpp: a desktop form drawn with Dear ImGui -- the ROM file with Browse... and drag-and-drop, the data
@@ -130,7 +131,7 @@ Everything derived from the ROM is generated on your machine:
 |---|---|---|
 | `ct_assets.dat` | [`assets/extract_assets.py`](../assets/extract_assets.py) | The asset container: scene palettes, tilesets, maps, sprites, the font, strings and dialogue, scene scripts, collision, exits. The field and the menus draw from it without the ROM. |
 | `src/data/*.h` | the generators in `tools/` | 47 tables the engine compiles in: battle animation records, menu chrome, the title sequence, the overworld placard, and so on. Of these, 12 are generated from the ROM alone and 35 by oracle runs from power-on (the recipes in `tools/recipes/`). |
-| `ct_tables.dat` | [`tools/gen/pack_tables.py`](../tools/gen/pack_tables.py) | The same 47 headers' tables (223 arrays) as a data file, which a data-free `Belthasar` loads at startup instead of compiling them in (see below). |
+| `ct_tables.dat` | [`tools/gen/pack_tables.py`](../tools/gen/pack_tables.py) | The same 47 headers' tables (223 arrays) as a data file, which a data-free `Belthasar` loads at startup instead of compiling them in (see below). The player's setup (`--out`) writes them inside the `ct_assets.dat` it leaves in the data folder (`pack_tables.py into`). |
 | `src/xlat/*.c` | [`tools/gen/xlat_all.py`](../tools/gen/xlat_all.py) (traces) + [`tools/gen/xlat.py`](../tools/gen/xlat.py) | Five timing-sensitive ROM programs translated instruction by instruction into C, compiled into `ct.exe` only, as references for their native replacements (see [ARCHITECTURE.md](ARCHITECTURE.md#translated-stages)). |
 | Oracle states | recipes replayed by the oracle | The savestates the generators and the regression suite start from. Each recipe is a pad script played from power-on, optionally on top of a battery save that another recipe produced. |
 
@@ -145,7 +146,8 @@ the recipes, generate, pack the tables, build ([README.md](../README.md#2-set-up
 
 A prebuilt `Belthasar` has to work for everyone without carrying anything of the game, so it can be built with none of
 the generated tables compiled in: `CT_DATAFREE=1 python tools/build.py Belthasar` (CMake `-DCT_DATAFREE=ON`). It then
-loads them at startup from `ct_tables.dat`, which the setup makes from your dump.
+loads them at startup from the table pack the setup makes from your dump: inside the player's `ct_assets.dat`
+(`tools/gen/pack_tables.py into`, what the setup's `--out` writes), or `ct_tables.dat` beside it in a developer's tree.
 
 - **How the engine includes a table.** Always through `src/tables/<name>.h`. In a normal build (`ct.exe`, a developer's
   `Belthasar`) that file only includes `src/data/<name>.h`, so nothing changes. In a data-free build it declares the

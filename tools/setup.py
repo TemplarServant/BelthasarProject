@@ -30,8 +30,9 @@ The player's setup (Belthasar's ROM screen, src/launcher.c) runs the same steps 
     python tools/setup.py --rom <dump> --no-build --oracle <ct.exe> --workdir <dir> --out <dir>
 
 --oracle uses a ct.exe built beforehand (the release's, compiled from the shapes like step 2's) instead of building one;
---workdir copies this tree to <dir> first and runs there (the installed one may be read-only); --out copies
-ct_assets.dat and ct_tables.dat (and ct_wide.dat when step 7 made one) to <dir> at the end. Every step prints `setup: progress K/N` for the screen's bar.
+--workdir copies this tree to <dir> first and runs there (the installed one may be read-only); --out writes
+ct_assets.dat with the tables of ct_tables.dat inside (tools/gen/pack_tables.py into: the player keeps one file) and
+ct_wide.dat when step 7 made one to <dir> at the end. Every step prints `setup: progress K/N` for the screen's bar.
 
 --check is the inverse proof for this repository: every generator runs again and its output must equal the file in the
 tree (line endings aside), so a header that cannot be made from the ROM shows up; the asset-stage outputs are compared
@@ -152,7 +153,7 @@ def main():
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--oracle', help='a ct.exe built beforehand: used instead of building one')
     ap.add_argument('--workdir', help='copy this tree to WORKDIR and run there')
-    ap.add_argument('--out', help='copy ct_assets.dat and ct_tables.dat to OUT at the end')
+    ap.add_argument('--out', help='write ct_assets.dat (the tables inside) and ct_wide.dat to OUT at the end')
     ap.add_argument('--steam', help="the Steam release's Chrono Trigger folder (default: look for an installed one)")
     ap.add_argument('--no-steam', action='store_true', help="skip the Steam margins (the mod's optional data)")
     a = ap.parse_args()
@@ -269,11 +270,18 @@ def main():
     if missing:
         say('NOT COMPLETE: %d generated file(s) could not be made: %s (docs/ROADMAP.md)' % (len(missing), ', '.join(missing)))
         return 1
-    if a.out:
+    if a.out and os.path.realpath(a.out) == os.path.realpath(ROOT):
+        say('--out is this tree: ct_assets.dat and ct_tables.dat stay as they are')
+    elif a.out:
         os.makedirs(a.out, exist_ok=True)
-        for f in ('ct_assets.dat', 'ct_tables.dat'):
-            shutil.copy2(os.path.join(ROOT, f), os.path.join(a.out, f))
-        say('ct_assets.dat and ct_tables.dat -> %s' % a.out)
+        # the player's one file: ct_assets.dat with the tables inside (pack_tables.py into; the Android app takes only it)
+        if run([sys.executable, 'tools/gen/pack_tables.py', 'into', '--assets', os.path.join(ROOT, 'ct_assets.dat'),
+                '--pack', os.path.join(ROOT, 'ct_tables.dat'), '--out', os.path.join(a.out, 'ct_assets.dat')]).returncode:
+            sys.exit('setup: could not write the tables into %s' % os.path.join(a.out, 'ct_assets.dat'))
+        old = os.path.join(a.out, 'ct_tables.dat')         # an earlier setup's separate pack: the one inside wins
+        if os.path.exists(old):
+            os.remove(old)
+        say('ct_assets.dat (the tables inside) -> %s' % a.out)
         if not a.no_steam and os.path.exists(wide):
             shutil.copy2(wide, os.path.join(a.out, 'ct_wide.dat'))
             say('ct_wide.dat -> %s' % a.out)

@@ -2,6 +2,9 @@
 #include "launcher.h"
 #include "rom_verify.h"
 #include "assets.h"       // CtAssetsFileRomFree: a ROM-free container needs no dump beside it
+#ifdef CT_DATAFREE
+#include "datapack.h"     // CtDataPackFileHasTables: the setup writes the tables inside ct_assets.dat
+#endif
 #include "SDL.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,10 +52,17 @@ static int romFreeAssets(const char* dir) {
   snprintf(p, sizeof p, "%sct_assets.dat", dir);
   return CtAssetsFileRomFree(p);
 }
+#ifdef CT_DATAFREE
+static int tablesThere(const char* dir) {          // inside ct_assets.dat (today's setup), or an earlier setup's ct_tables.dat
+  char p[1200];
+  snprintf(p, sizeof p, "%sct_assets.dat", dir);
+  return CtDataPackFileHasTables(p) || readable(dir, "ct_tables.dat");
+}
+#endif
 int CtLauncherReady(const CtLauncher* L) {
   return readable(L->data, "ct_assets.dat") && (romFreeAssets(L->data) || readable(L->data, ROM_NAME))
 #ifdef CT_DATAFREE
-         && readable(L->data, "ct_tables.dat")
+         && tablesThere(L->data)
 #endif
       ;
 }

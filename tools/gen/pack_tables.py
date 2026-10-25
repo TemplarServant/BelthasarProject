@@ -5,6 +5,7 @@ r"""The table pack: the generated src/data/*.h tables as a data file Belthasar l
     python tools/gen/pack_tables.py headers                      write src/tables/ from the shapes (tools/gen/shapes/data)
     python tools/gen/pack_tables.py check                        src/tables/ matches the shapes (exit 1 if not)
     python tools/gen/pack_tables.py dump [--pack ct_tables.dat]  list a pack's tables
+    python tools/gen/pack_tables.py into --assets A --out B      B = the container A with the pack's tables inside
 
 The engine includes every generated table through src/tables/<name>.h. A normal build (ct.exe, a developer's
 Belthasar) gets the real header from there unchanged (#include "../data/<name>.h"). A DATA-FREE build (CMake
@@ -27,6 +28,11 @@ A table's bytes follow the C layout of the targets the release ships (x86-64 and
 alignment, 8-byte pointers; Windows' LLP64 and the others' LP64 agree because no table uses `long`), padding zeroed.
 A pointer member (`const char* name`, the loader's chapter/era strings) holds, in the pack, the u64 offset of its string
 in the pool (all ones for NULL); its offset in the table is in the reloc list, and the loader stores pool + offset.
+
+THE TABLES INSIDE ct_assets.dat (`into`): the four entry types above do not meet any asset type (src/assets.h), so the
+pack's entries can ride in the player's ct_assets.dat, which the setup's --out writes that way: the player keeps one file
+(the Android app takes only it, docs/ANDROID.md). src/datapack.c reads them from the --assets file when its directory
+holds the header entry (CtDataPackFileHasTables), else from ct_tables.dat beside it.
 
 THE LAYOUT STRING of a table is its name and its type spelled out: every member's name, type and offset, every array's
 count, every struct's size. Its hash is compiled into the data-free build (tables_storage.c) from the shapes, and the
@@ -780,6 +786,27 @@ def container(entries):
     return bytes(out + blobs)
 
 
+def merge_into(assets, pack):
+    """The CTAS container `assets` (its version and blobs as they are, any old table entries dropped) with the table
+    entries of the container `pack` appended."""
+    if assets[:4] != b'CTAS':
+        raise PackError('the assets are not a CTAS container')
+    keep = [e for e in read_pack(assets) if e[0] not in (T_HEADER, T_TABLE, T_POOL, T_DEFINES)]
+    add = [e for e in read_pack(pack) if e[0] in (T_HEADER, T_TABLE, T_POOL, T_DEFINES)]
+    if not any(e[0] == T_HEADER for e in add):
+        raise PackError('the pack holds no tables')
+    entries = keep + add
+    out = bytearray(assets[:8] + struct.pack('<I', len(entries)))
+    off = 12 + 16 * len(entries)
+    blobs = bytearray()
+    for typ, eid, blob in entries:
+        if typ in (T_HEADER, T_TABLE, T_POOL, T_DEFINES):
+            blobs += b'\0' * (-(off + len(blobs)) % 8)   # the pack's blobs 8-aligned, as in ct_tables.dat
+        out += struct.pack('<IIII', typ, eid, off + len(blobs), len(blob))
+        blobs += blob
+    return bytes(out + blobs)
+
+
 def read_pack(data):
     if data[:4] != b'CTAS':
         raise PackError('not a CTAS container')
@@ -955,7 +982,8 @@ def want_headers():
 # ---------------------------------------------------------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('cmd', choices=('pack', 'headers', 'check', 'dump'))
+    ap.add_argument('cmd', choices=('pack', 'headers', 'check', 'dump', 'into'))
+    ap.add_argument('--assets', default=os.path.join(ROOT, 'ct_assets.dat'), help='into: the container to carry them')
     ap.add_argument('--out', default=os.path.join(ROOT, 'ct_tables.dat'))
     ap.add_argument('--pack', default=os.path.join(ROOT, 'ct_tables.dat'))
     ap.add_argument('--data', default=DATA, help='the generated headers (default src/data)')
@@ -979,6 +1007,14 @@ def main():
             open(tmp, 'wb').write(data)
             os.replace(tmp, a.out)
             print('pack_tables: %d tables, %d bytes -> %s' % (len(tables), len(data), os.path.relpath(a.out, ROOT)))
+            return 0
+        if a.cmd == 'into':
+            data = merge_into(open(a.assets, 'rb').read(), open(a.pack, 'rb').read())
+            tmp = a.out + '.tmp'
+            open(tmp, 'wb').write(data)
+            os.replace(tmp, a.out)
+            print('pack_tables: %s with the tables of %s, %d bytes -> %s'
+                  % (os.path.basename(a.assets), os.path.basename(a.pack), len(data), a.out))
             return 0
         if a.cmd == 'dump':
             for typ, eid, blob in read_pack(open(a.pack, 'rb').read()):

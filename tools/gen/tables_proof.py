@@ -12,6 +12,8 @@ In a developer tree (src/data holds the generated headers):
      (src/tables/tables_real.c);
   4. it loads the pack and compares every table byte for byte (padding included; a pointer member by its string), and
      every #define with the real header's value (a run-time one as the loader filled its variable);
+  4b. the same pack inside ct_assets.dat (pack_tables.py into, what the player's setup writes) loads the same way, and
+     ct_assets.dat without it is refused;
   5. the controls: packs with one table byte flipped or a run-time #define changed must DIFFER, and packs with a wrong
      pointer size, a wrong layout hash or a compiled-in #define changed must be REFUSED -- so the comparison and the
      loader's checks are not vacuous.
@@ -123,6 +125,22 @@ def main():
     print(p.stdout, end='')
     if p.returncode or 'IDENTICAL' not in p.stdout:
         return 1
+    # the player's one file: the same tables inside ct_assets.dat (pack_tables.py into, the setup's --out), read by the
+    # same loader; the container without them is refused (its tables are not there)
+    assets = os.path.join(ROOT, 'ct_assets.dat')
+    if os.path.exists(assets):
+        inside = os.path.join(OUT, 'ct_assets_tables.dat')
+        open(inside, 'wb').write(pt.merge_into(open(assets, 'rb').read(), open(pack, 'rb').read()))
+        q = run([EXE, inside])
+        ok_in = q.returncode == 0 and 'IDENTICAL' in q.stdout and 'carries the tables: yes' in q.stdout
+        bare = run([EXE, assets]) if pt.T_HEADER not in [e[0] for e in pt.read_pack(open(assets, "rb").read())] else None
+        ok_bare = bare is None or (bare.returncode != 0 and 'holds no tables' in bare.stdout)
+        print('tables-proof: inside ct_assets.dat %s' % ('IDENTICAL' if ok_in else 'FAILED -- ' + q.stdout.strip()[-400:]))
+        print('tables-proof: ct_assets.dat without them %s' % ('refused' if ok_bare else 'NOT REFUSED'))
+        if not (ok_in and ok_bare):
+            return 1
+    else:
+        print('tables-proof: inside ct_assets.dat: not checked (no ct_assets.dat)')
 
     # the controls
     data = open(pack, 'rb').read()
