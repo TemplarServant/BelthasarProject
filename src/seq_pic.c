@@ -255,6 +255,27 @@ static void opt(const CtSeqPic* p, const Line* L, int layer, int* lx, int* ly) {
   if (v & valid) *ly = (v & 0x3FF) + (y - p->vofs[layer]);
 }
 
+// THE OFFSET PER TILE PAST THE SCREEN'S EDGE (mode 2; a stage's art past its edge, a mod): the 32 columns' offsets carried
+// on as a line through the two entries nearest that edge, so a stretch made with them -- the attract's FF 63, the machine
+// opening from its middle -- goes on into the sides. x is the screen column, y the line; *mx / *my the layer's place
+// (unwrapped, as g_seqPicArt takes it). 1 = an offset applied.
+static int floorDiv8(int v) { return v >= 0 ? v / 8 : -((7 - v) / 8); }
+static int optSigned(uint16_t v) { int s = v & 0x3FF; return s >= 512 ? s - 1024 : s; }
+static int optSide(const CtSeqPic* p, const Line* L, int layer, int x, int y, int* mx, int* my) {
+  int hs = p->hofs[layer] & 0x3FF, valid = layer == 0 ? 0x2000 : 0x4000, done = 0;
+  int column = floorDiv8(x + (hs & 7)), e = column - 1, ea = e < 0 ? 0 : 30, eb = ea + 1;
+  uint16_t ha = optValue(p, L, ea, 0), hb = optValue(p, L, eb, 0), va = optValue(p, L, ea, 1), vb = optValue(p, L, eb, 1);
+  if ((ha & valid) && (hb & valid)) {
+    int h = optSigned(ha) + (optSigned(hb) - optSigned(ha)) * (e - ea);
+    *mx = (h & ~7) + column * 8 + ((x + hs) & 7); done = 1;
+  }
+  if ((va & valid) && (vb & valid)) {
+    int v = optSigned(va) + (optSigned(vb) - optSigned(va)) * (e - ea);
+    *my = (v + y) & 0x3FF; done = 1;
+  }
+  return done;
+}
+
 static void m7Start(const CtSeqPic* p, Line* L, int y) {
   int h = ((int16_t)(p->m7[6] << 3)) >> 3, v = ((int16_t)(p->m7[7] << 3)) >> 3;
   int xc = ((int16_t)(p->m7[4] << 3)) >> 3, yc = ((int16_t)(p->m7[5] << 3)) >> 3;
@@ -291,21 +312,23 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
     if (cl < 4) {
       int lx = x, ly = y;
       if (L->mosaicOn[cl] && L->mosaic > 1) { lx -= lx % L->mosaic; ly -= (ly - p->mosaicStart) % L->mosaic; }
-      int art = -1;
-      if (g_seqPicArt && g_seqPicWideSide > 0 && L->mode < 5) {          // (the scene adjustments' new art, a mod)
-        int hs = p->hofs[cl] & 0x3FF, amx;
+      int art = -1, artOn = g_seqPicArt && g_seqPicWideSide > 0 && L->mode < 5, optOut = 0, amx = 0, amy = 0;
+      if (artOn) {                                                       // (a stage's art past its edge, a mod)
+        int hs = p->hofs[cl] & 0x3FF;
         if (hs >= 512) hs -= 1024;
-        amx = lx + hs;
-        art = g_seqPicArt(p, cl, &amx, (ly + p->vofs[cl]) & 0x3FF, cp);
+        amx = lx + hs; amy = (ly + p->vofs[cl]) & 0x3FF;
+        if ((x < 0 || x > 255) && L->mode == 2) optOut = optSide(p, L, cl, x, ly, &amx, &amy);
+        art = g_seqPicArt(p, cl, &amx, amy, cp);
         lx = amx - hs;                                                  // (it may send the layer to another of its places)
       }
       if (art >= 0) px = art;
+      else if (optOut) px = bgPixel(p, L, amx & 0x3FF, amy & 0x3FF, cl, cp);
       else if (L->mode == 7) px = m7Pixel(p, L, lx, cl, cp);
       else {
         lx += p->hofs[cl];
         if (L->mode == 5 || L->mode == 6) { lx *= 2; lx += (sub || L->mosaicOn[cl]) ? 0 : 1; }
         ly += p->vofs[cl];
-        if (L->mode == 2 || L->mode == 4 || L->mode == 6) opt(p, L, cl, &lx, &ly);
+        if ((L->mode == 2 || L->mode == 4 || L->mode == 6) && !(artOn && (x < 0 || x > 255))) opt(p, L, cl, &lx, &ly);
         px = bgPixel(p, L, lx & 0x3FF, ly & 0x3FF, cl, cp);
       }
     } else {                                                           // (a widescreen column has no sprite: ppu.c's rule,

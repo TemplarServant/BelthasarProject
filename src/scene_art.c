@@ -67,20 +67,51 @@ static void entry3Build(const CtSeqPic* p) {
 static const CtWideExt* g_e3Steam;
 static CtWideExt g_e3SteamExt;
 static int g_e3Own = 1;                                               // the scene adjustments' own art
-void CtSceneArtEntry3Set(int steam, int own) {
-  g_e3Steam = steam && CtWideExtGet(0x06B, &g_e3SteamExt) ? &g_e3SteamExt : NULL;
-  g_e3Own = own;
-}
-// The Steam sheet's CGRAM index at the room's pixel (x, y) of a plane: 0 = nothing there, -1 = not a sheet's cell.
-static int steamPx(int plane, int x, int y) {
+// The Steam sheet's CGRAM index at the room's pixel (x, y) of a plane, its cell's page moved on by dpage: 0 = nothing
+// there, -1 = not a sheet's cell (the room's own metatiles).
+static int steamPx(int plane, int x, int y, int dpage) {
   const CtWideExt* e = g_e3Steam;
   int c = (x >> 4) + (e->w - 16) / 2, r = y >> 4;
   if (c < 0 || c >= e->w || r < 0 || r >= e->h) return 0;
   unsigned v = e->planes[(size_t)plane * e->w * e->h + (size_t)r * e->w + c];
   if (!v) return 0;
-  unsigned t = v - 1, page = t >> 8;
-  if (page < 1 || page > 7 || !e->pageSheet[page]) return -1;
+  unsigned t = v - 1, page = (t >> 8) + (unsigned)dpage;
+  if ((t >> 8) < 1 || page > 7 || !e->pageSheet[page]) return -1;
   return e->pageSheet[page][(((t >> 4) & 15) * 16 + (y & 15)) * 256 + (t & 15) * 16 + (x & 15)];
+}
+// THE ROUND PLANET (the Steam release's art): its glow (plane 0's cells, sheet 0) and under it the planet's dark edge (the
+// same cells two pages on, sheet 2) bend down towards the sides, over the planet (plane 3). The stage shows the sky's map
+// above line 70 only (HDMA channel 3), so in the sides the bend is laid at the sky's own rows on every line -- the row of
+// line l is l + the sky lines' V scroll -- and the planet shows only below it. Past the art's own columns (a 21:9 side is
+// wider than its 96) the bend goes on: the edge column, lowered along its own slope (g_e3Slope, pixels a column).
+static int g_e3SkyVofs;
+static float g_e3Slope[2];
+static int horizonPx(int x, int ys) {
+  const int ew = (g_e3Steam->w - 16) / 2 * 16;
+  int xe = x, dy = 0;
+  if (x < -ew) { xe = -ew; dy = (int)((-ew - x) * g_e3Slope[0] + 0.5f); }
+  else if (x >= 256 + ew) { xe = 255 + ew; dy = (int)((x - 255 - ew) * g_e3Slope[1] + 0.5f); }
+  int v = steamPx(0, xe, ys - dy, 0);
+  if (v) return v;
+  return steamPx(0, xe, ys - dy, 2) > 0 ? steamPx(0, xe, ys - dy, 2) : 0;
+}
+// The glow's lowest row in a column (its sky rows 48-79), for the slope past the art.
+static int glowBottom(int x) {
+  int b = 48;
+  for (int y = 48; y < 80; y++) if (steamPx(0, x, y, 0) > 0 || steamPx(0, x, y, 2) > 0) b = y;
+  return b;
+}
+
+void CtSceneArtEntry3Set(int steam, int own) {
+  g_e3Steam = steam && CtWideExtGet(0x06B, &g_e3SteamExt) ? &g_e3SteamExt : NULL;
+  g_e3Own = own;
+  if (g_e3Steam) {
+    const int ew = (g_e3Steam->w - 16) / 2 * 16;
+    g_e3Slope[0] = (glowBottom(-ew) - glowBottom(-ew + 16)) / 16.0f;
+    g_e3Slope[1] = (glowBottom(255 + ew) - glowBottom(255 + ew - 16)) / 16.0f;
+    if (g_e3Slope[0] < 0) g_e3Slope[0] = 0;
+    if (g_e3Slope[1] < 0) g_e3Slope[1] = 0;
+  }
 }
 
 int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
@@ -97,11 +128,23 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
     x = mx - hs;
     if (x >= 0 && x < 256) return -1;
     if (g_e3Steam) {                                                 // (the Steam release's glow and planet, a mod)
-      // (past its own columns -- a 21:9 side is wider than its 96 -- the Steam art mirrored about its edge)
-      const int ew = (g_e3Steam->w - 16) / 2 * 16;
-      int rx = mx < -ew ? -2 * ew - 1 - mx : mx >= 256 + ew ? 2 * (256 + ew) - 1 - mx : mx;
-      int sky = (p->r[0x08] & 0xFC) == 0x60, v = steamPx(sky ? 0 : 3, rx, sky ? (my & 255) : (my & 511));
-      if (v > 0) return pri ? 0 : v;
+      const int ew = (g_e3Steam->w - 16) / 2 * 16, sky = (p->r[0x08] & 0xFC) == 0x60;
+      const int line = (my - p->vofs[1]) & 0x3FF;
+      if (sky) g_e3SkyVofs = p->vofs[1];
+      int h = horizonPx(mx, (line + g_e3SkyVofs) & 255);
+      if (h > 0) return pri ? 0 : h;
+      if (h < 0 && !sky) {                                           // (the sky's rows on a planet's line: the night's tile)
+        const unsigned chr = (unsigned)(p->r[0x0B] >> 4) << 12;
+        int ys = (line + g_e3SkyVofs) & 255;
+        uint16_t e = p->vram[(0x6000 + (unsigned)(ys >> 3) * 32) & 0x7FFF];
+        int c = tilePixel(p, chr, e, mx & 7, ys & 7);
+        return pri ? 0 : (c ? (int)((e >> 10) & 7) * 16 + c : 0);
+      }
+      if (!sky) {                                                    // the planet, below the bend (mirrored past the art)
+        int rx = mx < -ew ? -2 * ew - 1 - mx : mx >= 256 + ew ? 2 * (256 + ew) - 1 - mx : mx;
+        int v = steamPx(3, rx, my & 511, 0);
+        if (v > 0) return pri ? 0 : v;
+      }
     }
     if ((p->r[0x08] & 0xFC) == 0x60 && (my & 255) < 32) { *pmx = mx & 7; return -1; }
     *pmx = (x < 0 ? -1 - x : 511 - x) + hs;
@@ -110,7 +153,7 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
   if (layer != 0 || (mx >= 8 && mx < 256)) return -1;                // (BG1 inside its own 256 columns: the ROM's)
   if (pri != E3_ART_PRI) return 0;                                   // (the machine's tiles are all of priority 0)
   int u = mx - 8, y = my & 255;                                      // u: the field's column (the machine's middle at 127.5)
-  if (g_e3Steam && (u < 0 || u >= 256)) { int v = steamPx(2, u, y); if (v > 0) return v; }   // (the Steam release's wings)
+  if (g_e3Steam && (u < 0 || u >= 256)) { int v = steamPx(2, u, y, 0); if (v > 0) return v; }   // (the Steam release's wings)
   if (u >= 128) u = 255 - u;                                         // the right side: the left's mirror
   if (u >= 0) return g_e3Orig[y][u];                                 // (the field's own columns past the display's wrap)
   int col = u + E3_ART_W;

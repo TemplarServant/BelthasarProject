@@ -94,9 +94,16 @@ The machine rising over the planet (sequence entry 3) draws its BG1 -- and throu
 from the field location where the story calls `FF 23`, 06B, whose Steam margins (`mapext_107`) are cells of three sheets
 of tiles that release drew for it (`cgext107_0`-`2`, pages 2-4): plane 2 the wings' pointed ends past the machine (80
 px a side, BG1's low layer), plane 0 the glow (the field's rows 3-4), plane 3 the planet (BG2). With the Steam margins
-on, the stage's sides draw them (`CtSceneArtEntry3Set`, the attract's 1B1 too: the same machine), the planet and the
-glow mirrored about the margins' own 96 columns past them (a 21:9 side is 133); the sky's rows of the room's own
-metatiles and everything past the art keep the rules above (one moon, the planet mirrored). (Until 2026-10-25 this
+on, the stage's sides draw them (`CtSceneArtEntry3Set`, the attract's 1B1 too: the same machine). The planet is round
+there: the glow and, under it, the planet's dark edge (plane 0's cells two pages on: `cgext107_2`) bend down towards
+the sides. The stage shows the sky's map above line 70 only (HDMA channel 3), so in the sides the bend is laid at the sky
+rows' own place on every line (the line plus the sky lines' V scroll) and the planet shows only below it; past the art's
+own 96 columns (a 21:9 side is 133) the bend goes on along the edge column's slope and the planet is mirrored. The sky's
+rows of the room's own metatiles keep the rules above (one moon).
+
+The attract's `FF 63` opens the machine from its middle with mode 2's offset per tile (each of the 32 columns' H offset
+a step further from the middle); past the screen's edge the offsets go on as the line through the two entries nearest
+that edge (`optSide` in `src/seq_pic.c`, only while a stage's art draws its sides), so the sides open with it. (Until 2026-10-25 this
 document said the Steam release had no art for the scene: its `Game/special` folder has none, the margins of 06B do.)
 
 ## Fill the bottom lines

@@ -7526,6 +7526,18 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
       o = fopen("build/racepic_native.pic", "wb");             // (the compositor's state after the frame: CtSeqPic as is)
       if (o) { fwrite(&sp.p, sizeof sp.p, 1, o); fclose(o); }
     }
+    // RACEPICCMP_SHOTEVERY=<n> (with RACEPICCMP_WIDE): every n-th frame's wide picture to build/_racepic_shots/wide_<k>.raw.
+    if (wside > 0 && wside <= 256 && getenv("RACEPICCMP_SHOTEVERY") && atoi(getenv("RACEPICCMP_SHOTEVERY")) > 0 &&
+        k % atoi(getenv("RACEPICCMP_SHOTEVERY")) == 0) {
+      char path[64]; snprintf(path, sizeof path, "build/_racepic_shots/wide_%05d.raw", k);
+      FILE* o = fopen(path, "wb");
+      if (o) {
+        uint32_t hd[2] = { (uint32_t)(256 + 2 * wside), 224 }; fwrite(hd, 4, 2, o);
+        for (int y = 0; y < 224; y++) { memcpy(wide + ((size_t)y * hd[0] + wside) * 3, rgb + (size_t)y * 256 * 3, 256 * 3);
+                                        fwrite(wide + (size_t)y * hd[0] * 3, 1, (size_t)hd[0] * 3, o); }
+        fclose(o);
+      }
+    }
   }
   #undef RPC_PAD
   printf("racepiccmp: %d frames -- first state difference %d, first race-WRAM difference %d, first picture difference %d (%ld px)\n", frames, firstState, firstWram, firstPic, picBad);
