@@ -4843,7 +4843,12 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
   // does): $1100,X move-mode + the party-slot -> object-X table $0197/$0199/$019B (maintained by the
   // ROM PC loader C0/426A; read by C0/024C's lead-cell record + C0/0715's defeat-pose staging).
   // CtSceneSeedFromWram overwrites the whole image with the oracle's values afterward when used.
+  // A LATER object's fn0 may kill an EARLIER one (C0/6254 `STA $1100,X = 80` on an object whose own fn0 already ran):
+  // loc 048's guard obj16 runs `0A 06` on the watcher obj3 when he lies passed out ($7F0198 bit 6), and on the cartridge
+  // obj3 stays at 80 -- no further writer. The mode above was taken right after obj3's own fn0, so the kill must be
+  // carried over here, or this mirror wrote 07 back and the watcher woke the guard ("What are you up to?!").
   for (int n = 0; n < count; n++) {
+    if (sc->actors[n].dead) sc->mode[n] = 0x80;
     w8(sc->mem, 0x7E1100 + (uint32_t)n * 2, sc->mode[n] & 0xFF);
     if (sc->mode[n] >= 0 && sc->mode[n] <= 2) w8(sc->mem, 0x7E0197 + (uint32_t)sc->mode[n] * 2, n * 2);
   }

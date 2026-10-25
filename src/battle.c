@@ -8149,8 +8149,13 @@ static void battleCounterArmROM(CtBattleHost* h, int n, const int* list) {
   s[0xB2C0] = 0;
   if ((s[0x2989] & 0x20) || !b2c0) return;                               // C1/8640-8654
   if (a >= 3 && (s[battleBlock(a) + 0x1E] & 0x04)) return;               // C1/8657-866E
-  for (int k = 0; k < n && k < 8; k++) {                                 // C1/8671-8814
-    int v = list[k] & 0xFF;
+  // The victims are the ROM's list, $AD8E copied into $B3AC (C1/8629-8635), not the action's own: an enemy's turn on a
+  // header (C1/8E47 -> C1/AC57 with $AECC's bit-7 form, C1/AC2A) skips the $AD8E copy, so its list stays FF and nobody
+  // counters. MEASURED, the rule's cartridge (the playthrough's 33_escape, the prison guards' fight, f2613-2718): the
+  // guard's call of a second guard (header 04 02 7D, $AECC = 05) -- $B3AC all FF at C1/8682, no turn; the port took $AECC
+  // and walked the new guard's block 2, one draw more on $26 and every hit after it a roll apart.
+  for (int k = 0; k < 8; k++) {                                          // C1/8671-8814
+    int v = s[0xAD8E + k];
     if (v < 3 || v == 0xFF || v >= 11) continue;                         // C1/8685-8690
     int slot = v - 3;
     // (The loop's per-victim gates -- a fallen one only for its block 2's condition 20, C1/8694-86C6, and C1/86FF's
