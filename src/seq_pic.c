@@ -129,9 +129,10 @@ static void decode(const CtSeqPic* p, Line* L) {
   for (int i = 0; i < 6; i++) L->math[i] = (r[0x31] >> i) & 1;
 }
 
-int g_seqPicWideSide = 0, g_seqPicWideSkip = 0;
+int g_seqPicWideSide = 0, g_seqPicWideSkip = 0, g_seqPicWideSkipModes = 0;
 uint8_t* g_seqPicWideOut = NULL;
 CtSeqPicArtFn g_seqPicArt = NULL;
+int g_seqPicWideSubTexture = 0;
 // x inside the window's span [l, r]: the hardware's test, or -- while the widescreen's sides are drawn -- snes/ppu.c
 // ppu_winTest's (a narrow band at an edge is no window; a wide span's edge within 16 columns of the screen's runs on to the
 // picture's; a curtain, one edge on the screen's edge, has its moving edge scaled to the picture).
@@ -307,7 +308,8 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
     int cl = kLayers[L->actMode][i], cp = kPrio[L->actMode][i];
     int on = sub ? L->sub[cl] && (!L->subWin[cl] || !winState(p, L, cl, x))
                  : L->main[cl] && (!L->mainWin[cl] || !winState(p, L, cl, x));
-    if ((x < 0 || x > 255) && (g_seqPicWideSkip >> cl & 1)) on = 0;   // (a scene layer: no copy of it in the sides)
+    if ((x < 0 || x > 255) && (g_seqPicWideSkip >> cl & 1) && (!g_seqPicWideSkipModes || (g_seqPicWideSkipModes >> L->mode & 1)))
+      on = 0;                                                          // (a scene layer: no copy of it in the sides)
     if (!on) continue;
     if (cl < 4) {
       int lx = x, ly = y;
@@ -331,14 +333,16 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
         if ((L->mode == 2 || L->mode == 4 || L->mode == 6) && !(artOn && (x < 0 || x > 255))) opt(p, L, cl, &lx, &ly);
         px = bgPixel(p, L, lx & 0x3FF, ly & 0x3FF, cl, cp);
       }
-    } else {                                                           // (a widescreen column has no sprite: ppu.c's rule,
-      int ox = x;                                                      //  the sub screen's texture repeated 256 along)
-      if ((x < 0 || x > 255) && sub && !L->main[4]) ox = x & 255;
+    } else {                                                           // (a widescreen column has no sprite: ppu.c's rule;
+      int ox = x;                                                      //  the sub screen's texture repeated 256 along if set)
+      if ((x < 0 || x > 255) && sub && !L->main[4] && g_seqPicWideSubTexture) ox = x & 255;
       px = (ox >= 0 && ox < 256 && L->objPri[ox] == cp) ? L->objPix[ox] : 0;
     }
     if (px > 0) { layer = cl; break; }
   }
-  if (L->direct && layer < 4 && kDepth[L->actMode][layer] == 8) {
+  if (px >= 0x10000) {                                                // (a stage's art in direct colour: BGR15)
+    *rr = px & 0x1F; *gg = (px >> 5) & 0x1F; *bb = (px >> 10) & 0x1F;
+  } else if (L->direct && layer < 4 && kDepth[L->actMode][layer] == 8) {
     *rr = ((px & 7) << 2) | ((px & 0x100) >> 7); *gg = ((px & 0x38) >> 1) | ((px & 0x200) >> 8); *bb = ((px & 0xC0) >> 3) | ((px & 0x400) >> 8);
   } else {
     uint16_t c = p->cgram[px & 0xFF];

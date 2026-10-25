@@ -63,11 +63,19 @@ extern int g_seqPicWideSide;
 // The layers (bit n = BG n+1) the sides leave out: a stage's SCENE layer, whose map is one screen wide, would show the same
 // picture again past each edge (entry 3's BG1, the machinery over the ocean, BG1SC 00) -- a background layer runs on.
 extern int g_seqPicWideSkip;
+// ... in the BG modes whose bits are set (bit n = mode n), 0 = in every mode: a stage whose phases change mode (the endings:
+// the world in mode 7 and the clouds in mode 1 go on into the sides, the planet and the credits in mode 4 do not).
+extern int g_seqPicWideSkipModes;
 extern uint8_t* g_seqPicWideOut;
+// Sprites only on the SUB screen as a texture laid over the picture (snes/ppu.c's gate warp tunnel): 1 = the sides take the
+// screen's pattern, 256 columns along. 0 (every native stage: their sub-screen sprites are text and objects -- the endings'
+// credits and "The End", entry 7's line -- which stood three times): no sprite past the 256.
+extern int g_seqPicWideSubTexture;
 // A SCENE'S NEW ART PAST ITS EDGE (the scene adjustments, a mod: scene_art.h; never set by a grading harness): while the sides
 // are drawn, a BG layer's pixel (modes 0-4) is asked of g_seqPicArt first, at the layer's own place before it wraps -- mx = x
 // + its H scroll as a signed 10-bit value, my = y + its V scroll (0-1023), the mosaic applied -- and pri the pass's priority.
-// It returns a CGRAM index (0 = nothing there at that priority) or -1: the layer's own pixel, at *mx (which it may move to
+// It returns a CGRAM index (0 = nothing there at that priority), 0x10000 | a BGR15 colour (art of its own colours, still under
+// the colour math and the brightness) or -1: the layer's own pixel, at *mx (which it may move to
 // another place of the layer). Called once with layer -1 at each frame's start.
 typedef int (*CtSeqPicArtFn)(const CtSeqPic* p, int layer, int* mx, int my, int pri);
 extern CtSeqPicArtFn g_seqPicArt;

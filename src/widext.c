@@ -14,12 +14,18 @@ static CtWideExt g_ext[WIDEXT_LOCATIONS];
 static uint8_t* g_file;                       // the whole file, kept: the chip sets and corners point into it
 static const uint8_t* g_set[256];
 
+#define WIDEXT_IMAGES 8
+typedef struct { char name[64]; int w, h; const uint8_t* rgba; } WidextImage;
+static WidextImage g_img[WIDEXT_IMAGES];
+static int g_nimg;
+
 static uint32_t rd32(const uint8_t* p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 
 // ct_wide.dat (LE): "CTWD", u32 version 3, u32 locations, u32 sets, u32 sheets; per set u8 set + 128*64 pixels; per sheet
 // 256*256 CGRAM indices; per location u16 location, u8 w, u8 h, 5*w*h u16, u8 slot set[6], u16 metatiles, per metatile
 // u16 id + 4 x (u16 chip, u8 pal, u8 flags), u8 pages, per page u8 page + u16 sheet. (A version-2 file, four planes and no
-// sheets, is refused: tools/steam_wide.py writes it again.)
+// sheets, is refused: tools/steam_wide.py writes it again.) Then, optionally, "SPCL", u32 images, per image u8 name length,
+// the name, u16 w, u16 h, w*h RGBA: the special scenes' extension art at the SNES's pixels (CtWideExtImage).
 static void widextLoad(void) {
   g_loaded = 1;
   const char* path = getenv("CT_WIDE_DAT");
@@ -65,6 +71,21 @@ static void widextLoad(void) {
     if (loc < WIDEXT_LOCATIONS && !g_ext[loc].planes) g_ext[loc] = e;
     else { free(p); free(ids); free(corners); }
   }
+  // the special scenes' images ("SPCL" after the locations: a reader of before stops ahead of them)
+  if (o + 8 <= len && !memcmp(d + o, "SPCL", 4)) {
+    uint32_t n = rd32(d + o + 4);
+    o += 8;
+    for (uint32_t i = 0; i < n && g_nimg < WIDEXT_IMAGES && o + 1 <= len; i++) {
+      int l = d[o];
+      if (o + 1 + l + 4 > len) break;
+      int w = d[o + 1 + l] | d[o + 2 + l] << 8, h = d[o + 3 + l] | d[o + 4 + l] << 8;
+      if (o + 5 + l + 4L * w * h > len) break;
+      WidextImage* im = &g_img[g_nimg++];
+      snprintf(im->name, sizeof im->name, "%.*s", l, (const char*)d + o + 1);
+      im->w = w; im->h = h; im->rgba = d + o + 5 + l;
+      o += 5 + l + 4L * w * h;
+    }
+  }
 }
 
 int CtWideExtAvailable(void) {
@@ -76,4 +97,10 @@ int CtWideExtGet(int location, CtWideExt* out) {
   if (location < 0 || location >= WIDEXT_LOCATIONS || !g_ext[location].planes) return 0;
   *out = g_ext[location];
   return 1;
+}
+const uint8_t* CtWideExtImage(const char* name, int* w, int* h) {
+  if (!g_loaded) widextLoad();
+  for (int i = 0; i < g_nimg; i++)
+    if (!strcmp(g_img[i].name, name)) { *w = g_img[i].w; *h = g_img[i].h; return g_img[i].rgba; }
+  return NULL;
 }

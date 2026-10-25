@@ -25,6 +25,9 @@ typedef struct {
 
 int CtWideExtGet(int location, CtWideExt* out);   // 1 = ct_wide.dat (CT_WIDE_DAT overrides the path) has this location
 int CtWideExtAvailable(void);                     // 1 = a ct_wide.dat was read (the setup writes one from a Steam copy it finds)
+// A special scene's extension art by its name in the Steam release ("40_kokscr_ext.png"): w x h RGBA at the SNES's
+// pixels, NULL = not in the player's ct_wide.dat (one written before 2026-10-25 has none: the setup writes it again).
+const uint8_t* CtWideExtImage(const char* name, int* w, int* h);
 
 #ifdef __cplusplus
 }

@@ -159,3 +159,28 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
   int col = u + E3_ART_W;
   return col < 0 || !g_e3Own ? 0 : g_e3Art[y][col];                // (the adjustments' own art, when on)
 }
+
+// ENTRY 6 (`FF 26`, the Epoch into Lavos's shell). Its BG1 in mode 1 is one screen -- the cockpit's dashboard on the lower
+// lines (the tunnel above them is mode 7, which the art is not asked for), the Epoch in the dive -- so the sides showed the
+// dashboard three times. Past the 256 its BG1 shows nothing but, with the Steam margins on, the Steam release's cockpit walls
+// (40_kokscr_ext, halved to the SNES's pixels by tools/steam_wide.py: the left wall its columns 0-95, the right 160-255, rows
+// 96-175, standing on the picture's bottom row beside the dashboard -- their canopy's edge meets the dashboard's at row 168).
+static const uint8_t* g_e6Img;
+static int g_e6W, g_e6H;
+void CtSceneArtEntry6Set(int steam) { g_e6Img = steam ? CtWideExtImage("40_kokscr_ext.png", &g_e6W, &g_e6H) : NULL; }
+int CtSceneArtEntry6(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
+  (void)pri;
+  if (layer != 0) return -1;
+  int hs = p->hofs[0] & 0x3FF;
+  if (hs >= 512) hs -= 1024;
+  const int x = *pmx - hs, row = ((my - p->vofs[0]) & 0x3FF) - 1;   // (the screen's column and row)
+  if (x >= 0 && x < 256) return -1;
+  // (Where nothing stands the side is black: the dashboard covers the whole 256 on its lines, the backdrop -- cyan -- never
+  //  shows there.)
+  if (!g_e6Img || g_e6W < 256 || g_e6H < 176) return 0x10000;
+  const int ix = x < 0 ? x + 96 : x - 96, iy = row - 48;
+  if ((x < 0 && ix < 0) || (x >= 256 && ix >= 256) || iy < 96 || iy >= 176) return 0x10000;
+  const uint8_t* q = g_e6Img + 4 * ((size_t)iy * g_e6W + ix);
+  if (q[3] < 128) return 0x10000;
+  return 0x10000 | (q[0] >> 3) | (q[1] >> 3) << 5 | (q[2] >> 3) << 10;
+}

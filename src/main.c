@@ -7498,11 +7498,15 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     // scene adjustments' art: RACEPICCMP_ART=1, the Steam release's from ct_wide.dat: RACEPICCMP_STEAM=1, scene_art.h) -- SHOT writes it to build/racepic_wide.raw.
     static uint8_t wide[(256 + 2 * 256) * 224 * 3]; int wside = getenv("RACEPICCMP_WIDE") ? atoi(getenv("RACEPICCMP_WIDE")) : 0;
     if (wside > 0 && wside <= 256) { g_seqPicWideSide = wside; g_seqPicWideOut = wide;
-                                     if (getenv("RACEPICCMP_ART") || getenv("RACEPICCMP_STEAM")) {
+                                     g_seqPicWideSkip = getenv("RACEPICCMP_SKIP") ? (int)strtol(getenv("RACEPICCMP_SKIP"), NULL, 16) : 0;
+                                     g_seqPicWideSubTexture = getenv("RACEPICCMP_SUBTEX") != NULL;
+                                     g_seqPicWideSkipModes = getenv("RACEPICCMP_SKIPMODES") ? (int)strtol(getenv("RACEPICCMP_SKIPMODES"), NULL, 16) : 0;
+                                     if (getenv("RACEPICCMP_E6")) { CtSceneArtEntry6Set(getenv("RACEPICCMP_STEAM") != NULL); g_seqPicArt = CtSceneArtEntry6; }
+                                     else if (getenv("RACEPICCMP_ART") || getenv("RACEPICCMP_STEAM")) {
                                        CtSceneArtEntry3Set(getenv("RACEPICCMP_STEAM") != NULL, getenv("RACEPICCMP_ART") != NULL);
                                        g_seqPicArt = CtSceneArtEntry3; } }
     CtSeqStagePicFrame(&sp, w, rgb);
-    g_seqPicWideSide = 0; g_seqPicWideOut = NULL; g_seqPicArt = NULL;
+    g_seqPicWideSide = 0; g_seqPicWideOut = NULL; g_seqPicArt = NULL; g_seqPicWideSkip = 0; g_seqPicWideSkipModes = 0; g_seqPicWideSubTexture = 0;
     uint32_t fr = s->frames;
     while (!s->inVblank && fr == s->frames) rpcOp(s, k);
     int pb = 0;

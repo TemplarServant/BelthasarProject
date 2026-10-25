@@ -5759,18 +5759,20 @@ static int fieldPpuField(void* c) { (void)c; return !(g_sndTraceFrame & 1); }
 // snes/ppu.c's rule) -- black while the stage's opening holds -- and the host shows them round the 256 (g_seqWideW).
 // art: the stage's art past its edge (scene_art.h) -- the Steam release's (the Steam margins, a mod) and the scene
 // adjustments' (a mod: settings.h sceneAdjust) -- drawn in place of the layers `skip` leaves out.
-static void stageWideBegin(int skip, CtSeqPicArtFn art) {
-  int sw = hostWideW(); g_seqWideW = 0; g_seqPicWideSkip = skip; g_seqPicArt = NULL;
+static void stageWideBegin(int skip, int skipModes, CtSeqPicArtFn art) {
+  int sw = hostWideW(); g_seqWideW = 0; g_seqPicWideSkip = skip; g_seqPicWideSkipModes = skipModes; g_seqPicArt = NULL;
   if (sw > CAMW && sw <= FIELD_WMAX) {
     g_seqPicWideSide = (sw - CAMW) / 2; g_seqPicWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3);
     g_seqWideW = sw;
+    const int steam = CtSettingsGet()->wideSteamMargins, own = CtSettingsGet()->sceneAdjust;
     if (art == CtSceneArtEntry3 && g_hostInteractive) {               // (entry 3: the Steam release's art, the adjustments')
-      const int steam = CtSettingsGet()->wideSteamMargins, own = CtSettingsGet()->sceneAdjust;
       if (steam || own) { CtSceneArtEntry3Set(steam, own); g_seqPicArt = art; g_seqPicWideSkip = 0; }
+    } else if (art == CtSceneArtEntry6 && g_hostInteractive) {        // (entry 6: no copy of its BG1; the Steam cockpit walls)
+      CtSceneArtEntry6Set(steam); g_seqPicArt = art;
     }
   }
 }
-static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideSkip = 0; g_seqPicWideOut = NULL; g_seqPicArt = NULL; }
+static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideSkip = 0; g_seqPicWideSkipModes = 0; g_seqPicWideOut = NULL; g_seqPicArt = NULL; }
 static CtRaceIo raceIoFor(uint8_t* w) {
   CtRaceIo io; memset(&io, 0, sizeof io);
   long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
@@ -21244,7 +21246,7 @@ int main(int argc, char** argv) {
         // order turned into the register's word), then its picture as that NMI left the PPU (seq_racepic.c; black while
         // the opening holds).
         drewSwing = 1;
-        stageWideBegin(0, NULL);
+        stageWideBegin(0, 0, NULL);
         if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
         else if (!raceEnded) {
           raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)
@@ -21261,8 +21263,14 @@ int main(int argc, char** argv) {
       } else if (seqOpen > 0 && endOn) {
         // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad, and its picture (entry 10's: black).
         drewSwing = 1;
-        stageWideBegin(endOn == 2 ? 1 : 0, endOn == 2 ? CtSceneArtEntry3 : NULL);   // (entry 3: its BG1, the field's machinery
-                                                            //  as one screen, stays out -- or the scene adjustments' art)
+        // (Entry 3: its BG1, the field's machinery as one screen, stays out -- or the stage's art draws it. Entry 7, the Day of
+        //  Lavos: its BG1 is the planet as one screen and its text is sprites on the sub screen, whose texture the sides
+        //  repeat -- both stay out, the sides are space: the planet and "BUT... THE FUTURE REFUSED TO CHANGE." stood three times.
+        //  Entry 6, the Epoch into Lavos: its one-screen BG1, the dashboard, stays out -- the Steam cockpit walls with the margins.)
+        //  The endings (FF 2A / 2B / 2E / 2F): in mode 4 the planet (BG1) and the credits (BG2) are one screen each -- they stay
+        //  out; the world (mode 7) and the clouds (mode 1) go on.)
+        stageWideBegin(endOn == 2 ? 1 : endOn == 4 ? 0x11 : endOn == 1 ? 0x03 : 0, endOn == 1 ? 1 << 4 : 0,
+                       endOn == 2 ? CtSceneArtEntry3 : endOn == 5 ? CtSceneArtEntry6 : NULL);
         if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
         else if (!endEnded) {
           raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)

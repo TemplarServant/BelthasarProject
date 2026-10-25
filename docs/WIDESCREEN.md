@@ -106,6 +106,28 @@ a step further from the middle); past the screen's edge the offsets go on as the
 that edge (`optSide` in `src/seq_pic.c`, only while a stage's art draws its sides), so the sides open with it. (Until 2026-10-25 this
 document said the Steam release had no art for the scene: its `Game/special` folder has none, the margins of 06B do.)
 
+## The special scenes past their 256
+
+A native `$C3` stage's sides show its layers at their own place past the screen's edge (`seq_pic.c`). A layer drawn as one
+screen -- a scene, not a background -- would show the same picture again in each side, so per stage (`stageWideBegin` in
+`src/field.c`, `g_seqPicWideSkip` / `g_seqPicWideSkipModes`):
+
+- **the race** (and the attract's): its road, ground and mountains are made to wrap -- they go on;
+- **entry 4, Lavos falls**: mode 7 and the stars -- the sides are space (the stars are sprites, the middle's only);
+- **entry 7, the Day of Lavos**: the planet (BG1) and "BUT... THE FUTURE REFUSED TO CHANGE." stay out -- they stood three
+  times;
+- **entry 6, the Epoch into Lavos**: the cockpit's dashboard (BG1 in mode 1 on the lower lines) stays out and the sides
+  there are black; with the Steam margins on, the Steam release's cockpit walls stand beside it (its
+  `into_lavos/40_kokscr_ext.png`, drawn at twice the SNES's resolution: `tools/steam_wide.py` halves it into
+  `ct_wide.dat`'s `SPCL` section; the walls 96 x 80 pixels a side on the picture's bottom, their canopy meeting the
+  dashboard's edge at row 168; drawn in their own colours, under the scene's colour math and brightness);
+- **the endings** (`FF 2A` / `2B` / `2E` / `2F`): the world in mode 7 and the clouds in mode 1 go on; in mode 4 the
+  planet (BG1) and the credits (BG2) stay out -- "The End" stood three times;
+- **entry 3**: above.
+
+Sprites only on the sub screen were repeated 256 columns along (snes/ppu.c's rule for the gate warp's tunnel texture);
+in the native stages they are text and objects (the credits, entry 7's line), so they are not (`g_seqPicWideSubTexture`).
+
 ## Fill the bottom lines
 
 The SNES's V-IRQ blanks lines 211-223 of the field and of fights (old TVs hid them). The option draws them. The SNES

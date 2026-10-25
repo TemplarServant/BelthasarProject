@@ -38,7 +38,9 @@ page 2, both after the room's own pages are built.
 ct_wide.dat (all LE): b"CTWD", u32 version 3, u32 locations, u32 sets, u32 sheets; per set: u8 set, 128 x 64 chip pixels
 (0..15); per sheet: 256 x 256 CGRAM indices; per location: u16 location, u8 w, u8 h, 5 * w * h u16 (planes 0-4; the
 fifth zero where the Steam release has none), u8 slot set[6] (0xFF none), u16 metatiles, per metatile: u16 id, 4 corners
-x (u16 chip, u8 palette, u8 flags: H 1, V 2, priority 4), u8 pages, per page: u8 page, u16 sheet.
+x (u16 chip, u8 palette, u8 flags: H 1, V 2, priority 4), u8 pages, per page: u8 page, u16 sheet. Then b"SPCL", u32
+images, per image: u8 name length, the name, u16 w, u16 h, w * h RGBA -- the special scenes' extension art (SPECIAL),
+halved to the SNES's pixels.
 """
 import argparse
 import gzip
@@ -229,6 +231,76 @@ def find_steam():
     return None
 
 
+def _png_rgba(data):
+    """A PNG (8-bit: palette with tRNS, grey, RGB or RGBA; no interlace) as (w, h, RGBA bytes) -- the stdlib only."""
+    import zlib
+    if data[:8] != b'\x89PNG\r\n\x1a\n':
+        return None
+    o, idat, plte, trns = 8, b'', b'', b''
+    w = h = depth = ctype = 0
+    while o + 8 <= len(data):
+        n, typ = struct.unpack('>I4s', data[o:o + 8]); body = data[o + 8:o + 8 + n]; o += 12 + n
+        if typ == b'IHDR': w, h, depth, ctype = struct.unpack('>IIBB', body[:10])
+        elif typ == b'PLTE': plte = body
+        elif typ == b'tRNS': trns = body
+        elif typ == b'IDAT': idat += body
+    ch = {0: 1, 2: 3, 3: 1, 6: 4}.get(ctype)
+    if depth != 8 or not ch:
+        return None
+    raw = zlib.decompress(idat); stride = w * ch; rows = []; prev = bytearray(stride); p = 0
+    for _ in range(h):
+        f = raw[p]; line = bytearray(raw[p + 1:p + 1 + stride]); p += 1 + stride
+        for i in range(stride):
+            a = line[i - ch] if i >= ch else 0; b = prev[i]; c = prev[i - ch] if i >= ch else 0
+            if f == 1: line[i] = (line[i] + a) & 255
+            elif f == 2: line[i] = (line[i] + b) & 255
+            elif f == 3: line[i] = (line[i] + (a + b) // 2) & 255
+            elif f == 4:
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                line[i] = (line[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append(line); prev = line
+    out = bytearray()
+    for line in rows:
+        for x in range(w):
+            if ctype == 3:
+                k = line[x]
+                out += plte[3 * k:3 * k + 3] + bytes([trns[k] if k < len(trns) else 255])
+            elif ctype == 0: out += bytes([line[x]] * 3 + [255])
+            elif ctype == 2: out += line[3 * x:3 * x + 3] + b'\xff'
+            else: out += line[4 * x:4 * x + 4]
+    return w, h, bytes(out)
+
+
+def _halve(w, h, px):
+    """The Steam release's special scenes are drawn at twice the SNES's resolution: back to its pixels, each 2 x 2 block's
+    most common colour (see-through when most of the block is)."""
+    out = bytearray()
+    for y in range(0, h - 1, 2):
+        for x in range(0, w - 1, 2):
+            q = [px[4 * ((y + j) * w + x + i):4 * ((y + j) * w + x + i) + 4] for j in (0, 1) for i in (0, 1)]
+            op = [c for c in q if c[3] >= 128]
+            if len(op) < 2:
+                out += b'\0\0\0\0'
+            else:
+                out += max(op, key=op.count)[:3] + b'\xff'
+    return w // 2, h // 2, bytes(out)
+
+
+# The special scenes' extension art the port draws (src/scene_art.c), halved to the SNES's pixels: the Epoch's cockpit
+# walls beside the dashboard, past the 256 (sequence entry 6, the Epoch into Lavos).
+SPECIAL = ['Game/special/into_lavos/40_kokscr_ext.png']
+
+
+def specials(f, files):
+    out = []
+    for name in SPECIAL:
+        if name in files:
+            img = _png_rgba(_block(f, *files[name]))
+            if img:
+                out.append((name.rsplit('/', 1)[1],) + _halve(*img))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('steam', nargs='?', help="the Steam release's Chrono Trigger folder or its resources.bin (default: look for it)")
@@ -267,6 +339,7 @@ def main():
                 if index[name] is not None:
                     pages = [p for p in pages if p[0] != pg] + [(pg, index[name])]
             m[loc] = m[loc][:5] + (pages,)
+        spc = specials(f, files)
     if a.list:
         for loc, (w, h, _, _, metas, pages) in sorted(m.items()):
             print('location %03X: %dx%d cells, %d metatiles, pages %s' % (loc, w, h, len(metas), [p for p, _ in pages]))
@@ -283,7 +356,10 @@ def main():
             for t, corners in metas:
                 o.write(struct.pack('<H', t) + b''.join(struct.pack('<HBB', c, p, fl) for c, p, fl in corners))
             o.write(struct.pack('<B', len(pages)) + b''.join(struct.pack('<BH', pg, s) for pg, s in pages))
-    print('steam-wide: %d locations with margins, %d chip sets, %d sheets -> %s' % (len(m), len(sets), len(sheets), a.out))
+        o.write(b'SPCL' + struct.pack('<I', len(spc)))   # (after the locations: a version-3 reader stops before it)
+        for name, w, h, px in spc:
+            o.write(struct.pack('<B', len(name)) + name.encode() + struct.pack('<HH', w, h) + px)
+    print('steam-wide: %d locations with margins, %d chip sets, %d sheets, %d special images -> %s' % (len(m), len(sets), len(sheets), len(spc), a.out))
 
 
 if __name__ == '__main__':

@@ -196,7 +196,8 @@ extern "C" int CtOverlayFrame(void) {
                           "setup reads it when it finds one installed and writes ct_wide.dat next to the game's data (or\n"
                           "run tools/steam_wide.py on its folder). Without that file the option stays off. The machine\n"
                           "rising over the planet (after the Blackbird, and in the attract) gets that release's wings,\n"
-                          "glow and planet in its sides too, with one moon in the sky. Rooms without\n"
+                          "glow and round planet in its sides too, and the Epoch's cockpit into Lavos its walls beside\n"
+                          "the dashboard. Rooms without\n"
                           "margins keep the sides as above. Nothing else in the game changes.");
       bool sa = s->widescreen != CT_WIDE_OFF && s->sceneAdjust != 0;   // (no widescreen: nothing to adjust, greyed)
       if (s->widescreen == CT_WIDE_OFF) ImGui::BeginDisabled();

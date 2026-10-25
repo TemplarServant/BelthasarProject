@@ -18,4 +18,9 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* mx, int my, int pri);
 // rules (one moon, the planet mirrored past the 256) hold with either.
 void CtSceneArtEntry3Set(int steam, int own);
 
+// Sequence entry 6 (`FF 26`, the Epoch into Lavos): its one-screen BG1 (the dashboard, the Epoch) is not repeated past the
+// 256; with the Steam margins on (steam) the Steam release's cockpit walls stand beside the dashboard there.
+int CtSceneArtEntry6(const CtSeqPic* p, int layer, int* mx, int my, int pri);
+void CtSceneArtEntry6Set(int steam);
+
 #endif
