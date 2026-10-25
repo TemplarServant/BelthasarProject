@@ -72,6 +72,10 @@ Install on a phone with USB debugging on:
 - `src/android.c` (`CtAndroidConfigure`, called first thing in `main`) makes the data folder the working folder. It
   points `CT_SRAM` and `CT_SETTINGS` there, sends stdout/stderr to `latest.log` in it, and starts the game
   with `--assets ct_assets.dat --boot` (the title screen).
+- The sound processor's program runs as a coroutine (`src/sound/coro.c`). Bionic has no `ucontext`, so on arm64 and
+  x86_64 the switch is the file's own few instructions (the callee-saved registers and the stack pointer); any other
+  ABI falls back to a thread taking turns, tens of microseconds a switch. A song's upload is ~10,000 switches: on that
+  thread the title's song froze the picture 3.7 s and every fight's start stalled.
 - The picture goes through SDL_Renderer on OpenGL ES. The OpenGL 3.3 and Vulkan backends of the desktop are not
   offered on Android.
 

@@ -170,7 +170,22 @@ static int hostTrace(void) {
   if (tr < 0) { const char* e = getenv("CT_HOST_TRACE"); tr = (e && *e) ? 1 : 0; }
   return tr;
 }
+static double g_hostWorkT = -1.0;       // (CT_HOST_TRACE=2: where the last pace ended -- a pass's work starts there)
+static void hostPaceDo(void);
 static void hostPace(void) {             // called once per engine frame, after its present
+  // CT_HOST_TRACE=2 (debug): also one line per pass whose own work (the frame's logic, picture and present, not the
+  // sleep) took over CT_HOST_TRACE_MS (default 8) ms -- where a slower machine (a phone) hitches.
+  static double thr = -1.0;
+  if (thr < 0) { const char* e = getenv("CT_HOST_TRACE"), *m = getenv("CT_HOST_TRACE_MS");
+                 thr = (e && atoi(e) >= 2) ? (m ? atof(m) : 8.0) : 0.0; }
+  if (thr > 0 && g_hostWorkT >= 0) {
+    double work = hostNowMs() - g_hostWorkT;
+    if (work > thr) fprintf(stderr, "host: frame %ld work %.1f ms\n", g_hostFrames + 1, work);
+  }
+  hostPaceDo();
+  g_hostWorkT = hostNowMs();
+}
+static void hostPaceDo(void) {
   double now = hostNowMs();
   if (g_hostT0 < 0) g_hostT0 = now;
   g_hostFrames++;
