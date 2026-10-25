@@ -379,17 +379,24 @@ typedef struct {
 // the extra strip. The widescreen draws such an object on, in the picture only, where the ROM let it go OUTSIDE the
 // original 256 columns: at its last step (the last two frames' world places) and with its last poses in turn (the flaps),
 // until it leaves the wide picture. Nothing is run or written: the game killed it, the strip shows where it was going.
-enum { OW_GHOST_KEYS = 256, OW_GHOST_POSES = 8, OW_GHOST_PIECES = 6 };
+// A lost object flies on in a list of its own (g_owGhostFly), not in its key's entry: the ROM gives the dead gull's block to
+// the next gull it spawns, often while the first is still crossing the strip, and the newcomer must not end it there.
+enum { OW_GHOST_KEYS = 256, OW_GHOST_POSES = 8, OW_GHOST_PIECES = 6, OW_GHOST_FLY = 64 };
 typedef struct { int n; CtWorldPiece pc[OW_GHOST_PIECES]; } OwGhostPose;
 typedef struct {
-  int seen, ghost, age;                             // seen: the frame it was last in the build; ghost: drawn on by the strip
+  int seen, age, own;                               // seen: the frame it was last in the build; age: frames flown on (a fly);
+                                                    //   own: its key went to a newcomer, so it is drawn under a key of its own
   double wx, wy, px, py;                            // its world place this frame and the frame before
   OwGhostPose pose[OW_GHOST_POSES]; int poseN, poseAt;
 } OwGhost;
-static OwGhost g_owGhost[OW_GHOST_KEYS];
+static OwGhost g_owGhost[OW_GHOST_KEYS];          // each key's live object, followed
+static OwGhost g_owGhostFly[OW_GHOST_FLY];        // the lost ones drawn on by the strip (poseN 0: a free entry)
 static int g_owGhostFrame;
 static int g_owGhostLive;                         // (any entry in use: a headless latch need not clear the table)
-static void owGhostReset(void) { if (g_owGhostLive) memset(g_owGhost, 0, sizeof g_owGhost); g_owGhostLive = 0; }
+static void owGhostReset(void) {
+  if (g_owGhostLive) { memset(g_owGhost, 0, sizeof g_owGhost); memset(g_owGhostFly, 0, sizeof g_owGhostFly); }
+  g_owGhostLive = 0;
+}
 static void owGhosts(World* w) {
   g_owGhostFrame++;
   const int W = hostWideW();
@@ -403,9 +410,9 @@ static void owGhosts(World* w) {
     if (P->key < 0 || P->key >= OW_GHOST_KEYS) continue;
     OwGhost* g = &g_owGhost[P->key];
     if (g->seen != f) {
-      if (g->seen != f - 1 || g->ghost) { g->poseN = 0; g->poseAt = 0; g->wx = P->ox + sx; g->wy = P->oy + sy; }
+      if (g->seen != f - 1) { g->poseN = 0; g->poseAt = 0; g->wx = P->ox + sx; g->wy = P->oy + sy; }
       g->px = g->wx; g->py = g->wy; g->wx = P->ox + sx; g->wy = P->oy + sy;
-      g->seen = f; g->ghost = 0; g->age = 0;
+      g->seen = f;
       g->poseAt = (g->poseAt + 1) % OW_GHOST_POSES; if (g->poseN < OW_GHOST_POSES) g->poseN++;
       g->pose[g->poseAt].n = 0;
     }
@@ -417,24 +424,32 @@ static void owGhosts(World* w) {
   for (int k = 0; k < OW_GHOST_KEYS; k++) {
     OwGhost* g = &g_owGhost[k];
     if (g->seen == f || !g->poseN) continue;
-    if (!g->ghost) {
-      double vx = g->wx - g->px, vy = g->wy - g->py, ox = g->wx - sx;
-      if (gtr) { const OwGhostPose* lp = &g->pose[g->poseAt]; int y0 = 999, y1 = -999;
-                 for (int i = 0; i < lp->n; i++) { if (lp->pc[i].y < y0) y0 = lp->pc[i].y; if (lp->pc[i].y > y1) y1 = lp->pc[i].y; }
-                 printf("ghost: pieces %d dy %d..%d ", lp->n, y0, y1); }
-      if (gtr) printf("ghost: f%d key %d lost at %.0f,%.0f v %.2f,%.2f seen f%d -> %s\n", f, k, ox, g->wy - sy, vx, vy, g->seen,
-                      g->seen != f - 1 ? "gap" : (ox >= 0 && ox < CAMW) ? "inside" : (fabs(vx) < 0.25 && fabs(vy) < 0.25) ? "still" :
-                      (fabs(vx) > 8 || fabs(vy) > 8) ? "fast" : "ghost");
-      if (g->seen != f - 1 || (ox >= 0 && ox < CAMW) || (fabs(vx) < 0.25 && fabs(vy) < 0.25) || fabs(vx) > 8 || fabs(vy) > 8) { g->poseN = 0; continue; }
-      g->ghost = 1;
-    }
+    double vx = g->wx - g->px, vy = g->wy - g->py, ox = g->wx - sx;
+    int fi = 0; while (fi < OW_GHOST_FLY && g_owGhostFly[fi].poseN) fi++;
+    if (gtr) { const OwGhostPose* lp = &g->pose[g->poseAt]; int y0 = 999, y1 = -999;
+               for (int i = 0; i < lp->n; i++) { if (lp->pc[i].y < y0) y0 = lp->pc[i].y; if (lp->pc[i].y > y1) y1 = lp->pc[i].y; }
+               printf("ghost: pieces %d dy %d..%d ", lp->n, y0, y1); }
+    if (gtr) printf("ghost: f%d key %d lost at %.0f,%.0f v %.2f,%.2f seen f%d -> %s\n", f, k, ox, g->wy - sy, vx, vy, g->seen,
+                    g->seen != f - 1 ? "gap" : (ox >= 0 && ox < CAMW) ? "inside" : (fabs(vx) < 0.25 && fabs(vy) < 0.25) ? "still" :
+                    (fabs(vx) > 8 || fabs(vy) > 8) ? "fast" : fi == OW_GHOST_FLY ? "full" : "ghost");
+    if (g->seen == f - 1 && !(ox >= 0 && ox < CAMW) && !(fabs(vx) < 0.25 && fabs(vy) < 0.25) && fabs(vx) <= 8 && fabs(vy) <= 8 &&
+        fi < OW_GHOST_FLY) { g_owGhostFly[fi] = *g; g_owGhostFly[fi].age = 0; g_owGhostFly[fi].own = 0; }
+    g->poseN = 0;                                   // (the key is free for the next object the ROM gives it)
+  }
+  for (int k = 0; k < OW_GHOST_FLY; k++) {
+    OwGhost* g = &g_owGhostFly[k];
+    if (!g->poseN) continue;
     double vx = g->wx - g->px, vy = g->wy - g->py;
     g->px = g->wx; g->py = g->wy; g->wx += vx; g->wy += vy; g->age++;
     int ox = (int)floor(g->wx - sx), oy = (int)floor(g->wy - sy);
-    if (ox < -X0 - 48 || ox > CAMW + X0 + 48 || oy < -48 || oy > CAMH + 48 || g->age > 600) { g->poseN = 0; g->ghost = 0; continue; }
+    if (ox < -X0 - 48 || ox > CAMW + X0 + 48 || oy < -48 || oy > CAMH + 48 || g->age > 600) { g->poseN = 0; continue; }
     const OwGhostPose* ps = &g->pose[((g->poseAt - g->poseN + 1 + (g->age - 1) % g->poseN) % OW_GHOST_POSES + 2 * OW_GHOST_POSES) % OW_GHOST_POSES];   // (oldest to newest, in turn)
+    // (the frames between follow a sprite by its key: the dead object's while no one has it, so its flight goes on without a
+    //  seam; once a newcomer has it, one past the world's keys, so the two are never taken for one object)
+    if (!g->own && ps->n && ps->pc[0].key >= 0 && ps->pc[0].key < OW_GHOST_KEYS && g_owGhost[ps->pc[0].key].seen == f) g->own = 1;
     for (int i = 0; i < ps->n && w->wideShowN < CT_OW_WIDE_MAX; i++) {
       CtWorldPiece q = ps->pc[i];
+      if (g->own) q.key = OW_GHOST_KEYS + k;
       q.x = (int16_t)(q.x + ox); q.y = (int16_t)(q.y + oy); q.ox = (int16_t)ox; q.oy = (int16_t)oy;
       w->wideShow[w->wideShowN++] = q;
     }
