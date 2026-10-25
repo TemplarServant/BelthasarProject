@@ -89,6 +89,7 @@ static void setKey(CtSettings* s, const char* sec, const char* key, const char* 
     else if (!strcmp(key, "wide_room_wrap")) {}                       // (an option removed 2026-10-23: read, ignored)
     else if (!strcmp(key, "steam_margins")) s->wideSteamMargins = iv != 0;
     else if (!strcmp(key, "fill_bottom_lines")) s->fillBottomLines = iv != 0;
+    else if (!strcmp(key, "scene_adjustments")) s->sceneAdjust = iv != 0;
     else if (!strcmp(key, "widescreen")) s->widescreen = !strcmp(val, "16:9") ? CT_WIDE_16_9 : !strcmp(val, "16:10") ? CT_WIDE_16_10 :
                                                          !strcmp(val, "21:9") ? CT_WIDE_21_9 : CT_WIDE_OFF;
     else if (!strcmp(key, "vsync")) s->vsync = iv != 0;
@@ -147,7 +148,7 @@ int CtSettingsSave(void) {
           s->scaleMode == CT_SCALE_INTEGER ? "integer" : s->scaleMode == CT_SCALE_STRETCH ? "stretch" : "fit",
           s->aspect == CT_ASPECT_4_3 ? "4:3" : "pixel", s->linearFilter ? "linear" : "nearest",
           s->widescreen == CT_WIDE_16_9 ? "16:9" : s->widescreen == CT_WIDE_16_10 ? "16:10" : s->widescreen == CT_WIDE_21_9 ? "21:9" : "off",
-          s->wideSteamMargins, s->fillBottomLines, s->renderScale, s->interpolate, s->vsync,
+          s->wideSteamMargins, s->fillBottomLines, s->sceneAdjust, s->renderScale, s->interpolate, s->vsync,
           s->renderDriver);
   fprintf(f, "[sound]\nvolume=%d\nmute=%d\n\n", s->volume, s->mute);
   fprintf(f, "[controls]\npad_stick=%d\n", s->padStick);

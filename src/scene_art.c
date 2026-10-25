@@ -1,0 +1,118 @@
+// scene_art.c -- THE SCENE ADJUSTMENTS' NEW ART (a mod; scene_art.h). Nothing here runs unless the player turned the option
+// on with the widescreen: the host sets seq_pic.h's g_seqPicArt for the stage, the grading harnesses never do.
+#include "scene_art.h"
+#include "widext.h"
+#include <string.h>
+
+// A stamp: the scene's own pixels from (su, sy) of its layer, w x h, laid at (du, dy) of the art (mirrored when flip), its
+// see-through pixels leaving what is under them.
+typedef struct { int16_t du, dy, su, sy; uint8_t w, h, flip; } CtArtStamp;
+#include "art/entry3_sides.h"
+
+// ENTRY 3. The machine as the field laid it out: 256 x 256 CGRAM indices (0 = see-through) in the field's own columns u. The
+// stage's BG1 map shows the field's row r one word to the right ((r, c) at display column c + 1; its column 31 at the next
+// row's display column 0); its tiles are 4bpp.
+static uint8_t g_e3Orig[256][256];
+static uint8_t g_e3Art[E3_ART_H][E3_ART_W];
+static uint32_t g_e3Key = 0xFFFFFFFFu;
+
+static int tilePixel(const CtSeqPic* p, unsigned chr, uint16_t e, int x, int y) {
+  int row = (e & 0x8000) ? 7 - y : y, col = (e & 0x4000) ? x : 7 - x;
+  unsigned base = chr + (unsigned)(e & 0x3FF) * 16;
+  uint16_t a = p->vram[(base + row) & 0x7FFF], b = p->vram[(base + 8 + row) & 0x7FFF];
+  return ((a >> col) & 1) | (((a >> (8 + col)) & 1) << 1) | (((b >> col) & 1) << 2) | (((b >> (8 + col)) & 1) << 3);
+}
+
+// Built again whenever the stage's BG1 map or tiles change (the setup uploads the map in the stage's first frames): the
+// machine, then the stamps over an empty art, then the new pixels (kE3Px's runs: count, value; 0 = none, a multiple of 16 =
+// see-through, else a CGRAM index).
+static void entry3Build(const CtSeqPic* p) {
+  const unsigned map = (unsigned)(p->r[0x07] & 0xFC) << 8, chr = (unsigned)(p->r[0x0B] & 0x0F) << 12;
+  uint32_t key = 2166136261u;
+  for (unsigned i = 0; i < 0x400; i++) key = (key ^ p->vram[(map + i) & 0x7FFF]) * 16777619u;
+  for (unsigned i = 0; i < 0x4000; i += 61) key = (key ^ p->vram[(chr + i) & 0x7FFF]) * 16777619u;
+  if (key == g_e3Key) return;
+  g_e3Key = key;
+  for (int ty = 0; ty < 32; ty++)
+    for (int tx = 0; tx < 32; tx++) {
+      uint16_t e = tx < 31 ? p->vram[(map + ty * 32 + tx + 1) & 0x7FFF] : p->vram[(map + ((ty + 1) & 31) * 32) & 0x7FFF];
+      for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++) {
+          int c = tilePixel(p, chr, e, x, y);
+          g_e3Orig[ty * 8 + y][tx * 8 + x] = (uint8_t)(c ? ((e >> 10) & 7) * 16 + c : 0);
+        }
+    }
+  memset(g_e3Art, 0, sizeof g_e3Art);
+  for (size_t s = 0; s < sizeof kE3Stamps / sizeof kE3Stamps[0]; s++) {
+    const CtArtStamp* t = &kE3Stamps[s];
+    for (int j = 0; j < t->h; j++)
+      for (int i = 0; i < t->w; i++) {
+        int sx = t->su + (t->flip ? t->w - 1 - i : i), sy = t->sy + j, dx = t->du + i + E3_ART_W, dy = t->dy + j;
+        if (sx < 0 || sx > 255 || sy < 0 || sy > 255 || dx < 0 || dx >= E3_ART_W || dy < 0 || dy >= E3_ART_H) continue;
+        if (g_e3Orig[sy][sx]) g_e3Art[dy][dx] = g_e3Orig[sy][sx];
+      }
+  }
+  size_t n = 0;
+  for (size_t i = 0; i + 1 < sizeof kE3Px && n < sizeof g_e3Art; i += 2)
+    for (int k = 0; k < kE3Px[i] && n < sizeof g_e3Art; k++, n++)
+      if (kE3Px[i + 1]) ((uint8_t*)g_e3Art)[n] = (kE3Px[i + 1] & 15) ? kE3Px[i + 1] : 0;
+}
+
+// THE STEAM RELEASE'S ART FOR IT (the Steam margins, a mod: settings.h wideSteamMargins, from the player's ct_wide.dat):
+// the machine's field location 06B (where the story calls `FF 23`) has margins whose cells are tiles that release added
+// for this scene -- its three sheets cgext107_0-2 (pages 2-4): the wings' pointed ends past the machine (plane 2, BG1's
+// low layer), the sky's glow on (plane 0, the field's BG1 rows 3-4 the stage shows through BG2 above line 70) and the
+// planet (plane 3, BG2's). Its column c is the room's metatile column c - x, x = (w - 16) / 2. A cell of the room's own
+// metatiles (the sky's, rows 0-2) is left to the rules below. NULL = not drawn.
+static const CtWideExt* g_e3Steam;
+static CtWideExt g_e3SteamExt;
+static int g_e3Own = 1;                                               // the scene adjustments' own art
+void CtSceneArtEntry3Set(int steam, int own) {
+  g_e3Steam = steam && CtWideExtGet(0x06B, &g_e3SteamExt) ? &g_e3SteamExt : NULL;
+  g_e3Own = own;
+}
+// The Steam sheet's CGRAM index at the room's pixel (x, y) of a plane: 0 = nothing there, -1 = not a sheet's cell.
+static int steamPx(int plane, int x, int y) {
+  const CtWideExt* e = g_e3Steam;
+  int c = (x >> 4) + (e->w - 16) / 2, r = y >> 4;
+  if (c < 0 || c >= e->w || r < 0 || r >= e->h) return 0;
+  unsigned v = e->planes[(size_t)plane * e->w * e->h + (size_t)r * e->w + c];
+  if (!v) return 0;
+  unsigned t = v - 1, page = t >> 8;
+  if (page < 1 || page > 7 || !e->pageSheet[page]) return -1;
+  return e->pageSheet[page][(((t >> 4) & 15) * 16 + (y & 15)) * 256 + (t & 15) * 16 + (x & 15)];
+}
+
+int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
+  const int mx = *pmx;
+  if (layer < 0) { entry3Build(p); return -1; }                      // (a new frame)
+  // THE SKY: above line 70 BG2 is the field's map $6000 (HDMA channel 3 switches BG2SC $60 -> $6A there), one screen
+  // wide: the red moon in its rows 0-3, columns 14-22, over tile $101's sky. Past the 256 that map would repeat the moon
+  // on both sides; there the sky's rows take the moonless column 0 (the night's own tile).
+  // Below, the planet (and the sky's glow): BG2's maps are one screen wide too, so a side shows the screen's own columns
+  // mirrored about its edge -- no seam where the 256 end, where a repeat broke the clouds.
+  if (layer == 1) {
+    int hs = p->hofs[1] & 0x3FF, x;
+    if (hs >= 512) hs -= 1024;
+    x = mx - hs;
+    if (x >= 0 && x < 256) return -1;
+    if (g_e3Steam) {                                                 // (the Steam release's glow and planet, a mod)
+      // (past its own columns -- a 21:9 side is wider than its 96 -- the Steam art mirrored about its edge)
+      const int ew = (g_e3Steam->w - 16) / 2 * 16;
+      int rx = mx < -ew ? -2 * ew - 1 - mx : mx >= 256 + ew ? 2 * (256 + ew) - 1 - mx : mx;
+      int sky = (p->r[0x08] & 0xFC) == 0x60, v = steamPx(sky ? 0 : 3, rx, sky ? (my & 255) : (my & 511));
+      if (v > 0) return pri ? 0 : v;
+    }
+    if ((p->r[0x08] & 0xFC) == 0x60 && (my & 255) < 32) { *pmx = mx & 7; return -1; }
+    *pmx = (x < 0 ? -1 - x : 511 - x) + hs;
+    return -1;
+  }
+  if (layer != 0 || (mx >= 8 && mx < 256)) return -1;                // (BG1 inside its own 256 columns: the ROM's)
+  if (pri != E3_ART_PRI) return 0;                                   // (the machine's tiles are all of priority 0)
+  int u = mx - 8, y = my & 255;                                      // u: the field's column (the machine's middle at 127.5)
+  if (g_e3Steam && (u < 0 || u >= 256)) { int v = steamPx(2, u, y); if (v > 0) return v; }   // (the Steam release's wings)
+  if (u >= 128) u = 255 - u;                                         // the right side: the left's mirror
+  if (u >= 0) return g_e3Orig[y][u];                                 // (the field's own columns past the display's wrap)
+  int col = u + E3_ART_W;
+  return col < 0 || !g_e3Own ? 0 : g_e3Art[y][col];                // (the adjustments' own art, when on)
+}

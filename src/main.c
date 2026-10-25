@@ -7260,6 +7260,7 @@ static int runSeqPpuCmp(const char* romPath, const char* statePath, int frames) 
 // VRAM / CGRAM / OAM copied, the frame drawn natively with the oracle's WRAM as HDMA's tables, the oracle run to its next
 // vblank, and the two pictures compared pixel for pixel (the oracle's line buffer, as the screen shows it).
 #include "seq_pic.h"
+#include "scene_art.h"
 static void seqPicFromPpu(CtSeqPic* q, const Ppu* u) {
   CtSeqPicReset(q);
   memcpy(q->vram, u->vram, sizeof q->vram); memcpy(q->cgram, u->cgram, sizeof q->cgram);
@@ -7493,7 +7494,15 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     }
     if (getenv("RACEPICCMP_VERBOSE") || k == firstState)
       printf("racepiccmp: frame %d: VRAM %d CGRAM %d OAM %d words differ; registers %d%s; HDMA %d; WRAM %d bytes\n", k, vb, cb, ob, rb, regs, hb, wb);
+    // RACEPICCMP_WIDE=<side>: the frame drawn with that many widescreen columns each side (a host mod's picture, for the
+    // scene adjustments' art: RACEPICCMP_ART=1, the Steam release's from ct_wide.dat: RACEPICCMP_STEAM=1, scene_art.h) -- SHOT writes it to build/racepic_wide.raw.
+    static uint8_t wide[(256 + 2 * 256) * 224 * 3]; int wside = getenv("RACEPICCMP_WIDE") ? atoi(getenv("RACEPICCMP_WIDE")) : 0;
+    if (wside > 0 && wside <= 256) { g_seqPicWideSide = wside; g_seqPicWideOut = wide;
+                                     if (getenv("RACEPICCMP_ART") || getenv("RACEPICCMP_STEAM")) {
+                                       CtSceneArtEntry3Set(getenv("RACEPICCMP_STEAM") != NULL, getenv("RACEPICCMP_ART") != NULL);
+                                       g_seqPicArt = CtSceneArtEntry3; } }
     CtSeqStagePicFrame(&sp, w, rgb);
+    g_seqPicWideSide = 0; g_seqPicWideOut = NULL; g_seqPicArt = NULL;
     uint32_t fr = s->frames;
     while (!s->inVblank && fr == s->frames) rpcOp(s, k);
     int pb = 0;
@@ -7508,6 +7517,14 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     if (getenv("RACEPICCMP_SHOT") && k == atoi(getenv("RACEPICCMP_SHOT"))) {
       FILE* o = fopen("build/racepic_native.raw", "wb");
       if (o) { uint32_t hd[2] = { 256, 224 }; fwrite(hd, 4, 2, o); fwrite(rgb, 1, sizeof rgb, o); fclose(o); }
+      if (wside > 0 && wside <= 256 && (o = fopen("build/racepic_wide.raw", "wb")) != NULL) {
+        uint32_t hd[2] = { (uint32_t)(256 + 2 * wside), 224 }; fwrite(hd, 4, 2, o);
+        for (int y = 0; y < 224; y++) { memcpy(wide + ((size_t)y * hd[0] + wside) * 3, rgb + (size_t)y * 256 * 3, 256 * 3);
+                                        fwrite(wide + (size_t)y * hd[0] * 3, 1, (size_t)hd[0] * 3, o); }
+        fclose(o);
+      }
+      o = fopen("build/racepic_native.pic", "wb");             // (the compositor's state after the frame: CtSeqPic as is)
+      if (o) { fwrite(&sp.p, sizeof sp.p, 1, o); fclose(o); }
     }
   }
   #undef RPC_PAD

@@ -64,6 +64,13 @@ extern int g_seqPicWideSide;
 // picture again past each edge (entry 3's BG1, the machinery over the ocean, BG1SC 00) -- a background layer runs on.
 extern int g_seqPicWideSkip;
 extern uint8_t* g_seqPicWideOut;
+// A SCENE'S NEW ART PAST ITS EDGE (the scene adjustments, a mod: scene_art.h; never set by a grading harness): while the sides
+// are drawn, a BG layer's pixel (modes 0-4) is asked of g_seqPicArt first, at the layer's own place before it wraps -- mx = x
+// + its H scroll as a signed 10-bit value, my = y + its V scroll (0-1023), the mosaic applied -- and pri the pass's priority.
+// It returns a CGRAM index (0 = nothing there at that priority) or -1: the layer's own pixel, at *mx (which it may move to
+// another place of the layer). Called once with layer -1 at each frame's start.
+typedef int (*CtSeqPicArtFn)(const CtSeqPic* p, int layer, int* mx, int my, int pri);
+extern CtSeqPicArtFn g_seqPicArt;
 
 // A STAGE's picture: the compositor's state plus what the stage's code sets around it -- the HDMA channels it programmed, HDMAEN,
 // and the data ports' addresses ($2116 / $2115 VRAM, $2121 CGRAM) its DMAs go through.

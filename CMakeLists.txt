@@ -34,7 +34,7 @@ if(MSVC)
 endif()
 
 # The playable host's sources (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake).
-set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c src/widext.c
+set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c src/widext.c src/scene_art.c
                  src/move.c src/audio.c src/sound/driver.c src/sound/lockstep.c src/sound/machine.c src/sound/coro.c src/sound/timing.c src/sound/timing_build.c src/sound/mixer.c src/sound/mixer_dsp.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/romview.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
 
 # CT_DATAFREE=ON: Belthasar loads the generated tables (src/data/*.h) from the player's pack instead of compiling them
@@ -84,6 +84,7 @@ add_executable(ct
   src/seq_ppu.c  # --seqppucmp: the sequence stages' vendored-PPU picture, graded against the oracle's own frame
   src/seq_gwarp.c  # --gwarpcmp: the gate warp, native (seq_gwarp.c), lockstepped against the oracle
   src/seq_pic.c  # --seqpiccmp: the sequence stages' NATIVE picture, graded against the oracle's own frame
+  src/scene_art.c src/widext.c # --racepiccmp RACEPICCMP_ART / _STEAM: the stage's art past its edge (mods), previewed
   ${SNES_SRC}
 )
 target_include_directories(ct PRIVATE snes src)

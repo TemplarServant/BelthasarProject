@@ -131,6 +131,7 @@ static void decode(const CtSeqPic* p, Line* L) {
 
 int g_seqPicWideSide = 0, g_seqPicWideSkip = 0;
 uint8_t* g_seqPicWideOut = NULL;
+CtSeqPicArtFn g_seqPicArt = NULL;
 // x inside the window's span [l, r]: the hardware's test, or -- while the widescreen's sides are drawn -- snes/ppu.c
 // ppu_winTest's (a narrow band at an edge is no window; a wide span's edge within 16 columns of the screen's runs on to the
 // picture's; a curtain, one edge on the screen's edge, has its moving edge scaled to the picture).
@@ -290,7 +291,16 @@ static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* r
     if (cl < 4) {
       int lx = x, ly = y;
       if (L->mosaicOn[cl] && L->mosaic > 1) { lx -= lx % L->mosaic; ly -= (ly - p->mosaicStart) % L->mosaic; }
-      if (L->mode == 7) px = m7Pixel(p, L, lx, cl, cp);
+      int art = -1;
+      if (g_seqPicArt && g_seqPicWideSide > 0 && L->mode < 5) {          // (the scene adjustments' new art, a mod)
+        int hs = p->hofs[cl] & 0x3FF, amx;
+        if (hs >= 512) hs -= 1024;
+        amx = lx + hs;
+        art = g_seqPicArt(p, cl, &amx, (ly + p->vofs[cl]) & 0x3FF, cp);
+        lx = amx - hs;                                                  // (it may send the layer to another of its places)
+      }
+      if (art >= 0) px = art;
+      else if (L->mode == 7) px = m7Pixel(p, L, lx, cl, cp);
       else {
         lx += p->hofs[cl];
         if (L->mode == 5 || L->mode == 6) { lx *= 2; lx += (sub || L->mosaicOn[cl]) ? 0 : 1; }
@@ -416,6 +426,7 @@ void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t en, CtSeqPicRe
   memset(w, 0, sizeof w);
   p->mosaicStart = 1;                                                  // (the frame's start: a vblank write counts from line 1)
   p->rangeOver = p->timeOver = 0;                                      // (and the sprite flags cleared: ppu.c handleFrameStart)
+  if (g_seqPicArt && g_seqPicWideSide > 0) { int z = 0; g_seqPicArt(p, -1, &z, 0, 0); } // (the scene adjustments' art: a new frame, a mod)
   if (rd) { hdmaInit(ch, en, w, rd, ctx); hdmaRun(p, ch, en, w, rd, ctx, 0); }
   for (int line = 1; line <= 224; line++) {
     drawLine(p, &L, line, rgb ? rgb + (size_t)(line - 1) * 256 * 3 : scratch);

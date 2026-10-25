@@ -184,8 +184,7 @@ extern "C" int CtOverlayFrame(void) {
                           "middle, so past a room's edge the sides are black, or the Steam margins (below); only a\n"
                           "background (a sky, the stars) goes on there, and not where the Steam release draws scenery over\n"
                           "it (the skywalk past its tower: black without the margins). A backdrop that never moves on the screen (the\n"
-                          "prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it. Magus's\n"
-                          "castle's sky is drawn 5 lines higher, so the band over it stays off the screen.");
+                          "prison skywalk's sky) is painted for 256 columns: the sides mirror it, not repeat it.");
       const bool haveWide = CtWideExtAvailable() != 0;   // (no ct_wide.dat: the option stays off and greyed)
       bool sm = haveWide && s->wideSteamMargins != 0;
       if (!haveWide) ImGui::BeginDisabled();
@@ -195,8 +194,20 @@ extern "C" int CtOverlayFrame(void) {
         ImGui::SetTooltip("A mod: past a room's edge the sides show the strip the Steam release draws there (its widescreen\n"
                           "rooms), with the room's own tiles. Its data come from your own copy of the Steam release: the\n"
                           "setup reads it when it finds one installed and writes ct_wide.dat next to the game's data (or\n"
-                          "run tools/steam_wide.py on its folder). Without that file the option stays off. Rooms without\n"
+                          "run tools/steam_wide.py on its folder). Without that file the option stays off. The machine\n"
+                          "rising over the planet (after the Blackbird, and in the attract) gets that release's wings,\n"
+                          "glow and planet in its sides too, with one moon in the sky. Rooms without\n"
                           "margins keep the sides as above. Nothing else in the game changes.");
+      bool sa = s->widescreen != CT_WIDE_OFF && s->sceneAdjust != 0;   // (no widescreen: nothing to adjust, greyed)
+      if (s->widescreen == CT_WIDE_OFF) ImGui::BeginDisabled();
+      if (ImGui::Checkbox("Scene adjustments", &sa)) s->sceneAdjust = sa;
+      if (s->widescreen == CT_WIDE_OFF) ImGui::EndDisabled();
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("A mod, with the widescreen: art direction for the wide picture, scene by scene. The machine\n"
+                          "rising over the planet under the red moon (after the Blackbird, and in the attract): one moon\n"
+                          "in the sky, not three, and the planet mirrored past the original 256 columns instead of\n"
+                          "repeated. Magus's castle's sky is drawn 5 lines higher, so the band of grey over it stays off\n"
+                          "the screen. Nothing else in the game changes.");
       bool fb = s->fillBottomLines != 0;
       if (ImGui::Checkbox("Fill the bottom lines", &fb)) s->fillBottomLines = fb;
       if (ImGui::IsItemHovered())

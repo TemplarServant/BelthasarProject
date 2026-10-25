@@ -42,6 +42,8 @@ typedef struct CtSettings {
                                 //   (tools/steam_wide.py, widext.h); off = the sides as above
   int fillBottomLines;          // a mod: the field's and the fights' bottom 13 lines (211-223), which the ROM's V-IRQ
                                 //   blanks to upload VRAM, drawn like the rest; off = black, as on the SNES
+  int sceneAdjust;              // a mod, with the widescreen: art direction for the wide picture -- new art past the edge of
+                                //   a scene drawn for 256 columns (scene_art.h), Magus's castle's sky drawn higher
   int vsync;
   int backend;                  // present.h CT_BACKEND_*: SDL_Renderer / OpenGL / Vulkan (next start)
   char renderDriver[32];        // SDL_Renderer driver ("" = SDL's choice; "direct3d", "direct3d11", "opengl", "software")

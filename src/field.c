@@ -103,6 +103,7 @@
 #include "seq_entry4.h"   // entry 4 (FF 24, the Tyranno Lair: Lavos falls), native
 #include "seq_entry6.h"   // entry 6 (FF 26, the Epoch into Lavos's shell), native
 #include "seq_entry7.h"   // entry 7 (FF 07, the Day of Lavos after the lost final battle), native
+#include "scene_art.h"     // the scene adjustments' new art past a stage's edge (a mod)
 #include "tables/ct_charbase.h" // baked $CC:0000 char base-stat table (new-game init; NO runtime ROM needed)
 #include "collision.h"   // CtCollisionShapeSolid — the byte-exact engine shape collision (C0/9AD3)
 #include "player.h"      // CtPlayerControl — the byte-exact player input->velocity controller (C0/881E)
@@ -4834,7 +4835,8 @@ static int fieldWideViewX(const Field* f, int w, int camx) {
   (void)f; (void)camx;
   return (w - CAMW) / 2;
 }
-// THE WIDESCREEN'S SKY OFFSETS (part of the widescreen, a mod; art direction, the owner 2026-10-24): a room whose BG2
+// THE WIDESCREEN'S SKY OFFSETS (the scene adjustments, a mod: settings.h sceneAdjust; art direction, the owner 2026-10-24,
+// moved under that option 2026-10-25): a room whose BG2
 // map begins with rows of one flat colour over its sky shows them as a band when the ROM's camera reaches them -- Magus's
 // castle (0A5): 32 rows of dark grey over the sky, 5 lines of it at the top of the attract's and the story's pan (the
 // cartridge's own picture), a band across the wide picture. In the widescreen the sky is drawn that many lines higher for
@@ -4843,7 +4845,7 @@ static int fieldWideViewX(const Field* f, int w, int camx) {
 // layers are untouched; the lines are BG2's offset in the picture only. 0 = none.
 static int fieldWideBg2Dy(void) {
   static const struct { uint16_t loc; int8_t dy; } kSky[] = { { 0x0A5, 5 } };
-  if (!g_hostInteractive || hostWideW() <= CAMW) return 0;
+  if (!g_hostInteractive || hostWideW() <= CAMW || !CtSettingsGet()->sceneAdjust) return 0;
   const uint8_t* s = CtWramSys(fieldWram());
   const int loc = s[0x100] | (s[0x101] << 8);
   for (size_t i = 0; i < sizeof kSky / sizeof kSky[0]; i++) if (kSky[i].loc == loc) return kSky[i].dy;
@@ -5755,14 +5757,20 @@ static void stagePicOpen(void) {
 static int fieldPpuField(void* c) { (void)c; return !(g_sndTraceFrame & 1); }
 // THE WIDESCREEN (a mod) for a native stage's picture: seq_pic.c draws the sides into g_seqWide (seq_pic.h g_seqPicWideSide,
 // snes/ppu.c's rule) -- black while the stage's opening holds -- and the host shows them round the 256 (g_seqWideW).
-static void stageWideBegin(int skip) {
-  int sw = hostWideW(); g_seqWideW = 0; g_seqPicWideSkip = skip;
+// art: the stage's art past its edge (scene_art.h) -- the Steam release's (the Steam margins, a mod) and the scene
+// adjustments' (a mod: settings.h sceneAdjust) -- drawn in place of the layers `skip` leaves out.
+static void stageWideBegin(int skip, CtSeqPicArtFn art) {
+  int sw = hostWideW(); g_seqWideW = 0; g_seqPicWideSkip = skip; g_seqPicArt = NULL;
   if (sw > CAMW && sw <= FIELD_WMAX) {
     g_seqPicWideSide = (sw - CAMW) / 2; g_seqPicWideOut = g_seqWide; memset(g_seqWide, 0, (size_t)sw * CAMH * 3);
     g_seqWideW = sw;
+    if (art == CtSceneArtEntry3 && g_hostInteractive) {               // (entry 3: the Steam release's art, the adjustments')
+      const int steam = CtSettingsGet()->wideSteamMargins, own = CtSettingsGet()->sceneAdjust;
+      if (steam || own) { CtSceneArtEntry3Set(steam, own); g_seqPicArt = art; g_seqPicWideSkip = 0; }
+    }
   }
 }
-static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideSkip = 0; g_seqPicWideOut = NULL; }
+static void stageWideEnd(void) { g_seqPicWideSide = 0; g_seqPicWideSkip = 0; g_seqPicWideOut = NULL; g_seqPicArt = NULL; }
 static CtRaceIo raceIoFor(uint8_t* w) {
   CtRaceIo io; memset(&io, 0, sizeof io);
   long rl = 0; const uint8_t* rb = CtBattleRom(&rl);
@@ -21236,7 +21244,7 @@ int main(int argc, char** argv) {
         // order turned into the register's word), then its picture as that NMI left the PPU (seq_racepic.c; black while
         // the opening holds).
         drewSwing = 1;
-        stageWideBegin(0);
+        stageWideBegin(0, NULL);
         if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
         else if (!raceEnded) {
           raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)
@@ -21253,7 +21261,8 @@ int main(int argc, char** argv) {
       } else if (seqOpen > 0 && endOn) {
         // THE ENDING: one NMI of its stage (seq_ending.c) with the frame's pad, and its picture (entry 10's: black).
         drewSwing = 1;
-        stageWideBegin(endOn == 2 ? 1 : 0);                 // (entry 3: its BG1, the field's machinery as one screen, stays out)
+        stageWideBegin(endOn == 2 ? 1 : 0, endOn == 2 ? CtSceneArtEntry3 : NULL);   // (entry 3: its BG1, the field's machinery
+                                                            //  as one screen, stays out -- or the scene adjustments' art)
         if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
         else if (!endEnded) {
           raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)
