@@ -97,20 +97,19 @@ static int horizonIndex(int v) {
   }
   return v;
 }
-// THE SEAM AT THE 256: the stage cuts the sky's map at the line HDMA channel 3 switches BG2 to the planet, so the middle's
-// glow ends there, a few rows above where the art's own glow ends at its inner columns (drawn for the field, where the
-// glow shows whole). The sides' bend is lifted by that much -- the art's last glow row at its inner column onto the
-// middle's last sky line (measured each frame: g_e3LastSky, the previous frame's) -- so the two meet without a step.
-// The band itself is the middle's height too: the art's rows from its glow's first row (g_e3GlowTop) to its last are laid
-// over the middle's, from the sky map's row 48 (the glow's first tile row) to that last sky line; the sky above moves with
-// the band's top.
-static int g_e3LastSky = 70, g_e3SkyNow, g_e3GlowEnd[2], g_e3GlowTop[2];
+// THE GLOW WHOLE (the Steam release shows the field 06B, where the sky's glow -- its map's rows 6-9, y 48-79 -- shows
+// whole, the art's band drawn against it): the stage switches BG2 from the sky's map to the planet's at line 70 (HDMA
+// channel 3), cutting the glow's last rows off, and the art's band at its inner columns ends those rows lower -- a step at
+// the 256. With the sides drawn, the glow's rows go on below the switch line over the planet, the middle's too (the sky's
+// map at its own row: the line plus the sky lines' V scroll), so middle and sides are one band, as on Steam.
+static int skyMapPixel(const CtSeqPic* p, int col, int ys) {
+  const unsigned chr = (unsigned)(p->r[0x0B] >> 4) << 12;
+  uint16_t e = p->vram[(0x6000 + (unsigned)(ys >> 3) * 32 + (unsigned)((col >> 3) & 31)) & 0x7FFF];
+  int c = tilePixel(p, chr, e, col & 7, ys & 7);
+  return c ? (int)((e >> 10) & 7) * 16 + c : 0;
+}
 static int horizonPx(int x, int ys) {
-  const int ew = (g_e3Steam->w - 16) / 2 * 16, k = x >= 0;
-  if (g_e3GlowEnd[k] > g_e3GlowTop[k] && g_e3LastSky > 48) {
-    if (ys < 48) ys += g_e3GlowTop[k] - 48;
-    else ys = g_e3GlowTop[k] + (ys - 48) * (g_e3GlowEnd[k] - g_e3GlowTop[k]) / (g_e3LastSky - 48);
-  }
+  const int ew = (g_e3Steam->w - 16) / 2 * 16;
   int xe = x, dy = 0;
   if (x < -ew) { xe = -ew; dy = (int)((-ew - x) * g_e3Slope[0] + 0.5f); }
   else if (x >= 256 + ew) { xe = 255 + ew; dy = (int)((x - 255 - ew) * g_e3Slope[1] + 0.5f); }
@@ -135,24 +134,12 @@ void CtSceneArtEntry3Set(int steam, int own) {
     g_e3Slope[1] = (glowBottom(255 + ew) - glowBottom(255 + ew - 16)) / 16.0f;
     if (g_e3Slope[0] < 0) g_e3Slope[0] = 0;
     if (g_e3Slope[1] < 0) g_e3Slope[1] = 0;
-    for (int k = 0; k < 2; k++) {                                     // (the glow's last row at the inner columns)
-      g_e3GlowEnd[k] = 0; g_e3GlowTop[k] = 0;
-      for (int y = 48; y < 96; y++) {
-        int v = steamPx(0, k ? 256 : -1, y, 0);
-        if (v > 0 && (v >> 4) == 3) { if (!g_e3GlowTop[k]) g_e3GlowTop[k] = y; g_e3GlowEnd[k] = y; }   // (row 3: the glow)
-      }
-    }
   }
 }
 
 int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
   const int mx = *pmx;
-  if (layer < 0) {                                                   // (a new frame)
-    entry3Build(p);
-    if (g_e3SkyNow) g_e3LastSky = g_e3SkyNow;
-    g_e3SkyNow = 0;
-    return -1;
-  }
+  if (layer < 0) { entry3Build(p); return -1; }                      // (a new frame)
   // THE SKY: above line 70 BG2 is the field's map $6000 (HDMA channel 3 switches BG2SC $60 -> $6A there), one screen
   // wide: the red moon in its rows 0-3, columns 14-22, over tile $101's sky. Past the 256 that map would repeat the moon
   // on both sides; there the sky's rows take the moonless column 0 (the night's own tile).
@@ -162,23 +149,20 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
     int hs = p->hofs[1] & 0x3FF, x;
     if (hs >= 512) hs -= 1024;
     x = mx - hs;
-    if (x >= 0 && x < 256) return -1;
-    if (g_e3Steam) {                                                 // (the Steam release's glow and planet, a mod)
-      const int sky = (p->r[0x08] & 0xFC) == 0x60;
-      const int line = (my - p->vofs[1]) & 0x3FF;
-      if (sky) { g_e3SkyVofs = p->vofs[1]; if (line > g_e3SkyNow) g_e3SkyNow = line; }
-      int h = horizonPx(mx, (line + g_e3SkyVofs) & 255);
+    const int sky = (p->r[0x08] & 0xFC) == 0x60, line = (my - p->vofs[1]) & 0x3FF;
+    if (sky) g_e3SkyVofs = p->vofs[1];
+    const int ys = (line + g_e3SkyVofs) & 255;
+    if (g_e3Steam && (x < 0 || x >= 256)) {                          // (the Steam release's glow, bent, a mod)
+      int h = horizonPx(x, ys);
       if (h > 0) return pri ? 0 : h;
-      if (h < 0 && !sky) {                                           // (the sky's rows on a planet's line: the night's tile)
-        const unsigned chr = (unsigned)(p->r[0x0B] >> 4) << 12;
-        int ys = (line + g_e3SkyVofs) & 255;
-        uint16_t e = p->vram[(0x6000 + (unsigned)(ys >> 3) * 32) & 0x7FFF];
-        int c = tilePixel(p, chr, e, mx & 7, ys & 7);
-        return pri ? 0 : (c ? (int)((e >> 10) & 7) * 16 + c : 0);
-      }
-      // (Below the bend the planet is the stage's own, mirrored about the screen's edge as below: the Steam art's planet,
-      //  plane 3, is drawn anew and does not join the stage's clouds at the 256 -- a seam the whole scene long.)
+      if (h < 0 && !sky) { int c = skyMapPixel(p, 0, ys); return pri ? 0 : c; }   // (the night's tile on a planet's line)
+    } else if (!sky && ys >= 48 && ys < 80) {                        // (the glow whole, the middle's and the mirrored sides')
+      int c = skyMapPixel(p, x < 0 ? -1 - x : x >= 256 ? 511 - x : x, ys);
+      if (c) return pri ? 0 : c;
     }
+    if (x >= 0 && x < 256) return -1;
+    // (Below the bend the planet is the stage's own, mirrored about the screen's edge as below: the Steam art's planet,
+    //  plane 3, is drawn anew and does not join the stage's clouds at the 256 -- a seam the whole scene long.)
     if ((p->r[0x08] & 0xFC) == 0x60 && (my & 255) < 32) { *pmx = mx & 7; return -1; }
     *pmx = (x < 0 ? -1 - x : 511 - x) + hs;
     return -1;

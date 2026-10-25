@@ -107,9 +107,14 @@ of tiles that release drew for it (`cgext107_0`-`2`, pages 2-4): plane 2 the win
 px a side, BG1's low layer), plane 0 the glow (the field's rows 3-4), plane 3 the planet (BG2). With the Steam margins
 on, the stage's sides draw them (`CtSceneArtEntry3Set`, the attract's 1B1 too: the same machine). The planet is round
 there: the glow and, under it, the planet's dark edge (plane 0's cells two pages on: `cgext107_2`) bend down towards
-the sides. The stage shows the sky's map above line 70 only (HDMA channel 3), so in the sides the bend is laid at the sky
-rows' own place on every line (the line plus the sky lines' V scroll) and the planet shows only below it; past the art's
-own 96 columns (a 21:9 side is 133) the bend goes on along the edge column's slope and the planet is mirrored. The sky's
+the sides, laid at the sky rows' own place on every line (the line plus the sky lines' V scroll); past the art's own 96
+columns (a 21:9 side is 133) the bend goes on along the edge column's slope. The stage cuts the sky's map at line 70
+(HDMA channel 3), the glow's last rows with it; the Steam release shows the field 06B, the glow whole, and its art is
+drawn against that -- so with the sides drawn the glow's rows go on below the switch line, the middle's too, one band as
+on Steam (the owner's reference, a Steam 16:9 capture, 2026-10-25). Below it the planet is the stage's own, mirrored
+about the screen's edge: the art's planet (plane 3) is new art that never joins the stage's clouds. The art's sky and
+dark edge sit on palette rows the stage never fades (2:10, row 1); they take the stage's rows of the same colour
+(4:15, row 7), so the sides fade and flash with the middle. The sky's
 rows of the room's own metatiles keep the rules above (one moon).
 
 The attract's `FF 63` opens the machine from its middle with mode 2's offset per tile (each of the 32 columns' H offset
