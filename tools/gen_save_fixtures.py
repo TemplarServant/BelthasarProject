@@ -9,7 +9,7 @@
 
   saves/ct_real_save.srm      the cart's 8 KB SRAM lifted out of saves/com_jogo_salvo.state -- a game
                               CHRONO TRIGGER ITSELF saved. It is the reference the checksum is graded
-                              against (`ct_field --sramcheck`): slot 0 carries signature $E41B and the
+                              against (`Belthasar --sramcheck`): slot 0 carries signature $E41B and the
                               checksum word 0x6B8C that the ROM wrote, and our port of FF/FBE7 has to
                               reproduce that number. Grading the checksum against a file WE wrote
                               would agree with any algorithm, right or wrong.

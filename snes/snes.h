@@ -74,7 +74,7 @@ extern long g_ctLogicalHeld, g_ctLogicalHolds, g_ctLogicalValves;
 void snes_setLogicalFrames(int on);
 void snes_logicalResume(int on);   // the translated stage's per-frame switch (keeps the rule's state)
 void snes_logicalFresh(void);      // ...and its state cleared for a new stage's machine
-extern int g_ctLogicalHoldApu;  // snes.c: the APU runs through a hold (1, the oracle) or stands with the beam (0, ct_field)
+extern int g_ctLogicalHoldApu;  // snes.c: the APU runs through a hold (1, the oracle) or stands with the beam (0, Belthasar)
 extern int g_ctLogicalLoads;    // snes.c: NMI-off loads start at phase 0 (the exception's second rule, 2026-09-25)
 extern long g_ctLogicalPhaseHolds, g_ctLogicalPhaseHeld;
 void snes_syncCycles(Snes* snes, bool start, int syncCycles);

@@ -1,0 +1,22 @@
+{
+  "name": "fxr_truce_pay_prompt",
+  "from": "fxr_truce_office",
+  "doc": "Stands in for saves/ferry_re/truce_pay_prompt.state, as disasm/notes/ow_ferry.md sec. 7 made it: the clerk (obj8, out of the ROM's action box from every cell beside the counter) poked beside Crono ($1810 = 0680), Left 2 frames and A: 'It's 10 G to Porre. Hop aboard?', waiting with the cursor on Yes ($0129 = 07, $0162 = 02), 60 frames after the A.",
+  "steps": [
+    [
+      "poke",
+      "7E1810=80,7E1811=06"
+    ],
+    [
+      "pad",
+      "40:2,0:10,100:4,0:60"
+    ]
+  ],
+  "expect": {
+    "loc": "0x012",
+    "wram": {
+      "0x0129": "0x07",
+      "0x0162": "0x02"
+    }
+  }
+}

@@ -3,7 +3,7 @@ r"""The FREE sync mode against FRAME-PERFECT, on the attract's first 3600 frames
 
     python tools/sync_free_check.py
 
-Runs ct_field --scene 433 twice with a settings file (CT_SETTINGS) choosing the sync mode -- the interactive
+Runs Belthasar --scene 433 twice with a settings file (CT_SETTINGS) choosing the sync mode -- the interactive
 presentation forced by CT_OVERLAY_SHOT (the overlay drawn at the end, under the dummy video driver), since a headless
 run never reads the file -- and prints every location load (CT_LOADCOST) of each:
 
@@ -28,7 +28,7 @@ def run(mode, d):
     open(ini, 'w').write('[timing]\nsync=%s\n' % mode)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_SETTINGS=ini, CT_LOADCOST='1',
                CT_OVERLAY_SHOT=os.path.join(d, mode + '.bmp') + '@3600:3')
-    p = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
+    p = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
                        env=env, capture_output=True, text=True, errors='replace', timeout=900)
     return [(m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4)))
             for m in (LOAD.match(l) for l in p.stdout.splitlines()) if m]

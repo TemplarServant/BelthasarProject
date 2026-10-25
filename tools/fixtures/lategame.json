@@ -1,0 +1,204 @@
+{
+  "doc": "The late game's fixtures (saves/blackbird_re, ending_re, lavos_re, race_re, tyranno_re and field_re/pre_scene_19f): the $C3 stages the story calls after 12000 BC and the end of the game, reached from Jackie's public battery saves (tools/third_party_saves.json) by recipes (tools/recipes/lg_*.json).",
+  "fixtures": [
+    {
+      "path": "saves/tyranno_re/tele301_req.state",
+      "recipe": "lg_tyranno_tele301",
+      "kind": "state",
+      "doc": "Jackie's ch17 brought to scene 301 by the ROM's loader (--teleport 301 8 30 0 --method req)"
+    },
+    {
+      "path": "saves/tyranno_re/tele301_req.lakewram",
+      "recipe": "lg_tyranno_tele301",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/tyranno_re/ff24_handoff_f27.state",
+      "recipe": "lg_tyranno_ff24_handoff",
+      "kind": "state",
+      "doc": "the frame before `FF 24` (Lavos falls), the fight won with the HP poke"
+    },
+    {
+      "path": "saves/lavos_re/tele476_aa77.state",
+      "recipe": "lg_lavos_tele476",
+      "kind": "state",
+      "doc": "Jackie's ch27, glb[170] = 77, teleported to scene 476 (loc 1DC)"
+    },
+    {
+      "path": "saves/lavos_re/tele476_aa77.lakewram",
+      "recipe": "lg_lavos_tele476",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/lavos_re/ff07_pre_f1530.state",
+      "recipe": "lg_lavos_ff07_pre",
+      "kind": "state",
+      "doc": "scene 476 after A every 32 frames to f1530: `FF 07` on its f10"
+    },
+    {
+      "path": "saves/lavos_re/ff07_handoff_f10.state",
+      "recipe": "lg_lavos_ff07_handoff",
+      "kind": "state",
+      "doc": "the frame before `FF 07` (the Day of Lavos)"
+    },
+    {
+      "path": "saves/lavos_re/lavos_1d2_arrival.state",
+      "recipe": "lg_lavos_1d2_arrival",
+      "kind": "state",
+      "doc": "Jackie's ch26 through the End of Time's bucket: the arrival at loc 1D2"
+    },
+    {
+      "path": "saves/lavos_re/lavos_1d2_arrival.lakewram",
+      "recipe": "lg_lavos_1d2_arrival",
+      "pad": "0:1",
+      "kind": "lakewram",
+      "doc": "the arrival's WRAM one frame on (as the capture's was dumped)"
+    },
+    {
+      "path": "saves/lavos_re/lavos_1d3_wait.state",
+      "recipe": "lg_lavos_1d3_wait",
+      "kind": "state",
+      "doc": "loc 1D3 in front of the shell, before the first mimic fight"
+    },
+    {
+      "path": "saves/lavos_re/lavos_1d3_wait.lakewram",
+      "recipe": "lg_lavos_1d3_wait",
+      "pad": "0:1",
+      "kind": "lakewram",
+      "doc": "its WRAM one frame on (as the capture's was dumped)"
+    },
+    {
+      "path": "saves/blackbird_re/ff23_story_f18.state",
+      "recipe": "lg_blackbird_story_poked",
+      "pad": "0:18",
+      "kind": "state",
+      "doc": "the story-poked hand-off 18 frames on (inside the location load's ramp)"
+    },
+    {
+      "path": "saves/blackbird_re/ff23_story_f18.lakewram",
+      "recipe": "lg_blackbird_story_poked",
+      "pad": "0:18",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/blackbird_re/ff23_handoff_f25.state",
+      "recipe": "lg_blackbird_story_poked",
+      "pad": "0:25",
+      "kind": "state",
+      "doc": "the frame before the story's `FF 23` (entry 3 after the Blackbird)"
+    },
+    {
+      "path": "saves/ending_re/ending_052_f1745.state",
+      "recipe": "lg_end_core_defeated",
+      "pad": "0:1745",
+      "kind": "state",
+      "doc": "1745 frames after the core: loc 052, the first of the chain after Lavos"
+    },
+    {
+      "path": "saves/ending_re/ending_052_f1745.lakewram",
+      "recipe": "lg_end_core_defeated",
+      "pad": "0:1745",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/ending_re/ending_pre_ff2b.state",
+      "recipe": "lg_end_pre_ff2b",
+      "kind": "state",
+      "doc": "Leene's Square, the talk to obj9 made: `FF 2B` at f131"
+    },
+    {
+      "path": "saves/ending_re/ending_pre_ff2b.lakewram",
+      "recipe": "lg_end_pre_ff2b",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/ending_re/ending_handoff_f130.state",
+      "recipe": "lg_end_handoff_f130",
+      "kind": "state",
+      "doc": "the frame before `FF 2B` (entry 11)"
+    },
+    {
+      "path": "saves/ending_re/ending_handoff_f130_ff2a.state",
+      "recipe": "lg_end_handoff_f130",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F2983=2A"
+      },
+      "kind": "state",
+      "doc": "the same hand-off with obj10's op operand at $7F:2983 changed to 2A: entry 10 from the same world and song"
+    },
+    {
+      "path": "saves/ending_re/ending_handoff_f6837.state",
+      "recipe": "lg_end_handoff_f6837",
+      "kind": "state",
+      "doc": "the frame before scene 90's `FF 2E` (entry 14)"
+    },
+    {
+      "path": "saves/ending_re/ending_handoff_f6837_ff2f.state",
+      "recipe": "lg_end_handoff_f6837",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "7F2268=2F"
+      },
+      "kind": "state",
+      "doc": "the same hand-off with scene 90's op operand at $7F:2268 changed to 2F: entry 15"
+    },
+    {
+      "path": "saves/race_re/race_user.state",
+      "recipe": "lg_race_lab32",
+      "kind": "state",
+      "doc": "Lab 32's west end facing Johnny (the race's second meeting): A at f30 calls `FF 00`"
+    },
+    {
+      "path": "saves/race_re/race_user.lakewram",
+      "recipe": "lg_race_lab32",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/lavos_re/cockpit_1b0_f1700.state",
+      "recipe": "lg_epoch_1f0",
+      "pad": "0:30,2:2,0:60,10:2,0:100,(100:2,0:30)*47,100:2",
+      "kind": "state",
+      "doc": "the owner's gauge drive to f1700: the Epoch's cockpit (loc 1B0) in the party's lines"
+    },
+    {
+      "path": "saves/lavos_re/cockpit_1b0_f1700.lakewram",
+      "recipe": "lg_epoch_1f0",
+      "pad": "0:30,2:2,0:60,10:2,0:100,(100:2,0:30)*47,100:2",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    },
+    {
+      "path": "saves/lavos_re/ff26_pre_f2760.state",
+      "recipe": "lg_epoch_1f0",
+      "pad": "0:30,2:2,0:60,10:2,0:100,(100:2,0:30)*80,100:2,0:5",
+      "kind": "state",
+      "doc": "the drive to f2761: `FF 26` on its f10, as the capture's (f2760 there: the twin's op comes a frame later)"
+    },
+    {
+      "path": "saves/lavos_re/ff26_handoff_f10.state",
+      "recipe": "lg_epoch_1f0",
+      "pad": "0:30,2:2,0:60,10:2,0:100,(100:2,0:30)*80,100:2,0:15",
+      "kind": "state",
+      "doc": "ten frames on: the hand-off, `FF 26` on its next frame"
+    },
+    {
+      "path": "saves/field_re/pre_scene_19f.state",
+      "recipe": "lg_ocean_palace_19f",
+      "kind": "state",
+      "doc": "the Ocean Palace's aftermath in 19F, 508 frames before CHANGELOC 1F4 (storyline CB)"
+    },
+    {
+      "path": "saves/field_re/pre_scene_19f.lakewram",
+      "recipe": "lg_ocean_palace_19f",
+      "kind": "lakewram",
+      "doc": "the same, as Belthasar --loadwram reads it"
+    }
+  ]
+}

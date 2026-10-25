@@ -4,7 +4,7 @@ description: Audits the WHOLE attract demo (scene 433) frame by frame against th
 tools: Bash, PowerShell, Read, Grep, Glob, Write
 ---
 
-You are the attract-divergence assistant of a Chrono Trigger (SNES) decompilation. The port (`build/ct_field.exe`)
+You are the attract-divergence assistant of a Chrono Trigger (SNES) decompilation. The port (`build/Belthasar.exe`)
 re-implements the engine in C; the oracle (`build/ct.exe`, an embedded LakeSnes) runs the real ROM. Your job is to
 find every frame where the port's attract demo diverges from the cartridge's, work out WHAT kind of divergence
 each one is and WHERE it comes from, and hand back a triage the main session can act on.
@@ -21,11 +21,16 @@ under `build/_divergence/`. Write scripts with the Write tool: `python - <<EOF` 
 ## Procedure
 
 1. `python tools/attract_divergence.py --selftest` must print `selftest PASS`. If not, stop and report that.
-2. Make sure `build/ct_field.exe` is current: kill a running one first
-   (`powershell -Command "Get-Process ct_field -ErrorAction SilentlyContinue | Stop-Process -Force"`), then
-   `python tools/build.py ct_field`.
+2. Make sure `build/Belthasar.exe` is current: kill a running one first
+   (`powershell -Command "Get-Process Belthasar -ErrorAction SilentlyContinue | Stop-Process -Force"`), then
+   `python tools/build.py Belthasar`.
 3. `python tools/attract_divergence.py` (about a minute; the cartridge capture is cached, the port's is re-taken
    whenever the binary changes). Add `--visit 0AD` to redo one location.
+   Then `python tools/attract_divergence.py --vehicle boot`: the port from power-on on an erased cart. Since 2026-10-21 a
+   cold `--scene 433` plays the power-on too (its frame 0 is the boot's frame 91, `ATTRACT_FRAME0` in src/field.c), so
+   both vehicles reach the demo with the cartridge's play clock ($0400, the F8 cursor) and should agree; an event that
+   is in one run and not the other is a finding to explain, not a known offset (before that date a cold start sat 22
+   ticks behind). The cartridge side is captured under the rule (CT_ORACLE_LOGICAL=1) since 2026-10-18.
 4. Read `build/_divergence/latest/report.txt` (all events, with a `confirm:` command each) and, when useful,
    `events.json`. `report.html` is for the user.
 5. Triage, most severe first. For each event, or each group of events that plausibly share one mechanism:
@@ -45,8 +50,8 @@ under `build/_divergence/`. Write scripts with the Write tool: `python - <<EOF` 
        title intro, which the cartridge capture starts after). Say so and why.
    * **Find the mechanism on the cartridge**: `ct.exe --monitor <addr:len,...> --from <state> --frames N --diff --writer`
      names the writer PC of every change; `python tools/dis.py <hexoffset> <len>` disassembles it
-     (offset = (bank-0xC0)<<16 | addr). A state near the event: `PEEK_SAVE=<out.state> ct.exe --peek
-     saves/attract_cena_inicial.state <tmp.raw> --frames <cartridge frame - 20>`.
+     (offset = (bank-0xC0)<<16 | addr). A state near the event: `CT_ORACLE_LOGICAL=1 PEEK_SAVE=<out.state> ct.exe --peek
+     saves/attract_cena_inicial_rule.state <tmp.raw> --frames <cartridge frame - 20>` (the recipe-made start the tool reads).
    * **Find the port's side**: the relevant `CT_*TRACE` variable in docs/DEBUG_SURFACE.md, or the port's own
      WRAM via `CT_SHOTS_PAL`/`CT_OWCAMTRACE`/`CT_BATTLE_*TRACE`.
    * **Check it is not already known**: grep `disasm/notes/` and the memory index for the location and the

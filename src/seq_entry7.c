@@ -13,6 +13,9 @@
 // they draw from ($3448: `$039B` + 1, the byte at C0/FE00 + it), the WRAM palette fade $6439 and the end. The picture (the
 // setup's VRAM packets, the CGRAM shadow it builds, the text sprites $64BF, the sparkles' sprites C3/0DBC, the PPU) is stage 2.
 #include "seq_entry7.h"
+#include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
+#include "seq_entry7pic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_racepic.h"
 #include "objslot.h"
 #include <string.h>
 
@@ -40,7 +43,7 @@ static void entry7Objslot(uint8_t* w, const CtRaceIo* io) {
 // carry stands).
 static uint8_t rng3448(uint8_t* w, const CtRaceIo* io) {
   uint8_t x = ++w[0x039B];
-  return (io && io->rom && io->romLen > 0xFE00 + 0xFF) ? io->rom[0xFE00 + x] : 0;
+  return io ? CtRomByte(io->rom, io->romLen, 0xFE00 + x) : 0;
 }
 
 // $7E:65AE -- one sparkle drawn anew, its record at X: x = rnd & 7F + 40, y = E0 while the word `$0044` is set (the text is
@@ -60,6 +63,7 @@ static void entry7Spark(uint8_t* w, unsigned x, const CtRaceIo* io) {
 // $0004 counts 4 frames a frame of $0003, and a record whose frame count reaches 0 is drawn anew. A record still alive is
 // drawn (C3/0DBC from the descriptor at $6640, whose first byte is its frame: (0A - $0003) | 80 -- the picture's).
 static void entry7Sparkles(uint8_t* w, const CtRaceIo* io) {
+  int draw = io && io->pic;
   wr(w, 0x0015, 0); wr(w, 0x0017, 0);                                 // 65DF LDX #0000 / STX $15 / STX $17
   for (unsigned x = 0x0C00; x != 0x0CC0; x += 8) {                    // 65E6 .. 663D
     if (w[x + 2]) { w[x + 2]--; continue; }                           // 65E9 LDA $0002,X / BEQ / DEC
@@ -69,13 +73,14 @@ static void entry7Sparkles(uint8_t* w, const CtRaceIo* io) {
     }
     w[0x0015] = w[x + 0]; w[0x0017] = w[x + 1];                       // 660D-6615
     w[0x6640] = (uint8_t)((0x0A - w[x + 3]) | 0x80);                  // 6617 LDA #0A / SEC / SBC $0003,X / ORA #80 / STA
+    if (draw) CtEntry7PicSparkle(w);                                  // 6629 JSL C3/0DBC (the picture's)
   }
 }
 
 // $7E:6439 -- the WRAM palette fade (D = $0300): every 16 frames (`LDA $08 / AND #0F`; $6422 makes it #1F), while $0366
 // counts down, each of the $0364 colours at ($0362) steps one unit per component toward the one at ($0360). The scratch
 // $03F0 / $03F2 / $03FE is the routine's own.
-static void entry7PalFade(uint8_t* w) {
+void CtSeqPalFade6439(uint8_t* w) {
   if (w[0x0008] & w[0x643E]) return;                                  // 643B LDA $08 / AND #0F (the operand at $643E)
   if (!w[0x0366]) return;                                             // 6445 LDA $66 / BEQ
   w[0x0366]--;                                                        // 6449 DEC $66
@@ -145,13 +150,17 @@ static unsigned entry7Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x3749: CtSeqScript(w, 0x0A00, io, entry7Call); return t;
     case 0x3754: CtSeqScript(w, 0x0B00, io, entry7Call); return t;
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);
-    case 0x37FA: entry7Objslot(w, io); return t;
+    case 0x37FA: wr(w, 0x00F0, 0x4242); entry7Objslot(w, io); return t;   // `LDX $4202` reads the open bus ($42), as entry 3
     case 0x65DD: entry7Sparkles(w, io); return t;
-    case 0x6439: entry7PalFade(w); return t;
+    case 0x6439: CtSeqPalFade6439(w); return t;
     case 0x63D5: case 0x63F5: return entry7End(w, t, io);
-    default: return t;                                                // 64BF: the text's sprites (the picture's)
+    default:                                                          // 64BF: the text's sprites (the picture's)
+      if (io && io->pic) CtEntry7PicTask(io->pic, w, t);
+      return t;
   }
 }
+
+static unsigned entry7Hook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) { (void)slot; return CtEntry7PicHook(io->pic, w, h); }
 
 int CtEntry7StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (!CtEntry7StageHas(operand)) return -1;
@@ -159,19 +168,24 @@ int CtEntry7StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   s_reset = 0; s_songHold = 0;
   // $7E:6248 -- the setup. Its VRAM packets ($3691 / C3/0557), the CGRAM shadow it builds ($8772, the copy $38AF), the DMAs
   // and the PPU are the picture's; what the logic reads, in order:
+  if (io && io->pic) CtEntry7PicSetupA(io->pic, w, io);               // 6248-62EB: the picture's loads (seq_entry7pic.c)
   wr(w, 0x0A20, (operand & 0x0F) == 8 ? 0x63A6 : 0x633D);             // 62D7-62E8 (`LDA $0384 / AND #000F / CMP #0008`)
   if (CtSeqScript(w, 0x0A00, io, entry7Call) < 0) return -1;          // 62F0 JSR $3749 -- page A runs once in the setup
   for (unsigned x = 0x0C00; x != 0x0CC0; x += 8) entry7Spark(w, x, io);   // 62FA JSR $6598 (the carry clear: see 65AE)
   for (unsigned y = 0; y < 0x90; y += 0x0C) w[0x0520 + y] = 0;        // 62FD JSL $FD:FFEE -> FD/E275
+  if (io && io->pic) { CtEntry7PicSetupB(io->pic); }                  // 6301-6333: the registers
   wr(w, 0x0399, 0x0080);                                              // 6336 LDX #0080 / STX $0399
   // $7E:300D .. 301E: $388B, $31B0, JSL C3/08D0 (one NMI, run here, without C3/09A4), NMI on, STZ $00, STZ $0392
-  CtSeqStageNmi(w, 0, io, entry7Task);
+  if (io && io->pic) CtRacePicCgram(io->pic, w);                      // 300D JSR $388B
+  g_ctRaceOpenNmi = 1;   // (the setup's last NMI: its posts wait for the opening's black frames, seq_race.h)
+  CtSeqStageNmiHooks(w, 0, io, (io && io->pic) ? entry7Hook : NULL, entry7Task);
+  g_ctRaceOpenNmi = 0;
   wr(w, 0x0000, 0); wr(w, 0x0392, 0);
   return 0;
 }
 
 int CtEntry7StageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
-  int st = CtSeqStageNmi(w, joy, io, entry7Task);
+  int st = CtSeqStageNmiHooks(w, joy, io, (io && io->pic) ? entry7Hook : NULL, entry7Task);
   if (s_reset) return 2;
   if (st != 2) s_songHold = CtSeqStageSongTick(w, io, s_songHold);
   return st;

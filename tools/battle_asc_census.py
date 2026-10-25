@@ -3,7 +3,7 @@ r"""Which opcodes of the PC battle anim scripts the port's interpreter executes 
 
     python tools/battle_asc_census.py [--scripts]
 
-Runs `build/ct_field.exe --asccensus` (battle.c CtBattleAscCensus: every tech's, consumable's and physical selector's
+Runs `build/Belthasar.exe --asccensus` (battle.c CtBattleAscCensus: every tech's, consumable's and physical selector's
 bank-CE script, walked track by track with the interpreter's own opcode lengths, `1E ss` supers descended) and
 classifies every opcode against battleAscTick's `switch (op)`, whose case labels this tool reads out of src/battle.c:
 
@@ -49,7 +49,7 @@ def terminators():
 
 def main():
     os.chdir(ROOT)
-    out = subprocess.run([os.path.abspath('build/ct_field.exe'), '--asccensus'], capture_output=True, text=True).stdout
+    out = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--asccensus'], capture_output=True, text=True).stdout
     run = handled_ops() | terminators() | {0x1F}     # terminators end the track before the switch; 1F is sized as 1
     scripts = []
     for l in out.splitlines():

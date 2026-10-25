@@ -9,7 +9,7 @@ Both sides are derived live, so nothing here is a pinned constant:
     channels -- disasm/notes/sequence_table.md section 7.1), and `ct.exe --hdma` prints the colour
     math state of every scanline of that frame. That is the cartridge's own answer.
   * the same run's `.wram` sidecar gives the 64 KB $7E page the channels' tables live in, and
-    `ct_field --seqhdma` replays the walker over it and prints the same bands.
+    `Belthasar --seqhdma` replays the walker over it and prints the same bands.
 
 ⚠ The oracle numbers its trace 0..224 and its first band is the state BEFORE the frame's first
 transfer; the port's starts at line 1, the first line the SNES draws. Both are expanded to a
@@ -25,7 +25,7 @@ import sys
 
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 BOOT = int(sys.argv[1]) if len(sys.argv) > 1 else 8600
 RAW = 'build/_seqhdma.raw'
 PAGE = 'build/_seqhdma_page.bin'

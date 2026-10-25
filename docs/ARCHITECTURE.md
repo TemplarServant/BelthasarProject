@@ -6,12 +6,14 @@ behaviour is derived and checked see [METHODOLOGY.md](METHODOLOGY.md).
 
 ## The programs
 
-`CMakeLists.txt` builds four executables into `build/`.
+`CMakeLists.txt` builds these executables into `build/`. Two more are not listed: `ct_oracle.exe`, built with `ct.exe`, is
+`src/main.c` with only the oracle modes (`--peek`, `--monitor`, `--hdma`, `--fb`), whose bytes key the suite's oracle cache.
+The optional `ct_tables_proof.exe` is built only when named (`python tools/gen/tables_proof.py`).
 
 | Program | Sources | What it is |
 |---|---|---|
 | `ct.exe` | `src/main.c` + the engine + `snes/*.c` | **The oracle harness.** Headless. It loads your ROM into the vendored LakeSnes core (the *oracle*) and runs the original game next to the C engine: lockstep differentials (`--vmdiff`), the 512-scene check (`--vm`), micro-execution sweeps of single ROM routines (`--sweep*`), RAM probes (`--peek`, `--monitor`, `--read`, `--followvm`), savestates. Always built; needs no SDL. |
-| `ct_field.exe` | `src/field.c` + the engine + the frontend + `snes/*.c` | **The game.** SDL2. Boots like the cartridge (`--boot`), runs the field, battles, menus, overworld, title and attract, plays the sound, and carries the F1 overlay and the mods. Its many headless flags (`--selftest`, `--battletest`, `--menutest`, `--walkscript`, ...) are what most regression checks drive. It links the LakeSnes core for three things only: the SPC700/DSP that plays the sound driver, the translated stages, and `CT_FIELDLOCK` (the oracle running inside the game for live comparison). |
+| `Belthasar.exe` | `src/field.c` + the engine + the frontend + `snes/*.c` | **The game.** SDL2. Boots like the cartridge (`--boot`), runs the field, battles, menus, overworld, title and attract, plays the sound, and carries the F1 overlay and the mods. Its many headless flags (`--selftest`, `--battletest`, `--menutest`, `--walkscript`, ...) are what most regression checks drive. It links the LakeSnes core for two things only: the reference SPC700/DSP (`CT_AUDIO_SPC=ref`; the game plays the sound machine in C) and `CT_FIELDLOCK` (the oracle running inside the game for live comparison). It runs no translated program. |
 | `ct_world.exe` | `src/ct_world.c`, `src/world.c` | An overworld viewer: walks the lead over the world map with the C mover and camera. A development tool. |
 | `ct_viewer.exe` | `src/viewer.c`, `src/scene.c` | A field-scene browser over `ct_assets.dat` (`--datonly`) or the ROM. A development tool. |
 
@@ -27,32 +29,33 @@ your ROM (verified: src/rom_verify.c, tools/ctlib/rom.py)
    |       (lz.py, gfx.py, maps.py, sprites.py, text.py, script.py)            |
    |                                                                           v
    +--> oracle (ct.exe) + recipes --> oracle states --> tools/gen_*.py --> src/data/*.h --> compiled
-   |                                                  \-> tools/gen/xlat.py --> src/xlat/*.c   into the
-   |                                                                                          engine
-   +--> read at run time by ct_field: battle enemy data, the sound driver (bank $C7) and song data
+                                                      \-> tools/gen/xlat.py --> src/xlat/*.c   into the
+                                                                               (ct.exe only)   engine
 ```
 
-- **`ct_assets.dat`** is one container (`CTAS` magic, a directory of typed entries) that holds what the field
-  needs to run without the ROM: scene palettes and headers, tilesets, maps, palette animations, sprites (graphics,
-  assembly, palettes), strings and dialogue, the font, decompressed scene scripts, actor tables, collision and
-  exits. `ct.exe --datverify` checks that a scene rendered from the container matches one rendered from the ROM.
-- **`src/data/*.h`** (51 headers) are tables compiled into the engine: battle animation records and sheets, menu
+- **`ct_assets.dat`** is one container (`CTAS` magic, a directory of typed entries) that holds everything the game
+  reads at run time, so `Belthasar` needs no ROM ([ROM.md](ROM.md#the-rom-free-runtime)): scene palettes and headers,
+  tilesets, maps, palette animations, sprites (graphics, assembly, palettes), strings and dialogue, the font,
+  decompressed scene scripts, actor tables, collision and exits, and the LZ streams and tables of the battle, the
+  menus, the overworld and the sound. `ct.exe --datverify` checks that a scene rendered from the container matches one
+  rendered from the ROM.
+- **`src/data/*.h`** (47 headers) are tables compiled into the engine: battle animation records and sheets, menu
   chrome, the title sequence's data, the overworld era placard, and so on. Each comes from a generator in
   `tools/`. They are ROM-derived and are generated locally (see [ROM.md](ROM.md)).
-- **`src/xlat/*.c`** are ROM programs translated into C (see [Translated stages](#translated-stages)).
+- **`src/xlat/*.c`** are ROM programs translated into C, compiled into `ct.exe` only as references for the native
+  stages (see [Translated stages](#translated-stages)).
 - **Battery saves** go to `ct_sram.srm`, in the cartridge's own 8 KB layout and checksum, so a save made by the
   engine and one made by the cartridge are interchangeable.
 
 ## Source layout
 
-Every C source in `src/`, one line each. The headers mostly match the `.c` names; two stand alone:
+The C sources in `src/`, one line each (a family of files shares a row). The headers mostly match the `.c` names; two stand alone:
 `ct_vbeam.h` (the virtual beam's constants, shared by the oracle and the engine) and `ct_owobj.h` (the overworld
 ambient-object block layout).
 
 | File | Role |
 |---|---|
-| `main.c` | `ct.exe`: the oracle harness. Every probe, lockstep, sweep and self-check mode. |
-| `harness_cli.c` | `ct.exe`'s flag table and argument parser; unknown flags fail hard. |
+| `main.c` | `ct.exe`: the oracle harness. Every probe, lockstep, sweep and self-check mode, and its argument parser (unknown flags fail hard). |
 | `harness_drive.c` | Timed pad scripts that drive the oracle from power-on (for example, to Crono's bedroom). |
 | `ct_cpu_infra.c` | The comparison core: loads the ROM into the oracle (`CtOracleCreate`), snapshots, verification, micro-execution of single routines. |
 | `ct_lake_state.c` | The `CTLS` savestate container (magic, length, CRC-32) around LakeSnes's state stream. |
@@ -69,16 +72,27 @@ ambient-object block layout).
 | `player.c` | The lead's input-to-velocity controller (`C0/881E` and its helpers). |
 | `oam.c` | Field sprite assembly into OAM (`C0/B276` onward), checked byte for byte against the oracle. |
 | `objslot.c` | The palette-effect record service (`FD/E39C`), one body shared by the field and the battle. |
-| `field.c` | `ct_field.exe`: the host. The frame loop, the field compositor, location loads, the battle and menu hand-offs, the overworld bridge, the sound host, the widescreen and frames-between composition, and the headless test modes. |
+| `field.c` | `Belthasar.exe`: the host. The frame loop, the field compositor, location loads, the battle and menu hand-offs, the overworld bridge, the sound host, the widescreen and frames-between composition, and the headless test modes. |
 | `field_cost.c` | What the field's reload after a menu costs, priced from the ROM's control flow (`C0/01A5`, `C0/286C`). |
 | `world.c` | The overworld: camera and scroll engine (bank `$C2`), mover, tilemap streaming, the ambient-object VM, party followers. |
 | `battle.c` | The battle module: boot and staging, the ATB and menu pass, the action pipeline, techs and items, the enemy AI, status, effects, rendering, rewards, the exit back to the field. |
 | `menu.c` | The X-menu screens, shops and the load screen; the save write and load (`FF/FA..`). |
 | `menu_cost.c` | What the menu's open costs, priced instruction by instruction. |
 | `title_intro.c` | The title sequence as the overlay's own machine (the `$C3` script interpreter and its NMI hooks), not a recording. |
-| `audio.c` | The sound system: the bank `$C7` driver upload, the song loader, the command channel, and pricing of each transfer on SPC time. It drives the vendored SPC700/DSP. |
-| `seq_xlat.c` | The runtime for translated stages: runs a `src/xlat/*.c` program over the vendored 65816, DMA and PPU, with the timing rule applied. |
-| `seq_ppu.c` | The picture of a `$C3` sequence stage, drawn by the vendored LakeSnes PPU. |
+| `audio.c` | The sound system: the bank `$C7` driver upload, the song loader, the command channel, and pricing of each transfer on SPC time. It drives the sound machine in C (`sound/`); `CT_AUDIO_SPC=ref` runs the vendored SPC700/DSP instead. |
+| `sound/*.c` | The sound processor in C: `driver.c` (the SPC700 program, routine by routine), `machine.c` (its clock, timers, ports and S-DSP), `mixer.c` (the S-DSP, sample-exact against `snes/dsp.c`), `timing.c` (the cost table's asset), `coro.c`; the references and tests `lockstep.c`, `fuzz.c`, `mixer_replay.c`, `mixer_dsp.c`, `timing_build.c`. |
+| `seq_race.c`, `seq_ending.c`, `seq_entry3.c`, `seq_entry4.c`, `seq_entry6.c`, `seq_entry7.c` | The `$C3` sequence stages, native: the motorcycle race, the ending, and entries 3, 4, 6 and 7. |
+| `seq_racepic.c`, `seq_endingpic.c`, `seq_entry*pic.c`, `seq_pic.c` | Those stages' pictures, native, over a stage picture of their own (`seq_pic.c`). |
+| `seq_gwarp.c` | The gate warp (bank `$FD`, ops `FF 80`-`8F`), native: logic and picture. |
+| `wipe.c` | The window wipe `C3/01E4` with its seed `C3/02DD`, and the overworld's window object `C6/E241` / `E27E`, native. |
+| `hdma_table.c` | The field's HDMA table builder `FD/C2C1`, native. |
+| `vwf.c` | Bank `$C2`'s proportional-text engine (`C2/57DF`, `C2/5823`). |
+| `seq_xlat.c`, `seq_ppu.c` | `ct.exe`'s references: a `src/xlat/*.c` program run over the vendored 65816, DMA and PPU (`--xlatcmp`), and a stage's picture on the vendored PPU (`--seqppucmp`). |
+| `romview.c`, `rom_census.c` | ROM-free reads: each ROM read served from `ct_assets.dat`'s tables, and `CT_ROM_CENSUS`, which records which code reads which ROM page. |
+| `datapack.c` | The data-free build's loader of `ct_tables.dat` ([ROM.md](ROM.md#the-data-free-belthasar)). |
+| `launcher.c`, `launcher_ui.cpp`, `launcher_ui_stub.c` | The player's first start: the ROM screen that runs the setup (Windows and Linux). |
+| `macos_paths.m`, `android.c`, `touchpad.c` | The macOS bundle's data folder, the Android host, the on-screen gamepad. |
+| `ct_shadow.c` | `ct.exe --shadow`: routine-level validation against the oracle ([SHADOW_PROPOSAL.md](SHADOW_PROPOSAL.md)). |
 | `settings.c` | `ct_settings.ini`: the player's options. Headless runs never read it. |
 | `overlay.cpp` | The F1 options overlay (Dear ImGui) over the paused game. |
 | `overlay_stub.c` | The no-overlay build, used when `third_party/imgui` is absent. |
@@ -95,7 +109,7 @@ Other top-level directories:
 |---|---|
 | `snes/` | Vendored LakeSnes (MIT): the oracle's 65816, PPU, DMA, SPC700 and DSP, with the timing rule's hooks added. Every check's ground truth runs on it, so change it with care. A change to its state layout invalidates every `.state` file. |
 | `assets/` | The Python asset pipeline (no dependencies outside the standard library). |
-| `tools/` | Build, the regression suite, the disassembler, the oracle wrapper `ct.py` + `ctlib`, generators, and about a hundred `*_cmp.py` comparison tools that grade one behaviour against the oracle. Index: [tools/README.md](../tools/README.md). |
+| `tools/` | Build, the regression suite, the disassembler, the oracle wrapper `ct.py` + `ctlib`, generators, and about 130 `*_cmp.py` comparison tools that grade one behaviour against the oracle. Index: [tools/README.md](../tools/README.md). |
 | `disasm/notes/` | The reverse-engineering dossiers. |
 | `docs/` | This documentation. |
 
@@ -148,12 +162,12 @@ grid, the colour math per world, and the window effects.
 
 The game's sound program runs on the SNES's sound processor (the SPC700). `audio.c` does the CPU's side natively:
 it uploads the bank `$C7` driver, loads songs and samples into sound RAM the way the ROM's loader does, sends
-commands through the four I/O ports, and prices each transfer on SPC time under the timing rule. The SPC700 and its
-DSP themselves are LakeSnes's core, run one frame per displayed frame.
-
-That is emulated hardware inside the port. The project has decided that nothing in the port should be emulation
-([DECISIONS.md](DECISIONS.md), 2026-10-09), so replacing it with a native implementation of the driver's behaviour
-is on the [roadmap](ROADMAP.md#3-debt-emulation-and-bakes-to-retire).
+commands through the four I/O ports, and prices each transfer on SPC time under the timing rule. The sound processor's
+side is native too (since 2026-10-18, [DECISIONS.md](DECISIONS.md)): `src/sound/driver.c` is the driver's program
+routine by routine, `src/sound/machine.c` runs it on its own clock with the timers and ports, and `src/sound/mixer.c`
+is the S-DSP; the output is the same PCM as LakeSnes's SPC700/DSP, run one frame per displayed frame. That vendored
+core stays as the reference (`CT_AUDIO_SPC=ref`, and `CT_AUDIO_SPC=lockstep` to compare the two instruction by
+instruction).
 
 ## Translated stages
 
@@ -163,21 +177,20 @@ transitions whose scanline edges come from a generator that reads the PPU's beam
 chose (2026-09-14) to translate the program: `tools/gen/xlat.py` turns each instruction the stage executes on the
 oracle into one labelled line of C, and `seq_xlat.c` runs it over the vendored 65816, DMA and PPU.
 
-| File | Program |
-|---|---|
-| `src/xlat/seq_c3.c` | The `$C3` sequence stages (the race and others), with their overlay in `$7E`. |
-| `src/xlat/wipe_c3.c` | The field's window wipe (`C3/01E4` and its seed routine `C3/02DD`). |
-| `src/xlat/owwin_c6.c` | The same window routine called from the overworld (`$C6:E241`). |
-| `src/xlat/gwarp_fd.c` | The gate warp effect (bank `$FD`). |
-| `src/xlat/hdma_fd.c` | The HDMA table builder `FD/C2C1`. |
+Under the decision of 2026-10-09 (no emulation) each was replaced by native C in 2026-10-17/18, and `Belthasar` links
+none of them. The translations stay in `ct.exe` as references the native code is graded against:
 
-`tools/gen/xlat_all.py` makes all five from the ROM: it runs the oracle's unique traces from the recipe states
-(`tools/recipes/attract_*`) and then `tools/gen/xlat.py` with the options each file was made with; `gwarp_fd.c` and
-`hdma_fd.c` still need two captures of the Millennial Fair (`tools/gen/manifest.json`, "needs").
+| File | Program | Native replacement |
+|---|---|---|
+| `src/xlat/seq_c3.c` | The `$C3` sequence stages (the race and others), with their overlay in `$7E`. | `src/seq_race.c`, `seq_ending.c`, `seq_entry*.c` and their `*pic.c` |
+| `src/xlat/wipe_c3.c` | The field's window wipe (`C3/01E4` and its seed routine `C3/02DD`). | `src/wipe.c` |
+| `src/xlat/owwin_c6.c` | The same window routine called from the overworld (`$C6:E241`). | `src/wipe.c` |
+| `src/xlat/gwarp_fd.c` | The gate warp effect (bank `$FD`). | `src/seq_gwarp.c` |
+| `src/xlat/hdma_fd.c` | The HDMA table builder `FD/C2C1` (`--hdmafuzz`). | `src/hdma_table.c` |
 
-These are exact by construction and graded per instruction against the oracle (`ct.exe --xlatcmp`). They are also
-emulation of the CPU and PPU, so they are debt: the decision of 2026-10-09 asks for native C that keeps the
-behaviour, replaced as each one is touched.
+`tools/gen/xlat_all.py` makes all five from the ROM: it runs the oracle's unique traces from the recipe states and
+then `tools/gen/xlat.py` with the options each file was made with (`tools/gen/manifest.json`; made from the recipes
+since 2026-10-11). They are exact by construction and graded per instruction against the oracle (`ct.exe --xlatcmp`).
 
 ## The frontend and the mods
 
@@ -200,7 +213,7 @@ behaviour, replaced as each one is touched.
 
 ## Where the reverse-engineering notes live
 
-- [`disasm/notes/`](../disasm/notes/): about 260 dossiers, one per mechanism, named by subsystem (`battle_*`,
+- [`disasm/notes/`](../disasm/notes/): about 280 dossiers, one per mechanism, named by subsystem (`battle_*`,
   `field_*`, `menu*`, `ow_*`, `audio_*`, ...). Each cites ROM addresses and oracle measurements and lists its open
   questions. Start with [events.md](../disasm/notes/events.md), [scenes.md](../disasm/notes/scenes.md),
   [field_tick.md](../disasm/notes/field_tick.md), [battle_loop.md](../disasm/notes/battle_loop.md) and
@@ -208,4 +221,3 @@ behaviour, replaced as each one is touched.
 - [`disasm/notes/patches/`](../disasm/notes/patches/): measured changes that are saved but not applied, with the
   reason.
 - Comments in the C cite the ROM routine each block ports (`C0/5A46`, `CD/0340`), and usually the dossier.
-- [`MEMORY.md`](../MEMORY.md) at the repository root is a navigation index for agents and humans.

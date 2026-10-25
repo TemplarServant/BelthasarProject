@@ -503,7 +503,7 @@ level, the flag, C2/D266's DEX scan of `$FF:D024` for the chapter, the chapter's
 each a vector `JMP` of 18 -> C2/58B2 -> C2/5DC4): per glyph a fixed 5DC4 prologue/epilogue and C2/5E36's 24 row calls,
 each C2/5E89 = head 120 + (odd code 120 | even 72) + 176 + the arm of `$6A` = pen & 7 (0: 264; 1-4: 308 + 12 n; 5-7:
 408 + 62 (8 - n)); the pen advances by `$C2:60E6`. Every instruction's cost is LakeSnes's, the trace's base per PC
-(tools/cycle_costs.py). The port (src/menu_cost.c, `ct_field --menucost`) and its Python twin (tools/vwf_cost_proto.py)
+(tools/cycle_costs.py). The port (src/menu_cost.c, `Belthasar --menucost`) and its Python twin (tools/vwf_cost_proto.py)
 match the cartridge's C2/D156 to the cycle on five batteries (check menu-open-slot-scan-cycles-vs-oracle).
 
 field.c prices the stretch at C for the field's callers (X, op C8) and uses S0 wherever it used C+16 (C+15: `$0407`,
@@ -526,7 +526,7 @@ location-load model + 190 lines, rounded up) gave 38 / 36: the model's C0/286C c
 lines, measured on door loads) left out the objects C0/B0E6 DRAWS after a menu -- 4 on loc $082, 8 on loc $005,
 ~52,000-70,000 cycles each -- and C0/0A50's BG3 builder (298,554 + a $1000-byte upload) where the map has one.
 
-The walk (src/field_cost.c, `ct_field --reloadcost`; its Python twin tools/pass_cost_proto.py; every block's cost
+The walk (src/field_cost.c, `Belthasar --reloadcost`; its Python twin tools/pass_cost_proto.py; every block's cost
 read off the beam traces by tools/pass_cost_consts.py, arms no trace ran priced by the KEY of an executed instruction
 -- opcode, widths, the region its operand lands in -- tools/ctlib/costtab.py):
 
@@ -604,3 +604,16 @@ on a close; shopsell's close f591: `$0DA0` / `$0DA3` frozen at 01 / 00); and the
 48 cycles shorter from the rule's boot (the five posts' APU phase -66, the two DMA legs' sync +12 / +6 -- the open legs of
 section 9, not the rule's), S0 unchanged. tools/menu_init_cmp.py finds C2/8000's frame (`--hookpc C28000`) instead of
 assuming it: the rule's boot reaches loc 0's `C8 41` two frames sooner.
+
+## The C8 screens' fade starts on the frame the host sees the park (2026-10-19)
+
+Op C8 parks in the event pass of frame N (C0/00C4, `$0117 = 40`); C0/0C76 -> C0/0CCE runs at the head of N+1 (C0/00A4) and
+its first `DEC $19` is that frame's. The host sees the park at the head of N+1 too, but started `menuT = -1`, so its first
+DEC was N+2 -- for the shop, the naming, the save point, the exchange's C8 00 and the loader. MEASURED (the playthrough,
+keys the cartridge's + 1): Marle's naming parks at f2306 on both sides, `$0119` = 0E at f2307 on the cartridge, f2308 in
+the port; the shop's park f875, 0E at f876. Now `menuT = 0`. The drives built before pressed the talk's A on the cartridge's
+own frame (menu_shell_cmp's shops, menu_audit_cmp's 0x1100, shop_equip_cmp, naming_cmp's `D - 1`): the port parked a frame
+early there and the late fade hid it. They take the +1 of every other key now, and their checks pass as before.
+
+And the resume (C0/2824) runs under the field's NMI and IRQ: field.c's `fieldNmi` takes it, so the animated tiles step
+(C0/ECDB) on its frames -- `$051D` was 8 steps behind after the naming's return.

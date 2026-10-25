@@ -5,7 +5,7 @@ r"""The port's enemy sprites against the cartridge's OBJ layer, on the cartridge
 
 1. build/ct.exe --peek <state> --frames <frame> with PEEK_ISOBG=4: the cartridge's OBJ layer alone, plus its
    128 KB WRAM and its OAM (.wram / .oam sidecars).
-2. build/ct_field.exe with CT_BATTLE_RENDERWRAM=<that .wram>: the port draws every combatant from the same WRAM
+2. build/Belthasar.exe with CT_BATTLE_RENDERWRAM=<that .wram>: the port draws every combatant from the same WRAM
    (the published poses $9907, the staged records $29BF, the live CGRAM page $2200) on a black screen.
 3. For every staged enemy slot, the 16x16 rectangles of its OAM entries in the cartridge's shadow -- the entries
    whose names are that combatant's run of the OAM template (CC:F84D -> CC:FAF3, one entry per cell of its record
@@ -35,7 +35,7 @@ from ctlib import oam as ctoam  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 
 
 def main():
@@ -47,9 +47,6 @@ def main():
     if '--btnscript' in sys.argv:
         extra = ['--btnscript', sys.argv[sys.argv.index('--btnscript') + 1]]
     rom = _romlib.load('Chrono_Trigger_USA_SNES.sfc')
-    if state == 'build/_z_f7085.state' and not os.path.exists(state):   # the attract 087's leg (fxobj_cmp.py)
-        subprocess.run([CT, '--peek', 'saves/attract_cena_inicial.state', 'build/_ztmp.raw', '--frames', '7085'],
-                       env=dict(os.environ, PEEK_SAVE=state), capture_output=True)
     tmp = 'build/_ecc_%d' % os.getpid()
     peek = tmp + '.raw'
     env = dict(os.environ, PEEK_ISOBG='4')

@@ -1,0 +1,29 @@
+{
+  "doc": "Jackie's battery saves loaded on the cartridge (tools/recipes/jackie_*.json): the states the census, the Epoch board and the HDMA builder read. Their .srm come from tools/fetch_saves.py.",
+  "fixtures": [
+    {
+      "path": "saves/downloaded/ctjackie/states/ch08.state",
+      "recipe": "jackie_ch08",
+      "kind": "state",
+      "doc": "Jackie's ch08 after its load (the End of Time)"
+    },
+    {
+      "path": "saves/downloaded/ctjackie/states/ch16.state",
+      "recipe": "jackie_ch16",
+      "kind": "state",
+      "doc": "Jackie's ch16 after its load (Forward to the Past (12000 BC, the Epoch))"
+    },
+    {
+      "path": "saves/downloaded/ctjackie/states/ch17.state",
+      "recipe": "jackie_ch17",
+      "kind": "state",
+      "doc": "Jackie's ch17 after its load (Unnatural Selection (the Reptite lair))"
+    },
+    {
+      "path": "saves/downloaded/ctjackie/states/ch24.state",
+      "recipe": "jackie_ch24",
+      "kind": "state",
+      "doc": "Jackie's ch24 after its load (The Time Egg (the Epoch, 1F3))"
+    }
+  ]
+}

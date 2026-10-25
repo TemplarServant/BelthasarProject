@@ -428,19 +428,19 @@ wantedSamples = audioFrequency / 60;                    // 800 for NTSC
 snes_setSamples(snes, audioBuffer, wantedSamples);
 if (SDL_GetQueuedAudioSize(dev) <= wantedSamples*4*6) SDL_QueueAudio(dev, audioBuffer, wantedSamples*4);
 ```
-`ct_field` already links SDL2 (`CMakeLists.txt`), but currently only `SDL_INIT_VIDEO`-class use —
+`Belthasar` already links SDL2 (`CMakeLists.txt`), but currently only `SDL_INIT_VIDEO`-class use —
 `SDL_INIT_AUDIO` must be added to its `SDL_Init`.
 
 ### (e) What must change in `CMakeLists.txt`, and the coupling cost
-`ct_field` today: `src/field.c scene.c lz.c assets.c ct_vm.c collision.c player.c world.c
-battle.c menu.c oam.c` + `target_include_directories(ct_field PRIVATE src ${SDL2_DIR}/include)`.
+`Belthasar` today: `src/field.c scene.c lz.c assets.c ct_vm.c collision.c player.c world.c
+battle.c menu.c oam.c` + `target_include_directories(Belthasar PRIVATE src ${SDL2_DIR}/include)`.
 **No `snes/*.c` at all** — confirmed by CMakeLists; `${SNES_SRC}` is only in the `ct` target.
 
 Minimal addition — **4 files, not the whole core**:
 ```cmake
-add_executable(ct_field src/field.c ... src/oam.c
+add_executable(Belthasar src/field.c ... src/oam.c
                snes/apu.c snes/spc.c snes/dsp.c snes/statehandler.c)
-target_include_directories(ct_field PRIVATE src snes ${SDL2_DIR}/include)
+target_include_directories(Belthasar PRIVATE src snes ${SDL2_DIR}/include)
 ```
 Dependency audit (grep of `#include` + cross-module symbol use):
 - `apu.c` → `spc_*`, `dsp_*`, `sh_*` only.
@@ -456,7 +456,7 @@ Dependency audit (grep of `#include` + cross-module symbol use):
   `src/input.c` *and* `snes/input.c` with `target_include_directories(ct PRIVATE snes src)`
   today. Keep `src` before `snes` in the list.
 - `statehandler.c` is only needed because `apu_handleState`/`spc_handleState`/`dsp_handleState`
-  reference `sh_*`; if `ct_field` never saves an APU state those functions are dead code but the
+  reference `sh_*`; if `Belthasar` never saves an APU state those functions are dead code but the
   linker still needs the symbols, so include the file (it is ~100 lines, libc-only).
 - **Binary/behavioral cost:** `sizeof(Apu)` ≈ 64 KB ARAM + small; a `Snes` shell is 128 KB+ if
   allocated whole (it embeds `ram[0x20000]`) — the port can allocate one and set only
@@ -467,7 +467,7 @@ Dependency audit (grep of `#include` + cross-module symbol use):
 ## 7. What the C port has to do, in order (the boot half)
 
 ```c
-// 1. once, at ct_field startup, in place of $C0:0053's JSL $C7:0000
+// 1. once, at Belthasar startup, in place of $C0:0053's JSL $C7:0000
 Apu* apu = apu_init(snesShell);      // snesShell->palTiming = false
 apu_reset(apu);                      // -> SPC PC = $FFC0 (IPL)
 

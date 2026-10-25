@@ -92,7 +92,7 @@ extern int g_ctVmTraceFrame;
 // a hardware register, not $7E/$7F, so the flat r[] image cannot hold it and the host must supply
 // it, exactly as CtJoypadPoll takes the joypad word from the host:
 //   * ct.exe    -> the oracle's own APU (snes.c serves CPU reads of $2140-3 from apu->outPorts[adr & 3])
-//   * ct_field  -> the SPC700 that src/audio.c already drives through the bank-$C7 driver upload
+//   * Belthasar  -> the SPC700 that src/audio.c already drives through the bank-$C7 driver upload
 // A ROM-wide scan settles that it is a real handshake and not a CPU scratch byte: $2143 is written
 // 30 times by the bank-$C7 Akao driver and read in the entire field engine ONLY at C0/3CC6.
 extern uint8_t g_ctApuPort3;
@@ -106,7 +106,7 @@ extern uint8_t g_ctApuPort1;
 
 // THE SPC700's FOUR OUTPUT PORTS ($2140-$2143 as the CPU reads them), for a script's pointer read (ops 0x48 / 0x49, C0/6792 /
 // 67C7) whose 24-bit pointer names one: `48 42 21 00 nn` reads the song's marker on port 2 into a local and the script loops
-// on it (scene 432 obj11, the Epoch's cockpit, before `FF 26`). The host fills them each frame from its SPC (ct_field: src/
+// on it (scene 432 obj11, the Epoch's cockpit, before `FF 26`). The host fills them each frame from its SPC (Belthasar: src/
 // audio.c's outPorts, field.c before the VM's tick); a host that never does reads zeros.
 extern uint8_t g_ctApuOut[4];
 

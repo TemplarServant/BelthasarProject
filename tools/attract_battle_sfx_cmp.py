@@ -26,7 +26,7 @@ import re
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 

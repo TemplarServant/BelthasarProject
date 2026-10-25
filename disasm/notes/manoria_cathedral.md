@@ -57,7 +57,7 @@ field pair, and onto `bat8_lake.state` (the same fight) for the battle pair:
    `88 8x` blob is the Telepod vortex, drawn only while the iris is open". A heuristic with no ROM counterpart:
    it hid obj16 (fn5 `90 / 88 82 ..`) and the co-located Naga-ette obj23 for the whole scene. **Removed**; the
    swirl is hidden by the PPU window = field.c's iris clip, unchanged.
-2. **`ct_field --loadwram` handed the create-time prescan NO story flags**, so scene 129's obj0 fn0 (`18 12 09`,
+2. **`Belthasar --loadwram` handed the create-time prescan NO story flags**, so scene 129's obj0 fn0 (`18 12 09`,
    C0/6442 `LDA $7F0000 / CMP / BCS`) took the storyline-0 arm and executed `0A 1E`: the controller obj15 was
    **dead from frame 1**, the nuns were never hidden, the Naga-ettes never shown. The lockstep host always passed
    the state's $7F page, which is why `--vmdiff` was CLEAN throughout. **Fixed**: the seed's `$7F:0000` page is

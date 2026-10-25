@@ -129,7 +129,7 @@ ct.exe --monitor "7E0F18:1" --from out_s8.state --frames 12 --writer
 ct.exe --teleport 129 7 16 0 --from <storyline>=0x12 state> --out o129b.state --frames 240
 ct.exe --peek o129b.state o129b.raw --btnscript "0:60"      # then read $1100/$0F00/$1880
 python tools/dis.py A947 0x50 ; python tools/dis.py A88D 0x60 ; python tools/dis.py 4C27 0x1A
-CT_TRIGDBG=1 build/ct_field.exe --assets ct_assets.dat --scene 8 --selftest --frames 6
+CT_TRIGDBG=1 build/Belthasar.exe --assets ct_assets.dat --scene 8 --selftest --frames 6
 ```
 Regression checks: `field-scene8-telepod-touch-trigger`, `field-scene129-class7-action-probe`
 (the latter also grades the 0x8D words and the sub-screen foreground mask).

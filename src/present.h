@@ -1,4 +1,4 @@
-// present.h - how ct_field puts its picture on the screen: the window, a backend that uploads the 256x224 RGB24 frame,
+// present.h - how Belthasar puts its picture on the screen: the window, a backend that uploads the 256x224 RGB24 frame,
 // places and filters it, and swaps. The game composes into its own buffer and never talks to a graphics API; the F1
 // overlay (overlay.cpp) draws through the same backend.
 //

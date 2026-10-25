@@ -13,4 +13,5 @@ static const uint16_t ctMenuChromeRibbonTM[6][CT_MENU_CHROME_TMW*CT_MENU_CHROME_
 static const uint16_t ctMenuChromeEnteredTM[6][CT_MENU_CHROME_TMW*CT_MENU_CHROME_TMH] = {0};
 static const uint16_t ctMenuChromeEquipTM[CT_MENU_CHROME_TMW*CT_MENU_CHROME_TMH] = {0};
 static const uint16_t ctMenuChromeEquipListTM[CT_MENU_CHROME_TMW*CT_MENU_CHROME_TMH] = {0};
+static const uint16_t ctMenuChromeExchTM[CT_MENU_CHROME_TMW*CT_MENU_CHROME_TMH] = {0};
 #endif

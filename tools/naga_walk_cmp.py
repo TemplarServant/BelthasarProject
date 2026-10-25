@@ -11,7 +11,7 @@ so a pixel there decides a victim. (The user, 2026-10-04: "when crono used cyclo
 damage / with fire whirl this also happened".)
 
   cartridge  build/ct.exe --monitor 7E1D0F:4,7E1D26:4 (the rule: CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1)
-  port       build/ct_field.exe --scene 129 --loadwram saves/field_re/m81_nuns_lake.lakewram, CT_BATTLE_POSTRACE
+  port       build/Belthasar.exe --scene 129 --loadwram saves/field_re/m81_nuns_lake.lakewram, CT_BATTLE_POSTRACE
              (every combatant's live foot at the frame's end)
 
 Aligned on each side's first enemy step; compared over `frames`:
@@ -57,7 +57,7 @@ def main():
                        cwd=ROOT, env=env, capture_output=True, text=True).stdout.splitlines()
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_BATTLE_SCRIPT='n:%d' % (frames + 900), CT_BATTLE_POSTRACE='1')
-    p = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '129',
+    p = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '129',
                         '--loadwram', 'saves/field_re/m81_nuns_lake.lakewram', '--selftest', os.devnull,
                         '--frames', str(frames + 500)],
                        cwd=ROOT, env=env, capture_output=True, text=True).stderr.splitlines()

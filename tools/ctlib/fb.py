@@ -6,7 +6,7 @@ Three capture formats exist in this repo (all observed in the writers):
      visible frame = EVERY OTHER column (2*x) and row (2*y) -> 256x240 RGB.
      Exactly 983040 bytes. (Reading column x = the left 256 cols showed only
      the left HALF stretched -- it hid the whole right side of the screen.)
-  2. ct_field shot (--shot / CT_OWBOAT_SHOT / .pan.raw, src/field.c):
+  2. Belthasar shot (--shot / CT_OWBOAT_SHOT / .pan.raw, src/field.c):
      [u32le w][u32le h][w*h*3 RGB rows]  (e.g. SHOT.raw = 256x224).
   3. ct_world WORLD_SHOT (src/ct_world.c): [u16le w][u16le h][w*h*3 RGB rows].
 

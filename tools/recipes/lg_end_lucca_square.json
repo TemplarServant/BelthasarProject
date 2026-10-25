@@ -1,0 +1,14 @@
+{
+  "name": "lg_end_lucca_square",
+  "from": "lg_end_core_defeated",
+  "doc": "After the core, the oracle's 2026-10-14 walk to the ending: A every 202 frames for 30 x 1010 frames (1DF -> 052 -> 10F -> 002 -> 04F -> 050, the night fair), the walk to Leene's Square (`10:150,80:200,10:300,40:120,10:400,40:96,10:400`, 051), up into 055 (the telepods' farewells, `10:100`), A every 302 frames for 30 x 906 frames, and down to the square again (`20:200`): ending_lucca_square, Lucca's square with lead obj7 -- the session's state's WRAM, byte for byte.",
+  "steps": [
+    [
+      "pad",
+      "((0:200,100:2)*5)*30,10:150,80:200,10:300,40:120,10:400,40:96,10:400,0:100,10:100,0:20,((0:300,100:2)*3)*30,20:200,0:60"
+    ]
+  ],
+  "expect": {
+    "loc": "0x051"
+  }
+}

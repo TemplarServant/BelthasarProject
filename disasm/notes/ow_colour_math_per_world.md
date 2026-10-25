@@ -95,7 +95,7 @@ ct.exe --followscene --from o112.state --input "20:200,0:120" --frames 320     #
 PEEK_SAVE=ow600o.state ct.exe --peek o112.state ow600o.raw --btnscript "20:40,0:260"
 ct.exe --hdma ow600o.state
 ct.exe --monitor "7E0046:1" --from o112.state --input "20:60,0:200" --frames 260 --writer --diff
-SDL_VIDEODRIVER=dummy build/ct_field.exe --assets ct_assets.dat --scene 112 --at 304 470 \
+SDL_VIDEODRIVER=dummy build/Belthasar.exe --assets ct_assets.dat --scene 112 --at 304 470 \
     --walkscript "d:40,.:260" --frames 300 --selftest ow600.raw       # the same view, our side
 ```
 Regression check: `ow-world1-colour-math` (pins `cgadsub=04` + the frame fnv at the same camera,

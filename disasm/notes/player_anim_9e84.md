@@ -181,7 +181,7 @@ to the lower-left diagonal, but in the original game the animation stays crono's
 running-down one, and in ours it is changing to the left animation."*
 
 Everything above was already ported and graded (`ct.exe --sweepanim`, 17/17 slots). The defect was a
-**consumer** gap: `ct_field`'s interactive loop runs `C0/881E` itself (`CtPlayerControl`) but never
+**consumer** gap: `Belthasar`'s interactive loop runs `C0/881E` itself (`CtPlayerControl`) but never
 reaches op `0xB0`'s state-0 arm for the lead, so `C0/9E29` — and with it `JSR C0/9E84` — never ran for
 the player. `field.c` stood in with
 

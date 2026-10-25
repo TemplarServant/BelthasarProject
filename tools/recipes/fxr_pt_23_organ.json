@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_23_organ",
+  "from": "fxr_pt_22_cathedral",
+  "doc": "The playthrough's leg 23_organ (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Manoria Cathedral (081): the organ at (2,8) from (2,9) -- A: the secret door at the right wall opens (glb[255]",
+  "steps": [
+    [
+      "pad",
+      "40:96,10:64,10:4,0:10,100:2,0:700,80:160,10:48,0:150"
+    ]
+  ]
+}

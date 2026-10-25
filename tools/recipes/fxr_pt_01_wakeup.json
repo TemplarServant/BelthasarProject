@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_01_wakeup",
+  "from": "fxr_pt_00_newgame",
+  "doc": "The playthrough's leg 01_wakeup (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Mom wakes Crono; her lines with A until he is up (story 03)",
+  "steps": [
+    [
+      "pad",
+      "(100:2,0:58)*30"
+    ]
+  ]
+}

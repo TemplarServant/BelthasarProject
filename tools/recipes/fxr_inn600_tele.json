@@ -1,0 +1,23 @@
+{
+  "name": "fxr_inn600_tele",
+  "from": "cathedral_entry",
+  "doc": "Stands in for saves/field_re/inn600_tele.state, its own provenance (--teleport 0x74 11 28 0 --method jmp --frames 240 from catedral_user.state, whose recipe twin is cathedral_entry): storyline 12, Crono and Lucca at the 600 A.D. inn's counter.",
+  "steps": [
+    [
+      "teleport",
+      116,
+      11,
+      28,
+      0,
+      240,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x074",
+    "wram": {
+      "0x10000": "0x12",
+      "0x2981": "0x02"
+    }
+  }
+}

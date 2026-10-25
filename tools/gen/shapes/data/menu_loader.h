@@ -7,11 +7,7 @@
 static const uint16_t ctMenuChromeLoaderTM[32*CT_MENU_LOADER_TMH] = {0};
 #define CT_MENU_LOADER_NBAND 3
 static const struct { short y0, y1; unsigned short vofs; }
-ctMenuLoaderBand[CT_MENU_LOADER_NBAND] = {
-  {   0,  39, 0x00FF },
-  {  40, 135, 0x01E7 },
-  { 136, 215, 0x01F7 },
-};
+ctMenuLoaderBand[CT_MENU_LOADER_NBAND] = {0};
 static const uint8_t ctMenuChromeLoaderPal[8][16][3] = {0};
 #define CT_LOADER_ICON_TRANSPARENT 0x01000000u
 static const uint32_t ctLoaderIcon[7][16][16] = {0};

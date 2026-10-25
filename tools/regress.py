@@ -23,6 +23,8 @@ substring in its "expect" list appears in the combined stdout+stderr.
 All checks are read-only (verified: no included check writes files), so they run as
 parallel subprocesses. A check declaring "exclusive": true (it writes a file) runs in
 the exclusive lane: one at a time, in declared order, in one worker beside the batch.
+Checks that run the same command (argv, env and env_rule: run_key) share ONE process and each is graded on its
+output (run_group); tools/regress_share.py proves when several checks can be given the same command.
 Checks whose declared inputs are missing are SKIPped with the missing file named (they stay in the suite so the needed capture stays discoverable).
 
 Exit status: 1 iff any check FAILed (SKIPs do not fail the suite).
@@ -142,6 +144,29 @@ def run_check(check, root=ROOT):
         return {"status": "ERROR", "secs": time.time() - t0,
                 "note": "cannot exec: %s" % e, "out": ""}
     return grade(check, out, time.time() - t0)
+
+
+def run_key(check):
+    """Two checks with this key run the same process: the same argv, env and env_rule."""
+    return json.dumps([check["argv"], check.get("env") or {}, check.get("env_rule") or {}], sort_keys=True)
+
+
+def run_group(group):
+    """ONE PROCESS FOR CHECKS THAT RUN THE SAME COMMAND (run_key): a run is a pure function of its argv and env, so the
+    first check that can run (all its inputs present) runs it and every other one is graded on the same output. A check
+    with a missing input SKIPs on its own. tools/regress_share.py proves when checks can be given the same env.
+    Returns [(check, result)]."""
+    out = [(c, run_check(c)) for c in group if missing_inputs(c)]
+    live = [c for c in group if not missing_inputs(c)]
+    if live:
+        r = run_check(live[0])
+        out.append((live[0], r))
+        for c in live[1:]:
+            if r["status"] == "ERROR" or r.get("note", "").startswith("TIMEOUT"):
+                out.append((c, dict(r)))
+            else:
+                out.append((c, grade(c, r.get("out", ""), r["secs"])))
+    return out
 
 
 def grade(check, out, secs):
@@ -345,12 +370,18 @@ def _resolve_mutation(root, m):
         # has nothing to do with the source drifting. Fit the pattern to the file instead:
         # try it verbatim, then with \n -> \r\n (translating "replace" the same way, so a
         # mutation never converts a CRLF file to LF and blows up the next git diff).
+        # And the other way: a find recorded from a CRLF working copy carries \r\n, and an LF checkout (Linux,
+        # macOS, the CI, a cloud session) has none -- 13 menu mutations read STALE there and nowhere else.
         find, repl = e["find"], e["replace"]
         if find not in s and "\n" in find:
             crlf = find.replace("\r\n", "\n").replace("\n", "\r\n")
+            lf = find.replace("\r\n", "\n")
             if crlf in s:
                 find = crlf
                 repl = repl.replace("\r\n", "\n").replace("\n", "\r\n")
+            elif lf in s:
+                find = lf
+                repl = repl.replace("\r\n", "\n")
         resolved.append((path, find, repl))
         n_hits = s.count(find)
         if n_hits != 1:
@@ -405,6 +436,7 @@ def do_mutate(data, names, jobs=0):
     by_name = {c["name"]: c for c in data["checks"]}
     todo = []
     for n in names:
+        n, _, only = n.partition("@")      # NAME@0,2: only those mutations (the ones a change touched)
         c = by_name.get(n)
         if not c:
             print("mutate: no such check '%s'" % n)
@@ -412,20 +444,25 @@ def do_mutate(data, names, jobs=0):
         if not c.get("mutations"):
             print("mutate: check '%s' declares no mutations -- nothing to prove" % n)
             return 2
-        todo.append(c)
+        todo.append((c, {int(i) for i in only.split(",")} if only else None))
     if jobs > 0:
         return _mutate_in_labs(todo, jobs)
 
     t0 = time.time()
     killed = survived = 0
-    for check in todo:
+    bad_base = []
+    for check, only in todo:
         name = check["name"]
         base = run_check(check)
         if base["status"] != "PASS":
-            print("mutate: %s -- BASELINE IS %s, fix that first" % (name, base["status"]))
-            return 2
-        print("mutate: %s -- baseline PASS, %d mutation(s)" % (name, len(check["mutations"])))
+            print("mutate: %s -- BASELINE IS %s, fix that first (skipped)" % (name, base["status"]))
+            bad_base.append(name)
+            continue
+        print("mutate: %s -- baseline PASS, %d mutation(s)%s" % (name, len(check["mutations"]),
+              " (only %s)" % ",".join(map(str, sorted(only))) if only else ""))
         for mi, m in enumerate(check["mutations"]):
+            if only is not None and mi not in only:
+                continue
             stale, originals, resolved = _resolve_mutation(ROOT, m)
             if stale:
                 v = ("STALE", stale)
@@ -443,8 +480,9 @@ def do_mutate(data, names, jobs=0):
             else:
                 survived += 1
         do_build()   # back to the restored source
-    print("mutate: %d killed, %d survived (%.1fs)" % (killed, survived, time.time() - t0))
-    return 1 if survived else 0
+    print("mutate: %d killed, %d survived (%.1fs)" % (killed, survived, time.time() - t0)
+          + ("; %d baseline(s) not PASS: %s" % (len(bad_base), ", ".join(bad_base)) if bad_base else ""))
+    return 1 if survived or bad_base else 0
 
 
 def _mutate_in_labs(todo, jobs):
@@ -458,7 +496,8 @@ def _mutate_in_labs(todo, jobs):
 
     The verdicts and their lines are the serial path's, printed per check in the order given once all are in (and one
     line per job as it lands). A baseline that does not PASS is reported and its mutants skipped; the other checks go
-    on, and the exit status is 2."""
+    on, and the exit status is 1, as for a survivor. todo: [(check, only)] -- only, NAME@i,j's mutation indices (None:
+    every one)."""
     t0 = time.time()
     pool = mutlabs.labs(ROOT, jobs)
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
@@ -494,11 +533,12 @@ def _mutate_in_labs(todo, jobs):
             times = json.load(f)
     except (OSError, ValueError):
         times = {}
-    verdicts = {c["name"]: {} for c in todo}
+    verdicts = {c["name"]: {} for c, _ in todo}
+    picked = {c["name"]: [i for i in range(len(c["mutations"])) if only is None or i in only] for c, only in todo}
     base_bad = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
         pending = {}
-        for c in sorted(todo, key=lambda c: -times.get(c["name"], 1e9)):    # the slowest checks' mutants start first
+        for c, _ in sorted(todo, key=lambda t: -times.get(t[0]["name"], 1e9)):  # the slowest checks' mutants first
             pending[ex.submit(job, c, None)] = (c, None)
         try:
             while pending:
@@ -518,9 +558,9 @@ def _mutate_in_labs(todo, jobs):
                             for l in v[1].splitlines()[-25:]:
                                 print("    | %s" % l)
                     else:
-                        print("mutate: %s -- baseline PASS, %d mutation(s) queued" % (name, len(check["mutations"])),
+                        print("mutate: %s -- baseline PASS, %d mutation(s) queued" % (name, len(picked[name])),
                               flush=True)
-                        for i in range(len(check["mutations"])):
+                        for i in picked[name]:
                             pending[ex.submit(job, check, i)] = (check, i)
         except BaseException:
             for fut in pending:      # Ctrl-C / a job's error: the queued jobs never start; a running one restores
@@ -531,22 +571,24 @@ def _mutate_in_labs(todo, jobs):
 
     print()
     killed = survived = 0
-    for check in todo:
+    for check, only in todo:
         name = check["name"]
         if name in base_bad:
-            print("mutate: %s -- BASELINE IS %s, fix that first" % (name, base_bad[name]))
+            print("mutate: %s -- BASELINE IS %s, fix that first (skipped)" % (name, base_bad[name]))
             continue
-        print("mutate: %s -- baseline PASS, %d mutation(s)" % (name, len(check["mutations"])))
-        for mi, m in enumerate(check["mutations"]):
-            v = verdicts[name][mi]
+        print("mutate: %s -- baseline PASS, %d mutation(s)%s" % (name, len(check["mutations"]),
+              " (only %s)" % ",".join(map(str, sorted(only))) if only else ""))
+        for mi in picked[name]:
+            m, v = check["mutations"][mi], verdicts[name][mi]
             for l in _verdict_lines(mi, m, v):
                 print(l)
             if _killed(v):
                 killed += 1
             else:
                 survived += 1
-    print("mutate: %d killed, %d survived (%d lab(s), %.1fs)" % (killed, survived, jobs, time.time() - t0))
-    return 2 if base_bad else (1 if survived else 0)
+    print("mutate: %d killed, %d survived (%d lab(s), %.1fs)" % (killed, survived, jobs, time.time() - t0)
+          + ("; %d baseline(s) not PASS: %s" % (len(base_bad), ", ".join(base_bad)) if base_bad else ""))
+    return 1 if survived or base_bad else 0
 
 
 _TEXT_INPUTS = (".py", ".c", ".h", ".json", ".md", ".txt")
@@ -823,12 +865,21 @@ def main():
             times = json.load(f)
     except (OSError, ValueError):
         times = {}
-    par = sorted((c for c in checks if not c.get("exclusive")), key=lambda c: -times.get(c["name"], 1e9))
-    ser = [c for c in checks if c.get("exclusive")]
+    groups = {}
+    for c in checks:
+        groups.setdefault(run_key(c), []).append(c)
+    groups = list(groups.values())
+    par = sorted((g for g in groups if not any(c.get("exclusive") for c in g)),
+                 key=lambda g: -max(times.get(c["name"], 1e9) for c in g))
+    ser = [g for g in groups if any(c.get("exclusive") for c in g)]
+    nshared = sum(len(g) - 1 for g in groups)
+    if nshared:
+        print("regress: %d checks in %d processes (%d share another check's run)" % (len(checks), len(groups), nshared))
 
-    def report(c, r):
-        results[c["name"]] = r
-        print("%-4s %s (%.1fs)" % (r["status"], c["name"], r["secs"]), flush=True)
+    def report(pairs):
+        for c, r in pairs:
+            results[c["name"]] = r
+            print("%-4s %s (%.1fs)" % (r["status"], c["name"], r["secs"]), flush=True)
 
     # THE EXCLUSIVE LANE: the exclusive checks run one at a time, in their declared order, in ONE worker of the pool,
     # alongside the parallel batch -- not after it. "exclusive" means a check that writes a file, and the files they
@@ -836,14 +887,14 @@ def main():
     # 2026-10-16, no read-only check names any of them, and none is graded on wall-clock time (all CT_NOPACE). Serial
     # after the batch they were 112 s of the quick tier's 272 s.
     def lane():
-        for c in ser:
-            report(c, run_check(c))
+        for g in ser:
+            report(run_group(g))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
         lane_fut = ex.submit(lane) if ser else None       # first: the lane is the longest single job of the batch
-        futs = {ex.submit(run_check, c): c for c in par}
+        futs = [ex.submit(run_group, g) for g in par]
         for fut in concurrent.futures.as_completed(futs):
-            report(futs[fut], fut.result())
+            report(fut.result())
         if lane_fut:
             lane_fut.result()
     total = time.time() - t0

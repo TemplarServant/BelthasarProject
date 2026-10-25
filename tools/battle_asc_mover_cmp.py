@@ -7,7 +7,7 @@ r"""The PC techs' anim-script movers, port against the rule's cartridge -- per-f
 The synthetic battle of tools/battle_ab.py (GATO's gato_wait made into a solo party by pokes; the same WRAM on both
 sides, the tech picked through the menu), aligned on each side's own `$A013` rise, and the named WRAM read every frame
 on both sides: the cartridge `build/ct.exe --monitor` under the rule (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1), the
-port `build/ct_field.exe` with CT_FIELD_MEMMON (the field host's $7E is the battle's). Each case grades one mechanism of
+port `build/Belthasar.exe` with CT_FIELD_MEMMON (the field host's $7E is the battle's). Each case grades one mechanism of
 the bank-CE interpreter (src/battle.c battleAscTick) or its movers (battleAscMoverFrame, battleEffectMoverFrame):
 
   haste  Marle's Haste (tech 0D): CE/1221 `A8 32` on track 8 -- the effect object's move-forward stops on the arena's
@@ -74,7 +74,7 @@ def run(case):
                     CT_BATTLE_SCRIPT_ABS='1', CT_BATTLE_SCRIPT=B.port_script(drive, start, total), CT_BATTLE_TRACE='1',
                     CT_FIELD_MEMMON=','.join('%04X:%X' % r for r in regs), CT_SHOTS=os.path.join(OUT, case + '_p'),
                     CT_SHOTS_AT=str(total), CT_SHOTS_EXIT='1')
-        r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
+        r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
                             '--loadwram', lw, '--walkscript', 'a:8'], env=penv, cwd=ROOT, capture_output=True,
                            text=True, errors='replace')
         p = r.stdout

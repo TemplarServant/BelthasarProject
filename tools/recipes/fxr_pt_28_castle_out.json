@@ -1,0 +1,14 @@
+{
+  "name": "fxr_pt_28_castle_out",
+  "from": "fxr_pt_27_castle_return",
+  "doc": "The playthrough's leg 28_castle_out (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): out of the castle with Marle: 07A's door (54,45) into the tower (1D4), its down-stairs (the boxes at x 7, rows 6 / 24 / 39: Left+Up) to 078 (37,9), down the hall to its exit (30,55) onto 1F1; Guardia Forest's north cell (A, 077), through the forest to its south exit (15,47), the world east and north to Truce Canyon's cell (440,208), A (070) the exits from the ROM's table ($E5:0000 + loc*2, 7-byte records); the forest by `route .. 15 47 --exit` (no fight met)",
+  "steps": [
+    [
+      "pad",
+      "10:16,80:64,40:32,20:240,80:176,10:176,80:32,10:200,40:8,10:48,0:100,40:16,10:16,0:150,40:16,10:16,0:150,40:16,10:16,0:200,20:400,40:80,20:112,40:16,20:80,40:16,20:80,80:16,20:64,0:60,0:100,20:64,0:20,100:2,0:200,40:16,20:16,40:48,20:16,40:64,20:80,80:16,20:48,80:48,20:16,80:64,20:96,40:16,20:32,40:48,20:16,40:80,10:8,40:48,20:8,40:64,20:32,80:16,20:144,80:96,10:16,80:80,20:128,40:16,20:32,40:16,20:80,80:32,20:64,0:100,0:30,20:20,80:48,20:16,80:32,10:16,80:16,10:16,80:64,10:32,80:16,10:32,40:16,10:40,80:16,10:80,0:30,100:2,0:250"
+    ]
+  ],
+  "expect": {
+    "loc": "0x070"
+  }
+}

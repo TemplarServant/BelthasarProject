@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 r"""Every frame of the attract demo, port against cartridge: WHERE they diverge, and of WHAT kind.
 
-    python tools/attract_divergence.py [--out DIR] [--vehicle lockstep|selftest] [--fresh-port] [--fresh-cart]
+    python tools/attract_divergence.py [--out DIR] [--vehicle lockstep|selftest|boot] [--fresh-port] [--fresh-cart]
                                         [--visit LOC] [--selftest]
 
 The two sides are captured once per frame, as 128x112 thumbnails (the same record both harnesses write:
 [u32 frame][u16 $0100][128*112*3 RGB], 2x2 SNES pixels averaged):
 
-    cartridge  build/ct.exe --peek saves/attract_cena_inicial.state --frames 9110   PEEK_THUMBS / _EVERY=1
-    port       build/ct_field.exe --assets ct_assets.dat --scene 433                 CT_SHOTS_THUMBS / _EVERY=1
+    cartridge  build/ct.exe --peek saves/attract_cena_inicial_rule.state --frames 9110   PEEK_THUMBS / _EVERY=1, CT_ORACLE_LOGICAL=1
+               (the attract from power-on + 2159 under the rule, made by a recipe: tools/fixtures/attract_rule.json; until
+               2026-10-22 the owner's real-time capture saves/attract_cena_inicial.state, another history)
+    port       build/Belthasar.exe --assets ct_assets.dat --scene 433                 CT_SHOTS_THUMBS / _EVERY=1
                (interactive, CT_AUDIO_LOCKSTEP=1, stopped at f11400 by CT_SHOTS_EXIT -- the numbering
                tools/frame_region_cmp.py and every attract check use)
 
 The cartridge capture never changes and is cached under build/_divergence/cache; the port's is re-taken
-whenever build/ct_field.exe or ct_assets.dat changes (or with --fresh-port).
+whenever build/Belthasar.exe or ct_assets.dat changes (or with --fresh-port).
 
 --vehicle selftest captures the port from `--selftest --frames 11400` instead. That run orders a transition's frames
 differently from the interactive one -- the curtain-close blink (disasm/notes/field_window_wipe.md) showed ONLY
@@ -61,11 +63,13 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join('build', 'ct.exe')
-FIELD = os.path.join('build', 'ct_field.exe')
-STATE = 'saves/attract_cena_inicial.state'
+FIELD = os.path.join('build', 'Belthasar.exe')
+# ATTRACT_DIV_STATE / ATTRACT_DIV_CART_FRAMES: another start for the cartridge's side -- `boot` (power-on, ct.exe's own) with
+# ~11500 frames covers the port's 11400 where the attract state is not at hand
+STATE = os.environ.get('ATTRACT_DIV_STATE', 'saves/attract_cena_inicial_rule.state')
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 ASSETS = 'ct_assets.dat'
-CART_FRAMES = 9110
+CART_FRAMES = int(os.environ.get('ATTRACT_DIV_CART_FRAMES', '9110'))
 PORT_FRAMES = 11400
 DT = np.dtype([('f', '<u4'), ('loc', '<u2'), ('img', 'u1', (112, 128, 3))])
 
@@ -100,12 +104,14 @@ def _cached(path, key):
 
 def capture_cart(cache, fresh):
     path = os.path.join(cache, 'cart_every1.bin')
-    key = _stamp(STATE, ROM) + '|frames=%d' % CART_FRAMES
+    key = _stamp(STATE, ROM) + '|frames=%d|rule=1' % CART_FRAMES   # (the rule's cartridge: a cache taken without it is stale)
     if not fresh and _cached(path, key):
         return path
     print('attract-divergence: capturing the cartridge, every frame to f%d ...' % CART_FRAMES, flush=True)
     t0 = time.time()
-    env = dict(os.environ, PEEK_THUMBS=path, PEEK_THUMBS_EVERY='1')
+    # THE RULE'S CARTRIDGE (CLAUDE.md, the zelda3 model): the logical oracle is the truth every check grades against;
+    # a real-time capture puts the battles' lag frames into the timing (the 07D fight came out 56 frames 'longer').
+    env = dict(os.environ, PEEK_THUMBS=path, PEEK_THUMBS_EVERY='1', CT_ORACLE_LOGICAL='1')
     subprocess.run([CT, '--peek', STATE, os.path.join(cache, 'cart_last.raw'), '--frames', str(CART_FRAMES)],
                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not os.path.exists(path) or os.path.getsize(path) < DT.itemsize * 100:
@@ -125,7 +131,11 @@ def capture_port(cache, fresh, vehicle):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SHOTS_THUMBS=path, CT_SHOTS_THUMBS_EVERY='1')
     argv = [FIELD, '--assets', ASSETS, '--scene', '433']
-    if vehicle == 'lockstep':
+    if vehicle == 'boot':      # from power-on on an erased cart: the play clock and the seeds the cartridge's demo has
+        argv = [FIELD, '--assets', ASSETS, '--boot']
+        env.update(CT_AUDIO_LOCKSTEP='1', CT_SRAM=os.path.join(cache, 'fresh.srm'), CT_SRAM_FRESH='1',
+                   CT_SHOTS=os.path.join(cache, 'port_last'), CT_SHOTS_AT=str(PORT_FRAMES), CT_SHOTS_EXIT='1')
+    elif vehicle == 'lockstep':
         env.update(CT_AUDIO_LOCKSTEP='1', CT_SHOTS=os.path.join(cache, 'port_last'), CT_SHOTS_AT=str(PORT_FRAMES),
                    CT_SHOTS_EXIT='1')
     else:
@@ -651,11 +661,13 @@ def main():
     ap.add_argument('--cache', default=os.path.join('build', '_divergence', 'cache'))
     ap.add_argument('--fresh-port', action='store_true')
     ap.add_argument('--fresh-cart', action='store_true')
-    ap.add_argument('--vehicle', choices=('lockstep', 'selftest'), default='lockstep',
+    ap.add_argument('--vehicle', choices=('lockstep', 'selftest', 'boot'), default='lockstep',
                     help='lockstep (default): the interactive run with CT_AUDIO_LOCKSTEP=1, the numbering every attract '
                          'check uses. selftest: `--selftest --frames N`, which orders a transition\'s frames differently '
                          '(the curtain-close blink showed only there) but fights the demo battles synchronously, so its '
-                         'battle legs are not comparable.')
+                         'battle legs are not comparable. boot: `--boot` on an erased cart, so the port reaches the '
+                         'demo with the cartridge play clock ($0400, the F8 cursor) -- a cold `--scene 433` starts 22 '
+                         'ticks behind, which put e.g. the 01C auto-scroll shake (C0/91FD reads $0400) out of phase.')
     ap.add_argument('--visit', help='only this location (hex, e.g. 0AD)')
     ap.add_argument('--selftest', action='store_true')
     a = ap.parse_args()

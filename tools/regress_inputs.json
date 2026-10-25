@@ -223,6 +223,9 @@
         "field-battle-ai-cursor-cadence",
         "field-battle-aitarget-list",
         "field-battle-ambush-generic-dissolve",
+        "field-battle-animeng-attack-gather",
+        "field-battle-animeng-idle-gather",
+        "field-battle-animeng-pc-gather",
         "field-battle-animeng-pc2-gather",
         "field-battle-asc-off-at-script-end",
         "field-battle-atb-initial-load",
@@ -241,13 +244,12 @@
         "field-battle-class6-orbit-seed",
         "field-battle-class6-rewind-seed",
         "field-battle-confirm-boundary",
-        "field-battle-crit-beatB-dead-suppressed",
+        "field-battle-crit-beatB-flash-hetake",
         "field-battle-crit-flash1",
         "field-battle-crit-flash2",
         "field-battle-crit-leap-mid",
         "field-battle-crit-sfx-two-slashes",
         "field-battle-crit-x2",
-        "field-battle-cyclone-fx-not-replayed",
         "field-battle-cyclone-holds-its-facing-until-the-idle-reaim",
         "field-battle-death-sfx-serial",
         "field-battle-discards-an-open-box-vs-rule-cartridge",
@@ -344,8 +346,8 @@
         "field-battle-song-note-motion",
         "field-battle-song-notes-drift",
         "field-battle-song-notes-orbit",
+        "field-battle-song-pose-and-notes",
         "field-battle-song-sfx-and-flinch",
-        "field-battle-song-spotlight",
         "field-battle-stale-deadflag-enemies-act",
         "field-battle-status-icon-in-span",
         "field-battle-status-immunity",
@@ -382,7 +384,6 @@
         "field-bg-seed-loc13B-colour-cycle-vs-oracle",
         "field-bg-seed-party3-vs-oracle",
         "field-bg-seed-tent-keeper-vs-oracle",
-        "field-camera-truce-inn",
         "field-caption-plane-staff-roll-vs-rule-cartridge",
         "field-cat-anime-once-duration",
         "field-chest-already-open-is-empty",
@@ -596,17 +597,15 @@
         "menu-window-colour-dim-rebuild-vs-oracle",
         "menu-window-colour-field-textbox-vs-oracle",
         "menu-window-colour-saved-vs-oracle",
+        "menu-window-gradient-vs-hdma",
         "menu-wram-around-the-x-menu-vs-logical-oracle",
         "menu-x-refused-off-the-field-main-loop",
         "move-dir-angle",
         "newgame-pan-camera-vs-oracle",
-        "npc-move-integration",
         "oam-build-field",
-        "oam-stage1-assembly",
         "options-free-sync-skips-the-hardware-waits",
         "options-widescreen-view-equals-the-256-picture",
         "oracle-bootcheck",
-        "oracle-button-grammar",
         "oracle-callrom-carry-clc",
         "oracle-callrom-carry-sec",
         "oracle-logical-frame-gato-and-xstrike",
@@ -712,12 +711,10 @@
         "sweepstatfetch-e9a8-d174",
         "sweeptouch-player-redirect",
         "sweepvram-b1b2-upload",
-        "tile-prio-recompute",
         "title-intro-logo-vs-oracle",
         "title-intro-machine-vs-oracle-wram",
         "title-intro-swing-vs-oracle",
         "title-sequence-sound-reaches-driver",
-        "velocity-trig-circle",
         "verifyframe-oam-lockstep",
         "verifyframe-oam-ourlist",
         "vm-activation-pass-0F00",
@@ -729,7 +726,7 @@
         "vmdiff-cathedral-face-op-ends-the-visit",
         "vmdiff-draw-visibility",
         "vmdiff-forest-ambush-d9-vs-oracle",
-        "vmdiff-forest-battle-entry",
+        "vmdiff-forest-idle-wanderers",
         "vmdiff-framelegs-party3",
         "vmdiff-gato-d9-release-vs-oracle",
         "vmdiff-im_so_sorry",
@@ -748,9 +745,7 @@
         "vmdiff-withpos-bedslide",
         "vmdiff-wmask-party3",
         "wide-box-is-the-vanilla-box-at-a-rooms-edge",
-        "wide-race-curtain-crosses-the-whole-picture",
-        "wram-loadcensus-clearlist",
-        "wram-loadcensus-natural-door"
+        "wide-race-curtain-crosses-the-whole-picture"
       ],
       "kind": "rom",
       "regenerable": false,
@@ -1031,13 +1026,12 @@
         "field-battle-class6-orbit-seed",
         "field-battle-class6-rewind-seed",
         "field-battle-confirm-boundary",
-        "field-battle-crit-beatB-dead-suppressed",
+        "field-battle-crit-beatB-flash-hetake",
         "field-battle-crit-flash1",
         "field-battle-crit-flash2",
         "field-battle-crit-leap-mid",
         "field-battle-crit-sfx-two-slashes",
         "field-battle-crit-x2",
-        "field-battle-cyclone-fx-not-replayed",
         "field-battle-cyclone-holds-its-facing-until-the-idle-reaim",
         "field-battle-death-sfx-serial",
         "field-battle-discards-an-open-box-vs-rule-cartridge",
@@ -1134,8 +1128,8 @@
         "field-battle-song-note-motion",
         "field-battle-song-notes-drift",
         "field-battle-song-notes-orbit",
+        "field-battle-song-pose-and-notes",
         "field-battle-song-sfx-and-flinch",
-        "field-battle-song-spotlight",
         "field-battle-stale-deadflag-enemies-act",
         "field-battle-status-icon-in-span",
         "field-battle-status-immunity",
@@ -1503,7 +1497,7 @@
         "vmdiff-bedslide",
         "vmdiff-cathedral-face-op-ends-the-visit",
         "vmdiff-forest-ambush-d9-vs-oracle",
-        "vmdiff-forest-battle-entry",
+        "vmdiff-forest-idle-wanderers",
         "vmdiff-framelegs-party3",
         "vmdiff-gato-d9-release-vs-oracle",
         "vmdiff-im_so_sorry",
@@ -1948,8 +1942,8 @@
     {
       "path": "saves/battle_re/bat9.raw.wram",
       "kind": "oracle_wram",
-      "regenerable": false,
-      "how": "A flat 128 KB WRAM image ($7E at offset 0, $7F at 0x10000) -- the file `ct.exe --peek` writes alongside its framebuffer as `<out>.wram`. CATALOGUED 2026-08-30 to close the one-command gate: before this, 37 of the 62 declared fixtures had no sha256 at all, so tools/preflight.py hard-failed on 'EXTRA' and exited WITHOUT RUNNING A SINGLE CHECK. ⚠ ITS PROVENANCE WAS NOT RECORDED WHEN THE CHECK WAS ADDED and is NOT reconstructed here -- writing a plausible-looking recipe would be worse than admitting the gap, because the next reader would trust it. What the sha256 above DOES guarantee is the thing the gate exists for: this is the exact byte sequence the consuming check(s) were pinned against, so a silent substitution or a regeneration with different contents now shows up as MISMATCH instead of as a quietly different green. If this file is lost, the check must be RE-DERIVED from the ROM/oracle, not re-guessed. Consumed by: field-battle-bat9-3pc-hud, field-battle-bat9-frog-bracket, field-battle-hud-strip-bottom, field-battle-no-gato-in-other-fights, field-battle-results-box-opposite-bottom, field-battle-zorder-bat9-oam.",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fx_bat9, pad 0:1)",
       "used_by": [
         "battle-results-band-24-lines",
         "battle-results-text-origin",
@@ -1960,21 +1954,21 @@
         "field-battle-results-box-opposite-bottom",
         "field-battle-zorder-bat9-oam"
       ],
-      "sha256": "e5a1d728c378dd049c699df651c72937e77b6c065310de00cf2c12409e703532",
+      "sha256": "7b3ea445d6663cb74b34e19d8d2233f494ba7d76da29d469c334d90b812118eb",
       "size": 131072,
       "present_when_recorded": true
     },
     {
       "path": "saves/battle_re/bat9_lake.state",
       "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fx_bat9)",
       "used_by": [
         "battle-enemy-cells-bat9-vs-oracle",
         "battle-hud-strip-command-windows-vs-oracle",
         "sweep-band-25a3"
       ],
-      "sha256": "c480f7e5efb79976cd649b62ba0481e6022d785e907647cf4b5ab08d9e6aef1c",
+      "sha256": "c6bb01779ef11e4955234eb172c1fbd75b2f47ca98dedc33d598c2cc604ff437",
       "size": 273109,
       "present_when_recorded": true
     },
@@ -2040,8 +2034,8 @@
       "regenerable": true,
       "how": "tools/fixtures.py (recipe fx_forest_holdleft)",
       "used_by": [
-        "vmdiff-forest-battle-entry",
-        "battle-forest-feet-vs-oracle"
+        "battle-forest-feet-vs-oracle",
+        "vmdiff-forest-idle-wanderers"
       ],
       "sha256": "8c91ece34a919e733859aae35a3aae77f16ae9ee8f959d220cf2039a722018d9",
       "size": 273109,
@@ -2052,8 +2046,9 @@
       "used_by": [
         "battle-ai-pointer-forest-op00-turns-vs-oracle",
         "battle-enemy-close-op01-forest-vs-oracle",
+        "battle-forest-feet-vs-oracle",
         "battle-pc-crit-vs-logical-oracle",
-        "field-battle-crit-beatB-dead-suppressed",
+        "field-battle-crit-beatB-flash-hetake",
         "field-battle-crit-leap-mid",
         "field-battle-drop-roll",
         "field-battle-end-uiteardown",
@@ -2084,8 +2079,7 @@
         "field-battle-sched-a4-cadence",
         "field-battle-tech-learn",
         "field-battle-zorder-forest-live",
-        "field-battleloop-forest",
-        "battle-forest-feet-vs-oracle"
+        "field-battleloop-forest"
       ],
       "kind": "raw_wram",
       "regenerable": true,
@@ -2163,7 +2157,7 @@
       "path": "saves/battle_re/forest_wait_ambush_active.lakewram",
       "kind": "oracle-wram",
       "regenerable": true,
-      "how": "build/ct.exe --peek saves/battle_re/forest_wait_ambush_active.state out.raw --frames 0, then \"HEADER\nRAM:131072:\" + out.raw.wram (the state's own WRAM, for ct_field --loadwram)",
+      "how": "build/ct.exe --peek saves/battle_re/forest_wait_ambush_active.state out.raw --frames 0, then \"HEADER\nRAM:131072:\" + out.raw.wram (the state's own WRAM, for Belthasar --loadwram)",
       "used_by": [
         "battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge",
         "battle-dissolve-no-flash-vs-rule-cartridge",
@@ -2249,7 +2243,6 @@
         "battle-fxobj-machine-cyclone-vs-oracle",
         "battle-fxobj-machine-song-vs-oracle",
         "field-battle-asc-off-at-script-end",
-        "field-battle-cyclone-fx-not-replayed",
         "field-battle-cyclone-holds-its-facing-until-the-idle-reaim",
         "field-battle-flash-attribute-uploaded-two-frames-late",
         "field-battle-pc-tech-sfx",
@@ -2438,9 +2431,12 @@
       "used_by": [
         "battle-ai-pointer-gato-op00-turn-vs-oracle",
         "battle-bracket-rebuild-live-foot",
+        "battle-enemy-census-feet-vs-oracle",
         "battle-fx-teardown-after-program-vs-oracle",
         "battle-gato-death-skips-the-death-routine-no-sound",
+        "battle-gato-feet-vs-oracle",
         "battle-gato-fight-vs-logical-oracle",
+        "battle-gato-long-feet-vs-oracle",
         "battle-loader-pointers-gato",
         "battle-pc-marle-far-vs-logical-oracle",
         "battle-pc-physical-vs-logical-oracle",
@@ -2482,8 +2478,8 @@
         "field-battle-song-note-motion",
         "field-battle-song-notes-drift",
         "field-battle-song-notes-orbit",
+        "field-battle-song-pose-and-notes",
         "field-battle-song-sfx-and-flinch",
-        "field-battle-song-spotlight",
         "field-battle-status-icon-in-span",
         "field-battle-status-immunity",
         "field-battle-status-inflict",
@@ -2503,10 +2499,7 @@
         "menu-save-screen-real",
         "menu-status-screen",
         "menu-tech-screen",
-        "menusave-ow-open",
-        "battle-gato-feet-vs-oracle",
-        "battle-enemy-census-feet-vs-oracle",
-        "battle-gato-long-feet-vs-oracle"
+        "menusave-ow-open"
       ],
       "kind": "raw_wram",
       "regenerable": true,
@@ -2566,22 +2559,25 @@
     },
     {
       "path": "saves/battle_re/gato_wait.state",
-      "kind": "unknown",
-      "regenerable": false,
-      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "kind": "rawstate",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fx_a_battle_gato_press_action; tools/fixtures/gato.json)",
       "used_by": [
         "battle-defeat-exit-vs-oracle",
         "battle-end-pc-stands-where-the-fight-left-it-vs-rule-cartridge",
         "battle-enemy-area-band-vs-oracle",
         "battle-enemy-census-counter-eval-vs-oracle",
         "battle-enemy-census-defeat-exit-tail-hdma-vs-oracle",
+        "battle-enemy-census-feet-vs-oracle",
         "battle-enemy-census-mechanisms-vs-oracle",
         "battle-enemy-census-movers-vs-oracle",
         "battle-enemy-counter-path-vs-oracle",
         "battle-enemy-turn-handlers-vs-oracle",
         "battle-fx-load-stage-vs-logical-oracle",
         "battle-gato-entry-stands-still-vs-rule-cartridge",
+        "battle-gato-feet-vs-oracle",
         "battle-gato-fight-vs-logical-oracle",
+        "battle-gato-long-feet-vs-oracle",
         "battle-gato-song-spotlight-is-the-arena-colour-math-vs-rule-cartridge",
         "battle-hud-aura-stash-strip-vs-oracle",
         "battle-hud-item-list-gap-strip-vs-oracle",
@@ -2606,12 +2602,9 @@
         "battle-yakra-fight-vs-logical-oracle",
         "field-battle-topbox-tech-description",
         "oracle-logical-frame-gato-and-xstrike",
-        "oracle-peekshots-equal-a-peek-per-frame",
-        "battle-gato-feet-vs-oracle",
-        "battle-enemy-census-feet-vs-oracle",
-        "battle-gato-long-feet-vs-oracle"
+        "oracle-peekshots-equal-a-peek-per-frame"
       ],
-      "sha256": "233ca7485cf1004a5bdeb00a4627026cff1c7a15787e19eb51011e0da0ee1352",
+      "sha256": "e9af8fe7f4bd29a0416dd727b8392894c4ca85b5b3ace63448512995f22060be",
       "size": 273109,
       "present_when_recorded": true
     },
@@ -2622,8 +2615,8 @@
       ],
       "kind": "lakewram",
       "regenerable": true,
-      "how": "saves/battle_re/gato_wait.state's WRAM with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single learned, MP 99), behind the 21-byte #lakewram header -- what battle_ab.run writes for the port.",
-      "sha256": "a2d2f38f3a0e8f6bb899e8084f230df5b3ea7e0b278d153b684758c43279be0d",
+      "how": "tools/fixtures.py (recipe fx_a_battle_gato_press_action; tools/fixtures/gato.json): gato_wait's WRAM with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single learned, MP 99), behind the 21-byte #lakewram header -- what battle_ab.run writes for the port.",
+      "sha256": "19428103b18fe75ec5cd4dafabfc9b2b0ad13c2923fb3d28e4f72860c1f48679",
       "size": 131093,
       "present_when_recorded": true
     },
@@ -2758,8 +2751,8 @@
       ],
       "kind": "lakewram_wrapper",
       "regenerable": true,
-      "how": "3-PC (Crono+Lucca+Frog) POST-VICTORY FIELD state at loc $082 (Manoria corridor), produced ENTIRELY from the oracle -- no hand-editing. bat9_lake.state is the project's only 3-PC capture and sits mid-battle; driving it to victory yields the field. Recipe: (1) BS=$(python -c \"print(','.join(['100:8','0:12']*115)+',0:300')\") ; (2) PEEK_SAVE=saves/battle_re/party3_field.state ./build/ct.exe --peek saves/battle_re/bat9_lake.state build/party3_field.raw --btnscript \"$BS\" ; (3) wrap the 128 KB dump: open(dst,'wb').write(b'HEADER\n'+b'RAM:131072:'+open('build/party3_field.raw.wram','rb').read()). NOTE A=0x100 in the LakeSnes serial-order grammar (0x80 is Right) -- see DEBUG_SURFACE.md. Verify: loc $0100=0082, $011F=01 (control restored), $2980-82 = 00 02 04, $AF02 all zero. The Diablos die by f1829 and the field resumes at f2304.",
-      "sha256": "0bdf340e250cd6f564cbba642d1a737461718c780ad94a1d23d0a58f97b3fc66",
+      "how": "tools/fixtures.py (recipe fx_party3_field)",
+      "sha256": "4fa21769c84d512865c958c78a903e4f3322da62ed42107d460e7d9a53ba7e0b",
       "size": 131093,
       "present_when_recorded": true
     },
@@ -2829,8 +2822,8 @@
       ],
       "kind": "lakestate",
       "regenerable": true,
-      "how": "CTLS savestate companion of party3_field.lakewram (same capture, see that entry's recipe): PEEK_SAVE=saves/battle_re/party3_field.state ./build/ct.exe --peek saves/battle_re/bat9_lake.state build/party3_field.raw --btnscript \"$BS\" with BS=$(python -c \"print(','.join(['100:8','0:12']*115)+',0:300')\"). 3-PC post-victory FIELD state at loc $082. Verify: $0100=0082, $011F=01, $2980-82 = 00 02 04.",
-      "sha256": "c78f50aefb89d7a4b23b8ceb4a159934220206cab572fbcce8c27e800a36e202",
+      "how": "tools/fixtures.py (recipe fx_party3_field)",
+      "sha256": "851d8cd0e53af36f6978305b398427d247223434c15dc5d4e2dc78f66fa76523",
       "size": 273125,
       "present_when_recorded": true
     },
@@ -2847,21 +2840,21 @@
       ],
       "kind": "oracle_wram",
       "regenerable": true,
-      "how": "The oracle's own WRAM with the Form screen (option 4) OPEN, so the check grades the RENDER and not the menu-open stat pass. Regenerate: build/ct.exe --peek saves/battle_re/party3_field.state out.raw --btnscript \"0:4,200:3,0:40,80:2,0:6,80:2,0:6,80:2,0:6,80:2,0:6,100:2,0:40\" (X, Right x4, A) and take out.raw.wram. WHY THE POST-OPEN CAPTURE AND NOT THE FIELD ONE: the ROM RECOMPUTES each character's derived attack/defence at menu open -- C2/9137 MVNs 11 bytes from $7E:9B1C into sheet+0x36 (writer C2:9160), built by C2/916E out of the equipment via C2/9261 with the caps at FF/CF33 and a per-charId pass through the C2/91DB jump table -- and a raw FIELD capture carries stale values (party3_field has Frog's +0x3D reading 229 where the menu computes 18). That stat engine is the same C1/CF15 + FD/B033 subsystem battle.c already names as a boundary, so this fixture keeps the boundary OUT of the pixel check instead of pinning a frame that shows its symptom.",
-      "sha256": "c8de27c7d2681511583020697d0474bdf40d94dcec1a1cc83bdcf29ca806ee44",
+      "how": "tools/fixtures.py (recipe fx_party3_field, pad 0:4,200:3,0:40,80:2,0:6,80:2,0:6,80:2,0:6,80:2,0:6,100:2,0:40)",
+      "sha256": "8df6e15a825c8b61883079a9600d40a2ec213859e846b0ecbfa963fe758ddbba",
       "size": 131072,
       "present_when_recorded": true
     },
     {
       "path": "saves/battle_re/party3_freshsheet.lakewram",
       "kind": "lake_wram",
-      "regenerable": false,
-      "how": "A 128 KB WRAM image with the 18-byte LakeSnes header (`--loadwram` takes this form). CATALOGUED 2026-08-30 to close the one-command gate: before this, 37 of the 62 declared fixtures had no sha256 at all, so tools/preflight.py hard-failed on 'EXTRA' and exited WITHOUT RUNNING A SINGLE CHECK. ⚠ ITS PROVENANCE WAS NOT RECORDED WHEN THE CHECK WAS ADDED and is NOT reconstructed here -- writing a plausible-looking recipe would be worse than admitting the gap, because the next reader would trust it. What the sha256 above DOES guarantee is the thing the gate exists for: this is the exact byte sequence the consuming check(s) were pinned against, so a silent substitution or a regeneration with different contents now shows up as MISMATCH instead of as a quietly different green. If this file is lost, the check must be RE-DERIVED from the ROM/oracle, not re-guessed. Consumed by: field-battle-lucca-type2.",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe fx_party3_field), PEEK_POKE as tools/fixtures/party3.json",
       "used_by": [
         "field-battle-lucca-type2"
       ],
-      "sha256": "d66751e97f1cfe2a1e6b0a16a32718651a3d496d344919a9b61f2a08509aa39b",
-      "size": 131090,
+      "sha256": "3c4dedf3415aaa133877c20fcbaa069a9932258a23413fcc552bbb24ef671ec5",
+      "size": 131093,
       "present_when_recorded": true
     },
     {
@@ -3050,9 +3043,9 @@
         "ow-party-follower-slot2-walks-the-trail-vs-rule-cartridge"
       ],
       "kind": "lake_wram",
-      "regenerable": false,
-      "how": "catedral_user.lakewram with $7E:2982 (party slot 2) = 01, Marle: byte 21 + 0x2982 of the file -- byte-identical to the first one. Rebuilt 2026-10-12: the first copy was made by a cloud session on 2026-10-03/04 and never reached this machine (saves/ is not in git).",
-      "sha256": "9650f51b6a59192c9a06ef6833aa4ff4b4cf32fb5bf0e4c411cde78aad0e3c21",
+      "regenerable": true,
+      "how": "tools/fixtures.py (recipe cathedral_entry, PEEK_POKE 2982=01 as tools/fixtures/party3.json)",
+      "sha256": "2a4cbe0386311be731b71c6769765bf3362859de374306a9c096f18c1d2adc04",
       "size": 131093,
       "present_when_recorded": true
     },
@@ -3236,7 +3229,7 @@
       ],
       "kind": "ctfs_state",
       "regenerable": false,
-      "how": "The owner's own ct_field CTFS state build/ct_debug_007.state (2026-10-04): the 600 A.D. inn (loc 0x74), Crono + Lucca, at the 'Register? Yes' prompt, copied -- byte-identical to the first one. Not regenerable from the ROM.",
+      "how": "The owner's own Belthasar CTFS state build/ct_debug_007.state (2026-10-04): the 600 A.D. inn (loc 0x74), Crono + Lucca, at the 'Register? Yes' prompt, copied -- byte-identical to the first one. Not regenerable from the ROM.",
       "sha256": "872ee9229b197ea2707f42aaba739f25526514835b95af05c045961430c45c9b",
       "size": 153972,
       "present_when_recorded": true
@@ -3245,7 +3238,7 @@
       "path": "saves/field_re/inn_sleep_10f.lakewram",
       "kind": "unknown",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_inn_sleep): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_inn_sleep): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-inn-sleep-vs-rule-cartridge"
       ],
@@ -3268,12 +3261,12 @@
     {
       "path": "saves/field_re/loc002_curtain_ctl.lakewram",
       "used_by": [
-        "field-slot1-map-copies-vs-logical-oracle",
-        "field-e5-copy-service-vs-logical-oracle"
+        "field-e5-copy-service-vs-logical-oracle",
+        "field-slot1-map-copies-vs-logical-oracle"
       ],
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_loc002_curtain_ctl): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_loc002_curtain_ctl): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "98639f9add67e6d0b6cd0ea18e3e6c42da1e38bd1607f227fb7295895a4d19ba",
       "size": 131093,
       "present_when_recorded": true
@@ -3281,8 +3274,8 @@
     {
       "path": "saves/field_re/loc002_curtain_ctl.state",
       "used_by": [
-        "field-slot1-map-copies-vs-logical-oracle",
-        "field-e5-copy-service-vs-logical-oracle"
+        "field-e5-copy-service-vs-logical-oracle",
+        "field-slot1-map-copies-vs-logical-oracle"
       ],
       "kind": "lake_state",
       "regenerable": true,
@@ -3298,7 +3291,7 @@
       ],
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_loc002_intro_curtain): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_loc002_intro_curtain): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "fed8bf8e19bbe02717c8ff125560c614ac492ed3653c3c57faf4a7112b49ddea",
       "size": 131093,
       "present_when_recorded": true
@@ -3319,7 +3312,7 @@
       "path": "saves/field_re/loc07B_soldiers_seated.lakewram",
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_loc07B_seated): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_loc07B_seated): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-obj-unit-priority-seated-soldiers-vs-oracle"
       ],
@@ -3346,7 +3339,7 @@
       ],
       "kind": "lakewram_wrapper",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_loc13B_teleport): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_loc13B_teleport): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "d6bbf84f36ab6333ce74c6f4ea737610caec0a11e2270a4ec5febff65c5071af",
       "size": 131093,
       "present_when_recorded": true
@@ -3404,7 +3397,7 @@
       "path": "saves/field_re/m81_frog_pre_lake.lakewram",
       "kind": "unknown",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_m81_frog_pre): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_m81_frog_pre): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-manoria-frog-blob"
       ],
@@ -3547,7 +3540,7 @@
       "path": "saves/field_re/predoor_f2f_s5.lakewram",
       "kind": "lakewram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_fair_marle, pad 40:16,10:32): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_fair_marle, pad 40:16,10:32): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-door-follower-lands-on-lead",
         "field-door-up-arrival-facing"
@@ -3561,7 +3554,7 @@
       "used_by": [],
       "kind": "story_flags",
       "regenerable": false,
-      "how": "The $7F:0000-01FF story page of the user's F5 capture build/ct_debug_023.state (loc 07B, 2026-10-09; CtScene 'CTFS' format): CT_DUMPWRAM=p.wram CT_DUMPWRAM_AT=3 build/ct_field.exe --assets ct_assets.dat --scene 123 --loadstate build/ct_debug_023.state --selftest x.raw --frames 10, then bytes 0x10000-0x101FF of p.wram. Storyline 0F, party 00/80/80.",
+      "how": "The $7F:0000-01FF story page of the user's F5 capture build/ct_debug_023.state (loc 07B, 2026-10-09; CtScene 'CTFS' format): CT_DUMPWRAM=p.wram CT_DUMPWRAM_AT=3 build/Belthasar.exe --assets ct_assets.dat --scene 123 --loadstate build/ct_debug_023.state --selftest x.raw --frames 10, then bytes 0x10000-0x101FF of p.wram. Storyline 0F, party 00/80/80.",
       "sha256": "eaee2a546db749764825e028c877f857cd65645685c5abbb9d8446acb7398a32",
       "size": 512,
       "present_when_recorded": true
@@ -3573,7 +3566,7 @@
       ],
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_s07b_table_seat): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_s07b_table_seat): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "dcc4e7d947abd8b10b1ab0f67b890c4daac53237983af45f67e04dd71d20b556",
       "size": 131093,
       "present_when_recorded": true
@@ -3648,7 +3641,7 @@
       ],
       "kind": "lake_wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_s236_lever): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_s236_lever): the same frame's WRAM for Belthasar --loadwram",
       "sha256": "9fd830c6a46e2bfa874aafa9726109a36e81852b047a4d99f4b832981916b2e6",
       "size": 131093,
       "present_when_recorded": true
@@ -3764,7 +3757,7 @@
       "path": "saves/field_re/s5_bell_marle.lakewram",
       "kind": "unknown",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_s5_bell_marle): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_s5_bell_marle): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-bell-ball-keeps-frozen-shape",
         "field-bell-marle-regroup-ring",
@@ -3823,7 +3816,7 @@
       ],
       "kind": "state",
       "regenerable": false,
-      "how": "A LakeSnes state on loc 084's save tile (3, 39), made 2026-10-11: the user's F5 ct_debug_032.state (CTFS, loc 0CB) dumped by ct_field CT_DUMPWRAM_AT=1, its $2400-$2FFF (bag, sheets, party, techs) and $7F:0000-01FF (the story flags) spliced into saves/field_re/m81_naga_after_fight_lake.state (tools/ctlib/lake.py), then `ct.exe --teleport 0x84 3 39 0 --frames 120 --out` under CT_ORACLE_LOGICAL=1 (the ROM's own loader).",
+      "how": "A LakeSnes state on loc 084's save tile (3, 39), made 2026-10-11: the user's F5 ct_debug_032.state (CTFS, loc 0CB) dumped by Belthasar CT_DUMPWRAM_AT=1, its $2400-$2FFF (bag, sheets, party, techs) and $7F:0000-01FF (the story flags) spliced into saves/field_re/m81_naga_after_fight_lake.state (tools/ctlib/lake.py), then `ct.exe --teleport 0x84 3 39 0 --frames 120 --out` under CT_ORACLE_LOGICAL=1 (the ROM's own loader).",
       "sha256": "ebb30dfcc77d800910bfaaf8253f433aa268ade2757b3346f5bad739e0754a9c",
       "size": 273125,
       "present_when_recorded": true
@@ -3899,7 +3892,7 @@
       "path": "saves/field_re/scene7_talk_obj13.lakewram",
       "kind": "unknown",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_scene7_talk_obj13): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_scene7_talk_obj13): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "lockstep-box-y-flips-the-window-vs-oracle",
         "lockstep-talk-box-machine-clean"
@@ -3925,7 +3918,7 @@
       "path": "saves/field_re/scene8_gate_c2200.lakewram",
       "kind": "wram",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_scene8_gate_c2200): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_scene8_gate_c2200): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-gate-transition-vs-cartridge-from-its-wram"
       ],
@@ -4040,7 +4033,7 @@
       "path": "saves/field_re/tech_double.lakewram",
       "kind": "lakewram_wrapper",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_tech_double): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_tech_double): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "menu-tech-dual-list-partner-sprite-and-tab-memory-vs-oracle"
       ],
@@ -4071,7 +4064,7 @@
       "path": "saves/field_re/tent_keeper.lakewram",
       "kind": "lakewram_wrapper",
       "regenerable": true,
-      "how": "tools/fixtures.py (recipe fxf_tent_keeper): the same frame's WRAM for ct_field --loadwram",
+      "how": "tools/fixtures.py (recipe fxf_tent_keeper): the same frame's WRAM for Belthasar --loadwram",
       "used_by": [
         "field-bg-seed-tent-keeper-vs-oracle",
         "field-textbox-under-the-rule-vs-logical-oracle",
@@ -4251,7 +4244,6 @@
       "path": "saves/ow_w0.state",
       "used_by": [
         "field-arrival-gate-vs-oracle",
-        "field-camera-truce-inn",
         "menu-overworld-save-screen-vs-oracle",
         "menu-save-overwrite-prompt-frames-vs-oracle",
         "menu-save-slot-colours-and-post-save-frames-vs-oracle",
@@ -4352,10 +4344,7 @@
         "audio-song-directory",
         "field-load-cost-world-vs-rom",
         "field-load-cost-world2-skips",
-        "oracle-button-grammar",
-        "ow-field-return",
-        "wram-loadcensus-clearlist",
-        "wram-loadcensus-natural-door"
+        "ow-field-return"
       ],
       "kind": "lake_state",
       "regenerable": true,
@@ -4678,10 +4667,10 @@
     {
       "path": "tools/battle_ab.py",
       "used_by": [
-        "battle-module-tail-vs-oracle",
-        "battle-enemy-census-mechanisms-vs-oracle",
         "battle-enemy-census-feet-vs-oracle",
-        "battle-gato-long-feet-vs-oracle"
+        "battle-enemy-census-mechanisms-vs-oracle",
+        "battle-gato-long-feet-vs-oracle",
+        "battle-module-tail-vs-oracle"
       ],
       "kind": "tool",
       "regenerable": true,
@@ -4696,9 +4685,9 @@
       "regenerable": false,
       "how": "tools/battle_feet_cmp.py (in the repo): a fight's feet, port against the rule's oracle",
       "used_by": [
+        "battle-enemy-census-feet-vs-oracle",
         "battle-forest-feet-vs-oracle",
         "battle-gato-feet-vs-oracle",
-        "battle-enemy-census-feet-vs-oracle",
         "battle-gato-long-feet-vs-oracle"
       ],
       "sha256": "1f702f6f0e1538b1d70cceae77c207a411363f40cc83b97b1a8991769060201c",
@@ -5061,8 +5050,8 @@
     {
       "path": "tools/ow_follower_cmp.py",
       "used_by": [
-        "ow-party-follower-walks-the-trail-vs-rule-cartridge",
-        "ow-party-follower-slot2-walks-the-trail-vs-rule-cartridge"
+        "ow-party-follower-slot2-walks-the-trail-vs-rule-cartridge",
+        "ow-party-follower-walks-the-trail-vs-rule-cartridge"
       ],
       "kind": "tool",
       "regenerable": true,

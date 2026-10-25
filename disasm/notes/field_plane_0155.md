@@ -5,7 +5,7 @@ User report (build/ct_debug_023.state, F5 at scene frame 93699, loc 07B, lead (1
 ## 1. What kind of stuck
 
 Loc $07B is a castle dining hall with soldiers at two tables (story $7F:0000 = 0F, Crono alone). Loading the capture
-(`ct_field --scene 123 --loadstate ct_debug_023.state`) and driving each direction with `CT_DRIVEDBG=1`: the movement
+(`Belthasar --scene 123 --loadstate ct_debug_023.state`) and driving each direction with `CT_DRIVEDBG=1`: the movement
 gate is OPEN (`gate=1 explore=1 leadBusy=0`, no box, no lock), the lead TURNS (facing 0/1/2/3) but never moves.
 The collision engine (C0/881E, CtPlayerControl) returns velocity 0 for every direction, with no actor hit
 (`$01EB` = 80). So: a collision/plane wedge, not a VM wait.

@@ -116,7 +116,7 @@ the TM/TS/TMW/TSW HDMA data) -- inside [l, r] the main screen is the backdrop, C
 Applied before the INIDISP brightness, as the PPU does.
 
 **Graded** (tools/wipe_step_cmp.py, check field-window-wipe-routine-and-mask-vs-oracle): `ct.exe --wipedump` hands the
-cartridge's own WRAM and beam at a call to `ct_field --wipecall`; the two tables + working copy (480 bytes), DP $0300's
+cartridge's own WRAM and beam at a call to `Belthasar --wipecall`; the two tables + working copy (480 bytes), DP $0300's
 page and `$0386` are identical on 16E's third call (mode 1) and 01C's fifth (mode 2); `--wipemask` on the WRAM after
 C0/00C7 agrees with the cartridge's window 2 on every sampled line (189 / 189, 188 / 188). Five mutations killed (X, the
 $213C toggle, the return address, the buffer choice, the 212-line table end); the flow check pins $0153 and kills the
@@ -416,3 +416,44 @@ programs, and takes the gates from the live WRAM; the brightness is the frame's 
 f2808..f2814 = 0, 4, 6, 8, 10, 12, 15 -- the cartridge's 228..234 (0, 4.4, 6.7, 8.9, 10.8, 12.8, 15.1) on the P+2 rule,
 no flash. (--wipemask keeps the old reading: it is handed a state from inside the call's iteration and prints THAT
 iteration's display.)
+
+## Native (2026-10-18, the no-ROM-code build)
+
+User decision 2026-10-17: Belthasar.exe carries no ROM code. C3/01E4, C3/02DD and C6/E241 / E27E are C now (src/wipe.c,
+src/wipe.h); src/xlat/wipe_c3.c and owwin_c6.c stay only as ct.exe's `--xlatcmp` references, and seq_xlat.c's call glue
+(CtXlatWipeCall / CtXlatWipePeek / CtXlatOwWindowCall and the CT_XLAT_WIPE_* / CT_XLAT_OWWIN_* beams) is gone.
+
+The interface (wipe.h), for every caller of the routine -- the field's C0/22FA, the world's C6/E27E and the $C3 race
+stage's task 3D72 / 7E:6844:
+
+* `CtWipeRoutine(rom, romLen, wram128, callerX, callerDb)` -- one call of C3/01E4 (C3/000E's JMP or a direct JSL). The
+  caller's registers it reads: X (C3/02DD's `TXA`) and the data bank (C3/02DD's absolute `$0386` / `$0008` / `$00F0` /
+  `$00F2` / `$00F4`). Measured at every call of the attract (`ct.exe --wipeaudit`): field X = 0004, stage X = 000C (3D76)
+  and 000E (6848), world X = 009C, DB = 00 everywhere. `CtWipePeek` is the same call kept out of CT_XLAT_SEEDTRACE.
+* `CtWipeSeed(wram128, a, carry, x, db)` -- C3/02DD alone.
+* `CtOwWindowObject(rom, romLen, wram128, target)` -- C6/E241 / E27E; the DMA registers E241 writes stay the host's.
+
+What the routine reads that is not in its listing's obvious path, each graded by a mutation:
+
+* **The seed's A is FE.** C3/0242 `LDA #C0 / STA $57 / LDA #FE / STA $56` runs between `CMP #20` and the JSL, so C3/02DD's
+  `ROL A` starts from FE with CMP #20's carry -- not from the count. (A first native draft rolled the count: every seed
+  wrong.)
+* **On a fill call X is the MVN's**, `$52 + $1C0 + $DF`, not the caller's: the fill's `MVN` advances X before the seed's
+  `TXA`.
+* **`CMP $2137` compares with the open bus.** $2137 drives no data: the CPU reads its last fetched byte, the operand's high
+  byte $21 -- so C = (A >= $21), on the cartridge and in the oracle (snes.c `case 0x37: return openBus`).
+* **Mode 2's floor leaves B = 03.** C3/02CD `TDC` loads C = D = $0300 to write a 00 line; the next run's `TAY` (X = 16)
+  then takes Y = $03xx, a run longer than the 224 lines: after the first line that floors at 0 the walk never reloads.
+* **The carry chain.** `ADC #03` / `ADC #08` / `ADC $F2` / `SBC $F2` have no CLC / SEC: the first run of mode 2 starts on
+  `CMP #02`'s carry (set) -- one line longer, and every mode-2 line subtracts `$F2 + 1` (the previous `CPX $F4` left C
+  clear).
+
+The native routine writes every WRAM byte the ROM does (the tables, the working copy, DP $0350-$0357, $03F0 / $03F2 /
+$03F4-$03F5, $0386) except the stack below the caller's S -- the routine's pushes and C3/02DD's return address, dead once
+it returns. The graders skip those 32 bytes: wipe_step_cmp / owwin_step_cmp (0 bytes differ elsewhere) and
+`ct.exe --wipeaudit boot 9200`, which runs the native routine at EVERY cartridge call over the attract (1015 calls: 256
+field, 3 + 96 world, 379 + 281 stage) and finds all 1015 identical (check wipe-native-every-call-vs-cartridge).
+
+Not covered by a cartridge call: the 2300 A.D. haze (C6/E27E from the world map, not in the attract). It runs the same
+routine through the same entry; its `$50` mode is whatever its object's +$22 holds, and the native code follows the ROM for
+any mode (`CMP #01` for the fill byte, `CMP #02` for the walk's direction and first carry).

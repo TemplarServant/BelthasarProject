@@ -20,7 +20,7 @@ static void showError(NSString* message) {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp activateIgnoringOtherApps:YES];
     NSAlert* alert = [[NSAlert alloc] init];
-    alert.messageText = @"Chrono Trigger could not start";
+    alert.messageText = @"Belthasar could not start";
     alert.informativeText = message;
     [alert runModal];
 }
@@ -89,9 +89,13 @@ int CtMacConfigure(int* outArgc, char*** outArgv) {
             data = [[[NSFileManager defaultManager] currentDirectoryPath] stringByAppendingPathComponent:data];
         }
         defaultEnv("CT_ROM", [data stringByAppendingPathComponent:RomName]);
-        // Some legacy loaders still use the canonical relative ROM filename.
-        if (chdir(data.fileSystemRepresentation) != 0) {
-            showError([NSString stringWithFormat:@"Cannot open game-data folder: %s", strerror(errno)]);
+        // A player's launch runs in the support folder beside the saves, so what the game writes to its working
+        // directory (F5's captures and ct_debug_log.txt) lands there: the game data may be inside the signed bundle,
+        // which repackaging replaces. A launch with arguments keeps the game-data folder for the legacy loaders that
+        // still use the canonical relative ROM filename.
+        NSString* work = argc == 1 ? support : data;
+        if (chdir(work.fileSystemRepresentation) != 0) {
+            showError([NSString stringWithFormat:@"Cannot open %@: %s", work, strerror(errno)]);
             return 1;
         }
         if (argc == 1 && !isatty(STDOUT_FILENO)) {

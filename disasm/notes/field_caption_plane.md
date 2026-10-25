@@ -202,3 +202,20 @@ Measured after (tools/caption_plane_cmp.py at d = +7): port f880-f1400 all ident
 f560-f1348 789/789. obj6's box (x 80-95, y 79-110) is black on both sides through f905 and lit from f906, though
 `CT_DRAWDBG` lists obj6 from f896 (obj7 from f900); what keeps it dark those ten frames was not traced -- the two sides
 agree pixel for pixel there.
+
+## The walk's frozen 42 frames: a sound upload inside the event pass (2026-10-18, ROADMAP F14 closed)
+
+The same walk (saves/field_re/s49_chest_walk.state, Right held from f134): at f202 the lead reaches the wall at $1802 = 1390.
+At f203 the main loop runs C0/881E -- the camera steps a pixel ($1D87 71 -> 72, $1D93 01 -> 02) -- and then a script's
+`JSL C7/0004` in the event pass holds the CPU in the driver's transfer (C7/09E5, `--cputrace` of f205) until f245: no
+FD/C2C1 ($0153 and both HDMA sets frozen: $7F:1508 = 70, $150C = 71) and no C0/A810 (the lead's integrate) for 42 frames.
+On screen (`--hdma` of PEEK_SAVE states): BG1 HOFS 113 -- set B's word -- from f203 to f244, the lead at his words. The port's
+WRAM was the cartridge's on every frame; its picture was not:
+
+* the map drew at the live camera (114): field.c now draws it at the shown set's word -- `$7F:1508/150A` (set A) or
+  `$150C/150E` (set B), the one FD/C2C1 built last (`$0153` bit 0), against `$1D87/$1D89` -- the camera less the difference;
+* the lead drew at the host's (px, py), which had taken f203's step (314) that the VM commits only on the resume: on a
+  parked frame (CtSceneMainLoopParked) the lead is drawn at his words.
+
+tools/chest_box_close_cmp.py: 188 -> 230 of 320 frames identical (f203-245 exact); the rest are the chest box's typewriter
+residuals pinned before.

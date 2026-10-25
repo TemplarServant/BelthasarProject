@@ -107,7 +107,9 @@ void CtWorldTilemapView(CtWorldStream* st, const uint8_t* ram, const CtWorldCam*
 void CtWorldObjOp05(uint8_t* ram, const uint8_t* op);
 void CtWorldLocationStores(uint8_t* ram, const uint8_t* op);   // C2/1100's stores = state 3's C2/2470 (no $027C)
 void CtWorldSetRom(const uint8_t* rom, long len);            // the ROM image, for VM objects running bank-$C2 scripts
+void CtWorldSetIrisCircle(void (*fn)(uint8_t* wram128, uint8_t arg));   // C3/0077 for $C6:E498 / E4BE (the field's port)
 void CtWorldSpawnVm(uint8_t* ram, uint8_t bank, uint16_t pc); // C2/04D9 -- a VM object started from outside the pass
+void CtWorldLoadTriggers(uint8_t* ram, int world);     // C2/2A44: the event / transition cells and the event scripts
 void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op);
 typedef int (*CtWorldOp4EHook)(uint8_t* ram128, uint32_t target);   // op 4E -> $C6:E241 / $C6:E27E: 0 = ran
 void CtWorldSetOp4EHook(CtWorldOp4EHook fn);
@@ -197,8 +199,15 @@ void CtWorldSetJsl(CtWorldJslFn fn);
 int  CtWorldTakePassSuspend(void);    // NMIs crossed by this frame's inline JSL (0 = the pass completed), consumed
 void CtWorldHdmaSet(int ch, uint8_t dmap, uint8_t bbad, uint16_t tbl);   // an HDMA channel as a native programs it
 int  CtWorldHdmaGet(int ch, uint8_t* dmap, uint8_t* bbad, uint16_t* tbl);
+void CtWorldGaugeEnter(uint8_t* ram, uint8_t* vram);   // C2/6A34's NMI-off half: the time gauge set up (mode 7, loads, spawns)
+void CtWorldGaugeLeave(uint8_t* ram);                  // C2/6AA6: the gauge's fade-out script
+int  CtWorldGaugeTakeSound(void);
+void CtWorldTraceFrame(int f);                          // the host frame number CT_OWVEHTRACE prints
+void CtWorldTraceEnd(const uint8_t* ram);               // ...and its line as the host frame ends
+void CtWorldMapEnter(uint8_t* ram, uint8_t* vram);     // C2/631F's NMI-off half: the world map ($027C = 6) set up
 void CtWorldLeadReinit(uint8_t* ram);     // C2/34F8: the lead's init again (stepping out of a vehicle, $027E 5 -> 0)
 void CtWorldLeadRingPush(uint8_t* ram);   // C2/3934: the lead's step arrival onto its trail ring ($1B5A/$1B5B/$1B7B)
+void CtWorldLeadArrive(uint8_t* ram);     // C2/375F: the arrival's cell test -> $0282 (the scanner's request)
 
 // FIELD -> OVERWORLD RETURN: a field 'world' exit jumps to the overworld with $0102/$0103 =
 // the arrival 8px cell (the exit record's dpos>>3) and $0104 = facing. The loader places the

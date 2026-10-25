@@ -410,7 +410,7 @@ menusfx-menu-count: N post(s) from M event(s), K silent
 
 Common `env`: `SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`, `CT_AUDIO_FORCE=1`,
 `CT_MENUSFX=1`, `CT_MENUSFX_COUNT=1`. Common `argv` shape:
-`build/ct_field.exe --assets ct_assets.dat --scene <N> --selftest build/_mnsfx.raw --frames <F>
+`build/Belthasar.exe --assets ct_assets.dat --scene <N> --selftest build/_mnsfx.raw --frames <F>
 --play "<script>"`. Drive grammar: `u/d/l/r` on **EDGE**, `a` = A, `b` = B, `s` = START,
 **`m` = X = open the menu**, `w`/`wait` = idle. **No repeat operator — expand literally.**
 

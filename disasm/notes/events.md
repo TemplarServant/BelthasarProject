@@ -248,10 +248,10 @@ Both feed the same `populate @<file>`.
 point is snapshotted once and re-loaded any time to read its flags — the populate input.
 The savestate is deterministic (two identical runs produce byte-identical states) and the
 save→load→flags round-trip reproduces the in-place flags exactly. The **native field
-consumes a captured state directly**: `ct_field --assets ct_assets.dat --scene N --loadflags
+consumes a captured state directly**: `Belthasar --assets ct_assets.dat --scene N --loadflags
 <flags>` seeds the scene's story flags, so you walk the scene populated as it really is at
 that savestate. Workflow for a deep populated scene: drive/play the oracle to the story
-point → `--savestate` → `--loadstate … --dumpflags` → `ct_field --loadflags` (or
+point → `--savestate` → `--loadstate … --dumpflags` → `Belthasar --loadflags` (or
 `engine.py populate @`).
 
 ## Population atlas (`assets/atlas.py`)
@@ -336,14 +336,14 @@ last divergence — the move-speed op). Surfaced + fixed a latent engine.py bug 
 mid-scene rendered wrong; `tick()` now refreshes it live. The remaining layer (an SDL input
 loop in C) is the last step to a self-contained interactive C field.
 
-## Native C field (`src/field.c`, `ct_field`)
-The whole field now runs in native C + SDL2 with no Python — `play.py` ported. `ct_field
+## Native C field (`src/field.c`, `Belthasar`)
+The whole field now runs in native C + SDL2 with no Python — `play.py` ported. `Belthasar
 --assets ct_assets.dat [--scene N]` opens an SDL window and per frame: reads held arrow
 keys and walks Crono with the verified sub-tile + z-plane **collision**, ticks the **C VM
 scheduler** (`CtSceneTick` — NPCs run their scripts + move), composites the camera view
 (map base from `CtRenderSceneFromAssets` + every live NPC and the player as **real sprites**
 via `CtComposeSprite`, Y-sorted), follows the camera, and presents at ~30 fps. Everything
-reads `ct_assets.dat` — no ROM, no Python. Built as `ct_field` (CMake, when SDL2 is present).
+reads `ct_assets.dat` — no ROM, no Python. Built as `Belthasar` (CMake, when SDL2 is present).
 **Now feature-complete vs play.py — textbox + doors + walk animation are native:**
 - **Walk/idle animation**: `pickAnimFrame` reads the packed `CT_ASSET_SPRITEANIM` (idle then
   walk frames) and selects the assembly frame by facing + a per-actor tick, choosing walk vs
@@ -373,7 +373,7 @@ reads `ct_assets.dat` — no ROM, no Python. Built as `ct_field` (CMake, when SD
   owner's **`result`** and dismissing the box — so the owner's script branches down the chosen
   path via op `0x1A` (`if result == N`). RE'd from the ROM scripts (the inn "Lodging is 10 G. /
   Check in? / No, thanks." has `result==1` = decline) — confirmed by the indented-option layout
-  across 1- and 2-line prompts — and validated in `ct_field` (selftest `--talk`/`--choose`/
+  across 1- and 2-line prompts — and validated in `Belthasar` (selftest `--talk`/`--choose`/
   `--select`): the ▶ renders/moves on both options and selecting dismisses + continues the script.
   **Multi-page decisions** (textbox v3): when the prompt has a page break (`\f`), the box pages
   through the prompt segments (▼) and shows the cursor on the options segment. Validated: scene 29
@@ -431,4 +431,4 @@ trail, and on-screen dialogue — no ROM touched. (A full native field would sti
 - Native field nicety: smooth scroll within a page (CT scrolls line-by-line) vs the current
   page-flip; shop/equipment menus behind the "buy?" decisions.
 - Deeper populated states: capture flags from an oracle savestate / recorded input movie at a
-  story point, then `ct_field --loadflags` (mash only reaches the early game).
+  story point, then `Belthasar --loadflags` (mash only reaches the early game).

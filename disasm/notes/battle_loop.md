@@ -955,3 +955,11 @@ or our camera `camPy` **at the exact staging frame**, not in the battle code.
   pin the task defers to "the field-sim pins separately").
 - **NOT the fix:** the battle staging FORMULA (a faithful port) and the battle ANCHOR (correctly consumes
   `16·rel+fine`, T1). The 3px must be corrected upstream in the field position/camera, not by nudging the anchor.
+
+## 2026-10-19 -- no iteration head after the victory or the defeat
+
+C1/8133's defeat (C1/8143) and C1/817A's victory (C1/8186) leave the loop: no C1/8120 (`INC $0027`) follows. The port's tick wrapper
+ran the next head on the victory's frame (CtBattleTick, `!r` after the victory's return 0). MEASURED, the rule's cartridge (the
+playthrough's leg 20, the first forest ambush): `$0027` stops at DE on f3005; the port's went on to DF, and since `$0027` is never
+reset between fights, the second ambush's turn scanner (C1/82A2 / C1/8313, odd iterations) ran two frames off the cartridge's --
+Crono's command window 4 frames late, the enemies' due turns ahead of it.

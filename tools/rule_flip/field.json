@@ -31,7 +31,7 @@
       "selftest: scene 5 naming=-1 name='', 8 NPCs, player (344,511) cam(208,368) f0 topF=1 botF=0, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=0 fgpx=148336 fgskip=117 -> 256x224 fnv32=67C099F9"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -52,7 +52,7 @@
       "selftest: playeranim $1D34=00 mode=00 af=3 lead$1600=00"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -76,7 +76,7 @@
       "selftest: scene 26 naming=-1 name='' [flags], 0 NPCs, player (488,623) cam(352,480) f0 topF=1 botF=1, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=0 fgpx=802153 fgskip=0 -> 256x224 fnv32=ABEBD1DA"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -115,7 +115,7 @@
       "selftest-ow: world 0 cam(312,168) mover(440,280) f357 cgadsub=44 fnv32=789F81B8 menu=0 $027C=01"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -223,7 +223,7 @@
       "fieldshot: f2338 camx=256 camy=16 fnv=C415A504"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--newgame",
@@ -248,7 +248,7 @@
       "selftest: scene 113 naming=-1 name='' [flags], 3 NPCs, player (136,176) cam(0,0) f0 topF=1 botF=1, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=68 fgpx=32906 fgskip=3 -> 256x224 fnv32=1F8E6191"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -340,7 +340,7 @@
       "CAMINFO f8589 $1D0A=0000 $1D0E=0026 $1D93=00 $1D96=00 $1D87=0000 $1D89=0000 $1D8B=0000 $1D8D=0000 $1D8F=0000 $1D91=0000 $1D35=02 $1D36=00"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -373,7 +373,7 @@
       "shotluma: f2839 loc=01C field mean=6"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -400,7 +400,7 @@
       "wipemask: $0350=00 $0139=00 $7F1522=17 $013C=03 $0119=00 $0351=00 $0153=00 $0386=7C 17C8=FF,FF,FF 18A8=FF,FF,FF -> masked l=0 r=255"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",
@@ -428,7 +428,7 @@
       "wipemask: $0350=02 $0139=03 $7F1522=17 $013C=01 $0119=0F $0351=1F $0153=00 $0386=F5 17C8=00,00,00 18A8=00,00,00 -> masked l=0 r=0"
     ],
     "argv": [
-      "build/ct_field.exe",
+      "build/Belthasar.exe",
       "--assets",
       "ct_assets.dat",
       "--scene",

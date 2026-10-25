@@ -454,7 +454,7 @@ exact). This is the "animation"; the CGRAM snapshot's constant pal1[0..7] hid it
 ⚠ `ctGatoIdleTraj.footDY` was the STATIC bracket vs GATO's moving anchor (ADD4's 50→45 "foot-bob" was spurious) —
 neutralized. NEW **`src/battle_bracket.h`** (`tools/_gen_battlebracket.py`, gitignored): the 4-corner assembly, the
 tile quad, the pulse palette + 62-frame `ctBracketPulse` triangle, the `ctBracketPos` origins. Verify **624/624
-bracket-ink exact** (4 pulse phases v31/19/5/0). `ct_field` re-builds clean. **NOT wired** (per task) — draw as its
+bracket-ink exact** (4 pulse phases v31/19/5/0). `Belthasar` re-builds clean. **NOT wired** (per task) — draw as its
 own asset gated on A6.4 (show iff `$95D5`≠0xFF & `$9609`==0; pos = `$95D5`'s home; →hand on `$9609`=1).
 
 ---

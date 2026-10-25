@@ -6,7 +6,7 @@ r"""The boot LOAD screen (screen $0E) with a given battery, the port against the
   * the cartridge: `ct.exe --fb` boots from power-on with CT_ORACLE_SRAM = the battery for 120 frames and saves the state
     (PEEK_SAVE); `--peek` from it presses Start at +13, +115 and +217 (the title, the menu) and dumps +257: the Load
     screen, settled. $0D79..$0D7B (C2/D266: each valid save's window colour) is read from that frame's WRAM.
-  * the port: `ct_field.exe --boot` with CT_SRAM = the same battery, Start at 133 (the boot checks' own drive), the frame
+  * the port: `Belthasar.exe --boot` with CT_SRAM = the same battery, Start at 133 (the boot checks' own drive), the frame
     at 260 (--selftest): the list is the shell's screen $0E, lit (C2/83B2's fade-in) by its f243.
 The two are compared over the whole 256 x 224 with the oracle's 240-line frame 7 lines down -- the Load screen's own
 convention (disasm/notes/boot_loader.md: its BG V scroll puts the port's line y at the frame's y + 7).
@@ -41,8 +41,8 @@ def main():
                    timeout=600)
     praw = 'build/_bootldr/%s_p.raw' % tag
     penv = dict(os.environ, CT_SRAM=srm, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy')
-    subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--boot', '--selftest', praw,
-                    '--frames', '260', '--walkscript', 'n:133,s:1,n:126'], env=penv, stdout=subprocess.DEVNULL,
+    subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--selftest', praw,
+                    '--frames', '325', '--walkscript', 'n:198,s:1,n:126'], env=penv, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL, timeout=600)
     w = open(oraw + '.wram', 'rb').read()
     ow, oh, o = fb.load(oraw)

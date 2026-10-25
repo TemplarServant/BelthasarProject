@@ -49,7 +49,7 @@ same vblank (the beam stands while the CPU works), which is why a flag that only
 
 MEASURED under the rule (`--hookpc 3B5A / 3B89 / 0B3F / 2866`, `--monitor 7E0112,7E0100,7E0119 --writer`):
 
-| run | exit | visit | store `$0100` | NMI on (0B3F) | ramp done (2866) | port (ct_field, unchanged) |
+| run | exit | visit | store `$0100` | NMI on (0B3F) | ramp done (2866) | port (Belthasar, unchanged) |
 |---|---|---|---|---|---|---|
 | s5b_roll_f2280 | 05B -> 05C | f27 | f28 | f46 | f62 | load f29, entry f46, main loop f62 |
 | | 05C -> 05D | f547 | f548 | f567 | f583 | entry f567, main loop f583 |

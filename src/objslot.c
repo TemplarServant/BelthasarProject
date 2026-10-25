@@ -5,6 +5,7 @@
 // memory changed hands (h->mem -> io->s) and the battle's one-factor palette view moved behind io->onRange, so
 // the field's VM pass can tick the SAME body the battle does instead of a second transcription.
 #include "objslot.h"
+#include "romview.h"
 #include <stdio.h>
 
 // The battle's own trace lines, character for character (checks pin them): `restore` != NULL is the copy-back exit
@@ -164,7 +165,7 @@ static int w16(const uint8_t* s, int a) { return s[a & 0xFFFF] | (s[(a + 1) & 0x
 static void p16(uint8_t* s, int a, int v) { s[a & 0xFFFF] = (uint8_t)v; s[(a + 1) & 0xFFFF] = (uint8_t)(v >> 8); }
 static uint8_t romByte(const CtObjSlotIo* io, int bank, int addr) {             // HiROM: $C0-$FF (and $40-$7D) -> file offset
   long o = ((long)(bank & 0x3F) << 16) | (addr & 0xFFFF);
-  return (io->rom && o < io->romLen) ? io->rom[o] : 0;
+  return CtRomByte(io->rom, io->romLen, o);                                    // (romview.h)
 }
 // The copy both colour-table modes end in (FD/E468-E47C / E4CB-E4DF): `cnt` words from $F6:x to the live page at
 // $7E:2200 + ci*2. `LDA $F60000,X` with X stepping by 2 (16-bit), the destination `[$18]` stepping by 2 in bank $7E;
@@ -215,10 +216,10 @@ static void objslotMode2(CtObjSlotIo* io, const uint8_t* r) {
 // +3 (the frame) and +4 (the tick) start at 0. Records 6-11 lose only their mode byte (E384-E395).
 void CtObjSlotLoad(uint8_t* s, const uint8_t* rom, long romLen, int loc) {
   if (!s || !rom || loc < 0 || loc > 511) return;
-  #define D(i) (((0x3DFA77L + (long)(i)) < romLen) ? rom[0x3DFA77L + (long)(i)] : 0)   // $FD:FA77,X
-  int pal = (0x360003L + (long)loc * 14 < romLen) ? rom[0x360003L + (long)loc * 14] : 0;
+  #define D(i) CtRomByte(rom, romLen, 0x3DFA77L + (long)(i))                      // $FD:FA77,X (romview.h)
+  int pal = CtRomByte(rom, romLen, 0x360003L + (long)loc * 14);
   int ti = (pal << 1) & 0xFF;
-  long X = (0x3DF9C8L + ti < romLen) ? (rom[0x3DF9C7L + ti] | (rom[0x3DF9C8L + ti] << 8)) : 0;
+  long X = CtRomByte(rom, romLen, 0x3DF9C7L + ti) | (CtRomByte(rom, romLen, 0x3DF9C8L + ti) << 8);
   for (int y = 0; y < 0x48; y += 0x0C) {
     uint8_t* r = s + 0x0520 + y;
     int m = D(X) & 0xF0;                                                           // E2CA-E2CE

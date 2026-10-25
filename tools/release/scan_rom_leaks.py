@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""Scan a tree for copyrighted bytes before it is published: nothing from the ROM may ship.
 
-    python tools/release/scan_rom_leaks.py <dir> [--rom ROM] [--corpus FILE ...] [--window 24]
+    python tools/release/scan_rom_leaks.py <dir> [--rom ROM] [--corpus FILE ...] [--window 24] [--binaries]
 
 The corpora are the ROM itself (always; verified) plus any FILE given with --corpus -- the extracted ct_assets.dat (the
 ROM's data decompressed) and the private bakes (src/data/*.h, savestates) are the useful ones, since decompressed
@@ -33,6 +33,8 @@ BINARY_OK_EXT = ('.png', '.gif', '.mp4')         #   the port running (tools/rel
 KNOWN_OK = {                                     # (path, text on the line) that match, and why they are not the game's
     ('snes/dsp.c', 'gaussValues'): "the S-DSP's gaussian interpolation table: the console's hardware (LakeSnes, MIT), not the "
                         "game; a smooth ramp also occurs in the extracted assets",
+    ('src/sound/mixer.c', 'ctMixGauss'): "the same S-DSP interpolation table in the port's own mixer (src/sound/mixer.c, "
+                        "which replaces snes/dsp.c): the console's hardware, not the game",
     ('disasm/notes/battle_hud_names_blink.md', '// Crono'): "the seven default character names in the game's text "
                                                      "encoding (Crono, Marle, ...): names, not the game's content",
     ('tools/regress_checks.json', '"names: f5 loc=000 $2C23='): "a check's expected output: the default names in the game's text encoding",
@@ -88,17 +90,67 @@ def runs_from_text(text):
     return out
 
 
+def is_ramp(win):
+    """A window made of STRUCTURE, not content: read as 1, 2 or 4 interleaved sequences (bytes, little-endian words,
+    longs), each one steps by a constant (00 01 02 .., 00 00 01 00 02 00 .., a run of one value) or holds only zero
+    and powers of two (80 40 20 .. 01: bit masks); or two such byte pieces end to end (a padding run, then an index
+    table: 00 00 .. 00 01 02 03 ..). Identity, index and bit tables: any program and any data may hold them."""
+    def seq_ok(q):
+        d = (q[1] - q[0]) & 0xFF if len(q) > 1 else 0
+        if all(((q[k + 1] - q[k]) & 0xFF) == d for k in range(len(q) - 1)):
+            return True
+        return all(v & (v - 1) == 0 for v in q)
+    if any(all(seq_ok(win[r::st]) for r in range(st)) for st in (1, 2, 4)):
+        return True
+    return any(seq_ok(win[:k]) and seq_ok(win[k:]) for k in range(2, len(win) - 1))
+
+
+def decode_text(data):
+    """The file's text, or None for a binary: a NUL byte, or bytes that are neither UTF-8 nor control-free Latin-1."""
+    if b'\0' in data:
+        return None
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:                      # a Latin-1 comment is still text; control bytes are not
+        t = data.decode('latin-1')
+        return None if any(c < ' ' and c not in '\t\r\n\f' for c in t) else t
+
+
+def content(win):
+    return len(set(win)) >= 8 and not is_ramp(win)
+
+
 def find_leak(data, corpora, w):
     """(corpus name, offset, window start) of the first content window of `data` found in a corpus, else None."""
     step = max(1, w // 2)
     for i in range(0, max(1, len(data) - w + 1), step):
         win = data[i:i + w]
-        if len(win) < w or len(set(win)) < 8:
+        if len(win) < w or not content(win):
             continue
         for name, blob in corpora:
             off = blob.find(win)
             if off >= 0:
                 return name, off, i
+    return None
+
+
+def corpus_index(corpora, w, stride):
+    """Every content window of the corpora at `stride`, for searching large binaries: a run the binary shares with a
+    corpus is found when it is at least w + stride - 1 bytes long."""
+    idx = {}
+    for name, blob in corpora:
+        for o in range(0, len(blob) - w + 1, stride):
+            win = blob[o:o + w]
+            if content(win) and win not in idx:
+                idx[win] = (name, o)
+    return idx
+
+
+def find_leak_indexed(data, idx, w):
+    for i in range(0, len(data) - w + 1):
+        hit = idx.get(data[i:i + w])
+        if hit and content(data[i:i + w]):
+            return hit[0], hit[1], i
     return None
 
 
@@ -108,6 +160,13 @@ def main():
     ap.add_argument('--rom')
     ap.add_argument('--corpus', action='append', default=[])
     ap.add_argument('--window', type=int, default=24)
+    ap.add_argument('--binaries', action='store_true',
+                    help='a release folder: binaries (the executables, the libraries, a bundled runtime) are not '
+                         'findings by themselves; their bytes are searched against an index of the corpora (every '
+                         'shared run of window + 15 bytes or more)')
+    ap.add_argument('--third-party', action='append', default=[], metavar='PREFIX',
+                    help='a path (relative, a file or a folder prefix) that is an upstream runtime shipped as it is -- '
+                         'SDL2.dll, a bundled Python: listed, not searched')
     a = ap.parse_args()
 
     corpora = [('ROM', romlib.load(a.rom))]
@@ -125,34 +184,32 @@ def main():
         else:
             corpora.append((os.path.basename(c), open(c, 'rb').read()))
 
-    leaks = nfiles = nruns = 0
+    idx = corpus_index(corpora, a.window, 16) if a.binaries else None
+    leaks = nfiles = nruns = nthird = 0
     for root, dirs, files in os.walk(a.dir):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for f in files:
             p = os.path.join(root, f)
             rel = os.path.relpath(p, a.dir).replace('\\', '/')
+            if any(rel == t or rel.startswith(t.rstrip('/') + '/') for t in a.third_party):
+                nthird += 1
+                continue
             data = open(p, 'rb').read()
             nfiles += 1
-            text = None
-            if b'\0' not in data:
-                try:
-                    text = data.decode('utf-8')
-                except UnicodeDecodeError:          # a Latin-1 comment is still text; control bytes are not
-                    t = data.decode('latin-1')
-                    if not any(c < ' ' and c not in '\t\r\n\f' for c in t):
-                        text = t
+            text = decode_text(data)
             lines = (text or '').split(chr(10))
             if text is not None:
                 runs = runs_from_text(text)
             else:
-                if not (rel.startswith(BINARY_OK_DIR) and rel.lower().endswith(BINARY_OK_EXT)):
+                if not a.binaries and not (rel.startswith(BINARY_OK_DIR) and rel.lower().endswith(BINARY_OK_EXT)):
                     print('binary: %s  %d bytes (not on the allowlist)' % (rel, len(data)))
                     leaks += 1
                 runs = [(0, data)]
             for line, run in runs:
                 nruns += 1
-                hit = find_leak(run, corpora, a.window)
-                ok = any(rel == kp and line and ks in "".join(lines[max(0, line - 2):line]) for kp, ks in KNOWN_OK)
+                hit = find_leak_indexed(run, idx, a.window) if (idx is not None and text is None) else find_leak(run, corpora, a.window)
+                ok = any((rel == kp or rel.endswith('/' + kp)) and line and ks in "".join(lines[max(0, line - 2):line])
+                         for kp, ks in KNOWN_OK)                 # (a release's kit holds the tree under setup/kit/)
                 if hit and not ok:
                     leaks += 1
                     print('leak: %s:%d  %d-byte run, a window at +%d == %s at 0x%X'
@@ -161,8 +218,9 @@ def main():
     if leaks:
         print('NOT CLEAN: %d finding(s) in %d files' % (leaks, nfiles))
         return 1
-    print('clean: %d files, %d byte runs searched against %d corpora (%.1f MB ROM + %.1f MB more)'
-          % (nfiles, nruns, len(corpora), len(corpora[0][1]) / 2**20, more / 2**20))
+    print('clean: %d files, %d byte runs searched against %d corpora (%.1f MB ROM + %.1f MB more)%s'
+          % (nfiles, nruns, len(corpora), len(corpora[0][1]) / 2**20, more / 2**20,
+             '; %d third-party files not searched (%s)' % (nthird, ', '.join(a.third_party)) if nthird else ''))
     return 0
 
 

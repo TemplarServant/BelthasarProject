@@ -1,0 +1,18 @@
+{
+  "name": "fxr_inn600_prompt",
+  "from": "fxr_inn600_tele",
+  "doc": "Stands in for the state behind saves/field_re/inn_lucca_007.state (the owner's own Belthasar F5 snapshot at the 600 A.D. inn's 'That'll be 10 G. Register? Yes' prompt, Crono and Lucca): from the counter Up to the innkeeper, A, and the prompt waiting -- inn600_yesno's drive cut before its Yes.",
+  "steps": [
+    [
+      "pad",
+      "10:16,0:30,100:2,0:120"
+    ]
+  ],
+  "expect": {
+    "loc": "0x074",
+    "wram": {
+      "0x10000": "0x12",
+      "0x0129": "0x07"
+    }
+  }
+}

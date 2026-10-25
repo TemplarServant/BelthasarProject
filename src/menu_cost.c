@@ -2,11 +2,12 @@
 // off the oracle's beam traces one instruction at a time (tools/cycle_costs.py); the comments name the instructions.
 // The Python twin tools/vwf_cost_proto.py is the same walk and is what tools/menu_init_cmp.py grades against the trace.
 #include "menu_cost.h"
+#include "romview.h"
 
 #include <stddef.h>
 
 static long fo(unsigned a24) { return (long)(((a24 >> 16) & 0xFF) - 0xC0) * 0x10000L + (a24 & 0xFFFF); }
-static int  rb(const uint8_t* rom, long romLen, long o) { return (o >= 0 && o < romLen) ? rom[o] : -1; }
+static int  rb(const uint8_t* rom, long romLen, long o) { return (o >= 0 && o < romLen) ? CtRomByte(rom, 0x400000L, (long)(o)) : -1; }
 
 // ---- C2/5E89: one plane-row (the caller's JSR is not in it) -------------------------------------------------------
 #define ROW_HEAD (28 + 42 + 18 + 20 + 12)                 // 5E89 LDY $60, 5E8B LDA [$76],Y, 5E8D XBA, 5E8E LDA $62, LSR A

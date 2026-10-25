@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-r"""The widescreen (a mod) against the vanilla picture for a translated stage's curtain: the race's opening and closing.
+r"""The widescreen (a mod) against the vanilla picture for a sequence stage's curtain: the race's opening and closing.
 
     python tools/wide_curtain_cmp.py [frame,frame,...]
 
 Runs the attract (--scene 433, lockstep) twice to the race's end -- once at 16:9, once with the widescreen off -- with
-CT_WIDESHOTS every frame from f8155, and for each listed frame reads the lit span on row 112 (the curtain opens and
+CT_WIDESHOTS every frame from f8140, and for each listed frame reads the lit span on row 112 (the curtain opens and
 closes from the left, so the span is [0, edge]). The widescreen's curtain is the vanilla one scaled to the picture: the
 vanilla edge e (0..255) stands at round(e * (w - 1) / 255) of the w-wide picture (snes/ppu.c ppu_winTest's curtain arm,
 the same scaling as field.c wideWipeEdge). Prints one line per frame and a verdict:
@@ -21,15 +21,18 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
-FRAMES = (8164, 8168, 8172, 8176, 8180, 8184, 8500, 8504, 8508, 8512, 8516, 8520)
+FIELD = os.path.abspath('build/Belthasar.exe')
+# (f8167 is the opening's last frame before its edge comes within 16 columns of the screen's -- from there both window
+#  rules, snes/ppu.c's and seq_pic.c's, read the band left as the road's hidden column and light the side: the mod's known
+#  limit; the curtain is the native stage's since 2026-10-18, on the cartridge's frames)
+FRAMES = (8148, 8152, 8156, 8160, 8164, 8167, 8484, 8488, 8492, 8496, 8500, 8504)
 
 
 def run(ini, out):
     os.makedirs(out, exist_ok=True)
     env = dict(os.environ, CT_SETTINGS=ini, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_AUDIO_LOCKSTEP='1', CT_WIDESHOTS=os.path.join(out, 'w'), CT_WIDESHOTS_EVERY='1',
-               CT_WIDESHOTS_FROM='8155', CT_OVERLAY_SHOT='%s@8530:9' % os.path.join(out, 'end.bmp'))
+               CT_WIDESHOTS_FROM='8140', CT_OVERLAY_SHOT='%s@8530:9' % os.path.join(out, 'end.bmp'))
     # (the overlay probe makes the host interactive, the only kind that reads the settings' mods; it ends the run at 8530)
     subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', '433'], env=env, capture_output=True, text=True,
                    errors='replace')

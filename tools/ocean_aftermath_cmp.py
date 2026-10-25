@@ -71,7 +71,7 @@ def main():
                 CT_AUDIO_SEEDSTATE=os.path.join(ROOT, STATE), CT_LOCTRACE='1', CT_TBTRACE='1',
                 CT_FIELD_MEMMON='0100:2,10000:1,2980:9', CT_SHOTS=os.path.join(ROOT, 'build', '_aftermath_%d' % os.getpid()),
                 CT_SHOTS_AT=str(END), CT_SHOTS_EXIT='1')
-    p = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '415',
+    p = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '415',
                         '--loadwram', os.path.join(ROOT, LAKEWRAM), '--walkscript', ws], cwd=ROOT, env=penv,
                        capture_output=True, text=True, errors='replace')
     try:

@@ -6,7 +6,7 @@ in the forest (op 0xFF 90 -> C0/21E1's iris, the window C3/0077 builds), Crono f
 
   * the cartridge: saves/field_re/scene8_gate_warp_f2300.state (the warp's hand-off at its f17, tools/gwarp_cmp.py) run on
     under the rule (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1), PEEK_THUMBS every frame, into loc 071;
-  * the port: field-scene8-gate-warp-flow's drive, CT_SHOTS_THUMBS every frame, `gatewarp: the translated program takes
+  * the port: field-scene8-gate-warp-flow's drive, CT_SHOTS_THUMBS every frame, `gatewarp: the native program takes
     over at f<F>` locating the warp.
 The warp itself lines up at port = cartridge + (F - 18) (tools/gwarp_cmp.py). The ARRIVAL is aligned on its own: the offset
 within two frames of the warp's that makes the most loc-071 frames identical -- the loc's load is where the two can part
@@ -50,7 +50,7 @@ def main():
     env = dict(os.environ, **chk['env']); env.pop('CT_GWTRACE', None)
     env.update(CT_SHOTS_THUMBS=pt, CT_SHOTS_THUMBS_EVERY='1', CT_SHOTS_THUMBS_FROM='3300', CT_SHOTS_THUMBS_TO='9000')
     log = subprocess.run([os.path.abspath(argv[0])] + argv[1:], env=env, capture_output=True, text=True, errors='replace').stdout
-    m = re.search(r'gatewarp: the translated program takes over at f(\d+)', log)
+    m = re.search(r'gatewarp: the native program takes over at f(\d+)', log)
     k = re.search(r'gatewarp: op-0xFF 80 ran (\d+) frames', log)
     if not m or not k:
         print('gate-arrival: FAIL -- the port never ran the warp'); return 1

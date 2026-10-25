@@ -6,13 +6,13 @@ the VRAM + CGRAM the field hands the translated stage, and the stage's PICTURE, 
 
 Both sides are derived live, nothing here is a pinned constant:
 
-  * the cartridge UNDER THE RULE: saves/attract_entry3_handoff_rule_f8859.state is the attract from power-on with the
-    virtual beam and logical frames, 18 frames before `FF 63` (C3:0000 at f18). `ct.exe --peek <state> out --frames 18`
+  * the cartridge UNDER THE RULE: the attract from power-on with the virtual beam and logical frames, 18 frames before
+    `FF 63` (C3:0000 at f18) -- by default this ct.exe's own (stage_rule_cmp.py), with --committed the recipe-made
+    saves/attract_entry3_handoff_f6750.state (tools/fixtures/attract.json: power-on + 8776 under the rule). `ct.exe --peek <state> out --frames 18`
     (with CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1) dumps the PPU's VRAM at the hand-off (out.vram; out.oam = OAM
     then CGRAM) and `--frames 151` the picture 133 stage frames later (out: 512 x 2*lines [pad,B,G,R], line y at image
-    row (y+8)*2 -- ctlib/fb.py's decode). (The real-beam capture saves/attract_entry3_handoff_f6750.state is the older
-    reference: its hand-off is f17 and its opening transition is the beam's, not the rule's.)
-  * the port: the attract from scene 433 with CT_XLAT_HANDOFF_VRAM (the 64 KB image + the 256 CGRAM words the host
+    row (y+8)*2 -- ctlib/fb.py's decode).
+  * the port: the attract from scene 433 with CT_STAGE_HANDOFF_VRAM (the 64 KB image + the 256 CGRAM words the host
     built for the stage: ct_lz_load_tiles, CtFieldSceneVramTilemaps, fieldPalettePages -- field.c) and CT_SHOTS_AT
     on the frame that presents the same stage frame (f8927 today: the hand-off is at f8795 under the suite's
     CT_AUDIO_LOCKSTEP=1 / CT_NOPACE=1 env, which this tool sets -- without the lockstep the audio's post price moves
@@ -37,10 +37,23 @@ import sys
 
 # UNDER THE RULE (CLAUDE.md's exception, the zelda3 model -- sequence_table.md 11.13): the cartridge from POWER-ON with
 # the virtual beam and logical frames (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1), saved 18 frames before its `FF 63`
-# (`PEEK_SAVE=... ct.exe --peek boot out --frames 8859`; --xlatentries on it: C3:0000 f18 with $0386 = E4, the stage's
-# 7E:3000 f35 at v=98 h=350). The port's seed history is the cartridge's call for call (seed_history_cmp.py), so the
-# opening transition C3/02DD draws is graded too: every stage frame from the hand-off's own.
-STATE = 'saves/attract_entry3_handoff_rule_f8859.state'
+# (recipe attract_entry3_handoff, power_on 8776; --xlatentries on it: C3:0000 f18 with $0386 = E4). The port's seed history
+# is the cartridge's call for call (seed_history_cmp.py), so the opening transition C3/02DD draws is graded too: every stage
+# frame from the hand-off's own. (Until 2026-10-22 this was saves/attract_entry3_handoff_rule_f8859.state, saved by hand
+# 2026-09-26 under an earlier rule; the recipe's state is the same moment under today's.)
+STATE = 'saves/attract_entry3_handoff_f6750.state'
+# ...but a recipe's state is the oracle's that made it (a state outlives the oracle that made it: stage_rule_cmp.py's
+# docstring), and the stage's colours follow the palette records the field hands over (sequence_table.md 11.12). So by
+# default the state is THIS oracle's, made from power-on by stage_rule_cmp.py (cached under build/_stagerule by ct.exe's
+# sha1; C3:0000 on its f18 as well); `--committed` reads the file above. The port's picture P is the cartridge's P+2 (THE ALIGNMENT, docs/TESTING.md): the check passes the frames so.
+if '--committed' in sys.argv: sys.argv.remove('--committed')
+else:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    _here = os.getcwd(); os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    import stage_rule_cmp
+    _st = stage_rule_cmp.cartridge_state('entry3', 18, 0x63)[0]
+    os.chdir(_here)
+    if _st: STATE = _st
 RULE = {'CT_ORACLE_VIRTUAL_BEAM': '1', 'CT_ORACLE_LOGICAL': '1'}
 HANDOFF_FRAMES = 18       # C3:0000 runs on this frame of the state (--xlatentries, above)
 PORT_FRAME = int(sys.argv[1]) if len(sys.argv) > 1 else 8896
@@ -57,7 +70,7 @@ def oracle(frames, tag):
     # under one was read under the other (the valve's port against the infinitely fast CPU's cartridge: 110 / 134).
     rule = ''.join(k for k, e in (('h', 'CT_ORACLE_NMION_HOLD'), ('l', 'CT_ORACLE_LINE64'), ('a', 'CT_ORACLE_HOLDAPU'),
                                   ('i', 'CT_ORACLE_IFAST')) if os.environ.get(e, '0' if e == 'CT_ORACLE_HOLDAPU' else '1') not in ('', '0'))
-    out = 'build/_e3orc_rule_%s%s.raw' % (tag, ('_' + rule) if rule else '')
+    out = 'build/_e3orc_rule_%s_%s%s.raw' % (os.path.splitext(os.path.basename(STATE))[0], tag, ('_' + rule) if rule else '')
     if not all(os.path.exists(out + ext) for ext in ('', '.vram', '.oam', '.thumbs')):
         env = dict(os.environ, PEEK_THUMBS=out + '.thumbs', PEEK_THUMBS_EVERY='1', **RULE)
         subprocess.run([os.path.abspath('build/ct.exe'), '--peek', STATE, out, '--frames', str(frames)], env=env,
@@ -88,9 +101,9 @@ def port():
     for p in [vram] + ['%s_f%d.raw' % (shots, f) for f in frames]:
         if os.path.exists(p): os.remove(p)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
-               CT_XLAT_HANDOFF_VRAM=vram, CT_SHOTS=shots, CT_SHOTS_AT=','.join(str(f) for f in frames),
+               CT_STAGE_HANDOFF_VRAM=vram, CT_SHOTS=shots, CT_SHOTS_AT=','.join(str(f) for f in frames),
                CT_SHOTS_EXIT='1')
-    subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
+    subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1200)
     return vram, '%s_f%d.raw' % (shots, PORT_FRAME), {f - (PORT_FRAME - ORC_FRAMES): '%s_f%d.raw' % (shots, f) for f in frames}
 

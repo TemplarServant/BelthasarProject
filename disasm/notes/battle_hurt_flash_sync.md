@@ -149,9 +149,9 @@ MASH=$(python -c "print(','.join(['100:20','0:40']*24))")
 
 ```
 CT_BATTLE_SCRIPT=n:500 CT_BATTLE_ASCTRACE=1 CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  build/ct_field.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
+  build/Belthasar.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
 CT_BATTLE_MASHA=1 CT_BATTLE_ASCTRACE=1 CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  build/ct_field.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
+  build/Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 ```
 
 Forest, Hetake attack `$9877=0x14`, dispatch f293 (rel 0), span 202:
@@ -288,9 +288,9 @@ python tools/dis.py CEA98 0x30 1 0     # the $9888/$993C boot fill
 
 # (e) our engine, both arenas
 CT_BATTLE_SCRIPT=n:500 CT_BATTLE_ASCTRACE=1 CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  build/ct_field.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
+  build/Belthasar.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
 CT_BATTLE_MASHA=1 CT_BATTLE_ASCTRACE=1 CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  build/ct_field.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
+  build/Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 ```
 
 ---
@@ -322,7 +322,7 @@ CT_BATTLE_MASHA=1 CT_BATTLE_ASCTRACE=1 CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy S
 ## Adversarial review (2026-08-22, independent re-run, read-only on `src/`)
 
 Reviewer's default was **"not proven"**. Everything below was re-run from a private snapshot of
-`build/ct.exe` / `build/ct_field.exe`, cwd = repo root. Nothing was taken from the dossier's own tables.
+`build/ct.exe` / `build/Belthasar.exe`, cwd = repo root. Nothing was taken from the dossier's own tables.
 
 **Bottom line.** The **core mechanism is CONFIRMED** — every ROM address holds the claimed instruction,
 every oracle row of §3.1/§3.2 reproduced to the frame, and `$993C` → OAM palette (1-frame lag) is exact.

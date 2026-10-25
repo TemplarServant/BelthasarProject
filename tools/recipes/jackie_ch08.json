@@ -1,0 +1,18 @@
+{
+  "name": "jackie_ch08",
+  "doc": "Jackie's battery save ch08 (the End of Time; tools/third_party_saves.json) loaded the player's way under the rule: power-on 133 frames with the save, Start at +300, the Load list, A on slot 0, then 300 frames: the same WRAM, byte for byte, as the state built by hand on 2026-10-14 (saves/downloaded/ctjackie/states/ch08.state).",
+  "steps": [
+    [
+      "sram_file",
+      "saves/downloaded/ctjackie/srm/ch08.srm"
+    ],
+    [
+      "power_on",
+      133
+    ],
+    [
+      "pad",
+      "0:300,8:2,0:120,100:2,0:300"
+    ]
+  ]
+}

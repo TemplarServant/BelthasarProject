@@ -30,7 +30,7 @@ from ctlib import peekshots  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_chest_close')
 STATE = os.path.join(ROOT, 'saves', 'field_re', 's49_chest_walk.state')
 BASE = os.path.join(ROOT, 'saves', 'field_re', 's19_power_tab.state')

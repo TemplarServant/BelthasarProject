@@ -75,8 +75,17 @@ struct CtXlatStage {
 
 // src/xlat/seq_c3.c is the sequence engine as the attract's `FF 60` (entry 0, the race) and `FF 63` (entry 3)
 // ran it: one program, because both run on the same overlay, NMI, interpreter and library -- only the tasks differ.
+// ct.exe alone builds the translations, as its lockstep tools' references (--xlatcmp, --xlatphase): CT_XLAT_SEQ_C3 the
+// attract's two stages (the playable host runs them natively: seq_race.c, seq_entry3.c, `$0384` bit 6) and, without
+// CT_XLAT_NO_GWARP, the gate warp (the playable host's is src/seq_gwarp.c). Belthasar links no translated program.
 int CtXlatStageHas(uint8_t seqId) {
-  return seqId == 0x60 || seqId == 0x63 || (seqId >= 0x80 && seqId <= 0x8F);   // $80-$8F: the gate warp (C0/3FE4)
+#ifdef CT_XLAT_SEQ_C3
+  if (seqId == 0x60 || seqId == 0x63) return 1;
+#endif
+#ifndef CT_XLAT_NO_GWARP
+  if (seqId >= 0x80 && seqId <= 0x8F) return 1;                     // $80-$8F: the gate warp (C0/3FE4)
+#endif
+  return 0;
 }
 
 // The hook of a hosted run: stop exactly where snes_runFrame stops (snes/snes.c) -- its two loops, checked at the same
@@ -90,7 +99,7 @@ int CtXlatStageHas(uint8_t seqId) {
 // 81, 121, ...), and WHICH frames hit that step moved with any change of the stage's cycles -- FD/E39C's tick of the
 // colour records the field hands over (disasm/notes/sequence_table.md 11.12).
 // CT_XLAT_SEEDTRACE=1: every entry into C3/02DD (the seed, CLAUDE.md's one exception) on the port's translated
-// hardware -- the stage and the field's / the world's calls -- with every input the routine folds into $0386: A and
+// hardware -- the stage (the field's and the world's calls are native: wipe.c prints the same line) -- with every input the routine folds into $0386: A and
 // the carry (ROL A), X (TXA), $0008, $00F0/$00F2/$00F4, the open bus the CMP $2137 compares, and $0351 (the virtual
 // $213C). The cartridge's side is `--cputrace` with CPUTRACE_FROM=C302DD under CT_ORACLE_VIRTUAL_BEAM=1.
 static int seedTraceOn(void) { static int on = -1; if (on < 0) on = getenv("CT_XLAT_SEEDTRACE") ? 1 : 0; return on; }
@@ -102,7 +111,6 @@ static void seedTrace(const CtXlat* x, const char* who) {
           "$00F0=%02X $00F2=%02X $00F4=%02X bus=%02X\n", who, x->snes->frames, x->snes->vPos, x->snes->hPos, c->a, c->x,
           c->c ? 1 : 0, c->dp, c->db, m[0x386], m[0x351], m[0x08], m[0xF0], m[0xF2], m[0xF4], x->snes->openBus);
 }
-static int seedCallHook(CtXlat* x) { seedTrace(x, "call"); return 0; }
 
 static int stageHook(CtXlat* x) {
   if (seedTraceOn()) seedTrace(x, "stage");
@@ -130,7 +138,15 @@ CtXlatStage* CtXlatStageOpen(const uint8_t* rom, long romLen, const uint8_t* wra
   Cpu* c = s->cpu;
   // C0/3FD3..3FE0 and C0/0B4E, as seq_xlat.h lists them.
   int warp = seqId >= 0x80;
+#if defined(CT_XLAT_SEQ_C3) && !defined(CT_XLAT_NO_GWARP)
   st->prog = warp ? CtXlat_gwarp_fd : CtXlat_seq_c3;
+#elif defined(CT_XLAT_SEQ_C3)
+  st->prog = CtXlat_seq_c3;
+#elif !defined(CT_XLAT_NO_GWARP)
+  st->prog = CtXlat_gwarp_fd;
+#else
+  (void)warp; st->prog = NULL;                                       // never opened: CtXlatStageHas says no
+#endif
   c->a = seqId; c->x = 0x06FF; c->y = hostY; c->sp = 0x06FF; c->dp = 0x0100; c->db = 0x00;
   c->k = 0xC3; c->pc = 0x0000;
   c->e = false; c->mf = true; c->xf = false; c->i = true; c->d = false;
@@ -195,94 +211,12 @@ int CtXlatStageFrame(CtXlatStage* st) {
   return st->done;
 }
 
-// ---- a translated routine inside the field's frame (seq_xlat.h: CtXlatWipeCall) -----------------------------------
 static Snes* g_callHw;      // one hardware for every call: the ROM, a PPU whose counters the routine latches, no APU use
-static int g_callQuiet;      // CtXlatWipePeek: a look ahead, not a call the game makes -- kept out of the seed trace
-int CtXlatWipeCall(const uint8_t* rom, long romLen, uint8_t* wram128, int vPos, int hPos) {
-  if (!rom || !wram128) return -1;
-  if (!g_callHw) {
-    g_callHw = snes_init();
-    if (!g_callHw || !snes_loadRom(g_callHw, rom, (int)romLen)) { g_callHw = NULL; return -1; }
-  }
-  Snes* s = g_callHw; Cpu* c = s->cpu;
-  memcpy(s->ram, wram128, 0x20000);
-  // The stack as the field's main loop leaves it at the JSL: C0/00B1 JSR (S 06FF -> 06FD), C0/21EA JSR (-> 06FB),
-  // C0/22FA JSL (-> 06F8, pushing C0 22 FD -- the RTL lands on C0:22FE, the translation's exit).
-  s->ram[0x06FB] = 0xC0; s->ram[0x06FA] = 0x22; s->ram[0x06F9] = 0xFD;
-  c->a = 0x00FF; c->x = 0x0004; c->y = 0x0000; c->sp = 0x06F8; c->dp = 0x0100; c->db = 0x00;
-  c->k = 0xC3; c->pc = 0x000E;
-  c->e = false; c->mf = true; c->xf = false; c->i = false; c->d = false;
-  c->n = false; c->v = false; c->z = false; c->c = false;   // C3/01E4 sets every flag it reads (PHP; CMP before ROL)
-  c->waiting = false; c->stopped = false; c->irqWanted = false; c->nmiWanted = false; c->intWanted = false;
-  c->resetWanted = false;
-  s->vPos = (uint16_t)vPos; s->hPos = (uint16_t)hPos;
-  s->inVblank = vPos >= 225; s->inNmi = false; s->nmiEnabled = false;   // no interrupt inside the routine
-  s->autoJoyRead = false; s->autoJoyTimer = 0;
-  s->fastMem = true; s->openBus = 0xC3;
-  // The counter latch as the field leaves it before every call: C0/5A46 and C0/CA82 read $213F (both toggles cleared)
-  // and then $2137 + $213D twice, once per frame -- so the routine's $213C read is a low byte and its two $213D reads
-  // are low then high, every call.
-  s->ppu->countersLatched = true; s->ppu->hCountSecond = false; s->ppu->vCountSecond = false;   // (--wipedump: latched=1 hSecond=0 vSecond=0 at every call)
-  CtXlat x; memset(&x, 0, sizeof x);
-  x.snes = s; x.cpu = c; x.hook = (seedTraceOn() && !g_callQuiet) ? seedCallHook : NULL; x.user = NULL; x.interp = 0;
-  // The seed's beam reads are the VIRTUAL BEAM (snes.c g_ctVirtualBeam, CLAUDE.md's one exception): the field's and the
-  // world's calls of C3/02DD have no beam this port could know -- the same virtual values as the oracle's.
-  int vbWas = g_ctVirtualBeam; g_ctVirtualBeam = 1;
-  int r = CtXlat_wipe_c3(&x);
-  g_ctVirtualBeam = vbWas;
-  if (r != CT_XLAT_EXIT) return r ? r : -2;
-  memcpy(wram128, s->ram, 0x20000);
-  return 0;
-}
-
-// The same call on an image the caller throws away (field.c fieldWipeMask: the table the NEXT C0/22D8 call writes, which
-// channel 7 reads live): not one of the game's calls, so it stays out of the CT_XLAT_SEEDTRACE history.
-int CtXlatWipePeek(const uint8_t* rom, long romLen, uint8_t* wram128, int vPos, int hPos) {
-  g_callQuiet = 1; int r = CtXlatWipeCall(rom, romLen, wram128, vPos, hPos); g_callQuiet = 0;
-  return r;
-}
-
-// ---- the overworld's window object (seq_xlat.h: CtXlatOwWindowCall) ----------------------------------------------------
-int CtXlatOwWindowCall(const uint8_t* rom, long romLen, uint8_t* wram128, uint32_t target, int vPos, int hPos, int hSecond, int ppu2Bus) {
-  if (!rom || !wram128 || (target != 0xC6E241 && target != 0xC6E27E)) return -1;
-  if (!g_callHw) {
-    g_callHw = snes_init();
-    if (!g_callHw || !snes_loadRom(g_callHw, rom, (int)romLen)) { g_callHw = NULL; return -1; }
-  }
-  Snes* s = g_callHw; Cpu* c = s->cpu;
-  memcpy(s->ram, wram128, 0x20000);
-  // C2/182C JSL C2/1836 pushes C2 18 2F (S 06EA -> 06E7); the target's RTL lands on C2:182F + 1 = C2:1830, the exit.
-  s->ram[0x06EA] = 0xC2; s->ram[0x06E9] = 0x18; s->ram[0x06E8] = 0x2F;
-  c->a = (uint16_t)((target & 0xFF00) | (target >> 16));   // C2/181F's 16-bit target word, then its bank in the low byte
-  c->x = 0x009C; c->y = 0x0003; c->sp = 0x06E7; c->dp = 0x0000; c->db = 0x00;   // X = op 4E << 1, Y = LDY #0003
-  c->k = (uint8_t)(target >> 16); c->pc = (uint16_t)target;
-  c->e = false; c->mf = true; c->xf = false; c->i = true; c->d = false;
-  c->n = ((target >> 16) & 0x80) != 0; c->z = ((target >> 16) & 0xFF) == 0;   // C2/1828 `LDA [$58],Y` of the bank byte: N/Z
-  c->v = false; c->c = false;
-  c->waiting = false; c->stopped = false; c->irqWanted = false; c->nmiWanted = false; c->intWanted = false;
-  c->resetWanted = false;
-  s->vPos = (uint16_t)vPos; s->hPos = (uint16_t)hPos;
-  s->inVblank = vPos >= 225; s->inNmi = false; s->nmiEnabled = false;
-  s->autoJoyRead = false; s->autoJoyTimer = 0;
-  s->fastMem = true; s->openBus = 0xC6;
-  // THE LATCH TOGGLES ARE THE OVERWORLD'S OWN HISTORY: nothing in the world engine reads $213C/$213D/$213F (--cputrace of the
-  // 1F5 leg: the only readers are C3/02DD's), so the $213C toggle C3/02DD flips is still flipped at the next call -- measured
-  // (--calldump C6E27E k=1..5): hSecond 0,1,0,1,0, vSecond always 0 (two $213D reads a call). The install ($C6:E241) is
-  // the first call after the world's load (latched=1, both clear); the per-frame calls keep what the last call left.
-  s->ppu->countersLatched = true; s->ppu->vCountSecond = false;
-  if (hSecond >= 0) s->ppu->hCountSecond = hSecond != 0;
-  if (ppu2Bus >= 0) s->ppu->ppu2openBus = (uint8_t)ppu2Bus;
-  CtXlat x; memset(&x, 0, sizeof x);
-  x.snes = s; x.cpu = c; x.hook = seedTraceOn() ? seedCallHook : NULL; x.user = NULL; x.interp = 0;
-  int vbWas = g_ctVirtualBeam; g_ctVirtualBeam = 1;              // the virtual beam, as CtXlatWipeCall
-  int r = CtXlat_owwin_c6(&x);
-  g_ctVirtualBeam = vbWas;
-  if (r != CT_XLAT_EXIT) return r ? r : -2;
-  memcpy(wram128, s->ram, 0x20000);
-  return 0;
-}
 
 // ---- the field's HDMA table builder FD/C2C1 (seq_xlat.h: CtXlatHdmaBuild) ---------------------------------------------
+// The translation, kept in ct.exe only (CT_XLAT_HDMA_REF) as the reference --hdmafuzz grades the native builder against
+// (src/hdma_table.c, the one every caller runs). Belthasar does not link it.
+#ifdef CT_XLAT_HDMA_REF
 int CtXlatHdmaBuild(const uint8_t* rom, long romLen, uint8_t* wram128) {
   if (!rom || !wram128) return -1;
   if (!g_callHw) {
@@ -314,6 +248,7 @@ int CtXlatHdmaBuild(const uint8_t* rom, long romLen, uint8_t* wram128) {
   memcpy(wram128, s->ram, 0x0600); memcpy(wram128 + 0x0700, s->ram + 0x0700, 0x20000 - 0x0700);
   return 0;
 }
+#endif
 
 Snes* CtXlatStageHardware(CtXlatStage* st) { return st ? st->hw : NULL; }
 void CtXlatStageSetRule(CtXlatStage* st, int on) { if (st) { st->rule = on; if (on) snes_logicalFresh(); } }

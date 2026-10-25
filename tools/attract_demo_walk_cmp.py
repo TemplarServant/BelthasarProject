@@ -12,7 +12,9 @@ committed the right Vamp's idle window and published pose 00 over the tech's clo
 teardown (src/battle.c battleIterFrameA, h->demoPass).
 
 Port: the interactive attract (--scene 433, CT_AUDIO_LOCKSTEP=1) with CT_BATTLE_WALKTRACE, one `idlewalk` line per
-dispatch; cartridge: `ct.exe --hookpc C12DA4` (after `LDA $A4`: A = the group) from saves/attract_cena_inicial.state.
+dispatch; cartridge: `ct.exe --hookpc C12DA4` (after `LDA $A4`: A = the group) under the rule (CT_ORACLE_LOGICAL /
+VIRTUAL_BEAM) from saves/attract_cena_inicial_rule.state (the attract from power-on + 2159, made by a recipe --
+tools/fixtures/attract_rule.json; until 2026-10-22 the owner's real-time capture saves/attract_cena_inicial.state).
 The dispatches are counted per demo battle, in order.
 """
 import os
@@ -20,9 +22,9 @@ import re
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
+STATE = 'saves/attract_cena_inicial_rule.state'
 
 
 def main():
@@ -41,7 +43,7 @@ def main():
         if m and cur is not None:
             cur[1].append((int(m.group(1)), int(m.group(2))))
     cr = subprocess.run([CT, '--hookpc', 'C12DA4', '--from', STATE, '--frames', '7700'], capture_output=True, text=True,
-                        errors='replace')
+                        env=dict(os.environ, CT_ORACLE_LOGICAL='1', CT_ORACLE_VIRTUAL_BEAM='1'), errors='replace')
     visits = []
     for l in (cr.stdout + cr.stderr).splitlines():
         m = re.match(r'\s+f(\d+)\s+visits=(\d+)\s.*A/X/Y: (\S+)', l)

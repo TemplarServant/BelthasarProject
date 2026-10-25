@@ -1,0 +1,30 @@
+{
+  "name": "fxr_magus_scene",
+  "from": "fxr_pt_23_organ",
+  "doc": "Stands in for saves/field_re/magus_scene_lake.state (the owner's snes9x snapshot in the Magus cult's room of the sanctum, loc 0CB, spliced onto a teleport): the way the owner came, as its previous-location bytes say ($0105 = 0C8, exit (47,9)) -- from the playthrough's leg 23 end in the sanctum's hall (loc 082, Crono, Lucca, Frog, storyline 15) a BFS route (tools/playthrough.py route_walk; a fight on the way played by its pilot) to the hall's door (53,12) into 0C8, across 0C8 to its exit (47,9) into 0CB; up the room (the cultists' box opens by itself at the entrance and talks on; A every 30 frames closes it, twice) to row 15, then Left 3 and Down 42: the party at the capture's places, Crono at (3750,11DF) with Lucca and Frog above him, no box open; 50 frames on, so the cultists' next box comes as on the capture (walking down from here it opens at f15 and waits from f86, the capture's f86). Its RNG cursor is not the capture's ($26 = 5C, the capture's 24), so the cult's fight runs another ATB order: battle-xstrike-death-fade-waits-for-the-effect's drive is re-anchored on it (one more Down to X-Strike).",
+  "steps": [
+    [
+      "pad",
+      "0:1,40:16,10:128,40:8,10:48,80:16,10:112,40:32,10:32,80:16,10:80,0:236,100:2,0:16,100:2,0:154,100:2,0:16,100:2,0:194,100:2,0:16,100:2,0:202,100:2,0:16,100:2,0:214,100:2,0:16,100:2,0:294,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:1130,40:32,10:112,40:112,10:32,80:16,10:112,80:32,10:16,80:80,10:32,0:20,10:48"
+    ],
+    [
+      "pad",
+      "0:60,80:80,10:48,80:80"
+    ],
+    [
+      "pad",
+      "0:60,10:124,0:6,(100:2,0:28)*11,0:2,40:3,20:42,0:50"
+    ]
+  ],
+  "expect": {
+    "loc": "0x0CB",
+    "wram": {
+      "0x10000": "0x15",
+      "0x0129": "0x00",
+      "0x1802": "0x50",
+      "0x1803": "0x37",
+      "0x1882": "0xDF",
+      "0x1883": "0x11"
+    }
+  }
+}

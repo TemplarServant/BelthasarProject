@@ -20,6 +20,8 @@ void CtSha1Hex(const uint8_t* data, long n, char out[41]);
 // source). Exits with a message when no supported ROM is found: nothing runs without the user's dump.
 const uint8_t* CtRomImage(long* len);
 void CtRomSetPath(const char* path);
+// The image CtRomImage hands out from now on, in place of a dump it would look for (the ROM-free runtime's empty one).
+void CtRomSetImage(const uint8_t* img, long len);
 
 // CT_ROM_MEMPATCH="OFF=HEX,OFF|=HH,...": a measuring tool's instrumentation (tools/battle_status_cmp.py), applied IN
 // MEMORY to an image that has already passed CtRomVerify -- the file on disk is always the user's verified dump.

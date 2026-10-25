@@ -16,7 +16,7 @@ stayed black for good). Back in loc 00C the PCs' fn0s pick their beds from their
              7F0166=0C,7F0168=38,7F016A=08,7F016C=01" (the keeper's five stores) `--teleport 271 8 8 1 --frames 40` (his
              E0's destination), CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1. At f40 loc 10F's obj0 is in its count.
   cartridge: build/ct.exe --monitor from the .state, the rule
-  port:      build/ct_field.exe --scene 271 --loadwram the .lakewram (CT_FIELD_MEMMON)
+  port:      build/Belthasar.exe --scene 271 --loadwram the .lakewram (CT_FIELD_MEMMON)
 
 Printed:
     inn-sleep: back to loc <L> tile (<x>,<y>) facing <f> at cartridge f<a> / port f<b>
@@ -32,7 +32,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 STATE = os.path.join(ROOT, 'saves', 'field_re', 'inn_sleep_10f.state')
 SEED = os.path.join(ROOT, 'saves', 'field_re', 'inn_sleep_10f.lakewram')
 REGIONS = [('0100', 2), ('0102', 3), ('1802', 4), ('1882', 4), ('1602', 1), ('1604', 1)]

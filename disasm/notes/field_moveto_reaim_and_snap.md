@@ -239,7 +239,7 @@ ADJACENT on both axes — a wrap-exact 8-bit compare on the tile bytes `$1801`/`
    IP and carry. The live VM was the outlier, not the reference.
 3. **The port, before and after.** Location 44 (script 425) obj3 fn1 is `89 40 / 94 04 / AC 28 / ...` with
    no storyline or party gate in front of it, and its target obj2 is itself script-driven (op 0x9C), so
-   `ct_field --scene 44 --talk 3` chases a MOVING actor. With the exact-tile rule obj3 finished the op at
+   `Belthasar --scene 44 --talk 3` chases a MOVING actor. With the exact-tile rule obj3 finished the op at
    **f288 standing on tile (5,9) — obj2's own tile**; with the ROM's rule it stops at **f264 on tile (6,8)**
    against obj2's (5,9). A tile too far and 24 frames late, and it applies to all **117** op-0x94 sites in
    the shipped scenes (30 locations; `assets/script.py` walk of every object's every slot).

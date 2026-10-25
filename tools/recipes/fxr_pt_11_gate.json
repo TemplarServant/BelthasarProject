@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_11_gate",
+  "from": "fxr_pt_10_demo",
+  "doc": "The playthrough's leg 11_gate (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Marle (obj14 at the bottom of tile (7,11), talked to from right above): she steps on the pod, the pendant,",
+  "steps": [
+    [
+      "pad",
+      "80:80,20:46,0:10,(100:2,0:40)*130"
+    ]
+  ]
+}

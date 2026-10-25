@@ -29,7 +29,7 @@ its 534 -- the rest of it the last sample held, an audible gap (the user, 2026-1
 the music"; it was a translated stage's exit frame whose remaining SPC time nobody ran -- audio.c CtAudioStageExitFrame).
 
 What was wrong (1.8 s behind the picture by the end): the race's logical-frame holds ran the APU (snes.c
-g_ctLogicalHoldApu -- the zelda3 model runs one SPC frame per displayed frame, ct_field turns it off), the field's
+g_ctLogicalHoldApu -- the zelda3 model runs one SPC frame per displayed frame, Belthasar turns it off), the field's
 mailbox kept posting through a translated stage (field.c), a stage's partial last frame stayed queued (audio.c's short
 read), and the host paths that give the SPC time no displayed frame stands for (an unclocked handshake at a location
 load, a clocked session's last opcode: ~100-250 samples a load) piled up. Those last ones are NOT debited from the SPC
@@ -56,7 +56,7 @@ def main():
     os.chdir(root)
     env = dict(os.environ, CT_AUDIO_FIFOTRACE='1', CT_AUDIO_LOCKSTEP='1', CT_SHOTS=os.path.join('build', '_audlat'),
                CT_SHOTS_AT=str(END), CT_SHOTS_EXIT='1', SDL_AUDIODRIVER='dummy')
-    r = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
+    r = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '433'],
                        env=env, capture_output=True, text=True, errors='replace')
     q, lost, short = {}, 0, []
     for l in (r.stdout + r.stderr).splitlines():

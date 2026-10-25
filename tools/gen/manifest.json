@@ -3,6 +3,42 @@
   "generators": [
     {
       "out": [
+        "saves/snd_timing.bin"
+      ],
+      "cmd": [
+        "tools/gen/snd_timing.py"
+      ],
+      "stage": "assets",
+      "status": "power-on",
+      "compare": "ct_assets.dat",
+      "compare_doc": "T_SND_TIMING (35): the sound machine's cost table, ct.exe --sndtiming from the ROM's block 0 and the boot ROM (src/sound/timing_build.c); `ct.exe --sndassets ct_assets.dat` checks the packed table against a fresh one and block 0's data byte for byte."
+    },
+    {
+      "out": [
+        "saves/anim_oplen.bin"
+      ],
+      "cmd": [
+        "tools/gen/anim_oplen.py"
+      ],
+      "stage": "assets",
+      "status": "rom",
+      "compare": "ct_assets.dat",
+      "compare_doc": "The battle anim interpreter's opcode lengths (ct.exe --animoplen, src/battle.c battleAnimOpLen over C1/7A6B's handlers): not packed, it sizes the anim scripts' closure (assets/rom_closure_battle.py), so ct_assets.dat proves it."
+    },
+    {
+      "out": [
+        "saves/lz_pack.bin"
+      ],
+      "cmd": [
+        "tools/gen/lz_pack.py"
+      ],
+      "stage": "assets",
+      "status": "rom",
+      "compare": "ct_assets.dat",
+      "compare_doc": "T_LZ (36): the LZ streams the ROM's own pointer tables name, decompressed by src/lz.c with both of C3/0557's costs (ct.exe --lzpack); `ct.exe --lzassets ct_assets.dat` checks each against the ROM's stream."
+    },
+    {
+      "out": [
         "src/data/battle_trig.h"
       ],
       "cmd": [

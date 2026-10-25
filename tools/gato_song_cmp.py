@@ -24,7 +24,7 @@ from ctlib import peekshots  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_gato_song')
 STATE = os.path.join(ROOT, 'saves', 'battle_re', 'gato_wait.state')
 RULE = dict(os.environ, CT_ORACLE_LOGICAL='1')

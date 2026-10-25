@@ -78,7 +78,7 @@ facings identical, dwell 10** (`ct_assets.dat` CT_ASSET_SPRITEANIM id 0) — mat
 ## 5. What the port was missing
 
 `CtPlayerAnimSelect` (src/move.c) has carried the whole of `C0/9E84` — including this arm — since it
-was ported, and `--sweepanim` grades it. But `ct_field`'s **free-roam** player never calls it: field.c
+was ported, and `--sweepanim` grades it. But `Belthasar`'s **free-roam** player never calls it: field.c
 picks the lead's anim with its own selector, which had walk / run / head-shake / idle-blink and **no
 `$1D34` arm at all**, so the ROM byte was computed by the collision commit and then ignored.
 

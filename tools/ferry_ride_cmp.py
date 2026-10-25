@@ -11,7 +11,7 @@ scanner ($3264), no name banner ($5628).
 
   cartridge: build/ct.exe --peek from the pay prompt (saves/ferry_re/truce_pay_prompt.state, porre_pay_prompt.state:
              the rule, CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1), A to pay (Porre: and A to close its "Here you go")
-  port:      build/ct_field.exe --loadwram from the office before the talk (office_at_clerk / porre_office_at_counter
+  port:      build/Belthasar.exe --loadwram from the office before the talk (office_at_clerk / porre_office_at_counter
              .lakewram), --talk + --choose/--select (Truce) or a --walkscript (Porre)
 
 Both write a 128x112 thumbnail every frame. The two sides are aligned on the frame each one first shows the destination
@@ -36,7 +36,7 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_ferry')
 REC = 6 + 128 * 112 * 3
 

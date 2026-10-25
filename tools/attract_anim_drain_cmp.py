@@ -13,7 +13,9 @@ pass, the objects past the fourth arena slot were popped with CLC and lost their
 the zelda3 model's virtual beam (src/ct_vbeam.h) and stops at the ROM's own line $6B.
 
 One interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) is watched with CT_FIELD_MEMMON and shoots the legs'
-frames; the cartridge (saves/attract_cena_inicial.state) is watched with `ct.exe --monitor` and peeked at the pairs.
+frames; the cartridge under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from saves/attract_cena_inicial_rule.state: the attract
+from power-on + 2159, made by a recipe -- tools/fixtures/attract_rule.json; until 2026-10-22 the owner's real-time capture
+saves/attract_cena_inicial.state) is watched with `ct.exe --monitor` and peeked at the pairs.
 
 * 0A5, the bats obj15-22 from their take-off ($1680 = 02) to anim 3: per bat, the poses it flies through and its longest
   hold of one pose, both counted from the bat's first flap. The cartridge's real beam gives another schedule than the
@@ -21,7 +23,7 @@ frames; the cartridge (saves/attract_cena_inicial.state) is watched with `ct.exe
   poses and none holds a pose longer than the cartridge's longest hold (before: obj19-22 flew ~455 frames in the
   hanging pose 07 and never flapped).
 * 087, Zombor's legs obj12 from the torso's first pose 02 to the battle: the sequence of committed leg poses on both
-  sides, and the legs' box (64,60)-(152,130) at five pairs (port = cartridge + 2012).
+  sides, and the legs' box (64,60)-(152,130) at five pairs (port = cartridge + 2066 under the rule, before the shift).
 """
 import os
 import re
@@ -30,14 +32,15 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
+STATE = 'saves/attract_cena_inicial_rule.state'
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 BATS = range(15, 23)
-LEG_PAIRS = [(7254, 9266), (7270, 9282), (7294, 9306), (7310, 9322), (7326, 9338)]
+LEG_PAIRS = [(7122, 9266), (7138, 9282), (7162, 9306), (7178, 9322), (7194, 9338)]   # (cartridge, port before the shift)
 LEG_BOX = (64, 60, 152, 130)
 PORT_END = 9351
-CART_END = 7340
+CART_END = 7208
 
 
 def parse(lines, rx):
@@ -135,12 +138,12 @@ def main():
 
     def cart_mon():
         return subprocess.run([CT, '--monitor', '7E0F16:4,7E0F1E:16,7E169E:16,7E0100:2', '--from', STATE,
-                               '--frames', str(CART_END)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                               '--frames', str(CART_END)], env=dict(os.environ, **RULE), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                               text=True).stdout
 
     def cart_peek(c):
         subprocess.run([CT, '--peek', STATE, os.path.join(tmp, 'o%d.raw' % c), '--frames', str(c)],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                       env=dict(os.environ, **RULE), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     for c, p in LEG_PAIRS:
         for f in (os.path.join(tmp, 'o%d.raw' % c), '%s_f%d.raw' % (pre, p)):
@@ -173,7 +176,7 @@ def main():
           % (ok, worst))
 
     # ---- 087, Zombor's legs
-    c0, cseq = legs(ctl, 7000, CART_END)
+    c0, cseq = legs(ctl, 6900, CART_END)
     p0, pseq = legs(ptl, 9000, PORT_END)
     print('anim-drain: 087 legs from the torso\'s pose 02: cart c%d %s | port p%d %s' %
           (c0, ' '.join('%02X' % v for v in cseq), p0, ' '.join('%02X' % v for v in pseq)))

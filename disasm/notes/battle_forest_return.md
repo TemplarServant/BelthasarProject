@@ -64,7 +64,7 @@ reaching the left bound) and Y→0x44 by the **op-0xE7 SEEK**. op-0xE7's TARGET 
 `forest_pre.raw.wram` is post-E7, so I built a **pre-E7 seed**: `ct_probe --peek forest_holdleft_pre.state
 pre_e7 --btnscript "40:24,0:16"` → `pre_e7.raw.wram` at oracle-f40 (`$1D0A=01 $1D0E=3C $1D02=00 $1D03=00
 $0117=00` — before the E7). Wrapped (`HEADER\nRAM:131072:`+raw) and driven:
-`ct_field --scene 19 --loadwram pre_e7_wrapped.lakewram --walkscript "l:130"`, dump at our f60:
+`Belthasar --scene 19 --loadwram pre_e7_wrapped.lakewram --walkscript "l:130"`, dump at our f60:
 ```
 $1D02=00 $1D03=44   ; op-0xE7 RAN (it wrote the target)
 $1D0A=00 $1D0E=44   ; ARENA ORIGIN correct (identical to the oracle D8-moment)

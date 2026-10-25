@@ -1,0 +1,16 @@
+{
+  "name": "fxr_power_on",
+  "doc": "The cartridge one frame after power-on: WRAM's story-flag page $7F:0000-01FF is still all zero, the blank page the suite's synthetic flag pages (tools/fixtures/rest.json: a few bits poked, as each page's check was built) start from.",
+  "steps": [
+    [
+      "power_on",
+      1
+    ]
+  ],
+  "expect": {
+    "wram": {
+      "0x10000": "0x00",
+      "0x101DF": "0x00"
+    }
+  }
+}

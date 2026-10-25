@@ -1,0 +1,18 @@
+{
+  "name": "lg_epoch_eot",
+  "from": "lg_jackie_ch27",
+  "doc": "Jackie's ch27 (loc 1DA, Lavos's outer shell) out by the Epoch: left 90 frames to it (obj12 at tile (5,60)), A -- its fn1 clears glb[170] bit 4 (57 -> 47), sets glb[171] bit 7 and $02AF = 01D9, and CHANGELOC 1D0: the End of Time, storyline D6, the Epoch parked at 1D9. Its story bytes are the owner's Epoch capture's (saves/epoch_re/epoch_user, 1000 A.D.) but for two flags ($7F00AB bit 7, $7F00CD).",
+  "steps": [
+    [
+      "pad",
+      "0:20,40:90,100:2,0:1400"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1D0",
+    "wram": {
+      "0x10000": "0xD6",
+      "0x100AA": "0x47"
+    }
+  }
+}

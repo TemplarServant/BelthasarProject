@@ -4,7 +4,7 @@ Session 2026-07-24. User report: scene 120, after Lucca's "She's Princess Nadia!
 dialogue loops back to "Crono!" (str85) forever. Root cause: our op-0xE0 model (defer-commit-to-
 RETURN on cell $7E0017) was derived from a single instance (scene-0 naming) and is NOT the ROM
 mechanism. Fixed in ct_vm.c; validated by the full suite (126/0/3 pre-existing + new check) and a
-live end-to-end ct_field run of the whole 120→108→120 cutscene chain.
+live end-to-end Belthasar run of the whole 120→108→120 cutscene chain.
 
 ## 1. The ROM handler — C0/3AB7 (event ops run with D=$0100: DP $xx = WRAM $01xx)
 
@@ -117,7 +117,7 @@ ct.exe --teleport 120 37 16 1 --from s120_pre.state --out s120_at.state       # 
 python  patch_state.py s120_at.state s120_go.state 10214=0B                   # fake "player at Y=11"
 ct.exe --monitor "11A2:2,0117:1,0119:1,0100:2" --from s120_go.state --input "100:4,0:16,..." --diff
 # ours, end-to-end (walk to Y=11, mash A through the whole chain):
-build/ct_field.exe --assets ct_assets.dat --scene 120 --loadwram s120_go.lakewram --selftest \
+build/Belthasar.exe --assets ct_assets.dat --scene 120 --loadwram s120_go.lakewram --selftest \
   --walkscript "u:95,a:2,i:14,..." --frames 4000       # prints changeloc 120->108, 108->120,
                                                        # storyline 16->18, explore back to 1
 # pinned check: python tools/regress.py --only field-scene120-lucca-e0-fadechange
@@ -129,7 +129,7 @@ build/ct_field.exe --assets ct_assets.dat --scene 120 --loadwram s120_go.lakewra
   ANIMEREPEAT(33 x2) completion timing** (ours still on the B7 at prio4; oracle already RETURNed
   to its B0 park) — a pre-existing anim-playback-rate residual (same with VMDIFF_ANIM=1), NOT the
   E0 mechanism (pre-fix the same window diverged at the replay itself). It shifts our E0 fire
-  frame vs the oracle in this scene; the ct_field end-to-end chain is otherwise correct.
+  frame vs the oracle in this scene; the Belthasar end-to-end chain is otherwise correct.
 
 - The exact ROM routine that (a) block-clears/writes the loc-var page on load and (b) whether any
   loader writes loc[9]/[10] directly (my teleport-time (37,16) reading is fully explained by

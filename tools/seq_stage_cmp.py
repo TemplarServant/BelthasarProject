@@ -27,7 +27,7 @@ from ctlib import fb as FB
 
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 
 # A boot frame that lands somewhere inside each page of entry 1. Only a SEED for the probe -- the
 # real alignment comes out of $7E:0008 below, so these only have to be inside the right page.

@@ -9,17 +9,24 @@ F = 357366 - 262 * 40            # one frame's non-refresh master cycles
 
 
 def load(path):
-    """[(pc, opcode, flags, line, h, cycles)] with `line` linear (v unwrapped across frames)."""
-    out, wraps, lastv = [], 0, None
+    """[(pc, opcode, flags, line, h, cycles)] with `line` linear (v unwrapped across frames). One instruction can carry
+    the beam past a whole frame (a DMA longer than 262 lines: the world loader's C2/26D3, 540076 cycles), so v going down
+    is not the only wrap: the stamp says how many lines the step can have crossed (1364 a line), and every further frame
+    that fits is one more wrap -- without it the step's refreshes read a frame short (264 x 40 cycles too many)."""
+    out, wraps, last = [], 0, None
     for line in open(path):
         m = RX.match(line)
         if not m:
             continue
-        v = int(m.group(4))
-        if lastv is not None and v < lastv:
-            wraps += 1
-        lastv = v
-        out.append((m.group(1), m.group(2), m.group(3), wraps * 262 + v, int(m.group(5)), int(m.group(6))))
+        v, c = int(m.group(4)), int(m.group(6))
+        if last is not None:
+            if v < last[0]:
+                wraps += 1
+            while (wraps + 1) * 262 + v - last[1] <= (c - last[2]) // 1364:
+                wraps += 1
+        lin = wraps * 262 + v
+        last = (v, lin, c)
+        out.append((m.group(1), m.group(2), m.group(3), lin, int(m.group(5)), c))
     return out
 
 

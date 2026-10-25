@@ -11,7 +11,7 @@ For each scenario, both sides run live:
   cartridge  build/ct.exe --lifetrace (opcode-stepped) with --pcwatch on the call site, C0/595C, the dispatch
              C0/5977 (X = op*2, Y = the live IP) and C0/597C (the terminator), and --wwatch on the mailbox
              $1E00-$1E03, obj0's $1180/$1C00 and the object count $7F:2000 (live IP = body + count*32)
-  port       build/ct_field.exe with CT_SLOT1TRACE=1 (`slot1: <site> ops OP@ADDR ... end@ADDR obj0 ...`) and
+  port       build/Belthasar.exe with CT_SLOT1TRACE=1 (`slot1: <site> ops OP@ADDR ... end@ADDR obj0 ...`) and
              CT_SNDTRACE=1 (every JSL $C7:0004, field-side and VM-side, in order on stderr)
 Graded, per scenario:
   trail    the ops the runner dispatched, in order, and where it stopped -- identical
@@ -25,13 +25,14 @@ import re
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 
 MASH = ','.join(['100:20,0:40'] * 45)
 SCENARIOS = [
     dict(label='0AD battle', site='C0/0330',
-         oracle=['--from', 'saves/attract_loc0AD_flea.state', '--frames', '330'],
+         oracle=['--from', 'saves/attract_loc0AD_flea_rule.state', '--frames', '650'],   # recipe-made, under the rule (2026-10-22)
+         oenv=dict(CT_ORACLE_LOGICAL='1', CT_ORACLE_VIRTUAL_BEAM='1'),
          port=['--assets', 'ct_assets.dat', '--scene', '433'],
          penv=dict(CT_AUDIO_FORCE='1', CT_AUDIO_PROBE='4420'), mailbox=True),   # 4382 until 2026-09-16: the return now holds the VM (battle-return)
     dict(label='082 battle', site='C0/0330',
@@ -52,7 +53,8 @@ def run_oracle(sc):
     args = [CT, '--lifetrace'] + sc['oracle'] + [
         '--wwatch', '7E1E00:4,7E1180:2,7E1C00:1,7F2000:1',
         '--pcwatch', '%s,C0/595C,C0/5977,C0/597C' % sc['site']]
-    r = subprocess.run(args, capture_output=True, text=True, errors='replace', timeout=900)
+    r = subprocess.run(args, env=dict(os.environ, **sc.get('oenv', {})), capture_output=True, text=True, errors='replace',
+                       timeout=900)
     return r.stdout
 
 

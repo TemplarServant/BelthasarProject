@@ -60,7 +60,7 @@ sweepops: 210 field-script opcodes ... 12600/12600 byte-exact ... (0 mismatch, 0
 
 `ct_vm.c`'s `step()` then gained a four-line arm for the seven opcodes that had none. The ROM image
 comes from the live VM's existing `gRomImg`/`gRomImgLen` (`CtSceneSetRomImage`, set by both
-`ct_field` and `ct.exe`); a NULL image is not special-cased here because every ROM read inside the
+`Belthasar` and `ct.exe`); a NULL image is not special-cased here because every ROM read inside the
 gate is already bounds-checked against `romLen` in move.c.
 
 **0xD2/0xD3/0xD4 were deliberately NOT migrated.** They have real arms in `ct_vm.c`, hand-derived
@@ -109,7 +109,7 @@ int disp = r[0x12001 + spill];
 Correct for `CtFieldRunnerOne`, which passes `script = r + 0x12001` so the two are the same pointer.
 **Wrong for `ct_vm.c`**, whose script is host memory and whose `addr` is body-relative — the read
 lands `header` bytes away (scene 2's header is 0x280, scene 21's 0x460) in a region a live
-`ct_field` run never fills. `CtVmItemFamily`, written by hand rather than extracted, does not have
+`Belthasar` run never fills. `CtVmItemFamily`, written by hand rather than extracted, does not have
 this defect: it reads `script[…]` throughout.
 
 **Neither existing grade could see it.**

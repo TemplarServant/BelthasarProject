@@ -495,7 +495,7 @@ Reuse the existing `CT_MENUSFX` / `CT_MENUSFX_COUNT` hooks (`src/field.c:1613-16
 `src/field.c:9822-9823`); the count printf's wording is ATB-specific ("row change(s)") and should be
 generalized to "event(s)" or given a naming-side counter.
 
-All run `build/ct_field.exe --assets ct_assets.dat --newgame --selftest --frames N --play "…"` with
+All run `build/Belthasar.exe --assets ct_assets.dat --newgame --selftest --frames N --play "…"` with
 `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy CT_AUDIO_FORCE=1 CT_MENUSFX=1 CT_MENUSFX_COUNT=1
 TB_AUTOADV=1` and **`CT_NAMEAS` UNSET** (setting it auto-confirms the screen and the check silently
 grades nothing — the trap `field-newgame-pan`'s notes already warn about).

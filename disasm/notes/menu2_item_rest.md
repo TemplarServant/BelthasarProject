@@ -658,7 +658,7 @@ description box reading **"Restores 50 HP"**.
 ```
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy CT_ITEMDEMO=1 \
   CT_MENUSHOT=scratchpad/menu/eng_list.raw CT_MENUSHOT_AT=40 \
-  build/ct_field.exe --assets ct_assets.dat --scene 8 --selftest scratchpad/menu/_x.raw \
+  build/Belthasar.exe --assets ct_assets.dat --scene 8 --selftest scratchpad/menu/_x.raw \
   --frames 160 --play "wait:20; m:1; wait:20; r:1; w:6; a:1; wait:60"
 ```
 Bright-pixel column runs across the Tonic row:
@@ -715,7 +715,7 @@ So with an HP item and a target already at `[sheet+0x3F]`, `C2/B870` returns `$0
 ### 4.9 Our engine eats the whole stack on a full-HP party
 ```
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy CT_ITEMDEMO=1 CT_MENUSFX=1 \
-  build/ct_field.exe --assets ct_assets.dat --scene 8 --selftest scratchpad/menu/_x.raw --frames 400 \
+  build/Belthasar.exe --assets ct_assets.dat --scene 8 --selftest scratchpad/menu/_x.raw --frames 400 \
   --play "wait:20; m:1; wait:20; r:1; w:6; a:1; wait:30; a:1; wait:20; a:1; wait:40; a:1; wait:40; a:1; wait:40; a:1; wait:40; a:1; wait:40"
 ```
 `CT_ITEMDEMO` seeds Crono 20/70 + 3 Tonics. Sounds posted: `ribbon-tab`, `screen-open`, `item-a` x3 —
@@ -826,7 +826,7 @@ engine-y 88, the yellow rule (`$7700 & 0x02`), `ctItemCat[]` (242/242 against `$
 scroll clamp (`0..232`), the pick/Move/Organize logic, the blip-on-every-A rule, and the silent
 pick-cancel are all confirmed correct against the ROM this pass.
 
-*(Provenance note: `build/ct_field.exe` used for §4.6/§4.9 was built before a parallel lane's
+*(Provenance note: `build/Belthasar.exe` used for §4.6/§4.9 was built before a parallel lane's
 Config/Tech edits landed in `src/menu.c` / `src/field.c`. `git diff` shows those hunks start at the
 old `field.c:8365` (the `menuScreen == 4` branch) and inside `CtMenuRenderConfig`/`CtMenuRenderTech` —
 the Item block, `field.c:8265-8364` and `menu.c:470-631`, is untouched, so the differential holds.)*
@@ -1205,7 +1205,7 @@ divergence §1(e)/§4.9 lists:
 
 ## AV.12 — what I did NOT verify
 
-* **§4.6's column-run comparison.** Reproducing it means running `build/ct_field.exe`, which this pass
+* **§4.6's column-run comparison.** Reproducing it means running `build/Belthasar.exe`, which this pass
   was instructed not to do (and which would take the build lock). I verified the *source* claims
   instead; the row-geometry claim is untested by me and remains the dossier's own.
 * **§6.2 — I found the only ROM writer of `sheet+0x3F` and it cuts both ways.** `C1/CF69` is an

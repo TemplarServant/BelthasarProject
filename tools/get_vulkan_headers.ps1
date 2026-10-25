@@ -1,7 +1,7 @@
 # Download the Khronos Vulkan headers (github.com/KhronosGroup/Vulkan-Headers, Apache-2.0 / MIT) into
-# third_party/vulkan for ct_field's Vulkan backend (src/present_vk.c). Only include/ is kept; git-ignored like SDL2.
+# third_party/vulkan for Belthasar's Vulkan backend (src/present_vk.c). Only include/ is kept; git-ignored like SDL2.
 # No SDK is needed: the functions are loaded at run time from the driver's vulkan-1 through SDL. Without the headers
-# ct_field builds without the Vulkan backend (choosing it falls back to SDL_Renderer). Run once:
+# Belthasar builds without the Vulkan backend (choosing it falls back to SDL_Renderer). Run once:
 #   powershell -ExecutionPolicy Bypass -File tools\get_vulkan_headers.ps1
 $ErrorActionPreference = 'Stop'
 $ver  = '1.3.296'

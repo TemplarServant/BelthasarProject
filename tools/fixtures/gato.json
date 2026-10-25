@@ -1,0 +1,25 @@
+{
+  "doc": "GATO's fight before the first A (saves/battle_re/gato_wait.*): the field in front of GATO with his song at its last box, Battle Mode on Wait -- recipes from power-on (fx_a_battle_gato_press_action) plus the capture's documented WRAM pokes (env PEEK_POKE on a 0-frame peek of the recipe).",
+  "fixtures": [
+    {
+      "path": "saves/battle_re/gato_wait.state",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2990=84"
+      },
+      "kind": "rawstate",
+      "doc": "GATO's last box with Battle Mode on Wait ($2990 = 84; the capture is gato_press_action.state with that byte): one more A boots the fight. The play clock $0400-$0405 is set to the capture's (8:28, which the X menu's TIME prints and the menu checks pin); everything else, the sound processor included, is the recipe's."
+    },
+    {
+      "path": "saves/battle_re/gato_wait_crono_solo.lakewram",
+      "recipe": "fx_a_battle_gato_press_action",
+      "pad": "0:0",
+      "env": {
+        "PEEK_POKE": "0400=1C,0401=37,0402=08,0403=02,0404=08,0405=00,0020=00,0021=00,0022=07,0023=00,0024=00,0025=00,0026=00,0027=00,2990=84,2980=00,2981=80,2982=80,2837=FF,2830=08,2607=63,2608=00,2609=63,260A=00"
+      },
+      "kind": "lakewram",
+      "doc": "gato_wait with tools/battle_ab.py pokes_for([0]) applied (Crono solo, every single tech learned, MP 99) -- what battle_ab.run writes for the port. The play clock $0400-$0405 is set to the capture's; everything else is the recipe's."
+    }
+  ]
+}

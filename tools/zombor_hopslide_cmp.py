@@ -7,7 +7,8 @@ object slides to the hop's midpoint.
 
     python tools/zombor_hopslide_cmp.py
 
-  * cartridge: build/_z_f7085.state (saves/attract_cena_inicial.state run to f7085, the 087 leg's start), then `ct.exe
+  * cartridge: saves/attract_087_leg_rule.state (the 087 leg's start under the rule, made by a recipe: tools/fixtures/
+    attract_rule.json; until 2026-10-22 the owner's real-time capture run to f7085, build/_z_f7085.state), then `ct.exe
     --monitor` prints the movers' arrays on every frame of the leg UNDER THE LOGICAL-FRAME RULE (CT_ORACLE_LOGICAL=1
     CT_ORACLE_VIRTUAL_BEAM=1, CLAUDE.md: no lag frame exists; cached as build/_z_orc_m4b_logical.txt). The real-beam
     cartridge lags inside the leg (the tracks' `20 0D`/`20 10` pauses released 1-2 frames late, the D8 shake 3 late),
@@ -32,10 +33,10 @@ import re
 import subprocess
 
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
-SRC = 'saves/attract_cena_inicial.state'
+FIELD = os.path.abspath('build/Belthasar.exe')
+SRC = 'saves/attract_087_leg_rule.state'
 FIX = 'saves/attract_zombor_pre.lakewram'
-STATE = 'build/_z_f7085.state'
+STATE = SRC
 ORC = 'build/_z_orc_m4b_logical.txt'
 # The oracle's cache is per model: under the rule's switches (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1) the same
 # --monitor from the same state is another run (the boot's frames are not the valve's), and a cache made under one model
@@ -115,12 +116,10 @@ def grade(orc, port, fo, fp, view, keys, alive):
 def main():
     if not os.path.exists(SRC) or not os.path.exists(FIX):
         print('zombor-hopslide: SKIP -- missing %s or %s' % (SRC, FIX)); return
-    if not os.path.exists(STATE):
-        run([CT, '--peek', SRC, 'build/_ztmp.raw', '--frames', '7085'], env=dict(os.environ, PEEK_SAVE=STATE))
     # ...and per BINARY and per switch: a trace kept across an oracle rebuild is another oracle's. The suite passed on a
     # trace made before CT_ORACLE_RDNMI became the default (2026-10-09: the cartridge's f502 where the rule's is f500).
     sw = ','.join('%s=%s' % (k, os.environ.get(k, '')) for k in ('CT_ORACLE_RDNMI', 'CT_ORACLE_LINE64', 'CT_ORACLE_VIRTUAL_BEAM'))
-    orc_path = '%s_%s.txt' % (ORC[:-4], hashlib.sha256(open(CT, 'rb').read() + sw.encode()).hexdigest()[:12])
+    orc_path = '%s_%s.txt' % (ORC[:-4], hashlib.sha256(open(CT, 'rb').read() + sw.encode() + STATE.encode()).hexdigest()[:12])
     if not os.path.exists(orc_path):
         # stdout only: the logical oracle prints its `logical-frame:` summary on stderr at exit, and merged into the same
         # pipe it can land inside the last --monitor row (it did under the rule's switches: the cache's f794 row ended

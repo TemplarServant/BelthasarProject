@@ -1596,7 +1596,7 @@ not in `menu.c` - `CtMenuConfigFrame` already takes `dir` as a parameter - it is
 
 Two smaller notes on the same call site, for whoever picks this up:
 
-- `cio.start = 0` with the comment *"ct_field does not bind START"*, so `C2/C183`'s
+- `cio.start = 0` with the comment *"Belthasar does not bind START"*, so `C2/C183`'s
   restore-factory-defaults is currently unreachable in the port. That is an honest gap, correctly
   labelled, but it means S6's START branch is dead code today.
 - `cio.a` / `cio.b` come from `aHeld` / `bHeld`, which are physical keys

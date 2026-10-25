@@ -119,3 +119,69 @@ The port, seeded from the cartridge's WRAM at c1500 and run INTERACTIVELY (paced
 keys 6C on voices 6/7 with srcn 02/05, re-keys voice 6 at +120 and +240, and 78 with 07/05. Under --selftest with
 CT_AUDIO_LOCKSTEP the same, and voices 6/7 alone sound on every frame from the key-on to +255 on both sides (RMS 996-2496 at the
 sampled offsets, within a quarter of each other). So the silent open is the ROM's: the circle's op writes $0139-$013D and nothing else (C0/4036).
+
+## 9. The circle as the COLOUR window: C0/21E1's entries 4 and 5 (2026-10-18)
+
+`FF 97` (C0/4191) is `FF 90`'s stores -- centre `$013A / $013B`, target `$013D`, `$013C = 0` -- with `$0139 = 04`; `FF 98`
+(C0/41B0) sets `$0139 = 05`. Script sites (byte scan of the 489 scene scripts, checked by context): scene 051's script $055
+at 0x093C (`FF 97 87 98 60 / F1 9F 00 / AD 0A / FF 98`), scene 055's $057 at 0x072A and 0x0923 (`FF 97 BD 52 1C`), scene
+0A3's $025 at 0x0583 (`FF 97 87 9A 61 / F1 9F 00`).
+
+```
+C0/232A  LDA $3C / CMP $3D / BCS 2384          (2384 STZ $39 / DEC $3C / BRA 2330)
+         TMW $7F:1522/1523 = 17, W12SEL / W34SEL $0BD9/$0BDA = 00, WOBJSEL $0BDB = 20, CGWSEL $0BDE = 12
+         $0350 = $3A, $0352 = $3B, $0354 = $3C, TSB $28 #20, $0356 = $53 ? 17C8 : 1AC8, $0358 = 7F
+         LDA #01 / JSL C3/0008 / INC $3C / RTS
+C0/238A  LDA $3C / BEQ 23E2 / DEC $3C, then the same stores and call / RTS
+```
+
+So the iris's circle (C3/0077, here with ARGUMENT 1: each pair of lines copied once, the circle half as tall) made the
+colour window -- window 1 for colour, math only inside it, the sub screen added -- with the colour `F1 9F 00` leaves
+(`$0121 = $0122 = 9F`, `$0BE0 = 17`: blue 31). Ported in ct_vm.c (ctColCircleFrame); graded by
+tools/field_colcircle_cmp.py (check field-colour-circle-c0-232a-238a-vs-rule-cartridge): scene 051's operands poked on both
+sides into a quiet room (loc 005) at frame 150, then every frame's `$0139 / $013C / $0153 / $0128`, the shadows and both
+448-byte buffers equal to the cartridge's for 120 frames, opening to radius 60 and closing to C0/23E2's teardown.
+
+**The renderers read channel 5's table** (field.c fieldCh5Rows): the set FD/C2C1 built this frame (`$0153` bit 0 clear
+after it = set A `$7F:1133`, set = set B `$7F:13EB`), its `<count> <addr>` entries walked line by line -- instead of a
+buffer pointer each effect leaves ($0356 for the iris, $0350 for the quad), which entry 4 would have read as its centre.
+The iris and the quad checks hold unchanged.
+
+**The picture in these rooms (2026-10-18, drawn).** Loc 051 (like loc 005, the graded room) keeps BG3 on the sub screen
+(TM 13 / TS 04, CGWSEL 02 -- the bake adds it everywhere); entry 4's CGWSEL 12 limits that sum to the circle, and inside
+it the sub screen's transparent pixels take the fixed blue (the PPU does not halve that case). The bake now keeps its two
+screens (scene.c CtFieldSceneScreens: the sub screen's pixels and layer bits, the main screen before the math), and
+fieldColWindowApply redoes the map's pixels under a window: inside, main +- (sub or COLDATA); outside, the main screen alone
+(prevent 1). Two more things the cartridge showed, both general:
+* **The field's CGADSUB is `$0BE0`**, not the map header's byte: the load copies byte 5 there (C0/A40B-A412) and op 0xF1
+  (C0/3D2C-3D74) and entry 9 (C0/25AE) rewrite it -- `F1 9F 00` leaves 17 after the circle is gone. The bake follows it
+  (CtFieldSceneSetEffect, a re-bake when it changes).
+* **Sprites take the math too**: a main-screen OBJ pixel of palettes 4-7 with CGADSUB bit 4 adds the sub pixel (or the
+  fixed colour) -- gated by the colour window when one is up, by CGWSEL's prevent mode always (g_colObjMath). After the
+  teardown the lead's palette-4+ pixels take BG3's sub pixel on the cartridge (102 px the port had plain).
+Graded at the field's P + 2 by field_colcircle_cmp.py: six pictures, opening, closing and after the teardown, 0 px.
+MEASURED too (loc 084, TM 04 / TS 13): outside the window the cartridge shows the main screen alone -- there BG3 over the
+backdrop, black.
+
+## 10. The fixed circles: entries 7 / 8 (`FF 99`) and 9 / 0A (`FF 9A`) (2026-10-18)
+
+Sites: `FF 99` in loc 109's script $033 (obj1, offset 0x03B5, after a run of `E6` ops: `AD 10 / FF 99`) and loc 100's $163
+(obj9, 0x08E0); `FF 9A` in loc 001's $043 (obj0 fn0, 0x012C, inside a sequence of `2E 50` colour ops: `AD 40 / 04 02 33 /
+FF 9A / AD 20`). None is reached by a capture here (the port's loc 001 / 109 / 100 entries take other branches).
+
+```
+C0/2514 (7, 8)  TMW/TSW $7F:1522/1523 = 17/00, $0BD9 = 00, $0BDB = 00, $0BDA = 03, CGWSEL $0BDE = 22,
+                $0350/$0352/$0354 = 7C/06/29, TSB $28 #20, (16-bit) $1D8D = 0100, $1D8F = F01D, $1D91 = 01C0,
+                $0356 = $53 ? 17C8 : 1AC8, $0358 = 7F, LDA #00 / JSL C3/0008, then $39 = 7 ? 8 : 0
+C0/2589 (9, A)  TMW/TSW 17/00, $0BD9 = 20, $0BDB = 00, $0BDA = 02, CGWSEL 22, CGADSUB $0BDF = $0BE0 = 04,
+                TM $0BD7 = $7F:1520 = 04, TS $0BD8 = $7F:1521 = 13, (16-bit) $1D8D = 0100, radius 27, the same tail
+```
+
+Two frames each (the routine runs at 7 and 8, so both buffers of the pair hold the circle); the window then stays until a
+teardown (`FF 9C` -> C0/23E2). Ported in ct_vm.c (ctFixedCircleFrame); graded on their state by field_colcircle_cmp.py's
+`fixed7` / `fixed9` runs (the pokes $0139 = 07 / 09 in loc 005): 120 frames each, equal. NOT DRAWN: their picture needs the
+field's bake to follow the live TM / TS ($7F:1520-1521; it follows CGADSUB $0BE0 already), per-layer window masks (W12SEL /
+W34SEL with TMW), and what the words $1D8D-$1D92 drive (DP $1D00, the layer scroll engine C0/75E9). MEASURED in loc 005: the
+cartridge's entry 9 leaves the picture black but for BG3's pixels with the sub screen added; entry 7 rearranges the layers.
+Entries 0B / 0C (C0/260E / 264F, `FF 9B`, and `FF 9E`'s park in loc 0AC) are frame loops of their own (C0/264F waits in
+C0/00DE / C0/EC60; C0/260E ends in `JML C3:0000` with sequence 85): not ported.

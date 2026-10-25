@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """gwarp_cmp.py -- the GATE WARP (op 0xFF 80, scene 8's Telepod), EVERY frame from its hand-off to its exit, the port's
-translated program (src/xlat/gwarp_fd.c) against the cartridge.
+native program (src/seq_gwarp.c: its logic and its picture through src/seq_pic.c) against the cartridge.
 
     python tools/gwarp_cmp.py [--realtime]
 
@@ -8,7 +8,7 @@ translated program (src/xlat/gwarp_fd.c) against the cartridge.
     --frames 18+N` with PEEK_THUMBS_EVERY=1 -- UNDER THE RULE (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1, as the port's
     stage runs) unless --realtime.
   * the port: field-scene8-gate-warp-flow's drive (scene 8, the Telepod flags, the A mash through the cutscene), with
-    CT_SHOTS_THUMBS over the warp; `gatewarp: the translated program takes over at f<F>` locates it, `ran <N> frames`
+    CT_SHOTS_THUMBS over the warp; `gatewarp: the native program takes over at f<F>` locates it, `ran <N> frames`
     ends it.
 Port frame F + k is compared with cartridge frame 18 + k, k = 0 .. N-1 (the jump is in f17's vblank, see H below):
 
@@ -44,10 +44,10 @@ def main():
     env.update(CT_SHOTS_THUMBS=pth, CT_SHOTS_THUMBS_EVERY='1', CT_SHOTS_THUMBS_FROM='1000', CT_SHOTS_THUMBS_TO='4000')
     log = subprocess.run([os.path.abspath(chk['argv'][0])] + chk['argv'][1:], env=env, capture_output=True, text=True,
                          errors='replace', timeout=1800).stdout
-    m = re.search(r'gatewarp: the translated program takes over at f(\d+)', log)
+    m = re.search(r'gatewarp: the native program takes over at f(\d+)', log)
     n = re.search(r'gatewarp: op-0xFF 80 ran (\d+) frames', log)
     if not m or not n:
-        print('gwarp-cmp: FAIL -- the port never ran the translated warp'); return 1
+        print('gwarp-cmp: FAIL -- the port never ran the native warp'); return 1
     F, N = int(m.group(1)), int(n.group(1))
     ot = 'build/_gwarp_orc.raw'
     oenv = dict(os.environ, PEEK_THUMBS=ot + '.thumbs', PEEK_THUMBS_EVERY='1')

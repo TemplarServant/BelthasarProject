@@ -179,8 +179,8 @@ seeded ONLY from that cell drive a 200-frame d-pad sweep byte-exact (incl. BG3).
   frames CGRAM[24..27] and [28..2B] rotate LEFT one slot, [2D]<->[2E] swap; CGRAM[20] flashes
   0x49B5 one tick in four (colour 0 = transparent on hardware -> backdrop+HDMA; not composed).
 
-## CROSS-ENGINE DONE: the overworld lives INSIDE ct_field
-`ct_field --assets ct_assets.dat --worldtest --selftest` = the full native cycle headless:
+## CROSS-ENGINE DONE: the overworld lives INSIDE Belthasar
+`Belthasar --assets ct_assets.dat --worldtest --selftest` = the full native cycle headless:
 Crono's house (field) -> front-door WORLD exit (kind 0 in CT_ASSET_EXITS) -> the overworld
 engine (mover/camera/streaming/cycling/entry latch) at the exit's world pixels -> walk to the
 Truce-market door -> talk = ENTER location 0x011 at tile (22,44) (native field load at

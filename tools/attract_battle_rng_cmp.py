@@ -15,17 +15,19 @@ entry's resolver 05) left the 087 two draws behind.
 
 Port: the live attract (`--scene 433 --selftest`) with CT_BATTLE_TRACE (the `battle-rng-cursor handback` line,
 field.c) and CT_BATTLE_MEMMON over $B163/$B185 (a line per frame whose bytes changed; the fight's first line is its
-frame 1). Cartridge: saves/attract_cena_inicial.state, `--monitor 7EB163:11,7EB185:1,7E29AD:1 --diff --writer` --
-each fight's first cursor pass is the first `$B185` write by C1:82EE after FD:A989 clears it, the handback is the
+frame 1). Cartridge: saves/attract_cena_inicial_rule.state under the rule, `--monitor 7EB163:11,7EB185:1,7E29AD:1 --diff --writer` --
+each fight's first cursor pass is the first `$B185` write by C1:82EE after FD:A989 clears it (or C1:FBD4 fills $B163, the
+writer a frame's sample names when both land in one frame), the handback is the
 `$29AD` write by C1:8448. Values only, no frame is graded: the port's fights sit at other frames than the cartridge's.
 """
 import os
 import re
 import subprocess
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
+STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json;
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}   # until 2026-10-22 the owner's real-time capture)
 NAMES = ['0AD', '07D', '087']
 
 
@@ -52,7 +54,8 @@ def port_side():
 
 def oracle_side():
     r = subprocess.run([CT, '--monitor', '7EB163:11,7EB185:1,7E29AD:1', '--from', STATE, '--frames', '7900',
-                        '--diff', '--writer'], capture_output=True, text=True, errors='replace', timeout=1800)
+                        '--diff', '--writer'], env=dict(os.environ, **RULE), capture_output=True, text=True, errors='replace',
+                       timeout=1800)
     fights = []
     for line in (r.stdout + r.stderr).splitlines():
         # one (value, changed, writer) per region: `7EB185=05*(C1:82EE)`
@@ -60,8 +63,11 @@ def oracle_side():
              re.findall(r'7E([0-9A-F]{4})=([0-9A-F]+)(\*?)(?:\(([0-9A-F]{2}:[0-9A-F]{4})\))?', line)}
         if not {'B163', 'B185', '29AD'} <= set(f):
             continue
-        if any(ch and w == 'FD:A989' for _, ch, w in f.values()):   # the boot's clear of the battle page
-            fights.append({})
+        # the boot's clear of the battle page (FD:A989), or its FF fill of $B163 (C1:FBD4) when both land in one frame -- under
+        # the rule the boot's NMI-on work is free, and a frame's sample names only its last writer
+        if any(ch and w in ('FD:A989', 'C1:FBD4') for _, ch, w in f.values()):
+            if not fights or 'b185' in fights[-1]:
+                fights.append({})
             continue
         v, ch, w = f['B185']
         if fights and ch and w == 'C1:82EE' and 'b185' not in fights[-1]:

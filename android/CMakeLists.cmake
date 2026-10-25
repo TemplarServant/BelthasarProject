@@ -2,13 +2,13 @@
 # toolchain sets ANDROID. android/app/build.gradle runs it for each ABI.
 #
 # libSDL2.so is built from SDL's source (tools/get_sdl2_src.ps1 -> third_party/SDL2-src, the version of the Windows dev
-# libraries); libmain.so is ct_field: SDL's Java activity loads both and calls SDL_main (field.c's main, renamed by
+# libraries); libmain.so is Belthasar: SDL's Java activity loads both and calls SDL_main (field.c's main, renamed by
 # SDL_main.h). The F1 overlay (Dear ImGui) draws the options and the virtual gamepad on SDL_Renderer / OpenGL ES.
 set(SDL2_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2-src)
 if(NOT EXISTS ${SDL2_SRC_DIR}/include/SDL.h)
   message(FATAL_ERROR "SDL2's source is not in third_party/SDL2-src: run tools/get_sdl2_src.ps1 (docs/ANDROID.md)")
 endif()
-foreach(gen src/data/title_intro.h src/xlat/seq_c3.c)
+foreach(gen src/data/title_intro.h)
   if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${gen})
     message(FATAL_ERROR "${gen} is missing: run tools/setup.py with your ROM first (docs/ROM.md)")
   endif()
@@ -22,6 +22,8 @@ add_subdirectory(${SDL2_SRC_DIR} ${CMAKE_CURRENT_BINARY_DIR}/SDL2)
 add_library(main SHARED ${CT_FIELD_SRC} src/android.c)
 target_include_directories(main PRIVATE src ${SDL2_SRC_DIR}/include snes)
 target_compile_options(main PRIVATE -O2 -Wno-everything)
+target_compile_definitions(main PRIVATE CT_XLAT_NO_GWARP)   # the gate warp is native (src/seq_gwarp.c)
+target_compile_definitions(main PRIVATE CT_AUDIO_SPC_DEFAULT=1)   # the sound machine in C, as the desktop's (no ROM code runs)
 target_link_libraries(main SDL2 m log android)
 
 # The frames between and the higher internal resolution draw on every core (field.c's MSVC /openmp, here libomp,

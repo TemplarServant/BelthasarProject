@@ -26,15 +26,26 @@
 #define CT_AUDIO_H
 
 #include <stdint.h>
+#include "assets.h"
 
 typedef struct CtAudio CtAudio;
 
 // Boot the sound system: instantiate the SPC700+DSP, let its IPL boot ROM come
 // up, then run bank $C7's upload (audio_boot.md §4) so the Akao driver lands in
-// ARAM byte-identically to the oracle's. `rom` is the 4 MB ROM image (ct_field
+// ARAM byte-identically to the oracle's. `rom` is the 4 MB ROM image (Belthasar
 // already caches one via CtBattleRom); returns NULL when it is absent or short,
 // so a ROM-less run stays silent instead of failing.
 CtAudio* CtAudioInit(const uint8_t* rom, long romLen);
+// The same, with the sound's data from the asset container (CT_ASSET_SND_*) when it holds them: the driver upload,
+// the songs, samples, instruments and effect sets are then never read from the ROM (which may be NULL).
+CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd);
+int CtAudioFromAssets(const CtAudio* a);   // 1 when the data comes from the container
+// Every datum the loader takes, from the ROM and from the container, side by side: the driver's six blocks (destination,
+// bytes), each song's sequence (its bytes, the 3 read past it, the address that prices the stream), instrument list,
+// percussion and record, each sample (bytes, address), each instrument's three words (ids 0..N), both effect sets, the
+// exception list's verdict for every song id, the heap base and FD/C1EE's channels. Prints the first difference to stderr;
+// returns the number of items compared, or -1 at a difference (or when the container holds no sound).
+long CtAudioDataCompare(const uint8_t* rom, long romLen, const CtAssets* snd);
 void     CtAudioFree(CtAudio* a);
 
 // Non-zero once the six blocks are in ARAM and the driver has been started.
@@ -69,12 +80,14 @@ int      CtAudioPost(CtAudio* a, uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3)
 // there was nothing to do, and -1 for a command whose handler is not yet
 // derived (the caller may log it; the mailbox is still cleared, as the ROM does).
 int      CtAudioService(CtAudio* a, uint8_t* mem7E);
+extern int g_ctAudioTraceFrame;   // the host's frame number, stamped on CT_SNDPOSTS's lines
 // The LOADER CLOCK (audio.c, song_load_freeze.md section 6): every CtAudioService re-runs the JSL's
 // master cycles -- the listing's instruction costs, the emulated SPC caught up before each port access,
 // the frame's NMI/HDMA/refresh background at its raster position -- and reports what a synchronous
 // upload cost the parked field: the NMIs crossed (frames lost) and the line the RTL landed on.
 struct Apu;
 void      CtAudioSeedFromApu(CtAudio* a, const struct Apu* src);   // adopt a savestate's SPC/DSP/ARAM (the oracle's driver state)
+void      CtAudioFrameSkip(CtAudio* a);   // a displayed frame whose SPC time a translated stage's bus ran: the field still flips
 // The debug snapshot's sound processor (field.c F5/F9): the SPC, the DSP, ARAM and the timers to a file, and back -- the
 // WRAM a restore brings back holds the CPU's side of the APU protocol, which only works against the SPC of the same moment.
 int       CtAudioSaveState(CtAudio* a, const char* path);
@@ -144,6 +157,19 @@ const uint8_t* CtAudioAram(const CtAudio* a);      // 64KB, for --aram-style dif
 // The SPC itself, for a translated stage (src/seq_xlat.h) to borrow: while the stage runs, its bus drives this APU
 // and the host must not advance it with CtAudioFrame -- its samples are still read with CtAudioSamples.
 struct Apu* CtAudioApu(CtAudio* a);
+struct SndMachine* CtAudioMachine(CtAudio* a);   // the sound machine in C (NULL under CT_AUDIO_SPC=ref)
+// The CPU's side of the ports, outside a JSL (a test harness, a stage's own post): $2140+k written now, and the sound
+// processor run `cycles` (apu_runCycles' way: to the first instruction starting at or after them; returns the cycles run).
+void      CtAudioPortWrite(CtAudio* a, int k, uint8_t v);
+// The instant sound uploads (a mod, src/field.c hostSoundInstant): a JSL's SPC time is not owed to the next frames and
+// its output is not played -- the host freezes no frame for it. Off = the SNES's timing.
+void      CtAudioSetInstant(CtAudio* a, int on);
+// `ct.exe --sndtiming <out>`: the sound machine's cost table (CT_ASSET_SND_TIMING) from the ROM; returns its bytes, 0 = failed.
+int       CtAudioTimingExport(const uint8_t* rom, long romLen, const char* path);
+int       CtAudioRunCycles(CtAudio* a, int cycles);
+void CtAudioAdvance(CtAudio* a, long master);
+void CtAudioFrameOrigin(CtAudio* a, long master);   // the frame grid begins `master` cycles earlier (no SPC is run)
+CtAudio* CtAudioInitPowerOn(const uint8_t* rom, long romLen, const CtAssets* snd);   // the SPC at power-on: no upload yet   // run the SPC for CPU work before a post, owed by the frame's slice
 uint32_t  CtAudioApuCycles(const CtAudio* a);               // the SPC's own cycle count (a stage's share of a frame)
 void      CtAudioStageExitFrame(CtAudio* a, uint32_t ran);  // a translated stage left mid-frame: the frame's remaining SPC
 // The reset's `JSL $C7:0000` (C0/0053) on the RUNNING driver: F0 hands the SPC to its IPL and the driver is uploaded

@@ -335,11 +335,11 @@ anyway, so the ROM's answer is *close*, not *re-resolve*.
 * Command strip — `src/field.c:7108` `int bhPhase = (bs2[0x95D5] < 3) ? 1 : 0;` (same at `4108`/`7204`).
   This IS the ROM's `C1/0C71` rule; with `$95D5` left at 1 the strip stays in COMMAND phase forever.
 
-### 4.3 Live repro in our engine (headless, `build/ct_field.exe`)
+### 4.3 Live repro in our engine (headless, `build/Belthasar.exe`)
 
 ```
 CT_BATTLE_SCRIPT="a:1,n:8,a:1,n:200,a:1,n:8,a:1,n:600,a:1,n:20,a:1,n:25,n:400,a:1,n:60,a:1,n:60,a:1,n:1500" \
-CT_BATTLE_TRACE=1 build/ct_field.exe --assets ct_assets.dat --scene 19 \
+CT_BATTLE_TRACE=1 build/Belthasar.exe --assets ct_assets.dat --scene 19 \
     --battletest saves/battle_re/forest_pre.raw.wram
 ```
 ```
@@ -546,7 +546,7 @@ python tools/ct.py fb2png lc_870.raw lc_870.png
 
 # --- our engine's defect, live ---
 CT_BATTLE_SCRIPT="a:1,n:8,a:1,n:200,a:1,n:8,a:1,n:600,a:1,n:20,a:1,n:25,n:400,a:1,n:60,a:1,n:60,a:1,n:1500" \
-CT_BATTLE_TRACE=1 build/ct_field.exe --assets ct_assets.dat --scene 19 \
+CT_BATTLE_TRACE=1 build/Belthasar.exe --assets ct_assets.dat --scene 19 \
     --battletest saves/battle_re/forest_pre.raw.wram | grep battletrace | tail
 #   f1628 victory cur=1 9609=1  ... f4000 end-debug cur=1 9609=1   (ROM: 9609=0 at delist+3, 95D5=FF at +46)
 

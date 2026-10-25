@@ -151,10 +151,10 @@ FIFO held **~1.8 s**. Four leaks, the race's by far the largest:
    exception: a lag frame becomes a hold); the oracle's holds run the APU on, the CPU's partner -- right for the ORACLE,
    whose CPU is the cartridge's and whose handshakes inside a hold must be answered. A PLAYER cannot: the race holds
    ~35% of a frame per frame, all of it SPC time no displayed frame plays. `g_ctLogicalHoldApu` (snes.c, default 1 =
-   the oracle's way): ct_field sets 0, so the APU stands with the beam through a hold and a phase hold -- the zelda3
+   the oracle's way): Belthasar sets 0, so the APU stands with the beam through a hold and a phase hold -- the zelda3
    model's relation (the SPC runs a frame per displayed frame whatever the CPU spent). A CPU that polls the SPC inside
    a hold is in a wait loop (C7:09E1), which releases the hold like any other. `CT_XLAT_HOLDAPU=1` restores the
-   oracle's way in ct_field (a probe).
+   oracle's way in Belthasar (a probe).
 2. **The field's per-frame sound catch-all kept handshaking through a stage** (field.c, `CtAudioService`): ~53 SPC
    cycles a frame on top of the stage's own 17088 (`CT_XLAT_APUTRACE=<n>` in seq_xlat.c prints the stage's APU
    cycles against its frames). No field code runs during a stage; the gate is `!seqX && !gwX`.

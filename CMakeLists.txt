@@ -24,9 +24,22 @@ if(MSVC)
   add_link_options(/Brepro /INCREMENTAL:NO /PDBALTPATH:%_PDB%)
 endif()
 
-# The playable host's sources (ct_field below; the Android app's libmain.so, android/CMakeLists.cmake).
-set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_ending.c src/seq_entry3.c src/seq_entry4.c src/seq_entry6.c src/seq_entry7.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c
-                 src/move.c src/audio.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
+# PORTABLE C (MSVC): what gcc 14 and clang 16 refuse by default is an error here too, so a Windows build cannot pass
+# code a Unix clone does not compile (PR #2: three static functions called before their declaration -- C4013 is a
+# level-3 warning, below every target's /W2, so nobody saw it). C4013 a call to an undeclared function, C4431 implicit
+# int, C4047 int <-> pointer, C4133 / C4024 incompatible pointer types (assignment / argument), C4020 too many
+# arguments, C4716 / C4033 a missing return value. /we raises each whatever the /W level.
+if(MSVC)
+  add_compile_options(/we4013 /we4431 /we4047 /we4133 /we4024 /we4020 /we4716 /we4033)
+endif()
+
+# The playable host's sources (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake).
+set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c src/widext.c
+                 src/move.c src/audio.c src/sound/driver.c src/sound/lockstep.c src/sound/machine.c src/sound/coro.c src/sound/timing.c src/sound/timing_build.c src/sound/mixer.c src/sound/mixer_dsp.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/romview.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
+
+# CT_DATAFREE=ON: Belthasar loads the generated tables (src/data/*.h) from the player's pack instead of compiling them
+# in (docs/ROM.md). ct.exe and the other tools always compile the real headers.
+option(CT_DATAFREE "Belthasar without the generated tables compiled in (loads ct_tables.dat)" OFF)
 
 # ANDROID (docs/ANDROID.md): only the playable host, as the shared library SDL's Java activity loads. The NDK's CMake
 # reaches this file through android/app/build.gradle.
@@ -37,7 +50,7 @@ endif()
 
 add_executable(ct
   src/main.c
-  src/ct_cpu_infra.c src/rom_verify.c
+  src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/romview.c
   src/ct_shadow.c  # --shadow: the routine-level shadow (docs/SHADOW_PROPOSAL.md)
   src/ct_lake_state.c
   src/harness_drive.c
@@ -51,21 +64,31 @@ add_executable(ct
   src/input.c
   src/player.c
   src/collision.c
-  src/world.c
+  src/world.c src/vwf.c
+  src/wipe.c     # the window wipe C3/01E4 + C3/02DD and the overworld's window object, native (ct_vm.c; --wipeaudit)
   src/audio.c
+  src/sound/driver.c src/sound/machine.c src/sound/coro.c src/sound/timing.c src/sound/timing_build.c   # the sound machine in C (CT_AUDIO_SPC)
+  src/sound/lockstep.c src/sound/fuzz.c   # ... against the vendored SPC700, instruction by instruction (CT_AUDIO_SPC=lockstep)
+  src/sound/mixer.c src/sound/mixer_dsp.c src/sound/mixer_replay.c   # --mixreplay: the native mixer against the vendored S-DSP
+  src/field_cost.c   # ct_vm.c: the load's object pass, priced op by op (ct_vm_op_cycles)
   src/menu.c src/menu_cost.c   # --shadow: the inventory routines C2/8791 / C2/87D5 (ct_shadow.c)
   src/battle.c   # --sweepaitarget: the first bank-$C1 micro-execution harness needs the battle port
   src/objslot.c  # FD/E39C, the palette-effect records -- one body for the battle and the field VM
   src/tileanim.c # FD/DE98 + FD/E022, the field's animated BG tiles (--sweepbganim)
+  src/hdma_table.c # FD/C2C1, the field's HDMA table builder, native (--hdmabuild); src/xlat/hdma_fd.c stays here as its reference (--hdmafuzz)
   src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c  # --xlatcmp: the race's program translated from the ROM, lockstepped per instruction
-  src/seq_race.c # --racestep: the race's tasks, native (sequence_table.md sec. 12)
-  src/seq_ending.c # --seqstage: the ending's stage, native (sequence_table.md sec. 13)
-  src/seq_entry3.c # --seqstage: entry 3 from the story (FF 23), native (sequence_table.md sec. 14)
-  src/seq_entry4.c src/seq_entry6.c src/seq_entry7.c # --seqstage: entry 4 (FF 24, the Tyranno Lair: Lavos falls), native (sequence_table.md sec. 15)
+  src/seq_race.c src/seq_racepic.c # --racestep: the race's tasks, native (sequence_table.md sec. 12)
+  src/seq_ending.c src/seq_endingpic.c # --seqstage: the ending's stage, native (sequence_table.md sec. 13)
+  src/seq_entry3.c src/seq_entry3pic.c # --seqstage: entry 3 from the story (FF 23), native (sequence_table.md sec. 14)
+  src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c # --seqstage: entry 4 (FF 24, the Tyranno Lair: Lavos falls), native (sequence_table.md sec. 15)
   src/seq_ppu.c  # --seqppucmp: the sequence stages' vendored-PPU picture, graded against the oracle's own frame
+  src/seq_gwarp.c  # --gwarpcmp: the gate warp, native (seq_gwarp.c), lockstepped against the oracle
+  src/seq_pic.c  # --seqpiccmp: the sequence stages' NATIVE picture, graded against the oracle's own frame
   ${SNES_SRC}
 )
 target_include_directories(ct PRIVATE snes src)
+target_compile_definitions(ct PRIVATE CT_XLAT_HDMA_REF)   # seq_xlat.c's CtXlatHdmaBuild: the translated FD/C2C1, ct.exe's reference only
+target_compile_definitions(ct PRIVATE CT_XLAT_SEQ_C3)   # src/xlat/seq_c3.c: --xlatcmp's lockstep (the play path is native)
 if(UNIX)
   target_link_libraries(ct m)   # lround (ct_vm.c); MSVC's CRT carries libm itself
 endif()
@@ -83,7 +106,7 @@ endif()
 # reader, the state loader and --fb's play script. `ct` depends on it, so the two are always built together.
 add_executable(ct_oracle
   src/main.c
-  src/ct_cpu_infra.c src/rom_verify.c src/ct_lake_state.c src/harness_drive.c
+  src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/ct_lake_state.c src/harness_drive.c
   ${SNES_SRC}
 )
 target_compile_definitions(ct_oracle PRIVATE CT_ORACLE_ONLY)
@@ -96,6 +119,16 @@ if(MSVC)
   target_compile_options(ct_oracle PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101 /wd4505)
 endif()
 add_dependencies(ct ct_oracle)
+
+# The table pack's byte-for-byte proof (tools/gen/tables_proof.py): the data-free storage filled from a pack, against
+# the same tables compiled from the real headers. Built only when named, in a tree that holds the generated headers.
+add_executable(ct_tables_proof EXCLUDE_FROM_ALL
+  tests/tables_proof.c src/datapack.c src/tables/tables_storage.c src/tables/tables_real.c)
+target_include_directories(ct_tables_proof PRIVATE src)
+target_compile_definitions(ct_tables_proof PRIVATE CT_DATAFREE)   # tables_real.c includes src/data/ directly
+if(MSVC)
+  target_compile_definitions(ct_tables_proof PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 
 # Interactive SDL2 viewer for the C scene engine. Built only when SDL2 is present
 # in third_party/SDL2 (downloaded, git-ignored). The headless 'ct' stays SDL-free;
@@ -114,7 +147,7 @@ elseif(UNIX)
   endif()
 endif()
 if(CT_SDL_INC)
-  add_executable(ct_viewer src/viewer.c src/scene.c src/lz.c src/assets.c)
+  add_executable(ct_viewer src/viewer.c src/scene.c src/lz.c src/assets.c src/romview.c)
   target_include_directories(ct_viewer PRIVATE src ${CT_SDL_INC})
   target_link_libraries(ct_viewer ${CT_SDL_LIB})
   if(MSVC)
@@ -126,33 +159,42 @@ if(CT_SDL_INC)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_viewer>)
   endif()
   # Native interactive field: VM scheduler (ct_vm.c) + renderer + sprite compositor + SDL.
-  # ct_field also links the SOUND system: src/audio.c drives the vendored SPC700/DSP through bank
+  # Belthasar also links the SOUND system: src/audio.c drives the vendored SPC700/DSP through bank
   # $C7's driver upload (disasm/notes/audio_boot.md); the whole vendored core (snes/*.c) is linked for
   # it and for the translated stages in src/xlat/. `snes` goes AFTER `src` on the include path so an
   # ambiguous name (input.h exists in both) still resolves to the engine's.
   # src/move.c runs live: ct_vm.c drives the ported C0/CAD9 animation tree through it (CtAnimDrainPass,
   # CtAnimDrawPass), the field runner CtFieldRunnerOne (which reaches the object loader CtObjLoad) and
   # most of the VM's op families (CtVm*).
-  add_executable(ct_field ${CT_FIELD_SRC})
-  target_include_directories(ct_field PRIVATE src ${CT_SDL_INC} snes)
-  target_link_libraries(ct_field ${CT_SDL_LIB})
+  add_executable(Belthasar ${CT_FIELD_SRC})
+  target_include_directories(Belthasar PRIVATE src ${CT_SDL_INC} snes)
+  target_link_libraries(Belthasar ${CT_SDL_LIB})
+  target_compile_definitions(Belthasar PRIVATE CT_XLAT_NO_GWARP)   # the gate warp is native (src/seq_gwarp.c)
+  target_compile_definitions(Belthasar PRIVATE CT_AUDIO_SPC_DEFAULT=1)   # the sound machine in C (src/audio.c; CT_AUDIO_SPC=ref the vendored core)
+  # DATA-FREE (docs/ROM.md): no generated table compiled in. The engine includes them through src/tables/, which then
+  # declares them; src/tables/tables_storage.c defines them zeroed and src/datapack.c fills them at startup from the
+  # pack made from the player's ROM (tools/gen/pack_tables.py -> ct_tables.dat).
+  if(CT_DATAFREE)
+    target_sources(Belthasar PRIVATE src/datapack.c src/tables/tables_storage.c)
+    target_compile_definitions(Belthasar PRIVATE CT_DATAFREE)
+  endif()
   if(MSVC)
     # the host's pictures at the options (the title's mode 7 at the internal resolution): drawn on every core
     set_source_files_properties(src/title_intro.c src/fieldnative.c src/field.c PROPERTIES COMPILE_OPTIONS "/openmp")
-    target_compile_definitions(ct_field PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(ct_field PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
+    target_compile_definitions(Belthasar PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(Belthasar PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
     if(DEFINED ENV{CT_ASAN})
-      target_compile_options(ct_field PRIVATE /fsanitize=address /Zi)
+      target_compile_options(Belthasar PRIVATE /fsanitize=address /Zi)
     endif()
   endif()
   # THE F1 OPTIONS OVERLAY (src/overlay.cpp, Dear ImGui -- tools/get_imgui.ps1 puts it in third_party/imgui, git-ignored
-  # like SDL2). Without it ct_field builds the stub and has no overlay; nothing else changes.
+  # like SDL2). Without it Belthasar builds the stub and has no overlay; nothing else changes.
   # THE VULKAN BACKEND (src/present_vk.c): the Khronos headers only (tools/get_vulkan_headers.ps1 -> third_party/vulkan,
   # git-ignored); nothing is linked -- the driver's vulkan-1 is loaded at run time through SDL.
   set(VULKAN_INC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan/include)
   if(EXISTS ${VULKAN_INC}/vulkan/vulkan.h)
-    target_compile_definitions(ct_field PRIVATE CT_HAVE_VULKAN)
-    target_include_directories(ct_field PRIVATE ${VULKAN_INC})
+    target_compile_definitions(Belthasar PRIVATE CT_HAVE_VULKAN)
+    target_include_directories(Belthasar PRIVATE ${VULKAN_INC})
   endif()
   set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
   if(EXISTS ${IMGUI_DIR}/imgui.h)
@@ -166,22 +208,27 @@ if(CT_SDL_INC)
       target_include_directories(ct_imgui PUBLIC ${VULKAN_INC})
       target_compile_definitions(ct_imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES)
     endif()
-    target_sources(ct_field PRIVATE src/overlay.cpp)
-    target_compile_definitions(ct_field PRIVATE CT_HAVE_IMGUI)
-    target_include_directories(ct_field PRIVATE ${IMGUI_DIR})
-    target_link_libraries(ct_field ct_imgui)
+    target_sources(Belthasar PRIVATE src/overlay.cpp src/launcher_ui.cpp)   # + the ROM screen (src/launcher.h)
+    target_compile_definitions(Belthasar PRIVATE CT_HAVE_IMGUI)
+    target_include_directories(Belthasar PRIVATE ${IMGUI_DIR})
+    target_link_libraries(Belthasar ct_imgui)
     if(MSVC)
       set_source_files_properties(src/overlay.cpp PROPERTIES COMPILE_OPTIONS "/utf-8")   # its Portuguese labels
     endif()
   else()
-    target_sources(ct_field PRIVATE src/overlay_stub.c)
+    target_sources(Belthasar PRIVATE src/overlay_stub.c src/launcher_ui_stub.c)
   endif()
+  if(MSVC)   # the link map: tools/rom_census.py names the function behind each ROM read (CT_ROM_CENSUS)
+    target_link_options(Belthasar PRIVATE "/MAP:$<TARGET_FILE_DIR:Belthasar>/Belthasar.map")
+  endif()
+  # THE PLAYER'S START (src/launcher.h): the data folder, and the ROM screen that makes the game's data from their dump.
+  target_sources(Belthasar PRIVATE src/launcher.c)
   if(CT_SDL_DLL)
-    add_custom_command(TARGET ct_field POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_field>)
+    add_custom_command(TARGET Belthasar POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:Belthasar>)
   endif()
   # M3-B: interactive overworld camera viewer (live map from a WRAM/VRAM dump + the byte-exact camera).
-  add_executable(ct_world src/ct_world.c src/world.c src/lz.c src/assets.c)   # lz.c: the world scripts' far call C6/E028
+  add_executable(ct_world src/ct_world.c src/world.c src/vwf.c src/lz.c src/assets.c src/romview.c)   # lz.c: the world scripts' far call C6/E028
   target_include_directories(ct_world PRIVATE src ${CT_SDL_INC})
   target_link_libraries(ct_world ${CT_SDL_LIB})
   if(MSVC)
@@ -192,24 +239,28 @@ if(CT_SDL_INC)
     add_custom_command(TARGET ct_world POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_world>)
   endif()
-  message(STATUS "SDL2 found: building ct_viewer + ct_field + ct_world")
+  message(STATUS "SDL2 found: building ct_viewer + Belthasar + ct_world")
 else()
-  message(STATUS "SDL2 not in third_party/SDL2 (nor the system's): skipping ct_viewer/ct_field (headless ct still builds)")
+  message(STATUS "SDL2 not in third_party/SDL2 (nor the system's): skipping ct_viewer/Belthasar (headless ct still builds)")
 endif()
 
 # Native Finder resource lookup and writable Application Support paths.
-if(APPLE AND TARGET ct_field)
+if(APPLE AND TARGET Belthasar)
     enable_language(OBJC)
-    target_sources(ct_field PRIVATE src/macos_paths.m src/macos_window.m src/macos_menu.m)
+    target_sources(Belthasar PRIVATE src/macos_paths.m src/macos_window.m src/macos_menu.m)
     set_source_files_properties(src/macos_paths.m src/macos_window.m src/macos_menu.m PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
-    target_link_libraries(ct_field "-framework AppKit")
+    target_link_libraries(Belthasar "-framework AppKit")
 endif()
 
 # Keep normal Unix executable names and the .exe aliases used by the shared
 # Python oracle/recipe/regression tools. Both names execute native machine code.
+# Every executable this file defines gets one: a hand-kept list forgot ct_oracle (PR #2), and tools/build.py checks
+# each target by its .exe name.
 if(UNIX)
-    foreach(target ct ct_field ct_world ct_viewer)
-        if(TARGET ${target})
+    get_property(ct_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(target ${ct_targets})
+        get_target_property(ct_target_type ${target} TYPE)
+        if(ct_target_type STREQUAL "EXECUTABLE")
             add_custom_command(TARGET ${target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E remove -f "$<TARGET_FILE_DIR:${target}>/${target}.exe"
                 COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE_NAME:${target}>"

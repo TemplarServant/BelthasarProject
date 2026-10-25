@@ -6,7 +6,7 @@ r"""The battle's effect objects (ops 02-07/26, 6E-71, 73/74, D9/DA; CC/F278) aga
 Cases (the oracle state + its drive, the port fixture + its CT_BATTLE_SCRIPT):
     cyclone   saves/battle_re/gato_cyclone.state  /  saves/battle_re/gato_cyclone.raw.wram  (Crono's Cyclone)
     song      saves/battle_re/gato_cyclone.state  /  saves/battle_re/gato_cyclone.raw.wram  (GATO's song after the Cyclone)
-    zombor    build/_z_f7085.state (made from the attract)  /  saves/attract_zombor_pre.lakewram  (the 087 triple tech)
+    zombor    saves/attract_087_leg_rule.state (the attract under the rule)  /  saves/attract_zombor_pre.lakewram  (the 087 triple tech)
 
 Both sides stream the same bytes -- $A1A8 (mode) $A1B0 (dwell) $A1B8 (cursor) $A2C0 (frame) $A1D8 (shown) $AB5F
 (priority) $A230 (facing) $A260/$A270 (the record's offsets) and the $A3DF matrix -- the oracle with --monitor, the
@@ -20,14 +20,14 @@ import re
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
 CASES = {
     'cyclone': dict(state='saves/battle_re/gato_cyclone.state',
                     drive='100:8,0:372,20:2,0:12,100:2,0:12,100:2,0:12,100:2,0:300', oframes=760,
                     wram='saves/battle_re/gato_cyclone.raw.wram', script='n:40,d:2,n:10,a:2,n:10,a:2,n:10,a:2,n:600',
                     omin=0, pmin=0),
-    'zombor': dict(state='build/_z_f7085.state', drive='', oframes=800,
+    'zombor': dict(state='saves/attract_087_leg_rule.state', drive='', oframes=800, oenv={'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'},
                    pargs=['--scene', '135', '--loadwram', 'saves/attract_zombor_pre.lakewram', '--frames', '700'],
                    penv={'CT_AUDIO_LOCKSTEP': '1'}, omin=0, pmin=0),
     'song': dict(state='saves/battle_re/gato_cyclone.state',
@@ -52,13 +52,10 @@ def arms(rows):
 
 def oracle(c):
     regs = ','.join('%s:%d' % (n, l) for n, l in FIELDS) + ',A3DF:88'
-    if not os.path.exists(c['state']) and c['state'] == 'build/_z_f7085.state':   # the 087 leg's start (zombor_orbit_cmp.py)
-        subprocess.run([CT, '--peek', 'saves/attract_cena_inicial.state', 'build/_ztmp.raw', '--frames', '7085'],
-                       env=dict(os.environ, PEEK_SAVE=c['state']), capture_output=True)
     argv = [CT, '--monitor', regs, '--from', c['state'], '--frames', str(c['oframes'])]
     if c['drive']:
         argv += ['--btnscript', c['drive']]
-    r = subprocess.run(argv, capture_output=True, text=True, errors='replace')
+    r = subprocess.run(argv, env=dict(os.environ, **c.get('oenv', {})), capture_output=True, text=True, errors='replace')
     rows = []
     for line in r.stdout.splitlines():
         m = re.match(r'\s*f(\d+)\s+(.*)$', line)

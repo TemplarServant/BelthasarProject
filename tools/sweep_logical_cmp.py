@@ -4,10 +4,11 @@ model, CLAUDE.md's one exception; disasm/notes/oracle_logical_frames.md §4).
 
     python tools/sweep_logical_cmp.py <base.state> <frames> <seed.raw.wram | -> <mv|idle> <n> [slot ...]
 
-The seed: the cartridge run `--peek <base.state> --btnscript 0:<frames>` in real time -- the same drive that produced
-<seed.raw.wram>, whose bytes are checked identical to the run's WRAM -- saved as a LakeSnes state (PEEK_SAVE, cached
-under build/_sweeps/). The reference: that state run <n> more frames on CT_ORACLE_LOGICAL=1, `--monitor` of the
-per-slot bytes. The port: build/ct_field.exe on CT_BATTLE_RENDERWRAM=<seed> with CT_BATTLE_MVSWEEP=<n> (mv) or
+The seed: the cartridge run `--peek <base.state> --btnscript 0:<frames>` under the rule (CT_ORACLE_LOGICAL=1; in real
+time until 2026-10-22, when the seeds became recipe-made fixtures, tools/fixtures/rest.json, which the rule makes) -- the
+same drive that produced <seed.raw.wram>, whose bytes are checked identical to the run's WRAM -- saved as a LakeSnes
+state (PEEK_SAVE, cached under build/_sweeps_rule/). The reference: that state run <n> more frames on CT_ORACLE_LOGICAL=1, `--monitor` of the
+per-slot bytes. The port: build/Belthasar.exe on CT_BATTLE_RENDERWRAM=<seed> with CT_BATTLE_MVSWEEP=<n> (mv) or
 CT_BATTLE_IDLESWEEP=<n> (idle). A seed of `-` is the base state's own WRAM (<frames> 0): a committed image taken
 apart from the state (bat2.raw.wram differs from bat2_lake.state in 84 bytes, $E5 among them -- the byte the sweep
 reads its iteration phase from) cannot be continued by the state. The sweep frame sf=k is the monitor's f(k-1)
@@ -34,13 +35,12 @@ def main():
     base, frames, seed, mode, n = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], int(sys.argv[5])
     slots = [int(s) for s in sys.argv[6:]]
     ct = os.path.abspath('build/ct.exe')
-    os.makedirs('build/_sweeps', exist_ok=True)
-    tag = 'build/_sweeps/%s_%d' % (os.path.splitext(os.path.basename(base))[0], frames)
+    os.makedirs('build/_sweeps_rule', exist_ok=True)
+    tag = 'build/_sweeps_rule/%s_%d' % (os.path.splitext(os.path.basename(base))[0], frames)
     env = dict(os.environ)
-    env.pop('CT_ORACLE_LOGICAL', None)
     if not os.path.exists(tag + '.state'):
         subprocess.run([ct, '--peek', base, tag + '.raw', '--btnscript', '0:%d' % frames],
-                       env=dict(env, PEEK_SAVE=tag + '.state'), capture_output=True)
+                       env=dict(env, PEEK_SAVE=tag + '.state', CT_ORACLE_LOGICAL='1'), capture_output=True)
     if seed == '-':
         seed = tag + '.raw.wram'
     a = open(tag + '.raw.wram', 'rb').read(); b = open(seed, 'rb').read()
@@ -68,7 +68,7 @@ def main():
         penv.update(CT_BATTLE_MVSWEEP=str(n), CT_BATTLE_MVTRACE='1', CT_BATTLE_WALKTRACE='1')
     else:
         penv.update(CT_BATTLE_IDLETRACE='1', CT_BATTLE_IDLESWEEP=str(n), CT_BATTLE_WALKTRACE='1')
-    p = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat'], env=penv,
+    p = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat'], env=penv,
                        capture_output=True, text=True, errors='replace')
     rows = []
     for l in (p.stdout + p.stderr).splitlines():

@@ -19,7 +19,7 @@ the pixels the hurt flash paints (all three channels >= 0xC0 -- the enemy's own 
     dissolve-flash: <side> death<k> white px: <n> <n> ... (frames -3..+8)
     dissolve-flash: <side> death<k> <no flash|FLASH>
 
-CT_DISSOLVE_FLASH_PORT=<exe> runs another ct_field build (the cartridge's frames are kept in build/_dissolve_flash/).
+CT_DISSOLVE_FLASH_PORT=<exe> runs another Belthasar build (the cartridge's frames are kept in build/_dissolve_flash/).
 """
 import os
 import re
@@ -31,7 +31,7 @@ import numpy as np  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.environ.get('CT_DISSOLVE_FLASH_PORT') or os.path.join(ROOT, 'build', 'ct_field.exe')   # another build
+FIELD = os.environ.get('CT_DISSOLVE_FLASH_PORT') or os.path.join(ROOT, 'build', 'Belthasar.exe')   # another build
 OUT = os.path.join(ROOT, 'build', '_dissolve_flash')
 CSTATE = 'saves/battle_re/forest_wait_ambush_active.state'
 PSEED = 'saves/battle_re/forest_wait_ambush_active.lakewram'

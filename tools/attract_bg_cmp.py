@@ -4,11 +4,14 @@ r"""Compare the port's attract against the CARTRIDGE on rows no sprite reaches.
     python tools/attract_bg_cmp.py <port_frame> <oracle_frame> <row0> <row1> [<row0> <row1> ...]
 
 The port runs the attract from its own boot (`--scene 433`) and dumps the presented frame with
-CT_SHOTS; the oracle (build/ct.exe) runs from saves/attract_cena_inicial.state -- the user's own snes9x
-capture of the attract, spliced by tools/s9x_to_lake.py -- and dumps its framebuffer with --peek.
-The two timelines are NOT frame-aligned (the port boots through the title first; the capture starts
-after it), so the frames are chosen inside the same leg, and only row bands where the background is
-static for that leg and no sprite passes are compared. Both sides are measured live every run.
+CT_SHOTS; the oracle (build/ct.exe) runs the cartridge under the rule (CT_ORACLE_LOGICAL /
+CT_ORACLE_VIRTUAL_BEAM, CLAUDE.md) from saves/attract_cena_inicial_rule.state -- the attract from power-on
++ 2159 frames, made by a recipe (tools/fixtures/attract_rule.json) -- and dumps its framebuffer with --peek.
+The two numberings differ by a constant on the field (the vehicle's frame p is the state's p - 2067: --scene
+433 plays the power-on, docs/TESTING.md 'The attract vehicle'), but --selftest runs the fights synchronously,
+so after a battle the pair is found inside the same leg; only row bands where no sprite passes are compared.
+Both sides are measured live every run. (Until 2026-10-22 the oracle ran the owner's real-time snes9x capture
+saves/attract_cena_inicial.state, another history: docs/ROADMAP.md 1.1.)
 
 Oracle framebuffer = 512x480 [pad,B,G,R], downsampled 2x; the port's row y is the oracle's row y+8.
 ATTRACT_CMP_DY=<n> adds n to that row mapping -- a measuring knob, nothing compensates with it any more.
@@ -21,9 +24,10 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
+STATE = 'saves/attract_cena_inicial_rule.state'
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 
 
 def main():
@@ -46,7 +50,7 @@ def main():
     os.remove(shot)
 
     orc = tmp + '_orc.raw'
-    subprocess.run([CT, '--peek', STATE, orc, '--frames', str(of)],
+    subprocess.run([CT, '--peek', STATE, orc, '--frames', str(of)], env=dict(os.environ, **RULE),
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not os.path.exists(orc):
         sys.exit('attract-bg-cmp: the oracle wrote no frame')

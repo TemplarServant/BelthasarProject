@@ -107,7 +107,12 @@
 // f1218->f1237, f1413->f1432 = dark 20 / 19 / 19). CD/025E+CD/027F carry two `JSR CD/3E7D` (2 derived
 // frames) plus a variable-cost bank-C2 VWF pass whose length was not decomposed -- see the dossier's
 // Open question 4. Pinned at the modal 3 (period 195).
-#define CT_BATTLE_RESULT_BUILD  3
+// UNDER THE RULE (the infinitely fast CPU) the build costs no frame: CD/025E's VWF pass is NMI-on work; the frames are
+// CD/027F's two waits -- the post on frame 0, `$CCEC = 10` on frame 2, CD/020A on 3-18, the dwell from 19. MEASURED, the
+// rule's cartridge (the playthrough's leg 20; a GATO fight): posts and boxes two frames apart, the next post 16 after a
+// close, a held A taken on post + 19 (disasm/notes/battle_results_box_timing.md, 2026-10-19). The 3 above was the
+// pre-rule picture's.  So: the close's 16, this build, the next box's 16 and the first test the frame after.
+#define CT_BATTLE_RESULT_BUILD  2
 // CD/019D: the 8-entry message-DWELL table, indexed `($2991 >> 3) & 7` (CD/01A5: `LDA $2991 / LSR x3 /
 // AND #07 / TAX / LDA $CD019D,X`) -- $2991 bits 3-5 are the config menu's Message Speed (C2/9332 unpacks
 // the same field into $0D90). Read from the ROM at run time, NEVER hard-coded: the last entry is 0xFF,
@@ -567,6 +572,7 @@ typedef struct CtBattleHost {
                              //   (0 = idle, so a host zeroed without CtBattleBegin -- the mover sweeps -- is idle too)
   int fxTeardownLong;        // ...and its path: 1 = the full one (CD/0473-0494), 0 = $99D2 bit 7 / $CD07 skip to CD/0497
   int fxTeardownRuns;        // teardowns run this battle (the battle-end trace prints it)
+  int bootPostPending;       // 1 from the module's start until the host posts C0/1BAB's JSL on C1/0000's frame (the rule)
   int bootApuFrames;         // frames the field's C0/1BAB post (JSL C7:0004) cost: the boot's first wait, before its 18 setup passes
   int bootSyncFree;          // the free sync mode: that post was priced at NO frames (not left unpriced -- a fixture's case)
   int renderFramesAbs;       // a host that never ran a boot (field.c's WRAM render host): its frames ARE the render clock
@@ -942,6 +948,17 @@ typedef struct CtBattleHost {
 // records E4/F600 are read from it). Returns 1 on success; without it the module still runs but
 // stages zeroed enemy stats.
 int CtBattleLoadRom(const char* path);
+// The ROM-free runtime with no dump at all: an EMPTY image (zeros) in place of the ROM, which the engine indexes through
+// romview.h and src/lz.c and never reads (every read is served from the container; CT_ROM_CENSUS guards it). Field's
+// start-up uses it when no dump is found and the container holds the ROM-free tables; 1 = in place.
+int CtBattleUseEmptyRom(void);
+// The DUMP itself for a harness that runs the ROM's code beside the port (the field lockstep's oracle, a state's SPC, the
+// sound's reference): the loaded image, or -- when the engine runs on the empty one -- the dump read from CT_ROM or
+// Chrono_Trigger_USA_SNES.sfc for that tool alone. NULL when there is none (the harness then says so).
+const uint8_t* CtBattleDumpRom(long* lenOut);
+// The anim interpreter's opcode lengths (battleAnimOpLen: C1/7A6B's handlers' advance) for ops 00-FF, -1 where it has
+// none: what tools/gen/anim_oplen.py writes for the closure of the anim scripts (assets/rom_closure_battle.py).
+void CtBattleAnimOpLens(int out[256]);
 void CtBattleAscCensus(void);                 // --asccensus: every PC anim script's opcodes (debug)
 const uint8_t* CtBattleRom(long* lenOut);        // the cached ROM (NULL if not loaded)
 // How many times an effect program slot was killed by an opcode this port has not derived, over the whole process.

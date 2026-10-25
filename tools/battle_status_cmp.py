@@ -10,7 +10,7 @@ r"""The battle's STATUS machinery, port against the rule's cartridge, from the s
 
 GATO's fight (saves/battle_re/gato_wait.state, the field before the A that starts it) on both sides: the cartridge is
 build/ct.exe under the rule (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1) with PEEK_POKE and the scenario's ROM
-patches applied in memory (CT_ROM_MEMPATCH, src/rom_verify.h) to the verified dump; the port is build/ct_field.exe --scene 6 --loadwram <the same WRAM> --walkscript a:8 with CT_ROM
+patches applied in memory (CT_ROM_MEMPATCH, src/rom_verify.h) to the verified dump; the port is build/Belthasar.exe --scene 6 --loadwram <the same WRAM> --walkscript a:8 with CT_ROM
 and CT_BATTLE_MEMMON (battle frames; the cartridge's frame = the port's + 227 on this fixture, disasm/notes/
 battle_status_pipeline.md S9.3). The ROM patches (disasm/notes/battle_status_pipeline.md S9.5), applied in memory on both sides:
   sleep02  GATO's attack headers CC/89C6[0..1]: +1 = 63 (accuracy), +2 = 02 (SLEEP), +7 |= 04 (the rider)
@@ -105,7 +105,7 @@ def run_port(tag, pokes, regs, script, frames):
     if script:
         env['CT_BATTLE_SCRIPT_ABS'] = '1'
         env['CT_BATTLE_SCRIPT'] = script
-    r = subprocess.run([os.environ.get('CT_STATUS_CMP_PORT') or os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
+    r = subprocess.run([os.environ.get('CT_STATUS_CMP_PORT') or os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
                         '--loadwram', lw, '--walkscript', 'a:8', '--selftest', '--frames', str(frames)],
                        cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     return parse(r.stdout + '\n' + r.stderr, r'memmon f(\d+)\S*(?: rel=-?\d+)?\s+(.*)')

@@ -1,0 +1,23 @@
+{
+  "name": "fxr_roly_s119",
+  "from": "fxr_pt_14_canyon_out",
+  "doc": "Stands in for saves/battle_re/roly_rider_s119.state, its own provenance on the playthrough: 600 A.D. Guardia Forest (loc 077, the playthrough's leg 14 end: Crono alone, storyline 0C) reloaded by the ROM's own loader at tile (8,10) facing down (--teleport 119 8 10 2, method jmp, 120 frames), above obj30's trigger tile -- Down 40 walks into the Roly Riders' ambush.",
+  "steps": [
+    [
+      "teleport",
+      119,
+      8,
+      10,
+      2,
+      120,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x077",
+    "wram": {
+      "0x10000": "0x0C",
+      "0x011F": "0x01"
+    }
+  }
+}

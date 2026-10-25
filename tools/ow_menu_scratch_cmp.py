@@ -20,7 +20,7 @@ import subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_ow_menu_scratch')
 TABLES = (('$7E:3000-37FF (BG1 block definitions)', 0x3000, 0x3800), ('$7E:3800-3FFF (BG2 block definitions)', 0x3800, 0x4000),
           ('$7E:4000-6FFF (the block grids)', 0x4000, 0x7000), ('$7E:7000-71FF', 0x7000, 0x7200))

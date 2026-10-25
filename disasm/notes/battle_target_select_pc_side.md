@@ -319,6 +319,32 @@ f1 `$99C0=00 FF`, `$A62D=FF`, `$9613=FF` (C1:1FDC), `$9609=0` (C1:1580), `$9614=
 never rises, the record is cleared (C1:85D8), Marle stays dead, `$1583` stays 04 (consumed). Without the poke the
 dispatch at f705 gives `$AD8E=01` (C1:C573) `$AE95=0x4000` (C1:AD31) `$AE93=BD` and `$A017=01` at f707.
 
+### 5.6b Enemy target dead between confirm and dispatch (one-enemy tech): C1/C82D re-targets (2026-10-18)
+C1/C335's dispatch on the tech's group (CC/1ACB & 7F): **00 / 05 / 06** take `$AD8E = C1/C8F7($B2AE)` -- the seat if
+present, else `$AE6D,X` (FD/B223's identity) -- and drop on `$5E4A,X` bit 7 (C1/C36E -> C1/C72B, `$AF23 = 1`). **07, 0B-0F,
+12, 1A** (C1/C427, C1/C506) take **C1/C82D**: `STZ $AF23`; for a PC (`$B18B < 3`) no present enemy -> `$AF23 = 1`
+(C8F1); `$B2AE` present -> kept (C84E-C858); else `$2989` bit 5 picks the first present seat from 3 (C883-C89B, the demo's)
+or `LDX #0003 / LDA #0B / JSR C1/AF22` until a present one (C861-C876); the pick into `$B2AE` / `$AD8E`, `$AD8D = 1`. Group
+09's arms jump into C82D / C37F / C43B by a C1/AF22 roll. Measured (battle_sim `@013:18`, three Hetakes at 1 HP, Crono's
+attack on the first and the next PC's tech on the same): the first falls at f941, the tech's dispatch writes `$B2AE = 04`
+at f988 (the first living seat: the roll's pick here). The port took the first living seat without the ROM's writes
+(battle.c battleTechC82D / battlePcRetarget now; check battle-sim-tech-retarget-c82d-vs-rule-cartridge). The roll: with
+the battle RNG's index `$0026 = C0` poked at f600 (battle_sim `poke=`) the same dispatch draws seat 05, not the first living
+04, on both sides (battle-sim-tech-retarget-c82d-roll-vs-rule-cartridge).
+
+### 5.6c The area pass's last shapes (C1/C586): the row and the radius around participant 1 (2026-10-18)
+C1/C5ED `JSR C1/C732` = `JSR ($C95C,X)` by the entry's `$04 & 7F`: 0 C78D (around `$00`, participant 0), 1 C7A7 (around
+`$06`, the target), 2 C7BD, 3 C7D1, 4 C7E7 (around `$02`, participant 1 -- C1/C74C's `$B2EB -> $B1BE`, also `$AE97`), 5 C7FD,
+6 C813, 7 AA7B; then C1/C741 `$99CC = $3D` and C1/1FDD's table C1/1FEA: 0 / 4 the band C1/25A3, 1 / 2 the radius C1/2701,
+3 / 5 C1/23A4, **6 the row C1/2332** -- the side's combatants (the band's gates) whose feet's y ($1D23) is within `$20` of the
+centre's (bounds clamped to 00 / FF), the centre into `$99C0`. Of the PC techs only three named a shape the port lacked: the
+duals 47 (Ayla+Crono) and 64 (Frog+Lucca), area 0B `06 01` (the row around the target), and 56 (Lucca+Robo), area 06 `01 04`
+(the radius around participant 1). Measured (battle_sim `drive=combo:` on three Hetakes): each hits two Hetakes on the
+cartridge (`$AF02 = FF 5E FF`); the port's pass stopped at the shape and kept the menu's one target. Now ported
+(battleAreaRow2332, battleAreaC586's fn 4 with battleTechCoActors run before the pass, as C1/C59A's C1/C74C does): every
+monitored change on the cartridge's frame (battle-sim-combo-47/64/56-area-shape-vs-rule-cartridge). C1/23A4 (shapes 3 / 5)
+and setups 2, 3, 5, 7 are used by no PC tech.
+
 ### 5.7 Dispatch masks (`M2="7EB2AE:1,7EAD8E:3,7EAECB:1,7EAE95:2,7EAE99:2,7EA017:3,7EAF23:1"`)
 | action | record +3 | `$AD8E` (writer) | `$AE95` | `$AE99` | `$A017..` |
 |---|---|---|---|---|---|

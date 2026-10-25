@@ -1,0 +1,17 @@
+{
+  "name": "lg_end_inner_lavos",
+  "from": "lg_jackie_ch27",
+  "doc": "Jackie's ch27 (loc 1DA, all level 99) walked into Lavos the way the oracle played it on 2026-10-14 (the memory note endgame-oracle-route; the session's auto-player replayed): 30 segments of `up 200, up+A, up 20, B, 8 x A every 12` (the shell to 1DB, the inner Lavos's fights), then 40 of `3 x B, 20 x A every 12` -- the WRAM of the session's saved segments, byte for byte.",
+  "steps": [
+    [
+      "pad",
+      "(10:200,110:2,10:20,1:2,0:6,(100:2,0:10)*8)*30,(1:2,0:6,1:2,0:6,1:2,0:6,(100:2,0:10)*20)*40"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1DB",
+    "wram": {
+      "0x10000": "0xD6"
+    }
+  }
+}

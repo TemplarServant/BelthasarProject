@@ -1,0 +1,21 @@
+{
+  "name": "fxr_m81_naga_after_fight",
+  "from": "fxr_m81_nuns",
+  "doc": "Stands in for saves/field_re/m81_naga_after_fight_lake.state (the capture driven into the Naga-ette fight, won, +40 frames): from fxr_m81_nuns A is mashed (2 frames of every 22) through the transformation and the fight until the field takes the party's sheets back (f7959: Crono's $2603 26 -> 15), then 95 frames with no input -- Lucca (obj3) at ip 0425, 47 frames before her 0429 (the capture: 41), obj15 at 078B.",
+  "steps": [
+    [
+      "pad",
+      "(100:2,0:20)*361,100:2,0:15,0:95"
+    ]
+  ],
+  "expect": {
+    "loc": "0x081",
+    "wram": {
+      "0x10000": "0x12",
+      "0x1186": "0x25",
+      "0x1187": "0x04",
+      "0x119E": "0x8B",
+      "0x119F": "0x07"
+    }
+  }
+}

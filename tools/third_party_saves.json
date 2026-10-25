@@ -1,0 +1,584 @@
+{
+  "description": "Third-party Chrono Trigger battery saves (8 KB .srm: a player's progress, no game data) the suite and the recipes start from. Never committed: tools/fetch_saves.py downloads each from its public source and verifies the SHA-256. saves/public: zdiemer/chrono-trigger-reimplemented's vendored saves (fantasyanime.com, games.technoplaza.net, zophar.net) at a fixed commit; saves/downloaded/ctjackie: \"Jackie's Game Saves\" from fantasyanime.com (ctsaves-enhasa.htm), each archive's .srm extracted.",
+  "files": [
+    {
+      "path": "saves/public/fantasyanime/ctsave01-kidnapping.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave01-kidnapping.srm",
+      "sha256": "d1c79c29342ad3328e25123356bf19385219a1865ae3ef5705ab22d2fdd03f1e"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave02-future.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave02-future.srm",
+      "sha256": "f0c389d7d68cafacffc8d80c6232866f957fa4031945627a0932fbd0b880cae4"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave03-future_more.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave03-future_more.srm",
+      "sha256": "ac1153fd3fe7fa5b310636c135d5fd2e0fb2b86de154ef5e152aaa22f6a6980b"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave04-masamune.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave04-masamune.srm",
+      "sha256": "9cb1008cbeef332f08fc01b5914673afa18f5a0f45ab549d7ab5f9efb98a1c57"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave05-prehistoric.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave05-prehistoric.srm",
+      "sha256": "47a70b58b8ff06a36d242c0543a321c7ba51ee0d4824da4e7bfa7d1836b0c69c"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave06-magus_castle.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave06-magus_castle.srm",
+      "sha256": "be9d3a826a5e5a1ded1cbf67c79697e92d80113c5fea32ecd7b0880bf882b2f2"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave07-azala.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave07-azala.srm",
+      "sha256": "54940340fbaa8679c168c54c68a02a3070b6051242552787b3efa68917ff6ce6"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave08-zeal.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave08-zeal.srm",
+      "sha256": "26882898207d8f8e186ff02cc264b0baf882629b158a1bee4ff3f492f55f8bf0"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave09-epoch.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave09-epoch.srm",
+      "sha256": "880c10cdc6319c52aef8deab3d030e957cfae5389a0f000acb6ed84b7e7c0ae9"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave10-ocean_palace.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave10-ocean_palace.srm",
+      "sha256": "e170e5142c3e9e45151a4b0a88d50eae18236089c7ba6edc118fab3aee598f8a"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave11-crono_gone.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave11-crono_gone.srm",
+      "sha256": "f76e3ee1d3688bfba81e12c70dd914bd7b4e3116f1d4463861d18db105aa15e5"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave12-side_quests1.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave12-side_quests1.srm",
+      "sha256": "f0f5c466f73b6c1ff53446e19d7db744460fe4542a436221ade8e13623945860"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave13-side_quests2.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave13-side_quests2.srm",
+      "sha256": "76f5a9833edbc86599b675f6881703439950105ee41d72d34ccb4a8bfb7a397a"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave14-side_quests3.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave14-side_quests3.srm",
+      "sha256": "a343f232a6e70a50016f7a4c5990bca2ddbb4eacacd5c1ce9eaaba0419a69df7"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave15-black_omen.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave15-black_omen.srm",
+      "sha256": "7cb213e6348d299da7ace4889511f0a6f782c111e5c758176ade402f10d5baec"
+    },
+    {
+      "path": "saves/public/fantasyanime/ctsave16-lavos.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/fantasyanime/ctsave16-lavos.srm",
+      "sha256": "cc5fa36da8185128e510c63f637842c77cf09dde413a196c3ab770656abff203"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state1.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state1.srm",
+      "sha256": "9c9a16d9e35636a88401532ed7b5beb764a9ef48912babb7011ca7c68e888be0"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state10.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state10.srm",
+      "sha256": "0dbbaa34593019245f087b0d1fa275d920a7f2bbf720de25aebb9a5152475daa"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state11.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state11.srm",
+      "sha256": "61ff67a6fb77570af48fc2961cadf57064fc8689b2afd56598a9b5a7b8fe8d8f"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state12.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state12.srm",
+      "sha256": "858c4ec7fc7896199293b3c7a9bf6a3914dd07a89dd39900ce8b03156e61eb02"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state13.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state13.srm",
+      "sha256": "02c4742fb8fa3bd2d6c8d248b06e510619e8b5ccb42e7d80fe7e68b437284f0d"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state14.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state14.srm",
+      "sha256": "133f2be7694e99113cf8607c4214d93f3aa34f486eeb8d548ad1d3475757631f"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state15.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state15.srm",
+      "sha256": "8e8551dfcd7d9b315666496ee9969545504d8747cbde5dc0f55624db60ae9980"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state16.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state16.srm",
+      "sha256": "11c1848cf36dacfe64631be155631199e0fbf4ab6b494abc5d6a842bbd7533b7"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state17.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state17.srm",
+      "sha256": "ab84a3d1270701665c47557d1ad755522b06592f57a922353dceb06cc03c6d60"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state18.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state18.srm",
+      "sha256": "23e45fbc10e7f210404a1ec567729ac10dddc371128dfb31a99766a205a3aac9"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state19.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state19.srm",
+      "sha256": "a9a3c74415ca8e98cd451058a0a187bf08f0ad8a54546dc730cc1a84649f71c9"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state2.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state2.srm",
+      "sha256": "c6ac9bd99065c758b1198afcbbe65691d9e8b885d054af4e988962f9bbbb8536"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state20.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state20.srm",
+      "sha256": "291543abade29d7c192938eec7c11a712e239a985c9d3c6d2e6a5456f3bbe25f"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state21.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state21.srm",
+      "sha256": "fe5adb712ffea4d1e68a0a7cc77ee339831204bac203f0a0e8747e985aef0bcc"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state22.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state22.srm",
+      "sha256": "595ea84f6c125038873911bd55506dc74bd480253f4b313a3c5c474d2583814a"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state23.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state23.srm",
+      "sha256": "9ade3d0ed30b70edc65a364822dec834d6cead5de6817b31257e5bf535883652"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state24.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state24.srm",
+      "sha256": "891620a7f3d6a6f3acb56fd33844c27ae8db8d62eb4883820e11af5ef5d06ce0"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state25.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state25.srm",
+      "sha256": "3fc08e27c1a3390f2d950c89f1f990d68eedc854da8875cf21d5fd99654ad3ee"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state26.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state26.srm",
+      "sha256": "dcaca8e5d0c93ebf6ba8f00a195c81b781892a2cc19fc5d842c724357cc2a6f0"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state3.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state3.srm",
+      "sha256": "defb9960b20bfbb194c5bcaba61ebed663c8c2166d394bdd1317b90f1b8989c7"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state4.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state4.srm",
+      "sha256": "e87521267d926f8d2e2300f18be18a6e5cc41351bf91c816b66dde657ebf85d3"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state5.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state5.srm",
+      "sha256": "2ab8b65198ebe17bf798d4aec4afdee94604493639dc33aef53e7bef33a05aa4"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state6.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state6.srm",
+      "sha256": "3584418963e86fe4d9a16575a50116b3dc5aaef6cb0d16bbdb15c0d4579b3284"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state7.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state7.srm",
+      "sha256": "81d141e17d4183fdceb5d9234523fb4efe57e0c58ac8afbc0bd0e84300d85c71"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state8.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state8.srm",
+      "sha256": "6fa2c401935bfb3137401243a31ec436dab6ac7d5487549e15e47f977136ded9"
+    },
+    {
+      "path": "saves/public/technoplaza/ct-state9.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/technoplaza/ct-state9.srm",
+      "sha256": "fed8e22a0815e7fddf50b067bc91df22bcef45b8d7dfba32a3f6394f104532b3"
+    },
+    {
+      "path": "saves/public/zophar/chrono-1.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono-1.srm",
+      "sha256": "6456c3b5d9c062b7db91a9a3481e35e0e41e3cd6491113b487ce5325f0e53341"
+    },
+    {
+      "path": "saves/public/zophar/chrono-2.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono-2.srm",
+      "sha256": "2e81806daa331bc717954ad431143865337516c59b5fd65468f1565bfb7b1637"
+    },
+    {
+      "path": "saves/public/zophar/chrono-3.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono-3.srm",
+      "sha256": "83904626b89b3f0941f0659c0fbba337c56e77b54409ace27b77fa7a7f3658e6"
+    },
+    {
+      "path": "saves/public/zophar/chrono-4.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono-4.srm",
+      "sha256": "f71ce1291935d64ab1cd25f915d3617549c4ae7e3f603ba9e4ed0ed9f5360a4e"
+    },
+    {
+      "path": "saves/public/zophar/chrono-5.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono-5.srm",
+      "sha256": "57df53dcecf21a78496dab90ea7b68bdfad15c2b673d1d64cbaea491f539d0fd"
+    },
+    {
+      "path": "saves/public/zophar/chrono-6.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono-6.srm",
+      "sha256": "a94c9df27a6ff8200064a35f80531a4964de0334e361b7ba8b147a21c40b27d9"
+    },
+    {
+      "path": "saves/public/zophar/chrono-7.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono-7.srm",
+      "sha256": "a20d27c71b0a0fa144cd02762b0e1fa670b6c0341caf375083482a338f0509a0"
+    },
+    {
+      "path": "saves/public/zophar/chrono-trigger.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono-trigger.srm",
+      "sha256": "ba2b0a32d8f827f572e08bff381a693ccb192bac45141ed9521421d2a2410ac5"
+    },
+    {
+      "path": "saves/public/zophar/chrono.srm",
+      "url": "https://raw.githubusercontent.com/zdiemer/chrono-trigger-reimplemented/3d69d1908a1c8a7ab56c458f677e5d3bca186e57/oracle/saves/zophar/chrono.srm",
+      "sha256": "a6cdf1ba35db13638256aac00fd9bd4edf58d7c618d1fe4414f0acfea4054ee3"
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie01-MillennialFair.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie01-MillennialFair.zip",
+      "sha256": "5214d8a79c420b2e1704af3c8911bee43f5f692572389636b9d5b2c80b665ccc",
+      "extract": [
+        {
+          "member": "01 - The Millennial Fair.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch01.srm",
+          "sha256": "4cdcd05ec521404f8310cf268e3658185c445f7dd092d1e020c930db041da833"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie02-QueenReturns.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie02-QueenReturns.zip",
+      "sha256": "580f6240b5304dbc5cf266e55582d146e425f9074e535bfa4b94384219fc417e",
+      "extract": [
+        {
+          "member": "02 - The Queen Returns.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch02.srm",
+          "sha256": "0a3b9ef03cc0ba5fc2c04726668f6355aaa64033c3e80cbdbb4330524c49b7c3"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie03-QueenGone.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie03-QueenGone.zip",
+      "sha256": "64502d154cdc1fd13fa06d7cd77710968830628280998759bccf08010440b417",
+      "extract": [
+        {
+          "member": "03 - The Queen is Gone.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch03.srm",
+          "sha256": "02f093232f0222545412eed90b3eb66105f4d4bfe149e49109e14abd0f8f8914"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie04-WereBack.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie04-WereBack.zip",
+      "sha256": "d1121d4eee5d1524fd0cdab76b64e2ce4d0c449ac15071e2be5398960de45732",
+      "extract": [
+        {
+          "member": "04 - We're Back!.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch04.srm",
+          "sha256": "5f900f6a05378f18efecbc53b506a336bf482e7ddaefa2678b668ca792ec3357"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie05-TheTrial.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie05-TheTrial.zip",
+      "sha256": "f76350b36b9c4a01c4ac22340154bd0c2ed5addc97e9022ae6d259a886c7a75c",
+      "extract": [
+        {
+          "member": "05 - The Trial.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch05.srm",
+          "sha256": "e589547aa631116ed68793d95eb3cad603be381543e187e00791f1f373bf3eb3"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie06-BeyondRuins.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie06-BeyondRuins.zip",
+      "sha256": "f067b8bb90ead1ee47b9d062038d2e52461e62b09b5d58656079737ebffd078b",
+      "extract": [
+        {
+          "member": "06 - Beyond the Ruins.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch06.srm",
+          "sha256": "98be5940d6024fffe03ec1d962f2ab3e66e2d7771a5e4ec7d1cc0d4ec129a349"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie07-FactoryRuins.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie07-FactoryRuins.zip",
+      "sha256": "ee7b303307cb4cc9807e75b092025b0154b693d312d37a689780ba16294a367f",
+      "extract": [
+        {
+          "member": "07 - The Factory Ruins.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch07.srm",
+          "sha256": "f111d3478a5c0ce20636ccf6d9388ce4be350baaf2b7f3529c09018eafad06a8"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie08-EndofTime.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie08-EndofTime.zip",
+      "sha256": "6d7777ca56c9082e069717b58e339c95056d052258e9706aa4b1289016f8c0e7",
+      "extract": [
+        {
+          "member": "08 - The End of Time.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch08.srm",
+          "sha256": "9c2fc1a763f304112e0cfff2b84397f82df080e321454f7a8b335264d623802c"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie09-VillageofMagic.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie09-VillageofMagic.zip",
+      "sha256": "d03375c1de641a922b82d83e3e53dfe522b8fbdd3db7ea8d81a5f5b539a4ffc9",
+      "extract": [
+        {
+          "member": "09 - The Village of Magic.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch09.srm",
+          "sha256": "3cfe327b2853e06e4f83c97d10df955f676a14dca45335cd7b6e71f8c848a723"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie10-HeroAppears.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie10-HeroAppears.zip",
+      "sha256": "7adf56acc6aae4a186e6bb1c2243fac084ef353df1a8c4866c5b40c59f8d9716",
+      "extract": [
+        {
+          "member": "10 - The Hero Appears.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch10.srm",
+          "sha256": "7ec4a380ae076e93ab8612fbd988bafd4a150257e5c6bed1a6ccbb664774328e"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie11-TatandFrog.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie11-TatandFrog.zip",
+      "sha256": "08552c9c9f3ca3a05650e15f66f2e56b9ce82545472573000be494dd86ff7755",
+      "extract": [
+        {
+          "member": "11 - Tata and the Frog.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch11.srm",
+          "sha256": "a869744b866137aced06f62cbc19dff445c3bd7f42a86b7446a06a3f48cdfe6f"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie12-RareRedRock.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie12-RareRedRock.zip",
+      "sha256": "7e47ff612e51cc524be852ccd4e0017904846328a4fbabcc0405de10f68dddb6",
+      "extract": [
+        {
+          "member": "12 - The Rare Red Rock.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch12.srm",
+          "sha256": "6a98e05f18ebb817c6e03ea93b7cb111f72c93b024f3992a1acf060687288daf"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie13-FootstepsFollow.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie13-FootstepsFollow.zip",
+      "sha256": "00a109d09ac24751e15fcf78f796fe6a489531f3294176f06d2956c9c5898b05",
+      "extract": [
+        {
+          "member": "13 - Footsteps! Follow!.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch13.srm",
+          "sha256": "7b75789f008e001c06090d0100ec80217f877cc00114de5f922b20140f8c3e91"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie14-Masamune.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie14-Masamune.zip",
+      "sha256": "5e97b734aba3826455219c4761df3991f5bb53dfb537d71708369eb558d8a4ae",
+      "extract": [
+        {
+          "member": "14 - The Masamune!.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch14.srm",
+          "sha256": "89576a0583c0b42eb69b8e97681f1443ade95950451a52645a8ecb4c6f45ce90"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie15-MagusCastle.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie15-MagusCastle.zip",
+      "sha256": "f7dddd71c0de0636f68fad002b904d6e02f6cfac5a45edd8039885f86641c372",
+      "extract": [
+        {
+          "member": "15 - Magus' Castle.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch15.srm",
+          "sha256": "2a813bb839e688fa1dd86edc66ad923672cde684bb80da1c578b4f7d70433e59"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie16-ForwardtoPast.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie16-ForwardtoPast.zip",
+      "sha256": "bf09d21e1eeca61c7fcdfe6dcd872091a76af49b762194f9652a39cfb0dab978",
+      "extract": [
+        {
+          "member": "16 - Forward to the Past.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch16.srm",
+          "sha256": "afaa7b37b21d5f217824e79fbee754feee78aa0f25b1e6ee464a9a81ef148584"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie17-UnnaturalSel.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie17-UnnaturalSel.zip",
+      "sha256": "feb96cf46b23c8690a49d5338d1308764b537bbd5693fa13f9ca10b9a60e156f",
+      "extract": [
+        {
+          "member": "17 - Unnatural Selection.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch17.srm",
+          "sha256": "703caca493074e9f9bf53f24e074c1a12d0929632c2c1ed1366fb1b41410dc1f"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie18-MagicKingdom.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie18-MagicKingdom.zip",
+      "sha256": "124265dd7bce8e96776ed42f977d879f4bde992f857dcf0eb30eedb91cbb8025",
+      "extract": [
+        {
+          "member": "18 - The Magic Kingdom.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch18.srm",
+          "sha256": "78854f621179d2980692df5e9632b42e56f44203ec15afba5214c3b5fc9af387"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie19-BreaktheSeal.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie19-BreaktheSeal.zip",
+      "sha256": "7ca952e3fdcc13fbdc3e5d067a52a3e024aaa7584d6e0dd641177fc1e7ccedd7",
+      "extract": [
+        {
+          "member": "19 - Break the Seal!.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch19.srm",
+          "sha256": "00a85ee0d38f89233e5786a53bd7ea388e379aa44ddbdf3f11554a2c2b788f51"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie20-GuruonMtWoe.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie20-GuruonMtWoe.zip",
+      "sha256": "7ad823466e28a779af52750fceaba5421f3530274a4600e7cfeb8818aa29cedf",
+      "extract": [
+        {
+          "member": "20 - The Guru on Mt.Woe.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch20.srm",
+          "sha256": "24ab7e74ca00afc712e1113609d44869be6211d9e3335fc842d98f6d6b14bcb5"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie21-WhatLiesBeyond.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie21-WhatLiesBeyond.zip",
+      "sha256": "53e5da93c51a505471ee5b742ceb4f12e9720f0f980f2a3ac170c990f32a6897",
+      "extract": [
+        {
+          "member": "21 - What Lies Beyond.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch21.srm",
+          "sha256": "42af0a4746005c3a8147f810fa22b02e03e24da24322cbad0fd9b5be4ac8ad9d"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie22-LavosBeckons.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie22-LavosBeckons.zip",
+      "sha256": "e6410ad29d441f0441789bd82da0cbe1ae1119a6ffe262428c9e2d2c803f27c3",
+      "extract": [
+        {
+          "member": "22 - Lavos Beckons.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch22.srm",
+          "sha256": "ec914d50dde61764c67c0f4fc122cfbfbb008ba0f9063e083417a3e83869eb58"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie23-TheNewKing.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie23-TheNewKing.zip",
+      "sha256": "c798c6475aa67e882f8738fdfe44d83d1df81401d1971e3ffc4337ac63d47f6d",
+      "extract": [
+        {
+          "member": "23 - The New King.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch23.srm",
+          "sha256": "92498dee527385b8c9712d1d0447d04368f55b882b241f80365bb90ac9fe1912"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie24-TheTimeEgg.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie24-TheTimeEgg.zip",
+      "sha256": "23e41c2509b70b4e80c20c092bad85df2a016509b5ada6c1596146ace620d2dd",
+      "extract": [
+        {
+          "member": "24 - The Time Egg.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch24.srm",
+          "sha256": "b26f41cf31c11b6518f109e6264e4edd6f04097eb3b6d8b3bce3b3e6237f7d71"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie25-FatedHour.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie25-FatedHour.zip",
+      "sha256": "1d0f3e19fbbe7b5130dd3cc24135fb5cded2d30dd0f3a267be41683ae8a08d56",
+      "extract": [
+        {
+          "member": "25 - The Fated Hour.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch25.srm",
+          "sha256": "e1b89fe15199436644c77774b40f0b2039b486a09f4044765d16e31f6851f6fb"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie26-FatedHour.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie26-FatedHour.zip",
+      "sha256": "fdf8cc36a5a20793a72125e79ffe164d07244f5f43548ee6174a10c1db7d24ec",
+      "extract": [
+        {
+          "member": "26 - The Fated Hour.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch26.srm",
+          "sha256": "aa12bf7feb06bceb51591c76f5615c27820110e53f2135e9cb8caa19522337e2"
+        }
+      ]
+    },
+    {
+      "path": "saves/downloaded/ctjackie/zip/ctjackie27-FinalBattle.zip",
+      "url": "https://fantasyanime.com/squaresoft/saves/ctjackie27-FinalBattle.zip",
+      "sha256": "57d07464375f981d4f29deec9055ee98f53b06f9febde942a723f907533606a2",
+      "extract": [
+        {
+          "member": "27 - The Final Battle.srm",
+          "path": "saves/downloaded/ctjackie/srm/ch27.srm",
+          "sha256": "346cce14de951da21e62fc438de00b0cf8be8ff60e9ed16b79625c83767fa0be"
+        }
+      ]
+    }
+  ]
+}

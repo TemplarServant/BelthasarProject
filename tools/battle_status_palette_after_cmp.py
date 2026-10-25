@@ -10,10 +10,11 @@ three seats (C1/357D-3587 `JSR C1/30B6`: $A46D cleared, the row's 26 bytes put b
 field keeps the page after the ack. The port skipped those three calls until 2026-10-04, and a Slowed Crono walked the
 field outlined in the ramp's last colour.
 
-  cartridge  build/ct.exe --peek from saves/field_re/m81_nuns_lake.state (the rule), A every 12 frames, 10300 frames: the
-             field after the ack (Crono and Marle slowed from c3911 / c5673 until the last enemy falls, c9733)
-  port       build/ct_field.exe --loadwram saves/field_re/m81_nuns_lake.lakewram, CT_BATTLE_MASHA, CT_DUMPWRAM at field
-             f9000 (Crono slowed from the kiss to the victory)
+  cartridge  build/ct.exe --peek from saves/field_re/m81_nuns_lake.state (the rule), A every 12 frames, 13300 frames: the
+             field after the ack (the recipe twin, 2026-10-22: Crono and Lucca slowed from c4043 / c6725 ($A46D) until the
+             last enemy falls, c12916; the sheets back at c13133)
+  port       build/Belthasar.exe --loadwram saves/field_re/m81_nuns_lake.lakewram, CT_BATTLE_MASHA, CT_DUMPWRAM at field
+             f13300 (the slowed seats from the kiss to the victory)
 
     status-palette: OBJ<r> cartridge <16 words> | port <16 words> -> SAME | DIFFER
 """
@@ -32,7 +33,7 @@ def row(w, r):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    frames = 10300
+    frames = 13300
     seq, t = [], 0
     while t < frames:
         n = min(12, frames - t)
@@ -44,10 +45,10 @@ def main():
                     '--btnscript', ','.join(seq)], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     pw = os.path.join(OUT, 'p.wram')
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_BATTLE_MASHA='1',
-               CT_BATTLE_DEBUGEND='20000', CT_DUMPWRAM=pw, CT_DUMPWRAM_AT='9000')
-    subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '129',
+               CT_BATTLE_DEBUGEND='20000', CT_DUMPWRAM=pw, CT_DUMPWRAM_AT='13300')
+    subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '129',
                     '--loadwram', 'saves/field_re/m81_nuns_lake.lakewram', '--selftest', os.path.join(OUT, 'p.raw'),
-                    '--frames', '9002'], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    '--frames', '13302'], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not os.path.exists(craw + '.wram') or not os.path.exists(pw):
         print('status-palette: FAILED -- a side wrote no WRAM')
         return 1

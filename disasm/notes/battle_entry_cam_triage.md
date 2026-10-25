@@ -33,7 +33,7 @@ Driving our engine through the whole GATO E7→D9→D8 chain from a pre-D8 seed 
 `CT_FIELDSHOT_AT`:
 
 ```
-build/ct_field.exe --assets ct_assets.dat --scene 6 --battletest <SCRATCH>/gato_seek_pre.raw.wram
+build/Belthasar.exe --assets ct_assets.dat --scene 6 --battletest <SCRATCH>/gato_seek_pre.raw.wram
    env: CT_ROM=Chrono_Trigger_USA_SNES.sfc  CT_FIELDSHOT=<out>  CT_FIELDSHOT_AT=<N>
 ```
 seed = f180 (2 frames before the E7 arms at f182). Frame N below is RELATIVE to the seed.
@@ -210,7 +210,7 @@ the 64 px reframe; the user explicitly wants motion).
 ## PART E — BOUNDARIES / OPEN
 
 - **Interactive vs seeded `$1D0A/$1D0E`.** The measured traces seed `$1D0E` from the oracle WRAM (so the seek
-  starts at the oracle-correct 24/480). In a from-scratch interactive ct_field session our VM does not maintain
+  starts at the oracle-correct 24/480). In a from-scratch interactive Belthasar session our VM does not maintain
   `$1D0A/$1D0E` (Part C proof), so the seek could start from a stale value and the jump/glide would differ
   (likely worse). This is the same root (no field-camera) and is exactly what tier (b) fixes; tier (a) is
   robust to it because it glides the render camera to the script TARGET, not from the stale coarse scroll.
@@ -222,7 +222,7 @@ the 64 px reframe; the user explicitly wants motion).
 - Screenshot artifacts confirm the numeric trace; the numbers (printed render camx/camy) are authoritative.
 
 ## Repro / artifacts (scratchpad, NOT committed)
-- exes: `<SCRATCH>/ct.exe`, `<SCRATCH>/ct_field.exe` (+ SDL2.dll) — copies of build/ (HEAD cdeb11d).
+- exes: `<SCRATCH>/ct.exe`, `<SCRATCH>/Belthasar.exe` (+ SDL2.dll) — copies of build/ (HEAD cdeb11d).
 - **GATO pre-D8 seed** (minted here, mirrors `forest_seek_pre.raw.wram`):
   `ct.exe --peek gato_press_action.state <SCRATCH>/gato_seek_pre.raw --btnscript "100:8,0:172"` -> `.wram`
   (f180: `$1D00=0`, `$1D0A=00 $1D0E=03`, loc=0006).

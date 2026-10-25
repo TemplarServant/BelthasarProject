@@ -1,0 +1,14 @@
+{
+  "name": "lg_end_handoff_f6837",
+  "from": "lg_end_pre_ff2b",
+  "doc": "Stands in for saves/ending_re/ending_handoff_f6837.state: ending_pre_ff2b + 6837 frames -- `FF 2B` to its END, the reboot, 02D -> 105 -> 059 -> 05A, the frame before scene 90's `FF 2E`.",
+  "steps": [
+    [
+      "pad",
+      "0:6837"
+    ]
+  ],
+  "expect": {
+    "loc": "0x05A"
+  }
+}

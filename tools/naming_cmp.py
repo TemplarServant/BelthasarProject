@@ -14,10 +14,11 @@ press a frame after the pad latch).
 
 `boot*` / `loadlist` -- from a cartridge's power-on (`ct.exe --fb` to f120 with CT_ORACLE_SRAM = a zeroed battery, or
 the drive's battery; Start at +13 and +115 -- the title takes the second) against the port's `--boot` (a fresh battery or
-a copy of the drive's; Start at 133). The two are aligned on the park of an op: `C8 C0` (the naming; boot, bootfast) or
+a copy of the drive's; Start at 198, the power-on's title: boot_loader.md sec. 10). The two are aligned on the park of an op: `C8 C0` (the naming; boot, bootfast) or
 `C8 41` (the load shell; bootldr, loadlist) -- the cartridge's from `--monitor` ($0125 / $0117), the port's from
-CT_NAMETRACE -- with D = cartridge park - (port park + 1): the port's field VM runs a frame ahead of its menu pictures
-(the shop's park is the port's f10 and the cartridge's f11, and its fade grades 0 px that way). Port frame p is the
+CT_NAMETRACE -- with D = cartridge park - port park (until 2026-10-19 `- (port park + 1)`: the port started the C8 fade
+one frame after its park, a frame later than C0/0CCE does, and the extra frame hid that these drives press the port's
+keys unshifted -- the shop's park is the port's f10 and the cartridge's f11). Port frame p is the
 cartridge's frame p + D, its thumbnail p + D + 2, and a key the cartridge gets at t the port gets at t - D + 1. Presses
 are listed in the cartridge's frames (from the f120 state). The load list sits 7 lines off the thumbnail grid (its BG V
 scroll: tools/boot_loader_cmp.py grades its settled picture), so `loadlist` grades its timing, not its pixels.
@@ -63,15 +64,18 @@ DRIVES = {
     # MARLE'S NAMING at the fair (`C8 C1`: $299F | $71 non-zero, so C2/E1ED goes straight to C2/E201 -- no selector, no
     # prompt, $68 0 -> 1, P = S0 + 4). Both sides mash the field A through the dialog until the op parks; the drive is
     # aligned on the parks (see run_park) and runs Right, Down, Start ("Marle" accepted) -> the close, the reload, the
-    # field's fade-in. Frames are the cartridge's from saves/field_re/s439_marle_choice_lake.state (park f572). The
+    # field's fade-in. Frames are the cartridge's from saves/field_re/s439_marle_choice_lake.state (the recipe twin since
+    # 2026-10-22: park f603 -- the capture's f572 plus the cartridge's 45-frame hold on the join's song load (`10 06`),
+    # a song the capture's sound processor already held, less the dialog's own pace from that state; the window opens
+    # at the fade's end, f619 = park + 16: under the fade the two dims of different field pictures differ). The
     # window starts after C0/0CC7's fade (which dims two different field pictures: the dialogs do not keep step) and ends
     # before the field's return (one frame early in the port: the reload after the menu, an open item).
-    'marle': ([(0x80, 630), (0x20, 650), (0x8, 680)], 579, 722),
+    'marle': ([(0x80, 661), (0x20, 681), (0x8, 711)], 619, 753),
 }
 # name: (cartridge state, port WRAM seed, port scene, the last frame the cartridge's dialog is mashed on)
 # boot drives: (battery, the op whose park aligns the two sides); a drive not listed is (None, 'naming')
 BOOT = {'bootldr': (None, 'loader'), 'loadlist': ('saves/field_re/colsave3.srm', 'loader')}
-PARK = {'marle': ('saves/field_re/s439_marle_choice_lake.state', 'saves/field_re/s439_marle_choice.lakewram', 439, 565)}
+PARK = {'marle': ('saves/field_re/s439_marle_choice_lake.state', 'saves/field_re/s439_marle_choice.lakewram', 439, 610)}
 
 
 def run(name, peeks):
@@ -184,8 +188,7 @@ def oracle_park(st, anchor, script, frames):
 
 def run_boot(name, peeks):
     """A drive from power-on. The two sides are aligned on the park of the anchor's op (C8 41 the loader, C8 C0 the
-    naming): the cartridge's from `--monitor`, the port's from CT_NAMETRACE, D = cartridge park - (port park + 1) -- the
-    port's field VM runs a frame ahead of its menu pictures (the shop's park: port f10, cartridge f11)."""
+    naming): the cartridge's from `--monitor`, the port's from CT_NAMETRACE, D = cartridge park - port park."""
     presses, f0, f1 = DRIVES[name]
     battery, anchor = BOOT.get(name, (None, 'naming'))
     end = f1 + 10
@@ -205,21 +208,21 @@ def run_boot(name, peeks):
     else:
         penv['CT_SRAM_FRESH'] = '1'
     base = [M.FIELD, '--assets', 'ct_assets.dat', '--boot', '--selftest', os.path.join(out, '_p_end.raw')]
-    r = subprocess.run(base + ['--frames', '400', '--walkscript', 'n:133,s:1,n:266'], cwd=ROOT, env=penv,
+    r = subprocess.run(base + ['--frames', '465', '--walkscript', 'n:198,s:1,n:266'], cwd=ROOT, env=penv,
                        capture_output=True, text=True).stdout
     ppark = next((int(l.split()[1][1:]) for l in r.splitlines()
                   if l.startswith(anchor + ':') and 'parked' in l), None)
     if opark is None or ppark is None:
         print('naming-cmp: %s: no %s park (cartridge %s, port %s)' % (name, anchor, opark, ppark))
         return
-    D = opark - (ppark + 1)
+    D = opark - ppark
     if battery:
         open(srm, 'wb').write(open(os.path.join(ROOT, battery), 'rb').read())
     env = dict(os.environ, CT_ORACLE_LOGICAL='1', PEEK_THUMBS=ot, PEEK_THUMBS_EVERY='1')
     subprocess.run([M.CT, '--peek', st, os.path.join(out, '_o_end.raw'), '--btnscript',
                     M.oracle_script(BOOT_START + presses, end)], cwd=ROOT, env=env, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL)
-    walk, t = ['n:133', 's:1'], 134
+    walk, t = ['n:198', 's:1'], 199
     for m, f in presses:
         pf = f - D + 1
         if pf > t:
@@ -271,8 +274,10 @@ def run_park(name, peeks):
             if v125 >= 0xC0 and v117 & 0x40:
                 opark = int(s[0][1:])
                 break
+    # the port's sound processor is the cartridge state's (CT_AUDIO_SEEDSTATE): the dialog's song load costs the SPC time
+    # it costs the cartridge from that state
     penv = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_NAMETRACE='1',
-                CT_SRAM=os.path.join(out, '_p.srm'), CT_SRAM_FRESH='1')
+                CT_SRAM=os.path.join(out, '_p.srm'), CT_SRAM_FRESH='1', CT_AUDIO_SEEDSTATE=ost)
     base = [M.FIELD, '--assets', 'ct_assets.dat', '--scene', str(scene), '--loadwram', seed, '--selftest',
             os.path.join(out, '_p_end.raw')]
 
@@ -291,7 +296,7 @@ def run_park(name, peeks):
     if opark is None or ppark is None:
         print('naming-cmp: %s: no park (cartridge %s, port %s)' % (name, opark, ppark))
         return
-    D = opark - (ppark + 1)
+    D = opark - ppark
     pt = os.path.join(out, 'p.thumbs')
     ot = os.path.join(out, 'o.thumbs')
     for f in (ot, pt):

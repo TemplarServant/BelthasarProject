@@ -3,7 +3,7 @@
 Two user reports, audited oracle-vs-ours frame-exact (mandate: measure both sides, derive from the ROM/oracle
 only). Method = LakeSnes oracle (`ct.exe`→`ct_probe.exe`) `--monitor` (RAM timelines) + `--peek` (rendered
 framebuffers, for the flash) on `gato_press_action.state` / a forced-crit in-battle state; our engine =
-`ct_field.exe --battletest` with `CT_BATTLE_TRACE` / `CT_BATTLESHOT_AT`. Writer PCs = the PC after the store.
+`Belthasar.exe --battletest` with `CT_BATTLE_TRACE` / `CT_BATTLESHOT_AT`. Writer PCs = the PC after the store.
 ⚠ `--peek` ≠ `--monitor` timelines — every RELATIVE measurement below is taken **within one run's own timeline**,
 anchored to the action-dispatch `$A013` 0→1 (which both capture). fb = 512×480 `[pad,B,G,R]`, mean brightness
 = Σ(R+G+B)/3px.
@@ -173,7 +173,7 @@ Marle's crit remains flash-less (`$9877`=0x0F == her normal crossbow anim, `actC
 # (1) cadence + reload + $9F22 (oracle):
 ct_probe --monitor "AFAB:8,A013:1" --from gato_press_action.state --input "100:8,0:1300" --frames 1350 --diff  <ROM>
 ct_probe --monitor "9F22:3" --from gato_press_action.state --input <mash> --diff --writer  <ROM>   # f768 $9F22[0]←0x48 C1:BDB2
-# ours: CT_BATTLE_MASHA=1 CT_BATTLE_TRACE=1 ct_field --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
+# ours: CT_BATTLE_MASHA=1 CT_BATTLE_TRACE=1 Belthasar --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 # (2) crit flash (oracle peek sweep; crit_ready.state = in-battle Crono crit=0xFF):
 #   for PAD: ct_probe --peek crit_ready.state sw.raw --btnscript "100:8,0:24,100:8,0:PAD" <ROM>  -> fb mean + .wram[$A013]
 #   Flash A peak f97 (rel+50), Flash B peak f138 (rel+91); dispatch $A013->1 @f47

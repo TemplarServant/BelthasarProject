@@ -63,7 +63,7 @@ def main():
     penv = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                 CT_AUDIO_SEEDSTATE=os.path.join(ROOT, STATE), CT_FIELD_MEMMON='101EC:1,103FE:1,011F:1',
                 CT_SHOTS=os.path.join(OUT, '_p%d' % os.getpid()), CT_SHOTS_AT=str(TO), CT_SHOTS_EXIT='1')
-    p = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
+    p = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
                         '--loadwram', seed, '--walkscript', 'a:8'], cwd=ROOT, env=penv, capture_output=True, text=True,
                        errors='replace')
     for f in (seed, os.path.join(OUT, '_p%d_f%d.raw' % (os.getpid(), TO))):

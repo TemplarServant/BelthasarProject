@@ -2,6 +2,7 @@
 // run_func (the init subset: flow + memory + actor ops). Run over the packed bytecode it
 // reproduces the field actor placement the Python VM packs as CT_ASSET_ACTORS.
 #include <stdio.h>
+#include "romview.h"     // the ROM's small tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -12,10 +13,13 @@
 #include "seq_xlat.h"      // CtXlatWipeCall: the window wipe C3/01E4 translated      // CtObjSceneInit / CtObjSlotAlloc / CtObjListLink: the
                        // scene-entry tables and C0/A88D's rising-edge setup
 #include "ct_vm.h"
+#include "hdma_table.h"     // FD/C2C1, the field's HDMA table builder (CtHdmaTableBuild)
 #include "rom_verify.h"
 #include "objslot.h"       // FD/E39C, the palette-effect records op 0x88 arms (the battle's body)
 #include "lz.h"
-#include "data/ct_regroup.h"          // baked ROM battle-RETURN regroup script templates (tools/_gen_regroup.py)
+#include "field_cost.h"     // ct_vm_op_cycles: the load's object pass, op by op
+#include "tables/ct_regroup.h"          // baked ROM battle-RETURN regroup script templates (tools/_gen_regroup.py)
+#include "wipe.h"                     // CtWipeRoutine: the window wipe C3/01E4 and its seed C3/02DD, native
 #define CTPI 3.14159265358979323846
 
 // ---- the sound sink (ct_vm.h; disasm/notes/audio_commands.md §6) -------------
@@ -28,6 +32,23 @@ void CtSceneSetSoundSink(const CtSoundSink* sink) {
   if (sink) gSoundSink = *sink;
   else { gSoundSink.ctx = 0; gSoundSink.post = 0; gSoundSink.port = 0; }
 }
+// THE LOAD'S LAST JSLs. A location load runs its scripts' init (the init runner C0/5709) and obj0's slot 1 (C0/56C8 ->
+// C0/595C) at its END, after the decompressions, with the NMI off: on the cartridge their sound commands reach the SPC in
+// the load's last frame, the one C0/2848 begins in (the Lavos chain's 1D3: `10 0D` from C0/1B8B at f2227 as the load
+// starts, slot 1's `E8 FF` -> `18 FF` at f2249 line 71, C0/2848 at f2249 line 89; tools/sound_post_cmp.py). The port runs
+// the whole load in its first frame and holds the black after it, so a host that prices the load that way
+// (CtSceneLoadPostsMode) gets those JSLs queued here -- the mailbox as each left it, $1E03 included -- and posts them with
+// CtSceneLoadPostsFlush in the load's last frame. The load's own song post (C0/1B8B, at its start) is not queued.
+// Each queued JSL keeps WHERE in the load it ran: the object pass's decompressions priced so far (g_ctLzSpriteCycles,
+// the sprite loads of the objects whose init ran before it). The host posts it as many frames before the load's end as
+// the work after it takes (CtSceneLoadPostCycles): the attract's 0A5 load posts its `10 18` at f4220 and reaches C0/2848
+// at f4234 -- the later objects' sprite loads -- where the Lavos chain's 1D3 load posts slot 1's `18 FF` on C0/2848's frame.
+static int gLoadPostMode = 0, gLoadPostOn = 0, gLoadPostN = 0, gLoadPostDone = 0;
+static uint8_t gLoadPost[32][4];
+static long gLoadPostCyc[32];
+void CtSceneLoadPostsMode(int on) { gLoadPostMode = on ? 1 : 0; }
+int  CtSceneLoadPostsPending(void) { return gLoadPostN - gLoadPostDone; }
+long CtSceneLoadPostCycles(int k) { k += gLoadPostDone; return (k >= 0 && k < gLoadPostN) ? gLoadPostCyc[k] : -1; }
 static void palSweepB0E6(CtScene* sc);                      // fwd (needs CtScene too)
 static uint8_t vmSoundPort(int k) {
   return gSoundSink.port ? gSoundSink.port(gSoundSink.ctx, k) : 0;   // no APU -> 0 -> waits pass
@@ -279,7 +300,7 @@ static void memInit(Mem* m, const uint8_t* gmem) {
 // ⚠ Single-threaded assumption: the handler unprotects, single-steps and re-arms, so a store from
 // another thread during that window is missed. Fine for the field engine, not for the SDL audio
 // thread if that ever touches WRAM.
-// Example -- `CT_WATCH=0E81 ct_field --scene 1 --worldtest` prints every writer of object 0's
+// Example -- `CT_WATCH=0E81 Belthasar --scene 1 --worldtest` prints every writer of object 0's
 // draw-list next-pointer, with the two list routines and the A8EC/A8EF one-shot each named.
 #include <windows.h>
 #include <dbghelp.h>
@@ -689,12 +710,12 @@ static const uint8_t* gEnemyRecTab; static int gEnemyRecLen;
 void CtSceneSetEnemyRecTable(const uint8_t* tab, int len) { gEnemyRecTab = tab; gEnemyRecLen = len; }
 static const uint8_t* gRomImg; static long gRomImgLen;
 void CtSceneSetRomImage(const uint8_t* rom, long len) { gRomImg = rom; gRomImgLen = len; }
-// `JSL FD/C2C1` -- the field's HDMA table builder (src/xlat/hdma_fd.c through CtXlatHdmaBuild, seq_xlat.h): one of the
+// `JSL FD/C2C1` -- the field's HDMA table builder, native (src/hdma_table.c, disasm/notes/field_hdma_tables.md): one of the
 // two table sets is written from the WRAM's state and $0153 bit 0 flips. Every caller of the port's runs it here; with no
 // ROM image (a host that never set one) the flip alone is left, as before the builder was in.
 void CtHdmaTableBuild(uint8_t* wram128) {
   if (!wram128) return;
-  if (!gRomImg || CtXlatHdmaBuild(gRomImg, gRomImgLen, wram128) != 0) wram128[0x0153] ^= 0x01;
+  if (!gRomImg || CtHdmaBuildNative(wram128, gRomImg, gRomImgLen) != 0) wram128[0x0153] ^= 0x01;
 }
 // ---- THE FRAME LEGS SWITCH (disasm/notes/frame_wiring.md) ---------------------------------------
 // C0/A810's four per-object legs (C98A / A98A / AB45 / A9CD) + the A88D edges' one-shot setup and
@@ -751,7 +772,7 @@ static int legsOn(void) {
   if (gLegs < 0) { const char* e = getenv("CT_FRAMELEGS"); gLegs = (e && *e == '0') ? 0 : 1; }
   return gLegs;
 }
-static uint32_t romU16(uint32_t off) { return (uint32_t)gRomImg[off] | ((uint32_t)gRomImg[off + 1] << 8); }
+static uint32_t romU16(uint32_t off) { return (uint32_t)CtRomByte(gRomImg, gRomImgLen, (long)(off)) | ((uint32_t)CtRomByte(gRomImg, gRomImgLen, (long)(off + 1)) << 8); }
 
 // ============================ THE OBJ PALETTE ALLOCATOR, C0/7170 ============================
 // Ported WHOLE. What stood here before was a stand-in that collapsed the ROM's 12-class dispatch
@@ -806,8 +827,8 @@ static void palUpload(Mem* m, int objX, int attr) {
                                      | (r8(m, 0x7E1401u + (uint32_t)objX) << 8));
   if (src + 24 > (uint32_t)gRomImgLen) return;
   for (int k = 0; k < 24; k++) {
-    w8(m, 0x7E0000u + dst + (uint32_t)k, gRomImg[src + (uint32_t)k]);                 // MVN #1
-    w8(m, 0x7E0000u + dst + 0x200u + (uint32_t)k, gRomImg[src + (uint32_t)k]);        // MVN #2
+    w8(m, 0x7E0000u + dst + (uint32_t)k, CtRomByte(gRomImg, gRomImgLen, (long)(src + (uint32_t)k)));                 // MVN #1
+    w8(m, 0x7E0000u + dst + 0x200u + (uint32_t)k, CtRomByte(gRomImg, gRomImgLen, (long)(src + (uint32_t)k)));        // MVN #2
   }
 }
 
@@ -888,13 +909,14 @@ static void palRelease734C(Mem* m, int obj) {
 // path (C0/4845: $1280/$1200 from the gfx ptr table entry, no allocation).
 static void loadGfxMirror(Mem* m, int obj, const uint8_t* hdr, int directGfx) {
   if (!gRomImg || gRomImgLen < 0x250000) return;
+  if (!hdr) return;
   uint32_t X = 0x7E0000u + (uint32_t)obj * 2;
   uint32_t gfxTab = 0x240000u + romU16(0x24FFE0);      // sprite meta $E4:FFE0 [0]: 3-byte gfx ptrs (LZ)
   uint32_t asmTab = 0x240000u + romU16(0x24FFE2);      // [1]: 3-byte assembly ptrs
   uint32_t fpTab  = 0x240000u + romU16(0x24FFE4);      // [2]: u16 anim frame-table ptrs
   uint32_t dpTab  = 0x240000u + romU16(0x24FFE6);      // [3]: u16 anim duration-table ptrs
   uint32_t ap = asmTab + (uint32_t)hdr[1] * 3;         // assembly ptr -> $1380 word + $1300 bank
-  w8(m, X + 0x1380, gRomImg[ap]); w8(m, X + 0x1381, gRomImg[ap + 1]); w8(m, X + 0x1300, gRomImg[ap + 2]);
+  w8(m, X + 0x1380, CtRomByte(gRomImg, gRomImgLen, (long)(ap))); w8(m, X + 0x1381, CtRomByte(gRomImg, gRomImgLen, (long)(ap + 1))); w8(m, X + 0x1300, CtRomByte(gRomImg, gRomImgLen, (long)(ap + 2)));
   uint32_t po = (uint32_t)hdr[2] * 24;                 // palette offset word $1400 (LE)
   w8(m, X + 0x1400, po & 0xFF); w8(m, X + 0x1401, (po >> 8) & 0xFF);
   uint32_t fy = (uint32_t)hdr[3] * 2;                  // anim set words $1480/$1500/$1580 (LE)
@@ -906,8 +928,8 @@ static void loadGfxMirror(Mem* m, int obj, const uint8_t* hdr, int directGfx) {
   w8(m, X + 0x1201, hdr[4]);                           // size flags
   uint32_t gp = gfxTab + (uint32_t)hdr[0] * 3;
   if (directGfx) {
-    w8(m, X + 0x1280, gRomImg[gp]); w8(m, X + 0x1281, gRomImg[gp + 1]);
-    w8(m, X + 0x1200, gRomImg[gp + 2]);
+    w8(m, X + 0x1280, CtRomByte(gRomImg, gRomImgLen, (long)(gp))); w8(m, X + 0x1281, CtRomByte(gRomImg, gRomImgLen, (long)(gp + 1)));
+    w8(m, X + 0x1200, CtRomByte(gRomImg, gRomImgLen, (long)(gp + 2)));
     return;
   }
   for (int s = 0; s < 16; s++)                         // C0/5C90 pass 1: share an existing set
@@ -925,8 +947,8 @@ static void loadGfxMirror(Mem* m, int obj, const uint8_t* hdr, int directGfx) {
   w8(m, 0x7E0930 + (uint32_t)freeSlot, obj * 2);
   uint32_t cur = (uint32_t)r8(m, 0x7E0071) | ((uint32_t)r8(m, 0x7E0072) << 8);
   w8(m, X + 0x1280, cur & 0xFF); w8(m, X + 0x1281, (cur >> 8) & 0xFF);   // pre-decompress cursor
-  uint32_t src = ((uint32_t)(gRomImg[gp + 2] - 0xC0) << 16) | romU16(gp);   // 3-byte SNES ptr -> file
-  if (gRomImg[gp + 2] >= 0xC0 && src + 2 <= (uint32_t)gRomImgLen) {
+  uint32_t src = ((uint32_t)(CtRomByte(gRomImg, gRomImgLen, (long)(gp + 2)) - 0xC0) << 16) | romU16(gp);   // 3-byte SNES ptr -> file
+  if (CtRomByte(gRomImg, gRomImgLen, (long)(gp + 2)) >= 0xC0 && src + 2 <= (uint32_t)gRomImgLen) {
     static uint8_t scratch[0x10000];                   // measure the decompressed size like the ROM's
                                                        // JSL C30002 job ($0306 -> $71 += size). Only
                                                        // canonical LZ sets reach here (0x82/0x83<0xF8 ids;
@@ -1024,8 +1046,16 @@ static void npcLoadMirror(Mem* m, int obj, int hdrIdx, int mode) {
   // freshly loaded NPC was not a blocker at all: measured on a fresh `--scene 5`, objs 19/20/24/25/26
   // all read $1B01 = 00 where the oracle reads 01. Same family as the PC arms' three stores above.
   w8(m, X + 0x1B01, 0x01);                             // 447F / 45A0 / 46EF
+  // ...and the two the arms make on the way in: `STA $1101,X` = the load op's operand (C0/448A for 0x81, C0/4564 in
+  // C0/4557 for 0x82 -- the raw operand, not the record index, which is operand + 7) and, in C0/4557 alone,
+  // `LDA #7F / STA $1200,X` (C0/4579): the sheet's bank, whatever C0/5C90 then finds. Op 0x81 takes its bank from the
+  // record (loadGfxMirror's direct arm). Without them the port kept a previous location's bytes there: on the bell
+  // stairs (1B7, from the fair) objects 29-31's $1200 read 00 / E6 / 07 where the cartridge's read 7F, and C0/CAD9's
+  // tile copy C0/E687 reads that bank (measured: CT_LOADWALK_DUMP against `ct --hookpc 286C` CT_HOOK_DUMPWRAM).
+  w8(m, X + 0x1101, (uint8_t)(mode == 4 ? hdrIdx - 7 : hdrIdx));
+  if (mode == 4) w8(m, X + 0x1200, 0x7F);
   if (!gRomImg || gRomImgLen < 0x250000) return;       // palette slots assign on first RENDER,
-  loadGfxMirror(m, obj, gRomImg + 0x24F000 + (uint32_t)hdrIdx * 5, mode == 3);   // not at load
+  loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F000 + (long)hdrIdx * 5, 5), mode == 3);   // not at load
 }
 
 // The PC loader C0/448D (op 0x57/0x5C/0x62/0x6A/0x68/0x6C/0x6D via C0/41E4-4214, and op 0x80's three
@@ -1041,7 +1071,7 @@ static void npcLoadMirror(Mem* m, int obj, int hdrIdx, int mode) {
 // so in a FRESH load the lead's $1380/$1300/$1480/$1500/$1580 stayed ZERO (measured with
 // CT_DUMPWRAM on scene 2: Crono all-zero, Mom and the cat filled by npcLoadMirror). The frame legs
 // read those tables to drive a PC's $7F0B01,X, so once op 0xAB/0xB7 completed on the byte instead
-// of the renderer's flag, the bedslide's `AB` parked forever in ct_field while --vmdiff (seeded
+// of the renderer's flag, the bedslide's `AB` parked forever in Belthasar while --vmdiff (seeded
 // from the oracle's tables) went CLEAN. Same directGfx arm as C0/4845's ROM-direct path: $1280/$1200
 // from the table entry, no allocator claim.
 // C0/42A1-42AD (slot 0) / C0/4315-4321 (slot 1) / C0/43C8-43D4 (slot 2) -- THE THREE PARTY ARMS'
@@ -1094,7 +1124,7 @@ static void pcLoaderIdStores(Mem* m, int obj, int id) {
 static void pcLoadMirror(Mem* m, int obj, int id) {
   if (!gRomImg || gRomImgLen < 0x250000 || id < 0 || id > 6) return;
   uint32_t X = 0x7E0000u + (uint32_t)obj * 2;
-  loadGfxMirror(m, obj, gRomImg + 0x24F000 + (uint32_t)id * 5, 1);   // C0/449B-4536
+  loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F000 + (long)id * 5, 5), 1);   // C0/449B-4536
   w8(m, X + 0x0C00, 0x20); w8(m, X + 0x0C01, 0x20);                   // 453B LDA #2020 / STA $0C00,X
   w8(m, X + 0x1680, 0x00);                                            // 4543
   w8(m, X + 0x1681, 0x00);                                            // 4548
@@ -1250,7 +1280,7 @@ static void loadMonMirror(Mem* m, int obj, uint8_t id, uint8_t op2) {
   w8(m, X + 0x1681, 0x00);                            // 4588
   w8(m, X + 0x0D00, (uint8_t)(((slot & 0xFE) << 4) | ((slot & 1) << 3)));
   if (gRomImg && gRomImgLen >= 0x250000)
-    loadGfxMirror(m, obj, gRomImg + 0x24F600 + (uint32_t)id * 10, id >= 0xF8);   // C0/477A: F8+ ROM-direct
+    loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F600 + (long)id * 10, 10), id >= 0xF8);   // C0/477A: F8+ ROM-direct
 }
 
 // op 0xA8 face toward object[op/2] (ROM C0/55A0) / 0xA9 face toward PC[op]'s object (C0/5605):
@@ -1392,6 +1422,24 @@ static void vmObjEnableOp(Mem* m, CtVmActor* actors, int nobj, int* mode, const 
 
 static void ctTileCopyQueue(CtScene* sc, int sl, int st, int el, int eb, int dl, int dt, int flags);   // fwd (needs CtScene)
 static int g_initLastOp = -1;   // C0/5906 TXY: the offset of the last op the init runner dispatched (C0/56CB's Y)
+// THE OBJECT PASS'S CPU TIME. While a location load runs its scripts' init (C0/5709) and obj0's slot 1 (C0/595C), every op
+// they dispatch is priced as the ROM runs it -- the runner's dispatch (CT_VM_DISPATCH) and the handler's arm on the WRAM
+// it is about to read (field_cost.c ct_vm_op_cycles) -- into g_ctLzSpriteCycles, the load's object-pass clock, next to
+// the sprite sheets the loaders decompress. gOpCostWhy names the first op priced on a path the walk does not decide.
+// The pricing is the host's choice (CtSceneLoadOpsPriced), not the sound sink's: the ops are CPU work whether or not an SPC
+// listens -- tied to the sink, a --loadwram run without the state's SPC priced none and loc 120's load came a frame short.
+static int gOpCostOn = 0, gOpCostMode = 0;
+void CtSceneLoadOpsPriced(int on) { gOpCostMode = on ? 1 : 0; }
+static const char* gOpCostWhy = NULL;
+static long gOpCostSum = 0; static int gOpCostN = 0;   // (the ops' share and count, for CT_LOADCOST)
+static void vmOpCost(Mem* m, const uint8_t* B, int blen, int addr, int obj) {
+  if (!gOpCostOn || !gRomImg) return;
+  long c = CT_VM_DISPATCH + ct_vm_op_cycles(gRomImg, gRomImgLen, m->s, B, blen, addr, obj, &gOpCostWhy);
+  g_ctLzSpriteCycles += c; gOpCostSum += c; gOpCostN++;
+  if (getenv("CT_OPCOST_TRACE")) fprintf(stderr, "opcost obj%d @%04X op %02X %ld\n", obj, addr, B[addr], c);
+}
+const char* CtSceneLoadCostWhy(void) { return gOpCostWhy; }
+long CtSceneLoadOpCycles(int* n) { if (n) *n = gOpCostN; return gOpCostSum; }
 static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int start, Mem* mem,
                     CtVmActor* actors, int* explore, int* bright, int* stopAddr, int* stopOp, CtScene* sc) {
   CtVmActor* a = &actors[obj];
@@ -1403,6 +1451,7 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
   while (addr >= 0 && addr < blen && ops < 6000) {
     uint8_t op = B[addr];
     if (op != 0x00) g_initLastOp = addr;               // 5900 BEQ / 5906 TXY: every dispatched op
+    if (op != 0x00) vmOpCost(mem, B, blen, addr, obj); // 5910 JSR ($5D6E,X): what it costs, before it runs
     if (initDbg == obj)
       fprintf(stderr, "[init obj%d] @%04X op=%02X (%02X %02X %02X)" "\n", obj, addr, op,
               addr + 1 < blen ? B[addr + 1] : 0, addr + 2 < blen ? B[addr + 2] : 0, addr + 3 < blen ? B[addr + 3] : 0);
@@ -1559,7 +1608,8 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
       npcLoadMirror(mem, obj, B[addr + 1], 3); a->facing = 1; }                                                                    // + gfx/palette allocator claims ($E4:F000 + id*5)
     else if (op == 0x82) { a->sprite = B[addr + 1] + 7; a->defined = 1; a->solid = 1; a->moveMode = 4; a->dead = 0; // op 0x82 C0/4559: $1100=4
       w8(mem, 0x7E1100 + (uint32_t)obj * 2, 0x04);                                                                              // 4559 STA $1100,X
-      npcLoadMirror(mem, obj, B[addr + 1] + 7, 4); a->facing = 1; }                                                                // header $E4:F000 + (id+7)*5 (C0/45A8 E4F024,X = id*5)
+      npcLoadMirror(mem, obj, B[addr + 1] + 7, 4); a->facing = 1;                                                                  // header $E4:F000 + (id+7)*5 (C0/45A8 E4F024,X = id*5)
+      w8(mem, 0x7E0173, (r8(mem, 0x7E0173) + 1) & 0xFF); }                                                                         // 4665 / 46D9 INC $73, both arms
     else if (op == 0x83) { a->sprite = B[addr + 1] + 256; a->defined = 1; a->solid = 1; a->dead = 0;
       a->moveMode = (B[addr + 2] & 0x80) ? 6 : 5;      // op 0x83 C0/46DF: $1100=5 (via C0/4557), operand2
       loadMonMirror(mem, obj, B[addr + 1], B[addr + 2]); a->facing = 1; }   // bit7 -> 6 (C0/47EC-47F4); + the $7E per-object mirror
@@ -1703,7 +1753,16 @@ typedef struct { int addr; int ret[8]; int prio, dc, tb, wait;
 // (The tent of horrors, loc 1B2: Bekkler waits in his talk fn1 on obj0's game, `04 00 33`; the game's end calls his fn3
 // at priority 0, `04 16 03`. Polled every visit, his fn3 never ran and the two waited on each other for good.)
 static int ssParked(const CtSS* s) { return s->waitObj >= 0 && s->callAddr >= 0 && s->addr == s->callAddr + 3; }
+// What a pre-empt PUSHES into the return slot: the ROM's $1180,X (C0/6168 / 6005 / 60CC, the invokes C0/5AC5 / 3154,
+// C0/5B41), which for a parked waiter is the 04/07's OWN byte, not the op after it. The RETURN then lands ON the call,
+// and the op decides on the latch as it always does (C0/6109): still set -> the poll; cleared -> a fresh install. The
+// latch is cleared under the waiter when the pre-empting function runs a 04/07 of its own (the poll arm on ITS operands,
+// below), so returning to "past the call" -- what the port pushed before -- skipped a call the ROM makes again.
+static int ssPushAddr(const CtSS* s) { return ssParked(s) ? s->callAddr : s->addr; }
                                                  // call-and-WAIT until the callee finishes
+// Per-frame, transient -- outside the struct: the debug savestate writes CtScene raw, so its layout must not move.
+static uint8_t g_ranB0[64];                   // op 0xB0 / 0xAF dispatched in THIS frame's pass (C0/3002 ran)
+static uint8_t g_landedB0[64];                // this frame's visit ENDED on a B0 it did not dispatch (no conga)
 struct CtScene {
   uint8_t* raw; int rawLen, nobj, header, blen;
   const uint8_t* body;
@@ -1918,6 +1977,21 @@ struct CtScene {
                                // barrier + E3 01 restore control. -1 = none.
   int d9Base;                  // body-offset of op 0xD9's first walk program ($7F3720 = IP 171F; slot k at +0x20*k).
 };
+// The followers, as the ROM finds them: the party slots $0199 / $019B (the object * 2; bit 7 = the slot is empty) --
+// slot 1 first, and slot 2 only when slot 1 is filled (C0/345F / 34E2 for op DA, C0/0355 / 036D for the battle return).
+// The object init (C0/426A) and the party ops (D4, C0/394E) keep the bytes in WRAM. Both callers used to take the objects
+// of move-mode 1 and 2 instead, and a member who has left the party keeps his mode: in 078 after Yakra `D4 04` empties
+// slot 2 ($019B 0A -> 8A) and the DA that follows releases Lucca alone on the cartridge ($7F03FE := 2, control back 20
+// frames later), where the port released Frog too ($7F03FE := 1) and waited for his walk (57 frames; the playthrough's
+// leg 27). Returns the count, the objects in fol[].
+static int ctPartyFollowers(CtScene* sc, int fol[2]) {
+  int s1 = r8(sc->mem, 0x7E0199), s2 = r8(sc->mem, 0x7E019B), nf = 0;
+  if (!(s1 & 0x80) && (s1 >> 1) < sc->nobj) {
+    fol[nf++] = s1 >> 1;
+    if (!(s2 & 0x80) && (s2 >> 1) < sc->nobj) fol[nf++] = s2 >> 1;
+  }
+  return nf;
+}
 
 // $1001,X -- THE CADENCE COUNTDOWN, a real WRAM byte, not a private counter. The ROM's queue build
 // tests and decrements it (C0/59F0-59F6), every enqueue arm reloads it from the period $1000,X
@@ -1951,7 +2025,8 @@ static int fpPtr(CtScene* sc, int obj, int fn) {
 
 // memory + actor effects (the non-control ops), mirroring runFunc; coord ops also move
 // the live float position. Reused by _step for the main-loop body.
-#define kRandAngle (CtRomImage(NULL) + 0x00FE00)       // C0/FE00, the ROM's own table, read from the user's dump (op-0x7F RNG + AE2D)
+// C0/FE00, the ROM's own table (op-0x7F RNG + AE2D): the container's (CT_ASSET_TABLE), else the user's dump
+#define kRandAngle(i) (CtRomViewHas(0x00FE00) ? CtRomByte(NULL, 0, 0x00FE00 + (i)) : CtRomImage(NULL)[0x00FE00 + (i)])
 static int mvRandAngle(Mem* m);
 static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
   CtVmActor* a = &sc->actors[obj]; const uint8_t* B = sc->body; Mem* m = sc->mem; int ps;
@@ -2006,11 +2081,20 @@ static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
     // $0197/$0199/$019B = 02/06/08, i.e. objects 1, 3, 4 -- where the paraphrase says 1, 2, 3.
     // The operand is the ALREADY-DOUBLED slot index; measured over the 504 shipped scenes it is 0 at
     // all 30 of this op's sites, 0/2 for op 0x24 and 0/2/4 for op 0xA9, never odd.
+    // ⭐ THE LEAD'S TILE IS HIS WORDS' HIGH BYTE AS THE PASS FINDS THEM: `LDA $1801,X` / `LDA $1881,X` (C0/65B2-65BA) --
+    // last frame's commit, because the frame's own step lands later, at C0/A810 (C0/00D3, after the event pass). The port's
+    // host hands the lead's new position to fx/fy before the tick; the WRAM words take it only at the tick's A810 mirror,
+    // so the bytes are the ROM's. MEASURED, loc 120 below the castle stairs (saves/field_re/scene468_stairs_to_120.state,
+    // Down from f180, the port's keys a frame after): obj0's `22 00 09 0A` at f205 stores row 0A on the cartridge (the
+    // word 0AFF before the step to 0B0F) and Lucca's poll sees 0B from f209 -- her box at f211; reading fx stored 0B at
+    // f205 and opened it at f208 (ROADMAP F3).
     int po = vmSlotTarget(m, op, B[addr + 1]) / 2;            // TILE x/y -> op2/op3.
     if (po >= 0 && po < sc->nobj) {                           // drives the "wait for Crono to reach
-      w8(m, LOC + B[addr + 2] * 2, ((int)sc->fx[po] >> 4) & 0xFF);   // the spot" dialogue triggers
-      w8(m, LOC + B[addr + 3] * 2, ((int)sc->fy[po] >> 4) & 0xFF);   // (scene 1: Mom). LIVE pos = fx/fy
-    }                                                          // (the integrator updates fx, NOT actors[].x)
+      uint32_t X2 = (uint32_t)po * 2;                         // the spot" dialogue triggers (scene 1: Mom)
+      int wx = r8(m, 0x7E1800 + X2) | (r8(m, 0x7E1801 + X2) << 8), wy = r8(m, 0x7E1880 + X2) | (r8(m, 0x7E1881 + X2) << 8);
+      w8(m, LOC + B[addr + 2] * 2, (wx >> 8) & 0xFF);
+      w8(m, LOC + B[addr + 3] * 2, (wy >> 8) & 0xFF);
+    }
     return;
   }
   if (op == 0x21) {                                           // GetObjCoords (C0/65B0): object[op1/2]'s TILE
@@ -2364,7 +2448,7 @@ static void mvIssueRegs(CtScene* sc, int obj, int anim) {
 static int mvRandAngle(Mem* m) {
   int c = (r8(m, 0x7E01F8) + 1) & 0xFF;                  // AE29 INC $F8 (8-bit: SEP #10 / M 8-bit)
   w8(m, 0x7E01F8, (uint8_t)c);
-  return kRandAngle[c];                                  // AE2D LDA $FE00,X
+  return kRandAngle(c);                                  // AE2D LDA $FE00,X
 }
 // ROM C0/5B95 (OBJECT-only -- it reads NO $7E/$7F map tile): a mover with collision enabled ($1C80
 // bit1, sc->coll) is blocked when the destination tile in its heading holds another SOLID object.
@@ -2745,7 +2829,7 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     // different, strictly TIGHTER rule -- the one the ROM applies to op 0x96/0x97/0xA0, never to this body.
     // The jump table settles which routine 0x94 is: the word at $C0:5D6E + 0x94*2 is 5215, and C0/5215
     // falls straight into 5228, the body 0x95 BRLs into at 5426. 117 sites across the shipped scenes run
-    // op 0x94. MEASURED on loc 44 (script 425 obj3 fn1 `89 40 / 94 04 / ...`, `ct_field --scene 44
+    // op 0x94. MEASURED on loc 44 (script 425 obj3 fn1 `89 40 / 94 04 / ...`, `Belthasar --scene 44
     // --talk 3`): with the exact-tile rule obj3 walked ON TOP of its target and finished at frame 288,
     // tile (5,9) -- obj2's own tile; with the ROM's rule it stops ADJACENT at frame 264, tile (6,8)
     // against obj2's (5,9). A tile too far and 24 frames late, on every one of those sites.
@@ -2978,6 +3062,39 @@ static void reqScratch(CtScene* sc, int op, int tgt, int pr) {
   int e3 = (int)(X & 0xFF) << 4;
   w8(sc->mem, 0x7E01E3, e3 & 0xFF); w8(sc->mem, 0x7E01E4, (e3 >> 8) & 0xFF);
 }
+// ---- THE LEAD'S STEP TICKET (C0/3040 arms it, any later `STZ $1A01,X` in the same pass drops it) ----------------
+// The ROM moves the lead in C0/A810's integrate (AB06 `LDA $1A01,X / BEQ` -> AB10-AB3F `$1800 += $1900`), AFTER the event
+// pass: C0/881E computes the step ($1D32/$1D33) before the VM, the lead's own op B0 arms it (3040 `LDA #01 / STA $1A01,X`,
+// 9E29 -> 9E53/9E5D copy the velocity into $1900/$1980), and every invoke that later in the same pass installs a function on
+// the lead ends `STZ $1A01,X` (op 0x02-0x07 C0/6034 / 60FD / 6199, op D9 32FE, ...) -- the step is gone and A810 does not move
+// him that frame. MEASURED on the rule's cartridge (saves/field_re/scene8_pod_latch.state, Up then Left on the Telepod touch,
+// `--monitor 7E1A07,7E1906,7E1806 --writer`): at f21 $1906 = F0 by C0:9E56, $1A07 = 00 by C0:619C (obj11's `04 06 36`), and
+// $1806 stays 3704 (no C0:AB28) -- the stale F0 sits there until fn7's MOVETO. The port's host (field.c) moves the lead
+// before the tick; it hands the step's origin here (CtSceneLeadStepFrom) and the integrate leg takes it back when no
+// ticket stands (vmLeadStepAtA810: never armed, or dropped). Transient per-frame state: statics, not CtScene members
+// (a member breaks every --loadstate .state).
+static int g_leadTk = -1;                  // -1 = the lead's 3040 arm has not run this pass, 1 = armed, 0 = dropped
+static int g_leadFromOk, g_leadFromTick; static double g_leadFromX, g_leadFromY;
+static int gVmTick;                        // trace timestamps (and the step origin's frame)
+static void vmTicketStop(CtScene* sc, int o) {   // `STZ $1A80,X / STZ $1A01,X` on another object's op
+  sc->hasTask[o] = 0; sc->cycles[o] = 0;
+  if (o == sc->playerObj && g_leadTk == 1) g_leadTk = 0;
+}
+void CtSceneLeadStepFrom(CtScene* sc, double x, double y) {
+  (void)sc; g_leadFromOk = 1; g_leadFromTick = gVmTick; g_leadFromX = x; g_leadFromY = y;   // this frame's, the tick to come
+}
+static int g_leadTakenTick = -1;           // the tick that took the lead's step back
+int CtSceneLeadStepDropped(const CtScene* sc) { (void)sc; return g_leadTakenTick == gVmTick; }
+// C0/A810 for the lead's host step, at the integrate leg (CtSceneTick, around the party trail).
+//   unarmed  (-1): the lead's op B0 did not run this pass -- he sat on B2 (C0/3543 `TYX / CLC`) or another op, or the
+//                  queue build left him out (C0/59F0: his countdown $1001 not expired) -- so $1A01 is 0 and AB06's BEQ
+//                  skips him. Taken back BEFORE the party trail: with no 9E29 there is no ring push either.
+//   dropped   (0): an invoke after his B0 zeroed $1A01 (vmTicketStop). Taken back AFTER the trail: 9E29 pushed.
+static void vmLeadStepAtA810(CtScene* sc, int dropped) {
+  if (sc->playerObj < 0 || sc->playerObj >= sc->nobj) return;
+  if (g_leadTk != (dropped ? 0 : -1) || !g_leadFromOk || g_leadFromTick != gVmTick - 1) return;
+  CtSceneSetActorPosF(sc, sc->playerObj, g_leadFromX, g_leadFromY); g_leadTakenTick = gVmTick; g_leadFromOk = 0;
+}
 static void reqOp(CtScene* sc, int target, int function, int priority) {
   if (target >= sc->nobj || function >= 16 || priority >= 8) return;
   // ROM C0/5FC8-5FD0: refuse if $1100 bit7 (inactive) or $1000 bit7 (cadence paused).
@@ -2999,7 +3116,7 @@ static void reqOp(CtScene* sc, int target, int function, int priority) {
   // so Marle's post-bump fn5 (`02 06 55` from fn2, prio 5) never ran and she stood still instead of
   // pacing "looking for the pendant".
   if (ts->addr >= 0 && ts->prio < priority) { if (ts->ret[priority] == 0) ts->ret[priority] = fpPtr(sc, target, function); return; }
-  if (ts->addr >= 0) ts->ret[ts->prio] = ts->addr;
+  if (ts->addr >= 0) ts->ret[ts->prio] = ssPushAddr(ts);          // C0/6005 / 60CC / 6168: $1180 (a waiter's 04 byte)
   ts->addr = fpPtr(sc, target, function); ts->prio = priority;
   // A PREEMPTING FUNCTION DROPS THE TARGET'S IN-FLIGHT MOVE. All three install arms end the same
   // four stores, in this order: `STA $1180,X / STA $1C00,X / STZ $1A80,X / STZ $1A01,X` --
@@ -3013,7 +3130,7 @@ static void reqOp(CtScene* sc, int target, int function, int priority) {
   // the previous move's heading and facing, and -- with a pure-axis heading pointing away from the
   // new target -- never landed an axis: scene 19's obj25 walked right off the map, obj24's
   // `04 32 34` CALL never completed, and its `D8 00 00` BATTLE three ops later never ran.
-  sc->hasTask[target] = 0; sc->cycles[target] = 0;                 // C0/6031+6034 / 60FA+60FD / 6196+6199
+  vmTicketStop(sc, target);                                        // C0/6031+6034 / 60FA+60FD / 6196+6199
   // do NOT reset ts->dc: the ROM
   // REQ/CALL leaves $1001 alone, so the callee first runs on its EXISTING cadence phase (the queue is
   // already built this frame), not next frame -- the callee's one-cadence-cycle defer. (There is no
@@ -3021,7 +3138,6 @@ static void reqOp(CtScene* sc, int target, int function, int priority) {
   // the 0x94/96/97 move-step takes its ticket from the $1000 cadence (moveAnim), not a separate counter.)
 }
 
-static int gVmTick;                                // trace timestamps only
 
 // The SCENE-ENTRY sweep, C0/B0E6 -> C0/B127. NOT the per-frame pass, and it must not be unified
 // with it: the ROM has two boxes and they differ on three terms. C0/B127 does
@@ -3091,8 +3207,29 @@ static void palSweepB0E6(CtScene* sc) {
   if (legsOn()) CtAnimDrawPass(m->s, NULL);                      // B124 BRL C0/B271
 }
 void CtScenePalSweepEntry(CtScene* sc) { if (sc) palSweepB0E6(sc); }
+// THE MENU'S RELOAD RUNS C0/286C WHOLE, and its object legs after the camera (C0/0A50) and the OBJ slots (C0/6F79, the
+// host's fieldPassObjSlots) are `2875 JSR C0/7155` (the eight palette owners $0B80-0B87 := 80), `2878 JSR C0/E935` (the
+// arena owners $0BC0-0BC7), `287B JSR C0/B204` (the whole draw-list page $0E00-0EFF := 80), `287E JSR C0/A7E9` (one
+// (00, FF) pair per object from $0F00) and `2881 JSR C0/B0E6` -- the sweep relinks every object in the camera's box in
+// INDEX order, with no party tail. The C0/01A5 MVN had put back the list from before the menu (the lead at its band's
+// head, where the party tail left him) and the port kept it until the object pass relinked: the fade-in layered by the
+// stale list (field_draw_list_order.md sec. 4).
+void CtSceneMenuReloadObjects(CtScene* sc) {
+  if (!sc) return;
+  uint8_t* r = sc->mem->s;
+  memset(r + 0x0B80, 0x80, 8);                                   // C0/7155
+  CtObjSceneInit(r, sc->nobj);                                   // C0/6F79 (again: the host's) / E935 / B204 / A7E9
+  palSweepB0E6(sc);                                              // C0/B0E6
+}
 
 static int ctWipeOp(CtScene* sc, int sub);
+// THE POLL'S VERDICT (C0/61B4-61D6, the comment in step() below): 1 = keep waiting on `tgt` for a call made at priority
+// `pr`, 0 = released. One body for the parked poll and for a 04/07 met with the latch already set.
+static int ssCallBusy(const CtScene* sc, int tgt, int pr) {
+  if (tgt < 0 || tgt >= sc->nobj) return 0;        // no such object: $1100,X reads 80 (unloaded), 61B7 BMI -> released
+  const CtSS* t = &sc->st[tgt];
+  return !sc->actors[tgt].dead && t->addr >= 0 && t->prio <= pr;
+}
 static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
   CtSS* s = &sc->st[obj]; const uint8_t* B = sc->body; int blen = sc->blen, addr = s->addr;
   if (ssParked(s)) {                               // 0x04/0x07, IP on the call: wait for the callee's function
@@ -3107,8 +3244,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // sparkle's ~180f convergence-to-gate mover -- while obj20 is still looping fn5 at prio 3; the
     // early release revealed Marle-inside-the-gate ~195 frames too soon. Verified vs the oracle:
     // it parks at this CALL f592..f772.) Also release if the callee was deactivated (0x0A/0x0B).
-    const CtSS* t = &sc->st[s->waitObj];
-    if (!sc->actors[s->waitObj].dead && t->addr >= 0 && t->prio <= s->waitPrio) return 1;
+    if (ssCallBusy(sc, s->waitObj, s->waitPrio)) return 1;
     s->waitObj = -1;             // RELEASE: the visit goes on (ROM SEC/continue)...
     // ...BUT THE POLL IS ITSELF ONE OF THE VISIT'S FIVE DISPATCHES. The parked IP is the 04's own byte (61A4 `TYX / CLC`),
     // so the visit that finds the call complete dispatches the 04 again, and its completion exit 61E0 `INX x3 / SEC`
@@ -3127,6 +3263,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
   if (addr < 0 || addr >= blen) { s->addr = -1; return 1; }
   uint8_t op = B[addr]; int ln = opLen(B, addr);
   if (obj >= 0 && obj < 64) sc->atB0[obj] = (op == 0xB0 || op == 0xAF);   // both run C0/3002 (0xAF: C0/2FFD)
+  if (obj >= 0 && obj < 64 && (op == 0xB0 || op == 0xAF)) g_ranB0[obj] = 1;
   { dbgFlags(); if (gEnvTraceAll && (obj == gEnvTraceAllObj || gEnvTraceAllObj < 0))   // DEBUG: trace ops (incl branches); <0 = all objs
       fprintf(stderr, "  [run obj%d] t%d @%04X op=%02X p%d\n", obj, gVmTick, addr, op, s->prio); }
   if (gEnvTrace &&
@@ -3296,6 +3433,8 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
         ctAnimSyncActor(&sc->actors[obj], sc->mem->s, (int)X); sc->actors[obj].animGen++;
       }
     }
+    if (op != 0xB2 && r8(sc->mem, 0x7E0138) == 0 && CtSceneActorMode((const CtScene*)sc, obj) == 0 && obj == sc->playerObj)
+      g_leadTk = 1;                                          // 3040 LDA #01 / STA $1A01,X: the lead's step armed
     if (op != 0xB2 && sc->touchHit >= 0 && sc->touchHit < sc->nobj
         && r8(sc->mem, 0x7E0138) == 0                      // C0/3002's $0138 early-out
         && CtSceneActorMode((const CtScene*)sc, obj) == 0) { // state 0 = the LEAD PC only
@@ -3494,6 +3633,10 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       w8(sc->mem, 0x7E0139, 1); sc->irisState = 1;   // (C0/21E1 steps it, ctIrisFrame)
     } else if (B[addr + 1] == 0x91) {                 // C0/4055: LDA #02 / STA $39 -- it CLOSES from wherever $3C is
       w8(sc->mem, 0x7E0139, 2); sc->irisState = 2;
+    } else if (B[addr + 1] == 0x97) {                 // C0/4191: 0x90's stores (4191-41A8), then `LDA #04 / STA $39`: the
+      w8(sc->mem, 0x7E013A, B[addr + 2]); w8(sc->mem, 0x7E013B, B[addr + 3]);   // circle GROWS as the colour window
+      w8(sc->mem, 0x7E013D, B[addr + 4]); w8(sc->mem, 0x7E013C, 0);             // (C0/232A, ctColCircleFrame)
+      w8(sc->mem, 0x7E0139, 4);
     } else if (B[addr + 1] >= 0x98 && B[addr + 1] <= 0x9C) {
       // C0/41B0 / 41B4 / 41B8 / 41C0 / 41C4 -- ONE tail, five immediates: `LDA #05|#07|#09|#0B|#0E / BRA ->41BA`,
       // 41BA `STA $39 / TYX / INX / INX / RTS` (the table C0/400E, subs 98-9C). They hand C0/21E1 an entry -- 9C's 0E
@@ -3520,10 +3663,9 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // ahead of the ROM for the rest of scene 254 and fired its next CALL four frames early -- the
     // f435 divergence of the tutorial lockstep. (The per-sub IP deltas are already right: opLen gives
     // 5 for 0x90/0x97 and 2 otherwise, matching C0/4036's four INXs and C0/41BA's two. The parking
-    // subs 0x92-0x95 run above (ctWipeOp). NOT PORTED here: 0x97 (C0/4191, 4 sites: 0x90's stores with
-    // $0139 = 04) and 0x9E (C0/41C8, scene 0AC: parks until C0/21E1's entry 0C ends in 0D) -- they hand
-    // C0/21E1 entries 4, 0C and 0D, which have no port (docs/ROADMAP.md F19); 0x98-0x9B set 5/7/9/0B,
-    // entries likewise unported. src/move.c's CtFieldRunnerOne has the whole ladder byte-derived and
+    // subs 0x92-0x95 run above (ctWipeOp). NOT PORTED here: 0x9E (C0/41C8, scene 0AC: `LDA $39 / BEQ` -> `LDA #0C /
+    // STA $39` and park; parks until C0/21E1's entry 0C ends in 0D) -- entries 7-0D have no port (docs/ROADMAP.md
+    // F19), so parking on it would hold the scene for good; 0x9B sets 0B, likewise unported. src/move.c's CtFieldRunnerOne has the whole ladder byte-derived and
     // graded by --sweepops FF:60.)
     return 1;
   }
@@ -3717,7 +3859,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // untouched.
     //
     // Delegated, not transcribed: move.c's CtVmPartyGateFamily is the body --sweepops micro-executes
-    // against the ROM at 60 cases per opcode. `gRomImg` may be NULL in a dat-only ct_field run and
+    // against the ROM at 60 cases per opcode. `gRomImg` may be NULL in a dat-only Belthasar run and
     // that is handled the same way move.c handles it -- every ROM read inside the gate is already
     // bounds-checked against romLen, so a missing image yields the routine's own zero-fill arm
     // rather than a special case invented here.
@@ -3771,6 +3913,27 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // party of Crono and Lucca hosts Lucca in obj3 ($0199 = 06), and the 600 A.D. inn's bedroom
     // (loc 0x75, obj0 `07 02 13`) woke the empty Marle object instead of her (move.c's graded
     // runner already reads it this way).
+    // ⭐ A 04/07 MET WITH THE LATCH ALREADY SET POLLS, ON ITS OWN OPERANDS -- it installs nothing. The latch $7F0980,X is
+    // one byte per object (s->waitObj >= 0), and the op reads it before anything else: C0/6109 `LDX $6D / LDA $7F0980,X /
+    // BEQ ->611A (install) / BRL ->61A7`, and 0x07's C0/6214 `BNE ->6232` -> 6236 `LDA $7F2001,X / TAX / LDA $97,X` (no
+    // empty-slot test) -> `BRL 61AF`. The poll (61A7-61E8) takes the target and the priority from the op in hand, waits
+    // (61E6 `TYX / CLC`, the IP on the op) while that priority >= the target's $1C00, and on release clears the latch
+    // (61D8-61DC) and steps past the op (61E0 `INX x3 / SEC`). The latch is still set here when a higher-priority
+    // function pre-empted a parked waiter (C0/6168, 5AC5, 3154 push the 04's byte and leave $7F0980 alone) and this op
+    // belongs to the new function. MEASURED (the rule's cartridge, saves/scene8_duas_animacoes.state, the Telepod, Up
+    // held then A on f22): the touch's fn2 of obj11 parks on `04 06 36` (Crono's fn6, the raised arms, priority 3); A
+    // pre-empts it with fn1 (the same code, priority 1), whose own `04 06 36` polls -- obj11 waits f26-f43 while the
+    // first fn6 plays and goes on at f46. The port installed the call again: Crono raised his arms a second time at f47
+    // (the user, 2026-10-19, translated from Portuguese: "sometimes Crono raises his arms, lowers them and raises them
+    // again"). disasm/notes/call_wait_latch_preempt.md sec. 4.
+    if ((op == 0x04 || op == 0x07) && s->waitObj >= 0) {
+      int t = (op == 0x04) ? B[addr + 1] / 2 : vmSlotTarget(sc->mem, op, B[addr + 1]) / 2;   // 61AB / 623B
+      int p = (B[addr + 2] & 0xF0) >> 4;                                                    // 61C6-61D0
+      s->waitObj = t; s->waitPrio = p; s->callAddr = addr; s->addr = addr + 3;              // parked on this op
+      if (ssCallBusy(sc, t, p)) return 1;                                                   // 61E6 TYX / CLC
+      s->waitObj = -1;                                                                      // 61D8-61DC latch := 0
+      return 0;                                                                             // 61E0 INX x3 / SEC
+    }
     int tgt;
     if (op <= 0x04) tgt = B[addr + 1] / 2;
     else {
@@ -3906,14 +4069,8 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // it -- after the walk -- instead of instantly, and the barrier seed is the same `3 - nFollowers`
     // law CtSceneBattleReturn already uses.
     Mem* m = sc->mem;
-    int fol[2] = { -1, -1 }, nf = 0;               // followers = move-mode 1 then 2 (the C0/0330 $99/$9B
-    for (int want = 1; want <= 2; want++)          //   pair CtSceneBattleReturn derives; the raw $0197/
-      for (int o = 0; o < sc->nobj; o++)           //   $0199/$019B bytes are NOT live party slots here --
-        if (o != sc->playerObj && sc->mode[o] == want          // memBoot seeds them 0x80 and field.c
-            && !sc->actors[o].dead && sc->actors[o].hasPos) {  // reuses them as collision scratch)
-          if (nf < 2) fol[nf++] = o;
-          break;
-        }
+    int fol[2] = { -1, -1 };
+    int nf = ctPartyFollowers(sc, fol);            // 345F `LDA $99 / BPL`, 34E2 `LDA $9B / BPL`
     // 3461 BPL -> 3463 INX / CLC: no follower -- the IP steps past it and the VISIT ENDS (CLC; move.c's arm had it). This
     // arm kept running: loc 070's ambush (obj22 fn1 `E3 00 / DA / E3 00 / AD 05`, cadence 4) reached its wait on the
     // DA's own visit, 4 frames before the cartridge (rule oracle: IP 035E f42 -> 0360 f46), and its fight began 8 early.
@@ -3945,12 +4102,12 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     if (sc->rgBase < 0) { s->addr = nxt; return 0; }  // block never materialized -> do not park forever
     for (int i = 0; i < nf; i++) {                 // 349F / 34F6: the C0/32C8 release, per follower
       int o = fol[i]; CtSS* fs = &sc->st[o];
-      if (fs->addr >= 0) fs->ret[fs->prio] = fs->addr;   // 32E8: push the current IP onto $7F0580,X
+      if (fs->addr >= 0) fs->ret[fs->prio] = ssPushAddr(fs);   // 32E8: push the current IP ($1180) onto $7F0580,X
       fs->addr = sc->rgBase;                             // 3519 LDA #16FF / 351C STA $1180,X
       fs->prio = 0;                                      // 3521 LDA #00 / 3523 STA $1C00,X
       ctSetDc(sc, o, 0);                                 // 352C STZ $1001,X
-      fs->waitObj = -1; fs->wait = 0; fs->nm = 0;
-      sc->hasTask[o] = 0; sc->cycles[o] = 0;             // 3526 STZ $1A80,X / 3529 STZ $1A01,X
+      fs->wait = 0; fs->nm = 0;                          // (the call latch $7F0980 survives: 32C8 does not touch it)
+      vmTicketStop(sc, o);                               // 3526 STZ $1A80,X / 3529 STZ $1A01,X
       sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
     }
     w8(m, LOC + 0xFF * 2, (uint8_t)(3 - nf));      // 34E8 #02 (slot 2 absent) / 3535 #01 (both released)
@@ -4000,7 +4157,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // (CtAnimTimerTick's CA4F arm, CtFieldFrameLookup's CBA4 arm) and forced back to 2 for an
     // off-camera object by A934. Measured cost of the private copy, scene 8's gate cutscene seeded
     // mid-B7: --vmdiff made ZERO ip-steps in 1500 frames (nothing headless ever cleared the flag),
-    // and ct_field ran the same cutscene ~800 frames ahead of the ROM (its `DD 71` at f1638 against
+    // and Belthasar ran the same cutscene ~800 frames ahead of the ROM (its `DD 71` at f1638 against
     // the oracle's f2447 under the same input) because the renderer's clock decided each B7's length.
     //
     // The C fields stay -- the renderer plays from them -- but they are now DERIVED from the bytes
@@ -4081,15 +4238,15 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       int o = v / 2;
       if (!(v & 1) && o < sc->nobj && sc->d9Base >= 0) {
         CtSS* ps = &sc->st[o];
-        if (ps->addr >= 0) ps->ret[ps->prio] = ps->addr;           // 32E8 / 336D / 33F4 STA $7F0580,X
+        if (ps->addr >= 0) ps->ret[ps->prio] = ssPushAddr(ps);     // 32E3 LDA $1180,X / 32E8 / 336D / 33F4 STA $7F0580,X
         ps->addr = sc->d9Base + 0x20 * k;                          // 32EE / 3373 / 33FA #171F / #173F / #175F
         { uint32_t ipw = (uint32_t)(ps->addr + sc->header);        // 32F1 STA $1180,X -- in WRAM NOW: a lead that
           w8(m, 0x7E1180 + (uint32_t)o * 2, ipw & 0xFF);           //   already had this frame's visit (it heads the
           w8(m, 0x7E1181 + (uint32_t)o * 2, (ipw >> 8) & 0xFF); }  //   queue) commits no visit-end mirror until next frame
         ps->prio = 0;                                              // 32F6 LDA #00 / STA $1C00,X
         ctSetDc(sc, o, 0);                                         // 3301 STZ $1001,X
-        ps->waitObj = -1; ps->wait = 0; ps->nm = 0;
-        sc->hasTask[o] = 0; sc->cycles[o] = 0;                     // 32FB STZ $1A80,X / 32FE STZ $1A01,X
+        ps->wait = 0; ps->nm = 0;                                  // (the call latch $7F0980 survives: not 32C8's)
+        vmTicketStop(sc, o);                                       // 32FB STZ $1A80,X / 32FE STZ $1A01,X
         sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
         sc->folRoamPrev[o] = 0;                                    // those STZs ARE the follower's walk-cycle release:
       }                                                            //   the conga's handover must not clear the new move again
@@ -4573,7 +4730,9 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
     // load game in 600ad, the music starts and stops". Oracle, boot -> title -> load (PEEK_WRITEWATCH=1E00:4):
     // at each of f19, f46, f413, f444 `$1E00 = 81` by C0/1B73, `$1E00 = 00` by C7/0196, THEN `= 10` by
     // C0/1B8B and its own C7/0196. With no sink (CT_NOAUDIO, ct.exe) this is inert and the WRAM is unchanged.
-    (void)vmSoundPostMem(sc->mem, sc->blen, 12);
+    // Its time is the load's too: the cartridge's C0/1B73 JSL is ~15k cycles of C7 (the bell stairs, 1B7: 14,670 from
+    // the JSL to its RTL, `ct --cputrace` CPUTRACE_BEAM), and the $10 below starts on the line it returns on.
+    int songLn = 12, songFr = 0, songAny = vmSoundPostAcc(sc->mem, sc->blen, &songLn, &songFr);
     if (g_carrySong >= 0) {
       w8(sc->mem, 0x7E29AE, g_carrySong & 0xFF);
       w8(sc->mem, 0x7E1E01, g_carrySong & 0xFF); w8(sc->mem, 0x7E1E00, 0x10);
@@ -4583,8 +4742,9 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
       // demo-battle RESET into loc 0 (saves/attract_demo_battle_f1850.state, A from f20): the `10 00` JSL runs from f57
       // line 246 to f68 line 142 -- 10.6 frames of the load's 12.2 (C0:0066 f57 line 241 -> C0:0094 f70 line 22) --
       // with no NMI and no HDMA behind it. The host adds its price to the load's black frames (CtSceneLoadSongPrice).
-      g_loadSongPrice = vmSoundPostMem(sc->mem, sc->blen, 12);                   // C0/1B8B
+      songAny |= vmSoundPostAcc(sc->mem, sc->blen, &songLn, &songFr);            // C0/1B8B
     }
+    if (songAny) g_loadSongPrice = (songFr << 10) | songLn;
   }
   sc->bright = 15; sc->brightTarget = 15;
   sc->explore = 1; sc->moveLock = 0;                 // default free; the scene's startup
@@ -4620,6 +4780,10 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
     w8(sc->mem, 0x7E1C80 + (uint32_t)o * 2, (uint8_t)((sc->actors[o].coll << 1) | sc->actors[o].collMap));
     w8(sc->mem, 0x7E1C81 + (uint32_t)o * 2, (uint8_t)sc->actors[o].snap);
   }
+  gLoadPostOn = gLoadPostMode;                       // C0/5709 and C0/56C8 run at the load's end (gLoadPost, above)
+  w8(sc->mem, 0x7E0173, 0);                          // C0/58DC STZ $73: op 0x82's party-slot counter (C0/4665 / 46D9)
+  gOpCostOn = gOpCostMode; gOpCostWhy = NULL;       // a load the host prices: its ops are priced as they run
+  gOpCostSum = 0; gOpCostN = 0;
   for (int n = 0; n < count; n++) {
     // C0/58ED / 58F0, the init runner's head for EVERY object of the scene ($BD = the object count * 2, inactive ones
     // included -- 58F3's `BMI` comes after): `STZ $1B01,X / STZ $1B80,X` with the REP #20 of 58E2 in force, so two
@@ -4758,6 +4922,7 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
   if (gRomImg) {                                       // (a harness without the ROM image has no bank $D1/$FF to read)
     int x = (count > 0) ? fpPtr(sc, 0, 1) : 0;         // 595C LDA $7F2003 / TAX
     CtVmC2LoadTail(sc->mem->s, gRomImg, (int)gRomImgLen, x & 0xFF, g_initLastOp & 0xFF); }
+  gLoadPostOn = 0; gOpCostOn = 0;
   if (getenv("CT_SHOWVORTEX"))       // DEBUG: run the emitter's open fn (its fn3 starts with op 0x88) to arm colorFx
     for (int n = 0; n < count; n++) if (sc->actors[n].colorGated) {
       int op3 = fpPtr(sc, n, 3);
@@ -4937,7 +5102,9 @@ void CtSceneSeedFromWram(CtScene* sc, const uint8_t* w) {
           if (ra > 0 && ra + 2 < sc->blen && (sc->body[ra] == 0x04 || sc->body[ra] == 0x07)) {
             int tgt = (sc->body[ra] == 0x04) ? sc->body[ra + 1] / 2 : (w[0x0197 + sc->body[ra + 1]] & 0x7F) / 2;
             if (tgt < sc->nobj) { s->waitObj = tgt; s->waitPrio = (sc->body[ra + 2] & 0xF0) >> 4;
-                                  s->callAddr = ra; s->ret[p] = ra + 3; }
+                                  s->callAddr = ra; }   // ret[p] stays ON the 04: the RETURN polls there
+                                                         // (or installs anew if a 04 of the pre-empting
+                                                         // function cleared the latch first)
           }
           break;
         }
@@ -4959,7 +5126,7 @@ void CtSceneSeedFromWram(CtScene* sc, const uint8_t* w) {
     // besides $1A81 := 0 at 6264) and the first test of the draw-list gate (C0/A88F BMI), the rebuild
     // (C0/B0F3) and the OAM drain (C0/CAD9). It used to be left to the create-time prescan, which runs
     // every object's fn0 BEFORE this seed with whatever story flags the host handed it: under --loadwram
-    // ct_field passed none, so scene 129's obj0 fn0 branched on storyline 0 instead of the state's $12
+    // Belthasar passed none, so scene 129's obj0 fn0 branched on storyline 0 instead of the state's $12
     // and executed `0A 1E` -- the cutscene controller obj15 was dead from frame 1, the nuns were never
     // hidden and the Naga-ettes never shown (defect #15). The seed is the oracle's own bit.
     sc->actors[o].dead = (w[0x1100 + x] & 0x80) ? 1 : 0;
@@ -5514,9 +5681,7 @@ void CtSceneCameraTick(CtScene* sc) {
 // the field host on a fresh scene entry (a WRAM/state seed carries the live camera instead). Note the Y
 // far-pin threshold is $1D1D-6 (asymmetric vs X's -8) and the far pins sit at mx1-256 / my1-224 = one px
 // past the scroll-reachable maxima (an entry camera can legally rest there; walking can't reach it).
-void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
-  if (!sc) return;
-  uint8_t* s = sc->mem->s;
+static void cameraLaw7506(uint8_t* s, int arrTileX, int arrTileY) {
   int x0 = s[0x1D1A], x1 = s[0x1D1B], y0 = s[0x1D1C], y1 = s[0x1D1D];
   int caxX;
   if      (arrTileX <= x0 + 8) caxX = x0 * 2;                 // left pin  (7516/7522)
@@ -5535,6 +5700,11 @@ void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
   // Crono (obj10 at y 159, C0/1FCD's speaker test against 128) moved from the top to the bottom.
   camPut16(s, 0x1D0A, caxX); camPut16(s, 0x1D0C, caxX + 0x20);
   camPut16(s, 0x1D0E, caxY); camPut16(s, 0x1D10, caxY + 0x1C);
+}
+void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
+  if (!sc) return;
+  uint8_t* s = sc->mem->s;
+  cameraLaw7506(s, arrTileX, arrTileY);
   s[0x1D93] = s[0x1D96] = 0;                                  // phases 0 (16-aligned)
   camPut16(s, 0x1D87, 0); camPut16(s, 0x1D89, 0);             // step counters zeroed at entry
   s[0x1D3B] = s[0x1D3C] = 0;                                  // fraction accumulators zeroed
@@ -5570,19 +5740,42 @@ void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
 // VERIFIED against the live bytes, not only the listing: loc 0AD md[2]=$56 -> $1D37=20 $1D38=10
 // ((+2,+1) px/f; the oracle's BG2 scroll went (182,91) -> (362,181) in 90 frames), loc 16E
 // md[2]=$D0 md[3]=$F0 -> $1D38=F0 $1D3A=C0, $1D36=02 (measured: BG1 -1, BG2 -2, BG3 -5 px/f).
-void CtSceneLayerScrollLoad(CtScene* sc, uint8_t md1, uint8_t md2, uint8_t md3) {
-  if (!sc) return;
-  uint8_t* s = sc->mem->s;
-  s[0x0BCA] = (md1 & 0x80) ? 0x01 : 0x00;                     // A38B BPL / LDA #01 / STA $0BCA (BG3 present)
-  s[0x0BC9] = (md1 & 0x40) ? 0x80 : 0x00;                     // A397 BIT #40 / LDA #80 / STA $0BC9 (the half-camera map mode)
-  // C0/74AC-74C5, which the entry (74A6) runs after 7506/7553 when `$0BC9` is negative: BG2's streamer window at HALF the
-  // camera, `$12 = ($0A >> 1) & FE`, `$14 = $12 + 20`, `$16 = $0E >> 1`, `$18 = $16 + 1C` (chip units). The port decodes the
-  // header after its camera entry, so the window is taken here, from the camera that entry just placed.
+// C0/74AC-74C5, which the entry (74A6) runs after 7506/7553 when `$0BC9` is negative: BG2's streamer window at HALF the
+// camera, `$12 = ($0A >> 1) & FE`, `$14 = $12 + 20`, `$16 = $0E >> 1`, `$18 = $16 + 1C` (chip units), from the camera the
+// entry law just placed.
+static void layerHalfWindow74AC(uint8_t* s) {
   if (s[0x0BC9] & 0x80) {
     s[0x1D12] = (uint8_t)((s[0x1D0A] >> 1) & 0xFE); s[0x1D14] = (uint8_t)(s[0x1D12] + 0x20);
     s[0x1D16] = (uint8_t)(s[0x1D0E] >> 1);          s[0x1D18] = (uint8_t)(s[0x1D16] + 0x1C);
   }
+}
+void CtSceneLayerScrollLoad(CtScene* sc, uint8_t md1, uint8_t md2, uint8_t md3) {
+  if (!sc) return;
+  uint8_t* s = sc->mem->s;
+  CtWramLayerScrollDecode(s, md1, md2, md3);
+  layerHalfWindow74AC(s);                                     // (decoded after the camera entry: the window is taken here)
   s[0x1D94] = s[0x1D97] = 0;                                  // BG2's phases, zeroed with the rest of the $1D page
+}
+// The location load's C0/286C entry, after its object init: the camera law (C0/7506 / 7553) and C0/74AC's window. What
+// CtSceneCameraEntry adds -- C0/7F7E's clear of the $1D page -- ran BEFORE the init (memLocationLoad, C0/7F95), and the
+// header's decode with it (CtWramLayerScrollDecode, C0/A385-A4FB inside C0/A33B): an init op's own store into the page
+// stays, as the cartridge's does. MEASURED, the staff roll's 05C (s5b_roll_f2280 under the rule, --cputrace from C0/0B86):
+// C0/A3AD `STZ $36` and C0/A45B `STA $35` at the load's line 3584 / 3669, fn0's `29 88` -> C0/3E87 / 3E8A `TSB $1D36 / $1D35`
+// at 18662, and C0/286C reads `$1D35` = 04 (C0/0AE1, and C0/87F1 skips its BG3 row). Clearing after the init put 00 there
+// and the load's walk priced the BG3 row C0/87F1 does not run (+8,996).
+void CtSceneLoadCameraEntry(CtScene* sc, int arrTileX, int arrTileY) {
+  if (!sc) return;
+  uint8_t* s = sc->mem->s;
+  cameraLaw7506(s, arrTileX, arrTileY);
+  s[0x0138] = 0;                                              // (outside the page: CtSceneCameraEntry's)
+  sc->bgD2x = sc->bgD2y = sc->bgD3x = sc->bgD3y = 0;          // every layer built at this camera (C0/0A50)
+  layerHalfWindow74AC(s);
+}
+// C0/A385-A4FB, the WRAM half: what the header decides, before the location's object init (C0/A33B is C0/00F4's leg).
+void CtWramLayerScrollDecode(uint8_t* s, uint8_t md1, uint8_t md2, uint8_t md3) {
+  if (!s) return;
+  s[0x0BCA] = (md1 & 0x80) ? 0x01 : 0x00;                     // A38B BPL / LDA #01 / STA $0BCA (BG3 present)
+  s[0x0BC9] = (md1 & 0x40) ? 0x80 : 0x00;                     // A397 BIT #40 / LDA #80 / STA $0BC9 (the half-camera map mode)
   s[0x1D36] = (md1 & 0x20) ? 0x04 : 0x00;                     // A3A9-A3B3
   if (md1 & 0x10) s[0x1D36] |= 0x02;                          // A3B7-A3BF
   s[0x1D35] = s[0x1D36];                                      // A459
@@ -5732,10 +5925,8 @@ static int ctWipeOp(CtScene* sc, int sub) {        // 1 = complete (advance 2), 
 // C0/00B1 JSR C0/21E1: `LDA $39 / BEQ / DEC / ASL / TAX / JSR ($21EE,X)`, and entry 3 is C0/22D8 -- once per main-loop frame,
 // BEFORE the object pass (C0/00B7). While $0350 is set it arms the window shadows, steps C3/01E4 (DP $0300) and holds
 // `$19 = 0F`; after, with $013C < 2 (92/93), it clears them again (C0/2307).
-// C3/01E4 runs TRANSLATED (src/xlat/wipe_c3.c, tools/gen/xlat.py from the cartridge's own traces of 16E's and 01C's wipes) on the
-// vendored hardware over this WRAM. Its seed C3/02DD folds $2137/$213C/$213D -- the H/V counters at that instant, the CPU's
-// position in the field's frame, which this port has no clock for: every call starts on the cartridge's first-call position
-// (seq_xlat.h CT_XLAT_WIPE_V/H, the one input that is not derived). The window is drawn by field.c from the tables the
+// C3/01E4 runs NATIVE (wipe.c CtWipeRoutine) over this WRAM. Its seed C3/02DD folds the beam counters, which read the rule's
+// virtual beam ($213C = $0351, $213D = 00; CLAUDE.md, the zelda3 model). The window is drawn by field.c from the tables the
 // routine writes, through the HDMA channel FD/C1EE programs ($2128/$2129 by $013C bit 0) and the shadows C0/22D8 sets.
 static void ctWipeFrame(CtScene* sc) {
   Mem* m = sc->mem;
@@ -5744,15 +5935,15 @@ static void ctWipeFrame(CtScene* sc) {
     w8(m, 0x7F1522, 0x17); w8(m, 0x7F1523, 0x17);                     // 22DD
     w8(m, 0x7E0BD9, 0x88); w8(m, 0x7E0BDA, 0x88); w8(m, 0x7E0BDB, 0x88);
     w8(m, 0x7E0BDC, 0x00); w8(m, 0x7E0BDD, 0xFF);
-    // JSL C3/000E -> C3/01E4: the routine itself, translated from the ROM (src/xlat/wipe_c3.c) and run on the vendored
-    // hardware over this WRAM (seq_xlat.h CtXlatWipeCall): the first call's fill, every call's step through $C0:FE00 with
+    // JSL C3/000E -> C3/01E4 (wipe.c CtWipeRoutine): the first call's fill, every call's step through $C0:FE00 with
     // C3/02DD's seed, the tables at $7F:17C8 / $7F:18A8, $51's count and $50's clear on the 32nd call, $0386's update.
-    int xr = gRomImg ? CtXlatWipeCall(gRomImg, gRomImgLen, m->s, CT_XLAT_WIPE_V, CT_XLAT_WIPE_H) : -1;
+    // The registers it reads: X = 0004 (C0/21EA `DEC A / ASL A / TAX` of state 3) and the data bank 00 (--wipedump).
+    int xr = CtWipeRoutine(gRomImg, gRomImgLen, m->s, CT_WIPE_FIELD_X, CT_WIPE_FIELD_DB);
     if (xr) {
-      // No ROM (a harness without one) or a translation stop: the routine cannot run. What the op waits on -- the count --
-      // is kept so the flow still completes; the tables stay as they are. Reported once.
+      // No ROM (a harness without one): the routine cannot run. What the op waits on -- the count -- is kept so the flow
+      // still completes; the tables stay as they are. Reported once.
       static int said = 0;
-      if (!said) { said = 1; printf("wipe: C3/01E4 not run (%s, r=%d) -- the count is kept, the tables are not stepped%s", gRomImg ? "translation stop" : "no ROM image", xr, "\n"); }
+      if (!said) { said = 1; printf("wipe: C3/01E4 not run (%s, r=%d) -- the count is kept, the tables are not stepped%s", gRomImg ? "a bank it cannot address" : "no ROM image", xr, "\n"); }
       int mode = r8(m, 0x7E0350), stp = r8(m, 0x7E0351);
       if (stp == 0) {                                                 // 01FA: the fill, 00 (mode 1) or FF (mode 2)
         uint32_t base = ((uint32_t)(r8(m, 0x7E0352) | (r8(m, 0x7E0353) << 8)) + 0x01C0) & 0xFFFF;
@@ -5925,6 +6116,77 @@ static void ctIrisStep(Mem* m) {
 static void ctIrisFrame(CtScene* sc) {
   ctIrisStep(sc->mem);
   sc->irisState = r8(sc->mem, 0x7E0139);                                     // the C mirror the host reads
+}
+
+// ---- THE CIRCLE AS THE COLOUR WINDOW: C0/21E1's entries 4 and 5 (`FF 97` / `FF 98`) ------------------------------------
+// C0/232A (entry 4) is the iris's opening (C0/220E) with the window made the COLOUR window: 2330-234A TMW $7F:1522/1523 =
+// 17, W12SEL / W34SEL $0BD9 / $0BDA = 00, WOBJSEL $0BDB = 20 (window 1, not inverted), CGWSEL $0BDE = 12 (math only inside
+// it, the sub screen added); the centre $3A / $3B and the radius $3C into $0350 / $0352 / $0354, `TSB $28` #20 (HDMA channel
+// 5 on), the buffer by $53 ($7F:17C8 set, $7F:1AC8 clear) into $0356 / $0358, and `LDA #01 / JSL C3/0008`: C3/0077 with
+// ARGUMENT 1 -- each pair of lines copied once, the circle half as tall (an ellipse). C0/238A (entry 5) steps the radius
+// down first and ends, at 0, in C0/23E2 (ctLineClose). The fixed colour is the one op 0xF1 left in $0121 (the scripts put
+// `F1 9F 00` after `FF 97`: blue at 31).
+static void ctColCircleBuild(Mem* m) {
+  w8(m, 0x7F1522, 0x17); w8(m, 0x7F1523, 0x17);                             // 2330-2336
+  w8(m, 0x7E0BD9, 0x00); w8(m, 0x7E0BDA, 0x00);                             // 233A-233F
+  w8(m, 0x7E0BDB, 0x20); w8(m, 0x7E0BDE, 0x12);                             // 2342-2349
+  w8(m, 0x7E0350, r8(m, 0x7E013A)); w8(m, 0x7E0352, r8(m, 0x7E013B)); w8(m, 0x7E0354, r8(m, 0x7E013C));   // 234C-2358
+  w8(m, 0x7E0128, r8(m, 0x7E0128) | 0x20);                                  // 235B TSB $28
+  uint16_t buf = r8(m, 0x7E0153) ? 0x17C8 : 0x1AC8;                          // 235F LDA $53 / BEQ
+  w16(m, 0x7E0356, buf); w8(m, 0x7E0358, 0x7F);
+  ctIrisCircle(m, 0x01);                                                     // 237B LDA #01 / JSL C3/0008
+}
+static void ctLineClose(Mem* m);   // C0/23E2 (below, with the quad)
+static void ctColCircleFrame(CtScene* sc) {
+  Mem* m = sc->mem;
+  int st = r8(m, 0x7E0139);
+  if (st == 4) {                                                             // C0/232A
+    if (r8(m, 0x7E013C) >= r8(m, 0x7E013D)) {                                // 232A LDA $3C / CMP $3D / BCS ->2384
+      w8(m, 0x7E0139, 0); w8(m, 0x7E013C, r8(m, 0x7E013C) - 1);              // 2384 STZ $39 / DEC $3C / BRA ->2330
+    }
+    ctColCircleBuild(m);
+    w8(m, 0x7E013C, r8(m, 0x7E013C) + 1);                                    // 2381 INC $3C
+  } else if (st == 5) {                                                      // C0/238A
+    if (r8(m, 0x7E013C) == 0) ctLineClose(m);                                // 238A LDA $3C / BEQ ->23E2
+    else { w8(m, 0x7E013C, r8(m, 0x7E013C) - 1); ctColCircleBuild(m); }      // 238E DEC $3C, 2390..
+  }
+}
+
+// ---- THE FIXED CIRCLES: C0/21E1's entries 7 / 8 (`FF 99`) and 9 / 0A (`FF 9A`) ------------------------------------------
+// Each is two frames of set-up -- `LDA $39 / CMP #07|#09 / BNE / INC $39`, else `STZ $39`: the same routine runs at 7 and
+// at 8 (9 and 0A), so the circle lands in both buffers of the $53 pair -- and the window then STAYS (nothing in them
+// clears $28 bit 5; a later `FF 9C` -> C0/23E2 does). A circle round (7C, 06), above the picture's top, through C3/0077
+// with argument 0 into the buffer $53 picks.
+//   C0/2514 (7/8): TMW / TSW $7F:1522/1523 = 17 / 00, W12SEL $0BD9 = 00, WOBJSEL $0BDB = 00, W34SEL $0BDA = 03 (BG3 in
+//     window 1, inverted: BG3 kept only inside it), CGWSEL $0BDE = 22 (math prevented inside, the sub screen added), the
+//     radius 29, `TSB $28` #20, and the words $1D8D = 0100, $1D8F = F01D, $1D91 = 01C0 (DP $1D00's, C0/75E9's).
+//   C0/2589 (9/0A): TMW / TSW 17 / 00, W12SEL 20 (BG2 in window 1), WOBJSEL 00, W34SEL 02 (BG3 in window 1), CGWSEL 22,
+//     CGADSUB $0BDF = $0BE0 = 04 (BG3), TM $0BD7 = $7F:1520 = 04, TS $0BD8 = $7F:1521 = 13, $1D8D = 0100, the radius 27.
+static void ctFixedCircleFrame(CtScene* sc) {
+  Mem* m = sc->mem;
+  int st = r8(m, 0x7E0139), nine = st >= 9;
+  w8(m, 0x7F1522, 0x17); w8(m, 0x7F1523, 0x00);                             // 2514-251C / 2589-2591
+  if (!nine) {
+    w8(m, 0x7E0BD9, 0x00); w8(m, 0x7E0BDB, 0x00); w8(m, 0x7E0BDA, 0x03);     // 2520-252A
+    w8(m, 0x7E0BDE, 0x22);                                                   // 252D
+    w8(m, 0x7E0350, 0x7C); w8(m, 0x7E0352, 0x06); w8(m, 0x7E0354, 0x29);     // 2532-253E
+    w8(m, 0x7E0128, r8(m, 0x7E0128) | 0x20);                                // 2541 TSB $28
+    w16(m, 0x7E1D8D, 0x0100); w16(m, 0x7E1D8F, 0xF01D); w16(m, 0x7E1D91, 0x01C0);   // 2545-2556 (16-bit)
+  } else {
+    w8(m, 0x7E0BD9, 0x20); w8(m, 0x7E0BDB, 0x00); w8(m, 0x7E0BDA, 0x02);     // 2595-25A1
+    w8(m, 0x7E0BDE, 0x22);                                                   // 25A4
+    w8(m, 0x7E0BDF, 0x04); w8(m, 0x7E0BE0, 0x04);                            // 25A9-25AE
+    w8(m, 0x7E0BD7, 0x04); w8(m, 0x7F1520, 0x04);                            // 25B1-25B6
+    w8(m, 0x7E0BD8, 0x13); w8(m, 0x7F1521, 0x13);                            // 25BA-25BF
+    w16(m, 0x7E1D8D, 0x0100);                                                // 25C3-25C8 (16-bit)
+    w8(m, 0x7E0350, 0x7C); w8(m, 0x7E0352, 0x06); w8(m, 0x7E0354, 0x27);     // 25CD-25D9
+    w8(m, 0x7E0128, r8(m, 0x7E0128) | 0x20);                                // 25DC TSB $28
+  }
+  uint16_t buf = r8(m, 0x7E0153) ? 0x17C8 : 0x1AC8;                          // 255B / 25E0 LDA $53 / BEQ
+  w16(m, 0x7E0356, buf); w8(m, 0x7E0358, 0x7F);
+  ctIrisCircle(m, 0x00);                                                     // 2577 / 25FC LDA #00 / JSL C3/0008
+  if (st == 7 || st == 9) w8(m, 0x7E0139, (uint8_t)(st + 1));                // 257D / 2602 CMP #07|#09 / BNE / INC $39
+  else w8(m, 0x7E0139, 0);                                                   // 2586 / 260B STZ $39
 }
 
 // ---- THE QUAD WINDOW: C0/21E1's entries 6 and 0E (the combat tutorial's yellow line) ---------------------------------------
@@ -6490,7 +6752,12 @@ void CtSceneTick(CtScene* sc) {
   if (!sc->sndFrozenTick && !sc->loadFadeIn && head && (d117 & 0x80)) {
     int fc = r8(sc->mem, 0x7E0119);
     if (fc != 0 && !(fc & 0x80)) {
+      // 0C97 DEC $19 -- and sc->bright with it: it stands for $0119's low nibble, and the picture is its frame's $0119
+      // (the NMI's C0/EC4E). Left at 15, the frame drew the host's copy of the byte from BEFORE the tick, one step late:
+      // MEASURED on the attract's loc 0E6 exit (a pan through the fade, $0117 = 80 at cartridge --monitor f5672 / boot
+      // port f7777), the port's first dim picture was one frame after the cartridge's while its scroll matched.
       w8(sc->mem, 0x7E0119, fc - 1);
+      sc->bright = (fc - 1) & 0x0F;
     } else {
       CtSceneExitCommit(sc);
       return;                                            // the main loop is left (see CtSceneExitCommit)
@@ -6521,11 +6788,14 @@ void CtSceneTick(CtScene* sc) {
     }
   }
   // C0/00B1 JSR C0/21E1, before the pass: `LDA $39 / BEQ / DEC / ASL / TAX / JSR ($21EE,X)` -- 1 the iris opening (C0/220E),
-  // 2 closing (C0/2269), 3 the window wipe (C0/22D8), 6 the quad window (C0/2409) and 0E its teardown (C0/23E2). (4, 5,
-  // 7-0D -- C0/232A 238A 2514 2589 260E 264F 2329 -- have no port.)
+  // 2 closing (C0/2269), 3 the window wipe (C0/22D8), 4 / 5 the circle as the colour window (C0/232A / 238A), 6 the quad
+  // window (C0/2409) and 0E its teardown (C0/23E2), 7-0A the fixed circles (C0/2514 / 2589). (0B-0D -- C0/260E 264F
+  // 2329 -- have no port.)
   if (!sc->sndFrozenTick && !sc->loadFadeIn && body) {
     int st39 = r8(sc->mem, 0x7E0139);
     if (st39 == 1 || st39 == 2) ctIrisFrame(sc);
+    else if (st39 == 4 || st39 == 5) ctColCircleFrame(sc);
+    else if (st39 >= 7 && st39 <= 0x0A) ctFixedCircleFrame(sc);
     else if (st39 == 6 || st39 == 0x0E) ctLineFrame(sc);
     else ctWipeFrame(sc);
     // C0/00B4 JSR C0/274D: the caption requests in $0154 bits 2/3/4 and, with none of them, bit 5's C0/2758 -- a chest's box
@@ -6613,6 +6883,9 @@ void CtSceneTick(CtScene* sc) {
               sc->actors[trObj].cadPause, sc->mode[trObj] & 0xFF,
               (ts->addr >= 0 && ts->addr < sc->blen) ? sc->body[ts->addr] : 0xEE,
               sc->mem->l[0x13], sc->mem->l[0x12], sc->mem->l[0x15], sc->mem->l[0x14]); } }
+  if (!sndResuming) g_leadTk = -1;                      // no B0 visit of the lead yet in this pass (a resumed one had it)
+  if (!sndResuming) { memset(g_ranB0, 0, sizeof g_ranB0); memset(g_landedB0, 0, sizeof g_landedB0); }   // (a resumed
+                                                                // pass keeps what its first half dispatched)
   for (int qi = sndResuming ? sc->sndResumeN : 0; qi < nq; qi++) {   // no cut: C0/5A5D on the fixed virtual beam
     int n = order[qi];
     CtSS* s = &sc->st[n];
@@ -6641,11 +6914,12 @@ void CtSceneTick(CtScene* sc) {
     // (The old comment's "scene-1 Mom obj15 12/22/11" cannot be a per-visit ROM opcode count.)
     for (int k = 0; k < 5; k++)
       if (step(sc, n)) break;
+    if (n < 64) g_landedB0[n] = !g_ranB0[n] && s->addr >= 0 && s->addr < sc->blen && sc->body[s->addr] == 0xB0;
     // ⭐ C0/5ABC-5ABF `REP #20 / TXA / LDX $6D / STA $1180,X` -- the runner writes the object's SCRIPT
     // POINTER back to WRAM at the end of every visit (C0/59AB is the same store on the autorun path).
     // Ours kept the ip only in the C struct, so $1180,X in any state we SAVE was whatever the last
     // seed left. That breaks the capture -> oracle workflow the F5 snapshot exists for: splicing a
-    // ct_field debug state onto a lake base sent the ROM to a STALE address and the scene went
+    // Belthasar debug state onto a lake base sent the ROM to a STALE address and the scene went
     // nowhere (measured on the user's own build/ct_debug.state -- obj3 read ip 03CB while its live
     // script sat at 01B0+header, and the oracle just closed the box and stopped). Same family as the
     // loader arms' $1C80/$1A81/$1B01: a C mirror that never reached the RAM the ROM reads.
@@ -6676,7 +6950,14 @@ void CtSceneTick(CtScene* sc) {
   // part of the runner above, and its $1900/$1980/$1600/$1680 stores are consumed by C0/A810 below (AAFD
   // integrate, the C98A anim leg) and by the drain. field.c used to call it AFTER CtSceneTick, one frame
   // late for all three consumers.
+  // THE LEAD'S STEP, AT C0/A810 (AB06 `LDA $1A01,X / BEQ`): the host moved him before the pass (field.c, C0/881E's step);
+  // it stands only on a ticket his B0 armed this pass and nothing dropped (vmLeadStepAtA810).
+  // (A song upload that parks the pass after his B0 keeps the ticket to the return frame, where A810 runs: the host does
+  // not move him while parked, and the step he took on the posting frame commits there -- CtSceneMainLoopParked.)
+  vmLeadStepAtA810(sc, 0);
   CtSceneUpdateFollowers(sc);
+  vmLeadStepAtA810(sc, 1);
+  g_leadFromOk = 0;
   // ⭐ C0/A810's OBJECT LOOP IS UNCONDITIONAL. A810 reads the object count into $BD and A819 walks
   // EVERY index every frame, dispatching on $1100,X (A81E CMP #03 / A822 CMP #08 / A826 CMP #07) --
   // there is no movement-ticket gate anywhere in it. Mode 7 goes to A86B `JSR C0/A947`, whose ONLY
@@ -7251,8 +7532,7 @@ void CtSceneUpdateFollowers(CtScene* sc) {
   // Not modelled: a visit the runner's raster budget skipped (C0/5A5D) -- this pass runs once per frame.
   // Op 0xAF runs the same C0/3002 (C0/2FFD `JSR 3002 / INX`) and leaves the ip one byte PAST itself: a follower whose
   // visit last ran it (atB0, set for 0xB0 and 0xAF alike) sits right after an 0xAF.
-  #define CT_FOL_ON_B0(o) (sc->st[o].addr >= 0 && sc->st[o].addr < sc->blen && (sc->body[sc->st[o].addr] == 0xB0 \
-                           || (sc->atB0[o] && sc->st[o].addr >= 1 && sc->body[sc->st[o].addr - 1] == 0xAF)))
+  #define CT_FOL_ON_B0(o) (sc->st[o].addr >= 0 && sc->st[o].addr < sc->blen && (sc->body[sc->st[o].addr] == 0xB0                            || (sc->atB0[o] && sc->st[o].addr >= 1 && sc->body[sc->st[o].addr - 1] == 0xAF)))
   int haveAny = 0;
   for (int o = 0; o < sc->nobj; o++)
     if ((sc->mode[o] == 1 || sc->mode[o] == 2) && o != lead && sc->actors[o].hasPos && !sc->actors[o].dead)
@@ -7294,7 +7574,13 @@ void CtSceneUpdateFollowers(CtScene* sc) {
     for (int k = 0; k < sc->nobj; k++)
       if (k != lead && sc->mode[k] == member && sc->actors[k].hasPos && !sc->actors[k].dead) { o = k; break; }
     if (o < 0) continue;
-    int roaming = CT_FOL_ON_B0(o) && w[0x0138] == 0;    // C0/3002: the op ran, and $0138 let it through
+    // C0/3002 RUNS WHEN THE OP IS DISPATCHED: A26B / A2CE have no other caller. A follower whose visit this frame ENDED
+    // on its B0 without dispatching it -- a RETURN onto the B0 with the five-op budget spent (C0/5AB6) -- gets no conga
+    // that frame; its next visit runs it (landedB0). MEASURED, the attract's loc 0E6 (the rule's cartridge from boot, `--monitor 7E168C --writer` and
+    // `--followvm --obj 6`): Robo's fn7 ends `AD 20 / 4F 0C 0F / 4F 25 10 / 02 00 33 / 00` -- the wait's last pass plus
+    // four ops spend the visit at c7669, the ip lands on 06A2's B0, and C0:A21C (A1E9's idle chain, reached from the B0)
+    // zeroes $168C at c7670; the port zeroed it in the RETURN's frame (ROADMAP F2).
+    int roaming = CT_FOL_ON_B0(o) && !g_landedB0[o] && w[0x0138] == 0;   // C0/3002: the op ran, and $0138 let it through
     // ...BUT NOT A TICKET THE NEW FUNCTION HAS ALREADY ISSUED. This pass runs after the whole runner, so on the frame a
     // follower leaves its B0 its new function has had its visit: the REQ that moved it (op 0x02-0x07's preempt arm,
     // C0/6031+6034 = reqOp) cleared $1A80/$1A01 BEFORE that visit, and a move op in it armed a fresh pair, which C0/A810
@@ -7360,7 +7646,7 @@ void CtSceneUpdateFollowers(CtScene* sc) {
       gVmTick, sc->fx[lead], sc->fy[lead], w[0x1D32], w[0x1D33], w[0x01AB], w[0x01AC], w[0x01AD],
       sc->nobj>3?sc->fx[3]:0.0, sc->nobj>3?sc->fy[3]:0.0, w[0x1606], w[0x1608]);
 }
-// --vmdiff's stand-in for the ROM's joypad routine (C2/8500) for the BUTTON byte pair only. ct_field no longer
+// --vmdiff's stand-in for the ROM's joypad routine (C2/8500) for the BUTTON byte pair only. Belthasar no longer
 // calls it: its host runs the NMI's whole pad latch (field.c fieldPadNmi -> player.c CtJoypadPoll, $00F0-$00FB).
 // $00F2 is the HELD buttons and $00F0 the NEWLY-PRESSED ones -- measured on the oracle with
 // `--monitor 7E00F0:4` across a press edge, both carrying the same layout
@@ -7505,6 +7791,7 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
     if (at < 0 || at >= sc->blen) { why = "off"; break; }
     if (sc->body[at] == 0x00) { why = "end"; break; }  // 5967 LDA / BEQ ->597C
     if (tr && ln < (int)sizeof line - 16) ln += snprintf(line + ln, sizeof line - ln, " %02X@%04X", sc->body[at], at);
+    vmOpCost(sc->mem, sc->body, sc->blen, at, 0);       // (a load's: priced as C0/5977 dispatches it)
     step(sc, 0);                                        // 5977 JSR ($5D6E,X) -- its carry is ignored
     if (sc->st[0].addr == at) { why = "parked"; break; } // the ROM would never leave C0/595C
   }
@@ -7525,12 +7812,8 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
 // caller's epilogue (field.c). Idempotent-safe: does nothing if rgBase wasn't installed.
 void CtSceneBattleReturn(CtScene* sc) {
   if (!sc || sc->rgBase < 0) return;
-  int fol[2] = { -1, -1 }, nf = 0;                    // the follower objects (move-mode 1 then 2, C0/0330 $99/$9B)
-  for (int want = 1; want <= 2; want++)
-    for (int o = 0; o < sc->nobj; o++)
-      if (o != sc->playerObj && sc->mode[o] == want && !sc->actors[o].dead && sc->actors[o].hasPos) {
-        if (nf < 2) fol[nf++] = o; break;
-      }
+  int fol[2] = { -1, -1 };
+  int nf = ctPartyFollowers(sc, fol);                  // 0355 `LDA $99 / BPL`, 036D `LDA $9B / BPL`
   w8(sc->mem, LOC + 0xFF * 2, (3 - nf) & 0xFF);      // loc[0xFF] seed = 3 - nFollowers (the barrier target 3)
   if (nf == 0) {                                       // C0/0359: no followers -> restore control directly
     sc->explore = 1; w8(sc->mem, 0x7E011F, 1); w8(sc->mem, 0x7F03FE, 3);   // 0359 LDA #01 / STA $1F / LDA #03 / STA $7F03FE
@@ -7539,12 +7822,12 @@ void CtSceneBattleReturn(CtScene* sc) {
   for (int i = 0; i < nf; i++) {                       // C0/5B1F: prioritized VM CALL of the RETURN block
     int o = fol[i]; CtSS* s = &sc->st[o];
     if (s->prio < 1) continue;                         // 5B26: only CALL if current prio >= 1 (idle=7 passes)
-    if (s->addr >= 0) s->ret[s->prio] = s->addr;       // 5B41: PUSH current IP under the current priority level
+    if (s->addr >= 0) s->ret[s->prio] = ssPushAddr(s); // 5B41: PUSH current IP ($1180) under the current priority level
     s->addr = sc->rgBase;                              // 5B4C: IP := the regroup block (our addr = op position)
     s->prio = 0;                                       // 5B54: priority := 0
     ctSetDc(sc, o, 0);                                 // 5B5F STZ $1001,X -- eligible on the next build
-    s->waitObj = -1; s->wait = 0; s->nm = 0;
-    sc->hasTask[o] = 0; sc->cycles[o] = 0;             // 5B59/5B5C: STZ $1A80 (velocity) / $1A01 (ticket)
+    s->wait = 0; s->nm = 0;                            // (the call latch $7F0980 is not 5B1F's: it survives, as a pre-empt's)
+    vmTicketStop(sc, o);                               // 5B59/5B5C: STZ $1A80 (velocity) / $1A01 (ticket)
     sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
   }
 }
@@ -7766,12 +8049,12 @@ void CtSceneActivate(CtScene* sc, int obj) {
   if (obj < 0 || obj >= sc->nobj) return;
   CtSS* st = &sc->st[obj];
   if (!CtVmInvokeGate(CtSceneMem7E(sc), obj, st->prio, 2)) return;   // C0/5AC5, CMP #02
-  if (st->addr >= 0) st->ret[st->prio] = st->addr;     // save current to resume after
+  if (st->addr >= 0) st->ret[st->prio] = ssPushAddr(st);   // save current ($1180) to resume after
   int fn = fpPtr(sc, obj, 1);
   if (fn < 0 || fn >= sc->blen) return;
   st->addr = fn; st->prio = 1; st->tb = 0;
   ctSetDc(sc, obj, 0);                                 // the activate path's STZ $1001,X (C0/3264ff family)
-  sc->hasTask[obj] = 0; sc->cycles[obj] = 0;           // talking STOPS the NPC's in-flight move: else the
+  vmTicketStop(sc, obj);                               // talking STOPS the NPC's in-flight move: else the
                                                        // preempted pacing move's hasTask lingers and she keeps
                                                        // the WALK anim through the dialogue (Marle "thank
                                                        // goodness, my pendant"). She re-issues + resumes on return.
@@ -7810,13 +8093,13 @@ void CtSceneTouch(CtScene* sc, int obj) {
   // activate, both branching to the routine's own shared bail. So the port carries ONE predicate and
   // passes the immediate, exactly as the ROM does.
   if (!CtVmInvokeGate(CtSceneMem7E(sc), obj, st->prio, 3)) return;   // C0/3154, CMP #03
-  if (st->addr >= 0) st->ret[st->prio] = st->addr;     // push the running fn to its return slot
+  if (st->addr >= 0) st->ret[st->prio] = ssPushAddr(st);   // push the running fn ($1180) to its return slot
   int fn = fpPtr(sc, obj, 2);
   if (fn < 0 || fn >= sc->blen) return;
 
   st->addr = fn; st->prio = 2; st->tb = 0;              // ROM C0/319F: fn2 at PRIORITY 2
   ctSetDc(sc, obj, 0);                                  // 31AA STZ $1001,X (beside the 1A80/1A01 zeroes below)
-  sc->hasTask[obj] = 0; sc->cycles[obj] = 0;            // the touch STOPS the actor's in-flight move (no lingering walk anim)
+  vmTicketStop(sc, obj);                               // the touch STOPS the actor's in-flight move (no lingering walk anim)
 }
 
 int CtSceneTextbox(const CtScene* sc, int* tableAddr, int* strIndex) {
@@ -8049,7 +8332,7 @@ int CtResolveNames(const char* in, int len, char* out, int cap, const CtScene* s
         if (!sc || !sc->mem || !gRomImg) { const char* t = "{item}"; for (; *t && o < cap - 1; t++) out[o++] = *t; continue; }
         uint32_t at = 0x0C0B5Fu + (uint32_t)sc->mem->l[0] * 11u;
         for (int k = 0; k < 10 && at + (uint32_t)k < (uint32_t)gRomImgLen && o < cap - 1; k++) {
-          uint8_t b = gRomImg[at + (uint32_t)k];
+          uint8_t b = CtRomByte(gRomImg, gRomImgLen, (long)(at + (uint32_t)k));
           if (b == 0xEF) break;                             // C2/5D28 `CMP #EF / BEQ`
           out[o++] = (b == 0xFF) ? ' ' : (char)b;
         }
@@ -8137,7 +8420,7 @@ int CtSceneActorScripted(const CtScene* sc, int i) {
 int CtSceneActorAtB0(const CtScene* sc, int i) { return (i >= 0 && i < sc->nobj && i < 64) ? sc->atB0[i] : 0; }
 int CtSceneActorMode(const CtScene* sc, int i) { return (i >= 0 && i < sc->nobj) ? sc->mode[i] : -1; }  // $1100 probe
 
-// ---- DEBUG save/load of the FULL live scene state (ct_field F5/F9). A whole-struct snapshot of the
+// ---- DEBUG save/load of the FULL live scene state (Belthasar F5/F9). A whole-struct snapshot of the
 // VM (WRAM + scheduler + movers + flags). The only pointers in CtScene are raw/body (the static loaded
 // scene data) and the tileSolid map-hook + ctx -- these are PRESERVED on load (the same scene/asset is
 // already loaded), so only the dynamic state is restored. Same-scene only (nobj must match). Debug-only;
@@ -8394,6 +8677,11 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
               fprintf(stderr, "[snd] blen=%-4d rawloc=%-3d cmd=%02X p1=%02X p2=%02X p3=%02X sink=%d\n",
                       blen, L[0] | (L[1] << 8), m[0], m[1], m[2], m[3], gSoundSink.post ? 1 : 0); } }
   int rr = -1;
+  if (gLoadPostOn && gSoundSink.post && mem->s[0x1E00]) {      // the load's last JSLs: queued for its last frame (above)
+    if (gLoadPostN < 32) { gLoadPostCyc[gLoadPostN] = g_ctLzSpriteCycles; memcpy(gLoadPost[gLoadPostN++], mem->s + 0x1E00, 4); }
+    w8(mem, 0x7E1E00, 0x00);
+    return startLine;                                          // (nothing crossed here: the load's black prices it)
+  }
   if (gSoundSink.post) rr = gSoundSink.post(gSoundSink.ctx, mem->s, startLine);
   // ...and the callee's TEARDOWN, which is unconditional. C7/0150 does `LDX #1E00 / PHX / PLD`, so
   // `$00` inside bank $C7 IS $7E1E00, and the routine has exactly ONE exit -- C7/0192 `SEP #20` /
@@ -8408,6 +8696,24 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
   // would stop being compared instead of comparing equal. w8 claims it unconditionally.
   w8(mem, 0x7E1E00, 0x00);                     // C7/0192-0194
   return rr;
+}
+int CtSceneLoadPostsFlush(CtScene* sc, int count) {    // the next `count` queued JSLs (gLoadPost; < 0 = all), in order, each with
+  int n = gLoadPostN, k0 = gLoadPostDone;              //   its mailbox
+  if (count >= 0 && k0 + count < n) n = k0 + count;
+  gLoadPostDone = n;
+  if (gLoadPostDone >= gLoadPostN) gLoadPostN = gLoadPostDone = 0;
+  if (!sc) return -1;
+  // ...AND PRICED, like every other JSL: each one from the line the one before it returned on (vmSoundPostAcc). A song an
+  // init script plays is uploaded INSIDE the load, with the NMI off, and the cartridge's black lasts as long as the upload:
+  // loc 071's obj init `EA 1B` (the gate's clearing, entered from 070 with Marle and Lucca) posts `10 1B` at f7378 and the
+  // SPC takes it to f7408; the ramp begins at f7425, 63 frames after the commit. The flush threw the price away and the
+  // port lit the clearing at f7394 -- its scene, its gate and the warp to 1000 A.D. all ~31 frames early.
+  int ln = 12, fr = 0, seen = 0;
+  for (int k = k0; k < n; k++) {
+    for (int b = 3; b >= 0; b--) w8(sc->mem, 0x7E1E00 + (uint32_t)b, gLoadPost[k][b]);
+    seen |= vmSoundPostAcc(sc->mem, sc->blen, &ln, &fr);
+  }
+  return seen ? fr * 1024 + ln : -1;
 }
 uint8_t* CtSceneMemGlb(CtScene* sc) { return sc->mem->g; }
 uint8_t* CtSceneMemLoc(CtScene* sc) { return sc->mem->l; }

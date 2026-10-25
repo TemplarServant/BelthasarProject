@@ -167,7 +167,7 @@ def b127(W, x):
 # C0/7170 -> ($7181,X): the OBJ palette allocator (the port's is ct_vm.c palAlloc7170).
 def pal7170(W, x):
     cyc = L(0x7170, 0x7172)
-    if W.b(0x0054) & 0x80:
+    if W.b(0x0154) & 0x80:                                   # `LDA $54` with D = $0100
         return cyc + br(0x7172, 1) + c(0x7180)
     cyc += br(0x7172, 0) + L(0x7174, 0x7179)
     t = W.b(0x1100 + x)

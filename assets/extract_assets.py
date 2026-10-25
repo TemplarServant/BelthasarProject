@@ -25,6 +25,8 @@ from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a
 import sys, os, struct, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import maps
+import rom_closure
+import rom_closure_battle
 import sprites
 import script
 import text
@@ -58,6 +60,26 @@ T_WORLDINTROSEED = 27  # id = world; the NEW-GAME INTRO object blocks (64 x 0x40
                    # overworld play stays sparse (no master pc=06CD).
 # T_STRINGS ids: 0=dictionary, 1=item names, 2=world names, 3=location names
 S_DICT, S_ITEMS, S_WORLD, S_LOCATIONS = 0, 1, 2, 3
+
+# --- the sound (disasm/notes/audio_song_data.md, audio_boot.md; src/audio.c reads them through CtSndData) ---
+T_SND_BOOT = 28    # id = upload block 0-5: [ARAM dest u16] + the block's bytes (block 0 = the driver: until it is native)
+T_SND_SEQ = 29     # id = song: its sequence block ($C7:0D18 + id*3 -> [u16 len][bytes]): [addr u16] + the bytes + the 3
+                   #   bytes after it (the upload's last unit reads past the block, size/3 + 1 units; the address -- the
+                   #   size word's, low 16 bits -- prices the stream: a block that crosses its 64 KB bank takes the slow loop)
+T_SND_SAMPLE = 30  # id = instrument 1..N: its BRR sample block ($C7:0AEA + (id-1)*3): [addr u16] + the bytes
+T_SND_INSTR = 31   # id = instrument 0..N: [loop u16][$1F40 param u16][$1FC0 param u16] ($C7:0BA4 / 0C20 / 0C9C at
+                   #   (id-1)*2; id 0 = the empty entry, whose index -1 wraps the long,X read into bank $C8)
+T_SND_SONG = 32    # id = song: its instrument list (32, $C7:0E11) + percussion (36, $C7:1871) + record (2, $C7:241D)
+T_SND_SFXSET = 33  # id 0 = set A (field, $C7:4309), 1 = set B (battle, $C7:5B0B): the [u16 len] block's bytes
+T_SND_TIMING = 35  # id 0: the sound machine's cost table (saves/snd_timing.bin, tools/gen/snd_timing.py: ct.exe --sndtiming;
+                   # src/sound/timing.h "SNDT"). With it block 0 (T_SND_BOOT 0, the driver) keeps only its data: the bytes its
+                   # code map marks as an instruction's are zero -- the game runs the driver in C
+T_SND_MISC = 34    # id 0: [song count u8] + the song-exception list ($C7:0AD8, through its bit-7 end)
+                   # id 1: FD/C1EE's HDMA program as the loader clock reads it: DMAP x8, set A tables x8, set B x8 (u16)
+T_TABLE = 37       # id = a ROM table's start file offset: its bytes (pack_tables: each table's extent from the code
+                   #   that reads it, or by the closure over every location); src/romview.h serves the reads it covers
+T_LZ = 36          # id = an LZ stream's ROM file offset: [out len u32][cost $7E u32][cost $7F u32] + the stream decompressed
+                   #   (saves/lz_pack.bin, tools/gen/lz_pack.py: ct.exe --lzpack over the ROM's own pointer tables)
 
 def _strlist(strings):
     """Serialize a list of UTF-8 strings: [count u16][ {u16 len, bytes} ... ]."""
@@ -410,8 +432,165 @@ def pack_sprite_anims(rom, T):
                 b += bytes([sf[0] & 0xFF, sf[1] & 0xFF, sf[2] & 0xFF, sf[3] & 0xFF, delay & 0xFF])
         yield (T_SPRITEANIM, si, bytes(b))
 
+def _fd_tile_anim_end(rom):
+    """FD/DE98's program (FD:F310..): the last byte any location's records read (tileanim.c, the same walk)."""
+    mx = 0
+    for loc in range(512):
+        idx = rom[0x360001 + loc * 14] & 0x3F
+        x = rom[0x3DF290 + idx * 2] | rom[0x3DF291 + idx * 2] << 8
+        for _ in range(12):
+            t = 0x3DF310 + x
+            fc = rom[t]; mx = max(mx, t); x += 1
+            if fc == 0x80:
+                continue
+            mx = max(mx, 0x3DF310 + x + 1); x += 2
+            if fc == 2:
+                mx = max(mx, 0x3DF310 + x + 1); x += 2; mx = max(mx, 0x3DF310 + x + 3); x += 4
+            elif fc == 4:
+                mx = max(mx, 0x3DF310 + x + 3); x += 4; mx = max(mx, 0x3DF310 + x + 7); x += 8
+            else:
+                mx = max(mx, 0x3DF310 + x + 7); x += 8; mx = max(mx, 0x3DF310 + x + 15); x += 16
+    return mx + 1
+
+def _fd_obj_slot_ends(rom):
+    """FD/E292's set table (FD:F9C7) and descriptor stream (FD:FA77): the ends any location's walk reaches."""
+    mset = mdesc = 0
+    for loc in range(512):
+        ti = (rom[0x360003 + loc * 14] << 1) & 0xFF
+        mset = max(mset, 0x3DF9C8 + ti)
+        x = rom[0x3DF9C7 + ti] | rom[0x3DF9C8 + ti] << 8
+        for _ in range(6):
+            d = 0x3DFA77 + x
+            m = rom[d] & 0xF0; mdesc = max(mdesc, d)
+            if m == 0:
+                x += 1; continue
+            r0 = rom[d]; x += 3; mdesc = max(mdesc, 0x3DFA77 + x); x += 1
+            if m not in (0x10, 0x80):
+                continue
+            mdesc = max(mdesc, 0x3DFA77 + x + 2); x += 3
+            if m == 0x80:
+                n = (r0 & 0x0F) + 1; mdesc = max(mdesc, 0x3DFA77 + x + n - 1); x += n
+    return mset + 1, mdesc + 1
+
+def _lz_skipped():
+    """The offsets tools/gen/lz_pack.py listed that are not LZ streams (saves/lz_pack.skipped): the raw blocks."""
+    p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'saves', 'lz_pack.skipped')
+    return {int(l, 16) for l in open(p) if l.strip()} if os.path.exists(p) else set()
+
+def rom_tables(rom):
+    """(name, start, end) of every small table the engine reads through src/romview.h."""
+    ta_end = _fd_tile_anim_end(rom)
+    os_set_end, os_desc_end = _fd_obj_slot_ends(rom)
+    return [
+        ('C0 atan 32x32 (C0/F300)', 0x00F300, 0x00F700),
+        ('C0 facing (C0/F700)', 0x00F700, 0x00F800),
+        ('C0 sine (C0/F800)', 0x00F800, 0x00F940),
+        ('C0 trig step (C0/F900, index (A << 2) & 3FF)', 0x00F900, 0x00FD00),
+        ('C0 bit reverse (C0/FD00)', 0x00FD00, 0x00FE00),
+        ('C0 noise (C0/FE00, 8-bit index)', 0x00FE00, 0x00FF00),
+        ('C0 bit masks (C0/FF20: 01 02 .. 80, the chest flags)', 0x00FF20, 0x00FF28),
+        ('C0 window wave (C0/FF30 + 4k + (step & 3E), k < 16)', 0x00FF30, 0x00FFAE),
+        ('location records (F6:0000, 512 x 14)', 0x360000, 0x360000 + 512 * 14),
+        ('FD tile-animation pointers (FD:F290, 64 words)', 0x3DF290, 0x3DF310),
+        ('FD tile-animation program (FD:F310, its closure)', 0x3DF310, ta_end),
+        ('FD colour-slot sets (FD:F9C7, its closure)', 0x3DF9C7, os_set_end),
+        ('FD colour-slot descriptors (FD:FA77, its closure)', 0x3DFA77, os_desc_end),
+        ('FF window tiles (FF:9E10, 8 x 0x280)', 0x3F9E10, 0x3F9E10 + 8 * 0x280),
+        ('FF text palettes (FF:B210, 8 x 16)', 0x3FB210, 0x3FB290),
+        ('FF naming grid (FF:C9AC, 80)', 0x3FC9AC, 0x3FC9FC),
+    ] + rom_closure.location_tables(rom) + rom_closure.sequence_tables(rom, _lz_skipped()) + rom_closure.sprite_tables(rom, _lz_skipped()) + rom_closure.party_tables(rom) + rom_closure.menu_tables(rom) + rom_closure.world_tables(rom) + rom_closure_battle.battle_tables(rom)
+
+def table_spans(rom):
+    """rom_tables' extents merged where they overlap or touch: one entry per span, so a read the union covers is
+    always inside ONE table (src/romview.c serves a CtRomPtr span only from a single table)."""
+    out = []
+    for _name, a, b in sorted(rom_tables(rom), key=lambda t: (t[1], t[2])):
+        if b <= a:
+            continue
+        if out and a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
+
+def pack_tables(rom, T):
+    for a, b in table_spans(rom):
+        yield (T_TABLE, a, bytes(rom[a:b]))
+
+def pack_lz(rom, T):
+    lp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'saves', 'lz_pack.bin')
+    if not os.path.exists(lp):
+        return
+    d = open(lp, 'rb').read()
+    if d[:4] != b'CTLZ':
+        raise ValueError('saves/lz_pack.bin: not an LZ pack')
+    n, = struct.unpack_from('<I', d, 4)
+    o = 8
+    for _ in range(n):
+        off, ln, c0, c1 = struct.unpack_from('<IIii', d, o)
+        o += 16
+        yield (T_LZ, off, struct.pack('<Iii', ln, c0, c1) + d[o:o + ln])
+        o += ln
+
 def pack_mover(rom, T):
     yield (T_MOVER, 0, rom[0xF300:0xF700] + rom[0xF700:0xF800] + rom[0xF800:0xF940])
+
+def snd_code_map(timing):
+    """Block 0's code map in the cost table (src/sound/timing.h): (start, length, the bit per byte)."""
+    if len(timing) < 12 or timing[:4] != b'SNDT':
+        raise ValueError('saves/snd_timing.bin: not a cost table')
+    blo, blen = struct.unpack_from('<HH', timing, 8)
+    return blo, blen, timing[12:12 + (blen + 7) // 8]
+
+
+def pack_sound(rom, T):
+    c7 = 0x70000
+    w = lambda o: rom[o] | rom[o + 1] << 8
+    p24 = lambda o: ((rom[o + 2] - 0xC0) << 16) | w(o)
+    src, dst = c7 + 0x10, c7 + 0x1C
+    tp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'saves', 'snd_timing.bin')
+    timing = open(tp, 'rb').read() if os.path.exists(tp) else None
+    if timing:
+        yield (T_SND_TIMING, 0, timing)
+    for b in range(6):                                   # the IPL upload: sources $C7:0010, destinations $C7:001C
+        at = c7 + w(src + 2 * b)
+        blk = bytearray(rom[at + 2:at + 2 + w(at)])
+        if b == 0 and timing:                            # the driver: its data only, its code's bytes zero
+            blo, blen, cmap = snd_code_map(timing)
+            if blo != w(dst) or blen != len(blk):
+                raise ValueError('saves/snd_timing.bin is not this ROM\'s block 0')
+            for k in range(blen):
+                if cmap[k >> 3] >> (k & 7) & 1:
+                    blk[k] = 0
+        yield (T_SND_BOOT, b, struct.pack('<H', w(dst + 2 * b)) + bytes(blk))
+    nsong = rom[c7 + 0x0AE9]
+    for s_ in range(nsong):
+        at = p24(c7 + 0x0D18 + 3 * s_)
+        yield (T_SND_SEQ, s_, struct.pack('<H', at & 0xFFFF) + bytes(rom[at + 2:at + 2 + w(at) + 3]))
+        yield (T_SND_SONG, s_, bytes(rom[c7 + 0x0E11 + 32 * s_:c7 + 0x0E11 + 32 * s_ + 32])
+               + bytes(rom[c7 + 0x1871 + 36 * s_:c7 + 0x1871 + 36 * s_ + 36])
+               + bytes(rom[c7 + 0x241D + 2 * s_:c7 + 0x241D + 2 * s_ + 2]))
+    ninst = (0x0BA4 - 0x0AEA) // 3                       # the pointer table's own extent
+    for i in range(1, ninst + 1):
+        at = p24(c7 + 0x0AEA + 3 * (i - 1))
+        yield (T_SND_SAMPLE, i, struct.pack('<H', at & 0xFFFF) + bytes(rom[at + 2:at + 2 + w(at)]))
+    for i in range(0, ninst + 1):
+        k = ((i - 1) * 2) & 0xFFFF                       # id 0: 0xFFFE, the long,X wrap into bank $C8
+        yield (T_SND_INSTR, i, struct.pack('<HHH', w(c7 + 0x0BA4 + k), w(c7 + 0x0C20 + k), w(c7 + 0x0C9C + k)))
+    for k, at in enumerate((c7 + 0x4309, c7 + 0x5B0B)):
+        yield (T_SND_SFXSET, k, bytes(rom[at + 2:at + 2 + w(at)]))
+    exc = bytearray()
+    o = c7 + 0x0AD8
+    while True:
+        exc.append(rom[o])
+        if rom[o] & 0x80:
+            break
+        o += 1
+    yield (T_SND_MISC, 0, bytes([nsong]) + bytes(exc))
+    fd = 0x3D0000
+    yield (T_SND_MISC, 1, bytes(rom[fd + 0xC1F8 + 4 * i] for i in range(8))
+           + b''.join(struct.pack('<H', w(fd + 0xC26E + 5 * i)) for i in range(8))
+           + b''.join(struct.pack('<H', w(fd + 0xC298 + 5 * i)) for i in range(8)))
 
 def pack_font(rom, T):
     """Dialogue VWF font v2, chars 0xA0-0xF3 (84 glyphs), 12x12 px 2bpp. The ROM stores the
@@ -618,7 +797,7 @@ PACKERS = [pack_scene_palettes, pack_sprite_palettes, pack_scene_headers,
            pack_pal_anims, pack_tileset12, pack_tileset3, pack_maps,
            pack_strings, pack_dialogue, pack_portraits, pack_namesprites, pack_menufont,
            pack_actors, pack_collision, pack_exits, pack_sprite_anims, pack_font, pack_mover,
-           pack_sprites, pack_scripts, pack_world]
+           pack_sprites, pack_scripts, pack_world, pack_sound, pack_lz, pack_tables]
 
 def build(rom):
     T = {

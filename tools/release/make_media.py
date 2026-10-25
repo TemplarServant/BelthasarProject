@@ -3,7 +3,7 @@ r"""Make the README's screenshots and clip (docs/media/) from the port running t
 
     python tools/release/make_media.py [--out docs/media]
 
-Every picture is the C engine's own output (build/ct_field.exe --boot, headless), never the oracle's: two runs of the
+Every picture is the C engine's own output (build/Belthasar.exe --boot, headless), never the oracle's: two runs of the
 cold start through the attract demo, one with every option at its default (CT_SHOTS) and two with the widescreen mod
 on (a settings file with widescreen=16:9; CT_WIDESHOTS: the stills, then the clip's every frame). The frames picked are listed in SHOTS and CLIP; each is
 scaled 2x with nearest-neighbour. The clip (the Zombor fight's Luminaire, widescreen) is encoded with ffmpeg, which
@@ -46,7 +46,7 @@ def x2(im):
 def run(env, tmp, log):
     e = dict(os.environ, SDL_VIDEODRIVER='dummy', **env)
     with open(os.path.join(tmp, log), 'w') as f:
-        subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--boot'],
+        subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot'],
                        cwd=ROOT, env=e, stdout=f, stderr=subprocess.STDOUT, check=True)
 
 

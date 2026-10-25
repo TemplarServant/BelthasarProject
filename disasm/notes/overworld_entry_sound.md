@@ -266,7 +266,7 @@ for loc 496.
 
 ```
 $ CT_SNDTRACE=1 CT_NAMEAS=Crono TB_AUTOADV=1 CT_OWSONG=1 SDL_VIDEODRIVER=dummy \
-    ./build/ct_field.exe --assets ct_assets.dat --newgame --selftest --frames 2600
+    ./build/Belthasar.exe --assets ct_assets.dat --newgame --selftest --frames 2600
 
 overworld entry: scene 0 -> world 0 at (568,564) ngIntro=1 f32
 owsong: music object at $0EB0 state=01 ctr=00C5
@@ -398,3 +398,51 @@ cannot see this: it grades the zoning arm only.
 - **The arrival-cell disagreement (§5).**
 - **The `$7F01ED` hold** on op `0x3D` — measured `00` on both entries, so its non-zero arm is
   unexercised here as well.
+
+## 8. 2026-10-17: the bootstrap's entry has no host post; the exit's two posts; the SPC's exact clock
+
+**The entry.** Under the bootstrap (owBootstrapObjects: the world's loader script runs) the script is the only thing that
+posts at a world entry: its dispatch either falls through to the zoning arm `34 0F 2F` (C2/2F0F, world.c obNative, which
+stages and posts in the world's first pass) or jumps to another loader, which plays its own song (`3D`) or none. The port
+used to keep its host post (the region's song) whenever the dispatch did not reach `34 0F 2F` -- a post the ROM does not have.
+Measured on the cartridge: Jackie's ch24 (1DD -> 1F6 by op DF at f493, and the return from `FF 23` at f1559) posts no `10`
+at those entries (the loader plays `10 44` 39 frames on, by its own op); the Lavos chain's 1F7 entry
+(saves/lavos_re/lavos_1d2_arrival.state, the pad of `lavos-day-chain-in-the-port`): `--monitor 7E1E00:4` shows `$1E00`
+unchanged at f961. The host post stays only for a replayed snapshot (which skipped the script). Graded by
+lavos-day-chain-in-the-port's mutation: the post's upload had held the port 8 frames over 1D2's `10 18` stretch (cartridge
+f2684 -> f2798, 114 frames; the port 122 with the post, 114 without).
+
+**The exit.** The world's main loop, state 2 (C2/24D5-2505, every exit into a location or another world): `JSR C2/26F0`,
+then two posts, `82 00 FF` (C2/24E3) and `83 00 FF` (C2/24F4), then `JML C0:0000` -- whose field load posts its `81`. The
+cartridge, the same Lavos chain at the 1F7 -> 1D2 exit (PEEK_APUTRACE=2050:2062): `$2140 = 82` at C7/0635 line 229, `83` line
+240, `81` line 247, all in f2058. The port had neither of the first two (field.c owExitSoundPosts, now before the reboot in
+both state-2 branches). No check grades them yet: they move no frame of any drive in the suite.
+
+**The clock.** The port's SPC ran 17,088 APU cycles every frame; the console's odd (non-interlaced) frames have line 240 four
+master cycles short (snes.c), 17,087.81 APU cycles. audio.c's CtAudioFrame now takes each frame's own (apuFrameCycles: the
+frame's parity, flipped every frame, seeded from a state's ppu->evenFrame, power-on even; CtAudioFrameSkip flips it for a frame a
+translated stage's bus ran). Measured: the ending's `FF 2A` logic exact for 11956 frames (5 frames a frame early before), the
+scene-8 vmdiff's long upload returns on line 137 (oracle 139, before 149). The attract moved a frame or two from its first
+long song handshakes on (its SPC's phase luck: a cold-booted port against the captured cartridge); those checks were
+renumbered with their content unchanged.
+
+**The stage's END in its own frame.** Under the rule's CPU the NMI that ENDs a `$C3` stage ($7E:0000 = 1) is followed, in
+the same frame, by the main loop's teardown ($302A) and `JML $C0:0000` (the Epoch's landing into the world: `$7E:0000 = 1` and
+C0/0000 both at f2158). The port's native stages (the race, the ending, entries 3 / 4 / 6) closed one frame later and loaded
+the next; field.c now closes them and pends the reboot in the END frame (after the frame's picture), so the load is the next
+host frame, as the cold reset's (the Day of Lavos' console reset keeps its own path). `ow-world-map-vs-oracle` (the Epoch's
+dive, then Select's map) is on the cartridge's frames again.
+
+**A load's last JSLs in its last frame (2026-10-18).** tools/sound_post_cmp.py (the cartridge's `$2140` command writes --
+C7/0635, a song's `10` at C7/0A6E -- with their `$2141`, against the port's CT_SNDPOSTS lines) found every command of the
+Lavos chain the cartridge's, one 25 frames early: the 1D3 load's `18 FF`, obj0 slot 1's `E8 FF` -- C0/56B0's `JSR C0/595C`
+(C0/56C8) at f2249 line 71, C0/2848 at f2249 line 89 (--cputrace from a PEEK_SAVE at f2244): the load's init runner (C0/5709)
+and slot 1 run at its END, NMI off, where the port ran them in the load's first frame and held the black after. ct_vm.c now
+queues those JSLs (gLoadPost: the mailbox as each left it, `$1E03` included; the load's own song post at C0/1B8B stays at its
+start) and field.c posts them in the load's last frame (CtSceneLoadPostsFlush when the hold ends): port f2250. The attract
+(tools/attract_divergence.py): the 112 visit one frame longer, 422 against the cartridge's 433 (421 before); no other visit
+moved. ...and not every queued JSL is the load's last: the init runner's ones come before the LATER objects' init, whose
+sprite loads are the bulk of the load's end (the attract's 0A5: `10 18` at f4220, C0/2848 at f4234; C0/28AA between is the
+door list's clear, cheap). Each queued JSL keeps the object pass's decompression cycles priced so far (g_ctLzSpriteCycles), and
+field.c posts it (total - those) / CT_LOAD_FRAME_CYCLES frames before the load's end: 0A5's at its end-offset (port +1671, the
+load end +1670; at the end it was +1684), 01B's two `10 18` at +2075 / +2074 (end +2073).

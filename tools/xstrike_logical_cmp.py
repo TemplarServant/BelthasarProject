@@ -24,7 +24,7 @@ import subprocess
 import sys
 
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 STATE = 'saves/attract_demo_battle_f1850.state'
 
 
@@ -108,5 +108,5 @@ def main():
 if __name__ == '__main__':
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
     CT = os.path.abspath('build/ct.exe')
-    FIELD = os.path.abspath('build/ct_field.exe')
+    FIELD = os.path.abspath('build/Belthasar.exe')
     main()

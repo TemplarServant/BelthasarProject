@@ -1,0 +1,22 @@
+{
+  "name": "fxr_tele01c",
+  "from": "fxr_jackie_rescue",
+  "doc": "Stands in for saves/field_re/tank/tele01c.state (disasm/notes/dragon_tank_bridge.md: Jackie's ch05 with the owner's story page spliced in, the bridge's two flags cleared): here the story page is the game's own -- Jackie's ch05 played through Lucca's rescue (fxr_jackie_rescue, storyline 2E, the bridge never visited: $7F0198 / $7F0199 bit 2 clear) -- then the ROM's loader onto the Dragon Tank's bridge, `--teleport 28 44 9 2 --method jmp --frames 60` (loc 01C), as the capture.",
+  "steps": [
+    [
+      "teleport",
+      28,
+      44,
+      9,
+      2,
+      60,
+      "jmp"
+    ]
+  ],
+  "expect": {
+    "loc": "0x01C",
+    "wram": {
+      "0x10000": "0x2E"
+    }
+  }
+}

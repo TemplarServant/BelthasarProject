@@ -17,8 +17,9 @@ Never guess, never approximate, never invent.
    ```
    cp build/ct.exe "$TMP/ct_probe.exe"     # NEVER probe with build/ct.exe directly
    ```
-3. Read `docs/DEBUG_SURFACE.md` (all oracle modes + env vars) and skim `MEMORY.md` +
-   `disasm/notes/` for prior work on your topic. Do not redo pinned RE.
+3. Read `docs/DEBUG_SURFACE.md` (all oracle modes + env vars) and skim
+   `disasm/notes/` (and the agent's memory index `MEMORY.md`, outside the
+   repository, when you have one) for prior work on your topic. Do not redo pinned RE.
 
 ## The probe cookbook (exact commands)
 

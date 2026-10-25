@@ -1,0 +1,27 @@
+{
+  "name": "lg_epoch_1f0",
+  "from": "lg_epoch_eot",
+  "doc": "Stands in for the owner's Epoch capture (saves/epoch_re/epoch_user.state: world 1F0, riding, wings), from which the cockpit's states were played: the End of Time's party aboard the Epoch over 1000 A.D. -- the vehicle bytes set as the capture's ($027E = 2 riding, $028F = 2 vehicle A, $0283-$0286 and $0290-$0294 its place (138,128) and state E3: wings, aboard; $029F-$02A0 its world 1F0: the boarding at the End of Time is not walked here) and world 1F0 entered through the ROM's overworld loader (`ct.exe --teleport 496 78 75 3 --method ow`, the capture's arrival cell, 300 frames). The owner's drive from it (Y, Up, A, then A every 32) runs on the capture's frames: 1B0 f473, CHANGELOC 1DA staged f2752, `FF 26` f2771 (the capture's f2770), END f4412.",
+  "steps": [
+    [
+      "poke",
+      "027E=02,0283=38,0284=01,0285=28,0286=01,028F=02,0290=38,0291=01,0292=28,0293=01,0294=E3,029F=F0,02A0=01"
+    ],
+    [
+      "teleport",
+      496,
+      78,
+      75,
+      3,
+      300,
+      "ow"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1F0",
+    "wram": {
+      "0x027E": "0x02",
+      "0x10000": "0xD6"
+    }
+  }
+}

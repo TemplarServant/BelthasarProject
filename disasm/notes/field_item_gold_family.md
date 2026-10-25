@@ -150,7 +150,7 @@ with it gone.
   same pair the real capture `two_member.state` carries.
 
   ```
-  CT_BAGDUMP=4 CT_ACTIVATE="15:5" build/ct_field.exe --assets ct_assets.dat --scene 439 \
+  CT_BAGDUMP=4 CT_ACTIVATE="15:5" build/Belthasar.exe --assets ct_assets.dat --scene 439 \
       --selftest build/_itemvm.raw --frames 60
   bag: D6:01 00:00 00:00 00:00  gold=400 famops=1
   ```

@@ -19,7 +19,7 @@
 // also FAIL (instead of loading as an all-zero machine).
 //
 // NOTE: this is NOT the LakeSnes upstream LSSF format (snes_saveState) and NOT
-// ct_field's CTFS CtScene snapshot. Payload layout is unchanged from the
+// Belthasar's CTFS CtScene snapshot. Payload layout is unchanged from the
 // historical ct.exe raw stream.
 #ifndef CT_LAKE_STATE_H
 #define CT_LAKE_STATE_H

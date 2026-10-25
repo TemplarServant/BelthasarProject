@@ -62,12 +62,14 @@ not. It must:
 
    Write or update a dossier in `disasm/notes/` that cites addresses and measured values and lists open questions.
 4. **Build** with `python tools/build.py` and trust its artifact check, not the banner. Close any running
-   `ct_field.exe` first: a locked executable is not replaced.
+   `Belthasar.exe` first: a locked executable is not replaced.
 5. **Run the quick tier**: `python tools/regress.py --quick`. Run the full suite for anything touching shared
    machinery (the VM, the scheduler, loads, the battle loop, audio, `snes/`).
 6. **Add a check** for the behaviour you fixed, in `tools/regress_checks.json`, with expected lines that come from the
    oracle, and at least one mutation (`python tools/regress.py --mutate <name>` must turn it red). A check that
-   stays green under its mutation grades nothing.
+   stays green under its mutation grades nothing. A state the check reads must come from a recipe
+   (`tools/fixtures/<domain>.json`) or a public source (`tools/third_party_saves.json`), never a local capture:
+   `python tools/input_provenance.py` (the check `inputs-come-from-recipes-or-sources`) fails otherwise.
 7. **Never re-pin to make a red check green** without evidence from the oracle that the new output is right. Say in
    the pull request which checks moved and why.
 8. **Open a pull request** that states what the ROM does (routine and RAM), how you measured it, which checks pin it,
@@ -112,6 +114,6 @@ keep it to what shows the problem.
 
 ## Where to ask
 
-Open an issue on the repository for questions, proposals and divergence reports. For a larger change (replacing a
-translated stage or the SPC700, splitting a large source file, a new mod), open an issue first to agree on the
+Open an issue on the repository for questions, proposals and divergence reports. For a larger change (simplifying a
+priced mechanism such as the load or sound costs, splitting a large source file, a new mod), open an issue first to agree on the
 approach. [docs/ROADMAP.md](docs/ROADMAP.md) lists what is wanted, with where to start.

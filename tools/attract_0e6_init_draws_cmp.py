@@ -30,7 +30,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 ROM = os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc')
 ORACLE_FRAMES = 7700
 PORT_LAST = 7600

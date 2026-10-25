@@ -35,7 +35,7 @@ from ctlib import fb  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 REC = 6 + 128 * 112 * 3
 # LakeSnes serial masks: B=1 Y=2 Sel=4 St=8 Up=10 Down=20 Left=40 Right=80 A=100 X=200 L=400 R=800
 KEY = {0x100: 'a', 0x1: 'b', 0x10: 'u', 0x20: 'd', 0x40: 'l', 0x80: 'r', 0x200: 'm', 0x1100: 'a'}
@@ -456,8 +456,9 @@ def run_port(d, outdir, thumbs, shots=(), dump_at=None, name=None):
         if m in HOLD:
             hold.append('%X@%d:1' % (HOLD[m], f + MENU_PRESS))
             continue
-        pf = f + (0 if m == 0x1100 else 1 if m == 0x200 else MENU_PRESS)   # the cartridge reads it a frame later (the
-                                                                          #   menu: see MENU_PRESS; a field talk: none)
+        pf = f + (1 if m in (0x1100, 0x200) else MENU_PRESS)   # the cartridge reads it a frame later (the menu: see
+        # MENU_PRESS); a field talk too, as every field key (ct-frame-alignment) -- until 2026-10-19 the talk took the
+        # cartridge's own frame, which the port's C8 fade, then a frame late, hid
         if pf > t:
             walk.append('n:%d' % (pf - t))
         walk.append('%s:1' % KEY[m])

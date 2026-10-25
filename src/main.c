@@ -19,6 +19,7 @@
 #include "harness_drive.h"
 #include "boot.h"
 #include "lz.h"
+#include "romview.h"
 #include "scene.h"
 #include "assets.h"
 #include "ct_vm.h"
@@ -159,7 +160,7 @@ static int runVm(const char* datPath, int scene, int frames) {
 }
 
 // Headless trace of the scene-8 Telepod DEMO through our own VM (pure CtSceneTick +
-// CtSceneTouch, no ct_field player rendering) so its timeline can be compared frame-for-
+// CtSceneTouch, no Belthasar player rendering) so its timeline can be compared frame-for-
 // frame against the oracle (the real ROM). Triggers obj12's touch (the demo), auto-advances
 // the early textboxes, and logs Crono's animation index, his reappear, each sparkle's vanish,
 // and the "ALL: Oh wow" textbox (str 0x68) — all relative to the reappear, the oracle anchor.
@@ -557,6 +558,9 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
         prevPcY[k] = w[0x1880 + ox2] | (w[0x1881 + ox2] << 8);
         if (px < 0) { px = prevPcX[k]; py = prevPcY[k]; }
         CtSceneSetActorPosF(sc, o, px / 16.0, py / 16.0);
+        { uint8_t* sm = CtSceneMem7E(sc);                // ...and their words, as the pass reads them (C0/65B2)
+          sm[0x1800 + ox2] = (uint8_t)px; sm[0x1801 + ox2] = (uint8_t)(px >> 8);
+          sm[0x1880 + ox2] = (uint8_t)py; sm[0x1881 + ox2] = (uint8_t)(py >> 8); }
         CtVmWmaskExclude(0x7E1800 + (uint32_t)ox2, 2);   // emitted BY the injector, like the lead's
         CtVmWmaskExclude(0x7E1880 + (uint32_t)ox2, 2);
       }
@@ -575,6 +579,9 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
         prevPcY[0] = w[0x1880 + lx] | (w[0x1881 + lx] << 8);
         if (ox < 0) { ox = prevPcX[0]; oy = prevPcY[0]; }       // frame 1 with no seed captured
         CtSceneSetActorPosF(sc, lead, ox / 16.0, oy / 16.0);    // sub-pixel: $1800 IS the position
+        { uint8_t* sm = CtSceneMem7E(sc);                       // ...and the words themselves: op 0x22 / 0x21 read
+          sm[0x1800 + lx] = (uint8_t)ox; sm[0x1801 + lx] = (uint8_t)(ox >> 8);   // $1801 / $1881 (C0/65B2), the
+          sm[0x1880 + lx] = (uint8_t)oy; sm[0x1881 + lx] = (uint8_t)(oy >> 8); } // commit the pass sees
         // The tick mirrors fx/fy back into these exact bytes (mode<3), so they would enter the
         // mask and compare equal BY CONSTRUCTION. The exclusion is emitted HERE, by the code that
         // does the injecting, so it cannot rot into a stale parallel table.
@@ -773,10 +780,11 @@ static int runDatField(const char* datPath, int scene) {
     printf("  actor obj=%u sprite=%u pos=(%u,%u) facing=%u  idle=%df walk=%df\n",
            p[0], spr, x, y, p[7], an ? an[0] : 0, an ? an[1 + an[0] * 5] : 0);
   }
-  for (int i = 0; i < nexi && i < 4; i++) {
+  for (int i = 0; i < nexi; i++) {                      // every exit, with its box (the packed record's +4 / +6)
     const uint8_t* p = exi + 1 + (size_t)i * 16;
     uint32_t x = p[0] | (p[1] << 8), y = p[2] | (p[3] << 8), dest = p[9] | (p[10] << 8);
-    printf("  exit at (%u,%u) -> %s %u\n", x, y, p[8] ? "scene" : "world", dest);
+    printf("  exit at (%u,%u) size %ux%u -> %s %u\n", x, y, p[4] | (p[5] << 8), p[6] | (p[7] << 8),
+           p[8] ? "scene" : "world", dest);
   }
   CtAssetsClose(&a);
   return 0;
@@ -6883,6 +6891,32 @@ static int runHookPc(const char* romPath, const char* statePath, int hookPc, int
         if (!inInt && s->cpu->intWanted && !s->cpu->waiting && !s->cpu->stopped) { inInt = 1; intSp = s->cpu->sp; ints++; curIsNmi = s->cpu->nmiWanted; }
         g_cycTag = inInt ? 1 : (s->cpu->k == 0xC7 && (s->cpu->pc == 0x09E0 || s->cpu->pc == 0x09E3)) ? 5 : 0;
       }
+      // CT_HOOK_DUMPCALLS=<prefix> + CT_HOOK_DUMPEXIT=<hexpc>[,<hexpc>...]: every call's WRAM pair -- <prefix>_<n>_in.wram at
+      // each visit to the hook (the routine's first instruction) and <prefix>_<n>_out.wram at the first exit PC after it
+      // (its RTL, before it runs). A call the CPU left its bank during (an interrupt: the hooked routine must not leave
+      // its bank itself) writes <prefix>_<n>_int.wram instead of _out, so a grader can set it aside. How FD/C2C1's builder is graded against the cartridge (tools/hdma_build_cmp.py).
+      // CT_HOOK_DUMPCALLS_FROM=<f>: only calls from the run's frame f on; CT_HOOK_DUMPCALLS_MAX=<n>: the cap (default 256).
+      { static const char* cp; static int init, armed, intr, ncall, from, cap = 256; static uint32_t ex[8]; static int nex;
+        if (!init) { init = 1; cp = getenv("CT_HOOK_DUMPCALLS"); const char* e = getenv("CT_HOOK_DUMPEXIT");
+                     if (getenv("CT_HOOK_DUMPCALLS_FROM")) from = atoi(getenv("CT_HOOK_DUMPCALLS_FROM"));
+                     if (getenv("CT_HOOK_DUMPCALLS_MAX")) cap = atoi(getenv("CT_HOOK_DUMPCALLS_MAX"));
+                     while (e && *e && nex < 8) { ex[nex++] = (uint32_t)strtoul(e, (char**)&e, 16); if (*e == ',') e++; } }
+        if (cp && ncall < cap && f >= from) {
+          uint32_t pcn = ((uint32_t)s->cpu->k << 16) | s->cpu->pc; char fn[1024];
+          if (armed) {
+            if (s->cpu->k != hookBank) intr = 1;
+            for (int q = 0; q < nex; q++) if (pcn == ex[q]) {
+              snprintf(fn, sizeof fn, "%s_%d_%s.wram", cp, ncall, intr ? "int" : "out");
+              FILE* df = fopen(fn, "wb"); if (df) { fwrite(s->ram, 1, 0x20000, df); fclose(df); }
+              printf("hookpc: call %d (frame %u) exit %06X%s\n", ncall, fr, pcn, intr ? " interrupted" : "");
+              armed = 0; ncall++; break; }
+          }
+          if (!armed && s->cpu->k == hookBank && s->cpu->pc == hookOff && !s->cpu->intWanted) {
+            snprintf(fn, sizeof fn, "%s_%d_in.wram", cp, ncall);
+            FILE* df = fopen(fn, "wb"); if (df) { fwrite(s->ram, 1, 0x20000, df); fclose(df); }
+            armed = 1; intr = 0;
+          }
+        } }
       int detail = (cycSplit >= 2 && f == cycFrame);
       uint32_t pcKey = ((uint32_t)s->cpu->k << 16) | s->cpu->pc; uint64_t cyc0 = s->cycles; int wasInt = inInt;
       if (pollHist && s->cpu->k == 0xC7) { if (s->cpu->pc == 0x09E0) pSince++; else if (s->cpu->pc == 0x09E5) { long k = pSince - 1; if (k < 0) k = 0; pHist[k > 64 ? 64 : k]++; pSince = 0; } }
@@ -7221,6 +7255,384 @@ static int runSeqPpuCmp(const char* romPath, const char* statePath, int frames) 
   return 0;
 }
 
+// --seqpiccmp <state> <frames> -- THE SEQUENCE PICTURE, NATIVE (src/seq_pic.c), graded against the oracle's own frame: the same
+// instant as --seqppucmp (the oracle leaving vblank), its PPU's state turned back into the register bytes it was written as,
+// VRAM / CGRAM / OAM copied, the frame drawn natively with the oracle's WRAM as HDMA's tables, the oracle run to its next
+// vblank, and the two pictures compared pixel for pixel (the oracle's line buffer, as the screen shows it).
+#include "seq_pic.h"
+static void seqPicFromPpu(CtSeqPic* q, const Ppu* u) {
+  CtSeqPicReset(q);
+  memcpy(q->vram, u->vram, sizeof q->vram); memcpy(q->cgram, u->cgram, sizeof q->cgram);
+  memcpy(q->oam, u->oam, sizeof q->oam); memcpy(q->highOam, u->highOam, sizeof q->highOam);
+  uint8_t* r = q->r;
+  r[0x00] = (uint8_t)((u->forcedBlank ? 0x80 : 0) | (u->brightness & 0x0F));
+  r[0x01] = (uint8_t)((u->objSize << 5) | ((u->objTileAdr1 >> 13) & 7) | ((((u->objTileAdr2 - u->objTileAdr1) >> 9) - 8) & 0x18));
+  r[0x02] = u->oamAdr; r[0x03] = (uint8_t)(u->objPriority ? 0x80 : 0);
+  r[0x05] = (uint8_t)(u->mode | (u->bg3priority ? 8 : 0));
+  for (int i = 0; i < 4; i++) {
+    if (u->bgLayer[i].bigTiles) r[0x05] |= (uint8_t)(0x10 << i);
+    if (u->bgLayer[i].mosaicEnabled) r[0x06] |= (uint8_t)(1 << i);
+    r[0x07 + i] = (uint8_t)((u->bgLayer[i].tilemapAdr >> 8) | (u->bgLayer[i].tilemapWider ? 1 : 0) | (u->bgLayer[i].tilemapHigher ? 2 : 0));
+    q->hofs[i] = u->bgLayer[i].hScroll; q->vofs[i] = u->bgLayer[i].vScroll;
+  }
+  r[0x06] |= (uint8_t)((u->mosaicSize - 1) << 4); q->mosaicStart = u->mosaicStartLine;
+  r[0x0B] = (uint8_t)((u->bgLayer[0].tileAdr >> 12) | ((u->bgLayer[1].tileAdr >> 12) << 4));
+  r[0x0C] = (uint8_t)((u->bgLayer[2].tileAdr >> 12) | ((u->bgLayer[3].tileAdr >> 12) << 4));
+  q->scrollPrev = u->scrollPrev; q->scrollPrev2 = u->scrollPrev2;
+  for (int i = 0; i < 8; i++) q->m7[i] = u->m7matrix[i];
+  q->m7prev = u->m7prev;
+  r[0x1A] = (uint8_t)((u->m7largeField ? 0x80 : 0) | (u->m7charFill ? 0x40 : 0) | (u->m7yFlip ? 2 : 0) | (u->m7xFlip ? 1 : 0));
+  for (int i = 0; i < 6; i++) {
+    const WindowLayer* w = &u->windowLayer[i];
+    uint8_t n = (uint8_t)((w->window1inversed ? 1 : 0) | (w->window1enabled ? 2 : 0) | (w->window2inversed ? 4 : 0) | (w->window2enabled ? 8 : 0));
+    r[0x23 + i / 2] |= (uint8_t)(n << ((i & 1) * 4));
+    if (i < 4) r[0x2A] |= (uint8_t)((w->maskLogic & 3) << (i * 2)); else r[0x2B] |= (uint8_t)((w->maskLogic & 3) << ((i - 4) * 2));
+  }
+  r[0x26] = u->window1left; r[0x27] = u->window1right; r[0x28] = u->window2left; r[0x29] = u->window2right;
+  for (int i = 0; i < 5; i++) {
+    if (u->layer[i].mainScreenEnabled) r[0x2C] |= (uint8_t)(1 << i);
+    if (u->layer[i].subScreenEnabled) r[0x2D] |= (uint8_t)(1 << i);
+    if (u->layer[i].mainScreenWindowed) r[0x2E] |= (uint8_t)(1 << i);
+    if (u->layer[i].subScreenWindowed) r[0x2F] |= (uint8_t)(1 << i);
+  }
+  r[0x30] = (uint8_t)((u->clipMode << 6) | (u->preventMathMode << 4) | (u->addSubscreen ? 2 : 0) | (u->directColor ? 1 : 0));
+  r[0x31] = (uint8_t)((u->subtractColor ? 0x80 : 0) | (u->halfColor ? 0x40 : 0));
+  for (int i = 0; i < 6; i++) if (u->mathEnabled[i]) r[0x31] |= (uint8_t)(1 << i);
+  q->fix[0] = u->fixedColorR; q->fix[1] = u->fixedColorG; q->fix[2] = u->fixedColorB;
+  r[0x33] = (uint8_t)((u->m7extBg ? 0x40 : 0) | (u->pseudoHires ? 8 : 0) | (u->overscan ? 4 : 0) | (u->objInterlace ? 2 : 0) | (u->interlace ? 1 : 0));
+}
+static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) return 2;
+  static CtSeqPic q;
+  static uint8_t rgb[256 * 224 * 3];
+  long totalBad = 0; int badFrames = 0, first = -1;
+  for (int k = 0; k < frames; k++) {
+    while (s->inVblank) cpu_runOpcode(s->cpu);
+    seqPicFromPpu(&q, s->ppu);
+    CtSeqPicHdma ch[8]; uint8_t en = 0;
+    for (int i = 0; i < 8; i++) {
+      DmaChannel* c = &s->dma->channel[i];
+      ch[i].dmap = (uint8_t)((c->indirect ? 0x40 : 0) | (c->mode & 7));
+      ch[i].bAdr = c->bAdr; ch[i].aAdr = c->aAdr; ch[i].aBank = c->aBank; ch[i].indBank = c->indBank;
+      if (c->hdmaActive) en |= (uint8_t)(1 << i);
+    }
+    int late = getenv("SEQPICCMP_LATE") != NULL;                      // (the tables as the frame ends: see --seqppucmp)
+    if (!late) CtSeqPicFrame(&q, ch, en, seqPpuCmpRead, s, rgb);
+    uint32_t fr = s->frames;
+    while (!s->inVblank && fr == s->frames) cpu_runOpcode(s->cpu);
+    if (late) CtSeqPicFrame(&q, ch, en, seqPpuCmpRead, s, rgb);
+    int bad = 0;
+    for (int y = 0; y < 224; y++) {
+      const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+      int lb = 0;
+      for (int x = 0; x < 256; x++) {
+        const uint8_t* o = b + x * 8 + 4; const uint8_t* m = rgb + (y * 256 + x) * 3;   // the main pixel, B G R (+1 format)
+        if (o[s->ppu->pixelOutputFormat + 2] != m[0] || o[s->ppu->pixelOutputFormat + 1] != m[1] || o[s->ppu->pixelOutputFormat + 0] != m[2]) { bad++; lb++; }
+      }
+      if (lb && k == 0 && getenv("SEQPICCMP_LINES")) printf("seqpiccmp: frame 0 line %d: %d px differ\n", y + 1, lb);
+    }
+    if (bad) { badFrames++; totalBad += bad; if (first < 0) first = k; }
+    if (getenv("SEQPICCMP_VERBOSE")) printf("seqpiccmp: frame %d -> %d / 57344 pixels differ\n", k, bad);
+  }
+  printf("seqpiccmp: %d frame(s) from %s -> %d differ (%ld pixels)%s\n", frames, statePath, badFrames, totalBad,
+         first >= 0 ? "" : " -- the native compositor reproduces the cartridge's picture");
+  if (first >= 0) printf("seqpiccmp: first differing frame %d\n", first);
+  CtOracleDestroy(s); free(rom);
+  return 0;
+}
+
+// --racepiccmp <state> <btnscript> <handoff> <operand> <frames> -- THE RACE'S PICTURE, NATIVE, in lockstep with the oracle. The
+// oracle runs the drive to the hand-off frame; its WRAM there opens the native stage with a picture (src/seq_racepic.c); the
+// oracle runs on until its stage has made the setup's NMI ($0008 = 1 at a frame's end), and from there each native NMI is laid
+// against the oracle's next one: as the oracle leaves vblank, VRAM / CGRAM / OAM / the display registers / the HDMA channels are
+// compared, then both frames are drawn and compared pixel for pixel. The native stage takes the oracle's pad from its $02.
+#include "seq_racepic.h"
+#include "seq_entry3.h"
+#include "seq_entry4.h"
+#include "seq_entry7.h"
+#include "seq_entry6.h"
+#include "seq_ending.h"
+// The stage by its operand: entry 3 / entry 4 (seq_entry3.c, seq_entry4.c and their *pic.c) or the race (seq_race.c / seq_racepic.c).
+static int rpcOpen(uint8_t* w, uint8_t op, const CtRaceIo* io) {
+  return CtEntry3StageHas(op) ? CtEntry3StageOpen(w, op, io) : CtEntry4StageHas(op) ? CtEntry4StageOpen(w, op, io)
+       : CtEntry7StageHas(op) ? CtEntry7StageOpen(w, op, io) : CtEntry6StageHas(op) ? CtEntry6StageOpen(w, op, io)
+       : CtEndingStageHas(op) ? CtEndingStageOpen(w, op, io) : CtRaceStageOpen(w, op, io); }
+static int rpcFrame(uint8_t* w, uint8_t op, uint16_t joy, const CtRaceIo* io) {
+  return CtEntry3StageHas(op) ? CtEntry3StageFrame(w, joy, io) : CtEntry4StageHas(op) ? CtEntry4StageFrame(w, joy, io)
+       : CtEntry7StageHas(op) ? CtEntry7StageFrame(w, joy, io) : CtEntry6StageHas(op) ? CtEntry6StageFrame(w, joy, io)
+       : CtEndingStageHas(op) ? CtEndingStageFrame(w, joy, io) : CtRaceStageFrame(w, joy, io); }
+static void racepicPost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }
+// A script's `F5` reads the SPC's output ports: here the oracle's own (the cartridge's marker on its frame).
+static Snes* g_rpcSnes;
+static uint8_t racepicPort(void* c, int n) { (void)c; return g_rpcSnes ? g_rpcSnes->apu->outPorts[n & 3] : 0; }
+// `LDA $213E` / `$213F`'s bit 7 (the field: STAT78's, ppu.c) as the oracle's NMI k read it: the port's frame k runs once the
+// oracle has left that vblank -- the next frame started, ppu_handleFrameStart already toggled the field -- so it is the other one.
+static int racepicField(void* c) { (void)c; return g_rpcSnes && !g_rpcSnes->ppu->evenFrame ? 1 : 0; }
+// RACEPICCMP_PCLOG=<hex 24-bit PC>: the oracle's A / X / Y / carry each time it is about to run that instruction.
+static void rpcOp(Snes* s, int k) {
+  static long pc = -2; if (pc == -2) { const char* e = getenv("RACEPICCMP_PCLOG"); pc = e ? strtol(e, NULL, 16) : -1; }
+  if (pc >= 0 && (((long)s->cpu->k << 16) | s->cpu->pc) == pc)
+    printf("racepiccmp: f%d pc %06lX A %04X X %04X Y %04X c %d D %04X ram51 %02X%02X%02X%02X F0 %02X%02X%02X%02X%c", k, pc, s->cpu->a, s->cpu->x, s->cpu->y, s->cpu->c ? 1 : 0, s->cpu->dp, s->ram[0x51], s->ram[0x52], s->ram[0x53], s->ram[0x54], s->ram[0xF0], s->ram[0xF1], s->ram[0xF2], s->ram[0xF3], 10);
+  cpu_runOpcode(s->cpu);
+}
+static int runRacePicCmp(const char* romPath, const char* statePath, const char* btns, int handoff, int operand, int frames) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) return 2;
+  static uint8_t w[0x20000], rgb[256 * 224 * 3], romImg[0x600000];
+  static CtSeqStagePic sp; static CtSeqPic q;
+  CtRaceIo io; memset(&io, 0, sizeof io);
+  { FILE* rf = fopen(romPath, "rb"); if (rf) { io.romLen = (long)fread(romImg, 1, sizeof romImg, rf); fclose(rf); io.rom = romImg; } }
+  io.ctx = w; io.post = racepicPost; io.pic = &sp; io.port = racepicPort; io.field = racepicField; g_rpcSnes = s;
+  CtBtnScript bs = { btns }; uint16_t held = 0; int left = 0;
+  #define RPC_PAD() do { while (left <= 0) { int n_; if (!ctBtnNext(&bs, &held, &n_)) { held = 0; n_ = 1 << 30; } left = n_; } \
+                         s->input1->currentState = held; left--; } while (0)
+  for (int f = 0; f < handoff; f++) { RPC_PAD(); CtOracleRunFrame(s); }
+  // RACEPICCMP_SPAN=<pcA>,<pcB> (24-bit hex): the oracle stepped opcode by opcode from the hand-off; the master cycles and the
+  // frame counter at the first visit of each -- an opening's cost measured where it runs (then the run ends).
+  if (getenv("RACEPICCMP_SPAN")) {
+    char* e; long pa = strtol(getenv("RACEPICCMP_SPAN"), &e, 16), pb = (*e == ',') ? strtol(e + 1, NULL, 16) : -1;
+    uint64_t ca = 0; uint32_t fa = 0; int seen = 0; RPC_PAD();
+    for (long n = 0; n < 400000000L && seen < 2; n++) {
+      long pc = ((long)s->cpu->k << 16) | s->cpu->pc;
+      if (!seen && pc == pa) { ca = s->cycles; fa = s->frames; seen = 1; printf("racepiccmp: span %06lX at frame %u v=%d h=%d\n", pa, fa, s->vPos, s->hPos); }
+      else if (seen == 1 && pc == pb) { seen = 2; printf("racepiccmp: span %06lX at frame %u v=%d h=%d -- %llu master cycles after %06lX\n",
+                                              pb, s->frames, s->vPos, s->hPos, (unsigned long long)(s->cycles - ca), pa); }
+      cpu_runOpcode(s->cpu);
+    }
+    return 0;
+  }
+  memcpy(w, s->ram, sizeof w);
+  // RACEPICCMP_WRAM=<128 KB file>: the native stage opens on that WRAM instead (the port's own hand-off, Belthasar's
+  // CT_STAGE_HANDOFF_WRAM) -- which of the bytes the port's field hands over the stage reads.
+  { const char* wf = getenv("RACEPICCMP_WRAM"); FILE* f = wf ? fopen(wf, "rb") : NULL;
+    if (f) { size_t n = fread(w, 1, sizeof w, f); fclose(f); printf("racepiccmp: the stage opens on %s (%zu bytes)\n", wf, n); } }
+  memset(&sp, 0, sizeof sp); CtSeqPicReset(&sp.p);
+  // RACEPICCMP_SEEDVRAM=1: the native VRAM starts as the cartridge's at the hand-off (the field's leftovers the race never
+  // writes) -- to tell the race's own uploads from what the port's field does not keep.
+  if (getenv("RACEPICCMP_SEEDVRAM")) memcpy(sp.p.vram, s->ppu->vram, sizeof sp.p.vram);
+  // RACEPICCMP_SEEDZERO=<lo>-<hi>[,...] (hex words): those ranges of the seeded VRAM cleared -- which of the field's regions a
+  // stage displays.
+  { const char* z = getenv("RACEPICCMP_SEEDZERO"); while (z && *z) { char* e; long lo = strtol(z, &e, 16), hi = lo;
+      if (*e == '-') hi = strtol(e + 1, &e, 16); for (long i = lo; i <= hi && i < 0x8000; i++) sp.p.vram[i] = 0;
+      z = (*e == ',') ? e + 1 : e; if (e == z && *z) break; } }
+  if (rpcOpen(w, (uint8_t)operand, &io) < 0) { printf("racepiccmp: open failed\n"); return 1; }
+  // The setup's NMI: once the overlay has the operand in $0384 and the common init has cleared $0008, the first INC $08.
+  int waited = 0, armed = 0;
+  for (;;) {
+    if (s->ram[0x0384] == (uint8_t)operand && s->ram[0x08] == 0 && s->ram[0x09] == 0) armed = 1;
+    else if (armed && s->ram[0x08] == 1 && s->ram[0x09] == 0) break;
+    if (waited >= 300) break;
+    RPC_PAD(); CtOracleRunFrame(s); waited++;
+  }
+  printf("racepiccmp: the stage's setup made its NMI %d frame(s) after the hand-off\n", waited);
+  CtSeqStagePicFrame(&sp, w, NULL);                                   // (the frame the setup's NMI drew: its HDMA's last writes)
+  int firstState = -1, firstPic = -1, firstWram = -1, stateFrames = 0, lastState = -1; long picBad = 0;
+  for (int k = 1; k <= frames; k++) {
+    RPC_PAD();
+    while (s->inVblank) rpcOp(s, k);                         // the oracle's NMI k and its hooks done
+    uint16_t joy = s->portAutoRead[0];                                  // $4218 / $4219 as the NMI read them (C3/0A99)
+    int st = rpcFrame(w, (uint8_t)operand, joy, &io);
+    if (st) { printf("racepiccmp: native stage ended (%d) at frame %d\n", st, k);
+              if (getenv("RACEPICCMP_PEEK")) printf("racepiccmp: f%d the oracle's $0000 = %02X%02X (its NMI %d done)\n", k, s->ram[1], s->ram[0], k);
+              break; }
+    seqPicFromPpu(&q, s->ppu);
+    int vb = 0, cb = 0, ob = 0, rb = 0, rl = 0; char regs[256] = "";
+    for (int i = 0; i < 0x8000; i++) vb += q.vram[i] != sp.p.vram[i];
+    for (int i = 0; i < 256; i++) cb += q.cgram[i] != sp.p.cgram[i];
+    for (int i = 0; i < 256; i++) ob += q.oam[i] != sp.p.oam[i];
+    for (int i = 0; i < 32; i++) ob += q.highOam[i] != sp.p.highOam[i];
+    static const uint8_t live[] = { 0x00, 0x01, 0x02, 0x03, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x1A, 0x23, 0x24, 0x25, 0x26,
+                                    0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33 };
+    for (unsigned i = 0; i < sizeof live; i++)
+      { uint8_t pv = live[i] == 0x02 ? sp.p.oamAdr : sp.p.r[live[i]];   // ($2102: the oracle's is its OAM address now, as the port's)
+        if (q.r[live[i]] != pv) { rb++; if (rl < 200) rl += sprintf(regs + rl, " %02X:%02X/%02X", live[i], q.r[live[i]], pv); } }
+    for (int i = 0; i < 4; i++) {
+      if (q.hofs[i] != sp.p.hofs[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " hofs%d", i); }
+      if (q.vofs[i] != sp.p.vofs[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " vofs%d", i); }
+    }
+    for (int i = 0; i < 8; i++) if (q.m7[i] != sp.p.m7[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " m7[%d]", i); }
+    for (int i = 0; i < 3; i++) if (q.fix[i] != sp.p.fix[i]) { rb++; if (rl < 200) rl += sprintf(regs + rl, " fix%d", i); }
+    uint8_t en = 0; int hb = 0;
+    for (int i = 0; i < 8; i++) {
+      DmaChannel* c = &s->dma->channel[i];
+      if (c->hdmaActive) en |= (uint8_t)(1 << i);
+      uint8_t dm = (uint8_t)((c->indirect ? 0x40 : 0) | (c->mode & 7));
+      if (((sp.hdmaen >> i) & 1) && (dm != sp.ch[i].dmap || c->bAdr != sp.ch[i].bAdr || c->aAdr != sp.ch[i].aAdr || c->aBank != sp.ch[i].aBank)) hb++;
+    }
+    if (en != sp.hdmaen) hb++;
+    int wb = 0, rwb = 0;
+    for (int i = 0; i < 0x20000; i++) if (s->ram[i] != w[i]) { wb++;
+      if (!((i >= 0x0100 && i < 0x0700) || (i >= 0x1E00 && i < 0x2000))) rwb++; }   // the race's own (not the field's pages, the stack, the sound queue)
+    if (rwb && firstWram < 0) { firstWram = k; printf("racepiccmp: frame %d: the race's WRAM differs in %d bytes%c", k, rwb, 10); }
+    if (getenv("RACEPICCMP_PEEK")) {                                    // RACEPICCMP_PEEK=addr:len,... : both sides every frame
+      const char* q = getenv("RACEPICCMP_PEEK");
+      while (*q) { char* e; long ad = strtol(q, &e, 16); long ln = (*e == ':') ? strtol(e + 1, &e, 16) : 2;
+        printf("racepiccmp: f%d $%05lX cart", k, ad); for (long i = 0; i < ln; i++) printf(" %02X", s->ram[(ad + i) & 0x1FFFF]);
+        printf(" | port"); for (long i = 0; i < ln; i++) printf(" %02X", w[(ad + i) & 0x1FFFF]); printf("%c", 10);
+        q = (*e == ',') ? e + 1 : e; if (e == q && *q && *q != ',') break; }
+    }
+    if (getenv("RACEPICCMP_WRAMAT") && k == atoi(getenv("RACEPICCMP_WRAMAT"))) {
+      int st0 = -1, shown = 0;
+      for (int i = getenv("RACEPICCMP_WRAMFROM") ? (int)strtol(getenv("RACEPICCMP_WRAMFROM"), NULL, 16) : 0; i <= 0x20000 && shown < 80; i++) { int d = i < 0x20000 && s->ram[i] != w[i];
+        if (d && st0 < 0) st0 = i; if (!d && st0 >= 0) { printf("racepiccmp:   WRAM $%05X-$%05X cart %02X port %02X\n", st0, i - 1, s->ram[st0], w[st0]); st0 = -1; shown++; } }
+    }
+    int bad = vb || cb || ob || rb || hb;
+    if (bad && firstState < 0) firstState = k;
+    if (bad) { stateFrames++; lastState = k; }
+    if (k == firstState && getenv("RACEPICCMP_VRAM")) {
+      int st0 = -1;
+      for (int i = 0; i <= 0x8000; i++) { int d = i < 0x8000 && q.vram[i] != sp.p.vram[i];
+        if (d && st0 < 0) st0 = i; if (!d && st0 >= 0) { printf("racepiccmp:   VRAM $%04X-$%04X (cart %04X port %04X)\n", st0, i - 1, q.vram[st0], sp.p.vram[st0]); st0 = -1; } }
+    }
+    if (k == firstState && getenv("RACEPICCMP_OAM")) {                  // the OAM words that differ (low table), the high table's bytes
+      for (int i = 0; i < 256; i++) if (q.oam[i] != sp.p.oam[i]) printf("racepiccmp:   OAM word %3d (sprite %3d) cart %04X port %04X\n", i, i >> 1, q.oam[i], sp.p.oam[i]);
+      for (int i = 0; i < 32; i++) if (q.highOam[i] != sp.p.highOam[i]) printf("racepiccmp:   OAM high %2d cart %02X port %02X\n", i, q.highOam[i], sp.p.highOam[i]);
+    }
+    if (getenv("RACEPICCMP_VERBOSE") || k == firstState)
+      printf("racepiccmp: frame %d: VRAM %d CGRAM %d OAM %d words differ; registers %d%s; HDMA %d; WRAM %d bytes\n", k, vb, cb, ob, rb, regs, hb, wb);
+    CtSeqStagePicFrame(&sp, w, rgb);
+    uint32_t fr = s->frames;
+    while (!s->inVblank && fr == s->frames) rpcOp(s, k);
+    int pb = 0;
+    for (int y = 0; y < 224; y++) {
+      const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+      for (int x = 0; x < 256; x++) {
+        const uint8_t* o = b + x * 8 + 4 + s->ppu->pixelOutputFormat; const uint8_t* m = rgb + (y * 256 + x) * 3;
+        if (o[2] != m[0] || o[1] != m[1] || o[0] != m[2]) pb++;
+      }
+    }
+    if (pb) { picBad += pb; if (firstPic < 0) { firstPic = k; printf("racepiccmp: frame %d: %d px differ\n", k, pb); } }
+    if (getenv("RACEPICCMP_SHOT") && k == atoi(getenv("RACEPICCMP_SHOT"))) {
+      FILE* o = fopen("build/racepic_native.raw", "wb");
+      if (o) { uint32_t hd[2] = { 256, 224 }; fwrite(hd, 4, 2, o); fwrite(rgb, 1, sizeof rgb, o); fclose(o); }
+    }
+  }
+  #undef RPC_PAD
+  printf("racepiccmp: %d frames -- first state difference %d, first race-WRAM difference %d, first picture difference %d (%ld px)\n", frames, firstState, firstWram, firstPic, picBad);
+  printf("racepiccmp: the state differs on %d frame(s), the last %d\n", stateFrames, lastState);   // (a pin of the first alone hides the rest)
+  CtOracleDestroy(s); free(rom);
+  return 0;
+}
+
+// --gwarpcmp <state> <frames> -- THE GATE WARP, NATIVE (src/seq_gwarp.c), in lockstep with the oracle. The oracle runs from the
+// state to the warp's entry (C0/3FE8.. `JML $FD:FFF1 / FFEB / FFE8 / FFE5`; PEEK_POKE=7F269C=81.. picks the routine on the
+// Telepod's state); its WRAM there opens the native stage, its VRAM and CGRAM the stage's picture (as the field hands them over).
+// Then frame by frame, stopping where CtXlatStageFrame stops (the start of each vblank): all 128 KB of WRAM, VRAM / CGRAM / OAM
+// and the picture. The setup's frames (the NMI-off stretch before the poll) are WRAM in progress on the cartridge and graded
+// from the poll's frame on; at the program's `JML $C0:0000` the oracle runs to C0:0000 and the WRAM it hands the reboot is
+// compared. GWARPCMP_WRAMAT=<k>: the differing WRAM ranges at frame k.
+#include "seq_gwarp.h"
+static int runGwarpCmp(const char* romPath, const char* statePath, int frames) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) return 2;
+  static uint8_t w[0x20000], rgb[256 * 224 * 3], romImg[0x600000];
+  static CtSeqStagePic sp; static CtSeqPic q;
+  long romLen = 0;
+  { FILE* rf = fopen(romPath, "rb"); if (rf) { romLen = (long)fread(romImg, 1, sizeof romImg, rf); fclose(rf); } }
+  long g0 = 0;
+  for (;; g0++) {
+    uint32_t pc = ((uint32_t)s->cpu->k << 16) | s->cpu->pc;
+    if (pc == 0xFDFFF1 || pc == 0xFDFFEB || pc == 0xFDFFE8 || pc == 0xFDFFE5) break;
+    if (g0 > 400000000L) { printf("gwarpcmp: the warp's entry not reached\n"); return 1; }
+    cpu_runOpcode(s->cpu);
+  }
+  uint8_t op = (uint8_t)s->cpu->a; uint32_t fr0 = s->frames;
+  printf("gwarpcmp: oracle at %02X:%04X (op FF %02X) after %ld instructions, frame %u v=%u h=%u\n", s->cpu->k, s->cpu->pc, op, g0,
+         s->frames, s->vPos, s->hPos);
+  memcpy(w, s->ram, sizeof w);
+  memset(&sp, 0, sizeof sp); CtSeqPicReset(&sp.p);
+  memcpy(sp.p.vram, s->ppu->vram, sizeof sp.p.vram); memcpy(sp.p.cgram, s->ppu->cgram, sizeof sp.p.cgram);
+  memcpy(sp.p.oam, s->ppu->oam, sizeof sp.p.oam); memcpy(sp.p.highOam, s->ppu->highOam, sizeof sp.p.highOam);   // (the field's, until the first NMI's DMA)
+  seqPicFromPpu(&q, s->ppu);
+  printf("gwarpcmp: the registers the warp never writes, on the cartridge at the hand-off: M7SEL $211A=%02X\n", q.r[0x1A]);
+  static CtGwarp gw;
+  if (CtGwarpOpen(&gw, w, op, &sp, romImg, romLen) < 0) { printf("gwarpcmp: open failed\n"); return 1; }
+  int firstW = -1, firstS = -1, firstP = -1, badW = 0, badS = 0, badP = 0, graded = 0, gradedR = 0, badR = 0, firstR = -1, litFrames = 0, firstLit = -1, exitK = -1, wramAt = getenv("GWARPCMP_WRAMAT") ? atoi(getenv("GWARPCMP_WRAMAT")) : -1;
+  for (int k = 1; k <= frames; k++) {
+    int st = CtGwarpFrame(&gw, w, &sp, rgb);
+    if (st) {                                                           // the JML: the oracle to C0:0000, the WRAM it hands over
+      for (long n = 0; n < 50000000L && (((uint32_t)s->cpu->k << 16) | s->cpu->pc) != 0xC00000; n++) cpu_runOpcode(s->cpu);
+      exitK = k;
+      printf("gwarpcmp: the cartridge at C0:0000: frame +%u v=%u h=%u even=%d\n", s->frames - fr0, s->vPos, s->hPos, s->ppu->evenFrame);
+      { int same = 0, black = 0, other = 0;                             // its picture buffer then, a line at a time, against the
+        for (int y = 0; y < 224; y++) {                                 // last frame drawn
+          const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+          int ls = 1, lb = 1;
+          for (int x = 0; x < 256; x++) {
+            const uint8_t* o = b + x * 8 + 4 + s->ppu->pixelOutputFormat; const uint8_t* m = rgb + (y * 256 + x) * 3;
+            if (o[2] != m[0] || o[1] != m[1] || o[0] != m[2]) ls = 0;
+            if (o[0] || o[1] || o[2]) lb = 0;
+          }
+          same += ls; black += lb && !ls; other += !ls && !lb;
+        }
+        printf("gwarpcmp: the cartridge's line buffer at the JML: %d lines the last frame's, %d black, %d other\n", same, black, other); }
+    } else {
+      while (s->inVblank) cpu_runOpcode(s->cpu);
+      uint32_t fr = s->frames;
+      while (!s->inVblank && fr == s->frames) cpu_runOpcode(s->cpu);
+    }
+    int gradeMem = k >= 112 || st;                                       // (GW_SETUP_FRAMES: the poll's frame)
+    int wb = 0; for (int i = 0; i < 0x20000; i++) wb += s->ram[i] != w[i];
+    seqPicFromPpu(&q, s->ppu);
+    int vb = 0, cb = 0, ob = 0;
+    for (int i = 0; i < 0x8000; i++) vb += q.vram[i] != sp.p.vram[i];
+    for (int i = 0; i < 256; i++) { cb += q.cgram[i] != sp.p.cgram[i]; ob += q.oam[i] != sp.p.oam[i]; }
+    for (int i = 0; i < 32; i++) ob += q.highOam[i] != sp.p.highOam[i];
+    // the display registers as the frame's last HDMA line left them (INIDISP as the PPU keeps it: blank + brightness)
+    static const uint8_t live[] = { 0x00, 0x01, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x1A, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A,
+                                    0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33 };
+    int rb = 0; char regs[160] = ""; int rl = 0;
+    for (unsigned i = 0; i < sizeof live; i++) {
+      uint8_t pv = live[i] == 0x00 ? (uint8_t)(sp.p.r[0] & 0x8F) : sp.p.r[live[i]];
+      if (q.r[live[i]] != pv) { rb++; if (rl < 120) rl += sprintf(regs + rl, " %02X:%02X/%02X", live[i], q.r[live[i]], pv); }
+    }
+    for (int i = 0; i < 8; i++) if (q.m7[i] != sp.p.m7[i]) { rb++; if (rl < 120) rl += sprintf(regs + rl, " m7[%d]:%04X/%04X", i, (uint16_t)q.m7[i], (uint16_t)sp.p.m7[i]); }
+    for (int i = 0; i < 3; i++) if (q.fix[i] != sp.p.fix[i]) { rb++; if (rl < 120) rl += sprintf(regs + rl, " fix%d", i); }
+    // (graded from the first NMI's frame, 114: before it the warp has written no mode-7 register and the screen is blank, and
+    // M7A-D still hold the field's; not at the JML, where the cartridge has run on into the reboot's frame with the NMI off)
+    int gradeRegs = k >= 114 && !st;
+    if (gradeRegs) gradedR++;
+    if (gradeRegs && rb) { badR++; if (firstR < 0 || getenv("GWARPCMP_REGS")) { if (firstR < 0) firstR = k; printf("gwarpcmp: frame %d: registers differ (cart/port):%s\n", k, regs); } }
+    if (gradeMem) {
+      graded++;
+      if (wb) { badW++; if (firstW < 0) { firstW = k; printf("gwarpcmp: frame %d: WRAM differs in %d bytes\n", k, wb); } }
+      if (vb || cb || ob) { badS++; if (firstS < 0) { firstS = k; printf("gwarpcmp: frame %d: VRAM %d CGRAM %d OAM %d words differ\n", k, vb, cb, ob); } }
+    }
+    if (k == wramAt || (wb && k == firstW && gradeMem)) {
+      int st0 = -1, shown = 0;
+      for (int i = 0; i <= 0x20000 && shown < 40; i++) { int d = i < 0x20000 && s->ram[i] != w[i];
+        if (d && st0 < 0) st0 = i;
+        if (!d && st0 >= 0) { printf("gwarpcmp:   WRAM $%05X-$%05X cart %02X port %02X\n", st0, i - 1, s->ram[st0], w[st0]); st0 = -1; shown++; } }
+    }
+    if (!st) {
+      int pb = 0;
+      for (int y = 0; y < 224; y++) {
+        const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+        for (int x = 0; x < 256; x++) {
+          const uint8_t* o = b + x * 8 + 4 + s->ppu->pixelOutputFormat; const uint8_t* m = rgb + (y * 256 + x) * 3;
+          if (o[2] != m[0] || o[1] != m[1] || o[0] != m[2]) pb++;
+        }
+      }
+      if (pb) { badP++; if (firstP < 0) { firstP = k; printf("gwarpcmp: frame %d: %d px differ\n", k, pb); } }
+      int lit = 0; for (int i = 0; i < 256 * 224 * 3; i++) if (rgb[i]) { lit = 1; break; }
+      litFrames += lit; if (lit && firstLit < 0) firstLit = k;
+    }
+    if (getenv("GWARPCMP_VERBOSE")) printf("gwarpcmp: f%d $051B=%04X wram %d vram %d cgram %d oam %d\n", k, w[0x51B] | (w[0x51C] << 8), wb, vb, cb, ob);
+    if (st) break;
+  }
+  printf("gwarpcmp: FF %02X: %s; WRAM / VRAM / CGRAM / OAM graded on %d frames (from the poll's, 112): %d / %d differ (first %d / %d); "
+         "registers on %d (from the first NMI's): %d differ (first %d); picture %d frames differ (first %d)%s\n", op,
+         exitK > 0 ? "native JML C0:0000" : "no exit", graded, badW, badS, firstW, firstS, gradedR, badR, firstR, badP, firstP,
+         (exitK > 0 && !badW && !badS && !badR && !badP) ? " -- IDENTICAL" : "");
+  if (exitK > 0) printf("gwarpcmp: FF %02X exits at frame %d; %d frames lit, the first %d\n", op, exitK, litFrames, firstLit);
+  CtOracleDestroy(s); free(rom);
+  return 0;
+}
+
 // --cputrace <state> <frames> <out.txt> -- EVERY instruction the oracle executes, with the bytes it executed.
 // One line per opcode: `KK:PPPP b0 b1 b2 b3 A=.... X=.... Y=.... S=.... D=.... B=.. P=nvmxdizc`, the four bytes read
 // off the bus at the moment of execution (so self-modifying code -- the race's $357B patches its own loop every
@@ -7324,6 +7736,7 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
 // VRAM, CGRAM and OAM. The first disagreement is printed with the address the translation was at -- nothing is
 // averaged, so a green run means the translation ran exactly the cartridge's instruction stream and clock.
 #include "seq_xlat.h"
+#include "hdma_table.h"   // --hdmabuild / --hdmafuzz: FD/C2C1 native
 #include "seq_race.h"   // --racestep: the race task $7E:485D, native
 // --racestep's sound: what the task sends the ports, printed as the writes the ROM makes ($2141 = pitch, then $2140 = $89).
 static void racestepApu(void* c, uint8_t p) { (void)c; printf("  w 002141 = %02X\n  w 002140 = 89\n", p); }
@@ -7418,7 +7831,7 @@ static int xlatCmpHook(CtXlat* x) {
 // oracle from the state to the k-th execution of C3:000E (C0/22FA's JSL, once per field frame while a wipe runs), writes
 // its 128 KB WRAM there (in.bin) and prints the registers and the beam (vPos, hPos) at that instant, then runs on to
 // C0:22FE (the RTL's landing) and writes the WRAM again (out.bin). tools/wipe_step_cmp.py hands in.bin and the beam to
-// `ct_field --wipecall` and diffs the port's WRAM against out.bin: the routine translated + the host's call glue, graded
+// `Belthasar --wipecall` and diffs the port's WRAM against out.bin: the routine translated + the host's call glue, graded
 // on the cartridge's exact inputs (field_window_wipe.md sec. 5).
 static int runWipeDump(const char* romPath, const char* statePath, int k, const char* inPath, const char* outPath, const char* maskPath,
                        uint32_t entryPc, uint32_t exitPc, uint32_t maskPc) {
@@ -7468,6 +7881,83 @@ static int runWipeDump(const char* romPath, const char* statePath, int k, const 
   CtOracleDestroy(s); free(rom);
   return 0;
 }
+// --wipeaudit <state|boot> <frames> -- THE NATIVE WINDOW WIPE AGAINST EVERY CALL THE CARTRIDGE MAKES. Runs the oracle and, at
+// each entry into C3/01E4 (C3/000E's JMP from the field's C0/22FA and the world's C6/E27E, or the $C3 stage's own JSL) and
+// into the world's window object C6/E241 / C6/E27E, copies its 128 KB WRAM and runs the native routine on the copy
+// (wipe.h: CtWipeRoutine with the cartridge's own X and data bank; CtOwWindowObject with the target alone -- its X and
+// bank are the port's, so a call where the cartridge's differ shows up as a difference); when the cartridge's RTL lands
+// (the return address the call's JSL pushed, S back where it was) the two WRAMs must agree on every byte but the 32 stack
+// bytes below the caller's S, the pushes the routine leaves dead. A call interrupted on the cartridge (an instruction
+// outside banks C3 / C6 before the RTL: an NMI or IRQ's work is in its WRAM) is counted apart, not graded. One line per
+// call site (target, return address): calls, modes, the registers the routine reads, identical ones; then the verdict.
+#include "wipe.h"
+static int runWipeAudit(const char* romPath, const char* statePath, int frames) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) return 2;
+  int romLen = 0; uint8_t* img = CtReadFile(romPath, &romLen);
+  if (!img) { CtOracleDestroy(s); free(rom); return 2; }
+  static uint8_t work[0x20000];
+  enum { NSITE = 24 };
+  struct { uint32_t target, ret; int n, same, fills, ends, mode1, mode2, other; uint16_t x; uint8_t db; int xVaries, dbVaries; } site[NSITE];
+  int nSite = 0, total = 0, same = 0, interrupted = 0, firstShown = 0;
+  int active = 0; uint32_t target = 0, ret = 0; uint16_t sp0 = 0, x0 = 0; uint8_t db0 = 0; int intr = 0;
+  uint32_t f0 = s->frames;
+  while ((int)(s->frames - f0) < frames) {
+    const Cpu* c = s->cpu;
+    uint32_t pc = ((uint32_t)c->k << 16) | c->pc;
+    if (!active) {
+      if (pc == 0xC301E4 || pc == 0xC6E241 || pc == 0xC6E27E) {
+        active = 1; target = pc; sp0 = c->sp; x0 = c->x; db0 = c->db; intr = 0;
+        const uint8_t* m = s->ram;                                     // the JSL's return: [S+1] PCL, [S+2] PCH, [S+3] K
+        ret = ((uint32_t)m[(uint16_t)(sp0 + 3)] << 16) |
+              (uint16_t)(((m[(uint16_t)(sp0 + 2)] << 8) | m[(uint16_t)(sp0 + 1)]) + 1);
+        memcpy(work, s->ram, sizeof work);
+      }
+    } else if (pc == ret && c->sp == (uint16_t)(sp0 + 3)) {
+      active = 0;
+      int k = 0;
+      for (; k < nSite; k++) if (site[k].target == target && site[k].ret == ret) break;
+      if (k == nSite && nSite < NSITE) { memset(&site[k], 0, sizeof site[k]); site[k].target = target; site[k].ret = ret;
+                                         site[k].x = x0; site[k].db = db0; nSite++; }
+      if (intr) { interrupted++; cpu_runOpcode(s->cpu); continue; }
+      // The mode and the step as the routine finds them (the window object's install sets them itself).
+      uint8_t mode = target == 0xC6E241 ? 0xFF : work[0x0350], step = work[0x0351];
+      int r = target == 0xC301E4 ? CtWipeRoutine(img, romLen, work, x0, db0) : CtOwWindowObject(img, romLen, work, target);
+      int diff = 0, firstAdr = -1;
+      for (int j = 0; j < 0x20000; j++) {
+        if (j <= sp0 && j >= sp0 - 31) continue;                       // the dead stack below the caller's S
+        if (work[j] != s->ram[j]) { diff++; if (firstAdr < 0) firstAdr = j; }
+      }
+      total++;
+      if (k < nSite) {
+        site[k].n++;
+        if (site[k].x != x0) site[k].xVaries = 1;
+        if (site[k].db != db0) site[k].dbVaries = 1;
+        if (target != 0xC6E241) {
+          if (mode == 0) {} else if (step == 0) site[k].fills++; else if (step == 0x1F) site[k].ends++;
+          if (mode == 1) site[k].mode1++; else if (mode == 2) site[k].mode2++; else if (mode) site[k].other++;
+        }
+        if (!r && !diff) site[k].same++;
+      }
+      if (!r && !diff) same++;
+      else if (firstShown++ < 4) {
+        printf("wipeaudit: DIFFERENT -- %06X from %06X at frame %u, X=%04X DB=%02X $0350=%02X $0351=%02X: r=%d, %d byte(s), first $%s:%04X cartridge %02X native %02X\n",
+               target, ret, (unsigned)(s->frames - f0), x0, db0, mode, step, r, diff,
+               firstAdr >= 0x10000 ? "7F" : "7E", firstAdr & 0xFFFF, firstAdr >= 0 ? s->ram[firstAdr] : 0, firstAdr >= 0 ? work[firstAdr] : 0);
+      }
+    } else if (c->k != 0xC3 && !(target != 0xC301E4 && c->k == 0xC6)) intr = 1;
+    cpu_runOpcode(s->cpu);
+  }
+  for (int k = 0; k < nSite; k++)
+    printf("wipeaudit: %06X from %06X: %d call(s) (mode 1 %d, mode 2 %d, other %d; fills %d, ends %d) X=%04X%s DB=%02X%s -> %d / %d identical\n",
+           site[k].target, site[k].ret, site[k].n, site[k].mode1, site[k].mode2, site[k].other, site[k].fills, site[k].ends,
+           site[k].x, site[k].xVaries ? " (varies)" : "", site[k].db, site[k].dbVaries ? " (varies)" : "", site[k].same, site[k].n);
+  printf("wipeaudit: %d / %d calls identical to the cartridge on all 128 KB but the dead stack, %d interrupted (not graded), over %d frames from %s\n",
+         same, total, interrupted, frames, statePath);
+  free(img); CtOracleDestroy(s); free(rom);
+  return same == total ? 0 : 1;
+}
 static int runXlatCmp(const char* romPath, const char* statePath, int frames) {
   uint8_t* romO = NULL, *romP = NULL;
   Snes* o = ctLoadStateOracle(romPath, statePath, &romO);
@@ -7498,7 +7988,7 @@ static int runXlatCmp(const char* romPath, const char* statePath, int frames) {
         if (!st) { printf("xlatcmp: CtXlatStageOpen refused $0384=%02X\n", (uint8_t)o->cpu->a); return 2; }
         p = CtXlatStageHardware(st);
         // XLATCMP_WRAM=<128 KB file>: the stage gets THIS WRAM instead of the oracle's -- a host's handoff image
-        // (ct_field CT_XLAT_HANDOFF_WRAM). The first divergence is then the first byte the stage READS that the
+        // (Belthasar CT_XLAT_HANDOFF_WRAM). The first divergence is then the first byte the stage READS that the
         // host does not have right; XLATCMP_PATCH=<adr=val,...> overrides bytes on top, to walk to the next one.
         { const char* hw = getenv("XLATCMP_WRAM");
           if (hw) { FILE* hf = fopen(hw, "rb"); size_t n = hf ? fread(p->ram, 1, sizeof p->ram, hf) : 0; if (hf) fclose(hf);
@@ -13010,13 +13500,13 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
       if (g_patOn) printf("  aputrace f%d END apuc=%u v=%d h=%d spcF4reads=%ld spcpc=%04X\n", f + 1, s->apu->cycles, s->vPos, s->hPos,
                           g_patReads, s->apu->spc->pc);
       // PEEK_PCM=<path>: the S-DSP's output, one frame at a time -- the 534 stereo samples the frame produced (32040 Hz,
-      // int16 L,R), exactly what the LakeSnes reference hands its audio device. ct_field's CT_AUDIO_PCM is the same stream.
+      // int16 L,R), exactly what the LakeSnes reference hands its audio device. Belthasar's CT_AUDIO_PCM is the same stream.
       { static FILE* pcm = (FILE*)1;
         if (pcm == (FILE*)1) { const char* pp = getenv("PEEK_PCM"); pcm = (pp && *pp) ? fopen(pp, "wb") : NULL; }
         if (pcm) { int16_t sb[534 * 2]; dsp_getSamples(s->apu->dsp, sb, 534); fwrite(sb, sizeof sb, 1, pcm); fflush(pcm); } }
       // PEEK_THUMBS=<path> (+ PEEK_THUMBS_EVERY=n, default 2): a 128x112 RGB thumbnail of every n-th frame, appended as
       // [u32 frame][u16 $0100][128*112*3] -- the picture's 224 visible scanlines (the 8 overscan lines above them skipped),
-      // each 4x4 block of the 512x480 buffer averaged. ct_field's CT_SHOTS_THUMBS writes the same records from its 256x224
+      // each 4x4 block of the 512x480 buffer averaged. Belthasar's CT_SHOTS_THUMBS writes the same records from its 256x224
       // frame, so a whole attract can be set side by side (tools/attract_survey.py).
       { static FILE* th = (FILE*)1; static int thn = 2; static uint8_t* thfb = NULL;
         if (th == (FILE*)1) { const char* tp = getenv("PEEK_THUMBS"); th = (tp && *tp) ? fopen(tp, "wb") : NULL;
@@ -15680,19 +16170,132 @@ static int ctOracleOnlyRefuse(void) {
 #endif
 
 int main(int argc, char** argv) {
-  // --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (src/xlat/hdma_fd.c, CtXlatHdmaBuild) on a
-  // 128 KB WRAM image and write what it leaves -- graded against the cartridge's own WRAM before and after one call
-  // (--hookpc FDC2C1 / C000CB with CT_HOOK_DUMPWRAM).
+  // --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (native, src/hdma_table.c -- the one every
+  // caller runs) on a 128 KB WRAM image and write what it leaves -- graded against the cartridge's own WRAM before and after
+  // one call (tools/hdma_build_cmp.py: --hookpc FDC2C1 / the RTL with CT_HOOK_DUMPWRAM). --hdmabuildxlat runs the
+  // translation (src/xlat/hdma_fd.c on the vendored core) instead, the reference.
+  // --hdmafuzz <N> [seed] [base.wram]: N random WRAM images (every mode of both sets, every branch: `$0126` 0..5 under bit
+  // 0 set / 0..2 clear, `$0127` 0..FF, the wave's `$1DF9` / `$1DFD` / `$1DFB`, `$53` bit 7, `$7F:0351`'s parity, the rest
+  // random) through the native builder and the translation; prints the first differing byte of any image and a census.
 #ifndef CT_ORACLE_ONLY   // the translated stages and the native sequences: not the cartridge's modes
-  if (argc == 4 && !strcmp(argv[1], "--hdmabuild")) {
-    FILE* rf = fopen(DEFAULT_ROM, "rb"); if (!rf) { fprintf(stderr, "hdmabuild: no ROM\n"); return 1; }
-    static uint8_t rom[0x600000], w[0x20000]; long rl = (long)fread(rom, 1, sizeof rom, rf); fclose(rf);
+  // --mixreplay <capture>: the native mixer (src/sound/mixer.c) against the vendored S-DSP, sample for sample, over a
+  // CT_MIXER_CAPTURE of a real run (src/sound/mixer_replay.c; tools/mixer_replay.py).
+  if (argc == 3 && !strcmp(argv[1], "--mixreplay")) { extern int CtMixerReplayMain(const char* path); return CtMixerReplayMain(argv[2]); }
+  // --mixfuzz <cases> [seed]: the same comparison over random state, RAM and writes from power-on (GAIN, saturation).
+  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--mixfuzz")) {
+    extern int CtMixerFuzzMain(int cases, uint32_t seed);
+    return CtMixerFuzzMain(atoi(argv[2]), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
+  }
+  if (argc == 4 && (!strcmp(argv[1], "--hdmabuild") || !strcmp(argv[1], "--hdmabuildxlat"))) {
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    static uint8_t w[0x20000];
     FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w, 1, sizeof w, wf) != sizeof w) { fprintf(stderr, "hdmabuild: bad WRAM\n"); return 1; }
     fclose(wf);
-    int r = CtXlatHdmaBuild(rom, rl, w);
+    int xl = !strcmp(argv[1], "--hdmabuildxlat");
+    int r = xl ? CtXlatHdmaBuild(rom, rl, w) : CtHdmaBuildNative(w, rom, rl);
     FILE* of = fopen(argv[3], "wb"); if (of) { fwrite(w, 1, sizeof w, of); fclose(of); }
-    printf("hdmabuild: FD/C2C1 -> %d ($0153 %02X)\n", r, w[0x0153]);
+    printf("hdmabuild: FD/C2C1 (%s) -> %d ($0153 %02X)\n", xl ? "translation" : "native", r, w[0x0153]);
     return r == 0 ? 0 : 1;
+  }
+  // --hdmabuildcmp <prefix> <n>: grade the native builder against the cartridge's calls <prefix>_<k>_in.wram ->
+  // <prefix>_<k>_out.wram, k < n (ct.exe --hookpc FDC2C1 with CT_HOOK_DUMPCALLS; a missing pair -- an interrupted call -- is
+  // skipped). EXACT: all 128 KB equal outside the stack page $0600-$06FF. WRITTEN: the entry's tables and data ($7F:0F80-
+  // $1E26) and DP $01D9-$01EF poisoned with $5A and with $A5 and built again -- a byte both builds agree on is one
+  // the builder wrote, and it must be the cartridge's. Prints `hdmabuildcmp: call <k> ...` for a failing call and one
+  // `hdmabuildcmp: key <k> <set> <mode> <n> <dfd> <df9> <tail> <b7> <odd>` line a call (the census, from the entry image).
+  if (argc == 4 && !strcmp(argv[1], "--hdmabuildcmp")) {
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    int n = atoi(argv[3]); long calls = 0, exact = 0, written = 0, bad = 0;
+    static uint8_t ci[0x20000], co[0x20000], nw[0x20000], p0[0x20000], p1[0x20000];
+    static const int pr[2][2] = { { 0x10F80, 0x11E27 }, { 0x01D9, 0x01F0 } };   // not $1DFB: the wave's step, read then stepped
+    for (int k = 0; k < n; k++) {
+      char fi[1024], fo[1024]; snprintf(fi, sizeof fi, "%s_%d_in.wram", argv[2], k); snprintf(fo, sizeof fo, "%s_%d_out.wram", argv[2], k);
+      FILE* a = fopen(fi, "rb"); FILE* b = fopen(fo, "rb");
+      int ok = a && b && fread(ci, 1, sizeof ci, a) == sizeof ci && fread(co, 1, sizeof co, b) == sizeof co;
+      if (a) fclose(a); if (b) fclose(b);
+      if (!ok) continue;
+      calls++;
+      memcpy(nw, ci, sizeof nw); memcpy(p0, ci, sizeof p0); memcpy(p1, ci, sizeof p1);
+      for (int q = 0; q < 2; q++) { memset(p0 + pr[q][0], 0x5A, pr[q][1] - pr[q][0]); memset(p1 + pr[q][0], 0xA5, pr[q][1] - pr[q][0]); }
+      if (CtHdmaBuildNative(nw, rom, rl) || CtHdmaBuildNative(p0, rom, rl) || CtHdmaBuildNative(p1, rom, rl)) {
+        bad++; printf("hdmabuildcmp: call %d: the builder refused ($0126 %02X $0153 %02X)\n", k, ci[0x0126], ci[0x0153]); continue; }
+      int d = -1, nd = 0;
+      for (int i = 0; i < 0x20000; i++) if ((i < 0x0600 || i >= 0x0700) && nw[i] != co[i]) { if (d < 0) d = i; nd++; }
+      int wd = -1, nwd = 0; long wr = 0;
+      for (int q = 0; q < 2; q++) for (int i = pr[q][0]; i < pr[q][1]; i++)
+        if (p0[i] == p1[i]) { wr++; if (p0[i] != co[i]) { if (wd < 0) wd = i; nwd++; } }
+      written += wr;
+      if (d < 0 && wd < 0) exact++;
+      else { bad++;
+        int at = d >= 0 ? d : wd; const uint8_t* got = d >= 0 ? nw : p0;
+        printf("hdmabuildcmp: call %d ($0126 %02X $0127 %02X $0153 %02X): %d byte(s) differ, %d written byte(s) wrong; first %s:%04X cartridge %02X native %02X\n",
+               k, ci[0x0126], ci[0x0127], ci[0x0153], nd, nwd, at < 0x10000 ? "7E" : "7F", at & 0xFFFF, co[at], got[at]); }
+      int setB = !(ci[0x0153] & 1) || ci[0x0126] >= 3, md = ci[0x0126] % 3;
+      if (md && !ci[0x0127]) md = 0;
+      printf("hdmabuildcmp: key %d %c %d %02X %d %d %d %d %d\n", k, setB ? 'B' : 'A', md, ci[0x0127], ci[0x1DFD] != 0, ci[0x1DF9] != 0,
+             (ci[0x1DF9] | ci[0x1DFA] | ci[0x1DFD] | ci[0x1DFE]) != 0, md == 0 && (ci[0x0153] & 0x80), ci[0x10351] & 1);
+    }
+    printf("hdmabuildcmp: %ld calls, %ld exact, %ld written bytes, %ld wrong\n", calls, exact, written, bad);
+    return bad ? 1 : 0;
+  }
+  // --snddrvfuzz <actions> [seed] (with CT_AUDIO_SPC=lockstep): the sound machine in C against the original on a
+  // constructed command stream (src/sound/fuzz.c); the lockstep's report is the verdict.
+  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--snddrvfuzz")) {
+    extern int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed);
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    return CtSndFuzz(rom, rl, strtol(argv[2], NULL, 0), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
+  }
+  // --snddrvsongs <cmd> <id|id+id...>... (with CT_AUDIO_SPC=lockstep): the game's song loader called directly on a fresh
+  // CtAudio per argument, each load's ARAM against its ROM blocks and the driver playing it (src/sound/fuzz.c).
+  if (argc >= 4 && !strcmp(argv[1], "--snddrvsongs")) {
+    extern int CtSndSongs(const uint8_t* rom, long romLen, uint8_t cmd, int nspec, char** spec);
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    return CtSndSongs(rom, rl, (uint8_t)strtol(argv[2], NULL, 16), argc - 3, argv + 3);
+  }
+  if ((argc >= 3 && argc <= 5) && !strcmp(argv[1], "--hdmafuzz")) {
+    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+    long n = strtol(argv[2], NULL, 0);
+    uint32_t rs = argc >= 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u;
+    static uint8_t base[0x20000], a[0x20000], b[0x20000];
+    int haveBase = 0;
+    if (argc == 5) { FILE* bf = fopen(argv[4], "rb"); haveBase = bf && fread(base, 1, sizeof base, bf) == sizeof base; if (bf) fclose(bf);
+                     if (!haveBase) { fprintf(stderr, "hdmafuzz: bad WRAM %s\n", argv[4]); return 1; } }
+#define HF_RND() (rs ^= rs << 13, rs ^= rs >> 17, rs ^= rs << 5, rs)
+    static long cen[2][3][128];   // [set B][the mode run][branch key: n = 0, n > $28, ch2 wave, ch3 wave, tail wave, $53 bit 7, $0351 odd]
+    long bad = 0, xfail = 0, nfail = 0;
+    for (long k = 0; k < n; k++) {
+      if (haveBase && (k & 1)) memcpy(a, base, sizeof a);
+      else for (int i = 0; i < 0x20000; i += 4) { uint32_t v = HF_RND(); memcpy(a + i, &v, 4); }
+      int setA = HF_RND() & 1;
+      a[0x0153] = (uint8_t)((a[0x0153] & 0xFE) | setA);
+      if (HF_RND() & 1) a[0x0153] &= 0x7F;
+      a[0x0126] = (uint8_t)(HF_RND() % (setA ? 6 : 3));
+      unsigned r = HF_RND() & 7;
+      a[0x0127] = (uint8_t)(r == 0 ? 0 : r < 5 ? HF_RND() % 0x29 : r == 5 ? 0x28 : HF_RND());
+      for (int q = 0; q < 2; q++) { unsigned z = HF_RND() & 3;   // $1DF9 / $1DFD: off, low byte only, high byte only, both
+        unsigned ad = q ? 0x1DFD : 0x1DF9; a[ad] = (z & 1) ? (uint8_t)(HF_RND() | 1) : 0; a[ad + 1] = (z & 2) ? (uint8_t)(HF_RND() | 1) : 0; }
+      memcpy(b, a, sizeof b);
+      int rx = CtXlatHdmaBuild(rom, rl, a);
+      int rn = CtHdmaBuildNative(b, rom, rl);
+      if (rx) { xfail++; continue; }
+      if (rn) { nfail++; continue; }
+      int d = -1; for (int i = 0; i < 0x20000; i++) if (a[i] != b[i]) { d = i; break; }
+      unsigned md = a[0x0126] % 3, nn = a[0x0127];
+      int setB = !setA || a[0x0126] >= 3;
+      int key = (nn == 0) | (nn > 0x28) << 1 | (a[0x1DFD] != 0) << 2 | (a[0x1DF9] != 0) << 3 |
+                ((a[0x1DF9] | a[0x1DFA] | a[0x1DFD] | a[0x1DFE]) != 0) << 4 | ((a[0x0153] >> 7) & 1) << 5 | (a[0x10351] & 1) << 6;
+      cen[setB][md][key]++;
+      if (d >= 0) { if (bad++ < 8) printf("hdmafuzz: image %ld ($0126 %02X $0127 %02X $0153 %02X) differs at %c:%04X: translation %02X native %02X\n",
+                                         k, a[0x0126], nn, a[0x0153], d < 0x10000 ? 'E' : 'F', d & 0xFFFF, a[d], b[d]); }
+    }
+#undef HF_RND
+    printf("hdmafuzz: %ld images, %ld differ, %ld translation stops, %ld native refusals\n", n, bad, xfail, nfail);
+    for (int sb = 0; sb < 2; sb++) for (int md = 0; md < 3; md++) {
+      int keys = 0; long imgs = 0;
+      for (int q = 0; q < 128; q++) if (cen[sb][md][q]) { keys++; imgs += cen[sb][md][q]; }
+      printf("hdmafuzz: set %c mode %d: %ld images, %d of the 128 branch keys\n", sb ? 'B' : 'A', md, imgs, keys);
+    }
+    return bad || xfail || nfail ? 1 : 0;
   }
   // --racestep <in.wram>: run the race's per-frame task $7E:485D (src/seq_race.c, CtRaceStep485D) once over a 128 KB WRAM
   // image and print every byte it changed -- graded against `--callrom 7E485D --writes` from the same frame's state
@@ -15884,8 +16487,12 @@ int main(int argc, char** argv) {
   const char* oamOut = NULL;
   const char* fxcState = NULL, *arenaState = NULL;
   const char* seqPpuState = NULL; int seqPpuFrames = 1;
+  const char* seqPicState = NULL; int seqPicFrames = 1;
+  const char* rpcArgs[5] = { 0 };
+  const char* gwcState = NULL; int gwcFrames = 0;
   const char* cpuTraceState = NULL, *cpuTraceOut = NULL; int cpuTraceFrames = 1;
   const char* xlatCmpState = NULL; int xlatCmpFrames = 1;
+  const char* wipeAuditState = NULL; int wipeAuditFrames = 0;   // --wipeaudit
   const char* wipeDumpState = NULL; int wipeDumpK = 1; const char* wipeDumpIn = NULL; const char* wipeDumpOut = NULL; const char* wipeDumpMask = NULL; uint32_t wipeDumpEntry = 0xC3000E, wipeDumpExit = 0xC022FE, wipeDumpMaskPc = 0xC000CB;
   const char* xlatEnState = NULL; int xlatEnFrames = 1;
   const char* xlatPhState = NULL; uint32_t xlatPhPc = 0; int xlatPhExtra = 0, xlatPhFrames = 1;
@@ -15938,6 +16545,106 @@ int main(int argc, char** argv) {
     if (!strcmp(argv[i], "--aram")) { doAram = 1; continue; }
     if (!strcmp(argv[i], "--audiotest")) { doAudioTest = 1; continue; }
     if (!strcmp(argv[i], "--songdirs")) { doSongDirs = 1; continue; }
+    // --sndassets <ct_assets.dat>: every datum the sound loader takes, from the ROM and from the container's CT_ASSET_SND_*
+    // entries side by side (src/audio.c CtAudioDataCompare) -- `snd-data: N items identical`, or the first difference.
+#ifndef CT_ORACLE_ONLY      // (the slim oracle links neither the assets nor the audio)
+    // --lzpack <list> <out> [skipped]: the LZ streams at the file offsets listed (hex, one a line; tools/gen/lz_pack.py makes the
+    // list from the ROM's own pointer tables) decompressed by src/lz.c with both of C3/0557's costs, for
+    // assets/extract_assets.py (CT_ASSET_LZ). `lzpack: N streams (M bytes), K skipped`.
+    if (!strcmp(argv[i], "--lzpack") && i + 2 < argc) {
+      long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      FILE* li = fopen(argv[i + 1], "r"); FILE* lo = fopen(argv[i + 2], "wb");
+      FILE* ls = (i + 3 < argc && argv[i + 3][0] != '-') ? fopen(argv[i + 3], "w") : NULL;   // the offsets that are not streams
+      if (!li || !lo) { printf("lzpack: cannot open the list or the output\n"); return 2; }
+      static uint8_t buf[0x40000];
+      uint32_t count = 0; long bytes = 0, skipped = 0; char line[64];
+      fwrite("CTLZ", 1, 4, lo); fwrite(&count, 4, 1, lo);
+      while (fgets(line, sizeof line, li)) {
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
+        uint32_t off = (uint32_t)strtoul(line, NULL, 16);
+        size_t n = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
+        if (!n) { skipped++; if (ls) fprintf(ls, "%06X\n", off); continue; }
+        int32_t c0 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), c1 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
+        uint32_t nn = (uint32_t)n;
+        fwrite(&off, 4, 1, lo); fwrite(&nn, 4, 1, lo); fwrite(&c0, 4, 1, lo); fwrite(&c1, 4, 1, lo); fwrite(buf, 1, n, lo);
+        count++; bytes += (long)n;
+      }
+      fseek(lo, 4, SEEK_SET); fwrite(&count, 4, 1, lo);
+      fclose(li); fclose(lo); if (ls) fclose(ls);
+      printf("lzpack: %u streams (%ld bytes), %ld skipped (not a stream)\n", count, bytes, skipped);
+      return 0;
+    }
+    // --animoplen <out>: the battle anim interpreter's opcode lengths (CtBattleAnimOpLens), one signed byte per op 00-FF
+    // (-1 = none) -- tools/gen/anim_oplen.py's saves/anim_oplen.bin, the anim scripts' closure walks with it.
+    if (!strcmp(argv[i], "--animoplen") && i + 1 < argc) {
+      if (!CtBattleLoadRom("Chrono_Trigger_USA_SNES.sfc")) { printf("animoplen: no ROM\n"); return 1; }
+      int len[256]; uint8_t b[256]; int n = 0; CtBattleAnimOpLens(len);
+      for (int k = 0; k < 256; k++) { b[k] = (uint8_t)(len[k] < 0 ? 0xFF : len[k]); if (len[k] > 0) n++; }
+      FILE* f = fopen(argv[i + 1], "wb"); if (!f) { printf("animoplen: cannot write %s\n", argv[i + 1]); return 1; }
+      fwrite(b, 1, 256, f); fclose(f);
+      printf("animoplen: %d opcodes sized\n", n);
+      return 0;
+    }
+    // --lzassets <ct_assets.dat>: every CT_ASSET_LZ entry against the ROM's own stream at its offset -- the bytes and
+    // both costs. `lz-data: N streams identical (bytes and both costs)`, or the first that is not.
+    if (!strcmp(argv[i], "--lzassets") && i + 1 < argc) {
+      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("lz-data: cannot open %s\n", argv[i + 1]); return 2; }
+      static uint8_t buf[0x40000];
+      long n = 0;
+      for (uint32_t k = 0; k < as.count; k++) {
+        const uint8_t* e = as.data + 12 + (size_t)k * 16;
+        uint32_t type = (uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24);
+        uint32_t off = (uint32_t)(e[4] | e[5] << 8 | e[6] << 16 | (uint32_t)e[7] << 24);
+        if (type != CT_ASSET_LZ) continue;
+        ct_lz_use_assets(&as, NULL);                       // read the container's entry, not the ROM's
+        size_t an = 0; long a0 = 0, a1 = 0; const uint8_t* ab = ct_lz_asset(off, &an, &a0, &a1);
+        ct_lz_use_assets(NULL, NULL);
+        size_t rn = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
+        long r0 = ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), r1 = ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
+        if (!ab || an != rn || memcmp(ab, buf, rn) || a0 != r0 || a1 != r1) {
+          printf("lz-data: the stream at %06X differs: container %zu bytes / %ld / %ld, ROM %zu / %ld / %ld\n",
+                 off, an, a0, a1, rn, r0, r1);
+          return 1;
+        }
+        n++;
+      }
+      printf("lz-data: %ld streams identical (bytes and both costs)\n", n);
+      return 0;
+    }
+    // --tabassets <ct_assets.dat>: every CT_ASSET_TABLE (the ROM's small tables, src/romview.h) byte for byte against
+    // the ROM. `tab-data: N tables, M bytes identical`.
+    if (!strcmp(argv[i], "--tabassets") && i + 1 < argc) {
+      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("tab-data: cannot open %s\n", argv[i + 1]); return 2; }
+      long nb = CtRomViewCompare(rimg, rl, &as);
+      if (nb < 0) return 1;
+      int nt = 0;
+      for (uint32_t k = 0; k < as.count; k++) {
+        const uint8_t* e = as.data + 12 + (size_t)k * 16;
+        if ((uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24) == CT_ASSET_TABLE) nt++;
+      }
+      printf("tab-data: %d tables, %ld bytes identical\n", nt, nb);
+      return 0;
+    }
+    if (!strcmp(argv[i], "--sndassets") && i + 1 < argc) {
+      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("snd-data: cannot open %s\n", argv[i + 1]); return 2; }
+      long n = CtAudioDataCompare(rimg, rl, &as);
+      if (n < 0) { printf("snd-data: DIFFERS (stderr says where)\n"); return 1; }
+      printf("snd-data: %ld items identical (the ROM's and the container's)\n", n);
+      return 0;
+    }
+    // --sndtiming <out>: the sound machine's cost table from the ROM (CT_ASSET_SND_TIMING; src/sound/timing.h), the setup's
+    // generator tools/gen/snd_timing.py -- the reachable instructions of block 0 and the boot ROM timed on the vendored SPC700.
+    if (!strcmp(argv[i], "--sndtiming") && i + 1 < argc) {
+      long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+      int n = CtAudioTimingExport(rimg, rl, argv[i + 1]);
+      if (!n) { printf("snd-timing: FAILED\n"); return 1; }
+      printf("snd-timing: %d bytes -> %s\n", n, argv[i + 1]);
+      return 0;
+    }
+#endif
     if (!strcmp(argv[i], "--songload") && i + 1 < argc) { songLoadSpec = argv[++i]; continue; }
     if (!strcmp(argv[i], "--at") && i + 1 < argc) { aramAt = argv[++i]; continue; }
     if (!strcmp(argv[i], "--scene") && i + 1 < argc) { sceneIdx = atoi(argv[++i]); continue; }
@@ -16017,10 +16724,14 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--sweepfxcompose") && i + 3 < argc) { fxcState = argv[++i]; fxcF0 = atoi(argv[++i]); fxcF1 = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--sweeparenascroll") && i + 3 < argc) { arenaState = argv[++i]; fxcF0 = atoi(argv[++i]); fxcF1 = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--seqppucmp") && i + 2 < argc) { seqPpuState = argv[++i]; seqPpuFrames = atoi(argv[++i]); }
+    else if (!strcmp(argv[i], "--seqpiccmp") && i + 2 < argc) { seqPicState = argv[++i]; seqPicFrames = atoi(argv[++i]); }
+    else if (!strcmp(argv[i], "--racepiccmp") && i + 5 < argc) { for (int k = 0; k < 5; k++) rpcArgs[k] = argv[++i]; }
+    else if (!strcmp(argv[i], "--gwarpcmp") && i + 2 < argc) { gwcState = argv[++i]; gwcFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatphase") && i + 4 < argc) { xlatPhState = argv[++i]; xlatPhPc = (uint32_t)strtoul(argv[++i], NULL, 16); xlatPhExtra = atoi(argv[++i]); xlatPhFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatentries") && i + 2 < argc) { xlatEnState = argv[++i]; xlatEnFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--xlatcmp") && i + 2 < argc) { xlatCmpState = argv[++i]; xlatCmpFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--calldump") && i + 6 < argc) { wipeDumpState = argv[++i]; wipeDumpK = atoi(argv[++i]); wipeDumpEntry = (uint32_t)strtoul(argv[++i], NULL, 16); wipeDumpExit = (uint32_t)strtoul(argv[++i], NULL, 16); wipeDumpIn = argv[++i]; wipeDumpOut = argv[++i]; wipeDumpMaskPc = 0; }
+    else if (!strcmp(argv[i], "--wipeaudit") && i + 2 < argc) { wipeAuditState = argv[++i]; wipeAuditFrames = atoi(argv[++i]); }
     else if (!strcmp(argv[i], "--wipedump") && i + 4 < argc) { wipeDumpState = argv[++i]; wipeDumpK = atoi(argv[++i]); wipeDumpIn = argv[++i]; wipeDumpOut = argv[++i];
                                                                      if (i + 1 < argc && argv[i + 1][0] != '-') wipeDumpMask = argv[++i]; }
     else if (!strcmp(argv[i], "--cputrace") && i + 3 < argc) { cpuTraceState = argv[++i]; cpuTraceFrames = atoi(argv[++i]); cpuTraceOut = argv[++i]; }
@@ -16268,8 +16979,12 @@ int main(int argc, char** argv) {
   if (arenaState) return CT_NOT_ORACLE(runSweepArenaScroll(romPath, arenaState, fxcF0, fxcF1));
   if (fxcState) return CT_NOT_ORACLE(runSweepFxCompose(romPath, fxcState, fxcF0, fxcF1));
   if (seqPpuState) return CT_NOT_ORACLE(runSeqPpuCmp(romPath, seqPpuState, seqPpuFrames));
+  if (seqPicState) return CT_NOT_ORACLE(runSeqPicCmp(romPath, seqPicState, seqPicFrames));
+  if (gwcState) return CT_NOT_ORACLE(runGwarpCmp(romPath, gwcState, gwcFrames));
+  if (rpcArgs[0]) return CT_NOT_ORACLE(runRacePicCmp(romPath, rpcArgs[0], rpcArgs[1], atoi(rpcArgs[2]), (int)strtol(rpcArgs[3], NULL, 16), atoi(rpcArgs[4])));
   if (cpuTraceState) return CT_NOT_ORACLE(runCpuTrace(romPath, cpuTraceState, cpuTraceFrames, cpuTraceOut));
   if (xlatCmpState) return CT_NOT_ORACLE(runXlatCmp(romPath, xlatCmpState, xlatCmpFrames));
+  if (wipeAuditState) return CT_NOT_ORACLE(runWipeAudit(romPath, wipeAuditState, wipeAuditFrames));
   if (wipeDumpState) return CT_NOT_ORACLE(runWipeDump(romPath, wipeDumpState, wipeDumpK, wipeDumpIn, wipeDumpOut, wipeDumpMask, wipeDumpEntry, wipeDumpExit, wipeDumpMaskPc));
   if (xlatEnState) return CT_NOT_ORACLE(runXlatEntries(romPath, xlatEnState, xlatEnFrames));
   if (xlatPhState) return CT_NOT_ORACLE(runXlatPhase(romPath, xlatPhState, xlatPhPc, xlatPhExtra, xlatPhFrames));

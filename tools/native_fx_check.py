@@ -30,7 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def run(argv, extra):
     env = dict(os.environ); env.update(extra)
     env.update(SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_NATIVECHECK='1')
-    out = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe')] + argv, cwd=ROOT, env=env, capture_output=True,
+    out = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe')] + argv, cwd=ROOT, env=env, capture_output=True,
                          text=True, errors='replace', timeout=1200).stdout
     fx = re.findall(r'nativecheck-fx: (\d+) frames \(iris (\d) colour (\d) caption (\d) now\), (\d+) differ, (\d+) px', out)
     al = re.findall(r'nativecheck: (\d+) frames, (\d+) differ, (\d+) px', out)

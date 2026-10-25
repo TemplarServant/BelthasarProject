@@ -84,6 +84,7 @@ class CostTab:
         self.op = {}
         self.len = {}
         self.keycost = collections.defaultdict(collections.Counter)
+        self.mx = {}                                      # the widths each PC first ran with (ctlib/pathcost.py)
         for p in paths:
             t = beam.load(p)
             regs = [m.groups() for m in (_REGS.search(line) for line in open(p) if beam.RX.match(line)) if m]
@@ -96,6 +97,7 @@ class CostTab:
                 self.op[pc] = op
                 dreg, breg, fl = regs[k]
                 m, x = (1 if fl[2] == 'M' else 0), (1 if fl[3] == 'X' else 0)
+                self.mx.setdefault(pc, (m, x))
                 mnem, mode = D.TABLE[op]
                 ln = 1 + D.oplen(mode, m, x)
                 prev = self.len.get(pc)
@@ -169,6 +171,22 @@ class CostTab:
                 return 6 * (1 + D.oplen(mode, m, x))
             # the read-ALU group shares one addressing path per mode (LakeSnes cpu.c: cpu_adr* then one read):
             # an executed member with the same mode, widths and region costs the same
+            # the read-modify-write group likewise (cpu_adr* then read, idle, write: INC/DEC/ASL/LSR/ROL/ROR, and
+            # TSB/TRB, whose idle is the same)
+            for grp in (('LDA', 'ORA', 'AND', 'EOR', 'ADC', 'SBC', 'CMP'),
+                        ('INC', 'DEC', 'ASL', 'LSR', 'ROL', 'ROR', 'TSB', 'TRB')):
+                if mnem not in grp:
+                    continue
+                for op2 in range(256):
+                    mn2, md2 = D.TABLE[op2]
+                    if mn2 in grp and md2 == mode and op2 != op:
+                        c2 = self.keycost.get((op2,) + tuple(kk[1:]))
+                        if c2:
+                            return min(c2)
+            # a push / pull of X or Y at a width no trace ran: LakeSnes's opcode fetch (6), one idle (6) and the
+            # bytes on the WRAM stack (8 each); a pull idles twice
+            if mnem in ('PHX', 'PHY', 'PLX', 'PLY'):
+                return 6 + (12 if mnem[1] == 'L' else 6) + 8 * (1 if x else 2)
             grp = ('LDA', 'ORA', 'AND', 'EOR', 'ADC', 'SBC', 'CMP')
             if mnem in grp:
                 for op2 in range(256):

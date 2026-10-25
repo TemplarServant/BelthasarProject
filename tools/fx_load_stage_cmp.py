@@ -57,7 +57,7 @@ def port(c, k, pokes, drive, total):
                    CT_BATTLE_SCRIPT_ABS='1', CT_BATTLE_SCRIPT=ab.port_script(drive, start, total), CT_BATTLE_TRACE='1',
                    CT_FIELD_MEMMON=','.join('%04X:%X' % r for r in REG), CT_SHOTS=os.path.join(OUT, 'stage_p'),
                    CT_SHOTS_AT=str(total), CT_SHOTS_EXIT='1')
-        r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
+        r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '6',
                             '--loadwram', lw, '--walkscript', 'a:8'], env=env, capture_output=True, text=True,
                            errors='replace', cwd=ROOT)
         out = r.stdout

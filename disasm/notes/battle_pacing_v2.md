@@ -4,7 +4,7 @@ Re-measures the GATO fight pacing at the **current HEAD** (the `$A013` action-fr
 commit/animate split, and the GATO walk are all SHIPPED since the old `battle_loop.md §E-L` ledger) and closes
 the residual gaps the caller flagged. Method = LakeSnes oracle (`ct.exe`→`ct_probe.exe`) `--monitor` (RAM
 timelines, `--writer` = PC after the store retires) on `gato_press_action.state`, vs our engine
-(`ct_field.exe --battletest` + `CT_BATTLE_TRACE`/`CT_BATTLE_MASHA`) on `saves/battle_re/gato_t0.raw.wram`.
+(`Belthasar.exe --battletest` + `CT_BATTLE_TRACE`/`CT_BATTLE_MASHA`) on `saves/battle_re/gato_t0.raw.wram`.
 Every claim is anchored to a ROM address (`tools/dis.py <fileoffset>`, fileoffset=(bank−0xC0)<<16|addr) or an
 oracle monitor row. **⚠ `--peek` ≠ `--monitor` timelines — ALL frame work here is `--monitor`.** Mandate: nothing
 invented; where the exact rule is the bank-CC AI interpreter it is marked BOUNDARY, never guessed.
@@ -299,7 +299,7 @@ Dir: `%TEMP%/claude/C--Users-Icaro-Ferris-Desktop-Crono-Trigger-Decompile/9e84b7
 - `oracle_hold.txt` — the HOLD fight (attack-A f478 / SONG f1151 / attack-A f1741): attack-A dispatch = timer-0+24f.
 - `ours_trace.txt` / `ours_cadence_trace.txt` — our MASHA (f1650) and slow-cadence (f1762) fights: 6 spans, GATO
   acts 1×.
-- `ct_probe.exe` (=build/ct.exe), `ct_field_probe.exe` (=build/ct_field.exe), `SDL2.dll`, `gato_press_action.state`.
+- `ct_probe.exe` (=build/ct.exe), `ct_field_probe.exe` (=build/Belthasar.exe), `SDL2.dll`, `gato_press_action.state`.
 
 Repro (probe/field copied to the scratchpad; ROM = repo root):
 ```

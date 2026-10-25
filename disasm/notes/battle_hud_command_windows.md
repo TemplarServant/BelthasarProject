@@ -2,7 +2,7 @@
 
 Found from the forest ambush's lockstep (field_d9_party_walk.md section 8: `vmdiff-forest-ambush-d9-vs-oracle` stops at
 f282). That f282 is the harness's reach, not a divergence: op D8 runs at f279 on both sides, the consumer arms at f280 and
-the cartridge's objects stop there, and `ct.exe` links neither field.c nor battle.c. The real host (`ct_field --scene 19
+the cartridge's objects stop there, and `ct.exe` links neither field.c nor battle.c. The real host (`Belthasar --scene 19
 --loadwram` of the same state) stages the whole interface byte for byte on the cartridge's frame (`$29B0`, the eight
 `$29BF` records, `$019D`, `$01A3`; `$0102` = 13 16 03 at f282 in the logical oracle, f283 in real time -- a lag frame).
 Following the battle past the staging showed the three defects below.

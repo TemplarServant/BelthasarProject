@@ -23,7 +23,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OSTATE = 'saves/battle_re/party3_field.state'
 PSEED = 'saves/battle_re/party3_field.lakewram'
 POKE = {0x2401: 0xBD, 0x2501: 0x01}

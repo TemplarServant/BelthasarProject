@@ -2,7 +2,7 @@
 
 ## Symptom (user, 2026-07-18 / clarified 2026-07-19)
 
-`ct_field.exe` live (not savestate-load specific): after the pre-battle approach
+`Belthasar.exe` live (not savestate-load specific): after the pre-battle approach
 animation starts, enemy sprites vanish and the game freezes with **no battle**.
 Savestate `jogo_trava.state` is only a **reference** for the start of that animation.
 
@@ -95,7 +95,7 @@ don't re-arm forever when resuming a mid-cutscene state.
 ## Validation
 
 ```
-ct_field --assets ct_assets.dat --scene 112 --loadwram saves/jogo_trava_loadwram.state \
+Belthasar --assets ct_assets.dat --scene 112 --loadwram saves/jogo_trava_loadwram.state \
   --selftest --frames 200
 # obj10 reaches ip=0468 (D8) ~f125; $2989=0x12 staged; enemy id 0x0C slots filled
 ```

@@ -1,0 +1,14 @@
+{
+  "name": "fxr_pt_00_newgame",
+  "doc": "The playthrough's leg 00_newgame (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): power-on, the title, New Game: Battle Mode Active, the name Crono, the opening over 1F0, into 10F",
+  "steps": [
+    [
+      "power_on",
+      300
+    ],
+    [
+      "pad",
+      "8:2,0:198,100:2,0:200,8:2,0:100,8:2,0:1794"
+    ]
+  ]
+}

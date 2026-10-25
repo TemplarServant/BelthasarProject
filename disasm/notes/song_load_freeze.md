@@ -130,7 +130,7 @@ measured scene as a ratchet, or derive the background from the ROM's NMI/HDMA wo
   model at all; a sound-op cost is the first place it is measurable.
 * **The cost**: needs a model that fits all three points before it can be pinned. Until then the
   gate-cutscene lockstep stays a ratchet at f154.
-* `--vmdiff` needs an audio instance (or a WRAM-only planner) to price the post; `ct_field` can
+* `--vmdiff` needs an audio instance (or a WRAM-only planner) to price the post; `Belthasar` can
   read the units straight from the service it already calls synchronously (`fieldSoundPost`).
 
 ## 6. PORTED (2026-09-02, 'go ahead'): the loader clock, the suspended tick, the tail overrun
@@ -189,7 +189,7 @@ is the driver's periodic tick landing inside a unit, on both).
   freezes for those frames, and the emulated SPC must not run them twice). ⚠ WRONG, CORRECTED 2026-09-14:
   `CtAudioSamples` used to output SILENCE on a debited frame, 'which is what the SNES outputs' -- it is not.
   The CPU waits in C7's handshake; the SPC and the S-DSP keep running, and the voices keep sounding.
-  Measured with the new streams (ct.exe --peek `PEEK_PCM`, ct_field `CT_AUDIO_PCM`) on the attract's demo
+  Measured with the new streams (ct.exe --peek `PEEK_PCM`, Belthasar `CT_AUDIO_PCM`) on the attract's demo
   battle: the cartridge's output has sound on every one of the 14 frames of `70 01` (C0/1BDF) and the 11 of
   `70 00` (C0/1C89); the port had 14 and 11 silent frames -- the user's 'when battles start/end the
   music stutters'. And the samples the DSP emitted during the JSL were mostly LOST: dsp.c keeps a
@@ -253,7 +253,7 @@ frame early), SlowROM access costs (a frame late).
 
 * The host's OTHER posters are priced but not consumed: the location loader's song (C0/1B86, flushed
   by the per-frame catch-all service) and the battle entry's C0/1BAB post through the void battle
-  sink -- `ct_field` does not yet lose those frames (the location change is a black screen; the battle
+  sink -- `Belthasar` does not yet lose those frames (the location change is a black screen; the battle
   module would start K frames later). The init-pass posts (`runFunc`) ignore the price.
 * `SND_TAIL_LINES` and the post line (12) are measured on one scene; a runner-position model would
   replace both.

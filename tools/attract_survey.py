@@ -4,8 +4,8 @@ r"""Survey the whole attract, port against cartridge, for VISUAL differences.
     python tools/attract_survey.py <oracle_thumbs.bin> <port_thumbs.bin> [<outdir>]
 
 Both files are the 128x112 thumbnail records `[u32 frame][u16 $0100][128*112*3 RGB]`:
-    oracle  build/ct.exe --peek saves/attract_cena_inicial.state <out> --frames 9100      with PEEK_THUMBS=<file>
-    port    build/ct_field.exe --assets ct_assets.dat --scene 433 (interactive, CT_AUDIO_LOCKSTEP=1)
+    oracle  build/ct.exe --peek saves/attract_cena_inicial_rule.state <out> --frames 9100      with PEEK_THUMBS=<file>
+    port    build/Belthasar.exe --assets ct_assets.dat --scene 433 (interactive, CT_AUDIO_LOCKSTEP=1)
             with CT_SHOTS_THUMBS=<file> CT_SHOTS=<p> CT_SHOTS_AT=<end> CT_SHOTS_EXIT=1
 
 The two timelines are not frame-aligned (the port boots through the title; its legs have their own residual lengths), so

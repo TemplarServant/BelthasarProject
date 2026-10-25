@@ -39,12 +39,24 @@ DRIVES = {
     '2E': dict(state=os.path.join(ROOT, 'saves', 'ending_re', 'ending_handoff_f6837.state'), handoff=0,
                hstate=os.path.join(ROOT, 'saves', 'ending_re', 'ending_handoff_f6837.state'),
                shift=53, hold=54, total=11000, wait=(0x9669, 0x925E, 0x92C7, 0x92E2)),
+    # `FF 2A` / `FF 2F` (entries 10 / 15; `glb[$6E]` the other way -- scene 052's obj0 stores 1-4 by `glb[$6D]` bit 7 and Crono
+    # in the party): the same hand-offs with the op's operand byte in the scene's script changed (obj10's `FF 2B` at $7F:2982 ->
+    # `2A`, scene 90's `FF 2E` at $7F:2267 -> `2F`), so the cartridge runs entry 10 / 15 from the same world and the same song
+    '2A': dict(state=os.path.join(ROOT, 'saves', 'ending_re', 'ending_handoff_f130_ff2a.state'), handoff=0,
+               hstate=os.path.join(ROOT, 'saves', 'ending_re', 'ending_handoff_f130_ff2a.state'),
+               shift=45, hold=46, total=12000, wait=(0x9108, 0x910E, 0x918C, 0x925E)),
+    '2F': dict(state=os.path.join(ROOT, 'saves', 'ending_re', 'ending_handoff_f6837_ff2f.state'), handoff=0,
+               hstate=os.path.join(ROOT, 'saves', 'ending_re', 'ending_handoff_f6837_ff2f.state'),
+               shift=53, hold=54, total=4100, wait=(0x9669, 0x925E)),
     # entry 3 from the story (`FF 23`, scenes 102-107 after the Blackbird) -- the attract's own hand-off with the story's two
     # bytes put back ($7F0057 bit 2 clear, the storyline D3): scene 107's controller then takes the story's arm, `DD F6 03
-    # 91 35 / FF 23`, on the cartridge (saves/blackbird_re/ff23_story_poked.state; the hand-off at f25, FF 23 on f26)
+    # 91 35 / FF 23`, on the cartridge (the recipe lg_blackbird_story_poked: the attract's hand-off under today's rule, power-on
+    # + 8776, the two bytes poked; the hand-off at f25, FF 23 on f26). SHIFT 18 since 2026-10-22: from today's rule the
+    # opening's vblank wait ($7E:3010 -> $31B0) is reached at v224 h898 and catches line 225 -- 17 frames from the jump; the
+    # older rule's capture reached it at h1356, 462 cycles later, and waited a frame more (SHIFT 19)
     '23': dict(state=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'), handoff=0,
                hstate=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'),
-               shift=19, hold=20, total=650, tag='seqstage',
+               shift=18, hold=19, total=650, tag='seqstage',
                # (palette records 0 and 1, which the moon's light chain waits on and arms -- FD/E39C's, task $37FA; records 2-11, the
                # field's own colour cycles, are a step behind in the port: open, sequence_table.md sec. 14)
                extra=[(0x0520, 0x18)]),

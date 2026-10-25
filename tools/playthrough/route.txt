@@ -1,0 +1,236 @@
+# The playthrough route: the cartridge's pad from power-on (erased cartridge) to "The End". See tools/playthrough.py.
+
+## 00_newgame -- power-on, the title, New Game: Battle Mode Active, the name Crono, the opening over 1F0, into 10F [oracle-only]
+# Start at the title; A on ACTIVE; Start closes the name prompt, Start accepts "Crono"; the pan to 10F (f2447).
+0:300,8:2,0:198,100:2,0:200,8:2,0:100,8:2,0:1794
+
+## 01_wakeup -- Mom wakes Crono; her lines with A until he is up (story 03)
+(100:2,0:58)*30
+
+## 02_downstairs -- control back at f132; down the stairs to the kitchen (loc 001)
+0:140,20:16,40:16,20:16,40:48,20:16,80:48,10:16,0:120
+
+## 03_kitchen -- Mom in the corridor: her lines, Lucca's name (Start closes the prompt, Start accepts), out the door
+0:30,20:24,(100:2,0:38)*6,0:100,8:2,0:100,8:2,0:100,(100:2,0:38)*8,0:60
+40:16,20:80,40:16,20:16,10:16,20:40,0:150
+
+## 04_to_fair -- on the overworld, up to Leene Square (its label shows on the tile), A enters (loc 005)
+0:10,10:60,40:30,10:60,80:12,10:30,0:30,100:2,0:200
+
+## 05_bellstairs -- around the fountain and up the square's stairs into 1B7 (Leene's Bell)
+0:30,10:176,40:32,10:48,80:16,10:160,40:16,10:32,80:16,10:80,0:200
+
+## 06_marle -- up the steps: Marle runs into Crono; the pendant (obj15 at tile (30,8), A from (30,10): $2400 = D6);
+# her loop passes (28,13) every ~250 frames -- Crono waits at (28,12) facing down; her lines, her name (Start, Start)
+10:120,80:40,0:100,(100:2,0:48)*16,0:100
+80:96,10:46,0:10,100:2,0:60
+20:32,40:24,20:2,0:190,(100:2,0:10)*7,(100:2,0:40)*16
+0:100,8:2,0:100,8:2,0:100,(100:2,0:40)*8
+
+## 07_merchant -- back down to the square (loc 005): a merchant with Marle sets glb[85].7, the twins leave 1B7's stairs
+# scene 5 obj16 (C8 90, the shop at (304,500)): talked to from (19,32) a little to the left, B closes the shop, its line
+0:30,20:48,40:32,20:112,40:48,20:16,10:16,20:30,0:150
+20:144,40:32,20:16,40:32,10:16,80:16,40:16,20:16,40:48,80:32,10:14,0:10,100:2,0:150
+1:2,0:60,1:2,0:150,100:2,0:100
+
+## 08_candy -- up to 1B7 again; at the north stairs Marle wants candy: she goes to the stall, A talks to her when she is done
+0:30,80:32,10:32,80:16,10:16,80:16,10:144,40:16,10:40,0:200
+10:140,80:80,10:80,40:64,10:250,(100:2,0:40)*4,0:300,(100:2,0:40)*13,0:60
+
+## 09_telepod -- around the stall and up the stairs the twins left, 1B7's north exit (loc 008): Taban's call
+0:2,40:16,20:16,40:48,10:96,40:16,10:40,0:250
+
+## 10_demo -- the Telepod demonstration: Taban's and Lucca's lines, up to the left pod, Crono is sent across (story 0A)
+(100:2,0:40)*30,10:64,40:64,10:16,80:16,40:16,0:30,10:30,(100:2,0:40)*16,0:120
+
+## 11_gate -- Marle (obj14 at the bottom of tile (7,11), talked to from right above): she steps on the pod, the pendant,
+# the gate opens and she vanishes (story 0C at f5441, control back)
+80:80,20:46,0:10,(100:2,0:40)*130
+
+## 12_after_her -- Crono steps on the left pod after her (obj11 at (4,5): DD 71): the gate warp, 600 A.D., loc 071
+40:32,10:70,0:30,(100:2,0:40)*78,0:120
+
+## 13_canyon -- the gate's clearing (071): left into the blue imps, the fight with A (won at f2395), out to 070
+0:200,20:10,40:160,(100:2,0:18)*105,0:30,10:32,40:128,10:16,40:30,0:150
+
+
+## 14_canyon_out -- Truce Canyon (070): up the right ledge, west along row 4 (the imps there: a fight, A), down to the exit
+# onto 1F1, then west and up to Guardia Forest's south cell (17,17): the world steps 8 px a press, so the lead stops at
+# y 110 where C2/39AE flags the cell (the banner shows); A enters (077). A leg never STARTS on the world map: the port
+# seeded there goes through a whole world load first (--scene 1F1 is an entry), so the world walk rides the leg before.
+# written by `route 14_canyon_out "0:2" 19 31 --exit` (the tiles' own planes, plane 1) and `walk .. 280 280 --ow`
+0:2,40:32,10:80,40:16,10:16,40:16,10:16,40:16,10:16,40:16,10:16,40:96,(100:2,0:18)*62,40:64,20:64,40:16,20:16,40:16,20:16,40:32,20:16,40:32,20:32,40:16,20:160,80:160,20:64,80:16,20:80,0:500
+0:1,20:32,40:16,20:32,40:64,20:16,40:16,20:16,40:32,10:16,40:48,10:16,10:4,0:30,100:2,0:150
+
+## 15_forest_castle -- Guardia Forest (077): north through the trees to the top exit, onto 1F1 at the forest's north
+# cell (17,15); up three cells to Guardia Castle (17,12), A enters (078): the soldiers' "Halt!"
+# written by `route 15_forest_castle "0:1" 15 1 --exit` (no visible enemy met on the way)
+0:1,40:16,10:176,40:16,10:16,40:80,20:16,40:16,20:16,40:32,20:16,40:48,10:112,80:32,10:16,80:48,10:16,80:32,10:16,80:32,10:112,40:16,10:16,40:16,10:16,40:32,10:16,40:48,10:112,80:16,10:16,80:16,10:16,80:80,10:64,40:16,10:16,40:16,0:300
+10:48,0:30,100:2,0:400
+
+## 16_castle_in -- the hall (078): A through the soldiers and Leene (storyline 0F), up the middle stairs into 1E0
+(100:2,0:38)*39,0:120,10:288,40:32,10:80,40:16,10:16,40:16,10:32,40:48,10:288,80:16,10:16,10:60,0:200
+
+## 17_queen -- back down to the hall, the right door (608,128) into the east tower (1D4), up its three floors (Right+Up
+# into each stair box at x 144) to 07A; the soldier at (53,57) ("The Queen awaits.") steps aside; down and west to the
+# queen's chamber, her maid, then the Queen at (40,43): "Ah! There you are." -- A through Marle vanishing (storyline 10)
+# the east door by `walkto --exit --dest=1D4` (the hall's left door leads back to 1E0, a dead end)
+0:1,20:16,40:16,10:16,0:120,20:288,80:32,10:32,80:112,20:32,80:48,10:288,80:16,10:16,0:120,80:16,10:16,0:150,80:16,10:16,0:150
+80:16,10:16,0:200,20:48,40:32,20:48,20:64,0:10,100:2,0:60,100:2,0:120,20:64,40:176,10:240,80:32,10:16,0:10,100:2,0:60
+100:2,0:40,40:48,0:20,10:32,0:10,100:2,(100:2,0:38)*81,0:200
+
+## 18_lucca -- out of the queen's chamber to the east tower (1D4), down its floors (Left+Up into each stair box at x 112) to the hall; two tiles down the passage the hall's obj17 sees the lead at y 11 (loc[10] = the lead's tile row) and Lucca runs in ("Crono!"), the scene at 06C, back in the hall: Lucca joins (storyline 12)
+# the chamber's walk by `walkto --exit --dest=1D4` from 17_queen
+20:48,80:16,20:208,80:160,10:160,80:16,10:48,40:16,10:16,0:60,40:16,10:16,0:150,40:16,10:16,0:150,40:16,10:16,0:400
+40:16,10:16,0:300,20:40,0:60,(100:2,0:38)*40,0:100,(100:2,0:38)*60,0:200,(100:2,0:38)*20,0:200
+
+## 19_to_forest -- the hall's south door to 1F1; the castle sits inside the forest: Down 40 onto the forest's north cell, A (077)
+# the hall by `walkto --exit --dest=1F1`
+20:384,40:80,20:96,40:16,20:224,40:16,10:16,0:300,20:40,0:30,100:2,0:250
+
+## 20_forest_fights -- Guardia Forest's three ambushes for levels (Crono and Lucca die to the Naga-ettes at level 1):
+# the hidden groups at (36,15), (31,30), (3-8,32) jump out when the lead reaches their zones (37,17), (27,32), (7,37);
+# A through each fight (level 2, 24/83 HP); out by the south exit, east on 1F1 to the Truce Inn's cell (25,19), A (074)
+# the forest by `playthrough.py goto` (tile BFS, A while $011F = 0), the world by `walkto --ow`
+40:16,20:16,40:48,20:16,40:64,20:80,80:16,20:64,80:32,20:16,80:80,20:16,80:32,20:16,80:32,20:32,80:240,10:32,0:30
+(100:2,0:38)*120,40:48,20:64,40:48,20:16,40:80,20:64,40:32,20:32,(100:2,0:18)*136,10:16,40:192,20:16,40:48,20:32,40:32
+20:16,40:96,10:8,40:48,20:16,40:64,20:16,(100:2,0:18)*86,80:96,10:16,80:16,10:16,80:96,20:224,0:150,20:16,80:48,20:16
+80:16,10:16,80:64,0:30,100:2,0:200
+
+## 21_inn -- the innkeeper (11,26) from (11,28): "That'll be 10 G. Register? Yes." -- the night, both healed (83, 76);
+# down the bedroom's stairs (075 -> 074), out, west on 1F1 to Manoria Cathedral's cell (12,17), A (081)
+40:48,10:8,0:10,100:2,0:120,100:2,(0:38,100:2)*15,0:300,20:32,40:48,10:16,0:150,20:48,80:16,20:64,80:96,20:16,10:16
+0:200,10:16,40:48,20:16,40:64,10:16,40:32,20:16,40:16,20:16,40:16,20:16,40:32,10:16,40:16,10:48,0:30,100:2,0:300
+
+## 22_cathedral -- up the nave: the hair pin at (8,10) ("What did you find?"), the nuns are Naga-ettes: the fight (won
+# at level 2), Frog ("Lower thine guard..."), "Go with the frog", the naming screen kept "Frog" (A on "What's your
+# name?", then Start, Start) -- Frog joins (party 00 02 04, storyline 15)
+10:280,0:20,100:2,0:200,(100:2,0:38)*250,0:100,(100:2,0:38)*45,0:120,100:2,0:150,8:2,0:40,8:2,0:100,(100:2,0:38)*20
+0:100
+
+## 23_organ -- Manoria Cathedral (081): the organ at (2,8) from (2,9) -- A: the secret door at the right wall opens (glb[255]
+# bit 4, the organ object's E5 tile copy) -- through it (12,7) into the sanctum (082)
+40:96,10:64,10:4,0:10,100:2,0:700,80:160,10:48,0:150
+
+## 24_sanctum_hall -- the sanctum's hall (082): north to its door (39,4) into 083, the fights on the way played by
+# tools/battle_pilot.py (attack; a Tonic under 35%; Frog's Slurp)
+# by `playthrough.py goto`
+40:16,10:128,40:8,10:48,80:16,10:112,40:208,0:80,100:2,0:138,100:2,0:16,100:2,0:150,100:2,0:16,100:2,0:494,20:2,0:10
+20:2,0:10,100:2,0:16,100:2,0:16,20:2,0:10,100:2,0:154,100:2,0:16,100:2,0:386,100:2,0:16,100:2,0:958,100:2,0:38,40:96
+10:240,0:80,100:2,0:122,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:466,100:2,0:16,100:2,0:358,100:2,0:16,100:2,0:186
+20:2,0:10,100:2,0:16,100:2,0:16,20:2,0:10,20:2,0:10,100:2,0:266,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:362,100:2
+0:16,100:2,0:1226,40:16,10:128,0:80,100:2,0:106,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:458,100:2,0:16,100:2,0:246
+100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:1530,40:16,10:64,0:150
+
+## 25_sanctum_switches -- 083: the north door opens on the organ (16,19) behind the spikes (obj36, glb[255] bit 2 -> the
+# tiles at (21,2)); the right switch (34,18, bit 1) clears the spikes' rows 22-24; the left one (9,18, bit 3). The way:
+# the central stairs to the balcony, right and down (a one-way drop), the right stairs up, the switch; the ladder at x 36
+# to the top hall, west, the ladder at x 6 down to the left room, its switch; down the left stairs, up to the balcony,
+# through the central door to the organ (A, then WAIT: an A while its scene runs plays it again); back the left way,
+# the ladder at x 6 up, the top hall to (21,7), Up through the opened door into 084
+10:176,80:160,20:144,0:2,80:72,10:300,0:2,40:32,10:64,0:80,100:2,0:122,100:2,0:16,100:2,0:390,100:2,0:16,100:2,0:586
+100:2,0:16,100:2,0:402,100:2,0:16,100:2,0:158,100:2,0:16,100:2,0:282,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:1178
+10:32,10:4,0:10,100:2,0:200,80:32,10:144,40:112,0:80,100:2,0:182,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:570,100:2
+0:16,100:2,0:430,100:2,0:16,100:2,0:206,100:2,0:16,100:2,0:654,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:270,100:2,0:16
+100:2,0:986,100:2,0:78,40:176,10:16,80:16,10:80,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8
+10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32
+80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8
+10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32
+40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8
+10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32
+80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8
+10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32
+40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8
+10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32
+80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8
+10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32
+40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8
+10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,40:8,10:32,80:8,10:32,10:48,0:200,40:32,20:16,40:16,20:16
+40:112,0:80,100:2,0:166,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:422,100:2,0:16,100:2,0:210,100:2,0:16,100:2,0:390
+100:2,0:16,100:2,0:346,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:382,100:2,0:16,100:2,0:238,100:2,0:16,100:2,0:246
+100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:1282,100:2,0:78,40:192,20:32,20:200,0:112,100:2,0:90,100:2,0:16,100:2,0:162
+100:2,0:16,100:2,0:170,100:2,0:16,100:2,0:282,100:2,0:16,100:2,0:1366,80:32,10:16,10:4,0:10,100:2,0:200,40:48,20:112
+20:300,0:2,80:72,10:200,0:2,80:160,10:120,0:82,100:2,0:118,100:2,0:128,100:2,0:142,100:2,0:16,100:2,0:150,20:2,0:10
+100:2,0:16,100:2,0:16,100:2,0:446,20:2,0:10,20:2,0:10,100:2,0:16,100:2,0:16,100:2,0:674,100:2,0:16,100:2,0:10,20:2
+0:10,100:2,0:16,100:2,0:16,20:2,0:10,100:2,0:402,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:118,100:2,0:16,100:2,0:750
+100:2,0:16,100:2,0:154,100:2,0:16,100:2,0:526,100:2,0:16,100:2,0:398,100:2,0:16,100:2,0:222,100:2,0:16,100:2,0:402
+100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:478,20:2,0:10,100:2,0:16,100:2,0:16,100:2,0:194,100:2,0:16,100:2,0:410,100:2
+0:16,100:2,0:182,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:1338,100:2,0:38,40:96,10:80,10:4,0:10,100:2,0:900,80:80
+20:96,20:120,0:2,10:16,40:160,20:150,0:2,40:80,10:300,0:2,10:48,0:80,100:2,0:106,100:2,0:16,100:2,0:10,100:2,0:16
+100:2,0:382,100:2,0:16,100:2,0:994,40:16,10:16,10:200,0:2,10:48,40:8,10:48,80:16,10:144,80:240,10:48,10:64,0:300
+
+## 26_yakra -- 084: west and down to the door (7,38) into 0C6; up the aisle: the chancellor ("Prepare yourself, Queen
+# Leene."), Frog, the true form -- Yakra (920 HP) played by the pilot (Frog's Slurp, a Revive); then Leene at (7,23):
+# A from (7,22) facing right -- "Let's return to the castle!" (storyline 1B, the change to 078)
+40:16,10:224,0:80,100:2,0:118,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:426,100:2,0:16,100:2,0:222,100:2,0:16,100:2
+0:10,100:2,0:16,100:2,0:402,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:318,100:2,0:16,100:2,0:262,100:2,0:16,100:2,0:390
+20:2,0:10,100:2,0:16,100:2,0:16,20:2,0:10,20:2,0:10,100:2,0:10,100:2,0:16,100:2,0:522,100:2,0:16,100:2,0:190,100:2
+0:16,100:2,0:222,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:974,40:16,10:128,0:80,100:2,0:126,100:2,0:16,100:2,0:10
+100:2,0:16,100:2,0:562,100:2,0:16,100:2,0:206,100:2,0:16,100:2,0:186,100:2,0:16,100:2,0:958,80:16,10:128,0:100,10:160
+0:140,(100:2,0:118)*19,100:2,0:174,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:1214,20:2,0:10,20:2,0:10,100:2,0:16,20:2
+0:10,100:2,0:16,20:2,0:10,100:2,0:154,20:2,0:10,20:2,0:10,100:2,0:16,20:2,0:10,100:2,0:16,20:2,0:10,100:2,0:474,100:2
+0:16,100:2,0:182,20:2,0:10,100:2,0:16,100:2,0:16,20:2,0:10,20:2,0:10,100:2,0:10,100:2,0:16,100:2,0:446,100:2,0:16
+100:2,0:978,20:2,0:10,100:2,0:16,100:2,0:16,100:2,0:170,100:2,0:16,100:2,0:514,20:2,0:10,100:2,0:16,100:2,0:16,20:2
+0:10,100:2,0:486,100:2,0:16,100:2,0:294,100:2,0:16,100:2,0:270,100:2,0:16,100:2,0:562,100:2,0:16,100:2,0:330,100:2
+0:16,100:2,0:174,100:2,0:16,100:2,0:406,100:2,0:16,100:2,0:202,100:2,0:16,100:2,0:698,100:2,0:16,100:2,0:526,20:2,0:10
+100:2,0:16,100:2,0:16,100:2,0:510,100:2,0:16,100:2,0:362,100:2,0:16,100:2,0:782,20:2,0:10,100:2,0:16,100:2,0:16,100:2
+0:526,100:2,0:16,100:2,0:542,20:2,0:10,100:2,0:16,100:2,0:16,100:2,0:658,100:2,0:16,100:2,0:394,100:2,0:16,100:2,0:394
+100:2,0:16,100:2,0:714,20:2,0:10,100:2,0:16,100:2,0:16,100:2,0:506,100:2,0:16,100:2,0:1246,(100:2,0:118)*12,100:2,0:38
+40:16,10:32,20:160,80:2,0:10,(100:2,0:38)*30,100:2,0:300
+
+## 27_castle_return -- 078: the throne room's scene (Frog leaves; storyline 1C, glb[161] bit 2), the Queen; Lucca: "Where
+# did Princess Nadia disappear?" -- the hall's right door (608,128) into the east tower (1D4), its three floors to 07A, the
+# Queen's chamber: the touch tiles (40,46)/(41,46) (objs 25/26, storyline 1C..20: loc[12] = 1) start obj 24's scene --
+# Marle comes back ("So let's go home, Crono!"), Marle joins (party 00 02 01, storyline 21). LEFT: the loads into 1D4 / 07A
+# hold a black frame more on the port (field_load_cost.md sec. 7), the touch runs a frame early, the camera ends 1 px high
+(100:2,0:38)*15,0:30,80:16,10:16,10:4,0:10,(100:2,0:38)*12,0:30,80:16,10:32,80:16,10:16,80:48,10:272,80:16,10:16,0:120
+80:16,10:16,0:150,80:16,10:16,0:150,80:16,10:16,0:200,20:48,40:32,20:48,20:128,40:176,10:240,80:32,10:16,0:100,40:64
+20:16,0:80,(100:2,0:58)*41,0:60
+
+## 28_castle_out -- out of the castle with Marle: 07A's door (54,45) into the tower (1D4), its down-stairs (the boxes at
+# x 7, rows 6 / 24 / 39: Left+Up) to 078 (37,9), down the hall to its exit (30,55) onto 1F1; Guardia Forest's north cell
+# (A, 077), through the forest to its south exit (15,47), the world east and north to Truce Canyon's cell (440,208), A (070)
+# the exits from the ROM's table ($E5:0000 + loc*2, 7-byte records); the forest by `route .. 15 47 --exit` (no fight met)
+10:16,80:64,40:32,20:240,80:176,10:176,80:32,10:200,40:8,10:48,0:100,40:16,10:16,0:150,40:16,10:16,0:150,40:16,10:16
+0:200,20:400,40:80,20:112,40:16,20:80,40:16,20:80,80:16,20:64,0:60,0:100,20:64,0:20,100:2,0:200,40:16,20:16,40:48
+20:16,40:64,20:80,80:16,20:48,80:48,20:16,80:64,20:96,40:16,20:32,40:48,20:16,40:80,10:8,40:48,20:8,40:64,20:32,80:16
+20:144,80:96,10:16,80:80,20:128,40:16,20:32,40:16,20:80,80:32,20:64,0:100,0:30,20:20,80:48,20:16,80:32,10:16,80:16
+10:16,80:64,10:32,80:16,10:32,40:16,10:40,80:16,10:80,0:30,100:2,0:250
+
+## 29_gate_home -- Truce Canyon (070): up and east along the canyon (the imps on the way: a fight, played by the pilot;
+# Crono, at 1 HP since Yakra, falls and gets up with 1), the exit (31,11) into the gate's clearing (071): the scene
+# ("How do we get home?", Lucca's Gate Key) -- A through it; the gate to 1000 A.D., the Telepod (008): Lucca stays
+# (storyline 27, party 00 01 81)
+# the canyon by `route 29_gate_home "0:2" 31 11 --exit`, the last steps Down + Right into the box
+0:2,40:16,10:16,40:16,10:16,40:16,10:32,40:144,10:128,80:16,10:16,80:16,10:64,80:64,10:64,0:80,100:2,0:118,100:2,0:90
+100:2,0:16,100:2,0:730,20:2,0:10,20:2,0:10,100:2,0:16,100:2,0:16,20:2,0:10,100:2,0:834,100:2,0:16,100:2,0:810,100:2
+0:16,100:2,0:702,100:2,0:16,100:2,0:502,100:2,0:16,100:2,0:734,100:2,0:16,100:2,0:1338,80:16,10:32,80:16,10:16,80:32
+10:16,80:16,10:16,80:160,20:128,80:80,20:16,80:64,0:100,(100:2,0:38)*115,0:100
+
+## 30_arrest -- 1000 A.D. with Marle: down from the Telepod (008) through 1B7 into Leene Square (005), its south exit onto
+# 1F0; west on the world to Guardia Forest's south cell (280,272), A (013); through the forest to its north exit, up to
+# the castle (280,208), A (015): "Princess Nadia!" -- the arrest, A through it to the courtroom (01B, storyline 2A, party
+# 00 81 81); the leg ends on the trial's opening pan
+0:2,20:144,0:60,20:160,40:16,20:176,0:60,20:112,80:16,20:80,40:48,20:128,80:32,20:160,0:100,20:40,40:32,20:60,40:112
+10:60,0:20,100:2,0:250,40:16,10:176,40:16,10:16,40:80,20:16,40:16,20:16,40:32,20:16,40:48,10:112,80:32,10:16,80:48
+10:16,80:32,10:16,80:32,10:112,40:16,10:16,40:16,10:16,40:32,10:16,40:48,10:112,80:16,10:16,80:16,10:16,80:80,10:96
+0:300,10:48,0:30,100:2,0:100,(100:2,0:38)*51,0:40
+
+## 31_trial -- the courtroom (01B): the trial -- the prosecution, the fair's flashbacks (1B7), the witnesses, the jury
+# ("Not guilty."), the Chancellor's sentence (storyline 2D), the prison (01C, 01D) -- Crono left in his cell (047)
+# written by `scene 31_trial "0:1"` (an A only when a box waits, BOX_SLACK frames in: a fixed-cadence press met a box on
+# its first waiting frame, and the side a frame later missed it)
+0:1011,100:2,0:146,100:2,0:170,100:2,0:102,100:2,0:498,100:2,0:54,100:2,0:46,100:2,0:266,100:2,0:226,100:2,0:222,100:2
+0:70,100:2,0:174,100:2,0:286,100:2,0:10,100:2,0:130,100:2,0:162,100:2,0:126,100:2,0:362,100:2,0:106,100:2,0:218,100:2
+0:106,100:2,0:70,100:2,0:70,100:2,0:106,100:2,0:50,100:2,0:202,100:2,0:170,100:2,0:74,100:2,0:126,100:2,0:178,100:2
+0:26,100:2,0:398,100:2,0:138,100:2,0:178,100:2,0:442,100:2,0:198,100:2,0:158,100:2,0:214,100:2,0:330,100:2,0:326,100:2
+0:354,100:2,0:398,100:2,0:382,100:2,0:10,100:2,0:390,100:2,0:358,100:2,0:130,100:2,0:130,100:2,0:138,100:2,0:134,100:2
+0:246,100:2,0:34,100:2,0:286,100:2,0:70,100:2,0:70,100:2,0:114,100:2,0:110,100:2,0:186,100:2,0:1386,100:2,0:162,100:2
+0:254,100:2,0:118,100:2,0:130,100:2,0:146,100:2,0:78,100:2,0:58,100:2,0:234,100:2,0:1060
+
+## 32_cell -- the cell (047): Crono waits; the guards come at f4092 ("We're here to take you to your place of
+# execution."), the walk to the guillotine (048, 01E) -- "We've sharpened up the guillotine..." -- and Lucca's rescue:
+# the guards down, Lucca joins (storyline 2E, party 00 02 81); control in 01E
+# written by `scene 32_cell "0:4100"`
+0:4622,100:2,0:382,100:2,0:3194,100:2,0:82,100:2,0:462,100:2,0:58,100:2,0:66,100:2,0:114,100:2,0:362,100:2,0:66,100:2
+0:244

@@ -91,7 +91,7 @@ It was only ever wrong as a source of TEXT.
 **Swapping the whole thing from fabricated text to real text turned NO existing check red.** The
 item and equip checks pin trace lines, MP caps and SFX posts; not one of them renders a description.
 That is the exact shape of an ungraded change, so `menu-item-descriptions-from-rom` was added:
-`ct_field --desctest` calls **`CtMenuEquipDesc` itself** (not the table) for eleven ids chosen to
+`Belthasar --desctest` calls **`CtMenuEquipDesc` itself** (not the table) for eleven ids chosen to
 span every arm above, and prints the table's shape as an anti-vacuity line
 (`table 242 entries, 105 non-empty`).
 

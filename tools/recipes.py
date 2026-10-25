@@ -2,7 +2,7 @@
 r"""Oracle states rebuilt from power-on: the recipes that replace captured savestates.
 
     python tools/recipes.py list
-    python tools/recipes.py make <name>... | all      [--rom ROM] [--force]
+    python tools/recipes.py make <name>... | all      [--rom ROM] [--force] [--jobs N]
     python tools/recipes.py show <name>                (the chain of steps, flattened)
 
 A savestate holds the console's whole memory -- the game's graphics, code and text -- so none may be published. What
@@ -28,6 +28,8 @@ Steps:
                          run `frames` frames with no pad -- how several captures were made from an earlier state
   ["sram", "<recipe>"]   the battery RAM of another recipe's state at power-on (CT_ORACLE_SRAM): only valid before
                          power_on / boot_to_bedroom
+  ["sram_file", "<path>"]  a third-party battery save at power-on, the same way: a file tools/fetch_saves.py downloads
+                         and verifies (tools/third_party_saves.json: its URL and SHA-256), never one of the owner's
 "expect" asserts the result: "loc" ($0100) and "wram" {"0xADDR": "0xVALUE", ...}; a recipe whose result does not
 match fails loudly rather than handing a wrong state to a generator or a check.
 
@@ -96,6 +98,8 @@ def key_of(recipes, name, rom_sha, tag):
         for st in r.get('steps', []):
             if st[0] == 'sram':
                 body.append(('sram', key_of(recipes, st[1], rom_sha, tag)))
+            elif st[0] == 'sram_file':
+                body.append(('sram_file', hashlib.sha256(open(sram_file(st[1]), 'rb').read()).hexdigest()))
     return hashlib.sha1(json.dumps([body, rom_sha, tag]).encode()).hexdigest()
 
 
@@ -139,6 +143,14 @@ def check_expect(r, path):
     return bad
 
 
+def sram_file(rel):
+    """A third-party battery save's path (tools/fetch_saves.py brings it), or a clear stop when it is not there."""
+    p = os.path.join(ROOT, rel)
+    if not os.path.exists(p):
+        sys.exit('recipes: %s is missing -- python tools/fetch_saves.py downloads it' % rel)
+    return p
+
+
 def write_srm(st):
     """<state>.srm: the battery RAM of a recipe's state -- the CTLS payload's last block (cart_handleState), as
     tools/gen/menu_loader.py reads it. An `sram` step boots the oracle with it (CT_ORACLE_SRAM)."""
@@ -147,15 +159,56 @@ def write_srm(st):
     return st + '.srm'
 
 
+class _Lock:
+    """An exclusive lock on <OUT>/<name>.lock, held across processes (two checks of a parallel suite asking for the same
+    recipe must not build it into the same files at once); the OS drops it when its holder dies."""
+    def __init__(self, path):
+        self.f = open(path, 'a+')
+        if os.name == 'nt':
+            import msvcrt
+            import time
+            while True:
+                try:
+                    self.f.seek(0)
+                    msvcrt.locking(self.f.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.2)
+        else:
+            import fcntl
+            fcntl.flock(self.f, fcntl.LOCK_EX)
+
+    def release(self):
+        if os.name == 'nt':
+            import msvcrt
+            self.f.seek(0)
+            msvcrt.locking(self.f.fileno(), msvcrt.LK_UNLCK, 1)
+        self.f.close()
+
+
 def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
     r = recipes[name]
     os.makedirs(OUT, exist_ok=True)
     st = os.path.join(OUT, name + '.state')
     meta = os.path.join(OUT, name + '.key')
     key = key_of(recipes, name, rom_sha, tag)
-    if not force and os.path.exists(st) and os.path.exists(meta) and open(meta).read() == key:
+
+    def cached():
+        return os.path.exists(st) and os.path.exists(meta) and open(meta).read() == key
+    if not force and cached():
         print('%srecipe %s: cached' % ('  ' * depth, name))
         return st
+    lock = _Lock(os.path.join(OUT, name + '.lock'))
+    try:
+        if not force and cached():                        # another process built it while this one waited
+            print('%srecipe %s: cached' % ('  ' * depth, name))
+            return st
+        return _build(recipes, name, r, st, meta, key, rom_path, rom_sha, tag, depth)
+    finally:
+        lock.release()
+
+
+def _build(recipes, name, r, st, meta, key, rom_path, rom_sha, tag, depth):
     parent = r.get('from')
     src = make(recipes, parent, rom_path, rom_sha, tag, False, depth + 1) if parent else None
     print('%srecipe %s: building' % ('  ' * depth, name), flush=True)
@@ -167,6 +220,9 @@ def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
         if op == 'sram':
             srm = make(recipes, step[1], rom_path, rom_sha, tag, False, depth + 1)
             env['CT_ORACLE_SRAM'] = srm + '.srm' if os.path.exists(srm + '.srm') else write_srm(srm)
+            continue
+        if op == 'sram_file':
+            env['CT_ORACLE_SRAM'] = sram_file(step[1])
             continue
         if op == 'power_on':
             p = run([rom_path, '--fb', tmp + '.raw', '--frames', str(step[1])], dict(env, PEEK_SAVE=tmp + '.state'), log)
@@ -206,12 +262,49 @@ def make(recipes, name, rom_path, rom_sha, tag, force=False, depth=0):
     return st
 
 
+def deps_of(recipes, name):
+    """The recipes `name` needs built first: its parent and the recipes its `sram` steps boot from."""
+    r = recipes[name]
+    d = [r['from']] if r.get('from') else []
+    return d + [st[1] for st in r.get('steps', []) if st[0] == 'sram']
+
+
+def make_many(recipes, names, rom_path, rom_sha, tag, jobs, force=False):
+    """make() every recipe in `names` and the chains under them, `jobs` at a time: a recipe starts once the recipes it
+    depends on are built, so the independent chains run side by side (each recipe's files are its own: no two jobs
+    touch the same state). `force` rebuilds the named ones only, as make() does. Returns {name: state}."""
+    from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+    need, todo = set(), list(names)
+    while todo:
+        n = todo.pop()
+        if n not in need:
+            need.add(n)
+            todo += deps_of(recipes, n)
+    done, out, running = set(), {}, {}
+    pending = set(need)
+    with ThreadPoolExecutor(max(1, jobs)) as ex:
+        while pending or running:
+            for n in sorted(p for p in pending if set(deps_of(recipes, p)) <= done):
+                pending.discard(n)
+                running[ex.submit(make, recipes, n, rom_path, rom_sha, tag, force and n in names)] = n
+            if not running:
+                sys.exit('recipes: a dependency cycle among %s' % ', '.join(sorted(pending)))
+            fin, _ = wait(running, return_when=FIRST_COMPLETED)
+            for f in fin:
+                n = running.pop(f)
+                out[n] = f.result()          # a failed recipe's SystemExit surfaces here
+                done.add(n)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('cmd', choices=['list', 'make', 'show', 'try'])
     ap.add_argument('names', nargs='*')
     ap.add_argument('--rom')
     ap.add_argument('--force', action='store_true')
+    ap.add_argument('--jobs', type=int, default=os.cpu_count() or 1,
+                    help='recipes built side by side (default: the CPU count); a chain still builds in order')
     a = ap.parse_args()
     recipes = load_all()
     if a.cmd == 'list':
@@ -241,7 +334,9 @@ def main():
     for n in names:
         if n not in recipes:
             sys.exit('recipes: no recipe %s' % n)
-        print('%s -> %s' % (n, os.path.relpath(make(recipes, n, rom_path, rom_sha, tag, a.force), ROOT)))
+    built = make_many(recipes, names, rom_path, rom_sha, tag, a.jobs, a.force)
+    for n in names:
+        print('%s -> %s' % (n, os.path.relpath(built[n], ROOT)))
     return 0
 
 

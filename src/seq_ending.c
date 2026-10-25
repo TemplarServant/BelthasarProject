@@ -13,6 +13,14 @@
 // (the mode-7 world, the credits text, the HDMA, the hooks, the render tasks and the main thread's $8930) is stage 2: its
 // setup packets and DMAs are not run here, and its inline calls (`F0 xxxx`) are accepted and left to it.
 #include "seq_ending.h"
+#include "seq_endingpic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_racepic.h"
+#include "seq_entry7.h"      // the overlay's palette fade $6439
+#include "seq_entry7pic.h"   // the overlay's text drawer $64CA (the credits' pages)
+#include "seq_entry6pic.h"   // the overlay's sprite lists $3A97 (the last planet)
+#include "seq_entry4.h"      // the overlay's stars $5777 / $579B (the star screen)
+#include "ct_vm.h"           // C3/0EFA, the quad window (CtPolyQuadImage)
+#include "objslot.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -36,24 +44,50 @@ int CtEndingStageHas(uint8_t operand) {
 static void endingClearTasks(uint8_t* w) { memset(w + 0x0920, 0, 0x20); }   // $7E:7EF8 `MVN $7E,$D2` (LDA #001F)
 static void endingClearHooks(uint8_t* w) { memset(w + 0x0940, 0, 0x10); }   // $7E:7F05 `MVN $7E,$D2` (LDA #000F)
 
+static void endingCopies(uint8_t* w, unsigned src) {                 // 9903 (M = 16): the palette fade's request ($6439)
+  wr(w, 0x0360, src); wr(w, 0x0362, 0x2200); wr(w, 0x0366, 0x0020); wr(w, 0x0364, 0x0070);
+}
 static int endingCall(uint8_t* w, unsigned page, unsigned tgt, const CtRaceIo* io) {
-  (void)page; (void)io;
+  CtSeqStagePic* pic = io ? io->pic : NULL;
   switch (tgt) {
-    case 0x8A01: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x01; return 0;   // 8A02 / 8A05, 8AD0 LDA #01 / STA $038C
-    case 0x8AF5: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x0F; return 0;   // 8AF6 / 8AF9, 8B15 LDA #0F / STA $038C
-    case 0x8BAF: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x00; return 0;   // 8BB0 / 8BB3, 8BC3 (A = $0000, TCD)
-    case 0x8C14: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x00; return 0;   // 8C15 / 8C18, 8C28 (A = $0000, TCD)
+    case 0x87CC: case 0x8790: if (pic) CtEndingPicCall(pic, w, page, tgt, io); return 0;   // the world's loads (the picture's)
+    case 0x9702: memmove(w + 0x2200, w + 0xC995, 0x0101); return 0;   // 9702 LDX #C995 / LDY #2200 / LDA #0100 / MVN $7E,$7E
+    case 0x96FB: wr(w, 0x3024, 0x3176); return 0;                     // 96FB: the main loop's call back to the RTS
+    case 0x9F8A:                                                        // 9F8A (16-bit X): colour animation $0520, the last fade
+      wr(w, 0x0527, 0xFF00); wr(w, 0x0520, 0x0050); wr(w, 0x0521, 0x0FE1); wr(w, 0x0523, 0x0001); wr(w, 0x0525, 0x0001); return 0;
+    case 0x9919: w[0x64D6] = w[0x0064]; w[0x64DA] = w[0x0065]; return 0;   // 991B: the credits' pen, into $64CA's operands
+    case 0x9FC8:                                                        // 9FC8 (8-bit A): colour animation $052C, a fade
+      wr(w, 0x0533, 0xFF00); w[0x052C] = 0x50; wr(w, 0x052D, 0x4001); wr(w, 0x052F, 0x0001); wr(w, 0x0531, 0x0002); return 0;
+    case 0x9FEA:                                                        // 9FEA: colour animation $0538
+      wr(w, 0x053F, 0xFF00); w[0x0538] = 0x50; wr(w, 0x0539, 0x3F41); wr(w, 0x053B, 0x0001); wr(w, 0x053D, 0x0002); return 0;
+    case 0x98F6: endingCopies(w, 0xC995); return 0;
+    case 0x98FB: endingCopies(w, 0xCA95); return 0;
+    case 0x9900: endingCopies(w, 0xCB95); return 0;
+  }
+  switch (tgt) {
+    case 0x8A01: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x01;            // 8A02 / 8A05, 8AD0 LDA #01 / STA $038C
+      if (pic) CtEndingPicCall(pic, w, page, tgt, io);
+      return 0;
+    case 0x8AF5: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x0F;            // 8AF6 / 8AF9, 8B15 LDA #0F / STA $038C
+      if (pic) CtEndingPicCall(pic, w, page, tgt, io);
+      return 0;
+    case 0x8BAF: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x00;            // 8BB0 / 8BB3, 8BC3 (A = $0000, TCD)
+      CtSeqStars5777(w, 0x80, 0);                              // 8BCB JSR $5777: A = $80 (8BC6), the carry the `F0` op's
+      if (pic) CtEndingPicCall(pic, w, page, tgt, io);         //   dispatch left clear (C3/0B6F ASL of op & 0F)
+      return 0;
+    case 0x8C14: endingClearTasks(w); endingClearHooks(w); w[0x038C] = 0x00;            // 8C15 / 8C18, 8C28 (A = $0000, TCD)
+      if (pic) CtEndingPicCall(pic, w, page, tgt, io);
+      return 0;
     case 0x8CD0:                                                                         // 8CD1 JSR $7EF8 (the tasks only)
       endingClearTasks(w);
-      if ((w[0x0384] & 0x0F) == 0x0F) wr(w, 0x0A20, 0x9315);   // 8CE0 LDA $0384 / AND #0F / CMP #0F / BNE: entry 15's end
-      return 0;                                                //   (8CE9 LDX #9315 / STX $0A20 -- the IP the call returns to)
+      if ((w[0x0384] & 0x0F) == 0x0F) { wr(w, 0x0A20, 0x9315); return 0; }   // 8CE0 LDA $0384 / AND #0F / CMP #0F / BNE: entry
+      if (pic) CtEndingPicCall(pic, w, page, tgt, io);                     //   15's end (8CE9 LDX #9315 / STX $0A20 -- the IP the
+      return 0;                                                            //   call returns to)
     case 0x8DF3:                                                                         // the last screen's planet:
+      if (pic) CtEndingPicCall(pic, w, page, tgt, io);                                   //   (8DFA-8E17: its palettes, the picture's)
       memset(w + 0x23C0, 0, 0x20);                                                       //   8E26 MVN $7E,$D2 (a palette row)
       wr(w, 0x71, 0x00E0); wr(w, 0x73, 0x0080); wr(w, 0x75, 0x0080);                    //   8E2C .. 8E3E: the pan that
       wr(w, 0x77, 0x0080); wr(w, 0x79, 0x0080);                                          //   task $9A0C runs out
-      return 0;
-    case 0x8790: case 0x87CC: case 0x96FB: case 0x9702:
-    case 0x98F6: case 0x98FB: case 0x9900: case 0x9919: case 0x9F8A: case 0x9FC8: case 0x9FEA:
       return 0;
     default:
       return -1;
@@ -72,7 +106,7 @@ static unsigned sine3465(const CtRaceIo* io, unsigned a) { return CtSeqSine(io, 
 
 // $7E:33D6 -- the signed product $F0 * $F2 into $F4-$F7 (D = the page): the sign of $F0 ^ $F2 kept, both made positive, then
 // $7E:31BF's unsigned 16 x 16 (seq_race.h CtSeqMul31BF), and the 32-bit result negated if the sign was set.
-static void mul33D6(uint8_t* w, unsigned d) {
+void CtSeqMul33D6(uint8_t* w, unsigned d) {
   unsigned f0 = rd(w, d + 0xF0), f2 = rd(w, d + 0xF2);
   int negr = ((f0 ^ f2) & 0x8000) != 0;
   if (f0 & 0x8000) f0 = ((f0 ^ 0xFFFF) + 1) & 0xFFFF;
@@ -93,11 +127,11 @@ static void task992A(uint8_t* w, const CtRaceIo* io) {
   const unsigned d = 0x0B00;
   wr(w, d + 0xF0, sine3465(io, rd(w, d + 0x0A)));                     // 992E LDA $0A / JSR $3465 / STA $F0
   wr(w, d + 0xF2, rd(w, d + 0x10));                                   // 9935 LDA $10 / STA $F2
-  mul33D6(w, d);
+  CtSeqMul33D6(w, d);
   wr(w, d + 0x02, ((rd(w, d + 0xF5) >> 4) + 0x0080) & 0xFFFF);        // 993C LDA $F5 / LSR x4 / CLC / ADC #0080 / STA $02
   wr(w, d + 0xF0, sine3465(io, rd(w, d + 0x0A) + 0x0100));            // 9948 LDA $0A / JSR $3461 / STA $F0
   wr(w, d + 0xF2, rd(w, d + 0x10));
-  mul33D6(w, d);
+  CtSeqMul33D6(w, d);
   unsigned s = (rd(w, d + 0xF5) >> 5) + 0x0070;                       // 9956 LDA $F5 / LSR x5 / CLC / ADC #0070
   unsigned c = s > 0xFFFF;
   wr(w, d + 0x04, s & 0xFFFF);                                        // 9961 STA $04
@@ -108,6 +142,75 @@ static void task992A(uint8_t* w, const CtRaceIo* io) {
   wr(w, 0x004E, (a + 0x1200 + c) & 0xFFFF);                           // 8929 ADC #1200 / STA $004E
 }
 
+// $7E:99B5 (D = 0) -- `$6D` / `$6F` = sin / cos of `$08` x 4 / x 2 times `$6B` (|sine| x `$6B` by $31BF, its bits 8-23, the
+// sign put back).
+static void task99B5(uint8_t* w, const CtRaceIo* io) {
+  unsigned fe = (rd(w, 0x08) << 1) & 0xFFFF; wr(w, 0xFE, fe);         // 99B5 LDA $08 / ASL / STA $FE
+  for (int k = 0; k < 2; k++) {
+    unsigned s = k ? sine3465(io, fe + 0x0100) : sine3465(io, (fe << 1) & 0xFFFF);   // 99BA ASL / JSR $3465; 99D9 JSR $3461
+    int neg = (s & 0x8000) != 0;
+    wr(w, 0xF0, neg ? ((s ^ 0xFFFF) + 1) & 0xFFFF : s); wr(w, 0xF2, rd(w, 0x6B));
+    CtSeqMul31BF(w, 0);
+    unsigned a = rd(w, 0xF5); if (neg) a = ((a ^ 0xFFFF) + 1) & 0xFFFF;
+    wr(w, k ? 0x6F : 0x6D, a);
+  }
+}
+// $7E:9D48 (the data bank $7E) -- every 8th frame the twinkle: four pairs of colours swapped in the CGRAM shadow ($2228/$222A,
+// $2222/$2224, $221A/$225A, $221C/$225C) and the same four in the palette's copy at $2000.
+static void task9D48(uint8_t* w) {
+  static const uint16_t pr[8][2] = { { 0x2228, 0x222A }, { 0x2222, 0x2224 }, { 0x221A, 0x225A }, { 0x221C, 0x225C },
+                                     { 0x2028, 0x202A }, { 0x2022, 0x2024 }, { 0x201A, 0x205A }, { 0x201C, 0x205C } };
+  if (rd(w, 0x08) & 0x0007) return;                                   // 9D48 LDA $08 / AND #0007 / BNE
+  for (int i = 0; i < 8; i++) { unsigned a = rd(w, pr[i][0]); wr(w, pr[i][0], rd(w, pr[i][1])); wr(w, pr[i][1], a); }
+}
+// $7E:9C58 (D = 0) -- ENTRY 10's SPRITE: its frame anew when `$A3` changed (`$A5`, the hook $9CE2 added, C3's $3974); at x =
+// -(page B's r1 + `$6D`), y = -(r2 + `$6F`), the window's HDMA bytes from them and the size `$AB` / `$AC`; every 4th frame
+// (`$A9`) the next of three tiles (`$A7`) written into the list's own bytes $A0F6 / $A0FA; then the list $9D27 + ($A3 & 3) x 8
+// through $A03D (the picture's).
+static void task9C58(uint8_t* w, const CtRaceIo* io) {
+  wr(w, 0x15, 0); wr(w, 0x17, 0);                                     // 9C58 STZ $15 / STZ $17 (16-bit)
+  if (w[0xA3] != w[0xA5]) {                                           // 9C5E LDA $A3 / CMP $A5 / BEQ
+    w[0xA5] = w[0xA3];
+    unsigned x = 0; while (x < 0x10 && rd(w, 0x0940 + x)) x += 2;     // 9C66 LDX #9CE2 / JSR $3974
+    if (x < 0x10) wr(w, 0x0940 + x, 0x9CE2);
+  }
+  unsigned t = (unsigned)w[0x0B02] + w[0x6D];                         // 9C6C CLC / ADC $6D
+  uint8_t a = (uint8_t)(((t & 0xFF) ^ 0xFF) + 1);                     // EOR #FF / INC A
+  w[0x15] = a; w[0x9077] = w[0x907A] = a;
+  t = (unsigned)a + w[0xAB];                                          // 9C7F CLC / ADC $AB
+  w[0x9078] = w[0x907B] = (uint8_t)t;
+  t = (unsigned)w[0x0B04] + w[0x6F];                                  // 9C8A CLC / ADC $6F
+  a = (uint8_t)(((t & 0xFF) ^ 0xFF) + 1); w[0x17] = a;
+  int c = a & 1; a >>= 1; w[0x9070] = a; w[0x9073] = (uint8_t)(a + c);   // 9C95 LSR A / ADC #00
+  a = w[0xAC]; c = a & 1; a >>= 1; w[0x9076] = a; w[0x9079] = (uint8_t)(a + c);   // 9CA0
+  if (++w[0xA9] == 4) {                                               // 9CAD INC $A9 / CMP #04
+    w[0xA9] = 0;
+    uint8_t n = (uint8_t)(w[0xA7] + 1); if (!((uint8_t)(n - 3) & 0x80)) n = 0;   // 9CB7 INC A / CMP #03 / BMI
+    w[0xA7] = n;
+    w[0xA0F6] = (uint8_t)((n << 2) | 0xE0); w[0xA0FA] = (uint8_t)(w[0xA0F6] + 2);   // 9CC2 ASL / ASL / ORA #E0, INC / INC
+  }
+  if (io && io->pic) CtEndingPicListA03D(w, rd(w, 0x9D27 + ((unsigned)(w[0xA3] & 3) << 3)));   // 9CDB LDA $9D27,X / JMP $A03D
+}
+// $7E:891B -- the main thread's `$004E` from page A's r5: ((r5 + $10) & $3E0) << 5, + $1200 (the dispatcher's carry clear).
+static void task891B(uint8_t* w) { wr(w, 0x004E, ((((rd(w, 0x0A0A) + 0x0010) & 0x03E0) << 5) + 0x1200) & 0xFFFF); }
+// $7E:37FA -- the object slots' service (FD/FFF7: the colour animations $0520..), `LDX $4202 / STX $F0` the open bus around it.
+static void task37FA(uint8_t* w, const CtRaceIo* io) {
+  wr(w, 0x00F0, 0x4242);
+  CtObjSlotIo o; memset(&o, 0, sizeof o);
+  o.s = w; o.colourModes = 1; o.rom = io ? io->rom : NULL; o.romLen = io ? io->romLen : 0;
+  CtObjSlotService(&o);
+}
+// $7E:999C -- the star screen's frame: once, the first 64 sprites kept for the stars (`$11` < $100: $3870's high-table byte, `$11`
+// = $100, `$13` = $0910), then entry 4's $579B -- X = 4 after $3870 (else the task's slot), the carry set (3870's `CPX #0004`, or
+// `CMP #0100`).
+static void task999C(uint8_t* w, unsigned slot) {
+  unsigned x = slot;
+  if ((rd(w, 0x11) - 0x0100) & 0x8000) {                              // 999C LDA $11 / CMP #0100 / BPL
+    CtSeqPicOamHigh3870(w); x = 4;                                    // 99A3 JSR $3870
+    wr(w, 0x11, 0x0100); wr(w, 0x13, 0x0910);
+  }
+  CtSeqStars579B(w, x, 1);                                            // 99B2 JMP $579B
+}
 // $7E:997D -- the last screens' page B (D = $0B00): r2 = sin r5 >> 6, r0 = cos r5 >> 6 (logical shifts of the 16-bit value).
 static void task997D(uint8_t* w, const CtRaceIo* io) {
   wr(w, 0x0B04, sine3465(io, rd(w, 0x0B0A)) >> 6);                   // 9981 LDA $0A / JSR $3465 / LSR x6 / STA $04
@@ -134,10 +237,11 @@ static unsigned creditsPageEnd(const uint8_t* w, unsigned x) {
 static void creditsColours(uint8_t* w, unsigned x) {                 // 9B9C .. 9BB4 (16-bit stores, in this order)
   wr(w, 0x0527, x); wr(w, 0x0520, 0x0050); wr(w, 0x0521, 0x04F0); wr(w, 0x0523, 0x0008); wr(w, 0x0525, 0x0001);
 }
-static unsigned task9B4F(uint8_t* w, unsigned t) {
+static unsigned task9B4F(uint8_t* w, unsigned t, const CtRaceIo* io) {
   if (!rd(w, 0x85)) return t;                                         // 9B4F LDA $85 / BNE / RTS
   if (rd(w, 0x83) & 1) {                                              // 9B54 LDA $83 / LSR A / BCC
     unsigned x = creditsPageEnd(w, rd(w, 0x0382));                    // 9B59 LDX $0382 / JSR $64CA
+    if (io && io->pic) CtSeqPicText64CA(w, rd(w, 0x0382));            //   (its sprites: the picture's)
     if ((rd(w, 0x038D) & 0x000F) != 0x000F) return t;                 // 9B5F AND #000F / CMP #000F / BNE
     wr(w, 0x81, rd(w, 0x81) - 1);                                     // 9B6A DEC $81
     if (rd(w, 0x81)) {                                                // 9B6C BNE -> 9B82
@@ -164,8 +268,12 @@ static unsigned task9B4F(uint8_t* w, unsigned t) {
 // skipped, each code less $40), to the `/` that ends it -- $4A past it, $48 the next tilemap row (+$20, in $4800-$4BE0). At
 // the `\` that ends the text: `INC $6A`, the hook $9EFC out ($3949), the task out ($39A7). The scroll $46 (9ED6: +8 with
 // $AD, else +1 on frames the PPU's field bit `$213F` bit 7 is set) is the picture's (stage 2).
-static unsigned task9E7B(uint8_t* w, unsigned t) {
-  if (!rd(w, 0xAD) && (rd(w, 0x08) & 0x000F)) return t;              // 9E7B LDA $AD / BNE; LDA $08 / AND #000F / BNE -> 9ED6
+static void scroll9ED6(uint8_t* w, const CtRaceIo* io) {
+  if (w[0xAD]) wr(w, 0x46, rd(w, 0x46) + 0x0008);                     // 9ED8 LDA $AD / AND #00FF / BNE; 9EE8 CLC / ADC #0008
+  else if (io && io->field && io->field(io->ctx)) wr(w, 0x46, rd(w, 0x46) + 1);   // 9EDF LDA $213E (16-bit) / ASL A / BCC / INC $46
+}
+static unsigned task9E7B(uint8_t* w, unsigned t, const CtRaceIo* io) {
+  if (!rd(w, 0xAD) && (rd(w, 0x08) & 0x000F)) { scroll9ED6(w, io); return t; }   // 9E7B LDA $AD / BNE; LDA $08 / AND #000F / BNE
   memset(w + 0x1414, 0, 0x20);                                        // 9E86 MVN $00,$D2: 32 zeros into $1414
   unsigned x = rd(w, 0x4A), o = 0x141C;                               // 9E99 $2181 = $141C, 9E9F LDX $4A
   for (int guard = 0; guard < 0x10000; guard++) {
@@ -173,6 +281,7 @@ static unsigned task9E7B(uint8_t* w, unsigned t) {
     if (b == 0x2F) {                                                  // 9EA6 CMP #2F -> 9EC4
       wr(w, 0x4A, x);                                                 // 9EC4 STX $4A
       wr(w, 0x48, (((rd(w, 0x48) + 0x0020) & 0x03E0) + 0x4800) & 0xFFFF);   // 9EC6 REP #21 / ADC #0020 / AND #03E0 / ADC #4800
+      scroll9ED6(w, io);                                              // (on into 9ED6)
       return t;
     }
     if (b == 0x5C) {                                                  // 9EAA CMP #5C -> 9EF1
@@ -194,7 +303,16 @@ static unsigned task9E7B(uint8_t* w, unsigned t) {
 // `DEC $0A04` -- eight bits, page A's r2.
 static unsigned task9A0C(uint8_t* w, unsigned t, const CtRaceIo* io) {
   unsigned a;
+  // 9A0C-9A4F: the window's quad, C3/0EFA into $7E:E000 -- (`$71`, `$73` / 4 + 8), (`$71`, `$79` / 4 + 9), ($FF, `$77` / 4), ($FF,
+  // `$75` / 4); the 16-bit stores in the ROM's order, the 8-bit ones after.
+  wr(w, 0x0351, 0x7E00); wr(w, 0x0350, 0xE000);
+  wr(w, 0x0367, rd(w, 0x75) >> 2); wr(w, 0x0365, rd(w, 0x77) >> 2);
+  wr(w, 0x0363, (rd(w, 0x79) >> 2) + 0x0009); wr(w, 0x0361, (rd(w, 0x73) >> 2) + 0x0008);
+  w[0x0364] = 0xFF; w[0x0366] = 0xFF; w[0x0360] = w[0x71]; w[0x0362] = w[0x71];
+  CtPolyQuadImage(w);                                                 // 9A4F JSL C3/0EFA
   if (rd(w, 0x71)) {                                                  // 9A55 LDA $71 / BEQ -> 9A7E
+    wr(w, 0x15, rd(w, 0x71) - 0x000C); wr(w, 0x17, rd(w, 0x73) >> 2); // 9A59 SEC / SBC #000C, 9A61 LSR / LSR
+    if (io && io->pic) CtSeqPicList3A97(w, 0xA1E2);                   // 9A67 JSL $7E3A97 (the planet's sprite: the picture's)
     wr(w, 0x71, rd(w, 0x71) - 2);                                     // 9A6E DEC $71 / DEC $71
     a = (rd(w, 0x73) + 4) & 0xFFFF; wr(w, 0x73, a); wr(w, 0x79, a);  // 9A72 .. 9A7A, BRA 9A94
   } else {
@@ -213,10 +331,23 @@ static unsigned task9A0C(uint8_t* w, unsigned t, const CtRaceIo* io) {
 // $7E:8D56 (the last screen's text, added by page A at `F5 08`) points the rolling text at its start -- 8DB7 `$4A = $B099`,
 // `$48 = $FFE0` -- sets $038C = 1 (8DB2) and removes itself (8DF0 JMP $39DE).
 static unsigned endingHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) {
-  (void)slot; (void)io;
+  CtSeqStagePic* pic = io ? io->pic : NULL;
   switch (h) {
-    case 0x8D56: w[0x038C] = 0x01; wr(w, 0x4A, 0xB099); wr(w, 0x48, 0xFFE0); return 0;
-    default: return h;
+    case 0x8D56:
+      if (pic) CtEndingPicHook(pic, w, slot, h, io);                  // its VRAM, HDMA and layers (the picture's)
+      w[0x038C] = 0x01; wr(w, 0x4A, 0xB099); wr(w, 0x48, 0xFFE0); return 0;
+    case 0x8C05: memset(w + 0x0900, 0, 0x20); return h;               // 8C05 MVN $00,$D2: the OAM's high table cleared (the stars')
+    case 0x9CE2:                                                      // entry 10's sprite frame: its DMA the picture's; the
+      if (pic) CtEndingPicHook(pic, w, slot, h, io);                  //   sprite's width / height for $9C58 from the table
+      { unsigned x = (unsigned)(w[0xA3] & 3) << 3; w[0xAB] = w[0x9D29 + x]; w[0xAC] = w[0x9D2B + x]; }   // 9D09 / 9D0F
+      return 0;                                                       //   9D22 JMP $39DE
+    case 0x8E44:                                                      // the last screen's layers (the picture's), HDMA on:
+      if (pic) CtEndingPicHook(pic, w, slot, h, io);
+      w[0x038C] = 0x01; return 0;                                     //   8E80 LDA #01 / STA $038C, 8E85 JMP $39DE
+    case 0x9F2B: case 0x9F39: case 0x9F47: case 0x9F73:               // one VRAM transfer each (the picture's), then out ($39DE)
+      if (pic) CtEndingPicHook(pic, w, slot, h, io);
+      return 0;
+    default: return (io && io->pic) ? CtEndingPicHook(io->pic, w, slot, h, io) : h;
   }
 }
 
@@ -231,10 +362,20 @@ static unsigned endingTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
     case 0x90C1: task90C1(w); return t;
     case 0x992A: task992A(w, io); return t;
     case 0x997D: task997D(w, io); return t;
-    case 0x9B4F: return task9B4F(w, t);
-    case 0x9E7B: return task9E7B(w, t);
+    case 0x9B4F: return task9B4F(w, t, io);
+    case 0x9E7B: return task9E7B(w, t, io);
     case 0x9A0C: return task9A0C(w, t, io);
-    default: return t;
+    case 0x37FA: task37FA(w, io); return t;
+    case 0x6439: CtSeqPalFade6439(w); return t;
+    case 0x99B5: task99B5(w, io); return t;
+    case 0x9D48: task9D48(w); return t;
+    case 0x891B: task891B(w); return t;
+    case 0x999C: task999C(w, slot); return t;
+    case 0x9D45: wr(w, 0x0A0A, rd(w, 0x0A0A) - 1); task9D48(w); return t;   // 9D45 DEC $0A0A, then $9D48
+    case 0x9C58: task9C58(w, io); return t;
+    default:                                                          // 9ABD 9BF9 8850 99FA: the picture's
+      if (io && io->pic) CtEndingPicTask(io->pic, w, slot, t, io);
+      return t;
   }
 }
 
@@ -254,6 +395,7 @@ int CtEndingStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   unsigned e = operand & 0x0F;                                        // 85D4 / 86B5 LDA $0384 / AND #0F
   // $7E:8538 -- the setup. Its picture (the VRAM packets $3691, the WRAM tables $36AA / $38E7 / C3/09E9, the DMAs, the PPU) is
   // stage 2; what the logic reads follows, in the setup's order.
+  if (io && io->pic) { CtEndingPicReset(); CtEndingPicSetupA(io->pic, w, io); }   // 8538-86A1: the picture's loads
   w[0x6525] = 0x3F;                                                   // 8552 LDA #3F / STA $7E6525 (a byte of the overlay)
   if (e == 0x0A) {                                                    // 864F LDX #9CE2 / JSR $3974: entry 10's own hook, in
     unsigned x = 0; while (rd(w, 0x0940 + x)) x += 2;                 //   the first free slot of $0940
@@ -269,17 +411,23 @@ int CtEndingStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   for (unsigned y = 0; y < 0x90; y += 0x0C) w[0x0520 + y] = 0;        // 86F2 JSL $FD:FFEE -> FD/E275: the colour animations off
   wr(w, 0x81, 0x0001); wr(w, 0x7D, 0x0040); wr(w, 0x7F, 0x0140);     // 86FA .. 8707 (16-bit stores: $81-$82, $7D-$7E, $7F-$80)
   w[0x0396] = 1;                                                      // 8709 LDA #01 / STA $0396: no soft reset while it plays
+  if (io && io->pic) CtEndingPicSetupB(io->pic, w, io);              // 870E-8714, 8722-874E: the stars, HDMA, the layers
   w[0x038C] = 0x1F;                                                   // 8717
   wr(w, 0x038E, 0x0101);                                              // 871C LDX #0101 / STX $038E: a fade step every frame
   // $7E:300D .. 301E: $388B (CGRAM), $31B0 (the vblank), JSL C3/08D0 (one NMI, run here), NMI on, STZ $00, STZ $0392
+  if (io && io->pic) CtRacePicCgram(io->pic, w);                      // 300D JSR $388B
+  g_ctRaceOpenNmi = 1;   // (the setup's last NMI: its posts wait for the opening's black frames, seq_race.h)
   CtSeqStageNmiHooks(w, 0, io, endingHook, endingTask);
+  g_ctRaceOpenNmi = 0;
   wr(w, 0x0000, 0); wr(w, 0x0392, 0);
+  if (io && io->pic) CtEndingPicThread(io->pic, w);                   // 3023: the main loop's first pass
   return 0;
 }
 
 int CtEndingStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
   int st = CtSeqStageNmiHooks(w, joy, io, endingHook, endingTask);   // (the NMIs run on over a song's post: CtSeqStageSongTick)
   if (st != 2) s_songHold = CtSeqStageSongTick(w, io, s_songHold);
+  if (st != 2 && io && io->pic) CtEndingPicThread(io->pic, w);        // the main loop's pass after the NMI
   return st;
 }
 

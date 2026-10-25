@@ -25,7 +25,7 @@ from ctlib import fb as FB
 
 ROM = 'Chrono_Trigger_USA_SNES.sfc'
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT_INTRO_BASE = 141
 
 

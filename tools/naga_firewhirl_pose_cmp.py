@@ -57,7 +57,7 @@ def main():
                     CT_SHOTS_AT=str(total), CT_SHOTS_EXIT='1')
         # (the interactive path, ended by CT_SHOTS_EXIT: --selftest fights the battle synchronously and prints no
         #  `battlephase:` line, and the keys would then land at the cartridge's field frames, not its battle's)
-        r = subprocess.run([os.path.join(ROOT, 'build', 'ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '129',
+        r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '129',
                             '--loadwram', lw], cwd=ROOT, env=penv, capture_output=True, text=True, errors='replace')
         p = r.stderr.splitlines()
         m = re.search(r'battlephase: begins at field f(\d+)', r.stderr)

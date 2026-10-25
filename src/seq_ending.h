@@ -22,5 +22,7 @@ long CtEndingStageSetupCycles(uint8_t operand);
 int  CtEndingStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
 int  CtEndingStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);
 void CtEndingStageClose(uint8_t* w, const CtRaceIo* io);
+// $7E:33D6 -- the signed product `$F0` x `$F2` into `$F4-$F7` on the direct page `d` (the overlay's; the picture's hooks use it).
+void CtSeqMul33D6(uint8_t* w, unsigned d);
 
 #endif

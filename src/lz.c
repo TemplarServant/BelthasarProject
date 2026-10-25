@@ -18,6 +18,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lz.h"
+#include "assets.h"
+#include "romview.h"
+// A byte of the ROM's tables (the location records and pointer lists, the world header...): the container's named table
+// when one covers it (CT_ASSET_TABLE, romview.h), else the ROM's.
+#define RB(o) CtRomByte(rom, (long)romLen, (long)(o))
 
 #define LZ_NO_CAP ((size_t)-1)
 
@@ -38,8 +43,86 @@ static int lz_copy_bytes(const uint8_t* data, size_t dataLen, uint8_t* out, size
   return 1;
 }
 
+static const CtAssets* g_lzAssets;
+static const uint8_t* g_lzRom;
+static const uint8_t* g_lzRom2[3];
+static int lzIsRom(const uint8_t* p) {
+  if (!p) return 0;
+  if (p == g_lzRom) return 1;
+  for (int i = 0; i < 3; i++) if (g_lzRom2[i] == p) return 1;
+  return 0;
+}
+void ct_lz_add_rom_image(const uint8_t* rom) {
+  for (int i = 0; i < 3; i++) if (!g_lzRom2[i] || g_lzRom2[i] == rom) { g_lzRom2[i] = rom; return; }
+}
+
+// CT_LZ_MISSLOG=<file>: every stream a decompression or a cost took from a ROM image, not the container, once per
+// offset and caller: `OFFSET CALLER kind` (CALLER = the calling instruction relative to the executable, resolved by
+// tools/rom_census.py --lzmiss through build/Belthasar.map). The list a work package adds to tools/gen/lz_pack.py.
+#ifdef _MSC_VER
+#include <intrin.h>
+__declspec(dllimport) void* __stdcall GetModuleHandleA(const char* name);   // (not <windows.h>: its `small` macro)
+#define LZ_CALLER() ((uintptr_t)_ReturnAddress() - (uintptr_t)GetModuleHandleA(NULL))
+#else
+#define LZ_CALLER() ((uintptr_t)__builtin_return_address(0))
+#endif
+#ifdef _WIN32
+__declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
+static long lzPid(void) { return (long)GetCurrentProcessId(); }
+#else
+#include <unistd.h>
+static long lzPid(void) { return (long)getpid(); }
+#endif
+static const char* lzExe(void) {               // the executable's base name: a map resolves only its own callers
+  static char name[64];
+  if (!name[0]) {
+#ifdef _WIN32
+    char path[512] = "";
+    extern __declspec(dllimport) unsigned long __stdcall GetModuleFileNameA(void* m, char* p, unsigned long n);
+    GetModuleFileNameA(NULL, path, sizeof path);
+#else
+    char path[512] = "?";
+    ssize_t n = readlink("/proc/self/exe", path, sizeof path - 1);
+    if (n > 0) path[n] = 0; else strcpy(path, "?");
+#endif
+    const char* b = path;
+    for (const char* q = path; *q; q++) if (*q == '\\' || *q == '/') b = q + 1;
+    snprintf(name, sizeof name, "%s", b);
+  }
+  return name;
+}
+static void lzMiss(size_t start, uintptr_t caller, const char* kind) {
+  static FILE* f; static int tried; static uint64_t seen[4096]; static int nseen;
+  if (!tried) { tried = 1; const char* p = getenv("CT_LZ_MISSLOG"); char path[1024];
+    if (p && strstr(p, "%d")) { snprintf(path, sizeof path, p, (int)lzPid()); p = path; }
+    if (p && *p) f = fopen(p, "w"); }
+  if (!f) return;
+  uint64_t key = ((uint64_t)start << 32) ^ (uint64_t)caller;
+  for (int i = 0; i < nseen; i++) if (seen[i] == key) return;
+  if (nseen < 4096) seen[nseen++] = key;
+  fprintf(f, "%06lX %llX %s %s\n", (unsigned long)start, (unsigned long long)caller, kind, lzExe());
+  fflush(f);
+}
+void ct_lz_use_assets(const void* assets, const uint8_t* rom) { g_lzAssets = (const CtAssets*)assets; g_lzRom = rom; }
+const uint8_t* ct_lz_asset(size_t start, size_t* outLen, long* cyc7e, long* cyc7f) {
+  uint32_t n = 0;
+  const uint8_t* e = g_lzAssets ? CtAssetGet(g_lzAssets, CT_ASSET_LZ, (uint32_t)start, &n) : NULL;
+  if (!e || n < 12) return NULL;
+  uint32_t len = (uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24);
+  if (len + 12 != n) return NULL;
+  if (outLen) *outLen = len;
+  if (cyc7e) *cyc7e = (long)(int32_t)(e[4] | e[5] << 8 | e[6] << 16 | (uint32_t)e[7] << 24);
+  if (cyc7f) *cyc7f = (long)(int32_t)(e[8] | e[9] << 8 | e[10] << 16 | (uint32_t)e[11] << 24);
+  return e + 12;
+}
+
 size_t ct_lz_decompress_bounded(const uint8_t* data, size_t dataLen,
                                 uint8_t* out, size_t outCap, size_t start) {
+  if (g_lzAssets && lzIsRom(data)) {              // the ROM's stream: the container's copy, when it holds one
+    size_t n = 0; const uint8_t* e = ct_lz_asset(start, &n, NULL, NULL);
+    if (e) { if (n > outCap) return 0; memcpy(out, e, n); return n; }
+  }
+  if (data && dataLen > 0x100000) lzMiss(start, LZ_CALLER(), lzIsRom(data) ? "decompress" : "decompress-other-image");
   if (start + 2 >= dataLen) return 0;
   size_t compressed_size = ((size_t)data[start + 1] << 8) | data[start];
   size_t byte_pos = start + 2;
@@ -157,6 +240,11 @@ size_t ct_lz_hirom_offset(unsigned addr24) {
 }
 
 long ct_lz_rom_cycles(const uint8_t* data, size_t dataLen, size_t start, int dstBankOdd) {
+  if (g_lzAssets && lzIsRom(data)) {
+    long c7e = 0, c7f = 0;
+    if (ct_lz_asset(start, NULL, &c7e, &c7f)) return dstBankOdd ? c7f : c7e;
+  }
+  if (data && dataLen > 0x100000) lzMiss(start, LZ_CALLER(), lzIsRom(data) ? "cost" : "cost-other-image");
   if (!data || start + 2 >= dataLen) return 0;
   size_t base = start;
   size_t x = base + 2;
@@ -310,7 +398,7 @@ long ct_map_build_cycles(const uint8_t* m, size_t len) {
 
 // C0/A33B WALKED -- everything the map load costs besides its decompression, cycle for cycle (the traces' costs,
 // tools/map_cost_proto.py is the twin; exact against the cartridge on loc $082 and $005). The model above stands in
-// for it only where the walk stops (a map whose header bytes 2-3 set up layer scrolls: C0/A463 / C0/A4B3, no trace).
+// for it only where the walk stops (a map the RLE plane runs past).
 //   the header parse C0/A33B-A508: map byte 1's bits 7-4 ($0BCA, $0BC9, $36, ..), $01BB (C0/0BE8 clears it on every
 //     location entry; C0/6DCF's FF arm -- record byte 2 = FF -- sets it), bytes 2 and 3 zero;
 //   C0/7399: each of the six plane dimensions -> a mask by a CMP #40 / #20 / #30 chain, then the record's bounds
@@ -326,24 +414,34 @@ long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc) {
   if (!rom || loc < 0 || loc > 511) return -1;
   const size_t REC = 0x360000u + (size_t)loc * 14;
   if (REC + 14 > romLen) return -1;
-  unsigned mapId = (unsigned)rom[REC + 4] | ((unsigned)rom[REC + 5] << 8);
+  unsigned mapId = (unsigned)RB(REC + 4) | ((unsigned)RB(REC + 5) << 8);
   size_t me = 0x361E00u + (size_t)mapId * 3;
   if (me + 3 > romLen) return -1;
-  size_t src = ct_lz_hirom_offset((unsigned)rom[me] | ((unsigned)rom[me + 1] << 8) | ((unsigned)rom[me + 2] << 16));
+  size_t src = ct_lz_hirom_offset((unsigned)RB(me) | ((unsigned)RB(me + 1) << 8) | ((unsigned)RB(me + 2) << 16));
   uint8_t* m = (uint8_t*)malloc(0x20000);
   if (!m) return -1;
   size_t len = ct_lz_decompress_bounded(rom, romLen, m, 0x20000, src);
   long k = -1;
-  if (len < 8 || m[2] || m[3]) goto out;                  /* C0/A463 / C0/A4B3: not traced */
+  if (len < 8) goto out;
   {
-    const int b1 = m[1], bb = rom[REC + 2] == 0xFF;
+    const int b1 = m[1], bb = RB(REC + 2) == 0xFF;
     k = 780 + ((b1 & 0x80) ? 68 : 44) + 32 + 56 + 32 + 50 + 32 + ((b1 & 0x10) ? 64 : 18) + 952   /* the header */
       + (bb ? 76 : 18) + 240 + (bb ? 76 : 18) + 334;
+    /* header bytes 2 and 3 (C0/A463 / C0/A4B3), the layers' scroll speeds: a non-zero byte costs 182; its low field (bits
+       0-2) a shift loop of 118 + 54 a step past the first, its sign (bit 3) 58; its high field (bits 4-6) 166 + 54 a
+       step, its sign (bit 7) 58 -- walked from the ROM on the traces' costs (tools/load_cost_consts.py) */
+    for (int i = 2; i < 4; i++) {
+      int b = m[i], lo = b & 7, hi = (b >> 4) & 7;
+      if (!b) continue;
+      k += 182;
+      if (lo) k += 118 + 54L * (lo - 1) + ((b & 0x08) ? 58 : 0);
+      if (hi) k += 166 + 54L * (hi - 1) + ((b & 0x80) ? 58 : 0);
+    }
     const int dims[6] = { ((m[0] & 3) + 1) << 4, ((m[0] & 0x0C) + 4) << 2, (m[0] & 0x30) + 0x10,
                           ((m[0] & 0xC0) >> 2) + 0x10, ((m[1] & 3) + 1) << 4, ((m[1] & 0x0C) + 4) << 2 };
     for (int i = 0; i < 6; i++)                            /* C0/7399 */
       k += 38 + (dims[i] == 0x40 ? 50 : dims[i] == 0x20 ? 92 : dims[i] == 0x30 ? 116 : 110);
-    k += 64 + ((rom[REC + 10] & 0x80) ? 214 : 222);
+    k += 64 + ((RB(REC + 10) & 0x80) ? 214 : 222);
     if (getenv("CT_MAPCOST_DEBUG")) fprintf(stderr, "mapcost: after %s %ld\n", "masks", k);
     static const long head[3] = { 336, 252, 252 };        /* C0/A521's plane copies */
     for (int i = 0; i < 3; i++) {
@@ -392,12 +490,12 @@ long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc) {
     if (getenv("CT_MAPCOST_DEBUG")) fprintf(stderr, "mapcost: after %s %ld\n", "rle", k);
     k += 201766;                                           /* C0/A66B's fill and MVNs */
     long e5 = 0x250000L;
-    unsigned x = rom[e5 + 2 * loc] | (rom[e5 + 2 * loc + 1] << 8), end = rom[e5 + 2 * loc + 2] | (rom[e5 + 2 * loc + 3] << 8);
+    unsigned x = RB(e5 + 2 * loc) | (RB(e5 + 2 * loc + 1) << 8), end = RB(e5 + 2 * loc + 2) | (RB(e5 + 2 * loc + 3) << 8);
     for (int guard = 0; ; guard++) {
       k += 28;
       if (x >= end || guard > 4096) { k += 76; break; }
       k += 78;
-      int n = rom[e5 + x + 2];
+      int n = RB(e5 + x + 2);
       int y = n & 0x7F, first = 1;
       k += (n & 0x80) ? 124 : 106;                        /* a column (C0/A6DC) / a row */
       for (;;) {
@@ -475,7 +573,7 @@ int ct_lz_world_packets(const uint8_t* rom, size_t romLen, int world,
   if (!rom || world < 0 || world > 7) return 0;
   size_t hp = ct_lz_hirom_offset(0xC6FD00) + (size_t)world * 2;
   if (hp + 2 > romLen) return 0;
-  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)rom[hp] | ((unsigned)rom[hp + 1] << 8)));
+  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)RB(hp) | ((unsigned)RB(hp + 1) << 8)));
   int n = 0;
   for (int i = 0; i < CT_OW_SITE_N && n < max; i++) {
     const CtOwSite* s = &CT_OW_SITES[i];
@@ -484,12 +582,12 @@ int ct_lz_world_packets(const uint8_t* rom, size_t romLen, int world,
     else if (s->hdrIdx == -2) idx = 1;
     else {
       if (hdr + (size_t)s->hdrIdx >= romLen) continue;
-      idx = rom[hdr + s->hdrIdx];
+      idx = RB(hdr + s->hdrIdx);
       if (idx & 0x80) continue;                          /* the loader's own BMI: bit 7 = no packet */
     }
     size_t e = ct_lz_hirom_offset(s->table) + (size_t)idx * 3;
     if (e + 3 > romLen) continue;
-    srcOut[n] = (unsigned)rom[e] | ((unsigned)rom[e + 1] << 8) | ((unsigned)rom[e + 2] << 16);
+    srcOut[n] = (unsigned)RB(e) | ((unsigned)RB(e + 1) << 8) | ((unsigned)RB(e + 2) << 16);
     dstOut[n] = s->dstBank;
     n++;
   }
@@ -510,7 +608,7 @@ long ct_lz_world_return_cost(const uint8_t* rom, size_t romLen, int world, int* 
   if (!rom || world < 0 || world > 7) return 0;
   size_t hp = ct_lz_hirom_offset(0xC6FD00) + (size_t)world * 2;
   if (hp + 2 > romLen) return 0;
-  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)rom[hp] | ((unsigned)rom[hp + 1] << 8)));
+  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)RB(hp) | ((unsigned)RB(hp + 1) << 8)));
   long cyc = 0; int n = 0;
   for (int i = 0; i < CT_OW_SITE_N; i++) {
     const CtOwSite* s = &CT_OW_SITES[i];
@@ -520,12 +618,12 @@ long ct_lz_world_return_cost(const uint8_t* rom, size_t romLen, int world, int* 
     else if (s->hdrIdx == -2) idx = 1;
     else {
       if (hdr + (size_t)s->hdrIdx >= romLen) continue;
-      idx = rom[hdr + s->hdrIdx];
+      idx = RB(hdr + s->hdrIdx);
       if (idx & 0x80) continue;
     }
     size_t e = ct_lz_hirom_offset(s->table) + (size_t)idx * 3;
     if (e + 3 > romLen) continue;
-    uint32_t src = (unsigned)rom[e] | ((unsigned)rom[e + 1] << 8) | ((unsigned)rom[e + 2] << 16);
+    uint32_t src = (unsigned)RB(e) | ((unsigned)RB(e + 1) << 8) | ((unsigned)RB(e + 2) << 16);
     cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset(src), s->dstBank == 0x7F);
     n++;
   }
@@ -539,6 +637,73 @@ long ct_lz_world_cost(const uint8_t* rom, size_t romLen, int world, int* outPack
   for (int i = 0; i < n; i++)
     cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset(src[i]), dst[i] == 0x7F);
   if (outPackets) *outPackets = n;
+  return cyc;
+}
+
+// C2/09C5, the world's first screen (C2/2C81 and C2/2C88, one call per BG), less its fixed part: what the camera's cells
+// decide. `LDA $E3,X / LSR / BCS / DEC / BPL / LDA #005F` picks the start column $08 (odd: 18; even: 42; even and zero:
+// 54) and `LDA $20,X / BIT #0008 / BEQ` its pixel offset (odd: 60, even: 48) -- the same on $E7 / $26 for the row $0A.
+// The 18 columns (C2/0A46 .. 0A64) each build 16 rows: the row offset `$0A * 0x60` wraps at 0x1800 (C2/0A99 BCC not
+// taken + TDC: +6) in every column when $0A >= 48, the column at 0x60 (C2/0A52: +6, once) when $08 >= 78, and C2/0ADC's
+// VRAM column `$0C >> 3` takes the second screen (C2/0AE4 not taken, CLC / ADC #03E0: +24) for every column at 32 or
+// past. The rest of the routine (its 36 DMAs of 64 bytes) is fixed, up to their 8-cycle alignment (a timing artefact,
+// within 30 cycles a call on the traces).
+static long owFirstScreenVar(unsigned e3, unsigned e7) {
+  long c = 0;
+  unsigned h = e3 >> 1, v = e7 >> 1, col, row;
+  if (e3 & 1) { c += 18 + 60; col = h; } else { c += (h ? 42 : 54) + 48; col = h ? h - 1 : 0x5F; }
+  if (e7 & 1) { c += 18 + 60; row = v; } else { c += (v ? 42 : 54) + 48; row = v ? v - 1 : 0x3F; }
+  if (row >= 48) c += 18 * 6;
+  if (col >= 78) c += 6;
+  unsigned px = ((e3 << 3) - ((e3 & 1) ? 8 : 16)) & 0x1FF;
+  for (int k = 0; k < 18; k++, px = (px + 0x10) & 0x1FF)
+    if ((px >> 3) >= 32) c += 24;
+  return c;
+}
+
+// THE WORLD LOAD, C0/0B5A (the NMI's off) -> C2/23CC (`LDA #81 / STA $4200`, the NMI back on), walked. Five traces of the
+// attract's world loads (worlds 5, 7, 2, 3, 0 under the rule, CPUTRACE_BEAM from C0/0C9A or the reboot's C0/0000) split it
+// into what the data decides and what it does not:
+//   - every packet: C3/0557's decompression (ct_lz_rom_cycles, exact) + the vector's JMP (18) + its site's C2 path
+//     (C2/278C-27A2 and its copies: 282, against the skip's taken BMI: 276). Only C2/2CC1's sites 27A2 / 280C / 284F ever
+//     skip (bit 7 of the world header's byte, worlds 2, 3, 5, 7); the others always run.
+//   - C2/2A44 after its packet (site 2A6D, $C6:FFC0, to $7F:0400): four counted lists copied through $2180 -- entries
+//     of 7, 3, 3 and 2 bytes, 506 / 234 / 234 / 166 cycles each (C2/2A8E, 2AE4, 2B1A, 2B4D).
+//   - C2/09C5 twice (owFirstScreenVar over each BG's cells $E3/$E7).
+//   - THE REST, fixed: C0's reset path, C2/0031-003D, C2/23A8's VRAM clear (one DMA past a frame long), C2/0BF6, the
+//     non-skippable sites' own code ... = WORLD_LOAD_FIXED, the world-5 trace less the above (2041796), which then
+//     predicts worlds 7, 2, 3 and 0 to -22, -36, -6 and +60 cycles.
+// -1 (and *why) when a list count is 0 (a 65536-pass loop no trace ran) or the packet does not decompress.
+#define WORLD_LOAD_FIXED 2041796L
+long ct_lz_world_load_cycles(const uint8_t* rom, size_t romLen, int world, const uint16_t e3[2], const uint16_t e7[2],
+                             int* outPackets, const char** why) {
+  uint32_t src[32]; uint8_t dst[32];
+  int n = ct_lz_world_packets(rom, romLen, world, src, dst, 32);
+  if (outPackets) *outPackets = n;
+  if (n <= 0) { if (why) *why = "no packets"; return -1; }
+  long cyc = WORLD_LOAD_FIXED;
+  for (int i = 0; i < n; i++)
+    cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset(src[i]), dst[i] == 0x7F) + 18 + 276;
+  // C2/2A44's lists: the packet the 2A6D site decompressed (header byte $15 into $C6:FFC0)
+  size_t hp = ct_lz_hirom_offset(0xC6FD00) + (size_t)world * 2;
+  size_t hdr = ct_lz_hirom_offset(0xC60000u | ((unsigned)RB(hp) | ((unsigned)RB(hp + 1) << 8)));
+  unsigned idx = RB(hdr + 0x15);
+  if (idx & 0x80) { if (why) *why = "C2/2A44: no packet (the lists read $7F:0400 as it stands)"; return -1; }
+  size_t e = ct_lz_hirom_offset(0xC6FFC0) + (size_t)idx * 3;
+  uint8_t* img = (uint8_t*)malloc(0x10000);
+  if (!img) return -1;
+  size_t len = ct_lz_decompress_bounded(rom, romLen, img, 0x10000,
+                   ct_lz_hirom_offset((unsigned)RB(e) | ((unsigned)RB(e + 1) << 8) | ((unsigned)RB(e + 2) << 16)));
+  static const int kSize[4] = { 7, 3, 3, 2 }, kCyc[4] = { 506, 234, 234, 166 };
+  size_t p = 0;
+  for (int l = 0; l < 4; l++) {
+    unsigned cnt = p < len ? img[p] : 0;
+    if (!cnt) { free(img); if (why) *why = "C2/2A44: a list count of 0"; return -1; }
+    cyc += (long)cnt * kCyc[l];
+    p += 1 + (size_t)cnt * kSize[l];
+  }
+  free(img);
+  for (int b = 0; b < 2; b++) cyc += owFirstScreenVar(e3[b], e7[b]);
   return cyc;
 }
 
@@ -565,33 +730,33 @@ long ct_lz_load_cost(const uint8_t* rom, size_t romLen, int loc, long* outDma, i
   if (REC + 14 > romLen) return 0;
   long cyc = 0, dma = 0;
   int n = 0;
-  const unsigned tileset = rom[REC + 1];
+  const unsigned tileset = RB(REC + 1);
   if (tileset != 0xFF) {
     const size_t LIST = 0x361C00u + (size_t)tileset * 8;
     for (int i = 0; i < 8 && LIST + 8 <= romLen; i++) {
-      unsigned idx = rom[LIST + i];
+      unsigned idx = RB(LIST + i);
       if (idx == 0xFF) continue;
       size_t pe = 0x362220u + (size_t)idx * 3;
       if (pe + 3 > romLen) continue;
-      size_t src = ct_lz_hirom_offset((unsigned)rom[pe] | ((unsigned)rom[pe + 1] << 8) |
-                                      ((unsigned)rom[pe + 2] << 16));
+      size_t src = ct_lz_hirom_offset((unsigned)RB(pe) | ((unsigned)RB(pe + 1) << 8) |
+                                      ((unsigned)RB(pe + 2) << 16));
       cyc += ct_lz_rom_cycles(rom, romLen, src, i >= 6);   /* 6D65/6D97 land in bank $7F */
       n++;
       if (i < 6) dma += 8L * (i == 5 ? 0x0F80 : 0x1000) + 24;   /* C0/2DC8, the VRAM upload */
     }
     size_t pp = 0x362100u + (size_t)tileset * 3;
     if (pp + 3 <= romLen) {
-      size_t src = ct_lz_hirom_offset((unsigned)rom[pp] | ((unsigned)rom[pp + 1] << 8) |
-                                      ((unsigned)rom[pp + 2] << 16));
+      size_t src = ct_lz_hirom_offset((unsigned)RB(pp) | ((unsigned)RB(pp + 1) << 8) |
+                                      ((unsigned)RB(pp + 2) << 16));
       cyc += ct_lz_rom_cycles(rom, romLen, src, 0);
       n++;
     }
   }
-  unsigned mapId = (unsigned)rom[REC + 4] | ((unsigned)rom[REC + 5] << 8);
+  unsigned mapId = (unsigned)RB(REC + 4) | ((unsigned)RB(REC + 5) << 8);
   size_t me = 0x361E00u + (size_t)mapId * 3;
   if (me + 3 <= romLen) {
-    size_t src = ct_lz_hirom_offset((unsigned)rom[me] | ((unsigned)rom[me + 1] << 8) |
-                                    ((unsigned)rom[me + 2] << 16));
+    size_t src = ct_lz_hirom_offset((unsigned)RB(me) | ((unsigned)RB(me + 1) << 8) |
+                                    ((unsigned)RB(me + 2) << 16));
     cyc += ct_lz_rom_cycles(rom, romLen, src, 0);
     n++;
     // ...and then C0/A33B BUILDS what it just decompressed, which costs as much again. The walk
@@ -614,26 +779,26 @@ long ct_lz_load_cost(const uint8_t* rom, size_t romLen, int loc, long* outDma, i
   // MEASURED (`--cputrace` of the attract's reboot into loc 112, from f2435): C0:6E03 `E5:3C21 -> 7F:5080` in f2454,
   // C0:0A4A `EF:8F48 -> 7E:C000` in f2462, C0:56FF `FB:8021 -> 7F:2000` in f2463, between the map and the object pass.
   {
-    const unsigned b3 = rom[REC + 2];
+    const unsigned b3 = RB(REC + 2);
     if (b3 != 0xFF) {
       size_t pe = 0x362220u + (size_t)b3 * 3, pa = 0x3621C0u + (size_t)b3 * 3;
       if (pe + 3 <= romLen) {
-        cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)rom[pe] | ((unsigned)rom[pe + 1] << 8) |
-                                                               ((unsigned)rom[pe + 2] << 16)), 1);
+        cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)RB(pe) | ((unsigned)RB(pe + 1) << 8) |
+                                                               ((unsigned)RB(pe + 2) << 16)), 1);
         n++;
         dma += 8L * 0x1000 + 24;                                        /* 6E1E JSR C0/2DC8, $1000 bytes */
       }
       if (pa + 3 <= romLen) {
-        cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)rom[pa] | ((unsigned)rom[pa + 1] << 8) |
-                                                               ((unsigned)rom[pa + 2] << 16)), 0);
+        cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)RB(pa) | ((unsigned)RB(pa + 1) << 8) |
+                                                               ((unsigned)RB(pa + 2) << 16)), 0);
         n++;
       }
     }
-    const unsigned sid = (unsigned)rom[REC + 8] | ((unsigned)rom[REC + 9] << 8);
+    const unsigned sid = (unsigned)RB(REC + 8) | ((unsigned)RB(REC + 9) << 8);
     size_t ps = ct_lz_hirom_offset(0xFCF9F0u) + (size_t)sid * 3;
     if (ps + 3 <= romLen) {
-      cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)rom[ps] | ((unsigned)rom[ps + 1] << 8) |
-                                                             ((unsigned)rom[ps + 2] << 16)), 1);
+      cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)RB(ps) | ((unsigned)RB(ps + 1) << 8) |
+                                                             ((unsigned)RB(ps + 2) << 16)), 1);
       n++;
     }
   }
@@ -655,17 +820,17 @@ long ct_lz_return_cost(const uint8_t* rom, size_t romLen, int loc) {
   const size_t REC = 0x360000u + (size_t)loc * 14;
   if (REC + 14 > romLen) return 0;
   long cyc = 0;
-  const unsigned tileset = rom[REC + 1];
+  const unsigned tileset = RB(REC + 1);
   if (tileset != 0xFF) {                                              /* C0/09DD: $F6:2100 + t*3 */
     size_t pp = 0x362100u + (size_t)tileset * 3;
     if (pp + 3 <= romLen)
-      cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)rom[pp] | ((unsigned)rom[pp + 1] << 8) |
-                                                             ((unsigned)rom[pp + 2] << 16)), 0);
+      cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)RB(pp) | ((unsigned)RB(pp + 1) << 8) |
+                                                             ((unsigned)RB(pp + 2) << 16)), 0);
   }
-  unsigned mapId = (unsigned)rom[REC + 4] | ((unsigned)rom[REC + 5] << 8);   /* C0/A33B */
+  unsigned mapId = (unsigned)RB(REC + 4) | ((unsigned)RB(REC + 5) << 8);   /* C0/A33B */
   size_t me = 0x361E00u + (size_t)mapId * 3;
   if (me + 3 <= romLen) {
-    size_t src = ct_lz_hirom_offset((unsigned)rom[me] | ((unsigned)rom[me + 1] << 8) | ((unsigned)rom[me + 2] << 16));
+    size_t src = ct_lz_hirom_offset((unsigned)RB(me) | ((unsigned)RB(me + 1) << 8) | ((unsigned)RB(me + 2) << 16));
     cyc += ct_lz_rom_cycles(rom, romLen, src, 0);
     uint8_t* img = (uint8_t*)malloc(0x20000);
     if (img) {
@@ -675,18 +840,18 @@ long ct_lz_return_cost(const uint8_t* rom, size_t romLen, int loc) {
       free(img);
     }
   }
-  const unsigned b3 = rom[REC + 2];                                   /* C0/0A14: $F6:21C0 + b*3 */
+  const unsigned b3 = RB(REC + 2);                                   /* C0/0A14: $F6:21C0 + b*3 */
   if (b3 != 0xFF) {
     size_t pa = 0x3621C0u + (size_t)b3 * 3;
     if (pa + 3 <= romLen)
-      cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)rom[pa] | ((unsigned)rom[pa + 1] << 8) |
-                                                             ((unsigned)rom[pa + 2] << 16)), 0);
+      cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)RB(pa) | ((unsigned)RB(pa + 1) << 8) |
+                                                             ((unsigned)RB(pa + 2) << 16)), 0);
   }
-  const unsigned sid = (unsigned)rom[REC + 8] | ((unsigned)rom[REC + 9] << 8);   /* C0/56D4 */
+  const unsigned sid = (unsigned)RB(REC + 8) | ((unsigned)RB(REC + 9) << 8);   /* C0/56D4 */
   size_t ps = ct_lz_hirom_offset(0xFCF9F0u) + (size_t)sid * 3;
   if (ps + 3 <= romLen)
-    cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)rom[ps] | ((unsigned)rom[ps + 1] << 8) |
-                                                           ((unsigned)rom[ps + 2] << 16)), 1);
+    cyc += ct_lz_rom_cycles(rom, romLen, ct_lz_hirom_offset((unsigned)RB(ps) | ((unsigned)RB(ps + 1) << 8) |
+                                                           ((unsigned)RB(ps + 2) << 16)), 1);
   return cyc;
 }
 
@@ -697,10 +862,10 @@ int ct_lz_map_header_byte(const uint8_t* rom, size_t romLen, int loc, int idx) {
   if (!rom || loc < 0 || loc > 511 || idx < 0) return -1;
   const size_t REC = 0x360000u + (size_t)loc * 14;
   if (REC + 14 > romLen) return -1;
-  unsigned mapId = (unsigned)rom[REC + 4] | ((unsigned)rom[REC + 5] << 8);
+  unsigned mapId = (unsigned)RB(REC + 4) | ((unsigned)RB(REC + 5) << 8);
   size_t me = 0x361E00u + (size_t)mapId * 3;
   if (me + 3 > romLen) return -1;
-  size_t src = ct_lz_hirom_offset((unsigned)rom[me] | ((unsigned)rom[me + 1] << 8) | ((unsigned)rom[me + 2] << 16));
+  size_t src = ct_lz_hirom_offset((unsigned)RB(me) | ((unsigned)RB(me + 1) << 8) | ((unsigned)RB(me + 2) << 16));
   uint8_t* img = (uint8_t*)malloc(0x20000);
   if (!img) return -1;
   size_t mlen = ct_lz_decompress_bounded(rom, romLen, img, 0x20000, src);
@@ -720,15 +885,15 @@ int ct_lz_load_tiles(const uint8_t* rom, size_t romLen, int loc, uint8_t* vram64
   int n = 0;
   uint8_t* buf = (uint8_t*)malloc(0x20000);
   if (!buf) return 0;
-  const unsigned tileset = rom[REC + 1];
+  const unsigned tileset = RB(REC + 1);
   if (tileset != 0xFF) {
     const size_t LIST = 0x361C00u + (size_t)tileset * 8;
     for (int i = 0; i < 6 && LIST + 8 <= romLen; i++) {
-      unsigned idx = rom[LIST + i];
+      unsigned idx = RB(LIST + i);
       if (idx == 0xFF) continue;
       size_t pe = 0x362220u + (size_t)idx * 3;
       if (pe + 3 > romLen) continue;
-      size_t src = ct_lz_hirom_offset((unsigned)rom[pe] | ((unsigned)rom[pe + 1] << 8) | ((unsigned)rom[pe + 2] << 16));
+      size_t src = ct_lz_hirom_offset((unsigned)RB(pe) | ((unsigned)RB(pe + 1) << 8) | ((unsigned)RB(pe + 2) << 16));
       size_t len = ct_lz_decompress_bounded(rom, romLen, buf, 0x20000, src);
       size_t want = (i == 5) ? 0x0F80 : 0x1000;
       if (len > want) len = want;
@@ -736,11 +901,11 @@ int ct_lz_load_tiles(const uint8_t* rom, size_t romLen, int loc, uint8_t* vram64
       n++;
     }
   }
-  const unsigned b3 = rom[REC + 2];
+  const unsigned b3 = RB(REC + 2);
   if (b3 != 0xFF) {
     size_t pe = 0x362220u + (size_t)b3 * 3;
     if (pe + 3 <= romLen) {
-      size_t src = ct_lz_hirom_offset((unsigned)rom[pe] | ((unsigned)rom[pe + 1] << 8) | ((unsigned)rom[pe + 2] << 16));
+      size_t src = ct_lz_hirom_offset((unsigned)RB(pe) | ((unsigned)RB(pe + 1) << 8) | ((unsigned)RB(pe + 2) << 16));
       size_t len = ct_lz_decompress_bounded(rom, romLen, buf, 0x20000, src);
       if (len > 0x1000) len = 0x1000;
       memcpy(vram64k + 0xA000, buf, len);
@@ -758,15 +923,15 @@ int ct_lz_load_anim_tiles(const uint8_t* rom, size_t romLen, int loc, uint8_t* w
   if (!rom || !wram || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
   if (REC + 14 > romLen) return 0;
-  const unsigned tileset = rom[REC + 1];
+  const unsigned tileset = RB(REC + 1);
   if (tileset == 0xFF) return 0;
   int n = 0;
   for (int i = 6; i < 8; i++) {
     const size_t LIST = 0x361C00u + (size_t)tileset * 8 + (size_t)i;
-    if (LIST >= romLen || rom[LIST] == 0xFF) continue;                       // 6D67 / 6DA0 `CMP #FF / BEQ`
-    size_t pe = 0x362220u + (size_t)rom[LIST] * 3;
+    if (LIST >= romLen || RB(LIST) == 0xFF) continue;                       // 6D67 / 6DA0 `CMP #FF / BEQ`
+    size_t pe = 0x362220u + (size_t)RB(LIST) * 3;
     if (pe + 3 > romLen) continue;
-    size_t src = ct_lz_hirom_offset((unsigned)rom[pe] | ((unsigned)rom[pe + 1] << 8) | ((unsigned)rom[pe + 2] << 16));
+    size_t src = ct_lz_hirom_offset((unsigned)RB(pe) | ((unsigned)RB(pe + 1) << 8) | ((unsigned)RB(pe + 2) << 16));
     size_t dst = (i == 6) ? 0x16000u : 0x17000u;                             // 6D7F / 6DB6, bank $7F
     ct_lz_decompress_bounded(rom, romLen, wram + dst, 0x20000u - dst, src);
     n++;
@@ -781,11 +946,11 @@ int ct_lz_load_assembly(const uint8_t* rom, size_t romLen, int loc, uint8_t* asm
   if (!rom || !asm4k || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
   if (REC + 14 > romLen) return 0;
-  const unsigned tileset = rom[REC + 1];
+  const unsigned tileset = RB(REC + 1);
   if (tileset == 0xFF) return 0;
   size_t pp = 0x362100u + (size_t)tileset * 3;
   if (pp + 3 > romLen) return 0;
-  size_t src = ct_lz_hirom_offset((unsigned)rom[pp] | ((unsigned)rom[pp + 1] << 8) | ((unsigned)rom[pp + 2] << 16));
+  size_t src = ct_lz_hirom_offset((unsigned)RB(pp) | ((unsigned)RB(pp + 1) << 8) | ((unsigned)RB(pp + 2) << 16));
   uint8_t* buf = (uint8_t*)malloc(0x20000);
   if (!buf) return 0;
   size_t len = ct_lz_decompress_bounded(rom, romLen, buf, 0x20000, src);
@@ -802,11 +967,11 @@ int ct_lz_load_assembly3(const uint8_t* rom, size_t romLen, int loc, uint8_t* as
   if (!rom || !asm2k || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
   if (REC + 14 > romLen) return 0;
-  const unsigned b3 = rom[REC + 2];
+  const unsigned b3 = RB(REC + 2);
   if (b3 == 0xFF) return 0;
   size_t pp = 0x3621C0u + (size_t)b3 * 3;
   if (pp + 3 > romLen) return 0;
-  size_t src = ct_lz_hirom_offset((unsigned)rom[pp] | ((unsigned)rom[pp + 1] << 8) | ((unsigned)rom[pp + 2] << 16));
+  size_t src = ct_lz_hirom_offset((unsigned)RB(pp) | ((unsigned)RB(pp + 1) << 8) | ((unsigned)RB(pp + 2) << 16));
   uint8_t* buf = (uint8_t*)malloc(0x20000);
   if (!buf) return 0;
   size_t len = ct_lz_decompress_bounded(rom, romLen, buf, 0x20000, src);
@@ -827,10 +992,10 @@ int ct_lz_map_to_wram(const uint8_t* rom, size_t romLen, int loc, uint8_t* s7e) 
   if (!rom || !s7e || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
   if (REC + 14 > romLen) return 0;
-  unsigned mapId = (unsigned)rom[REC + 4] | ((unsigned)rom[REC + 5] << 8);
+  unsigned mapId = (unsigned)RB(REC + 4) | ((unsigned)RB(REC + 5) << 8);
   size_t me = 0x361E00u + (size_t)mapId * 3;
   if (me + 3 > romLen) return 0;
-  size_t src = ct_lz_hirom_offset((unsigned)rom[me] | ((unsigned)rom[me + 1] << 8) | ((unsigned)rom[me + 2] << 16));
+  size_t src = ct_lz_hirom_offset((unsigned)RB(me) | ((unsigned)RB(me + 1) << 8) | ((unsigned)RB(me + 2) << 16));
   uint8_t* img = (uint8_t*)malloc(0x20000);
   if (!img) return 0;
   size_t n = ct_lz_decompress_bounded(rom, romLen, img, 0x20000, src);

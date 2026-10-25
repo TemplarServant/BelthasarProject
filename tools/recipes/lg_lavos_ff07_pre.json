@@ -1,0 +1,14 @@
+{
+  "name": "lg_lavos_ff07_pre",
+  "from": "lg_lavos_tele476",
+  "doc": "Stands in for saves/lavos_re/ff07_pre_f1530.state: from scene 476 A for 2 frames every 32 (after 30) to f1530 -- `FF 07` on its f10; byte for byte the capture.",
+  "steps": [
+    [
+      "pad",
+      "(0:30,100:2)*47,0:26"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1DC"
+  }
+}

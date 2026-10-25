@@ -21,9 +21,12 @@ kills the three historical FALSE-'Build OK' mechanisms:
      hashes (sha1) are compared against build/.ctbuildstamp.json; a changed
      source whose exe hash did NOT change is the skew trap: auto-heal by
      os.utime(now) on the changed sources, rebuild once, re-verify, and FAIL
-     loudly ('STALE: ...') if the exe still does not change.
+     loudly ('STALE: ...') if the exe still does not change -- unless the re-run
+     provably compiled every changed source (its object is newer than the bump):
+     then the edit changes no code (a comment) and the build is certified.
 
-Usage:  python tools/build.py [ct|ct_field|ct_world|ct_viewer]
+Usage:  python tools/build.py [ct|Belthasar|ct_world|ct_viewer|ct_tables_proof]
+        CT_DATAFREE=1: Belthasar without the generated tables compiled in (docs/ROM.md)
         (no argument = build all configured targets, like before)
 
 Read-only with respect to the engine: it uses CMake's configured targets
@@ -41,7 +44,7 @@ import time
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 # CT_BUILD_DIR=<dir under the repo>: build into another tree (e.g. build_alt) -- a second set of exes to test with while the
-# player's build\ct_field.exe is running. Everything else (the suite, the tools) keeps reading build\.
+# player's build\Belthasar.exe is running. Everything else (the suite, the tools) keeps reading build\.
 BUILD = os.path.join(ROOT, os.environ.get("CT_BUILD_DIR") or "build")
 STAMP_PATH = os.path.join(BUILD, ".ctbuildstamp.json")
 VCENV_BAT = os.path.join(BUILD, ".ctvcenv.bat")
@@ -52,7 +55,11 @@ VCVARS_REL = r"VC\Auxiliary\Build\vcvars64.bat"
 CMAKE_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 NINJA_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 
-KNOWN_TARGETS = ("ct", "ct_oracle", "ct_field", "ct_world", "ct_viewer")
+KNOWN_TARGETS = ("ct", "ct_oracle", "Belthasar", "ct_world", "ct_viewer", "ct_tables_proof")
+# Built only when named: the table pack's byte-for-byte proof (tools/gen/tables_proof.py; EXCLUDE_FROM_ALL in CMake).
+OPTIONAL_TARGETS = ("ct_tables_proof",)
+# The playable host was ct_field until 2026-10-17; the old name still selects it.
+TARGET_ALIASES = {"ct_field": "Belthasar"}
 
 
 def fail(reason, code=1):
@@ -214,6 +221,16 @@ def run_step(cmd, env, label):
         return 127
 
 
+def object_path(target, relpath):
+    """The object Ninja compiles `relpath` (a source of `target`) into, or None: CMake's
+    build/CMakeFiles/<target>.dir/<relpath>.o (.obj with MSVC)."""
+    base = os.path.join(BUILD, "CMakeFiles", target + ".dir", relpath.replace("/", os.sep))
+    for ext in (".o", ".obj"):
+        if os.path.isfile(base + ext):
+            return base + ext
+    return None
+
+
 # ----------------------------------------------------------------------- stamp
 def load_stamp():
     try:
@@ -252,13 +269,13 @@ def main(argv):
     if len(args) > 1:
         fail("usage: build.py [{}]".format("|".join(KNOWN_TARGETS)), 2)
     if args:
-        want = args[0]
+        want = args[0] = TARGET_ALIASES.get(args[0], args[0])
         if want not in KNOWN_TARGETS:
             fail("unknown target '{}' (know: {})".format(want, ", ".join(KNOWN_TARGETS)), 2)
 
     # ---- pre-flight: refuse to build over a RUNNING exe (the LNK1168 class).
     procs = running_ct_processes() if os.name == "nt" else []
-    # A single-target build links only that exe: another one running (the player's ct_field while ct.exe is rebuilt) is
+    # A single-target build links only that exe: another one running (the player's Belthasar while ct.exe is rebuilt) is
     # not in its way. `ct` also links ct_oracle (CMakeLists.txt: add_dependencies), so a running ct_oracle is in its way.
     if procs and args:
         links = {args[0].lower() + ".exe"} | ({"ct_oracle.exe"} if args[0].lower() == "ct" else set())
@@ -296,15 +313,20 @@ def main(argv):
     # speed. CT_BUILD_TYPE overrides (Debug for a stepping session); the configure is re-run when the
     # type changes, since the cache remembers it.
     btype = os.environ.get("CT_BUILD_TYPE", "RelWithDebInfo")
+    # CT_DATAFREE=1: Belthasar without the generated tables compiled in; it loads them from the pack made from the
+    # player's ROM (ct_tables.dat, docs/ROM.md). Passed both ways so the cache follows the environment.
+    datafree = os.environ.get("CT_DATAFREE", "") not in ("", "0")
     cfg = [cmake, "-S", ROOT, "-B", BUILD, "-G", "Ninja",
-           "-DCMAKE_MAKE_PROGRAM=" + ninja, "-DCMAKE_BUILD_TYPE=" + btype]
+           "-DCMAKE_MAKE_PROGRAM=" + ninja, "-DCMAKE_BUILD_TYPE=" + btype,
+           "-DCT_DATAFREE=" + ("ON" if datafree else "OFF")]
     request_cmake_sources()
-    if run_step(cfg, env, "cmake configure (Ninja, " + btype + ")") != 0:
+    if run_step(cfg, env, "cmake configure (Ninja, " + btype + (", data-free" if datafree else "") + ")") != 0:
         fail("cmake configure step failed (see errors above)")
     source_lists = configured_source_lists()
     if want is not None and want not in source_lists:
         fail("target '{}' is not configured; install SDL2 for graphical targets".format(want), 2)
-    requested = [want] if want is not None else [n for n in KNOWN_TARGETS if n in source_lists]
+    requested = [want] if want is not None else [n for n in KNOWN_TARGETS
+                                                  if n in source_lists and n not in OPTIONAL_TARGETS]
     if not requested:
         fail("CMake did not configure any known targets")
 
@@ -353,7 +375,16 @@ def main(argv):
             # With no earlier content hash, an identical rebuilt exe is valid.
             previous_sources = stamp.get(n, {}).get("sources", {})
             if post == stamp.get(n, {}).get("exe") and any(p in previous_sources for p in files):
-                status[n] = ("STALE", files)
+                # An edit that changes no code (a comment, on lines that keep their numbers) leaves the exe byte for byte:
+                # that is not the skew trap when the re-run provably COMPILED every changed source -- its object is
+                # newer than the bump. A source that is not compiled itself (a header) cannot be proven that way.
+                objs = [object_path(n, p) for p in files]
+                if all(o and os.path.getmtime(o) >= now - 1 for o in objs):
+                    status[n] = ("UP-TO-DATE", "the edit to {} changes no code: recompiled, the exe is the same"
+                                 .format(", ".join(files)))
+                    stamp[n] = {"exe": post, "sources": cur_src[n], "when": time.strftime("%Y-%m-%d %H:%M:%S")}
+                else:
+                    status[n] = ("STALE", files)
             # else: healed; final status decided below from pre/post hashes
 
     # ---- final statuses + stamp update for every target that verified.
@@ -376,7 +407,7 @@ def main(argv):
             if s == "BUILT":
                 line = "BUILT        ({} updated)".format(rel(exe_path[n]))
             elif s == "UP-TO-DATE":
-                line = "UP-TO-DATE"
+                line = "UP-TO-DATE" + ("   ({})".format(detail) if detail else "")
             elif s == "STALE":
                 ok = False
                 line = "STALE        (exe did NOT change after rebuilding)"

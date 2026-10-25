@@ -68,7 +68,7 @@ def resolve(name, loader):
         return Path(path.replace("@loader_path", str(loader.parent))
                     .replace("@executable_path", str(BUILD)))
     candidates = ([expand(p) / name[len("@rpath/"):]
-                   for p in rpaths(loader) + rpaths(BUILD / "ct_field.exe")]
+                   for p in rpaths(loader) + rpaths(BUILD / "Belthasar.exe")]
                   if name.startswith("@rpath/") else [expand(name)])
     if name.startswith("@rpath/"):
         candidates.append(loader.parent / name[len("@rpath/"):])
@@ -112,7 +112,7 @@ def main():
                     help="upstream source version (X.Y.Z); default: 0.0.0 development build")
     ap.add_argument("--build-number", type=build_number,
                     help="numeric bundle build number for local rebuilds; default: 1")
-    ap.add_argument("--output", type=Path, default=BUILD / "macos" / "Chrono Trigger.app",
+    ap.add_argument("--output", type=Path, default=BUILD / "macos" / "Belthasar.app",
                     help="destination .app path")
     args = ap.parse_args()
     if platform.system() != "Darwin":
@@ -127,12 +127,12 @@ def main():
         if (not existing.is_file() or plistlib.loads(existing.read_bytes()).get("CFBundleIdentifier")
                 != "io.github.TemplarServant.BelthasarProject"):
             ap.error("refusing to replace an unrelated existing app")
-    engine = BUILD / "ct_field.exe"
+    engine = BUILD / "Belthasar.exe"
     if not engine.is_file():
         ap.error("build the project first: python3 tools/build.py")
 
     # Stage separately: a failed package never overwrites a working app.
-    stage = BUILD / "macos-staging" / "Chrono Trigger.app"
+    stage = BUILD / "macos-staging" / "Belthasar.app"
     if stage.parent.exists():
         shutil.rmtree(stage.parent)
     (stage / "Contents").mkdir(parents=True)
@@ -143,10 +143,10 @@ def main():
     macos.mkdir(exist_ok=True)
     frameworks.mkdir(exist_ok=True)
     resources.mkdir(exist_ok=True)
-    shutil.copy2(engine, macos / "ChronoTrigger")
+    shutil.copy2(engine, macos / "Belthasar")
 
     libraries = {}  # original resolved file -> bundled file
-    origins = {macos / "ChronoTrigger": engine}
+    origins = {macos / "Belthasar": engine}
 
     def collect(original, filename=None):
         original = original.resolve()

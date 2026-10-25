@@ -22,9 +22,8 @@ void CtSettingsDefaults(CtSettings* s) {
   memset(s, 0, sizeof *s);
   s->fullscreen = 0; s->windowScale = 2; s->scaleMode = CT_SCALE_FIT; s->aspect = CT_ASPECT_PIXEL;
   s->linearFilter = 0; s->renderScale = 1; s->vsync = 1; s->renderDriver[0] = 0; s->backend = 0;
-  s->wideRoomWrap = 1;
   s->volume = 100; s->mute = 0;
-  // the keyboard ct_field always had (field.c fieldKeyPad): the arrows; A = Z, B = X, X = A, Y = S, L = D, R = C,
+  // the keyboard Belthasar always had (field.c fieldKeyPad): the arrows; A = Z, B = X, X = A, Y = S, L = D, R = C,
   // Select = Backspace, Start = Enter (and the keypad's Enter)
   static const int k0[CT_BTN_COUNT] = {
     SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
@@ -48,6 +47,7 @@ void CtSettingsDefaults(CtSettings* s) {
 #endif
   s->touchOpacity = 45; s->touchScale = 100;
   s->sync = CT_SYNC_FRAME_PERFECT;
+  s->instantUploads = 0;
 }
 
 CtSettings* CtSettingsGet(void) {
@@ -86,7 +86,9 @@ static void setKey(CtSettings* s, const char* sec, const char* key, const char* 
     else if (!strcmp(key, "filter")) s->linearFilter = !strcmp(val, "linear");
     else if (!strcmp(key, "render_scale")) s->renderScale = clampi(iv, 1, 4);
     else if (!strcmp(key, "interpolation")) s->interpolate = iv != 0;
-    else if (!strcmp(key, "wide_room_wrap")) s->wideRoomWrap = iv != 0;
+    else if (!strcmp(key, "wide_room_wrap")) {}                       // (an option removed 2026-10-23: read, ignored)
+    else if (!strcmp(key, "steam_margins")) s->wideSteamMargins = iv != 0;
+    else if (!strcmp(key, "fill_bottom_lines")) s->fillBottomLines = iv != 0;
     else if (!strcmp(key, "widescreen")) s->widescreen = !strcmp(val, "16:9") ? CT_WIDE_16_9 : !strcmp(val, "16:10") ? CT_WIDE_16_10 :
                                                          !strcmp(val, "21:9") ? CT_WIDE_21_9 : CT_WIDE_OFF;
     else if (!strcmp(key, "vsync")) s->vsync = iv != 0;
@@ -111,6 +113,7 @@ static void setKey(CtSettings* s, const char* sec, const char* key, const char* 
     else if (!strcmp(key, "size")) s->touchScale = clampi(iv, 50, 150);
   } else if (!strcmp(sec, "timing")) {
     if (!strcmp(key, "sync")) s->sync = !strcmp(val, "free") ? CT_SYNC_FREE : CT_SYNC_FRAME_PERFECT;
+    else if (!strcmp(key, "instant_sound_uploads")) s->instantUploads = iv != 0;
   }
 }
 
@@ -138,13 +141,13 @@ int CtSettingsSave(void) {
   const CtSettings* s = CtSettingsGet();
   FILE* f = fopen(CtSettingsPath(), "w");
   if (!f) return 0;
-  fprintf(f, "; Chrono Trigger (native port) -- options. Edited by the F1 overlay; safe to edit by hand.\n\n");
-  fprintf(f, "[video]\nbackend=%s\nfullscreen=%d\nwindow_scale=%d\nscale=%s\naspect=%s\nfilter=%s\nwidescreen=%s\nwide_room_wrap=%d\nrender_scale=%d\ninterpolation=%d\nvsync=%d\nrender_driver=%s\n\n",
+  fprintf(f, "; Belthasar -- options. Edited by the F1 overlay; safe to edit by hand.\n\n");
+  fprintf(f, "[video]\nbackend=%s\nfullscreen=%d\nwindow_scale=%d\nscale=%s\naspect=%s\nfilter=%s\nwidescreen=%s\nsteam_margins=%d\nfill_bottom_lines=%d\nrender_scale=%d\ninterpolation=%d\nvsync=%d\nrender_driver=%s\n\n",
           s->backend == 1 ? "opengl" : s->backend == 2 ? "vulkan" : "sdl", s->fullscreen, s->windowScale,
           s->scaleMode == CT_SCALE_INTEGER ? "integer" : s->scaleMode == CT_SCALE_STRETCH ? "stretch" : "fit",
           s->aspect == CT_ASPECT_4_3 ? "4:3" : "pixel", s->linearFilter ? "linear" : "nearest",
           s->widescreen == CT_WIDE_16_9 ? "16:9" : s->widescreen == CT_WIDE_16_10 ? "16:10" : s->widescreen == CT_WIDE_21_9 ? "21:9" : "off",
-          s->wideRoomWrap, s->renderScale, s->interpolate, s->vsync,
+          s->wideSteamMargins, s->fillBottomLines, s->renderScale, s->interpolate, s->vsync,
           s->renderDriver);
   fprintf(f, "[sound]\nvolume=%d\nmute=%d\n\n", s->volume, s->mute);
   fprintf(f, "[controls]\npad_stick=%d\n", s->padStick);
@@ -155,7 +158,8 @@ int CtSettingsSave(void) {
     fprintf(f, "pad_%s=%s\n", BTN_KEY[b], pn ? pn : "");
   }
   fprintf(f, "\n[touch]\nvirtual_pad=%d\nopacity=%d\nsize=%d\n", s->touchPad, s->touchOpacity, s->touchScale);
-  fprintf(f, "\n[timing]\nsync=%s\n", s->sync == CT_SYNC_FREE ? "free" : "frame_perfect");
+  fprintf(f, "\n[timing]\nsync=%s\ninstant_sound_uploads=%d\n", s->sync == CT_SYNC_FREE ? "free" : "frame_perfect",
+          s->instantUploads);
   fclose(f);
   return 1;
 }

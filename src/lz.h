@@ -34,6 +34,16 @@ long ct_lz_rom_cycles(const uint8_t* data, size_t dataLen, size_t start, int dst
 
 size_t ct_lz_hirom_offset(unsigned addr24);   // 24-bit HiROM address -> file offset
 
+// THE STREAMS FROM THE ASSET CONTAINER (CT_ASSET_LZ): once set, a decompression or a cost asked of `rom` (the ROM image
+// the engine reads) at an offset the container holds is served from it -- the bytes and both costs as the ROM's stream
+// gives them -- and the ROM is not read. Streams it does not hold still come from `rom`. NULL clears it.
+
+void ct_lz_use_assets(const void* assets, const uint8_t* rom);
+// Another copy of the same ROM image the engine reads through (rom_verify.c's beside battle.c's): served the same way.
+void ct_lz_add_rom_image(const uint8_t* rom);
+// The container's entry for the stream at `start` (NULL = none): its decompressed bytes, length and two costs.
+const uint8_t* ct_lz_asset(size_t start, size_t* outLen, long* cyc7e, long* cyc7f);
+
 // What C0/A33B spends BUILDING the map after it decompresses it: the four plane copies and the
 // RLE fill, walked over the decompressed image `m` the way the ROM walks it, plus the routine's
 // fixed half (its 4032-byte MVN, derived, and a one-shot constant measured over five locations).
@@ -47,6 +57,10 @@ long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc);
 int  ct_lz_world_packets(const uint8_t* rom, size_t romLen, int world,
                          uint32_t* srcOut, uint8_t* dstOut, int max);
 long ct_lz_world_cost(const uint8_t* rom, size_t romLen, int world, int* outPackets);
+// The whole world load, C0/0B5A -> C2/23CC (the NMI back on), in non-refresh cycles: the packets with their sites, C2/2A44's
+// lists, C2/09C5 over each BG's camera cells ($E3/$E7 = the camera >> 3), and the fixed rest (lz.c). -1 (*why) off the walk.
+long ct_lz_world_load_cycles(const uint8_t* rom, size_t romLen, int world, const uint16_t e3[2], const uint16_t e7[2],
+                             int* outPackets, const char** why);
 // C2/2C93's rebuild after the X menu: the entry's packets minus the four that survive the menu (lz.c).
 long ct_lz_world_return_cost(const uint8_t* rom, size_t romLen, int world, int* outPackets);
 

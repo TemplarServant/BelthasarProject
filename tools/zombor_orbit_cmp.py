@@ -5,8 +5,9 @@ three rounds -- radius 12 for 32 steps, 10 for 16, 8 for 16).
 
     python tools/zombor_orbit_cmp.py
 
-  * cartridge: saves/attract_cena_inicial.state run to f7085 (the 087 leg's start, cached as build/_z_f7085.state), then
-    `ct.exe --monitor` prints the mover's arrays on every frame of the leg: $A240/$A250 (the objects' X/Y, slot*2), $AAA5
+  * cartridge: saves/attract_087_leg_rule.state (the 087 leg's start, the power-on + 9112 under the rule, made by a recipe:
+    tools/fixtures/attract_rule.json; until 2026-10-22 the owner's real-time capture run to f7085, build/_z_f7085.state),
+    then `ct.exe --monitor` under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM) prints the mover's arrays on every frame of the leg: $A240/$A250 (the objects' X/Y, slot*2), $AAA5
     (angles), $AAC3 (16-bit counts), $A1E0 (done), $AA7F/$AA92 (centres), $A342 (active);
   * port: the pre-battle fixture saves/attract_zombor_pre.lakewram (the cartridge's WRAM 9 frames before the leg's `D8`,
     `--scene 135 --loadwram`) with CT_BATTLE_ORBTRACE=1: the same arrays after every frame's mover pass.
@@ -21,11 +22,10 @@ import re
 import subprocess
 
 CT = os.path.abspath('build/ct.exe')
-FIELD = os.path.abspath('build/ct_field.exe')
-SRC = 'saves/attract_cena_inicial.state'
+FIELD = os.path.abspath('build/Belthasar.exe')
 FIX = 'saves/attract_zombor_pre.lakewram'
-STATE = 'build/_z_f7085.state'
-ORC = 'build/_z_orc_orbit2.txt'
+STATE = SRC = 'saves/attract_087_leg_rule.state'
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 REGS = ['A240', 'A250', 'AAA5', 'AAC3', 'A1E0', 'AA7F', 'AA92', 'A342']
 
 
@@ -75,13 +75,9 @@ def rel(d):
 def main():
     if not os.path.exists(SRC) or not os.path.exists(FIX):
         print('zombor-orbit: SKIP -- missing %s or %s' % (SRC, FIX)); return
-    if not os.path.exists(STATE):
-        run([CT, '--peek', SRC, 'build/_ztmp.raw', '--frames', '7085'], env=dict(os.environ, PEEK_SAVE=STATE))
-    if not os.path.exists(ORC):
-        out = run([CT, '--monitor', ','.join('7E%s:%d' % (r, 16 if r in ('A240', 'A250', 'AAC3') else 8) for r in REGS),
-                   '--from', STATE, '--frames', '800'])
-        open(ORC, 'w').write(out)
-    orc = parse_orc(open(ORC).read())
+    orc = parse_orc(subprocess.run([CT, '--monitor', ','.join('7E%s:%d' % (r, 16 if r in ('A240', 'A250', 'AAC3') else 8) for r in REGS),
+                                    '--from', STATE, '--frames', '800'], env=dict(os.environ, **RULE), stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, text=True, timeout=1200).stdout)
     pt = run([FIELD, '--assets', 'ct_assets.dat', '--scene', '135', '--loadwram', FIX, '--frames', '900'],
              env=dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_BATTLE_ORBTRACE='1',
                       CT_SHOTS='build/_zorb', CT_SHOTS_AT='900', CT_SHOTS_EXIT='1'))

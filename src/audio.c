@@ -16,11 +16,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <process.h>     // getpid: CT_SPC_COVERAGE's per-process file
+#else
+#include <unistd.h>
+#endif
 #include "audio.h"
+#include "assets.h"
+#include "sound/lockstep.h"
+#include "sound/machine.h"
+#include "sound/timing.h"
 #include "snes.h"
 #include "apu.h"
 #include "spc.h"
 #include "dsp.h"
+#include "ppu.h"
 
 // Bank $C7 is HiROM: file offset = 0x70000 + addr (audio_boot.md §0 header).
 #define C7_BASE      0x70000
@@ -58,7 +68,7 @@
 // a computed one. What would close it: count the 09DA tail in MASTER cycles against the emulator's
 // own $2140 access timing, or drive the port's writes from a cycle-accurate CPU model.
 // Bounded spin. The real handshake settles in a handful of quanta; this exists
-// so a protocol mismatch degrades to "no sound" instead of hanging ct_field.
+// so a protocol mismatch degrades to "no sound" instead of hanging Belthasar.
 #define SPIN_LIMIT  200000
 
 // ==== THE HDMA THE RASTER RUNS, FROM ITS CHANNELS (snes/dma.c dma_initHdma / dma_doHdma) =================================
@@ -95,9 +105,14 @@ struct CtAudio {
   Snes* shell;      // zeroed stand-in: dsp_getSamples reads exactly one field of
                     // it (dsp->apu->snes->palTiming, snes/dsp.c:586) and nothing
                     // in apu.c/spc.c/dsp.c ever touches another. No snes.c needed.
-  Apu*  apu;
+  Apu*  apu;                         // the vendored SPC700 + S-DSP: the reference (CT_AUDIO_SPC=ref), the lockstep's original,
+                                     //   and the stretch a seeded state runs before the machine takes over at $0299
+  SndMachine* mach;                  // the sound machine in C (sound/machine.h): the game's (CT_AUDIO_SPC=machine)
+  int spc;                           // SPC_REF / SPC_MACHINE / SPC_BOTH (the lockstep: both, the game hears the reference)
+  int machPending;                   // the machine takes over at the vendored core's next $0299 (a seeded or loaded state)
   int   ready;
   double cycleCarry;                 // fractional APU cycles across frames; a clocked JSL's SPC time is DEBITED here
+  int evenFrame;                     // the PPU's field this frame of SPC stands for (ppu.c evenFrame: an odd frame is short)
   int engineMode;                    // 0 field, 1 battle: the background block the loader clock charges
   int postLine;                      // raster line a JSL $C7:0004 begins on (default 12: the runner's early queue, measured)
   int lastFrames, lastEndLine;       // the last clocked JSL: NMIs crossed, the line it returned on
@@ -108,6 +123,7 @@ struct CtAudio {
   long lastRuleStart;                // the last rule JSL's start, master cycles past the vblank (traces)
   int ruleNmiOff;                    // the rule: the caller runs with the NMI disabled (CtAudioSetRuleNmiOff) -- the listing's clock
   int ruleOff;                       // the rule does not apply to this instance (CtAudioSetRuleOff): its SPC is not the cartridge's
+  int instant;                       // the mod (CtAudioSetInstant): a JSL's SPC time is not owed to the next frames, its output not played
   int ruleIrqLine;                   // the rule: the V-IRQ line whose handler waits for its H-blank (CtAudioSetRuleIrq; -1 none)
   LdHdma hdma;                       // the HDMA the loader clock walks (CtAudioSetRuleHdma); kept across the JSLs of a chain
   // THE OUTPUT IS THE DSP'S OWN STREAM. snes/dsp.c keeps its last 0x400 samples in a ring and dsp_getSamples reads the
@@ -123,10 +139,37 @@ struct CtAudio {
   uint16_t src[C7_NBLOCKS];          // as read from $C7:0010
   uint16_t dst[C7_NBLOCKS];          // as read from $C7:001C
   uint16_t size[C7_NBLOCKS];         // each block's leading size word
+  const uint8_t* blk[C7_NBLOCKS];    // each block's bytes (after the size word): the ROM's or the container's
+  const CtAssets* snd;               // the asset container the sound's data comes from, or NULL (the ROM)
+  int ninst;                         // the instruments the sample table holds
 };
 
-static void W(CtAudio* a, int k, uint8_t v) { a->apu->inPorts[k] = v; }
-static uint8_t R(CtAudio* a, int k)         { return a->apu->outPorts[k]; }
+// ==== THE SOUND PROCESSOR (sound step 5, 2026-10-18) ==========================================================================
+// The game's is the sound machine in C (sound/machine.h: the boot ROM, the driver and its receivers as C, timed by the
+// listing's cycles, the timers, the ports, the native S-DSP) -- no SPC700. The vendored core (snes/apu.c, spc.c, dsp.c)
+// is the reference: CT_AUDIO_SPC=ref runs it instead, CT_AUDIO_SPC=lockstep runs both and compares them instruction by
+// instruction (sound/lockstep.h; the game hears the reference). Belthasar's default is the machine (CT_AUDIO_SPC_DEFAULT,
+// CMakeLists.txt), the tools' the reference. A run seeded from an oracle state (CtAudioSeedFromApu) or a reference
+// savestate starts on the vendored core and hands over at its next pass over the main loop's top ($0299).
+enum { SPC_REF = 0, SPC_MACHINE = 1, SPC_BOTH = 2 };
+#ifndef CT_AUDIO_SPC_DEFAULT
+#define CT_AUDIO_SPC_DEFAULT SPC_REF
+#endif
+static int spcModeWanted(void) {
+  static int m = -1;
+  if (m < 0) {
+    const char* e = getenv("CT_AUDIO_SPC");
+    m = !e || !*e ? CT_AUDIO_SPC_DEFAULT : !strcmp(e, "ref") ? SPC_REF : !strcmp(e, "machine") ? SPC_MACHINE
+      : !strcmp(e, "lockstep") ? SPC_BOTH : CT_AUDIO_SPC_DEFAULT;
+  }
+  return m;
+}
+static int machineRuns(const CtAudio* a) { return a->spc == SPC_MACHINE && !a->machPending; }
+static void W(CtAudio* a, int k, uint8_t v) {
+  if (a->spc != SPC_MACHINE || a->machPending) a->apu->inPorts[k] = v;
+  if (a->spc != SPC_REF) SndMachinePortWrite(a->mach, k, v);
+}
+static uint8_t R(CtAudio* a, int k) { return machineRuns(a) ? SndMachinePortRead(a->mach, k) : a->apu->outPorts[k]; }
 static int ctStepCycles(void) {   // experiment hook: CT_AUDIO_QUANTUM overrides the 96 above
   static int n = -1;
   if (n < 0) { const char* e = getenv("CT_AUDIO_QUANTUM"); n = e ? atoi(e) : 16; }
@@ -137,32 +180,83 @@ static long g_sndSettleCycles;   // ...of which the post-echo SETTLE (the 65816'
 static long g_sndMovedBytes;     // bytes the DEFRAGMENTER had the SPC move (command $07): its cost is the SPC's memmove, not a handshake
 // Take every sample the DSP emitted since the last take (snes/dsp.c writes sampleBuffer[(sampleOffset & 0x3ff) * 2]
 // then sampleOffset++). More than the ring's 0x400 between two takes cannot be recovered; apuRun never lets that happen.
+static void fifoPut(CtAudio* a, const int16_t* lr, int n) {
+  for (int i = 0; i < n; i++) {
+    if (a->fifoLen == CT_AUD_FIFO) { a->fifoHead = (a->fifoHead + 1) % CT_AUD_FIFO; a->fifoLen--; a->fifoDropped++; }
+    unsigned w = (a->fifoHead + a->fifoLen) % CT_AUD_FIFO;
+    a->fifo[w * 2] = lr[i * 2]; a->fifo[w * 2 + 1] = lr[i * 2 + 1];
+    a->fifoLen++;
+  }
+}
+static void machineSink(void* c, const int16_t* lr, int n) { fifoPut((CtAudio*)c, lr, n); }
 static void audTake(CtAudio* a) {
+  if (machineRuns(a)) return;                          // (the machine's samples come through its sink)
   Dsp* dsp = a->apu->dsp;
   unsigned n = (uint16_t)(dsp->sampleOffset - a->dspRead);
   if (n > 0x400) { a->fifoDropped += n - 0x400; a->dspRead = (uint16_t)(dsp->sampleOffset - 0x400); n = 0x400; }
+  int16_t buf[0x400 * 2];
   for (unsigned i = 0; i < n; i++) {
     unsigned r = ((unsigned)a->dspRead + i) & 0x3FF;
-    if (a->fifoLen == CT_AUD_FIFO) { a->fifoHead = (a->fifoHead + 1) % CT_AUD_FIFO; a->fifoLen--; a->fifoDropped++; }
-    unsigned w = (a->fifoHead + a->fifoLen) % CT_AUD_FIFO;
-    a->fifo[w * 2] = dsp->sampleBuffer[r * 2]; a->fifo[w * 2 + 1] = dsp->sampleBuffer[r * 2 + 1];
-    a->fifoLen++;
+    buf[i * 2] = dsp->sampleBuffer[r * 2]; buf[i * 2 + 1] = dsp->sampleBuffer[r * 2 + 1];
   }
+  fifoPut(a, buf, (int)n);
+  if (a->spc == SPC_BOTH && n) CtSndLockstepSamples(a->apu, buf, (int)n, ((uint64_t)a->apu->cycles + 31) / 32 - n);
   a->dspRead = dsp->sampleOffset;
 }
 // apu_runCycles, taking the samples as it goes: 0x400 samples are 32768 APU cycles, so a run is cut into pieces well
 // under that. Returns the cycles run, like apu_runCycles.
 static long long g_apuTotal;   // CT_AUDIO_SPCCLOCK: every SPC cycle this CtAudio ran, printed per CtAudioFrame
-static int apuRun(CtAudio* a, int cycles) {
+void CtSndMachineAdoptApu(SndMachine* m, const Apu* apu);   // (sound/lockstep.c)
+static int refRun(CtAudio* a, int cycles, int toLoop) {   // toLoop: stop at $0299 (the machine takes over)
   int ran = 0;
   while (ran < cycles) {
+    if (toLoop && a->apu->spc->pc == 0x0299 && !a->apu->spc->resetWanted) break;
     int chunk = cycles - ran; if (chunk > 16000) chunk = 16000;
-    ran += apu_runCycles(a->apu, chunk);
+    ran += apu_runCycles(a->apu, toLoop ? 1 : chunk);
     audTake(a);
   }
-  g_apuTotal += ran;
   return ran;
 }
+static int apuRun(CtAudio* a, int cycles) {
+  int ran;
+  if (a->spc == SPC_MACHINE) {
+    ran = 0;
+    if (a->machPending) {   // the seeded stretch, up to the main loop's top
+      ran = refRun(a, cycles, 1);
+      if (ran >= cycles) { g_apuTotal += ran; return ran; }
+      CtSndMachineAdoptApu(a->mach, a->apu);
+      SndMachineSetSink(a->mach, machineSink, a);
+      a->machPending = 0;
+    }
+    ran += SndMachineRun(a->mach, cycles - ran);
+  } else {
+    uint32_t start = a->apu->cycles;
+    if (a->spc == SPC_BOTH) CtSndLockstepRunStart(a->apu);
+    ran = refRun(a, cycles, 0);
+    if (a->spc == SPC_BOTH) {
+      int mr = 0;
+      if (CtSndLockstepActive(a->apu)) mr = SndMachineRun(a->mach, (int)(uint32_t)(start + (uint32_t)cycles - (uint32_t)SndMachineCycles(a->mach)));
+      CtSndLockstepRunEnd(a->apu, ran, mr);
+    }
+  }
+  g_apuTotal += ran;
+  { static int rt = -1; if (rt < 0) rt = getenv("CT_AUDIO_RUNTRACE") ? 1 : 0;   // every run: asked, ran, the ports after
+    if (rt) { uint8_t o[4]; for (int k = 0; k < 4; k++) o[k] = R(a, k);
+              fprintf(stderr, "spcrun %d %d %02X%02X%02X%02X%c", cycles, ran, o[0], o[1], o[2], o[3], 10); } }
+  return ran;
+}
+// CT_AUDIO_PORTTRACE on the REFERENCE SPC (CT_AUDIO_SPC=ref): the SPC's side as well, as PEEK_APUTRACE prints it -- every
+// store to its port 0 ($F4: the echo; the driver's timer routine writes 00 at $02DD each tick) and its first read of each
+// new value, with its PC and its cycle count. Set beside the cartridge's `aputrace` lines by `apuc` (from power-on the
+// two counts agree to a few cycles).
+static SpcWriteHandler g_ptSpcW; static SpcReadHandler g_ptSpcR; static uint8_t g_ptSeen = 0xFF;
+static void ptSpcWrite(void* mem, uint16_t adr, uint8_t val) { Apu* apu = (Apu*)mem; uint16_t pc = apu->spc->pc;
+  g_ptSpcW(mem, adr, val);
+  if (adr == 0xF4) fprintf(stderr, "porttrace SPC $F4 := %02X at pc %04X apuc=%u\n", val, pc, apu->cycles); }
+static uint8_t ptSpcRead(void* mem, uint16_t adr) { Apu* apu = (Apu*)mem; uint16_t pc = apu->spc->pc;
+  uint8_t v = g_ptSpcR(mem, adr);
+  if (adr == 0xF4 && v != g_ptSeen) { g_ptSeen = v; fprintf(stderr, "porttrace SPC reads $F4 = %02X at pc %04X apuc=%u\n", v, pc, apu->cycles); }
+  return v; }
 static void audReset(CtAudio* a) { a->fifoHead = a->fifoLen = 0; a->dspRead = a->apu->dsp->sampleOffset; }
 static void step(CtAudio* a)                { int c = ctStepCycles(); g_sndSpcCycles += c; apuRun(a, c); }
 
@@ -247,6 +341,7 @@ typedef struct {
   int nmis;                   // frame boundaries crossed (NMIs taken while the main loop was parked)
   long stolen;                // background cycles queued at the raster: the CPU sits them out
   double owed, hdmaFrac;      // APU cycles owed (snes->apuCatchupCycles); HDMA per-line fraction carry
+  long long ran;              // APU cycles the catch-ups ran (an opcode's overshoot included): what the stretch debits
   int mode;                   // 0 = field, 1 = battle: which background block the raster inserts
   long long budget;           // runaway guard: a broken handshake must not spin the raster forever
   long polls;                 // $2140 polls taken across the run (a measurement aid)
@@ -313,6 +408,19 @@ static uint8_t ldRomFD(const CtAudio* a, unsigned off) {             // a byte o
   long p = 0x3D0000L + (long)off;
   return (a && a->rom && p < a->romLen) ? a->rom[p] : 0;
 }
+// FD/C1EE's program as the clock needs it: channel i's DMAP, and its table in set A or set B -- the container's
+// (CT_ASSET_SND_MISC 1) or the immediates read from the ROM.
+static uint8_t ldFdDmap(const CtAudio* a, int i) {
+  uint32_t n = 0; const uint8_t* m = a && a->snd ? CtAssetGet(a->snd, CT_ASSET_SND_MISC, 1, &n) : NULL;
+  if (m && n >= 40) return m[i];
+  return ldRomFD(a, 0xC1F8 + 4 * (unsigned)i);
+}
+static uint16_t ldFdTable(const CtAudio* a, int setB, int i) {
+  uint32_t n = 0; const uint8_t* m = a && a->snd ? CtAssetGet(a->snd, CT_ASSET_SND_MISC, 1, &n) : NULL;
+  if (m && n >= 40) { const uint8_t* t = m + 8 + (setB ? 16 : 0) + 2 * i; return (uint16_t)(t[0] | (t[1] << 8)); }
+  unsigned at = setB ? 0xC298 + 5 * (unsigned)i : 0xC26E + 5 * (unsigned)i;   // FD/C26D / C297 `LDX #tbl / STX $x2`
+  return (uint16_t)(ldRomFD(a, at) | (ldRomFD(a, at + 1) << 8));
+}
 static uint8_t ldHd7F(const LdHdma* hd, unsigned adr) { return hd->wram ? hd->wram[0x10000 + (adr & 0xFFFF)] : 0; }
 // Line 0, h 16 (snes.c: `vPos == 0` -> hdmaInitRequested): FD/C1EE's channels at the set `$0153 & 0F` names, `$0128`'s
 // enabled -- each loads its line count and, indirect, its address. 0 when none is enabled (dma_initHdma returns).
@@ -325,9 +433,8 @@ static long ldHdmaInit(LdHdma* hd, const CtAudio* a) {
     c->enabled = (mask >> i) & 1; c->terminated = 0; c->doTransfer = 0;
     if (!c->enabled) continue;
     any = 1;
-    uint8_t dmap = ldRomFD(a, 0xC1F8 + 4 * i);                      // FD/C1F7 LDA #44 / STA $00 .. FD/C213 LDA #40 / STA $70
-    unsigned at = setB ? 0xC298 + 5 * i : 0xC26E + 5 * i;           // FD/C26D / C297 `LDX #tbl / STX $x2`, eight of each
-    c->tableAdr = (uint16_t)(ldRomFD(a, at) | (ldRomFD(a, at + 1) << 8));
+    uint8_t dmap = ldFdDmap(a, i);                                  // FD/C1F7 LDA #44 / STA $00 .. FD/C213 LDA #40 / STA $70
+    c->tableAdr = ldFdTable(a, setB, i);                            // FD/C26D / C297 `LDX #tbl / STX $x2`, eight of each
     c->indirect = (dmap & 0x40) != 0; c->len = LD_HDMA_LEN[dmap & 7];
     cost += 8;                                                      // the count byte
     c->repCount = ldHd7F(hd, c->tableAdr++);                        // (the table bank: FD/C242 LDA #7F / STA $x4)
@@ -387,7 +494,7 @@ static void ldWalk(long cycles) {        // wall time passes: the raster walks a
       if (ld.hd && ld.vPos == 225 && ld.hd->nmiOn) ld.hd->on = 1;      // the NMI, taken inside C7: `$0128` to $420C
       if (ld.vPos == 225) { ld.nmis++;                                    // vblank: the NMI is taken
         { static int lf = -1; if (lf < 0) { const char* e = getenv("CT_AUDIO_LDFRAMES"); lf = (e && *e) ? 1 : 0; }
-          if (lf && g_ldA) { ldCatch(g_ldA); const uint8_t* r = g_ldA->apu->ram;
+          if (lf && g_ldA) { ldCatch(g_ldA); const uint8_t* r = CtAudioAram(g_ldA);
             fprintf(stderr, "ldframe nmi%d $83=%02X $97=%02X%02X clk=%lld cpu=%lld refresh=%lld hdma=%lld irq=%lld polls=%ld\n", ld.nmis, r[0x83], r[0x98], r[0x97], ld.clk, ld.dbgCpu, ld.dbgBg[0], ld.dbgBg[1], ld.dbgBg[3], ld.polls);
             ld.dbgCpu = 0; ld.dbgBg[0] = ld.dbgBg[1] = ld.dbgBg[3] = 0; } }
         if (ld.ifast) ld.stolen += ld.nmiWait;                          //   (the rule: its work free, its waits the beam's)
@@ -421,9 +528,17 @@ static void ldCatch(CtAudio* a) {        // snes_catchupApu: run the SPC up to t
   if (!ld.active) return;
   ld.owed += (double)(ld.clk - ld.lastClk) * LD_APU_PER_MASTER; ld.lastClk = ld.clk;
   int n = (int)ld.owed;
-  if (n > 0) { int ran = apuRun(a, n); ld.owed -= (double)ran; g_sndSpcCycles += ran; }
+  if (n > 0) { int ran = apuRun(a, n); ld.owed -= (double)ran; ld.ran += ran; g_sndSpcCycles += ran; }
 }
-static void    Wc(CtAudio* a, int k, uint8_t v) { ldCatch(a); W(a, k, v); }   // snes_cpuWrite -> writeBBus $2140+k
+static void    Wc(CtAudio* a, int k, uint8_t v) {   // snes_cpuWrite -> writeBBus $2140+k
+  ldCatch(a); W(a, k, v);
+  // CT_AUDIO_PORTTRACE=1: every CPU store to the ports with the SPC's cycle count and its PC -- the port's side of the
+  // oracle's PEEK_APUTRACE (`aputrace fN CPU $2140 = ..  apuc=..`), to set the two processors' interleaving side by side
+  { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
+    if (pt && a->apu) fprintf(stderr, "porttrace CPU $214%d = %02X apuc=%llu out=%02X%02X%02X%02X\n", k, v,
+                              machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles,
+                              R(a, 0), R(a, 1), R(a, 2), R(a, 3)); }
+}
 static uint8_t Rc(CtAudio* a, int k)            { ldCatch(a); return R(a, k); }   // snes_cpuRead  -> readBBus
 static void ldStart(int mode, int vPos) {
   memset(&ld, 0, sizeof ld); ld.active = 1; ld.mode = (mode >= 0 && mode <= 2) ? mode : 0;
@@ -444,14 +559,23 @@ static int ldStartRule(CtAudio* a) {
   long at = spcPos % frame;                                          // a post past an earlier one's frames counts its own
   long pos = 225L * LD_MASTER_PER_LINE + at;                         // the vblank's line 225, h 0, + the offset
   pos %= frame; ld.vPos = (int)(pos / LD_MASTER_PER_LINE); ld.hPos = (int)(pos % LD_MASTER_PER_LINE);
-  if (a->rulePostAt > at && a->rulePostAt < frame) ldRun(a->rulePostAt - at);   // the NMI's waits: the SPC runs on
+  // The NMI's waits: the SPC runs on and the BEAM walks to postAt -- a raster position (the pad latch's line 228, the battle
+  // NMI's line-64 cut), so the stretch is wall time, postAt - at exactly. The CPU is waiting through it: the refresh and the
+  // HDMA it meets steal nothing from code (ldRun charged them as if the CPU had run: the battle's line-64 posts reached C7
+  // on line 71, 10,089 cycles of refresh + HDMA late -- the 087 fight's `18 72` / `18 A3` ... 474 APU cycles after the
+  // rule's cartridge's, now within 10. The field NMI's pad-latch posts lose the 160 of refresh they were charged).
+  if (a->rulePostAt > at && a->rulePostAt < frame) { ldWalk(a->rulePostAt - at); ld.stolen = 0; ld.irqPending = 0; }
   a->lastRuleStart = at > a->rulePostAt ? at : a->rulePostAt;
   ld.clk0 = ld.clk; ld.cpu0 = ld.dbgCpuAll;
   return 1;
 }
 // the $400-poll loops the ROM uses outside the token (C7/0A6E, C7/0603, C7/062F): CMP $2140, BEQ, DEX, BNE
 static int ldPoll400(CtAudio* a, uint8_t want) {
-  for (int px = 0; px < 0x400; px++) { ldRun(I_CMP_BB); if (Rc(a, 0) == want) { ldRun(I_BR_T); return 1; } ldRun(I_BR_NT + I_IMPL + I_BR_T); ld.polls++; }
+  for (int px = 0; px < 0x400; px++) { ldRun(I_CMP_BB); if (Rc(a, 0) == want) {
+      { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
+        if (pt && a->apu) fprintf(stderr, "porttrace ECHO %02X seen apuc=%llu after %d polls\n", want,
+                                  machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles, px); }
+      ldRun(I_BR_T); return 1; } ldRun(I_BR_NT + I_IMPL + I_BR_T); ld.polls++; }
   return 0;
 }
 
@@ -465,20 +589,34 @@ static int waitEcho(CtAudio* a, int k, uint8_t want) {
 }
 
 // ---- the upload ($C7:0038, audio_boot.md §4) --------------------------------
-static int uploadDriver(CtAudio* a, const uint8_t* rom, long romLen) {
-  // Read both tables out of the ROM. (§2: the old apu_upload.md read $001C as a
-  // single "initial target"; it is a 6-entry table parallel to $0010, and every
-  // block pushes its own destination to $2142/$2143 at $C7:00C6/$00CD.)
+// The six blocks: the container's (CT_ASSET_SND_BOOT: [dest u16] + bytes), or both tables read out of the ROM. (§2: the
+// old apu_upload.md read $001C as a single "initial target"; it is a 6-entry table parallel to $0010, and every block
+// pushes its own destination to $2142/$2143 at $C7:00C6/$00CD.)
+// Block 0 is the driver: the container keeps only its data (the code's bytes zero -- the game runs the driver in C, the
+// sound machine); the vendored core (the reference, the lockstep's original) takes its block 0 from the ROM.
+static int sndBootLoad(CtAudio* a, const uint8_t* rom, long romLen) {
   for (int b = 0; b < C7_NBLOCKS; b++) {
+    if (a->snd && !(b == 0 && a->spc != SPC_MACHINE && rom && romLen > C7_BASE + 0x40)) {
+      uint32_t n = 0; const uint8_t* e = CtAssetGet(a->snd, CT_ASSET_SND_BOOT, (uint32_t)b, &n);
+      if (!e || n < 2 || n - 2 > 0xFFFF) return 0;
+      a->dst[b] = (uint16_t)(e[0] | (e[1] << 8)); a->size[b] = (uint16_t)(n - 2); a->blk[b] = e + 2; a->src[b] = 0;
+      continue;
+    }
     long s = C7_BASE + C7_SRC_TABLE + b * 2, d = C7_BASE + C7_DST_TABLE + b * 2;
-    if (d + 1 >= romLen) return 0;
+    if (!rom || d + 1 >= romLen) return 0;
     a->src[b] = (uint16_t)(rom[s] | (rom[s + 1] << 8));
     a->dst[b] = (uint16_t)(rom[d] | (rom[d + 1] << 8));
     long p = C7_BASE + a->src[b];
     if (p + 1 >= romLen) return 0;
     a->size[b] = (uint16_t)(rom[p] | (rom[p + 1] << 8));
     if (p + 2 + a->size[b] > romLen) return 0;
+    a->blk[b] = rom + p + 2;
   }
+  return 1;
+}
+
+static int uploadDriver(CtAudio* a, const uint8_t* rom, long romLen) {
+  if (!sndBootLoad(a, rom, romLen)) return 0;
 
   // $C7:004D — wait for the IPL's $BBAA ready signature. The CPU parks $FF/$F0
   // in the low ports while it waits; the SPC's boot ROM answers AA/BB.
@@ -497,7 +635,7 @@ static int uploadDriver(CtAudio* a, const uint8_t* rom, long romLen) {
 
   uint8_t idx = 0;
   for (int b = 0; b < C7_NBLOCKS; b++) {
-    const uint8_t* p = rom + C7_BASE + a->src[b] + 2;   // skip the size word
+    const uint8_t* p = a->blk[b];                      // (after the size word)
     idx = 0;                                           // $C7:007D — per BLOCK, not per upload
     for (uint16_t y = 0; y < a->size[b]; y++) {
       W(a, 1, p[y]);      // data byte FIRST ($2141)...
@@ -569,18 +707,152 @@ static int uploadDriver(CtAudio* a, const uint8_t* rom, long romLen) {
 #define C7_SFXSET_B  0x75B0Bu   // driver mode 1 (battle) -- the block the IPL never uploads
 #define C7_IPL_BLK2  0x740B4u   // block 2's [u16 len]; its ARAM destination is $4700
 
+// ---- the sound's data: the asset container's (CT_ASSET_SND_*, assets/extract_assets.py pack_sound) when CtAudioInitWith
+// was given one that holds them, else the ROM's. Every read the loader makes of bank $C7 goes through these.
+static const uint8_t* sndGet(const CtAudio* a, uint32_t type, uint32_t id, uint32_t* n) {
+  return a && a->snd ? CtAssetGet(a->snd, type, id, n) : NULL;
+}
+int CtAudioFromAssets(const CtAudio* a) { return a && a->snd; }
+static unsigned sndInstrWord(const CtAudio* a, unsigned id, int which);   // (below)
+static const uint8_t* sndPerc(const CtAudio* a, int songId);
+static const uint8_t* sndSfxData(const CtAudio* a, int setB, unsigned* len);
+static int sndException(const CtAudio* a, int songId);
+static int sndCmpBytes(const char* what, int id, const uint8_t* x, int nx, const uint8_t* y, int ny) {
+  if (nx == ny && (!nx || (x && y && !memcmp(x, y, (size_t)nx)))) return 1;
+  int k = 0;
+  while (k < nx && k < ny && x && y && x[k] == y[k]) k++;
+  fprintf(stderr, "snd-data: %s %d differs: rom %d bytes, container %d, first at %d\n", what, id, nx, ny, k);
+  return 0;
+}
+long CtAudioDataCompare(const uint8_t* rom, long romLen, const CtAssets* snd) {
+  static CtAudio r, c;                                       // two data sources, no SPC: only the accessors run
+  memset(&r, 0, sizeof r); memset(&c, 0, sizeof c);
+  r.rom = rom; r.romLen = romLen;
+  c.rom = NULL; c.romLen = 0; c.snd = snd;
+  if (!snd || !CtAssetGet(snd, CT_ASSET_SND_BOOT, 0, NULL)) { fprintf(stderr, "snd-data: the container holds no sound\n"); return -1; }
+  while (CtAssetGet(snd, CT_ASSET_SND_SAMPLE, (uint32_t)(c.ninst + 1), NULL)) c.ninst++;
+  if (!sndBootLoad(&r, rom, romLen) || !sndBootLoad(&c, NULL, 0)) { fprintf(stderr, "snd-data: the blocks\n"); return -1; }
+  long items = 0;
+  // block 0: its data the ROM's, its code's bytes zero (the cost table's code map); the table itself the ROM's
+  uint32_t tn = 0;
+  const uint8_t* tm = CtAssetGet(snd, CT_ASSET_SND_TIMING, 0, &tn);
+  if (!tm) { fprintf(stderr, "snd-data: the container holds no cost table (CT_ASSET_SND_TIMING)\n"); return -1; }
+  { const char* tp = "build/_snd_timing_check.bin";
+    long n = CtAudioTimingExport(rom, romLen, tp);
+    FILE* f = n > 0 ? fopen(tp, "rb") : NULL;
+    uint8_t* x = f ? (uint8_t*)malloc((size_t)n) : NULL;
+    int same = x && fread(x, 1, (size_t)n, f) == (size_t)n && n == (long)tn && !memcmp(x, tm, (size_t)n);
+    if (f) fclose(f);
+    free(x); remove(tp);
+    if (!same) { fprintf(stderr, "snd-data: the cost table is not the ROM's\n"); return -1; }
+    items++; }
+  for (int b = 0; b < C7_NBLOCKS; b++, items++) {
+    if (b == 0) {
+      if (r.dst[0] != c.dst[0] || r.size[0] != c.size[0]) { fprintf(stderr, "snd-data: block 0's place\n"); return -1; }
+      for (int k = 0; k < r.size[0]; k++) {
+        int code = SndTimingIsCode(tm, (long)tn, (uint16_t)(r.dst[0] + k));
+        if (c.blk[0][k] != (code ? 0 : r.blk[0][k])) { fprintf(stderr, "snd-data: block 0 byte $%04X (%s)\n", r.dst[0] + k, code ? "code" : "data"); return -1; }
+      }
+      continue;
+    }
+    if (r.dst[b] != c.dst[b] || !sndCmpBytes("block", b, r.blk[b], r.size[b], c.blk[b], c.size[b])) return -1;
+  }
+  if (CtAudioSongCount(&r) != CtAudioSongCount(&c) || CtAudioInstrumentCount(&r) != CtAudioInstrumentCount(&c)
+      || CtAudioHeapBase(&r) != CtAudioHeapBase(&c)) { fprintf(stderr, "snd-data: counts / heap base\n"); return -1; }
+  items += 3;
+  for (int s = 0; s < CtAudioSongCount(&r); s++) {
+    int nr = 0, nc = 0;
+    const uint8_t* x = CtAudioSeqBlock(&r, s, &nr); const uint8_t* y = CtAudioSeqBlock(&c, s, &nc);
+    if (!x || !y || !sndCmpBytes("sequence (+3 past it)", s, x, nr + 3, y, nc + 3)) return -1;
+    if ((((x - rom) - 2) & 0xFFFF) != (long)(y[-2] | (y[-1] << 8))) { fprintf(stderr, "snd-data: sequence %d's address\n", s); return -1; }
+    if (!sndCmpBytes("instrument list", s, CtAudioInstrSet(&r, s), 32, CtAudioInstrSet(&c, s), 32)) return -1;
+    if (!sndCmpBytes("percussion", s, sndPerc(&r, s), 36, sndPerc(&c, s), 36)) return -1;
+    int e1 = 0, s1 = 0, e2 = 0, s2 = 0;
+    CtAudioSongRecord(&r, s, &e1, &s1); CtAudioSongRecord(&c, s, &e2, &s2);
+    if (e1 != e2 || s1 != s2) { fprintf(stderr, "snd-data: record %d\n", s); return -1; }
+    items += 5;
+  }
+  for (int i = 1; i <= CtAudioInstrumentCount(&r); i++, items++) {
+    int nr = 0, nc = 0;
+    const uint8_t* x = CtAudioSampleBlock(&r, i, &nr); const uint8_t* y = CtAudioSampleBlock(&c, i, &nc);
+    if (!x || !y || !sndCmpBytes("sample", i, x, nr, y, nc)) return -1;
+    if ((((x - rom) - 2) & 0xFFFF) != (long)(y[-2] | (y[-1] << 8))) { fprintf(stderr, "snd-data: sample %d's address\n", i); return -1; }
+  }
+  for (int i = 0; i <= CtAudioInstrumentCount(&r); i++)
+    for (int w = 0; w < 3; w++, items++)
+      if (sndInstrWord(&r, (unsigned)i, w) != sndInstrWord(&c, (unsigned)i, w)) { fprintf(stderr, "snd-data: instrument %d word %d\n", i, w); return -1; }
+  for (int sb = 0; sb < 2; sb++, items++) {
+    unsigned nr = 0, nc = 0;
+    const uint8_t* x = sndSfxData(&r, sb, &nr); const uint8_t* y = sndSfxData(&c, sb, &nc);
+    if (!sndCmpBytes("effect set", sb, x, (int)nr, y, (int)nc)) return -1;
+  }
+  for (int s = 0; s < 256; s++, items++)
+    if (sndException(&r, s) != sndException(&c, s)) { fprintf(stderr, "snd-data: exception list, song %d\n", s); return -1; }
+  for (int i = 0; i < 8; i++, items += 3)
+    if (ldFdDmap(&r, i) != ldFdDmap(&c, i) || ldFdTable(&r, 0, i) != ldFdTable(&c, 0, i)
+        || ldFdTable(&r, 1, i) != ldFdTable(&c, 1, i)) { fprintf(stderr, "snd-data: FD/C1EE channel %d\n", i); return -1; }
+  return items;
+}
 int CtAudioSongCount(const CtAudio* a) {
+  if (a && a->snd) { uint32_t n = 0; const uint8_t* m = sndGet(a, CT_ASSET_SND_MISC, 0, &n); return m && n ? m[0] : 0; }
   if (!a || !a->rom || (long)C7_SONGCOUNT >= a->romLen) return 0;
   return a->rom[C7_SONGCOUNT];
 }
 int CtAudioInstrumentCount(const CtAudio* a) {
+  if (a && a->snd) return a->ninst;
   if (!a || !a->rom) return 0;
   return (int)((C7_LOOPOFF - C7_SAMPLEPTR) / 3);        // the table's own extent, not a constant
 }
 unsigned CtAudioHeapBase(const CtAudio* a) {
+  if (a && a->snd) return (unsigned)a->size[2] + 0x4700u;   // block 2's length past its destination
   if (!a || !a->rom || (long)(C7_IPL_BLK2 + 2) > a->romLen) return 0;
   return (unsigned)(a->rom[C7_IPL_BLK2] | (a->rom[C7_IPL_BLK2 + 1] << 8)) + 0x4700u;
 }
+// One of an instrument's three words ($C7:0BA4 loop, $C7:0C20 / $C7:0C9C the $1F40 / $1FC0 params), at the loader's
+// own index `(id - 1) * 2`: id 0 reads index -1, the long,X wrap into bank $C8.
+static unsigned sndInstrWord(const CtAudio* a, unsigned id, int which) {
+  if (a->snd) {
+    uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_INSTR, id & 0xFFFF, &n);
+    return e && n >= 6 ? (unsigned)(e[2 * which] | (e[2 * which + 1] << 8)) : 0;
+  }
+  static const unsigned tbl[3] = { C7_LOOPOFF, C7_PARAM1F40, C7_PARAM1FC0 };
+  long tp = (long)tbl[which] + (long)(((id - 1) * 2) & 0xFFFF);
+  return (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+}
+// The song's percussion block (36 bytes, ARAM $F120).
+static const uint8_t* sndPerc(const CtAudio* a, int songId) {
+  if (a->snd) { uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SONG, (uint32_t)songId, &n); return e && n >= 70 ? e + 32 : NULL; }
+  long p = (long)C7_PERC + (long)songId * 36;
+  return (p + 36 <= a->romLen) ? a->rom + p : NULL;
+}
+// An effect set ([u16 len][bytes]): set B is the battle's.
+static const uint8_t* sndSfxData(const CtAudio* a, int setB, unsigned* len) {
+  if (a->snd) { uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SFXSET, setB ? 1u : 0u, &n); *len = n; return e; }
+  long src = setB ? (long)C7_SFXSET_B : (long)C7_SFXSET_A;
+  *len = (unsigned)(a->rom[src] | (a->rom[src + 1] << 8));
+  return a->rom + src + 2;
+}
+// $C7:0734's song-exception list: 1 when the song is on it.
+// The scan itself (C7/0740-074B): 1 on a match; *walked = the entries passed before the one that stopped it (the price).
+static int sndExceptionWalk(const CtAudio* a, int songId, int* walked) {
+  int n0 = 0;
+  if (walked) *walked = 0;
+  if (a->snd) {
+    uint32_t n = 0; const uint8_t* m = sndGet(a, CT_ASSET_SND_MISC, 0, &n);
+    for (uint32_t k = 1; m && k < n; k++, n0++) {
+      if (m[k] & 0x80) break;
+      if (m[k] == (uint8_t)songId) { if (walked) *walked = n0; return 1; } }
+    if (walked) *walked = n0;
+    return 0;
+  }
+  for (long p = 0x70AD8; p < a->romLen; p++, n0++) {
+    if (a->rom[p] & 0x80) break;                                // bit7 = end of list
+    if (a->rom[p] == (uint8_t)songId) { if (walked) *walked = n0; return 1; }
+  }
+  if (walked) *walked = n0;
+  return 0;
+}
+static int sndException(const CtAudio* a, int songId) { return sndExceptionWalk(a, songId, NULL); }
 static long c7ptr24(const CtAudio* a, unsigned tbl, int idx) {   // a 24-bit bank:addr -> flat offset
   long p = (long)tbl + (long)idx * 3;
   if (!a || !a->rom || p + 3 > a->romLen) return -1;
@@ -591,6 +863,12 @@ static long c7ptr24(const CtAudio* a, unsigned tbl, int idx) {   // a 24-bit ban
 // A [u16 len][payload] block: returns the payload pointer and writes its length. NULL on any bound
 // failure -- callers must not fall back to a table length, because the ROM never does.
 const uint8_t* CtAudioSeqBlock(const CtAudio* a, int songId, int* lenOut) {
+  if (a && a->snd) {
+    uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SEQ, (uint32_t)songId, &n);
+    if (!e || n < 5) return NULL;
+    if (lenOut) *lenOut = (int)n - 5;                  // [addr u16] + the block + the 3 bytes read past it
+    return e + 2;
+  }
   long p = c7ptr24(a, C7_SEQPTR, songId);
   if (p < 0 || p + 2 > a->romLen) return NULL;
   int n = a->rom[p] | (a->rom[p + 1] << 8);
@@ -600,6 +878,12 @@ const uint8_t* CtAudioSeqBlock(const CtAudio* a, int songId, int* lenOut) {
 }
 const uint8_t* CtAudioSampleBlock(const CtAudio* a, int instr, int* lenOut) {
   if (instr < 1 || instr > CtAudioInstrumentCount(a)) return NULL;   // the table is 1-based
+  if (a->snd) {
+    uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SAMPLE, (uint32_t)instr, &n);
+    if (!e || n < 2) return NULL;
+    if (lenOut) *lenOut = (int)n - 2;
+    return e + 2;
+  }
   long p = c7ptr24(a, C7_SAMPLEPTR, instr - 1);
   if (p < 0 || p + 2 > a->romLen) return NULL;
   int n = a->rom[p] | (a->rom[p + 1] << 8);
@@ -608,11 +892,19 @@ const uint8_t* CtAudioSampleBlock(const CtAudio* a, int instr, int* lenOut) {
   return a->rom + p + 2;
 }
 const uint8_t* CtAudioInstrSet(const CtAudio* a, int songId) {
+  if (a && a->snd) { uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SONG, (uint32_t)songId, &n); return e && n >= 70 ? e : NULL; }
   long p = (long)C7_INSTSET + (long)songId * 32;
   return (a && a->rom && p + 32 <= a->romLen) ? a->rom + p : NULL;
 }
 // The per-song record: EDL = byte0's low nibble (the echo delay), and byte1 the opaque $004D scalar.
 int CtAudioSongRecord(const CtAudio* a, int songId, int* edl, int* scalar) {
+  if (a && a->snd) {
+    uint32_t n = 0; const uint8_t* e = sndGet(a, CT_ASSET_SND_SONG, (uint32_t)songId, &n);
+    if (!e || n < 70) return 0;
+    if (edl) *edl = e[68] & 0x0F;
+    if (scalar) *scalar = e[69];
+    return 1;
+  }
   long p = (long)C7_REC + (long)songId * 2;
   if (!a || !a->rom || p + 2 > a->romLen) return 0;
   if (edl)    *edl    = a->rom[p] & 0x0F;
@@ -763,7 +1055,8 @@ static void sndCmdBlk(CtAudio* a, uint8_t* m, unsigned dst, uint8_t cmd) {
 // the bank bump where Y wraps). The size word's own two INYs have the same `BNE / INC $14`.
 enum { SND_SAMPLE = 0, SND_SEQ = 1 };
 static void sndStream(CtAudio* a, uint8_t* m, const uint8_t* src, int n, int kind) {
-  long y = ((long)(src - a->rom) - 2) & 0xFFFF;                     // Y at the size word
+  long y = a->snd ? (long)(src[-2] | (src[-1] << 8))               // Y at the size word (the container keeps its address)
+                  : ((long)(src - a->rom) - 2) & 0xFFFF;
   long head = 0;                                                    // the size word: LDA [$12],Y / STA / (STA / ADC / STA) / INY / BNE
   for (int k = 0; k < 2; k++) { y = (y + 1) & 0xFFFF; head += I_LDA_DPIY_ROM + I_LDA_DP + I_IMPL + (y ? I_BR_T : I_BR_NT + I_INC_DP); }
   int slow = (y + n) > 0xFFFF;                                      // ADC $0C carries: the block crosses its bank
@@ -852,10 +1145,9 @@ static void sndSfxSet(CtAudio* a, uint8_t* m) {
     SM8(m, 0x1E84, 0xE0);
   }
   int setB = M8(m, 0x1E10) != 0;
-  long src = setB ? (long)C7_SFXSET_B : (long)C7_SFXSET_A;
-  unsigned x = (unsigned)(a->rom[src] | (a->rom[src + 1] << 8));
+  unsigned x = 0; const uint8_t* sfx = sndSfxData(a, setB, &x);
   ldRun(I_LDA_DP + (setB ? I_BR_T : I_BR_NT) + 2 * (5 * RA + I_LDA_DP) + 3 * (I_IMM8 + I_LDA_DP) + I_LDA_DP16 + I_IMM16);   // 0952-0970
-  const uint8_t* p = a->rom + src + 2;
+  const uint8_t* p = sfx;
   do {
     for (int k = 0; k < 3; k++) { ldRun(I_LDA_DPIY_ROM + I_STA_BB); Wc(a, 1 + k, p[k]); ldRun(I_IMPL); }   // LDA [$12],Y / STA $214x / INY
     ldRun(I_LDA_DP + I_JSR);                                                // LDA $84 / JSR C7/09DA
@@ -943,8 +1235,15 @@ static int sndDefrag(CtAudio* a, uint8_t* m) {
         sndTok(a, M8(m, 0x1E84));                       // 02EE LDA $84 / 02F0 JSR C7/09DA
         int xr = ((M8(m, 0x1E05) + 1) & 0xFF) << 5;     // 02F8 LDA $05 / INC A / AND #00FF / ASL x5
         for (int yr = 0x20; yr > 0; yr -= 2, xr -= 2) { // 031A DEX / DEX / DEY / DEY / BNE
-          long tp = (long)0x70E0F + xr;                 // 0304 LDA $C70E0F,X
-          unsigned v = (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+          unsigned v = 0;                               // 0304 LDA $C70E0F,X: the song's own instrument list
+          if (a->snd) {                                 //   (word xr/2 - 1 of the set $C7:0E11 + ($05 + 1) * 32 - 32)
+            const uint8_t* set = xr >= 2 ? CtAudioInstrSet(a, (xr >> 5) - 1) : NULL;
+            int w = ((xr - 2) & 0x1F) >> 1;
+            if (set) v = (unsigned)(set[2 * w] | (set[2 * w + 1] << 8));
+          } else {
+            long tp = (long)0x70E0F + xr;
+            v = (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+          }
           SM16(m, 0x1EFE + yr, v);                      // 0308
           SM16(m, 0x1F1E + yr, v);                      // 030B
           SM16(m, 0x1E1E + yr, 0);                      // 0311
@@ -1016,51 +1315,74 @@ static void sndParamStream(CtAudio* a, uint8_t* m, const uint8_t* src) {
 }
 // $C7:0A12 -- the echo-buffer cull: from slot 0 up, the first resident whose END high byte has
 // reached the new ESA page is evicted, and everything from there to slot $1F is cleared.
+// C7/0A12, on the loader clock: `LDA $63,X / BEQ ->0A37` (an empty slot ends the walk), `CMP $F2 / BCS ->0A29` (a sample
+// ending past the new echo buffer's page), `INX INX / CPX #0020 / BNE`; from that slot to the table's end
+// `STA $20,X / STA $40,X / STA $62,X / INX / CPX #0020 / BNE` zeroes the three tables BYTE by byte. 3,812 master cycles from
+// C7/0A57's JSR to C7/0A5A on the rule's cartridge (route leg 15, the world -> 078: 6 slots passed, the 7th culled), as here.
 static void sndCull(uint8_t* m) {
   unsigned esa = M8(m, 0x1EF2);
+  ldRun(I_PHP + I_SEP + I_IMM16);                                     // 0A12 PHP / SEP #20 / LDX #0000
   for (int s = 0; s < 16; s++) {
-    if (M8(m, 0x1E63 + s * 2) >= esa) {                 // $1E60[s+1] high byte = this sample's end
+    unsigned end = M8(m, 0x1E63 + s * 2);                             // $1E60[s+1] high byte = this sample's end
+    ldRun(I_LDA_DPX);                                                 // 0A18 LDA $63,X
+    if (!end) { ldRun(I_BR_T + I_PLP + I_RTS); return; }              // 0A1A BEQ ->0A37 / PLP / RTS
+    ldRun(I_BR_NT + I_LDA_DP);                                        // 0A1C CMP $F2
+    if (end >= esa) {
+      ldRun(I_BR_T + I_IMM8);                                         // 0A1E BCS ->0A29 / LDA #00
+      for (int x = s * 2; x < 0x20; x++) ldRun(3 * I_LDA_DPX + I_IMPL + I_IMM16 + (x < 0x1F ? I_BR_T : I_BR_NT));
       for (int k = s; k < 16; k++) {
         SM16(m, 0x1E20 + k * 2, 0); SM16(m, 0x1E40 + k * 2, 0);
         SM16(m, 0x1E62 + k * 2, 0);
       }
+      ldRun(I_PLP + I_RTS);                                           // 0A37 PLP / RTS
       return;
     }
-    if (M16(m, 0x1E20 + s * 2) == 0) return;            // first empty slot ends the scan
+    ldRun(I_BR_NT + 2 * I_IMPL + I_IMM16 + (s < 15 ? I_BR_T : I_BR_NT));   // 0A20 INX INX / CPX #0020 / BNE
   }
+  ldRun(I_BR_T + I_PLP + I_RTS);                                      // 0A27 BRA ->0A37
 }
 
 // The loader proper. `cmd` is the mailbox command ($10/$11/$14/$15); `m` is the engine's $7E page.
 // Returns 1 when the song was loaded, 0 when the driver ABORTED it ($C7:0A80) or the load hit an
 // unported boundary, -1 on a structural refusal. Blocking, by the ROM's own design.
 int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
-  if (!a || !a->ready || !m || !a->rom) return -1;   // m == NULL is a real case: the overworld has no VM
+  if (!a || !a->ready || !m || (!a->rom && !a->snd)) return -1;   // m == NULL is a real case: the overworld has no VM
   g_sndUnits = g_sndBytes = g_sndBlocks = 0; g_sndSpcCycles = 0; g_sndSettleCycles = 0; g_sndMovedBytes = 0;
   int nsong = CtAudioSongCount(a);
   if (songId < 0 || songId >= nsong) return -1;                 // $C7:01A5 CMP $C70AE9 / BCS -> drop
-  ldRun(18 + I_LDA_DP + 30 + I_BR_NT + I_JSR + 250 + I_RTS + I_JSR + 276 + I_RTS + 2 * I_LDA_DP);   // $01A1-$01B3: SEP, LDA $01, CMP $C70AE9, BCS, JSR C7/0734 (the exception scan, 1 entry), JSR C7/0A39 (the record: 14 instructions), LDA/STA $05
+  // The ROM's loader reads its inputs from the mailbox -- the id at C7/01A3 and C7/0A64 `LDA $01`, the command at C7/0737
+  // and C7/0A69 `LDA $00` (posted to $2140, and the token seed) -- so the parameters ARE those two bytes. Staged here: a
+  // caller that left the page unposted (the driver fuzz's direct call) had the port block send command $00 for song $00,
+  // and the driver took the stream's tokens for commands -- an upload session whose garbage headers reached the kind-7
+  // mover and ran it over the driver's own code. (CtAudioService's page already holds them: no change there.)
+  SM8(m, 0x1E00, cmd); SM8(m, 0x1E01, (unsigned)songId);
+  ldRun(I_SEP + I_LDA_DP + 30 + I_BR_NT + I_JSR);              // $01A1-$01AB: SEP, LDA $01, CMP $C70AE9, BCS, JSR C7/0734
 
-  // ---- $C7:0734: the song-exception scan, then bit2 for cmd >= $14 ------------------------
+  // ---- $C7:0734: bit2 for cmd >= $14, else the song-exception scan ---------------------------
   // Implemented as the SCAN, not as "inert": rom[$C7:0AD8] happens to start with $FF on this ROM so
   // the list terminates immediately, but a port that hardcoded that would be encoding an accident.
-  for (long p = 0x70AD8; p < a->romLen; p++) {
-    if (a->rom[p] & 0x80) break;                                // bit7 = end of list
-    if (a->rom[p] == (uint8_t)songId) { SM8(m, 0x1E00, M8(m, 0x1E00) | 4); break; }
-  }
-  if (cmd >= 0x14) SM8(m, 0x1E00, M8(m, 0x1E00) | 4);
+  { int walked = 0, hit = cmd >= 0x14 ? 1 : sndExceptionWalk(a, songId, &walked);
+    ldRun(I_PHP + I_SEP + I_LDA_DP + I_IMM8);                   // 0734 PHP / SEP #20 / LDA $00 / CMP #14
+    if (cmd >= 0x14) ldRun(I_BR_T);                             // 073B BCS ->074D
+    else ldRun(I_BR_NT + I_IMM16 + walked * (30 + I_BR_NT + I_LDA_DP + I_BR_NT + I_IMPL + I_BR_T)   // 073D LDX; per entry LDA long,X / BMI / CMP $01 / BEQ / INX / BRA
+               + 30 + (hit ? I_BR_NT + I_LDA_DP + I_BR_T : I_BR_T));   // the entry that stops it: the match (BEQ) or the end (BMI)
+    if (hit) { ldRun(I_IMM8 + 2 * I_LDA_DP); SM8(m, 0x1E00, M8(m, 0x1E00) | 4); }   // 074D LDA #04 / ORA $00 / STA $00
+    ldRun(I_PLP + I_RTS); }                                     // 0753 PLP / RTS
 
   // ---- $C7:0A39: the record, the ECHO-DELAY switch, the port block, the token seed, the abort --
   int edl = 0, scalar = 0;
   CtAudioSongRecord(a, songId, &edl, &scalar);
   SM8(m, 0x1E02, scalar);
   SM8(m, 0x1E03, edl);
-  ldRun(I_LDA_DP + I_BR_NT);                                    // $0A53 CMP $F0 / $0A55 BEQ
+  ldRun(I_JSR + I_PHP + I_SEP + I_LDA_DP16 + I_IMM16 + 2 * I_IMPL + I_SEP + 2 * (30 + I_LDA_DP) + I_IMM8);   // 01AE JSR C7/0A39: 0A39-0A51, the record's 12
+  ldRun(I_LDA_DP);                                              // $0A53 CMP $F0
   if (edl != (int)M8(m, 0x1EF0)) {                              // $0A53 CMP $F0 -- BEFORE the port block
-    ldRun(I_JSR + 60 + 240 + I_RTS);                            // $0A57 JSR C7/09FD: the ESA rewrite, then the cull's slot walk (C7/0A12)
+    ldRun(I_BR_NT + I_JSR + I_PHP + I_SEP + I_LDA_DP + 3 * I_IMPL + I_IMM8 + 3 * I_IMPL + I_LDA_DP + I_JSR);   // 0A55 BEQ / JSR C7/09FD: 09FD-0A0D, the ESA page
     SM8(m, 0x1EF0, edl);
     SM8(m, 0x1EF2, (0xF1 - edl * 8) & 0xFF);                    // ESA page; buffer = [ESA*$100,$F100)
-    sndCull(m);                                                 // $09FD -> $0A12
-  }
+    sndCull(m);                                                 // $0A0D JSR C7/0A12, the cull's slot walk
+    ldRun(I_PLP + I_RTS);                                       // 0A10 PLP / RTS
+  } else ldRun(I_BR_T);                                         // 0A55 BEQ ->0A5A
   for (int attempt = 0; ; attempt++) {                          // $0A5A, resent unboundedly on timeout
     ldRun(I_LDA_DP + I_STA_BB); Wc(a, 3, M8(m, 0x1E03));        // 0A5A LDA $03 / 0A5C STA $2143
     ldRun(I_LDA_DP + I_STA_BB); Wc(a, 2, M8(m, 0x1E02));        // 0A5F / 0A61
@@ -1077,9 +1399,11 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   SM8(m, 0x1E84, (uint8_t)((M8(m, 0x1E00) + 1) & 0x7F));        // $0A7B THE TOKEN SEED
   if (Rc(a, 1) & 0x80) {                                        // $0A80 the driver refused the song
     uint8_t t = M8(m, 0x1E84);
-    if (ld.ifast) {                                             // the rule: C7/0A85-0A8E on the clock, `DEC A / CMP $2140 /
-      ldRun(I_BR_NT + I_LDA_DP + I_STA_BB); Wc(a, 0, t);        //   BEQ` a wait while the old echo stands (off the rule the
-      ldRun(I_IMPL);                                            //   SPC is stepped outside the clock, as it always was)
+    if (ld.active) {                                            // C7/0A85-0A8E on the clock, `DEC A / CMP $2140 / BEQ` a wait
+      ldRun(I_BR_NT + I_LDA_DP + I_STA_BB); Wc(a, 0, t);        //   while the old echo stands: CPU time on any clocked JSL --
+      ldRun(I_IMPL);                                            //   the rule's and the loader's (a location load's song post:
+                                                                //   loc 070's 24 lines until the driver's timer routine writes
+                                                                //   its port 0, SPC $02DD); unclocked callers step the SPC
       sndSpin(a, 0, (uint8_t)(t - 1), 0);
     } else {
       W(a, 0, t);
@@ -1088,6 +1412,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
     SM8(m, 0x1E00, 0);                                          // $1E05 is deliberately NOT set
     return 0;
   }
+  ldRun(I_BR_T + I_PLP + I_RTS + 2 * I_LDA_DP);                 // 0A83 BPL ->0A96 / PLP / RTS; 01B1 LDA $01 / STA $05
   SM8(m, 0x1E05, (unsigned)songId);                             // $01B3 -- BUSY, and the id register
 
   // ---- $C7:01B5-$0375: the instrument-set DIFF ---------------------------------------------
@@ -1122,7 +1447,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
       if (!id) { ldRun(I_BR_T - I_BR_NT); break; }
       int used = 0; ldRun(I_IMM16);                             // 0220 LDY #0000
       for (int k = 0; k < 16; k++) { ldRun(34); if (M16(m, 0x1F00 + k * 2) == id) { used = 1; ldRun(I_BR_T); break; } ldRun(I_BR_NT + 2 * I_IMPL + I_IMM16 + (k < 15 ? I_BR_T : I_BR_NT)); }   // 0223 CMP $1F00,Y / BEQ / INY INY / CPY / BNE (the ROM walks all 16 slots)
-      if (!used) { SM16(m, 0x1E20 + s * 2, 0); SM16(m, 0x1E40 + s * 2, 0); ldRun(I_LDA_DPX16); }   // 022F STZ $20,X
+      if (!used) { SM16(m, 0x1E20 + s * 2, 0); ldRun(I_LDA_DPX16); }   // 022F STZ $20,X -- the id only: $1E40 keeps its length (the append or 0367 rewrites it)
       ldRun(2 * I_IMPL + I_IMM16 + (s < 15 ? I_BR_T : I_BR_NT));   // 0231 INX INX / CPX #0020 / BNE
     }
     int firstFree = 0;
@@ -1206,8 +1531,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
       }
       if (found) {
         unsigned base = M16(m, 0x1E60 + y);
-        long lp = (long)C7_LOOPOFF + (long)(((id - 1) * 2) & 0xFFFF);
-        unsigned loop = (lp + 2 <= a->romLen) ? (unsigned)(a->rom[lp] | (a->rom[lp + 1] << 8)) : 0;
+        unsigned loop = sndInstrWord(a, id, 0);
         SM16(m, ptr, base); SM16(m, ptr + 2, (base + loop) & 0xFFFF);
         ldRun(I_PHX16 + 3 * I_IMPL + I_ABSX_W16_X16 + I_STA_DPI16 + 2 * I_INC_DP16 + I_IMPL + I_LONGX_ROM16 + I_STA_DPI16
               + I_PLX16 + I_BR_T);                              // 039E PHX / DEC / ASL / TAX / LDA $1E60,Y / STA ($12) / INC $12 x2 / CLC / ADC / STA ($12) / PLX / BRA
@@ -1228,15 +1552,13 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   { uint8_t buf[32];
     for (int k = 0; k < 16; k++) {
       unsigned id = M16(m, 0x1F00 + k * 2);
-      long tp = (long)C7_PARAM1F40 + (long)(((id - 1) * 2) & 0xFFFF);
-      unsigned v = (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+      unsigned v = sndInstrWord(a, id, 1);
       buf[k * 2] = (uint8_t)v; buf[k * 2 + 1] = (uint8_t)(v >> 8);
     }
     sndHeadLit(a, m, 0x1F40, 0x02, I_SEP); sndParamStream(a, m, buf);
     for (int k = 0; k < 16; k++) {
       unsigned id = M16(m, 0x1F00 + k * 2);
-      long tp = (long)C7_PARAM1FC0 + (long)(((id - 1) * 2) & 0xFFFF);
-      unsigned v = (tp + 2 <= a->romLen) ? (unsigned)(a->rom[tp] | (a->rom[tp + 1] << 8)) : 0;
+      unsigned v = sndInstrWord(a, id, 2);
       buf[k * 2] = (uint8_t)v; buf[k * 2 + 1] = (uint8_t)(v >> 8);
     }
     sndHeadLit(a, m, 0x1FC0, 0x02, I_SEP); sndParamStream(a, m, buf);
@@ -1284,8 +1606,8 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
                sndStream(a, m, seq, n, SND_SEQ); } }
 
   // ---- $C7:059A: the 36-byte per-song block -> ARAM $F120 ------------------------------------
-  { long p = (long)C7_PERC + (long)songId * 36;
-    if (p + 36 <= a->romLen) sndPercBlock(a, m, a->rom + p); }
+  { const uint8_t* perc = sndPerc(a, songId);
+    if (perc) sndPercBlock(a, m, perc); }
 
   // ---- $C7:0601: GO. Without this final $E0 the driver never starts playing. ------------------
   sndMark("go", 0);
@@ -1294,9 +1616,9 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
   ldRun(I_STA_BB); Wc(a, 0, 0xE0);                              // 0609 STA $2140
   if (ld.active) ldPoll400(a, 0xE0);                            // 060C CMP $2140 / BEQ / DEX / BNE
   else for (long c = 0; c < 0x400L * 16; c += ctStepCycles()) { if (R(a, 0) == 0xE0) break; step(a); }
-  ldRun(I_LDA_DP + I_JSR + 240 + I_RTS);                        // 0614 STA $05 / 0616 JSR C7/0A12 (the cull's slot walk, ~240)
+  ldRun(I_LDA_DP + I_JSR);                                      // 0614 STA $05 / 0616 JSR C7/0A12
   SM8(m, 0x1E05, 0xE0);                                         // $0614 -- READY again
-  sndCull(m);                                                   // $0616
+  sndCull(m);                                                   // $0616: the cull's slot walk, priced as it walks
   SM8(m, 0x1E00, 0);                                            // $0192
   return 1;
 }
@@ -1310,7 +1632,7 @@ int CtAudioLoadSong(CtAudio* a, uint8_t* m, int songId, uint8_t cmd) {
 // before C0/0057 -- the host holds the screen black for them.
 int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
   if (master) *master = 0; if (frames) *frames = 0;
-  if (!a || !a->rom) return 0;
+  if (!a || (!a->rom && !a->snd)) return 0;
   ldStart(2, 0);
   ldRun(I_PHP + 28 + I_PHP + 2 * I_SEP + 3 * 28 + I_SEP + I_IMM8 + I_PHP + 26 + I_IMM16 + 28 + 34 + I_IMM16);  // 0038-004D prologue
   int ok = 0;
@@ -1331,7 +1653,7 @@ int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
   ldRun(I_STA_BB);
   for (;;) { ldRun(I_CMP_BB); if (Rc(a, 0) == 0xCC) { ldRun(I_BR_NT); break; } ldRun(I_BR_T); ld.polls++; }   // 0078
   for (int b = 0; b < C7_NBLOCKS; b++) {
-    const uint8_t* src = a->rom + C7_BASE + a->src[b] + 2;
+    const uint8_t* src = a->blk[b];
     // 007D LDA #00 / XBA / LDA $C70010,X / STA $12 / LDA $C70011,X / STA $13 / LDA #C7 / STA $14 / LDY #0 /
     // LDA [$12],Y / CLC / ADC #02 / STA $0C / INY / LDA [$12],Y / ADC #00 / STA $0D / INY
     ldRun(I_IMM8 + I_XBA + 30 + I_LDA_DP + 30 + I_LDA_DP + I_IMM8 + I_LDA_DP + I_IMM16 + I_LDA_DPIY_ROM + I_IMPL +
@@ -1375,25 +1697,203 @@ int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
   ldCatch(a);
   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   ld.active = 0;
-  a->cycleCarry -= (double)ld.clk * LD_APU_PER_MASTER;               // the SPC time it already ran
+  a->cycleCarry -= (double)ld.ran;                                    // the SPC time it already ran
   a->ready = 1;
   if (master) *master = a->lastMaster; if (frames) *frames = a->lastFrames;
   return 1;
 }
 
-CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
-  if (!rom || romLen < C7_BASE + 0x6000) return NULL;
+// ---- measuring the driver (disasm/notes/audio_spc_driver.md) -------------------------------------------------------
+// CT_SPC_COVERAGE=<file>: every SPC700 address the driver executed, `ADDR COUNT` a line, written at exit (the listing
+// tools/spc700dis.py --coverage marks). CT_DSP_LOG=<file>: every S-DSP register write, `frame apucycle reg value`.
+static uint32_t* g_spcCov;
+static FILE* g_dspLog;
+static long g_audFrameNo;
+static void spcCovHook(Apu* apu, uint16_t pc) { (void)apu; g_spcCov[pc]++; }
+// CT_MIXER_CAPTURE=<file>: what the S-DSP was given and what it made, for the native mixer's replay (ct.exe --mixreplay,
+// tools/mixer_replay.py; disasm/notes/audio_mixer.md sec. 9). Binary, little-endian: "CTMX", u32 version 1, then records:
+//   'S' u32 apucycles, u32 n, n bytes of dsp_handleState, 64 KB ARAM -- a segment starts (power-on, a seeded or loaded SPC)
+//   'W' varint dcyc, reg, val      -- an S-DSP register write ($F3), dcyc APU cycles after the previous record
+//   'A' varint dcyc, u16 adr, val  -- an SPC write to its RAM that CHANGES the byte (the DSP's own echo writes are not
+//                                     the SPC's: both replays make them)
+//   'R' varint dcyc, reg, val      -- an S-DSP register read and the value the SPC got
+//   'H' u32 n, u32 fnv             -- the next n samples the DSP made (FNV-1a/32 over int16 L,R), 4096 a record
+// One SPC is followed: the last CtAudio made, seeded or loaded (each starts a new segment).
+static FILE* g_mixCap;
+static const Apu* g_mixApu;
+static uint32_t g_mixLast;              // the APU cycle of the last record
+static uint32_t g_mixHash, g_mixHashN;
+#define MIXCAP_CHUNK 4096
+static void mixPut32(uint32_t v) { uint8_t b[4] = { (uint8_t)v, (uint8_t)(v >> 8), (uint8_t)(v >> 16), (uint8_t)(v >> 24) }; fwrite(b, 1, 4, g_mixCap); }
+static void mixStamp(int tag, const Apu* apu) {
+  uint32_t d = apu->cycles - g_mixLast;
+  g_mixLast = apu->cycles;
+  fputc(tag, g_mixCap);
+  do { uint8_t b = d & 0x7f; d >>= 7; fputc(b | (d ? 0x80 : 0), g_mixCap); } while (d);
+}
+static void mixFlushHash(void) {
+  if (!g_mixHashN) return;
+  fputc('H', g_mixCap); mixPut32(g_mixHashN); mixPut32(g_mixHash);
+  g_mixHash = 2166136261u; g_mixHashN = 0;
+}
+static void mixSampleHook(Dsp* dsp, int16_t l, int16_t r) {
+  if (dsp->apu != g_mixApu) return;
+  uint8_t b[4] = { (uint8_t)l, (uint8_t)((uint16_t)l >> 8), (uint8_t)r, (uint8_t)((uint16_t)r >> 8) };
+  for (int i = 0; i < 4; i++) g_mixHash = (g_mixHash ^ b[i]) * 16777619u;
+  if (++g_mixHashN == MIXCAP_CHUNK) mixFlushHash();
+}
+static void mixRamHook(Apu* apu, uint16_t adr, uint8_t val) {
+  if (apu != g_mixApu || apu->ram[adr] == val) return;
+  mixStamp('A', apu); fputc(adr & 0xff, g_mixCap); fputc(adr >> 8, g_mixCap); fputc(val, g_mixCap);
+}
+static void mixReadHook(Apu* apu, uint8_t adr, uint8_t val) {
+  if (apu != g_mixApu) return;
+  mixStamp('R', apu); fputc(adr, g_mixCap); fputc(val, g_mixCap);
+}
+static void mixSnapshot(const Apu* apu) {   // a segment begins: the DSP's whole state and the RAM it reads
+  if (!g_mixCap) return;
+  mixFlushHash();
+  g_mixApu = apu; g_mixLast = apu->cycles;
+  StateHandler* sh = sh_init(true, NULL, 0);
+  dsp_handleState(apu->dsp, sh);
+  fputc('S', g_mixCap); mixPut32(apu->cycles); mixPut32((uint32_t)sh->offset);
+  fwrite(sh->data, 1, (size_t)sh->offset, g_mixCap); fwrite(apu->ram, 1, 0x10000, g_mixCap);
+  sh_free(sh);
+}
+static void mixCapClose(void) { if (g_mixCap) { mixFlushHash(); fclose(g_mixCap); g_mixCap = NULL; } }
+
+static void dspLogHook(Apu* apu, uint8_t adr, uint8_t val) {
+  if (g_mixCap && apu == g_mixApu) { mixStamp('W', apu); fputc(adr, g_mixCap); fputc(val, g_mixCap); }
+  if (g_dspLog) fprintf(g_dspLog, "%ld %llu %02X %02X\n", g_audFrameNo, (unsigned long long)apu->cycles, adr, val);
+}
+static void spcCovWrite(void) {
+  const char* p = getenv("CT_SPC_COVERAGE");
+  char path[1024];
+  if (p && strstr(p, "%d")) { snprintf(path, sizeof path, p, (int)getpid()); p = path; }   // one file per process
+  FILE* f = p ? fopen(p, "w") : NULL;
+  if (!f) return;
+  for (int i = 0; i < 0x10000; i++) if (g_spcCov[i]) fprintf(f, "%04X %u\n", i, g_spcCov[i]);
+  fclose(f);
+}
+static void dspLogClose(void) { if (g_dspLog) fclose(g_dspLog); }
+static void measureInit(void) {
+  static int done;
+  if (done) return;
+  done = 1;
+  const char* c = getenv("CT_SPC_COVERAGE");
+  if (c && *c && (g_spcCov = (uint32_t*)calloc(0x10000, sizeof *g_spcCov))) { g_apuOpHook = spcCovHook; atexit(spcCovWrite); }
+  const char* d = getenv("CT_DSP_LOG");
+  if (d && *d && (g_dspLog = fopen(d, "w"))) { g_apuDspWriteHook = dspLogHook; atexit(dspLogClose); }
+  const char* x = getenv("CT_MIXER_CAPTURE");
+  if (x && *x && (g_mixCap = fopen(x, "wb"))) {
+    static char buf[1 << 20];
+    setvbuf(g_mixCap, buf, _IOFBF, sizeof buf);
+    fwrite("CTMX", 1, 4, g_mixCap); mixPut32(1);
+    g_mixHash = 2166136261u; g_mixHashN = 0;
+    g_apuDspWriteHook = dspLogHook; g_apuRamWriteHook = mixRamHook; g_apuDspReadHook = mixReadHook;
+    g_dspSampleHook = mixSampleHook;
+    atexit(mixCapClose);
+  }
+}
+
+static void machineDspLog(void* c, char k, uint8_t reg, uint8_t val, uint64_t io) {
+  (void)c;
+  if (k == 'D' && g_dspLog) fprintf(g_dspLog, "%ld %llu %02X %02X%c", g_audFrameNo, (unsigned long long)io, reg, val, 10);
+}
+
+// THE SOUND MACHINE's COST TABLE (sound/timing.h): each instruction of block 0 (the driver) and of the boot ROM, timed
+// on the vendored SPC700 -- once a process.
+// The container's (CT_ASSET_SND_TIMING, made at setup from the player's ROM: ct.exe --sndtiming); without it, measured
+// here from block 0's code -- the ROM's (the tools' way).
+static const SndTiming* sndTiming(CtAudio* a, const uint8_t* rom, long romLen) {
+  static SndTiming* t;
+  static int tried;
+  if (tried) return t;
+  tried = 1;
+  uint32_t n = 0;
+  const uint8_t* e = a->snd ? CtAssetGet(a->snd, CT_ASSET_SND_TIMING, 0, &n) : NULL;
+  if (e) {
+    SndTiming* nt = (SndTiming*)calloc(1, sizeof *nt);
+    if (nt && SndTimingRead(nt, e, (long)n)) { t = nt; return t; }
+    free(nt);
+    fprintf(stderr, "[audio] the container's sound cost table is unreadable\n");
+  }
+  int keep = a->spc;
+  a->spc = SPC_REF;                                    // (block 0's code: the ROM's)
+  int ok = rom && sndBootLoad(a, rom, romLen) && (long)a->dst[0] + a->size[0] <= 0xFFC0;
+  a->spc = keep;
+  if (!ok) return NULL;
+  uint8_t* img = (uint8_t*)calloc(0x10000, 1);
+  SndTiming* nt = (SndTiming*)calloc(1, sizeof *nt);
+  if (!img || !nt) { free(img); free(nt); return NULL; }
+  memcpy(img + a->dst[0], a->blk[0], a->size[0]);
+  memcpy(img + 0xFFC0, apu_bootRom(), 0x40);
+  if (SndTimingBuild(nt, img, a->dst[0], (uint16_t)(a->dst[0] + a->size[0])) && SndTimingBuild(nt, img, 0xFFC0, 0x0000)) t = nt;
+  else free(nt);
+  free(img);
+  return t;
+}
+
+// `ct.exe --sndtiming <out>`: the cost table's asset (timing.h) from the ROM's block 0 and the boot ROM -- the setup's
+// generator for CT_ASSET_SND_TIMING (tools/gen/snd_timing.py).
+int CtAudioTimingExport(const uint8_t* rom, long romLen, const char* path) {
+  static CtAudio r;
+  memset(&r, 0, sizeof r);
+  if (!sndBootLoad(&r, rom, romLen) || (long)r.dst[0] + r.size[0] > 0xFFC0) return 0;
+  uint8_t* img = (uint8_t*)calloc(0x10000, 1);
+  if (!img) return 0;
+  memcpy(img + r.dst[0], r.blk[0], r.size[0]);
+  memcpy(img + 0xFFC0, apu_bootRom(), 0x40);
+  uint8_t* out = NULL;
+  long n = SndTimingExport(img, r.dst[0], r.size[0], &out);
+  free(img);
+  FILE* f = n > 0 ? fopen(path, "wb") : NULL;
+  int ok = f && fwrite(out, 1, (size_t)n, f) == (size_t)n;
+  if (f) fclose(f);
+  free(out);
+  return ok ? (int)n : 0;
+}
+
+CtAudio* CtAudioInit(const uint8_t* rom, long romLen) { return CtAudioInitWith(rom, romLen, NULL); }
+
+static CtAudio* audioInit(const uint8_t* rom, long romLen, const CtAssets* snd, int powerOn);
+CtAudio* CtAudioInitWith(const uint8_t* rom, long romLen, const CtAssets* snd) { return audioInit(rom, romLen, snd, 0); }
+// THE POWER-ON's SPC: the boot ROM running from its first cycle, the driver NOT uploaded -- the reset's `JSL $C7:0000`
+// (CtAudioColdBoot, on the loader clock) does that, as C0/0053 does on the cartridge. The blocks are read (sndBootLoad).
+CtAudio* CtAudioInitPowerOn(const uint8_t* rom, long romLen, const CtAssets* snd) { return audioInit(rom, romLen, snd, 1); }
+static CtAudio* audioInit(const uint8_t* rom, long romLen, const CtAssets* snd, int powerOn) {
+  if (snd && !CtAssetGet(snd, CT_ASSET_SND_BOOT, 0, NULL)) snd = NULL;   // a container without the sound: the ROM
+  if (!snd && (!rom || romLen < C7_BASE + 0x6000)) return NULL;
+  measureInit();
   CtAudio* a = (CtAudio*)calloc(1, sizeof *a);
   if (!a) return NULL;
   a->shell = (Snes*)calloc(1, sizeof(Snes));          // palTiming = false = NTSC
   if (!a->shell) { free(a); return NULL; }
   a->rom = rom; a->romLen = romLen;
+  a->snd = snd;
+  if (snd) while (CtAssetGet(snd, CT_ASSET_SND_SAMPLE, (uint32_t)(a->ninst + 1), NULL)) a->ninst++;
+  a->evenFrame = 1;                                    // power-on: the PPU flips its field at (0,0), the first frame is even
   a->engineMode = 0; a->postLine = 12;
   a->rulePostAt = LD_PAD_WAIT; a->ruleNmiWait = LD_PAD_WAIT;   // the rule: the field's main loop, after its NMI's pad latch
   a->ruleIrqLine = -1;                                         // ...and no V-IRQ until the host says one is armed
   a->apu = apu_init(a->shell);
   apu_reset(a->apu);                                   // SPC PC -> $FFC0, the IPL
-  a->ready = uploadDriver(a, rom, romLen);
+  a->spc = spcModeWanted();
+  if (a->spc != SPC_REF) {                             // the sound machine, powered on beside it
+    const SndTiming* tim = sndTiming(a, rom, romLen);
+    a->mach = tim ? SndMachineNew(tim) : NULL;
+    if (!a->mach) { fprintf(stderr, "[audio] the sound machine has no cost table -- the reference SPC700 runs\n"); a->spc = SPC_REF; }
+    else if (a->spc == SPC_MACHINE) {
+      SndMachineSetSink(a->mach, machineSink, a);
+      a->mach->traces = 1;
+      if (g_dspLog) SndMachineSetObserver(a->mach, machineDspLog, a);   // CT_DSP_LOG, the vendored hook's line
+    }
+    else CtSndLockstepAttach(a->apu, a->mach, 1);
+  }
+  mixSnapshot(a->apu);
+  if (getenv("CT_AUDIO_PORTTRACE") && a->spc == SPC_REF) {   // (the SPC's side of the trace, on the reference core)
+    g_ptSpcW = a->apu->spc->write; a->apu->spc->write = ptSpcWrite; g_ptSpcR = a->apu->spc->read; a->apu->spc->read = ptSpcRead; }
+  a->ready = powerOn ? sndBootLoad(a, rom, romLen) : uploadDriver(a, rom, romLen);
   audReset(a);                                         // the IPL transfer's own output is not the game's
   if (!a->ready) fprintf(stderr, "[audio] $C7 upload did not complete -- running silent\n");
   return a;
@@ -1401,6 +1901,8 @@ CtAudio* CtAudioInit(const uint8_t* rom, long romLen) {
 
 void CtAudioFree(CtAudio* a) {
   if (!a) return;
+  if (a->apu == g_mixApu) { mixFlushHash(); g_mixApu = NULL; }
+  if (a->mach) { if (a->spc == SPC_BOTH) CtSndLockstepDetach(a->apu); SndMachineFree(a->mach); }
   if (a->apu) apu_free(a->apu);
   free(a->shell);
   free(a);
@@ -1408,16 +1910,34 @@ void CtAudioFree(CtAudio* a) {
 
 int CtAudioReady(const CtAudio* a) { return a && a->ready; }
 
+// ONE FRAME's SPC TIME. The console's frame is 262 lines of 1364 master cycles -- but in a non-interlaced odd frame line 240 is
+// 4 cycles short (snes.c: `hPos == 1360 && vPos == 240 && !evenFrame`), and the SPC's time is the master clock's: 17,088 APU
+// cycles an even frame, 17,087.81 an odd one. A constant 17,088 runs the sound processor 0.1 cycle a frame ahead of the
+// console: over a long stage a song's marker crosses a frame boundary early -- the ending's `FF 2A`, page A's `F5 08` 10,850
+// frames in, a frame before the cartridge's (ending-stage-logic-ff2a-ff2f-vs-oracle). (A MEAN of 17,087.90 every frame is not
+// this either: the field flips each frame, the short line is the odd frame's.) The field flips at each frame's start
+// (ppu_handleFrameStart) -- at power-on's (0,0) too: the first frame is even. A frame's slice runs vblank to vblank, so it holds
+// the line 240 of the frame it starts in: its parity is used, then flipped.
+#define APU_CYCLES_PER_MASTER (APU_CYCLES_PER_SEC / (1364.0 * 262.0 * 60.0))
+static double apuFrameCycles(const CtAudio* a) { return APU_CYCLES_PER_FRAME - (a->evenFrame ? 0.0 : 4.0 * APU_CYCLES_PER_MASTER); }
+void CtAudioFrameSkip(CtAudio* a) { if (a) a->evenFrame ^= 1; }
 void CtAudioFrame(CtAudio* a) {
   if (!a) return;
+  g_audFrameNo++;
   { static int ck = -1; static long fr = 0; if (ck < 0) { const char* e = getenv("CT_AUDIO_SPCCLOCK"); ck = (e && *e) ? 1 : 0; }
     if (ck) fprintf(stderr, "spcclock pass%ld total=%lld carry=%.1f" "\n", fr++, g_apuTotal, a->cycleCarry); }
-  double want = APU_CYCLES_PER_FRAME + a->cycleCarry;
+  double want = apuFrameCycles(a) + a->cycleCarry;
+  { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;   // (CT_AUDIO_PORTTRACE: each slice's start)
+    if (pt && a->apu) fprintf(stderr, "porttrace FRAME n=%ld apuc=%llu carry=%.1f spcpc=%04X\n", g_audFrameNo,
+                              machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles,
+                              a->cycleCarry, machineRuns(a) ? 0 : a->apu->spc->pc); }
+  a->evenFrame ^= 1;                                   // (the next slice's frame)
   if (want < 1.0) { a->cycleCarry = want; a->mutedFrame = 1; return; }   // a clocked JSL already ran this frame's SPC time
   a->mutedFrame = 0;
   int n = (int)want;
   int ran = apuRun(a, n);                              // overshoots by at most one opcode
   a->cycleCarry = want - (double)ran;                  // carry it, so long runs do not drift
+  if (a->spc == SPC_BOTH) CtSndLockstepRam(a->apu);
 }
 
 void CtAudioSamples(CtAudio* a, int16_t* out, int samples) {
@@ -1462,7 +1982,8 @@ void CtAudioSamples(CtAudio* a, int16_t* out, int samples) {
     for (; i < n; i++) { unsigned r = (a->fifoHead + i) % CT_AUD_FIFO; fr[i * 2] = a->fifo[r * 2]; fr[i * 2 + 1] = a->fifo[r * 2 + 1]; }
     for (; i < 534; i++) { fr[i * 2] = fr[(n - 1) * 2]; fr[i * 2 + 1] = fr[(n - 1) * 2 + 1]; }
     a->fifoHead = (a->fifoHead + n) % CT_AUD_FIFO; a->fifoLen = 0;
-  } else dsp_getSamples(a->apu->dsp, fr, 534);
+  } else if (machineRuns(a)) SndMachineNewest(a->mach, fr, 534);
+  else dsp_getSamples(a->apu->dsp, fr, 534);
   // CT_AUDIO_PCM=<path>: the frame as played at 32040 Hz (int16 L,R), 534 samples a frame -- a drained frame's 536 read
   // down to 534 by the nearest sample, centred (both ends kept, two skipped inside the frame), so frame k of the file is
   // output frame k and its boundaries are the output's: the same stream as ct.exe --peek's PEEK_PCM, side by side.
@@ -1500,9 +2021,24 @@ int CtAudioPost(CtAudio* a, uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) {
   return 1;
 }
 
+int g_ctAudioTraceFrame = 0;
+// THE INSTANT UPLOADS (a mod, CtAudioSetInstant; src/field.c hostSoundInstant): a JSL that crosses frames -- a song's
+// upload, a sound set's, the title's spin -- happens between two frames. The host freezes no frame for it (field.c), so
+// its time from the post on is owed to none: only the stretch before the post (the frame's own, the rule's start) is
+// debited from the frames after; and the output from the post on, the old song's release under the upload, is not
+// played -- the FIFO is put back where the post found it -- so the new song starts with the picture. A JSL inside its
+// frame (a sound effect's post) is the vanilla one. Returns 1 when that applied (the debit made).
+static int instantJsl(CtAudio* a, unsigned fifoAt) {
+  if (!a->instant || ld.nmis <= 0) return 0;
+  if (a->fifoLen > fifoAt) a->fifoLen = fifoAt;
+  a->cycleCarry -= (double)ld.clk0 * LD_APU_PER_MASTER;
+  return 1;
+}
+void CtAudioSetInstant(CtAudio* a, int on) { if (a) a->instant = on ? 1 : 0; }
 int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   if (!a || !mem7E) return 0;      // NULL mem7E = no scene VM (overworld); nothing stages commands there
   uint8_t* mb = mem7E + 0x1E00;                        // $00:1E00 mirrors $7E:1E00
+  unsigned fifoAt;
   int rc;
   // THE RULE: a JSL that never touches the ports -- the driver latch down (C7/0157), nothing staged (C7/015B), a command
   // the dispatch drops or that has no derived handler -- is CPU work only: it costs nothing and moves no SPC. (The host's
@@ -1516,10 +2052,43 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
       a->lastMaster = 0; a->lastFrames = 0; a->lastPolls = 0;
       return undone ? -1 : 0;
     } }
+  // CT_SNDPOSTS=1: every JSL that reaches the ports, `sndpost f<host frame> cmd=<$1E00> p1=<$1E01>` -- the port's side of
+  // tools/sound_post_cmp.py, which reads the cartridge's $2140 command writes (C7/0635, a song's C7/0A6E) and their $2141.
+  { static int sp = -1; if (sp < 0) sp = getenv("CT_SNDPOSTS") ? 1 : 0;
+    if (sp && (mb[0x05] & 0x80) && mb[0x00]) printf("sndpost f%d cmd=%02X p1=%02X\n", g_ctAudioTraceFrame, mb[0x00], mb[0x01]); }
+  { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
+    if (pt && (mb[0x05] & 0x80) && mb[0x00]) fprintf(stderr, "porttrace JSL cmd=%02X %02X mode=%d rule=%d off=%d nmioff=%d\n", mb[0x00], mb[0x01],
+                                                    a->engineMode, CtAudioRuleOn(), a->ruleOff, a->ruleNmiOff); }
   if (!ldStartRule(a))                                 // (the rule: from where the SPC and the CPU's last wait stand)
     ldStart(a->engineMode, a->postLine);               // the JSL begins: the clock runs until the RTL
-  ldRun(ld.ifast ? 740 - 54 : 740);                    // JSL 54 (the caller's: free under the rule) + C7/0004 JMP 18 + the $0140 prologue 264 (PHB PHD PHP REP REP PHA PHX PHY SEP LDA PHA PLB) + $0150-$0173 dispatch 404 (LDX PHX PLD SEP ... JMP ($0AD9,X))
+  fifoAt = a->fifoLen;                                 // (the output up to the post: the instant mod keeps it)
   uint8_t cmd = mb[0x00];
+  // THE DISPATCH, by the command's path (disasm/notes/patches/c7_dispatch_preamble_listing.diff; the cartridge's --cputrace,
+  // enemy B9's exit: C7/0004 at v226 h1206, C7/0157 at v227 h222 -- 380 -- and C7/01A1 at h528 -- 686 for a song command;
+  // the 087 fight's `18 72` under the rule: C7/0004 on line 64 h 220, C7/061C's `STA $2143` at h 874): the JSL 54 (the
+  // caller's -- free under the rule), C7/0004 `JMP $0140` 18 and the prologue C7/0140-0155 362 (PHB PHD PHP REP REP PHA
+  // PHX PHY SEP LDA #00 PHA PLB LDX #1E00 PHX PLD SEP), then C7/0157 `LDA $05 / BPL ->0192` / `LDA $00 / BEQ ->0192` /
+  // `BMI ->017A` (>= $80: `JMP C7/061C`) / `CMP #10 / BCC ->0192` / `CMP #18 / BCS ->0176` / C7/0169-0173 the $0AD9 table
+  // (AND ASL XBA LDA PHA XBA PHA PLX `JMP ($0AD9,X)`) | C7/0176 `CMP #30 / BCS / JMP 061C` | 017D `CMP #40 / BCS / JMP
+  // 071D` | 0184 `CMP #70 / BNE / JMP 08E3` | 018B `CMP #71 / BNE / JMP 0755`. (The flat 686 was the song path's.)
+  { long d = (ld.ifast ? 0 : 54) + 18 + 362 + I_LDA_DP;
+    if (!(mb[0x05] & 0x80)) d += I_BR_T;
+    else { d += I_BR_NT + I_LDA_DP;
+      if (cmd == 0x00) d += I_BR_T;
+      else { d += I_BR_NT;
+        if (cmd & 0x80) d += I_BR_T + 18;
+        else { d += I_BR_NT + I_IMM8;
+          if (cmd < 0x10) d += I_BR_T;
+          else { d += I_BR_NT + I_IMM8;
+            if (cmd < 0x18) d += I_BR_NT + 2 * I_IMM8 + I_XBA + I_IMM8 + I_PHP + I_XBA + I_PHP + I_PLX16 + 36;
+            else { d += I_BR_T + I_IMM8;
+              if (cmd < 0x30) d += I_BR_NT + 18;
+              else { d += I_BR_T + I_IMM8;
+                if (cmd < 0x40) d += I_BR_NT + 18;
+                else { d += I_BR_T + I_IMM8;
+                  if (cmd == 0x70) d += I_BR_NT + 18;
+                  else d += I_BR_T + I_IMM8 + (cmd == 0x71 ? I_BR_NT + 18 : I_BR_T); } } } } } } }
+    ldRun(d); }
   // The two early tests BRANCH TO THE COMMON EXIT, they do not return before it: C7/0157
   // `LDA $05 / BPL ->0192` and C7/015B `LDA $00 / BEQ ->0192`, and $0192 is the `STZ $00`
   // teardown. Ours used to `return 0` ahead of the clear at the bottom of this function, so a
@@ -1549,8 +2118,9 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   else if (cmd == 0x71)        rc = -1;                // $018B -> $C7:0755:  NOT DERIVED
   else                         rc = 0;                 // falls to $0192
   mb[0x00] = 0x00;                                     // $C7:0192 — STZ $1E00 on every exit
-  ldRun(296);                                          // $0192-$01A0: the epilogue's pulls and the RTL
+  ldRun(I_SEP + I_LDA_DP + 2 * I_SEP + 3 * I_PLX16 + I_PLP + I_PLX16 + I_PLP + 42);   // $0192 SEP / STZ $00 / REP / REP / PLY PLX PLA (16) / PLP / PLD / PLB / RTL = 304
   ldCatch(a);                                          // the SPC is level with the CPU at the RTL
+  if (a->spc == SPC_BOTH) CtSndLockstepRam(a->apu);
   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   if (ldTrace() && ld.polls) { fprintf(stderr, "[ldtrace] polls per token:"); for (int k = 0; k <= 64; k++) if (ldHist[k]) fprintf(stderr, " %d:%ld", k, ldHist[k]);
     fprintf(stderr, "  | %lld master, %d NMIs, line %d\n", ld.clk, ld.nmis, ld.vPos); memset(ldHist, 0, sizeof ldHist); }
@@ -1565,7 +2135,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   // The SPC time this JSL consumed is HOST time the field will now lose (the caller freezes for
   // lastFrames): debit it from CtAudioFrame's per-frame budget so the emulated SPC is not advanced
   // twice, once here and once per frozen frame. Nothing to debit for the unclocked callers.
-  a->cycleCarry -= (double)ld.clk * LD_APU_PER_MASTER;
+  if (!instantJsl(a, fifoAt)) a->cycleCarry -= (double)ld.ran;
   return rc;
 }
 // $7E:5AAA `LDA $2143 / AND #$0F / BEQ ->5AAA` -- the title setup's own wait, run AFTER the song
@@ -1579,6 +2149,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
 int CtAudioWaitReplyNibble(CtAudio* a, int* frames) {
   if (frames) *frames = 0;
   if (!a || !a->ready) return 0;
+  unsigned fifoAt = a->fifoLen;
   ldStart(a->engineMode, a->postLine);
   int got = 0;
   for (long i = 0; i < SPIN_LIMIT; i++) {
@@ -1589,7 +2160,7 @@ int CtAudioWaitReplyNibble(CtAudio* a, int* frames) {
   ldCatch(a);
   a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   ld.active = 0;
-  a->cycleCarry -= (double)ld.clk * LD_APU_PER_MASTER;   // the SPC time this spin already consumed
+  if (!instantJsl(a, fifoAt)) a->cycleCarry -= (double)ld.ran;        // the SPC time this spin already ran
   if (frames) *frames = a->lastFrames;
   return got;
 }
@@ -1605,12 +2176,27 @@ void CtAudioSeedFromApu(CtAudio* a, const Apu* src) {
   { void* mem = spc->mem; SpcReadHandler r = spc->read; SpcWriteHandler w = spc->write; SpcIdleHandler i = spc->idle;
     memcpy(spc, src->spc, sizeof *spc); spc->mem = mem; spc->read = r; spc->write = w; spc->idle = i; }
   memcpy(dsp, src->dsp, sizeof *dsp); dsp->apu = d;
+  if (src->snes && src->snes->ppu) a->evenFrame = src->snes->ppu->evenFrame ? 1 : 0;   // the state's field: the next frame flips it
   a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;
   audReset(a);
+  if (a->spc == SPC_MACHINE) a->machPending = 1;       // the machine takes over at its $0299
+  else if (a->spc == SPC_BOTH) CtSndLockstepAdoptNext(a->apu);
+  mixSnapshot(d);
 }
 #define CT_APUSTATE_MAGIC 0x50415443u   /* 'CTAP' LE */
+// The sound machine's savestate (sound/machine.h: its restore point and the host's inputs since), "CTSM"; the reference's
+// is the vendored core's state, "CTAP" -- either loads into the machine (the reference's then runs to $0299 first).
 int CtAudioSaveState(CtAudio* a, const char* path) {
   if (!a || !a->apu || !path) return 0;
+  if (machineRuns(a)) {
+    uint8_t* b = NULL; long n = 0;
+    if (!SndMachineSave(a->mach, &b, &n)) return 0;
+    FILE* f = fopen(path, "wb");
+    int ok = f && fwrite(b, 1, (size_t)n, f) == (size_t)n;
+    if (f) fclose(f);
+    free(b);
+    return ok;
+  }
   StateHandler* sh = sh_init(true, NULL, 0);
   apu_handleState(a->apu, sh);
   FILE* f = fopen(path, "wb");
@@ -1625,6 +2211,19 @@ int CtAudioLoadState(CtAudio* a, const char* path) {
   FILE* f = fopen(path, "rb");
   if (!f) return 0;
   uint32_t hdr[2] = { 0, 0 }; uint8_t* buf = NULL;
+  if (fread(hdr, 4, 1, f) == 1 && hdr[0] == 0x4D535443u) {   // the machine's
+    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    int ok = 0;
+    if (a->mach && a->spc == SPC_MACHINE && n > 0 && (buf = (uint8_t*)malloc((size_t)n)) && fread(buf, 1, (size_t)n, f) == (size_t)n) {
+      audReset(a);
+      ok = SndMachineLoad(a->mach, buf, n);
+      if (ok) { a->machPending = 0; a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0; audReset(a); }
+    }
+    if (!ok) fprintf(stderr, "[loadstate] %s: a sound machine state, this SPC cannot take it\n", path);
+    fclose(f); free(buf);
+    return ok;
+  }
+  fseek(f, 0, SEEK_SET);
   int ok = fread(hdr, 4, 2, f) == 2 && hdr[0] == CT_APUSTATE_MAGIC && hdr[1] > 0 && hdr[1] < (1u << 20)
            && (buf = (uint8_t*)malloc(hdr[1])) != NULL && fread(buf, 1, hdr[1], f) == hdr[1];
   fclose(f);
@@ -1632,8 +2231,11 @@ int CtAudioLoadState(CtAudio* a, const char* path) {
     StateHandler* sh = sh_init(false, buf, (int)hdr[1]);
     apu_handleState(a->apu, sh);
     sh_free(sh);
+    mixSnapshot(a->apu);
     a->ready = 1; a->cycleCarry = 0.0; a->mutedFrame = 0;   // (as CtAudioSeedFromApu: the adopted driver's moment)
     audReset(a);
+    if (a->spc == SPC_MACHINE) a->machPending = 1;
+    else if (a->spc == SPC_BOTH) CtSndLockstepAdoptNext(a->apu);
   }
   free(buf);
   return ok;
@@ -1676,9 +2278,22 @@ void CtAudioSeedMailboxPage(const CtAudio* a, uint8_t* mem7E) {
   m[0x1E00] = 0x00;
 }
 
-const uint8_t* CtAudioAram(const CtAudio* a) { return a ? a->apu->ram : NULL; }
+const uint8_t* CtAudioAram(const CtAudio* a) { return !a ? NULL : machineRuns(a) ? a->mach->d.m : a->apu->ram; }
 struct Apu* CtAudioApu(CtAudio* a) { return a ? a->apu : NULL; }
-uint32_t CtAudioApuCycles(const CtAudio* a) { return a ? a->apu->cycles : 0; }
+struct SndMachine* CtAudioMachine(CtAudio* a) { return a ? a->mach : NULL; }
+void CtAudioPortWrite(CtAudio* a, int k, uint8_t v) { if (a) W(a, k & 3, v); }
+int CtAudioRunCycles(CtAudio* a, int cycles) { return a ? apuRun(a, cycles) : 0; }
+// The SPC time of `master` CPU cycles that come BEFORE a post inside this frame's slice (a location load's CPU work from the
+// vblank to its first `JSL C7/0004`): run now, and owed by the slice (cycleCarry), so the SPC gets no time twice.
+// The frame grid starts `master` cycles before this point: the next slices run that much less SPC (none is run here).
+void CtAudioFrameOrigin(CtAudio* a, long master) { if (a && master > 0) a->cycleCarry -= (double)master * LD_APU_PER_MASTER; }
+void CtAudioAdvance(CtAudio* a, long master) {
+  if (!a || master <= 0) return;
+  double want = (double)master * LD_APU_PER_MASTER;
+  int ran = apuRun(a, (int)want);
+  a->cycleCarry -= (double)ran;
+}
+uint32_t CtAudioApuCycles(const CtAudio* a) { return !a ? 0 : machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles; }
 // A TRANSLATED STAGE'S EXIT FRAME. A stage's bus runs this SPC itself while it is open (the host's slice is skipped,
 // field.c `!seqX && !gwX`), one frame of SPC per stage frame -- and the frame it leaves in (`JML C0:0000`) its bus ran
 // only up to the jump. The cartridge's SPC does not stop there: the rest of that frame's 17,088 cycles run on while the
@@ -1690,7 +2305,7 @@ uint32_t CtAudioApuCycles(const CtAudio* a) { return a ? a->apu->cycles : 0; }
 // ran in that last frame.
 void CtAudioStageExitFrame(CtAudio* a, uint32_t ran) {
   if (!a || !a->ready) return;
-  double want = APU_CYCLES_PER_FRAME - (double)ran;
+  double want = apuFrameCycles(a) - (double)ran;
   if (want < 1.0) return;
   int got = apuRun(a, (int)want);
   a->cycleCarry += want - (double)got;                 // (an opcode's overshoot, carried as CtAudioFrame carries it)
@@ -1699,17 +2314,20 @@ void CtAudioStageExitFrame(CtAudio* a, uint32_t ran) {
 uint32_t CtAudioAramFnv(const CtAudio* a) {
   if (!a) return 0;
   uint32_t h = 2166136261u;
-  for (int i = 0; i < 0x10000; i++) h = (h ^ a->apu->ram[i]) * 16777619u;
+  const uint8_t* r = CtAudioAram(a);
+  for (int i = 0; i < 0x10000; i++) h = (h ^ r[i]) * 16777619u;
   return h;
 }
 
 void CtAudioPorts(const CtAudio* a, uint8_t in[4], uint8_t out[4]) {
   if (!a) return;
+  if (machineRuns(a)) { for (int i = 0; i < 4; i++) { if (in) in[i] = a->mach->in[i]; if (out) out[i] = a->mach->out[i]; } return; }
   for (int i = 0; i < 4; i++) { if (in) in[i] = a->apu->inPorts[i]; if (out) out[i] = a->apu->outPorts[i]; }
 }
 
 int CtAudioVoicesSounding(const CtAudio* a) {
   if (!a) return 0;
+  if (machineRuns(a)) return SndMachineVoicesSounding(a->mach);
   int n = 0;
   for (int c = 0; c < 8; c++) if (a->apu->dsp->channel[c].gain) n++;
   return n;

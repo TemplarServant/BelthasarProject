@@ -1,15 +1,23 @@
 # Android
 
-The playable host (`ct_field`: the field, the overworld, battles, menus, sound) builds as an Android app. On-screen
+The playable host (`Belthasar`: the field, the overworld, battles, menus, sound) builds as an Android app. On-screen
 touch controls are drawn over the picture, and a Bluetooth or USB controller works too.
 
 ## What the APK does and does not contain
 
-- **No game data.** The ROM and `ct_assets.dat` are never packed into the APK. On first launch the app asks for them
-  (the system file picker) and copies them into its data folder, `Android/data/org.belthasar.ct/files/`. Every later
-  launch goes straight to the title screen.
+- **No game data.** The ROM and `ct_assets.dat` are never packed into the APK. On first launch the app asks for
+  `ct_assets.dat` (the system file picker) and copies it into its data folder, `Android/data/org.belthasar.ct/files/`.
+  A ROM-free `ct_assets.dat` -- what the current setup makes -- is all the game reads: the app needs no ROM at all
+  ([ROM.md](ROM.md#the-rom-free-runtime)). An older container still needs the ROM beside it, so the ROM button stays for
+  that case. Every later
+  launch goes straight to the title screen. `ct_assets.dat` is made on a computer: the desktop Belthasar's ROM screen
+  leaves it in its data folder ([ROM.md](ROM.md#the-players-start-the-rom-screen)), or `tools/setup.py` at the root.
+- **Each file is checked before it is kept** (`SetupActivity`): the ROM's size and SHA-1 (as `CtRomVerify`), the
+  container's header and directory (as `CtAssetsOpen`), a save's 8192 bytes. A file that fails is dropped with the
+  reason, the one already there stays, and the game only starts on files that pass; `src/android.c` checks them again
+  before the engine reads them (a file replaced by hand) and says so instead of closing.
 - **It is built from your ROM.** Like the desktop executable, the native library compiles the sources that
-  `tools/setup.py` generates from your dump (`src/data/*.h`, `src/xlat/*.c`). An APK you build is for your own devices
+  `tools/setup.py` generates from your dump (`src/data/*.h`). An APK you build is for your own devices
   only. Do not distribute it.
 
 ## Requirements (Windows)
@@ -22,7 +30,7 @@ touch controls are drawn over the picture, and a Bluetooth or USB controller wor
 | A JDK 17+ | Android Studio's bundled one: `C:\Program Files\Android\Android Studio\jbr` |
 | SDL2's **source** (2.32.10) | `powershell -ExecutionPolicy Bypass -File tools\get_sdl2_src.ps1` -> `third_party\SDL2-src` |
 | Dear ImGui | `tools\get_imgui.ps1` (it is already there if the desktop build has the F1 overlay) |
-| The generated sources | `python tools/setup.py <your ROM>` (docs/ROM.md), as for the desktop build |
+| The generated sources | `python tools/setup.py --rom <your ROM>` (docs/ROM.md), as for the desktop build |
 
 The Gradle wrapper downloads Gradle 8.14.3 and the Android Gradle Plugin 8.13 on first use, unless they are already
 in `%USERPROFILE%\.gradle`.
@@ -52,7 +60,7 @@ Install on a phone with USB debugging on:
 
 - `android/app/build.gradle` runs the NDK's CMake on the **root** `CMakeLists.txt`. Its `if(ANDROID)` branch includes
   `android/CMakeLists.cmake`, which builds `libSDL2.so` from `third_party/SDL2-src` and `libmain.so` from the same
-  source list as the desktop `ct_field` (`CT_FIELD_SRC`), plus `src/android.c`. The desktop targets are untouched.
+  source list as the desktop `Belthasar` (`CT_FIELD_SRC`), plus `src/android.c`. The desktop targets are untouched.
 - SDL's Java glue (`org.libsdl.app`) is compiled straight from `third_party/SDL2-src/android-project`.
   `GameActivity` is SDL's activity. `SetupActivity` is the first-run file picker.
 - `src/android.c` (`CtAndroidConfigure`, called first thing in `main`) makes the data folder the working folder. It
@@ -63,14 +71,14 @@ Install on a phone with USB debugging on:
 
 ## Getting the files onto the device
 
-The first-run screen has three buttons: the ROM (`.sfc`, 4 MB; a 512-byte copier header is accepted),
-`ct_assets.dat` (the one `tools/setup.py` wrote next to the ROM on your computer), and, optionally, a battery save
-(`ct_sram.srm`, 8 KB, from the desktop game). Copy them to the phone first (USB, cloud drive, ...), then pick them.
+The first-run screen has three buttons: `ct_assets.dat` (the one `tools/setup.py` wrote next to the ROM on your
+computer), the ROM (`.sfc`, 4 MB; a 512-byte copier header is accepted -- only for an older `ct_assets.dat`), and,
+optionally, a battery save (`ct_sram.srm`, 8 KB, from the desktop game). Copy them to the phone first (USB, cloud
+drive, ...), then pick them.
 
 Or push them by hand:
 
 ```bat
-adb push Chrono_Trigger_USA_SNES.sfc /sdcard/Android/data/org.belthasar.ct/files/
 adb push ct_assets.dat /sdcard/Android/data/org.belthasar.ct/files/
 adb push ct_sram.srm /sdcard/Android/data/org.belthasar.ct/files/
 ```

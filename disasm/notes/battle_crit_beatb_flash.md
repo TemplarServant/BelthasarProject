@@ -14,8 +14,8 @@ Note the **some** — the report is conditional, so this dossier's job is the CO
 * Isolation: with the flag forced, beat A is **byte-identical** (fnv `4F75DA7B` both runs) and only beat B
   changes (fnv `90ACA583` → `50A41E8D`): the enemy stays coloured and the whole-screen wash disappears (§4).
 
-Probe binaries: `build/ct.exe` / `build/ct_field.exe` snapshotted to `%TMP%\ctwf3\crit\`
-(`ct_probe.exe`, `ct_field.exe`, `SDL2.dll`). All commands run with cwd = repo root.
+Probe binaries: `build/ct.exe` / `build/Belthasar.exe` snapshotted to `%TMP%\ctwf3\crit\`
+(`ct_probe.exe`, `Belthasar.exe`, `SDL2.dll`). All commands run with cwd = repo root.
 
 ---
 
@@ -115,7 +115,7 @@ Sweep that established the 1:1 (so the *arm* is not the defect):
 for w in bat2 bat3 bat4 bat8 bat9 ambush_pre gato_solo gato_t1 gato_t2 gato_t3 \
          gato_deadmarle solo_forest forest_seek_pre; do
   CT_BATTLE_TRACE=1 CT_BATTLE_CRITRATE=255 CT_BATTLE_MASHA=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-    "$TMP/ctwf3/crit/ct_field.exe" --assets ct_assets.dat --battletest saves/battle_re/$w.raw.wram
+    "$TMP/ctwf3/crit/Belthasar.exe" --assets ct_assets.dat --battletest saves/battle_re/$w.raw.wram
 done      # every fixture: "pc-act …9877=01" count == "crit-flash2" count
 ```
 
@@ -147,7 +147,7 @@ MEASURED — the field `$7E` after one forest battle (three Hetakes killed):
 ```
 CT_BATTLE_TRACE=1 CT_BATTLE_CRITRATE=255 CT_BATTLE_MASHA=1 \
 CT_DUMPWRAM="$TMP/ctwf3/crit/post.wram" CT_DUMPWRAM_AT=2600 \
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$TMP/ctwf3/crit/ct_field.exe" --assets ct_assets.dat \
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$TMP/ctwf3/crit/Belthasar.exe" --assets ct_assets.dat \
   --scene 19 --loadwram saves/forest_re/battle_crono_solo.dumpwram --selftest o.raw --frames 2700 \
   --walkscript "l:2600,."
 ```
@@ -261,7 +261,7 @@ Both runs (control = the untouched fixture), same script, same seed:
 ```
 CT_BATTLE_TRACE=1 CT_BATTLE_CRITRATE=255 CT_BATTLE_SCRIPT="n:20,a:1,n:3,a:1,n:400" \
 CT_BATTLESHOT=<out>.raw CT_BATTLESHOT_AT=<250|290> SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  "$TMP/ctwf3/crit/ct_field.exe" --assets ct_assets.dat --scene 19 --battletest <wram>
+  "$TMP/ctwf3/crit/Belthasar.exe" --assets ct_assets.dat --scene 19 --battletest <wram>
 python tools/ct.py fb2png <out>.raw <out>.png
 ```
 
@@ -279,6 +279,10 @@ exactly: white on the first slash, not white on the second, and only in *some* f
 `field-battle-crit-beatB-dead-suppressed` (shot f289 on `forest_pre`) does **not** pin a suppressed case: on
 that fixture the victim is alive at beat B, the alive branch is taken, and f290 renders the victim white
 (verified by render). The check grades a *flashing* beat B under a name that says the opposite.
+
+**Renamed 2026-10-24: `field-battle-crit-beatB-flash-hetake`** (docs/MUTATION_AUDIT.md). The retimed fight had
+also moved its fixed frame off the flash; it is anchored on `pc-act#1+92` now, the frame the victim shows white, and a
+mutation of op 0x69's colour record kills it.
 
 ---
 
@@ -355,7 +359,7 @@ Recording them so they are not re-measured, and deliberately not bundling them (
 
 Default verdict was "not proven". Every ROM address was re-disassembled and every oracle number
 re-measured from a state I loaded myself, with my own binary snapshots
-(`%TMP%\ctwf3\crit-adv\{ct_probe.exe,ct_field.exe,SDL2.dll}`, cwd = repo root).
+(`%TMP%\ctwf3\crit-adv\{ct_probe.exe,Belthasar.exe,SDL2.dll}`, cwd = repo root).
 
 **Net verdict: the MECHANISM survives intact — but the dossier is wrong on four factual points,
 badly understates the defect, and its fix ORDERING is the CLAUDE.md spot-fix shape.**
@@ -504,7 +508,7 @@ for s,v in ((0,0x81),(1,0xC3),(2,0x87)): d[0x5FAD+s*0x80+0x1D]=v
 open(r'%TMP%\ctwf3\crit-adv\forest_b2.raw.wram','wb').write(bytes(d))"
 
 CT_BATTLE_TRACE=1 CT_BATTLE_CRITRATE=255 CT_BATTLE_SCRIPT="n:20,a:1,n:400,a:1,n:2000" \
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy <ct_field> --assets ct_assets.dat --scene 19 \
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy <Belthasar> --assets ct_assets.dat --scene 19 \
   --battletest <wram> | grep -c enemy-arrive
 ```
 

@@ -1,0 +1,49 @@
+{
+  "name": "lg_end_core_defeated",
+  "from": "lg_end_inner_lavos",
+  "doc": "Stands in for the oracle's lavos_core_defeated state (2026-10-14): 80 more segments of `3 x B, 20 x A every 12` through Lavos's core (loc 1DF), with the session's heals -- after a segment, any of the party's seats below 500 HP set to its max ($5E30 + $80 x seat := $5E32's; the battle's HP, a test fixture: the auto-player's A alone loses the core) after segments 0 (seats 0-2), 41 (seat 1), 48 and 65 (seat 0), as its log recorded. The core defeated: the WRAM of the session's state, byte for byte.",
+  "steps": [
+    [
+      "pad",
+      "1:2,0:6,1:2,0:6,1:2,0:6,(100:2,0:10)*20"
+    ],
+    [
+      "poke",
+      "5E30=E7,5E31=03,5EB0=E7,5EB1=03,5F30=E7,5F31=03"
+    ],
+    [
+      "pad",
+      "(1:2,0:6,1:2,0:6,1:2,0:6,(100:2,0:10)*20)*41"
+    ],
+    [
+      "poke",
+      "5EB0=E7,5EB1=03"
+    ],
+    [
+      "pad",
+      "(1:2,0:6,1:2,0:6,1:2,0:6,(100:2,0:10)*20)*7"
+    ],
+    [
+      "poke",
+      "5E30=E7,5E31=03"
+    ],
+    [
+      "pad",
+      "(1:2,0:6,1:2,0:6,1:2,0:6,(100:2,0:10)*20)*17"
+    ],
+    [
+      "poke",
+      "5E30=E7,5E31=03"
+    ],
+    [
+      "pad",
+      "(1:2,0:6,1:2,0:6,1:2,0:6,(100:2,0:10)*20)*14"
+    ]
+  ],
+  "expect": {
+    "loc": "0x1DF",
+    "wram": {
+      "0x10000": "0xD6"
+    }
+  }
+}

@@ -1,8 +1,9 @@
 // tileanim.c -- FD/DE98 + FD/E022, the field's animated BG tiles. See tileanim.h and disasm/notes/field_bg_anim.md.
 #include "tileanim.h"
+#include "romview.h"
 
 static int rd16(const uint8_t* p) { return p[0] | (p[1] << 8); }
-static uint8_t romb(const uint8_t* rom, long romLen, long o) { return (o >= 0 && o < romLen) ? rom[o] : 0; }
+static uint8_t romb(const uint8_t* rom, long romLen, long o) { return CtRomByte(rom, romLen, o); }   // (romview.h)
 
 // FD/DE98. D = $0500, DB = 0, X/Y 16-bit. The WRAM port ($2181 = $0400, $2183 = $7F) takes the tables in record order;
 // a terminator ($80) record writes none, so the port does not advance for it.

@@ -1,5 +1,9 @@
 // move.c — the CT field actor movement tick (the move-step handler). See move.h + field_tick.md.
 #include <stdio.h>
+#include "romview.h"     // the ROM's small tables from ct_assets.dat (CT_ASSET_TABLE)
+// A byte of the ROM the sprite engine reads (the sprite tables, frames, palettes, tiles): the container's named
+// table when one covers it (CT_ASSET_TABLE, romview.h), else the ROM's.
+#define MR(o) CtRomByte(rom, 0x400000L, (long)(o))
 #include <stdlib.h>
 #include "move.h"
 #include "oam.h"   // CtMoveDirAngle (the atan2 heading, C0/ABA2)
@@ -20,7 +24,7 @@
 // negating zero yields zero (EOR #FF -> $FF, INC -> $00), so they agree on every RESULT. That is why
 // the substitution was invisible, and it is written down here so nobody has to re-measure it.
 static int acfdMul(const uint8_t* rom, int sp, int ang) {
-  int t = rom[0xF800 + (ang & 0xFF)];
+  int t = MR(0xF800 + (ang & 0xFF));
   int neg = (ang & 0xFF) >= 0x80;                         // AD10 CPX #80 / AD3D CPX #80
   int mag = neg ? ((-t) & 0xFF) : t;                      // AD22 EOR #FF / AD24 INC A
   int p = ((sp * mag) >> 8) & 0xFF;                       // AD1B/AD2C LDA $4217
@@ -122,7 +126,7 @@ void CtBuildVelocityPriority(uint8_t* r, const uint8_t* rom, int idx) {
       // test at ADB4 exists at all: the ADFA arm simply has no BMI.
       if ((r[0x1C80 + idx] & 1) && (r[0x01E5] & 0x80)) {  // ADB4 BMI ->AE27
         r[0x01F8] = (uint8_t)(r[0x01F8] + 1);             // AE29 INC $F8
-        r[0x01EE] = rom[0xFE00 + r[0x01F8]];              // AE2D LDA $FE00,X / AE31 STA $EE
+        r[0x01EE] = CtRomByte(rom, 0x10000, 0xFE00 + r[0x01F8]);   // AE2D LDA $FE00,X / AE31 STA $EE
         continue;                                          // AE34 BRL ->AE37 -- run the second copy
       }
     } else if (r[0x01E5] & 0x80) {
@@ -683,7 +687,7 @@ static int ctVmC2Find(uint8_t* r, int limit, int* yOut) {
 // $FF:F9BB is the eight-entry bit table 80 40 20 10 08 04 02 01, and `LDX $C0` is EIGHT bits, so a
 // PC id above 7 indexes past it into code. Read it out of the ROM exactly as the ROM does.
 static int ctVmC2Place(uint8_t* r, const uint8_t* rom, int y) {
-  r[0x29AF] = (uint8_t)(r[0x29AF] | (rom ? rom[0x3FF9BB + r[0x04C0]] : 0));   // 8C95 LDA $FFF9BB,X / 8C99 TSB (no-ROM run: none)
+  r[0x29AF] = (uint8_t)(r[0x29AF] | (rom ? MR(0x3FF9BB + r[0x04C0]) : 0));   // 8C95 LDA $FFF9BB,X / 8C99 TSB (no-ROM run: none)
   r[0x2980 + y] = r[0x04C0];                             // 8C9C LDA $C0 / 8C9E STA $2980,Y
   return r[0x04C0];
 }
@@ -774,7 +778,7 @@ static int ctVmC2Leaf12(uint8_t* r) {
 static int ctVmC2F5ED(uint8_t* r, const uint8_t* rom, int romLen, int pc) {
   int w = r[(0x2629 + pc * 0x50) & 0xFFFF];              // F601 $4216 / F606 LDA $2629,X / AND #00FF
   r[0x041B] = (uint8_t)w; r[0x041C] = 0x00;              // F60C STA $041B -- SIXTEEN bits
-  int v = ((size_t)(0xD6CEC + w) < (size_t)romLen) ? rom[0xD6CEC + w] : 0;   // F610 LDA $CD6CEC,X
+  int v = ((size_t)(0xD6CEC + w) < (size_t)romLen) ? MR(0xD6CEC + w) : 0;   // F610 LDA $CD6CEC,X
   return 0x114B00 + v * 6;                               // F617-F61F: v*2 + v*4 + $4B00, bank $D1
 }
 
@@ -788,20 +792,20 @@ static void ctVmC2F958(uint8_t* r, const uint8_t* rom) {
   for (int y = 8; y >= 0; y--) {                         // F964 LDY #08 / F971 DEY / F972 BPL
     int pc = r[0x2980 + y];                              // F966 LDX $2980,Y
     if (pc & 0x80) continue;                             // F969 BMI
-    have &= ~rom[0x3FF9BB + pc];                         // F96B LDA $FFF9BB,X / F96F TRB $A3
+    have &= ~MR(0x3FF9BB + pc);                         // F96B LDA $FFF9BB,X / F96F TRB $A3
   }
   r[0x04A3] = (uint8_t)have;
   r[0x04A0] = 0x00;                                      // F974 STZ $A0
   do {
     int i = r[0x04A0];                                   // F976 LDX $A0
     r[0x04A4 + i] = 0x00;                                // F978 STZ $A4,X -- before any test
-    if (!(rom[0xC2983 + i] & have)) {                    // F97A LDA $CC2983,X / AND $A3 / F980 BNE
+    if (!(MR(0xC2983 + i) & have)) {                    // F97A LDA $CC2983,X / AND $A3 / F980 BNE
       int x = i * 3, ok = 0;                             // F982 ASL A / ADC $A0 -> i*3
       r[0x04A1] = 0x03;                                  // F988 LDA #03 / F98A STA $A1
       for (;;) {
-        int t = (rom[0xC2953 + x] - 1) & 0xFF;           // F98C LDA $CC2953,X / F990 DEC A
+        int t = (MR(0xC2953 + x) - 1) & 0xFF;           // F98C LDA $CC2953,X / F990 DEC A
         r[0x04A2] = (uint8_t)t;                          // F991 STA $A2
-        if (!(rom[0x3FF9BB + (t & 7)] & r[0x2837 + (t >> 3)])) break;   // F99D / F9A2 / F9A5 BEQ
+        if (!(MR(0x3FF9BB + (t & 7)) & r[0x2837 + (t >> 3)])) break;   // F99D / F9A2 / F9A5 BEQ
         x++;                                             // F9A7 INX
         r[0x04A1] = (uint8_t)(r[0x04A1] - 1);            // F9A8 DEC $A1
         if (r[0x04A1] == 0) { ok = 1; break; }           // F9AA BNE ->F98C
@@ -840,7 +844,7 @@ static int ctVmC2Epilogue(uint8_t* r, const uint8_t* rom, int romLen) {
     if (r[0x2980 + x] & 0x80) continue;                  // 8363 BMI ->8375
     int src = ctVmC2F5ED(r, rom, romLen, r[0x2980 + x]); // 8366 JSR C2/F5ED -> X, and A = 5
     for (int k = 0; k < 6; k++)                          // 8369 MVN $7E,$D1 with C = 5 -> SIX bytes
-      r[(y + k) & 0xFFFF] = ((size_t)(src + k) < (size_t)romLen) ? rom[src + k] : 0;
+      r[(y + k) & 0xFFFF] = ((size_t)(src + k) < (size_t)romLen) ? MR(src + k) : 0;
     y = (y + 6 + 0x1A) & 0xFFFF;                         // MVN leaves Y past the block; 8371 ADC #1A
   }
   if ((size_t)romLen > 0x3FF9C3) ctVmC2F958(r, rom);  // 837B JSL $FF:F958 (its $FF:F9BB / $CC:29xx reads; a no-ROM run has none)
@@ -1001,9 +1005,9 @@ void CtAnimTimerTick(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
   // on the others (--monitor 7E01C1:2 --writer, saves/field_re/m81_nuns_lake.state f1..f5).
   r[0x01C1] = (uint8_t)c1; r[0x01C2] = (uint8_t)(c1 >> 8);
   int ix = ((r[0x1681 + idx] & 0xFF) + c1 + (sum > 0xFFFF)) & 0xFFFF;  // phase-indexed offset into $E4
-  int a = (0x240000 + ix < romLen) ? rom[0x240000 + ix] : 0;
+  int a = (0x240000 + ix < romLen) ? MR(0x240000 + ix) : 0;
   if (a != 0) { r[0x1601 + idx] = (uint8_t)a; return; }     // CA72: store, phase persists
-  a = (0x240000 + c1 < romLen) ? rom[0x240000 + c1] : 0;    // CA45: re-look-up at the phaseless base
+  a = (0x240000 + c1 < romLen) ? MR(0x240000 + c1) : 0;    // CA45: re-look-up at the phaseless base
   r[0x1601 + idx] = (uint8_t)a;
   if (mode != 2) { r[0x1681 + idx] = 0; return; }           // CA48-CA4D / CA6A: phase := 0
   // CA4F-CA69, the mode-2 PING-PONG (was deferred). $7F0B01,X is the direction/repeat state, and
@@ -1043,7 +1047,7 @@ int CtFieldFrameLookup(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
   int ph = r[0x1681 + idx] & 0xFF;                          // phase
   int mod = (cfg == 2) ? r[0x1781 + idx] : r[0x1680 + idx]; // CB8D ($1781) vs CBB1 ($1680)
   d6 = (d6 + ((mod & 0xFF) << 2) + ph) & 0xFFFF;
-  int fb = (0x240000 + d6 < romLen) ? rom[0x240000 + d6] : 0xFF;  // CB9E/CBC2: [$D6] in bank $E4
+  int fb = (0x240000 + d6 < romLen) ? MR(0x240000 + d6) : 0xFF;  // CB9E/CBC2: [$D6] in bank $E4
   if (fb == 0xFF && cfg == 2) {
     // C0/CBA4-CBB0, the mode-2 arm of the sentinel -- and it is NOTHING like the other one. The ROM
     // decrements the repeat state and returns CLC: "do not commit this frame". The wrap below
@@ -1066,7 +1070,7 @@ int CtFieldFrameLookup(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
     // the row's first. --sweepcb3a caught it: 148 of 2187 input combinations.
     d6 = (d6 - ph) & 0xFFFF;                                // CBCA-CBCF
     r[0x1681 + idx] = 0xFF;                                 // CBD3-CBD5
-    fb = (0x240000 + d6 < romLen) ? rom[0x240000 + d6] : 0xFF;   // CBD8: the RE-FETCH
+    fb = (0x240000 + d6 < romLen) ? MR(0x240000 + d6) : 0xFF;   // CBD8: the RE-FETCH
   }
   return fb;
 }
@@ -1131,7 +1135,7 @@ static void ctAnimIdleChain(uint8_t* r, const uint8_t* rom, int romLen, int y) {
   r[0x0158] = (uint8_t)v; r[0x0159] = (uint8_t)(v >> 8);
   int t = (r[0x01F8] + 1) & 0xFF;                                 // A22F SEP #20 / A231 INC $F8
   r[0x01F8] = (uint8_t)t;
-  int a = (0xFE00 + t < romLen) ? rom[0xFE00 + t] : 0;            // A233 LDA $F8 / TAX / A236 LDA $FE00,X
+  int a = CtRomByte(rom, romLen, 0xFE00 + t);                     // A233 LDA $F8 / TAX / A236 LDA $FE00,X
                                                                   //   DB = $00 and bank $00:$FE00 mirrors
                                                                   //   $C0:$FE00 = file offset $FE00.
   if (a >= 0x08) { ctAnimMode(r, y, 0x00); return; }              // A239 CMP #08 / A23B BCS ->A211
@@ -1178,7 +1182,7 @@ void CtPlayerAnimSelect(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
 // (every handler begins `LDX $6D`, i.e. the object being run, whichever entry reached it).
 void CtAnimDispatch9FF7(uint8_t* r, const uint8_t* rom, int romLen, int y, int ix) {
   ix &= 0x7E;
-  int t = rom[0x9FF7 + ix] | (rom[0x9FF8 + ix] << 8);    // 9ECD JSR ($9FF7,X)
+  int t = MR(0x9FF7 + ix) | (MR(0x9FF8 + ix) << 8);    // 9ECD JSR ($9FF7,X)
   // Each handler's operands are read STRAIGHT FROM THE ROM rather than transcribed into a table here:
   // a hand-copied facing list is exactly the kind of thing that goes stale silently, and this routine
   // has already cost two wrong hand-decodes. The handlers begin `LDX $6D`, so they re-load X = idx
@@ -1186,14 +1190,14 @@ void CtAnimDispatch9FF7(uint8_t* r, const uint8_t* rom, int romLen, int y, int i
   if (t == 0x9FF2) { ctAnimIdleChain(r, rom, romLen, y); return; }               // the default arm
   int tail, d;
   if (t >= 0xA079 && t < 0xA0C9) {                       // CARDINAL, stride $0A: unconditional facing
-    r[0x1600 + y] = rom[t + 3];                          // +2 LDA #f  -> the operand at +3
-    d = rom[t + 8] | (rom[t + 9] << 8);                  // +7 BRL, operand at +8, next instr at +10
+    r[0x1600 + y] = MR(t + 3);                          // +2 LDA #f  -> the operand at +3
+    d = MR(t + 8) | (MR(t + 9) << 8);                  // +7 BRL, operand at +8, next instr at +10
     tail = (t + 10 + ((d >= 0x8000) ? d - 0x10000 : d)) & 0xFFFF;
   } else if (t >= 0xA0C9 && t < 0xA171) {                // DIAGONAL, stride $15: keep-else-force
     int cur = r[0x1600 + y];                             // +2 LDA $1600,X
-    if (cur != rom[t + 6] && cur != rom[t + 10])         // +5 CMP #a / +9 CMP #b
-      r[0x1600 + y] = rom[t + 14];                       // +13 LDA #a / +15 STA $1600,X
-    d = rom[t + 19] | (rom[t + 20] << 8);                // +18 BRL, operand at +19, next instr at +21
+    if (cur != MR(t + 6) && cur != MR(t + 10))         // +5 CMP #a / +9 CMP #b
+      r[0x1600 + y] = MR(t + 14);                       // +13 LDA #a / +15 STA $1600,X
+    d = MR(t + 19) | (MR(t + 20) << 8);                // +18 BRL, operand at +19, next instr at +21
     tail = (t + 21 + ((d >= 0x8000) ? d - 0x10000 : d)) & 0xFFFF;
   } else return;                                         // not a shape this port knows
   if (tail == 0xA171)      ctAnimWalkTail(r, y);
@@ -1629,10 +1633,10 @@ static void ctVmMoveActorOp(uint8_t* r, const uint8_t* rom, int idx, int ip,
   }
   int ee = CtMoveDirAngle(r, rom);                    // 5281 / 5326 / 53CA JSR C0/ABA2
   r[0x01EE] = (uint8_t)ee;
-  if (anim) r[0x1600 + idx] = rom[0xF700 + (ee & 0xFF)];          // 528B/5290 / 53D4/53D9
+  if (anim) r[0x1600 + idx] = MR(0xF700 + (ee & 0xFF));          // 528B/5290 / 53D4/53D9
   if (CtCollisionActorMovable(r, idx)) {              // 5293 / 5329 / 53DC JSR C0/5B95
     ee = (ee + 0x30) & 0xFF; r[0x01EE] = (uint8_t)ee;             // 5298-529D / 532E / 53E1
-    if (anim) r[0x1600 + idx] = rom[0xF700 + (ee & 0xFF)];        // 52A0/52A5 -- the SECOND write,
+    if (anim) r[0x1600 + idx] = MR(0xF700 + (ee & 0xFF));        // 52A0/52A5 -- the SECOND write,
   }                                                               //   easy to drop
   // ⚠ THE TICKET SOURCE DIFFERS: the legged pair takes the SCRIPT byte at ip+2, the other four
   // mirror $1000 -- and $7F0B00 takes the same byte as $1A01 in every case.
@@ -2156,11 +2160,11 @@ void CtVmColorFx(uint8_t* r, const uint8_t* rom, int romLen, const uint8_t* scri
     int src = r[0x1400 + idx] | (r[0x1401 + idx] << 8);
     for (int k = 0; k < 0x18; k++) {                            // 48F5 LDA #0017 -> 24 bytes
       int s = 0x240000 + ((src + k) & 0xFFFF);
-      r[(dst + k) & 0xFFFF] = (s < romLen) ? rom[s] : 0;        // 48F8 MVN $7E,$E4
+      r[(dst + k) & 0xFFFF] = (s < romLen) ? MR(s) : 0;        // 48F8 MVN $7E,$E4
     }
     for (int k = 0; k < 0x18; k++) {                            // 4902/4905 -- the SAME source
       int s = 0x240000 + ((src + k) & 0xFFFF);                  //   again, dest + $200
-      r[(dst + 0x200 + k) & 0xFFFF] = (s < romLen) ? rom[s] : 0;
+      r[(dst + 0x200 + k) & 0xFFFF] = (s < romLen) ? MR(s) : 0;
     }
     out->ip = (ip + 2) & 0xFFFF; out->carry = 1; out->ok = 1; return;     // 490B
   }
@@ -2617,7 +2621,7 @@ int CtVmLocalArithFamily(uint8_t* r, const uint8_t* rom, int romLen, const uint8
     r[0x01D9] = (uint8_t)src; r[0x01DA] = (uint8_t)(src >> 8);      // 6A85 / 6B02
   } else if (op == 0x63 || op == 0x64) {
     int mt = (op == 0x63) ? 0xFF20 : 0xFF28;                        // 6B29 / 6B54 -- NO mask
-    src = (mt + o1 < romLen) ? rom[mt + o1] : 0;
+    src = (mt + o1 < romLen) ? MR(mt + o1) : 0;
     r[0x01D9] = (uint8_t)src;                                       // 6B2C / 6B57, 8-bit
   } else { src = o1; r[0x01D9] = (uint8_t)src; }                    // 6A25 / 6AA9 / ..., 8-bit
   int di = (op == 0x60) ? script[(ip + 3) & 0xFFFF]
@@ -3148,7 +3152,7 @@ static void vmVramDma(int word, const uint8_t* src, int bytes) { if (g_ctVramSin
 // is thirty-two zero bytes, so it is a 2048-byte zero fill -- written as the source it really is, not as a memset.
 static void vmFill75A0(uint8_t* r, const uint8_t* rom, int romLen) {
   for (int q = 0; q < 0x800; q++)
-    r[0xC800 + q] = (rom && 0x120000 + (q & 0x1F) < romLen) ? rom[0x120000 + (q & 0x1F)] : 0;   // a dat-only live run has no ROM
+    r[0xC800 + q] = (rom && 0x120000 + (q & 0x1F) < romLen) ? MR(0x120000 + (q & 0x1F)) : 0;   // a dat-only live run has no ROM
 }
 
 // C0/27EB -- a caption line's VRAM address. X (the byte that ended the line) + 1 is the next line's start; the column is
@@ -3208,11 +3212,11 @@ int CtVmCaption274D(uint8_t* r, const uint8_t* rom, int romLen) {
     return 1;
   }
   for (int k = 0; k < 0x40; k++)                                     // 2792-27A4: two MVNs of $20 from $D2:0000, the
-    r[0xD800 + k] = (rom && 0x120000 + (k & 0x1F) < romLen) ? rom[0x120000 + (k & 0x1F)] : 0;   // second at Y = $D820
+    r[0xD800 + k] = (rom && 0x120000 + (k & 0x1F) < romLen) ? MR(0x120000 + (k & 0x1F)) : 0;   // second at Y = $D820
   int x = r[0x0BE1] | (r[0x0BE2] << 8), w = 0xD800;                  // 27AA-27B5 WMADD = $7E:D800, LDX $0BE1
   for (;;) {
     long at = 0x3DA000L + x;                                         // 27B8 LDA $FDA000,X (long,X: no bank wrap)
-    uint8_t c = (rom && at < romLen) ? rom[at] : 0x80;               // (no ROM: no table -- the record ends here)
+    uint8_t c = (rom && at < romLen) ? MR(at) : 0x80;               // (no ROM: no table -- the record ends here)
     if (c & 0x80) {                                                  // 27BC BMI 27E0
       r[0x0154] = (uint8_t)(r[0x0154] & ~0x10);                      // 27E0 LDA #10 / TRB $54
       vm27EB(r, x);                                                  // 27E4 JSR 27EB
@@ -3312,7 +3316,7 @@ int CtVmCaptionFamily(uint8_t* r, const uint8_t* rom, int romLen, const uint8_t*
         int x29 = 0;                                     // 3EB6 LDX #0000
         r[0x01DD] = 0x00;                                // 3EB9 STZ $DD
         while ((r[0x01D9] & 0xFF) != (r[0x01DD] & 0xFF) && 0x3DA000 + x29 < romLen) {   // 3EBB/3EBD/3EBF CMP / BEQ (no ROM: no table)
-          int by29 = (0x3DA000 + x29 < romLen) ? rom[0x3DA000 + x29] : 0;   // 3EC1
+          int by29 = (0x3DA000 + x29 < romLen) ? MR(0x3DA000 + x29) : 0;   // 3EC1
           x29 = (x29 + 1) & 0xFFFF;                                  // 3EC7 or 3ECA -- both INX
           if (by29 & 0x80) r[0x01DD] = (uint8_t)(r[0x01DD] + 1);     // 3ECB INC $DD, 8-bit
         }
@@ -3401,11 +3405,11 @@ int CtVmPalOp33(uint8_t* r, const uint8_t* rom, int romLen, const uint8_t* scrip
         int src33 = r[0x1400 + idx] | (r[0x1401 + idx] << 8);          // 3738 LDA $1400,X (16-bit)
         for (int k = 0; k < 0x18; k++) {                               // 373D LDA #0017 -> 24 bytes
           int s = 0x240000 + ((src33 + k) & 0xFFFF);
-          r[(dst33 + k) & 0xFFFF] = (s < romLen) ? rom[s] : 0;         // 3740 MVN $7E,$E4
+          r[(dst33 + k) & 0xFFFF] = (s < romLen) ? MR(s) : 0;         // 3740 MVN $7E,$E4
         }
         for (int k = 0; k < 0x18; k++) {                               // 3743 PLX/PLA -- the SAME
           int s = 0x240000 + ((src33 + k) & 0xFFFF);                   //   source again, dest + $200
-          r[(dst33 + 0x200 + k) & 0xFFFF] = (s < romLen) ? rom[s] : 0; // 374D MVN $7E,$E4
+          r[(dst33 + 0x200 + k) & 0xFFFF] = (s < romLen) ? MR(s) : 0; // 374D MVN $7E,$E4
         }
         h.ip = (ip + 2) & 0xFFFF; h.carry = 1; h.ok = 1; break;        // 3753 LDX $C7 / 3755 SEC
       }
@@ -3429,8 +3433,8 @@ int CtVmRandOp7F(uint8_t* r, const uint8_t* rom, int romLen, const uint8_t* scri
         int t = (r[0x01F8] + 1) & 0xFF;                     // 6D0B LDA $F8 / 6D0D INC A (8-bit)
         r[0x01F8] = (uint8_t)t;                             // 6D0E STA $F8
         // DB = $00 and bank $00:$FE00 mirrors $C0:$FE00 = file offset $FE00, the same convention
-        // every other rom[] read in this file uses.
-        int b = (0xFE00 + t < romLen) ? rom[0xFE00 + t] : 0;         // 6D11 LDA $FE00,X
+        // every other MR() read in this file uses.
+        int b = CtRomByte(rom, romLen, 0xFE00 + t);                 // 6D11 LDA $FE00,X
         r[0x01D9] = (uint8_t)b;                             // 6D14 STA $D9
         int v = script[ip + 1];           // 6D18
         r[0x10200 + ((v * 2) & 0xFFFF)] = (uint8_t)b;       // 6D21 ASL A / 6D27 STA $7F0200,X (8-bit)
@@ -4206,7 +4210,7 @@ int CtFieldRunnerOne(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip
           r[0x01F2] = r[0x1800 + tgt]; r[0x01F3] = r[0x1880 + tgt];    // 55DC / 55E1
         }
         int ee = CtMoveDirAngle(r, rom);                               // 55E6 JSR C0/ABA2
-        r[0x1600 + idx] = rom[0xF700 + (ee & 0xFF)];                   // 55F0 / 55F5
+        r[0x1600 + idx] = MR(0xF700 + (ee & 0xFF));                   // 55F0 / 55F5
         r[0x1601 + idx] = 0x00;                                        // 55F8 STZ $1601,X
         h.ip = (ip + 2) & 0xFFFF; h.carry = 0; h.ok = 1; break;        // 55FB TYX / INX / INX / CLC
       }
@@ -4322,7 +4326,7 @@ int CtFieldRunnerOne(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip
         int o1 = r[0x12001 + ((ip + 1) & 0xFFFF)];         // 6B7A
         r[0x01DB] = (uint8_t)o1;                           // 6B7E STA $DB
         int mt = (op == 0x65) ? 0xFF20 : 0xFF28;           // 6B83 / 6BB1 LDA $FFxx,X
-        int m = (mt + (o1 & 0x0F) < romLen) ? rom[mt + (o1 & 0x0F)] : 0;
+        int m = (mt + (o1 & 0x0F) < romLen) ? MR(mt + (o1 & 0x0F)) : 0;
         r[0x01D9] = (uint8_t)m;                            // 6B86 STA $D9
         int a = 0x10000 + ((((o1 >> 7) & 1) << 8) | r[0x12001 + ((ip + 2) & 0xFFFF)]);
         r[a] = (uint8_t)(op == 0x65 ? (r[a] | m) : (r[a] & m));        // 6B9A ORA / 6BC8 AND
@@ -4654,7 +4658,7 @@ int CtFieldRunnerOne(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip
         // 4E94 `REP #20` makes 4E99 `STA $EE` a SIXTEEN-BIT store, so it lands on $01EE AND $01EF,
         // and 4E96 `AND #00FF` has already cleared the high byte -- $01EF is zeroed, not left alone.
         r[0x01EE] = (uint8_t)ee; r[0x01EF] = 0x00;        // 4E99 STA $EE -- DP = $0100, so $01EE
-        r[0x1600 + idx] = rom[0xF700 + (ee & 0xFF)];      // 4E9E LDA $F700,X / 4EA3 STA $1600,X
+        r[0x1600 + idx] = MR(0xF700 + (ee & 0xFF));      // 4E9E LDA $F700,X / 4EA3 STA $1600,X
         r[0x10B00 + idx] = 0x80;                          // 4EA6 LDA #80 / 4EA8 STA $7F0B00,X --
                                                           //   a LITERAL here; op 0x96 mirrors $1000
         r[0x1A01 + idx] = r[0x12001 + ((ip + 2) & 0xFFFF)];   // 4EAF operand 2 = DURATION -> ticket
@@ -4801,10 +4805,10 @@ int CtFieldRunnerOne(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip
         }
         int ee = CtMoveDirAngle(r, rom);                  // 54B6 JSR C0/ABA2
         r[0x01EE] = (uint8_t)ee;
-        r[0x1600 + idx] = rom[0xF700 + (ee & 0xFF)];      // 54C0 / 54C5
+        r[0x1600 + idx] = MR(0xF700 + (ee & 0xFF));      // 54C0 / 54C5
         if (CtCollisionActorMovable(r, idx)) {            // 54C8 JSR C0/5B95
           ee = (ee + 0x30) & 0xFF; r[0x01EE] = (uint8_t)ee;          // 54CD-54D2
-          r[0x1600 + idx] = rom[0xF700 + (ee & 0xFF)];               // 54D5 / 54DA
+          r[0x1600 + idx] = MR(0xF700 + (ee & 0xFF));               // 54D5 / 54DA
         }
         r[0x1A01 + idx] = r[0x1000 + idx];                // 54DF / 54E2
         r[0x10B00 + idx] = r[0x1000 + idx];               // 54E5
@@ -4852,11 +4856,11 @@ int CtFieldRunnerOne(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip
         // The four staged bytes above ARE C0/ABA2's inputs; it subtracts them itself, unsigned.
         int ee = CtMoveDirAngle(r, rom);                  // 4FAB JSR C0/ABA2 -- writes $01EE
         r[0x01EE] = (uint8_t)ee;                          // ABB6/ABC7/... -- $EE is DP, so $01EE
-        r[0x1600 + idx] = rom[0xF700 + (ee & 0xFF)];      // 4FB5 LDA $F700,X / 4FBA STA $1600,X
+        r[0x1600 + idx] = MR(0xF700 + (ee & 0xFF));      // 4FB5 LDA $F700,X / 4FBA STA $1600,X
         if (CtCollisionActorMovable(r, idx)) {            // 4FBD JSR C0/5B95 / 4FC0 BCC ->4FD2
           ee = (ee + 0x30) & 0xFF;                        // 4FC2-4FC5: the +$30 sidestep
           r[0x01EE] = (uint8_t)ee;                        // 4FC7
-          r[0x1600 + idx] = rom[0xF700 + (ee & 0xFF)];    // 4FCA/4FCF -- the ROM re-writes the FACING
+          r[0x1600 + idx] = MR(0xF700 + (ee & 0xFF));    // 4FCA/4FCF -- the ROM re-writes the FACING
         }                                                 //   too, which is easy to drop
         r[0x1A01 + idx] = r[0x1000 + idx];                // 4FD4/4FD7 arm the ticket
         r[0x10B00 + idx] = r[0x1000 + idx];               // 4FDA mirror to $7F0B00
@@ -5026,7 +5030,7 @@ int CtFieldRunnerOne(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip
         r[0x01C7] = (uint8_t)ip832; r[0x01C8] = (uint8_t)(ip832 >> 8);  // 46E9 STY $C7, 16-bit --
         r[0x1B01 + idx] = 0x01;                                  // 46EF    the ONLY surviving IP
         int rec83 = ctLoaderWalk(r, rom, romLen, idx, id83, 0x24F600, 10);   // 46E4-476A
-        int e383 = (romLen > rec83) ? rom[rec83] : 0;            // 476F $E4F600,X
+        int e383 = (romLen > rec83) ? MR(rec83) : 0;            // 476F $E4F600,X
         r[0x01E3] = (uint8_t)e383;                               // 4773 STA $E3
         // ---- the three graphics arms. 4777 `LDA $1101,X / CMP #F8 / BCC` -- note the walk above
         // has ALREADY run for every id, so an early-out on the id would be wrong.
@@ -5217,7 +5221,7 @@ int CtFieldRunnerOne(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip
             // C0/9E29's FIRST instruction is `JSR C0/9E84` -- the FACING selector runs before the
             // velocity copy, and it is the player's only writer of $1600. The romLen argument is
             // 0x10000 = "bank $C0 is present", which is all this call needs ($9FF7's dispatch table
-            // and $FE00's blink table both live there) and exactly what every other rom[] read in
+            // and $FE00's blink table both live there) and exactly what every other MR() read in
             // this file already assumes.
             CtPlayerAnimSelect(r, rom, 0x10000, idx);      // 9E29
             ct9E29Apply(r, idx);                           // 9E2C onward
@@ -5361,7 +5365,7 @@ void CtArenaFreeRun(uint8_t* r, int idx) {
 // live sprite tables hold banks $D2/$D3/$D4, and only a fresh-boot oracle leaves them 0.
 static int romRead24(const uint8_t* r, const uint8_t* rom, int romLen, int bank, int addr) {
   bank &= 0xFF; addr &= 0xFFFF;
-  if (bank >= 0xC0) { int off = ((bank - 0xC0) << 16) | addr; return off < romLen ? rom[off] : 0; }
+  if (bank >= 0xC0) { int off = ((bank - 0xC0) << 16) | addr; return off < romLen ? MR(off) : 0; }
   if (bank == 0x7E || bank == 0x7F) return r[((bank - 0x7E) << 16) | addr];
   if ((bank <= 0x3F || (bank >= 0x80 && bank <= 0xBF)) && addr < 0x2000) return r[addr];
   return 0;
@@ -5422,7 +5426,7 @@ static void ctAnimBlit(uint8_t* r, const uint8_t* rom, int romLen, int idx,
       int base = ((gfxBank & 0xFF) << 16) | gfxAddr;
       for (int i = 0; i < 32; i++)
         r[0x10000 + ((d + i) & 0xFFFF)] =
-            rom[0xFD00 + romRead24Flat(r, rom, romLen, base + off + i)];   // E546 LDA $FD00,X
+            MR(0xFD00 + romRead24Flat(r, rom, romLen, base + off + i));   // E546 LDA $FD00,X
     } else {                                                // C0/E687
       int sb = (gfxBank == 0x7F || gfxBank == 0xD2 || gfxBank == 0xD3 || gfxBank == 0xD4)
              ? gfxBank : 0xD5;                              // E699-E6B3, else E6B6's hardcoded $D5
@@ -5992,7 +5996,7 @@ int CtAnimRelease(uint8_t* r, int idx) {
 // instead of letting one be guessed in either direction.
 int gCtDrawSkipped;   // objects the B701 gate REFUSED (SEC) on the last pass -- see --sweepdraw
 // How many times the draw walk hit its non-convergence guard, CUMULATIVE over the run. It is reported
-// by ct_field's worldtest so the guard cannot absorb a defect in silence -- which it did once already:
+// by Belthasar's worldtest so the guard cannot absorb a defect in silence -- which it did once already:
 // the guard turned the $0E00 draw-list corruption from a hang into a passing run, and the !inWorld gate
 // that actually fixed that corruption was consequently UNGRADED. A counter is what makes the difference
 // between "the guard is never needed" and "nobody looked".
@@ -6022,7 +6026,7 @@ int CtAnimDrawPass(uint8_t* r, int* unresolved) {
     for (;;) {
       // A PORT-SIDE NON-CONVERGENCE GUARD, not a ROM behaviour -- the ROM's B2B2 loop is unbounded
       // because its $0E81 chain is always well-formed. Ours is not yet: with CT_FRAMELEGS=1 on a LIVE
-      // host (ct_field --scene 1 --worldtest) the chain CYCLES -- measured obj 00 <-> obj 04, with six
+      // host (Belthasar --scene 1 --worldtest) the chain CYCLES -- measured obj 00 <-> obj 04, with six
       // different buckets all claiming obj 0 as their head while obj 4's prev-link says IT is the head.
       // The scene-entry fill is not the culprit (CtObjSceneInit does write $0E00..$0EFF = $80); the
       // list is corrupted DURING the run by unlink/relink leaving stale heads behind. The lockstep
@@ -6188,7 +6192,7 @@ static void ctLoaderPartySlot(uint8_t* r, int cur) {
 // Returns the record's flat ROM offset, which the NPC tail still needs for its dedup key.
 // ⚠ THE STRIDE IS A PARAMETER, not a constant. C0/4590 (op 0x82) walks $E4:F023 with stride 5;
 // C0/46E4 (op 0x83) is the SAME 147 bytes with only the stride and the five table offsets changed
-// -- byte-diffing rom[0x4595:0x4628] against rom[0x46E4:0x4777] leaves exactly 9 differing bytes,
+// -- byte-diffing MR(0x4595:0x4628) against MR(0x46E4:0x4777) leaves exactly 9 differing bytes,
 // all of them those two things. Same field semantics at rec+0..rec+4, same [$B2]/[$B5]/[$B8]
 // walks, same `CLC / ADC #0000` no-op. So this is shared verbatim rather than duplicated.
 static int ctLoaderWalk(uint8_t* r, const uint8_t* rom, int romLen, int idx, int id, int recBase,
@@ -6197,7 +6201,7 @@ static int ctLoaderWalk(uint8_t* r, const uint8_t* rom, int romLen, int idx, int
   int rec = recBase + bf;                                  // $E4:F023 (NPC) or $E4:F000 (PC)
   r[0x01BF] = (uint8_t)bf; r[0x01C0] = (uint8_t)(bf >> 8); // 45A3 LDX $4216 / 45A6 STX $BF (16-bit)
 
-  int f1 = (romLen > rec + 1) ? rom[rec + 1] : 0;          // 45A8 $E4F024,X
+  int f1 = (romLen > rec + 1) ? MR(rec + 1) : 0;          // 45A8 $E4F024,X
   // 45B1 `STA $D9`, 16-bit, and 45AE's `AND #00FF` has already cleared the high byte -- so $01DA
   // is ZEROED here, not left alone. The three DP spills above are the whole of what C0/4590 writes
   // to the direct page besides $E3; measured with `--callrom C0/4590 --regdp 0100 --writes`, which
@@ -6209,11 +6213,11 @@ static int ctLoaderWalk(uint8_t* r, const uint8_t* rom, int romLen, int idx, int
   r[0x1380 + idx] = (uint8_t)a1; r[0x1381 + idx] = (uint8_t)(a1 >> 8);
   r[0x1300 + idx] = (uint8_t)ctLoaderTbl(r, rom, romLen, 0xB2, y1 + 2, 0);   // 45C4: the BANK
 
-  int f2 = (romLen > rec + 2) ? rom[rec + 2] : 0;          // 45CB $E4F025,X
+  int f2 = (romLen > rec + 2) ? MR(rec + 2) : 0;          // 45CB $E4F025,X
   int v2 = (f2 * 0x18) & 0xFFFF;                           // 45D2 LDA #18 -> $4216
   r[0x1400 + idx] = (uint8_t)v2; r[0x1401 + idx] = (uint8_t)(v2 >> 8);       // 45E5 (16-bit)
 
-  int f3 = (romLen > rec + 3) ? rom[rec + 3] : 0;          // 45EC $E4F026,X
+  int f3 = (romLen > rec + 3) ? MR(rec + 3) : 0;          // 45EC $E4F026,X
   int y3 = f3 * 2;                                         // 45F5 ASL A -- a WORD table
   int w0 = ctLoaderTbl(r, rom, romLen, 0xB5, y3, 1);       // 45F9/45FE: [$B5],Y and [$B5],Y+2
   int w1 = ctLoaderTbl(r, rom, romLen, 0xB5, y3 + 2, 1);
@@ -6223,7 +6227,7 @@ static int ctLoaderWalk(uint8_t* r, const uint8_t* rom, int romLen, int idx, int
   int w2 = ctLoaderTbl(r, rom, romLen, 0xB8, y3, 1);       // 460C LDA [$B8],Y
   r[0x1580 + idx] = (uint8_t)w2; r[0x1581 + idx] = (uint8_t)(w2 >> 8);
 
-  r[0x1201 + idx] = (uint8_t)((romLen > rec + 4) ? rom[rec + 4] : 0);        // 4615: THE CLASS BYTE
+  r[0x1201 + idx] = (uint8_t)((romLen > rec + 4) ? MR(rec + 4) : 0);        // 4615: THE CLASS BYTE
   return rec;
 }
 
@@ -6254,7 +6258,7 @@ int CtObjLoad(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip, int s
   // (4631) instead of loading again; a MISS claims the first $FF slot, records id and owner, and
   // returns carry CLEAR -- whereupon the ROM queues a graphics DECOMPRESSION and ADVANCES the
   // cursor. See object_loader.md.
-  int e3 = (romLen > rec) ? rom[rec] : 0;                  // 4620 $E4F023,X
+  int e3 = (romLen > rec) ? MR(rec) : 0;                  // 4620 $E4F023,X
   r[0x01E3] = (uint8_t)e3;                                 // 4624 STA $E3 -- DP is $0100, so $01E3
   int k;
   for (k = 0; k < 16; k++) if (r[0x0920 + k] == (uint8_t)e3) break;          // 5C95 CMP $0920,X
@@ -6332,7 +6336,7 @@ static int ctPcLoad(uint8_t* r, const uint8_t* rom, int romLen, int idx, int id,
   r[0x01C7] = (uint8_t)ip; r[0x01C8] = (uint8_t)(ip >> 8); // 4496 STY $C7 (16-bit)
   int rec = ctLoaderWalk(r, rom, romLen, idx, id, 0x24F000, 5);       // C0/449B-4518
   // ---- the PC tail, C0/4518-4551 ---------------------------------------------------------------
-  int e0 = (romLen > rec) ? rom[rec] : 0;                  // 4518 LDA $E4F000,X
+  int e0 = (romLen > rec) ? MR(rec) : 0;                  // 4518 LDA $E4F000,X
   r[0x01D9] = (uint8_t)e0; r[0x01DA] = 0x00;               // 4521 STA $D9 -- 16-bit, so $01DA is
   int y = e0 * 3;                                          // 4523-4528: *3   ZEROED, not left alone
   int a = ctLoaderTbl(r, rom, romLen, 0xAF, y, 1);         // 4529 LDA [$AF],Y
@@ -6632,7 +6636,7 @@ int CtObjSlotFree(uint8_t* r, int idx) {
 // actually branches on, and the byte the ported frame legs (CtAnimTimerTick's CA4F ping-pong and
 // CtFieldFrameLookup's CBA4 arm) already drive 2 -> 1 in the live image. Measured cost of the private
 // copy: --vmdiff on a cutscene seeded mid-B7 (scene 8, the gate) made ZERO ip-steps in 1500 frames
-// because nothing in a headless run ever cleared the flag, and in ct_field the same cutscene ran ~800
+// because nothing in a headless run ever cleared the flag, and in Belthasar the same cutscene ran ~800
 // frames ahead of the ROM (DD at f1638 vs f2447) because the renderer's own playback decided when a
 // B7 was over. The bodies below are the switch cases they used to be, moved verbatim; the ONLY edit is
 // the operand reads, which go through `script` for the same reason CtVmItemFamily's do.

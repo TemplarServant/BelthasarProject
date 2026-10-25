@@ -62,7 +62,7 @@ SCEN = {
 def run_port(sc):
     env = dict(os.environ, CT_BATTLE_TRACE='1', CT_BATTLE_ASCIP='1', CT_NOPACE='1', SDL_AUDIODRIVER='dummy',
                SDL_VIDEODRIVER='dummy', **sc['env'])
-    r = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat'] + sc['argv'],
+    r = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat'] + sc['argv'],
                        env=env, capture_output=True, text=True, errors='replace')
     acts, cur = [], None
     ips = {t: [] for t in TRACKS}

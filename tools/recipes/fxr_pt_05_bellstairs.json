@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_05_bellstairs",
+  "from": "fxr_pt_04_to_fair",
+  "doc": "The playthrough's leg 05_bellstairs (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): around the fountain and up the square's stairs into 1B7 (Leene's Bell)",
+  "steps": [
+    [
+      "pad",
+      "0:30,10:176,40:32,10:48,80:16,10:160,40:16,10:32,80:16,10:80,0:200"
+    ]
+  ]
+}

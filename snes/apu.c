@@ -20,6 +20,21 @@ static const uint8_t bootRom[0x40] = {
 
 static void apu_cycle(Apu* apu);
 
+const uint8_t* apu_bootRom(void) { return bootRom; }
+
+// Measuring hooks (CT_SPC_COVERAGE / CT_DSP_LOG, src/audio.c): NULL unless asked for, so a run pays one test per
+// instruction and per S-DSP write. The PC is the instruction's about to run; the write is the $F3 one.
+void (*g_apuOpHook)(Apu* apu, uint16_t pc) = NULL;
+void (*g_apuDspWriteHook)(Apu* apu, uint8_t adr, uint8_t val) = NULL;
+// The SPC700's own bus reads and writes (src/sound/lockstep.c: the ports, timers and S-DSP reads the driver makes, and
+// what its upload receivers store), NULL unless asked for.
+void (*g_apuReadHook)(Apu* apu, uint16_t adr, uint8_t val) = NULL;
+void (*g_apuWriteHook)(Apu* apu, uint16_t adr, uint8_t val) = NULL;
+// CT_MIXER_CAPTURE (src/audio.c): every SPC write to its RAM (before it lands, so the hook sees the old byte) and every
+// S-DSP register read with the value the SPC got.
+void (*g_apuRamWriteHook)(Apu* apu, uint16_t adr, uint8_t val) = NULL;
+void (*g_apuDspReadHook)(Apu* apu, uint8_t adr, uint8_t val) = NULL;
+
 Apu* apu_init(Snes* snes) {
   Apu* apu = malloc(sizeof(Apu));
   apu->snes = snes;
@@ -74,6 +89,7 @@ int apu_runCycles(Apu* apu, int wantedCycles) {
   int runCycles = 0;
   uint32_t startCycles = apu->cycles;
   while(runCycles < wantedCycles) {
+    if(g_apuOpHook && !apu->spc->resetWanted) g_apuOpHook(apu, apu->spc->pc);
     spc_runOpcode(apu->spc);
     runCycles += (uint32_t) (apu->cycles - startCycles);
     startCycles = apu->cycles;
@@ -119,7 +135,9 @@ uint8_t apu_read(Apu* apu, uint16_t adr) {
       return apu->dspAdr;
     }
     case 0xf3: {
-      return dsp_read(apu->dsp, apu->dspAdr & 0x7f);
+      uint8_t v = dsp_read(apu->dsp, apu->dspAdr & 0x7f);
+      if(g_apuDspReadHook) g_apuDspReadHook(apu, apu->dspAdr & 0x7f, v);
+      return v;
     }
     case 0xf4:
     case 0xf5:
@@ -172,7 +190,10 @@ void apu_write(Apu* apu, uint16_t adr, uint8_t val) {
       break;
     }
     case 0xf3: {
-      if(apu->dspAdr < 0x80) dsp_write(apu->dsp, apu->dspAdr, val);
+      if(apu->dspAdr < 0x80) {
+        if(g_apuDspWriteHook) g_apuDspWriteHook(apu, apu->dspAdr, val);
+        dsp_write(apu->dsp, apu->dspAdr, val);
+      }
       break;
     }
     case 0xf4:
@@ -200,12 +221,16 @@ void apu_write(Apu* apu, uint16_t adr, uint8_t val) {
 uint8_t apu_spcRead(void* mem, uint16_t adr) {
   Apu* apu = (Apu*) mem;
   apu_cycle(apu);
-  return apu_read(apu, adr);
+  uint8_t val = apu_read(apu, adr);
+  if(g_apuReadHook) g_apuReadHook(apu, adr, val);
+  return val;
 }
 
 void apu_spcWrite(void* mem, uint16_t adr, uint8_t val) {
   Apu* apu = (Apu*) mem;
   apu_cycle(apu);
+  if(g_apuWriteHook) g_apuWriteHook(apu, adr, val);
+  if(g_apuRamWriteHook) g_apuRamWriteHook(apu, adr, val);
   apu_write(apu, adr, val);
 }
 

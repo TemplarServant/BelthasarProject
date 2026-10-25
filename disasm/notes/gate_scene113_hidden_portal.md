@@ -30,13 +30,13 @@ Render: the clearing, Crono, the flower cluster on the BG. **No gate.**
 ### Our engine
 
 ```
-./build/ct_field.exe --assets ct_assets.dat --scene 113 --selftest out.raw --frames 90
+./build/Belthasar.exe --assets ct_assets.dat --scene 113 --selftest out.raw --frames 90
 python tools/ct.py fb2png out.raw out.png
 ```
 
 Render: a ~100 px blue swirling disc centred on map px (136,127), drawn over Crono.
 
-`CT_DRAWDBG=1 ./build/ct_field.exe --assets ct_assets.dat --scene 113 --selftest o.raw --frames 3`
+`CT_DRAWDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 113 --selftest o.raw --frames 3`
 
 ```
 [draw f0] obj1  spr=104 af=0 at(8,15)     foot(0,0) prio=80 mode=04 ... blob=0@0
@@ -367,10 +367,10 @@ python tools/ct.py objs  "$TMP/ctwf/gate/orc113.raw.wram"
    --btnscript "0:40" --diff --writer
 
 # --- ours: the gate is drawn ---
-./build/ct_field.exe --assets ct_assets.dat --scene 113 --selftest "$TMP/ctwf/gate/our113.raw" --frames 90
+./build/Belthasar.exe --assets ct_assets.dat --scene 113 --selftest "$TMP/ctwf/gate/our113.raw" --frames 90
 python tools/ct.py fb2png "$TMP/ctwf/gate/our113.raw" "$TMP/ctwf/gate/our113.png"
-CT_DRAWDBG=1 ./build/ct_field.exe --assets ct_assets.dat --scene 113 --selftest o.raw --frames 3
-CT_TRIGDBG=1 ./build/ct_field.exe --assets ct_assets.dat --scene 113 --selftest o.raw --frames 3
+CT_DRAWDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 113 --selftest o.raw --frames 3
+CT_TRIGDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 113 --selftest o.raw --frames 3
 
 # --- ROM ---
 python tools/ct.py script 113 --obj 11

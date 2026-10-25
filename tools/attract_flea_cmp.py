@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""Compare Flea's ENTRANCE POSE in the attract's demo battle (loc 0AD) with the cartridge, pixel for pixel.
 
-    python tools/attract_flea_cmp.py [<port_frame> <oracle_frame>]      (default 3687 50)
+    python tools/attract_flea_cmp.py [<port_frame> <oracle_frame>]      (default 3716 50)
 
 The pose is the one whose OBJ tiles OVERLAP: her face (tiles 0-3) is drawn over her white cape (tiles 4-7). On the
 SNES a lower OAM slot wins, and the ROM copies a frame's tiles into ascending slots in tile order (oam.md: tile# =
@@ -10,8 +10,10 @@ The port composes a frame into one bitmap (src/scene.c CtComposeSprite); if a la
 one, the face disappears under the cape.
 
 The port runs the attract from its own boot (`--scene 433 --selftest`) and dumps the composed field frame at
-<port_frame> with CT_FIELDSHOT. The oracle runs saves/attract_loc0AD_flea.state for <oracle_frame> frames and dumps
-its framebuffer with --peek. Oracle frame rows sit 8 lines below the port's (the 240-line framebuffer), which the
+<port_frame> with CT_FIELDSHOT. The oracle runs the cartridge under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM) from
+saves/attract_loc0AD_flea_rule.state (the attract from power-on + 3758, at loc 0AD before Flea's entrance, made by a
+recipe: tools/fixtures/attract_rule.json) for <oracle_frame> frames and dumps its framebuffer with --peek. (Until 2026-10-22 it ran the owner's real-time capture
+saves/attract_loc0AD_flea.state, another history: docs/ROADMAP.md 1.1.) Oracle frame rows sit 8 lines below the port's (the 240-line framebuffer), which the
 throne -- a static BG feature above her -- confirms. Compared: the box around Flea, x 104..139, port y 62..107.
 """
 import os
@@ -19,16 +21,17 @@ import struct
 import subprocess
 import sys
 
-FIELD = os.path.abspath('build/ct_field.exe')
+FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_loc0AD_flea.state'
+STATE = 'saves/attract_loc0AD_flea_rule.state'
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 X0, X1, Y0, Y1, DY = 104, 140, 62, 108, 8
 
 
 def main():
-    pf, of = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) >= 3 else (3687, 50)
-    shot = os.path.join('build', '_fleacmp_port.shot')
-    orc = os.path.join('build', '_fleacmp_orc.raw')
+    pf, of = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) >= 3 else (3716, 50)
+    shot = os.path.join('build', '_fleacmp_port_%d.shot' % os.getpid())
+    orc = os.path.join('build', '_fleacmp_orc_%d.raw' % os.getpid())
     for p in (shot, orc):
         if os.path.exists(p):
             os.remove(p)
@@ -36,7 +39,8 @@ def main():
                CT_FIELDSHOT=shot, CT_FIELDSHOT_AT=str(pf))
     subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', '433', '--frames', str(pf + 10), '--selftest'],
                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run([CT, '--peek', STATE, orc, '--frames', str(of)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run([CT, '--peek', STATE, orc, '--frames', str(of)], env=dict(os.environ, **RULE),
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if not os.path.exists(shot) or not os.path.exists(orc):
         sys.exit('attract-flea-cmp: FAIL -- missing dump (port %s, oracle %s)' % (os.path.exists(shot), os.path.exists(orc)))
     p = open(shot, 'rb').read()

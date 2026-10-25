@@ -290,7 +290,7 @@ and **219 of 256 entries differ between the page-1 and page-2 captures**, so it 
 and seeding it would be invention *and* wrong. The bytes are gradeable where the pixels are not, so
 the OAM is diffed against the oracle's own `.oam` sidecar as well (`seq-credits-oam-vs-oracle`).
 
-Harness: `ct_field.exe --seqstage <entry> <frames> [page]` (dumps a frame to `CT_SEQSHOT`, prints the
+Harness: `Belthasar.exe --seqstage <entry> <frames> [page]` (dumps a frame to `CT_SEQSHOT`, prints the
 OAM digest) and `--seqtimeline <entry> <visits>`; `tools/seq_stage_cmp.py` diffs against the oracle
 and finds its own alignment by reading `$7E:0008` out of a probe run. Pinned as
 `seq-credits-timeline` and `seq-credits-oam-vs-oracle` (quick), `seq-credits-vs-oracle` and
@@ -977,7 +977,7 @@ re-reads the same byte every frame forever. Two of them, four bytes apart.
 
 ### The shape of the attract (measured, not assumed)
 
-`build/ct_field.exe --scene 433` and the ROM's own script for that location:
+`build/Belthasar.exe --scene 433` and the ROM's own script for that location:
 
 * **Location `$1B1` = 433 is not a place, it is the attract's RETURN POINT.** Its script body is a
   chain of compares on the story byte `$7F:0062`, and each arm dispatches the next leg and advances
@@ -1846,7 +1846,7 @@ Regenerated with the press paths: add `CPUTRACE_BTN=0:40,100:10,0:400` / `0:170,
   from C3:0000 to the `JML $C0:0000` at frame 425.**
 * `XLATCMP_SEED=stage` (check `seq-race-xlat-stage-handoff`): the port's hardware built by `CtXlatStageOpen` the
   way a host builds it (11.4), against the power-on oracle's first visit. **IDENTICAL, 5,238,668 instructions.**
-* `XLATCMP_WRAM=<the port's own handoff image>` (ct_field `CT_XLAT_HANDOFF_WRAM`): 68,699 bytes differ from the
+* `XLATCMP_WRAM=<the port's own handoff image>` (Belthasar `CT_XLAT_HANDOFF_WRAM`): 68,699 bytes differ from the
   cartridge's, and the lockstep still holds for 721,309 instructions -- the overlay decompression, the common init,
   the setup and 54 frames -- until the first `C3/02DD` reads `$0386`. With `$0386` and `$1E05` (the sound driver's
   present latch, which only an audio-on host seeds) patched, **the whole race is IDENTICAL on the port's own
@@ -2400,9 +2400,11 @@ CT_CALLROM_NONMI=1 and `$0384` = 20 so the song's handshake is left to the host'
 it is one CtRaceStageFrame with the frame's pad ($4218's word); the sounds go through the host's post (`F6`, the bump's
 `19 98 80`) and the engine's pitch straight into the SPC's input ports. At the END: CtRaceStageClose (the driver reset)
 and the reboot into the staged location. Check race-story-plays-through-in-the-port: 10F, the race, the reboot, 0DF at
-(39,14) -- the cartridge's path; the port arrives 28 frames early (the song's handshake inside the setup is not charged).
-Still open: the picture (stage 2), those 28 frames, and `FF 09`'s story-only code patches' effects (they patch picture
-code: `$53A0`... are in the HUD/sprite tasks).
+(39,14) -- the cartridge's path. ~~The port arrives 28 frames early (the song's handshake inside the setup is not charged).~~
+**Charged since 2026-10-17** (field.c raceSndPost while the race opens: the post's SPC time, CtAudioLastPostRaster, joins the
+NMI-off stretch): 73 black frames, the cartridge's; 0DF in the port's presented f2914 (the cartridge writes `$0100` at f2913).
+The picture is native too (seq_picture.md sec. 4); it reads `FF 09`'s story-only patches where the overlay holds them (the
+immediates at `$4F74` and `$50DA`, the lists' bytes `$53A0`..), but no capture of an `FF 09` call grades them yet.
 
 ---
 
@@ -2473,10 +2475,11 @@ markers 6, 7, 8, 9 pass at 115, 2037, 4192, 7788 frames after the hand-off (save
 Native: **`FF 2E` 10948 frames, 0 differing** (the hooks' scratch, the HDMA shadow `$038C`, the beam RNG `$0386` and the
 overlay RNG `$039B` aside), the markers on the same frames. The story run: `FF 2B` -> 02D -> 105 -> 059 -> 05A -> `FF 2E`.
 
-**Open questions.** The picture (stage 2: the mode-7 world, the credits' glyphs, the shooting stars and their RNG, the
-hooks' drawing, the main thread's `$8930`, the scroll `$46` -- its +1 also rides the field bit, 9EDF); entries 10 (`FF 2A`)
-and 15 (`FF 2F`) are not graded against the cartridge (no state at their call: they need `glb[110]` the other way -- scene
-81 obj0 fn3 and scene 90's `16 6E 03 00 05`); 8A01's `$038C = 01` and 8AF5's are read from the listings, not measured.
+**The picture (stage 2, seq_picture.md sec. 9)**: native for `FF 2B` and `FF 2E` since 2026-10-17, exact NMI for NMI
+(`ending-ff2b-picture-native-vs-oracle`, `ending-ff2e-picture-native-vs-oracle`) and drawn in play (FF 2E two frames early from
+the song's second marker); entries 10 and 15 graded from the FF 2B / FF 2E hand-offs with the op's operand changed in the script
+(seq_picture.md sec. 9, which also has `glb[$6E]`'s derivation; 8A01's `$038C = 01` and 8AF5's measured there). **Open
+questions.** No natural drive reaches entries 10 / 15 yet (the oracle walked `glb[$6D]` bit 7's branch from the core to the fair).
 
 ---
 
@@ -2506,7 +2509,8 @@ in the same frame: the field clears both IPs), world 1F6, loc 1DD f1029. Native 
 the reboot into 1F6, whose world script needed two more natives (C2/7B5A: C6:FDF0's packet 3 into $7F:9000; C2/7B9F:
 C6:FEA0's packet 18 into $7E:C600, both through C3/0557), and 1DD at f1010 (the cartridge f1011).
 
-**Open.** The picture (stage 2); a real capture at the Blackbird would grade the context too (the song playing, the party). Since 2026-10-15 the
+**The picture is native too (2026-10-17, seq_picture.md sec. 5)**: exact NMI for NMI; in play 6 frames early and the colour
+cycles below one step behind. **Open.** A real capture at the Blackbird would grade the context too (the song playing, the party). Since 2026-10-15 the
 grade also takes palette records 0 and 1 ($0520-$0537, the moon's light chain's): exact. Records 2-11 -- the field's own
 colour cycles, which FD/E39C keeps running -- are one step behind the cartridge's in the port from the first frame on (one
 service fewer before the first NMI; not yet located): the picture's, open.
@@ -2557,6 +2561,14 @@ frames are the opening's pricing: C3:0000 -> $7E:3010 is 7899068 cycles on the c
 init's `JSR $31B0` waits for a vblank (boundary 23: a wait by design) and the setup's own `JSL C3/08D0` runs in the frame
 after it, NMI off, so the first NMI comes at boundary 24; the field prices `(oc + od + os) / 346888` = 22 for the whole
 opening. FF 23 shows the same frame (1DD at f1010, the cartridge's f1011: 6074890 cycles = 16.999 frames, then the wait).
+**Priced whole since 2026-10-17** (field.c seqOpeningHold): H = floor((C + 4449) / 357368) + 1, C the real cost to $7E:3010 (C3/0557's
+cycles with their refresh -- the LZ model's are net of it --, C3:0000's own 580, the common init's 54196, the setup's, $388B's
+4704), 4449 the jump's place in its vblank (v 228, h ~357 on every stage), +1 the vblank `$31B0` waits for. MEASURED in place
+(`ct.exe --racepiccmp ... RACEPICCMP_SPAN=C30000,7E3013`, frames from the jump to `$3013`): FF 2B 48, FF 2E 52, FF 23 18, FF 24 23,
+FF 07 24, FF 26 32 -- the formula's on all six (the old one gave 48 52 17 22 23 31). Now: 1DD at the cartridge's f1011, the
+fall's END 1733 frames after the op (the cartridge's 1734: one frame left, the op's side). The race keeps its own pricing: its
+song's post is priced on the host's SPC, and measured in place its setup costs 691k more than `--callrom` read while the host's
+song post costs 336k more than the cartridge's (9825788) -- two errors that cancel to the cartridge's 73; OPEN (sec. 12).
 A timing artefact (CLAUDE.md 2026-10-09); open.
 
 **Found on the way: Azala's ring.** In the port the fight froze on Azala's technique (CD/D38E): its effect program 74
@@ -2567,7 +2579,7 @@ negated for an angle >= 80, sign-extended by its bit 7), the angles from `$7C * 
 cartridge (its own fight, s301_c2) EB runs from f2121, `$CD3A` 01, 02, 03 ..; in the port the program now ends
 (battle-azala-ring-op-eb-in-the-port).
 
-**Open.** The picture (stage 2: the planet in mode 7, the stars' sprites, 56EB); the two frames above; the world 1F3's
+**The picture is native (2026-10-17, seq_picture.md sec. 6)**, exact NMI for NMI. **Open.** The frame above (the END 1733 frames after the op, the cartridge's 1734); the world 1F3's
 picture natives after the fall (C2/7957, C2/7981 -- the window circle through C3/0008 -- and C6:E072, a COLDATA HDMA), which
 advance without running.
 
@@ -2613,7 +2625,7 @@ cross 14 vblanks, the cartridge 13 (a timing artefact). The pad: the port's from
 after the input). In the field (lavos-day-ff07-plays-through-to-the-title-in-the-port): `FF 07` at f1573, the press, the reset
 954 frames after the op (the cartridge's 955), loc 000 -> 1B1 -> the title.
 
-**Open.** The picture (stage 2: the packets, the text 64BF, the sparkles C3/0DBC, the fade's colours); and how the port reaches
+**The picture is native (2026-10-17, seq_picture.md sec. 7)**, exact NMI for NMI and in play. **Open.** How the port reaches
 loc 1DC at all -- the lost final battle's path to it is not derived (the boss rush from lavos_1d3_wait ran 18000 frames of A
 without ending).
 
@@ -2653,4 +2665,62 @@ to f1512; at f1513 page B's `F5 04` passes on the cartridge and two frames later
 artefact. In the field (lavos-epoch-ff26-plays-through-in-the-port, from the cartridge's cockpit at f1700 of the drive): `FF 26`
 at f1071 (the cartridge 1070), 31 black frames, the dive, the reboot into 1DA.
 
-**Open.** The picture (stage 2: mode 7, the shake, the lightning, the Epoch's sprite).
+**The picture is native (2026-10-17, seq_picture.md sec. 8)**, exact NMI for NMI and in play.
+
+## 18. THE ATTRACT'S ARM, NATIVE -- `FF 60` and `FF 63` (2026-10-18; src/xlat/seq_c3.c out of the play path)
+
+Both attract stages are the story stages' own setups on their other arm: `$0384` bit 6, the setup's own `BIT #0040`. What the
+arm changes, read from the overlay (`tools/wdis.py saves/race_re/race_f300.wram`) and `tools/race_script_walk.py`:
+
+- **The race, $7E:3B48's 3C7C arm** (the story's 3C5C): `$038E` = 0808; the curtain's state pointer `$0352` = $E000, `$0354` =
+  $7E (16-bit `STZ $0351`: $0352's low byte too); `$7E:4259` = 02 -- the operand of task $424D's `LDA #imm`; the windows
+  `$2123-$2125` = 22 and `$2127` = FF by 16-bit stores (each writes the next register too), TMW / TSW 17 / 04; then `$0397`
+  += 1 (16-bit, NOT cleared by the common init: it survives every visit) and its parity picks page A: 404D (even) or 40C3
+  (odd), page B 415E. Both runs are a fixed camera: 412D adds the tasks `42CE 3749 3754 428B 4F54 4D0D 3D72 4447` and the
+  hooks `380B 3843 5221 43F2 44FE`; no 485D / 4339 / 42BD (no race logic, no player). The script pokes `$0350` = 1 (the
+  opening curtain), `$038D` = 0F, adds $424D, posts `18 BA 80`, and at its end pokes `$0350` = 2 (the closing one) and ENDs.
+  Task $4F54's bit-6 arm draws the two bikes only (4F85 / 4F9C: no HUD).
+- **Entry 3, $7E:671F's 6785 / 67BF arms**: pages 6898 / 68A1 (the story's 6902 / 693A); W12SEL FF; the light chain's three
+  immediates patched -- `$7E:6A5F` = 06, `$6A82` = 08, `$6AAB` = 08 (the `LDA #imm` before each record step: the story's 01 / 04
+  / 03) -- and `$038C` = 0F (HDMA channel 0: the curtain's window). 683D writes `$4259` = 01 on both arms: entry 3's abort
+  OPENS its window (its 68B4 starts with the closing walk `$0350` = 2 and 68F0 ends on the opening one).
+- **Task $3D72 / $6844**: `JSL C3/000E` (C3/01E4), then `$4302` (HDMA channel 0's table) = $3D64 / $688A when `$0351` is
+  odd, else $3D6B / $6891 -- the half C3/01E4 just wrote.
+- **Task $424D (both)**: with any pad bit in `$02` and no curtain running (`$0350` = 0): `$0350` = `$4259`'s byte, `18 BA 80`
+  through $377E unless `$0388`, `$0399` = 32, `$7F:0062` = 0 (1B1's script then sends the attract to the title), and its slot
+  to $4283 (`DEC $0399`, at 0 `INC $00`). A press inside a curtain is ignored (sec. 11.2b's "A at f40 is ignored").
+
+**C3/01E4, the curtain** (D = $0300; dis 301E4): `$50` = 0 clears `$51`; the first call fills the 224-byte state at
+`$54`:`$52` + 1C0 with 00 (open) / FF (close) -- 16-bit `LDA $F0 / STA long`, then an MVN that drags the byte up --; calls
+1..31 seed `$55` by C3/02DD (A = FE, the carry `CMP #20` left, X's low byte: the caller's X, or the MVN's end on the first
+call), then walk the state: a run of Y = (b & 1F) + 3 + C lines steps by (b' & 3) + 8 + C (b, b' the next two bytes of the
+chain `[$55]` over $C0:FE00, each byte read the next one's index), saturating at FF (open, `ADC`) or 0 (close, `SBC` with
+the borrow: the step + 1), into the state and through WMDATA into the half `$51`'s parity names. The close's clamp is `TDC`
+(D = $0300): it leaves B = 03, so the next refresh's `TAY` makes a run of $03xx lines -- the rest of the buffer walks on one
+step. The 32nd call clears `$50` / `$51`. Native: seq_race.c CtSeqCurtain01E4 (the stages' body; the field's wipe and the
+world's window object still run the translation, another session's port -- one function to swap).
+
+**The END is the main loop's.** `$0000` = 1 comes from an NMI, but `3023 JSR $51D1 / 3026 LDA $00` reads it only when the
+pass returns, and a pass parked at 5211 (the bike frame waiting on `$39`) returns NMIs later -- the NMIs run on meanwhile.
+Measured on the rule's cartridge: `$0000` = 1 at f441 of the race's hand-off state, $7E:302A at f443. CtRaceStageFrame
+reports the END once the thread is not parked; the story race's END met an idle thread (race-picture-native-vs-oracle
+unchanged at 2738).
+
+**The openings**, measured in place (`ct.exe --racepiccmp` RACEPICCMP_SPAN): the race's setup 10205558 cycles (no song: bit 5),
+C3:0000 -> $7E:3013 46 frames; entry 3's 114098, 18 frames -- CtRaceStageSetupCycles / CtEntry3StageSetupCycles by arm.
+
+**Graded.** `--racepiccmp` from the committed rule states (saves/attract_race_handoff_rule_f8247.state at 19,
+attract_entry3_handoff_rule_f8859.state at 18): the race's WRAM and every pixel equal for its 378 NMIs (one register on frame
+1: the setup frame's HDMA, below), entry 3 everything equal for 280; with a press (the abort checks' frames) too
+(attract-*-picture-native-vs-oracle, attract-*-abort-native-vs-oracle). In play, under the rule from power-on
+(tools/stage_rule_cmp.py, the picture at THE ALIGNMENT's P+2): the race 424 / 424 frames, entry 3 298 / 298 -- the translation
+had 63 / 424 and 45 / 298. tools/entry3_stage_cmp.py on the fresh state: the full picture 57344 / 57344 and 134 / 134 frames.
+The seed's history stays 403 / 403 (the native curtain traces its calls). The attract audit (tools/attract_divergence.py)
+lists the same 44 events before and after.
+
+**Not reproduced (CLAUDE.md, a CPU-time artefact):** the race's setup NMI (`3013 JSL C3/08D0`, NMI off) runs past line 0 of
+the next frame, so task $3D72's `STX $4302` lands after that frame's HDMA init: the cartridge's forced-blank setup frame walks
+$3D64 and leaves `$2126` = 80 where the port's walks $3D6B (00). Invisible (INIDISP $80) and gone at the next frame's init.
+
+**Before**, the play path ran src/xlat/seq_c3.c on the vendored CPU (sec. 11); that translation is ct.exe's now (--xlatcmp,
+`CT_XLAT_SEQ_C3`), and Belthasar.exe links no translated $C3 program.

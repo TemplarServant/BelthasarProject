@@ -5,8 +5,10 @@ r"""The attract's 1F0 overworld leg, port against cartridge: the BG3 (cloud) scr
 
 The leg (loc 1F0, the pan over 1000 A.D. that closes the attract) renders BLACK under `--selftest`, so the port side
 is the INTERACTIVE run with CT_AUDIO_LOCKSTEP=1 -- the same vehicle tools/attract_survey.py drives -- stopped at
-`port_frame` with CT_SHOTS/CT_SHOTS_EXIT; the cartridge side is `--peek saves/attract_cena_inicial.state --frames
-<oracle_frame>`. Both sides' BG3 scroll is read out ($24/$2A: the port's from CT_OWCAMTRACE, the cartridge's from the
+`port_frame` with CT_SHOTS/CT_SHOTS_EXIT; the cartridge side is `--peek saves/attract_cena_inicial_rule.state --frames
+<oracle_frame>` under the rule (the attract from power-on + 2159, made by a recipe: tools/fixtures/attract_rule.json; the
+port's frame p is its p - 2068 on this leg, after 087's one-frame-longer visit; until 2026-10-22 the owner's real-time
+capture saves/attract_cena_inicial.state, frame 8856 for the port's 10922). Both sides' BG3 scroll is read out ($24/$2A: the port's from CT_OWCAMTRACE, the cartridge's from the
 peek's .wram) and the pictures are compared pixel for pixel over the whole 256x224 frame.
 
 The leg has no BG3 ANIMATOR object (class $75C3 / $75FD), so the cartridge's $24/$2A stay 0000 for its whole 270
@@ -19,15 +21,15 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-STATE = 'saves/attract_cena_inicial.state'
+STATE = 'saves/attract_cena_inicial_rule.state'
 
 
 def main():
     os.chdir(ROOT)
     pf = int(sys.argv[1]) if len(sys.argv) > 1 else 10922
-    of = int(sys.argv[2]) if len(sys.argv) > 2 else 8856
+    of = int(sys.argv[2]) if len(sys.argv) > 2 else 8854
     tmp = 'build/_owbg3_%d' % os.getpid()
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_AUDIO_LOCKSTEP='1', CT_OWCAMTRACE='1', CT_SHOTS=tmp, CT_SHOTS_AT=str(pf), CT_SHOTS_EXIT='1')
@@ -42,7 +44,8 @@ def main():
     w, h = struct.unpack('<II', d[:8])
     port = d[8:]
     orc = tmp + '_orc.raw'
-    subprocess.run([CT, '--peek', STATE, orc, '--frames', str(of)], capture_output=True)
+    subprocess.run([CT, '--peek', STATE, orc, '--frames', str(of)], env=dict(os.environ, CT_ORACLE_LOGICAL='1',
+                   CT_ORACLE_VIRTUAL_BEAM='1'), capture_output=True)
     if not os.path.exists(orc + '.wram'):
         sys.exit('attract-ow-bg3-cmp: the oracle wrote no frame')
     o = open(orc, 'rb').read()

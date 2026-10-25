@@ -185,8 +185,10 @@ void dsp_handleState(Dsp* dsp, StateHandler* sh) {
 // CT: CT_DSP_KONTRACE=1 -- every key-on ($4C) write, stamped with the samples the DSP has produced since the process
 // began: 534 a frame at 32040 Hz on the oracle and on the port alike, so s/534 lines up two runs' frames (a sound command
 // against the moment its voice starts).
-static unsigned long ctDspSamples = 0;
+unsigned long ctDspSamples = 0;   // (src/sound/machine.c counts its samples here too: one count a process)
 static int ctKonTrace = -1;
+// CT_MIXER_CAPTURE (src/audio.c): every sample the DSP makes, as it goes into the ring. NULL unless asked for.
+void (*g_dspSampleHook)(Dsp* dsp, int16_t l, int16_t r) = NULL;
 void dsp_cycle(Dsp* dsp) {
   ctDspSamples++;
   dsp->sampleOutL = 0;
@@ -208,12 +210,16 @@ void dsp_cycle(Dsp* dsp) {
   // put final sample in the samplebuffer
   dsp->sampleBuffer[(dsp->sampleOffset & 0x3ff) * 2] = dsp->sampleOutL;
   dsp->sampleBuffer[(dsp->sampleOffset++ & 0x3ff) * 2 + 1] = dsp->sampleOutR;
+  if(g_dspSampleHook) g_dspSampleHook(dsp, dsp->sampleOutL, dsp->sampleOutR);
   // CT: CT_DSP_RAWPCM=<path> (debug) -- EVERY sample the DSP makes, in order (int16 L,R), from the process's first: sample
   // n of the file is the one CT_DSP_KONTRACE counts as s=n+1, on the oracle and on the port alike, so a key-on's sound can
   // be cut out of both streams at the same point of its own (no frame mapping, no output FIFO in between).
-  { static FILE* raw = (FILE*)1;
-    if(raw == (FILE*)1) { const char* p = getenv("CT_DSP_RAWPCM"); raw = (p && *p) ? fopen(p, "wb") : NULL; }
-    if(raw) { int16_t s2[2] = { (int16_t)dsp->sampleOutL, (int16_t)dsp->sampleOutR }; fwrite(s2, sizeof s2, 1, raw); } }
+  dsp_ctRawPcm((int16_t)dsp->sampleOutL, (int16_t)dsp->sampleOutR);
+}
+void dsp_ctRawPcm(int16_t l, int16_t r) {   // (the sound machine's samples go to the same file, in order)
+  static FILE* raw = (FILE*)1;
+  if(raw == (FILE*)1) { const char* p = getenv("CT_DSP_RAWPCM"); raw = (p && *p) ? fopen(p, "wb") : NULL; }
+  if(raw) { int16_t s2[2] = { l, r }; fwrite(s2, sizeof s2, 1, raw); }
 }
 
 static int clamp16(int val) {
@@ -355,7 +361,7 @@ static void dsp_cycleChannel(Dsp* dsp, int ch) {
   dsp->ram[(ch << 4) | 8] = dsp->channel[ch].gain >> 4;
   dsp->ram[(ch << 4) | 9] = sample >> 8;
   dsp->channel[ch].sampleOut = sample;
-  // CT: CT_DSP_VOICEMASK=<hex> (debug, ct.exe and ct_field alike) -- only the voices in the mask reach the main mix and
+  // CT: CT_DSP_VOICEMASK=<hex> (debug, ct.exe and Belthasar alike) -- only the voices in the mask reach the main mix and
   // the echo input, so one sound (an SFX on voices 6/7: C0) can be heard and compared alone on both sides. The voice
   // still runs (its sampleOut still modulates the next voice's pitch).
   { static int ctVoiceMask = -2;

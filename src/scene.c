@@ -303,17 +303,46 @@ typedef struct { const uint16_t* tiles; int lw, lh; const Meta* metas; int nmeta
                  const uint8_t* chips; const uint8_t* present; int nchips;
                  const uint8_t* tprio; int tpw, tph; int sox, soy; int mapRing; const uint16_t* held; } LInfo;
 
+// The canvas column a still backdrop's column c shows (CtFieldSceneSetStill): the 256 columns from vw show the view's
+// [vx, vx + 256) -- the same columns when the view is in the picture's middle -- and a column past either edge the one
+// mirrored at that edge (period 512). The canvas is a ring of W columns: a column is on the nearer side.
+static int stillCol(int c, int vx, int vw, int W) {
+  int s = ((c - vw) % W + W) % W;
+  if (s >= 256 + (W - 256) / 2) s -= W;
+  s = (s % 512 + 512) % 512;
+  if (s >= 256) s = 511 - s;
+  return ((vx + s) % W + W) % W;
+}
+
 static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint8_t pal[128][3],
-                      LInfo* l1, LInfo* l2, LInfo* l3, uint8_t* priomask) {
+                      LInfo* l1, LInfo* l2, LInfo* l3, uint8_t* priomask, int still, int stillVx, int stillVw) {
   int order_bit[6] = { BL3, BL2, BL1, BL2, BL1, BL3 };
   int order_prio[6] = { 0, 0, 0, 1, 1, 1 };
   LInfo* order_l[6] = { l3, l2, l1, l2, l1, l3 };
   for (int i = 0; i < 6; i++) {
     if (!(targets & order_bit[i])) continue;
     LInfo* L = order_l[i];
-    draw_layer(px, cov, W, H, L->tiles, L->lw, L->lh, L->metas, L->nmeta,
-               L->chips, L->present, L->nchips, pal, order_prio[i], (uint8_t)order_bit[i], priomask,
+    // a still backdrop (a mod): drawn apart, then every canvas column takes the one stillCol gives it
+    uint8_t* tp = NULL; uint8_t* tc = NULL; uint8_t* tm = NULL;
+    if ((still & order_bit[i]) && W > 256) {
+      tp = (uint8_t*)malloc((size_t)W * H * 3); tc = (uint8_t*)calloc((size_t)W * H, 1);
+      tm = priomask ? (uint8_t*)calloc((size_t)W * H, 1) : NULL;
+      if (!tp || !tc || (priomask && !tm)) { free(tp); free(tc); free(tm); tp = tc = tm = NULL; }
+    }
+    draw_layer(tp ? tp : px, tp ? tc : cov, W, H, L->tiles, L->lw, L->lh, L->metas, L->nmeta,
+               L->chips, L->present, L->nchips, pal, order_prio[i], (uint8_t)order_bit[i], tp ? tm : priomask,
                L->tprio, L->tpw, L->tph, L->sox, L->soy, L->mapRing, L->held);
+    if (!tp) continue;
+    for (int x = 0; x < W; x++) {
+      int sx = stillCol(x, stillVx, stillVw, W);
+      for (int y = 0; y < H; y++) {
+        size_t s = (size_t)y * W + sx, d = (size_t)y * W + x;
+        if (!tc[s]) continue;
+        memcpy(px + d * 3, tp + s * 3, 3); cov[d] = tc[s];
+        if (tm && tm[s]) priomask[d] = 1;
+      }
+    }
+    free(tp); free(tc); free(tm);
   }
 }
 
@@ -329,6 +358,7 @@ typedef struct {
   int w1, h1, w2, h2, w3, h3, has_l3;
   int screen_flags, effect_flags;
   int scrOn, scrCGWSEL, scrCGADSUB;   // CtFieldSceneSetScreen: a battle's own colour math
+  int fxLive, fxLiveOn;                // CtFieldSceneSetEffect: the field's live CGADSUB ($0BE0), over the header's byte
   int scrTM, scrTS;                   // ...and its layer designations (BL1/BL2/BL3 bits)
   int scrObjM, scrObjS;               // ...and OBJ's ($212C/$212D bit 4)
   // The map header's layer-scroll bytes md[1..3] (ROM C0/A385-A4FB decodes them; see
@@ -339,6 +369,8 @@ typedef struct {
   int l2ox, l2oy, l3ox, l3oy;
   uint8_t mapBuilt;            // $1D35 & 6 as the field last passed it: bit1 BG2, bit2 BG3 built from the map (see draw_layer)
   uint8_t vramOff;             // CtFieldSceneSetVramLayers: layers whose VRAM tilemap is no longer the map's (BL3: the caption plane)
+  uint8_t stillBits; int stillVx, stillVw;   // CtFieldSceneSetStill (a mod, the widescreen): the still backdrop's layers,
+                                             //   the view's canvas column and the one its middle 256 stand at
   int sm_l, sm_t, sm_r, sm_b, sm_full;
   // retained chip/palette animation source: lets the field re-apply the BG animation for
   // any frame (flags waving, water, fire) instead of freezing it at the load-time frame.
@@ -349,6 +381,8 @@ typedef struct {
   uint8_t* prevChips;                      // shadow of chips12 to detect when a re-bake is needed
   int animFrame;                           // last frame applied to chips12/pal
   uint8_t* bakeMain;                       // ...and its MAIN screen before the colour math (CtFieldSceneMainScreen)
+  uint8_t* bakeSub; uint8_t* bakeSubCov;   // ...and its SUB screen (pixels, layer bits; NULL with no sub screen) and the
+  int bakeBlend, bakeSubOp, bakeHalf;      //   math the bake applied with it (CtFieldSceneScreens)
   uint8_t* bakeCov; int bakeCovW, bakeCovH; // the last CtFieldSceneBake's MAIN-screen coverage: per pixel the layer bit
                                            //   (L1 1, L2 2, L3 4) of the pixel on top, 0 = backdrop
   uint8_t* layRgb[6]; uint8_t* layCov[6]; int layW[6], layH[6], layDirty;   // CtFieldSceneLayers, built on demand
@@ -365,7 +399,7 @@ static void CtFreeSceneData(SceneData* sd) {
   free(sd->chips3); free(sd->pres3); free(sd->meta3);
   free(sd->l1t); free(sd->l2t); free(sd->l3t); free(sd->tprio);
   for (int i = 0; i < 3; i++) { free(sd->held[i]); sd->held[i] = NULL; sd->heldN[i] = 0; }
-  free(sd->animChips); free(sd->chipAnimDesc); free(sd->palAnimDesc); free(sd->prevChips); free(sd->bakeCov); free(sd->bakeMotCov); free(sd->bakeMain);
+  free(sd->animChips); free(sd->chipAnimDesc); free(sd->palAnimDesc); free(sd->prevChips); free(sd->bakeCov); free(sd->bakeMotCov); free(sd->bakeMain); free(sd->bakeSub); free(sd->bakeSubCov);
   for (int i = 0; i < 6; i++) { free(sd->layRgb[i]); free(sd->layCov[i]); sd->layRgb[i] = sd->layCov[i] = NULL; }
 }
 
@@ -472,13 +506,21 @@ static void CtLoadSceneFromRom(const uint8_t* rom, int index, int frame,
 // Compose loaded scene data into a fresh RGB image (animation already baked in). If outPrio
 // is non-NULL, also returns a 1-byte/pixel mask of BG1/BG2 priority-1 pixels (the foreground
 // tiles a field engine should draw OVER sprites), cropped to match the returned image.
+// THE FIELD'S COLOUR MATH IS $0BE0, not the header's byte: the load copies the map header's byte 5 there (C0/A40B-A412
+// `LDA $7EB505 / STA $0BDF / STA $0BE0`, the same byte effect_flags holds) and channel 6's rows take it every frame (FD/C6F6);
+// op 0xF1 (C0/3D2C-3D74) and C0/21E1's entry 9 (C0/25AE) rewrite it. CtFieldSceneSetEffect hands the bake the live byte.
+static int sceneEffect(const SceneData* sd) { return sd->fxLiveOn ? sd->fxLive : sd->effect_flags; }
 static int gSceneLayersOff = 0;   // BL1/BL2/BL3 bits removed from both screens for one compose (see below)
 static uint8_t* gSceneMotCov;     // CtComposeScene's motion coverage, when it is asked for the coverage (CtFieldSceneBake)
 static uint8_t* gSceneMainPre;    // ...and its main screen before the colour math (the same crop)
+static uint8_t* gSceneSubPx;      // ...and its sub screen, pixels and layer bits (NULL with none), and the math it took
+static uint8_t* gSceneSubCov;
+static int gSceneBlend, gSceneSubOp, gSceneHalf;
 static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* outW, int* outH, uint8_t** outPrio,
                                uint8_t** outCov) {
   int main_t = sd->screen_flags & 0x07, sub_t = (sd->screen_flags >> 4) & 0x07;
-  int blend_en = sd->effect_flags & 0x07, sub_op = (sd->effect_flags & 0x80) != 0, half = (sd->effect_flags & 0x40) != 0;
+  int ef = sceneEffect(sd);
+  int blend_en = ef & 0x07, sub_op = (ef & 0x80) != 0, half = (ef & 0x40) != 0;
   if (sd->scrOn) {                                   // a battle's screen (CtFieldSceneSetScreen): its TM/TS, CGWSEL bit 1 = add
     main_t = sd->scrTM; sub_t = sd->scrTS;           //   the SUB screen (clear: the fixed colour, the battle compositor's), and
     if (!(sd->scrCGWSEL & 0x02)) sub_t = 0;          //   CGADSUB. A BG3 on the effect's tilemap is not in scrTM/scrTS: it is the
@@ -529,14 +571,16 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   // sprite. Measured: the oracle's live BG1 tilemap at loc $081 has 392 priority-bit entries, the
   // pews at metatiles (4..6, 18..19) carry them (tileset 11 metas 213/214/216/229/200/232), and the
   // oracle draws the nuns (obj10/obj11, $0C00 = $0C01 = 0x20 = OBJ prio 2) BEHIND those pews.
-  draw_pass(main_px, main_cov, W, H, main_t, palc, &li1, &li2, &li3, priomask);
-  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask);
+  draw_pass(main_px, main_cov, W, H, main_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
+  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
 
   // THE COLOUR MATH IS THE PPU'S, IN 5 BITS (snes/ppu.c ppu_handlePixel): add or subtract the sub-screen colour, halve,
   // THEN clamp to 0..31. The palette holds conv5 values, so >> 3 recovers each channel's 5 bits exactly. The 8-bit
   // `(d >> 1) + (s >> 1)` this used to do is off by up to 4 per channel -- every shadow BG2 half-adds over BG3 (the
   // tent keeper, CGADSUB = $42) and every BG3 glow full-adds over BG1/BG2 (scene 130, CGADSUB = $24) came out wrong.
   uint8_t* pre = outCov ? malloc((size_t)W * H * 3) : NULL;   // the main screen as it stands before the math
+  int keepSub = outCov && sub_t;                               // (and the sub screen, for a window that limits the math)
+  gSceneBlend = blend_en; gSceneSubOp = sub_op; gSceneHalf = half;
   if (pre) memcpy(pre, main_px, (size_t)W * H * 3);
   if (sub_t) {
     static const uint8_t BLACK[3] = { 0, 0, 0 };
@@ -598,13 +642,24 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
       uint8_t* pp = pre ? malloc((size_t)cw * ch * 3) : NULL;
       if (pp) for (int y = 0; y < ch; y++) memcpy(pp + (size_t)y * cw * 3, pre + ((size_t)(cy0 + y) * W + cx0) * 3, (size_t)cw * 3);
       free(pre); pre = pp;
+      if (keepSub) {
+        uint8_t* sp = malloc((size_t)cw * ch * 3); uint8_t* sc = malloc((size_t)cw * ch);
+        if (sp && sc)
+          for (int y = 0; y < ch; y++) {
+            memcpy(sp + (size_t)y * cw * 3, sub_px + ((size_t)(cy0 + y) * W + cx0) * 3, (size_t)cw * 3);
+            memcpy(sc + (size_t)y * cw, sub_cov + (size_t)(cy0 + y) * W + cx0, (size_t)cw);
+          }
+        free(sub_px); free(sub_cov); sub_px = sp; sub_cov = sc;
+      }
     }
   } else {
     out = main_px; *outW = W; *outH = H;
     if (outPrio) *outPrio = priomask;
     if (outCov) { *outCov = main_cov; main_cov = NULL; }
   }
-  free(main_cov); free(sub_px); free(sub_cov);
+  free(main_cov);
+  free(gSceneSubPx); free(gSceneSubCov); gSceneSubPx = gSceneSubCov = NULL;
+  if (keepSub) { gSceneSubPx = sub_px; gSceneSubCov = sub_cov; } else { free(sub_px); free(sub_cov); }
   free(gSceneMotCov); gSceneMotCov = mot;
   free(gSceneMainPre); gSceneMainPre = pre;
   return out;
@@ -761,6 +816,9 @@ uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask) 
   if (out) { free(sd->bakeCov); sd->bakeCov = cov; sd->bakeCovW = *outW; sd->bakeCovH = *outH;
              free(sd->bakeMotCov); sd->bakeMotCov = gSceneMotCov; gSceneMotCov = NULL; sd->layDirty = 1;
              free(sd->bakeMain); sd->bakeMain = gSceneMainPre; gSceneMainPre = NULL;
+             free(sd->bakeSub); free(sd->bakeSubCov); sd->bakeSub = gSceneSubPx; sd->bakeSubCov = gSceneSubCov;
+             gSceneSubPx = gSceneSubCov = NULL;
+             sd->bakeBlend = gSceneBlend; sd->bakeSubOp = gSceneSubOp; sd->bakeHalf = gSceneHalf;
              sd->bakedO[0] = sd->l2ox; sd->bakedO[1] = sd->l2oy; sd->bakedO[2] = sd->l3ox; sd->bakedO[3] = sd->l3oy; }
   else free(cov);
   return out;
@@ -786,7 +844,8 @@ const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* ha
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->bakeMain) return NULL;
   int objM = (sd->screen_flags & 0x08) != 0, objS = (sd->screen_flags & 0x80) != 0;
-  int be = sd->effect_flags & 0x07, so = (sd->effect_flags & 0x80) != 0, hf = (sd->effect_flags & 0x40) != 0;
+  int ef = sceneEffect(sd);
+  int be = ef & 0x07, so = (ef & 0x80) != 0, hf = (ef & 0x40) != 0;
   if (sd->scrOn) {
     objM = sd->scrObjM; objS = sd->scrObjS && (sd->scrCGWSEL & 0x02);
     be = sd->scrCGADSUB & 0x07; so = (sd->scrCGADSUB & 0x80) != 0; hf = (sd->scrCGADSUB & 0x40) != 0;
@@ -795,6 +854,85 @@ const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* ha
   if (blendEn) *blendEn = be; if (subOp) *subOp = so; if (half) *half = hf;
   return sd->bakeMain;
 }
+// THE LAST BAKE'S TWO SCREENS, for a COLOUR WINDOW that limits the math (field.c fieldColWindowApply): the sub screen's
+// pixels (NULL when the bake had no sub screen) and its layer bits (0 = transparent), the main screen before the math, and
+// the math the bake applied everywhere (blend layers, subtract, half) -- what a pixel outside the window must lose.
+const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_t** mainPre, int* blendEn, int* subOp,
+                                   int* half) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || !sd->bakeSub || !sd->bakeSubCov || !sd->bakeMain) return NULL;
+  if (subCov) *subCov = sd->bakeSubCov; if (mainPre) *mainPre = sd->bakeMain;
+  if (blendEn) *blendEn = sd->bakeBlend; if (subOp) *subOp = sd->bakeSubOp; if (half) *half = sd->bakeHalf;
+  return sd->bakeSub;
+}
+// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in five planes drawn with this scene's
+// palette and the Steam release's tiles -- its chip sets where slotChips names one (else this scene's), its definitions of
+// the metatiles in metaIds (4 corners of u16 chip, u8 palette row, u8 flags H 1 / V 2 / priority 4 at metaCorners + 16 i)
+// over this scene's, and its pixel sheets for the pages in pageSheet (256 x 256 CGRAM indices, 0 = nothing; an index past
+// the BG palettes draws nothing). A cell v is tile v - 1, page (v - 1) >> 8 (the Steam executable's drawer, 0x54FD5C); 0
+// draws nothing, nor does a page past 1 without a sheet. The planes are the Steam release's layers, drawn from the bottom
+// up: plane 3 (BG2's low-priority tiles) and plane 2 (BG1's) mark cov BL1, under the sprites; planes 1 and 0 (the
+// priority-1 layer) mark BL2, over them; plane 4, opaque (its cells fill with colour 0 first: 0x550260), drawn with BG3,
+// marks BL3. Only the planes in planeMask (bit k = plane k) are drawn. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel
+// (0 = nothing); both are cleared first. A pixel's first byte is its CGRAM INDEX (0..127), not a colour: the caller colours
+// it with the scene's live palette (CtFieldScenePalette), so the margins follow its fades and cycles as the room does --
+// a fight's darkening through the CGRAM left them bright beside Zombor's room (087; the owner, 2026-10-23).
+int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
+                        const uint16_t* metaIds, const uint8_t* metaCorners, const uint8_t* const pageSheet[8],
+                        int planeMask, uint8_t* rgb, uint8_t* cov) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || !sd->meta12 || !sd->chips12 || !planes || w <= 0 || hgt <= 0) return 0;
+  int W = w * 16, H = hgt * 16, n = w * hgt;
+  memset(rgb, 0, (size_t)W * H * 3); memset(cov, 0, (size_t)W * H);
+  uint16_t* t = (uint16_t*)malloc(sizeof(uint16_t) * (size_t)n);
+  uint8_t* chips = (uint8_t*)malloc(768 * 64); uint8_t* pres = (uint8_t*)malloc(768); Meta* metas = (Meta*)malloc(512 * sizeof(Meta));
+  if (!t || !chips || !pres || !metas) { free(t); free(chips); free(pres); free(metas); return 0; }
+  memcpy(chips, sd->chips12, 768 * 64); memcpy(pres, sd->pres12, 768); memcpy(metas, sd->meta12, 512 * sizeof(Meta));
+  for (int sl = 0; sl < 6; sl++)
+    if (slotChips && slotChips[sl]) { memcpy(chips + (size_t)sl * 128 * 64, slotChips[sl], 128 * 64); memset(pres + sl * 128, 1, 128); }
+  for (int m = 0; m < nMeta; m++) {
+    if (metaIds[m] >= 512) continue;
+    for (int k = 0; k < 4; k++) {
+      const uint8_t* e = metaCorners + (size_t)m * 16 + k * 4;
+      Corner* c = &metas[metaIds[m]].c[k];
+      c->chip = (uint16_t)(e[0] | e[1] << 8); c->base = (uint8_t)(e[2] * 16);
+      c->fx = e[3] & 1; c->fy = (e[3] >> 1) & 1; c->prio = (e[3] >> 2) & 1;
+    }
+  }
+  uint8_t ipal[128][3]; memset(ipal, 0, sizeof ipal);   // (the index palette: colour i is (i, 0, 0))
+  for (int i = 0; i < 128; i++) ipal[i][0] = (uint8_t)i;
+  static const int order[5] = { 3, 2, 1, 0, 4 };
+  for (int o = 0; o < 5; o++) {
+    int k = order[o]; uint8_t bit = k >= 2 && k < 4 ? BL1 : k < 2 ? BL2 : BL3;
+    if (!(planeMask & (1 << k))) continue;
+    const uint16_t* pl = planes + (size_t)k * n;
+    for (int i = 0; i < n; i++) {
+      int v = pl[i], pg = (v - 1) >> 8;
+      t[i] = (v == 0 || pg >= 2 || (pageSheet && pageSheet[pg])) ? 0xFFFF : (uint16_t)(v - 1);
+      if (v == 0) continue;
+      int x0 = (i % w) * 16, y0 = (i / w) * 16;
+      if (k == 4)                                      // opaque: colour 0 under the tile
+        for (int y = 0; y < 16; y++)
+          for (int x = 0; x < 16; x++) { size_t q = (size_t)(y0 + y) * W + x0 + x; memcpy(rgb + q * 3, ipal[0], 3); cov[q] = bit; }
+      const uint8_t* s = pageSheet && pg < 8 ? pageSheet[pg] : NULL;
+      if (!s) continue;
+      int tt = (v - 1) & 255, sx = (tt & 15) * 16, sy = (tt >> 4) * 16;
+      for (int y = 0; y < 16; y++)
+        for (int x = 0; x < 16; x++) {
+          int ci = s[(sy + y) * 256 + sx + x];
+          if (!ci || ci >= 128) continue;
+          size_t q = (size_t)(y0 + y) * W + x0 + x;
+          memcpy(rgb + q * 3, ipal[ci], 3); cov[q] = bit;
+        }
+    }
+    for (int prio = 0; prio < 2; prio++)
+      draw_layer(rgb, cov, W, H, t, w, hgt, metas, 512, chips, pres, 768, ipal, prio, bit, NULL, NULL, 0, 0, 0, 0, 0, NULL);
+  }
+  free(t); free(chips); free(pres); free(metas);
+  return 1;
+}
+
+const uint8_t* CtFieldScenePalette(void* h) { SceneData* sd = (SceneData*)h; return sd ? &sd->pal[0][0] : NULL; }
 // The main-screen coverage of the last bake (see SceneData.bakeCov); NULL before the first.
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt) {
   SceneData* sd = (SceneData*)h;
@@ -813,7 +951,8 @@ int CtFieldSceneLayers(void* h, CtSceneLayers* o) {
   if (!sd || !o) return 0;
   // the bake's own setup (CtComposeScene's head, blend on)
   int main_t = sd->screen_flags & 0x07, sub_t = (sd->screen_flags >> 4) & 0x07;
-  int blend_en = sd->effect_flags & 0x07, sub_op = (sd->effect_flags & 0x80) != 0, half = (sd->effect_flags & 0x40) != 0;
+  int ef = sceneEffect(sd);
+  int blend_en = ef & 0x07, sub_op = (ef & 0x80) != 0, half = (ef & 0x40) != 0;
   if (sd->scrOn) {
     main_t = sd->scrTM; sub_t = sd->scrTS;
     if (!(sd->scrCGWSEL & 0x02)) sub_t = 0;
@@ -899,6 +1038,18 @@ int CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3y,
   return 1;
 }
 
+// THE WIDESCREEN'S STILL BACKDROP (a mod: field.c fieldWideStill): the layers (BL2 2 / BL3 4) the bake holds to the wide
+// picture -- the 256 view's columns (canvas column vx on) drawn from canvas column vw, the picture's middle -- and mirrors
+// past them instead of repeating; 0 = none, the bake as the PPU repeats a layer. Returns 1 when that changed (re-bake).
+int CtFieldSceneSetStill(void* h, int bits, int vx, int vw) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd) return 0;
+  bits &= BL2 | BL3; if (!bits) vx = vw = 0;
+  if (sd->stillBits == bits && sd->stillVx == vx && sd->stillVw == vw) return 0;
+  sd->stillBits = (uint8_t)bits; sd->stillVx = vx; sd->stillVw = vw;
+  return 1;
+}
+
 // A DMA into the BG1/BG2 characters: VRAM words $2000-$4FFF are what chips12 holds (chip c = word $2000 + c*16 -- the
 // metatiles' chip numbers are the tile numbers minus 256, parse_metas's sub256), so `n` bytes of 4bpp planar
 // characters replace n/32 chips from `vramWord` on. FD/E022's $80 bytes are four. Returns 1 when a chip changed.
@@ -917,6 +1068,13 @@ int CtFieldSceneTileDma(void* h, int vramWord, const uint8_t* bytes, int n) {
 // The BG colours: CGRAM 0-127 as the NMI uploads them, from the live page $7E:2200 (BGR555 words). Every writer of the
 // field's colours meets there -- C0/7084's load, FD/E39C's animation records, op 0x88 -- so the bake reads the page, not
 // a palette of its own. Returns 1 when a colour changed.
+int CtFieldSceneSetEffect(void* h, int cgadsub) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd) return 0;
+  int ef = cgadsub & 0xFF, ch = !sd->fxLiveOn ? ef != sd->effect_flags : ef != sd->fxLive;
+  sd->fxLive = ef; sd->fxLiveOn = 1;
+  return ch;
+}
 int CtFieldSceneSetScreen(void* h, int on, int cgwsel, int cgadsub, int tm, int ts) {
   SceneData* sd = (SceneData*)h;
   if (!sd) return 0;

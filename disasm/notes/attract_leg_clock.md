@@ -15,7 +15,7 @@ Both sides dump the same WRAM bytes every frame -- the logical oracle with `--mo
 CT_ORACLE_LOGICAL=1 ct.exe --monitor 7E0100:2,7E0119:1,7E1E00:2,7E0384:1,7E011E:1,7E0153:1,7EA013:1,7E29C6:1 \
     --from saves/attract_cena_inicial.state --frames 9120 --diff
 CT_NOPACE=1 CT_AUDIO_LOCKSTEP=1 CT_FIELD_MEMMON="0100:2,0119:1,1E00:2,0384:1,011E:1,0153:1,A013:1,29C6:1" \
-    CT_SHOTS=x CT_SHOTS_AT=11200 CT_SHOTS_EXIT=1 build/ct_field.exe --assets ct_assets.dat --scene 433
+    CT_SHOTS=x CT_SHOTS_AT=11200 CT_SHOTS_EXIT=1 build/Belthasar.exe --assets ct_assets.dat --scene 433
 ```
 
 ⚠ The port's memmon line can be CUT by an interleaved stderr print (`[snd] ...`); a parser that takes a cut line's

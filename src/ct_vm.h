@@ -133,11 +133,17 @@ void CtSceneCameraEntry(CtScene* sc, int arrTileX, int arrTileY);
 // C0/A385-A4FB: a location load's BG2/BG3 scroll setup from the map header md[1..3] (call after
 // CtSceneCameraEntry), and the per-frame result: BG2/BG3 offsets from BG1 in pixels.
 void CtSceneLayerScrollLoad(CtScene* sc, uint8_t md1, uint8_t md2, uint8_t md3);
+// ...a location load's own order: the decode's WRAM half before the object init (C0/A33B is C0/00F4's leg, after C0/7F7E's
+// clear of the $1D page), and after the init only the C0/286C entry -- the camera law and C0/74AC's window -- so an init op's
+// store into the page (op 0x29's `TSB $1D35 / $1D36`) stays.
+void CtWramLayerScrollDecode(uint8_t* s, uint8_t md1, uint8_t md2, uint8_t md3);
+void CtSceneLoadCameraEntry(CtScene* sc, int arrTileX, int arrTileY);
 void CtSceneLayerOffsets(const CtScene* sc, int* bg2x, int* bg2y, int* bg3x, int* bg3y);
 void CtSceneLayerOffsetsOf(const CtScene* sc, const uint8_t* page, int* bg2x, int* bg2y, int* bg3x, int* bg3y);   // the same, from a copy of the object page (a battle: $7F:2000 - $0920)
 // The SCENE-ENTRY OBJ palette sweep (ROM C0/2881 -> C0/B0E6). Call it on a fresh scene entry AFTER
 // the lead is placed and the camera is set -- it needs both, and its box is NOT the per-frame one.
 void CtScenePalSweepEntry(CtScene* sc);
+void CtSceneMenuReloadObjects(CtScene* sc);   // the menu reload's C0/286C object legs: 7155 / E935 / B204 / A7E9 / B0E6
 void CtSceneCameraPx(const CtScene* sc, int* camx, int* camy);
 void CtSceneCameraPxOf(const uint8_t* page, int* camx, int* camy);   // the same, from a copy of the object page (a battle)
 
@@ -173,6 +179,11 @@ void CtSceneActor(const CtScene* sc, int obj, int* placed, int* sprite, int* x, 
 void CtSceneSetActorPos(CtScene* sc, int obj, int x, int y);  // sync an actor's pos (PC1 = the player)
 void CtSceneSetActorPosF(CtScene* sc, int obj, double x, double y);  // sub-pixel variant (the per-frame lead
                                                               // sync; the ROM's $1800/$1880 keep the fraction)
+// The lead's step: the host moved him from (x, y) this frame (C0/881E's step, before the tick); C0/A810 integrates it only
+// on the ticket his op B0 armed this pass (C0/3040) and nothing dropped (`STZ $1A01,X`) -- else the tick takes it back --
+// and a song upload that parks the pass keeps the ticket to the return frame. Dropped = the tick took the step back.
+void CtSceneLeadStepFrom(CtScene* sc, double x, double y);
+int  CtSceneLeadStepDropped(const CtScene* sc);
 int CtSceneLeadScriptPlaced(const CtScene* sc, int obj, double* x, double* y);  // 1 = the lead's fn0 placed it
                                                               // AFTER its C0/42B8 arrival arm (fx/fy returned)
 // Trail the active-party FOLLOWERS (move-mode 1/2) behind the lead PC along its path (conga-line).
@@ -223,8 +234,17 @@ typedef struct {
   uint8_t (*port)(void* ctx, int k);          // read $2140+k (k = 0..3)
 } CtSoundSink;
 void CtSceneSetSoundSink(const CtSoundSink* sink);   // NULL detaches
+// A location load's last JSLs (its init runner and obj0's slot 1), queued while the mode is on and posted by the flush in
+// the load's last frame (ct_vm.c gLoadPost).
+void CtSceneLoadPostsMode(int on);
+void CtSceneLoadOpsPriced(int on);                   // a host that prices its loads: the init pass's ops are CPU time
+int  CtSceneLoadPostsPending(void);
+long CtSceneLoadPostCycles(int k);                   // the k-th pending one's object-pass cycles (g_ctLzSpriteCycles) when it ran
+long CtSceneLoadOpCycles(int* n);                   // ...the ops' share of it (and how many)
+const char* CtSceneLoadCostWhy(void);                // the first op of the last priced load whose arms are not walked (NULL: none)
+int  CtSceneLoadPostsFlush(CtScene* sc, int count);  // the next `count` pending ones (< 0: all); frames << 10 | line, -1 = none priced
 // THE RULE's infinitely fast CPU for the sound ops' JSLs (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1 by default): the host
-// says 0 for a run whose SPC does not stand for the cartridge's (ct_field's WRAM-seeded runs), and the VM keeps the
+// says 0 for a run whose SPC does not stand for the cartridge's (Belthasar's WRAM-seeded runs), and the VM keeps the
 // real-time tail rule there.
 void CtSceneSetRuleIfast(int on);
 int  CtSceneMainLoopParked(const CtScene* sc);   // before the tick: the CPU is still inside a script's `JSL C7/0004` this frame
@@ -236,7 +256,7 @@ int  CtSceneLoadSongPrice(void);      // the last scene load's C0/1B8B post: fra
 // (CC/E387) reads this bit to derive $99E1 (0=ACTIVE/0x40=WAIT) for the Wait freeze gate (73dfa42).
 void CtSceneSetAtbMode(CtScene* sc, int active);
 // DEBUG/test: force `obj` to become active-party member `member` (1 or 2) -- registers the char in
-// $7E2980+member and sets its move-mode -- so the conga-line follow can be exercised in ct_field without
+// $7E2980+member and sets its move-mode -- so the conga-line follow can be exercised in Belthasar without
 // playing through the join dialogue. (The real game does this via op 0xD3 + op 0x5C.)
 void CtSceneDebugMakeFollower(CtScene* sc, int obj, int member, int charId);
 // Held joypad for the script VM ($00F2 in CT layout: A=0x80 X=0x40 L=0x20 R=0x10 B=0x08 Y=0x04
@@ -298,7 +318,7 @@ int  CtSceneDiffWramMasked(const CtScene* sc, const uint8_t* w, int frame,
 // (see the ownership note above); a CtScene is merely one way to reach the pointer --
 // CtSceneCreateIn stores the CtWram straight into sc->mem, so sc->mem IS the CtWram.
 // Taking the wram directly is what lets a lockstep run keep grading across a hop that has NO
-// scene at all: ct_field frees the field scene when it enters the overworld, and every
+// scene at all: Belthasar frees the field scene when it enters the overworld, and every
 // scene-addressed call above then goes quiet on a NULL and grades nothing while the run
 // carries on. Identical results in field mode: same buffers, same bits.
 void CtVmWmaskResetW(CtWram* w7e, const uint8_t* w);
@@ -455,7 +475,7 @@ void CtPolyQuadImage(uint8_t* w128);                  // C3/0EFA (the quad windo
 int  CtSceneActorColorGated(const CtScene* sc, int obj);  // 1 = an op-0x88 colour-gated sprite (Telepod swirl) — clip it to the iris
 int  CtSceneActorScripted(const CtScene* sc, int i); // 1 = a called/scripted fn is running
 int  CtSceneActorMode(const CtScene* sc, int i);     // $1100 move-mode probe (debug)
-int  CtSceneSaveState(const CtScene* sc, const char* path, const double player[4]);  // DEBUG: snapshot the scene + the field player state {px,py,pz,pfac} (ct_field F5)
+int  CtSceneSaveState(const CtScene* sc, const char* path, const double player[4]);  // DEBUG: snapshot the scene + the field player state {px,py,pz,pfac} (Belthasar F5)
 int  CtSceneLoadState(CtScene* sc, const char* path, double player[4]);  // DEBUG: restore (F9); same-scene only. 0=fail, 1=VM only (old/no player), 2=VM+player[] restored
 int  CtSceneStateLoc(const char* path, uint8_t* flags);  // DEBUG: the location ($0100) a snapshot was taken in (+ its $7F:0000 page into flags[0x200] if non-NULL); -1 if not loadable
 void CtSceneAnimFinished(CtScene* sc, int i);       // renderer: the once-anim of actor i ended
@@ -481,7 +501,7 @@ void CtSceneSetEnemyRecTable(const uint8_t* tab, int len);
 // Optional like the rec table -- without it fresh loads leave $1280/$1380/$1400../$0F81 zero
 // exactly as before (WRAM-seeded scenes carry the oracle's values regardless).
 void CtSceneSetRomImage(const uint8_t* rom, long len);
-void CtHdmaTableBuild(uint8_t* wram128);   // `JSL FD/C2C1`: the field's HDMA table builder (the ROM's, src/xlat/hdma_fd.c), $0153 bit 0 flips
+void CtHdmaTableBuild(uint8_t* wram128);   // `JSL FD/C2C1`: the field's HDMA table builder (src/hdma_table.c), $0153 bit 0 flips
 void CtSceneFree(CtScene* sc);
 
 #endif

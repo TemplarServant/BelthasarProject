@@ -254,7 +254,7 @@ Frame-for-frame identical to the `$7F0054=00` run. **The story flag has no effec
 Drive: `u:100`, then `a:1,i:11` ×100, then `d:300` (walk away at the end).
 
 ```
-SDL_VIDEODRIVER=dummy CT_CARRYPARTY="0,1,128" CT_STORYDBG=1 build/ct_field.exe \
+SDL_VIDEODRIVER=dummy CT_CARRYPARTY="0,1,128" CT_STORYDBG=1 build/Belthasar.exe \
   --assets ct_assets.dat --scene 439 --loadflags <FLAGS> --at 392 143 \
   --selftest --frames 1600 --walkscript "u:100,(a:1,i:11)x100,d:300"
 ```
@@ -366,3 +366,17 @@ gate, no story flag, and the same machine as the post-battle regroup.
 - `$0162` and `$0138` were measured at `00` for every frame of the oracle run, so nothing in this
   item exercises them. A claim that they are *never* used in scene 439 would be a negative I did not
   test properly — this only says they never move in this scenario.
+
+## 9. Which followers the DA releases -- the party slots, not the move modes (2026-10-20)
+
+C0/345A takes the followers from the PARTY SLOTS, the bytes `$0199` / `$019B` (object * 2; bit 7 = the slot is empty):
+`345F LDA $99 / BPL` (slot 1; empty -> IP + 1, CLC, the visit ends), `34A1 LDA $99 / TAX` (the release of slot 1),
+`34E2 LDA $9B / BPL` (slot 2; empty -> `$7F03FE := 2`, one arrival owed), else the release of slot 2 and `$7F03FE := 1`.
+The battle return C0/0330 reads the same two bytes (`0355 LDA $99 / BPL`, `036D LDA $9B / BPL`). The port used to pick
+the objects of move-mode 1 and 2 instead; a member who has LEFT the party keeps his move mode. MEASURED, the playthrough's
+leg 27 (the rule's cartridge, from leg 26's end in 078, the throne room after Yakra): the scene's `5A 1C / D4 04 / D1 04 /
+DA` leaves `$0197/$0199/$019B` = `02 06 8A` (Frog's slot emptied) on both sides; at the DA the cartridge stores `$7F03FE` =
+02 (f584) and gives control back at f602 when Lucca arrives, where the port stored 01, waited for Frog as well and gave it
+back at f659 -- and every press of the leg after that missed. Both now read the slots (src/ct_vm.c ctPartyFollowers):
+control at f602, and legs 01-26 unchanged. The solo-party arm of sec. 8 is the same read: with `$0199` = 80 the DA steps
+over itself.

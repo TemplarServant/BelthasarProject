@@ -637,7 +637,7 @@ New `tools/regress_checks.json` entry, same shape as the existing `field-battle-
 
 ```json
 { "name": "field-battle-status-render",
-  "argv": ["build/ct_field.exe","--assets","ct_assets.dat","--battletest","saves/battle_re/gato_t0.raw.wram"],
+  "argv": ["build/Belthasar.exe","--assets","ct_assets.dat","--battletest","saves/battle_re/gato_t0.raw.wram"],
   "env": { "CT_BATTLE_TRACE":"1", "CT_BATTLE_MASHA":"1", "CT_BATTLE_STATUSTEST":"99",
            "CT_BATTLE_DEBUGEND":"1200", "CT_BATTLESHOT_AT":"1150",
            "CT_BATTLESHOT":"build/status_sleep.raw" },

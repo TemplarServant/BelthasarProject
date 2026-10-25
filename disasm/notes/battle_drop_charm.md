@@ -240,3 +240,15 @@ Dir: `%TEMP%/claude/C--Users-…-9e84b785-…/scratchpad/`
   (→ `0x1AF22`); drop grant `0x1D010`; charm roll `0x1E9D5`; charm sub-dispatch `0x1EB1C`; charm caller
   (D306 tail) `0x1D306`; charm grant `0x3DB655`→`0x1D005`; `$AE4D=header+7` `0x1EB0E`; header staging
   `0x1BF81`. ROM tables: reward `CC/5E00` (`0x0C5E00`), header `CC/213F` (`0x0C213F`), RNG `FD/BA61`.
+
+## 2026-10-19 -- the roll at the death (the DEVIATION of 4.1 removed)
+
+The drop roll (FD/AC1F-AC27, `LDA #64 / JSL C1/FDCB / CMP #5A`) now draws `$26` at each drop-eligible death, in the
+death path, as the ROM does (battle.c battleRollDrop); battleResolveDrops keeps only the guaranteed (drop == charm) half.
+The deferral to the victory was kept while the port's combat was not `$26`-lockstep. It is now, on a route drive: the
+playthrough's leg 20 (Guardia Forest's three ambushes) once the fight takes the route's presses on the cartridge's frames
+(CT_WS_BATTLE_LEAD): the rule's cartridge draws at FD:AC21 on f1648 (`--cputrace`, `$26` A9 -> AA, the first Hetake's
+death), the port drew the same roll at the victory (f1980), and every later roll was an entry off -- the hand-back `$29AD`
+D3 against BE, the second ambush's targets, damage and length apart. With the roll at the death the leg's values (gold,
+HP, control, locations) are the cartridge's through all three fights. Re-pinned: field-battle-drop-roll,
+field-battle-end-uiteardown, battle-motion-owners-explain-the-fight (the forest fight's later rolls move).

@@ -80,7 +80,7 @@ The X-menu is NOT a scene/loc transition: the field mainloop itself (C0/18D9 bra
   copy). Both mm_menu (400G on screen) and mm_fair_menu3 read 400 at $2C53.
 - C port: src/menu.c (CtMenuPanelData/CtMenuRender/CtMenuClockTick) + the field.c menu phase
   machine (entry gates C0/192F, save C0/011B, restore C0/1A03, both fades frozen-synchronous per
-  C0/193E + C0/2824); selfcheck `ct_field --menutest` (regress: field-menutest-gato).
+  C0/193E + C0/2824); selfcheck `Belthasar --menutest` (regress: field-menutest-gato).
 
 ## Open questions
 - Menu mode 5 (initial screen $67=07, Y button + storyline>=0x49; also battle-site C2/2552 A=($027C==5)?1:5): which screen is it (Epoch/world-map? save?) — needs a storyline>=0x49 oracle state to open it

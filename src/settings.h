@@ -1,8 +1,8 @@
-// settings.h - the player's options for ct_field: what the F1 overlay edits and ct_settings.ini keeps.
+// settings.h - the player's options for Belthasar: what the F1 overlay edits and ct_settings.ini keeps.
 //
 // The options are the HOST's (window, picture, sound volume, controls, how strictly the SNES's timing is kept); the
 // game's own settings (battle speed, the Config screen's button map, Stereo/Mono) stay in the game's SRAM as on the
-// cartridge. Defaults are the behaviour ct_field had before the file existed, so a missing or partial file changes
+// cartridge. Defaults are the behaviour Belthasar had before the file existed, so a missing or partial file changes
 // nothing.
 //
 // HEADLESS RUNS NEVER READ THE FILE (CtSettingsLoad's `interactive` = 0: --selftest, CT_NOPACE, a dummy video driver):
@@ -38,7 +38,10 @@ typedef struct CtSettings {
   int renderScale;              // the internal picture, x 256x224 (1..4): the field's sub-pixel positions (motion.h)
   int interpolate;              // the frames between: the field drawn at the screen's rate between two 60 Hz frames
   int widescreen;               // CT_WIDE_*: the field's picture wider than the SNES's 256 (the rest pillarboxed)
-  int wideRoomWrap;             // widescreen: a room as wide as its map shows the map wrapping in the sides (else black)
+  int wideSteamMargins;         // a mod: past a room's edge, the Steam release's margins from the player's ct_wide.dat
+                                //   (tools/steam_wide.py, widext.h); off = the sides as above
+  int fillBottomLines;          // a mod: the field's and the fights' bottom 13 lines (211-223), which the ROM's V-IRQ
+                                //   blanks to upload VRAM, drawn like the rest; off = black, as on the SNES
   int vsync;
   int backend;                  // present.h CT_BACKEND_*: SDL_Renderer / OpenGL / Vulkan (next start)
   char renderDriver[32];        // SDL_Renderer driver ("" = SDL's choice; "direct3d", "direct3d11", "opengl", "software")
@@ -55,6 +58,8 @@ typedef struct CtSettings {
   int touchScale;               // 50..150 (%), the controls' size
   // how the game keeps the SNES's timing
   int sync;                     // CT_SYNC_*
+  int instantUploads;           // a mod: a song's (or a sound set's) upload to the sound processor costs no frames --
+                                //   the game goes on while it lands (the free sync mode has it too); off = the SNES's
 } CtSettings;
 
 CtSettings* CtSettingsGet(void);                 // the live options (defaults until CtSettingsLoad)

@@ -195,7 +195,7 @@ velocity `$1A01,X`/cadence `$1001,X`, then consumes the per-PC target operands (
 not a snap. The oracle endpoints (from the staged records above): Crono → tile (8,11) fine (6,0); Marle → tile
 (11,8) fine (0,15) — two distinct spots (lower-left + upper-right, the GATO formation).
 
-**Our engine vs the oracle** (`CT_BATTLE_STAGEDBG=1 CT_BATTLE_DEBUGEND=60 ct_field --battletest
+**Our engine vs the oracle** (`CT_BATTLE_STAGEDBG=1 CT_BATTLE_DEBUGEND=60 Belthasar --battletest
 saves/battle_re/gato_t0.raw.wram`):
 ```
 seat   OURS (rel fine)   → screen    ORACLE (rel fine)  → screen    delta

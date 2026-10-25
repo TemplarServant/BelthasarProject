@@ -1,0 +1,19 @@
+{
+  "name": "fxr_cathedral_door_open",
+  "from": "frog_joins",
+  "doc": "Stands in for the state behind saves/field_re/door_009.state (the owner's F5 snapshot, loc 081 after the organ opened the hidden door, storyline 15): cathedral_hall's first two steps (Crono checks the organ, obj13: $7F00FF bit 4, the door's rect copied over the wall; A through the scene) and its third cut before the door -- Crono stands below it at (208,141), the snapshot's place.",
+  "steps": [
+    [
+      "pad",
+      "10:48,40:32,10:16,40:48,80:16,10:4,0:4,100:2,0:60,((100:2,0:30)*2)*17,80:32,10:32,80:80,20:32,80:32,80:8,10:10,0:20"
+    ]
+  ],
+  "expect": {
+    "loc": "0x081",
+    "wram": {
+      "0x10000": "0x15",
+      "0x100FF": "0x10",
+      "0x011F": "0x01"
+    }
+  }
+}

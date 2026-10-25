@@ -43,7 +43,7 @@ def main():
                SDL_AUDIODRIVER='dummy', SDL_VIDEODRIVER='dummy',
                CT_BATTLE_MEMMON='A013:1,AFAB:3,AFB1:1,B185:1,0027:1,00A4:1,00E5:1', CT_BATTLE_MVTRACE='1')
     env.pop('CT_ORACLE_LOGICAL', None)
-    pr = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--battletest',
+    pr = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--battletest',
                          'saves/battle_re/gato_t0.raw.wram'], env=env, capture_output=True, text=True, errors='replace')
     oenv = dict(os.environ, CT_ORACLE_LOGICAL='1')
     if RULE:

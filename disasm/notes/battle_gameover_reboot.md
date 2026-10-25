@@ -7,7 +7,7 @@ battle: GAME OVER (party defeated, $2A1F bit5 clear) -- reboot sequence unported
 ```
 
 and sets a `gameOver` flag that gates the player controller, the talk key, the X-menu and movement
-(field.c:5447/6241/6374/6451). **Losing a battle in `ct_field` is therefore a permanent freeze** — the
+(field.c:5447/6241/6374/6451). **Losing a battle in `Belthasar` is therefore a permanent freeze** — the
 window stays up, nothing responds, only Escape quits. This dossier derives the ROM's real behaviour.
 
 Every line below is `tools/dis.py` output on the USA ROM. Nothing here is inferred.
@@ -97,14 +97,14 @@ screen; death returns you to the title.
 Steps (a) and (b) port cleanly and are the whole user-visible defeat experience:
 
 1. **(a)** Replace the freeze at `field.c:4142` with a game-over MODE, not a dead flag: keep the
-   field/battle tick running, poll for a fresh key edge (ct_field already tracks edges — the
+   field/battle tick running, poll for a fresh key edge (Belthasar already tracks edges — the
    `!e.key.repeat` KEYDOWN block at field.c:5078).
 2. **(b)** On the edge, ramp the existing frame brightness down one step per frame while the tick
-   continues. ct_field already owns a brightness path — the `fadeBri`/`FADE_STEP` machine at
+   continues. Belthasar already owns a brightness path — the `fadeBri`/`FADE_STEP` machine at
    field.c:5106 — so this is the same ramp the door transitions use, driven from the same
    canonical `$0119` semantics.
 3. **(c)** is where the honest boundary sits. `BRL ->000E` is a cold reboot into the TITLE/attract
-   chain, and `ct_field` has no title screen (`ct-field-newgame-boot`: the port's cold entry is
+   chain, and `Belthasar` has no title screen (`ct-field-newgame-boot`: the port's cold entry is
    `--newgame` → scene 0 naming → loc 496 pan → loc 271 → loc 2). Rebooting into the *new-game*
    chain is the nearest faithful endpoint and must be labelled as the approximation it is: the ROM
    reaches the title first. Do NOT dress it up as byte-exact.

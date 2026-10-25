@@ -1,5 +1,6 @@
 // ct_shadow.c — see ct_shadow.h and docs/SHADOW_PROPOSAL.md.
 #include <stdlib.h>
+#include "romview.h"
 #include <string.h>
 #include "ct_shadow.h"
 #include "cpu.h"
@@ -8,8 +9,10 @@
 #include "dma.h"
 #include "battle.h"
 #include "move.h"
+#include "collision.h"
 #include "menu.h"
 #include "oam.h"
+#include "vwf.h"
 
 #define SH_WRAM  0x20000
 #define SH_DEPTH 16
@@ -160,6 +163,22 @@ static int timerRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long
                     CtShadowRegs* out) {
   (void)e; (void)in; (void)out; CtAnimTimerTick(w, rom, (int)romLen, w[0x016D]); return CT_SH_RETURNS;
 }
+// C0/8A6D, the lead's tile collision (CtPlayerCollide): run by C0/881E's `JSR C0/8A6D` (C0/8847) on the DP $1D00, the
+// feelers on the WRAM planes $7E:30C0 / $7E:7000 / $7E:7040 (ct.exe installs no host tile fetch).
+static int collGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; (void)w; return in->dp == 0x1D00 && in->db == 0x00;
+}
+// C0/9C5C's positional exit, C0/9CA1 -> 9D2C: the exit table at $E5:0000 stages the destination $0112-$0116 and the
+// latch $0117 bit 7 (with $1D52 its scratch). The port stages exits in the field host (field.c, the exit and door list),
+// not in CtCollisionCommit (collision.h), so those bytes are not this entry's to grade.
+static const CtShadowSkip s_collSkip[] = {
+  { 0x0112, 0x0117, "C0/9CA1's positional exit staging: the field host's" },
+  { 0x1D52, 0x1D52, "C0/9CA1's scratch" },
+  { 0, 0, NULL } };
+static int collRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                   CtShadowRegs* out) {
+  (void)e; (void)rom; (void)romLen; (void)in; (void)out; CtPlayerCollide(w); return CT_SH_RETURNS;
+}
 static int pAnimRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                     CtShadowRegs* out) {
   (void)e; (void)in; (void)out; CtPlayerAnimSelect(w, rom, (int)romLen, w[0x016D]); return CT_SH_RETURNS;
@@ -224,7 +243,7 @@ static int techPassRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, l
 static int fxGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   int at = w[0x40] | (w[0x41] << 8);
-  return rom && in->dp == 0x0000 && in->db == 0x7E && w[0x42] == 0xD1 && rom[0x110000 + at] == (in->a & 0xFF);
+  return rom && in->dp == 0x0000 && in->db == 0x7E && w[0x42] == 0xD1 && CtRomByte(rom, rl, 0x110000L + at) == (in->a & 0xFF);
 }
 static int fxRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                  CtShadowRegs* out) {
@@ -270,6 +289,22 @@ static int modeMachineRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom
   return CtBattleModeMachineProbe(w) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
 }
 
+// C2/57DF AND C2/5823, THE PROPORTIONAL TEXT (vwf.c CtVwfBegin / CtVwfRun), entered by JSL (C2:0003 / C2:0009 jump to
+// them; C2/6965 calls them straight). Both `PHP / REP #20 / PHD` and set D = $0200 themselves, so any m enters; 57DF's
+// `LDX #0200` is three bytes, so x is 16-bit. Their absolutes ($0231, $0237-$023A) are the direct page's bytes when DB
+// maps the low WRAM. A comes back 0000 (57DF `LDA #0000 ... LDA #00`; 5823 `LDA #00 / XBA` with B = 0); X and Y are
+// left as the last step had them and no caller reads them.
+static int vwfGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
+  (void)e; (void)w; return in->db == 0x7E || !(in->db & 0x40);
+}
+static int vwfRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
+                  CtShadowRegs* out) {
+  (void)in;
+  if (e->arg) { if (CtVwfRun(w, rom, romLen) < 0) return CT_SH_UNPORTED; }
+  else CtVwfBegin(w, rom, romLen);
+  out->a = 0;
+  return CT_SH_RETURNS;
+}
 static const CtShadowEntry k_fixed[] = {
   { 0xC28791, "inventory add (CtMenuInvAdd)", 0x00, 0x00, 0, 0, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
   { 0xC287D5, "inventory remove (CtMenuInvRemove)", 0x00, 0x00, 0, 1, invGuard, invRun, CT_SH_A8 | CT_SH_X16, NULL },
@@ -284,6 +319,7 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC0A9CD, "draw-list link (CtObjListLink)", 0x00, 0x00, 0, 0, fieldGuard, linkRun, 0, NULL },
   { 0xC0C98A, "anim timer (CtAnimTimerTick)", 0x30, 0x30, 0, 0, fieldGuard, timerRun, 0, NULL },
   { 0xC09E84, "player anim (CtPlayerAnimSelect)", 0x30, 0x30, 0, 0, fieldGuard, pAnimRun, 0, NULL },
+  { 0xC08A6D, "player collision (CtPlayerCollide)", 0x00, 0x00, 0, 0, collGuard, collRun, 0, s_collSkip },
   { 0xC0B701, "anim release (CtAnimRelease)", 0x30, 0x20, 0, 0, fieldGuard, releaseRun, CT_SH_C, NULL },
   { 0xC0CAD9, "anim drain visit (CtAnimDrainVisit)", 0x30, 0x30, 0, 0, fieldGuard, drainRun, CT_SH_C, NULL },
   { 0xC0305D, "arrival snap (ctArriveSnap305D)", 0x00, 0x00, 0, 0, fieldGuard, snapRun, CT_SH_C, NULL },
@@ -297,6 +333,8 @@ static const CtShadowEntry k_fixed[] = {
   { 0xC12D9F, "battle idle walk (C1/2D9F)", 0x20, 0x20, 0, 0, battleGuard, idleWalkRun, 0, NULL },
   { 0xC13714, "battle mode machine (C1/3714)", 0x20, 0x20, 0, 0, battleGuard, modeMachineRun, 0, NULL },
   { 0xFFFAA3, "save load (CtMenuSaveLoad)", 0x00, 0x00, 1, 0, loadGuard, loadRun, 0, NULL },
+  { 0xC257DF, "text set-up (CtVwfBegin)", 0x10, 0x00, 1, 0, vwfGuard, vwfRun, CT_SH_A16, NULL },
+  { 0xC25823, "text run (CtVwfRun)", 0x10, 0x00, 1, 1, vwfGuard, vwfRun, CT_SH_A16, NULL },
 };
 #define AI_NCOND 0x29   // the condition ops 00-28 (--sweepaieval's range; op 0F, C1/2C02's path test, is unported)
 #define SH_NFIXED ((int)(sizeof k_fixed / sizeof k_fixed[0]))

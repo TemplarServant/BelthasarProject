@@ -87,6 +87,7 @@ void snes_reset(Snes* snes, bool hard) {
   snes->openBus = 0;
 }
 
+static void lfRestoredMarks(Snes* snes);
 void snes_handleState(Snes* snes, StateHandler* sh) {
   sh_handleBools(sh,
     &snes->palTiming, &snes->hIrqEnabled, &snes->vIrqEnabled, &snes->nmiEnabled, &snes->inNmi, &snes->irqCondition,
@@ -110,8 +111,10 @@ void snes_handleState(Snes* snes, StateHandler* sh) {
   input_handleState(snes->input1, sh);
   input_handleState(snes->input2, sh);
   cart_handleState(snes->cart, sh);
+  if(!sh->saving) lfRestoredMarks(snes);
 }
 
+static unsigned g_runFrameCalls = 0;   // (the harness frame, for the traces below)
 void snes_runFrame(Snes* snes) {
   // TODO: improve handling of dma's that take up entire vblank / frame
   // run until we are starting a new frame (leaving vblank)
@@ -123,6 +126,11 @@ void snes_runFrame(Snes* snes) {
   while(!snes->inVblank && frame == snes->frames) {
     cpu_runOpcode(snes->cpu);
   }
+  { static int tr = -1; unsigned calls = ++g_runFrameCalls;   // CT_ORACLE_RUNFRAME_TRACE=1: a call that ran over a frame boundary --
+    if(tr < 0) tr = getenv("CT_ORACLE_RUNFRAME_TRACE") != NULL;   // one opcode (a long DMA) past both the vblank and line 0:
+    if(tr && snes->frames != frame)                           // one picture for two frames (the TODO above)
+      fprintf(stderr, "runframe: call %u ran frames %u-%u (to V=%d) at %02X:%04X\n", calls, frame, snes->frames, snes->vPos,
+              snes->cpu->k, snes->cpu->pc); }
   snes_catchupApu(snes); // catch up the apu after running
 }
 
@@ -219,7 +227,7 @@ static void lfReadEnv(void) {
   static int done = 0; if(done) return; done = 1;
   const char* v = getenv("CT_ORACLE_NMION_HOLD"); g_ctLogicalValve = (v && *v == '0');
   // UNDER THE RULE THE APU STANDS WITH THE BEAM (the zelda3 model: the SPC runs a frame per frame whatever the CPU spent --
-  // the port's own relation, ct_field's g_ctLogicalHoldApu = 0). The oracle ran it through a hold for the valve's sake (a
+  // the port's own relation, Belthasar's g_ctLogicalHoldApu = 0). The oracle ran it through a hold for the valve's sake (a
   // handshake inside a held stretch had to be answered before the valve fired); with no valve, a poll of the APU is a wait
   // (lfInWaitLoop: the plain poll and the counted one) and ends the stretch like any other. Held cycles were SPC time no
   // frame of the port gives: the line-64 cut alone holds ~20 lines of every action frame. CT_ORACLE_HOLDAPU=1 keeps the
@@ -398,12 +406,13 @@ int g_ctLogicalLoads = 0;
 // per displayed frame (the console's relation, and the zelda3 model's -- the SPC there runs a frame per frame whatever
 // the CPU spent), so every held cycle the APU ran became samples no frame plays, queued behind the picture for good:
 // the attract's race holds ~35% of a frame per frame and left the sound 1.8 s late for the rest of the demo (measured,
-// CT_AUDIO_FIFOTRACE). ct_field sets 0: the APU stands with the beam through a hold (and a phase hold), and a CPU that
+// CT_AUDIO_FIFOTRACE). Belthasar sets 0: the APU stands with the beam through a hold (and a phase hold), and a CPU that
 // polls it there is a wait (C7:09E1), which releases the hold like any other.
 int g_ctLogicalHoldApu = 1;
 static unsigned long long lfVbCycles = 0; static long lfVbRefresh = 0;
 static long lfPhaseHold = 0; static int lfPhasePending = 0;
 long g_ctLogicalPhaseHolds = 0, g_ctLogicalPhaseHeld = 0;
+static unsigned long long lfOffCycles = 0; static long lfOffRefresh = 0;
 void snes_noteNmiWrite(Snes* snes, int wasOn, int nowOn) {
   if(g_ctLogicalFrames && wasOn != nowOn) lfStretchEnd();
   if(!g_ctLogicalFrames || !g_ctLogicalLoads) return;
@@ -411,11 +420,15 @@ void snes_noteNmiWrite(Snes* snes, int wasOn, int nowOn) {
     long spent = (long)(snes->cycles - lfVbCycles) - (g_cycTagCycles[4] - lfVbRefresh) - (g_ctIfastHeld - lfVbIfast);
     lfPhaseHold = spent > 0 ? spent : 0; lfPhasePending = lfPhaseHold > 0;
     if(getenv("CT_ORACLE_LOGICAL_TRACE"))
-      fprintf(stderr, "logical-frame: frame %u NMI off at %02X:%04X, %ld cycles into the frame -> phase hold\n",
-              snes->frames, snes->cpu->k, snes->cpu->pc, lfPhaseHold);
+      fprintf(stderr, "logical-frame: frame %u (call %u) NMI off at %02X:%04X, %ld cycles into the frame -> phase hold\n",
+              snes->frames, g_runFrameCalls + 1, snes->cpu->k, snes->cpu->pc, lfPhaseHold);
   } else if(!wasOn && nowOn && lfPhasePending) {
     lfPhasePending = 0; lfPhaseHold = 0;
   }
+  if(wasOn && !nowOn) { lfOffCycles = snes->cycles; lfOffRefresh = g_cycTagCycles[4]; }
+  else if(!wasOn && nowOn && getenv("CT_ORACLE_LOGICAL_TRACE"))   // the stretch's length, for pricing its port twin
+    fprintf(stderr, "logical-frame: frame %u (call %u) NMI on at %02X:%04X (V=%d H=%d inNmi=%d), %llu cycles since it went off (%ld refresh)\n",
+            snes->frames, g_runFrameCalls + 1, snes->cpu->k, snes->cpu->pc, snes->vPos, snes->hPos, snes->inNmi, snes->cycles - lfOffCycles, g_cycTagCycles[4] - lfOffRefresh);
 }
 void snes_setLogicalFrames(int on) {
   g_ctLogicalFrames = on;
@@ -429,7 +442,7 @@ void snes_setLogicalFrames(int on) {
 // A translated stage (seq_xlat.c CtXlatStageFrame) runs under the same rule as the oracle -- the logical frame and the
 // phase-0 NMI-off stretches -- one host frame at a time: this switches the rule on and off around each frame WITHOUT
 // resetting its state (the wait ring, the tentative hold's snapshot, a pending phase hold), which belongs to the stage's
-// hardware across frames. The stage's machine is the only one that runs under it in ct_field.
+// hardware across frames. The stage's machine is the only one that runs under it in Belthasar.
 void snes_logicalResume(int on) {
   g_ctLogicalFrames = on; g_ctLogicalLoads = on;
   g_cpuOpHook = on ? lfOpHook : NULL;
@@ -444,6 +457,22 @@ void snes_logicalFresh(void) {
   lfFill = 0; lfPos = 0; lfWroteNow = 0; lfHoldNow = 0;
   lfSnapFrame = lfNoHoldFrame = 0xffffffffu; lfRollbackPending = 0;
   lfPhaseHold = 0; lfPhasePending = 0; lfVbCycles = 0; lfVbRefresh = 0;
+}
+// ...AND A RESTORED STATE IS AT A LOGICAL FRAME'S START. The phase hold measures the CPU work since the step into line 225
+// from three marks (lfVbCycles / lfVbRefresh / lfVbIfast) that live outside the savestate. A state saved after
+// snes_runFrame sits right there -- the run stops on the instruction that set inVblank at V=225 (V=240 on an overscan
+// frame) -- and loading it left the marks at 0 or at another run's values: when the first frame after the load turned the
+// NMI off before any vblank (a location load committed on that frame), its phase hold read the whole machine's cycle count
+// (`102365085092 cycles into the frame`) and the load ended frames off. MEASURED, the playthrough's trial (leg 31): a
+// state saved on f9436, the courtroom load's commit, resumed into a different trial (40641 bytes apart a frame later)
+// where the same run without the cut held 4126 cycles. So the marks are put back where that step left them: the
+// instruction's own tail is this line's hPos, the refresh comes at H=536, and nothing of the frame ran on the infinitely
+// fast CPU yet. A state that is not at a vblank's start (the valve's own snapshot, V=224) keeps the marks it has.
+static void lfRestoredMarks(Snes* snes) {
+  if(!snes->inVblank || (snes->vPos != 225 && snes->vPos != 240)) return;
+  lfVbCycles = snes->cycles - snes->hPos;
+  lfVbRefresh = g_cycTagCycles[4] - (snes->hPos >= 536 ? 40 : 0);
+  lfVbIfast = g_ctIfastHeld;
 }
 
 // ...EXCEPT THE CPU's SIDE OF THE APU PROTOCOL (user decision 2026-10-01, CLAUDE.md): while the CPU runs the sound driver's

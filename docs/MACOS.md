@@ -10,7 +10,7 @@ brew install cmake ninja pkg-config sdl2
 python3 tools/get_imgui.py
 python3 tools/setup.py --rom "/path/to/Chrono Trigger (USA).sfc"
 python3 tools/package_macos.py --with-game-data
-open "build/macos/Chrono Trigger.app"
+open "build/macos/Belthasar.app"
 ```
 
 Use your own [supported ROM dump](ROM.md). Setup generates the game data and
@@ -41,9 +41,10 @@ The app writes these files under `~/Library/Application Support/BelthasarProject
 | `ct_sram.srm` | Cartridge saves |
 | `ct_settings.ini` | Settings and control mappings |
 | `latest.log` | Latest Finder launch output |
+| `ct_debug_*`, `ct_debug_log.txt` | F5 captures and their log |
 
 `CT_ROM`, `CT_SRAM` and `CT_SETTINGS` overrides remain available. Running
-`build/ct_field` directly keeps the existing command line behavior. The
+`build/Belthasar` directly keeps the existing command line behavior. The
 `build/ct*.exe` symlinks let existing setup and regression tools use the native
 executables.
 
@@ -80,7 +81,7 @@ and the packaged signature have these additional checks:
 
 ```sh
 python3 -m unittest discover -s tests -v
-codesign --verify --deep --strict "build/macos/Chrono Trigger.app"
+codesign --verify --deep --strict "build/macos/Belthasar.app"
 ```
 
 Physical controller use, a full playthrough, Intel hardware and older macOS

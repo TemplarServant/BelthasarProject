@@ -293,7 +293,7 @@ samples/frame`):
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy CT_AUDIO_FORCE=1 \
 CT_BATTLE_SCRIPT="n:600,d:1,n:20,a:1,n:20,d:1,n:20,b:1,n:20,d:1,n:20,a:1,n:20,d:1,n:20,b:1,n:600" \
 CT_BATTLE_TRACE=1 CT_BATTLE_SFXVOICES=1 \
-build/ct_field.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
+build/Belthasar.exe --assets ct_assets.dat --scene 19 --battletest saves/battle_re/forest_pre.raw.wram
 ```
 Six UI transitions in the fully un-frozen window f715..f999 — cursor f762, tech-open f782, tech-cancel
 f824, cursor f844, item-open f867, item-cancel f907, **every one `A013=0`** — and **zero** sound posts;

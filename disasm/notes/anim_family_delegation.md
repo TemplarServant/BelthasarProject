@@ -33,7 +33,7 @@ Measured cost of the private copy, on the scene-8 GATE cutscene seeded at the pe
 |---|---|---|
 | `--vmdiff` first divergence | **f16**, obj3 parked on B7, **ours = 0 ip-steps in 1500 frames** | f154, obj11 past `EA 18` (the song-load freeze, §4) |
 | `--vmdiff` with `VMDIFF_ANIM=1` | f16 (the mimic's clock is not the ROM's) | — |
-| `ct_field` same cutscene, same A cadence | `DD 71` at **f1638**; ROM: f2447 | (see §4) |
+| `Belthasar` same cutscene, same A cadence | `DD 71` at **f1638**; ROM: f2447 | (see §4) |
 | `vmdiff-bedslide` | pinned defect **f85** (obj1 `AB` 0434) | **CLEAN 300** |
 | `vmdiff-withpos-bedslide` | f85 | **CLEAN 130** |
 
@@ -71,7 +71,7 @@ obj9 cat    $1380/1=27D8 $1300=DE $1480=0014 $1500=6710
 The live PC arms (op 0x57/0x5C/0x62/0x6A/0x68/0x6C/0x6D and op 0x80's three in-party arms, all of
 which `JSR C0/448D`) wrote only the C-side actor. The drain reads `$1380/$1500` to walk a PC's
 sequence, so with the tables at zero a PC's `$7F0B01` never reached 1 and the bedslide's `AB`
-parked forever in `ct_field` — while `--vmdiff`, seeded from the oracle's tables, was CLEAN.
+parked forever in `Belthasar` — while `--vmdiff`, seeded from the oracle's tables, was CLEAN.
 `pcLoadMirror` (ct_vm.c) now runs the same descriptor walk `loadGfxMirror` does for NPCs over the
 seven PC records at `$E4:F000 + id*5` (C0/449B-4518 = C0/4595-4620 with the base changed) with the
 PC tail: ROM-direct graphics pointer (`[$AF],Y` at C0/4529, no dedup/decompress — a PC's sheet is
@@ -101,7 +101,7 @@ Y 401AB5FD) because the PCs' blocking anime at 0x0256 now runs the ROM's ping-po
   emergent from the transfer loop and the song's size; the derivation route is the same as
   `copyFreeze`'s: measure per song on the oracle (`$1E05` != `$E0` span, or the IP hold), check the
   bytes/frame rate against audio.c's own upload byte counts, model the freeze from the byte count. Measurements, the two cost models tried and the port design: `song_load_freeze.md`.
-* **Cutscene pacing in `ct_field`** is still ~840 frames ahead of the ROM on this cutscene (`DD 71`
+* **Cutscene pacing in `Belthasar`** is still ~840 frames ahead of the ROM on this cutscene (`DD 71`
   at f1606 vs f2447); the song-load freezes are the first named contributor.
 * **The renderer still plays from the C fields** (`animTickActor`, its own frame/delay/loops model)
   and writes `$0F01,X` back over the drain's commit (field.c:11134 / :11332). The next render slice

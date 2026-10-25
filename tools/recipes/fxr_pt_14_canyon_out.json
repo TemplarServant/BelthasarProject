@@ -1,0 +1,11 @@
+{
+  "name": "fxr_pt_14_canyon_out",
+  "from": "fxr_pt_13_canyon",
+  "doc": "The playthrough's leg 14_canyon_out (tools/playthrough/route.txt, the cartridge's own pad, graded leg by leg against the port by tools/playthrough.py): Truce Canyon (070): up the right ledge, west along row 4 (the imps there: a fight, A), down to the exit",
+  "steps": [
+    [
+      "pad",
+      "0:2,40:32,10:80,(40:16,10:16)*4,40:96,(100:2,0:18)*62,40:64,20:64,40:16,20:16,40:16,20:16,40:32,20:16,40:32,20:32,40:16,20:160,80:160,20:64,80:16,20:80,0:500,0:1,20:32,40:16,20:32,40:64,20:16,40:16,20:16,40:32,10:16,40:48,10:16,10:4,0:30,100:2,0:150"
+    ]
+  ]
+}

@@ -4,14 +4,14 @@ r"""The F1 options overlay and ct_settings.ini, checked without a visible window
     python tools/options_overlay_check.py
 
 Writes a settings file (4:3, window x3, integer scale, the A button on Space, sync free) to a temp folder, runs
-ct_field under SDL_VIDEODRIVER=dummy with CT_SETTINGS pointing at it and CT_OVERLAY_SHOT (the overlay drawn at frame
+Belthasar under SDL_VIDEODRIVER=dummy with CT_SETTINGS pointing at it and CT_OVERLAY_SHOT (the overlay drawn at frame
 40 on the Controls tab, the window saved as a BMP), then reads the BMP:
 
     options: window 896x672 (4:3 at x3)            -- the file's aspect and window size took effect
     options: picture 896 px wide from x 0 ...       -- integer scale fills the 4:3 window (3 x 224 lines)
     options: overlay drawn (N px of its panel colour)
 
-Needs third_party/imgui (tools/get_imgui.ps1); without it ct_field has no overlay and the check says so.
+Needs third_party/imgui (tools/get_imgui.ps1); without it Belthasar has no overlay and the check says so.
 """
 import os
 import struct
@@ -43,7 +43,7 @@ def main():
     open(ini, 'w').write(INI)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOAUDIO='1', CT_SETTINGS=ini,
                CT_OVERLAY_SHOT=bmp + '@40:2')
-    p = subprocess.run([os.path.abspath('build/ct_field.exe'), '--assets', 'ct_assets.dat', '--scene', '6'],
+    p = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '6'],
                        env=env, capture_output=True, text=True, errors='replace', timeout=300)
     if not os.path.exists(bmp):
         print('options: no overlay (third_party/imgui missing?)', p.stdout[-300:])

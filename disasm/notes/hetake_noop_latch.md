@@ -7,7 +7,7 @@ belongs in `hetake_damage_turns.md` and is **NOT** decided in this file.
 ## 1. The repro (no input at all — the enemies are the only actors)
 
 ```
-CT_BATTLE_TRACE=1 build\ct_field.exe --assets ct_assets.dat --scene 19 \
+CT_BATTLE_TRACE=1 build\Belthasar.exe --assets ct_assets.dat --scene 19 \
     --battletest saves\battle_re\forest_pre.raw.wram
 ```
 

@@ -675,7 +675,7 @@ Ported (`src/menu.c`, `src/ct_vm.c`, `src/field.c`, `src/data/menu_loader.h`,
 * Screen `$0E`: chrome plane + its own CGRAM baked from the oracle, the cursor rules (default row,
   skip-empty settle), the chapter/era/summary/party text, A = load / new game, and the
   `JML $C0:0000` reboot into `$0100`.
-* `ct_field --boot` = the cold entry: the SRAM scan, then scene 0's own script decides everything.
+* `Belthasar --boot` = the cold entry: the SRAM scan, then scene 0's own script decides everything.
 * The title STAGE and, since the title-intro pass, the WHOLE of what it plays (see the first
   boundary below), plus `--loadcheck <srm>`, which runs FF/FAA3 over an SRAM image and prints each
   slot's unpacked fields.
@@ -791,3 +791,29 @@ C0/0B86 -> C0/0B38 like the menu reload (src/field_cost.c: the packets, the load
 the objects the loader has placed) and time a reboot's load as the continuation of its caller's NMI-off stretch. NOT
 DONE YET -- the objects-as-loaded state the pass reads has to be validated on fresh loads first (menu_shell_timing.md
 section 10's last paragraph). The save's reboot (C2/8320's tail, the overworld 7 frames early) is the same class.
+
+## 10. The POWER-ON is the reset, ported (2026-10-21)
+
+`--boot` used to upload the driver at once and light scene 0 on its frame 0: the port's picture was 34 frames ahead of the
+cartridge's (loc 0 lit at f0 against f34, 1B1 committed at f16 against f50) and its SPC ~12 frames younger at every
+later post. The power-on is now the reset of section 8 from c 0 (src/field.c, `powerOn`, before the frame loop), with the
+SPC in its boot ROM (audio.c CtAudioInitPowerOn) and the cartridge's own timeline:
+
+| leg | the rule's cartridge from power-on (--cputrace, CPUTRACE_BEAM) | the port |
+|---|---|---|
+| FD:C000 -> C0/000E -> C0/0053's `JSL C7:0000` | c 128 / 2,108 / 676,798 (the clears' DMA) | POWERON_TO_C7, the SPC run for it |
+| the upload (C7:0000 -> C0:0057) | 7,356,244 | CtAudioColdBoot from the boot ROM: 7,356,212 |
+| C0/0057 -> C0/005D, C2/8D6A's scan on a blank cart | 102,888 | RESET_SRAM_SCAN (the in-game reset's black too) |
+| C0/005D -> C0/0B86 -> the first JSL C7:0004 | 3,946 | RESET_LOAD_SPC_LEAD with the scan |
+| loc 0's load to C0/0B38, the NMI on, the first NMI | C0/0B38 at 11,580,270, NMI f33, `$0119 = 0F` at f34 | the load's walk: lit f34 |
+
+The load's window: the stretch starts on frame 0 at c 0 and the port loads in that same iteration, where a load's hold
+(`ct_nmi_wait_frames - 1`) counts from the iteration after the cartridge's stretch began -- one more frame
+(`powerOnLoad`). **The frame grid**: a slice runs vblank to vblank and frame k's posts follow the vblank that opens it;
+power-on is line 0, inside the frame the first vblank (line 225) closes -- the labels' frame 1, so frame 0 has no SPC
+(CtAudioFrameOrigin, one frame and 37 lines). Measured: every END f<k> from f3 on at APU k x 17,088 - 2,414.
+
+Result, PEEK_APUTRACE against CT_AUDIO_PORTTRACE from power-on: the upload's 13,893 port writes within 4 APU cycles, loc
+0's `81` / `10` +16 / +29, its song's GO -40, 1B1's load `81` +12, its refused `10` and the token +5 / +9, the script's
+`10 00` +8. The title's opening (sequence_table / field_load_cost.md sec. 12) then puts the attract's loads on the
+cartridge's frames from power-on to f7324 (tools: the commit -> first ramp INC of every load, off 0).

@@ -29,18 +29,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ctlib import fb, peekshots  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FIELD = os.path.join(ROOT, 'build', 'ct_field.exe')
+FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 CT = os.path.join(ROOT, 'build', 'ct.exe')
 
-# name, oracle state, port seed, scene, oracle btnscript (LakeSnes masks), port walkscript, frames, the full-field
+# name, oracle state, port seed, scene, oracle btnscript (LakeSnes masks), port walkscript (every key the cartridge's + 1,
+# ct-frame-alignment: the shops' A was the cartridge's own frame until 2026-10-19, when the port's C8 fade started a frame
+# late and hid it), frames, the full-field
 # reference frame, the lit-menu reference frame, the first frame the menu owns the picture (the switch) and the RTL
 DRIVES = [
     ('x-menu', 'saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
      '0:4,200:2,0:54,1:2,0:100', 'n:5,m:1,n:55,b:1,n:100', (3, 127), 3, 55, 20, 69),
     ('shop', 'saves/field_re/shop90_lake.state', 'saves/field_re/shop90.lakewram', 5,
-     '0:10,100:2,0:418,1:2,0:40', 'n:10,a:1,n:420,b:1,n:40', (9, 62), 9, 60, 27, None),
+     '0:10,100:2,0:418,1:2,0:40', 'n:11,a:1,n:419,b:1,n:40', (9, 62), 9, 60, 27, None),
     ('shop-close', 'saves/field_re/shop90_lake.state', 'saves/field_re/shop90.lakewram', 5,
-     '0:10,100:2,0:418,1:2,0:100', 'n:10,a:1,n:420,b:1,n:100', (428, 499), 9, 428, 27, 439),
+     '0:10,100:2,0:418,1:2,0:100', 'n:11,a:1,n:419,b:1,n:100', (428, 499), 9, 428, 27, 439),
     # the X menu on the OVERWORLD (menu_audit_cmp.py's owsave presses): the world's fade object, C2/2E23's stash, the
     # shell, the Save tab, then B, B -- the menu's fade, C2/2E72 + C2/2C93's black window, the world's fade-in object.
     # The world's own picture differs (the port's seed enters it through a load), so the level is each side's own.
