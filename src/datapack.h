@@ -37,6 +37,10 @@ int CtDataPackLoad(const char* path, char* err, size_t errLen);
 // player's setup wrote them into (tools/gen/pack_tables.py pack --into).
 int CtDataPackFileHasTables(const char* path);
 
+// 1 = the pack at `path` is laid out for THIS build (its header: the format, the pointer size, the byte order, the set
+// of tables). An earlier version's data fails it, so the start shows the setup instead of a game that quits at once.
+int CtDataPackFileMatches(const char* path);
+
 // Belthasar's startup: find the pack and load it. In order: `--tables <path>`, $CT_TABLES, the --assets/--datonly
 // file itself when it carries the tables, ct_tables.dat beside it, ct_tables.dat in the working directory.
 // Returns 1, or 0 with the reason in err.

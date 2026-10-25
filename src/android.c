@@ -32,10 +32,9 @@ static int assetsOk(const char* dir) {             // CtAssetsOpen: the header, 
 
 static int tablesThere(const char* dir) {          // inside ct_assets.dat (today's setup), or an earlier one's ct_tables.dat
   char p[1024];
-  snprintf(p, sizeof p, "%s/%s", dir, ASSETS_NAME);
-  if (CtDataPackFileHasTables(p)) return 1;
-  snprintf(p, sizeof p, "%s/ct_tables.dat", dir);
-  return CtDataPackFileHasTables(p);
+  snprintf(p, sizeof p, "%s/%s", dir, ASSETS_NAME);                 // (made for this build: an older version's is refused
+  if (!CtDataPackFileHasTables(p)) snprintf(p, sizeof p, "%s/ct_tables.dat", dir);   // here, with its message)
+  return CtDataPackFileMatches(p);
 }
 
 static void defaultEnv(const char* key, const char* dir, const char* name) {
@@ -61,7 +60,7 @@ int CtAndroidConfigure(int* outArgc, char*** outArgv) {
                   : !readable(data, ASSETS_NAME) ? "missing"
                   : !assetsOk(data) ? "ct_assets.dat is damaged or not one"
                   : !CtAssetsFileRomFree(ap) ? "an older ct_assets.dat that needs the ROM -- make a new one"
-                  : !tablesThere(data) ? "it has no tables -- make a new one with today's Belthasar" : NULL;
+                  : !tablesThere(data) ? "its tables are missing or from another version -- make a new one with this Belthasar" : NULL;
   if (bad) {
     char msg[1200];
     snprintf(msg, sizeof msg, "The game needs %s in\n%s\n(%s).\n\nOpen the app again to choose it "

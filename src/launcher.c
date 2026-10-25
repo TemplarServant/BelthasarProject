@@ -53,10 +53,11 @@ static int romFreeAssets(const char* dir) {
   return CtAssetsFileRomFree(p);
 }
 #ifdef CT_DATAFREE
-static int tablesThere(const char* dir) {          // inside ct_assets.dat (today's setup), or an earlier setup's ct_tables.dat
-  char p[1200];
+static int tablesThere(const char* dir) {          // inside ct_assets.dat (today's setup), or an earlier setup's ct_tables.dat,
+  char p[1200];                                    // made for this build: an older version's data runs the setup again
   snprintf(p, sizeof p, "%sct_assets.dat", dir);
-  return CtDataPackFileHasTables(p) || readable(dir, "ct_tables.dat");
+  if (!CtDataPackFileHasTables(p)) snprintf(p, sizeof p, "%sct_tables.dat", dir);
+  return CtDataPackFileMatches(p);
 }
 #endif
 int CtLauncherReady(const CtLauncher* L) {

@@ -52,6 +52,24 @@ int CtDataPackFileHasTables(const char* path) {
   return found;
 }
 
+int CtDataPackFileMatches(const char* path) {
+  FILE* f = fopen(path, "rb");
+  if (!f) return 0;
+  uint8_t h[12], e[16], th[32];
+  int ok = fread(h, 1, 12, f) == 12 && !memcmp(h, "CTAS", 4), found = 0;
+  uint32_t n = ok ? rd32(h + 8) : 0, off = 0, len = 0;
+  for (uint32_t i = 0; ok && i < n && !found; i++) {
+    if (fread(e, 1, 16, f) != 16) break;
+    if ((found = rd32(e) == T_HEADER && rd32(e + 4) == 0)) { off = rd32(e + 8); len = rd32(e + 12); }
+  }
+  // the header's checks CtDataPackLoad makes first: the format, the pointer size, the byte order, the set of tables
+  ok = found && len >= 32 && !fseek(f, (long)off, SEEK_SET) && fread(th, 1, 32, f) == 32 && !memcmp(th, "CTTB", 4) &&
+       rd32(th + 4) == PACK_VERSION && rd32(th + 8) == sizeof(void*) && rd32(th + 12) == 1 &&
+       rd32(th + 16) == (uint32_t)ctTableDescCount && rd64(th + 24) == ctTableSetHash;
+  fclose(f);
+  return ok;
+}
+
 int CtDataPackLoad(const char* path, char* err, size_t errLen) {
   const uint16_t one = 1;
   if (*(const uint8_t*)&one != 1) return fail(err, errLen, "%sthis build is big-endian; packs are little-endian", "", 0);
