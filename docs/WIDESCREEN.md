@@ -81,6 +81,14 @@ owners (`motion.c` `CtMotRaster`). Every moving thing is placed at a **continuou
 (`CtMotFit`): the camera, each object, each self-scrolling layer -- so a pan of 0.75 px a frame (the Blackbird) moves
 0.75 px a frame instead of 1, 1, 1, 0.
 
+- **The rate comes from the engine where it keeps one** (`CtMotEngine`, 2026-10-24). The field's camera carries the
+  remainder C0/92CA leaves in `$1D3B/$1D3C` (sixteenths, cut toward zero) and every object its 12.4 words
+  `$1800/$1880,X`; a frame's rate is their step, used whenever the drawn place stepped as their whole part did. The
+  fit over the history is the fallback (the layers, the overworld, the fight, a picture held behind its camera).
+  Measured on the attract (`CT_MOTFITTRACE=2`, against `CT_MOTENGINE=0`): the frames whose shown step is off the
+  engine's by more than 0.1 px fall from 71% to 10% for the objects (mean 0.30 -> 0.04 px) and from 6.5% to 0.6% for
+  the camera; what remains is the trailing rule re-phasing a motion's first frames.
+
 - A continuous place **trails** the drawn one (never past it): an object that stops -- at a wall -- reaches the drawn
   place and stays.
 - A fit needs two steps and a steady slope; with none it goes on at the last frames' mean rate from where it was, and

@@ -19686,6 +19686,7 @@ int main(int argc, char** argv) {
     if (f.vm) { const uint8_t* cp = CtSceneMem7E(f.vm);
       if (battlePhase && g_battleObjSaved && cp) CtSceneCameraPxOf(cp + 0x12000 - 0x0920, &camx, &camy);
       else CtSceneCameraPx(f.vm, &camx, &camy); }
+    const int romCamX = camx, romCamY = camy;        // (the ROM's camera, whole: the frames between's rate, CtMotEngine)
     // (No clamp to the canvas: the VM's camera is the ROM's, bounded by the scroll mask the location record gives, and a
     //  mask may run past the map -- loc 1B0's record says 64 rows on a 32-row map. What shows there is the map again;
     //  fieldBaseAt wraps every canvas read below.)
@@ -19761,6 +19762,7 @@ int main(int argc, char** argv) {
     mot->scene = CtWramSys(fieldWram())[0x100] | (CtWramSys(fieldWram())[0x101] << 8);
     mot->camX = camx; mot->camY = camy; mot->canvas = f.base; mot->cW = f.W; mot->cH = f.H;
     mot->canvasX0 = camx; mot->canvasY0 = camy;
+    if (f.vm && !battlePhase) CtMotEngine(mot, CtSceneMem7E(f.vm), romCamX, romCamY);   // (the engine's fractions)
     // (the offsets the canvas was BAKED at -- the picture's -- not the VM's of this moment: a self-scrolling layer moved since)
     if (f.sd) CtFieldSceneLayerOffsetsBaked(f.sd, &mot->o2x, &mot->o2y, &mot->o3x, &mot->o3y);
     else if (f.vm) CtSceneLayerOffsets(f.vm, &mot->o2x, &mot->o2y, &mot->o3x, &mot->o3y);
