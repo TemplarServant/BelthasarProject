@@ -360,6 +360,7 @@ typedef struct {
   uint16_t entryLatch;
   int have;
   uint8_t world;                     // world index (era tag)
+  const uint8_t* ext1000[2];         // 1999 A.D. (world 7): 1000 A.D.'s block grids, for the sides past its map (a mod)
   // the player sprite atlas (CT_ASSET_WORLDSPR; zero-copy into the .dat)
   struct { uint8_t fac, par, mov, w, h; int8_t ox, oy; const uint8_t* px; } spr[16];
   int sprN;
@@ -755,6 +756,14 @@ static int worldInit(CtAssets* a, World* w, int id) {
   worldPalRefresh(w, 0, 256);
   w->entryLatch = 0xFFFF;
   w->world = b[1];
+  // 1999 A.D.'s map (world 7) is a patch of the world round Truce and Guardia -- the rest of its grids empty, the camera
+  // stopping at the patch's edge. Past it the widescreen's sides (the scene adjustments, a mod) show 1000 A.D.'s geography
+  // drawn with 1999's own blocks and tiles (most of the terrain's blocks are the same in both); CtWorldStream.ext.
+  if (w->world == 7) {
+    uint32_t l0 = 0;
+    const uint8_t* b0 = CtAssetGet(a, CT_ASSET_WORLD, 0, &l0);
+    if (b0 && l0 >= 6 + 2 * 6144) { w->ext1000[0] = b0 + 6; w->ext1000[1] = b0 + 6 + 6144; }
+  }
   uint32_t gl = 0;                                  // the gull frames (optional)
   const uint8_t* gp = CtAssetGet(a, CT_ASSET_WORLDSPR, 1, &gl);
   if (gp && gl > 1) {
@@ -14513,6 +14522,8 @@ int main(int argc, char** argv) {
         nat->n = 0; nat->w = &wd; nat->cs = *cs; nat->W = owWideW; nat->X0 = owWideX;
         nat->stm = owWideW > CAMW ? &owViewStm : &wd.stm;
         if (owWideW > CAMW) {
+          const int ext = CtSettingsGet()->sceneAdjust && wd.ext1000[0];   // (past 1999's patch: 1000 A.D., a mod)
+          owViewStm.ext[0] = ext ? wd.ext1000[0] : NULL; owViewStm.ext[1] = ext ? wd.ext1000[1] : NULL;
           CtWorldTilemapView(&owViewStm, wd.wram, cs);
           g_mot = owMot; g_owNatRec = nat; worldComposeAt(&wd, g_wfb, owWideW, owWideX, &owViewStm); g_mot = NULL; g_owNatRec = NULL;
           memcpy(g_motPic, g_wfb, (size_t)owWideW * CAMH * 3);

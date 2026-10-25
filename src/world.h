@@ -86,6 +86,10 @@ typedef struct CtWorldStream {
   // at CT_WORLD_VIEW_W columns as `tilemap` wraps at 64 -- the 21:9 picture and its fine scroll need more than 64
   // columns (512 px), and with 64 its left edge showed the far side of the ring. NULL: `tilemap`, the streamed layout.
   uint16_t (*view)[CT_WORLD_VIEW_W * 32];
+  // The sides past a world map's edge (the scene adjustments, a mod): where the RAM's BG2 block grid is empty (block 0), the
+  // view takes both BGs' blocks from these 96 x 64 grids instead -- 1999 A.D.'s map is a patch of the world, and past it the
+  // sides show 1000 A.D.'s geography drawn with 1999's own blocks and tiles. NULL: none.
+  const uint8_t* ext[2];
 } CtWorldStream;
 // The map's tile (BG1 bg = 0, BG2 1) at layer pixel (wx, wy): the streamed 64x32 layout or the picture's wider one.
 static inline uint16_t CtWorldStreamChip(const CtWorldStream* st, int bg, int wx, int wy) {

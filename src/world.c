@@ -474,7 +474,9 @@ void CtWorldTilemapView(CtWorldStream* st, const uint8_t* ram, const CtWorldCam*
       int wcol = ((baseC + i) % 192 + 192) % 192, tc = (baseC + i) & (CT_WORLD_VIEW_W - 1);
       for (int j = 0; j < 32; j++) {
         int wrow = ((baseR + j) % 128 + 128) % 128, tr = (baseR + j) & 0x1F;
-        int block = ram[OW_GRID[bg] + (wrow >> 1) * 96 + (wcol >> 1)];
+        const int o = (wrow >> 1) * 96 + (wcol >> 1);
+        int block = ram[OW_GRID[bg] + o];
+        if (st->ext[bg] && !ram[OW_GRID[1] + o]) block = st->ext[bg][o];   // (past the map's patch: the extension's)
         view[bg][tr * CT_WORLD_VIEW_W + tc] = owDefWord(ram, bg, block, ((wrow & 1) * 2 + (wcol & 1)) * 2);
       }
     }
