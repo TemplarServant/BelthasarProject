@@ -8621,9 +8621,19 @@ static int battleDcfdTail(CtBattleHost* h, int atk, int tgt, int dmg, int* stage
   }
   int cur = s[tb + 3] | (s[tb + 4] << 8);
   if (cur == 0) return 0;                                          // DDCC -> DE83: a fallen target, nothing
-  // (the death staging at DDD9-DE3A -- $AEB0/$AEB2/$5E0A/$B03A/$B242/$AECB for a hit that meets the HP -- is left to
-  // the port's span-end death path)
   battleStageEBF8(s, tgt, dmg, 0x00);                              // DE3C-DE58 / DDE1-DDF4 (DDDF's skip needs dmg 0 >= cur > 0)
+  if (cur <= dmg) {                                                // DDCF-DDD6: a hit that meets the HP, at the compute
+    // DDF7-DE07: an enemy victim marks its death byte and the battle-wide one, and its REQUESTED move mode `$5E0A,X`
+    // goes to 0; DE0A-DE1D: its ATB flag `$B03A,X` stops; a PC victim also clears every enemy's remembered target
+    // `$B242,Y` that names it (`$5E15,Y`, DE20-DE33); DE35 `$AECB = 1`. MEASURED, the rule's cartridge (the playthrough's
+    // 40_guardian): Bit 7's lethal hit writes `$5E11 = 00` at f6212 (C1:DE0A), the mode machine commits it after the
+    // Guardian's revive (`$974E = 00` f12319, C1:336A) and the Bit stands; the port left the death to the span end, the
+    // request stood at 0A, and the revived Bit walked 32 px off its place.
+    if (tgt >= 3) { s[0xAEB2] = 1; s[0xAEB0 + tgt] = 1; s[0x5E0A + tgt] = 0; }   // ($5E0A + cmb = BT_MVREQ's $5E0D + slot)
+    s[0xB03A + tgt] = 0;
+    if (tgt < 3) for (int y = 0; y < 8; y++) if (s[0x5E15 + y] == tgt) s[0xB242 + y] = 0xFF;
+    s[0xAECB] = 1;
+  }
   battleShowRecordPut(s, tgt, dmg, 3);                             // DE5B-DE76
   int t = (s[0xAE7B] | (s[0xAE7C] << 8)) + dmg;                    // DE79-DE7D
   s[0xAE7B] = (uint8_t)t; s[0xAE7C] = (uint8_t)(t >> 8);
