@@ -208,8 +208,9 @@ extern "C" int CtOverlayFrame(void) {
                           "rising over the planet under the red moon (after the Blackbird, and in the attract): one moon\n"
                           "in the sky, not three, and the planet mirrored past the original 256 columns instead of\n"
                           "repeated. Magus's castle's sky is drawn 5 lines higher, so the band of grey over it stays off\n"
-                          "the screen. Past 1999 A.D.'s world map (a patch of the world) the sides show 1000 A.D.'s\n"
-                          "geography in 1999's own tiles. Nothing else in the game changes.");
+                          "the screen. Past 1999 A.D.'s world map (a patch of the world) the sides show 600 A.D.'s\n"
+                          "geography in 1999's own tiles (the map editor can pick another era). Nothing else in the\n"
+                          "game changes.");
       bool fb = s->fillBottomLines != 0;
       if (ImGui::Checkbox("Fill the bottom lines", &fb)) s->fillBottomLines = fb;
       if (ImGui::IsItemHovered())

@@ -81,14 +81,17 @@ art direction for the wide picture, scene by scene, where what the sides show by
 
 - **1999 A.D.'s world map (world 7, the attract's Day of Lavos):** its map is a patch of the world round Truce and
   Guardia (74 x 70 blocks; the rest of its grids empty -- VGMaps' rip is the same patch, and the Steam release has no
-  world-map margins), and the camera stops at the patch's edge, where the sides were black. Past it they show 1000 A.D.'s
-  geography (world 0's block grids from ct_assets.dat) drawn with 1999's own blocks, tiles and colours -- 92-95% of the
-  terrain blocks past the patch are the same in both worlds; where the patch was redrawn the coast does not join yet
-  (the owner adjusts it later, 2026-10-25). `CtWorldStream.ext`, `CtWorldTilemapView`.
+  world-map margins), and the camera stops at the patch's edge, where the sides were black. Past it they show another
+  era's geography -- 600 A.D.'s by default (world 1's block grids from ct_assets.dat; the owner, 2026-10-26: it was
+  1000 A.D.'s), or the era the map editor's Fill menu picks -- drawn with 1999's own blocks, tiles and colours (most of
+  the terrain's blocks are the same in every era; a block only the fill era has draws as 1999's block of that number);
+  where the patch was redrawn the coast does not join yet (the owner adjusts it later). `CtWorldStream.ext`,
+  `CtWorldTilemapView`.
   **The map editor** paints those cells: `python tools/map_editor.py` (RPG Maker style: a block palette, the map with
-  zoom and scrolling, BG2 ground / BG1 overlay, pencil, rectangle, fill, erase -- nothing on BG1, the open sea on BG2 --, restore -- back to 1000 A.D.'s block --, pick,
+  zoom and scrolling, BG2 ground / BG1 overlay, pencil, rectangle, fill, erase -- nothing on BG1, the open sea on BG2 --, restore -- back to the fill era's block --, pick, the Fill menu (the era past the patch),
   undo, the patch's border; the ROM's patch is locked). It draws from the player's ct_assets.dat and saves block
-  numbers only to `ct_mapedits.dat` (CT_MAPEDITS, else the working folder, else the executable's), which Belthasar
+  numbers and the fill era only to `ct_mapedits.dat` (version 2: a fill table of 8 bytes, one per world, after the
+  count; version 1 files keep the default) (CT_MAPEDITS, else the working folder, else the executable's), which Belthasar
   reads every 60 frames: paint with the game open and the sides follow (`owExtGrids` in `src/field.c`).
 - **Magus's castle (0A5):** the sky is drawn 5 lines higher for the whole visit (BG2's offset in the picture only,
   `fieldWideBg2Dy`), so the pan ends with the band of flat grey over it just above the screen (the owner, 2026-10-24).

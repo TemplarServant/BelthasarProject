@@ -360,7 +360,8 @@ typedef struct {
   uint16_t entryLatch;
   int have;
   uint8_t world;                     // world index (era tag)
-  const uint8_t* ext1000[2];         // 1999 A.D. (world 7): 1000 A.D.'s block grids, for the sides past its map (a mod)
+  int extOn;                         // 1999 A.D. (world 7): the sides past its map show another era's geography (a mod)
+  const uint8_t* extSrc[8][2];       // (each world's block grids in the assets, BG1 / BG2: the fill's possible sources)
   // the player sprite atlas (CT_ASSET_WORLDSPR; zero-copy into the .dat)
   struct { uint8_t fac, par, mov, w, h; int8_t ox, oy; const uint8_t* px; } spr[16];
   int sprN;
@@ -682,10 +683,13 @@ static uint32_t ctFnv32(const uint8_t* p, size_t n) {          // FNV-1a, the su
 // world.c wants for its `ram + 0x10000 + pc` script reads, so the world simply uses it. NOT freed
 // here: it outlives every world and every scene, as WRAM does.
 // THE PLAYER'S PAINTED CELLS (the scene adjustments, a mod): tools/map_editor.py paints blocks into the cells past a world
-// map's own patch and saves them to ct_mapedits.dat ("CTME", u32 version 1, u32 count, per edit: u8 world, u8 layer (0 BG1,
-// 1 BG2), u8 x, u8 y (the 96 x 64 grid), u8 block, u8 0) -- read from CT_MAPEDITS, else the working folder, else the
-// executable's. The sides' grids are the extension's (1000 A.D.'s) with those cells over them, made again whenever the
-// world changes or the file does (it is read every 60 frames: paint with the game open). Block numbers only, no picture.
+// map's own patch and saves them to ct_mapedits.dat ("CTME", u32 version, u32 count, [version 2: u8 fill[8], the era each
+// world's sides are filled from, 0xFF = the default], then per edit: u8 world, u8 layer (0 BG1, 1 BG2), u8 x, u8 y (the
+// 96 x 64 grid), u8 block, u8 0) -- read from CT_MAPEDITS, else the working folder, else the executable's. The sides'
+// grids are the fill era's (600 A.D.'s unless the file names another: the owner, 2026-10-26) with those cells over them,
+// made again whenever the world changes or the file does (it is read every 60 frames: paint with the game open). Block
+// numbers only, no picture: the fill is drawn with the patch world's own blocks and tiles.
+enum { OW_FILL_DEFAULT = 1 };                                         // (600 A.D.: world 1)
 static FILE* mapEditsOpen(void) {
   const char* e = getenv("CT_MAPEDITS");
   if (e && *e) return fopen(e, "rb");
@@ -698,8 +702,8 @@ static void owExtGrids(const World* w, const uint8_t* out[2]) {
   static uint8_t grid[2][6144], file[1 << 20];
   static long fileLen = -1;
   static int lastWorld = -1, tick;
-  static const uint8_t* lastBase;
-  int changed = w->world != lastWorld || w->ext1000[0] != lastBase;
+  static const World* lastW;
+  int changed = w->world != lastWorld || w != lastW;
   if (changed || ++tick >= 60) {
     tick = 0;
     static uint8_t now[1 << 20];
@@ -709,12 +713,19 @@ static void owExtGrids(const World* w, const uint8_t* out[2]) {
     if (n != fileLen || memcmp(now, file, (size_t)(n > 0 ? n : 0))) { memcpy(file, now, (size_t)(n > 0 ? n : 0)); fileLen = n; changed = 1; }
   }
   if (changed) {
-    lastWorld = w->world; lastBase = w->ext1000[0];
-    memcpy(grid[0], w->ext1000[0], 6144); memcpy(grid[1], w->ext1000[1], 6144);
-    if (fileLen >= 12 && !memcmp(file, "CTME", 4)) {
+    lastWorld = w->world; lastW = w;
+    const int ok = fileLen >= 12 && !memcmp(file, "CTME", 4);
+    const uint32_t ver = ok ? (uint32_t)(file[4] | file[5] << 8 | file[6] << 16 | (uint32_t)file[7] << 24) : 0;
+    const long at = ver >= 2 ? 20 : 12;                               // (the edits' start: after the fill table in v2)
+    int src = ok && ver >= 2 && fileLen >= 20 && w->world < 8 ? file[12 + w->world] : 0xFF;
+    if (src >= 8 || !w->extSrc[src][0]) src = OW_FILL_DEFAULT;
+    if (!w->extSrc[src][0]) src = 0;
+    if (w->extSrc[src][0]) { memcpy(grid[0], w->extSrc[src][0], 6144); memcpy(grid[1], w->extSrc[src][1], 6144); }
+    else { memset(grid, 0, sizeof grid); }
+    if (ok && fileLen >= at) {
       uint32_t cnt = (uint32_t)(file[8] | file[9] << 8 | file[10] << 16 | (uint32_t)file[11] << 24);
-      for (uint32_t i = 0; i < cnt && 12 + 6L * (long)(i + 1) <= fileLen; i++) {
-        const uint8_t* q = file + 12 + 6 * i;
+      for (uint32_t i = 0; i < cnt && at + 6L * (long)(i + 1) <= fileLen; i++) {
+        const uint8_t* q = file + at + 6 * i;
         if (q[0] == w->world && q[1] < 2 && q[2] < 96 && q[3] < 64) grid[q[1]][q[3] * 96 + q[2]] = q[4];
       }
     }
@@ -797,12 +808,15 @@ static int worldInit(CtAssets* a, World* w, int id) {
   w->entryLatch = 0xFFFF;
   w->world = b[1];
   // 1999 A.D.'s map (world 7) is a patch of the world round Truce and Guardia -- the rest of its grids empty, the camera
-  // stopping at the patch's edge. Past it the widescreen's sides (the scene adjustments, a mod) show 1000 A.D.'s geography
-  // drawn with 1999's own blocks and tiles (most of the terrain's blocks are the same in both); CtWorldStream.ext.
+  // stopping at the patch's edge. Past it the widescreen's sides (the scene adjustments, a mod) show another era's
+  // geography -- 600 A.D.'s, or the one ct_mapedits.dat names (owExtGrids) -- drawn with 1999's own blocks and tiles
+  // (most of the terrain's blocks are the same in every era); CtWorldStream.ext.
   if (w->world == 7) {
-    uint32_t l0 = 0;
-    const uint8_t* b0 = CtAssetGet(a, CT_ASSET_WORLD, 0, &l0);
-    if (b0 && l0 >= 6 + 2 * 6144) { w->ext1000[0] = b0 + 6; w->ext1000[1] = b0 + 6 + 6144; }
+    for (int k = 0; k < 8; k++) {
+      uint32_t l0 = 0;
+      const uint8_t* b0 = CtAssetGet(a, CT_ASSET_WORLD, (uint32_t)k, &l0);
+      if (b0 && l0 >= 6 + 2 * 6144 && b0[1] == k && k != 7) { w->extSrc[k][0] = b0 + 6; w->extSrc[k][1] = b0 + 6 + 6144; w->extOn = 1; }
+    }
   }
   uint32_t gl = 0;                                  // the gull frames (optional)
   const uint8_t* gp = CtAssetGet(a, CT_ASSET_WORLDSPR, 1, &gl);
@@ -14624,7 +14638,7 @@ int main(int argc, char** argv) {
         nat->n = 0; nat->w = &wd; nat->cs = *cs; nat->W = owWideW; nat->X0 = owWideX;
         nat->stm = owWideW > CAMW ? &owViewStm : &wd.stm;
         if (owWideW > CAMW) {
-          const int ext = CtSettingsGet()->sceneAdjust && wd.ext1000[0];   // (past 1999's patch: 1000 A.D., a mod)
+          const int ext = CtSettingsGet()->sceneAdjust && wd.extOn;   // (past 1999's patch: another era's map, a mod)
           const uint8_t* eg[2] = { NULL, NULL };
           if (ext) owExtGrids(&wd, eg);
           owViewStm.ext[0] = eg[0]; owViewStm.ext[1] = eg[1];

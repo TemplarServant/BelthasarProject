@@ -5,18 +5,20 @@
 
 It draws a world map from the player's own ct_assets.dat (its block grids, block definitions, tiles and colours -- nothing
 of the ROM is in this file or in what it saves) and paints blocks into the cells the widescreen's sides draw past a map's
-own patch: 1999 A.D.'s map (world 7) is a patch of the world round Truce and Guardia, and past it Belthasar shows 1000
-A.D.'s geography in 1999's tiles (the scene adjustments, src/field.c). Those cells are the editable ones; the patch itself
-(the ROM's map, the game's playfield) is drawn but locked.
+own patch: 1999 A.D.'s map (world 7) is a patch of the world round Truce and Guardia, and past it Belthasar shows another
+era's geography in 1999's tiles -- 600 A.D.'s unless the Fill menu picks another (the scene adjustments, src/field.c).
+Those cells are the editable ones; the patch itself (the ROM's map, the game's playfield) is drawn but locked.
 
-The edits go to ct_mapedits.dat (b"CTME", u32 version 1, u32 count, per edit: u8 world, u8 layer (0 BG1, 1 BG2), u8 x,
-u8 y (the 96 x 64 block grid), u8 block, u8 0). Belthasar reads it from CT_MAPEDITS, else the working folder, else the
-executable's, and reads it again when it changes -- paint here with the game open and the sides follow.
+The edits go to ct_mapedits.dat (b"CTME", u32 version 2, u32 count, u8 fill[8] (the era each world's sides are filled
+from, 0xFF = the default), then per edit: u8 world, u8 layer (0 BG1, 1 BG2), u8 x, u8 y (the 96 x 64 block grid), u8
+block, u8 0; version 1 has no fill table). Belthasar reads it from CT_MAPEDITS, else the working folder, else the
+executable's, and reads it again when it changes -- paint here with the game open and the sides follow (the Fill menu
+too, once saved).
 
 Mouse: left paints with the selected block (drag to paint more), right picks the block under the cursor, middle drags the
 view; wheel scrolls (Shift: sideways, Ctrl: zoom). Tools (keys): P pencil, R rectangle, F fill (bucket), E erase (the cell
-emptied: nothing on BG1, the open sea on BG2 -- each layer's commonest block past the patch), T restore (back to 1000
-A.D.'s own block). Ctrl+Z undo, Ctrl+Y redo, Ctrl+S save, G grid, B the patch's border, H highlight the
+emptied: nothing on BG1, the open sea on BG2 -- each layer's commonest block past the patch), T restore (back to the
+fill era's own block). Ctrl+Z undo, Ctrl+Y redo, Ctrl+S save, G grid, B the patch's border, H highlight the
 painted cells, 1 / 2 the layer painted (BG1 overlay / BG2 ground), V the other layer shown or hidden.
 """
 import argparse, os, struct, sys
@@ -27,7 +29,11 @@ from PIL import Image, ImageDraw, ImageTk
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 CT_ASSET_WORLD = 17
 GW, GH = 96, 64                     # the block grid (16 x 16 px blocks): 1536 x 1024 px
-EXT_WORLDS = {7: 0}                 # a patch world -> the world whose geography goes on past it (src/field.c worldInit)
+EXT_WORLDS = {7: 1}                 # a patch world -> the world whose geography goes on past it by default (src/field.c
+                                    # OW_FILL_DEFAULT: 600 A.D.); the Fill menu / the file's fill table picks another
+ERAS = {0: '1000 A.D.', 1: '600 A.D.', 2: '2300 A.D.', 3: '65,000,000 B.C.', 4: '12,000 B.C.', 5: 'the sea (5)',
+        6: '12,000 B.C. (after the fall)', 7: '1999 A.D.'}
+FILL_ERAS = (1, 0, 2, 3, 4, 6)      # (the worlds with a geography to fill from)
 
 
 # ------------------------------------------------------------------------------------------------------------- the data
@@ -84,23 +90,29 @@ class World:
 
 
 def read_edits(path):
-    edits = {}
+    """-> (edits {(world, layer, x, y): block}, fill {world: the era its sides are filled from})."""
+    edits, fill = {}, {}
     if os.path.exists(path):
         d = open(path, 'rb').read()
         if d[:4] == b'CTME' and len(d) >= 12:
-            n = struct.unpack_from('<I', d, 8)[0]
+            ver, n = struct.unpack_from('<II', d, 4)
+            at = 12
+            if ver >= 2 and len(d) >= 20:
+                fill = {w: d[12 + w] for w in range(8) if d[12 + w] < 8}
+                at = 20
             for i in range(n):
-                o = 12 + 6 * i
+                o = at + 6 * i
                 if o + 6 > len(d): break
                 w, layer, x, y, blk = d[o:o + 5]
                 edits[(w, layer, x, y)] = blk
-    return edits
+    return edits, fill
 
 
-def write_edits(path, edits):
+def write_edits(path, edits, fill):
     items = sorted(edits.items())
     with open(path + '.tmp', 'wb') as f:
-        f.write(b'CTME' + struct.pack('<II', 1, len(items)))
+        f.write(b'CTME' + struct.pack('<II', 2, len(items)))
+        f.write(bytes(fill.get(w, 0xFF) for w in range(8)))
         for (w, layer, x, y), blk in items:
             f.write(bytes([w, layer, x, y, blk, 0]))
     os.replace(path + '.tmp', path)
@@ -112,7 +124,7 @@ class Editor:
 
     def __init__(self, root, assets, edits_path, world):
         self.root, self.assets, self.edits_path = root, assets, edits_path
-        self.edits = read_edits(edits_path)
+        self.edits, self.fill = read_edits(edits_path)
         self.undo, self.redo = [], []
         self.layer, self.tool, self.sel = 1, 'pencil', 0
         self.show = [True, True]; self.grid_on = False; self.border_on = True; self.hl_on = False
@@ -126,8 +138,9 @@ class Editor:
         if not blob:
             messagebox.showerror('map editor', 'world %d is not in the assets' % wid); return
         self.wid, self.w = wid, World(blob)
-        src = EXT_WORLDS.get(wid)
+        src = self.fill_src(wid)
         self.ext = World(self.assets[(CT_ASSET_WORLD, src)]).grid if src is not None else None
+        self.fill_var.set(ERAS[src] if src is not None else '-')
         self.blank = [0, 0]                                   # (erase: each layer's commonest block past the patch)
         if self.ext is not None:
             for layer in (0, 1):
@@ -138,6 +151,19 @@ class Editor:
         self.cache = {}
         self.world_var.set(wid)
         self.compose_all(); self.draw_palette(); self.status()
+
+    def fill_src(self, wid):
+        """The era a patch world's sides are filled from (None: not a patch world)."""
+        if wid not in EXT_WORLDS: return None
+        src = self.fill.get(wid, EXT_WORLDS[wid])
+        return src if (CT_ASSET_WORLD, src) in self.assets else EXT_WORLDS[wid]
+
+    def set_fill(self, name):
+        if self.wid not in EXT_WORLDS: self.fill_var.set('-'); return
+        src = next(k for k, v in ERAS.items() if v == name)
+        if src == self.fill_src(self.wid): return
+        self.fill[self.wid] = src; self.dirty = True
+        self.load_world(self.wid)
 
     def editable(self, x, y):
         """A cell past the patch (the world's BG2 grid empty there): the sides' own, not the ROM's playfield."""
@@ -231,7 +257,7 @@ class Editor:
         return (x, y) if 0 <= x < GW and 0 <= y < GH else None
 
     def set_cell(self, x, y, blk, change):
-        """blk None = back to the world's own (1000 A.D.'s) block."""
+        """blk None = back to the fill era's own block."""
         if not self.editable(x, y): return False
         k = (self.wid, self.layer, x, y)
         old = self.edits.get(k)
@@ -314,7 +340,7 @@ class Editor:
         dst.append(change); self.dirty = True; self.refresh_cells(cells); self.status()
 
     def save(self):
-        write_edits(self.edits_path, self.edits); self.dirty = False; self.status()
+        write_edits(self.edits_path, self.edits, self.fill); self.dirty = False; self.status()
 
     # -- the window
     def build_ui(self):
@@ -324,6 +350,9 @@ class Editor:
         tk.Label(bar, text='World').pack(side='left')
         self.world_var = tk.IntVar(value=7)
         tk.OptionMenu(bar, self.world_var, *range(8), command=lambda v: self.load_world(int(v))).pack(side='left')
+        tk.Label(bar, text='Fill').pack(side='left', padx=(8, 0))         # (the era past the patch)
+        self.fill_var = tk.StringVar(value='-')
+        tk.OptionMenu(bar, self.fill_var, *[ERAS[k] for k in FILL_ERAS], command=self.set_fill).pack(side='left')
         self.tool_var = tk.StringVar(value='pencil')
         for t, label in (('pencil', 'Pencil (P)'), ('rect', 'Rectangle (R)'), ('fill', 'Fill (F)'), ('erase', 'Erase (E)'),
                          ('restore', 'Restore (T)')):
@@ -406,8 +435,10 @@ class Editor:
 
     def status(self, extra=''):
         n = sum(1 for k in self.edits if k[0] == self.wid)
-        self.stat.configure(text='world %d  %s  layer %s  %d painted cell(s)%s  -> %s   %s' % (
-            self.wid, self.tool, 'BG1' if self.layer == 0 else 'BG2', n, ' (unsaved)' if self.dirty else '',
+        src = self.fill_src(self.wid)
+        self.stat.configure(text='world %d%s  %s  layer %s  %d painted cell(s)%s  -> %s   %s' % (
+            self.wid, '  fill %s' % ERAS[src] if src is not None else '', self.tool, 'BG1' if self.layer == 0 else 'BG2', n,
+            ' (unsaved)' if self.dirty else '',
             self.edits_path, extra))
 
     def quit(self):
