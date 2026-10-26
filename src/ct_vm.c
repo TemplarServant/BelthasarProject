@@ -2130,10 +2130,21 @@ static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
     // 0x95/0xB6 arm, it is NOT an emptiness test: an empty slot's 0x80 makes the ROM read
     // $7E:1100+0x80 = $7E:1180 and decline only because that byte happens to be negative.
     if (r8(m, 0x7E1100 + (uint32_t)off) & 0x80) return;
-    int t = off / 2;
-    if (t >= 0 && t < sc->nobj) {                            // Crono instead of holding the arms-raised pose
-      int dx = (int)sc->fx[t] - (int)sc->fx[obj], dy = (int)sc->fy[t] - (int)sc->fy[obj];
-      vmSetFacing(sc->mem, a, obj, mvTables()[0x400 + mvAngle(dx, dy)]);
+    // 55AE-55E4: the heading from the TILE BYTES `$1801/$1881` (the target's, then its own), or -- on the same tile --
+    // from the low bytes `$1800/$1880`; 55E6 JSR C0/ABA2 (an unsigned compare per axis: mvAngle's signs), then
+    // 55F0-55F8 `LDA $F700,X / STA $1600,X / STZ $1601,X` -- the animation's frame timer restarts on EVERY visit.
+    // (The port took the C positions' pixel delta and left `$1601` running: MEASURED, the rule's cartridge, the
+    // playthrough's 39_arris_shop -- obj14's `A9 00 / B1 / 11 04` loop zeroes `$161D` every visit by C0:55FB from f1773,
+    // where the port's timer ran on and the resident's pose came out of phase.)
+    {
+      uint32_t T = (uint32_t)off, S = (uint32_t)obj * 2;
+      int f2 = r8(m, 0x7E1801 + T), f3 = r8(m, 0x7E1881 + T), f0 = r8(m, 0x7E1801 + S), f1 = r8(m, 0x7E1881 + S);
+      if (f1 == f3 && f0 == f2) {
+        f0 = r8(m, 0x7E1800 + S); f1 = r8(m, 0x7E1880 + S); f2 = r8(m, 0x7E1800 + T); f3 = r8(m, 0x7E1880 + T);
+      }
+      vmSetFacing(sc->mem, a, obj, mvTables()[0x400 + mvAngle(f2 - f0, f3 - f1)]);
+      w8(m, 0x7E1601 + S, 0);
+      ctAnimSyncActor(&sc->actors[obj], sc->mem->s, (int)S);
     }
     return;
   }
@@ -7617,12 +7628,22 @@ void CtSceneUpdateFollowers(CtScene* sc) {
   }
 
   // ---- C0/A26B / C0/A2CE, the two followers, in chain order.
-  for (int member = 1; member <= 2; member++) {
+  // IN THE PASS'S ORDER, NOT THE CHAIN'S. A26B / A2CE run inside each follower's own B0 visit, and the runner visits the
+  // objects by index, so when member 3 is the LOWER object it measures its gap against `$01AC` as it stood before member
+  // 2's advance of this frame. MEASURED, the rule's cartridge (the playthrough's 39_arris_shop, Arris Dome: member 3 =
+  // obj2, member 2 = obj3): at f48 `$01AC` 17 -> 18 and `$01AD` holds at 00 (gap 17 < 18), the advance at f49; the port
+  // took member 2 first and member 3 set off a frame early, a pixel ahead for the rest of the leg.
+  int folObj[3] = { -1, -1, -1 };
+  for (int m = 1; m <= 2; m++)
+    for (int k = 0; k < sc->nobj; k++)
+      if (k != lead && sc->mode[k] == m && sc->actors[k].hasPos && !sc->actors[k].dead) { folObj[m] = k; break; }
+  int folOrder[2] = { 1, 2 };
+  if (folObj[1] >= 0 && folObj[2] >= 0 && folObj[2] < folObj[1]) { folOrder[0] = 2; folOrder[1] = 1; }
+  for (int oi = 0; oi < 2; oi++) {
+    int member = folOrder[oi];
     int curAddr  = 0x01AB + member;                     // $01AC (member 2), $01AD (member 3)
     int prevAddr = 0x01AB + member - 1;                 // ...measured against the one IN FRONT
-    int o = -1;
-    for (int k = 0; k < sc->nobj; k++)
-      if (k != lead && sc->mode[k] == member && sc->actors[k].hasPos && !sc->actors[k].dead) { o = k; break; }
+    int o = folObj[member];
     if (o < 0) continue;
     // C0/3002 RUNS WHEN THE OP IS DISPATCHED: A26B / A2CE have no other caller. A follower whose visit this frame ENDED
     // on its B0 without dispatching it -- a RETURN onto the B0 with the five-op budget spent (C0/5AB6) -- gets no conga
