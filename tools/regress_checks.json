@@ -47110,6 +47110,46 @@
       ]
     },
     {
+      "name": "options-fill-bottom-lines-window-rows-follow-the-picture",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/fill_window_rows_check.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "saves/field_re/telepod_entry09.flags",
+        "tools/fill_window_rows_check.py"
+      ],
+      "expect": [
+        "fill-win: f2000 (008, the gate's iris): rows 1-210 of the mod-on picture against the mod-off one a line lower: 0 px differ",
+        "fill-win: f2250 (008, the lowered box: the lines above it): rows 1-130 of the mod-on picture against the mod-off one a line lower: 0 px differ",
+        "fill-win: f3500 (071, the arrival's iris): rows 1-210 of the mod-on picture against the mod-off one a line lower: 0 px differ",
+        "fill-win: f2250 (008, the lines the lowered box uncovers): rows 131-143 against f2310's, the box closed: 0 px differ"
+      ],
+      "pin": [
+        "^fill-win: "
+      ],
+      "timeout_s": 300,
+      "note_pass": "the mod \"Fill the bottom lines\": the window rows follow the picture -- the lines a lowered dialogue box uncovers take the picture's window, not the box's (no strip of the Telepod's swirl above the box), and the iris moves down with the held origin (008's gate, 071's arrival)",
+      "notes": "2026-10-26 (the owner's report of 2026-10-25, scene 8; first written on claude/quirky-davinci-10q60a without the ROM, ported onto main and seen here). A MOD check (outside the ROM mandate; the mod-off run is the SNES's placement, graded elsewhere). src/field.c fieldCh5Rows: with g_fillBoxOn, channel 5's box word ($1534 / set B $1536) gives way to the line's own word of the table's first buffer; fillWinRowsHold: the iris's and the colour window's rows move down fillHold lines. Measured before the fix (main 647a659): the lines 131-143 the lowered box uncovers 3228 px (the swirl's strip above the box), f2000 / f2250 / f3500 126 px (the iris a line above its gate); the mod off byte-identical before and after (365 frames of the same drive). tools/fill_window_rows_check.py: two interactive runs (CT_OVERLAY_SHOT, CT_SETTINGS) of field-scene8-gate-portal-draws-inside-window's drive; the state is the recipe fxf_scene8_taban_moving's.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      if (g_fillBoxOn && a == boxW && buf && buf != boxW && line < 212) {   // (the mod: the picture's window, not the box's)",
+          "replace": "      if (0 && g_fillBoxOn && a == boxW && buf && buf != boxW && line < 212) {   /* MUT: the box's window above the lowered box */",
+          "why": "the lines a lowered box uncovers keep the box's window: BG1/BG2 off across the whole line, the Telepod's swirl as a strip above the box (the owner's report)"
+        },
+        {
+          "file": "src/field.c",
+          "find": "    if (g_bgWinOn && !battlePhase) fillWinRowsHold(g_bgWinL, g_bgWinR, fillHold);",
+          "replace": "    /* MUT: the iris on the SNES's lines */",
+          "why": "the iris's rows stay on the SNES's lines while the map and the objects are held a line lower: the iris a line above its gate"
+        }
+      ]
+    },
+    {
       "name": "ow-600ad-motion-owners-under-the-mist",
       "tier": "full",
       "argv": [
@@ -50117,7 +50157,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 627 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 628 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"

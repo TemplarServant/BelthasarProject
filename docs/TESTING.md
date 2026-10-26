@@ -2600,6 +2600,16 @@ vertical step from f3806 to f3807 (the fight's first frame) nor from f4210 to f4
 frames equal to the mod-off picture one line lower on rows 1-210 (0 px: the combatants and effects moved with the arena,
 `bRaise`). Re-pin only if the attract's 0AD moves; the step must stay +0.
 
+### options-fill-bottom-lines-window-rows-follow-the-picture (`python tools/fill_window_rows_check.py`)
+
+A MOD check (outside the ROM mandate): with "Fill the bottom lines" on, the window rows follow the picture. Two
+interactive runs of scene 8's gate show (`CT_OVERLAY_SHOT`, `CT_SETTINGS`; `--selftest` so `CT_CALLFN` starts Taban's
+show; the flags are the recipe fxf_scene8_taban_moving's), the mod on and the mod off. Graded: the gate's iris in 008
+(f2000) and at the 600 A.D. arrival in 071 (f3500), and the picture above the lowered box (f2250), equal to the mod-off
+picture one line lower (0 px: the iris moved down with the held origin, `fillWinRowsHold`); and the lines 131-143 the
+lowered box uncovers equal to the same lines once the box has closed (f2310; 0 px: the picture, not the BG3 swirl the
+box's window leaves, `fieldCh5Rows`). Before the fix: 3228 px and 126 px. Re-pin only if scene 8's drive moves.
+
 ### battle-enemy-census-defeat-exit-tail-hdma-vs-oracle (`python tools/battle_ab.py enemies 6E,E3,F4 -j3`)
 
 Three enemies of the census in GATO's arena whose fights end in the party's defeat: every monitored change, `$AE93` (the

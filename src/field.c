@@ -3116,21 +3116,44 @@ static int g_bgWinOn = 0;
 // held for count lines, 00 the end (the edges hold). Screen row y takes the table's line y (the window measured with the
 // iris: the displayed window is the table written in the same frame). Mode 0's table is `E4 <buf> F0 <buf+C8*2> 00`, so
 // this reads 212 lines of one buffer, as before; a text box's modes 1 / 2 add their own runs.
+// THE BOTTOM LINES DRAWN (a mod, settings.h fillBottomLines; fillBoxBegin below): g_fillBoxOn this frame, Dy the box being
+// drawn's (drawCtWindow's screen-fixed rows).
+static int g_fillBoxOn, g_fillBoxDy;
+// (THE BOTTOM LINES DRAWN, a mod: a text box's lines take one word for all its 2n lines -- mode 1's / mode 2's `2n $1534`,
+//  set B's $1536 (field_hdma_tables.md) -- the box's own window, which takes BG1 and BG2 off the whole line under the box.
+//  A lowered box (fillBoxBegin) leaves the top of its band to the picture: the Telepod's warp (008), whose swirl is BG3,
+//  showed a strip of it right across the screen above the box (the owner, 2026-10-25). With the mod on, those lines take
+//  the window the picture has there: the line's own word of the buffer the table's first run hands out -- the runs before
+//  the box read it a line a word, `E4 $17C8 | 9D $1890 | .. $18CA` -- as every line of mode 0's table does.)
 static void fieldCh5Rows(const uint8_t* w128, int16_t* L, int16_t* R) {
   const uint8_t* b7f = w128 + 0x10000;
-  unsigned t = (w128[0x0153] & 0x01) ? 0x13EB : 0x1133, line = 0, l = 0, r = 0;
+  const int setB = (w128[0x0153] & 0x01) != 0;
+  unsigned t = setB ? 0x13EB : 0x1133, line = 0, l = 0, r = 0, buf = 0;
+  const unsigned boxW = setB ? 0x1536 : 0x1534;
   for (int guard = 0; guard < 64 && line < 256; guard++) {
     unsigned n = b7f[t & 0xFFFF];
     if (!n) break;
     unsigned a = (unsigned)(b7f[(t + 1) & 0xFFFF] | (b7f[(t + 2) & 0xFFFF] << 8));
+    if (!guard) buf = a;
     t += 3;
     unsigned cnt = n == 0x80 ? 128 : (n & 0x7F), rep = n > 0x80;
     for (unsigned k = 0; k < cnt && line < 256; k++, line++) {
       if (rep || k == 0) { unsigned q = a + (rep ? 2 * k : 0); l = b7f[q & 0xFFFF]; r = b7f[(q + 1) & 0xFFFF]; }
+      if (g_fillBoxOn && a == boxW && buf && buf != boxW && line < 212) {   // (the mod: the picture's window, not the box's)
+        unsigned q = buf + 2 * line; L[line] = b7f[q & 0xFFFF]; R[line] = b7f[(q + 1) & 0xFFFF]; continue; }
       L[line] = (int16_t)l; R[line] = (int16_t)r;
     }
   }
   for (; line < 256; line++) { L[line] = (int16_t)l; R[line] = (int16_t)r; }
+}
+// ...and with the picture's origin held at a room's bottom (`hold` lines, the same mod: fillHold in the compose) the map and
+// the objects are that many lines lower than the SNES's, so the window rows the ROM placed on the screen move down with
+// them -- the iris stood above the gate it opens round. The lines above take the table's first.
+static void fillWinRowsHold(int16_t* L, int16_t* R, int hold) {
+  if (hold <= 0 || hold >= CAMH) return;
+  memmove(L + hold, L, (size_t)(256 - hold) * sizeof *L);
+  memmove(R + hold, R, (size_t)(256 - hold) * sizeof *R);
+  for (int y = 1; y < hold; y++) { L[y] = L[0]; R[y] = R[0]; }
 }
 static void fieldBgWindowRows(const uint8_t* w128) {
   g_bgWinOn = 0;
@@ -3535,7 +3558,6 @@ static int drawCtWindowPpu(uint8_t* fb, int top, int y0c, int y1c) {
 // ever, at its own lines and with the per-line tables those lines carry, over the picture raised by the shift; lowering it
 // back puts the picture where it was and the box `dy` lines down. g_fillBoxOn is set per frame by the compose (the
 // interactive run with the mod on, where the V-IRQ would have blanked the lines); off, nothing here runs.
-static int g_fillBoxOn, g_fillBoxDy;               // (Dy: the box being drawn's, for drawCtWindow's screen-fixed rows)
 static uint8_t g_fillBoxSave[CAMW * CAMH * 3];
 static int fillBoxDyOf(int top, int h) {
   const int room = 211 - h;
@@ -20122,6 +20144,7 @@ int main(int argc, char** argv) {
     // scroll (36,18) -- the layer the loc loaded, its VRAM unchanged since before the open. A capture of scene 8's BG3
     // scrolled by the host's frame counter stood here, in every scene.
     fieldBgWindowRows(f.vm ? CtWramSys(fieldWram()) : NULL);
+    if (g_bgWinOn && !battlePhase) fillWinRowsHold(g_bgWinL, g_bgWinR, fillHold);   // (the mod's held origin: the rows move with the map)
     fieldHdmaTmRows((f.vm && !battlePhase) ? CtWramSys(fieldWram()) : NULL);   // the box text's BG3 lines (drawTbSlots)
     if (g_bgWinOn && f.sd) {
       int bw = 0, bh = 0;
@@ -20136,6 +20159,7 @@ int main(int argc, char** argv) {
     // THE COLOUR WINDOW (fieldColWindowRows): its math needs each pixel's main layer, so while it is up the sprites stamp
     // their OBJ palette (plot's g_bObjPalMask) and the foreground pass below unstamps what it paints back.
     fieldColWindowRows(f.vm ? CtWramSys(fieldWram()) : NULL);
+    if (g_colWinOn && !battlePhase) fillWinRowsHold(g_colWinL, g_colWinR, fillHold);
     if (battlePhase) g_colObjMath = 0;                 // (a fight's sprites are the battle compositor's)
     static uint8_t colObjPal[FIELD_WMAX * CAMH];
     uint8_t* colKeepMask = g_bObjPalMask;

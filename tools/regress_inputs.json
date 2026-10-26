@@ -1515,7 +1515,8 @@
         "vmdiff-wmask-party3",
         "wide-box-is-the-vanilla-box-at-a-rooms-edge",
         "wide-race-curtain-crosses-the-whole-picture",
-        "wram-lifetime-survives-load"
+        "wram-lifetime-survives-load",
+        "options-fill-bottom-lines-window-rows-follow-the-picture"
       ],
       "kind": "assets",
       "regenerable": true,
@@ -4051,7 +4052,8 @@
         "field-scene8-gate-portal-draws-inside-window",
         "field-scene8-gate-warp-every-frame-vs-oracle",
         "field-scene8-gate-warp-flow",
-        "field-scene8-objpal-sweep-demo-sparkle"
+        "field-scene8-objpal-sweep-demo-sparkle",
+        "options-fill-bottom-lines-window-rows-follow-the-picture"
       ],
       "kind": "flags",
       "regenerable": true,
@@ -4887,6 +4889,18 @@
       ],
       "sha256": "a68920cb3cf0815e51f46f2123179fcb62f90df786d8f90aea6a00a83a5b2ed9",
       "size": 3840,
+      "present_when_recorded": true
+    },
+    {
+      "path": "tools/fill_window_rows_check.py",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "used_by": [
+        "options-fill-bottom-lines-window-rows-follow-the-picture"
+      ],
+      "sha256": "fbd3474f8e62dd325464af07a293427fa4bf2b5f497a0818f1ae91fda5d9c0f4",
+      "size": 4688,
       "present_when_recorded": true
     },
     {

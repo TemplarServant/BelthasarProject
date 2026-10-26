@@ -171,6 +171,12 @@ room's last row stays on line 223, and the camera's last pixel down moves the ob
 (2026-10-25; until then the line repeated the room's last row, which read as a doubled line). A fight there holds it the
 same way (its arena is the field's picture at the camera it began on); held to the SNES's origin, the picture went up a
 line as the fight began and down as it ended (the owner, 2026-10-25).
+What the ROM places on the screen in the field moves with the held picture too: the iris's and the colour window's rows
+(`fillWinRowsHold`; the gate's iris stood a line above its gate). A lowered text box leaves the top of its band to the
+picture, and channel 5's table gives those lines the box's window (one word for the whole box, which takes BG1/BG2 off
+the line): with the option on they take the line's own word of the iris buffer (`fieldCh5Rows`), so the gate's BG3
+swirl no longer shows as a strip right across the screen above the box (scene 8, the owner, 2026-10-25; seen
+2026-10-26, check `options-fill-bottom-lines-window-rows-follow-the-picture`).
 
 ## The frames between
 
