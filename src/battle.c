@@ -14669,6 +14669,18 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           int cs[11], nc = battleAscCmbs(h, t, cs);
           for (int i = 0; i < nc; i++) { h->mem[0xA4A4 + cs[i]] = 0; h->mem[0xA4AF + cs[i]] = 0; battleAscOffsetMirror(h, cs[i]); }
           break; }
+        // `2C`: the combatant BACK IN THE FIGHT (C1/58AB): `INC $96F5,X / STZ $A0A8,X` -- present again and its "gone" flag
+        // cleared, so the target lists (C1/2045) take it -- on `$A014[$A010]`, or the list `$A018..` (to its FF) on track 4;
+        // nothing from track 8 on. Then `INC $A00F` (free). MEASURED, the rule's cartridge (the playthrough's 40_guardian):
+        // the Guardian's Bits come back at f12006 (`$1D` bit 7 cleared by FD:B487) and this op makes them targets at f12140
+        // (`$96FC/$96FD` 00 -> 01 by C1:58CE, `$A0AF/$A0B0` -> 00 by C1:58D1); without it the port's list held the Guardian
+        // alone, the next attack hit him instead of a Bit, and his counter took the party.
+        case 0x2C: {
+          uint8_t* s = h->mem;
+          if (t >= 8) break;
+          if (t == 4) { for (int y = 0; y < 11 && !(s[0xA018 + y] & 0x80); y++) { int x = s[0xA018 + y]; s[0x96F5 + x]++; s[0xA0A8 + x] = 0; } }
+          else { int x = s[0xA014 + t]; s[0x96F5 + x]++; s[0xA0A8 + x] = 0; }
+          break; }
         case 0xC4: case 0xC5: {                                      // $A4AF toward xx by yy, parked until equal (C1/6F9A,
           int X = (op == 0xC4) ? a1 : 0, Y = (op == 0xC4) ? a2 : a1; //   C5 = C1/6FEF with xx = 0): the float and the land
           isFree = 0;
