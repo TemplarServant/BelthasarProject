@@ -13,7 +13,8 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     met it at row 2) walked to the item, A, and the ally select's `$9614` (an index into `$99C0`) walked to that PC, A;
   * otherwise ATTACK: row 0, A, A (the default target) -- or, with PILOT_TARGETS (enemy ids in hex, in order), row 0, A
     and the target select walked to the first living one; PILOT_TECH (seats, `0,1`) takes the seat's first tech instead
-    of the attack while its MP holds 2; PILOT_HEAL (percent) moves the heal threshold.
+    of the attack while its MP holds 2; PILOT_HEAL (percent) moves the heal threshold; PILOT_RUN holds L+R the whole
+    fight (the party runs away) and picks nothing.
 Presses are 2 frames with 10-frame gaps (the menu reads one key per 4-frame pass). A submenu or target select still open
 after 12 steps (a press that missed its pass) is backed out with B. Between decisions it idles 4 frames; it stops when
 control is back on the field ($011F != 0) or after --max frames. Combatant blocks: `$5E2D + c * 0x80`, the current HP at
@@ -129,6 +130,8 @@ class Pilot:
 
     def step(self, w):
         """The pad for the next stretch of a fight (and a note when it decided something)."""
+        if os.environ.get('PILOT_RUN'):                           # PILOT_RUN: hold L+R (the run away) and press nothing
+            return [(0xC00, 8)], None
         self.stuck = self.stuck + 1 if w[0x95D5] < 3 and (w[0x95DB] or w[0x9609]) else 0
         if self.stuck > 12:
             self.stuck = 0

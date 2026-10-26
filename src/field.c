@@ -18816,6 +18816,21 @@ int main(int argc, char** argv) {
       // CAMERA PAN while the lead is script-locked (leadBusy): compute the request WITHOUT moving the lead
       // (applyMove=0) -- the knockdown fall-pan (corpus #11: LEFT pans, RIGHT/idle hold). The VM camera tick's
       // 99DE deadzone then decides whether the d-pad actually scrolls, from the lead's on-screen foot.
+      // ...AND THE STEP, HANDED TO HIS B0. C0/881E runs whatever the lead's script is doing; only his op B0 publishes the
+      // step (C0/3040 -> 9E29), and his running function may return onto it within the pass (ct_vm.c, CtSceneLeadDeferStep).
+      // So the step is computed as the free branch computes it -- on copies, the collision's own WRAM bytes (the commit's
+      // plane and the intent C0/881E leaves, $1D2C-$1D34) published as there -- and the VM takes it at his B0 or drops it.
+      if (!fieldResume) {
+        double dpx = px, dpy = py; int dpz = pz;
+        fieldPlayerCollide(&f.C, f.vm, pObj, &dpz, &dpx, &dpy, cdx, cdy, crun, 1, &camReqX, &camReqY);
+        { uint8_t* lw = CtSceneMem7E(f.vm);
+          lw[0x1D2C] = g_collRam[0x1D2C]; lw[0x1D2D] = g_collRam[0x1D2D];
+          lw[0x1D32] = g_collRam[0x1D32]; lw[0x1D33] = g_collRam[0x1D33];
+          lw[0x1D34] = g_collRam[0x1D34]; }
+        pz = dpz;                                            // the commit's $0155 (C0/9D54) stands either way
+        if (dpx != px || dpy != py) CtSceneLeadDeferStep(f.vm, dpx, dpy);
+        if (fade) CtSceneSetTouchHit(f.vm, -1);
+      } else
       fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, cdx, cdy, crun, 0, &camReqX, &camReqY);
     }
     else if (!battlePhase && f.vm && !CtSceneExplore(f.vm) && CtSceneMem7E(f.vm)[0x0120] && !(tbActive && isChoice) &&

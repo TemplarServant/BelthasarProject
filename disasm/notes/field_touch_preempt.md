@@ -444,3 +444,38 @@ re-locked control forever. The more-correct scan didn't cause that; it exposed i
 > combatant") when it was only a fact about our port's output. A blocker phrased as canon is expensive —
 > it makes the retry look like it needs new derivation when it needs a bug fixed. Phrase them as what
 > was measured, not as what the ROM must therefore be.
+
+## 10. THE CASTLE HALL'S GUARDS (2026-10-26, playthrough leg 36) -- four mechanisms the port had wrong
+
+Loc 015 after the Dragon Tank: the guards of the hall chase Crono (`84 03` solid and pushable, `95 00` in a loop), he
+walks into one, and the scene that follows calls functions on Crono and Lucca. Measured on the rule's cartridge with
+`--monitor --writer` against the port's memmon (the playthrough's `36_castle_hall`); the leg is SAME after all four.
+
+1. **The push, C0/31B1** (`vmTouchPush`). C0/3154's tail `31AD JSR C0/31B1` runs whether or not the touch installed
+   fn2 (only the three refusals at 3156-3163 skip it). A touched object with `$1B01` bit 1 is shoved one tile the
+   way the LEAD faces (`$1600,$97`: 0 up 3202 / 1 down 3217 / 2 left 31ED / else right 31DA; up from row 0 and left
+   from column 0 refuse), unless that tile's `$7E7040` has bit 7 (the word is not masked). 3228 writes the tile to
+   `$7F3781` -- the operands of C0/5D68's program at `$7F3780` (`96 tx ty / FF 9D / 00`, C0/5D26's MVN) --, saves
+   the running IP at its own priority (`$7F0580[$1C00 * 80 + $EB]`), sets `$1180,X` = 177F at priority 0, zeroes
+   `$1A80/$1A01/$1001` and `TSB $54` #02. `FF 9D` (C0/41DC) clears that latch. Cartridge: `$01EB` = 34 at f809,
+   `$7F3780` = `96 0F 28`, obj26 shoved 0ED4 -> 0F31.
+2. **ACFD tests the landing tile on every issue** (`mvCrossesSolid`). C0/AD81-ADB4 reads `$7E7040` under
+   `$1800 + $DD`, `$1880 + $DB` -- not only when the step changes tiles; a mover standing on a bit-7 tile bounces at
+   once (obj26 on (15,39) = C1, f739). A zero step skips the test (AD5F-AD73).
+3. **The retry's stale `$DE`.** The random angle's retry sign-extends dx only when it is nonzero (AE97-AEA5); a zero dx
+   goes AEA7 -> AEAB with `$DE` as the first test left it, so after a first heading with dx < 0 the probe of a
+   straight up/down retry lands one tile (0x100) to the LEFT. obj22 at (1E04,3022), f1399: the retry (0,E1) is clear
+   on its own tile (30,48) = 01 but probes (29,48) = 81 and stalls (`$1900` = 0 by C0:AF1F).
+4. **The chase reads the target's tile bytes from WRAM** (522D `LDA $1801,X / $1881,X`; 52D8, 5370, 5444 the same).
+   The lead moves in A810, after the pass; the port's host moves him before the tick, so the C position showed the
+   chasers his new tile a frame early (obj25 re-issued at f801 against the cartridge's f803).
+
+And two for the lead and the party, from the scene's calls (obj18's `04 02 4C` / `04 06 4A`):
+
+5. **A busy lead's step** (`CtSceneLeadDeferStep`). C0/881E runs every frame; the lead moves when his op B0 runs in the
+   pass (3040 -> 9E29), and a function another object called on him may RETURN onto it within the pass. f1334: Crono
+   on fn12 (`AE / 00`) with Right held, back on B0 (04FB) at the frame's end and `$1802` 6019 -> 7019. The host now
+   hands such a step to the VM, which takes it at his B0 (with 9E84's arm on the published intent) or drops it.
+6. **A follower whose B0 ran before a later call** (`CtSceneUpdateFollowers`, `ranThenCalled`). A26B ran in her visit
+   (the cursor, the ring's velocity, the 9ED1 arm); the call's `STZ $1A80 / $1A01` (C0/6031-6034) only leaves A810
+   nothing to integrate. Lucca at f1337: `$01AC` 14 -> 15, `$1806` held at 3018, the step from f1338.

@@ -184,6 +184,7 @@ void CtSceneSetActorPosF(CtScene* sc, int obj, double x, double y);  // sub-pixe
 // and a song upload that parks the pass keeps the ticket to the return frame. Dropped = the tick took the step back.
 void CtSceneLeadStepFrom(CtScene* sc, double x, double y);
 int  CtSceneLeadStepDropped(const CtScene* sc);
+void CtSceneLeadDeferStep(CtScene* sc, double x, double y);   // a busy lead's step, taken by his B0 if he reaches it
 int CtSceneLeadScriptPlaced(const CtScene* sc, int obj, double* x, double* y);  // 1 = the lead's fn0 placed it
                                                               // AFTER its C0/42B8 arrival arm (fx/fy returned)
 // Trail the active-party FOLLOWERS (move-mode 1/2) behind the lead PC along its path (conga-line).
