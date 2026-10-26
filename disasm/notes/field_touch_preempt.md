@@ -479,3 +479,27 @@ And two for the lead and the party, from the scene's calls (obj18's `04 02 4C` /
 6. **A follower whose B0 ran before a later call** (`CtSceneUpdateFollowers`, `ranThenCalled`). A26B ran in her visit
    (the cursor, the ring's velocity, the 9ED1 arm); the call's `STZ $1A80 / $1A01` (C0/6031-6034) only leaves A810
    nothing to integrate. Lucca at f1337: `$01AC` 14 -> 15, `$1806` held at 3018, the step from f1338.
+
+## 11. ARRIS DOME (2026-10-26, playthrough leg 39) -- three more the port had wrong
+
+Loc 0D6 from the entrance to the hall, the shop, the save point's Shelter and the X menu's equipment. Measured on the
+rule's cartridge with `--monitor --writer` against the port's memmon (the playthrough's `39_arris_shop`). The leg is
+SAME after all three.
+
+1. **The menu's resume ramp runs the camera** (field.c, the `fieldResume` branch). Each of C0/2824's iterations is
+   `INC $19 / JSR C0/881E / JSR C0/00DE / JSR C0/EC60`. C0/881E runs with `$1F` = 0 (no d-pad), and its camera tail
+   (C0/99DE / 91AC / 93E1) carries the layers' drift: the speeds `$1D37-$1D3A` go into the accumulators `$1D3D-$1D40`
+   and the counters `$1D8B-$1D92`. On the cartridge BG3's `$1D3F` steps 02 04 06 .. and `$1D8F` counts from f4244,
+   the first iteration (`$0119` = 01). The port started the drift at the end of the ramp (f4259), which left the dome's
+   fog 15 frames behind.
+2. **The followers move in the pass's order** (`CtSceneUpdateFollowers`). A26B / A2CE run inside each follower's own
+   B0 visit, and the runner visits objects by index. When member 3 is the lower object, it measures its gap against
+   `$01AC` before member 2's advance of that frame. Here member 3 = obj2 and member 2 = obj3: at f48 `$01AC` goes
+   17 -> 18 and `$01AD` holds at 00 (gap 17 < 18), and it advances at f49.
+3. **Op A8/A9 faces by tile and restarts the frame timer** (C0/55A9).
+   - 55AE-55E4 take the heading from the tile bytes `$1801/$1881` (the target's, then its own). On the same tile they
+     use the low bytes `$1800/$1880` instead.
+   - 55E6 JSR C0/ABA2 compares each axis unsigned.
+   - 55F0-55F8 do `LDA $F700,X / STA $1600,X / STZ $1601,X`.
+   - So a resident looping `A9 00 / B1 / 11 04` (obj14) has `$161D` zeroed on every visit, by C0:55FB from f1773.
+   - The port used the C positions' pixel delta and left `$1601` running, so the pose drifted out of phase.

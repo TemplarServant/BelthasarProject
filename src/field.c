@@ -14977,6 +14977,16 @@ int main(int argc, char** argv) {
       menuT++;                                               // `INC $19`, and C0/00DE = `JSL FD/C2C1` ($0153 flips) /
       s7[0x0119] = (uint8_t)(menuT > 15 ? 15 : menuT);      // (the byte: MEASURED 01 .. 0F over the resume, C0:282B)
       if (menuT >= 1 && menuT <= 15) {                       // `JSL FD/FFF7` (the colour records); the IRQ's tiles
+        // C0/2830 JSR C0/881E (with $1F = 0: no d-pad) BEFORE C0/00DE -- its camera tail C0/99DE / 91AC / 93E1 runs every
+        // iteration, and with it the layers' own drift ($1D37-$1D3A into $1D3D-$1D40 and the counters $1D8B-$1D92).
+        // MEASURED, the rule's cartridge (the playthrough's 39_arris_shop, Arris Dome after the shop): BG3's `$1D3F` steps
+        // 02 04 06 .. and `$1D8F` counts from f4244, the resume's first iteration ($0119 = 01); the port's drift waited for
+        // the end of the ramp (f4259), and the dome's fog stood 15 frames behind for the rest of the leg.
+        // With no d-pad, 88EE + 8A6D make a zero request ($1D2E/$1D30): the camera stands and only the layers drift. The
+        // host's request is the last walk's. MEASURED (menu-resume-fade-in-vs-oracle: X right after a walk) -- carried into
+        // the ramp, it scrolled the reloaded field 16611 px away from the cartridge's.
+        CtSceneCameraRequestClear(f.vm);
+        CtSceneCameraTick(f.vm);
         CtHdmaTableBuild(s7);                                // step in the field's own render below
         fieldColourRecords(s7);
         fieldWaitEC60(s7);                                   // C0/2839 JSR C0/EC60: the idle counter $0158 counts on

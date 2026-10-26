@@ -8621,9 +8621,19 @@ static int battleDcfdTail(CtBattleHost* h, int atk, int tgt, int dmg, int* stage
   }
   int cur = s[tb + 3] | (s[tb + 4] << 8);
   if (cur == 0) return 0;                                          // DDCC -> DE83: a fallen target, nothing
-  // (the death staging at DDD9-DE3A -- $AEB0/$AEB2/$5E0A/$B03A/$B242/$AECB for a hit that meets the HP -- is left to
-  // the port's span-end death path)
   battleStageEBF8(s, tgt, dmg, 0x00);                              // DE3C-DE58 / DDE1-DDF4 (DDDF's skip needs dmg 0 >= cur > 0)
+  if (cur <= dmg) {                                                // DDCF-DDD6: a hit that meets the HP, at the compute
+    // DDF7-DE07: an enemy victim marks its death byte and the battle-wide one, and its REQUESTED move mode `$5E0A,X`
+    // goes to 0; DE0A-DE1D: its ATB flag `$B03A,X` stops; a PC victim also clears every enemy's remembered target
+    // `$B242,Y` that names it (`$5E15,Y`, DE20-DE33); DE35 `$AECB = 1`. MEASURED, the rule's cartridge (the playthrough's
+    // 40_guardian): Bit 7's lethal hit writes `$5E11 = 00` at f6212 (C1:DE0A), the mode machine commits it after the
+    // Guardian's revive (`$974E = 00` f12319, C1:336A) and the Bit stands; the port left the death to the span end, the
+    // request stood at 0A, and the revived Bit walked 32 px off its place.
+    if (tgt >= 3) { s[0xAEB2] = 1; s[0xAEB0 + tgt] = 1; s[0x5E0A + tgt] = 0; }   // ($5E0A + cmb = BT_MVREQ's $5E0D + slot)
+    s[0xB03A + tgt] = 0;
+    if (tgt < 3) for (int y = 0; y < 8; y++) if (s[0x5E15 + y] == tgt) s[0xB242 + y] = 0xFF;
+    s[0xAECB] = 1;
+  }
   battleShowRecordPut(s, tgt, dmg, 3);                             // DE5B-DE76
   int t = (s[0xAE7B] | (s[0xAE7C] << 8)) + dmg;                    // DE79-DE7D
   s[0xAE7B] = (uint8_t)t; s[0xAE7C] = (uint8_t)(t >> 8);
@@ -12516,6 +12526,17 @@ static void battleDispatchScheduled(CtBattleHost* h) {
     { const uint8_t* rr = CtBattleRom(NULL);                   // C1/BABE JSR C1/C1DD: the victims from the item's group
       int grp = rr ? CtRomByte(rr, 0x400000L, (long)(ROM_ITEM_TGTGRP_TBL + (itemId - 0xBC))) : 0x80;   //   (CC/1BB5): one PC, or every seat (01)
       h->actTgtN = battleBuildHitSet(h, grp & 0x7F, tgt, h->actTgtList, 8); }
+    // C1/BAC9-BB09: `$AE90 = $AE94 = 0`, `$AE92 = 03` (the item), `$AECC` = the victims (`$AECB` the count), then C1/AD09
+    // ($AE95, the first's bit) and C1/AD35 ($AE99, the others') -- the masks CC/F186 turns into the roles $A017/$A018.
+    // MEASURED, the rule's cartridge (the playthrough's 40_guardian): Crono's Tonic on Lucca at f7819 has `$AE91 = 00 03
+    // BD` and `$AE95 = 0020`; the port left the previous action's masks there and the effect played on Crono's seat.
+    s[0xAE90] = 0; s[0xAE94] = 0; s[0xAE92] = 3; s[0xAECB] = 0;
+    for (int x = 0; x < h->actTgtN && x < 11; x++) {
+      if ((h->actTgtList[x] & 0xFF) == 0xFF) break;                 // BAEE-BB04
+      s[0xAECC + x] = (uint8_t)h->actTgtList[x]; s[0xAECB]++;
+    }
+    battleTargetMask(s);                                       // C1/BB06 JSR C1/AD09
+    aiAD35(s, 0);                                              // C1/BB09 JSR C1/AD35
     h->actValue = battleComputeItemEffect(h, tgt, itemId);     // heal = negative delta (Tonic -50), staged $B328 (§4)
   } else if (techId > 0) {
     // C1/BB66-BB6B, the tech arm of the PC command record's decode (the demo's battleDemoCommand runs the same bytes):
@@ -12665,7 +12686,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
   if (techId == 0) h->actTgtApply[0] = 1;                      // physical / item: the one victim (a miss is actMiss)
   if (itemId == 0 && techId == 0) battleShowRecordsHits(h);    // the item and the tech staged their own records
   s[0xAE91] = (uint8_t)actor;                                  // C1/BBA1 (tech) -- the physical's own $AE91 is the seat
-  if (techId > 0) s[0xAE92] = 2; else if (itemId == 0) s[0xAE92] = 1;   // C1/BBA4-BBA6 (tech: 2) / C1/BFDA-BFDC (physical: 1) -- the command type
+  if (techId > 0) s[0xAE92] = 2; else if (itemId == 0) s[0xAE92] = 1; else s[0xAE92] = 3;   // C1/BBA4-BBA6 (tech: 2) / C1/BFDA-BFDC (physical: 1) / C1/BB15 (item: 3)
   // C1/B967 is done with the command; C1/4058's two waits come next (battleThinkTick), then C1/40A6 opens it. (The demo's
   // synchronous dispatch opens at once: its caller already waited them out, battleCommitDemoTech.)
   h->dispOpenPend = 1; h->dispActor = actor; h->dispTgt = tgt; h->dispTech = techId; h->dispItem = itemId;
@@ -13453,6 +13474,18 @@ static void battleAscPoseTick(CtBattleHost* h) {
 }
 // Load the dispatched script for the current action window: the C1/4541 header read + the C1/4562 MSB-first
 // mask walk + the CC/F156 role/home filler.
+// CC/F186-F1C9: the victims' roles from the dispatch's two masks (16-bit, bit 15 = combatant 0). $A017 = the index of
+// $AE95's first set bit (0 when the mask is empty), closed by FF (`ORA #FF00 / STA $A017`); then every set bit of $AE99,
+// combatants 0..0A in order, as `idx | FF00` at $A018,Y -- the list the track-4 ops walk, FF-closed by its own stores.
+// $AC5C/$AC5D.. the same.
+static void battleRoleVictims(uint8_t* s) {
+  int w = s[0xAE95] | (s[0xAE96] << 8), x = 0;
+  if (w) while (!(w & 0x8000)) { w = (w << 1) & 0xFFFF; x++; }      // CF18A-CF196
+  s[0xA017] = s[0xAC5C] = (uint8_t)x; s[0xA018] = s[0xAC5D] = 0xFF;  // CF198-CF1A7
+  int m = s[0xAE99] | (s[0xAE9A] << 8), y = 0;                       // CF1AD-CF1C7
+  if (m) for (x = 0; x < 0x0B; x++, m = (m << 1) & 0xFFFF)
+    if (m & 0x8000) { s[0xA018 + y] = s[0xAC5D + y] = (uint8_t)x; s[0xA019 + y] = s[0xAC5E + y] = 0xFF; y++; }
+}
 static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
   long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
   h->ascOn = 0; h->ascSel = sel; h->ascStall = 0; h->ascGateSaid = 0;
@@ -13511,20 +13544,22 @@ static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
   // `combos 50`, Double Cure chosen on Frog): `$A017 = 00`, `$A018 = 01 FF` (CC:F198 / F1BC) -- and Lapis either caster
   // (battle_target_select_pc_side.md sec. 5.7). The port took the confirm's target (Frog): its `02 24` on track 3 and every
   // pose of the victims' tracks played on the wrong seat, and the tech's tail ran 1-2 frames off.
-  h->ascRole[3] = (h->actTgtN > 0) ? h->actTgtList[0] : h->actTarget;
-  for (int i = 1; i < h->actTgtN && i < 5; i++) h->ascRole[3 + i] = h->actTgtList[i];
   // ...and the ROM's own table (CC/F156-F1C9): $A014 = the actor, $A015/$A016 = the co-actors (a party actor's negative
   // ones replaced from CC/FBC8), $A017 = the primary, $A018.. = the other targets, each list closed by FF -- the list the
   // track-4 ops walk (op 25, the orbit/shake/offset ops on every target) and $AC5C, the same targets for the close's tail.
-  { uint8_t* s = h->mem; int k = 0;
+  { uint8_t* s = h->mem;
     for (int i = 0; i < 11; i++) s[0xA014 + i] = 0xFF;
     s[0xA014] = (uint8_t)(h->actAttacker & 0xFF);
     for (int j = 1; j <= 2; j++) { int v = s[0xAE96 + j];
       if ((v & 0x80) && h->actAttacker >= 0 && h->actAttacker < 3) v = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + h->actAttacker * 2 + (j - 1)));
       s[0xA014 + j] = (uint8_t)v; }
-    s[0xA017] = (h->ascRole[3] >= 0) ? (uint8_t)h->ascRole[3] : 0xFF;
-    for (int i = 1; i < h->actTgtN && k < 7; i++) s[0xA018 + k++] = (uint8_t)h->actTgtList[i];
-    s[0xA018 + k] = 0xFF; }
+    // $A017 and $A018.. from the dispatch's masks $AE95 / $AE99 (CC/F186-F1C9), not from the port's target list. MEASURED,
+    // the rule's cartridge (the playthrough's 40_guardian): the Guardian's revive at f12006 has `$AE95` = 0100 and
+    // `$AE99` = 0080 -> `$A017 = 07`, `$A018 = 08 FF` (CC:F1A7 / F1BF) -- the port's list held Bit 7 alone, its track-4
+    // `2C` brought back one Bit, and the fight went another way.
+    battleRoleVictims(s);
+    h->ascRole[3] = (s[0xA017] < 11) ? s[0xA017] : -1;
+    for (int i = 0; i < 4; i++) h->ascRole[4 + i] = (s[0xA018 + i] < 11) ? s[0xA018 + i] : -1; }
   for (int k = 0; k < 3; k++) {                                     // $99AF/$99B2 = role k's dispatch pos
     int c = h->ascRole[k];
     if (c >= 0 && c < 11) { h->ascHomeX[k] = BT_LIVEX(h, c); h->ascHomeY[k] = BT_LIVEY(h, c); }
@@ -14668,6 +14703,18 @@ static void battleAscTick(CtBattleHost* h, int rel) {
         case 0x2B: {                                                 // both draw offsets to 0 (C1/587D)
           int cs[11], nc = battleAscCmbs(h, t, cs);
           for (int i = 0; i < nc; i++) { h->mem[0xA4A4 + cs[i]] = 0; h->mem[0xA4AF + cs[i]] = 0; battleAscOffsetMirror(h, cs[i]); }
+          break; }
+        // `2C`: the combatant BACK IN THE FIGHT (C1/58AB): `INC $96F5,X / STZ $A0A8,X` -- present again and its "gone" flag
+        // cleared, so the target lists (C1/2045) take it -- on `$A014[$A010]`, or the list `$A018..` (to its FF) on track 4;
+        // nothing from track 8 on. Then `INC $A00F` (free). MEASURED, the rule's cartridge (the playthrough's 40_guardian):
+        // the Guardian's Bits come back at f12006 (`$1D` bit 7 cleared by FD:B487) and this op makes them targets at f12140
+        // (`$96FC/$96FD` 00 -> 01 by C1:58CE, `$A0AF/$A0B0` -> 00 by C1:58D1); without it the port's list held the Guardian
+        // alone, the next attack hit him instead of a Bit, and his counter took the party.
+        case 0x2C: {
+          uint8_t* s = h->mem;
+          if (t >= 8) break;
+          if (t == 4) { for (int y = 0; y < 11 && !(s[0xA018 + y] & 0x80); y++) { int x = s[0xA018 + y]; s[0x96F5 + x]++; s[0xA0A8 + x] = 0; } }
+          else { int x = s[0xA014 + t]; s[0x96F5 + x]++; s[0xA0A8 + x] = 0; }
           break; }
         case 0xC4: case 0xC5: {                                      // $A4AF toward xx by yy, parked until equal (C1/6F9A,
           int X = (op == 0xC4) ? a1 : 0, Y = (op == 0xC4) ? a2 : a1; //   C5 = C1/6FEF with xx = 0): the float and the land
@@ -18914,9 +18961,7 @@ static int battleC1ActionRoles(CtBattleHost* h) {
     if (s[0xA015] & 0x80) s[0xA015] = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + actor * 2));
     if (s[0xA016] & 0x80) s[0xA016] = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + actor * 2 + 1));
   }
-  { int w = s[0xAE95] | (s[0xAE96] << 8), x = 0;                   // CF18A-CF198
-    if (w) { while (!(w & 0x8000)) { w <<= 1; x++; } }
-    s[0xA017] = (uint8_t)x; s[0xA018] = 0xFF; s[0xAC5C] = (uint8_t)x; s[0xAC5D] = 0xFF; }
+  battleRoleVictims(s);                                             // CF186-CF1C9
   for (int k = 0; k < 3; k++) { int c = s[0xA014 + k];             // CF1CC-CF1E5
     if (!(c & 0x80) && c < 11 && h->mvInited) { s[0x99AF + k] = (uint8_t)BT_LIVEX(h, c); s[0x99B2 + k] = (uint8_t)BT_LIVEY(h, c); } }
   // C1/4310 -> the $AE92 = 2 entry of C1/7A63 -> C1/45BB: the PC-tech config CD/45A6[$AE93*7] and the three table

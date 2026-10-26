@@ -150,13 +150,19 @@ def ensure_states(legs, upto):
 def route_bfs(w, s, g, z):
     """4-way BFS over the location's tiles on plane z: walkable = shape != 1 ($7E:30C0 >> 2) and plane ($7E:7040 & 3) == z
     -- the ROM's own planes; a partial shape is tried (the cartridge decides). A list of tiles from s to g, or None."""
-    from collections import deque
-
     def ok(tx, ty):
         if not (0 <= tx < 64 and 0 <= ty < 64):
             return False
         o = (ty << 8) | tx
-        return ((w[0x30C0 + o] >> 2) & 0x3F) != 1 and ((w[0x7040 + o] & 3) == z or (w[0x7040 + o] & 3) >= 2)   # 2/3: stairs
+        return ((w[0x30C0 + o] >> 2) & 0x3F) != 1 and (z is None or (w[0x7040 + o] & 3) == z or (w[0x7040 + o] & 3) >= 2)
+    path = bfs(ok, s, g)
+    if path is None and z is not None:          # a route that changes planes (a ramp between two floors): planes ignored,
+        path = route_bfs(w, s, g, None)         #   the cartridge decides each stretch (route_walk nudges a refused one)
+    return path
+
+
+def bfs(ok, s, g):
+    from collections import deque
     prev = {s: None}
     q = deque([s])
     while q:
