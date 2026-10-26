@@ -181,8 +181,17 @@ static int glowBottom(int x) {
 static uint8_t g_e3Prof[2][8];                                        // (the band's rows under the glow, left / right)
 static int g_e3ProfN[2];
 static int8_t g_e3MidGb[256];                                         // (the middle's lowest glow row, a column; -1 none)
+// THE MIDDLE GLOW'S TOP ON THE CURVE (the owner, 2026-10-25: in the flash "the middle stays straight"). The stage's glow
+// starts at its map's row 6 in every column, while its lowest row bends (74 at the edges, 70 in the middle) and the art's
+// glow keeps one thickness along its bend: in the flash, which whitens the glow's dark top rows, the middle stood as a
+// flat block over the sides' curve. Its rows above the lowest row less the art's thickness (its innermost column's, the
+// sky's rows not counted) are the sky, so its top follows the bottom's curve and meets the art's at the 256.
+static int g_e3Thick[2];
 static void bandProfile(int side, int x) {
-  int gb = glowBottom(x), n = 0;
+  int gb = glowBottom(x), n = 0, top = 48;
+  const int sky = steamPx(0, x, 48, 0);
+  while (top < gb && steamPx(0, x, top, 0) == sky) top++;
+  g_e3Thick[side] = gb - top + 1;
   while (n < 8 && bandRow(x, gb + n)) { g_e3Prof[side][n] = (uint8_t)bandRow(x, gb + n); n++; }
   g_e3ProfN[side] = n;
 }
@@ -236,6 +245,8 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
     x = mx - hs;
     const int sky = (p->r[0x08] & 0xFC) == 0x60, line = (my - p->vofs[1]) & 0x3FF;
     const int ys = (line + g_e3SkyVofs) & 255;
+    if (g_e3Steam && x >= 0 && x < 256 && g_e3MidGb[x] >= 0 && ys >= 48 && ys <= g_e3MidGb[x] - g_e3Thick[x >= 128])
+      return pri ? 0 : horizonIndex(0x2A);                           // (the middle glow's top on the curve: the sky)
     if (g_e3Steam && x >= 0 && x < 256 && g_e3MidGb[x] >= 0) {      // (the band under the middle's glow, its lowest row on)
       const int side = x >= 128, k = ys - g_e3MidGb[x];
       if (k >= 0 && k < g_e3ProfN[side]) {

@@ -121,7 +121,10 @@ columns (a 21:9 side is 133) the bend goes on along the planet's limb: the glow'
 art's, lies on one curve (70 in the middle, 74 at the 256, 78 at 76 columns out), fitted each frame as q0 + q2 (x -
 127.5)^2; from ~80 columns out the art's cells cut the glow's lowest rows (they stay at row 79, a flat edge that made
 21:9 run on flat -- the owner, 2026-10-25), so past the art's last uncut column a column is that column lowered by the
-curve. 16:9 (71 columns a side) never reaches the cut and is unchanged. The stage cuts the sky's map at line 70
+curve. 16:9 (71 columns a side) never reaches the cut and is unchanged. The middle's glow starts at its map's row 6 in
+every column while its lowest row bends, so in the flash (which whitens its dark top rows) it stood as a flat block over
+the sides' curve: its rows above its lowest row less the art's glow thickness are the sky, and its top bends with the
+bottom and meets the art's at the 256 (the owner, 2026-10-25). The stage cuts the sky's map at line 70
 (HDMA channel 3), the glow's last rows with it; the Steam release shows the field 06B, the glow whole, and its art is
 drawn against that -- so with the sides drawn the glow's rows go on below the switch line, the middle's too, one band as
 on Steam (the owner's reference, a Steam 16:9 capture, 2026-10-25). Below it the planet is the stage's own, mirrored
