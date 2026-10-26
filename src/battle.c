@@ -12516,6 +12516,17 @@ static void battleDispatchScheduled(CtBattleHost* h) {
     { const uint8_t* rr = CtBattleRom(NULL);                   // C1/BABE JSR C1/C1DD: the victims from the item's group
       int grp = rr ? CtRomByte(rr, 0x400000L, (long)(ROM_ITEM_TGTGRP_TBL + (itemId - 0xBC))) : 0x80;   //   (CC/1BB5): one PC, or every seat (01)
       h->actTgtN = battleBuildHitSet(h, grp & 0x7F, tgt, h->actTgtList, 8); }
+    // C1/BAC9-BB09: `$AE90 = $AE94 = 0`, `$AE92 = 03` (the item), `$AECC` = the victims (`$AECB` the count), then C1/AD09
+    // ($AE95, the first's bit) and C1/AD35 ($AE99, the others') -- the masks CC/F186 turns into the roles $A017/$A018.
+    // MEASURED, the rule's cartridge (the playthrough's 40_guardian): Crono's Tonic on Lucca at f7819 has `$AE91 = 00 03
+    // BD` and `$AE95 = 0020`; the port left the previous action's masks there and the effect played on Crono's seat.
+    s[0xAE90] = 0; s[0xAE94] = 0; s[0xAE92] = 3; s[0xAECB] = 0;
+    for (int x = 0; x < h->actTgtN && x < 11; x++) {
+      if ((h->actTgtList[x] & 0xFF) == 0xFF) break;                 // BAEE-BB04
+      s[0xAECC + x] = (uint8_t)h->actTgtList[x]; s[0xAECB]++;
+    }
+    battleTargetMask(s);                                       // C1/BB06 JSR C1/AD09
+    aiAD35(s, 0);                                              // C1/BB09 JSR C1/AD35
     h->actValue = battleComputeItemEffect(h, tgt, itemId);     // heal = negative delta (Tonic -50), staged $B328 (§4)
   } else if (techId > 0) {
     // C1/BB66-BB6B, the tech arm of the PC command record's decode (the demo's battleDemoCommand runs the same bytes):
@@ -12665,7 +12676,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
   if (techId == 0) h->actTgtApply[0] = 1;                      // physical / item: the one victim (a miss is actMiss)
   if (itemId == 0 && techId == 0) battleShowRecordsHits(h);    // the item and the tech staged their own records
   s[0xAE91] = (uint8_t)actor;                                  // C1/BBA1 (tech) -- the physical's own $AE91 is the seat
-  if (techId > 0) s[0xAE92] = 2; else if (itemId == 0) s[0xAE92] = 1;   // C1/BBA4-BBA6 (tech: 2) / C1/BFDA-BFDC (physical: 1) -- the command type
+  if (techId > 0) s[0xAE92] = 2; else if (itemId == 0) s[0xAE92] = 1; else s[0xAE92] = 3;   // C1/BBA4-BBA6 (tech: 2) / C1/BFDA-BFDC (physical: 1) / C1/BB15 (item: 3)
   // C1/B967 is done with the command; C1/4058's two waits come next (battleThinkTick), then C1/40A6 opens it. (The demo's
   // synchronous dispatch opens at once: its caller already waited them out, battleCommitDemoTech.)
   h->dispOpenPend = 1; h->dispActor = actor; h->dispTgt = tgt; h->dispTech = techId; h->dispItem = itemId;
