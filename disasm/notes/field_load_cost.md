@@ -826,3 +826,38 @@ Result, the attract from power-on (tools: the loads' commit -> first ramp INC ag
 the cartridge's frames, 8700 included -- the 087 exit's `FE` now finds the driver in the cartridge's state. Left, frame-free:
 a walked load's init-script posts flush at a frame's granularity (0AD's `10 18` 8,000 cycles after the cartridge's, mid-frame
 there), and the driver paths part again at f4944 / f5377 / f5410 without moving a frame of the demo.
+
+## 17. The prison escape: an opened chest, the init posts inside their frame, a menu over 048 (2026-10-25)
+
+The playthrough's leg 33 (tools/playthrough/route.txt, the escape from Guardia's prison: chests, cell levers, guards,
+two menus) put ten loads and a menu reload against the rule's cartridge (tools/load_cost_cmp.py, the play clock `$0400`
+and the field cursor `$01F8` it seeds at every load). Five gaps, each the ROM's:
+
+- **An opened chest in the walk** (field_cost.c chestsA712). C0/A712's loop took the closed arm only and refused an opened
+  one (`chests: an opened chest (C0/A7E6)`): every load into 048 after its Mid Tonic fell back to ct_lz_load_cost, a frame
+  short. The opened arm is A7E1's BNE taken (+6), A785's BCC not taken (-6), then A787 `LDA $7E30C0,X / BIT #01 / BEQ`
+  and on bit 0 the tile: FE -> FF, E0 -> E1, else untouched. MEASURED (CPUTRACE_BEAM, loc 048's load after the chest):
+  the record's iteration 1,088 cycles past its refresh against the closed one's 926, the FE arm's 162 = 32 12 12 32 12 18
+  12 32 (FastROM C0: 6 a fetch, WRAM 8); the bit-0-clear arm 62, E0 198, any other tile 142.
+- **A load's init posts inside their frame** (field.c, the load's last JSLs; audio.c CtAudioAdvanceTo). Sec. 16's LEFT
+  item: a walked load flushed its init runner's posts at a frame's granularity, after the frame's whole SPC slice. On the
+  cartridge each JSL comes where its CPU reaches it: the vblank, C0/0B5D's NMI-off write 5,035 master cycles on
+  (LOAD_NMIOFF_AT: LOAD_SPC_LEAD's 5,751 to C0/0B86 less 0B5D -> 0B86's 716), then the walk's work before it -- W less the
+  work after it (the object pass's after the post, slot 1, C2/8004, C0/9DC3, the pass) -- on the wall clock. The SPC now
+  runs to that cycle and the post goes there. MEASURED (048 -> 01C, the init `EA 16`'s `10 16` after C0/1B8B's): the
+  cartridge posts at f1688 line 106 (APU 3,623,702,102), inside the driver's loop (SPC $0894), the echo 726 cycles later;
+  the port posted at the frame's end (3,623,710,125), met the idle poll ($0B98) and had its echo in 168 -- 73,374 master
+  cycles less on the loader clock, every 01C load a black frame short (d 36 / 37). Now 3,623,702,874 (the walk's W before
+  the post 20,000 cycles over the cartridge's: not found) and all four 01C loads on the cartridge's frames.
+- **obj0's slot 1 in the menu reload** (field_cost.c vm595C). The reload's slot-1 walk priced ops 12 and 16 and refused any
+  other: 048's slot 1 copies the guards' tiles with E4 (C0/3D97 -> C0/AF4E), the handler the load's runners price
+  (ct_vm_op_cycles). MEASURED (the reload's trace): `E4 3C 1A 3F 1C 28 0E 3B` C0/3D97 -> C0/597A 11,246 past nine refreshes
+  against the formula's 11,298, `E4 3E 1D 3E 1D 26 0F 3B` 4,776 / 4,828 (the DMA sync's tens).
+- **The menu's open: the frame's own tick first** (field.c, the X and Y paths). C2/85AE ticks `$0400` in the NMI at a
+  frame's head; C0/1946's `$0407 = FF` is that frame's main loop. MEASURED (X in 048 at f9176): `$0400` 33 -> 34 at f9176
+  with `$0119` = 0E, then still; the port wrote `$0407` before its tick and stood a frame behind through the menu.
+- **C0/011B's save** (field.c, the menu's black frame). The routine also stores the party's position and $0C00 words to
+  `$7F:1D09 / 1D0F / 1D15`, `$01AB-$01AD` to `$7F:1D1B-1D`, the words `$7F:3728 / 3748 / 3768 / 3781` to `$7F:1D1E-25` and the
+  window wave `$1DF9` to `$7F:1D26` -- what C0/01FF puts back at the reload. MEASURED: `$7F1D26` 42 -> 00 by C0:01A4 at
+  f9191; the port kept the stale 42, its reload walk read a live wave (`pass: $1DF9 / $1DFD`) and charged the estimate.
+  (The page's MVN C0/0918 is not made: the port keeps the field's page live under the menu.)

@@ -92,8 +92,22 @@ static long chestsA712(Walk* c, int loc) {
     k += 28;                                               // A712_TEST
     if (x >= hi) return k + 76;                            // A712_DONE
     int n = ((x - base) >> 2) & 0xFFFF, bit = rom8(c, 0xC0, 0xFF20 + (n & 7));
-    if (b8(c, 0x10001 + ((n >> 3) & 0x3F)) & bit) { unpriced(c, "chests: an opened chest (C0/A7E6)"); return k; }
     k += 898;                                              // A712_CLOSED
+    if (b8(c, 0x10001 + ((n >> 3) & 0x3F)) & bit) {
+      // AN OPENED CHEST: C0/A7E1's BNE taken (A7E6 SEC, +6) and A785's BCC not taken (-6), then A787 `LDA $7E30C0,X /
+      // BIT #01 / BEQ` and, on bit 0, A78F's tile: FE -> FF (A7A3), E0 -> E1 (A79B), else untouched. MEASURED, the rule's
+      // cartridge (the playthrough's 33_escape, loc 048 after its Mid Tonic, CPUTRACE_BEAM): the record's iteration 1088
+      // cycles past its refresh against the closed one's 926 (+28 A712_TEST) -- the FE arm, 162 = 32 12 12 32 12 18 12 32.
+      int tx = (rom8(c, 0xF5, x) | (rom8(c, 0xF5, x + 1) << 8)) & w16(c, 0x1D1E);   // A771-A779
+      if (!(b8(c, 0x30C0 + tx) & 0x01)) k += 32 + 12 + BR_T;                           // A787-A78D -> A7A9
+      else {
+        int t = b8(c, 0x3000 + tx);
+        k += 32 + 12 + BR_NT + 32 + 12;                                               // A787-A78D, A78F LDA / CMP #FE
+        if (t == 0xFE) { k += BR_T + 12 + 32; sb(c, 0x3000 + tx, 0xFF); }              // A795 BEQ, A7A3 LDA #FF / STA
+        else if (t == 0xE0) { k += BR_NT + 12 + BR_NT + 12 + 32 + BR_T; sb(c, 0x3000 + tx, 0xE1); }   // A79B, A7A1 BRA
+        else k += BR_NT + 12 + BR_T;                                                  // A797 CMP #E0 / A799 BNE
+      }
+    }
   }
 }
 
@@ -780,6 +794,22 @@ static long vm595C(Walk* c) {
       truth = vmCmp(cmp, d9, db, &k);
       c3 = pos + 4;
       k += truth ? 128 : 312;                              // OP16_FALL / OP16_JUMP
+    } else if (op == 0xE4) {
+      // C0/3D97 -> C0/AF4E, the map copy, the handler ct_vm_op_cycles prices for the load's runners (the same handler;
+      // only the runner around it differs: VM_TOP / VM_DISPATCH / VM_BRA here). MEASURED, the rule's cartridge (the
+      // playthrough's 33_escape, loc 048's menu reload: obj0's slot 1, both guards down, four copies): `E4 3C 1A 3F 1C 28 0E
+      // 3B` C0/3D97 -> C0/597A 11,246 past nine refreshes against the formula's 11,298, `E4 3E 1D 3E 1D 26 0F 3B` 4,776 /
+      // 4,828 -- the DMA-sync tens the load's walk has too
+      int fl = b8(c, 0x12001 + pos + 7);
+      int dx = (b8(c, 0x12001 + pos + 3) - b8(c, 0x12001 + pos + 1)) & 0xFF;
+      int dy = (b8(c, 0x12001 + pos + 4) - b8(c, 0x12001 + pos + 2)) & 0xFF;
+      if (!fl) k += 672;
+      else {
+        k += 672 + 266;
+        for (int i = 0; i < 6; i++) if (fl >> i & 1) k += 778 + 46L * dx * (dy + 1) + 440L * dy;
+        for (int i = 6; i < 8; i++) if (fl >> i & 1) k += 822 + 266L * dx * (dy + 1) + 558L * dy;
+      }
+      truth = 1; c3 = pos + 7;                             // the next op, 8 bytes on
     } else {
       static char msg[48];
       snprintf(msg, sizeof msg, "slot-1 op %02X (C0/595C)", op);

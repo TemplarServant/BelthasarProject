@@ -9608,7 +9608,8 @@ static void battlePopupAnimator(CtBattleHost* h) {
 //   98 02 19 (trig-slide HOME, speed 4) / 1B 19 (snap-home-exact)`.
 // Op 0x18's walker (handler C1/542D -> shared tail C1/5437 -> arm C1/5480 / controller C1/54C1):
 //   * grid build (C1/4A71): $7CFD = the arena grid ($7BFD image: border 0xC0 + solids 0x40) + 0x40 stamped
-//     at every OTHER present combatant's cell (f437 oracle: Marle's cell 0x6B); self cell 0x20 (cleared
+//     at every `$96F5` combatant's cell, the party's only while `$2989` bit 2 is clear (CC/F110, battleGridF110;
+//     f437 oracle: Marle's cell 0x6B); self cell 0x20 (cleared
 //     after), goal cell (the victim's) 0xFF; BFS flood waves 1..0x1E from self; then the path BACKTRACE
 //     (C1/4B77) walks goal->self down the wave gradient ORing 0xE0 into each path cell.
 //   * per segment (the op re-visits while parked): counter $A500 < 0 -> reload 7, probe the 4 neighbors
@@ -9628,17 +9629,24 @@ static void battlePopupAnimator(CtBattleHost* h) {
 #define ROM_PCWALK_SIDE   0x0CF475u  /* [dir*8 +0/1] -> immediate side-cell offsets (variant choice) */
 #define ROM_PCWALK_DX     0x0CF494u  /* [track*8+phase] -> per-frame X delta (signed) */
 #define ROM_PCWALK_DY     0x0CF594u  /* [track*8+phase] -> per-frame Y delta (signed) */
+// CC/F110, THE WALK GRID: the arena image $7BFD copied to $7CFD (MVN), then 0x40 on the cell of every combatant whose
+// `$96F5,Y` is set, Y = 0..10 -- or 3..13 when `$2989` bit 2 is set (CF121-CF12C): then the party's cells are NOT
+// stamped and a PC walks through an ally's cell. The action loop rebuilds it every frame (C1/40C4, before the script
+// C1/4BBE), and the physical verdict just before its anim choice (C1/4336 -> C1/49FF): both floods C1/4A71 start here.
+// Oracle (logical), playthrough leg 33's bridge fight: `$2989 = 84`, Lucca at (143,143) between Crono (111) and the
+// guard (168) on a one-row bridge; Crono's `18 03` walks 111 -> 143 (Lucca's cell) and strikes from there (f15614-15629).
+static void battleGridF110(const uint8_t* s, uint8_t* g) {
+  memcpy(g, s + 0x7BFD, 256);                                       // CF110-CF11E MVN $7BFD -> $7CFD
+  int y0 = (s[0x2989] & 0x04) ? 3 : 0;                              // CF121-CF12C
+  for (int y = y0; y < y0 + 11; y++)                                // CF12E-CF153, $82 = 0B
+    if (s[0x96F5 + y]) g[(s[0x1D23 + y] & 0xF0) | (s[0x1D0C + y] >> 4)] = 0x40;
+}
 static int battlePcWalkCellOf(int x, int y) { return (y & 0xF0) | ((x >> 4) & 0x0F); }
 // Build the walk grid + flood + backtrace (C1/4A71 + C1/4B77), then arm the walker (C1/5496-54BE).
 static void battlePcWalkArm(CtBattleHost* h, int cmb, int gx, int gy) {
   uint8_t* g = h->pcWalkGrid;
   const uint8_t* s = h->mem;
-  memcpy(g, s + 0x7BFD, 256);                                     // the staged arena grid (border+solids)
-  for (int c = 0; c < 11; c++) {                                  // occupancy: other combatants' cells 0x40
-    if (c == cmb || !battlePresent(s, c)) continue;
-    if (s[battleBlock(c) + 0x1D] & 0x80) continue;                // dead -> no footprint
-    g[battlePcWalkCellOf(BT_LIVEX(h, c), BT_LIVEY(h, c))] = 0x40;
-  }
+  battleGridF110(s, g);                                           // the action loop's grid (C1/40C4, every frame)
   int self = battlePcWalkCellOf(BT_LIVEX(h, cmb), BT_LIVEY(h, cmb));
   int goal = battlePcWalkCellOf(gx, gy);
   if (goal == self) goal = (goal - 0x10) & 0xFF;                  // degenerate same-cell (C1/4AA5)
@@ -10554,10 +10562,7 @@ static int battleAnimParse(CtBattleHost* h, int sel, int isTech) {
 static int battleTargetWalkable(CtBattleHost* h, int atk, int tgt) {
   const uint8_t* s = h->mem;
   uint8_t g[256];
-  memcpy(g, s + 0x7BFD, 256);                                       // CC/F110's MVN $7BFD -> $7CFD
-  int y0 = (s[0x2989] & 0x04) ? 3 : 0;                              // CC/F121-CF12C
-  for (int y = y0; y < y0 + 11; y++)                                // CC/F12E-CF153, $82 = 0B
-    if (s[0x96F5 + y]) g[(s[0x1D23 + y] & 0xF0) | (s[0x1D0C + y] >> 4)] = 0x40;
+  battleGridF110(s, g);
   int self = (s[0x1D23 + atk] & 0xF0) | (s[0x1D0C + atk] >> 4);     // C1/4A79-4A89
   int goal = (s[0x1D23 + tgt] & 0xF0) | (s[0x1D0C + tgt] >> 4);     // C1/4A97-4AA4
   if (goal == self) goal = (goal - 0x10) & 0xFF;                    // C1/4AA5-4AAD

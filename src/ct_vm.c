@@ -7835,6 +7835,11 @@ void CtSceneBattleReturn(CtScene* sc) {
     vmTicketStop(sc, o);                               // 5B59/5B5C: STZ $1A80 (velocity) / $1A01 (ticket)
     sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
   }
+  // 0384-0388 `LDA $AB / STA $AC / STA $AD`: both followers' read cursors back on the ring's head, so after the regroup
+  // each follows the lead only once the head has run its gap again. MEASURED, the rule's cartridge (the playthrough's
+  // 33_escape, the prison guards' fight): `$01AC` 13 -> 22 by C0:0388 and `$01AD` 00 -> 22 by C0:038A at f8885; the port
+  // kept the old cursors and Lucca set off after Crono 15 frames early (f8930 against f8945).
+  { uint8_t h = (uint8_t)r8(sc->mem, 0x7E01AB); w8(sc->mem, 0x7E01AC, h); w8(sc->mem, 0x7E01AD, h); }
 }
 // Wire the NPC MAP-collision hook (ROM ACFD): a mover with $1C80 bit0 (collMap) won't cross into a tile
 // the hook reports solid; it then re-aims via the C0/FE00 random-angle table (a bounce off the wall).

@@ -2293,6 +2293,15 @@ void CtAudioAdvance(CtAudio* a, long master) {
   int ran = apuRun(a, (int)want);
   a->cycleCarry -= (double)ran;
 }
+// ...up to the SPC's own cycle `target` (nothing when it already stands there or past it), owed the same way: a load's init
+// post placed where the cartridge's CPU reaches it inside the frame (field.c, the load's last JSLs).
+void CtAudioAdvanceTo(CtAudio* a, uint32_t target) {
+  if (!a) return;
+  int32_t d = (int32_t)(target - CtAudioApuCycles(a));
+  if (d <= 0) return;
+  int ran = apuRun(a, d);
+  a->cycleCarry -= (double)ran;
+}
 uint32_t CtAudioApuCycles(const CtAudio* a) { return !a ? 0 : machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles; }
 // A TRANSLATED STAGE'S EXIT FRAME. A stage's bus runs this SPC itself while it is open (the host's slice is skipped,
 // field.c `!seqX && !gwX`), one frame of SPC per stage frame -- and the frame it leaves in (`JML C0:0000`) its bus ran

@@ -355,3 +355,14 @@ on the rule's cartridge (saves/tyranno_re/s301_c1_hp1.state, A every 30 frames) 
 7F (`$AE93 = 7F`, C1:AD08, the same frame) takes Azala with him (C1:F12E on both enemies) -- the fight ends there. The
 port, which dropped the counter, needed another action to kill Azala; the chain after the fight now runs 179-211 frames
 sooner, the legs relative to each other unchanged.
+
+### 8.5 The victims are $B3AC, not the action's list (2026-10-25)
+
+The arm (battle.c battleCounterArmROM) walked the port's own victim list (`h->actTgtList`, the $AECC form) where the ROM
+walks `$B3AC` -- C1/8629-8635's copy of `$AD8E`. The two part on an enemy turn on a header (C1/8E47 -> C1/AC57 with
+$AECC's bit-7 form, C1/AC2A): its target lands in $AECC alone and the $AD8E copy is skipped, so the list stays FF and
+nobody counters. MEASURED, the rule's cartridge (the playthrough's 33_escape, the prison guards' fight, `--cputrace`
+f2611 / f2714): the guard's call of a second guard (header 04 02 7D, $AECC = 05) -- $B3AC all FF at C1/8682, C1/881C's
+eval then walks slot 1 on id FF (no draw). The port took $AECC = 05, walked the new guard's block 2 as a counter
+(battleCounterTurn -> C1/8CF9 cleared its $B2B6) and its eval drew on $26 once more (aiCond 17, C1/95E4): every roll
+after it one along, Lucca's damage 2 for 1, and the party lost the fight the cartridge wins.
