@@ -90,3 +90,12 @@ comment explains why (the mover integrates `fx`); 0xD2/0xD3 in step are hand-der
   is bounded by the ROM length, and the party gate's C2/F958 / C2/8C95 table reads are skipped with no ROM.
 - Op 0x24 no longer passes ct_vm.c's traced slot resolver (`field-party-slot-table` keeps 0x22/0xA9): it runs the
   same ctVmPartySlotTarget inside move.c and stores the object's $1600 byte.
+
+## A kill across objects in the init pass (2026-10-25)
+
+`runFunc()` runs op 0x0A on its target with no `mode[]` (the init pass), and the load took each object's `$1100,X` right
+after that object's own fn0 -- so a LATER object's fn0 killing an EARLIER one (C0/6254 `STA $1100,X = 80`) was written
+back over by the mirror loop at the pass's end. Loc 048 (the playthrough's 33_escape): the passed-out guard obj16's fn0
+runs `0A 06` on its watcher obj3 when `$7F0198` bit 6 is set; the cartridge's obj3 stays at 80 (C0/5ACC skips it), the
+port's came back as 07 and its range test called the guard's fn3 ("What are you up to?!") -- a fight the cartridge never
+has. The mirror now carries the kill (ct_vm.c, `actors[n].dead`).

@@ -10,6 +10,7 @@ through the real loaders (a --teleport'd state does not: `jmp` leaves the lead P
 following.
 
 usage: python tools/walkto.py <start.state> <tx> <ty> <out.state> [maxprobes] [--exit] [--lead=HEX] [--run] [--ow] [--astar] [--fight] [--dest=HEX]
+  --step=N: frames a probe holds the d-pad (16): 8 reaches a world-map passage the 16-px grid steps over
   --exit : the target is an exit box; a step that changes $0100 is SUCCESS (the transition is the goal)
   --dest=HEX: with --exit, only a transition INTO that location ($0100 & 1FF) is the goal; one into another
            location is a wall (a door the route must not take)
@@ -75,11 +76,12 @@ def cell(x, y):
 
 
 def main():
-    global LEAD, HOLD, OW, FIGHT, DEST
+    global LEAD, HOLD, OW, FIGHT, DEST, STEP
     for a in sys.argv[1:]:
         if a.startswith('--lead='): LEAD = int(a[7:], 16)
         if a == '--run': HOLD = 0x01
         if a == '--ow': OW = True
+        if a.startswith('--step='): STEP = int(a[7:])
         if a == '--fight': FIGHT = True
         if a.startswith('--dest='): DEST = int(a[7:], 16)
     args = [a for a in sys.argv[1:] if not a.startswith('--')]

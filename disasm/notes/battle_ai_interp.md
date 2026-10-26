@@ -401,12 +401,23 @@ The §10e "PC attack route" open closed end-to-end. Oracle base: gato_press_acti
   9-0x11 = role (tt−9)'s pos + the per-cmb engage offsets $9708/$9713; 0x18 = fixed (0x80,0x80);
   **0x19-0x1B = PC seat (tt−0x19)'s staged HOME ($99AF/$99B2)**; 0x1C+ = attachment-object positions.
 - ARM (first visit): `JSR C1/4A71` = **BFS FLOOD + PATH BACKTRACE** on the walk grid $7CFD:
-  the grid = the ARENA GRID image ($7BFD: border 0xC0 + solid 0x40) + **0x40 stamped at every other
-  combatant's cell** (f437 live grid: Marle's cell 0x6B ✓); self cell = 0x20 (cleared after), goal
+  the grid = the ARENA GRID image ($7BFD: border 0xC0 + solid 0x40) + **0x40 stamped at every `$96F5`
+  combatant's cell** (CC/F110, below; f437 live grid: Marle's cell 0x6B ✓); self cell = 0x20 (cleared after), goal
   cell = 0xFF; waves 1..0x1E flood from self (frontier lists $7DFD/$7EFD); then the backtrace walks
   goal→self down the wave gradient ORing **0xE0 into each path cell** (probe order up/down/left/
   right, default right). Walker state: $A513/$A53D cell, $A517 track, $A548 no-backtrack, $A500=FF,
   $A15B=1.
+- **WHO GETS THE 0x40 (2026-10-26, playthrough leg 33).** The stamp is not the walker's: it is CC/F110 (JSL from the
+  action loop C1/40C4, EVERY frame before the script C1/4BBE, and from C1/4336 before the physical verdict C1/49FF):
+  MVN $7BFD -> $7CFD, then 0x40 on the cell of every combatant whose **`$96F5,Y` (presence) is set, Y = 0..10 -- or
+  3..13 when `$2989` bit 2 is set** (CF121-CF12C, `$80` = 3), the live foot `$1D23 & F0 | $1D0C >> 4`. C1/4A71 only
+  writes the self 0x20 and the goal 0xFF over it (C1/4A87, C1/4AB0). So with `$2989` bit 2 the PARTY is not stamped
+  and a PC walks through an ally's cell. Oracle (logical), leg 33's bridge fight (the one-row bridge, row 8): `$2989
+  = 84`, `$96F5 = 01 01 00 00 01`, Crono (111,143), Lucca (143,143), the guard cmb 4 (168,143); Crono's `18 03` steps
+  111 -> 143 (f15614-15629, 2 px/f, two straight segments: 86 -> 87 -> 88, then the 2-ahead probe 8A = FF stops him
+  ON Lucca's cell) and returns f15678-15685. The port stamped every present live combatant but itself: Lucca's 0x40
+  closed the row, the flood ran dry (`touched` 0, no 0xE0 path), the controller's fall-through right-diagonal
+  (C1/55AA) walked Crono off the arena for 1440 frames. Both floods now read one helper (battleGridF110).
 - PER SEGMENT (op re-visit with $A500 < 0): reload 7; MVN the grid to the $8AFD scratch; probe the
   4 neighbors (skip $A548) for an 0xE0-class cell → dir (default right); **STOP if the chosen cell
   == 0xFF or a 2-ahead probe (cur + CC/F454/F455/F456[dir·8]) == 0xFF** (= rest ONE CLEAR CELL from

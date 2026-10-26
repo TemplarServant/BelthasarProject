@@ -5653,6 +5653,9 @@ static int g_titleOpenSpc = 0;     // this iteration opens the title (`FF 02`): 
 static int g_dfRebootLoad = 0;     // op 0xDF / 0xE1 rebooted this iteration (C0/3B71's spin saw the vblank): the load follows
 static int g_stageRebootLoad = 0;  // an overlay machine's END rebooted this iteration (no $3177): the load follows on the next
 #define LOAD_SPC_LEAD (5751L + 3060L)   // master cycles from the vblank to C0/1B73's JSL C7:0004 (the traces' mean)
+#define LOAD_NMIOFF_AT (5751L - 716L)   // ...and to C0/0B5D's NMI-off write, where the walk's W starts (0B5D -> 0B86: 716)
+static uint32_t g_loadSpcBase = 0;     // a field load's SPC cycle at that vblank, and the iteration that loaded
+static int g_loadSpcBaseOn = 0, g_loadSpcBaseF = 0;
 #define OW_EXIT_SPC_LEAD 3868L          // master cycles from the $83's RTL (C2/2505) to C0/1B73's JSL (the world's exit)
 #define STAGE_END_SPC_LEAD (4252L + 218L + 4008L)   // the vblank -> C0/1B73's JSL out of an overlay machine's END (below)
 // ...and an END that runs the teardown $3177 (its five driver resets, $7E:377E's own posts and echo polls): from the last
@@ -13087,6 +13090,8 @@ int main(int argc, char** argv) {
           // the CPU work from the vblank to C0/1B73's JSL: C0/0B86 stands at line 229 h ~295 on every field-to-field load
           // traced (5,751 master: the pad latch's 4,224, then the NMI-off stretch's start), and C0/0B86 -> the JSL is
           // 3,018-3,102 (C0/00F4's head, C0/092B, C0/1B53's arm)
+          g_loadSpcBaseOn = (g_loadSpcLead == 1 && audio) ? 1 : 0;   // the vblank the stretch starts after (C0/0C9A's commit)
+          if (g_loadSpcBaseOn) { g_loadSpcBase = CtAudioApuCycles(audio); g_loadSpcBaseF = frameNo; }
           if (g_loadSpcLead && audio)
             CtAudioAdvance(audio, g_loadSpcLead == 2 ? OW_EXIT_SPC_LEAD : g_loadSpcLead == 3 ? STAGE_END_SPC_LEAD :
                                   g_loadSpcLead == 4 ? REBOOT_SPC_LEAD : g_loadSpcLead == 5 ? STAGE_TEARDOWN_SPC_LEAD : LOAD_SPC_LEAD);
@@ -13438,7 +13443,34 @@ int main(int argc, char** argv) {
     // the cartridge's CPU reaches them: as many frames before the load's last one (the one C0/2848 begins in) as the object
     // pass's work after each takes -- the later objects' sprite loads, CT_LOAD_FRAME_CYCLES a frame. (The port ran the load in
     // its first frame and holds the black after.)
-    if (f.vm && CtSceneLoadPostsPending()) {
+    // ...and on a walked field load, each one INSIDE its frame: the SPC runs up to the cycle where the cartridge's CPU reaches
+    // the JSL -- the vblank, LOAD_NMIOFF_AT, then the walk's work before it (W less the work after it), on the wall clock --
+    // and the post goes there. The frame's slice ran it to the frame's end first, a whole slice past the CPU: the driver met
+    // the post in another state. MEASURED, the rule's cartridge (the playthrough's 33_escape, 048 -> 01C, the init `EA 16`'s
+    // `10 16` after C0/1B8B's): the cartridge posts at f1688 line 106 (APU 3,623,702,102), in the middle of the driver's
+    // loop (SPC $0894), and its echo comes 726 cycles later; the port posted at the frame's end (3,623,710,125), found the
+    // driver idle ($0B98) and had its echo in 168 -- 73,374 master cycles less on the loader clock, and every 01C load a black
+    // frame short (d 36 against 37), the play clock $0400 a frame ahead and the next load's $01F8 seed one apart.
+    if (f.vm && CtSceneLoadPostsPending() && fade == 3 && loadW > 0 && g_loadSpcBaseOn && audio) {
+      long tail = loadWalk.party + loadWalk.pass + load9dc3;
+      double fapu = 17088.0, apm = 32040.0 * 32.0 / (1364.0 * 262.0 * 60.0);   // APU cycles a frame / a master cycle
+      uint32_t gridNext = g_loadSpcBase + (uint32_t)((frameNo - g_loadSpcBaseF + 2) * fapu);   // where the next slices end
+      while (CtSceneLoadPostsPending()) {
+        long T = loadW - (loadPostTotal - CtSceneLoadPostCycles(0) + tail);   // the CPU work before this JSL
+        uint32_t at = g_loadSpcBase + (uint32_t)(((double)LOAD_NMIOFF_AT + (double)T * 357368.0 / CT_LOAD_FRAME_CYCLES) * apm);
+        if ((int32_t)(at - gridNext) >= 0) break;          // a later frame's
+        CtAudioAdvanceTo(audio, at);
+        int sp = CtSceneLoadPostsFlush(f.vm, 1);
+        if (sp >= 0) {
+          loadW += (long)((double)loadSinkWall(sp) * (double)CT_LOAD_FRAME_CYCLES / 357368.0);
+          int h = ct_nmi_wait_frames(loadW) - 1;
+          loadHold += h - loadW0; loadW0 = h;
+        }
+        if (getenv("CT_LOADCOST")) printf("loadpost: f%d 1 JSL at APU %u (W %ld), %d frame(s) before the load's end, %d crossed\n",
+                                          frameNo, at, T, loadHold, sp >= 0 ? sp >> 10 : 0);
+      }
+    }
+    if (f.vm && CtSceneLoadPostsPending() && !(fade == 3 && loadW > 0 && g_loadSpcBaseOn && audio)) {
       int np = CtSceneLoadPostsPending(), due = 0;
       if (fade != 3) due = np;
       else {
@@ -13734,6 +13766,12 @@ int main(int argc, char** argv) {
                                                              // play clock keeps ticking across the whole menu
                                                              // (measured: $0407 stays 00 through the open).
         } else {
+          // The frame's own tick first: C2/85AE runs in the NMI at this frame's HEAD (the field's call below stands for it),
+          // and C0/1946 is the main loop's, after it. MEASURED, the rule's cartridge (the playthrough's 33_escape, X in
+          // 048 at f9176): `$0400` 33 -> 34 at f9176 with `$0119` = 0E, then still until the reload; the port wrote $0407
+          // first and lost that tick -- its clock a frame behind through the menu.
+          if (!battlePhase && f.vm && !coldResetHold && seqOpen <= 0 && gwPhase != 3 && !loadFadeEntry)
+            CtMenuClockTick(s7);   // (a stage's exit frame has no X press)
           s7[0x407] = 0xFF;                                  // C0/1946: pause mailbox (halts the play clock)
           memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);       // freeze the field frame: the entry fade C0/193E
                                                              // is a synchronous EC60 loop (the field is halted).
@@ -13764,6 +13802,8 @@ int main(int argc, char** argv) {
           && CtSceneExplore(f.vm) && s7[0x162] == 0 && s7[0x110] == 0   // C0/1998-19A5
           && !CtSceneOffMainLoop(f.vm)) {                    // C0/18D9 runs only inside C0/0097's loop
         menuPhase = 1; menuT = 0; menuScreen = 0x07; menuExchOn = 1; menuExch68 = 0;
+        if (!coldResetHold && seqOpen <= 0 && gwPhase != 3 && !loadFadeEntry)
+          CtMenuClockTick(s7);                               // the frame's head tick first (the X path's note)
         s7[0x407] = 0xFF;                                    // C0/19A7-19A9
         memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);         // the field is halted under the synchronous fade
         if (getenv("CT_SHOPTRACE")) printf("exchange: f%d Y -> mode 5, screen $07\n", frameNo);
@@ -14984,6 +15024,27 @@ int main(int argc, char** argv) {
           { int ly = s7[0x0197] | (s7[0x0198] << 8);
             if (ly & 0x80) { s7[0x102] = s7[(0x1801 + ly) & 0xFFFF]; s7[0x103] = s7[(0x1881 + ly) & 0xFFFF];
                              s7[0x104] = s7[(0x1600 + ly) & 0xFFFF]; } }
+          // C0/013D-01A4, the rest of the save, into the WRAM where C0/01A5's reload reads it back: each party slot's
+          // ($0197,X >= 0) position words $1800 / $1880 and its $0C00 word to $7F:1D09 / 1D0F / 1D15 + X, $01AB-$01AD to
+          // $7F:1D1B-1D1D, the four words $7F:3728 / 3748 / 3768 / 3781 to $7F:1D1E-1D25 and the window wave's $1DF9 to
+          // $7F:1D26 (C0/01FF puts it back). MEASURED, the rule's cartridge (the playthrough's 33_escape, X in 048 at f9176):
+          // `$7F1D26` 42 -> 00 by C0:01A4 at f9191; the port kept the stale 42 and its reload walk read a live wave, refused
+          // the pass and charged the load estimate -- 048's reload a frame short. (C0/0918's MVN of the page $0920-$1DFF to
+          // $7F:2000 is not made: the port keeps the field's page live under the menu.)
+          for (int x = 0; x < 6; x += 2) {
+            int sl = s7[0x0197 + x];
+            if (sl & 0x80) continue;                                     // C0/0142-0144 `LDA $97,X / BMI`
+            for (int b = 0; b < 2; b++) {
+              s7[0x11D09 + x + b] = s7[0x1800 + sl + b]; s7[0x11D0F + x + b] = s7[0x1880 + sl + b];
+              s7[0x11D15 + x + b] = s7[0x0C00 + sl + b];
+            }
+          }
+          s7[0x11D1B] = s7[0x01AB]; s7[0x11D1C] = s7[0x01AC]; s7[0x11D1D] = s7[0x01AD];
+          for (int b = 0; b < 2; b++) {
+            s7[0x11D1E + b] = s7[0x13728 + b]; s7[0x11D20 + b] = s7[0x13748 + b];
+            s7[0x11D22 + b] = s7[0x13768 + b]; s7[0x11D24 + b] = s7[0x13781 + b];
+          }
+          s7[0x11D26] = s7[0x1DF9];
           mSave.px = px; mSave.py = py; mSave.pz = pz; mSave.pfac = pfac;   // camera lives in mem.s (VM frozen)
           for (int k = 0; k < 3; k++) {
             mSave.pcObj[k] = -1;
@@ -18818,6 +18879,21 @@ int main(int argc, char** argv) {
       // CAMERA PAN while the lead is script-locked (leadBusy): compute the request WITHOUT moving the lead
       // (applyMove=0) -- the knockdown fall-pan (corpus #11: LEFT pans, RIGHT/idle hold). The VM camera tick's
       // 99DE deadzone then decides whether the d-pad actually scrolls, from the lead's on-screen foot.
+      // ...AND THE STEP, HANDED TO HIS B0. C0/881E runs whatever the lead's script is doing; only his op B0 publishes the
+      // step (C0/3040 -> 9E29), and his running function may return onto it within the pass (ct_vm.c, CtSceneLeadDeferStep).
+      // So the step is computed as the free branch computes it -- on copies, the collision's own WRAM bytes (the commit's
+      // plane and the intent C0/881E leaves, $1D2C-$1D34) published as there -- and the VM takes it at his B0 or drops it.
+      if (!fieldResume) {
+        double dpx = px, dpy = py; int dpz = pz;
+        fieldPlayerCollide(&f.C, f.vm, pObj, &dpz, &dpx, &dpy, cdx, cdy, crun, 1, &camReqX, &camReqY);
+        { uint8_t* lw = CtSceneMem7E(f.vm);
+          lw[0x1D2C] = g_collRam[0x1D2C]; lw[0x1D2D] = g_collRam[0x1D2D];
+          lw[0x1D32] = g_collRam[0x1D32]; lw[0x1D33] = g_collRam[0x1D33];
+          lw[0x1D34] = g_collRam[0x1D34]; }
+        pz = dpz;                                            // the commit's $0155 (C0/9D54) stands either way
+        if (dpx != px || dpy != py) CtSceneLeadDeferStep(f.vm, dpx, dpy);
+        if (fade) CtSceneSetTouchHit(f.vm, -1);
+      } else
       fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, cdx, cdy, crun, 0, &camReqX, &camReqY);
     }
     else if (!battlePhase && f.vm && !CtSceneExplore(f.vm) && CtSceneMem7E(f.vm)[0x0120] && !(tbActive && isChoice) &&

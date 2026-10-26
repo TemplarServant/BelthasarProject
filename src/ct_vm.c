@@ -2612,11 +2612,24 @@ static int npcMoveAngleStale(const CtScene* sc, int obj, int angle) {
 int CtSceneSolidLive(int* gated, int* deflected) {
   if (gated) *gated = gMvaGated; if (deflected) *deflected = gSolidHit; return gMvaCalls;
 }
-// Would the current step's velocity cross INTO a solid MAP tile (ROM ACFD $7E7040-bit7 test)?
-static int mvCrossesSolid(const CtScene* sc, int obj) {
-  double nfx = sc->fx[obj] + sc->mx[obj], nfy = sc->fy[obj] + sc->my[obj];
-  int ntx = (int)nfx >> 4, nty = (int)nfy >> 4;
-  return (ntx != ((int)sc->fx[obj] >> 4) || nty != ((int)sc->fy[obj] >> 4)) && sc->tileSolid(sc->tileCtx, ntx, nty);
+// Does the current step land on a solid MAP tile (ROM ACFD's $7E7040-bit7 test)? C0/AD81-ADB4: `$DF = $1800,X + $DD`,
+// `$1880,X + $DB` -- the position the step would reach -- and the tile under it, `(Y high << 8 | $E0) & $1D1E`, read
+// `LDA $7E7040,X / BMI ->AE27`; the random angle's retry tests its own landing the same way (AEB7-AEE1 -> AF27). The
+// test runs on EVERY issue, the object's own tile included: there is no "did the step change tiles" gate. Only a step
+// with no velocity at all skips it (AD5F-AD73: $DD = 0 and $DB = 0 -> ADEB). MEASURED, the rule's cartridge (the
+// playthrough's 36_castle_hall, loc 015): obj26's fn6 `95 00` chases Crono from tile (15,39), whose `$7E7040` = C1;
+// its first issue (f739) bounces at once -- `$01F8` 03 -> 05, velocity E3/0B -- where the port walked left four frames
+// until the step crossed into tile 14, and the guard Crono was meant to meet stood one pixel off.
+// THE RETRY'S STALE HIGH BYTE. The first test sign-extends dx into $DE on both arms (AD63-AD6F: FF, or `STZ $DE` when dx is
+// 0); the random angle's retry does it only for a nonzero dx (AE97-AEA5) -- a zero dx goes AEA7 `LDA $DB / BEQ` -> AEAB with
+// $DE untouched, and AEBF's 16-bit `ADC $DD` adds the FIRST heading's sign: FF00 when that dx was negative, so the probe
+// lands a whole tile (0x100) to the left of the step. `staleX` carries it (-16 px or 0). MEASURED, the rule's cartridge
+// (36_castle_hall, loc 015): obj22 at (1E04,3022) bounces at f1399 (`$01F8` 25 -> 27); the second angle is straight up
+// (0, E1), its own tile (30,48) is clear (`$7E7040` = 01) but (29,48) is 81, and the guard stalls -- velocity 0 by C0:AF1F.
+static int mvCrossesSolid(const CtScene* sc, int obj, double staleX) {
+  if (sc->mx[obj] == 0 && sc->my[obj] == 0) return 0;                 // AD5F-AD73 / AEA7-AEA9 -> AF18
+  double nfx = sc->fx[obj] + sc->mx[obj] + (sc->mx[obj] == 0 ? staleX : 0), nfy = sc->fy[obj] + sc->my[obj];
+  return sc->tileSolid(sc->tileCtx, (int)floor(nfx) >> 4, (int)nfy >> 4);   // ADA8-ADB4 / AED5-AEE1
 }
 // C0/568B -- the move-op family's ARRIVAL / DECLINE exit forces the auto anim IDLE:
 //   568B LDX $6D / LDA $1780,X / BEQ ->5693 / RTS      mode != 0: the script owns the anim, nothing
@@ -2806,7 +2819,13 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     // unreachable in practice and exists so a malformed script cannot index off the actor array.
     if (t >= sc->nobj || !sc->actors[t].hasPos) { sc->hasTask[obj] = 0; return (op == 0xB5 || op == 0xB6) ? 1 : 0; }   // port-only guard: no ROM exit here
     tgtObj = t;
-    dtx = (int)sc->fx[t] / 16; dty = (int)sc->fy[t] / 16;
+    // 522D-5235 `LDA $1801,X / STA $F2 / LDA $1881,X / STA $F3` (and 52D8 / 5370 / 5444 for 0x9E / 0x98 / 0x8F): the
+    // target's TILE BYTES from WRAM, as the pass found them. The lead moves in A810, after the pass, and the port's host
+    // moves it before the tick (sc->fx already holds the step; its WRAM words take it at the tick's A810 mirror), so the
+    // C position would show a chaser the lead's tile a frame early. MEASURED, the rule's cartridge (36_castle_hall, loc
+    // 015): Crono's $1803 turns 0D -> 0E at f801; obj25's `95 00` (parked adjacent since f750) re-issues at f803, its next
+    // visit -- the port re-issued at f801, and every `$01F8` draw after it came two frames early.
+    dtx = r8(m, 0x7E1801 + (uint32_t)off); dty = r8(m, 0x7E1881 + (uint32_t)off);
   } else if (op == 0x96 || op == 0xA0) { dtx = B[addr + 1]; dty = B[addr + 2]; }
   else { dtx = r8(m, LOC + B[addr + 1] * 2); dty = r8(m, LOC + B[addr + 2] * 2); }
   int atx = (int)sc->fx[obj] >> 4, aty = (int)sc->fy[obj] >> 4;
@@ -2987,10 +3006,11 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
   if (op == 0x98 || op == 0x99) _tk = B[addr + 2];   // 53F4: the legged pair's ticket is the SCRIPT byte
   mvStartStep(sc, obj, _ang, _tk, animLayer);
   CtVmMoveTrace(sc, obj, op, addr, "issued");
-  if (sc->collMap[obj] && sc->tileSolid && mvCrossesSolid(sc, obj)) {
+  if (sc->collMap[obj] && sc->tileSolid && mvCrossesSolid(sc, obj, 0)) {
+    double staleX = sc->mx[obj] < 0 ? -16.0 : 0.0;                             // $DE as the first test left it
     _ang = mvRandAngle(m);                                                      // AE27-AE2D: the $7E01F8 cursor,
     mvStartStep(sc, obj, _ang, _tk, 0);                                         // 8-bit -> $FE00. setFace=0: the map bounce
-    if (mvCrossesSolid(sc, obj)) {                                              // sets VELOCITY ONLY -- ROM C0/ACFD has NO
+    if (mvCrossesSolid(sc, obj, staleX)) {                                              // sets VELOCITY ONLY -- ROM C0/ACFD has NO
       sc->cycles[obj] = 0; sc->mx[obj] = 0; sc->my[obj] = 0; sc->hasTask[obj] = 0; mvIssueRegs(sc, obj, animLayer); return 1;   // AF27: zero velocity published, then 5614 -> idle. $1600 write, so the cat keeps its player-ward facing (C0/5290) through the bounce. AF27 stall
     }
   }
@@ -3074,6 +3094,7 @@ static void reqScratch(CtScene* sc, int op, int tgt, int pr) {
 // ticket stands (vmLeadStepAtA810: never armed, or dropped). Transient per-frame state: statics, not CtScene members
 // (a member breaks every --loadstate .state).
 static int g_leadTk = -1;                  // -1 = the lead's 3040 arm has not run this pass, 1 = armed, 0 = dropped
+static int g_leadDefer, g_leadDeferTick; static double g_leadDeferX, g_leadDeferY;   // a busy lead's step (below)
 static int g_leadFromOk, g_leadFromTick; static double g_leadFromX, g_leadFromY;
 static int gVmTick;                        // trace timestamps (and the step origin's frame)
 static void vmTicketStop(CtScene* sc, int o) {   // `STZ $1A80,X / STZ $1A01,X` on another object's op
@@ -3082,6 +3103,17 @@ static void vmTicketStop(CtScene* sc, int o) {   // `STZ $1A80,X / STZ $1A01,X` 
 }
 void CtSceneLeadStepFrom(CtScene* sc, double x, double y) {
   (void)sc; g_leadFromOk = 1; g_leadFromTick = gVmTick; g_leadFromX = x; g_leadFromY = y;   // this frame's, the tick to come
+}
+// THE BUSY LEAD'S STEP. C0/881E runs every frame (C0/00A7) whatever the lead's script is doing; what moves him is his op
+// B0 (C0/3040 `STA $1A01,X` / 9E29), wherever in the pass his visit reaches it. A lead whose own function is running when
+// the frame starts -- a call another object made on him -- may RETURN onto his B0 in this very pass, and then he walks this
+// frame. The host does not move such a lead (field.c's leadBusy: his function may as well run for good, a knockdown that
+// pins him); it hands the step's destination here, and his B0 visit takes it (ct_vm.c, op B0) or the pass ends without it.
+// MEASURED, the rule's cartridge (the playthrough's 36_castle_hall, loc 015): obj18's `04 02 4C` puts Crono on his fn12
+// (`AE / 00`) at f1333 with Right pressed; at f1334 his `$1180` is back on the B0 (04FB) and `$1802` 6019 -> 7019. The
+// port refused the step that frame and walked from f1335, a pixel behind the rest of the leg.
+void CtSceneLeadDeferStep(CtScene* sc, double x, double y) {
+  (void)sc; g_leadDefer = 1; g_leadDeferTick = gVmTick; g_leadDeferX = x; g_leadDeferY = y;
 }
 static int g_leadTakenTick = -1;           // the tick that took the lead's step back
 int CtSceneLeadStepDropped(const CtScene* sc) { (void)sc; return g_leadTakenTick == gVmTick; }
@@ -3422,16 +3454,27 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // ct_debug_010, loc 00D's `Do you know about our establishment?`; the rule's cartridge, --teleport 13 19 27 3
     // from saves/field_re/npcface_lake.state, walk right, A): $011F = 01, $0162 = 02, $1682 = 19, $0F03 = A8 -- the
     // port kept $1682 = 00 and drew the walk's last frame 02.
+    // ...AND A BUSY LEAD'S STEP IS HIS B0's TOO. The host moves a lead that sits on his B0 before the pass; one whose own
+    // function is running (a call another object made on him) only hands his step over (CtSceneLeadDeferStep), and it
+    // lands here if that function returns onto his B0 within this pass -- with 9E29's arm on the intent C0/881E published.
+    int leadDefer = op != 0xB2 && r8(sc->mem, 0x7E0138) == 0 && CtSceneActorMode((const CtScene*)sc, obj) == 0
+                    && obj == sc->playerObj && g_leadDefer && g_leadDeferTick == gVmTick - 1;
     if (op != 0xB2 && gRomImg && gRomImgLen >= 0x10000
-        && r8(sc->mem, 0x7E0138) == 0 && (r8(sc->mem, 0x7E0162) != 0 || r8(sc->mem, 0x7E011F) == 0)
+        && r8(sc->mem, 0x7E0138) == 0 && (leadDefer || r8(sc->mem, 0x7E0162) != 0 || r8(sc->mem, 0x7E011F) == 0)
         && CtSceneActorMode((const CtScene*)sc, obj) == 0) {
-      w8(sc->mem, 0x7E1D2C, 0); w8(sc->mem, 0x7E1D2D, 0);                   // C0/882F / 8831 STZ $2C / $2D
+      if (!leadDefer) { w8(sc->mem, 0x7E1D2C, 0); w8(sc->mem, 0x7E1D2D, 0); }   // C0/882F / 8831 STZ $2C / $2D
       uint32_t X = (uint32_t)obj * 2;
       uint8_t was = sc->mem->s[0x1680 + X], wasF = sc->mem->s[0x1681 + X];
       CtPlayerAnimSelect(sc->mem->s, gRomImg, (int)gRomImgLen, (int)X);     // C0/3047 JSR C0/9E29 -> JSR C0/9E84
       if (sc->mem->s[0x1680 + X] != was || sc->mem->s[0x1681 + X] != wasF) {   // the C mirrors follow the bytes
         ctAnimSyncActor(&sc->actors[obj], sc->mem->s, (int)X); sc->actors[obj].animGen++;
       }
+      if (leadDefer) sc->actors[obj].facing = sc->mem->s[0x1600 + X] & 3;  // 9E84's $1600 store
+    }
+    if (leadDefer) {                                         // the step, as the host would have taken it (CtSceneLeadStepFrom)
+      g_leadDefer = 0;
+      g_leadFromOk = 1; g_leadFromTick = gVmTick - 1; g_leadFromX = sc->fx[obj]; g_leadFromY = sc->fy[obj];
+      CtSceneSetActorPosF(sc, obj, g_leadDeferX, g_leadDeferY);
     }
     if (op != 0xB2 && r8(sc->mem, 0x7E0138) == 0 && CtSceneActorMode((const CtScene*)sc, obj) == 0 && obj == sc->playerObj)
       g_leadTk = 1;                                          // 3040 LDA #01 / STA $1A01,X: the lead's step armed
@@ -3644,6 +3687,8 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       // the CLC at 400C below ends the visit as for every sub.
       static const uint8_t k39[5] = { 0x05, 0x07, 0x09, 0x0B, 0x0E };
       w8(sc->mem, 0x7E0139, k39[B[addr + 1] - 0x98]);
+    } else if (B[addr + 1] == 0x9D) {                 // C0/41DC `LDA #02 / TRB $54`: the push program's end (vmTouchPush)
+      w8(sc->mem, 0x7E0154, (uint8_t)(r8(sc->mem, 0x7E0154) & ~0x02));
     } else if (B[addr + 1] == 0x96) {
       // C0/4181, the table's sub 6: `LDA $4210 / BPL ->4181` (the vblank-flag spin, NMI on), `JSR C0/0B4E` (SEI,
       // force blank, NMI and HDMA off), `LDX #06FF / TXS`, `JML FD/C000` -- the RESET vector's own target ($00:FF00
@@ -4843,7 +4888,12 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
   // does): $1100,X move-mode + the party-slot -> object-X table $0197/$0199/$019B (maintained by the
   // ROM PC loader C0/426A; read by C0/024C's lead-cell record + C0/0715's defeat-pose staging).
   // CtSceneSeedFromWram overwrites the whole image with the oracle's values afterward when used.
+  // A LATER object's fn0 may kill an EARLIER one (C0/6254 `STA $1100,X = 80` on an object whose own fn0 already ran):
+  // loc 048's guard obj16 runs `0A 06` on the watcher obj3 when he lies passed out ($7F0198 bit 6), and on the cartridge
+  // obj3 stays at 80 -- no further writer. The mode above was taken right after obj3's own fn0, so the kill must be
+  // carried over here, or this mirror wrote 07 back and the watcher woke the guard ("What are you up to?!").
   for (int n = 0; n < count; n++) {
+    if (sc->actors[n].dead) sc->mode[n] = 0x80;
     w8(sc->mem, 0x7E1100 + (uint32_t)n * 2, sc->mode[n] & 0xFF);
     if (sc->mode[n] >= 0 && sc->mode[n] <= 2) w8(sc->mem, 0x7E0197 + (uint32_t)sc->mode[n] * 2, n * 2);
   }
@@ -7580,7 +7630,15 @@ void CtSceneUpdateFollowers(CtScene* sc) {
     // `--followvm --obj 6`): Robo's fn7 ends `AD 20 / 4F 0C 0F / 4F 25 10 / 02 00 33 / 00` -- the wait's last pass plus
     // four ops spend the visit at c7669, the ip lands on 06A2's B0, and C0:A21C (A1E9's idle chain, reached from the B0)
     // zeroes $168C at c7670; the port zeroed it in the RETURN's frame (ROADMAP F2).
-    int roaming = CT_FOL_ON_B0(o) && !g_landedB0[o] && w[0x0138] == 0;   // C0/3002: the op ran, and $0138 let it through
+    // ...AND ONE THAT RAN ITS B0 KEEPS THE CONGA EVEN IF A CALL TAKES IT OFF LATER IN THE PASS. This pass runs after the
+    // runner, so an object further down the queue may have put the follower on a function since its visit: A26B / A2CE ran
+    // in that visit all the same (the cursor, the ring's velocity, the 9ED1 arm), and only the step is gone -- the call's
+    // accept arm `STZ $1A80,X / STZ $1A01,X` (C0/6031-6034) leaves A810 nothing to integrate. MEASURED, the rule's
+    // cartridge (the playthrough's 36_castle_hall, loc 015): Lucca's B0 at f1337, then obj18's `04 06 4A` (fn10, priority
+    // 4) -- `$01AC` 14 -> 15 that frame with `$1806` held at 3018, the step from f1338; the port held the cursor too and
+    // ran one entry behind, a frame early on every hold after.
+    int ranThenCalled = g_ranB0[o] && !CT_FOL_ON_B0(o);
+    int roaming = ((CT_FOL_ON_B0(o) && !g_landedB0[o]) || ranThenCalled) && w[0x0138] == 0;   // C0/3002 ran, $0138 let it through
     // ...BUT NOT A TICKET THE NEW FUNCTION HAS ALREADY ISSUED. This pass runs after the whole runner, so on the frame a
     // follower leaves its B0 its new function has had its visit: the REQ that moved it (op 0x02-0x07's preempt arm,
     // C0/6031+6034 = reqOp) cleared $1A80/$1A01 BEFORE that visit, and a move op in it armed a fresh pair, which C0/A810
@@ -7632,6 +7690,7 @@ void CtSceneUpdateFollowers(CtScene* sc) {
     sc->actors[o].facing = w[0x1600 + o * 2] & 3;
     // C0/AAFD, the ordinary mover integrate: `$1800,X += sign-extend($1900,X)` in 12.4. Adding
     // sixteenths to the double keeps the sub-pixel fraction, which is the whole point of the ring.
+    if (ranThenCalled) { sc->folMoving[o] = 0; continue; }   // the call's STZ $1A01: nothing for A810 (above)
     sc->fx[o] += vx / 16.0; sc->fy[o] += vy / 16.0;
     sc->actors[o].x = (int)sc->fx[o]; sc->actors[o].y = (int)sc->fy[o];
     sc->folMoving[o] = (vx || vy);
@@ -7830,6 +7889,11 @@ void CtSceneBattleReturn(CtScene* sc) {
     vmTicketStop(sc, o);                               // 5B59/5B5C: STZ $1A80 (velocity) / $1A01 (ticket)
     sc->mx[o] = sc->my[o] = 0; sc->vecMove[o] = 0;
   }
+  // 0384-0388 `LDA $AB / STA $AC / STA $AD`: both followers' read cursors back on the ring's head, so after the regroup
+  // each follows the lead only once the head has run its gap again. MEASURED, the rule's cartridge (the playthrough's
+  // 33_escape, the prison guards' fight): `$01AC` 13 -> 22 by C0:0388 and `$01AD` 00 -> 22 by C0:038A at f8885; the port
+  // kept the old cursors and Lucca set off after Crono 15 frames early (f8930 against f8945).
+  { uint8_t h = (uint8_t)r8(sc->mem, 0x7E01AB); w8(sc->mem, 0x7E01AC, h); w8(sc->mem, 0x7E01AD, h); }
 }
 // Wire the NPC MAP-collision hook (ROM ACFD): a mover with $1C80 bit0 (collMap) won't cross into a tile
 // the hook reports solid; it then re-aims via the C0/FE00 random-angle table (a bounce off the wall).
@@ -8082,6 +8146,44 @@ void CtSceneRequestFn(CtScene* sc, int obj, int slot, int prio) {
   reqOp(sc, obj, slot & 0x0F, prio & 0x0F);
 }
 
+// C0/31B1, THE PUSH -- C0/3154's tail (31AD `JSR C0/31B1`), run whether or not the touch installed fn2. A touched object
+// whose `$1B01,X` has bit 1 is shoved one tile the way the lead faces, by a program of the engine's own: C0/5D68's six
+// bytes at $7F3780 (C0/5D26's MVN), `96 tx ty / FF 9D / 00` -- MOVETO the tile, clear the latch, RETURN.
+//   31B1 LDA $54 / BIT #02 / BNE -> RTS            one push at a time: the latch FF 9D (C0/41DC `LDA #02 / TRB $54`) clears
+//   31BC LDA $1C00,X / BEQ -> RTS                  an object already at priority 0 (being pushed) is not pushed again
+//   31C4 LDY $EB / LDA $1B01,Y / BIT #02 / BEQ     not pushable
+//   31CD LDX $97 / LDA $1600,X                     the LEAD's facing: 0 up (3202), 1 down (3217), 2 left (31ED), else right
+//                                                  (31DA) -- the tile word (Y << 8 | X) of the object's tile bytes, +-1 on
+//                                                  that axis in 8 bits; up from row 0 or left from column 0 refuses
+//   LDA $7E7040,X / BMI -> RTS                     the tile there mover-solid: refused (the word is not masked)
+//   3228 STA $7F3781 (the program's operands); `$7F0580[$1C00 * 80 + $EB]` := `$1180,X` (the running IP, saved at its
+//   own priority); `$1180,X` := 177F, `$1C00,X` := 0, STZ $1A80 / $1A01 / $1001; `LDA #02 / TSB $54`.
+// MEASURED, the rule's cartridge (the playthrough's 36_castle_hall, loc 015): Crono walks right into the guard obj26
+// (`84 03`, chasing him with `95 00`); at f809 `$01EB` = 34, `$7F3780` = `96 0F 28`, obj26's `$1180` = 177F at priority
+// 0, and the guard is shoved right a tile (0ED4 -> 0F31) and turns down; the port only ran fn2, the guard stood, and
+// Crono stood stuck against him for good.
+static void vmTouchPush(CtScene* sc, int obj) {
+  Mem* m = sc->mem; CtSS* st = &sc->st[obj];
+  uint32_t X = (uint32_t)obj * 2;
+  if (r8(m, 0x7E0154) & 0x02) return;                                       // 31B1-31B5
+  if ((st->prio & 0xFF) == 0) return;                                       // 31BC-31BF
+  if (!(r8(m, 0x7E1B01 + X) & 0x02)) return;                                // 31C4-31CB
+  int f = r8(m, 0x7E1600 + (uint32_t)r8(m, 0x7E0197));                      // 31CD-31CF
+  int tx = r8(m, 0x7E1801 + X), ty = r8(m, 0x7E1881 + X);
+  if (f == 0) { if (ty == 0) return; ty--; }                                // 3202-3209
+  else if (f == 1) ty = (ty + 1) & 0xFF;                                    // 3217-321C
+  else if (f == 2) { if (tx == 0) return; tx--; }                           // 31ED-31F6
+  else tx = (tx + 1) & 0xFF;                                                // 31DA-31E1
+  uint32_t word = (uint32_t)(ty << 8 | tx);
+  if (r8(m, 0x7E7040 + word) & 0x80) return;                                // LDA $7E7040,X / BMI -> 31B9
+  w8(m, 0x7F3781, (uint8_t)tx); w8(m, 0x7F3782, (uint8_t)ty);               // 322B STA $7F2001,X (X = 1780)
+  sc->raw[0x1781] = (uint8_t)tx; sc->raw[0x1782] = (uint8_t)ty;             //   (the runner reads its own copy)
+  if (st->addr >= 0) st->ret[st->prio] = ssPushAddr(st);                    // 3232-324B
+  st->addr = 0x177F - sc->header; st->prio = 0; st->tb = 0;                 // 324F-325B
+  ctSetDc(sc, obj, 0);                                                      // 3264 STZ $1001,X
+  vmTicketStop(sc, obj);                                                    // 325E / 3261 STZ $1A80,X / $1A01,X
+  w8(m, 0x7E0154, (uint8_t)(r8(m, 0x7E0154) | 0x02));                      // 3267 LDA #02 / TSB $54
+}
 void CtSceneTouch(CtScene* sc, int obj) {
   if (obj < 0 || obj >= sc->nobj) return;
   CtSS* st = &sc->st[obj];
@@ -8091,15 +8193,19 @@ void CtSceneTouch(CtScene* sc, int obj) {
   //   0x5AC5  [24 ROM bytes at 0x5AC5: python tools/dis.py 0x5AC5 24]
   // -- LDX $EB, the $1C01/$1100/$1000 refusals, then `CMP #03` for the touch and `CMP #02` for the
   // activate, both branching to the routine's own shared bail. So the port carries ONE predicate and
-  // passes the immediate, exactly as the ROM does.
-  if (!CtVmInvokeGate(CtSceneMem7E(sc), obj, st->prio, 3)) return;   // C0/3154, CMP #03
-  if (st->addr >= 0) st->ret[st->prio] = ssPushAddr(st);   // push the running fn ($1180) to its return slot
-  int fn = fpPtr(sc, obj, 2);
-  if (fn < 0 || fn >= sc->blen) return;
-
-  st->addr = fn; st->prio = 2; st->tb = 0;              // ROM C0/319F: fn2 at PRIORITY 2
-  ctSetDc(sc, obj, 0);                                  // 31AA STZ $1001,X (beside the 1A80/1A01 zeroes below)
-  vmTicketStop(sc, obj);                               // the touch STOPS the actor's in-flight move (no lingering walk anim)
+  // passes the immediate, exactly as the ROM does. The two bails are not the same place, though: the refusals go to
+  // 31B0 `RTS`, the priority test to 31AD `JSR C0/31B1` -- the push runs whether or not fn2 was installed.
+  if (!CtVmInvokeGate(CtSceneMem7E(sc), obj, 0xFF, 0)) return;            // 3156-3163 -> 31B0
+  if (CtVmInvokeGate(NULL, obj, st->prio, 3)) {                             // 3165-316A CMP #03 / BCC ->31AD
+    int fn = fpPtr(sc, obj, 2);
+    if (fn >= 0 && fn < sc->blen) {
+      if (st->addr >= 0) st->ret[st->prio] = ssPushAddr(st);   // push the running fn ($1180) to its return slot
+      st->addr = fn; st->prio = 2; st->tb = 0;              // ROM C0/319F: fn2 at PRIORITY 2
+      ctSetDc(sc, obj, 0);                                  // 31AA STZ $1001,X (beside the 1A80/1A01 zeroes below)
+      vmTicketStop(sc, obj);                               // the touch STOPS the actor's in-flight move (no lingering walk anim)
+    }
+  }
+  vmTouchPush(sc, obj);                                    // 31AD JSR C0/31B1
 }
 
 int CtSceneTextbox(const CtScene* sc, int* tableAddr, int* strIndex) {
