@@ -14883,6 +14883,10 @@ int main(int argc, char** argv) {
         // MEASURED, the rule's cartridge (the playthrough's 39_arris_shop, Arris Dome after the shop): BG3's `$1D3F` steps
         // 02 04 06 .. and `$1D8F` counts from f4244, the resume's first iteration ($0119 = 01); the port's drift waited for
         // the end of the ramp (f4259), and the dome's fog stood 15 frames behind for the rest of the leg.
+        // With no d-pad, 88EE + 8A6D make a zero request ($1D2E/$1D30): the camera stands and only the layers drift. The
+        // host's request is the last walk's. MEASURED (menu-resume-fade-in-vs-oracle: X right after a walk) -- carried into
+        // the ramp, it scrolled the reloaded field 16611 px away from the cartridge's.
+        CtSceneCameraRequestClear(f.vm);
         CtSceneCameraTick(f.vm);
         CtHdmaTableBuild(s7);                                // step in the field's own render below
         fieldColourRecords(s7);

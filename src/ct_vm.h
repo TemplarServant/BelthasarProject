@@ -124,6 +124,7 @@ int CtSceneActorCount(const CtScene* sc);
 // this frame's post-collision request + the lead's start-of-frame foot; CameraEntry does the C0/7506 scene-
 // entry init from the arrival tile; CameraPx reads the render camera in pixels. All state in mem.s[$1D..].
 void CtSceneCameraTick(CtScene* sc);
+void CtSceneCameraRequestClear(CtScene* sc);   // the post-collision request $1D2E/$1D30 = 0 (a frame with no d-pad)
 // C0/00EB, one wait of the battle return's chain (C0/881E's camera, C0/00DE's $0153 flip and FD/E39C) -- field.c.
 void CtSceneReturnWaitFrame(CtScene* sc);
 // C0/02AF-02C1, one frame of the defeat's fade (C0/881E + FD/FFF7).

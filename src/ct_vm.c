@@ -5722,6 +5722,7 @@ static void camAlign885A(CtScene* sc, int onX, int onY) {
 // host (its post-collision request handed in via CtSceneCameraInput); headless hosts leave the request 0,
 // so the camera only moves via scripted op-0xE7/E6 or a WRAM-seeded mid-seek -- matching the input-less
 // oracle. No-op-to-the-scroll when the request and all deltas are 0 (a still camera stays byte-identical).
+void CtSceneCameraRequestClear(CtScene* sc) { if (sc) { sc->camReqX = 0; sc->camReqY = 0; } }
 void CtSceneCameraTick(CtScene* sc) {
   if (!sc) return;
   uint8_t* s = sc->mem->s;
