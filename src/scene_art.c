@@ -143,6 +143,8 @@ static int horizonPx(int x, int ys, int* band) {
     dy = (int)floor(g_e3Q2 * (u * u - ue * ue) + 0.5);
   }
   int v = steamPx(0, xe, ys - dy, 0);
+  if (v < 0 && ys >= 48 && ys - dy < 48) v = steamPx(0, xe, 48, 0);  // (lowered: the rows it opens above are the art's sky,
+                                                                     //  not the stage's glow row there -- white in the flash)
   *band = bandRow(xe, ys - dy);
   if (v > 0 && *band && steamPx(0, xe, ys - dy + 1, 0) <= 0) v = 0;   // (the glow's lowest row: the band's)
   return v > 0 ? horizonIndex(v) : v;
