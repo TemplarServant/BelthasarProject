@@ -8,7 +8,8 @@ Reads `git ls-files` (the index: a file staged for the next commit counts) and f
   * a path the public export leaves out (tools/release/export_public.py EXCLUDE: the ROM, ct_assets.dat, savestates,
     WRAM captures, battery saves, src/data's tables, src/xlat's translated programs, ...);
   * a binary file (tools/release/scan_rom_leaks.py's decode_text) outside the scanner's allowlist -- the README's
-    pictures in docs/media/ -- and the upstream files named in UPSTREAM below.
+    pictures in docs/media/ -- the upstream files named in UPSTREAM below and the files export_public.py's KEEP
+    publishes by name.
 
 It needs no ROM, so it runs everywhere (the GitHub CI, a fresh clone). It does NOT search the files' bytes: a table
 pasted into a source file is found only by tools/release/scan_rom_leaks.py, which needs the ROM (CONTRIBUTING.md).
@@ -24,7 +25,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
-from export_public import excluded  # noqa: E402
+from export_public import KEEP, excluded  # noqa: E402
 from scan_rom_leaks import BINARY_OK_DIR, BINARY_OK_EXT, decode_text  # noqa: E402
 
 UPSTREAM = {                                     # binaries that are someone else's program, shipped as they are
@@ -56,7 +57,7 @@ def main():
         nbin += 1
         if f.startswith(BINARY_OK_DIR) and f.lower().endswith(BINARY_OK_EXT):
             nmedia += 1
-        elif f in UPSTREAM:
+        elif f in UPSTREAM or f in KEEP:
             nup += 1
         else:
             print('tracked: %s  a binary file, %d bytes (only docs/media/ pictures and the upstream files in '

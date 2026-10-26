@@ -38,7 +38,15 @@ EXCLUDE = [
 ]
 
 
+KEEP = {                                         # files EXCLUDE would match that are published by name
+    'ct_mapedits.dat': "the owner's painted world-map cells (tools/map_editor.py): block numbers per cell, no byte of "
+                       "the game",
+}
+
+
 def excluded(path):
+    if path in KEEP:
+        return None
     for pat, why in EXCLUDE:
         if fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(os.path.basename(path), pat):
             return pat
