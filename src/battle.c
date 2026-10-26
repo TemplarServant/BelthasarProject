@@ -13453,6 +13453,18 @@ static void battleAscPoseTick(CtBattleHost* h) {
 }
 // Load the dispatched script for the current action window: the C1/4541 header read + the C1/4562 MSB-first
 // mask walk + the CC/F156 role/home filler.
+// CC/F186-F1C9: the victims' roles from the dispatch's two masks (16-bit, bit 15 = combatant 0). $A017 = the index of
+// $AE95's first set bit (0 when the mask is empty), closed by FF (`ORA #FF00 / STA $A017`); then every set bit of $AE99,
+// combatants 0..0A in order, as `idx | FF00` at $A018,Y -- the list the track-4 ops walk, FF-closed by its own stores.
+// $AC5C/$AC5D.. the same.
+static void battleRoleVictims(uint8_t* s) {
+  int w = s[0xAE95] | (s[0xAE96] << 8), x = 0;
+  if (w) while (!(w & 0x8000)) { w = (w << 1) & 0xFFFF; x++; }      // CF18A-CF196
+  s[0xA017] = s[0xAC5C] = (uint8_t)x; s[0xA018] = s[0xAC5D] = 0xFF;  // CF198-CF1A7
+  int m = s[0xAE99] | (s[0xAE9A] << 8), y = 0;                       // CF1AD-CF1C7
+  if (m) for (x = 0; x < 0x0B; x++, m = (m << 1) & 0xFFFF)
+    if (m & 0x8000) { s[0xA018 + y] = s[0xAC5D + y] = (uint8_t)x; s[0xA019 + y] = s[0xAC5E + y] = 0xFF; y++; }
+}
 static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
   long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
   h->ascOn = 0; h->ascSel = sel; h->ascStall = 0; h->ascGateSaid = 0;
@@ -13511,20 +13523,22 @@ static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
   // `combos 50`, Double Cure chosen on Frog): `$A017 = 00`, `$A018 = 01 FF` (CC:F198 / F1BC) -- and Lapis either caster
   // (battle_target_select_pc_side.md sec. 5.7). The port took the confirm's target (Frog): its `02 24` on track 3 and every
   // pose of the victims' tracks played on the wrong seat, and the tech's tail ran 1-2 frames off.
-  h->ascRole[3] = (h->actTgtN > 0) ? h->actTgtList[0] : h->actTarget;
-  for (int i = 1; i < h->actTgtN && i < 5; i++) h->ascRole[3 + i] = h->actTgtList[i];
   // ...and the ROM's own table (CC/F156-F1C9): $A014 = the actor, $A015/$A016 = the co-actors (a party actor's negative
   // ones replaced from CC/FBC8), $A017 = the primary, $A018.. = the other targets, each list closed by FF -- the list the
   // track-4 ops walk (op 25, the orbit/shake/offset ops on every target) and $AC5C, the same targets for the close's tail.
-  { uint8_t* s = h->mem; int k = 0;
+  { uint8_t* s = h->mem;
     for (int i = 0; i < 11; i++) s[0xA014 + i] = 0xFF;
     s[0xA014] = (uint8_t)(h->actAttacker & 0xFF);
     for (int j = 1; j <= 2; j++) { int v = s[0xAE96 + j];
       if ((v & 0x80) && h->actAttacker >= 0 && h->actAttacker < 3) v = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + h->actAttacker * 2 + (j - 1)));
       s[0xA014 + j] = (uint8_t)v; }
-    s[0xA017] = (h->ascRole[3] >= 0) ? (uint8_t)h->ascRole[3] : 0xFF;
-    for (int i = 1; i < h->actTgtN && k < 7; i++) s[0xA018 + k++] = (uint8_t)h->actTgtList[i];
-    s[0xA018 + k] = 0xFF; }
+    // $A017 and $A018.. from the dispatch's masks $AE95 / $AE99 (CC/F186-F1C9), not from the port's target list. MEASURED,
+    // the rule's cartridge (the playthrough's 40_guardian): the Guardian's revive at f12006 has `$AE95` = 0100 and
+    // `$AE99` = 0080 -> `$A017 = 07`, `$A018 = 08 FF` (CC:F1A7 / F1BF) -- the port's list held Bit 7 alone, its track-4
+    // `2C` brought back one Bit, and the fight went another way.
+    battleRoleVictims(s);
+    h->ascRole[3] = (s[0xA017] < 11) ? s[0xA017] : -1;
+    for (int i = 0; i < 4; i++) h->ascRole[4 + i] = (s[0xA018 + i] < 11) ? s[0xA018 + i] : -1; }
   for (int k = 0; k < 3; k++) {                                     // $99AF/$99B2 = role k's dispatch pos
     int c = h->ascRole[k];
     if (c >= 0 && c < 11) { h->ascHomeX[k] = BT_LIVEX(h, c); h->ascHomeY[k] = BT_LIVEY(h, c); }
@@ -18926,9 +18940,7 @@ static int battleC1ActionRoles(CtBattleHost* h) {
     if (s[0xA015] & 0x80) s[0xA015] = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + actor * 2));
     if (s[0xA016] & 0x80) s[0xA016] = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + actor * 2 + 1));
   }
-  { int w = s[0xAE95] | (s[0xAE96] << 8), x = 0;                   // CF18A-CF198
-    if (w) { while (!(w & 0x8000)) { w <<= 1; x++; } }
-    s[0xA017] = (uint8_t)x; s[0xA018] = 0xFF; s[0xAC5C] = (uint8_t)x; s[0xAC5D] = 0xFF; }
+  battleRoleVictims(s);                                             // CF186-CF1C9
   for (int k = 0; k < 3; k++) { int c = s[0xA014 + k];             // CF1CC-CF1E5
     if (!(c & 0x80) && c < 11 && h->mvInited) { s[0x99AF + k] = (uint8_t)BT_LIVEX(h, c); s[0x99B2 + k] = (uint8_t)BT_LIVEY(h, c); } }
   // C1/4310 -> the $AE92 = 2 entry of C1/7A63 -> C1/45BB: the PC-tech config CD/45A6[$AE93*7] and the three table
