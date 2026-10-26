@@ -168,7 +168,9 @@ The SNES's V-IRQ blanks lines 211-223 of the field and of fights (old TVs hid th
 shows the row `camy + 1` on line 0, so with the ROM's camera at a room's bottom the last line is one row past the room
 (the next room, or the map wrapping to its top). In the field the option holds the picture's origin there instead: the
 room's last row stays on line 223, and the camera's last pixel down moves the objects on the screen, not the picture
-(2026-10-25; until then the line repeated the room's last row, which read as a doubled line).
+(2026-10-25; until then the line repeated the room's last row, which read as a doubled line). A fight there holds it the
+same way (its arena is the field's picture at the camera it began on); held to the SNES's origin, the picture went up a
+line as the fight began and down as it ended (the owner, 2026-10-25).
 
 ## The frames between
 

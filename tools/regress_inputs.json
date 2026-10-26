@@ -4878,6 +4878,18 @@
       "present_when_recorded": true
     },
     {
+      "path": "tools/fill_battle_hold_check.py",
+      "kind": "unknown",
+      "regenerable": false,
+      "how": "Auto-added from regress_checks.json; fill in provenance.",
+      "used_by": [
+        "options-fill-bottom-lines-fight-keeps-the-held-picture"
+      ],
+      "sha256": "a68920cb3cf0815e51f46f2123179fcb62f90df786d8f90aea6a00a83a5b2ed9",
+      "size": 3840,
+      "present_when_recorded": true
+    },
+    {
       "path": "tools/frame_region_cmp.py",
       "kind": "unknown",
       "regenerable": false,

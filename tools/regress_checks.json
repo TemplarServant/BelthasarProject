@@ -47069,6 +47069,47 @@
       ]
     },
     {
+      "name": "options-fill-bottom-lines-fight-keeps-the-held-picture",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/fill_battle_hold_check.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "tools/fill_battle_hold_check.py"
+      ],
+      "expect": [
+        "fill-hold: fight begins f3806 -> f3807: best vertical step +0 (rows 20-149)",
+        "fill-hold: fight ends f4210 -> f4211: best vertical step +0 (rows 20-149)",
+        "fill-hold: fight f3807: the mod-off picture one line lower, rows 1-210: 0 px differ",
+        "fill-hold: fight f3900: the mod-off picture one line lower, rows 1-210: 0 px differ",
+        "fill-hold: fight f4100: the mod-off picture one line lower, rows 1-210: 0 px differ",
+        "fill-hold: fight f4210: the mod-off picture one line lower, rows 1-210: 0 px differ"
+      ],
+      "pin": [
+        "^fill-hold: "
+      ],
+      "timeout_s": 420,
+      "note_pass": "the mod \"Fill the bottom lines\" holds the picture a line lower at a room's bottom in the fights as in the field: no line's jump as the attract's 0AD fight begins (f3807) or ends (f4211), and the whole fight -- arena, combatants, effects -- one line below the mod-off picture",
+      "notes": "2026-10-25 (the owner: the screen went up 1 px as a fight began and down 1 px as it ended). A MOD check (outside the ROM mandate; the vanilla picture is graded elsewhere -- the mod-off run here is the SNES's placement). src/field.c fillHold: with the mod on and the camera at a room's bottom the field's origin moves up so the room's last row stays on line 223 (f29a3af); the fights now hold it too (their arena is the field's picture at the camera the fight began on), and what the fight places on the screen is drawn over the arena raised by bRaise and lowered back with it (the frames between's record lowered the same). tools/fill_battle_hold_check.py: two interactive attract runs (CT_OVERLAY_SHOT, CT_SETTINGS; the mod-on run at 16:9 so the wide arena path is composed too).",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    if (g_hostInteractive && CtSettingsGet()->fillBottomLines && f.vm && !gameOver) {",
+          "replace": "    if (g_hostInteractive && CtSettingsGet()->fillBottomLines && f.vm && !battlePhase && !gameOver) {   /* MUT: the fights at the SNES's origin */",
+          "why": "the fight composed at the SNES's origin while the field holds it a line lower: the picture jumps up a line as the fight begins and down as it ends (the owner's report)"
+        },
+        {
+          "file": "src/field.c",
+          "find": "    const int bRaise = battlePhase ? fillHold : 0;",
+          "replace": "    const int bRaise = 0;   /* MUT: the fight's screen-placed layers not raised */",
+          "why": "the arena held a line lower but the combatants, effects and cursors drawn at the SNES's lines: the sprites jump a line against the arena at the fight's edges and sit a line high in it"
+        }
+      ]
+    },
+    {
       "name": "ow-600ad-motion-owners-under-the-mist",
       "tier": "full",
       "argv": [

@@ -19877,11 +19877,17 @@ int main(int argc, char** argv) {
     // Forest 013 entered from the south; the owner, 2026-10-25), so the mod holds the picture's origin instead: the room's
     // last row stays on the last line, and the camera's last step down moves the picture no further (the objects, drawn
     // from the same origin, move on the screen instead). Only when that row would be one of the mod's lines, and never
-    // above the room's top; the fights compose their arena as the SNES does.
-    if (g_hostInteractive && CtSettingsGet()->fillBottomLines && f.vm && !battlePhase && !gameOver) {
+    // above the room's top. The fights too: their arena is this picture at the camera the fight began on (the page copy
+    // above), so a fight held to the SNES's origin moved the whole picture up a line at its start and down at its end
+    // (the owner, 2026-10-25; the attract's 0AD on the Zenan bridge, the camera at the room's bottom: f3807 / f4211).
+    // A fight's sprites, effects and cursors are placed on the screen, not on the map, so the fight draws them over its
+    // arena raised by the same lines and lowers it back (bRaise, at the battle's compose below).
+    int fillHold = 0;                                 // (the lines the picture's origin moved up)
+    if (g_hostInteractive && CtSettingsGet()->fillBottomLines && f.vm && !gameOver) {
       int last = f.my1 - 1 - camy;                    // the screen line of the room's last row
-      if (last >= 210 && last < CAMH - 1 && camy - (CAMH - 1 - last) >= f.my0) camy -= CAMH - 1 - last;
+      if (last >= 210 && last < CAMH - 1 && camy - (CAMH - 1 - last) >= f.my0) { fillHold = CAMH - 1 - last; camy -= fillHold; }
     }
+    const int bRaise = battlePhase ? fillHold : 0;
     if (dbg.camInfo) {
       fprintf(stderr, "CAMINFO W=%d H=%d mask[%d,%d]x[%d,%d] camx=%d camy=%d\n",
                       f.W, f.H, f.mx0, f.mx1, f.my0, f.my1, camx, camy);
@@ -19977,6 +19983,11 @@ int main(int argc, char** argv) {
         if (nz) fprintf(stderr, "arenashift f%d rows=%d first=%d (%d,%d)\n", frameNo, nz, fy, arenaD[fy * 4], arenaD[fy * 4 + 1]);
       }
     } else memset(arenaD, 0, sizeof arenaD);
+    if (bRaise) {                                    // (the picture held a line lower, a mod: its row y is the SNES's line
+      memmove(arenaD + bRaise * 4, arenaD, sizeof arenaD - sizeof arenaD[0] * 4 * (size_t)bRaise);   //  y - bRaise, and
+      memmove(arenaRow + bRaise, arenaRow, (size_t)(CAMH - bRaise));                                   //  takes its records)
+      for (int y = 1; y < bRaise; y++) { memcpy(arenaD + y * 4, arenaD, sizeof arenaD[0] * 4); arenaRow[y] = arenaRow[0]; }
+    }
     for (int y = 0; y < ch; y++)
       for (int x = 0; x < cw; x++)
         memcpy(fb + ((size_t)y * g_fw + x) * 3, f.base + fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]) * 3, 3);
@@ -20874,12 +20885,20 @@ int main(int argc, char** argv) {
       static uint8_t fxFrontFb[CAMW * CAMH * 3]; int fxFrontOn = 0;
       static uint8_t cvwin[CAMW * CAMH];               // the arena composite's main-screen layer under the camera window
       const uint8_t* bmem = CtSceneMem7E(f.vm);
+      // THE PICTURE HELD A LINE LOWER (the bottom lines drawn, a mod: fillHold above). The arena is drawn at the held
+      // origin; what the fight places on the screen -- the combatants, the effects' sprites and BG3, the cursors, the
+      // numbers -- is the SNES's, so it is drawn over the arena raised by bRaise (as the SNES has it) and the whole is
+      // lowered back before the screen-fixed boxes: the fight moves with its arena, as the field's objects do.
+      static uint8_t bRaiseTop[CAMW * 16 * 3];
+      const size_t bRow = (size_t)CAMW * 3;
+      if (bRaise) { memcpy(bRaiseTop, fb, bRow * (size_t)bRaise); memmove(fb, fb + bRow * (size_t)bRaise, bRow * (size_t)(CAMH - bRaise)); }
+      const int bcamy = camy + bRaise;                 // (the SNES's origin, for what is drawn raised)
       if (!defeatHold) battleFleeFxRender(fb, bmem, &liveHost);       // the objslot fade page (Cyclone/X-Strike `80 ..`, the run-off) + MOSAIC
       { int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
         if (cvs && !defeatHold) {
           for (int y = 0; y < CAMH; y++)
             for (int x = 0; x < CAMW; x++) {
-              int sx = camx + x, sy = camy + y;
+              int sx = camx + x, sy = bcamy + y;
               cvwin[y * CAMW + x] = (sx >= 0 && sy >= 0 && sx < cvW && sy < cvH) ? cvs[(size_t)sy * cvW + sx] : 0;
             }
           CtBattleFxLayerCompose(fb, CAMW, CAMH, cvwin, bmem, &liveHost);   // BG3 through the windows + colour math
@@ -20944,6 +20963,13 @@ int main(int argc, char** argv) {
               //  (unshifted by the row's battle scroll, as the view's own lookup above)
               bcov[i] = (cvs && cvW > 0 && cvH > 0) ? cvs[(size_t)((sy % cvH + cvH) % cvH) * cvW + (size_t)((ux % cvW + cvW) % cvW)] : 0;
             }
+          static uint8_t bwRaiseTop[FIELD_WMAX * 16 * 3];   // (the held picture, a mod: the effects on the SNES's lines --
+          const size_t bwRow = (size_t)bwW * 3;              //  raised as the view is above, lowered back below)
+          if (bRaise) {
+            memcpy(bwRaiseTop, g_bwFb, bwRow * (size_t)bRaise);
+            memmove(g_bwFb, g_bwFb + bwRow * (size_t)bRaise, bwRow * (size_t)(CAMH - bRaise));
+            memmove(bcov, bcov + (size_t)bwW * bRaise, (size_t)bwW * (CAMH - bRaise));
+          }
           int mz = bmem[0xBE9A], msz = (mz >> 4) + 1;  // the flee's mosaic, on the view's own block grid
           if (msz > 1 && (mz & 0x0F))
             for (int by = 0; by < CAMH; by += msz)
@@ -20955,6 +20981,10 @@ int main(int argc, char** argv) {
               }
           if (cvs) CtBattleFxLayerComposeWide(g_bwFb, bwW, CAMH, bcov, bmem, &liveHost, bx0);
           battleCritFlashRenderN(g_bwFb, (size_t)bwW * CAMH, &liveHost);
+          if (bRaise) {
+            memmove(g_bwFb + bwRow * (size_t)bRaise, g_bwFb, bwRow * (size_t)(CAMH - bRaise));
+            memcpy(g_bwFb, bwRaiseTop, bwRow * (size_t)bRaise);
+          }
           memcpy(g_bwPre, g_bwFb, (size_t)bwW * CAMH * 3);
           g_bwW = bwW; g_bwX = bx0;
         } }
@@ -20995,7 +21025,8 @@ int main(int argc, char** argv) {
       if (f.prio && !dbg.noFg)
         for (int y = 0; y < ch; y++)
           for (int x = 0; x < cw; x++) {
-            size_t bo = fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]);   // the row's battle scroll
+            const int ry = y + bRaise < CAMH ? y + bRaise : CAMH - 1;   // (raised: the SNES's line y is the held row y + bRaise)
+            size_t bo = fieldBaseAt(&f, camx + x + arenaD[ry * 4], bcamy + y + arenaD[ry * 4 + 1]);   // the row's battle scroll
             if (!f.prio[bo]) continue;
             if (objPrio[y * CAMW + x] != 0xFF) { if (objPrio[y * CAMW + x] == 3) prioKept++; else prioCovered++; }
             // ...but only over a cell of OBJ priority 0-2. Mode 1's order is OBJ3 > BG1H > BG2H > OBJ2 > ...: a
@@ -21030,6 +21061,18 @@ int main(int argc, char** argv) {
         if (nm && getenv("CT_BATTLE_OBJMATHTRACE")) fprintf(stderr, "battleobjmath f%d %ld px\n", liveHost.frames, nm);
       }
       g_bObjPalMask = NULL; g_bObjPalCur = -1;
+      if (bRaise) {                                    // (lowered back: the held picture, its top rows the arena's as drawn)
+        const size_t up = bRow * (size_t)bRaise, keep = bRow * (size_t)(CAMH - bRaise);
+        memmove(fb + up, fb, keep); memcpy(fb, bRaiseTop, up);
+        if (bMot) {                                    // ...and the frames between's record of it, the same
+          memmove(bMotCanvas + up, bMotCanvas, keep); memcpy(bMotCanvas, bRaiseTop, up);
+          memmove(g_motPic + up, g_motPic, keep); memcpy(g_motPic, bRaiseTop, up);
+          memmove(mot->own + CAMW * bRaise, mot->own, (size_t)CAMW * (CAMH - bRaise)); memset(mot->own, CT_MOT_BG1, (size_t)CAMW * bRaise);
+          memmove(mot->world + CAMW * bRaise, mot->world, (size_t)CAMW * (CAMH - bRaise)); memset(mot->world, 0, (size_t)CAMW * bRaise);
+          for (int i = 0; i < mot->nspx; i++) mot->spx[i].y = (int16_t)(mot->spx[i].y + bRaise);
+          for (int i = 0; i < mot->nspr; i++) mot->sprY[i] += bRaise;
+        }
+      }
       memcpy(g_bWorld, fb, sizeof g_bWorld);           // (the widescreen: what the screen-fixed boxes below cover)
       { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
         int fdy = defeatHold ? 0 : fillBoxBegin(fb, (bmem[0x2989] & 0x02) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM, CT_BRESULT_H);

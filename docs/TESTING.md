@@ -2590,6 +2590,16 @@ depend on a player's saved options -- and `CT_OVERLAY_SHOT` draws the F1 overlay
 Controls tab at f40 under the dummy video driver and saves the window. Graded: the window is 896x672, the picture fills
 its width on the middle line, the overlay's tabs are drawn. Needs `third_party/imgui` (`tools/get_imgui.ps1`).
 
+### options-fill-bottom-lines-fight-keeps-the-held-picture (`python tools/fill_battle_hold_check.py`)
+
+A MOD check (outside the ROM mandate): with "Fill the bottom lines" on and the camera at a room's bottom the field holds
+the picture's origin a line lower (src/field.c `fillHold`), and the fights must hold it too -- the owner, 2026-10-25,
+saw the screen go up a line as a fight began and down as it ended. Two interactive attract runs (`CT_OVERLAY_SHOT`,
+`CT_SETTINGS`), the mod on at 16:9 and the mod off, through the 0AD fight (its camera at its room's bottom). Graded: no
+vertical step from f3806 to f3807 (the fight's first frame) nor from f4210 to f4211 (the field again), and four fight
+frames equal to the mod-off picture one line lower on rows 1-210 (0 px: the combatants and effects moved with the arena,
+`bRaise`). Re-pin only if the attract's 0AD moves; the step must stay +0.
+
 ### battle-enemy-census-defeat-exit-tail-hdma-vs-oracle (`python tools/battle_ab.py enemies 6E,E3,F4 -j3`)
 
 Three enemies of the census in GATO's arena whose fights end in the party's defeat: every monitored change, `$AE93` (the
