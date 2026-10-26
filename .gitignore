@@ -12,6 +12,8 @@ ct_debug_log.txt
 # The old private tree's git history (a bundle with ROM-derived files in it): local only, never published
 /private_history/
 *.dat
+# The owner's painted world-map cells (tools/map_editor.py; the scene adjustments mod), shipped with the tree
+!/ct_mapedits.dat
 dump.bin
 
 # Build output
