@@ -103,6 +103,16 @@ def run_check(check, root=ROOT):
             env["CT_ORACLE_CACHE_ALIAS"] = root + "|" + ROOT
     for k, v in (check.get("env") or {}).items():
         env[k] = str(v)
+    # The player's battery save (the working folder's ct_sram.srm, src/field.c fieldSramPath) is no check's input: one
+    # played in this tree opened the menu a frame later in 17 menu checks (2026-10-27; a fresh clone has none), and a check
+    # that saved would write over it. A check that wants a save names it (CT_SRAM); every other one reads a blank cart from
+    # a file of its own under build/, made anew each run.
+    if "CT_SRAM" not in (check.get("env") or {}):
+        sram = os.path.join(root, "build", "_regress_sram", check["name"] + ".srm")
+        os.makedirs(os.path.dirname(sram), exist_ok=True)
+        if os.path.exists(sram):
+            os.remove(sram)
+        env["CT_SRAM"] = sram
     # "env_rule": what a check needs only under the infinitely fast CPU's migration switches (CT_ORACLE_NMION_HOLD=1 AND
     # CT_ORACLE_IFAST=1, CLAUDE.md) because its premise changes there -- e.g. a lockstep whose port runs the rule's clock
     # needs the oracle under the rule too. Without both switches it is not read: the check runs exactly as declared.
