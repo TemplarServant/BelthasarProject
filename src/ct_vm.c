@@ -1458,7 +1458,14 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
     int ln = opLen(B, addr);
     if (addr + ln > blen) break;
     int nxt = addr + ln;
-    if (op == 0x00 || op == 0xAF || op == 0xB0 || op == 0xB1 || op == 0xB2) {
+    // Only the 00 ends the ROM's init walk (5900 `LDA $7F2001,X / BEQ ->5915`); the loop ignores every handler's carry
+    // (5913 BRA). B1's handler C0/353F is `TYX / INX / CLC`, so inside the walk it is a one-byte step, not a stop:
+    // loc 0DF's obj0 fn0 (`B1 10 03 0A 1A 16 54 01 86 05 EA 27 ... 00`) runs to its 00 in the load and the idle code
+    // after it (`16 54 02 86 5F 66 81 54`, Johnny's post-race scene) is where C0/591B leaves $1180 (cartridge f3220
+    // of playthrough leg 47: $1180 = 0208 by C0:591E). Stopping on B1 left the rest of fn0 to the runner, whose
+    // RETURN at priority 7 (C0/5FB3 TYX / CLC) parks on the 00 for good. AF / B0 / B2 park in place (C0/3002,
+    // C0/3543 TYX / CLC; AF's INX after 3002 only for a non-PC): the port keeps stopping on those.
+    if (op == 0x00 || op == 0xAF || op == 0xB0 || op == 0xB2) {
       if (stopAddr) { *stopAddr = addr; *stopOp = op; }
       break;
     }
