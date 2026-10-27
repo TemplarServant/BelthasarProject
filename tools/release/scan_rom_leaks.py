@@ -27,9 +27,15 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from ctlib import rom as romlib  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from export_public import KEEP  # noqa: E402  (the files the tree publishes by name)
 
 BINARY_OK_DIR = 'docs/media/'                    # the only binaries the public tree may carry: the README's pictures of
 BINARY_OK_EXT = ('.png', '.gif', '.mp4')         #   the port running (tools/release/make_media.py; docs/ROM.md)
+UPSTREAM = {                                     # binaries that are someone else's program, shipped as they are
+    'android/gradle/wrapper/gradle-wrapper.jar': "Gradle's wrapper (Apache-2.0), SDL2 2.32.10's android-project copy byte "
+                                                 "for byte; the CI pins its SHA-256 (gradle/actions/wrapper-validation)",
+}
 KNOWN_OK = {                                     # (path, text on the line) that match, and why they are not the game's
     ('snes/dsp.c', 'gaussValues'): "the S-DSP's gaussian interpolation table: the console's hardware (LakeSnes, MIT), not the "
                         "game; a smooth ramp also occurs in the extracted assets",
@@ -210,7 +216,8 @@ def main():
             if text is not None:
                 runs = runs_from_text(text)
             else:
-                if not a.binaries and not (rel.startswith(BINARY_OK_DIR) and rel.lower().endswith(BINARY_OK_EXT)):
+                named = rel in UPSTREAM or rel in KEEP           # (still searched below, byte for byte)
+                if not a.binaries and not named and not (rel.startswith(BINARY_OK_DIR) and rel.lower().endswith(BINARY_OK_EXT)):
                     print('binary: %s  %d bytes (not on the allowlist)' % (rel, len(data)))
                     leaks += 1
                 runs = [(0, data)]
