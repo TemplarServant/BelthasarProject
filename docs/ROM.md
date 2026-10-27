@@ -241,7 +241,9 @@ whole or in part, cannot be published in this repository:
 - screenshots and video of the game, with one exception: the handful of pictures and the short clip of the port
   running that the README shows, in [`docs/media/`](media/). They are made by
   [`tools/release/make_media.py`](../tools/release/make_media.py) from the engine's own output during the attract
-  demo, and they are the only binary files the leak scanner accepts;
+  demo (the widescreen ones with the Steam margins on, so they show that release's art as the port draws it), and
+  they are, with the files named in `tools/release/scan_rom_leaks.py`'s `UPSTREAM` and `export_public.py`'s `KEEP`,
+  the only binary files the leak scanner accepts;
 - trace and disassembly output that reproduces the ROM's bytes.
 
 The repository holds the code that **produces** these from your dump, and documentation that describes the game's

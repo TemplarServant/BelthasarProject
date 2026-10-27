@@ -4,8 +4,10 @@ r"""Make the README's screenshots and clip (docs/media/) from the port running t
     python tools/release/make_media.py [--out docs/media]
 
 Every picture is the C engine's own output (build/Belthasar.exe --boot, headless), never the oracle's: two runs of the
-cold start through the attract demo, one with every option at its default (CT_SHOTS) and two with the widescreen mod
-on (a settings file with widescreen=16:9; CT_WIDESHOTS: the stills, then the clip's every frame). The frames picked are listed in SHOTS and CLIP; each is
+cold start through the attract demo, one with every option at its default (CT_SHOTS) and two with every graphics mod
+on (WIDE_INI: the widescreen at 16:9, the Steam margins, the scene adjustments, the bottom lines filled; CT_WIDESHOTS:
+the stills, then the clip's every frame). The Steam margins need ct_wide.dat in the repository's root (tools/setup.py
+makes it from the owner's Steam copy); without it the margins stay off and the sides show the room alone. The frames picked are listed in SHOTS and CLIP; each is
 scaled 2x with nearest-neighbour. The clip (the Zombor fight's Luminaire, widescreen) is encoded with ffmpeg, which
 must be on PATH. The F1 overlay shot comes from CT_OVERLAY_SHOT. See docs/DEBUG_SURFACE.md for the variables.
 
@@ -25,12 +27,15 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SHOTS = {                                       # name: (run, frame) -- 'v' vanilla, 'w' widescreen
-    'title': ('v', 1980), 'battle-tech': ('v', 6840),
-    'widescreen-zeal': ('w', 2250), 'widescreen-battle': ('w', 9450),
+    'title': ('v', 1980), 'battle-tech': ('v', 6900),
+    'widescreen-zeal': ('w', 2340), 'widescreen-battle': ('w', 9450),
     'widescreen-forest': ('w', 4680), 'widescreen-castle': ('w', 5670),
+    'widescreen-black-omen': ('w', 9000),
 }
-CLIP = (9580, 9862)                             # widescreen frames [from, to) of the clip
-OVERLAY = 9880                                  # the F1 overlay's Video tab over the widescreen picture; ends the run
+CLIP = (9610, 9892)                             # widescreen frames [from, to) of the clip
+OVERLAY = 9910                                  # the F1 overlay's Video tab over the widescreen picture; ends the run
+WIDE_INI = '[video]\nwidescreen=16:9\nsteam_margins=1\nscene_adjustments=1\nfill_bottom_lines=1\n'   # (the frames
+#   between and the internal resolution change no still: CT_WIDESHOTS takes the engine's own 1x frame)
 
 
 def load_raw(path):
@@ -59,7 +64,7 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix='ct_media_')
     none_ini, wide_ini = os.path.join(tmp, 'none.ini'), os.path.join(tmp, 'wide.ini')
-    open(wide_ini, 'w').write('[video]\nwidescreen=16:9\n')
+    open(wide_ini, 'w').write(WIDE_INI)
     vf = sorted({f for r, f in SHOTS.values() if r == 'v'})
     run({'CT_SETTINGS': none_ini, 'CT_SHOTS': os.path.join(tmp, 'v'), 'CT_SHOTS_AT': ','.join(map(str, vf)),
          'CT_SHOTS_EXIT': '1'}, tmp, 'vanilla.log')
