@@ -99,3 +99,19 @@ back over by the mirror loop at the pass's end. Loc 048 (the playthrough's 33_es
 runs `0A 06` on its watcher obj3 when `$7F0198` bit 6 is set; the cartridge's obj3 stays at 80 (C0/5ACC skips it), the
 port's came back as 07 and its range test called the guard's fn3 ("What are you up to?!") -- a fight the cartridge never
 has. The mirror now carries the kill (ct_vm.c, `actors[n].dead`).
+
+## The init walk steps over B1 (2026-10-27)
+
+C0/58ED-5922 runs each object's fn0 in the load: `LDA $7F2001,X / BEQ ->5915`, `JSR ($5D6E,X)`, `BRA ->5900` -- the
+handler's carry is never read, and only an op 00 byte ends the walk; then `INX / STA $1180,X` (5915-591B) leaves the
+object's IP on the byte after that 00, the idle code the runner visits from the first frame. B1's handler is C0/353F
+`TYX / INX / CLC`: inside the walk it is a one-byte step. (B2 = C0/3543 and B0 = C0/3002 for an NPC are `TYX / CLC`:
+the walk would dispatch them forever, so no fn0 has one before its 00; AF = `JSR 3002 / INX`.)
+
+`runFunc()` stopped on B1 as if it were a park and left the rest of fn0 to the runner, whose RETURN at priority 7
+(C0/5F74 `CMP #07 / BEQ 5FB3`: `TYX / CLC`) parks on the 00 for good -- the code after it never ran. Loc 0DF's obj0 fn0
+is `B1 10 03 0A 1A 16 54 01 86 05 EA 27 10 03 EA 33 C9 DD 03 10 03 0A 1C 00`, its idle code `C9 DD 03 10 03 0A 1C 16 54
+02 86 5F 66 81 54 ...`: after Johnny's race (the playthrough's 47_race) the cartridge's load writes `$1180` = 0208
+(C0:591E, 45 frames into the load), the runner tests `$7F0154` bit 1 (set by 10F's script), clears it (C0:6BCE) and
+takes control for Johnny's lines ("Ride again, if you think you can handle it, chump."). The port's obj0 parked at the
+00 and the scene never ran; with B1 a step the leg is SAME.
