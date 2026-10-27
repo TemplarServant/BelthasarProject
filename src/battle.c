@@ -4425,9 +4425,19 @@ static void battleFleeCounterFrame(CtBattleHost* h, int input) {
   uint8_t* s = h->mem;
   // $4218 is the AUTO-READ joypad: the NMI that opens frame N latches the pad as it stood during frame N-1, so the
   // service counts THIS frame what was held LAST frame (oracle: L+R applied from f240, the first INC at f241, the
-  // release at f300 cleared at f301). The port's `input` is this frame's level; the lag is one frame of history.
-  int padNow = (input & CT_BIN_LRH) != 0 || (battleHoldBtnMask(h) & 0x30) == 0x30;
-  int held = h->fleeHeldPrev;
+  // release at f300 cleared at f301). CF/E70B reads the register itself, as the demo button beside it (CF/E6E0) does:
+  // the host's h->joyAutoRead (the previous frame's word; on a route drive under CT_WS_BATTLE_LEAD the frame's own,
+  // which is the cartridge's previous one). The command-built `input` (the L+R level of THIS frame plus a frame of
+  // history) came a frame later again on a route: the playthrough's 48_lab32_road, L+R from f588, the cartridge's
+  // first INC at f589 and the port's at f590 -- each run-away one frame late. CT_HOLDBTN (battle frames, headless)
+  // keeps its frame of history, like the demo button's.
+  // The hold / release trace stays on the pad's own level (this frame's), the count on the register.
+  static unsigned prevMask = 0;
+  if (h->frames == 0) prevMask = 0;
+  unsigned maskNow = battleHoldBtnMask(h);
+  int held = (h->joyAutoRead & 0x0030) == 0x0030 || (prevMask & 0x30) == 0x30;
+  prevMask = maskNow;
+  int padNow = (input & CT_BIN_LRH) != 0 || (maskNow & 0x30) == 0x30;
   if (padNow != h->fleeHeldPrev) { h->fleeHeldPrev = padNow; battleFleeTrace(h, padNow ? "hold" : "release"); }
   if (s[0xA013]) return;                                       // FE706
   if (held) {
@@ -22406,9 +22416,14 @@ static int battleFleeStageTick(CtBattleHost* h) {
   h->fleeT++;
   int t = h->fleeT;
   if (h->fleeStage == 1) {
-    if (t == 3)  { s[0xCCEC] = 0x10; s[0xCA24]++; battleFleeTrace(h, "ranaway-open"); }          // CD/028C-0291
-    if (t == 79) { s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++; battleFleeTrace(h, "ranaway-close"); }   // CD/01FD-0203
-    if (t == 95) {
+    // The offsets are the rule's cartridge's, from the post at t 0 (C1/8201 `JSL CD/0021`, `$020D` := 11 EF CE): the box at
+    // +2 (CD/3E7D x2, then CD/028C-0291 -- C2/0009's render is NMI-on CPU work, free under the rule), its close at +78, the
+    // run-off's C1/895B at +94 and `$A013` at +96. MEASURED 2026-10-27: the forest's saves/battle_re/forest_holdleft_pre
+    // (L+R from f350, the post f849, `$CCEC` 10 f851 / 00 f927, `$AE93` 79 f943) and the playthrough's 48_lab32_road (post
+    // f708, 710 / 786 / 802, `$A013` f804). The old +3 / +79 / +95 were the forest's before the rule (battle_flee.md sec. 5).
+    if (t == 2)  { s[0xCCEC] = 0x10; s[0xCA24]++; battleFleeTrace(h, "ranaway-open"); }          // CD/028C-0291
+    if (t == 78) { s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++; battleFleeTrace(h, "ranaway-close"); }   // CD/01FD-0203
+    if (t == 94) {
       battleStatusClearEA9D(h);                                        // C1/8207 JSR C1/EA9D
       battleEndTeardown(h);                                        // C1/820A JSR C1/B7F2
       s[0xAE93] = 0x79; s[0xAE91] = 0; s[0xAE92] = 2;              // C1/895B
@@ -22417,12 +22432,12 @@ static int battleFleeStageTick(CtBattleHost* h) {
       CtBattlePcLadderWipe(h);                                     // C1/405B JSL CC/F06B
       battleFleeTrace(h, "run-off-dispatch");
     }
-    if (t == 96) battleOpen409C(h);                        // C1/409C JSL CC/F102 (after the first C1/007E)
-    if (t == 97) battleFleeOpenAction(h);                          // C1/40A6 INC $A013 + CC/F156 + C1/4310
-    if (t == 97 + CT_FLEE_FX_ARM) battleFxActionLoad(h, h->mem[0x987C]);   // C1/4833: sheets, CD/0F2C/CD/15D5, frames
+    if (t == 95) battleOpen409C(h);                        // C1/409C JSL CC/F102 (after the first C1/007E)
+    if (t == 96) battleFleeOpenAction(h);                          // C1/40A6 INC $A013 + CC/F156 + C1/4310
+    if (t == 96 + CT_FLEE_FX_ARM) battleFxActionLoad(h, h->mem[0x987C]);   // C1/4833: sheets, CD/0F2C/CD/15D5, frames
   }
   battleAdvanceAction(h);                                          // C1/40B0-40CE: the pose engine, the interpreter, the close
-  if (h->fleeStage == 1 && t > 97 && !h->actActive) {
+  if (h->fleeStage == 1 && t > 96 && !h->actActive) {
     h->fleeStage = 2; h->fleeExitT = 0; battleFleeTrace(h, "run-off-end");
     battleModuleTail(h, 3);                                        // C1/8212-821E -> C1/8423
   }

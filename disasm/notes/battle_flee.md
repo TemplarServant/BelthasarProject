@@ -291,3 +291,17 @@ count back).
 * This port's GATO acts at f251 where the oracle's acts at f332 (the enemy first-turn pacing residue, unchanged):
   with the hold from f240 Marle's deferred visit never lands before the freeze, which is why the check holds from
   f200.
+
+## 7. Under the rule (2026-10-27): the counter reads $4218, the box opens at the post + 2
+
+Re-measured on the rule's cartridge (the infinitely fast CPU, CLAUDE.md): saves/battle_re/forest_holdleft_pre with
+`--input "40:120,00:230,C00:900,00:500"` -- the post (`$020D` := 11 EF CE, C1/8201) at f849, `$CCEC` = 10 at f851, = 00
+at f927, `$AE93` = 79 at f943; the playthrough's 48_lab32_road (L+R from f588) the same offsets from its post at f708
+(710 / 786 / 802, `$A013` = 01 at f804). Section 5's f647 -> f650 was this oracle before the rule flip: the box's
+C2/0009 render is NMI-on CPU work, free under the rule, so the open is the two CD/3E7D waits alone. battle.c's
+battleFleeStageTick takes + 2 / + 78 / + 94 / + 96 (was + 3 / + 79 / + 95 / + 97).
+
+The counter itself (section 1) reads the auto-read register: CF/E70B `LDA $004218`. battle.c counted the frame's own L+R
+level with a frame of history, which on a route drive (the port's pad a frame after the cartridge's, field.c
+CT_WS_BATTLE_LEAD) made the first INC a frame late (f590 for the cartridge's f589) and every run-away with it. It reads
+h->joyAutoRead now, as the demo button CF/E6E0 beside it does.
