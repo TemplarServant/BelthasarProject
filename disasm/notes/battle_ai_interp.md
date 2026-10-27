@@ -1370,3 +1370,28 @@ max 5969 -> 632 px; GATO's entry 2 -> 3 frames). The 12 was compensating the boo
 C1/0000's frame (disasm/notes/patches/battle_boot_post_c1_0000.diff, the measurements above): the exact price and the post
 have to go in TOGETHER, with the arm's count (`2 + apu + 3 + 1`) re-read off the cartridge for the demo's three fights and
 GATO's.
+
+## 26. 2026-10-27 -- AN ENEMY TECH'S CO-ACTORS SURVIVE TO THE OPEN; THE ATB BIT A REFUSED ENTRY LEAVES SET
+
+Found on the playthrough's leg 53 (0E6, Robo's switch: three Acids `69` and two Alkalines `6A`), the rule's cartridge
+against the port, both from `end52` with the same pad.
+
+**The co-actors.** C1/8CF9's only stores to `$AE97/$AE98` are its head, C1/8D1F-8D24 `LDA #FF / STA $AE97 / STA
+$AE98` (`dis.py 018CF9`; the 8DA4-8E15 decode stores neither). The AI's tech handlers then store a tech's co-actors there
+(C1/9A77, C1/A086, C1/A2CE after C1/AC14 -- aiTechCoTargets), and CC/F156 binds them as roles 1/2 at the open (`$A015 =
+$AE97`, `$A016 = $AE98`; only a PC actor, `$AE91 < 3`, replaces a negative one from CC/FBC8). The Acids' "Chemically fuse
+with other members" is enemy tech 17 (anim `$9877 = 17`, fx `4B`), run as a COUNTER to Crono's hit: `$AE97 = FF FF` at the
+turn (f1946, C1:8D27), `04 FF` from the AI (f2151), `$A014 = 03 04 FF 00 01 02` at the open (f2164, CC:F1BF). The port
+cleared them again in two places after the AI -- the counter's decode (battleCounterDecodeRest) and the open of an enemy's
+action (battleOpenAction) -- so track 1 was unbound, its scratch objects slid from (0,0) (`SLIDE ... n=34` against the
+cartridge's 6 steps from (139,112)), the action ran 28 frames long, and the pilot's inputs met another fight from there.
+
+**The ATB's bit.** C1/8461's enemy entry that takes no turn -- gone (`$AEFF = FF`), ATB not 0, refused by the arrival
+gate C1/84B8 (`LDA $9826,X / BEQ`) or by `$B247` (84C3) -- branches to C1/84EC; with no PC record pending (`$B188 | $B189
+| $B18A` bit 7 clear) it leaves by C1/850E `JMP C1/881C`, the eval only. C1/860D's `$B186 &= FFFE` and C1/8626's sweep are
+not on that path, so the ATB's bit stays set and C1/8313 runs the handler again on the next odd pass, on the entry at
+the cursor - 1 (`$AEC7 - 1` once the cursor pass has walked off the end). Measured on the same fight: combatant 6 ready
+at f4311 (`$B03A[6] = 81`, `$B186 = 01`), its arrival latch `$982C` set at f4312, `$B186` still 01 at f4313, the turn at
+f4315 (`$B185 = 00`, `$B03A[6] = 01`, `$AFAB[6] = 48`). The port ran the whole tail (battleH12Tail) on that exit, cleared
+the bit at f4311, and took the turn 16 frames late, when the cursor came round again; the Acids' moves and Crono's next
+walk followed it. Both fixed (battle.c); the fight is the cartridge's action for action, and the leg SAME.
