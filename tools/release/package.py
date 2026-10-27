@@ -13,6 +13,7 @@ What a player downloads (docs/RELEASE.md) is a folder -- zipped on Windows, a .t
         setup/kit/                the public tree itself (git archive HEAD): tools/setup.py and what it runs
         setup/python/             a Python runtime (the one running this script, pruned), unless --no-python
         LICENSE, CREDITS.md, README.txt
+        ct_mapedits.dat           the owner's painted world-map cells (the scene adjustments mod reads them)
 
 The player opens Belthasar, chooses their own dump on its setup screen (src/launcher_ui.cpp), and the setup makes
 ct_assets.dat (the tables inside) in their data folder; from then on the game reads only that (docs/ROM.md, the ROM-free
@@ -207,7 +208,7 @@ def main():
         src = a.python or sys.base_prefix
         copy_python(src, os.path.join(dist, 'setup', 'python'))
         say('   bundled Python %s from %s' % (platform.python_version() if not a.python else '?', src))
-    for f in ('LICENSE', 'CREDITS.md'):
+    for f in ('LICENSE', 'CREDITS.md', 'ct_mapedits.dat'):     # (the map editor's cells: the scene adjustments mod)
         if os.path.exists(os.path.join(ROOT, f)):
             shutil.copy2(os.path.join(ROOT, f), dist)
     with open(os.path.join(dist, 'README.txt'), 'w', encoding='utf-8', newline='\r\n' if WIN else '\n') as fh:
