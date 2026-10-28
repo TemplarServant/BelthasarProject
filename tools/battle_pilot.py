@@ -18,8 +18,10 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows from its top -- and
     idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
     threshold; PILOT_HEALTECH (`seat:row`) heals the lowest PC under it with that row of the seat's tech list (Aura)
-    before any item; PILOT_ETHER (MP) gives an Ether to the PC whose MP falls under it; PILOT_HOLD (`addr:val`, hex) holds every attack while that WRAM byte
-    reads the value (a counter stance) -- heals still go; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
+    before any item; PILOT_ETHER (MP) gives an Ether to the PC whose MP falls under it; PILOT_HOLD (`addr:val`, hex)
+    holds every attack while that WRAM byte reads the value (a counter stance) -- heals still go; PILOT_RUN holds L+R the
+    whole fight (the party runs away) and picks nothing -- in a fight that allows it ($2989 bit 7 clear; otherwise it is
+    fought).
 Presses are 2 frames with 10-frame gaps (the menu reads one key per 4-frame pass). A submenu or target select still open
 after 12 steps (a press that missed its pass) is backed out with B. Between decisions it idles 4 frames; it stops when
 control is back on the field ($011F != 0) or after --max frames. Combatant blocks: `$5E2D + c * 0x80`, the current HP at
@@ -192,7 +194,9 @@ class Pilot:
 
     def step(self, w):
         """The pad for the next stretch of a fight (and a note when it decided something)."""
-        if os.environ.get('PILOT_RUN'):                           # PILOT_RUN: hold L+R (the run away) and press nothing
+        if os.environ.get('PILOT_RUN') and not (w[0x2989] & 0x80):
+            # PILOT_RUN: hold L+R (the run away) and press nothing -- unless the fight forbids it ($2989 bit 7: a boss, a
+            # scripted fight), which is then fought
             return [(0xC00, 8)], None
         self.stuck = self.stuck + 1 if w[0x95D5] < 3 and (w[0x95DB] or w[0x9609]) else 0
         if self.stuck > 12:
