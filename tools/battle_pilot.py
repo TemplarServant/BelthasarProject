@@ -17,7 +17,8 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     `$95E1`); PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated) takes a double tech from seat
     a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows down -- and
     idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
-    threshold; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
+    threshold; PILOT_HEALTECH (`seat:row`) heals the lowest PC under it with that row of the seat's tech list (Aura)
+    before any item; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
 Presses are 2 frames with 10-frame gaps (the menu reads one key per 4-frame pass). A submenu or target select still open
 after 12 steps (a press that missed its pass) is backed out with B. Between decisions it idles 4 frames; it stops when
 control is back on the field ($011F != 0) or after --max frames. Combatant blocks: `$5E2D + c * 0x80`, the current HP at
@@ -65,6 +66,7 @@ class Pilot:
         self.prefer = [int(x, 16) for x in os.environ.get('PILOT_TARGETS', '').split(',') if x]
         self.techs = [int(x) for x in os.environ.get('PILOT_TECH', '').split(',') if x]
         self.duals = [[int(x) for x in d.split(':')] for d in os.environ.get('PILOT_DUAL', '').split(',') if d]
+        self.healtech = dict((int(a), int(b)) for a, b in (d.split(':') for d in os.environ.get('PILOT_HEALTECH', '').split(',') if d))
         self.techrow = dict((int(a), int(b)) for a, b in (d.split(':') for d in os.environ.get('PILOT_TECHROW', '').split(',') if d))
         self.waited = 0                                           # frames a window has idled for its partner's gauge
         self.busy = set()                                         # seats given a command whose gauge has not reloaded yet
@@ -103,6 +105,14 @@ class Pilot:
             if rd16(w, 0x5E2D + s * 0x80 + 3) != self.pending[s]:
                 del self.pending[s]
         lives = [(r, s) for r, s in lives if s not in self.pending]
+        if lives and seat in self.healtech and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2:
+            ratio, who = min(lives)
+            if ratio < self.heal:
+                # PILOT_HEALTECH (`seat:row`): a one-ally healing tech (Marle's Aura) on the lowest-ratio PC -- Tech, the
+                # list walked to the row, A (step), the ally select walked to that PC, A
+                self.goal = ('tech', who, self.healtech[seat])
+                self.pending[who] = rd16(w, 0x5E2D + who * 0x80 + 3)
+                return 'healtech->%d' % who, press(walk(row, 1) + [0x100])
         if lives:
             ratio, who = min(lives)
             mids = sum(n for iid, n in bag if iid == MIDTONIC) - self.spentMid
