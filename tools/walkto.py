@@ -9,11 +9,12 @@ through the real loaders (a --teleport'd state does not: `jmp` leaves the lead P
 439's real exit into scene 5 (--exit, 228 probes), then 44 probes to the bell's talk tile with Marle
 following.
 
-usage: python tools/walkto.py <start.state> <tx> <ty> <out.state> [maxprobes] [--exit] [--lead=HEX] [--run] [--ow] [--astar] [--fight] [--pilot] [--dest=HEX]
+usage: python tools/walkto.py <start.state> <tx> <ty> <out.state> [maxprobes] [--exit] [--lead=HEX] [--run] [--ow] [--astar] [--fight] [--pilot] [--apress] [--dest=HEX]
   --step=N: frames a probe holds the d-pad (16): 8 reaches a world-map passage the 16-px grid steps over
   --exit : the target is an exit box; a step that changes $0100 is SUCCESS (the transition is the goal)
   --dest=HEX: with --exit, only a transition INTO that location ($0100 & 1FF) is the goal; one into another
            location is a wall (a door the route must not take)
+  --apress: an A press after every step (what an object does on A becomes a step of the search)
   --pilot: as --fight, but a fight is played by tools/battle_pilot.py's Pilot (PILOT_* from the environment) and its pad
            goes into the drive; a scene still takes the A chunks
   --fight: a step that leaves the player without control ($011F = 0: a visible enemy touched, a scene) is followed by A
@@ -36,6 +37,8 @@ DEST = None          # --dest=HEX: the one location an --exit transition may go 
 FIGHT = False        # --fight: mash A through what takes control away (the fights) and keep going
 PILOT = False        # --pilot: as --fight, but a FIGHT is played by tools/battle_pilot.py's Pilot (its PILOT_* settings)
 PADS = {}            # --pilot: probe state -> the pad its fight took (the playthrough grammar)
+APRESS = False       # --apress: each step is followed by an A press (0:2,100:4,0:20) -- what an object does on A (a jump
+                     #   between the rocks of a waterfall) is found by the search; the step's frames grow by 26
 MASH = {}            # probe state -> the 40-frame A chunks its step needed
 MASH_CHUNK = '100:2,0:18,100:2,0:18'
 
@@ -58,7 +61,8 @@ def control(state):
 
 def step(state, btn, frames, outstate):
     env = dict(ENV, PEEK_SAVE=outstate)
-    subprocess.run([CT, '--peek', state, outstate + '.fb', '--btnscript', '%X:%d' % (btn | HOLD, frames)],
+    subprocess.run([CT, '--peek', state, outstate + '.fb', '--btnscript', '%X:%d' % (btn | HOLD, frames) +
+                    (',0:2,100:4,0:20' if APRESS else '')],
                    cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if PILOT and control(outstate) == 0:
         import playthrough as P
@@ -101,7 +105,7 @@ def cell(x, y):
 
 
 def main():
-    global LEAD, HOLD, OW, FIGHT, PILOT, DEST, STEP
+    global LEAD, HOLD, OW, FIGHT, PILOT, APRESS, DEST, STEP
     for a in sys.argv[1:]:
         if a.startswith('--lead='): LEAD = int(a[7:], 16)
         if a == '--run': HOLD = 0x01
@@ -109,6 +113,7 @@ def main():
         if a.startswith('--step='): STEP = int(a[7:])
         if a == '--fight': FIGHT = True
         if a == '--pilot': PILOT = True
+        if a == '--apress': APRESS = True
         if a.startswith('--dest='): DEST = int(a[7:], 16)
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     want_exit = '--exit' in sys.argv
@@ -193,9 +198,12 @@ def main():
             merged.append([d, 0])
         elif merged and merged[-1][0] == d: merged[-1][1] += STEP
         else: merged.append([d, STEP])
+        if APRESS and not (d.startswith('M') or d.startswith('P:')):
+            merged.append(['A', 0])
     print('end (%d,%d) after %d probes, %d steps' % (x, y, probes, len(script)))
     print('script:', ','.join(PADS[b[2:]] if b.startswith('P:') else ('(%s)*%d' % (MASH_CHUNK, int(b[1:])))
-                              if b.startswith('M') else '%X:%d' % (BTN[b] | HOLD, f) for b, f in merged))
+                              if b.startswith('M') else '0:2,100:4,0:20' if b == 'A' else '%X:%d' % (BTN[b] | HOLD, f)
+                              for b, f in merged))
     print('state ->', out)
     shutil.rmtree(tmpdir, ignore_errors=True)
 
