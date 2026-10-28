@@ -32,6 +32,12 @@ What the sides show where the room ends, in order:
    layers; the fifth is opaque with BG3. A margin of one cell everywhere (266 of 412 locations: the dark around an
    interior) is a fill and yields to the room's own continuation. The margins have 4 to 6 columns a side; past them
    (a 16:9 side is 71 px: the fair's 005 has 64) the side goes on as below, never as the room's own layers again.
+   The tiles the Steam release added (`cgext*` sheets, 25 locations) were painted with its own recoloured palette
+   (`palette_bin/plt<id>.bin`), which the port never draws (the owner, 2026-10-28). `ct_wide.dat` keeps it as a key
+   only: where it made two indices one colour that the ROM keeps apart, the index a sheet pixel stands for is read
+   where the art meets the room (at the room's edge columns, the room's index beside a sheet pixel of the same Steam
+   colour, by majority; `CtFieldSceneBakeExt`). The Black Omen's exterior (06B): the wings past the machine were 0x2A,
+   080808 on Steam like the body's 0x5A but the ROM's navy sky; they take the body's 0x6A (000000).
 2. **A background** -- a layer the ROM marks as detached from the camera or scrolling on its own (`$1D35` / `$1D36`,
    from the map header md[1..3]) -- goes on: the Blackbird's clouds (16E), Flea's stars (0AD), Death Peak's snow (104).
    A still backdrop (detached, no speed: the skywalk's 01C sky) is painted for 256 columns and is **mirrored** about the

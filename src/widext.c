@@ -25,7 +25,8 @@ static uint32_t rd32(const uint8_t* p) { return (uint32_t)p[0] | (uint32_t)p[1] 
 // 256*256 CGRAM indices; per location u16 location, u8 w, u8 h, 5*w*h u16, u8 slot set[6], u16 metatiles, per metatile
 // u16 id + 4 x (u16 chip, u8 pal, u8 flags), u8 pages, per page u8 page + u16 sheet. (A version-2 file, four planes and no
 // sheets, is refused: tools/steam_wide.py writes it again.) Then, optionally, "SPCL", u32 images, per image u8 name length,
-// the name, u16 w, u16 h, w*h RGBA: the special scenes' extension art at the SNES's pixels (CtWideExtImage).
+// the name, u16 w, u16 h, w*h RGBA: the special scenes' extension art at the SNES's pixels (CtWideExtImage). Then,
+// optionally, "PALS", u32 palettes, per palette u16 location + 128 x u16: the Steam release's colours (CtWideExt.steamPal).
 static void widextLoad(void) {
   g_loaded = 1;
   const char* path = getenv("CT_WIDE_DAT");
@@ -84,6 +85,15 @@ static void widextLoad(void) {
       snprintf(im->name, sizeof im->name, "%.*s", l, (const char*)d + o + 1);
       im->w = w; im->h = h; im->rgba = d + o + 5 + l;
       o += 5 + l + 4L * w * h;
+    }
+  }
+  // the Steam release's palettes of the locations with added sheets ("PALS" after the images)
+  if (o + 8 <= len && !memcmp(d + o, "PALS", 4)) {
+    uint32_t n = rd32(d + o + 4);
+    o += 8;
+    for (uint32_t i = 0; i < n && o + 258 <= len; i++, o += 258) {
+      int loc = d[o] | d[o + 1] << 8;
+      if (loc < WIDEXT_LOCATIONS && g_ext[loc].planes) g_ext[loc].steamPal = d + o + 2;
     }
   }
 }

@@ -40,7 +40,9 @@ ct_wide.dat (all LE): b"CTWD", u32 version 3, u32 locations, u32 sets, u32 sheet
 fifth zero where the Steam release has none), u8 slot set[6] (0xFF none), u16 metatiles, per metatile: u16 id, 4 corners
 x (u16 chip, u8 palette, u8 flags: H 1, V 2, priority 4), u8 pages, per page: u8 page, u16 sheet. Then b"SPCL", u32
 images, per image: u8 name length, the name, u16 w, u16 h, w * h RGBA -- the special scenes' extension art (SPECIAL),
-halved to the SNES's pixels.
+halved to the SNES's pixels. Then b"PALS", u32 palettes, per palette: u16 location, 128 LE BGR555 -- the Steam release's
+colours of the location's BG half, for the locations with added sheets: never drawn, a key to their indices
+(steam_palette).
 """
 import argparse
 import gzip
@@ -119,6 +121,23 @@ def sheet_pages(loc):
     if 0x15A <= loc <= 0x15E or 0x1C8 <= loc <= 0x1CB:
         pages.append((2, 'cgext_lavos.bin'))
     return pages
+
+
+def steam_palette(f, files, loc):
+    """The Steam release's palette of a location, its BG half (CGRAM 0-127, 128 LE BGR555): `palette_bin/plt<id>.bin`
+    (u16 0x100, then 256 colours), id = the location's ROM header byte 3 (`Mapinfo` u16 5, equal to it in 511 of 512) -- or None. The Steam release
+    recoloured its rooms; the port keeps the ROM's colours (the owner, 2026-10-22 and 2026-10-28), so this is never drawn:
+    the added sheets were painted with its indices, and where two of them are one colour in it but not in the ROM's (06B's
+    0x2A and 0x5A, both 080808: the sky's 000010 and the machine's body 000000 in the ROM's) it tells the port which of
+    the room's own colours a sheet's pixel stands for (scene.c CtFieldSceneBakeExt)."""
+    info = files.get('Game/field/Mapinfo/mapinfo_%d.dat' % loc)
+    if not info:
+        return None
+    e = files.get('Game/field/palette_bin/plt%d.bin' % struct.unpack('<11H', _block(f, *info)[:22])[5])
+    if not e:
+        return None
+    d = _block(f, *e)
+    return d[2:2 + 256] if len(d) >= 2 + 512 and struct.unpack('<H', d[:2])[0] == 0x100 else None
 
 
 def margins(f, files):
@@ -340,6 +359,7 @@ def main():
                     pages = [p for p in pages if p[0] != pg] + [(pg, index[name])]
             m[loc] = m[loc][:5] + (pages,)
         spc = specials(f, files)
+        pals = {loc: p for loc in m if m[loc][5] for p in [steam_palette(f, files, loc)] if p}
     if a.list:
         for loc, (w, h, _, _, metas, pages) in sorted(m.items()):
             print('location %03X: %dx%d cells, %d metatiles, pages %s' % (loc, w, h, len(metas), [p for p, _ in pages]))
@@ -359,7 +379,11 @@ def main():
         o.write(b'SPCL' + struct.pack('<I', len(spc)))   # (after the locations: a version-3 reader stops before it)
         for name, w, h, px in spc:
             o.write(struct.pack('<B', len(name)) + name.encode() + struct.pack('<HH', w, h) + px)
-    print('steam-wide: %d locations with margins, %d chip sets, %d sheets, %d special images -> %s' % (len(m), len(sets), len(sheets), len(spc), a.out))
+        o.write(b'PALS' + struct.pack('<I', len(pals)))  # (after the images: a reader of before stops ahead of it)
+        for loc, pal in sorted(pals.items()):
+            o.write(struct.pack('<H', loc) + pal)
+    print('steam-wide: %d locations with margins, %d chip sets, %d sheets, %d special images, %d palettes -> %s'
+          % (len(m), len(sets), len(sheets), len(spc), len(pals), a.out))
 
 
 if __name__ == '__main__':

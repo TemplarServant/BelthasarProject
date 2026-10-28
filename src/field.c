@@ -5019,8 +5019,8 @@ static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   size_t px = (size_t)e.w * 16 * e.h * 16;
   p.rgb = (uint8_t*)malloc(px * 3); p.cov = (uint8_t*)malloc(px); p.rgb2 = (uint8_t*)malloc(px * 3); p.cov2 = (uint8_t*)malloc(px);
   if (!p.rgb || !p.cov || !p.rgb2 || !p.cov2 ||
-      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, 0x17, p.rgb, p.cov) ||
-      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, 0x08, p.rgb2, p.cov2)) {
+      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, e.steamPal, 0x17, p.rgb, p.cov) ||
+      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, e.steamPal, 0x08, p.rgb2, p.cov2)) {
     free(p.rgb); free(p.cov); free(p.rgb2); free(p.cov2); p.rgb = p.cov = p.rgb2 = p.cov2 = NULL; return NULL;
   }
   return &p;

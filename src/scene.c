@@ -877,9 +877,59 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
 // (0 = nothing); both are cleared first. A pixel's first byte is its CGRAM INDEX (0..127), not a colour: the caller colours
 // it with the scene's live palette (CtFieldScenePalette), so the margins follow its fades and cycles as the room does --
 // a fight's darkening through the CGRAM left them bright beside Zombor's room (087; the owner, 2026-10-23).
+// THE SHEETS' INDICES AS THE ROOM'S (steamPal). The sheets were painted with the Steam release's palette, which recoloured
+// the room; the port draws the ROM's (the owner, 2026-10-22 and 2026-10-28: not the Steam colours). Where that palette made
+// two indices one colour the ROM keeps apart, the painter took either: 06B's wings past the machine are 0x2A -- 080808 in
+// it like the machine's body 0x5A, but 000010 (the sky's) in the ROM's -- and stood navy beside the middle's black body (the
+// owner, 2026-10-28). The room's own layer uses both there (its sky and its body), so which one a pixel stands for is
+// read where the art meets the room: at the room's edge columns, a sheet's pixel beside a room's pixel of the same Steam
+// colour (the art going on from it) names that room index; each sheet index takes the room index named most (itself when
+// beside itself), and one never beside the room stays. The room's layer is the plane's: plane 3 BG2's low tiles, plane 2
+// BG1's, planes 1 and 0 the priority-1 tiles (BG1's over BG2's).
+static int roomIndexAt(const SceneData* sd, const uint16_t* t, int lw, int lh, int prio, int x, int y) {
+  if (!t || lw <= 0 || lh <= 0) return 0;
+  int mc = ((x >> 4) % lw + lw) % lw, mr = ((y >> 4) % lh + lh) % lh, ti = t[mr * lw + mc];
+  if (ti >= 512) return 0;
+  const Corner* c = &sd->meta12[ti].c[((y >> 3) & 1) * 2 + ((x >> 3) & 1)];
+  if (c->chip >= 768 || !sd->pres12[c->chip] || (int)c->prio != prio) return 0;
+  int v = sd->chips12[(size_t)c->chip * 64 + (c->fy ? 7 - (y & 7) : y & 7) * 8 + (c->fx ? 7 - (x & 7) : x & 7)];
+  return v && c->base + v < 128 ? c->base + v : 0;
+}
+static int roomLayerIndex(const SceneData* sd, int plane, int x, int y) {
+  if (plane == 3) return roomIndexAt(sd, sd->l2t, sd->w2, sd->h2, 0, x, y);
+  if (plane == 2) return roomIndexAt(sd, sd->l1t, sd->w1, sd->h1, 0, x, y);
+  int v = roomIndexAt(sd, sd->l1t, sd->w1, sd->h1, 1, x, y);
+  return v ? v : roomIndexAt(sd, sd->l2t, sd->w2, sd->h2, 1, x, y);
+}
+static int sheetIndexAt(const uint16_t* pl, int w, int hgt, const uint8_t* const pageSheet[8], int X, int Y) {
+  if (X < 0 || Y < 0 || X >= w * 16 || Y >= hgt * 16) return 0;
+  int v = pl[(Y >> 4) * w + (X >> 4)], pg = (v - 1) >> 8;
+  if (!v || pg < 2 || pg >= 8 || !pageSheet[pg]) return 0;
+  int tt = (v - 1) & 255, ci = pageSheet[pg][((tt >> 4) * 16 + (Y & 15)) * 256 + (tt & 15) * 16 + (X & 15)];
+  return ci < 128 ? ci : 0;
+}
+static void extIndexMap(const SceneData* sd, const uint16_t* pl, int w, int hgt, const uint8_t* const pageSheet[8],
+                        const uint8_t* steamPal, int plane, uint8_t map[128]) {
+  for (int i = 0; i < 128; i++) map[i] = (uint8_t)i;
+  if (!steamPal || !pageSheet || plane > 3) return;
+  const int full = (sd->sm_l & 0x80) != 0, mx0 = full ? 0 : sd->sm_l * 16, mx1 = full ? sd->w1 * 16 : (sd->sm_r + 1) * 16;
+  const int xo = (w - mx1 / 16) / 2;
+  static int votes[128][128]; memset(votes, 0, sizeof votes);
+  for (int y = 0; y < hgt * 16; y++)
+    for (int side = 0; side < 2; side++) {
+      const int mo = side ? mx1 : mx0 - 1, mi = side ? mx1 - 1 : mx0;   // (the art's column and the room's beside it)
+      int a = sheetIndexAt(pl, w, hgt, pageSheet, mo + xo * 16, y), b = roomLayerIndex(sd, plane, mi, y);
+      if (a && b && steamPal[2 * a] == steamPal[2 * b] && steamPal[2 * a + 1] == steamPal[2 * b + 1]) votes[a][b]++;
+    }
+  for (int i = 1; i < 128; i++) {
+    int best = i;
+    for (int j = 1; j < 128; j++) if (votes[i][j] > votes[i][best]) best = j;
+    map[i] = (uint8_t)best;                                         // (06B: plane 2's 0x2A -> 0x6A, the body's 000000)
+  }
+}
 int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
                         const uint16_t* metaIds, const uint8_t* metaCorners, const uint8_t* const pageSheet[8],
-                        int planeMask, uint8_t* rgb, uint8_t* cov) {
+                        const uint8_t* steamPal, int planeMask, uint8_t* rgb, uint8_t* cov) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->meta12 || !sd->chips12 || !planes || w <= 0 || hgt <= 0) return 0;
   int W = w * 16, H = hgt * 16, n = w * hgt;
@@ -906,6 +956,7 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
     int k = order[o]; uint8_t bit = k >= 2 && k < 4 ? BL1 : k < 2 ? BL2 : BL3;
     if (!(planeMask & (1 << k))) continue;
     const uint16_t* pl = planes + (size_t)k * n;
+    uint8_t imap[128]; extIndexMap(sd, pl, w, hgt, pageSheet, steamPal, k, imap);
     for (int i = 0; i < n; i++) {
       int v = pl[i], pg = (v - 1) >> 8;
       t[i] = (v == 0 || pg >= 2 || (pageSheet && pageSheet[pg])) ? 0xFFFF : (uint16_t)(v - 1);
@@ -922,7 +973,7 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
           int ci = s[(sy + y) * 256 + sx + x];
           if (!ci || ci >= 128) continue;
           size_t q = (size_t)(y0 + y) * W + x0 + x;
-          memcpy(rgb + q * 3, ipal[ci], 3); cov[q] = bit;
+          memcpy(rgb + q * 3, ipal[imap[ci]], 3); cov[q] = bit;
         }
     }
     for (int prio = 0; prio < 2; prio++)
