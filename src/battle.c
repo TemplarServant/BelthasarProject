@@ -16228,7 +16228,17 @@ static void battleAdvanceAction(CtBattleHost* h) {
     // routine from there) -- then the loop's tail and its step-less C1/881C (battleSpanEndArm). A lifeline revive the sweep
     // meets waits there as on the handler's own tail, and the eval after it (battleLifelineResume -> battleH12TailRest).
     if (!tailRan && turnSlot >= 0) {
+      int ctrMore = 0;                                          // another victim's counter still in the loop (C1/87FE ->
+      if (wasCounter)                                           //   C1/8694): C1/881C's eval waits for the loop's end
+        for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) ctrMore = 1;
       if (wasCounter && battleDeadFlagSweep(h, 0, LL_CONT_H12)) { h->llSlot = turnSlot; tailWaits = 1; }
+      else if (ctrMore) {
+        // MEASURED, the rule's cartridge (leg 54_r_series, the R-series' counters to Crono's Cyclone, `--cputrace` from
+        // f17650): slot 5's counter ends at C1/8E7D, then C1/87FE and C1/8694 take slot 6's (its C1/A486 draws, C1/8CF9,
+        // C1/E2C8 x2, C1/8E47) -- no C1/8C09 between. The port walked the AI at each counter's close and drew one more
+        // (C1/98D1, slot 5's random branch), and every later roll of the fight moved.
+        if (h->aiTurnAdv[turnSlot]) { h->aiTurnAdv[turnSlot] = 0; battleAiAdvance(h, turnSlot); }
+      }
       else battleSpanEndArm(h, turnSlot);
     }
     // (No re-aim here. A PC's facing after its action is whatever the action's script left: a plain attack re-aims with its

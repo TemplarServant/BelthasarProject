@@ -10354,15 +10354,20 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
   // $7BFD (bit7($2B23)>>1 = the grid's SOLID bit6; verified 256/256 vs the oracle on both arenas).
   // The $7E7000-plane bit7 window measured ZERO in both oracle arenas -> staged 0 (documented boundary;
   // the merge carries the term structurally).
+  // C0/039B-03A2 / C0/03A4-03AB: the window's origin is `($1D0A >> 1) & $1D1E` / `($1D0E >> 1) & $1D1F` (8-bit), and
+  // C0/03AD-03D7 / C0/03DB-0407 copy 16 rows of 16 bytes with MVN from $7E:7000 / $7E:7040 + (row << 8 | col), the row
+  // stepping +$100 -- the planes as the location load and the scripted copies left them in WRAM, whole bytes. The
+  // $7E7000 window is NOT always zero: Heckran's Cave (loc 030, the playthrough's 58_heckran_cave) has its walls there
+  // (bit 7), and the cartridge's arena grid carries them as 0x80 cells (`$7BFD` rows 2-C); staged as zeros, the guard's
+  // shove (action 0A's A2 walk) carried Crono through the wall, 17 frames further than the cartridge's stop.
   { int nsol = 0;
+    int col0 = (s[0x1D0A] >> 1) & s[0x1D1E], row0 = (s[0x1D0E] >> 1) & s[0x1D1F];
     for (int gr = 0; gr < 16; gr++)
       for (int gc = 0; gc < 16; gc++) {
-        int tx = oTX + gc, ty = oTY + gr, solid = 0;
-        if (g_fc && g_fc->mv && tx >= 0 && ty >= 0 && tx < g_fc->cw && ty < g_fc->ch)
-          solid = g_fc->mv[ty * g_fc->cw + tx] & 1;               // mv bit0 = ROM $7E7040 bit7 (mover-solid)
-        s[0x2B23 + gr * 16 + gc] = (uint8_t)(solid ? 0x80 : 0x00);
-        s[0x2A23 + gr * 16 + gc] = 0x00;
-        nsol += solid;
+        int o = ((row0 << 8) | col0) + gr * 0x100 + gc;
+        s[0x2A23 + gr * 16 + gc] = s[(0x7000 + o) & 0xFFFF];
+        s[0x2B23 + gr * 16 + gc] = s[(0x7040 + o) & 0xFFFF];
+        nsol += s[0x2B23 + gr * 16 + gc] >> 7;
       }
     if (getenv("CT_BATTLE_STAGEDBG"))
       fprintf(stderr, "[stage] collision window oT=(%d,%d) g_fc=%p mv=%p cw=%d solids=%d\n",

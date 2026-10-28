@@ -45020,13 +45020,13 @@
         "saves/tyranno_re/tele301_req.lakewram"
       ],
       "expect": [
-        "fleeprog f2589 slot0 op=84 at=6CFE next=6CFF BE9A=00 CFFF=00 9FFA=00 loop=0",
-        "fleeprog f2654 done 5D9B=0 CCEA=1 stops=0",
+        "fleeprog f2370 slot0 op=84 at=6CFE next=6CFF BE9A=00 CFFF=00 9FFA=00 loop=0",
+        "fleeprog f2435 done 5D9B=0 CCEA=1 stops=0",
         "fleeprog: run total stops=0"
       ],
       "pin": [
-        "^fleeprog f2589 slot0 op=84 at=6CFE next=6CFF",
-        "^fleeprog f2654 done",
+        "^fleeprog f[0-9]+ slot0 op=84 at=6CFE next=6CFF",
+        "^fleeprog f[0-9]+ done",
         "^fleeprog: run total"
       ],
       "timeout_s": 300,
@@ -45039,7 +45039,7 @@
         }
       ],
       "note_pass": "Azala's ring (effect program D1/6CD9, op EB = D1/EFE3: 106 point pairs around point 0 into $C15D..) runs its 151 steps and the program ends: the fight goes on",
-      "notes": "The fight in scene 301 (Black Tyranno + Azala) from the same seed as tyranno-ff24-chain-plays-through-in-the-port, unpoked, A held: Azala's technique (CD/D38E) arms program 74 (D1/6CD9) at battle f2446; its loop `83 96 / EB 01 / 84` ran into op EB, which the port did not have -- the program stopped and the tech never ended (the boulder hung on screen and the fight froze). On the cartridge (s301_c2, its own fight) EB runs from f2121: $CD3A 01, 02, 03 .., $45/$47 the angles, their high bytes 00."
+      "notes": "The fight in scene 301 (Black Tyranno + Azala) from the same seed as tyranno-ff24-chain-plays-through-in-the-port, unpoked, A held: Azala's technique (CD/D38E) arms program 74 (D1/6CD9) at battle f2446; its loop `83 96 / EB 01 / 84` ran into op EB, which the port did not have -- the program stopped and the tech never ended (the boulder hung on screen and the fight froze). On the cartridge (s301_c2, its own fight) EB runs from f2121: $CD3A 01, 02, 03 .., $45/$47 the angles, their high bytes 00. Re-pinned 2026-10-28: the program arms at f2227 (was f2446), closer to the cartridge's f2121, after the hidden-slot shuffle and ATB load and the counter loop's single eval were ported (playthrough legs 54/65)."
     },
     {
       "name": "jackie-saves-census-vs-oracle",
