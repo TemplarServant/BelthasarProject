@@ -144,7 +144,7 @@ class Pilot:
         self.pendingMp = {s for s in self.pendingMp if rd16(w, 0x5E2D + s * 0x80 + 7) < int(os.environ.get('PILOT_ETHER') or 0)}
         if self.hold and w[self.hold[0]] == self.hold[1]:
             # PILOT_HOLD (`addr:val`, hex): while that WRAM byte holds the value -- an enemy's counter stance (Heckran's
-            # "Go ahead! Try and attack...!": $B1D0 = 11 from the message until "Brief counterattack break") -- no attack:
+            # challenge to attack: $B1D0 = 11 from that message until the one that ends the stance) -- no attack:
             # the window idles (the battle runs on, Active)
             return 'wait', [(0, 4)]
         tgt = self.target(w)
