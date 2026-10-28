@@ -3112,6 +3112,10 @@ static void reqScratch(CtScene* sc, int op, int tgt, int pr) {
 // ticket stands (vmLeadStepAtA810: never armed, or dropped). Transient per-frame state: statics, not CtScene members
 // (a member breaks every --loadstate .state).
 static int g_leadTk = -1;                  // -1 = the lead's 3040 arm has not run this pass, 1 = armed, 0 = dropped
+// An op 0xDA ring reset (C0/347D) made in a visit AFTER the lead's B0: in the ROM the lead's push (3040 -> 9E29) has run by
+// then -- the lead is the queue's head (C0/5A31-5A3D) -- so the cursors take the pushed head. This port pushes after the
+// runner (CtSceneUpdateFollowers), which re-applies the reset behind its push.
+static int g_daRingPend = 0;
 static int g_leadDefer, g_leadDeferTick; static double g_leadDeferX, g_leadDeferY;   // a busy lead's step (below)
 static int g_leadFromOk, g_leadFromTick; static double g_leadFromX, g_leadFromY;
 static int gVmTick;                        // trace timestamps (and the step origin's frame)
@@ -4159,6 +4163,11 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       { unsigned hd = r8(m, 0x7E01AB) & 0xFF;
         w8(m, 0x7E01AC, hd); w8(m, 0x7E01AD, hd);
         w8(m, 0x7F0C00 + hd, 0); w8(m, 0x7F0D00 + hd, 0); w8(m, 0x7F0F00 + hd, 0); }
+      // ...AND THE HEAD IT COPIES INCLUDES THIS FRAME'S PUSH when the lead's B0 visit came first (it always does: the
+      // lead is the queue's head). MEASURED, the rule's cartridge (playthrough leg 53, 0EB's lift): the DA releases at
+      // f15621 with `$01AC/$01AD = 32` (C0:3481/3483) after the lead's first step pushed `$01AB` 31 -> 32 (C0:9E49) that
+      // frame; the port copied 31 and the follower set off a frame early.
+      if (g_leadTk != -1) g_daRingPend = 1;
       s->addr = nxt;                                       // 349A LDX $C7 / 349C INX / 349D SEC
       return 0;
     }
@@ -6953,6 +6962,7 @@ void CtSceneTick(CtScene* sc) {
               (ts->addr >= 0 && ts->addr < sc->blen) ? sc->body[ts->addr] : 0xEE,
               sc->mem->l[0x13], sc->mem->l[0x12], sc->mem->l[0x15], sc->mem->l[0x14]); } }
   if (!sndResuming) g_leadTk = -1;                      // no B0 visit of the lead yet in this pass (a resumed one had it)
+  if (!sndResuming) g_daRingPend = 0;
   if (!sndResuming) { memset(g_ranB0, 0, sizeof g_ranB0); memset(g_landedB0, 0, sizeof g_landedB0); }   // (a resumed
                                                                 // pass keeps what its first half dispatched)
   for (int qi = sndResuming ? sc->sndResumeN : 0; qi < nq; qi++) {   // no cut: C0/5A5D on the fixed virtual beam
@@ -7633,6 +7643,12 @@ void CtSceneUpdateFollowers(CtScene* sc) {
     w8(sc->mem, 0x7F0E80 + h, w[0x0C01 + lead * 2]);
     w8(sc->mem, 0x7F0F00 + h, w[0x1D34]);
     w[0x1900 + lead * 2] = w[0x1D32]; w[0x1980 + lead * 2] = w[0x1D33];   // 9E53/9E5D: the lead too
+  }
+  if (g_daRingPend) {                                   // an op 0xDA reset this pass, after the lead's visit (g_daRingPend)
+    unsigned hd = w[0x01AB] & 0x7F;                     // 347D LDA $AB / STA $AC / STA $AD, on the head the push left
+    w[0x01AC] = (uint8_t)hd; w[0x01AD] = (uint8_t)hd;
+    w8(sc->mem, 0x7F0C00 + hd, 0); w8(sc->mem, 0x7F0D00 + hd, 0); w8(sc->mem, 0x7F0F00 + hd, 0);   // 3486-3496
+    g_daRingPend = 0;
   }
 
   // ---- C0/A26B / C0/A2CE, the two followers, in chain order.

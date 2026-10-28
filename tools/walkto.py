@@ -9,11 +9,13 @@ through the real loaders (a --teleport'd state does not: `jmp` leaves the lead P
 439's real exit into scene 5 (--exit, 228 probes), then 44 probes to the bell's talk tile with Marle
 following.
 
-usage: python tools/walkto.py <start.state> <tx> <ty> <out.state> [maxprobes] [--exit] [--lead=HEX] [--run] [--ow] [--astar] [--fight] [--dest=HEX]
+usage: python tools/walkto.py <start.state> <tx> <ty> <out.state> [maxprobes] [--exit] [--lead=HEX] [--run] [--ow] [--astar] [--fight] [--pilot] [--dest=HEX]
   --step=N: frames a probe holds the d-pad (16): 8 reaches a world-map passage the 16-px grid steps over
   --exit : the target is an exit box; a step that changes $0100 is SUCCESS (the transition is the goal)
   --dest=HEX: with --exit, only a transition INTO that location ($0100 & 1FF) is the goal; one into another
            location is a wall (a door the route must not take)
+  --pilot: as --fight, but a fight is played by tools/battle_pilot.py's Pilot (PILOT_* from the environment) and its pad
+           goes into the drive; a scene still takes the A chunks
   --fight: a step that leaves the player without control ($011F = 0: a visible enemy touched, a scene) is followed by A
            presses (40-frame chunks of `100:2,0:18`) until control is back, and that stretch goes into the drive -- the
            visible enemies of a dungeon are fought through instead of walling the search off
@@ -32,6 +34,8 @@ OPP = {'R': 'L', 'L': 'R', 'U': 'D', 'D': 'U'}
 STEP = 16
 DEST = None          # --dest=HEX: the one location an --exit transition may go to
 FIGHT = False        # --fight: mash A through what takes control away (the fights) and keep going
+PILOT = False        # --pilot: as --fight, but a FIGHT is played by tools/battle_pilot.py's Pilot (its PILOT_* settings)
+PADS = {}            # --pilot: probe state -> the pad its fight took (the playthrough grammar)
 MASH = {}            # probe state -> the 40-frame A chunks its step needed
 MASH_CHUNK = '100:2,0:18,100:2,0:18'
 
@@ -56,6 +60,20 @@ def step(state, btn, frames, outstate):
     env = dict(ENV, PEEK_SAVE=outstate)
     subprocess.run([CT, '--peek', state, outstate + '.fb', '--btnscript', '%X:%d' % (btn | HOLD, frames)],
                    cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if PILOT and control(outstate) == 0:
+        import playthrough as P
+        from battle_pilot import Pilot, in_fight
+        pilot, loc0, pad, t = Pilot(), read_pos(outstate)[0], [], 0
+        while t < 12000:                            # a fight by the pilot; a scene's frames by A, as --fight
+            w = P.wram_of(outstate)
+            if w[0x011F] or ((w[0x100] | (w[0x101] << 8)) & 0x1FF) != loc0:
+                break
+            st = pilot.step(w)[0] if in_fight(w) else P.expand(MASH_CHUNK)
+            P.oracle_play(outstate, st, outstate + '.m'); shutil.move(outstate + '.m', outstate)
+            pad += st; t += sum(n for _, n in st)
+        if pad:
+            PADS[outstate] = P.btnscript(pad); MASH[outstate] = 'P'
+        return read_pos(outstate)
     if FIGHT and control(outstate) == 0:
         loc0 = read_pos(outstate)[0]
         k = 0
@@ -71,18 +89,26 @@ def step(state, btn, frames, outstate):
     return read_pos(outstate)
 
 
+def tok(nxt):
+    """The script token for what a probe's step needed after it: a pilot's fight pad, or a count of A chunks."""
+    if MASH.get(nxt) == 'P':
+        return ['P:' + nxt]
+    return ['M%d' % MASH[nxt]] if MASH.get(nxt) else []
+
+
 def cell(x, y):
     return (x // 8, y // 8)
 
 
 def main():
-    global LEAD, HOLD, OW, FIGHT, DEST, STEP
+    global LEAD, HOLD, OW, FIGHT, PILOT, DEST, STEP
     for a in sys.argv[1:]:
         if a.startswith('--lead='): LEAD = int(a[7:], 16)
         if a == '--run': HOLD = 0x01
         if a == '--ow': OW = True
         if a.startswith('--step='): STEP = int(a[7:])
         if a == '--fight': FIGHT = True
+        if a == '--pilot': PILOT = True
         if a.startswith('--dest='): DEST = int(a[7:], 16)
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     want_exit = '--exit' in sys.argv
@@ -113,7 +139,7 @@ def main():
                 loc1, nx, ny = step(st, BTN[d], STEP, nxt)
                 if loc1 != loc0:
                     if want_exit and (DEST is None or (loc1 & 0x1FF) == DEST):
-                        best = (nxt, (nx, ny), script + [d] + (['M%d' % MASH[nxt]] if MASH.get(nxt) else []))
+                        best = (nxt, (nx, ny), script + [d] + tok(nxt))
                         print('  transition -> loc %03X at (%d,%d)' % (loc1, nx, ny)); break
                     continue
                 fought = MASH.get(nxt, 0)
@@ -121,7 +147,7 @@ def main():
                     continue
                 visited.add(cell(nx, ny))
                 seq += 1
-                ext = [d] + (['M%d' % fought] if fought else [])
+                ext = [d] + tok(nxt)
                 heapq.heappush(heap, ((len(script) + 1) * 8 + 2 * dist(nx, ny), seq, nxt, (nx, ny), script + ext))
             if best:
                 break
@@ -154,7 +180,7 @@ def main():
         if not fought and ((nx, ny) == (x, y) or cell(nx, ny) in visited):
             continue
         visited.add(cell(nx, ny))
-        stack.append((nxt, (nx, ny), script + [d] + (['M%d' % fought] if fought else []), set()))
+        stack.append((nxt, (nx, ny), script + [d] + tok(nxt), set()))
     if not best and stack and not want_exit:
         best = stack[-1][:3]
     if not best:
@@ -163,13 +189,13 @@ def main():
     shutil.copyfile(st, out)
     merged = []
     for d in script:
-        if d.startswith('M'):
+        if d.startswith('M') or d.startswith('P:'):
             merged.append([d, 0])
         elif merged and merged[-1][0] == d: merged[-1][1] += STEP
         else: merged.append([d, STEP])
     print('end (%d,%d) after %d probes, %d steps' % (x, y, probes, len(script)))
-    print('script:', ','.join(('(%s)*%d' % (MASH_CHUNK, int(b[1:]))) if b.startswith('M') else '%X:%d' % (BTN[b] | HOLD, f)
-                              for b, f in merged))
+    print('script:', ','.join(PADS[b[2:]] if b.startswith('P:') else ('(%s)*%d' % (MASH_CHUNK, int(b[1:])))
+                              if b.startswith('M') else '%X:%d' % (BTN[b] | HOLD, f) for b, f in merged))
     print('state ->', out)
     shutil.rmtree(tmpdir, ignore_errors=True)
 

@@ -12379,11 +12379,14 @@ static void battleOpenAction(CtBattleHost* h, int atk, int reactive) {
                                                                   //   degenerate PC dispatch: never a PC
                                                                   //   tech or item, so clear any leftover
                                                                   //   (battleDispatchScheduled owns those)
-  // No co-actors: the enemy command's C1/8D1F and the PC physical's C1/BFC8 both `LDA #FF / STA $AE97 / STA $AE98`
-  // (oracle gato_elixir f673: GATO's command -> `$AE97 = FF FF` (C1:AD31 row), `$A014 = 06 FF FF 00`). The AI's
-  // own co-actor stores (C1/9A77, C1/A086, C1/A2CE -- `STA $AE97` from $AECC after C1/AC14) are NOT ported.
+  // The co-actors. The PC physical's C1/BFC8 `LDA #FF / STA $AE97 / STA $AE98` clears them; an ENEMY's were cleared at
+  // its turn's head (C1/8D1F, battleAiTurn) and its AI may since have stored a tech's co-actors there (C1/9A77, C1/A086,
+  // C1/A2CE -- `STA $AE97` from $AECC after C1/AC14, aiTechCoTargets), which the open must keep: CC/F156 binds them as
+  // roles 1/2. MEASURED, the rule's oracle (playthrough leg 53, the Acids' "Chemically fuse" tech 17): `$AE97 = FF FF`
+  // at the turn (f1946, C1:8D27), `04 FF` from the AI (f2151), and at the open `$A014 = 03 04 FF 00` (f2164, CC:F1BF);
+  // clearing them here left track 1 unbound and its scratch objects slid from (0,0) -- 28 frames too long.
   if (!reactive) {
-  s[0xAE97] = 0xFF; s[0xAE98] = 0xFF;
+  if (battleIsPc(atk)) { s[0xAE97] = 0xFF; s[0xAE98] = 0xFF; }
   // An enemy TECH runs the attack's pipeline on its class-2 header (C1/8E15 JSR C1/D7C4; see battleArrive).
   if (!battleIsPc(atk)) s[0xAEE3] = isTech ? 0x02 : 0x01;         // C1/8D7E, the turn's op
   battleShowRecordsClear(s);                                       // FD/ACEE at the enemy's command (C1/8835..)
@@ -12815,7 +12818,9 @@ static int battleCounterDecodeRest(CtBattleHost* h, int slot, int op, int tgt) {
   if (op == BT_AI_ACT_HDR) { h->aiTurnTgtN = 1; h->aiTurnTgtList[0] = tgt; }
   h->actCrit = 0; h->actCritFlash = 0; h->actMiss = 0;
   h->actTechId = 0; h->actItemId = 0;
-  s[0xAE97] = 0xFF; s[0xAE98] = 0xFF;
+  // (No co-actor clear here: C1/8CF9's only `STA $AE97 / STA $AE98` is its head, C1/8D1F-8D24 -- battleAiTurn, which the
+  // counter's turn ran -- and the handler between may have stored a tech's co-actors, which 8DA4-8E15 keep. Leg 53's
+  // "Chemically fuse" is a counter: `$AE97 = 04` from the AI, `$A014 = 03 04 FF 00` at the open.)
   battleAiActionHeader(s);                                         // C1/8DA4 JSR C1/ACF2
   s[0xAEE3] = isTech ? 0x02 : 0x01;                                // C1/8D7E, the turn's op
   battleShowRecordsClear(s);                                       // FD/ACEE
@@ -22883,6 +22888,16 @@ static void battleTurnHandler12(CtBattleHost* h) {
   if (h->stSweepAtEnd) {}
   else if (pcCmd && h->pcThinkDelay > 0) h->h12TailPc = 1;
   else if (pcCmd) battleH12Tail(h, LL_CONT_DISPATCH, -1);        // C1/B967 ran no action: C1/85D1 -> C1/860D at once
+  else if (!tookTurn && cmbSeen >= 3 && !(h->pcInTurn[0] || h->pcInTurn[1] || h->pcInTurn[2])
+           && !((s[0xB188] | s[0xB189] | s[0xB18A]) & 0x80))
+    // AN ENEMY ENTRY THAT TOOK NO TURN (gone, ATB not 0, the C1/84B8 arrival gate, $B247) with no PC record pending:
+    // C1/84EC-84F6 -> C1/850E JMP C1/881C -- the eval only. C1/860D's `$B186 &= FFFE` and C1/8626's sweep are not on that
+    // path, so the ATB's bit stays set and the next odd pass runs this handler again on the entry at the cursor - 1 ($AEC7
+    // - 1 once the cursor pass has walked off the end). MEASURED, the rule's oracle (playthrough leg 53, the Acids):
+    // combatant 6 ready at f4311 (`$B03A[6] = 81`, `$B186 = 01`), its arrival latch $982C at f4312, `$B186` still 01 at
+    // f4313, the turn at f4315 (`$B185 = 00`, `$B03A[6] = 01`, `$AFAB[6] = 48`); the port cleared the bit at f4311 and
+    // took the turn 16 frames late, when the cursor came round again.
+    battleH12TailRest(h, -1);
   else battleH12Tail(h, LL_CONT_DISPATCH, tookTurn ? -2 : -1);   // (-2: a no-action turn ran its C1/881C already)
 }
 static int battleTickBody(CtBattleHost* h, int endRequest, int input) {

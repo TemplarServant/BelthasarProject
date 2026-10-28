@@ -395,3 +395,13 @@ lands the ip on his prio-7 B0 at 06A2 and the visit ends; $168C stays 08, $160C 
 C0:A21C zeroes $168C ($160C 0305). The port now skips the conga for a follower whose visit this frame ENDED on a B0 it did
 not dispatch (ct_vm.c g_landedB0; the flags live outside struct CtScene, which the debug savestate writes raw). Check
 attract-0e6-robo-idle-on-the-b0s-dispatch-vs-rule-cartridge (port f7616/f7617 = c7669/c7670).
+
+## 2026-10-27 -- op 0xDA's ring reset sees this frame's push
+
+C0/347D (`LDA $AB / STA $AC / STA $AD`, and the entry at the head zeroed) copies the head as it stands at the DA's visit.
+The lead is the queue's head (C0/5A31-5A3D prepends him), so on a frame he steps, his B0 (3040 -> 9E29, the push) has run
+before any other object's DA. MEASURED, the rule's cartridge (playthrough leg 53, 0EB's lift event, obj 10's `DA`): the
+lead's first step after the hand-back pushes `$01AB` 31 -> 32 at f15621 (C0:9E49) and the DA releases the same frame with
+`$01AC/$01AD = 32` (C0:3481/3483). This port pushes after the runner (CtSceneUpdateFollowers), so its DA copied 31 and
+the follower set off one frame early -- the shutters' walk four frames short at the end. A DA reset in a pass where the
+lead's B0 already ran (g_leadTk) is re-applied behind the push (ct_vm.c g_daRingPend).

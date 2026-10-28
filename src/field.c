@@ -1076,6 +1076,7 @@ static void worldEnterSong(World* w, int cell8x, int cell8y) {
 // 0x4E are never even reached and the leg cannot end (notes 9.17).
 // CT_OWSNAP=1 forces the old snapshot path back for an A/B.
 static int g_owObjFromCapture = 0;                 // set by --loadwram and the CT_OWBOAT_SHOT canary
+static int g_owCaptureStart = 0;                   // a world capture's start (below the --loadwram seed): no entry song post
 static int owBootstrapObjects(void) {
   if (getenv("CT_OWSNAP")) return 0;
   if (getenv("CT_OWSEEDBOOT")) return 1;          // a world capture entered the ROM's way: its bootstrap over its own WRAM
@@ -1207,7 +1208,7 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
   w->wram[0x0041] = 0x17;                              // C2/0155 TM = BG1+BG2+BG3+OBJ
   w->wram[0x0042] = 0x13;                              // C2/0159 TS = BG1+BG2+OBJ
   CtWorldEnter(&w->cam, &w->mv, px >> 3, py >> 3);
-  worldEnterSong(w, px >> 3, py >> 3);
+  if (!g_owCaptureStart) worldEnterSong(w, px >> 3, py >> 3);   // a capture's song is already playing on its seeded SPC
   worldClearHdmaArea(w->wram);                         // C2/2C7A JSR C2/2BFB, before C2/09C5's two maps
   CtWorldTilemapBuild(&w->stm, w->wram, &w->cam);
   w->entryLatch = 0xFFFF;
@@ -12723,6 +12724,38 @@ int main(int argc, char** argv) {
       pendHasFlags = 1; memcpy(pendFlags, cw + 0x10000, 0x200);
       fade = 1;
       printf("reboot: JML C0:0000 -> loc %03X tile(%d,%d) bits%02X\n", rl, rtx, rty, rb); }
+  }
+  // ---- A WORLD-MAP CAPTURE AS THE START: `--loadwram` of a state whose $0100 is a world (>= 0x1F0). The capture IS the
+  // world in progress: its party at $0283/$0285, its camera ($20 / $26 = the position less (128,112), the entry law of
+  // CtWorldEnter -- measured on the playthrough's 1F2 state past Lab 32: (672,304) and (544,192)), its object blocks, its
+  // direct page, its song on the seeded SPC. The port used to run it as a FIELD scene first, whose positional-exit test
+  // met the lead's field position and the exit records the field had left in WRAM (0E1's, the location the party had just
+  // come out of) and re-entered the world at THAT exit's tile (81,31) on frame 0 -- (648,248) for the capture's (672,304),
+  // a fade and a song post later. Now the world loads (worldInit: its maps, char and tables, the same ROM data the capture
+  // holds), the loader's placement runs on the capture's own position (worldEnterAt, for the host's C-side mirrors: the
+  // mover, the camera, the streaming, the sprites in VRAM) without the entry's song post, and the capture's WRAM goes back
+  // over everything the placement rebuilt. No fade: the capture's screen is lit. HARNESS ONLY (a seed is not the game).
+  if (loadWramPath && g_owObjFromCapture && haveWorld && f.vm) {
+    uint8_t* hw = CtWramSys(fieldWram());
+    int wl = (hw[0x0100] | (hw[0x0101] << 8)) & 0x1FF;
+    int wpx = hw[0x0283] | (hw[0x0284] << 8), wpy = hw[0x0285] | (hw[0x0286] << 8);
+    static uint8_t keepCap[0x20000];
+    memcpy(keepCap, hw, sizeof keepCap);
+    fieldFree(&f);
+    haveWorld = worldInit(&assets, &wd, wl - 0x1F0);
+    if (haveWorld) {
+      g_owCaptureStart = 1; worldEnterAt(&wd, wpx, wpy); g_owCaptureStart = 0;
+      memcpy(hw, keepCap, sizeof keepCap);
+      wd.mv.posX = wd.mv.probeX = (uint16_t)wpx; wd.mv.posY = wd.mv.probeY = (uint16_t)wpy;   // the exact pixel (the
+      wd.cam.bg1h = wd.cam.bg2h = (uint16_t)(hw[0x20] | (hw[0x21] << 8));                  //   entry rounds to the
+      wd.cam.bg1v = wd.cam.bg2v = (uint16_t)(hw[0x26] | (hw[0x27] << 8));                  //   8-px cell)
+      CtWorldTilemapBuild(&wd.stm, wd.wram, &wd.cam);
+      wd.entryLatch = (uint16_t)(hw[0x1B32] | (hw[0x1B33] << 8));
+      { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }
+      g_owNoMarker = 0; inWorld = 1; worldTick = 0; fade = 0; fadeBri = 15; pendKind = 0;
+      fprintf(stderr, "[loadwram] a world capture: world %d entered at its own (%d,%d), camera (%d,%d)\n",
+              wl - 0x1F0, wpx, wpy, wd.cam.bg1h, wd.cam.bg1v);
+    }
   }
   while (running && !g_shotsExit) {
     fieldIrqPreFlip = 0;                             // set by this frame's return-chain wait, if any (the battle's ack)
