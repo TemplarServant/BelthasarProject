@@ -13,12 +13,13 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     met it at row 2) walked to the item, A, and the ally select's `$9614` (an index into `$99C0`) walked to that PC, A;
   * otherwise ATTACK: row 0, A, A (the default target) -- or, with PILOT_TARGETS (enemy ids in hex, in order), row 0, A
     and the target select walked to the first living one; PILOT_TECH (seats, `0,1`) takes the seat's first tech instead
-    of the attack while its MP holds 2 (PILOT_TECHROW, `seat:row`: another row of the seat's list, walked from its cursor
-    `$95E1`); PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated) takes a double tech from seat
+    of the attack while its MP holds 2 (PILOT_TECHROW, `seat:row`: another row of the seat's list, walked down from its
+    top); PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated) takes a double tech from seat
     a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows down -- and
     idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
     threshold; PILOT_HEALTECH (`seat:row`) heals the lowest PC under it with that row of the seat's tech list (Aura)
-    before any item; PILOT_ETHER (MP) gives an Ether to the PC whose MP falls under it; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
+    before any item; PILOT_ETHER (MP) gives an Ether to the PC whose MP falls under it; PILOT_HOLD (`addr:val`, hex) holds every attack while that WRAM byte
+    reads the value (a counter stance) -- heals still go; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
 Presses are 2 frames with 10-frame gaps (the menu reads one key per 4-frame pass). A submenu or target select still open
 after 12 steps (a press that missed its pass) is backed out with B. Between decisions it idles 4 frames; it stops when
 control is back on the field ($011F != 0) or after --max frames. Combatant blocks: `$5E2D + c * 0x80`, the current HP at
@@ -65,6 +66,8 @@ class Pilot:
         self.heal, self.spent, self.stuck, self.revived = heal, 0, 0, 0
         self.spentMid, self.goal, self.pending = 0, None, {}
         self.spentEther, self.pendingMp = 0, set()
+        h = os.environ.get('PILOT_HOLD', '')
+        self.hold = tuple(int(v, 16) for v in h.split(':')) if h else None
         self.prefer = [int(x, 16) for x in os.environ.get('PILOT_TARGETS', '').split(',') if x]
         self.techs = [int(x) for x in os.environ.get('PILOT_TECH', '').split(',') if x]
         self.duals = [[int(x) for x in d.split(':')] for d in os.environ.get('PILOT_DUAL', '').split(',') if d]
@@ -137,6 +140,11 @@ class Pilot:
                 self.goal = (ETHER, who)
                 return 'ether->%d' % who, press(walk(row, 2) + [0x100])
         self.pendingMp = {s for s in self.pendingMp if rd16(w, 0x5E2D + s * 0x80 + 7) < int(os.environ.get('PILOT_ETHER') or 0)}
+        if self.hold and w[self.hold[0]] == self.hold[1]:
+            # PILOT_HOLD (`addr:val`, hex): while that WRAM byte holds the value -- an enemy's counter stance (Heckran's
+            # "Go ahead! Try and attack...!": $B1D0 = 11 from the message until "Brief counterattack break") -- no attack:
+            # the window idles (the battle runs on, Active)
+            return 'wait', [(0, 4)]
         tgt = self.target(w)
         for d in self.duals:
             # PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated): seat a's window with seat b alive and both MPs held -- b READY
@@ -197,9 +205,10 @@ class Pilot:
             self.stuck = 0
             return press(walk(w[0x95E6] + w[0x95E5], want) + [0x100]), None
         if w[0x95D5] < 3 and self.goal and self.goal[0] == 'tech' and w[0x95DB] == 1 and w[0x9609] == 0:
-            # the Tech list: its cursor $95E1 (remembered between turns as the Item list's is) walked to the row, A
+            # the Tech list: its cursor is remembered between turns and the list scrolls past three rows (the doubles), so
+            # Up to the top (it does not wrap: eight presses cover the longest list) and Down to the row, A
             want, self.goal, self.stuck = self.goal[2], ('attack', self.goal[1]), 0
-            return press(walk(w[0x95E1], want) + [0x100]), None
+            return press([0x10] * 8 + [0x20] * want + [0x100]), None
         if w[0x95D5] < 3 and self.goal and w[0x9609]:
             # the ally select: $9614 indexes the compacted list $99C0 (C1/20A9)
             lst = []
