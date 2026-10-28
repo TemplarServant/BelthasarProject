@@ -61,6 +61,7 @@ two runs, so nothing is published that was not scanned against the ROM, and the 
         setup/kit/               the public tree: tools/setup.py and everything it runs
         setup/python/            a Python runtime: the packager's own, pruned of what the setup never imports (PSF licence)
         LICENSE, CREDITS.md, README.txt
+        ct_mapedits.dat          the owner's painted world-map cells (tools/map_editor.py; the scene adjustments mod)
 
     Belthasar-<version>-android.apk  the app (data-free; arm64-v8a and x86_64), signed with the release key
 

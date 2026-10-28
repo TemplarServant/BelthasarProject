@@ -7,7 +7,7 @@ program running in an embedded SNES core.
 
 <p align="center">
   <img src="docs/media/widescreen-battle.gif" alt="A battle in the port with the widescreen mod on: Marle casts a spell on Zombor" width="796">
-  <br><sub>The C engine running a battle from the attract demo, widescreen mod on (<a href="docs/media/widescreen-battle.mp4">MP4</a>).</sub>
+  <br><sub>The C engine running a battle from the attract demo, graphics mods on (<a href="docs/media/widescreen-battle.mp4">MP4</a>).</sub>
 </p>
 
 BelthasarProject is named after Belthasar, the Guru of Reason who designed the Epoch. The name keeps clear of the "Chrono"
@@ -56,12 +56,20 @@ Every picture is the C engine's own output during the attract demo (not the emul
 | ![The title screen](docs/media/title.png) | ![Frog's tech over three enemies in a battle](docs/media/battle-tech.png) |
 | The title sequence | A battle tech, vanilla 256x224 |
 
-With the widescreen mod (16:9), the field, the overworld and battles show more of the map at the sides:
+With the graphics mods on -- the widescreen (16:9), the Steam margins, the scene adjustments and the bottom lines
+filled -- the field, the overworld and battles show more of the map at the sides, and the special scenes are drawn
+for the wide picture:
 
 | | |
 |---|---|
 | ![A floating continent over the clouds, widescreen](docs/media/widescreen-zeal.png) | ![A battle on a bridge, widescreen](docs/media/widescreen-battle.png) |
 | ![The party in a forest, widescreen](docs/media/widescreen-forest.png) | ![The party before a castle gate, widescreen](docs/media/widescreen-castle.png) |
+
+<p align="center"><img src="docs/media/widescreen-black-omen.png" alt="The Black Omen rising over the planet under the red moon, widescreen with the scene adjustments" width="796">
+<br><sub>The Black Omen rising under one red moon: the scene adjustments draw it for the wide picture.</sub></p>
+
+The Steam margins draw the strip the Steam release draws past each room's edge, read by the setup from the player's
+own Steam copy: no Steam data is in this repository or a release, only these pictures of it drawn.
 
 The mods are switched on in the F1 overlay. With every option at its default, the game is the vanilla game:
 

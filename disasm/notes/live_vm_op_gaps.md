@@ -110,8 +110,8 @@ the walk would dispatch them forever, so no fn0 has one before its 00; AF = `JSR
 
 `runFunc()` stopped on B1 as if it were a park and left the rest of fn0 to the runner, whose RETURN at priority 7
 (C0/5F74 `CMP #07 / BEQ 5FB3`: `TYX / CLC`) parks on the 00 for good -- the code after it never ran. Loc 0DF's obj0 fn0
-is `B1 10 03 0A 1A 16 54 01 86 05 EA 27 10 03 EA 33 C9 DD 03 10 03 0A 1C 00`, its idle code `C9 DD 03 10 03 0A 1C 16 54
-02 86 5F 66 81 54 ...`: after Johnny's race (the playthrough's 47_race) the cartridge's load writes `$1180` = 0208
-(C0:591E, 45 frames into the load), the runner tests `$7F0154` bit 1 (set by 10F's script), clears it (C0:6BCE) and
-takes control for Johnny's lines ("Ride again, if you think you can handle it, chump."). The port's obj0 parked at the
+opens with a B1 and ends at its first 00, 24 bytes on (read it with `tools/dis.py` from the location's script; the
+bytes are not copied here); its idle code after that 00 tests `$7F0154` bit 1. After Johnny's race (the playthrough's
+47_race) the cartridge's load writes `$1180` = 0208 (C0:591E, 45 frames into the load), the runner tests `$7F0154`
+bit 1 (set by 10F's script), clears it (C0:6BCE) and takes control for Johnny's lines. The port's obj0 parked at the
 00 and the scene never ran; with B1 a step the leg is SAME.
