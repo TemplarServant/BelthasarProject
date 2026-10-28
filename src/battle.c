@@ -5458,7 +5458,11 @@ static void battleCombatStart(CtBattleHost* h) {
         if (0xB163 + filled <= 0xB16D) s[0xB163 + filled] = (uint8_t)(pool[r] - 1);
         filled++; pool[r] = 0xFF;
       }
-      for (int k = 0; k < 8; k++) { s[0xB23A + k] = 0xFF; pool[k] = s[0xAF02 + k]; }
+      // C1/8099-80A8: `LDA #FF / STA $B23A,X / LDA $AF0D,X / STA $B16E,X` -- the STAGED ids ($AF0D), not the present
+      // ones ($AF02): a hidden slot (FD/B2B1: $AF02 = FF, $AF0D = its id, $AF15 bit 7) is shuffled too. Oracle, leg
+      // 65_denadoro's second 091 fight (74 with 71 hidden behind it): `--cputrace` from f3800 = 18 C1:807B draws and THREE
+      // C1:80B1 draws ($26 F6 -> 0B); taking $AF02 drew two (-> 0A), and every later roll -- the hits' damage -- shifted.
+      for (int k = 0; k < 8; k++) { s[0xB23A + k] = 0xFF; pool[k] = s[0xAF0D + k]; }
       int y = 0; guard = 0;
       for (;;) {
         int remain = 0;
@@ -12818,6 +12822,17 @@ static int battleCounterDecodeRest(CtBattleHost* h, int slot, int op, int tgt) {
   if (op == BT_AI_ACT_HDR) { h->aiTurnTgtN = 1; h->aiTurnTgtList[0] = tgt; }
   h->actCrit = 0; h->actCritFlash = 0; h->actMiss = 0;
   h->actTechId = 0; h->actItemId = 0;
+  // C1/8D93-8D9E: `$B3B8 = 1` -> JMP C1/8E47 (JSR C1/AC57 at once) -- the counter's C1/8CF9 takes the turn's branch: no
+  // C1/8DA4 (no C1/ACF2 header, no C1/8E15 effect), so no hit roll and no value; $AEE3 stays the handler's op, as
+  // battleArrive's hdr arm keeps it. MEASURED, the rule's cartridge (leg 65_denadoro's second 091 fight): Lucca's Fire
+  // provokes 74's counter `03 02 70 00` (74 becomes 71, the HP carried, f5283) and 71 keeps that HP until the party's
+  // next hits (f6145); the port rolled an attack on 71 here (60) and killed it at once.
+  if (op == BT_AI_ACT_HDR) {
+    h->actValue = 0;
+    h->actTgtN = 1; h->actTgtList[0] = tgt; h->actTgtVal[0] = 0; h->actTgtApply[0] = 0;
+    h->ctrTgt = tgt; h->ctrIsTech = isTech;
+    return 1;
+  }
   // (No co-actor clear here: C1/8CF9's only `STA $AE97 / STA $AE98` is its head, C1/8D1F-8D24 -- battleAiTurn, which the
   // counter's turn ran -- and the handler between may have stored a tech's co-actors, which 8DA4-8E15 keep. Leg 53's
   // "Chemically fuse" is a counter: `$AE97 = 04` from the AI, `$A014 = 03 04 FF 00` at the open.)
@@ -17375,7 +17390,17 @@ void CtBattleBegin(CtBattleHost* h) {
       s[0xB03A + i] = 0x01;                                      // FD/B856-B858 (a seat) / FD/B8E7-B8E9 (an enemy): the ATB's
                                                                  //   flag, after FD/B0D5 zeroed all thirteen arrays' flags
       order[no++] = (uint8_t)i;
+    } else if (i >= 3 && i - 3 < s[0xAEC6] && s[0xAF0D + i - 3] != 0xFF) {
+      // FD/B867-B8DD: the enemies' loop is gated on the STAGED id ($AF0D,X != FF), not on $AF02 -- a hidden slot (FD/B2B1:
+      // $AF02 = FF) gets its reload too, `STA $B15B,X / STA $AFAE,X`, and the normaliser (FD/B8F8-B935, $AEFF != FF) never
+      // touches it: it comes out with its raw reload. FD/B8E0-B8E9: the flag $B03D,X only when $AF02 != FF. MEASURED, the
+      // rule's cartridge (leg 65_denadoro's second 091 fight, 71 hidden behind 74): `$AFAB = 01 1F 2B 07 FF FF FF 3C ..`
+      // and `$B158 = .. 3C ..` (FD:B935, FD:B8DD); the port left 71's timer at FF, so it never acted before Crono's tech.
+      int sp = s[battleBlock(i) + 0x38];
+      s[0xB158 + i] = s[0xAFAB + i] = (uint8_t)battleReload(rom, sp, bs);
     } else { s[0xB158 + i] = 0x69; s[0xAFAB + i] = 0xFF; if (i < 3) s[0x9F22 + i] = 0xFF; }  // absent: 105 reload, FF timer
+    // FD/B8AF-B8BD: an enemy whose block +0x0A has bit 0 gets `$AF15,X |= 40` (the slot no target select offers).
+    if (i >= 3 && i - 3 < s[0xAEC6] && s[0xAF0D + i - 3] != 0xFF && (s[battleBlock(i) + 0x0A] & 0x01)) s[0xAF15 + i - 3] |= 0x40;
   }
   for (int a = 1; a < no; a++) {                                 // insertion sort: speed desc, index asc (stable)
     uint8_t v = order[a]; int sp = s[battleBlock(v) + 0x38]; int b = a - 1;
