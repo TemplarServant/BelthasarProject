@@ -14,7 +14,8 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
   * otherwise ATTACK: row 0, A, A (the default target) -- or, with PILOT_TARGETS (enemy ids in hex, in order), row 0, A
     and the target select walked to the first living one; PILOT_TECH (seats, `0,1`) takes the seat's first tech instead
     of the attack while its MP holds 2 (PILOT_TECHROW, `seat:row`: another row of the seat's list, walked down from its
-    top); PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated) takes a double tech from seat
+    top; PILOT_TECHON, enemy ids in hex: only on those targets, an attack on the others); PILOT_DUAL (`a:b:row:mpA:mpB`,
+    comma-separated) takes a double tech from seat
     a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows from its top -- and
     idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
     threshold; PILOT_HEALTECH (`seat:row`) heals the lowest PC under it with that row of the seat's tech list (Aura)
@@ -168,7 +169,9 @@ class Pilot:
                 self.waited += 4
                 return 'wait', [(0, 4)]
         self.waited = 0
-        if tgt is not None and seat in self.techs and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2:
+        techon = [int(x, 16) for x in os.environ.get('PILOT_TECHON', '').split(',') if x]
+        if tgt is not None and seat in self.techs and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2 and \
+                (not techon or w[0xAEFF + tgt] in techon):
             # PILOT_TECH (seats): the seat's first tech on the chosen enemy -- row 1 (Tech), A; then (step) the list's row
             # 0 (or the row PILOT_TECHROW gives the seat, `seat:row`), A; the target select comes next, as an attack's
             self.goal = ('tech', tgt, self.techrow.get(seat, 0))
