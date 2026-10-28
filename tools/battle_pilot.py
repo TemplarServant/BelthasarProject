@@ -13,8 +13,10 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     met it at row 2) walked to the item, A, and the ally select's `$9614` (an index into `$99C0`) walked to that PC, A;
   * otherwise ATTACK: row 0, A, A (the default target) -- or, with PILOT_TARGETS (enemy ids in hex, in order), row 0, A
     and the target select walked to the first living one; PILOT_TECH (seats, `0,1`) takes the seat's first tech instead
-    of the attack while its MP holds 2; PILOT_HEAL (percent) moves the heal threshold; PILOT_RUN holds L+R the whole
-    fight (the party runs away) and picks nothing.
+    of the attack while its MP holds 2; PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated) takes a double tech from seat
+    a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows down -- and
+    idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
+    threshold; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
 Presses are 2 frames with 10-frame gaps (the menu reads one key per 4-frame pass). A submenu or target select still open
 after 12 steps (a press that missed its pass) is backed out with B. Between decisions it idles 4 frames; it stops when
 control is back on the field ($011F != 0) or after --max frames. Combatant blocks: `$5E2D + c * 0x80`, the current HP at
@@ -61,6 +63,9 @@ class Pilot:
         self.spentMid, self.goal, self.pending = 0, None, {}
         self.prefer = [int(x, 16) for x in os.environ.get('PILOT_TARGETS', '').split(',') if x]
         self.techs = [int(x) for x in os.environ.get('PILOT_TECH', '').split(',') if x]
+        self.duals = [[int(x) for x in d.split(':')] for d in os.environ.get('PILOT_DUAL', '').split(',') if d]
+        self.waited = 0                                           # frames a window has idled for its partner's gauge
+        self.busy = set()                                         # seats given a command whose gauge has not reloaded yet
         if os.environ.get('PILOT_HEAL'):                          # (route_walk's pilot takes the default threshold)
             self.heal = float(os.environ['PILOT_HEAL']) / 100
 
@@ -109,6 +114,25 @@ class Pilot:
                 self.pending[who] = rd16(w, 0x5E2D + who * 0x80 + 3)
                 return '%s->%d' % ('midtonic' if use == MIDTONIC else 'tonic', who), press(walk(row, 2) + [0x100])
         tgt = self.target(w)
+        for d in self.duals:
+            # PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated): seat a's window with seat b alive and both MPs held -- b READY
+            # (its gauge `$AFAB + b` at 0) and given no command yet: row 1 (Tech), A, the list's cursor down `row` rows (past
+            # a's single techs onto the double), A, the target select next as an attack's; b still charging: the window
+            # idles (the battle runs on, Active), at most 400 frames
+            if seat != d[0]:
+                continue
+            b, drow, ma, mb = d[1], d[2], d[3], d[4]
+            if b not in [s for _, s in lives] or rd16(w, 0x5E2D + seat * 0x80 + 7) < ma or rd16(w, 0x5E2D + b * 0x80 + 7) < mb:
+                continue
+            if w[0xAFAB + b] == 0 and b not in self.busy:
+                self.waited = 0
+                self.goal = ('attack', tgt) if tgt is not None else None
+                pad = press(walk(row, 1) + [0x100]) + [(0, 6)] + press([0x20] * drow + [0x100])
+                return 'dual->%s' % tgt, pad + ([] if tgt is not None else [(0, 6)] + press([0x100]))
+            if w[0xAFAB + b] != 0 and self.waited < 400:
+                self.waited += 4
+                return 'wait', [(0, 4)]
+        self.waited = 0
         if tgt is not None and seat in self.techs and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2:
             # PILOT_TECH (seats): the seat's first tech on the chosen enemy -- row 1 (Tech), A, the list's row 0, A; the
             # target select comes next, as an attack's
@@ -152,9 +176,13 @@ class Pilot:
             want = lst.index(self.goal[1]) if self.goal[1] in lst else w[0x9614]
             self.goal, self.stuck = None, 0
             return press(walk(w[0x9614], want) + [0x100]), None
+        self.busy = {s for s in self.busy if w[0xAFAB + s] == 0}    # a reloaded gauge: that seat's command has run
         if w[0x95D5] < 3 and w[0x95DB] == 0 and w[0x9609] == 0:
             self.goal = None
             what, pad = self.decide(w)
+            if what == 'wait':
+                return pad, None
+            self.busy.add(w[0x95D5])
             hp = ' '.join('%d/%d' % (rd16(w, 0x5E30 + s * 0x80), rd16(w, 0x5E32 + s * 0x80)) for s in range(3))
             return pad, 'seat %d %s (hp %s)' % (w[0x95D5], what, hp)
         return [(0, 4)], None
