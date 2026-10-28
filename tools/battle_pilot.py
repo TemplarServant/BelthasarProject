@@ -13,7 +13,8 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     met it at row 2) walked to the item, A, and the ally select's `$9614` (an index into `$99C0`) walked to that PC, A;
   * otherwise ATTACK: row 0, A, A (the default target) -- or, with PILOT_TARGETS (enemy ids in hex, in order), row 0, A
     and the target select walked to the first living one; PILOT_TECH (seats, `0,1`) takes the seat's first tech instead
-    of the attack while its MP holds 2; PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated) takes a double tech from seat
+    of the attack while its MP holds 2 (PILOT_TECHROW, `seat:row`: another row of the seat's list, walked from its cursor
+    `$95E1`); PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated) takes a double tech from seat
     a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows down -- and
     idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
     threshold; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
@@ -64,6 +65,7 @@ class Pilot:
         self.prefer = [int(x, 16) for x in os.environ.get('PILOT_TARGETS', '').split(',') if x]
         self.techs = [int(x) for x in os.environ.get('PILOT_TECH', '').split(',') if x]
         self.duals = [[int(x) for x in d.split(':')] for d in os.environ.get('PILOT_DUAL', '').split(',') if d]
+        self.techrow = dict((int(a), int(b)) for a, b in (d.split(':') for d in os.environ.get('PILOT_TECHROW', '').split(',') if d))
         self.waited = 0                                           # frames a window has idled for its partner's gauge
         self.busy = set()                                         # seats given a command whose gauge has not reloaded yet
         if os.environ.get('PILOT_HEAL'):                          # (route_walk's pilot takes the default threshold)
@@ -134,10 +136,10 @@ class Pilot:
                 return 'wait', [(0, 4)]
         self.waited = 0
         if tgt is not None and seat in self.techs and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2:
-            # PILOT_TECH (seats): the seat's first tech on the chosen enemy -- row 1 (Tech), A, the list's row 0, A; the
-            # target select comes next, as an attack's
-            self.goal = ('attack', tgt)
-            return 'tech->%d' % tgt, press(walk(row, 1) + [0x100]) + [(0, 6)] + press([0x100])
+            # PILOT_TECH (seats): the seat's first tech on the chosen enemy -- row 1 (Tech), A; then (step) the list's row
+            # 0 (or the row PILOT_TECHROW gives the seat, `seat:row`), A; the target select comes next, as an attack's
+            self.goal = ('tech', tgt, self.techrow.get(seat, 0))
+            return 'tech->%d' % tgt, press(walk(row, 1) + [0x100])
         if tgt is not None:                                       # a chosen enemy: the target select comes next
             self.goal = ('attack', tgt)
             return 'attack->%d' % tgt, press(walk(row, 0) + [0x100])
@@ -167,6 +169,10 @@ class Pilot:
             want = ids.index(self.goal[0]) if self.goal[0] in ids else 0
             self.stuck = 0
             return press(walk(w[0x95E6] + w[0x95E5], want) + [0x100]), None
+        if w[0x95D5] < 3 and self.goal and self.goal[0] == 'tech' and w[0x95DB] == 1 and w[0x9609] == 0:
+            # the Tech list: its cursor $95E1 (remembered between turns as the Item list's is) walked to the row, A
+            want, self.goal, self.stuck = self.goal[2], ('attack', self.goal[1]), 0
+            return press(walk(w[0x95E1], want) + [0x100]), None
         if w[0x95D5] < 3 and self.goal and w[0x9609]:
             # the ally select: $9614 indexes the compacted list $99C0 (C1/20A9)
             lst = []
