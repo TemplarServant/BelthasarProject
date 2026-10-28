@@ -18,7 +18,7 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows down -- and
     idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
     threshold; PILOT_HEALTECH (`seat:row`) heals the lowest PC under it with that row of the seat's tech list (Aura)
-    before any item; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
+    before any item; PILOT_ETHER (MP) gives an Ether to the PC whose MP falls under it; PILOT_RUN holds L+R the whole fight (the party runs away) and picks nothing.
 Presses are 2 frames with 10-frame gaps (the menu reads one key per 4-frame pass). A submenu or target select still open
 after 12 steps (a press that missed its pass) is backed out with B. Between decisions it idles 4 frames; it stops when
 control is back on the field ($011F != 0) or after --max frames. Combatant blocks: `$5E2D + c * 0x80`, the current HP at
@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 TONIC = 0xBD
 MIDTONIC = 0xBE
 REVIVE = 0xC7
+ETHER = 0xC0
 FROG = 4                                 # the character id at $2980 + seat
 USABLE = set(range(0xBD, 0xD0))           # the battle's item list: the consumables (Tonic BD .. ), not the Pendant D6
 
@@ -63,6 +64,7 @@ class Pilot:
     def __init__(self, heal=0.35):
         self.heal, self.spent, self.stuck, self.revived = heal, 0, 0, 0
         self.spentMid, self.goal, self.pending = 0, None, {}
+        self.spentEther, self.pendingMp = 0, set()
         self.prefer = [int(x, 16) for x in os.environ.get('PILOT_TARGETS', '').split(',') if x]
         self.techs = [int(x) for x in os.environ.get('PILOT_TECH', '').split(',') if x]
         self.duals = [[int(x) for x in d.split(':')] for d in os.environ.get('PILOT_DUAL', '').split(',') if d]
@@ -125,6 +127,16 @@ class Pilot:
                 self.goal = (use, who)
                 self.pending[who] = rd16(w, 0x5E2D + who * 0x80 + 3)
                 return '%s->%d' % ('midtonic' if use == MIDTONIC else 'tonic', who), press(walk(row, 2) + [0x100])
+        if os.environ.get('PILOT_ETHER') and lives and self.spentEther < sum(n for iid, n in bag if iid == ETHER):
+            # PILOT_ETHER (MP): an Ether on the living PC whose MP has fallen under it (the casters first: the lowest MP)
+            low = sorted((rd16(w, 0x5E2D + s * 0x80 + 7), s) for _, s in lives if s not in self.pendingMp)
+            if low and low[0][0] < int(os.environ['PILOT_ETHER']):
+                who = low[0][1]
+                self.spentEther += 1
+                self.pendingMp.add(who)
+                self.goal = (ETHER, who)
+                return 'ether->%d' % who, press(walk(row, 2) + [0x100])
+        self.pendingMp = {s for s in self.pendingMp if rd16(w, 0x5E2D + s * 0x80 + 7) < int(os.environ.get('PILOT_ETHER') or 0)}
         tgt = self.target(w)
         for d in self.duals:
             # PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated): seat a's window with seat b alive and both MPs held -- b READY
