@@ -15,7 +15,7 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     and the target select walked to the first living one; PILOT_TECH (seats, `0,1`) takes the seat's first tech instead
     of the attack while its MP holds 2 (PILOT_TECHROW, `seat:row`: another row of the seat's list, walked down from its
     top); PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated) takes a double tech from seat
-    a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows down -- and
+    a's window when seat b is ready (gauge 0, no command given) and both MPs hold -- Tech, the list `row` rows from its top -- and
     idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
     threshold; PILOT_HEALTECH (`seat:row`) heals the lowest PC under it with that row of the seat's tech list (Aura)
     before any item; PILOT_ETHER (MP) gives an Ether to the PC whose MP falls under it; PILOT_HOLD (`addr:val`, hex) holds every attack while that WRAM byte
@@ -148,8 +148,9 @@ class Pilot:
         tgt = self.target(w)
         for d in self.duals:
             # PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated): seat a's window with seat b alive and both MPs held -- b READY
-            # (its gauge `$AFAB + b` at 0) and given no command yet: row 1 (Tech), A, the list's cursor down `row` rows (past
-            # a's single techs onto the double), A, the target select next as an attack's; b still charging: the window
+            # (its gauge `$AFAB + b` at 0) and given no command yet: row 1 (Tech), A, the list's cursor up to its top and down
+            # `row` rows (past a's single techs and the header onto the double), A, the target select next as an attack's;
+            # b still charging: the window
             # idles (the battle runs on, Active), at most 400 frames
             if seat != d[0]:
                 continue
@@ -159,7 +160,7 @@ class Pilot:
             if w[0xAFAB + b] == 0 and b not in self.busy:
                 self.waited = 0
                 self.goal = ('attack', tgt) if tgt is not None else None
-                pad = press(walk(row, 1) + [0x100]) + [(0, 6)] + press([0x20] * drow + [0x100])
+                pad = press(walk(row, 1) + [0x100]) + [(0, 6)] + press([0x10] * 8 + [0x20] * drow + [0x100])
                 return 'dual->%s' % tgt, pad + ([] if tgt is not None else [(0, 6)] + press([0x100]))
             if w[0xAFAB + b] != 0 and self.waited < 400:
                 self.waited += 4
