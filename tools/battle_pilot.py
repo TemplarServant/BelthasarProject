@@ -156,11 +156,16 @@ class Pilot:
         return 'attack', press(walk(row, 0) + [0x100]) + [(0, 6)] + press([0x100])
 
     def target(self, w):
-        """The first living enemy of the preference order (PILOT_TARGETS: enemy ids in hex, `AD,94`), or None."""
+        """The first living enemy of the preference order (PILOT_TARGETS: enemy ids in hex, `AD,94`), else with PILOT_ANY
+        the first living one, or None."""
         for want in self.prefer:
             for c in range(3, 11):
                 b = 0x5E2D + c * 0x80
                 if w[0xAEFF + c] == want and rd16(w, b + 3) > 0:
+                    return c
+        if os.environ.get('PILOT_ANY'):                           # PILOT_ANY: else the first living enemy
+            for c in range(3, 11):
+                if w[0xAEFF + c] != 0xFF and rd16(w, 0x5E2D + c * 0x80 + 3) > 0:
                     return c
         return None
 
