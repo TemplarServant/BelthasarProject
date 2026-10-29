@@ -23479,6 +23479,30 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // C1/8195-81C8: C1/B093 (the low-HP bit) + C1/B0B6 (the status flags' bit 0, sleep's ATB stop, lock, chaos, stop) --
   // after the sweep and the end tests, BEFORE the Wait gate: they run on every iteration (battleStatusFlagsPass).
   battleStatusFlagsPass(h);
+  // C1/81EC-81F6: `LDA $2989 / BIT #20 / BNE skip / LDA $99CD / BEQ skip` -> the FLEE end (battleFleeStageTick's
+  // header). The trigger frame itself: `$7F01EC = 0` (C1/81F8), FD/AA98 (every enemy block's +$1D := $80, `STA
+  // $5FCA,X / X += 80`), and the "Ran away!" post CD/01B3 with id 8 -- D1:EE99[8] = FF (no sound), the table
+  // $020D/E/F = CE:EF11, CD/025E's `$020C / STZ $CCED / STZ $02A1 / STZ $0214`, CD/027C-027F `LDA #40 / STA $0213`.
+  // Oracle f647: `$99CD = 1` (CF:E72D), `$7F01EC = 0` (C1:81FD), `$5FCA = 80` (FD:AA9F), `$020D.. = 11 EF CE`
+  // (CD:01C1), `$020C = 08`, all in the trigger frame; the window preset follows at T+3 (the stage machine).
+  // ...AND IT RUNS BEFORE THE TIMERS: C1/81CA `LDA $99E0 / BEQ ->81EC`, the flee test, then C1/8221 ($AF25) and C1/8231 the
+  // timer pass, C1/8313 the turns -- a turn the timers would start on the trigger's iteration is never dispatched. MEASURED,
+  // the rule's cartridge (leg 62_steel_saber, the last 070 fight run from with L+R): `$99CD = 1` and the enemy whose ATB
+  // reached 0 the frame before takes no turn (no C1/AF22 draw); the port dispatched it first and drew its hit roll.
+  if (!s[0x99E0] && !(s[0x2989] & 0x20) && s[0x99CD] && !h->fleeTriggered) {
+    h->fleeTriggered = 1; battleFleeTrace(h, "flee-trigger");
+    h->glb[0x1EC] = 0;                                              // C1/81F8-81FA
+    for (int slot = 0; slot < 8; slot++) s[ENEMY_BLOCK(slot) + 0x1D] = 0x80;   // FD/AA98-AAAC
+    { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);           // CD/01B6-01CF
+      s[0x020D] = 0x11; s[0x020E] = 0xEF; s[0x020F] = 0xCE;
+      int snd = (rom && rl > (long)(ROM_FLEE_MSG_SND_TBL + 8)) ? CtRomByte(rom, 0x400000L, (long)(ROM_FLEE_MSG_SND_TBL + 8)) : 0xFF;
+      if (snd != 0xFF) battleSfxPost(h, 0x18, (uint8_t)snd, 0x80); }
+    s[0x020C] = 0x08; s[0xCCED] = 0; s[0x02A1] = 0; s[0x0214] = 0;  // CD/025E-0272
+    s[0x0213] = 0x40;                                               // CD/027C -> CD/027F
+    h->fleeStage = 1; h->fleeT = 0;
+    battleFleeTrace(h, "ranaway-post");
+    return 0;
+  }
   if (!s[0x99E0]) {                                              // C1/81CA LDA $99E0 / BEQ ->81EC
     battleTimerPass(s);                                          // C1/8231-828E, all thirteen arrays
     if (s[0x0027] & 1) {                                         // C1/82A2 / C1/8313: odd iterations only
@@ -23524,26 +23548,6 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // ⚠ C1/83BB-83CF and C1/8425-8434 put back $5E32/$5EB2/$5F32 from $B316/$B318/$B31A (the boot's C1/FD2C copy of
   // the three max-HP words) -- not modelled: nothing in this engine changes a max HP during a fight.
   if (h->demoPass && !h->actActive && h->schedN == 0) { battleDemoEnd(h); return 0; }
-  // C1/81EC-81F6: `LDA $2989 / BIT #20 / BNE skip / LDA $99CD / BEQ skip` -> the FLEE end (battleFleeStageTick's
-  // header). The trigger frame itself: `$7F01EC = 0` (C1/81F8), FD/AA98 (every enemy block's +$1D := $80, `STA
-  // $5FCA,X / X += 80`), and the "Ran away!" post CD/01B3 with id 8 -- D1:EE99[8] = FF (no sound), the table
-  // $020D/E/F = CE:EF11, CD/025E's `$020C / STZ $CCED / STZ $02A1 / STZ $0214`, CD/027C-027F `LDA #40 / STA $0213`.
-  // Oracle f647: `$99CD = 1` (CF:E72D), `$7F01EC = 0` (C1:81FD), `$5FCA = 80` (FD:AA9F), `$020D.. = 11 EF CE`
-  // (CD:01C1), `$020C = 08`, all in the trigger frame; the window preset follows at T+3 (the stage machine).
-  if (!(s[0x2989] & 0x20) && s[0x99CD] && !h->fleeTriggered) {
-    h->fleeTriggered = 1; battleFleeTrace(h, "flee-trigger");
-    h->glb[0x1EC] = 0;                                              // C1/81F8-81FA
-    for (int slot = 0; slot < 8; slot++) s[ENEMY_BLOCK(slot) + 0x1D] = 0x80;   // FD/AA98-AAAC
-    { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);           // CD/01B6-01CF
-      s[0x020D] = 0x11; s[0x020E] = 0xEF; s[0x020F] = 0xCE;
-      int snd = (rom && rl > (long)(ROM_FLEE_MSG_SND_TBL + 8)) ? CtRomByte(rom, 0x400000L, (long)(ROM_FLEE_MSG_SND_TBL + 8)) : 0xFF;
-      if (snd != 0xFF) battleSfxPost(h, 0x18, (uint8_t)snd, 0x80); }
-    s[0x020C] = 0x08; s[0xCCED] = 0; s[0x02A1] = 0; s[0x0214] = 0;  // CD/025E-0272
-    s[0x0213] = 0x40;                                               // CD/027C -> CD/027F
-    h->fleeStage = 1; h->fleeT = 0;
-    battleFleeTrace(h, "ranaway-post");
-    return 0;
-  }
   return 0;
 }
 
