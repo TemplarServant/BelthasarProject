@@ -5458,7 +5458,11 @@ static void battleCombatStart(CtBattleHost* h) {
         if (0xB163 + filled <= 0xB16D) s[0xB163 + filled] = (uint8_t)(pool[r] - 1);
         filled++; pool[r] = 0xFF;
       }
-      for (int k = 0; k < 8; k++) { s[0xB23A + k] = 0xFF; pool[k] = s[0xAF02 + k]; }
+      // C1/8099-80A8: `LDA #FF / STA $B23A,X / LDA $AF0D,X / STA $B16E,X` -- the STAGED ids ($AF0D), not the present
+      // ones ($AF02): a hidden slot (FD/B2B1: $AF02 = FF, $AF0D = its id, $AF15 bit 7) is shuffled too. Oracle, leg
+      // 65_denadoro's second 091 fight (74 with 71 hidden behind it): `--cputrace` from f3800 = 18 C1:807B draws and THREE
+      // C1:80B1 draws ($26 F6 -> 0B); taking $AF02 drew two (-> 0A), and every later roll -- the hits' damage -- shifted.
+      for (int k = 0; k < 8; k++) { s[0xB23A + k] = 0xFF; pool[k] = s[0xAF0D + k]; }
       int y = 0; guard = 0;
       for (;;) {
         int remain = 0;
@@ -11744,6 +11748,22 @@ static void battleModeMachine3714(CtBattleHost* h, int holdCmb);   // C1/3714 (b
 // battle_ab's enemy 92 (GATO in his arena with three PCs): his return segment in flight when the action ends steps on at
 // f1301, the frame after `$A013 = 0`, while C1/3714's counter $9897 stays frozen to f1322; the port held the stepper with
 // the idle tick and walked 21 frames late.
+// CF/F9D3, THE PARTS' LINK (the NMI chain's CF/E75C `LDA $AA63 / BEQ / JSR CF/F9D3`, every frame, after the stepper
+// and the action's movers): `LDA $A002 / TAY`, then for X = 7..0 with `$96F8,X` set: `$1D0F,X = $1D0F,Y + $AA64,X`,
+// `$1D26,X = $1D26,Y + $AA6C,X` -- a multi-part boss's pieces stand where the master stands, plus their staged offsets.
+// MEASURED, the rule's cartridge (leg 63_zombor): Zombor's upper half walks (CF:F9C5) and `$1D15` (his lower half, slot 6)
+// takes the same x the same frame (CF:F9E9); the port left the lower half at its staged 200, and the action 0A's eight
+// effect objects, which start from it, slid 169 px instead of 31 -- the action 31 frames long.
+static void battleLinkParts(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  if (!s[0xAA63]) return;
+  int y = s[0xA002] & 7;
+  for (int x = 7; x >= 0; x--) {
+    if (!s[0x96F8 + x]) continue;
+    BT_LIVEX(h, x + 3) = (uint8_t)(BT_LIVEX(h, y + 3) + s[0xAA64 + x]);
+    BT_LIVEY(h, x + 3) = (uint8_t)(BT_LIVEY(h, y + 3) + s[0xAA6C + x]);
+  }
+}
 static void battleMoveStepper(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (s[0xA013] || s[0xA0FD]) return;                              // FEFAF-FEFB9
@@ -12194,7 +12214,19 @@ static void battleMoveInit(CtBattleHost* h) {
         if (f4 & 0x80) { s[0xA5C5 + slot] = 0x80; s[0xA5CD + cmb] = 0x80; }
         // CC/EBA4-EBA9 `LDA $9700,Y / AND #04 / STA $A08F,Y` (no branch): `$A08C,cmb`, the part of the boss the ARENA is
         // (C1/5DEA, CD/0043's D0066 arm). Oracle (battle_sim fight D1, Giga Gaia): `$A092 = 04` at f271 (CC:EBAC).
-        s[0xA08F + slot] = (uint8_t)(f4 & 0x04); } }
+        s[0xA08F + slot] = (uint8_t)(f4 & 0x04);
+        // CC/EB86-EB92: `AND #08 / BEQ / INC $AA63 / LDA $80 / STA $A002` -- the boss whose parts move with it: the
+        // count of flagged slots and the last one's slot, the master the link (CF/F9D3) carries the others from.
+        if (f4 & 0x08) { s[0xAA63]++; s[0xA002] = (uint8_t)slot; } } }
+  }
+  // CC/EC31-EC5D, after the eight slots: with `$AA63` set, every present enemy's offset from the master `$A002` --
+  // `$AA64,X = $1D0F,X - $1D0F,master`, `$AA6C,X = $1D26,X - $1D26,master` for each `$96F8,X`. MEASURED, the rule's
+  // cartridge (leg 63_zombor): `$AA63 = 01` (CC:EB90), `$A002 = 00`, `$AA6C[6] = E0` (CC:EC5D) -- Zombor's lower half
+  // (slot 6) 32 px above its upper one's foot.
+  if (s[0xAA63]) {
+    int m = s[0xA002] & 7, mx = BT_LIVEX(h, m + 3), my = BT_LIVEY(h, m + 3);
+    for (int x = 0; x < 8; x++)
+      if (s[0x96F8 + x]) { s[0xAA64 + x] = (uint8_t)(BT_LIVEX(h, x + 3) - mx); s[0xAA6C + x] = (uint8_t)(BT_LIVEY(h, x + 3) - my); }
   }
   // CC/EC63-ECAF, after the eight slots: each enemy's id word $9853,Y (Y = 0..E step 2) against the records of E1:DE00
   // (`id word, kind word`, up to a negative id). Kind 3 -> `$80 = 1`, kind 4 -> `$82 = 4`, any other kind -> the 16-bit
@@ -12777,9 +12809,24 @@ static int battleCounterDecode(CtBattleHost* h, int slot) {
     }
     if (s[battleBlock(atk) + 0x1E] & 0x8F) return 0; }               // C1/86FF-8704
   int id = s[battleBlock(atk) + 0];
+  int prevMsg = h->aiTurnMsg;                                      // (a section that commits runs C1/8CF9, which sets it:
+  h->aiTurnMsg = 0;                                                //  only this counter's own message may post below)
   int op = battleCounterTurn(h, h->enCounterK[slot], atk, h->enCounterBy[slot], &tgt);   // C1/8686-87FB
   char evbuf[32];
   if (op == 0) {                                                   // no section held, or one with no action (a message)
+    // A SECTION WITH A MESSAGE AND NO ACTION (op 0B/0C/0D... with $B3C7, $B3B8 = 2) is the turn's "step alone" inside
+    // C1/8CF9 -- CD/0033's box runs there, so the loop waits it out before its next victim (or C1/881C). MEASURED, the
+    // rule's cartridge (leg 67_masa_mune_fight, MasaMune's block 2 `12 00 02 00 / 0B 37 0A 00 1B`, hit by Crono's Slash):
+    // its walk's cursor $B1D0 = CC:AA07 at f13304 and CC:A9E3 at f13315 -- the box's 11 frames; the port moved on at once.
+    if (h->aiTurnMsg) {
+      int hold = battleNameBoxPost(h, h->aiTurnMsg);
+      h->aiTurnMsg = 0;
+      if (hold > 0) {
+        h->ctrMsgHold = hold; h->ctrMsgSlot = slot; h->ctrMsgOp = 0; h->ctrMsgTgt = tgt;
+        snprintf(evbuf, sizeof evbuf, "counter-msg id%02X#%d", id, slot);
+        battleTrace(h, evbuf); return 2;
+      }
+    } else h->aiTurnMsg = prevMsg;
     snprintf(evbuf, sizeof evbuf, "counter-nofire id%02X#%d", id, slot);
     battleTrace(h, evbuf); return 0;
   }
@@ -12818,6 +12865,17 @@ static int battleCounterDecodeRest(CtBattleHost* h, int slot, int op, int tgt) {
   if (op == BT_AI_ACT_HDR) { h->aiTurnTgtN = 1; h->aiTurnTgtList[0] = tgt; }
   h->actCrit = 0; h->actCritFlash = 0; h->actMiss = 0;
   h->actTechId = 0; h->actItemId = 0;
+  // C1/8D93-8D9E: `$B3B8 = 1` -> JMP C1/8E47 (JSR C1/AC57 at once) -- the counter's C1/8CF9 takes the turn's branch: no
+  // C1/8DA4 (no C1/ACF2 header, no C1/8E15 effect), so no hit roll and no value; $AEE3 stays the handler's op, as
+  // battleArrive's hdr arm keeps it. MEASURED, the rule's cartridge (leg 65_denadoro's second 091 fight): Lucca's Fire
+  // provokes 74's counter `03 02 70 00` (74 becomes 71, the HP carried, f5283) and 71 keeps that HP until the party's
+  // next hits (f6145); the port rolled an attack on 71 here (60) and killed it at once.
+  if (op == BT_AI_ACT_HDR) {
+    h->actValue = 0;
+    h->actTgtN = 1; h->actTgtList[0] = tgt; h->actTgtVal[0] = 0; h->actTgtApply[0] = 0;
+    h->ctrTgt = tgt; h->ctrIsTech = isTech;
+    return 1;
+  }
   // (No co-actor clear here: C1/8CF9's only `STA $AE97 / STA $AE98` is its head, C1/8D1F-8D24 -- battleAiTurn, which the
   // counter's turn ran -- and the handler between may have stored a tech's co-actors, which 8DA4-8E15 keep. Leg 53's
   // "Chemically fuse" is a counter: `$AE97 = 04` from the AI, `$A014 = 03 04 FF 00` at the open.)
@@ -12871,8 +12929,12 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
       if (h->ctrMsgSlot != slot || h->ctrDecodeF == h->frames) continue;
       if (h->nameBoxT >= 0) battleNameBoxFrame(h);
       if (--h->ctrMsgHold > 0) continue;
-      if (battleCounterDecodeRest(h, slot, h->ctrMsgOp, h->ctrMsgTgt)) { h->ctrPendSlot = slot; continue; }
-      h->enCounterDelay[slot] = 0;                                // (its target left: C1/881C as below)
+      if (h->ctrMsgOp && battleCounterDecodeRest(h, slot, h->ctrMsgOp, h->ctrMsgTgt)) { h->ctrPendSlot = slot; continue; }
+      h->enCounterDelay[slot] = 0;                                // (its target left, or a message alone: C1/881C as below)
+      // A message alone: CD/0295 returned this frame and the loop's head runs here (the enemy-message-end's own rule), so
+      // the idle tick's frame A is the next frame and its first ATB pass the one after. MEASURED, the rule's cartridge (leg
+      // 67_masa_mune_fight): $B2C0 cleared and `$0027 = 80` at f13315, `$0027 = 81` and MasaMune's gauge at f13317.
+      if (!h->ctrMsgOp) h->msgHoldEndF = h->frames;
       int more = 0;
       for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) more = 1;
       if (!more && !s[0x24]) battleAiEvalAll(h);
@@ -14356,6 +14418,11 @@ static void battleAscTick(CtBattleHost* h, int rel) {
       int a1 = (len > 1) ? CtRomByte(rom, 0x400000L, (long)(ip + 1)) : 0, a2 = (len > 2) ? CtRomByte(rom, 0x400000L, (long)(ip + 2)) : 0;
       int isFree = battleAscOpFree(rom, romLen, op), adv = 1, gx = 0, gy = 0;
       switch (op) {
+        case 0x16: case 0x17:                                       // 16 x y / 17: WALK to a POINT, the same walker
+          // C1/5409 (16): `LDA [$E6],Y / STA $A2B0 / ... / STA $A2B2`, the point from the operands; C1/541B (17): the stored
+          // point `$5D9E` / `$5D9F`; both `BRA ->C1/5437`, op 18's shared tail (the grid, the flood, the controller). MEASURED,
+          // the rule's cartridge (leg 63_zombor, Zombor's action 4C, `16 C8 90`): his upper half walks 2 px a frame from
+          // x 78 to C8 (CF:F9E9, the lower half linked); the port had no case and the next op stood him there at once.
         case 0x18: {                                                // 18 rr: WALK to role rr's foot over the arena grid
           // C1/542D -> C1/5437: the first visit arms the walker (C1/5480: the $7CFD grid, the flood C1/4A71, the
           // backtrace C1/4B77) and the op STAYS; every later visit is the segment controller C1/54C1 (after the
@@ -14365,7 +14432,9 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           if (c < 0 || c >= 11) { h->ascLive[t] = 0; h->ascStall = 1; adv = 0; isFree = 0;
             if (tr) fprintf(stderr, "asc f%d rel=%d t%d WALK on no combatant -- stopped\n", h->frames, rel, t); break; }
           if (!h->ascWalkOn[t]) {
-            if (!battleAscResolve(h, t, a1, &gx, &gy)) { h->ascLive[t] = 0; h->ascStall = 1; adv = 0; isFree = 0; break; }
+            if (op == 0x16) { gx = a1; gy = a2; }                                         // C1/5409-5412
+            else if (op == 0x17) { gx = h->mem[0x5D9E]; gy = h->mem[0x5D9F]; }            // C1/541B-5424
+            else if (!battleAscResolve(h, t, a1, &gx, &gy)) { h->ascLive[t] = 0; h->ascStall = 1; adv = 0; isFree = 0; break; }
             battlePcWalkArm(h, c, gx, gy); h->ascWalkOn[t] = 1;
             if (tr) fprintf(stderr, "asc f%d rel=%d t%d WALK cmb%d from=(%d,%d) to=(%d,%d)\n", h->frames, rel, t, c,
                             BT_LIVEX(h, c), BT_LIVEY(h, c), gx, gy);
@@ -15421,6 +15490,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
   // iteration's (oracle, GATO's Cyclone: 59/59 frames of the whirl's cells in the OAM shadow with $A240/$A250 of the frame
   // and $A2C0/$A1B0/$A260/$A270/$AB5F of the frame before). The port moves its combatants and effect objects inside the
   // track loop above, so this is where the frame's movement is complete.
+  battleLinkParts(h);                                              // CF/E75C: after this frame's movers (CF/E750)
   battleFxObjFollow(h);
   if (!h->composeHeld) battleTrailCompose(h);                      // the compose's CF/E909-E91E -> CF/E92C (CF/E764's gate)
   if (!h->composeHeld) for (int o = 0; o < 8; o++) {
@@ -16213,7 +16283,17 @@ static void battleAdvanceAction(CtBattleHost* h) {
     // routine from there) -- then the loop's tail and its step-less C1/881C (battleSpanEndArm). A lifeline revive the sweep
     // meets waits there as on the handler's own tail, and the eval after it (battleLifelineResume -> battleH12TailRest).
     if (!tailRan && turnSlot >= 0) {
+      int ctrMore = 0;                                          // another victim's counter still in the loop (C1/87FE ->
+      if (wasCounter)                                           //   C1/8694): C1/881C's eval waits for the loop's end
+        for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) ctrMore = 1;
       if (wasCounter && battleDeadFlagSweep(h, 0, LL_CONT_H12)) { h->llSlot = turnSlot; tailWaits = 1; }
+      else if (ctrMore) {
+        // MEASURED, the rule's cartridge (leg 54_r_series, the R-series' counters to Crono's Cyclone, `--cputrace` from
+        // f17650): slot 5's counter ends at C1/8E7D, then C1/87FE and C1/8694 take slot 6's (its C1/A486 draws, C1/8CF9,
+        // C1/E2C8 x2, C1/8E47) -- no C1/8C09 between. The port walked the AI at each counter's close and drew one more
+        // (C1/98D1, slot 5's random branch), and every later roll of the fight moved.
+        if (h->aiTurnAdv[turnSlot]) { h->aiTurnAdv[turnSlot] = 0; battleAiAdvance(h, turnSlot); }
+      }
       else battleSpanEndArm(h, turnSlot);
     }
     // (No re-aim here. A PC's facing after its action is whatever the action's script left: a plain attack re-aims with its
@@ -17375,7 +17455,17 @@ void CtBattleBegin(CtBattleHost* h) {
       s[0xB03A + i] = 0x01;                                      // FD/B856-B858 (a seat) / FD/B8E7-B8E9 (an enemy): the ATB's
                                                                  //   flag, after FD/B0D5 zeroed all thirteen arrays' flags
       order[no++] = (uint8_t)i;
+    } else if (i >= 3 && i - 3 < s[0xAEC6] && s[0xAF0D + i - 3] != 0xFF) {
+      // FD/B867-B8DD: the enemies' loop is gated on the STAGED id ($AF0D,X != FF), not on $AF02 -- a hidden slot (FD/B2B1:
+      // $AF02 = FF) gets its reload too, `STA $B15B,X / STA $AFAE,X`, and the normaliser (FD/B8F8-B935, $AEFF != FF) never
+      // touches it: it comes out with its raw reload. FD/B8E0-B8E9: the flag $B03D,X only when $AF02 != FF. MEASURED, the
+      // rule's cartridge (leg 65_denadoro's second 091 fight, 71 hidden behind 74): `$AFAB = 01 1F 2B 07 FF FF FF 3C ..`
+      // and `$B158 = .. 3C ..` (FD:B935, FD:B8DD); the port left 71's timer at FF, so it never acted before Crono's tech.
+      int sp = s[battleBlock(i) + 0x38];
+      s[0xB158 + i] = s[0xAFAB + i] = (uint8_t)battleReload(rom, sp, bs);
     } else { s[0xB158 + i] = 0x69; s[0xAFAB + i] = 0xFF; if (i < 3) s[0x9F22 + i] = 0xFF; }  // absent: 105 reload, FF timer
+    // FD/B8AF-B8BD: an enemy whose block +0x0A has bit 0 gets `$AF15,X |= 40` (the slot no target select offers).
+    if (i >= 3 && i - 3 < s[0xAEC6] && s[0xAF0D + i - 3] != 0xFF && (s[battleBlock(i) + 0x0A] & 0x01)) s[0xAF15 + i - 3] |= 0x40;
   }
   for (int a = 1; a < no; a++) {                                 // insertion sort: speed desc, index asc (stable)
     uint8_t v = order[a]; int sp = s[battleBlock(v) + 0x38]; int b = a - 1;
@@ -21639,6 +21729,21 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
       if (PB(0) == 0x00) { s[0xCD04] = 0; battleFxColRamp(s, 0x04); break; }   // CD/2D4A `STZ $CD04 / LDA #04` -> 2D51
       if (PB(0) == 0x13) { s[0x5D9A] = 1; battleFxColRamp(s, 0x14); break; }   // CD/2D39 `$5D9A := 1 / LDA #14` -> 2D51
       if (PB(0) == 0x04 || PB(0) == 0x05 || PB(0) == 0x12) { battleFxOp80Tri(s, PB(0)); break; }   // CD/2CDC 2CB3 2B12
+      // CD/2CF5 (02): the triangle's centred seed; CD/2D0C (03): two of its points apart by 2; CD/2C8B (07): two of them in
+      // by 2 (`INC $CAEC` x2 / `DEC $CAF0` x2); CD/2C7F (08): `TDC / TAX / STX $CAE4 / STX $CAE6 / STX $CAE8` (16-bit X);
+      // CD/2D44 (0E): the colour ramp of 00 without its `STZ $CD04`. (Zombor's action 4C runs 06 then 07 eight times.)
+      if (PB(0) == 0x02) { s[0xCAEA] = s[0xCAEE] = s[0xCAF2] = 0x80; s[0xCAEC] = 0; s[0xCAF0] = s[0xCAF4] = 0xD4; break; }
+      if (PB(0) == 0x03) { s[0xCAEE] = (uint8_t)(s[0xCAEE] + 2); s[0xCAF2] = (uint8_t)(s[0xCAF2] - 2); break; }
+      if (PB(0) == 0x07) { s[0xCAEC] = (uint8_t)(s[0xCAEC] + 2); s[0xCAF0] = (uint8_t)(s[0xCAF0] - 2); break; }
+      if (PB(0) == 0x08) { for (int k = 0; k < 6; k++) s[0xCAE4 + k] = 0; break; }
+      if (PB(0) == 0x0E) { battleFxColRamp(s, 0x04); break; }
+      if (PB(0) == 0x06) {                                         // CD/2C98: the triangle's three points, the rotation's seed --
+        // `STZ $CAEA / STZ $CAEE / LDA #01 / STA $CAEC / LDA #9F / STA $CAF0 / LDA #50 / STA $CAF4 / LDA #C0 / STA $CAF2`.
+        // MEASURED, the rule's cartridge (leg 63_zombor, Zombor's action 4C, program D1/94BF `80 06` at D1/94C9): the program
+        // runs on 120 frames to CD:1650's `$5D9B := 0`; the port stopped on the op and the action ended 118 frames early.
+        s[0xCAEA] = 0; s[0xCAEE] = 0; s[0xCAEC] = 0x01; s[0xCAF0] = 0x9F; s[0xCAF4] = 0x50; s[0xCAF2] = 0xC0;
+        break;
+      }
       if (PB(0) == 0x01) {                                         // CD/2D1F: ROTATE the per-line intensities by one
         // `TDC / TAX / LDA $BB07,X / PHA` then `LDA $BB0B,X / STA $BB07,X / INX x4 / CPX #017C / BNE` and finally
         // `PLA / STA $BB07,X` -- every record's byte takes the next one's and the first wraps into the last, one
@@ -23151,6 +23256,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // C1/3714 that starts a walk runs from the idle state (C1/10B5 / C1/10DC), behind the CD/0009 that is holding it --
   // gato_wait: GATO stands at (135,85) from the song's end f1462 through the teardown and first steps at f1517, in mode 1.
   if (!wasFrozen) battleMoveStepper(h);                            // CF/EFAF: the NMI's, whatever the main loop is doing
+  battleLinkParts(h);                                              // CF/E75C -> CF/F9D3, every frame
   if (!battleDeathHold(h) && !fxTd) {
     if (!wasFrozen && !h->victoryHold)   // (the victory is C1/8186's blocking chain: no idle tick, no C1/3714)
                                // the action's last frame (the NMI's CF/F978 saw $A013 = 1); inside, $A0FD (C1/4058) stops
@@ -23392,6 +23498,30 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // C1/8195-81C8: C1/B093 (the low-HP bit) + C1/B0B6 (the status flags' bit 0, sleep's ATB stop, lock, chaos, stop) --
   // after the sweep and the end tests, BEFORE the Wait gate: they run on every iteration (battleStatusFlagsPass).
   battleStatusFlagsPass(h);
+  // C1/81EC-81F6: `LDA $2989 / BIT #20 / BNE skip / LDA $99CD / BEQ skip` -> the FLEE end (battleFleeStageTick's
+  // header). The trigger frame itself: `$7F01EC = 0` (C1/81F8), FD/AA98 (every enemy block's +$1D := $80, `STA
+  // $5FCA,X / X += 80`), and the "Ran away!" post CD/01B3 with id 8 -- D1:EE99[8] = FF (no sound), the table
+  // $020D/E/F = CE:EF11, CD/025E's `$020C / STZ $CCED / STZ $02A1 / STZ $0214`, CD/027C-027F `LDA #40 / STA $0213`.
+  // Oracle f647: `$99CD = 1` (CF:E72D), `$7F01EC = 0` (C1:81FD), `$5FCA = 80` (FD:AA9F), `$020D.. = 11 EF CE`
+  // (CD:01C1), `$020C = 08`, all in the trigger frame; the window preset follows at T+3 (the stage machine).
+  // ...AND IT RUNS BEFORE THE TIMERS: C1/81CA `LDA $99E0 / BEQ ->81EC`, the flee test, then C1/8221 ($AF25) and C1/8231 the
+  // timer pass, C1/8313 the turns -- a turn the timers would start on the trigger's iteration is never dispatched. MEASURED,
+  // the rule's cartridge (leg 62_steel_saber, the last 070 fight run from with L+R): `$99CD = 1` and the enemy whose ATB
+  // reached 0 the frame before takes no turn (no C1/AF22 draw); the port dispatched it first and drew its hit roll.
+  if (!s[0x99E0] && !(s[0x2989] & 0x20) && s[0x99CD] && !h->fleeTriggered) {
+    h->fleeTriggered = 1; battleFleeTrace(h, "flee-trigger");
+    h->glb[0x1EC] = 0;                                              // C1/81F8-81FA
+    for (int slot = 0; slot < 8; slot++) s[ENEMY_BLOCK(slot) + 0x1D] = 0x80;   // FD/AA98-AAAC
+    { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);           // CD/01B6-01CF
+      s[0x020D] = 0x11; s[0x020E] = 0xEF; s[0x020F] = 0xCE;
+      int snd = (rom && rl > (long)(ROM_FLEE_MSG_SND_TBL + 8)) ? CtRomByte(rom, 0x400000L, (long)(ROM_FLEE_MSG_SND_TBL + 8)) : 0xFF;
+      if (snd != 0xFF) battleSfxPost(h, 0x18, (uint8_t)snd, 0x80); }
+    s[0x020C] = 0x08; s[0xCCED] = 0; s[0x02A1] = 0; s[0x0214] = 0;  // CD/025E-0272
+    s[0x0213] = 0x40;                                               // CD/027C -> CD/027F
+    h->fleeStage = 1; h->fleeT = 0;
+    battleFleeTrace(h, "ranaway-post");
+    return 0;
+  }
   if (!s[0x99E0]) {                                              // C1/81CA LDA $99E0 / BEQ ->81EC
     battleTimerPass(s);                                          // C1/8231-828E, all thirteen arrays
     if (s[0x0027] & 1) {                                         // C1/82A2 / C1/8313: odd iterations only
@@ -23437,26 +23567,6 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // ⚠ C1/83BB-83CF and C1/8425-8434 put back $5E32/$5EB2/$5F32 from $B316/$B318/$B31A (the boot's C1/FD2C copy of
   // the three max-HP words) -- not modelled: nothing in this engine changes a max HP during a fight.
   if (h->demoPass && !h->actActive && h->schedN == 0) { battleDemoEnd(h); return 0; }
-  // C1/81EC-81F6: `LDA $2989 / BIT #20 / BNE skip / LDA $99CD / BEQ skip` -> the FLEE end (battleFleeStageTick's
-  // header). The trigger frame itself: `$7F01EC = 0` (C1/81F8), FD/AA98 (every enemy block's +$1D := $80, `STA
-  // $5FCA,X / X += 80`), and the "Ran away!" post CD/01B3 with id 8 -- D1:EE99[8] = FF (no sound), the table
-  // $020D/E/F = CE:EF11, CD/025E's `$020C / STZ $CCED / STZ $02A1 / STZ $0214`, CD/027C-027F `LDA #40 / STA $0213`.
-  // Oracle f647: `$99CD = 1` (CF:E72D), `$7F01EC = 0` (C1:81FD), `$5FCA = 80` (FD:AA9F), `$020D.. = 11 EF CE`
-  // (CD:01C1), `$020C = 08`, all in the trigger frame; the window preset follows at T+3 (the stage machine).
-  if (!(s[0x2989] & 0x20) && s[0x99CD] && !h->fleeTriggered) {
-    h->fleeTriggered = 1; battleFleeTrace(h, "flee-trigger");
-    h->glb[0x1EC] = 0;                                              // C1/81F8-81FA
-    for (int slot = 0; slot < 8; slot++) s[ENEMY_BLOCK(slot) + 0x1D] = 0x80;   // FD/AA98-AAAC
-    { long rl = 0; const uint8_t* rom = CtBattleRom(&rl);           // CD/01B6-01CF
-      s[0x020D] = 0x11; s[0x020E] = 0xEF; s[0x020F] = 0xCE;
-      int snd = (rom && rl > (long)(ROM_FLEE_MSG_SND_TBL + 8)) ? CtRomByte(rom, 0x400000L, (long)(ROM_FLEE_MSG_SND_TBL + 8)) : 0xFF;
-      if (snd != 0xFF) battleSfxPost(h, 0x18, (uint8_t)snd, 0x80); }
-    s[0x020C] = 0x08; s[0xCCED] = 0; s[0x02A1] = 0; s[0x0214] = 0;  // CD/025E-0272
-    s[0x0213] = 0x40;                                               // CD/027C -> CD/027F
-    h->fleeStage = 1; h->fleeT = 0;
-    battleFleeTrace(h, "ranaway-post");
-    return 0;
-  }
   return 0;
 }
 
