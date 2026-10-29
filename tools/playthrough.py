@@ -3,7 +3,7 @@ r"""The playthrough: one route from power-on to "The End", played on the rule's 
 
     python tools/playthrough.py try  <leg> "<pad>"     play <pad> on the cartridge from the leg's start (authoring)
     python tools/playthrough.py play <leg>|all          play the route's legs on the cartridge, writing their end states
-    python tools/playthrough.py cmp  <leg>|all [-v]     each leg on both sides from its start state, compared
+    python tools/playthrough.py cmp  <leg>|all [-v] [-jN] each leg on both sides from its start state, compared (-jN: N legs at a time)
     python tools/playthrough.py scene <leg> "<pad>"     authoring: the pad, then a scene played by its boxes (A when one waits)
 
 THE ROUTE (tools/playthrough/route.txt) is the cartridge's pad, frame by frame, in the --btnscript grammar (`hexbtn:frames`,
@@ -565,7 +565,25 @@ def main():
     elif a[0] == 'cmp':
         todo = range(len(legs)) if a[1] == 'all' else [find(legs, a[1])]
         ensure_states(legs, max(todo) - 1) if max(todo) > 0 else None
-        res = [cmp_leg(legs, i, '-v' in a) for i in todo]
+        jobs = [int(x[2:] or os.cpu_count() or 1) for x in a if x.startswith('-j')]
+        if jobs and jobs[0] > 1 and len(todo) > 1:
+            # -jN: the legs graded N at a time, each its own `cmp <leg>` with its own scratch (PT_TMP), printed in route
+            # order. The start states are made above, once; a child finds them keyed and current.
+            from concurrent.futures import ThreadPoolExecutor
+            def one(i):
+                env = dict(os.environ, PT_TMP=os.path.join(TMP, 'j%d' % i))
+                os.makedirs(env['PT_TMP'], exist_ok=True)
+                return subprocess.run([sys.executable, os.path.abspath(__file__), 'cmp', legs[i]['name']] +
+                                      (['-v'] if '-v' in a else []), cwd=ROOT, env=env, capture_output=True,
+                                      text=True, errors='replace').stdout
+            res = []
+            with ThreadPoolExecutor(jobs[0]) as ex:
+                for out in ex.map(one, todo):
+                    m = re.search(r'^playthrough: (\d+)/(\d+) legs SAME$', out, re.M)
+                    sys.stdout.write(out[:m.start()] if m else out); sys.stdout.flush()
+                    res.append(None if not m or m.group(2) == '0' else m.group(1) == '1')
+        else:
+            res = [cmp_leg(legs, i, '-v' in a) for i in todo]
         graded = [r for r in res if r is not None]
         print('playthrough: %d/%d legs SAME' % (sum(graded), len(graded)))
     else:

@@ -12762,6 +12762,17 @@ int main(int argc, char** argv) {
               wl - 0x1F0, wpx, wpy, wd.cam.bg1h, wd.cam.bg1v);
     }
   }
+  // THE CAPTURE'S OBJECTS WERE ITS ENTRY'S ONLY. The capture's WRAM went back over the placement above, so its world runs
+  // the cartridge's own object blocks -- the scripts that raise $027C and light $1C/$1D, which the blob snapshot's bridges
+  // stand in for (owBootstrapObjects' callers) -- and every later world entry is the ROM's (C2/2C1D's clear and the
+  // bootstrap script). The flag stayed set for the whole run: the bridges held $1C/$1D lit under the exit's fade-out
+  // object, which never reached C2/2103 (`STZ $1BF6`), and the next world's fade-in died on the bit (C2/2116); the entry
+  // after a field took the blob's packed blocks. The playthrough's leg 68 (seeded on 1F1, through Porre's inn and market):
+  // the place-name banner ($5628) came back in state 3 without its C2/5775 copy, its anim script `$7E:8600` the field's
+  // map (zeroes); the anim VM ran them, op 06 queued a 64 KB DMA from $00:0000 and the world was one flat colour. The
+  // rule's cartridge (`--monitor 7E1BF6,7E001C,7E027C --writer`): the fade-out to $1C = 80 and `$1BF6 = 00` by f381,
+  // `$027C = 03` (C2:35F1) at the exit, the banner in state 1 over `04 04 86 00` at f3100.
+  g_owObjFromCapture = 0;
   while (running && !g_shotsExit) {
     fieldIrqPreFlip = 0;                             // set by this frame's return-chain wait, if any (the battle's ack)
     // C0/000E, THE COLD INIT, reached from a running game this frame (the demo battle's CF/E702, the defeat's C0/02CA):
@@ -17489,10 +17500,15 @@ int main(int argc, char** argv) {
             // $0197/$0199/$019B name: slot 1's place on the map passes to whoever is slot 1 now.
             // This is what makes a Form exchange show WITHOUT a scene reload. It is deliberately not
             // scoped to the Form screen -- C0/1A03 is the general post-menu / post-battle reconcile.
-            int changed = (mSave.party[0] != s7[0x2980] || mSave.party[1] != s7[0x2981]
-                                                       || mSave.party[2] != s7[0x2982]);
+            // The comparison is the ROM's: against the shadow $0194-0196 the location's load wrote (C0/0C34-0C44) and the
+            // last reconcile refreshed (C0/1A5D-1A6D), not the party at the menu's opening -- a scene that changed the party
+            // before the menu leaves it for the menu's exit to reconcile. MEASURED, the rule's cartridge (the playthrough's
+            // leg 75, Ioka's hut: Ayla joins by the scene's party ops at f927-939, the exchange screen opens at f960 and B
+            // closes it): `$0194` = 000102 until C0:1A6F writes 000501 at f1103, with the respawns (C0:4315 / 43C8 / 4293).
+            int changed = (s7[0x0194] != s7[0x2980] || s7[0x0195] != s7[0x2981] || s7[0x0196] != s7[0x2982]);
             if (changed) {
               int nre = CtSceneReconcileParty(f.vm);                // C0/597D on EVERY character's object
+              s7[0x0194] = s7[0x2980]; s7[0x0195] = s7[0x2981]; s7[0x0196] = s7[0x2982];   // C0/1A5D-1A6D
               for (int k = 0; k < 3; k++) {                          // ...then re-find slot k's object
                 mSave.pcObj[k] = -1;
                 for (int o = 0; o < CtSceneActorCount(f.vm); o++)

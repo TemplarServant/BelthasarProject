@@ -3279,10 +3279,17 @@ void CtSceneMenuReloadObjects(CtScene* sc) {
 static int ctWipeOp(CtScene* sc, int sub);
 // THE POLL'S VERDICT (C0/61B4-61D6, the comment in step() below): 1 = keep waiting on `tgt` for a call made at priority
 // `pr`, 0 = released. One body for the parked poll and for a 04/07 met with the latch already set.
+// The release tests are the ROM's two bytes, not the port's `dead`: `61B4 LDA $1100,X / BMI` (op 0x0A's kill) and `61B9
+// LDA $1000,X / BMI` (the cadence pause: op 0x0B, a battle's dead-mark C0/07F3). A battle's defeated enemy is `dead` in the
+// port for good, but op 0x0C (C0/6282) clears its $1000 bit 7 and the ROM calls and waits on it like any other: MEASURED
+// (the playthrough's leg 73, loc 111 after the first Reptite fight; the rule's cartridge, `--monitor 7E1180`): obj8's
+// `0C 18` wakes obj12, `04 18 55` calls its fn5 (a walk in from (4,6)) and waits f7764-f7828 until it returns; the port
+// released on `dead` four frames in, and the scene's next fight came 58 frames early.
 static int ssCallBusy(const CtScene* sc, int tgt, int pr) {
   if (tgt < 0 || tgt >= sc->nobj) return 0;        // no such object: $1100,X reads 80 (unloaded), 61B7 BMI -> released
   const CtSS* t = &sc->st[tgt];
-  return !sc->actors[tgt].dead && t->addr >= 0 && t->prio <= pr;
+  if ((r8(sc->mem, 0x7E1100 + (uint32_t)tgt * 2) & 0x80) || (r8(sc->mem, 0x7E1000 + (uint32_t)tgt * 2) & 0x80)) return 0;
+  return t->addr >= 0 && t->prio <= pr;
 }
 static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
   CtSS* s = &sc->st[obj]; const uint8_t* B = sc->body; int blen = sc->blen, addr = s->addr;
@@ -7809,14 +7816,16 @@ void CtSceneReinitObj(CtScene* sc, int obj) {
   if (sc->mode[obj] >= 0 && sc->mode[obj] <= 2) w8(sc->mem, 0x7E0197 + (uint32_t)sc->mode[obj] * 2, obj * 2);
 }
 
-// C0/1A03's party RECONCILE, the whole of it. The ROM walks its per-CHARACTER PC-object table
-// $018D..$0193 in the order 0,1,2,4,3,5,6 and respawns EVERY character's object -- not just the ones
-// that happened to be slots 0..2 -- because a re-ordered party can put a character on screen who had
-// no slot a moment ago. This engine has no $018D..$0193, so the same set is identified the way the
-// ROM's own loaders write it: a PC object is one whose $1100,X came from the PARTY-AWARE loader
-// (op 0x57/0x5C/0x62/0x80 -> mode 0/1/2 in party, 0x80 when it aborted, C0/426A) AND whose sprite is
-// a PC sprite 0..6. That excludes op 0x81's always-NPC mode 3 -- which matters, because scene 8's
-// fair has NPCs wearing sprites 1 and 2 -- and op 0x82/0x83's modes 4..6.
+// C0/1A03's party RECONCILE, the whole of it (dis.py 1A03): when $7E:2980-82 differ from the shadow $0194-0196, it walks
+// the per-CHARACTER object table $018D..$0193 in the order 0,1,2,4,3,5,6 (`LDA $8D / BMI / STA $6D / JSR C0/597D`, then
+// $8E, $8F, $91, $90, $92, $93) and respawns EVERY character's object -- not just slots 0..2 -- because a re-ordered party
+// can put a character on screen who had no slot a moment ago. The table is the PC loaders' own store (pcLoaderIdStores:
+// 41E4-4268 `LDA $6D / STA $8D+id`, made before their party test, so a character's object is in it whatever mode the test
+// gave it). The port used to infer the set from the mode (0/1/2/80 = a party-aware loader's), and left out a mode 3 --
+// which a party-aware loader's NPC arm writes too: the playthrough's leg 75, Ioka's hut after the morning scene and the
+// exchange screen (party 000501), the cartridge respawns Ayla's obj6 (mode 03 -> 01, C0:4315), Marle's obj2 (03 -> 02,
+// C0:43C8) and Lucca's obj3 (03 -> 80, C0:4293) at f1103; the port kept all three NPCs on the four-frame cadence, Ayla
+// walked to the lead at a quarter of her speed and control came back 52 frames late.
 // Returns the number of objects respawned. Positions are the CALLER's: the ROM puts the snapshotted
 // X/Y/prio back into the objects the NEW $0197/$0199/$019B name.
 int CtSceneReconcileParty(CtScene* sc) {
@@ -7824,15 +7833,12 @@ int CtSceneReconcileParty(CtScene* sc) {
   static const int kOrder[7] = { 0, 1, 2, 4, 3, 5, 6 };   // C0/1A03's own character order
   int n = 0;
   for (int i = 0; i < 7; i++) {
-    int cid = kOrder[i];
-    for (int o = 0; o < sc->nobj; o++) {
-      int m = sc->mode[o];
-      if (!((m >= 0 && m <= 2) || m == 0x80)) continue;   // not a party-aware loader's object
-      if (sc->actors[o].sprite != cid) continue;          // ...and this is THAT character's
-      CtSceneReinitObj(sc, o);
-      n++;
-      break;
-    }
+    uint8_t x = r8(sc->mem, 0x7E018D + (uint32_t)kOrder[i]);   // 1A1E LDA $8D,char / 1A20 BMI -> skip
+    if (x & 0x80) continue;
+    int o = x / 2;
+    if (o >= sc->nobj) continue;
+    CtSceneReinitObj(sc, o);                                 // 1A22 STA $6D / 1A24 JSR C0/597D
+    n++;
   }
   return n;
 }

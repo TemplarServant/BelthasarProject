@@ -1077,7 +1077,7 @@ A0:8,20:8,80:8,10:4,80:8,10:8,80:48,10:8,80:8,20:8,A0:8,10:8,90:8,10:4,80:12,A0:
 # half (98) first; once they join, MasaMune's block byte +$37 reads 1 after each of its attacks (CC/A9B4: its next turn
 # is the Tornado, which takes the whole party) until a hit by tech 02 sets it to 0A, so Crono's Slash (his list's row 1)
 # goes in at once, the other windows heal while it reads 1 (any other hit draws its counter), Lucca's Fire on MasaMune
-# only); north up the ladder (8,7): storyline 60, and the 600 A.D. map at Denadoro's foot
+# only); north up the ladder (8,7): storyline 60, and the 600 A.D. map at Denadoro's foot once it has faded in
 0:228,100:2,0:10,20:2,0:10,100:2,0:410,100:2,0:10,20:2,0:10,100:2,0:10,100:2,0:10,20:2,0:10,100:2,0:338,100:2,0:10
 20:2,0:10,100:2,0:502,100:2,0:10,20:2,0:10,100:2,0:10,100:2,0:10,20:2,0:10,100:2,0:278,100:2,0:10,20:2,0:10,100:2
 0:942,100:2,0:10,20:2,0:10,100:2,0:10,100:2,0:10,20:2,0:10,100:2,0:406,100:2,0:10,20:2,0:10,100:2,0:366,100:2,0:10
@@ -1113,12 +1113,12 @@ A0:8,20:8,80:8,10:4,80:8,10:8,80:48,10:8,80:8,20:8,A0:8,10:8,90:8,10:4,80:12,A0:
 100:2,0:10,20:2,0:10,20:2,0:10,100:2,0:10,100:2,0:10,20:2,0:10,100:2,0:702,20:2,0:10,20:2,0:10,100:2,0:10,100:2,0:10
 20:2,0:10,100:2,0:162,20:2,0:10,100:2,(0:10,10:2)*8,0:10,20:2,0:10,20:2,(0:10,100:2)*4,0:2116,100:2,0:28,100:2,0:28
 100:2,0:58,100:2,0:28,100:2,0:58,(100:2,0:28)*3,100:2,0:58,100:2,0:28,100:2,0:28,100:2,0:238,80:16,10:192,0:1094,100:2
-0:58,100:2,0:70,100:2,0:394,100:2,0:62,100:2,0:360
+0:58,100:2,0:70,100:2,0:394,100:2,0:62,100:2,0:600
 ## 68_porre -- 1F1 (600 A.D., Denadoro's foot): south on the world to Porre Inn's cell (25,51), A (09C): its keeper
 # (09C obj8 at (28,26)) from (28,28), facing up: 20 G, Yes -- the party whole; out and east to the market's cell
 # (26,52), A (09D): its keeper (09D obj8 at (56,7)) from (56,9): Buy -- Up adds ten, Right one -- 21 Tonics, 11 Mid
 # Tonics, 5 Revives and 3 Shelters (3629 G left); out onto 1F1
-0:240,20:64,40:16,20:24,40:16,20:184,80:56,0:4,100:2,0:120,10:4,0:10,100:2,0:90,100:2,0:58,100:2,0:38,100:2,0:570
+20:64,40:16,20:24,40:16,20:184,80:56,0:4,100:2,0:120,10:4,0:10,100:2,0:90,100:2,0:58,100:2,0:38,100:2,0:570
 80:32,20:16,80:32,20:16,80:48,20:48,0:60,80:24,0:4,100:2,0:120,40:8,0:4,100:2,0:120,10:40,0:10,100:2,0:90,100:2,0:60
 20:2,0:14,20:2,0:14,100:2,0:40,10:2,0:14,10:2,0:34,100:2,0:60,20:2,0:14,100:2,0:40,10:2,0:34,100:2,0:60,20:2,0:14,20:2
 0:14,100:2,0:40,(80:2,0:14)*3,80:2,0:34,100:2,0:60,20:2,0:14,100:2,0:40,80:2,0:14,80:2,0:34,100:2,0:60,(1:2,0:30)*3
@@ -1151,14 +1151,15 @@ A0:8,20:8,80:8,10:4,80:8,10:8,80:48,10:8,80:8,20:8,A0:8,10:8,90:8,10:4,80:12,A0:
 100:2,0:148,100:2,0:28,100:2,0:28,100:2,0:88,(100:2,0:28)*23,100:2,0:88
 ## 72_mystic_mountain -- 028, Melchior's Hut: south out onto 1F0, east to Medina's elder's house (cell (57,24), A: 024);
 # west and up to the gate (024 obj10 at (7,3)), A facing up from (7,4): the End of Time (1D0, the Medina pillar at
-# (14,8)); down and left to the pillar at (12,12) (1D0 obj17, open from storyline 4D): A held brings its question
-# (Mystic Mountain, 65,000,000 B.C.), Yes -- the party arrives in 110
+# (14,8)); down and left, before the pillar at (12,12) (1D0 obj17, open from storyline 4D) -- the leg ends with
+# control there, not in the pillar's black (the port cannot start from the middle of a transition)
 40:64,20:80,10:16,0:60,10:8,80:24,10:40,80:96,10:16,80:16,10:32,80:16,10:16,80:32,10:24,80:40,0:4,100:2,0:180,40:80
-10:64,40:16,10:4,0:10,100:2,0:800,20:64,40:32,0:10,100:40,0:60,100:2,0:300
-## 73_ayla -- 110, Mystic Mountain (65,000,000 B.C.): the arrival's scene and the walk into 111; the Reptites' ambush,
+10:64,40:16,10:4,0:10,100:2,0:800,20:64,40:32,0:10
+## 73_ayla -- 1D0: at the pillar (12,12), A held brings its question (Mystic Mountain, 65,000,000 B.C.), Yes;
+# 110, Mystic Mountain (65,000,000 B.C.): the arrival's scene and the walk into 111; the Reptites' ambush,
 # two fights (their 01s, by tools/battle_pilot.py's default: attacks, a Mid Tonic under 35%), the boxes by A; Ayla's
 # naming screen (Start, Start accepts "Ayla") -- storyline 6F, control back at (15,5)
-0:630,(100:2,0:28)*4,100:2,0:288,100:2,0:16,100:2,0:198,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:346,100:2,0:16,100:2
+100:40,0:60,100:2,0:300,0:630,(100:2,0:28)*4,100:2,0:288,100:2,0:16,100:2,0:198,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:346,100:2,0:16,100:2
 0:1094,100:2,0:16,100:2,0:14,100:2,0:16,100:2,0:466,100:2,0:16,100:2,0:14,100:2,0:16,100:2,0:886,100:2,0:16,100:2
 0:238,100:2,0:16,100:2,0:14,100:2,0:16,100:2,0:354,100:2,0:16,100:2,0:426,100:2,0:16,100:2,0:14,100:2,0:16,100:2,0:526
 100:2,0:16,100:2,0:330,100:2,0:16,100:2,0:10,100:2,0:16,100:2,0:1206,(100:2,0:28)*5,100:2,0:448,(100:2,0:28)*4,100:2
@@ -1196,3 +1197,17 @@ A0:8,20:8,80:8,10:4,80:8,10:8,80:48,10:8,80:8,20:8,A0:8,10:8,90:8,10:4,80:12,A0:
 100:2,0:4,(100:2,0:2)*4,100:2,0:4,(100:2,0:2)*4,100:2,0:4,(100:2,0:2)*4,100:2,0:4,(100:2,0:2)*4,100:2,0:4,(100:2
 0:2)*4,100:2,0:394,100:2,0:90,100:2,0:250,100:2,0:240,100:2,0:50,100:2,0:80,100:2,0:120,100:2,0:80,100:2,0:70,100:2
 0:190,100:2,0:40
+## 75_ayla_joins -- 113, the Chief's Hut (65,000,000 B.C.), the morning after the feast: right and up beside Ayla, whose
+# snoring box (113 obj8's slot 3) loops until her own talk (obj6 slot 1) sets the scene's variable 08: A in the gaps
+# between the boxes; the wake-up scene by A once each page is typed -- storyline 78 and Ayla in the party (000501); the
+# party-exchange screen, B: Marle stays; control back in the hut at (9,11)
+10:80,80:32,10:16,0:10,100:2,0:11,80:4,0:1,100:2,0:262,100:2,0:90,100:2,0:90,100:2,0:100,100:2,0:150,100:2,0:50,100:2
+0:120,1:2,0:180,100:2,0:80
+## 76_forest_maze -- 113, the Chief's Hut: down out onto 1F3 (Ioka); south-east to the Forest Maze's north cell (33,45),
+# A (11A at (9,2)); east into the maze, where 11A obj19 at (13,6), touched, sets storyline 7B and its scene runs (the
+# boxes by A once each page is typed); control back at (9,8). The maze's way on to its south exit (6,47) is over the
+# raised plane (11A's $7E:7040 & 3 = 2) and is not walked yet
+20:80,40:32,20:64,0:60,20:40,80:16,10:8,80:32,20:16,40:8,20:80,80:16,20:136,0:4,100:2,0:240,20:48,80:96,0:78,100:2
+0:146,100:2,0:138,100:2,0:54,100:2,0:194,100:2,0:106,100:2,0:82,100:2,0:158,100:2,0:106,100:2,0:114,100:2,0:86,100:2
+0:110,100:2,0:74,100:2,0:164,100:2,0:80,100:2,0:60,100:2,0:110,100:2,0:50,100:2,0:240,100:2,0:40,100:2,0:80,100:2
+0:100
