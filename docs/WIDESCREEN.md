@@ -84,21 +84,6 @@ animate, the gulls' whole flight) a copy of its block takes that op's steps -- i
 the flaps and the 30-frame glide at their own dwell (`owGhosts`, world.c `CtWorldGhostStep`); the game's state is not
 changed.
 
-Some scripts show or hide an object just past the 256 columns, where the SNES never let it be seen, and in the sides it
-pops out of nothing. `CT_WIDEPOP=1` lists every such pop (docs/DEBUG_SURFACE.md); over the playthrough's 75 legs at 16:9
-it found 23 (2026-10-29). The Steam release fixes the ones its own picture shows, by hand and at any width, by changing
-the script's ops (its patch table 0x563A20). Belthasar takes the same cases as a table, `sideFix` in `src/field.c`, and
-changes the picture only -- $1A81, the latch and every collision stay the ROM's:
-- HELD: drawn while the ROM keeps it hidden, and its picture slides (3 px a frame) over the jump the script makes when it
-  shows it. 070's bird (obj 11, from the load: Steam skips its hide, show and walk-back) and 091's obj 9 (from its hide
-  at 0308: Steam skips that hide).
-- SPARED: not drawn in the sides, by the sides or by the ROM's band, from its show to the next fight or location load.
-  087's three creatures in Ozzie's scene (objs 21-23, the shows at 0A39 / 0ADC / 0B72: Steam holds them to its next
-  load's end); after the fight they are there and walk in.
-Steam's other hand fixes are width-gated (the entrances of 015, 0DF and 0E1 moved out by its side's excess over the
-ROM's band: off at 16:9, where its side is 24 px) or not about the sides (089's nudge); the pops only Belthasar's wider
-side shows (015's other soldiers, 02F, 087's skeletons, 0D4, 07A) have no Steam reference.
-
 ## The special sequences and fights
 
 The `$C3` stages (the race, the panoramas, the ending) draw their sides from their own layers at their own scroll

@@ -4923,58 +4923,6 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
 // 0x1136C bit 7 or + 0x11374 & 0x11, not mapped to the SNES's RAM yet: clamped here.) A room that wraps (fieldWideMask:
 // no edge) is not clamped. The ROM's camera, and everything it decides, are untouched: only the view moves in the
 // picture. (Until 2026-10-28 the view stayed in the middle at every room's edge, from a misreading of the node's place.)
-// THE WIDESCREEN'S HELD OBJECTS (a mod, picture only): an object a script keeps hidden while the 256 picture cannot see
-// it and shows only as it is about to come on screen -- in the sides it popped out of nothing. The Steam release fixes
-// these by hand at any width (its patch table 0x563A20); Belthasar draws the same thing without touching the game: the
-// object is drawn while the ROM keeps it hidden ($1A81 = 0, not removed), and its picture slides over the jump the script
-// makes when it shows it. Nothing is written: $1A81, the latch and every collision stay the ROM's.
-//   070 Truce Canyon, obj 11 (`83 1A`, the bird): fn0 hides it (047B) and paces it between (B,4) and (F,5) hidden; obj
-//   10's fn0 reads the lead's tile (`22 00 0C 0D`) and calls fn4 (`8B 0B 04 / 90` at 04C1: to (B,4), shown) or fn5
-//   (`96 0B 04 / 91` at 04C6: back to (B,4), hidden). Steam (entered from 071) skips those four ops and fn0's hide: the
-//   bird is there and pacing from the load. MEASURED (playthrough leg 14, 16:9, CT_WIDEPOP): it appeared at x 184, 35 px
-//   left of the view, at f293, jumping from x 243.
-//   091 Denadoro Mountains (map 4), obj 9: fn4 walks it out to (4,4) and hides it (`91` at 0308), 22 px left of the view
-//   (leg 65, f3589): it vanished in the side. Steam skips that hide when its test 0x56CE00 passes: HELD from that hide.
-// And the other way round, SPARED (not drawn in the sides) from a show to the next fight or location load:
-//   087 Zenan Bridge (Ozzie's scene), objs 21 / 22 / 23 (sprite 3A): they blink out in the view, and fn5 / fn4 / fn3
-//   place them off it and show them (`8B / 90` at 0A36 / 0AD9 / 0B6F) to wait there for what follows; they appeared at x
-//   440 / 408, 40 / 72 px left of the view (leg 63, f1717). Steam holds those three shows until its next load's end
-//   (0x55CA89, loc 087 only).
-enum { SIDE_HELD = 1, SIDE_SPARED = 2 };
-typedef struct { uint16_t loc; uint8_t obj, kind; uint16_t ip; } SideFix;   // ip: the op's $1180, 0 = from the load
-static const SideFix* sideFix(int loc, int o) {
-  static const SideFix fix[] = {
-    { 0x070, 11, SIDE_HELD, 0 }, { 0x091, 9, SIDE_HELD, 0x0308 },
-    { 0x087, 21, SIDE_SPARED, 0x0A39 }, { 0x087, 22, SIDE_SPARED, 0x0ADC }, { 0x087, 23, SIDE_SPARED, 0x0B72 } };
-  for (size_t k = 0; k < sizeof fix / sizeof fix[0]; k++) if (fix[k].loc == loc && fix[k].obj == o) return &fix[k];
-  return NULL;
-}
-// Per object, from the field's load: held / spared since the op, and last frame's $1A81.
-static uint8_t sideHeldOn[64], sideSpared[64], sidePrevVis[64];
-static int sideHeld(int loc, int o) { const SideFix* x = sideFix(loc, o); return x && x->kind == SIDE_HELD && (!x->ip || sideHeldOn[o]); }
-// Every frame, every object: catch the table's op as it changes $1A81 (the visit's own ip, CtSceneObjIp).
-static void sideFixTrack(CtScene* vm, int loc, int o, int vis) {
-  const SideFix* x = sideFix(loc, o);
-  int was = sidePrevVis[o]; sidePrevVis[o] = (uint8_t)vis;
-  if (!x || !x->ip) return;
-  int ip = CtSceneObjIp(vm, o, NULL) & 0xFFFF;
-  if (x->kind == SIDE_HELD) { if (was && !vis && ip == x->ip) sideHeldOn[o] = 1; else if (vis) sideHeldOn[o] = 0; }
-  else if (!was && vis && ip == x->ip) sideSpared[o] = 1;
-}
-// The held object's picture: its own place, but over a jump (more than 16 px in a frame -- the script's `8B`) it slides,
-// 3 px a frame on each axis, to where the script put it.
-typedef struct { int on, slide, x, y; } SideGlide;
-static SideGlide sideGlide[64];
-static void sideGlideStep(SideGlide* g, int* x, int* y) {
-  if (!g->on) { g->on = 1; g->slide = 0; g->x = *x; g->y = *y; return; }
-  int dx = *x - g->x, dy = *y - g->y;
-  if (abs(dx) + abs(dy) > 16) g->slide = 1;
-  if (g->slide) {
-    g->x += dx > 3 ? 3 : dx < -3 ? -3 : dx; g->y += dy > 3 ? 3 : dy < -3 ? -3 : dy;
-    if (g->x == *x && g->y == *y) g->slide = 0;
-  } else { g->x = *x; g->y = *y; }
-  *x = g->x; *y = g->y;
-}
 static int fieldWideViewX(const Field* f, int w, int camx) {
   const int m0 = (w - CAMW) / 2;
   int x0, x1; fieldWideMask(f, w, &x0, &x1);
@@ -13274,7 +13222,7 @@ int main(int argc, char** argv) {
             // scene load -- fieldLoad seeded the new mask above; here we seed the camera from the arrival tile. Without
             // it the camera kept the PRIOR scene's scroll (visibly off in a multi-screen scene entered from the
             // overworld, user report: scene 5). Replaces the old stateful camX=px-128 re-seed + the >32 recentre hack.
-            memset(animPlay, 0, sizeof animPlay); memset(&pPlay, 0, sizeof pPlay); memset(sidePlay, 0, sizeof sidePlay); memset(sideShown, 0, sizeof sideShown); memset(sideGlide, 0, sizeof sideGlide); memset(sideHeldOn, 0, sizeof sideHeldOn); memset(sideSpared, 0, sizeof sideSpared); memset(sidePrevVis, 0, sizeof sidePrevVis);
+            memset(animPlay, 0, sizeof animPlay); memset(&pPlay, 0, sizeof pPlay); memset(sidePlay, 0, sizeof sidePlay); memset(sideShown, 0, sizeof sideShown);
             pIdleCtr = 0; pBlink = 0; pAnimMode = 0;        // reset the field idle-blink timer on a scene change
             fieldArrivalTileMode(&f.C, px, py, f.vm);       // C0/9DC3: $1D34, $0155 and the PCs' pairs from the ARRIVAL tile
                                                             //   (else a ladder's climb flag walks through the door)
@@ -20496,23 +20444,6 @@ int main(int argc, char** argv) {
     // animation (the script's mode and index, idle / walk by whether it moves, its facing) stepped by the port's model of
     // the ROM's ticker (animTickActor) on a play state of its own -- the ROM's $0F01 is not stepped off screen, and a
     // frozen pose sliding along the side read as broken. Picture only: nothing is written (no $0F01, no 'anim finished').
-    // A SPARED object (sideFix) stays out of the sides when the ROM draws it there too: latched in its two-tile band but
-    // with no part of it in the 256 view. In the view it is the ROM's as always. A fight ends it, as Steam's next load's
-    // end does: the field comes back from it reloaded (087: the Deceased fight, then the three walk at the party).
-    if (battleCompose) memset(sideSpared, 0, sizeof sideSpared);
-    if (wideW > CAMW && f.vm && !battleCompose) {
-      int w = 0;
-      for (int k = 0; k < n; k++) {
-        int o = order[k];
-        if (o >= 0 && o < 64 && sideSpared[o]) {
-          int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);
-          int sx = ax - camx;
-          if (!(sx + 12 > wideX && sx - 12 < wideX + CAMW)) { if (sten[k]) nSten--; continue; }
-        }
-        order[w] = order[k]; oy[w] = oy[k]; lay[w] = lay[k]; sten[w] = sten[k]; w++;
-      }
-      n = w;
-    }
     // (Gated on the wide picture, not on the view's place in it: at a room's edge the camera clamp stands the view at x 0,
     //  and until 2026-10-29 `wideX > 0` turned the sides' objects off there -- MEASURED, Zenan Bridge (020) with the
     //  camera at its left end, 16:9: every soldier walking right vanished at x 288, CT_WIDEPOP below.)
@@ -20520,15 +20451,10 @@ int main(int argc, char** argv) {
       for (int o = 0; o < nact && o < 64; o++) {   // (the lead too: a scene walks it out of the window like any object --
         int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);   //  Crono in 0BA's attract, gone in the left side)
         int shown = sideShown[o]; sideShown[o] = 0;
+        if (pl) { memset(&sidePlay[o], 0, sizeof sidePlay[o]); continue; }   // latched: the ROM's, in the list below
         const uint8_t* w7 = CtSceneMem7E(f.vm);
         int cls = w7[0x1100 + o * 2], vis = w7[0x1A81 + o * 2];
-        sideFixTrack(f.vm, f.loc, o, vis);              // (the held / spared table above: its ops, every frame)
-        if (pl) { memset(&sidePlay[o], 0, sizeof sidePlay[o]); sideGlide[o].on = 0; continue; }   // latched: the ROM's, below
-        if (sideSpared[o]) continue;
-        int held = sideHeld(f.loc, o) && !vis && !(cls & 0x80) && cls != 7 && cls != 8;   // (below: drawn while hidden)
-        if (cls == 7 || cls == 8 || (cls & 0x80) || (!vis && !held) || (vis & 0x80)) { sideGlide[o].on = 0; continue; }
-        if (sideHeld(f.loc, o)) sideGlideStep(&sideGlide[o], &ax, &ay);   // (its picture slides over the script's jumps)
-        else sideGlide[o].on = 0;
+        if (cls == 7 || cls == 8 || (cls & 0x80) || !vis || (vis & 0x80)) continue;
         int sx = ax - camx, sy = ay - camy;
         // The window's own band is the ROM's decision -- but the ROM's, not this pixel test's: C0/B127 latches by tiles
         // and a frame after an object that walks in from the sides crosses into the band, so one the sides drew last frame
@@ -20537,8 +20463,8 @@ int main(int argc, char** argv) {
         // An object the ROM has not latched, whose sprite cannot reach the 256 view (24 px either side of its foot), is the
         // sides' whatever the band says: the ROM's two tiles end short of 32 px -- Crono in the attract's robot fight
         // (0BA) at 32 px left of the view, unlatched, was in neither picture for 3 frames (the owner, 2026-10-24).
-        if (sx > wideX - 24 && sx < wideX + CAMW + 24 && !shown && !held) continue;
-        if (sx < -48 || sx >= wideW + 48 || sy < -16 || sy >= CAMH + 64) { sideGlide[o].on = 0; continue; }
+        if (sx > wideX - 24 && sx < wideX + CAMW + 24 && !shown) continue;
+        if (sx < -48 || sx >= wideW + 48 || sy < -16 || sy >= CAMH + 64) continue;
         int tf = (w7[0x0C00 + o * 2] & 0x30) == 0x30, bf = (w7[0x0C01 + o * 2] & 0x30) == 0x30;
         int am, ai, ail, alp, ast, agen = CtSceneActorAnim(f.vm, o, &am, &ai, &ail, &alp, &ast);
         uint32_t al = 0; const uint8_t* an = CtAssetGet(&assets, CT_ASSET_SPRITEANIM, (uint32_t)sp, &al);
