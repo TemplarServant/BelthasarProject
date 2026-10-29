@@ -299,7 +299,9 @@ def gauge():
 
 MAP_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '4:2', '0:240', '1:2', '0:250']
 MAP_SEL, MAP_B = 3082, 3324                       # Select and B on the cartridge's clock
-MAP_SHIFT = 359 + 65    # the world's own scripts run 359 frames behind from the free flight (the VM in $0C30 ends at f3074 / f3433)
+MAP_SHIFT = 358 + 65    # the world's own scripts run 358 frames behind from the free flight (the VM in $0C30 ends at f3074 / f3433 with the old 359)
+                        # (359 until 2026-10-29: the drive's story panorama, FF 23, opened in 18 frames on the port, the
+                        # cartridge's 17 -- field.c seqOpeningHold)
 MAP_SHOTS = [3100, 3105, 3200, 3215, 3250, 3300, 3340, 3355, 3412, 3430, 3445, 3470]   # the mosaic and fade, the zoom, the map, B, the way back
 MAP_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:600']
 

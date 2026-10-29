@@ -7698,7 +7698,7 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
   int uniq = getenv("CPUTRACE_UNIQUE") != NULL;
   enum { CT_TRSET = 1 << 20 };
   uint64_t* set = uniq ? (uint64_t*)calloc(CT_TRSET, sizeof(uint64_t)) : NULL;
-  // CPUTRACE_FROM=<K:PPPP hex>: print nothing -- and mark nothing seen -- until that address first executes. A
+  // CPUTRACE_FROM=<KPPPP hex> (24-bit, e.g. C08385; no colon): print nothing -- and mark nothing seen -- until that address first executes. A
   // unique trace that starts in the host's code would otherwise hide every later run of an instruction the host
   // already ran (the field and a stage share C0/FD library code), and a translation made from it would miss them.
   const char* fromEnv = getenv("CPUTRACE_FROM");

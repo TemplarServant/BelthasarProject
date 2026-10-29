@@ -5824,18 +5824,24 @@ static uint8_t raceSndPort(void* c, int n) {
   if (!g_fieldAudio) return 0;
   CtAudioPorts(g_fieldAudio, in, out); return out[n & 3];
 }
-// A NATIVE STAGE's OPENING, priced whole (2026-10-17; disasm/notes/sequence_table.md sec. 15 derived it for entry 4). From
-// C3:0000 the NMI is off ($4200 = 01 at C3:0032) and the overlay's work runs to $7E:3010 -- C3/0557's decompression (`oc`, the
-// LZ model's cycles NET of DRAM refresh: x 1364 / 1324 is the real clock; `--callrom C30557` reads 5901440 with 173080 of
-// refresh), C3:0000-006F's own 580, the common init $7E:3063 (54196 with its DMAs, `--callrom 7E3063`), the setup (`os`) and
-// $388B (4704); the jump lands 4449 cycles into its vblank (v 228, h ~357, every stage measured). That stretch crosses
-// floor(C / 357368) frame boundaries (the rule's NMI-off clock), `JSR $31B0` then waits for the next vblank and `$3013 JSL
-// C3/08D0` runs inside it -- the stage's first NMI is the frame after. MEASURED in place (ct.exe --racepiccmp RACEPICCMP_SPAN
-// C30000,7E3013): FF 2B 48, FF 2E 52, FF 23 18, FF 24 23, FF 07 24, FF 26 32 frames -- this formula's on all six. (The race
-// keeps its own: its song's post is priced on the host's SPC -- sequence_table.md sec. 12.)
+// A NATIVE STAGE's OPENING, priced whole (2026-10-17; disasm/notes/sequence_table.md sec. 15 derived it for entry 4). The
+// stretch is the rule's NMI-off one: C0/3FD3's JSR C0/0B4E turns the NMI off at C0/0B5D (v 228 h 150 on every jump measured)
+// and the oracle's phase hold gives back the frame's CPU cycles before it, net of refresh (`logical-frame: ... NMI off at
+// C0:0B5D, 4120 cycles into the frame`), so the stretch starts there at phase 0 but for the three vblank lines' refresh the
+// hold does not return (122). C3:0000 runs 204 cycles after C0/0B5D, and the overlay's work runs to $7E:3010: C3:0000 to C3/0557's
+// entry (716), the decompression (`oc`, the LZ model's cycles NET of DRAM refresh: x 1364 / 1324 is the real clock; the
+// cartridge's 5901304 to $7E:3000), $7E:3000 to the setup's entry -- the common init $3063 and its DMAs, the $3043 dispatch
+// (54380) -- the setup (`os`) and $388B (4704). That stretch crosses floor(C / 357368) frame boundaries, `JSR $31B0` then
+// waits for the next vblank and `$3013 JSL C3/08D0` runs inside it -- the stage's first NMI is the frame after. MEASURED, the
+// rule's cartridge (`--cputrace` CPUTRACE_BEAM, C3:0000 -> $7E:3010 -> $7E:3013): entry 3's two arms straddle a boundary --
+// the story's `FF 23` (ff23_handoff_f25) 6074428 cycles, ending at v 224 h 898 (7E:3013 17 frames after the jump), the
+// attract's `FF 63` (power-on f8793) 6075186, ending at v 225 h 292 (18) -- which puts the 17th boundary 326 cycles short of
+// 17 frames from C3:0000, the 204 + 122 above; the jump's own 4449 into its vblank (v 228 h ~357) counted the cycles the hold
+// gives back. Entry 4 23 frames (ff24_handoff_f27), the credits 18, the race 46. (The race keeps its own: its song's post is
+// priced on the host's SPC -- sequence_table.md sec. 12.)
 static int seqOpeningHold(long oc, long os) {
-  long long c = (long long)oc * 1364 / 1324 + 580 + 54196 + os + 4704;
-  return (int)((c + 4449) / 357368) + 1;
+  long long c = (long long)oc * 1364 / 1324 + 716 + 54380 + os + 4704;
+  return (int)((c + 204 + 122) / 357368) + 1;
 }
 // A $C3 STAGE's PICTURE (stage 2): the stage's PPU state -- the compositor's arrays and registers, the HDMA channels, the
 // ports -- filled by the stage's own code (seq_racepic.c: the race; seq_entry3pic.c: entry 3) and drawn after each NMI. Opened
