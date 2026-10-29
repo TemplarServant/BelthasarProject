@@ -16,11 +16,22 @@ says what each option draws that the SNES does not, and why. The history of each
 ## The camera: the Steam release's
 
 The Steam release (2018-2023) is the reference for all widescreen work (the owner, 2026-10-23). Its field node is the
-SNES picture scaled into a 16:9 design with **the 256 columns always centred on the ROM's camera** (the executable,
-0x5889D0): the picture never stops at a room's edge, so past the edge the sides show what lies beyond it. The port keeps
-the SNES's 224 lines and the ROM's vertical camera: nothing of the Steam release's phone heritage (its 192-line crop,
-its own vertical camera) is ported (the owner, 2026-10-23). The ROM's camera and everything it decides are untouched;
-`fieldWideViewX` only places the view in the middle of the wider picture.
+SNES picture scaled into a 16:9 design with the 256 columns centred (the executable, 0x5889D0), and the camera it shows
+is **clamped to the room** (0x55A020 at the room's load, applied every frame at 0x589ED6-0x589F7D):
+
+    shown = clamp(the ROM's camera, L * 16 + m, (R + 1) * 16 - 256 - m)
+
+with L / R the scroll mask's first and last columns and m the side's width; a room narrower than the picture is held at
+the bounds' midpoint. So the room's edge stands at the wide screen's edge and Crono walks up to it before an exit there
+(Leene Square's plaza rear, 1B7, to Gato: the owner, 2026-10-28). Steam's side is ~23.5 px at 16:9 (it shows 192 lines);
+the port keeps the 224 lines, so m is the port's own side (71 px at 16:9) and a room up to 398 px wide stands still,
+centred, while the ROM's camera moves the view across it. Steam's own exceptions are kept (location numbers only): no
+clamp (m = 0) at 06C, 106, 107 and 15B; the right bound at 256 in 1A7 and the left at 1024 in 1EE. The Blackbird's
+passages (170, 171) drop the clamp on two Steam state bits not yet mapped to the SNES's RAM: clamped here. A room that
+wraps is not clamped. The port keeps the SNES's 224 lines and the ROM's vertical camera: nothing of the Steam release's
+phone heritage (its 192-line crop, its own vertical camera) is ported (the owner, 2026-10-23). The ROM's camera and
+everything it decides are untouched; `fieldWideViewX` only places the view in the wider picture. (From 2026-10-23 to
+2026-10-28 the view stayed in the middle at every room's edge, from a misreading of the node's place.)
 
 ## Past a room's edge
 

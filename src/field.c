@@ -4908,18 +4908,33 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
   else { *x0 = f->mx0; *x1 = f->mx1; }
 }
 // THE WIDESCREEN'S CAMERA (a mod) is the Steam release's (Chrono Trigger.exe, 2023; ROADMAP X4): where the 256 view
-// stands in a picture `w` wide whose ROM camera is at camx -- always the picture's middle. The Steam field is the SNES's
-// picture on one node, scaled 1.875 x 5/3 into a 568 x 320 design and placed at (0x7FA108, 0) (0x5889D0-0x5889FE), where
-// 0x7FA108 = (the design's width - 480) / 2 + its origin (0x40EBE5-0x40EC3F): the 256 columns centred, whatever the
-// room. Its sides are the ROM's camera's own surroundings: past a room's scroll mask it draws the room's margins
-// (mapext_<location>, 4 to 6 columns a side for wide rooms as for narrow ones: fieldWideExtPic), so its picture never
-// stops at a room's edge -- the ROM's camera does, and the picture with it. Here the sides past the edge are the Steam
-// margins when the player has them, else what fieldWideMask leaves there (black, or the map wrapping). The ROM's camera,
-// and everything it decides, are untouched. (Until 2026-10-23 the picture stopped at a wide room's edges and the view slid
-// off the middle; the Steam release never does.)
+// stands in a picture `w` wide whose ROM camera is at camx. The Steam field is the SNES's picture on one node, scaled
+// 1.875 x 5/3 into a 568 x 320 design and placed at (0x7FA108, 0) (0x5889D0-0x5889FE), where 0x7FA108 = (the design's
+// width - 480) / 2 + its origin (0x40EBE5-0x40EC3F): the 256 columns centred. But the camera it shows is CLAMPED to the
+// room (0x55A020 at the room's load; applied every frame, 0x589ED6-0x589F7D, Vec2::clamp, the sprites moved with the
+// map): shown = clamp(the ROM's camera, L * 16 + m, (R + 1) * 16 - 256 - m), L / R the scroll mask's columns, m the
+// side's width; a room narrower than the picture (low > high) is held at the bounds' midpoint. So the room's edge stands
+// at the WIDE screen's edge, and Crono walks to it before an exit there (Leene Square's plaza rear, 1B7, to Gato: the
+// owner, 2026-10-28). Steam's side is ~23.5 px at 16:9 (its 192 lines); the port keeps 224, so m is its own side (71 px
+// at 16:9): a room up to 398 px wide stays still, centred, while the ROM's camera moves the view across it. Its own
+// exceptions (location numbers only): m = 0 -- the view in the middle, unclamped -- for 06C, 106, 107 and 15B (its jump
+// table 0x55A2C0/0x55A2C8); the Ocean Palace's Lavos (1A7) has its right bound at 256 and the Destruction of Lavos 2
+// (1EE) its left at 1024. (0x170 / 0x171, the Blackbird's passages, take m = 0 on two of its state bits, [0x81B4C4] +
+// 0x1136C bit 7 or + 0x11374 & 0x11, not mapped to the SNES's RAM yet: clamped here.) A room that wraps (fieldWideMask:
+// no edge) is not clamped. The ROM's camera, and everything it decides, are untouched: only the view moves in the
+// picture. (Until 2026-10-28 the view stayed in the middle at every room's edge, from a misreading of the node's place.)
 static int fieldWideViewX(const Field* f, int w, int camx) {
-  (void)f; (void)camx;
-  return (w - CAMW) / 2;
+  const int m0 = (w - CAMW) / 2;
+  int x0, x1; fieldWideMask(f, w, &x0, &x1);
+  if (x0 < -(1 << 29)) return m0;
+  int m = m0;
+  if (f->loc == 0x06C || f->loc == 0x106 || f->loc == 0x107 || f->loc == 0x15B) m = 0;
+  if (f->loc == 0x1A7) x1 = 256;
+  if (f->loc == 0x1EE) x0 = 1024;
+  const int lo = x0 + m, hi = x1 - CAMW - m;
+  const int shown = lo > hi ? (lo + hi) >> 1 : camx < lo ? lo : camx > hi ? hi : camx;
+  int vx = camx - shown + m0;
+  return vx < 0 ? 0 : vx > w - CAMW ? w - CAMW : vx;
 }
 // THE WIDESCREEN'S SKY OFFSETS (the scene adjustments, a mod: settings.h sceneAdjust; art direction, the owner 2026-10-24,
 // moved under that option 2026-10-25): a room whose BG2
@@ -5082,10 +5097,10 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, 
 // the PPU would repeat its period, a seam at each edge of the view, so the widescreen's sides mirror it there instead:
 // the bake (scene.c CtFieldSceneSetStill), the layers drawn past the room's edge (fieldStillCol), the frames between
 // (fieldnative.c). A layer that moves shows all of its period in time, painted to repeat: it repeats.
-// It stands still on the WIDE screen: its 256 columns in the picture's middle, which is where the view is (fieldWideViewX,
-// the Steam release's camera). (While the widescreen's camera stopped at a room's edge, the view slid across the stopped
-// picture and a backdrop held to the view slid over a bridge that stood still -- the owner, 2026-10-22; held to the
-// picture's middle it stood. With the view always there the two are one.)
+// It stands still on the WIDE screen: its 256 columns in the picture's middle, where the view is but at a room's edge
+// (fieldWideViewX, the Steam release's clamped camera). (While the widescreen's camera stopped at a room's edge, the view
+// slid across the stopped picture and a backdrop held to the view slid over a bridge that stood still -- the owner,
+// 2026-10-22; held to the picture's middle it stood.)
 static int g_wideStill, g_wideStillVx, g_wideStillVw;   // this frame's still layers (BL2 2, BL3 4), the 256 view's map
                                                         //   column, and the map column of the picture's middle 256
 static int fieldWideStillBits(const uint8_t* pg) {
