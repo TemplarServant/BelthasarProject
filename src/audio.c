@@ -252,7 +252,7 @@ static int apuRun(CtAudio* a, int cycles) {
 static SpcWriteHandler g_ptSpcW; static SpcReadHandler g_ptSpcR; static uint8_t g_ptSeen = 0xFF;
 static void ptSpcWrite(void* mem, uint16_t adr, uint8_t val) { Apu* apu = (Apu*)mem; uint16_t pc = apu->spc->pc;
   g_ptSpcW(mem, adr, val);
-  if (adr == 0xF4) fprintf(stderr, "porttrace SPC $F4 := %02X at pc %04X apuc=%u\n", val, pc, apu->cycles); }
+  if (adr == 0xF4 || adr == 0xF5) fprintf(stderr, "porttrace SPC $%02X := %02X at pc %04X apuc=%u\n", adr, val, pc, apu->cycles); }
 static uint8_t ptSpcRead(void* mem, uint16_t adr) { Apu* apu = (Apu*)mem; uint16_t pc = apu->spc->pc;
   uint8_t v = g_ptSpcR(mem, adr);
   if (adr == 0xF4 && v != g_ptSeen) { g_ptSeen = v; fprintf(stderr, "porttrace SPC reads $F4 = %02X at pc %04X apuc=%u\n", v, pc, apu->cycles); }
@@ -450,6 +450,8 @@ static long ldHdmaLine(LdHdma* hd) {
   for (int i = 0; i < 8; i++) if (hd->ch[i].enabled) { any = 1; if (!hd->ch[i].terminated) lastActive = i; }
   if (!any) return 0;
   long cost = 8 + LD_HDMA_SYNC;
+  { static double x = -2, fr = 0; if (x == -2) { const char* e = getenv("CT_AUDIO_HDMASYNC"); x = (e && *e) ? atof(e) : -1; }
+    if (x >= 0) { fr += x; long w = (long)fr; fr -= (double)w; cost += w - LD_HDMA_SYNC; } }   // (measurement: a mean, not the run's own)
   for (int i = 0; i < 8; i++) {
     LdHdmaCh* c = &hd->ch[i];
     if (!c->enabled || c->terminated || !c->doTransfer) continue;
@@ -484,7 +486,9 @@ static void ldWalk(long cycles) {        // wall time passes: the raster walks a
       if (ld.hd && ld.vPos == 0) { long h = ldHdmaInit(ld.hd, g_ldA); ld.stolen += h; ld.dbgBg[1] += h; } }
     else if (ld.hPos == 536) { if (!ld.irqWaiting) { ld.stolen += 40; ld.dbgBg[0] += 40; } }     // DRAM refresh (a wait does not feel it)
     else if (ld.hPos == 1104) {                                           // HDMA run, visible lines only
-      if (ld.vPos <= 224 && ld.hd) { long h = ldHdmaLine(ld.hd); ld.stolen += h; ld.dbgBg[1] += h; }
+      if (ld.vPos <= 224 && ld.hd) { long h = ldHdmaLine(ld.hd); ld.stolen += h; ld.dbgBg[1] += h;
+        { static int hl = -1; if (hl < 0) { const char* e = getenv("CT_AUDIO_HDMALINES"); hl = (e && *e) ? 1 : 0; }   // (debug)
+          if (hl) fprintf(stderr, "hdmaline nmi%d v=%d cost=%ld on=%d\n", ld.nmis, ld.vPos, h, ld.hd->on); } }
       else if (ld.vPos <= 224) { ld.hdmaFrac += LD_BG[ld.mode].hdmaLine; long h = (long)ld.hdmaFrac; ld.hdmaFrac -= (double)h; ld.stolen += h; ld.dbgBg[1] += h; } }
     else if (ld.hPos == LD_MASTER_PER_LINE) { ld.hPos = 0; ld.vPos++;
       if (ld.vPos == LD_LINES_PER_FRAME) ld.vPos = 0;
@@ -535,9 +539,9 @@ static void    Wc(CtAudio* a, int k, uint8_t v) {   // snes_cpuWrite -> writeBBu
   // CT_AUDIO_PORTTRACE=1: every CPU store to the ports with the SPC's cycle count and its PC -- the port's side of the
   // oracle's PEEK_APUTRACE (`aputrace fN CPU $2140 = ..  apuc=..`), to set the two processors' interleaving side by side
   { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
-    if (pt && a->apu) fprintf(stderr, "porttrace CPU $214%d = %02X apuc=%llu out=%02X%02X%02X%02X\n", k, v,
+    if (pt && a->apu) fprintf(stderr, "porttrace CPU $214%d = %02X apuc=%llu out=%02X%02X%02X%02X v=%d h=%d\n", k, v,
                               machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles,
-                              R(a, 0), R(a, 1), R(a, 2), R(a, 3)); }
+                              R(a, 0), R(a, 1), R(a, 2), R(a, 3), ld.active ? ld.vPos : -1, ld.active ? ld.hPos : -1); }
 }
 static uint8_t Rc(CtAudio* a, int k)            { ldCatch(a); return R(a, k); }   // snes_cpuRead  -> readBBus
 static void ldStart(int mode, int vPos) {
@@ -1928,9 +1932,12 @@ void CtAudioFrame(CtAudio* a) {
     if (ck) fprintf(stderr, "spcclock pass%ld total=%lld carry=%.1f" "\n", fr++, g_apuTotal, a->cycleCarry); }
   double want = apuFrameCycles(a) + a->cycleCarry;
   { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;   // (CT_AUDIO_PORTTRACE: each slice's start)
-    if (pt && a->apu) fprintf(stderr, "porttrace FRAME n=%ld apuc=%llu carry=%.1f spcpc=%04X\n", g_audFrameNo,
-                              machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles,
-                              a->cycleCarry, machineRuns(a) ? 0 : a->apu->spc->pc); }
+    if (pt && a->apu) { static int ab = -2; if (ab == -2) { const char* e = getenv("CT_AUDIO_ARAMBYTE"); ab = (e && *e) ? (int)strtol(e, NULL, 16) & 0xFFFF : -1; }
+      fprintf(stderr, "porttrace FRAME n=%ld apuc=%llu carry=%.1f spcpc=%04X", g_audFrameNo,
+              machineRuns(a) ? (unsigned long long)SndMachineCycles(a->mach) : (unsigned long long)a->apu->cycles,
+              a->cycleCarry, machineRuns(a) ? 0 : a->apu->spc->pc);
+      if (ab >= 0) fprintf(stderr, " aram[%04X]=%02X", ab, CtAudioAram(a)[ab]);   // CT_AUDIO_ARAMBYTE=<hex>: one ARAM byte
+      fprintf(stderr, "\n"); } }
   a->evenFrame ^= 1;                                   // (the next slice's frame)
   if (want < 1.0) { a->cycleCarry = want; a->mutedFrame = 1; return; }   // a clocked JSL already ran this frame's SPC time
   a->mutedFrame = 0;
