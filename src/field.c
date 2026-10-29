@@ -20444,7 +20444,10 @@ int main(int argc, char** argv) {
     // animation (the script's mode and index, idle / walk by whether it moves, its facing) stepped by the port's model of
     // the ROM's ticker (animTickActor) on a play state of its own -- the ROM's $0F01 is not stepped off screen, and a
     // frozen pose sliding along the side read as broken. Picture only: nothing is written (no $0F01, no 'anim finished').
-    if (wideX > 0 && f.vm && !battleCompose)
+    // (Gated on the wide picture, not on the view's place in it: at a room's edge the camera clamp stands the view at x 0,
+    //  and until 2026-10-29 `wideX > 0` turned the sides' objects off there -- MEASURED, Zenan Bridge (020) with the
+    //  camera at its left end, 16:9: every soldier walking right vanished at x 288, CT_WIDEPOP below.)
+    if (wideW > CAMW && f.vm && !battleCompose)
       for (int o = 0; o < nact && o < 64; o++) {   // (the lead too: a scene walks it out of the window like any object --
         int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);   //  Crono in 0BA's attract, gone in the left side)
         int shown = sideShown[o]; sideShown[o] = 0;
@@ -20470,6 +20473,43 @@ int main(int argc, char** argv) {
         drawSprite(&assets, fb, sidx, spal, sp, af, sx, sy, front, tf, bf, 0, 0, 0, 0, 0, NULL, 0, NULL, NULL, NULL);
         sideShown[o] = 1;
       }
+    // CT_WIDEPOP=1 (probe, the widescreen's census): an object the wide picture shows in its sides only (no part of it in
+    // the 256 view) that APPEARS there, VANISHES there or JUMPS (more than 16 px in a frame) while the screen is at full
+    // brightness two frames running in one location -- what the 256 picture keeps off screen and the sides show. One line
+    // each: `widepop: f<N> loc=<L> obj<o> appear|vanish|jump L|R at (x,y) from (x,y) spr=<s> ip=<$1180> | ...` (its screen
+    // place, the view's, who draws it, $0F00 / $1A81 / $1100); `2` adds a `side-only` line per such object every 60
+    // frames. Picture only. The census (2026-10-29): every playthrough leg, 16:9 -- 23 events, 12 of them the scripts'.
+    { static int wp = -1, pv[64], pax[64], pay[64], pso[64], pLoc = -1, pFr = -100, pBr = 0;
+      if (wp < 0) wp = getenv("CT_WIDEPOP") ? atoi(getenv("CT_WIDEPOP")) : 0;
+      if (wp && f.vm && wideW > CAMW) {
+        const uint8_t* w7 = CtSceneMem7E(f.vm);
+        int loc = w7[0x0100] | (w7[0x0101] << 8), vb = CtSceneBright(f.vm), br = vb < fadeBri ? vb : fadeBri;
+        int live = !battleCompose && br >= 15 && pBr >= 15 && loc == pLoc && frameNo == pFr + 1, romDrawn[64] = {0};
+        for (int k = 0; k < n; k++) { int o = order[k] < 0 ? pObj : order[k]; if (o >= 0 && o < 64) romDrawn[o] = 1; }
+        for (int o = 0; o < nact && o < 64; o++) {
+          int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);
+          // (drawn: the ROM's list or the sides' own, which draw 48 px past the frame and 16 / 64 lines above / below it --
+          //  one that crosses the frame's edge is drawn before it shows and is no pop; on the frame: its foot within 4 px
+          //  of it across, and between the top line and 24 lines below the bottom, where its head still shows)
+          int sx = ax - camx, sy = ay - camy, v = romDrawn[o] || sideShown[o];
+          int onf = sx > -4 && sx < wideW + 4 && sy > 4 && sy < CAMH + 24;
+          int so = v && onf && !(sx + 12 > wideX && sx - 12 < wideX + CAMW), side = sx < wideX ? 'L' : 'R';
+          const char* ev = NULL;
+          if (live && v && !pv[o] && so) ev = "appear";
+          else if (live && !v && pv[o] && pso[o]) ev = "vanish";
+          else if (live && v && pv[o] && (so || pso[o]) && abs(ax - pax[o]) + abs(ay - pay[o]) > 16) ev = "jump";
+          if (ev) {
+            if (!so) side = pax[o] - camx < wideX ? 'L' : 'R';
+            printf("widepop: f%d loc=%03X obj%d %s %c at (%d,%d) from (%d,%d) spr=%02X ip=%04X | scr (%d,%d) view %d "
+                   "rom %d side %d latch %02X $1A81 %02X $1100 %02X\n", frameNo, loc, o, ev, side,
+                   ax, ay, pax[o], pay[o], sp & 0xFF, CtSceneObjIp(f.vm, o, NULL) & 0xFFFF, sx, sy, wideX,
+                   romDrawn[o], sideShown[o], w7[0x0F00 + o * 2], w7[0x1A81 + o * 2], w7[0x1100 + o * 2]);
+          }
+          if (wp == 2 && so && frameNo % 60 == 0) printf("widepop: f%d loc=%03X obj%d side-only %c at (%d,%d) live=%d\n", frameNo, loc, o, side, ax, ay, live);
+          pv[o] = v; pso[o] = so; pax[o] = ax; pay[o] = ay;
+        }
+        pLoc = loc; pFr = frameNo; pBr = br;
+      } }
     for (int i = 0; !battleCompose && i < n; i++) {
       if (sten[i]) {                                     // a $0F80 prio-0/1 OCCLUDER, cutting at its
         // own turn in the OAM order: its low index wins the overlap against everything painted
