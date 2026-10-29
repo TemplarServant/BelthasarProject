@@ -28705,7 +28705,7 @@
         "tools/frame_region_cmp.py",
         "saves/tyranno_re/ff24_handoff_f27.state",
         "252",
-        "4400",
+        "4519",
         "0",
         "0",
         "256",
@@ -28739,7 +28739,7 @@
         "tools/frame_region_cmp.py"
       ],
       "expect": [
-        "frame-region-cmp: port f4400 vs oracle f252 box (0,0)-(256,224) -> 56549 / 57344 identical"
+        "frame-region-cmp: port f4519 vs oracle f252 box (0,0)-(256,224) -> 56570 / 57344 identical"
       ],
       "pin": [
         "^frame-region-cmp: "
@@ -28753,8 +28753,8 @@
           "why": "the field gives entry 4 its picture"
         }
       ],
-      "note_pass": "Lavos's fall as the port plays it (the Tyranno chain's drive): the native picture at P+2 from the op, 56549 / 57344 pixels the cartridge's -- the rest are the stars, seeded by the field's RNG $0386, which the two drives leave differently (a ratchet)",
-      "notes": "A RATCHET. The port plays tyranno-ff24-chain-plays-through-in-the-port's drive (FF 24 at f4151) and presents f4400, 249 frames after the op; the cartridge's hand-off state ff24_handoff_f27 (FF 24 on its f1, a different drive: s301_c1_hp1) matches at f252 -- P+2, the field's alignment, since the opening is priced whole. Lavos is the cartridge's to the pixel; the 795 pixels left are the stars, whose positions come from C3/02DD over the field's $0386 at the hand-off (seq_entry4.c), different in the two drives."
+      "note_pass": "Lavos's fall as the port plays it (the Tyranno chain's drive): the native picture at P+2 from the op, 56570 / 57344 pixels the cartridge's -- the rest are the stars, seeded by the field's RNG $0386, which the two drives leave differently (a ratchet)",
+      "notes": "A RATCHET. The port plays tyranno-ff24-chain-plays-through-in-the-port's drive (FF 24 at f4270 since the battle fixes merged in 8542bd8 made its Black Tyranno fight 119 frames longer; f4151 before) and presents f4519, 249 frames after the op; the cartridge's hand-off state ff24_handoff_f27 (FF 24 on its f1, a different drive: s301_c1_hp1) matches at f252 -- P+2, the field's alignment, since the opening is priced whole. Lavos is the cartridge's to the pixel; the 774 pixels left are the stars, whose positions come from C3/02DD over the field's $0386 at the hand-off (seq_entry4.c), different in the two drives."
     },
     {
       "name": "entry7-picture-native-vs-oracle",
@@ -44954,23 +44954,23 @@
         "saves/tyranno_re/tele301_req.lakewram"
       ],
       "expect": [
-        "sequence: entry 4 (Lavos falls) opening at f4151 -- 5728360 + 49152 + 1938002 cycles = 23 black frame(s)",
+        "sequence: entry 4 (Lavos falls) opening at f4270 -- 5728360 + 49152 + 1938002 cycles = 23 black frame(s)",
         "sequence: entry 4 (native) ended after 1734 frames from C3:0000",
         "sequence: the fall ended ($7E:0000=1) -> reboot into loc 12D",
         "reboot: JML C0:0000 -> loc 12D tile(8,13) bits00",
         "reboot: op 0xDF/0xE1 at the vblank -> $0100=1F3, $0105=12D",
         "reboot: JML C0:0000 -> loc 1F3 tile(0,0) bits01",
-        "fmemmon f8688 loc=105  0100=0501*  0047=3D1E1E",
-        "fmemmon f8521 loc=1F3  0100=F301  0047=1B1B1B*",
-        "fmemmon f8528 loc=1F3  0100=F301  0047=000000*",
-        "fmemmon f8534 loc=1F3  0100=F301  0047=101010*"
+        "fmemmon f8807 loc=105  0100=0501*  0047=3D1E1E",
+        "fmemmon f8640 loc=1F3  0100=F301  0047=1B1B1B*",
+        "fmemmon f8647 loc=1F3  0100=F301  0047=000000*",
+        "fmemmon f8653 loc=1F3  0100=F301  0047=101010*"
       ],
       "pin": [
         "^sequence: entry 4 ",
         "^sequence: the fall ended",
         "^reboot: ",
         "^fmemmon f\\d+ loc=105",
-        "^fmemmon f85(21|28|34) loc=1F3"
+        "^fmemmon f86(40|47|53) loc=1F3"
       ],
       "timeout_s": 300,
       "mutations": [
@@ -44988,7 +44988,7 @@
         }
       ],
       "note_pass": "after the Black Tyranno the Tyranno Lair's `FF 24` plays through in the port: the native entry-4 stage to its END, the reboot into 301 (Azala's last words, the dactyls), world 1F3 with the impact's colour fade (op 49) and on to 105 -- the cartridge's path",
-      "notes": "Roadmap G1a. Jackie's ch17 brought to scene 301 through the ROM's loader (`ct.exe --teleport 301 8 30 0 --method req`, saves/tyranno_re/tele301_req.*), walked up to the trigger row (objs 15-20 call obj21 fn3), the talk and the fight driven with A; the fight's two enemies' HP poked to 1 at f1700 (CT_POKEWRAM: $5FB0 Black Tyranno, $61B0 Azala) -- a test fixture, the party of ch17 loses the fight on A alone on the cartridge too. The cartridge (s301_c1_hp1, the same poke): `FF 24` at f3128, the END 1734 frames later, world 1F3 f7378, $0047 = 1F at +148 then -4 a frame from +152, 105 at +319; the port: the END 1732 frames after `FF 24` (the common init's vblank wait $7E:3010 -> $31B0 and the setup's NMI frame are not priced: a timing artefact) and 1F3's leg 3 frames later than the cartridge's, the same fade and the same path. ==== 2026-10-15, RE-PINNED (frames only; the values unchanged): every enemy death routine is CD/0043's 43 frames from the delist (the port's were 40: the palette copy a frame late, a 9-frame hold from the delist) and the battle's loop head waits for the last one, the idle tick on the frame after (battle_death_dissolve_order.md last addendum; graded against the rule's cartridge by battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge, battle-roly-rider-dissolves-vs-oracle, battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge, battle-lavos-mimic-fight-vs-rule-cartridge). Each death moves what follows by +4; a death sound posts on the delist + 1 as the cartridge's; a picture inside a dissolve shows the dither at the cartridge's level (drawn from the tiles the NMI uploaded). Here: the Azala's routine ends 4 frames later (victory f541 -> f545 of the battle) and its death sound posts a frame earlier (the cartridge's delist + 1); the reward lines ride the drive's A grid, so the handoff is unchanged (f721), the fall opens a frame earlier (f4331 -> f4330: the sound processor's phase at the handshake) and 1F3 arrives 31 frames later (f8548 -> f8579: one period of the drive's fixed 30-frame A grid in 301's boxes). The 1F3 fade's three pinned frames move with it (8703/8710/8716 -> 8734/8741/8747); the path and the fade are the same. ==== 2026-10-16, RE-PINNED (frames only): the Black Tyranno's block 2 opens with condition 20, so when he falls he counters from the grave (C1/8694-86C6, disasm/notes/battle_counter_gating.md sec. 8): the rule's cartridge from s301_c1_hp1 (A every 30 frames) -- f718 his HP 0 (C1:ED12) and on that frame `$AE93 = 7F` (C1:AD08), tech 7F's effect on his own side (C1:F12E) taking Azala with him: no further action, the victory. The port dropped that counter on its own alive test, and the party needed another action to kill Azala. Now the fight ends at his death (battle f294 counter, f320 Azala's routine, f365 the victory): the fall opens 179 frames earlier (f4330 -> f4151) and everything after it 211 (1F3's fade 8734/8741/8747 -> 8523/8530/8536, 105 f8901 -> f8690; the 32 between them one period of the drive's 30-frame A grid in the boxes). The legs relative to each other are unchanged (1F3's $0047 = 1F at +151 of its arrival, 105 at +322; the cartridge's +148 / +319). ==== 2026-10-17, RE-PINNED (frames only): the opening is priced whole (field.c seqOpeningHold: the common init's vblank wait $31B0 and the setup's NMI frame, measured in place on six stages) -- 23 black frames, the END 1733 frames after `FF 24` (the cartridge's 1734; was 1732), everything after +1 (1F3's fade 8523/8530/8536 -> 8524/8531/8537, 105 f8690 -> f8691). | 2026-10-17 RE-PINNED (frames only, -1; the values unchanged): a native stage's END now reboots in the frame of the NMI that ENDed, as the cartridge (field.c, after the frame's picture: $7E:0000 = 1 and C0/0000 in the same frame), one host frame less than before. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): 301's reload 28 -> 29 frames and world 3's load 38 -> 35, both the cartridge's (from ff24_handoff_f27, A every 30: NMI off/on f1735/1764 and f4227/4262); the fade 8523/8530/8536 -> 8521/8528/8534 and 105 f8690 -> f8688, now +148 (1F) and +319 (105) from 1F3's arrival, the cartridge's to the frame (was +151 / +322). Pin regex f85(21|28|34)."
+      "notes": "Roadmap G1a. Jackie's ch17 brought to scene 301 through the ROM's loader (`ct.exe --teleport 301 8 30 0 --method req`, saves/tyranno_re/tele301_req.*), walked up to the trigger row (objs 15-20 call obj21 fn3), the talk and the fight driven with A; the fight's two enemies' HP poked to 1 at f1700 (CT_POKEWRAM: $5FB0 Black Tyranno, $61B0 Azala) -- a test fixture, the party of ch17 loses the fight on A alone on the cartridge too. The cartridge (s301_c1_hp1, the same poke): `FF 24` at f3128, the END 1734 frames later, world 1F3 f7378, $0047 = 1F at +148 then -4 a frame from +152, 105 at +319; the port: the END 1732 frames after `FF 24` (the common init's vblank wait $7E:3010 -> $31B0 and the setup's NMI frame are not priced: a timing artefact) and 1F3's leg 3 frames later than the cartridge's, the same fade and the same path. ==== 2026-10-15, RE-PINNED (frames only; the values unchanged): every enemy death routine is CD/0043's 43 frames from the delist (the port's were 40: the palette copy a frame late, a 9-frame hold from the delist) and the battle's loop head waits for the last one, the idle tick on the frame after (battle_death_dissolve_order.md last addendum; graded against the rule's cartridge by battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge, battle-roly-rider-dissolves-vs-oracle, battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge, battle-lavos-mimic-fight-vs-rule-cartridge). Each death moves what follows by +4; a death sound posts on the delist + 1 as the cartridge's; a picture inside a dissolve shows the dither at the cartridge's level (drawn from the tiles the NMI uploaded). Here: the Azala's routine ends 4 frames later (victory f541 -> f545 of the battle) and its death sound posts a frame earlier (the cartridge's delist + 1); the reward lines ride the drive's A grid, so the handoff is unchanged (f721), the fall opens a frame earlier (f4331 -> f4330: the sound processor's phase at the handshake) and 1F3 arrives 31 frames later (f8548 -> f8579: one period of the drive's fixed 30-frame A grid in 301's boxes). The 1F3 fade's three pinned frames move with it (8703/8710/8716 -> 8734/8741/8747); the path and the fade are the same. ==== 2026-10-16, RE-PINNED (frames only): the Black Tyranno's block 2 opens with condition 20, so when he falls he counters from the grave (C1/8694-86C6, disasm/notes/battle_counter_gating.md sec. 8): the rule's cartridge from s301_c1_hp1 (A every 30 frames) -- f718 his HP 0 (C1:ED12) and on that frame `$AE93 = 7F` (C1:AD08), tech 7F's effect on his own side (C1:F12E) taking Azala with him: no further action, the victory. The port dropped that counter on its own alive test, and the party needed another action to kill Azala. Now the fight ends at his death (battle f294 counter, f320 Azala's routine, f365 the victory): the fall opens 179 frames earlier (f4330 -> f4151) and everything after it 211 (1F3's fade 8734/8741/8747 -> 8523/8530/8536, 105 f8901 -> f8690; the 32 between them one period of the drive's 30-frame A grid in the boxes). The legs relative to each other are unchanged (1F3's $0047 = 1F at +151 of its arrival, 105 at +322; the cartridge's +148 / +319). ==== 2026-10-17, RE-PINNED (frames only): the opening is priced whole (field.c seqOpeningHold: the common init's vblank wait $31B0 and the setup's NMI frame, measured in place on six stages) -- 23 black frames, the END 1733 frames after `FF 24` (the cartridge's 1734; was 1732), everything after +1 (1F3's fade 8523/8530/8536 -> 8524/8531/8537, 105 f8690 -> f8691). | 2026-10-17 RE-PINNED (frames only, -1; the values unchanged): a native stage's END now reboots in the frame of the NMI that ENDed, as the cartridge (field.c, after the frame's picture: $7E:0000 = 1 and C0/0000 in the same frame), one host frame less than before. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): 301's reload 28 -> 29 frames and world 3's load 38 -> 35, both the cartridge's (from ff24_handoff_f27, A every 30: NMI off/on f1735/1764 and f4227/4262); the fade 8523/8530/8536 -> 8521/8528/8534 and 105 f8690 -> f8688, now +148 (1F) and +319 (105) from 1F3's arrival, the cartridge's to the frame (was +151 / +322). Since the battle fixes merged in 8542bd8 the Black Tyranno fight runs 119 frames longer: the fall opens at f4270 and everything after it moves by the same 119 (1F3 8640/8647/8653, 105 f8807). Pin regex f86(40|47|53)."
     },
     {
       "name": "battle-azala-ring-op-eb-in-the-port",
@@ -50089,6 +50089,80 @@
         "tools/walkto.py"
       ],
       "expect": [
+        "playthrough: 00_newgame played on the cartridge (2600 frames)",
+        "playthrough: 01_wakeup played on the cartridge (1800 frames)",
+        "playthrough: 02_downstairs played on the cartridge (436 frames)",
+        "playthrough: 03_kitchen played on the cartridge (1312 frames)",
+        "playthrough: 04_to_fair played on the cartridge (434 frames)",
+        "playthrough: 05_bellstairs played on the cartridge (806 frames)",
+        "playthrough: 06_marle played on the cartridge (3018 frames)",
+        "playthrough: 07_merchant played on the cartridge (1342 frames)",
+        "playthrough: 08_candy played on the cartridge (2230 frames)",
+        "playthrough: 09_telepod played on the cartridge (484 frames)",
+        "playthrough: 10_demo played on the cartridge (2288 frames)",
+        "playthrough: 11_gate played on the cartridge (5596 frames)",
+        "playthrough: 12_after_her played on the cartridge (3528 frames)",
+        "playthrough: 13_canyon played on the cartridge (2856 frames)",
+        "playthrough: 14_canyon_out played on the cartridge (3369 frames)",
+        "playthrough: 15_forest_castle played on the cartridge (2173 frames)",
+        "playthrough: 16_castle_in played on the cartridge (2788 frames)",
+        "playthrough: 17_queen played on the cartridge (6329 frames)",
+        "playthrough: 18_lucca played on the cartridge (7276 frames)",
+        "playthrough: 19_to_forest played on the cartridge (1454 frames)",
+        "playthrough: 20_forest_fights played on the cartridge (12124 frames)",
+        "playthrough: 21_inn played on the cartridge (2508 frames)",
+        "playthrough: 22_cathedral played on the cartridge (13718 frames)",
+        "playthrough: 23_organ played on the cartridge (1234 frames)",
+        "playthrough: 24_sanctum_hall played on the cartridge (9646 frames)",
+        "playthrough: 25_sanctum_switches played on the cartridge (35744 frames)",
+        "playthrough: 26_yakra played on the cartridge (29080 frames)",
+        "playthrough: 27_castle_return played on the cartridge (5834 frames)",
+        "playthrough: 28_castle_out played on the cartridge (5470 frames)",
+        "playthrough: 29_gate_home played on the cartridge (12170 frames)",
+        "playthrough: 30_arrest played on the cartridge (5806 frames)",
+        "playthrough: 31_trial played on the cartridge (15245 frames)",
+        "playthrough: 32_cell played on the cartridge (9672 frames)",
+        "playthrough: 33_escape played on the cartridge (21845 frames)",
+        "playthrough: 34_to_bridge played on the cartridge (19458 frames)",
+        "playthrough: 35_dragon_tank played on the cartridge (23027 frames)",
+        "playthrough: 36_castle_hall played on the cartridge (5333 frames)",
+        "playthrough: 37_gate_2300 played on the cartridge (4417 frames)",
+        "playthrough: 38_lab16 played on the cartridge (6521 frames)",
+        "playthrough: 39_arris_shop played on the cartridge (5895 frames)",
+        "playthrough: 40_guardian played on the cartridge (27569 frames)",
+        "playthrough: 41_arris_password played on the cartridge (4782 frames)",
+        "playthrough: 42_arris_beyond played on the cartridge (12543 frames)",
+        "playthrough: 43_arris_info_center played on the cartridge (12605 frames)",
+        "playthrough: 44_day_of_lavos played on the cartridge (6937 frames)",
+        "playthrough: 45_bike_key played on the cartridge (29094 frames)",
+        "playthrough: 46_johnny played on the cartridge (4739 frames)",
+        "playthrough: 47_race played on the cartridge (3650 frames)",
+        "playthrough: 48_lab32_road played on the cartridge (7786 frames)",
+        "playthrough: 49_robo played on the cartridge (13885 frames)",
+        "playthrough: 50_factory played on the cartridge (6764 frames)",
+        "playthrough: 51_security played on the cartridge (11804 frames)",
+        "playthrough: 52_factory_floor played on the cartridge (9753 frames)",
+        "playthrough: 53_lasers_and_zabie played on the cartridge (17990 frames)",
+        "playthrough: 54_r_series played on the cartridge (31548 frames)",
+        "playthrough: 55_spekkio played on the cartridge (11710 frames)",
+        "playthrough: 56_medina_gate played on the cartridge (2590 frames)",
+        "playthrough: 57_medina_inn played on the cartridge (5651 frames)",
+        "playthrough: 58_heckran_cave played on the cartridge (16771 frames)",
+        "playthrough: 59_heckran played on the cartridge (24632 frames)",
+        "playthrough: 60_to_600ad played on the cartridge (7025 frames)",
+        "playthrough: 61_zenan_supplies played on the cartridge (18828 frames)",
+        "playthrough: 62_steel_saber played on the cartridge (23423 frames)",
+        "playthrough: 63_zombor played on the cartridge (42832 frames)",
+        "playthrough: 64_to_denadoro played on the cartridge (2439 frames)",
+        "playthrough: 65_denadoro played on the cartridge (81488 frames)",
+        "playthrough: 66_masa_mune played on the cartridge (4400 frames)",
+        "playthrough: 67_masa_mune_fight played on the cartridge (36886 frames)",
+        "playthrough: 68_porre played on the cartridge (3292 frames)",
+        "playthrough: 69_hero_medal played on the cartridge (1050 frames)",
+        "playthrough: 70_bent_hilt played on the cartridge (5618 frames)",
+        "playthrough: 71_melchior played on the cartridge (12766 frames)",
+        "playthrough: 72_mystic_mountain played on the cartridge (2250 frames)",
+        "playthrough: 73_ayla played on the cartridge (18128 frames)",
         "playthrough: 00_newgame oracle-only (power-on, the title, New Game: Battle Mode Active, the name Crono, the opening over 1F0, into 10F [oracle-only])",
         "playthrough: 01_wakeup SAME -- locs 10F 002 | story 00 03 | party 008080 | gold 400 | hp 70 (1) | ctrl 1 | end picture 0 px at port -2",
         "playthrough: 02_downstairs SAME -- locs 002 001 | story 03 | party 008080 | gold 400 | hp 70 (1) | ctrl 2 | end picture 0 px at port +0",
@@ -50155,7 +50229,16 @@
         "playthrough: 63_zombor DIFFERENT -- locs 074 1F1 087 | story 57 5A | party 000102 | gold 2474 | hp 98 (6) | ctrl 7 | end picture 344 px at port +0",
         "playthrough: 64_to_denadoro DIFFERENT -- locs 087 1F1 08A 1F1 091 | story 5A | party 000102 | gold 2424 | hp 202 (2) | ctrl 3 | end picture 463 px at port -2",
         "playthrough: 65_denadoro DIFFERENT -- locs 091 08E 092 08F 093 096 090 094 095 08F 097 | story 5A 5D | party 000102 | gold 4509 | hp 99 (14) | ctrl 31 | end picture 54016 px at port +0",
-        "playthrough: 50/65 legs SAME"
+        "playthrough: 66_masa_mune DIFFERENT -- locs 097 | story 5D | party 000102 | gold 4509 | hp 217 (4) | ctrl 2 | end picture 54016 px at port +0",
+        "playthrough: 67_masa_mune_fight SAME -- locs 097 1F1 | story 5D 60 | party 000102 | gold 6409 | hp 115 (3) | ctrl 3 | end picture 0 px at port +0",
+        "playthrough: 68_porre DIFFERENT -- locs 1F1 09C 1F1 09D 1F1 | story 60 | party 000102 | gold 3629 | hp 232 (2) | ctrl 3 | end picture 57145 px at port +0",
+        "playthrough: 69_hero_medal SAME -- locs 1F1 098 | story 60 66 | party 000102 | gold 3629 | hp 232 (1) | ctrl 3 | end picture 0 px at port -2",
+        "playthrough: 70_bent_hilt DIFFERENT -- locs 098 1F1 08C 08D | story 66 69 | party 000102 | gold 3629 | hp 232 (1) | ctrl 13 | end picture 45341 px at port +0",
+        "playthrough: 71_melchior SAME -- locs 08D 08C 1F1 087 1F1 070 071 1D0 024 1F0 028 | story 69 40 69 40 69 6C | party 000102 | gold 3629 | hp 232 (1) | ctrl 19 | end picture 0 px at port +0",
+        "playthrough: 72_mystic_mountain SAME -- locs 028 1F0 024 1D0 110 | story 6C 40 6C 40 | party 000102 | gold 3629 | hp 232 (1) | ctrl 10 | end picture 0 px at port +0",
+        "playthrough: 73_ayla DIFFERENT -- locs 110 111 | story 40 6C 6F | party 000102 | gold 3629 | hp 210 (3) | ctrl 2 | end picture 54016 px at port +0",
+        "playthrough: 74_dreamstone SAME -- locs 111 112 1F3 113 118 117 113 | story 6F 72 75 | party 000102 | gold 3629 | hp 210 (1) | ctrl 17 | end picture 0 px at port +0",
+        "playthrough: 55/74 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
