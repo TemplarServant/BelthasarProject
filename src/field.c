@@ -4908,18 +4908,33 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
   else { *x0 = f->mx0; *x1 = f->mx1; }
 }
 // THE WIDESCREEN'S CAMERA (a mod) is the Steam release's (Chrono Trigger.exe, 2023; ROADMAP X4): where the 256 view
-// stands in a picture `w` wide whose ROM camera is at camx -- always the picture's middle. The Steam field is the SNES's
-// picture on one node, scaled 1.875 x 5/3 into a 568 x 320 design and placed at (0x7FA108, 0) (0x5889D0-0x5889FE), where
-// 0x7FA108 = (the design's width - 480) / 2 + its origin (0x40EBE5-0x40EC3F): the 256 columns centred, whatever the
-// room. Its sides are the ROM's camera's own surroundings: past a room's scroll mask it draws the room's margins
-// (mapext_<location>, 4 to 6 columns a side for wide rooms as for narrow ones: fieldWideExtPic), so its picture never
-// stops at a room's edge -- the ROM's camera does, and the picture with it. Here the sides past the edge are the Steam
-// margins when the player has them, else what fieldWideMask leaves there (black, or the map wrapping). The ROM's camera,
-// and everything it decides, are untouched. (Until 2026-10-23 the picture stopped at a wide room's edges and the view slid
-// off the middle; the Steam release never does.)
+// stands in a picture `w` wide whose ROM camera is at camx. The Steam field is the SNES's picture on one node, scaled
+// 1.875 x 5/3 into a 568 x 320 design and placed at (0x7FA108, 0) (0x5889D0-0x5889FE), where 0x7FA108 = (the design's
+// width - 480) / 2 + its origin (0x40EBE5-0x40EC3F): the 256 columns centred. But the camera it shows is CLAMPED to the
+// room (0x55A020 at the room's load; applied every frame, 0x589ED6-0x589F7D, Vec2::clamp, the sprites moved with the
+// map): shown = clamp(the ROM's camera, L * 16 + m, (R + 1) * 16 - 256 - m), L / R the scroll mask's columns, m the
+// side's width; a room narrower than the picture (low > high) is held at the bounds' midpoint. So the room's edge stands
+// at the WIDE screen's edge, and Crono walks to it before an exit there (Leene Square's plaza rear, 1B7, to Gato: the
+// owner, 2026-10-28). Steam's side is ~23.5 px at 16:9 (its 192 lines); the port keeps 224, so m is its own side (71 px
+// at 16:9): a room up to 398 px wide stays still, centred, while the ROM's camera moves the view across it. Its own
+// exceptions (location numbers only): m = 0 -- the view in the middle, unclamped -- for 06C, 106, 107 and 15B (its jump
+// table 0x55A2C0/0x55A2C8); the Ocean Palace's Lavos (1A7) has its right bound at 256 and the Destruction of Lavos 2
+// (1EE) its left at 1024. (0x170 / 0x171, the Blackbird's passages, take m = 0 on two of its state bits, [0x81B4C4] +
+// 0x1136C bit 7 or + 0x11374 & 0x11, not mapped to the SNES's RAM yet: clamped here.) A room that wraps (fieldWideMask:
+// no edge) is not clamped. The ROM's camera, and everything it decides, are untouched: only the view moves in the
+// picture. (Until 2026-10-28 the view stayed in the middle at every room's edge, from a misreading of the node's place.)
 static int fieldWideViewX(const Field* f, int w, int camx) {
-  (void)f; (void)camx;
-  return (w - CAMW) / 2;
+  const int m0 = (w - CAMW) / 2;
+  int x0, x1; fieldWideMask(f, w, &x0, &x1);
+  if (x0 < -(1 << 29)) return m0;
+  int m = m0;
+  if (f->loc == 0x06C || f->loc == 0x106 || f->loc == 0x107 || f->loc == 0x15B) m = 0;
+  if (f->loc == 0x1A7) x1 = 256;
+  if (f->loc == 0x1EE) x0 = 1024;
+  const int lo = x0 + m, hi = x1 - CAMW - m;
+  const int shown = lo > hi ? (lo + hi) >> 1 : camx < lo ? lo : camx > hi ? hi : camx;
+  int vx = camx - shown + m0;
+  return vx < 0 ? 0 : vx > w - CAMW ? w - CAMW : vx;
 }
 // THE WIDESCREEN'S SKY OFFSETS (the scene adjustments, a mod: settings.h sceneAdjust; art direction, the owner 2026-10-24,
 // moved under that option 2026-10-25): a room whose BG2
@@ -5019,8 +5034,8 @@ static const FieldWideExtPic* fieldWideExtPic(const Field* f) {
   size_t px = (size_t)e.w * 16 * e.h * 16;
   p.rgb = (uint8_t*)malloc(px * 3); p.cov = (uint8_t*)malloc(px); p.rgb2 = (uint8_t*)malloc(px * 3); p.cov2 = (uint8_t*)malloc(px);
   if (!p.rgb || !p.cov || !p.rgb2 || !p.cov2 ||
-      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, 0x17, p.rgb, p.cov) ||
-      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, 0x08, p.rgb2, p.cov2)) {
+      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, e.steamPal, 0x17, p.rgb, p.cov) ||
+      !CtFieldSceneBakeExt(f->sd, e.planes, e.w, e.h, e.slotChips, e.nMeta, e.metaIds, e.metaCorners, e.pageSheet, e.steamPal, 0x08, p.rgb2, p.cov2)) {
     free(p.rgb); free(p.cov); free(p.rgb2); free(p.cov2); p.rgb = p.cov = p.rgb2 = p.cov2 = NULL; return NULL;
   }
   return &p;
@@ -5082,10 +5097,10 @@ static int fieldWideExtPixel(const FieldWideExtPic* p, int mx, int my, int o2x, 
 // the PPU would repeat its period, a seam at each edge of the view, so the widescreen's sides mirror it there instead:
 // the bake (scene.c CtFieldSceneSetStill), the layers drawn past the room's edge (fieldStillCol), the frames between
 // (fieldnative.c). A layer that moves shows all of its period in time, painted to repeat: it repeats.
-// It stands still on the WIDE screen: its 256 columns in the picture's middle, which is where the view is (fieldWideViewX,
-// the Steam release's camera). (While the widescreen's camera stopped at a room's edge, the view slid across the stopped
-// picture and a backdrop held to the view slid over a bridge that stood still -- the owner, 2026-10-22; held to the
-// picture's middle it stood. With the view always there the two are one.)
+// It stands still on the WIDE screen: its 256 columns in the picture's middle, where the view is but at a room's edge
+// (fieldWideViewX, the Steam release's clamped camera). (While the widescreen's camera stopped at a room's edge, the view
+// slid across the stopped picture and a backdrop held to the view slid over a bridge that stood still -- the owner,
+// 2026-10-22; held to the picture's middle it stood.)
 static int g_wideStill, g_wideStillVx, g_wideStillVw;   // this frame's still layers (BL2 2, BL3 4), the 256 view's map
                                                         //   column, and the map column of the picture's middle 256
 static int fieldWideStillBits(const uint8_t* pg) {
@@ -20445,7 +20460,10 @@ int main(int argc, char** argv) {
     // animation (the script's mode and index, idle / walk by whether it moves, its facing) stepped by the port's model of
     // the ROM's ticker (animTickActor) on a play state of its own -- the ROM's $0F01 is not stepped off screen, and a
     // frozen pose sliding along the side read as broken. Picture only: nothing is written (no $0F01, no 'anim finished').
-    if (wideX > 0 && f.vm && !battleCompose)
+    // (Gated on the wide picture, not on the view's place in it: at a room's edge the camera clamp stands the view at x 0,
+    //  and until 2026-10-29 `wideX > 0` turned the sides' objects off there -- MEASURED, Zenan Bridge (020) with the
+    //  camera at its left end, 16:9: every soldier walking right vanished at x 288, CT_WIDEPOP below.)
+    if (wideW > CAMW && f.vm && !battleCompose)
       for (int o = 0; o < nact && o < 64; o++) {   // (the lead too: a scene walks it out of the window like any object --
         int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);   //  Crono in 0BA's attract, gone in the left side)
         int shown = sideShown[o]; sideShown[o] = 0;
@@ -20471,6 +20489,43 @@ int main(int argc, char** argv) {
         drawSprite(&assets, fb, sidx, spal, sp, af, sx, sy, front, tf, bf, 0, 0, 0, 0, 0, NULL, 0, NULL, NULL, NULL);
         sideShown[o] = 1;
       }
+    // CT_WIDEPOP=1 (probe, the widescreen's census): an object the wide picture shows in its sides only (no part of it in
+    // the 256 view) that APPEARS there, VANISHES there or JUMPS (more than 16 px in a frame) while the screen is at full
+    // brightness two frames running in one location -- what the 256 picture keeps off screen and the sides show. One line
+    // each: `widepop: f<N> loc=<L> obj<o> appear|vanish|jump L|R at (x,y) from (x,y) spr=<s> ip=<$1180> | ...` (its screen
+    // place, the view's, who draws it, $0F00 / $1A81 / $1100); `2` adds a `side-only` line per such object every 60
+    // frames. Picture only. The census (2026-10-29): every playthrough leg, 16:9 -- 23 events, 12 of them the scripts'.
+    { static int wp = -1, pv[64], pax[64], pay[64], pso[64], pLoc = -1, pFr = -100, pBr = 0;
+      if (wp < 0) wp = getenv("CT_WIDEPOP") ? atoi(getenv("CT_WIDEPOP")) : 0;
+      if (wp && f.vm && wideW > CAMW) {
+        const uint8_t* w7 = CtSceneMem7E(f.vm);
+        int loc = w7[0x0100] | (w7[0x0101] << 8), vb = CtSceneBright(f.vm), br = vb < fadeBri ? vb : fadeBri;
+        int live = !battleCompose && br >= 15 && pBr >= 15 && loc == pLoc && frameNo == pFr + 1, romDrawn[64] = {0};
+        for (int k = 0; k < n; k++) { int o = order[k] < 0 ? pObj : order[k]; if (o >= 0 && o < 64) romDrawn[o] = 1; }
+        for (int o = 0; o < nact && o < 64; o++) {
+          int pl, sp, ax, ay, fa; CtSceneActor(f.vm, o, &pl, &sp, &ax, &ay, &fa);
+          // (drawn: the ROM's list or the sides' own, which draw 48 px past the frame and 16 / 64 lines above / below it --
+          //  one that crosses the frame's edge is drawn before it shows and is no pop; on the frame: its foot within 4 px
+          //  of it across, and between the top line and 24 lines below the bottom, where its head still shows)
+          int sx = ax - camx, sy = ay - camy, v = romDrawn[o] || sideShown[o];
+          int onf = sx > -4 && sx < wideW + 4 && sy > 4 && sy < CAMH + 24;
+          int so = v && onf && !(sx + 12 > wideX && sx - 12 < wideX + CAMW), side = sx < wideX ? 'L' : 'R';
+          const char* ev = NULL;
+          if (live && v && !pv[o] && so) ev = "appear";
+          else if (live && !v && pv[o] && pso[o]) ev = "vanish";
+          else if (live && v && pv[o] && (so || pso[o]) && abs(ax - pax[o]) + abs(ay - pay[o]) > 16) ev = "jump";
+          if (ev) {
+            if (!so) side = pax[o] - camx < wideX ? 'L' : 'R';
+            printf("widepop: f%d loc=%03X obj%d %s %c at (%d,%d) from (%d,%d) spr=%02X ip=%04X | scr (%d,%d) view %d "
+                   "rom %d side %d latch %02X $1A81 %02X $1100 %02X\n", frameNo, loc, o, ev, side,
+                   ax, ay, pax[o], pay[o], sp & 0xFF, CtSceneObjIp(f.vm, o, NULL) & 0xFFFF, sx, sy, wideX,
+                   romDrawn[o], sideShown[o], w7[0x0F00 + o * 2], w7[0x1A81 + o * 2], w7[0x1100 + o * 2]);
+          }
+          if (wp == 2 && so && frameNo % 60 == 0) printf("widepop: f%d loc=%03X obj%d side-only %c at (%d,%d) live=%d\n", frameNo, loc, o, side, ax, ay, live);
+          pv[o] = v; pso[o] = so; pax[o] = ax; pay[o] = ay;
+        }
+        pLoc = loc; pFr = frameNo; pBr = br;
+      } }
     for (int i = 0; !battleCompose && i < n; i++) {
       if (sten[i]) {                                     // a $0F80 prio-0/1 OCCLUDER, cutting at its
         // own turn in the OAM order: its low index wins the overlap against everything painted

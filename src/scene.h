@@ -29,14 +29,15 @@ uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask);
 uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH);   // the bake without BL1/BL2/BL3 bits (a window's)
 // A mod's picture (widext.h): five planes of w x h metatile ids drawn with this scene's palette and the given chip sets,
 // metatile definitions (else this scene's) and pixel sheets into rgb ((16 w) x (16 h) x 3) and cov (BL1 under the
-// sprites, BL2 / BL3 over them, 0 = nothing); 1 = done.
+// sprites, BL2 / BL3 over them, 0 = nothing); 1 = done. steamPal (128 LE BGR555, or NULL): the colours the sheets were
+// painted with, to read their indices as the room's own (never drawn).
 // The widescreen's still backdrop (a mod): layers BL2 2 / BL3 4 held to the wide picture -- the 256 view's columns (canvas
 // column vx on) drawn from canvas column vw -- and mirrored past them instead of repeated (field.c fieldWideStill); 0 = the
 // plain bake. 1 = changed (re-bake).
 int CtFieldSceneSetStill(void* h, int bits, int vx, int vw);
 int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const uint8_t* const slotChips[6], int nMeta,
                         const uint16_t* metaIds, const uint8_t* metaCorners, const uint8_t* const pageSheet[8],
-                        int planeMask, uint8_t* rgb, uint8_t* cov);
+                        const uint8_t* steamPal, int planeMask, uint8_t* rgb, uint8_t* cov);
 // The scene's live BG palette, 128 x RGB (it follows CtFieldSceneSetCgram and the palette cycles).
 const uint8_t* CtFieldScenePalette(void* h);
 // The last bake's MAIN-screen coverage, one byte per pixel: the layer bit (L1 1, L2 2, L3 4) on top, 0 = backdrop.

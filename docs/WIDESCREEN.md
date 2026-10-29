@@ -16,11 +16,22 @@ says what each option draws that the SNES does not, and why. The history of each
 ## The camera: the Steam release's
 
 The Steam release (2018-2023) is the reference for all widescreen work (the owner, 2026-10-23). Its field node is the
-SNES picture scaled into a 16:9 design with **the 256 columns always centred on the ROM's camera** (the executable,
-0x5889D0): the picture never stops at a room's edge, so past the edge the sides show what lies beyond it. The port keeps
-the SNES's 224 lines and the ROM's vertical camera: nothing of the Steam release's phone heritage (its 192-line crop,
-its own vertical camera) is ported (the owner, 2026-10-23). The ROM's camera and everything it decides are untouched;
-`fieldWideViewX` only places the view in the middle of the wider picture.
+SNES picture scaled into a 16:9 design with the 256 columns centred (the executable, 0x5889D0), and the camera it shows
+is **clamped to the room** (0x55A020 at the room's load, applied every frame at 0x589ED6-0x589F7D):
+
+    shown = clamp(the ROM's camera, L * 16 + m, (R + 1) * 16 - 256 - m)
+
+with L / R the scroll mask's first and last columns and m the side's width; a room narrower than the picture is held at
+the bounds' midpoint. So the room's edge stands at the wide screen's edge and Crono walks up to it before an exit there
+(Leene Square's plaza rear, 1B7, to Gato: the owner, 2026-10-28). Steam's side is ~23.5 px at 16:9 (it shows 192 lines);
+the port keeps the 224 lines, so m is the port's own side (71 px at 16:9) and a room up to 398 px wide stands still,
+centred, while the ROM's camera moves the view across it. Steam's own exceptions are kept (location numbers only): no
+clamp (m = 0) at 06C, 106, 107 and 15B; the right bound at 256 in 1A7 and the left at 1024 in 1EE. The Blackbird's
+passages (170, 171) drop the clamp on two Steam state bits not yet mapped to the SNES's RAM: clamped here. A room that
+wraps is not clamped. The port keeps the SNES's 224 lines and the ROM's vertical camera: nothing of the Steam release's
+phone heritage (its 192-line crop, its own vertical camera) is ported (the owner, 2026-10-23). The ROM's camera and
+everything it decides are untouched; `fieldWideViewX` only places the view in the wider picture. (From 2026-10-23 to
+2026-10-28 the view stayed in the middle at every room's edge, from a misreading of the node's place.)
 
 ## Past a room's edge
 
@@ -32,6 +43,12 @@ What the sides show where the room ends, in order:
    layers; the fifth is opaque with BG3. A margin of one cell everywhere (266 of 412 locations: the dark around an
    interior) is a fill and yields to the room's own continuation. The margins have 4 to 6 columns a side; past them
    (a 16:9 side is 71 px: the fair's 005 has 64) the side goes on as below, never as the room's own layers again.
+   The tiles the Steam release added (`cgext*` sheets, 25 locations) were painted with its own recoloured palette
+   (`palette_bin/plt<id>.bin`), which the port never draws (the owner, 2026-10-28). `ct_wide.dat` keeps it as a key
+   only: where it made two indices one colour that the ROM keeps apart, the index a sheet pixel stands for is read
+   where the art meets the room (at the room's edge columns, the room's index beside a sheet pixel of the same Steam
+   colour, by majority; `CtFieldSceneBakeExt`). The Black Omen's exterior (06B): the wings past the machine were 0x2A,
+   080808 on Steam like the body's 0x5A but the ROM's navy sky; they take the body's 0x6A (000000).
 2. **A background** -- a layer the ROM marks as detached from the camera or scrolling on its own (`$1D35` / `$1D36`,
    from the map header md[1..3]) -- goes on: the Blackbird's clouds (16E), Flea's stars (0AD), Death Peak's snow (104).
    A still backdrop (detached, no speed: the skywalk's 01C sky) is painted for 256 columns and is **mirrored** about the

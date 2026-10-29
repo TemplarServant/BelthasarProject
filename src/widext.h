@@ -15,12 +15,15 @@ extern "C" {
 // metatiles drawn with the Steam release's tiles: its chip sets for BG1/BG2 slots 0-5 (128 chips of 64 pixels, 0..15;
 // NULL = the ROM's slot) and its definitions of the metatiles the margins use (metaIds[i]'s four corners at metaCorners +
 // 16 i: u16 chip in the scene's chip space, u8 palette row, u8 flags H 1 / V 2 / priority 4). A page in pageSheet (pages
-// 1-7) is a 256 x 256 sheet of CGRAM indices (0 = nothing) instead: the tiles the Steam release added.
+// 1-7) is a 256 x 256 sheet of CGRAM indices (0 = nothing) instead: the tiles the Steam release added. steamPal: the
+// Steam release's colours of the location's CGRAM 0-127 (128 LE BGR555; NULL = none in the file) -- never drawn (the port
+// keeps the ROM's), the key to what a sheet's index stands for (scene.c CtFieldSceneBakeExt).
 typedef struct {
   int w, h; const uint16_t* planes;
   const uint8_t* slotChips[6];
   int nMeta; const uint16_t* metaIds; const uint8_t* metaCorners;
   const uint8_t* pageSheet[8];
+  const uint8_t* steamPal;
 } CtWideExt;
 
 int CtWideExtGet(int location, CtWideExt* out);   // 1 = ct_wide.dat (CT_WIDE_DAT overrides the path) has this location

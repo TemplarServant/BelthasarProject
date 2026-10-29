@@ -18,9 +18,10 @@ tools/tutorial_cmp.py's seed), f100. Both wrote their rows with the 256 picture'
 And `forest`, a live battle (scene 19 from saves/battle_re/forest_pre_wrapped.lakewram, A mashed), f300: the arena is
 composed wide round the battle's own 256 view. A room as wide as its map ends at its edge like any other (the option
 that wrapped the map there, wide_room_wrap, was removed 2026-10-23): black past it but for a background layer. The widescreen's
-camera is the Steam release's (2026-10-23): the view stays in the middle at a room's edge too, and the side past the
-edge is black (`5-edge`, the fair with Crono at its left edge; the forest's fight at f300). Should the view ever stand
-off the middle, the line says where (the screen-fixed boxes stay at the middle: what still differs there).
+camera is the Steam release's clamped one (2026-10-28): at a room's edge the room's edge stands at the wide screen's
+edge and the view slides off the middle (`5-edge`, the fair with Crono at its left edge: the view at x 0; the forest's
+fight at f300). When the view stands off the middle the line says where (the screen-fixed boxes stay at the middle:
+what still differs there).
 """
 import os
 import subprocess

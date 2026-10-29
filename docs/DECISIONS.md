@@ -17,6 +17,8 @@ The binding text of the rules is in [CLAUDE.md](../CLAUDE.md). The timing model 
 - **Its camera, not its phone heritage.** The 256 columns always centred on the ROM's camera, and past a room's edge
   its margins (the scenery expansion). Not its 192-line crop or its own vertical camera, made for a phone's screen: the
   port keeps 224 lines and the ROM's vertical camera. The owner draws the art the margins leave short.
+  (2026-10-28: the Steam camera is CLAMPED to the room -- its 0x55A020 -- so the room's edge stands at the wide
+  screen's edge; the port follows with its own side width. [WIDESCREEN.md](WIDESCREEN.md#the-camera-the-steam-releases).)
 - **Backgrounds go on, scenes do not.** Past an edge only a layer the ROM marks as a background continues; a scene is
   never copied or mirrored ("in the attract's scene where the robot falls on the party, no"). Where the Steam release
   draws scenery over a background, without its margins the side ends black (42 locations, numbers only).
