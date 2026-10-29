@@ -2708,6 +2708,14 @@ unchanged at 2738).
 
 **The openings**, measured in place (`ct.exe --racepiccmp` RACEPICCMP_SPAN): the race's setup 10205558 cycles (no song: bit 5),
 C3:0000 -> $7E:3013 46 frames; entry 3's 114098, 18 frames -- CtRaceStageSetupCycles / CtEntry3StageSetupCycles by arm.
+(2026-10-29) Entry 3's story arm (`FF 23`) in place, $7E:671F -> $7E:300D: 113324 (the --callrom figure 120000 was not the
+arm's in place), C3:0000 -> $7E:3013 17 frames -- the two arms straddle a boundary (C3:0000 -> $7E:3010: the story 6,074,428
+cycles ending at v 224 h 898, the attract 6,075,186 ending at v 225 h 292). They put the boundary 326 cycles short of 17 frames
+from C3:0000: the rule's phase hold starts the NMI-off stretch at C0/0B5D (C0/3FD3's JSR C0/0B4E, 204 cycles before C3:0000)
+and returns the frame's CPU cycles net of refresh (4120 at v 228 h 150), so the vblank lines' 122 refresh cycles stay. The
+port's seqOpeningHold counted from the jump's own 4449 into the vblank; it counts the 204 + 122 now (field.c). The J+1 open:
+the port opens a stage the frame after the jump (ffPro) and runs the setup's last `JSL C3/08D0` inside its Open, so a hold of
+the cartridge's C3:0000 -> 7E:3013 span lands its first regular NMI on the cartridge's C3/08B3 (entry 4: J+24 on both).
 
 **Graded.** `--racepiccmp` from the committed rule states (saves/attract_race_handoff_rule_f8247.state at 19,
 attract_entry3_handoff_rule_f8859.state at 18): the race's WRAM and every pixel equal for its 378 NMIs (one register on frame

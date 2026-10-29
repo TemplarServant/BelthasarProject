@@ -573,7 +573,11 @@ Traced on the attract under the rule (`--peek boot` states, CPUTRACE_FROM=C00B86
   instructions. C0/0AE1's upload is C0/7F77 (+16402, the BRA -6), and C0/87F1 skips its BG3 row C0/83A5 (-8996: the
   standard against 087). 16E's whole load: the port 6,034,257 cycles, the cartridge 6,034,256; its d 19 on both.
 - $0BC9 bit 7 with bit 1 clear: C0/87F1 runs C0/8385 (C0/8365 on the half camera $1D14 / $1D16): +12 when its C0/7BA9 row
-  ($1D16 - 1) is odd like the standard's; an even row is refused (C0/7BA9's even arm, no trace).
+  ($1D16 - 1) is odd like the standard's; an even row is 460 less (priced 2026-10-29: C0/7BAD's BEQ taken goes straight
+  into the 15-row loop at 7BB2, where the odd arm's BEQ not taken + BRL runs 7C45 -- the same prologue plus the first
+  metatile's lower half, 7C56-7C7E, 418 -- and BRL 7BC3; traced on the Tyranno Lair's reload after Lavos's fall,
+  ff24_handoff_f27 f1735, $5A = 04, every instruction one cost). That reload walked: 9,770,791 cycles against the
+  cartridge's 9,787,229 (C0/0B5D -> C0/0B38 net of refresh), 28 black frames where the fallback's rounding held 29.
 - C0/72B4 (palette classes 5 / 6) is C0/721C instruction for instruction with other bounds: its share scan costs C0/721C's
   (087's pass: the port 1,585,059, the cartridge 1,585,082).
 - C0/E687's default arm (a graphics bank but 7F / D2-D4): C0/E6B6, the D4 arm's body reading $D5, 18 less (a taken BNE
