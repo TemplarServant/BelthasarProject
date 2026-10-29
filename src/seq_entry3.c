@@ -21,12 +21,12 @@ static void wr(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v
 
 int CtEntry3StageHas(uint8_t operand) { return (operand & 0x1F) == 3; }   // `FF 23` (the story) and `FF 63` (the attract)
 
-// MEASURED: `CT_CALLROM_NONMI=1 ct.exe --callrom 7E671F --pokewram 0384=23 --regdb 00 --m8 --x16` from the cartridge
-// inside the opening (saves/blackbird_re/ff23_handoff_f25.state + 12 frames: the overlay in WRAM): 4195 ops, 120000
-// cycles (3520 of them refresh) -- the whole opening is the overlay's decompression. The attract's arm (`FF 63`), measured
-// in place on the rule's cartridge (`ct.exe --racepiccmp` RACEPICCMP_SPAN=7E671F,7E300D from its hand-off, power-on f8793):
-// 114098. Both open in 18 frames.
-long CtEntry3StageSetupCycles(uint8_t operand) { return (operand & 0x40) ? 114098L : 120000L; }
+// MEASURED in place on the rule's cartridge, $7E:671F -> $7E:300D: the attract's arm (`FF 63`, `ct.exe --racepiccmp`
+// RACEPICCMP_SPAN=7E671F,7E300D from its hand-off, power-on f8793) 114098; the story's (`FF 23`, `--cputrace` CPUTRACE_BEAM
+// from saves/blackbird_re/ff23_handoff_f25.state, f18) 113324. (A `--callrom 7E671F` run outside the opening read 120000 for
+// the story's: the arm's cost there, not in place.) The story's opens in 17 frames, the attract's in 18 (field.c
+// seqOpeningHold: the two straddle a boundary by ~400 cycles each side).
+long CtEntry3StageSetupCycles(uint8_t operand) { return (operand & 0x40) ? 114098L : 113324L; }
 
 // $7E:37FA -- the palette records' frame (`LDX $4202 / STX $F0 / JSL FD/FFF7 / LDX $F0 / STX $4202`): FD/E39C over the
 // twelve records at $0520, whose record 0 the task chain below waits on. ⚠ $4202 / $4203 are write-only: the `LDX` reads the

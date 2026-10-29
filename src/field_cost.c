@@ -713,9 +713,13 @@ static long pass286C(Walk* c, int loc) {
   if (b8(c, 0x1D35) & 0x02) k += 16402 + 12 - 9936;
   else if (b8(c, 0x0BC9) & 0x80) {
     // C0/8806 BPL not taken + JSR C0/8385 + BRA: C0/8365 on the half camera ($1D14 / $1D16): +12 when its C0/7BA9 row
-    // is odd like the standard's ($0E - 1, the camera's even row less one); the even row's arm no trace ran
-    if (((b8(c, 0x1D16) - 1) & 1) == 0) { unpriced(c, "pass: C0/8385 on an even row (C0/7BA9's even arm)"); return -1; }
+    // is odd like the standard's ($0E - 1, the camera's even row less one). An EVEN row is 460 less: C0/7BAD's BEQ taken
+    // (18) goes straight into the 15-row loop at C0/7BB2, where the odd arm's BEQ not taken (12) + BRL (24) runs C0/7C45,
+    // the same prologue plus a half row -- 7C56-7C7E, the first metatile's lower two bytes, 418 -- and BRL 7BC3 (24).
+    // Traced (the rule's cartridge, the Tyranno Lair's reload after Lavos's fall, ff24_handoff_f27 f1735, $5A = 04):
+    // every instruction of the arm one cost, 9,344 cycles for the call.
     k += 12;
+    if (((b8(c, 0x1D16) - 1) & 1) == 0) k -= 460;
   }
   if (b8(c, 0x1D35) & 0x04) k -= 8996;
   // FD:C1EE's `LDA $013C / BIT #01 / BNE`: the $2129 arm is `LDA #29` alone where $2128's is `LDA #28 / BRA` (-12)
