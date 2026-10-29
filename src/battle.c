@@ -12809,9 +12809,24 @@ static int battleCounterDecode(CtBattleHost* h, int slot) {
     }
     if (s[battleBlock(atk) + 0x1E] & 0x8F) return 0; }               // C1/86FF-8704
   int id = s[battleBlock(atk) + 0];
+  int prevMsg = h->aiTurnMsg;                                      // (a section that commits runs C1/8CF9, which sets it:
+  h->aiTurnMsg = 0;                                                //  only this counter's own message may post below)
   int op = battleCounterTurn(h, h->enCounterK[slot], atk, h->enCounterBy[slot], &tgt);   // C1/8686-87FB
   char evbuf[32];
   if (op == 0) {                                                   // no section held, or one with no action (a message)
+    // A SECTION WITH A MESSAGE AND NO ACTION (op 0B/0C/0D... with $B3C7, $B3B8 = 2) is the turn's "step alone" inside
+    // C1/8CF9 -- CD/0033's box runs there, so the loop waits it out before its next victim (or C1/881C). MEASURED, the
+    // rule's cartridge (leg 67_masa_mune_fight, MasaMune's block 2 `12 00 02 00 / 0B 37 0A 00 1B`, hit by Crono's Slash):
+    // its walk's cursor $B1D0 = CC:AA07 at f13304 and CC:A9E3 at f13315 -- the box's 11 frames; the port moved on at once.
+    if (h->aiTurnMsg) {
+      int hold = battleNameBoxPost(h, h->aiTurnMsg);
+      h->aiTurnMsg = 0;
+      if (hold > 0) {
+        h->ctrMsgHold = hold; h->ctrMsgSlot = slot; h->ctrMsgOp = 0; h->ctrMsgTgt = tgt;
+        snprintf(evbuf, sizeof evbuf, "counter-msg id%02X#%d", id, slot);
+        battleTrace(h, evbuf); return 2;
+      }
+    } else h->aiTurnMsg = prevMsg;
     snprintf(evbuf, sizeof evbuf, "counter-nofire id%02X#%d", id, slot);
     battleTrace(h, evbuf); return 0;
   }
@@ -12914,8 +12929,12 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
       if (h->ctrMsgSlot != slot || h->ctrDecodeF == h->frames) continue;
       if (h->nameBoxT >= 0) battleNameBoxFrame(h);
       if (--h->ctrMsgHold > 0) continue;
-      if (battleCounterDecodeRest(h, slot, h->ctrMsgOp, h->ctrMsgTgt)) { h->ctrPendSlot = slot; continue; }
-      h->enCounterDelay[slot] = 0;                                // (its target left: C1/881C as below)
+      if (h->ctrMsgOp && battleCounterDecodeRest(h, slot, h->ctrMsgOp, h->ctrMsgTgt)) { h->ctrPendSlot = slot; continue; }
+      h->enCounterDelay[slot] = 0;                                // (its target left, or a message alone: C1/881C as below)
+      // A message alone: CD/0295 returned this frame and the loop's head runs here (the enemy-message-end's own rule), so
+      // the idle tick's frame A is the next frame and its first ATB pass the one after. MEASURED, the rule's cartridge (leg
+      // 67_masa_mune_fight): $B2C0 cleared and `$0027 = 80` at f13315, `$0027 = 81` and MasaMune's gauge at f13317.
+      if (!h->ctrMsgOp) h->msgHoldEndF = h->frames;
       int more = 0;
       for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) more = 1;
       if (!more && !s[0x24]) battleAiEvalAll(h);

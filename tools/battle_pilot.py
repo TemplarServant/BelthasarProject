@@ -20,7 +20,11 @@ fight), `$95DB` = 0 (the command row, not a submenu), `$9609` = 0 (no target sel
     idles the window (at most 400 frames) while b's gauge still runs; PILOT_HEAL (percent) moves the heal
     threshold; PILOT_HEALTECH (`seat:row`) heals the lowest PC under it with that row of the seat's tech list (Aura)
     before any item; PILOT_ETHER (MP) gives an Ether to the PC whose MP falls under it; PILOT_HOLD (`addr:val`, hex)
-    holds every attack while that WRAM byte reads the value (a counter stance) -- heals still go; PILOT_RUN holds L+R the
+    holds every attack while that WRAM byte reads the value (a counter stance) -- heals still go; PILOT_PRIO
+    (`seat:row:addr:val`, addr/val hex) has the seat take that tech row on the target while the byte reads the value, before
+    the heals; PILOT_HOLDHEAL (percent) turns the hold into a heal threshold while the byte reads the value (a window
+    with nobody under it attacks: an idled window keeps the next seat's from opening), PILOT_HOLDITEM (item id, hex) spends
+    such a window on that item on its own PC instead; PILOT_RUN holds L+R the
     whole fight (the party runs away) and picks nothing -- in a fight that allows it ($2989 bit 7 clear; otherwise it is
     fought).
 Presses are 2 frames with 10-frame gaps (the menu reads one key per 4-frame pass). A submenu or target select still open
@@ -76,6 +80,8 @@ class Pilot:
         self.duals = [[int(x) for x in d.split(':')] for d in os.environ.get('PILOT_DUAL', '').split(',') if d]
         self.healtech = dict((int(a), int(b)) for a, b in (d.split(':') for d in os.environ.get('PILOT_HEALTECH', '').split(',') if d))
         self.techrow = dict((int(a), int(b)) for a, b in (d.split(':') for d in os.environ.get('PILOT_TECHROW', '').split(',') if d))
+        self.prio = [[int(x, 16) if i >= 2 else int(x) for i, x in enumerate(d.split(':'))]
+                     for d in os.environ.get('PILOT_PRIO', '').split(',') if d]
         self.waited = 0                                           # frames a window has idled for its partner's gauge
         self.busy = set()                                         # seats given a command whose gauge has not reloaded yet
         if os.environ.get('PILOT_HEAL'):                          # (route_walk's pilot takes the default threshold)
@@ -83,6 +89,9 @@ class Pilot:
 
     def decide(self, w):
         seat = w[0x95D5]
+        heal = self.heal
+        if self.hold and w[self.hold[0]] == self.hold[1] and os.environ.get('PILOT_HOLDHEAL'):
+            heal = max(heal, float(os.environ['PILOT_HOLDHEAL']) / 100)
         pcs = [s for s in range(3) if w[0x2980 + s] < 0x80]
         lives = []
         for s in pcs:
@@ -90,21 +99,30 @@ class Pilot:
             hp, mx = rd16(w, b + 3), rd16(w, b + 5)
             if hp > 0 and mx > 0:
                 lives.append((hp / mx, s))
+        row = w[0x95DC + seat]
+        for pr in self.prio:
+            # PILOT_PRIO (`seat:row:addr:val`, comma-separated; addr and val hex): while that WRAM byte reads the value, the
+            # seat takes that row of its tech list on the chosen enemy (its MP holding 2) before anything else
+            # -- MasaMune's charge ($37 of its block = 1 after an attack: its next turn is the Tornado unless Slash hits it)
+            if seat == pr[0] and self.target(w) is not None and w[pr[2]] == pr[3] and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2:
+                self.goal = ('tech', self.target(w), pr[1])
+                return 'prio->%d' % self.target(w), press(walk(row, 1) + [0x100])
         bag = [(w[0x2400 + i], w[0x2500 + i]) for i in range(0x100) if w[0x2400 + i] in USABLE and w[0x2500 + i]]
         row = w[0x95DC + seat]
         tonics = sum(n for iid, n in bag if iid == TONIC) - self.spent      # chosen ones the bag may not show yet
         order = [seat] + [s for _, s in sorted(lives, key=lambda t: t[1]) if s != seat]
-        dead = [s for s in pcs if rd16(w, 0x5E2D + s * 0x80 + 3) == 0 and s != seat]
+        dead = [s for s in pcs if rd16(w, 0x5E2D + s * 0x80 + 3) == 0 and s != seat and s not in self.pending]
         revives = [i for i, (iid, _) in enumerate(bag) if iid == REVIVE]
         if dead and revives and self.revived < sum(n for iid, n in bag if iid == REVIVE):
             # a fallen ally: a Revive (the ally list holds every party member, the user first, then seat order)
             allord = [seat] + [s for s in pcs if s != seat]
             self.revived += 1
             self.goal = (REVIVE, dead[0])
+            self.pending[dead[0]] = 0                             # (another window does not revive the same PC)
             return 'revive->%d' % dead[0], press(walk(row, 2) + [0x100])
         if lives and w[0x2980 + seat] == FROG and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2:
             ratio, who = min(lives)
-            if ratio < self.heal and who in order:
+            if ratio < heal and who in order:
                 # Frog's first tech, Slurp (one ally): row 1 (Tech), A, the list's row 0, A, the ally, A
                 return 'slurp->%d' % who, press(walk(row, 1) + [0x100]) + [(0, 6)] + press([0x100]) + [(0, 6)] + \
                     press(walk(0, order.index(who)) + [0x100])
@@ -115,7 +133,7 @@ class Pilot:
         lives = [(r, s) for r, s in lives if s not in self.pending]
         if lives and seat in self.healtech and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2:
             ratio, who = min(lives)
-            if ratio < self.heal:
+            if ratio < heal:
                 # PILOT_HEALTECH (`seat:row`): a one-ally healing tech (Marle's Aura) on the lowest-ratio PC -- Tech, the
                 # list walked to the row, A (step), the ally select walked to that PC, A
                 self.goal = ('tech', who, self.healtech[seat])
@@ -124,7 +142,7 @@ class Pilot:
         if lives:
             ratio, who = min(lives)
             mids = sum(n for iid, n in bag if iid == MIDTONIC) - self.spentMid
-            if ratio < self.heal and (tonics > 0 or mids > 0):
+            if ratio < heal and (tonics > 0 or mids > 0):
                 b = 0x5E2D + who * 0x80
                 big = rd16(w, b + 5) - rd16(w, b + 3) > 100          # a Mid Tonic (200) for a deficit a Tonic (50) leaves
                 use = MIDTONIC if (mids > 0 and (big or tonics <= 0)) else TONIC
@@ -143,12 +161,19 @@ class Pilot:
                 self.goal = (ETHER, who)
                 return 'ether->%d' % who, press(walk(row, 2) + [0x100])
         self.pendingMp = {s for s in self.pendingMp if rd16(w, 0x5E2D + s * 0x80 + 7) < int(os.environ.get('PILOT_ETHER') or 0)}
-        if self.hold and w[self.hold[0]] == self.hold[1]:
+        tgt = self.target(w)
+        hi = int(os.environ.get('PILOT_HOLDITEM') or '0', 16)
+        if self.hold and w[self.hold[0]] == self.hold[1] and hi and any(iid == hi for iid, _ in bag):
+            # PILOT_HOLDITEM (an item id, hex): while the hold byte reads its value, a window with no heal to give spends the
+            # turn on that item on its own PC (a Heal on a PC with no status: nothing happens) -- no hit to counter, and
+            # the queue moves on to the next seat's window
+            self.goal = (hi, seat)
+            return 'holditem', press(walk(row, 2) + [0x100])
+        if self.hold and w[self.hold[0]] == self.hold[1] and not os.environ.get('PILOT_HOLDHEAL'):
             # PILOT_HOLD (`addr:val`, hex): while that WRAM byte holds the value -- an enemy's counter stance (Heckran's
             # challenge to attack: $B1D0 = 11 from that message until the one that ends the stance) -- no attack:
             # the window idles (the battle runs on, Active)
             return 'wait', [(0, 4)]
-        tgt = self.target(w)
         for d in self.duals:
             # PILOT_DUAL (`a:b:row:mpA:mpB`, comma-separated): seat a's window with seat b alive and both MPs held -- b READY
             # (its gauge `$AFAB + b` at 0) and given no command yet: row 1 (Tech), A, the list's cursor up to its top and down
