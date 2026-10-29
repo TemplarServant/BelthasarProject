@@ -11748,6 +11748,22 @@ static void battleModeMachine3714(CtBattleHost* h, int holdCmb);   // C1/3714 (b
 // battle_ab's enemy 92 (GATO in his arena with three PCs): his return segment in flight when the action ends steps on at
 // f1301, the frame after `$A013 = 0`, while C1/3714's counter $9897 stays frozen to f1322; the port held the stepper with
 // the idle tick and walked 21 frames late.
+// CF/F9D3, THE PARTS' LINK (the NMI chain's CF/E75C `LDA $AA63 / BEQ / JSR CF/F9D3`, every frame, after the stepper
+// and the action's movers): `LDA $A002 / TAY`, then for X = 7..0 with `$96F8,X` set: `$1D0F,X = $1D0F,Y + $AA64,X`,
+// `$1D26,X = $1D26,Y + $AA6C,X` -- a multi-part boss's pieces stand where the master stands, plus their staged offsets.
+// MEASURED, the rule's cartridge (leg 63_zombor): Zombor's upper half walks (CF:F9C5) and `$1D15` (his lower half, slot 6)
+// takes the same x the same frame (CF:F9E9); the port left the lower half at its staged 200, and the action 0A's eight
+// effect objects, which start from it, slid 169 px instead of 31 -- the action 31 frames long.
+static void battleLinkParts(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  if (!s[0xAA63]) return;
+  int y = s[0xA002] & 7;
+  for (int x = 7; x >= 0; x--) {
+    if (!s[0x96F8 + x]) continue;
+    BT_LIVEX(h, x + 3) = (uint8_t)(BT_LIVEX(h, y + 3) + s[0xAA64 + x]);
+    BT_LIVEY(h, x + 3) = (uint8_t)(BT_LIVEY(h, y + 3) + s[0xAA6C + x]);
+  }
+}
 static void battleMoveStepper(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (s[0xA013] || s[0xA0FD]) return;                              // FEFAF-FEFB9
@@ -12198,7 +12214,19 @@ static void battleMoveInit(CtBattleHost* h) {
         if (f4 & 0x80) { s[0xA5C5 + slot] = 0x80; s[0xA5CD + cmb] = 0x80; }
         // CC/EBA4-EBA9 `LDA $9700,Y / AND #04 / STA $A08F,Y` (no branch): `$A08C,cmb`, the part of the boss the ARENA is
         // (C1/5DEA, CD/0043's D0066 arm). Oracle (battle_sim fight D1, Giga Gaia): `$A092 = 04` at f271 (CC:EBAC).
-        s[0xA08F + slot] = (uint8_t)(f4 & 0x04); } }
+        s[0xA08F + slot] = (uint8_t)(f4 & 0x04);
+        // CC/EB86-EB92: `AND #08 / BEQ / INC $AA63 / LDA $80 / STA $A002` -- the boss whose parts move with it: the
+        // count of flagged slots and the last one's slot, the master the link (CF/F9D3) carries the others from.
+        if (f4 & 0x08) { s[0xAA63]++; s[0xA002] = (uint8_t)slot; } } }
+  }
+  // CC/EC31-EC5D, after the eight slots: with `$AA63` set, every present enemy's offset from the master `$A002` --
+  // `$AA64,X = $1D0F,X - $1D0F,master`, `$AA6C,X = $1D26,X - $1D26,master` for each `$96F8,X`. MEASURED, the rule's
+  // cartridge (leg 63_zombor): `$AA63 = 01` (CC:EB90), `$A002 = 00`, `$AA6C[6] = E0` (CC:EC5D) -- Zombor's lower half
+  // (slot 6) 32 px above its upper one's foot.
+  if (s[0xAA63]) {
+    int m = s[0xA002] & 7, mx = BT_LIVEX(h, m + 3), my = BT_LIVEY(h, m + 3);
+    for (int x = 0; x < 8; x++)
+      if (s[0x96F8 + x]) { s[0xAA64 + x] = (uint8_t)(BT_LIVEX(h, x + 3) - mx); s[0xAA6C + x] = (uint8_t)(BT_LIVEY(h, x + 3) - my); }
   }
   // CC/EC63-ECAF, after the eight slots: each enemy's id word $9853,Y (Y = 0..E step 2) against the records of E1:DE00
   // (`id word, kind word`, up to a negative id). Kind 3 -> `$80 = 1`, kind 4 -> `$82 = 4`, any other kind -> the 16-bit
@@ -14371,6 +14399,11 @@ static void battleAscTick(CtBattleHost* h, int rel) {
       int a1 = (len > 1) ? CtRomByte(rom, 0x400000L, (long)(ip + 1)) : 0, a2 = (len > 2) ? CtRomByte(rom, 0x400000L, (long)(ip + 2)) : 0;
       int isFree = battleAscOpFree(rom, romLen, op), adv = 1, gx = 0, gy = 0;
       switch (op) {
+        case 0x16: case 0x17:                                       // 16 x y / 17: WALK to a POINT, the same walker
+          // C1/5409 (16): `LDA [$E6],Y / STA $A2B0 / ... / STA $A2B2`, the point from the operands; C1/541B (17): the stored
+          // point `$5D9E` / `$5D9F`; both `BRA ->C1/5437`, op 18's shared tail (the grid, the flood, the controller). MEASURED,
+          // the rule's cartridge (leg 63_zombor, Zombor's action 4C, `16 C8 90`): his upper half walks 2 px a frame from
+          // x 78 to C8 (CF:F9E9, the lower half linked); the port had no case and the next op stood him there at once.
         case 0x18: {                                                // 18 rr: WALK to role rr's foot over the arena grid
           // C1/542D -> C1/5437: the first visit arms the walker (C1/5480: the $7CFD grid, the flood C1/4A71, the
           // backtrace C1/4B77) and the op STAYS; every later visit is the segment controller C1/54C1 (after the
@@ -14380,7 +14413,9 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           if (c < 0 || c >= 11) { h->ascLive[t] = 0; h->ascStall = 1; adv = 0; isFree = 0;
             if (tr) fprintf(stderr, "asc f%d rel=%d t%d WALK on no combatant -- stopped\n", h->frames, rel, t); break; }
           if (!h->ascWalkOn[t]) {
-            if (!battleAscResolve(h, t, a1, &gx, &gy)) { h->ascLive[t] = 0; h->ascStall = 1; adv = 0; isFree = 0; break; }
+            if (op == 0x16) { gx = a1; gy = a2; }                                         // C1/5409-5412
+            else if (op == 0x17) { gx = h->mem[0x5D9E]; gy = h->mem[0x5D9F]; }            // C1/541B-5424
+            else if (!battleAscResolve(h, t, a1, &gx, &gy)) { h->ascLive[t] = 0; h->ascStall = 1; adv = 0; isFree = 0; break; }
             battlePcWalkArm(h, c, gx, gy); h->ascWalkOn[t] = 1;
             if (tr) fprintf(stderr, "asc f%d rel=%d t%d WALK cmb%d from=(%d,%d) to=(%d,%d)\n", h->frames, rel, t, c,
                             BT_LIVEX(h, c), BT_LIVEY(h, c), gx, gy);
@@ -15436,6 +15471,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
   // iteration's (oracle, GATO's Cyclone: 59/59 frames of the whirl's cells in the OAM shadow with $A240/$A250 of the frame
   // and $A2C0/$A1B0/$A260/$A270/$AB5F of the frame before). The port moves its combatants and effect objects inside the
   // track loop above, so this is where the frame's movement is complete.
+  battleLinkParts(h);                                              // CF/E75C: after this frame's movers (CF/E750)
   battleFxObjFollow(h);
   if (!h->composeHeld) battleTrailCompose(h);                      // the compose's CF/E909-E91E -> CF/E92C (CF/E764's gate)
   if (!h->composeHeld) for (int o = 0; o < 8; o++) {
@@ -21674,6 +21710,21 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
       if (PB(0) == 0x00) { s[0xCD04] = 0; battleFxColRamp(s, 0x04); break; }   // CD/2D4A `STZ $CD04 / LDA #04` -> 2D51
       if (PB(0) == 0x13) { s[0x5D9A] = 1; battleFxColRamp(s, 0x14); break; }   // CD/2D39 `$5D9A := 1 / LDA #14` -> 2D51
       if (PB(0) == 0x04 || PB(0) == 0x05 || PB(0) == 0x12) { battleFxOp80Tri(s, PB(0)); break; }   // CD/2CDC 2CB3 2B12
+      // CD/2CF5 (02): the triangle's centred seed; CD/2D0C (03): two of its points apart by 2; CD/2C8B (07): two of them in
+      // by 2 (`INC $CAEC` x2 / `DEC $CAF0` x2); CD/2C7F (08): `TDC / TAX / STX $CAE4 / STX $CAE6 / STX $CAE8` (16-bit X);
+      // CD/2D44 (0E): the colour ramp of 00 without its `STZ $CD04`. (Zombor's action 4C runs 06 then 07 eight times.)
+      if (PB(0) == 0x02) { s[0xCAEA] = s[0xCAEE] = s[0xCAF2] = 0x80; s[0xCAEC] = 0; s[0xCAF0] = s[0xCAF4] = 0xD4; break; }
+      if (PB(0) == 0x03) { s[0xCAEE] = (uint8_t)(s[0xCAEE] + 2); s[0xCAF2] = (uint8_t)(s[0xCAF2] - 2); break; }
+      if (PB(0) == 0x07) { s[0xCAEC] = (uint8_t)(s[0xCAEC] + 2); s[0xCAF0] = (uint8_t)(s[0xCAF0] - 2); break; }
+      if (PB(0) == 0x08) { for (int k = 0; k < 6; k++) s[0xCAE4 + k] = 0; break; }
+      if (PB(0) == 0x0E) { battleFxColRamp(s, 0x04); break; }
+      if (PB(0) == 0x06) {                                         // CD/2C98: the triangle's three points, the rotation's seed --
+        // `STZ $CAEA / STZ $CAEE / LDA #01 / STA $CAEC / LDA #9F / STA $CAF0 / LDA #50 / STA $CAF4 / LDA #C0 / STA $CAF2`.
+        // MEASURED, the rule's cartridge (leg 63_zombor, Zombor's action 4C, program D1/94BF `80 06` at D1/94C9): the program
+        // runs on 120 frames to CD:1650's `$5D9B := 0`; the port stopped on the op and the action ended 118 frames early.
+        s[0xCAEA] = 0; s[0xCAEE] = 0; s[0xCAEC] = 0x01; s[0xCAF0] = 0x9F; s[0xCAF4] = 0x50; s[0xCAF2] = 0xC0;
+        break;
+      }
       if (PB(0) == 0x01) {                                         // CD/2D1F: ROTATE the per-line intensities by one
         // `TDC / TAX / LDA $BB07,X / PHA` then `LDA $BB0B,X / STA $BB07,X / INX x4 / CPX #017C / BNE` and finally
         // `PLA / STA $BB07,X` -- every record's byte takes the next one's and the first wraps into the last, one
@@ -23186,6 +23237,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // C1/3714 that starts a walk runs from the idle state (C1/10B5 / C1/10DC), behind the CD/0009 that is holding it --
   // gato_wait: GATO stands at (135,85) from the song's end f1462 through the teardown and first steps at f1517, in mode 1.
   if (!wasFrozen) battleMoveStepper(h);                            // CF/EFAF: the NMI's, whatever the main loop is doing
+  battleLinkParts(h);                                              // CF/E75C -> CF/F9D3, every frame
   if (!battleDeathHold(h) && !fxTd) {
     if (!wasFrozen && !h->victoryHold)   // (the victory is C1/8186's blocking chain: no idle tick, no C1/3714)
                                // the action's last frame (the NMI's CF/F978 saw $A013 = 1); inside, $A0FD (C1/4058) stops
