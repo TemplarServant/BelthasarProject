@@ -13494,7 +13494,8 @@ static uint8_t patSpcRead(void* mem, uint16_t adr) {
 static void patSpcWrite(void* mem, uint16_t adr, uint8_t val) {
   Apu* apu = (Apu*)mem; uint16_t pc = apu->spc->pc;
   g_patSpcW(mem, adr, val);
-  if (g_patOn && adr == 0xF4) printf("  aputrace f%d SPC $F4 := %02X at pc %04X apuc=%u\n", g_patFrame, val, pc, apu->cycles);
+  if (g_patOn && (adr == 0xF4 || adr == 0xF5))       // port 0 (the echo) and port 1 (CD/0432's `LDA $002141`)
+    printf("  aputrace f%d SPC $%02X := %02X at pc %04X apuc=%u\n", g_patFrame, adr, val, pc, apu->cycles);
 }
 
 // Debug: load a savestate, run a button script ("hexbtn:frames,..." -- or N frames of `btn` +
@@ -13534,8 +13535,11 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
             g_patSpcW = s->apu->spc->write; s->apu->spc->write = patSpcWrite; } else patFrom = -1; }
         g_patFrame = f + 1; g_patOn = (patFrom >= 0 && f + 1 >= patFrom && f + 1 <= patTo); g_patReads = 0; }
       CtOracleRunFrame(s);
-      if (g_patOn) printf("  aputrace f%d END apuc=%u v=%d h=%d spcF4reads=%ld spcpc=%04X\n", f + 1, s->apu->cycles, s->vPos, s->hPos,
-                          g_patReads, s->apu->spc->pc);
+      if (g_patOn) { static int ab = -2; if (ab == -2) { const char* e = getenv("PEEK_ARAMBYTE"); ab = (e && *e) ? (int)strtol(e, NULL, 16) & 0xFFFF : -1; }
+        printf("  aputrace f%d END apuc=%u v=%d h=%d spcF4reads=%ld spcpc=%04X", f + 1, s->apu->cycles, s->vPos, s->hPos,
+               g_patReads, s->apu->spc->pc);
+        if (ab >= 0) printf(" aram[%04X]=%02X", ab, s->apu->ram[ab]);   // PEEK_ARAMBYTE=<hex>: one ARAM byte at the frame's end
+        printf("\n"); }
       // PEEK_PCM=<path>: the S-DSP's output, one frame at a time -- the 534 stereo samples the frame produced (32040 Hz,
       // int16 L,R), exactly what the LakeSnes reference hands its audio device. Belthasar's CT_AUDIO_PCM is the same stream.
       { static FILE* pcm = (FILE*)1;
