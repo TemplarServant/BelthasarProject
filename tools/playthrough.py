@@ -148,17 +148,45 @@ def ensure_states(legs, upto):
 
 
 def route_bfs(w, s, g, z):
-    """4-way BFS over the location's tiles on plane z: walkable = shape != 1 ($7E:30C0 >> 2) and plane ($7E:7040 & 3) == z
-    -- the ROM's own planes; a partial shape is tried (the cartridge decides). A list of tiles from s to g, or None."""
-    def ok(tx, ty):
-        if not (0 <= tx < 64 and 0 <= ty < 64):
-            return False
-        o = (ty << 8) | tx
-        return ((w[0x30C0 + o] >> 2) & 0x3F) != 1 and (z is None or (w[0x7040 + o] & 3) == z or (w[0x7040 + o] & 3) >= 2)
-    path = bfs(ok, s, g)
-    if path is None and z is not None:          # a route that changes planes (a ramp between two floors): planes ignored,
-        path = route_bfs(w, s, g, None)         #   the cartridge decides each stretch (route_walk nudges a refused one)
-    return path
+    """BFS over the location's tiles and the lead's plane, as C0/9C37 gates a step: a tile's plane is 0 (solid), 3 (any
+    plane, and from 3 any tile) or 1/2 (the same plane); IGNORE_Z ($04) passes on planes 1/2 and keeps the plane; any
+    other step sets the plane to the tile's (C0/9D54). A partial shape ($7E:30C0 >> 2 >= 2) has two halves, `b2 & 3` and
+    `(b2 >> 3) & 3` with IGNORE_Z `$20` (C0/9AD3's walk and solid tails); either may be the one stepped on (the cartridge
+    decides). Shape 1 is solid. A list of tiles from s to g, or None. (The Forest Maze, 11A, is crossed only so: its
+    raised path's planes 1 and 2 meet at six plane-3 tiles.)"""
+    from collections import deque
+
+    def halves(x, y):
+        if not (0 <= x < 64 and 0 <= y < 64):
+            return []
+        o = (y << 8) | x
+        sh, b = (w[0x30C0 + o] >> 2) & 0x3F, w[0x7040 + o]
+        if sh == 1:
+            return []
+        return [(b & 3, b & 4)] + ([((b >> 3) & 3, b & 0x20)] if sh >= 2 else [])
+    z = z if z in (1, 2, 3) else 1
+    start = (s[0], s[1], z)
+    prev, q, end = {start: None}, deque([start]), None
+    while q:
+        c = q.popleft()
+        if (c[0], c[1]) == tuple(g):
+            end = c
+            break
+        for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = c[0] + d[0], c[1] + d[1]
+            for tz, ig in halves(nx, ny) or ([(c[2], 0)] if (nx, ny) == tuple(g) else []):
+                ok = c[2] != 3 if ig else (tz != 0 and (tz == 3 or tz == c[2] or c[2] == 3))
+                n = (nx, ny, c[2] if ig else tz)
+                if ok and n not in prev:
+                    prev[n] = c
+                    q.append(n)
+    if end is None:
+        return None
+    out = []
+    while end is not None:
+        out.append(end[:2])
+        end = prev[end]
+    return out[::-1]
 
 
 def bfs(ok, s, g):
