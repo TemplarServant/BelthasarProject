@@ -4375,6 +4375,11 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // loc 01B's `F0 01 / F2 / D3 01 / D3 04 / DF ...` reached its location change before the fade.
     return 1;                                 // park: s->addr stays on the op, visit ends
   }
+  if (op == 0xF3 && (r8(sc->mem, 0x7E0118) & 0x08)) {
+    // C0/3D7A -- WAIT FOR THE COLOUR-MATH FADE: `TYX / LDA $18 / BIT #08 / BNE ->3D82 / INX / CLC / RTS`, op 0xF2's twin on
+    // bit 3 (op 0xF1's request, cleared by C0/1F5A when $0121 reaches $0122). Parked, the op runs again next visit.
+    return 1;
+  }
   if (op == 0xE0) {
     // ChangeLocation with FADE (ROM C0/3AB7; the handler runs with D=$0100, so its DP cells are
     // $01xx WRAM). `LDA $17 / BMI park` -- $0117 bit7 = "a fade-change is already pending". Fire
@@ -6870,6 +6875,24 @@ void CtSceneTick(CtScene* sc) {
       if (cur < tg) sc->bright++;                                              // 1F3D INC $19
       else if (--sc->bright == 0) w8(sc->mem, 0x7E0118, r8(sc->mem, 0x7E0118) & ~0x02);   // 1F4D-1F57
       w8(sc->mem, 0x7E0119, (uint8_t)sc->bright);                              // (the byte they step)
+    }
+  }
+  // C0/0C81 LDA $18 / BIT #08 / BEQ / JSR C0/1F5A, right after the brightness: THE COLOUR-MATH FADE op 0xF1's transition
+  // arm requests (3D3D `LDA #18 / TSB $18`). It walks COLDATA's shadow $0121 one step toward $0122 every $0123 + 1 frames
+  // ($0124 the countdown) and, on reaching it, clears bit 3 -- the bit op 0xF3 waits on:
+  //   1F5A LDA $21 / CMP $22 / BEQ ->1F82                   1F82 LDA #08 / TRB $18 / RTS
+  //   1F60 BCS ->1F72 (above: down)                         below: up
+  //   1F62/1F72 LDA $24 / BEQ / DEC $24 / RTS               the countdown, then
+  //   1F69/1F79 LDA $23 / STA $24 / INC $21 (DEC $21)       reload it and step
+  // MEASURED (the playthrough's 84, Melchior's forge 029, obj8's last stage `F1 FF 08 / F3`): the cartridge's screen
+  // whitens for 273 frames before the change to 028; the port skipped the fade and the wait and changed at once.
+  if (head && !sc->loadFadeIn && (r8(sc->mem, 0x7E0118) & 0x08)) {
+    uint8_t c21 = r8(sc->mem, 0x7E0121), c22 = r8(sc->mem, 0x7E0122);
+    if (c21 == c22) w8(sc->mem, 0x7E0118, r8(sc->mem, 0x7E0118) & ~0x08);     // 1F5E -> 1F82
+    else if (r8(sc->mem, 0x7E0124)) w8(sc->mem, 0x7E0124, r8(sc->mem, 0x7E0124) - 1);   // 1F62/1F72 -> DEC $24
+    else {
+      w8(sc->mem, 0x7E0124, r8(sc->mem, 0x7E0123));                            // 1F69/1F79
+      w8(sc->mem, 0x7E0121, (uint8_t)(c21 < c22 ? c21 + 1 : c21 - 1));         // 1F6F INC $21 / 1F7F DEC $21
     }
   }
   // C0/00B1 JSR C0/21E1, before the pass: `LDA $39 / BEQ / DEC / ASL / TAX / JSR ($21EE,X)` -- 1 the iris opening (C0/220E),
