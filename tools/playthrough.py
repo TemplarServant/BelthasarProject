@@ -221,6 +221,7 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
     from battle_pilot import Pilot, in_fight
     pilot = Pilot()
     loc0, last, nudge, it, scene, waited = None, None, 0, 0, 0, 0
+    fought = 0
     while it < cap:
         w = wram_of(cur)
         loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
@@ -232,10 +233,16 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
         tx, ty, z = w[0x1801 + lead], w[0x1881 + lead], w[0x0155]
         here = (w[0x1800 + lead] | (w[0x1801 + lead] << 8), w[0x1880 + lead] | (w[0x1881 + lead] << 8))
         if w[0x011F] == 0 and in_fight(w):           # a fight: the pilot (not counted against the cap)
+            fought = 1
             step, note = pilot.step(w)
             if note:
                 print('route: fight: %s' % note)
             it -= 1
+        elif fought and w[0x011F]:                   # control back from a fight: FIGHT_SLACK idle frames before the walk
+            fought = 0                               # goes on, so a side whose exit lands a few frames apart (the battle
+            step = [(0, FIGHT_SLACK)]                # exit's SPC poll class) starts the same pad from the same place
+            it -= 1
+            here = None                              # (an idle stretch is not a refused step: no nudge after it)
         elif w[0x011F] == 0 or w[0x0129]:            # a scene (or a fight's first frames): its boxes (box_step); never an
             scene += 1                               # A on a box that is not waiting -- it re-touches what the lead faces
             step, waited = box_step(w, waited)       # (the sanctum's organ, played again)
@@ -271,6 +278,7 @@ def route_walk(cur, pad, gx, gy, want_exit, cap):
     return [tuple(x) for x in merged]
 
 
+FIGHT_SLACK = 24                # frames route_walk idles after a fight gives control back (see route_walk)
 BOX_SLACK = 6                   # frames a box waits (state 7) before the press: room for a load a frame or two apart
 
 
