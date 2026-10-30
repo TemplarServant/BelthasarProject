@@ -253,6 +253,13 @@ static void memLocationLoad(Mem* m) {
   // line, `BB 07` (Mom's line about Leene's Bell), while the oracle shows string 6
   // (Mom's wake-up line) -- the line the user reported never appears.
   memset(m->hi + (0x0580 - 0x0400), 0, 0x1B40 - 0x0580);   // C0/58CA
+  // C0/58CD `LDA #80 / STA $74 / STA $75 / STA $76 / STA $77` (D = $0100), right after that clear: BOTH queues empty -- the
+  // runner's ($0174/$0175, C0/59D9-5A46) and the anim FIFO's head and tail ($0176/$0177, C0/C98A's enqueue, C0/CA76's
+  // drain). The port reset neither, so a FIFO the last location left non-empty came along: entering 0CD (Frog's
+  // flashback, the playthrough's 85) at head 80 / tail 06 -- an empty queue to the drain, a non-empty tail to C0/C98A,
+  // whose C9A6/C9AE arms then link each object behind it and return; the drain never reaches them, their $1601 timers
+  // stay 0, and obj2's `AB 03` waited forever for an animation that never stepped.
+  m->s[0x0174] = m->s[0x0175] = m->s[0x0176] = m->s[0x0177] = 0x80;
   //
   // The load's own constant fills, in the same pass. Census-confirmed writers, +1 per the reported-PC
   // convention: $0920-092F = 0xFF (C0/5929, seen as C0/592E), $0B80-0B87 = 0x80 (C0/7155, seen as

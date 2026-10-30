@@ -15162,16 +15162,18 @@ int main(int argc, char** argv) {
           }
           s7[0x11D26] = s7[0x1DF9];
           mSave.px = px; mSave.py = py; mSave.pz = pz; mSave.pfac = pfac;   // camera lives in mem.s (VM frozen)
+          // C0/013D-0164: `LDA $97,X / BMI / TAY` -- slot k's object is the one the SLOT TABLE $0197/$0199/$019B names, not
+          // an object whose $1100 mode reads k: a scene's party ops rewrite the table before the menu opens (the playthrough's
+          // 85, Frog joining in 08D: $0199 = 08, his obj4, at f27271 while its mode is still 03), and an empty slot (bit 7)
+          // writes nothing -- its $7F:1D09 record keeps what the last save left, as this one keeps its pcX/pcY.
           for (int k = 0; k < 3; k++) {
+            uint8_t sv = s7[0x0197 + 2 * k];
             mSave.pcObj[k] = -1;
-            for (int o = 0; o < CtSceneActorCount(f.vm); o++)
-              if (CtSceneActorMode(f.vm, o) == k) {          // PC slot k = the object with $1100,X == k
-                int pl, sp, fa2;
-                CtSceneActor(f.vm, o, &pl, &sp, &mSave.pcX[k], &mSave.pcY[k], &fa2);
-                mSave.pcObj[k] = o;
-                mSave.pcPrio[k][0] = s7[0x0C00 + o * 2]; mSave.pcPrio[k][1] = s7[0x0C01 + o * 2];
-                break;
-              }
+            if (sv & 0x80 || sv / 2 >= CtSceneActorCount(f.vm)) continue;
+            int o = sv / 2, pl, sp, fa2;
+            CtSceneActor(f.vm, o, &pl, &sp, &mSave.pcX[k], &mSave.pcY[k], &fa2);
+            mSave.pcObj[k] = o;
+            mSave.pcPrio[k][0] = s7[0x0C00 + o * 2]; mSave.pcPrio[k][1] = s7[0x0C01 + o * 2];
           }
           mSave.valid = 1;
           // ROM $7E:0194-0196, the PARTY SHADOW C0/1A1B compares against on the way out. Taken here,
@@ -17530,10 +17532,9 @@ int main(int argc, char** argv) {
             if (changed) {
               int nre = CtSceneReconcileParty(f.vm);                // C0/597D on EVERY character's object
               s7[0x0194] = s7[0x2980]; s7[0x0195] = s7[0x2981]; s7[0x0196] = s7[0x2982];   // C0/1A5D-1A6D
-              for (int k = 0; k < 3; k++) {                          // ...then re-find slot k's object
-                mSave.pcObj[k] = -1;
-                for (int o = 0; o < CtSceneActorCount(f.vm); o++)
-                  if (CtSceneActorMode(f.vm, o) == k) { mSave.pcObj[k] = o; break; }
+              for (int k = 0; k < 3; k++) {                          // ...then re-find slot k's object: C0/1A74 `LDA $97,X /
+                uint8_t sv = s7[0x0197 + 2 * k];                      // BMI / TAY`, the NEW table the respawns wrote
+                mSave.pcObj[k] = (sv & 0x80 || sv / 2 >= CtSceneActorCount(f.vm)) ? -1 : sv / 2;
               }
               if (getenv("CT_MENUSFX"))
                 printf("menureconcile: party %02X%02X%02X -> %02X%02X%02X, respawned %d, slots -> obj %d/%d/%d\n",
