@@ -394,7 +394,11 @@ def port_timeline(start, pad):
     at = [end + k for k in SHOTS if end + k > 0]
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                CT_AUDIO_SEEDSTATE=start, CT_WS_BATTLE_LEAD='1', CT_FIELD_MEMMON=','.join('%s:%d' % (p, n) for _, _, p, n in MON),
-               CT_SHOTS=os.path.join(TMP, 'p'), CT_SHOTS_AT=','.join(map(str, at)), CT_SHOTS_EXIT='1')
+               CT_SHOTS=os.path.join(TMP, 'p'), CT_SHOTS_AT=','.join(map(str, at)), CT_SHOTS_EXIT='1',
+               # the cartridge's battery: the route starts on an erased cartridge, so the port's is erased too (a save
+               # left in the tree's ct_sram.srm changed the port's legs 45, 54 and 82), and a save a leg makes lands in
+               # its own scratch, never over the player's file
+               CT_SRAM_FRESH='1', CT_SRAM=os.path.join(TMP, 'port.srm'))
     r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
                         '--walkscript', walkscript(pad)], cwd=ROOT, env=env, capture_output=True, text=True,
                        errors='replace')
