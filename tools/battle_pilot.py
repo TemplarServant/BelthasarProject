@@ -236,6 +236,12 @@ class Pilot:
             ids = [w[0x1580 + i * 5] for i in range(0x40)]
             want = ids.index(self.goal[0]) if self.goal[0] in ids else 0
             self.stuck = 0
+            self.itemTries = getattr(self, 'itemTries', 0) + 1
+            if self.itemTries > 6:
+                # an A the list does not take (a row it greys: an item the bag has run out of) -- the list stays open and,
+                # in Wait mode, the fight with it: back out and let the window decide again
+                self.itemTries, self.goal = 0, None
+                return press([0x01]), 'B (the item list refused the A)'
             return press(walk(w[0x95E6] + w[0x95E5], want) + [0x100]), None
         if w[0x95D5] < 3 and self.goal and self.goal[0] == 'tech' and w[0x95DB] == 1 and w[0x9609] == 0:
             # the Tech list: its cursor is remembered between turns and the list scrolls past three rows (the doubles), so
@@ -249,7 +255,7 @@ class Pilot:
                 if w[0x99C0 + i] == 0xFF: break
                 lst.append(w[0x99C0 + i])
             want = lst.index(self.goal[1]) if self.goal[1] in lst else w[0x9614]
-            self.goal, self.stuck = None, 0
+            self.goal, self.stuck, self.itemTries = None, 0, 0
             return press(walk(w[0x9614], want) + [0x100]), None
         self.busy = {s for s in self.busy if w[0xAFAB + s] == 0}    # a reloaded gauge: that seat's command has run
         if w[0x95D5] < 3 and w[0x95DB] == 0 and w[0x9609] == 0:
