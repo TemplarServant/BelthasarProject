@@ -1,6 +1,6 @@
 // romview.h -- the ROM's small tables, by name, from the asset container (CT_ASSET_TABLE).
 //
-// The ROM-free runtime (memory rom-free-runtime-goal) moves each system's reads into ct_assets.dat. A table the engine
+// The ROM-free runtime (docs/ROM.md) moves each system's reads into ct_assets.dat. A table the engine
 // indexes by the ROM's own address arithmetic -- the trig and noise tables of bank C0, FD's tile-animation and
 // colour-slot programs, FF's window tiles, text palettes and naming grid -- is packed whole under its start offset
 // (assets/extract_assets.py pack_tables, its extent derived from the code that reads it or by the closure over every

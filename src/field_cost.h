@@ -1,15 +1,11 @@
-// What the field's RELOAD after a menu close costs the CPU -- C0/0B4E's NMI-off stretch (C0/0B5D, the `STA $4200`
-// that turns the NMI off) to C0/0B28's vblank wait (C0/0B38), the ROM's C0/01A5 (the location's load legs again) and
-// C0/286C (the first pipeline pass) -- priced the way the logical oracle counts it (CLAUDE.md, NMI-off loads): the
-// stretch starts at phase 0, the wait is entered floor(C / CT_FRAME_CPU_CYCLES) frames later and the NMI comes back
-// at the end of that frame; C0/2824's first `INC $19` is one full frame after that (C0/EC60).
-//
-// Every instruction is LakeSnes's cost, read off the cartridge's beam traces (tools/ctlib/costtab.py, the block
-// constants tools/pass_cost_consts.py prints; arms no trace ran are priced by the key of an executed instruction --
-// the opcode, the widths and the region its operand lands in). The control flow is the ROM's, walked over the WRAM it
-// reads: the Python twin is tools/pass_cost_proto.py, the grade tools/reload_cost_cmp.py (disasm/notes/
-// menu_shell_timing.md section 10). What is NOT walked is said where it is used: the DMA legs' sync to the master clock
-// (a few cycles each), a location whose layers or HDMA run arms no trace covers (reported, not guessed), the obj0
+// field_cost.h -- the CPU cost of the field's NMI-off loads: the reload after a menu close (C0/0B5D, the NMI off,
+// through C0/01A5 and the first pass C0/286C to the vblank wait C0/0B38) and the location load. Priced under the
+// NMI-off load rule (CLAUDE.md): the stretch starts at phase 0 and crosses floor(C / CT_FRAME_CPU_CYCLES) frames;
+// the NMI returns at the end of that frame and C0/2824's first `INC $19` comes one frame later (C0/EC60).
+// Instruction costs come from LakeSnes's beam traces (tools/ctlib/costtab.py, tools/pass_cost_consts.py); the control
+// flow is the ROM's, walked over the WRAM it reads. Python twin: tools/pass_cost_proto.py; grade:
+// tools/reload_cost_cmp.py (disasm/notes/menu_shell_timing.md sec. 10).
+// Not walked: the DMA legs' sync to the master clock, layer/HDMA arms no trace covers (reported), and the obj0
 // slot-1 run's ops other than 00 / 12 / 16.
 #ifndef CT_FIELD_COST_H
 #define CT_FIELD_COST_H
@@ -31,12 +27,10 @@ typedef struct {
 long ct_field_reload_cycles(const uint8_t* rom, long romLen, const uint8_t* wram, int loc, int caller,
                             CtReloadCost* out);
 
-// The black frames an NMI-off stretch that ENDS in C0/0B28's vblank wait leaves after its own frame: C0/0B38 `LDA $4210 /
-// BPL` polls RDNMI, which the PPU sets at line 225 and clears at line 0 -- the end of vblank -- or on the read (LakeSnes
-// snes.c). The stretch starts at phase 0 (a vblank's start, CLAUDE.md's NMI-off rule), so after floor(C / F) boundaries
-// the wait's read lands rem = C mod F cycles into a vblank: inside its 37 lines (37 x 1,324 non-refresh cycles) the flag
-// is still up and the wait falls through in that frame; past them it waits for the next vblank, one frame more.
-// MEASURED (logical oracle): loc $082 38.184 F -> 39, loc $005 36.186 F -> 37, loc $082 after a walk 38.022 F -> 38.
+// The frames an NMI-off stretch of `cyc` cycles that ends in C0/0B28's vblank wait takes. C0/0B38 `LDA $4210 / BPL`
+// polls RDNMI, set at line 225 and cleared at line 0 or on the read. From phase 0, the read lands rem = C mod F cycles
+// into a vblank: within its 37 lines (37 x 1,324 cycles) the flag is still up and the wait falls through; past them it
+// waits one frame more. Measurements: disasm/notes/menu_shell_timing.md sec. 10.
 static inline int ct_nmi_wait_frames(long cyc) {
   long rem = cyc % 346886L;
   return (int)(cyc / 346886L) + ((rem + 18 >= 37L * 1324) ? 1 : 0);   // +18: the LDA's read after its three fetches
@@ -54,10 +48,10 @@ long ct_vm_op_cycles(const uint8_t* rom, long romLen, const uint8_t* w, const ui
                      const char** why);
 #define CT_VM_DISPATCH 152L
 
-// THE LOCATION LOAD, C0/0B5D (the NMI's off) -> C0/2848's first vblank wait C0/0B38, over `wram` as the port holds it once
-// the location's objects are loaded: every leg but the ops the object pass dispatches (ct_vm_op_cycles, priced by the VM
-// as they run), C0/9DC3 (ct_load_9dc3_cycles, the host's arrival) and the sound driver's (the loader clock's). -1 when a
-// leg is not walked (out->why names it; out->total is then the walk with that leg at its nearest arm).
+// The location load, C0/0B5D (NMI off) -> C0/2848's first vblank wait C0/0B38, over `wram` as the port holds it once
+// the objects are loaded. Covers every leg except the ops the object pass dispatches (ct_vm_op_cycles, priced by the
+// VM as they run), C0/9DC3 (ct_load_9dc3_cycles) and the sound driver (the loader clock). -1 when a leg is not walked
+// (out->why names it; out->total then prices that leg at its nearest arm).
 typedef struct {
   long packets;     // C0/0960 -> C0/56D4: the decompressions, the map build, the uploads
   long anim;        // FD:DE98 + FD:E292
@@ -71,8 +65,8 @@ long ct_field_load_cycles(const uint8_t* rom, long romLen, const uint8_t* wram, 
 long ct_fd_de98_cycles(const uint8_t* rom, long romLen, int loc);
 long ct_fd_e292_cycles(const uint8_t* rom, long romLen, int loc);
 long ct_c28004_cycles(const uint8_t* rom, long romLen, const uint8_t* w);
-// C0/9DC3 (C0/5926's BRL to the RTS into C0/56C8): the arrival tile's first property byte $58, its plane $6A (C0/9DFA),
-// the conveyor's $1D30
+// C0/9DC3 (C0/5926's BRL to the RTS into C0/56C8), from the arrival tile's property byte 0 $58, its plane $6A
+// (C0/9DFA) and the conveyor's $1D30.
 long ct_load_9dc3_cycles(int b58, int a6a, int d30);
 
 #endif

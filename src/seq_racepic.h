@@ -1,4 +1,4 @@
-// seq_racepic.h -- the motorcycle race's picture, native (stage 2). See seq_racepic.c.
+// seq_racepic.h -- the motorcycle race's picture. See seq_racepic.c.
 #ifndef CT_SEQ_RACEPIC_H
 #define CT_SEQ_RACEPIC_H
 #include <stdint.h>
@@ -13,7 +13,8 @@ void CtRacePicSetupB(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io);
 void CtRacePicCgram(CtSeqStagePic* sp, const uint8_t* w);
 // One vblank hook of the list $0940 (C3/08F7 -> $7E:39BE); returns what its slot holds afterwards.
 unsigned CtRacePicHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook, const CtRaceIo* io);
-// One of the picture's tasks (in the list's slot `slot`, a byte offset); returns 0 for a task this file does not draw (the caller's own, or not ported yet).
+// One of the picture's tasks (in the list's slot `slot`, a byte offset); returns 0 for a task this file does not draw
+// (the caller's own, or not ported).
 int CtRacePicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned task, const CtRaceIo* io);
 
 // C3/09E9's code at $7E:B574 (the setup B's first step), and the main thread's pass after each NMI ($7E:51D1).

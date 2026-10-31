@@ -1,10 +1,9 @@
-// seq_racepic.c -- THE MOTORCYCLE RACE's picture, native (stage 2 of the race's port; stage 1, its logic, is seq_race.c).
+// seq_racepic.c -- the motorcycle race's picture (its logic is seq_race.c). disasm/notes/seq_picture.md sec. 4.
 //
-// What the race's code puts in the PPU, done by the same code natively over the stage's WRAM and its CtSeqStagePic: the setup's
-// uploads ($7E:3D8C and $7E:3B5D-3C4E: the packets, the copies, the reformatting streams, the VRAM loads, the HDMA channels;
-// $7E:3CEA-3D44: the layers' registers, the VRAM read back), the CGRAM upload $7E:388B, the vblank hooks and the picture's tasks.
-// The overlay's code is read from the WRAM image it was decompressed into ($7E:3000.., `tools/wdis.py`).
-// disasm/notes/seq_picture.md sec. 4.
+// What the race's code puts in the PPU, over the stage's WRAM and its CtSeqStagePic: the setup's uploads ($7E:3D8C and
+// $7E:3B5D-3C4E: packets, copies, reformatting streams, VRAM loads, HDMA channels; $7E:3CEA-3D44: the layers' registers,
+// the VRAM read back), the CGRAM upload $7E:388B, the vblank hooks and the picture's tasks. The overlay's code is read
+// from the WRAM image it was decompressed into ($7E:3000.., `tools/wdis.py`).
 #include "seq_racepic.h"
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <string.h>
@@ -118,8 +117,9 @@ void CtRacePicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
 // $7E:4309 (4640 JMP): `$1446-$1545` cleared -- the mode-7 table builder's request bytes.
 void CtRacePicTables(uint8_t* w) { fill(w, 0x1446, 0x100, 0); }
 
-// $7E:3CEA-3D44 -- after the script: C3/09E9 writes the bike frames' reformatting code at $7E:B574 (CtRacePicGenB574), the layers ($2107 = 60 / 64, $2109 = 68, $210B = $210C = 77, CGWSEL 02, TM 17, TS 04),
-// and VRAM words $0B00.. read back (VMAIN 02: every 128th) into $7E:C995, 20 bytes.
+// $7E:3CEA-3D44 -- after the script: C3/09E9 writes the bike frames' reformatting code at $7E:B574 (CtRacePicGenB574), the
+// layers ($2107 = 60 / 64, $2109 = 68, $210B = $210C = 77, CGWSEL 02, TM 17, TS 04), and VRAM words $0B00.. read back
+// (VMAIN 02: every 128th) into $7E:C995, 20 bytes.
 void CtRacePicSetupB(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
   (void)io;
   CtRacePicGenB574(w);
@@ -133,7 +133,7 @@ void CtRacePicSetupB(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {
 // $7E:388B -- CGRAM from $7E:2200, 512 bytes.
 void CtRacePicCgram(CtSeqStagePic* sp, const uint8_t* w) { sp->cgadd = 0; CtSeqStagePicDma(sp, w, 0x00, 0x22, 0x2200, 0x200); }
 
-// ---- the vblank hooks ($0940) ----
+// ---- The vblank hooks ($0940) ----
 // $7E:3870 -- a byte of the OAM's high table: `($13)` shifted down to the size bits of the next sprite (`$11` / 4).
 static void hook3870(uint8_t* w) {
   unsigned x = (w[0x11] >> 2) & 3;
@@ -190,7 +190,7 @@ static void hook4643(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io, int from
   }
 }
 static void hook449C(uint8_t* w);
-// ---- shared by the stages' pictures (the overlay's common code: every entry runs the same $7E:3000-39FF) ----
+// ---- Shared by the stages' pictures (the overlay's common code: every entry runs the same $7E:3000-39FF) ----
 long CtSeqPicMpy(const CtSeqStagePic* sp) { return (long)sp->p.m7[0] * (int8_t)((uint16_t)sp->p.m7[1] >> 8); }
 void CtSeqPicHdma36CC(CtSeqStagePic* sp, const uint8_t* w, unsigned t) {
   for (unsigned c = 0; c < 8 && w[t & 0x1FFFF] != 0xFF; c++, t += 5) {   // 5-byte records, $FF ends; the bank to $43x4 and $43x7
@@ -231,19 +231,16 @@ unsigned CtRacePicHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook, const CtRac
   }
 }
 
-// ---- the picture's tasks ----
+// ---- The picture's tasks ----
 static unsigned div16x8(unsigned a, unsigned b) { b &= 0xFF; return b ? (a & 0xFFFF) / b : 0xFFFF; }   // $4204-$4206 -> $4214
 
-// $7E:357B -- THE ROAD's per-line mode-7 matrix (D = $0A00, page A's registers): the cosine and the sine of reg 5 scaled by reg 0's
-// low byte (C2-style 16 x 16, $7E:31BF), then for each line from reg 6 down the screen the hardware divider gives cos / X and
-// sin / X with X the line's distance (reg 8 on, a step a line): M7A = M7D = cos / X, M7B = sin / X, M7C = -(sin / X) (the signs
-// as the angle's), into $7E:F100 + 4n (A, B) and $7E:F488 + 4n (C, D). The routine patches its own loop with what it computed --
-// the products as the loop's immediates ($3623, $360B), the negation as a branch ($3616: `80 00` falls into it, `80 04` skips),
-// the two sine tables' order ($362B / $3632) and, with reg 11 set, the loop's tail ($3634 = $368F's `BRA` to $366C: every line
-// computed is copied to the next and the distance steps 2). Those bytes are written here too: they are the overlay's WRAM.
-// The routine is the overlay's, shared: what each entry patches before its loop is the `JSR` at $35FD (the race's $45B0, entry
-// 6's $8042), which leaves X (the first distance) and Y and writes the loop's tail at $3634 (`NOP / INX`, `INX / INX`, `DEX / DEX`,
-// or the race's `BRA` to $366C) and its limit at $3637 (`CPY #imm`) -- read back here from WRAM.
+// $7E:357B -- the road's per-line mode-7 matrix (D = $0A00, page A's registers): cos and sin of reg 5 scaled by reg 0's low
+// byte ($7E:31BF), then for each line the divider gives cos / X and sin / X, X the line's distance: M7A = M7D = cos / X,
+// M7B = sin / X, M7C = -(sin / X), into $7E:F100 + 4n (A, B) and $7E:F488 + 4n (C, D).
+// The routine patches its own loop, and those bytes are written here too (they are the overlay's WRAM): the products as
+// immediates ($3623, $360B), the negation as a branch ($3616: `80 00` falls in, `80 04` skips), the sine tables' order
+// ($362B / $3632). Each entry's pre-routine (the `JSR` at $35FD: the race's $45B0, entry 6's $8042) leaves X and Y and
+// writes the loop's tail at $3634 (`NOP / INX`, `INX / INX`, `DEX / DEX`, or a `BRA` to $366C) and its limit at $3637.
 void CtSeqPic357B(uint8_t* w, const CtRaceIo* io, CtSeqPic357BPre pre) {
   const unsigned D = 0x0A00;
   unsigned reg0 = rw(w, D + 0x00), reg5 = rw(w, D + 0x0A);
@@ -344,10 +341,10 @@ static void task4447(uint8_t* w, const CtRaceIo* io) {
   a = ((rw(w, 0x0A0A) ^ 0xFFFF) + 1) & 0xFFFF;
   ww(w, 0x141C, a); ww(w, 0x1434, a >> 1); ww(w, 0x1430, a >> 2);
 }
-// ---- the bikes' projection, $7E:4D0D (D = $0000) ----
-// ⚠ THE CARRY IS STATE here as in seq_race.c: `ADC` with no `CLC` (4DCA, 4DD4, 4DF7, 4E01, 4E0D, 4ED0, 4EE0, 4EE6, 4F00), `SBC`
-// with no `SEC` (4E73, 4EDC, 4F34, 4F46), the restoring divide's `ROL $F0` taking the caller's carry. It is one variable, threaded
-// in program order; so is X, which 4EEB reads back when it skips its search (4F06 BEQ: `TXA` takes what X held).
+// ---- The bikes' projection, $7E:4D0D (D = $0000) ----
+// Note: the carry is state here as in seq_race.c: `ADC` with no `CLC` (4DCA, 4DD4, 4DF7, 4E01, 4E0D, 4ED0, 4EE0, 4EE6, 4F00),
+// `SBC` with no `SEC` (4E73, 4EDC, 4F34, 4F46), the divide's `ROL $F0` taking the caller's carry. So is X, which 4EEB reads
+// back when it skips its search (4F06 BEQ: `TXA` takes what X held).
 typedef struct { uint8_t* w; int c; unsigned x; const CtRaceIo* io; unsigned dvd, quo, mpa, prod; } K;   // the divider and the multiplier too
 static unsigned kadc(K* k, unsigned a, unsigned v) { unsigned s = (a & 0xFFFF) + (v & 0xFFFF) + (unsigned)k->c; k->c = s > 0xFFFF; return s & 0xFFFF; }
 static unsigned ksbc(K* k, unsigned a, unsigned v) { int s = (int)(a & 0xFFFF) - (int)(v & 0xFFFF) - (1 - k->c); k->c = s >= 0; return (unsigned)s & 0xFFFF; }
@@ -357,7 +354,7 @@ static void kdiv(K* k, unsigned b) { b &= 0xFF; k->quo = b ? k->dvd / b : 0xFFFF
 // $7E:3461 / $7E:3465 -- the sine of A (3461: of A + $100, the cosine), from C0:F900; X = the index, the carry = X >= $200.
 static unsigned ksin(K* k, unsigned a) { k->x = a & 0x03FF; k->c = k->x >= 0x0200; return CtSeqSine(k->io, a); }
 // C3/094C -- the signed 16 x 8 product $F0 x $F2 (low byte) into $F4..$F7, through $4202 / $4203; the flags survive (PHP / PLP).
-// ⚠ $F6 IS NOT CLEARED: `STZ $F7` is an 8-bit store and the 16-bit `ADC $F5` reads $F6 as the last product left it.
+// Note: $F6 is not cleared: `STZ $F7` is an 8-bit store and the 16-bit `ADC $F5` reads $F6 as the last product left it.
 static void mul094C(K* k) {
   uint8_t* w = k->w;
   unsigned f0 = rw(w, 0xF0); uint8_t f2 = w[0xF2];
@@ -528,7 +525,7 @@ static void hook449C(uint8_t* w) {
   k->c = (int)(a & 1); a >>= 1;                                       // 44C7 LSR A
   ww(w, 0x1434, kadc(k, a, rw(w, 0xF0)));
 }
-// ---- the sprites: C3's OAM library over the shadow $0700 (low table, 4 bytes a sprite at `$11`) and $0900 (the high table,
+// ---- The sprites: C3's OAM library over the shadow $0700 (low table, 4 bytes a sprite at `$11`) and $0900 (the high table,
 // its byte at `$13`); the data bank is $00, so the shadow is the low WRAM ----
 static unsigned lo(unsigned a) { return a & 0x1FFF; }
 // C3/0D0E -- a sprite list read through WMDATA ($2181 = A, bank $7E): a count n + 1, then n x (tile, attr, x, y), x and y offset
@@ -592,8 +589,8 @@ static void num39F5(uint8_t* w, unsigned a) {
   w[0x3A7D] = (uint8_t)x;
   oam0D0E(w, 0x3A7D);
 }
-// $7E:50D3 / 50E7 -- a minimap marker's place: y = $BE - the product's high byte, x = $C0 + A / 8. ⚠ `SBC $4217` IS 16-BIT:
-// its high byte is $4218, the pad's auto-read (JOY1L) -- what lands in $16, the word's high byte (the sprite reads only $15).
+// $7E:50D3 / 50E7 -- a minimap marker's place: y = $BE - the product's high byte, x = $C0 + A / 8. Note: `SBC $4217` is
+// 16-bit, so its high byte is $4218, the pad's auto-read (JOY1L); it lands in $16, which the sprite does not read.
 static void hud50D3(K* k, const CtSeqStagePic* sp, unsigned a) {
   uint8_t* w = k->w;
   a = (a & 0xFFFF) >> 3;
@@ -696,7 +693,7 @@ static void bike5047(K* k) {
   }
   if (!rw(w, 0x88)) { ww(w, 0x15, rw(w, 0x6B)); ww(w, 0x17, rw(w, 0x6D)); oam0D5E(w, 0x535C); }
 }
-// $7E:4F54 -- THE HUD AND THE BIKES' SPRITES: the turn $FE = ((reg 5 + $40) / 128 + reg 12) x 2 (3 bits), $0A14 cleared while
+// $7E:4F54 -- the HUD and the bikes' sprites: the turn $FE = ((reg 5 + $40) / 128 + reg 12) x 2 (3 bits), $0A14 cleared while
 // page B's reg 13 is 0, the multiplier's $4202 = $B8 - $21 (the ASL's borrow); then, unless the attract's `$0384` bit 6, the
 // minimap markers and the panel, and the two bikes, the one further down the screen ($61 against $86) first.
 static void task4F54(CtSeqStagePic* sp, uint8_t* w, int c) {
@@ -715,9 +712,9 @@ static void task4F54(CtSeqStagePic* sp, uint8_t* w, int c) {
   if (!((x61 - x86) & 0x8000)) { if (hud) { hud5100(k, sp); hud50F1(k, sp); hud5116(k); } bike4FAD(k); bike5047(k); }
   else { if (hud) { hud50F1(k, sp); hud5100(k, sp); hud5116(k); } bike5047(k); bike4FAD(k); }
 }
-// ---- the bike frames: the main thread $7E:51D1 ----
+// ---- The bike frames: the main thread $7E:51D1 ----
 #define B7F(a) w[0x10000 + ((a) & 0xFFFF)]
-// C3/09E9 -- THE REFORMATTING CODE's generator (X = the first page written, Y = the source base, through WMDATA from `wm`): for
+// C3/09E9 -- the reformatting code's generator (X = the first page written, Y = the source base, through WMDATA from `wm`): for
 // each word, in the order (the table C3:09D9's eight offsets, then 8 x 4, 2 x 2, 8 x $20 innermost), `LDA $src / STA $dp` with
 // src = the four offsets + Y and dp the destination's low byte, a `LDA #page00 / TCD` before each page, `RTS` at the end; it
 // leaves $F0 = $0700, $F2 = $20, $F4 = 4, $F6 = 0, $F8 = Y, $FA = X with its page byte stepped once a page. With `run`, the walk
@@ -744,7 +741,7 @@ static void walk09E9(uint8_t* w, unsigned wm, unsigned x, unsigned y, int run) {
   #undef EMIT
 }
 void CtRacePicGenB574(uint8_t* w) { walk09E9(w, 0xB574, 0x0C00, 0x0200, 0); }   // $7E:3CEA: $2181 = $7E:B574, X = $0C00, Y = $0200
-// C3/0307 -- THE BIKE's FRAME, SCALED (D = 0, the data bank $7F; the request in $1F..$2C, the out pointer $2D / $2F = $0200):
+// C3/0307 -- the bike's frame, scaled (D = 0, the data bank $7F; the request in $1F..$2C, the out pointer $2D / $2F = $0200):
 // rows from $33 = 0 stepped by $27 until `$25` runs out or the row (($33 / 2) & ~$3F, 64 bytes a row of the source, one byte a
 // pixel) reaches `$2B`; a row equal to the last one copies the 32 bytes above it, else `$1F` x 16 pixels sampled at X += $29
 // (8.8: the column X >> 8, every ADC on the carry as it stands) and turned into 4 bit planes (8 pixels -> 4 bytes, the first
@@ -806,13 +803,12 @@ static void frame51F4(uint8_t* w, unsigned req) {
   unsigned a = rw(w, 0x27); k->c = (int)((a >> 15) & 1); ww(w, 0x29, (a << 1) & 0xFFFF);
   scale0307(k);
 }
-// $7E:51D1 -- THE MAIN THREAD's pass (the loop $7E:3023 `JSR $51D1 / LDA $00 / BEQ`, run after each NMI: the oracle's CPU is
-// infinitely fast, so the pass is done before the beam moves on): for the first bike's request ($1402 = 1, from $1400) and then
-// the second's ($1410 = 1, from $140E), the frame scaled, then -- once the hook $5221 has sent the last one (`$39` = 0; the pass
-// waits at 5211 `LDA $39 / BNE` until then, across NMIs: sp->thread keeps where) -- `$39` raised, the rows reformatted into the
-// tiles at $0C00 ($B574), and the request marked sent (2).
-// The loop calls the pass again as long as the last one did something and `$00` is 0: a request the NMI's tasks made while the
-// pass waited is taken in the same frame (the oracle measured: the second bike sent, then the first one's next frame scaled).
+// $7E:51D1 -- the main thread's pass (the loop $7E:3023 `JSR $51D1 / LDA $00 / BEQ`, run after each NMI; under the infinitely
+// fast CPU rule it finishes before the beam moves): for the first bike's request ($1402 = 1, from $1400) and then the
+// second's ($1410 = 1, from $140E), the frame scaled, then, once the hook $5221 has sent the last one (`$39` = 0; the pass
+// waits at 5211 `LDA $39 / BNE` across NMIs, sp->thread keeps where), `$39` raised, the rows reformatted into the tiles at
+// $0C00 ($B574), and the request marked sent (2). The loop runs the pass again while the last one did something and `$00`
+// is 0, so a request made while the pass waited is taken in the same frame.
 static int pass51D1(CtSeqStagePic* sp, uint8_t* w) {
   static const uint16_t flag[2] = { 0x1402, 0x1410 }, req[2] = { 0x1400, 0x140E };
   int did = 0;
@@ -848,7 +844,7 @@ int CtRacePicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned t, cons
   }
 }
 
-// ---- exported for the other stages (seq_entry6pic.c) ----
+// ---- Exported for the other stages (seq_entry6pic.c) ----
 void CtSeqPicGen09E9(uint8_t* w, unsigned wm, unsigned x, unsigned y) { walk09E9(w, wm, x, y, 0); }
 void CtSeqPicRun09E9(uint8_t* w, unsigned x, unsigned y) { walk09E9(w, 0, x, y, 1); }
 void CtSeqPicScale0307(uint8_t* w, int carry) { K kk = { w, carry, 0, NULL, 0, 0, 0, 0 }; scale0307(&kk); }

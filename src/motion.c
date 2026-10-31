@@ -1,4 +1,4 @@
-// motion.c - see motion.h.
+// motion.c -- see motion.h.
 #include "motion.h"
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +14,7 @@ void CtMotBegin(CtMotFrame* m, int w) {
 }
 
 void CtMotEngine(CtMotFrame* m, const uint8_t* w7, int camWX, int camWY) {
-  static int on = -1; if (on < 0) on = !(getenv("CT_MOTENGINE") && !strcmp(getenv("CT_MOTENGINE"), "0"));   // (measurement:
+  static int on = -1; if (on < 0) on = !(getenv("CT_MOTENGINE") && !strcmp(getenv("CT_MOTENGINE"), "0"));   // (=0: measure
   if (!m || !w7 || !on) return;                                                                            //  the fit alone)
   m->w7 = w7; m->camE = 1;
   m->camEW[0] = camWX; m->camEX[0] = camWX * 16 + (int8_t)w7[0x1D3B];   // (the remainder: a signed nibble, C0/92CA)
@@ -34,7 +34,7 @@ int CtMotSprite(CtMotFrame* m, int key, int x, int y) {
 
 // ---- the continuous places: the self-scrolling layers, the camera, the objects (motion.h CtMotFit) -----------------------
 int g_ctMotNoFrac;                                 // (CT_MOTCHECK: the owners against the frame as drawn -- whole pixels)
-#define FIT_N 32                                   // (frames: a run of 2 px with a 1 every 16 -- the Magus hall -- fits whole)
+#define FIT_N 32                                   // (frames: long enough that a rate of 2 px with a 1 every 16 fits)
 // (channels 0-5 the layers' offsets, 6-7 the camera's place)
 // (qo: BG2's / BG3's offsets fitted on their own, where the place on the map is no steady line -- below)
 // (eOk / eW / eX: the last frame's engine camera, CtMotFrame.camE)
@@ -49,24 +49,19 @@ static double fitSlope(const double* v, int n, int whole) {
   double den = n * sxx - sx * sx; if (den == 0) return 0;
   double b = (n * sxy - sx * sy) / den, a = (sy - b * sx) / n;
   if (b == 0 || b > 2.0 || b < -2.0) return 0;     // still, or fast: whole pixels a frame need no fit
-  // (one step in the history is a start, not a slope: a run starting from still read as 0.04 px a frame and the party
-  //  stayed two pixels behind the camera's pan into the Magus hall -- the owner, 2026-10-24)
+  // (one step in the history is a start from still, not a slope)
   { int steps = 0; for (int i = 1; i < n; i++) if (v[i] != v[i - 1]) steps++; if (steps < 2) return 0; }
   if (whole && fabs(b - floor(b + 0.5)) < 0.02) return 0;
   for (int i = 0; i < n; i++) { double r = v[i] - (a + b * i); if (r > 0.75 || r < -0.75) return 0; }   // not steady
   return b;
 }
-// The continuous place: the last one advanced by the slope, TRAILING the drawn one -- never past it, never a whole pixel
-// behind (for a motion up the axis inside (drawn - 1, drawn], down it [drawn, drawn + 1)), so a step re-phases it and the
-// advance per frame stays the slope. Led instead (the drawn one its whole part), an object that stopped -- at a wall --
-// was drawn up to a pixel past it between the frames and came back (the owner, 2026-10-24); trailing, it reaches the
-// drawn place and stays. It never jumps: where the history is no steady slope (a pan changing its speed, a stop) it goes
-// on at the last few frames' mean rate from where it was, and where the rate is whole pixels a frame or none it closes on
-// the drawn place an eighth of a pixel a frame. On the drawn place and stepping whole pixels (a pan starting from still,
-// a walk of 1 or 2 px a frame) it stays on it. *steady (may be NULL): a steady sub-pixel slope was found.
-// known (may be NULL): the engine's own rate this frame -- the camera's remainder, an object's 12.4 words -- which
-// stands for the fit's slope: it is there from the motion's first frame and follows a change of speed, a stop or a turn
-// on the frame it happens, where the fit needs two steps and a steady history.
+// The continuous place: the last one advanced by the slope, trailing the drawn one -- never past it, never a whole
+// pixel behind ((drawn - 1, drawn] moving up the axis, [drawn, drawn + 1) moving down). Trailing, an object that stops
+// at a wall reaches the drawn place and stays, instead of overshooting between frames. It never jumps: with no steady
+// slope it goes on at the last few frames' mean rate; at a whole-pixel rate or none it closes on the drawn place by
+// 1/8 px a frame; on the drawn place and stepping whole pixels it stays there. *steady (may be NULL): a steady
+// sub-pixel slope was found. known (may be NULL): the engine's own rate this frame (the camera's remainder, an
+// object's 12.4 words), used instead of the fit's slope since it follows a change of speed on the frame it happens.
 static double fitQ(double* qs, int* have, int* steady, const double* v, int n, double cur, int whole, const double* known) {
   double b = known ? (whole && fabs(*known - floor(*known + 0.5)) < 0.02 ? 0 : *known) : fitSlope(v, n, whole), rate = b;
   if (steady) *steady = b != 0;
@@ -90,9 +85,8 @@ static double fitQ(double* qs, int* have, int* steady, const double* v, int n, d
 static double fitOne(int c, const double* v, int n, double cur, const double* known) {
   return fitQ(&g_fit.q[c], &g_fit.qOk[c], &g_fit.steady[c], v, n, cur, c >= 6, known);
 }
-// The engine's rate of an object's 12.4 word (w, the last frame's pw), when the drawn place stepped as its whole part
-// did (dv): a drawn place the engine's does not explain -- a picture held a frame behind its camera, a
-// re-seed -- has none, and the fit goes on.
+// The engine's rate of an object's 12.4 word (w, the last frame's pw), when the drawn place stepped as its whole
+// part did (dv). Otherwise (a picture held a frame behind its camera, a re-seed) there is none and the fit is used.
 static int engineRate16(int w, int pw, double dv, double* rate) {
   if (w < 0 || pw < 0) return 0;
   const int d = (int16_t)(w - pw);                 // (a 16-bit word: its step wraps)
@@ -141,18 +135,15 @@ void CtMotFit(CtMotFrame* m) {
   if (m->camE) for (int c = 0; c < 2; c++) { g_fit.eW[c] = m->camEW[c]; g_fit.eX[c] = m->camEX[c]; }
   double q[6];
   for (int c = 0; c < 6; c++) {
-    // BG2's / BG3's offset over the canvas that only undoes the camera (camera + offset the same all along the history: a
-    // layer held to the screen, the bridge's sky at 01C) does not scroll on its own: it stays where the screen is, the
-    // camera's continuous place undone. Its fit took the camera's whole-pixel steps for a slope and put the layer half a
-    // pixel off the screen between two frames -- the sky shifted, a strip of the layer's other side at the screen's edge.
+    // A BG2/BG3 offset that only undoes the camera (camera + offset constant over the history: a layer held to the
+    // screen) stays where the screen is, the camera's continuous place undone; fitting it would shift it off the screen.
     int held = c < 4 && g_fit.n > 1;
     for (int i = 1; held && i < g_fit.n; i++)
       if (g_fit.v[c][i] + g_fit.cam[c & 1][i] != g_fit.v[c][0] + g_fit.cam[c & 1][0]) held = 0;
     if (held) { g_fit.qOk[c] = 0; q[c] = now[c] + (cam[c & 1] - qc[c & 1]); continue; }
-    // A layer that steps only on the frames the camera moves (a parallax: Magus's castle 0A5, its sky at half the
-    // camera's speed) stops with the camera: the fit's slope ran on past the pan's end and the sky crept up to a pixel
-    // between the frames, falling back on each one (the owner, 2026-10-24). (Not while the camera's own fit runs: a pan
-    // at less than a pixel a frame stands still on most frames.)
+    // A layer that steps only on frames the camera moves (a parallax sky at half the camera's speed) stops with the
+    // camera, so the fit's slope does not run on past the pan's end. (Not while the camera's own fit runs: a pan at
+    // less than a pixel a frame stands still on most frames.)
     if (c < 4 && g_fit.n > 1 && !g_fit.steady[6 + (c & 1)] && g_fit.cam[c & 1][g_fit.n - 1] == g_fit.cam[c & 1][g_fit.n - 2]) {
       int tied = 0, i = 1;
       for (; i < g_fit.n; i++) {
@@ -163,21 +154,17 @@ void CtMotFit(CtMotFrame* m) {
       if (tied && i == g_fit.n) { g_fit.qOk[c] = 0; q[c] = now[c] + (cam[c & 1] - qc[c & 1]); continue; }
     }
     if (c >= 4) { q[c] = fitOne(c, g_fit.v[c], g_fit.n, now[c], NULL); continue; }
-    // (an offset the same all along the history -- a layer that scrolls with the camera -- keeps it exactly: its place is
-    //  the camera's continuous one plus the offset, never a fraction of its own off the camera's -- a seam across the
-    //  overworld's mountain, tiles out of step with the map when a pan turned; the owner, 2026-10-24)
+    // (an offset constant over the history -- a layer that scrolls with the camera -- is kept as is: its place is the
+    //  camera's continuous one plus the offset, never a fraction off it, which would open seams against the map)
     { int same = 1; for (int i = 1; same && i < g_fit.n; i++) same = g_fit.v[c][i] == g_fit.v[c][0];
       if (same) { g_fit.qOk[c] = 0; q[c] = now[c]; continue; } }
-    // (BG2's / BG3's place on the map -- the camera and the offset together -- is what is fitted, its whole part the drawn
-    //  one: fitted apart, the camera's fraction and the offset's added past a pixel and the layer stood a pixel off at the
-    //  frame itself -- the Blackbird's clouds, 16E)
+    // (BG2's / BG3's place on the map -- camera and offset together -- is what is fitted: fitted apart, the two
+    //  fractions could add past a pixel and leave the layer a pixel off at the frame itself)
     double wv[FIT_N];
     for (int i = 0; i < g_fit.n; i++) wv[i] = g_fit.v[c][i] + g_fit.cam[c & 1][i];
-    // ...unless the two go opposite ways: the sum of two steady steppers is then no steady line (the 1000 A.D. intro's
-    // clouds, 1F0: the camera climbing a pixel every 4 frames, the drift C2/75C3 adds going down one every 8 -- the drawn
-    // place goes -1, +1, -1 and the fit took it for no slope, so the clouds stepped whole pixels all the way up; the owner,
-    // 2026-10-24). The offset's own fit then goes on the camera's continuous place; the two trail their drawn places from
-    // either side, so their sum stays inside a pixel of the drawn one (else, the same way round, the sum's own fit holds).
+    // ...unless the two go opposite ways (e.g. the camera climbing a pixel every 4 frames while a drift goes down one
+    // every 8): the sum is then no steady line. The offset's own fit then rides on the camera's continuous place; both
+    // trail their drawn places, so the sum stays within a pixel of the drawn one (else the sum's own fit is used).
     if (fitSlope(wv, g_fit.n, 0) == 0 && fitSlope(g_fit.v[c], g_fit.n, 0) != 0) {
       if (!g_fit.qoOk[c]) { g_fit.qo[c] = g_fit.qOk[c] ? g_fit.q[c] - qc[c & 1] : now[c]; g_fit.qoOk[c] = 1; }
       const double qo = fitQ(&g_fit.qo[c], &g_fit.qoOk[c], NULL, g_fit.v[c], g_fit.n, now[c], 0, NULL);
@@ -200,8 +187,8 @@ void CtMotFit(CtMotFrame* m) {
     int key = m->sprKey[i];
     if (key < 0 || key >= FIT_KEYS) continue;
     FitSpr* s = &g_fitSpr[key];
-    if (s->last == g_fitFrame) {                   // (a key twice in one frame -- an object of several sprites, the
-      m->qsx[i] = m->sprX[i] + s->fx; m->qsy[i] = m->sprY[i] + s->fy; continue; }   //  Blackbird's three: the first one's)
+    if (s->last == g_fitFrame) {                   // (a key twice in one frame -- an object of several sprites:
+      m->qsx[i] = m->sprX[i] + s->fx; m->qsy[i] = m->sprY[i] + s->fy; continue; }   //  the first one's fraction)
     if (s->scene != m->scene || s->last != g_fitFrame - 1 || s->n == 0 ||
         fabs(m->sprX[i] - s->x[s->n - 1]) > 32 || fabs(m->sprY[i] - s->y[s->n - 1]) > 32) { s->n = 0; s->okx = s->oky = 0; s->wx = s->wy = -1; }
     s->scene = m->scene; s->last = g_fitFrame;
@@ -279,10 +266,10 @@ static void upscale(const uint8_t* fb, int w, int k, uint8_t* out) {
   }
 }
 
-// WHO IS IN FRONT where two owners' blocks meet -- pairwise, as the picture was composed: screen-fixed pixels over all,
-// then an opaque cloud (the caption plane / BG3 in front); between two sprites the one painted later (OBJ against OBJ is
-// the draw order, whatever their priorities); a sprite against the map's priority-1 foreground by the sprite's own front
-// bit; any sprite over the map behind it; and the map's layers BG1 > BG2 > BG3 / the caption plane behind.
+// Who is in front where two owners' blocks meet, pairwise, as the picture was composed: screen-fixed pixels over all,
+// then the caption plane in front; between two sprites the one painted later (OBJ against OBJ is draw order); a sprite
+// against the map's priority-1 foreground by its front bit; any sprite over the map behind it; then BG1 > BG2 > BG3 /
+// the caption plane behind.
 #define OWN_EMPTY 0xFE
 static int bgRank(int o) {
   return (o == CT_MOT_BG1F || o == CT_MOT_BG2F) ? 4 : o == CT_MOT_BG1 ? 3 : o == CT_MOT_BG2 ? 2 : 1;

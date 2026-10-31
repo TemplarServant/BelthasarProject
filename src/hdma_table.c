@@ -1,25 +1,15 @@
-// hdma_table.c -- THE FIELD'S HDMA TABLE BUILDER, FD/C2C1, native (disasm/notes/field_hdma_tables.md).
+// hdma_table.c -- the field's HDMA table builder, FD/C2C1 (disasm/notes/field_hdma_tables.md).
 //
-// The field's main loop (C0/00C7), its fades (C0/00DE, C0/2824) and the battle's exit tail (C0/0AFF) call `JSL FD/C2C1`
-// once a frame. It writes the eight HDMA channels' tables of ONE of two sets in bank $7F -- the set the NMI's FD/C1EE does
-// not point the channels at this frame -- from the textbox window (`$0126` = none / top / bottom, `$0127` = its height),
-// the window wave (`$1DF9` / `$1DFD`, the offsets in C0:FF30..) and the scroll words the field keeps at $7E:1D87.. (or, in
-// the battle's exit, $7F:3467..), then flips `$0153` bit 0 so the next frame builds the other set:
+// Called once a frame (C0/00C7, C0/00DE, C0/2824, C0/0AFF), it writes the eight channels' tables of the set in bank $7F
+// the NMI's FD/C1EE is not using -- set B ($7F:1238.., table FD:C2E5) when `$0153` bit 0 is clear, set A ($7F:0F80..,
+// FD:C2DF) when set -- from the textbox window (`$0126` mode, `$0127` height), the window wave (`$1DF9` / `$1DFD`) and
+// the scroll words at $7E:1D87.. (the battle's exit: $7F:3467..), then flips the bit.
 //
-//   bit 0 clear -> set B ($7F:1238..149F) through the table at FD:C2E5, then `TSB $53`;
-//   bit 0 set   -> set A ($7F:0F80..11E7) through the table at FD:C2DF, then `TRB $53`.
+// The stores follow the ROM's order, which is part of the result: two writers can run past the next channel's table (a
+// variable-length list at $1085,Y / $133D,Y). Every handler runs with DB = $7F and D = $0100. The routine's own stack
+// pushes are not written; no caller reads them back.
 //
-// The two sets are the same program at two places: every channel of set B sits $2B8 past set A's, each channel $57 long,
-// and the indirect data pointers differ per set (Set below). FD:C2EB / C995 / CFCF (set A) and C847 / CD0C / D27E (set B)
-// are the mode handlers `$0126` = 0 / 1 / 2 picks; modes 1 and 2 with `$0127` = 0 fall into mode 0 (C995 `BRL C2EB`).
-//
-// This is the routine written in C over the WRAM image, in the ROM's own store order (two of its writers can run past the
-// next channel's table -- a long variable-length list at $1085,Y / $133D,Y -- so the order is part of the result). Every
-// handler runs with DB = $7F (`PHB / LDA #7F / PHA / PLB`) and D = $0100: an absolute operand is $7F:xxxx, a direct-page
-// one $7E:01xx, a long `$00xxxx` one $7E:xxxx. The routine's stack pushes (its JSR / PHB frames) are not written: the
-// cartridge's land in the caller's stack page wherever its S was, and no caller reads them back.
-//
-// ⚠ THE CARRY IS STATE in one place: the window wave's sixteen `ADC $001D8F` (C5F7.., C747..) have no CLC -- the first
+// Note: the carry is state in one place: the window wave's sixteen `ADC $001D8F` (C5F7.., C747..) have no CLC -- the first
 // takes the carry the channel-7 builder's `LSR A` left (bit 0 of $7F:0351, C43C / C47A), each next one the previous
 // one's. Everywhere else the ROM sets the carry (CLC / SEC / CMP / ASL) before it reads it.
 #include "hdma_table.h"
@@ -33,7 +23,7 @@ typedef struct {
   unsigned y;            // Y in the variable-length writer CC5E / CCB8
 } H;
 
-// ---- the memory the routine touches -----------------------------------------------------------------------------
+// ---- The memory the routine touches ----
 static void s8(H* h, unsigned a, unsigned v) { h->w[0x10000 + (a & 0xFFFF)] = (uint8_t)v; }                // STA abs, M = 1
 static void s16(H* h, unsigned a, unsigned v) { s8(h, a, v); s8(h, a + 1, v >> 8); }                      // STX abs / STA abs, M = 0
 static unsigned l7f16(H* h, unsigned a) { return h->w[0x10000 + (a & 0xFFFF)] | (h->w[0x10000 + ((a + 1) & 0xFFFF)] << 8); }
@@ -51,7 +41,7 @@ static unsigned adc16(H* h, unsigned a, unsigned v) { unsigned s = (a & 0xFFFF) 
 // An HDMA entry: the line-count byte, then (for these indirect channels) the data's address, written STA then STX.
 static void ent(H* h, unsigned a, unsigned count, unsigned ptr) { s8(h, a, count); s16(h, a + 1, ptr); }
 
-// ---- the two sets ---------------------------------------------------------------------------------------------------
+// ---- The two sets ----
 typedef struct {
   unsigned base;                     // set A 0, set B $2B8: the channel tables, $57 apart (ch0 $0F80 / $1238)
   unsigned p1, p2, p3;               // ch1 / ch2 / ch3 data (set A $1508 / $1510 / $1518, set B $150C / $1514 / $151C)
@@ -129,7 +119,7 @@ static void waveDirect(H* h, const Set* s, unsigned n, unsigned p) {   // CAA1 /
   dp8(h, 0xEE, ldp8(h, 0xEE) + n);                                // CCB2 CLC / ADC $EE (A = the same 2n)
 }
 
-// ---- the tail: the scroll words into ch1..3's data, then the window wave or not ------------------------------------
+// ---- The tail: the scroll words into ch1..3's data, then the window wave or not ----
 // C5A7 (set A) / C6F7 (set B).
 static void tailField(H* h, const Set* s) {
   unsigned t = s->t;
@@ -171,7 +161,7 @@ static void tailBattle(H* h, const Set* s) {
   s8(h, 0x1530 + s->b, v);
 }
 
-// ---- mode 0: no window (C2EB / C847) -----------------------------------------------------------------------------
+// ---- Mode 0: no window (C2EB / C847) ----
 static void mode0(H* h, const Set* s) {
   full(h, CH(s, 0), 0x14F0);
   full(h, CH(s, 1), s->p1);
@@ -188,7 +178,7 @@ static void mode0(H* h, const Set* s) {
   else tailField(h, s);
 }
 
-// ---- mode 1: the window at the top (C995 / CD0C), n = `$0127` ----------------------------------------------------
+// ---- Mode 1: the window at the top (C995 / CD0C), n = `$0127` ----
 // The ROM's arithmetic is 8-bit throughout (`LDA #29 / SEC / SBC $000127`, `ASL A`, `DEC A`): every count is & $FF.
 static void band1(H* h, unsigned a, unsigned n, unsigned p, unsigned p2) {   // C9A4: 07 / 29-n / 2n (p2) / 64-n / 1E
   ent(h, a, 0x07, p);
@@ -261,7 +251,7 @@ static void mode1(H* h, const Set* s, unsigned n) {
   tailField(h, s);
 }
 
-// ---- mode 2: the window at the bottom (CFCF / D27E), n = `$0127` -------------------------------------------------
+// ---- Mode 2: the window at the bottom (CFCF / D27E), n = `$0127` ----
 static void band2(H* h, unsigned a, unsigned n, unsigned p, unsigned p2) {   // CFDE: 64 / 1D / 29-n+1 / 2n (p2) / 29-n-1
   ent(h, a, 0x64, p);
   ent(h, a + 3, 0x1D, p);

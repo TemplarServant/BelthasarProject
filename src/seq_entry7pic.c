@@ -1,4 +1,4 @@
-// seq_entry7pic.c -- SEQUENCE ENTRY 7's picture, native (stage 2; its logic, stage 1, is seq_entry7.c): the Day of Lavos after
+// seq_entry7pic.c -- sequence entry 7's picture (its logic is seq_entry7.c): the Day of Lavos after
 // the lost final battle -- the planet in mode 3, the sparkles and the text "BUT... THE FUTURE REFUSED TO CHANGE.".
 //
 // The setup $7E:6248: packet $63's 2bpp characters widened to 4bpp through WMDATA ($66B0: two bytes a row, then eight zero words
@@ -65,7 +65,7 @@ unsigned CtEntry7PicHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook) {
 }
 // $7E:6629 -- a live sparkle: C3/0DBC from the record $7E:6640 (its first byte the frame seq_entry7.c just wrote).
 void CtEntry7PicSparkle(uint8_t* w) { CtSeqPicOam0DBC(w, 0x6640); }
-// $7E:64BF -> 64CA -- THE TEXT (8-bit A, the data bank $7E): from the string at X, the pen ($15 / $17) starting where the code's
+// $7E:64BF -> 64CA -- the text (8-bit A, the data bank $7E): from the string at X, the pen ($15 / $17) starting where the code's
 // own operands at $64D6 / $64DA say; `40` ends it (the OAM cursor back to `$11`), `00 x y` moves the pen (and rewrites both
 // operands), `2F` a new line ($15 = the line's x, $17 += $10), `20` a space ($15 += 8). A character c: its tile from $7E:664F + c,
 // its attribute the operand at $6525 (6524 `LDA #imm`), at the pen; its width w from $7E:662F + c -- from 9 up a large sprite

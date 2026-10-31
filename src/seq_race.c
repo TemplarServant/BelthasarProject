@@ -1,23 +1,21 @@
-// seq_race.c -- THE MOTORCYCLE RACE's own logic (sequence entry 0, `FF 00` / `FF 09` / the attract's `FF 60`), native.
+// seq_race.c -- the motorcycle race's logic (sequence entry 0: `FF 00` / `FF 09` / the attract's `FF 60`), and the $C3
+// stage machine every entry shares (disasm/notes/sequence_table.md sec. 12).
 //
-// The race runs in the $C3 overlay's TASKS (disasm/notes/sequence_table.md sec. 12); its script only waits (`FD 07 40` at
-// $7E:4007) until a task points it at the finish. This file is the tasks, transliterated from the overlay as it sits in WRAM
-// ($7E:3000.., decompressed from C3:1313; `tools/wdis.py saves/race_re/race_f300.wram <addr> ...` lists them), over the WRAM
-// image itself: the race keeps its state in the direct page (D = $0000 for these tasks), and the transliteration reads and
-// writes the same bytes the cartridge does, so every frame can be graded against the oracle byte for byte (tools/
-// race_step_cmp.py, `ct.exe --callrom 7E485D --writes`).
+// The race runs in the $C3 overlay's tasks; its script only waits (`FD 07 40` at $7E:4007) until a task points it at the
+// finish. The tasks are transliterated from the overlay as it sits in WRAM ($7E:3000.., decompressed from C3:1313;
+// `tools/wdis.py` lists them) and work on the WRAM image itself (D = $0000), so a frame can be compared with the oracle
+// byte for byte (tools/race_step_cmp.py, `ct.exe --callrom 7E485D --writes`).
 //
-// ⚠ THE CARRY IS STATE. The 65816 code leans on it across instructions -- `ADC` with no `CLC` before it (4AF9, 4CD2, 4A3A),
-// `SBC` after an `ADC` (4C76), `SBC $F2` right after a `ROR` (4AE9), a `JSR` whose callee ends on an `SBC` (4B7B -> 4C3F ->
-// 4CD0) -- so the carry is one variable here, threaded through in program order, and every helper sets it the way the
-// instruction does. N is derived where a branch reads it (BMI/BPL after LDA/CMP/SBC/ADC: bit 15 of the result, M = 16).
+// Note: the carry is state. The code relies on it across instructions (`ADC` with no `CLC` at 4AF9, 4CD2, 4A3A; `SBC` after
+// an `ADC` at 4C76; `SBC $F2` after a `ROR` at 4AE9; a callee ending on `SBC` at 4B7B -> 4C3F -> 4CD0), so it is one
+// variable threaded in program order. N is derived where a branch reads it (bit 15 of the result, M = 16).
 #include "seq_race.h"
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "lz.h"       // the overlay: C3:0000 decompresses it with C3/0557
-#include "seq_racepic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_racepic.h"   // the picture, when the host draws it (io->pic)
 #include "seq_entry4.h"    // CtSeqRng02DD8: C3/02DD, the curtain's seed
 
 typedef struct { uint8_t* w; int c; const CtRaceIo* io; } R;
@@ -34,8 +32,8 @@ static int neg(unsigned v) { return (v & 0x8000) != 0; }
 
 // The task-list library (C3 overlay): $3934 removes X from the task list $0920, $395E adds it at the first free slot,
 // $3974 adds a vblank hook at the first free slot of $0940. Each is `PHP ... PLP`: the caller's flags survive the call.
-// ⚠ NONE OF THE THREE HAS A BOUND: `LDA $0920,X / BEQ / INX / INX / BRA` walks on past the list's sixteen slots until it meets
-// a zero (the task list runs into the hook list at $0940, the hook list into $0960). Kept; the cap only stops a runaway.
+// Note: none of the three has a bound. `LDA $0920,X / BEQ / INX / INX / BRA` walks past the sixteen slots until it meets a
+// zero (the task list runs into the hook list at $0940, that one into $0960). Kept; the cap only stops a runaway.
 static void taskDel(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (rd(r, 0x0920 + i) == x) { wr(r, 0x0920 + i, 0); return; } }
 static void taskAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (!rd(r, 0x0920 + i)) { wr(r, 0x0920 + i, x); return; } }
 static void vblAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (!rd(r, 0x0940 + i)) { wr(r, 0x0940 + i, x); return; } }
@@ -86,7 +84,7 @@ static void side4CE7(R* r) {
   sideSwap(r);
 }
 
-// $7E:4788 -- THE PLAYER CROSSED THE LINE FIRST ($53 == 8). Returns the task that replaces this one (39B1).
+// $7E:4788 -- the player crossed the line first ($53 == 8). Returns the task that replaces this one (39B1).
 static unsigned win4788(R* r) {
   wr(r, 0x0380, 1);                                                   // 4788 LDA #0001 / STA $0380
   wr(r, 0xB2, rd(r, 0x8E) & 0x00FF);                                  // 478E
@@ -136,19 +134,19 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
     wr(r, 0x0A20, 0x4211);                                            // 48A0 the script, at the finish
     return 0;                                                         // 48A6 JMP $39A7 -- this task ends
   }
-  // 48A9 THE HUD'S TWO MARKERS on the camera's middle point ($9C/$9E)
+  // 48A9 the HUD's two markers on the camera's middle point ($9C/$9E)
   if (!rd(r, 0x9E) && !cmpn(r, rd(r, 0x9C), 0x1000) && rd(r, 0xA2)) { wr(r, 0xA2, 0); vblAdd(r, 0x464D); }
   if (rd(r, 0x9E) == 7) {                                             // 48C0 LDA $9E / CMP #0007 / BNE
     r->c = 1;
     sbc(r, rd(r, 0x9C), 0xF200);                                      // 48C7 LDA $9C / SBC #F200 / BCC
     if (r->c && !rd(r, 0xA2)) { wr(r, 0xA2, rd(r, 0xA2) + 1); vblAdd(r, 0x4643); }
   } else cmpn(r, rd(r, 0x9E), 7);
-  // 48DA THE LEAD: $63 = $88 = 1 when the player is $1000 or more ahead
+  // 48DA the lead: $63 = $88 = 1 when the player is $1000 or more ahead
   wr(r, 0x88, 0); wr(r, 0x63, 0);
   r->c = 1; wr(r, 0xF0, sbc(r, rd(r, 0x51), rd(r, 0x76)));
   wr(r, 0xF2, sbc(r, rd(r, 0x53), rd(r, 0x78)));
   if (!cmpn(r, rd(r, 0xF2), 0) && !cmpn(r, rd(r, 0xF0), 0x1000)) { wr(r, 0x63, rd(r, 0x63) + 1); wr(r, 0x88, rd(r, 0x88) + 1); }
-  // 48FD THE SPEEDS: drag $80 a frame, then the engine
+  // 48FD the speeds: drag $80 a frame, then the engine
   { r->c = 1; unsigned a = sbc(r, rd(r, 0x4A), 0x80); if (neg(a)) a = 0; wr(r, 0x4A, a); }
   { r->c = 1; unsigned a = sbc(r, rd(r, 0x6F), 0x80); if (neg(a)) a = 0; wr(r, 0x6F, a); }
   r->c = 0; wr(r, 0x4A, adc(r, rd(r, 0x4A), rd(r, 0x4C)));            // 4913 LDA $4A / CLC / ADC $4C
@@ -156,7 +154,7 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
   wr(r, 0x4C, 0x0100); wr(r, 0x71, 0x00F8);                           // 4928
   if (cmpn(r, rd(r, 0x57), rd(r, 0x4A))) wr(r, 0x4C, 0);              // 4932 LDA $57 / CMP $4A / BPL
   if (cmpn(r, rd(r, 0x7C), rd(r, 0x6F))) wr(r, 0x71, 0);              // 493A
-  // 4942 THE BOOST (B), only once the race runs ($B0 == 0)
+  // 4942 the boost (B), only once the race runs ($B0 == 0)
   if (!rd(r, 0xB0)) {
     if (rd(r, 0xBA)) {                                                // 4946 a boost is burning
       if (rd(r, 0x9A) && !(rd(r, 0xBA) & 7)) {                        // 494A ... every eighth frame, the flash
@@ -180,16 +178,16 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
       }
     } else wr(r, 0xA0, 0);                                            // 49B3 STZ $A0
   }
-  // 49B5 THE TOP SPEEDS: whoever is behind ($8E's sign) gets the higher one
+  // 49B5 the top speeds: whoever is behind ($8E's sign) gets the higher one
   wr(r, 0x57, rd(r, 0x55)); wr(r, 0x7C, rd(r, 0x7A));
   if (!neg(rd(r, 0x8E))) wr(r, 0x7C, rd(r, 0x7E)); else wr(r, 0x57, rd(r, 0x59));
-  // 49CB THE CAMERA: the middle of the two positions, and BG's $0A02 from it
+  // 49CB the camera: the middle of the two positions, and BG's $0A02 from it
   r->c = 0; wr(r, 0x9C, adc(r, rd(r, 0x51), rd(r, 0x76)));
   { unsigned hi = adc(r, rd(r, 0x53), rd(r, 0x78)); hi = lsr(r, hi); wr(r, 0x9E, hi); }
   { unsigned a = ror(r, rd(r, 0x9C)); wr(r, 0x9C, a);
     a = lsr(r, a); a = lsr(r, a); a = lsr(r, a); a = lsr(r, a);
     r->c = 1; a = adc(r, a, 0x0374); wr(r, 0x0A02, a & 0x03FF); }
-  // 49EC JOHNNY'S STEERING ($98: bit 15 = he runs, $0100 / $0200 = steer one way / the other) and $69 (the "W.P.")
+  // 49EC Johnny's steering ($98: bit 15 = he runs, $0100 / $0200 = steer one way / the other) and $69 (the "W.P.")
   wr(r, 0x98, 0);
   if (!rd(r, 0xB0)) {
     wr(r, 0x98, 0x8000);
@@ -208,7 +206,7 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
     }
     if (steer) wr(r, 0x98, rd(r, 0x98) | steer);                      // 4A29 TSB $98
   }
-  // 4A2B THE PLAYER'S STEERING: the pad against the camera's two masks $B8 / $B6 (task $4339)
+  // 4A2B the player's steering: the pad against the camera's two masks $B8 / $B6 (task $4339)
   wr(r, 0xAE, 0);
   if (rd(r, 0x06) & rd(r, 0xB8)) {
     wr(r, 0xAE, 1);
@@ -232,7 +230,7 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
     for (int k = 0; k < 5; k++) { wr(r, 0xF0, lsr(r, rd(r, 0xF0))); a = ror(r, a); }
     wr(r, 0x8E, sbc(r, a, rd(r, 0xF2))); }                           // 4AE9 SBC $F2 -- the last ROR's carry
   if (!rd(r, 0xB0)) {
-    // 4AF4 THE COLLISION: $A4 = (sideways relation << 4) | (lengthwise relation); 0 = touching on both axes
+    // 4AF4 the collision: $A4 = (sideways relation << 4) | (lengthwise relation); 0 = touching on both axes
     wr(r, 0xA4, 0);
     wr(r, 0xF0, adc(r, 0x0100, rd(r, 0x51)));
     wr(r, 0xF2, adc(r, 0x00C0, rd(r, 0x76)));
@@ -270,7 +268,7 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
     }
     if (!w[0x0388] && r->io && r->io->apu) r->io->apu(r->io->ctx, w[0x4B]);    // 4BCB $2141 = $4B, $2140 = $89: the engine
   }
-  // 4BDE THE POSITIONS: speed >> 6 a frame (and the lateral ones, clamped to 0..$7000)
+  // 4BDE the positions: speed >> 6 a frame (and the lateral ones, clamped to 0..$7000)
   r->c = 0; wr(r, 0x51, adc(r, rd(r, 0x51), (rd(r, 0x4A) >> 6) & 0x01FF));
   wr(r, 0x53, adc(r, rd(r, 0x53), 0));
   r->c = 0; wr(r, 0x76, adc(r, rd(r, 0x76), (rd(r, 0x6F) >> 6) & 0x01FF));
@@ -282,7 +280,7 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
   return 0x485D;                                                      // 4C3E RTS: the task stays
 }
 
-// $7E:4339 -- THE CAMERA AND THE STEERING MASKS (D = $0A00, set by the task itself: `LDA #0A00 / TCD`).
+// $7E:4339 -- the camera and the steering masks (D = $0A00, set by the task itself: `LDA #0A00 / TCD`).
 //   4339  on the story's call (`$0044` != 0, `FF 09`'s INC / the attract leaves it 0): the pad `$0006` through $43B8 (R,
 //         bit 4: $0A3A up to 12, else down to 0) and $43D5 (L, bit 5: $0A3C), then the angle `$0A0A += ($3A >> 2) - ($3C >> 2)`
 //   4361  the masks: X = (($0A0A + $40) >> 6) & $0E; `$00B6 = $7E:4319,X`, `$00B8 = $7E:4329,X` -- which d-pad bit steers
@@ -325,7 +323,7 @@ void CtRaceTask4339(uint8_t* w) {
   }
 }
 
-// ---- THE $C3 SCRIPT INTERPRETER (C3/0AFF -> C3/0B03), over its register page in WRAM -------------------------------------
+// ---- The $C3 script interpreter (C3/0AFF -> C3/0B03), over its register page in WRAM ----
 // The same machine title_intro.c runs for the title (sequence_table.md sec. 8.1), here over the page itself, because the
 // race's tasks read the registers straight from WRAM ($0A0A, $0A00, $0B1A, ...) and the race's own task writes the IP ($0A20).
 // Encoding (C3/0B03): bit 7 clear = an assignment (low nibble = the register; high nibble with bit 5 clear = a 16-bit
@@ -418,7 +416,7 @@ int CtSeqScript(uint8_t* w, unsigned page, const CtRaceIo* io, CtSeqCall call) {
       case 0x3:                                                          // 0C7C GOSUB: $30 = IP + 2, then JUMP
         pgw16(r, page, 0x30, ip + 2); pgw16(r, page, 0x20, rd(r, ip)); continue;
       case 0x4: pgw16(r, page, 0x20, pg16(r, page, 0x30)); continue;     // 0C85 RETURN
-      case 0x5: {                                                        // 0C2A WAIT FOR THE SONG: port 2's low nibble
+      case 0x5: {                                                        // 0C2A wait for the song: port 2's low nibble
         if (!io || !io->port) { pgw16(r, page, 0x20, ip - 1); return 0; }   //   (no sound processor: the marker never comes)
         uint8_t v = (uint8_t)(io->port(io->ctx, 2) & 0x0F);             // 0C2C LDA $2142 (read until stable) / AND #0F
         if ((int8_t)(uint8_t)(v - w[ip & 0xFFFF]) >= 0) {                 // 0C38 CMP ($20) / BPL -> 0C28 -> 0BB5
@@ -446,7 +444,7 @@ int CtSeqScript(uint8_t* w, unsigned page, const CtRaceIo* io, CtSeqCall call) {
   return 0;
 }
 
-// $7E:42BD -- THE PAD'S THREE WORDS, rotated once a frame (D = $0000): `LDA $02 / STA $F0 / LDA $04 / STA $02 / LDA $06 /
+// $7E:42BD -- the pad's three words, rotated once a frame (D = $0000): `LDA $02 / STA $F0 / LDA $04 / STA $02 / LDA $06 /
 // STA $04 / LDA $F0 / STA $06`. The NMI (C3/0A8E) puts the pad in $02; after this task, $06 is it -- what $4339 and $485D
 // read -- and $02/$04 hold the two before. ($F0 keeps the word, as the ROM leaves it.)
 void CtRaceTask42BD(uint8_t* w) {
@@ -455,11 +453,10 @@ void CtRaceTask42BD(uint8_t* w) {
   wr(r, 0xF0, t); wr(r, 0x02, rd(r, 0x04)); wr(r, 0x04, rd(r, 0x06)); wr(r, 0x06, t);
 }
 
-// ---- THE STAGE: C3:0000 -> $7E:3000 -> the NMI ----------------------------------------------------------------------------
-// The machine every entry shares (the overlay, the common init, the NMI, the brightness tasks), then the race's own setup and
-// tasks. Stage 1 of the native port: the LOGIC end to end -- what decides how a stage plays and when it ends -- over the WRAM
-// image, the picture's own work left out (the packets and DMAs of the setups, the render tasks and the vblank hooks; stage 2).
-// sequence_table.md sec. 12 (the race) and sec. 13 (the ending).
+// ---- The stage: C3:0000 -> $7E:3000 -> the NMI ----
+// The machine every entry shares (the overlay, the common init, the NMI, the brightness tasks), then the race's own setup
+// and tasks: the logic that decides how a stage plays and when it ends. The picture's work (the setups' packets and DMAs,
+// the render tasks, the vblank hooks) is in seq_racepic.c. sequence_table.md sec. 12 (the race) and sec. 13 (the ending).
 
 // The overlay, decompressed where C3:0000 puts it: `LDA $FE0003` (= C3:1313) -> $0300, `$7E:3000` -> $0303, JSL C3/0557.
 static int seqOverlay(uint8_t* w, const CtRaceIo* io) {
@@ -518,7 +515,7 @@ int CtSeqStageBegin(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   return 0;
 }
 
-// C3/08D0 -- ONE NMI of the stage, its logic: INC $08, the task list into its snapshot $0950, the pad (C3/0A8E: $02, the
+// C3/08D0 -- one NMI of the stage, its logic: INC $08, the task list into its snapshot $0950, the pad (C3/0A8E: $02, the
 // pause on Start's edge once $0390 allows it, the soft reset on L+R+Select+Start unless $0396), then the tasks of the snapshot
 // in order (7E:398A: sixteen slots, `CPX #0020`), each one able to remove or replace itself in the live list at its own index
 // ($39A7 / $39B1). Paused ($0392), neither the hooks nor the tasks run.
@@ -632,19 +629,10 @@ void CtSeqMul31BF(uint8_t* w, unsigned d) {
   wr(r, d + 0xF6, s);                                                 // 3200 STA $F6
 }
 
-// C3/01E4 (through C3/000E) -- THE CURTAIN: one call a frame while `$0350` (D = $0300 from here: $50) is 1 (open) or 2 (close).
-// `$51` counts the calls; the first fills the 224-byte state at bank `$54`:`$52` + $1C0 with 00 (open) or FF (close: the
-// 16-bit `LDA $F0 / STA long` then an MVN that drags the byte up the buffer); calls 1-31 seed `$55` by C3/02DD (A = FE, the
-// carry the `CMP #20` left, X's low byte: the caller's X, or the fill's MVN end on the first call) and walk the state: every
-// `Y` lines (Y = (b & 1F) + 3 + C, the step (b' & 3) + 8 + C, b / b' the next two bytes of the chain `[$55]` over $C0:FE00 --
-// each byte read is the next one's index) each line steps by it, saturating at FF (open, `ADC`) or 0 (close, `SBC` with the
-// borrow: step + 1), into the state and through WMDATA into the output half the parity of `$51` names ($52 odd, $52 + E0
-// even). ⚠ The close's clamp is `TDC`: it leaves B = $03, so the next refresh's `TAY` takes Y = $03xx -- the rest of the
-// buffer walks on one step. The 32nd call clears `$50` / `$51`. Every register comes back (C3/01BD's pulls, PLP included).
-// The caller's data bank is $00 (the stage's dispatcher, D = 0 / B = 0): C3/02DD's absolute operands are low RAM and the
-// rule's virtual beam (CtSeqRng02DD8). The field's window wipe (C0/22FA) and the overworld's window object call the same
-// routine; their port is another session's (src/xlat/wipe_c3.c, owwin_c6.c today) -- this is the stages' native one, the one
-// body to swap for a shared one later.
+// C3/01E4 (through C3/000E) -- the curtain: one call a frame while `$0350` (D = $0300: $50) is 1 (open) or 2 (close);
+// sequence_table.md sec. 18 walks it. Note: the close's clamp is `TDC`, which leaves B = $03, so the next refresh's `TAY`
+// takes Y = $03xx and the rest of the buffer walks on one step. The caller's data bank is $00, so C3/02DD's absolutes are
+// low RAM and the virtual beam (CtSeqRng02DD8). The field's window wipe has its own port of this routine (src/wipe.c).
 void CtSeqCurtain01E4(uint8_t* w, unsigned x, const CtRaceIo* io) {
   uint8_t* d = w + 0x0300;
   if (!d[0x50]) { d[0x51] = 0; d[0x50] = 0; return; }                // 01F2 LDA $50 / BEQ -> 023B
@@ -707,7 +695,7 @@ void CtSeqCurtain01E4(uint8_t* w, unsigned x, const CtRaceIo* io) {
   #undef FE
 }
 
-// $7E:424D -- THE ATTRACT's BUTTON (a task the attract's scripts add once their curtain is open; D = 0, A 8-bit): any pad bit
+// $7E:424D -- the attract's button (a task the attract's scripts add once their curtain is open; D = 0, A 8-bit): any pad bit
 // in `$02` while no curtain runs (`$0350` = 0) starts the closing one -- `$0350` = the operand of 4258's `LDA #imm`, which the
 // setup patched ($7E:4259: 02 for the race, 01 for entry 3) --, posts `18 BA 80` ($1E00-$1E02 through $377E, unless `$0388`),
 // `$0399` = 32, `$7F:0062` = 0 (the world script then sends loc 1B1 to the title) and hands its slot to $4283, which counts
@@ -735,10 +723,9 @@ static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* 
 int g_ctRaceOpenNmi;
 static unsigned raceHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) { (void)slot; return CtRacePicHook(io->pic, w, h, io); }
 
-// The setup $7E:3B48's own master cycles, NMI off, by its arm: the story's 9521394 (`--callrom 7E3B48`, CT_CALLROM_NONMI=1,
-// $0384 = 20 -- the song's post left to the host's SPC; sequence_table.md sec. 12); the attract's (`FF 60`: bit 5, no song)
-// 10205558, measured in place on the rule's cartridge (`ct.exe --racepiccmp` RACEPICCMP_SPAN=7E3B48,7E300D from its hand-off,
-// power-on f8182; C3:0000 to $7E:3013 is 46 frames there).
+// The setup $7E:3B48's own master cycles, NMI off, by its arm: the story's from `--callrom 7E3B48` (CT_CALLROM_NONMI=1,
+// $0384 = 20, the song's post left to the host's SPC; sequence_table.md sec. 12), the attract's (`FF 60`) from
+// `ct.exe --racepiccmp` with RACEPICCMP_SPAN=7E3B48,7E300D.
 long CtRaceStageSetupCycles(uint8_t operand) { return (operand & 0x40) ? 10205558L : 9521394L; }
 
 int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
@@ -752,7 +739,7 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
     w[0x1E01] = 0x2C; w[0x1E00] = 0x10; w[0x1E02] = 0xFF; w[0x1E03] = 0xFF;
     if (io && io->post) io->post(io->ctx);
   }
-  if (io && io->pic) CtRacePicSetupA(io->pic, w, io);                 // 3B5D-3C4E: the picture's loads (stage 2)
+  if (io && io->pic) CtRacePicSetupA(io->pic, w, io);                 // 3B5D-3C4E: the picture's loads
   // $7E:45D6 (JSR at 3C51): the start values
   if (w[0x44]) {                                                      // the story's call: six bytes of the overlay's own code
     w[0x53A0] = 0xD8; w[0x4F74] = 0xD8; w[0x50DA] = 0xD8; w[0x53A4] = 0xE8; w[0x5395] = 0x06; w[0x53AE] = 0x01;
@@ -791,7 +778,7 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   return 0;
 }
 
-// The race's tasks (the logic ones; the picture's are stage 2).
+// The race's tasks (the logic ones; the picture's are in seq_racepic.c).
 static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io) {
   switch (t) {
     case 0x3749: CtRaceScript(w, 0x0A00, io); return t;
@@ -809,7 +796,7 @@ static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* 
       CtSeqCurtain01E4(w, slot, io);                                  //   table by the call's parity (3D78 LDA $0351 / LSR A)
       if (io && io->pic) io->pic->ch[0].aAdr = (w[0x0351] & 1) ? 0x3D64 : 0x3D6B;   // STX $4302
       return t;
-    default:                                                          // the picture's tasks (stage 2)
+    default:                                                          // the picture's tasks
       if (io && io->pic) CtRacePicTask(io->pic, w, slot, t, io);
       return t;
   }
@@ -820,8 +807,7 @@ int CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
   if (st != 2 && CtSeqStageSong(w, io) > 0) w[0x0388] = 0;           // (the race never changes $038A)
   if (st != 2 && io && io->pic) CtRacePicThread(io->pic, w);         // $7E:3023 the main loop's pass
   // The END is the main loop's: `3023 JSR $51D1 / 3026 LDA $00 / BEQ` reads `$00` only once the pass returns, and a pass
-  // parked at 5211 (waiting on `$39` for the hook $5221) returns NMIs later -- the NMIs run on meanwhile. MEASURED on the
-  // rule's cartridge, the attract's race: `$0000 = 1` at f441 of its hand-off state, $7E:302A at f443.
+  // parked at 5211 (waiting on `$39` for the hook $5221) returns NMIs later; the NMIs run on meanwhile.
   if (st == 1 && io && io->pic && io->pic->thread) return 0;
   return st;
 }
@@ -829,17 +815,16 @@ int CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
 // $7E:302A -- the teardown after the END: NMI and HDMA off, forced blank, the driver reset, `JML $C0:0000` (the host's reboot).
 void CtRaceStageClose(uint8_t* w, const CtRaceIo* io) { CtSeqStageEnd(w, io); }
 
-// $7E:4F54 -- THE HUD's task, its one piece of logic. Everything else in it draws (the minimap's two markers, the boost
-// icons, REST, BEST, the score: stage 2), but on the story's call it reaches `$5116` every frame (4F8A-4F90 or 4FA1-4FA7,
-// `$0384` bit 6 clear) and that routine FLOORS THE SCORE before it draws it: 51A2 `LDA $69 / BPL / LDA #0000 / STA $69`.
-// The race task $485D runs after it in the list, so a trailing player's `DEC $69` leaves FFFF and the next frame puts it
-// back to 0 -- the cartridge's $69 sits at FFFF all the while Johnny leads (measured: f340 on). The win's jackpots read it.
+// $7E:4F54 -- the HUD's task, its one piece of logic. Everything else in it draws (the minimap's markers, the boost icons,
+// REST, BEST, the score), but on the story's call it reaches `$5116` every frame (4F8A-4F90 or 4FA1-4FA7, `$0384` bit 6
+// clear), and that routine floors the score before drawing it: 51A2 `LDA $69 / BPL / LDA #0000 / STA $69`. $485D runs
+// after it, so a trailing player's `DEC $69` leaves FFFF until the next frame. The win's jackpots read $69.
 void CtRaceTask4F54(uint8_t* w) {
   if (w[0x0384] & 0x40) return;                                       // 4F85 / 4F9C BIT #0040: the attract's arm draws less
   if (w[0x6A] & 0x80) { w[0x69] = 0; w[0x6A] = 0; }                   // 51A2
 }
 
-// $7E:44CE -- THE SCORE COUNTED DOWN after the finish (485D puts it in $4339's slot): every 4th frame (`$08` & 3 = 0) `$69`
+// $7E:44CE -- the score counted down after the finish (485D puts it in $4339's slot): every 4th frame (`$08` & 3 = 0) `$69`
 // loses 2000, else 200, else 20, else 2 -- the first that fits (`SEC / SBC / BCS`, the `ADC` putting it back); under 2 the
 // task removes itself (44F8 JMP $39A7). Returns 0 then.
 int CtRaceTask44CE(uint8_t* w) {

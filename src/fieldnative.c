@@ -1,15 +1,13 @@
-// fieldnative.c - the field's frames between, drawn NATIVELY (a mod: settings.h interpolate; CLAUDE.md "MODS ARE OUTSIDE THE
-// MANDATE"). The reprojection (motion.c CtMotRaster) shifts the pixels of the composed frame; this redraws the frame at the
-// moment t between two logic frames from what it is made of:
-//   - the map: its layers (scene.c CtFieldSceneLayers -- BG1/BG2/BG3 x priority 0/1, one period each), sampled at the
-//     camera's and each layer's own scroll AT t (the self-scrolling layers at their continuous offset, CtMotFit), with the
-//     bake's own layer order, sub screen and colour math, per output pixel;
-//   - the sprites: every pixel each one put down this frame (CtMotFrame.spx, in paint order: the later in front, an
-//     occluder's hole clears what is under it), each sprite at its object's place at t; a sprite pixel shows unless the
-//     map's priority-1 foreground is there and the pixel is not in front of it;
-//   - what is screen-fixed (the box, the curtain, the blank lines -- CtMotSettle's FIXED): the composed frame's pixel.
-// No hole to fill, no pixel of two layers moved as one. The caption plane, the iris and the colour window are not drawn here
-// (the caller keeps the reprojection for a frame with any of them).
+// fieldnative.c -- the field's frames between, drawn natively (a mod: settings.h interpolate; see CLAUDE.md "Mods are
+// outside the mandate"). Where the reprojection (motion.c CtMotRaster) shifts the composed frame's pixels, this redraws
+// the frame at the moment t between two logic frames from its parts:
+//   - the map's layers (scene.c CtFieldSceneLayers: BG1/BG2/BG3 x priority 0/1, one period each), sampled at the
+//     camera's and each layer's scroll at t (CtMotFit's continuous offsets), with the bake's layer order, sub screen
+//     and colour math, per output pixel;
+//   - every pixel each sprite put down this frame (CtMotFrame.spx, in paint order; an occluder's hole clears what is
+//     under it), at its object's place at t, hidden by the priority-1 foreground unless the pixel is in front of it;
+//   - screen-fixed pixels (the box, the curtain, blank lines: CtMotSettle's FIXED) from the composed frame;
+//   - the iris, the colour window and the caption plane when cur->nativeFx carries them (fieldnative.h).
 #include "fieldnative.h"
 #include "motion.h"
 #include "scene.h"
@@ -43,14 +41,11 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   }
   if (fabs(o2x - cur->o2x) > 32 || fabs(o2y - cur->o2y) > 32) { o2x = cur->o2x; o2y = cur->o2y; }
   if (fabs(o3x - cur->o3x) > 32 || fabs(o3y - cur->o3y) > 32) { o3x = cur->o3x; o3y = cur->o3y; }
-  // EVERY PLACE AT t BY ONE RULE: the whole 1/k pixel under it on the map, floor(p * k). The screen shows map pixel
+  // Every place at t follows one rule: the whole 1/k pixel under it on the map, floor(p * k). The screen shows map pixel
   // camXk / k + X / k, a layer its pixel at the camera plus its offset, an object its map place less the camera -- each
-  // the floor of its own sum, so whatever moves together at t lands together: a layer held to the camera (BG1, a BG2
-  // part of the map) and one held to the screen (camera + offset constant, a sky) exactly, an object standing on the map
-  // or walking with the camera exactly. (Rounded apart -- the camera to the nearest, the offset down -- a layer held to
-  // the screen came out a quarter pixel off on some t and showed a column of its other side at the screen's edge.) The
-  // floor is also the drawn frame's: the drawn offset is the whole part of the continuous one, so at t = 256 and 1x this
-  // is the frame as composed.
+  // the floor of its own sum, so whatever moves together at t lands together (a layer held to the camera or to the
+  // screen, an object standing on the map or walking with the camera). Rounding the parts apart would leave a layer
+  // held to the screen a fraction off. At t = 256 and 1x this is the frame as composed.
   #define FLK(p) ((long)floor((p) * k + 1e-9))
   long camXk = FLK(camXt), camYk = FLK(camYt);
   long offXk[6], offYk[6];
@@ -61,8 +56,7 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
   memset(sx, 0, sizeof sx); memset(sy, 0, sizeof sy);
   for (int i = 0; i < cur->nspr && i < 120; i++) {
     int j = 0; while (j < prev->nspr && prev->sprKey[j] != cur->sprKey[i]) j++;
-    // (new, or a jump: at its map place, where the map is at t -- with the camera trailing its drawn place, the screen's
-    //  place stood a fraction off the floor)
+    // (new, or a jump: at its map place, where the map is at t)
     sx[CT_MOT_SPR + i] = (int)-FLK(cdx); sy[CT_MOT_SPR + i] = (int)-FLK(cdy);
     if (j < prev->nspr) {
       int wx = cur->sprX[i] - prev->sprX[j], wy = cur->sprY[i] - prev->sprY[j];
@@ -93,8 +87,8 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
       for (int i = 0; i < k; i++) {
         int X = X0 + i; if ((unsigned)X >= (unsigned)W) continue;
         size_t q = (size_t)Y * W + X;
-        // (in front of the foreground is the PIXEL's, as the compositor's front mask: the sprite that wins it carries its
-        // own priority -- a later priority-2 unit over a priority-3 one goes behind the foreground again, drawSprite)
+        // (in front of the foreground is per pixel, as the compositor's front mask: the sprite that wins it carries its
+        // own priority, so a later priority-2 unit over a priority-3 one goes behind the foreground again; drawSprite)
         spf[q] = f;
         if (f) { sp[q * 3] = cur->spx[n].r; sp[q * 3 + 1] = cur->spx[n].g; sp[q * 3 + 2] = cur->spx[n].b; spp[q] = cur->spx[n].pal; }
       }
@@ -123,18 +117,14 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
     x1T[X] = X / k;
     long cx = fdiv(camXk + X, k);
     inT[X] = !wide || (cx >= cur->mx0 && cx < cur->mx1);
-    // (the frame's own column showing map column cx: a world pixel the frame drew screen-fixed -- the Steam margins,
-    //  field.c, CtMotFrame.world -- is taken from there, so it moves with the camera at t. Copied at the screen's place
-    //  they stepped at 60 Hz beside a room drawn at t -- the owner, 2026-10-23 -- and a room column that fell past the
-    //  edge at t, 01C's shake, took the self-scrolling sky instead of them, a column of cloud in the margins)
+    // (the frame's own column showing map column cx: a world pixel the frame drew screen-fixed -- the widescreen
+    //  margins, CtMotFrame.world -- is taken from there, so it moves with the camera at t)
     long xs = cx - cur->camX;
     fxT[X] = xs >= 0 && xs < w ? (int)xs : -1;
-    fcT[X] = xs < 0 ? 0 : xs >= w ? w - 1 : (int)xs;   // (a side column the frame never drew -- the picture's edge, a step of
-                                                        //  the camera at t -- takes the frame's nearest: 01C's shake left a
-                                                        //  column of the sky at the picture's left edge, the owner 2026-10-24)
-    // (the margins' BG2 plane -- world 2 -- at BG2's place at t: the frame's column showing BG2's column there. Taken at the
-    //  camera's, 0A5's sky climbed a pixel between two frames and fell back on the next, at the end of its pan -- the owner,
-    //  2026-10-24)
+    fcT[X] = xs < 0 ? 0 : xs >= w ? w - 1 : (int)xs;   // (a side column the frame never drew -- the picture's edge at
+                                                        //  t -- takes the frame's nearest)
+    // (the margins' BG2 plane -- world 2 -- at BG2's place at t, not the camera's: the frame's column showing BG2's
+    //  column there)
     long xs2 = fdiv(offXk[1] + X, k) - (cur->camX + cur->o2x);
     fx2T[X] = xs2 >= 0 && xs2 < w ? (int)xs2 : -1;
     fc2T[X] = xs2 < 0 ? 0 : xs2 >= w ? w - 1 : (int)xs2;

@@ -1,4 +1,5 @@
-// M3-B: overworld camera/scroll -- C port of the bank-C2 scroll engine (see world.h for the RE map).
+// world.c -- the overworld engine (bank C2): camera, mover, streaming, entry, ambient-object VM.
+// The map of routines is in world.h; dossiers are disasm/notes/ow_*.md and overworld*.md.
 #include "world.h"
 #include "ct_owobj.h"   // the ambient-object block ABI (offsets/class shared with field.c)
 #include "vwf.h"      // C2/57DF / 5823: the proportional text (the world map's era label)
@@ -10,17 +11,15 @@
 #include <stdio.h>      // CT_MAILTRACE only (env-gated debug trace in CtWorldSoundRequest)
 #include <stdlib.h>
 
-// The anim sub-VM reads its bytecode through a (bank, 16-bit pc) long pointer built from the
-// object's +0D/+0B. Only bank $C3 is ever stamped (object-VM op 0x30), and the reachable region is
-// baked in ow_anim.h -- so this resolves exactly that window and refuses anything else instead of
-// reading out of bounds.
-// ...and from the ROM itself for another bank (the world map's markers run scripts in bank $C2, C2:6A18 / 6A20).
+// The anim sub-VM reads its bytecode through a (bank, pc) long pointer from the object's +0D/+0B. Op 0x30
+// stamps bank $C3, whose reachable region is baked in ow_anim.h; other banks read the ROM (the world map's
+// markers run scripts in bank $C2, C2:6A18 / 6A20). Anything outside those returns NULL.
 static const uint8_t* g_owRom; static long g_owRomLen;   // (defined with CtWorldSetRom below)
 // A byte of the ROM, through romview.h: the container's table when one covers it, else the image's.
 static uint8_t owRB(long o) { return CtRomByte(g_owRom, g_owRomLen, o); }
-// The 8-byte window a script reader decodes an op from: the op's bytes through owRB. A table that covers the op's first
-// byte ends where the program the closure walked ends (assets/rom_closure.py world_scripts), so the window's bytes past
-// it are no op's operands and read 0 -- were one an operand, the container and the ROM would part (tools/rom_free_cmp.py).
+// The 8-byte window a script reader decodes an op from. A table covering the op's first byte ends where the
+// closure's program ends (assets/rom_closure.py world_scripts), so bytes past it are no operand and read 0
+// (tools/rom_free_cmp.py compares the container with the ROM).
 static void owRomWin(uint8_t* buf, long o) {
   int tab = CtRomViewHas(o);
   for (int k = 0; k < 8; k++) buf[k] = (!tab || CtRomViewHas(o + k)) ? owRB(o + k) : 0;
@@ -101,27 +100,18 @@ uint8_t CtWorldProp(const uint8_t* ram, int col8, int row8) {
   return (col8 & 1) ? (uint8_t)(b & 0x0F) : (uint8_t)(b >> 4);
 }
 
-// C2/62ED -- the per-CELL REGION nibble. Same shape as CtWorldProp above, a different grid: a 96x64
-// nibble map packed two cells per byte at $7E:7200, 48 bytes per row. It is what zones the overworld,
-// and `$1B9B,X` turns a region into a SONG (C2/2F25).
-//   62F3: LDA $01 / STA $4202 ; 62F8: LDA #30 / STA $4203   -- row * 48, through the PPU multiplier
-//   6300: LDA #7200 / ADC $4216 / STA $10                   -- long pointer = $7E:(7200 + row*48)
-//   6308: LDA $00 / AND #00FF / LSR A / TAY                 -- Y = col / 2
-//   6311: LDA [$10],Y / 6313: LSR $00 / BCS ->631C          -- col ODD  -> AND #0F   (low nibble)
-//   6317: LSR A x4                                          -- col EVEN -> high nibble
-// ⚠ `630A AND #00FF` is what makes the caller's `3008 TAX` safe: X is 16-bit there while A is 8-bit,
-// so TAX would carry a stale high byte if B were not already zeroed here.
-// ⚠ The ROM bounds NOTHING -- a row past 63 reads on into $7E:7E00, the entry records. Reproduced
-// rather than clamped; every caller feeds it a coordinate that is already in range.
+// C2/62ED -- the per-cell region nibble: a 96x64 grid packed two cells per byte at $7E:7200, 48 bytes a row
+// (even col = high nibble). `$1B9B,X` turns a region into a song (C2/2F25). disasm/notes/overworld_music.md sec. 1.
+// Note: the ROM does not bound the row (past 63 it reads the entry records at $7E:7E00); not clamped here
+// either, and every caller passes an in-range cell.
 uint8_t CtWorldRegion(const uint8_t* ram, int col, int row) {
   uint8_t b = ram[0x7200 + row * 48 + (col >> 1)];
   return (col & 1) ? (uint8_t)(b & 0x0F) : (uint8_t)(b >> 4);
 }
 
-// C2/2ED9 -- the shared SOUND-REQUEST commit, and the $1BEC/$1BED/$1BEE phase gate every overworld
-// requester goes through. A caller stages the four mailbox bytes in $1BE8-$1BEB plus a priority in
-// $1BED and calls this; it copies them into the real mailbox $1E00-$1E03 and marks one pending.
-//   $1BEC  0 = idle, 1 = staged and not yet posted, $FF = BEING posted (C2/045D)
+// C2/2ED9 -- the shared sound-request commit and its phase gate. A caller stages the four mailbox bytes in
+// $1BE8-$1BEB and a priority in $1BED; this copies them into the mailbox $1E00-$1E03 and marks one pending.
+//   $1BEC  0 = idle, 1 = staged and not yet posted, $FF = being posted (C2/045D)
 //   $1BED  the incoming request's priority
 //   $1BEE  the pending request's priority
 // Returns 1 for the ROM's CLC (accepted), 0 for SEC (refused).
@@ -131,12 +121,12 @@ int CtWorldSoundRequest(uint8_t* ram) {
     if (pend & 0x80) return 0;                    // 2EDE: BMI  -- mid-post, refuse
     if (ram[0x1BEE] < ram[0x1BED]) return 0;      // 2EE0-2EE6: LDA $1BEE / CMP $1BED / BCC
   }
-  // TEST HOOK CT_MAILTRACE: who overwrites the $1E00 mailbox, and what was in it. Inert unset.
+  // CT_MAILTRACE (debug): who overwrites the $1E00 mailbox, and what was in it.
   { static int mt = -1; if (mt < 0) { const char* e = getenv("CT_MAILTRACE"); mt = (e && *e) ? 1 : 0; }
     if (mt) fprintf(stderr, "mailtrace   OW-REQUEST overwrites $1E00: was %02X %02X %02X -> now %02X %02X %02X\n",
                     ram[0x1E00], ram[0x1E01], ram[0x1E02], ram[0x1BE8], ram[0x1BE9], ram[0x1BEA]); }
-  ram[0x1E00] = ram[0x1BE8];                      // 2EE8-2EFD -- COMMAND FIRST here, unlike C2/2F3A
-  ram[0x1E01] = ram[0x1BE9];                      //   where it is written last. Kept as the ROM has it.
+  ram[0x1E00] = ram[0x1BE8];                      // 2EE8-2EFD -- the command first here (C2/2F3A
+  ram[0x1E01] = ram[0x1BE9];                      //   writes it last)
   ram[0x1E02] = ram[0x1BEA];
   ram[0x1E03] = ram[0x1BEB];
   ram[0x1BEE] = ram[0x1BED];                      // 2F00
@@ -144,22 +134,20 @@ int CtWorldSoundRequest(uint8_t* ram) {
   return 1;                                       // 2F0B: CLC
 }
 
-// C2/18F1 -- the ambient script's PLAY SONG op (0x3D), gated on $7F01ED (the same field-song hold
-// C2/2FAE uses). ONE body, two callers: the sub-VM's case 0x3D, and the host's new-game intro entry
-// -- see the note at that call for why the host has to issue it itself.
-// Op 0x4A's handler IS C2/18F9, the body below without the gate: the script plays its song whatever $7F01ED holds
-// (overworld 1F4's second visit, `4A 4A`, the song with the hold set by C6/E63D).
+// C2/18F1 -- the ambient script's play-song op (0x3D), gated on $7F01ED (the field-song hold C2/2FAE also
+// uses). Callers: the sub-VM's case 0x3D and the host's new-game intro entry (see the note at that call).
+// Op 0x4A's handler is C2/18F9, the same body without the gate (overworld 1F4's second visit, `4A 4A`,
+// plays its song with the hold set by C6/E63D).
 static void owPlaySong18F9(uint8_t* ram, uint8_t song);
 void CtWorldScriptPlaySong(uint8_t* ram, uint8_t song) {
   if (ram[0x101ED]) return;                         // 218F3 LDA $7F01ED / BNE -> straight to the RTS
   owPlaySong18F9(ram, song);
 }
 static void owPlaySong18F9(uint8_t* ram, uint8_t song) {
-  ram[0x1BE8] = 0x10;                              // 218FB LDA #10 -- cmd $10 = PLAY SONG
+  ram[0x1BE8] = 0x10;                              // 218FB LDA #10 -- cmd $10 = play song
   ram[0x1BE9] = song;                               // 21905 STA $1BE9
-  ram[0x02AE] = song;                               // 21908 STA $02AE -- the shadow, written here
-                                                    //   UNCONDITIONALLY (owMusicPlayRegion commits it
-                                                    //   only on acceptance; this handler does not)
+  ram[0x02AE] = song;                               // 21908 STA $02AE -- the shadow, written whether or
+                                                    //   not the request is accepted (unlike owMusicPlayRegion)
   ram[0x1BEA] = 0xFF; ram[0x1BEB] = 0xFF;           // 2190B LDA #FF -> STA $1BEA / STA $1BEB
   ram[0x1BED] = 0;                                  // 21913 STZ $1BED
   CtWorldSoundRequest(ram);                         // 21916 JSR C2/2ED9
@@ -168,33 +156,27 @@ static void owPlaySong18F9(uint8_t* ram, uint8_t song) {
 // C2/3076 -- issue the region's song. $EB holds the region the compare last computed.
 static void owMusicPlayRegion(uint8_t* ram) {
   ram[0x1BE9] = ram[0x1B9B + ram[0x00EB]];        // 3077: LDA $EB / TAX / LDA $1B9B,X
-  ram[0x1BE8] = 0x10;                             // 3080: cmd $10 = PLAY
+  ram[0x1BE8] = 0x10;                             // 3080: cmd $10 = play
   ram[0x1BEA] = 0xFF; ram[0x1BEB] = 0x80;
   ram[0x1BED] = 0x00;                             // 308F: STZ $1BED -- priority 0, always accepted
   if (CtWorldSoundRequest(ram))                   // 3095: BCS -> skip
-    ram[0x02AE] = ram[0x1BE9];                    // 3097: the shadow commits ONLY on acceptance
+    ram[0x02AE] = ram[0x1BE9];                    // 3097: the shadow commits only on acceptance
 }
 
-// C2/2F94 -- THE OVERWORLD MUSIC-ZONE OBJECT. It is a normal entry in the ambient-object array: the
-// generic dispatcher C2/0535 loads the block's CLASS WORD (+0) as a handler address and `JMP ($0050)`s
-// to it, so this object is simply the block whose class is $2F94 (block 14, $7E:0EB0, on world 0). The
-// dispatcher also owns the counter this uses: C2/054E `INC $0003,X` bumps a 16-bit per-object frame
-// counter every frame the handler returns CLC, and a handler returning SEC is KILLED (C2/0547 zeroes
-// the class word). Hence every arm below returns 1.
-//
-// The states live in the block itself, at +2, and are dispatched through the table at C2/2F9D:
-//   0 -> C2/2FA5   arm ($EB = FF, no region known yet), state := 1, FALL THROUGH into 1
+// C2/2F94 -- the overworld music-zone object: the ambient block whose class word is $2F94 (block 14,
+// $7E:0EB0, on world 0; the dispatcher C2/0535 jumps to the class word). C2/054E bumps the block's 16-bit
+// counter (+3) each frame the handler returns CLC; SEC kills it (C2/0547). States at +2 (table C2/2F9D):
+//   0 -> C2/2FA5   arm ($EB = FF), state := 1, fall through into 1
 //   1 -> C2/2FAE   compare the player's region against $02AE; on a change start the fade
-//   2 -> C2/303C   wait 60 frames, then PLAY the new song and state := 3
-//   3 -> C2/304F   send the stop/prepare and state := 1
-// (states 4 and 5 point at C2/4EA6 / C2/02FE and are not part of the music cycle)
-//
+//   2 -> C2/303C   wait 60 frames, then play the new song, state := 3
+//   3 -> C2/304F   send the stop/prepare, state := 1
+// (states 4 and 5 point at C2/4EA6 / C2/02FE, outside the music cycle). disasm/notes/overworld_music.md sec. 5.
 // `b` = the block base ($4E in the ROM). Returns 1 = keep the object (CLC), 0 = kill (SEC).
 int CtWorldMusicObj(uint8_t* ram, int b) {
   int st = ram[b + 2];
-  if (st == 0) { ram[b + 2] = 1; ram[0x00EB] = 0xFF; st = 1; }   // 2FA5-2FAC, then FALLS THROUGH
+  if (st == 0) { ram[b + 2] = 1; ram[0x00EB] = 0xFF; st = 1; }   // 2FA5-2FAC, then falls through
   if (st == 1) {
-    if (ram[0x101ED]) {                           // 2FAE: LDA $7F01ED / BNE -- keep the FIELD song
+    if (ram[0x101ED]) {                           // 2FAE: LDA $7F01ED / BNE -- keep the field song
       ram[0x1BE9] = ram[0x29AE];                  // 2FB4-2FC7
       ram[0x1BE8] = 0x10; ram[0x1BEA] = 0xFF; ram[0x1BEB] = 0x80;
       ram[0x1BED] = 0x00;
@@ -205,16 +187,16 @@ int CtWorldMusicObj(uint8_t* ram, int b) {
     if (!(mode == 0 || mode == 1 || mode == 7)) { ram[0x00EB] = 0xFF; return 1; }   // -> 3036
     if (ram[0x027E]) { ram[0x00EB] = 0xFF; return 1; }                              // 2FE7-2FEA
     int col = (ram[0x0283] | (ram[0x0284] << 8)) >> 4;          // 2FEE-2FF5 (16-bit read, >>4)
-    int row = ((ram[0x0285] | (ram[0x0286] << 8)) >> 4) - 1;    // 2FF7-2FFF -- ⚠ MINUS ONE, and the
-    uint8_t region = CtWorldRegion(ram, col, row);              //   entry path C2/2F15 does NOT do this
+    int row = ((ram[0x0285] | (ram[0x0286] << 8)) >> 4) - 1;    // 2FF7-2FFF -- minus one; the entry
+    uint8_t region = CtWorldRegion(ram, col, row);              //   path C2/2F15 does not subtract
     ram[0x00EB] = region;                         // 3004: STA $EB
     if (ram[0x1B9B + region] == ram[0x02AE]) return 1;          // 300C-300F: unchanged -> nothing
     ram[b + 2] = (uint8_t)(ram[b + 2] + 1);       // 3013: INC $0002,X -> state 2
     ram[b + 3] = 0; ram[b + 4] = 0;               // 3016/3019: restart the frame counter
-    ram[0x1BE8] = 0x81; ram[0x1BE9] = 0x0C;       // 301C-3023: cmd $81 param $0C = the FADE OUT
+    ram[0x1BE8] = 0x81; ram[0x1BE9] = 0x0C;       // 301C-3023: cmd $81 param $0C = fade out
     ram[0x1BEA] = 0x00; ram[0x1BEB] = 0xFF;
     ram[0x1BED] = 0x00;
-    CtWorldSoundRequest(ram);                     // 3031 -- the shadow is NOT committed here
+    CtWorldSoundRequest(ram);                     // 3031 -- the shadow is not committed here
     return 1;
   }
   if (st == 2) {
@@ -254,37 +236,25 @@ void CtWorldMoverFrame(CtWorldMover* m, const uint8_t* ram,
     int cx = m->probeX >> 3, cy = m->probeY >> 3;
     uint8_t c0 = CtWorldProp(ram, cx - 1, cy - 1);  // the 2x2 corner cells (C2/39D5)
     uint8_t c1 = CtWorldProp(ram, cx, cy - 1);
-    if (((c0 | c1) & 3) != 0) {                   // verdict C2/39C3: AND #$0303 over the TOP pair
+    if (((c0 | c1) & 3) != 0) {                   // verdict C2/39C3: AND #$0303 over the top pair
       m->velX = 0; m->velY = 0; m->moving = 0;    // blocked tail C2/36B6
       return;
     }
-    m->phase = 2;                                 // INC $0002,X (C2/36EA) -- integrate THIS frame
+    m->phase = 2;                                 // INC $0002,X (C2/36EA) -- integrate this frame
   }
   if (m->phase != 2 || (m->velX == 0 && m->velY == 0)) return;
   m->posX = (uint16_t)(m->posX + m->velX);        // integrator C2/0F38 (fractions stay 0 on foot)
   m->posY = (uint16_t)(m->posY + m->velY);
   *dxOut = m->velX; *dyOut = m->velY;
   if (m->posX == m->probeX && m->posY == m->probeY)
-    m->phase = 1;                                 // arrival (C2/3757): back to boundary, vel KEPT
+    m->phase = 1;                                 // arrival (C2/3757): back to boundary, vel kept
 }
 
-// BG3 ocean animator (C2/75CE-75FC): ambient drift + consume the camera deltas. The animator
-// object ticks BEFORE the camera apply, so it sees the PREVIOUS frame's $1BF1/$1BF3.
-// ⭐ IT IS AN OBJECT'S HANDLER, NOT A FREE-RUNNING TICK (2026-09-17): C2/75CE belongs to CLASS $75C3, so the drift --
-// and the camera-delta consume with it -- happens only while such an object is live. Oracle: the interactive world 0
-// (saves/ow_w0.state) carries one at block $0CF0 (`--hookpc C275CE`: every visit with $4E = 0CF0; `--monitor 7E0024:2
-// --writer`: -1 every fourth frame by C2:75ED, +1 every eighth by C2:75F5), while the attract's 1F0 leg has no $75C3
-// object at all and its $24/$2A stay 0000 for the whole 270-frame visit. The port ticked it in EVERY world, so that
-// leg's clouds drifted 49 px left and 24 px down across it -- the survey's worst overworld median (13.0).
-// ...and each world has its OWN: world 0 carries class $75C3 (C2/75C3: every fourth frame `DEC $24`, every eighth
-// `INC $2A`), world 1 class $75FD (C2/75FD: every fourth frame BOTH), and worlds 3, 6 and 7 carry none at all -- their
-// BG3 never drifts. Both handlers skip everything, the consume included, while `$0294 & 10` is set (C2/75C6 / C2/7600).
-// ...and worlds 2 and 4 carry a THIRD kind, a 16.16 drift: C2/7702 (world 2, 2300 A.D.'s ash) and C2/77F2 (world 4),
-// byte for byte the same routine but for the velocity they arm on the first visit (`INC $0002,X` / `STA $001A..20,X`):
-// every frame `$24`/`$2A` into +14/+18, C2/0F38's two 32-bit adds (+12/+14 += +1A/+1C, +16/+18 += +1E/+20), back into
-// `$24`/`$2A`, then `$24 += $1BF1` / `$2A += $1BF3` and both STZ. The port had neither since the drift became the
-// object's (4dd1cd0): world 2's BG3 stood still where the cartridge's ash moves (-3.46, +2.00) px a frame (user defect
-// 2026-09-26 #6, "the 2300 AD smoke regressed, demo screen"; the attract's 1F2 leg, c5848 on: `$24` FFFC, -3/-4 a frame).
+// The BG3 drift is an object's handler, not a free-running tick: it (and the consume of the camera deltas)
+// runs only while the world carries one of these classes. World 0: $75C3 (`DEC $24` every 4th frame, `INC $2A`
+// every 8th); world 1: $75FD (both every 4th); worlds 2 and 4: the 16.16 drifts C2/7702 / C2/77F2 (the same
+// routine, different velocity, armed on the first visit); worlds 3, 6 and 7: none, BG3 never drifts. All
+// skip the visit while `$0294 & 10` is set (C2/75C6 / C2/7600). disasm/notes/ow_bg3_animator.md secs. 2 and 6.
 static int owBg3AnimatorBlock(const uint8_t* ram) {
   for (int b = OWOBJ_BASE; b < OWOBJ_END; b += OWOBJ_STRIDE) {
     uint16_t cls = (uint16_t)(ram[b] | (ram[b + 1] << 8));
@@ -310,7 +280,7 @@ static int owSine(int i) {
   int v = g_owRom ? owRB(0xF900 + i) : 0;
   return i >= 0x200 ? -v : v;
 }
-// THE DRIFT OBJECT'S VISIT (C2/75C3 / C2/75FD / C2/7702 / C2/77F2): the drift, then `$24 += $1BF1` / `$2A += $1BF3` and
+// The drift object's visit (C2/75C3 / C2/75FD / C2/7702 / C2/77F2): the drift, then `$24 += $1BF1` / `$2A += $1BF3` and
 // both STZ. Returns 0 when `$0294 & 10` skips the whole visit (C2/75C6 / C2/7600 `BIT #10 / BNE` -> CLC, nothing
 // consumed). `ctrW` = the animator block's own +22 word when the RAM is the game's (the object pass); NULL on the
 // read-only validators, which count in c->bg3ctr (seeded from $0D12 = world 0's $0CF0 + $22).
@@ -327,18 +297,16 @@ static int owBg3Drift(CtWorldCam* c, const uint8_t* ram, uint16_t cls, uint8_t* 
     c->pendDx = c->pendDy = 0;                             // 7751-7754 STZ
     return 1;
   }
-  // C2/75CE / C2/7608 `INC $0022,X`: the counter is the BLOCK's, and C2/048A's MVN hands a spawned block its PARENT's
-  // +05..+3F -- so the drift starts at whatever phase the bootstrap's own +22 had when it ran op $35.
+  // C2/75CE / C2/7608 `INC $0022,X`: the counter is the block's, and C2/048A's MVN hands a spawned block its parent's
+  // +05..+3F, so the drift starts at whatever phase the bootstrap's own +22 had when it ran op $35.
   if (ctrW) { uint16_t k = (uint16_t)((ctrW[0] | (ctrW[1] << 8)) + 1); ctrW[0] = (uint8_t)k; ctrW[1] = (uint8_t)(k >> 8);
               c->bg3ctr = (uint8_t)k; }
   else c->bg3ctr++;
   if (cls == 0x75FD) {
     if ((c->bg3ctr & 3) == 0) { c->bg3h--; c->bg3v++; }   // C2/7611-7615
     // C2/7627-7646: `ASL $1BF3 / LDA $7EA916 / ADC $1BF3`, wrapped back into [A925, A9A5) by one 0x80 -- the wave
-    // table's window follows the camera's vertical step, so a band of mist keeps its line offset as it scrolls.
-    // MEASURED, the rule's cartridge (saves/field_re/catedral_world.state, Down 40 / Up 40, --writer): `$A916` A92B ->
-    // A93B over eight 1-px frames down, A975 -> A965 up (C2:764A). The port held the window at A925 and, walking up or
-    // down in 600 A.D., every band of mist changed its offset line by line: the mist ran sideways (user report 2026-10-04).
+    // table's window follows the camera's vertical step, so a band of mist keeps its line offset as it scrolls
+    // (disasm/notes/ow_bg3_animator.md, "The wave's window follows the camera").
     { uint16_t t = (uint16_t)(c->waveTop + 2 * c->pendDy);
       if (t < 0xA925) t = (uint16_t)(t + 0x80);
       else if (t >= 0xA9A5) t = (uint16_t)(t - 0x80);
@@ -359,8 +327,8 @@ static void owBg3Tick(CtWorldCam* c, const uint8_t* ram, uint16_t cls, int dx, i
   c->pendDx = (int16_t)dx; c->pendDy = (int16_t)dy;
 }
 
-// THE PER-LINE BG3 H SCROLL, an HDMA channel 1 to $2111 (DMAP $42, indirect, bank $7E) that two objects rebuild each
-// frame after the drift has moved `$24` (their blocks follow the drift's in the object pass):
+// The per-line BG3 H scroll: HDMA channel 1 to $2111 (DMAP $42, indirect, bank $7E), rebuilt each frame by two
+// objects after the drift has moved `$24` (their blocks follow the drift's in the object pass):
 //   C2/7759 (world 2, block 0CF0 in the attract's 1F2): table `$7E:8A35` = F0 ->$8B56, F0 ->$8C36, 00 -- scanline L
 //     reads the word at $8B56 + 2L; the even lines get `$24` (77B5-77C5), line 2k+1 gets `$24 + S(p + k)`, k = 0..111
 //     (77D3-77EE), p = the word at $0022,X with X left at $01C0 by the loop -- i.e. $7E:01E2 -- which 77CC-77D0
@@ -368,11 +336,8 @@ static void owBg3Tick(CtWorldCam* c, const uint8_t* ram, uint16_t cls, int dx, i
 //   C2/7652 (world 1, block 0D70): table `$7E:A918` = C0 / C0 / C0 / A0 (64 + 64 + 64 + 32 lines), each entry's
 //     address rewritten to $A925 by the NMI (C2/030A-0316), so scanline L reads word L & 63; word k = `$24 +
 //     (S(p + 16k) >> 2)` with the sign kept (76DB-76E4 `ORA #C000`), p = the block's +22, advanced by 1.
-// Both clear the channel ($4A bit 1, `TRB`) while `$1C` bit 7 (forced blank) is set and change nothing while `$0294 &
-// 10`. MEASURED on the oracle (the attract's 1F2 leg, saves/attract_cena_inicial.state from c5800): C2:77B3 arms `$4A`
-// at f5852 and C2:77D3 adds 4 to $01E2 every frame; its isolated BG3's even lines match a plain scroll (dx +4, dy -2 =
-// `$24`/`$2A`'s step) and the odd ones do not -- the wave. World 1's table: saves/ow_w1.live, `$A918..` = C0 25A9 x3,
-// A0 25A9, 00. The port drew every line at the one `$24`.
+// Both clear the channel ($4A bit 1, `TRB`) while `$1C` bit 7 (forced blank) is set and change nothing while
+// `$0294 & 10`. disasm/notes/ow_bg3_animator.md sec. 6.
 static void owBg3WaveTick(CtWorldCam* c, const uint8_t* ram) {
   uint16_t cls = 0;
   for (int b = OWOBJ_BASE; b < OWOBJ_END && !cls; b += OWOBJ_STRIDE) {
@@ -460,9 +425,9 @@ void CtWorldTilemapBuild(CtWorldStream* st, uint8_t* ram, const CtWorldCam* c) {
   // rebuilds leave their direct-page words (owRebuildScratch), the second over the first.
   if (ram) { owRebuildScratch(ram, 0); owRebuildScratch(ram, 1); }
 }
-// The picture's own tilemaps around the camera (the widescreen's sides): the same build, read-only on the RAM.
-// Its columns stand round the camera as the streamed build's (16 tiles left of it of 64) stand, scaled to the wider ring:
-// 48 left of the camera's column, 80 from it on -- the widest picture's side (144 px) and its fine scroll inside.
+// The widescreen's picture-only tilemaps around the camera: the same build, read-only on the RAM. The streamed
+// build keeps 16 of its 64 columns left of the camera; this one keeps 48 of 128 left, enough for the widest
+// side (144 px) and its fine scroll.
 void CtWorldTilemapView(CtWorldStream* st, const uint8_t* ram, const CtWorldCam* c) {
   static uint16_t view[2][CT_WORLD_VIEW_W * 32];
   if (!ram) return;
@@ -509,14 +474,12 @@ static void owStageWrite(CtWorldStream* st, int off, uint16_t w) {
   st->staging[st->stageOff + off] = (uint8_t)w;
   st->staging[st->stageOff + off + 1] = (uint8_t)(w >> 8);
 }
-// THE STREAMING'S RAM, AS THE ROM LEAVES IT. The steppers (C2/0568 / C2/066C and their pixel loops), the writers
-// (C2/0773 / C2/07C2 / C2/0843 / C2/088F with C2/0811 / C2/08DB) and the queues (C2/090D / C2/0961) work through the
-// direct page, write the staged words through `STA ($06),Y` with $06 = $E0 (bank $7E), and append the DMA records to
-// the NMI's one queue at $60 + $5F -- the queue anim op 6 (C2/0F00) appends to and C2/0405 (CtWorldNmiVramQueue)
-// drains. The port delivers the maps through its own list (st->pend), and ALSO keeps every one of those bytes where
-// the ROM keeps them: C3/02DD (the seed) folds $0008 into $0386 when the world's window object calls it later in the
-// same pass (sequence_table.md 11.13) -- MEASURED, the attract's 1F5 leg, seed call 10 reads $0008 = $641F, the column
-// queue's VRAM word (C2/0921).
+// The streaming's RAM as the ROM leaves it. The steppers (C2/0568 / C2/066C), the writers (C2/0773 / 07C2 / 0843 /
+// 088F with C2/0811 / 08DB) and the queues (C2/090D / 0961) work through the direct page, stage words through
+// `STA ($06),Y` with $06 = $E0 (bank $7E) and append DMA records to the NMI queue at $60 + $5F (shared with anim op 6,
+// C2/0F00; drained by C2/0405, CtWorldNmiVramQueue). The port delivers the maps through st->pend and also keeps
+// those RAM bytes: C3/02DD (the seed) folds $0008 into $0386 when the world's window object calls it later in the
+// same pass (disasm/notes/sequence_table.md 11.13).
 static unsigned owRomW(unsigned bankC2off);        // (with g_owRom, below)
 static void owW16r(uint8_t* ram, int a, unsigned v) { ram[a] = (uint8_t)v; ram[a + 1] = (uint8_t)(v >> 8); }
 static unsigned owR16r(const uint8_t* ram, int a) { return (unsigned)(ram[a] | (ram[a + 1] << 8)); }
@@ -527,7 +490,7 @@ static void owStageRam(uint8_t* ram, int y, uint16_t w) {           // `STA ($06
 
 // Column writer C2/0773 (left tile-col: chips +0/+4) / C2/07C2 (right: +2/+6) + queue C2/090D.
 // 30 words into the 64-byte staging slot at offsets ((bgV-8)/8 + k)*2 mod 64; the DMA then
-// uploads the WHOLE slot to VRAM column (pixX/8 mod 64) rows 0-31 (VMAIN 0x81).
+// uploads the whole slot to VRAM column (pixX/8 mod 64) rows 0-31 (VMAIN 0x81).
 static void owStreamCol(CtWorldStream* st, uint8_t* ram, int bg, int mcol, int mrow,
                         int offTop, int offBot, uint16_t vshadow, uint16_t pixX) {
   int gridRow = mrow * 0x60;
@@ -600,7 +563,7 @@ static void owStreamRow(CtWorldStream* st, uint8_t* ram, int bg, int mcolStart, 
   owW16r(ram, 0x04, (unsigned)g4); owW16r(ram, 0x0A, (unsigned)so);
   owW16r(ram, 0x08, (unsigned)phase); owW16r(ram, 0x19, 0);
   int base = (pixY & 0xF8) << 2;                   // row*32 words (mod 32 rows)
-  { // C2/0961: $08 = the word (+ $16), $0A = $08 + $400; TWO records (the two screens), VMAIN $80, $40 bytes each
+  { // C2/0961: $08 = the word (+ $16), $0A = $08 + $400; two records (the two screens), VMAIN $80, $40 bytes each
     unsigned w0 = ((unsigned)base + owR16r(ram, 0x16)) & 0xFFFF, w1 = (w0 + 0x400) & 0xFFFF;
     owW16r(ram, 0x08, w0); owW16r(ram, 0x0A, w1);
     uint8_t x = ram[0x5F];
@@ -735,63 +698,32 @@ static void obIntegrate(uint8_t* B) {               // C2/0F38 both axes + world
   obAdd32(B + OWOBJ_YFRAC, B + OWOBJ_YPOS, obW(B + OWOBJ_VELYF), obW(B + OWOBJ_VELYI));
   obWrapWorld(B);
 }
-// C2/0E1D -- the ANIM SUB-VM, ported (this used to be a free-running "flap counter" approximation).
-// The interpreter itself (C2/0E1D-0E49): $52/$54 = a long pointer built from the object's own
-// +0B/+0C (script) and +0D (bank); fetch the opcode byte, dispatch through the 8-entry table at
-// C2/0E4A, and use the handler's RETURN VALUE as the number of bytes to ADVANCE -- a returned ZERO
-// stops the pass and PARKS the pointer on that opcode (that is how a frame is held across frames).
-// The advanced pointer is written back to +0B on exit.
-//
-// The eight handlers, byte-for-byte:
-//   0 (0E5A) len 2: object byte at [operand] := 0        (TDC / STA ($4E),Y)
-//   1 (0E6B) len 2: object byte at [operand] += 1
-//   2 (0E7E) len 2: object byte at [operand] -= 1
-//   3 (0E91) len = the operand SIGN-EXTENDED (BIT #$0080 / ORA #FF00) -> a relative JUMP; the
-//            interpreter's `CLC / ADC $52` makes a negative value loop the sequence
-//   4 (0EA3) len 4: SHOW A FRAME. +0F bit6 set = HOLD (park, return 0). Else if the dwell +0E is 0
-//            it is LOADED from the operand at +3 and the op parks; each later visit DECs it and
-//            parks; when the DEC reaches 0 the op returns 4 and the script advances. The frame
-//            itself is the 16-bit param at +1 (a bank-$54 sprite-descriptor pointer staged by
-//            C2/0B53) -- see the render note below.
-//   5 (0EDC) len 2: WAIT -- same dwell protocol as op 4 without staging a frame.
-//   6 (0F00) / 7 (0F35): the particle/child spawners ($5E/$5F staging). Not reached by any sequence
-//            in the C3:E000 table this engine runs (gulls/boats/fair objects use 0/1/3/4 only), so
-//            they PARK here rather than being guessed at -- an unreached op must not be invented.
-//
-// RENDER NOTE: the frame pointer op 4 carries (E1FA/E20E/E213... per gull facing) is the canonical
-// frame identity, and +26 (op 1/0 around the up-stroke) is the sequence's own flip/attr flag. The
-// captured-atlas picker still keys on OWOBJ_ANIMCTR, which is kept ticking for it.
-// ===================== THE PER-FRAME DRAW LIST (C2/0C4D -> C2/0B53 -> C2/0CEA) =====================
-// The ROM does NOT render an object because it holds an anim pointer -- it renders whatever is on the
-// frame's DRAW LIST, and the only thing that puts an object there is the anim sub-VM's op-4 handler:
-//     C2/0EA3  ... 0EC9  LDA $54 / STA $57 / REP #20 / LDY #01 / LDA [$52],Y / STA $55
-//                        JSR $0B53          <- ENQUEUE (the HOLD path and the dwell PARK path)
-//                        TDC / CLC / RTS    <- advance 0 = park on this op
-// (the DEC that expires returns 4 at C2/0EC2 WITHOUT enqueuing -- that frame is over). C2/0B53 unlinks
-// a node from the free list and copies the object's X (+14), Y (+18), attr (+0F), tile base (+10) and
-// the descriptor pointer ($55) into it, Y-sorted; C2/032B empties the list every frame (C2/0C4D: head
-// $B500 self-linked, the 64 nodes at $B000 re-threaded from the $B400 template) and C2/0336 drains it
-// into the OAM shadow (C2/0CEA -> the decoder C2/0D08).
-//
-// So VISIBILITY == "did this object's anim sub-VM run this frame". A script yielding on op 0x38 waits
-// WITHOUT the C2/0E1D tick (op 0x39 is the same wait WITH it -- C2/188E's extra `JSR C2/0E1D`), so it
-// enqueues nothing and emits no OAM, while its +0B pointer keeps naming a perfectly good frame.
-// This port kept only the pointer, so every ambient object drew on every frame. Measured on the oracle
-// (--peek saves/ow_w0.state): walking, the era-placard block $0D30 is pc=$06A3 anim=$F836 and its three
-// OAM entries are ABSENT; after 200 idle frames it is pc=$069E, anim=$F836 UNCHANGED, and OAM carries
-// $1AC@252 $1A6@12 $18A@28. Nothing in the block distinguishes the two -- only the enqueue does.
-//
-// The port keeps the enqueue's RESULT per block rather than the linked list: the renderer reads the
-// object's live position out of the block it is already walking (same frame, same values the node
-// snapshots), so what the list adds is the visibility gate and the descriptor. The list ORDER (the
-// Y-sort at C2/0B98) is not reproduced -- this host has its own draw order and no OAM table.
+// C2/0E1D -- the anim sub-VM. $52/$54 = a long pointer from the object's +0B/+0C (script) and +0D (bank);
+// each opcode dispatches through the 8-entry table at C2/0E4A and the handler returns the bytes to advance.
+// A return of 0 parks the pointer on that opcode (how a frame is held); the pointer is written back to +0B.
+//   0 (0E5A) len 2: object byte at [operand] := 0;  1 (0E6B) += 1;  2 (0E7E) -= 1
+//   3 (0E91) len = the operand sign-extended: a relative jump (negative loops the sequence)
+//   4 (0EA3) len 4: show a frame (the descriptor at +1). +0F bit 6 = hold (park). Else a zero dwell +0E is
+//            loaded from +3 and the op parks; later visits DEC it and park; the DEC that reaches 0 advances.
+//   5 (0EDC) len 2: wait, the same dwell protocol without a frame.
+//   6 (0F00) len 8: queue a VRAM upload for the NMI.  7 (0F35): unreached by the C3:E000 sequences; parks.
+// disasm/notes/ow_objvm.md has the table.
+
+// ---- The per-frame draw list (C2/0C4D -> C2/0B53 -> C2/0CEA) ----
+// The ROM draws whatever is on the frame's draw list, and only op 4 puts an object there: every path that
+// parks at C2/0EC9 calls C2/0B53 (enqueue); the expiring DEC (C2/0EC2) does not. C2/0B53 copies the object's
+// X (+14), Y (+18), attr (+0F), tile base (+10) and descriptor into a free node and sorts it in (C2/0B98);
+// C2/032B empties the list every frame and C2/0336 drains it into the OAM shadow (C2/0CEA -> decoder C2/0D08).
+// So an object is visible iff its anim sub-VM ran this frame (op 0x38 waits without the C2/0E1D tick, op 0x39
+// with it). disasm/notes/ow_placard_draw_list.md.
+// The port keeps both the per-block result (g_owShown, the visibility gate) and the list itself in WRAM,
+// since its order is the OAM order (which sprite is in front).
 #define OW_DRAWLIST_N  ((OWOBJ_END - OWOBJ_BASE) / OWOBJ_STRIDE)
 static uint16_t g_owShownDesc[OW_DRAWLIST_N];   // the descriptor each block enqueued this frame
 static uint8_t  g_owShown[OW_DRAWLIST_N];       // 1 = on the list this frame
-// ⭐ ...and the list ITSELF, in WRAM where the ROM keeps it, because its ORDER is the OAM order and the OAM order
-// is which sprite is in front. 64 nodes of 16 bytes at $7E:B000 -- +00 prev, +02 next, +04 X, +06 Y, +08 attr
-// (the block's +0F), +09 tile base (+10, a word), +0B descriptor (a word), +0D its bank -- the head at $B500
-// (self-linked when empty), the free list at $B504, and at $B400 the prev/next TEMPLATE the reset copies back.
+// The list: 64 nodes of 16 bytes at $7E:B000 -- +00 prev, +02 next, +04 X, +06 Y, +08 attr (the block's +0F),
+// +09 tile base (+10, a word), +0B descriptor (a word), +0D its bank. Head at $B500 (self-linked when empty),
+// free list at $B504, and at $B400 the prev/next template the reset copies back.
 #define OWL_HEAD 0xB500
 #define OWL_FREE 0xB504
 static uint16_t owlW(const uint8_t* ram, uint16_t a) { return (uint16_t)(ram[a] | (ram[a + 1] << 8)); }
@@ -841,10 +773,10 @@ static void owDrawListEnqueue(uint8_t* ram, const uint8_t* B, uint16_t desc) {  
   owlPut(ram, (uint16_t)(x + 0x09), (uint16_t)(B[0x10] | (B[0x11] << 8)));
   ram[x + 0x0D] = B[OWOBJ_ANIMBK];                         // 0B8D LDA $57 -- the anim bank C2/0EC9 staged
   ram[x + 0x08] = B[OWOBJ_ATTR];                           // 0B92
-  // 0B98: where it goes. Attr bit 0 = a FRONT node: after the other front nodes, before everything else.
-  // Otherwise a set bit 7 of the tile base's high byte sends it to the TAIL; the rest are kept in DESCENDING Y
+  // 0B98: where it goes. Attr bit 0 = a front node: after the other front nodes, before everything else.
+  // Otherwise bit 7 of the tile base's high byte sends it to the tail; the rest are kept in descending Y
   // (the later of two equal Ys goes behind), skipping front nodes.
-  // (the ROM's walks are unbounded; a corrupted list would hang the cartridge -- here they stop after the 64 nodes)
+  // (The ROM's walks are unbounded; here they stop after the 64 nodes.)
   y = OWL_HEAD;
   if (ram[x + 0x08] & 0x01) {
     for (int g = 0; g < 64; g++) { y = owlW(ram, (uint16_t)(y + 2)); if (y == OWL_HEAD || !(owlW(ram, (uint16_t)(y + 8)) & 1)) break; }
@@ -867,28 +799,25 @@ static void owDrawListEnqueue(uint8_t* ram, const uint8_t* B, uint16_t desc) {  
   owlPut(ram, y, x);
 }
 
-// ===================== THE OAM SHADOW (C2/034D, C2/0CEA -> C2/0D08) =====================
+// ---- The OAM shadow (C2/034D, C2/0CEA -> C2/0D08) ----
 // C2/032E `STZ $4D` and C2/0330 `JSR C2/034D` park every OAM entry (Y = $E0, high table 0); after the object pass
-// C2/0336 `JSR C2/0CEA` walks the list from the head and C2/0D08 decodes each node's descriptor into entries at
-// $7E:0700 + 4*$4D: a descriptor is [count] then count x {s8 dX, s8 dY, word2}; the sprite is at the node's X/Y plus
-// dX/dY -- minus the BG2 scroll ($22/$28, wrapped into -$300..$2FF / -$200..$1FF on the $600 x $400 torus) when attr
-// bit 7 says the object lives in world coordinates -- and is dropped when it is not inside x -15..255, y -15..223.
-// The OAM word is word2 + the tile base, OR the attr's bits 1-5 (palette, priority) as the high byte's; the high
-// table gets the X's bit 8 and the size, which is attr+tile-base bit 14 (the tile base's high byte, bit 6).
-// The next NMI DMAs the whole $0220 bytes to OAM (C2/0184), so the screen always shows the PREVIOUS frame's build.
-// THE DIRECT PAGE IT LEAVES. The decoder's working words are scratch, but the NEXT reader of one is not the decoder: C3/02DD
-// (the seed) folds $0008 into $0386 when the field's window wipe runs after the world (16E, the attract), so they are
-// written here as the ROM writes them (all sixteen-bit but $00/$13/$16/$57, and in its order -- `STA $09` overwrites the
-// high byte `STA $08` put there, and `LSR $05` halves the X's high byte `STA $04` left).
+// C2/0336 `JSR C2/0CEA` walks the list and C2/0D08 decodes each node's descriptor into entries at $7E:0700 + 4*$4D.
+// A descriptor is [count] then count x {s8 dX, s8 dY, word2}; the sprite is at the node's X/Y plus dX/dY, minus the
+// BG2 scroll ($22/$28, wrapped into -$300..$2FF / -$200..$1FF) when attr bit 7 marks world coordinates, and is dropped
+// outside x -15..255, y -15..223. The OAM word is word2 + the tile base, OR the attr's bits 1-5 (palette, priority) in
+// the high byte; the high table gets X bit 8 and the size (the tile base's high byte, bit 6).
+// The next NMI DMAs the $0220 bytes to OAM (C2/0184), so the screen shows the previous frame's build.
+// The decoder's direct-page words are written as the ROM writes them (16-bit except $00/$13/$16/$57, in its order):
+// C3/02DD (the seed) folds $0008 into $0386 when the field's window wipe runs after the world (16E, the attract).
 static void owW16s(uint8_t* ram, int a, unsigned v) { ram[a] = (uint8_t)v; ram[a + 1] = (uint8_t)(v >> 8); }
 static int g_owOamKey[128];
 static int16_t g_owOamPos[128][2];
 const int16_t* CtWorldOamObjPos(void) { return &g_owOamPos[0][0]; }
 static CtWorldPiece g_owWide[CT_OW_WIDE_MAX];
 static int g_owWideN;
-// THE WIDESCREEN'S GHOSTS (a mod, the picture only: field.c owGhosts). Each block the build drew, as it stood when drawn, and
-// whether its script stood on op 0x31 (move + animate): a gull's whole flight is `31 01 / 34 A1 78 / 23 00 00 FB` -- a step
-// of its 16.16 velocity and of its anim sub-VM a frame, until C2/78A1 finds it off the view and the script ends it.
+// The widescreen mod's ghosts (picture only, field.c owGhosts): each block the build drew, as it stood when drawn, and
+// whether its script stood on op 0x31 (move + animate). A gull's flight is `31 01 / 34 A1 78 / 23 00 00 FB`: one step of
+// its velocity and anim sub-VM a frame, until C2/78A1 finds it off the view and the script ends it.
 static uint8_t g_owWideBlk[64][OWOBJ_STRIDE];
 static uint8_t g_owWideFlies[64];
 static const uint8_t* obScript(const uint8_t* ram, uint8_t bank, uint16_t pc, uint8_t* buf);
@@ -1025,10 +954,9 @@ static int obAnimRun(uint8_t* ram, uint8_t* B, int live) {   // C2/0E1D
   B[OWOBJ_ANIMCTR]++;                                      // (kept: the captured-atlas frame picker reads it)
   uint16_t pc = obW(B + OWOBJ_ANIM);
   if (!pc || !B[OWOBJ_ANIMBK]) return -1;                  // no sequence installed (op 0x30 sets both)
-  // ⚠ STILL 64 HERE, ON PURPOSE. This is the ANIM sub-VM (C2/0E1D), a different dispatcher from
-  // obRun's, and its loop was never measured -- only obRun's was (C2/0F73). Lifting a budget on the
-  // strength of a neighbour's derivation is exactly the kind of guess the mandate forbids.
-  for (int guard = 0; guard < 64; guard++) {               // (the ROM loops until a handler returns 0)
+  // The ROM loops until a handler returns 0; 64 is the port's guard. Only obRun's loop (C2/0F73) has a
+  // derived budget, so this one is not raised on its account.
+  for (int guard = 0; guard < 64; guard++) {
     const uint8_t* op = owAnimPtr(live ? ram : NULL, B[OWOBJ_ANIMBK], pc);
     if (!op) break;
     int adv;
@@ -1037,11 +965,10 @@ static int obAnimRun(uint8_t* ram, uint8_t* B, int live) {   // C2/0E1D
       case 0x01: B[op[1] & 0x3F]++; adv = 2; break;                         // C2/0E6B
       case 0x02: B[op[1] & 0x3F]--; adv = 2; break;                         // C2/0E7E
       case 0x03: adv = (int8_t)op[1]; break;                                // C2/0E91 (signed jump)
-      case 0x04:                                                            // C2/0EA3 SHOW FRAME
-        // Every path that PARKS here (adv 0) falls through C2/0EC9 and `JSR C2/0B53` -- the enqueue
-        // onto this frame's draw list, which IS the object's visibility. The DEC that reaches 0
-        // returns 4 at C2/0EC2 first and enqueues NOTHING.
-        if (B[OWOBJ_ATTR] & 0x40) { adv = 0; }                              // 0EAA BIT #40 -> HOLD
+      case 0x04:                                                            // C2/0EA3 show frame
+        // Every path that parks (adv 0) reaches C2/0EC9 `JSR C2/0B53`, the enqueue; the DEC that reaches 0
+        // returns 4 at C2/0EC2 without enqueuing.
+        if (B[OWOBJ_ATTR] & 0x40) { adv = 0; }                              // 0EAA BIT #40 -> hold
         else if (B[OWOBJ_DWELL] == 0) { B[OWOBJ_DWELL] = op[3]; adv = 0; }  // 0EB3 load from +3
         else adv = (--B[OWOBJ_DWELL] == 0) ? 4 : 0;                         // 0EBD DEC / 0EC4 len 4
         if (adv == 0) { shown = op[1] | (op[2] << 8);
@@ -1051,12 +978,10 @@ static int obAnimRun(uint8_t* ram, uint8_t* B, int live) {   // C2/0E1D
         if (B[OWOBJ_DWELL] == 0) { B[OWOBJ_DWELL] = op[1]; adv = 0; break; }
         adv = (--B[OWOBJ_DWELL] == 0) ? 2 : 0;
         break;
-      case 0x06: {                                                          // C2/0F00: QUEUE A VRAM UPLOAD for the NMI
-        // `SEP #30 / LDX $5F / INC $5E / LDA [$52],1 -> $62,X (bank) / LDA #80 -> $67,X (VMAIN) / REP #20 / [$52],2 ->
-        // $60,X (source) / [$52],4 -> $63,X (VRAM word) / [$52],6 -> $65,X (bytes) / $5F += 8 / STZ $5E / LDA #0008`.
-        // C2/0405 (CtWorldNmiVramQueue) DMAs the queue at the next NMI. The attract 1F0's Epoch starts its anim
-        // ($1E -> C3:E582) with it: `$7E:C940` (the loader's C2/27BC packet) to VRAM word $1800. Parking here left
-        // the Epoch invisible and its trail drawing tiles $180.. that never arrived.
+      case 0x06: {                                                          // C2/0F00: queue a VRAM upload for the NMI
+        // One record at $60 + $5F: [+1] bank -> $62, VMAIN $80 -> $67, [+2] source -> $60, [+4] VRAM word -> $63,
+        // [+6] bytes -> $65; $5F += 8. C2/0405 (CtWorldNmiVramQueue) DMAs it at the next NMI. The attract 1F0's
+        // Epoch starts its anim ($1E -> C3:E582) with it ($7E:C940 to VRAM word $1800).
         if (!live) { adv = 8; break; }
         uint8_t x = ram[0x5F];
         ram[0x5E]++;
@@ -1078,19 +1003,17 @@ static int obAnimRun(uint8_t* ram, uint8_t* B, int live) {   // C2/0E1D
   return shown;
 }
 static void obAnimTick(uint8_t* ram, uint8_t* B) { obAnimRun(ram, B, 1); }
-// The CURRENT frame of an object's anim sub-VM, decoded from the ROM descriptor its +0B parks on.
-// The descriptor format is the decoder C2/0D08's: [u8 pieceCount] then pieceCount x 4 bytes
-// { s8 dX, s8 dY, u16 word2 }, where word2 bits0-8 are the tile NAME (added to the object's own
-// tile base $10 by C2/0DBE), bits9-13 the palette/priority (zero in ROM data, OR'd in from the
-// object's +0F attr), bit14 H-flip and bit15 V-flip. Returns the piece count (0 = the pointer is
-// not parked on an op-4 "show frame", e.g. mid-wait), and fills piece 0 -- the whole sprite for the
-// 1-piece objects (gulls) whose render anchor this replaces.
+// The current frame of an object's anim sub-VM, decoded from the ROM descriptor its +0B parks on.
+// The format is C2/0D08's: [u8 pieceCount] then pieceCount x { s8 dX, s8 dY, u16 word2 }; word2 bits 0-8
+// are the tile name (added to the tile base +10 by C2/0DBE), bits 9-13 palette/priority (zero in ROM data,
+// OR'd from the attr +0F), bit 14 H-flip, bit 15 V-flip. Returns the piece count (0 = not parked on op 4)
+// and fills piece 0.
 int CtWorldAnimDesc(const uint8_t* B) {
   const uint8_t* op = ctWorldAnimRom(B[OWOBJ_ANIMBK], obW(B + OWOBJ_ANIM));
   if (!op || op[0] != 0x04) return -1;
   return op[1] | (op[2] << 8);
 }
-// A descriptor by ADDRESS (bank $C3), for a consumer that holds a pointer the block has already moved
+// A descriptor by address (bank $C3), for a consumer that holds a pointer the block has already moved
 // past -- the lead's draw is one OAM DMA behind the block (see CtWorldLeadAnimFrame).
 int CtWorldAnimDescPiece(int desc, int piece, int* dx, int* dy, int* name, int* flip) {
   if (dx) *dx = 0; if (dy) *dy = 0; if (name) *name = 0; if (flip) *flip = 0;
@@ -1109,35 +1032,21 @@ int CtWorldAnimDescPiece(int desc, int piece, int* dx, int* dy, int* name, int* 
   return n;
 }
 
-// ===================== THE LEAD BLOCK'S OWN ANIMATION (C2/3404 -> C2/1CDA -> C2/0E1D) =====================
-// The overworld player's pose is carried by the LEAD block itself -- the 0x40-byte object whose handler
-// word is $3404 (pointer $7E:004E; $0D70 on world 0, $0DF0 on world 1) -- through the same +0B/+0C/+0D
-// anim sub-VM pointer every ambient object has, installed by C2/1CDA (`REP #20 / AND #00FF / ASL A / TAX /
-// LDA $C3E000,X / LDX $4E / STA $000B,X / SEP #20 / LDA #C3 / STA $000D,X / STZ $000E,X`) from exactly
-// five sites of the interactive lead path ($0280 == 0):
+// ---- The lead block's animation (C2/3404 -> C2/1CDA -> C2/0E1D) ----
+// The player's pose is carried by the lead block (handler word $3404; $0D70 on world 0, $0DF0 on world 1)
+// through the same +0B/+0C/+0D anim pointer every ambient object has, installed by C2/1CDA ($C3:E000[id],
+// bank $C3, dwell 0) from five sites of the interactive lead path ($0280 == 0):
 //   C2/3549  init (phase 0, C2/34F8): +0F := $A8 (or $B8 when $0100 == $01F5), +10 := 0, +26 := 0,
-//            +28 := $0104 & 3 (the arrival facing), then the STAND id;
-//   C2/35D7  every no-input frame while $02B1 < $F0: the STAND id again (its script is a single
-//            `04 desc 00` = dwell 0 = held forever; the re-install's STZ +0E is invisible);
-//   C2/35CD  once, on the frame $02B1 reaches $F0 (240 no-input frames): id $A2, the fidget; $02B1 then
-//            parks at $FE (35D0) so the stand re-install stops and the fidget loop runs free;
-//   C2/3694  the frame a d-pad direction is pressed at an 8px boundary -- unless (+28 & $7F) == dir AND
-//            +28 bit 7 (already walking that way: the walk cycle continues across steps, C2/362A-3630):
-//            the WALK id, after +28 := $80 | dir;
-//   C2/36DF  the same frame, when the step is BLOCKED (C2/39C3 on the target's corner props): +28 &= $7F
-//            and the STAND id again -- so a press into a wall ends the frame on the stand id.
-// STAND id = C2:39AA[facing] = {Up 03, Down 00, Left 06, Right 09}; WALK id = C2:397F[facing*2 + (+26 & 1)]
-// = {Up 04/05, Down 01/02, Left 07/08, Right 0A/0B}; both +$0C when the lead character $7E2980 is 6 (Magus,
-// ids $0C-$17 = the same shape on its own descriptors). The walk scripts INC/ZERO +26 around their two legs
-// (`01 26 | leg A 8f | stand 8f | 00 26 | leg B 8f | stand 8f | 03 EC`), which is what makes the NEXT walk
-// start on the other leg. The tick is the ordinary C2/0E1D interpreter (obAnimTick), run once per frame by
-// the lead handler on every path (35E0 idle, 36E2 blocked, 3731 moving -- after C2/0F38 moved the position).
-// A non-interactive module state ($027C != 1: C2/356A) runs only the tick.
-// Measured on saves/ow_w0.state (--monitor 7E0D7B:2,7E0D7E:1): idle E14C held; Left held: E18A f11 / E18E
-// f19 / E194 f27 / E198 f35 / E18A f43, release -> E184; Right into the coast: E1A4 dwell 8 then E19E held;
-// the fidget at f75 ($02B1 $A5 -> $F0): E1B8/E1BC/E1C0/E1C4 (8f each) E1C8 (24f) looping.
-// Dossier: disasm/notes/ow_player_sprite.md (rewritten 2026-09-05; commit 99ac511 had taken the coastal
-// BOAT block $0F30 for the player).
+//            +28 := $0104 & 3 (the arrival facing), then the stand id;
+//   C2/35D7  every no-input frame while $02B1 < $F0: the stand id again (a single `04 desc 00`, held);
+//   C2/35CD  once, when $02B1 reaches $F0 (240 idle frames): id $A2, the fidget; $02B1 then parks at $FE;
+//   C2/3694  a d-pad press at an 8 px boundary, unless already walking that way ((+28 & $7F) == dir and
+//            +28 bit 7, C2/362A-3630): +28 := $80 | dir, the walk id;
+//   C2/36DF  the same frame, when the step is blocked (C2/39C3): +28 &= $7F and the stand id again.
+// Stand id = C2:39AA[facing] = {Up 03, Down 00, Left 06, Right 09}; walk id = C2:397F[facing*2 + (+26 & 1)];
+// both +$0C when the lead character $7E2980 is 6 (Magus). The walk scripts toggle +26 around their two legs, so
+// the next walk starts on the other leg. The tick (C2/0E1D, obAnimTick) runs once per frame on every path;
+// a non-interactive module state ($027C != 1, C2/356A) runs only the tick. disasm/notes/ow_player_sprite.md.
 static const uint8_t kLeadStandId[4] = { 0x03, 0x00, 0x06, 0x09 };                        // C2:39AA
 static const uint8_t kLeadWalkId[8]  = { 0x04, 0x05, 0x01, 0x02, 0x07, 0x08, 0x0A, 0x0B };  // C2:397F
 static void leadInstall(uint8_t* B, unsigned id) {                     // C2/1CDA
@@ -1145,12 +1054,9 @@ static void leadInstall(uint8_t* B, unsigned id) {                     // C2/1CD
   B[OWOBJ_ANIMBK] = 0xC3;                                              // 1CEB LDA #C3 / STA $000D,X
   B[OWOBJ_DWELL] = 0;                                                  // 1CF0 STZ $000E,X
 }
-// ⭐ Is there a lead PC on this overworld AT ALL? On the cartridge the player IS an object --
-// class $3404, spawned by the world's own bootstrap on its INTERACTIVE branch -- so a CUTSCENE
-// entry has no such block: the attract's world-5 leg holds $0F63 (a script object) at $0DB0
-// where interactive play holds $3404, and its mover reads (0,0) (sequence_table.md 9.14).
-// ⚠ CtWorldLeadBlock below FALLS BACK to $0D70 when none is tagged, which is right for asking
-// "where would the mover seed read" and wrong for "is there a player". Ask this instead.
+// Is there a player object on this overworld? The player is class $3404, spawned by the world's bootstrap on
+// its interactive branch only, so a cutscene entry has none (disasm/notes/sequence_table.md 9.14).
+// Note: CtWorldLeadBlock falls back to $0D70 when none is tagged; use this to ask "is there a player".
 int CtWorldHasObjClass(const uint8_t* ram, uint16_t cls) {
   for (int b = OWOBJ_BASE; b < OWOBJ_END; b += OWOBJ_STRIDE)
     if ((ram[b] | (ram[b + 1] << 8)) == cls) return 1;
@@ -1159,8 +1065,8 @@ int CtWorldHasObjClass(const uint8_t* ram, uint16_t cls) {
 int CtWorldHasLead(const uint8_t* ram) { return CtWorldHasObjClass(ram, 0x3404); }
 
 int CtWorldLeadBlock(const uint8_t* ram) {
-  // By HANDLER WORD, never by $4E: $4E is only the object-pass cursor (frame-end values $10B0/$7010 on world 0,
-  // $1170 on world 1 -- measured), and the ROM's own C2/3404 addresses the lead through it only while it runs.
+  // By handler word, not by $4E: $4E is only the object-pass cursor, and C2/3404 addresses the lead through it
+  // only while it runs.
   for (int b = OWOBJ_BASE; b < OWOBJ_END; b += OWOBJ_STRIDE)
     if ((ram[b] | (ram[b + 1] << 8)) == 0x3404) return b;
   return 0x0D70;                    // world 0's block, and where the mover seed reads ($0D84/$0D88) when none is tagged
@@ -1176,7 +1082,7 @@ void CtWorldLeadAnimFrame(uint8_t* ram, int dir, int phaseBefore, int blocked, i
     if (dir < 0) {                                                     // C2/35B3, no button at all
       B[0x28] &= 0x7F;                                                 // 35B5-35BA
       uint8_t c = (uint8_t)(ram[0x02B1] + 1); ram[0x02B1] = c;         // 35BD INC $02B1
-      if (c < 0xF0) leadInstall(B, kLeadStandId[B[0x28] & 3] + magus); // 35C3 BCC ->35D7: the STAND, every idle frame
+      if (c < 0xF0) leadInstall(B, kLeadStandId[B[0x28] & 3] + magus); // 35C3 BCC ->35D7: the stand, every idle frame
       else { if (c != 0xFF) leadInstall(B, 0xA2); ram[0x02B1] = 0xFE; } // 35C7-35D5: the fidget once, then park at $FE
     } else {
       int cur = B[0x28];
@@ -1185,16 +1091,13 @@ void CtWorldLeadAnimFrame(uint8_t* ram, int dir, int phaseBefore, int blocked, i
         leadInstall(B, kLeadWalkId[dir * 2 + (B[0x26] & 1)] + magus);  // 3694 JSR C2/3953
       }
       ram[0x02B1] = 0;                                                 // 3697 STZ $02B1
-      if (blocked) {                                                   // C2/36B6 (C2/39C3 returned CARRY SET:
-        B[0x28] &= 0x7F;                                               //  the step was REFUSED -- no STZ $1BF7)
+      if (blocked) {                                                   // C2/36B6 (C2/39C3 returned carry set:
+        B[0x28] &= 0x7F;                                               //  the step was refused -- no STZ $1BF7)
         leadInstall(B, kLeadStandId[B[0x28] & 3] + magus);             // 36DF JSR C2/3987
       } else {
-        // 36B4 BCC ->36E7: the step WAS issued, and only then does the ROM zero $1BF7 -- the counter
-        // the world's own placard script ramps (op 0x11 at C2/12A1) and gates its SHOW arm on at $78.
-        // A refused press does NOT reset it, which is why walking into a cliff still surfaces the
-        // placard. Measured: `--monitor 7E1BF7:1 --from saves/ow_w0.state --btnscript 40:80,0:160
-        // --diff --writer` -> zeroed by C2:36EA at f1, f9, f17, f25, f33 (the 8-frame step cadence)
-        // and INC'd by C2:12A1 on every frame in between, so it never reaches $78 while walking.
+        // 36B4 BCC ->36E7: only an issued step zeroes $1BF7, the counter the placard script ramps (op 0x11,
+        // C2/12A1) and shows itself at $78. A refused press does not reset it, so walking into a cliff still
+        // brings the placard up (disasm/notes/ow_placard_draw_list.md sec. 4).
         ram[0x1BF7] = 0;                                               // 36E7 STZ $1BF7
       }
     }
@@ -1211,14 +1114,10 @@ static void leadInit(uint8_t* ram, uint8_t* B) {
     B[OWOBJ_ATTR] = (loc == 0x01F5) ? 0xB8 : 0xA8;                     // 34FD LDY $0100 / CPY #01F5 / LDA #A8|#B8 / STA $000F,X
     B[0x10] = 0; B[0x11] = 0;                                          // 350B STZ $0010,X (tile base 0, 16x16)
     B[0x26] = 0;                                                       // 353A STZ $0026,X
-    // 3533 LDA $0104 / AND #03 / STA $0028,X -- the ARRIVAL byte the location commit (C0/0CBC) copied from the exit's
-    // $0116, not the host's own facing: `facingInit` was the host's wd.pfac, which worldInit seeds to 1 (down) and which
-    // follows +28 only after this init. MEASURED (the user, 2026-10-07: "when leaving the ticket office in porre, crono is
-    // facing a different direction"): loc 038's one exit, ROM record E5:06DA `34 2E 01 F0 07 32 77`, stages $0116 =
-    // ((07 >> 1) & 0F) = 03; the cartridge's save on the map reads $0104 = 03, +28 = 03, the right stand E19E; the port
-    // committed $0104 = 03 and then drew Crono facing down (+28 = 01, E14C) and wrote 01 back into $0104.
+    // 3533 LDA $0104 / AND #03 / STA $0028,X -- the arrival byte the location commit (C0/0CBC) copied from the exit's
+    // $0116, not the host's facing (`facingInit` is unused: the host's facing follows +28 only after this init).
     B[0x28] = (uint8_t)(ram[0x0104] & 3);
-    // 353B STZ $1B5A / 3540 JSR C2/391C: the lead's TRAIL ring (16 words of X at $1B5B, of Y at $1B7B, cursor $1B5A)
+    // 353B STZ $1B5A / 3540 JSR C2/391C: the lead's trail ring (16 words of X at $1B5B, of Y at $1B7B, cursor $1B5A)
     // starts empty -- every entry the arrival point, `LDA $0283 / STA $1B5B,X / LDA $0285 / STA $1B7B,X` x 16. The init
     // put that point in the block first (3515-351E `LDA $0283 / STA $0014,X`), so the block's position is it.
     ram[0x1B5A] = 0;
@@ -1233,7 +1132,7 @@ static void leadInit(uint8_t* ram, uint8_t* B) {
   owDactylProps(ram, B, obW(B + OWOBJ_XPOS), obW(B + OWOBJ_YPOS));
   if ((obW(B + 0x22) & 0x0404) == 0x0404) ram[0x0282] |= 0x03;
 }
-// C2/3934 -- the lead's arrival PUSH onto its trail ring, `JSR C2/3934` at C2/3757: once per completed 8-px step
+// C2/3934 -- the lead's arrival push onto its trail ring, `JSR C2/3934` at C2/3757: once per completed 8-px step
 // (the frame the lead's position equals its step target +2A/+2C, C2/3745-3755), before anything else in the pass reads it.
 //   3934 LDA $1B5A / AND #00FF / TAY / LDA $0014,X / STA $1B5B,Y / LDA $0018,X / STA $1B7B,Y
 //   3947 INY / INY / TYA / AND #001F / SEP #20 / STA $1B5A
@@ -1255,17 +1154,15 @@ void CtWorldLeadArrive(uint8_t* ram) {
   else ram[0x0282] &= (uint8_t)~0x02;
 }
 
-// ===================== THE PARTY FOLLOWERS (class $3AE2, C2/3AE2) =====================
-// The overworld's party members 2 and 3 are objects of their own: the world's bootstrap allocates two blocks of class
-// $3AE2 with +24 = the party SLOT (1, 2) -- $0E30 / $0E70 on world 1 after the cathedral (saves/field_re/
-// catedral_world.state: Crono at (B8,118), Lucca's block at (C8,118), the third block idle). Each one walks the lead's
-// TRAIL: the ring of the lead's last 16 step arrivals (C2/3934 above), slot 1 one entry behind the newest, slot 2 two.
-// The handler, mode `$0280 == 0` and module `$027E == 0` (the only ones this port reaches -- it pins $027E to 0):
+// ---- The party followers (class $3AE2, C2/3AE2) ----
+// Party members 2 and 3 are objects of their own: the bootstrap allocates two blocks of class $3AE2 with +24 = the
+// party slot (1, 2). Each walks the lead's trail ring (C2/3934 above), slot 1 one entry behind the newest, slot 2 two.
+// The handler, for mode `$0280 == 0` and module `$027E == 0` (the only ones the port reaches; it pins $027E to 0):
 //   3AE2  `LDA $0024,X / TAX / LDA $7E2980,X / BPL`: an empty slot returns CLC (nothing drawn)
 //   3AEF  $027E != $027F or $0280 != $0281 -> phase := 0;  3B07 `JMP ($3B0F,X)` on $027E (0 -> 3B1B; 1-3 -> CLC)
-//   3B1B  $027C not 0/1 (a fade, the menu, a ride) -> +28 &= $7F, the STAND id (C2/3987), the tick (C2/0E1D), CLC
+//   3B1B  $027C not 0/1 (a fade, the menu, a ride) -> +28 &= $7F, the stand id (C2/3987), the tick (C2/0E1D), CLC
 //   3B44  `JMP ($3B58,X)` on $0280 * 8 + phase * 2: 3BC2 init / 3C39 decide / 3CDA horizontal / 3D3B vertical
-// The anim ids are the LEAD's (C2/3987 STAND, C2/3953 WALK, +$0C for Magus); the block's own +10 tile base ($20 slot
+// The anim ids are the lead's (C2/3987 stand, C2/3953 walk, +$0C for Magus); the block's own +10 tile base ($20 slot
 // 1, $40 slot 2) and palette ($0A / $0C) make them that member. Dossier: disasm/notes/ow_party_followers.md.
 static void folStand(uint8_t* ram, uint8_t* B) {                       // C2/416C -> C2/3987
   B[0x28] &= 0x7F;                                                     // 416E LDA $0028,X / AND #7F / STA
@@ -1306,14 +1203,14 @@ static void folRingTarget(uint8_t* ram, uint8_t* B) {                  // C2/3F6
   obPutW(B + 0x2A, obW(ram + 0x1B5B + i));
   obPutW(B + 0x2C, obW(ram + 0x1B7B + i));
 }
-// C2/3EE1 (slot 1, +-$10) and C2/3F27 (slot 2, +-$20): is the LEAD ($0283/$0285) inside the box [p - r, p + r + 1)
+// C2/3EE1 (slot 1, +-$10) and C2/3F27 (slot 2, +-$20): is the lead ($0283/$0285) inside the box [p - r, p + r + 1)
 // around this follower on both axes? 16-bit unsigned compares, as the ROM's CMP / BCC / BCS.
 static int folNearLead(const uint8_t* ram, const uint8_t* B, uint16_t r) {
   uint16_t y = obW(B + OWOBJ_YPOS), x = obW(B + OWOBJ_XPOS);
   uint16_t ly = obW(ram + 0x0285), lx = obW(ram + 0x0283);
   return ly >= (uint16_t)(y - r) && ly < (uint16_t)(y + r + 1) && lx >= (uint16_t)(x - r) && lx < (uint16_t)(x + r + 1);
 }
-// C2/4205: a ROW scan -- every cell from $05 (exclusive) to $07 (inclusive) along row $06 - 1, its prop & 3 a block.
+// C2/4205: a row scan -- every cell from $05 (exclusive) to $07 (inclusive) along row $06 - 1, its prop & 3 a block.
 // 8-bit cell arithmetic, the direction from the sign of the 8-bit difference (4220 BMI). $05 ends on the last cell read.
 static int folScanRow(const uint8_t* ram, uint8_t* x, uint8_t row, uint8_t to) {
   uint8_t r = (uint8_t)(row - 1);                                      // 4217 DEC $06
@@ -1326,7 +1223,7 @@ static int folScanRow(const uint8_t* ram, uint8_t* x, uint8_t row, uint8_t to) {
   } while (*x != to);
   return 0;
 }
-// C2/425A: a COLUMN scan -- every row from $06 - 1 (exclusive) to $07 - 1 (inclusive), the cells at columns $05 - 1 and
+// C2/425A: a column scan -- every row from $06 - 1 (exclusive) to $07 - 1 (inclusive), the cells at columns $05 - 1 and
 // $05 (the first one's prop parked in +22, 4289 / 42B8). $06 ends one row below the last row read (42D5 INC $06).
 static int folScanCol(const uint8_t* ram, uint8_t* B, uint8_t col, uint8_t* y, uint8_t to) {
   uint8_t r = (uint8_t)(*y - 1), end = (uint8_t)(to - 1);             // 426C DEC $06 / 426E DEC $07
@@ -1375,7 +1272,7 @@ static void folDispatchPath(uint8_t* B, int r) {                       // 3FE3 `
 static void folDecidePath(uint8_t* ram, uint8_t* B) {                  // C2/3FBC
   uint8_t x1 = (uint8_t)(obW(B + OWOBJ_XPOS) >> 3), x2 = (uint8_t)(obW(ram + 0x0283) >> 3);
   uint8_t y1 = (uint8_t)(obW(B + OWOBJ_YPOS) >> 3), y2 = (uint8_t)(obW(ram + 0x0285) >> 3);
-  int r = folPaths(ram, B, x1, x2, y1, y2);                            // to the LEAD's cell, not the trail target
+  int r = folPaths(ram, B, x1, x2, y1, y2);                            // to the lead's cell, not the trail target
   if (r != 3) { folDispatchPath(B, r); return; }
   // C2/4060, both blocked: walk the ring back from the newest-but-one entry for a point either path reaches.
   unsigned i = (unsigned)(ram[0x1B5A] - 2) & 0x1F;                     // 4064 LDA $1B5A / DEC A x2 / AND #1F
@@ -1445,7 +1342,7 @@ static void folPhase(uint8_t* ram, uint8_t* B, int ph) {
   }
   obAnimTick(ram, B);                                                  // 3D36 / 3D97 JSR C2/0E1D
 }
-// ===================== BOARDING AND LEAVING A VEHICLE ($027E 4 / 5) =====================
+// ---- Boarding and leaving a vehicle ($027E 4 / 5) ----
 // `$028F` names the vehicle: 2 = the Epoch (record $0290 x, $0292 y, $0294 flags -- bits 0-1 the members aboard, 5 the
 // wings, 6 riding, 7 present), 3 = the other one ($029A / $029C / $029E, only on loc 1F3). C2/3AB1, one more member aboard:
 // `LDA $028F / ASL A / TAX / JMP ($3ABA,X)` -> 3AC3 `INC $0294` / 3AC7 `INC $029E` (0 / 1: nothing).
@@ -1510,8 +1407,8 @@ static int folBoard(uint8_t* ram, uint8_t* B) {
   return 0;                                                            // 3EDF CLC (aboard: not drawn)
 }
 
-// THE EVENT MODE (`$0280 = 1`, an event cell's script running -- C2/3349, the scanner below): the lead and each follower wait
-// for the script to name them a sub-script (op 08 -> `$1B3B` + 2 x slot, by the member's id), then run it INLINE on their own
+// The event mode (`$0280 = 1`, an event cell's script running -- C2/3349, the scanner below): the lead and each follower wait
+// for the script to name them a sub-script (op 08 -> `$1B3B` + 2 x slot, by the member's id), then run it inline on their own
 // block (C2/0F63) each frame until its end, their place copied to `$0283` + 4 x slot / `$0285` + 4 x slot. The lead's row is
 // C2:345D's second (3772 / 37A1 / 37BB), a follower's C2:3B58's (3D9C / 3DC1 / 3DE3).
 static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c);
@@ -1585,13 +1482,9 @@ static int obFollower(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   }
   return -1;
 }
-// The descriptor's PIECE LIST, decoded per piece. Layout (decoder C2/0D08, drain C2/0CEA):
-//     +0  u8 N                                   piece count
-//     +1  N x { s8 dX, s8 dY, u16 word2 }        word2 bits0-8 = OBJ tile NAME, 14 = H-flip, 15 = V
-// CtWorldAnimFrame used to return N but decode only piece 0 -- so a multi-piece object could place
-// nothing but its left cap. All seven era placards carry 2, 3 or 4 pieces (ids $75..$7B; e.g. $75 is
-// 3 x {-12,$1AC}{+4,$1A6}{+20,$18A} and $78 is 4), and every one of them was silently truncated.
-// Piece i is now selectable; `piece` 0 keeps the old meaning so existing callers are unchanged.
+// Piece i of the descriptor the anim sub-VM is parked on (layout of C2/0D08: +0 u8 N, then N x { s8 dX, s8 dY,
+// u16 word2 }, word2 bits 0-8 = tile name, 14 = H-flip, 15 = V-flip). Multi-piece objects such as the era
+// placards (ids $75..$7B, 2-4 pieces) need every piece.
 int CtWorldAnimPiece(const uint8_t* B, int piece, int* dx, int* dy, int* name, int* flip) {
   if (dx) *dx = 0; if (dy) *dy = 0; if (name) *name = 0; if (flip) *flip = 0;
   const uint8_t* op = ctWorldAnimRom(B[OWOBJ_ANIMBK], obW(B + OWOBJ_ANIM));
@@ -1610,10 +1503,8 @@ int CtWorldAnimPiece(const uint8_t* B, int piece, int* dx, int* dy, int* name, i
   if (flip) *flip = (w2 >> 14) & 3;                        // bit0 = H, bit1 = V
   return n;
 }
-// The inverse of op 0x30: which $C3:E000 table id produced this anim pointer. The table is the ROM's
-// own (ctOwAnimC3), so this asks the ROM which script an object is parked on rather than keying off a
-// host-side world number -- which is what lets the era placard read the id its OWN script selected,
-// including the two-arm "?"-then-real choice worlds 1 and 2 make at run time. -1 = no entry matches.
+// The inverse of op 0x30: which $C3:E000 table id produced this anim pointer (-1 = none). It lets the era
+// placard read the id its own script selected, including the "?"-then-real choice worlds 1 and 2 make at run time.
 int CtWorldAnimIdForPtr(int ptr, int lo, int hi) {
   if (ptr <= 0) return -1;
   if (lo < 0) lo = 0;
@@ -1627,29 +1518,27 @@ int CtWorldAnimFrame(const uint8_t* B, int* dx, int* dy, int* name, int* flip) {
   return CtWorldAnimPiece(B, 0, dx, dy, name, flip);
 }
 
-static void obSignNorm(uint8_t* B) {                // C2/1759: a NEGATIVE int word -> 0xFFFF if its frac is
+static void obSignNorm(uint8_t* B) {                // C2/1759: a negative int word -> 0xFFFF if its frac is
   if (obW(B + OWOBJ_XPOS) & 0x8000) obPutW(B + OWOBJ_XPOS, obW(B + OWOBJ_XFRAC) ? 0xFFFF : 0x0000);  // nonzero else 0; non-neg -> 0
   else                        obPutW(B + OWOBJ_XPOS, 0x0000);
   if (obW(B + OWOBJ_YPOS) & 0x8000) obPutW(B + OWOBJ_YPOS, obW(B + OWOBJ_YFRAC) ? 0xFFFF : 0x0000);
   else                        obPutW(B + OWOBJ_YPOS, 0x0000);
 }
-// op 34 natives. 78A1 = on-screen visibility -> $00 (margin +16px, view 288x272).
-// 754D/7598 = the BIRD-SPAWNER aiming pair: re-position to a random X inside the view at
-// camY+256 (just below the screen) and pick a launch velocity from the 16-entry 16.16 ROM
-// table (all northward headings, 0/30/45 deg at 1-2 px/f). RNG = ROM byte table C0:FE00
-// indexed by the free-running $1B30 (C2/2336). The tables are staged in the wram view at
-// $7F:E000 (RNG) / $7F:E100 (velocities) by the loaders. Other natives (smoke fx etc) no-op.
+// Op 34 natives (obNative). 78A1 = on-screen visibility -> $00 (margin +16 px, view 288x272).
+// 754D/7598 = the bird spawner's aiming pair: a random X inside the view at camY+256 (just below the screen)
+// and a launch velocity from the 16-entry 16.16 ROM table. RNG = ROM byte table C0:FE00 indexed by the
+// free-running $1B30 (C2/2336). The loaders stage the tables at $7F:E000 (RNG) / $7F:E100 (velocities).
+// A target the port does not have is reported once on stderr and skipped.
 static uint8_t obRnd(uint8_t* ram) {               // C2/2336
   uint8_t v = ram[0x1E000 + ram[0x1B30]];
   ram[0x1B30]++;
   return v;
 }
-// C2/0568 (H) / C2/066C (V), called by an OBJECT: `$00 & 3` picks the layer (1 = BG1 -> X=0, 2 = BG2
+// C2/0568 (H) / C2/066C (V), called by an object: `$00 & 3` picks the layer (1 = BG1 -> X=0, 2 = BG2
 // -> X=2) and `$01` is the signed pixel step; each pixel is C2/0607 / C2/059D (H) or C2/070B / C2/06A1
 // (V), which move $20,X / $26,X, keep the tile cell $E3,X / $E7,X, and stream the entering column/row.
-// Those are owStepH/owStepV -- the SAME steppers the player's camera runs -- and the cells are written
-// back to their WRAM addresses as the ROM stores them there. With no stream (the --checkowobj harness)
-// only the scroll word moves.
+// Those are owStepH/owStepV, the player camera's steppers; the cells are written back to WRAM as the ROM
+// stores them. With no stream (the --checkowobj harness) only the scroll word moves.
 static CtWorldStream* g_obStream;
 static void obScroll(uint8_t* ram, CtWorldCam* c, int bg, int vert, int step) {
   if (g_obStream) owDispatchScratch(ram, bg, step);  // the dispatcher runs, and writes its words, on a zero step too
@@ -1664,9 +1553,9 @@ static void obScroll(uint8_t* ram, CtWorldCam* c, int bg, int vert, int step) {
   }
 }
 // C2/1784 (X, the +12/+14 pair) / C2/17AB (Y, +16/+18): "did the accumulator reach a whole pixel". For a
-// NEGATIVE int word it tests the high word of the 32-bit NEGATION (`CLC / LDA frac / EOR #FFFF / ADC #1 /
+// negative int word it tests the high word of the 32-bit negation (`CLC / LDA frac / EOR #FFFF / ADC #1 /
 // LDA int / EOR #FFFF / ADC #0 / BEQ`), otherwise the int word itself; the step handed on is the int
-// word's LOW BYTE (`SEP #20 / LDA $0014,X / STA $01`).
+// word's low byte (`SEP #20 / LDA $0014,X / STA $01`).
 static int obWholeStep(const uint8_t* fracp, const uint8_t* intp, int* out) {
   uint16_t i = obW(intp), a = i;
   if (i & 0x8000) {
@@ -1677,28 +1566,21 @@ static int obWholeStep(const uint8_t* fracp, const uint8_t* intp, int* out) {
   *out = (int8_t)(uint8_t)i;
   return 1;
 }
-// CLASS $7849 -- a native object (allocated by op 0x35 `35 49 78`, dispatched by C2/0535 on its class
-// word every frame) and a PARALLAX NUDGE: `LDX $4E / INC $0022,X / LDA $0022,X / AND #03 / BNE ->785E
-// / LDA #01 / STA $01 / STA $00 / JSR C2/0568 / 785E CLC / RTS` -- every fourth frame, scroll BG1 (only)
-// one pixel RIGHT; CLC = keep the object (C2/054E bumps its +3 counter). World 5's bootstrap installs it
-// (`$7F:0439`), so while the attract's flyover pans BG1 and BG2 left at 1 px/frame with op 0x32, BG1
-// gives one pixel back in four. MEASURED (PEEK_SAVE f100 of saves/attract_cena_inicial.state, --monitor
-// "7E0020:2,7E0022:2"): $0022 falls 02FF, 02FE, 02FD.. one per frame while $0020 holds every fourth
-// (02FD twice, 02FA twice), and --hookpc C20607 visits once per four frames with X = 0000.
+// Class $7849 -- a native object (allocated by op 0x35 `35 49 78`) and a parallax nudge: every fourth
+// frame (+22 & 3 == 0) it scrolls BG1 only one pixel right (C2/0568); CLC keeps the object. World 5's
+// bootstrap installs it (`$7F:0439`), so while the attract's flyover pans BG1 and BG2 left at 1 px/frame
+// with op 0x32, BG1 gives one pixel back in four.
 static int obClass7849(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   B[0x22]++;
   if ((B[0x22] & 3) == 0) obScroll(ram, c, 0, 0, 1);
   return 0;                                        // CLC
 }
-// THE PASS'S OWN JSL C7/0004. The overworld's object pass runs inside its NMI (C2/0333 JSR C2/051D), and a native that posts
-// to the sound driver inline -- C2/2F0F, the loader script's zoning arm (`34 0F 2F`, C2/2F49 `JSL C7/0004`) -- keeps the CPU
-// in bank C7 for as long as the SPC needs: a song upload. Every NMI met meanwhile finds the pass incomplete (`$4C` bit 0,
-// cleared by C2/01CC) and takes C2/0178 `JMP C2/033D` = `INC $4B` and RTI: nothing else of the world runs. When the JSL
-// returns, the SAME pass goes on from the next op of the same script and the blocks after it, then C2/0336's OAM build.
-// MEASURED (the rule's oracle, saves/field_re/catedral_user.state walked out of the 600 A.D. cathedral, --hookpc C70004 /
-// C223D2, --monitor 7E1E00:4 --writer): the post at f73 (vPos 228, `$1E00 = 10 02`), the driver's STZ $1E00 at f107 (C7:0196),
-// the lead and the followers allocated by the resumed pass at f107 (C2:04AA), the loader's C2/0346 wait released at f108.
-// The host prices the JSL on its own SPC (g_owJsl: NMIs crossed) and holds the world that many frames (field.c).
+// The pass's own JSL C7/0004. The object pass runs inside the NMI (C2/0333 JSR C2/051D), and a native that posts to the
+// sound driver inline -- C2/2F0F, the loader script's zoning arm (`34 0F 2F`, C2/2F49 `JSL C7/0004`) -- stays in bank C7
+// for as long as the SPC needs (a song upload). Every NMI met meanwhile finds the pass incomplete (`$4C` bit 0) and takes
+// C2/0178 `JMP C2/033D` = `INC $4B` and RTI. When the JSL returns, the same pass goes on from the next op, then C2/0336's
+// OAM build. The host prices the JSL on its own SPC (g_owJsl: NMIs crossed) and holds the world that many frames
+// (field.c). disasm/notes/ow_party_followers.md sec. 6.
 static CtWorldJslFn g_owJsl = NULL;
 static int g_owSuspendNmis = 0;      // NMIs the pass's inline JSL crossed: the pass is suspended until they are spent
 static int g_owResumeBlock = -1;     // ...on this block (its script resumes at its saved pc)
@@ -1762,10 +1644,10 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
     uint16_t dy = (uint16_t)(obW(B + OWOBJ_YPOS) - c->bg2v + 0x10);
     if (dy >= 0x8000) dy += 0x400;
     ram[0x00] = (dx < 0x120 && dy < 0x110) ? 1 : 0;
-  } else if (addr == 0x7575) {                     // GULL aim (C2/7575): X = 0x178 + FULL-byte RNG (fixed fair
-    uint8_t rnd = obRnd(ram);                       // centre, UNmasked), Y = ((camV>>3)+0x20)<<3 just below view.
-    obPutW(B + OWOBJ_XPOS, (uint16_t)(0x178 + rnd));       // (the burst master calls THIS, not 0x754D -- without it the
-    obPutW(B + OWOBJ_YPOS, (uint16_t)((((c->bg2v >> 3) + 0x20) << 3)));  // gulls aim wrong, fly off-screen + die -> too few)
+  } else if (addr == 0x7575) {                     // gull aim (C2/7575): X = 0x178 + the full RNG byte (the fair's
+    uint8_t rnd = obRnd(ram);                       // centre, unmasked), Y = ((camV>>3)+0x20)<<3 just below view.
+    obPutW(B + OWOBJ_XPOS, (uint16_t)(0x178 + rnd));       // (the burst master calls this one, not 0x754D)
+    obPutW(B + OWOBJ_YPOS, (uint16_t)((((c->bg2v >> 3) + 0x20) << 3)));
   } else if (addr == 0x754D) {                     // re-aim position: random X in view, Y below it
     uint8_t rnd = (uint8_t)(obRnd(ram) & 0x7F);
     obPutW(B + OWOBJ_XPOS, (uint16_t)(((c->bg2h >> 3) << 3) + rnd + 0x40));
@@ -1775,44 +1657,37 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
     const uint8_t* t = ram + 0x1E100 + i;
     memcpy(B + OWOBJ_VELXF, t, 8);                        // velXfrac/velXint/velYfrac/velYint
   } else if (addr == 0x79E0) {
-    // C2/79E0: a random nudge RIGHT, 0..48 px -- what spreads the attract 1F7's earth fragments (each one's script `34 E0
-    // 79`) across the screen instead of stacking them on their birth X. `JSR C2/2336 / STA $4202 / LDA #30 / STA $4203 /
-    // 4 NOP / LDA $4216 / BMI -> LDA $4217 / INC A : LDA $4217` (the product's high byte, rounded on the low byte's bit 7)
-    // `/ REP #20 / LDX $4E / AND #00FF / CLC / ADC $0014,X / STA $0014,X`. MEASURED (--hookpc C279E0 from the attract
-    // state): visits at f2984, f2985 and f3000; the cartridge's fragments sit at X 657..693, the port's all at 648.
+    // C2/79E0: a random nudge right, 0..48 px -- it spreads the attract 1F7's earth fragments (`34 E0 79`) across the
+    // screen. X += the high byte of RNG * $30, rounded on the low byte's bit 7 (`LDA $4216 / BMI -> LDA $4217 / INC A`).
     uint8_t rnd = obRnd(ram);
     unsigned p = (unsigned)rnd * 0x30u;
     unsigned add = ((p >> 8) + ((p & 0x80) ? 1u : 0u)) & 0xFFu;
     obPutW(B + OWOBJ_XPOS, (uint16_t)(obW(B + OWOBJ_XPOS) + add));
   } else if (addr == 0x48CD) {
-    // C2/48CD: a LEAP of 0x200 px along the X velocity -- `REP #20 / LDX $4E / LDA $001C,X / BMI -> LDA #FE00 : LDA #0200 /
-    // CLC / ADC $0014,X / STA $0014,X / JMP C2/1CB8` (the world wrap). The attract 1F0's Epoch calls it (`34 CD 48` at
-    // $7F:141C) between the first and second rounds of its flight loop ($7F:1492): cartridge f8749, $0CC4 02A0 -> 04A0 (then
-    // the frame's step, 04A8). Skipped, the port's Epoch flew on 0x200 behind and was off screen when it came round.
+    // C2/48CD: a leap of 0x200 px along the X velocity (-0x200 when +1C is negative), then the world wrap C2/1CB8.
+    // The attract 1F0's Epoch calls it (`34 CD 48` at $7F:141C) between rounds of its flight loop ($7F:1492).
     uint16_t d = (obW(B + OWOBJ_VELXI) & 0x8000) ? 0xFE00 : 0x0200;
     obPutW(B + OWOBJ_XPOS, (uint16_t)(obW(B + OWOBJ_XPOS) + d));
     obWrapWorld(B);
   } else if (addr == 0x786F) {
-    // C2/786F: the PARTY into the overworld's own cells -- `LDA $7E2980 / STA $001BA3`, $2981 -> $1BA4, $2982 -> $1BA5.
-    // The attract's 2300 A.D. walkers read them back (`17 22 A4 1B` / `1F 22 03 07`) to pick each member's script:
-    // $7F:0ADA/$0AF6/$0B12 for Robo (id 3), $0A4F/$0A6F/$0A8F for the others. This native used to fall through the
-    // chain below without a word, so $1BA4 stayed 0 and Robo walked out of the dome on Crono's script.
+    // C2/786F: the party into the overworld's own cells -- $7E2980..2982 -> $1BA3..1BA5. The attract's 2300 A.D.
+    // walkers read them back (`17 22 A4 1B` / `1F 22 03 07`) to pick each member's script.
     ram[0x1BA3] = ram[0x2980];
     ram[0x1BA4] = ram[0x2981];
     ram[0x1BA5] = ram[0x2982];
   } else if (addr == 0x79C8) {
-    // C2/79C8: GRAVITY -- the block's vertical velocity (+1E fraction, +20 pixels) gains 0x2000 a call, the carry into the
+    // C2/79C8: gravity -- the block's vertical velocity (+1E fraction, +20 pixels) gains 0x2000 a call, the carry into the
     // pixels (`CLC / LDA $001E,X / ADC #2000 / STA $001E,X / LDA $0020,X / ADC #0000`): the party's arcs out of Heckran's
     // whirlpool onto the shore by Lucca's house (world 0's event script, $7F:12D2...).
     uint32_t v = (uint32_t)obW(B + 0x1E) + 0x2000u;
     obPutW(B + 0x1E, (uint16_t)v); obPutW(B + 0x20, (uint16_t)(obW(B + 0x20) + (v >> 16)));
   } else if (addr == 0x7AFC || addr == 0x7B20) {
-    // THE BLACK OMEN'S PICTURE LOADERS (the 1F6 cutscene, $7F:0668 / $067E): `LDX #9000 / STX $0303 / LDA #7F / STA $0305 /
+    // The Black Omen's picture loaders (the 1F6 cutscene, $7F:0668 / $067E): `LDX #9000 / STX $0303 / LDA #7F / STA $0305 /
     // LDX $08 / REP #20 / LDA tbl,X / STA $0300 / SEP #20 / LDA tbl+2,X / STA $0302 / JSL C3/0002` -- the packet the record at
     // tbl + `$08` names (the script's `13 08 00 nn`), C6:FE20 for 7AFC, C6:FF40 for 7B20, into $7F:9000; op 0x03 then sends it.
     owFarLzTo(ram, 0x7F, 0x9000, addr == 0x7AFC ? 0xFE20 : 0xFF40, (uint16_t)(ram[0x08] | (ram[0x09] << 8)));
   } else if (addr == 0x7C56 || addr == 0x7C97) {
-    // ...AND ITS WAVE: two indirect HDMA channels on BG2's scroll. 7C56: `$8A35 = $8A38 = F0`, `$8A3B = 00`, channel 1 = DMAP
+    // ...and its wave: two indirect HDMA channels on BG2's scroll. 7C56: `$8A35 = $8A38 = F0`, `$8A3B = 00`, channel 1 = DMAP
     // 42 (indirect, two writes) to $210F (BG2HOFS) from $7E:8A35, `TSB $4A` #02; 7C97 the same on channel 2 to $2110 (BG2VOFS)
     // from $7E:8A42, #04. Each zeroes its caller's +26 and fills its two line buffers with 0 (`STA $8B56 / MVN` over 0x460
     // bytes: $8B56-$8FB5; $9176-$95D5). The tables' pointers are the NMI's copies of $8A21/$8A23 and $8A25/$8A27 (C2/02B2).
@@ -1824,7 +1699,7 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
     B[0x26] = 0;
     memset(ram + buf, 0, 0x460);
   } else if (addr == 0x7CD8 || addr == 0x7D5E) {
-    // ...ITS STEP, once a frame from each wave child: `INC $0026,X`; on an even count the table reads buffer A while buffer B,
+    // ...its step, once a frame from each wave child: `INC $0026,X`; on an even count the table reads buffer A while buffer B,
     // shifted one line (`MVN` 0x1BE bytes from B + 2), becomes A; on an odd count the other way round -- then the newest
     // line, the last word of the buffer just written: `+24 += 10`, C2/225E's sine of it, its magnitude times the amplitude
     // +22 through $4202/$4203, the product's high byte, the sign put back.
@@ -1852,41 +1727,28 @@ static void obNative(uint8_t* ram, uint8_t* B, uint16_t addr, CtWorldCam* c) {
   }
 }
 
-// op 0x30 (C2/160F -> C2/1CDA) sets the per-object ANIM SUB-SCRIPT pointer +0B/+0C, and that +0B IS the
-// canonical class discriminator the renderer reads. The ROM is three instructions:
+// Op 0x30 (C2/160F -> C2/1CDA) sets the anim sub-script pointer +0B/+0C, the class the renderer reads:
 //     C2/1CDC  AND #$00FF / ASL A / TAX / LDA $C3E000,X / STA $000B,X / LDA #C3 / STA $000D,X
-// -- a DIRECT 8-bit index into a 166-entry (ids $00..$A5) word table at $C3:E000, with NO range check.
-// This used to be `obAnimTbl[op[1] & 0x3F]`, a hand-written 64-entry stub with FOUR non-zero slots. Both
-// halves were wrong: the mask is EIGHT bits (`AND #$00FF` only truncates the 16-bit `LDA [$58],Y` read --
-// measured with --callrom C2/1CDA, A=$FF75 and A=$0075 both give $F836 while A=$0035 gives $E66D), and
-// the table is the ROM's. The 6-bit mask aliased every id >= $40 onto a zeroed hole: the seven ERA
-// PLACARDS $75..$7B all landed on $35..$3B and got anim pointer 0 -- defect #8, "invented 600AD placard".
-// Across the eight captured overworlds the live objects use twelve distinct table entries and the stub
-// reproduced exactly one of them ($22), so this was never only about the placard.
-// The table needs no new data: ctOwAnimC3 is already byte-for-byte ROM $C3:E000..FFFF, and its first
-// 0x14C bytes ARE the pointer table. Reproduce the ROM's unguarded read rather than clamping it.
+// -- a direct 8-bit index into the word table at $C3:E000 (ids $00..$A5), with no range check. The mask is
+// eight bits (`AND #$00FF` truncates the 16-bit operand read). ctOwAnimC3 is ROM $C3:E000..FFFF, so its first
+// 0x14C bytes are the pointer table.
 uint16_t CtWorldAnimPtrForId(unsigned id) {                   // C2/1CDA's `LDA $C3E000,X`
   unsigned o = (id & 0xFF) * 2;                            // AND #$00FF / ASL A
   if (o + 1 >= CT_OWANIM_SIZE) return 0;                   // (our blob is only the $E000..FFFF window)
   return (uint16_t)(ctOwAnimC3[o] | (ctOwAnimC3[o + 1] << 8));
 }
 
-// ---- C2/1100: object-VM op $05, ENTER A LOCATION ------------------------------------------------
-// ⭐ This is what drives the ATTRACT DEMO off the overworld. Its flyover has no player, no mover
-// and no input (measured -- sequence_table.md 9.1), so the only thing that can change $0100 is this
-// opcode, and it used to be a no-op here. Graded byte-for-byte against the cartridge: all SEVENTEEN
-// writes `ct.exe --callrom C21100 --writes` reports are reproduced, in value and in address.
-//
-// ⚠ Operand byte 2 is read TWICE by the ROM -- 16-bit as the destination's high byte (masked to
-// $01FF, so only bit 8 survives) and again 8-bit, shifted right, as the arrival flags.
-// ⚠ $0107/$04FE take a SIXTEEN-bit store and $0108/$04FF an eight-bit one right after, so the
-// column's high byte is written and then overwritten by the row. Both stores are kept.
-// The stores are also the main loop's state 3 (C2/2470-24D2, the location entry's own), over the entrance record
-// `$7E:7E03,X` instead of the operands -- the same writes without C2/115E's request: state 3 falls straight into state 2's
-// code, so $027C stays 3 (measured on the Truce door from saves/ow_w0.state: $0100 = 011 at f129, $027C = 03 throughout).
+// ---- C2/1100: object-VM op $05, enter a location ----
+// This drives the attract demo off the overworld: its flyover has no player or input (disasm/notes/
+// sequence_table.md 9.1), so only this op changes $0100. `ct.exe --callrom C21100 --writes` lists the writes.
+// Note: operand byte 2 is read twice -- 16-bit as the destination's high byte (masked to $01FF) and 8-bit,
+// shifted right, as the arrival flags. $0107/$04FE take a 16-bit store and $0108/$04FF an 8-bit one right
+// after, so the column's high byte is overwritten by the row; both stores are kept.
+// The stores are also the main loop's state 3 (C2/2470-24D2), over the entrance record `$7E:7E03,X` instead of
+// the operands, without C2/115E's request: state 3 falls into state 2's code, so $027C stays 3.
 void CtWorldLocationStores(uint8_t* ram, const uint8_t* op) {
   uint16_t cur = (uint16_t)(ram[0x0100] | (ram[0x0101] << 8));
-  ram[0x0105] = (uint8_t)cur; ram[0x0106] = (uint8_t)(cur >> 8);       // the RETURN location
+  ram[0x0105] = (uint8_t)cur; ram[0x0106] = (uint8_t)(cur >> 8);       // the return location
   ram[0x04FC] = (uint8_t)cur; ram[0x04FD] = (uint8_t)(cur >> 8);
   uint16_t col = (uint16_t)((ram[0xE5] | (ram[0xE6] << 8)) + 0x10);    // ...and the return position
   if (col >= 0xC0) col -= 0xC0;
@@ -1907,24 +1769,12 @@ void CtWorldObjOp05(uint8_t* ram, const uint8_t* op) {
   ram[0x027C] = 2;                                                     // C2/115E: the request
 }
 
-// op 0x4E -- C2/181C: an INDIRECT FAR CALL. The three operand bytes are a 24-bit address; the
-// handler loads it into $5B/$5D and `JML [$005B]`s to it, and the target returns with RTL:
-//   C2/181C: LDY #0001 / LDA [$58],Y / STA $5B      -- the low WORD (M=16 here)
-//            SEP #20 / LDY #0003 / LDA [$58],Y / STA $5D   -- the BANK
-//            JSL $C21836   ($C2/1836: JML [$005B])
-//            REP #20 / LDA #0004 / RTS              -- the advance, unconditional
-// ⭐ The advance is NOT a function of the callee: the handler returns the literal 4 whatever the
-// target did, and no target reports anything back to the script (the call is `JML`, the return
-// `RTL` -- there is no result register the dispatcher reads). So the SCRIPT's control flow is
-// independent of whether a given target is ported, which is why this advances even for a target
-// whose body is not.
-//
-// The port used to have no case at all for 0x4E, so it fell to `default: adv = -1` and PARKED the
-// object -- permanently, since a parked object re-reads the same op every frame. That is what froze
-// the attract's world-5 flyover: its driver reaches `4E 41 E2 C6` at pc=0562 and never gets past it,
-// so the leg never ends and scene 433's chain never advances to its next entry (notes 9.17).
-// The host's hook for the window object's two targets (field.c installs the native wipe.h CtOwWindowObject;
-// a host without one -- ct_world, the oracle -- names the call and advances, as before).
+// Op 0x4E -- C2/181C: an indirect far call. The three operand bytes are a 24-bit address loaded into $5B/$5D;
+// `JSL $C21836` (`JML [$005B]`) runs it and it returns with RTL. The handler then returns a literal 4, and no
+// target reports anything back to the script, so the script's control flow does not depend on the target:
+// an unported target is reported and advanced over (disasm/notes/sequence_table.md 9.17).
+// The window object's two targets go through the host's hook (field.c installs wipe.h CtOwWindowObject; a host
+// without one, ct_world or the oracle, reports the call and advances).
 static const uint8_t* g_owRom = NULL;   // the host's ROM image (CtWorldSetRom, below)
 static long g_owRomLen = 0;
 static void (*g_owIrisCircle)(uint8_t* wram128, uint8_t arg);   // C3/0077, the host's (CtWorldSetIrisCircle, below)
@@ -1947,12 +1797,9 @@ static void owFarLz(uint8_t* ram, uint16_t dst, uint16_t tbl, uint16_t x) { owFa
 void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
   uint32_t tgt = (uint32_t)op[1] | ((uint32_t)op[2] << 8) | ((uint32_t)op[3] << 16);
   switch (tgt) {
-    // $C6:E2AF -- `TDC / STA $7F0062 / RTL`, entered with M = 8 (C2/1823 SEP #20) and D = $0000 (the overworld never
-    // moves the direct page off zero: every traced instruction of the leg reads D=0000). So $7F0062 := $00 -- the
-    // attract's step counter, reset by the world scripts' "a button was pressed" arm (`23 F0 00 rr` -> ... -> `4E AF E2
-    // C6` -> `05 B1 01 ..`): traced on the cartridge from the attract's 1F5 leg with A held (ct.exe --cputrace with
-    // CPUTRACE_BTN=100 from f199), C6:E2B0 runs 17 frames after the press and C2:1138 writes $0100 = 1B1 the same frame;
-    // loc 1B1 then reads $7F0062 = 0 as "back to the title".
+    // $C6:E2AF -- `TDC / STA $7F0062 / RTL` with M = 8 (C2/1823 SEP #20) and D = $0000 (the overworld keeps the
+    // direct page at zero): the attract's step counter := 0, by the world scripts' "a button was pressed" arm
+    // (`23 F0 00 rr` -> ... -> `4E AF E2 C6` -> `05 B1 01 ..`). Loc 1B1 then reads $7F0062 = 0 as "back to the title".
     case 0xC6E2AF:
       ram[0x10062] = 0x00;
       break;
@@ -1960,20 +1807,12 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
     // host's hook) over this WRAM, as C2/181C's far call runs them. E241: HDMA channel 2 over $2127 (DMAP $40, table
     // $7E:8A42, bank $7E -- the registers here), `TSB $4A` #04, the object's +$22 -> $0350 and +$24 -> $0352 (bank $7E),
     // JSL C3/000E; both: $7E:8A25 / $8A27 = the table half C3/01E4 wrote (+0 or +$E0 by $0351) and +$70. The routine's
-    // seed reads the rule's virtual beam (field_window_wipe.md, "The virtual beam").
-    // $C6:E595 / $C6:E5C5 -- THE WAVE OVER BG1 (world 1F5 after the Ocean Palace: MEASURED, the cartridge from
-    // saves/field_re/pre_scene_19f.state, active f993-1580 and f2019-2447). E595, the install: the indirect table $7E:8A4F
-    // = `F0 .. .. F0 .. .. 00` (two 112-line runs; their pointers are the NMI's copy of $8A29 / $8A2B, C2/02B2-02DE),
-    // HDMA channel 3 = DMAP 42 (two writes, indirect, bank 7E) over $210E (BG1's VOFS), `TSB $4A` #08, the object's
-    // +$22-$23 := 0. E5C5, a call a frame: the 224-line table into $7E:9A36 or $7E:9796 by the object's +$24 bit 0 (`LSR /
-    // BCS`), $8A29 = it, $8A2B = it + $E0, +$24 up (16-bit); line k's word = $26 + (+-C0:F900[(phase + 8k) & 3FF] * 4) >> 8
-    // -- the second half of the table negated (`EOR #FFFF / INC / XBA / ORA #FF00`), the first `XBA / AND #00FF` -- then
-    // +$22 += 8. MEASURED: the cartridge's table at f1002 is this one at phase 0x40 ($9A36) and 0x38 ($9796), $26 = 0230.
-    // $C6:E448 / E470 -- THE WINDOW OBJECTS' INSTALLS (world 1F5 after the Ocean Palace: MEASURED, $4A = 0A and the table
-    // $8A35 live f1024-1055 and from f1116, CGWSEL 10 -- the colour math only inside -- and CGADSUB 11 / 13): E448 the
-    // indirect table $7E:8A35 = `F0 .. .. F0 .. .. 00` and HDMA channel 1 = DMAP 41 (two registers, indirect, bank 7E) over
-    // $2126 (WH0 / WH1), `TSB $4A` #02; E470 the same at $8A42, channel 2 over $2128 (WH2 / WH3), `TSB $4A` #04. Their
-    // entries' pointers are the NMI's copies of $8A21 / $8A23 and $8A25 / $8A27 (C2/02B2-02DE).
+    // seed reads the rule's virtual beam (disasm/notes/field_window_wipe.md, "The virtual beam").
+    // $C6:E595 / E5C5 -- the wave over BG1, and $C6:E448 / E470 / E498 / E4BE -- the light's windows (world 1F5 after
+    // the Ocean Palace): disasm/notes/ocean_palace_aftermath.md sec. 2.1.
+    // E448 / E470, the window installs: the indirect table $7E:8A35 (E470: $8A42) = `F0 .. .. F0 .. .. 00`, HDMA channel
+    // 1 (2) = DMAP 41 over $2126 WH0/WH1 ($2128 WH2/WH3), `TSB $4A` #02 (#04). The entries' pointers are the NMI's copies
+    // of $8A21 / $8A23 ($8A25 / $8A27, C2/02B2-02DE).
     case 0xC6E448:
       ram[0x8A35] = 0xF0; ram[0x8A38] = 0xF0; ram[0x8A3B] = 0x00;  // E448-E453
       CtWorldHdmaSet(1, 0x41, 0x26, 0x8A35); ram[0x4A] |= 0x02;    // E457-E46D
@@ -1982,12 +1821,10 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
       ram[0x8A42] = 0xF0; ram[0x8A45] = 0xF0; ram[0x8A48] = 0x00;  // E470-E47B
       CtWorldHdmaSet(2, 0x41, 0x28, 0x8A42); ram[0x4A] |= 0x04;    // E47F-E495
       break;
-    // $C6:E498 / E4BE, a call a frame: the window's table into $8B56 / $8DF6 (channel 1) or $9176 / $9416 (channel 2) by the
-    // object's +$26 bit 0, the pointers $8A21 / $8A23 (or $8A25 / $8A27) = it and it + $E0, +$26 up; then (E4E2) C3/0008's
-    // circle around (+$14, +$18) of radius +$22 into it (the host's C3/0077), and E4FF stretches it +$24 lines: radius 0 -> one
-    // entry (+$14) at line +$18 repeated down +$24 lines (E50F-E52B: the word, then an MVN one byte on); else the circle's
-    // top half (its +$22 rows above the centre) moved +$24 lines down (E52E-E553) and the rows between filled with the
-    // centre's (E555-E563: an MVN a word on). The light that rises over 1F5.
+    // $C6:E498 / E4BE, a call a frame: the window's table into $8B56 / $8DF6 (channel 1) or $9176 / $9416 (channel 2) by
+    // +$26 bit 0, the pointers = it and it + $E0, +$26 up; then (E4E2) C3/0008's circle around (+$14, +$18) of radius +$22
+    // (the host's C3/0077), stretched +$24 lines by E4FF: radius 0 -> one entry repeated down +$24 lines (E50F-E52B);
+    // else the circle's top half moved +$24 lines down (E52E-E553) and the rows between filled with the centre's (E555-E563).
     case 0xC6E498: case 0xC6E4BE: {
       unsigned X = ram[0x4E] | (ram[0x4F] << 8);
       int two = tgt == 0xC6E4BE;
@@ -2011,8 +1848,7 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
         for (unsigned k = 0; k <= cnt; k++) ram[(dst + k) & 0xFFFF] = ram[(src + k) & 0xFFFF];   // E529 MVN $7E,$7E
       } else {
         unsigned r352 = ram[0x0352] | (ram[0x0353] << 8);
-        // E52E-E536 `LDA $0352 / DEC A / ASL A / ADC $0356`: at centre line 0 the ASL of FFFF carries, so a8 = the buffer - 1
-        // (MEASURED, ow_wave_cmp at cartridge f1040: without the carry the beam's last lines were one row off).
+        // E52E-E536 `LDA $0352 / DEC A / ASL A / ADC $0356`: at centre line 0 the ASL of FFFF carries, so a8 = the buffer - 1.
         unsigned d352 = (r352 - 1) & 0xFFFF, a8 = ((d352 << 1) + b356 + (d352 >> 15)) & 0xFFFF;
         unsigned Y = a8, Xd = ((OBW(0x24) << 1) + a8 + (OBW(0x24) >> 15)) & 0xFFFF;   // E538-E541 ASL / ADC $08
         unsigned n = ram[0x0354] | (ram[0x0355] << 8);             // E542-E545
@@ -2061,19 +1897,18 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
                                         tgt, g_owWinCall ? "no ROM" : "no host hook", r); } }
       break;
     }
-    // THE PICTURE LOADERS -- four routines of one shape, the whole family in bank C6 (a byte-pattern scan of the bank finds
-    // these four and no other):
+    // The picture loaders -- four routines of one shape, the whole family in bank C6:
     //   LDX #dst / STX $0303 / LDA #7F / STA $0305 / LDX #x / REP #20 / LDA tbl,X / STA $0300 / SEP #20 / LDA tbl+2,X /
     //   STA $0302 / JSL C3/0002 / RTL
     // -- the packet named by the three-byte record at tbl + x, decompressed by C3/0002 (= C3/0557, the LZ routine; its
-    // $0308-$0316 workspace is the routine's own and not kept, as everywhere else in the port). Lavos's rising (overworld
+    // $0308-$0316 workspace is not kept, as everywhere else in the port). Lavos's rising (overworld
     // 1F4) runs E028 (the picture, then op 0x03 sends it to VRAM) and E04D (its palettes: the three op-0x04 rows after it
     // read $7F:8C00/8C20/8C40).
     case 0xC6E028: owFarLz(ram, 0x9000, 0xFDF0, 0x06); break;
     case 0xC6E04D: owFarLz(ram, 0x8C00, 0xFEA0, 0x03); break;
     case 0xC6E64A: owFarLz(ram, 0x9000, 0xFDF0, 0x27); break;
     case 0xC6E66F: owFarLz(ram, 0x8C00, 0xFEA0, 0x06); break;
-    // THE HELD SONG'S FLAG: E63D `LDA #01 / STA $7F01ED / RTL`, E644 `TDC / STA $7F01ED / RTL` (M = 8, D = 0). While it is set
+    // The held song's flag: E63D `LDA #01 / STA $7F01ED / RTL`, E644 `TDC / STA $7F01ED / RTL` (M = 8, D = 0). While it is set
     // the loader's zoning arm C2/2F0F plays $7E:29AE instead of the cell's song (1F4's script stores 0D there just before,
     // `13 00 00 0D` / `34 D1 7B`).
     case 0xC6E63D: ram[0x101ED] = 0x01; break;
@@ -2088,11 +1923,11 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
   }
 }
 
-// THE SCRIPT'S BANK. C2/0F63 loads `$5A = $0009,X` over the pc and reads `[$58]` long, so a VM object runs from whatever
+// The script's bank. C2/0F63 loads `$5A = $0009,X` over the pc and reads `[$58]` long, so a VM object runs from whatever
 // bank its +09 names: the world's own scripts are the $7F:0400 blob, but the menu's two fades and the location entry's
-// fade-out are scripts in bank $C2 itself ($C2:2EC1 `28 01 52`, $C2:2EC4 `29 01 52`, spawned by C2/04D9 with A = $C2).
+// fade-out are scripts in bank $C2 ($C2:2EC1 `28 01 52`, $C2:2EC4 `29 01 52`, spawned by C2/04D9 with A = $C2).
 // The ROM image is the host's (CtWorldSetRom); without one, and for any bank that is neither $7E nor a ROM bank, the
-// read stays where it always was, $7F.
+// read is from $7F.
 void CtWorldSetRom(const uint8_t* rom, long len) { g_owRom = rom; g_owRomLen = len; }
 // C3/0077's circle (JSL C3/0008), the host's (CtIrisCircleImage, the field's port over the same 128 KB image layout): the
 // $C6:E498 / E4BE window objects call it. Without one the objects leave their table as it was.
@@ -2107,22 +1942,9 @@ static const uint8_t* obScript(const uint8_t* ram, uint8_t bank, uint16_t pc, ui
   return ram + 0x10000 + pc;
 }
 
-// C2/09C5's DIRECT-PAGE WORDS -- what the per-layer rebuild leaves in $00-$1B and the scroll shadows once it returns. The
-// tilemap it streams is CtWorldTilemapBuild's (graded against the oracle's VRAM by ow-streaming); these are the scratch
-// words the routine walks while doing it, and they are not dead: C3/02DD (the seed, `ADC $0008`) folds $0008 into
-// $0386 when the world's window object calls it later in the same pass -- MEASURED, the attract's 1F5 leg under the
-// rule (CT_ORACLE_VIRTUAL_BEAM=1, CT_ORACLE_LOGICAL=1, from power-on): the first seed call reads $0008 = 41, the last
-// word C2/0A55 stored, where the port read 00. All sixteen-bit (09CC REP #20; the tables are bank $C2 words):
-//   09DB-09E7  $20,X = $E3,X << 3 ; $26,X = $E7,X << 3                       X = (layer - 1) * 2
-//   09E9-09F9  $14 / $16 / $10 = C2:0556 / C2:055C / C2:0562 [X]
-//   09FB-0A06  $08 = $E3,X >> 1 when $E3,X is odd, else ($E3,X >> 1) - 1, and -1 -> $5F
-//   0A08-0A13  $0A = the same from $E7,X, -1 -> $3F
-//   0A15-0A29  $0C = ($20,X - (bit 3 ? 8 : 16)) & $1FF ; 0A2B-0A3F  $0E = ($26,X - (bit 3 ? 8 : 16)) & $FF
-//   0A41       $02 = 18, then 18 rows of:
-//     0A6C  $00 = 16 ; $18 = $08 + $16 ; $1A = $0A << 6 ; $04 = $0A * 96 ; $06 = ($0E & $F0) >> 2 ; and 16 columns of
-//           0A90-0AA7  $04 += $60 (>= $1800 -> 0) ; $06 = ($06 + 4) & $3F ; DEC $00
-//     0ADC  $12 = ($0C >> 3, + $3E0 when >= $20) + $10   (then the row's two DMAs)
-//     0A4C  $08 += 1 (>= $60 -> 0) ; 0A57  $0C = ($0C + $10) & $1FF ; 0A62  DEC $02
+// C2/09C5's direct-page words: what the per-layer rebuild leaves in $00-$1B and the scroll shadows (the tilemap itself
+// is CtWorldTilemapBuild's). C3/02DD (the seed) reads $0008 later in the same pass, so they are kept. The trace is in
+// disasm/notes/overworld.md, "The tilemap rebuild's direct-page words (C2/09C5)".
 static void owW16(uint8_t* ram, int a, unsigned v) { ram[a] = (uint8_t)v; ram[a + 1] = (uint8_t)(v >> 8); }
 static unsigned owRomW(unsigned bankC2off) {
   long o = 0x020000L + (long)bankC2off;
@@ -2175,7 +1997,7 @@ void CtWorldSpawnVm(uint8_t* ram, uint8_t bank, uint16_t pc) {
   }
 }
 
-// C2/048A for a NATIVE class: the first free block from $0C30 (60 of them), the class word, +2 and the 16-bit +3/+4
+// C2/048A for a native class: the first free block from $0C30 (60 of them), the class word, +2 and the 16-bit +3/+4
 // zeroed, then the MVN of the parent's +05..+3F. (Op $09's VM clone and C2/04D9 install a script pointer on top.)
 static void obAllocNative(uint8_t* ram, const uint8_t* B, uint16_t cls) {
   ram[0x08] = (uint8_t)cls; ram[0x09] = (uint8_t)(cls >> 8);   // 048A STX $08 -- before the search, full table or not
@@ -2193,21 +2015,14 @@ static int g_obTrace = -1;                          // CT_OWOBJTRACE, see obRun'
 static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   uint16_t pc = obW(B + OWOBJ_PC);
   uint8_t opbuf[8];
-  // ⭐ NO OP BUDGET. The ROM's dispatcher is `LDA [$58] / ASL A / TAX / JSR ($0F91,X) / BEQ ->0F8E /
-  // CLC / ADC $58 / STA $58 / ... / BRA ->0F73` (C2/0F73): it runs opcodes until a handler returns
-  // ZERO, and nothing counts them. This used to stop at 64, which is not a number the cartridge has
-  // -- and it showed. A bootstrap needing more than 64 ops in one frame was cut short and resumed
-  // next frame, so other objects' spawns interleaved differently and C2/048A's first-fit put
-  // everything one slot along: world 4 went from 21 differing slots to 6 the moment the budget was
-  // lifted (sequence_table.md 9.10).
-  // ⚠ The counter stays only as a RUNAWAY GUARD -- a script that never yields would hang the ROM
-  // too, so this is a host safety net, not a modelled limit, and it sits far above anything measured.
+  // No op budget: the dispatcher (C2/0F73: `LDA [$58] / ASL A / TAX / JSR ($0F91,X) / BEQ ->0F8E / CLC /
+  // ADC $58 / STA $58 / ... / BRA ->0F73`) runs opcodes until a handler returns zero. A bootstrap may run
+  // many ops in one frame, and cutting it short shifts C2/048A's first-fit slots (sequence_table.md 9.10).
+  // The counter is only a guard against a script that never yields (which would hang the ROM too).
   for (int guard = 0; guard < 65536; guard++) {
     const uint8_t* op = obScript(ram, B[0x09], pc, opbuf);   // [$58] long, bank = +09 (C2/0F67)
     int adv = -1;                                   // -1 = yield (keep pc)
-    // CT_OWOBJTRACE=1: one line per opcode executed. The overworld's bootstrap runs dozens of
-    // ops inside a single frame, so a per-FRAME pc is too coarse to find where the port's path
-    // leaves the cartridge's -- this is what makes the two comparable op by op.
+    // CT_OWOBJTRACE=1: one line per opcode executed, to compare the port with the cartridge op by op.
     if (g_obTrace < 0) g_obTrace = getenv("CT_OWOBJTRACE") ? 1 : 0;
     if (g_obTrace)
       printf("obrun: pc=%04X op=%02X %02X %02X %02X %02X\n", pc,
@@ -2219,28 +2034,24 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         adv = 1; break;
       case 0x01: B[OWOBJ_ATTR] = (uint8_t)((B[OWOBJ_ATTR] & 0xF1) | op[1]); adv = 2; break;
       case 0x02: B[OWOBJ_ATTR] = (uint8_t)((B[OWOBJ_ATTR] & 0x4F) | op[1]); adv = 2; break;
-      // C2/10CD -- A PALETTE ROW. `LDX $4E / LDY #01 / LDA [$58],Y / STA $0035,X` (the source word, M = 16) / `SEP #20 /
-      // Y = 3 -> +37` (its bank) / `Y = 4 -> +32` (the CGRAM row) / `STZ $0033,X` / `Y = 5 -> +34` / `LDX #1DD4 / JSR C2/048A
-      // / LDA #0006`. The operands land in the SCRIPT'S OWN block and reach the child through C2/048A's MVN; the dispatcher's
-      // +32 clear after the advance then zeroes the parent's copy. This is the world's palette animation: every world
-      // script cycles a row through frames of the $7E:C000 packet the loader decompresses (C2/2930) -- world 0 row 2
-      // ($C000/$C020/$C040/$C060, ten frames apart), world 3 rows 3 and 4. Class $1DD4 is obPalRow below.
+      // C2/10CD -- a palette row. The operands go into the script's own block (+35/+36 the source word, +37 its bank,
+      // +32 the CGRAM row, +33 = 0, +34) and reach the child (class $1DD4, obPalRow) through C2/048A's MVN; the
+      // dispatcher's +32 clear after the advance then zeroes the parent's copy. This is the world's palette animation:
+      // a row cycled through frames of the $7E:C000 packet the loader decompresses (C2/2930). disasm/notes/ow_objvm.md.
       case 0x04:
         B[0x35] = op[1]; B[0x36] = op[2]; B[0x37] = op[3];
         B[0x32] = op[4]; B[0x33] = 0; B[0x34] = op[5];
         obAllocNative(ram, B, 0x1DD4);
         adv = 6; break;
-      // C2/10BF -- A VRAM UPLOAD. `SEP #20 / LDX #1CF5 / JSR C2/048A / REP #20 / LDA #000A / RTS`: the op only spawns class
-      // $1CF5 (obVramUp below) and steps over its nine operand bytes; the child reads them through its copy of the parent's
-      // +07 (C2/0F86 stores the pc after every advance -- the port keeps it in a local, so it is stored first, as 0x28/0x29).
-      // Lavos's rising (overworld 1F4): `4E 28 E0 C6` decompresses the picture to $7F:9000, then `03 00 90 7F 00 00 00 00 00
-      // 01` sends its $100 tiles to VRAM word 0 -- the port PARKED here (no case), and the map stayed black.
+      // C2/10BF -- a VRAM upload: the op only spawns class $1CF5 (obVramUp below) and steps over its nine operand bytes;
+      // the child reads them through its copy of the parent's +07 (C2/0F86 stores the pc after every advance; the port
+      // keeps it in a local, so it is stored first, as in 0x28/0x29). disasm/notes/ocean_palace_aftermath.md sec. 1.
       case 0x03:
         obPutW(B + OWOBJ_PC, pc);
         obAllocNative(ram, B, 0x1CF5);
         adv = 10; break;
-      case 0x05: CtWorldObjOp05(ram, op); adv = 5; break;   // C2/1100 -- ENTER A LOCATION
-      // C2/1B2F -- COPY A RECTANGLE OF THE MAP: `4F sb sx sy db dx dy w h`. Each end is a map buffer of $7E -- $4000 when its
+      case 0x05: CtWorldObjOp05(ram, op); adv = 5; break;   // C2/1100 -- enter a location
+      // C2/1B2F -- copy a rectangle of the map: `4F sb sx sy db dx dy w h`. Each end is a map buffer of $7E -- $4000 when its
       // first operand is 01, else $5800 -- plus `y * $60` (`STA $4202 / LDA #60 / STA $4203`, the row stride) + x; $10-$12 /
       // $13-$15 hold the two long pointers. Then h rows ($01, `DEC $01 / BNE`) of w bytes ($00 -> $02 each row) through
       // WMADD ($2181 = $13 per row, $2183 = 7E, `LDA [$10],Y / STA $2180`), both pointers + $60 a row. 1BDC LDA #0009.
@@ -2285,42 +2096,20 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         }
         adv = 4; break;
       }
-      case 0x35: {                                  // C2/1839: allocate a NATIVE-class object
-        // ⭐ `LDY #01 / LDA [$58],Y / TAX / JSR $048A / LDA #0003` -- the operand IS the class word,
-        // and unlike op $09 no script pointer is installed: a native class is dispatched by $0000.
-        // This is what the overworld's BOOTSTRAP script parks on when it is missing: world 5's
-        // $7F:0439 is `35 49 78`, the class-$7849 object, and without it the bootstrap never reaches
-        // the ops after it (sequence_table.md 9.5).
-        // ⚠ C2/048A zeroes +2 AND the 16-bit pair +3/+4 before the MVN, which copies the PARENT's
-        // block from +5 up (0x3B bytes). Op $09 above clears only +2/+3 -- a one-byte difference
-        // that predates this and is left alone rather than changed under no check.
+      case 0x35: {                                  // C2/1839: allocate a native-class object
+        // `LDY #01 / LDA [$58],Y / TAX / JSR $048A / LDA #0003` -- the operand is the class word, and unlike op $09
+        // no script pointer is installed (e.g. world 5's bootstrap `35 49 78`, sequence_table.md 9.5).
+        // C2/048A zeroes +2 and the 16-bit +3/+4, then copies the parent's +5..+3F.
+        // Note: op $09 above clears only +2/+3, not +4; not checked, left as it is.
         obAllocNative(ram, B, (uint16_t)(op[1] | (op[2] << 8)));
         adv = 3; break;
       }
-      // C2/1947 -- `LDA [$58],Y / STA $00 / JSR $09C5`, length 2. ⭐ What $09C5 DOES is rebuild a
-      // BG's whole tilemap: micro-executed with `--callrom C209C5 --pokewram 7E0000=01` it makes
-      // over 77000 writes, into the $7E:F000 staging area and the scroll shadows ($E3/$E7 scaled by
-      // eight into $20/$26). The port already does that work, in CtWorldTilemapBuild, which
-      // worldEnterAt runs at every world entry and which `ow-streaming` holds byte-exact against the
-      // oracle's live VRAM -- so advancing past this op is NOT dropping the behaviour, it is leaving
-      // it with the graded owner.
-      // ⚠ This is not the same as op $05's old stub, and the difference is the point: $05's effect
-      // (the location change) was something NOTHING else in the port did. Driving a per-BG rebuild
-      // from the VM -- $09C5 selects one with `$00 & 3`, and 0 takes a different path at $0A6A --
-      // is a real difference from the port's unconditional both-BG rebuild, and it is a camera
-      // change, not an opcode one. ⚠ `$00` is deliberately NOT written: the ROM's own routine
-      // overwrites it immediately (`C2/0AAB` stores $0F there), so mirroring only the store would
-      // leave a value the cartridge never keeps.
-      // ⭐ ...BUT THE SCROLL WORDS ARE NOT THE HOST'S TO SET LATER. 09D8-09E7 is `DEC A / ASL A / TAX /
-      // LDA $E3,X / ASL x3 / STA $20,X / LDA $E7,X / ASL x3 / STA $26,X` -- the camera word is re-derived
-      // from the cells INSIDE the object pass, so an object that runs after this one in the same pass
-      // already scrolls from the new place. The port left it to a read-back after the pass, which was
-      // invisible until an object could scroll: the attract's flyover driver does `13 E3 00 60 / ... /
-      // 3E 01 / 3E 02 / ... / 09 8A 05 7F`, its pan child stepped the OLD camera (tile 185) in that same
-      // pass and wrote 184 back over the script's $60. MEASURED: $0020 = 0300 at f3 (C2:09E2), then
-      // 02FF at f5. So the camera for layer `$00 & 3` (1 = BG1, 2 = BG2) is set here and that layer's
-      // tilemap rebuilt; a column already queued for it this frame is superseded by the rebuild. (`$00`
-      // = 0 takes C2/0A6A, not derived here -- it still only advances.)
+      // C2/1947 -- `LDA [$58],Y / STA $00 / JSR $09C5`, length 2. C2/09C5 rebuilds one BG's whole tilemap
+      // (`$00 & 3`: 1 = BG1, 2 = BG2) and re-derives its camera word from the cells (09D8-09E7: $20,X = $E3,X << 3,
+      // $26,X = $E7,X << 3) inside the object pass, so an object later in the same pass scrolls from the new place
+      // (the attract's flyover driver: `13 E3 00 60 / ... / 3E 01 / 3E 02`). Here: the camera set, the layer
+      // rebuilt (owTilemapBuildBg) and a column already queued for it dropped. sequence_table.md (C2/1947).
+      // Not ported: `$00` = 0 (C2/0A6A) only advances.
       case 0x3E:
         if (g_obStream && (op[1] & 3) >= 1 && (op[1] & 3) <= 2) {
           int bg = (op[1] & 3) - 1;
@@ -2336,23 +2125,18 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         }
         adv = 2; break;
       case 0x0A: B[op[1]] = 0; adv = 2; break;
-      case 0x0B: B[op[1]]++; adv = 2; break;        // C2/121D: B[operand]++ (the fair release-3 sub 07FC
-                                                    // interleaves 0B between its 3 spawns; parking here gave 1 bunch + a frozen blob)
+      case 0x0B: B[op[1]]++; adv = 2; break;        // C2/121D: B[operand]++ (the fair's release-3 sub 07FC
+                                                    // interleaves 0B between its 3 spawns)
       case 0x0C: B[op[1]]--; adv = 2; break;        // C2/1230: `LDA ($4E),Y / DEC A / STA ($4E),Y`, Y = the operand
       case 0x0D: B[op[1]] = op[2]; adv = 3; break;
       case 0x0E: B[op[1]] |= op[2]; adv = 3; break;
       case 0x0F: B[op[1]] &= (uint8_t)~op[2]; adv = 3; break;
       case 0x10: ram[op[1] | (op[2] << 8)] = 0; adv = 3; break;
       case 0x11: ram[op[1] | (op[2] << 8)]++; adv = 3; break;
-      // C2/12A7 / C2/12B8 / C2/12CE -- the other three ABSOLUTE-WRAM writers, same shape as 0x10/0x11:
-      //   `LDY #01 / LDA [$58],Y / TAX / SEP #20 / ... $0000,X / REP #20 / LDA #len / RTS`.
+      // C2/12A7 / C2/12B8 / C2/12CE -- the other three absolute-WRAM writers, same shape as 0x10/0x11:
       //   0x12 DEC abs (len 3) | 0x13 abs := imm (len 4, imm read at Y=3) | 0x14 abs |= imm (len 4).
-      // ⭐ 0x13 IS HOW A WORLD SETS ITS COLOUR MATH. $0046 is the CGADSUB shadow the overworld NMI
-      // pushes to $2131 (C2/0296 `LDA $46 / STA $2131`), and each world's own object script stores it:
-      // world 0 (1000 A.D.) 0x44 = half-add on BG3, world 1 (600 A.D.) 0x04 = FULL add on BG3.
-      // Measured: `--monitor 7E0046:1 --writer` walking out of loc 112 into world 1 shows
-      // `f73 7E0046=04 (C2:12C8)` -- C2/12C8 is the instruction after this handler's `STA $0000,X`.
-      // Without the op the shadow kept world 0's 0x44 and 600 A.D.'s mist composited half-bright.
+      // 0x13 is how a world sets its colour math: $0046 is the CGADSUB shadow the NMI pushes to $2131 (C2/0296), and
+      // each world's script stores it (world 0: 0x44 half-add on BG3; world 1: 0x04 full add). ow_colour_math_per_world.md.
       case 0x12: ram[op[1] | (op[2] << 8)]--; adv = 3; break;
       case 0x13: ram[op[1] | (op[2] << 8)] = op[3]; adv = 4; break;
       case 0x14: ram[op[1] | (op[2] << 8)] |= op[3]; adv = 4; break;
@@ -2362,10 +2146,10 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         adv = 3; break;
       case 0x22: if (ram[op[1] | (op[2] << 8)] == 0) { pc = (uint16_t)(pc + (int8_t)op[3]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 4; break;
       case 0x23: if (ram[op[1] | (op[2] << 8)] != 0) { pc = (uint16_t)(pc + (int8_t)op[3]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 4; break;
-      // C2/14AD -- op 0x25's opposite: `CMP $0000,X / BEQ ->14CC` steps 5 when the byte EQUALS the operand, else returns the
+      // C2/14AD -- op 0x25's opposite: `CMP $0000,X / BEQ ->14CC` steps 5 when the byte equals the operand, else returns the
       // sign-extended offset (`TDC / INY / LDA [$58],Y / BPL / ORA #FF00`) and the dispatcher jumps by it.
       case 0x24: if (ram[op[1] | (op[2] << 8)] != op[3]) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
-      // C2/1A52 (0x44) / C2/1AAC (0x45) -- SET / CLEAR BIT 7 OF A RECORD: `JSR ($1A70,X)` on operand 1 (three real entries --
+      // C2/1A52 (0x44) / C2/1AAC (0x45) -- set / clear bit 7 of a record: `JSR ($1A70,X)` on operand 1 (three real entries --
       // the table's later words are the code after it) points $10 at record operand 2 of one of three $7E arrays:
       //   1A76  $10 = $7E00 + n * 7  (the world's entrance records)   1A8A  $8300 + n * 3   1A9B  $8180 + n * 3
       // (each `STA $00` the 16-bit n first), then $12 = 7E and `LDA [$10] / ORA #80` (0x44) or `AND #7F` (0x45). Three bytes.
@@ -2385,23 +2169,20 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
       case 0x26: if ((ram[op[1] | (op[2] << 8)] & op[3]) != 0) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
       case 0x27: if ((ram[op[1] | (op[2] << 8)] & op[3]) == 0) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
       case 0x4C: if (ram[op[1] | (op[2] << 8)] < op[3]) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
-      // C2/1566 -- op $4C's MIRROR: `CMP [$58],Y / BCC ->1585` takes the FALL-THROUGH when the cell
-      // is below the immediate, so the branch is >=. Same shape otherwise: sign-extended
-      // displacement on the taken arm (`BPL / ORA #FF00`), `LDA #0005` on the other.
-      // ⭐ World 0's bootstrap parks here without it: `4D A6 1B 51 09` at $7F:0503.
+      // C2/1566 -- op $4C's mirror: `CMP [$58],Y / BCC ->1585` falls through when the cell is below the
+      // immediate, so the branch is >=. Sign-extended displacement on the taken arm (`BPL / ORA #FF00`),
+      // `LDA #0005` on the other. World 0's bootstrap uses it (`4D A6 1B 51 09` at $7F:0503).
       case 0x4D: if (ram[op[1] | (op[2] << 8)] >= op[3]) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
       // C2/158B (0x28) / C2/1599 (0x29): `LDX #20A2` / `LDX #2105`, `JSR C2/048A`, `LDA #0002` -- allocate the native
-      // FADE object: 0x28 fades out, 0x29 fades in (obFade below). C2/048A is op $35's allocator: the first free block from
-      // $0C30 (60), the class word, +3/+4 and +2 zeroed, then the MVN of the parent's +05..+3F. The child finds its rate
-      // through that copy: the parent's +07 is THIS op's address (C2/0F86 stores the pc after every advance), and the
-      // handler reads `[+07],Y` with Y = 1 -- the operand. The port keeps the pc in a local until the visit ends, so it is
-      // stored first.
+      // fade object: 0x28 fades out, 0x29 fades in (obFade below). The child finds its rate through C2/048A's copy of
+      // the parent's +07, this op's address (C2/0F86 stores the pc after every advance), reading `[+07],Y` with Y = 1.
+      // The port keeps the pc in a local until the visit ends, so it is stored first.
       case 0x28: case 0x29: {
         obPutW(B + OWOBJ_PC, pc);
         obAllocNative(ram, B, op[0] == 0x28 ? 0x20A2 : 0x2105);
         adv = 2; break;
       }
-      case 0x2A: case 0x2B: {                       // C2/15A7 / 15B5: the MOSAIC up (class $21F8) / down ($2194), 2 operands
+      case 0x2A: case 0x2B: {                       // C2/15A7 / 15B5: the mosaic up (class $21F8) / down ($2194), 2 operands
         obPutW(B + OWOBJ_PC, pc);
         obAllocNative(ram, B, op[0] == 0x2A ? 0x21F8 : 0x2194);
         adv = 3; break;
@@ -2418,23 +2199,20 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         else if (--B[OWOBJ_WAIT] == 0) { adv = 2; break; }
         obIntegrate(B); obAnimTick(ram, B);
         adv = -1; break;
-      case 0x32:                                    // C2/164B camera-pan-mover: timed normalize+integrate (NO wrap/anim)
-        if (B[OWOBJ_WAIT] == 0) {                          // first visit: load timer + ZERO the 4 accumulators
+      case 0x32:                                    // C2/164B camera-pan-mover: timed normalize+integrate (no wrap/anim)
+        if (B[OWOBJ_WAIT] == 0) {                          // first visit: load timer + zero the 4 accumulators
           B[OWOBJ_WAIT] = op[1];
           obPutW(B + OWOBJ_XFRAC, 0); obPutW(B + OWOBJ_XPOS, 0);  // X frac/int
           obPutW(B + OWOBJ_YFRAC, 0); obPutW(B + OWOBJ_YPOS, 0);  // Y frac/int
         } else if (--B[OWOBJ_WAIT] == 0) { adv = 2; break; }
-        obSignNorm(B);                               // C2/1759 BEFORE integrate
-        obAdd32(B + OWOBJ_XFRAC, B + OWOBJ_XPOS, obW(B + OWOBJ_VELXF), obW(B + OWOBJ_VELXI));   // C2/0F38 X  (NO obWrapWorld, NO obAnimTick)
+        obSignNorm(B);                               // C2/1759 before integrate
+        obAdd32(B + OWOBJ_XFRAC, B + OWOBJ_XPOS, obW(B + OWOBJ_VELXF), obW(B + OWOBJ_VELXI));   // C2/0F38 X  (no obWrapWorld, no obAnimTick)
         obAdd32(B + OWOBJ_YFRAC, B + OWOBJ_YPOS, obW(B + OWOBJ_VELYF), obW(B + OWOBJ_VELYI));   //           Y
-        // ...AND THE WHOLE PIXELS ARE THE CAMERA. The position words are only an accumulator here (zeroed
-        // on entry, re-normalised by C2/1759 every frame); what the handler does with them is scroll:
+        // The position words are only an accumulator here (zeroed on entry, normalised by C2/1759 every frame);
+        // the whole pixels scroll the camera:
         //   167F JSR C2/1784 / BCC / $00 = 1: JSR C2/0568 / $00 = 2: JSR C2/0568      BG1 and BG2 by $01
         //   1694 unless $1BA7 bit4 / $1BAA bit5 / $1BAF bit1: `$24 += $01` (sign-extended)   BG3
         //   16BC JSR C2/17AB / BCC / $00 = 1,2: JSR C2/066C / same gates: `$2A += $01`      the Y twin
-        // The port integrated and threw the pixels away, so the attract's flyover never panned. MEASURED
-        // (PEEK_SAVE f100, --monitor "7E0020:2,7E0022:2,7E0024:2" --writer): its child `2E 00 00 FF FF /
-        // 2F 00 00 00 00 / 32 F6` moves $0022 and $0024 down one per frame from f5 (C2:05C7 / C2:16B8).
         { int d;
           if (obWholeStep(B + OWOBJ_XFRAC, B + OWOBJ_XPOS, &d)) {
             obScroll(ram, c, 0, 0, d); obScroll(ram, c, 1, 0, d);
@@ -2446,7 +2224,7 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
           }
         }
         adv = -1; break;
-      // C2/16FA -- ONE LAYER'S PAN, op 0x32's twin for the layer the script names: `51 <layer> <frames>`. The timer is
+      // C2/16FA -- one layer's pan, op 0x32's twin for the layer the script names: `51 <layer> <frames>`. The timer is
       // operand 2 (16FA-1708: +0A, the four accumulators zeroed, on into the step the same visit; 171B DEC +0A / BNE, and
       // 0 -> LDA #0003), the step is op 0x32's (1726 JSR C2/1759 / JSR C2/0F38), and the whole pixels go to that layer
       // alone: 172E JSR C2/1784 / BCC / `$00 = operand 1 / JSR C2/0568`, 1743 JSR C2/17AB / BCC / `$00 = operand 1 / JSR
@@ -2471,7 +2249,7 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         if (obWholeStep(B + OWOBJ_YFRAC, B + OWOBJ_YPOS, &d) && bg >= 0) obScroll(ram, c, bg, 1, d);
         adv = -1; break;
       }
-      // C2/1ACA / C2/1AE1 -- A BLOCK BYTE PLUS / MINUS AN IMMEDIATE: `46 off n` = block[off] += n, `47 off n` = block[off]
+      // C2/1ACA / C2/1AE1 -- a block byte plus / minus an immediate: `46 off n` = block[off] += n, `47 off n` = block[off]
       // -= n (M = 8, `LDA [$58],Y / TAX` with B = 0 from the dispatcher's AND #00FF, `ADC ($4E),Y` / `SBC [$58],Y`, the carry
       // CLC / SEC first). Three bytes each.
       case 0x46: B[op[1]] = (uint8_t)(B[op[1]] + op[2]); adv = 3; break;
@@ -2504,17 +2282,10 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         obWrapWorld(B); obAnimTick(ram, B);
         adv = -1; break;
       }
-      // ---- The sub-VM's SOUND ops (handler table C2/0F91[op*2], verified: op 0x30 -> C2/160F which
-      // JSRs C2/1CDA, op 0x32 -> C2/164B, op 0x3B -> C2/18C7). 0x3B was previously labelled a
-      // "graphics-LOAD request ... render reads +0B" and stubbed to advance-only; the disassembly of
-      // C2/18C7 is a SOUND request (the +0B render class belongs to op 0x30's C2/1CDA, not here). The
-      // `adv` values below are the handlers' own `LDA #000n / RTS` returns, which is why the stub kept
-      // the scripts in sync while dropping every effect. 0x3C/0x3D/0x4B had no case at all and fell to
-      // `default: adv = -1`, which PARKS the object.
-      //
+      // ---- The sound ops (handler table C2/0F91[op*2]); `adv` is each handler's own `LDA #000n / RTS`. ----
       // C2/18C7 (cmd $18) and C2/18D0 (cmd $19) share a tail: stage $1BE8-$1BEA, commit via C2/2ED9.
-      // $1BEB is deliberately NOT written -- it keeps the previous request's byte, the same stickiness
-      // the field mailbox's $1E03 has (see the 0xE8/0xEA family in ct_vm.c).
+      // $1BEB is not written: it keeps the previous request's byte, as the field mailbox's $1E03 does
+      // (the 0xE8/0xEA family in ct_vm.c).
       case 0x3B: case 0x3C:
         ram[0x1BE8] = (op[0] == 0x3B) ? 0x18 : 0x19;  // 218C9 LDA #18 / 218D2 LDA #19 -> STA $1BE8
         ram[0x1BE9] = op[1];                          // 218D7 LDY #0001 / LDA [$58],Y / STA $1BE9
@@ -2522,78 +2293,65 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         ram[0x1BED] = 0;                              // 218E5 STZ $1BED -- priority 0 (always accepted)
         CtWorldSoundRequest(ram);                     // 218E8 JSR C2/2ED9
         adv = 3; break;                               // 218ED LDA #0003 / RTS
-      // C2/18F1 -- PLAY SONG, gated on $7F01ED (the same field-song hold C2/2FAE uses at line 124).
+      // C2/18F1 -- play song, gated on $7F01ED (the field-song hold C2/2FAE also uses).
       case 0x3D:
         CtWorldScriptPlaySong(ram, op[1]);
         adv = 2; break;                               // 2191B LDA #0002 / RTS
-      // C2/18F9 -- PLAY SONG, UNGATED: op 0x3D's body from its gate on (the dispatch word C2:0F91+4A*2 = 18F9).
+      // C2/18F9 -- play song, ungated: op 0x3D's body after its gate (the dispatch word C2:0F91+4A*2 = 18F9).
       case 0x4A:
         owPlaySong18F9(ram, op[1]);
         adv = 2; break;                               // 2191B LDA #0002 / RTS
-      // C2/191F -- the RAW command: all four mailbox bytes come from the script.
+      // C2/191F -- the raw command: all four mailbox bytes come from the script.
       case 0x4B:
         ram[0x1BE8] = op[1]; ram[0x1BE9] = op[2];     // 21923-2192C
         ram[0x1BEA] = op[3]; ram[0x1BEB] = op[4];     // 2192F-21938
         ram[0x1BED] = 0;                              // 2193B STZ $1BED
         CtWorldSoundRequest(ram);                     // 2193E JSR C2/2ED9
         adv = 5; break;                               // 21943 LDA #0005 / RTS
-      // C2/12E7 -- CLEAR BITS: `mem[addr] &= ~mask`, four bytes.
-      //   LDY #0001 / LDA [$58],Y / TAX        -- X = the 16-bit address (operand bytes 1-2)
-      //   SEP #20 / LDY #0003 / LDA [$58],Y    -- the mask (operand byte 3)
-      //   EOR #FF / AND $0000,X / STA $0000,X  -- clear those bits in place
-      //   REP #20 / LDA #0004 / RTS
-      // ⭐ This is how the attract's world-5 FLYOVER ENDS. Its driver runs `15 A9 1B 80` --
-      // `$1BA9 &= ~$80`, clearing the very story-page bit C2/26D6's MVN brings in to select the
-      // attract's cutscene branch -- and the op immediately after it, at pc 0584, is `05` (C2/1100,
-      // ENTER A LOCATION), the return to scene 433. With no case here the op fell to `default` and
-      // parked the object FOUR BYTES short of the leg's ending, so the flyover ran forever and the
-      // 433 chain never reached its next entry (notes 9.17).
+      // C2/12E7 -- clear bits: `mem[addr] &= ~mask` (address = operand bytes 1-2, mask = byte 3), four bytes.
+      // The attract's world-5 flyover ends with it: `15 A9 1B 80` clears the story-page bit that selected the
+      // cutscene branch, and the next op (pc 0584) is `05`, the return to scene 433 (sequence_table.md 9.17).
       case 0x15: {
         int a = op[1] | (op[2] << 8);
         ram[a] = (uint8_t)(ram[a] & ~op[3]);
         adv = 4; break;
       }
-      // C2/1B15 -- SUBTRACT: `mem[addr] -= imm`, four bytes: `LDY #0001 / LDA [$58],Y / TAX` (the 16-bit address), `SEP #20 /
-      // LDY #0003 / LDA $0000,X / SEC / SBC [$58],Y / STA $0000,X / REP #20 / LDA #0004 / RTS`. World 1F3 after Lavos's fall
-      // (`FF 24`'s reboot) parked an object on it at pc 0825 until this existed.
+      // C2/1B15 -- subtract: `mem[addr] -= imm`, four bytes (`SEC / SBC [$58],Y`). Used by world 1F3 after Lavos's fall
+      // (`FF 24`'s reboot, pc 0825).
       case 0x49: {
         int a = op[1] | (op[2] << 8);
         ram[a] = (uint8_t)(ram[a] - op[3]);
         adv = 4; break;
       }
-      // THE BYTE-COPY FAMILY C2/1302-1369 (16-bit A, `LDA [$58],Y` reads the op's own bytes, ($4E) = this block):
+      // The byte-copy family C2/1302-1369 (16-bit A, `LDA [$58],Y` reads the op's own bytes, ($4E) = this block):
       //   16 off lo hi   C2/1302  `LDA ($4E),Y / STA $0000,X`   -- $7E:hilo := block[off]           4 bytes
       //   17 off lo hi   C2/131C  `LDA $0000,X / STA ($4E),Y`   -- block[off] := $7E:hilo           4 bytes
       //   18 dst src     C2/1336  `LDA ($4E),Y / STA ($4E),Y`   -- block[dst] := block[src]         3 bytes
       //   19 dlo dhi slo shi  C2/1350  `LDA $0000,X / STA $0000,Y` -- $7E:dst := $7E:src           5 bytes
-      // Op 17 is what parked the attract's 2300 A.D. walkers (world 2, blocks 11-13 at pc 0994 / 0A03 / 0A42) at
-      // (0,0): oracle attract_cena_inicial f5936 has them at (914,424) (922,428) (914,432) on scripts 09AD/0B27/0AA5.
+      // The attract's 2300 A.D. walkers (world 2, blocks 11-13) read the party through op 17.
       case 0x16: ram[op[2] | (op[3] << 8)] = B[op[1]]; adv = 4; break;
       case 0x17: B[op[1]] = ram[op[2] | (op[3] << 8)]; adv = 4; break;
       case 0x18: B[op[1]] = B[op[2]]; adv = 3; break;
       case 0x19: ram[op[1] | (op[2] << 8)] = ram[op[3] | (op[4] << 8)]; adv = 5; break;
-      // ...and their BLOCK-byte branches C2/1398-141D, the $22/$23/$25 family's twins on the object's own block:
+      // ...and their block-byte branches C2/1398-141D, the $22/$23/$25 family's twins on the object's own block:
       // the taken arm returns the sign-extended displacement (`BPL / ORA #FF00 / CLC`), the other the length.
       //   1C off d      C2/1398  `LDA ($4E),Y / BNE ->len`      -- branch if block[off] == 0      3 bytes
       //   1D off d      C2/13B8  `LDA ($4E),Y / BEQ ->len`      -- branch if block[off] != 0      3 bytes
       //   1E off v d    C2/13D8  `CMP ($4E),Y / BEQ ->len`      -- branch if block[off] != v      4 bytes
       //   1F off v d    C2/13FC  `CMP ($4E),Y / BNE ->len`      -- branch if block[off] == v      4 bytes
-      // The 2300 A.D. walkers stop on 1E (block 11, pc 0B4E) and 1F (block 12, pc 0A07) once op 17 runs.
       case 0x1C: if (B[op[1]] == 0) { pc = (uint16_t)(pc + (int8_t)op[2]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 3; break;
       case 0x1D: if (B[op[1]] != 0) { pc = (uint16_t)(pc + (int8_t)op[2]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 3; break;
       case 0x1E: if (B[op[1]] != op[2]) { pc = (uint16_t)(pc + (int8_t)op[3]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 4; break;
       case 0x1F: if (B[op[1]] == op[2]) { pc = (uint16_t)(pc + (int8_t)op[3]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 4; break;
       // C2/1420 / C2/1444, the bit-test pair of the same family: `AND ($4E),Y` of the block byte op[1] with the mask op[2],
-      // then 0x20 BEQ -> advance 4 (so it branches on ANY bit set) and 0x21 BNE -> advance 4 (it branches on none set).
-      // The ferry's bootstrap parked an object on `20 22 80 53` at $7F:0A3D until this existed (the Truce pay, saves/ferry_re).
+      // then 0x20 BEQ -> advance 4 (so it branches on any bit set) and 0x21 BNE -> advance 4 (it branches on none set).
+      // The ferry's bootstrap uses it (`20 22 80 53` at $7F:0A3D, disasm/notes/ow_ferry.md).
       case 0x20: if (B[op[1]] & op[2]) { pc = (uint16_t)(pc + (int8_t)op[3]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 4; break;
       case 0x21: if (!(B[op[1]] & op[2])) { pc = (uint16_t)(pc + (int8_t)op[3]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 4; break;
-      case 0x4E: CtWorldObjOp4E(ram, op); adv = 4; break;   // C2/181C -- INDIRECT FAR CALL
+      case 0x4E: CtWorldObjOp4E(ram, op); adv = 4; break;   // C2/181C -- indirect far call
       case 0x52: obPutW(B, 0); return 0;            // die: free the block
-      // An op with no case PARKS the object, and a parked object re-reads the same byte every frame
-      // for the rest of the run -- silently. That silence is what hid ops 0x15 and 0x4E: the attract
-      // looked "stuck on a scene" rather than "stopped on an opcode". Name it once per opcode; the
-      // handler's real address is the word at C2:0F91[op*2] (self-checked: op 4E -> C2/181C).
+      // An op with no case parks the object (it re-reads the same byte every frame), so it is reported once
+      // per opcode; the handler's address is the word at C2:0F91[op*2].
       default: {
         static uint8_t said[256];
         if (!said[op[0]]) { said[op[0]] = 1;
@@ -2611,15 +2369,10 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   return 1;
 }
 
-// THE TWO FADE OBJECTS (classes $20A2 and $2105, allocated by ops 0x28/0x29). They own the overworld's brightness: the
-// NMI writes `$1C | $1D` to INIDISP (C2/031F) and nothing else in bank C2 steps $1D. $1BF6 is their mutex (bit 1 = a
-// fade-out is running, bit 0 = a fade-in). The rate is the spawning op's operand, read through the copied pc; a rate of 0
-// is a CUT. Their counter is the block's +3, which the object loop bumps after every CLC (C2/054E) -- so a step waits
-// until +3 reaches the rate, then clears it. Returns 1 = SEC (the loop frees the block), 0 = CLC.
-// M is 8-bit in both handlers (the loop's `SEP #20` at C2/053A), so every +3 store and compare is one byte.
-// THE MOSAIC OBJECTS, classes $21F8 (up: ops 0x2A) and $2194 (down: 0x2B), on `$1F` -- the MOSAIC shadow ($2106: the size
-// in the high nybble, the layers in the low). Their script operands: +1 the layers OR-ed into `$1F`, +2 the frames a step
-// (0: at once -- up to F, or down to 0). A step every +2 frames: up `$1F += 10` until the size is F, down `- 10` to 0.
+// The mosaic objects, classes $21F8 (up: op 0x2A) and $2194 (down: 0x2B), on `$1F`, the MOSAIC shadow ($2106: the size
+// in the high nybble, the layers in the low). Operands: +1 the layers OR-ed into `$1F`, +2 the frames a step (0: at
+// once, up to F or down to 0). A step every +2 frames: up `$1F += 10` until the size is F, down `- 10` to 0.
+// Returns 1 = SEC (the loop frees the block), 0 = CLC.
 static int obMosaic(uint8_t* ram, uint8_t* B, uint16_t cls) {
   uint8_t rb[8];
   const uint8_t* op = obScript(ram, B[0x09], obW(B + OWOBJ_PC), rb);   // `LDA $0007,X / STA $10 / LDA $0009,X / STA $12`
@@ -2637,13 +2390,18 @@ static int obMosaic(uint8_t* ram, uint8_t* B, uint16_t cls) {
   ram[0x1F] = (uint8_t)(ram[0x1F] - 0x10);                             // 21ED SBC #10
   return 0;
 }
+// The two fade objects (classes $20A2 and $2105, ops 0x28/0x29) own the overworld's brightness: the NMI writes `$1C | $1D`
+// to INIDISP (C2/031F) and nothing else in bank C2 steps $1D. $1BF6 is their mutex (bit 1 = fade-out running, bit 0 =
+// fade-in). The rate is the spawning op's operand (read through the copied pc); 0 is a cut. A step waits until the
+// block's +3 (bumped by C2/054E after every CLC) reaches the rate, then clears it. M is 8-bit in both handlers (C2/053A
+// `SEP #20`), so +3 is one byte. Returns 1 = SEC, 0 = CLC. disasm/notes/ow_objvm.md, "The FADE objects".
 static int obFade(uint8_t* ram, uint8_t* B, uint16_t cls) {
   uint8_t rb[8];
   uint8_t rate0 = obScript(ram, B[0x09], (uint16_t)(obW(B + OWOBJ_PC) + 1), rb)[0];   // `LDY #0001 / LDA [$10],Y`, $12 = +09
   { static int ft = -1; if (ft < 0) { const char* e = getenv("CT_OWFADETRACE"); ft = (e && *e) ? 1 : 0; }
     if (ft && B[2] == 0) printf("owfade-obj: cls=%04X blk=%04X pc=%02X:%04X rate=%02X $1BF6=%02X $1C=%02X $1D=%02X\n", cls,
                                 (unsigned)(B - ram), B[9], obW(B + OWOBJ_PC), rate0, ram[0x1BF6], ram[0x1C], ram[0x1D]); }
-  if (cls == 0x20A2) {                                // FADE OUT, C2/20A2 `JMP ($20AB,X)`: 20AF / 20DF
+  if (cls == 0x20A2) {                                // fade out, C2/20A2 `JMP ($20AB,X)`: 20AF / 20DF
     if (B[2] == 0) {
       if (ram[0x1BF6] & 0x02) return 1;               // 20AF LDA $1BF6 / BIT #02 / BNE ->20D7 (SEC)
       ram[0x1BF6] |= 0x02;                            // 20B6 LDA #02 / TSB $1BF6
@@ -2658,7 +2416,7 @@ static int obFade(uint8_t* ram, uint8_t* B, uint16_t cls) {
     ram[0x1BF6] &= (uint8_t)~0x02;                    // 20FE LDA #02 / TRB $1BF6
     return 1;                                         // 2103 SEC
   }
-  switch (B[2]) {                                     // FADE IN, C2/2105 `JMP ($210E,X)`: 2116 / 2152 / 216F / 218D
+  switch (B[2]) {                                     // fade in, C2/2105 `JMP ($210E,X)`: 2116 / 2152 / 216F / 218D
     case 0:
       if (ram[0x1BF6] != 0) break;                    // 2116 LDA $1BF6 / BNE ->218D
       ram[0x1BF6] |= 0x01;                            // 211B LDA #01 / TSB $1BF6
@@ -2683,14 +2441,10 @@ static int obFade(uint8_t* ram, uint8_t* B, uint16_t cls) {
   return 1;                                           // 2192 SEC
 }
 
-// CLASS $1DD4, THE PALETTE ROW (allocated by op 0x04). Two frames of life:
-//   1DD4 TDC / LDA $0002,X / BNE ->1E2F / LDA $0034,X / BEQ ->1DE7 / LDX #1E38 / JSR C2/048A / SEC
-//   1DE7 TXY / INC $0002,X / LDX $0032,Y / INC $0B20,X / TYX / LDA $0032,X / REP #20 / ASL x5 / ADC #0920 / STA $2181
-//        LDA $0035,X / STA $10 / ... / STZ $2183 / $12 = +37 / 16 x `LDA [$10],Y / STA $2180 / INY` twice / TSB $4C #02 / CLC
-//   1E2F LDA $0032,X / TAX / DEC $0B20,X / SEC
-// The copy goes through WMADD/WMDATA (bank bit 0 = $7E) into the CGRAM SHADOW $7E:0920 + row * 32, and `$4C` bit 1 asks
-// the next NMI to upload it (C2/01A6). $0B20 + row counts the live objects on a row. A non-zero +34 hands the row to
-// class $1E38, the 32-step fade (obRowFade below) -- the attract's 1000 A.D. leg asks for one on row 8 before its white-out.
+// Class $1DD4, the palette row (op 0x04), two frames of life. State 0: a non-zero +34 hands the row to class $1E38 (the
+// 32-step fade, obRowFade) and dies; otherwise INC $0B20 + row (the live objects on a row), copy 32 bytes from
+// [+35..+37] through WMDATA into the CGRAM shadow $7E:0920 + row * 32, and `TSB $4C #02` (the NMI uploads it, C2/01A6).
+// State 1 (1E2F): DEC $0B20 + row, SEC. disasm/notes/ow_objvm.md, "The PALETTE ROWS".
 static int obPalRow(uint8_t* ram, uint8_t* B) {
   if (B[2] != 0) { ram[0x0B20 + B[0x32]]--; return 1; }                // 1E2F, X = the row (the TDC left B = 0)
   if (B[0x34] != 0) { obAllocNative(ram, B, 0x1E38); return 1; }      // 1DDF LDX #1E38 / JSR C2/048A / SEC
@@ -2706,13 +2460,10 @@ static int obPalRow(uint8_t* ram, uint8_t* B) {
   return 0;
 }
 
-// CLASS $1CF5, THE VRAM UPLOAD (op 0x03). `JMP ($1D02,X)` on +02: 1D06 / 1D4C.
-//   1D06 INC $0002,X / $10 = +07 (the op's address), $12 = +09 (its bank) / +0D = [op+3] (the source bank, 8-bit) / 16-bit:
-//        +0B = [op+1] (the source), +0E = [op+4] (the VRAM word), +12 = [op+6] (tiles a frame), +14 = [op+8] (tiles in all) /
-//        +12 == 0 -> +12 = +14 -- and falls into 1D4C the same frame
-//   1D4C LDX $4E / $08 = min(+12, +14) / one NMI queue entry at $60 + $5F (INC $5E around the write, like the anim op 6):
-//        $62 = +0D, $67 = 80, $60 = +0B, $63 = +0E, $65 = $0A = $08 << 5 (32-byte tiles) / $5F += 8 / STZ $5E /
-//        +14 -= $08: zero -> SEC (1DB3, the block is freed) / else +0B += $0A, +0E += $0A >> 1, CLC
+// Class $1CF5, the VRAM upload (op 0x03), `JMP ($1D02,X)` on +02. 1D06 (once): from the op, +0D source bank, +0B source,
+// +0E VRAM word, +12 tiles a frame (0 -> all), +14 tiles in all; then into 1D4C the same frame. 1D4C: one NMI queue entry
+// of min(+12, +14) 32-byte tiles; +14 -= that, zero -> SEC (freed), else the source and VRAM word advance, CLC.
+// disasm/notes/ocean_palace_aftermath.md sec. 1.
 static int obVramUp(uint8_t* ram, uint8_t* B) {
   if (B[2] == 0) {
     B[2]++;
@@ -2744,18 +2495,11 @@ static int obVramUp(uint8_t* ram, uint8_t* B) {
   return 0;
 }
 
-// CLASS $1E38, THE ROW FADE: the shadow row walks to the op's 16 target colours in 32 steps, one step every +09 (the op's
-// +34) frames. `JMP ($1E41,X)`: 1E47 / 1E86 / 1EB5.
-//   1E47 INC $0002,X / LDY $0032,X / INC $0B20,Y / +09 = +34, +0D = +37, +07 = row, +0B = +35, STZ +03 +05 (16-bit) /
-//        +0E = row * 32 + $0920 / JSR C2/1EC0 / CLC
-//   1EC0 per colour: $08 = the shadow's colour now, $0A = the target; C2/1F11 stores one DESCRIPTOR per channel into
-//        +10+k (red), +20+k (green), +30+k (blue): 0 when equal, the rise when the target is above, $80 | (fall + $1F) below
-//   1E86 LDY $0007,X / LDA $0B20,Y / CMP #01 / BNE ->1EB5 (another object took the row) / LDA $0003,X / CMP $0009,X / BCC
-//        (wait) / JSR C2/1F85 / STZ $0003,X / TSB $4C #02 / INC $0005,X / CMP #20 / BNE / INC $0002,X
-//   1F85 per colour, C2/1FCC per channel: a rising descriptor moves the channel up one when `$C2:2062,d` is set and then
-//        counts up; a falling one tests `$C2:2062,(d & 3F)`, moves down and counts down. (The table is 32 zeroes then 32
-//        ones, so a rise of n moves in the last n of the 32 steps, a fall of n in the first n.)
-//   1EB5 LDA $0007,X / TAX / DEC $0B20,X / SEC
+// Class $1E38, the row fade: the shadow row walks to the op's 16 target colours in 32 steps, one step every +09 (the
+// op's +34) frames. `JMP ($1E41,X)`: 1E47 (set up; C2/1EC0/1F11 store one descriptor per channel and colour into
+// +10/+20/+30 + k: 0 equal, the rise, or $80 | (fall + $1F)) / 1E86 (step; leave if another object took the row) /
+// 1EB5 (DEC $0B20 + row, SEC). C2/1FCC moves a channel when `$C2:2062,d` is set (32 zeroes then 32 ones, so a rise
+// of n moves in the last n steps, a fall in the first n). disasm/notes/ow_objvm.md, "The PALETTE ROWS".
 static uint8_t obFadeDesc(int cur, int tgt) {                          // C2/1F11's three arms, one channel
   if (tgt == cur) return 0;                                            // BEQ -> TDC
   if (tgt > cur) return (uint8_t)(tgt - cur);                          // BCS
@@ -2823,8 +2567,8 @@ static int obRowFade(uint8_t* ram, uint8_t* B) {
   return 1;
 }
 
-// ===================== THE EPOCH ON THE MAP: classes $309E, $42DD, $495E and the lead's modules 2/4/5 =====================
-// disasm/notes/ow_vehicle.md. `$027E` is the lead's MODULE (C2/3404's table C2:342D): 0 on foot (the host's mover), 1
+// ---- The Epoch on the map: classes $309E, $42DD, $495E and the lead's modules 2/4/5 ----
+// disasm/notes/ow_vehicle.md. `$027E` is the lead's module (C2/3404's table C2:342D): 0 on foot (the host's mover), 1
 // nothing, 2 riding the Epoch (C2/346D: `$0283 = $0290`, no tick -- the party is inside), 3 riding vehicle B (C2/347B), 4
 // boarding (C2/3489), 5 stepping out (C2/349B). The boarding manager $309E moves it; the Epoch $42DD flies.
 static void owUnderway(const char* what) {
@@ -2862,7 +2606,7 @@ static int owBoxHit(unsigned ax, unsigned ay, unsigned abox, unsigned bx, unsign
   else r = ((0x10000 - d) & 0xFFFF) - owRomW(bbox + 6) - owRomW(abox + 4);
   return (r & 0x8000) != 0;
 }
-// THE BOARDING MANAGER, class $309E (block $0E30 on 1F6). Only in free roam or a cutscene ($027C 0 / 1) and with no entry
+// The boarding manager, class $309E (block $0E30 on 1F6). Only in free roam or a cutscene ($027C 0 / 1) and with no entry
 // pending ($0280 = 0); `$027F = $027E` first (the lead and the followers zero their phase when the two differ), then the
 // module's arm (C2:30C1).
 static int obBoardManager(uint8_t* ram) {
@@ -2908,7 +2652,7 @@ static int obBoardManager(uint8_t* ram) {
   }
   return 0;                                                            // 1: 31B2 CLC
 }
-// THE LEAD'S MODULES 1-5 (C2/3404 past its module-0 arm, which the host's mover is). Called from the pass on the lead's
+// The lead's modules 1-5 (C2/3404 past its module-0 arm, which the host's mover is). Called from the pass on the lead's
 // block while `$027E != 0`; returns 0 (CLC).
 static int obLeadModule(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   if (ram[0x2980] & 0x80) return 0;                                    // 3404 LDA $7E2980 / BPL
@@ -2948,7 +2692,7 @@ static int obLeadModule(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
     }
     B[2]++;                                                            // 382B INC $0002,X
     leadInstall(B, kLeadWalkId[(B[0x28] & 3) * 2 + (B[0x26] & 1)] + magus);   // 382E JSR C2/3953
-  }  /* fall through: 3837 is the next instruction */
+  }  /* 3837 is the next instruction */
   /* FALLTHROUGH */
   case 1: {                                                            // C2/3837: the column
     obIntegrate(B);                                                    // 383B JSR C2/0F38 / JSR C2/1CB8
@@ -3024,7 +2768,7 @@ static int owLandForbidden(const uint8_t* ram, const uint8_t* B) {
   if (y < R[w][0]) out |= 4; else if (y >= R[w][1]) out |= 8;
   return out == 0;
 }
-// THE EPOCH, class $42DD (block $0DB0 on 1F6), states C2:42E6.
+// The Epoch, class $42DD (block $0DB0 on 1F6), states C2:42E6.
 static int obEpoch(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   for (;;) switch (B[2]) {
   case 0:                                                              // C2/42F8: placed on its record
@@ -3226,7 +2970,7 @@ static int obEpoch(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   }
   }
 }
-// THE EPOCH'S SHADOW, class $495E: only on the Epoch's world (else SEC, gone); every frame its pose afresh -- 4E above the
+// The Epoch's shadow, class $495E: only on the Epoch's world (else SEC, gone); every frame its pose afresh -- 4E above the
 // craft, or with wings and aloft ($1BEF) 1F below it.
 static int obEpochShadow(uint8_t* ram, uint8_t* B) {
   if (B[2] == 0) {                                                     // C2/496B
@@ -3241,7 +2985,7 @@ static int obEpochShadow(uint8_t* ram, uint8_t* B) {
   return 0;
 }
 
-// ===================== VEHICLE B, THE DACTYLS (loc 1F3, 65,000,000 B.C.) =====================
+// ---- Vehicle B, the Dactyls (loc 1F3, 65,000,000 B.C.) ----
 // disasm/notes/ow_vehicle.md sec. 7. Record `$029A/$029C` (position), `$029E` (bits 0-1 aboard, 5 landing, 6 riding, 7 present);
 // `$1BF0` aloft. The lead's module 3 (C2/347B) rides it; the boarding manager's vehicle-B arm (box C2:325C) boards it. Classes:
 // $4CC5 the lead's Dactyl, $504B its shadow, $5097 x 2 the followers' Dactyls (+24 = the slot), $5494 x 2 their shadows.
@@ -3331,7 +3075,7 @@ static void owDactylProps(uint8_t* ram, uint8_t* B, unsigned px, unsigned py) {
   B[0x24] = CtWorldProp(ram, xm, y);             B[0x25] = CtWorldProp(ram, x, y);
   obPutW(ram + 0x0008, (uint16_t)x); obPutW(ram + 0x000A, (uint16_t)y);
 }
-// THE LEAD'S DACTYL, class $4CC5 (states C2:4CCE).
+// The lead's Dactyl, class $4CC5 (states C2:4CCE).
 static int obDactyl(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   for (;;) switch (B[2]) {
   case 0:                                                              // C2/4CDA
@@ -3435,7 +3179,7 @@ static int obDactyl(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
     return 0;
   }
 }
-// THE DACTYL'S SHADOW, class $504B: under it on the ground (4E, 18 above), or (aloft, `$1BF0`) 1F, 18 below.
+// The Dactyl's shadow, class $504B: under it on the ground (4E, 18 above), or (aloft, `$1BF0`) 1F, 18 below.
 static int obDactylShadow(uint8_t* ram, uint8_t* B) {
   if (B[2] == 0) { B[2]++; B[OWOBJ_ATTR] = 0xB0; B[0x10] = 0; B[0x11] = 0; }   // C2/5058
   unsigned k = (unsigned)ram[0x1BF0] * 4;                              // C2/5068: C2:508F[$1BF0]
@@ -3445,7 +3189,7 @@ static int obDactylShadow(uint8_t* ram, uint8_t* B) {
   obAnimTick(ram, B);
   return 0;
 }
-// A FOLLOWER'S DACTYL, class $5097 (+24 = the slot, 1 or 2; states C2:50A0).
+// A follower's Dactyl, class $5097 (+24 = the slot, 1 or 2; states C2:50A0).
 static int obDactylMate(uint8_t* ram, uint8_t* B) {
   int slot1 = (B[0x24] == 1);
   for (;;) switch (B[2]) {
@@ -3518,7 +3262,7 @@ static int obDactylMate(uint8_t* ram, uint8_t* B) {
     return 0;
   }
 }
-// A FOLLOWER DACTYL'S SHADOW, class $5494 (+24 = the slot; states C2:549D).
+// A follower Dactyl's shadow, class $5494 (+24 = the slot; states C2:549D).
 static int obDactylMateShadow(uint8_t* ram, uint8_t* B) {
   int slot1 = (B[0x24] == 1);
   for (;;) switch (B[2]) {
@@ -3574,7 +3318,7 @@ static int obDactylMateShadow(uint8_t* ram, uint8_t* B) {
   }
 }
 
-// ===================== THE WORLD MAP ($027C = 6: C2/258D -> C2/631F) =====================
+// ---- The world map ($027C = 6: C2/258D -> C2/631F) ----
 // disasm/notes/ow_world_map.md. Select aboard the Epoch or a Dactyl. A mode-7 picture of the whole world built from its own
 // map: one pixel wide and two high for each 16 x 16 cell (the colour of one pixel of the cell's tiles), zoomed out from the
 // party's place (class $666C), the party's and the Epoch's markers and the era's label; B zooms back in.
@@ -3621,7 +3365,7 @@ static void owMapMatrix(uint8_t* ram, uint8_t* B) {
   obPutW(ram + 0x00, (uint16_t)m00); obPutW(ram + 0x02, (uint16_t)m02); obPutW(ram + 0x04, (uint16_t)m04); obPutW(ram + 0x06, (uint16_t)m06);
   obPutW(ram + 0x2C, (uint16_t)m00); obPutW(ram + 0x2E, (uint16_t)m02); obPutW(ram + 0x30, (uint16_t)m04); obPutW(ram + 0x32, (uint16_t)m06);
 }
-// THE CONTROLLER, class $666C (states C2:6675): centre the plane on the party, zoom out (C6:F560 / F5A0, 32 steps), wait for
+// The controller, class $666C (states C2:6675): centre the plane on the party, zoom out (C6:F560 / F5A0, 32 steps), wait for
 // B (`$00F6 & 08`), zoom back in, `$027C = 7` and away.
 static int obMapCtl(uint8_t* ram, uint8_t* B) {
   for (;;) switch (B[2]) {
@@ -3654,7 +3398,7 @@ static int obMapCtl(uint8_t* ram, uint8_t* B) {
   default: return 0;
   }
 }
-// THE MARKERS, classes $67FA (the party: $0283/$0285) and $683B (the Epoch, on its world only): C2/688A's map place (x / 8 +
+// The markers, classes $67FA (the party: $0283/$0285) and $683B (the Epoch, on its world only): C2/688A's map place (x / 8 +
 // 20, y / 8 + 30, each with the LSRs' carry), their blink in bank C2 (6A18 / 6A20); gone when `$1B48` (the zoom back) is set.
 // $68A3, the era's label: C2:68E4[world], y C0, pose 47.
 static void owMapPlace(uint8_t* B) {
@@ -3765,7 +3509,7 @@ void CtWorldMapEnter(uint8_t* ram, uint8_t* vram) {
   ram[0x4C] |= 0x03;
 }
 
-// ===================== THE TIME GAUGE ($027C = 8: C2/261D -> C2/6A34) =====================
+// ---- The time gauge ($027C = 8: C2/261D -> C2/6A34) ----
 // disasm/notes/ow_time_gauge.md. The gauge is a screen of the overworld's own engine: its objects run in the same pass,
 // the controller $6AC8, the swirl $6F85 (the mode-7 matrix per line), seven era markers $7143 and three palette / fade
 // scripts. `+22` of the controller is the era (0..6) over the table C2:6C97 -- or C2:6CA5 once the storyline ($1BA6)
@@ -3791,7 +3535,7 @@ static void owMul6F33(uint8_t* ram) {
   if (neg) r = (0x1000000 - r) & 0xFFFFFF;                             // 6F73-6F80: 0 - $19/$1A, 0 - $1B with the borrow
   ram[0x19] = (uint8_t)r; ram[0x1A] = (uint8_t)(r >> 8); ram[0x1B] = (uint8_t)(r >> 16);
 }
-// C2/6CC1 -- THE NEEDLE: the triangle C2:6F2D turned by the angle +18 about (84, 70), rasterized into window 1's edges
+// C2/6CC1 -- the needle: the triangle C2:6F2D turned by the angle +18 about (84, 70), rasterized into window 1's edges
 // for each line (HDMA channel 1, DMAP 41 to WH0 / WH1). The two line buffers $8B56 / $8DF6 swap every call (`$1BF5` bit
 // 0); `$1BB8..$1BBD` the turned vertices, `$1BC4..` the edges (active, slope, x 8.8, top, bottom, lines left).
 static void owGaugeNeedle(uint8_t* ram, uint8_t* B) {
@@ -3884,7 +3628,7 @@ static void owGaugeNeedle(uint8_t* ram, uint8_t* B) {
   }
 }
 static int g_owGaugeSound = 0;                                         // the controller's error post (see obGaugeCtl)
-// THE CONTROLLER, class $6AC8 (states C2:6AD1). Returns 0 (CLC), or 2 when it posted to the sound driver inline.
+// The controller, class $6AC8 (states C2:6AD1). Returns 0 (CLC), or 2 when it posted to the sound driver inline.
 static int obGaugeCtl(uint8_t* ram, uint8_t* B) {
   int turn = 0;
   if (B[2] == 0) {                                                     // C2/6AD7
@@ -3945,7 +3689,7 @@ static int obGaugeCtl(uint8_t* ram, uint8_t* B) {
   }
   return 0;
 }
-// THE SWIRL, class $6F85: the mode-7 matrix a line at a time -- HDMA channels 2 / 5 (M7A / M7D) from $8A42 and 3 / 4 (M7B /
+// The swirl, class $6F85: the mode-7 matrix a line at a time -- HDMA channels 2 / 5 (M7A / M7D) from $8A42 and 3 / 4 (M7B /
 // M7C) from $8A4F, `F0 p1 F0 p2 00` each; A = D = cos(t), B = C = sin(t + 80), t stepping 4 a line, the 224-line buffers
 // double ($9176 / $9416 and $9796 / $9A36, `$1BF5` bit 1) and shifted a line a frame with the newest at the bottom.
 static int obGaugeSwirl(uint8_t* ram, uint8_t* B) {
@@ -3994,7 +3738,7 @@ static int obGaugeSwirl(uint8_t* ram, uint8_t* B) {
   obPutW(B + 0x18, (uint16_t)(t + 4));
   return 0;
 }
-// AN ERA MARKER, class $7143 (+22 = its era): placed from C2:71DD; drawn only while its era is the chosen one -- C2:71EB's
+// An era marker, class $7143 (+22 = its era): placed from C2:71DD; drawn only while its era is the chosen one -- C2:71EB's
 // appear script on the choice, C2:71EC's going away when it changes (each held to its end: +0E back to 0).
 static int obGaugeMarker(uint8_t* ram, uint8_t* B) {
   unsigned k = B[0x22];
@@ -4087,7 +3831,7 @@ void CtWorldGaugeEnter(uint8_t* ram, uint8_t* vram) {
 void CtWorldGaugeLeave(uint8_t* ram) { CtWorldSpawnVm(ram, 0xC2, 0x74B3); }
 
 static uint8_t g_owNmiEn = 0, g_owNmiWh0 = 0, g_owNmiWh1 = 0;   // the NMI's HDMAEN / WH0 / WH1 pushes (see below)
-// THE OVERWORLD'S HDMA CHANNELS as the natives program them ($43x0 DMAP, $43x1 B-bus target, $43x2-3 the table in bank
+// The overworld's HDMA channels as the natives program them ($43x0 DMAP, $43x1 B-bus target, $43x2-3 the table in bank
 // $7E): channel 2 is window 1's right edge (C6/E241: DMAP 40 to $2127 from $8A42) unless the Black Omen's wave took it
 // (C2/7C97: DMAP 42 to $2110); channel 1 is that wave's BG2HOFS (C2/7C56). What the picture reads, with HDMAEN ($4A as
 // the NMI pushed it).
@@ -4128,15 +3872,13 @@ static void owVehTrace(const uint8_t* ram, int isPass) {
 }
 void CtWorldTraceEnd(const uint8_t* ram) { if (ram) owVehTrace(ram, 0); }
 void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
-  // C2/02C2-02D1, in the NMI that precedes every object pass: `LDA $7E8A25 / STA $7E8A43 / LDA $7E8A27 / STA $7E8A46`
-  // (16-bit) -- the window object's HDMA channel 2 (op 4E -> $C6:E241) reads its two indirect table entries from
-  // $7E:8A42, and the entries' pointers are refreshed from $8A25/$8A27, where $C6:E28F/E2A2 leave the half C3/01E4
-  // wrote LAST frame. So a frame's window comes from the previous call's table (field.c owWin1Line reads the entries).
-  // ...and what the NMI pushes to the PPU before the pass: HDMAEN from $4A (C2/02xx), WH0/WH1 from $3B/$3C (C2/025F-0266). A
-  // change the pass makes to them (E241's `TSB $4A` #04) reaches the registers at the NEXT NMI: the frame in between
-  // draws with these (measured: the install's frame shows W1 = [1, 0], the shadows before the call).
-  // A pass the last frame's inline JSL suspended (obNative) RESUMES here: the NMI that runs it is the one that began
-  // then, so none of its front half runs again -- the dispatch goes on from the suspended block.
+  // C2/02C2-02D1, in the NMI before every object pass: the indirect HDMA entries ($7E:8A36.., 8A43.., 8A50..) are
+  // refreshed from their pointers ($8A21-$8A2C), where e.g. $C6:E28F/E2A2 leave the half C3/01E4 wrote last frame,
+  // so a frame's window comes from the previous call's table (field.c owWin1Line reads the entries).
+  // The NMI also pushes HDMAEN ($4A) and WH0/WH1 ($3B/$3C, C2/025F-0266) before the pass, so a change the pass makes
+  // (E241's `TSB $4A` #04) reaches the registers at the next NMI.
+  // A pass the last frame's inline JSL suspended (obNative) resumes here, from the suspended block, without the
+  // NMI's front half.
   int b0 = OWOBJ_BASE;
   if (g_owResumeBlock >= 0) { b0 = g_owResumeBlock; g_owResumeBlock = -1; }
   else {
@@ -4150,15 +3892,12 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
   }
 
   g_obStream = st;
-  // ⚠ The list is NOT reset here any more: C2/032B `JSR C2/0C4D` empties it before the WHOLE object pass, and the
-  // lead block is part of that pass -- its op-4 enqueue (CtWorldLeadAnimFrame) runs before this function in the
-  // host, so a reset here threw the lead off the list. The caller resets (CtWorldDrawListReset) before both.
+  // Note: the draw list is not reset here. C2/032B empties it before the whole object pass, which includes the lead
+  // block, whose enqueue (CtWorldLeadAnimFrame) the host runs before this function; the caller resets it before both.
   for (int b = b0; b < OWOBJ_END; b += OWOBJ_STRIDE) {
     uint8_t* B = ram + b;
-    // C2/0535: the class word at +0 IS the handler address, and the dispatcher `JMP ($0050)`s to it.
-    // Dispatching on it is the ROM's own mechanism, not a slot lookup -- the music object is simply
-    // whichever block carries $2F94 (block 14 on world 0). C2/0543-054E owns what happens after: a
-    // handler returning CLC gets its 16-bit frame counter at +3 bumped, one returning SEC is KILLED.
+    // C2/0535: the class word at +0 is the handler address (`JMP ($0050)`). After it (C2/0543-054E), a handler
+    // returning CLC gets its 16-bit frame counter at +3 bumped; one returning SEC is killed.
     uint16_t cls = obW(B);
     if (cls) { ram[0x4E] = (uint8_t)b; ram[0x4F] = (uint8_t)(b >> 8); }   // C2/053C STX $4E (the live block pointer)
     if (cls == 0x2F94) {
@@ -4181,11 +3920,11 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
       else obPutW(B, 0);
       continue;
     }
-    // THE LEAD'S SLOT: C2/3725 `LDA $001C,X / STA $1BF1 / LDA $0020,X / STA $1BF3` -- its velocity, stored on the frames
+    // The lead's slot: C2/3725 `LDA $001C,X / STA $1BF1 / LDA $0020,X / STA $1BF3` -- its velocity, stored on the frames
     // its mover integrates. The mover itself is the host's (CtWorldStreamFrame held the delta); the store lands here.
     if (cls == 0x3404 && c && c->leadStore) { c->pendDx = c->leadDx; c->pendDy = c->leadDy; c->leadStore = 0; }
-    // ...EXCEPT IN A VEHICLE'S MODULES ($027E != 0): there the lead's handler is the ROM's own (obLeadModule), not the host's
-    // mover, and it runs here in its slot like any block.
+    // In a vehicle's modules ($027E != 0) or an event the lead's handler is obLeadModule, not the host's mover, and it
+    // runs here in its slot like any block.
     if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0 || ram[0x0281] != 0)) {
       obLeadModule(ram, B, c);
       int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
@@ -4219,11 +3958,9 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
       else obPutW(B, 0);
       continue;
     }
-    // THE BG3 OBJECTS, AT THEIR OWN SLOTS: the drift (C2/75C3 / 75FD / 7702 / 77F2) and, after it in block order, the
-    // per-line wave (C2/7759 / 7652) that reads the moved `$24`. All return CLC. They were ticked outside the pass, before
-    // it -- so on the frame the bootstrap spawns the drift object (op $35, same pass, a later block) the cartridge already
-    // stepped its +22 and the port did not: world 0's clouds ran one frame behind for the whole of every entry (the ferry
-    // from the Truce pay, saves/ferry_re: every fourth frame one px apart).
+    // The BG3 objects run at their own slots: the drift (C2/75C3 / 75FD / 7702 / 77F2) and, after it in block order, the
+    // per-line wave (C2/7759 / 7652) that reads the moved `$24`. All return CLC. Running them in the pass matters: a drift
+    // object the bootstrap spawns in a later block steps its +22 in that same pass.
     if (cls == 0x75C3 || cls == 0x75FD || cls == 0x7702 || cls == 0x77F2) {
       if (c && owBg3Drift(c, ram, cls, B + 0x22)) {          // the visit's `$24` / `$2A` are WRAM in the ROM: kept there too
         obPutW(ram + 0x24, c->bg3h); obPutW(ram + 0x2A, c->bg3v);
@@ -4259,7 +3996,7 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
       if (obFollower(ram, B, c) == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
       continue;
     }
-    if (cls != OWOBJ_CLASS_VM) continue;            // the other native classes are still not run
+    if (cls != OWOBJ_CLASS_VM) continue;            // Not ported: the other native classes are not run
     if (obRun(ram, B, c) == 2) { g_owResumeBlock = b; return; }   // its inline JSL holds the pass (obNative)
   }
   owVehTrace(ram, 1);
@@ -4291,7 +4028,7 @@ uint16_t CtWorldEntryScan(const uint8_t* ram, int posX, int posY) {
   return 0xFFFF;
 }
 
-// THE SCANNER, class $3264 (C2/3264). `$0281 = $0280`, then by `$0280` (C2:3275):
+// The scanner, class $3264 (C2/3264). `$0281 = $0280`, then by `$0280` (C2:3275):
 //   0 (3279): on a cell the lead has just reached (`$0282` bit 0, set with bit 1 by C2/34F8 and C2/3766 when C2/39AE finds
 //     bit 2 on the cell's top pair), its 16 x 16 cell into the three tables (C2/32CD: the first record armed -- bit 7 -- whose
 //     cell word & 3F7F is it; `$1B32` / `$1B34` / `$1B36`, FFFF for none) and C2/3349 acts on what it found; off such a cell
@@ -4362,7 +4099,7 @@ static int obEntryScan(uint8_t* ram, uint8_t* B) {
   }
   return 0;
 }
-// THE PLACE-NAME BANNER, class $5628 (C2/5628, states C2:5637 = 563F / 5663 / 5699 / 56F9; every one falls into the next and
+// The place-name banner, class $5628 (C2/5628, states C2:5637 = 563F / 5663 / 5699 / 56F9; every one falls into the next and
 // every exit is CLC). It writes the name `$1B58` (the scanner's, C2/6263) one glyph a frame into the strip `$7E:8621` with the
 // proportional-text engine (vwf.c), queues the strip's two rows to VRAM `$1E00` / `$1F00` (OBJ tiles $1E0-$1EB / $1F0-$1FB) and
 // then shows itself every frame through the anim sub-VM: its script is `04 8604 00` at `$7E:8600` (C2/5775), the frame
@@ -4448,10 +4185,10 @@ int CtWorldEntryDecode(const uint8_t* ram, uint16_t off, CtWorldEntry* out) {
   return 1;
 }
 
-// C2/0405 -- the NMI's VRAM QUEUE: `LDA $5E / BEQ / RTS` (an object is writing it), `LDA $5F / BNE / RTS` (empty), then per
+// C2/0405 -- the NMI's VRAM queue: `LDA $5E / BEQ / RTS` (an object is writing it), `LDA $5F / BNE / RTS` (empty), then per
 // 8-byte entry at $60+X: DMA channel 0, `$4300 = 01` (two registers, $2118/$2119), `$4302 = $60,X` (source), `$4304 = $62,X`
 // (bank), `$4305 = $65,X` (bytes), `$2116 = $63,X` (VRAM word), `$2115 = $67,X` (VMAIN) and `$420B = 01`; X += 8 until X ==
-// $5F; `STZ $5F`. `vram` is the world's BYTE image (word w at byte 2w). The port's tilemap streaming keeps its own queue
+// $5F; `STZ $5F`. `vram` is the world's byte image (word w at byte 2w). The port's tilemap streaming keeps its own queue
 // (CtWorldStream.pend); this is the rest of the ROM's, the anim op 6 entries.
 void CtWorldNmiVramQueue(uint8_t* ram, uint8_t* vram) {
   if (!ram || !vram || ram[0x5E] || !ram[0x5F]) return;
@@ -4479,8 +4216,8 @@ void CtWorldNmiVramQueue(uint8_t* ram, uint8_t* vram) {
   ram[0xE0] = 0x00; ram[0xE1] = 0xF0; ram[0xE2] = 0x7E;              // 044A-0451 LDX #F000 / STX $E0 / LDA #7E / STA $E2
 }
 void CtWorldStreamFrame(CtWorldStream* st, CtWorldCam* c, uint8_t* ram, int dx, int dy) {
-  // The NMI at the start of THIS frame flushes the queue from LAST frame (staging is untouched
-  // in between -- the $E0 reset happens after the flush).
+  // The NMI at the start of this frame flushes last frame's queue (the staging is untouched in
+  // between; the $E0 reset comes after the flush).
   for (int q = 0; q < st->nPend; q++) {
     int bg = st->pend[q].bg, so = st->pend[q].stage, a = st->pend[q].addr;
     if (!st->pend[q].isRow) {
@@ -4498,9 +4235,9 @@ void CtWorldStreamFrame(CtWorldStream* st, CtWorldCam* c, uint8_t* ram, int dx, 
   }
   st->nPend = 0;
   st->stageOff = 0;                                // $E0 := $F000 (reset every NMI)
-  // The camera apply (C2/36F7) is the lead's MOVING path -- C2/36E7 `INC $0002,X`, the integrate C2/0F38 and then the
+  // The camera apply (C2/36F7) is the lead's moving path -- C2/36E7 `INC $0002,X`, the integrate C2/0F38 and then the
   // four dispatcher calls, a zero component included; an idle lead returns before it (C2/36E5). The port's mover
-  // hands a delta exactly on those frames, so the dispatchers' words are written then and only then.
+  // hands a delta on exactly those frames, so the dispatchers' words are written only then.
   int apply = dx || dy;
   if (apply) owDispatchScratch(ram, 0, dx);
   owStepH(st, c, ram, 0, dx);                      // the camera apply order (C2/36F7): H BG1, H BG2,
@@ -4510,8 +4247,8 @@ void CtWorldStreamFrame(CtWorldStream* st, CtWorldCam* c, uint8_t* ram, int dx, 
   owStepV(st, c, ram, 0, dy);
   if (apply) owDispatchScratch(ram, 1, dy);
   owStepV(st, c, ram, 1, dy);
-  // THE LEAD'S DELTA WAITS FOR THE LEAD'S SLOT. The host mover moved the camera above, but on the cartridge the lead is
-  // a block of the object pass and stores its velocity into $1BF1/$1BF3 there (C2/3725); the drift object and the
-  // per-line wave are blocks of the same pass. CtWorldAmbientFrame runs all three in block order.
+  // The lead's delta waits for the lead's slot: the lead is a block of the object pass and stores its velocity into
+  // $1BF1/$1BF3 there (C2/3725), as the drift object and the per-line wave are blocks of the same pass.
+  // CtWorldAmbientFrame runs all three in block order.
   c->leadDx = dx; c->leadDy = dy; c->leadStore = (dx || dy);
 }

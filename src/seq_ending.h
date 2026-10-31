@@ -14,10 +14,10 @@ int CtEndingStageHas(uint8_t operand);
 // picture loads it makes (8790 / 87CC). 0 for an operand that is not the ending's.
 long CtEndingStageSetupCycles(uint8_t operand);
 
-// THE STAGE, its logic (stage 1): C3:0000 + $7E:3000 + the setup $7E:8538 up to the main loop (the overlay, the common init,
+// The stage's logic: C3:0000 + $7E:3000 + the setup $7E:8538 up to the main loop (the overlay, the common init,
 // the entry's two script pages and its credits pointer, the brightness shadows, page A run once, the first NMI); one NMI a
 // frame (`joy` = the $4218 word, as CtRaceStageFrame); the teardown. The song is the field's (bit 5): the scripts wait on its
-// markers through io->port. Open returns -1 for what it does not port. Frame returns 1 once the stage ENDed (`FF 2B`'s fade,
+// markers through io->port. Open returns -1 for what it does not port. Frame returns 1 once the stage ENDs (`FF 2B`'s fade,
 // $7E:34E3), 2 on the soft reset (`FF 2E`/`FF 2F` end on "The End" with $0396 = 0: the player resets), else 0.
 int  CtEndingStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
 int  CtEndingStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);

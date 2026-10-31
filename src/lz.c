@@ -1,27 +1,19 @@
-// lz.c — Chrono Trigger LZ decompressor. See lz.h.
+// lz.c -- Chrono Trigger LZ decompressor (see lz.h) and the ROM's cost of the loads that use it.
 //
-// Faithful port of the canonical routine reverse-engineered by Michael Springer
-// ("Evil Peer"), as implemented in CTViewer (util/lz_decompress.rs). The format
-// is a segmented LZ: a 2-byte size header, then flag bytes whose bits select
-// literal (0) or back-reference (1). Back-references are 2-byte pairs; the
-// window is 11-bit (small) or 12-bit (large), chosen once from the top bits of
-// the byte just past the first segment. Segments can rebase via a 3-byte marker.
-//
-// BOUNDS. The algorithm itself has no terminator it can trust: a stream that is
-// not actually LZ drives byte_pos and work_pos wherever its bytes say. Every
-// read and write is therefore range-checked against the caller's caps, and any
-// violation returns 0 ("not a stream I can decompress") rather than walking off
-// the buffer. ct_lz_decompress keeps the old uncapped signature by passing
-// SIZE_MAX, so a well-formed block decompresses byte-for-byte as before -- the
-// checks only ever fire on input the routine could not have handled anyway.
+// The routine was reverse-engineered by Michael Springer ("Evil Peer"); this follows CTViewer's
+// util/lz_decompress.rs. The format is a segmented LZ: a 2-byte size header, then flag bytes whose bits
+// select literal (0) or back-reference (1). Back-references are 2-byte pairs; the window is 11-bit (small)
+// or 12-bit (large), chosen once from the top bits of the byte just past the first segment. Segments can
+// rebase via a 3-byte marker. Every read and write is range-checked against the caller's caps and a
+// violation returns 0; ct_lz_decompress passes SIZE_MAX for both.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "lz.h"
 #include "assets.h"
 #include "romview.h"
-// A byte of the ROM's tables (the location records and pointer lists, the world header...): the container's named table
-// when one covers it (CT_ASSET_TABLE, romview.h), else the ROM's.
+// A byte of the ROM's tables (location records, pointer lists, the world header): from the container's named
+// table when one covers it (CT_ASSET_TABLE, romview.h), else from the ROM.
 #define RB(o) CtRomByte(rom, (long)romLen, (long)(o))
 
 #define LZ_NO_CAP ((size_t)-1)
@@ -56,9 +48,9 @@ void ct_lz_add_rom_image(const uint8_t* rom) {
   for (int i = 0; i < 3; i++) if (!g_lzRom2[i] || g_lzRom2[i] == rom) { g_lzRom2[i] = rom; return; }
 }
 
-// CT_LZ_MISSLOG=<file>: every stream a decompression or a cost took from a ROM image, not the container, once per
-// offset and caller: `OFFSET CALLER kind` (CALLER = the calling instruction relative to the executable, resolved by
-// tools/rom_census.py --lzmiss through build/Belthasar.map). The list a work package adds to tools/gen/lz_pack.py.
+// CT_LZ_MISSLOG=<file>: logs each stream taken from a ROM image instead of the container, once per offset and
+// caller, as `OFFSET CALLER kind`. CALLER is relative to the executable; tools/rom_census.py --lzmiss resolves it
+// through build/Belthasar.map. The list feeds tools/gen/lz_pack.py.
 #ifdef _MSC_VER
 #include <intrin.h>
 __declspec(dllimport) void* __stdcall GetModuleHandleA(const char* name);   // (not <windows.h>: its `small` macro)
@@ -118,7 +110,7 @@ const uint8_t* ct_lz_asset(size_t start, size_t* outLen, long* cyc7e, long* cyc7
 
 size_t ct_lz_decompress_bounded(const uint8_t* data, size_t dataLen,
                                 uint8_t* out, size_t outCap, size_t start) {
-  if (g_lzAssets && lzIsRom(data)) {              // the ROM's stream: the container's copy, when it holds one
+  if (g_lzAssets && lzIsRom(data)) {              // a ROM stream: use the container's copy when it has one
     size_t n = 0; const uint8_t* e = ct_lz_asset(start, &n, NULL, NULL);
     if (e) { if (n > outCap) return 0; memcpy(out, e, n); return n; }
   }
@@ -177,24 +169,11 @@ size_t ct_lz_decompress(const uint8_t* data, uint8_t* out, size_t start) {
   return ct_lz_decompress_bounded(data, LZ_NO_CAP, out, LZ_NO_CAP, start);
 }
 
-// ============================================================================================
-// THE ROM'S COST of a decompression -- C3/0557 priced instruction by instruction.
-// (disasm/notes/field_load_cost.md.) The port decompresses in no time at all; the ROM spends
-// most of a location load in here, and a black hold that is not this long is not the ROM's.
-//
-// The loop, from the listing (large-window arm, C3/05E5-0658; the 11-bit arm at C3/076B is the
-// same code with one LSR A fewer in the match body and an AND #07FF mask):
-//     05E5 LDA #08 / STA $0B                    a group is 8 flags
-//     05E9 CPX $09 / BEQ ->0644                 at the block end -> the chain
-//     05ED LDA $0000,X / BEQ ->059D             a ZERO control byte = 8 unrolled literals
-//     05F2 INX / LSR A / STA $0D / BCS ->0614   first flag: set = match
-//     05F8 literal: LDA $0000,X / STA $002180 / INY / INX
-//     0601 DEC $0B / BEQ ->05E5 / LSR $0D / BCS ->0614   ...then the next flag
-//     0614 match: len = (b1>>4)+2, offset = u12, MVN moves len+1 bytes
-//     0644 block chain: (X)&3F = the next group's flag count, 0 = end
-// Timings are LakeSnes's, which are the SNES's: a ROM byte in a bank >= $80 with FastROM on
-// costs 6 master cycles, an idle 6, a direct-page or WRAM access 8, the $2180 write 6, and MVN
-// re-fetches its three opcode bytes per byte moved (18 + 8 + 8 + 12 = 46).
+// ---- The ROM's cost of a decompression: C3/0557 priced instruction by instruction ----
+// The port decompresses instantly; the ROM spends most of a location load here. The loop (large-window arm
+// C3/05E5-0658; the 11-bit arm at C3/076B has one LSR A fewer and an AND #07FF mask) and the per-access
+// timings are in disasm/notes/field_load_cost.md sec. 2: FastROM byte 6 master cycles, idle 6, direct page or
+// WRAM 8, the $2180 write 6, MVN 46 per byte moved.
 #define LZC_F   6                       /* a code/ROM byte (FastROM, banks >= $80) */
 #define LZC_I   6                       /* internal cycle */
 #define LZC_D   8                       /* direct page / stack (bank 0 below $2000) */
@@ -233,8 +212,7 @@ size_t ct_lz_decompress(const uint8_t* data, uint8_t* out, size_t start) {
                      LZC_REPSEP + LZC_LDA_ABX16 + LZC_DP16 + LZC_DP16 + 3 * LZC_IMP + LZC_REPSEP + LZC_BR_T)
 #define LZC_BLKEND  (LZC_DP16 + LZC_BR_T + LZC_LDA_ABX8 + LZC_IMM8 + LZC_BR_T + LZC_JMP)
 
-// HiROM: banks $C0-$FF map straight onto the file, so the file offset of a 24-bit ROM address is
-// (bank - $C0) << 16 | offset -- the same mapping tools/dis.py and fieldStageExit use.
+// HiROM: banks $C0-$FF map straight onto the file, offset = (bank - $C0) << 16 | addr (as in tools/dis.py).
 size_t ct_lz_hirom_offset(unsigned addr24) {
   return (size_t)(((addr24 >> 16) - 0xC0u) & 0x3Fu) << 16 | (addr24 & 0xFFFFu);
 }
@@ -251,7 +229,7 @@ long ct_lz_rom_cycles(const uint8_t* data, size_t dataLen, size_t start, int dst
   size_t end = base + 2 + (((size_t)data[base + 1] << 8) | data[base]);
   if (end >= dataLen) return 0;
   int small = (data[end] & 0xC0) != 0;
-  // The dispatch at C3/0580-059A, measured: the four arms differ only here (spread 0 inside each).
+  // The dispatch at C3/0580-059A: the four arms differ only in this fixed prologue (dossier sec. 2).
   long cyc = small ? (dstBankOdd ? 1030 : 1054) : (dstBankOdd ? 1042 : 1030);
   long matBody = LZC_MAT - (small ? LZC_IMP : 0);   /* 076B decodes the length with three LSRs */
   int flags = 8;
@@ -291,25 +269,10 @@ long ct_lz_rom_cycles(const uint8_t* data, size_t dataLen, size_t start, int dst
   }
 }
 
-// ============================================================================================
-// C0/A33B's MAP BUILD -- the half after its `JSL C3/0002`, priced the same way.
-// (disasm/notes/field_load_cost.md.) The decompressed map is read back through the
-// auto-incrementing WRAM port ($2180) into four planes:
-//
-//   A548 -> $7E:3000   dims $0BCB x $0BCD          A57D -> $7E:3040   dims $0BCF x $0BD1
-//   A5B9 -> $7E:3080   dims $0BD3 x $0BD5, only when map byte 1 has bit 7 set ($0BCA)
-//   A5F0 -> $7E:30C0 + $7E:7000 + $7E:7040, dims $0BCB x $0BCD and RLE-coded: a byte with
-//           bit 7 set opens a RUN (three plane bytes then a length, 0 meaning 256) and the
-//           run's own cell is written by the header; anything else is three literal bytes.
-//
-// and the dimensions come from the first two bytes of the map itself (C0/A3C1-A408):
-//   $0BCB = ((b0 & 03) + 1) << 4   $0BCD = ((b0 & 0C) + 4) << 2
-//   $0BCF =  (b0 & 30) + 10        $0BD1 = ((b0 & C0) >> 2) + 10
-//   $0BD3 = ((b1 & 03) + 1) << 4   $0BD5 = ((b1 & 0C) + 4) << 2
-//
-// The structure was checked against the ROM's own execution counts, not argued from the
-// listing: CT_CALLROM_PCHIST on scene 468 reports A548 4096, A554 64, A5F0 838, A5F5 447,
-// A61A 391, A641 3649, A657 3258, A60C 6, A649 58 -- and this walk reproduces every one.
+// ---- C0/A33B's map build: the half after its `JSL C3/0002`, priced the same way ----
+// The decompressed map is read back through $2180 into four planes (A548 -> $7E:3000, A57D -> $3040,
+// A5B9 -> $3080 only with map byte 1 bit 7, A5F0 -> the RLE-coded $30C0/$7000/$7040); the dimensions come
+// from map bytes 0-1 (C0/A3C1-A408). Layout and RLE format: disasm/notes/field_load_cost.md sec. 5.
 #define MBC_LDA_ABS_B (3 * LZC_F + LZC_B)          /* LDA $2180                  24 */
 #define MBC_STA_LX    (4 * LZC_F + LZC_D)          /* STA $7E3000,X              32 */
 #define MBC_IMP       (2 * LZC_F)                  /* INX/TAX/XBA/TDC/DEY/TAY    12 */
@@ -320,11 +283,10 @@ long ct_lz_rom_cycles(const uint8_t* data, size_t dataLen, size_t start, int dst
 #define MBC_RTS       (LZC_F + 3 * LZC_I + 2 * LZC_D)
 /* A554-A55F and its clones: LDA $55 / INC A / STA $55 / XBA / LDA #00 / TAX / CPX $52 */
 #define MBC_ROWEND (MBC_DP8 + MBC_IMP + MBC_DP8 + MBC_IMP + MBC_IMM8 + MBC_IMP + MBC_CPX)
-/* C0/A67B-A693 moves a fixed 4032-byte block with MVN -- 4032 in every location measured. */
+/* C0/A67B-A693 moves a fixed 4032-byte block with MVN. */
 #define MBC_MVN_BLOCK (4032L * LZC_MVN_BYTE)
-/* The one-shot half -- the header parse, the two fixed 64/63-iteration loops at C0/A670/A67F
-   and the tail past the MVN. A CONSTANT of the routine, measured over five locations
-   (26780, 27044, 28118, 28898, 28960: median 28118, spread 2180 = 0.006 of a load frame). */
+/* The one-shot half (header parse, the fixed 64/63-pass loops at C0/A670/A67F, the tail past the MVN):
+   measured, the median over five locations. Used only where ct_map_load_cycles' walk stops. */
 #define MBC_ONESHOT 28118L
 
 static long mbcCopyPlane(int cols, int rows) {           /* A548-A55F */
@@ -396,20 +358,13 @@ long ct_map_build_cycles(const uint8_t* m, size_t len) {
   return c;
 }
 
-// C0/A33B WALKED -- everything the map load costs besides its decompression, cycle for cycle (the traces' costs,
-// tools/map_cost_proto.py is the twin; exact against the cartridge on loc $082 and $005). The model above stands in
-// for it only where the walk stops (a map the RLE plane runs past).
-//   the header parse C0/A33B-A508: map byte 1's bits 7-4 ($0BCA, $0BC9, $36, ..), $01BB (C0/0BE8 clears it on every
-//     location entry; C0/6DCF's FF arm -- record byte 2 = FF -- sets it), bytes 2 and 3 zero;
-//   C0/7399: each of the six plane dimensions -> a mask by a CMP #40 / #20 / #30 chain, then the record's bounds
-//     (bytes 10-13, or the whole plane's when byte 10 is negative: C0/7495);
-//   C0/A521: the three plane copies through $2180 (the third only with byte 1 bit 7), then the RLE plane -- a byte
-//     with bit 7 opens a run, a zero length is 256 (C0/A63B `LDY #0100` / BRA past the TAY);
-//   C0/A66B: the $7E:7080 fill, 63 MVNs of 64 bytes, then the location's $E5:0000 list of 7-byte entries: a count
-//     with bit 7 writes a COLUMN (C0/A6DC, +$100 a step), else a row; a row's `AND $1E` (C0/A6C7) is 16-bit on its
-//     first pass and 8-bit after (the SEP at C0/A6CA), a column's (C0/A6E7) 16-bit on every pass (its step's own
-//     REP #20 at C0/A6F8);
-//   + the `JSL C3:0002` vector's JMP (18).
+// C0/A33B walked: everything the map load costs besides its decompression (tools/map_cost_proto.py is the
+// Python twin). ct_map_build_cycles stands in only where this walk stops (an RLE plane that runs past the map).
+// The legs: the header parse C0/A33B-A508 (map byte 1 bits 7-4, $01BB, bytes 2-3); C0/7399's six plane masks
+// and the record's bounds (bytes 10-13, the whole plane when byte 10 is negative: C0/7495); C0/A521's plane
+// copies and RLE plane; C0/A66B's $7E:7080 fill (63 MVNs of 64 bytes) and the $E5:0000 list of 7-byte entries
+// (count bit 7 = a column, C0/A6DC; a row's `AND $1E` at C0/A6C7 is 16-bit on its first pass only); the vector's
+// JMP (18). disasm/notes/field_load_cost.md sec. 9.
 long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc) {
   if (!rom || loc < 0 || loc > 511) return -1;
   const size_t REC = 0x360000u + (size_t)loc * 14;
@@ -427,9 +382,9 @@ long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc) {
     const int b1 = m[1], bb = RB(REC + 2) == 0xFF;
     k = 780 + ((b1 & 0x80) ? 68 : 44) + 32 + 56 + 32 + 50 + 32 + ((b1 & 0x10) ? 64 : 18) + 952   /* the header */
       + (bb ? 76 : 18) + 240 + (bb ? 76 : 18) + 334;
-    /* header bytes 2 and 3 (C0/A463 / C0/A4B3), the layers' scroll speeds: a non-zero byte costs 182; its low field (bits
-       0-2) a shift loop of 118 + 54 a step past the first, its sign (bit 3) 58; its high field (bits 4-6) 166 + 54 a
-       step, its sign (bit 7) 58 -- walked from the ROM on the traces' costs (tools/load_cost_consts.py) */
+    /* header bytes 2 and 3 (C0/A463 / C0/A4B3), the layers' scroll speeds: a non-zero byte costs 182; its low field
+       (bits 0-2) 118 + 54 a step past the first, its sign (bit 3) 58; its high field (bits 4-6) 166 + 54 a step, its
+       sign (bit 7) 58 (tools/load_cost_consts.py) */
     for (int i = 2; i < 4; i++) {
       int b = m[i], lo = b & 7, hi = (b >> 4) & 7;
       if (!b) continue;
@@ -516,34 +471,11 @@ out:
   return k;
 }
 
-// --------------------------------------------------------------------------------------------
-// WHAT A LOCATION LOAD DECOMPRESSES, and what the ROM pays for it. The tables are the location
-// loader's own (bank $F6), read here exactly as C0/0960 / C0/A33B / C0/09DD read them:
-//   location record   $F6:0000 + loc*14   -- byte 1 = tileset id, word 4 = map id
-//   packet list       $F6:1C00 + tileset*8   (8 entries, $FF = none)
-//   packet pointers   $F6:2220 + idx*3       (24-bit source)
-//   map pointers      $F6:1E00 + mapId*3
-//   prop pointer      $F6:2100 + tileset*3
-// C0/0960 sends entries 0-5 through C0/6D2F (decompress to $7E:3000, then C0/2DC8 DMAs $1000
-// bytes to VRAM -- $0F80 for entry 5), then falls into C0/6D65/6D97, which decompress entries 6
-// and 7 to $7F:6000 and $7F:7000 with NO DMA. C0/A33B decompresses the map to $7E:B500 and
-// C0/09DD the tile properties to $7E:B000.
-// The DMA is 8 master cycles a byte plus the channel setup, measured in the oracle's own bucket
-// (CT_HOOK_CYCLES: dma=32792 on the frames that upload $1000 bytes = 8*4096 + 24).
-// ============================================================================================
-// THE OVERWORLD LOAD -- bank C2's own packet list, and what it costs.
-// (disasm/notes/field_load_cost.md.) Leaving a location for the world map runs C2's loader, and it
-// decompresses with the SAME C3/0557 this file already prices: bank $C2 holds 23 `JSL C3/0002`
-// sites and a world load runs sixteen of them, 24 packets in all.
-//
-//   C2/275B  LDA $C6FD00,X          world*2 -> the world's HEADER pointer, bank $C6
-//   each site: an index byte out of that header (BMI = bit 7 set = skip), *3 into a 3-byte
-//              pointer table, then $0300/$0302 = source, $0305 = destination bank.
-//
-// The site list below is MEASURED, not read off a call graph: `--hookpc C2xxxx` on each of the 23
-// sites says which ran and on which frame, and `--hookpc C30557 --hookwatch 0300/0302/0305` gives
-// every call's source and destination. World 0's 24 packets come out in the oracle's own order,
-// byte for byte.
+// ---- The overworld load: bank C2's packet list ----
+// C2's loader decompresses with the same C3/0557: `C2/275B LDA $C6FD00,X` (world*2) gives the world's header
+// pointer in bank $C6; each `JSL C3/0002` site takes an index byte from that header (bit 7 = skip), *3 into a
+// 3-byte pointer table, then $0300/$0302 = source, $0305 = destination bank. The site list was read off the
+// oracle with `--hookpc` on each of the 23 sites (disasm/notes/field_load_cost.md sec. 10).
 typedef struct { uint16_t site; int16_t hdrIdx; uint32_t table; uint8_t dstBank; } CtOwSite;
 static const CtOwSite CT_OW_SITES[] = {
   { 0x27A2, 0x0C, 0xC6FDF0, 0x7F }, { 0x27A2, 0x0D, 0xC6FDF0, 0x7F },
@@ -594,15 +526,8 @@ int ct_lz_world_packets(const uint8_t* rom, size_t romLen, int world,
   return n;
 }
 
-// What bank C2's loader spends decompressing for one world, priced with the same cycle-exact model
-// as a field load. THE REST of its window -- setup, DMA, palettes, whatever else C2 does between
-// C0/0066 and the world engine's first tick -- is not derived: measured on world 0 it is the
-// difference between the whole window (44 frames from the commit, oracle) and this (35.1), i.e.
-// CT_OW_LOAD_REST below.
-// C2/2C93, the world's REBUILD after the X menu (C2/2556 -> C2/2E72 restore -> C2/03EF -> C2/2C93): the same loaders
-// as the entry minus four -- MEASURED by --cputrace over the return (menu_audit_cmp.py's owsave drive, world 0): twenty
-// `JSL C3/0002`, from 27A2 x4, 2B7C, 280C x7, 284F, 287D, 28AB, 28CC, 27D9, 2987, 29E3, 2959 over f302-f332; the entry's
-// 29B5 / 2A11 / 2A6D / 2A3F never run (their packets survive the menu). Priced with the same decompressor model.
+// C2/2C93, the world's rebuild after the X menu (C2/2556 -> C2/2E72 -> C2/03EF -> C2/2C93): the entry's sites
+// minus 29B5 / 2A11 / 2A6D / 2A3F, whose packets survive the menu (read off a --cputrace of the return).
 long ct_lz_world_return_cost(const uint8_t* rom, size_t romLen, int world, int* outPackets) {
   if (outPackets) *outPackets = 0;
   if (!rom || world < 0 || world > 7) return 0;
@@ -630,6 +555,7 @@ long ct_lz_world_return_cost(const uint8_t* rom, size_t romLen, int world, int* 
   if (outPackets) *outPackets = n;
   return cyc;
 }
+// What bank C2's loader spends decompressing for one world.
 long ct_lz_world_cost(const uint8_t* rom, size_t romLen, int world, int* outPackets) {
   uint32_t src[32]; uint8_t dst[32];
   int n = ct_lz_world_packets(rom, romLen, world, src, dst, 32);
@@ -640,14 +566,12 @@ long ct_lz_world_cost(const uint8_t* rom, size_t romLen, int world, int* outPack
   return cyc;
 }
 
-// C2/09C5, the world's first screen (C2/2C81 and C2/2C88, one call per BG), less its fixed part: what the camera's cells
-// decide. `LDA $E3,X / LSR / BCS / DEC / BPL / LDA #005F` picks the start column $08 (odd: 18; even: 42; even and zero:
-// 54) and `LDA $20,X / BIT #0008 / BEQ` its pixel offset (odd: 60, even: 48) -- the same on $E7 / $26 for the row $0A.
-// The 18 columns (C2/0A46 .. 0A64) each build 16 rows: the row offset `$0A * 0x60` wraps at 0x1800 (C2/0A99 BCC not
-// taken + TDC: +6) in every column when $0A >= 48, the column at 0x60 (C2/0A52: +6, once) when $08 >= 78, and C2/0ADC's
-// VRAM column `$0C >> 3` takes the second screen (C2/0AE4 not taken, CLC / ADC #03E0: +24) for every column at 32 or
-// past. The rest of the routine (its 36 DMAs of 64 bytes) is fixed, up to their 8-cycle alignment (a timing artefact,
-// within 30 cycles a call on the traces).
+// C2/09C5, the world's first screen (C2/2C81 / 2C88, one call per BG): the part the camera cells $E3/$E7
+// decide. `LDA $E3,X / LSR / BCS / DEC / BPL / LDA #005F` picks the start column $08 (odd 18; even 42; even
+// and zero 54) and `LDA $20,X / BIT #0008` its pixel offset (odd 60, even 48); the same on $E7/$26 for the
+// row $0A. In the 18 columns (C2/0A46-0A64): the row offset wraps at 0x1800 when $0A >= 48 (C2/0A99, +6 a
+// column), the column at 0x60 when $08 >= 78 (C2/0A52, +6 once), and VRAM column 32 or past takes the second
+// screen (C2/0AE4, +24 a column). The rest (36 DMAs of 64 bytes) is fixed.
 static long owFirstScreenVar(unsigned e3, unsigned e7) {
   long c = 0;
   unsigned h = e3 >> 1, v = e7 >> 1, col, row;
@@ -661,18 +585,10 @@ static long owFirstScreenVar(unsigned e3, unsigned e7) {
   return c;
 }
 
-// THE WORLD LOAD, C0/0B5A (the NMI's off) -> C2/23CC (`LDA #81 / STA $4200`, the NMI back on), walked. Five traces of the
-// attract's world loads (worlds 5, 7, 2, 3, 0 under the rule, CPUTRACE_BEAM from C0/0C9A or the reboot's C0/0000) split it
-// into what the data decides and what it does not:
-//   - every packet: C3/0557's decompression (ct_lz_rom_cycles, exact) + the vector's JMP (18) + its site's C2 path
-//     (C2/278C-27A2 and its copies: 282, against the skip's taken BMI: 276). Only C2/2CC1's sites 27A2 / 280C / 284F ever
-//     skip (bit 7 of the world header's byte, worlds 2, 3, 5, 7); the others always run.
-//   - C2/2A44 after its packet (site 2A6D, $C6:FFC0, to $7F:0400): four counted lists copied through $2180 -- entries
-//     of 7, 3, 3 and 2 bytes, 506 / 234 / 234 / 166 cycles each (C2/2A8E, 2AE4, 2B1A, 2B4D).
-//   - C2/09C5 twice (owFirstScreenVar over each BG's cells $E3/$E7).
-//   - THE REST, fixed: C0's reset path, C2/0031-003D, C2/23A8's VRAM clear (one DMA past a frame long), C2/0BF6, the
-//     non-skippable sites' own code ... = WORLD_LOAD_FIXED, the world-5 trace less the above (2041796), which then
-//     predicts worlds 7, 2, 3 and 0 to -22, -36, -6 and +60 cycles.
+// The world load, C0/0B5A (NMI off) -> C2/23CC (`LDA #81 / STA $4200`, NMI on), walked. Per packet: the
+// decompression + the vector's JMP (18) + its site's C2 path (276 over a skip). Then C2/2A44's four counted
+// lists after site 2A6D's packet (entries of 7/3/3/2 bytes at 506/234/234/166 cycles), C2/09C5 twice, and
+// WORLD_LOAD_FIXED for the rest (measured on world 5's trace). disasm/notes/field_load_cost.md sec. 10.
 // -1 (and *why) when a list count is 0 (a 65536-pass loop no trace ran) or the packet does not decompress.
 #define WORLD_LOAD_FIXED 2041796L
 long ct_lz_world_load_cycles(const uint8_t* rom, size_t romLen, int world, const uint16_t e3[2], const uint16_t e7[2],
@@ -707,21 +623,16 @@ long ct_lz_world_load_cycles(const uint8_t* rom, size_t romLen, int world, const
   return cyc;
 }
 
-// C0/286C, the pipeline pass C0/2848 runs ONCE before its ramp: it builds and uploads everything
-// the new location needs (C0/0A50's tilemap build is ~2/3 of it, then B204/A7E9/B0E6/0B28 and the
-// rest of the draw chain) and ends in the vblank wait C0/EC60. MEASURED IN SITU, because that
-// wait makes it untimeable with --callrom: over three real transitions (twice into scene 468,
-// once into 122) the work between C0/2848's entry and C0/EC60 is 1044, 1043 and 1052 lines --
-// 1046 lines x 1364 = 1426744 master cycles, a spread of 0.5%. It is a CONSTANT of the routine
-// because its loops are screen-sized, not map-sized (the same 4032-byte MVN at C0/A72D and the
-// same 256-cell build in every location measured). ⚠ NOT fully derived: C0/0A50 dispatches
-// between tilemap builders (C0/7B0x here, C0/7E2x on the one state of five that measured 33%
-// higher), and what selects them is not yet read out -- on such a map this constant is about a
-// frame light. See disasm/notes/field_load_cost.md.
+// C0/286C, the pipeline pass C0/2848 runs once before its ramp (C0/0A50's tilemap build, then the draw chain),
+// ending in the vblank wait C0/EC60. Measured in situ (1046 lines x 1364); its loops are screen-sized, so it is
+// a constant of the routine. Not derived: C0/0A50 picks between tilemap builders (C0/7B0x / C0/7E2x) on a
+// selector not yet read out; on a C0/7E2x map this is about a frame light. disasm/notes/field_load_cost.md sec. 6.
 #define LOADC_FIRST_PASS 1426744L
 
 long g_ctLzSpriteCycles = 0;   // the object pass's own decompressions, filled by the loaders (lz.h)
 
+// The location loader's tables (bank $F6, read as C0/0960 / C0/A33B / C0/09DD read them) are listed in
+// disasm/notes/field_load_cost.md sec. 3. Entries 0-5 are DMAed to VRAM by C0/2DC8 at 8 cycles a byte + 24.
 long ct_lz_load_cost(const uint8_t* rom, size_t romLen, int loc, long* outDma, int* outPackets) {
   if (outDma) *outDma = 0;
   if (outPackets) *outPackets = 0;
@@ -759,8 +670,7 @@ long ct_lz_load_cost(const uint8_t* rom, size_t romLen, int loc, long* outDma, i
                                     ((unsigned)RB(me + 2) << 16));
     cyc += ct_lz_rom_cycles(rom, romLen, src, 0);
     n++;
-    // ...and then C0/A33B BUILDS what it just decompressed, which costs as much again. The walk
-    // needs the decompressed image, so take it -- this port has the same decompressor the ROM does.
+    // C0/A33B then builds what it decompressed; the fallback model needs the decompressed image.
     uint8_t* img = (uint8_t*)malloc(0x20000);
     if (img) {
       size_t mlen = ct_lz_decompress_bounded(rom, romLen, img, 0x20000, src);
@@ -769,15 +679,11 @@ long ct_lz_load_cost(const uint8_t* rom, size_t romLen, int loc, long* outDma, i
       free(img);
     }
   }
-  // ⭐ THE REST OF C0/00F4's PACKETS. The model stopped at C0/09DD, and scene 468 -- the location it was measured on --
-  // has no BG3 tileset and a short script, so what it left out was inside its rounding there. The load is
-  // `092B / 1B53 / 0960 / 6DCF / 7084 / 7F7E / A33B / 09DD / 0A14 / 56D4`, and three of those decompress too:
-  //   C0/6DCF  record byte +2 (the BG3 tileset) != FF: `$F6:2220 + b*3 -> $7F:5080` (6DFE LDA #7F), then C0/2DC8 DMAs
-  //            $1000 bytes of it to VRAM $5000 (6E07-6E1E). FF: 6E22 `LDA #01 / STA $BB` and nothing else.
-  //   C0/0A14  `LDA $BB / BNE` (so the same byte), `$F6:21C0 + b*3 -> $7E:C000` (0A45 LDA #7E), no upload.
-  //   C0/56D4  the location's SCRIPT: record word +8, `$FC:F9F0 + id*3 -> $7F:2000` (56FA LDA #7F).
-  // MEASURED (`--cputrace` of the attract's reboot into loc 112, from f2435): C0:6E03 `E5:3C21 -> 7F:5080` in f2454,
-  // C0:0A4A `EF:8F48 -> 7E:C000` in f2462, C0:56FF `FB:8021 -> 7F:2000` in f2463, between the map and the object pass.
+  // The rest of C0/00F4's packets (disasm/notes/field_load_cost.md sec. 6b):
+  //   C0/6DCF  record byte +2 (BG3 tileset) != FF: `$F6:2220 + b*3 -> $7F:5080`, then C0/2DC8 DMAs $1000 bytes
+  //            to VRAM $5000. FF: 6E22 `LDA #01 / STA $BB` only.
+  //   C0/0A14  the same byte: `$F6:21C0 + b*3 -> $7E:C000`, no upload.
+  //   C0/56D4  the location's script: record word +8, `$FC:F9F0 + id*3 -> $7F:2000`.
   {
     const unsigned b3 = RB(REC + 2);
     if (b3 != 0xFF) {
@@ -808,13 +714,10 @@ long ct_lz_load_cost(const uint8_t* rom, size_t romLen, int loc, long* outDma, i
   return cyc;
 }
 
-// THE FIELD'S RETURN FROM A BATTLE (disasm/notes/sequence_table.md 11.10). C0/18C1 `JSR C0/0283` -> C0/0304 re-runs a
-// SUBSET of the location load -- C0/A33B (the map, decompressed and built again), C0/09DD (the tileset's assembly),
-// C0/0A14 (the BG3 assembly) and C0/56D4 (the script) -- with three C0/00EB frames and C0/0330's obj0 slot-1 run
-// between them. No tiles, no BG3 tileset, no sprites. Priced on the same clock as the load; the caller adds the
-// counted frames. Measured (`--cputrace` from saves/attract_07d_battle_f4540.state at f594, loc 07D): C0/0283 at
-// f58, the map f59-73 (6 decompressing + 9 building), C0/09DD f74-76, C0/0A14 f77, C0/56D4 f78, C0/0330 f79, the
-// runner C0/5A46 back at f82 -- 24 frames.
+// The field's return from a battle (disasm/notes/sequence_table.md 11.10): C0/18C1 `JSR C0/0283` -> C0/0304
+// re-runs part of the load -- C0/A33B (the map, decompressed and built), C0/09DD (tileset assembly), C0/0A14
+// (BG3 assembly), C0/56D4 (the script) -- with three C0/00EB frames and C0/0330's obj0 slot-1 run between them.
+// No tiles, BG3 tileset or sprites. The caller adds the counted frames.
 long ct_lz_return_cost(const uint8_t* rom, size_t romLen, int loc) {
   if (!rom || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
@@ -855,9 +758,9 @@ long ct_lz_return_cost(const uint8_t* rom, size_t romLen, int loc) {
   return cyc;
 }
 
-// One byte of a location's MAP IMAGE as C0/A33B decompresses it to $7E:B500 -- the header bytes the field engine
-// reads back before the build (C0/A385-A4FB): byte 4 is what C0/A415-A456 packs into $0BD7/$0BD8 (the effect
-// layer's staging bits, copied to $2C66/$2C67 by C0/0691 for the battle). -1 when the map cannot be read.
+// One byte of a location's map image as C0/A33B decompresses it to $7E:B500 (the header bytes read back by
+// C0/A385-A4FB). Byte 4 is what C0/A415-A456 packs into $0BD7/$0BD8, the effect layer's staging bits (C0/0691
+// copies them to $2C66/$2C67 for the battle). -1 when the map cannot be read.
 int ct_lz_map_header_byte(const uint8_t* rom, size_t romLen, int loc, int idx) {
   if (!rom || loc < 0 || loc > 511 || idx < 0) return -1;
   const size_t REC = 0x360000u + (size_t)loc * 14;
@@ -874,10 +777,9 @@ int ct_lz_map_header_byte(const uint8_t* rom, size_t romLen, int loc, int idx) {
   return v;
 }
 
-// THE FIELD'S CHARACTERS AS THE LOAD UPLOADS THEM: C0/0960 + C0/6D2F decompress the tileset's eight packets ($F6:1C00 +
-// ts*8 -> $F6:2220 + idx*3), the first six to $7E:3000 and on to VRAM by C0/2DC8 -- $1000 bytes each ($0F80 for the
-// sixth) at word $2000 / $2800 / $3000 / $3800 / $4000 / $4800 -- and C0/6DCF the BG3 tileset (record byte +2) to
-// $7F:5080 and VRAM $5000 ($1000). Written into a 64 KB byte image of VRAM (word address * 2). Returns the packets.
+// The field's tiles as the load uploads them: C0/0960 + C0/6D2F decompress the tileset's packets 0-5 to VRAM
+// words $2000-$4800 ($1000 bytes each, $0F80 for the sixth) and C0/6DCF the BG3 tileset (record byte +2) to
+// VRAM $5000. Written into a 64 KB byte image of VRAM (word address * 2). Returns the packet count.
 int ct_lz_load_tiles(const uint8_t* rom, size_t romLen, int loc, uint8_t* vram64k) {
   if (!rom || !vram64k || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
@@ -916,9 +818,9 @@ int ct_lz_load_tiles(const uint8_t* rom, size_t romLen, int loc, uint8_t* vram64
   return n;
 }
 
-// C0/6D65 / C0/6D97, the end of C0/0960: the tileset's packets 6 and 7 decompressed to $7F:6000 and $7F:7000 with no DMA
-// and no length cap (a long packet 6 runs on into $7000 and packet 7 lands over its tail) -- the animated characters
-// FD/E022 DMAs from. `wram` = the flat 128 KB image. Returns the number of packets written.
+// C0/6D65 / C0/6D97, the end of C0/0960: packets 6 and 7 to $7F:6000 and $7F:7000 with no DMA and no length cap
+// (a long packet 6 runs into $7000 and packet 7 overwrites its tail). These are the animated tiles FD/E022 DMAs
+// from. `wram` = the flat 128 KB image. Returns the number of packets written.
 int ct_lz_load_anim_tiles(const uint8_t* rom, size_t romLen, int loc, uint8_t* wram) {
   if (!rom || !wram || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
@@ -939,9 +841,9 @@ int ct_lz_load_anim_tiles(const uint8_t* rom, size_t romLen, int loc, uint8_t* w
   return n;
 }
 
-// THE TILESET'S ASSEMBLY as C0/09DD decompresses it to $7E:B000 ($F6:2100 + ts*3): 512 metatiles x 4 corner words
-// (TL TR on the even tilemap row, BL BR on the odd -- C0/79CF / C0/7AC1), each `chip | pal << 10 | prio << 13 |
-// fx << 14 | fy << 15`; the map's +256 ids select the second 2 KB. Into a 4 KB buffer; 0 when the record has none.
+// The tileset's assembly as C0/09DD decompresses it to $7E:B000 ($F6:2100 + ts*3): 512 metatiles x 4 corner
+// words (TL TR on the even tilemap row, BL BR on the odd: C0/79CF / C0/7AC1), each `chip | pal << 10 |
+// prio << 13 | fx << 14 | fy << 15`; ids +256 select the second 2 KB. Into a 4 KB buffer; 0 when there is none.
 int ct_lz_load_assembly(const uint8_t* rom, size_t romLen, int loc, uint8_t* asm4k) {
   if (!rom || !asm4k || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
@@ -960,9 +862,9 @@ int ct_lz_load_assembly(const uint8_t* rom, size_t romLen, int loc, uint8_t* asm
   return 1;
 }
 
-// THE BG3 ASSEMBLY as C0/0A14 decompresses it to $7E:C000 (`LDA $BB / BNE`: the record's byte +2, the BG3 tileset's,
-// FF = none; $F6:21C0 + b*3; 0A45 LDA #7E): 256 metatiles x 4 corner words, the same layout as $7E:B000's, read by
-// C0/7CB5's BG3 build. Into a 2 KB buffer; 0 when the record has none.
+// The BG3 assembly as C0/0A14 decompresses it to $7E:C000 (record byte +2, FF = none; $F6:21C0 + b*3):
+// 256 metatiles x 4 corner words, laid out as $7E:B000, read by C0/7CB5's BG3 build. Into a 2 KB buffer;
+// 0 when there is none.
 int ct_lz_load_assembly3(const uint8_t* rom, size_t romLen, int loc, uint8_t* asm2k) {
   if (!rom || !asm2k || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;
@@ -981,13 +883,11 @@ int ct_lz_load_assembly3(const uint8_t* rom, size_t romLen, int loc, uint8_t* as
   return 1;
 }
 
-// THE MAP IN WRAM AS C0/A521-A66B LEAVES IT (dis.py 0A521): WMADD $7E:B506 (past the six header bytes) and four
-// sequential streams, each written at ROW * 256 + COLUMN: layer A (BG1) at $7E:3000 (wA x hA from byte 0: w =
-// ((b & 3) + 1) * 16, h = ((b & 0C) + 4) * 4), layer B (BG2) at $3040 (byte 0's high nibble: w = (b & 30) + 10,
-// h = ((b & C0) >> 2) + 10), layer C (BG3) at $3080 only with byte 1 bit 7 (dims from byte 1 as A's), then the
-// PROPERTIES over A's dims: three bytes a cell to $30C0 / $7000 / $7040, or with bit 7 of the first a RUN
-// (`AND #7F`, the two bytes, then a count byte, 0 = 256; C0/A61A-A669). A translated stage builds its own tilemap
-// from these cells (entry 3's mountains, $7E:3040 = 00 01 02 .. at the hand-off). Returns 1 when written.
+// The map in WRAM as C0/A521-A66B leaves it: from $7E:B506 (past the six header bytes), four streams written at
+// row * 256 + column -- layer A (BG1) at $7E:3000, layer B (BG2) at $3040, layer C (BG3) at $3080 only with
+// byte 1 bit 7, then the properties over A's dims, three bytes a cell to $30C0 / $7000 / $7040, or with bit 7
+// of the first a run (`AND #7F`, two bytes, a count, 0 = 256; C0/A61A-A669). Stages build their own tilemap
+// from these cells. Returns 1 when written.
 int ct_lz_map_to_wram(const uint8_t* rom, size_t romLen, int loc, uint8_t* s7e) {
   if (!rom || !s7e || loc < 0 || loc > 511) return 0;
   const size_t REC = 0x360000u + (size_t)loc * 14;

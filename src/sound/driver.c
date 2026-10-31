@@ -1,4 +1,3 @@
-// ============================================================================
 // sound/driver.c -- the sound processor's program as native C (see driver.h). Each routine names the address it ports
 // (an ARAM address of block 0, or of the boot ROM at $FFC0); disasm/notes/audio_spc_driver.md reads each of them.
 //
@@ -8,12 +7,10 @@
 // driver's own (8-bit wrap, its carries and its 8x8 multiplies), written as C.
 //
 // The marks: AT(pc) says the program has reached pc; the walker (SndClockAt) charges every instruction from the last
-// mark -- straight on, a conditional branch counted taken when the mark is its target, a jump followed, a return
-// landing on the mark. So every basic block the original runs has a mark: a branch's fall-through where its target
-// is also reached, the return address after each CALL, and inside each loop a mark other than its head. An access the
-// outside sees goes through a helper that names its instruction (dspW, portR, timerR, ramW, ...): the access then
-// happens at the cycle the original makes it.
-// ============================================================================
+// mark (straight on, a conditional branch taken when the mark is its target, a jump followed, a return landing on the
+// mark). So every basic block the original runs has a mark: a branch's fall-through where its target is also reached,
+// the return address after each CALL, and inside each loop a mark other than its head. An access the outside sees goes
+// through a helper that names its instruction (dspW, portR, timerR, ramW, ...), so it happens on the original's cycle.
 #include "driver.h"
 
 #include <setjmp.h>
@@ -22,7 +19,7 @@
 #define M(a) d->m[(uint16_t)(a)]
 #define T(f) d->m[(uint16_t)((f) + x)]
 
-// --- the direct page -----------------------------------------------------------------------------------------------
+// ---- the direct page ----
 enum {
   D_SONG_BASE = 0x00,   // word: added to a song's relative pointers ($2024 - the song header's own base)
   D_TRK_PTR = 0x02,     // word +x: the track's read pointer
@@ -76,14 +73,14 @@ enum {
   D_COND = 0xD2, D_COND_MAX = 0xD3,     // command 88's value (event FA's test), the largest FA operand seen
   D_QHEAD = 0xD7, D_BRR_STEP = 0xD8, D_EVOLOUT = 0xD9,
 };
-// --- page 1 (+x) ---------------------------------------------------------------------------------------------------
+// ---- page 1 (+x) ----
 enum {
   P_FIR_STEP = 0x0100,  // 8 words: the FIR slide's step per coefficient
   P_VIB_DELAY = 0x0110, P_VIB_DELAY_N = 0x0111, P_TREM_DELAY = 0x0130, P_TREM_DELAY_N = 0x0131,
   P_PSLIDE = 0x0150,    // the next note's pitch slide (semitones)
   P_VIB_DEPTH = 0x0151, P_TREM_DEPTH = 0x0170, P_SWEEP = 0x0171,
 };
-// --- the per-track arrays (+x) -------------------------------------------------------------------------------------
+// ---- the per-track arrays (+x) ----
 enum {
   T_OCT = 0xF200, T_INSTR = 0xF201, T_EXPR = 0xF220, T_PHASE = 0xF221,
   T_VOL = 0xF240, T_VOL_STEP = 0xF260, T_PAN = 0xF280, T_PAN_STEP = 0xF2A0, T_VOL_N = 0xF2C0, T_PAN_N = 0xF2C1,
@@ -95,7 +92,7 @@ enum {
   T_VIB_OFS = 0xF500, T_PITCH = 0xF520, T_ADSR = 0xF540,
   T_LOOP_CNT = 0xF560, T_LOOP_LEFT = 0xF580, T_LOOP_PTR = 0xF5C0,   // + the loop slot (LOOP_PTR + 2 x slot)
 };
-// --- the rest of the RAM, and the tables the loader put in block 0 -------------------------------------------------
+// ---- the rest of the RAM, and the tables the loader put in block 0 ----
 enum {
   A_PERC_TAB = 0xF120,  // 3 bytes a note: instrument, note, volume
   A_FADE = 0xF160,      // 3 words: music, effects A (voices 7-6), effects B (5-4); high bytes $F161/3/5
@@ -116,9 +113,7 @@ static void ww(SndDrv* d, uint16_t a, uint16_t v) { M(a) = (uint8_t)v; M(a + 1) 
 static uint8_t xcn(uint8_t a) { return (uint8_t)(a << 4 | a >> 4); }
 static uint8_t voiceReg(int x) { return (uint8_t)(xcn((uint8_t)x) >> 1); }   // `MOV A,X / XCN / LSR`: voice x/2 & 7, x 16
 
-// ===================================================================================================================
-// The SPC700's time (timing.h): the walk through the cartridge's code
-// ===================================================================================================================
+// ---- The SPC700's time (timing.h): the walk through the cartridge's code ----
 
 #define AT(pc) SndClockAt(d, (uint16_t)(pc))
 
@@ -177,7 +172,7 @@ static void wAt(SndDrv* d, int nth) {   // the instruction's nth RAM write
   c->io = c->insStart + (nth < in->nw ? in->wIdx[nth] : in->cyc - 1) + 1;
 }
 
-// --- the accesses the outside sees --------------------------------------------------------------------------------
+// ---- the accesses the outside sees ----
 // The S-DSP ignores writes to $80-$FF (they mirror the read-only view): the sink sees $00-$7F only.
 static void dspW(SndDrv* d, uint16_t pc, uint8_t reg, uint8_t val) {
   insAt(d, pc); ioAt(d, 0xF3, 1);
@@ -232,9 +227,7 @@ static void mainLoop(SndDrv* d);
 static void toLoop(SndDrv* d);
 static void toIpl(SndDrv* d);
 
-// ===================================================================================================================
-// The ports, the queue
-// ===================================================================================================================
+// ---- The ports, the queue ----
 
 static void ackPorts(SndDrv* d, uint16_t ret) {   // `CALL $07A8`: clear ports 0-1 (the ack)
   AT(0x07A8); ctlW(d, 0x07A8, 0xF1, 0x13); ctlW(d, 0x07AB, 0xF1, 0x03); AT(ret);
@@ -318,9 +311,7 @@ static void echoWait(SndDrv* d, uint8_t at) {
   AT(0x1315);
 }
 
-// ===================================================================================================================
-// The S-DSP side helpers
-// ===================================================================================================================
+// ---- The S-DSP side helpers ----
 
 static void timer1Restart(SndDrv* d, uint16_t pc) {   // `$F1=1 / MOV Y,$FE / $F1=3`: timer 1 from 0
   ctlW(d, pc, 0xF1, 0x01); timerR(d, (uint16_t)(pc + 3), 1); ctlW(d, (uint16_t)(pc + 5), 0xF1, 0x03);
@@ -462,9 +453,7 @@ static void endTrack(SndDrv* d, int x) {
   echoOff(d, x);   // (JMP $1A2C: its RET is this routine's)
 }
 
-// ===================================================================================================================
-// Reading a track, pitches
-// ===================================================================================================================
+// ---- Reading a track, pitches ----
 
 static uint8_t trkRead(SndDrv* d, int x) {   // $0753
   AT(0x0753);
@@ -608,10 +597,9 @@ static uint16_t sfxPtr(SndDrv* d, uint8_t a, uint8_t y) {   // $1BBC: the effect
   return v;
 }
 
-// ===================================================================================================================
-// The sequence events $C4-$FF ($073D through the table at $1554). `a` is the first operand (0 for an event without
-// one, whose $A5 then holds the event's index). Returns 1 when the track ended (the step stops).
-// ===================================================================================================================
+// ---- The sequence events $C4-$FF ($073D through the table at $1554) ----
+// `a` is the first operand (0 for an event without one, whose $A5 then holds the event's index). Returns 1 when the
+// track ended (the step stops).
 
 static void setVol(SndDrv* d, int x, uint8_t a) {   // $175F
   AT(0x175F);
@@ -1114,10 +1102,9 @@ static uint8_t lookAhead(SndDrv* d, int x) {
   }
 }
 
-// ===================================================================================================================
-// A track's step ($0507): events up to a note; the note's length, pitch, modulations and key-on; the look-ahead's
-// tie; the pitch slide toward the next note.
-// ===================================================================================================================
+// ---- A track's step ($0507) ----
+// Events up to a note; the note's length, pitch, modulations and key-on; the look-ahead's tie; the pitch slide toward
+// the next note.
 
 static void step(SndDrv* d, int x) {
   uint8_t a;
@@ -1480,9 +1467,7 @@ sfx:
   AT(0x0414);
 }
 
-// ===================================================================================================================
-// The voices
-// ===================================================================================================================
+// ---- The voices ----
 
 // $0ADE: a modulation's waveform step at the end of its period: the new current delta from the old one (cur), the
 // step and the phase (3 bits); the depth's top bits (in $A5) pick the shape. *nph = the new phase.
@@ -1694,9 +1679,7 @@ static void voice(SndDrv* d, int x) {
   voiceOut(d, x);
 }
 
-// ===================================================================================================================
-// The fades ($1492, every 7th tick)
-// ===================================================================================================================
+// ---- The fades ($1492, every 7th tick) ----
 
 typedef struct { uint16_t entry, nz, chg, j, zx, stop, next; } FadePcs;
 static const FadePcs kFade[3] = {
@@ -1747,9 +1730,7 @@ static void fades(SndDrv* d) {
   AT(0x1543);
 }
 
-// ===================================================================================================================
-// Stopping
-// ===================================================================================================================
+// ---- Stopping ----
 
 static void stopMusic(SndDrv* d) {   // $0F17 (command F1)
   AT(0x0F17);
@@ -1788,9 +1769,7 @@ static void stopSfxB(SndDrv* d) {
   stopSfx(d, 0x0F71, 0x0F8D, 0x0F91, 0x0F9D, 0x0FA4, a, (uint8_t)(a << 2), 0x1A, 0x20, 0x08);
 }
 
-// ===================================================================================================================
-// The tick
-// ===================================================================================================================
+// ---- The tick ----
 
 // $02B0 / $041A: the 17 shadowed S-DSP registers (the list at $16FF / $1710: FIR, EFB, EVOL, EON, KOFF, FLG, NON,
 // PMON, KON last), then the key shadows cleared.
@@ -1978,9 +1957,7 @@ static void uploadTick(SndDrv* d) {
   AT(0x0463);
 }
 
-// ===================================================================================================================
-// The commands
-// ===================================================================================================================
+// ---- The commands ----
 
 static void trackInit(SndDrv* d, int x) {   // $0CF6 (straight-line: its RET is the caller's next mark)
   AT(0x0CF6);
@@ -2457,11 +2434,9 @@ static void dispatch(SndDrv* d) {
   portW(d, 0x0BD5, 0, c);
 }
 
-// ===================================================================================================================
-// The upload session ($100E, command FE and every song start): the CPU's blocks, each a header (kind, destination)
-// and its data, through the receivers. The two-processor protocol as the driver runs it: the tokens on port 0, each
+// ---- The upload session ($100E, command FE and every song start) ----
+// The CPU's blocks, each a header (kind, destination) and its data, through the receivers: the tokens on port 0, each
 // echoed; data on ports 1-3. The receivers' self-modified store addresses are kept where the driver keeps them.
-// ===================================================================================================================
 
 // `CMP X,#$FF / BNE / MOV A,#$F0 / CBNE $F5 / MOV $8E,A / JMP $12BD`: a token $FF with $F0 on port 1 is the reset.
 static void uploadReset(SndDrv* d) {
@@ -2791,9 +2766,7 @@ static void upload(SndDrv* d, uint8_t x) {
   }
 }
 
-// ===================================================================================================================
-// The main loop, the boot, the IPL
-// ===================================================================================================================
+// ---- The main loop, the boot, the IPL ----
 
 // $0299: the main loop -- the poll ($0B96: a command the CPU posted, port 0 nonzero and read twice the same, taken
 // whole, acked and run), then a tick each time timer 0 has counted. Never returns.
@@ -2906,9 +2879,7 @@ static void ipl(SndDrv* d) {
   mainLoop(d);
 }
 
-// ===================================================================================================================
-// The program and its entries
-// ===================================================================================================================
+// ---- The program and its entries ----
 
 static void toLoop(SndDrv* d) { longjmp(d->jb, SND_ENTRY_LOOP); }
 static void toIpl(SndDrv* d) { longjmp(d->jb, SND_ENTRY_IPL); }

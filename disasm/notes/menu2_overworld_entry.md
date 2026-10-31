@@ -848,3 +848,20 @@ engine's analogue of §4.5's `total saved-region diffs: 5`). Anchor the fade ass
     captures are free-roam. The ROM's protection is the `$027C == 1` gate itself (a scripted overworld
     sequence parks `$027C` elsewhere), so I believe it is covered — but "I did not reproduce it" is the
     honest statement, per `verify-negatives-on-proper-state`.
+
+## The rebuild's WRAM and VRAM halves
+
+`C2/2C93` runs after the X menu (`C2/2556 -> C2/2E72 -> C2/03EF -> C2/2C93`) and after the time gauge.
+
+WRAM half: the menu uses `$7E:3000..` as its own scratch while it builds its screens (`C2:9641`, `C2:96B8`,
+`C2:971B`, `C2:97B9`, `C2:ECD4`, `C2:F224`, ...), and `C2/2E72`'s six stash blocks do not cover it. The rebuild
+decompresses it again from the world's own packets (`C3:07BB` writes `$7E:3000` and `$7E:3800`, then `$7E:7000`).
+On the cartridge (saves/ow_w0.state, X at f80, then B, B) the block definitions `$7E:3000-3FFF` and `$7E:7000-71FF`
+read the same before the menu and after the return. These are the bytes `worldInit` (src/field.c) copies from the
+world's image, so `worldReloadMenuScratch` copies them again. If the menu's bytes stay there, the map's streaming
+(`owTilemapBuildBg` and the column writers) builds every column that comes into view after the menu from them, and so
+do the widescreen's sides.
+
+VRAM half: the time gauge clears all of VRAM (`C2/26A8`) for its own mode-7 picture, so the rebuild reloads the
+world's BG char (`$4000` bytes on), BG3 (`$E000`) and the sprites (`C2/2CCD`, `C2/2CDC`) from the same packets the
+entry decompressed (`worldReloadVram`).

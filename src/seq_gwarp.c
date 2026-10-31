@@ -1,35 +1,21 @@
-// seq_gwarp.c -- THE GATE WARP, native (see seq_gwarp.h): the program of bank $FD that op 0xFF $80..$8F jumps to, written over
+// seq_gwarp.c -- the gate warp (see seq_gwarp.h): the program of bank $FD that op 0xFF $80..$8F jumps to, written over
 // the WRAM image `w` (128 KB: $7E at 0, $7F at 0x10000) and the stage's picture (seq_pic.h), with no CPU and no PPU.
 //
-// The ROM's shape (disasm/notes/gate_warp_fd_family.md sec. 2 and 11): FD/DA00, DA5F, DABE and DB1D are one loop each --
-//   JSR FD/DB97        the setup, NMI off: own NMI vectors (FD/EAF4), the PPU (FD/EB13), the flags saved (FD/EAA6), the
-//                      mode-7 characters (each tile a flat colour) and map (FD/F1ED), the colours (FD/EF6F), the sprites
-//                      (FD/F24C, $FD:DDB5), the ray picture drawn into $7F:4000 (DC1E-DCA0, FD/ECD5), the HDMA tables
-//                      (FD/ED89, the hardware divider), the window table built twice (FD/EB8B), then RDNMI (FD/EADA)
-//   loop: JSR FD/EAEB  wait for the NMI (FD/DE15: CGRAM and OAM by DMA, the window buffer, $1B += 1, HDMA on, INIDISP $0F)
-//         [DB1D: INIDISP from $FD:DDF5, the brightness pulse]
-//         JSR FD/DCBD  the mode-7 centre / scroll for $1B, the sprite colour ring rotated
-//         $2123 / $23  by the counter's band (the window opening and closing)
-//         JSR FD/EB8B  the next window table (a disc of radius $23)
-//         JSR FD/F123  the BG colours' red and green from the sine
-//   until $1B = the routine's end; then FD/EAC8 (blank, NMI off), FD/EAB7 (flags restored), JML $C0:0000.
-//
-// Every value is the ROM's: the tables are read from the user's ROM ($FD:DD96, DDF5, DDB5, ED79, ED81, F001, F081, F101, F181
-// and the sine $C0:F800), the code's immediates are the code. Where the program leaves a register in memory -- the stack
-// page (its JSRs, PHX, the NMI's pushes) and the accumulator's high byte (which XBA / TAX / TAY carry into an address or a
-// colour: the first FF 83 frame's INIDISP is read at $FD:DDF5 + $3F00) -- the register is kept as the ROM leaves it, so the
-// WRAM is the cartridge's byte for byte from the setup's end on. The clock: the setup is NMI-off work whose length does not
-// depend on any data (CLAUDE.md, NMI-off loads), so its frame count is the listing's, measured once; every NMI-on iteration
-// is free (the infinitely fast CPU): its writes land in the vblank, before the frame's HDMA starts.
+// FD/DA00, DA5F, DABE and DB1D are one loop each (disasm/notes/gate_warp_fd_family.md sec. 2 and 11): the setup FD/DB97
+// (NMI off), then per frame the NMI's wait (FD/EAEB, FD/DE15), [DB1D's brightness pulse], FD/DCBD, the window band
+// ($2123 / $23), FD/EB8B and FD/F123, until $1B reaches the routine's end; then FD/EAC8, FD/EAB7 and `JML $C0:0000`.
+// The tables are read from the ROM. Where the program leaves a register in memory (the stack page; the accumulator's
+// high byte, which XBA / TAX / TAY carry into an address or a colour) the register is kept as the ROM leaves it. The
+// setup is NMI-off work of a fixed length, so its frame count is a constant; every NMI-on iteration is free (the
+// infinitely fast CPU) and its writes land in the vblank.
 #include "seq_gwarp.h"
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include <string.h>
 #include <stdio.h>
 
-// FD/DB97's NMI-off stretch, from the hand-off (C0/3FE8's JML, line 239) to FD/EADA's RDNMI poll: 40,005,322 master cycles
-// on the cartridge under the rule (ct.exe --racepiccmp RACEPICCMP_SPAN=FDFFF1,FDEADF from scene8_gate_warp_f2300.state; FF 81
-// 40,005,274) -- it crosses 112 vblanks and the poll is met by the 112th's flag (EADF at frame +112, line 225). The setup
-// reads nothing that differs between visits (no input, no WRAM it does not write first), so the count is the program's own.
+// FD/DB97's NMI-off stretch, from the hand-off (C0/3FE8's JML, line 239) to FD/EADA's RDNMI poll, crosses 112 vblanks and the
+// poll meets the 112th's flag (`ct.exe --racepiccmp` with RACEPICCMP_SPAN=FDFFF1,FDEADF). The setup reads nothing that
+// differs between visits (no input, no WRAM it does not write first), so the count is the program's own.
 #define GW_SETUP_FRAMES 112
 
 // The four routines: their JSR return addresses (what the stack page keeps) and their constants -- the band edges of
@@ -45,7 +31,7 @@ static const Routine kR[4] = {
   { 0xDB1F, 0xDB26, 0xDB40, 0xDB7F, 0xDB82, 0xDB8F, 0xDB92, 0x0020, 0x02A0, 0x02C0, 0x02FF },   // FD/DB1D (FF 83 ...)
 };
 
-// ---- the machine the code runs on: ROM, WRAM, the direct page $0500, the stack, the WRAM port, the math unit ----
+// ---- The machine the code runs on: ROM, WRAM, the direct page $0500, the stack, the WRAM port, the math unit ----
 static uint8_t rom8(const CtGwarp* g, uint32_t a) {           // a 24-bit address in the HiROM banks ($C0-$FF; $00-$3F's upper half)
   uint8_t bank = (uint8_t)(a >> 16);
   if (bank < 0xC0 && !((bank & 0x7F) < 0x40 && (a & 0x8000))) {

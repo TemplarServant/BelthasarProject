@@ -1,4 +1,4 @@
-// seq_entry4pic.c -- SEQUENCE ENTRY 4's picture, native (stage 2; its logic, stage 1, is seq_entry4.c): Lavos falls through
+// seq_entry4pic.c -- sequence entry 4's picture (its logic is seq_entry4.c): Lavos falls through
 // space onto the planet. Mode 7 (the planet's map and characters), the stars and the planet's sprite.
 //
 // The setup $7E:53BB uploads the mode-7 characters as VRAM's high bytes (packet $2D's nibbles spread by $350E), the OBJ

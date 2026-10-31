@@ -1,4 +1,4 @@
-// viewer.c — interactive SDL2 viewer for the C scene engine. Opens a window,
+// viewer.c -- interactive SDL2 viewer for the C scene engine. Opens a window,
 // renders a Chrono Trigger field scene (src/scene.c) to a texture, advances chip
 // + palette animation in real time, and navigates scenes with the keyboard.
 //
@@ -6,7 +6,7 @@
 //   F          : toggle full map vs camera crop  Esc : quit
 //
 // Usage: ct_viewer[.exe] [rom.sfc] [--scene N] [--assets ct_assets.dat] [--selftest]
-//        ct_viewer[.exe] --datonly ct_assets.dat [--scene N]   (renders WITHOUT the ROM)
+//        ct_viewer[.exe] --datonly ct_assets.dat [--scene N]   (renders without the ROM)
 // --datonly renders entirely from ct_assets.dat (no ROM needed). --selftest renders
 // one scene headlessly (dummy video driver) and prints an FNV of the pixels, so the
 // SDL build/render path can be checked without a display.

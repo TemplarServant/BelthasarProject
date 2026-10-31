@@ -1,11 +1,11 @@
-// seq_entry6pic.c -- SEQUENCE ENTRY 6's picture, native (stage 2; its logic, stage 1, is seq_entry6.c): the Epoch flies into
+// seq_entry6pic.c -- sequence entry 6's picture (its logic is seq_entry6.c): the Epoch flies into
 // Lavos's shell. Mode 7 (the shell's map, its per-line matrix built by the shared $357B), the Epoch scaled on the main thread
 // (C3/0307 and the code C3/09E9 writes at $B574, as the race's bikes), the backdrop of mode 1, the sprites.
 //
-// Part 1 (2026-10-17): the setup $7E:78DD with $7A68, the hooks ($380B / $3843 / $388B shared, $81C4, $824A, $7F58 and the
-// PPU halves of $7A35 / $79F8), the main thread $8278 and the task $82D1 ($357B with $8042 / $801F before its loop). Not yet:
-// the tasks $7F7D, $7FCB (C3/0077's circle), $8079, $835B, $7BF2 -- their draws use C3/02DD with a 16-bit A, which reads $2138 and
-// $213E. disasm/notes/seq_picture.md sec. 8.
+// Part 1: the setup $7E:78DD with $7A68, the hooks ($380B / $3843 / $388B shared, $81C4, $824A, $7F58 and the PPU halves of
+// $7A35 / $79F8), the main thread $8278 and the task $82D1 ($357B with $8042 / $801F before its loop). Part 2: the sprite
+// tasks $7F7D, $7FCB (C3/0077's circle), $8079, $835B, $7BF2, whose draws use C3/02DD with a 16-bit A (it reads $2138 and
+// $213E). disasm/notes/seq_picture.md sec. 8.
 #include "seq_entry6pic.h"
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include "seq_racepic.h"
@@ -88,7 +88,7 @@ void CtEntry6PicSetupB(CtSeqStagePic* sp) {
   CtSeqPicWrite(&sp->p, 0x23, 0x22, 0); CtSeqPicWrite(&sp->p, 0x25, 0x22, 0);
   CtSeqPicWrite(&sp->p, 0x07, 0x60, 0); CtSeqPicWrite(&sp->p, 0x0B, 0x04, 0);
 }
-// $7E:8278 -- THE MAIN THREAD's pass (the loop's `JSR ($3024)`, after each NMI): with `$21` clear, the Epoch's frame scaled from
+// $7E:8278 -- the main thread's pass (the loop's `JSR ($3024)`, after each NMI): with `$21` clear, the Epoch's frame scaled from
 // $7F:0A00 (C3/0307: `$1F` = 4 groups, `$25` = $21 rows, `$2B` = $400, `$29` = `$27` x 2 -- the ASL's carry into C3/0307) and
 // reformatted at $0C00 ($B574), `$21` = 1; hook $824A sends it and clears `$21`.
 void CtEntry6PicThread(uint8_t* w) {
@@ -153,17 +153,17 @@ unsigned CtEntry6PicHook(CtSeqStagePic* sp, uint8_t* w, unsigned hook) {
   { static unsigned said = 0; if (said != hook) { said = hook; fprintf(stderr, "entry6pic: UNDERIVED vblank hook $%04X\n", hook); } }
   return hook;
 }
-// ---- part 2: the sprites ----
+// ---- Part 2: the sprites ----
 typedef struct { CtSeqStagePic* sp; uint8_t* w; unsigned a; int c; unsigned x; int dbr7e; } Cpu6;   // A (16 bits), the carry, X,
                                                                    //   the data bank $7E (else $00)
 static unsigned adc16(Cpu6* k, unsigned a, unsigned v) { unsigned s = (a & 0xFFFF) + (v & 0xFFFF) + (unsigned)k->c; k->c = s > 0xFFFF; return s & 0xFFFF; }
 static unsigned sbc16(Cpu6* k, unsigned a, unsigned v) { int s = (int)(a & 0xFFFF) - (int)(v & 0xFFFF) - (1 - k->c); k->c = s >= 0; return (unsigned)s & 0xFFFF; }
-// $7E:3443 -> C3/02DD WITH A 16 BITS WIDE: every operand a word. `CMP $2137` reads the latch (the CPU's open bus: the operand's
+// $7E:3443 -> C3/02DD with a 16-bit A: every operand a word. `CMP $2137` reads the latch (the CPU's open bus: the operand's
 // last byte, $21) and $2138 (OAM data at the OAM address -- the compositor's, which the read advances); `ADC $213C` the rule's
 // virtual beam ($0351, then $213D's 0); `SBC $213D` its 0 and $213E (STAT77: 1, the PPU1 open bus' bit 4, last frame's range /
 // time over). The carry threaded as the 8-bit routine's (seq_entry4.c rng02DD).
-// ⚠ ITS OPERANDS ARE ABSOLUTE, IN THE CALLER's DATA BANK: under $7E (a task that did `PHK / PLB`, as $8079) `$2137`, `$213C`,
-// `$213D` are WRAM's bytes $7E:2137.., not the PPU's -- the beam, the latch and OAM untouched.
+// Note: its operands are absolute, in the caller's data bank: under $7E (a task that did `PHK / PLB`, as $8079) `$2137`,
+// `$213C`, `$213D` are WRAM's bytes $7E:2137.., not the PPU's -- the beam, the latch and OAM untouched.
 static unsigned rngW(Cpu6* k, unsigned adr, int word) { return word ? rw(k->w, adr) : k->w[adr & 0x1FFFF]; }
 static void rng16(Cpu6* k) {
   uint8_t* w = k->w; unsigned a = k->a;
@@ -199,7 +199,7 @@ static uint8_t rng8w(Cpu6* k, uint8_t a) {
   w[0x0386] = a;
   return a;
 }
-// $7E:3A97 -- A LIST OF SPRITES through WMDATA from $7E:A: a count n + 1, then n x (tile, attr -- its bit 4 the size, cleared in
+// $7E:3A97 -- a list of sprites through WMDATA from $7E:A: a count n + 1, then n x (tile, attr -- its bit 4 the size, cleared in
 // OAM --, x, y), x and y signed bytes added to the words `$15` / `$17`. x < 0: its low byte and bit 8 set in the high table; x
 // from $100: the y byte skipped and y = $E0 (x's byte not written); y negative or from $E0: $E0. A and the carry it leaves are
 // the next caller's (A = the last word's high byte : the OAM index's low nibble).
@@ -263,7 +263,7 @@ static void task7F7D(Cpu6* k) {
   k->c = 1; a = sbc16(k, rw(w, 0x46), 0x0028); ww(w, 0x17, a);
   draw3A97(k, 0x8122);
 }
-// C3/0077 -- A CIRCLE INTO A WINDOW TABLE (D = $0300; A's low byte the mode, from the caller): the centre (`$50`, `$52`), the
+// C3/0077 -- a circle into a window table (D = $0300; A's low byte the mode, from the caller): the centre (`$50`, `$52`), the
 // radius `$54` (their high bytes cleared), the table at `$56` in bank $7E / $7F by `$58` bit 0, two bytes a line (left, right).
 // Radius 0: every line `01 00` (C3/01C6). Else the midpoint walk from (x = r, y = 0), d = 3 - 2r less the ASL's borrow, writes
 // the lines cy - x and cy - y (left cx - y / cx - x clamped at 0, right cx + y / cx + x at $FF) while x >= y; then the lower
@@ -360,7 +360,7 @@ static void circle0077(Cpu6* k, uint8_t mode) {
   }
   #undef TB
 }
-// $7E:7FCB (D = $0B00) -- THE WINDOW's CIRCLE: page B's r6 as the centre and the radius (`$0350` / `$0352` / `$0354`), C3/0077 in
+// $7E:7FCB (D = $0B00) -- the window's circle: page B's r6 as the centre and the radius (`$0350` / `$0352` / `$0354`), C3/0077 in
 // mode $80 (every line mirrored, no fills) into $7E:E060; the HDMA tables' bytes $7C5C / $7C66 = r2 - r6 - 1, $7C69 = r6 x 2,
 // $7C5F = it | $80; then the (r6 + 1) x 2 lines from $E060 to $E0E0, each its left byte + r1 (clamped at 0) | $FF00.
 static void task7FCB(Cpu6* k) {
@@ -402,7 +402,7 @@ static unsigned spark80A6(Cpu6* k, unsigned wm) {
   }
   return wm;
 }
-// $7E:8079 -- THE LIGHTNING: the first two sprites' words of the list $8109 ($810A, $810E) from $80D3, then the next four through
+// $7E:8079 -- the lightning: the first two sprites' words of the list $8109 ($810A, $810E) from $80D3, then the next four through
 // WMDATA from $8112 ($80A6 at x $38 and $C0). A enters as the task's address (the dispatcher's `LDA $0950,X`).
 static void task8079(Cpu6* k) {
   uint8_t* w = k->w;
@@ -414,7 +414,7 @@ static void task8079(Cpu6* k) {
   w[0x00F0] = 0x38; k->a = 0x0038; wm = spark80A6(k, wm);
   w[0x00F0] = 0xC0; k->a = (k->a & 0xFF00) | 0xC0; spark80A6(k, wm);
 }
-// $7E:835B (the data bank $7E) -- THE EXPLOSION's frames: `$4C` counts the current one's frames down; at 0 the pointer `$4E` steps 3
+// $7E:835B (the data bank $7E) -- the explosion's frames: `$4C` counts the current one's frames down; at 0 the pointer `$4E` steps 3
 // through the table from $84F6 (a count byte, then the list's address; a 0 count starts it again) -- then the list drawn at
 // page B's r1 / r2 through $3A97.
 static void task835B(Cpu6* k) {

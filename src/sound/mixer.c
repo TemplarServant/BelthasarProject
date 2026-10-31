@@ -1,6 +1,6 @@
-// mixer.c -- the port's S-DSP (mixer.h). Every stage is the vendored snes/dsp.c's (LakeSnes, MIT) arithmetic, kept to the
-// integer width and the order of operations it has, so the output is sample-exact; the model and where each piece of the
-// console's behaviour comes from: disasm/notes/audio_mixer.md.
+// mixer.c -- the port's S-DSP (mixer.h). Every stage keeps the vendored snes/dsp.c's (LakeSnes, MIT) integer widths and
+// order of operations, so the output matches it sample for sample; the model and the source of each piece of the
+// console's behaviour: disasm/notes/audio_mixer.md.
 #include <string.h>
 #include "mixer.h"
 
@@ -73,7 +73,7 @@ void ct_mixer_init(CtMixer* m, uint8_t* aram) {
   m->voiceMask = 0xff;
 }
 
-// ---- BRR: four samples of the block's data, through the header's shift and prediction filter -----------------------
+// ---- BRR: four samples of the block's data, through the header's shift and prediction filter ----
 static void brrDecode(CtMixer* m, CtMixerVoice* v) {
   const uint8_t* ram = m->aram;
   int shift = v->header >> 4;
@@ -105,7 +105,7 @@ static void brrDecode(CtMixer* m, CtMixerVoice* v) {
   if (v->ringPos >= 12) v->ringPos = 0;
 }
 
-// ---- the Gaussian interpolation over the four samples around the position ------------------------------------------
+// ---- the Gaussian interpolation over the four samples around the position ----
 static int16_t interpolate(const CtMixerVoice* v) {
   int pos = (v->pitchCounter >> 12) + v->ringPos;
   int frac = (v->pitchCounter >> 4) & 0xff;
@@ -120,7 +120,7 @@ static int16_t interpolate(const CtMixerVoice* v) {
   return clamp16(out) & ~1;
 }
 
-// ---- the envelope: one step of ADSR or GAIN, taken when the mode's rate fires --------------------------------------
+// ---- the envelope: one step of ADSR or GAIN, taken when the mode's rate fires ----
 static void envelope(CtMixer* m, CtMixerVoice* v) {
   int level = v->env;
   int rate = 0;
@@ -156,7 +156,7 @@ static void envelope(CtMixer* m, CtMixerVoice* v) {
   if (rateFires(m, rate)) v->env = level;
 }
 
-// ---- one voice's sample --------------------------------------------------------------------------------------------
+// ---- one voice's sample ----
 static void voiceSample(CtMixer* m, int ch) {
   CtMixerVoice* v = &m->v[ch];
   const uint8_t* ram = m->aram;
@@ -225,7 +225,7 @@ static void voiceSample(CtMixer* m, int ch) {
   }
 }
 
-// ---- the echo: the buffer's oldest sample through the FIR, mixed in; the input plus feedback written back ----------
+// ---- the echo: the buffer's oldest sample through the FIR, mixed in; the input plus feedback written back ----
 static void echoSample(CtMixer* m) {
   uint8_t* ram = m->aram;
   m->firPos = (m->firPos + 1) & 0x7;
@@ -333,7 +333,7 @@ void ct_mixer_write(CtMixer* m, uint8_t reg, uint8_t val) {
   m->regs[reg] = val;
 }
 
-// ---- the clock ----------------------------------------------------------------------------------------------------
+// ---- the clock ----
 // samples = master x (32,040 / (1364 x 262 x 60)) = master x 267 / 178,684 (both / 120): an even field, 357,368 master
 // cycles, is exactly 534.
 int ct_mixer_clock_frame(CtMixerClock* c, int oddFrame) {
@@ -342,7 +342,7 @@ int ct_mixer_clock_frame(CtMixerClock* c, int oddFrame) {
   return (int)(c->master * 267u / 178684u - a);
 }
 
-// ---- voice-level operations ---------------------------------------------------------------------------------------
+// ---- voice-level operations ----
 void ct_mixer_voice_source(CtMixer* m, int v, uint8_t srcn) { ct_mixer_write(m, (uint8_t)(v << 4 | 4), srcn); }
 void ct_mixer_voice_pitch(CtMixer* m, int v, uint16_t p) {
   ct_mixer_write(m, (uint8_t)(v << 4 | 2), p & 0xff);

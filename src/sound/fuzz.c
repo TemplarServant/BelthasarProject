@@ -1,18 +1,13 @@
-// ============================================================================
 // sound/fuzz.c -- `ct.exe --snddrvfuzz <actions> [seed]`: a constructed command stream for the sound driver's
 // lockstep (sound/lockstep.h), reaching what no game run does.
 //
 // The original driver runs on the vendored SPC700 (a CtAudio, its upload from the ROM), the C driver beside it in
-// lockstep. A seeded generator then drives the SPC's ports the way the CPU would: the game's own song loads
-// (CtAudioLoadSong: every block kind the loader uses), effect starts on the loaded set, random commands with random
-// operands (the fades, the modifiers, mono, mute, pause, fast, the echo delay, an S-DSP write, the meter mode),
-// cold boots (command FF F0), upload sessions with every block kind (0-6, a block below $1E00, the effect table
-// itself), and CONSTRUCTED SONGS: tracks drawn from all 60 sequence events with random operands, the ones that move
-// the pointer (loops, their exits, the conditional and the plain jumps, the effect subroutines)
-// laid out so that every cycle a track can take contains a note. The CPU's side of the upload protocol here is a
-// test harness's, written from the driver's side of it (disasm/notes/audio_spc_driver.md, "The upload session").
-// The verdict is the lockstep's report: every tick identical, and what the original ran.
-// ============================================================================
+// lockstep. A seeded generator drives the ports as the CPU would: the game's own song loads (CtAudioLoadSong), effect
+// starts, random commands with random operands, cold boots (command FF F0), upload sessions with every block kind, and
+// constructed songs (tracks drawn from all 60 sequence events with random operands, the pointer-moving ones laid out so
+// that every cycle a track can take contains a note). The CPU's side of the upload protocol is a test harness's,
+// written from the driver's side (disasm/notes/audio_spc_driver.md, "The upload session"). The verdict is the lockstep's
+// report.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,7 +78,7 @@ static int post(uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3) {
   return ok;
 }
 
-// --- the upload session (the CPU's side) -----------------------------------------------------------------------------
+// ---- the upload session (the CPU's side) ----
 typedef struct { uint8_t kind; uint16_t dest; const uint8_t* data; int n; } Block;
 static void session(uint8_t tok, const Block* b, int nb) {
   if (nb <= 0) { wr(1, 0xE0); wr(0, tok); waitOut(0, tok); spc(64); return; }
@@ -110,7 +105,7 @@ static void session(uint8_t tok, const Block* b, int nb) {
   }
 }
 
-// --- a constructed song --------------------------------------------------------------------------------------------
+// ---- a constructed song ----
 enum { SONG_AT = 0x2000 };
 // The songs' relocation ($00/$01): the effects' own jumps are relative to it too, so a constructed song keeps the one the
 // game's songs set (taken after each real load).
@@ -252,8 +247,8 @@ static void constructedSong(void) {
   b[nb++] = (Block){ 3, SONG_AT, g_song, (int)sizeof g_song };
   // (the bytes stored go to the sequence area $2800-$2EFF, which every song load rewrites: the game's loader keeps its
   // own account of what lies above it, and a block there behind its back would make its defragmenter move garbage)
-  // (each field drawn in its own statement, left to right: an initializer list's order is unspecified, and MSVC and gcc
-  //  drew them differently -- the same seed was two streams)
+  // (each field drawn in its own statement, left to right: an initializer list's evaluation order is unspecified, and
+  //  compilers differ, which would make one seed two streams)
   if (rn(2)) { uint8_t k = (uint8_t)(rn(2) ? 0 : 4 + 2 * rn(2)); uint16_t d = (uint16_t)(0x3000 + rn(0x1000)); int n = 1 + rn(64);
     b[nb++] = (Block){ k, d, junk, n }; }
   if (rn(3) == 0) { uint8_t k = (uint8_t)(1 + rn(3)); uint16_t d = (uint16_t)(0x2800 + rn(0x600)); int n = 1 + rn(64);
@@ -310,9 +305,8 @@ static void coldWram(void) { memset(g_wram, 0, sizeof g_wram); CtAudioSeedMailbo
 // the fuzz's way -- the mailbox page cold and unposted -- each id on a fresh CtAudio; "24+49" loads 24 then 49 on the same
 // one (the song change, the defragmenter's case). After each load: the sequence at $2000 byte for byte against its ROM
 // block, the heap packed from its base and every resident instrument there byte for byte, the whole song's set resident;
-// then 30 frames, and the driver must be in its main loop playing that id ($80). The loader once posted command $00 for song $00 from such a page (it took the
-// command and id from the page, not from its arguments): the driver read the stream as commands and upload headers, and
-// its kind-7 mover ran over its own code.
+// then 30 frames, and the driver must be in its main loop playing that id ($80). The cold, unposted page checks that the
+// loader stages its own command and id in the mailbox (the ROM's loader reads them from there).
 int CtSndSongs(const uint8_t* rom, long romLen, uint8_t cmd, int nspec, char** spec) {
   if (!CtSndLockstepWanted()) { fprintf(stderr, "snddrvsongs: needs CT_AUDIO_SPC=lockstep\n"); return 2; }
   long bad = 0, loads = 0;

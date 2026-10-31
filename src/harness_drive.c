@@ -1,4 +1,4 @@
-// harness_drive.c — see harness_drive.h.
+// harness_drive.c -- see harness_drive.h.
 #include "harness_drive.h"
 #include "ct_cpu_infra.h"
 #include <stdio.h>

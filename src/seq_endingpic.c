@@ -1,18 +1,10 @@
-// seq_endingpic.c -- THE ENDING's picture, native (stage 2; its logic, stage 1, is seq_ending.c): sequence entries 10 / 11 /
-// 14 / 15 (`FF 2A` / `FF 2B` / `FF 2E` / `FF 2F`) -- the world turning in mode 7 under the staff credits, the shooting stars,
-// the planet's last screens.
+// seq_endingpic.c -- the ending's picture (its logic is seq_ending.c): sequence entries 10 / 11 / 14 / 15 (`FF 2A` / `FF 2B`
+// / `FF 2E` / `FF 2F`) -- the world turning in mode 7 under the staff credits, the shooting stars, the planet's last screens.
+// disasm/notes/seq_picture.md sec. 9 lists the setup's loads, the hooks and the tasks.
 //
-// The setup $7E:8538: packet $63's 2bpp tiles widened at VRAM $5000 ($66B0, entry 7's), C3/09E9's reformatting code at
-// $7E:B574, the mode-7 characters (packet $7E, the high bytes) and the map (packets $81 / $D2, $37CA's rows of 64 + 64 zeros, the
-// low bytes through $8752), $4000-$4FFF's low bytes the byte at $7E:350B ($90A7), the sprites' tiles (packet $87 at $4000),
-// the palettes ($36AA's rows, $8772, packet $8A, $38AF); after the script: $9BB8 (the two shooting stars' scripts), $36CC's
-// HDMA channels from $8FEA, the layers. Page A's first op `F0 87CC` (or `F0 8790`, the world again) loads the world's sprite
-// sheet ($7F:0A00, streamed mirrored into $7F:5600 by $3ED3) and points the main thread at $8930. The hooks: the common three,
-// $9DBC (mode 7's centre and the scroll origin), $9080 (the HDMA tables' line counts), $9AF3 (the orbit's centre), $89C0 (the
-// world's sprite sheet to VRAM $5800), $8850 (the planet's sprite and window). The tasks: $9ABD ($357B's matrix with the
-// pre-routine $9B46, only on a change), $9BF9 (the shooting stars, $A03D), $8850, and the credits' text ($9B4F -> $64CA). The
-// main thread $8930 scales the world's sheet by page B's r0 (C3/0307) and reformats it ($B574). disasm/notes/seq_picture.md
-// sec. 9.
+// The setup is $7E:8538 (before the script) and $9BB8 / $36CC / the layers (after it). Page A's first op `F0 87CC` (or
+// `F0 8790`) loads the world's sprite sheet and points the main thread at $8930, which scales the sheet by page B's r0
+// (C3/0307) and reformats it ($B574).
 #include "seq_endingpic.h"
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include "seq_racepic.h"
@@ -152,7 +144,7 @@ static void world87DD(uint8_t* w, const CtRaceIo* io, unsigned d) {
   copy36AA(w, io, d, 0xA5, 0x2100); copy36AA(w, io, d, 0xA5, 0x2300);
 }
 int CtEndingPicHas(uint8_t operand) { return CtEndingStageHas(operand); }
-// ---- the last screens (`FF 2E` / `FF 2F`) ----
+// ---- The last screens (`FF 2E` / `FF 2F`) ----
 // $7E:5E54 (4bpp) / $7E:5EF8 (8bpp), the data bank $7F, D = 0 -- one tile's rows from $7F:X into mode 7's characters (the high
 // bytes through $2119, VMAIN $80): each pixel's bits rolled out of the planes' bytes ($3B.. as the rows load them), the first
 // plane in bit 0. Returns X past the rows (2 a row); the counter `$3F` / `$31` and the planes' bytes end at 0.
@@ -224,7 +216,7 @@ int CtEndingPicCall(CtSeqStagePic* sp, uint8_t* w, unsigned page, unsigned tgt, 
       dma8752(sp, w); dma8752(sp, w);
       world87DD(w, io, page);
       return 1;
-    case 0x8BAF:                                                      // THE STARS (after the logic's lists and $5777):
+    case 0x8BAF:                                                      // the stars (after the logic's lists and $5777):
       sp->hdmaen = 0; reg(sp, 0x00, 0x80);                            // 8BC0 STA $420C (A = 0), 8BC6 INIDISP $80
       ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                   // 8BCE $89ED
       w[0x00F0] = 0x01; w[0x00F2] = 0x18;
@@ -233,7 +225,7 @@ int CtEndingPicCall(CtSeqStagePic* sp, uint8_t* w, unsigned page, unsigned tgt, 
       ww(w, 0x00F0, 0x0020); CtSeqPicCopy36AA(w, io, 0x39, 0x2120);   // 8BF1 (D = 0)
       memmove(w + 0x2200, w + 0x2000, 0x200);                         // 8BFF $38AF
       return 1;
-    case 0x8C14:                                                      // THE PLANET (mode 7, 8bpp):
+    case 0x8C14:                                                      // the planet (mode 7, 8bpp):
       sp->hdmaen = 0; reg(sp, 0x00, 0x80); reg(sp, 0x1A, 0x80);       // 8C25 / 8C2D, 8C30 M7SEL
       ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                   // 8C33 $89ED
       w[0x00F0] = 0x01; w[0x00F2] = 0x18; sp->vmain = 0x80;
@@ -248,7 +240,7 @@ int CtEndingPicCall(CtSeqStagePic* sp, uint8_t* w, unsigned page, unsigned tgt, 
       CtRacePicCgram(sp, w);                                          // 8C97 $388B
       reg(sp, 0x2C, 0x01); reg(sp, 0x2D, 0x10); reg(sp, 0x2E, 0x00); reg(sp, 0x2F, 0x00); reg(sp, 0x05, 0x07);   // 8C9E
       return 1;
-    case 0x8CD0: {                                                    // "THE END"'s layers (entry 14; 15 left at 8CE9):
+    case 0x8CD0: {                                                    // "The End"'s layers (entry 14; 15 left at 8CE9):
       sp->hdmaen = 0;                                                 // 8CD8 LDA #5B00 / SEP / STA $420C
       ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                   // 8CF2 $89ED
       CtSeqPicUnpack(w, io, 0xAE);
@@ -267,13 +259,13 @@ int CtEndingPicCall(CtSeqStagePic* sp, uint8_t* w, unsigned page, unsigned tgt, 
       } while (--w[0x00F0]);
       return 1;
     }
-    case 0x8DF3:                                                      // THE LAST PLANET's palettes (D = the page's):
+    case 0x8DF3:                                                      // the last planet's palettes (D = the page's):
       ww(w, 0x0304, 0x0000);                                          // 8DFA LDX #0000 / STX $0304
       ww(w, page + 0xF0, 0x0020);
       copy36AA(w, io, page, 0xA2, 0x21E0); copy36AA(w, io, page, 0xAB, 0x2000);
       memmove(w + 0x2200, w + 0x2000, 0x200);                         // 8E17 $38AF
       return 1;
-    case 0x8A01:                                                      // ENTRY 10's PLANET (after the logic's lists; D = 0):
+    case 0x8A01:                                                      // entry 10's planet (after the logic's lists; D = 0):
       reg(sp, 0x00, 0x80); sp->hdmaen = 0; sp->vmain = 0x80;          // 8A12 INIDISP $80, 8A17 TDC / STA $420C, 8A1B VMAIN
       ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200);                   // 8A20 $89ED
       w[0x00F0] = 0x01; w[0x00F2] = 0x18;
@@ -308,7 +300,7 @@ int CtEndingPicCall(CtSeqStagePic* sp, uint8_t* w, unsigned page, unsigned tgt, 
   }
 }
 
-// ---- the vblank hooks (M = 8, X = 16; the dispatcher's `CPX #0010` leaves the carry clear for every slot after the first) ----
+// ---- The vblank hooks (M = 8, X = 16; the dispatcher's `CPX #0010` leaves the carry clear for every slot after the first) ----
 // $7E:5654 (D = $0A00) -- page A's matrix ($14-$1B), centre ($06 / $08) and scroll ($02 / $04) to the PPU, low byte first.
 static void regs5654(CtSeqStagePic* sp, const uint8_t* w) {
   static const uint8_t r[] = { 0x1B, 0x1B, 0x1C, 0x1C, 0x1D, 0x1D, 0x1E, 0x1E, 0x1F, 0x1F, 0x20, 0x20, 0x0D, 0x0D, 0x0E, 0x0E };
@@ -390,7 +382,7 @@ unsigned CtEndingPicHook(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned 
       reg(sp, 0x1F, w[0x0A06]); reg(sp, 0x1F, w[0x0A07]); reg(sp, 0x20, w[0x0A08]); reg(sp, 0x20, w[0x0A09]);
       reg(sp, 0x0D, w[0x0A02]); reg(sp, 0x0D, w[0x0A03]); reg(sp, 0x0E, w[0x0A04]); reg(sp, 0x0E, w[0x0A05]);
       return hook;
-    case 0x8D56:                                                      // "THE END"'s screen: $7F:0200 to VRAM $4000 ($200 bytes),
+    case 0x8D56:                                                      // "The End"'s screen: $7F:0200 to VRAM $4000 ($200 bytes),
       sp->vaddr = 0x4000; sp->vmain = 0x80; CtSeqStagePicDma(sp, w, 0x01, 0x18, 0x10200, 0x0200);
       sp->vaddr = 0x4800; sp->vmain = 0x00; CtSeqStagePicDma(sp, w, 0x08, 0x18, 0x350B, 0x0400);   // 8D7D $90A7: the low bytes
       sp->vaddr = 0x4800; sp->vmain = 0x80; CtSeqStagePicDma(sp, w, 0x08, 0x19, 0x9E7A, 0x0400);   // 8D8C: the high, $7E:9E7A's
@@ -445,7 +437,7 @@ unsigned CtEndingPicHook(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned 
   }
 }
 
-// ---- the tasks (M = 16, D = 0) ----
+// ---- The tasks (M = 16, D = 0) ----
 // $7E:9B46 -- $357B's pre-routine: Y = (page A's r6 - 1) x 4, X = r8 (the loop's tail and limit as the overlay holds them).
 static void pre9B46(uint8_t* w, unsigned* x, unsigned* y, unsigned* wm) {
   (void)wm;
@@ -463,7 +455,7 @@ static void task9ABD(uint8_t* w, const CtRaceIo* io) {
 }
 // $7E:A03D (the data bank $7E) -- a list of large sprites read through WMDATA from A (`n + 1`, then tile, attr, x, y per sprite)
 // at `$15` / `$17`: x = byte + `$15` (8-bit), y = byte + `$17` (16-bit). The code at $A074 `BCS` skips a sprite whose y is $E0
-// or more -- unless a caller wrote it over with `NOP / NOP` ($9BF9 does) -- and ITS JUMP SKIPS THE `SEP #20`: the loop runs on
+// or more -- unless a caller wrote it over with `NOP / NOP` ($9BF9 does). Note: its jump skips the `SEP #20`, so the loop runs on
 // with a 16-bit A (the count `$19` a word, each `LDA $2180` the byte twice, each store two bytes, x + `$15` a word) until a
 // sprite is kept. The OAM cursor `$11`, the high table's `$13`.
 static void listA03D(uint8_t* w, unsigned p) {
@@ -494,7 +486,7 @@ static void listA03D(uint8_t* w, unsigned p) {
   #undef B
   ww(w, 0x13, x); ww(w, 0x11, y);
 }
-// $7E:9BF9 (the data bank $7E) -- THE SHOOTING STARS, two (X = 0, 2): `$87,X` counts the frame down; at 0 the script `$8F,X`
+// $7E:9BF9 (the data bank $7E) -- the shooting stars, two (X = 0, 2): `$87,X` counts the frame down; at 0 the script `$8F,X`
 // steps 2 to the next `n, list` (n = 0: a new script from $9BD8, and step again), `$87,X` = n, `$8F,X` + 1; then the list at
 // ($8F,X) drawn at `$97,X` / `$98,X` through $A03D with its `BCS` patched out ($A074 = `NOP / NOP`, the old word kept in `$F0`
 // and put back). $A090's two bytes are `CMP #E0` while it runs, `LDA #E0` after.
@@ -529,7 +521,7 @@ int CtEndingPicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned t, co
   }
 }
 
-// ---- the main thread ----
+// ---- The main thread ----
 // $7E:32E2 -- the divide (M = 16, D = 0): $F0 = A, $F8 = $F2 - 1, $F4 = 0; eight steps that shift $F0's top into A (`ROL $F0 /
 // ROL A`) and eight that shift zeros (`ASL A`), each `SBC $F8 / BCS / ADC $F2 / CLC` and the carry into the quotient (`ROL
 // $F4`, whose top goes on into the next `ROL $F0`). `*c` the carry in and out.
@@ -551,7 +543,7 @@ static unsigned div32E2(uint8_t* w, unsigned a, int* cp) {
   *cp = c;
   return a;
 }
-// $7E:8930 -- THE MAIN THREAD's pass (the loop $7E:3023 `JSR ($3024)`): unless the last frame is still to send (`$21`), the
+// $7E:8930 -- the main thread's pass (the loop $7E:3023 `JSR ($3024)`): unless the last frame is still to send (`$21`), the
 // world's sheet scaled by page B's r0 & $1FF (`$27`, `$56`): `$25` rows ($20, or $40 with `$7B`) up to `$2B` ($400 / $800),
 // from `$23` = `$4E`, `$4C` = $800 / `$27` ($32E2), `$29` = `$27` x 2, four groups (C3/0307, the data bank $7F), then
 // reformatted at $0C00 ($B574); the planet's list counts by the size ($88B9: 9 / 3 / 2, $88DA: $11 / 5 / 2 below $80 / $100);

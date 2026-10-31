@@ -1,9 +1,8 @@
-// collision.c -- CT field tile-collision decode (see collision.h + disasm/notes/collision.md).
-// Ported byte-exact from the adversarially-verified disassembly. DP = $1D00 throughout, so the
-// source "$XX" maps to ram[0x1D00 + XX]; absolute operands ($0155 etc.) are ram[that addr].
+// collision.c -- field tile collision and the player's collision handlers (disasm/notes/collision.md).
+// DP = $1D00 throughout, so the ROM's "$XX" is ram[0x1D00 + XX]; absolute operands ($0155 etc.) are ram[addr].
 #include "collision.h"
-// Set by the commit C0/9D54-9D67 when it writes the lead's plane and OAM priority pair ($6C == 0): the host keeps
-// the collision RAM apart from its scene WRAM and copies them across (field.c fieldPlayerCollide).
+// Set when the commit (C0/9D54-9D67) writes the lead's plane and OAM priority pair; the host copies them into
+// its scene WRAM (field.c fieldPlayerCollide).
 int g_collPairCommit = 0;
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,12 +15,9 @@ int g_collPairCommit = 0;
 // Final bit7 == 0 -> WALKABLE tail, == 1 -> SOLID tail.
 #include "tables/coll_slope.h"
 
-// Pure shape-solidity verdict (the walk-vs-solid TAIL decision of C0/9AD3, byte-exact). `shapeFull` =
-// (byte0 & 0xFC) >> 2 (0..0x3F). `subX` = $1D66, `subY` = $1D68: the sub-tile position low bytes (0..255,
-// i.e. 256 subpixels per 16px tile). Returns 1 = SOLID (the 9B62 tail), 0 = walkable (9B41). This is the
-// engine's real collision shape (slope tables + one-way), shared by CtCollisionShapeDecode and usable
-// standalone (e.g. the interactive field). The conveyor (orig 0x1E) reports walkable here; its $1D30/
-// $1D5E side effects live only in CtCollisionShapeDecode.
+// The walk-vs-solid decision of C0/9AD3. `shapeFull` = (byte0 & 0xFC) >> 2; `subX`/`subY` = $1D66/$1D68, the
+// sub-tile position (256 subpixels per 16 px tile). Returns 1 = solid (the 9B62 tail), 0 = walkable (9B41).
+// The conveyor (shape 0x1E) is walkable here; its $1D30/$1D5E side effects are in CtCollisionShapeDecode.
 int CtCollisionShapeSolid(int shapeFull, int subX, int subY) {
   uint8_t s56 = (uint8_t)((subY & 0xFF) >> 2);                       // 9ADD: $56 = $68 >> 2 (Y proxy)
   int shape = shapeFull & 0x3F;
@@ -67,13 +63,10 @@ void CtCollisionShapeDecode(uint8_t* ram) {
   d[0x6F] = (uint8_t)(((byte2 >> 2) & 0x10) | 0x20);                 //            + prio from byte2
 }
 
-// ---- C0/5B95 actor-vs-actor "movability" test for the NPC move-step (C0/5129->5170). Returns 1 =
-// BLOCKED (a solid actor sits in the 1-tile box ahead in the mover's facing), 0 = movable. Gated by
-// $1C80[mover]&0x02 (collision-enable); when off it returns movable without scanning (the field default).
-// Scan stride = idx (actorNum*2), same as the rest of the mover. The 4 facing box-handlers (C0/5BFA up /
-// 5C20 down / 5C47 left / 5C6D right) test |dprimary|<0x100 in the facing dir AND |dlateral|<0x100, with
-// the ROM's carry quirks: the primary SBC inherits carry from `CPX $6D` (candIdx>=moverIdx), the lateral
-// SBC from `CMP #$0100` (clear), and abs uses one's-complement (EOR #$FFFF, no INC). ----
+// C0/5B95: actor-vs-actor test for the NPC move step (C0/5129 -> 5170). Returns 1 = blocked (a solid actor in
+// the one-tile box ahead), 0 = movable. Gated by $1C80[mover] & 0x02. The four box handlers (5BFA up, 5C20
+// down, 5C47 left, 5C6D right) keep the ROM's carry quirks: the primary SBC takes its carry from `CPX $6D`
+// (candIdx >= moverIdx), the lateral SBC from `CMP #$0100` (clear), and abs is one's complement (EOR, no INC).
 static int collActorBox(int facing, int candX, int candY, int moverX, int moverY, int carryIn) {
   int b = (1 - carryIn);                                  // SBC borrow on the primary axis (carry from CPX $6D)
   if (facing == 0) {                                      // 5BFA up: candidate ABOVE
@@ -110,28 +103,12 @@ static int collActorBox(int facing, int candX, int candY, int moverX, int moverY
 }
 static int rd16(const uint8_t* p, int off);
 int CtCollisionActorMovable(uint8_t* r, int moverIdx) {   // C0/5B95; 1 = blocked
-  // 5B95 `STZ $EA` -- the routine's FIRST instruction, before any test, so it fires on every path
-  // including both early exits. DP = $0100, so it clears $01EA. This was missing for as long as the
-  // routine has been ported and nothing could see it: --sweepops compares the whole 128 KB image,
-  // but $01EA already happened to hold 0, and a write of 0 over a 0 is indistinguishable from no
-  // write at all. It surfaced only when the mode's poison audit was taught to flag oracle writes
-  // that do not CHANGE the value, and $01EA was then seeded to $5A -- at which point op 0x96 went
-  // 60/60 -> 30/60. Grading a byte is not the same as poisoning it first.
-  r[0x01EA] = 0x00;
+  r[0x01EA] = 0x00;                                       // 5B95 STZ $EA (DP = $0100), on every path
   if (r[0x0F00 + moverIdx] == 0) return 0;                // 5B99 mover inactive -> movable
   if (!(r[0x1C80 + moverIdx] & 0x02)) return 0;           // 5BA0/5BA3 GATE clear -> movable
-  // 5BA7-5BB9 -- FOUR DP SPILLS THE PORT NEVER MADE. They were invisible while --sweepops drove
-  // this routine only through ops 0x92/0x96/0x9C, which never reached a live candidate; the mover
-  // neighbourhood (0x8F/0x97/0x98/0x99/0x9D/0x9E/0x9F/0xA1) does, and they surfaced at once --
-  // measured `$001D9: C=5A RO=00`.
-  // 5BA7 `STY $C7` is NOT modelled: it spills the CALLER's Y, and every caller in this engine is a
-  // handler holding Y = its own ip which then writes $01C7 = ip itself after this returns. Same
-  // value, later write, so the spill is unobservable -- and reproducing it would mean threading an
-  // ip parameter through a routine the ROM gives no such argument.
-  // ⚠ 5BAC's `ASL A` RUNS ON THE RAW BYTE -- there is no AND. A facing outside 0..3 therefore
-  // indexes past the four-entry table that 5BE6 `JSR ($5BF2,X)` dispatches through, and the ROM
-  // jumps into data. The engine only ever stores 0..3 here, so the two agree in practice, but the
-  // spill itself must carry the UNMASKED product.
+  // 5BA7-5BB9 spill the facing and position to DP. 5BA7 `STY $C7` is omitted: every caller writes
+  // $01C7 = its own ip right after, so the spill is never observed.
+  // Note: 5BAC's `ASL A` runs on the unmasked facing byte, so the spill keeps the unmasked product.
   r[0x01D9] = (uint8_t)((r[0x1600 + moverIdx] << 1) & 0xFF);            // 5BAC / 5BAD STA $D9
   int facing = r[0x1600 + moverIdx] & 3;                  // 5BA9 mover facing
   int moverX = rd16(r, 0x1800 + moverIdx), moverY = rd16(r, 0x1880 + moverIdx);   // 5BB1/5BB6
@@ -143,10 +120,7 @@ int CtCollisionActorMovable(uint8_t* r, int moverIdx) {   // C0/5B95; 1 = blocke
         && !(r[0x1100 + X] & 0x80)                        // 5BD2 not inactive
         && X != moverIdx                                  // 5BD7 CPX $6D: skip self
         && (r[0x1B01 + X] & 0x01)) {                      // 5BDB solid
-      // 5BE2 `STX $E9` -- the candidate index is spilled before `5BE6 JSR ($5BF2,X)` and reloaded
-      // by `5BE9 LDX $E9` afterwards, because the dispatch clobbers X. Missed for the same reason
-      // $01EA above was: nothing poisoned it, so the port's silence compared equal.
-      r[0x01E9] = (uint8_t)X;
+      r[0x01E9] = (uint8_t)X;                             // 5BE2 STX $E9 (the dispatch at 5BE6 clobbers X)
       int carryIn = (X >= moverIdx) ? 1 : 0;              // carry from CPX $6D into the box handler's 1st SBC
       if (collActorBox(facing, rd16(r, 0x1800 + X), rd16(r, 0x1880 + X), moverX, moverY, carryIn)) return 1;
     }
@@ -155,9 +129,9 @@ int CtCollisionActorMovable(uint8_t* r, int moverIdx) {   // C0/5B95; 1 = blocke
   return 0;                                               // 5BD0 fall-through -> movable
 }
 
-// ---- C0/8A6D player tile-collision: directional feeler/slide handlers around the validated probe
-// (8A9E) + commit (9C5C). 16-bit ADC/SBC mirrored with an explicit carry so the ROM's carry-chained
-// feeler math is byte-exact (cy=1 == SEC, cy=0 == CLC). Each handler nets to the clamped $1D2E/$1D30. ----
+// C0/8A6D player tile collision: the directional feeler/slide handlers around the probe (8A9E) and the commit
+// (9C5C). ADC/SBC carry an explicit carry so the ROM's carry-chained feeler math is kept (cy=1 SEC, cy=0 CLC).
+// Each handler leaves the clamped velocity in $1D2E/$1D30.
 static int rd16(const uint8_t* p, int off) { return p[off] | (p[off + 1] << 8); }
 static void wr16(uint8_t* p, int off, int v) { p[off] = (uint8_t)v; p[off + 1] = (uint8_t)(v >> 8); }
 static int adc16(int a, int b, int* cy) { int r = (a & 0xFFFF) + (b & 0xFFFF) + *cy; *cy = (r >> 16) & 1; return r & 0xFFFF; }
@@ -272,9 +246,8 @@ Lcorner2:
   CtCollisionCommit(ram); return;
 }
 
-// Diagonal handlers: corner-box probes with cardinal fallbacks. The carry-chained feeler math varies
-// per site (some `SEC;SBC#70;ADC$2E` chain the SBC carry into the ADC, others `...;CLC;ADC$2E` reset it)
-// -- transcribed exactly. Each falls back to a cardinal handler (zeroing one axis first) when boxed.
+// Diagonal handlers: corner probes with cardinal fallbacks. Some sites chain the SBC carry into the ADC
+// (`SEC;SBC#70;ADC$2E`), others reset it (`...;CLC;ADC$2E`); each is transcribed as the ROM has it.
 static void coll_ne(uint8_t* ram) {                       // C0/8E21 (X>0,Y<0)
   uint8_t* d = ram + 0x1D00; int X = ram[0x0197], cy;
   d[0x31] = 0xFF; d[0x2F] = 0;
@@ -396,13 +369,8 @@ L913D:
   wr16(d, 0x30, 0); wr16(d, 0x2E, 0); return;              // 915A
 }
 
-// C0/8A6D dispatch (gated by $0120!=0 at the call site). Dispatches on the sign of the 8-bit velocity
-// accumulators $1D2E/$1D30 to a directional handler; the handler nets to the clamped $1D2E/$1D30.
-// ALL EIGHT arms are ported and EXHAUSTIVELY graded: --sweepclamp micro-executes the real 8A6D over a
-// position grid x 49 velocity vectors x both entry-carry values (16562 combos, every arm reached
-// >= 1014 times) and compares velocity + committed position + plane + the $01EB touch latch + the
-// feeler scratch -- 16562/16562 byte-exact. (The older in-situ --checkclamp only reached whatever a
-// walk happened to hit, which could not tell a correct diagonal from an unexercised one.)
+// C0/8A6D dispatch (the caller gates it on $0120 != 0): picks the directional handler from the signs of the
+// velocity bytes $1D2E/$1D30. `ct.exe --sweepclamp` checks all eight arms against the ROM.
 void CtPlayerCollide(uint8_t* ram) {                      // C0/8A6D
   uint8_t* d = ram + 0x1D00;
   int vy = (int8_t)d[0x30], vx = (int8_t)d[0x2E];
@@ -424,24 +392,16 @@ int CtCollisionZGate(const uint8_t* ram) {
   return 1;                                                         // the other plane -> solid
 }
 
-// Port of the actor-proximity probe C0/9923 (DP=$1D00; A/X 8-bit at the per-actor compares). Scans the
-// actor list (count at $7F2000, X = count*2 stepping down by 2), skipping inactive ($0F00,X==0), hidden
-// ($1100,X bit7), and self/party ($0197/$0199/$019B). For the first remaining actor within the |dy|<$E0
-// && |dx|<$E0 box (dy/dx = actor pos $1880,X/$1800,X minus the probe point $1D68/$1D66), returns its
-// $1B01,X bit0: bit0 SET = BLOCKED (1), bit0 CLEAR = explicitly CLEAR (0, and stops scanning). If no
-// actor is in range, returns 0 (clear). NOTE the byte-exact carry quirk: the dy SBC inherits its carry
-// from the preceding `CPX $019B` (no SEC), so dy = $1880,X - $1D68 - (X < $019B ? 1 : 0); the dx SBC
-// inherits a CLEARED carry from the `CMP #$E0`, so dx = $1800,X - $1D66 - 1.
+// C0/9923 actor-proximity probe. Scans the actor list ($7F2000 = count, X = count*2 down by 2), skipping
+// inactive ($0F00,X == 0), hidden ($1100,X bit 7) and party ($0197/$0199/$019B) actors. The first actor inside
+// the |dy| < $E0, |dx| < $E0 box around the probe point $1D66/$1D68 decides: returns its $1B01,X bit 0
+// (1 = blocked) and stops. No actor in range returns 0.
+// Note the carries: the dy SBC inherits carry from `CPX $019B` (dy = pos - $1D68 - (X < $019B)), the dx SBC
+// a clear carry from `CMP #$E0` (dx = pos - $1D66 - 1).
 int CtCollisionActorBlock(uint8_t* ram) {
   uint8_t* d = ram + 0x1D00;
-  // $01EB = THE TOUCH HIT LATCH (C0/9925-9928 `LDA #0080 / STA $01EB` on entry, `STX $01EB` at 9960
-  // for a solid hit and 99A1 for a non-solid one). The event-VM's op 0xB0 consumes it later in the
-  // same frame (C0/3054 -> C0/3154) -- the ROM's ONE scan drives both the player BLOCK and the touch,
-  // which is why the port used to need a second, hand-rolled box in field.c.
-  // NOTE the "last scan wins" semantics, which are the ROM's: the eight directional callers in
-  // C0/8A6D-C0/90BF can run this several times per frame and each entry re-arms 0x80, so a hit
-  // recorded by an early probe can be cleared by a later one (writer C0:9941 is observable on
-  // non-firing frames). Mirror it exactly rather than latching the first hit.
+  // $01EB is the touch latch read by event op 0xB0 (C0/3054 -> C0/3154) later in the frame. Each call
+  // re-arms it to 0x80, so with several probes per frame the last one wins, as in the ROM.
   ram[0x01EB] = 0x80;                                    // 9925/9928: "nothing"
   int X = (ram[0x12000] * 2) & 0xFF;                     // LDA $7F2000; ASL; TAX (8-bit)
   static int dbg9923 = -1; if (dbg9923 < 0) dbg9923 = getenv("CT_9923DBG") ? 1 : 0;   // probe census (see DEBUG_SURFACE)
@@ -471,25 +431,13 @@ int CtCollisionActorBlock(uint8_t* ram) {
   return 0;                                              // 993C CLC (no blocker)
 }
 
-// Port of the per-axis collision COMMIT C0/9C5C (DP=$1D00). Computes the tentative next position
-// $1D66/$1D70 = $1D62 + $1D2E (X, 16-bit incl the sign byte $1D2F) and $1D68 = $1D64 + $1D30 (Y);
-// fetches the cell props UNCHECKED (C0/9AC8, no off-map sentinel) at the tentative tile, decodes the
-// shape (9AD3), z-gates (9C37). If SOLID -> zeroes the velocity accumulators $1D2E/$1D2F/$1D30/$1D31
-// (the wall-stop). Else updates the player plane $0155 + OBJ priority $0C00/$0C01[$0197] (gated by
-// IGNORE_Z $1D6C) and applies the conveyor (byte1 $1D5A bits) into the momentum seed $1D2A/$1D2B.
-// The C0/9CA1 touch-trigger / door-on-step side-state ($0112-$0116/$015B/$0117) is NOT modelled here
-// (it does not affect position/velocity); port it separately before relying on triggers.
-// Tile-property fetch for the collision probe: given the tentative tile ($1D67=tileX hi, $1D69=tileY hi),
-// return the 3 prop bytes b0/b1/b2 and 1 if the tile is OFF-MAP (else 0). Default reads the engine's
-// de-interleaved WRAM planes ($7E30C0/$7E7000/$7E7040, treasure plane $7E70C0, masked by $1D1E/$1D1F). The
-// interactive field overrides it (CtCollisionSetTileFetch) to read its asset shp/zb directly.
+// Tile-property fetch (C0/9AC8): for the tile at $1D67/$1D69 (tile X/Y high bytes, masked by $1D1E/$1D1F),
+// returns the three property bytes and 1 if the tile is off-map. The default reads the WRAM planes
+// $7E30C0/$7E7000/$7E7040; the interactive field installs its own (CtCollisionSetTileFetch). The treasure
+// plane test belongs only to the C0/9AA1 entry, so it lives in CtCollisionSolidAt.
 static int collFetchEngine(uint8_t* ram, uint8_t* b0, uint8_t* b1, uint8_t* b2) {
   uint8_t* d = ram + 0x1D00;
   uint16_t X = (uint16_t)((d[0x67] | (d[0x69] << 8)) & (d[0x1E] | (d[0x1F] << 8)));
-  // (The $7E70C0 TREASURE-plane test that used to sit here has moved to CtCollisionSolidAt: it is the
-  //  head of C0/9AA1 ONLY. C0/9AC8 -- the same fetch reached by the COMMIT C0/9C5C and by the arrival
-  //  evaluation C0/9DDE -- is literally 9AA1 minus that test (`REP #10 / REP #20 / AND $1E / SEP #20 /
-  //  TAX / BRA ->9AB2`), so a shared fetch that tested it made the commit solid on a chest tile too.)
   *b0 = ram[0x30C0 + X]; *b1 = ram[0x7000 + X]; *b2 = ram[0x7040 + X];
   return 0;
 }
@@ -498,6 +446,10 @@ void CtCollisionSetTileFetch(int (*fn)(uint8_t*, uint8_t*, uint8_t*, uint8_t*)) 
   g_collFetch = fn ? fn : collFetchEngine;
 }
 
+// C0/9C5C per-axis commit: the tentative position $1D66/$1D70 = $1D62 + $1D2E and $1D68 = $1D64 + $1D30 is
+// fetched (9AC8), decoded (9AD3) and z-gated (9C37). Solid zeroes the velocity; otherwise it latches a door
+// tile, updates the plane $0155 and the lead's OBJ priority (unless IGNORE_Z, $1D6C) and applies the conveyor.
+// The touch-trigger half of C0/9CA1 ($0112-$0116, $0117 bit 7) stays with the host's exit records.
 void CtCollisionCommit(uint8_t* ram) {
   uint8_t* d = ram + 0x1D00;
   int tentX = (rd16(d, 0x62) + rd16(d, 0x2E)) & 0xFFFF;             // 9C5E $66=$70=$62+$2E
@@ -511,17 +463,8 @@ void CtCollisionCommit(uint8_t* ram) {
   d[0x58] = b0; d[0x5A] = b1; d[0x5C] = b2;
   CtCollisionShapeDecode(ram);                                      // 9AD3
   if (CtCollisionZGate(ram)) { wr16(d, 0x2E, 0); wr16(d, 0x30, 0); return; }  // 9C96 SOLID -> STZ $2E/$30
-  // ---- C0/9D35: THE DOOR-ON-STEP LATCH ----------------------------------------------------
-  // `LDA $73 / AND $1F / XBA / LDA $71 / AND $1E / TAX` builds the tile index (row << 8) | col
-  // from the pair $1D71/$1D73 -- the tile AHEAD in the direction of travel, which 9C5E/9C70
-  // already computed into $1D70/$1D72 above -- masked by the map dimensions $1D1E/$1D1F, exactly
-  // as collFetchEngine masks $1D67/$1D69. Then `LDA $7E7000,X / BIT #10 / BEQ` -> prop1 bit4 is
-  // the DOOR flag; on a hit it stores the index in $015B and raises $0117 bit4. The consumer is
-  // C0/0D3E, which clears the bit, reads the L1 metatile at $015B and bumps the door's tile block
-  // (see CtFieldSceneDoorOpen). This is the whole of the 9CA1 side-state that has a VISIBLE
-  // effect; the exit-staging half ($0112-$0116 + $0117 bit7) stays with the host's own exit
-  // records. Without it doors never opened when walked into ("doors like the one in scene 4 are not
-  // opening when walking through").
+  // C0/9D35 door-on-step latch: the tile ahead ($1D71/$1D73, masked by $1D1E/$1D1F) with property byte 1
+  // bit 4 set is stored in $015B and raises $0117 bit 4. C0/0D3E consumes it (CtFieldSceneDoorOpen).
   {
     uint8_t sx = d[0x67], sy = d[0x69];                  // the fetch hook reads the plane at $67/$69;
     d[0x67] = d[0x71]; d[0x69] = d[0x73];                //   point it at the DOOR tile, read, restore
@@ -557,17 +500,9 @@ void CtCollisionCommit(uint8_t* ram) {
 int CtCollisionSolidAt(uint8_t* ram, int* offMapOut) {
   uint8_t* d = ram + 0x1D00;
   uint8_t b0 = 0, b1 = 0, b2 = 0;
-  // ⭐ THE HEAD OF C0/9AA1: A TREASURE TILE IS IMPASSABLE TO THE PLAYER, and this is the only thing
-  // that makes it so. The two prop-fetch entries differ in exactly this test --
-  //   9AA5 AND $1E / TAX / 9AAA LDA $7E70C0,X / 9AAE BMI ->9AB2 / 9AB0 SEC / RTS
-  // -- and 9AA1's ONE caller is C0/8AA4 inside the player feeler helper C0/8A9E, which the eight
-  // direction routines dispatched by C0/8A6D reach from 51 sites. Carry set returns A = 1, the same
-  // hard-solid tri-state as off-map. The plane is built by C0/A712 at every location load (bit7 set
-  // everywhere, then the record's slot stored at `tile & $1D1E/$1D1F`, UNCONDITIONALLY -- the isOpened
-  // test at A782 gates only the metatile pre-bump), so an opened chest still blocks.
-  // Without it the player walks ONTO the chest tile and the treasure probe, which looks at the tile in
-  // FRONT of him, then points past the chest: 'some chests do not open', defect #3 of the 2026-09-02
-  // list. 89 of the 256 shipped records sit on a tile whose own shape/z data is not solid.
+  // 9AA1-9AB0: a treasure tile ($7E70C0 bit 7 clear) is solid to the player, as off-map is. C0/A712 builds
+  // the plane at every load whether or not the chest is open, so an opened chest still blocks.
+  // Only C0/9AA1 makes this test; the fetch at 9AC8 skips it.
   { uint16_t X = (uint16_t)((d[0x67] | (d[0x69] << 8)) & (d[0x1E] | (d[0x1F] << 8)));
     if (!(ram[0x70C0 + X] & 0x80)) { if (offMapOut) *offMapOut = 1; return 1; } }
   int off = g_collFetch(ram, &b0, &b1, &b2);                        // 9AB2 prop fetch (+ off-map sentinel)

@@ -37,7 +37,7 @@ static uint8_t next31(Vwf* v) { uint8_t a = rd(v, dpLong(v, 0x31)); inc16(v, 0x3
 static uint8_t next37(Vwf* v) { uint8_t a = rd(v, dpLong(v, 0x37)); inc16(v, 0x37); return a; }
 static uint8_t next3D(Vwf* v) { uint8_t a = rd(v, dpLong(v, 0x3D)); inc16(v, 0x3D); return a; }
 
-// ---- C2/5DC4: one glyph ---------------------------------------------------------------------------------------------
+// ---- C2/5DC4: one glyph ----
 // C2/5E89 / C2/5F5A, one plane-row: the font's left eight pixels ([$76],Y: FF:2060 + code x 24) over its right four
 // ([$79],Y: FF:3860 + (code >> 1) x 24, the even code's high nibble, the odd code's low), a 12-bit row left-justified in
 // a word; shifted to the pen's column ($6A = pen & 7, C2:5EAF / 5F80) and stored at the strip's column offsets ($6E = 2 x
@@ -107,7 +107,7 @@ static void glyph(Vwf* v, unsigned code) {
   DP(0x17)++;
 }
 
-// ---- The numbers ----------------------------------------------------------------------------------------------------
+// ---- The numbers ----
 // C2/614B: Y rounds of compare-and-subtract against $6A, halving it, the quotient's bits into $65; Y = 4 after.
 static unsigned div8(Vwf* v, unsigned a, int y) {                      // m 8-bit (C2/615E)
   DP(0x65) = 0;
@@ -194,7 +194,7 @@ static void hexByte(Vwf* v) {
   }
 }
 
-// ---- The string loop and its states ---------------------------------------------------------------------------------
+// ---- The string loop and its states ----
 // C2/5D23 / 5D34 / 5D45: the bytes at [$37] before `stop`, at most `max`.
 static uint8_t countTo(Vwf* v, uint8_t stop, unsigned max) {
   unsigned y = 0;

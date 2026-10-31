@@ -1,7 +1,7 @@
-// The field's reload after a menu close, priced cycle for cycle -- see field_cost.h. Every number below is a block of
-// LakeSnes's cost read off the cartridge's beam traces (the names and values tools/pass_cost_consts.py prints; the
-// ranges are in bank C0), and the walk is the ROM's control flow over the WRAM it reads. The Python twin that grades
-// this layout block by block is tools/pass_cost_proto.py.
+// field_cost.c -- the CPU cost of the field's NMI-off loads (field_cost.h; disasm/notes/field_load_cost.md). Each
+// number is a block of LakeSnes's cost read off the cartridge's beam traces (names and values as
+// tools/pass_cost_consts.py prints them; ranges in bank C0); the walk is the ROM's control flow over the WRAM it reads.
+// tools/pass_cost_proto.py is the Python twin that grades it block by block.
 #include <stdio.h>
 #include "romview.h"
 #include <stdlib.h>
@@ -94,10 +94,9 @@ static long chestsA712(Walk* c, int loc) {
     int n = ((x - base) >> 2) & 0xFFFF, bit = rom8(c, 0xC0, 0xFF20 + (n & 7));
     k += 898;                                              // A712_CLOSED
     if (b8(c, 0x10001 + ((n >> 3) & 0x3F)) & bit) {
-      // AN OPENED CHEST: C0/A7E1's BNE taken (A7E6 SEC, +6) and A785's BCC not taken (-6), then A787 `LDA $7E30C0,X /
-      // BIT #01 / BEQ` and, on bit 0, A78F's tile: FE -> FF (A7A3), E0 -> E1 (A79B), else untouched. MEASURED, the rule's
-      // cartridge (the playthrough's 33_escape, loc 048 after its Mid Tonic, CPUTRACE_BEAM): the record's iteration 1088
-      // cycles past its refresh against the closed one's 926 (+28 A712_TEST) -- the FE arm, 162 = 32 12 12 32 12 18 12 32.
+      // An opened chest: C0/A7E1's BNE taken (A7E6 SEC, +6) and A785's BCC not taken (-6), then A787 `LDA $7E30C0,X /
+      // BIT #01 / BEQ` and, on bit 0, A78F's tile: FE -> FF (A7A3), E0 -> E1 (A79B), else untouched
+      // (disasm/notes/field_load_cost.md sec. 17).
       int tx = (rom8(c, 0xF5, x) | (rom8(c, 0xF5, x + 1) << 8)) & w16(c, 0x1D1E);   // A771-A779
       if (!(b8(c, 0x30C0 + tx) & 0x01)) k += 32 + 12 + BR_T;                           // A787-A78D -> A7A9
       else {
@@ -115,9 +114,8 @@ static long chestsA712(Walk* c, int loc) {
 static void palClaim(Walk* c, int x, int slot) {
   sb(c, 0x0B00 + x, 0x80); sb(c, 0x0B01 + x, 0x80); sb(c, 0x0B80 + slot, x); sb(c, 0x0F81 + x, (slot << 1) & 0x0E);
 }
-// C0/72B4 (classes 5 / 6, slots 1-3) is C0/721C (slots 0-4) instruction for instruction -- the same opcodes and modes at
-// the same offsets, only `LDX #01` / `CPX #04` for `LDX #00` / `CPX #05` -- so every arm costs the same (7285 = 731D,
-// 727A = 7312, 72AA = 7342); loc 087's objects take its share arm (the cartridge's pass to the cycle).
+// C0/72B4 (classes 5 / 6, slots 1-3) is C0/721C (slots 0-4) instruction for instruction, only `LDX #01` / `CPX #04`
+// for `LDX #00` / `CPX #05`, so every arm costs the same (7285 = 731D, 727A = 7312, 72AA = 7342).
 static long palScan(Walk* c, int x, int lo, int end) {
   long tail = 2772;                                        // P721C_TAIL / P72B4_TAIL (two 24-byte MVNs from $E4)
   long k = 12;                                             // _INI
@@ -179,7 +177,7 @@ static long vram6F9A(Walk* c, int x) {
   int t = b8(c, 0x1100 + x);
   if (t != 3 && t != 4) return k + 40;                     // V6FB9
   if (b8(c, 0x1201 + x) & 3) {
-    // C0/6FC1 BEQ not taken, `BRA C0/7008` (100 with the head): a class 1-3 object takes TWO adjacent slots, the pairs
+    // C0/6FC1 BEQ not taken, `BRA C0/7008` (100 with the head): a class 1-3 object takes two adjacent slots, the pairs
     // $0C/$0D .. $16/$17 of $0B88 in order (`LDA $0B88,X / BPL / LDA $0B89,X / BPL`, then `INX / INX / CPX #18 / BMI`).
     // The claim is C0/6FCC's (618) with the second `STA $0B89,X` (+26), on the even slot.
     k += 100;
@@ -619,17 +617,13 @@ static long b271(Walk* c) {
   return k;
 }
 
-// ---- C0/78EC: BG2's tilemap build (C0/0A50, `JSR C0/78EC` at C0/0AAB), from that JSR to its return. Rows of C0/79CF
-// (sixteen cells, four WMDATA bytes each); the ARM by $1D35 bit 1 and $0BC9 bit 7:
-//   standard   32 rows from ($1D0A, $1D0E): the entry camera is always even (C0/7506/7553's `<< 1`), so it has ONE cost,
-//              and PASS_REST carries it
-//   C0/794E    ($1D35 bit 1) 32 rows at column 0, then by $0BCF / $0BD1: 7976 (both $10) the same 32 again, 7991 ($0BCF
-//              != $10) 32 at column $20, 79AE ($0BD1 != $10) rows 32-63 and `$1D85 := 2`
+// ---- C0/78EC: BG2's tilemap build (C0/0A50's `JSR C0/78EC` at C0/0AAB to its return), rows of C0/79CF. The arm
+// by $1D35 bit 1 and $0BC9 bit 7:
+//   standard   32 rows from ($1D0A, $1D0E); the entry camera is always even, so one cost, carried by PASS_REST
+//   C0/794E    ($1D35 bit 1) 32 rows at column 0, then 7976 / 7991 / 79AE by $0BCF / $0BD1
 //   C0/792F    ($0BC9 bit 7) rows $1D16..$1D18 at column $1D12, which C0/74B1 set from the camera
-// A row costs by its parity and its first column's (C0/79CF's two tests): 10010 / 10028 from an even column, 10220 /
-// 10394 from an odd one (a half cell, fifteen, a half: 7A2A / 7B12). MEASURED on --cputrace beam traces, non-refresh:
-// the hub's standard arm 327,358 and loc 0AD's 794E + 7976 652,856, both to the cycle; the arms no trace ran are priced
-// instruction by instruction on the key of an executed one (tools/ctlib/costtab.py lin_rom).
+// A row costs by its parity and its first column's (row79CF). Derivation: disasm/notes/field_load_cost.md, "C0/78EC,
+// BG2's tilemap build".
 #define B78_STD 327358L
 static long row79CF(int row, int col) {
   return (col & 1) ? ((row & 1) ? 10394 : 10220) : ((row & 1) ? 10028 : 10010);
@@ -664,17 +658,15 @@ static long b204(int n) { return 11898 + (long)n * 60 + (n - 1) * BR_T + BR_NT +
 // (C0/75E9 and C0/78EC -- the builders, whose parity tests run on the camera's even coordinates -- two C0/7F62
 // uploads, C0/87F1, C0/74A6's C0/74AC-74D1 and C0/7F9A, whose C0/813D family reads the $1D99-$1D9E C0/74C7 zeroes),
 // C0/6F79, C0/7155, C0/E935, and after C0/B0E6: C0/6E5C, 70E9, 29F7, 6EB0, 2B78 (its counts are immediates), 6EF1,
-// 6F0C, B262, 6F5E, and C0/0B28's FD:C124 / FD:C2C1 / FD:C1EE up to the wait. MEASURED as the traces' remainder
-// once the walked legs are taken out: 874,914 / 874,876 / 874,902 on loc $082 / $005 / $078 -- the spread is the
-// DMA legs' sync to the master clock; the mean.
+// 6F0C, B262, 6F5E, and C0/0B28's FD:C124 / FD:C2C1 / FD:C1EE up to the wait. The mean of three traces' remainders
+// once the walked legs are taken out (disasm/notes/field_load_cost.md, "C0/78EC, BG2's tilemap build").
 #define PASS_REST 874897L
 
 // FD:C2C1's set and its channel 7 (src/hdma_table.c): C2C1 `LDA $53 / BIT #01 / BNE C2D3` -- bit 0 clear builds set B
 // (the BNE not taken, 12), set builds set A (taken, 18) -- and the channel's `LDA $0351 / LSR A` reads $7F:0351 (DB =
 // $7F; $7E:0351 is the wipe's, which nothing in the pass reads): set A's C439 `BCS`, set B's C477 `BCC`, 18 taken / 12
-// not. With the parity even the two sets cost the same (set A 18 + 12, set B 12 + 18: 3,306 cycles each on the 05C
-// load's pass and the main loop's next call), the configuration PASS_REST and the reload's C0/01A5 call were measured
-// on; an odd parity takes set A's BCS (+6) and leaves set B's BCC (-6).
+// not. With the parity even the two sets cost the same (set A 18 + 12, set B 12 + 18), the configuration PASS_REST and
+// the reload's C0/01A5 call were measured on; an odd parity takes set A's BCS (+6) and leaves set B's BCC (-6).
 static long hdmaCh7Arm(Walk* c) {
   if (!(b8(c, 0x10351) & 1)) return 0;
   return (b8(c, 0x0153) & 1) ? 6 : -6;
@@ -705,7 +697,7 @@ static long pass286C(Walk* c, int loc) {
     k += 198;
   }
   k += (d3 = b78EC(c)) - B78_STD;                          // C0/78EC's arm, in place of the standard one PASS_REST holds
-  // THE WIDE LAYERS, $1D35 bits 1 (BG2) and 2 (BG3), in place of the standard arms PASS_REST holds (traced: loc 16E with
+  // The wide layers, $1D35 bits 1 (BG2) and 2 (BG3), in place of the standard arms PASS_REST holds (traced: loc 16E with
   // both, loc 087 with bit 2; the standard on 002 / 070 / 082 / 1B7). C0/0AB4 `BIT #02 / BEQ`: bit 1 uploads BG2 through
   // C0/7F77 -- `LDX #1000 / STX $4E / BRA 7F67`, C0/7F62's 0x800 bytes doubled: 16384 + the BRA -- and branches over the
   // other (BEQ not taken + BRA 0AC3: +12). C0/87F1 then skips, on bit 1, its BG2 row C0/8365 (`BIT #02 / BNE` taken:
@@ -713,11 +705,8 @@ static long pass286C(Walk* c, int loc) {
   if (b8(c, 0x1D35) & 0x02) k += 16402 + 12 - 9936;
   else if (b8(c, 0x0BC9) & 0x80) {
     // C0/8806 BPL not taken + JSR C0/8385 + BRA: C0/8365 on the half camera ($1D14 / $1D16): +12 when its C0/7BA9 row
-    // is odd like the standard's ($0E - 1, the camera's even row less one). An EVEN row is 460 less: C0/7BAD's BEQ taken
-    // (18) goes straight into the 15-row loop at C0/7BB2, where the odd arm's BEQ not taken (12) + BRL (24) runs C0/7C45,
-    // the same prologue plus a half row -- 7C56-7C7E, the first metatile's lower two bytes, 418 -- and BRL 7BC3 (24).
-    // Traced (the rule's cartridge, the Tyranno Lair's reload after Lavos's fall, ff24_handoff_f27 f1735, $5A = 04):
-    // every instruction of the arm one cost, 9,344 cycles for the call.
+    // is odd like the standard's ($0E - 1). An even row is 460 less: C0/7BAD's BEQ taken skips C0/7C45's half row
+    // (7C56-7C7E, 418) and its two BRLs (disasm/notes/field_load_cost.md, "C0/78EC, BG2's tilemap build").
     k += 12;
     if (((b8(c, 0x1D16) - 1) & 1) == 0) k -= 460;
   }
@@ -727,13 +716,9 @@ static long pass286C(Walk* c, int loc) {
   if (getenv("CT_PASSCOST_DEBUG")) printf("passcost: doors %ld chests %ld camera %ld 78EC %ld n %d\n", d0, d1, d2, d3, n);
   if ((b8(c, 0x0BCA) & 1) && !b8(c, 0x01BB)) {
     if (b8(c, 0x1D35) & 0x04) {
-      // C0/7CB5 `BIT #04 / BEQ` not taken -> C0/7CE7: 32 rows of C0/7D66 at column 0, then by $0BD3 / $0BD5 (like
-      // C0/794E): 7D0D (both $10) the same 32 again, 7D28 ($0BD3 != $10) 32 at column $20, 7D45 ($0BD5 != $10) rows
-      // 32-63 and `$1D86 := 2`. Every row starts on an even column: 9114 an even row, 9132 an odd one (C0/7D66's
-      // `BIT #01` arms), 32 of each = 583,872. The loops around them: 11,576 on 7D0D (16E's trace, to the cycle), and
-      // from the same instructions 11,916 on 7D28 (its `LDA #20 / STA $58` a row, +12, and the BNE taken) and 11,998 on
-      // 7D45 (the same, the second BNE taken, and `LDA #02 / STA $86`). Then C0/0AE1 `BIT #04 / BEQ` not taken: C0/7F77
-      // (+16402 over C0/7F62) and the BRA (-6 against the standard's BEQ taken).
+      // C0/7CB5 `BIT #04 / BEQ` not taken -> C0/7CE7: 64 rows of C0/7D66 from even columns (9114 an even row, 9132 an
+      // odd one: 583,872), then by $0BD3 / $0BD5 the loop arm 7D0D / 7D28 / 7D45 (the last sets `$1D86 := 2`); then
+      // C0/0AE1's C0/7F77 (+16402 over C0/7F62) and the BRA (-6). disasm/notes/field_load_cost.md sec. 10.
       long arm = 11576;
       if (b8(c, 0x0BD3) != 0x10) arm = 11916;
       else if (b8(c, 0x0BD5) != 0x10) { arm = 11998; sb(c, 0x1D86, 2); }
@@ -799,11 +784,8 @@ static long vm595C(Walk* c) {
       c3 = pos + 4;
       k += truth ? 128 : 312;                              // OP16_FALL / OP16_JUMP
     } else if (op == 0xE4) {
-      // C0/3D97 -> C0/AF4E, the map copy, the handler ct_vm_op_cycles prices for the load's runners (the same handler;
-      // only the runner around it differs: VM_TOP / VM_DISPATCH / VM_BRA here). MEASURED, the rule's cartridge (the
-      // playthrough's 33_escape, loc 048's menu reload: obj0's slot 1, both guards down, four copies): `E4 3C 1A 3F 1C 28 0E
-      // 3B` C0/3D97 -> C0/597A 11,246 past nine refreshes against the formula's 11,298, `E4 3E 1D 3E 1D 26 0F 3B` 4,776 /
-      // 4,828 -- the DMA-sync tens the load's walk has too
+      // C0/3D97 -> C0/AF4E, the map copy: the handler ct_vm_op_cycles prices for the load's runners; only the runner
+      // around it differs (VM_TOP / VM_DISPATCH / VM_BRA here). disasm/notes/field_load_cost.md sec. 17.
       int fl = b8(c, 0x12001 + pos + 7);
       int dx = (b8(c, 0x12001 + pos + 3) - b8(c, 0x12001 + pos + 1)) & 0xFF;
       int dy = (b8(c, 0x12001 + pos + 4) - b8(c, 0x12001 + pos + 2)) & 0xFF;
@@ -897,7 +879,7 @@ static long loadPackets(Walk* c, int loc) {
   k += 40;                                                 // JSR 56D4
   if (getenv("CT_PASSCOST_DEBUG")) printf("pre: %-6s %ld\n", "56D4", k);
   // C0/56D4: the script (record word 8) -> $7F:2000, over the menu's stash (C0/011B's $0920 copy), then C0/5CC7 /
-  // C0/5CEC. What the rest of the walk reads there -- the object count $7F:2000, object 0's slot-1 run -- is THIS.
+  // C0/5CEC. The rest of the walk reads the object count $7F:2000 and object 0's slot-1 run from this copy.
   {
     int sid = CtRomByte(c->rom, c->romLen, (long)(REC + 8)) | (CtRomByte(c->rom, c->romLen, (long)(REC + 9)) << 8);
     long sp = ptr24(c, 0x3CF9F0L + (long)sid * 3);
@@ -976,14 +958,14 @@ long ct_field_reload_cycles(const uint8_t* rom, long romLen, const uint8_t* wram
 // =================================================================================================================
 // The location load's object pass: one op of the event VM, as the init runner (C0/5910) or obj0's slot-1 runner
 // (C0/5977) dispatches it -- `JSR ($5D6E,X)` to the handler's RTS, the dispatch's JSR included; the runner's own
-// fetch / ASL / TAX / BRA around it is CT_VM_DISPATCH. Measured on the four kept load traces (loc 002 / 070 / 082
-// / 1B7) and walked from the ROM (tools/load_cost_consts.py prints every number below): a handler with no branch is
-// its straight path; a branchy one is its arms, decided here on the WRAM the handler is about to read. The sound
-// driver's cycles (a JSL C7/0004) are not in these numbers -- they are the loader clock's (the posts' own pricing);
-// a sprite sheet's decompression is lz.c's (ct_lz_rom_cycles), only the vector's `JMP` (18) is here.
+// fetch / ASL / TAX / BRA is CT_VM_DISPATCH. Measured on the four load traces (loc 002 / 070 / 082 / 1B7) and walked
+// from the ROM (tools/load_cost_consts.py prints every number below): a handler with no branch is its straight path;
+// a branchy one is its arms, decided on the WRAM the handler is about to read. Not included: the sound driver's
+// cycles (JSL C7/0004, the loader clock's) and a sprite sheet's decompression (lz.c ct_lz_rom_cycles; only the
+// vector's `JMP`, 18, is here).
 // =================================================================================================================
 
-// The handlers with ONE path (the dispatch's JSR to the RTS), 0 = branchy (below) or not walked.
+// The handlers with one path (the dispatch's JSR to the RTS), 0 = branchy (below) or not walked.
 static const short VM_OP_STRAIGHT[256] = {
   [0x08] = 200, [0x09] = 218, [0x0A] = 332, [0x0C] = 320, [0x0D] = 292, [0x0E] = 274, [0x0F] = 250, [0x10] = 306,
   [0x11] = 324, [0x17] = 250, [0x19] = 388, [0x1B] = 250, [0x1C] = 360, [0x1D] = 250, [0x1E] = 320, [0x1F] = 320,
@@ -998,8 +980,8 @@ static const short VM_OP_STRAIGHT[256] = {
   [0xB4] = 370, [0xB8] = 320, [0xDC] = 524, [0xDD] = 524, [0xDE] = 574, [0xE3] = 204, [0xE5] = 582, [0xE8] = 384,
   [0xEA] = 378, [0xEB] = 790, [0xEC] = 448,
 };
-// ...and, for a branchy handler not walked below, its path with every branch NOT taken: what the load is charged, with
-// the op reported (CtVmOpCost.why) -- a number off the ROM, not the arm the WRAM picks.
+// ...and, for a branchy handler not walked below, its path with every branch not taken: what the load is charged, with
+// the op reported (*why) -- a number off the ROM, not the arm the WRAM picks.
 static const short VM_OP_FALLTHROUGH[256] = {
   [0x02] = 1486, [0x03] = 1512, [0x04] = 798, [0x05] = 1560, [0x06] = 1586, [0x07] = 1686, [0x27] = 282, [0x28] = 602,
   [0x2D] = 234, [0x30] = 208, [0x31] = 208, [0x34] = 208, [0x35] = 208, [0x36] = 208, [0x37] = 190,
@@ -1138,10 +1120,8 @@ long ct_vm_op_cycles(const uint8_t* rom, long romLen, const uint8_t* w, const ui
     // $1D36 / $1D35`, two STZ, JSR) 264; C0/6E27: $0300-$0305 (234 to the JSL), the font `$FD:0000 -> $7F:5080` (the
     // vector's JMP + C3/0557), 242, C0/2DC8's $0400 bytes to VRAM; RTS + JSR 80; C0/75A0: 92, `MVN $7E,$D2` of $20 (44 a
     // byte), six `LDX / LDA` (36) and `MVN $7E,$7E` doubling it to $800 (2016 bytes at 46), 84; C0/3E99-3EB9 244 (the BMI's
-    // two arms cost the same: 18 + AND / STA / LDA / STA against 12 + STA / LDA / STA / BRA). Then C0/3EBB's scan of the
-    // ASCII records at $FD:A000 for record xx & 7F: a record passed 52 (LDA / CMP / BEQ not taken), each byte 72 (LDA
-    // $FDA000,X / BMI not taken / INX / BRA), its end byte 112 (BMI taken / INX / INC $DD / BRA) for 72; the match 58 and
-    // C0/3ECF-3ED5 114. The cartridge's 05C load (s5b_roll_f2280, record 8): 276,188, this 276,192 (the DMA's sync).
+    // two arms cost the same). Then C0/3EBB's scan of the ASCII records at $FD:A000 for record xx & 7F: a record passed
+    // 52, each byte 72, its end byte 112 in place of 72; the match 58 and C0/3ECF-3ED5 114 (field_load_cost.md sec. 14).
     case 0x29: {
       long k = 264 + 234 + 18 + ct_lz_rom_cycles(rom, (size_t)romLen, 0x3D0000, 1) + 242 + dma2DC8(0x400) + 80
              + 92 + 32 * 44 + 6 * 36 + 2016L * 46 + 84 + 244 + 58 + 114;
@@ -1190,7 +1170,7 @@ long ct_vm_op_cycles(const uint8_t* rom, long romLen, const uint8_t* w, const ui
 }
 
 // =================================================================================================================
-// The LOCATION LOAD (C0/0066 -> C0/0085 JSR C0/0B86 ... C0/0094 JSR C0/2848): what the CPU spends from the write that
+// The location load (C0/0066 -> C0/0085 JSR C0/0B86 ... C0/0094 JSR C0/2848): what the CPU spends from the write that
 // turns the NMI off (C0/0B5A) to C0/2848's first vblank wait (C0/0B38), the object pass's ops excepted (the VM prices
 // those as they run: ct_vm_op_cycles). The legs, in the ROM's order:
 //   C0/0B86 the field's variables; C0/00F4: 092B (the record's address), 1B53 (the song), the packets C0/0960-56D4

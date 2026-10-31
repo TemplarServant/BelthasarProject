@@ -1,5 +1,5 @@
-// assets.h — loader for ct_assets.dat, the container the build extracts from the
-// ROM (assets/extract_assets.py) and the C engine consumes (Python -> C bridge).
+// assets.h -- loader for ct_assets.dat, the container the setup extracts from the ROM
+// (assets/extract_assets.py) and the C engine reads.
 //
 // Format (little-endian): "CTAS", version u32, entry_count u32,
 //   directory[entry_count] = { type u32, id u32, offset u32, length u32 },
@@ -36,20 +36,20 @@
 #define CT_ASSET_MOVER          20  // id 0: C0/F300 atan(0x400) + C0/F700 facing(0x100) + C0/F800 sine(0x140)
 #define CT_ASSET_PORTRAIT       22  // id = char-id 0-6 (Crono..Magus): the 48x48 name-screen portrait,
                                     //   [w u8][h u8] + w*h*3 RGB (ROM gfx $FF:0000 + per-char palette)
-#define CT_ASSET_NAMESPRITES    23  // id 0: name-screen grid HAND pointer (16x16; ROM $FF:9CF0).
-                                    //   id 1: the name-cursor TRIANGLE (11x12 beveled ▲; ROM $FF:9D70,
-                                    //   V-flipped for ▼). Both [w u8][h u8] + w*h*4 RGBA.
+#define CT_ASSET_NAMESPRITES    23  // id 0: name-screen grid hand pointer (16x16; ROM $FF:9CF0).
+                                    //   id 1: the name-cursor triangle (11x12, bevelled, pointing up; ROM $FF:9D70,
+                                    //   V-flipped to point down). Both [w u8][h u8] + w*h*4 RGBA.
 #define CT_ASSET_MENUFONT       24  // id 0: the 8x8 menu font, raw 2bpp 256 tiles x 16 B, tile =
                                     //   char code (ROM $FF:8C60); rendered with the menu text palette
 #define CT_ASSET_NAMEWIN        25  // id 0: name-screen window background = BG2 rendered in isolation
-                                    //   (the real weave + HDMA gradient, byte-exact): [w u16][h u16]+RGB
-#define CT_ASSET_NAMEMSG        26  // id 0: "Enter a name..." prompt box (new-game Crono naming), byte-
-                                    //   exact: [x0 u16][y0 u16][w u16][h u16] + w*h*3 RGB (overlay)
-#define CT_ASSET_WORLDINTROSEED 27  // id = world; the NEW-GAME INTRO object blocks (0x1000 = 64 x 0x40).
-                                    //   The BASE CT_ASSET_WORLD seed is the INTERACTIVE snapshot (sparse:
+                                    //   (the weave + HDMA gradient): [w u16][h u16]+RGB
+#define CT_ASSET_NAMEMSG        26  // id 0: "Enter a name..." prompt box (new-game Crono naming):
+                                    //   [x0 u16][y0 u16][w u16][h u16] + w*h*3 RGB (overlay)
+#define CT_ASSET_WORLDINTROSEED 27  // id = world; the new-game intro object blocks (0x1000 = 64 x 0x40).
+                                    //   The base CT_ASSET_WORLD seed is the interactive snapshot (sparse:
                                     //   no flock+fair spawner master); this is the intro cutscene's seed
-                                    //   (with master pc=06CD) that field.c overlays on $0B30 ONLY for the
-                                    //   --newgame 496-pan, so the dense flock + Leene fair are intro-only.
+                                    //   (master pc=06CD) that field.c overlays on $0B30 only for the
+                                    //   --newgame 496-pan.
 // --- the sound (assets/extract_assets.py pack_sound; src/audio.c reads them instead of bank $C7 when present) ---
 #define CT_ASSET_SND_BOOT       28  // id = upload block 0-5: [ARAM dest u16] + the block's bytes (0 = the driver itself)
 #define CT_ASSET_SND_SEQ        29  // id = song: [addr u16] + its sequence block's bytes (ARAM $2000) + the 3 bytes after
@@ -65,7 +65,7 @@
 #define CT_ASSET_SND_TIMING     35  // id 0: the sound machine's cost table (src/sound/timing.h "SNDT": the reachable
                                     //   instructions' cycles and accesses, block 0's code map), made at setup by
                                     //   `ct.exe --sndtiming` (tools/gen/snd_timing.py); block 0 (SND_BOOT 0) then keeps only its data
-#define CT_ASSET_LZ             36  // id = an LZ stream's ROM file offset (its size word): the stream DECOMPRESSED, and what
+#define CT_ASSET_LZ             36  // id = an LZ stream's ROM file offset (its size word): the stream decompressed, and what
                                     //   C3/0557 spends on it: [out len u32][cycles $7E u32][cycles $7F u32] + the bytes
                                     //   (tools/gen/lz_pack.py: ct.exe --lzpack; src/lz.c serves it for the ROM's stream)
 #define CT_ASSET_TABLE          37  // id = a ROM table's start file offset: its bytes (assets/extract_assets.py pack_tables, the

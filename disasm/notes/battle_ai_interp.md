@@ -1395,3 +1395,40 @@ at f4311 (`$B03A[6] = 81`, `$B186 = 01`), its arrival latch `$982C` set at f4312
 f4315 (`$B185 = 00`, `$B03A[6] = 01`, `$AFAB[6] = 48`). The port ran the whole tail (battleH12Tail) on that exit, cleared
 the bit at f4311, and took the turn 16 frames late, when the cursor came round again; the Acids' moves and Crono's next
 walk followed it. Both fixed (battle.c); the fight is the cartridge's action for action, and the leg SAME.
+
+## The per-seat forwarding table $AE6D
+
+`$AE6D..$AE77`, one byte per combatant seat, answers "who took this seat's place": a target locked onto a
+combatant that leaves mid-battle (a transformation) is forwarded onto whatever replaced it.
+
+Writers:
+
+```
+FD/B223  TDC / TAX / [B225] STA $AE6D,X / INC A / CMP #0B / BCC ->B224 / RTL
+         identity over all eleven seats; `JSL FDB223` at C1/FDA5 in the boot chain
+C1/9ED2  TXA / STA $AE6D,X   (and its bank-$FD twin FD/AA26)
+         inside the enemy-spawn loop C1/9E9E-9F28: a freshly spawned enemy stands for itself
+C1/9C0A-9C17  the only mutation, a swap:
+           LDA $AECC / TAY            Y = the arriving seat
+           LDA $AE6D,Y / STA $0E      tmp = AE6D[new]
+           LDA $AE6D,X                X = $B18B, the departing seat
+           STA $AE6D,Y                AE6D[new] = AE6D[old]
+           LDA $0E / STA $AE6D,X      AE6D[old] = tmp
+```
+
+The swap sits in the transformation opcode's handler C1/9B8D (operands read off the script through `$B1D2`),
+which also clears the arrival's hide bit (C1/9BE3 `AND #7F`), marks the departing seat absent (C1/9C01
+`LDA #FF / STA $AEFF,X`) and hides it (C1/9C1A `ORA #80`). C1/9BC9 `LDA $AE6D,X / CMP $0E` tests an entry
+against its own index ("never swapped"), a test that only makes sense for a permutation seeded with the
+identity.
+
+Readers, both "absent? follow the pointer":
+
+* C1/C8F7, the single hop every consumer of `$B2AE` runs its seat through (`battleTargetRedirect`).
+* C1/D63F-D68E, the same hop plus a re-validation: if the replacement is absent too it rerolls a random
+  living seat (D677 `LDX #0003 / LDA #0B / JSR C1/AF22`, retried until present; `battleTargetRevalidate`).
+  The pre-loop at D646 guarantees a living seat in 3..$0A, the span the draw covers, so the unbounded
+  retry always ends.
+
+In ordinary fights the table stays the identity, so C1/C8F7 is the identity function; `ct.exe --sweepredirect`
+exercises the non-identity arm against the oracle.

@@ -9,8 +9,8 @@
 int CtEntry7StageHas(uint8_t operand);
 // The setup's own cost in master cycles, NMI off (`--callrom 7E6248`, CT_CALLROM_NONMI=1; seq_entry7.c).
 long CtEntry7StageSetupCycles(void);
-// THE STAGE, its logic (stage 1), as CtEntry4Stage*: Open (C3:0000 + $7E:3000 + the setup $7E:6248), one NMI a frame, the
-// teardown. Frame returns 2 when the stage RESETS the console (task $63F5's `JML $00FF00`, a pad press 128 frames before),
+// The stage's logic, as CtEntry4Stage*: Open (C3:0000 + $7E:3000 + the setup $7E:6248), one NMI a frame, the
+// teardown. Frame returns 2 when the stage resets the console (task $63F5's `JML $00FF00`, a pad press 128 frames before),
 // or on the soft reset (L+R+Select+Start); never 1 -- the script has no END.
 int  CtEntry7StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
 int  CtEntry7StageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);

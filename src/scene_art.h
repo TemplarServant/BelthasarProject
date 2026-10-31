@@ -1,4 +1,4 @@
-// scene_art.h -- THE SCENE ADJUSTMENTS' NEW ART (a mod: settings.h sceneAdjust, with the widescreen; outside the ROM mandate,
+// scene_art.h -- the scene adjustments' new art (a mod: settings.h sceneAdjust, with the widescreen; outside the ROM mandate,
 // docs/WIDESCREEN.md "Scene adjustments"). A scene the original draws for 256 columns only gets art of its own past that edge,
 // drawn after the scene's design in its own resolution and palettes: cells that name the scene's own tiles (as a BG map
 // does: tile, palette, priority, flips -- the tiles themselves come from the player's VRAM, none of the ROM's pixels is here)

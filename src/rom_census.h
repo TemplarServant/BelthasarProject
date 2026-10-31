@@ -1,4 +1,4 @@
-// rom_census.h -- which pages of the ROM image a run reads (the ROM-free runtime's meter: memory rom-free-runtime-goal).
+// rom_census.h -- which pages of the ROM image a run reads (the ROM-free runtime's meter; docs/ROM.md).
 //
 // CT_ROM_CENSUS=<file> (`%d` = the process id): every ROM image the engine keeps (rom_verify.c's, battle.c's) is moved
 // into pages the OS refuses to read; the first read of each 4 KB page traps, is recorded with the code address that

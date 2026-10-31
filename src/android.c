@@ -30,7 +30,7 @@ static int assetsOk(const char* dir) {             // CtAssetsOpen: the header, 
   return 1;
 }
 
-static int tablesThere(const char* dir) {          // inside ct_assets.dat (today's setup), or an earlier one's ct_tables.dat
+static int tablesThere(const char* dir) {          // inside ct_assets.dat (the current setup), or an older ct_tables.dat
   char p[1024];
   snprintf(p, sizeof p, "%s/%s", dir, ASSETS_NAME);                 // (made for this build: an older version's is refused
   if (!CtDataPackFileHasTables(p)) snprintf(p, sizeof p, "%s/ct_tables.dat", dir);   // here, with its message)
@@ -52,7 +52,7 @@ int CtAndroidConfigure(int* outArgc, char*** outArgv) {
   if (!data || !*data) data = SDL_AndroidGetExternalStoragePath();
   if (!data || !*data) data = SDL_AndroidGetInternalStoragePath();
   // The setup activity keeps only files that pass these same checks; a file changed behind its back (adb push) is
-  // refused here with a message instead of reaching the engine. The app is a DATA-FREE build (android/CMakeLists.cmake):
+  // refused here with a message instead of reaching the engine. The app is a data-free build (android/CMakeLists.cmake):
   // a ROM-free ct_assets.dat with the tables inside (docs/ROM.md) is all it reads -- it never takes a ROM.
   char ap[1024];
   snprintf(ap, sizeof ap, "%s/%s", data ? data : ".", ASSETS_NAME);

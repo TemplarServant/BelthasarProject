@@ -1,12 +1,8 @@
-// main.c — M0 headless verification harness for the Chrono Trigger C port.
-//
-// Proves the frame-by-frame pipeline end to end:
-//   [1] the LakeSnes oracle loads the real ROM as HiROM,
-//   [2] emulation is deterministic (two oracles stay byte-identical),
-//   [3] CT actually boots far enough to render (VRAM/CGRAM populated),
-//   [4] the comparator catches a single flipped byte (not a no-op),
-//   [5] the port copy-stub wiring is in place.
-//
+// main.c -- ct.exe, the oracle harness: the LakeSnes oracle (running the ROM) beside the C port, and the CLI
+// modes that compare them. docs/DEBUG_SURFACE.md documents every mode and debug variable.
+// With no mode flag it runs the M0 self-check: the oracle loads the ROM as HiROM, two oracles stay
+// identical, the game boots far enough to render, the comparator catches one flipped byte, and the port
+// copy-stub wiring is in place.
 // Usage: ct[.exe] [rom-path] [--frames N] [--dump]
 #include <stdio.h>
 #include <time.h>
@@ -34,23 +30,10 @@
 #include "battle.h"   // --sweepaitarget: C1/B8BB's resolvers (CtBattleAiResolveList)
 #include "statehandler.h"
 
-// ---- the ONE button-script cursor, shared by every drive mode ----------------------------
-// Grammar: "hexbtn:frames,hexbtn:frames,..." (`--input` / `--btnscript`, and --followtest's
-// "80:60" default). Parsed straight off the caller's argv string: no copy, NO LENGTH CAP.
-//
-// Each of the four drive sites used to open with `char buf[N]; strncpy(buf, script, N-1);` --
-// N was 256 in one place and 512 in the others -- and then walked the COPY. Anything past the cap
-// was dropped without a word, so a long drive script ran its first few tokens and then fed the
-// oracle ZERO input for the remainder of the run. That reads exactly like the game freezing, which
-// is the one thing this harness must never fake: it turns a tooling limit into a false claim about
-// the ROM. Driving a battle savestate to victory hit it head-on -- a 5.6 KB mash script became 511
-// bytes, the alive-list $AF02 never moved across 9000 frames, and the tidy conclusion on offer was
-// "the only 3-PC capture wedges": a statement about the GAME produced by a bug in the HARNESS.
-//
-// The cap was NOT a discovery -- DEBUG_SURFACE.md's gotcha list already said "input-script buffers
-// are 512 chars (silently truncated)". It was written down and left in, which is the failure mode
-// worth naming: a known silent-truncation trap costs more than an unknown one, because the note
-// gets read AFTER the false negative has already been believed.
+// ---- Button-script cursor, shared by every drive mode ----
+// Grammar: "hexbtn:frames,hexbtn:frames,..." (`--input` / `--btnscript`, and --followtest's "80:60"
+// default). Parsed straight off the caller's argv string, with no copy and no length cap: a truncated
+// script would feed zero input for the rest of the run, which looks like the game freezing.
 typedef struct { const char* p; } CtBtnScript;
 static int ctBtnNext(CtBtnScript* s, uint16_t* btn, int* frames) {
   if (!s->p || !*s->p) return 0;
@@ -145,13 +128,10 @@ static int runVm(const char* datPath, int scene, int frames) {
   }
   printf("C VM vs packed actors over 512 scenes: %d OK, %d mismatch; total placed C=%d packed=%d\n",
          okScenes, mismatch, totC, totP);
-  // ⚠ AND THE MAP ITSELF, because the count above cannot guard it. The packed actor table this sweep
-  // compares against is built by assets/script.py from ITS OWN copy of the one-byte PC loaders'
-  // op -> char-id map, so when both copies carry the same mistake the sweep reports 512 OK on two
-  // copies of one error -- which is exactly what 0x68/0x6A did until 2026-08-30 (the ROM's C0:5D6E
-  // table sends 0x68 to C0/41FC `LDA #04` and 0x6A to C0/4204 `LDA #03`; the mapping is NOT monotonic
-  // in the handler address, and both sides had them swapped). Printing the engine's map pins one side
-  // against the ROM independently, so a re-swap of BOTH can no longer be silent.
+  // Note: the packed actor table this sweep compares against is built by assets/script.py from its own
+  // copy of the one-byte PC loaders' op -> char-id map, so one mistake in both copies would still pass.
+  // Printing the engine's map (C0:5D6E + each handler's immediate) lets it be checked against the ROM.
+  // The map is not monotonic in the handler address: 0x68 -> C0/41FC `LDA #04`, 0x6A -> C0/4204 `LDA #03`.
   printf("pcloader map (C0:5D6E + each handler's immediate):");
   { static const int OPS[7] = { 0x57, 0x5C, 0x62, 0x68, 0x6A, 0x6C, 0x6D };
     for (int k = 0; k < 7; k++) printf(" %02X=%d", OPS[k], CtScenePcLoaderId(OPS[k])); }
@@ -160,11 +140,10 @@ static int runVm(const char* datPath, int scene, int frames) {
   return mismatch ? 1 : 0;   /* exit 0 only when every scene matched packed actors */
 }
 
-// Headless trace of the scene-8 Telepod DEMO through our own VM (pure CtSceneTick +
-// CtSceneTouch, no Belthasar player rendering) so its timeline can be compared frame-for-
-// frame against the oracle (the real ROM). Triggers obj12's touch (the demo), auto-advances
-// the early textboxes, and logs Crono's animation index, his reappear, each sparkle's vanish,
-// and the "ALL: Oh wow" textbox (str 0x68) — all relative to the reappear, the oracle anchor.
+// Headless trace of the scene-8 Telepod demo through the VM (CtSceneTick + CtSceneTouch, no rendering), to
+// compare its timeline with the oracle frame by frame. Fires obj12's touch, auto-advances the early
+// textboxes and logs Crono's animation index, his reappear, each sparkle's vanish and the "ALL: Oh wow"
+// textbox (str 0x68), all relative to the reappear (the oracle anchor).
 static int runVmDemo(const char* datPath, int scene) {
   CtAssets a; uint32_t ln = 0, rl = 0;
   if (!CtAssetsOpen(&a, datPath)) { printf("FAIL: cannot open '%s'\n", datPath); return 2; }
@@ -178,10 +157,10 @@ static int runVmDemo(const char* datPath, int scene) {
   if (!sc) { printf("scene %d: no script\n", scene); CtAssetsClose(&a); return 0; }
   for (int f = 0; f < 10; f++) CtSceneTick(sc);                  // settle
   int pObj = CtScenePlayerObj(sc);
-  CtSceneTouch(sc, 12);                                          // fire the DEMO touch (obj12 fn2)
+  CtSceneTouch(sc, 12);                                          // fire the demo touch (obj12 fn2)
   printf("demo trace: scene %d, playerObj=obj%d\n", scene, pObj);
   int reappearF = -1, anim9F = -1, anim29F = -1, owF = -1, prevAnim = -999;
-  int hideF = -1, app15F = -1, prevPCpl = 0;                     // Crono HIDE vs sparkle APPEAR (user sync check)
+  int hideF = -1, app15F = -1, prevPCpl = 0;                     // Crono hide vs sparkle appear
   int prevY10 = -999, prevS10 = -1;                             // Taban (obj10) post-teleport south move (fn11 MOVETO 6,7)
   int prevPlaced[64]; for (int i = 0; i < 64; i++) prevPlaced[i] = 0;
   for (int f = 0; f < 520; f++) {
@@ -231,18 +210,12 @@ static int runVmDemo(const char* datPath, int scene) {
 
 static Snes* ctLoadStateOracle(const char* romPath, const char* statePath, uint8_t** romOut);  // fwd
 
-// --vmdiff <state> [--datf <dat>] [--frames N] [--withpos]
-//   The LOCKSTEP ORACLE DIFFERENTIAL (M1+M2). Load a savestate into the oracle (the real
-//   ROM = ground truth); build our VM for the same scene and SEED its per-object scheduler
-//   state from the oracle's WRAM; then step BOTH one frame at a time and compare the
-//   scheduler state ($1180 IP mapped body-relative, $1C00 priority) each frame. Reports the
-//   FIRST frame/object/field that diverges -- converting "the scheduler is wrong somewhere"
-//   into a pinpointed transition. Run on a clean scene-load state first (mostly idle), then
-//   on a mid-cutscene state (e.g. the demo) to chase a specific timing bug.
-// --- Faithful anime-once completion for the HEADLESS vmdiff (mirrors field.c animTickActor,
-// mode-2 path only). The VM's op 0xAB/0xB7 BLOCK until the renderer signals CtSceneAnimFinished;
-// with no renderer they hang forever, freezing scripted actors mid-cutscene. This lets the
-// lockstep run the real demo. Enabled by VMDIFF_ANIM=1. ----
+// --vmdiff <state> [--datf <dat>] [--frames N] [--withpos]: the lockstep oracle differential. Seeds the
+// VM's per-object scheduler from the oracle's WRAM, steps both one frame at a time and reports the first
+// frame/object/field that diverges ($1180 IP body-relative, $1C00 priority). The env switches are in
+// docs/DEBUG_SURFACE.md.
+// Headless anime-once completion (field.c animTickActor, mode-2 path only): ops 0xAB/0xB7 block until the
+// renderer signals CtSceneAnimFinished, and this mode has no renderer. Enabled by VMDIFF_ANIM=1.
 typedef struct { int gen, ai, frame, delay, loops; } VdAnim;
 static const uint8_t* vdAnimFrames(const uint8_t* an, uint32_t al, int ai, int* n) {
   *n = 0; if (!an || al < 2) return NULL;
@@ -282,11 +255,11 @@ static int vdAnimTick(VdAnim* ap, const uint8_t* an, uint32_t al,
   return 0;
 }
 
-// The NPC MAP-COLLISION hook (ROM C0/ACFD), the same one field.c hands the VM at field.c:1789.
-// `mv` is CT_ASSET_COLLISION's THIRD plane = the per-tile prop byte2, whose bit7 the ROM streams to
-// $7E7040,X (C0/A630) and whose test is `LDA $7E7040,X / BMI` at C0/AEE1 -- taken, the step's velocity
-// is ZEROED (AF29 STZ $DB / AF2B STZ $DD) and republished at AF18, so a mover aimed into a wall burns
-// its whole ticket standing still. The asset packs that bit into bit0 (extract_assets.pack_collision).
+// The NPC map-collision hook (C0/ACFD), the one field.c gives the VM. `mv` is CT_ASSET_COLLISION's third
+// plane, prop byte 2, whose bit 7 the ROM streams to $7E7040,X (C0/A630) and tests at C0/AEE1 (`LDA
+// $7E7040,X / BMI`): when taken the step's velocity is zeroed (AF29/AF2B) and republished at AF18, so a mover
+// aimed into a wall stands still for its whole ticket. The asset packs that bit into bit 0
+// (extract_assets.pack_collision).
 typedef struct { const uint8_t* mv; int cw, ch; } VdMoverPlane;
 static int vdTileSolid(void* ctx, int tx, int ty) {
   const VdMoverPlane* p = (const VdMoverPlane*)ctx;
@@ -294,9 +267,9 @@ static int vdTileSolid(void* ctx, int tx, int ty) {
   return (p->mv[ty * p->cw + tx] & 1) != 0;
 }
 
-// --vmdiff's SOUND SINK: a CtAudio seeded from the savestate's own APU (SPC, DSP, ARAM), so the port VM's
-// sound ops run the transfer the oracle is about to run and the loader clock prices it -- the VM then
-// loses the same frames the ROM's parked main loop does. VMDIFF_NOAUDIO=1 restores the unpriced sink.
+// --vmdiff's sound sink: a CtAudio seeded from the savestate's APU (SPC, DSP, ARAM), so the VM's sound ops
+// run the transfer the oracle is about to run and the loader clock prices it; the VM then loses the frames
+// the ROM's parked main loop does. VMDIFF_NOAUDIO=1 installs the unpriced sink.
 static int vdSoundPost(void* ctx, uint8_t* mem7E, int startLine) {
   CtAudio* a = (CtAudio*)ctx; int fr = 0, el = startLine;
   // (the rule: a field scene -- its V-IRQ C0/ECCC at line 211 unless $010F bit 7, as field.c says it per frame)
@@ -321,14 +294,8 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
   const uint8_t* hdr = CtAssetGet(&a, CT_ASSET_SCENE_HEADER, (uint32_t)scene, &ln);
   int si = hdr ? (hdr[8] | (hdr[9] << 8)) : 0;
   const uint8_t* raw = CtAssetGet(&a, CT_ASSET_SCRIPT, (uint32_t)si, &rl);
-  // Give the field VM the ROM image, the way field.c already does (field.c:4903). ct_vm.c gates every
-  // ROM-table read on it, so without it the lockstep harness ran the VM with those tables blank while
-  // the live engine had them -- the two hosts were not running the same engine.
-  // MEASURED, not assumed: of the eight vmdiff checks this moves exactly ONE, and it moves it the
-  // right way -- vmdiff-wmask-party3 goes from `mask 42 addr` to `mask 90 addr` and stays
-  // `no masked divergence`. The port now CLAIMS 48 more bytes and every one of them still matches the
-  // oracle, which is a coverage gain, not a regression: that counter exists to catch the mask
-  // SHRINKING toward a vacuous zero, and here it grew.
+  // Give the VM the ROM image, as field.c does: ct_vm.c gates every ROM-table read on it, so without it
+  // this harness would run a different engine than the live one.
   CtAudio* vdAudio = NULL;
   static CtSoundSink vsink;
   { int rlv = 0; uint8_t* rimg = CtReadFile(romPath, &rlv); if (rimg) free(rimg);
@@ -336,28 +303,18 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
     if (!getenv("VMDIFF_NOAUDIO")) { vdAudio = CtAudioInit(rom, rlv);
       if (vdAudio) { CtAudioSeedFromApu(vdAudio, s->apu);
         vsink.ctx = vdAudio; vsink.post = vdSoundPost; vsink.port = vdSoundPort; } } }
-  // THE REAL MOVER TABLES, for the same reason as the ROM image above: ct_vm.c falls back to FORMULA
-  // tables when nobody hands it CT_ASSET_MOVER ("within 1 LSB of the ROM", ct_vm.c:1136) -- and one LSB
-  // of a velocity component is a position divergence a few frames later. field.c has always passed them
-  // (field.c:1697); this harness never did, so it was grading a different mover than the live engine.
+  // The mover tables, for the same reason: without CT_ASSET_MOVER ct_vm.c falls back to formula tables
+  // within 1 LSB of the ROM, and one LSB of velocity becomes a position divergence a few frames later.
   { uint32_t ml = 0; const uint8_t* mv = CtAssetGet(&a, CT_ASSET_MOVER, 0, &ml);
     CtSceneSetMoverTables(mv, (int)ml); }
   CtScene* sc = raw ? CtSceneCreate(raw, (int)rl, w + 0x10000, scene) : 0;
   if (!sc) { printf("FAIL: scene %d (loc %03X) has no script\n", scene, loc); CtAssetsClose(&a); CtOracleDestroy(s); free(rom); return 2; }
-  // The sink goes in only NOW, after the seed scene exists. CtSceneCreate is C0/1B53 and POSTS the location
-  // load's `81 00 FF FF` (C0/1B77) -- right for a real load, wrong here: this scene is rebuilt from a savestate
-  // captured long after that load, and the APU seeded from the same state has already consumed it. Posted
-  // at seed, that extra $81 reaches the driver the oracle's did not get and moved the EA 18 upload's return
-  // from line 168 to 163 (oracle: 169) on vmdiff-scene8-gate-cutscene.
+  // The sink is installed only after the seed scene exists: CtSceneCreate (C0/1B53) posts the location
+  // load's `81 00 FF FF` (C0/1B77), which the APU seeded from the state has already consumed.
   if (vdAudio) CtSceneSetSoundSink(&vsink);
-  // ...and the MAP-COLLISION hook. Without it sc->tileSolid is NULL, ct_vm.c's ACFD test at line 1421
-  // (`sc->collMap[obj] && sc->tileSolid && mvCrossesSolid`) is short-circuited away, and every mover in
-  // this harness walked through walls the oracle stops at. MEASURED on party3_field: obj27 has
-  // $1C80 = 03 (map collision ON) and its script parks on `96 37 1D` (move to tile 55,29) which IS
-  // mover-solid, so the oracle publishes velocity 0 from C0/AF1F//AF24 and holds it still for 130
-  // frames while the port walked it 1 px every other frame.
-  // ⚠ The runtime plane MUTATION ops (0xE4/0xE5, ROM C0/AF4E bits 3-5, which field.c copies the planes
-  // for) are not modelled here: this points straight at the read-only asset.
+  // ...and the map-collision hook: without it sc->tileSolid is NULL, ct_vm.c's ACFD test is skipped and
+  // movers walk through walls the oracle stops them at.
+  // Not modelled: the runtime plane mutation ops 0xE4/0xE5 (C0/AF4E bits 3-5); this reads the asset.
   static VdMoverPlane vdmv; vdmv.mv = NULL; vdmv.cw = vdmv.ch = 0;
   { uint32_t cl = 0; int mi = hdr ? (hdr[4] | (hdr[5] << 8)) : 0;
     const uint8_t* col = CtAssetGet(&a, CT_ASSET_COLLISION, (uint32_t)mi, &cl);
@@ -368,24 +325,18 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
   int fd = -1, sdiff = CtSceneScriptDiffWram(sc, w, &fd);   // [sanity] our script == oracle $7F2000?
   printf("  script vs $7F2000 image: %s (%d byte diffs)\n", sdiff ? "MISMATCH" : "identical", sdiff);
   if (sdiff && fd >= 0) printf("    first diff at $7F2000+%X (oracle=%02X)\n", fd, w[0x12000 + fd]);
-  // SEED PHASE. snes_runFrame runs from WHEREVER THE CPU IS to the start of the next vblank
-  // (snes/snes.c:115) -- it is not a fixed quantum. So from a savestate captured at an arbitrary
-  // point the FIRST call advances only the REMAINDER of that frame: if the capture landed after
-  // the engine's movement pass, the pass does not run again before vblank and the oracle appears
-  // not to move on frame 1; if it landed before, it does. That is the bidirectional one-step
-  // offset. ONE settle frame reaches that boundary, and the proof is that the ABSOLUTE frame of the
-  // first divergence then stops depending on the settle count: bedslide settle=1 -> f4 and settle=2
-  // -> f3 are the same absolute frame 5, while settle=0 reports a divergence at f1 that neither of
-  // them sees; DEMO8_gtu reports 49/48/47, absolute 49 every time, i.e. it had no artifact at all.
-  // DEFAULT 1. VMDIFF_SETTLE=0 restores the old, mid-frame seed.
+  // Seed phase: snes_runFrame runs from wherever the CPU is to the start of the next vblank, so from a
+  // savestate captured mid-frame the first call runs only the rest of that frame. One settle frame (the
+  // default) reaches the boundary; the absolute frame of a first divergence then no longer depends on the
+  // settle count. VMDIFF_SETTLE=N sets the count (0 = seed mid-frame).
   { const char* sv = getenv("VMDIFF_SETTLE"); int nq = sv ? atoi(sv) : 1;
     for (int q = 0; q < nq; q++) { s->input1->currentState = 0; CtOracleRunFrame(s); } }
   CtSceneSeedFromWram(sc, w);                         // seed our VM from the oracle, then verify round-trip
   CtVmDiff d[64];
   int nd0 = CtSceneDiffWram(sc, w, withPos, d, 64);
   printf("  seed fidelity (frame 0): %d divergence(s)%s\n", nd0, nd0 ? ":" : " (clean)");
-  // THE DRAW COMPARE'S OWN COVERAGE. Printed only when it is armed, and printed as a COUNT because
-  // "0 divergences" from a compare that grades nothing reads identical to a clean port.
+  // The draw compare's own coverage, printed as a count when it is armed: "0 divergences" from a compare
+  // that grades nothing would read like a clean port.
   { const char* e = getenv("VMDIFF_DRAW");
     if (e && *e != '0') { int tot = 0, g = CtSceneDrawGraded(sc, w, &tot);
       printf("  draw compare ($1A81 vs `draw`): %d of %d objects graded (C0/B0F3 class guard)\n", g, tot); } }
@@ -402,93 +353,64 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
   VdAnim vdan[64]; int vdGen[64];
   for (int i = 0; i < 64; i++) { vdan[i].gen = -1; vdan[i].ai = -1; vdan[i].frame = 0; vdan[i].delay = 0; vdan[i].loops = 0; vdGen[i] = -1; }
   int firstDivF = -1;
-  // ---- VMDIFF_BTNSCRIPT: A REAL DRIVE SCRIPT, and the LIVENESS that makes CLEAN mean something.
-  //
-  // CT_BTN injects ONE held word for the whole run. That is enough to lockstep a walk, and useless
-  // for anything the ROM advances on a button EDGE -- a textbox, a decision box, a tutorial. Held A
-  // dismisses nothing, so the scene freezes on its first box and every remaining frame compares two
-  // identical stopped machines: `CLEAN over 3000 frames` with nothing whatsoever exercised. That is
-  // exactly the shape this repo's own rule warns about (grade-invariant-when-no-behavior), and it is
-  // how a scripted scene can pass a lockstep that never ran it.
-  //
-  // VMDIFF_BTNSCRIPT takes the same `hexbtn:frames,...` grammar as --btnscript, in the $00F2 layout
-  // CT_BTN already uses (A=0x80 X=0x40 L=0x20 R=0x10 B=0x08 Y=0x04 Sel=0x02 St=0x01), and feeds it
-  // through the shared ctBtnNext cursor -- so a mash is `80:4,0:26,...` and both sides get the same
-  // edges on the same frames, which is the whole contract of this mode. When it is set it REPLACES
-  // CT_BTN; when it runs out the drive holds 0 for the rest of the run.
+  // ---- VMDIFF_BTNSCRIPT: a per-frame drive script, and the liveness count ----
+  // A held CT_BTN cannot advance anything the ROM advances on a button edge (a textbox, a decision box),
+  // so a scripted scene would freeze and the run would compare two stopped machines. VMDIFF_BTNSCRIPT takes
+  // the `hexbtn:frames,...` grammar of --btnscript, in CT_BTN's $00F2 layout (A=0x80 X=0x40 L=0x20 R=0x10
+  // B=0x08 Y=0x04 Sel=0x02 St=0x01), through the shared ctBtnNext cursor, so both sides get the same edges
+  // on the same frames. It replaces CT_BTN when set and holds 0 once it runs out.
   const char* vdScript = getenv("VMDIFF_BTNSCRIPT");
   CtBtnScript vdBs = { vdScript };
   uint16_t vdBtn = 0; int vdHold = 0;
-  // LIVENESS: how many frames the ORACLE's scheduler actually moved an object's IP, and how many
-  // OURS did. A CLEAN line with oracle-steps 0 is a stopped machine, not an agreement.
+  // Liveness: how many frames the oracle's scheduler moved an object's IP, and how many ours did. A CLEAN
+  // line with oracle steps 0 is a stopped machine, not an agreement.
   int oraIpPrev[64], ourIpPrev[64];
   long oraIpSteps = 0, ourIpSteps = 0;
   for (int o = 0; o < 64; o++) { oraIpPrev[o] = -1; ourIpPrev[o] = -1; }
-  // The oracle's lead position as of the END of the previous frame -- the phase the ROM's event VM
-  // actually reads (see the LEAD SYNC block). Seeded from the state, i.e. pre-frame-1.
-  // ...and the same for the two FOLLOWERS. The party-slot table $0197 is the ROM's own index of who
-  // the player layer drives: read live off party3_field it is 0002 / 0006 / 0008 = obj1 (lead), obj3,
-  // obj4, and the ROM writes all three from C0/93E1 -- INSIDE C0/881E, at 00A7, which this mode does
-  // not run. Before this, the lead was injected and the followers were left standing wherever the seed
-  // put them, so the oracle walked them and we did not. That is the identical harness-scope fact the
-  // lead's injection is built on, not a widening of the don't-care list to hide an engine defect: the
-  // measured divergences had `ours == seed` with the ORACLE moving, i.e. nothing on our side drove them.
+  // The oracle's lead position as of the end of the previous frame, the phase the ROM's event VM reads
+  // (see the lead sync below); seeded from the state, i.e. pre-frame-1.
+  // The same for the two followers: the party-slot table $0197 names the objects the player layer drives,
+  // and the ROM writes all three from C0/93E1 inside C0/881E (at 00A7), which this mode does not run, so
+  // the followers are injected like the lead.
   int prevPcX[3] = { -1, -1, -1 }, prevPcY[3] = { -1, -1, -1 }, pcObj[3] = { -1, -1, -1 };
   { for (int k = 0; k < 3; k++) {
       int slot = w[0x0197 + k * 2] | (w[0x0198 + k * 2] << 8);
-      if (slot & 0x80) continue;                        // 0x80 = the slot is EMPTY (the op-0xB6 gate's datum)
+      if (slot & 0x80) continue;                        // 0x80 = the slot is empty (the op-0xB6 gate's datum)
       int o = slot / 2; if (o < 0 || o >= CtSceneActorCount(sc)) continue;
       pcObj[k] = o;
       prevPcX[k] = w[0x1800 + slot] | (w[0x1801 + slot] << 8);
       prevPcY[k] = w[0x1880 + slot] | (w[0x1881 + slot] << 8);
     } }
-  // VMDIFF_OAM=1 -- THE OAM COMPARE INSIDE THE LOCKSTEP HARNESS. verifyframe-oam-ourlist grades our
-  // draw list through our OAM production, but on a state whose UPSTREAM is the oracle's (its whole
-  // 128 KB is copied in every frame). Here the upstream is OURS: the scene was seeded once and every
-  // frame since is this VM's own scheduler, movement, legs and drain. So this asks the strictest
-  // version of the question -- given only a seed, does our engine put the same sprites in the same
-  // OAM slots as the ROM, frame after frame.
-  // The build writes into SCRATCH buffers, not $7E:0700, so the write mask's owned set and the two
-  // pinned wmask counts are untouched by turning this on.
+  // VMDIFF_OAM=1: build the OAM from our image each frame and compare it with the oracle's. Unlike
+  // verifyframe-oam-ourlist (oracle upstream copied in every frame), the upstream here is ours: seeded once,
+  // then our scheduler, movement, legs and drain.
+  // The build writes scratch buffers, not $7E:0700, so the write mask and its pinned counts are unaffected.
   int oamOn = 0; { const char* e = getenv("VMDIFF_OAM"); oamOn = e && *e != '0'; }
   long oamBad = 0, oamHigh = 0, oamFrames = 0, oamOurs = 0, oamOra = 0;
   long oamByte[4] = { 0, 0, 0, 0 };   // which of X/Y/tile/attr diverges
   int oamFirstF = -1;
   static uint8_t oamMain[0x200], oamHighB[0x20];
-  int wmFirstF = -1, wmDiffs = 0;   // the write-mask compare keeps its OWN latch,
+  int wmFirstF = -1, wmDiffs = 0;   // the write-mask compare keeps its own latch,
                                     // so it can never move firstDivF (the pinned signal)
-  // Arm the mask AFTER the seed. CtSceneSeedFromWram is three bulk memcpys, not w8 calls, so it
-  // leaves the mask empty on its own -- but the reset also records the oracle's seed image, which
-  // is the denominator for the coverage number ("addresses the ROM drives that we never write").
-  CtVmWmaskEnable(-1);                                // reads VMDIFF_WMASK; OFF by default
+  // Arm the mask after the seed. CtSceneSeedFromWram is bulk memcpys, not w8 calls, so the mask starts
+  // empty; the reset also records the oracle's seed image, the denominator for the coverage number
+  // ("addresses the ROM drives that we never write").
+  CtVmWmaskEnable(-1);                                // reads VMDIFF_WMASK; off by default
   CtVmWmaskReset(sc, w);
   for (int f = 1; f <= frames; f++) {
-    uint16_t injBtn = 0; { const char* b = getenv("CT_BTN"); if (b) injBtn = (uint16_t)strtol(b, 0, 16); }   // TEST: inject a held button
+    uint16_t injBtn = 0; { const char* b = getenv("CT_BTN"); if (b) injBtn = (uint16_t)strtol(b, 0, 16); }   // held-button word injected each frame
     if (vdScript && *vdScript) {                    // VMDIFF_BTNSCRIPT wins: a real per-frame drive
       if (vdHold <= 0 && !ctBtnNext(&vdBs, &vdBtn, &vdHold)) { vdBtn = 0; vdHold = frames; }
       vdHold--; injBtn = vdBtn;
     }
-    // THE TEXTBOX DISMISS, which is the field LAYER's job and not the VM's -- the same class of harness
-    // completion as the LEAD SYNC below. In the real engine field.c's A-press handler calls
-    // CtSceneAdvance once the box is fully revealed; this mode runs no field layer at all, so without
-    // this an open box parks OUR scheduler forever while the ROM's walks on -- measured on scene 254
-    // (the combat tutorial): oracle ip-steps 286, ours 12, first divergence at the first C2 op. Drive it
-    // with a SLOW mash (e.g. `80:4,0:86`) so the ROM's typewriter has finished before the press lands;
-    // a fast mash would advance us on a frame the ROM is still revealing on.
-    // CT_BTN is in CT's $00F2 button layout (A=0x80 X=0x40 L=0x20 R=0x10 B=0x08 Y=0x04 Sel=0x02
-    // St=0x01) -- what CtSceneSetButtons takes.
-    // The oracle's Input.currentState is a different grammar entirely: SERIAL shift order, LSB
-    // first, B=0x001 Y=0x002 Sel=0x004 St=0x008 Up=0x010 Down=0x020 Left=0x040 Right=0x080
-    // A=0x100 X=0x200 L=0x400 R=0x800 (snes/input.c: input_read shifts out bit 0 first).
-    //
-    // This used to be `currentState = (injBtn & 0x80) ? 0x0080 : 0`, commented "A=$00F2 bit7 ->
-    // SNES joypad bit7". Both halves are the same layout confusion: $00F2 bit7 IS A, but
-    // currentState 0x0080 is RIGHT. So asking for A held our VM A while the oracle held RIGHT --
-    // two different, mutually exclusive buttons, in the one tool whose entire purpose is that both
-    // sides receive IDENTICAL input. Measured on the oracle's own bytes (--monitor 7E00F2:2 from
-    // truce_market.state): currentState 0x0080 -> $00F2=00 $00F3=01 (Right, NO button); 0x0100 ->
-    // $00F2=80 $00F3=00 (A). Every non-A button was silently dropped on the oracle side as well,
-    // and the d-pad could not be expressed at all -- so no walking scenario could be lockstepped.
+    // The textbox dismiss is the field layer's job, which this mode does not run (in the engine field.c's
+    // A-press handler calls CtSceneAdvance once the box is revealed); without it an open box parks our
+    // scheduler while the ROM's walks on. Drive it with a slow mash (e.g. `80:4,0:86`) so the ROM's
+    // typewriter has finished before the press lands.
+    // CT_BTN is in CT's $00F2 layout (A=0x80 X=0x40 L=0x20 R=0x10 B=0x08 Y=0x04 Sel=0x02 St=0x01), what
+    // CtSceneSetButtons takes. The oracle's Input.currentState is in serial shift order, LSB first: B=0x001
+    // Y=0x002 Sel=0x004 St=0x008 Up=0x010 Down=0x020 Left=0x040 Right=0x080 A=0x100 X=0x200 L=0x400 R=0x800
+    // (snes/input.c), so the word is translated bit by bit.
     static const uint16_t kF2ToSerial[8] = {   // $00F2 bit index -> currentState bit
       0x008,   // $00F2 0x01 Start  -> serial Start
       0x004,   // $00F2 0x02 Select -> serial Select
@@ -501,17 +423,10 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
     };
     uint16_t oracleBtn = 0;
     for (int b = 0; b < 8; b++) if (injBtn & (1u << b)) oracleBtn |= kF2ToSerial[b];
-    // The D-PAD rides in bits 8..11 in CT's own $00F3 order (Right=0x100 Left=0x200 Down=0x400
-    // Up=0x800), so a WALKING scenario can be lockstepped -- scene triggers, touch/bump and paced
-    // movers all need the lead to actually move.
-    //
-    // Our side gets the direction by LEAD SYNC, not by running a player controller: runVmDiff ticks
-    // the scene VM only, so each frame our lead is forced to the oracle's lead position (the exact
-    // technique --followtest uses to isolate the follower model from the input layer). That keeps
-    // both engines seeing the same world WITHOUT this mode silently grading the player controller,
-    // which is --playermove's job and is validated there. What --vmdiff then measures under a walk
-    // is what it is supposed to measure: the SCHEDULER's response to the lead being somewhere.
-    // Any divergence reported is the VM's, not the controller's.
+    // The d-pad rides in bits 8..11 in CT's $00F3 order (Right=0x100 Left=0x200 Down=0x400 Up=0x800).
+    // Our side gets the direction by the lead sync (our lead is set to the oracle's lead position each
+    // frame, as --followtest does), not by a player controller, so a divergence under a walk is the
+    // scheduler's; the controller is graded by --playermove.
     if (injBtn & 0x100) oracleBtn |= 0x080;   // $00F3 Right -> serial Right
     if (injBtn & 0x200) oracleBtn |= 0x040;   // $00F3 Left  -> serial Left
     if (injBtn & 0x400) oracleBtn |= 0x020;   // $00F3 Down  -> serial Down
@@ -519,38 +434,27 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
     s->input1->currentState = oracleBtn;
     CtOracleRunFrame(s);
     if (vdAudio && !CtAudioRuleOn()) CtAudioFrame(vdAudio);   // our driver keeps the oracle's pace (debited after a priced JSL)
-    // THE HARNESS'S TEXTBOX DISMISS -- MIRROR THE ORACLE'S OWN ACCEPT, do not guess at it.
-    // The field layer (which this mode does not run) owns the box machine C0/1F87: it decides when a
-    // press is accepted (state 7 = waiting for input; a press during state 6 only finishes the
-    // reveal) and it is what clears $0129 at the end of the close ramp. Rather than model any of that
-    // here, watch the ORACLE's own state byte and fire CtSceneAdvance on its 7 -> 0x0D transition,
-    // which IS the ROM accepting the dismiss. Same class of injection as the LEAD SYNC below.
-    // ⚠ IT MUST BE THIS EDGE, NOT OUR OWN BUTTON. The word we inject for frame f reaches the ROM's
-    // logic on frame f+1 (the joypad auto-read latches at vblank), so a dismiss keyed on our press
-    // fires ONE FRAME EARLY -- MEASURED with VMDIFF_BOXTRACE: our dismiss f91, the oracle's $0129
-    // 7 -> 0D at f92, its clear at f103 against our f102. With obj13 visited every 4 frames that
-    // error is invisible at some press phases and a 4-frame divergence at others: sweeping the drive
-    // script by ONE frame flipped half the phases red. A lockstep whose verdict depends on the phase
-    // of its own input is not a lockstep.
+    // The textbox dismiss mirrors the oracle's own accept. The box machine C0/1F87 belongs to the field
+    // layer (state 7 waits for input; a press in state 6 only finishes the reveal), so fire CtSceneAdvance
+    // on the oracle's $0129 7 -> 0x0D transition, the ROM accepting the press.
+    // Note: it must be this edge, not our own button. The word injected for frame f reaches the ROM on
+    // frame f+1 (the joypad auto-read latches at vblank), so keying on our press fires one frame early and
+    // makes the verdict depend on the phase of the input. VMDIFF_BOXTRACE prints both edges.
     { static int p29 = -1;
       int now29 = w[0x0129];
       if (p29 == 0x07 && now29 == 0x0D) { int tt = 0, ti = 0;
         if (CtSceneTextbox(sc, &tt, &ti)) CtSceneAdvance(sc); }
-      // ...and the typewriter's end the same way: the ROM's C2 text engine draws the string, this harness
-      // has no string, so its 6 -> 7 (C0/21D8) is mirrored from the oracle's own byte.
-      // ...and $0215 with it, MIRRORED from the oracle rather than guessed: it is the control code
-      // the ROM's text engine stopped on, and state 7 reads it to decide whether a decision box's
-      // cursor may arm (C0/2024). This harness has no string, so the oracle's own byte is the only
-      // honest source -- the same rule as the 6 -> 7 edge itself.
+      // The typewriter's end is mirrored the same way: this harness has no string, so the oracle's 6 -> 7
+      // (C0/21D8) is taken from its byte, together with $0215, the control code the text engine stopped
+      // on, which state 7 reads to decide whether a decision box's cursor may arm (C0/2024).
       if (p29 == 0x06 && now29 == 0x07) CtSceneTextboxRevealDone(sc, w[0x0215]);
       if (getenv("VMDIFF_BOXTRACE") && now29 != p29)
         fprintf(stderr, "  [box f%d] oracle $0129 %02X -> %02X  $0127=%02X\n", f, p29 & 0xFF, now29, w[0x0127]);
       p29 = now29; }
     if (injBtn) CtSceneSetButtons(sc, (uint16_t)(injBtn & 0xFF));   // ours: the $00F2 byte only
     if (injBtn & 0xFF00) {                     // LEAD SYNC (see above): our lead := the oracle's lead
-      // The FOLLOWERS first, on the same previous-frame phase and for the same reason (see prevPcX):
-      // C0/93E1 writes them and it lives inside C0/881E, which this mode does not run. Slot 0 is the
-      // lead and is handled by the block below (CtScenePlayerObj is the same object).
+      // The followers first, on the same previous-frame phase (see prevPcX): C0/93E1 writes them inside
+      // C0/881E, which this mode does not run. Slot 0 is the lead, handled below (CtScenePlayerObj).
       for (int k = 1; k < 3; k++) {
         int o = pcObj[k]; if (o < 0) continue;
         int ox2 = o * 2;
@@ -568,68 +472,52 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
       int lead = CtScenePlayerObj(sc);
       if (lead >= 0) {
         int lx = lead * 2;                     // per-actor tables are obj*2 strided
-        // THE PHASE. The ROM's frame is C0/00A7 `JSR $881E` (velocity only -- the lead's $1800 is
-        // written by C0:AB28, measured, inside the A810 pass) -> C0/00C4 `JSR $5A46` (the event VM)
-        // -> C0/00D3 `JSR $A810` -> AAFD -> AB25 (the position COMMIT). So the VM reads $1801 as of
-        // the END OF THE PREVIOUS FRAME. We call CtOracleRunFrame first, so `w` here is POST-commit
-        // for THIS frame -- injecting it hands our VM a position the ROM's VM had not seen yet, one
-        // integrate step ahead. Inject the PREVIOUS frame's instead; prev is seeded from the state,
-        // which is exactly pre-frame-1.
-        int ox = prevPcX[0], oy = prevPcY[0];                   // slot 0 of the $0197 table IS the lead
+        // The phase: the ROM's frame runs C0/00A7 `JSR $881E` (velocity), C0/00C4 `JSR $5A46` (the event
+        // VM), then C0/00D3 `JSR $A810` -> AAFD -> AB25 (the position commit; the lead's $1800 is written by
+        // C0:AB28). So the VM reads $1801 as of the end of the previous frame. `w` is already post-commit
+        // for this frame, so the previous frame's position is injected (prev is seeded from the state).
+        int ox = prevPcX[0], oy = prevPcY[0];                   // slot 0 of the $0197 table is the lead
         prevPcX[0] = w[0x1800 + lx] | (w[0x1801 + lx] << 8);
         prevPcY[0] = w[0x1880 + lx] | (w[0x1881 + lx] << 8);
         if (ox < 0) { ox = prevPcX[0]; oy = prevPcY[0]; }       // frame 1 with no seed captured
-        CtSceneSetActorPosF(sc, lead, ox / 16.0, oy / 16.0);    // sub-pixel: $1800 IS the position
+        CtSceneSetActorPosF(sc, lead, ox / 16.0, oy / 16.0);    // sub-pixel: $1800 is the position
         { uint8_t* sm = CtSceneMem7E(sc);                       // ...and the words themselves: op 0x22 / 0x21 read
           sm[0x1800 + lx] = (uint8_t)ox; sm[0x1801 + lx] = (uint8_t)(ox >> 8);   // $1801 / $1881 (C0/65B2), the
           sm[0x1880 + lx] = (uint8_t)oy; sm[0x1881 + lx] = (uint8_t)(oy >> 8); } // commit the pass sees
-        // The tick mirrors fx/fy back into these exact bytes (mode<3), so they would enter the
-        // mask and compare equal BY CONSTRUCTION. The exclusion is emitted HERE, by the code that
-        // does the injecting, so it cannot rot into a stale parallel table.
+        // The tick mirrors fx/fy back into these bytes (mode < 3), so they would compare equal by
+        // construction; the code that injects them excludes them from the mask.
         CtVmWmaskExclude(0x7E1800 + (uint32_t)lx, 2);
         CtVmWmaskExclude(0x7E1880 + (uint32_t)lx, 2);
       }
-      // ...and the TOUCH HIT LATCH from the same place, for the same reason. $01EB is produced by the
-      // PLAYER layer (C0/881E resets it to 0x80, the C0/9923 scan stores the hit index) and consumed
-      // by the event-VM later in the frame. This mode does not run our player controller, so taking
-      // the oracle's latch keeps the comparison on the VM's RESPONSE to a touch -- which is the thing
-      // under test -- instead of silently grading our proximity scan. 0x80 = nothing -> -1.
+      // ...and the touch latch $01EB from the oracle, for the same reason. The player layer produces it
+      // (C0/881E resets it to 0x80, the C0/9923 scan stores the hit index) and the event VM consumes it
+      // later in the frame, so taking the oracle's keeps the comparison on the VM's response to a touch
+      // rather than on our proximity scan. 0x80 = nothing -> -1.
       CtSceneSetTouchHit(sc, (w[0x01EB] & 0x80) ? -1 : (w[0x01EB] >> 1));
-      // ...and the CAMERA EDGES, for the third time the same reason. The scroll is driven by the
-      // player layer (field.c feeds CtSceneCameraInput); runVmDiff never calls it, so our $1D0A
-      // would sit frozen at the seed value while the oracle's camera follows the walk. Every object
-      // the C0/A810 activation pass judges is judged against those four cells, so a frozen camera
-      // silently fails the whole pass. Take them from the oracle and test the VM's RESPONSE.
-      // (Found exactly this way: obj32 activates on the oracle at f73 with $1D0A = 0x44, ours still
-      // held the seed's 0x4E, and VMDIFF_ACT reported "obj32 act ours=0 oracle=1" at f74.)
+      // ...and the camera cells, for the same reason: the player layer drives the scroll (field.c feeds
+      // CtSceneCameraInput) and runVmDiff never calls it, so our $1D0A would stay at the seed value. The
+      // C0/A810 activation pass judges every object against these four cells, so they come from the oracle.
       { uint8_t* ms = CtSceneMem7E(sc);
         if (ms) { ms[0x1D0A] = w[0x1D0A]; ms[0x1D0C] = w[0x1D0C];
                   ms[0x1D0E] = w[0x1D0E]; ms[0x1D10] = w[0x1D10];
-                  // ...AND THE STEP COUNTERS. Same argument, and they were MISSED: $1D87/$1D89 are
-                  // the camera's per-step phase (ct_vm.c camPut16 +-1 per scroll step, zeroed at
-                  // entry) and C0/AB45 reads `$1D87 & 7` / `$1D89 & 7` as the fine part of the
-                  // screen position it writes to $0A00,X. Injecting only the coarse cells left ours
-                  // frozen at the seed's 0x90 while the oracle's walked 8F, 8E, 8D... one per frame
-                  // of a held Left -- so the fine term was 0 against the oracle's 7 and every
-                  // sprite's screen X was off. That is what the three $0A0x entries in this mode's
-                  // 23 pinned divergences were, and what vmdiff-oam-lockstep priced at X=1707.
-                  // A harness-scope gap, not an engine defect: nothing here drives the scroll.
+                  // ...and the step counters $1D87/$1D89, the camera's per-step phase (ct_vm.c camPut16,
+                  // +-1 per scroll step). C0/AB45 reads `$1D87 & 7` / `$1D89 & 7` as the fine part of the
+                  // screen position it writes to $0A00,X, so without them every sprite's screen X is off.
                   ms[0x1D87] = w[0x1D87]; ms[0x1D88] = w[0x1D88];
                   ms[0x1D89] = w[0x1D89]; ms[0x1D8A] = w[0x1D8A]; } }
       CtVmWmaskExclude(0x7E1D0A, 1); CtVmWmaskExclude(0x7E1D0C, 1);  // same argument
       CtVmWmaskExclude(0x7E1D0E, 1); CtVmWmaskExclude(0x7E1D10, 1);
       CtVmWmaskExclude(0x7E1D87, 2); CtVmWmaskExclude(0x7E1D89, 2);   // same argument
-      // $01D9 is a DIRECT-PAGE SCRATCH byte with many writers in one frame -- C0/5614's |velX| (5638 STA $D9),
-      // the PC loader's 44A9, the anim family's ... -- so its value at the frame boundary is whichever ROM
-      // routine ran last, an intra-frame order the port does not reproduce (measured: oracle 40 from a later
-      // writer, ours 07 from the last mover's 5614). Excluded on that argument, not because ours is right.
+      // $01D9 is a direct-page scratch byte with many writers in one frame (C0/5614's |velX| at 5638, the
+      // PC loader's 44A9, the anim family), so its value at the frame boundary depends on an intra-frame
+      // order the port does not reproduce. Excluded for that reason, not because ours is right.
       CtVmWmaskExclude(0x7E01D9, 1);
     }
-    CtVmWmaskFramePre(sc);       // shadow := our image, AFTER every harness injection
+    CtVmWmaskFramePre(sc);       // shadow := our image, after every harness injection
     CtSceneTick(sc);
-    // THE RULE (CtAudioRuleOn): the frame's SPC slice runs from its vblank to the next, and the VM's posts are at its start
-    // (the NMI's pad latch) -- the oracle's frame runs its iteration's JSLs from the vblank the state stands on -- so the
-    // slice is run AFTER the tick here, not before it.
+    // Under the rule (CtAudioRuleOn) the frame's SPC slice runs from its vblank to the next and the VM's
+    // posts are at its start (the NMI's pad latch; the oracle's frame runs its iteration's JSLs from the
+    // vblank the state stands on), so the slice runs after the tick, not before it.
     if (vdAudio && CtAudioRuleOn()) CtAudioFrame(vdAudio);
     CtVmWmaskFramePost(sc, w);   // fold this frame's RAW-pointer writes into the mask
     if (getenv("VMDIFF_CAMPROBE")) { uint8_t* MS = CtSceneMem7E(sc); static int shown = 0; int dA = MS[0x1D0A] != w[0x1D0A], dE = MS[0x1D0E] != w[0x1D0E], d87 = MS[0x1D87] != w[0x1D87], d89 = MS[0x1D89] != w[0x1D89]; if ((dA|dE|d87|d89) && shown++ < 12) printf("  [cam] f%-4d $1D0A ours=%02X ora=%02X | $1D0E %02X/%02X | $1D87 %02X/%02X | $1D89 %02X/%02X\n", f, MS[0x1D0A], w[0x1D0A], MS[0x1D0E], w[0x1D0E], MS[0x1D87], w[0x1D87], MS[0x1D89], w[0x1D89]); }
@@ -646,7 +534,7 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
         int pl, sp, ax, ay, fa; CtSceneActor(sc, i, &pl, &sp, &ax, &ay, &fa);
         uint32_t al = 0; const uint8_t* an = CtAssetGet(&a, CT_ASSET_SPRITEANIM, (uint32_t)sp, &al);
         int wlk = CtSceneActorMoving(sc, i);
-        { const char* dbgo = getenv("VMDIFF_ANIMDBG");            // TEMP-DEBUG: per-frame mirror state for one object
+        { const char* dbgo = getenv("VMDIFF_ANIMDBG");            // debug: per-frame mirror state for one object
           if (dbgo && atoi(dbgo) == i)
             fprintf(stderr, "[andbg f%d obj%d] mode=%d idx=%d il=%d loops=%d gen=%d sp=%d an=%p al=%u | vd ai=%d frame=%d delay=%d loops=%d\n",
                     f, i, mode, idx, il, loops, gen, sp, (void*)an, al, vdan[i].ai, vdan[i].frame, vdan[i].delay, vdan[i].loops); }
@@ -677,9 +565,8 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
                f, op2, w[0x1100 + x], b1b80, b0b00, t1a00, t1a01, vx, vy, w[0x1000 + x], w[0x1001 + x], w[0x1C00 + x] & 7, ox, oy);
       }
     }
-    // LIVENESS counters (see VMDIFF_BTNSCRIPT above): one step per object whose IP moved this frame,
-    // counted on BOTH machines. The oracle's is the one that matters -- if it is 0 the scene never ran
-    // and a CLEAN verdict compares two stopped machines.
+    // Liveness counters (see VMDIFF_BTNSCRIPT above): one step per object whose IP moved this frame, on
+    // both machines. If the oracle's count is 0 the scene never ran and a CLEAN verdict is vacuous.
     { int nobj = CtSceneActorCount(sc); if (nobj > 64) nobj = 64;
       for (int o = 0; o < nobj; o++) {
         int oIp2 = w[0x1180 + o * 2] | (w[0x1181 + o * 2] << 8);
@@ -711,7 +598,7 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
                bd[k].frame, bd[k].addr, bd[k].mask, bd[k].ours, bd[k].oracle, bd[k].seed);
       }
     }
-    if (oamOn) {               // OUR image -> OUR OAM, in the ROM's own persistent buffer
+    if (oamOn) {               // our image -> our OAM, in the ROM's own persistent buffer
       uint8_t* R = CtSceneMem7E(sc);
       CtBuildFieldOAM(R, R + 0x0700, R + 0x0900, NULL, NULL);   // C0/B309 stage 2, into $7E:0700/0900
       int fb = 0;
@@ -732,8 +619,7 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
     if (wmFirstF < 0) printf("  [wmask] no masked divergence over %d frames\n", frames);
     else printf("  [wmask] first masked divergence at frame %d; %d address(es) over %d frames\n",
                 wmFirstF, wmDiffs, frames);
-    // PHASE F: the unmodelled bytes, enumerated. `unmodelled` below is the count; this is the
-    // list behind it, which is what a verdict can actually be written against.
+    // VMDIFF_CENSUS: the list of unmodelled bytes behind the `unmodelled` count below.
     if (getenv("VMDIFF_CENSUS")) CtVmWmaskCensusReport(1);
     printf("  [wmask] mask %d addr / excluded %d / oracle-changed %d / unmodelled %d / dropped %d\n",
            mk, ex, oc, un, dr);
@@ -758,8 +644,8 @@ static int runVmDiff(const char* romPath, const char* statePath, const char* dat
   return (firstDivF < 0 && nd0 == 0 && sdiff == 0) ? 0 : 1;
 }
 
-// Read the packed FIELD assets (actors/collision/exits/sprite-anim/font) for a scene via
-// the C loader and summarize them — proving the C engine can drive the field ROM-free.
+// Read the packed field assets (actors/collision/exits/sprite-anim/font) for a scene via the C loader
+// and summarize them.
 static int runDatField(const char* datPath, int scene) {
   CtAssets a;
   if (!CtAssetsOpen(&a, datPath)) { printf("FAIL: cannot open '%s'\n", datPath); return 2; }
@@ -803,10 +689,10 @@ static void fbBox(uint8_t* px, int W, int H, int x0, int y0, int w, int h, int r
       if (fill || x == x0 || x == x0 + w - 1 || y == y0 || y == y0 + h - 1)
         fbPlot(px, W, H, x, y, r, g, b);
 }
-static int cSolidShape(int s, int sx, int sy) {     // byte-exact engine shape (C0/9AD3), pixel->subpixel
+static int cSolidShape(int s, int sx, int sy) {     // engine shape (C0/9AD3), pixel -> subpixel
   return CtCollisionShapeSolid(s, sx << 4, sy << 4);
 }
-static int cZSolid(int z, int pz) {                  // engine._zsolid (verified C0/9C3B)
+static int cZSolid(int z, int pz) {                  // engine._zsolid (C0/9C3B)
   if (z == 0) return 1;
   if (z == 3 || z == pz || pz == 3) return 0;
   return 1;
@@ -855,8 +741,8 @@ static void cText(uint8_t* px, int W, int H, const uint8_t* font, const char* s,
   }
 }
 
-// `ct.exe --field <dat> [--scene N] [--out f.raw]`: render a field scene + place its
-// actors + walk a player with collision + render text, ALL from ct_assets.dat (no ROM).
+// `ct.exe --field <dat> [--scene N] [--out f.raw]`: render a field scene, place its actors, walk a
+// player with collision and render text, all from ct_assets.dat (no ROM).
 static int runField(const char* datPath, int scene, const char* outPath) {
   CtAssets a;
   if (!CtAssetsOpen(&a, datPath)) { printf("FAIL: cannot open '%s'\n", datPath); return 2; }
@@ -994,8 +880,8 @@ static int runScene(const char* romPath, int index, int aframe, int full, const 
   return 0;
 }
 
-// Render a scene ENTIRELY from ct_assets.dat (no ROM) and print the pixel FNV — the
-// proof that the C engine is ROM-independent and matches the ROM-direct render.
+// Render a scene from ct_assets.dat alone (no ROM) and print the pixel FNV, to compare with the
+// ROM-direct render.
 static int runSceneFromDat(const char* datPath, int index, int aframe, int full, const char* outPath) {
   CtAssets a;
   if (!CtAssetsOpen(&a, datPath)) { printf("FAIL: cannot open assets '%s'\n", datPath); return 2; }
@@ -1020,8 +906,8 @@ static uint32_t fnv32(const uint8_t* p, size_t n) {
   return h;
 }
 
-// Verify every scene renders identically from the ROM and from ct_assets.dat, over
-// a few animation ticks — proves the .dat carries everything the engine needs.
+// Check that every scene renders identically from the ROM and from ct_assets.dat over a few
+// animation ticks.
 static int runDatVerify(const char* romPath, const char* datPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1044,8 +930,8 @@ static int runDatVerify(const char* romPath, const char* datPath) {
   return diff == 0 ? 0 : 1;
 }
 
-// Read decoded text back out of ct_assets.dat — proves the engine can consume the
-// packed dictionary / item / world / location / dialogue strings without the ROM.
+// Read decoded text back out of ct_assets.dat: the packed dictionary / item / world / location /
+// dialogue strings, without the ROM.
 static int runTextDump(const char* datPath) {
   CtAssets a;
   if (!CtAssetsOpen(&a, datPath)) { printf("FAIL: cannot open '%s'\n", datPath); return 2; }
@@ -1098,8 +984,7 @@ static int runLzTest(const char* romPath, long offset) {
   return 0;
 }
 
-// The baked GATO sheet (interim fixture) — used here ONLY as the CHECK datum that --sheetcheck diffs the
-// ROM-decompressed sheet against, per the port mandate "keep the fixtures as CHECK data".
+// The baked GATO sheet, kept only as the check datum --sheetcheck diffs the ROM-decompressed sheet against.
 #include "data/animeng_sheet_gato.h"
 
 // enemy `gfxid` -> compressed battle-sheet ROM file offset, via the chain derived in
@@ -1116,10 +1001,10 @@ static long ctSheetSrc(const uint8_t* rom, long romLen, int gfxid) {
   return ((long)(bank - 0xC0) << 16) | a16;
 }
 
-// --sheetcheck: prove the ENEMY-SHEET decompressor + pointer chain end-to-end (battle_sheet_decomp.md,
-// anim-engine O3/C5 close). For each byte-verified enemy resolve gfxid -> source, decompress with the
-// CT-LZ (lz.c), print src/size/FNV; for GATO DIFF the decompressed sheet against the baked fixture
-// (animeng_sheet_gato.h) byte-for-byte. PASS iff 4/4 chains decompress AND the GATO diff is byte-exact.
+// --sheetcheck: the enemy-sheet decompressor and pointer chain end to end (battle_sheet_decomp.md). For each
+// listed enemy resolve gfxid -> source, decompress with lz.c and print src/size/FNV; for GATO diff the
+// sheet against the baked fixture (animeng_sheet_gato.h). Passes when every chain decompresses and the
+// GATO diff is clean.
 static int runSheetCheck(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1271,8 +1156,8 @@ static int runBootCheck(const char* romPath) {
   return ok ? 0 : 1;
 }
 
-// Boot N frames in the oracle, then dump its CGRAM (512 bytes) — the real
-// palette the game loaded — for assets/palettes.py to render.
+// Boot N frames in the oracle, then dump its CGRAM (512 bytes), the palette the game loaded, for
+// assets/palettes.py to render.
 static int runDumpCgram(const char* romPath, int frames, const char* outPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1289,15 +1174,10 @@ static int runDumpCgram(const char* romPath, int frames, const char* outPath) {
   return 0;
 }
 
-// --aram [--from STATE] [--frames N] [--out FILE] [--at ADDR[+N]]: the AUDIO observation surface.
-//
-// Every other mode here looks at WRAM/VRAM/CGRAM/OAM — the CPU's world. Nothing could see the OTHER
-// processor: the SPC700's 64KB ARAM, where bank $C7 uploads the Akao sound driver over the IPL
-// handshake (disasm/notes/apu_upload.md) and where every song/SFX command lands. The C port drives the
-// SAME vendored SPC700/DSP (snes/apu.c|spc.c|dsp.c), so "did my upload/command reproduce the ROM's?"
-// is answerable only by diffing against this. Prints the SPC core state, the four APU I/O ports (the
-// command channel $2140-2143), an ARAM fingerprint, and the DSP's live voice state — the last is the
-// honest "is sound actually being PRODUCED" signal, since a correct upload with no key-ons is silence.
+// --aram [--from STATE] [--frames N] [--out FILE] [--at ADDR[+N]]: the audio observation surface. Prints
+// the SPC700 core state, the four APU I/O ports (the command channel $2140-2143), an ARAM fingerprint and
+// the DSP's live voice state (a correct upload with no key-ons is silence). Bank $C7 uploads the sound
+// driver into ARAM over the IPL handshake (disasm/notes/apu_upload.md).
 static int runAramDump(const char* romPath, const char* statePath, int frames,
                        const char* outPath, const char* atSpec) {
   uint8_t* rom = NULL;
@@ -1362,16 +1242,10 @@ static int runAramDump(const char* romPath, const char* statePath, int frames,
   return 0;
 }
 
-// --audiotest: does the C port's bank-$C7 sound-driver upload (src/audio.c) reproduce the ORACLE's?
-//
-// The acceptance test from disasm/notes/audio_boot.md §7: run both uploads, then slice the SIX
-// per-block ARAM destination ranges out of each side and compare them byte for byte. Only those
-// 13884 bytes are the upload's product -- the rest of ARAM is the driver's own runtime state (stack,
-// sequencer scratch, echo buffer), which diverges the instant the driver starts executing, so
-// comparing all 64KB would be comparing the emulator against itself plus noise.
-//
-// The block tables are read from the ROM here too ($C7:0010 / $C7:001C), so this check would catch a
-// port that hardcoded them and a ROM whose tables differ.
+// --audiotest: does the port's bank-$C7 driver upload (src/audio.c) reproduce the oracle's? As in
+// disasm/notes/audio_boot.md sec. 7, run both uploads and compare only the six per-block ARAM destination
+// ranges: the rest of ARAM is the driver's runtime state (stack, sequencer scratch, echo buffer).
+// The block tables are read from the ROM ($C7:0010 / $C7:001C), so a port that hardcoded them is caught.
 static int runAudioTest(const char* romPath, int frames) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1413,24 +1287,17 @@ static int runAudioTest(const char* romPath, int frames) {
          pin[0], pin[1], pin[2], pin[3], pout[0], pout[1], pout[2], pout[3],
          s->apu->inPorts[0], s->apu->inPorts[1], s->apu->inPorts[2], s->apu->inPorts[3]);
   printf("audiotest: %s\n", mism == 0 ? "PASS -- the $C7 upload is byte-exact vs the oracle" : "FAIL");
-  // The comparison window is real and bounded: the oracle's upload COMPLETES around frame 23, and by
-  // ~frame 28 its driver has executed long enough to mutate its own scratch INSIDE the uploaded region
-  // (measured: 0 mismatch at frames 23-27; 14 at f30; 22 from f40; 15 at f300 -- every one of them in
-  // block 0 from ARAM $109B up). That is the driver WORKING, not an upload defect, so the check samples
-  // mid-window at 25 unless --frames overrides. Comparing later compares runtime state, not the upload.
+  // The comparison window is bounded: the oracle's upload completes around frame 23, and from about
+  // frame 28 its driver mutates its own scratch inside the uploaded region (block 0, from ARAM $109B up).
+  // So the check samples at frame 25 unless --frames overrides it.
   CtAudioFree(a);
   CtOracleDestroy(s); free(rom);
   return mism == 0 ? 0 : 1;
 }
 
-// --songdirs [--from STATE]: prove the port's SONG DIRECTORY against the oracle's ARAM.
-//
-// The directory (src/audio.c) resolves a song id to its ROM blocks through bank $C7's eight tables.
-// If that resolution is wrong, a ported loader would stream plausible-looking garbage into ARAM and
-// produce SILENCE with no visible symptom -- so it gets proven before any loader is written, the
-// same way the $C7 IPL upload was. The proof is the strongest one available: the oracle has already
-// performed the load, so its ARAM $2000 holds the sequence the ROM chose. Ours must be that, byte
-// for byte, with the LENGTH taken from the block's own header (never from a table).
+// --songdirs [--from STATE]: check the port's song directory (src/audio.c), which resolves a song id to
+// its ROM blocks through bank $C7's eight tables, against the oracle's ARAM: the sequence at ARAM $2000
+// must be one song's block, with the length taken from the block's own header.
 static int runSongDirs(const char* romPath, const char* statePath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1450,13 +1317,10 @@ static int runSongDirs(const char* romPath, const char* statePath) {
 
   int rc = (seqOk == nsong && instOk == ninst) ? 0 : 1;
   if (statePath) {
-    // THE PROOF. Do NOT assume $7E29AE names the resident song -- it does NOT. $29AE is the SHADOW,
-    // i.e. what to RESTORE (C0/1B59 re-uses it on a return, C0/1C2E replays it after a battle), and
-    // it diverges from ARAM whenever a location declines to set a song or a battle is in progress.
-    // Measured: bedslide's shadow reads $0F and gato_press_action's $42, yet BOTH have song $06
-    // resident. So the assertion is the honest one -- search EVERY song and require that exactly one
-    // matches the oracle's ARAM $2000 byte for byte, with the length from the block's own header.
-    // That proves the id -> ROM-block resolution without presuming which id happens to be loaded.
+    // $7E29AE does not name the resident song: it is the shadow, what to restore (C0/1B59 reuses it on a
+    // return, C0/1C2E replays it after a battle), and it differs from ARAM when a location sets no song or
+    // a battle is in progress. So search every song and require exactly one to match ARAM $2000, with the
+    // length from the block's own header.
     uint8_t* r2 = NULL;
     Snes* st2 = ctLoadStateOracle(romPath, statePath, &r2);
     if (st2) {
@@ -1482,26 +1346,15 @@ static int runSongDirs(const char* romPath, const char* statePath) {
   return rc;
 }
 
-// --songload <songId> [--from STATE]: run the PORTED song loader and diff the resulting ARAM
-// against the oracle's.
-//
-// This is the acceptance test for $C7:01A1. The port boots its own SPC700 (the $C7 IPL upload,
-// already pinned byte-exact), seeds the $1E00 page as the upload tail does, then issues the song
-// through the same mailbox the game uses. If the loader is right, the regions the ROM writes --
-// the sequence at $2000, the DSP sample directory at $1E80, the two parameter blocks at $1F40 /
-// $1FC0, the per-song block at $F120, and the BRR heap from $4901 up -- must match a state in
-// which the oracle loaded the same song.
-//
-// Regions are compared SEPARATELY and reported separately, because a partial match localises the
-// defect: a good heap with a bad directory means the DIFF allocator works and $037B does not.
-//
-// ⚠ A SINGLE COLD LOAD CANNOT REACH THE ALLOCATOR'S INTERESTING STATE. The instrument-set heap only
-// fragments when one song EVICTS a set another song left behind, so every id loaded on a fresh
-// SPC700 finds firstFree == lastOcc+1 and the `$C7:025A` defragmenter boundary is UNREACHABLE. That
-// is the arm-unreachable blindness class at the level of the CHECK rather than the seed grid: this
-// mode reported PASS on ten songs in a row while never once exercising the path it exists to guard.
-// `--songload A,B,C` therefore runs a SEQUENCE against one SPC700 and prints the allocator's
-// occupancy after each load, so fragmentation is OBSERVED rather than inferred.
+// --songload <songId>[,id...] [--from STATE]: run the ported song loader ($C7:01A1) and diff the ARAM
+// against the oracle's. The port boots its own SPC700 (the $C7 IPL upload), seeds the $1E00 page as the
+// upload tail does and issues the song through the game's mailbox. The regions the ROM writes are
+// compared and reported separately, so a partial match localises the defect: the sequence at $2000, the
+// DSP sample directory at $1E80, the parameter blocks at $1F40 / $1FC0, the per-song block at $F120 and
+// the BRR heap from $4901.
+// Note: a single cold load never fragments the instrument-set heap, so the `$C7:025A` defragmenter is
+// unreachable from one id. `--songload A,B,C` runs a sequence on one SPC700 and prints the allocator's
+// occupancy after each load.
 static int runSongLoad(const char* romPath, const char* songSpec, const char* statePath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1520,20 +1373,15 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
   static uint8_t mem[0x20000];
   memset(mem, 0, sizeof mem);
   CtAudioSeedMailboxPage(a, mem);
-  // CT_SONGLOAD_SEEDPAGE=1 with --from: run the loader on the ORACLE'S OWN driver page ($1E00-$1FFF: the
-  // resident-set tables $1E20/$1E40/$1E60, the echo delay $1EF0, the mode $1E10...) instead of a cold one,
-  // so its transfer DECISIONS can be compared with what the oracle streamed from that state. Without it
-  // every id loads from an empty table -- 8 sample blocks for song $18 where the oracle, with sets $1F and
-  // $2C already resident at the scene-8 pendant, streamed 6 -- and the unit count is the cold one. The
-  // $81 stop/prepare pre-post below is the FIELD LOADER's (C0/1B5F); the event op EA (C0/3C2F) posts $10
-  // straight away, so the seeded run skips it too.
-  // CT_SONGLOAD_MODE=1 charges the BATTLE engine's per-frame background (NMI+DMA, eight HDMA channels)
-  // instead of the field's; CT_SONGLOAD_LINE=<n> is the raster line the JSL begins on (default 12).
+  // CT_SONGLOAD_SEEDPAGE=1 with --from: run the loader on the oracle's own driver page ($1E00-$1FFF: the
+  // resident-set tables $1E20/$1E40/$1E60, the echo delay $1EF0, the mode $1E10) instead of a cold one, so
+  // its transfer decisions can be compared with what the oracle streamed from that state. The $81 pre-post
+  // below is the field loader's (C0/1B5F); event op EA (C0/3C2F) posts $10 directly, so the seeded run
+  // skips it too. CT_SONGLOAD_MODE / CT_SONGLOAD_LINE: see docs/DEBUG_SURFACE.md.
   if (getenv("CT_SONGLOAD_MODE")) CtAudioSetEngineMode(a, atoi(getenv("CT_SONGLOAD_MODE")));
   if (getenv("CT_SONGLOAD_LINE")) CtAudioSetPostLine(a, atoi(getenv("CT_SONGLOAD_LINE")));
-  // CT_SONGLOAD_RULEPOST=<postAt>,<nmiWait>[,<irqLine>] (the rule, CtAudioRuleOn): where the CPU posts, master cycles past
-  // the vblank, how long each NMI met while it waits holds its poll, and the V-IRQ line whose H-blank wait it meets (211:
-  // the field's C0/ECCC) -- the caller's side of CtAudioSetRulePost / CtAudioSetRuleIrq.
+  // CT_SONGLOAD_RULEPOST=<postAt>,<nmiWait>[,<irqLine>]: the caller's side of CtAudioSetRulePost /
+  // CtAudioSetRuleIrq under the rule (docs/DEBUG_SURFACE.md).
   { const char* rp = getenv("CT_SONGLOAD_RULEPOST"); long pa = 0, nw = 0; int il = -1;
     if (rp && sscanf(rp, "%ld,%ld,%d", &pa, &nw, &il) >= 2) { CtAudioSetRulePost(a, pa, nw); CtAudioSetRuleIrq(a, il); } }
   int seededPage = 0;
@@ -1547,16 +1395,14 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
               printf("songload: driver page $1E00-$1FFF seeded from %s (no $81 pre-post)\n", statePath); }
   }
 
-  // C0/1B5F-1B73 sends cmd $81 (00,FF,FF) -- "stop / prepare" -- BEFORE the play command, on every
-  // location load. Skipping it is not a shortcut: some songs then load into ARAM correctly and never
-  // start ($01 and $1E did exactly that, while $06 happened to start anyway).
+  // C0/1B5F-1B73 sends cmd $81 (00,FF,FF), "stop / prepare", before the play command on every location
+  // load. Without it some songs load into ARAM but never start ($01, $1E).
   if (!seededPage) { mem[0x1E01] = 0x00; mem[0x1E02] = 0xFF; mem[0x1E03] = 0xFF; mem[0x1E00] = 0x81;
     CtAudioService(a, mem); }
   mem[0x1E01] = (uint8_t)songId;
   mem[0x1E00] = 0x10;                                   // the field play command (C0/1B86)
-  // Call the loader DIRECTLY, not through CtAudioService: the service gates song commands off by
-  // default (CT_AUDIO_SONGLOAD) precisely because this check still fails, and routing the check
-  // through that gate would have it measure an all-zero ARAM and report a meaningless verdict.
+  // Call the loader directly, not through CtAudioService: the service gates song commands off by default
+  // (CT_AUDIO_SONGLOAD), and through that gate this check would measure an all-zero ARAM.
   int rc = 0;
   for (int q = 0; q < nseq; q++) {
     mem[0x1E01] = (uint8_t)seq[q];
@@ -1567,10 +1413,10 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
       uint8_t cmd = (uint8_t)(ec ? strtol(ec, NULL, 16) : 0x10);
       if (e10) mem[0x1E10] = (uint8_t)strtol(e10, NULL, 16);
       mem[0x1E01] = (uint8_t)seq[q]; mem[0x1E00] = cmd;
-      rc = CtAudioService(a, mem); }                     // through the service, so the loader CLOCK brackets it
-    // The occupancy AFTER each load is what says whether the heap fragmented. firstFree is the
-    // first zeroed slot in $1E20 and lastOcc the last non-zero one; the ROM's own precondition for
-    // skipping the defragmenter is firstFree == lastOcc + 1, so any other pair means a HOLE.
+      rc = CtAudioService(a, mem); }                     // through the service, so the loader clock brackets it
+    // The occupancy after each load says whether the heap fragmented. firstFree is the first zeroed slot
+    // in $1E20 and lastOcc the last non-zero one; the ROM skips the defragmenter when firstFree ==
+    // lastOcc + 1, so any other pair means a hole.
     int firstFree = 0, lastOcc = -1;
     while (firstFree < 16 && (mem[0x1E20 + firstFree * 2] | (mem[0x1E21 + firstFree * 2] << 8)))
       firstFree++;
@@ -1588,16 +1434,11 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
   printf("songload: song $%02X service rc=%d  $1E05=%02X $1E84=%02X $1EF0=%02X $1EF2=%02X $1EF6=%04X\n",
          songId, rc, mem[0x1E05], mem[0x1E84], mem[0x1EF0], mem[0x1EF2],
          mem[0x1EF6] | (mem[0x1EF7] << 8));
-  // ---- THE HEAP INVARIANT, checked against the ROM rather than against a second oracle state.
-  //
-  // A sequence has no cold-boot oracle to diff against -- the whole point is that other sets are
-  // still resident -- so without this the mode would print PASS having compared NOTHING, which is
-  // exactly what it did before the sequence support existed. Two things must hold after any load,
-  // and together they say the SPC700 really moved the bytes where the tables claim:
-  //   1. the slots are CONTIGUOUS: $1E60[s+1] == $1E60[s] + $1E40[s]
-  //   2. the ARAM at $1E60[s] for $1E40[s] bytes IS the ROM's own sample block for id $1E20[s]
-  // The second is the load-bearing one. A defragmenter that updated the tables but failed to make
-  // the driver move the samples satisfies (1) and fails (2) on every slot it shifted.
+  // ---- The heap invariant, checked against the ROM ----
+  // A sequence has no cold-boot oracle state to diff against, so two things are checked after every load:
+  //   1. the slots are contiguous: $1E60[s+1] == $1E60[s] + $1E40[s]
+  //   2. the ARAM at $1E60[s] for $1E40[s] bytes is the ROM's own sample block for id $1E20[s]
+  // A defragmenter that updated the tables but did not move the samples passes (1) and fails (2).
   int invBad = 0, invSlots = 0;
   { const uint8_t* ar = CtAudioAram(a);
     for (int sl = 0; sl < 16; sl++) {
@@ -1626,12 +1467,9 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
         invBad++;
       }
     }
-    // ⚠ AND THE DENOMINATOR ITSELF HAS TO BE CHECKED. "0 violations over 0 resident slots" is what
-    // a TOTAL COLLAPSE looks like, and it reads exactly like success: mutating the command byte
-    // away ($07 -> nothing, or -> $06) makes the driver refuse, the rebuild path wipes the tables,
-    // and the loop above then has nothing to disagree with. So assert the thing that must be true
-    // after ANY successful load -- every instrument in the song's OWN set ($1F00, which the loader
-    // fills) is resident in $1E20. That is the fact a collapse destroys first.
+    // Note: the denominator is checked too. "0 violations over 0 resident slots" is what a total collapse
+    // looks like (a driver that refuses the command and a rebuild that wipes the tables), so assert that
+    // every instrument in the song's own set ($1F00, filled by the loader) is resident in $1E20.
     int want = 0, missing = 0;
     for (int k = 0; k < 16; k++) {
       unsigned id = (unsigned)(mem[0x1F00 + k * 2] | (mem[0x1F01 + k * 2] << 8));
@@ -1653,11 +1491,9 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
            " %d violation(s)\n", invSlots, want - missing, want, songId, invBad);
   }
 
-  // SNAPSHOT THE ARAM BEFORE RUNNING A SINGLE FRAME. The driver mutates its own working areas the
-  // instant it is released -- the $1E80 directory, the $1F40/$1FC0 parameter blocks and the sequence
-  // cursor are all LIVE state -- so comparing after even a few frames measures the driver running,
-  // not the upload. (Same trap the $C7 IPL check documents: byte-exact at frames 23-27, divergent
-  // by f30.) The voice count below is deliberately a SEPARATE, later sample.
+  // Snapshot the ARAM before running a single frame: once released the driver mutates its working areas
+  // (the $1E80 directory, the $1F40/$1FC0 parameter blocks, the sequence cursor), so a later compare would
+  // measure the driver running, not the upload. The voice count below is a separate, later sample.
   static uint8_t snap[0x10000];
   memcpy(snap, CtAudioAram(a), 0x10000);
   for (int f = 0; f < 120; f++) CtAudioFrame(a);         // let the driver pick the sequence up
@@ -1712,9 +1548,8 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
       CtOracleDestroy(s); free(r2);
     }
   }
-  // ⚠ THE VERDICT MUST NAME WHAT IT COMPARED. Without --from there is no oracle ARAM in play at
-  // all, and the old wording ("reproduces the oracle ARAM") was printed anyway -- a PASS asserting
-  // a comparison that never ran. It now says which evidence it actually has.
+  // The verdict names what it compared: without --from there is no oracle ARAM in play, so it says which
+  // evidence it has.
   int okAll = (rc == 1 && bad == 0 && invBad == 0);
   printf("songload: %s\n",
          !okAll                ? "FAIL"
@@ -1725,8 +1560,8 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
   return okAll ? 0 : 1;
 }
 
-// Boot N frames, then dump the rendered framebuffer (512x480, 4 B/px, byte layout [pad,B,G,R] -- read R=+3,G=+2,B=+1) — the actual
-// on-screen image — for assets/palettes.py to convert to PNG.
+// Boot N frames, then dump the rendered framebuffer (512x480, 4 B/px, byte layout [pad,B,G,R]: R=+3, G=+2,
+// B=+1) for assets/palettes.py to convert to PNG.
 /* ROM-boot drive: HarnessDriveScript in harness_drive.c */
 static int runDumpFb(const char* romPath, int frames, int script, const char* outPath) {
   int len = 0;
@@ -1768,7 +1603,7 @@ static int runDumpFb(const char* romPath, int frames, int script, const char* ou
   return 0;
 }
 
-// Boot N frames, then dump the oracle's VRAM (64 KB) — the loaded tile data.
+// Boot N frames, then dump the oracle's VRAM (64 KB), the loaded tile data.
 static int runDumpVram(const char* romPath, int frames, const char* outPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1785,9 +1620,9 @@ static int runDumpVram(const char* romPath, int frames, const char* outPath) {
   return 0;
 }
 
-// Boot N frames, then dump the oracle's global story flags ($7F0000-$7F0200, 0x200 bytes)
-// — the event/storyline bits the field scripts gate NPC placement on. The Python field
-// engine seeds these (SceneEngine gmem) so a scene populates at the REAL game state.
+// Boot N frames, then dump the oracle's global story flags ($7F0000-$7F0200, 0x200 bytes), the event bits
+// the field scripts gate NPC placement on. The Python field engine seeds these (SceneEngine gmem) so a
+// scene populates at a real game state.
 static int runDumpFlags(const char* romPath, int frames, const char* outPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1830,10 +1665,10 @@ static int runPlayFlags(const char* romPath, int frames, const char* outPath) {
   return 0;
 }
 
-// Port + validate STAGE 1 (the field sprite engine, C0/B788): for each live sprite object,
-// recompute the assembled OAM bytes (finalX/finalY per OBJ tile + the high byte) from the
-// object's X/Y ($0A00/$0A80) + the per-tile offset template ($7F4Bxx), and compare to the
-// oracle's assembled values ($7F4BC0[0]/[1] + $7F4F00) byte-for-byte over many gameplay frames.
+// --checkstage1: stage 1 of the field sprite engine (C0/B788). For each live sprite object recompute the
+// assembled OAM bytes (finalX/finalY per OBJ tile + the high byte) from its X/Y ($0A00/$0A80) and the
+// per-tile offset template ($7F4Bxx), and compare them with the oracle's ($7F4BC0[0]/[1] + $7F4F00) over
+// many gameplay frames.
 static int runCheckStage1(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1912,10 +1747,9 @@ static int runCheckPrio(const char* romPath) {
         int p = r[0x0F80 + idx];
         int e0, e1;
         if (p & 0x80) {                                  // bit7 set: tilemap-cell priority (C0/AE0D)
-          // NOTE: $0C00/$0C01 here are STATEFUL + event-driven -- the velocity handler recomputes them
-          // only at a step-issue (from the tentative cell ((world+vel)>>8) at that frame) and they
-          // persist between; idle actors keep an init/last-move value. A stateless recompute can't
-          // match those (the residual below) -- porting them needs the move-handler's step timing.
+          // Note: $0C00/$0C01 are stateful: the velocity handler recomputes them only at a step issue (from
+          // the tentative cell ((world+vel)>>8) of that frame) and idle actors keep their last value, so a
+          // stateless recompute leaves the residual below; matching it needs the move handler's step timing.
           int cell = (((r[0x1881 + idx] << 8) | r[0x1801 + idx]) & mask);
           if (0x7000 + cell >= 0x10000 || 0x7040 + cell >= 0x10000) continue;
           e0 = ((r[0x7000 + cell] & 0x40) >> 2) | 0x20;
@@ -1942,12 +1776,10 @@ static int ctSignedMulShift(int sp, int t) {
   return t < 0 ? -m : m;
 }
 
-// Validate the C move-step handler CtActorMoveStep (the 0xA0 step-issue, C0/5129) statefully: at each
-// frame, for every 0xA0 actor whose counter was 0 last frame (so a fresh step issues this frame), run
-// the C handler over the PREVIOUS frame's WRAM (= the handler's input state) and assert its outputs
-// match the oracle this frame -- velocity $1900/$1980 (set at the step + persists), priority
-// $0C00/$0C01 (persists), and the reloaded counter $1A01 (= move-duration $1000, less the one
-// integration decrement). Proves the step-issue handler byte-exact ahead of wiring it into the tick.
+// --checkstep: the move-step handler CtActorMoveStep (the 0xA0 step issue, C0/5129), checked statefully.
+// For every 0xA0 actor whose counter was 0 last frame, run the handler over the previous frame's WRAM (its
+// input) and compare its outputs with the oracle this frame: velocity $1900/$1980, priority $0C00/$0C01 and
+// the reloaded counter $1A01 (the move duration $1000, less the one integration decrement).
 static int runCheckStep(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -1970,8 +1802,8 @@ static int runCheckStep(const char* romPath) {
         if (oa + 2 >= 0x20000 || prev[oa] != 0xA0) continue;     // only the 0xA0 move-to-target command
         if (prev[0x1A01 + idx] != 0) continue;                    // a step issues only when the counter was 0
         if (r[0x1A01 + idx] == 0) continue;                       // ...and the oracle actually reloaded it this
-                                                                  // frame = a real step-issue (else it was idle /
-                                                                  // not scheduled this frame; the scheduler is STEP 4)
+                                                                  // frame = a real step issue (else it was idle /
+                                                                  // not scheduled this frame; see --porttick)
         memcpy(work, prev, 0x20000);                              // the handler's input = the previous frame
         if (CtActorMoveStep(work, rom, idx)) continue;            // arrived (no step) -> skip
         issues++;
@@ -1996,13 +1828,11 @@ static int runCheckStep(const char* romPath) {
 }
 
 static int ctSchedQualifies(const uint8_t* cram, int idx);
-// STEP 4: the STATEFUL autonomous movement tick. The C port owns a 0xA0 actor's movement state from
-// a step-issue through arrival: each frame it runs CtActorMoveStep (yield / re-issue) + the AAFD
-// integration over its OWN maintained state (not copied from the oracle), with the un-owned inputs
-// (script IP, target, speed, tilemap) stubbed from the oracle. This proves the move tick runs
-// autonomously in C (the step-issue + integration loop) and stays byte-exact vs the oracle. Ownership
-// starts on a real step-issue (oracle reloaded the counter) -- "when to start" is the scheduler,
-// deferred -- and ends on arrival / opcode change / any divergence.
+// --porttick: the stateful movement tick. The port owns a 0xA0 actor's movement state from a step issue
+// through arrival: each frame it runs CtActorMoveStep (yield / re-issue) and the AAFD integration over its
+// own state, with the inputs it does not own (script IP, target, speed, tilemap) taken from the oracle.
+// Ownership starts on a real step issue (the oracle reloaded the counter) and ends on arrival, an opcode
+// change or any divergence.
 static int runPortTick(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2024,17 +1854,14 @@ static int runPortTick(const char* romPath) {
     for (int idx = 0; idx < 0x80; idx += 2) if (own[idx]) for (int k = 0; k < 9; k++) cram[OFF[k] + idx] = sav[idx][k];
     int arrived[0x80]; for (int i = 0; i < 0x80; i++) arrived[i] = 0;
     for (int idx = 0; idx < 0x80; idx += 2) if (own[idx]) {  // C tick: step-issue then integration (AAFD)
-      // The ROM only reaches the op handler when C0/59D9 QUALIFIES the actor. This mode used to
-      // call the step-issue unconditionally every frame, which is why it issued moves the oracle
-      // did not -- every residual line showed the port with a ticket where the oracle had none.
+      // The ROM reaches the op handler only when C0/59D9 qualifies the actor.
       if (ctSchedQualifies(cram, idx) && CtActorMoveStep(cram, rom, idx)) arrived[idx] = 1;
-      // C0/A81E-A82A, the REAL four-arm dispatch. `st < 3` -> AAFD; `st == 8` -> the object is
-      // skipped entirely; `st == 7` -> C0/A947, which touches $0F00 and NOT the position, so for a
-      // position check skipping the integrate IS its behaviour; EVERYTHING ELSE -- 3..6 and also
-      // st >= 9 and the bit7 states -- reaches AA07. `st >= 3 && st <= 6` was a narrowed reading.
+      // C0/A81E-A82A, the four-arm dispatch: `st < 3` -> AAFD; `st == 8` -> skipped; `st == 7` -> C0/A947,
+      // which touches $0F00 but not the position, so skipping the integrate is its behaviour here;
+      // everything else (3..6, st >= 9 and the bit-7 states) reaches AA07.
       int st = cram[0x1100 + idx];
       if (st == 8 || st == 7) { /* A822 / A826: no position change */ }
-      else if (st >= 3) CtActorIntegrate(cram, idx);       // A82A JSR C0/AA07 -- WITH the tile clamp
+      else if (st >= 3) CtActorIntegrate(cram, idx);       // A82A JSR C0/AA07, with the tile clamp
       else if (cram[0x1A01 + idx]) {                       // A870 JSR C0/AAFD, the plain add
         cram[0x1A01 + idx]--;
         int x = (cram[0x1800 + idx] | (cram[0x1801 + idx] << 8)) + (int8_t)cram[0x1900 + idx];
@@ -2079,50 +1906,40 @@ static int runPortTick(const char* romPath) {
   return (chk > 0 && ok == chk) ? 0 : 1;
 }
 
-// C0/59D9's QUALIFY condition -- the scheduler gate. DP = $1000 throughout that routine, so its
-// `$00,X` / `$01,X` are $1000,X / $1001,X:
-//   59EE  $1000,X bit7 SET      -> paused, skip
+// C0/59D9's qualify condition, the scheduler gate. DP = $1000 throughout that routine, so its `$00,X` /
+// `$01,X` are $1000,X / $1001,X:
+//   59EE  $1000,X bit7 set      -> paused, skip
 //   59F2  $1001,X == 0          -> qualifies
 //   59F6  --$1001,X == 0        -> qualifies (the countdown lands this frame)
-//   5A04  $1100,X == 0          -> a DIFFERENT arm (5A31), not this one
-//   5A06  $1100,X bit7 SET      -> skip
+//   5A04  $1100,X == 0          -> a different arm (5A31), not this one
+//   5A06  $1100,X bit7 set      -> skip
 //   5A08  X == $0175            -> skip
-//   5A0F  $1080,X bit7 CLEAR    -> skip
-// The harness does NOT perform 59F4's `DEC $01,X`: $1001 is not in OFF[], so it is re-fed from the
-// oracle every frame and the value read here is the one BEFORE this frame's decrement -- which makes
-// `<= 1` exactly "already 0, or reaches 0 now".
-// $0175 and $1080 were measured on bedslide / DEMO8_gtu / S5_gtu: $0175 = $80 (a "none" sentinel,
-// past any real object index) and $1080,X = $80 on every object, so both are inert THERE. They are
-// modelled anyway because a state that clears $1080 would otherwise silently over-run the port.
+//   5A0F  $1080,X bit7 clear    -> skip
+// The harness does not perform 59F4's `DEC $01,X`: $1001 is re-fed from the oracle every frame, so the
+// value read here is the one before this frame's decrement and `<= 1` means "already 0, or reaches 0 now".
+// $0175 ($80, a "none" sentinel) and $1080,X ($80 on every object) are inert on the captured states but
+// modelled, so a state that clears $1080 is still handled.
 static int ctSchedQualifies(const uint8_t* cram, int idx) {
   if (cram[0x1000 + idx] & 0x80) return 0;                                   // 59EE
   if (cram[0x1001 + idx] > 1) return 0;                                      // 59F2 / 59F6
   int st = cram[0x1100 + idx];
   if (st & 0x80) return 0;                                                   // 5A06
-  // ONE QUEUE, TWO INSERTION ENDS -- an earlier comment here called them two queues, which the
-  // consumer refutes: C0/5A46 pops a single list, `5A66 LDA $74 / BMI ->5A90` for empty and
-  // `5A6D CMP $75` for the last element, so $0174 is its HEAD and $0175 its TAIL. Reading 5A04's
-  // `BEQ ->5A31` as "skip" was the original defect: a state-0 object does not skip, it jumps the
-  // queue by inserting at the HEAD (5A3B `STA $80,X` / 5A3D `STX $0174`), while 5A11 appends at the
-  // TAIL. Same shape as C0/C98A's $0176/$0177 pair, which CtAnimTimerTick already models as
-  // front-vs-tail. The head arm has no $1080 precondition and RELOADS the cadence
-  // (`LDA $00,X / STA $01,X`). $1080,X is the LINK field, not a flag: bit7 set means "not currently
-  // in the list", the convention the draw list uses for $0E01.
+  // One queue with two insertion ends: C0/5A46 pops a single list (`5A66 LDA $74 / BMI ->5A90` for empty,
+  // `5A6D CMP $75` for the last element), so $0174 is its head and $0175 its tail. A state-0 object (5A04
+  // `BEQ ->5A31`) does not skip: it inserts at the head (5A3B `STA $80,X` / 5A3D `STX $0174`), while 5A11
+  // appends at the tail, as C0/C98A's $0176/$0177 pair does (CtAnimTimerTick). The head arm has no $1080
+  // precondition and reloads the cadence (`LDA $00,X / STA $01,X`). $1080,X is the link field: bit 7 set
+  // means "not in the list", the draw list's convention for $0E01.
   if (st == 0) return idx != cram[0x0174];                                   // 5A31 / 5A34
   if (idx == cram[0x0175]) return 0;                                         // 5A08
   if (!(cram[0x1080 + idx] & 0x80)) return 0;                                // 5A0F
   return 1;
 }
 
-// --portrun's WRITER PROBE. PORTRUN_HOOKW=<hex WRAM addr> [PORTRUN_HOOKF=<lo>-<hi>] reports, per
-// opcode, every ROM write that CHANGES the watched byte, with the writer PC and the four inputs
-// C0/CB3A's frame lookup reads ($1600 facing / $1680 mode / $1681 phase / $1601 timer) on BOTH sides.
-// It lives inside --portrun's own stepping loop rather than in a standalone mode for one reason: the
-// oracle here is reached through HarnessDriveScript and driven by this loop's own d-pad schedule, so
-// the frame numbering in a divergence line and the frame numbering in the probe are THE SAME COUNTER.
-// A separate --from probe would have to reproduce both, and the last time a probe had to reproduce a
-// scenario by hand it manufactured a false result (bedslide.state ran 192 clean frames while the
-// defect it was meant to catch lived only in this driver).
+// --portrun's writer probe. PORTRUN_HOOKW=<hex WRAM addr> [PORTRUN_HOOKF=<lo>-<hi>] reports, per opcode,
+// every ROM write that changes the watched byte, with the writer PC and the four inputs C0/CB3A's frame
+// lookup reads ($1600 facing / $1680 mode / $1681 phase / $1601 timer) on both sides. It lives inside
+// --portrun's stepping loop so that the probe and the divergence lines count frames with the same counter.
 static struct { int addr, lo, hi, on, idx; uint8_t prev; } g_prHook = { -1, 0, 0, 0, 0, 0 };
 static void ctPortrunHookInit(void) {
   const char* a = getenv("PORTRUN_HOOKW");
@@ -2135,21 +1952,19 @@ static void ctPortrunHookInit(void) {
   printf("portrun: WRITER PROBE on $%05X (idx %02X) over frames %d..%d\n",
          g_prHook.addr, g_prHook.idx, g_prHook.lo, g_prHook.hi);
 }
-// The SIX bytes C0/CB3A reads, printed identically for the oracle and the port so the two vectors can
-// be diffed by eye. $1480/$1500/$1680 are NOT in --portrun's owned set, so the port takes them from
-// the memcpy of the oracle's END-of-previous-frame state -- if the ROM moves any of them mid-frame,
-// the port reads a stale one, and this is the print that shows it.
+// The six bytes C0/CB3A reads, printed the same way for the oracle and the port. $1480/$1500/$1680 are not
+// in --portrun's owned set, so the port takes them from the oracle's end-of-previous-frame state; if the
+// ROM moves one mid-frame, this print shows the stale value.
 static void ctPrLookupVec(const char* who, const uint8_t* m, int i, int extra) {
   printf("%s[cfg%02X fc%02X 1480=%04X 1500=%04X ph%02X mod%02X]", who,
          m[0x1780 + i], m[0x1600 + i], m[0x1480 + i] | (m[0x1481 + i] << 8),
          m[0x1500 + i] | (m[0x1501 + i] << 8), m[0x1681 + i], m[0x1680 + i]);
   if (extra >= 0) printf(" fb=%02X", extra);
 }
-// PORTRUN_OPTRACE=<hex obj idx> -- tally every VM opcode the ORACLE dispatches for that object.
-// The dispatch is `5AB1 JSR ($5D6E,X)` with X = opcode*2 and $6D already latched at 5A9C, so a single
-// PC hook reads both. This answers "what would the port have to execute in order to FOLLOW this
-// actor", which is NOT the same question as "what does the port trap on": an actor the port never
-// CLAIMS never traps at all, and the player is exactly that case before f254.
+// PORTRUN_OPTRACE=<hex obj idx>: tally every VM opcode the oracle dispatches for that object. The dispatch
+// is `5AB1 JSR ($5D6E,X)` with X = opcode*2 and $6D already latched at 5A9C, so one PC hook reads both.
+// This lists what the port would have to execute to follow the actor, which differs from what it traps
+// on: an actor the port never claims never traps.
 static int g_opTrace = -2, g_opHist[256], g_opFirst[256], g_opLast[256];
 static void ctOpTraceStep(Snes* s, int f, int pc) {
   if (g_opTrace == -2) {
@@ -2163,10 +1978,9 @@ static void ctOpTraceStep(Snes* s, int f, int pc) {
   if (!g_opHist[op]) g_opFirst[op] = f;
   g_opLast[op] = f;
   g_opHist[op]++;
-  // The TALLY alone cannot answer "how many opcodes did this visit run", which is the only question
-  // that distinguishes a wrong budget from a wrong handler. With PORTRUN_HOOKF set, print the
-  // SEQUENCE inside that window, carrying the ROM's own budget pair: $0167 is the live counter and
-  // $0168 its reload (5A93 LDA $68 / 5A95 STA $67), both DP-relative with DP = $0100.
+  // The tally cannot say how many opcodes a visit ran, which separates a wrong budget from a wrong
+  // handler. With PORTRUN_HOOKF set, print the sequence inside that window with the ROM's budget pair:
+  // $0167 is the live counter and $0168 its reload (5A93 LDA $68 / 5A95 STA $67), DP = $0100.
   if (f >= g_prHook.lo && f <= g_prHook.hi && g_prHook.addr >= 0)
     printf("  DISP   f%-3d op %02X  $0167=%02X $0168=%02X\n", f, op, s->ram[0x0167], s->ram[0x0168]);
 }
@@ -2175,18 +1989,14 @@ static void ctPortrunHookStep(Snes* s, const uint8_t* cram, int f, int bk, int p
   if (!g_prHook.on) return;
   const uint8_t* r0 = s->ram; int i0 = g_prHook.idx;
   // Entry hooks: C0/CB3A is the frame lookup, C0/CA76 the FIFO drain, C0/CAD9 the drain's per-object
-  // visit. `$6D` is the object index every one of them reads, so filtering on it isolates the player.
-  // C0/A810 and C0/00D3 are hooked WITHOUT the $6D filter: $6D is not yet set when they are
-  // entered, and the question they answer is whether the movement loop ran AT ALL this frame.
-  // THE STAGE HEADS OF THE FIELD BODY, each printed as it is reached. C0/00BF is straight-line --
-  // `00C1 JSR 59D9 / 00C4 JSR 5A46 / 00C7 JSL FDC2C1 / 00CD JSL FDFFF7 / 00D3 JSR A810 / 00D6 JSR
-  // CA76` with NO branch anywhere in it -- so "00C1 was visited and 00D3 was not" cannot be the ROM
-  // taking a different path. It can only be the harness's frame boundary falling INSIDE the body.
-  // That is the whole reason these five are printed separately instead of one `fieldRan` tally.
-  // C0/3CC6 is op 0xEE's `LDA $2143`. It is hooked because that byte is the ONE input the field VM
-  // takes from outside WRAM, and the port is handed a sample taken at the harness frame boundary
-  // while the ROM reads it here, mid-frame, from a coprocessor that free-runs. Printing BOTH is the
-  // only way to tell a sampling skew from a wrong handler.
+  // visit; filtering on `$6D` (the object index they read) isolates the player. C0/A810 and C0/00D3 are
+  // hooked without the filter ($6D is not set on entry): they say whether the movement loop ran this frame.
+  // The stage heads of the field body are printed separately because C0/00BF is straight-line (`00C1 JSR
+  // 59D9 / 00C4 JSR 5A46 / 00C7 JSL FDC2C1 / 00CD JSL FDFFF7 / 00D3 JSR A810 / 00D6 JSR CA76`): "00C1
+  // visited, 00D3 not" can only mean the harness's frame boundary fell inside the body.
+  // C0/3CC6 is op 0xEE's `LDA $2143`, the one input the field VM takes from outside WRAM. The port gets a
+  // sample taken at the frame boundary while the ROM reads it mid-frame from the free-running SPC, so
+  // both are printed to tell a sampling skew from a wrong handler.
   if (bk == 0xC0 && pc == 0x3CC6)
     printf("  EEread f%-3d $2143=%02X (&0F=%X) port-was=%02X  obj=%02X\n",
            f, s->apu->outPorts[3], s->apu->outPorts[3] & 0x0F, g_ctApuPort3, s->ram[0x016D]);
@@ -2215,11 +2025,10 @@ static void ctPortrunHookStep(Snes* s, const uint8_t* cram, int f, int bk, int p
   g_prHook.prev = v;
 }
 
-// STEP 5: the RUNNER. Like --porttick but drives the actor's script via CtFieldRunner (the C0/5A93
-// loop + opcode dispatch) instead of calling the 0xA0 handler directly -- so the C port follows the
-// script IP through command transitions (arrival -> advance IP -> next opcode). Validates the IP
-// ($1180) + facing ($1600) byte-exact on top of the movement state, and tallies the trap opcodes
-// (the not-yet-ported handlers) so the next porting work is localized precisely.
+// --portrun: like --porttick, but drives the actor's script via CtFieldRunner (the C0/5A93 loop + opcode
+// dispatch) instead of calling the 0xA0 handler directly, so the port follows the script IP through
+// command transitions (arrival -> advance IP -> next opcode). Checks the IP ($1180) and facing ($1600) on
+// top of the movement state, and tallies the trap opcodes (handlers not ported).
 static int runPortRun(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2229,7 +2038,7 @@ static int runPortRun(const char* romPath) {
   if (HarnessDriveScript(s) != 0) { CtOracleDestroy(s); free(rom); return 4; }
   ctPortrunHookInit();
   static uint8_t cram[0x20000];
-  static uint8_t cTplAttr[0x80][4];                 // STEP 6.3b: the C-maintained template priority attr per actor
+  static uint8_t cTplAttr[0x80][4];                 // the port-maintained template priority attr per actor
   static const int OFF[15] = { 0x1800, 0x1801, 0x1880, 0x1881, 0x1900, 0x1980, 0x1A01, 0x0C00, 0x0C01, 0x1180, 0x1181, 0x1600, 0x1601, 0x1681, 0x0F01 };
   enum { NOFF = 15 };
   int own[0x80], prevCnt[0x80], runLen[0x80], trapCount[256], prev0F[0x80], everOwned[0x80];
@@ -2237,7 +2046,7 @@ static int runPortRun(const char* romPath) {
   for (int i = 0; i < 256; i++) trapCount[i] = 0;
   memcpy(cram, s->ram, 0x20000);
   int frames = 360, chk = 0, ok = 0, moves = 0, shown = 0, maxRun = 0, decOk = 0, decBad = 0, tplOk = 0, tplBad = 0;
-  int skipped = 0;                                   // frames on which the ROM ran NO field frame
+  int skipped = 0;                                   // frames on which the ROM ran no field frame
   int straddleTwo = 0, straddleTail = 0;             // body split across the harness frame boundary
   static const uint16_t dirs[4] = { 0x10, 0x80, 0x20, 0x40 };
   for (int f = 0; f < frames; f++) {
@@ -2245,72 +2054,51 @@ static int runPortRun(const char* romPath) {
     for (int idx = 0; idx < 0x80; idx += 2) if (own[idx]) for (int k = 0; k < NOFF; k++) sav[idx][k] = cram[OFF[k] + idx];
     memcpy(cram, s->ram, 0x20000);
     for (int idx = 0; idx < 0x80; idx += 2) if (own[idx]) for (int k = 0; k < NOFF; k++) cram[OFF[k] + idx] = sav[idx][k];
-    // ===== C0/EB8C (the NMI) JSR C0/B1B2 -- the VRAM upload, which is where the frame ACTUALLY starts.
-    // Not an addition to the frame: B1B2 is the ONLY thing that clears $09A0, and $09A0 is C0/CA76's
-    // whole-pass gate. The harness re-seeds cram from the oracle's END-of-frame WRAM, which is the one
-    // instant in the frame when $09A0 is SET -- C0/CCAC (the drain's own append) raises it and the
-    // NEXT frame's NMI lowers it. Measured directly, f323/f324: `W $09A0 00->01 @ C0/CCAC` then
-    // `W $09A0 01->00 @ C0/B201` then `00->01 @ C0/CCAC` again. So a port that starts its frame from
-    // that snapshot reads a 1 the ROM had already consumed, and the drain below refuses every frame
-    // that follows a frame which uploaded. NULL = walk the queue and clear the gate without copying,
-    // the mode CtAnimUploadFlush documents for a host with no VRAM of its own.
+    // ---- C0/EB8C (the NMI) JSR C0/B1B2: the VRAM upload, where the frame starts ----
+    // B1B2 is the only thing that clears $09A0, C0/CA76's whole-pass gate. The harness reseeds cram from
+    // the oracle's end-of-frame WRAM, the one instant $09A0 is set (C0/CCAC, the drain's append, raises it;
+    // the next frame's NMI lowers it at C0/B201), so without this the drain would refuse every frame after
+    // an upload. NULL = walk the queue and clear the gate without copying (see CtAnimUploadFlush).
     CtAnimUploadFlush(cram, NULL);
-    // ⚠ THE SNAPSHOT POINT CANNOT BE MOVED PAST THE NMI, and this was TRIED AND MEASURED rather than
-    // reasoned about. The remaining idx-02 family is a phase problem: the joypad reaches $00F9 through
-    // the NMI (auto-joypad at vblank start -> $4218 -> C2/8545), so the memcpy above -- taken where
-    // snes_runFrame stops, i.e. the START of vblank -- hands the port a d-pad nibble one oracle-frame
-    // stale. Draining vblank BEFORE snapshotting looks like the fix and is not: the ROM's main loop is
-    // FREE-RUNNING and the NMI interrupts it wherever it happens to be, so the instant vblank ends the
-    // CPU is at an ARBITRARY point in C0/0097's body -- frequently mid-way through 00D3's object loop,
-    // not at the head. Snapshotting there splices half a field frame into the port's start state.
-    // Measured: 6454/6466 -> 6382/6467, 12 divergences -> 48+, with idx 10 breaking at f1 on the move
-    // TICKET ($1A01 C=00 O=04). The start-of-vblank point is phase-SHIFTED but CONSISTENT, which is
-    // strictly better than a point that is correctly-phased only sometimes. Closing the residual needs
-    // the joypad chain itself (C2/8545 -> $00F9) on the port side, not a different snapshot instant.
-    // ===== C2/84F0 + C2/8545 -- THE JOYPAD POLL, which is what makes the snapshot's phase moot. =====
-    // The port does not need the NMI's WRAM writes if it runs the NMI's WORK. The input the ROM will
-    // decode this frame is not in WRAM at all at snapshot time: it is in the auto-joypad HARDWARE
-    // register, latched at the start of vblank (snes/snes.c:180-188) -- i.e. at the exact instant
-    // snes_runFrame stopped, one line above. Reading portAutoRead[0] here therefore gets EXACTLY the
-    // word the oracle's own NMI is about to read, with no phase shift to correct and no guess about
-    // which dirs[] entry is current. That is the harness supplying INPUT, which is the boundary of
-    // the port's scope -- unlike re-feeding $1D32, which would be reading back an engine RESULT.
+    // Note: the snapshot point cannot move past the NMI. The joypad reaches $00F9 through the NMI
+    // (auto-read at vblank start -> $4218 -> C2/8545), so a snapshot at the start of vblank sees a d-pad
+    // nibble one frame stale; but the main loop is free-running, so when vblank ends the CPU can be anywhere
+    // in C0/0097's body (often inside 00D3's object loop), and a snapshot there splices half a frame into
+    // the port's start state. The start of vblank is phase-shifted but consistent; the poll below closes it.
+    // ---- C2/84F0 + C2/8545: the joypad poll ----
+    // The input the ROM decodes this frame is in the auto-joypad register, latched at the start of vblank
+    // (snes/snes.c), the instant snes_runFrame stopped, so portAutoRead[0] is the word the oracle's NMI is
+    // about to read. That is the harness supplying input, the boundary of the port's scope (unlike
+    // re-feeding $1D32, which would read back an engine result).
     CtJoypadPoll(cram, s->portAutoRead[0]);
-    // ===== $2143 -- the SPC700's output mailbox, the ONE input op 0xEE (C0/3CC5) takes from outside
-    // WRAM. snes.c:260 serves the CPU's read of $2140-3 from apu->outPorts[adr & 3], so this is
-    // byte-for-byte what `LDA $2143` returns in the oracle. Supplied here for the same reason and on
-    // the same boundary as the joypad word above: it is an INPUT, not an engine result.
+    // ---- $2143: the SPC700's output mailbox, the one input op 0xEE (C0/3CC5) takes from outside WRAM ----
+    // snes.c serves the CPU's read of $2140-3 from apu->outPorts[adr & 3], so this is what `LDA $2143`
+    // returns in the oracle. An input, on the same boundary as the joypad word.
     g_ctApuPort3 = s->apu->outPorts[3];
-    // ===== C0/00A7 JSR C0/881E -- THE PLAYER CONTROLLER, three JSRs ahead of C0/00BF =====
-    // This mode used to start at C0/00C1 and so ran none of it, which is where ALL of its residual
-    // divergences came from: $1D32/$1D33 (published by C0/9175 at 884C), $0C00/$0C01 (written by
-    // C0/9D62/9D67 inside C0/9C5C <- C0/8AFE <- C0/8A6D at 8847) and the facing. Every one of those
-    // is a byte the compare set CLAIMS, so not running their producer was a broken promise, not a
-    // scoping choice. CtPlayerControl is the whole 881E body in the ROM's order -- 88E5 seed, intent
-    // clear, the $0162/$011F gate, 88EE, the $0120-gated 8A6D, then 9175's publish.
+    // ---- C0/00A7 JSR C0/881E: the player controller, three JSRs ahead of C0/00BF ----
+    // It produces bytes the compare set claims: $1D32/$1D33 (C0/9175 at 884C), $0C00/$0C01 (C0/9D62/9D67
+    // inside C0/9C5C <- C0/8AFE <- C0/8A6D at 8847) and the facing. CtPlayerControl is the whole 881E body
+    // in the ROM's order: 88E5 seed, intent clear, the $0162/$011F gate, 88EE, the $0120-gated 8A6D, then
+    // 9175's publish.
     CtPlayerControl(cram);
     int trap[0x80]; for (int i = 0; i < 0x80; i++) trap[i] = -1;
-    // C0/A810's LOOP BOUND, and it is what was animating a ghost. A810 sets $BD = $7F2000 * 2
-    // (the object COUNT doubled) and runs `A842 CPX $BD / BMI ->A819`, i.e. strictly X < $BD.
-    // An object index at or past the count is never visited at all -- no integrate, no A88D,
-    // no C98A -- and its $0F00 simply keeps whatever it last held. That is exactly obj 0x16
-    // here: from f161 the oracle's $1601 FREEZES at $0A with a stale $0F00 = $80, while the
-    // harness kept ticking it one per frame.
+    // C0/A810's loop bound: A810 sets $BD = $7F2000 * 2 and runs `A842 CPX $BD / BMI ->A819`, so an object
+    // index at or past the count is never visited (no integrate, no A88D, no C98A) and its $0F00 keeps its
+    // last value.
     int nobj2 = (cram[0x12000] * 2) & 0xFF;            // A810 LDA $7F2000 / ASL A / STA $BD
-    for (int idx = 0; idx < 0x80 && idx < nobj2; idx += 2) if (own[idx]) {  // PASS A: the runner (if scheduled), then PASS B: integration
+    for (int idx = 0; idx < 0x80 && idx < nobj2; idx += 2) if (own[idx]) {  // pass A: the runner (if scheduled), then pass B: integration
       // the scheduler (rebuild C0/59D9) skips an actor while its delay $1001 > 0 (it DECs it each
       // frame, qualifying only as it reaches 0); + the $1000 bit7 / $1100 state gates.
       int sched = ctSchedQualifies(cram, idx);            // C0/59D9's qualify condition, in full
-      // PORTRUN_PDISP=<hex obj idx> prints the PORT's dispatch sequence, to be read against the
-      // oracle's DISP lines. Two visits in one frame look exactly like one over-long visit in the
-      // end-of-frame IP, and only these two traces side by side tell them apart.
+      // PORTRUN_PDISP=<hex obj idx> prints the port's dispatch sequence, to read against the oracle's DISP
+      // lines: two visits in one frame and one over-long visit leave the same end-of-frame IP.
       { static int pd = -2;
         if (pd == -2) { const char* e = getenv("PORTRUN_PDISP"); pd = e ? (int)strtol(e, NULL, 16) : -1; }
         g_ctVmTraceIdx = (pd >= 0 && f >= g_prHook.lo && f <= g_prHook.hi) ? pd : -1;
         g_ctVmTraceFrame = f; }
       if (sched) trap[idx] = CtFieldRunner(cram, rom, len, idx);
       // C0/A81E-A82A: `st < 3` -> AAFD, `st == 8` skipped, `st == 7` -> C0/A947 (no position change),
-      // everything ELSE -> AA07 -- including st >= 9 and the bit7 states, which `st <= 6` excluded.
+      // everything else -> AA07, including st >= 9 and the bit-7 states.
       int st = cram[0x1100 + idx];
       if (st == 8 || st == 7) {                             // A822 / A826
       } else if (st >= 3) {
@@ -2322,39 +2110,21 @@ static int runPortRun(const char* romPath) {
         int y = (cram[0x1880 + idx] | (cram[0x1881 + idx] << 8)) + (int8_t)cram[0x1980 + idx];
         cram[0x1880 + idx] = (uint8_t)y; cram[0x1881 + idx] = (uint8_t)(y >> 8);
       }
-      // THE ROM'S GATE, not a stand-in. C0/C98A is reached at A832/A878 only through
-      // `JSR C0/A88D / BCC`, and A88D's carry is exactly `$0F00,X & $80` (A8E5's latch read;
-      // the activation pass is graded at 0/3770 by vm-activation-pass-0F00). States 7 and 8
-      // never get there at all -- A824 skips 8 outright and A826 sends 7 to C0/A947, whose
-      // BRA lands past the four calls. `$0F01 != $FF` was a stand-in that fired on frames the
-      // ROM does not animate, which decremented $1601 one tick too often.
-      // C0/A82D / C0/A873 `JSR C0/A88D / BCC` -- the REAL gate, replacing the stale-latch stand-in.
-      // Both arms of A810 reach A88D (state >= 3 via A82A, state < 3 via A870) and both skip C98A,
-      // A98A, AB45 and A9CD on a clear carry; only state 7 (-> C0/A947) and state 8 bypass it.
-      // This used to read `cram[$0F00+idx] & 0x80`, which is A88D's answer as of the PREVIOUS frame's
-      // snapshot -- right while the object's activity holds, wrong on the frame it changes. The
-      // op-0x91 port made that visible: the ROM hides object $10 at f66 and clears the latch the same
-      // frame, so it stops ticking the anim timer while the port ticked it once more.
-      // C0/A832 is still the ENQUEUE and NOTHING ELSE: the frame lookup and the commit belong to the
-      // drain below, not here.
+      // C0/A82D / C0/A873 `JSR C0/A88D / BCC`: C0/C98A (and A98A, AB45, A9CD) run only on a set carry, and
+      // A88D's carry is `$0F00,X & $80` (A8E5's latch read; graded by vm-activation-pass-0F00). Both arms of
+      // A810 reach A88D; states 7 and 8 never do (A824 skips 8, A826 sends 7 to C0/A947, whose BRA lands
+      // past the four calls). The gate is computed this frame, not read from the previous frame's latch.
+      // C0/A832 only enqueues: the frame lookup and the commit belong to the drain below.
       if (st != 7 && st != 8 && CtObjActiveGate(cram, idx))
         CtAnimTimerTick(cram, rom, len, idx);           // C0/C98A: the anim timer/phase advance
     }
-    // ===== C0/00D6 JSR C0/CA76 -- the DRAIN, ONCE per frame, AFTER the movement loop =====
-    // WHY THE COMMIT MOVED HERE. A --portrun writer probe on $0F03 (PORTRUN_HOOKW) settled it by
-    // execution rather than inference: over f264-f267 the oracle NEVER VISITS C0/CB3A at all and
-    // never writes $0F03, while the FIFO reads q[hd80 tl80] -- empty. On f268 the timer reaches 0,
-    // C0/C98A enqueues (q[hd02 tl02]), and TICK -> DRAIN -> VISIT -> LOOKUP -> `W $0F03 12->07 @
-    // C0/CC14` all fire in one chain. Identical shape at f276-f282. So $0F01 is committed ONLY on a
-    // FIFO POP, and the per-object speculative lookup this replaces was committing on every frame in
-    // between -- with a frame from whatever facing row was current, which is why those divergences
-    // were off by exactly one or two 6-step walk rows while phase and timer agreed.
-    // The earlier attempt to call the drain collapsed --portrun to 156/1592 because C0/B701, the
-    // arena RELEASE, was unported and the four-slot pool exhausted. B701 is ported now, and cram is
-    // re-seeded from the oracle every frame, so the pool starts each frame at the oracle's own state.
-    // The scanline is the ONE thing a clockless port cannot supply: CA94's `CMP #00F0 / BPL` treats
-    // >= 240 as vblank = NO deadline, so passing 0xF0 drains the queue fully. That is the same stated
-    // approximation CtAnimDrainPass already documents, not a new one.
+    // ---- C0/00D6 JSR C0/CA76: the drain, once per frame, after the movement loop ----
+    // $0F01 is committed only on a FIFO pop: the oracle visits C0/CB3A and writes $0F03 only on a frame
+    // where C0/C98A enqueues (timer at 0 -> tick, drain, visit, lookup, `W $0F03 @ C0/CC14` in one chain),
+    // so the commit belongs here, not in a per-object lookup. cram is reseeded from the oracle every frame,
+    // so the four-slot arena pool (released by C0/B701) starts each frame at the oracle's state.
+    // The scanline is the one thing a clockless port cannot supply: CA94's `CMP #00F0 / BPL` treats >= 240
+    // as vblank (no deadline), so 0xF0 drains the queue fully, the approximation CtAnimDrainPass documents.
     { uint8_t pre0F[0x80];
       for (int idx = 0; idx < 0x80; idx += 2) pre0F[idx] = cram[0x0F01 + idx];
       int dq = cram[0x0176], da = cram[0x09A0];
@@ -2362,8 +2132,7 @@ static int runPortRun(const char* romPath) {
       if (g_prHook.addr >= 0 && f >= g_prHook.lo && f <= g_prHook.hi)
         printf("  PDRAIN f%-3d       C  [09A0=%02X hd%02X tl%02X] -> visits=%d  0F%02X->%02X\n",
                f, da, dq, cram[0x0177], dv, pre0F[g_prHook.idx], cram[0x0F01 + g_prHook.idx]);
-      // CC17's decode, on exactly the objects the drain COMMITTED -- the same set the old speculative
-      // block updated, now identified by the $0F01 the drain actually changed rather than predicted.
+      // CC17's decode, on the objects whose $0F01 the drain changed.
       for (int idx = 0; idx < 0x80; idx += 2) if (own[idx] && cram[0x0F01 + idx] != pre0F[idx]) {
         CtObjTile a4[4];
         CtDecodeSpriteAssembly(cram, rom, len, idx, a4);
@@ -2372,33 +2141,16 @@ static int runPortRun(const char* romPath) {
       }
     }
     s->input1->currentState = dirs[(f / 12) % 4];
-    // RUN THE ORACLE FRAME WHILE COUNTING VISITS TO THE FIELD BODY'S STAGE HEADS
-    // (00C1 sched / 00C4 VM / 00D3 movement / 00D6 drain / 00DB draw). Some frames the ROM never
-    // enters it at all: an execution hook (--hookpc) showed the CPU ending NINE consecutive frames
-    // inside bank $C7, the Akao SOUND driver, with C0/0097 -- the main-loop head itself -- visited
-    // ZERO times. On those frames the ROM advances no field state whatever, so a harness that ticks
-    // its own actors is grading against an engine that did not run. This is NOT the raster
-    // truncation, NOT the op-0xE5 copy freeze and NOT A810's loop bound; all three were derived and
-    // then refuted by measurement before the hook answered it directly.
-    // snes_runFrame's EXACT loop (snes/snes.c:115) with the PC check inside. Stopping on the frame
-    // COUNTER instead would cut the frame at a different point than the emulator does and shift the
-    // phase -- measured: it moved the port 5 sub-pixels ahead of the oracle from f1.
-    //
-    // ⭐ THE STAGE GATED ON USED TO BE 00C1, THE **FIRST** STAGE, AND THAT WAS WRONG IN BOTH
-    // DIRECTIONS. C0/00BF is straight-line -- `00C1 JSR 59D9 / 00C4 JSR 5A46 / 00C7 JSL FDC2C1 /
-    // 00CD JSL FDFFF7 / 00D3 JSR A810 / 00D6 JSR CA76`, no branch anywhere -- so the body cannot
-    // take a shortcut. But it BLOCKS inside those two bank-$FD sync calls, and when it does, one
-    // body STRADDLES the harness's frame boundary. Measured directly (PORTRUN_HOOKW=1617, obj 0x16):
-    //   f161: 00C1 + 00C4 only .......... the front half; ROM moved nothing, port ran a WHOLE frame
-    //   f162..f169: no stage head at all . nine frames parked in the sound driver
-    //   f170: 00D3 + 00D6, no 00C1 ...... the SAME body's back half -- and the old rule SKIPPED it,
-    //                                     undoing the port's tick on the one frame the ROM ticked
-    // So "the field ran" was true when only the front half had, and false when only the back half
-    // had. Every byte --portrun grades ($1800/$1880 position, $1601 timer, $1681 phase, $0F01 frame,
-    // $1900/$1980 velocity) is written by the BACK half; the front half only advances the IP, which
-    // is still sitting in RAM when the back half lands. Gating on 00D3 therefore aligns the port's
-    // one-lump frame with the body that actually produced the state being compared. On every
-    // non-straddled frame the two rules are identical, because the body is straight-line.
+    // Run the oracle frame while counting visits to the field body's stage heads (00C1 sched / 00C4 VM /
+    // 00D3 movement / 00D6 drain / 00DB draw). On some frames the ROM never enters the body: the CPU can
+    // spend consecutive frames inside the bank-$C7 sound driver without visiting C0/0097, and then no field
+    // state advances. The loop is snes_runFrame's own (snes/snes.c) with the PC check inside; stopping on
+    // the frame counter would cut the frame at a different point.
+    // The gate is on 00D3, not 00C1: the straight-line body C0/00BF can block inside its two bank-$FD sync
+    // calls and straddle the harness's frame boundary (front half 00C1/00C4 on one frame, back half
+    // 00D3/00D6 frames later). Every byte --portrun grades ($1800/$1880, $1601, $1681, $0F01, $1900/$1980)
+    // is written by the back half, so gating on 00D3 aligns the port's frame with the body that produced
+    // the state. On frames that do not straddle, the two gates agree.
     int fieldRan = 0, schedRan = 0;
     { long guard = 8000000;
       g_prHook.on = g_prHook.addr >= 0 && f >= g_prHook.lo && f <= g_prHook.hi;
@@ -2406,7 +2158,7 @@ static int runPortRun(const char* romPath) {
       while (s->inVblank && --guard > 0) {
         if (s->cpu->k == 0xC0 && s->cpu->pc == 0x00D3) fieldRan++;
         if (s->cpu->k == 0xC0 && s->cpu->pc == 0x00C1) schedRan++;
-        int hb = s->cpu->k, hp = s->cpu->pc;                 // the opcode ABOUT to run = the writer
+        int hb = s->cpu->k, hp = s->cpu->pc;                 // the opcode about to run = the writer
         CtOracleStep(s);
         ctPortrunHookStep(s, cram, f, hb, hp);
         ctOpTraceStep(s, f, hp);
@@ -2420,10 +2172,8 @@ static int runPortRun(const char* romPath) {
         ctPortrunHookStep(s, cram, f, hb, hp);
         ctOpTraceStep(s, f, hp);
       } }
-    // The port runs its body ONCE per graded frame, so more than one movement pass in a single
-    // harness frame would be graded as one and silently under-count. It does not happen in this
-    // driver (the body waits on vblank), but a silent cap is exactly the kind of thing that reads
-    // as coverage later, so say it out loud rather than assume it.
+    // The port runs its body once per graded frame, so two movement passes in one harness frame would be
+    // graded as one. This driver does not produce that (the body waits on vblank), but it is reported.
     if (fieldRan > 1) { straddleTwo++; if (straddleTwo <= 4) printf("  NOTE f%d: %d movement passes in one harness frame\n", f, fieldRan); }
     if (fieldRan && !schedRan) straddleTail++;               // back half of a body that began earlier
     if (!fieldRan && !getenv("PORTRUN_NOSKIP")) {      // the ROM did nothing: undo our own tick
@@ -2432,11 +2182,9 @@ static int runPortRun(const char* romPath) {
       skipped++;
       continue;
     }
-    // PORTRUN_SAVE_AT=N PORTRUN_SAVE=path.state -- capture the oracle at the END of frame N. This
-    // mode is the only one that reproduces the obj-0x16 timer freeze, and it reaches its scene
-    // through HarnessDriveScript rather than from a savestate, so a --writer probe had nothing to
-    // load: bedslide.state is the same loc and object count but does NOT exercise the defect
-    // (192 clean frames). Mirrors the PEEK_SAVE hook in --peek.
+    // PORTRUN_SAVE_AT=N PORTRUN_SAVE=path.state: capture the oracle at the end of frame N. This mode reaches
+    // its scene through HarnessDriveScript, not a savestate, so this is how a --writer probe gets a state
+    // to load. Mirrors the PEEK_SAVE hook in --peek.
     { static int saveAt = -2; static const char* savePath = NULL;
       if (saveAt == -2) { const char* a2 = getenv("PORTRUN_SAVE_AT");
                           saveAt = a2 ? atoi(a2) : -1; savePath = getenv("PORTRUN_SAVE"); }
@@ -2448,9 +2196,8 @@ static int runPortRun(const char* romPath) {
         sh_free(sh);
       } }
     const uint8_t* r = s->ram;
-    // Per-frame VALUE dump for the hooked object. The writer probe above only reports CHANGES, which
-    // is blind to "this byte held the value that made the ROM skip the object" -- so print the whole
-    // A810/A88D input vector every hooked frame instead of waiting for an edge.
+    // Per-frame value dump for the hooked object: the writer probe reports only changes, so print the
+    // whole A810/A88D input vector every hooked frame.
     if (g_prHook.addr >= 0 && f >= g_prHook.lo && f <= g_prHook.hi) {
       int i = g_prHook.idx;
       printf("  STATE  f%-3d ora[$0F00=%02X $1100=%02X $1A81=%02X $1601=%02X pos=%02X,%02X "
@@ -2459,14 +2206,9 @@ static int runPortRun(const char* romPath) {
              r[0x1D0A], r[0x1D0C], r[0x1D0E], r[0x1D10], r[0x12000], (r[0x12000] * 2) & 0xFF,
              cram[0x1100 + i], cram[0x1601 + i]);
     }
-    // BOUNDED BY A810's OWN LOOP BOUND, which this loop had been ignoring. C0/A842 is
-    // `CPX $BD / BMI ->A819` with $BD = $7F2000 * 2, so the ROM NEVER visits an index at or past the
-    // object count -- and the PASS A/B loop above already respects it. This one did not, so it
-    // claimed and graded PHANTOM actors past the end of the table, whose $1180 is whatever garbage
-    // sits there. It was harmless while the claim list was a hand-written set of ten move opcodes
-    // (garbage rarely decodes to one of those); making the list DERIVED turned it into 2354 spurious
-    // cTplAttr mismatches, every one of them at `base0000` on an index >= the count, all aliasing the
-    // same $7F4807 slot. The failure was in the check's reach, not in the engine.
+    // Bounded by A810's own loop bound (C0/A842 `CPX $BD / BMI ->A819`, $BD = $7F2000 * 2): the ROM never
+    // visits an index at or past the object count, whose $1180 is garbage, so nothing is claimed or graded
+    // there.
     for (int idx = 0; idx < 0x80 && idx < nobj2; idx += 2) {
       if (own[idx]) {
         if (trap[idx] >= 0) { trapCount[trap[idx]]++; own[idx] = 0; runLen[idx] = 0;    // hit an unported opcode
@@ -2475,21 +2217,15 @@ static int runPortRun(const char* romPath) {
           int cx = cram[0x1800 + idx] | (cram[0x1801 + idx] << 8), cy = cram[0x1880 + idx] | (cram[0x1881 + idx] << 8);
           int ox = r[0x1800 + idx] | (r[0x1801 + idx] << 8), oy = r[0x1880 + idx] | (r[0x1881 + idx] << 8);
           int cip = cram[0x1180 + idx] | (cram[0x1181 + idx] << 8), oip = r[0x1180 + idx] | (r[0x1181 + idx] << 8);
-          // THE COMPARED SET AND THE PRINTED SET ARE ONE LIST BY CONSTRUCTION. They used to be two --
-          // a hand-written conjunction of ELEVEN fields and a printf of SEVEN -- so a divergence in
-          // one of the four it did not print ($1900, $1980, $0C00, $1600) surfaced as a line whose
-          // every VISIBLE field was equal. Three of the residual lines were exactly that, and no
-          // amount of staring at them could have said which byte moved. Adding a field here now adds
-          // it to the report automatically; the two can no longer drift.
+          // The compared set and the printed set are one list, so a divergence in any compared field shows
+          // in the report; adding a field here adds it to both.
           static const struct { int off, wide; const char* n; } CMPF[] = {
             { 0x1800, 1, "posX" }, { 0x1880, 1, "posY" }, { 0x1180, 1, "ip"   },
             { 0x1900, 0, "velX" }, { 0x1980, 0, "velY" }, { 0x1A01, 0, "tick" },
             { 0x0C00, 0, "prio" }, { 0x0C01, 0, "prio2"}, { 0x1600, 0, "face" },
             { 0x1601, 0, "timer"}, { 0x1681, 0, "phase"}, { 0x0F01, 0, "frame" } };
-            // $0C01 was OWNED (it is in OFF[]) but NOT COMPARED -- the exact hole this table was
-            // introduced to close, still open one field over. Measured: $0C03 diverges on f265, f300,
-            // f313 and f348 (writer C0/9D67) and the report said nothing. Adding it makes the score
-            // WORSE and the report TRUE; a byte in OFF[] with no entry here is a silent promise.
+            // $0C01 is owned (in OFF[]), so it is compared: a byte in OFF[] with no entry here would be an
+            // unchecked claim.
           char why[240]; int wl = 0, match = 1;
           for (int k = 0; k < (int)(sizeof CMPF / sizeof CMPF[0]); k++) {
             int o = CMPF[k].off + idx, w = CMPF[k].wide;
@@ -2515,13 +2251,9 @@ static int runPortRun(const char* romPath) {
         int ip = r[0x1180 + idx] | (r[0x1181 + idx] << 8), oa = 0x12001 + ip;
         if (oa + 2 < 0x20000) {
           int op = r[oa];
-          // THE CLAIM LIST IS NOW ASKED, NOT WRITTEN DOWN. It is supposed to mean "opcodes
-          // CtFieldRunner can execute", and as a hand-kept list it drifted behind the runner TWICE:
-          // first 0xA6/0xB1/0xB2/0xAF/0xB0, then the ten player-script opcodes and 0x96. Each time
-          // the actors sitting on the missing entries -- the PLAYER above all -- were simply
-          // invisible, and invisible does not look like broken: it looks like a clean run.
-          // So probe the runner itself on a scratch copy and claim iff it does not trap. A list that
-          // is derived cannot drift, and this is the same law that fixed the compare-vs-print sets.
+          // The claim list is derived, not written down. It means "opcodes CtFieldRunner can execute", so
+          // probe the runner itself on a scratch copy and claim iff it does not trap. A hand-kept list drifts
+          // behind the runner, and actors on the missing opcodes (the player above all) silently drop out.
           static uint8_t probe[0x20000];
           memcpy(probe, cram, 0x20000);
           CtHRet ph; int canRun = (CtFieldRunnerOne(probe, rom, len, idx, ip, &ph) < 0);
@@ -2535,9 +2267,9 @@ static int runPortRun(const char* romPath) {
           }
         }
       }
-      // STEP 6.3 validation: on an $0F01 change (the oracle decoded), check the decode's per-tile
-      // priority cache formula -- template attr $7F4807+base+t*8 = ($0F81|$0D01) | ($0C00 if the
-      // template tile-Y $7F4804+base+t*8 < 0xE8 else $0C01) -- against the oracle's template.
+      // Decode check: on an $0F01 change (the oracle decoded), check the decode's per-tile priority cache
+      // formula -- template attr $7F4807+base+t*8 = ($0F81|$0D01) | ($0C00 if the template tile-Y
+      // $7F4804+base+t*8 < 0xE8 else $0C01) -- against the oracle's template.
       if (own[idx] && prev0F[idx] != -1 && r[0x0F01 + idx] != prev0F[idx] && r[0x0F01 + idx] != 0xFF) {
         int base = r[0x1700 + idx] | (r[0x1701 + idx] << 8);
         if ((base & 0x1F) == 0 && 0x14807 + base + 0x1F < 0x20000) {
@@ -2548,9 +2280,8 @@ static int runPortRun(const char* romPath) {
           }
         }
       }
-      // STEP 6.3b: validate the C-MAINTAINED template priority (cTplAttr, written by the C decode on
-      // each $0F01 change with the decode-time $0C00) vs the oracle's template EVERY frame -- proving
-      // the stateful caching that lets the OAM build read a C-produced priority (retiring the stub).
+      // Check the port-maintained template priority (cTplAttr, written by the C decode on each $0F01 change
+      // with the decode-time $0C00) against the oracle's template every frame; the OAM build reads it.
       if (own[idx] && r[0x0F01 + idx] != 0xFF) {
         int base = r[0x1700 + idx] | (r[0x1701 + idx] << 8);
         if ((base & 0x1F) == 0 && 0x14807 + base + 0x1F < 0x20000)
@@ -2568,11 +2299,8 @@ static int runPortRun(const char* romPath) {
     for (int o = 0; o < 256; o++) if (g_opHist[o])
       printf("    op %02X  x%-6d  f%d..f%d\n", o, g_opHist[o], g_opFirst[o], g_opLast[o]);
   }
-  // `moves` counts CLAIM EVENTS, not actors -- it used to be printed as "%d actors tracked", which
-  // is a different and smaller number (20 here) and, worse, one that MOVES WITH THE DEFECT COUNT: a
-  // claim is re-issued after every divergence and every trap, so fixing six divergences dropped the
-  // "actors tracked" figure 31 -> 26 and made a repair look like lost coverage. Print both, and name
-  // each for what it is. (20 distinct + 2 divergences + 4 traps = 26.)
+  // `moves` counts claim events, not actors: a claim is re-issued after every divergence and every trap,
+  // so it moves with the defect count. Both numbers are printed, each under its own name.
   int distinct = 0;
   for (int i = 0; i < 0x80; i += 2) if (everOwned[i]) distinct++;
   printf("portrun: runner + integration -> %d/%d owned-actor-frames match (%d distinct actors, %d claim events, longest run %d, %d sound-stall frames skipped, %d graded on a straddled body's back half). Trap opcodes (port next):\n",
@@ -2580,9 +2308,8 @@ static int runPortRun(const char* romPath) {
   if (straddleTwo) printf("  WARNING: %d harness frames ran the movement pass more than once\n", straddleTwo);
   printf("  decode priority cache: %d/%d tile-attrs byte-exact on $0F01 change\n", decOk, decOk + decBad);
   printf("  C-maintained template priority (cTplAttr) vs oracle, every frame: %d/%d byte-exact\n", tplOk, tplOk + tplBad);
-  // AN EMPTY TRAP LIST PRINTS NOTHING, AND A LINE THAT IS NOT PRINTED CANNOT BE PINNED. The suite
-  // matches stdout signatures, so "no traps" has to be an explicit, matchable sentence or a
-  // reintroduced trap would slip past the pin. Say it, and say how many opcodes are behind it.
+  // An empty trap list must still print a line: the suite matches stdout signatures, so "no traps" is an
+  // explicit sentence (with the opcode count behind it) that a reintroduced trap would break.
   { int trapKinds = 0, trapHits = 0;
     for (int i = 0; i < 256; i++) if (trapCount[i]) { trapKinds++; trapHits += trapCount[i]; printf("  op %02X  x%d\n", i, trapCount[i]); }
     if (!trapKinds) printf("  NO TRAP OPCODES: every opcode this scenario reaches is ported\n");
@@ -2591,12 +2318,11 @@ static int runPortRun(const char* romPath) {
   return (chk > 0 && ok == chk && decBad == 0 && tplBad == 0) ? 0 : 1;
 }
 
-// Validate the joypad-read input handler (CtReadJoypad, ported from C2/8500 + the C2/8545 remap)
-// byte-exact vs the oracle. Each frame: snapshot the PRE-frame WRAM (so the port sees the previous
-// frame's $F2 as prev-held + the live remap masks $2993-$299A), inject a swept held-button word into
-// the SNES controller, run the oracle (its real C2/8500+8545 produce the truth), then run CtReadJoypad
-// on the pre-frame copy with the same held and diff the joypad bytes ($F0/$F2/$F3/$FE = the core read;
-// $F6/$F7 = the button remap). The held sweep cycles the 12 single buttons + a few combos.
+// --checkjoy: the joypad-read handler (CtReadJoypad, C2/8500 + the C2/8545 remap) against the oracle.
+// Each frame: snapshot the pre-frame WRAM (the previous $F2 as prev-held + the remap masks $2993-$299A),
+// inject a swept held-button word, run the oracle, then run CtReadJoypad on the copy with the same word and
+// diff $F0/$F2/$F3/$FE (the core read) and $F6/$F7 (the remap). The sweep cycles the 12 single buttons and
+// a few combos.
 static int runCheckJoy(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2610,18 +2336,18 @@ static int runCheckJoy(const char* romPath) {
   static const int FLD[6] = { 0xF0, 0xF2, 0xF3, 0xFE, 0xF6, 0xF7 };
   static uint8_t copy[0x20000];
   int frames = 240, shown = 0, fok[6] = { 0 }, fbad[6] = { 0 };
-  // The SNES input is pipelined 1 frame: currentState set before a frame is latched at that frame's
-  // VBlank and read by the NEXT frame's main loop. So the oracle's joypad bytes after frame f reflect
-  // the currentState set before frame f-1. Prime with 0, then validate against the PREVIOUS held.
+  // The SNES input is pipelined one frame: currentState set before a frame is latched at that frame's
+  // vblank and read by the next frame's main loop, so the oracle's joypad bytes after frame f reflect the
+  // currentState set before frame f-1. Prime with 0, then check against the previous held word.
   uint16_t prevH = 0;
   s->input1->currentState = 0; CtOracleRunFrame(s);
   for (int f = 0; f < frames; f++) {
     uint16_t h = held[f % NH];
     memcpy(copy, s->ram, 0x20000);             // pre-frame: the prev-held $F2 + the live remap masks
     s->input1->currentState = h;
-    CtOracleRunFrame(s);                         // the oracle's real C2/8500+8545 run inside the frame
+    CtOracleRunFrame(s);                         // the oracle's C2/8500+8545 run inside the frame
     const uint8_t* r = s->ram;
-    CtReadJoypad(copy, prevH);                   // the oracle's read this frame reflects the PREVIOUS held
+    CtReadJoypad(copy, prevH);                   // the oracle's read this frame reflects the previous held word
     prevH = h;
     for (int i = 0; i < 6; i++) {
       if (copy[FLD[i]] == r[FLD[i]]) fok[i]++;
@@ -2638,10 +2364,10 @@ static int runCheckJoy(const char* romPath) {
   return badAll ? 1 : 0;
 }
 
-// Probe: after ctDriveScript, hold a d-pad direction and report which actors respond -- i.e. whether
-// the game reached a CONTROLLABLE state and which actor slot is the player. If an actor's world
-// position tracks the held direction, that's the input-driven player; if none move with it, the
-// current script state is non-controllable (a cutscene) and a different input path is needed.
+// Probe: after ctDriveScript, hold a d-pad direction and report which actors respond, i.e. whether the
+// game reached a controllable state and which actor slot is the player. An actor whose world position
+// tracks the held direction is the input-driven player; if none moves, the current script state is not
+// controllable (a cutscene) and a different input path is needed.
 static int runFindPlayer(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2667,9 +2393,9 @@ static int runFindPlayer(const char* romPath) {
   return 0;
 }
 
-// Probe: drive to Crono's room, settle, then cycle the d-pad and per-OPCODE watch the player's (idx 02)
-// movement state -- printing the WRITER PC (the opcode about to run, before the step) each time a watched
-// byte changes. Directly pins which routine sets the player's velocity/facing/heading/counter from input.
+// Probe: drive to Crono's room, settle, then cycle the d-pad and watch the player's (idx 02) movement
+// state per opcode, printing the writer PC (the opcode about to run) each time a watched byte changes.
+// Shows which routine sets the player's velocity/facing/heading/counter from input.
 static int runWatchWrite(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2703,13 +2429,11 @@ static int runWatchWrite(const char* romPath) {
   return 0;
 }
 
-// STEP 2 of the field collision: validate CtCollisionShapeDecode (port of C0/9AD3) byte-exact vs the
-// oracle. The shape decoder is a pure leaf (no JSR; spans $9AD3..$9BF4 ending in RTS). Each time the
-// oracle is about to run it (PC == C0/9AD3), snapshot the WRAM (its inputs $1D58/$5A/$5C + $1D66/$1D68
-// are already set by the preceding prop-fetch), run the C port over the snapshot, then single-step the
-// oracle until it returns (PC leaves [$9AD3,$9BF4]) and diff the outputs the oracle wrote ($1D5E/$60/
-// $6A/$6C/$6E/$6F + the conveyor's $1D30) against the C port's. Drive the player in all 4 directions so
-// the decoder runs over many tiles / sub-positions / shapes.
+// --checkcollide: CtCollisionShapeDecode (C0/9AD3) against the oracle. The decoder is a pure leaf ($9AD3..
+// $9BF4, ending in RTS). Each time the oracle is about to run it, snapshot the WRAM (its inputs
+// $1D58/$5A/$5C + $1D66/$1D68 are set by the preceding prop fetch), run the port over the snapshot,
+// single-step the oracle until it returns and diff the outputs ($1D5E/$60/$6A/$6C/$6E/$6F + the conveyor's
+// $1D30). The player walks in all four directions to cover many tiles, sub-positions and shapes.
 static int runCheckCollide(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2767,10 +2491,10 @@ static int runCheckCollide(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP 3c: validate CtPlayerCollide (port of the C0/8A6D dispatch + directional handlers) IN-SITU vs
-// the oracle's real 8A6D while walking. Hook 8A6D entry, run the C port on the snapshot, step the oracle
-// through 8A6D, and diff the net velocity clamp $1D2E/$1D2F/$1D30/$1D31. Split cardinal (one axis zero)
-// vs diagonal (both nonzero) -- the diagonals are not yet ported.
+// --checkclamp: CtPlayerCollide (the C0/8A6D dispatch + directional handlers) in situ against the
+// oracle's 8A6D while walking. Hook 8A6D entry, run the port on the snapshot, step the oracle through 8A6D
+// and diff the net velocity clamp $1D2E/$1D2F/$1D30/$1D31, split cardinal (one axis zero) vs diagonal.
+// It reaches only what the walk hits; --sweepclamp covers all eight arms.
 static int runCheckClamp(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2821,9 +2545,9 @@ static int runCheckClamp(const char* romPath) {
   return (cOk != cTot || dOk != dTot) ? 1 : 0;
 }
 
-// STEP 3c (prereq): validate CtCollisionActorBlock (port of C0/9923) IN-SITU vs the oracle's real
-// actor-proximity probe while walking. Hook 9923 entry, run the C port on the snapshot, step the oracle
-// to its RTS, and compare the C return against the oracle's carry (SEC = blocked).
+// --checkactor: CtCollisionActorBlock (C0/9923) in situ against the oracle's actor-proximity probe while
+// walking. Hook 9923 entry, run the port on the snapshot, step the oracle to its RTS and compare the
+// return with the oracle's carry (SEC = blocked).
 static int runCheckActor(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2868,12 +2592,11 @@ static int runCheckActor(const char* romPath) {
   return (probes && ok != probes) ? 1 : 0;
 }
 
-// STEP 3b: validate CtCollisionCommit (port of C0/9C5C) IN-SITU against the oracle's real per-axis
-// commit while walking. At each 9C5C entry (inputs $1D62/$1D64 base + $1D2E/$1D30 velocity + sign
-// bytes set by the handler), snapshot the WRAM, run the C port, step the oracle through 9C5C to its
-// RTS, and diff the velocity accumulators ($1D2E/$2F/$30/$31), the player plane $0155, the player OBJ
-// priority $0C00/$0C01[$0197], the conveyor seed $1D2A/$1D2B, and $1D34. (The 9CA1 trigger side-state
-// is intentionally not compared.)
+// --checkcommit: CtCollisionCommit (C0/9C5C) in situ against the oracle's per-axis commit while walking.
+// At each 9C5C entry (inputs $1D62/$1D64 base + $1D2E/$1D30 velocity + sign bytes set by the handler),
+// snapshot the WRAM, run the port, step the oracle through 9C5C to its RTS, and diff the velocity
+// accumulators ($1D2E/$2F/$30/$31), the player plane $0155, the player OBJ priority $0C00/$0C01[$0197],
+// the conveyor seed $1D2A/$1D2B and $1D34. The 9CA1 trigger side-state is not compared.
 static int runCheckCommit(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2925,12 +2648,12 @@ static int runCheckCommit(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP 3a: validate CtCollisionSolidAt (the full probe core: prop-fetch 9AA1 + shape 9AD3 + z-gate
-// 9C37) IN-SITU against the oracle's real C0/8A9E player tile-probe while walking. At each 8A9E entry
-// (inputs $1D66-$1D69 tentative pos + the live prop planes + $0155 are set by the handler), snapshot
-// the WRAM, run the C port on it, then step the oracle through 8A9E to its RTS and compare: the solid
-// verdict (C port return vs oracle carry), the off-map flag (vs the oracle's A = 1/0), and the decoded
-// property bytes ($1D58/$5A/$5C/$6A/$6C/$6E/$6F) for in-bounds cells.
+// --checksolidat: CtCollisionSolidAt (the probe core: prop fetch 9AA1 + shape 9AD3 + z-gate 9C37) in situ
+// against the oracle's C0/8A9E player tile probe while walking. At each 8A9E entry (inputs $1D66-$1D69
+// tentative pos + the live prop planes + $0155, set by the handler), snapshot the WRAM, run the port on it,
+// step the oracle through 8A9E to its RTS and compare the solid verdict (port return vs oracle carry), the
+// off-map flag (vs the oracle's A = 1/0) and the decoded property bytes ($1D58/$5A/$5C/$6A/$6C/$6E/$6F)
+// for in-bounds cells.
 static int runCheckSolidAt(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -2988,9 +2711,9 @@ static int runCheckSolidAt(const char* romPath) {
   return (badV || badP) ? 1 : 0;
 }
 
-// Investigation: per-OPCODE watch of one NPC's pos-X bytes ($1800+idx / $1801+idx) during the stall
-// frame (a tile-boundary crossing), to find which routine skips/reverts the AAFD integrate. Prints the
-// writer PC each time the pos changes, across the target frame.
+// Investigation: per-opcode watch of one NPC's pos-X bytes ($1800+idx / $1801+idx) during the stall frame
+// (a tile-boundary crossing), to find which routine skips or reverts the AAFD integrate. Prints the writer
+// PC each time the position changes, across the target frame.
 static int runWatchNpcPos(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -3019,10 +2742,10 @@ static int runWatchNpcPos(const char* romPath) {
   return 0;
 }
 
-// Investigation: dump the ORACLE's per-frame chain for one NPC (idx) around tile-crossings, to find why
-// it skips a position-integrate on the crossing frame (the --portrun 0.4% residual). Mirrors --portrun's
-// drive (ctDriveScript + the 12-frame dir cycle). Prints pos X, deltaX (=integrated this frame), velocity,
-// counter $1A01, IP $1180 + opcode, state $1100/$1B80, and the move-counter source $1000.
+// Investigation: dump the oracle's per-frame chain for one NPC (idx) around tile crossings, to find why it
+// skips a position integrate on the crossing frame (a --portrun residual). Mirrors --portrun's drive
+// (ctDriveScript + the 12-frame direction cycle). Prints pos X, deltaX (integrated this frame), velocity,
+// counter $1A01, IP $1180 + opcode, state $1100/$1B80 and the move-counter source $1000.
 static int runTraceNpc(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -3065,12 +2788,11 @@ static int runTraceNpc(const char* romPath) {
   return 0;
 }
 
-// NPC collision: EXHAUSTIVE validation of CtCollisionActorMovable by MICRO-EXECUTING the real C0/5B95.
-// 5B95's actor-box handlers are never reached in live play (the $1C80&2 gate is off in the whole trace),
-// so we set up a synthetic 2-actor table (mover + one solid candidate, gate ON) and sweep the facing +
-// the candidate's offset across the 0x100 box boundary, with both candIdx>moverIdx and candIdx<moverIdx
-// (to exercise the carry-from-CPX). Run the real 5B95 via micro-execution (DP=0, sentinel return) and
-// diff its carry (blocked) against the C port.
+// NPC collision: CtCollisionActorMovable against the ROM's C0/5B95 by micro-execution. 5B95's actor-box
+// handlers are not reached in live play (the $1C80 & 2 gate is off in the traces), so a synthetic two-actor
+// table (mover + one solid candidate, gate on) sweeps the facing and the candidate's offset across the
+// 0x100 box boundary, with candIdx both above and below moverIdx (the carry from CPX). The ROM's 5B95 runs
+// by micro-execution (DP = 0, sentinel return) and its carry (blocked) is diffed with the port.
 static void sa_setActor(uint8_t* r, int idx, int active, int solid, int inactiveHi, int x, int y) {
   r[0x0F00 + idx] = (uint8_t)active; r[0x1100 + idx] = (uint8_t)(inactiveHi ? 0x80 : 0x00);
   r[0x1B01 + idx] = (uint8_t)(solid ? 0x01 : 0x00);
@@ -3125,21 +2847,13 @@ static int runSweepActor(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: EXHAUSTIVE byte-exact validation of CtFieldFrameLookup's ROW SELECT by MICRO-EXECUTING the
-// real C0/CB3A over a synthetic sweep of its inputs. Same shape as --sweepactor.
-//
-// WHY THIS EXISTS. C0/CB3A picks the animation row with
+// --sweepcb3a: CtFieldFrameLookup's row select against the ROM's C0/CB3A by micro-execution over a
+// synthetic sweep of its inputs (same shape as --sweepactor). CB3A picks the animation row with
 //     CB3D BEQ (facing 0) / CB3F CMP #02 / CB41 BEQ (facing 2) / CB43 BPL -> x3 / fallthrough -> x1
-// and that BPL tests the sign of (A - 2), because CMP leaves N from the subtraction. facing 1 gives
-// 1 - 2 = 0xFF -> N set -> BPL not taken -> the x1 row. The port tested bit7 of A instead, which sent
-// facing 1 -- the commonest facing -- down the x3 row (fixed in src/move.c).
-// --porttick DOES compare $0F01 (its match conjunction includes it) and did NOT move for that fix:
-// its tracked scenario never reaches an owned object at facing 1 before the object drops out for
-// another reason. So the defect was real, and no pinned number could see it. This sweep can: it
-// drives the inputs directly instead of waiting for a scenario to produce them.
-//
-// The sweep deliberately holds $1780 != 3, because the cfg==3 short-circuit (CBF2-CBF9 LDA $1301,X)
-// lives in CB3A's CALLER, not in CB3A -- the port's function folds the two together.
+// and that BPL tests the sign of (A - 2), since CMP leaves N from the subtraction: facing 1 gives 0xFF, N
+// set, the x1 row. Scenario checks rarely reach an owned object at facing 1, so the inputs are driven.
+// The sweep holds $1780 != 3: the cfg == 3 short-circuit (CBF2-CBF9 LDA $1301,X) is in CB3A's caller,
+// which the port's function folds in.
 static int runSweepCb3a(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -3148,13 +2862,13 @@ static int runSweepCb3a(const char* romPath) {
   if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000];
-  // facings 0..3 plus values ABOVE 3: op 0xA6 stores its operand RAW (no &3), so $1600 can hold
-  // anything, and the (A-2) rule and a bit7-of-A rule disagree there too.
+  // Facings 0..3 plus values above 3: op 0xA6 stores its operand raw (no & 3), so $1600 can hold anything,
+  // and the (A-2) rule and a bit7-of-A rule disagree there too.
   static const int FACE[] = { 0, 1, 2, 3, 4, 0x7F, 0x80, 0x81, 0xFF };
   static const int B1480[] = { 0x0008, 0x0028, 0x0100 };
   static const int B1500[] = { 0x0000, 0x72C0, 0x1234 };
   static const int MOD[]   = { 0, 3, 6 };
-  static const int MOD2[]  = { 5, 1, 2 };           // $1781, DELIBERATELY never equal to MOD[i]
+  static const int MOD2[]  = { 5, 1, 2 };           // $1781, never equal to MOD[i] (see below)
   static const int PH[]    = { 0, 1, 5 };
   static const int REP[]   = { 0, 1, 2, 3 };        // $7F0B01,X -- the mode-2 repeat/direction state
   int NF = (int)(sizeof(FACE)/sizeof(FACE[0])), NA = 3, NB = 3, NM = 3, NP = 3, NR = 4;
@@ -3171,10 +2885,9 @@ static int runSweepCb3a(const char* romPath) {
          r[0x1480 + idx] = (uint8_t)B1480[ai]; r[0x1481 + idx] = (uint8_t)(B1480[ai] >> 8);
          r[0x1500 + idx] = (uint8_t)B1500[bi]; r[0x1501 + idx] = (uint8_t)(B1500[bi] >> 8);
          r[0x1780 + idx] = (uint8_t)cfg;
-         // ⚠ THE TWO SEQUENCE COUNTERS MUST NOT AGREE. They were both seeded with MOD[mi], which
-         // made `cfg == 2 ? $1781 : $1680` indistinguishable from reading either one always -- a
-         // mutation that collapsed the split scored a clean 2187/2187. MOD2 is a different value at
-         // every index, so CB8D's choice is observable; the report asserts the split below.
+         // Note: the two sequence counters must differ, or `cfg == 2 ? $1781 : $1680` could not be told
+         // from reading either one always. MOD2 differs at every index, so CB8D's choice is observable; the
+         // report asserts the split below.
          r[0x1781 + idx] = (uint8_t)MOD2[mi];               // cfg==2 reads $1781 (CB8D)
          r[0x1680 + idx] = (uint8_t)MOD[mi];                // else $1680 (CBB1)
          r[0x1681 + idx] = (uint8_t)PH[pi];
@@ -3197,12 +2910,10 @@ static int runSweepCb3a(const char* romPath) {
          if (opsr < 0) { lost++; continue; }
          int oc = s->cpu->c ? 1 : 0, oa = s->cpu->a & 0xFF, oph = r[0x1681 + idx];
          calls++;
-         // CARRY CLEAR is the mode-2 REPEAT path (C0/CBA4-CBB0: `LDA $7F0B01,X / DEC A / ... /
-         // CLC / RTS`) -- the ROM saying "do not commit this frame". The port cannot express that:
-         // move.c:140 explicitly defers the cfg==2 ping-pong, and CtFieldFrameLookup returns a byte
-         // with no commit signal at all. Scoring those as mismatches would judge the function
-         // against a contract it does not have; hiding them would be worse. They get their own
-         // pinned number, so porting the repeat path MOVES it and this check notices.
+         // Carry clear is the mode-2 repeat path (C0/CBA4-CBB0: `LDA $7F0B01,X / DEC A / ... / CLC / RTS`),
+         // the ROM saying "do not commit this frame". CtFieldFrameLookup returns a byte with no commit
+         // signal (move.c defers the cfg == 2 ping-pong), so these get their own pinned count instead of
+         // being scored as mismatches; porting the repeat path moves it.
          if (!oc) noc++;
          int myRep = work[0x10B01 + idx], oRep = r[0x10B01 + idx];
          int match = oc ? (my == oa && myPh == oph && myRep == oRep)
@@ -3221,26 +2932,18 @@ static int runSweepCb3a(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: EXHAUSTIVE byte-exact validation of CtAnimTimerTick by MICRO-EXECUTING the real C0/C98A over
-// a synthetic sweep of ITS OWN inputs. Same shape as --sweepcb3a, and it exists for the same reason:
-// the mode-2 ping-pong at CA4F-CA69 was ported with NOTHING able to grade it. --porttick (128/136)
-// and --portrun (1592/1592) did not move when it landed, because their scenarios never reach a
-// mode-2 object -- exactly the blind spot that hid the facing-1 row bug in CB3A. A pinned number that
-// cannot move is not evidence.
-//
-// C0/C98A is TWO routines welded together and this sweep grades both:
-//   C98A-CA06  the ENQUEUE. $76/$77 are the head/tail of a singly-linked FIFO whose next-pointer is
+// --sweepc98a: CtAnimTimerTick against the ROM's C0/C98A by micro-execution over a synthetic sweep of its
+// own inputs (same shape as --sweepcb3a). Scenario checks never reach a mode-2 object, so the inputs are
+// driven. C0/C98A is two routines and this sweep grades both:
+//   C98A-CA06  the enqueue. $76/$77 are the head/tail of a singly-linked FIFO whose next pointer is
 //              $1081,X and whose null is >= $80. State ($1100,X) picks the end: >= 3 appends at the
 //              tail $77 (C9A6), == 0 pushes at the head $76 (C9D0), == 1/2 appends too (C9E2) unless
-//              the one-shot $78 == 2 sends it to the front instead. An object already in the list
-//              (X == $77, or $1081,X < $80) is REJECTED -- and the INC $1681,X that advances the
-//              animation phase lives on the accept paths ONLY.
-//   CA09-CA75  the RELOAD: mod*4 + $1580 + phase -> a byte in bank $E4; non-zero = the new timer,
-//              zero = end of row -> re-look-up at the phaseless base and reset/reverse the phase.
-// The port implements the second half and stands in for the first with a flat gate, so this sweep is
-// expected to come back RED on the enqueue. That is the point: measure the gap instead of asserting
-// it is small. Scoring is strict over all seven outputs, with the breakdown printed so the two halves
-// can be told apart.
+//              the one-shot $78 == 2 sends it to the front. An object already in the list (X == $77, or
+//              $1081,X < $80) is rejected, and the INC $1681,X that advances the phase is on the accept
+//              paths only.
+//   CA09-CA75  the reload: mod*4 + $1580 + phase -> a byte in bank $E4; non-zero = the new timer, zero =
+//              end of row -> re-look-up at the phaseless base and reset/reverse the phase.
+// Scoring is strict over all seven outputs, with a breakdown so the two halves can be told apart.
 static int runSweepC98a(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -3254,9 +2957,8 @@ static int runSweepC98a(const char* romPath) {
   static const int ST[]   = { 0, 1, 2, 3, 0x80 };  // the five arms of the C997 dispatch
   static const int Q76[]  = { 0xFF, 2, 5 };        // head: null / us / the peer
   static const int Q77[]  = { 0xFF, 2, 5 };        // tail: null / us / the peer
-  // ⚠ THE THIRD VALUE IS WHAT GRADES THE COMPARE. Seeded 0 and 2 only, C9E4's exact `CMP #02`
-  // is indistinguishable from a plain non-zero test, and a mutation that widened it to `!= 0`
-  // scored clean. $01 reaches the arm the ROM does NOT take.
+  // Note: the third value is what grades C9E4's `CMP #02`: with only 0 and 2 seeded it could not be told
+  // from a plain non-zero test. $01 reaches the arm the ROM does not take.
   static const int F78[]  = { 0, 1, 2 };           // the one-shot front-jump flag (C9E4 CMP #02)
   static const int LNK[]  = { 0x03, 0xFF };        // $1081,X: already linked / null
   static const int MOD[]  = { 0, 3 };
@@ -3281,10 +2983,10 @@ static int runSweepC98a(const char* romPath) {
     r[0x0177] = (uint8_t)Q77[i77];
     r[0x0178] = (uint8_t)F78[i78];
     r[0x1081 + idx] = (uint8_t)LNK[il];
-    r[0x1081 + other] = 0xFF;                      // the peer starts unlinked, so a link INTO it shows
+    r[0x1081 + other] = 0xFF;                      // the peer starts unlinked, so a link into it shows
     r[0x1780 + idx] = (uint8_t)mode;
     r[0x1680 + idx] = (uint8_t)MOD[di];            // mode 0/1 reads $1680 (CA18)
-    r[0x1781 + idx] = (uint8_t)(MOD[di] + 1);      // mode 2/3 reads $1781 (CA13) -- DIFFERENT, so a
+    r[0x1781 + idx] = (uint8_t)(MOD[di] + 1);      // mode 2/3 reads $1781 (CA13) -- different, so a
     r[0x1580 + idx] = (uint8_t)BASE[bi];           //   mis-selection cannot hide behind a shared value
     r[0x1581 + idx] = (uint8_t)(BASE[bi] >> 8);
     r[0x1681 + idx] = (uint8_t)PH[pi];
@@ -3329,25 +3031,13 @@ static int runSweepC98a(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: EXHAUSTIVE byte-exact validation of CtAnimDrainVisit (C0/CAD9, the animation-queue drain's
-// per-object visit) + the four-slot arena C0/E952, by MICRO-EXECUTING the real routine over a
-// synthetic cross-product. Third of the family after --sweepcb3a and --sweepc98a, and it grades the
-// two things that make $0F01 move: the four gate tests, and the alloc-or-drop decision.
-//
-// WHAT IS COMPARED, stated up front because this sweep runs code the port does NOT model. The ROM's
-// class-0 handler continues past the commit into CC17-CDBE -- a 16-tile blit through the $2180 WRAM
-// port into $7F:3800+, a 7-table VRAM upload queue at $0940-$09A0, and a 4-entry OBJ template at
-// $7F4802 -- and none of that is ported. So this compares exactly the bytes the port CLAIMS:
-//   the carry, $0F01,X (the committed frame), $0BC0..$0BC3 (the arena), $0D80,X (the granted base)
-//   and $1B00,X (the staged-pass count).
-// Anything else the oracle writes is deliberately out of scope. Same discipline as VMDIFF_WMASK:
-// grade what we own, and say so rather than letting a green line imply more.
-//
-// CLASSES 1 AND 2 GET THEIR OWN NUMBER. CtAnimDrainVisit returns -1 for them (their handlers
-// C0/CEF5 and C0/D4F7 stage across multiple resumable passes and are unported), so scoring them as
-// matches would be a lie and scoring them as mismatches would judge the function against a contract
-// it does not have. They are counted separately, exactly like --sweepcb3a's mode2-noncommit, so
-// that PORTING them moves the pinned number and this check notices.
+// --sweepcad9: CtAnimDrainVisit (C0/CAD9, the animation-queue drain's per-object visit) and the four-slot
+// arena C0/E952, by micro-execution over a synthetic cross-product. It grades what makes $0F01 move: the
+// four gate tests and the alloc-or-drop decision.
+// Compared: the carry, $0F01,X (the committed frame), $0BC0..$0BC3 (the arena), $0D80,X (the granted
+// base), $1B00,X (the staged-pass count), and the tile half below. Anything else the oracle writes is out
+// of scope, as with VMDIFF_WMASK. A -1 return from CtAnimDrainVisit (an unported path) is counted on its
+// own, neither as a match nor as a mismatch.
 static int runSweepCad9(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -3357,28 +3047,26 @@ static int runSweepCad9(const char* romPath) {
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);   // real $1200/$1280/$1300/$1380/$0D00 tables
   static uint8_t work[0x20000];
   const int idx = 2;                                  // obj1, a real class-0 sprite in this state
-  static const int ST[]   = { 0x00, 0x04, 0x80 };     // $1100,X -- CADE tests bit7 ONLY, so 0 passes
+  static const int ST[]   = { 0x00, 0x04, 0x80 };     // $1100,X -- CADE tests bit7 only, so 0 passes
   static const int EN[]   = { 0x00, 0x01, 0x80 };     // $1A81,X -- BEQ and BMI both reject
   static const int WIN[]  = { 0x00, 0x80 };           // $0F00,X -- the camera-window latch
   static const int CLS[]  = { 0x00, 0x01, 0x02, 0x23 };  // $1201,X -- &3 = 0,1,2,3 (0x23 also proves
                                                          //   the high bits are ignored)
   static const int NB00[] = { 0x00, 0x01, 0x02, 0x80, 0x81, 0x82 };  // $1B00,X -- the masked pass
                                                          //   select (CF17 / D518 `AND #7F`).
-                                                         //   Class 1 has two passes, class 2 THREE,
+                                                         //   Class 1 has two passes, class 2 three,
                                                          //   so 0/1/2 and their bit7 twins are all
                                                          //   needed to reach every leg.
   static const int MODE[] = { 0, 2, 3 };              // $1780,X -- incl. 2 (ping-pong) and 3 (pose)
-  // $0F01,X. 0x14 matches what $1780==3 resolves to ($1301,X, seeded below), and 0x10 is what the
-  // lookup actually RETURNS for every non-mode-3 case here: this sweep's oracle is a fresh boot, so
-  // $1480/$1500/$1580 are zero and C0/CB3A lands on $E4:0001 = 0x10. Without it the CLASS-2 equality
-  // guard is unreachable -- class 2's D50D-D514 returns SEC for mode 3 BEFORE the guard, so the 0x14
-  // case never gets there, and deleting the guard went unnoticed (measured: 124416/124416 with it
-  // removed). Class 1's guard was exercised all along, via its mode-3 path CF21.
+  // $0F01,X. 0x14 is what $1780 == 3 resolves to ($1301,X, seeded below), and 0x10 is what the lookup
+  // returns for every non-mode-3 case here: the oracle is a fresh boot, so $1480/$1500/$1580 are zero and
+  // C0/CB3A lands on $E4:0001 = 0x10. Without 0x10 class 2's equality guard is unreachable (D50D-D514
+  // returns SEC for mode 3 before the guard). Class 1's guard is reached through its mode-3 path CF21.
   static const int CUR[]  = { 0x00, 0x10, 0x14, 0xFF };
   static const int FACE[] = { 0, 1, 2, 3 };           // $1600,X
   static const int POOL[] = { 0x80808080, 0x02808080, 0x80808002, 0x02020202 };  // $0BC0..$0BC3:
-                                          // all free / slot0 ours / slot3 ours / FULL (alloc fails)
-  static const int SIXE[] = { 0x00, 0x02 };           // $6E -- CDC1's index is the WORD $6D/$6E
+                                          // all free / slot0 ours / slot3 ours / full (alloc fails)
+  static const int SIXE[] = { 0x00, 0x02 };           // $6E -- CDC1's index is the word $6D/$6E
   const int NS=3, NE=3, NW=2, NC=4, NM=3, NF=4, NA=4, NP=4, NX=2, NN=6;
   long total = (long)NS*NE*NW*NC*NM*NF*NA*NP*NX*NN;
   int calls=0, ok=0, bad=0, shown=0, lost=0, unported=0, tileSkip=0;
@@ -3400,25 +3088,21 @@ static int runSweepCad9(const char* romPath) {
     r[0x1681 + idx] = 1;  r[0x1680 + idx] = 0;  r[0x1781 + idx] = 0;
     r[0x10B01 + idx] = 1;                             // $7F0B01 -- the mode-2 ping-pong state
     for (int k = 0; k < 4; k++) r[0x0BC0 + k] = (uint8_t)(POOL[pi] >> (24 - k * 8));
-    // The TILE HALF's inputs. A fresh-boot oracle leaves the sprite pointer tables zero, which
-    // sends C0/E687's bank dispatch into the C0/E6B6 copier and its `STA $000n,Y` writes to bank
-    // 0 -- the DMA registers. Bank $D2 selects the C0/E7BC copier and keeps every fetch in ROM.
-    // $CF and $CD are VARIED, because with a fixed $D2 base three real facts were unreachable:
-    // C0/E687's dispatch never fell through to the C0/E6B6 arm (which reads bank $D5 HARDCODED,
-    // ignoring $CF), C0/E534's `[$CD],Y` never disagreed with it, and E691's 16-BIT `ADC $CD`
-    // never wrapped. $D6 reaches the fallback; $F000 + a high tile index reaches the wrap.
+    // The tile half's inputs. A fresh-boot oracle leaves the sprite pointer tables zero, which sends
+    // C0/E687's bank dispatch into the C0/E6B6 copier, whose `STA $000n,Y` writes reach bank 0 (the DMA
+    // registers); bank $D2 selects the C0/E7BC copier and keeps every fetch in ROM. $CF and $CD are varied
+    // so that C0/E687 also falls through to the C0/E6B6 arm (which reads bank $D5 hardcoded, ignoring $CF),
+    // C0/E534's `[$CD],Y` can disagree with it, and E691's 16-bit `ADC $CD` wraps: $D6 reaches the
+    // fallback, $F000 + a high tile index the wrap.
     static const int GBANK[4] = { 0xD2, 0xD6, 0xD3, 0xD4 };
     r[0x1200 + idx] = (uint8_t)GBANK[pi];
     r[0x1280 + idx] = 0x00; r[0x1281 + idx] = (uint8_t)((nb & 1) ? 0xF0 : 0x00);   // $CD
-    // The record BASE is varied so the sweep reaches records with a NEGATIVE X displacement and
-    // a Y displacement >= $E8. With a fixed base neither occurred, and two real facts went
-    // ungraded: deleting the +2/+3 sign extension and the >= $E8 priority split both left the
-    // number at 165888.
+    // The record base is varied so the sweep reaches records with a negative X displacement and a Y
+    // displacement >= $E8, which grade the +2/+3 sign extension and the >= $E8 priority split.
     r[0x1300 + idx] = 0xD2;
     r[0x1380 + idx] = (uint8_t)(ai * 0x40); r[0x1381 + idx] = (uint8_t)(fi * 0x11);
-    // $0D00's LOW byte == $68 selects class 2's ALTERNATE staging geometry (D520/D52D/D539), a
-    // different interleave of the same 48 tiles. Without this value in the sweep three of its six
-    // legs are unreachable.
+    // $0D00's low byte == $68 selects class 2's alternate staging geometry (D520/D52D/D539), a different
+    // interleave of the same 48 tiles; three of its six legs need it.
     r[0x0D00 + idx] = (uint8_t)(ai == 1 ? 0x68 : 0x40 + ai * 2);
     r[0x0D01 + idx] = (uint8_t)(ai & 1);
     r[0x0F81 + idx] = (uint8_t)((ai * 2) & 0x0E);
@@ -3426,20 +3110,20 @@ static int runSweepCad9(const char* romPath) {
     r[0x1700 + idx] = (uint8_t)(pi * 0x20); r[0x1701 + idx] = 0x00;   // slot << 5
     r[0x0179] = 0x00;                                  // $79, the upload cursor
     for (int k = 0; k < 0x74; k++) r[0x0940 + k] = 0;  // the seven queue tables + terminator
-    // $09A0 must NOT start at zero, or the 16-bit `INC $09A0,X` is indistinguishable from an
-    // 8-bit one and the 16-bit terminator STZ writes zeros over zeros. $00FF+1 = $0100 as a
-    // word but $00 as a byte, and the next slot carries a poison value.
+    // $09A0 must not start at zero, or the 16-bit `INC $09A0,X` could not be told from an 8-bit one and the
+    // 16-bit terminator STZ would write zeros over zeros. $00FF+1 = $0100 as a word but $00 as a byte, and
+    // the next slot carries a poison value.
     r[0x09A0] = 0xFF; r[0x09A1] = 0x00;
     r[0x09A2] = 0x5A; r[0x09A3] = 0xA5;
-    for (int k = 0; k < 0x100; k++) r[0x14802 + k] = 0;  // $7F4802.. the OBJ template. MUST cover
-                                                        // 12 pieces x 8 bytes PLUS the $1700 base,
+    for (int k = 0; k < 0x100; k++) r[0x14802 + k] = 0;  // $7F4802.. the OBJ template. Must cover
+                                                        // 12 pieces x 8 bytes plus the $1700 base,
                                                         // or stale bytes leak between iterations.
     r[0x016D] = (uint8_t)idx; r[0x016E] = (uint8_t)SIXE[xi];   // DP = $0100
     int x16 = r[0x016D] | (r[0x016E] << 8);
     r[0x1B00 + idx] = (uint8_t)NB00[nb];   // class 1 reads it to pick its pass (CF14)
     r[0x1B00 + x16] = (uint8_t)NB00[nb];   // and D308 vs D4F0/D11A disagree on index width
-    // ($79 and the $09A0 row are seeded with the rest of the tile-half inputs above; a second
-    //  zeroing here used to overwrite them, which is what hid the 16-bit INC.)
+    // ($79 and the $09A0 row are seeded with the rest of the tile-half inputs above; zeroing them again
+    //  here would hide the 16-bit INC.)
     memcpy(work, r, 0x20000);
     int my = CtAnimDrainVisit(work, rom, len, idx);
     // micro-execute C0/CAD9 with the field frame's DP ($0100) and DB $7E, X 8-bit (CA7C REP #10 /
@@ -3452,7 +3136,7 @@ static int runSweepCad9(const char* romPath) {
     s->cpu->sp = 0x01FD; r[0x01FE] = 0xFD; r[0x01FF] = 0xFF;
     s->cpu->k = 0xC0; s->cpu->pc = 0xCAD9;
     if (CtOracleRunToPC(s, 0xC0, 0xFFFE, 400000) < 0) { lost++; continue; }
-    if (my < 0) { unported++; continue; }              // classes 1/2 -- see the header
+    if (my < 0) { unported++; continue; }              // an unported path -- see the header
     calls++;
     int oc = s->cpu->c ? 1 : 0;
     int diff = (my != oc)
@@ -3460,15 +3144,10 @@ static int runSweepCad9(const char* romPath) {
             || work[0x0D80 + idx] != r[0x0D80 + idx] || work[0x0D81 + idx] != r[0x0D81 + idx]
             || work[0x1B00 + x16] != r[0x1B00 + x16]
             ;
-    // THE TILE HALF: the seven upload-queue tables (plus the 16-bit
-    // terminator the append writes one slot past the cursor), the $79 cursor, and the OBJ
-    // template at $7F4802 + $1700,X, and -- now that C0/E534/E687 are ported -- the
-    // pixel copy's 512-byte output at $7F:3800.
-    //
-    // ONLY CLASS 0's TILE HALF IS PORTED. Classes 1 and 2 append to the queue ONCE PER PASS
-    // with per-pass lengths (measured: C0/D394 `ADC #0200` inside class 1's pass 2), so they
-    // need their own derivation rather than a shared helper with different constants. Their
-    // cases are COUNTED here, not compared and not hidden -- porting either moves the number.
+    // The tile half: the seven upload-queue tables (plus the 16-bit terminator the append writes one slot
+    // past the cursor), the $79 cursor, the OBJ template at $7F4802 + $1700,X, and the pixel copy's 512-byte
+    // output at $7F:3800 (C0/E534/E687). Classes 1 and 2 append to the queue once per pass with per-pass
+    // lengths (C0/D394 `ADC #0200` inside class 1's pass 2).
     int tileCmp = 1;   // all four classes now stage; nothing is excluded from the tile compare
     if (tileCmp) {
       if (work[0x0179] != r[0x0179]) diff = 1;
@@ -3491,11 +3170,10 @@ static int runSweepCad9(const char* romPath) {
                r[0x0BC0], r[0x0BC1], r[0x0BC2], r[0x0BC3]); }
     }
   }
-  // ---- the ARENA on its own, all SEVEN routines over every pool state -------------------------
-  // Necessary because the sweep above only ever reaches CtArenaAlloc(n=1): the 2- and 3-slot claims
-  // and the 2-/3-slot releases live behind classes 1 and 2, which are unported, so nothing else
-  // would exercise them. Here they are driven directly. 3 values per slot (free / ours / another
-  // object's) over 4 slots = 81 pool states, x 7 routines.
+  // ---- The arena on its own: all seven routines over every pool state ----
+  // The sweep above reaches the arena only through the classes' own claims, so the 1-, 2- and 3-slot
+  // claims and releases are driven directly here: 3 values per slot (free / ours / another object's) over
+  // 4 slots = 81 pool states, x 7 routines.
   int aOk = 0, aBad = 0, aShown = 0;
   static const struct { const char* n; int addr; int alloc; int n_; } AR[] = {
     { "alloc1", 0xE952, 1, 1 }, { "alloc2", 0xE97A, 1, 2 }, { "alloc3", 0xE9AA, 1, 3 },
@@ -3511,12 +3189,9 @@ static int runSweepCad9(const char* romPath) {
         int sv = SV[v % 3]; v /= 3;
         r[0x0BC0 + k] = (uint8_t)(sv < 0 ? idx : sv);
       }
-      // $0BC4..$0BC6 = FREE on purpose. The pool is FOUR slots and the ROM's scan bounds are 4/3/2
-      // (`CPX #04` / `#03` / `#02`), so a port that scanned one entry too far would read past the
-      // pool. With whatever the state happens to leave there the over-scan usually finds an
-      // occupied byte and fails silently -- i.e. the check could not see the bound at all. Marking
-      // them free makes an over-long scan SUCCEED, and therefore diverge. (Measured: without this,
-      // widening the bound to `k < 4` for every n left the sweep at 567/567.)
+      // $0BC4..$0BC6 are marked free on purpose. The pool is four slots and the ROM's scan bounds are
+      // 4/3/2 (`CPX #04` / `#03` / `#02`); with free bytes past the pool, a port that scanned one entry too
+      // far would succeed and therefore diverge, instead of failing on an occupied byte by chance.
       for (int k = 4; k < 7; k++) r[0x0BC0 + k] = 0x80;
       r[0x016D] = (uint8_t)idx;
       r[0x0D80 + idx] = 0xAA; r[0x0D81 + idx] = 0xBB;        // poison, so a missing write shows
@@ -3526,8 +3201,8 @@ static int runSweepCad9(const char* romPath) {
       else if (AR[ri].n_)    CtArenaFree(work, idx, AR[ri].n_);
       else                   CtArenaFreeRun(work, idx);
       s->cpu->e = false; s->cpu->mf = true; s->cpu->d = false; s->cpu->i = true;
-      // WIDTH CONTRACT: E9E2/E9FF/EA1F open with SEP #10 and close with REP #10, so they are
-      // entered X-16. EA42 brackets neither and is entered X-8. The allocators run X-8 throughout.
+      // Width contract: E9E2/E9FF/EA1F open with SEP #10 and close with REP #10, so they are entered
+      // X-16. EA42 brackets neither and is entered X-8. The allocators run X-8 throughout.
       s->cpu->xf = (AR[ri].alloc || AR[ri].addr == 0xEA42);
       s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->y = 0;
       s->cpu->x = (uint16_t)idx;
@@ -3539,8 +3214,8 @@ static int runSweepCad9(const char* romPath) {
       int diff = 0;
       for (int k = 0; k < 4; k++) if (work[0x0BC0 + k] != r[0x0BC0 + k]) diff = 1;
       if (work[0x0D80 + idx] != r[0x0D80 + idx] || work[0x0D81 + idx] != r[0x0D81 + idx]) diff = 1;
-      // Only the ALLOCATORS have a carry contract. C0/EA42 leaves a data-dependent carry that no
-      // ROM caller reads (EA62 falls out of a CMP), so grading it would invent a requirement.
+      // Only the allocators have a carry contract. C0/EA42 leaves a data-dependent carry that no ROM
+      // caller reads (EA62 falls out of a CMP), so it is not graded.
       if (AR[ri].alloc && myC != (s->cpu->c ? 1 : 0)) diff = 1;
       if (!diff) aOk++;
       else {
@@ -3562,20 +3237,16 @@ static int runSweepCad9(const char* romPath) {
   return (bad || aBad) ? 1 : 0;
 }
 
-// STEP: the object LOADER, C0/4557 + C0/4590, by micro-execution. This is the routine family whose
-// absence makes the whole C0/CAD9 tree unreachable from the live engine: it fills $1200/$1280/
-// $1300/$1380/$1400/$1480/$1500/$1580/$1201 from a sprite id, and every one of those is an input
-// the animation pipeline reads. See disasm/notes/object_loader.md.
-//
-// GRADED IN TWO SPANS, because C0/4590 as a whole never returns in a synthetic state: past the
-// descriptor walk it drags in graphics decompression, the palette allocator and party
-// bookkeeping (C0/73A5, C0/71A5, C0/0A80, C3/0002 ...), and its own dedup helper can BRL away
-// entirely when the cache is full (C0/5CB3). The part this port covers is straight-line:
-//   span 1  C0/4590 -> C0/4626   the prologue (via its one real JSR, C0/4557) and the whole
-//                                descriptor walk. Every `20` byte a raw scan finds in between is
-//                                the OPERAND of a REP/SEP, not a JSR -- checked one by one.
+// --sweeploader: the object loader, C0/4557 + C0/4590, by micro-execution. It fills $1200/$1280/$1300/
+// $1380/$1400/$1480/$1500/$1580/$1201 from a sprite id, inputs the whole animation pipeline reads
+// (disasm/notes/object_loader.md).
+// Graded in two spans, because C0/4590 as a whole never returns in a synthetic state: past the descriptor
+// walk it calls graphics decompression, the palette allocator and party bookkeeping (C0/73A5, C0/71A5,
+// C0/0A80, C3/0002 ...), and its dedup helper can BRL away when the cache is full (C0/5CB3):
+//   span 1  C0/4590 -> C0/4626   the prologue (via its one JSR, C0/4557) and the whole descriptor walk.
+//                                Every `20` byte a raw scan finds in between is the operand of a REP/SEP.
 //   span 2  C0/5C90 -> RTS       the per-scene graphics dedup cache.
-// The decompression queue ($0300-$0303) and the $71 cursor are outside both, and outside the port.
+// The decompression queue ($0300-$0303) and the $71 cursor are outside both spans and outside the port.
 static int runSweepLoader(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -3588,15 +3259,14 @@ static int runSweepLoader(const char* romPath) {
   int calls = 0, ok = 0, bad = 0, shown = 0, lost = 0;
   // Sprite ids across the NPC range, plus values that exercise the dedup cache's hit/miss/full arms.
   static const int ID[] = { 0x00, 0x01, 0x05, 0x10, 0x2A, 0x40, 0x7F, 0x80, 0xC0, 0xFF };
-  // $71 must be seeded in the REAL staging range. The heap is $7F:8000-$FFFF and C0/46CA halts the
-  // machine (BRL C0/2E1E) if the cursor ever falls below $8000 -- so a seed of 0 does not test the
-  // low path, it just makes the ROM never return. Measured live: $B860 (DEMO8_gtu), $9000
-  // (bedslide), $FE20 (S5_gtu). The wrap arm is therefore NOT gradable by micro-execution at all.
+  // $71 must be seeded in the staging range: the heap is $7F:8000-$FFFF and C0/46CA halts the machine
+  // (BRL C0/2E1E) if the cursor falls below $8000, so a seed of 0 just makes the ROM never return. The
+  // values are ones seen live; the wrap arm cannot be graded by micro-execution.
   static const int GFX[] = { 0x8000, 0x9000, 0xB860 };     // $71, the graphics staging cursor
-  static const int CACHE[] = { 0, 1, 2 };                  // dedup: empty / holds our id / FULL
+  static const int CACHE[] = { 0, 1, 2 };                  // dedup: empty / holds our id / full
   static const int IPV[] = { 0x0000, 0x0040 };             // the script IP the id is read from
-  // $81 is not decoration: 4686's `CMP #01 / BMI` is SIGNED, so $81 takes the SAME arm as 0.
-  // With only 0/1/2 seeded, writing that test as `p == 0` was indistinguishable from the ROM.
+  // $81 matters: 4686's `CMP #01 / BMI` is signed, so $81 takes the same arm as 0, which separates the
+  // ROM's test from `p == 0`.
   static const int PARTY[] = { 0x00, 0x01, 0x02, 0x81 };    // $73: the party-slot arms
   for (int ii = 0; ii < 10; ii++)
    for (int gi = 0; gi < 3; gi++)
@@ -3614,12 +3284,12 @@ static int runSweepLoader(const char* romPath) {
       int ip = IPV[pi];
       r[0x12001 + ip + 1] = (uint8_t)ID[ii];               // the sprite id the loader consumes
       for (int k = 0; k < 16; k++) { r[0x0920 + k] = 0xFF; r[0x0930 + k] = 0xFF; }
-      if (CACHE[ci] == 1) {                                // a HIT on an object that already owns it
+      if (CACHE[ci] == 1) {                                // a hit on an object that already owns it
         int rec = 0x24F023 + ID[ii] * 5;
         r[0x0920 + 3] = (uint8_t)(rec < len ? rom[rec] : 0);
         r[0x0930 + 3] = 0x08;
         r[0x1280 + 8] = 0xAA; r[0x1281 + 8] = 0xBB;        // the owner's graphics address
-      } else if (CACHE[ci] == 2) {                         // FULL: no free slot, no hit
+      } else if (CACHE[ci] == 2) {                         // full: no free slot, no hit
         for (int k = 0; k < 16; k++) { r[0x0920 + k] = 0x7E; r[0x0930 + k] = 0x04; }
       }
       // poison every output so a missing write shows
@@ -3627,8 +3297,8 @@ static int runSweepLoader(const char* romPath) {
                                  0x1381, 0x1400, 0x1401, 0x1480, 0x1481, 0x1500, 0x1501, 0x1580,
                                  0x1581, 0x1600, 0x1680, 0x1681, 0x1B01, 0x0C00, 0x0C01 };
       for (int k = 0; k < (int)(sizeof(OUT)/sizeof(OUT[0])); k++) r[OUT[k] + idx] = 0x5A;
-      // The GRAPHICS half's outputs, none of them indexed by the object: the 6-byte request record
-      // plus C3/0002's size report, the cursor, the party counter and its three destinations.
+      // The graphics half's outputs, none indexed by the object: the 6-byte request record plus C3/0002's
+      // size report, the cursor, the party counter and its three destinations.
       static const int GOUT[] = { 0x01E3, 0x0300, 0x0301, 0x0302, 0x0303, 0x0304, 0x0305, 0x0306,
                                   0x0307, 0x0171, 0x0172, 0x0173, 0x29C8, 0x29C9, 0x29D4, 0x29D5,
                                   0x29E0, 0x29E1 };
@@ -3639,10 +3309,9 @@ static int runSweepLoader(const char* romPath) {
       memcpy(work, r, 0x20000);
       int myIp = CtObjLoad(work, rom, len, idx, ip, 4);
       // micro-execute C0/4590 with Y = the script IP, DP = $0100, DB = $00 (bank 0 mirrors WRAM and
-      // maps $4202/$4203/$4216 -- the loader lives on the hardware multiplier).
-      // X/Y are SIXTEEN-BIT here: C0/4557 does `TYX / LDA $7F2001,X` on a 16-bit script IP, so a
-      // narrow index would truncate it -- and did, pinning the oracle's $C7 at $18 whatever the
-      // seed said.
+      // maps $4202/$4203/$4216 -- the loader uses the hardware multiplier).
+      // X/Y are 16-bit here: C0/4557 does `TYX / LDA $7F2001,X` on a 16-bit script IP, which a narrow
+      // index would truncate.
       s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
       s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0;
       s->cpu->x = (uint16_t)idx; s->cpu->y = (uint16_t)ip;
@@ -3650,12 +3319,10 @@ static int runSweepLoader(const char* romPath) {
       s->cpu->nmiWanted = s->cpu->irqWanted = s->cpu->intWanted = s->cpu->resetWanted = false;
       r[0x016D] = (uint8_t)idx;
       s->cpu->sp = 0x01FD; r[0x01FE] = 0xFD; r[0x01FF] = 0xFF;
-      // Where span 1 can stop depends on what the dedup will do: a HIT falls through to the
-      // $1280 copy at 4631-4638, a MISS branches to the graphics path at 466B, and a FULL cache
-      // makes C0/5C90 BRL away at 5CB3 and never come back -- so that arm stops before the call.
-      // Both the HIT and the MISS arm now run to the REAL RTS ($FFFE via the seeded stack), so the
-      // oracle executes JSL C3/0002 for real and the port's ct_lz_decompress is graded against it.
-      // The FULL arm still stops before the call: C0/5C90 BRLs away at 5CB3 and never comes back.
+      // Where span 1 stops depends on the dedup: a hit falls through to the $1280 copy at 4631-4638, a miss
+      // branches to the graphics path at 466B, and a full cache makes C0/5C90 BRL away at 5CB3 and never
+      // come back, so that arm stops before the call. The hit and miss arms run to the RTS ($FFFE via the
+      // seeded stack), so the oracle executes JSL C3/0002 and the port's ct_lz_decompress is graded on it.
       int tgt = (CACHE[ci] == 2) ? 0x4626 : 0xFFFE;
       s->cpu->k = 0xC0; s->cpu->pc = 0x4590;
       if (CtOracleRunToPC(s, 0xC0, tgt, 200000) < 0) { lost++; continue; }      // span 1
@@ -3670,10 +3337,8 @@ static int runSweepLoader(const char* romPath) {
       if (CACHE[ci] != 2) {
         for (int k = 0; k < (int)(sizeof(GOUT)/sizeof(GOUT[0])); k++)
           if (work[GOUT[k]] != r[GOUT[k]]) diff = 1;
-        // And the DECOMPRESSED SHEET itself: the whole $7F:8000-$FFFF heap, byte for byte. This is
-        // what makes the sweep grade ct_lz_decompress against the ROM's own C3/0002 rather than
-        // trusting the size report -- a decompressor that got the length right and the bytes wrong
-        // would otherwise pass.
+        // And the decompressed sheet itself, the whole $7F:8000-$FFFF heap: a decompressor that got the
+        // length right and the bytes wrong would pass on the size report alone.
         for (int k = 0x18000; k < 0x20000; k++) if (work[k] != r[k]) { diff = 1; break; }
       }
       // span 2: the dedup, from the state span 1 left behind ($E3 is already set).
@@ -3683,7 +3348,7 @@ static int runSweepLoader(const char* romPath) {
       if (CACHE[ci] != 2) {
         for (int k = 0; k < 16; k++)
           if (work[0x0920 + k] != r[0x0920 + k] || work[0x0930 + k] != r[0x0930 + k]) diff = 1;
-      }   // the FULL arm BRLs away at C0/5CB3 and never returns, so span 1 stops before the call
+      }   // the full arm BRLs away at C0/5CB3 and never returns, so span 1 stops before the call
           // and neither side touches the cache -- comparing it there would grade nothing.
       if (!diff) ok++;
       else {
@@ -3711,29 +3376,14 @@ static int runSweepLoader(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: C0/B1B2, the VRAM UPLOAD -- the consumer of the queue C0/CAD9 fills and the ONLY thing that
-// clears $09A0, which is C0/CA76's whole-pass gate. Graded the strongest way available: the oracle
-// performs the REAL channel-7 DMAs into its own PPU, and the sweep compares all 64 KB of VRAM byte
-// for byte against a buffer the port filled. That grades the DMA semantics themselves -- mode 1's
-// alternating $2118/$2119, VMAIN $80 incrementing after the HIGH byte, the word-vs-byte address, the
-// $7F source bank and the 0-means-$10000 length -- not just the queue walk.
-// STEP: EXHAUSTIVE byte-exact validation of CtPlayerAnimSelect (C0/9E84, the PC's FACING selector)
-// by MICRO-EXECUTING the real routine over a cross-product of its inputs. Same shape as --sweepcb3a /
-// --sweepc98a / --sweepcad9.
-//
-// WHY A SWEEP AND NOT A SCENARIO. This routine was ported once before (3648128) on the theory that it
-// drove $0F01, wired straight into --portrun, measured at 105 live invocations with the score
-// UNMOVED, and reverted. --portrun could not have graded it: it reaches one facing sequence on one
-// actor, so 15 of the 17 table slots and every early arm went untouched. Driving the inputs directly
-// is what makes them visible -- and the first cut of this sweep scored 4380/4860, i.e. the port was
-// wrong in a way no scenario had been able to say.
-//
-// WHAT IS SEEDED: the two velocity deltas $1D2C/$1D2D (which ARE the table index), the early-arm flag
-// $1D34, the current facing $1600,X and mode $1680,X (so the CMP early-out and the diagonals'
-// keep-else-force are both exercised), the idle counter $0158/$0159, the blink cursor $01F8, the
-// live velocity $1D32/$1D33, the control flags $011F/$0162, the lead index $0197 and the object
-// index $016D. WHAT IS COMPARED: every byte the routine can write --
-// $1600,X $1680,X $1681,X $1601,X $0158 $0159 $01E5 $01F8 $01DB.
+// --sweepanim: CtPlayerAnimSelect (C0/9E84, the PC's facing selector) by micro-execution over a
+// cross-product of its inputs (same shape as --sweepcb3a / --sweepc98a / --sweepcad9). A scenario reaches
+// one facing sequence on one actor, so most table slots and every early arm need the inputs driven.
+// Seeded: the velocity deltas $1D2C/$1D2D (the table index), the early-arm flag $1D34, the facing $1600,X
+// and mode $1680,X (so the CMP early-out and the diagonals' keep-else-force are exercised), the idle
+// counter $0158/$0159, the blink cursor $01F8, the live velocity $1D32/$1D33, the control flags
+// $011F/$0162, the lead index $0197 and the object index $016D. Compared: every byte the routine can
+// write -- $1600,X $1680,X $1681,X $1601,X $0158 $0159 $01E5 $01F8 $01DB.
 static int runSweepAnim(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -3742,12 +3392,9 @@ static int runSweepAnim(const char* romPath) {
   if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000];
-  // The deltas span both signs and both sides of the >>3 shift. THE SLOT HISTOGRAM IS PART OF THE
-  // CHECK, not decoration: the first cut of this list reached only 16 of the 17 distinct table
-  // targets and reported a clean 14336/14336 anyway. The hole was C0/A0B5 (facing 0, RUN tail),
-  // which the table holds at X = $40 and NOWHERE ELSE -- and $40 is unreachable while every seeded
-  // Y delta folds below it, since ix = (fold(dy) | fold(dx)>>3) & $7E. $40 and $C0 close it; the
-  // printed "17/17" is what says so.
+  // The deltas span both signs and both sides of the >>3 shift. The slot histogram is part of the check:
+  // ix = (fold(dy) | fold(dx)>>3) & $7E, and C0/A0B5 (facing 0, run tail) sits only at X = $40, which needs
+  // the $40 and $C0 deltas. The printed "17/17" says every table target was reached.
   static const int DELTA[10] = { 0x00, 0x08, 0x10, 0x18, 0x20, 0x40, 0xF8, 0xF0, 0xE8, 0xC0 };
   static const int MODE[4]  = { 0x00, 0x01, 0x06, 0x17 };   // incl. the values the CMP guards test
   static const int FACE[4]  = { 0x00, 0x01, 0x02, 0x03 };   // both diagonal cases: already-a-component or not
@@ -3756,18 +3403,18 @@ static int runSweepAnim(const char* romPath) {
   static const struct { int d34, f11F, f162, v32, v33, cnt, idx, f8; } SC[14] = {
     { 0x00, 1, 0, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // idle: BCC -> A211 stand
     { 0x00, 1, 0, 0x10, 0x00, 0x0000, 0x02, 0x00 },   // moving: run tail takes A1A4
-    { 0x00, 1, 0, 0x00, 0x00, 0x0000, 0x04, 0x00 },   // not the lead: CPY $97 fails in BOTH A18C and A1E9
+    { 0x00, 1, 0, 0x00, 0x00, 0x0000, 0x04, 0x00 },   // not the lead: CPY $97 fails in both A18C and A1E9
     { 0x00, 0, 0, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // $011F == 0 -> A211
     { 0x00, 1, 2, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // $0162 == 2 && lead -> A1D2, k = $19
-    { 0x00, 1, 2, 0x00, 0x00, 0x0000, 0x04, 0x00 },   // $0162 == 2 but NOT lead -> falls to A1F7
+    { 0x00, 1, 2, 0x00, 0x00, 0x0000, 0x04, 0x00 },   // $0162 == 2 but not lead -> falls to A1F7
     { 0x00, 1, 0, 0x00, 0x00, 0x02FF, 0x02, 0x00 },   // the exact-$02FF blink entry
     { 0x00, 1, 0, 0x00, 0x00, 0x037F, 0x02, 0x11 },   // blink via (c & $7F) == $7F
-    { 0x00, 1, 0, 0x00, 0x00, 0x0300, 0x02, 0x00 },   // > $02FF, low bits not $7F -> WRITES NOTHING
+    { 0x00, 1, 0, 0x00, 0x00, 0x0300, 0x02, 0x00 },   // > $02FF, low bits not $7F -> writes nothing
     { 0x00, 1, 0, 0x00, 0x00, 0x0100, 0x02, 0x00 },   // < $02FF -> A211
     { 0x00, 1, 0, 0x00, 0x00, 0x047F, 0x02, 0x03 },   // blink, different $FE00 cursor -> the CMP #08 gate
-    { 0x01, 1, 0, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // $1D34 != 0, bit2 CLEAR -> INC $E5, then the table
-    { 0x04, 1, 0, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // $1D34 bit2 SET -> the 9E95 arm
-    { 0x05, 1, 0, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // bit2 SET with another bit -> same arm
+    { 0x01, 1, 0, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // $1D34 != 0, bit2 clear -> INC $E5, then the table
+    { 0x04, 1, 0, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // $1D34 bit2 set -> the 9E95 arm
+    { 0x05, 1, 0, 0x00, 0x00, 0x0000, 0x02, 0x00 },   // bit2 set with another bit -> same arm
   };
   // Every byte C0/9E84 can write. Per-object entries carry a +idx offset; the rest are absolute.
   static const struct { int off, perObj; const char* n; } OUT[9] = {
@@ -3790,11 +3437,11 @@ static int runSweepAnim(const char* romPath) {
         r[0x011F] = (uint8_t)SC[sc].f11F; r[0x0162] = (uint8_t)SC[sc].f162;
         r[0x0158] = (uint8_t)SC[sc].cnt; r[0x0159] = (uint8_t)(SC[sc].cnt >> 8);
         r[0x01F8] = (uint8_t)SC[sc].f8;
-        r[0x0197] = 0x02;                                  // the LEAD PC index
+        r[0x0197] = 0x02;                                  // the lead PC index
         r[0x016D] = (uint8_t)idx;                          // $6D -- what LDY $6D reads
         r[0x1600 + idx] = (uint8_t)FACE[fc];
         r[0x1680 + idx] = (uint8_t)MODE[m];
-        r[0x1681 + idx] = 0x5A; r[0x1601 + idx] = 0x5A;    // POISON: a tail that does not reset them
+        r[0x1681 + idx] = 0x5A; r[0x1601 + idx] = 0x5A;    // poison: a tail that does not reset them
         r[0x01E5] = 0x5A; r[0x01DB] = 0x5A;                //   must leave the poison intact
         memcpy(work, r, 0x20000);
         CtPlayerAnimSelect(work, rom, len, idx);
@@ -3832,8 +3479,8 @@ static int runSweepAnim(const char* romPath) {
       }
   printf("sweepanim: CtPlayerAnimSelect vs micro-executed C0/9E84 -> %d/%d byte-exact (%d mismatch, "
          "%d lost, %d/17 table slots reached)\n", ok, calls, bad, lost, distinct);
-  // A clean score over a grid that never reaches a handler is the failure mode this mode was built
-  // to avoid -- say it out loud rather than letting the pass line imply coverage it does not have.
+  // A clean score over a grid that never reaches a handler would imply coverage it does not have, so
+  // unreached slots are reported.
   if (distinct < 17) printf("  sweepanim WARNING: %d of the 17 table slots were NEVER REACHED -- the "
                             "seed grid is blind to them and the score above does not cover them\n",
                             17 - distinct);
@@ -3841,13 +3488,14 @@ static int runSweepAnim(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: byte-exact validation of the IRIS WINDOW BUILDER C3/0077 (ct_vm.c ctIrisCircle, entered by C0/2214/226F's
-// `LDA #00 / JSL C3/0008`) by MICRO-EXECUTING the real routine over a grid of its inputs: the centre $0350/$0352, the radius
-// $0354, the table $0356 and its bank $0358 (bit 0: $7F, clear: $7E) -- including centres at and past the screen's edges,
-// where the left edge clamps at 0 (BPL / LDA #0000), the right at $FF (CMP #00FF / BMI / LDA #00FF), a circle above row 1
-// skips the top fill (CMP #0001 / BMI / BEQ) and one reaching row $DF skips the bottom fill (CMP #00DF / BPL). Every call
-// starts from a POISONED image; compared: both banks from the table's base - $200 to base + $400 (the routine writes
-// lines above its base when the circle runs off the top) and its scratch $03F0-$03F7.
+// --sweepiris: the iris window builder C3/0077 (ct_vm.c ctIrisCircle, entered by C0/2214/226F's `LDA #00 /
+// JSL C3/0008`) by micro-execution over a grid of its inputs: the centre $0350/$0352, the radius $0354,
+// the table $0356 and its bank $0358 (bit 0: $7F, clear: $7E). Centres at and past the screen's edges
+// reach the clamps: left at 0 (BPL / LDA #0000), right at $FF (CMP #00FF / BMI / LDA #00FF), a circle
+// above row 1 skips the top fill (CMP #0001 / BMI / BEQ), one reaching row $DF skips the bottom fill
+// (CMP #00DF / BPL). Every call starts from a poisoned image; compared: both banks from the table's base
+// - $200 to base + $400 (the routine writes above its base when the circle runs off the top) and its
+// scratch $03F0-$03F7.
 //   sweepiris: CtIrisCircleImage vs micro-executed C3/0077 -> <ok>/<calls> byte-exact (<bad> mismatch, <lost> lost)
 static int runSweepIris(const char* romPath) {
   int len = 0;
@@ -3901,13 +3549,13 @@ static int runSweepIris(const char* romPath) {
   return bad || lost ? 1 : 0;
 }
 
-// STEP: byte-exact validation of the QUAD WINDOW BUILDER C3/0EFA (ct_vm.c ctPolyQuad, entered by C0/2409's `JSL C3/0011`:
-// the combat tutorial's yellow line) by MICRO-EXECUTING the real routine over its inputs: the four vertices $0360-$0367 and
-// the table $0350/$0352 ($7F:17C8 / $7F:1AC8, the two the game uses, and a $7E one for the BCC twin at 0FE3). The vertex
-// bytes come from the tutorial's own four FE lines (each frame of each interpolation, as C0/2409 hands them over) and from a
-// fixed pseudo-random draw over edge values (00 01 7F 80 DF FE FF and the line's own) -- flat edges, ties for the top,
-// edges going up first, a quad wider than the screen. Every call starts from a POISONED image; compared: the whole 128 KB
-// but the stack page.
+// --sweeppoly: the quad window builder C3/0EFA (ct_vm.c ctPolyQuad, entered by C0/2409's `JSL C3/0011`:
+// the combat tutorial's yellow line) by micro-execution over its inputs: the four vertices $0360-$0367 and
+// the table $0350/$0352 ($7F:17C8 / $7F:1AC8, the two the game uses, and a $7E one for the BCC twin at
+// 0FE3). The vertex bytes come from the tutorial's own four FE lines (each frame of each interpolation, as
+// C0/2409 hands them over) and from a fixed pseudo-random draw over edge values (00 01 7F 80 DF FE FF and
+// the line's own): flat edges, ties for the top, edges going up first, a quad wider than the screen.
+// Every call starts from a poisoned image; compared: the whole 128 KB but the stack page.
 //   sweeppoly: CtPolyQuadImage vs micro-executed C3/0EFA -> <ok>/<calls> byte-exact (<bad> mismatch, <lost> lost)
 static int runSweepPoly(const char* romPath) {
   int len = 0;
@@ -3942,9 +3590,9 @@ static int runSweepPoly(const char* romPath) {
       v[k] = (q & 1) ? POOL[(q >> 1) % sizeof POOL] : (uint8_t)(q >> 4);
     }
     int bi = t % 3, base = BUF[bi].base, bank = BUF[bi].bank;
-    // A vertex on line FF makes the bottom fill `$F0 = (100 - FF) * 2 - 1` = FFFF: a 64 KB MVN through the table's bank.
-    // In $7E that is the ROM's own stack -- it never returns (measured: all 117 such draws lost, every one with a Y of FF).
-    // The game cannot reach it (C0/2409 always hands $7F), so the $7E twin is drawn without that line.
+    // A vertex on line FF makes the bottom fill `$F0 = (100 - FF) * 2 - 1` = FFFF: a 64 KB MVN through the
+    // table's bank, which in $7E overwrites the ROM's own stack and never returns. The game cannot reach
+    // it (C0/2409 always hands $7F), so the $7E twin is drawn without that line.
     if (bank == 0x7E) for (int k = 1; k < 8; k += 2) if (v[k] == 0xFF) v[k] = 0xFE;
     uint8_t* r = s->ram;
     memcpy(r, img0, 0x20000);
@@ -3977,19 +3625,11 @@ static int runSweepPoly(const char* romPath) {
   return bad || lost ? 1 : 0;
 }
 
-// STEP: byte-exact validation of VM op 0x02 (C0/5FB6, the PRIORITY CALL) by MICRO-EXECUTING the real
-// handler. Fifth of the micro-execution sweep family.
-//
-// WHY IT MUST BE A SWEEP. --portrun cannot reach this opcode at all. The actor that executes it in
-// that scenario is object $10, and the port DROPS object $10 at f66 on an unported op 0x91 -- five
-// frames before the op-0x02 call at f71 -- so a --portrun run dispatches op 0x02 exactly ZERO times
-// and the score is identical with the handler present or absent. Grading it there would be grading
-// nothing, which is the failure this project has now hit three times (--porttick on a harness stub,
-// --playerframe on a memcpy, C0/9E84 on one facing sequence).
-//
-// THE CONTRACT is the handler's, not just its memory writes: the VM runner takes the NEW IP from the
-// returned X and the continue/yield decision from the CARRY, so both are compared. Every arm of this
-// opcode exits IP+3 with SEC.
+// --sweepop02: VM op 0x02 (C0/5FB6, the priority call) by micro-execution of the handler. Scenario runs
+// do not dispatch this opcode on an owned object, so the inputs are driven.
+// The contract is the handler's, not only its memory writes: the runner takes the new IP from the
+// returned X and the continue/yield decision from the carry, so both are compared. Every arm exits IP+3
+// with SEC.
 static int runSweepOp02(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -4001,13 +3641,13 @@ static int runSweepOp02(const char* romPath) {
   const int IP = 0x0300;                                   // operands land at $7F2301/$7F2302, clear
                                                            // of every seeded fn table below
   static const int TGT[3]  = { 0x04, 0x10, 0x12 };
-  // operand 2 packs newPrio in bits 7..3 and the fn slot in bits 3..0, so this list sweeps BOTH.
+  // operand 2 packs newPrio in bits 7..3 and the fn slot in bits 3..0, so this list sweeps both.
   static const int OP2[9]  = { 0x00, 0x0A, 0x11, 0x19, 0x22, 0x3B, 0x45, 0x7C, 0xF3 };
   static const int CUR[5]  = { 0x00, 0x01, 0x02, 0x03, 0x07 };   // the target's current priority
-  // The three reject gates ISOLATED -- 0 = none, 1 = $1C01,X != 0, 2 = $1100,X bit7, 3 = $1000,X
+  // The three reject gates, one at a time: 0 = none, 1 = $1C01,X != 0, 2 = $1100,X bit7, 3 = $1000,X
   // bit7. Setting them together would let a port that checks only one of the three pass.
   static const int GATE[4] = { 0, 1, 2, 3 };
-  static const int PARK[2] = { 0, 1 };         // is the DEFER arm's destination slot already taken?
+  static const int PARK[2] = { 0, 1 };         // is the defer arm's destination slot already taken?
   int ok = 0, bad = 0, calls = 0, lost = 0, shown = 0;
   int armHist[4]; for (int i = 0; i < 4; i++) armHist[i] = 0;   // reject / equal / call / defer
   for (int t = 0; t < 3; t++)
@@ -4027,8 +3667,8 @@ static int runSweepOp02(const char* romPath) {
         r[0x1100 + tgt] = (uint8_t)((GATE[g] == 2) ? 0x80 : 0x00);
         r[0x1000 + tgt] = (uint8_t)((GATE[g] == 3) ? 0x80 : 0x00);
         r[0x1180 + tgt] = 0xEF; r[0x1181 + tgt] = 0xBE;     // a distinctive live IP to watch get saved
-        r[0x1A80 + tgt] = 0x5A; r[0x1A01 + tgt] = 0x5A;     // POISON: only the CALL arm clears these
-        r[0x016D] = 0x02;                                   // the CALLER's index ($6D), not the target
+        r[0x1A80 + tgt] = 0x5A; r[0x1A01 + tgt] = 0x5A;     // poison: only the call arm clears these
+        r[0x016D] = 0x02;                                   // the caller's index ($6D), not the target
         // The object's script-function pointer table at $7F2001 + idx*16 + slot*2.
         for (int k = 0; k < 16; k++) {
           int e = 0x12001 + tgt * 16 + k * 2;
@@ -4037,18 +3677,15 @@ static int runSweepOp02(const char* romPath) {
         // The whole $7F0580 priority-save page: distinct per slot so a wrong row or a wrong stride
         // shows up as a value, not just as a zero.
         for (int k = 0; k < 0x400; k++) r[0x10580 + k] = (uint8_t)(k * 7);
-        // ⚠ `>> 4`, NOT `>> 3`. This sweep is what caught ctVmCall02 counting three shifts (699/840),
-        // and its own seeding kept the wrong count afterwards -- so the PARK row it staged was never
-        // the row the routine reads. Operand 2 is newPrio:slot, one nibble each.
+        // Note: `>> 4`, not `>> 3`: operand 2 is newPrio:slot, one nibble each, and the PARK row staged
+        // here must be the row the routine reads.
         { int newp = (OP2[o] >> 4) & 0xFF;
           int park = 0x10580 + ((newp * 128 + tgt) & 0xFFFF);
           r[park] = (uint8_t)(PARK[pk] ? 0x33 : 0); r[park + 1] = (uint8_t)(PARK[pk] ? 0x44 : 0); }
-        // ⚠ POISON THE DIRECT-PAGE SCRATCH. A full-image compare is still blind to a store whose
-        // value happens to already be there, and $01DC is zero in the settled state -- so dropping
-        // 5FC1's `STZ $DC` survived even after the compare was widened to all 128 KB. $01D9-$01E4 is
-        // the block ctVmCall02 stages ($D9 cur, $DB/$DC target, $DD operand 2, $DF newPrio, $E1 the
-        // save index, $E3 the table offset); poisoning it is what makes a MISSING write as loud as a
-        // wrong one.
+        // Poison the direct-page scratch: a full-image compare cannot see a store whose value is already
+        // there, and $01DC is zero in the settled state (5FC1's `STZ $DC`). $01D9-$01E4 is the block
+        // ctVmCall02 stages ($D9 cur, $DB/$DC target, $DD operand 2, $DF newPrio, $E1 the save index, $E3
+        // the table offset); poisoned, a missing write is as visible as a wrong one.
         for (int k = 0x01D9; k <= 0x01E4; k++) r[k] = 0x5A;
         memcpy(work, r, 0x20000);
         int myCarry = 0;
@@ -4057,7 +3694,7 @@ static int runSweepOp02(const char* romPath) {
           int arm = GATE[g] ? 0 : (newp == cur2 ? 1 : (newp < cur2 ? 2 : 3));
           armHist[arm]++; }
         // Micro-execute. Y = the IP (the runner's convention; the handler opens INY / TYX), X/Y are
-        // SIXTEEN-bit because Y carries a full script pointer, M is 8-bit, DP = $0100 and DB = $00.
+        // 16-bit because Y carries a full script pointer, M is 8-bit, DP = $0100 and DB = $00.
         s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
         s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->x = 0; s->cpu->y = IP;
         s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = false;
@@ -4071,12 +3708,9 @@ static int runSweepOp02(const char* romPath) {
         if (myIp != roIp)   { diff = 1; what = "retIP"; }
         else if (myCarry != roC) { diff = 1; what = "carry"; }
         else {
-          // ⚠ THIS USED TO BE A HAND-LISTED WRITE SET ({ $1180, $1181, $1C00, $1A80, $1A01 } plus the
-          // $7F0580 page), and a hand-listed set is exactly how ctVmCall02's DIRECT-PAGE staging went
-          // missing: $01DB/$01DC/$01D9/$01DD/$01DF/$01E1/$01E3 are shared scratch the routine really
-          // writes, and nothing here looked at them. --sweepops found it later by comparing the whole
-          // image; this now does the same, so the next missing store cannot hide behind the list.
-          // $01FE/$01FF are the RTS sentinel this harness planted, and only those two are excused.
+          // The whole image is compared, not a hand-listed write set: the routine also writes the shared
+          // direct-page scratch $01D9/$01DB/$01DC/$01DD/$01DF/$01E1/$01E3. Only $01FE/$01FF, the RTS
+          // sentinel this harness planted, are excused.
           for (int k = 0; k < 0x20000 && !diff; k++) {
             if (k == 0x01FE || k == 0x01FF) continue;
             if (work[k] != r[k]) { diff = 1; what = "byte"; at = k; }
@@ -4101,20 +3735,14 @@ static int runSweepOp02(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: byte-exact validation of CtObjActiveGate (C0/A88D, the object ACTIVATION GATE) by
-// MICRO-EXECUTING the real routine. Sixth of the micro-execution sweep family.
-//
-// WHAT IS COMPARED, and why the list is short on purpose: the routine's CARRY -- which is its whole
-// product, since both arms of C0/A810 do `JSR C0/A88D / BCC` to skip C98A/A98A/AB45/A9CD -- plus the
-// four camera-window bytes $01C3-$01C6 and the latch $0F00,X. The port deliberately stops there (the
-// rising-edge one-shot, the four sub-calls and the falling-edge tails are separate mechanisms), so
-// those bytes are excluded and NAMED rather than silently skipped.
-//
-// $0154 BIT 7 IS SEEDED SET, and that is the difference between a sweep and a sweep that averts its
-// eyes: C0/7170 and C0/734C -- the OBJ palette allocator's assign and release, which A88D calls on
-// its two edges -- BOTH open `LDA $54 / BMI ->exit`. Setting that bit makes them inert BY THE ROM'S
-// OWN GATE, so the oracle really does execute the whole routine and simply has nothing to do in the
-// palette. The palette half is ported in ct_vm.c (see disasm/notes/objpal_allocator.md).
+// --sweepa88d: CtObjActiveGate (C0/A88D, the object activation gate) by micro-execution.
+// Compared: the carry, which is the routine's product (both arms of C0/A810 do `JSR C0/A88D / BCC` to skip
+// C98A/A98A/AB45/A9CD), the four camera-window bytes $01C3-$01C6 and the latch $0F00,X. The port stops
+// there (the rising-edge one-shot, the four sub-calls and the falling-edge tails are separate mechanisms),
+// so those bytes are excluded by name.
+// $0154 bit 7 is seeded set: C0/7170 and C0/734C, the OBJ palette allocator's assign and release that A88D
+// calls on its two edges, both open `LDA $54 / BMI ->exit`, so the oracle runs the whole routine with
+// nothing to do in the palette (ported in ct_vm.c, disasm/notes/objpal_allocator.md).
 static int runSweepA88d(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -4126,20 +3754,18 @@ static int runSweepA88d(const char* romPath) {
   static const int IDX[2]  = { 0x02, 0x10 };
   static const int ST[3]   = { 0x00, 0x04, 0x80 };            // state: <3, >=3, and the bit7 reject
   static const int VIS[4]  = { 0x00, 0x01, 0x7F, 0x80 };      // $1A81: the BEQ and BMI rejects + both live values
-  // Camera tuples chosen so every SATURATION is exercised: rows 1 and 2 drive $1D0A < 4 and
-  // $1D0E < 2 (the -> 0 clamps), rows 3 and 4 drive $1D0C > $FB and $1D10 > $FA (the -> $FF clamps).
+  // Camera tuples chosen so every saturation is exercised: rows 1 and 2 drive $1D0A < 4 and $1D0E < 2
+  // (the -> 0 clamps), rows 3 and 4 drive $1D0C > $FB and $1D10 > $FA (the -> $FF clamps).
   static const struct { int a, c, e, g; } CAM[5] = {
-    { 0x40, 0x80, 0x20, 0x61 },   // $1D10 ODD so c6 = $66 is EVEN and a doubled position can equal it
+    { 0x40, 0x80, 0x20, 0x61 },   // $1D10 odd so c6 = $66 is even and a doubled position can equal it
     { 0x02, 0x80, 0x01, 0x60 },
     { 0x40, 0xFE, 0x20, 0xFD },
     { 0x00, 0xFF, 0x00, 0xFF },
-    { 0x50, 0x54, 0x30, 0x33 },      // a deliberately NARROW window: most positions fall outside
+    { 0x50, 0x54, 0x30, 0x33 },      // a narrow window: most positions fall outside
   };
-  // Positions around and outside the window, including >= 0x80 so the EIGHT-bit ASL drops bit 7 --
-  // AND the four that land EXACTLY on an edge, which is the whole point. A doubled position is always
-  // EVEN, so an odd edge can never be hit; $1E/$0F/$42/$33 give tx == c3, ty == c5, tx == c4 and
-  // ty == c6 for the camera rows above. Without them the `>=`-vs-`>` boundary is UNGRADED: the
-  // acceptance pass caught exactly that -- relaxing BCS to `>` left the score at a clean 8640/8640.
+  // Positions around and outside the window, including >= 0x80 so the 8-bit ASL drops bit 7, and four
+  // that land on an edge: a doubled position is always even, so $1E/$0F/$42/$33 give tx == c3, ty == c5,
+  // tx == c4 and ty == c6 for the camera rows above. They grade the `>=`-vs-`>` boundary (BCS).
   static const int POS[11] = { 0x00, 0x0F, 0x1E, 0x20, 0x2C, 0x33, 0x41, 0x42, 0x7F, 0x80, 0xC0 };
   static const int LATCH[2] = { 0x00, 0x80 };                 // prior $0F00,X: both edges
   int ok = 0, bad = 0, calls = 0, lost = 0, shown = 0;
@@ -4161,8 +3787,8 @@ static int runSweepA88d(const char* romPath) {
           r[0x1801 + idx] = (uint8_t)POS[px]; r[0x1881 + idx] = (uint8_t)POS[py];
           r[0x0F00 + idx] = (uint8_t)LATCH[la];
           r[0x0154] |= 0x80;                                   // 7170/734C inert by their own gate
-          r[0x01C3] = 0x5A; r[0x01C4] = 0x5A;                  // POISON: a run that rejects on a flag
-          r[0x01C5] = 0x5A; r[0x01C6] = 0x5A;                  //   must leave the window UNWRITTEN
+          r[0x01C3] = 0x5A; r[0x01C4] = 0x5A;                  // poison: a run that rejects on a flag
+          r[0x01C5] = 0x5A; r[0x01C6] = 0x5A;                  //   must leave the window unwritten
           memcpy(work, r, 0x20000);
           int myAct = CtObjActiveGate(work, idx);
           if (myAct) nAct++; else nIn++;
@@ -4180,13 +3806,10 @@ static int runSweepA88d(const char* romPath) {
           int diff = 0, at = -1; const char* what = NULL;
           if (myAct != roC) { diff = 1; what = "carry"; }
           else {
-            // $01C5 IS COMPARED ONLY ON THE INACTIVE VERDICT, and the reason is a real ROM fact
-            // rather than a convenience: C0/A9CD -- the Y-sorted list LINK that A88D calls on the
-            // ACTIVATE edge -- reuses $C5 as scratch (`A9F2 STY $C5` ... `A9FD LDY $C5`) and does not
-            // put the old byte back. So on an activation the oracle's $01C5 holds A9CD's list index,
-            // not A88D's window edge. The port does not call A9CD (CtObjListLink is graded on its
-            // own by --sweeplist), so this is the omitted-sub-call boundary showing through, not a
-            // divergence. The 7520 inactive cases still grade the $1D0E-2 clamp fully.
+            // $01C5 is compared only on the inactive verdict: C0/A9CD, the Y-sorted list link A88D calls on
+            // the activate edge, reuses $C5 as scratch (`A9F2 STY $C5` ... `A9FD LDY $C5`) without restoring
+            // it, so on an activation the oracle's $01C5 holds A9CD's list index. The port does not call A9CD
+            // here (CtObjListLink is graded by --sweeplist); the inactive cases still grade the $1D0E-2 clamp.
             static const int W[5] = { 0x01C3, 0x01C4, 0x01C5, 0x01C6, 0x0F00 };
             for (int q = 0; q < 5 && !diff; q++) {
               if (q == 2 && myAct) continue;                   // see above: A9F2 STY $C5
@@ -4212,38 +3835,18 @@ static int runSweepA88d(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: byte-exact validation of the PLAYER'S TOUCH REDIRECT -- C0/5B8D's gate and C0/3154's body --
-// by MICRO-EXECUTING both. Seventh of the micro-execution sweep family.
-//
-// $0154 BIT 1 IS SEEDED SET so that C0/31B1 -- the tail 31AD calls on BOTH non-reject paths, which
-// does a tile-based shove of the touched object and is NOT ported -- exits at once through its own
-// `31B1 LDA $54 / BIT #02 / BNE ->31BB(RTS)`. Same discipline as --sweepa88d's bit 7 for the palette:
-// the oracle still executes the whole routine, it simply has nothing to do.
-// STEP: C0/5B95, THE OBJECT-SOLID TEST -- its GATE CHAIN, micro-executed and graded.
-//
-// WHY A SWEEP AND NOT A SCENARIO. The line under test (5BC3, the CANDIDATE's $0F00) was ungraded:
-// reverting it to the retired `draw` test survived the whole suite. A divergence counter inside
-// npcSolidTile plus a run over ALL 512 field scenes found exactly three that could tell the two
-// apart (285: 5/5, 294: 3/3, 298: 25/25 divergent decisions, and the actor-position hash moved on
-// all three). Then porting 5B99 -- the MOVER's own $0F00, which the port was missing -- took that to
-// ZERO scenes out of 512, because a mover that is itself activated is on-camera and so is everything
-// near it. The FAITHFUL port makes the line unreachable by real data, so real data cannot cover it.
-// Same situation that produced --sweepowregion, and the same answer.
-//
-// WHAT IS GRADED HERE: the six gates, against the ROM's own carry.
-//   5B99 mover $0F00 | 5BA0 mover $1C80 bit1 | 5BC3 cand $0F00 | 5BD5 cand $1100 bit7
-//   5BD7 cand == mover | 5BDB cand $1B01 bit0
-// The port side is CtVmSolidMoverGate/CtVmSolidCandGate -- the same functions npcSolidTile calls,
-// NOT a copy. (A sweep that grades a private copy grades the copy: that is exactly how the draw
-// compare's class guard survived its own mutation earlier in this same investigation.) Geometry is
-// held CONSTANT and passing -- the candidate sits 8 px along the heading, well inside the ROM's
-// 16 px box on every arm -- so a gate verdict is never silently a geometry verdict.
-//
-// ALL THREE PHASES ARE GRADED: the gate chain, the distance BOX (C0/5BFA / 5C20 / 5C47 /
-// 5C6D compare $1800/$1880 against #0100 = 16.0 px in 12.4, directional and half-open, selected by
-// $1600,X; the port compares the destination TILE), and the SCAN RANGE (5BBD starts at
-// X = $7F2000*2, i.e. ONE PAST the last object, and 5BC8's `DEX DEX / BNE` exits at 0 -- so the ROM
-// probes index N and never tests index 0, while the port walks N-1..0).
+// --sweepsolid: C0/5B95, the object-solid test, micro-executed and graded in three phases. Real data
+// cannot reach line 5BC3 (the candidate's $0F00): with 5B99 (the mover's own $0F00) ported, an activated
+// mover is on camera and so is everything near it, so the inputs are driven (as in --sweepowregion).
+//   Phase 1, the six gates against the ROM's carry:
+//     5B99 mover $0F00 | 5BA0 mover $1C80 bit1 | 5BC3 cand $0F00 | 5BD5 cand $1100 bit7
+//     5BD7 cand == mover | 5BDB cand $1B01 bit0
+//   The port side is CtVmSolidMoverGate/CtVmSolidCandGate, the functions npcSolidTile calls (not a copy).
+//   Geometry is held constant and passing (the candidate 8 px along the heading, inside the 16 px box).
+//   Phase 2, the distance box: C0/5BFA / 5C20 / 5C47 / 5C6D compare $1800/$1880 against #0100 = 16.0 px
+//   in 12.4, directional and half-open, selected by $1600,X; the port compares the destination tile.
+//   Phase 3, the scan range: 5BBD starts at X = $7F2000*2, one past the last object, and 5BC8's `DEX DEX /
+//   BNE` exits at 0, so the ROM probes index N and never index 0, while the port walks N-1..0.
 static int runSweepSolid(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -4258,7 +3861,7 @@ static int runSweepSolid(const char* romPath) {
   static const int CACT[2] = { 0x00, 0x80 };             // candidate $0F00
   static const int CCLS[3] = { 0x00, 0x04, 0x80 };       // candidate $1100 (bit7 = unloaded slot)
   static const int CSOL[2] = { 0x00, 0x01 };             // candidate $1B01 (bit0 = solid)
-  static const int CIDX[2] = { 2, MOVER };               // a real candidate, and the mover ITSELF
+  static const int CIDX[2] = { 2, MOVER };               // a real candidate, and the mover itself
   int ok = 0, bad = 0, lost = 0, shown = 0, nBlock = 0, nPass = 0, nInv = 0;
   for (int ma = 0; ma < 2; ma++)
    for (int mc = 0; mc < 4; mc++)
@@ -4268,10 +3871,10 @@ static int runSweepSolid(const char* romPath) {
        for (int ci = 0; ci < 2; ci++)
         for (int h = 0; h < 4; h++) {
           uint8_t* r = s->ram;
-          for (int k = 0; k < 0x20; k++) {               // POISON every per-object byte the scan reads
+          for (int k = 0; k < 0x20; k++) {               // poison every per-object byte the scan reads
             r[0x0F00 + k] = 0x00; r[0x1100 + k] = 0x80; r[0x1B01 + k] = 0x00;
             r[0x1C80 + k] = 0x00; r[0x1600 + k] = 0x00;
-            r[0x1A81 + k] = 0x01;                        // see the INVERSE seed below
+            r[0x1A81 + k] = 0x01;                        // see the inverse seed below
             r[0x1800 + k] = 0x00; r[0x1801 + k] = 0x00;
             r[0x1880 + k] = 0x00; r[0x1881 + k] = 0x00;
           }
@@ -4282,9 +3885,8 @@ static int runSweepSolid(const char* romPath) {
           r[0x1C80 + MOVER * 2] = (uint8_t)MCOL[mc];
           r[0x1600 + MOVER * 2] = (uint8_t)h;
           r[0x1100 + MOVER * 2] = 0x04;
-          // The mover is seeded SOLID and ACTIVE-LOOKING as a candidate, so that when cand == MOVER
-          // the ONLY thing that can reject it is 5BD7's `CPX $6D / BEQ`. Without this its poisoned
-          // $1B01 = 0 rejected it first and the self-test mutation walked through the sweep.
+          // The mover is seeded solid and active-looking as a candidate, so when cand == MOVER only 5BD7's
+          // `CPX $6D / BEQ` can reject it.
           r[0x1B01 + MOVER * 2] = 0x01;
           r[0x1A81 + MOVER * 2] = (uint8_t)(MACT[ma] ? 0x00 : 0x01);
           r[0x1800 + MOVER * 2] = (uint8_t)mx; r[0x1801 + MOVER * 2] = (uint8_t)(mx >> 8);
@@ -4297,22 +3899,19 @@ static int runSweepSolid(const char* romPath) {
             r[0x1B01 + cand * 2] = (uint8_t)CSOL[cs];
             r[0x1800 + cand * 2] = (uint8_t)cx; r[0x1801 + cand * 2] = (uint8_t)(cx >> 8);
             r[0x1880 + cand * 2] = (uint8_t)cy; r[0x1881 + cand * 2] = (uint8_t)(cy >> 8);
-            // ANTI-BLINDNESS. $1A81 is seeded as the EXACT INVERSE of $0F00, so any test that reads
-            // the script-visibility byte instead of the activation latch -- which is precisely the
-            // retired form of this line -- flips its answer on EVERY seed and cannot hide. Without
-            // this the sweep would be seeding two bytes that happen to agree, and the one mutation
-            // it exists to kill would walk straight through it.
+            // $1A81 is seeded as the inverse of $0F00, so a test that reads the script-visibility byte
+            // instead of the activation latch flips its answer on every seed.
             r[0x1A81 + cand * 2] = (uint8_t)(CACT[ca] ? 0x00 : 0x01);
             if (CACT[ca] == 0) nInv++;
           }
-          int mine = 0;                                  // OURS: the very functions npcSolidTile calls
+          int mine = 0;                                  // ours: the functions npcSolidTile calls
           if (CtVmSolidMoverGate(r, MOVER * 2))
             for (int i = NOBJ - 1; i >= 0 && !mine; i--)
               if (i == cand && CtVmSolidCandGate(r, MOVER * 2, i * 2)) mine = 1;
           if (mine) nBlock++; else nPass++;
           s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = true; s->cpu->d = false; s->cpu->i = true;
           s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->x = 0; s->cpu->y = 0;
-          s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = !mine;   // seed the OPPOSITE carry
+          s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = !mine;   // seed the opposite carry
           s->cpu->nmiWanted = s->cpu->irqWanted = s->cpu->intWanted = s->cpu->resetWanted = false;
           s->cpu->sp = 0x01FD; r[0x01FE] = 0xFD; r[0x01FF] = 0xFF;
           r[0x016D] = (uint8_t)(MOVER * 2);              // $6D under DP = $0100
@@ -4330,12 +3929,12 @@ static int runSweepSolid(const char* romPath) {
          ok, ok + bad, bad, lost, nBlock, nPass);
   printf("sweepsolid: %d seeds carry $1A81 as the exact INVERSE of $0F00, so reading the script-"
          "visibility byte instead of the activation latch is caught rather than tolerated\n", nInv);
-  // ---- PHASE 2: THE DISTANCE BOX (C0/5BFA / 5C20 / 5C47 / 5C6D), swept across every boundary. ----
-  // All gates are held OPEN so a verdict here is purely geometric. The offsets bracket both edges of
-  // #0100 on both signs, and BOTH INDEX ORDERS are driven (cand below and above the mover) because
-  // 5BD7's `CPX $6D` leaves the carry the first SBC runs on -- the same candidate at the same distance
-  // decides differently depending on its index, and a sweep that only used one order would never see
-  // it. Every offset is also driven on the CROSS axis, whose carry is always 0 (the primary CMP).
+  // ---- Phase 2: the distance box (C0/5BFA / 5C20 / 5C47 / 5C6D), swept across every boundary ----
+  // All gates are held open so a verdict here is purely geometric. The offsets bracket both edges of
+  // #0100 on both signs, and both index orders are driven (cand below and above the mover), because 5BD7's
+  // `CPX $6D` leaves the carry the first SBC runs on: the same candidate at the same distance decides
+  // differently depending on its index. Every offset is also driven on the cross axis, whose carry is
+  // always 0 (the primary CMP).
   static const int OFS[13] = { 0, 1, -1, 0xFF, 0x100, 0x101, -0xFF, -0x100, -0x101, 8, -8, 0x180, -0x180 };
   int bok = 0, bbad = 0, blost = 0, bshown = 0, bBlock = 0, bPass = 0, bOrderLo = 0, bOrderHi = 0;
   for (int h = 0; h < 4; h++)
@@ -4343,7 +3942,7 @@ static int runSweepSolid(const char* romPath) {
     for (int oj = 0; oj < 13; oj++)
      for (int lo = 0; lo < 2; lo++) {
        uint8_t* r = s2->ram;
-       int mover = lo ? 3 : 1, cand = lo ? 1 : 3;     // lo=1 puts the candidate BELOW the mover's index
+       int mover = lo ? 3 : 1, cand = lo ? 1 : 3;     // lo=1 puts the candidate below the mover's index
        for (int k = 0; k < 0x20; k++) {
          r[0x0F00 + k] = 0x00; r[0x1100 + k] = 0x80; r[0x1B01 + k] = 0x00;
          r[0x1C80 + k] = 0x00; r[0x1600 + k] = 0x00; r[0x1A81 + k] = 0x00;
@@ -4387,15 +3986,13 @@ static int runSweepSolid(const char* romPath) {
          bok, bok + bbad, bbad, blost, bBlock, bPass, bOrderLo, bOrderHi);
   if (!bBlock || !bPass || !bOrderLo || !bOrderHi)
     printf("  sweepsolid WARNING: the box sweep never produced one of its verdicts or index orders\n");
-  // ---- PHASE 3: THE SCAN RANGE (5BBD start, 5BC8 exit-at-zero), driven END TO END. -------------
-  // The range is invisible to the two phases above: they evaluate one candidate that the caller has
-  // already chosen, so the loop bounds never enter the verdict. This one runs the WHOLE scan --
-  // CtVmSolidScan, the same function npcSolidTile calls -- with EXACTLY ONE qualifying blocker,
-  // walked across every slot from 0 to nobj inclusive. Two of those slots are the whole point:
-  //   index 0     the ROM NEVER tests it (5BC8's `DEX DEX / BNE` exits at zero) -> must NOT block
-  //   index nobj  the ROM DOES probe it (5BBD starts at $7F2000*2, one PAST the last object) -> BLOCKS
-  // A port that walks nobj-1..0 gets BOTH of those backwards, which is exactly the shape the range
-  // mutation takes, and neither phase 1 nor phase 2 would notice.
+  // ---- Phase 3: the scan range (5BBD start, 5BC8 exit at zero), driven end to end ----
+  // The phases above evaluate one candidate the caller already chose, so the loop bounds never enter
+  // their verdict. This runs the whole scan (CtVmSolidScan, the function npcSolidTile calls) with one
+  // qualifying blocker walked across every slot from 0 to nobj inclusive. Two slots decide it:
+  //   index 0     the ROM never tests it (5BC8's `DEX DEX / BNE` exits at zero) -> must not block
+  //   index nobj  the ROM probes it (5BBD starts at $7F2000*2, one past the last object) -> blocks
+  // A port that walks nobj-1..0 gets both backwards.
   int sok = 0, sbad = 0, slost = 0, sshown = 0, sBlock = 0, sPass = 0, sZero = 0, sPast = 0;
   for (int h = 0; h < 4; h++)
    for (int nb = 3; nb <= 5; nb++)
@@ -4422,7 +4019,7 @@ static int runSweepSolid(const char* romPath) {
        r[0x1880 + slot * 2] = (uint8_t)cy; r[0x1881 + slot * 2] = (uint8_t)(cy >> 8);
        if (slot == 0) sZero++;
        if (slot == nb) sPast++;
-       int mine = CtVmSolidScan(r, nb, mv * 2, h, NULL, NULL);    // the SAME scan npcSolidTile calls
+       int mine = CtVmSolidScan(r, nb, mv * 2, h, NULL, NULL);    // the scan npcSolidTile calls
        if (mine) sBlock++; else sPass++;
        s2->cpu->e = false; s2->cpu->mf = true; s2->cpu->xf = true; s2->cpu->d = false; s2->cpu->i = true;
        s2->cpu->dp = 0x0100; s2->cpu->db = 0x00; s2->cpu->a = 0; s2->cpu->x = 0; s2->cpu->y = 0;
@@ -4445,8 +4042,7 @@ static int runSweepSolid(const char* romPath) {
          sok, sok + sbad, sbad, slost, sBlock, sPass, sZero, sPast);
   if (!sZero || !sPast || !sBlock || !sPass)
     printf("  sweepsolid WARNING: the scan sweep never reached index 0, index nobj, or one verdict\n");
-  // The box used to be listed here as unported. It is not any more -- phase 2 grades it and
-  // npcSolidTile calls it. What is left is the SCAN RANGE, and it stays printed until it is closed.
+  // Gates, distance box and scan range are all graded above; npcSolidTile calls the same functions.
   printf("sweepsolid: nothing of C0/5B95 is left unported -- gates, distance box and scan range "
          "are all graded against micro-execution above\n");
   if (!nBlock || !nPass)
@@ -4455,6 +4051,10 @@ static int runSweepSolid(const char* romPath) {
   return bad ? 1 : 0;
 }
 
+// --sweeptouch: the player's touch redirect, C0/5B8D's gate and C0/3154's body, both micro-executed.
+// $0154 bit 1 is seeded set so that C0/31B1 (the tail 31AD calls on both non-reject paths, a tile-based
+// shove of the touched object; not ported) exits at once through its own `31B1 LDA $54 / BIT #02 /
+// BNE ->31BB(RTS)`, as --sweepa88d does with bit 7 for the palette.
 static int runSweepTouch(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -4463,7 +4063,7 @@ static int runSweepTouch(const char* romPath) {
   if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000];
-  // ---- PART 1: C0/5B8D, the gate. Two instructions, so sweep ALL 256 latch values. -------------
+  // ---- Part 1: C0/5B8D, the gate: two instructions, so all 256 latch values are swept ----
   int gOk = 0, gBad = 0;
   for (int v = 0; v < 256; v++) {
     uint8_t* r = s->ram;
@@ -4471,17 +4071,17 @@ static int runSweepTouch(const char* romPath) {
     int mine = !(v & 0x80);                            // 5B8F BPL ->5B93 SEC ; else 5B91 CLC
     s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = true; s->cpu->d = false; s->cpu->i = true;
     s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->x = 0; s->cpu->y = 0;
-    s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = !mine;   // seed the OPPOSITE carry
+    s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = !mine;   // seed the opposite carry
     s->cpu->nmiWanted = s->cpu->irqWanted = s->cpu->intWanted = s->cpu->resetWanted = false;
     s->cpu->sp = 0x01FD; r[0x01FE] = 0xFD; r[0x01FF] = 0xFF;
     s->cpu->k = 0xC0; s->cpu->pc = 0x5B8D;
     if (CtOracleRunToPC(s, 0xC0, 0xFFFE, 1000) < 0) { gBad++; continue; }
     if ((s->cpu->c ? 1 : 0) == mine) gOk++; else gBad++;
   }
-  // ---- PART 2: C0/3154, the redirect ----------------------------------------------------------
+  // ---- Part 2: C0/3154, the redirect ----
   static const int TGT[3]  = { 0x04, 0x12, 0x16 };
   static const int CUR[6]  = { 0x00, 0x02, 0x03, 0x04, 0x07, 0x0F };   // both sides of `CMP #03`
-  static const int GATE[4] = { 0, 1, 2, 3 };   // 0 none, 1 $1C01, 2 $1100 bit7, 3 $1000 bit7 -- ISOLATED
+  static const int GATE[4] = { 0, 1, 2, 3 };   // 0 none, 1 $1C01, 2 $1100 bit7, 3 $1000 bit7 -- one at a time
   static const int IP[3]   = { 0x0000, 0x073F, 0xBEEF };
   int ok = 0, bad = 0, calls = 0, lost = 0, shown = 0;
   int nDo = 0, nSkip = 0;
@@ -4497,7 +4097,7 @@ static int runSweepTouch(const char* romPath) {
        r[0x1100 + tgt] = (uint8_t)((GATE[g] == 2) ? 0x80 : 0x00);
        r[0x1000 + tgt] = (uint8_t)((GATE[g] == 3) ? 0x80 : 0x00);
        r[0x1180 + tgt] = (uint8_t)IP[ipx]; r[0x1181 + tgt] = (uint8_t)(IP[ipx] >> 8);
-       r[0x1A80 + tgt] = 0x5A; r[0x1A01 + tgt] = 0x5A; r[0x1001 + tgt] = 0x5A;   // POISON
+       r[0x1A80 + tgt] = 0x5A; r[0x1A01 + tgt] = 0x5A; r[0x1001 + tgt] = 0x5A;   // poison
        r[0x0154] |= 0x02;                                // C0/31B1 inert by its own gate
        for (int k = 0; k < 16; k++) {                    // the object's fn-pointer table
          int e = 0x12001 + tgt * 16 + k * 2;
@@ -4536,37 +4136,16 @@ static int runSweepTouch(const char* romPath) {
   return (bad || gBad) ? 1 : 0;
 }
 
-// SWEEPACT: the ACTIVATE INVOKE's four guards, byte-exact against the micro-executed ROM.
-//
-// C0/5AC5 is the routine the A-button handler reaches once the object probe has latched a target
-// ($01EB). It opens with four tests that all leave through the same 5B1E RTS:
-//   5AC7  LDA $1C01,X / BNE ->5B1E      ; a pending cross-object wait
-//   5ACC  LDA $1100,X / BMI ->5B1E      ; DEACTIVATED  (op 0x0A, C0/6254: $1100,X := $80)
-//   5AD1  LDA $1000,X / BMI ->5B1E      ; PAUSED       (op 0x0B, C0/6269: $1000,X |= $80)
-//   5AD6  LDA $1C00,X / CMP #02 / BCC   ; busy at priority 0 or 1
-// and only then commits: push $1180,X into $7F0580[prio*0x80 + obj*2], load fn1 from
-// $7F2001[obj*32 + 2], set $1C00,X = 1 and zero $1A80,X / $1A01,X / $1001,X.
-//
-// WHAT IS COMPARED IS THE VERDICT, and the ROM's verdict is read the honest way: the WHOLE 128 KB
-// image before and after. A declined invoke writes NOTHING, so "the image changed" IS "accepted" --
-// there is no hand-listed write set here to be wrong about. (The seed poisons $1A80/$1A01/$1001 and
-// $1180 so that an accept can never be invisible.) The port side is CtVmActivateGate, the SAME
-// function CtSceneActivate calls -- this does not grade a private second copy of the rule.
-//
-// $1C00,X IS SEEDED, AND THAT IS THE POINT. This engine does not maintain that byte (measured: a
-// fresh --scene 2 run dumped at f200 has $1C00 = 00 for all 24 objects), so CtVmActivateGate takes
-// the live script priority as its value; here the sweep hands the ROM the same number it hands the
-// port, which is exactly the equivalence being claimed.
-// --sweepdoorlist -- the OPENED-DOOR LIST at $7F:1CC8 (disasm/notes/field_door_list.md) micro-executed against the port:
+// --sweepdoorlist: the opened-door list at $7F:1CC8 (disasm/notes/field_door_list.md) micro-executed against the port:
 //   (1) C0/28E1 (the re-apply, C0/286C's first JSR) vs CtWramDoorListApply, over a junk map span and lists of 0..16
-//       entries whose cells hold the five closed door ids (or anything) -- compared over the WHOLE 128 KB;
-//   (2) C0/28C0 (the append) vs CtWramDoorListAppend: empty, partial, full lists, a tile already listed or not, a
-//       "tile" with bit 15 set -- the whole 128 KB;
-//   (3) the DOOR REQUEST, C0/0C76 with $0117 = $10 -> C0/0D45 -> JSR C0/28C0 -> the handler dispatch (C0/0D4C .. 149D),
-//       vs CtWramDoorListAppend + CtWramDoorOpen -- compared on the list and the whole map span $7E:3000..$7F:2FFF
-//       (the handlers' other writes -- the VRAM queue $09D0, $015F, the camera scratch, the SFX mailbox -- are theirs,
-//       not the map's). Rows 0 and 1 are seeded so a block's upper rows wrap X into bank $7F; the E6 handler's
-//       sixteen-bit INC at (r-1,c) is seeded with $FF so it carries into (r-1,c+1).
+//       entries whose cells hold the five closed door ids (or anything), compared over the whole 128 KB;
+//   (2) C0/28C0 (the append) vs CtWramDoorListAppend: empty, partial and full lists, a tile already listed or not, a
+//       "tile" with bit 15 set, compared over the whole 128 KB;
+//   (3) the door request, C0/0C76 with $0117 = $10 -> C0/0D45 -> JSR C0/28C0 -> the handler dispatch (C0/0D4C .. 149D),
+//       vs CtWramDoorListAppend + CtWramDoorOpen, compared on the list and the whole map span $7E:3000..$7F:2FFF
+//       (the handlers' other writes -- the VRAM queue $09D0, $015F, the camera scratch, the SFX mailbox -- are not
+//       the map's). Rows 0 and 1 are seeded so a block's upper rows wrap X into bank $7F; the E6 handler's 16-bit INC
+//       at (r-1,c) is seeded with $FF so it carries into (r-1,c+1).
 // Entry: M 8-bit, X 16-bit, D = $0100 (C0/28C0's `CMP $5B` is $015B), DB = $00, a JSR from C0/FFFD. $1E05 bit 7 clear,
 // so C0/1B90's JSL C7:0004 skips the sound driver.
 static int runSweepDoorList(const char* romPath) {
@@ -4674,6 +4253,20 @@ static int runSweepDoorList(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad[0] || bad[1] || bad[2] || lost[0] || lost[1] || lost[2]) ? 1 : 0;
 }
+// --sweepact: the activate invoke's four guards against the micro-executed ROM. C0/5AC5 is what the A-button
+// handler reaches once the object probe has latched a target ($01EB). It opens with four tests that all leave
+// through the same 5B1E RTS:
+//   5AC7  LDA $1C01,X / BNE ->5B1E      ; a pending cross-object wait
+//   5ACC  LDA $1100,X / BMI ->5B1E      ; deactivated  (op 0x0A, C0/6254: $1100,X := $80)
+//   5AD1  LDA $1000,X / BMI ->5B1E      ; paused       (op 0x0B, C0/6269: $1000,X |= $80)
+//   5AD6  LDA $1C00,X / CMP #02 / BCC   ; busy at priority 0 or 1
+// and only then commits: push $1180,X into $7F0580[prio*0x80 + obj*2], load fn1 from $7F2001[obj*32 + 2],
+// set $1C00,X = 1 and zero $1A80,X / $1A01,X / $1001,X.
+// The verdict is read from the whole 128 KB image before and after: a declined invoke writes nothing, so
+// "the image changed" means "accepted" (the seed poisons $1A80/$1A01/$1001 and $1180 so an accept is always
+// visible). The port side is CtVmInvokeGate, the predicate the live VM calls.
+// Stand-in: the port does not maintain $1C00,X, so the gate takes the live script priority as its value;
+// the sweep hands the ROM the same number it hands the port.
 static int runSweepAct(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -4684,7 +4277,7 @@ static int runSweepAct(const char* romPath) {
   static uint8_t before[0x20000];
   static const int OBJX[3] = { 0x04, 0x12, 0x16 };                     // objects 2, 9, 11 (X = obj*2)
   static const int CUR[6]  = { 0x00, 0x01, 0x02, 0x03, 0x07, 0x0F };   // both sides of CMP #02
-  // ($1C01, $1100, $1000) -- each guard ISOLATED, plus the low-bit controls that must NOT gate.
+  // ($1C01, $1100, $1000) -- each guard on its own, plus the low-bit controls that must not gate.
   static const int G1C01[9] = { 0x00, 0x01, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
   static const int G1100[9] = { 0x04, 0x04, 0x04, 0x80, 0x84, 0x7F, 0x04, 0x04, 0x04 };
   static const int G1000[9] = { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x80, 0x91, 0x7F };
@@ -4704,17 +4297,17 @@ static int runSweepAct(const char* romPath) {
       r[0x1100 + tx] = (uint8_t)G1100[g];
       r[0x1000 + tx] = (uint8_t)G1000[g];
       r[0x1180 + tx] = 0x37; r[0x1181 + tx] = 0x13;           // a distinct current IP
-      r[0x1A80 + tx] = 0x5A; r[0x1A01 + tx] = 0x5A; r[0x1001 + tx] = 0x5A;   // POISON: the three STZs
+      r[0x1A80 + tx] = 0x5A; r[0x1A01 + tx] = 0x5A; r[0x1001 + tx] = 0x5A;   // poison: the three STZs
       for (int k = 0; k < 16; k++) {                          // the object's 16-entry fn table
         int e = 0x12001 + tx * 16 + k * 2;                    // $7F2001 + obj*32 + k*2
         r[e] = (uint8_t)(0x40 + k); r[e + 1] = (uint8_t)(0x0A + t);
       }
       for (int k = 0; k < 0x800; k++) r[0x10580 + k] = (uint8_t)(k * 7 + 3);  // the return-stack page
-      r[0x0154] |= 0x02;                                     // C0/31B1 inert by its own gate -- SEEDED
-                                                             // BEFORE the snapshot, or iteration 0 reads
+      r[0x0154] |= 0x02;                                     // C0/31B1 inert by its own gate -- seeded
+                                                             // before the snapshot, or iteration 0 reads
                                                              // its own store as a ROM write
       memcpy(before, r, 0x20000);
-      int mine = CtVmInvokeGate(r, tx / 2, CUR[c], MINPRIO[en]);   // THE PORT -- the live predicate
+      int mine = CtVmInvokeGate(r, tx / 2, CUR[c], MINPRIO[en]);   // the port: the live predicate
       s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
       s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->x = 0; s->cpu->y = 0;
       s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = false;
@@ -4723,7 +4316,7 @@ static int runSweepAct(const char* romPath) {
       s->cpu->k = 0xC0; s->cpu->pc = (uint16_t)ENTRY[en];
       if (CtOracleRunToPC(s, 0xC0, 0xFFFE, 200000) < 0) { lost++; continue; }
       calls++;
-      int romAcc = 0;                                          // a DECLINE writes nothing at all
+      int romAcc = 0;                                          // a decline writes nothing at all
       for (int q = 0; q < 0x20000 && !romAcc; q++)
         if ((q < 0x01F4 || q >= 0x0200) && before[q] != r[q]) romAcc = 1;   // minus the stack headroom
       if (romAcc) { nAcc++; armAcc[g]++; entAcc[en]++; } else nDec++;
@@ -4743,19 +4336,12 @@ static int runSweepAct(const char* romPath) {
   return (bad || lost || !nAcc || !nDec) ? 1 : 0;
 }
 
-// STEP: byte-exact validation of the TEN player-script opcodes by MICRO-EXECUTING each real handler.
-// Eighth of the micro-execution sweep family.
-//
-// IT COMPARES THE WHOLE 128 KB WRAM IMAGE, not a hand-listed write set. Every sweep before this one
-// named the bytes it expected the routine to touch, and twice in this session that list was the thing
-// that was wrong ($0C01 owned-but-uncompared in --portrun, $01C5 clobbered by a callee in
-// --sweepa88d). Diffing everything removes the list as a place for an error to hide: any byte the ROM
-// writes and the port does not -- or vice versa -- is a mismatch by construction. The ONLY exclusion
-// is [$01F4,$0200), the CPU stack headroom below the fake return address this sweep seeds.
-//
-// The returned IP and the CARRY are compared too, because they are the handler's actual contract with
-// the runner (C0/5AB4 BCC yields the visit; C0/5ABF commits X as the new IP) and several of these
-// opcodes deliberately PARK -- returning the entry IP so the same opcode re-dispatches.
+// --sweepops: the script opcodes in OPS[], each handler micro-executed. It compares the whole 128 KB WRAM
+// image, not a hand-listed write set, so any byte the ROM writes and the port does not (or vice versa) is a
+// mismatch; the only exclusion is [$01F4,$0200), the stack headroom below the fake return address.
+// The returned IP and the carry are compared too: they are the handler's contract with the runner (C0/5AB4
+// BCC yields the visit; C0/5ABF commits X as the new IP), and several opcodes park by returning the entry
+// IP so the same opcode re-dispatches.
 static int runSweepOps(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -4765,24 +4351,14 @@ static int runSweepOps(const char* romPath) {
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000];
   const int IP = 0x0500;                          // operands at $7F2501.. , clear of every seeded table
-  // THE FOUR EX-TRAPS ARE GRADED HERE, and so are the three older handlers that were ported without
-  // ever entering this sweep (0x0A, 0x91, 0x96). That gap was not academic: 0x96 and 0x92 both do
-  // `STY $C7`, a SIXTEEN-bit spill of the IP to $01C7/$01C8, and 0x96 shipped without modelling it
-  // because nothing compared those two bytes. This sweep compares the WHOLE image, so it does.
-  // THE POISON AUDIT (below) EXISTS BECAUSE COMPARING THE WHOLE IMAGE IS STILL NOT ENOUGH. Twice in
-  // one session a mutation proved this sweep blind to a fact it appeared to be grading: op 0x04's
-  // function-table stride (the only arm that reads the table was reachable solely with target index
-  // 0, where every multiplier gives the same address) and op 0x8D's 16-bit coordinate store (the
-  // PREVIOUS case's oracle run had already left $7E in $1801, so the port's missing write compared
-  // equal to the leftover). Both were found by hand. The second is mechanically detectable, and
-  // detecting it by hand once per opcode does not scale to 34 of them -- so measure it directly:
-  // log every address the ORACLE writes, and flag the ones whose value did not CHANGE. A write that
-  // leaves memory as it found it cannot distinguish a port that performs it from one that does not,
-  // whatever the score says.
+  // Note: ops 0x96 and 0x92 both do `STY $C7`, a 16-bit spill of the IP to $01C7/$01C8, which only a
+  // whole-image compare sees. Even that is not enough: a write that leaves memory as it found it cannot
+  // tell a port that performs it from one that does not. So the poison audit logs every address the
+  // oracle writes and flags the ones whose value did not change.
   CtOracleInstallWriteHook(s);
   static uint8_t pre[0x20000];
   static uint8_t auditWrote[0x20000 / 8], auditChanged[0x20000 / 8];   // per-opcode, see the resolve
-  static uint8_t auditTrans[0x20000 / 8];   // THE TRANSIENT AUDIT -- see the resolve below
+  static uint8_t auditTrans[0x20000 / 8];   // the transient audit -- see the resolve below
   enum { NOPS = CT_VM_NOPS };
   const CtVmOpInfo* OPS = g_ctVmOps;   // move.c: the routine-level shadow (ct_shadow.c) registers the same handlers
   static const int IDX[2] = { 0x02, 0x12 };
@@ -4794,9 +4370,8 @@ static int runSweepOps(const char* romPath) {
   static uint8_t diffAddr[0x20000 / 8];
   memset(diffAddr, 0, sizeof diffAddr);
   int scratchOnly = 0, outsideScratch = 0, lzOnly = 0, stkFloor = 0x0200;
-  // Op 0x04's SEVEN arms, tallied from the ORACLE's own post-state rather than from the seeds that
-  // were meant to select them. 60/60 on the first run is not evidence the arms were reached -- it
-  // is exactly what a grid that reaches one arm sixty times also prints.
+  // Op 0x04's seven arms, tallied from the oracle's own post-state rather than from the seeds meant to
+  // select them: a clean score alone does not show that every arm was reached.
   int arm04[7]; for (int i = 0; i < 7; i++) arm04[i] = 0;
   int arm80[6]; for (int i = 0; i < 6; i++) arm80[i] = 0;
   int noStore80 = 0;
@@ -4821,31 +4396,28 @@ static int runSweepOps(const char* romPath) {
        r[0x12001 + IP] = (uint8_t)OPS[oi].op;
        r[0x12001 + IP + 1] = (uint8_t)oper;
        r[0x12001 + IP + 2] = 0x7E;                 // op 0x4A pointer MID -> bank $7E when used
-       r[0x12001 + IP + 3] = 0x7E;                 // op 0x4A pointer BANK
+       r[0x12001 + IP + 3] = 0x7E;                 // op 0x4A pointer bank
        r[0x12001 + IP + 4] = (uint8_t)(0xA0 + sv); // op 0x4A value
        // ---- per-object state the arms select on
        r[0x016D] = (uint8_t)idx; r[0x016E] = 0x00;
-       // $7F2000 is the OBJECT COUNT: C0/5B95 scans candidates from (it * 2) downwards, so every
-       // opcode that reaches the actor collision depends on it. Seeded HERE, for every case,
-       // rather than inside one opcode's block -- set only there it survives into whatever opcode
-       // runs next and moves scores that have nothing to do with it. Measured while getting this
-       // wrong: five untouched opcodes each lost exactly one case.
+       // $7F2000 is the object count: C0/5B95 scans candidates from (it * 2) downwards, so every opcode
+       // that reaches the actor collision depends on it. Seeded here for every case, so a value set in one
+       // opcode's block cannot leak into the next.
        r[0x12000] = 0x08;
        r[0x10B01 + idx] = (uint8_t)st;             // op 0xAB's arm selector
-       // ops 0xBA/0xBC/0xBD compare this counter against $08/$10/$20, so it must reach values
-       // BELOW, EQUAL TO and ABOVE those limits or two of their three arms never run.
+       // ops 0xBA/0xBC/0xBD compare this counter against $08/$10/$20, so it must reach values below,
+       // equal to and above those limits, or two of their three arms never run.
        r[0x10A01 + idx] = (uint8_t)(sv == 0 ? 0x00 : sv == 1 ? 0x08 : sv == 2 ? 0x10 :
                                     sv == 3 ? 0x20 : 0x40);   // op 0xAD's counter
        r[0x1C00 + idx] = (uint8_t)st;              // op 0x00's priority
        r[0x1781 + idx] = 0x02;                     // op 0xAB's "same id?" comparand
        r[0x1780 + idx] = (uint8_t)(sv & 1);        // op 0xAB's conditional-$1680 gate
        r[0x1680 + idx] = (uint8_t)(sv == 2 ? 0xFF : 0x30);
-       r[0x1681 + idx] = 0x5A; r[0x1601 + idx] = 0x5A;          // POISON
+       r[0x1681 + idx] = 0x5A; r[0x1601 + idx] = 0x5A;          // poison
        r[0x1000 + idx] = (uint8_t)(0x80 | sv);     // op 0x87's bit-7 carry-over
-       // ops 0x0B/0x0C read-modify-write $1000 at the OPERAND's object, and 0x0B's carry turns
-       // on whether that target is SELF -- which the grid reaches because OPER carries 0x02 and
-       // IDX is 0x02. Seed the operand's slot on both sides of bit 7 so the OR and the AND are
-       // each observable.
+       // ops 0x0B/0x0C read-modify-write $1000 at the operand's object, and 0x0B's carry turns on whether
+       // that target is self, which the grid reaches because OPER carries 0x02 and IDX is 0x02. Seed the
+       // operand's slot on both sides of bit 7 so the OR and the AND are each observable.
        r[0x1000 + oper] = (uint8_t)((sv & 1) ? 0x80 : 0x00);
        r[0x1C01 + idx] = 0x5A;                     // ops 0x08/0x09 write it
        r[0x1001 + idx] = 0x5A; r[0x1A00 + idx] = 0x5A;
@@ -4855,101 +4427,78 @@ static int runSweepOps(const char* romPath) {
        for (int k = 0; k < 0x400; k++) r[0x10580 + k] = 0x00;
        r[0x10580 + ((6 * 0x80 + idx) & 0xFFFF)]     = 0x3F;
        r[0x10580 + ((6 * 0x80 + idx + 1) & 0xFFFF)] = 0x07;      // slot[6] = $073F
-       // ---- state the FOUR EX-TRAPS branch on. Each is driven off the existing ov/sv grid so that
-       // every arm is reached rather than merely compiled.
+       // ---- state the handlers below branch on, driven off the ov/sv grid so that every arm is
+       // reached rather than merely compiled.
        r[0x0F80 + idx] = (uint8_t)((sv & 1) ? 0x80 : 0x00);      // op 0x8B's priority-block gate (bit 7)
-       // op 0x8B indexes the collision planes by the WORD $01D9|$01DA<<8, and its two operands are
-       // the script bytes at IP+1 and IP+2, so seed exactly the cell it will land on -- with bit 6
-       // set in one plane and clear in the other, and swapped by sv, so both 0x20 and 0x30 come out.
+       // op 0x8B indexes the collision planes by the word $01D9|$01DA<<8, and its two operands are the
+       // script bytes at IP+1 and IP+2, so seed the cell it will land on, with bit 6 set in one plane and
+       // clear in the other, swapped by sv, so both 0x20 and 0x30 come out.
        { int t8b = (oper | (0x7E << 8)) & 0xFFFF;
          r[0x7000 + t8b] = (uint8_t)((sv & 1) ? 0x40 : 0x00);
          r[0x7040 + t8b] = (uint8_t)((sv & 2) ? 0x40 : 0x00); }
-       // op 0x8E writes $0F80 unconditionally and $0F01/$1601 on both arms -- poison all three so the
-       // writes are GRADED rather than accidentally already-equal. Its bit-7 arm indexes the tile
-       // planes by the object's CURRENT tile ($1801|$1881<<8), which is a different cell from the one
-       // op 0x8B computes from its operands, so seed that one too, with bit 6 set in one plane and
-       // clear in the other so both $30 and $20 come out.
+       // op 0x8E writes $0F80 unconditionally and $0F01/$1601 on both arms; all three are poisoned so the
+       // writes are graded. Its bit-7 arm indexes the tile planes by the object's current tile
+       // ($1801|$1881<<8), a different cell from the one op 0x8B computes from its operands, so that one is
+       // seeded too, with bit 6 set in one plane and clear in the other so both $30 and $20 come out.
        r[0x0F01 + idx] = 0x5A;
        r[0x1C80 + idx] = 0x5A; r[0x1301 + idx] = 0x5A; r[0x1A81 + idx] = 0x5A;
-       // ---- the two CONDITIONAL BRANCHES need a usable MODE byte. The shared operand at IP+3 is
-       // $7E (op 0x4A's pointer bank), and C0/6467 is a SIXTEEN-entry table, so $7E would send
-       // every single case off the end and trap -- 60 'lost', which is not grading, it is silence.
-       // Drive modes 0..15 off the existing grid, and set bit 7 on half of them because for op
-       // 0x16 that bit is NOT part of the mode: it selects the $7F0100 page and is masked away.
-       // BIT 7 ONLY FOR 0x16. Op 0x12 has no masking arm -- it uses the byte RAW -- so setting
-       // bit 7 there just makes mode >= $80, i.e. off-table, and 30 of its 60 cases went to the
-       // trap and were reported as 'lost'. Lost is not graded; it is the check declining to have
-       // an opinion. Only 0x16 treats bit 7 as the page selector rather than as mode bits.
+       // ---- the two conditional branches need a usable mode byte. The shared operand at IP+3 is $7E (op
+       // 0x4A's pointer bank), and C0/6467 is a 16-entry table, so $7E would send every case off the end.
+       // Modes 0..15 are driven off the grid. Bit 7 is set on half of them for op 0x16 only, where it is
+       // not part of the mode but selects the $7F0100 page and is masked away; op 0x12 uses the byte raw,
+       // so bit 7 there would only make the mode off-table.
        if (OPS[oi].op == 0x12) r[0x12001 + IP + 3] = (uint8_t)((sv * 3 + ov) & 0x0F);
        if (OPS[oi].op == 0x16)
          r[0x12001 + IP + 3] = (uint8_t)(((sv * 3 + ov) & 0x0F) | ((ov & 1) ? 0x80 : 0x00));
-       // the compared operands themselves: the LOCAL array C0/62ED reads at $7F0200 + var*2 and
-       // the GLOBAL byte C0/6410/6427 reads at $7F0000 + index (+$100 on the bit-7 arm).
-       // ⚠ ONE SEED IS $FF ON PURPOSE. op 0x72 is a SIXTEEN-BIT `INC`, so its high byte only ever
-       // changes when the low byte CARRIES -- with the low byte seeded to $A0..$A4 the ROM writes
-       // the high byte back unchanged and the store is ungraded (the poison audit counted exactly
-       // that, 72:6). $FF makes the carry happen, which is the only input that can tell a 16-bit
-       // increment from an 8-bit one.
+       // the compared operands: the local array C0/62ED reads at $7F0200 + var*2 and the global byte
+       // C0/6410/6427 reads at $7F0000 + index (+$100 on the bit-7 arm).
+       // Note: one seed is $FF on purpose. Op 0x72 is a 16-bit `INC`, whose high byte changes only when
+       // the low byte carries, so $FF is the only input that tells a 16-bit increment from an 8-bit one.
        r[0x10200 + ((oper * 2) & 0xFFFF)] = (uint8_t)(sv == 4 ? 0xFF : 0xA0 + sv);
-       // ops 0x72 and 0x76 are SIXTEEN-BIT writers of this array, so the byte ABOVE the variable
-       // is an output too. Poisoned, or a port that made them 8-bit would compare equal here.
+       // ops 0x72 and 0x76 are 16-bit writers of this array, so the byte above the variable is an output
+       // too. It is poisoned, or a port that made them 8-bit would compare equal here.
        r[0x10200 + ((oper * 2 + 1) & 0xFFFF)] = 0x5A;
        r[0x10000 + oper] = (uint8_t)(0xA0 + sv);
        r[0x10000 + oper + 0x100] = (uint8_t)(0x5A + sv);
-       // ⚠ $01DA AND $01DC MUST DIFFER. They are the HIGH bytes the 16-bit predicate modes 8-15
-       // read, and neither opcode writes them -- so seeding both to the same value makes every
-       // wide compare collapse onto its 8-bit twin and the grid goes BLIND to the whole upper
-       // half of C0/6467. Measured: with both at $5A, mutating the port to ct_vm.c's `mode & 7`
-       // model (8-bit only) still scored a perfect 12:60 16:60. With them different it is caught.
+       // Note: $01DA and $01DC must differ. They are the high bytes the 16-bit predicate modes 8-15 read and
+       // neither opcode writes them, so equal seeds would collapse every wide compare onto its 8-bit twin
+       // and leave the upper half of C0/6467 ungraded.
        r[0x01DD] = 0x5A;
        r[0x01C3] = 0x5A; r[0x01C4] = 0x5A;
-       // ---- THE SHARED OUTPUT POISON, derived from this mode's own audit rather than guessed at.
-       // Every address below is something SOME handler here WRITES and nothing here reads as an
-       // input. Seeding each to a value no handler produces is what makes a MISSING write visible:
-       // without it the whole-image compare passes for free on any write whose value the byte
-       // already held -- which is precisely how op 0x8D's dropped high byte scored 58/60, and how
-       // op 0x96 and op 0x92 were leaving 24 and 19 addresses ungraded. The list came from the
-       // poison-audit line this mode now prints; it was not written from memory.
-       // Placed BEFORE the $8E tile cell is derived just below, so that derivation sees the
-       // poisoned tile rather than a value the previous case's oracle run left behind.
+       // ---- the shared output poison, taken from this mode's own poison-audit line. Every address below
+       // is written by some handler here and read by none, so a value no handler produces makes a missing
+       // write visible. It is placed before the $8E tile cell is derived below, so that derivation sees
+       // the poisoned tile rather than a value the previous case's oracle run left behind.
        { static const int OUT1[] = { 0x0C00, 0x0C01, 0x1600, 0x1800, 0x1801, 0x1880, 0x1881,
                                      0x1900, 0x1980 };
          for (int k = 0; k < (int)(sizeof(OUT1)/sizeof(OUT1[0])); k++) r[OUT1[k] + idx] = 0x5A;
          r[0x10B00 + idx] = 0x5A;                             // $7F0B00,X, the anim drain's phase
-         // C0/ACFD's and C0/ABA2's direct-page staging. ⚠ $01DA AND $01DC ARE DELIBERATELY ABSENT:
-         // the 16-bit predicate modes READ them, and poisoning them to the same value is the exact
-         // blindness this file already documents at length for ops 0x12/0x16.
+         // C0/ACFD's and C0/ABA2's direct-page staging. $01DA and $01DC are left out on purpose: the
+         // 16-bit predicate modes read them (see the note above).
          static const int DPO[] = { 0x01DB, 0x01DE, 0x01DF, 0x01E0, 0x01E1, 0x01E2, 0x01E3, 0x01E4,
                                     0x01E5, 0x01E9, 0x01EA, 0x01EF, 0x01F0, 0x01F1, 0x01F2, 0x01F3 };
          for (int k = 0; k < (int)(sizeof(DPO)/sizeof(DPO[0])); k++) r[DPO[k]] = 0x5A; }
        { int c8e = (r[0x1801 + idx] | (r[0x1881 + idx] << 8)) & 0xFFFF;
          r[0x7000 + c8e] = (uint8_t)((sv & 1) ? 0x40 : 0x00);
          r[0x7040 + c8e] = (uint8_t)((sv & 2) ? 0x40 : 0x00); }
-       // ⚠ $1A80 AND $1780 MUST NOT SHARE A DRIVER. Both were `sv & 1`, which correlated them
-       // perfectly: the move opcodes' DONE arm needs $1A80 != 0, and moveArriveAnim (C0/5690)
-       // returns immediately when $1780 != 0 -- so on every case that could reach the arrival
-       // animation, the animation was guaranteed to no-op. Measured: giving op 0x9C an arrival
-       // anim it does not have scored a full 9C:60 until these were split.
-       // ---- op 0xFF's PORTABLE half (subcmd $90..$9F minus the two blocked ones).
+       // Note: $1A80 and $1780 must not share a driver: the move opcodes' done arm needs $1A80 != 0 and
+       // moveArriveAnim (C0/5690) returns at once when $1780 != 0, so correlated seeds would never run the
+       // arrival animation.
+       // ---- op 0xFF's portable half (subcmd $90..$9F minus the two blocked ones).
        if (OPS[oi].op == 0xFF) {
-         // ⚠ NEVER SEED A SUBCMD BELOW $90, NOR $96 / $9F. Below $90 the ROM hard-resets the stack
-         // pointer (`3FD6 LDX #06FF / TXS`) and leaves through `JSL $FD:FFF7` or a `JML` -- it never
-         // returns, so the oracle runs away and a runaway corrupts its persistent RAM, damaging
-         // every LATER case. $96 leaves via `JML $FD:C000` and $9F via `JSL $C2:8004`. $A0-$A3 are
-         // the ROM's own invalid-opcode panic. All of those TRAP in the port and are kept out here.
-         // ⚠ THE SUBCMD AND THE STATE MUST NOT SHARE AN AXIS. Keying both to sv left the two
-         // perfectly correlated: 0x9A and 0x9B were never seeded at all, and no handshake subcmd
-         // ever met the state that selects its FINISH -- five mutations sat at 60/60, including
-         // swapping two mode literals and dropping the TRB $28 entirely.
-         // The subcmd comes from the REMAINDER of ov*5+sv over the 14 portable values; the state
-         // comes from the QUOTIENT plus ii, which op 0xFF never reads ($016D is untouched here), so
-         // the two indices are independent and every subcmd meets all four phases.
+         // Note: never seed a subcmd below $90, nor $96 / $9F. Below $90 the ROM resets the stack pointer
+         // (`3FD6 LDX #06FF / TXS`) and leaves through `JSL $FD:FFF7` or a `JML`, so the oracle runs away
+         // and corrupts its RAM for every later case; $96 leaves via `JML $FD:C000` and $9F via `JSL
+         // $C2:8004`. $A0-$A3 are the ROM's invalid-opcode panic. All of those trap in the port.
+         // The subcmd and the state must not share an axis: the subcmd comes from the remainder of ov*5+sv
+         // over the 14 portable values, the state from the quotient plus ii (which op 0xFF never reads;
+         // $016D is untouched here), so every subcmd meets all four phases.
          { static const uint8_t SUBS[14] = { 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x97, 0x98,
                                              0x99, 0x9A, 0x9B, 0x9C, 0x9D, 0x9E };
            int k = ov * 5 + sv, ph = ((k / 14) * 2 + ii) % 4;
            int sc = SUBS[k % 14];
            r[0x12001 + IP + 1] = (uint8_t)sc;
-           // phase 0 = START, 1 = the FINISH state, 2 = START-but-BUSY, 3 = somebody else's mode.
+           // phase 0 = start, 1 = the finish state, 2 = start-but-busy, 3 = somebody else's mode.
            // op 0x9E finishes on $0D where 0x92..0x95 finish on $03.
            r[0x0139] = (uint8_t)(ph == 0 ? 0x00
                                : ph == 1 ? (sc == 0x9E ? 0x0D : 0x03)
@@ -4958,39 +4507,33 @@ static int runSweepOps(const char* romPath) {
          r[0x12001 + IP + 2] = (uint8_t)(0x21 + ov * 7);   // the three operands $90/$97 consume
          r[0x12001 + IP + 3] = (uint8_t)(0x54 - ov * 3);
          r[0x12001 + IP + 4] = (uint8_t)(0x8A + ov * 5);
-         // ⚠ IT MUST CARRY LOW BITS ON EVERY ROW, not just some. TRB clears bit 7 and leaves the
-         // rest; a plain store of 0 clears everything. With $0128 = $80 exactly the two agree, and
-         // BOTH long-finish cases land on ov == 0 -- so keying the low bits to ov left that
-         // mutation at a clean 60/60. Keyed to sv, and never zero.
-         r[0x0128] = (uint8_t)(0x80 | (0x15 + sv * 3));    // TRB $28 clears bit 7 -- seed it SET
+         // Note: the low bits must be non-zero on every row. TRB clears bit 7 and leaves the rest, a store
+         // of 0 clears everything, and with $0128 = $80 exactly the two agree. Keyed to sv, never zero.
+         r[0x0128] = (uint8_t)(0x80 | (0x15 + sv * 3));    // TRB $28 clears bit 7 -- seed it set
          r[0x0154] = (uint8_t)(0x02 | (ov * 9));           // ...and TRB $54 clears bit 1
          r[0x0119] = (uint8_t)(0x40 + ov);                 // the brightness the short finish zeroes
          r[0x013A] = 0x5A; r[0x013B] = 0x5A; r[0x013C] = 0x5A; r[0x013D] = 0x5A;
          r[0x01DF] = 0x5A; r[0x0351] = 0x5A; r[0x0352] = 0x5A; r[0x0353] = 0x5A; r[0x0354] = 0x5A;
          r[0x0BD9] = 0x5A; r[0x0BDA] = 0x5A; r[0x0BDB] = 0x5A;
-         r[0x0BDC] = 0x5A;   // ⚠ DELIBERATELY POISONED AND NEVER WRITTEN: the ROM skips it between
+         r[0x0BDC] = 0x5A;   // poisoned and never written: the ROM skips it between
          r[0x0BDD] = 0x5A;   //   $0BDB and $0BDD, so a port that clears the whole run is caught
          r[0x11522] = 0x5A; r[0x11523] = 0x5A;
        }
-       // ---- op 0xE4 copies a tile RECTANGLE, up to eight planes per call.
+       // ---- op 0xE4 copies a tile rectangle, up to eight planes per call.
        if (OPS[oi].op == 0xE4) {
-         // ⚠ THE MASK MUST REACH ALL EIGHT BITS AND COMBINATIONS OF THEM. C0/AF4E's tests are
-         // CUMULATIVE, not exclusive -- one opcode can block-move six planes and then merge two
-         // single bits -- so a grid of single-bit masks would never catch an arm running in the
-         // wrong ORDER or a base applied to the wrong plane. These six are the shapes the real
-         // scripts use (0x41, 0x79, 0x71, 0x51, 0x82, 0xB2) plus the all-bits and empty cases.
-         // ⚠ AT LEAST ONE MASK MUST RUN C0/B096 WITHOUT ANY MERGE AFTER IT. The bit-6/bit-7 blocks
-         // rewrite $01DF/$01E0/$01E1/$01E2, so with every B096 mask also carrying bit 6 or 7, B096's
-         // own (dead) spills to those bytes were overwritten before the compare and dropping them
-         // scored a clean 60/60. $3F runs all six block moves and neither merge.
+         // Note: the mask must reach all eight bits and combinations of them. C0/AF4E's tests are
+         // cumulative, not exclusive (one opcode can block-move six planes and then merge two single bits),
+         // so single-bit masks would miss an arm running in the wrong order or a base applied to the wrong
+         // plane. These are shapes the scripts use plus the all-bits and empty cases. $3F runs all six block
+         // moves and neither merge, so C0/B096's own spills to $01DF-$01E2 are not overwritten by the
+         // bit-6/bit-7 blocks before the compare.
          { static const uint8_t MASK[6] = { 0x00, 0x3F, 0x41, 0x79, 0x82, 0xFF };
            r[0x12001 + IP + 7] = MASK[ov]; }
-         // A small rect near the plane origin: width/height are (x2-x1) and (y2-y1) as separate
-         // 8-bit subtractions, so the two halves of each pair are independent coordinates.
-         // ⚠ ONE ROW MUST OVERFLOW 256 COLUMNS. C0/B096 advances a row by ARITHMETIC (back up
-         // width+1, add $100) while the merge blocks MASK ($FF00 then OR the saved column). The two
-         // agree for every rect that fits inside one row -- swapping them scored 60/60 -- and differ
-         // only when x1 + width + 1 crosses $100. sv 4 is that row.
+         // A small rect near the plane origin: width/height are (x2-x1) and (y2-y1) as separate 8-bit
+         // subtractions, so the two halves of each pair are independent coordinates.
+         // Note: one row must overflow 256 columns. C0/B096 advances a row by arithmetic (back up width+1,
+         // add $100) while the merge blocks mask ($FF00, then OR the saved column); they differ only when
+         // x1 + width + 1 crosses $100. sv 4 is that row.
          { static const uint8_t X1[5] = { 0x02, 0x00, 0x05, 0x01, 0xF0 };
            static const uint8_t Y1[5] = { 0x01, 0x00, 0x02, 0x04, 0x01 };
            static const uint8_t W[5]  = { 0x03, 0x00, 0x02, 0x05, 0x20 };   // x2 = x1 + W
@@ -4999,13 +4542,13 @@ static int runSweepOps(const char* romPath) {
            r[0x12001 + IP + 2] = Y1[sv];
            r[0x12001 + IP + 3] = (uint8_t)(X1[sv] + W[sv]);
            r[0x12001 + IP + 4] = (uint8_t)(Y1[sv] + H[sv]);
-           // ⚠ THE DESTINATION MUST NOT OVERLAP THE SOURCE ON EVERY ROW, or a row-advance error
-           // that lands one row off still copies the right bytes. Offset it in BOTH axes.
+           // The destination is offset from the source in both axes, so a row-advance error that lands
+           // one row off does not still copy the right bytes.
            r[0x12001 + IP + 5] = (uint8_t)(X1[sv] + 0x10);
            r[0x12001 + IP + 6] = (uint8_t)(Y1[sv] + 0x08); }
-         // The six plane windows the bases name ($3000/$3040/$3080/$30C0/$7000/$7040), filled with
-         // a pattern that varies per byte so a wrong base or a wrong row stride shows up, and whose
-         // BIT 0 and BIT 1 vary independently for the two merge arms.
+         // The six plane windows the bases name ($3000/$3040/$3080/$30C0/$7000/$7040), filled with a
+         // pattern that varies per byte so a wrong base or a wrong row stride shows up, and whose bit 0 and
+         // bit 1 vary independently for the two merge arms.
          for (int k = 0; k < 0x1400; k++)
            r[0x3000 + k] = (uint8_t)((k * 7 + (k >> 5) + ov * 13) & 0xFF);
          for (int k = 0; k < 0x0800; k++)
@@ -5016,51 +4559,41 @@ static int runSweepOps(const char* romPath) {
          r[0x01DF] = 0x5A; r[0x01E0] = 0x5A; r[0x01E1] = 0x5A; r[0x01E2] = 0x5A;
          r[0x01E3] = 0x5A; r[0x01E4] = 0x5A; r[0x01F0] = 0x5A; r[0x01F1] = 0x5A;
          r[0x01C7] = 0x5A; r[0x01C8] = 0x5A; r[0x01D9] = 0x5A;
-         r[0x0117] = (uint8_t)(0x05 + ov);   // 0xE4 must NOT touch it; 0xE5 sets bit 5
+         r[0x0117] = (uint8_t)(0x05 + ov);   // 0xE4 must not touch it; 0xE5 sets bit 5
        }
-       // ---- the mover neighbourhood. All eight park on their own opcode and only ONE arm of each
+       // ---- the mover neighbourhood. All eight park on their own opcode and only one arm of each
        // consumes the bytes, so the grid has to reach every arm through per-object state.
        if (OPS[oi].op == 0x97 || OPS[oi].op == 0xA1 || OPS[oi].op == 0x9D ||
            OPS[oi].op == 0x9E || OPS[oi].op == 0x9F || OPS[oi].op == 0x98 ||
            OPS[oi].op == 0x99 || OPS[oi].op == 0x8F ||
            OPS[oi].op == 0x94 || OPS[oi].op == 0x95 ||
            OPS[oi].op == 0xB5 || OPS[oi].op == 0xB6) {
-         // ⚠ $1A01 AND $1A80 MUST NOT SHARE A DRIVER -- the legged members split on BOTH, and the
-         // three exits (busy-park / leg-drain / start) need all three combinations.
+         // Note: $1A01 and $1A80 must not share a driver: the legged members split on both, and the three
+         // exits (busy-park / leg-drain / start) need all three combinations.
          r[0x1A01 + idx] = (uint8_t)((sv == 0) ? 0x07 : 0x00);
          r[0x1A80 + idx] = (uint8_t)((sv == 0 || sv == 1) ? 0x03 : 0x00);
          // $1C81 bit 0 gates C0/305D (0x97/0xA1) and bit 1 gates C0/30B3 (0x9E/0x9F/0x98/0x99);
-         // op 0x8F tests NEITHER.
+         // op 0x8F tests neither.
          r[0x1C81 + idx] = (uint8_t)((ov & 1) ? 0x03 : 0x00);
          r[0x1000 + idx] = (uint8_t)(0x04 + ov);
          r[0x12001 + IP + 1] = (uint8_t)((OPS[oi].op == 0x9F || OPS[oi].op == 0x99 ||
                                           OPS[oi].op == 0x8F || OPS[oi].op == 0x95 ||
                                           OPS[oi].op == 0xB6) ? ((ov % 3) * 2) : (0x06 + (ov % 3) * 2));
-         r[0x12001 + IP + 2] = (uint8_t)(0x03 + ov);            // the legged pair's DURATION
-         // ⚠ TOUCH ONLY THE OBJECTS THIS FAMILY CAN NAME. An earlier draft seeded $1100/$1800/
-         // $1880/$1680/$1681/$1601/$1780 across 0x40 objects and $0197 across 16 slots; the sweep
-         // carries ONE RAM image from case to case, so those wide writes survived into the NEXT
-         // opcode and cost five untouched opcodes (0x84/0xA8/0x59/0x6F/0x88) exactly one case each.
-         // main.c already states the rule for op 0x82's block: adding a case must not quietly move
-         // the others. The three slots resolve to objects 6, $0A and $0E; the raw form names 6, 8
-         // and $0A; so this set covers every target either addressing mode can produce.
+         r[0x12001 + IP + 2] = (uint8_t)(0x03 + ov);            // the legged pair's duration
+         // Only the objects this family can name are touched: the sweep carries one RAM image from case to
+         // case, so wider writes would leak into the next opcode. The three slots resolve to objects 6, $0A
+         // and $0E and the raw form names 6, 8 and $0A, so this set covers every target either mode produces.
          { r[0x0197] = 0x06; r[0x0199] = 0x0A; r[0x019B] = 0x0E;
            static const int OBJ[4] = { 0x06, 0x08, 0x0A, 0x0E };
-           // ⚠ ADJACENCY IS A THREE-WAY TEST (equal / +1 / -1) AND EACH BRANCH NEEDS A ROW WHERE
-           // IT ALONE DECIDES. Self sits at ($14,$1A), so $13 and $19 exercise the -1 branch that
-           // an earlier grid never separated -- dropping it scored a clean 60/60 on all eight.
-           // Most rows are adjacent on purpose: C0/30B3 only runs when the object is ALREADY
-           // adjacent AND $1C81 bit 1 is set, and with only two such rows its internals were
-           // ungraded (the sign of its X nudge and its $FFF0 tile mask both survived).
-           // ⚠ MOST TARGETS MUST BE FAR, NOT ADJACENT. Making them adjacent to reach C0/30B3
-           // STARVED THE STEP ARM: with nothing far, C0/5B95 is barely called and removing it
-           // entirely scored a clean 60/60. Object $0A is force-aligned just below and carries the
-           // 30B3 coverage on its own, so these can stay far.
+           // Adjacency is a three-way test (equal / +1 / -1) and each branch needs a row where it alone
+           // decides: self sits at ($14,$1A), so $13 and $19 exercise the -1 branch. Most targets are far, so
+           // the step arm (C0/5B95) runs; C0/30B3 runs only when the object is already adjacent and $1C81
+           // bit 1 is set, and object $0A, force-aligned below, carries that coverage on its own.
            static const uint8_t TX[6] = { 0x14, 0x2A, 0x13, 0x35, 0x22, 0x08 };
            static const uint8_t TY[6] = { 0x30, 0x19, 0x40, 0x19, 0x1A, 0x27 };
            for (int q = 0; q < 4; q++) {
              int k = OBJ[q];
-             // Bit 7 flags the target INACTIVE -- the arm where the three siblings diverge
+             // Bit 7 flags the target inactive -- the arm where the three siblings diverge
              // (nothing / self+$1A80 / self). Unreachable without it.
              r[0x1100 + k] = (uint8_t)(((q + sv) % 4 == 0) ? 0x80 : 0x02);
              r[0x1800 + k] = (uint8_t)(k * 3);  r[0x1801 + k] = TX[(q + ov) % 6];
@@ -5068,19 +4601,16 @@ static int runSweepOps(const char* romPath) {
              r[0x1680 + k] = 0x30; r[0x1681 + k] = 0x5A; r[0x1601 + k] = 0x5A;
              r[0x1780 + k] = (uint8_t)(((q + ov) & 3) ? 0x00 : 0x01);
            } }
-         // ⚠ C0/5B95's OWN INPUTS MUST BE SEEDED, not inherited. Every step arm calls it, and it
-         // scans candidates from $7F2000*2 downwards testing $0F00 / $1100 bit 7 / not-self /
-         // $1B01 bit 0, spilling the winner to $01E9. Left to leftovers the scan start and the
-         // candidate flags carry over from whatever opcode ran last, and the arm it reaches is not
-         // a property of this grid at all -- measured as `$001E9: C=5A RO=12`, the oracle finding a
-         // candidate at $12 that the port's inherited state did not have.
+         // Note: C0/5B95's own inputs must be seeded, not inherited. Every step arm calls it, and it scans
+         // candidates from $7F2000*2 downwards testing $0F00 / $1100 bit 7 / not-self / $1B01 bit 0,
+         // spilling the winner to $01E9; left to leftovers, the arm it reaches would depend on the previous
+         // opcode.
          r[0x1C80 + idx] = (uint8_t)((sv & 1) ? 0x02 : 0x00);   // 5BA3 gate: bit 1 arms the scan
          for (int k = 0; k <= 0x10; k += 2) {
            r[0x0F00 + k] = (uint8_t)(((k >> 1) + ov) % 3 ? 0x01 : 0x00);   // active
            r[0x1B01 + k] = (uint8_t)(((k >> 1) + sv) % 3 ? 0x01 : 0x00);   // solid
-           // ⚠ AND THEY NEED POSITIONS NEAR SELF. C0/5B95 only reports BLOCKED when a candidate's
-           // box actually overlaps, so scan candidates parked at whatever the previous case left
-           // make the +$30 heading nudge unreachable.
+           // ...with positions near self: C0/5B95 reports blocked only when a candidate's box overlaps, so
+           // candidates parked wherever the previous case left them make the +$30 heading nudge unreachable.
            if (k != 0x06 && k != 0x08 && k != 0x0A && k != 0x0E) {
              r[0x1800 + k] = (uint8_t)(0x08 + ((k * 3 + ov) & 0x1F));
              r[0x1801 + k] = (uint8_t)(0x14 + ((k >> 2) & 1));
@@ -5091,33 +4621,27 @@ static int runSweepOps(const char* romPath) {
              r[0x1100 + k] = (uint8_t)(((k >> 1) + sv) % 5 == 0 ? 0x80 : 0x02);
          }
          r[0x0F00 + idx] = 0x01;                                // 5B99: an inactive mover exits early
-         r[0x1780 + idx] = (uint8_t)((ov & 2) ? 0x01 : 0x00);   // moveArriveAnim's own gate, on SELF
+         r[0x1780 + idx] = (uint8_t)((ov & 2) ? 0x01 : 0x00);   // moveArriveAnim's own gate, on self
          r[0x1680 + idx] = 0x30; r[0x1681 + idx] = 0x5A; r[0x1601 + idx] = 0x5A;
-         // Self's tile, with a varying sub-tile half so C0/30B3's $FFF0 masking is exercised.
-         // ⚠ THE SUB-TILE HALVES MUST NOT ALL BE MULTIPLES OF $10. C0/30B3 compares the 16-bit
-         // positions masked to $FFF0, so with $00/$20/$40/... in the low byte the mask is a no-op
-         // and widening it to $FFFF is invisible. The $08 offset is what makes it bite.
+         // Self's tile, with a varying sub-tile half so C0/30B3's $FFF0 masking is exercised: it compares
+         // the 16-bit positions masked to $FFF0, so with multiples of $10 in the low byte the mask would be
+         // a no-op. The $08 offset makes it bite.
          r[0x1800 + idx] = (uint8_t)(0x08 + ov * 0x20); r[0x1801 + idx] = 0x14;
          r[0x1880 + idx] = (uint8_t)(0x08 + sv * 0x30); r[0x1881 + idx] = 0x1A;
-         // ⚠ ONE TARGET MUST BE EXACTLY ALIGNED WITH SELF. C0/30B3 compares the two positions
-         // masked to $FFF0 and its CLC (aligned, caller completes) exit needs BOTH axes equal --
-         // without such a row that exit is unreachable and its $1900/$1980 pre-clear, its return
-         // value and its $FFF0 mask are all ungraded at 60/60. Object $0A is a target of BOTH the
-         // raw form (0x9E/0x98) and the slot form (0x9F/0x99). Y matches on half the rows only, so
-         // the Y-adjust path stays reachable too.
+         // One target is aligned with self: C0/30B3 compares the positions masked to $FFF0, and its CLC exit
+         // (aligned, caller completes) needs both axes equal; that row grades its $1900/$1980 pre-clear, its
+         // return value and its mask. Object $0A is a target of both the raw form (0x9E/0x98) and the slot
+         // form (0x9F/0x99). Y matches on half the rows only, so the Y-adjust path stays reachable too.
          r[0x1800 + 0x0A] = r[0x1800 + idx]; r[0x1801 + 0x0A] = r[0x1801 + idx];
          r[0x1880 + 0x0A] = (uint8_t)((sv & 1) ? r[0x1880 + idx] : (r[0x1880 + idx] + 0x20));
          r[0x1881 + 0x0A] = r[0x1881 + idx];
-         r[0x1100 + 0x0A] = 0x02;                               // and it must be ACTIVE to be used
-         // ⚠ AND ONE TARGET WITH X MISALIGNED BUT Y ALREADY EQUAL. C0/30B3 has a third exit --
-         // tx != sx then ty == sy -- which sets $1900 and returns 1 WITHOUT ever touching $1980,
-         // so $1980 keeps the value its own pre-clear left. Object $0A only ever produces
-         // (X equal, Y equal) or (X equal, Y differ), so that branch stayed unreached and adding a
-         // spurious $1980 write to it scored a clean 60/60. Object $06 is a target of BOTH
-         // addressing forms (raw ov%3==0, and slot 0 -> $0197 = $06).
-         r[0x1800 + 0x06] = (uint8_t)(r[0x1800 + idx] + 0x20);   // masked X DIFFERS
-         r[0x1801 + 0x06] = r[0x1801 + idx];                     // ...but the TILE is adjacent
-         r[0x1880 + 0x06] = r[0x1880 + idx];                     // masked Y EQUAL
+         r[0x1100 + 0x0A] = 0x02;                               // and it must be active to be used
+         // ...and one target with X misaligned but Y already equal: C0/30B3's third exit (tx != sx, then
+         // ty == sy) sets $1900 and returns 1 without touching $1980, which keeps its pre-cleared value.
+         // Object $06 is a target of both addressing forms (raw ov%3==0, and slot 0 -> $0197 = $06).
+         r[0x1800 + 0x06] = (uint8_t)(r[0x1800 + idx] + 0x20);   // masked X differs
+         r[0x1801 + 0x06] = r[0x1801 + idx];                     // ...but the tile is adjacent
+         r[0x1880 + 0x06] = r[0x1880 + idx];                     // masked Y equal
          r[0x1881 + 0x06] = r[0x1881 + idx];
          r[0x1100 + 0x06] = 0x02;
          // op 0x8F's camera box, on the same halved bytes op 0x28 uses.
@@ -5125,21 +4649,19 @@ static int runSweepOps(const char* romPath) {
            r[0x1D0A] = CX[sv]; r[0x1D0B] = 0x5B;
            r[0x1D0E] = CX[(sv + 2) % 5]; r[0x1D0F] = 0x5B; }
          r[0x1900 + idx] = 0x5A; r[0x1980 + idx] = 0x5A;
-         // ⚠ $1600 MUST HOLD A LEGAL FACING (0..3), NOT POISON. C0/5B95 reads it at 5BA9 and does
-         // "ASL A / STA $D9" with NO MASK, then 5BE4 "LDX $D9" / 5BE6 "JSR ($5BF2,X)" dispatches
-         // through it. A $5A there indexes far past the four-entry vector table, the oracle jumps
-         // into data and RUNS AWAY -- and a runaway corrupts the oracle's persistent RAM, so every
-         // LATER case inherits the damage. That is what made five unrelated opcodes drift by one.
-         // Ops 0xA1/0x9E/0x9F never write $1600, so they run 5B95 against whatever is here.
+         // Note: $1600 must hold a legal facing (0..3), not poison. C0/5B95 reads it at 5BA9 and does "ASL
+         // A / STA $D9" with no mask, then 5BE4 "LDX $D9" / 5BE6 "JSR ($5BF2,X)" dispatches through it; a $5A
+         // would index past the four-entry table and the oracle would run away, corrupting its RAM for every
+         // later case. Ops 0xA1/0x9E/0x9F never write $1600, so they run 5B95 against whatever is here.
          r[0x1600 + idx] = (uint8_t)(ov & 3);
          r[0x01E3] = 0x5A; r[0x01E4] = 0x5A;   // ops 0xB5/0xB6's `STY $E3`, 16-bit
          r[0x01E9] = 0x5A; r[0x01EA] = 0x5A; r[0x01DB] = 0x5A; r[0x01DD] = 0x5A;
          r[0x01F2] = 0x5A; r[0x01F3] = 0x5A;
        }
        if (OPS[oi].op == 0x97 || OPS[oi].op == 0xA1 || OPS[oi].op == 0x9D) {
-         // op 0x97 reads BOTH targets through the scene-var array, so the array must hold tile
-         // values that straddle the object's own tile -- otherwise every case is "arrived" or none
-         // is, and the four-way arm split collapses.
+         // op 0x97 reads both targets through the scene-var array, so the array must hold tile values that
+         // straddle the object's own tile; otherwise every case is "arrived" or none is, and the four-way
+         // arm split collapses.
          for (int k = 0; k < 0x200; k++)
            r[0x10200 + k] = (uint8_t)((k & 1) ? 0x5A : (0x1C + ((k + ov) & 0x0F)));
          r[0x12001 + IP + 1] = (uint8_t)(0x02 + ov * 2);
@@ -5150,42 +4672,31 @@ static int runSweepOps(const char* romPath) {
        r[0x1A80 + idx] = (uint8_t)(sv & 1);                      // op 0x92's in-progress flag
        r[0x1A01 + idx] = (uint8_t)(ov & 1);                      // ...and the mover ticket it tests
        r[0x1C81 + idx] = (uint8_t)(sv & 1);                      // op 0x96's snap-to-centre opt-in
-       // ⚠ AND BIT 1 BACK ON FOR THE MOVER FAMILY, AFTER the generic line above -- which runs LATER
-       // in this function than their own block and was silently clearing it. Bit 0 gates C0/305D,
-       // bit 1 gates C0/30B3, and with bit 1 never set C0/30B3 WAS NEVER CALLED AT ALL: every
-       // mutation of it -- flipping both delta signs, widening its $FFF0 tile mask, dropping its
-       // $1900/$1980 pre-clear, inverting its aligned return, dropping its $1A01/$7F0B00 writes --
-       // scored a clean 60/60 on all eight opcodes.
+       // ...and bit 1 back on for the mover family, after the generic line above (which runs later in this
+       // function than their own block and clears it). Bit 0 gates C0/305D and bit 1 gates C0/30B3; without
+       // bit 1 C0/30B3 is never called.
        if (OPS[oi].op == 0x9E || OPS[oi].op == 0x9F || OPS[oi].op == 0x98 || OPS[oi].op == 0x99 ||
            OPS[oi].op == 0x94 || OPS[oi].op == 0x95 || OPS[oi].op == 0xB5 || OPS[oi].op == 0xB6) {
          r[0x1C81 + idx] = (uint8_t)((ov & 1) ? 0x02 : 0x00);
-         // ⚠ AND RESTORE THE TWO HEAD FLAGS, which the generic lines just above also clobbered.
-         // `$1A01 = ov & 1` is the trap: the $1C81 bit-1 gate is ALSO driven by `ov & 1`, so the
-         // gate was set EXACTLY when the ticket was busy -- and a busy ticket parks at the head
-         // before the gate is ever reached. PERFECTLY ANTI-CORRELATED, which made C0/30B3
-         // unreachable for all six non-legged callers no matter what else the grid did. Ops
-         // 0x98/0x99 escaped only because their $1A80 head never tests $1A01 when the leg is idle,
-         // which is why the arm looked graded. Drive the ticket from sv so the two are independent.
+         // ...and restore the two head flags the generic lines above also clobber. `$1A01 = ov & 1` would
+         // make the ticket busy exactly when the $1C81 bit-1 gate (also `ov & 1`) is set, and a busy ticket
+         // parks at the head before the gate is reached, so C0/30B3 would be unreachable for the six
+         // non-legged callers. The ticket is driven from sv so the two are independent.
          r[0x1A01 + idx] = (uint8_t)((sv == 0) ? 0x07 : 0x00);
          r[0x1A80 + idx] = (uint8_t)((sv == 0 || sv == 1) ? 0x03 : 0x00);
        }
-       r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;                       // POISON the STY $C7 IP spill
+       r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;                       // poison the STY $C7 IP spill
        r[0x01EE] = 0x5A; r[0x01DA] = 0x5A;                       // ...and the heading / tile-Y scratch
-       // ...and ONLY THEN the two high bytes the 16-bit predicate modes read. This must come AFTER
-       // the $01DA poison above, which otherwise resets it: with $01DA and $01DC both $5A every
-       // wide compare collapses onto its 8-bit twin and the grid goes blind to the upper half of
-       // C0/6467. Measured while getting this wrong -- the `mode & 7` mutation scored 12:60 with
-       // the seeds equal, 12:22 with them different.
+       // ...and only then the two high bytes the 16-bit predicate modes read. This must come after the
+       // $01DA poison above, which would otherwise reset it (see the $01DA / $01DC note above).
        r[0x01DA] = 0x01; r[0x01DC] = 0x02;
-       // ---- op 0xBB's four arms. $012D is a REQUIRED PRECONDITION, not a selector: C0/3572's
-       // BNE continues when it is NON-zero, and falling through (== 0) runs the ROM's panic
-       // handler, which never returns. Seed it NON-ZERO or every case hangs the oracle -- which
-       // is exactly what happened first time: 60 'lost', 0 graded, and the single-step trace read
-       // `3570 3572 3574 3577 2E1E ...`. $0129 (a request already in flight) and $7F0A00+idx
-       // (ours completed) are the two that pick between park / issue / consume.
+       // ---- op 0xBB's four arms. $012D is a required precondition, not a selector: C0/3572's BNE
+       // continues when it is non-zero, and falling through (== 0) runs the ROM's panic handler, which
+       // never returns (`3570 3572 3574 3577 2E1E ...`). $0129 (a request already in flight) and
+       // $7F0A00+idx (ours completed) pick between park / issue / consume.
        r[0x012D] = 0x01;
-       // op 0xB8 WRITES $012B/$012C/$012D, so they must be poisoned for it even though op 0xBB
-       // needs $012D non-zero as an input. Both hold: 0xB8 runs before anything reads them.
+       // op 0xB8 writes $012B/$012C/$012D, so they must be poisoned for it even though op 0xBB needs $012D
+       // non-zero as an input. Both hold: 0xB8 runs before anything reads them.
        if (OPS[oi].op == 0xB8) { r[0x012B] = 0x5A; r[0x012C] = 0x5A; r[0x012D] = 0x5A; }
        // ops 0x48/0x49 read through a script-supplied 24-bit pointer; the shared operands make
        // it $7E7E?? which is real WRAM in the flat image, so seed a recognisable pair there.
@@ -5195,44 +4706,31 @@ static int runSweepOps(const char* romPath) {
        }
        r[0x0129] = (uint8_t)((sv == 1) ? 0x01 : 0x00);
        r[0x10A00 + idx] = (uint8_t)((sv == 2) ? 0x01 : 0x00);
-       r[0x012A] = 0x5A; r[0x012E] = 0x5A; r[0x0132] = 0x5A; r[0x0130] = 0x5A;   // $0130 poisoned: the 3 variants differ ONLY in what they store there
+       r[0x012A] = 0x5A; r[0x012E] = 0x5A; r[0x0132] = 0x5A; r[0x0130] = 0x5A;   // $0130 poisoned: the 3 variants differ only in what they store there
        r[0x0154] = (uint8_t)(0x20 | (sv & 1));   // TRB must clear bit 5 and leave the rest alone
-       r[0x1100 + oper] = 0x5A; r[0x1A81 + oper] = 0x5A;         // ops 0x0A/0x7C/0x7D write the OPERAND's object
-       // op 0xEE reads $2143, which is not WRAM at all: it is the SPC700's output mailbox, served to
-       // the CPU from apu->outPorts[3]. Seed it on BOTH sides of the `AND #0F` test -- sv*3 gives
-       // low nibbles 0,3,6,C,5, so the advance arm and the park arm both run -- and hand the port
-       // the identical byte, which is the whole contract of g_ctApuPort3.
+       r[0x1100 + oper] = 0x5A; r[0x1A81 + oper] = 0x5A;         // ops 0x0A/0x7C/0x7D write the operand's object
+       // op 0xEE reads $2143, which is not WRAM: it is the SPC700's output mailbox, served to the CPU from
+       // apu->outPorts[3]. Seed it on both sides of the `AND #0F` test (sv*3 gives low nibbles 0,3,6,C,5, so
+       // the advance arm and the park arm both run) and hand the port the same byte via g_ctApuPort3.
        { uint8_t a3 = (uint8_t)(sv * 3); s->apu->outPorts[3] = a3; g_ctApuPort3 = a3; }
-       // op 0xED reads $2141 WHOLE, where its sibling 0xEE masks $2143 with `AND #0F`. Seeding only
-       // $00 and $37 exercised both arms but could not tell the two apart -- $37's low nibble is
-       // non-zero, so a masked and an unmasked test agree, and an `AND #0F` mutation scored a full
-       // ED:60. $30 is the discriminating value: non-zero byte, ZERO low nibble.
+       // op 0xED reads $2141 whole, where its sibling 0xEE masks $2143 with `AND #0F`. $30 (non-zero byte,
+       // zero low nibble) is the value that tells the two apart; $00 and $37 exercise both arms.
        { uint8_t a1 = (uint8_t)(sv == 0 ? 0x00 : sv == 1 ? 0x30 : 0x37);
          s->apu->outPorts[1] = a1; g_ctApuPort1 = a1; }
        // 0x18 branches on the storyline byte $7F0000; drive it both sides of the operand.
        r[0x10000] = (uint8_t)(sv < 2 ? 0x00 : 0xF0);
        r[0x0118] = (uint8_t)((sv & 1) ? 0x02 : 0x00);   // 0xF2 parks on bit 1, 0xF3 on bit 3
        r[0x0119] = 0x5A; r[0x011B] = 0x5A; r[0x011C] = 0x5A; r[0x011D] = 0x5A;
-       // ---- op 0x04's world, gated for the same reason op 0x82's is. It has SIX reachable arms
-       // across TWO entry paths, and the thing that selects the path -- $7F0980 indexed by the
-       // CALLER -- is state no other opcode here touches. Driving all six off the existing ov/sv
-       // grid rather than adding a dimension: ov picks which reject gate is armed and the latch,
-       // sv picks the requested priority, and the target's current priority is set against it so
-       // that both sides of the `requested < current` test occur on every arm.
-       // ---- op 0x8D's outputs. POISONED because this sweep reuses ONE RAM image across all cases
-       // and the oracle's own previous case leaves its results behind: $1801 still held the $7E the
-       // last iteration's oracle wrote there, so a port that dropped the high half of the 16-bit
-       // `4C31 STA $1800,X` compared EQUAL to it in 58 of 60 cases. Measured exactly that way --
-       // the 8-bit mutation scored 8D:58 before this and 8D:0 after. Same family as the op 0x04
-       // stride blindness: the score was real, what it was scoring was not.
-       // ---- op 0x80's world. Its arm is chosen by PARTY MEMBERSHIP ($7E2980-2982) and, for the two
-       // follower slots, by whether a leader exists -- state nothing else here touches. Left
-       // unseeded, every case would take the not-in-party arm and the score would cover one path
-       // out of six while reading 60/60.
+       // ---- op 0x8D's outputs are poisoned (OUT1 above): this sweep reuses one RAM image across all
+       // cases, so the previous case's oracle run leaves $7E in $1801, and a port that dropped the high
+       // half of the 16-bit `4C31 STA $1800,X` would compare equal to it.
+       // ---- op 0x80's world. Its arm is chosen by party membership ($7E2980-2982) and, for the two
+       // follower slots, by whether a leader exists, state nothing else here touches; unseeded, every
+       // case would take the not-in-party arm.
        if (OPS[oi].op == 0x80 || OPS[oi].op == 0x57 || OPS[oi].op == 0x5C || OPS[oi].op == 0x62 ||
            OPS[oi].op == 0x68 || OPS[oi].op == 0x6A || OPS[oi].op == 0x6C || OPS[oi].op == 0x6D) {
-         // The seven immediates carry their PC id in the OPCODE, so the party array has to be
-         // keyed on that id rather than on the script operand op 0x80 reads.
+         // The seven immediates carry their PC id in the opcode, so the party array has to be keyed on
+         // that id rather than on the script operand op 0x80 reads.
          int pcid = OPS[oi].op == 0x80 ? oper :
                     OPS[oi].op == 0x57 ? 0 : OPS[oi].op == 0x5C ? 1 : OPS[oi].op == 0x62 ? 2 :
                     OPS[oi].op == 0x6A ? 3 : OPS[oi].op == 0x68 ? 4 : OPS[oi].op == 0x6C ? 5 : 6;
@@ -5240,29 +4738,23 @@ static int runSweepOps(const char* romPath) {
          if (sv == 1) r[0x2980] = (uint8_t)pcid;                 // -> slot 0, the leader
          if (sv == 2 || sv == 4) r[0x2981] = (uint8_t)pcid;      // -> slot 1
          if (sv == 3) r[0x2982] = (uint8_t)pcid;                 // -> slot 2
-         // $0197 bit 7 = NO LEADER (435E BMI). Driven so that BOTH the follow arm and the default
-         // fallback run for each follower slot: sv 4 kills the leader for slot 1, and ii does it
-         // for slot 2, which otherwise would only ever be seen following.
+         // $0197 bit 7 = no leader (435E BMI). Driven so that both the follow arm and the default fallback
+         // run for each follower slot: sv 4 kills the leader for slot 1, and ii does it for slot 2.
          int noLead = (sv == 4) || (ii == 1 && sv == 3);
-         r[0x0197] = (uint8_t)(noLead ? 0x80 : 0x04);   // an INPUT for slots 1/2, an output for 0
+         r[0x0197] = (uint8_t)(noLead ? 0x80 : 0x04);   // an input for slots 1/2, an output for 0
          r[0x0178] = (uint8_t)(sv & 1);                          // the $78 block, taken both ways
-         // The ARRIVAL STAGING the default placement reads. These are INPUTS -- written by the
-         // ChangeLocation handler C0/3B1B, not by this opcode -- so they are seeded, not poisoned.
+         // The arrival staging the default placement reads. These are inputs (written by the
+         // ChangeLocation handler C0/3B1B, not by this opcode), so they are seeded, not poisoned.
          r[0x0102] = 0x11; r[0x0103] = 0x22; r[0x0104] = (uint8_t)(sv * 3);
          // The leader object the follow arm copies from ($0197 = 4 above).
          r[0x1800 + 4] = 0x34; r[0x1801 + 4] = 0x12;
          r[0x1880 + 4] = 0x78; r[0x1881 + 4] = 0x56; r[0x1600 + 4] = 0x03;
-         // ⚠ $0198/$019A/$019C ARE DELIBERATELY *NOT* POISONED, and the reason is a limit of the
-         // model rather than an oversight. They are the HIGH halves of the three 16-bit
-         // `STX $97/$99/$9B` spills, so the ROM writes 0 into them and a port that skipped that
-         // write compares equal -- the poison audit names all three, and an 8-bit-spill mutation
-         // does score a full 80:60. But they are also INPUTS: `436E LDX $97` and `437D LDX $97`
-         // are SIXTEEN-BIT loads, so poisoning $0198 to $5A makes the ROM read $1880 + $5A04,
-         // i.e. bank-0 addresses above $2000, which are MMIO/ROM and which a flat 128 KB WRAM
-         // image cannot represent -- port and oracle then disagree for a reason that has nothing
-         // to do with the port. Seeded to 0, which is the only value the engine ever produces
-         // (the same 16-bit STX writes it), and left in the audit's residue where it is visible.
-         // $0197 is likewise absent: slots 1 and 2 READ it as the leader index.
+         // Note: $0198/$019A/$019C are not poisoned. They are the high halves of the three 16-bit `STX
+         // $97/$99/$9B` spills, so the ROM writes 0 into them and a port that skipped the write compares
+         // equal (the poison audit names all three). But they are also inputs: `436E LDX $97` and `437D LDX
+         // $97` are 16-bit loads, so a $5A there makes the ROM read bank-0 addresses above $2000 (MMIO/ROM)
+         // that a flat 128 KB WRAM image cannot represent. They are seeded to 0, the only value the engine
+         // produces, and left in the audit's residue. $0197 is absent too: slots 1 and 2 read it.
          r[0x0198] = 0x00; r[0x019A] = 0x00; r[0x019C] = 0x00;
          static const int O80[] = { 0x0B89, 0x0B8A, 0x0B8B, 0x0B8C, 0x018D, 0x018E, 0x018F, 0x0190,
                                     0x0191, 0x0192, 0x0193, 0x01AB, 0x01AC, 0x01AD,
@@ -5275,12 +4767,10 @@ static int runSweepOps(const char* romPath) {
          for (int k = 0; k < (int)(sizeof(P80)/sizeof(P80[0])); k++) r[P80[k] + idx] = 0x5A;
          r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;                     // 4496's STY $C7 spill
        }
-       // ---- the CALL FAMILY (0x02/0x03/0x05/0x06/0x07). Three seeds that the audit asked for:
-       // the target's live IP must be NON-ZERO or the `STA $7F0580,X` that saves it writes 0 over
-       // the 0 the ladder was cleared to and grades nothing; its priority must vary so the call,
-       // defer and same-level arms are all reachable; and one sv must leave the DEFER slot
-       // OCCUPIED, because `6057 BNE ->6078` skips both the $E3 staging and the park on that path
-       // -- a mutation that staged $E3 unconditionally scored a full 60 until this existed.
+       // ---- the call family (0x02/0x03/0x05/0x06/0x07). The target's live IP must be non-zero, or the
+       // `STA $7F0580,X` that saves it writes 0 over the cleared ladder and grades nothing; its priority
+       // must vary so the call, defer and same-level arms are reachable; and one sv must leave the defer
+       // slot occupied, because `6057 BNE ->6078` skips both the $E3 staging and the park on that path.
        if (OPS[oi].op == 0x02 || OPS[oi].op == 0x03 || OPS[oi].op == 0x05 ||
            OPS[oi].op == 0x06 || OPS[oi].op == 0x07) {
          int tg[2] = { oper, 0x04 };                  // 0x02/0x03 name it directly, the rest via $97
@@ -5296,10 +4786,9 @@ static int runSweepOps(const char* romPath) {
            if (sv == 3) { int e = 0x10580 + ((7 * 128 + tg[k]) & 0xFFFF);
                           r[e] = 0x11; r[e + 1] = 0x22; }
        }
-       // ---- the party-slot calls 0x05/0x06/0x07 resolve their target from $0197 + slot. sv
-       // decides whether that slot is EMPTY (bit 7) or names a live object, so both the skip arm
-       // and the real call are reached; the object it names is idx itself on half the rows, which
-       // is the self-call case the other family members turned out to branch on.
+       // ---- the party-slot calls 0x05/0x06/0x07 resolve their target from $0197 + slot. sv decides
+       // whether that slot is empty (bit 7) or names a live object, so both the skip arm and the call are
+       // reached; the object it names is idx itself on half the rows (the self-call case).
        if (OPS[oi].op == 0x05 || OPS[oi].op == 0x06 || OPS[oi].op == 0x07) {
          for (int k = 0; k < 8; k++) r[0x0197 + k] = 0x80;          // every slot empty by default
          if (sv != 0) r[0x0197 + (oper & 7)] = (uint8_t)((sv & 1) ? idx : 0x04);
@@ -5308,17 +4797,15 @@ static int runSweepOps(const char* romPath) {
          r[0x1C00 + 0x04] = 0x05; r[0x1180 + 0x04] = 0xC7; r[0x1181 + 0x04] = 0x0E;
          r[0x1A80 + 0x04] = 0x5A; r[0x1A01 + 0x04] = 0x5A;
        }
-       // ---- the C0/3D7A neighbourhood. 0xF3 gates on $0118 bit 3; 0xE7 is a three-state
-       // counter at $1D00 whose arms are 0 / 1 / anything-else. Drive both off sv so all three
-       // of 0xE7's arms and both of 0xF3's run, and POISON everything the five of them write.
+       // ---- the C0/3D7A neighbourhood. 0xF3 gates on $0118 bit 3; 0xE7 is a three-state counter at
+       // $1D00 whose arms are 0 / 1 / anything-else. Drive both off sv so all three of 0xE7's arms and both
+       // of 0xF3's run, and poison everything the five of them write.
        if (OPS[oi].op == 0xF3 || OPS[oi].op == 0xF4 || OPS[oi].op == 0xE5 ||
            OPS[oi].op == 0xE6 || OPS[oi].op == 0xE7) {
-         // ⚠ THE SHARED SCRIPT SEEDS ONLY REACH IP+4, AND THESE OPCODES ARE FIVE AND EIGHT BYTES
-         // LONG. Left alone, op 0xE6's mask byte was the fixed $7E: bit 0 CLEAR (so $1D24 was
-         // never written at all) and bits 1 and 2 BOTH set writing the SAME value (so swapping
-         // their branches was invisible). Measured: an 8-bit-STY mutation and a swapped-bit
-         // mutation each scored a full E6:60 until the mask was made to vary, and op 0xE5's $45
-         // mask likewise could not tell `& 7` from `& 0x0F` while bit 3 of its flag byte was fixed.
+         // Note: the shared script seeds reach only IP+4, and these opcodes are five and eight bytes long.
+         // Op 0xE6's mask byte must vary: a fixed $7E has bit 0 clear ($1D24 never written) and bits 1 and 2
+         // both set, writing the same value; op 0xE5's $45 mask needs bit 3 of its flag byte to vary to
+         // tell `& 7` from `& 0x0F`.
          r[0x12001 + IP + 3] = (uint8_t)(sv + 1);          // 0xE6's select mask: 1,2,3,4,5
          r[0x12001 + IP + 5] = (uint8_t)(0xB0 + sv);
          r[0x12001 + IP + 6] = (uint8_t)(0xC0 + sv);
@@ -5331,9 +4818,9 @@ static int runSweepOps(const char* romPath) {
          for (int k = 0; k < (int)(sizeof(O3D)/sizeof(O3D[0])); k++) r[O3D[k]] = 0x5A;
          r[0x0117] = (uint8_t)(0x40 | (sv & 1));   // TSB must OR bit 5 in, not overwrite
        }
-       // ---- ops 0x19/0x1A/0x1C write the RESULT word $7F0A80,X; 0x65/0x66 read-modify-write a
-       // global flag byte whose PAGE is bit 7 of operand 1, so both pages must be seeded and
-       // poisoned or the page bit is untestable.
+       // ---- ops 0x19/0x1A/0x1C write the result word $7F0A80,X; 0x65/0x66 read-modify-write a global
+       // flag byte whose page is bit 7 of operand 1, so both pages must be seeded and poisoned or the page
+       // bit is untestable.
        if (OPS[oi].op == 0x19 || OPS[oi].op == 0x1A || OPS[oi].op == 0x1C ||
            OPS[oi].op == 0x65 || OPS[oi].op == 0x66 || OPS[oi].op == 0x4F) {
          r[0x10A80 + idx] = (uint8_t)(sv == 1 ? oper : 0x5A);   // 0x1A compares against operand 1
@@ -5343,16 +4830,13 @@ static int runSweepOps(const char* romPath) {
          r[0x10000 + r[0x12001 + IP + 2]] = (uint8_t)(0xA0 + sv);
          r[0x10100 + r[0x12001 + IP + 2]] = (uint8_t)(0x50 + sv);
        }
-       // ---- ops 0xA8/0xA9 turn to face a target. Their SAME-TILE fallback only runs when the
-       // two objects share a tile, so seed the target to match this object on some rows; and
-       // 0xA9 resolves through $0197+slot, which the op-0x80 block also uses, so seed it here
-       // too for the rows where that block does not run.
+       // ---- ops 0xA8/0xA9 turn to face a target. Their same-tile fallback runs only when the two objects
+       // share a tile, so the target matches this object on some rows; and 0xA9 resolves through
+       // $0197+slot, which the op-0x80 block also uses, so it is seeded here for the rows that block skips.
        if (OPS[oi].op == 0xA8 || OPS[oi].op == 0xA9) {
          int t = (OPS[oi].op == 0xA8) ? oper : 0x04;
-         // ⚠ ONE ROW MUST LEAVE THE SLOT EMPTY ($80). op 0xA9 does NOT test bit 7 the way the
-         // party-slot CALLS do, so the only way to grade that absence is to make an empty slot
-         // occur: with every slot seeded $04, a mutation that ADDED the missing bit-7 skip scored
-         // a full A9:60, because the skip it added could never fire.
+         // One row leaves the slot empty ($80): op 0xA9 does not test bit 7 the way the party-slot calls
+         // do, and only an empty slot can grade that absence.
          for (int k = 0; k < 8; k++) r[0x0197 + k] = (uint8_t)((sv == 4) ? 0x80 : 0x04);
          r[0x1100 + t] = (uint8_t)((sv == 3) ? 0x80 : 0x04);        // 55AC BMI -- the skip arm
          r[0x1801 + t] = (uint8_t)((sv & 1) ? r[0x1801 + idx] : 0x40);
@@ -5361,55 +4845,47 @@ static int runSweepOps(const char* romPath) {
          r[0x1600 + idx] = 0x5A; r[0x1601 + idx] = 0x5A;
          r[0x01F0] = 0x5A; r[0x01F1] = 0x5A; r[0x01F2] = 0x5A; r[0x01F3] = 0x5A;
        }
-       // ---- the C0/68C6 assignment grid reads and writes BOTH arrays with different index
-       // rules (local = byte, doubled; global = word, raw). Seed a spread of both, and poison
-       // the destinations, or an 8-bit/16-bit pair cannot be told apart.
+       // ---- the C0/68C6 assignment grid reads and writes both arrays with different index rules
+       // (local = byte, doubled; global = word, raw). Seed a spread of both, and poison the destinations,
+       // or an 8-bit/16-bit pair cannot be told apart.
        if (OPS[oi].op >= 0x50 && OPS[oi].op <= 0x6F) {
-         // ⚠ SEED THE WHOLE REACHABLE SPAN, NOT JUST THE FIRST $20 BYTES. ops 0x53/0x54 build a
-         // SIXTEEN-BIT global index from two operands, so it lands well past $20 -- and with only
-         // the low region seeded, both the correct index and a swapped-operand one read unseeded
-         // zeroes and compare equal. Measured: swapping those two operands scored a full 53:60
-         // 54:60 until this span was filled. The pattern is address-derived so any wrong index
-         // reads a different byte. (Note $7F0200 is both local[0] and global[$200]: the two arrays
-         // OVERLAP in this address space, which is the ROM's own layout, so one fill serves both.)
+         // The whole reachable span is seeded, not just the first $20 bytes: ops 0x53/0x54 build a 16-bit
+         // global index from two operands, which lands well past $20, where a correct and a swapped index
+         // would both read unseeded zeroes. The pattern is address-derived so a wrong index reads a
+         // different byte. ($7F0200 is both local[0] and global[$200]: the two arrays overlap in the ROM's
+         // own layout, so one fill serves both.)
          for (int k = 0; k < 0x600; k++) r[0x10000 + k] = (uint8_t)(k ^ (k >> 8) ^ 0x5A);
-         // ⚠ THIS OPERAND MUST REACH 0 AND MUST EXCEED $0F. It is a local index for some members, a
-         // literal for others, a mask-table index for 0x63/0x64 and a SHIFT COUNT for 0x6F -- and
-         // with the old `sv*2+1` (1,3,5,7,9) two mutations were invisible: masking 0x63/0x64's
-         // index with $0F was a no-op below $10, and 0x6F's do-while cannot be told from a while
-         // unless the count is ZERO (where the ROM shifts 256 times, not none). Measured: both
-         // scored a full 60 before this line changed.
+         // Note: this operand must reach 0 and exceed $0F. It is a local index for some members, a literal
+         // for others, a mask-table index for 0x63/0x64 (masked with $0F) and a shift count for 0x6F, whose
+         // do-while differs from a while only when the count is zero (the ROM then shifts 256 times).
          { static const uint8_t O1[5] = { 0x00, 0x03, 0x11, 0x07, 0x2A };
            r[0x12001 + IP + 1] = O1[sv]; }
          r[0x12001 + IP + 2] = (uint8_t)(sv + 4);
          r[0x12001 + IP + 3] = (uint8_t)(sv + 9);
          r[0x01D9] = 0x5A; r[0x01DA] = 0x5A;
        }
-       // ---- op 0x88 has FIVE arms selected by its operand, each with its own length and one
-       // of them variable, so the selector must be driven directly rather than left to OPER.
-       // sv picks: 0 = restore, 1 = the $20 exact arm, 2 = a $4x arm, 3 = an $8x upload,
-       // 4 = a value matching nothing (the default ip+2 arm).
-       // ---- op 0xD8 branches on $0117 bit 0 then $0118 bit 0; sv must reach all three arms,
-       // and its two staged bytes at $7E2989/$7E2A1F need poisoning.
+       // ---- op 0xD8 branches on $0117 bit 0 then $0118 bit 0; sv must reach all three arms, and its two
+       // staged bytes at $7E2989/$7E2A1F need poisoning.
        if (OPS[oi].op == 0xD8) {
          r[0x0117] = (uint8_t)((sv == 1) ? 0x01 : 0x40);
          r[0x0118] = (uint8_t)((sv == 2 || sv == 3) ? 0x01 : 0x80);
          r[0x2989] = 0x5A; r[0x2A1F] = 0x5A; r[0x011F] = 0x5A;
        }
+       // ---- op 0x88 has five arms selected by its operand, each with its own length and one of them
+       // variable, so the selector is driven directly rather than left to OPER. sv picks: 0 = restore,
+       // 1 = the $20 exact arm, 2 = a $4x arm, 3 = an $8x upload, 4 = a value matching nothing (the default
+       // ip+2 arm).
        if (OPS[oi].op == 0x88) {
-         // ⚠ THE LAST SELECTOR IS $25, NOT AN ARBITRARY MISS. $20 and $30 are compared WHOLE at
-         // 489E/48A2, BEFORE the `48A6 AND #F0`, so only a $2x that is NOT $20 can tell an exact
-         // test from a masked one -- with $71 there, making those two tests masked scored 88:60.
+         // The last selector is $25: $20 and $30 are compared whole at 489E/48A2, before the `48A6 AND
+         // #F0`, so only a $2x that is not $20 tells an exact test from a masked one.
          static const uint8_t SEL[5] = { 0x00, 0x20, 0x43, 0x85, 0x25 };
          r[0x12001 + IP + 1] = SEL[sv];
-         r[0x12001 + IP + 2] = (uint8_t)((sv == 3) ? 0x06 : 0x39);  // the $8x COUNT word, low
+         r[0x12001 + IP + 2] = (uint8_t)((sv == 3) ? 0x06 : 0x39);  // the $8x count word, low
          r[0x12001 + IP + 3] = (uint8_t)((sv == 3) ? 0x00 : 0xC4);  // ...and high
          r[0x12001 + IP + 4] = 0x5C;
-         // the effect table: half the rows leave a free slot, half fill it completely so the
-         // allocator FAILS and the two allocating arms take their CLC exits.
-         // ⚠ AND THE TABLE MUST BE PARTIALLY FULL, not all-free or all-full. With every slot free
-         // the allocator returns offset 0 whatever its stride is, and a stride of 8 instead of 12
-         // scored 88:60. Occupying slot 0 alone makes it return 12, which a wrong stride cannot.
+         // The effect table: half the rows leave a free slot, half fill it completely so the allocator
+         // fails and the two allocating arms take their CLC exits. It is also partially full: with every
+         // slot free the allocator returns offset 0 whatever its stride; slot 0 occupied makes it return 12.
          for (int k = 0; k < 0x60; k++)
            r[0x0520 + k] = (uint8_t)((ov & 1) ? 0x77 : (k == 0 ? 0x77 : 0x00));
          r[0x10B80 + idx] = (uint8_t)((ov & 2) ? 0x0C : 0xFF);      // active slot vs "none"
@@ -5423,26 +4899,23 @@ static int runSweepOps(const char* romPath) {
          for (int k = 0; k < 0x40; k++) r[0x2000 + k] = 0x5A;
          for (int k = 0; k < 0x20; k++) r[0x12001 + IP + 4 + k] = (uint8_t)(0xE0 + k);
        }
-       // ---- op 0x7A divides distance by velocity, so BOTH axes must be driven zero and
-       // non-zero or its three ticket sources (X divide / Y divide / the literal) do not all
-       // run. Its speed feeds C0/AC69, so that must vary too.
+       // ---- op 0x7A divides distance by velocity, so both axes must be driven zero and non-zero or its
+       // three ticket sources (X divide / Y divide / the literal) do not all run. Its speed feeds C0/AC69,
+       // so that must vary too.
        if (OPS[oi].op == 0x7A) {
          r[0x1801 + idx] = 0x20; r[0x1881 + idx] = 0x30;      // this object's tile
-         // ⚠ ONE ROW PUTS THE TARGET BEHIND THE OBJECT ($10 against a tile of $20). Without a
-         // NEGATIVE delta the `EOR #FF / INC A` magnitude step is never taken, and using the
-         // signed delta directly scored a full 7A:60.
+         // One row puts the target behind the object ($10 against a tile of $20): without a negative delta
+         // the `EOR #FF / INC A` magnitude step is never taken.
          { static const uint8_t TX[5] = { 0x35, 0x20, 0x10, 0x20, 0x35 };
            r[0x12001 + IP + 1] = TX[sv]; }                                     // target X
-         // ⚠ THE TARGET MUST SOMETIMES SIT ABOVE THE OBJECT. C0/AC69's velocity sign comes from
-         // the heading, and the heading is RECOMPUTED by C0/ABA2 from these tiles at 4D46 -- so
-         // seeding $01EE directly (as the line below once tried) is pointless, the handler
-         // overwrites it. With every target BELOW the object the Y velocity was never negative and
-         // AC69's sign extension of $1981 was unobservable: dropping it scored a full 7A:60.
+         // The target must sometimes sit above the object: C0/AC69's velocity sign comes from the heading,
+         // which C0/ABA2 recomputes from these tiles at 4D46 (seeding $01EE directly is pointless), and only
+         // a negative Y velocity grades AC69's sign extension of $1981.
          { static const uint8_t TY[5] = { 0x48, 0x48, 0x18, 0x30, 0x48 };
            r[0x12001 + IP + 2] = TY[sv]; }                                     // target Y
          r[0x12001 + IP + 3] = (uint8_t)(0x03 + sv);                           // operand 3
          r[0x1A00 + idx] = (uint8_t)(sv == 4 ? 0x00 : 0x20 + sv * 8);          // speed -> AC69
-         r[0x01EE] = 0x5A;   // an OUTPUT here: C0/ABA2 at 4D46 recomputes it before AC69 reads it
+         r[0x01EE] = 0x5A;   // an output here: C0/ABA2 at 4D46 recomputes it before AC69 reads it
          r[0x1900 + idx] = 0x5A; r[0x1901 + idx] = 0x5A;
          r[0x1980 + idx] = 0x5A; r[0x1981 + idx] = 0x5A;
          r[0x1B80 + idx] = 0x5A; r[0x1B81 + idx] = 0x5A; r[0x01C1] = 0x5A;
@@ -5451,21 +4924,18 @@ static int runSweepOps(const char* romPath) {
        // ---- the read-object-state block C0/658F..66A5 and its three skip-branch relatives.
        if (OPS[oi].op == 0x20 || OPS[oi].op == 0x21 || OPS[oi].op == 0x22 || OPS[oi].op == 0x23 ||
            OPS[oi].op == 0x24 || OPS[oi].op == 0x27 || OPS[oi].op == 0x28 || OPS[oi].op == 0x2D) {
-         // Operand 1 is an object index for 0x21/0x23/0x27/0x28, a PARTY SLOT for 0x22/0x24, and
-         // op 0x2D's DISPLACEMENT. One value serves all three roles; do NOT write it twice.
+         // Operand 1 is an object index for 0x21/0x23/0x27/0x28, a party slot for 0x22/0x24, and op 0x2D's
+         // displacement. One value serves all three roles; do not write it twice.
          int o28 = 0x04 + ov * 6;
          r[0x12001 + IP + 1] = (uint8_t)((OPS[oi].op == 0x22 || OPS[oi].op == 0x24) ? (ov + 1) : o28);
-         // ⚠ IP+2 IS vx FOR 0x21, vf FOR 0x23 AND THE DISPLACEMENT FOR 0x27/0x28. An earlier draft
-         // wrote it twice -- once as the variable and again as the displacement -- which silently
-         // destroyed the vx == vy row below and left op 0x21's load-order fact ungraded at 60/60.
+         // IP+2 is vx for 0x21, vf for 0x23 and the displacement for 0x27/0x28; written once, so the vx ==
+         // vy row below survives.
          r[0x12001 + IP + 2] = (uint8_t)(0x11 + ov * 5);
-         // ⚠ ONE ROW MAKES vy EQUAL vx. Op 0x21 loads BOTH bytes before storing EITHER, X first, so
-         // with vx == vy the Y byte is the survivor; a port that stores as it loads agrees
-         // everywhere else and differs only here.
+         // One row makes vy equal vx. Op 0x21 loads both bytes before storing either, X first, so with
+         // vx == vy the Y byte is the survivor; a port that stores as it loads differs only here.
          r[0x12001 + IP + 3] = (uint8_t)((ov == 2) ? (0x11 + ov * 5) : (0x40 + ov * 3));
-         // ⚠ THE PARTY-SLOT TABLE MUST HOLD DISTINCT VALUES AT CONSECUTIVE ADDRESSES. `B5 97
-         // LDA $97,X` indexes by the RAW slot; with the table flat, slot and slot*2 read the same
-         // byte and that mutation scores a clean 60/60.
+         // The party-slot table holds distinct values at consecutive addresses: `B5 97 LDA $97,X` indexes
+         // by the raw slot, and with a flat table slot and slot*2 would read the same byte.
          for (int k = 0; k < 0x10; k++) r[0x0197 + k] = (uint8_t)(0x05 + k * 7);
          for (int k = 0; k < 0x100; k++) {
            r[0x1801 + k] = (uint8_t)(0x03 + ((k * 7 + ov) & 0x1F));
@@ -5473,14 +4943,13 @@ static int runSweepOps(const char* romPath) {
            r[0x1600 + k] = (uint8_t)((k + ov) & 0x03);
            r[0x0F00 + k] = (uint8_t)(((k + sv) & 1) ? 0x00 : 0x81);
          }
-         // ⚠ THE CAMERA HIGH BYTES MUST BE ODD. The read is 8-bit and the LSR is 8-bit, so with an
-         // EVEN high byte a 16-bit read-then-shift produces the same low byte and the width is
-         // ungraded -- that mutation scored 60/60 with $5A there.
+         // The camera high bytes must be odd. The read and the LSR are 8-bit, so with an even high byte a
+         // 16-bit read-then-shift produces the same low byte and the width is ungraded.
          r[0x1D0A] = 0x20; r[0x1D0B] = 0x5B;
          r[0x1D0E] = 0x30; r[0x1D0F] = 0x5B;
-         // ...so the box test sees dx = $1801[o] - $10 and dy = $1881[o] - $18. Drive the two
-         // objects' tiles to land ON the boundaries: dx from sv, dy from ov, independently, so that
-         // 0/1/2 and $0C/$0D/$0E all occur and the ASYMMETRY (dx <= $0D but dy <= $0C) is graded.
+         // ...so the box test sees dx = $1801[o] - $10 and dy = $1881[o] - $18. The two objects' tiles land
+         // on the boundaries, dx from sv and dy from ov independently, so 0/1/2 and $0C/$0D/$0E all occur
+         // and the asymmetry (dx <= $0D but dy <= $0C) is graded.
          { static const uint8_t DXV[5] = { 0x10, 0x11, 0x12, 0x1D, 0x1E };   // dx = 0,1,2,$0D,$0E
            static const uint8_t DYV[6] = { 0x18, 0x19, 0x1A, 0x23, 0x24, 0x25 };  // dy = 0,1,2,$0B,$0C,$0D
            r[0x1801 + o28] = DXV[sv]; r[0x1881 + o28] = DYV[ov]; }
@@ -5493,27 +4962,25 @@ static int runSweepOps(const char* romPath) {
        }
        // ---- ops 0xC0/0xC3/0xC4, the decision-box request+wait.
        if (OPS[oi].op == 0xC0 || OPS[oi].op == 0xC3 || OPS[oi].op == 0xC4) {
-         // ⚠ $012D STAYS NON-ZERO. Zero is the ROM's panic arm, which ends in `BRA -2` and never
-         // returns -- seeding it does not grade the trap, it hangs the oracle and loses the case.
-         // main.c already forces it non-zero for the 0xBB family for exactly this reason.
+         // $012D stays non-zero: zero is the ROM's panic arm, which ends in `BRA -2` and never returns
+         // (the same reason as for the 0xBB family).
          r[0x012D] = 0x01;
          // sv picks the arm: in-flight park / completed / issue.
          { static const uint8_t Q129[5] = { 0x01, 0x00, 0x00, 0x00, 0x00 };
            r[0x0129] = Q129[sv]; }
-         // ⚠ $016E MUST SOMETIMES BE NON-ZERO. The completion index comes from a SIXTEEN-bit
-         // `LDX $6D` while $012E is written from an EIGHT-bit `LDA $6D` of the same DP word -- with
-         // the high byte always zero the two are indistinguishable.
+         // $016E must sometimes be non-zero. The completion index comes from a 16-bit `LDX $6D` while $012E
+         // is written from an 8-bit `LDA $6D` of the same DP word; with the high byte zero they agree.
          r[0x016E] = (uint8_t)((ov & 1) ? 0x01 : 0x00);
          { int x6 = idx | (r[0x016E] << 8);
            for (int k = 0; k < 0x200; k++) { r[0x10A00 + k] = 0x5A; r[0x10A80 + k] = 0x5A; }
            r[0x10A00 + x6] = (uint8_t)((sv == 1 || sv == 3) ? (0x40 + ov) : 0x00); }
          r[0x0166] = (uint8_t)(0x71 + ov * 3);                 // copied to $7F0A80 on completion
          r[0x12001 + IP + 1] = (uint8_t)(0x30 + ov * 7);
-         // Operand 2 feeds THREE places: verbatim to $01D9, its low two bits to $0165 and bits 2-3
-         // to $0164. Values must differ in both nibbles or the two shifts cannot be told apart.
+         // Operand 2 feeds three places: verbatim to $01D9, its low two bits to $0165 and bits 2-3 to
+         // $0164. Values must differ in both nibbles or the two shifts cannot be told apart.
          r[0x12001 + IP + 2] = (uint8_t)(0x1B + ov * 0x25);
-         // ⚠ $0154 MUST CARRY BIT 5 ON SOME ROWS. The tail's `TRB $54` CLEARS it; with the bit
-         // already clear everywhere, a TSB (which SETS) or a plain store would compare equal.
+         // $0154 carries bit 5 on some rows: the tail's `TRB $54` clears it, and with the bit already clear
+         // everywhere a TSB (which sets) or a plain store would compare equal.
          { static const uint8_t P54C[6] = { 0x20, 0x21, 0x00, 0xA5, 0x60, 0x1F };
            r[0x0154] = P54C[ov]; }
          r[0x0130] = 0x5A; r[0x012A] = 0x5A; r[0x012E] = 0x5A; r[0x0132] = 0x5A;
@@ -5521,19 +4988,16 @@ static int runSweepOps(const char* romPath) {
        }
        // ---- ops 0x13/0x14/0x15, the rest of the compare-and-branch family.
        if (OPS[oi].op == 0x13 || OPS[oi].op == 0x14 || OPS[oi].op == 0x15) {
-         // ⚠ THE OFF-TABLE MODE IS DELIBERATELY NOT SEEDED, exactly as for ops 0x12/0x16. Past the
-         // table the ROM dispatches into whatever bytes follow -- code, not a vector -- so the
-         // ORACLE runs somewhere underivable and the port can only trap. Seeding it does not grade
-         // the bound, it just fails the case: modes $08/$11 scored 13:36 / 14:48 / 15:36, which is
-         // precisely the count of NON-trapping rows.
-         // The bound still differs within the family (0x14 goes through the table BASE, 16 entries;
-         // 0x13 and 0x15 enter at entry 8, so only 8 remain) and each grid stays inside its own.
+         // The off-table mode is not seeded, as for ops 0x12/0x16: past the table the ROM dispatches into
+         // whatever bytes follow (code, not a vector), so the oracle runs somewhere underivable and the port
+         // can only trap. The bound still differs within the family (0x14 goes through the table base, 16
+         // entries; 0x13 and 0x15 enter at entry 8, so only 8 remain) and each grid stays inside its own.
          { static const uint8_t M8[5]  = { 0x00, 0x02, 0x04, 0x06, 0x07 };   // 0x13 / 0x15: wide half
            static const uint8_t M16[5] = { 0x00, 0x03, 0x07, 0x0A, 0x0F };   // 0x14: narrow AND wide
            r[0x12001 + IP + (OPS[oi].op == 0x13 ? 4 : 3)] =
              (OPS[oi].op == 0x14) ? M16[sv] : M8[sv]; }
-         // Variable indices, and for 0x13 a 16-bit immediate whose HIGH byte is sometimes non-zero
-         // -- without that the wide comparand cannot be told from an 8-bit one.
+         // Variable indices, and for 0x13 a 16-bit immediate whose high byte is sometimes non-zero, so the
+         // wide comparand can be told from an 8-bit one.
          r[0x12001 + IP + 1] = (uint8_t)(0x02 + ov * 3);
          if (OPS[oi].op == 0x13) {
            r[0x12001 + IP + 2] = (uint8_t)(0x40 + ov * 9);
@@ -5543,30 +5007,25 @@ static int runSweepOps(const char* romPath) {
            r[0x12001 + IP + 2] = (uint8_t)(0x05 + ov * 4);      // the second variable index
            r[0x12001 + IP + 4] = (uint8_t)(0x06 + ov * 7);      // the displacement
          }
-         // ⚠ THE ARRAY'S ODD BYTES MUST VARY TOO. They are the HIGH halves of the 16-bit words that
-         // 0x13 and 0x15 compare; left at a constant, a wide compare collapses onto its 8-bit twin
-         // and the missing SEP #20 that defines both opcodes becomes invisible.
+         // The array's odd bytes vary too: they are the high halves of the 16-bit words 0x13 and 0x15
+         // compare, and a constant would collapse a wide compare onto its 8-bit twin (the SEP #20 question).
          for (int k = 0; k < 0x200; k++)
            r[0x10200 + k] = (uint8_t)((k & 1) ? (0x81 + (((k >> 1) + ov) & 0x07))
                                               : (0x10 + ((k * 5 + sv) & 0x3F)));
          r[0x01D9] = 0x5A; r[0x01DB] = 0x5A;
-         // ⚠ $01DA AND $01DC MUST NOT BE POISONED TO THE SAME VALUE. Op 0x14 never writes them, and
-         // its modes 8..15 compare through them as the high halves -- equal poison collapses every
-         // wide compare onto its 8-bit twin. This is the same measure main.c already applies for
-         // ops 0x12/0x16, and overwriting it with $5A/$5A undoes it. They are also kept clear of
-         // the $81..$88 the array's odd bytes hold, so 0x13/0x15 FAILING to write them shows up.
+         // $01DA and $01DC are not poisoned to the same value: op 0x14 never writes them and its modes 8..15
+         // compare through them as high halves (the same measure as for ops 0x12/0x16). They are also kept
+         // clear of the $81..$88 the array's odd bytes hold, so 0x13/0x15 failing to write them shows up.
          r[0x01DA] = 0x01; r[0x01DC] = 0x02;
          r[0x01C3] = 0x5A; r[0x01C4] = 0x5A;
        }
        // ---- op 0x8C: op 0x8B's indirect twin.
        if (OPS[oi].op == 0x8C) {
-         // ⚠ THE ARRAY MUST BE FILLED TO $200, NOT $40. The `ASL A` that turns the operand into an
-         // offset is SIXTEEN-BIT, so an index of $80 reaches offset $100 instead of wrapping -- a
-         // grid that only fills the first $40 bytes reads uninitialised memory for half its rows.
-         // ⚠ THE PATTERN MUST NOT REPEAT WITH PERIOD $100. A fill of `(k*3 + ...) & 0x3F` makes
-         // offset $000 and offset $100 hold the SAME byte, so the 16-bit-vs-8-bit ASL cannot be
-         // told apart at all -- that mutation scored a full 60/60 until the `k >> 5` term went in.
-         // Values stay under $40 so a tile cell is a real (row, col) in the 64-wide plane.
+         // The array is filled to $200, not $40: the `ASL A` that turns the operand into an offset is
+         // 16-bit, so an index of $80 reaches offset $100 instead of wrapping. The pattern does not repeat
+         // with period $100 (the `k >> 5` term), or offsets $000 and $100 would hold the same byte and the
+         // 16-bit-vs-8-bit ASL could not be told apart. Values stay under $40 so a tile cell is a real
+         // (row, col) in the 64-wide plane.
          for (int k = 0; k < 0x200; k++)
            r[0x10200 + k] = (uint8_t)((k & 1) ? 0x5A : ((k + (k >> 5) + ov * 11) & 0x3F));
          // Indices spanning both halves of the array, so the wide shift is exercised.
@@ -5575,42 +5034,35 @@ static int runSweepOps(const char* romPath) {
            r[0x12001 + IP + 1] = VXI[ov]; r[0x12001 + IP + 2] = VYI[ov]; }
          // The bit-7 gate on $0F80 picks whether the tile-attribute block runs at all.
          r[0x0F80 + idx] = (uint8_t)((sv & 1) ? 0x80 | sv : sv);
-         // ⚠ $1800 IS POISONED AND MUST STAY POISONED. Op 0x8B writes it, op 0x8C does not; without
-         // the poison a spurious `= 0x80` copied from the sibling would compare equal on quiet WRAM.
+         // $1800 stays poisoned: op 0x8B writes it and op 0x8C does not, so a spurious `= 0x80` copied from
+         // the sibling would otherwise compare equal on quiet WRAM.
          r[0x1800 + idx] = 0x5A; r[0x1801 + idx] = 0x5A;
          r[0x1880 + idx] = 0x5A; r[0x1881 + idx] = 0x5A;
          r[0x0C00 + idx] = 0x5A; r[0x0C01 + idx] = 0x5A;
-         // ⚠ SEED THE PLANES OVER THE WHOLE RANGE A 16-BIT CELL REACHES, not just $200 bytes.
-         // The cell is tx | (ty << 8), so with both under $40 it spans $0000-$3F3F; a $200-byte
-         // seed leaves every row but the first reading whatever the previous case left, where the
-         // correct address and a wrong one compare equal. Dropping the row (8-bit cell) and
-         // swapping the axes both scored a full 60/60 before this was widened.
-         // ⚠ THE PATTERN MUST DEPEND ON BIT 8, i.e. ON ty. Two earlier attempts did not and both
-         // left the 16-bit cell ungraded at a full 60/60. `(k >> 6) & 1` looks like a high-bit term
-         // but with tx < $40 the cell's bit 6 comes from ty << 2, whose low bit is ALWAYS zero --
-         // so t and (t & $FF) selected the same pattern value and dropping the row was invisible.
-         // ONE fill covers both planes: $7040 is the same array $40 further on, which is precisely
-         // why a 64-wide row on a 256-byte pitch keeps them from overlapping.
+         // The planes are seeded over the whole range a 16-bit cell reaches: the cell is tx | (ty << 8), so
+         // with both under $40 it spans $0000-$3F3F, and a $200-byte seed would leave every row but the
+         // first reading leftovers. The pattern depends on bit 8 (ty): with tx < $40 the cell's bit 6 comes
+         // from ty << 2, whose low bit is always zero, so a `(k >> 6) & 1` term alone would not separate t
+         // from (t & $FF). One fill covers both planes: $7040 is the same array $40 further on, and a
+         // 64-wide row on a 256-byte pitch keeps them from overlapping.
          for (int k = 0; k < 0x4080; k++)
-           // The (k >> 6) term is what makes the TWO PLANES independent: plane 2 sits $40 later,
-           // and with tx < $40 that offset touches bit 6 alone. Without it plane1 and plane2 agree
-           // on every case and swapping them is invisible.
+           // The (k >> 6) term makes the two planes independent: plane 2 sits $40 later, and with tx < $40
+           // that offset touches bit 6 alone. Without it the planes agree and swapping them is invisible.
            r[0x7000 + k] = (uint8_t)(((k ^ (k >> 3) ^ (k >> 6) ^ (k >> 8)) & 1) ? 0x40 : 0x00);
        }
        // ---- ops 0x2C / 0x7F.
        if (OPS[oi].op == 0x2C) {
-         // ⚠ OPERAND 2 MUST EXCEED $1F ON SOME ROWS. Its value is shifted LEFT BY THREE into a
-         // 16-bit store whose high half lands on $1D92 -- which an earlier STZ has just cleared.
-         // Below $20 the shift stays inside one byte, the high half is 0, and the STZ and the real
-         // store are indistinguishable.
+         // Operand 2 exceeds $1F on some rows: it is shifted left by three into a 16-bit store whose high
+         // half lands on $1D92, which an earlier STZ has just cleared; below $20 the high half is 0 and the
+         // STZ and the store agree.
          r[0x12001 + IP + 1] = (uint8_t)(0x07 + ov * 0x29);
          r[0x12001 + IP + 2] = (uint8_t)(0x11 + ov * 0x2B);
          r[0x1D3F] = 0x5A; r[0x1D40] = 0x5A; r[0x1D8F] = 0x5A; r[0x1D90] = 0x5A;
          r[0x1D91] = 0x5A; r[0x1D92] = 0x5A;
        }
        if (OPS[oi].op == 0x7F) {
-         // The cursor is READ, incremented and WRITTEN BACK, so it must start at values that make
-         // the +1 observable -- including $FF, where it wraps to 0 rather than reaching $100.
+         // The cursor is read, incremented and written back, so it starts at values that make the +1
+         // observable, including $FF, where it wraps to 0 rather than reaching $100.
          { static const uint8_t F8[5] = { 0x00, 0x01, 0x7F, 0xFE, 0xFF };
            r[0x01F8] = F8[sv]; }
          r[0x12001 + IP + 1] = (uint8_t)(0x04 + ov * 5);
@@ -5618,38 +5070,35 @@ static int runSweepOps(const char* romPath) {
          for (int k = 0; k < 0x40; k++) r[0x10200 + k] = 0x5A;
        }
        // ---- op 0x81 falls through into the same descriptor walk op 0x80 calls, so the grid has to
-       // separate FOUR descriptor bytes that all index different tables.
+       // separate four descriptor bytes that all index different tables.
        if (OPS[oi].op == 0x81) {
-         // ⚠ IDS 0x00-0x06 ARE IDENTITY DESCRIPTORS (`0n 0n 0n 0n 00`, the seven PCs) AND A GRID
-         // MADE OF THEM IS BLIND: d0 = d1 = d2 = d3 = id, so nothing distinguishes the gfx index
-         // from the assembly index from the palette index from the anim index, nor id*5 from id*1.
-         // These six all have four distinct descriptor bytes, and between them cover: d4 != 0 twice
-         // (0x0F -> 1, 0xD5 -> 5, and 5 cannot be confused with the constant 1 this opcode also
-         // writes to $1B01/$1600), d2*24 > 255 everywhere (so the 16-bit $1400 store is graded),
-         // 3*d0 > 255 (0x17, 0xD5), and id*5 > 255 (0x3A, 0x7C, 0xD5, which grades $01C0).
+         // Ids 0x00-0x06 are identity descriptors (`0n 0n 0n 0n 00`, the seven PCs): d0 = d1 = d2 = d3 = id,
+         // so nothing would separate the gfx, assembly, palette and anim indices, nor id*5 from id*1. These
+         // six all have four distinct descriptor bytes and cover d4 != 0 twice (0x0F -> 1, 0xD5 -> 5, and 5
+         // cannot be confused with the constant 1 this opcode writes to $1B01/$1600), d2*24 > 255 (the
+         // 16-bit $1400 store), 3*d0 > 255 (0x17, 0xD5) and id*5 > 255 (0x3A, 0x7C, 0xD5, which grades $01C0).
          static const uint8_t ID81[6] = { 0x09, 0x0F, 0x17, 0xD5, 0x3A, 0x7C };
          r[0x12001 + IP + 1] = ID81[ov];
-         // Every store here is unconditional, so on quiet WRAM a missing one compares equal for
-         // free. Poison the whole per-object row, both halves of each 16-bit pair.
+         // Every store here is unconditional, so on quiet WRAM a missing one compares equal. Poison the
+         // whole per-object row, both halves of each 16-bit pair.
          { static const int PO[] = { 0x1100, 0x1101, 0x1200, 0x1201, 0x1280, 0x1281, 0x1300,
                                      0x1380, 0x1381, 0x1400, 0x1401, 0x1480, 0x1481, 0x1500,
                                      0x1501, 0x1580, 0x1581, 0x1600, 0x1680, 0x1681, 0x1B01,
                                      0x0C00, 0x0C01 };
            for (int k = 0; k < (int)(sizeof(PO)/sizeof(PO[0])); k++) r[PO[k] + idx] = 0x5A; }
          r[0x01C7] = 0x5A; r[0x01C8] = 0x5A; r[0x01BF] = 0x5A; r[0x01C0] = 0x5A;
-         r[0x01D9] = 0x5A; r[0x01DA] = 0x5A;   // written TWICE -- d1 then d0; the FINAL value is d0
+         r[0x01D9] = 0x5A; r[0x01DA] = 0x5A;   // written twice -- d1 then d0; the final value is d0
        }
        // ---- op 0xFE builds eight interpolation channels through the SNES divider.
        if (OPS[oi].op == 0xFE) {
-         // ⚠ A ZERO DURATION IS SEEDED ON PURPOSE. The handler has no zero guard and no zero path,
-         // so the divide-by-zero result is NOT derivable from the ROM -- the port asserts the
-         // documented $FFFF and this row is what makes the ORACLE adjudicate it rather than the
-         // claim going untested. sv 1 also sits at 1, the divisor that makes quotient == dividend.
+         // A zero duration is seeded on purpose: the handler has no zero guard, so the divide-by-zero result
+         // is not derivable from the ROM; the port asserts the documented $FFFF and this row makes the oracle
+         // adjudicate it. sv 1 sits at 1, the divisor that makes quotient == dividend.
          { static const uint8_t DUR[5] = { 0x00, 0x01, 0x08, 0x40, 0xFF };
            r[0x12001 + IP + 1] = DUR[sv]; }
-         // Eight (start, target) pairs. All three arms -- equal, ascending, descending -- must occur
-         // WITHIN one call, because a single call runs all eight channels and the arm is chosen per
-         // channel. Pair i deliberately spans equal / b>a / b<a and both extremes of the byte range.
+         // Eight (start, target) pairs. All three arms (equal, ascending, descending) must occur within one
+         // call, because one call runs all eight channels and the arm is chosen per channel. Pair i spans
+         // equal / b>a / b<a and both extremes of the byte range.
          for (int i = 0; i < 8; i++) {
            int a = (0x11 + i * 0x1D + ov * 7) & 0xFF;
            int b;
@@ -5673,50 +5122,46 @@ static int runSweepOps(const char* romPath) {
            r[0x10200 + k] = (uint8_t)((k & 1) ? 0x5A : (0x60 + k + ov));   // odd bytes stay poison so
          r[0x1A00 + idx] = 0x5A;                                          // a stride of 1 shows up
        }
-       // ---- ops 0x2A/0x2B/0x32 OR a bit into $0154. TSB is test-and-SET, so the seed must carry
-       // OTHER bits (and never the op's own) or an OR is indistinguishable from an assignment.
+       // ---- ops 0x2A/0x2B/0x32 OR a bit into $0154. TSB is test-and-set, so the seed carries other bits
+       // (never the op's own), or an OR could not be told from an assignment.
        if (OPS[oi].op == 0x2A || OPS[oi].op == 0x2B || OPS[oi].op == 0x32) {
          static const uint8_t P54[6] = { 0x00, 0x01, 0x20, 0x83, 0x40, 0xA1 };
-         r[0x0154] = (uint8_t)(P54[ov] & (uint8_t)~0x1C);   // clear ALL THREE of 04/08/10
+         r[0x0154] = (uint8_t)(P54[ov] & (uint8_t)~0x1C);   // clear all three of 04/08/10
        }
        // ---- the $C1 item + gold family (0xC7/0xC9/0xCA/0xCB/0xCC/0xCD/0xCE).
        if (OPS[oi].op == 0xC7 || OPS[oi].op == 0xC9 || OPS[oi].op == 0xCA ||
            OPS[oi].op == 0xCB || OPS[oi].op == 0xCC || OPS[oi].op == 0xCD || OPS[oi].op == 0xCE) {
-         // ⚠ THE ARGUMENT MUST INCLUDE ZERO. Every leaf's first branch is `CPY #0000 / BEQ`, and
-         // that arm returns a DIFFERENT constant for the gold leaves ($FF) than for the item ones
-         // (0) -- so without a zero row the two cannot be told apart.
-         // Item ids and gold amounts share the operand, so this doubles as the gold value: $0000
-         // exercises the zero arm, $0064 and $2710 sit either side of nothing in particular, and
-         // $9680/$9FFF straddle the SECOND stage of AddGold's two-stage clamp (`CMP #9680`).
+         // The argument includes zero: every leaf's first branch is `CPY #0000 / BEQ`, and that arm returns
+         // a different constant for the gold leaves ($FF) than for the item ones (0).
+         // Item ids and gold amounts share the operand, so this doubles as the gold value: $0000 exercises
+         // the zero arm, $0064 and $2710 are plain values, and $9680/$9FFF straddle the second stage of
+         // AddGold's two-stage clamp (`CMP #9680`).
          static const uint16_t ARG[6] = { 0x0000, 0x0007, 0x0064, 0x2710, 0x9680, 0x9FFF };
          r[0x12001 + IP + 1] = (uint8_t)ARG[ov];
          r[0x12001 + IP + 2] = (uint8_t)(ARG[ov] >> 8);      // the 16-bit half for 0xCC/0xCD/0xCE
          r[0x12001 + IP + 3] = (uint8_t)(0x04 + sv * 7);     // 0xCC's branch displacement
-         // ⚠ AND FOR THE 8-BIT OPS THE BRANCH BYTE IS AT IP+2, WHICH THE LINE ABOVE OWNS. 0xC9
-         // reads its displacement from the spill (ip+2), i.e. the SAME byte that is the high half
-         // of the wide operand. Keying it to sv keeps it varying for both readings.
-         // the inventory: a PARTIALLY populated table. All-empty makes "first free slot" and
-         // "slot 0" identical, and all-full hides the free-slot capture entirely.
+         // For the 8-bit ops the branch byte is at IP+2, which the line above owns: 0xC9 reads its
+         // displacement from the spill (ip+2), the same byte as the high half of the wide operand. Keying it
+         // to sv keeps it varying for both readings.
+         // the inventory: a partially populated table. All-empty makes "first free slot" and "slot 0"
+         // identical, and all-full hides the free-slot capture entirely.
          for (int k = 0; k < 0x100; k++) { r[0x2400 + k] = 0x00; r[0x2500 + k] = 0x00; }
          r[0x2400 + 0] = 0x11; r[0x2500 + 0] = 0x05;
          r[0x2400 + 1] = 0x07; r[0x2500 + 1] = (uint8_t)(sv == 2 ? 0x63 : sv == 3 ? 0x01 : 0x20);
-         r[0x2400 + 2] = 0x22; r[0x2500 + 2] = 0x63;         // a FULL stack -- the CMP #63 arm
+         r[0x2400 + 2] = 0x22; r[0x2500 + 2] = 0x63;         // a full stack -- the CMP #63 arm
          if (sv == 4) for (int k = 0; k < 0x100; k++) r[0x2400 + k] = (uint8_t)(0x30 + k);
-         // the 24-bit gold, straddling the clamp and the borrow
-         // ⚠ sv 1 AND sv 2 ARE BOTH LOAD-BEARING AND NEITHER IS OBVIOUS.
-         // sv 1 puts the gold at EXACTLY $0064 with $2C55 = 0, which is ARG[2] -- the only row
-         // where HasGold's `CPX $AEF7 / BCS` sees equality, and without it `>=` and `>` agree
-         // everywhere (the one other equal pair is masked because its $2C55 is non-zero, and a
-         // non-zero high byte returns "affordable" before the comparison can matter).
-         // sv 2 puts it at $98:9600, so adding a small argument lands $2C53 INSIDE [$9600,$9680)
-         // with $2C55 already at the clamp -- the only way to part AddGold's second-stage
-         // `CMP #9680` from a wrong bound. sv 4 keeps $2C55 = $99, i.e. ALREADY past the clamp,
-         // which is what grades the unconditional `STA $2C55`.
+         // the 24-bit gold, straddling the clamp and the borrow:
+         //   sv 1 puts the gold at $0064 with $2C55 = 0, which is ARG[2]: the only row where HasGold's
+         //        `CPX $AEF7 / BCS` sees equality (the other equal pair has a non-zero $2C55, which returns
+         //        "affordable" before the comparison matters).
+         //   sv 2 puts it at $98:9600, so adding a small argument lands $2C53 inside [$9600,$9680) with $2C55
+         //        already at the clamp, which separates AddGold's second-stage `CMP #9680` from a wrong bound.
+         //   sv 4 keeps $2C55 = $99, already past the clamp, which grades the unconditional `STA $2C55`.
          { static const uint8_t G53[5] = { 0x00, 0x64, 0x00, 0xFF, 0x7F };
            static const uint8_t G54[5] = { 0x00, 0x00, 0x96, 0xFF, 0x96 };
            static const uint8_t G55[5] = { 0x00, 0x00, 0x98, 0x00, 0x99 };
            r[0x2C53] = G53[sv]; r[0x2C54] = G54[sv]; r[0x2C55] = G55[sv]; }
-         r[0xAEF7] = 0x5A; r[0xAEF8] = 0x5A; r[0xAEF9] = 0x5A;    // POISON the scratch triple
+         r[0xAEF7] = 0x5A; r[0xAEF8] = 0x5A; r[0xAEF9] = 0x5A;    // poison the scratch triple
          r[0xAEFA] = 0x5A; r[0xAEFB] = 0x5A;
          r[0x01D9] = 0x5A; r[0x01DA] = 0x5A; r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;
          for (int k = 0; k < 0x40; k++) r[0x10200 + k] = (uint8_t)(0x40 + k);   // 0xC7's $7F0200
@@ -5725,21 +5170,18 @@ static int runSweepOps(const char* romPath) {
        if (OPS[oi].op == 0xCF || OPS[oi].op == 0xD0 || OPS[oi].op == 0xD1 || OPS[oi].op == 0xD2 ||
            OPS[oi].op == 0xD3 || OPS[oi].op == 0xD4 || OPS[oi].op == 0xD7 ||
            OPS[oi].op == 0xF8 || OPS[oi].op == 0xF9 || OPS[oi].op == 0xFA) {
-         // The operand is a PC char-id (or, for 0xD7, an item id). Real ids are 0-6.
-         // ⚠ ONE ID MUST EXCEED 7. C2/8C93 does `LDX $C0 / LDA $FFF9BB,X` with X EIGHT bits and
-         // NO mask, so an id past the table's eight entries reads the code behind it -- and every
-         // id in {0..6} makes an invented `& 7` score a perfect 600/600. $09 reads $DA where the
-         // masked read would give $40.
+         // The operand is a PC char-id (or, for 0xD7, an item id). Real ids are 0-6, but one exceeds 7:
+         // C2/8C93 does `LDX $C0 / LDA $FFF9BB,X` with an 8-bit X and no mask, so an id past the table's
+         // eight entries reads the code behind it ($09 reads $DA where a masked read would give $40).
          static const uint8_t PC[6] = { 0x00, 0x01, 0x03, 0x09, 0x02, 0x05 };
          r[0x12001 + IP + 1] = PC[ov];
          r[0x12001 + IP + 2] = (uint8_t)(0x03 + sv * 5);    // 0xCF/0xD2 displacement; 0xD7 slot
-         // ⚠ THE ROSTER IS KEYED TO sv AND THE ID TO ov, DELIBERATELY. Both the membership answer
-         // and every placement arm are decided by (id vs roster); pinning them to one axis is the
-         // ninth blindness class, and here it would collapse found/not-found to a diagonal.
-         // Row 2 is the ONLY one with no bit-7 slot anywhere -- it is what reaches leaf 1's
-         // eviction of slot 2 and leaf 4's fall-out, and what makes C2/8CBE run off the end.
-         // Row 1 has ONE active member, which is what grades the epilogue's "an empty slot is
-         // skipped WITHOUT advancing the destination": it paints $21BA and leaves $21DA/$21FA.
+         // The roster is keyed to sv and the id to ov: the membership answer and every placement arm are
+         // decided by (id vs roster), and one axis for both would collapse found/not-found to a diagonal.
+         // Row 2 is the only one with no bit-7 slot: it reaches leaf 1's eviction of slot 2 and leaf 4's
+         // fall-out, and makes C2/8CBE run off the end. Row 1 has one active member, which grades the
+         // epilogue's "an empty slot is skipped without advancing the destination" (it paints $21BA and
+         // leaves $21DA/$21FA).
          static const uint8_t ROSTER[5][9] = {
            { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x80, 0x80, 0x80 },
            { 0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 },
@@ -5747,14 +5189,13 @@ static int runSweepOps(const char* romPath) {
            { 0x80, 0x01, 0x80, 0x80, 0x03, 0x80, 0x05, 0x80, 0x80 },
            { 0x03, 0x04, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 },
          };
-         // Rows 1/3/4 make leaf 1's first EMPTY active slot land on 1, 0 and 2 respectively, and
-         // rows 0/2 are full so the eviction arm runs. Without a first-empty-at-slot-2 row the
-         // scan bound `y < 3` is separated from `y < 2` by two cases out of six hundred.
+         // Rows 1/3/4 make leaf 1's first empty active slot land on 1, 0 and 2, and rows 0/2 are full so the
+         // eviction arm runs; the first-empty-at-slot-2 row separates the scan bound `y < 3` from `y < 2`.
          for (int k = 0; k < 9; k++) r[0x2980 + k] = ROSTER[sv][k];
-         r[0x29AF] = 0x5A;                                  // POISON the TSB target
-         // op 0xD3/0xD4's OBJECT slots and the char-id array they index. Row 2 puts the hole at
-         // slot 1, which is the only way to reach `3998 BMI ->39B1` -- the branch that jumps INTO
-         // the compaction instead of falling through to slot 2.
+         r[0x29AF] = 0x5A;                                  // poison the TSB target
+         // op 0xD3/0xD4's object slots and the char-id array they index. Row 2 puts the hole at slot 1, the
+         // only way to reach `3998 BMI ->39B1`, the branch that jumps into the compaction instead of falling
+         // through to slot 2.
          static const uint8_t OBJ97[5] = { 0x02, 0x80, 0x02, 0x02, 0x80 };
          static const uint8_t OBJ99[5] = { 0x05, 0x05, 0x80, 0x05, 0x80 };
          static const uint8_t OBJ9B[5] = { 0x08, 0x08, 0x08, 0x80, 0x80 };
@@ -5763,9 +5204,8 @@ static int runSweepOps(const char* romPath) {
          r[0x1101 + 0x02] = 0x01; r[0x1101 + 0x05] = 0x03; r[0x1101 + 0x08] = 0x06;
          for (int k = 0; k < 10; k++) r[0x018D + k] = (uint8_t)(k == 2 ? 0x80 : 0x10 + k); // 0xD3
          r[0x0178] = 0x5A; r[0x01DB] = 0x5A;
-         // the SEVEN PC records. The accessory picks BOTH the max-HP bonus arm ($A0 = +25%,
-         // $A1 = +50%, anything else = +0) and C2/82E1's triple-tech relic window [$AE,$B3) --
-         // $B3 is seeded precisely because it is the first id OUTSIDE it.
+         // the seven PC records. The accessory picks both the max-HP bonus arm ($A0 = +25%, $A1 = +50%,
+         // anything else = +0) and C2/82E1's triple-tech relic window [$AE,$B3); $B3 is the first id outside.
          static const uint8_t ACC[7] = { 0xA0, 0xA1, 0x00, 0xAE, 0xB0, 0xB2, 0xB3 };
          for (int n = 0; n < 7; n++) {
            int rec = 0x2600 + n * 0x50;
@@ -5777,14 +5217,11 @@ static int runSweepOps(const char* romPath) {
            r[rec + 9] = (uint8_t)(0x20 + n * 7 + sv);       // max MP -> leaf 7 copies it to +7
          }
          for (int k = 0; k < 0x60; k++) r[0x21A0 + k] = (uint8_t)(0xC0 + k);   // the 3 palette rows
-         // the tech bitmap $FF:F958 walks. All-set and all-clear are both needed (they decide
-         // whether a combination's three techs are ALL learned), and the two alternating patterns
-         // separate the `t & 7` bit from the `t >> 3` byte index.
-         // ⚠ AND IT MUST VARY BYTE BY BYTE. A uniform fill is the classic ungradeable seed: it
-         // pins the VALUE but leaves the INDEX free, so `$2837 + (t >> 3)` and `$2837 + (t >> 4)`
-         // read the same byte and score identically even though the ROM's t values put them on
-         // different bytes for eleven of the fifteen techs. Row 0 stays all-set on purpose -- it
-         // is the only row that reaches `F9AE INC $A4,X`, the all-three-learned arm.
+         // the tech bitmap $FF:F958 walks. All-set and all-clear are both needed (they decide whether a
+         // combination's three techs are all learned), and the two alternating patterns separate the `t & 7`
+         // bit from the `t >> 3` byte index. It also varies byte by byte: a uniform fill pins the value but
+         // leaves the index free, so `$2837 + (t >> 3)` and `$2837 + (t >> 4)` would read the same byte. Row
+         // 0 stays all-set: it is the only row that reaches `F9AE INC $A4,X`, the all-three-learned arm.
          { static const uint8_t TECH[5] = { 0xFF, 0x00, 0xAA, 0x55, 0xF0 };
            for (int k = 0; k < 0x20; k++)
              r[0x2837 + k] = (uint8_t)(sv == 0 ? 0xFF : (TECH[sv] ^ (uint8_t)(k * 0x5B))); }
@@ -5793,39 +5230,36 @@ static int runSweepOps(const char* romPath) {
          for (int k = 0; k < 0x0A; k++) r[0x04A0 + k] = 0x5A;
          for (int k = 0; k < 0x0A; k++) r[0x04C0 + k] = 0x5A;
          r[0x01D9] = 0x5A; r[0x01DA] = 0x5A; r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;
-         // op 0xD7 reads the item COUNT out of the same $2400/$2500 pair the $C1 side owns.
-         // ⚠ A slot whose id matches but whose count is ZERO must be present, because C2/87FA
-         // SKIPS it rather than accepting it -- without that row `BNE` and `BRA` score the same.
+         // op 0xD7 reads the item count out of the same $2400/$2500 pair the $C1 side owns. A slot whose id
+         // matches but whose count is zero is present, because C2/87FA skips it rather than accepting it;
+         // without it `BNE` and `BRA` would score the same.
          for (int k = 0; k < 0x100; k++) { r[0x2400 + k] = 0x00; r[0x2500 + k] = 0x00; }
          r[0x2400 + 0] = 0x00; r[0x2500 + 0] = 0x00;
-         r[0x2400 + 1] = 0x01; r[0x2500 + 1] = 0x00;        // matches PC[1] with a ZERO count
+         r[0x2400 + 1] = 0x01; r[0x2500 + 1] = 0x00;        // matches PC[1] with a zero count
          r[0x2400 + 2] = 0x03; r[0x2500 + 2] = 0x11;
          r[0x2400 + 3] = 0x06; r[0x2500 + 3] = (uint8_t)(0x01 + sv);
-         r[0x2400 + 9] = 0x01; r[0x2500 + 9] = 0x27;        // the SECOND slot holding id 1 -- the
+         r[0x2400 + 9] = 0x01; r[0x2500 + 9] = 0x27;        // the second slot holding id 1 -- the
          for (int k = 0; k < 0x40; k++) r[0x10200 + k] = (uint8_t)(0x40 + k);   //  one 87FA accepts
        }
-       // ---- op 0x4E (C0/6846) copies an INLINE blob out of the script into WRAM.
+       // ---- op 0x4E (C0/6846) copies an inline blob out of the script into WRAM.
        if (OPS[oi].op == 0x4E) {
-         // ⚠ THE ARM AND THE LENGTH MUST SIT ON DIFFERENT AXES. The bank byte picks which of the
-         // two MVNs runs and the length picks how much it moves; keying both to one axis would tie
-         // "which bank" to "how many bytes" and let a swapped destination hide inside a short copy.
-         // Bank rides ov, length rides sv.
+         // The arm and the length sit on different axes: the bank byte picks which of the two MVNs runs
+         // and the length how much it moves, so one axis for both would let a swapped destination hide
+         // inside a short copy. Bank rides ov, length rides sv.
          r[0x12001 + IP + 3] = (uint8_t)((ov & 1) ? 0x7E : 0x7F);
-         // ⚠ ONE LENGTH MUST EXCEED $FF. `685E LDA $7F2001,X` is a SIXTEEN-bit read, and with every
-         // length under $100 the high byte is always zero -- an 8-bit read scores a clean 60/60.
-         // $0103 moves 257 bytes and takes that mutation to 24/60. $0014 keeps an ODD count in the
-         // grid, which the other four (8, $100, 2, $20) would otherwise leave out entirely.
+         // One length exceeds $FF: `685E LDA $7F2001,X` is a 16-bit read, and with every length under $100
+         // the high byte would always be zero. $0103 moves 257 bytes; $0014 keeps an odd count in the grid.
          static const uint16_t L4E[5] = { 0x000B, 0x0103, 0x0014, 0x0005, 0x0023 };
          r[0x12001 + IP + 4] = (uint8_t)L4E[sv];
          r[0x12001 + IP + 5] = (uint8_t)(L4E[sv] >> 8);
-         // ⚠ AND THE DESTINATION MUST VARY. A fixed address makes the 16-bit `LDA $7F2001,X` that
-         // reads it indistinguishable from an 8-bit one, and hides an off-by-one in the base.
+         // The destination varies too: a fixed address makes the 16-bit `LDA $7F2001,X` that reads it
+         // indistinguishable from an 8-bit one, and hides an off-by-one in the base.
          int d4E = 0x4000 + ov * 0x111;
          r[0x12001 + IP + 1] = (uint8_t)d4E;
          r[0x12001 + IP + 2] = (uint8_t)(d4E >> 8);
-         // POISON BOTH DESTINATIONS PAST THE LONGEST COPY (33 bytes), in BOTH banks -- otherwise an
-         // over-long or short copy compares equal past its end, and a port that wrote to the wrong
-         // bank would only be caught if that bank happened to differ.
+         // Poison both destinations past the longest copy (33 bytes), in both banks: otherwise an over-long
+         // or short copy compares equal past its end, and a write to the wrong bank would only be caught if
+         // that bank happened to differ.
          for (int k = 0; k < 0x140; k++) {
            r[(d4E + k) & 0xFFFF] = (uint8_t)(0x5A);
            r[0x10000 + ((d4E + k) & 0xFFFF)] = (uint8_t)(0xA5);
@@ -5840,29 +5274,25 @@ static int runSweepOps(const char* romPath) {
          int isBtn = (o == 0x30 || o == 0x31 || (o >= 0x34 && o <= 0x39) || o == 0x3B ||
                       o == 0x3C || (o >= 0x3F && o <= 0x44) || o == 0x47);
          if (o == 0xC8 || o == 0xDD || o == 0xDE || isBtn) {
-           // ⚠ THE TWO GATE BITS MUST BE INDEPENDENT. Op 0xC8 tests $0117 bit 6 FIRST and only
-           // then $0118 bit 6, so keying both to one axis makes the ACK arm unreachable -- the
-           // sixteenth blindness class, an arm that is not merely under-covered but impossible.
-           // $0117 is keyed to sv and $0118 to ov, so all four combinations occur.
+           // The two gate bits are independent: op 0xC8 tests $0117 bit 6 first and only then $0118 bit 6,
+           // so one axis for both would make the ack arm unreachable. $0117 is keyed to sv and $0118 to ov,
+           // so all four combinations occur.
            r[0x0117] = (uint8_t)((sv & 1) ? 0x40 : 0x00);
            r[0x0118] = (uint8_t)((ov & 1) ? 0x40 : 0x00);
            r[0x0125] = 0x5A; r[0x011E] = 0x5A;
            for (int k = 0; k < 6; k++) r[0x0100 + k] = 0x5A;   // 0xDD's staging window
-           // The four operand bytes. The FIRST one's high byte does triple duty in 0xDD/0xDE --
-           // it is masked to nine bits for the destination, shifted for the middle nibble, and
-           // tested for bit 7 -- so it has to carry a set bit 7, a non-zero middle nibble AND a
-           // ninth bit, or three separate facts collapse into one constant.
+           // The four operand bytes. The first one's high byte does triple duty in 0xDD/0xDE: it is masked
+           // to nine bits for the destination, shifted for the middle nibble and tested for bit 7, so it
+           // carries a set bit 7, a non-zero middle nibble and a ninth bit.
            static const uint8_t W1L[6] = { 0x00, 0x34, 0xFF, 0x07, 0x91, 0xC3 };
            static const uint8_t W1H[6] = { 0x00, 0x01, 0x8B, 0x1E, 0x40, 0xF7 };
            r[0x12001 + IP + 1] = W1L[ov]; r[0x12001 + IP + 2] = W1H[ov];
            r[0x12001 + IP + 3] = (uint8_t)(0x20 + sv * 9);
            r[0x12001 + IP + 4] = (uint8_t)(0x70 - sv * 5);
-           // The branch displacement lives at IP+1, which the line above owns for 0xDD/0xDE; for
-           // the branch family that same byte IS the displacement, so W1L doubles as it and
-           // already spans $00..$FF.
-           // ⚠ THE FOUR SOURCE BYTES MUST DIFFER FROM EACH OTHER. $00F2 and $00F8 are read
-           // ABSOLUTE (bank $00) and $0150/$0151 through DP $0100; filling all four with one
-           // pattern would let a port that confused the two addressing modes score clean.
+           // The branch displacement lives at IP+1, which the line above owns for 0xDD/0xDE; for the
+           // branch family that byte is the displacement, so W1L doubles as it and spans $00..$FF.
+           // The four source bytes differ from each other: $00F2 and $00F8 are read absolute (bank $00)
+           // and $0150/$0151 through DP $0100, and one shared pattern would hide a confusion of the two.
            static const uint8_t BTN[5] = { 0x00, 0xFF, 0xAA, 0x55, 0x9C };
            r[0x00F2] = BTN[sv];
            r[0x00F8] = (uint8_t)(BTN[sv] ^ 0x6D);
@@ -5871,50 +5301,42 @@ static int runSweepOps(const char* romPath) {
            r[0x016B] = 0x5A;
            r[0x01D9] = 0x5A; r[0x01DA] = 0x5A;
          } }
-       // ---- op 0x83 (C0/46DF) loads a field enemy. It shares C0/4557 and the descriptor walk
-       // with op 0x82, so it needs op 0x82's seeds PLUS its own three-way graphics arm.
+       // ---- op 0x83 (C0/46DF) loads a field enemy. It shares C0/4557 and the descriptor walk with
+       // op 0x82, so it needs op 0x82's seeds plus its own three-way graphics arm.
        if (OPS[oi].op == 0x83) {
-         // The id is the FIRST operand and it picks the arm: >= $F8 is ROM-DIRECT, below that goes
-         // through the dedup. Real sites use ids $F8/$F9/$FA (8 of 1471) and a long tail below.
-         // ⚠ KEYED TO ov, and the DEDUP TABLE below is keyed to sv, so "which arm" and "is the
-         // table populated" are INDEPENDENT -- putting them on one axis is the tenth blindness class.
+         // The id is the first operand and it picks the arm: >= $F8 is ROM-direct, below that goes
+         // through the dedup (real sites use ids $F8/$F9/$FA and a long tail below). It is keyed to ov
+         // and the dedup table below to sv, so "which arm" and "is the table populated" are independent.
          static const uint8_t ID83[6] = { 0x00, 0x2E, 0x3D, 0xF5, 0xF8, 0xFA };
          r[0x12001 + IP + 1] = ID83[ov];
-         // The SECOND operand is n = (op2 & $7F) + 1 AND the state-6 gate (bit 7). Real sites use
-         // {3..10} and {$83..$8A}. Both halves must vary or $0B88+n, $0D00,X and $1700,X are all
-         // pinned to one value and the state-6 override never fires.
-         // ⚠ n MUST REACH AN ODD VALUE AND ONE >= $10, and the obvious seed does neither.
-         // n = (op2 & $7F) + 1, so an op2 of 3/5/7/9/$0B gives n = 4/6/8/$0A/$0C -- every one EVEN
-         // and every one below $10. That kills TWO facts at once: `(n & 1) << 3` is always 0, so
-         // dropping it scores 60/60, and `(n & $FE) << 4` never carries into the high byte, so the
-         // 8-bit `47C2 STX $D9` cannot be told from a 16-bit one. $04 and $88 make n odd, $1F makes
-         // n = $20. Real sites use op2 in {3..10} and {$83..$8A}, which DOES include even values --
-         // the grid was narrower than the game.
+         // The second operand is n = (op2 & $7F) + 1 and the state-6 gate (bit 7); real sites use
+         // {3..10} and {$83..$8A}. Both halves vary, or $0B88+n, $0D00,X and $1700,X are pinned and the
+         // state-6 override never fires. n must also reach an odd value and one >= $10: `(n & 1) << 3`
+         // is 0 for even n, and only n >= $10 makes `(n & $FE) << 4` carry into the high byte, which
+         // separates the 8-bit `47C2 STX $D9` from a 16-bit one. $04 and $88 make n odd, $1F makes n = $20.
          static const uint8_t OP283[5] = { 0x04, 0x05, 0x1F, 0x88, 0x8B };
          r[0x12001 + IP + 2] = OP283[sv];
-         // the dedup table: half the rows leave $E3 already resident (a HIT), half leave it absent
-         // with free slots (a MISS -> decompress), and one row fills it so the FULL halt is reached.
+         // the dedup table: half the rows leave $E3 already resident (a hit), half leave it absent with
+         // free slots (a miss -> decompress), and one row fills it so the full halt is reached.
          for (int k = 0; k < 16; k++) { r[0x0920 + k] = 0xFF; r[0x0930 + k] = 0x5A; }
          if (sv == 1 || sv == 3) { r[0x0920 + 2] = (uint8_t)rom[0x24F600 + ID83[ov] * 10];
-                                   r[0x0930 + 2] = 0x12; }        // a HIT owned by the OTHER idx
+                                   r[0x0930 + 2] = 0x12; }        // a hit owned by the other idx
          // the owner's staging address must DIFFER from the cursor the prologue just stamped, or
          // "copy the owner's $1280" and "keep my own" are the same bytes and the hit arm is blind
          r[0x1280 + 0x12] = 0x33; r[0x1281 + 0x12] = 0x77;
          r[0x1280 + 0x02] = 0x44; r[0x1281 + 0x02] = 0x88;
          r[0x0171] = 0x00; r[0x0172] = (uint8_t)(0x90 + ov);       // the $71 staging cursor
-         r[0x0B88 + 0] = 0x5A;                                     // POISON the $0B88 claim window
+         r[0x0B88 + 0] = 0x5A;                                     // poison the $0B88 claim window
          for (int k = 0; k < 0x20; k++) r[0x0B88 + k] = 0x5A;
          r[0x0D00 + idx] = 0x5A; r[0x0D01 + idx] = 0x5A;
          r[0x1700 + idx] = 0x5A; r[0x1701 + idx] = 0x5A;
          r[0x01E1] = 0x5A; r[0x01E3] = 0x5A; r[0x01BF] = 0x5A; r[0x01C0] = 0x5A;
          r[0x1B01 + idx] = 0x5A; r[0x1201 + idx] = 0x5A;
          for (int k = 0; k < 8; k++) r[0x0300 + k] = 0x5A;
-         // ⚠ THE FOUR BASE POINTERS, AND THEY ARE NOT OPTIONAL. The walk and all three graphics
-         // arms read the ROM THROUGH [$AF]/[$B2]/[$B5]/[$B8] -- boot constants pointing into bank
-         // $E4. Left unseeded they read outside the ROM, the port's source bank comes back 0, its
-         // `sBk >= 0xC0` guard skips the decompress entirely, and the ORACLE still runs the real
-         // C3/0002 -- which is exactly the mismatch at $0306 this seed was added to fix.
-         // This is the eleventh blindness class, and it had already bitten ops 0x80/0x81 once.
+         // The four base pointers are required: the walk and all three graphics arms read the ROM through
+         // [$AF]/[$B2]/[$B5]/[$B8], boot constants pointing into bank $E4. Unseeded, they read outside the
+         // ROM, the port's source bank comes back 0 and its `sBk >= 0xC0` guard skips the decompress,
+         // while the oracle still runs C3/0002.
          r[0x01AF] = 0x00; r[0x01B0] = 0x20; r[0x01B1] = 0xE4;
          r[0x01B2] = 0x00; r[0x01B3] = 0x23; r[0x01B4] = 0xE4;
          r[0x01B5] = 0x00; r[0x01B6] = 0x26; r[0x01B7] = 0xE4;
@@ -5923,114 +5345,99 @@ static int runSweepOps(const char* romPath) {
        // ---- the sound-mailbox family (0xE8/0xEA/0xEB/0xEC). C0/3C11 / 3C2F / 3C4C / 3C98.
        if (OPS[oi].op == 0xE8 || OPS[oi].op == 0xEA ||
            OPS[oi].op == 0xEB || OPS[oi].op == 0xEC) {
-         // ⚠ $1E05 BIT 7 MUST STAY CLEAR ON EVERY ROW. It is the driver's ready latch, and with it
-         // SET the ORACLE enters $C7:061C, writes the four APU ports and spins on `CMP $2140`
-         // waiting for an SPC700 echo -- $400 tries, then it re-sends and retries UNBOUNDED. The
-         // 2-frame sweep state has no Akao image, so the oracle would never come back and every
-         // case would go `lost` rather than red. The gate is therefore held shut here BY CHOICE,
-         // and the note on this check says plainly that the driver half is NOT graded.
+         // Note: $1E05 bit 7 stays clear on every row. It is the driver's ready latch: with it set the
+         // oracle enters $C7:061C, writes the four APU ports and spins on `CMP $2140` for an SPC700 echo
+         // ($400 tries, then it re-sends and retries without bound). The 2-frame sweep state has no driver
+         // image, so the oracle would never come back. The driver half is therefore not graded here.
          // The low bits still vary so `& 0x80` cannot be confused with `& 0x40` or a plain test.
          static const uint8_t GATE[6] = { 0x00, 0x40, 0x7F, 0x20, 0x53, 0x60 };
          r[0x1E05] = GATE[ov];
-         // POISON the whole mailbox. $1E03 is the one that matters most: only 0xEB writes it, so
-         // this is what separates "leave the sticky byte alone" from "write 0".
+         // Poison the whole mailbox. $1E03 matters most: only 0xEB writes it, so this separates "leave
+         // the sticky byte alone" from "write 0".
          for (int k = 0; k < 5; k++) r[0x1E00 + k] = 0x5A;
          r[0x29AE] = 0x5A;                          // op 0xEA's shadow copy
          r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;        // the 16-bit spill, four different values
-         // 0xEB needs op1 != op2, and 0xEC needs three DISTINCT operands, or a swapped pair or a
-         // wrong index reads the same byte. The generic script fill puts $7E at BOTH IP+2 and
-         // IP+3, which would have made two of 0xEC's three stores indistinguishable.
+         // 0xEB needs op1 != op2, and 0xEC needs three distinct operands, or a swapped pair or a wrong
+         // index reads the same byte; the generic script fill puts $7E at both IP+2 and IP+3.
          r[0x12001 + IP + 2] = (uint8_t)(0x11 + ov * 0x13);
          r[0x12001 + IP + 3] = (uint8_t)(0xC4 - ov * 0x07);
        }
        // ---- op 0x29 (C0/3E84) arms the BG3 caption plane and walks the $FD:A000 record table.
        if (OPS[oi].op == 0x29) {
-         // ⚠ THE OPERAND IS OVERRIDDEN so bit 7 and the record number sit on DIFFERENT AXES.
-         // OPER's own spread would have put the ONLY bit-7-set row at $FF, i.e. record $7F -- mode
-         // and record moving together, which is the tenth blindness class. Bit 7 comes from sv,
-         // the record from ov, and record 0 is kept because it is the one input for which the
-         // walk loop never executes at all.
-         // ⚠ RECORD 49 IS NOT DECORATION. Records 0-46 of the $FD:A000 table ALL terminate with
-         // exactly $80; only from record 47 up do the terminators become $F0, $AD and $AF. So a
-         // wrong `== 0x80` test instead of `& 0x80` is invisible to every low record, and with
-         // record 17 here it was caught by the $7F row ALONE (50/60 -- one row, and by accident).
-         // Record 49 lands in the $AD range and makes it two rows: 40/60.
+         // The operand is overridden so bit 7 and the record number sit on different axes: bit 7 comes
+         // from sv, the record from ov, and record 0 is kept because for it the walk loop never runs.
+         // Record 49 matters: records 0-46 of the $FD:A000 table all terminate with exactly $80, and only
+         // from record 47 up are the terminators $F0, $AD and $AF, so a `== 0x80` test instead of `& 0x80`
+         // is invisible on every low record.
          static const uint8_t REC29[6] = { 0x00, 0x01, 0x02, 0x05, 0x31, 0x7F };
          r[0x12001 + IP + 1] = (uint8_t)(((sv & 1) ? 0x80 : 0x00) | REC29[ov]);
-         // `TSB $1D36` / `TSB $1D35` are test-and-SET: the seed must carry OTHER bits and never
-         // bit 2, or an OR cannot be told from an assignment.
+         // `TSB $1D36` / `TSB $1D35` are test-and-set: the seed carries other bits and never bit 2, or an
+         // OR could not be told from an assignment.
          static const uint8_t P1D[6] = { 0x00, 0x01, 0x20, 0x83, 0x40, 0xA1 };
          r[0x1D35] = (uint8_t)(P1D[ov] & (uint8_t)~0x04);
          r[0x1D36] = (uint8_t)(P1D[(ov + 3) % 6] & (uint8_t)~0x04);
-         // the two STZs need DISTINCT non-zero starting values, or dropping either one is invisible
+         // the two STZs need distinct non-zero starting values, or dropping either one is invisible
          r[0x1D39] = (uint8_t)(0x11 + ov); r[0x1D3A] = (uint8_t)(0x91 + ov);
-         r[0x0BE1] = 0x5A; r[0x0BE2] = 0x5A; r[0x0BE9] = 0x5A;      // POISON the three outputs
+         r[0x0BE1] = 0x5A; r[0x0BE2] = 0x5A; r[0x0BE9] = 0x5A;      // poison the three outputs
          r[0x01DD] = 0x5A; r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;
          for (int k = 0; k < 8; k++) r[0x0300 + k] = 0x5A;          // the LZ request + size report
          for (int k = 0; k < 0x480; k++) r[0x15080 + k] = 0x5A;     // the caption font destination
          for (int k = 0; k < 0x800; k++) r[0xC800 + k] = 0x5A;      // the staging buffer C0/75A0
-         for (int k = 0; k < 8; k++) r[0x0148 + k] = 0x5A;          // clears -- $5A so a ZERO fill
+         for (int k = 0; k < 8; k++) r[0x0148 + k] = 0x5A;          // clears -- $5A so a zero fill
        }                                                           // shows, and the $48/$4A/$4B/
        // ---- op 0x33 (C0/3711) assigns a palette slot from the operand and uploads 24 ROM bytes
-       // TWICE. Its `TSB $54` needs the same treatment as 0x2A/0x2B/0x32 -- other bits set, its own
-       // (bit 7) never -- or the OR is indistinguishable from an assignment.
+       // twice. Its `TSB $54` needs the same treatment as 0x2A/0x2B/0x32 (other bits set, its own bit 7
+       // never), or the OR could not be told from an assignment.
        if (OPS[oi].op == 0x33) {
          static const uint8_t P54_33[6] = { 0x00, 0x01, 0x22, 0x43, 0x14, 0x69 };
          r[0x0154] = P54_33[ov];
-         // OPER carries the pal spread on its own: {00,01,02,03,21,FF} -> pal {0,2,4,6,2,14}. That
-         // is what grades `ASL A / AND #0E` -- $03 separates the ASL (6 vs 2) and $FF separates the
-         // mask ($0E vs $1E). ⚠ `AND #0E` and `AND #0F` are DEMONSTRABLY equivalent here and no
-         // seed can part them: the ASL guarantees bit 0 is already zero.
-         //
-         // ⚠ THE SOURCE IS KEYED TO sv AND ii, NEVER TO ov. ov is what picks the palette slot, so
-         // driving the ROM offset from it too would put the destination and the source on ONE axis
-         // -- the tenth blindness class, where a wrong pal and a wrong source cannot be told apart
-         // because they always move together.
-         for (int k = 0; k < 0x80; k++) r[0x1400 + k] = 0x5A;      // POISON the neighbouring slots,
+         // OPER carries the pal spread on its own: {00,01,02,03,21,FF} -> pal {0,2,4,6,2,14}, which grades
+         // `ASL A / AND #0E`: $03 separates the ASL (6 vs 2) and $FF the mask ($0E vs $1E). `AND #0E` and
+         // `AND #0F` are equivalent here (the ASL clears bit 0), so no seed can part them.
+         // The source is keyed to sv and ii, never to ov: ov picks the palette slot, and driving the ROM
+         // offset from it too would make a wrong pal and a wrong source move together.
+         for (int k = 0; k < 0x80; k++) r[0x1400 + k] = 0x5A;      // poison the neighbouring slots,
          int s33 = 0xF000 + sv * 0x18 + ii * 0xF0;                 // so a wrong index reads $5A5A
          r[0x1400 + idx] = (uint8_t)s33; r[0x1401 + idx] = (uint8_t)(s33 >> 8);
          for (int k = 0; k < 0x80; k++) r[0x0F80 + k] = 0x5A;      // ...and the same for $0F81,X
          for (int k = 0; k < 0x400; k++) r[0x2000 + k] = 0x5A;     // the two MVN destinations:
        }                                                          // $2102 + pal*16, and again +$200
-       // ---- ops 0x1E/0x1F/0x25/0x26 write the object the OPERAND names; 0xA7 writes the current
-       // one through the $7F0200 array. Both need targets that are NOT the current object, or the
-       // two entry points into the C0/554B tail cannot be told apart.
+       // ---- ops 0x1E/0x1F/0x25/0x26 write the object the operand names; 0xA7 writes the current one
+       // through the $7F0200 array. Both need targets that are not the current object, or the two entry
+       // points into the C0/554B tail cannot be told apart.
        if (OPS[oi].op == 0x1E || OPS[oi].op == 0x1F || OPS[oi].op == 0x25 ||
            OPS[oi].op == 0x26 || OPS[oi].op == 0xA7) {
-         // ⚠ ov == 1 DELIBERATELY AIMS AT THE CURRENT OBJECT and every other row aims elsewhere.
-         // With the operand always equal to idx, entering the tail at 554B (LDX $6D) and at 554D
-         // (operand kept) write the same byte and the distinction is invisible.
+         // ov == 1 aims at the current object and every other row aims elsewhere: with the operand always
+         // equal to idx, entering the tail at 554B (LDX $6D) and at 554D (operand kept) write the same byte.
          static const uint8_t TG[6] = { 0x10, 0x02, 0x1C, 0x06, 0x28, 0x0A };
          r[0x12001 + IP + 1] = (uint8_t)((OPS[oi].op == 0xA7) ? (0x03 + ov) : TG[ov]);
          for (int k = 0; k < 0x40; k++) { r[0x1600 + k] = 0x5A; r[0x1601 + k] = 0x5A; }
-         // op 0xA7's indirect source. Values 0..3 are the real facings, but seed OUT of that range
-         // too -- the tail stores A verbatim and does not mask it.
+         // op 0xA7's indirect source. Values 0..3 are the real facings, but out-of-range values are seeded
+         // too: the tail stores A verbatim and does not mask it.
          for (int k = 0; k < 0x40; k++)
            r[0x10200 + k] = (uint8_t)((k & 1) ? 0x5A : ((k / 2 + ov) & 0x07));
        }
-       // ---- op 0xE0 is a one-shot guarded by $0117 bit 7, and everything it derives comes from
-       // its first operand's HIGH byte, so ov must drive that byte and not just the word.
+       // ---- op 0xE0 is a one-shot guarded by $0117 bit 7, and everything it derives comes from its
+       // first operand's high byte, so ov drives that byte and not just the word.
        if (OPS[oi].op == 0xE0) {
          r[0x0117] = (uint8_t)(sv == 0 ? (0x80 | ov) : (ov * 0x11) & 0x7F);   // bit 7 = the guard
-         // ⚠ THE HIGH BYTE FEEDS THREE SEPARATE DERIVATIONS: bit 8 of the `AND #01FF` location,
-         // the shifted middle nibble in $0116, and bit 7 OR'd over it. These six give both values
-         // of bit 0 and bit 7 and six different middle nibbles, so no two of the three can be
-         // confused for one another.
+         // The high byte feeds three derivations: bit 8 of the `AND #01FF` location, the shifted middle
+         // nibble in $0116, and bit 7 OR'd over it. These six give both values of bit 0 and bit 7 and six
+         // different middle nibbles, so no two of the three can be confused.
          { static const uint8_t HB[6] = { 0x00, 0x83, 0x1E, 0xA5, 0x71, 0xFF };
            r[0x12001 + IP + 1] = (uint8_t)(0x30 + ov);
            r[0x12001 + IP + 2] = HB[ov]; }
          r[0x12001 + IP + 3] = (uint8_t)(0x5C - ov * 3);
          r[0x12001 + IP + 4] = (uint8_t)(0x90 + ov * 5);
-         // $0116 is an OUTPUT, but TSB is an OR -- seed it non-zero so the store-then-OR pair is
-         // distinguishable from a single combined store.
+         // $0116 is an output, but TSB is an OR: seed it non-zero so the store-then-OR pair can be told
+         // from a single combined store.
          r[0x0116] = (uint8_t)(0x24 + sv);
          r[0x0112] = 0x5A; r[0x0113] = 0x5A; r[0x0114] = 0x5A; r[0x0115] = 0x5A;
          r[0x0119] = 0x5A; r[0x01D9] = 0x5A; r[0x01DA] = 0x5A;
        }
-       // ---- op 0xE2 is op 0xE0's guard with FOUR LOCAL INDICES for operands. The first seeding gave the whole
-       // grid one park arm and a zeroed local array, and two mutations survived it (the location word's high byte
-       // cut to its bit 0; the facing read from the third local): every operand must name a DIFFERENT local, the
-       // array must differ byte by byte (the word's high byte included), and the guard must take both values.
+       // ---- op 0xE2 is op 0xE0's guard with four local indices for operands. Every operand names a
+       // different local, the array differs byte by byte (the location word's high byte included, so a cut
+       // to its bit 0 shows) and the guard takes both values (so a facing read from the wrong local shows).
        if (OPS[oi].op == 0xE2) {
          r[0x0117] = (uint8_t)(sv == 0 ? (0x80 | ov) : (ov * 0x11) & 0x7F);   // 3B9E bit 7 = the guard
          { static const uint8_t O1[6] = { 0x00, 0x07, 0x21, 0x80, 0xC3, 0xFF };   // $7F0200 .. $7F03FE (and 03FF)
@@ -6042,18 +5449,15 @@ static int runSweepOps(const char* romPath) {
          r[0x0112] = 0x5A; r[0x0113] = 0x5A; r[0x0114] = 0x5A; r[0x0115] = 0x5A; r[0x0116] = 0x5A;
          r[0x0119] = 0x5A; r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;
        }
-       // ---- the POKE FAMILY (0x4A/0x4B/0x4C/0x4D) all share C0/67E3's 24-bit pointer, so sv drives
-       // WHERE the store lands and ov drives what goes through it.
+       // ---- the poke family (0x4A/0x4B/0x4C/0x4D) all share C0/67E3's 24-bit pointer, so sv drives where
+       // the store lands and ov drives what goes through it.
        if (OPS[oi].op == 0x4A || OPS[oi].op == 0x4B ||
            OPS[oi].op == 0x4C || OPS[oi].op == 0x4D) {
-         // The destination classes ctFlatAddr24 actually distinguishes, plus one that leaves WRAM.
-         // ⚠ THE LAST ROW IS THE WRAM MIRROR'S FINAL BYTE, and it is the ONLY row that grades the
-         // bank carry on a 16-bit `STA [$D0]`. $7E:FFFF looks like the obvious choice and grades
-         // NOTHING: it carries to $7F:0000, which the flat image places at exactly fa+1, so
-         // resolving the second byte properly and just writing fa+1 agree. From $00:1FFF the carry
-         // reaches $00:2000 -- a hardware register, not WRAM -- so the correct code writes ONE byte
-         // and the fa+1 shortcut corrupts $2000. Measured: with $7E:FFFF that mutation scored a
-         // full 60/60 on all four opcodes.
+         // The destination classes ctFlatAddr24 distinguishes, plus one that leaves WRAM. The last row is
+         // the WRAM mirror's final byte and the only row that grades the bank carry on a 16-bit `STA [$D0]`:
+         // $7E:FFFF carries to $7F:0000, which the flat image places at fa+1, so it grades nothing; from
+         // $00:1FFF the carry reaches $00:2000, a hardware register, so the correct code writes one byte and
+         // an fa+1 shortcut corrupts $2000.
          static const int DST[5][2] = { { 0x7E, 0x7E00 }, { 0x7F, 0x7E00 }, { 0x00, 0x1F00 },
                                         { 0xC0, 0x8000 }, { 0x00, 0x1FFF } };
          r[0x12001 + IP + 1] = (uint8_t)(DST[sv][1] & 0xFF);
@@ -6069,89 +5473,75 @@ static int runSweepOps(const char* romPath) {
          r[0x01D0] = 0x5A; r[0x01D1] = 0x5A; r[0x01D2] = 0x5A;
          r[0x01D9] = 0x5A; r[0x01DA] = 0x5A;
        }
-       // ---- op 0x2E dispatches on its operand's HIGH NIBBLE, so sv picks the arm and ov drives
-       // what that arm then measures.
+       // ---- op 0x2E dispatches on its operand's high nibble, so sv picks the arm and ov drives what
+       // that arm then measures.
        if (OPS[oi].op == 0x2E) {
-         // ⚠ THE DEFAULT ARM MUST SOMETIMES BE $90. The selector is `AND #F0`, and with only
-         // $40/$50/$80/$20 in the grid an `AND #E0` scores a clean 60/60: $50 and $40 share an arm
-         // anyway, and the other three are unchanged by the wider mask. $90 is the discriminator --
-         // it defaults under #F0 but becomes the blob arm under #E0.
+         // The default arm is sometimes $90: the selector is `AND #F0`, and with only $40/$50/$80/$20 an
+         // `AND #E0` would agree. $90 defaults under #F0 but becomes the blob arm under #E0.
          static const uint8_t HI[5] = { 0x40, 0x50, 0x80, 0x80, 0x20 };
          r[0x12001 + IP + 1] = (uint8_t)((sv == 4 && (ov & 1) ? 0x90 : HI[sv]) | ov);
-         // ⚠ THE SLOT TABLE MUST SOMETIMES BE FULL, AND THE FREE SLOT MUST NOT ALWAYS BE THE FIRST.
-         // The allocator walks $0520 in steps of 12 up to $60; with slot 0 always free the walk
-         // never runs and the full-table arm (which differs from success in the CARRY ALONE) is
-         // never reached. TAKEN[ov] is how many leading slots are occupied -- 8 means full.
+         // The slot table is sometimes full, and the free slot is not always the first: the allocator walks
+         // $0520 in steps of 12 up to $60, and the full-table arm differs from success in the carry alone.
+         // TAKEN[ov] is how many leading slots are occupied (8 = full).
          { static const uint8_t TAKEN[6] = { 0, 3, 7, 8, 1, 5 };
            for (int k = 0; k < 8; k++) {
              r[0x0520 + k * 12] = (uint8_t)(k < TAKEN[ov] ? (0x60 + k) : 0x00);
-             for (int f = 1; f < 12; f++) r[0x0520 + k * 12 + f] = 0x5A;   // POISON the fields
+             for (int f = 1; f < 12; f++) r[0x0520 + k * 12 + f] = 0x5A;   // poison the fields
            } }
-         // The $80 arm's index and SIXTEEN-BIT length. Length >= 3 keeps `DEC A` x3 out of the
-         // 16-bit underflow that would turn one opcode into a 64 KB block move.
+         // The $80 arm's index and 16-bit length. Length >= 3 keeps `DEC A` x3 out of the 16-bit underflow
+         // that would turn one opcode into a 64 KB block move.
          r[0x12001 + IP + 2] = (uint8_t)(0x02 + sv * 2 + ov);             // table index
-         // ⚠ ip+4 IS TWO DIFFERENT OPERANDS. The alloc arm reads it as the byte whose nibbles get
-         // splatted into $0527/$0528; the blob arm reads ip+3/ip+4 as ONE 16-bit length. Seeding it
-         // to zero for both left the splats and the wide read all scoring 60/60 -- three facts
-         // ungraded on one constant. Seed it per arm.
+         // ip+4 is two different operands: the alloc arm reads it as the byte whose nibbles are splatted
+         // into $0527/$0528, the blob arm reads ip+3/ip+4 as one 16-bit length. It is seeded per arm.
          if (sv <= 1) {
            r[0x12001 + IP + 4] = (uint8_t)(0x19 + ov * 0x27);             // the nibble-splat source
          } else {
-           // sv 3 carries a NON-ZERO HIGH BYTE, the only thing that grades the 16-bit read.
+           // sv 3 carries a non-zero high byte, the only thing that grades the 16-bit read.
            int wlen = (sv == 3) ? (0x0103 + ov) : (5 + ov);
            r[0x12001 + IP + 3] = (uint8_t)wlen; r[0x12001 + IP + 4] = (uint8_t)(wlen >> 8);
          }
          if (sv <= 1) r[0x12001 + IP + 3] = (uint8_t)(0x31 + ov);         // just an operand here
          for (int k = 0; k < 0x140; k++)                                  // payload, past the longest
            r[0x12001 + IP + 5 + k] = (uint8_t)(0xC0 + ((k * 3 + ov + sv * 5) & 0x3F));
-         for (int k = 0; k < 0x800; k++) r[0x2000 + k] = 0x5A;           // POISON both destinations
+         for (int k = 0; k < 0x800; k++) r[0x2000 + k] = 0x5A;           // poison both destinations
          r[0x01C1] = 0x5A; r[0x01C2] = 0x5A; r[0x01D9] = 0x5A;
          r[0x01DB] = 0x5A; r[0x01DC] = 0x5A; r[0x01DD] = 0x5A; r[0x01DE] = 0x5A;
          r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;
        }
-       // ---- ops 0xD9 / 0xDA release party slots. They ignore $016D entirely, which frees the ii
-       // axis to drive something real -- see the priority zeroing below.
+       // ---- ops 0xD9 / 0xDA release party slots. They ignore $016D entirely, which frees the ii axis
+       // to drive something real (see the priority zeroing below).
        if (OPS[oi].op == 0xD9 || OPS[oi].op == 0xDA) {
          static const uint8_t OBJ[3] = { 0x04, 0x08, 0x0C };
          static const uint8_t B7[6][3] = { {0,0,0}, {0,0,1}, {0,1,0},
-                                           {1,0,0}, {1,0,1}, {1,1,1} };   // which slots read EMPTY
-         // A swath of priorities and $1180 entries wide enough for a SIXTEEN-bit index, because
-         // that is what the write path uses. All non-zero: zero is the completion path's park
-         // condition and is applied deliberately just below, not left lying around.
+                                           {1,0,0}, {1,0,1}, {1,1,1} };   // which slots read empty
+         // Priorities and $1180 entries across a span wide enough for a 16-bit index, which the write path
+         // uses. All non-zero: zero is the completion path's park condition and is applied just below.
          for (int k = 0; k < 0x200; k++) {
            r[0x1C00 + k] = (uint8_t)(((k * 7 + sv * 3 + ov) & 0x1F) + 1);
-           // ⚠ $80..$BF, DELIBERATELY CLEAR OF THE $5A POISON. These bytes are copied verbatim onto
-           // the $7F0580 slot stack, which is poisoned with $5A -- at $40..$7F the copy could store
-           // $5A onto $5A and the poison audit caught exactly that at $7F0705.
+           // $80..$BF, clear of the $5A poison: these bytes are copied verbatim onto the $7F0580 slot
+           // stack, which is poisoned with $5A, so a copy at $40..$7F could store $5A onto $5A.
            r[0x1180 + k] = (uint8_t)(0x80 + ((k * 5 + ov) & 0x3F));
            r[0x1A80 + (k & 0xFF)] = 0x5A; r[0x1A01 + (k & 0xFF)] = 0x5A;
            r[0x1001 + (k & 0xFF)] = 0x5A;
          }
          for (int s = 0; s < 3; s++) {
            r[0x0197 + s * 2] = (uint8_t)(OBJ[s] | (B7[ov][s] ? 0x80 : 0x00));
-           // ⚠ THE HIGH BYTES MUST NOT ALL BE ZERO. Slot 0's READ index is a 16-bit `A6 LDX $97`
-           // while the other four copies zero-extend an 8-bit `AA TAX` -- and every $1180 WRITE
-           // index is 16-bit whichever the read was. With $0198/$019A/$019C at zero the two forms
-           // coincide exactly and the distinction is unobservable, which is the "operand that never
-           // varies" blindness recorded above for the five-byte opcodes.
-           // ⚠ DRIVEN BY ov, NOT sv. Keyed to sv this scored 59/60 -- ONE case -- because the only
-           // arm that reads slot 0 is phase 0, which sv also selects, so the two constraints
-           // intersected in a single row. ov is free of the phase, so every phase-0 case now
-           // carries a different high byte.
+           // The high bytes are not all zero: slot 0's read index is a 16-bit `A6 LDX $97` while the other
+           // four copies zero-extend an 8-bit `AA TAX`, and every $1180 write index is 16-bit; with
+           // $0198/$019A/$019C at zero the two forms coincide. Driven by ov, not sv: the only arm that reads
+           // slot 0 is phase 0, which sv also selects.
            r[0x0198 + s * 2] = (uint8_t)((ov + s) % 3);
          }
-         // ii picks whether ONE slot's object sits at priority zero. On the completion path that is
-         // the park condition, and pairing it with the bit-7 pattern is what grades the SKIP: a
-         // flagged slot must not be tested at all, so a zeroed priority behind a set bit 7 has to
-         // still complete.
+         // ii picks whether one slot's object sits at priority zero. On the completion path that is the
+         // park condition, and pairing it with the bit-7 pattern grades the skip: a flagged slot is not
+         // tested at all, so a zeroed priority behind a set bit 7 still completes.
          if (ii) r[0x1C00 + OBJ[ov % 3]] = 0x00;
          r[0x01AB] = (uint8_t)(0x10 + ov * 4);                  // the clear block's index
-         r[0x011F] = 0x5A;                                      // op 0xD9 zeroes this -- POISON
+         r[0x011F] = 0x5A;                                      // op 0xD9 zeroes this -- poison
          { static const uint8_t P54[6] = { 0x00, 0x20, 0x40, 0x82, 0x14, 0x68 };
            r[0x0154] = P54[ov]; }                               // ...none of them carrying bit 0
-         // The six coordinate bytes. Each pair's two SIGN bits pick one of four quadrant codes, so
-         // the signs are driven from independent bit sources -- all four codes must occur for each
-         // of the three pairs, and simply reusing ov left pair 2 stuck on two of them.
+         // The six coordinate bytes. Each pair's two sign bits pick one of four quadrant codes, so the signs
+         // are driven from independent bit sources and all four codes occur for each of the three pairs.
          { int src[6] = { ov & 1, (ov >> 1) & 1, (ov >> 2) & 1,
                           sv & 1, (sv >> 1) & 1, ((sv >> 2) ^ (ov & 1)) & 1 };
            for (int k = 0; k < 6; k++)
@@ -6167,103 +5557,87 @@ static int runSweepOps(const char* romPath) {
            r[0x0154] = (uint8_t)(r[0x0154] | L54[sv]);
            r[0x103FE] = PH[sv];
          }
-         r[0x01AC] = 0x5A; r[0x01AD] = 0x5A;                    // POISON -- outputs
+         r[0x01AC] = 0x5A; r[0x01AD] = 0x5A;                    // poison -- outputs
          r[0x01D9] = 0x5A; r[0x01DA] = 0x5A; r[0x01DB] = 0x5A; r[0x01DD] = 0x5A;
          r[0x01C3] = 0x5A; r[0x01C4] = 0x5A; r[0x01C7] = 0x5A; r[0x01C8] = 0x5A;
-         // $7F0580's slot stack OVERLAPS $7F0C00/$7F0D00/$7F0F00 for large offsets -- in the ROM
-         // too -- so poison the whole window rather than the three rows, and let the collisions
-         // land wherever they land.
-         // Wide enough that every reachable `prod + dpv` lands INSIDE it: a store that falls past
-         // the poison compares against whatever the previous case left, which is the leftover-state
-         // blindness this file already records for op 0x8D.
+         // $7F0580's slot stack overlaps $7F0C00/$7F0D00/$7F0F00 for large offsets (in the ROM too), so
+         // the whole window is poisoned rather than the three rows. It is wide enough that every reachable
+         // `prod + dpv` lands inside it; a store past the poison would compare against leftover state.
          for (int k = 0x0500; k < 0x2000; k++) r[0x10000 + k] = 0x5A;
          for (int k = 0; k < 0x60; k++) r[0x13728 + k] = 0x5A;  // the three dest rows, stride $20
        }
-       // ---- op 0xF1 has FIVE arms and TWO lengths, and the arm is picked entirely by the two
-       // operands, so sv drives the arm and ov drives everything the arm then measures.
+       // ---- op 0xF1 has five arms and two lengths, and the arm is picked entirely by the two operands,
+       // so sv drives the arm and ov drives everything the arm then measures.
        if (OPS[oi].op == 0xF1) {
-         // operand 1 == 0 is arm E, the only TWO-byte form -- give it exactly one sv row.
+         // operand 1 == 0 is arm E, the only two-byte form -- give it exactly one sv row.
          static const uint8_t O1[6] = { 0x37, 0xA5, 0xE0, 0x1F, 0x62, 0xC3 };
          r[0x12001 + IP + 1] = (uint8_t)(sv == 0 ? 0x00 : O1[ov]);
-         // operand 2 selects among the other four: 0 / 0x01..0x7F / 0x80 exactly / 0x80|n.
-         // ⚠ 0x80 EXACTLY NEEDS ITS OWN ROW. It is the only value where `AND #7F` yields zero, and
-         // it is what separates the two negative arms -- lumping it in with 0x81..0xFF leaves the
-         // `BEQ ->3D5F` at 3D52 untaken on every case.
+         // operand 2 selects among the other four: 0 / 0x01..0x7F / 0x80 exactly / 0x80|n. 0x80 exactly
+         // needs its own row: it is the only value where `AND #7F` yields zero, and it separates the two
+         // negative arms (the `BEQ ->3D5F` at 3D52).
          r[0x12001 + IP + 2] = (uint8_t)(sv == 1 ? 0x00 :
                                          sv == 2 ? (0x01 + ov * 0x13) :        // 01..60, all < 80
                                          sv == 3 ? 0x80 :
                                          sv == 4 ? (0x81 + ov * 0x13) : 0x44); // 81..E0, none == 80
-         // ⚠ $0121's LOW FIVE BITS MUST DIFFER FROM THE OPERAND'S. Arms B and D copy $0122 whole
-         // while every other write masks it, so with the two agreeing in the low bits the masked
-         // and unmasked stores land on the same byte and the difference is unobservable. Indexed
-         // by ov+sv so it shares a driver with neither the arm nor the operand.
+         // $0121's low five bits differ from the operand's: arms B and D copy $0122 whole while every other
+         // write masks it, so agreeing low bits would land the masked and unmasked stores on the same byte.
+         // Indexed by ov+sv so it shares a driver with neither the arm nor the operand.
          static const uint8_t P21[6] = { 0x5C, 0xB3, 0x0E, 0xF1, 0x27, 0xAA };
          r[0x0121] = P21[(ov + sv) % 6];
-         // $0BDF is an INPUT on arm E alone (it restores the CGADSUB shadow). Vary it so that
-         // copying it is distinguishable from storing a constant.
+         // $0BDF is an input on arm E alone (it restores the CGADSUB shadow). It varies, so copying it can be
+         // told from storing a constant.
          r[0x0BDF] = (uint8_t)(0x21 + ov);
-         // ⚠ $0118 MUST NOT ALREADY HOLD 0x18. TSB is an OR, so a seed containing both bits makes
-         // it indistinguishable from a plain store; these six give neither bit, bit 3 alone, bit 4
-         // alone, and three unrelated patterns, which is what separates |=18 from |=08 and |=10.
+         // $0118 must not already hold 0x18: TSB is an OR, so a seed containing both bits makes it look like
+         // a plain store. These six give neither bit, bit 3 alone, bit 4 alone and three unrelated patterns,
+         // which separates |=18 from |=08 and |=10.
          { static const uint8_t P18[6] = { 0x00, 0x05, 0x08, 0x10, 0x22, 0x41 };
            r[0x0118] = P18[ov]; }
-         r[0x0122] = 0x5A; r[0x0123] = 0x5A; r[0x0124] = 0x5A;   // POISON -- outputs
+         r[0x0122] = 0x5A; r[0x0123] = 0x5A; r[0x0124] = 0x5A;   // poison -- outputs
          r[0x0BE0] = 0x5A; r[0x01D9] = 0x5A;
        }
+       // ---- op 0x04's world, gated like op 0x82's. It has six reachable arms across two entry paths, and
+       // what selects the path ($7F0980 indexed by the caller) is state no other opcode here touches. All
+       // six are driven off the ov/sv grid: ov picks which reject gate is armed and the latch, sv the
+       // requested priority, and the target's current priority is set against it so that both sides of
+       // the `requested < current` test occur on every arm.
        int latch04 = 0;
        if (OPS[oi].op == 0x04) {
          int tgt = oper;
          latch04 = (ov & 1);
          r[0x10980 + idx] = (uint8_t)((ov & 1) ? 0x01 : 0x00);   // 0 -> fresh arm, 1 -> poll arm
          r[0x12001 + IP + 2] = (uint8_t)((sv << 4) | 0x03);      // operand2 = requested<<4 | fn slot 3
-         // The target's CURRENT priority, chosen so that `requested == current` -- the exact
-         // boundary that separates `>=` from `>` in 614C/614E and 61D4/61D6 -- actually OCCURS.
-         // It is reached at sv == 2 on the cur == 2 rows and sv == 3 on the cur == 3 rows; the
-         // first draft used 5 for the second group, where no sv can equal it, and the two BEQ
-         // mutations were then caught by 2 cases each instead of 4.
+         // The target's current priority, chosen so that `requested == current` (the boundary that
+         // separates `>=` from `>` in 614C/614E and 61D4/61D6) occurs: at sv == 2 on the cur == 2 rows and
+         // sv == 3 on the cur == 3 rows.
          r[0x1C00 + tgt] = (uint8_t)((ov < 3) ? 0x02 : 0x03);
-         // ⚠ THE $1C01 GATE SITS ON ov == 0, NOT ov == 2, AND THAT PLACEMENT IS THE WHOLE POINT.
-         // ov selects the target index from OPER[], and OPER[0] is $00. Putting the busy-gate on
-         // ov == 2 left the ISSUE arm -- the ONLY arm that reads the function-pointer table --
-         // reachable exclusively with target index 0, where tgt*8, tgt*16 and tgt*32 are all the
-         // same address. The check scored a perfect 60/60 while blind to the table stride:
-         // mutating it to *32 and to *8 BOTH still read 04:60. Moving the gate to ov == 0 gives
-         // the issue arm target $02 instead, and both mutations are then caught.
-         r[0x1C01 + tgt] = (uint8_t)((ov == 0) ? 0x01 : 0x00);   // 6127's gate -- PARKS, not skips
+         // The $1C01 gate sits on ov == 0, not ov == 2: ov selects the target index from OPER[], and
+         // OPER[0] is $00. With the gate elsewhere the issue arm (the only arm that reads the function
+         // pointer table) would be reached only with target index 0, where tgt*8, tgt*16 and tgt*32 are the
+         // same address; with it on ov == 0 the issue arm gets target $02 and the table stride is graded.
+         r[0x1C01 + tgt] = (uint8_t)((ov == 0) ? 0x01 : 0x00);   // 6127's gate -- parks, not skips
          r[0x1100 + tgt] = (uint8_t)((ov == 4) ? 0x80 : 0x04);   // 612C / 61B4
          r[0x1000 + tgt] = (uint8_t)((ov == 5) ? 0x80 : 0x00);   // 6131 / 61B9
          r[0x1180 + tgt] = 0xC7; r[0x1181 + tgt] = 0x0E;         // a live IP worth saving to $7F0580
-         r[0x1A80 + tgt] = 0x5A; r[0x1A01 + tgt] = 0x5A;         // POISON the two mover STZs
+         r[0x1A80 + tgt] = 0x5A; r[0x1A01 + tgt] = 0x5A;         // poison the two mover STZs
          r[0x01DB] = 0x5A; r[0x01DC] = 0x5A; r[0x01DD] = 0x5A;   // ...and every DP byte it stages
          r[0x01DF] = 0x5A; r[0x01E1] = 0x5A; r[0x01E2] = 0x5A;
          r[0x01E3] = 0x5A; r[0x01E4] = 0x5A;
-         // The fn-pointer table the issue arm reads, at $7F2001 + operand1*16 + slot*2. Seeded
-         // INJECTIVELY -- word k holds $1000+k, so every distinct index yields a distinct value --
-         // rather than planting one recognisable word at the address the port is expected to
-         // compute. Seeding only the expected entry tests that the port reads SOMETHING there; an
-         // address-derived fill tests that it reads the RIGHT one, which is the difference between
-         // catching a stride error and not. $400 bytes is the whole table (32 objects x 16 words)
-         // and stops well short of the script at IP $0500.
+         // The fn-pointer table the issue arm reads, at $7F2001 + operand1*16 + slot*2, seeded injectively
+         // (word k holds $1000+k, so every distinct index yields a distinct value): an address-derived fill
+         // tests that the port reads the right entry, which catches a stride error. $400 bytes is the whole
+         // table (32 objects x 16 words) and stops well short of the script at IP $0500.
          for (int k = 0; k < 0x400; k += 2) {
            r[0x12001 + k]     = (uint8_t)(0x1000 + k);
            r[0x12001 + k + 1] = (uint8_t)((0x1000 + k) >> 8);
          }
        }
-       // ---- op 0x82's world, and ONLY op 0x82's. This block is gated the same way op 0x12's and
-       // 0x16's mode byte is, because it is not neutral: it re-points four RAM pointers and poisons
-       // sixteen per-object bytes, and applying that to the thirty opcodes that are already green
-       // would change their inputs to serve a thirty-first. A sweep is only worth its score if
-       // adding a case cannot quietly move the others.
-       // The three loaders are the handlers that READ THE ROM THROUGH RAM POINTERS, so without
-       // these four bases (as C0/0BB0-0C0E leaves them, all bank $E4) they walk a descriptor table
-       // at whatever address the previous case left behind -- and both sides walk the SAME wrong
-       // table and agree. That is a pass that grades nothing.
-       // ⚠ THIS WAS SEEDED FOR 0x82 ALONE AND THAT LEFT 0x80's TABLE LOOKUPS UNGRADED. Found while
-       // adding 0x81: mutating ctLoaderWalk's `(next - this) >> 2` anim length to `>> 1` scored a
-       // full 60/60 on both 0x80 and 0x81 while scoring 0/60 on 0x82. With the pointers unset the
-       // reads fall outside the ROM and return 0, so w1 - w0 is 0 and every shift agrees. The
-       // record base itself is a direct ROM index and WAS graded, which is why the blind spot was
-       // confined to the six values reached through [$AF]/[$B2]/[$B5]/[$B8].
+       // ---- the loaders' world (ops 0x80/0x81/0x82), gated like op 0x12's and 0x16's mode byte because
+       // it is not neutral: it re-points four RAM pointers and poisons sixteen per-object bytes, which must
+       // not change the inputs of the other opcodes. The loaders read the ROM through RAM pointers, so
+       // without these four bases (as C0/0BB0-0C0E leaves them, all bank $E4) both sides would walk the
+       // same wrong table at whatever address the previous case left behind and agree. The table lookups
+       // reached through [$AF]/[$B2]/[$B5]/[$B8] (e.g. ctLoaderWalk's `(next - this) >> 2` anim length)
+       // need them for all three opcodes: unset, the reads fall outside the ROM and return 0.
        if (OPS[oi].op == 0x80 || OPS[oi].op == 0x81 || OPS[oi].op == 0x82) {
          r[0x01AF] = 0x00; r[0x01B0] = 0x20; r[0x01B1] = 0xE4;
          r[0x01B2] = 0x00; r[0x01B3] = 0x23; r[0x01B4] = 0xE4;
@@ -6271,28 +5645,23 @@ static int runSweepOps(const char* romPath) {
          r[0x01B8] = 0x00; r[0x01B9] = 0x28; r[0x01BA] = 0xE4;
        }
        if (OPS[oi].op == 0x82) {
-         // $71 is re-seeded EVERY case, not once. The miss arm advances it by the decompressed
-         // size, so left to drift it crosses $FFFF within a handful of cases -- whereupon C0/46CA
-         // `BRL C0/2E1E` halts the oracle and the rest turn into silent 'lost'.
+         // $71 is re-seeded every case: the miss arm advances it by the decompressed size, so left to drift
+         // it crosses $FFFF within a few cases and C0/46CA `BRL C0/2E1E` halts the oracle.
          r[0x0171] = 0x00; r[0x0172] = 0x90;                     // inside the $7F:8000-$FFFF heap
          r[0x0173] = (uint8_t)st;                                // the party counter, 4686's arms
-         // The dedup cache. sv == 1 plants OUR id on slot 3 owned by object 8, which is the HIT arm
-         // (4629 falls through to the $1280 copy at 4631); every other sv leaves it empty, which is
-         // the MISS arm and runs the real JSL C3/0002. The FULL arm is deliberately NOT reached --
-         // C0/5CB3 BRLs to the halt and never returns, so it is not micro-executable from here at
-         // all; --sweeploader grades that one by stopping the oracle short of the call.
-         // WIPE THE STAGING HEAP. The miss arm decompresses a sprite sheet into $7F:8000-$FFFF, and
-         // the PREVIOUS case decompressed the same sheet to the same place -- so most of those
-         // ~28 KB of writes landed on bytes that already held the value, and the poison audit
-         // counted 5585 of them as ungraded. They were: a port that decompressed nothing would have
-         // compared equal on all but the differing tail. Filling with $5A makes every byte of the
-         // decompression graded, which is what the sweeploader check assumes this one also does.
+         // The dedup cache. sv == 1 plants our id on slot 3 owned by object 8, the hit arm (4629 falls
+         // through to the $1280 copy at 4631); every other sv leaves it empty, the miss arm, which runs the
+         // real JSL C3/0002. The full arm is not reached: C0/5CB3 BRLs to the halt and never returns, so it
+         // is not micro-executable from here; --sweeploader grades it by stopping the oracle short of the call.
+         // The staging heap is wiped: the miss arm decompresses a sheet into $7F:8000-$FFFF, and the previous
+         // case decompressed the same sheet to the same place, so without the $5A fill a port that
+         // decompressed nothing would compare equal on most of it.
          memset(r + 0x18000, 0x5A, 0x8000);
          for (int k = 0; k < 16; k++) { r[0x0920 + k] = 0xFF; r[0x0930 + k] = 0xFF; }
          if (sv == 1) { int rec = 0x24F023 + oper * 5;
                         r[0x0920 + 3] = (uint8_t)(rec < len ? rom[rec] : 0); r[0x0930 + 3] = 0x08;
                         r[0x1280 + 8] = 0xAA; r[0x1281 + 8] = 0xBB; }
-         r[0x01E3] = 0x5A; r[0x0300] = 0x5A; r[0x0301] = 0x5A; r[0x0302] = 0x5A;  // POISON the
+         r[0x01E3] = 0x5A; r[0x0300] = 0x5A; r[0x0301] = 0x5A; r[0x0302] = 0x5A;  // poison the
          r[0x0303] = 0x5A; r[0x0304] = 0x5A; r[0x0305] = 0x5A;                    // 6-byte request
          r[0x0306] = 0x5A; r[0x0307] = 0x5A;                                      // + C3/0002's size
          r[0x1B01 + idx] = 0x5A; r[0x1201 + idx] = 0x5A; r[0x1300 + idx] = 0x5A;
@@ -6308,18 +5677,16 @@ static int runSweepOps(const char* romPath) {
        int myCarry = 0, myIp = IP;
        {
          CtHRet hh; int t = CtFieldRunnerOne(work, rom, len, idx, IP, &hh);
-         // "lost" means the case was NOT GRADED -- the port trapped, or the oracle never came back.
+         // "lost" means the case was not graded: the port trapped, or the oracle never came back.
          if (t >= 0) { lost++; continue; }
          myIp = hh.ip; myCarry = hh.carry;
        }
        // micro-execute the real handler: Y = the IP of the opcode byte, $6D already latched
        s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
-       // ⚠ X IS opcode*2, NOT ZERO. The runner reaches a handler through `5AAA AND #00FF / 5AAD
-       // ASL A / 5AAE TAX / 5AB1 JSR ($5D6E,X)`, and JSR (abs,X) does not disturb X -- so every
-       // handler is entered with the doubled opcode still in it. 179 opcodes never noticed, because
-       // their first instruction is `TYX`. Ops 0xF8/0xF9/0xFA are the first that DON'T: they read
-       // no operand at all, so the stale X is what their `JSL $C2:8004` hands to `STX $C9`. A zero
-       // here was a harness fiction the port would have had to reproduce in order to score.
+       // Note: X is opcode*2, not zero. The runner reaches a handler through `5AAA AND #00FF / 5AAD ASL A
+       // / 5AAE TAX / 5AB1 JSR ($5D6E,X)`, and JSR (abs,X) does not disturb X, so every handler is entered
+       // with the doubled opcode in it. Most handlers open with `TYX`; ops 0xF8/0xF9/0xFA read no operand,
+       // so the stale X is what their `JSL $C2:8004` hands to `STX $C9`.
        s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->y = IP;
        s->cpu->x = OPS[oi].op * 2;
        s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = false;
@@ -6328,12 +5695,9 @@ static int runSweepOps(const char* romPath) {
        s->cpu->k = 0xC0; s->cpu->pc = OPS[oi].addr;
        s->apu->outPorts[3] = g_ctApuPort3;                       // re-assert: the port already read it
        s->apu->outPorts[1] = g_ctApuPort1;
-       // MEASURE the stack floor instead of asserting one. The hand-written [$01F4,$0200) window
-       // was right for thirty handlers that push nothing deeper than a JSR, and WRONG the moment
-       // op 0x82 arrived: its `JSL C3/0002` nests far enough to push below $01F4, and those bytes
-       // came back as WRAM mismatches at $01F0/$01F1 -- stack junk indicted as a port defect. So
-       // step the routine and watch SP. The floor only ever moves DOWN from $01F4, so no opcode
-       // that was graded on those twelve bytes stops being graded on them.
+       // The stack floor is measured, not asserted: a handler that nests deep (op 0x82's `JSL C3/0002`)
+       // pushes below $01F4, so the routine is stepped while SP is watched. The floor only moves down from
+       // $01F4.
        int minSp = s->cpu->sp, ranAway = 1;
        CtWriteLogStart();
        for (int q = 0; q < 200000; q++) {
@@ -6343,22 +5707,16 @@ static int runSweepOps(const char* romPath) {
        }
        CtWriteLogStop();
        if (minSp < stkFloor) stkFloor = minSp;
-       // A push writes to $01,SP and THEN decrements, so the lowest byte the stack touched is
-       // minSp + 1.
-       // ⚠ THIS USED TO CLAMP AT $01F4 AND THE PRINTED ADMISSION DID NOT SAY SO. The report line
-       // below is built from the MEASURED floor, so it claimed "$01FE-$01FF" while the compare was
-       // actually skipping $01F4-$01FF on every case -- ten bytes of direct page excluded silently.
-       // That is not academic: $01F8 is a real engine variable (the C0/FE00 bounce cursor that
-       // C0/ACFD steps and op 0x7F writes), and dropping op 0x7F's write-back to it scored a full
-       // 60/60 with ZERO differing addresses. Now the window is purely measured, clamped only at
-       // $01FE -- the fake return address CtOracleRunToPC pushes before the handler starts, which
-       // is the one thing minSp cannot account for.
+       // A push writes to $01,SP and then decrements, so the lowest byte the stack touched is minSp + 1.
+       // The window is purely measured and clamped only at $01FE, the fake return address
+       // CtOracleRunToPC pushes before the handler starts, which minSp cannot account for. ($01F8, for one,
+       // is a real engine variable: the C0/FE00 bounce cursor that C0/ACFD steps and op 0x7F writes.)
        int stkLo = (minSp + 1 < 0x01FE) ? (minSp + 1) : 0x01FE;
        if (ranAway) { lost++; continue; }
        calls++;
-       // ---- THE POISON AUDIT. Every address the oracle WROTE whose value did not change is a
-       // write this case cannot grade: a port that skipped it would compare equal for free. Counted
-       // per opcode and per address, deduped within the case so a repeatedly-written byte counts once.
+       // ---- the poison audit. Every address the oracle wrote whose value did not change is a write this
+       // case cannot grade: a port that skipped it would compare equal. Counted per opcode and per address,
+       // deduped within the case so a repeatedly-written byte counts once.
        { const CtWrite* wl = CtWriteLogData(); int wn = CtWriteLogCount();
          for (int q = 0; q < wn; q++) {
            uint32_t a = wl[q].adr; int f = -1;
@@ -6370,24 +5728,20 @@ static int runSweepOps(const char* romPath) {
            if (f >= 0x0308 && f <= 0x0316) continue;                             // C3/0002's workspace
            auditWrote[f >> 3] |= (uint8_t)(1 << (f & 7));
            if (pre[f] != r[f]) auditChanged[f >> 3] |= (uint8_t)(1 << (f & 7));   // graded here
-           // ---- THE TRANSIENT AUDIT. The poison audit asks "did this write change anything";
-           // this one asks the OTHER question a final-state compare cannot answer: was a value
-           // written that DID NOT SURVIVE to the end? If so, the port could have written anything
-           // there and still compared equal. Found the hard way on the sound-mailbox family --
-           // $C7:0192's `STZ $00` wipes the command byte, so replacing op 0xE8's $18 with $99
-           // scored a clean 60/60. This makes that exposure MEASURED and per-opcode instead of
-           // discovered by accident.
+           // ---- the transient audit. The poison audit asks "did this write change anything"; this one
+           // asks whether a written value failed to survive to the end, since a final-state compare cannot
+           // see that and the port could have written anything there (e.g. $C7:0192's `STZ $00` wipes the
+           // command byte of the sound-mailbox ops).
            if (wl[q].val != r[f]) auditTrans[f >> 3] |= (uint8_t)(1 << (f & 7));
          } }
        int roIp = s->cpu->x & 0xFFFF, roC = s->cpu->c ? 1 : 0;
-       // Classify op 0x04's arm from what the ORACLE did, not from what the seeds intended. $01D9
-       // is the discriminator the two early-exit arms cannot fake: 6127's $1C01 park and 61B4's
-       // target-gone exit both return BEFORE `STA $D9`, so the poison survives on exactly those two.
-       // Op 0x80's arm, read out of the ORACLE's own result: $1100,X carries the verdict ($80 =
-       // not in party, else the slot number), and $1801,X says which placement ran -- $12 is the
-       // leader's high byte, $22 is the arrival staging's, so the two cannot be confused.
-       // op 0x80 AND its seven immediate siblings all run C0/426A, so they are tallied together:
-       // the arms belong to the shared body, not to the entry that reached it.
+       // Classify op 0x04's arm from what the oracle did, not from what the seeds intended. $01D9 is the
+       // discriminator the two early-exit arms cannot fake: 6127's $1C01 park and 61B4's target-gone exit
+       // both return before `STA $D9`, so the poison survives on exactly those two.
+       // Op 0x80's arm, read from the oracle's result: $1100,X carries the verdict ($80 = not in party,
+       // else the slot number), and $1801,X says which placement ran ($12 is the leader's high byte, $22
+       // the arrival staging's). Op 0x80 and its seven immediate siblings all run C0/426A, so they are
+       // tallied together: the arms belong to the shared body, not to the entry that reached it.
        if (OPS[oi].op == 0x80 || OPS[oi].op == 0x57 || OPS[oi].op == 0x5C || OPS[oi].op == 0x62 ||
            OPS[oi].op == 0x68 || OPS[oi].op == 0x6A || OPS[oi].op == 0x6C || OPS[oi].op == 0x6D) {
          int st80 = r[0x1100 + idx], fol = (r[0x1801 + idx] == 0x12);
@@ -6404,25 +5758,22 @@ static int runSweepOps(const char* romPath) {
        int diff = 0, at = -1, lzScratch = 0; const char* what = NULL;
        if (myIp != roIp)        { diff = 1; what = "retIP"; }
        else if (myCarry != roC) { diff = 1; what = "carry"; }
-       // COLLECT EVERY DIFFERING ADDRESS, not just the first. Stopping at the first one answers
-       // "is it wrong" but not "how wrong and where", and the difference between a handler defect
-       // and a shared-helper defect is exactly the SHAPE of the address set.
+       // Collect every differing address, not just the first: the shape of the address set is what tells
+       // a handler defect from a shared-helper defect.
        int outside = 0;
        for (int k = 0; k < 0x20000; k++) {
          if (k >= stkLo && k < 0x0200) continue;                  // CPU stack, floor measured above
-         // C3/0002's OWN WORKSPACE. The port's ct_lz_decompress is a rewrite, not a transliteration:
-         // it produces the same output bytes -- the whole $7F:8000-$FFFF heap is compared below and
-         // matches, as does the $0306/$0307 size report the ROM routine hands back -- but it keeps
-         // none of C3/0002's internal scratch. Measured, not assumed: `--callrom C0/4590 --writes`
-         // attributes $0300-$0305 to C0 (ported, and graded) and everything from $0308 up to C3.
-         // CLASSIFIED, not excluded -- it is counted and named on the breakdown line.
+         // C3/0002's own workspace. The port's ct_lz_decompress is a rewrite: it produces the same output
+         // (the whole $7F:8000-$FFFF heap is compared and the $0306/$0307 size report matches) but keeps
+         // none of C3/0002's internal scratch. `--callrom C0/4590 --writes` attributes $0300-$0305 to C0
+         // (ported, graded) and everything from $0308 up to C3. Classified, not excluded: it is counted and
+         // named on the breakdown line.
          if (k >= 0x0308 && k <= 0x0316) { if (work[k] != r[k]) lzScratch = 1; continue; }
          if (work[k] != r[k]) { if (at < 0) { at = k; what = "wram"; } diff = 1; diffAddr[k >> 3] |= (uint8_t)(1 << (k & 7));
-           // CLASSIFY, do not exclude. C0/ACFD stages its hardware-multiply results and their sign
-           // extensions through the direct page ($D9, $DB-$E1, $E5 -> $01D9..$01E5 under DP = $0100)
-           // and the port computes the same arithmetic directly, so it writes NONE of them. That is
-           // a known, named gap. A mismatch that reaches any OTHER address is a different animal --
-           // an OUTPUT the port got wrong -- and the two must never be pooled into one number.
+           // Classified, not excluded: C0/ACFD stages its hardware-multiply results and their sign extensions
+           // through the direct page ($D9, $DB-$E1, $E5 -> $01D9..$01E5 under DP = $0100), and the port
+           // computes the same arithmetic directly, so it writes none of them (a named gap). A mismatch at
+           // any other address is an output the port got wrong, and the two are never pooled into one number.
            if (!(k >= 0x01D9 && k <= 0x01E5)) outside = 1; }
        }
        if (lzScratch) lzOnly++;
@@ -6434,17 +5785,14 @@ static int runSweepOps(const char* romPath) {
            printf("  sweepops MISMATCH op %02X (%s) %s", OPS[oi].op, OPS[oi].name, what);
            if (at >= 0) printf(" at $%05X: C=%02X RO=%02X", at, work[at], r[at]);
            else printf(": C=%04X/%d RO=%04X/%d", myIp, myCarry, roIp, roC);
-           // $01EE is the HEADING, and it is written BEFORE C0/ACFD is entered. Printing both sides
-           // is what separates "the velocity builder is wrong" from "it was handed a different
-           // angle" -- two conclusions that look identical in the velocity bytes alone.
+           // $01EE is the heading, written before C0/ACFD is entered. Printing both sides separates "the
+           // velocity builder is wrong" from "it was handed a different angle".
            printf("   idx=%02X oper=%02X st=%02X  $01EE C=%02X RO=%02X  pos=(%02X,%02X)\n",
                   idx, oper, st, work[0x01EE], r[0x01EE], work[0x1801 + idx], work[0x1881 + idx]); } }
      }
-   // ---- resolve this opcode's audit. An address counts as UNGRADED only if the ROM wrote it and
-   // NO case ever changed its value. Flagging it per-case over-reported: op 0x72's 16-bit INC
-   // leaves the high byte alone unless the low byte carries, so with one carrying seed among five
-   // the address IS graded, and calling it ungraded would send the next reader hunting a defect
-   // that the grid already covers.
+   // ---- resolve this opcode's audit. An address counts as ungraded only if the ROM wrote it and no case
+   // ever changed its value (op 0x72's 16-bit INC, for one, leaves the high byte alone unless the low byte
+   // carries, so one carrying seed among five grades it).
    for (int k = 0; k < 0x20000; k++)
      if ((auditWrote[k >> 3] & (1 << (k & 7))) && !(auditChanged[k >> 3] & (1 << (k & 7))))
        ungraded[oi]++;
@@ -6458,42 +5806,35 @@ static int runSweepOps(const char* romPath) {
   printf("\n");
   printf("   mismatch breakdown: %d differ ONLY inside C0/ACFD's DP staging $01D9-$01E5, %d reach OUTSIDE it\n",
          scratchOnly, outsideScratch);
-  // Both of these are ADMISSIONS, printed whether or not anything failed. A sweep that quietly
-  // narrows what it compares and then reports a perfect score is the exact failure mode this
-  // project keeps re-learning, so the two regions the compare does NOT own say so out loud.
+  // Both lines below are printed whether or not anything failed: they name the two regions the compare
+  // does not own.
   printf("   not compared: stack $%04X-$01FF (deepest SP measured, not assumed) | C3/0002 workspace "
          "$0308-$0316, differed in %d case(s) -- ct_lz_decompress is a rewrite, graded on its OUTPUT "
          "(the whole $7F:8000-$FFFF heap + the $0306/$0307 size report), not on the ROM's scratch\n",
          (stkFloor + 1) & 0xFFFF, lzOnly);
-  // THE POISON AUDIT VERDICT. Each number is how many DISTINCT addresses that opcode's ROM handler
-  // wrote WITHOUT CHANGING THE VALUE -- writes this grid cannot grade, because a port that skipped
-  // them would compare equal for free. It is not a pass/fail: some are genuinely unavoidable (a
-  // handler that stores 0 over a byte the ROM's own earlier arm already zeroed). It is the number
-  // that must not silently GROW, which is why it is printed and pinned rather than asserted away.
+  // The poison audit verdict: for each opcode, how many distinct addresses its ROM handler wrote without
+  // changing the value, writes this grid cannot grade. It is not a pass/fail (some are unavoidable, e.g. a
+  // store of 0 over a byte an earlier arm already zeroed); it is printed and pinned so it cannot grow
+  // silently.
   { int tot = 0; for (int i = 0; i < NOPS; i++) tot += ungraded[i];
     printf("   poison audit: %d ungraded oracle writes (an address written WITHOUT changing value, so "
            "a port that skipped it would pass) --", tot);
     for (int i = 0; i < NOPS; i++) if (ungraded[i]) printf(" %02X:%d", OPS[i].op, ungraded[i]);
     if (!tot) printf(" none");
     printf("\n");
-    // THE TRANSIENT AUDIT VERDICT -- the companion question, and the one that had been going
-    // unasked. Each number is how many DISTINCT addresses that opcode's ROM handler wrote with a
-    // value that DID NOT SURVIVE to the end of the handler. The final-state compare cannot see
-    // those, so a port that wrote something else there passes for free.
-    // Like the poison audit this is an ADMISSION, not a failure: a loop counter's intermediates
-    // are transient by nature and nothing is wrong with that. What it prevents is a repeat of how
-    // this was found -- by accident, on the sound-mailbox family, where $C7:0192's `STZ $00` wipes
-    // the command byte and swapping op 0xE8's $18 for $99 scored a clean 60/60. Now the exposure
-    // is printed per opcode, so the next reader sees WHICH constants a green score does not cover.
+    // The transient audit verdict: for each opcode, how many distinct addresses its ROM handler wrote
+    // with a value that did not survive to the end of the handler. The final-state compare cannot see
+    // those, so a port that wrote something else there would pass. Like the poison audit this is
+    // informational (a loop counter's intermediates are transient by nature); it shows which constants a
+    // clean score does not cover.
     { int tot = 0; for (int i = 0; i < NOPS; i++) tot += transient[i];
       printf("   transient audit: %d addresses whose value did NOT survive the handler (written, then "
              "overwritten -- invisible to a final-state compare, so the port could write anything) --", tot);
       for (int i = 0; i < NOPS; i++) if (transient[i]) printf(" %02X:%d", OPS[i].op, transient[i]);
       if (!tot) printf(" none");
       printf("\n"); } }
-  // An arm that was never exercised is not covered by this score, whatever the score says. Print
-  // the counts so a seed change that stops reaching one is visible, and FAIL outright on a zero --
-  // the same law --sweepacfd and --sweepaba2 already carry for their arms.
+  // An arm that was never exercised is not covered by this score. The counts are printed, and a zero
+  // fails outright, as in --sweepacfd and --sweepaba2.
   {
     int gap = !noStore80;
     printf("   op 0x80 family arms reached:");
@@ -6517,22 +5858,14 @@ static int runSweepOps(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: byte-exact validation of buildVelocityPriority (C0/ACFD, the field VELOCITY + PRIORITY
-// builder) against micro-execution of the real routine, over the WHOLE 128 KB WRAM image.
-//
-// WHY THIS EXISTS SEPARATELY FROM --sweepops. --sweepops reaches ACFD only INDIRECTLY, through the
-// two move opcodes that call it, and those opcodes drive it with whatever heading and position the
-// scenario happens to hold. Measured: they never once took the BOUNCE arm. Porting the bounce and
-// then grading it through a caller that cannot reach it would have shipped unvalidated code -- the
-// exact failure this project keeps re-learning (an actor the claim list never accepted never traps,
-// a seed grid with no edge case never fails). So drive ACFD DIRECTLY and seed its own inputs.
-//
-// THE ARMS THIS HAS TO REACH, all of them counted and reported so a silent gap is impossible:
+// CtBuildVelocityPriority (C0/ACFD, the field velocity + priority builder) against micro-execution of the ROM
+// routine, compared over the whole 128 KB WRAM image. ACFD is driven directly with seeded inputs: --sweepops
+// reaches it only through the two move opcodes, which never take the bounce arm. Arms counted and reported:
 //   * both components zero -> the early exit at AD73 that skips position, priority and $DC
-//   * $DD == 0 with $DB != 0 -> the AD6F STZ $DE path (which the SECOND copy omits)
-//   * $1C80,X bit 0 clear -> the ADFA arm, which has no bounce test at all
-//   * bit 0 set + plane2 bit 7 -> the BOUNCE at AE27, re-entering the second copy at AE37
-//   * a SECOND blocked cell on the retry -> AF27, which zeroes both components
+//   * $DD == 0 with $DB != 0 -> the AD6F STZ $DE path (which the second copy omits)
+//   * $1C80,X bit 0 clear -> the ADFA arm, which has no bounce test
+//   * bit 0 set + plane2 bit 7 -> the bounce at AE27, re-entering the second copy at AE37
+//   * a second blocked cell on the retry -> AF27, which zeroes both components
 //   * $0F80 bit 7 set -> the tile-property priority; clear -> the ADD7 fixed-nibble law
 static int runSweepAcfd(const char* romPath) {
   int len = 0;
@@ -6555,9 +5888,8 @@ static int runSweepAcfd(const char* romPath) {
       for (int fl = 0; fl < 4; fl++) {
         uint8_t* r = s->ram;
         int idx = IDX[ii];
-        // ---- the collision planes. Filled over the whole reachable window with a deterministic
-        // pattern so that bit 7 (the bounce trigger) and bit 6 (the priority bit) both vary, and so
-        // the retry's DIFFERENT cell is seeded too -- not just the first pass's.
+        // The collision planes: a pattern over the whole reachable window, so bit 7 (the bounce trigger)
+        // and bit 6 (the priority bit) both vary, in the retry's cell too.
         for (int k = 0; k < 0x2000; k++) r[0x7000 + k] = (uint8_t)((k * 37) ^ (k >> 3) ^ (fl << 6));
         r[0x1D1E] = 0x3F; r[0x1D1F] = 0x3F;                  // the AD99 mask, bounding the cell
         r[0x01EE] = (uint8_t)ANG[ai]; r[0x01EF] = 0x5A;
@@ -6566,31 +5898,26 @@ static int runSweepAcfd(const char* romPath) {
         r[0x1880 + idx] = (uint8_t)(POS[pi] >> 4); r[0x1881 + idx] = (uint8_t)(POS[pi] >> 12);
         r[0x0F80 + idx] = (uint8_t)((fl & 1) ? 0x80 : 0x25);  // bit7 selects tile-vs-fixed priority
         r[0x1C80 + idx] = (uint8_t)((fl & 2) ? 0x01 : 0x00);  // bit0 gates the bounce test
-        // THE BOUNCE RING INDEX, and two of these eight are CHOSEN, not arbitrary. The retry's
-        // heading is $C0:FE00[$01F8 + 1], and the ONLY two entries in that 256-byte table holding
-        // $40 or $C0 are k = 39 and k = 161 -- the headings whose X component (angle + $40) lands
-        // on a table value of 0, i.e. the only way to reach `$DD == 0 ON THE RETRY`. That is the
-        // single case in which the two copies' handling of `STZ $DE` differs, and without these
-        // seeds the grid was BLIND to it: mutating the port to do the STZ in both copies left the
-        // score at a perfect 576/576. Found by mutation, not by reading.
+        // The bounce ring index. The retry's heading is $C0:FE00[$01F8 + 1]; only k = 39 and k = 161 of
+        // that table hold $40 or $C0 (X component 0), the only way to reach $DD == 0 on the retry, where
+        // the two copies' handling of `STZ $DE` differs. Two of these seeds are chosen to reach them.
         static const int F8SEED[8] = { 0x10, 0x26, 0xA0, 0x3F, 0x7E, 0xC1, 0x05, 0x99 };
         r[0x01F8] = (uint8_t)F8SEED[ai];
-        // POISON every byte the routine is supposed to write, so a MISSING write is a mismatch
-        // rather than an accidental match.
+        // Poison every byte the routine writes, so a missing write is a mismatch.
         r[0x01D9] = 0x5A; r[0x01DA] = 0x5A; r[0x01DB] = 0x5A; r[0x01DC] = 0x5A; r[0x01DD] = 0x5A;
         r[0x01DE] = 0x5A; r[0x01DF] = 0x5A; r[0x01E0] = 0x5A; r[0x01E1] = 0x5A; r[0x01E5] = 0x5A;
         r[0x1900 + idx] = 0x5A; r[0x1980 + idx] = 0x5A;
         r[0x0C00 + idx] = 0x5A; r[0x0C01 + idx] = 0x5A;
         r[0x016D] = (uint8_t)idx; r[0x016E] = 0x00;
         memcpy(work, r, 0x20000);
-        // ---- tally which arms this seed actually reaches, from the ROM's own inputs
+        // Tally the arms this seed reaches, from the ROM's own inputs.
         { int e5pre = 0; (void)e5pre;
           if (SPD[si] == 0) armZero++;
           if ((fl & 2) == 0) armNoGate++;
           if (fl & 1) armTile++; else armFixed++; }
         CtBuildVelocityPriority(work, rom, idx);
-        // ---- micro-execute the real C0/ACFD with the caller's register state (X = idx, A 8-bit,
-        // X/Y 16-bit, DP = $0100, DB = $00) and a fake return address.
+        // Micro-execute C0/ACFD with the caller's registers (X = idx, A 8-bit, X/Y 16-bit, DP = $0100,
+        // DB = $00) and a fake return address.
         s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
         s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->x = idx; s->cpu->y = 0;
         s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = false;
@@ -6599,7 +5926,7 @@ static int runSweepAcfd(const char* romPath) {
         s->cpu->k = 0xC0; s->cpu->pc = 0xACFD;
         if (CtOracleRunToPC(s, 0xC0, 0xFFFE, 400000) < 0) { lost++; continue; }
         calls++;
-        // the bounce is visible AFTER the fact: the ROM rewrites $01EE and bumps $01F8
+        // the bounce shows afterwards: the ROM rewrites $01EE and bumps $01F8
         if (r[0x01F8] != (uint8_t)F8SEED[ai]) { armBounce++; if (r[0x01DD] == 0 && r[0x01DB] == 0) armDouble++; }
         if (r[0x01DD] == 0) armDDzero++;
         int diff = 0, at = -1; const char* what = NULL;
@@ -6617,27 +5944,17 @@ static int runSweepAcfd(const char* romPath) {
          "WHOLE 128KB image (%d mismatch, %d lost)\n", ok, calls, bad, lost);
   printf("   arms reached: zero-speed %d, $DD==0 %d, no-gate %d, BOUNCE %d (of which double-blocked %d), "
          "tile-prio %d, fixed-prio %d\n", armZero, armDDzero, armNoGate, armBounce, armDouble, armTile, armFixed);
-  // A sweep that never reaches the bounce is not a sweep of this routine -- say so loudly rather
-  // than report a clean number over the arms it happened to visit.
+  // A sweep that never reaches the bounce fails.
   if (!armBounce) printf("   WARNING: the BOUNCE arm was never exercised -- this score does not cover it\n");
   CtOracleDestroy(s); free(rom);
   return (bad || !armBounce) ? 1 : 0;
 }
 
-// STEP: byte-exact validation of CtMoveDirAngle (C0/ABA2, the field HEADING builder) against
-// micro-execution of the real routine, over the WHOLE 128 KB WRAM image.
-//
-// The seed grid is the FOUR STAGED BYTES themselves ($01F0 curX, $01F1 curY, $01F2 tgtX, $01F3
-// tgtY), swept independently over a value set chosen to reach every arm AND to straddle the wrap:
-// $00 and $FF are adjacent as unsigned bytes, and that adjacency is the entire defect this port
-// fixes -- the old version took signed int8 deltas, so target $00 from current $FF read as +1
-// instead of borrowing, and aimed 180 degrees the wrong way.
-//
-// NOTE THE NARROWER STACK EXCLUSION. --sweepops skips [$01F4,$0200) because its opcodes can nest
-// calls; C0/ABA2 contains NO JSR at all, and CtOracleRunToPC sets PC directly rather than pushing,
-// so only the fake return address at $01FE/$01FF is touched. Excluding just those two bytes is what
-// lets this sweep grade $01F4/$01F5 -- which matter, because `AC0D/AC30/AC50 STA $F4` is a SIXTEEN-
-// BIT store and a port that made it 8-bit would leave $01F5 stale and nothing would notice.
+// CtMoveDirAngle (C0/ABA2, the field heading builder) against micro-execution of the ROM routine, over the
+// whole 128 KB WRAM image. The grid sweeps the four staged bytes ($01F0 curX, $01F1 curY, $01F2 tgtX, $01F3
+// tgtY) over values that reach every arm and straddle the unsigned wrap (target $00 from current $FF borrows).
+// Only the fake return address $01FE/$01FF is excluded (ABA2 has no JSR), so $01F4/$01F5 are graded: the
+// `STA $F4` at AC0D/AC30/AC50 is a 16-bit store.
 static int runSweepAba2(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -6658,16 +5975,14 @@ static int runSweepAba2(const char* romPath) {
        uint8_t* r = s->ram;
        r[0x01F0] = (uint8_t)V[a]; r[0x01F1] = (uint8_t)V[b];
        r[0x01F2] = (uint8_t)V[c]; r[0x01F3] = (uint8_t)V[d];
-       // POISON every byte the routine writes, so a MISSING write mismatches instead of matching by
-       // luck. $01F8 is poisoned too: the `A5 F7 LDA $F7` loads are SIXTEEN-BIT (M is already clear
-       // by then), so they read $01F7 AND $01F8 -- the masks throw the high byte away, and this is
-       // what proves that rather than assuming it.
+       // Poison every byte the routine writes. $01F8 too: the `LDA $F7` loads are 16-bit (M is clear by
+       // then) and read $01F8; the masks discard it, and the poison checks that.
        r[0x01EE] = 0x5A; r[0x01EF] = 0x5A; r[0x01F4] = 0x5A; r[0x01F5] = 0x5A;
        r[0x01F6] = 0x5A; r[0x01F7] = 0x5A; r[0x01F8] = 0x5A;
        memcpy(work, r, 0x20000);
        CtMoveDirAngle(work, rom);
-       // micro-execute the real routine with the field VM's register state: A 8-bit, X/Y 16-BIT
-       // (the `AA TAX` at AC1B/AC3C/AC5D depends on it), DP = $0100, DB = $00.
+       // Micro-execute the ROM routine with the field VM's registers: A 8-bit, X/Y 16-bit (the `TAX` at
+       // AC1B/AC3C/AC5D depends on it), DP = $0100, DB = $00.
        s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
        s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->x = 0; s->cpu->y = 0;
        s->cpu->waiting = false; s->cpu->stopped = false; s->cpu->c = false;
@@ -6682,7 +5997,7 @@ static int runSweepAba2(const char* romPath) {
          if ((f6 & 0x40) || (f7 & 0x40)) arm[0]++; else if ((f6 & 0x20) || (f7 & 0x20)) arm[1]++; else arm[2]++; }
        int diff = 0, at = -1;
        for (int k = 0; k < 0x20000; k++) {
-         if (k >= 0x01FE) { if (k < 0x0200) continue; }    // ONLY the fake return address
+         if (k >= 0x01FE) { if (k < 0x0200) continue; }    // only the fake return address
          if (work[k] != r[k]) { diff = 1; at = k; break; }
        }
        if (!diff) ok++;
@@ -6691,15 +6006,10 @@ static int runSweepAba2(const char* romPath) {
            printf("  sweepaba2 MISMATCH at $%05X: C=%02X RO=%02X   cur=(%02X,%02X) tgt=(%02X,%02X)  $01EE C=%02X RO=%02X\n",
                   at, work[at], r[at], V[a], V[b], V[c], V[d], work[0x01EE], r[0x01EE]); } }
      }
-  // ---- PHASE 2: EXHAUSTIVE OVER THE ROUTINE'S ACTUAL BEHAVIOUR SPACE ----------------------------
-  // Phase 1 sweeps 10 values per byte, which is 10^4 of a 256^4 input space -- so on its own it
-  // cannot answer "does the grid cover the routine". It does not have to. Every output depends only
-  // on the two pairs (delta, borrow), because the ONLY things read from $01F0-$01F3 are the two
-  // `SEC / SBC` results and their carries. Per axis that is 511 reachable combinations: 256 without
-  // a borrow (cur $00, tgt d) and 255 with one (cur $FF, tgt d-1, which is < $FF exactly when a
-  // borrow is possible). Enumerating both axes is 511^2 -- exhaustive BY CONSTRUCTION, not by
-  // sampling. Phase 1 having already compared the WHOLE image is what licenses the narrow compare
-  // here: it established WHICH bytes the routine writes, so this phase only has to check values.
+  // Phase 2: exhaustive. The outputs depend only on the two (delta, borrow) pairs of the `SEC / SBC` on
+  // $01F0-$01F3. Per axis that is 511 combinations: 256 without a borrow (cur $00, tgt d) and 255 with one
+  // (cur $FF, tgt < $FF), so 511^2 covers them all. Phase 1's whole-image compare found which bytes the
+  // routine writes, so this phase compares only those.
   int ok2 = 0, bad2 = 0, shown2 = 0;
   static const int TOUCH[7] = { 0x01EE, 0x01EF, 0x01F4, 0x01F5, 0x01F6, 0x01F7, 0x01F8 };
   for (int yi = 0; yi < 511; yi++)
@@ -6734,7 +6044,7 @@ static int runSweepAba2(const char* romPath) {
   bad += bad2;
   printf("   quadrants reached: +Y+X %d, +Y-X %d, -Y-X %d, -Y+X %d | scale arms: >>2 %d, >>1 %d, none %d\n",
          q[0], q[1], q[2], q[3], arm[0], arm[1], arm[2]);
-  // A grid that misses a quadrant or a scale arm is not a sweep of this routine. Say so, loudly.
+  // A grid that misses a quadrant or a scale arm fails.
   { int gap = 0;
     for (int i = 0; i < 4; i++) if (!q[i]) gap = 1;
     for (int i = 0; i < 3; i++) if (!arm[i]) gap = 1;
@@ -6743,6 +6053,8 @@ static int runSweepAba2(const char* romPath) {
   return bad ? 1 : 0;
 }
 
+// --sweepvram: the C0/B1B2 VRAM upload. Compares all 64 KB of VRAM after the oracle's channel-7 DMAs against a
+// buffer the port filled.
 static int runSweepVram(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -6751,19 +6063,18 @@ static int runSweepVram(const char* romPath) {
   if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000], myVram[0x10000];
-  // Each row is one queue SHAPE: {entries, dstA, srcA, lenA, dstB, srcB, lenB}. The shapes exist to
-  // separate things a single well-behaved entry cannot: an ODD length (mode 1 ends mid-pair, so the
-  // word address must NOT advance), a destination near the top of VRAM (the word address is 15-bit),
-  // a length of ZERO (which is $10000 bytes on real hardware, not none), and an entry whose flag has
-  // a zero LOW byte but a non-zero high one -- the walk reads that flag EIGHT-bit, so it must stop.
+  // Each row is one queue shape: {entries, dstA, srcA, lenA, dstB, srcB, lenB}. They cover an odd length
+  // (mode 1 ends mid-pair and the word address does not advance), a destination near the top of VRAM (the
+  // word address is 15-bit), a length of zero ($10000 bytes on hardware) and a flag with a zero low byte
+  // and a non-zero high one (the walk reads it 8-bit and stops).
   struct { int n, dA, sA, lA, dB, sB, lB, flagHi; } Q[] = {
     { 1, 0x0000, 0x3800, 0x0100, 0x0080, 0x3900, 0x0100, 0 },
     { 3, 0x0200, 0x3800, 0x0040, 0x0240, 0x3A00, 0x0080, 0 },
-    { 1, 0x0400, 0x3801, 0x0021, 0x0420, 0x3B00, 0x0007, 0 },   // ODD lengths
+    { 1, 0x0400, 0x3801, 0x0021, 0x0420, 0x3B00, 0x0007, 0 },   // odd lengths
     { 1, 0x7FE0, 0x3C00, 0x0100, 0x7FF0, 0x3D00, 0x0100, 0 },   // wraps the 15-bit word address
     { 1, 0x1000, 0x8000, 0x0000, 0x1000, 0x8000, 0x0010, 0 },   // lenA = 0 -> $10000 bytes
     { 0, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0 },   // empty queue: only the gate clear
-    { 1, 0x0600, 0x3800, 0x0100, 0x0680, 0x3900, 0x0100, 1 },   // flag = $0100: low byte 0 -> STOP
+    { 1, 0x0600, 0x3800, 0x0100, 0x0680, 0x3900, 0x0100, 1 },   // flag = $0100: low byte 0 -> stop
   };
   int ok = 0, bad = 0, calls = 0, lost = 0, shown = 0;
   for (int qi = 0; qi < (int)(sizeof(Q)/sizeof(Q[0])); qi++) {
@@ -6797,9 +6108,7 @@ static int runSweepVram(const char* romPath) {
     calls++;
     int diff = 0, at = -1;
     for (int k = 0; k < 0x20; k++) if (work[0x09A0 + k] != r[0x09A0 + k]) { diff = 1; at = 0x09A0 + k; break; }
-    // LakeSnes keeps VRAM as 32768 uint16 WORDS, so it has to be indexed through a BYTE pointer:
-    // comparing s->ppu->vram[k] against a byte compares a whole word, and reports every shape --
-    // including the two that copy nothing at all -- as a mismatch at offset 0.
+    // LakeSnes keeps VRAM as 32768 16-bit words: compare it through a byte pointer.
     const uint8_t* ov = (const uint8_t*)s->ppu->vram;
     if (!diff) for (int k = 0; k < 0x10000; k++)
       if (myVram[k] != ov[k]) { diff = 1; at = -2 - k; break; }
@@ -6816,51 +6125,37 @@ static int runSweepVram(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// --hookpc <HEX> --from STATE [--input S] [--frames N] [--hookwatch HEX]
-// EXECUTION hook, not a WRAM inference. Steps the oracle one opcode at a time and records, per
-// frame, every visit to bank-$C0 PC <HEX> together with the live $6D ($016D, the object index every
-// field routine reads). WRAM probing cannot answer "was this routine REACHED for object X" -- a
-// routine that runs and stores nothing is indistinguishable from one that never ran, which is
-// exactly the trap C0/A88D sets (it writes $0F00,X only on an EDGE, so an already-active object
-// produces no writer at all). This mode answers it directly.
+// --hookpc <HEX> --from STATE [--input S] [--frames N] [--hookwatch HEX] (docs/DEBUG_SURFACE.md): steps the
+// oracle one opcode at a time and records each frame's visits to PC <HEX> with $016D (the object index). It
+// answers "was this routine reached for object X", which WRAM probing cannot (C0/A88D writes $0F00,X only on
+// an edge, so an already-active object leaves no write).
 static int runHookPc(const char* romPath, const char* statePath, int hookPc, int watchAddr,
                      const char* inputScript, int frames) {
   if (!statePath) { printf("FAIL: --hookpc needs --from <savestate>\n"); return 2; }
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
   if (!s) return 2;
-  // ⭐ THE HOOK IS 24-BIT WHEN YOU GIVE IT A BANK. `--hookpc EC55` still means C0/EC55 (every existing
-  // use), but `--hookpc 7E5BEA` hooks WRAM -- which is the only way to see inside the $C3 title
-  // overlay, a 34 KB program that runs from $7E:3000 and has no ROM address at all
-  // (disasm/notes/title_intro.md). At each visit the CPU's A/X/Y are reported too, so the arithmetic
-  // of a WRAM routine can be read off directly instead of inferred from cells that later tasks in the
-  // same frame overwrite.
+  // A hook above $FFFF carries its bank (`--hookpc 7E5BEA` hooks WRAM, e.g. the $C3 title overlay that runs
+  // from $7E:3000, disasm/notes/title_intro.md); a 16-bit one is bank $C0. Each visit also reports A/X/Y.
   int hookBank = (hookPc > 0xFFFF) ? ((hookPc >> 16) & 0xFF) : 0xC0;
   uint16_t hookOff = (uint16_t)(hookPc & 0xFFFF);
   printf("hookpc: %02X/%04X over %d frames from %s\n", hookBank, hookOff, frames, statePath);
   CtBtnScript bs = { inputScript ? inputScript : "" };
   uint16_t btn = 0; int hold = 0;
-  // CT_HOOK_CYCLES=1: split every frame's master cycles into buckets (snes.c g_cycTagCycles) --
-  // CPU outside interrupts / CPU inside the NMI handler / DMA / HDMA / DRAM refresh -- and count
-  // the interrupts taken. Interrupt entry is detected the way the CPU does it (intWanted before
-  // the opcode) and its exit by the stack pointer climbing back past the entry frame (the RTI),
-  // so the NMI bucket holds the handler and everything it calls, wherever that code lives
-  // (the vector goes through WRAM $0500).
+  // CT_HOOK_CYCLES=1: each frame's master cycles split into buckets (snes.c g_cycTagCycles) and the interrupts
+  // taken. An interrupt starts when intWanted is set before an opcode and ends when SP climbs back past its
+  // entry (the RTI), so the NMI bucket holds the whole handler wherever it runs (the vector is in WRAM $0500).
   extern int g_cycTag; extern long g_cycTagCycles[8];
   int cycSplit = getenv("CT_HOOK_CYCLES") ? atoi(getenv("CT_HOOK_CYCLES")) : 0; int inInt = 0; uint16_t intSp = 0;
-  // CT_HOOK_CYCLES=2 CT_HOOK_CYCFRAME=N: on frame N also print (a) where the interrupt handlers spend
-  // their cycles (a PC histogram of the NMI/IRQ bucket, top entries), (b) the distribution of the
-  // cycle distance between consecutive hook visits (its mode is the undisturbed per-visit cost, the
-  // larger values are visits an interrupt or HDMA run fell into), and (c) the HDMA channel setup.
+  // CT_HOOK_CYCLES=2 CT_HOOK_CYCFRAME=N: frame N's interrupt PC histogram, the cycle distances between hook
+  // visits (the mode is the undisturbed per-visit cost) and the HDMA channel setup.
   int cycFrame = getenv("CT_HOOK_CYCFRAME") ? atoi(getenv("CT_HOOK_CYCFRAME")) : -1;
   int pollHist = getenv("CT_HOOK_POLLHIST") != NULL; static long pHist[65]; long pSince = 0;
   enum { HN = 16384 };
   static uint32_t hKey[HN]; static long hCyc[HN]; static int hCnt[HN];
   static long dKey[512]; static int dCnt[512]; int dN = 0;
   long nmiCyc = 0, irqCyc = 0; int curIsNmi = 0;
-  // CT_HOOK_STALL=<F>:<N>: at the start of the run's frame F, stall the CPU for N master cycles (N even) -- the bus
-  // idles as it does under a DMA -- and nothing else changes. Whether a later raster read (C3/02DD's $213C) moves
-  // tells whether the CPU's phase against the beam is carried forward from that point or reset somewhere between.
+  // CT_HOOK_STALL=<F>:<N>: stall the CPU N master cycles (N even) at the start of frame F, as under a DMA.
   int stallF = -1, stallN = 0;
   { const char* e = getenv("CT_HOOK_STALL"); if (e) { stallF = atoi(e); const char* q = strchr(e, ':'); stallN = q ? atoi(q + 1) : 0; } }
   for (int f = 0; f < frames; f++) {
@@ -6871,14 +6166,11 @@ static int runHookPc(const char* romPath, const char* statePath, int hookPc, int
     long cyc0[8]; memcpy(cyc0, g_cycTagCycles, sizeof cyc0); int ints = 0;
     int idxs[64], vps[64], hps[64], n = 0, hit = 0; long guard = 8000000;
     int ra[64], rx[64], ry[64];
-    int rw[64];                       // --hookwatch, sampled AT THE HOOK (16-bit LE)
+    int rw[64];                       // --hookwatch, sampled at the hook (16-bit LE)
     while (s->frames == fr && --guard > 0) {
       if (s->cpu->k == hookBank && s->cpu->pc == hookOff) { hit++;
-        // CT_HOOK_DUMPWRAM=<path>: the whole WRAM ($7E0000-$7FFFFF, 128 KB) at the hook's FIRST visit -- the state
-        // a routine starts from, not the nearest frame boundary's (how the field's C0/286C pass is priced against
-        // the cartridge, src/field_cost.c).
-        // CT_HOOK_DUMPWRAM_AT=<n> (alias CT_HOOK_DUMPWRAM_NTH): at the n-th visit instead (1-based; how a later visit is
-        // replayed by --sweepfxmisc / --sweepfx80).
+        // CT_HOOK_DUMPWRAM=<path>: the 128 KB WRAM at the hook's first visit; CT_HOOK_DUMPWRAM_AT=<n> (alias _NTH):
+        // at the n-th visit (1-based).
         { static int dumped, visits; const char* dp = getenv("CT_HOOK_DUMPWRAM");
           const char* at = getenv("CT_HOOK_DUMPWRAM_AT"); if (!at) at = getenv("CT_HOOK_DUMPWRAM_NTH");
           int want = (at && atoi(at) > 0) ? atoi(at) : 1;
@@ -6892,11 +6184,9 @@ static int runHookPc(const char* romPath, const char* statePath, int hookPc, int
         if (!inInt && s->cpu->intWanted && !s->cpu->waiting && !s->cpu->stopped) { inInt = 1; intSp = s->cpu->sp; ints++; curIsNmi = s->cpu->nmiWanted; }
         g_cycTag = inInt ? 1 : (s->cpu->k == 0xC7 && (s->cpu->pc == 0x09E0 || s->cpu->pc == 0x09E3)) ? 5 : 0;
       }
-      // CT_HOOK_DUMPCALLS=<prefix> + CT_HOOK_DUMPEXIT=<hexpc>[,<hexpc>...]: every call's WRAM pair -- <prefix>_<n>_in.wram at
-      // each visit to the hook (the routine's first instruction) and <prefix>_<n>_out.wram at the first exit PC after it
-      // (its RTL, before it runs). A call the CPU left its bank during (an interrupt: the hooked routine must not leave
-      // its bank itself) writes <prefix>_<n>_int.wram instead of _out, so a grader can set it aside. How FD/C2C1's builder is graded against the cartridge (tools/hdma_build_cmp.py).
-      // CT_HOOK_DUMPCALLS_FROM=<f>: only calls from the run's frame f on; CT_HOOK_DUMPCALLS_MAX=<n>: the cap (default 256).
+      // CT_HOOK_DUMPCALLS=<prefix> + CT_HOOK_DUMPEXIT=<hexpc>[,...]: each call's WRAM pair, <prefix>_<n>_in.wram at the
+      // hook and _out.wram at the first exit PC after it. A call during which the CPU left the hook's bank (an
+      // interrupt) writes _int.wram instead. _FROM=<f>: from frame f on; _MAX=<n>: the cap (default 256).
       { static const char* cp; static int init, armed, intr, ncall, from, cap = 256; static uint32_t ex[8]; static int nex;
         if (!init) { init = 1; cp = getenv("CT_HOOK_DUMPCALLS"); const char* e = getenv("CT_HOOK_DUMPEXIT");
                      if (getenv("CT_HOOK_DUMPCALLS_FROM")) from = atoi(getenv("CT_HOOK_DUMPCALLS_FROM"));
@@ -6959,19 +6249,14 @@ static int runHookPc(const char* romPath, const char* statePath, int hookPc, int
         printf("\n");
       }
     }
-    // Sample where the CPU spent the frame: the PC at the frame boundary. "visits=0" alone
-    // cannot distinguish "the routine was skipped" from "the engine is not even in this loop",
-    // and that distinction is the whole question.
+    // The PC at the frame boundary, so "visits=0" tells a skipped routine from an engine in another loop.
     printf("  f%-4d visits=%-3d end=%02X/%04X", f, hit, s->cpu->k, s->cpu->pc);
     if (watchAddr >= 0) { printf(" [%05X]=", watchAddr);
-      // AT THE HOOK, not at the frame boundary: a scratch cell a WRAM routine computes is
-      // overwritten by the next task in the same NMI, so a boundary sample reads someone
-      // else's value (the $C3 overlay's $F0-$F7 multiply scratch is exactly that).
+      // Sampled at the hook: a scratch cell (e.g. the $C3 overlay's $F0-$F7) is overwritten later in the frame.
       for (int k = 0; k < n && k < 8; k++) printf("%s%04X", k ? "," : "", rw[k]); }
     printf("  $6D:");
     for (int k = 0; k < n; k++) printf(" %02X", idxs[k]);
-    // THE RASTER POSITION at each visit -- what a clockless port cannot know and must be measured.
-    // vPos is the PPU's scanline counter, the same quantity C0/CA85-CA9B assembles from two $213D reads.
+    // The raster position at each visit: vPos is the PPU's scanline, what C0/CA85-CA9B builds from two $213D reads.
     printf("  A/X/Y:");
     for (int k = 0; k < n && k < 8; k++) printf(" %04X/%04X/%04X", ra[k] & 0xFFFF, rx[k] & 0xFFFF, ry[k] & 0xFFFF);
     printf("  vPos:");
@@ -6987,12 +6272,10 @@ static int runHookPc(const char* romPath, const char* statePath, int hookPc, int
   return 0;
 }
 
-// STEP: the SCENE-ENTRY INIT chain -- C0/6F79, C0/E935, C0/B204 and C0/A7E9, four of the eight
-// routines C0/56B0 runs on a scene load. They are the PRECONDITION for the animation tree: C0/A9CD
-// refuses to link an object unless $0E01,X is already negative, and C0/B204 is the only thing that
-// makes it so. Three of the four write through the PPU's WRAM PORT ($2180 with DP = $2100) and one
-// finishes with three chained MVNs, so micro-execution here exercises the oracle's WRAM port and
-// block-move for real rather than a model of them.
+// The scene-entry init chain: C0/6F79, C0/E935, C0/B204 and C0/A7E9, four of the eight routines C0/56B0 runs on
+// a scene load, against CtObjSceneInit. They precede the animation tree: C0/A9CD links an object only if
+// $0E01,X is negative, which only C0/B204 sets. Three write through the WRAM port ($2180, DP = $2100) and one
+// ends with three chained MVNs.
 static int runSweepInit(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -7011,10 +6294,7 @@ static int runSweepInit(const char* romPath) {
      for (int k = 0; k < 0x100; k++) { r[0x0B00 + k] = (uint8_t)POISON[pi];
                                        r[0x0E00 + k] = (uint8_t)POISON[pi];
                                        r[0x0F00 + k] = (uint8_t)POISON[pi]; }
-     r[0x12000] = (uint8_t)NOBJ[ni]; r[0x12001] = 0x00;      // $7F2000 -- flat offset 0x10000 +
-                                                             // 0x2000, NOT 0x10000. Seeding $7F0000
-                                                             // let the ROM read a stale count and
-                                                             // reported the PORT as short by one.
+     r[0x12000] = (uint8_t)NOBJ[ni]; r[0x12001] = 0x00;      // $7F2000 = flat offset 0x10000 + 0x2000
      memcpy(work, r, 0x20000);
      CtObjSceneInit(work, NOBJ[ni]);
      int died = 0;
@@ -7047,29 +6327,10 @@ static int runSweepInit(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: C0/305D, the ARRIVAL SNAP -- the path C0/5129 takes on arrival when $1C81,X bit0 is set,
-// instead of completing the move. Dormant on every object measured so far, which is exactly why it
-// went unported twice (here and at ct_vm.c's op-0xA0 arm); "not seen yet" is not "absent".
-// The seeds sweep the sub-tile offset over values that straddle the X centre ($80) and the Y bottom
-// ($F0) AND carry a non-zero low nibble, because `AND #F0` masking the sub-PIXEL away is a fact the
-// port must not lose -- $8F and $80 have to behave identically.
-// STEP: C2/62ED, the overworld's per-cell REGION nibble -- the lookup that turns the player's position
-// into a music zone (`$1B9B,X` -> song, C2/2F25). Micro-executed against CtWorldRegion.
-//
-// WHY THIS EXISTS RATHER THAN A LIVE COMPARISON. World 0's own grid is BLIND to the thing most likely
-// to be coded wrong: swapping the even/odd nibble select leaves all three entry points we can measure
-// (the Truce-market door, --owforce mid-map, the boat) reporting the same song, and even leaves the
-// histogram over all 6144 cells identical at {0:5671, 1:392, 2:81}. A mutation that no amount of real
-// data can see is not covered by real data. So the grid here is SEEDED with a pattern whose two
-// nibbles always differ, which makes the order observable, and the ROM is asked directly.
-// STEP: C2/2F94, the overworld MUSIC-ZONE object -- the whole fade -> wait -> play cycle that swaps the
-// music when the player walks into a different region. Micro-executed state by state against
-// CtWorldMusicObj + CtWorldSoundRequest, comparing EVERY byte the machine can touch.
-//
-// This grades the derivation without needing a live region crossing, which is just as well: on world 0
-// the terrain around the only region-1 pocket does not let the player walk across the boundary from any
-// cell reachable by --teleport --method ow (14 border cells x 4 directions tried, none crossed). Seeding
-// the states directly reaches every arm including the ones a walk would take minutes to hit.
+// C2/2F94, the overworld music-zone object (the fade -> wait -> play cycle that swaps the music when the player
+// enters another region), micro-executed state by state against CtWorldMusicObj + CtWorldSoundRequest over
+// every byte the machine touches. The states are seeded: on world 0 no reachable cell lets the player walk
+// across a region boundary.
 static int runSweepOwMusic(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -7080,9 +6341,8 @@ static int runSweepOwMusic(const char* romPath) {
   uint8_t* r = s->ram;
   static uint8_t work[0x20000];
   enum { B = 0x0EB0 };                               // the block the music object occupies on world 0
-                                                     // (enum, not const int: a `static const int[]`
-                                                     //  initialiser needs a C constant expression)
-  // Every byte the machine reads or writes, so the compare is total rather than a spot check.
+                                                     // (an enum: WATCH's initialiser needs a constant)
+  // Every byte the machine reads or writes.
   static const int WATCH[] = { 0x00EB, 0x02AE, 0x1BE8, 0x1BE9, 0x1BEA, 0x1BEB, 0x1BEC, 0x1BED, 0x1BEE,
                                0x1E00, 0x1E01, 0x1E02, 0x1E03, B + 2, B + 3, B + 4 };
   const int NW = (int)(sizeof WATCH / sizeof WATCH[0]);
@@ -7092,15 +6352,11 @@ static int runSweepOwMusic(const char* romPath) {
   static const uint8_t MODE[] = { 0x00, 0x01, 0x03, 0x07 };      // $027C: in and out of {0,1,7}
   static const uint8_t SHAD[] = { 0x01, 0x1E };                  // $02AE against the region's song
   static const uint8_t ED[]   = { 0x00, 0x01 };                  // $7F01ED
-  // A POSITION axis. Without it the row's `- 1` is UNGRADED: one seeded position had the same region
-  // above and below, so dropping the DEC A scored a clean 768/768. The count of positions where the
-  // two rows genuinely differ is asserted below, so this cannot quietly go blind again.
-  // ⚠ The columns must be EVEN. The seeded grid steps by 48*7 = 0x150 per row, i.e. +0x50 per byte,
-  // which moves the HIGH nibble by 5 and leaves the LOW nibble alone -- so on an ODD column the region
-  // is identical in row and row-1 and the `- 1` is ungraded. The first three positions here were all
-  // odd columns (0x150>>4 = 21, 0x270>>4 = 39, 0x398>>4 = 57) and dropping the DEC A scored a clean
-  // 2304/2304. rowDisc below counts the seeds that actually discriminate and the mode FAILS on zero.
-  static const uint16_t POSX[] = { 0x0140, 0x0280, 0x03A0 };     // cols 20, 40, 58 -- all EVEN
+  // A position axis, so the row's `- 1` (the DEC A) is graded; rowDisc counts the seeds where the row and the
+  // row above differ, and the mode fails on zero.
+  // Note: the columns must be even. The seeded grid steps 0x150 per row (+0x50 a byte), which moves only the
+  // high nibble, so on an odd column row and row - 1 give the same region.
+  static const uint16_t POSX[] = { 0x0140, 0x0280, 0x03A0 };     // cols 20, 40, 58 (even)
   static const uint16_t POSY[] = { 0x0120, 0x0208, 0x0311 };
   int ok = 0, bad = 0, calls = 0, lost = 0, shown = 0, hitPlay = 0, hitFade = 0, hitStop = 0;
   int rowDisc = 0, gateOk = 0, gateBad = 0, gateRefused = 0;
@@ -7124,11 +6380,10 @@ static int runSweepOwMusic(const char* romPath) {
       r[0x004E] = (uint8_t)B; r[0x004F] = (uint8_t)(B >> 8);   // $4E = the block base, as C2/053C sets it
       memcpy(work, r, 0x20000);
       int keep = CtWorldMusicObj(work, B);
-      // The HANDLER is called directly, not through C2/0535: that entry is the body of the object LOOP
-      // and falls into `BRA ->0527`, so it would walk on into every following block. The dispatcher's own
-      // contract (INC $0003,X on CLC, class := 0 on SEC, C2/0543-054E) is therefore NOT applied to either
-      // side here -- it is the CALLER's, and the carry itself is compared instead. Entry state as the
-      // dispatcher leaves it: SEP #20 at C2/053A, X still 16-bit, DP and DB zero.
+      // The handler is called directly: C2/0535 is the object loop's body and would run on into the following
+      // blocks. The dispatcher's contract (INC $0003,X on CLC, class := 0 on SEC, C2/0543-054E) is the caller's,
+      // so the carry is compared instead. Entry state as the dispatcher leaves it: SEP #20 at C2/053A, X 16-bit,
+      // DP and DB zero.
       CtCallSetup in = { 0xC22F94, 0, (uint16_t)B, 0, 0x0000, 0x0000, 1, 0, 0, 0, 200000 };
       CtCallResult out;
       if (!CtOracleCallRoutine(s, &in, &out)) { lost++; continue; }
@@ -7147,9 +6402,8 @@ static int runSweepOwMusic(const char* romPath) {
           printf(" %04X C=%02X RO=%02X", WATCH[k], work[WATCH[k]], r[WATCH[k]]);
         printf("\n"); } }
     }
-  // PHASE 2 -- C2/2ED9 on its own. THROUGH THE HANDLER THE PRIORITY COMPARE IS UNREACHABLE: every state
-  // writes $1BED = 0 before calling, so `$1BEE < $1BED` is always false and flipping the comparison
-  // scored a clean 768/768 in phase 1. Graded here over the cross product that actually reaches it.
+  // Phase 2: C2/2ED9 on its own. Through the handler its priority compare is unreachable (every state writes
+  // $1BED = 0 first, so `$1BEE < $1BED` is false); this cross product reaches it.
   for (int pe = 0; pe < 3; pe++) for (int nd = 0; nd < 4; nd++) for (int pd = 0; pd < 4; pd++) {
     r[0x1BEC] = PEND[pe]; r[0x1BED] = (uint8_t)nd; r[0x1BEE] = (uint8_t)pd;
     r[0x1BE8] = 0x10; r[0x1BE9] = 0x2A; r[0x1BEA] = 0xFF; r[0x1BEB] = 0x80;
@@ -7175,8 +6429,7 @@ static int runSweepOwMusic(const char* romPath) {
          ok, calls, NW, bad, lost, hitFade, hitPlay, hitStop);
   printf("sweepowmusic: %d of %d seeds sit where the row and the row ABOVE are DIFFERENT regions, so "
          "the `- 1` at C2/2FFE is graded\n", rowDisc, calls);
-  // Every one of these is a coverage assertion, not a score: each was a mutation that SURVIVED until
-  // the grid was widened to reach it. A zero here means the sweep has gone blind again.
+  // Coverage assertions: a zero means an arm went unreached.
   int armsOk = hitFade && hitPlay && hitStop && rowDisc && gateRefused;
   if (!armsOk) printf("sweepowmusic: FAIL -- an arm was never reached, the grid is blind\n");
   bad += gateBad;
@@ -7184,15 +6437,12 @@ static int runSweepOwMusic(const char* romPath) {
   return (bad || !armsOk) ? 1 : 0;
 }
 
-// --seqppucmp <state> <frames> -- THE SEQUENCE PICTURE THROUGH THE VENDORED PPU, graded against the oracle's own frame.
-// src/seq_ppu.c draws a stage by handing a PPU core what the stage's code writes and walking HDMA over its tables.
-// This checks that path in isolation from any ported stage code: at the instant the oracle LEAVES vblank (vPos 0 --
-// every register the NMI will ever write for this frame is written, and from here only HDMA changes them) the
-// oracle's PPU and its DMA channel setup are copied into a CtSeqPpu, the frame is drawn there with the port's HDMA
-// walk reading the oracle's WRAM, and the oracle then runs to its next vblank. Both line buffers are compared byte
-// for byte (all 2048 bytes a line: the main and the sub-screen pixel of every column).
-// ⚠ snes.c calls ppu_handleFrameStart as it clears inVblank, so the copy has already toggled evenFrame once;
-// CtSeqPpuFrame toggles it again, so the copy's flag is flipped back first.
+// --seqppucmp <state> <frames>: the sequence picture through the vendored PPU (src/seq_ppu.c) against the oracle's
+// frame. When the oracle leaves vblank (the NMI's register writes done; only HDMA changes them after), its PPU
+// and DMA setup are copied into a CtSeqPpu and the frame is drawn with the port's HDMA walk over the oracle's
+// WRAM; the oracle then runs to its next vblank and the line buffers are compared (main and sub pixel).
+// Note: snes.c toggles evenFrame as it clears inVblank and CtSeqPpuFrame toggles it again, so the copy's flag
+// is flipped back first.
 #include "seq_ppu.h"
 static uint8_t seqPpuCmpRead(void* ctx, uint32_t adr) {
   Snes* s = (Snes*)ctx;
@@ -7219,8 +6469,7 @@ static int runSeqPpuCmp(const char* romPath, const char* statePath, int frames) 
       ch[i].bAdr = c->bAdr; ch[i].aAdr = c->aAdr; ch[i].aBank = c->aBank; ch[i].indBank = c->indBank;
       if (c->hdmaActive) en |= (uint8_t)(1 << i);
     }
-    // SEQPPUCMP_LATE=1: draw with the WRAM as the frame ENDS (every table the NMI's overrunning tasks finish
-    // writing during the visible lines already in place) -- the other bound of what HDMA can have read.
+    // SEQPPUCMP_LATE=1: draw with the WRAM as the frame ends, the other bound of what HDMA can have read.
     int late = getenv("SEQPPUCMP_LATE") != NULL;
     if (!late) CtSeqPpuFrame(sp, ch, en, seqPpuCmpRead, s, NULL);
     uint32_t fr = s->frames;
@@ -7256,10 +6505,9 @@ static int runSeqPpuCmp(const char* romPath, const char* statePath, int frames) 
   return 0;
 }
 
-// --seqpiccmp <state> <frames> -- THE SEQUENCE PICTURE, NATIVE (src/seq_pic.c), graded against the oracle's own frame: the same
-// instant as --seqppucmp (the oracle leaving vblank), its PPU's state turned back into the register bytes it was written as,
-// VRAM / CGRAM / OAM copied, the frame drawn natively with the oracle's WRAM as HDMA's tables, the oracle run to its next
-// vblank, and the two pictures compared pixel for pixel (the oracle's line buffer, as the screen shows it).
+// --seqpiccmp <state> <frames>: the native sequence picture (src/seq_pic.c) against the oracle's frame. At the
+// instant --seqppucmp uses, the oracle's PPU state is turned back into register bytes, VRAM / CGRAM / OAM are
+// copied, the frame is drawn natively over the oracle's WRAM, and the pictures are compared pixel for pixel.
 #include "seq_pic.h"
 #include "scene_art.h"
 static void seqPicFromPpu(CtSeqPic* q, const Ppu* u) {
@@ -7345,18 +6593,18 @@ static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) 
   return 0;
 }
 
-// --racepiccmp <state> <btnscript> <handoff> <operand> <frames> -- THE RACE'S PICTURE, NATIVE, in lockstep with the oracle. The
-// oracle runs the drive to the hand-off frame; its WRAM there opens the native stage with a picture (src/seq_racepic.c); the
-// oracle runs on until its stage has made the setup's NMI ($0008 = 1 at a frame's end), and from there each native NMI is laid
-// against the oracle's next one: as the oracle leaves vblank, VRAM / CGRAM / OAM / the display registers / the HDMA channels are
-// compared, then both frames are drawn and compared pixel for pixel. The native stage takes the oracle's pad from its $02.
+// --racepiccmp <state> <btnscript> <handoff> <operand> <frames>: a native $C3 stage and its picture (e.g. the race,
+// src/seq_racepic.c) in lockstep with the oracle. The oracle runs the drive to the hand-off frame, where its WRAM opens
+// the native stage, and on until the stage's setup makes its NMI ($0008 = 1 at a frame's end). From there each native
+// NMI is laid against the oracle's next: as the oracle leaves vblank, VRAM / CGRAM / OAM, the display registers and the
+// HDMA channels are compared, then both pictures pixel for pixel. The native stage reads the oracle's pad from its $02.
 #include "seq_racepic.h"
 #include "seq_entry3.h"
 #include "seq_entry4.h"
 #include "seq_entry7.h"
 #include "seq_entry6.h"
 #include "seq_ending.h"
-// The stage by its operand: entry 3 / entry 4 (seq_entry3.c, seq_entry4.c and their *pic.c) or the race (seq_race.c / seq_racepic.c).
+// The stage by its operand: entries 3, 4, 7, 6, the ending, or the race (the seq_*.c stages and their *pic.c).
 static int rpcOpen(uint8_t* w, uint8_t op, const CtRaceIo* io) {
   return CtEntry3StageHas(op) ? CtEntry3StageOpen(w, op, io) : CtEntry4StageHas(op) ? CtEntry4StageOpen(w, op, io)
        : CtEntry7StageHas(op) ? CtEntry7StageOpen(w, op, io) : CtEntry6StageHas(op) ? CtEntry6StageOpen(w, op, io)
@@ -7369,8 +6617,8 @@ static void racepicPost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }
 // A script's `F5` reads the SPC's output ports: here the oracle's own (the cartridge's marker on its frame).
 static Snes* g_rpcSnes;
 static uint8_t racepicPort(void* c, int n) { (void)c; return g_rpcSnes ? g_rpcSnes->apu->outPorts[n & 3] : 0; }
-// `LDA $213E` / `$213F`'s bit 7 (the field: STAT78's, ppu.c) as the oracle's NMI k read it: the port's frame k runs once the
-// oracle has left that vblank -- the next frame started, ppu_handleFrameStart already toggled the field -- so it is the other one.
+// The field bit (`$213F` bit 7, STAT78) as the oracle's NMI k read it. The port's frame k runs after the oracle has left
+// that vblank and ppu_handleFrameStart has toggled the field, so it is the other value.
 static int racepicField(void* c) { (void)c; return g_rpcSnes && !g_rpcSnes->ppu->evenFrame ? 1 : 0; }
 // RACEPICCMP_PCLOG=<hex 24-bit PC>: the oracle's A / X / Y / carry each time it is about to run that instruction.
 static void rpcOp(Snes* s, int k) {
@@ -7392,8 +6640,8 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   #define RPC_PAD() do { while (left <= 0) { int n_; if (!ctBtnNext(&bs, &held, &n_)) { held = 0; n_ = 1 << 30; } left = n_; } \
                          s->input1->currentState = held; left--; } while (0)
   for (int f = 0; f < handoff; f++) { RPC_PAD(); CtOracleRunFrame(s); }
-  // RACEPICCMP_SPAN=<pcA>,<pcB> (24-bit hex): the oracle stepped opcode by opcode from the hand-off; the master cycles and the
-  // frame counter at the first visit of each -- an opening's cost measured where it runs (then the run ends).
+  // RACEPICCMP_SPAN=<pcA>,<pcB> (24-bit hex): step the oracle from the hand-off and print the frame and the master cycles
+  // at the first visit of each, then end the run.
   if (getenv("RACEPICCMP_SPAN")) {
     char* e; long pa = strtol(getenv("RACEPICCMP_SPAN"), &e, 16), pb = (*e == ',') ? strtol(e + 1, NULL, 16) : -1;
     uint64_t ca = 0; uint32_t fa = 0; int seen = 0; RPC_PAD();
@@ -7408,15 +6656,14 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   }
   memcpy(w, s->ram, sizeof w);
   // RACEPICCMP_WRAM=<128 KB file>: the native stage opens on that WRAM instead (the port's own hand-off, Belthasar's
-  // CT_STAGE_HANDOFF_WRAM) -- which of the bytes the port's field hands over the stage reads.
+  // CT_STAGE_HANDOFF_WRAM).
   { const char* wf = getenv("RACEPICCMP_WRAM"); FILE* f = wf ? fopen(wf, "rb") : NULL;
     if (f) { size_t n = fread(w, 1, sizeof w, f); fclose(f); printf("racepiccmp: the stage opens on %s (%zu bytes)\n", wf, n); } }
   memset(&sp, 0, sizeof sp); CtSeqPicReset(&sp.p);
-  // RACEPICCMP_SEEDVRAM=1: the native VRAM starts as the cartridge's at the hand-off (the field's leftovers the race never
-  // writes) -- to tell the race's own uploads from what the port's field does not keep.
+  // RACEPICCMP_SEEDVRAM=1: the native VRAM starts as the cartridge's at the hand-off (the field's leftovers the race
+  // never writes).
   if (getenv("RACEPICCMP_SEEDVRAM")) memcpy(sp.p.vram, s->ppu->vram, sizeof sp.p.vram);
-  // RACEPICCMP_SEEDZERO=<lo>-<hi>[,...] (hex words): those ranges of the seeded VRAM cleared -- which of the field's regions a
-  // stage displays.
+  // RACEPICCMP_SEEDZERO=<lo>-<hi>[,...] (hex words): clear those ranges of the seeded VRAM.
   { const char* z = getenv("RACEPICCMP_SEEDZERO"); while (z && *z) { char* e; long lo = strtol(z, &e, 16), hi = lo;
       if (*e == '-') hi = strtol(e + 1, &e, 16); for (long i = lo; i <= hi && i < 0x8000; i++) sp.p.vram[i] = 0;
       z = (*e == ',') ? e + 1 : e; if (e == z && *z) break; } }
@@ -7495,8 +6742,9 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     }
     if (getenv("RACEPICCMP_VERBOSE") || k == firstState)
       printf("racepiccmp: frame %d: VRAM %d CGRAM %d OAM %d words differ; registers %d%s; HDMA %d; WRAM %d bytes\n", k, vb, cb, ob, rb, regs, hb, wb);
-    // RACEPICCMP_WIDE=<side>: the frame drawn with that many widescreen columns each side (a host mod's picture, for the
-    // scene adjustments' art: RACEPICCMP_ART=1, the Steam release's from ct_wide.dat: RACEPICCMP_STEAM=1, scene_art.h) -- SHOT writes it to build/racepic_wide.raw.
+    // RACEPICCMP_WIDE=<side>: also draw with that many widescreen columns a side (a mod's picture; RACEPICCMP_ART=1 the
+    // scene adjustments' art, RACEPICCMP_STEAM=1 the Steam art from ct_wide.dat, scene_art.h); SHOT writes
+    // build/racepic_wide.raw.
     static uint8_t wide[(256 + 2 * 256) * 224 * 3]; int wside = getenv("RACEPICCMP_WIDE") ? atoi(getenv("RACEPICCMP_WIDE")) : 0;
     if (wside > 0 && wside <= 256) { g_seqPicWideSide = wside; g_seqPicWideOut = wide;
                                      g_seqPicWideSkip = getenv("RACEPICCMP_SKIP") ? (int)strtol(getenv("RACEPICCMP_SKIP"), NULL, 16) : 0;
@@ -7554,13 +6802,11 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   return 0;
 }
 
-// --gwarpcmp <state> <frames> -- THE GATE WARP, NATIVE (src/seq_gwarp.c), in lockstep with the oracle. The oracle runs from the
-// state to the warp's entry (C0/3FE8.. `JML $FD:FFF1 / FFEB / FFE8 / FFE5`; PEEK_POKE=7F269C=81.. picks the routine on the
-// Telepod's state); its WRAM there opens the native stage, its VRAM and CGRAM the stage's picture (as the field hands them over).
-// Then frame by frame, stopping where CtXlatStageFrame stops (the start of each vblank): all 128 KB of WRAM, VRAM / CGRAM / OAM
-// and the picture. The setup's frames (the NMI-off stretch before the poll) are WRAM in progress on the cartridge and graded
-// from the poll's frame on; at the program's `JML $C0:0000` the oracle runs to C0:0000 and the WRAM it hands the reboot is
-// compared. GWARPCMP_WRAMAT=<k>: the differing WRAM ranges at frame k.
+// --gwarpcmp <state> <frames>: the gate warp, native (src/seq_gwarp.c), in lockstep with the oracle. The oracle runs to the
+// warp's entry (C0/3FE8.. `JML $FD:FFF1 / FFEB / FFE8 / FFE5`; PEEK_POKE=7F269C=81.. picks the routine on the Telepod's
+// state); its WRAM, VRAM and CGRAM there open the native stage. At the start of each vblank WRAM, VRAM / CGRAM / OAM and
+// the picture are compared; memory from the poll's frame on (before it the NMI-off setup is still in progress). At the
+// `JML $C0:0000` the WRAM handed to the reboot is compared. GWARPCMP_WRAMAT=<k>: the differing WRAM ranges at frame k.
 #include "seq_gwarp.h"
 static int runGwarpCmp(const char* romPath, const char* statePath, int frames) {
   uint8_t* rom = NULL;
@@ -7670,12 +6916,10 @@ static int runGwarpCmp(const char* romPath, const char* statePath, int frames) {
   return 0;
 }
 
-// --cputrace <state> <frames> <out.txt> -- EVERY instruction the oracle executes, with the bytes it executed.
-// One line per opcode: `KK:PPPP b0 b1 b2 b3 A=.... X=.... Y=.... S=.... D=.... B=.. P=nvmxdizc`, the four bytes read
-// off the bus at the moment of execution (so self-modifying code -- the race's $357B patches its own loop every
-// frame -- is listed as it RAN, not as a later WRAM image holds it), plus `-- frame N` whenever the oracle's frame
-// counter advances. Reads that could touch hardware are not made: only WRAM, its low mirror and ROM are dumped,
-// anything else prints `??`. tools/cputrace_dis.py turns the file into per-routine listings.
+// --cputrace <state> <frames> <out.txt>: every instruction the oracle executes, one line per opcode:
+// `KK:PPPP b0 b1 b2 b3 A=.... X=.... Y=.... S=.... D=.... B=.. P=nvmxdizc`, the bytes read at execution time (so
+// self-modifying code such as the race's $357B is listed as it ran), plus `-- frame N` at each new frame. Only WRAM,
+// its low mirror and ROM are read; anything else prints `??`. tools/cputrace_dis.py turns it into per-routine listings.
 static uint8_t cpuTracePeek(Snes* s, const uint8_t* rom, int romLen, uint8_t bank, uint16_t adr, int* ok) {
   *ok = 1;
   if (bank == 0x7E || bank == 0x7F) return s->ram[((bank & 1) << 16) | adr];
@@ -7693,24 +6937,20 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
   if (!f) { fprintf(stderr, "cputrace: cannot write %s\n", outPath); CtOracleDestroy(s); free(rom); return 2; }
   uint32_t fr0 = s->frames, last = s->frames;
   long n = 0;
-  // CPUTRACE_UNIQUE=1: print an instruction only the first time its (bank, pc, bytes, M, X, D) is seen -- a whole
-  // stage's code in a few thousand lines instead of millions. Every variant of a patched instruction still prints.
+  // CPUTRACE_UNIQUE=1: print an instruction only the first time its (bank, pc, bytes, M, X, D) is seen.
   int uniq = getenv("CPUTRACE_UNIQUE") != NULL;
   enum { CT_TRSET = 1 << 20 };
   uint64_t* set = uniq ? (uint64_t*)calloc(CT_TRSET, sizeof(uint64_t)) : NULL;
-  // CPUTRACE_FROM=<KPPPP hex> (24-bit, e.g. C08385; no colon): print nothing -- and mark nothing seen -- until that address first executes. A
-  // unique trace that starts in the host's code would otherwise hide every later run of an instruction the host
-  // already ran (the field and a stage share C0/FD library code), and a translation made from it would miss them.
+  // CPUTRACE_FROM=<KPPPP hex> (24-bit, e.g. C08385): print nothing, and mark nothing seen, until that address first
+  // executes (the field and a stage share C0/FD library code, which a unique trace would otherwise hide).
   const char* fromEnv = getenv("CPUTRACE_FROM");
   uint32_t fromPc = fromEnv ? (uint32_t)strtoul(fromEnv, NULL, 16) : 0;
   int started = fromEnv == NULL;
-  // CPUTRACE_BTN=<hex> or <hex:frames,...>: the controller, in LakeSnes SERIAL order (A = 100) -- held for the whole
-  // trace, or a --btnscript-style script over the trace's frames -- so the code a press reaches is traced from the
-  // frame the press lands, not from a state saved after its NMI already ran.
+  // CPUTRACE_BTN=<hex> or <hex:frames,...>: the controller in LakeSnes serial order (A = 100), held for the whole trace
+  // or a --btnscript-style script over its frames.
   const char* btnEnv = getenv("CPUTRACE_BTN");
   uint32_t btnFrame = 0xFFFFFFFFu;
-  // CPUTRACE_BEAM=1: each line also carries the beam and the master clock at the instruction's start -- ` v=VVV h=HHHH
-  // c=<cycles>` -- so a raster-dependent read (C3/02DD's $213C/$213D) can be laid against the code that ran before it.
+  // CPUTRACE_BEAM=1: each line also carries the beam and the master clock at the instruction's start (` v=VVV h=HHHH c=N`).
   int beam = getenv("CPUTRACE_BEAM") != NULL;
   fprintf(f, "-- frame 0\n");
   while (s->frames - fr0 < (uint32_t)frames) {
@@ -7766,12 +7006,10 @@ static int runCpuTrace(const char* romPath, const char* statePath, int frames, c
   return 0;
 }
 
-// --xlatcmp <state> <frames> -- A TRANSLATED STAGE, LOCKSTEPPED AGAINST THE ORACLE ONE INSTRUCTION AT A TIME.
-// Two copies of the same savestate: the oracle runs cpu_runOpcode, the port hardware runs the translated program
-// (src/xlat/seq_c3.c) on the same vendored clock. At every instruction boundary the two CPUs must agree on every
-// register and flag, on the master-cycle count and on the beam position; at every frame boundary on all of WRAM,
-// VRAM, CGRAM and OAM. The first disagreement is printed with the address the translation was at -- nothing is
-// averaged, so a green run means the translation ran exactly the cartridge's instruction stream and clock.
+// --xlatcmp <state> <frames>: a translated program (src/xlat/, kept as a reference) in lockstep with the oracle, one
+// instruction at a time, from two copies of the same savestate on the same vendored clock. At every instruction the
+// CPUs must agree on every register and flag, the master-cycle count and the beam; at every frame on WRAM, VRAM,
+// CGRAM, OAM and the picture. The first disagreement is printed with the translation's address.
 #include "seq_xlat.h"
 #include "hdma_table.h"   // --hdmabuild / --hdmafuzz: FD/C2C1 native
 #include "seq_race.h"   // --racestep: the race task $7E:485D, native
@@ -7838,11 +7076,11 @@ static int xlatCmpHook(CtXlat* x) {
     int dc = memcmp(p->ppu->cgram, o->ppu->cgram, sizeof p->ppu->cgram) != 0;
     int dm = memcmp(p->ppu->oam, o->ppu->oam, sizeof p->ppu->oam) != 0 || memcmp(p->ppu->highOam, o->ppu->highOam, sizeof p->ppu->highOam) != 0;
     int dp = memcmp(p->ppu->pixelBuffer, o->ppu->pixelBuffer, sizeof p->ppu->pixelBuffer) != 0;
-    // A seeded run (XLATCMP_SEED) starts from a power-on PPU, so the VRAM/CGRAM/OAM the stage never writes differ from
-    // the oracle's leftovers by construction: there only the WRAM and the PICTURE are graded, the rest is reported.
+    // A seeded run (XLATCMP_SEED) starts from a power-on PPU, so VRAM/CGRAM/OAM the stage never writes differ: only the
+    // WRAM and the picture are graded, the rest is reported.
     int fatal = k->seeded ? (dr || dp) : (dr || dv || dc || dm || dp);
-    // XLATCMP_WRAM hands the stage a DIFFERENT image on purpose: there WRAM is not graded (the instruction lockstep
-    // still is -- the first register the host's bytes change is the verdict), only the picture.
+    // XLATCMP_WRAM hands the stage a different image on purpose: WRAM is not graded there, only the instruction
+    // lockstep and the picture.
     if (getenv("XLATCMP_WRAM")) { fatal = dp; if (dr && !dp) dr = 0; }
     if (dr || dv || dc || dm || dp) {
       if (fatal || !k->seedReported) printf("xlatcmp: frame %u memory differs: wram=%d vram=%d cgram=%d oam=%d picture=%d%s\n", p->frames - k->f0, dr, dv, dc, dm, dp, fatal ? "" : " (seeded: not graded)");
@@ -7864,12 +7102,11 @@ static int xlatCmpHook(CtXlat* x) {
   k->steps++;
   return 0;
 }
-// --wipedump <state> <k> <in.bin> <out.bin> -- THE CARTRIDGE'S OWN INPUTS AND OUTPUT OF ONE WINDOW-WIPE CALL. Runs the
-// oracle from the state to the k-th execution of C3:000E (C0/22FA's JSL, once per field frame while a wipe runs), writes
-// its 128 KB WRAM there (in.bin) and prints the registers and the beam (vPos, hPos) at that instant, then runs on to
-// C0:22FE (the RTL's landing) and writes the WRAM again (out.bin). tools/wipe_step_cmp.py hands in.bin and the beam to
-// `Belthasar --wipecall` and diffs the port's WRAM against out.bin: the routine translated + the host's call glue, graded
-// on the cartridge's exact inputs (field_window_wipe.md sec. 5).
+// --wipedump <state> <k> <in.bin> <out.bin>: the cartridge's inputs and output of one window-wipe call. Runs the oracle to
+// the k-th execution of C3:000E (C0/22FA's JSL, once per field frame while a wipe runs), writes the 128 KB WRAM (in.bin)
+// and prints the registers and the beam, then runs to C0:22FE (the RTL's landing) and writes out.bin.
+// tools/wipe_step_cmp.py feeds in.bin and the beam to `Belthasar --wipecall` and diffs against out.bin
+// (disasm/notes/field_window_wipe.md sec. 5).
 static int runWipeDump(const char* romPath, const char* statePath, int k, const char* inPath, const char* outPath, const char* maskPath,
                        uint32_t entryPc, uint32_t exitPc, uint32_t maskPc) {
   uint8_t* rom = NULL;
@@ -7893,15 +7130,13 @@ static int runWipeDump(const char* romPath, const char* statePath, int k, const 
   { FILE* f = fopen(outPath, "wb"); if (f) { fwrite(s->ram, 1, sizeof s->ram, f); fclose(f); } }
   printf("wipedump: back at %06X after %ld instructions -- $0351=%02X $0386=%02X v=%u h=%u -> %s, %s\n", exitPc,
          g2, s->ram[0x0351], s->ram[0x0386], s->vPos, s->hPos, inPath, outPath);
-  // The window registers the frame is drawing with -- what the last NMI pushed (the shadows at the call may already
-  // have been rewritten by the script, and a channel the call enables through the HDMAEN shadow starts at the next NMI).
+  // The window registers the frame draws with, as the last NMI pushed them (a channel the call enables through the
+  // HDMAEN shadow starts at the next NMI).
   printf("wipedump: regs now -- W1=%d..%d W2=%d..%d hdma ch2=%d ch7=%d\n", s->ppu->window1left, s->ppu->window1right,
          s->ppu->window2left, s->ppu->window2right, s->dma->channel[2].hdmaActive, s->dma->channel[7].hdmaActive);
-  // ...and WINDOW 2 on every remaining visible line of this frame (sampled as --hdma's scanline trace samples: at each
-  // vPos change), the lines the HDMA channel draws from the table this call wrote; the routine returns inside the
-  // visible frame (v = 35 above), so the lines before it are not reported. On the way, at C0:00CB -- the return of
-  // C0/00C7's `JSL FD/C2C1`, which flips $0153 bit 0 -- the WRAM once more (<mask.bin>): the state the port's frame
-  // renders from (its C0/00C7 has run), with this call's tables untouched.
+  // Then window 2 on each remaining visible line of the frame (sampled at each vPos change, as --hdma does), drawn from
+  // the table this call wrote. On the way, at C0:00CB (the return of C0/00C7's `JSL FD/C2C1`, which flips $0153 bit 0)
+  // the WRAM once more (<mask.bin>): the state the port's frame renders from.
   { int lastV = -1, dumped = 0, firstV = s->vPos;
     for (int guard = 0; guard < 4000000; guard++) {
       int v = s->vPos;
@@ -7918,15 +7153,12 @@ static int runWipeDump(const char* romPath, const char* statePath, int k, const 
   CtOracleDestroy(s); free(rom);
   return 0;
 }
-// --wipeaudit <state|boot> <frames> -- THE NATIVE WINDOW WIPE AGAINST EVERY CALL THE CARTRIDGE MAKES. Runs the oracle and, at
-// each entry into C3/01E4 (C3/000E's JMP from the field's C0/22FA and the world's C6/E27E, or the $C3 stage's own JSL) and
-// into the world's window object C6/E241 / C6/E27E, copies its 128 KB WRAM and runs the native routine on the copy
-// (wipe.h: CtWipeRoutine with the cartridge's own X and data bank; CtOwWindowObject with the target alone -- its X and
-// bank are the port's, so a call where the cartridge's differ shows up as a difference); when the cartridge's RTL lands
-// (the return address the call's JSL pushed, S back where it was) the two WRAMs must agree on every byte but the 32 stack
-// bytes below the caller's S, the pushes the routine leaves dead. A call interrupted on the cartridge (an instruction
-// outside banks C3 / C6 before the RTL: an NMI or IRQ's work is in its WRAM) is counted apart, not graded. One line per
-// call site (target, return address): calls, modes, the registers the routine reads, identical ones; then the verdict.
+// --wipeaudit <state|boot> <frames>: the native window wipe against every call the cartridge makes. At each entry into
+// C3/01E4 (from C3/000E, i.e. the field's C0/22FA and the world's C6/E27E, or a $C3 stage's JSL) and into the world's
+// window object C6/E241 / C6/E27E, the WRAM is copied and the native routine run on the copy (wipe.h: CtWipeRoutine with
+// the cartridge's X and data bank; CtOwWindowObject with the target alone). When the cartridge's RTL lands, the two
+// WRAMs must agree on every byte but the 32 dead stack bytes below the caller's S. A call interrupted on the cartridge
+// (an instruction outside banks C3 / C6 before the RTL) is counted apart. One line per call site, then the verdict.
 #include "wipe.h"
 static int runWipeAudit(const char* romPath, const char* statePath, int frames) {
   uint8_t* rom = NULL;
@@ -8000,11 +7232,10 @@ static int runXlatCmp(const char* romPath, const char* statePath, int frames) {
   Snes* o = ctLoadStateOracle(romPath, statePath, &romO);
   Snes* p = o ? ctLoadStateOracle(romPath, statePath, &romP) : NULL;
   if (!o || !p) return 2;
-  // XLATCMP_AT=<K:PPPP hex>: run the oracle to the first execution of that address (the stage's handoff, C30000)
-  // and start the comparison there. XLATCMP_SEED=<list>: build the port's hardware the way a HOST would -- a fresh
-  // machine given only the WRAM, the CPU registers and the clock (beam, cycle count, frame parity, the $42xx latches)
-  // -- plus whichever of `ppu`, `dma`, `apu` the list names, copied from the oracle. What is left out stays at its
-  // power-on state, so a green run proves the stage never reads it.
+  // XLATCMP_AT=<K:PPPP hex>: run the oracle to the first execution of that address (the stage's handoff, C30000) and
+  // compare from there. XLATCMP_SEED=<list>: build the port's hardware as a host would, a fresh machine given the WRAM,
+  // the CPU registers and the clock (beam, cycles, frame parity, the $42xx latches) plus whichever of `ppu`, `dma`,
+  // `apu` the list names; the rest stays at power-on, so a green run shows the stage never reads it.
   { const char* at = getenv("XLATCMP_AT");
     if (at) {
       uint32_t want = (uint32_t)strtoul(at, NULL, 16); long g = 0;
@@ -8015,18 +7246,18 @@ static int runXlatCmp(const char* romPath, const char* statePath, int frames) {
                   printf("xlatcmp: oracle WRAM at %06X -> %s\n", want, dw); } }
       const char* seed = getenv("XLATCMP_SEED");
       if (seed && !strcmp(seed, "stage")) {
-        // XLATCMP_SEED=stage: the PRODUCTION handoff -- CtXlatStageOpen exactly as a host calls it, given the oracle's
-        // WRAM and Y, then the oracle's SPC loaded into the stage's own (a host lends its CtAudio's). Grades the
-        // CT_XLAT_HANDOFF_* clock too, so it is only green from a state whose handoff IS that clock (boot f8314).
+        // XLATCMP_SEED=stage: CtXlatStageOpen as a host calls it, given the oracle's WRAM and Y, then the oracle's SPC
+        // loaded into the stage's. It grades the CT_XLAT_HANDOFF_* clock too, so it passes only from a state whose
+        // handoff has that clock (boot f8314).
         CtOracleDestroy(p); p = NULL; free(romP); romP = NULL;
         int len = 0; romP = CtReadFile(romPath, &len);
         static CtXlatStage* st = NULL;
         st = CtXlatStageOpen(romP, len, o->ram, (uint8_t)o->cpu->a, NULL, o->cpu->y);
         if (!st) { printf("xlatcmp: CtXlatStageOpen refused $0384=%02X\n", (uint8_t)o->cpu->a); return 2; }
         p = CtXlatStageHardware(st);
-        // XLATCMP_WRAM=<128 KB file>: the stage gets THIS WRAM instead of the oracle's -- a host's handoff image
-        // (Belthasar CT_XLAT_HANDOFF_WRAM). The first divergence is then the first byte the stage READS that the
-        // host does not have right; XLATCMP_PATCH=<adr=val,...> overrides bytes on top, to walk to the next one.
+        // XLATCMP_WRAM=<128 KB file>: the stage gets this WRAM instead of the oracle's (a host's handoff image, Belthasar
+        // CT_XLAT_HANDOFF_WRAM); the first divergence is the first byte the stage reads that the host has wrong.
+        // XLATCMP_PATCH=<adr=val,...> overrides bytes on top.
         { const char* hw = getenv("XLATCMP_WRAM");
           if (hw) { FILE* hf = fopen(hw, "rb"); size_t n = hf ? fread(p->ram, 1, sizeof p->ram, hf) : 0; if (hf) fclose(hf);
                     printf("xlatcmp: stage WRAM <- %s (%zu bytes)\n", hw, n); }
@@ -8067,11 +7298,9 @@ static int runXlatCmp(const char* romPath, const char* statePath, int frames) {
         p->ramAdr = o->ramAdr;
         memcpy(p->portAutoRead, o->portAutoRead, sizeof p->portAutoRead);
         p->ppu->evenFrame = o->ppu->evenFrame;
-        // XLATCMP_PERTURB=<list>: the registers the handoff leaves as the HOST had them (y, d, c, v) scrambled -- a
-        // green run proves the stage overwrites them before it reads them.
+        // XLATCMP_PERTURB=<list>: scramble the registers the handoff leaves as the host had them (y, d, c, v), on both
+        // machines so the lockstep holds; XLATCMP_HASHOUT records the frames to diff against an unscrambled run.
         { const char* pt = getenv("XLATCMP_PERTURB");
-          // Both machines get the same scramble (so the lockstep still holds); XLATCMP_HASHOUT then records the frames,
-          // and a diff against an unscrambled run is the verdict.
           if (pt) { Cpu* cs[2] = { pc_, o->cpu };
                     for (int q = 0; q < 2; q++) {
                       if (strchr(pt, 'y')) cs[q]->y ^= 0x5A5A; if (strchr(pt, 'd')) cs[q]->dp ^= 0x0F00;
@@ -8116,12 +7345,9 @@ static int runXlatCmp(const char* romPath, const char* statePath, int frames) {
   return ok && !k.bad ? 0 : 1;
 }
 
-// --xlatphase <state> <handoffPc hex> <extraCycles> <frames> -- HOW MUCH A STAGE DEPENDS ON ITS ENTRY CLOCK PHASE.
-// Runs the oracle to the first execution of <handoffPc>, delays the clock there by <extraCycles> master cycles (the
-// CPU does nothing, exactly as if the code before it had taken that much longer), then prints one signature line per
-// frame: the race's RNG accumulator $0386, the handshake bytes $1402/$1410, and CRCs of VRAM, OAM and the picture.
-// Two runs with different delays, diffed, show which of the stage's outputs the entry phase reaches.
-
+// --xlatphase <state> <handoffPc hex> <extraCycles> <frames>: how much a stage depends on its entry clock phase. Runs the
+// oracle to <handoffPc>, idles <extraCycles> master cycles there, then prints one signature line per frame: the race's
+// RNG accumulator $0386, the handshake bytes $1402/$1410 and CRCs of VRAM, OAM and the picture. Diff two delays.
 static int runXlatPhase(const char* romPath, const char* statePath, uint32_t handoff, int extra, int frames) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -8131,8 +7357,7 @@ static int runXlatPhase(const char* romPath, const char* statePath, uint32_t han
   printf("xlatphase: handoff %06X at v=%u h=%u cyc=%lld, delaying %d cycles\n", handoff, s->vPos, s->hPos,
          (long long)s->cycles, extra);
   if (extra > 0) snes_runCycles(s, extra);
-  // XLATPHASE_APU=<n>: advance ONLY the SPC by n of its cycles at the handoff -- the sound side's phase against the
-  // CPU's, which a port whose audio runs on its own pacing does not share with the stage.
+  // XLATPHASE_APU=<n>: advance only the SPC by n of its cycles at the handoff.
   { const char* ap = getenv("XLATPHASE_APU"); if (ap) apu_runCycles(s->apu, atoi(ap)); }
   uint32_t f0 = s->frames;
   for (int k = 0; k < frames; k++) {
@@ -8147,14 +7372,13 @@ static int runXlatPhase(const char* romPath, const char* statePath, uint32_t han
   return 0;
 }
 
-// --xlatentries <state> <frames> -- every entry into the $C3 sequence engine over a long run: at each execution of
-// C3:0000 the frame, the beam, the master-cycle count mod 8 (what snes_syncCycles aligns on), the registers, and the
-// history bytes a stage inherits ($0384 the entry, $0386 the C3/02DD accumulator). Tells whether two visits to the
-// same stage start from the same clock and the same history.
+// --xlatentries <state> <frames>: each entry into the $C3 sequence engine (C3:0000) and the gate warp: the frame, the
+// beam, the master cycles mod 8 (what snes_syncCycles aligns on), the registers and the bytes a stage inherits ($0384 the
+// entry, $0386 the C3/02DD accumulator), to tell whether two visits start from the same clock and history.
 static int runXlatEntries(const char* romPath, const char* statePath, int frames) {
   uint8_t* rom = NULL;
   Snes* s = NULL;
-  if (!strcmp(statePath, "boot")) {                  // `boot`: from POWER-ON, no savestate -- the attract's own history
+  if (!strcmp(statePath, "boot")) {                  // `boot`: from power-on, no savestate (the attract's own history)
     int len = 0; rom = CtReadFile(romPath, &len);
     s = rom ? CtOracleCreate(rom, len, NULL) : NULL;
   } else s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -8164,7 +7388,7 @@ static int runXlatEntries(const char* romPath, const char* statePath, int frames
   while ((int)(s->frames - f0) < frames) {
     const Cpu* c = s->cpu;
     uint32_t pc = ((uint32_t)c->k << 16) | c->pc;
-    // ...and the GATE WARP's four entries (C0/3FE8-3FFC `JML $FD:FFF1/FFEB/FFE8/FFE5`), the same clock fields.
+    // The gate warp's four entries (C0/3FE8-3FFC `JML $FD:FFF1/FFEB/FFE8/FFE5`).
     int gwEntry = (pc == 0xFDFFF1 || pc == 0xFDFFEB || pc == 0xFDFFE8 || pc == 0xFDFFE5);
     if ((pc == 0xC30000 || gwEntry) && !inside) {
       inside = !gwEntry;
@@ -8174,8 +7398,8 @@ static int runXlatEntries(const char* romPath, const char* statePath, int frames
       printf("xlatentries:   evenFrame=%d inVblank=%d inNmi=%d nmiEn=%d autoJoy=%d/%u fastMem=%d openBus=%02X ramAdr=%05X apuCatch=%.4f\n",
              s->ppu->evenFrame, s->inVblank, s->inNmi, s->nmiEnabled, s->autoJoyRead, s->autoJoyTimer, s->fastMem,
              s->openBus, s->ramAdr, s->apuCatchupCycles);
-      // CT_XLATENTRIES_WRAM=<prefix>: the 128 KB WRAM at this entry, <prefix>_f<N>.wram -- the cartridge's side of the
-      // port's CT_XLAT_HANDOFF_WRAM (what the host hands a stage), to diff the two at the same instruction.
+      // CT_XLATENTRIES_WRAM=<prefix>: the 128 KB WRAM at this entry to <prefix>_f<N>.wram, the cartridge's side of the
+      // port's CT_XLAT_HANDOFF_WRAM.
       { const char* wp = getenv("CT_XLATENTRIES_WRAM");
         if (wp && *wp && !gwEntry) { char fn[1024]; snprintf(fn, sizeof fn, "%s_f%u.wram", wp, s->frames - f0);
           FILE* wf = fopen(fn, "wb"); if (wf) { fwrite(s->ram, 1, 0x20000, wf); fclose(wf); } } }
@@ -8190,6 +7414,9 @@ static int runXlatEntries(const char* romPath, const char* statePath, int frames
   return 0;
 }
 
+// C2/62ED, the overworld's per-cell region nibble (the player's position -> music zone, `$1B9B,X` -> song, C2/2F25),
+// micro-executed against CtWorldRegion. The grid is seeded so each byte's two nibbles differ: on world 0's own data
+// a swapped even/odd select does not show.
 static int runSweepOwRegion(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -8229,6 +7456,9 @@ static int runSweepOwRegion(const char* romPath) {
   return bad ? 1 : 0;
 }
 
+// C0/305D, the arrival snap (the path C0/5129 takes on arrival when $1C81,X bit 0 is set), against
+// ctArriveSnap305D. The sub-tile seeds straddle the X centre ($80) and the Y bottom ($F0) with a non-zero low
+// nibble, since `AND #F0` drops the sub-pixel ($8F and $80 behave alike).
 static int runSweepSnap(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -8239,7 +7469,7 @@ static int runSweepSnap(const char* romPath) {
   static uint8_t work[0x20000];
   const int idx = 2;
   static const int SUB[] = { 0x00, 0x0F, 0x70, 0x7F, 0x80, 0x8F, 0x90, 0xF0, 0xFF };
-  static const int HI[]  = { 0x00, 0x13 };            // the position's HIGH byte must not matter
+  static const int HI[]  = { 0x00, 0x13 };            // the position's high byte must not matter
   int ok = 0, bad = 0, calls = 0, lost = 0, shown = 0;
   for (int xi = 0; xi < 9; xi++)
    for (int yi = 0; yi < 9; yi++)
@@ -8280,16 +7510,11 @@ static int runSweepSnap(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: the Y-SORTED SPRITE LIST, C0/A98A (unlink) and C0/A9CD (link). These BRACKET C0/AB45 inside
-// the movement pass, and they are the piece that makes the draw pass reproducible: --checksort
-// already MEASURED that rebuilding the list from scratch each frame does not work (1392 head + 3780
-// next mismatches over 180/180 frames), so the chain order is history and only incremental
-// maintenance reproduces it.
-//
-// The seeds deliberately include INCOHERENT list states (a flag that says linked while prev/next say
-// otherwise, a bucket head that does not point at us). The ROM validates none of that -- it branches
-// on the flag and on the sign of prev/head and does whatever follows -- so a port that "tidied up"
-// an inconsistent state would diverge exactly where the engine actually lives.
+// The Y-sorted sprite list, C0/A98A (unlink) and C0/A9CD (link), which bracket C0/AB45 in the movement pass,
+// against CtObjListUnlink / CtObjListLink. The chain order depends on history (--checksort shows a rebuild from
+// scratch does not reproduce it), so the list must be maintained incrementally. The seeds include incoherent
+// states (a flag that says linked while prev/next disagree, a bucket head that does not point at us): the ROM
+// validates none of it and branches on the flag and the signs of prev/head.
 static int runSweepList(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -8299,14 +7524,13 @@ static int runSweepList(const char* romPath) {
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000];
   const int idx = 2;
-  static const int FLAG[] = { 0x80, 0x00 };            // bit7 = OUT of the list
-  static const int PREV[] = { 0x80, 0x04, 0x10 };      // $80 = we are the HEAD
-  // $FF is not a spare: A9AD stores A, and on the head arm with a NEGATIVE next A still HOLDS
-  // THAT NEXT rather than $80. With $80 as the only negative seed, "store next" and "store $80"
-  // are the same instruction and the difference cannot be seen.
-  static const int NEXT[] = { 0x80, 0x06, 0x20, 0xFF };// $80/$FF = we are the TAIL
+  static const int FLAG[] = { 0x80, 0x00 };            // bit7 = out of the list
+  static const int PREV[] = { 0x80, 0x04, 0x10 };      // $80 = we are the head
+  // $FF as well as $80: A9AD stores A, and on the head arm with a negative next A still holds that
+  // next rather than $80.
+  static const int NEXT[] = { 0x80, 0x06, 0x20, 0xFF };// $80/$FF = we are the tail
   static const int SY[]   = { 0x00, 0x33, 0x80, 0xFF };// -> buckets 0, $18, $40, $7E
-  static const int HEAD[] = { 0x80, -1, 0x0A };        // empty / points at US / points at another
+  static const int HEAD[] = { 0x80, -1, 0x0A };        // empty / points at us / points at another
   int uOk = 0, uBad = 0, uShown = 0, uCalls = 0;
   int lOk = 0, lBad = 0, lShown = 0, lCalls = 0, lost = 0;
   for (int which = 0; which < 2; which++)
@@ -8316,14 +7540,14 @@ static int runSweepList(const char* romPath) {
       for (int yi = 0; yi < 4; yi++)
        for (int hi = 0; hi < 3; hi++) {
          uint8_t* r = s->ram;
-         // A distinguishable pattern across BOTH pages, so any stray write shows. $0F00 is inside
-         // the window ON PURPOSE: A9BC stores through Y with no sign test, so the TAIL case writes
-         // $0E80 + $80 = $0F00, object 0's activation latch. That is the ROM's own behaviour.
+         // A distinguishable pattern across both pages, so any stray write shows. $0F00 is inside the
+         // window: A9BC stores through Y with no sign test, so the tail case writes $0E80 + $80 = $0F00,
+         // object 0's activation latch, as the ROM does.
          for (int k = 0; k < 0x180; k++) r[0x0E00 + k] = (uint8_t)(0x11 + k * 0x07);
          r[0x0E01 + idx] = (uint8_t)FLAG[fi];
          r[0x0E80 + idx] = (uint8_t)PREV[pi];
          r[0x0E81 + idx] = (uint8_t)NEXT[ni];
-         r[0x0A80 + idx] = (uint8_t)SY[yi]; r[0x0A81 + idx] = 0x01;   // bit8 set: must NOT bucket
+         r[0x0A80 + idx] = (uint8_t)SY[yi]; r[0x0A81 + idx] = 0x01;   // bit8 set: must not bucket
          int bucket = (SY[yi] >> 1) & 0xFE;
          r[0x0E00 + bucket] = (uint8_t)(HEAD[hi] < 0 ? idx : HEAD[hi]);
          r[0x016D] = (uint8_t)idx; r[0x016E] = 0;
@@ -8367,12 +7591,9 @@ static int runSweepList(const char* romPath) {
   return (uBad || lBad) ? 1 : 0;
 }
 
-// STEP: the per-object SCREEN POSITION, C0/AB45 -- item 4, the last table the C0/CAD9 tree reads
-// that nothing in the port filled. Small enough to sweep exhaustively over its six inputs.
-//
-// The X and Y seeds are DELIBERATELY DECOUPLED (each axis draws from a different index into the
-// same arrays). Driving both from one index makes camX == camY and wx == wy in every case, and a
-// port that computed the Y position from the X inputs would be byte-identical to the ROM.
+// The per-object screen position, C0/AB45 (read by the C0/CAD9 tree), against CtObjScreenPos over its six
+// inputs. The X and Y seeds come from different indices into the same arrays, so a port that computed Y from
+// the X inputs would differ.
 static int runSweepScreen(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -8384,9 +7605,8 @@ static int runSweepScreen(const char* romPath) {
   const int idx = 2;
   static const int PH[]  = { 0x0000, 0x0003, 0x0007, 0x0008, 0xFFFF };  // AND #0007: 0,3,7,0,7
   static const int CAM[] = { 0x0000, 0x0020, 0x00FF, 0xAA40 };          // AND #00FF drops the high
-  // The world seeds have to straddle the borrow BOTH ways and produce a bit8 that is set WITHOUT a
-  // borrow ($1F00 >> 4 = $1F0 against a small camera), or `ORA #0100` and `AND #01FF` cannot be
-  // told apart -- the ORA would look like it was doing the AND's work.
+  // The world seeds straddle the borrow both ways and give a bit 8 set without a borrow ($1F00 >> 4 = $1F0
+  // against a small camera), so `ORA #0100` and `AND #01FF` are told apart.
   static const int W[]   = { 0x0000, 0x0100, 0x0800, 0x1F00, 0x8000, 0xFFF0 };
   static const int OUT[] = { 0x01D9, 0x01DA, 0x01DB, 0x01DC, 0x01DD, 0x01DE, 0x01DF, 0x01E0 };
   int ok = 0, bad = 0, shown = 0, calls = 0, lost = 0;
@@ -8442,18 +7662,11 @@ static int runSweepScreen(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: the OBJ SLOT ALLOCATOR -- item 2 of the loader chain, and the routine that fills $1700 and
-// $0D00, two of the three tables the CAD9 tree reads that nothing in the port writes yet. Both
-// halves are micro-executed against the C port: C0/6F9A (the state dispatch + both claim paths) and
-// C0/7056 (the release).
-//
-// Why the STATE is swept and not assumed: C0/6F9A does `LDA $1100,X / ASL A / TAX / JSR ($6FA7,X)`,
-// and the nine-entry table at $6FA7 reads B9 6F  B9 6F  B9 6F  BA 6F  BA 6F  B9 6F  B9 6F  B9 6F
-// B9 6F -- with $6FB9 holding the single byte `60` = RTS. So seven of the nine states allocate
-// NOTHING. A sweep that only drove state 4 would have graded one arm and called the routine done.
-// States above 8 are deliberately NOT swept: the table has nine entries, so state 9 would make the
-// ROM read $6FB9/$6FBA as a pointer and jump into the weeds. That is not a case the engine can
-// reach, and micro-executing it would grade nothing but the crash.
+// The OBJ slot allocator, which fills $1700 and $0D00 for the CAD9 tree: C0/6F9A (the state dispatch and both
+// claim paths) against CtObjSlotAlloc, and C0/7056 (the release) against CtObjSlotFree.
+// The state is swept: C0/6F9A does `LDA $1100,X / ASL A / TAX / JSR ($6FA7,X)`, and the nine-entry table there
+// sends seven states to $6FB9 (a bare RTS), so only states 3 and 4 allocate. States above 8 are not swept: the
+// ROM would read $6FB9/$6FBA as a pointer, a case the engine cannot reach.
 static int runSweepSlot(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -8465,11 +7678,10 @@ static int runSweepSlot(const char* romPath) {
   const int idx = 2;
   int lost = 0;
 
-  // ---- HALF A: C0/6F9A, the claim ---------------------------------------------------------------
-  // The pool patterns have to make the two scans DISAGREE, or the sweep grades a single formula and
-  // not the two search orders. Class 0 walks $19 DOWN to $01; every other class walks $0C UP to $16
-  // in steps of two demanding a consecutive pair. Pattern 4 (evens free, odds taken) is the one that
-  // separates them: class 0 finds $18 immediately, the pair scan finds nothing at all.
+  // ---- Half A: C0/6F9A, the claim ----
+  // The pool patterns make the two scans disagree. Class 0 walks $19 down to $01; every other class walks $0C
+  // up to $16 in steps of two for a consecutive pair. Pattern 4 (evens free) separates them: class 0 finds $18,
+  // the pair scan finds nothing.
   static const int STATE[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 0x83, 0xFF };
   static const int NPAT = 10;
   int aOk = 0, aBad = 0, aShown = 0, aCalls = 0;
@@ -8484,17 +7696,14 @@ static int runSweepSlot(const char* romPath) {
             case 1: free_ = 0; break;                                  // everything taken
             case 2: free_ = (k == 0x19); break;                        // only the top single slot
             case 3: free_ = (k == 0x01); break;                        // only the bottom one: full scan
-            case 4: free_ = ((k & 1) == 0); break;                     // evens free -> NO pair exists
-            case 5: free_ = (k == 0x0C || k == 0x0D); break;           // only the FIRST pair
-            case 6: free_ = (k == 0x16 || k == 0x17); break;           // only the LAST pair
+            case 4: free_ = ((k & 1) == 0); break;                     // evens free -> no pair exists
+            case 5: free_ = (k == 0x0C || k == 0x0D); break;           // only the first pair
+            case 6: free_ = (k == 0x16 || k == 0x17); break;           // only the last pair
             case 7: free_ = (k == 0x03 || k == 0x10 || k == 0x11); break;
-            // Pattern 8 is the ONLY one that isolates slot 0: the single scan runs $19 DOWN and
-            // ends on `BNE` at X=0, so slot 0 is never handed out -- but with any higher slot free
-            // the scan stops before ever reaching it, and a port that walked to 0 looked identical.
+            // Only slot 0 free: the single scan runs $19 down and ends on `BNE` at X=0, so slot 0 is
+            // never handed out.
             case 8: free_ = (k == 0x00); break;
-            // Pattern 9 puts a free pair at an ODD start. The pair scan steps by TWO, so it cannot
-            // see $0D/$0E; a port that stepped by one finds it. With every other pattern the two
-            // step sizes land on the same slot and the mutation was invisible.
+            // A free pair at an odd start: the pair scan steps by two and does not see $0D/$0E.
             default: free_ = (k == 0x0D || k == 0x0E); break;
           }
           r[0x0B88 + k] = (uint8_t)(free_ ? 0x80 : 0x02);
@@ -8522,9 +7731,8 @@ static int runSweepSlot(const char* romPath) {
         for (int k = 0; k < 0x20; k++) if (work[0x0B88 + k] != r[0x0B88 + k]) diff = 1;
         if (work[0x0D00 + idx] != r[0x0D00 + idx] || work[0x0D01 + idx] != r[0x0D01 + idx]) diff = 1;
         if (work[0x1700 + idx] != r[0x1700 + idx] || work[0x1701 + idx] != r[0x1701 + idx]) diff = 1;
-        // my < 0 = the RTS arms. The port declines to name a carry there, but the arms are a BARE
-        // RTS reached without touching P, so the entry carry (seeded 0) provably survives -- that
-        // much IS derived from the bytes and is graded.
+        // my < 0 = the RTS arms. The port names no carry there, but a bare RTS reached without touching P
+        // keeps the entry carry (seeded 0), and that is graded.
         if (my < 0) { if (oc != 0) diff = 1; }
         else if (my != oc) diff = 1;
         if (!diff) aOk++;
@@ -8538,18 +7746,17 @@ static int runSweepSlot(const char* romPath) {
         }
       }
 
-  // ---- HALF B: C0/7056, the release -------------------------------------------------------------
-  // The slot is recovered from $1700,X >> 5 -- the allocator's own scale read backwards -- so the
-  // sweep drives $1700 directly, including values that are NOT slot<<5, to grade the shift rather
-  // than a round trip. The release never consults the class; it frees the PAIR iff the neighbour is
-  // also ours, which is why OWN below seeds the neighbour independently.
+  // ---- Half B: C0/7056, the release ----
+  // The slot is recovered as $1700,X >> 5, so $1700 is driven directly, including values that are not
+  // slot << 5. The release ignores the class and frees the pair iff the neighbour is also ours, so OWN
+  // seeds the neighbour independently.
   static const int TMPL[] = { 0x0000, 0x0020, 0x0180, 0x01A0, 0x02C0, 0x0320, 0x0015, 0x03FF };
   static const int OWN[] = { 0, 1, 2, 3 };   // 0 = neither ours, 1 = slot only, 2 = both, 3 = neighbour only
   int fOk = 0, fBad = 0, fShown = 0, fCalls = 0;
   for (int ti = 0; ti < 8; ti++)
     for (int oi = 0; oi < 4; oi++) {
       uint8_t* r = s->ram;
-      for (int k = 0; k < 0x20; k++) r[0x0B88 + k] = 0x04;             // owned by SOMEONE ELSE
+      for (int k = 0; k < 0x20; k++) r[0x0B88 + k] = 0x04;             // owned by someone else
       int slot = (TMPL[ti] >> 5) & 0xFF;
       if (slot < 0x20) {
         if (OWN[oi] == 1 || OWN[oi] == 2) r[0x0B88 + slot] = (uint8_t)idx;
@@ -8589,22 +7796,14 @@ static int runSweepSlot(const char* romPath) {
   return (aBad || fBad) ? 1 : 0;
 }
 
-// STEP: the two ends of the arena's LIFECYCLE -- C0/B701 (the release, and the draw pass's per-object
-// gate) and C0/CA76 (the FIFO drain that establishes the ORDER). Fourth of the micro-execution sweep
-// family. Together with --sweepc98a (the enqueue) and --sweepcad9 (the visit) this closes the loop:
-//
-//   C0/00D3 JSR C0/A810  movement -> C0/C98A per object  = ENQUEUE
-//   C0/00D6 JSR C0/CA76  the DRAIN -> C0/CAD9 per pop    = the E952 GRANT
-//   C0/00DB BRL C0/B271  the DRAW  -> C0/B309 -> C0/B701 = the FREE
-//
-// HOW THE RASTER DEADLINE IS MADE GRADABLE. C0/CA76 stops when the V counter reaches the word
-// $6B/$6C (measured 0x0078 on every state tried), and CA88-CA91 assembles that counter from two
-// $213D reads. CtOracleRunToPC runs opcodes only -- no PPU stepping -- so `snes->vPos` holds still
-// for the whole micro-execution, which turns a cycle-emergent bound into an INPUT the sweep can
-// drive. Setting it >= 0xF0 (vblank, CA97's signed BPL) makes the drain run the queue to completion
-// deterministically; setting it in [0x78, 0xEF] makes the deadline fire at once. Both are swept.
-// What this canNOT grade is the real counter ADVANCING mid-drain, which is what cuts the queue on a
-// busy scene -- measured at 24 frames out of 90 on DEMO8_gtu, 1/90 on party3_field, 0/90 on bedslide.
+// The two ends of the arena's lifecycle: C0/B701 (the release and the draw pass's per-object gate) against
+// CtAnimRelease, and C0/CA76 (the FIFO drain that sets the order) against CtAnimDrainPass. With --sweepc98a (the
+// enqueue) and --sweepcad9 (the visit) this covers the loop:
+//   C0/00D3 JSR C0/A810  movement -> C0/C98A per object  = enqueue
+//   C0/00D6 JSR C0/CA76  the drain -> C0/CAD9 per pop    = the E952 grant
+//   C0/00DB BRL C0/B271  the draw  -> C0/B309 -> C0/B701 = the free
+// C0/CA76 stops when the V counter (two $213D reads, CA88-CA91) reaches the word $6B/$6C. The start line is
+// seeded through `snes->vPos`; see half B for which cases are graded (disasm/notes/anim_drain_cad9.md).
 static int runSweepDrain(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -8615,12 +7814,11 @@ static int runSweepDrain(const char* romPath) {
   static uint8_t work[0x20000];
   int lost = 0;
 
-  // ---- HALF A: C0/B701, the release + draw gate -----------------------------------------------
-  // The three class arms are one law: T = (class & 3) + 1 = the arena arity, and (n & 0x7F) < T
-  // means "not fully staged". Class 3 tail-calls C0/C73A, which is OUTSIDE that law -- it reads
-  // $1B00,X nowhere and frees nothing -- and whose carry is not explicit: C73A has no SEC/RTS or
-  // CLC/RTS at all, only bare RTSs, so its flag is whatever its last ADC left (C97D's `ADC $C5` on
-  // path A, C7EF/C814's `ADC #0008` on paths B and C). The sweep MEASURES that against the port.
+  // ---- Half A: C0/B701, the release + draw gate ----
+  // The three class arms are one law: T = (class & 3) + 1 = the arena arity, and (n & 0x7F) < T means "not
+  // fully staged". Class 3 tail-calls C0/C73A, outside that law (it reads no $1B00,X and frees nothing); C73A
+  // ends in bare RTSs, so its carry is what its last ADC left (C97D's `ADC $C5` on path A, C7EF/C814's
+  // `ADC #0008` on paths B and C).
   static const int NVAL[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x7F,
                               0x80, 0x81, 0x82, 0x83, 0x84, 0xFF };   // $1B00,X
   static const int RPOOL[] = { 0x80808080, 0x02020202, 0x02808080, 0x80020280 };
@@ -8632,31 +7830,24 @@ static int runSweepDrain(const char* romPath) {
         uint8_t* r = s->ram;
         r[0x1201 + idx] = (uint8_t)cls;
         r[0x1B00 + idx] = (uint8_t)NVAL[ni];
-        // THE EMITTERS' inputs. The three Y clamps are chosen by the object's own SCREEN Y --
-        // >= $100, $80..$FF, or <= $7F -- because `B796 STA $C5` is a 16-BIT store that puts bit 8
-        // into $C6. Seeding $C6 separately would be pointless: the emitter overwrites it. The 12
-        // NVAL values give all three ranges.
-        // The screen Y is driven by `pi` and its bit 8 by `ni`, DECOUPLED on purpose. Tying both to
-        // `ni` made path C unreachable for the REPOSITION emitter -- the only n that selects it is
-        // $80, and that one value also fixed the screen Y -- so `BPL` and `BCC` never disagreed and
-        // swapping them went unnoticed. pi = 1 gives $60, which with the live +4 seed produces a
-        // sum that carries while staying below $80: exactly the case that separates them.
+        // The emitters' inputs. The three Y clamps are chosen by the object's screen Y (>= $100, $80..$FF,
+        // <= $7F): `B796 STA $C5` is a 16-bit store that puts bit 8 into $C6.
+        // The screen Y follows `pi` and its bit 8 `ni`, independently, so the reposition emitter reaches
+        // path C (n = $80). pi = 1 gives $60, which with the live +4 seed carries while staying below $80:
+        // the case that separates `BPL` from `BCC`.
         r[0x0A00 + idx] = (uint8_t)(0x30 + ni * 4); r[0x0A01 + idx] = (uint8_t)(ni & 1);
         static const int SY[4] = { 0x20, 0x60, 0xA0, 0xF0 };   // one per Y-range, plus a high one
         r[0x0A80 + idx] = (uint8_t)SY[pi]; r[0x0A81 + idx] = (uint8_t)(ni & 1);
         r[0x1700 + idx] = (uint8_t)(pi * 0x20); r[0x1701 + idx] = 0x00;
-        // Seed BOTH buffers with distinguishable junk: the reposition emitter must read the LIVE
-        // record, the instantiate one the STAGED record, and a shared value would hide a swap.
-        // The two buffers must stay DISTINGUISHABLE (a shared value would hide a staged/live swap)
-        // and must between them cover the displacement ranges the clamps actually branch on:
-        // bit7 clear and set, and sums that straddle $E0 both with and without a carry.
+        // Seed both buffers with different junk: the reposition emitter reads the live record, the
+        // instantiate one the staged record. Between them they cover the displacement ranges the clamps
+        // branch on: bit 7 clear and set, and sums that straddle $E0 with and without a carry.
         for (int k = 0; k < 0x100; k++) { r[0x14802 + k] = (uint8_t)((k * 0x35) & 0xFF);
                                           r[0x14BC0 + k] = (uint8_t)((0xE3 - k * 0x17) & 0xFF); }
         r[0x14F00 + idx] = 0x5A; r[0x14F01 + idx] = 0xA5;
         r[0x14F80 + idx] = 0x3C; r[0x14F81 + idx] = 0xC3;   // class 3's 5th and 6th high bytes (C7AE/C7C2)
-        // 0x1A0, not 0x180: class 3 runs TWENTY-FOUR records, so with the largest seeded base ($60)
-        // its last record's +4 sits at $4CDC -- past the old window's $4CBF end, where a missing or
-        // misplaced store would have been invisible.
+        // 0x1A0: class 3 runs 24 records, so with the largest seeded base ($60) its last record's +4 sits
+        // at $4CDC.
         for (int k = 0; k < 0x1A0; k++) r[0x14B40 + k] = (uint8_t)((0xE3 - k * 0x17) & 0xFF);
         for (int k = 0; k < 4; k++) r[0x0BC0 + k] = (uint8_t)(RPOOL[pi] >> (24 - k * 8));
         r[0x016D] = (uint8_t)idx; r[0x016E] = 0;
@@ -8675,14 +7866,11 @@ static int runSweepDrain(const char* romPath) {
         if (my < 0) { emitSkip++; continue; }   // a class whose gate the port refuses: none is left
         int diff = (my != oc) || work[0x1B00 + idx] != r[0x1B00 + idx];
         for (int k = 0; k < 4; k++) if (work[0x0BC0 + k] != r[0x0BC0 + k]) diff = 1;
-        // THE OAM EMITTERS, ALL SEVEN: class 0's pair (C0/B788 reposition, C0/B8CA instantiate),
-        // class 1's (BA65/BCDC), class 2's (BFF2/C2BF) and class 3's single C0/C73A. None of them
-        // is counted-rather-than-compared any more, so `emitSkip` should stay at zero.
+        // The seven OAM emitters: class 0's pair (C0/B788 reposition, C0/B8CA instantiate), class 1's
+        // (BA65/BCDC), class 2's (BFF2/C2BF) and class 3's C0/C73A. All are compared (`emitSkip` stays 0).
         {
-          // From $4B40, not $4BC0: class 2's THIRD high-table byte lands at $4B40 (C0BA), below
-          // the record window. Comparing only $4BC0+ left that destination ungraded -- swapping
-          // it for $4F02 changed nothing the sweep could see. Class 3 then puts its FOURTH at
-          // $4B41 and its fifth and sixth out at $4F80/$4F81 (C786/C79A/C7AE/C7C2).
+          // From $4B40: class 2's third high-table byte lands at $4B40 (C0BA), below the record window;
+          // class 3 puts its fourth at $4B41 and its fifth and sixth at $4F80/$4F81 (C786/C79A/C7AE/C7C2).
           for (int k = 0; k < 0x1A0; k++) if (work[0x14B40 + k] != r[0x14B40 + k]) diff = 1;
           if (work[0x14F00 + idx] != r[0x14F00 + idx]) diff = 1;
           if (work[0x14F01 + idx] != r[0x14F01 + idx]) diff = 1;
@@ -8700,60 +7888,35 @@ static int runSweepDrain(const char* romPath) {
         }
       }
 
-  // ---- HALF B: C0/CA76, the FIFO drain ---------------------------------------------------------
-  // A synthetic three-object queue linked head -> A -> B -> C = tail.
-  //
-  // WHAT THIS HALF GRADES, and why the queue is built the way it is. The target is the LOOP -- the
-  // $09A0 prologue gate, CA80's `STZ $79`, the raster deadline, the visit ORDER, and the two pop
-  // shapes (mid-list vs head == tail). The per-object VISIT is already graded by --sweepcad9, so
-  // running it again here buys nothing and costs a great deal: this sweep's oracle is a FRESH BOOT
-  // (CtOracleCreate + 2 frames, like every sweep in this family), so there are no field objects and
-  // the sprite pointer tables $1200/$1280/$1300/$1380 are all ZERO. A class-0 object therefore sends
-  // C0/CBDC's tile blit through a null 24-bit pointer -- measured: $CF = 00, $CD = 0000, and the
-  // micro-execution segfaults. An earlier revision of this sweep claimed the queue held "REAL
-  // class-0 sprites of this state"; there is no state, and that claim was simply wrong.
-  //
-  // So the queue is built from objects that reach a CLC WITHOUT entering a handler: class 3, which
-  // passes all four gate tests and returns at CAFF, and gate-rejecting objects. Both exercise the
-  // pop path identically -- CA76 cannot tell why CAD9 returned CLC. Grading the loop on the visit's
-  // *contract* rather than on its side effects is the same split --sweepcad9 makes when it compares
-  // only the bytes the port claims.
-  //
-  // AND THE CLOCK RUNS. The first cut of this sweep assumed `snes->vPos` would hold still because
-  // CtOracleRunToPC only calls cpu_runOpcode -- it does not: the CPU's read/idle callbacks drive
-  // snes_runCycles, so the V counter ADVANCES mid-drain exactly as on hardware. Measured: with the
-  // real budget $0078 and a start of 0x77, the oracle drains ONE object and then the deadline fires,
-  // while the port (which has no clock) drains all three. That is not a defect on either side, it is
-  // the boundary of what a cycle-free port can model, so the sweep NAMES it: a case is GRADED only
-  // when its outcome is clock-independent -- the start is already in vblank (>= 0xF0, CA97's signed
-  // BPL, so no limit applies) or already at/past the budget (immediate exit). Everything else is
-  // counted as clock-dependent and reported, never silently scored.
+  // ---- Half B: C0/CA76, the FIFO drain ----
+  // A synthetic three-object queue linked head -> A -> B -> C = tail. Graded: the loop (the $09A0 prologue
+  // gate, CA80's `STZ $79`, the raster deadline, the visit order and the two pop shapes, mid-list and
+  // head == tail). The per-object visit is --sweepcad9's. The oracle is a fresh boot with zero sprite pointer
+  // tables ($1200-$1380), where a class-0 visit sends C0/CBDC's blit through a null pointer, so the queue holds
+  // objects that reach a CLC without a handler: class 3 (passes the four gate tests, returns at CAFF) and
+  // gate-rejected ones. CA76 cannot tell why CAD9 returned CLC.
+  // The V counter advances during the micro-execution (the CPU callbacks drive snes_runCycles) and the port
+  // has no clock, so a case is graded only when its outcome does not depend on it: a start already in vblank
+  // (>= 0xF0, CA97's signed BPL lifts the limit) or at/past the budget (immediate exit). The rest is counted
+  // as clock-dependent.
   static const int SCAN[] = { 0x00, 0x40, 0x77, 0x78, 0x80, 0xC0, 0xEF, 0xF0, 0x100 };
-  // 0x0078 is the measured value; 0x0180 is UNREACHABLE (NTSC vPos tops out at 261 = 0x105), which
-  // makes "always proceeds" clock-independent AND gives $6C a non-zero byte -- without it a port
-  // that read $6B as a byte instead of the word CA99 actually compares would go unnoticed.
+  // 0x0078 is the budget measured on every state tried; 0x0180 is unreachable (NTSC vPos tops out at 0x105),
+  // so "always proceeds" is clock-independent and $6C is non-zero (CA99 compares the word).
   static const int BUDG[] = { 0x0000, 0x0010, 0x0078, 0x0180 };
   static const int Q9A0[] = { 0x00, 0x01 };
   static const int DPOOL[] = { 0x80808080, 0x02020202, 0x80808002 };
   static const int LINK[] = { 0, 1, 2 };            // which of the 3 is the head (rotates the order)
-  // Per-object make-up. class 3 = passes every gate and returns CLC at CAFF without a handler; the
-  // other three each fail ONE of the four gate tests, so the loop still pops them but through the
-  // CAE0 exit. Between them every reason CAD9 can return CLC is represented.
+  // Per-object make-up. Class 3 passes every gate and returns CLC at CAFF without a handler; the other
+  // three each fail one gate test and are popped through the CAE0 exit.
   static const struct { int st; int en; int win; int cls; } MK[4] = {
     { 0x04, 0x01, 0x80, 0x03 },   // passes all gates, class 3 -> CLC at CAFF, no handler
     { 0x84, 0x01, 0x80, 0x03 },   // CADE: $1100 bit7 set
     { 0x04, 0x00, 0x80, 0x03 },   // CAE5: $1A81 == 0
     { 0x04, 0x01, 0x00, 0x03 },   // CAEC: outside the camera window
   };
-  // WHY THERE IS NO CLASS-0/1/2 OBJECT HERE, having tried: putting a class-1 object in the queue
-  // would grade the drain's SEC branch, and it segfaults the oracle. A fresh-boot state leaves the
-  // sprite pointer tables zero, and C0/E687's bank dispatch then falls through to the C0/E6B6
-  // copier, whose `STA $000n,Y` writes BANK 0 at an arbitrary Y -- straight into the DMA registers.
-  // Seeding a real ROM bank ($D2, which selects the C0/E7BC copier) was not enough either. Note
-  // --sweepcad9 DOES micro-execute the class-1 handler safely, 80640/80640: the difference is that
-  // it runs one visit on one object, where the drain runs three back-to-back over accumulated
-  // state. Grading a single `continue` is not worth re-introducing the fragility this sweep was
-  // rebuilt to remove -- the SEC branch stays derived-not-verified, and src/move.c says so.
+  // No class-0/1/2 object: a class-1 object (the drain's SEC branch) crashes the oracle here, even with a ROM
+  // bank seeded in the pointer tables. Not graded: the drain's SEC branch (see src/move.c); --sweepcad9 covers
+  // the class-1 visit itself.
   const int OB[3] = { 2, 4, 6 };
   int dOk = 0, dBad = 0, dShown = 0, dSkipped = 0, dClock = 0;
   for (int si = 0; si < 9; si++)
@@ -8772,11 +7935,9 @@ static int runSweepDrain(const char* romPath) {
               r[0x0F00 + o] = (uint8_t)MK[m].win;  r[0x1201 + o] = (uint8_t)MK[m].cls;
               r[0x1B00 + o] = 0x00;                 // class 1 starts at pass 1 (CF17 AND #7F)
               r[0x1780 + o] = 0x00;                 // not mode 3 -> the two-pass path
-              // The sprite pointer tables MUST hold a real ROM bank. A fresh-boot oracle leaves
-              // them zero, and C0/E687's bank dispatch then falls through to the C0/E6B6 copier,
-              // whose `STA $000n,Y` writes BANK 0 at an arbitrary Y -- i.e. straight into the DMA
-              // registers. That is what segfaulted the oracle, twice. Bank $D2 selects the
-              // C0/E7BC copier instead and keeps every fetch inside ROM.
+              // The sprite pointer tables hold a ROM bank: with zero, C0/E687's bank dispatch falls
+              // through to the C0/E6B6 copier, whose `STA $000n,Y` writes bank 0 (the DMA registers).
+              // Bank $D2 selects the C0/E7BC copier and keeps every fetch inside ROM.
               r[0x1200 + o] = 0xD2; r[0x1280 + o] = 0x00; r[0x1281 + o] = 0x00;
               r[0x1300 + o] = 0xD2; r[0x1380 + o] = 0x00; r[0x1381 + o] = 0x00;
               r[0x0D00 + o] = 0x00; r[0x0D01 + o] = 0x00;
@@ -8788,19 +7949,16 @@ static int runSweepDrain(const char* romPath) {
             for (int k = 0; k < 4; k++) r[0x0BC0 + k] = (uint8_t)(DPOOL[pi] >> (24 - k * 8));
             r[0x09A0] = (uint8_t)Q9A0[qi]; r[0x09A1] = 0x46;   // 0x46 = the stale high byte, measured
             r[0x0179] = 0xEE;                                  // poison, so CA80's STZ is graded
-            r[0x016B] = (uint8_t)BUDG[bg];                     // CA99 CMP $6B is 16-BIT: a WORD
+            r[0x016B] = (uint8_t)BUDG[bg];                     // CA99 CMP $6B is a 16-bit compare
             r[0x016C] = (uint8_t)(BUDG[bg] >> 8);
             r[0x016D] = 0; r[0x016E] = 0;
             memcpy(work, r, 0x20000);
-            // GRADABLE only where the clock cannot change the answer, WITH MARGIN. The exit
-            // case additionally needs headroom below vblank: measured, a start of 0xEF drains
-            // FULLY in the oracle because the counter ticks to 0xF0 during the prologue and
-            // CA97's BPL then lifts the limit entirely. 0xC0 leaves 48 scanlines, against a
-            // pass that consumes well under one.
+            // Graded only where the clock cannot change the answer, with margin: a start of 0xEF reaches
+            // 0xF0 during the prologue and CA97's BPL lifts the limit, so the exit case stops at 0xC0.
             int graded = (SCAN[si] >= 0xF0) || (SCAN[si] >= BUDG[bg] && SCAN[si] <= 0xC0)
                       || BUDG[bg] > 0x105;
             int mv = CtAnimDrainPass(work, rom, len, SCAN[si]);
-            s->vPos = (uint16_t)SCAN[si];                      // <- the deadline becomes an INPUT
+            s->vPos = (uint16_t)SCAN[si];                      // the start line, an input
             s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = true; s->cpu->d = false; s->cpu->i = true;
             s->cpu->dp = 0x0100; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->y = 0; s->cpu->x = 0;
             s->cpu->waiting = false; s->cpu->stopped = false;
@@ -8821,10 +7979,8 @@ static int runSweepDrain(const char* romPath) {
               if (r[0x0F01 + o] != 0x14) committed = 1;   // nothing should commit here
             }
             for (int k = 0; k < 4; k++) if (work[0x0BC0 + k] != r[0x0BC0 + k]) diff = 1;
-            // $79 is only comparable when nothing committed. Each class-0 commit does `$79 += 2` in
-            // CC7C-CCB4, the upload-queue append, which is part of the UNPORTED tile half -- so a
-            // committing pass legitimately diverges there. Comparing it on the no-commit passes is
-            // what grades CA80's `STZ $79`.
+            // $79 is compared only when nothing committed (a class-0 commit does `$79 += 2` in CC7C-CCB4, the
+            // upload-queue append, outside this port); that grades CA80's `STZ $79`.
             if (!committed && work[0x0179] != r[0x0179]) diff = 1;
             if (!diff) dOk++;
             else {
@@ -8850,47 +8006,17 @@ static int runSweepDrain(const char* romPath) {
   return (rBad || dBad) ? 1 : 0;
 }
 
-// =================================================================================================
-// --sweepaitarget -- C1/B8BB's TARGETING RESOLVERS, and the FIRST bank-$C1 micro-execution harness in
-// this tree. Every other runSweep* here drives bank $C0/$C2; the battle engine had no equivalent at
-// all, which is exactly why battle_enemy_move_target.md §G.5 said "build the harness, then port".
-//
-// WHY IT HAS TO BE A SWEEP. The targeting byte is witnessed taking 00/01/04/05/06/0A/0E/0F/10 across
-// nine captures, but those captures are MID-BATTLE states, which do not seed the port ([[ct-defects-
-// 2026-09]]). So a scenario cannot reach these handlers with known inputs, and seeding the input space
-// directly is the only honest way to grade them -- the same argument --sweepdraw's refusal arm made.
-//
-// ENTRY STATE, and none of it is a guess: DB = $7E (every operand in the family is a $7E address --
-// $AECC, $AEFF, and C1/AE70's `LDA $0000,X` with X a block base ABOVE $2000, which bank 0 does not
-// mirror), DP = 0, M 8-bit, X/Y SIXTEEN bits (`CPY #0003`, `LDX #0002`). The PC comes out of the ROM's
-// own table at C1/B8BB[value*2] rather than a list written here, so a mis-transcribed entry address
-// cannot hide.
-//
-// WHAT IS COMPARED: the whole output set -- $AECB (the count), $AECC[0..$10] (the LIST), $AEC9/$AECA
-// (C1/AD68's `STY $AEC9`), $AF1E-$AF21 (the seat cursor, the mask and the two flag counters) and the
-// direct-page scratch $0A-$0D. All of it is poisoned first, so a write the port MISSES shows as loudly
-// as a wrong one -- which is what grades value 00's handler being a bare `RTS` that writes nothing.
-//
-// TWO CLASSES OF CASE ARE COUNTED RATHER THAN COMPARED, and both are named in the report:
-//   * `a4e0` -- C1/ADA1's tail `JSR C1/A4E0` when $AF20 != 0 and the winner has bit $40. A4E0 runs the
-//     C1/0003 -> C1/2986 machinery, which branches on $96F5,X / $9FF7,X -- two bytes NOTHING in this
-//     engine writes (battle_enemy_move_target.md §F.4), so porting it would repeat the $A2B5 mistake.
-//   * `romhang` -- C1/ADA1's own non-termination. Variant A's `BPL ->ADB3` (ADD1, offset $E0) jumps
-//     back to the COMPARE with both cursors unchanged, so a ring match on an entry whose bit7 is clear
-//     re-tests the same entry for ever. The ROM never returns, so the oracle is `lost` by construction
-//     and there is nothing to compare against.
-// --sweepfxline -- the battle effect's WINDOW RASTERIZER, program op D9 n k (CD/19B1: the clamp CD/2433, the angle
+// ---- Battle sweeps (banks $C1, $CD) ----
+
+// --sweepfxline: the battle effect's window rasterizer, program op D9 n k (CD/19B1: the clamp CD/2433, the angle
 // CE/E7CF, the corners CD/2466, the scan conversion D1/F9AF through the $2180 WRAM port), micro-executed against
-// battle.c's battleFxLine. Seeded, not scenario-driven: the attract's X-Strike reaches it with inputs one frame
-// apart from the port's (the interpreter's +1), so the only honest grade of the rasterizer itself is a sweep.
-// ENTRY STATE (the program runner's own, CD/16AF `JSR ($16B5,X)`): M 8-bit, X/Y 16-bit, DB = $7E, DP = 0, the
-// operands behind the long pointer $40-$42. The inputs span the whole byte range, so both clamps, every octant of
-// the angle table, degenerate quads (flat tops, zero-height edges -> the divider's x/0 = FFFF) and corner bytes that
-// wrap past 00/FF are all reached; $7C both parities (which buffer is drawn).
-// COMPARED: $5DA0..$5DAB (the clamps write back), $CD08, $CC64, $CD0D..$CD1D, and BOTH window buffers $C161..$C860,
-// every byte poisoned first. NOT compared: the direct-page scratch $00-$4C (the battle NMI saves and restores $00-$2A
-// around the whole service, D1/E7A9 MVN; $45-$4C are the handlers' locals) and APU port 3 (the low byte of each
-// 16-bit `STA $217F`).
+// battle.c's battleFxLine over seeded inputs.
+// Entry state (the program runner's, CD/16AF `JSR ($16B5,X)`): M 8-bit, X/Y 16-bit, DB = $7E, DP = 0, the operands
+// behind the long pointer $40-$42. The inputs span the byte range: both clamps, every octant, degenerate quads
+// (flat tops, zero-height edges -> the divider's x/0 = FFFF), corners that wrap past 00/FF, both $7C parities.
+// Compared, poisoned first: $5DA0..$5DAB, $CD08, $CC64, $CD0D..$CD1D and both window buffers $C161..$C860. Not
+// compared: the DP scratch $00-$4C (the battle NMI saves and restores $00-$2A, D1/E7A9 MVN; $45-$4C are the
+// handlers' locals) and APU port 3 (the low byte of each 16-bit `STA $217F`).
 static int runSweepFxLine(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -8937,7 +8063,7 @@ static int runSweepFxLine(const char* romPath) {
     for (int g = 0; g < 5 && !diff; g++)
       for (int i = 0; i < RANGES[g][1]; i++)
         if (work[RANGES[g][0] + i] != r[RANGES[g][0] + i]) { diff = 1; firstDiff = RANGES[g][0] + i; break; }
-    { int lines = 0;                                                // LIVENESS: lines the ROM actually drew
+    { int lines = 0;                                                // liveness: lines the ROM drew
       for (int i = 0; i < 0x700; i += 4) if (r[0xC161 + i] != (uint8_t)(0x96 ^ ((i + 0x61) * 7))) lines++;
       if (lines) modeSeen[0]++;
       if (lines > 20) modeSeen[1]++;
@@ -8961,23 +8087,17 @@ static int runSweepFxLine(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || lost || ok == 0) ? 1 : 0;
 }
-// --sweepfxshape -- the battle effect's SHAPE WINDOW, program ops 8A (CD/2FED set), 89 (CD/2FBC step), AB (CD/24F3 centre
-// on a bound point) and 8B (CD/2FB7: the half-chord circle CD/31AA, then one of six shapes CD:319E -- the table builders
+// --sweepfxshape: the battle effect's shape window, program ops 8A (CD/2FED set), 89 (CD/2FBC step), AB (CD/24F3 centre on
+// a bound point) and 8B (CD/2FB7: the half-chord circle CD/31AA, then one of six shapes CD:319E -- the table builders
 // 31FE / 3273 / 3337 through the $2180 port, the placers 35A5 / 352D / 347D / 33D9 and the unrolled copy CE/E1C7-E7C7),
-// micro-executed against battle.c's battleFxShape*. Seeded, like --sweepfxline: the single techs the synthetic battle can
-// run reach shapes 0 (Area Bomb), 1 (Napalm, Mega Bomb) and 2 (Haste) only -- 3, 4 and 5 are dual/triple techs' -- so the
-// six routines are graded here on the whole input range: radii 00..FF (bit 7 set reaches the placers whole while the table
-// takes r & 7F; r & 7F = 0 draws nothing), centres anywhere (the clips at line 0 and line DE, the floors at x 00 and caps
-// at FF), cy = 0 on shape 2 and the placers' do-while loops that run their 16-bit index all the way round, $7C both
-// parities, records 0..3 (the ops index $CAA4.. with the whole operand byte).
-// ENTRY STATE (the runner's, CD/16AF): M 8-bit, X/Y 16-bit, A = 0 (B = 0: the runner's own `ASL / TAX` dispatch needs it),
-// DB = $7E, DP = 0, the operands at $7E:0300 behind the long pointer $40-$42.
-// COMPARED: the whole 128 KB image from $0200 up (the tables $B800.., $B900..$BAFF and the $2180 stream, both window
-// buffers, $CAA4..$CAAA, $CAD1/$CAD2, $5DA0..$5DA3, and any runaway's reach), poisoned first; $40/$41 (8A / 89 move it by
-// 3). NOT compared: $00-$3F / $42-$FF (the handlers' direct-page locals $45-$51) and the stack page. REFUSED (counted, not
-// compared): the cases where the port returns 1 -- a placer whose copy the ROM would enter outside CE/E1C7..E7C7: d > 512
-// bytes (a radius with bit 7 set) or d "negative" (a shape whose top is below line DE: `cy - r > DE` makes the bottom trim
-// larger than the shape, and E7C7 - 3d lands in the code after the RTS), where the ROM runs code that is not the copy.
+// micro-executed against battle.c's battleFxShape*. Seeded (single techs reach only shapes 0-2) over the whole range:
+// radii 00..FF (the placers take r whole, the table r & 7F; r & 7F = 0 draws nothing), centres anywhere (the clips at
+// lines 0 and DE, x 00 and FF), cy = 0 on shape 2 (the placers' 16-bit index runs round), both $7C parities, records 0..3.
+// Entry state (the runner's, CD/16AF): M 8-bit, X/Y 16-bit, A = 0 (B = 0 for the `ASL / TAX` dispatch), DB = $7E, DP = 0,
+// the operands at $7E:0300 behind the long pointer $40-$42.
+// Compared, poisoned first: all of WRAM from $0200 up, and $40/$41 (8A / 89 advance it by 3); not the DP locals or the
+// stack. Refused (counted): the port returns 1 where the ROM would enter the copy outside CE/E1C7..E7C7 (d > 512 bytes,
+// or a top below line DE so `cy - r > DE` and E7C7 - 3d lands after the RTS).
 static int runSweepFxShape(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -9060,17 +8180,12 @@ static int runSweepFxShape(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || lost || ok == 0) ? 1 : 0;
 }
-// --sweepfxquad -- battle effect-program ops 85 86 A1 A3 A4 AC BD C3 D2 DA E0 (battle.c battleFxOpsQuadTri) micro-executed
-// against the ROM's own handlers, entered as CD/16A6 enters them: M 8-bit, X/Y 16-bit, DB = $7E, DP = 0, $43 = the slot
-// (0 / $10), A = X = the table index (op << 1, B = 0), Y = $40 = the operand address (here $7E:0300, the long pointer
-// $40-$42), the handler's address read from the ROM's table CD:16B5 -- so a mis-transcribed entry cannot hide. Seeded,
-// not scenario-driven: most of these ops sit in programs whose other ops this tree does not run yet (Fire 2's 85/86/C3
-// come after 89/8A/8B, Luminaire's A1/A3/A4 after A2/A5/A6), so a sweep is the only way to grade them all now.
-// COMPARED: all of WRAM except the direct page $00-$4F (the battle NMI saves and restores $00-$2A around the whole service,
-// D1/E7A9 / D1/E885 MVN; $2B-$4F are the handlers' locals and the runner's pointer) and the stack page; the $40 the
-// handler leaves is compared on its own (the op's length law). WRAM is poisoned first (the window buffers, the palette
-// pages, the 3-D objects), so a missed write shows as loudly as a wrong one. Not compared: APU port 3 (the low byte of
-// each 16-bit `STA $217F` of the rasterizers).
+// --sweepfxquad: battle effect-program ops 85 86 A1 A3 A4 AC BD C3 D2 DA E0 (battle.c battleFxOpsQuadTri) against the ROM's
+// handlers on seeded inputs, entered as CD/16A6 enters them: M 8-bit, X/Y 16-bit, DB = $7E, DP = 0, $43 = the slot (0 /
+// $10), A = X = op << 1 (B = 0), Y = $40 = the operand address ($7E:0300), the handler taken from the ROM's table CD:16B5.
+// Compared, WRAM poisoned first: all of it except the direct page $00-$4F (the battle NMI saves and restores $00-$2A,
+// D1/E7A9 / D1/E885 MVN; $2B-$4F are the handlers' locals and the runner's pointer) and the stack page, plus the $40 the
+// handler leaves (the op's length). Not compared: APU port 3 (the low byte of the rasterizers' 16-bit `STA $217F`).
 static int runSweepFxQuad(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -9131,7 +8246,7 @@ static int runSweepFxQuad(const char* romPath) {
     }
     int rp = r[0x40] | (r[0x41] << 8);
     if (diff < 0 && rp != pp) { diff = 0x40; lenBad++; }
-    { int changed = 0;                                             // LIVENESS: for the rasterizers, window lines the ROM
+    { int changed = 0;                                             // liveness: for the rasterizers, window lines the ROM
       if (op == 0xA1 || op == 0xAC || op == 0xDA) {                //   drew (a buffer byte off its poison); for D2, a
         for (int i = 0xC161; i < 0xC861 && !changed; i++)          //   palette word written; else always counted
           if (r[i] != (uint8_t)((i & 1) ? (0x3C ^ ((i - 1) >> 3)) : (0x96 ^ (i * 7)))) changed = 1;
@@ -9158,18 +8273,14 @@ static int runSweepFxQuad(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (tBad || tLost || tOk == 0) ? 1 : 0;
 }
-// --sweepfxops -- battle EFFECT-PROGRAM ops micro-executed against battle.c's battleFleeProgOp, at their REAL sites: one
-// D1 address per distinct (op, operand bytes) the 148 programs hold for 88.01 88.02 80.00 80.13 C4 C5 A2 A5 A6 A7 B1
-// B9 D7 EA 82 (the static decode's listing -- the program walker of battle_fx_program_census.md), so every operand value
-// the ROM ever feeds these handlers is graded, and nothing else.
-// ENTRY STATE: the runner's own dispatch, CD/16A6 (`STX $43 / ASL A / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) /
-// LDX $43 / RTS`) with A = the opcode (B = 0), X = the slot (0 / $10, both), $40-$42 = the op's address in bank D1, M
-// 8-bit, X/Y 16-bit, DB = $7E, DP = 0 -- so the carry the ASL leaves (D7's random path reads it) and the pre-INY are the
-// ROM's. The WHOLE WRAM ($7E and $7F) is filled with seeded noise first (the slot records, $7C's parity and low bits,
-// the direct page -- D7's 16-bit reads of $45 take $46 as their high byte -- the palettes, the window buffers).
-// COMPARED: all 128 KB of WRAM except $0040-$0044 (the pointer and the slot the dispatch itself keeps) and $0100-$01FF
-// (the stack), and $40 after the handler against the port's `p` (the op's length). CtOracleRunToPC steps opcodes only,
-// so no NMI/IRQ interleaves; the multiplier ($4202/$4203 -> $4217, C4/C5's CD/3BFD) is the oracle's.
+// --sweepfxops: battle effect-program ops 88.01 88.02 80.00 80.13 C4 C5 A2 A5 A6 A7 B1 B9 D7 EA 82 against battle.c's
+// battleFleeProgOp at their sites: one D1 address per distinct (op, operands) the 148 programs hold (the listing of
+// disasm/notes/battle_fx_program_census.md), so every operand the ROM feeds these handlers is graded.
+// Entry state: the runner's dispatch CD/16A6 (`STX $43 / ASL A / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43
+// / RTS`), A = the opcode (B = 0), X = the slot (0 / $10), $40-$42 = the op's D1 address, M 8-bit, X/Y 16-bit, DB = $7E,
+// DP = 0, so the ASL's carry (D7's random path reads it) and the pre-INY are the ROM's. All of WRAM is seeded noise.
+// Compared: all 128 KB but $0040-$0044 (the dispatch's pointer and slot) and the stack, and $40 against the port's `p`.
+// CtOracleRunToPC steps opcodes only, so no NMI/IRQ interleaves; the multiplier (C4/C5's CD/3BFD) is the oracle's.
 static int runSweepFxOps(const char* romPath) {
   static const uint16_t SITES[] = {   // D1 addresses (fxprog_listing.txt: the first site of each distinct op + operands)
     0x7AFF, 0x7B5C, 0x9CAD, 0x9D85, 0x7205, 0x72AC, 0x72B1, 0x85DA, 0x85E4, 0x9214,
@@ -9187,9 +8298,8 @@ static int runSweepFxOps(const char* romPath) {
     0x9E1B, 0x9E19, 0x9586, 0x9A12, 0x9B0B, 0x963F, 0x91FE, 0xA1AD, 0x9A79, 0x9E93, 0x814E, 0x7C9E,
   };
   int NS = (int)(sizeof SITES / sizeof SITES[0]);
-  // REPLAY: CT_SWEEPFXOPS_SEED=<a 128 KB WRAM image> -- the cartridge's own WRAM at a handler's entry (ct --hookpc <handler>
-  // with CT_HOOK_DUMPWRAM: $40 = the op's address + 1, $43 = the slot) -- grades that one visit instead of the noise:
-  // the site is the dump's $40 - 1, the slot its $43, one case.
+  // CT_SWEEPFXOPS_SEED=<128 KB WRAM>: grade one cartridge visit (ct --hookpc <handler> with CT_HOOK_DUMPWRAM) instead of
+  // the noise: the site is the dump's $40 - 1, the slot its $43.
   uint8_t* seed = NULL; int seedSite = -1, seedX = 0;
   { const char* sp = getenv("CT_SWEEPFXOPS_SEED");
     if (sp && *sp) {
@@ -9257,10 +8367,9 @@ static int runSweepFxOps(const char* romPath) {
   for (int o = 0; o < 256; o++) if (perOp[o]) printf(" %02X %d/%d", o, perOp[o] - perOpBad[o], perOp[o]);
   if (seed) printf("  (replay of D1/%04X slot %02X from the seed)", seedSite, seedX);
   printf("\n");
-  // OP 88's FOUR SUB-OPS BY THEIR TABLE, D1/FBCE entered as CD/29DA enters it (`LDA [$40] / ASL / TAX / JSL D1FBCE`: A 8-bit,
-  // X = sub * 2 16-bit, DB = $7E, DP = 0) -- 88 03 (D1/FBDA) has no site in any program, so it is graded here, beside
-  // 88 00/01/02, on seeded whole-WRAM noise ($7C both parities); compared: all 128 KB but the stack. Its own seed, a
-  // second line: the first one stands.
+  // Op 88's four sub-ops through their table, D1/FBCE entered as CD/29DA enters it (`LDA [$40] / ASL / TAX / JSL D1FBCE`:
+  // A 8-bit, X = sub * 2 16-bit, DB = $7E, DP = 0); 88 03 (D1/FBDA) has no site in any program. Seeded whole-WRAM noise,
+  // its own seed; compared: all 128 KB but the stack.
   if (!seed) {
     int ok88[4] = { 0 }, bad88[4] = { 0 }, lost88 = 0;
     uint32_t rng2 = 0x88038803;
@@ -9295,18 +8404,14 @@ static int runSweepFxOps(const char* romPath) {
   CtOracleDestroy(s); free(rom); free(seed);
   return (bad || lost || stop || ok == 0) ? 1 : 0;
 }
-// --sweepfx80 -- effect-program ops 80.04 80.05 80.12 AF B3 B8 E3 (and A1, which shares B8's triangle raster, battle.c
-// battleFxTriRasterV; DA shares it too but its head -- CD/1937's arms, CE/E7CF -- leaves $49-$4D the port does not write,
-// so it is graded by --sweepfxquad from $50 up) micro-executed against battleFleeProgOp at their REAL sites: the first D1 address of every
-// distinct (op, operand) the 148 programs hold (fxprog_listing.txt), entered as CD/16A6 dispatches them -- A = the
-// opcode (B = 0), X = the slot (0 / $10), $40-$42 = the op's address, M 8-bit, X/Y 16-bit, DB = $7E, DP = 0.
-// WRAM ($7E and $7F) = seeded noise, and for the triangle ops a quarter of the cases each with points 0-1 on one line
-// (y0 = y1), point 0 or 1 on line 0 (no band above), points 0-1 on one column (x0 = x1).
-// COMPARED: all 128 KB except $0000-$002A (the direct page the battle NMI saves at D1/E7A9 and restores at D1/E885 --
-// B8/A1/DA's slope scratch $00-$17 and CD/3924's STZ $0020 never outlive it), $0040-$0044 (the pointer and the slot the
-// dispatch keeps) and the stack, and $40 after the handler against the port's (every op here is two bytes).
-// REPLAY: CT_SWEEPFX80_SEED=<128 KB WRAM> -- a cartridge visit's own WRAM (ct --hookpc <handler> + CT_HOOK_DUMPWRAM,
-// $40 - 1 = the site, $43 = the slot) graded instead of the noise.
+// --sweepfx80: effect-program ops 80.04 80.05 80.12 AF B3 B8 E3, and A1 (which shares B8's triangle raster,
+// battleFxTriRasterV), against battleFleeProgOp at the first D1 site of each distinct (op, operand), entered as
+// --sweepfxops enters them. DA shares the raster too, but its head (CD/1937's arms, CE/E7CF) leaves $49-$4D the port does
+// not write, so --sweepfxquad grades it from $50 up. WRAM is seeded noise; for the triangle ops a quarter of the cases
+// each put points 0-1 on one line, point 0 or 1 on line 0, or points 0-1 on one column.
+// Compared: all 128 KB but $0000-$002A (the DP the battle NMI saves at D1/E7A9 and restores at D1/E885), $0040-$0044 and
+// the stack, and $40 against the port's (every op here is two bytes). CT_SWEEPFX80_SEED=<128 KB WRAM>: replay one
+// cartridge visit, as --sweepfxops.
 static int runSweepFx80(const char* romPath) {
   static const uint16_t SITES[] = { 0x9AB7 /* 80 04 */, 0x6DBD /* 80 05 */, 0x90F7 /* 80 12 */, 0x8522 /* AF 00 */,
                                     0x9AC7 /* B3 64 */, 0x8A9E /* B8 00 */, 0x6DB2 /* E3 00 */,
@@ -9394,21 +8499,14 @@ static int runSweepFx80(const char* romPath) {
   CtOracleDestroy(s); free(rom); free(seed);
   return (bad || lost || stop || ok == 0) ? 1 : 0;
 }
-// --sweepfxmisc -- battle EFFECT-PROGRAM ops D0 D1 D3 D4 D5 D6 DF E7 E8 E9 EE F0 F4 (battle.c battleFxOpsMisc) micro-executed
-// against the ROM's own handlers at their REAL sites: one D1 address per distinct (op, operand bytes) of the 37 sites the 148
-// programs hold (fxprog_listing.txt, the static walk of battle_fx_program_census.md: programs 00 4E 6B 75 7E 83 89 -- T4A T3E
-// T44 T3B T68 T5D T71), so every operand the ROM ever feeds these handlers is graded, and nothing else.
-// ENTRY STATE: CD/16A6 itself (`STX $43 / ASL A / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43 / RTS`), A = the
-// opcode (B = 0), X = the slot (0 / $10, both), $40-$42 = the op's address in bank D1, M 8-bit, X/Y 16-bit, DB = $7E,
-// DP = 0 -- so the handler address is the ROM's table, the carry DF's first `ADC $7C` meets is the ASL's, and the pre-INY
-// is the ROM's. The whole WRAM ($7E and $7F) is seeded noise, and a quarter of the cases steer the state to where the
-// branches split: D5's $CAA4,X = 0, D6's $CAA4,X = $5D8E (the fall-through arms), E8's $CD38 and EE's $5DA1/$CD3A/$CD3B
-// in the range the programs keep (the noise also runs their 16-bit index round through $7F, which the port follows).
-// COMPARED: all 128 KB of WRAM except $0040-$0044 (the pointer and the slot the dispatch keeps) and $0100-$01FF (the
-// stack) -- the direct-page locals $45-$4A included -- and, for F4 alone, $00-$2A too: D1/F9AF's scratch, which the battle
-// NMI restores (D1/E7A9 / D1/E885 MVN). $40 after the handler against the port's `p` (the op's length / jump target).
-// REPLAY: CT_SWEEPFXMISC_SEED=<a 128 KB WRAM image> taken at a handler's entry (ct --hookpc <handler> with
-// CT_HOOK_DUMPWRAM) grades that one visit: the site is the dump's $40 - 1, the slot its $43.
+// --sweepfxmisc: battle effect-program ops D0 D1 D3 D4 D5 D6 DF E7 E8 E9 EE F0 F4 (battle.c battleFxOpsMisc) against the
+// ROM's handlers at one D1 site per distinct (op, operands) the programs hold (programs 00 4E 6B 75 7E 83 89, see
+// disasm/notes/battle_fx_program_census.md), entered through CD/16A6 as --sweepfxops (so the carry DF's first `ADC $7C`
+// meets is the ASL's). WRAM is seeded noise; a quarter of the cases steer to where the branches split: D5's $CAA4,X = 0,
+// D6's $CAA4,X = $5D8E, E8's $CD38 and EE's $5DA1/$CD3A/$CD3B in the programs' range.
+// Compared: all 128 KB but $0040-$0044 and the stack (the DP locals $45-$4A included), for F4 also not $00-$2A (D1/F9AF's
+// scratch, restored by the battle NMI), and $40 against the port's `p` (length or jump target).
+// CT_SWEEPFXMISC_SEED=<128 KB WRAM>: replay one cartridge visit, as --sweepfxops.
 static int runSweepFxMisc(const char* romPath) {
   static const uint16_t SITES[] = {
     0x6B96, 0x6D89, 0x6E3A, 0x6E46, 0x70F1, 0x7101, 0x710A, 0x746D, 0x746F, 0x7478, 0x747A, 0x748A,
@@ -9496,17 +8594,12 @@ static int runSweepFxMisc(const char* romPath) {
   CtOracleDestroy(s); free(rom); free(seed);
   return (bad || lost || stop || ok == 0) ? 1 : 0;
 }
-// --sweepfx3d -- battle effect-program ops A8 BA BC BE (the 3-D objects rotated: battle.c battleFxOpA8 / battleFxOpBA /
-// battleFxOpBC / battleFxOpBE) micro-executed against the ROM's own handlers at EVERY site the 148 programs hold them
-// (fxprog_listing.txt: A8 x28, BC x22, BE x6, BA x12), entered through the runner's dispatch CD/16A6 exactly as
-// --sweepfxops enters it (A = the opcode, B = 0, X = the slot 0 / $10, $40-$42 = the op's D1 address, M 8-bit, X/Y
-// 16-bit, DB = $7E, DP = 0), the WHOLE WRAM seeded with noise first (the object block $CAD4.., the scale $CAFC, $7C's
-// parity = the window buffer BA/BE fill, the direct page). COMPARED: all 128 KB except $0000-$002A (the battle NMI's
-// scratch -- D1/E7A9 saves it to $CC65 and D1/E885 restores it around the runner, so the rasterizer's $00-$17, CD/2173's
-// $12-$17/$0020 and CD/28A1/CD/1EF7's $21-$22 never outlive the op), $0040-$0044 (the dispatch's own pointer and slot) and
-// the stack page -- so $45-$51 (the rotation's angles, CD/211B's scale locals, CD/38B6's line base) are graded -- and $40
-// after the handler against the port's (the length law: A8 10, BC 6, BA/BE 2). The multiplier ($4202/$4203 -> $4217 of
-// CD/3C55, CD/3D90, CD/211B) is the oracle's; WMDATA (the 16-bit `STA $217F` of CD/3685) lands in its WRAM.
+// --sweepfx3d: battle effect-program ops A8 BA BC BE (the rotated 3-D objects, battle.c battleFxOpA8 / BA / BC / BE)
+// against the ROM's handlers at every site the programs hold them (A8 x28, BC x22, BE x6, BA x12), entered through CD/16A6
+// as --sweepfxops, over whole-WRAM noise. Compared: all 128 KB but $0000-$002A (the battle NMI's scratch, saved to $CC65
+// at D1/E7A9 and restored at D1/E885), $0040-$0044 and the stack, so $45-$51 (the rotation's angles, CD/211B's scale
+// locals, CD/38B6's line base) are graded; and $40 (the length law: A8 10, BC 6, BA/BE 2). The multiplier and WMDATA
+// (CD/3685's 16-bit `STA $217F`) are the oracle's.
 static int runSweepFx3d(const char* romPath) {
   static const uint16_t SITES[] = {
     0x6AF3, 0x6B10, 0x6B39, 0x6B62, 0x925F, 0x927A, 0x9892, 0x989E, 0x98AA, 0x98CF, 0x98F2, 0x9915, 0x993B, 0x995E,   // A8
@@ -9517,8 +8610,7 @@ static int runSweepFx3d(const char* romPath) {
     0x8141, 0x814A, 0x8158, 0x8161, 0x816F, 0x8178, 0x81AC, 0x81B2, 0x81BD, 0x81C3, 0x81CE, 0x81D4,                 // BA
   };
   int NS = (int)(sizeof SITES / sizeof SITES[0]);
-  // REPLAY: CT_SWEEPFX3D_SEED=<a 128 KB WRAM image at a handler's entry> (ct --hookpc <handler> with CT_HOOK_DUMPWRAM:
-  // $40 = the op's address + 1, $43 = the slot) grades that one cartridge visit instead of the noise.
+  // CT_SWEEPFX3D_SEED=<128 KB WRAM>: replay one cartridge visit, as --sweepfxops.
   uint8_t* seed = NULL; int seedSite = -1, seedX = 0;
   { const char* sp = getenv("CT_SWEEPFX3D_SEED");
     if (sp && *sp) {
@@ -9564,7 +8656,7 @@ static int runSweepFx3d(const char* romPath) {
       cases++; perOp[op]++;
       if (CtOracleRunToPC(s, 0xCD, 0xFFFE, 400000) < 0) { lost++; perOpBad[op]++; continue; }
       if (pp < 0) { stop++; perOpBad[op]++; continue; }
-      if (op == 0xBA || op == 0xBE) {                               // LIVENESS: a window line the ROM filled
+      if (op == 0xBA || op == 0xBE) {                               // liveness: a window line the ROM filled
         for (int i = 0xC161; i < 0xC861; i++) if (r[i] != pre[i - 0xC161]) { drew++; break; }
       }
       int romP = r[0x40] | (r[0x41] << 8);
@@ -9593,17 +8685,17 @@ static int runSweepFx3d(const char* romPath) {
   CtOracleDestroy(s); free(rom); free(seed);
   return (bad || lost || stop || ok == 0) ? 1 : 0;
 }
-// --sweepbganim -- the field's BG animation machines (disasm/notes/field_bg_anim.md) micro-executed against the port:
-//   (1) FD/DE98 (tileanim.c CtTileAnimLoad) and FD/E292 (objslot.c CtObjSlotLoad) for EVERY location, over junk-filled
+// --sweepbganim: the field's BG animation machines (disasm/notes/field_bg_anim.md) micro-executed against the port:
+//   (1) FD/DE98 (tileanim.c CtTileAnimLoad) and FD/E292 (objslot.c CtObjSlotLoad) for every location, over junk-filled
 //       records: compared $05B0..$05EB, $7F:0400..$7F:05FF and $0520..$05AF;
 //   (2) FD/E022 (CtTileAnimRun) on seeded states -- half on a real location's loaded tables, half on random ones:
 //       compared $051D, $05B0..$05EB and the whole of VRAM (the port's DMAs applied to the same starting VRAM);
 //   (3) FD/E39C (CtObjSlotService with colourModes) on seeded records of modes 0/1/2/3/4/5/8+ (4/5 on sub-mode 0, the
 //       ported one, on a range that ends inside the page; 6/7 are not ported and not seeded): compared $0520..$05AF
 //       and $7E:2000..$25FF.
-// NOT compared: the direct-page scratch the three routines keep at $0500..$051A. ENTRY STATES: the callers' -- M 8-bit,
-// X/Y 16-bit (C0/0112, C0/0116, C0/ED08, C0/00CD); D = $0100 for FD/E39C (its DB is D's low byte); FD/E022 under the
-// IRQ's forced blank. The return address sits at $1FF1 (FD/DE98 reads $01FE, the location record's offset).
+// Not compared: the DP scratch the three keep at $0500..$051A. Entry states are the callers' (C0/0112, C0/0116, C0/ED08,
+// C0/00CD): M 8-bit, X/Y 16-bit; D = $0100 for FD/E39C (its DB is D's low byte); FD/E022 under the IRQ's forced blank.
+// The return address sits at $1FF1 (FD/DE98 reads $01FE, the location record's offset).
 #include "tileanim.h"
 #include "objslot.h"
 typedef struct { uint8_t* w; uint16_t* vram; int n; } SweepBgDma;
@@ -9738,9 +8830,9 @@ static int runSweepBgAnim(const char* romPath) {
     if (diff < 0) ok[2]++;
     else { bad[2]++; if (shown++ < 10) printf("  service case %d: first diff $%04X rom=%02X port=%02X\n", c, diff, r[diff], work[diff]); }
   }
-  // (4) FD/E82C's sub-modes (mode 4, toward white: 0 = E8D7, 1 E962, 2 E98F, 3 EA5C, 4 E935, 5 E9CA, 6+ EA11) -- its own
-  // seed, so (1)-(3) and their line stand as they were: every record mode 4x with a random sub-mode 0-9, acc, limit, step
-  // and period, on a range inside the page; the rest of the table off. Compared as (3).
+  // (4) FD/E82C's sub-modes (mode 4, toward white: 0 = E8D7, 1 E962, 2 E98F, 3 EA5C, 4 E935, 5 E9CA, 6+ EA11), on its own
+  // seed: records of mode 4x with a random sub-mode 0-9, acc, limit, step and period, on a range inside the page; the
+  // rest of the table off. Compared as (3).
   int wOk = 0, wBad = 0, wLost = 0, wSub[8] = { 0 }, wApplied = 0;
   { uint32_t rng2 = 0x0BADF00D;
     #define NEXT2() (rng2 = rng2 * 1103515245u + 12345u, (int)((rng2 >> 16) & 0xFF))
@@ -9783,15 +8875,13 @@ static int runSweepBgAnim(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad[0] || bad[1] || bad[2] || lost[0] || lost[1] || lost[2] || wBad || wLost) ? 1 : 0;
 }
-// --sweepshake -- the battle NMI's CD/0929-092C pair: CD/06B4 (the three BG layers' per-line scroll records, the four
-// variants by $CA92) and CD/0B51 (the screen shake's two axes, $CCC0's hand-out, CD/0C48's record commit), micro-executed
-// against battle.c's battleScrollFill + battleFxPalCommit on seeded states. ENTRY STATE: the NMI's own at CD/0929 -- M 8-bit,
-// X/Y 16-bit, B = 0 (the ROM's TAX/TAY carry it into 16-bit indices), DB = $7E, DP = 0; CD/0B51 runs with the widths CD/06B4
-// returns (`TDC / SEP #20 / REP #10`). The inputs reach every re-roll and amplitude branch (period hit / not, the step up,
-// down, down to 0 turning the axis off, level), every $CCC0 mask, all four fill variants with the wave flags on and off, and
-// $CCE5's two copies (the bit-7 one is 12 bytes: `LDA #000B`).
-// COMPARED: $CCA4..$CCF0, the records $BC80..$BE8F, $0580..$05B7, $7C/$7D. NOT compared: the direct-page scratch the ROM
-// uses as locals ($1A-$1F, $45-$50).
+// --sweepshake: the battle NMI's CD/0929-092C pair, CD/06B4 (the three BG layers' per-line scroll records, four variants by
+// $CA92) and CD/0B51 (the screen shake's two axes, $CCC0's hand-out, CD/0C48's record commit), against battle.c's
+// battleScrollFill + battleFxPalCommit on seeded states. Entry state: the NMI's at CD/0929 (M 8-bit, X/Y 16-bit, B = 0 for
+// the 16-bit TAX/TAY, DB = $7E, DP = 0); CD/0B51 runs with the widths CD/06B4 returns (`TDC / SEP #20 / REP #10`). The
+// inputs reach every re-roll and amplitude branch, every $CCC0 mask, all four fill variants with the wave flags on and off,
+// and $CCE5's two copies (the bit-7 one is 12 bytes: `LDA #000B`).
+// Compared: $CCA4..$CCF0, the records $BC80..$BE8F, $0580..$05B7, $7C/$7D. Not compared: the DP locals ($1A-$1F, $45-$50).
 static int runSweepShake(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -9933,12 +9023,11 @@ static int runSweepArenaScroll(const char* romPath, const char* statePath, int f
   free(rom);
   return (same[0] == rows && same[1] == rows && same[2] == rows && same[3] == rows && rows) ? 0 : 1;
 }
-// --sweepfxcompose <state> <f0> <f1> -- the battle effect layer's COMPOSITOR (battle.c CtBattleFxLayerCompose) graded
-// against the oracle's own frames. For each frame F: save the state, render F with g_ppuFxBase (main screen without
-// BG3 and OBJ, no clip, no math) = the arena composite; restore, render F for real; render F once more with only OBJ
-// (g_ppuIsoBg = 4) to know which pixels are sprites. The port's compositor then runs on the base with the ORACLE's
-// inputs -- its WRAM (the HDMA tables), its VRAM ($7C00 map / $5000 sheets) and its window-select registers -- and
-// every non-sprite pixel is compared with the real frame. `$7C` after F's NMI is one past the parity CD/0AEE used.
+// --sweepfxcompose <state> <f0> <f1>: the battle effect layer's compositor (battle.c CtBattleFxLayerCompose) against the
+// oracle's frames. For each frame F: render it with g_ppuFxBase (main screen without BG3 and OBJ, no clip, no math: the
+// arena composite), then for real, then with only OBJ (g_ppuIsoBg = 4) to find the sprite pixels. The compositor runs on
+// the base with the oracle's inputs (WRAM's HDMA tables, VRAM's $7C00 map / $5000 sheets, the window-select registers)
+// and every non-sprite pixel is compared. `$7C` after F's NMI is one past the parity CD/0AEE used.
 static int runSweepFxCompose(const char* romPath, const char* statePath, int f0, int f1) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -9950,12 +9039,10 @@ static int runSweepFxCompose(const char* romPath, const char* statePath, int f0,
   static uint8_t rgb[256 * 224 * 3];
   static CtBattleHost hh;
   long totalBad = 0, totalPx = 0, fxPx = 0; int badFrames = 0;
-  // THE SPRITES' SHARE (CtBattleFxObjMath): the real frame's main layer and CGRAM index per pixel (g_ppuMainPix) says
-  // which pixels are OBJ and of which palette; the port's sprite pass is stood in for by pasting that OBJ colour, raw, on
-  // the compositor's output, then CtBattleFxFrontApply and CtBattleFxObjMath run as field.c runs them, and every OBJ
-  // pixel of a modelled row must equal the real frame. A second line, so the first one's pins stand.
-  // The same line also carries the non-sprite grade without the V-IRQ's forced-blank rows (below), which the first line
-  // counts: there the compositor's BG3 on the backdrop is drawn over by field.c's blank, not compared.
+  // The sprites' share (CtBattleFxObjMath), reported on its own line: the real frame's layer and CGRAM index per pixel
+  // (g_ppuMainPix) give the OBJ pixels and their palettes; that OBJ colour is pasted raw on the compositor's output in place
+  // of the sprite pass, CtBattleFxFrontApply and CtBattleFxObjMath run as in field.c, and every OBJ pixel of a modelled row
+  // must match. That line also grades the non-sprite pixels without the V-IRQ's forced-blank rows (field.c blanks them).
   long oBad = 0, oPx = 0, oMath = 0, oPal4 = 0, oNsBad = 0, oNsPx = 0; int oBadFrames = 0, oNsBadFrames = 0;
   long oRegRows = 0, oRegBad = 0;                                  // drawn rows, and those whose registers the PPU met otherwise
   for (int f = 0; f < f0; f++) CtOracleRunFrame(s);
@@ -9977,9 +9064,9 @@ static int runSweepFxCompose(const char* romPath, const char* statePath, int f0,
       for (int k = 0; k < gBattleFxCutN; k++) { gBattleFxCutSnap[k] = g_ctLineCutRam[k]; gBattleFxCutLine[k] = g_ctLineCutAt[k]; }
       if (getenv("CT_BATTLE_LINECUT")) for (int k = 0; k < gBattleFxCutN; k++) fprintf(stderr, "linecut f%d line %d (oracle)\n", F, gBattleFxCutLine[k]); }
     sh_free(sv);
-    // A line the PPU drew in FORCED BLANK records no main pixel (ppu_handlePixel skips ppu_getPixel): the battle's V-IRQ
-    // D1/FE97 (VTIME $D3, D1/F29A) sets INIDISP = 80 at line 211's hblank for its uploads, so lines 212.. are black
-    // whatever the layers hold -- field.c blacks those rows after the compose (the V-IRQ blank). Not the compositor's.
+    // A line drawn in forced blank records no main pixel (ppu_handlePixel skips ppu_getPixel): the battle's V-IRQ D1/FE97
+    // (VTIME $D3, D1/F29A) sets INIDISP = 80 at line 211's hblank for its uploads, so lines 212.. are black; field.c blacks
+    // those rows after the compose.
     static uint8_t rowBlank[224];
     for (int y = 0; y < 224; y++) { rowBlank[y] = 1; for (int x = 0; x < 256; x++) if (g_ppuMainPix[y * 256 + x] != 0xFFFF) { rowBlank[y] = 0; break; } }
     memset(&hh, 0, sizeof hh);
@@ -10102,6 +9189,18 @@ static int runSweepFxCompose(const char* romPath, const char* statePath, int f0,
   CtOracleDestroy(s); free(rom);
   return (badFrames || oBadFrames || fxPx == 0) ? 1 : 0;
 }
+// --sweepaitarget: C1/B8BB's targeting resolvers, micro-executed in bank $C1 over seeded inputs (mid-battle
+// captures do not seed the port). disasm/notes/battle_enemy_move_target.md sec. H.
+// Entry state: DB = $7E (every operand is a $7E address; C1/AE70's `LDA $0000,X` has X above $2000), DP = 0,
+// M 8-bit, X/Y 16-bit (`CPY #0003`, `LDX #0002`). The PC comes from the ROM's table at C1/B8BB[value*2].
+// Compared, poisoned first: $AECB (the count), $AECC[0..$10] (the list), $AEC9/$AECA (C1/AD68's `STY $AEC9`),
+// $AF1E-$AF21 (the seat cursor, the mask, the two flag counters) and the DP scratch $0A-$0D.
+// Counted apart in the report:
+//   * `a4e0`: C1/ADA1's tail `JSR C1/A4E0` when $AF20 != 0 and the winner has bit $40. Not ported: A4E0 runs
+//     C1/0003 -> C1/2986, which branches on $96F5,X / $9FF7,X, bytes the port does not maintain (sec. F.4).
+//     The count and winner are excused; every other byte is compared.
+//   * `romhang`: variant A's `BPL ->ADB3` (ADD1) jumps back to the compare with both cursors unchanged, so a
+//     ring match on an entry with bit 7 clear loops for ever and the oracle run is lost.
 static int runSweepAiTarget(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -10122,9 +9221,8 @@ static int runSweepAiTarget(const char* romPath) {
     { 0x00,0xFF,0x02, 0x10,0xFF,0x12,0xFF,0x14,0xFF,0x16,0xFF },   // holes on both sides
     { 0xFF,0x01,0xFF, 0xFF,0xFF,0x12,0x13,0xFF,0xFF,0xFF,0x20 },   // only seat 1 of the party
     { 0xFF,0xFF,0xFF, 0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17 },   // no party at all -> count 0
-    // ⚠ BIT 7 SET BUT NOT $FF, and this row exists because a mutation SURVIVED without it. C1/A3FD
-    // and C1/AE7A are `CMP #FF` -- an EXACT compare -- and with only $00-$20 and $FF seeded, reading
-    // them as a bit7 test was indistinguishable from the ROM. $80/$FE/$81/$F0/$8F separate the two.
+    // Bit 7 set but not $FF: C1/A3FD and C1/AE7A are `CMP #FF`, an exact compare, and $80/$FE/$81/$F0/$8F
+    // tell it from a bit 7 test.
     { 0x80,0x01,0xFE, 0x10,0x81,0x12,0xFF,0x14,0xF0,0x16,0x8F },
   };
   // Per-seat block bytes: +$1D (bit7 = dead), +$1E..+$21 (the stat bytes $0A selects) and +$20 (whose
@@ -10138,8 +9236,8 @@ static int runSweepAiTarget(const char* romPath) {
     { {0x00,0x86,0x03,0x30,0x21}, {0x00,0x86,0x03,0x30,0x21}, {0x00,0x86,0x03,0x30,0x21} },
     { {0x00,0x02,0xFF,0x10,0xFF}, {0x80,0x04,0xFF,0x20,0xFF}, {0x00,0x04,0xFF,0x00,0xFF} },
   };
-  // $B23A[0..7], the LAST-TARGET ring C1/ADA1 reduces against: one that matches the first candidate,
-  // one that matches the last, and one that matches nothing at all (the ring-exhausted arm).
+  // $B23A[0..7], the last-target ring C1/ADA1 reduces against: one that matches the first candidate,
+  // one that matches the last, and one that matches nothing (the ring-exhausted arm).
   static const uint8_t RING[3][8] = {
     { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 },
     { 0x02,0x01,0x00,0x07,0x07,0x07,0x07,0x07 },
@@ -10173,13 +9271,11 @@ static int runSweepAiTarget(const char* romPath) {
       memcpy(work, r, 0x20000);
 
       int my = CtBattleAiResolveList(work, rom, value);
-      // ⚠ THE SKIP DECISIONS ARE THE PORT'S OWN, so they are MEASURED and not taken on trust -- a port
-      // that wrongly claimed "unported" or "the ROM hangs" would otherwise silently delete its own
-      // mismatches from the denominator. Both classes still micro-execute:
-      //   my == -2  the ROM must NOT return. If it does, the non-termination reading is wrong -> FAIL.
-      //   my == -1  the ROM runs on into C1/A4E0, which writes $AECB / $AECC[0] / $AD8D / $986E-$9873
-      //             and NOTHING else -- so every other output byte is already final at the tail call
-      //             and is compared exactly as usual. Only the count and the winning entry are excused.
+      // The port's skip verdicts are checked, not trusted; both classes still micro-execute:
+      //   my == -2  the ROM must not return; if it does, the non-termination reading is wrong -> fail.
+      //   my == -1  the ROM runs on into C1/A4E0, which writes only $AECB / $AECC[0] / $AD8D / $986E-$9873,
+      //             so every other output is final at the tail call and compared; the count and the
+      //             winning entry are excused.
       int handler = rom[0x01B8BB + value * 2] | (rom[0x01B8BB + value * 2 + 1] << 8);
       s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
       s->cpu->dp = 0x0000; s->cpu->db = 0x7E; s->cpu->a = 0; s->cpu->x = 0; s->cpu->y = 0;   // DB: C1/AE70 blocks
@@ -10189,7 +9285,7 @@ static int runSweepAiTarget(const char* romPath) {
       s->cpu->k = 0xC1; s->cpu->pc = (uint16_t)handler;
       int returned = (CtOracleRunToPC(s, 0xC1, 0xFFFE, 200000) >= 0);
       if (my == -2) {                                       // the port claims the ROM never returns
-        if (returned) { bad++;                              //   ...and it DID: the reading is wrong
+        if (returned) { bad++;                              //   and it did: the reading is wrong
           if (shown < 8) { shown++;
             printf("  B8BB val%02X seat%d blk%d ring%d: port said NON-TERMINATING, the ROM RETURNED\n",
                    value, si, bi, ri); }
@@ -10198,9 +9294,7 @@ static int runSweepAiTarget(const char* romPath) {
       }
       if (!returned) { lost++; continue; }
 
-      // $AECB and $AECC[0] are the only two bytes C1/A4E0 can still change after C1/AE08's tail call,
-      // so on the `my == -1` cases every OTHER byte -- the mask, both flag counters, the seat cursor,
-      // the direct-page scratch and the rest of the list -- is compared exactly as on a ported one.
+      // On `my == -1` only $AECB and $AECC[0] are excused (C1/A4E0's writes after C1/AE08's tail call).
       int diff = 0, excused = (my == -1);
       for (int k = 0; k < (int)(sizeof OUT / sizeof OUT[0]); k++) {
         if (excused && OUT[k] == 0xAECB) continue;
@@ -10226,27 +9320,19 @@ static int runSweepAiTarget(const char* romPath) {
                  r[0x0A], r[0x0B], r[0x0C], r[0x0D]); }
       }
      }
-  // ===============================================================================================
-  // PHASE 2 -- C1/AC14, THE TARGETING REQUEST. The resolvers above fill a list; this is the routine
-  // that turns the list into what a caller reads, and porting it is what retires §G.4's claim that
-  // the consumer would have to be invented. It is micro-executed whole, so the resolver runs INSIDE
-  // the oracle's own `JSR ($B8BB,X)` and the port's composition is graded end to end, not per piece.
-  //
-  // The targeting value is NOT seeded: C1/AC1E reads it from the bank-CC script at the cursor $B1D2,
-  // so the sweep instead POINTS THE CURSOR at a real ROM byte holding the value it wants (found by
-  // scanning bank $CC below). A port that read the value from anywhere else -- $AEE5, a parameter,
-  // the wrong bank -- cannot pass, and the cursor's own advance is compared as an output byte.
-  //
-  // The literal values ($80/$C3/$FF) are the asymmetric path: C1/AC2A's `BRA ->AC3F` jumps PAST the
-  // copy loop, so $AD8E must stay all $FF from C1/AC46's clear while $AECC[0] carries $AED8. That is
-  // only observable because BOTH lists are poisoned and BOTH are compared in full.
+  // ---- Phase 2: C1/AC14, the targeting request ----
+  // It turns the resolvers' list into what a caller reads. Micro-executed whole, so the resolver runs inside
+  // the oracle's own `JSR ($B8BB,X)`. The value is not seeded: C1/AC1E reads it from the bank-$CC script at the
+  // cursor $B1D2, so the cursor is pointed at a ROM byte holding the wanted value, and its advance is compared.
+  // The literals ($80/$C3/$FF): C1/AC2A's `BRA ->AC3F` skips the copy loop, so $AD8E stays all $FF from C1/AC46's
+  // clear while $AECC[0] carries $AED8; both lists are poisoned and compared in full.
   static const int TVAL[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
                               0x80, 0xC3, 0xFF };                 // the twelve ported + three literals
   int tcur[sizeof TVAL / sizeof TVAL[0]];
   for (int k = 0; k < (int)(sizeof TVAL / sizeof TVAL[0]); k++) {
     tcur[k] = -1;
     for (int i = 1; i < 0x10000; i++)                             // bank $CC = ROM offset $0C0000
-      if (rom[0x0C0000 + i] == TVAL[k]) { tcur[k] = i - 1; break; }   // cursor is INCremented first
+      if (rom[0x0C0000 + i] == TVAL[k]) { tcur[k] = i - 1; break; }   // the cursor is incremented first
     if (tcur[k] < 0) { printf("sweepaitarget: FAIL -- no byte %02X anywhere in bank $CC\n", TVAL[k]);
                        CtOracleDestroy(s); free(rom); return 1; }
   }
@@ -10269,8 +9355,8 @@ static int runSweepAiTarget(const char* romPath) {
       for (int k = 0; k < 8; k++) r[0xB23A + k] = RING[ri][k];
       r[0xB252] = (uint8_t)(si * 2 + 1);
       for (int k = 0; k < 0x20; k++) r[0xB19E + k] = (uint8_t)(0x51 + k * 0x13);
-      r[0xAED8] = (uint8_t)(0x30 + si * 3 + bi);                  // VARIES, so a port that took the
-      r[0xB1D2] = (uint8_t)tcur[vi];                              //   literal from a constant is red
+      r[0xAED8] = (uint8_t)(0x30 + si * 3 + bi);                  // varies, so a port that took the
+      r[0xB1D2] = (uint8_t)tcur[vi];                              //   literal from a constant fails
       r[0xB1D3] = (uint8_t)(tcur[vi] >> 8);
       for (int k = 0; k < (int)(sizeof TOUT / sizeof TOUT[0]); k++) r[TOUT[k]] = 0x5A;
       r[0xB1D2] = (uint8_t)tcur[vi]; r[0xB1D3] = (uint8_t)(tcur[vi] >> 8);   // (re-seed: TOUT poisons it)
@@ -10323,10 +9409,8 @@ static int runSweepAiTarget(const char* romPath) {
       }
      }
 
-  // THE LIST-LENGTH TALLY IS PART OF THE CHECK. A resolver family whose every case resolved to exactly
-  // one target would be indistinguishable from the single-seat model this port used to carry, so the
-  // report says how many cases produced a count of 0, 1, 2 and 3+. `multi` reaching zero would mean the
-  // sweep had stopped exercising the very thing that makes the ROM's shape different from ours.
+  // The list-length tally: how many cases produced a count of 0, 1 and 2+. `multi` at zero would mean the
+  // sweep no longer reaches multi-target lists.
   int c0 = seenCount[0], c1 = seenCount[1], multi = 0;
   for (int k = 2; k < 17; k++) multi += seenCount[k];
   printf("sweepaitarget: C1/B8BB resolvers vs micro-executed bank-$C1 handlers -> %d/%d byte-exact "
@@ -10339,8 +9423,7 @@ static int runSweepAiTarget(const char* romPath) {
          "%d took the LITERAL arm ($AD8E left all $FF by AC2A's BRA), %d resolved to NO TARGET "
          "($B2AE = $FF, not the lead PC), %d a4e0-tailed, %d rom-nonterminating\n",
          tok, tok + tbad, tbad, tlost, tliteral, tempty, tunported, thang);
-  // Coverage assertions, same contract as the tally above: each names an arm that the port's shape
-  // depends on, and a zero means the sweep has stopped telling the two shapes apart.
+  // Coverage assertions: a zero means an AC14 arm went unreached.
   if (!tliteral || !tempty)
     printf("sweepaitarget: FAIL -- an AC14 arm was never reached (literal %d, no-target %d)\n",
            tliteral, tempty);
@@ -10348,31 +9431,16 @@ static int runSweepAiTarget(const char* romPath) {
   return (bad || tbad || !tliteral || !tempty) ? 1 : 0;
 }
 
-// =================================================================================================
-// --sweepaieval -- THE AI's CONDITION WALK (C1/AFD2), its condition handlers (C1/B80D) and its commit (C1/8C3E),
-// against the ROM run on the same WRAM (the zelda3 check: both sides from one image, the whole image compared).
-//
-// SEEDED FROM REAL BATTLES, then fuzzed: five battle states (the attract's two fights, bat3, GATO, the Hetake forest)
-// give the WRAM, and the bytes the handlers read are randomised byte by byte (a byte keeps the battle's value half the
-// time): the rosters $AEFF / $AF02 / $AF0A / $AF0D / $AF15 and $AEC6, $AEB3, $B158, $B163, $B19E-$B1BD, $B23A,
-// $B320, $96F1-3, $AED8, the RNG cursor $26 and the demo bit ($2989 bit 5), the pointer page $0B, and every combatant
-// block ($5E2D + seat*$80, one byte in eight). ENTRY STATE: C1/8C09's -- DB = $7E, D = 0, M 8-bit, X 16-bit.
-//   phase 1  C1/AFD2 for every enemy id 00-FF from each state, A = the id, in a random slot; graded up to the first
-//            commit that commits (C1/8C53, past C1/8C3E's `$B1CF = 80` return) or the walk's return.
-//   phase 2  each condition handler ALONE, on real operands: the cursor $B1D2 on every 1/40th occurrence of the op's
-//            byte in bank $CC (so the three bytes after it are whatever the ROM holds there -- script or not), $B1CF
-//            0 / 1 / $80 (C1/AEFD's three arms and C1/8C3E's early return); graded to C1/8C53 or the handler's RTS.
-//            It reaches the handlers no block-1 script of phase 1 does (11, 14-16, 19, 1C-1E, 20-22).
-//   phase 3  C1/8C3E whole, with the entry's eval handler (C1/B85F): a real section of a real script, the cursor
-//            anywhere in its condition area, $B263/$B26B equal or not, $B1D4 on one of the section's entries or on
-//            its $FE, $B2C0 0 or 1 (the reactive arm); graded to the RTS.
-// COMPARED: all of WRAM, both banks, but the stack page ($0100-$01FF). EXCUSED (counted, named in the report): the
-// walk met a condition whose C1/0003 the port does not have (0F's sub-mode 08, 0E's 08 and up) or a resolver the port
-// does not have (05/06 need the live host; 07-09 / 11-17 underived) -- the ROM run is skipped there; a case the port DID
-// port that reaches an unported C1/0003 FAILS. C1/0003 entry 5 with a ported sub-mode of C1/2986 (04-07, 09-0C, 0E: the
-// conditions 0C 0D 0E 10 1F) runs through; the feet ($1D0C/$1D23, the mirror $A039/$A050) are fuzzed on a stream of
-// their own, so the other bytes' draws are what they were (a handler that reads the feet -- the turn handler 07's
-// arrivals -- sees other feet).
+// --sweepaieval: the enemy AI's condition walk (C1/AFD2), its condition handlers (C1/B80D), its commit (C1/8C3E), C1/AC14
+// with every resolver and the turn handlers (C1/B88D), against the ROM run on the same WRAM, all of it compared but the
+// stack page (disasm/notes/battle_ai_interp.md sec. 19.4, 23.5). Five battle states give the WRAM; aiEvalFuzz randomises
+// the bytes the handlers read. Entry state: C1/8C09's (DB = $7E, D = 0, M 8-bit, X 16-bit).
+//   phase 1  C1/AFD2 for every enemy id from each state, to the first commit (C1/8C53) or the walk's return;
+//   phase 2  each condition handler alone, the cursor on real bank-$CC bytes, $B1CF 0 / 1 / $80;
+//   phase 3  C1/8C3E with the entry's eval handler (C1/B85F) on real script sections.
+// Excused (counted): a condition whose C1/0003 the port lacks (0F's sub-mode 08, 0E's 08 and up) or a resolver it lacks
+// (05/06 need the live host; 07-09 / 11-17 underived); the ROM run is skipped. A ported case that reaches an unported
+// C1/0003 fails. C1/0003 entry 5 with a ported C1/2986 sub-mode (04-07, 09-0C, 0E) runs through.
 static void aiEvalFuzz(uint8_t* r, uint32_t* rng) {
   #define NEXT() (*rng = *rng * 1103515245u + 12345u, (int)((*rng >> 16) & 0xFF))
   #define FUZZ(a) do { if (NEXT() & 1) r[(a)] = (uint8_t)NEXT(); } while (0)
@@ -10385,7 +9453,8 @@ static void aiEvalFuzz(uint8_t* r, uint32_t* rng) {
   FUZZ(0xAEC6); if ((NEXT() & 3) == 0) r[0xAEC6] = (uint8_t)(NEXT() & 7);
   FUZZ(0x96F1); FUZZ(0x96F2); FUZZ(0x96F3); FUZZ(0xAED8); FUZZ(0x0026); FUZZ(0x000B);
   if (NEXT() & 1) r[0x2989] ^= 0x20;
-  { uint32_t pr = *rng ^ 0x9E3779B9u;                              // the feet, on their own stream (*rng untouched)
+  { uint32_t pr = *rng ^ 0x9E3779B9u;                              // the feet, on their own stream (*rng untouched,
+                                                                   //   so the other bytes' draws do not move)
     for (int i = 0; i < 11; i++) {
       pr = pr * 1103515245u + 12345u; if ((pr >> 16) & 1) r[0x1D0C + i] = (uint8_t)(pr >> 20);
       pr = pr * 1103515245u + 12345u; if ((pr >> 16) & 1) r[0x1D23 + i] = (uint8_t)(pr >> 20);
@@ -10770,16 +9839,13 @@ static int runSweepAiEval(const char* romPath) {
           !t3.ok || handMissing || t4.bad || t4.lost || t5.bad || t5.lost || msgBad || valMissing || turnMissing) ? 1 : 0;
 }
 
-// =================================================================================================
-// --sweepband25a3 -- C1/25A3, C1/1FDD's routine 0: THE BAND (battle.c battleAreaBand25A3) against the ROM micro-executed
-// on the same WRAM, all of WRAM compared but the direct page and the stack ($0000-$01FF: the routine's scratch $80-$92 /
-// $AE and C1/0222's $D3-$E2, which the port keeps in locals). Battle states give the WRAM; the inputs are fuzzed: the side
-// $9604 (0, 1 or another non-zero byte), the attacker $9605 and the target $9606 (0..A), the half-width $9607 (1..4, the
-// tables' 02 among them), $9608 (0, 1 or another non-zero byte: C1/C78D / C1/C813 stage the area entry's bit 7 there --
-// the enemies' area 08 has 0, Lucca's Flame Toss area 05 has 1), the four candidate gates $96F5 / $9FF7 bit 7 / $A0A8 /
-// $A09B, and every combatant's foot $1D0C / $1D23 -- half the cases at random, half strung along the attacker-target
-// line with a jitter, so the band takes several victims. ENTRY: C1/1FDD's `JSR ($1FEA,X)` -- DB = $7E, D = 0, M 8-bit,
-// X 16-bit; NMI and IRQs off. The tally counts the cases by side and $9608 with two victims or more.
+// --sweepband25a3: C1/25A3, C1/1FDD's routine 0, the band (battle.c battleAreaBand25A3), against the ROM on the same WRAM,
+// all of it compared but $0000-$01FF (the routine's scratch $80-$92 / $AE and C1/0222's $D3-$E2 are port locals). Battle
+// states give the WRAM; fuzzed: the side $9604, the attacker $9605 and target $9606 (0..A), the half-width $9607 (1..4),
+// $9608 (C1/C78D / C1/C813 stage the area entry's bit 7 there: the enemies' area 08 has 0, Flame Toss's area 05 has 1),
+// the candidate gates $96F5 / $9FF7 bit 7 / $A0A8 / $A09B, and the feet $1D0C / $1D23 (half the cases strung along the
+// attacker-target line, so the band takes several victims). Entry: C1/1FDD's `JSR ($1FEA,X)` (DB = $7E, D = 0, M 8-bit,
+// X 16-bit), NMI and IRQs off. The tally counts cases with two victims or more, by side and $9608.
 static int runSweepBand25A3(const char* romPath) {
   static const char* STATES[] = {
     "saves/battle_re/bat3_lake.state", "saves/battle_re/bat9_lake.state", "saves/battle_re/gato_cyclone.state",
@@ -10861,14 +9927,12 @@ static int runSweepBand25A3(const char* romPath) {
   return (bad || lost || !multi[0][0] || !multi[0][1] || !multi[1][0] || !multi[1][1]) ? 1 : 0;
 }
 
-// =================================================================================================
-// --sweeptechpass -- C1/F205, THE VICTORY'S TECH PASS (single techs, then the dual and triple techs), battle.c's
-// battleTechPass against the ROM micro-executed on the same WRAM, ALL of WRAM compared but the stack page. Five battle
-// states give the WRAM; the pass's inputs are fuzzed: the rosters $AEFF[0..2] (char ids 0-6, sometimes FF), each seat's
-// block (+$00 the id, +$02 bit 4, the countdown +$2D, the lifetime TP +$16..18 up to the 98967F cap), the tech levels
-// $2830.. and bits $2837.., the dual/triple flags $283E.., the TP pool $B2DB-$B2DD, $B2AF / $B2B3.. / $B3CC / $B1F4, and
-// $7F:01E0 (the magic gate). ENTRY: C1/F9E3's JSR -- DB = $7E, D = 0, M 8-bit, X 16-bit; NMI and IRQs off (the CPU's
-// accesses advance the beam). The tally counts the cases where a single, a dual and a triple tech were learned.
+// --sweeptechpass: C1/F205, the victory's tech pass (single techs, then dual and triple), battle.c's battleTechPass,
+// against the ROM on the same WRAM, all of it compared but the stack page. Five battle states give the WRAM; fuzzed: the
+// rosters $AEFF[0..2], each seat's block (+$00 the id, +$02 bit 4, the countdown +$2D, the lifetime TP +$16..18 up to the
+// 98967F cap), the tech levels $2830.. and bits $2837.., the dual/triple flags $283E.., the TP pool $B2DB-$B2DD,
+// $B2AF / $B2B3.. / $B3CC / $B1F4 and $7F:01E0 (the magic gate). Entry: C1/F9E3's JSR (DB = $7E, D = 0, M 8-bit, X 16-bit),
+// NMI and IRQs off (the CPU's accesses advance the beam). The tally counts cases where each kind of tech was learned.
 static int runSweepTechPass(const char* romPath) {
   static const char* STATES[] = {
     "saves/attract_demo_battle_f1850.state", "saves/attract_07d_battle_f4540.state",
@@ -10948,50 +10012,24 @@ static int runSweepTechPass(const char* romPath) {
   return (bad || lost || !singles || !duals || !triples) ? 1 : 0;
 }
 
-// =================================================================================================
-// --sweepmoveclass -- C1/3760's ENEMY MOVE CLASSES 2, 3, 7 and 8, the four that had no witnessed mode
-// in any capture this repo owns and were therefore left to a fall-through. The bank-$C1 harness
-// --sweepaitarget built is what makes them gradable at all.
-//
-// ⚠ X AND Y ARE SIXTEEN BITS HERE, and the first reading of this was WRONG. The handlers' bare
-// `LDA $DB / TAX / LDA $C0F700,X` looks like it demands a narrow X -- it does not, because C1/01F9
-// returns with the accumulator's B half already cleared (`29 FF 00`, a 16-bit `AND #00FF`, at
-// C1/0205). The width is settled by two three-byte immediates the 8-bit decode turns into garbage:
-// `C0 0B 00` at C1/2914 is `CPY #000B`, not `CPY #0B` + `BRK`, and `E0 00 02` at C1/0208 is
-// `CPX #0200`. Running this sweep with X narrow sent the CPU off into bank 0 at $FF1C on every case
-// that reaches C1/28B0 -- 756 of 810 `lost`, which is how the mistake surfaced.
-// `LDX $9C` therefore reads the WORD $9C/$9D, so $9D is seeded to 0. M is 8-bit and DB = $7E.
-//
-// THE CLASS COMES FROM THE ROM, TWICE OVER: the seeded $A2B5 goes through CC/FBAB to a class, the port
-// dispatches on that, and the harness takes the handler's ENTRY ADDRESS from C1/3760[cls*2] rather
-// than from a list written here. A mis-transcribed address or a mis-read class table cannot hide.
-//
-// WHAT IS COMPARED: every persistent byte the four handlers write -- $9786 (bearing), $96DE (facing),
-// $98AF/$98B7 (the segment base), $98A7 (armed), $9829 (the arrival counter), $5E1D (the split
-// commit), $9831/$9839 (the victim's recorded foot), $A039/$A050 (the C1/283D mirror the step lands
-// in), $A5FD and $9875. All poisoned first, so a write the port MISSES is as loud as a wrong one --
-// which is what grades classes 7 and 8 NOT clearing $A5FD, and class 8 not touching $9875 at all.
-// EXCLUDED: $80/$8C/$8E/$AE/$DB/$D3-$D6, the ROM's direct-page scratch, which are C locals in the port
-// and are claimed by nothing.
-//
-// ⚠ ONE INPUT IS FORCED INTO AGREEMENT RATHER THAN GRADED: C1/28B0's presence gate. The ROM reads
-// `$96F5,Y`; this engine reads $2980 / the staged record's +6 bit7, a stand-in recorded in
-// battle_enemy_move_target.md §F.4 because nothing in the port writes $96F5. The sweep seeds all three
-// consistently so the body test is exercised and comparable -- the handler is what is under test, not
-// the substitution, and saying so is the point of this paragraph.
-// C1/285A's four box rows for ONE combatant, written the way the ROM writes them. The sweep needs
-// these because C1/28B0 reads the PRE-BUILT rows $975A/$9770/$9765/$977B for every OTHER body -- only
-// the actor's are rebuilt by the handler's own `JSR C1/285A`. In the live engine C1/283D refreshes
-// them for every present combatant before each handler loop; here nothing does, so without seeding
-// them the oracle compared its boot zeros against a port that recomputes from the mirror, and every
-// overlapping-body case disagreed (measured: 132 of 810).
-//
-// ⚠ THE CLAMPS BRANCH ON THE SIGN OF THE POSITION, NOT ON THE ARITHMETIC RESULT -- `BMI ->12868`
-// takes the SUBTRACT with no floor at all when the foot is >= $80, and the max side clamps to $FF
-// only when a foot >= $80 wraps back under it. Writing them as a plain clamp-to-0/clamp-to-$FF agrees
-// for small extents and diverges for large ones, which is exactly why this is spelled out rather than
-// reusing the engine's own battleBoxAt: seeding from the ROM's formula is what lets the sweep GRADE
-// battleBoxAt instead of assuming it.
+// --sweepmoveclass: C1/3760's enemy move classes 2, 3, 7 and 8 (no capture witnessed their modes), micro-executed in
+// bank $C1. Entry state: M 8-bit, X/Y 16-bit, DB = $7E. X is 16-bit: C1/01F9 returns with B cleared (`AND #00FF` at
+// C1/0205), and `CPY #000B` (C1/2914) and `CPX #0200` (C1/0208) are three-byte immediates. `LDX $9C` reads the word
+// $9C/$9D, so $9D is seeded to 0.
+// The class comes from the ROM: the seeded $A2B5 goes through CC/FBAB, and the handler is C1/3760[cls*2].
+// Compared, poisoned first: $9786 (bearing), $96DE (facing), $98AF/$98B7 (the segment base), $98A7 (armed), $9829 (the
+// arrival counter), $5E1D (the split commit), $9831/$9839 (the victim's recorded foot), $A039/$A050 (the C1/283D
+// mirror), $A5FD and $9875 (classes 7 and 8 do not clear $A5FD; class 8 leaves $9875). Not compared: the DP scratch
+// $80/$8C/$8E/$AE/$DB/$D3-$D6 (C locals in the port).
+// Note: C1/28B0's presence gate is seeded to agree, not graded. The ROM reads `$96F5,Y`; the port reads $2980 / the
+// staged record's +6 bit 7, a stand-in for $96F5,Y, which the port does not maintain (battle_enemy_move_target.md
+// sec. F.4).
+
+// C1/285A's four box rows for one combatant, as the ROM writes them. C1/28B0 reads the pre-built rows
+// $975A/$9770/$9765/$977B for every other body (in the live engine C1/283D refreshes them), so the sweep seeds them.
+// Note: the clamps branch on the sign of the position, not of the result: `BMI ->12868` subtracts with no floor
+// when the foot is >= $80, and the max side clamps to $FF only when a foot >= $80 wraps under it. Seeding from the
+// ROM's formula lets the sweep grade battleBoxAt.
 static void mvSeedBoxRows(uint8_t* r, int c) {
   int px = r[0xA039 + c], py = r[0xA050 + c], ex = r[0x971E + c], ey = r[0x9729 + c], v;
   v = (px - ex) & 0xFF;  if (!(px & 0x80) && (v & 0x80)) v = 0;              // 1285B-12869 -> $975A
@@ -11009,9 +10047,8 @@ static int runSweepMoveClass(const char* romPath) {
   Snes* s = CtOracleCreate(rom, len, NULL);
   if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
-  // battle.c caches the ROM separately (CC/FBAB and $C0F700 are read through it), and nothing in the
-  // `ct` harness had ever needed it before this sweep -- without this the probe's class lookup returns
-  // -1 for every case and the sweep scores a vacuous 0/0.
+  // battle.c caches the ROM separately (CC/FBAB and $C0F700 are read through it); without it the probe's
+  // class lookup returns -1 for every case.
   if (!CtBattleLoadRom(romPath)) { printf("FAIL: CtBattleLoadRom cache\n");
                                    CtOracleDestroy(s); free(rom); return 4; }
   static uint8_t work[0x20000];
@@ -11022,8 +10059,8 @@ static int runSweepMoveClass(const char* romPath) {
   static const int MODE[] = { 0x07, 0x1B, 0x1E, 0x1F, 0x08, 0x09,
                               0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19 };
   // self (x,y) and target (x,y). Rows 0-3 put the target on each side; row 4 shares the actor's
-  // 32-pixel cell on BOTH axes and row 5 on neither, which is the only thing that separates class 3's
-  // C1/0119 arrival test (`LSR A` x5) from a plain coordinate compare.
+  // 32-pixel cell on both axes and row 5 on neither, which separates class 3's C1/0119 arrival test
+  // (`LSR A` x5) from a plain coordinate compare.
   static const int POS[6][4] = {
     { 0x60, 0x60, 0xA0, 0x60 }, { 0xA0, 0x60, 0x60, 0x60 },
     { 0x60, 0x60, 0x60, 0xA0 }, { 0x60, 0xA0, 0x60, 0x60 },
@@ -11040,7 +10077,7 @@ static int runSweepMoveClass(const char* romPath) {
       uint8_t* r = s->ram;
       int mode = MODE[mi];
       // ---- the inputs ----
-      r[0x9C] = (uint8_t)SLOT; r[0x9D] = 0;                 // `LDX $9C`, one byte (X is 8-bit)
+      r[0x9C] = (uint8_t)SLOT; r[0x9D] = 0;                 // `LDX $9C` reads the word (X is 16-bit)
       r[0xA2B5] = (uint8_t)mode;                            // C1/373B's store: the mode being dispatched
       for (int c = 0; c < 11; c++) {
         r[0x1D0C + c] = 0x10; r[0x1D23 + c] = 0x10;         // parked well away from the actor
@@ -11057,7 +10094,7 @@ static int runSweepMoveClass(const char* romPath) {
       r[0xA039 + 0]   = (uint8_t)POS[pi][2]; r[0xA050 + 0]   = (uint8_t)POS[pi][3];
       r[0x9752 + SLOT] = 0;                                 // the move-target is PC seat 0
       r[0x2989] = (uint8_t)((pi & 1) ? 0x04 : 0x00);        // C1/2897's box-bottom rule, both ways
-      // the actor is present on BOTH sides' readings
+      // the actor is present on both sides' readings
       r[0x96F5 + CMB] = 1; r[0x29BF + SLOT * 12 + 6] = 0x00;
       if (NBODY[bi] >= 0) {                                 // one more body, present on both readings
         int c = NBODY[bi];
@@ -11121,9 +10158,8 @@ static int runSweepMoveClass(const char* romPath) {
                  r[0x9839+SLOT], r[0xA039+CMB], r[0xA050+CMB], r[0xA5FD+SLOT], r[0x9875]); }
       }
      }
-  // The armed/stopped tally is part of the check: class 2's whole point is that a BLOCKED step IS its
-  // arrival, so a grid that never blocks would leave every stop path unexercised and the sweep green
-  // for the wrong reason.
+  // The armed/stopped tally: class 2's blocked step is its arrival, so a grid that never blocks leaves
+  // the stop paths unexercised.
   printf("sweepmoveclass: C1/3760 classes 2/3/7/8 vs micro-executed bank-$C1 handlers -> %d/%d "
          "byte-exact (%d mismatch, %d lost, %d not-these-classes); classes reached 0x%X; "
          "%d segments left ARMED / %d STOPPED\n",
@@ -11132,22 +10168,11 @@ static int runSweepMoveClass(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// --sweephitroll -- C1/DC64, THE PHYSICAL TO-HIT ROLL, micro-executed against battleHitCore.
-//
-// WHY IT EXISTS. Three facts of this routine are reachable by NO scenario in the suite, and mutation
-// testing is how that was established rather than guessed: C1/DC99's `>=` (no fixture's draw ever
-// equals the percentage), the $3A/$3B stat-offset fallback ($AEE9/$AEEA are always staged), and --
-// until field-battle-atk-header was found to carry them -- the rand divisor and the clamp constant.
-// A scenario has no seeds to widen; this does.
-//
-// THE GRID IS BUILT AROUND THE BOUNDARY. hit and evade straddle the clamp ($63/$64) and every ratio
-// that makes a non-trivial percentage, and $26 -- the RNG cursor -- is swept so the roll lands above,
-// below AND exactly ON the percentage. That last one is the whole point: `>=` and `>` differ on one
-// value in a hundred, and the report asserts how many cases reached it.
-//
-// The compare is the whole 128 KB with $16/$17/$18/$28-$2F/$32/$33/$AE4F poisoned first. $01FD is
-// excused for the same measured reason as --sweepmuldiv: C1/DC64 reaches C1/C92A, which brackets
-// itself in PHP/PLP, and this port has no processor-status register to push.
+// --sweephitroll: C1/DC64, the physical to-hit roll, against battleHitCore. No scenario reaches C1/DC99's `>=` (no
+// fixture's draw equals the percentage) or the $3A/$3B stat-offset fallback ($AEE9/$AEEA are always staged).
+// hit and evade straddle the clamp ($63/$64) and the ratios that give a non-trivial percentage, and $26 (the RNG
+// cursor) is swept so the roll lands above, below and on the percentage; the report counts the boundary cases.
+// The whole 128 KB is compared with $16/$17/$18/$28-$2F/$32/$33/$AE4F poisoned first; the stack is excused (below).
 static int runSweepHitRoll(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -11173,14 +10198,14 @@ static int runSweepHitRoll(const char* romPath) {
       uint8_t* r = s->ram;
       memcpy(r, base, 0x20000);
       r[0x26] = (uint8_t)(seed * 7 + 3);                    // the stream position C1/AF22 walks
-      for (int k = 0; k < NO; k++) r[OUT[k]] = 0x5A;        // POISON every byte the routine writes
+      for (int k = 0; k < NO; k++) r[OUT[k]] = 0x5A;        // poison every byte the routine writes
       r[0x16] = (uint8_t)HIT[hi];                           // the two staged stats (C1/D174)
       r[0x18] = (uint8_t)EVA[ei];
       if (HIT[hi] >= EVA[ei]) nClamp++; else nDivide++;
       memcpy(work, r, 0x20000);
       int pct = 0, roll = 0;
       int my = CtBattleHitCoreProbe(work, rom, &pct, &roll);
-      if (pct == roll) nBoundary++;   // the ONE value where C1/DC99's `>=` and `>` disagree
+      if (pct == roll) nBoundary++;   // the one value where C1/DC99's `>=` and `>` disagree
       if (my) nHit++; else nMiss++;
       s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = false; s->cpu->d = false; s->cpu->i = true;
       s->cpu->dp = 0x0000; s->cpu->db = 0x7E;
@@ -11190,12 +10215,9 @@ static int runSweepHitRoll(const char* romPath) {
       s->cpu->sp = 0x01FD; r[0x01FE] = 0xFD; r[0x01FF] = 0xFF;
       s->cpu->k = 0xC1; s->cpu->pc = 0xDC64;
       if (CtOracleRunToPC(s, 0xC1, 0xFFFE, 200000) < 0) { lost++; continue; }
-      // ⭐ THE STACK IS EXCUSED, AND ITS DEPTH IS MEASURED RATHER THAN ASSUMED. C1/DC64 is the first
-      // routine swept here that NESTS: it calls C1/C90B, then C1/C92A, then C1/AF22 -- which pushes $2C
-      // and calls C1/C92A again, which pushes P. Micro-executing that uses the stack; calling a C
-      // function does not, so every byte the chain pushed reads as a mismatch. The excused window is
-      // $0100-$01FF and the report carries the DEEPEST address the oracle actually touched, so the
-      // exclusion cannot quietly widen: if the chain ever pushes deeper, the number moves.
+      // The stack page $0100-$01FF is excused: C1/DC64 nests (C1/C90B; C1/C92A, which brackets itself in
+      // PHP/PLP; C1/AF22, which pushes $2C and calls C1/C92A again), and a C call pushes nothing. The report
+      // prints the deepest address the oracle touched, so a deeper push shows.
       int diff = 0, at = -1;
       for (int k = 0; k < 0x20000 && !diff; k++) {
         if (k >= 0x0100 && k <= 0x01FF) {
@@ -11228,18 +10250,13 @@ static int runSweepHitRoll(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || !armsOk) ? 1 : 0;
 }
-// --sweepstatfetch -- C1/E9A8, C1/E9C5 and C1/D174: the staged block BASES and the stat fetch that
-// reads them, micro-executed against battleStageBase / battleStatFetch.
-//
-// PHASE 1 is the two staging halves. They are byte-identical eight-instruction routines differing
-// only in where they store, and each is a FALL-THROUGH target -- nothing JSRs them, which is why a
-// static scan found neither writer and --monitor --writer did, in two commands.
-// PHASE 2 is C1/D174, which adds the caller's stat OFFSET ($AEE9 / $AEEA) to the base and indexes
-// $5E2D. It has no fallback for a zero offset: it reads the block's +0 like any other offset, which
-// is what retired the port's invented `if (hoff == 0) hoff = 0x3A`.
-//
-// Both phases compare the whole 128 KB with every output poisoned, and both excuse the stack for the
-// measured reason --sweepmuldiv records: these routines call C1/C90B, which is entered by JSR.
+// --sweepstatfetch: C1/E9A8, C1/E9C5 and C1/D174, the staged block bases and the stat fetch that reads them, against
+// battleStageBase / battleStatFetch.
+// Phase 1: the two staging halves, identical eight-instruction routines that differ only in where they store; both
+// are fall-through targets (nothing JSRs them).
+// Phase 2: C1/D174 adds the caller's stat offset ($AEE9 / $AEEA) to the base and indexes $5E2D; a zero offset reads
+// the block's +0 like any other (no fallback).
+// Both compare the whole 128 KB with every output poisoned and excuse the stack (the JSR into C1/C90B).
 static int runSweepStatFetch(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -11250,7 +10267,7 @@ static int runSweepStatFetch(const char* romPath) {
   static uint8_t work[0x20000], base[0x20000];
   memcpy(base, s->ram, 0x20000);
   static const int IDX[] = { 0, 1, 2, 3, 4, 7, 10, 0xFF };      // the eleven combatants, plus $FF
-  static const int OFF[] = { 0x00, 0x01, 0x3A, 0x3B, 0x45, 0xFF };   // stat offsets incl. ZERO
+  static const int OFF[] = { 0x00, 0x01, 0x3A, 0x3B, 0x45, 0xFF };   // stat offsets incl. zero
   const int NI = (int)(sizeof IDX / sizeof IDX[0]), NF = (int)(sizeof OFF / sizeof OFF[0]);
   int ok = 0, bad = 0, shown = 0, lost = 0, stackLow = 0x0200;
   int nStage = 0, nFetch = 0, nZeroOff = 0;
@@ -11269,7 +10286,7 @@ static int runSweepStatFetch(const char* romPath) {
        r[0x28] = 0x5A; r[0x29] = 0x5A; r[0x2A] = 0x5A; r[0x2B] = 0x5A;
        r[0x2C] = 0x5A; r[0x2D] = 0x5A; r[0x2E] = 0x5A; r[0x2F] = 0x5A;
        if (phase == 0) { r[0xB1F4] = 0x5A; r[0xB1F5] = 0x5A; r[0xB1F6] = 0x5A; r[0xB1F7] = 0x5A; }
-       else {                                                   // D174 READS the bases
+       else {                                                   // D174 reads the bases
          r[0xB1F4] = (uint8_t)(IDX[ai] * 0x80); r[0xB1F5] = (uint8_t)((IDX[ai] * 0x80) >> 8);
          r[0xB1F6] = (uint8_t)(IDX[bi] * 0x80); r[0xB1F7] = (uint8_t)((IDX[bi] * 0x80) >> 8);
          if (OFF[fi] == 0 || OFF[gi] == 0) nZeroOff++;
@@ -11318,29 +10335,15 @@ static int runSweepStatFetch(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || !armsOk) ? 1 : 0;
 }
-// --sweeprevalidate -- C1/D63F-D68E and C1/AD09: the TARGET RE-VALIDATION and the bitmask it publishes.
-//
-// This is the second reader of the $AE6D forwarding table, and the richer one: C1/C8F7 hops once and
-// hands back whatever it lands on, this checks the landing and rerolls if the replacement is gone too.
-// It is also the located call site that needed battleRng's X -- `LDX #0003 / LDA #0B` is base 3 over a
-// span of (A - X) = 8, landing in [3, $0B), the enemy seats exactly.
-//
-// FOUR THINGS HERE CANNOT BE REACHED FROM A FIXTURE, which is the whole reason for the sweep:
-//   * the $AE6D hop, because $AE6D is identity in all eleven battle fixtures (see sweepredirect);
-//   * the DOUBLE-absent path, where the replacement is gone too and the draw takes over;
-//   * the D656 bail, which needs every enemy seat dead at once;
-//   * and the reroll's interaction with the divide's carried-in $2E, swept explicitly here.
-//
-// THE EXIT IS GRADED, NOT ASSUMED. The ROM leaves this block at one of two addresses -- D691 on every
-// normal path and the mode-2 skip, D742 on the bail -- and which one is a pure function of the SEED, so
-// the harness picks the stop PC without consulting the port. The port's own return code is then checked
-// against that same seed-derived expectation, so choosing the wrong exit is caught even when the bytes
-// happen to agree.
-//
-// ⭐ AND THE REROLL'S TERMINATION IS MEASURED RATHER THAN TRUSTED. D685's retry has no bound in the ROM
-// and needs none: the D646 pre-loop guarantees a living seat inside 3..$0A, exactly the span the draw
-// covers. Read alone the loop looks like the C1/ADA1 non-termination hazard; the oracle runs every seed
-// here under an op cap and a ROM that failed to arrive would be counted as lost.
+// --sweeprevalidate: C1/D63F-D68E and C1/AD09, the target re-validation and the bitmask it publishes, against
+// battleTargetRevalidate / battleTargetMask. The second reader of the $AE6D forwarding table: C1/C8F7 hops once; this
+// checks the landing and rerolls if the replacement is gone too. `LDX #0003 / LDA #0B` draws from [3, $0B), the enemy
+// seats (battleRng's X is a base).
+// Not reachable from a fixture: the $AE6D hop ($AE6D is identity in all battle fixtures, see --sweepredirect), the
+// double-absent path, the D656 bail (every enemy seat dead) and the reroll with the divide's carried-in $2E.
+// The exit (D691 on normal paths and the mode-2 skip, D742 on the bail) follows from the seed alone; the harness stops
+// there and checks the port's return code against it. D685's retry has no bound, but the D646 pre-loop guarantees a
+// living seat in 3..$0A; the oracle runs under an op cap, so a run that never arrives counts as lost.
 static int runSweepRevalidate(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -11350,12 +10353,11 @@ static int runSweepRevalidate(const char* romPath) {
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000], base[0x20000];
   memcpy(base, s->ram, 0x20000);
-  // Roster patterns over the eleven seats. P1 kills every enemy at once (the D656 bail); P3 puts the
-  // redirect's landing seat in the grave too (the double-absent path); P4 leaves exactly one alive, so
-  // the reroll has to find the single needle in its eight-seat span.
+  // Roster patterns over the eleven seats. P1 kills every enemy (the D656 bail); P3 makes the redirect's
+  // landing seat absent too (the double-absent path); P4 leaves one alive in the reroll's eight-seat span.
   static const int PRES[5][0x0B] = {
     { 0,0,0, 0,0,0,0,0,0,0,0 },                                   // everyone present
-    { 0,0,0, 1,1,1,1,1,1,1,1 },                                   // every ENEMY absent -> bail
+    { 0,0,0, 1,1,1,1,1,1,1,1 },                                   // every enemy absent -> bail
     { 0,0,0, 0,1,0,0,0,0,0,0 },                                   // seat 4 absent
     { 0,0,0, 0,1,0,0,1,0,0,0 },                                   // seats 4 and 7 absent
     { 1,1,1, 1,1,1,1,1,1,0,1 },                                   // only seat 9 alive
@@ -11395,7 +10397,7 @@ static int runSweepRevalidate(const char* romPath) {
          r[0x25] = 0x5A; r[0x28] = 0x5A; r[0x29] = 0x5A; r[0x2A] = 0x5A; r[0x2B] = 0x5A;
          r[0x32] = 0x5A; r[0x33] = 0x5A; r[0xB31E] = 0x5A;
          r[0x2989] = 0x00;                                         // bit 5 clear, as every fixture has it
-         // Which exit the ROM must take, derived from the SEED alone -- never from the port's answer.
+         // Which exit the ROM must take, derived from the seed alone, not from the port's answer.
          int anyLiving = 0;
          for (int k = 3; k < 0x0B; k++) if (!PRES[pi][k]) { anyLiving = 1; break; }
          int skip = (MODE[mi] == 0x02);
@@ -11430,7 +10432,7 @@ static int runSweepRevalidate(const char* romPath) {
            }
            if (work[k] != r[k]) { diff = 1; at = k; }
          }
-         if (cRc != wantRc) { diff = 2; }                          // the EXIT the block takes
+         if (cRc != wantRc) { diff = 2; }                          // the exit the block takes
          if (!diff) ok++;
          else {
            bad++;
@@ -11459,22 +10461,12 @@ static int runSweepRevalidate(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || lost || !armsOk) ? 1 : 0;
 }
-// --sweeprng -- C1/AF22, THE BATTLE RNG, micro-executed against battleRngBase. The routine the port used
-// to model as `table[$26] % (n+1)`.
-//
-// WHAT THIS IS FOR. Porting the X half turned AF22 from an expression into a routine with five exits, and
-// two of its facts cannot be reached from any fixture:
-//   * X IS A BASE. The divisor is (A - X) and the answer is (remainder + X), so the draw lands in [X, A).
-//     Every ported call site passes X = 0; the one located site that does not, C1/D65C's `LDX #0003 /
-//     LDA #0B`, is not ported. So the offset is invisible to the whole suite and is seeded here instead.
-//   * THREE OF THE FIVE EXITS DO NOT ADVANCE $26. A cursor that moves when the ROM's would not diverges
-//     silently and compounds across a battle, which is exactly the class of bug a value-only model hides.
-//
-// AND ONE QUESTION THIS EXISTS TO ANSWER RATHER THAN ASSUME. C1/C92A divides a 32-BIT dividend -- $28 low,
-// $2E high -- and AF60-AF67 sets only $28, so $2E enters the divide holding whatever the previous divide
-// left. `table[$26] % count` is the right answer only when $2E is zero, and the old C model could not see
-// the difference. $2E is swept explicitly here (including a value with bits in both bytes) and the ROM is
-// asked directly; the report counts how many X = 0 draws the old formula would have got WRONG.
+// --sweeprng: C1/AF22, the battle RNG, micro-executed against battleRngBase.
+// Two facts no fixture reaches: X is a base (the draw lands in [X, A); every ported caller passes X = 0, and
+// C1/D65C's `LDX #0003 / LDA #0B` is not ported), and three of the five exits do not advance $26.
+// C1/C92A divides a 32-bit dividend ($28 low, $2E high) and AF60-AF67 sets only $28, so $2E enters holding what
+// the previous divide left; `table[$26] % count` is right only when $2E is zero. $2E is swept here, and the
+// report counts the X = 0 draws that formula gets wrong.
 static int runSweepRng(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -11490,7 +10482,7 @@ static int runSweepRng(const char* romPath) {
   // X at entry: zero (every ported caller), the 3 C1/D65C passes, values that meet A, and $FF (exit 1).
   static const int BAS[]  = { 0x00, 0x01, 0x03, 0x0B, 0x64, 0xFE, 0xFF };
   static const int IDX[]  = { 0x00, 0x37, 0xFE };                 // $26, the stream cursor
-  static const int E2[]   = { 0x0000, 0x0001, 0xABCD };            // $2E: the divide's HIGH word, carried IN
+  static const int E2[]   = { 0x0000, 0x0001, 0xABCD };            // $2E: the divide's high word, carried in
   static const int MODE[] = { 0x00, 0x20 };                        // $2989 bit 5: the no-random mode
   const int NC = (int)(sizeof CNT / sizeof CNT[0]), NB = (int)(sizeof BAS / sizeof BAS[0]);
   const int NI = 3, NE = 3, NM = 2;
@@ -11530,7 +10522,7 @@ static int runSweepRng(const char* romPath) {
        s->cpu->k = 0xC1; s->cpu->pc = 0xAF22;
        if (CtOracleRunToPC(s, 0xC1, 0xFFFE, 200000) < 0) { lost++; continue; }
        int roA = (int)(s->cpu->a & 0xFF);
-       // THE MEASUREMENT: would the old value-only model have agreed, on the X = 0 draws it covered?
+       // Would `table[$26] % count` have agreed, on the X = 0 draws?
        if (bse == 0 && count > 0 && !(MODE[mi] & 0x20) && span != 0xFF) {
          int oldv = (int)rom[0x3DBA61 + IDX[ii]] % count;
          if (oldv != roA) nOldWrong++;
@@ -11543,7 +10535,7 @@ static int runSweepRng(const char* romPath) {
          }
          if (work[k] != r[k]) { diff = 1; at = k; }
        }
-       if (cOut != roA) { diff = 2; }                  // the ANSWER, which lives in A
+       if (cOut != roA) { diff = 2; }                  // the answer, in A
        if (!diff) ok++;
        else {
          bad++;
@@ -11572,19 +10564,11 @@ static int runSweepRng(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || !armsOk) ? 1 : 0;
 }
-// --sweepredirect -- FD/B223 and C1/C8F7: the $AE6D per-seat FORWARDING TABLE and the hop that reads it.
-//
-// WHY IT HAS TO BE A SWEEP. $AE6D is identity in all eleven battle fixtures this project holds (measured:
-// `00 01 02 03 04 05 06 07 08 09 0A` after 60 settle frames in every one), because nothing short of the
-// enemy-transformation opcode at C1/9B8D ever perturbs it and no fixture reaches one. So C1/C8F7 is the
-// identity function everywhere a scenario check can look, and the ONE arm worth grading -- "seat absent,
-// follow the pointer" -- is invisible to all of them. Micro-execution is where it can be exercised: the
-// table is seeded by hand with permutations the fixtures cannot produce, and the ROM is asked directly.
-//
-// The two routines have different return conventions and both are honoured: FD/B223 ends in RTL (a
-// three-byte sentinel at $01FD-$01FF), C1/C8F7 in RTS, and C8F7's answer comes back in A, not in RAM --
-// so this compares the returned accumulator AND the whole 128 KB, the latter because C8F7 must not write.
-// $AE6D is POISONED before the init so a table the port fails to stamp is as loud as one it stamps wrong.
+// --sweepredirect: FD/B223 and C1/C8F7, the $AE6D per-seat forwarding table and the hop that reads it.
+// $AE6D is identity in every battle fixture (only the transformation opcode C1/9B8D perturbs it), so the
+// "seat absent, follow the pointer" arm is reachable only by seeding the table by hand.
+// FD/B223 ends in RTL (a three-byte sentinel at $01FD-$01FF), C1/C8F7 in RTS with its answer in A. The sweep
+// compares A and the whole 128 KB (C8F7 must not write); $AE6D is poisoned before the init.
 static int runSweepRedirect(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -11661,7 +10645,7 @@ static int runSweepRedirect(const char* romPath) {
         }
         if (work[k] != r[k]) { diff = 1; at = k; }
       }
-      if (phase == 1 && cOut != roA) { diff = 2; at = -1; }      // the ANSWER, which lives in A
+      if (phase == 1 && cOut != roA) { diff = 2; at = -1; }      // the answer, in A
       if (!diff) ok++;
       else {
         bad++;
@@ -11688,19 +10672,11 @@ static int runSweepRedirect(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || !armsOk) ? 1 : 0;
 }
-// --sweepmuldiv -- C1/C90B and C1/C92A, THE BATTLE ENGINE'S SOFTWARE MULTIPLY AND DIVIDE, micro-executed
-// against battleMul16 / battleDiv32.
-//
-// WHY THEY NEEDED PORTING AT ALL. Every battle formula that multiplies or divides goes through these two
-// and reads the answer from $2C; the port did the arithmetic in C instead. That gives the same quotient
-// and none of the state -- and the state is load-bearing, because C1/DC64 CHAINS them: the multiply
-// leaves its high word in $2E and the divide picks it up as the middle word of a 48-bit register.
-//
-// THE COMPARE IS THE WHOLE 128 KB, only the RTS sentinel excused, and $28/$2A/$2C/$2E/$32 are POISONED
-// first -- a routine that leaves a word alone has to be seen leaving it alone. Both carry-in values are
-// swept: the multiply's first `ROR $2A` shifts the CALLER's carry in (it never reaches a tested bit, so
-// the product is unaffected and only $2A's final value carries it), and the divide brackets itself in
-// PHP/PLP so the caller's flags come back untouched.
+// --sweepmuldiv: C1/C90B and C1/C92A, the battle software multiply and divide, micro-executed against
+// battleMul16 / battleDiv32. Their state matters: C1/DC64 chains them, the multiply leaving its high word in $2E
+// for the divide to take as the middle word of a 48-bit register. The compare covers the whole 128 KB (only the
+// RTS sentinel excused) with $28/$2A/$2C/$2E/$32 poisoned. Both carry-in values are swept: the multiply's first
+// `ROR $2A` shifts the caller's carry into $2A, and the divide restores the caller's flags with PHP/PLP.
 static int runSweepMulDiv(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -11714,7 +10690,7 @@ static int runSweepMulDiv(const char* romPath) {
   // the 100 C1/DC64 multiplies by, values whose product crosses 16 bits, and $FFFF.
   static const int OPS[] = { 0x0000, 0x0001, 0x0002, 0x0008, 0x0063, 0x0064, 0x00FF, 0x0100,
                              0x1234, 0x8000, 0xFFFF };
-  static const int MID[] = { 0x0000, 0x0001, 0xABCD };      // $2E: the divide's MIDDLE word, carried IN
+  static const int MID[] = { 0x0000, 0x0001, 0xABCD };      // $2E: the divide's middle word, carried in
   const int NO = (int)(sizeof OPS / sizeof OPS[0]), NM = 3;
   int ok = 0, bad = 0, shown = 0, lost = 0, nMul = 0, nDiv = 0;
   int divEarly = 0, mulHigh = 0, carrySeen[2] = { 0, 0 }, phpSkip = 0;
@@ -11728,7 +10704,7 @@ static int runSweepMulDiv(const char* romPath) {
        r[0x28] = (uint8_t)OPS[ai];  r[0x29] = (uint8_t)(OPS[ai] >> 8);
        r[0x2A] = (uint8_t)OPS[bi];  r[0x2B] = (uint8_t)(OPS[bi] >> 8);
        r[0x2E] = (uint8_t)MID[mi];  r[0x2F] = (uint8_t)(MID[mi] >> 8);
-       r[0x2C] = 0x5A; r[0x2D] = 0x5A;                      // POISON the outputs
+       r[0x2C] = 0x5A; r[0x2D] = 0x5A;                      // poison the outputs
        r[0x32] = 0x5A; r[0x33] = 0x5A;
        memcpy(work, r, 0x20000);
        if (which == 0) { CtBattleMul16Probe(work, cy); nMul++; }
@@ -11744,13 +10720,8 @@ static int runSweepMulDiv(const char* romPath) {
        s->cpu->sp = 0x01FD; r[0x01FE] = 0xFD; r[0x01FF] = 0xFF;
        s->cpu->k = 0xC1; s->cpu->pc = (which == 0) ? 0xC90B : 0xC92A;
        if (CtOracleRunToPC(s, 0xC1, 0xFFFE, 200000) < 0) { lost++; continue; }
-       // ⭐ $01FD IS THE DIVIDE'S `PHP`, AND THE EXCLUSION IS MEASURED RATHER THAN ASSUMED. The first
-       // run of this sweep had all 726 multiplies exact and all 726 divides red -- every one of them at
-       // $01FD with the port at 00 and the ROM at $26/$27, which is the P register with and without the
-       // carry, while $28/$2A/$2C/$2E/$32 matched on both sides in every case. C1/C92A brackets itself
-       // in PHP/PLP so the caller's flags survive; this port has no processor-status register to push.
-       // That one byte is excused for C1/C92A only -- the multiply does not touch it, and if it ever
-       // starts to, its cases go red.
+       // $01FD is the divide's PHP (the caller's P). The port has no status register to push, so that byte is
+       // excused for C1/C92A only.
        int diff = 0, at = -1;
        for (int k = 0; k < 0x20000 && !diff; k++) {
          if (k == 0x01FE || k == 0x01FF) continue;
@@ -11784,26 +10755,12 @@ static int runSweepMulDiv(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || !armsOk) ? 1 : 0;
 }
-// --sweepdeadflag -- C1/B279, THE PER-COMBATANT DEAD-FLAG REFRESH, micro-executed ONE COMBATANT AT A
-// TIME exactly as C1/A452 calls it by hand (X = cmb*$80, Y = cmb) and as the 11-slot sweep C1/B223
-// calls it in a loop. It grades battleDeadFlagOne.
-//
-// WHY IT EXISTS NOW. battle_crit_beatb_flash.md §3.2 transcribed this routine as far as B2B6 and the
-// port modelled exactly that much: clear bit7, set it back if curHP is 0. The bytes carry on. The
-// LIVING path also republishes the roster byte `$AEFF,Y` from `$AF0A,Y`, clears the `$24` all-dead
-// latch and sets bit0 of `$B03A,Y` -- three stores nothing in this tree had -- and those three are
-// what this sweep grades. They are no-ops on a live boot today (staging leaves $AEFF and $AF0A equal,
-// and nothing here reads $24 or $B03A), which is exactly why only a micro-execution sweep can grade
-// them: it seeds the three outputs with POISON independently of their inputs, so a store that does
-// not happen is as loud as one that happens wrong.
-//
-// ⭐ AND THE DEAD/HIDDEN ARM IS MEASURED AS A GAP RATHER THAN DECLARED AS ONE. `B2A5 BNE ->B2B9` and
-// B2B6's fall-through both reach `LDA #00 / STA $B03A,Y / LDA #FF / STA $AEFF,Y`, and only then run on
-// into the death-effect dispatch (C1/B3A0 for enemies, the $FD:A849 table and C1/BC60 for PCs) that
-// this port does not model. So on that arm the sweep does not compare -- it ASSERTS that the ROM wrote
-// $AEFF = $FF and $B03A = 0 and that the port did not. The unported gap is a checked fact with a
-// count, not a sentence in a comment, and if the ROM ever stops doing it the sweep goes red.
-// That gap is what blocks the C1/B8BB list-fillers: every resolver gates on `$AEFF,Y == $FF`.
+// --sweepdeadflag: C1/B279, the per-combatant dead-flag refresh, micro-executed one combatant at a time as
+// C1/A452 calls it (X = cmb*$80, Y = cmb) and as the 11-slot sweep C1/B223 calls it; grades
+// CtBattleDeadFlagProbe. Besides the flag byte, the living path republishes $AEFF,Y from $AF0A,Y, clears the
+// $24 all-dead latch and sets bit 0 of $B03A,Y; each output is poisoned independently of its inputs.
+// Every arm is compared over the same bytes, the enemy death mark (C1/B3A0) included; the PC death arm past
+// the B2D9 fork is --sweepdeadflagpc's.
 static int runSweepDeadFlag(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -11812,10 +10769,9 @@ static int runSweepDeadFlag(const char* romPath) {
   if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000], base[0x20000];
-  memcpy(base, s->ram, 0x20000);                   // every case starts from the SAME WRAM: the dispatch
-                                                   // arm lets the ROM run on, so cases must not inherit
-  // $AF0A,Y -- the presence gate. `CMP #FF` is EXACT, so $80 (bit7 set, not $FF) has to behave like a
-  // present combatant; that is the same distinction --sweepaitarget needed a fifth seat row to reach.
+  memcpy(base, s->ram, 0x20000);                   // every case starts from the same WRAM
+  // $AF0A,Y, the presence gate. `CMP #FF` is exact, so $80 (bit 7 set, not $FF) must behave like a present
+  // combatant (the distinction --sweepaitarget needed a fifth seat row to reach).
   static const uint8_t ROSTER[4] = { 0xFF, 0x00, 0x5E, 0x80 };
   static const uint16_t HP[3]    = { 0x0000, 0x0001, 0x0190 };   // straddle the `BEQ` on the 16-bit read
   static const uint8_t HID[2]    = { 0x00, 0x80 };               // $AF12,Y bit7 (enemies only, CPY #0003)
@@ -11836,8 +10792,8 @@ static int runSweepDeadFlag(const char* romPath) {
        r[blk + 0x03] = (uint8_t)HP[hp]; r[blk + 0x04] = (uint8_t)(HP[hp] >> 8);
        r[blk + 0x1D] = FLAG[fi];
        r[0xB03A + cmb] = FLAG[fi];
-       r[0x0024] = 0x5A;                                         // poison: the living path must ZERO it
-       r[0xAEFF + cmb] = 0x5A;                                   // poison: the living path REPUBLISHES it
+       r[0x0024] = 0x5A;                                         // poison: the living path zeroes it
+       r[0xAEFF + cmb] = 0x5A;                                   // poison: the living path republishes it
        // C1/B3A0's own three bytes. $AE82 rides the FLAG index rather than costing an axis of its own:
        // the $FF row carries "already flagged", which is B3A3's `BNE ->B3B7` skip, and the other two
        // rows carry 0, so both arms of that branch are reached at every enemy seat.
@@ -11861,10 +10817,8 @@ static int runSweepDeadFlag(const char* romPath) {
        if (arm == 0) nAbsent++; else if (arm == 1) nLiving++;
        else if (arm == 2) nDeadPc++;
        else { nDeadEnemy++; if (work[0xAEB2] == 0x5A) nSkipMark++; else nMark++; }
-       // EVERY arm is compared over the SAME window now, the PC death arm included. Its tail (the
-       // $FD:A849 dispatch) writes $5E4F, $B18B and $AD89/$AD8A -- none of which are in here -- so the
-       // stores BEFORE the B2D9 fork are gradable for PCs too, and $AEB0/$AEB2 staying POISONED is how
-       // "a PC never reaches C1/B3A0" gets graded rather than assumed.
+       // Every arm is compared over the same bytes. The PC tail ($FD:A849) writes $5E4F, $B18B and $AD89/$AD8A,
+       // outside this window; $AEB0/$AEB2 staying poisoned shows that a PC never reaches C1/B3A0.
        int OUT[12] = { 0x0024, 0xAEFF + cmb, 0xB03A + cmb, blk + 0x1D, blk + 0x02,
                        blk + 0x1E, blk + 0x1F, blk + 0x20, blk + 0x21,
                        0xAEB0 + cmb, 0xAEB2, 0xAE82 + cmb };
@@ -11896,15 +10850,12 @@ static int runSweepDeadFlag(const char* romPath) {
   CtOracleDestroy(s); free(rom);
   return (bad || !armsOk) ? 1 : 0;
 }
-// --sweepdeadflagpc -- C1/B279's PC ARM PAST B2D9, which the sweep above leaves out, micro-executed over ALL of WRAM (the
-// stack page aside): B2E1-B30D (the command record's +1 bit 4 -> $B18B, C1/BC60, the bit cleared; $06 = the record),
-// B392-B39E (the fallen PC's gauge: $9F22 = $99DD = $AFAB = $B158) and the LIFELINE B30F-B373 (+22 bit 7: the bit cleared,
-// $AD89 = +39 * 5 through C1/C90B, $B1FD, C1/E89F's record, $B2C7 / $B202, C1/EBF8's slot, $AE91-$AE94, $AECC, C1/AD09's
-// mask) up to its `JSR C1/AC57` -- where the ROM runs action 7A and the port's host takes over (battleLifelineStage).
-// Axes per PC seat: the roster ($AF0A), curHP (0 / 1: the dead arm and the living one), +22 (00 / 80), the record's +1
-// (10 / EF), +39 (00 / 05 / FF: the multiply), $AD9B (00 / 01: the record set), $AECB (00 / 01: C1/AD09's gate). Every
-// case starts from the same WRAM with the outputs poisoned. CtBattleDeadFlagProbe runs the lifeline's stores (its host
-// part, the action, is the caller's).
+// --sweepdeadflagpc: C1/B279's PC arm past B2D9, micro-executed over all of WRAM except the stack page:
+// B2E1-B30D (the command record's +1 bit 4 -> $B18B, C1/BC60; $06 = the record), B392-B39E (the fallen PC's
+// gauge, $9F22 = $99DD = $AFAB = $B158) and the lifeline B30F-B373 (+22 bit 7; $AD89 = +39 * 5 via C1/C90B,
+// $B1FD, C1/E89F's record, $B2C7/$B202, C1/EBF8's slot, $AE91-$AE94, $AECC, C1/AD09's mask) up to its
+// `JSR C1/AC57`, where the port's host runs action 7A (battleLifelineStage). Axes per PC seat: $AF0A, curHP 0/1,
+// +22 00/80, the record's +1 10/EF, +39 00/05/FF, $AD9B 00/01, $AECB 00/01. Outputs are poisoned.
 static int runSweepDeadFlagPc(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -11980,32 +10931,14 @@ static int runSweepDeadFlagPc(const char* romPath) {
 }
 
 
-// STEP: byte-exact validation of CtAnimDrawPass (C0/B271, the DRAW PASS) by MICRO-EXECUTING the real
-// routine on a SYNTHETIC draw list.
-//
-// WHY THIS EXISTS AND WHY A SCENARIO CANNOT REPLACE IT. C0/B309's body is `JSR C0/B701 / B30C BCC ->
-// B30F / B30E RTS` -- the carry is the DRAW GATE. Inverting the port's reading of it (drawing even when
-// B701 says SEC) survived every check in the suite, and not because the scenarios were unlucky:
-// measured with a counter inside CtAnimDrawPass, `B701 SEC refusals over 130 frames: 0` on BOTH
-// party3_field and bedslide. The reason is structural. B701 refuses only while `($1B00,X & 0x7F) < T`
-// with bit7 CLEAR -- an object caught MID-STAGING -- and the only thing that leaves staging incomplete
-// across a frame boundary is C0/CA76's raster deadline, which a clockless port cannot model: our drain
-// loops on SEC until the queue empties, so every object reaches the draw pass fully staged with
-// $1B00 = 0x80. So the gate's refusal arm is unreachable from a scenario BY THE SAME ROOT CAUSE as the
-// frame legs' remaining divergence family, and seeding the input space directly is the only honest way
-// to grade it. (Sweep first, wire second -- the lesson C0/9E84 already taught this project.)
-//
-// WHAT IS COMPARED: the state C0/B271 maintains -- $016D/$016E, the six per-group OAM cursors
-// ($0181-$018C high, $01DB-$01E0 main, which share bytes with C0/AB45's and C0/B788's DP scratch), the
-// three high-water marks $017B-$0180, C0/B788's $01C3-$01C6 and $01D9-$01DA, the arena owner table
-// $0BC0-$0BC7, every listed object's $1B00, and the emitters' live records in $7F:4B40 and $7F:4F00.
-// EXCLUDED: $7E0700-$7E091F, stage 2's OAM byte copy through the $2180 WRAM port -- src/oam.c is this
-// port's graded model of that copy (--checkoam) and CtAnimDrawPass deliberately does not emit it. But
-// the B2C4 hide-tail writes into that same region, so the sweep compares it on exactly the cases where
-// NO object was drawn: there the ROM emits no sprite bytes either, and any difference is the tail's.
-// $01C9 is also excluded -- a stage-2 internal piece counter, part of the emission this port leaves to
-// oam.c. CLASS 3 IS SWEPT NOW (C0/C73A ported): it is in CLSPAT, and since it is the only class whose
-// draw arm writes SIX high bytes and advances $60, it is what grades the 1/2/3/6 entry-count table.
+// --sweepdraw: CtAnimDrawPass (C0/B271, the draw pass) micro-executed on a synthetic draw list.
+// C0/B309's body is `JSR C0/B701 / BCC / RTS`: the carry is the draw gate. B701 refuses (SEC) only while
+// ($1B00,X & 0x7F) < T with bit 7 clear, an object caught mid-staging. In a scenario every object reaches the
+// draw pass fully staged ($1B00 = 0x80), so only seeded inputs reach the refusal arm.
+// Compared: $016D/$016E, the six per-group OAM cursors ($0181-$018C high, $01DB-$01E0 main), the high-water
+// marks $017B-$0180, C0/B788's $01C3-$01C6 and $01D9-$01DA, the arena owners $0BC0-$0BC7, each object's $1B00,
+// and the emitter records in $7F:4B40 and $7F:4F00. Not compared: $01C9 and the OAM bytes $7E0700-$7E091F
+// (stage 2, see --sweepstage2), except where nothing was drawn and any difference is the B2C4 hide tail's.
 static int runSweepDraw(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12014,25 +10947,20 @@ static int runSweepDraw(const char* romPath) {
   if (!s) { printf("FAIL: oracle load failed\n"); free(rom); return 3; }
   for (int f = 0; f < 2; f++) CtOracleRunFrame(s);
   static uint8_t work[0x20000];
-  // FOUR objects, laid out so the walk itself is exercised: two CHAINED in one bucket (so $0E81 must
-  // be followed and $6D re-read after the JSR, as B2B2 does), one in a lower bucket and one in the
-  // very first bucket visited, which is what makes the high-to-low order observable.
+  // Four objects: two chained in one bucket (so $0E81 is followed and $6D re-read after the JSR, as B2B2
+  // does), one in a lower bucket and one in the first bucket visited, so the high-to-low order shows.
   static const int OB[4] = { 0x02, 0x04, 0x06, 0x08 };
   static const int BUCKET[4] = { 0x40, -1, 0x20, 0x7E };   // -1 = chained behind the previous object
-  // The n selector: 0 = the REFUSAL arm (not staged, bit7 clear), 1 = reposition-emit, 2 = instantiate.
-  // The patterns matter as much as the values: an interleaved one puts a refusal BETWEEN two draws, so
-  // a port that advanced the cursor on a refusal is caught by the NEXT object's placement, not just by
-  // the final total.
+  // The n selector: 0 = the refusal arm (not staged, bit 7 clear), 1 = reposition-emit, 2 = instantiate.
+  // Interleaved patterns put a refusal between two draws, so a cursor advanced on a refusal shows in the
+  // next object's placement.
   static const int NPAT[6][4] = { {0,0,0,0}, {1,1,1,1}, {2,2,2,2}, {0,1,0,2}, {1,0,2,0}, {2,0,1,1} };
-  // CLASS 3 IS IN THE PATTERNS NOW, and it is the only way the 1/2/3/6 entry count gets graded: its
-  // draw arm C0/B5CB writes SIX high bytes and advances the main cursor by $60, so a port that kept
-  // the old `(class & 3) + 1` arithmetic lands every LATER object in the walk at the wrong cursor.
-  // It is also the only class whose gate ignores $1B00 (C0/C73A tests it nowhere), so the `n`
-  // selector below is inert for it -- a class-3 object draws on every NPAT row.
+  // Class 3 grades the 1/2/3/6 entry count: its draw arm C0/B5CB writes six high bytes and advances the main
+  // cursor by $60. Its gate (C0/C73A) ignores $1B00, so the `n` selector is inert for it.
   static const int CLSPAT[5][4] = { {0,0,0,0}, {0,1,0,2}, {1,2,1,0}, {3,0,3,1}, {2,3,0,3} };
   static const int PRIOPAT[3][4] = { {0x00,0x00,0x00,0x00}, {0x00,0x04,0x08,0x0C}, {0x08,0x0C,0x00,0x04} };
-  // The previous frame's high-water marks. One config equals the init constants (the tail writes
-  // nothing), one sits ABOVE them (the tail blanks a range), one is mixed.
+  // The previous frame's high-water marks: equal to the init constants (the tail writes nothing), above
+  // them (the tail blanks a range), and mixed.
   static const int MARKS[3][3] = { {0x0770,0x08A0,0x0710}, {0x0800,0x08F0,0x0760}, {0x0780,0x08A0,0x0730} };
   int ok = 0, bad = 0, shown = 0, lost = 0;
   int armSec = 0, armRep = 0, armInst = 0, oamCmp = 0;
@@ -12054,9 +10982,8 @@ static int runSweepDraw(const char* romPath) {
         if (BUCKET[i] >= 0) r[0x0E00 + BUCKET[i]] = (uint8_t)o;
         else r[0x0E81 + OB[i - 1]] = (uint8_t)o;                 // chain behind the previous one
       }
-      // Seed BOTH emitter buffers with distinguishable junk, same argument as --sweepdrain: the
-      // reposition emitter reads the LIVE record and the instantiate one the STAGED record, and a
-      // shared value would hide a swap between them.
+      // Distinct junk in both emitter buffers (as in --sweepdrain): the reposition emitter reads the live
+      // record and the instantiate one the staged record, and a shared value would hide a swap.
       for (int k = 0; k < 0x200; k++) { r[0x14802 + k] = (uint8_t)((k * 0x35) & 0xFF);
                                         r[0x14BC0 + k] = (uint8_t)((0xE3 - k * 0x17) & 0xFF); }
       for (int k = 0; k < 0x180; k++) r[0x14B40 + k] = (uint8_t)((0xE3 - k * 0x17) & 0xFF);
@@ -12089,13 +11016,11 @@ static int runSweepDraw(const char* romPath) {
         for (int k = 0; k < CMP[c][1]; k++)
           if (work[CMP[c][0] + k] != r[CMP[c][0] + k]) diff = 1;
       for (int i = 0; i < 4; i++) if (work[0x1B00 + OB[i]] != r[0x1B00 + OB[i]]) diff = 1;
-      // 0x1C0, not 0x180: a class-3 object at record base $60 runs 24 records, so its last one's +1
-      // lands at $4CE1 -- past the old window, where a miscounted Y half would have been invisible.
+      // 0x1C0: a class-3 object at record base $60 runs 24 records, so its last one's +1 lands at $4CE1.
       for (int k = 0; k < 0x1C0; k++) if (work[0x14B40 + k] != r[0x14B40 + k]) diff = 1;
       for (int k = 0; k < 8; k++) if (work[0x14F00 + k] != r[0x14F00 + k]) diff = 1;
       for (int k = 0; k < 16; k++) if (work[0x14F80 + k] != r[0x14F80 + k]) diff = 1;
-      // THE HIDE-TAIL, graded on exactly the cases where nothing was drawn: the ROM's stage 2 never
-      // ran, so the whole OAM region is the tail's own work and comparable byte for byte.
+      // The hide tail, graded where nothing was drawn: stage 2 never ran, so the OAM region is the tail's alone.
       if (drawn == 0) { oamCmp++;
         for (int k = 0; k < 0x220; k++) if (work[0x0700 + k] != r[0x0700 + k]) diff = 1; }
       if (!diff) ok++;
@@ -12121,22 +11046,14 @@ static int runSweepDraw(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP: byte-exact validation of CtBuildFieldOAM -- C0/B309's STAGE 2, the OAM byte emission -- by
-// MICRO-EXECUTING the real C0/B271 over a synthetic draw list, and comparing the whole OAM shadow
-// buffer ($7E0700-$08FF main + $7E0900-$091F high) byte for byte.
-//
-// WHY IT IS NOT --checkoam. --checkoam runs the builder on the ORACLE's live WRAM, so the records it
-// copies out of $7F:4BC0 are the oracle's own -- which makes the VALUES a pass-through and, on that
-// scenario, makes every object class 0. Two defects hid behind exactly that: the builder emitted ONE
-// OAM entry per object where the ROM emits ($1201,X & 3) + 1, and it RE-DERIVED the placement C0/B788
-// had already done (with a plain Y add where ctOamEmit clamps). This sweep seeds the records with
-// per-byte-distinguishable junk and sweeps the class, so the ADDRESSING is what is graded: which piece
-// lands at which OAM byte, which high byte at which slot, and how far each group's cursor moves.
-//
-// THE ORDER SPLIT IS INERT, and that is derived rather than hoped: the ROM interleaves B701 and stage 2
-// per object, while the port runs CtAnimDrawPass (all the B701s) and then CtBuildFieldOAM (all the
-// copies). B701 writes only $7F:4BC0 + $1700,X and the high byte at $4F00/$4F01/$4B40 + $6D -- windows
-// that are per-object and disjoint for distinct $1700 -- so no object's emit can perturb another's.
+// --sweepstage2: CtBuildFieldOAM (C0/B309's stage 2, the OAM byte emission) micro-executed through the real
+// C0/B271 over a synthetic draw list; compares the OAM shadow ($7E0700-$08FF main, $7E0900-$091F high).
+// Unlike --checkoam, which copies the oracle's live records (all class 0 in its scenario), this seeds the
+// records with per-byte distinct junk and sweeps the class, so it grades the addressing: which piece lands at
+// which OAM byte, which high byte at which slot, and how far each group's cursor moves.
+// The port runs all the B701s (CtAnimDrawPass) and then all the copies; the ROM interleaves them per object.
+// That is inert here: B701 writes only $7F:4BC0 + $1700,X and the high byte at $4F00/$4F01/$4B40 + $6D,
+// windows disjoint for distinct $1700.
 static int runSweepStage2(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12147,52 +11064,14 @@ static int runSweepStage2(const char* romPath) {
   static uint8_t work[0x20000];
   static const int OB[3] = { 0x02, 0x04, 0x06 };
   static const int BUCKET[3] = { 0x40, -1, 0x20 };          // -1 = chained behind the previous object
-  // Bases far enough apart that a CLASS-3 record window (24 pieces * 8 = 0xC0 bytes) cannot overlap
-  // the next object's, and all 0x20-aligned so the builder's live-sprite gate admits them. The old
-  // 0x80 spacing was sized for class 2's 0x60 and could not have held class 3.
+  // Bases 0xC0 apart, so a class-3 record window (24 pieces * 8 bytes) cannot overlap the next object's, and
+  // 0x20-aligned so the builder's live-sprite gate admits them.
   static const int BASE[3] = { 0x000, 0x0C0, 0x180 };
-  // ⚠⚠ CLASS 3 IS NOT SEEDED HERE, AND THAT IS A RECORDED GAP, NOT AN OVERSIGHT (2026-09-11).
-  // It is the class C0/C73A and CtBuildFieldOAM's class-3 arm added, and this is the sweep that grades
-  // that function -- so `GRP[3] = 6` (24 pieces, SIX groups of four, B5AF's `LDA #18`) is ungraded
-  // here: a mutation of GRP to { 1, 2, 3, 4 } scores clean.
-  //
-  // SEEDING IT PRODUCES REAL MISMATCHES. Investigated 2026-09-11; NOT a transcription defect, and
-  // NOT yet fully attributed. What the investigation established, in order:
-  //
-  //  1. ⚠ A CLAIM I MADE AND MEASURED WRONG, corrected here rather than left standing: I said the
-  //     harness's own `T = cls + 1` seed (four piece-groups for class 3 instead of six) accounted for
-  //     half the first run's 32 red cases. It accounted for NONE -- the count was 32 before that
-  //     change and 32 after. I changed the object count in the same step and credited the wrong one.
-  //     `T = cls + 1` is not even wrong here: it feeds $1B00, which is 1/2/3 for classes 0-2 and
-  //     INERT for class 3, whose gate C0/C73A tests $1B00 nowhere -- as --sweepdraw's own header
-  //     already says. The whole 32 -> 8 came from seeding ONE class-3 object per case, not three.
-  //  2. THE ROM'S PER-GROUP OAM BUDGET IS REAL AND SMALL. C0/B2D3 / B2E9 / B2FF bound the three main
-  //     regions: group 0 is $0770..$089F (76 entries), group B $08A0..$08FF (TWENTY-FOUR) and group C
-  //     $0710..$076F (twenty-four). NOTHING in the object loop checks them -- only the hide tail
-  //     carries the bound. A class-3 sprite is 24 pieces, so ONE fills group B exactly, and a seed
-  //     with two group-B objects makes the ROM write past $08FF into the HIGH TABLE at $0900, which
-  //     this port's `m + 3 < 512` backstop declines to do. That is the $0900 mismatch, and it is an
-  //     over-subscribed seed rather than a defect.
-  //  3. THE RECORDS ARE BYTE-IDENTICAL. Diffing $7F:4BC0[0..0x280] and $7F:4F00[0..0x90] between the
-  //     port and the oracle on a failing case reports NO difference -- so the class-3 EMITTER
-  //     (C0/C73A, ctOamEmitClass3) and the B701 arms agree, and the divergence is entirely in
-  //     stage 2's copy.
-  //  4. AND THAT COPY'S TRANSCRIPTION IS ALSO RIGHT. C0/B62A-B64F is `LDA $7F4BC0,X / $4BC1 / $4BC6 /
-  //     $4BC7` through the $2180 port, `ADC #0008` per piece, 24 iterations -- byte for byte what
-  //     CtBuildFieldOAM does. The three high arms (B5CB / B6AA / B653) read the SAME six sources and
-  //     differ only in cursor ($0181 / $0185 / $0189 = $0907 / $091A / $0901), which the port's
-  //     highOff { 0x07, 0x1A, 0x01 } matches.
-  //
-  // WHAT IS LEFT is an ORDERING difference, not a byte one: this harness runs ALL the B701 releases
-  // first (CtAnimDrawPass) and only then the copy, while the ROM's B309 interleaves release and copy
-  // PER OBJECT. A release that rewrites a later object's $1700,X would be invisible with one class-3
-  // object and fatal with two -- which is the shape of what is left (the first divergence is always
-  // the SECOND class-3 object's first main byte). That is a harness-structure question and its own
-  // piece of work; reproduce by restoring the 6-row CLSPAT below plus the T table and a per-group
-  // capacity guard. ⚠ --sweepdraw's CLSPAT already carries class 3 AND still computes `T = cls + 1`.
+  // Not seeded: class 3, so `GRP[3] = 6` (24 pieces, B5AF `LDA #18`) is ungraded here. Seeding it gives
+  // mismatches that come from this harness's release-then-copy order, not from the port:
+  // disasm/notes/oam.md "--sweepstage2 and class 3".
   static const int CLSPAT[4][3] = { {0,0,0}, {1,1,1}, {2,2,2}, {0,2,1} };
-  // ⚠ AND EVERY PRIORITY SEEDED HAD BIT 1 CLEAR (00/04/08/0C), so `$0F80 & 0x0C` could not be told
-  // from `& 0x0E`. The fourth row carries bit 1 in all three objects.
+  // The fourth row sets priority bit 1 in all three objects, so `$0F80 & 0x0C` is told from `& 0x0E`.
   static const int PRIOPAT[4][3] = { {0x00,0x00,0x00}, {0x00,0x04,0x08}, {0x0C,0x00,0x04},
                                      {0x02,0x06,0x0A} };
   // The staging counter picks B701's arm: reposition (bit7 set) leaves the record's +6/+7 as the seeded
@@ -12207,8 +11086,7 @@ static int runSweepStage2(const char* romPath) {
       uint8_t* r = s->ram;
       for (int k = 0; k < 0x100; k++) r[0x0E00 + k] = 0x80;      // C0/B204's fill
       for (int i = 0; i < 3; i++) {
-        // T = the PIECE-GROUP COUNT, 1/2/3/6 -- NOT `cls + 1`. Class 3 is SIX groups of four,
-        // and seeding it as four is the same `(class & 3) + 1` mistake the dossier warns about.
+        // T = the piece-group count, 1/2/3/6 (class 3 is six groups of four).
         static const int TCNT[4] = { 1, 2, 3, 6 };
         int o = OB[i], cls = CLSPAT[cp][i], T = TCNT[cls];
         r[0x1201 + o] = (uint8_t)cls;
@@ -12221,16 +11099,16 @@ static int runSweepStage2(const char* romPath) {
         if (BUCKET[i] >= 0) r[0x0E00 + BUCKET[i]] = (uint8_t)o;
         else r[0x0E81 + OB[i - 1]] = (uint8_t)o;
       }
-      // Distinguishable junk in BOTH record buffers -- every byte of the 0x200 window differs from its
-      // neighbours, so a copy that reads +2 where it should read +6 lands a value that cannot match.
+      // Distinct junk in both record buffers: every byte of the window differs from its neighbours, so a copy
+      // that reads +2 where it should read +6 cannot match.
       for (int k = 0; k < 0x280; k++) { r[0x14802 + k] = (uint8_t)((k * 0x35) & 0xFF);
                                         r[0x14BC0 + k] = (uint8_t)((0xE3 - k * 0x17) & 0xFF); }
       for (int k = 0; k < 0x180; k++) r[0x14B40 + k] = (uint8_t)((0xE3 - k * 0x17) & 0xFF);
       // $4F00..$4F8F: class 3's high-table destinations reach $4F80/$4F81 (C0/B5CB), not just $4F00.
       for (int k = 0; k < 0x90; k++) r[0x14F00 + k] = (uint8_t)(0x5A ^ (k * 0x11));
       for (int k = 0; k < 8; k++) r[0x0BC0 + k] = (uint8_t)((k & 1) ? 0x80 : OB[(k >> 1) % 3]);
-      // High-water marks EQUAL to the init constants, so C0/B2C4's hide-tail writes nothing and every
-      // difference in the OAM buffer belongs to stage 2. (The tail itself is graded by --sweepdraw.)
+      // High-water marks equal to the init constants, so C0/B2C4's hide tail writes nothing and every OAM
+      // difference is stage 2's (--sweepdraw grades the tail).
       r[0x017B] = 0x70; r[0x017C] = 0x07; r[0x017D] = 0xA0; r[0x017E] = 0x08;
       r[0x017F] = 0x10; r[0x0180] = 0x07;
       for (int k = 0; k < 0x220; k++) r[0x0700 + k] = (uint8_t)(k * 0x2B);   // junk, so an unwritten
@@ -12265,13 +11143,11 @@ static int runSweepStage2(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// STEP 2b: EXHAUSTIVE byte-exact validation of CtCollisionShapeDecode by MICRO-EXECUTING the real
-// ROM routine C0/9AD3 in the oracle on SYNTHETIC inputs (the walk-based --checkcollide only reaches the
-// few shapes present in Crono's room). For each (shape, byte1, byte2, subX, subY) combo: write the
-// inputs into WRAM, set up a 65816 call (DP=$1D00, A/X 8-bit, push a sentinel return addr, PC=C0/9AD3),
-// run the oracle's CPU to the RTS sentinel (cpu_runOpcode only -- no PPU/IRQ), then diff the oracle's
-// outputs ($1D5E/$60/$6A/$6C/$6E/$6F + conveyor $1D30) against the C port on the same inputs. Sweeps all
-// 64 shape ids, so the slope evaluator (shapes 2..0x17) and the conveyor (0x1E) are runtime-validated.
+// --sweepcollide: CtCollisionShapeDecode against the ROM's C0/9AD3, micro-executed on synthetic inputs (the
+// walk-based --checkcollide reaches only the shapes in Crono's room). For each (shape, byte1, byte2, subX, subY)
+// the inputs go into WRAM, the oracle's CPU runs 9AD3 (DP = $1D00, A/X 8-bit) to an RTS sentinel, and the
+// outputs ($1D5E/$60/$6A/$6C/$6E/$6F and the conveyor's $1D30) are diffed against the port. All 64 shape ids
+// are swept, slopes (2..0x17) and the conveyor (0x1E) included.
 static int runSweepCollide(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12337,16 +11213,11 @@ static int runSweepCollide(const char* romPath) {
   return (bad || notret) ? 1 : 0;
 }
 
-// EXHAUSTIVE byte-exact validation of CtPlayerCollide (the C0/8A6D dispatch + its EIGHT directional
-// handlers) by MICRO-EXECUTING the real 8A6D on SYNTHETIC (position x velocity) inputs. The walk-based
-// --checkclamp only reaches whatever the trajectory happens to hit -- and a green there cannot tell
-// "the diagonals are right" from "the walk never boxed a diagonal", which is exactly the blindness
-// class the project's own law forbids trusting. So: settle a live field scene, snapshot its RAM, then
-// for every (player position on a grid, velocity vector) combo restore that snapshot, poke the inputs,
-// micro-call C0/8A6D to an RTS sentinel, and diff the FULL result of the routine -- the clamped
-// velocity $1D2E/$2F/$30/$31, the committed position ($1800,X/$1880,X via 9C5C), the plane $0155, the
-// touch latch $01EB (9923), and the feeler scratch $1D62/$64/$66/$68 -- against the C port run on the
-// same pre-state. Counts are reported PER ARM so a run that never reached an arm is visible, not silent.
+// --sweepclamp: CtPlayerCollide (the C0/8A6D dispatch and its eight directional handlers) against the ROM,
+// micro-executed over a grid of player positions x velocity vectors from a settled field scene (the walk-based
+// --checkclamp reaches only what its trajectory hits). Each combo diffs the clamped velocity $1D2E-$1D31, the
+// committed position ($1800,X/$1880,X via 9C5C), the plane $0155, the touch latch $01EB (9923) and the feeler
+// scratch $1D62/$64/$66/$68. Counts are reported per arm, so an arm never reached is visible.
 static int runSweepClamp(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12366,8 +11237,8 @@ static int runSweepClamp(const char* romPath) {
   int armCalls[9], armOk[9];
   for (int i = 0; i < 9; i++) { armCalls[i] = 0; armOk[i] = 0; }
   int calls = 0, ok = 0, bad = 0, shown = 0, notret = 0;
-  // 13x13 position grid on an 8px step = a 96px box around the spawn: open floor, walls, furniture and
-  // the room's edges, so every handler meets walkable, z-solid AND off-map probes.
+  // 13x13 position grid on an 8 px step (a 96 px box around the spawn): open floor, walls, furniture and the
+  // room's edges, so every handler meets walkable, z-solid and off-map probes.
   int carryOk[2] = { 0, 0 }, carryCalls[2] = { 0, 0 };
   for (int cf = 0; cf < 2; cf++)
    for (int gy = -6; gy <= 6; gy++)
@@ -12385,24 +11256,19 @@ static int runSweepClamp(const char* romPath) {
           r[0x1880 + idx] = (uint8_t)py; r[0x1881 + idx] = (uint8_t)(py >> 8);
           r[0x1D2E] = (uint8_t)vx; r[0x1D2F] = (uint8_t)(vx < 0 ? 0xFF : 0x00);
           r[0x1D30] = (uint8_t)vy; r[0x1D31] = (uint8_t)(vy < 0 ? 0xFF : 0x00);
-          memcpy(work, r, 0x20000);                          // the C port runs on the SAME pre-state
+          memcpy(work, r, 0x20000);                          // the C port runs on the same pre-state
           s->cpu->e = false; s->cpu->mf = true; s->cpu->xf = true; s->cpu->d = false; s->cpu->i = true;
           s->cpu->dp = 0x1D00; s->cpu->db = 0x00; s->cpu->a = 0; s->cpu->x = 0; s->cpu->y = 0;
-          // The ARITHMETIC FLAGS are an INPUT too: leaving them at the previous combo's values made
-          // this sweep non-deterministic (133 vs 118 mismatches on two runs of the same binary).
-          // Pin them, and sweep the CARRY explicitly below so a real entry-carry dependency shows up
-          // as a per-carry split instead of as noise.
+          // The arithmetic flags are an input too: pin them (the previous combo's values made the sweep
+          // non-deterministic), and sweep the carry explicitly so an entry-carry dependency shows as a split.
           s->cpu->c = (cf != 0); s->cpu->n = false; s->cpu->v = false; s->cpu->z = false;
           s->cpu->waiting = false; s->cpu->stopped = false;
           s->cpu->nmiWanted = s->cpu->irqWanted = s->cpu->intWanted = s->cpu->resetWanted = false;
           s->cpu->sp = 0x01FD; r[0x01FE] = 0xFD; r[0x01FF] = 0xFF;   // RTS -> $C0:FFFE sentinel
           s->cpu->k = 0xC0; s->cpu->pc = 0x8A6D;
-          // Run to the sentinel with INTERRUPTS SUPPRESSED. In LakeSnes the CPU advances cycles
-          // through its own memory accesses, so the PPU keeps running inside a micro-call and an NMI
-          // can fire mid-routine -- which runs the ROM's whole frame handler and clobbers WRAM
-          // (observed: $01EB rewritten by the NMI path). Whether it fires depends on the PPU phase
-          // inherited from the previous combo, so a plain CtOracleRunToPC makes this sweep
-          // NON-DETERMINISTIC (measured 133 vs 118 mismatches on identical binaries+inputs).
+          // Run to the sentinel with interrupts suppressed. LakeSnes advances the PPU through the CPU's memory
+          // accesses, so an NMI could fire mid-routine (depending on the phase the previous combo left) and run
+          // the ROM's frame handler over WRAM ($01EB, for one).
           int ops = -1;
           for (int guard = 40000; guard > 0; guard--) {
             if (s->cpu->k == 0xC0 && s->cpu->pc == 0xFFFE) { ops = 40000 - guard; break; }
@@ -12443,12 +11309,10 @@ static int runSweepClamp(const char* romPath) {
   return (bad || notret) ? 1 : 0;
 }
 
-// Probe: resolve the player TILE-COLLISION path empirically (collision.md STEP 1). Drive Crono to his
-// room, then hold each direction and (a) per-OPCODE tally which collision routines actually execute, and
-// (b) sample the gate $0120 + velocity/plane at each player-controller entry (C0/881E). Answers: does
-// free-roam walking run the 8A6D/9C5C tile-collision path (i.e. is $0120 set when moving), and does the
-// player stop at a wall (the oracle's wall-stop = ground truth for the port). The boot_trace_play capture
-// was idle, so this is the only way to see the moving collision behaviour.
+// --watchcollide: Drive Crono to his room, hold each direction, and (a) tally per opcode which collision
+// routines execute, (b) sample the gate $0120 and velocity/plane at each player-controller entry (C0/881E).
+// Shows whether free-roam walking runs the 8A6D/9C5C tile-collision path and how the oracle stops at a wall
+// (disasm/notes/collision.md).
 static int runWatchCollide(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12496,13 +11360,10 @@ static int runWatchCollide(const char* romPath) {
   return 0;
 }
 
-// Validate the FULL player controller CtPlayerControl (C0/881E: seed + d-pad dispatch + 8A6D tile clamp
-// + 9175 edge clamp) byte-exact, IN-SITU, with the CORRECT timing. The --playerframe end-to-end harness
-// feeds post-frame WRAM, but the gate $011F (control-enable) flips 0->1 mid-frame, so 881E uses a value
-// the post-frame snapshot misses. Here we hook the oracle at 881E ENTRY (joypad already read; gates +
-// seed at their real pre-881E values), run CtPlayerControl on the snapshot, step the oracle through 881E
-// to its RTS, and diff the produced velocity $1D32/$1D33. This isolates the controller from the harness's
-// input-phase artifact.
+// --checkctrl: the full player controller CtPlayerControl (C0/881E: seed, d-pad dispatch, 8A6D tile clamp,
+// 9175 edge clamp), checked in situ. The control-enable gate $011F can flip mid-frame, which a post-frame
+// snapshot (--playerframe) misses, so this hooks the oracle at 881E entry (joypad read, gates and seed at their
+// real values), runs CtPlayerControl on that snapshot, steps the oracle to 881E's RTS and diffs $1D32/$1D33.
 static int runCheckCtrl(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12540,10 +11401,9 @@ static int runCheckCtrl(const char* romPath) {
   return (hits && ok != hits) ? 1 : 0;
 }
 
-// Investigation: dump the oracle's per-frame player (idx 2) movement chain across the --playerframe
-// d-pad sweep, to see the velocity-ramp / startup-stall residual (what the oracle does on a fresh d-pad
-// press that the port doesn't model). Prints pos $1800/$1880, applied vel $1900/$1980, seed $1D2A/$1D2B,
-// accum $1D2E/$1D30, vel $1D32/$1D33, and the gate flags. Focus window: the Left->Right change (~f72).
+// --tracemove: dump the oracle's per-frame player (idx 2) movement chain across the --playerframe d-pad sweep,
+// for the velocity-ramp / startup-stall residual on a fresh press: pos $1800/$1880, applied vel $1900/$1980,
+// seed $1D2A/$1D2B, accum $1D2E/$1D30, vel $1D32/$1D33 and the gate flags. Window: the Left->Right change (~f72).
 static int runTraceMove(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12575,11 +11435,10 @@ static int runTraceMove(const char* romPath) {
   return 0;
 }
 
-// STEP E of the player mover: END-TO-END. Maintain the lead player (idx 02)'s position across frames
-// and run the full per-frame tick -- CtPlayerControl (velocity from the d-pad + the velocity-control
-// inputs) -> 9E29 apply ($1900/$1980 <- $1D32/$1D33) -> AAFD integrate ($1800/$1880) -- feeding the
-// velocity-control inputs ($F9/$F8 + the seed $1D2A/$1D2B + the edge bounds) from the oracle, then diff
-// the C-maintained position + applied velocity vs the oracle byte-exact over a held-d-pad sweep.
+// --playerframe: the player mover end to end. The port keeps the lead's (idx 02) position across frames and
+// runs the per-frame tick (CtPlayerControl -> 9E29 apply, $1900/$1980 <- $1D32/$1D33 -> AAFD integrate),
+// taking the velocity-control inputs ($F9/$F8, the seed $1D2A/$1D2B, the edge bounds) from the oracle, and
+// diffs position and applied velocity over a held-d-pad sweep.
 static int runPlayerFrame(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12592,14 +11451,13 @@ static int runPlayerFrame(const char* romPath) {
   const int idx = 2;                                  // Crono (the lead) in his room
   int px = s->ram[0x1800 + idx] | (s->ram[0x1801 + idx] << 8);   // C-maintained position
   int py = s->ram[0x1880 + idx] | (s->ram[0x1881 + idx] << 8);
-  // 881E reads the control gates at frame START; they can flip mid-frame (e.g. $011F 0->1), so a
-  // post-frame snapshot mis-phases them by one frame. Feed CtPlayerControl the PREVIOUS frame's gates.
+  // 881E reads the control gates at frame start; they can flip mid-frame (e.g. $011F 0->1), so a post-frame
+  // snapshot is one frame late. Feed CtPlayerControl the previous frame's gates.
   uint8_t pg11F = s->ram[0x011F], pg162 = s->ram[0x0162], pg138 = s->ram[0x0138];
   static const uint16_t dirs[] = { 0x10, 0x20, 0x40, 0x80, 0x90, 0x50, 0x60, 0xA0, 0x00 };
   int NH = (int)(sizeof(dirs) / sizeof(dirs[0]));
-  // The port OWNS the velocity and the ticket. Copy-stubbing $1900/$1980 from the oracle every
-  // frame would make any frame the port declines to write them compare equal for free -- the score
-  // would be measuring the memcpy, which is exactly what the old 196/270 was doing.
+  // The port owns the velocity and the ticket: copying $1900/$1980 from the oracle every frame would make any
+  // frame the port fails to write them compare equal.
   uint8_t ownVX = s->ram[0x1900 + idx], ownVY = s->ram[0x1980 + idx], ownTick = s->ram[0x1A01 + idx];
   int okPos = 0, badPos = 0, okVel = 0, badVel = 0, shown = 0;
   for (int f = 0; f < 270; f++) {
@@ -12615,9 +11473,8 @@ static int runPlayerFrame(const char* romPath) {
     cram[0x011F] = pg11F; cram[0x0162] = pg162; cram[0x0138] = pg138;   // start-of-frame gates (881E timing)
     pg11F = r[0x011F]; pg162 = r[0x0162]; pg138 = r[0x0138];            // this frame becomes "prev" for the next
     CtPlayerControl(cram);                            // C0/881E: -> velocity $1D32/$1D33
-    // THE REAL RUNNER. C0/3002 (ops 0xAF/0xB0) is an EVENT-VM handler: it runs only when C0/59D9
-    // qualifies the object AND the script IP sits on that opcode. This mode used to assume both.
-    // The op arms $1A01 itself, so the integrate below is ticket-gated like C0/AAFD.
+    // C0/3002 (ops 0xAF/0xB0) is an event-VM handler: it runs only when C0/59D9 qualifies the object and the
+    // script IP sits on that opcode. The op arms $1A01 itself, so the integrate below is ticket-gated like C0/AAFD.
     if (ctSchedQualifies(cram, idx)) CtFieldRunner(cram, rom, len, idx);
     if (cram[0x1A01 + idx]) {
       cram[0x1A01 + idx]--;
@@ -12628,9 +11485,7 @@ static int runPlayerFrame(const char* romPath) {
     int opx = r[0x1800 + idx] | (r[0x1801 + idx] << 8), opy = r[0x1880 + idx] | (r[0x1881 + idx] << 8);
     if (px == opx && py == opy) okPos++;
     else { badPos++; if (shown < 16) { shown++; printf("  f%3d h=%02X pos port=(%04X,%04X) oracle=(%04X,%04X) vel=(%d,%d) $F9=%02X\n", f, h, px, py, opx, opy, (int8_t)cram[0x1900 + idx], (int8_t)cram[0x1980 + idx], r[0x00F9]); } }
-    // THE VELOCITY WAS COMPARED AND NEVER PRINTED -- the same compare-vs-print split that made three
-    // of --portrun's residual lines unreadable until the two sets were made one. A score of 268/270
-    // with no way to name the two frames is a number you cannot act on, so print them.
+    // Print each velocity mismatch, so the frames behind the score can be named.
     if (cram[0x1900 + idx] == r[0x1900 + idx] && cram[0x1980 + idx] == r[0x1980 + idx]) okVel++;
     else { badVel++; printf("  f%3d h=%02X VEL port=(%02X,%02X) oracle=(%02X,%02X) tick=%02X/%02X ip=%04X op=%02X $F9=%02X $011F=%02X\n",
              f, h, cram[0x1900 + idx], cram[0x1980 + idx], r[0x1900 + idx], r[0x1980 + idx],
@@ -12643,12 +11498,10 @@ static int runPlayerFrame(const char* romPath) {
   return (badPos || badVel) ? 1 : 0;
 }
 
-// STAIR-CLIMB check: inject a captured WRAM (snes9x_extract.py from a scene-13-at-the-stairs state),
-// hold RIGHT ($F9=01), and each frame MICRO-EXECUTE the real player controller C0/881E (d-pad ->
-// 8A6D slope collision -> 9175) on the live WRAM, then diff the post-collision velocity vs the C
-// port (CtPlayerControl). The trajectory advances by the ORACLE's velocity (ground truth). The 8A6D
-// slope handlers were only validated on flat ground; this pinpoints where the C port blocks but the
-// real game climbs. Arg = the 128KB WRAM file (build/ow_wram.bin).
+// --stairtest: inject a captured WRAM (snes9x_extract.py from a scene-13-at-the-stairs state, e.g.
+// build/ow_wram.bin), hold a direction, and each frame micro-execute the real C0/881E (d-pad -> 8A6D slope
+// collision -> 9175) on the live WRAM; diff the post-collision velocity against CtPlayerControl. The trajectory
+// follows the oracle's velocity. Finds where the port blocks on a slope that the game climbs.
 static int runStairTest(const char* romPath, const char* wramPath) {
   int len = 0, wlen = 0;
   uint8_t* rom = CtReadFile(romPath, &len); if (!rom) { printf("FAIL: ROM\n"); return 2; }
@@ -12659,11 +11512,7 @@ static int runStairTest(const char* romPath, const char* wramPath) {
   uint8_t* r = s->ram;
   int idx = r[0x0197];
   static uint8_t snap[0x20000];
-  // CT_STAIRDIR = the held direction, as the C0/88EE d-pad NIBBLE spelling (Up=8 Down=4 Left=2
-  // Right=1, so "9" = up+right); default 1 = RIGHT, which is what every existing pin drives.
-  // CT_RUN = hold the RUN modifier ($00F8 bit1), i.e. the ROM's 0x20 accumulator magnitude instead
-  // of 0x10 -- measured on the oracle: LEFT alone gives $1D2E = 0xF0, LEFT+B gives 0xE0 with
-  // $00F8 = 0x0A. CT_STAIRFRAMES = how many frames to walk (default 50).
+  // CT_STAIRDIR, CT_RUN, CT_STAIRFRAMES: see docs/DEBUG_SURFACE.md (default: hold Right, 50 frames).
   const char* sdEnv = getenv("CT_STAIRDIR");
   int stairNib = sdEnv ? (int)strtol(sdEnv, NULL, 16) : 1;
   int stairRun = getenv("CT_RUN") != NULL;
@@ -12677,9 +11526,8 @@ static int runStairTest(const char* romPath, const char* wramPath) {
   for (int f = 0; f < stairFrames; f++) {
     int px = r[0x1800 + idx] | (r[0x1801 + idx] << 8), py = r[0x1880 + idx] | (r[0x1881 + idx] << 8);
     int plane = r[0x0155];
-    // Seed the accumulator exactly as C0/88EE does for this direction (momentum $1D2A/$2B = 0, which
-    // C0/88E5 would have copied in): CtPlayerDpadIntent IS that dispatch, all nine cases, and it is
-    // separately pinned by playermove-input-velocity. Zero first, then apply the nibble.
+    // Seed the accumulator as C0/88EE does for this direction (momentum $1D2A/$2B = 0, as C0/88E5 copies in):
+    // CtPlayerDpadIntent is that dispatch (pinned by playermove-input-velocity). Zero first, then apply the nibble.
     r[0x1D2C] = 0; r[0x1D2D] = 0; r[0x1D2E] = 0; r[0x1D2F] = 0; r[0x1D30] = 0; r[0x1D31] = 0;
     CtPlayerDpadIntent(r, (uint8_t)stairNib, stairRun);
     memcpy(snap, r, 0x20000);                               // C port of 8A6D on the same accumulator
@@ -12698,7 +11546,7 @@ static int runStairTest(const char* romPath, const char* wramPath) {
     printf("  f%2d %04X,%04X t(%2d,%2d) %d | o(%+d,%+d) pl%d | p(%+d,%+d) pl%d %s%s\n",
            f, px, py, px >> 8, py >> 8, plane, oVx, oVy, oPl, pVx, pVy, pPl,
            diff ? "<-- DIVERGE" : "", ops < 0 ? " [no-ret]" : "");
-    px = (px + oVx) & 0xFFFF; py = (py + oVy) & 0xFFFF;     // integrate by the ORACLE result (ground truth)
+    px = (px + oVx) & 0xFFFF; py = (py + oVy) & 0xFFFF;     // integrate by the oracle's result
     r[0x1800 + idx] = (uint8_t)px; r[0x1801 + idx] = (uint8_t)(px >> 8);
     r[0x1880 + idx] = (uint8_t)py; r[0x1881 + idx] = (uint8_t)(py >> 8);
   }
@@ -12707,11 +11555,10 @@ static int runStairTest(const char* romPath, const char* wramPath) {
   return (div < 0) ? 0 : 1;  /* -1 = clean */
 }
 
-// STEP A+B of the player mover: validate the input->velocity half (CtPlayerControl: C0/881E body --
-// d-pad dispatch -> intent $1D2C/$1D2D + accumulator $1D2E/$1D30 -> velocity $1D32/$1D33 with edge
-// clamp) byte-exact vs the oracle. Each frame: snapshot the PRE-frame WRAM, set a swept d-pad word,
-// run the oracle (its 881E runs), then feed the C the oracle's this-frame dispatch input ($F9/$F8) +
-// gate flags and run CtPlayerControl on the snapshot; diff the intent/accumulator/velocity bytes.
+// --playermove: the input -> velocity half of CtPlayerControl (C0/881E: d-pad dispatch -> intent $1D2C/$1D2D
+// and accumulator $1D2E/$1D30 -> velocity $1D32/$1D33 with the edge clamp). Each frame: snapshot the pre-frame
+// WRAM, set a swept d-pad word, run the oracle, then run CtPlayerControl on the snapshot with the oracle's
+// dispatch input ($F9/$F8) and gate flags, and diff the intent/accumulator/velocity bytes.
 static int runPlayerMove(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12723,17 +11570,14 @@ static int runPlayerMove(const char* romPath) {
   static uint8_t snap[0x20000];
   static const uint16_t dirs[] = { 0x10, 0x20, 0x40, 0x80, 0x90, 0x50, 0x60, 0xA0, 0x00 };  // U,D,L,R,U+R,U+L,D+L,D+R,none
   int NH = (int)(sizeof(dirs) / sizeof(dirs[0]));
-  // The FOUR fields CtPlayerControl actually owns. $1D2E/$1D30 are NOT among them: they are the
-  // CAMERA REQUEST, not player state (disasm/notes/movement_pinned_open.md §1). Post-frame they hold
-  // whatever C0/99DE (STZ $2E at 99ED/99FD, STZ $30 at 9A0E/9A1C) and C0/91AC (STA $2E) left there,
-  // and BOTH run AFTER C0/9175 -- exactly where the ported controller correctly stops. Comparing them
-  // against a routine that never runs them is a mis-specified check, and that mis-specification IS
-  // the whole of the old "accX 222/270 accY 134/270" shortfall. They are still printed below, under
-  // their real name, as an informational row.
+  // The four fields CtPlayerControl owns. $1D2E/$1D30 are not among them: they are the camera request
+  // (disasm/notes/movement_pinned_open.md sec. 1), rewritten after C0/9175 by C0/99DE (STZ $2E at 99ED/99FD,
+  // STZ $30 at 9A0E/9A1C) and C0/91AC (STA $2E), where the ported controller stops. They are printed below as
+  // an informational row.
   static const struct { int a; const char* n; } F[4] = {
     { 0x1D2C, "intX$2C" }, { 0x1D2D, "intY$2D" }, { 0x1D32, "velX$32" }, { 0x1D33, "velY$33" } };
   int ok[4] = { 0 }, bad[4] = { 0 }, shown = 0, camOk[2] = { 0, 0 };
-  int pg162 = s->ram[0x0162], pg11F = s->ram[0x011F], pg138 = s->ram[0x0138];   // START-of-frame gates
+  int pg162 = s->ram[0x0162], pg11F = s->ram[0x011F], pg138 = s->ram[0x0138];   // start-of-frame gates
   for (int f = 0; f < 270; f++) {
     uint16_t h = dirs[(f / 24) % NH];              // hold each direction 24 frames (realistic, vs a per-frame torture test)
     memcpy(snap, s->ram, 0x20000);                 // pre-frame (= the oracle's pre-881E state)
@@ -12741,11 +11585,8 @@ static int runPlayerMove(const char* romPath) {
     CtOracleRunFrame(s);
     const uint8_t* r = s->ram;
     snap[0x00F9] = r[0x00F9]; snap[0x00F8] = r[0x00F8];          // feed this-frame's dispatch input
-    // ...but the PREVIOUS frame's gate flags. C0/881E samples $0162/$011F/$0138 at frame START; the
-    // post-frame values are what the frame LEFT BEHIND. On the single frame where a gate flips
-    // mid-frame (f73: $011F 0->1 as control is handed back) feeding the post value sent the port down
-    // the other branch -- that one frame is the entire old "intX 269/270 velX 269/270" shortfall.
-    // runPlayerFrame already carried the gates this way; runPlayerMove did not.
+    // ...but the previous frame's gate flags: C0/881E samples $0162/$011F/$0138 at frame start, and a gate
+    // can flip mid-frame ($011F 0->1 as control is handed back), as in runPlayerFrame.
     snap[0x0162] = (uint8_t)pg162; snap[0x011F] = (uint8_t)pg11F; snap[0x0138] = (uint8_t)pg138;
     pg162 = r[0x0162]; pg11F = r[0x011F]; pg138 = r[0x0138];     // this frame becomes "prev" for the next
     CtPlayerControl(snap);
@@ -12765,10 +11606,9 @@ static int runPlayerMove(const char* romPath) {
   return (bad[0]+bad[1]+bad[2]+bad[3]) ? 1 : 0;
 }
 
-// Validate the FULL direction chain (movement layer 3, the scripted "move toward target" cmd 0xA0):
-// for each actor running opcode 0xA0, read its move target from the event script, compute the
-// heading $EE = CtMoveDirAngle(target - current pos), and verify the persistent velocity
-// $1900/$1980 == speed * trig($EE) (the shadow of the scratch angle). Ported per the workflow RE.
+// --checkdir: the direction chain of the scripted "move toward target" command 0xA0. For each actor on opcode
+// 0xA0, read its target from the event script, compute the heading $EE = CtMoveDirAngle(target - pos), and
+// check the persistent velocity $1900/$1980 == speed * trig($EE).
 static int runCheckDir(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12790,21 +11630,17 @@ static int runCheckDir(const char* romPath) {
       int ip = r[0x1180 + idx] | (r[0x1181 + idx] << 8);   // per-actor event-script IP
       int oa = 0x12001 + ip;                               // $7F2001 + IP (opcode address)
       if (oa + 2 >= 0x20000 || r[oa] != 0xA0) { pHave[idx] = 0; continue; }  // only the move-toward-target cmd
-      int dx = (int8_t)(r[oa + 1] - r[0x1801 + idx]);      // tgtX - curX (high bytes), THIS frame
+      int dx = (int8_t)(r[oa + 1] - r[0x1801 + idx]);      // tgtX - curX (high bytes), this frame
       int dy = (int8_t)(r[oa + 2] - r[0x1881 + idx]);      // tgtY - curY
       int sp = r[0x1A00 + idx];
       int vx = (int8_t)r[0x1900 + idx], vy = (int8_t)r[0x1980 + idx];
-      // the velocity is recomputed only on a step-issue (when $1A01 hits 0) and stays constant
-      // between steps. On a step-issue the velocity changes, computed from the position at frame
-      // start = the previous frame's (dx,dy); latch that. Then every moving frame's velocity must
-      // equal $EE(latched delta).
+      // The velocity is recomputed only on a step issue ($1A01 reaching 0), from the position at frame start
+      // (the previous frame's dx,dy); latch that, then every moving frame's velocity must equal $EE(latched).
       if (pHave[idx] && (vx != pVx[idx] || vy != pVy[idx])) { lDx[idx] = pDx[idx]; lDy[idx] = pDy[idx]; lV[idx] = 1; }
       if (lV[idx] && sp != 0 && (vx != 0 || vy != 0)) {
-        // C0/ABA2 now reads its four inputs from WRAM and subtracts them UNSIGNED, but this check
-        // only ever latched signed DELTAS, not the positions they came from. Biasing both sides by
-        // $80 reproduces the int8 semantics exactly -- tgt < cur as unsigned iff the delta is
-        // negative, for every delta in [-128,127] -- and it goes into a SCRATCH image so the
-        // oracle's live RAM is not perturbed mid-check.
+        // C0/ABA2 reads its four inputs from WRAM and subtracts them unsigned; this check latches signed
+        // deltas, so both sides are biased by $80 (tgt < cur unsigned iff the delta is negative, for every
+        // delta in [-128,127]), in a scratch image so the oracle's RAM is not touched.
         static uint8_t hstage[0x20000];
         hstage[0x01F0] = 0x80; hstage[0x01F1] = 0x80;
         hstage[0x01F2] = (uint8_t)(0x80 + lDx[idx]);
@@ -12827,11 +11663,9 @@ static int runCheckDir(const char* romPath) {
   return badAngle ? 1 : 0;
 }
 
-// Validate the velocity handler (movement layer 2, C0/AD02..ADF2): the velocity is vector/angle
-// based -- $1900 (X) = speed($1A00) * $F800[dir+0x40] >> 8, $1980 (Y) = speed * $F800[dir] >> 8
-// ($F800 = a signed sin/cos table). We don't know the per-actor direction, so validate the
-// FORMULA by consistency: every moving actor's (velX,velY) must equal the handler's output for
-// SOME direction 0-255 (i.e. lie on the speed-scaled trig circle).
+// --checkvel: the velocity handler (C0/AD02..ADF2): $1900 (X) = speed($1A00) * $F800[dir+0x40] >> 8, $1980 (Y)
+// = speed * $F800[dir] >> 8 ($F800 = a signed sin/cos table). The per-actor direction is unknown, so each
+// moving actor's (velX, velY) must equal the handler's output for some direction 0-255.
 static int runCheckVel(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12868,10 +11702,9 @@ static int runCheckVel(const char* romPath) {
   return (off - offZeroed) ? 1 : 0;  /* collision-clipped zeros are expected; unclipped offs fail */
 }
 
-// Port + validate the actor movement integration (C0/AB06..AB44): while the move counter
-// $1A01[idx] != 0, each frame the actor's world position is advanced by its velocity and the
-// counter is decremented: $1800 += sign_extend($1900) (X), $1880 += sign_extend($1980) (Y),
-// $1A01 -= 1. Validated by predicting frame N+1's position from frame N's pos+velocity.
+// --checkmove: the actor movement integration (C0/AB06..AB44): while $1A01[idx] != 0, each frame adds the
+// velocity to the position ($1800 += sext($1900), $1880 += sext($1980)) and decrements $1A01. Checked by
+// predicting frame N+1's position from frame N's.
 static int runCheckMove(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12912,10 +11745,9 @@ static int runCheckMove(const char* romPath) {
   return (badX || badY) ? 1 : 0;
 }
 
-// Port + validate the OBJ-assembly ROM decoder (C0/CC22..CD2C): the sprite frame's per-tile X/Y
-// offsets ($7F4802 template) are read from ROM at $D3 = bank $1300[idx] : ($1380[idx] +
-// frame($0F01[idx]) * 40). Each frame record is 40 bytes; the 4 tiles' offsets are at +0x20
-// (X0,Y0,X1,Y1,...). Validate the decoded $7F4802 (Xoff 16-bit sign-ext / Yoff byte) vs the oracle.
+// --checkdecode: the OBJ-assembly decoder (C0/CC22..CD2C). The frame's per-tile X/Y offsets ($7F4802 template)
+// come from ROM at $D3 = bank $1300[idx] : ($1380[idx] + frame($0F01[idx]) * 40); each 40-byte frame record
+// holds the four tiles' offsets at +0x20 (X0,Y0,X1,Y1,...). Compares the decoded $7F4802 with the oracle's.
 static int runCheckDecode(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -12957,9 +11789,8 @@ static int runCheckDecode(const char* romPath) {
   return (badX || badY || badTile || badAttr) ? 1 : 0;
 }
 
-// Diagnostic: after the input script reaches gameplay, can the player (Crono, object idx 0x10)
-// actually move? Press each direction and report the change in the actor world position ($1800/
-// $1880). All-zero => the script left us in a locked (cutscene/dialogue) state, not free-roam.
+// --movetest: after the input script reaches gameplay, press each direction and report the change in the
+// lead's world position ($1800/$1880). All zero means the script left a locked (cutscene/dialogue) state.
 static int runMoveTest(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -13005,9 +11836,8 @@ static int runMoveTest(const char* romPath) {
   return 0;
 }
 
-// Port + validate the actor->screen transform (C0/AB45..ABA1): the sprite-object screen coords
-// $0A00 (X) / $0A80 (Y) = (the actor world position $1800/$1880 >> 4) - the camera, where
-// cameraX = ($1D0A << 3) + ($1D87 & 7), cameraY = ($1D0E << 3) + ($1D89 & 7). Non-stateful.
+// --checkxform: the actor -> screen transform (C0/AB45..ABA1): $0A00 (X) / $0A80 (Y) = (world $1800/$1880 >> 4)
+// - camera, with cameraX = ($1D0A << 3) + ($1D87 & 7) and cameraY = ($1D0E << 3) + ($1D89 & 7). Stateless.
 static int runCheckXform(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -13040,10 +11870,9 @@ static int runCheckXform(const char* romPath) {
   return (badX || badY) ? 1 : 0;
 }
 
-// Experiment: can the Y-bucket sprite list ($0E00 heads + $0E81 chains, keyed by sprite Y) be
-// rebuilt from scratch each frame, or is it stateful (incrementally maintained)? Rebuild it from
-// the active sprites ($1B80 != 0), inserting at the bucket head (C0/A9CD), and compare to the
-// oracle's $0E00/$0E81. 0 mismatches -> a from-scratch port works; else the order is history-dependent.
+// --checksort: can the Y-bucket sprite list ($0E00 heads, $0E81 chains) be rebuilt from scratch each frame?
+// Rebuilds it from the active sprites ($1B80 != 0), inserting at the bucket head (C0/A9CD), and compares with
+// the oracle's $0E00/$0E81. Zero mismatches means a stateless port works; otherwise the order is history-dependent.
 static int runCheckSort(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -13077,46 +11906,26 @@ static int runCheckSort(const char* romPath) {
   return (badHead || badNext) ? 1 : 0;
 }
 
-// Port + validate STAGES 1+2 of the field OAM build, end-to-end. Iterates the Y-sorted sprite
-// list ($7E0E00), recomputes each object's OAM (stage 1) and copies it into the priority-grouped
-// OAM slots (stage 2), then compares the written slots to the oracle's $7E0700 (main) / $7E0900
-// (high) byte-for-byte over many gameplay frames.
-// The C port's per-frame reimplementation (zelda3 model): copy-stub the not-yet-ported routines
-// from the oracle into g_ram, then run the PORTED field-sprite render path over g_ram, writing the
-// OAM. As more routines are ported the copy-stub shrinks; for now only the field OAM build is C.
-// How many objects C0/B701's emit ran on, accumulated over the run, and --verifyframe ASSERTS it.
-// That is not decoration: deleting the CtAnimDrawPass call below leaves the check GREEN, because the
-// copy-stub already holds the oracle's records and a correct emit only rewrites them with the same
-// values. So the check cannot detect the producer's ABSENCE by its effects -- only by its having run.
+// The port's per-frame field render (zelda3 model) for --verifyframe: copy the not-yet-ported upstream WRAM
+// from the oracle into g_ram, then run the ported field-sprite path (draw pass, priority, stage-2 copy) over it.
+// g_vfEmitted counts the objects C0/B701's emit ran on; --verifyframe asserts it, since the copied WRAM already
+// holds the oracle's records and dropping the emit would not change the OAM.
 static long g_vfEmitted;
-static int  g_vfOurLinked;   // objects OUR legs linked when VERIFYFRAME_OURLIST is set
-// ...and the same discipline for the priority injection below: how many PIECES it wrote, and a bitmask
-// of the sprite CLASSES it saw. The class mask is the honest part -- it is what tells a reader that the
-// 8- and 12-piece arms are unexercised on this scenario, instead of leaving that in a comment.
+static int  g_vfOurLinked;   // objects our legs linked when VERIFYFRAME_OURLIST is set
+// The same for the priority injection: pieces written, and a mask of the sprite classes seen (which shows
+// the 8- and 12-piece arms unexercised on this scenario).
 static long g_vfPieces; static int g_vfClsMask; static int g_vfDrawnCls;
 static void CtPortRunFrame(const Snes* oracle, const uint8_t* rom, int romLen) {
-  static uint8_t cTplAttr[0x80][24];           // the C-maintained per-tile OBJ priority (decode-time cached).
-                                               // 24, not 12: class 3 is SIX groups of four (C0/B5AF)
+  static uint8_t cTplAttr[0x80][24];           // the port's per-tile OBJ priority, cached at decode time
+                                               // (24: class 3 is six groups of four, C0/B5AF)
   static int prev0F[0x80], inited = 0;
   if (!inited) { for (int i = 0; i < 0x80; i++) prev0F[i] = -1; inited = 1; }
   CtPortCopyWramFromOracle(oracle);            // stub: pull the upstream WRAM (movement/anim/sort/...) into g_ram
-  // VERIFYFRAME_OURLIST=1 -- CLOSE THE COMPOSITION. Every link of the draw chain is graded on its own:
-  // $1A81 by vmdiff-draw-visibility, $0F00 by vm-activation-pass-0F00, the draw LIST itself
-  // ($0E00/$0E80/$0E81) inside vmdiff-framelegs-party3's write mask -- mutation-proven, forcing the
-  // wrong bucket in CtObjListLink takes $0Exx divergences 0 -> 7 and the total 23 -> 36 -- and the
-  // list -> OAM production by this mode plus --sweepstage2 / --sweepdrain / --checkstage1 / --checkoam.
-  // What NOTHING graded is the WIRING: this mode copies the oracle's whole WRAM, DRAW LIST INCLUDED, so
-  // a port whose own list is right but whose OAM builder walks the wrong one reads clean. The same
-  // "each piece graded, the composition not" shape that hid the dead object-collision path for three
-  // commits.
-  // It cannot be closed inside --vmdiff: that harness's memory model is $7E plus $7F:0000-03FF only and
-  // w8() SILENTLY DROPS $7F:0400+ (counted as gWmDropped), so the staged OAM records at $7F:4BC0 are
-  // not addressable there at all.
-  // With the flag the oracle's draw list is DISCARDED and rebuilt by OUR OWN legs in C0/A810's exact
-  // loop order -- A82D's `JSR C0/A88D / BCC` gate, then A838's AB45 screen pos, then A83B's A9CD link,
-  // per object, skipping what A81B/A822/A826 skip ($1100 bit7 and class 7). The emit and stage-2 copy
-  // below then run over a list this port produced: the positions stay the oracle's, the SELECTION and
-  // the BUCKET ORDER become ours.
+  // VERIFYFRAME_OURLIST=1: discard the oracle's draw list and rebuild it with the port's own legs in C0/A810's
+  // loop order (A82D `JSR C0/A88D / BCC` gate, A838's AB45 screen position, A83B's A9CD link; skipping $1100
+  // bit 7 and class 7), so the OAM compare runs over our selection and bucket order. --vmdiff cannot host
+  // this: its memory model drops $7F:0400+, where the staged OAM records live.
+  // disasm/notes/frame_wiring.md sec. 4.
   if (getenv("VERIFYFRAME_OURLIST")) {
     int nobj = g_ram[0x12000];
     for (int b = 0; b < 0x100; b += 2) g_ram[0x0E00 + b] = 0x80;
@@ -13132,48 +11941,24 @@ static void CtPortRunFrame(const Snes* oracle, const uint8_t* rom, int romLen) {
     }
   }
 
-  // ---- C0/B271's PER-OBJECT RELEASE + EMIT, which is what retired CtBuildFieldOAMFull -------------
-  // This used to end in CtBuildFieldOAMFull, a copy-stub that stood in for the whole record pipeline by
-  // deriving the screen position from the world position and decoding the tiles out of the ROM. Both
-  // halves of the real pipeline are graded now -- C0/B788's emit by --sweepdrain, C0/B309's stage-2 copy
-  // by --sweepstage2 -- so the stub is gone and the real one runs here.
-  //
-  // ⚠ AND THE SWAP HAD TO BE THIS, NOT A PLAIN CtBuildFieldOAM. The copy-stub above pulls the oracle's
-  // ENTIRE WRAM into g_ram, records included, so a bare stage-2 copy would read the oracle's $7F:4BC0
-  // and write back the oracle's own OAM bytes -- this check would have gone green as a memcpy. Running
-  // CtAnimDrawPass first is what keeps it honest: C0/B701's reposition arm RECOMPUTES each piece's
-  // placed X (`xd + $0A00`) and its CLAMPED Y into the record's +0/+1, so those two bytes per piece are
-  // C-produced before stage 2 copies them out. Mutation-checked, not assumed -- see the check's notes.
+  // ---- C0/B271's per-object release + emit ----
+  // The copied WRAM holds the oracle's records, so a bare stage-2 copy would write back the oracle's own OAM.
+  // CtAnimDrawPass runs first: B701's reposition arm recomputes each piece's placed X (`xd + $0A00`) and
+  // clamped Y into the record's +0/+1. disasm/notes/frame_wiring.md "The last copy-stub in the OAM path".
   g_vfEmitted += CtAnimDrawPass(g_ram, NULL);
-  g_vfDrawnCls |= gCtDrawClsMask;   // which classes the DRAW LIST held -- the only ones any compare sees
-  // STEP 6.3c -- C-PRODUCE the OBJ priority (retire the copy-stub): maintain the per-tile priority
-  // statefully (the decode caches it on each $0F01 change, with the then-$0C00, and it persists
-  // between changes -- the decode-time caching that the stub avoided), then write it into the OAM
-  // assembly source so the build reads a C-produced value, not the oracle's copy.
-  // It runs AFTER the emit deliberately: B701's INSTANTIATE arm rewrites the record's +6/+7 from the
-  // staged template, so injecting the priority first would let that arm clobber it. (Today every object
-  // here arrives with $1B00 = 0x80 and takes the reposition arm, which leaves +6/+7 alone -- the order
-  // is for the case where it does not.)
-  // IT IS NO LONGER 4-PIECE, AND THE FIX WAS TO STOP RE-DERIVING RATHER THAN TO WIDEN THE DERIVATION.
-  // The obvious repair was to teach CtDecodeSpriteAssembly the class-1/2 geometry -- the per-class
-  // frame-record stride ($28 / $50 / $78, applied by the ROM through the hardware multiplier at
-  // C0/CBDC: $4202 = the frame $0F01,X, $4203 = the stride), the offsets that sit at stride - pieces*2
-  // ($20 / $40 / $60), and the two class-2 tile-numbering variants whose extra $10 jumps at a
-  // different piece in each. All of that is derived and written down -- in anim_drain_cad9.md, for
-  // C0/CAD9's frame half, which is PORTED and graded byte-exact at 165888/165888 across all four
-  // classes and both class-2 geometries. Re-deriving it here would be a SECOND model of the same
-  // computation, which is precisely the defect just removed from CtBuildFieldOAM.
-  //
-  // So the per-tile Y offset comes from where the ported producer already staged it: the assembly
-  // template at $7F:4800 + $1700,X + e*8, whose +4 is the Y offset (ctOamEmit reads it as
-  // `CT_STAGE(o+2)` off its $4802 base, and --checkdecode compares the ROM decode against exactly this
-  // byte, badY = 0 over 180 frames). That makes the widening free: the piece count is $1201,X & 3 and
-  // nothing about the record geometry has to be known here at all.
+  g_vfDrawnCls |= gCtDrawClsMask;   // the classes the draw list held, the only ones any compare sees
+  // The OBJ priority, produced by the port: kept per tile (the decode caches it on each $0F01 change with the
+  // then-$0C00, and it persists between changes) and written into the OAM assembly source before the build.
+  // It runs after the emit: B701's instantiate arm rewrites the record's +6/+7 from the staged template and
+  // would clobber it. (Here every object arrives with $1B00 = 0x80 and takes the reposition arm.)
+  // The per-tile Y offset is read where C0/CAD9's ported frame half staged it ($7F:4800 + $1700,X + e*8, +4;
+  // --checkdecode compares that byte), so no record geometry is re-derived here: the piece count is
+  // $1201,X & 3 (disasm/notes/frame_wiring.md "The last copy-stub in the OAM path").
   static const int GRP[4] = { 1, 2, 3, 6 };     // groups of four per class -- B341/B3FB/B4D4/B5CB
   for (int idx = 0; idx < 0x80; idx += 2) {
     int cls = g_ram[0x1201 + idx] & 3;
-    int np = 4 * GRP[cls];                      // 4 / 8 / 12 / 24 pieces -- class 3's arm is C0/B5AF,
-                                                //   whose `LDA #18` copy loop is 24 records long
+    int np = 4 * GRP[cls];                      // 4 / 8 / 12 / 24 pieces; class 3's arm C0/B5AF copies
+                                                //   24 records (`LDA #18`)
     int base = g_ram[0x1700 + idx] | (g_ram[0x1701 + idx] << 8);
     if ((base & 0x1F) || base + 0x20 * GRP[cls] > 0x540) continue;    // the record window scales too
     int f01 = g_ram[0x0F01 + idx];
@@ -13182,7 +11967,7 @@ static void CtPortRunFrame(const Snes* oracle, const uint8_t* rom, int romLen) {
       for (int t = 0; t < np; t++) cTplAttr[idx][t] = g_ram[0x14BC7 + base + t * 8];
     else if (f01 != prev0F[idx]) {              // $0F01 changed -> re-cache the per-tile priority
       for (int t = 0; t < np; t++) {            // $0C00 if tile Y-offset < 0xE8 (bottom half) else $0C01 (top half)
-        int yoff = g_ram[0x14804 + base + t * 8];        // the STAGED Y offset ($7F:4800 + base + e*8, +4)
+        int yoff = g_ram[0x14804 + base + t * 8];        // the staged Y offset ($7F:4800 + base + e*8, +4)
         cTplAttr[idx][t] = (uint8_t)((g_ram[0x0F81 + idx] | g_ram[0x0D01 + idx]) | ((yoff < 0xE8) ? g_ram[0x0C00 + idx] : g_ram[0x0C01 + idx]));
       }
     }
@@ -13193,9 +11978,8 @@ static void CtPortRunFrame(const Snes* oracle, const uint8_t* rom, int romLen) {
   CtBuildFieldOAM(g_ram, g_ram + 0x0700, g_ram + 0x0900, NULL, NULL);   // C0/B309 stage 2, the real one
 }
 
-// Lockstep verify of the C-port frame: run the oracle, run CtPortRunFrame into g_ram, and assert the
-// OAM region (the ported part) matches the oracle byte-for-byte. attr-only 0x10 diffs (the $0C00
-// position-priority timing) are classified separately.
+// --verifyframe: run the oracle, run CtPortRunFrame into g_ram, and compare the OAM region with the oracle's.
+// Attr-only 0x10 differences (the $0C00 position-priority timing) are counted separately.
 static int runVerifyFrame(const char* romPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -13253,10 +12037,8 @@ static int runCheckOAM(const char* romPath) {
   return bad ? 1 : 0;
 }
 
-// Run N frames (optionally mashing), then dump the oracle's OAM (the real sprite table) in
-// canonical SNES layout (128 sprites x {X,Y,tile,attr} = 512 bytes, then the 32-byte high
-// table) + the full WRAM to <out>.wram. The ground truth for the byte-exact OAM/sprite port:
-// find the shadow OAM in WRAM (it matches this), then the routine that builds it.
+// --dumpoam: run N frames (optionally mashing), then dump the oracle's OAM in SNES layout (128 sprites x
+// {X,Y,tile,attr} = 512 bytes, then the 32-byte high table) and the full WRAM to <out>.wram.
 static int runDumpOam(const char* romPath, int frames, int mash, int script, const char* outPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -13284,8 +12066,8 @@ static int runDumpOam(const char* romPath, int frames, int mash, int script, con
   return 0;
 }
 
-// Mash to a field, then log one frame's CPU writes and report which PCs write the shadow OAM
-// buffer ($7E0700-$7E091F) — i.e. the OAM-build routine(s) to port. Foundation for the port.
+// --findoam: mash to a field, log the CPU writes, and report which PCs write the watch region (default the
+// shadow OAM buffer $7E0700-$7E091F), i.e. the OAM-build routines.
 static int runFindOam(const char* romPath, int frames, int mash, int script, uint32_t watchAddr, uint32_t watchLen) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -13347,9 +12129,8 @@ static int runFindOam(const char* romPath, int frames, int mash, int script, uin
   return 0;
 }
 
-// Run N frames (optionally mashing to start + advance a new game), then save the oracle's
-// full emulator state (LakeSnes snes_handleState) to a resumable savestate file. A story
-// point reached this way can later be re-loaded to read its flags for the populated atlas.
+// --savestate: run N frames (optionally mashing to start and advance a new game), then save the oracle's full
+// state (LakeSnes snes_handleState) to a resumable savestate file.
 static int runSaveState(const char* romPath, int frames, int mash, const char* outPath) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -13374,8 +12155,7 @@ static int runSaveState(const char* romPath, int frames, int mash, const char* o
   return 0;
 }
 
-// Load a savestate into the oracle (restore the full emulator state) and dump its global
-// story flags ($7F0000) — the per-scene populate input. Reads only the ROM + the state.
+// --loadstate: load a savestate into the oracle and dump its global story flags ($7F0000).
 static int runLoadState(const char* romPath, const char* statePath, const char* flagsOut) {
   int len = 0, slen = 0, fmt = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -13398,9 +12178,8 @@ static int runLoadState(const char* romPath, const char* statePath, const char* 
   return 0;
 }
 
-// Find the input-driven LEAD actor slot: hold Down then Up and pick the actor table offset
-// ($1800/$1880 + off, even offsets, 64 objects) whose world Y tracks the d-pad both ways.
-// Scene loads re-assign slots, so this runs at start + after every scene change.
+// One pass of the lead-slot search: hold bPlus then bMinus and score each actor table offset ($1800/$1880 + off,
+// even offsets, 64 objects) whose position on axis `tbl` follows the d-pad.
 static int ctLeadPass(Snes* s, int tbl, uint16_t bPlus, uint16_t bMinus) {
   const uint8_t* r = s->ram;
   int v0[64], v1[64];
@@ -13410,14 +12189,14 @@ static int ctLeadPass(Snes* s, int tbl, uint16_t bPlus, uint16_t bMinus) {
   for (int i = 0; i < 64; i++) v1[i] = r[tbl + i * 2] | (r[tbl + 1 + i * 2] << 8);
   for (int f = 0; f < 24; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }   // release + settle
   for (int f = 0; f < 40; f++) { s->input1->currentState = bMinus; CtOracleRunFrame(s); }
-  // a wall can block either single direction flush, so accept a slot that responds with the correct
-  // SIGN in at least one phase and never moves against the held button; score = total response.
+  // A wall can block either direction flush, so accept a slot that responds with the right sign in at least
+  // one phase and never moves against the held button; score = total response.
   int best = -1, bestScore = 0;
   for (int i = 0; i < 64; i++) {
     int v2 = r[tbl + i * 2] | (r[tbl + 1 + i * 2] << 8);
     int dA = v1[i] - v0[i], dB = v2 - v1[i];
     int okA = dA > 64, okB = dB < -64;
-    int badA = dA < -16, badB = dB > 16;          // moved AGAINST the held button = not the player
+    int badA = dA < -16, badB = dB > 16;          // moved against the held button: not the player
     if ((okA || okB) && !badA && !badB) {
       int score = (dA > 0 ? dA : -dA) + (dB > 0 ? dB : -dB);
       if (score > bestScore) { bestScore = score; best = i * 2; }
@@ -13426,10 +12205,8 @@ static int ctLeadPass(Snes* s, int tbl, uint16_t bPlus, uint16_t bMinus) {
   return best;
 }
 
-// Find the input-driven LEAD actor slot: hold a direction and its reverse and pick the actor table
-// offset ($1800 X / $1880 Y + off, 64 even slots) whose position tracks the d-pad both ways. Tries
-// Down/Up on Y, then Right/Left on X (a wall can block one axis flush). Scene loads re-assign
-// slots, so this runs at start + after every scene change.
+// Find the input-driven lead actor slot: tries Down/Up on Y, then Right/Left on X (a wall can block one axis).
+// Scene loads reassign slots, so this runs at start and after every scene change.
 static int ctFindLeadSlot(Snes* s) {
   int best = ctLeadPass(s, 0x1880, 0x20, 0x10);            // Y: Down then Up
   if (best < 0) best = ctLeadPass(s, 0x1800, 0x80, 0x40);  // X: Right then Left
@@ -13443,9 +12220,8 @@ static Snes* ctLoadStateOracle(const char* romPath, const char* statePath, uint8
   int len = 0, slen = 0, fmt = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
   if (!rom) { printf("FAIL: cannot read ROM '%s'\n", romPath); return NULL; }
-  // `boot` in place of a state: POWER-ON (the machine --xlatentries boot starts), so every mode that loads a state --
-  // --peek, --monitor, --hookpc, --cputrace -- can follow a byte's whole history from the reset vector. It is how a
-  // value the cartridge accumulates across the attract (C3/02DD's $0386) is compared with the port's from its start.
+  // `boot` in place of a state: power-on (as --xlatentries boot), so every mode that loads a state (--peek,
+  // --monitor, --hookpc, --cputrace) can follow a byte from the reset vector.
   if (!strcmp(statePath, "boot")) {
     Snes* sb = CtOracleCreate(rom, len, NULL);
     if (!sb) { printf("FAIL: oracle load failed\n"); free(rom); return NULL; }
@@ -13462,18 +12238,18 @@ static Snes* ctLoadStateOracle(const char* romPath, const char* statePath, uint8
   StateHandler* sh = sh_init(false, sdata, slen);
   snes_handleState(s, sh);
   sh_free(sh); free(sdata);
-  // PEEK_POKE="ADDR=HH,...": WRAM bytes set on the loaded state before any mode runs it (--pokewram's grammar) -- how a
-  // capture no drive reaches cheaply is made, e.g. a party on 1 HP for a defeat (every --peek/--monitor/--hookpc/...).
+  // PEEK_POKE="ADDR=HH,...": WRAM bytes set on the loaded state before any mode runs it (--pokewram's grammar),
+  // e.g. a party on 1 HP for a defeat.
   ctPokeWram(s, getenv("PEEK_POKE"));
   CtOracleFrameCountReset();                                   // PEEK_POKE_AT counts from here
   *romOut = rom;
   return s;
 }
 
-// PEEK_APUTRACE=<from>:<to> (--peek, measurement): the sound handshake from BOTH processors' sides over that window of
-// peek frames -- every CPU store to $2140-$2143 with the beam, and on the SPC every store to its port 0 ($F4, the echo)
-// and the first read of each new value the CPU put on $2140, with the SPC's PC and its own cycle count. Per frame, the
-// APU's cycle count at the frame's end (so an SPC event's place in the frame is (cycles - previous end) / 17088 * 262).
+// PEEK_APUTRACE=<from>:<to> (--peek): the sound handshake from both processors' sides over that window of peek
+// frames: every CPU store to $2140-$2143 with the beam; on the SPC every store to port 0 ($F4, the echo) and the
+// first read of each new value on $2140, with the SPC's PC and cycle count; and the APU's cycle count at each
+// frame's end (an SPC event's place in the frame is (cycles - previous end) / 17088 * 262).
 static Snes* g_patSnes = NULL; static int g_patOn = 0, g_patFrame = 0; static uint8_t g_patLastSeen = 0xFF;
 static long g_patReads = 0;
 static CpuWriteHandler g_patCpuW = NULL; static SpcReadHandler g_patSpcR = NULL; static SpcWriteHandler g_patSpcW = NULL;
@@ -13498,8 +12274,8 @@ static void patSpcWrite(void* mem, uint16_t adr, uint8_t val) {
     printf("  aputrace f%d SPC $%02X := %02X at pc %04X apuc=%u\n", g_patFrame, adr, val, pc, apu->cycles);
 }
 
-// Debug: load a savestate, run a button script ("hexbtn:frames,..." -- or N frames of `btn` +
-// optional N2 of `btn2`), dump the framebuffer + key field/overworld vars.
+// --peek: load a savestate, run a button script ("hexbtn:frames,..." or N frames of `btn` + optional N2 of
+// `btn2`), dump the framebuffer and key field/overworld vars. PEEK_* options: docs/DEBUG_SURFACE.md.
 static int ctWramOff(uint32_t addr);   // fwd (PEEK_WRITEWATCH)
 static int runPeek(const char* romPath, const char* statePath, int frames, uint16_t btn,
                    int frames2, uint16_t btn2, const char* script, const char* outPath) {
@@ -13507,13 +12283,7 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
   if (!s) return 2;
   const uint8_t* r = s->ram;
-  // Token-STREAMED, not collected into a fixed array. This used to build `uint16_t seq[128][2]`
-  // and stop parsing at `nSeq < 128` -- silently (DEBUG_SURFACE.md: "--peek button script caps at
-  // 128 phases"). A 231-token drive script ran its first 128 tokens (1280 of the requested 2600
-  // frames) and then reported success, so the dump was a mid-battle frame labelled as the
-  // post-battle one -- a fixture that would have been WRONG in a way nothing downstream could see.
-  // Same silent-truncation class as the `char buf[N]` copies in ctStream/runMonitor/runFollowTest/
-  // runPpuRegs; all five now share ctBtnNext.
+  // The button script is streamed token by token (ctBtnNext), with no fixed phase cap.
   int f = 0, lastLoc = -1;
   CtBtnScript bs = { script };
   uint16_t phBtn = 0; int phN = 0, fbPhase = 0;
@@ -13540,15 +12310,14 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
                g_patReads, s->apu->spc->pc);
         if (ab >= 0) printf(" aram[%04X]=%02X", ab, s->apu->ram[ab]);   // PEEK_ARAMBYTE=<hex>: one ARAM byte at the frame's end
         printf("\n"); }
-      // PEEK_PCM=<path>: the S-DSP's output, one frame at a time -- the 534 stereo samples the frame produced (32040 Hz,
-      // int16 L,R), exactly what the LakeSnes reference hands its audio device. Belthasar's CT_AUDIO_PCM is the same stream.
+      // PEEK_PCM=<path>: the S-DSP's output per frame, the 534 stereo samples (32040 Hz, int16 L,R) the LakeSnes
+      // reference hands its audio device; Belthasar's CT_AUDIO_PCM is the same stream.
       { static FILE* pcm = (FILE*)1;
         if (pcm == (FILE*)1) { const char* pp = getenv("PEEK_PCM"); pcm = (pp && *pp) ? fopen(pp, "wb") : NULL; }
         if (pcm) { int16_t sb[534 * 2]; dsp_getSamples(s->apu->dsp, sb, 534); fwrite(sb, sizeof sb, 1, pcm); fflush(pcm); } }
-      // PEEK_THUMBS=<path> (+ PEEK_THUMBS_EVERY=n, default 2): a 128x112 RGB thumbnail of every n-th frame, appended as
-      // [u32 frame][u16 $0100][128*112*3] -- the picture's 224 visible scanlines (the 8 overscan lines above them skipped),
-      // each 4x4 block of the 512x480 buffer averaged. Belthasar's CT_SHOTS_THUMBS writes the same records from its 256x224
-      // frame, so a whole attract can be set side by side (tools/attract_survey.py).
+      // PEEK_THUMBS=<path> (+ PEEK_THUMBS_EVERY=n, default 2): a 128x112 RGB thumbnail of every n-th frame, appended
+      // as [u32 frame][u16 $0100][128*112*3]: the 224 visible scanlines (8 overscan lines skipped), each 4x4 block of
+      // the 512x480 buffer averaged. Belthasar's CT_SHOTS_THUMBS writes the same records (tools/attract_survey.py).
       { static FILE* th = (FILE*)1; static int thn = 2; static uint8_t* thfb = NULL;
         if (th == (FILE*)1) { const char* tp = getenv("PEEK_THUMBS"); th = (tp && *tp) ? fopen(tp, "wb") : NULL;
                               if (getenv("PEEK_THUMBS_EVERY")) thn = atoi(getenv("PEEK_THUMBS_EVERY"));
@@ -13572,10 +12341,9 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
         for (int i = 0; i < ln; i++) { int wo = ctWramOff(lg[i].adr); if (wo < 0 || (unsigned)wo < pwwA || (unsigned)wo >= pwwA + pwwN) continue;
           printf("  writewatch f%d $%04X = %02X by %02X/%04X\n", f + 1, wo, lg[i].val, lg[i].bank, lg[i].pc); } }
       f++;
-      // PEEK_SHOTS=<prefix> + PEEK_SHOTS_AT=<n,n,...>: after the n-th frame, the dump a `--peek` that ran n frames writes
-      // (<prefix>_f<n>.raw, the 512x480 [pad,B,G,R] buffer; with PEEK_SHOTS_SIDECARS=1 also its .wram/.vram/.oam) -- the
-      // frames are a pure function of the state and the buttons up to them, so ONE run replaces a --peek per frame
-      // (tools/ctlib/peekshots.py; a tool that re-ran the oracle from the state for each of 500 frames paid 500 x 250).
+      // PEEK_SHOTS=<prefix> + PEEK_SHOTS_AT=<n,n,...>: after the n-th frame, the dump a `--peek` of n frames writes
+      // (<prefix>_f<n>.raw, the 512x480 [pad,B,G,R] buffer; with PEEK_SHOTS_SIDECARS=1 also .wram/.vram/.oam), so one
+      // run replaces a --peek per frame (tools/ctlib/peekshots.py).
       { static int shN = -1; static int* shAt = NULL; static const char* shPre = NULL; static int shSide = 0;
         if (shN < 0) { shN = 0; shPre = getenv("PEEK_SHOTS"); const char* at = getenv("PEEK_SHOTS_AT");
                        shSide = getenv("PEEK_SHOTS_SIDECARS") && atoi(getenv("PEEK_SHOTS_SIDECARS"));
@@ -13607,8 +12375,7 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
       lastLoc = loc;
     }
   }
-  // `f`, the frames ACTUALLY driven -- not the `--frames` argument, which this line used to print
-  // even when a script drove a completely different number (it read "peek f300" after 1280 frames).
+  // `f` is the number of frames driven, not the `--frames` argument.
   printf("peek f%d: loc=%03X $0138=%02X $0162=%02X $011F=%02X storyline=%02X\n", f,
          r[0x0100] | (r[0x0101] << 8), r[0x0138], r[0x0162], r[0x011F], r[0x10000]);
   for (int i = 0; i < 16; i++) {
@@ -13623,9 +12390,8 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
       printf("peek: savestate (CTLS) -> %s (%d payload B)\n", saveTo, sh->offset);
     sh_free(sh);
   }
-  // Layer-isolation capture (PEEK_ISOBG=N): render one more frame with only BG/OBJ layer N
-  // composited (its real per-scanline gradient/color-math intact) -- e.g. PEEK_ISOBG=1 grabs the
-  // menu window background (BG2) with NO content layer, so it can be baked byte-exact.
+  // PEEK_ISOBG=N: render one more frame with only BG/OBJ layer N composited (its per-scanline gradient and
+  // color math intact); e.g. PEEK_ISOBG=1 grabs the menu window background (BG2) with no content layer.
   { const char* iso = getenv("PEEK_ISOBG");
     if (iso) { extern int g_ppuIsoBg; g_ppuIsoBg = atoi(iso); CtOracleRunFrame(s); printf("peek: isolated BG%d\n", g_ppuIsoBg + 1); } }
   size_t fbsize = 512 * 480 * 4;
@@ -13653,9 +12419,8 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
   return 0;
 }
 
-// M3-B RE: load the overworld savestate, cycle the d-pad, and per CPU step report the WRITER PC of
-// every change to the BG scroll shadows $0020-$002B (BG1/2/3 H/V, pinned to $210D-$2112 by the NMI
-// copy C2:01D8-0211) — pins the overworld camera routine.
+// --owwatch: load the overworld savestate, cycle the d-pad, and per CPU step report the writer PC of every
+// change to the BG scroll shadows $0020-$002B (BG1/2/3 H/V, copied to $210D-$2112 by the NMI at C2:01D8-0211).
 static int runOwWatch(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -13695,9 +12460,9 @@ static int runOwWatch(const char* romPath, const char* statePath) {
   return 0;
 }
 
-// MYSTERY-1 probe: per-opcode watch of the dialogue-text DP=$0200 vars across the Mom-textbox
-// btnscript -- $020C (string id), $020D-$020F (string-table long ptr), $0231-$0233 (text read ptr),
-// $0234 (VWF pen pixel-x). Prints every change + the WRITER PC. Input advances per frame via s->frames.
+// --textwatch: per-opcode watch of the dialogue-text vars (DP = $0200) across the Mom-textbox btnscript:
+// $020C (string id), $020D-$020F (string-table long ptr), $0231-$0233 (text read ptr), $0234 (VWF pen x).
+// Prints every change with the writer PC. Input advances per frame via s->frames.
 static int runTextWatch(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -13735,10 +12500,9 @@ static int runTextWatch(const char* romPath, const char* statePath) {
   return 0;
 }
 
-// M3-B VALIDATOR: the C camera (src/world.c) vs the oracle, byte-exact, over a d-pad sweep on the
-// overworld. Per frame: run the oracle, derive the player's (dx,dy) from $0D84/$0D88 (torus-aware),
-// feed CtWorldCamFrame, compare all six scroll shadows ($20-$2B). The player deltas are oracle
-// inputs here (the overworld MOVER port is the next milestone); the camera math is what's under test.
+// --checkowcam: the overworld camera (src/world.c) against the oracle over a d-pad sweep. Per frame: run the
+// oracle, take the player's (dx,dy) from $0D84/$0D88 (torus-aware), feed CtWorldCamFrame and compare the six
+// scroll shadows ($20-$2B). The player deltas come from the oracle; the camera math is under test.
 static int runCheckOwCam(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -13784,11 +12548,10 @@ static int runCheckOwCam(const char* romPath, const char* statePath) {
   return bad ? 1 : 0;
 }
 
-// M3-C VALIDATOR: the C overworld MOVER + CAMERA end-to-end vs the oracle. Per frame: press a
-// scripted d-pad state, run the oracle, run the C mover over its OWN state (seeded once) with
-// the same held bits, feed its (dx,dy) to the C camera, then compare player pos/vel/probe/phase
-// AND all six scroll shadows byte-exact. This is the full native chain: input -> mover ->
-// position -> camera, with the oracle only providing the initial state + the input bits.
+// --checkowmove: the overworld mover and camera end to end. Per frame: press a scripted d-pad state, run the
+// oracle, run the port's mover over its own state (seeded once) with the same bits, feed its (dx,dy) to the
+// camera, and compare player pos/vel/probe/phase and the six scroll shadows. The oracle provides only the
+// initial state and the input bits.
 static int runCheckOwMove(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -13804,9 +12567,9 @@ static int runCheckOwMove(const char* romPath, const char* statePath) {
     {0x60,"DL"}, {0x00,"idle2"}, {0x50,"UL"}, {0x40,"Left2"}, {0x90,"UR"}, {0x80,"Right2"} };
   long checked = 0, bad = 0;
   int frames = 0;
-  uint16_t prevB = 0;                              // the auto-joypad is PIPELINED 1 frame: the $F8
-  for (int p = 0; p < 12; p++) {                   // word the mover reads in frame N latched during
-    for (int f = 0; f < 75; f++) {                 // the previous vblank (the CtReadJoypad RE gotcha)
+  uint16_t prevB = 0;                              // the auto-joypad is one frame behind: the $F8
+  for (int p = 0; p < 12; p++) {                   // word the mover reads in frame N was latched in
+    for (int f = 0; f < 75; f++) {                 // the previous vblank (see CtReadJoypad)
       uint16_t b = PH[p].b;
       s->input1->currentState = b;
       CtOracleRunFrame(s);
@@ -13840,10 +12603,9 @@ static int runCheckOwMove(const char* romPath, const char* statePath) {
   return bad ? 1 : 0;
 }
 
-// M3 STREAMING VALIDATOR: the C tilemap streamer vs the oracle's live VRAM, byte-exact. Per
-// frame: scripted d-pad, run the oracle, derive the player's (dx,dy), run CtWorldStreamFrame
-// (scroll + streaming over the C-owned tilemaps), then compare BOTH full 64x32 tilemaps
-// (VRAM $6000/$6800, 2048 words each) plus the scroll shadows -- every frame.
+// --checkowstream: the overworld tilemap streamer against the oracle's VRAM. Per frame: scripted d-pad, run the
+// oracle, take the player's (dx,dy), run CtWorldStreamFrame (scroll + streaming over the port's tilemaps), then
+// compare both 64x32 tilemaps (VRAM $6000/$6800, 2048 words each) and the scroll shadows.
 static int runCheckOwStream(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -13868,8 +12630,8 @@ static int runCheckOwStream(const char* romPath, const char* statePath) {
       int dx = nx - px, dy = ny - py;
       if (dx > 768) dx -= 1536; else if (dx < -768) dx += 1536;
       if (dy > 512) dy -= 1024; else if (dy < -512) dy += 1024;
-      // The port's streaming now writes the RAM the ROM's does (its direct page, the staging at $E0, the NMI queue): it
-      // runs on a COPY of the oracle's image each frame, so the oracle -- the side being graded against -- is never touched.
+      // The streamer writes the RAM the ROM's does (its direct page, the staging at $E0, the NMI queue), so it
+      // runs on a copy of the oracle's image each frame.
       { static uint8_t pr[0x20000]; memcpy(pr, s->ram, sizeof pr); CtWorldStreamFrame(&stm, &cam, pr, dx, dy); }
       px = nx; py = ny;
       for (int bg = 0; bg < 2; bg++) {
@@ -13898,10 +12660,10 @@ static int runCheckOwStream(const char* romPath, const char* statePath) {
   return bad ? 1 : 0;
 }
 
-// M3-D VALIDATOR: location entry. Walks a scripted path that crosses several entry cells,
-// comparing the C record scan (CtWorldEntryScan vs the oracle's $1B32) EVERY frame; then stops
-// on the Truce-market entry cell, presses A, and validates the whole transition: $0100 (dest),
-// $0102/$0103 (dest tile), $0104 (flags), $0105 (return loc), $0107/$0108 (return cursors).
+// --checkowentry: location entry. Walks a path across several entry cells comparing the record scan
+// (CtWorldEntryScan vs the oracle's $1B32) every frame, then stops on the Truce-market entry cell, presses A and
+// checks the transition: $0100 (dest), $0102/$0103 (dest tile), $0104 (flags), $0105 (return loc),
+// $0107/$0108 (return cursors).
 static int runCheckOwEntry(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -13922,10 +12684,9 @@ static int runCheckOwEntry(const char* romPath, const char* statePath) {
       frames++;
       int px = r[0x0283] | (r[0x0284] << 8), py = r[0x0285] | (r[0x0286] << 8);
       uint16_t want = (uint16_t)(r[0x1B32] | (r[0x1B33] << 8));
-      // The record latch updates ONLY on phase-1 (8px boundary) frames: the mover re-reads the
-      // prop corners at POS (C2/3550); if both carry the entry bit 4 (C2/39AE) it sets $0282
-      // bit1 and the scanner latches the matching record; otherwise bit1 clears and the scanner
-      // forces $1B32=FFFF. Between boundaries everything HOLDS.
+      // The record latch updates only on phase-1 (8 px boundary) frames: the mover re-reads the prop corners at
+      // POS (C2/3550); if both carry entry bit 4 (C2/39AE) it sets $0282 bit 1 and the scanner latches the
+      // matching record; otherwise bit 1 clears and the scanner forces $1B32 = FFFF. Between boundaries it holds.
       if (r[0x0D72] == 1) {
         int cx = px >> 3, cy = py >> 3;
         int entryProp = (CtWorldProp(r, cx - 1, cy - 1) & CtWorldProp(r, cx, cy - 1) & 4) != 0;
@@ -13972,11 +12733,10 @@ static int runCheckOwEntry(const char* romPath, const char* statePath) {
   return bad ? 1 : 0;
 }
 
-// RETURN VALIDATOR: field -> overworld. From a savestate inside Truce market (loc 0x011), walk
-// out the south exit; capture $0102/$0103/$0104 at the JML; predict the landing (pos = cell*8,
-// camera = pos-(128,112), cursors = cam/8) with CtWorldEnter; after the load settles, compare
-// pos/camera/cursors/scrolls -- then run a 200-frame d-pad sweep with the C camera+mover seeded
-// from CtWorldEnter to prove the post-return state drives the engine byte-exact.
+// --checkowreturn: field -> overworld. From a savestate inside Truce market (loc 0x011), walk out the south
+// exit, capture $0102/$0103/$0104 at the JML, predict the landing with CtWorldEnter (pos = cell*8, camera =
+// pos - (128,112), cursors = cam/8) and compare pos/camera/cursors/scrolls after the load settles; then a
+// 200-frame d-pad sweep with the port's camera and mover seeded from CtWorldEnter.
 static int runCheckOwReturn(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14009,8 +12769,7 @@ static int runCheckOwReturn(const char* romPath, const char* statePath) {
     checked++;
     if (C[i].got != C[i].want) { printf("  MISMATCH landing %s: oracle=%04X c=%04X\n", C[i].n, C[i].got, C[i].want); bad++; }
   }
-  // Drive the freshly-entered state: the C mover+camera (seeded ONLY from the field exit cell)
-  // must track the oracle byte-exact from here.
+  // From here the port's mover and camera, seeded only from the field exit cell, must track the oracle.
   CtWorldCamSeed(&cam, r);                        // re-sync BG3 (free-running drift) + counters
   CtWorldEnter(&cam, &mv, cellX, cellY);          // (CtWorldEnter leaves bg3*/ctr from the seed)
   static const uint16_t SW[4] = { 0x40, 0x20, 0x80, 0x10 };
@@ -14040,10 +12799,9 @@ static int runCheckOwReturn(const char* romPath, const char* statePath) {
   return bad ? 1 : 0;
 }
 
-// M3 worlds 1-7: FORCE-LOAD another overworld. Loads the world-0 savestate, writes $0100 =
-// 0x1F0+world (+ an arrival cell in $0102/$0103), and jumps the CPU to the engine entry
-// C2/0000 (the same JML the field dispatch takes; it disables NMI and re-inits everything from
-// $0100). After the loader settles: dump fb+wram+vram (pack inputs) + a savestate.
+// --owforce: force-load another overworld. Loads the world-0 savestate, writes $0100 = 0x1F0+world (and an
+// arrival cell in $0102/$0103), and jumps the CPU to C2/0000 (the field dispatch's JML target; it disables NMI
+// and re-inits from $0100). After the load settles: dump fb+wram+vram (pack inputs) and a savestate.
 static int runOwForce(const char* romPath, const char* statePath, int world, const char* outPath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14055,10 +12813,8 @@ static int runOwForce(const char* romPath, const char* statePath, int world, con
   r[0x0102] = 96; r[0x0103] = 64;                 // arrival cell (8px units): mid-map; adjusted after
   r[0x0104] = 0;
   s->cpu->k = 0xC2; s->cpu->pc = 0x0000;          // the engine entry the field's JML takes
-  // CT_OWWRITEWATCH=<hexaddr>: report every CPU write to that WRAM address DURING the world load,
-  // with the writer PC. A world load is the only event that repopulates the $7E1B00 page, and no
-  // existing mode could see it -- --monitor cannot force a world change, and this mode pokes and
-  // jumps without reporting writers. That blind spot is why $1B9B's provenance stayed unknown.
+  // CT_OWWRITEWATCH=<hexaddr>: report every CPU write to that WRAM address during the world load, with the
+  // writer PC. A world load is the only event that repopulates the $7E1B00 page.
   const char* wwEnv = getenv("CT_OWWRITEWATCH");
   unsigned wwAdr = wwEnv ? (unsigned)strtoul(wwEnv, NULL, 16) : 0;
   if (wwEnv) { CtOracleInstallWriteHook(s); CtWriteLogStart(); }
@@ -14101,20 +12857,13 @@ static int runOwForce(const char* romPath, const char* statePath, int world, con
   return (nloc == loc) ? 0 : 1;
 }
 
-// Compose the overworld player's current OBJ poses (from live OAM + VRAM/CGRAM) into a small RGBA
-// frame anchored at the player point (128,112). Returns 1 + fills *w/*h/*ox/*oy/px[32*32*4] (px must
-// be >=32*32*4) and *fac (= lead+$28&3) on success, 0 if no centred player OBJ this frame. Shared by
-
-// THE OVERWORLD PLAYER ATLAS, keyed by OBJ TILE NAME. The player's pose is the LEAD block's own anim
-// descriptor (world.c CtWorldLeadAnimFrame: C2/3404 -> C2/1CDA -> C2/0E1D), one 16x16 OBJ piece naming a
-// tile in the HIGH name table (OBSEL $60: names $100.. at VRAM byte $2000), drawn with the palette the
-// lead's attr +0F carries ($A8 -> OBJ palette 4). So the atlas is the set of 16x16 tiles the lead's
-// scripts can name -- walked here from the ROM's own tables (C2:39AA stand ids, C2:397F walk ids, +$0C
-// for Magus, $A2 the fidget) through their op-4 descriptors -- decoded from the loaded state's VRAM and
-// CGRAM. Output <out>.spr: [n u8] then per frame {fac=$FE, par=name lo, mov=name hi, w=16, h=16, ox=0,
-// oy=0, 16*16*4 RGBA}; field.c picks the frame by name and applies the descriptor's dX/dY and flips itself.
-// (Until 2026-09-05 this captured the coastal BOAT's OAM pieces -- 99ac511 had taken block $0F30 for the
-// player -- which is why the overworld showed a boat 40px off the anchor.)
+// --owsprite: the overworld player atlas, keyed by OBJ tile name. The player's pose is the lead block's anim
+// descriptor (world.c CtWorldLeadAnimFrame: C2/3404 -> C2/1CDA -> C2/0E1D), one 16x16 OBJ piece naming a tile in
+// the high name table (OBSEL $60: names $100.. at VRAM byte $2000), drawn with the palette in the lead's attr
+// +0F ($A8 -> OBJ palette 4). The atlas is every 16x16 tile the lead's scripts can name, walked from the ROM's
+// tables (C2:39AA stand ids, C2:397F walk ids, +$0C for Magus, $A2 the fidget) through their op-4 descriptors and
+// decoded from the state's VRAM and CGRAM. Output <out>.spr: [n u8] then per frame {fac=$FE, par=name lo,
+// mov=name hi, w=16, h=16, ox=0, oy=0, 16*16*4 RGBA}; field.c picks the frame by name and applies dX/dY and flips.
 static int runOwSprite(const char* romPath, const char* statePath, const char* outPath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14188,12 +12937,11 @@ static int runOwSprite(const char* romPath, const char* statePath, const char* o
   return nfr ? 0 : 1;
 }
 
-// COASTAL BOAT sprite capture (canonical, navigation-free): the 1000 AD overworld has a parked
-// ambient object (script@0E04, OBJ attribute +0F=0xB4) that bobs a 32x32 ship in place. Its anim
-// sub-VM (bank C3 bytecode at block +0B/0C) ticks every frame EVEN while off-screen, so we read
-// its current anim PCs straight from the loaded state, deref each in the ROM to its OAM sprite
-// list, and decode those tiles from the resident OBJ VRAM -- no need to scroll the boat on-screen.
-// Output <out>.spr feeds extract_assets.py -> CT_ASSET_WORLDSPR id 2 -> field.c worldCompose.
+// --owboat: the coastal boat sprite, captured without navigating. The 1000 AD overworld has a parked ambient
+// object (script@0E04, attr +0F = 0xB4) that bobs a 32x32 ship in place; its anim sub-VM (bank C3 bytecode at
+// block +0B/0C) ticks every frame even off screen, so its anim PCs are read from the loaded state, dereferenced
+// in the ROM to OAM sprite lists, and decoded from the resident OBJ VRAM. Output <out>.spr feeds
+// extract_assets.py -> CT_ASSET_WORLDSPR id 2 -> field.c worldCompose.
 static int runOwBoat(const char* romPath, const char* statePath, const char* outPath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14201,12 +12949,10 @@ static int runOwBoat(const char* romPath, const char* statePath, const char* out
   const uint8_t* r = s->ram;
   for (int f = 0; f < 30; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }
   #define C3(addr) rom[0x030000 + (addr)]
-  // Assemble ONE ambient object's sprite into a frame atlas: env OWBOAT_OBJ = script addr
-  // (default 0x0E04 = the coastal BOAT, a 32x32 2-frame sprite). Collect its anim PCs IN bob order,
-  // deref each (op 04 -> sprite list [count {yoff xoff tile attr}]), draw every 16x16 sub-sprite at
-  // its offset onto a shared canvas, decode straight from the resident OBJ VRAM in the object's
-  // palette ((+0F>>1)&7). Writes <out>.spr (CtAssets WORLDSPR layout: nframes, then per frame
-  // [idx,0,0,w,h,ox,oy] + w*h*4 RGBA) -- the canonical boat the engine renders.
+  // Assemble one ambient object's sprite into a frame atlas (OWBOAT_OBJ = script addr, default 0x0E04, the
+  // boat): collect its anim PCs in bob order, dereference each (op 04 -> sprite list [count {yoff xoff tile
+  // attr}]), draw every 16x16 sub-sprite at its offset on a shared canvas, decoded from OBJ VRAM in the object's
+  // palette ((+0F>>1)&7). Writes <out>.spr (WORLDSPR layout: nframes, then per frame [idx,0,0,w,h,ox,oy] + w*h*4).
   const uint8_t* vb = (const uint8_t*)s->ppu->vram;
   int target = getenv("OWBOAT_OBJ") ? (int)strtol(getenv("OWBOAT_OBJ"), NULL, 16) : 0x0E04;
   int tb = -1;
@@ -14287,9 +13033,8 @@ static int runOwBoat(const char* romPath, const char* statePath, const char* out
   return 0;
 }
 
-// Deep probe: follow ONE long-lived bird for N frames -- per-frame position, velocity (16.16),
-// anim pointer/state (B+0B/0E), and its OAM tile -- to detect velocity changes (turning) and
-// the real flap cadence the anim sub-VM produces.
+// --owbirdtrack: follow one long-lived bird for N frames (position, 16.16 velocity, anim pointer/state B+0B/0E,
+// OAM tile) to see velocity changes (turning) and the flap cadence the anim sub-VM produces.
 static int runOwBirdTrack(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14338,9 +13083,9 @@ static int runOwBirdTrack(const char* romPath, const char* statePath) {
   return 0;
 }
 
-// Probe: watch the oracle for NEW object spawns (any handler) on the overworld -- reports the
-// frame, block, handler, script ptr, position and velocity of every block that comes alive,
-// plus the registered-script slots. Optionally holds a d-pad button (env OWSPAWN_BTN hex).
+// --owspawnwatch: watch the overworld for new object spawns (any handler): frame, block, handler, script ptr,
+// position and velocity of every block that comes alive, plus the registered-script slots. OWSPAWN_BTN = a
+// d-pad button to hold (hex).
 static int runOwSpawnWatch(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14379,8 +13124,8 @@ static int runOwSpawnWatch(const char* romPath, const char* statePath) {
   return 0;
 }
 
-// Probe: print the PPU layer setup (mode, per-BG tilemap/char addresses) after loading a
-// savestate + running a --btnscript. For RE'ing screen layers (textbox).
+// --ppuregs: print the PPU layer setup (mode, per-BG tilemap/char addresses) after loading a savestate and
+// running a --btnscript.
 static int runPpuRegs(const char* romPath, const char* statePath, const char* btnScript) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14405,10 +13150,9 @@ static int runPpuRegs(const char* romPath, const char* statePath, const char* bt
   if (fp) { fwrite(s->ppu->cgram, 2, 256, fp); fclose(fp); }
   fp = fopen("build/ppuregs.oam", "wb");
   if (fp) { fwrite(s->ppu->oam, 2, 512, fp); fwrite(s->ppu->highOam, 1, 32, fp); fclose(fp); }
-  // MODE 7 + COLOUR MATH. The $C3 title overlay drives BG1 through the mode-7 registers every frame
-  // (matrix out of $7E:005A-0061, scroll out of $7E:0A02/0A04 -- disasm/notes/title_intro.md), and the
-  // rotation CENTRE is write-only with no WRAM shadow: assuming it from the setup code is exactly the
-  // kind of guess this project forbids, so the oracle reports what the PPU actually holds.
+  // Mode 7 and colour math. The $C3 title overlay drives BG1 through the mode-7 registers every frame (matrix
+  // from $7E:005A-0061, scroll from $7E:0A02/0A04; disasm/notes/title_intro.md); the rotation centre is
+  // write-only with no WRAM shadow, so the PPU's own value is reported.
   printf("m7: A=%d B=%d C=%d D=%d X=%d Y=%d hofs=%d vofs=%d largeField=%d charFill=%d xFlip=%d yFlip=%d extBg=%d\n",
          (int16_t)s->ppu->m7matrix[0], (int16_t)s->ppu->m7matrix[1], (int16_t)s->ppu->m7matrix[2],
          (int16_t)s->ppu->m7matrix[3], (int16_t)s->ppu->m7matrix[4], (int16_t)s->ppu->m7matrix[5],
@@ -14431,13 +13175,10 @@ static int runPpuRegs(const char* romPath, const char* statePath, const char* bt
   return 0;
 }
 
-// HDMA PROBE: dump the ACTIVE HDMA channels of a loaded state and DECODE each channel's table into
-// its per-scanline writes. A per-scanline PPU effect (the overworld's COLDATA ocean gradient, the
-// window/brightness ramps) is programmed as an HDMA table, so this reads the ROM's own table instead
-// of leaving the effect to be eyeballed. Prints, per active channel: the $21xx target, transfer mode,
-// direct/indirect, the table address, and then the decoded (lineCount, repeat, bytes) entries with a
-// running scanline counter. Channels writing $2132 (COLDATA) additionally decode the B/G/R enable
-// bits + the 5-bit intensity of each byte, which IS the fixed colour the colour math uses per line.
+// --hdma: dump the active HDMA channels of a loaded state and decode each table into its per-scanline writes
+// (the overworld's COLDATA ocean gradient, window/brightness ramps). Per channel: the $21xx target, transfer
+// mode, direct/indirect, the table address, then the decoded (lineCount, repeat, bytes) entries with a running
+// scanline count. $2132 (COLDATA) channels also decode each byte's B/G/R enables and 5-bit intensity.
 static int runHdmaProbe(const char* romPath, const char* statePath, const char* btnScript) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14448,8 +13189,7 @@ static int runHdmaProbe(const char* romPath, const char* statePath, const char* 
       for (int f = 0; f < n; f++) { s->input1->currentState = b; CtOracleRunFrame(s); }
   } else CtOracleRunFrame(s);
   static const int UNITS[8] = { 1, 2, 2, 4, 4, 4, 2, 4 };     // bytes per HDMA transfer, by mode
-  // The COLOUR-MATH state first: if no HDMA channel drives $2132 then the "fixed colour" is a plain
-  // static register, and any per-scanline gradient hypothesis is wrong for this state.
+  // The colour-math state first: if no HDMA channel drives $2132, the fixed colour is a static register.
   printf("colormath: cgadsub=%02X (half=%d sub=%d | bg1=%d bg2=%d bg3=%d bg4=%d obj=%d bd=%d)"
          " cgwsel=%02X fixed=(%d,%d,%d)\n",
          (s->ppu->halfColor ? 0x40 : 0) | (s->ppu->subtractColor ? 0x80 : 0)
@@ -14474,9 +13214,9 @@ static int runHdmaProbe(const char* romPath, const char* statePath, const char* 
     printf("hdma ch%d: $21%02X mode=%d %s table=%02X:%04X indBank=%02X rep=%d term=%d\n",
            ch, c->bAdr, c->mode, c->indirect ? "INDIRECT" : "direct", c->aBank, c->tableAdr,
            c->indBank, c->repCount, c->terminated);
-    // Walk the table from its PROGRAMMED start ($43x2/3 = aAdr, which the per-frame HDMA init
-    // reloads into tableAdr): line-count byte (bit7 = repeat, bits0-6 = count), then the data --
-    // inline for direct, or a 16-bit pointer into indBank for indirect. 0x00 ends the table.
+    // Walk the table from its programmed start ($43x2/3 = aAdr, which the per-frame HDMA init reloads into
+    // tableAdr): a line-count byte (bit 7 = repeat, bits 0-6 = count), then the data, inline for direct or a
+    // 16-bit pointer into indBank for indirect. 0x00 ends the table.
     uint32_t tp = ((uint32_t)c->aBank << 16) | c->aAdr;
     int line = 0, entries = 0;
     while (entries < 64) {
@@ -14503,15 +13243,11 @@ static int runHdmaProbe(const char* romPath, const char* statePath, const char* 
   if (!any) printf("hdma: no active channels AT THIS SAMPLE POINT (a frame boundary is inside\n"
                    "  vblank, where the ROM may legitimately hold HDMAEN clear) -- the per-scanline\n"
                    "  TRACE below is the authoritative measurement of what the registers actually do.\n");
-  // PER-SCANLINE REGISTER TRACE: step the CPU through ONE frame and sample, at every vPos change,
-  // the registers a per-scanline effect would drive -- the colour-math FIXED COLOUR ($2132 COLDATA),
-  // the math enables ($2131 CGADSUB) and the main/sub screen designations ($212C/$212D). Consecutive
-  // identical lines are collapsed into bands. This measures the EFFECT directly, so it is independent
-  // of decoding HDMA tables (and of whether HDMAEN happens to be set at a frame boundary).
+  // Per-scanline register trace: step the CPU through one frame and sample, at every vPos change, the fixed
+  // colour ($2132), the math enables ($2131) and the main/sub screens ($212C/$212D), collapsing identical lines
+  // into bands. This measures the effect directly, independent of the HDMA tables.
   printf("scanline trace (one frame):\n");
-  // The loaded state sits in VBLANK (vPos ~225+), so first run forward until the counter WRAPS to
-  // the top of the next frame; only then sample the visible lines. (Sampling immediately would end
-  // at the first vPos==240 -- still inside the same vblank, before any visible line was drawn.)
+  // The loaded state sits in vblank (vPos ~225+), so first run until the counter wraps to the next frame's top.
   { int prevV = s->vPos;
     for (int guard = 0; guard < 4000000; guard++) { CtOracleStep(s);
       if (s->vPos < prevV) break; prevV = s->vPos; } }
@@ -14531,9 +13267,8 @@ static int runHdmaProbe(const char* romPath, const char* statePath, const char* 
     int n = snprintf(curSig, sizeof curSig, "fixed=(%2d,%2d,%2d) math=%02X half=%d sub=%d TM=%02X TS=%02X",
              s->ppu->fixedColorR, s->ppu->fixedColorG, s->ppu->fixedColorB,
              math, s->ppu->halfColor, s->ppu->subtractColor, tm, ts);
-    // HDMA_TRACE_BG=1: also the three BG scrolls and the window state, so a SHAPE drawn by per-line scroll
-    // or window positions (not by colour math) shows up as bands too. Inert unset: the default lines stay
-    // byte-identical for every existing reader.
+    // HDMA_TRACE_BG=1: also the three BG scrolls and the window state, so a shape drawn by per-line scroll or
+    // window positions shows as bands too. Unset, the output is unchanged.
     { static int bgTr = -1; if (bgTr < 0) { const char* e = getenv("HDMA_TRACE_BG"); bgTr = (e && *e) ? 1 : 0; }
       if (bgTr && n > 0 && n < (int)sizeof curSig) {
         int tmw = 0, tsw = 0, w1 = 0, w2 = 0;
@@ -14564,12 +13299,10 @@ static int runHdmaProbe(const char* romPath, const char* statePath, const char* 
   return 0;
 }
 
-// AMBIENT-VM VALIDATOR: run the C object VM (CtWorldAmbientFrame) over a private WRAM copy in
-// lockstep with the oracle (idle, static camera) and compare every script-VM object's script
-// pointer, wait counter, position and velocity each frame, while alive on both sides. Deaths
-// (the 78A1 off-screen check feeding op 52) must also match. The ANIM SUB-VM fields (+0B..+0E,
-// +26) are compared too since C2/0E1D is ported; native-handler children are not spawned by the
-// port.
+// --checkowobj: the ambient object VM (CtWorldAmbientFrame) over a private WRAM copy in lockstep with the
+// oracle (idle, static camera). Compares each script-VM object's script pointer, wait counter, position and
+// velocity per frame while alive on both sides, its death (the 78A1 off-screen check feeding op 52), and the
+// anim sub-VM fields (+0B..+0E, +26, C2/0E1D). Not ported: spawning native-handler children.
 static int runCheckOwObj(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14584,11 +13317,10 @@ static int runCheckOwObj(const char* romPath, const char* statePath) {
   int tracked[64], nt = 0;
   for (int b = 0x0B30; b < 0x1B30; b += 0x40)
     if ((r[b] | (r[b + 1] << 8)) == 0x0F63) tracked[nt++] = b;
-  // OP 0x30 == C2/1CDA, ON ITS OWN. The ambient objects in every capture are SEEDED with their anim
-  // pointer already resolved, so the op never re-executes and no scene-driven check can reach it -- a
-  // 6-bit mask into a 4-entry stub sat here for months and the whole quick tier stayed green. The ROM is
-  // , a DIRECT 8-bit index, so ask the port for the seven ERA
-  // ids and compare against the ROM's own table bytes (file offset 0x3E000 + id*2, dumped independently).
+  // Op 0x30 (C2/1CDA) on its own: the ambient objects in every capture are seeded with their anim pointer
+  // resolved, so no scene-driven check re-executes the op. C2/1CDA indexes its table ($C3E000) directly by the
+  // 8-bit id, so the port is asked for the seven era ids and compared with the ROM's table bytes (file offset
+  // 0x3E000 + id*2).
   { static const unsigned short want[7] = { 0xF836, 0xF83A, 0xF83E, 0xF842, 0xF846, 0xF84A, 0xF84E };
     int bad = 0;
     printf("checkowobj: op30 era $75..$7B ->");
@@ -14599,21 +13331,16 @@ static int runCheckOwObj(const char* romPath, const char* statePath) {
     }
     printf(" (%d wrong)\n", bad); }
   printf("checkowobj: %d script-VM objects tracked\n", nt);
-  // +0B/+0C/+0D/+0E (the ANIM SUB-VM's script pointer, bank and dwell) and +26 (the flag its
-  // sequences INC/zero around the up-stroke) are IN the comparison as of the C2/0E1D port. They
-  // used to be excluded as "approximated by design" -- that exclusion was the reason a free-running
-  // flap counter could stand in for the real interpreter without any check noticing.
+  // +0B/+0C/+0D/+0E (the anim sub-VM's script pointer, bank and dwell) and +26 (the flag its sequences
+  // INC/zero around the up-stroke) are compared (C2/0E1D is ported).
   static const int OFF[] = { 0x07, 0x08, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x12, 0x13, 0x14, 0x15,
                              0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20,
                              0x21, 0x22, 0x26 };
   long checked = 0, bad = 0;
   int deaths = 0;
-  // The ambient VM's SOUND REQUESTS ($1BE8-$1BEB, committed through C2/2ED9) were ungraded: the sub-VM's
-  // sound ops only ever advanced the script, so every per-object field above stayed identical whether the
-  // request was posted or dropped. That blindness is exactly why op 0x3B could sit stubbed as a "graphics
-  // -LOAD request". Both sides write the SAME WRAM image, so the mailbox is directly comparable; counted
-  // and compared only on the frames where either side moves it, and reported in the signature so a lost
-  // post shows up as a number rather than as silence.
+  // The ambient VM's sound requests ($1BE8-$1BEB, committed through C2/2ED9) leave every per-object field above
+  // unchanged, so they are graded separately: both sides write the same WRAM image, so the mailbox is compared
+  // directly on the frames where either side moves it, and counted in the signature.
   long sndO = 0, sndM = 0, sndBad = 0;
   uint8_t pO[4], pM[4];
   memcpy(pO, r + 0x1BE8, 4); memcpy(pM, my + 0x1BE8, 4);
@@ -14661,14 +13388,11 @@ static int runCheckOwObj(const char* romPath, const char* statePath) {
   return bad ? 1 : 0;
 }
 
-// M3 birds: capture the ambient-OBJ frames (birds) + their animation cycle. Idles N frames;
-// each frame decodes every non-player OBJ on screen, dedupes by pixel hash, and records the
-// per-frame frame-index sequence (the char-upload animation phase). Atlas -> <out>.spr in the
-// --owballoons: capture the Leene's Square fair balloon sprites from the new-game intro pan. They are
-// 8x8 OBJ priority-3 sprites (attr bits5-4 = 3), tiles $00..$0A at OBJ char base $0000: the booth
-// POPPER cycles $00/$02/$04/$06/$08 (palette 0), rising BUNCHES are tile $0A (palettes 1/2/3). Settle
-// to the fair hold (~f870) then capture, deduping by (OAM tile, palette). .spr header byte1=tile,
-// byte2=palette so the renderer selects a frame from the live $0B30 object's +0F nibble + anim ctr.
+// --owballoons: capture the Leene's Square fair balloon sprites from the new-game intro pan. They are OBJ
+// priority-3 sprites (attr bits 5-4 = 3) at OBJ char base $0000: the booth popper cycles $00/$02/$04/$06/$08
+// (palette 0), the rising bunches are tile $0A (16x16, palettes 1/2/3). Settles to the fair hold (~f870) and
+// captures the bunches only, deduped by (OAM tile, palette). The .spr header's byte 1 = tile and byte 2 = palette,
+// so the renderer picks a frame from the live $0B30 object's +0F nibble and anim counter.
 static int runOwBalloons(const char* romPath, const char* statePath, const char* outPath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14684,9 +13408,9 @@ static int runOwBalloons(const char* romPath, const char* statePath, const char*
       if (oy >= 0xE0) continue;
       int tile = s->ppu->oam[i * 2 + 1] & 0xFF, attr = (s->ppu->oam[i * 2 + 1] >> 8) & 0xFF;
       if ((attr & 0x30) != 0x30) continue;                  // OBJ priority 3 only
-      if (tile != 0x0A) continue;                           // capture ONLY the rising BUNCH (char $0A, 16x16). Chars $00-$08
-      // here are the coastal BOAT (it overwrites the explosion puffs in the new-game pan) -- the real cream/white pop +
-      // the settled bunch palettes are supplied by tools/owbpal0.py from anim_leenes_square.state, which overwrites this.
+      if (tile != 0x0A) continue;                           // the rising bunch only (char $0A, 16x16). Chars $00-$08
+      // here are the coastal boat (it overwrites the explosion puffs in the new-game pan); tools/owbpal0.py supplies
+      // the cream/white pop and the settled bunch palettes from anim_leenes_square.state, overwriting this.
       int curpal = (attr >> 1) & 7, fx = (attr >> 6) & 1, fy = (attr >> 7) & 1;
       int sz = 16;                                          // bunch only
       uint8_t px[16 * 16 * 4]; memset(px, 0, sizeof px);
@@ -14735,7 +13459,10 @@ static int runOwBalloons(const char* romPath, const char* statePath, const char*
   return 0;
 }
 
-// same format as --owsprite (facing field = frame index, parity/moving = 0).
+// --owbirds: capture the ambient OBJ frames (birds) and their animation cycle. Idles N frames; each frame
+// decodes every non-player OBJ on screen, dedupes by pixel hash, and records the per-frame frame-index sequence
+// (the char-upload animation phase). Atlas -> <out>.spr in --owsprite's format (facing = frame index,
+// parity/moving = 0).
 static int runOwBirds(const char* romPath, const char* statePath, const char* outPath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14805,10 +13532,10 @@ static int runOwBirds(const char* romPath, const char* statePath, const char* ou
   return nbf ? 0 : 1;
 }
 
-// FIELD CAMERA VALIDATOR: enter scene 0x0C (Truce inn, 256x496 mask -> vertical scrolling) from
-// the overworld state, walk up/down, and compare the engine camera ($1D0A<<3|$1D87&7 etc.)
-// against clamp(playerPos-(128,112), maskRect) every frame. The mask is the scene header's
-// scroll mask (bytes 10-13, metatiles) = the engine's player clamps $1D1A-$1D1D.
+// --checkfieldcam: enter scene 0x0C (Truce inn, 256x496 mask, so it scrolls vertically) from the overworld
+// state, walk up and down, and compare the engine camera ($1D0A<<3 | $1D87&7 etc.) with
+// clamp(playerPos - (128,112), maskRect) every frame. The mask is the scene header's scroll mask (bytes 10-13,
+// metatiles), i.e. the engine's player clamps $1D1A-$1D1D.
 static int runCheckFieldCam(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14854,9 +13581,8 @@ static int runCheckFieldCam(const char* romPath, const char* statePath) {
   return bad ? 1 : 0;
 }
 
-// M3-D RE (streaming): load the overworld savestate, walk a d-pad script, and report which VRAM
-// words change frame-to-frame -- the empirical map of the tilemap column/row streaming (which
-// addresses, how many words, on which camera crossings).
+// --owstreamwatch: load the overworld savestate, walk a d-pad script, and report which VRAM words change
+// frame to frame: which addresses, how many words, on which camera crossings the tilemap streams.
 static int runOwStreamWatch(const char* romPath, const char* statePath) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14904,9 +13630,8 @@ static int runOwStreamWatch(const char* romPath, const char* statePath) {
   return 0;
 }
 
-// M3-B RE: load the overworld savestate and dump full WRAM before/after holding each direction
-// (idle/Right/Down/Left/Up, 90 frames each) -> <prefix>_<phase>.wram. Python diffs the snapshots to
-// locate the overworld player/camera position variables.
+// --owprobe: load the overworld savestate and dump WRAM before/after holding each direction (idle/Right/Down/
+// Left/Up, 90 frames each) to <prefix>_<phase>.wram, for locating the player/camera position variables.
 static int runOwProbe(const char* romPath, const char* statePath, const char* prefix) {
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
@@ -14930,8 +13655,8 @@ static int runOwProbe(const char* romPath, const char* statePath, const char* pr
   return 0;
 }
 
-// Boot `start` frames, then dump CGRAM once per frame for `count` consecutive
-// frames (prefix0.bin, prefix1.bin, ...) — captures palette animation/cycling.
+// --cgramseq: boot `start` frames, then dump CGRAM once per frame for `count` frames (prefix0.bin, prefix1.bin,
+// ...), to capture palette animation.
 static int runDumpCgramSeq(const char* romPath, int start, int count, const char* prefix) {
   int len = 0;
   uint8_t* rom = CtReadFile(romPath, &len);
@@ -14952,16 +13677,11 @@ static int runDumpCgramSeq(const char* romPath, int start, int count, const char
   return 0;
 }
 
-// ============================================================================
-// Agent-facing oracle probes: --read / --monitor / --followscene / --followvm /
-// --teleport. These are PROBES and DRIVERS, never models: each loads a real
-// savestate (or boots), drives the real ROM frame-by-frame (or reads the cart),
-// and reports raw bytes / live WRAM the original 65816 produced. No game
-// behavior is encoded here — that is the project's no-invention guarantee.
-// Shared input-script grammar: "hexbtn:frames,hexbtn:frames,..." (serial-order
-// button bits B=0x01 Y=0x02 Sel=0x04 Start=0x08 Up=0x10 Down=0x20 Left=0x40
-// Right=0x80 A=0x100 X=0x200 L=0x400 R=0x800). Same grammar as --btnscript.
-// ============================================================================
+// ---- Agent-facing oracle probes: --read / --monitor / --followscene / --followvm / --teleport ----
+// Probes and drivers only: each loads a savestate (or boots), drives the ROM frame by frame (or reads the cart),
+// and reports the bytes the ROM produced; no game behaviour is encoded here.
+// Input-script grammar (as --btnscript): "hexbtn:frames,hexbtn:frames,...", serial-order button bits B=0x01
+// Y=0x02 Sel=0x04 Start=0x08 Up=0x10 Down=0x20 Left=0x40 Right=0x80 A=0x100 X=0x200 L=0x400 R=0x800.
 
 // Resolve a 24-bit SNES address (or a bare <0x20000 offset) to an index into
 // s->ram (the flat $7E/$7F WRAM). Returns -1 if the address is not WRAM.
@@ -14981,9 +13701,9 @@ static uint32_t ctParseAddr(const char* s, char** end) {
   return v;
 }
 
-// A watched WRAM region -- or, with `vram` (the spec's `V<word>`, e.g. `V7820:384`), a region of the PPU's VRAM: `off`
-// is then the byte offset (word x 2), `addr` prints as F0<word> (--monitor only: how the battle strip's NMI uploads are
-// graded per frame against the port's VRAM images, disasm/notes/battle_hud_upload_pipeline.md sec. 4.5).
+// A watched WRAM region or, with `vram` (the spec's `V<word>`, e.g. `V7820:384`), a region of VRAM: `off` is then
+// the byte offset (word x 2) and `addr` prints as F0<word> (--monitor only; disasm/notes/battle_hud_upload_pipeline.md
+// sec. 4.5).
 typedef struct { uint32_t addr; int off; int len; int vram; } CtWatch;
 
 // Parse "ADDR:LEN,ADDR:LEN,..." (LEN optional, default 1, hex addr, decimal len)
@@ -15026,32 +13746,25 @@ static void ctHexRegion(const uint8_t* ram, int off, int len, char* buf, size_t 
   }
 }
 
-// (1) --read <spec> [--from STATE] [--frames N] [--json]
-//   spec tokens (comma-separated): rom:ADDR[+N] | wram:ADDR[+N] | ADDR[+N] |
-//   flags | story | party | loc. ROM bytes come from the cart via snes_read
-//   (HiROM-correct); WRAM bytes from the live oracle (after optional --from +
-//   settle). Pure observation; the agent confirms a fact by READING it.
-// A frame of the LOCATION LOAD hands the CPU this many master cycles. Measured, not assumed
-// (CT_HOOK_CYCLES=1 over the load window of saves/field_re/scene468_stairs_to_120.state): the
-// loader quiesces the PPU and IRQs (C0/0B4E), so every frame from the commit to the fade-in ramp
-// reports nmi=0 and hdma=0 and the only background left is the DRAM refresh, 10480 a frame --
-// 357368 - 10480 = 346888, which is exactly the `main=346894` those frames print.
+// (1) --read <spec> [--from STATE] [--frames N] [--json]: ROM bytes from the cart via snes_read (HiROM), WRAM
+// bytes from the live oracle (docs/DEBUG_SURFACE.md).
+// Master cycles the CPU gets per frame of a location load: the loader quiesces the PPU and IRQs (C0/0B4E), so
+// the only background left is the DRAM refresh, 10480 a frame: 357368 - 10480 = 346888 (measured with
+// CT_HOOK_CYCLES=1 over saves/field_re/scene468_stairs_to_120.state's load).
 #define CT_LOAD_FRAME_CYCLES 346888
 
-// --loadcost <loc> --from STATE: grade the port's model of C3/0557 against the ORACLE, packet by
-// packet, on the packets that location's load actually decompresses. For each one the mode pokes
-// $0300-$0305 the way C0/6D2F / C0/A33B / C0/09DD do and runs the real routine with the vblank NMI
-// held off, then subtracts the DRAM refresh (background, not the routine's work) -- what is left is
-// what the ROM's CPU spent, and ct_lz_rom_cycles has to reproduce it exactly.
-// (disasm/notes/field_load_cost.md.)
+// --loadcost <loc> --from STATE: the port's model of C3/0557 against the ROM, packet by packet, on the packets
+// that location's load decompresses. For each, $0300-$0305 are poked as C0/6D2F / C0/A33B / C0/09DD do and the
+// real routine runs with the vblank NMI held off; minus the DRAM refresh, that is the ROM's CPU cost, which
+// ct_lz_rom_cycles must reproduce (disasm/notes/field_load_cost.md).
 static int runLoadCost(const char* romPath, const char* statePath, int loc) {
   uint8_t* rom = NULL;
   Snes* s = statePath ? ctLoadStateOracle(romPath, statePath, &rom) : NULL;
   if (!s) { printf("FAIL: --loadcost needs --from <savestate>\n"); return 2; }
   const uint8_t* rimg = s->cart->rom; long romLen = (long)s->cart->romSize;   /* the cart's own image */
   if (!rimg) { printf("FAIL: no ROM image\n"); CtOracleDestroy(s); free(rom); return 2; }
-  // A destination >= $1F0 is the OVERWORLD, the ROM's own test (C0/0066 `CPX #01F0`): grade bank
-  // C2's packet list instead of the field loader's, on the same terms.
+  // A destination >= $1F0 is the overworld (C0/0066 `CPX #01F0`): grade bank C2's packet list instead, on the
+  // same terms.
   if (loc >= 0x1F0) {
     int world = loc - 0x1F0;
     uint32_t src[32]; uint8_t dstb[32];
@@ -15103,10 +13816,10 @@ static int runLoadCost(const char* romPath, const char* statePath, int loc) {
   size_t me = 0x361E00u + (size_t)mapId * 3;
   pk[n].src = ct_lz_hirom_offset((unsigned)rimg[me] | ((unsigned)rimg[me+1] << 8) | ((unsigned)rimg[me+2] << 16));
   pk[n].odd = 0; pk[n].what = "map"; n++;
-  // ...and the three C0/00F4 packets PAST C0/09DD, which the model used to leave out: the BG3 tileset
-  // (C0/6DCF, record byte +2 -> $F6:2220, decompressed to $7F:5080 and DMA'd to VRAM $5000), its assembly
-  // (C0/0A14, the same byte -> $F6:21C0, $7E:C000) and the location's SCRIPT (C0/56D4, record word +8 ->
-  // $FC:F9F0, $7F:2000). A record whose byte +2 is $FF takes C0/6E22 (`LDA #01 / STA $BB`) and neither BG3 packet.
+  // ...and the three C0/00F4 packets past C0/09DD: the BG3 tileset (C0/6DCF, record byte +2 -> $F6:2220,
+  // decompressed to $7F:5080 and DMA'd to VRAM $5000), its assembly (C0/0A14, the same byte -> $F6:21C0, $7E:C000)
+  // and the location's script (C0/56D4, record word +8 -> $FC:F9F0, $7F:2000). A record whose byte +2 is $FF takes
+  // C0/6E22 (`LDA #01 / STA $BB`) and neither BG3 packet.
   { unsigned bg3 = rimg[REC + 2];
     if (bg3 != 0xFF) {
       size_t pe = 0x362220u + (size_t)bg3 * 3, pa = 0x3621C0u + (size_t)bg3 * 3;
@@ -15141,9 +13854,9 @@ static int runLoadCost(const char* romPath, const char* statePath, int loc) {
     printf("  %-4s %06X bank%s  model %8ld  oracle %8ld  %s\n", pk[i].what, (unsigned)addr24,
            pk[i].odd ? "7F" : "7E", model, meas, model == meas ? "exact" : "DIFFERS");
   }
-  // ...and the BUILD half of C0/A33B, on the same terms: run the real routine, take off the map
-  // packet's (now known) decompression and the refresh, and compare what is left with the model.
-  // Only meaningful when the state IS at this location -- A33B reads its record through $01FE.
+  // ...and the build half of C0/A33B: run the real routine, subtract the map packet's decompression and the
+  // refresh, and compare the rest with the model. Only meaningful when the state is at this location (A33B
+  // reads its record through $01FE).
   int stateLoc = s->ram[0x0100] | (s->ram[0x0101] << 8);
   if (stateLoc == loc) {
     size_t msrc = ct_lz_hirom_offset((unsigned)rimg[me] | ((unsigned)rimg[me+1] << 8) | ((unsigned)rimg[me+2] << 16));
@@ -15174,17 +13887,12 @@ static int runLoadCost(const char* romPath, const char* statePath, int loc) {
   return bad ? 1 : 0;
 }
 
-// --callrom: set the CPU up like a JSR site, run ONE ROM routine to its RTS/RTL, and print
-// the register file INCLUDING THE CARRY (zelda3's RunEmulatedFunc). Every field-VM opcode
-// handler is a `JSR ($5D6E,X)` target, so its visit-yield verdict (CLC = end the visit,
-// SEC = keep spending the op budget -- C0/5AB4) becomes a MEASUREMENT instead of an
-// argument over disassembly. With --writes it also reports every WRAM byte the routine
-// touched, which is the routine's effect, likewise measured.
-// `--pokewram "7E0300=A8,0301=D3,..."` seeds the WRAM a routine reads its ARGUMENTS from before
-// the call. Plenty of ROM routines take none in registers -- C3/0557 reads its source/destination
-// out of $0300-$0305 -- so without this the mode can only ever measure the one packet the loaded
-// state happens to be pointing at. Addresses are flat WRAM offsets ($7E0000 = 0, $7F0000 = 0x10000;
-// a leading 7E/7F bank byte is accepted and folded), values are one byte each.
+// --callrom: set the CPU up like a JSR site, run one ROM routine to its RTS/RTL, and print the register file
+// including the carry (zelda3's RunEmulatedFunc); e.g. a field-VM handler's visit-yield verdict (CLC = end the
+// visit, SEC = keep spending the op budget, C0/5AB4). --writes also reports every WRAM byte touched.
+// --pokewram "7E0300=A8,0301=D3,..." seeds WRAM arguments before the call (C3/0557 reads its source/destination
+// from $0300-$0305): flat WRAM offsets ($7E0000 = 0, $7F0000 = 0x10000; a leading 7E/7F bank is folded), one
+// byte each.
 static void ctPokeWram(Snes* s, const char* spec) {
   if (!spec) return;
   const char* q = spec;
@@ -15221,7 +13929,7 @@ static int runCallRom(const char* romPath, const char* statePath, const char* ad
   int ok = CtOracleCallRoutine(s, &in, &r);
   if (showWrites) CtWriteLogStop();
 
-  // ctParseAddr("C0/5535") -> 0xC05535, a real 24-bit SNES address (NOT a flat ROM offset).
+  // ctParseAddr("C0/5535") -> 0xC05535, a 24-bit SNES address (not a flat ROM offset).
   unsigned bank = (in.addr >> 16) ? (unsigned)(in.addr >> 16) : 0xC0u;
   unsigned off  = (unsigned)(in.addr & 0xFFFF);
   const CtRegs* g = &r.regs;
@@ -15325,15 +14033,11 @@ static int ctStream(const char* romPath, const char* statePath, const char* inpu
   uint8_t* rom = NULL;
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);   // (prints the core banner first)
   if (!s) return 2;
-  if (jsonWrap) printf("[");                                // bracket AFTER load -> banner stays out of the JSON
+  if (jsonWrap) printf("[");                                // bracket after the load, so the banner stays out of the JSON
   for (int f = 0; f < settleN; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }
   int f = 0;
   if (inputScript && *inputScript) {
-    // Parsed straight off the argv string -- NO fixed buffer. A `char buf[512]` here used to
-    // strncpy the script and SILENTLY drop everything past 511 chars, so a long drive script
-    // (e.g. a 9000-frame battle mash) ran its first ~30 tokens and then fed zero input for the
-    // rest of the run. The symptom was indistinguishable from "the game froze" -- it manufactured
-    // false negatives on exactly the negative claims this harness exists to make.
+    // Parsed straight off the argv string, with no fixed buffer, so a long drive script is never truncated.
     CtBtnScript bs = { inputScript }; uint16_t b; int n;
     while (ctBtnNext(&bs, &b, &n))
       for (int k = 0; k < n; k++) { s->input1->currentState = b; CtOracleRunFrame(s); cb(s, f++, ctx); }
@@ -15345,11 +14049,9 @@ static int ctStream(const char* romPath, const char* statePath, const char* inpu
   return 0;
 }
 
-// (3) --followscene [--from STATE] [--input SCRIPT] [--frames N] [--json]
-//   Streams the location word $0100/$0101 + transition command $027C + arrival
-//   cell $0102/$0103 + facing $0104; emits a row whenever loc or $027C changes.
-//   loc>=0x1F0 => overworld (world=loc-0x1F0); else field scene. The 0x1F0
-//   split is the documented C0:0066 dispatch test (re-confirmable via --read).
+// (3) --followscene [--from STATE] [--input SCRIPT] [--frames N] [--json]: streams the location word $0100/$0101,
+// the transition command $027C, the arrival cell $0102/$0103 and facing $0104; a row whenever loc or $027C
+// changes. loc >= 0x1F0 is the overworld (world = loc - 0x1F0), the C0:0066 dispatch test.
 typedef struct { int jsonOut, lastLoc, last27C, first, rows; } CtFollowSceneCtx;
 static void cbFollowScene(Snes* s, int f, void* vctx) {
   CtFollowSceneCtx* c = (CtFollowSceneCtx*)vctx;
@@ -15381,23 +14083,15 @@ static int runFollowScene(const char* romPath, const char* statePath, const char
   return rc;
 }
 
-// (1b) --lifetrace : the ORDERED INTRA-FRAME instrument.
-//   --lifetrace --from STATE [--btnscript S | --input S | --frames N] [--settle N]
-//               [--wwatch "ADDR:LEN,..."] [--pcwatch "C0/CAD9,C0/B701,..."]
-//   --monitor --writer keeps only the LAST writer per region per frame, so it
-//   cannot answer "in what ORDER were $1B00,X's values written, and by whom".
-//   This mode steps the oracle ONE OPCODE at a time -- byte-identical to
-//   snes_runFrame, which is itself only a `while(...) cpu_runOpcode()` loop --
-//   and prints, in strict chronological order inside each frame:
+// (1b) --lifetrace --from STATE [--btnscript S | --input S | --frames N] [--settle N] [--wwatch "ADDR:LEN,..."]
+//      [--pcwatch "C0/CAD9,C0/B701,..."]: the ordered intra-frame instrument. --monitor --writer keeps only the
+//   last writer per region per frame; this steps the oracle one opcode at a time (as snes_runFrame does) and
+//   prints, in order within each frame:
 //     W <addr> <- <val>  @bank:pc    every CPU write landing in a watched region
 //     X bank:pc A=.. X=.. Y=.. C=..  every execution of a watched PC
-//   The reported write PC is the address of the NEXT instruction (the CPU has
-//   already advanced past the opcode when the bus write fires) -- e.g. a store
-//   at C0/CC14 reports C0/CC17.
-//   snes_catchupApu() is static in snes.c and therefore not called at the frame
-//   boundary; it is a pure lazy-sync (every $2140-43 read/write calls it first),
-//   so CPU-visible behaviour is unchanged.  The `end-of-frame` line duplicates
-//   --monitor's row so the two modes can be diffed as a self-check.
+//   The write PC is the next instruction's address (a store at C0/CC14 reports C0/CC17). snes_catchupApu() is
+//   static in snes.c and not called at the frame boundary; it is a lazy sync (every $2140-43 access calls it), so
+//   CPU-visible behaviour is unchanged. The `end-of-frame` line repeats --monitor's row, so the two can be diffed.
 typedef struct { uint8_t bank; uint16_t pc; } CtPcW;
 static int ctParsePcWatch(const char* spec, CtPcW* w, int maxw) {
   int n = 0; const char* p = spec;
@@ -15429,8 +14123,8 @@ static int runLifeTrace(const char* romPath, const char* statePath, const char* 
     else { if (fno >= frames) break; btn = 0; nrep = 1; }
     for (int k = 0; k < nrep; k++) {
       s->input1->currentState = btn;
-      // CT's field code runs with DP=$0100, so the direct-page shorthands $6D/$76/$77/$78/$79/$6B
-      // live at $016D/$0176/... . Read them there (a raw r[0x76] reads the WRONG byte).
+      // The field code runs with DP = $0100, so the direct-page shorthands $6D/$76/$77/$78/$79/$6B live at
+      // $016D/$0176/...; a raw r[0x76] reads the wrong byte.
       printf("=== f%d in=%03X BEGIN $76=%02X $77=%02X $78=%02X $79=%02X $09A0=%02X $6B=%02X pool=%02X%02X%02X%02X\n",
              fno, btn, r[0x176], r[0x177], r[0x178], r[0x179], r[0x09A0], r[0x16B],
              r[0x0BC0], r[0x0BC1], r[0x0BC2], r[0x0BC3]);
@@ -15444,7 +14138,7 @@ static int runLifeTrace(const char* romPath, const char* statePath, const char* 
           const Cpu* c = s->cpu;
           for (int i = 0; i < npw; i++)
             if (c->k == pw[i].bank && c->pc == pw[i].pc) {
-              int dp6d = (c->dp + 0x6D) & 0xFFFF;   // $6D is DIRECT PAGE (DP=$0100 in the field)
+              int dp6d = (c->dp + 0x6D) & 0xFFFF;   // $6D is direct page (DP = $0100 in the field)
               printf("   X %02X/%04X A=%04X X=%04X Y=%04X C=%d D=%04X $6D=%04X\n",
                      c->k, c->pc, c->a, c->x, c->y, c->c ? 1 : 0, c->dp,
                      r[dp6d] | (r[(dp6d + 1) & 0xFFFF] << 8));
@@ -15480,12 +14174,9 @@ static int runLifeTrace(const char* romPath, const char* statePath, const char* 
   return 0;
 }
 
-// (2) --monitor <addrs> [--from STATE] [--input SCRIPT] [--frames N] [--diff]
-//     [--writer] [--json]
-//   Streams a chosen set of WRAM regions per frame (or only on change with
-//   --diff). With --writer the CPU write hook is armed each frame so each
-//   changed region also reports the last writer's bank:pc — the generic form
-//   of the hardcoded watch* probes.
+// (2) --monitor <addrs> [--from STATE] [--input SCRIPT] [--frames N] [--diff] [--writer] [--json]: streams
+// chosen WRAM regions per frame (only on change with --diff); --writer arms the CPU write hook so each changed
+// region also reports its last writer's bank:pc.
 typedef struct {
   int jsonOut, diffOnly, writer, nw, rows, havePrev;
   CtWatch w[32];
@@ -15588,13 +14279,10 @@ static int runMonitor(const char* romPath, const char* statePath, const char* ad
   return 0;
 }
 
-// (4) --followvm [--obj K | all] [--from STATE] [--input SCRIPT] [--frames N] [--json]
-//   Streams the live event-VM per-object state the running scheduler maintains:
-//   script IP $1180,X (X=obj*2), per-object state byte $1100,X, active gate
-//   $0F00,X, facing $1600,X, world pos $1800/$1880,X. It ALSO reports the raw
-//   bytes at $7F2000+IP / $7F2001+IP so the agent can cross-check the live IP
-//   against the disassembled script — the tool asserts NO opcode semantics, it
-//   reports raw memory the real VM is indexing.
+// (4) --followvm [--obj K | all] [--from STATE] [--input SCRIPT] [--frames N] [--json]: streams the live
+// event-VM per-object state: script IP $1180,X (X = obj*2), state $1100,X, active gate $0F00,X, facing
+// $1600,X, world pos $1800/$1880,X, and the raw bytes at $7F2000+IP / $7F2001+IP for cross-checking the IP
+// against the disassembled script. It reports memory only and asserts no opcode semantics.
 typedef struct { int jsonOut, obj, rows; } CtVmCtx;
 static void cbFollowVm(Snes* s, int f, void* vctx) {
   CtVmCtx* c = (CtVmCtx*)vctx;
@@ -15630,11 +14318,10 @@ static int runFollowVm(const char* romPath, const char* statePath, int obj,
   return rc;
 }
 
-// --followtest <state> [--datf dat] [--input SCRIPT]: validate the C party-follower (CtSceneUpdateFollowers)
-// against the oracle. Each frame we FORCE our lead PC to the oracle's lead position (so the only thing under
-// test is the follower trail), call CtSceneUpdateFollowers, and diff our follower's px vs the oracle's. Use a
-// scene-8 2-member state (Crono lead + Marle follower) and walk via --input (Up=0x10/Down=0x20/Left=0x40/
-// Right=0x80). Prints the max/first follower divergence.
+// --followtest <state> [--datf dat] [--input SCRIPT]: the party follower (CtSceneUpdateFollowers) against the
+// oracle. Each frame our lead is forced to the oracle lead's position, so only the follower trail is under
+// test, and each follower's px is diffed. Use a scene-8 party state and walk via --input (Up=0x10 Down=0x20
+// Left=0x40 Right=0x80). Prints the max/first follower divergence.
 static int runFollowTest(const char* romPath, const char* statePath, const char* datPath,
                          const char* inputScript) {
   if (!statePath) { printf("FAIL: --followtest needs --from <state>\n"); return 2; }
@@ -15651,10 +14338,8 @@ static int runFollowTest(const char* romPath, const char* statePath, const char*
   CtScene* sc = raw ? CtSceneCreate(raw, (int)rl, w + 0x10000, scene) : 0;
   if (!sc) { printf("FAIL: scene %d has no script\n", scene); CtAssetsClose(&a); CtOracleDestroy(s); free(rom); return 2; }
   CtSceneSeedFromWram(sc, w);
-  // BOTH followers, not just the first. --followtest used to resolve one move-mode-1 object and diff only
-  // that: a model can be byte-exact on member 2 and wrong on member 3 (the ROM chains member 3's gap off
-  // member 2's CURSOR, not off the head -- party_follower_ring.md section 2), and the single-follower
-  // report called that BYTE-EXACT. It is the blindness that let an invented position-trail stand.
+  // Both followers: the ROM chains member 3's gap off member 2's cursor, not off the head
+  // (disasm/notes/party_follower_ring.md sec. 2), so a model can match member 2 and miss member 3.
   int lead = CtScenePlayerObj(sc), foll = -1, foll2 = -1;
   for (int o = 0; o < CtSceneActorCount(sc); o++) if (o != lead && CtSceneActorMode(sc, o) == 1) { foll = o; break; }
   for (int o = 0; o < CtSceneActorCount(sc); o++) if (o != lead && CtSceneActorMode(sc, o) == 2) { foll2 = o; break; }
@@ -15672,11 +14357,9 @@ static int runFollowTest(const char* romPath, const char* statePath, const char*
       int ofx = (w[0x1800 + fx2] | (w[0x1801 + fx2] << 8)) >> 4;             // oracle follower px
       int ofy = (w[0x1880 + fx2] | (w[0x1881 + fx2] << 8)) >> 4;
       CtSceneSetActorPos(sc, lead, olx, oly);                                // force our lead to match
-      // ...and hand our ring the LEAD'S VELOCITY, the same way. C0/9E3F pushes $1D32/$1D33 and C0/A26B
-      // tests them for "is the lead moving"; here the lead is not walked by our player controller at all,
-      // it is teleported onto the oracle's, so the velocity has to come from the oracle too -- the ROM's
-      // own bytes, read out of its WRAM, exactly like the position above. $1D2C/$1D2D (the pre-adjust
-      // pair) and $1D34 (the shape byte) ride along because the ring stores them per entry.
+      // ...and hand our ring the lead's velocity from the oracle too: C0/9E3F pushes $1D32/$1D33 and C0/A26B
+      // tests them for "is the lead moving", and the lead here is placed, not walked. $1D2C/$1D2D (the
+      // pre-adjust pair) and $1D34 (the shape byte) ride along because the ring stores them per entry.
       { uint8_t* ow = CtSceneMem7E(sc);
         ow[0x1D2C] = w[0x1D2C]; ow[0x1D2D] = w[0x1D2D];
         ow[0x1D32] = w[0x1D32]; ow[0x1D33] = w[0x1D33]; ow[0x1D34] = w[0x1D34]; }
@@ -15703,15 +14386,10 @@ static int runFollowTest(const char* romPath, const char* statePath, const char*
   return maxerr == 0 ? 0 : 1;
 }
 
-// (5) --teleport <scene> <tileX> <tileY> <facing> [--from STATE] [--method req|jmp]
-//     [--frames N] [--out STATE]
-//   Field analogue of --owforce. Pokes the location-request record the game's
-//   own loader reads ($0100/$0101=scene, $0102/$0103=arrival tile, $0104=facing)
-//   then lets the ORIGINAL ROM perform the fade+load: method "req" sets the
-//   queued-change command $027C=2 and runs frames; method "jmp" sets the CPU to
-//   the engine entry C2:0000 (the JML the field dispatch itself takes, per
-//   runOwForce) and runs. It does NOT reimplement ChangeLocation. Success when
-//   $0100 re-reads as the requested scene.
+// (5) --teleport <scene> <tileX> <tileY> <facing> [--from STATE] [--method req|jmp|ow] [--frames N] [--out STATE]
+//   The field analogue of --owforce: pokes the location-request record the loader reads ($0100/$0101 = scene,
+//   $0102/$0103 = arrival tile, $0104 = facing) and lets the ROM do the fade and load. Success when $0100
+//   re-reads as the requested scene.
 static int runTeleport(const char* romPath, const char* statePath, int scene, int tx, int ty,
                        int facing, const char* method, int frames, const char* outPath) {
   if (!statePath) { printf("FAIL: --teleport needs --from <savestate>\n"); return 2; }
@@ -15724,10 +14402,9 @@ static int runTeleport(const char* romPath, const char* statePath, int scene, in
   r[0x0100] = (uint8_t)scene; r[0x0101] = (uint8_t)(scene >> 8);
   r[0x0102] = (uint8_t)tx;    r[0x0103] = (uint8_t)ty;
   r[0x0104] = (uint8_t)(facing & 3);
-  // "jmp": enter the MASTER DISPATCHER C0:0066 (LDX $0100; CPX #$01F0; <0x1F0 => field
-  // load path JSR $0B86/$00F4/$B192, >=0x1F0 => JML $C20000 overworld). This is the
-  // universal entry the game itself uses; C2:0000 is only the overworld leg. "ow" forces
-  // the overworld leg; "req" just pokes the request and runs (diagnostic).
+  // "jmp" (the default): enter the master dispatcher C0:0066 (LDX $0100; CPX #$01F0; < 0x1F0 -> field load path
+  // JSR $0B86/$00F4/$B192, >= 0x1F0 -> JML $C20000 overworld), the entry the game uses. "ow" forces the
+  // overworld leg C2:0000; "req" pokes the request, sets $027C = 2 and runs (diagnostic).
   int jmp = !method || !strcmp(method, "jmp");
   if (jmp)                                  { s->cpu->k = 0xC0; s->cpu->pc = 0x0066; }
   else if (!strcmp(method, "ow"))           { s->cpu->k = 0xC2; s->cpu->pc = 0x0000; }
@@ -15744,13 +14421,11 @@ static int runTeleport(const char* romPath, const char* statePath, int scene, in
     if (r[0x0F00 + o * 2]) active++;
     if (r[0x0F00 + o * 2] && ox != 0xFF00) placedObjs++;
   }
-  // Two distinct outcomes, reported honestly:
-  //  - SCENE LOADED: loc holds AND the destination's objects populated/placed (the
-  //    C0:0066 dispatcher ran the field-load path). A bare $0100 match is NOT enough.
-  //  - PLAYER PLACED: the lead PC ($0197 obj) got a real position (not the 0xFF00
-  //    sentinel). The dispatcher's field-load path DOES spawn the lead PC at the
-  //    arrival tile ($0102/$0103) and the result is controllable (verified by walking
-  //    the teleported state); both should be true for a clean warp.
+  // Two outcomes, reported separately:
+  //  - scene loaded: loc holds and the destination's objects were populated (the C0:0066 field-load path ran);
+  //    a bare $0100 match is not enough.
+  //  - player placed: the lead PC ($0197 obj) has a real position (not the 0xFF00 sentinel); the field-load
+  //    path spawns it at the arrival tile ($0102/$0103). Both should hold for a clean warp.
   int sceneLoaded = (nloc == (scene & 0x1FF)) && placedObjs > 0;
   int playerPlaced = (leadX != 0xFF00);
   printf("teleport[%s]: from %03X -> requested %03X, now %03X  scene=%s  player=%s\n",
@@ -15772,42 +14447,21 @@ static int runTeleport(const char* romPath, const char* statePath, int scene, in
   return ok ? 0 : 1;
 }
 
-// ------------------------------------------------------------------------------------------------
-// (6) --loadcensus <state> -- the per-CPU-step WRITE CENSUS of a LOCATION LOAD.
-//
-// `disasm/notes/wram_lifetime.md` establishes that the ROM's $7E is PROCESS-lifetime (a location
-// change never wipes it; only C0/000E does, from reset and from load-game) while the port gives that
-// same 64 KB SCENE lifetime -- and its section 7 lists the facts that block the ownership move. Every
-// one of them is the same question, "WHICH INSTRUCTION WROTE WHICH BYTE", and no existing mode can
-// answer it: `--monitor --writer` keeps only the LAST writer per region per frame and only on a
-// CHANGED row, and `CT_OWWRITEWATCH` follows ONE address through a world load. This mode logs every
-// CPU write across the whole transition and reconciles it against a before/after image of all 128 KB.
-//
-// Three classes come out of that reconciliation. The third is the one a diff cannot see at all:
-//   CPU    changed AND written by a logged instruction  -- the writer PC is named.
-//   DMA?   changed with NO logged CPU write             -- DMA reaches WRAM through snes_write()
-//          (snes/dma.c:350), which does NOT go through cpu->write, so it is invisible here. This is a
-//          REPORTED BLIND SPOT rather than a hole in the measurement: quantifying it is the point.
-//   IDEM   written but the value did not change         -- invisible to ANY before/after diff, and
-//          yet still a byte the load OWNS. For the ownership move that is the whole question: a byte
-//          the load rewrites may hold anything beforehand, a byte it never touches must SURVIVE.
-//          Section 4b of the dossier ("$7E:2300-29AD survives untouched") is a claim of exactly this
-//          shape, and a sentinel diff can only ever support it by accident.
-//
-// The WRAM PORT is resolved rather than ignored. A store to $2180 (WMDATA) lands at whatever address
-// the $2181-83 latch holds, so the log records it as a write to $2180; charged naively it would
-// either vanish from the census or be billed to offset $2180. Section 4a of the dossier is precisely
-// a port bug -- a SIXTEEN-BIT `STX $80` at C0/B246 with D=$2100 writing WMDATA and then WMADDL -- so
-// a census that does not model the port can say nothing about $7E:0F00.
+// ---- (6) --loadcensus <state>: the per-CPU-step write census of a location load ----
+// Logs every CPU write across the transition and reconciles it against before/after images of all 128 KB:
+//   CPU    changed and written by a logged instruction (the writer PC is named);
+//   DMA?   changed with no logged CPU write (DMA writes via snes_write(), snes/dma.c, not cpu->write: a
+//          reported blind spot);
+//   IDEM   written but unchanged, invisible to any before/after diff, yet a byte the load owns.
+// Stores to $2180 (WMDATA) are charged to the address the $2181-83 latch holds.
+// disasm/notes/wram_lifetime.md sec. 7 and disasm/notes/wram_load_census.md.
 typedef struct { uint32_t writes; uint16_t firstPc, lastPc; uint8_t firstBank, lastBank; } CtCensusCell;
 static CtCensusCell s_census[0x20000];
 static uint8_t s_censusBefore[0x20000], s_censusAfter[0x20000];
 
 // Resolve a logged CPU write to a WRAM offset (0..0x1FFFF), or -1 when it is not WRAM.
-// STRICT on purpose: ctWramOff() maps ANY bare address below 0x20000 to a WRAM offset, which is right
-// for a $7E/$7F store but bills a bank-$00 PPU register write like $002100 to WRAM offset $2100. A
-// census cannot afford that -- it would invent writers for the $21xx page, which is one of the very
-// spans section 7 lists as unexplained.
+// Strict on purpose: ctWramOff() maps any bare address below 0x20000 to WRAM, which would bill a bank-$00 PPU
+// register write like $002100 to WRAM offset $2100.
 static int ctCensusOff(const CtWrite* w, int* viaPort) {
   uint8_t bank = (uint8_t)(w->adr >> 16);
   uint16_t a = (uint16_t)(w->adr & 0xFFFF);
@@ -15825,7 +14479,7 @@ static const char* ctCensusName(int off, char* buf, size_t n) {
   return buf;
 }
 
-// Expand a button script into one entry per frame so both passes drive the machine IDENTICALLY.
+// Expand a button script into one entry per frame so both passes drive the machine identically.
 // Frames past the end of the script read 0 (no buttons held).
 static int ctBtnExpand(const char* script, uint16_t* out, int maxN) {
   CtBtnScript bs = { script }; uint16_t b; int n, f = 0;
@@ -15850,17 +14504,16 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
   uint8_t* rom = NULL;
   int T = 0, loc0 = 0, loc1 = 0;
 
-  // ---- PASS 1: find the frame the location word actually flips (natural drive only). The load
-  // BEGINS BEFORE that frame -- the door handler stages the request and the fade runs first -- so
-  // the logging window opens `pre` frames earlier. A one-pass "log everything" would overflow the
-  // 1M-entry log on a 300-frame drive and truncate silently.
+  // ---- Pass 1: find the frame the location word flips (natural drive only). The load begins before that
+  // frame (the door handler stages the request and the fade runs first), so the logging window opens `pre`
+  // frames earlier; logging the whole drive would overflow the 1M-entry log.
   if (!useTele) {
     Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
     if (!s) return 2;
     for (int f = 0; f < 10; f++) { s->input1->currentState = 0; CtOracleRunFrame(s); }
     loc0 = s->ram[0x0100] | (s->ram[0x0101] << 8);
-    // A control run (--censusnull) must NOT transition; the scan below is what proves it did not,
-    // so it runs over exactly the window the measured run will use rather than being skipped.
+    // A control run (--censusnull) must not transition; the scan below proves it over the same window the
+    // measured run uses.
     int scanN = nullRun ? pre + post : CT_CENSUS_MAXF;
     for (int f = 0; f < scanN; f++) {
       s->input1->currentState = f < nbtn ? s_censusBtn[f] : 0;
@@ -15869,10 +14522,9 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
       if (loc != loc0) { T = f; loc1 = loc; break; }
     }
     CtOracleDestroy(s); free(rom); rom = NULL;
-    // CONTROL RUN (--censusnull): drive the SAME state over the same span with a script that never
-    // crosses a door. Its census is the engine's ORDINARY per-frame churn, and subtracting it is the
-    // only way to say "the LOAD wrote this" rather than "something wrote this while the load ran".
-    // A control that transitions anyway is broken, and is refused rather than quietly reported.
+    // Control run (--censusnull): the same state over the same span with a script that never crosses a door.
+    // Its census is the engine's ordinary per-frame churn, to subtract from the load's. A control that
+    // transitions anyway is refused.
     if (nullRun) {
       if (loc1) { printf("loadcensus: --censusnull but loc %03X -> %03X TRANSITIONED at f%d -- NOT a control\n",
                          loc0, loc1, T); return 1; }
@@ -15883,7 +14535,7 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
     if (T < pre) pre = T;                                   // cannot open the window before frame 0
   }
 
-  // ---- PASS 2: same state, same input, but snapshot + log across the window.
+  // ---- Pass 2: same state, same input, with the snapshot and the log across the window.
   Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
   if (!s) return 2;
   uint8_t* r = s->ram;
@@ -15946,7 +14598,7 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
          "  IDEM=%ld (written, value unchanged -- INVISIBLE to a diff)\n",
          nChanged, nWritten, nCpu, nDma, nIdem);
 
-  // ---- Spans. A byte is interesting if it CHANGED or was WRITTEN; merge contiguous runs.
+  // ---- Spans. A byte is interesting if it changed or was written; contiguous runs are merged.
   int shown = 0, total = 0;
   printf("loadcensus: spans (chg = changed bytes, wr = logged writes, cls = CPU/DMA?/IDEM/mixed):\n");
   for (int o = 0; o < 0x20000; ) {
@@ -15981,18 +14633,15 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
     for (int j = 0; j < npc; j++) printf(" %02X/%04X", pcs[j] >> 16, pcs[j] & 0xFFFF);
     printf("%s\n", npc == 4 ? " ..." : "");
   }
-  // No silent caps: say what was dropped rather than letting the list read as complete.
+  // Say what was dropped, so the list does not read as complete.
   if (total > shown) printf("  ... %d further span(s) NOT PRINTED (--censusspans N raises the cap of %d)\n",
                             total - shown, spanCap);
   printf("loadcensus: %d span(s) total\n", total);
 
-  // ---- The DMA leg. A DMA into WRAM reaches memory through snes_writeBBus() (snes/dma.c:353) and
-  // therefore NEVER passes cpu->write, so it lands in the DMA? bucket above with no writer. That is
-  // exactly why every static scan for "the instruction that clears the scene locals" came up empty:
-  // there is no such instruction. But the SETUP is all CPU stores -- $43x0-$43x6 then $420B -- and
-  // those ARE in the log, so the initiating PC is recoverable. Better still, `ramAdr` is captured on
-  // every logged write, so at the instant of the $420B the WRAM-port latch IS the destination base
-  // of any channel pointed at $2180 (WMDATA). This turns "unexplained" into a named transfer.
+  // ---- The DMA leg. A DMA into WRAM goes through snes_writeBBus() (snes/dma.c), never cpu->write, so it
+  // lands in the DMA? bucket with no writer. Its setup ($43x0-$43x6, then $420B) is CPU stores and is in the
+  // log, so the initiating PC is recoverable; and since `ramAdr` is captured on every logged write, the
+  // WRAM-port latch at the $420B is the destination base of any channel pointed at $2180 (WMDATA).
   {
     uint8_t dmaReg[8][8]; memset(dmaReg, 0, sizeof dmaReg);
     int nDma = 0, shownDma = 0;
@@ -16008,14 +14657,11 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
         uint8_t abank = dmaReg[ch][4];
         uint32_t asrc = ((uint32_t)abank << 16) | ((uint32_t)dmaReg[ch][3] << 8) | dmaReg[ch][2];
         int size = dmaReg[ch][5] | (dmaReg[ch][6] << 8); if (!size) size = 0x10000;
-        // TWO ways a transfer reaches WRAM, and only listing the first is how a census misses one:
+        // Two ways a transfer reaches WRAM (both bypass cpu->write, snes/dma.c):
         //   A->B into $2180 (WMDATA)  -- destination is the WRAM-port latch
-        //   B->A with an A-bus bank of $7E/$7F -- destination is the A-bus address ITSELF
-        // Both bypass cpu->write (snes/dma.c:350 and :353 call snes_write/snes_writeBBus directly).
-        // The A-bus destination may be named through the LOW-RAM MIRROR as easily as through $7E:
-        // C0/58B9 clears $7E:1900 by pointing A1B7 at bank $00. Requiring bank $7E/$7F here missed
-        // that transfer entirely, and the only reason it did not become a wrong "unexplained" verdict
-        // is that the DMA? bucket still counted its 3 changed bytes. Keep both paths.
+        //   B->A with an A-bus bank of $7E/$7F -- destination is the A-bus address itself
+        // The A-bus destination may be named through the low-RAM mirror as well as through $7E: C0/58B9
+        // clears $7E:1900 by pointing A1B7 at bank $00.
         int aLowMirror = (abank <= 0x3F || (abank >= 0x80 && abank <= 0xBF)) && (asrc & 0xFFFF) < 0x2000;
         int aWram = (abank == 0x7E || abank == 0x7F) || aLowMirror;
         int aOff = abank == 0x7F ? (int)(0x10000 | (asrc & 0xFFFF)) : (int)(asrc & 0xFFFF);
@@ -16041,8 +14687,8 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
            nDma, shownDma);
   }
 
-  // ---- Optional: a per-byte map, so a measured run can be SUBTRACTED from a control run offline.
-  // 0x20000 bytes, one per WRAM offset: bit0 = changed, bit1 = written; then the two 128 KB images.
+  // ---- Optional: a per-byte map, so a measured run can be subtracted from a control run offline.
+  // 0x20000 bytes, one per WRAM offset: bit 0 = changed, bit 1 = written; then the two 128 KB images.
   if (outPath) {
     uint8_t* map = (uint8_t*)malloc(0x20000);
     if (map) {
@@ -16060,13 +14706,10 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
     }
   }
 
-  // ---- Optional: the ordered write history of ONE address (the general form of CT_OWWRITEWATCH).
-  // `seq` is the write's index in the GLOBAL ordered log, not just among this address's hits. Two
-  // runs of the same state + same script drive the machine identically and therefore produce the
-  // same log, so two --censusat histories are directly comparable on `seq`: that is how "does the
-  // ROM populate X before it writes Y" gets answered by measurement instead of by reading the
-  // caller chain and hoping the dispatch is direct. Without it each history restarts at [0] and the
-  // one question a write ORDER can settle -- which came first -- is exactly the one it cannot.
+  // ---- Optional: the ordered write history of one address (the general form of CT_OWWRITEWATCH).
+  // `seq` is the write's index in the global ordered log. Two runs of the same state and script produce the
+  // same log, so two --censusat histories are comparable on `seq`: that is how "which was written first"
+  // is measured across addresses.
   if (atOn) {
     char nm[16];
     printf("loadcensus: write history of %s:\n", ctCensusName((int)atOff, nm, sizeof nm));
@@ -16081,10 +14724,8 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
     if (!hits) {
       printf("    NO logged CPU write resolved to this offset (before=%02X after=%02X)\n",
              s_censusBefore[atOff], s_censusAfter[atOff]);
-      // NEAR MISSES. "No writer" is the conclusion this whole mode exists to license, so it must not
-      // rest on ctCensusOff() being right. Any logged write whose LOW 16 BITS match is reported with
-      // the bank it actually carried: if one shows up, the resolver dropped it and the negative is
-      // MINE, not the ROM's.
+      // Near misses: any logged write whose low 16 bits match is reported with the bank it carried, so a
+      // "no writer" result does not rest on ctCensusOff() alone.
       int nm2 = 0;
       for (int i = 0; i < nlog && nm2 < 12; i++) {
         if ((log[i].adr & 0xFFFF) != (atOff & 0xFFFF)) continue;
@@ -16101,12 +14742,11 @@ static int runLoadCensus(const char* romPath, const char* statePath, const char*
   return 0;
 }
 
-// --shadow [--frames N] [--loadstate S] [--btnscript B | --btnfile F] [--dump PREFIX] [--stateout S]: the routine-level shadow (src/ct_shadow.c,
-// docs/SHADOW_PROPOSAL.md). The oracle plays N frames -- from power-on (CT_ORACLE_SRAM gives it a battery save) or from
-// a state, pressing B -- and every call it makes to a registered routine is graded against our C function on a copy of
-// its WRAM. Prints one line per entry and `shadow: ... mismatched M ...`; exits 1 when M > 0. `--stateout` writes the
-// oracle's state (CTLS) at the end, and the last line names where the run ended ($0100, the location), so a route can be
-// chained from a battery save one leg at a time.
+// --shadow [--frames N] [--loadstate S] [--btnscript B | --btnfile F] [--dump PREFIX] [--stateout S]: the
+// routine-level shadow (src/ct_shadow.c, docs/SHADOW_PROPOSAL.md). The oracle plays N frames (from power-on, with
+// CT_ORACLE_SRAM for a battery save, or from a state) and every call it makes to a registered routine is graded
+// against our C function on a copy of its WRAM. Exits 1 on any mismatch. `--stateout` writes the oracle's state
+// (CTLS) at the end and the last line names where the run ended, so a route can be chained one leg at a time.
 static int runShadow(int argc, char** argv) {
   const char* romPath = DEFAULT_ROM; const char* statePath = NULL; const char* script = NULL; const char* dump = NULL;
   const char* stateOut = NULL; uint32_t dumpAddr = 0;
@@ -16194,12 +14834,11 @@ static void ctLogicalReport(void) {
   fprintf(stderr, "logical-frame: %ld hold(s), %ld cycles held, %ld valve release(s); %ld phase hold(s), %ld cycles\n",
           g_ctLogicalHolds, g_ctLogicalHeld, g_ctLogicalValves, g_ctLogicalPhaseHolds, g_ctLogicalPhaseHeld);
 }
-// THE ORACLE-ONLY BUILD (ct_oracle.exe, CMakeLists.txt): this main() with only the cartridge's own modes dispatched --
-// --peek, --monitor, --hdma, --fb. Every other mode answers 97 and the marker below instead of running, so nothing but
-// those four reaches the link, and the linker -- not a list -- decides which sources the oracle needs. The suite's
-// oracle cache (tools/ctlib/oracle_cache.py) runs THIS binary for those modes and keys on its bytes: an edit to the port
-// (battle.c, ct_vm.c, field.c ...) leaves it unchanged, so the cartridge side of every -vs-oracle check is replayed. On
-// the marker it falls back to build/ct.exe (a mode whose flags take another branch of the chain below).
+// The oracle-only build (ct_oracle.exe, CMakeLists.txt): this main() dispatching only the cartridge's own modes
+// (--peek, --monitor, --hdma, --fb). Every other mode answers 97 and the marker below, so the linker decides which
+// sources the oracle needs. The suite's oracle cache (tools/ctlib/oracle_cache.py) runs this binary for those
+// modes and keys on its bytes, so a port edit leaves the cartridge side cached; on the marker it falls back to
+// build/ct.exe.
 #ifdef CT_ORACLE_ONLY
 static int ctOracleOnlyRefuse(void) {
   fprintf(stderr, "ct_oracle: not an oracle mode -- run build/ct.exe\n");
@@ -16211,13 +14850,13 @@ static int ctOracleOnlyRefuse(void) {
 #endif
 
 int main(int argc, char** argv) {
-  // --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (native, src/hdma_table.c -- the one every
-  // caller runs) on a 128 KB WRAM image and write what it leaves -- graded against the cartridge's own WRAM before and after
-  // one call (tools/hdma_build_cmp.py: --hookpc FDC2C1 / the RTL with CT_HOOK_DUMPWRAM). --hdmabuildxlat runs the
-  // translation (src/xlat/hdma_fd.c on the vendored core) instead, the reference.
-  // --hdmafuzz <N> [seed] [base.wram]: N random WRAM images (every mode of both sets, every branch: `$0126` 0..5 under bit
-  // 0 set / 0..2 clear, `$0127` 0..FF, the wave's `$1DF9` / `$1DFD` / `$1DFB`, `$53` bit 7, `$7F:0351`'s parity, the rest
-  // random) through the native builder and the translation; prints the first differing byte of any image and a census.
+  // --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (native, src/hdma_table.c) on a
+  // 128 KB WRAM image and write the result, graded against the cartridge's WRAM before and after one call
+  // (tools/hdma_build_cmp.py: --hookpc FDC2C1 / the RTL with CT_HOOK_DUMPWRAM). --hdmabuildxlat runs the reference
+  // translation (src/xlat/hdma_fd.c on the vendored core) instead.
+  // --hdmafuzz <N> [seed] [base.wram]: N random WRAM images (every mode of both sets, every branch: `$0126` 0..5 under
+  // bit 0 set / 0..2 clear, `$0127` 0..FF, the wave's `$1DF9` / `$1DFD` / `$1DFB`, `$53` bit 7, `$7F:0351`'s parity,
+  // the rest random) through the native builder and the translation; prints the first differing byte and a census.
 #ifndef CT_ORACLE_ONLY   // the translated stages and the native sequences: not the cartridge's modes
   // --mixreplay <capture>: the native mixer (src/sound/mixer.c) against the vendored S-DSP, sample for sample, over a
   // CT_MIXER_CAPTURE of a real run (src/sound/mixer_replay.c; tools/mixer_replay.py).
@@ -16239,11 +14878,11 @@ int main(int argc, char** argv) {
     return r == 0 ? 0 : 1;
   }
   // --hdmabuildcmp <prefix> <n>: grade the native builder against the cartridge's calls <prefix>_<k>_in.wram ->
-  // <prefix>_<k>_out.wram, k < n (ct.exe --hookpc FDC2C1 with CT_HOOK_DUMPCALLS; a missing pair -- an interrupted call -- is
-  // skipped). EXACT: all 128 KB equal outside the stack page $0600-$06FF. WRITTEN: the entry's tables and data ($7F:0F80-
-  // $1E26) and DP $01D9-$01EF poisoned with $5A and with $A5 and built again -- a byte both builds agree on is one
-  // the builder wrote, and it must be the cartridge's. Prints `hdmabuildcmp: call <k> ...` for a failing call and one
-  // `hdmabuildcmp: key <k> <set> <mode> <n> <dfd> <df9> <tail> <b7> <odd>` line a call (the census, from the entry image).
+  // <prefix>_<k>_out.wram, k < n (ct.exe --hookpc FDC2C1 with CT_HOOK_DUMPCALLS; a missing pair, an interrupted call,
+  // is skipped). Exact: all 128 KB equal outside the stack page $0600-$06FF. Written: the entry's tables and data
+  // ($7F:0F80-$1E26) and DP $01D9-$01EF are poisoned with $5A and with $A5 and built again; a byte both builds agree
+  // on is one the builder wrote, and it must match the cartridge's. Prints `hdmabuildcmp: call <k> ...` for a
+  // failing call and one `hdmabuildcmp: key <k> <set> <mode> <n> <dfd> <df9> <tail> <b7> <odd>` census line a call.
   if (argc == 4 && !strcmp(argv[1], "--hdmabuildcmp")) {
     long rl = 0; const uint8_t* rom = CtRomImage(&rl);
     int n = atoi(argv[3]); long calls = 0, exact = 0, written = 0, bad = 0;
@@ -16338,9 +14977,9 @@ int main(int argc, char** argv) {
     }
     return bad || xfail || nfail ? 1 : 0;
   }
-  // --racestep <in.wram>: run the race's per-frame task $7E:485D (src/seq_race.c, CtRaceStep485D) once over a 128 KB WRAM
-  // image and print every byte it changed -- graded against `--callrom 7E485D --writes` from the same frame's state
-  // (tools/race_step_cmp.py). The sound callbacks print what the ROM would post.
+  // --racestep <in.wram>: run the race's per-frame task $7E:485D (src/seq_race.c, CtRaceStep485D) once over a 128 KB
+  // WRAM image and print every byte it changed, graded against `--callrom 7E485D --writes` from the same frame's
+  // state (tools/race_step_cmp.py). The sound callbacks print what the ROM would post.
   if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--racestep")) {
     static uint8_t w0[0x20000], w[0x20000];
     FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w0, 1, sizeof w0, wf) != sizeof w0) { fprintf(stderr, "racestep: bad WRAM\n"); return 1; }
@@ -16360,10 +14999,10 @@ int main(int argc, char** argv) {
     for (int a = 0; a < 0x20000; a++) if (w[a] != w0[a]) printf("  w %06X = %02X\n", a < 0x10000 ? 0x7E0000 + a : 0x7F0000 + (a - 0x10000), w[a]);
     return 0;
   }
-  // --racestage <in.wram> <operand> <frames> <btnscript> <ADDR:LEN,...>: the race's stage natively (src/seq_race.c) from a
-  // field WRAM at the hand-off -- CtRaceStageOpen, then one CtRaceStageFrame a frame with the pad of the btnscript (the oracle's
-  // `hexbtn:frames` grammar, LakeSnes order, converted to the $4218 word) -- printing the regions on change in --monitor's
-  // format (`fN  7EAAAA=HH..`, frame 0 = the state after the setup). tools/race_stage_cmp.py grades it against the cartridge.
+  // --racestage <in.wram> <operand> <frames> <btnscript> <ADDR:LEN,...>: the race's stage natively (src/seq_race.c)
+  // from a field WRAM at the hand-off: CtRaceStageOpen, then one CtRaceStageFrame a frame with the btnscript's pad
+  // (`hexbtn:frames`, LakeSnes order, converted to the $4218 word), printing the regions on change in --monitor's
+  // format (`fN  7EAAAA=HH..`, frame 0 = the state after the setup). tools/race_stage_cmp.py grades it.
   if (argc == 7 && !strcmp(argv[1], "--racestage")) {
     static uint8_t w[0x20000], rsRom2[0x600000];
     FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w, 1, sizeof w, wf) != sizeof w) { fprintf(stderr, "racestage: bad WRAM\n"); return 1; }
@@ -16400,11 +15039,11 @@ int main(int argc, char** argv) {
     free(pads);
     return 0;
   }
-  // --seqstage <state> <operand> <frames> <btnscript> <ADDR:LEN,...> [hold]: a $C3 stage natively (the race, src/seq_race.c, or
-  // the ending, src/seq_ending.c, by the operand) from an ORACLE STATE at the hand-off -- its WRAM, and its sound processor
-  // seeded into the port's (CtAudio): the stage's posts go to it, a script's `F5` reads its port 2. `hold` frames of the SPC run
-  // before the first NMI (the setup's black frames). Then one NMI and one frame of the SPC a frame, the regions printed on
-  // change in --monitor's format. tools/ending_stage_cmp.py grades it against the cartridge.
+  // --seqstage <state> <operand> <frames> <btnscript> <ADDR:LEN,...> [hold]: a $C3 stage natively (the race,
+  // src/seq_race.c, or the ending, src/seq_ending.c, by the operand) from an oracle state at the hand-off: its WRAM,
+  // and its sound processor seeded into the port's CtAudio (the stage's posts go to it; a script's `F5` reads its
+  // port 2). `hold` frames of SPC run before the first NMI (the setup's black frames); then one NMI and one frame of
+  // SPC a frame, the regions printed on change in --monitor's format. tools/ending_stage_cmp.py grades it.
   if ((argc == 7 || argc == 8) && !strcmp(argv[1], "--seqstage")) {
     static uint8_t w[0x20000];
     uint8_t* srom = NULL;
@@ -16462,17 +15101,17 @@ int main(int argc, char** argv) {
     free(pads);
     return 0;
   }
-  // CT_ORACLE_VIRTUAL_BEAM=1: C3/02DD reads the virtual beam (snes.c g_ctVirtualBeam = 2, CLAUDE.md's one exception) --
-  // the oracle side of every comparison of the field wipe / the world's window object against the port.
+  // CT_ORACLE_VIRTUAL_BEAM (on by default under CT_ORACLE_LOGICAL; 0 turns it off): C3/02DD reads the virtual beam
+  // (snes.c g_ctVirtualBeam = 2), the oracle side of every field-wipe / world-window comparison (CLAUDE.md, zelda3 model).
 #endif
   { const char* vb = getenv("CT_ORACLE_VIRTUAL_BEAM"), *lg = getenv("CT_ORACLE_LOGICAL");   // the rule's oracle = the
     if (vb ? *vb != '0' : (lg && *lg)) g_ctVirtualBeam = 2; }                             //   logical mode + this
-  // CT_ORACLE_LOGICAL=1: run by LOGICAL frames (snes.c snes_setLogicalFrames, CLAUDE.md's one exception) -- vblank waits
-  // for the CPU to reach a wait loop, so no main-loop iteration spills into the next frame (zelda3's RunOrigAsmCodeOneLoop).
-  // CT_ORACLE_LOGICAL_TRACE=1 prints every hold. The run's totals print at exit.
+  // CT_ORACLE_LOGICAL=1: run by logical frames (snes.c snes_setLogicalFrames; CLAUDE.md, zelda3 model): vblank waits
+  // for the CPU to reach a wait loop, so no main-loop iteration spills into the next frame (zelda3's
+  // RunOrigAsmCodeOneLoop). CT_ORACLE_LOGICAL_TRACE=1 prints every hold. The run's totals print at exit.
   if (getenv("CT_ORACLE_LOGICAL")) { snes_setLogicalFrames(1); atexit(ctLogicalReport); }
-  // ...and NMI-off work starts at phase 0 (snes.c g_ctLogicalLoads, the exception's second rule, user decision
-  // 2026-09-25): part of the logical oracle. CT_ORACLE_LOGICAL_LOADS=0 turns it off (to measure what it moves).
+  // ...and NMI-off work starts at phase 0 (snes.c g_ctLogicalLoads; see docs/DECISIONS.md, "NMI-off loads start
+  // at phase 0"). CT_ORACLE_LOGICAL_LOADS=0 turns it off, for measurement.
   if (getenv("CT_ORACLE_LOGICAL")) {
     const char* ll = getenv("CT_ORACLE_LOGICAL_LOADS");
     g_ctLogicalLoads = !(ll && ll[0] == '0');
@@ -16562,10 +15201,9 @@ int main(int argc, char** argv) {
   // agent-facing probes (--read/--monitor/--followscene/--followvm/--teleport)
   const char* readSpec = NULL;
   const char* callRomAddr = NULL; int callRomWrites = 0;
-  // Defaults are the FIELD EVENT-VM RUNNER's entry state, because that is what this mode is
-  // mostly used on: C0/5A9E `REP #10` leaves the index 16-bit and C0/5AAF `SEP #20` leaves the
-  // accumulator 8-bit, with DP = $0100 throughout the scheduler. dp/db default to KEEP so a
-  // --from state supplies them; the explicit 0x100 below only applies when there is no state.
+  // --callrom defaults are the field event-VM runner's entry state: C0/5A9E `REP #10` leaves the index 16-bit
+  // and C0/5AAF `SEP #20` the accumulator 8-bit, with DP = $0100 in the scheduler. dp/db default to keep, so a
+  // --from state supplies them; the explicit 0x100 below applies only without a state.
   CtCallSetup callSetup = { 0, 0, 0, 0, CT_CALL_KEEP, CT_CALL_KEEP, 1, 0, 0, 0, 200000 };
   const char* monitorAddrs = NULL;
   int doLifeTrace = 0; const char* lifeW = NULL; const char* lifePc = NULL;
@@ -16589,8 +15227,8 @@ int main(int argc, char** argv) {
     // --sndassets <ct_assets.dat>: every datum the sound loader takes, from the ROM and from the container's CT_ASSET_SND_*
     // entries side by side (src/audio.c CtAudioDataCompare) -- `snd-data: N items identical`, or the first difference.
 #ifndef CT_ORACLE_ONLY      // (the slim oracle links neither the assets nor the audio)
-    // --lzpack <list> <out> [skipped]: the LZ streams at the file offsets listed (hex, one a line; tools/gen/lz_pack.py makes the
-    // list from the ROM's own pointer tables) decompressed by src/lz.c with both of C3/0557's costs, for
+    // --lzpack <list> <out> [skipped]: the LZ streams at the listed file offsets (hex, one a line; tools/gen/lz_pack.py
+    // makes the list from the ROM's pointer tables) decompressed by src/lz.c with both of C3/0557's costs, for
     // assets/extract_assets.py (CT_ASSET_LZ). `lzpack: N streams (M bytes), K skipped`.
     if (!strcmp(argv[i], "--lzpack") && i + 2 < argc) {
       long rl = 0; const uint8_t* rimg = CtRomImage(&rl);

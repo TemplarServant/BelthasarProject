@@ -1,6 +1,6 @@
-// seq_entry3pic.c -- SEQUENCE ENTRY 3's picture, native (stage 2; its logic, stage 1, is seq_entry3.c): the night panorama.
+// seq_entry3pic.c -- sequence entry 3's picture (its logic is seq_entry3.c): the night panorama.
 //
-// The stage draws with what the FIELD left in VRAM -- the tiles at $1000, BG2's maps at $6800 / $6A00, the field's BG1 rows at
+// The stage draws with what the field left in VRAM -- the tiles at $1000, BG2's maps at $6800 / $6A00, the field's BG1 rows at
 // $6140 -- so its picture starts from the host's VRAM (a CtSeqStagePic seeded with it). Its own: the setup's two reads (the
 // multiplier's product into $7E:1400, the field's BG1 rows back into $7E:1680) and their upload as BG1's map at $0000 ($783C),
 // the HDMA channels ($7E:685E), the layers' registers; the hook $66DD (BG3's offset-per-tile row from $0043, BG3 H / BG1 V
@@ -13,9 +13,9 @@
 static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
 static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
 
-// $7E:671F-6772 (8-bit A) -- before the script: M7A = $0100, M7B = 1 and a `B -> A` DMA of $280 bytes from $2134 / $2135 in turn
-// (mode 1: the product's low and middle bytes, 00 01) fills $7E:1400; $2116 = $6140, a dummy `LDA $213A` (VMAIN 0: no step), VMAIN $80 and $580 bytes from $2139 /
-// $213A into $7E:1680 -- the field's BG1 rows; BG12NBA = $11.
+// $7E:671F-6772 (8-bit A) -- before the script: M7A = $0100, M7B = 1 and a `B -> A` DMA of $280 bytes from $2134 / $2135
+// in turn (mode 1: the product's low and middle bytes, 00 01) fills $7E:1400; $2116 = $6140, a dummy `LDA $213A` (VMAIN 0:
+// no step), VMAIN $80 and $580 bytes from $2139 / $213A into $7E:1680 -- the field's BG1 rows; BG12NBA = $11.
 void CtEntry3PicSetupA(CtSeqStagePic* sp, uint8_t* w) {
   CtSeqPicWrite(&sp->p, 0x1B, 0x00, 0); CtSeqPicWrite(&sp->p, 0x1B, 0x01, 0); CtSeqPicWrite(&sp->p, 0x1C, 0x01, 0);
   { long m = CtSeqPicMpy(sp); for (unsigned i = 0; i < 0x280; i++) w[0x1400 + i] = (uint8_t)(m >> (8 * (i & 1))); }   // DMAP 81: $2134 / $2135 in turn

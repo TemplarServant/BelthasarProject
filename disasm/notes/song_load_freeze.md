@@ -259,3 +259,59 @@ frame early), SlowROM access costs (a frame late).
   replace both.
 * The clock's residuals: +-6 lines from the SPC's phase at the post, ~30 lines on the battle path
   (the battle background's 4-frame DMA pattern is charged as its mean).
+
+## The unclocked handshake: poll step and settle
+
+Outside the loader clock (the IPL upload in audio.c `uploadDriver`, `--audiotest`, any caller with no clocked JSL
+running) the port drives the handshake with two numbers:
+
+* the step (`ctStepCycles`, `CT_AUDIO_QUANTUM`, default 16 APU cycles) is the poll granularity while the CPU spins on
+  an echo. Both sides spin during the IPL upload, so its result does not depend on the step.
+* the settle (`sndSettle`, `CT_AUDIO_SETTLE`, default 32 APU cycles) stands for the CPU's time between an echo and the
+  next unit's write. After the SPC echoes the token the 65816 finishes C7/09DA (BNE / INC / AND / PLP / RTS), stores
+  the token, runs DEX three times and the branch, and only then does `LDA [$12],Y / STA $2141`: about 35 CPU cycles,
+  on the order of ten APU cycles at FastROM. The port's spin returns the moment the echo appears, so without a
+  settle it overwrites bytes the SPC has not read.
+
+Measured with `--songload` at step 16, sweeping the settle (ARAM regions that match the oracle, of six):
+
+| settle | 0 | 8 | 11 | 16 | 32 / 64 / 96 |
+|---|---|---|---|---|---|
+| regions | 3 | 4 | 4 | 6 | 6 |
+
+The threshold is 16; 32 is used, twice the threshold. Open: the instruction count predicts ~10 APU cycles against
+the measured 16. Counting the 09DA tail in master cycles against the emulator's `$2140` access timing would close it.
+The clocked path (the loader clock) charges the listing's own costs instead and needs neither number.
+
+## The loader clock's HDMA, from the channels
+
+Where the host names the HDMA program (`CtAudioSetRuleHdma`), the loader clock prices the HDMA a clocked JSL meets
+line by line from the channels and their tables in the host's WRAM, not from a per-engine mean (`LD_BG`).
+
+Program 1 is the field's channels, set up by FD/C1EE (the field NMI's, and C0/0AFF's, which D1/F4C0, the battle's
+exit tail, runs too): eight indirect channels; the DMAP, table bank and indirect bank are the immediates at
+FD/C1F7-C262; the table set is chosen by `$0153 & 0F` (FD/C264: zero -> set A at FD/C26D's addresses, else set B at
+FD/C297's); `$0128` enables them. The container keeps the same channel data (`CT_ASSET_SND_MISC` 1) so no ROM read
+is needed.
+
+What a frame costs, by LakeSnes's rules (cycles the CPU sits out):
+
+* at line 0 h 16, the init: 8, and per enabled channel 8 for its line count and 16 more for an indirect address;
+* at h 1104 of every visible line: 8, and per live (enabled, not terminated) channel 8 for each byte it transfers
+  (doTransfer: an entry's first line, or every line of a repeat entry), 8 for the next count byte, and at an entry's
+  end 16 for the next indirect address (8 when the table ended on the last live channel).
+
+Each such run is also aligned twice by snes_syncCycles: to the 8-cycle master clock on entry and to the CPU's access
+on exit. That depends on the absolute clock's phase, which the port does not have (the CPU-timing class), so it is
+`LD_HDMA_SYNC` = 8 a run, a mean measured on the rule's oracle against the deterministic cost of the same frames:
+
+* the scene-8 gate's `10 18` upload, poll-only frames f155-164: 14,478 each = 12,664 + 226 runs x 8.03; the unit
+  frames' mean is the same;
+* enemy 6E's exit chain, f7-f12: mean 14,182 = 12,416 + 212 x 8.33.
+
+The phase is the master clock's against the CPU's accesses; it is not uniform (that would be 8.5 a run for a
+56-cycle line). `CT_AUDIO_HDMASYNC=<mean>` replaces the constant with a fractional mean (measurement only);
+`CT_AUDIO_HDMALINES=1` prints each line's cost. See also battle_exit_fade_poll.md for the residual on the exit upload.
+
+The V-IRQ at `cutLine` (D1/FEB5, line 211) writes `$420C = 0` and ends the HDMA; with `nmiOn`, an NMI taken inside
+C7 writes `$0128` to `$420C` (D1/F4E6's absolute `STA $420C`, DB = 0) and enables them.

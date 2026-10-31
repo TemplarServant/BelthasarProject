@@ -1018,3 +1018,51 @@ scheduler's first tick — `field.c:8005`'s "cleared when the screen appears" is
   is structurally 0.
 * `menu_entry.md`'s "C2/8255 (palette fade)" and "C2/82B4" are wrong (see the banner); its "restore 3
   positions + camera" is the *changed-party* branch only.
+
+## The gear panel's entry slide (C2/A71E + C2/A7B7)
+
+Nothing is moved as a picture. On A over a member, C2/A71E builds the gear panel's left column off-screen ($FF:BE26
+through C2/ED31: BG1 rows 32-63 cleared and string 7 "Weapon" at (5,42); BG2 rows 22-25 backed up to 54-57, the label
+window at (2,40) 12x4, the list window at (2,44) 12x14 -- the same cells the built panel's rows 8-25 hold) and uploads
+it (FBEA, FC06). BG mode 2's offset-per-tile then brings it in: screen column c (c >= 1) takes the V scroll of both BG1
+and BG2 from entry c-1 of the BG3 map row its line's BG3 V scroll points at (bits 13/14 = BG1/BG2, value & 0x3FF), and
+$5CC2/$5D42 are entries 1-12 (screen columns 2-13) of rows 59 and 61.
+
+Each of the 24 steps (one per frame; FC45 uploads rows 58-61) C2/A7B7 adds 6 to $5CC2 (from 0x606F) and $0DAB to
+$5D42 (0x61FF, the lines' own map line), and rewrites the channel-6 BG3-V table at $969A (C2/AA19, entries from line
+16), which the NMI's thunk $9690 copies to $9303 in the same vblank ($0D13 = E5, bit 7):
+
+```
+$22 lines at 0x1E0 (row 61: the party column)     $24 lines at 0x1F0 (row 63, never written: the TIME box)
+$26 lines at 0x1D0 (row 59: the new column)        16 lines at 0x1F0
+```
+
+with $22 = 0x90, $24 = 0x30, $26 = 0 at the start and, each step, $26 += 6 while $24 (then $22) gives 6 back. After
+step k the new column fills lines 208 - 6k .. 207 and shows map line 320 (row 40, the label window's top) at its first
+line: it rises 6 px a frame, rigid, over the TIME box and then the lower panels. After $0D25 = (3 - $0412) * 8 steps
+$0DAB becomes 6 and the party column scrolls up with it, so the picked member's box ends at the top and the boxes above
+it go under line 16 (lines 0-15 are mode 1, no offsets). The cursor is off for the whole loop (INC $0D9B each step, the
+hand's one-shot suppress C2/E956). Step 24's frame is also C2/A321's (the built panel).
+
+Oracle reading (tour, logical oracle): $5CC2 = 606F on the A frame, 6075 .. 60FF over the next 24; at step 9 row 59 =
+0000 60A5 x12 0000.. and row 61 = 0000 61FF x12 0000.., the table 11+127 lines 0x1E0, 54 lines 0x1D0, 16 lines 0x1F0.
+
+## The gear panel's way back (C2/A85C)
+
+The entry slide's machine run the other way. B (or Left) on the gear select yields at once (the picture stands). The
+next frame builds in the buffers only ($FF:BE5B: BG2's member box at (2,2) block-copied row by row over rows 8-25,
+which C2/EF05's top-down copy turns into four copies of it; BG1 rows 9-10 cleared; C2/A1B2 writes the three member
+panels; FBEA). The frame after is the setup, and it shows: OPT rows 61-62 cleared, C2/9E76 (the member boxes toned for
+$0412, and its record FBFF uploads BG2 rows 2-27), the channel-6 table C2:AA06 (16 lines FFFF, 48 of 0x1E0, 144 of
+0x1D0, 16 of 0x1F0), $5CC2 = 0x60FF (the gear column where it stands, BG1 and BG2 now), $5D42 = 0x6000 |
+(48 * $0412 - 1) (the party column scrolled so that $0412's box is the top one), FC45, FBE3, and a 16-bit DEC $0D9A
+that also sets $0D9B -- the hand's one-shot suppress, so the hand is gone on this frame already.
+
+Then 24 steps (C2/A970): $5CC2 -= 6, $5D42 -= $0DAB (6 for $0D25 = 8 * $0412 steps, 0 for the lead), and the table
+rewritten as 16 FFFF, $22 of 0x1E0, 0xC0 - $22 of 0x1D0, 16 of 0x1F0 with $22 = 0x30 + 6 per step: the gear column
+sinks 6 px a frame, cut at line 207, while the party column (rows 2-25: the four boxes, BG1's panels and the member
+select's TIME/gold, never cleared) opens above it. The right side keeps the gear panel's detail. The 24th step is also
+C2/A2CD's rebuild.
+
+Oracle reading (tour, logical oracle): $5CC2 = 60FF on the setup frame, 60F9 .. 606F over the next 24; OAM $0770
+parked (Y E0) from the setup frame on.

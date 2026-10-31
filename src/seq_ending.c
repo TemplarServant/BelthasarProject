@@ -1,19 +1,16 @@
-// seq_ending.c -- THE ENDING's $C3 stage (sequence entries 10, 11, 14, 15: `FF 2A` / `FF 2B` / `FF 2E` / `FF 2F`), native.
+// seq_ending.c -- the ending's $C3 stage (sequence entries 10, 11, 14, 15: `FF 2A` / `FF 2B` / `FF 2E` / `FF 2F`).
 //
 // $7E:3043's table points all four entries at one setup, $7E:8538 (disasm/notes/sequence_table.md sec. 13). It loads the
-// world's picture and the staff credits, hands the two script pages their programs (by `$0384 & 0F`) and lets them run: the
-// story's `FF 2B` (Leene's Square, scene 81) plays the credits over the world and ENDs on its own fade ($7E:34E3); `FF 2E` /
-// `FF 2F` (scene 90) end on "The End" for good -- page A stops on a jump-to-self with $0396 = 0, and only the soft reset leaves.
-// The scripts keep TIME WITH THE SONG: `F5 n` (C3/0C2A) waits until the sound processor's port 2 shows marker n, so the
-// stage's length is the song's (the cartridge: `FF 2B` at f131 from saves/ending_re/ending_pre_ff2b.state, the markers pass
-// at f349 / f829 / f2029 / f3950, the fade at f4910, the END at f4925).
+// world's picture and the staff credits, hands the two script pages their programs (by `$0384 & 0F`) and lets them run:
+// `FF 2B` (Leene's Square, scene 81) plays the credits over the world and ENDs on its own fade ($7E:34E3); `FF 2E` / `FF 2F`
+// (scene 90) end on "The End" for good (page A stops on a jump-to-self with $0396 = 0; only the soft reset leaves).
+// The scripts keep time with the song: `F5 n` (C3/0C2A) waits until the sound processor's port 2 shows marker n.
 //
-// Stage 1 of the native port, as the race's (seq_race.c): the LOGIC -- the scripts, the waits, the brightness tasks that
-// decide the END, the setup's WRAM that the logic reads -- over the WRAM image, byte for byte with the cartridge. The picture
-// (the mode-7 world, the credits text, the HDMA, the hooks, the render tasks and the main thread's $8930) is stage 2: its
-// setup packets and DMAs are not run here, and its inline calls (`F0 xxxx`) are accepted and left to it.
+// This file is the logic (the scripts, the waits, the brightness tasks that decide the END, the setup's WRAM the logic
+// reads). The picture (the mode-7 world, the credits text, the HDMA, the hooks, the render tasks, the main thread's $8930)
+// is seq_endingpic.c; the inline calls (`F0 xxxx`) that only draw are handed to it.
 #include "seq_ending.h"
-#include "seq_endingpic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_endingpic.h"   // the picture, when the host draws it (io->pic)
 #include "seq_racepic.h"
 #include "seq_entry7.h"      // the overlay's palette fade $6439
 #include "seq_entry7pic.h"   // the overlay's text drawer $64CA (the credits' pages)
@@ -94,7 +91,7 @@ static int endingCall(uint8_t* w, unsigned page, unsigned tgt, const CtRaceIo* i
   }
 }
 
-// ---- the two tasks that write the script pages' registers ----
+// ---- The two tasks that write the script pages' registers ----
 // (Everything else the scripts' registers hold comes from the scripts themselves; these two tasks are why page A's r2 and
 // page B's r1 / r2 move on frames no script op runs.)
 
@@ -163,7 +160,7 @@ static void task9D48(uint8_t* w) {
   if (rd(w, 0x08) & 0x0007) return;                                   // 9D48 LDA $08 / AND #0007 / BNE
   for (int i = 0; i < 8; i++) { unsigned a = rd(w, pr[i][0]); wr(w, pr[i][0], rd(w, pr[i][1])); wr(w, pr[i][1], a); }
 }
-// $7E:9C58 (D = 0) -- ENTRY 10's SPRITE: its frame anew when `$A3` changed (`$A5`, the hook $9CE2 added, C3's $3974); at x =
+// $7E:9C58 (D = 0) -- entry 10's sprite: its frame anew when `$A3` changed (`$A5`, the hook $9CE2 added, C3's $3974); at x =
 // -(page B's r1 + `$6D`), y = -(r2 + `$6F`), the window's HDMA bytes from them and the size `$AB` / `$AC`; every 4th frame
 // (`$A9`) the next of three tiles (`$A7`) written into the list's own bytes $A0F6 / $A0FA; then the list $9D27 + ($A3 & 3) x 8
 // through $A03D (the picture's).
@@ -229,7 +226,7 @@ static unsigned creditsPageEnd(const uint8_t* w, unsigned x) {
   return x;
 }
 
-// $7E:9B4F -- THE CREDITS' PAGER (M = 16): $85 pages left, $83 the phase (odd: a page up; even: the gap), $81 the frames
+// $7E:9B4F -- the credits' pager (M = 16): $85 pages left, $83 the phase (odd: a page up; even: the gap), $81 the frames
 // left in it, $7D / $7F the two lengths. On an odd phase it draws the page at $0382 (64CA) every frame and, once the screen is
 // fully lit ($038D = $0F), counts $81 down (at $20 the page's fade-out colours, 9B99); at 0 the next phase, and the page's
 // end becomes $0382 -- or, past the last page ($AB1A), the task removes itself. On an even phase it counts the gap and
@@ -267,7 +264,7 @@ static unsigned task9B4F(uint8_t* w, unsigned t, const CtRaceIo* io) {
 // buffer $1414-$1433 and copies the next line of the text at $4A into $141C.. through the WRAM port (`20` a blank, `00 a b`
 // skipped, each code less $40), to the `/` that ends it -- $4A past it, $48 the next tilemap row (+$20, in $4800-$4BE0). At
 // the `\` that ends the text: `INC $6A`, the hook $9EFC out ($3949), the task out ($39A7). The scroll $46 (9ED6: +8 with
-// $AD, else +1 on frames the PPU's field bit `$213F` bit 7 is set) is the picture's (stage 2).
+// $AD, else +1 on frames the PPU's field bit `$213F` bit 7 is set) is the picture's.
 static void scroll9ED6(uint8_t* w, const CtRaceIo* io) {
   if (w[0xAD]) wr(w, 0x46, rd(w, 0x46) + 0x0008);                     // 9ED8 LDA $AD / AND #00FF / BNE; 9EE8 CLC / ADC #0008
   else if (io && io->field && io->field(io->ctx)) wr(w, 0x46, rd(w, 0x46) + 1);   // 9EDF LDA $213E (16-bit) / ASL A / BCC / INC $46
@@ -327,7 +324,7 @@ static unsigned task9A0C(uint8_t* w, unsigned t, const CtRaceIo* io) {
   return t;
 }
 
-// The vblank hooks' logic. They draw (the DMAs, the PPU, the HDMA tables -- stage 2); what the stage's logic reads from them:
+// The vblank hooks' logic. They draw (the DMAs, the PPU, the HDMA tables); what the stage's logic reads from them:
 // $7E:8D56 (the last screen's text, added by page A at `F5 08`) points the rolling text at its start -- 8DB7 `$4A = $B099`,
 // `$48 = $FFE0` -- sets $038C = 1 (8DB2) and removes itself (8DF0 JMP $39DE).
 static unsigned endingHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) {
@@ -351,9 +348,8 @@ static unsigned endingHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo
   }
 }
 
-// The ending's tasks (the logic ones, and the ones above): the two script pages and the overlay's brightness fades. The rest
-// draw (stage 2): 37FA, 99B5, 9ABD, 9D48, 9BF9 (the shooting
-// stars, on the RNG $039B), 891B, 6439, 8850, ...
+// The ending's tasks: the two script pages, the overlay's brightness fades and the tasks above. The rest draw (9ABD,
+// 9BF9 -- the shooting stars, on the RNG $039B -- 8850, 99FA: seq_endingpic.c).
 static unsigned endingTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io) {
   switch (t) {
     case 0x3749: CtSeqScript(w, 0x0A00, io, endingCall); return t;
@@ -394,7 +390,7 @@ int CtEndingStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (CtSeqStageBegin(w, operand, io) < 0) return -1;
   unsigned e = operand & 0x0F;                                        // 85D4 / 86B5 LDA $0384 / AND #0F
   // $7E:8538 -- the setup. Its picture (the VRAM packets $3691, the WRAM tables $36AA / $38E7 / C3/09E9, the DMAs, the PPU) is
-  // stage 2; what the logic reads follows, in the setup's order.
+  // seq_endingpic.c's; what the logic reads follows, in the setup's order.
   if (io && io->pic) { CtEndingPicReset(); CtEndingPicSetupA(io->pic, w, io); }   // 8538-86A1: the picture's loads
   w[0x6525] = 0x3F;                                                   // 8552 LDA #3F / STA $7E6525 (a byte of the overlay)
   if (e == 0x0A) {                                                    // 864F LDX #9CE2 / JSR $3974: entry 10's own hook, in

@@ -1,4 +1,4 @@
-// seq_entry4pic.h -- sequence entry 4's picture, native (stage 2). See seq_entry4pic.c.
+// seq_entry4pic.h -- sequence entry 4's picture. See seq_entry4pic.c.
 #ifndef CT_SEQ_ENTRY4PIC_H
 #define CT_SEQ_ENTRY4PIC_H
 #include <stdint.h>

@@ -1,22 +1,11 @@
-// title_intro.c - the TITLE SEQUENCE's machine and its render (disasm/notes/title_intro.md).
-//
-// ⭐ THE SEQUENCE IS NOT A MOVIE, IT IS A MACHINE. `$7E:3023 JSR $3176` -- the sequence engine's
-// main loop -- is a bare RTS; everything happens in the NMI, which runs two WRAM hook lists: eight
-// VBLANK slots at $7E:0940 (dispatcher $39BE) and sixteen TASKS at $7E:0920/$0950 (dispatcher
-// $398A, the list double-buffered by the NMI's own MVN). What installs and removes those tasks is a
-// BYTE-CODE SCRIPT (C3/0B03) whose sixteen registers ARE the PPU shadow cells -- reg0 the mode-7
-// scale, reg1 BG1HOFS, reg2 BG1VOFS, reg6 the ripple amplitude.
-//
-// So this file is that machine, transcribed: the interpreter, the two lists, each task's own body,
-// the sprite-package drawers and the ROM's palette-job runner, plus a renderer that is LakeSnes'
-// own PPU fetch for the two configurations the sequence uses (mode 7 for the swing, mode 2 with
-// offset-per-tile for the logo).
-//
-// ⚠ Three render traps, each of which cost a wrong answer first (title_intro.md section 3):
-// the scanline is 1-BASED (`ppu_runLine` runs lines 1..224 and it is `line` that enters the mode-7
-// matrix); the oracle's 512x480 dump puts line y at buffer row y*2+16, i.e. IMAGE rows 8..231; and
-// the state that renders frame N is the one the VBLANK HOOKS LATCHED at N, not the cells the tasks
-// have already advanced -- which is why CtTitleIntroTick latches first and runs the tasks after.
+// title_intro.c -- the title sequence's machine and its render (disasm/notes/title_intro.md).
+// The sequence engine's main loop (`$7E:3023 JSR $3176`) is a bare RTS; the NMI runs two WRAM hook lists: eight
+// vblank slots at $7E:0940 (dispatcher $39BE) and sixteen tasks at $7E:0920/$0950 (dispatcher $398A, double-buffered
+// by the NMI's MVN). A byte-code script (C3/0B03) installs and removes the tasks; its sixteen registers are the PPU
+// shadow cells (reg0 mode-7 scale, reg1 BG1HOFS, reg2 BG1VOFS, reg6 ripple amplitude). This file holds that machine
+// and a renderer that follows LakeSnes's PPU fetch for mode 7 (the swing) and mode 2 with offset-per-tile (the logo).
+// Note (title_intro.md sec. 3): the scanline is 1-based (lines 1..224 enter the mode-7 matrix), and frame N renders
+// the state the vblank hooks latched at N, so CtTitleIntroTick latches first and runs the tasks after.
 #include <string.h>
 #include <stdlib.h>
 #include "title_intro.h"
@@ -25,7 +14,7 @@
 
 #define CT_M7_FIELD 1024                 // the mode-7 field is 128 tiles x 8 px on each axis
 #define CT_TI_HOFS  0xFF40               // $210F/$210D's constant during the swing ($7E:5A94)
-#define CT_TI_SEQ_ID 2                   // $7E:0384 -- this IS sequence 2 ($7E:3003 dispatches on it)
+#define CT_TI_SEQ_ID 2                   // $7E:0384 -- sequence 2 ($7E:3003 dispatches on it)
 
 // ---- the overlay routines the machine dispatches on, by their $7E address ------------------------
 enum { T_SCRIPT = 0x3749, T_PEND = 0x5BCF, T_MULSAVE = 0x37FA, T_WAVE = 0x5FFE, T_COPY = 0x5D32,
@@ -33,11 +22,9 @@ enum { T_SCRIPT = 0x3749, T_PEND = 0x5BCF, T_MULSAVE = 0x37FA, T_WAVE = 0x5FFE, 
        T_DAMP = 0x5BBF, T_SQUARE = 0x5E1E, T_EXIT = 0x34AB, T_FADE = 0x34C2,
        // entry 1's three, and $34E3 is the plain fade every stage's teardown uses
        T_FADEIN = 0x347A, T_CREDPAGE = 0x6BE5, T_FADEOUT = 0x34E3,
-       // ⭐ $7E:3754 is $3749 with `LDA #$0B00 / TCD` instead of `#$0A00`: one dispatcher, the OTHER
-       // register page. Entry 3 installs both ($0A20 and $0B20) and steps them as two separate
-       // tasks -- sequence_table.md 8.1. ⚠ Disassembled with an 8-bit accumulator the two read
-       // `LDA #$00 / ASL A / TCD`, which looks like "DP = 0" and is nonsense; the raw bytes
-       // (`A9 00 0A 5B` and `A9 00 0B 5B`) settle it.
+       // $7E:3754 is $3749 with `LDA #$0B00 / TCD` instead of `#$0A00`: the other register page.
+       // Entry 3 installs both as separate tasks (sequence_table.md 8.1). Note: disassembled with an
+       // 8-bit accumulator they misread as `LDA #$00 / ASL A / TCD`; the bytes are `A9 00 0A 5B` / `A9 00 0B 5B`.
        T_SCRIPTB = 0x3754 };
 enum { V_CGRAM = 0x388B, V_OAM = 0x380B, V_OAMCLR = 0x3843, V_M7 = 0x5C57, V_OFFS = 0x6212 };
 
@@ -51,11 +38,9 @@ static uint8_t ovlPkg(uint16_t a) {
 }
 static uint16_t scr16(uint16_t a) { return (uint16_t)(ovlScript(a) | (ovlScript(a + 1) << 8)); }
 
-// ⭐ $7E:3465 (sine) / $7E:3461 (cosine) over the ROM's own 1024-byte table. The FIRST HALF is
-// negated, and the `CPX #$0200` the routine ends on leaves a CARRY that its callers' next ADC picks
-// up. ⚠ That term is carried here because the ROM's ADC reads it, not because this sequence needs
-// it: the clock's spiral walks its angle $F6 -> $70, so the carry is 0 on all 68 of its frames and
-// no frame of the title can grade it (title_intro.md 2.1).
+// $7E:3465 (sine) / $7E:3461 (cosine) over the ROM's 1024-byte table. The first half is negated, and the
+// closing `CPX #$0200` leaves a carry the callers' next ADC reads; it is kept for that, though the title's
+// angles never set it (title_intro.md 2.1).
 static uint16_t ctSin(uint16_t a, int* carry, int* neg) {
   int idx = a & 0x3FF;
   uint16_t v = ctTitleSin[idx];
@@ -70,10 +55,9 @@ static uint16_t ctCos(uint16_t a, int* carry, int* neg) { return ctSin((uint16_t
 static uint16_t fw(const CtTitleIntro* t, int a) { return (uint16_t)(t->f[a] | (t->f[a + 1] << 8)); }
 static void fws(CtTitleIntro* t, int a, uint16_t v) { t->f[a] = (uint8_t)v; t->f[a + 1] = (uint8_t)(v >> 8); }
 
-// ⭐ $31BF is four hardware 8x8s -- and it zeroes $F6 (so $F7 too) and then ROLs the WORD at $F7,
-// which rotates BIT 7 OF THE STALE $F8 into the middle ADC as a carry. $F8 is the quotient the
-// driver's own divide left there, shifted one place left by every multiply since; model it and the
-// whole swing computes, which is why this port no longer carries a captured matrix stream.
+// $31BF is four hardware 8x8s. It zeroes $F6 (so $F7 too) and then ROLs the word at $F7, which rotates bit 7
+// of the stale $F8 into the middle ADC as a carry. $F8 is the quotient the divide left there, shifted left
+// by every multiply since; the swing depends on it.
 static void ctMul(CtTitleIntro* t) {
   uint16_t f0 = fw(t, 0), f2 = fw(t, 2);
   unsigned p0 = (f2 & 0xFF) * (f0 & 0xFF);
@@ -84,7 +68,7 @@ static void ctMul(CtTitleIntro* t) {
   unsigned word = (unsigned)t->f[8] << 8;            // $F7 was just cleared by `STZ $F6`
   unsigned sum = p1 + p2;
   unsigned rol = ((word << 1) | (sum > 0xFFFF)) & 0xFFFF;
-  int cout = (word >> 15) & 1;                       // ⭐ bit 7 of the old $F8
+  int cout = (word >> 15) & 1;                       // bit 7 of the old $F8
   t->f[7] = (uint8_t)rol;
   t->f[8] = (uint8_t)(rol >> 8);
   unsigned a = (sum & 0xFFFF) + fw(t, 5) + (unsigned)cout;
@@ -108,7 +92,7 @@ static uint16_t ctMulTo(CtTitleIntro* t, uint16_t a, uint16_t b) {
 
 // ---- C3/0D0E (8x8) and C3/0D5E (16x16): draw one sprite package into the OAM shadow --------------
 // A package is [count+1][tile, attr, dx, dy] x n. Both drawers append at the $11 cursor and shift
-// the high-table byte at $13 two bits per sprite: 0D0E shifts ZEROS in from the top (so every
+// the high-table byte at $13 two bits per sprite: 0D0E shifts zeros in from the top (so every
 // sprite it emits is 8x8 with x < 256), 0D5E rotates in the x-high bit and then a set bit (so every
 // sprite it emits is 16x16). After four sprites the byte is full and $13 advances.
 static void ctDrawPkg(CtTitleIntro* t, uint16_t addr, int large) {
@@ -149,7 +133,7 @@ static void listDel(uint16_t* l, int n, uint16_t v) {
   for (int i = 0; i < n; i++) if (l[i] == v) { l[i] = 0; return; }
 }
 // $7E:39B1 -- "replace me with X": the same pops as the delete exit, then `STA $0920,X` with the
-// dispatcher's own cursor, so the new task takes over the SLOT the old one was running in.
+// dispatcher's own cursor, so the new task takes over the slot the old one was running in.
 static void listSwap(uint16_t* l, int n, uint16_t from, uint16_t to) {
   for (int i = 0; i < n; i++) if (l[i] == from) { l[i] = to; return; }
 }
@@ -157,9 +141,8 @@ static void listSwap(uint16_t* l, int n, uint16_t from, uint16_t to) {
 // ---- the palette jobs: the ROM's twelve 12-byte records at $7E:0520, run by FD/E39C --------------
 // +0 kind (high nibble) | +1 first CGRAM index | +2 count | +3 step | +4 tick | +5 period
 // +6 blend mode | +7 level | +8 target. The level walks toward the target by `step` every `period`
-// frames; the frame it would pass the target the record COPIES THE BASE PALETTE BACK and frees
-// itself (FD/E624 / FD/E8AC) -- which is why the settled screen is the untouched palette, not the
-// last blended one.
+// frames; the frame it would pass the target the record copies the base palette back and frees
+// itself (FD/E624 / FD/E8AC), so the settled screen is the untouched palette, not the last blend.
 static void ctPalRestore(CtTitleIntro* t, const uint8_t* r) {
   for (int i = 0; i < r[2]; i++) t->palShadow[(r[1] + i) & 0xFF] = ctTitlePal0[(r[1] + i) & 0xFF];
 }
@@ -231,8 +214,8 @@ static void ctTaskPendulum(CtTitleIntro* t) {
   t->cell[CT_TI_C6C] = t->cell[CT_TI_C6C] - 1 ? (uint16_t)(t->cell[CT_TI_C6C] - 1) : 1;
 }
 
-// $7E:5FFE -- the OFFSET-PER-TILE ripple. The 32 words at $0C40 are BG3's second tilemap row, which
-// mode 2 reads as a per-COLUMN vertical offset for BG1; the table shifts one column per frame and a
+// $7E:5FFE -- the offset-per-tile ripple. The 32 words at $0C40 are BG3's second tilemap row, which
+// mode 2 reads as a per-column vertical offset for BG1; the table shifts one column per frame and a
 // fresh sin(frame * 16) * reg6 enters at the left, so the wave travels across the TRIGGER logo and
 // dies out as the damping task counts reg6 down to zero.
 static void ctTaskWave(CtTitleIntro* t) {
@@ -287,8 +270,7 @@ static void ctTaskHands(CtTitleIntro* t) {           // $7E:5D20 -- the clock ha
 
 // $7E:5D32 -- the copyright block: fourteen 16x16 sprites, and the sequence's own opening timer.
 // It counts $0072 (seeded 110 by the script) down, installs the START handler when the count
-// reaches 60, and deletes itself at zero -- which is why the block is on screen for exactly the
-// first 110 frames and vanishes at 110 with nothing else changing.
+// reaches 60, and deletes itself at zero, so the block shows for the first 110 frames.
 static void ctTaskCopyright(CtTitleIntro* t) {
   t->cell[CT_TI_C15] = 0x90;
   t->cell[CT_TI_C17] = 0xB0;
@@ -313,7 +295,7 @@ static void ctTaskLetters(CtTitleIntro* t) {
   }
 }
 
-static void ctTaskSquare(CtTitleIntro* t) {          // $7E:5E1E -- "© 1995 SQUARE"
+static void ctTaskSquare(CtTitleIntro* t) {          // $7E:5E1E -- "(c) 1995 SQUARE"
   t->cell[CT_TI_C17] = 0xD0;
   t->cell[CT_TI_C15] = 0x78;
   ctDrawPkg(t, 0x6186, 0);
@@ -329,12 +311,10 @@ static void ctTaskDamp(CtTitleIntro* t) {
   if (!t->scr[0].reg[6]) listDel(t->task, 16, T_DAMP);
 }
 
-// $7E:5B99 -- START. It is not the host's decision and it is not "the START button": the task
-// leaves on ANY button ($0002 != 0), latches $0070 so it can only fire once, installs the FADE and
-// then reads the pad a second time -- `BIT #$30`, i.e. L or R -- to decide whether to leave
-// $7F0060 behind. Without that flag the reboot falls through scene 433's test into the attract
-// demo instead of the game, which is what holding a shoulder button at the title does.
-// $006E (the script's own handover near the end) makes the whole task a no-op.
+// $7E:5B99 -- start. The task leaves on any button ($0002 != 0), latches $0070 so it fires once, installs
+// the exit and reads the pad again (`BIT #$30`, L or R) to decide whether to leave $7F0060 set. Without the
+// flag the reboot falls through scene 433's test into the attract demo instead of the game.
+// $006E (the script's handover near the end) makes the task a no-op.
 static void ctTaskStart(CtTitleIntro* t) {
   if (t->cell[CT_TI_C6E] || t->cell[CT_TI_C70]) return;
   if (!t->joy) return;
@@ -345,7 +325,7 @@ static void ctTaskStart(CtTitleIntro* t) {
 }
 
 // $7E:34AB -- the exit. It asks the sound driver to fade the music ($1E00 = $81, $1E01 = $0040) and
-// then REPLACES ITSELF in its own slot with $34C2, the brightness ramp.
+// then replaces itself in its own slot with $34C2, the brightness ramp.
 static void ctSndMail(CtTitleIntro* t, int off, uint8_t v) {
   if (t->snd.mail) t->snd.mail(t->snd.ctx, off, v);
 }
@@ -354,8 +334,8 @@ static void ctSndPost(CtTitleIntro* t) {
 }
 
 static void ctTaskExit(CtTitleIntro* t) {
-  // `LDX #$0040 / STX $1E01` is a 16-BIT store, so it writes $1E01 = $40 AND $1E02 = $00; $1E03 is
-  // not touched and goes out to $2143 with whatever the last command left in it.
+  // `LDX #$0040 / STX $1E01` is a 16-bit store: $1E01 = $40 and $1E02 = $00. $1E03 is not touched and
+  // goes out to $2143 with whatever the last command left in it.
   ctSndMail(t, 1, 0x40);
   ctSndMail(t, 2, 0x00);
   ctSndMail(t, 0, 0x81);
@@ -367,23 +347,23 @@ static void ctTaskExit(CtTitleIntro* t) {
 // the brightness shadow $038D loses one; the NMI pushes it to $2100 (or $80 -- forced blank -- once
 // it is 0), so the whole screen dims 15 -> 0 while every other task keeps drawing. At zero it asks
 // the driver to stop the music ($F0), sets $7E:0000 and deletes itself: sixteen frames from the
-// button to the reboot, which is exactly the window boot_loader.md §3.2 measured.
+// button to the reboot (boot_loader.md sec. 3.2).
 static void ctTaskFade(CtTitleIntro* t) {
   if (--t->briCnt) return;
   t->briCnt = t->briPeriod;
   if (--t->bri) return;
-  ctSndMail(t, 0, 0xF0);                             // $34D5: the command byte ALONE
+  ctSndMail(t, 0, 0xF0);                             // $34D5: the command byte alone
   ctSndPost(t);
   t->done = 1;
   listDel(t->task, 16, T_FADE);
 }
 
-// ---- SEQUENCE-TABLE ENTRY 1: the STAFF CREDITS ($7E:6B04) ----------------------------------------
-// disasm/notes/sequence_table.md section 6. Three tasks and a setup, on the engine above -- entry 1
-// installs NO vblank hook and runs NO script ($0940 and $0A20 are empty, measured), so the whole
-// stage is the two fades, a 90-frame hold, and what the setup puts in VRAM and OAM.
+// ---- Sequence-table entry 1: the staff credits ($7E:6B04) ----------------------------------------
+// disasm/notes/sequence_table.md sec. 6. Three tasks and a setup on the engine above; entry 1 installs no
+// vblank hook and runs no script ($0940 and $0A20 stay empty), so the stage is the two fades, a 90-frame
+// hold, and what the setup puts in VRAM and OAM.
 
-// $7E:347A -- the brightness fade IN. The same four instructions as the title's $34C2 with the walk
+// $7E:347A -- the brightness fade in. The same four instructions as the title's $34C2 with the walk
 // reversed and no sound: it counts $038F down, reloads it from $038E, steps $038D and leaves
 // through $39A7 (delete self) the frame the brightness reaches $0F.
 static void ctTaskFadeIn(CtTitleIntro* t) {
@@ -393,15 +373,10 @@ static void ctTaskFadeIn(CtTitleIntro* t) {
   listDel(t->task, 16, T_FADEIN);
 }
 
-// $7E:34E3 -- the plain fade OUT: the title's $34C2 without the two sound commands. `INC $00` is the
-// sequence's DONE flag, which is what the main loop at $7E:3026 polls. ⭐ This is the teardown
-// EVERY entry shares; the title's is the special one, because only the title has to stop the music.
-// ...and the frame it ends on is BLACK, not the level-1 the NMI has just latched: the task runs inside the NMI (v 228 on the
-// logical oracle's credits, `--cputrace` with CPUTRACE_BEAM), the main loop at $7E:3026 sees $00 on the NMI's return and
-// jumps to C0:0000 (v 231), whose first call C0/0B4E stores `$2100 = 80` -- all before line 0. MEASURED (the rule's
-// cartridge, the credits before 0A5, --monitor 7E038D:3,7E0000:1): $038D 02 at c5587, 01 at c5588, 00 with $00 = 01 at
-// c5589, and c5588's frame shows level 2, c5589's black; the port showed the 1 for a frame at the end of all four pages
-// (build/_divergence/audit_2026-09-28.md item 4).
+// $7E:34E3 -- the plain fade out: the title's $34C2 without the sound commands, and the teardown every entry
+// shares. `INC $00` is the done flag the main loop at $7E:3026 polls.
+// The frame it ends on is black, not the level 1 just latched: the task runs inside the NMI, the main loop sees
+// $00 on its return and jumps to C0:0000, whose C0/0B4E stores `$2100 = 80` before line 0 (sequence_table.md).
 static void ctTaskFadeOut(CtTitleIntro* t) {
   if (--t->briCnt) return;
   t->briCnt = t->briPeriod;
@@ -411,13 +386,10 @@ static void ctTaskFadeOut(CtTitleIntro* t) {
   listDel(t->task, 16, T_FADEOUT);
 }
 
-// $7E:6BE5 -- the page's own clock. ⚠ `LDA $08 / CMP #$005A` is SIXTEEN bits (the task dispatcher
-// enters with `REP #20`, and the NMI's own counter is `REP #20 / INC $08`), and the common init
-// clears $0000..$00FF, so the hold is exactly 90 frames from the setup. It leaves through $39B1,
-// not $39A7: the fade takes over the SLOT this task was running in.
-// ⚠ The two stores are the OAM shadow's cursor ($11) and pointer ($13 = $0900), which the title's
-// vblank hook resets instead. Entry 1 draws no sprite package, so nothing in this stage reads them
-// and no frame of it can grade them -- they are here because that is what the task does.
+// $7E:6BE5 -- the page's clock. `LDA $08 / CMP #$005A` is 16-bit (the dispatcher enters with `REP #20`) and the
+// common init clears $0000..$00FF, so the hold is 90 frames from the setup. It leaves through $39B1, not $39A7:
+// the fade takes over this task's slot. The two stores (OAM cursor $11, pointer $13 = $0900) are the task's own;
+// nothing in this stage reads them.
 static void ctTaskCreditsPage(CtTitleIntro* t) {
   t->cell[CT_TI_C11] = 0;
   t->cell[CT_TI_C13] = 0x0900;
@@ -432,9 +404,9 @@ static uint8_t ctCredByte(uint16_t a) {
 
 // $7E:6C4D -- the BG1 tilemap writer. It runs with DP = $2100, so its "$16/$17" are VMADDL/VMADDH,
 // its "$18/$19" are VMDATAL/VMDATAH and its "$80" is WMDATA: the text is streamed out of WRAM
-// through the port the setup pointed at the page. A record is a tilemap WORD ADDRESS and then a
-// NUL-terminated string; $FF ends the stream. The tile is `char - $40`, and SPACE ($20) is remapped
-// to $40 first so it lands on tile 0 -- which is why the font starts at '@'.
+// through the port the setup pointed at the page. A record is a tilemap word address and then a
+// NUL-terminated string; $FF ends the stream. The tile is `char - $40`, and space ($20) is remapped
+// to $40 first so it lands on tile 0 (the font starts at '@').
 static void ctCredBgText(CtTitleIntro* t, uint16_t a) {
   for (;;) {
     uint8_t lo = ctCredByte(a++);
@@ -449,13 +421,11 @@ static void ctCredBgText(CtTitleIntro* t, uint16_t a) {
   }
 }
 
-// $7E:6C71 -- the same shape of stream, drawn as SPRITES. ⚠ Its "$0015/$0017" are ABSOLUTE (real
-// WRAM), not the page-$2100 registers the other decoder uses: they are the pen's x and y. The tile
-// is `char - $21`, the attribute byte is zero, a SPACE draws nothing, and the pen advances FIVE
-// pixels per character either way -- an 8x8 font kerned by overlapping its cells.
-// ⚠ It writes through $2104, i.e. the PPU's OWN OAM -- not the $7E:0700 shadow the title's tasks
-// draw into. Entry 1 installs no vblank hook, so nothing would ever DMA that shadow: what the setup
-// puts in OAM here is what every frame of the page renders.
+// $7E:6C71 -- the same stream drawn as sprites. Note: its "$0015/$0017" are absolute WRAM (the pen's x and
+// y), not the page-$2100 registers. The tile is `char - $21`, the attribute 0, a space draws nothing, and
+// the pen advances five pixels per character either way (an 8x8 font kerned by overlapping its cells).
+// It writes through $2104, the PPU's own OAM, not the $7E:0700 shadow; with no vblank hook nothing DMAs the
+// shadow, so this OAM is what every frame of the page renders.
 static void ctCredOamText(CtTitleIntro* t, uint16_t a) {
   int slot = 0;                                      // $2102 was zeroed: OAMDATA fills from sprite 0
   for (;;) {
@@ -478,26 +448,23 @@ static void ctCredOamText(CtTitleIntro* t, uint16_t a) {
 }
 
 static void ctSetupCredits(CtTitleIntro* t) {        // $7E:6B04
-  // $6BF9: four greys, into BOTH halves of the palette shadow -- $7E:2200 is the BG's and $7E:2300
-  // the OBJ's, and $7E:388B DMAs all 512 bytes of it to CGRAM once the setup returns. ⚠ Only these
-  // eight entries can ever be read: every tilemap word this stage writes carries palette 0, and
-  // every sprite attribute byte is 0.
+  // $6BF9: four greys into both halves of the palette shadow ($7E:2200 BG, $7E:2300 OBJ); $7E:388B DMAs all
+  // 512 bytes to CGRAM once the setup returns. Only these eight entries are read (palette 0 everywhere).
   static const uint16_t grey[4] = { 0x0000, 0x77BD, 0x4631, 0x1CE7 };
   for (int i = 0; i < 4; i++) { t->palShadow[i] = grey[i]; t->palShadow[0x80 + i] = grey[i]; }
   // The fonts: $6BF9 DMAs a 512-byte packet (ROM index $AE through $7E:3691 -> C3/0557) to VRAM
   // word $0000, and $66B0 expands a 2bpp source at $7F:0300 into word $0100, padding each tile's
   // upper two planes with zeroes so the sprites can use the same glyphs at 4bpp. Both are the
-  // BOOT's work, so they are captured (tools/gen/seq_credits.py), like the title's chr.
+  // boot's work, so they are captured (tools/gen/seq_credits.py), like the title's chr.
   memcpy(t->vram, ctCredFont, sizeof ctCredFont);
-  // $6B1F: a FIXED-source DMA of $0800 bytes out of $D2:0000 (which is zero) -- exactly the 32x32
+  // $6B1F: a fixed-source DMA of $0800 bytes out of $D2:0000 (which is zero) -- the 32x32
   // BG1 tilemap, cleared. Then the same trick twice on OAM: 32 bytes of $00 over the high table,
   // and 512 of the $E0 at $7E:4565 over the low one, which parks every sprite off screen.
   memset(&t->vram[0x0400], 0, 0x0400 * sizeof t->vram[0]);
   memset(t->l.oam, 0xE0, 0x200);
   memset(t->l.oam + 0x200, 0x00, 0x20);
-  // $6B8A: `LDA $0382 / INC A / CMP #6 / BNE / LDA #1`. ⭐ The common init does NOT clear $0382, so
-  // the counter survives the overlay's reboot and each of the attract's five visits shows the next
-  // page (measured: 1 at boot f2787, then 2, 3, 4, 5).
+  // $6B8A: `LDA $0382 / INC A / CMP #6 / BNE / LDA #1`. The common init does not clear $0382, so the
+  // counter survives the overlay's reboot and each of the attract's five visits shows the next page.
   int page = t->page + 1;
   if (page == 6) page = 1;
   t->page = (uint8_t)page;
@@ -515,22 +482,22 @@ static void ctSetupCredits(CtTitleIntro* t) {        // $7E:6B04
 
 // ---- the $C3 script interpreter (C3/0B03), DP = $0A00 --------------------------------------------
 // Assignments (bit 7 clear): 0R/1R take a 16-bit immediate (set / add), 2R/3R take a register index
-// byte. Commands (bit 7 set) dispatch on the LOW nibble through C3/0B74, except high nibbles $80
+// byte. Commands (bit 7 set) dispatch on the low nibble through C3/0B74, except high nibbles $80
 // and $90, which are the loop-counter opcode (run / yield) at C3/0C92.
 static void ctScriptCall(CtTitleIntro* t, int pg, uint16_t a) {
   static const uint8_t hands[9] = { 0x40, 0xB0, 0x0B, 0x02, 0x00, 0x01, 0x03, 0x80, 0x00 };
   static const uint8_t fade[9]  = { 0x50, 0xC0, 0x10, 0x04, 0x00, 0x01, 0x00, 0x00, 0xFF };
-  if (a == 0x5DA7) {                                 // ⭐ $7E:5DA7: BG MODE 2, and BG1VOFS = $FFB9
+  if (a == 0x5DA7) {                                 // $7E:5DA7: BG mode 2, and BG1VOFS = $FFB9
     t->mode = 2;
     t->scr[pg].reg[2] = 0xFFB9;
   } else if (a == 0x5DE9) {                          // the clock hands' white flash (kind 4, mode 3)
     memcpy(t->job[0], hands, sizeof hands);
-  } else if (a == 0x5DB4) {                          // "© 1995 SQUARE" fading up (kind 5, mode 0)
+  } else if (a == 0x5DB4) {                          // "(c) 1995 SQUARE" fading up (kind 5, mode 0)
     memcpy(t->job[0], fade, sizeof fade);
   }
 }
 
-// ⭐ `JSL $C3:0AFF` with DP = $0A00 ($7E:3749, task T_SCRIPT) or $0B00 ($7E:3754, T_SCRIPTB).
+// `JSL $C3:0AFF` with DP = $0A00 ($7E:3749, task T_SCRIPT) or $0B00 ($7E:3754, T_SCRIPTB).
 // One dispatcher, two register pages -- sequence_table.md 8.1.
 static void ctScriptRun(CtTitleIntro* t, int pg) {
   for (int guard = 0; guard < 4096; guard++) {
@@ -579,10 +546,9 @@ static void ctScriptRun(CtTitleIntro* t, int pg) {
       case 0x1: {                                       // byte poke into bank 0
         uint16_t a = scr16(t->scr[pg].ip);
         uint8_t v = ovlScript((uint16_t)(t->scr[pg].ip + 2));
-        // ⭐ `F1 006E 01` is the sequence's own handover: $006E != 0 makes the START handler a
-        // no-op, and the very next opcode installs $34AB -- so from here the fade runs whether or
-        // not anyone pressed anything. It does NOT end the sequence; $34C2 does, fifteen frames of
-        // brightness later.
+        // `F1 006E 01` is the sequence's handover: $006E != 0 makes the start handler a no-op and the
+        // next opcode installs $34AB, so the fade runs regardless of input. $34C2 ends the sequence,
+        // fifteen frames of brightness later.
         if (a == 0x006E) t->cell[CT_TI_C6E] = v;
         t->scr[pg].ip = (uint16_t)(t->scr[pg].ip + 3);
         break;
@@ -602,10 +568,10 @@ static void ctScriptRun(CtTitleIntro* t, int pg) {
       case 0x9: listDel(t->task, 16, scr16(t->scr[pg].ip)); t->scr[pg].ip = (uint16_t)(t->scr[pg].ip + 2); break;
       case 0xA: listAdd(t->task, 16, scr16(t->scr[pg].ip)); t->scr[pg].ip = (uint16_t)(t->scr[pg].ip + 2); break;
       case 0xB: t->scr[pg].ip = (uint16_t)(t->scr[pg].ip + 2); break;   // a direct $21xx write
-      case 0xC: return;                                 // YIELD
-      case 0xD: t->scr[pg].ip = scr16(t->scr[pg].ip); return;           // JUMP + yield
-      case 0xE: t->scr[pg].ip = scr16(t->scr[pg].ip); break;            // JUMP
-      default:  t->scr[pg].ip--; t->done = 1; return;           // END: $7E:0000 = 1
+      case 0xC: return;                                 // yield
+      case 0xD: t->scr[pg].ip = scr16(t->scr[pg].ip); return;           // jump + yield
+      case 0xE: t->scr[pg].ip = scr16(t->scr[pg].ip); break;            // jump
+      default:  t->scr[pg].ip--; t->done = 1; return;           // end: $7E:0000 = 1
     }
   }
 }
@@ -634,11 +600,10 @@ void CtTitleIntroReset(CtTitleIntro* t) {
   memcpy(t->f, ctTitleSeedScratch, sizeof t->f);
   memcpy(t->palShadow, ctTitleSeedPalShadow, sizeof t->palShadow);
   t->mode = 7; t->tm = 0x01; t->ts = 0x10;
-  // The title's own layer registers, measured on the oracle (`--ppuregs`: map=6400/6000 chr=5000
-  // both, objTileAdr1=4000 objTileAdr2=5000). They were the constants the render used to carry.
+  // The title's layer registers as the oracle's `--ppuregs` reads them (map 6400/6000, chr 5000 both,
+  // OBJ tiles 4000/5000).
   t->bg1sc = 0x65; t->bg2sc = 0x60; t->bg12nba = 0x55; t->obsel = 0x02; t->cgadsub = 0x21;
-  // CGWSEL = $02: no clipping, no prevent-math, and bit 1 = ADD THE SUBSCREEN rather than the fixed
-  // colour. It used to be implicit -- the render always fetched the subscreen when math was on.
+  // CGWSEL = $02: no clipping, no prevent-math, and bit 1 = add the subscreen rather than the fixed colour.
   t->addSub = 1;
   t->stage = 2;
   memcpy(&t->vram[CT_TITLE_VRAM_BASE], ctTitleVram, sizeof ctTitleVram);
@@ -648,9 +613,8 @@ void CtTitleIntroReset(CtTitleIntro* t) {
   t->bri = CT_TITLE_SEED_BRI;
   t->briPeriod = CT_TITLE_SEED_BRIPER;
   t->briCnt = CT_TITLE_SEED_BRICNT;
-  // (host mod) The seed's OAM is the buffer as the copyright task left it -- its block in the slots up to the OAM pointer
-  // (cell C11) -- so its anchor slots are seeded with it: the first latch (frame 0) carries the block, and without them the
-  // widescreen drew it one frame at the ROM's columns before moving it (the user, 2026-10-13).
+  // (host mod) The seed's OAM is the buffer as the copyright task left it (its block in the slots up to the OAM pointer,
+  // cell C11), so the anchor slots are seeded with it and the first latch (frame 0) carries the block's anchoring.
   for (int i = 0; i < 16; i++)
     if (t->task[i] == T_COPY && t->cell[CT_TI_C11]) {
       t->anchorLo = 0;
@@ -660,19 +624,13 @@ void CtTitleIntroReset(CtTitleIntro* t) {
   t->frame = -1;                                     // the first tick produces frame 0
 }
 
-// ⭐ $7E:3000: `JSR $3063` (the common init) and then `LDA $0384 / AND #$1F / ASL A / TAX /
-// JSR ($3043,X)`. The table is sixteen words but the mask allows THIRTY-TWO indices, so 16..31 read
-// the init's own code as pointers -- see disasm/notes/sequence_table.md section 1 before porting
-// anything that gets there.
-//
-// The common init ($3063) is the part every entry shares: it clears $0000..$00FF and $0900..$1DFF
-// with a fixed-source DMA out of MPYL (measured 0 at this entry, which is what makes the credits'
-// 90-frame hold exact), zeroes the brightness and the sound shadows, and resets the PPU from
-// $7E:3102 with DP = $2100 -- BGMODE 0, BG12NBA 0, OBSEL $02, every scroll and both colour-math
-// registers 0. ⚠ $0382 is NOT in the list, which is how the credits' page counter survives.
-// $7E:3043 itself: the table of setups, as far as it is derived. ⚠ The ROM's table has sixteen
-// words behind eleven distinct routines and the mask reaches THIRTY-TWO indices; what is missing
-// here is missing because it has not been derived, not because the ROM has nothing there.
+// $7E:3000: `JSR $3063` (the common init), then `LDA $0384 / AND #$1F / ASL A / TAX / JSR ($3043,X)`.
+// The table is sixteen words but the mask allows 32 indices, so 16..31 read the init's own code as pointers
+// (disasm/notes/sequence_table.md sec. 1).
+// The common init ($3063) clears $0000..$00FF and $0900..$1DFF with a fixed-source DMA out of MPYL (0 here),
+// zeroes the brightness and sound shadows, and resets the PPU from $7E:3102 (DP = $2100: BGMODE 0, BG12NBA 0,
+// OBSEL $02, scrolls and colour math 0). $0382 is not cleared, so the credits' page counter survives.
+// Not ported: the entries of $7E:3043 not listed below (sequence_table.md sec. 5).
 typedef void (*CtSeqSetup)(CtTitleIntro*);
 static CtSeqSetup ctSeqEntry(int entry) {
   switch (entry) {
@@ -697,15 +655,15 @@ int CtTitleIntroResetStage(CtTitleIntro* t, int stage) {
                                                      // in this machine keeps its state
   uint8_t page = t->page;                            // the one cell the init leaves alone
   CtTitleSoundSink snd = t->snd;                     // ...and the host's mailbox attachment, which is not machine state
-  memset(t, 0, sizeof *t);                           //   either (CtTitleIntroReset keeps it for the same reason): the
-  t->page = page;                                    //   attract's first credits (`FF 61`) wiped it, and every title
-  t->snd = snd;                                      //   after them posted nothing -- no song $30 at the pendulum
-  t->stage = (uint8_t)(stage & 0x1F);                //   (cartridge f9122: `$1E00 = 10 30`, 7E:3767), no exit fade
+  memset(t, 0, sizeof *t);                           //   (CtTitleIntroReset keeps it too: a later title must still
+  t->page = page;                                    //   post its song and its exit fade)
+  t->snd = snd;
+  t->stage = (uint8_t)(stage & 0x1F);
   t->briPeriod = 4; t->briCnt = 4;                   // $3063: `LDA #04 / STA $038E / STA $038F`
   t->obsel = 0x02;                                   // $3102's PPU reset -- everything else is 0
   t->frame = -1;
   setup(t);
-  // $7E:300D `JSR $388B` -- the same CGRAM DMA the title installs as a vblank hook, here run ONCE
+  // $7E:300D `JSR $388B` -- the same CGRAM DMA the title installs as a vblank hook, here run once
   // from the main dispatch, right after the setup and before the first NMI.
   memcpy(t->l.cgram, t->palShadow, sizeof t->l.cgram);
   return 1;
@@ -717,42 +675,32 @@ void CtTitleIntroSetSoundSink(CtTitleIntro* t, const CtTitleSoundSink* s) {
   if (s) t->snd = *s; else memset(&t->snd, 0, sizeof t->snd);
 }
 
-// ⭐ THE TITLE HAS ITS OWN SONG, and it is the setup that starts it -- `$7E:5AA5 LDA #$30 / JSR
-// $375F`, measured at boot f97, sixteen frames after the sequence engine's common init sends its
-// stop. $375F is "play song A": the id into $1E01, the LOAD command into $1E00 and `LDX #$FFFF /
-// STX $1E02` over the other two, then `JSL $C7:0004`. C7/0A39 then overwrites $1E02/$1E03 with the
-// song's OWN record ($C7:241D + id*2 -> $06/$C0 for song $30), which is why the mailbox reads
-// `30 C0 06` for the rest of the sequence and why the exit's $81 carries that $06 out to $2143.
-// ⚠ $375F also mirrors the id into $0389/$038A and the setup then spins on `$2143 & $0F`; neither
-// is modelled -- nothing in this sequence reads those shadows, and the port's loader is synchronous.
+// The title's song, started by the setup: `$7E:5AA5 LDA #$30 / JSR $375F`. $375F is "play song A": the id into
+// $1E01, the load command into $1E00, `LDX #$FFFF / STX $1E02`, then `JSL $C7:0004`. C7/0A39 then overwrites
+// $1E02/$1E03 with the song's record ($C7:241D + id*2 -> $06/$C0 for song $30), so the mailbox reads `30 C0 06`
+// for the rest of the sequence and the exit's $81 carries that $06 out to $2143. $375F also latches the id into
+// $0389/$038A; the setup's spin on `$2143 & $0F` is the sink's `wait`.
 void CtTitleIntroSetupSound(CtTitleIntro* t) {
   if (!t) return;
-  t->sndReq = 0x30;                                  // $3761 STA $038A -- the song WANTED
-  t->sndCur = 0x30;                                  // $3764 STA $0389 -- ...and the song PLAYING
+  t->sndReq = 0x30;                                  // $3761 STA $038A -- the song wanted
+  t->sndCur = 0x30;                                  // $3764 STA $0389 -- ...and the song playing
   ctSndMail(t, 1, 0x30);                             // $3767 STA $1E01 -- the song id
   ctSndMail(t, 0, 0x10);                             // $376A LDA #$10 / STA $1E00
   ctSndMail(t, 2, 0xFF);                             // $376F LDX #$FFFF / STX $1E02 (two bytes)
   ctSndMail(t, 3, 0xFF);
   ctSndPost(t);                                      // $3775 JSL $C7:0004
   // $5AAA `LDA $2143 / AND #$0F / BEQ ->5AAA` -- the setup waits for the driver to answer before it
-  // returns, and that wait is over six frames long on the oracle (boot 133..139).
+  // returns (over six frames on the oracle; title_intro.md sec. 12).
   if (t->snd.wait) t->snd.wait(t->snd.ctx);
 }
 
-// $7E:3177 -- the overlay's DRIVER RESET, run by the common init at the opening (30E9 `BIT #20 / BNE ->30F6 / STZ $038A /
-// JSR $3177`) and by the teardown before the reboot (302A ... `JSR $3177`). Five commands, each through $377E (the mailbox
-// to $2140-$2143 and a spin on the echo): `85 00` (STZ $1E02 / LDX #0085 / STX $1E00), `89`, `F2 00`, `F2 01` (LDA #01 /
-// STA $1E01), and `81 00 FF` (LDX #FF00 / STX $1E01 / LDA #81 / STA $1E00 / JMP $377E) -- src/xlat/seq_c3.c L_7E3177 has
-// the routine as the translated stages run it. `$0384` bit 5 skips it (317A): the credits ($61), the race ($60) and
-// entry 3 ($63) never reach it; the title ($02) does, at both ends. Oracle, the attract's second title: `$0384 = 02` f9090,
-// the last command `$1E00 = 81` at f9106 (7E:31AD), the title's song `10 30` at f9122.
-// $377E is NOT C7/0004: it copies $1E03..$1E00 to $2143..$2140 and spins on `CMP $2140` for the echo (re-sending every
-// 0x400 polls), and never clears the mailbox -- which is why $3177's fourth command can rewrite $1E01 alone and still send
-// `F2 01`. The port's post is C7/0004's (the driver's consumption zeroes $1E00), so the bytes are kept here and written
-// again before every send. ($1E03 is persistent RAM that $3177 never writes and no post clears: left alone.) What $377E
-// leaves behind (`81 00 FF`) is NOT put back after the last send: the ROM's next writer overwrites it inside the same
-// frame (the song load `10 30` at the opening; the boot's `00 00 FF 05` after the teardown's `JML $C0:0000`, oracle
-// f11153), and the field's per-frame catch-all service would send a leftover `81` to the driver a second time.
+// $7E:3177 -- the overlay's driver reset, run by the common init at the opening (30E9) and by the teardown before the
+// reboot (302A). Five commands, each through $377E: `85 00`, `89`, `F2 00`, `F2 01`, `81 00 FF` (src/xlat/seq_c3.c
+// L_7E3177). `$0384` bit 5 skips it (317A), so the credits ($61), the race ($60) and entry 3 ($63) never reach it.
+// $377E is not C7/0004: it copies $1E03..$1E00 to $2143..$2140, spins on the echo and never clears the mailbox (so the
+// fourth command rewrites only $1E01). The port's post is C7/0004's, which zeroes $1E00, so the bytes are kept here and
+// written before every send; $1E03 is left alone. The last `81 00 FF` is not restored after the send: the ROM's next
+// writer overwrites it in the same frame. disasm/notes/title_intro.md sec. 12.
 static void ctSnd377E(CtTitleIntro* t, const uint8_t m[3]) {
   for (int k = 0; k < 3; k++) ctSndMail(t, k, m[k]);
   ctSndPost(t);
@@ -769,17 +717,13 @@ void CtTitleIntroDriverReset(CtTitleIntro* t, uint8_t seq) {
   m[0] = 0x81; ctSnd377E(t, m);                      // 31A8 LDA #81 / STA $1E00 / JMP $377E
 }
 
-// ⭐ C3/09A4 -- the NMI's OTHER half. C3/08B3 calls C3/08D0 (the frame, §1) and then this: a
-// song-change watcher that compares the song WANTED ($038A) with the song PLAYING ($0389) and, when
-// they differ, loads the wanted one. It is why $375F writes BOTH -- a caller that writes only $038A
-// (there are two in the overlay) is making a REQUEST this watcher services on the next NMI.
-// The title never changes $038A after its setup, so here the watcher only ever finds them equal --
-// but leave out $375F's `STA $0389` and it loads the title's song all over again, every frame.
+// C3/09A4 -- the NMI's other half. C3/08B3 calls C3/08D0 (the frame, sec. 1) and then this song-change watcher:
+// when the song wanted ($038A) differs from the song playing ($0389) it loads the wanted one. A caller that writes
+// only $038A is making a request serviced on the next NMI; $375F writes both, so the title's song loads once.
 static void ctNmiSound(CtTitleIntro* t) {
   if (t->sndBusy) return;                            // $09A6 LDA $0388 / BNE
-  // $09AB LDA $0384 / BIT #$20 / BNE -- the SEQUENCE id gates the watcher off for entries $20-$3F.
-  // This sequence is entry 2, so the branch is never taken here; it is written out because it is
-  // the ROM's condition, not because the title needs it.
+  // $09AB LDA $0384 / BIT #$20 / BNE -- the sequence id gates the watcher off for entries $20-$3F
+  // (never taken for entry 2).
   if (CT_TI_SEQ_ID & 0x20) return;
   if (t->sndReq == t->sndCur) return;                // $09B2 LDA $038A / $09B5 CMP $0389 / BEQ
   t->sndCur = t->sndReq;                             // $09BA STA $0389
@@ -798,8 +742,8 @@ int CtTitleIntroFrames(void) { return 1990; }
 
 int CtTitleIntroTick(CtTitleIntro* t) {
   if (!t) return 0;
-  // ---- the VBLANK hook list ($7E:39BE over $0940) ----------------------------------------------
-  // Everything these push is what the frame ABOUT TO BE DRAWN uses, so the latch is taken here and
+  // ---- the vblank hook list ($7E:39BE over $0940) ----------------------------------------------
+  // Everything these push is what the frame about to be drawn uses, so the latch is taken here and
   // the tasks below already belong to the next frame.
   for (int i = 0; i < 8; i++) {
     switch (t->vbl[i]) {
@@ -848,7 +792,7 @@ int CtTitleIntroTick(CtTitleIntro* t) {
     switch (live[i]) {
       case 0:          break;
       case T_SCRIPT:   ctScriptRun(t, 0); break;   // $7E:3749 -- DP = $0A00
-      case T_SCRIPTB:  ctScriptRun(t, 1); break;   // $7E:3754 -- DP = $0B00, the SAME interpreter
+      case T_SCRIPTB:  ctScriptRun(t, 1); break;   // $7E:3754 -- DP = $0B00, the same interpreter
       case T_PEND:     ctTaskPendulum(t); break;
       case T_WAVE:     ctTaskWave(t); break;
       case T_COPY:     ctTaskCopyright(t); break;
@@ -889,12 +833,11 @@ static int tiM7Tile(int row, int col) {
 
 typedef struct { int sx, sy; } TiM7Start;
 
-// ---- the PPU's LIVE register file, and the HDMA that rewrites it per scanline -------------------
-// ⭐ Until entry 3 the port could draw a whole frame from one vblank latch, because the title never
-// changes a register mid-frame. Entries 0 and 3 do: entry 3 moves a window edge and BG1's scroll on
-// every line and swaps BG2's TILEMAP BASE at line 70, and entry 0 rewrites the whole mode-7 matrix
-// per line and even changes $2105 itself (sequence_table.md 7.1/7.2). So the frame is drawn from
-// THIS, seeded from the latch and then mutated exactly where HDMA writes.
+// ---- the PPU's live register file, and the HDMA that rewrites it per scanline -------------------
+// The title never changes a register mid-frame, but entries 0 and 3 do: entry 3 moves a window edge and BG1's
+// scroll on every line and swaps BG2's tilemap base at line 70; entry 0 rewrites the mode-7 matrix per line and
+// changes $2105 (sequence_table.md 7.1/7.2). So the frame is drawn from this, seeded from the latch and changed
+// where HDMA writes.
 typedef struct TiLine {
   uint8_t  mode, tm, ts, tmw, tsw, cgadsub, bg1sc, bg2sc, bg12nba, obsel;
   uint8_t  clipMode, preventMath, addSub, subtract, halfColor;
@@ -909,23 +852,22 @@ typedef struct TiLine {
   int      y;                                        // (CtTitleIntroRenderEx: the line being drawn)
 } TiLine;
 
-// One channel's live walk. dma.c keeps this in the channel; here it is per FRAME, so the render can
+// One channel's live walk. dma.c keeps this in the channel; here it is per frame, so the render can
 // stay const -- it never writes back into the machine.
 typedef struct TiHdmaRun {
   uint16_t tableAdr, size;
   uint8_t  repCount, doTransfer, terminated;
 } TiHdmaRun;
 
-// The overlay's own STATIC bytes that an HDMA channel can point at -- its descriptor tables, which
-// are decompressed once at boot and never written again (measured: $7E:685E..$68A0 is identical at
-// three frames of entry 3, while $F000 changes every frame). Only the region a ported stage uses is
-// carried; anywhere else reads 0, and a 0 repeat count terminates the channel.
+// The overlay's static bytes an HDMA channel can point at: its descriptor tables, decompressed once at boot and
+// never written again (unlike $F000..$F3FF). Only the region a ported stage uses is carried; anywhere else reads
+// 0, and a 0 repeat count terminates the channel.
 static const uint8_t* g_seqPage7E = 0;             // see CtSeqSetOverlayImage
 static uint8_t ctSeqOverlay(uint16_t a) {
   return g_seqPage7E ? g_seqPage7E[a] : 0;
 }
 
-// DEBUG/TEST HOOK. An HDMA channel's descriptor table can point anywhere in $7E, so grading
+// Debug/test hook. An HDMA channel's descriptor table can point anywhere in $7E, so grading
 // the walker against the cartridge means letting it read a real page. Point this at a 64 KB
 // $7E image (a `--peek` .wram sidecar) and tiRead resolves everything outside $F000..$F3FF
 // through it. A ported stage carries its own captured tables instead and leaves this null.
@@ -940,9 +882,9 @@ static uint8_t tiRead(const CtTitleIntro* t, uint32_t adr) {
   return ctSeqOverlay(a);
 }
 
-// snes/ppu.c ppu_write, for the registers a sequence's HDMA actually targets. ⚠ $210D/$210F/$2111
-// and $210E/$2110/$2112 are WRITE-TWICE and share one latch pair, which is why mode 2 ("one
-// register written twice") is what the ROM programs for a scroll channel.
+// snes/ppu.c ppu_write, for the registers a sequence's HDMA targets. Note: $210D/$210F/$2111 and
+// $210E/$2110/$2112 are write-twice and share one latch pair, so the ROM programs a scroll channel in
+// mode 2 (one register written twice).
 static void tiWriteReg(TiLine* L, int adr, uint8_t val) {
   switch (adr & 0xFF) {
     case 0x05: L->mode = (uint8_t)(val & 7); break;
@@ -952,7 +894,7 @@ static void tiWriteReg(TiLine* L, int adr, uint8_t val) {
     case 0x0D: L->bg1h = (uint16_t)(((val << 8) | (L->scrollPrev & 0xF8) | (L->scrollPrev2 & 7)));
                L->scrollPrev2 = L->scrollPrev; L->scrollPrev = val; break;
     case 0x0E: L->bg1v = (uint16_t)((val << 8) | L->scrollPrev); L->scrollPrev = val; break;
-    case 0x10: /* BG2VOFS -- entry 3 drives it, but no ported stage READS BG2's v-scroll */
+    case 0x10: /* BG2VOFS -- entry 3 drives it, but no ported stage reads BG2's v-scroll */
                L->scrollPrev = val; break;
     case 0x11: L->bg3h = (uint16_t)(((val << 8) | (L->scrollPrev & 0xF8) | (L->scrollPrev2 & 7)));
                L->scrollPrev2 = L->scrollPrev; L->scrollPrev = val; break;
@@ -989,7 +931,7 @@ static void tiWriteReg(TiLine* L, int adr, uint8_t val) {
     case 0x31: L->cgadsub = (uint8_t)(val & 0x3F);
                L->halfColor = (uint8_t)((val >> 6) & 1); L->subtract = (uint8_t)((val >> 7) & 1);
                break;
-    // $2132: bits 7-5 say WHICH of blue/green/red the low five bits are for, and one write can
+    // $2132: bits 7-5 say which of blue/green/red the low five bits are for, and one write can
     // set more than one of them -- entry 0's $EE is all three at once.
     case 0x32: if (val & 0x20) L->fixedR = (uint8_t)(val & 0x1F);
                if (val & 0x40) L->fixedG = (uint8_t)(val & 0x1F);
@@ -1016,7 +958,7 @@ static void tiHdmaInit(const CtTitleIntro* t, TiHdmaRun* run) {
     run[i].tableAdr = c->aAdr;
     run[i].repCount = tiRead(t, ((uint32_t)c->aBank << 16) | run[i].tableAdr++);
     if (run[i].repCount == 0) run[i].terminated = 1;
-    if (c->dmap & 0x40) {                            // indirect: the entry carries a POINTER
+    if (c->dmap & 0x40) {                            // indirect: the entry carries a pointer
       run[i].size = tiRead(t, ((uint32_t)c->aBank << 16) | run[i].tableAdr++);
       run[i].size |= (uint16_t)(tiRead(t, ((uint32_t)c->aBank << 16) | run[i].tableAdr++) << 8);
     }
@@ -1024,7 +966,7 @@ static void tiHdmaInit(const CtTitleIntro* t, TiHdmaRun* run) {
   }
 }
 
-// dma_doHdma: at hPos 1104 of every visible line, i.e. AFTER that line is drawn -- so the line the
+// dma_doHdma: at hPos 1104 of every visible line, i.e. after that line is drawn -- so the line the
 // render is about to draw has already had one run per line above it.
 static void tiHdmaRun(const CtTitleIntro* t, TiHdmaRun* run, TiLine* L) {
   int lastActive = 0;
@@ -1079,7 +1021,7 @@ static int tiWinState(const TiLine* L, int layer, int x) {
   }
 }
 
-// $210D/$210E feed BOTH the mode-7 scroll (13 bits, signed) and the BG layer scroll (10 bits), from
+// $210D/$210E feed both the mode-7 scroll (13 bits, signed) and the BG layer scroll (10 bits), from
 // the same latched word -- so the two readings below are two views of one register, not two sources.
 static int s13(uint16_t v) { return ((int16_t)((v & 0x1FFF) << 3)) >> 3; }
 
@@ -1127,10 +1069,8 @@ static void tiOPT(const CtTitleIntro* t, const TiLine* L, int layer, int* lx, in
 // BG fetch, transliterated from snes/ppu.c ppu_getPixelForBgLayer for the two bit depths the
 // sequences use: bitDepthsPerMode says mode 2 is 4bpp on BG1/BG2 and mode 0 is 2bpp on all four --
 // and mode 0 alone shifts each layer's palette block by eight (`paletteNum += 8 * layer`).
-// Everything that used to be a title constant here now comes from the registers a setup writes.
-// ⚠ Only BG1 and BG2 have their registers here. Mode 0 puts BG3/BG4 in the layer order, but no
-// ported stage enables them in $212C, so $2109/$210A/$210C were never derived -- a stage that does
-// enable one needs them read off its own setup, not guessed.
+// Not ported: BG3/BG4's registers ($2109/$210A/$210C). Mode 0 puts them in the layer order, but no ported
+// stage enables them in $212C; a stage that does needs them read off its own setup.
 static int tiBgPixel(const CtTitleIntro* t, const TiLine* L, int x, int y, int layer, int priority) {
   int sc = layer == 0 ? L->bg1sc : L->bg2sc;
   int adr = ((sc & 0xFC) << 8) + (((y >> 3) & 0x1F) << 5 | ((x >> 3) & 0x1F));
@@ -1153,10 +1093,8 @@ static int tiBgPixel(const CtTitleIntro* t, const TiLine* L, int x, int y, int l
   return px ? 16 * pal + px : 0;
 }
 
-// ppu_evaluateSprites: 8x8/16x16 (OBSEL = 0), name base $4000, and BOTH hardware limits -- 32
-// sprites and 34 8x1 slivers per line. ⚠ Ninety-odd sprites are live in the logo phase but they
-// never crowd one line: 20 is the most any scanline of this sequence carries, so neither limit ever
-// fires and no frame can grade them. They are here because that is what the PPU does.
+// ppu_evaluateSprites: 8x8/16x16 (OBSEL = 0), name base $4000, and both hardware limits -- 32
+// sprites and 34 8x1 slivers per line (the title never reaches them: at most 20 sprites a line).
 static void tiEvalSprites(const CtTitleIntro* t, int line, uint8_t* pix, uint8_t* prio) {
   const uint8_t* o = t->l.oam;
   const uint8_t* hi = t->l.oam + 0x200;
@@ -1297,7 +1235,7 @@ static int tiGetPixel(const CtTitleIntro* t, const TiLine* L, int x, int y, int 
   for (int i = 0; i < n; i++) {
     int cur = lay[i], curPri = pri[i];
     int bit = cur == 4 ? 0x10 : (1 << cur);
-    // ppu_getPixel: a layer draws if $212C/$212D enables it AND it is not window-clipped here.
+    // ppu_getPixel: a layer draws if $212C/$212D enables it and it is not window-clipped here.
     if (!(screen & bit)) continue;
     if ((clipped & bit) && tiWinState(L, cur, x)) continue;
     if (cur < 4) {
@@ -1322,21 +1260,20 @@ static int tiGetPixel(const CtTitleIntro* t, const TiLine* L, int x, int y, int 
 }
 
 void CtTitleIntroRender(const CtTitleIntro* t, unsigned char* fb, int w, int h) {
-  // CGWSEL = $02 / CGADSUB = $21 for the TITLE: no clipping, ADD, no halving, fixed colour (0,0,0),
-  // and the math enabled for BG1 and the backdrop. During the swing TS = OBJ, so the copyright
-  // block and the clock are ADDED onto the mode-7 pendulum in 5-BIT space; from the moment $5C98
-  // writes $212C the subscreen is empty and the add becomes a no-op. $2131's low six bits are the
-  // per-layer enables in the LakeSnes layer order, so the credits' $00 turns the whole block off.
+  // CGWSEL = $02 / CGADSUB = $21 for the title: no clipping, add, no halving, fixed colour (0,0,0), and the
+  // math enabled for BG1 and the backdrop. During the swing TS = OBJ, so the copyright block and the clock are
+  // added onto the mode-7 pendulum in 5-bit space; once $5C98 writes $212C the subscreen is empty and the add
+  // is a no-op. $2131's low six bits are the per-layer enables, so the credits' $00 turns the math off.
   uint8_t objPix[256], objPrio[256];
   memset(objPrio, 0, sizeof objPrio);
   memset(fb, 0, (size_t)w * h * 3);
-  // $2100: bit 7 is FORCED BLANK (the whole screen is black, sprites are not even evaluated) and the
-  // low nibble scales every component on the way out -- `* brightness / 15`, AFTER the 5->8
-  // expansion, exactly where snes/ppu.c ppu_putPixels does it. This is the fade $7E:34C2 walks down.
+  // $2100: bit 7 is forced blank (the whole screen is black, sprites are not evaluated) and the low
+  // nibble scales every component on the way out -- `* brightness / 15`, after the 5->8 expansion,
+  // where snes/ppu.c ppu_putPixels does it. This is the fade $7E:34C2 walks down.
   int bri = t->l.bri & 0x0F;
   if (t->l.bri & 0x80) return;
   // The line's register file, seeded from the vblank latch. For the title and the credits it stays
-  // exactly this for all 224 lines; for a stage with HDMA it is rewritten below, per line.
+  // this for all 224 lines; for a stage with HDMA it is rewritten below, per line.
   TiLine L;
   memset(&L, 0, sizeof L);
   L.mode = t->mode; L.tm = t->tm; L.ts = t->ts; L.tmw = t->tmw; L.tsw = t->tsw;
@@ -1351,9 +1288,8 @@ void CtTitleIntroRender(const CtTitleIntro* t, unsigned char* fb, int w, int h) 
   TiHdmaRun run[8];
   tiHdmaInit(t, run);                                // hPos 16 of line 0
   for (int y = 0; y < h; y++) {
-    int line = y + 1;                                // ⚠ the SNES renders scanlines 1..224
-    // dma_doHdma fires at hPos 1104 of every visible line, i.e. after that line is drawn -- so the
-    // line about to be drawn has had exactly one run for every line above it.
+    int line = y + 1;                                // the SNES renders scanlines 1..224
+    // dma_doHdma fires after each visible line is drawn (see tiHdmaRun).
     tiHdmaRun(t, run, &L);
     const int mathEnabled[6] = { L.cgadsub & 1, (L.cgadsub >> 1) & 1, (L.cgadsub >> 2) & 1,
                                  (L.cgadsub >> 3) & 1, (L.cgadsub >> 4) & 1, (L.cgadsub >> 5) & 1 };
@@ -1363,7 +1299,7 @@ void CtTitleIntroRender(const CtTitleIntro* t, unsigned char* fb, int w, int h) 
     for (int x = 0; x < w; x++) {
       int r, g, b, r2 = 0, g2 = 0, b2 = 0;
       int main = tiGetPixel(t, &L, x, line, 0, &m7, objPix, objPrio, &r, &g, &b);
-      // ppu_handlePixel: the COLOUR window ($2130's clip/prevent-math modes test window layer 5).
+      // ppu_handlePixel: the colour window ($2130's clip/prevent-math modes test window layer 5).
       int cw = tiWinState(&L, 5, x);
       if (L.clipMode == 3 || (L.clipMode == 2 && cw) || (L.clipMode == 1 && !cw)) r = g = b = 0;
       int me = main < 6 && mathEnabled[main] &&
@@ -1385,7 +1321,7 @@ void CtTitleIntroRender(const CtTitleIntro* t, unsigned char* fb, int w, int h) 
         if (g < 0) g = 0;
         if (b < 0) b = 0;
       }
-      // 5-bit -> 8-bit LAST, exactly as the PPU does it on the way out, then the brightness.
+      // 5-bit -> 8-bit last, as the PPU does it on the way out, then the brightness.
       row[x * 3 + 0] = (unsigned char)((((r << 3) | (r >> 2)) * bri) / 15);
       row[x * 3 + 1] = (unsigned char)((((g << 3) | (g >> 2)) * bri) / 15);
       row[x * 3 + 2] = (unsigned char)((((b << 3) | (b >> 2)) * bri) / 15);
@@ -1393,7 +1329,7 @@ void CtTitleIntroRender(const CtTitleIntro* t, unsigned char* fb, int w, int h) 
   }
 }
 
-// ---- THE HOST'S OPTIONS: wider, sharper, between two frames (title_intro.h CtTitleIntroRenderEx) ---------------------
+// ---- The host's options: wider, sharper, between two frames (title_intro.h CtTitleIntroRenderEx) ---------------------
 // tiGetPixel with the mode-7 sample handed in (taken at the sub-pixel) and the view's edges: outside the SNES's 256
 // columns there are no sprites and no tiled layer (their maps wrap), only mode 7.
 static void tiOPTEx(const CtTitleIntro* t, const TiLine* L, int layer, int* lx, int* ly);
@@ -1628,11 +1564,10 @@ void CtTitleIntroRenderEx(const CtTitleIntro* t, const struct CtTiLatch* prev, i
   }
 }
 
-// ---- DEBUG/TEST: the HDMA walker, reported the way ct.exe --hdma reports the cartridge ---------
+// ---- Debug/test: the HDMA walker, reported the way ct.exe --hdma reports the cartridge ---------
 // Runs one frame of HDMA over the channels in `t` and returns the colour-math state each scanline
-// is drawn with. It exists so the walker can be graded against the ORACLE'S OWN per-line trace
-// before any stage that uses HDMA is ported -- machinery nothing exercises is machinery nothing
-// grades. Line k of the output is scanline k+1, which is the first line the SNES draws.
+// is drawn with, so the walker can be graded against the oracle's per-line trace. Line k of the
+// output is scanline k+1, the first line the SNES draws.
 int CtSeqHdmaTrace(const CtTitleIntro* t, CtSeqLineMath* out, int maxLines) {
   if (!t || !out || maxLines <= 0) return 0;
   TiLine L;

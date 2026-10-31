@@ -1,4 +1,3 @@
-// ============================================================================
 // sound/lockstep.h -- the sound machine in C (sound/machine.h) run beside the original on the vendored SPC700 and S-DSP,
 // instruction by instruction.
 //
@@ -10,10 +9,9 @@
 //   - where each run stops (the cycle) and the ports the CPU then reads;
 //   - every sample the two S-DSPs make;
 //   - the RAM, byte for byte (but the registers' mirror $F0-$FF), at each frame's end and each song load's.
-// The machine joins at power-on, or -- after a seeded or loaded SPC, or a mismatch -- at the original's next pass over
+// The machine joins at power-on, or (after a seeded or loaded SPC, or a mismatch) at the original's next pass over
 // the main loop's top ($0299), adopting its state there. The report goes to stdout at exit (CT_SNDDRV_LOCKSTEP_OUT=<file>
 // appends it there, `%d` = the process id).
-// ============================================================================
 #ifndef CT_SOUND_LOCKSTEP_H
 #define CT_SOUND_LOCKSTEP_H
 

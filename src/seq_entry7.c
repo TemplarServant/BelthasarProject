@@ -1,20 +1,15 @@
-// seq_entry7.c -- SEQUENCE ENTRY 7 (`FF 07`), native: the Day of Lavos, after the final battle is lost.
+// seq_entry7.c -- sequence entry 7 (`FF 07`): the Day of Lavos, after the final battle is lost.
 //
-// Scene 476 (loc 1DC, 1999 A.D.: the control room) is entered by no script and no exit: the lost final battle sends the game
-// there. Its obj1 loop (the code after fn0's RETURN) tests glb[170] & 20: clear, two lines, the bit set, `CHANGELOC 1F0`;
-// set -- the second time -- the operator's and the director's lines, the bit cleared and `FF 07`. The setup $7E:6248 (entry 8
-// shares it; no site calls `FF 08`) puts page A at `$633D` and the script runs to an endless yield: the fade-in, the
-// sparkles, the palette fades, the song `3A`, the text, and at last task `$63D5`, which waits for a PAD PRESS, posts `81 40`,
-// adds the fade-out `$3495` and becomes `$63F5`: 128 frames of `DEC $0399`, then `JML $00FF00` -- the console's reset, back to
-// the title (disasm/notes/sequence_table.md sec. 16).
-//
-// Stage 1 of the native port (as seq_entry4.c): the logic over the WRAM image, byte for byte with the cartridge -- the script
-// and its calls, the fades, the palette-record service ($37FA = FD/E39C), the sparkles' records ($0C00-$0CBF) and the RNG
-// they draw from ($3448: `$039B` + 1, the byte at C0/FE00 + it), the WRAM palette fade $6439 and the end. The picture (the
-// setup's VRAM packets, the CGRAM shadow it builds, the text sprites $64BF, the sparkles' sprites C3/0DBC, the PPU) is stage 2.
+// Scene 476 (loc 1DC), reached from the lost final battle (disasm/notes/sequence_table.md sec. 16). The setup $7E:6248
+// (entry 8 shares it) puts page A at `$633D`; the script runs to an endless yield, and task `$63D5` waits for a pad press,
+// fades out and becomes `$63F5`, which resets the console (`JML $00FF00`) 128 frames later.
+// This file is the logic over the WRAM image: the script and its calls, the fades, the palette-record
+// service ($37FA = FD/E39C), the sparkles' records ($0C00-$0CBF) and the RNG they draw from ($3448: `$039B` + 1, the byte
+// at C0/FE00 + it), the WRAM palette fade $6439 and the end. The picture (the setup's VRAM packets, the CGRAM shadow it
+// builds, the text sprites $64BF, the sparkles' sprites C3/0DBC, the PPU) is seq_entry7pic.c.
 #include "seq_entry7.h"
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
-#include "seq_entry7pic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_entry7pic.h"   // the picture, when the host draws it (io->pic)
 #include "seq_racepic.h"
 #include "objslot.h"
 #include <string.h>
@@ -24,9 +19,8 @@ static void wr(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v
 
 int CtEntry7StageHas(uint8_t operand) { return (operand & 0x1F) == 7 && !(operand & 0x40); }
 
-// MEASURED: `CT_CALLROM_NONMI=1 ct.exe --callrom 7E6248 --pokewram 0384=07 --regdb 00 --m8 --x16` from the cartridge inside
-// the opening (saves/lavos_re/ff07_pre_f1530.state + 26 frames: the overlay whole in WRAM): 97637 ops, 2534972 cycles (74360
-// of them refresh) -- the VRAM packets above all.
+// The setup's cycles, from `CT_CALLROM_NONMI=1 ct.exe --callrom 7E6248 --pokewram 0384=07 --regdb 00 --m8 --x16` on a
+// state inside the opening with the overlay in WRAM: the VRAM packets above all.
 long CtEntry7StageSetupCycles(void) { return 2534972L; }
 
 static int s_reset;                                                   // $63F5 reached `JML $00FF00`

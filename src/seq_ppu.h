@@ -1,11 +1,9 @@
-// seq_ppu.h - the SEQUENCE stages' picture, drawn by the vendored LakeSnes PPU (snes/ppu.c).
+// seq_ppu.h - the sequence stages' picture drawn by the vendored LakeSnes PPU (snes/ppu.c). The native stages draw
+// through seq_pic.c; this one is a reference (`ct.exe --seqppucmp`).
 //
-// A $C3 sequence stage is register-driven from top to bottom: its NMI hooks DMA VRAM/CGRAM/OAM and
-// write the $21xx registers, and its HDMA rewrites them per scanline (the motorcycle race changes
-// $2105 itself mid-frame and recomputes the mode-7 matrix on every line). The port runs the stage's
-// CODE (tasks, scripts, hooks) and hands what that code writes to this PPU, the same way src/audio.c
-// hands the sound driver's port writes to the vendored SPC700. Only the hardware is emulated; nothing
-// of the game's own logic lives here.
+// A $C3 stage is register-driven: its NMI hooks DMA VRAM/CGRAM/OAM and write the $21xx registers, and its HDMA
+// rewrites them per line (the race changes $2105 mid-frame and the mode-7 matrix on every line). The caller runs the
+// stage's code and hands what it writes to this PPU. Only the hardware is here; none of the game's logic.
 //
 // The PPU reads four fields of its Snes (hPos, vPos, openBus, palTiming) and nothing else, so a zeroed
 // shell is enough -- snes.c's bus is never involved.

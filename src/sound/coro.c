@@ -51,10 +51,10 @@ int SndCoroDone(const SndCoro* c) { return !c || c->done; }
 void SndCoroFree(SndCoro* c) { if (!c) return; DeleteFiber(c->fiber); free(c); }
 
 #elif defined(SND_CORO_SWITCH)
-// THE SWITCH: what a fiber or swapcontext does -- the callee-saved registers pushed on the running stack, its pointer
-// stored, the other stack's taken and its registers popped -- with no system call (swapcontext also saves the signal
-// mask). The thread that took turns before cost two wake-ups a switch, tens of microseconds on a phone, and a song's
-// upload makes ~10,000 switches (one per handshake): a fight's start and the title's song stood the picture still.
+// The switch does what a fiber or swapcontext does (the callee-saved registers pushed on the running stack, its pointer
+// stored, the other stack's taken and its registers popped) with no system call. A thread taking turns costs two
+// wake-ups a switch, tens of microseconds on a phone, and a song's upload makes ~10,000 switches (one per handshake),
+// enough to stall the picture.
 // ct_snd_switch(save, to): *save = this side's stack pointer, then run on `to` until switched back.
 // ct_snd_start: where a new coroutine's first switch returns, with the SndCoro in x19 / rbx.
 struct SndCoro {

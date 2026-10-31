@@ -11,7 +11,7 @@
 // headerless HiROM image (bank C0 at offset 0): the run chain at $C0:FE00 is read from it. No hardware register is
 // touched: the two tables go to WRAM where the ROM's WMADD/WMDATA ($2181-$2183 / $2180) put them.
 //
-// The seed's beam reads are the rule's VIRTUAL BEAM (CLAUDE.md, the zelda3 model; snes.c snes_readBBus): `$213C` reads
+// The seed's beam reads are the timing rule's virtual beam (CLAUDE.md, the zelda3 model; snes.c snes_readBBus): `$213C` reads
 // `$0351`, both `$213D` reads 00. `CMP $2137` compares with the CPU's open bus -- $2137 drives no data, so the read
 // returns the last byte the CPU fetched, the operand's high byte $21.
 
@@ -24,7 +24,7 @@
 // the $C3 stage's task 3D72 and 7E/6844. Returns 0, or -1 without a ROM or with a bank this WRAM image cannot hold.
 int CtWipeRoutine(const uint8_t* rom, long romLen, uint8_t* wram128, uint16_t callerX, uint8_t callerDb);
 // The field's caller C0/22FA (C0/00B1 -> C0/21E1 -> C0/22D8): X = 0004 from C0/21EA's `DEC A / ASL A / TAX` of state 3,
-// the data bank 00 (measured at every field call of the attract: `ct.exe --wipeaudit`).
+// the data bank 00 (`ct.exe --wipeaudit` checks every field call of the attract).
 #define CT_WIPE_FIELD_X   0x0004
 #define CT_WIPE_FIELD_DB  0x00
 // The same call on an image the caller throws away (field.c fieldWipeMask's look-ahead): not one of the game's calls, so

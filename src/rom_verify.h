@@ -23,7 +23,7 @@ void CtRomSetPath(const char* path);
 // The image CtRomImage hands out from now on, in place of a dump it would look for (the ROM-free runtime's empty one).
 void CtRomSetImage(const uint8_t* img, long len);
 
-// CT_ROM_MEMPATCH="OFF=HEX,OFF|=HH,...": a measuring tool's instrumentation (tools/battle_status_cmp.py), applied IN
-// MEMORY to an image that has already passed CtRomVerify -- the file on disk is always the user's verified dump.
+// CT_ROM_MEMPATCH="OFF=HEX,OFF|=HH,...": a measuring tool's instrumentation (tools/battle_status_cmp.py), applied in
+// memory to an image that has already passed CtRomVerify; the file on disk stays the user's verified dump.
 // OFF is a file offset (hex); `=HEX` writes the bytes, `|=HH` ORs one byte. Returns how many bytes it changed.
 int CtRomApplyMemPatch(uint8_t* img, long len);

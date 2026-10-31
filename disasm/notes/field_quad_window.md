@@ -91,3 +91,23 @@ under `$1D1C * 2` to it -- no routine behind it. The ROM's loader (`--teleport 1
 `ct.exe --monitor` / `--hookpc` WITHOUT `CT_ORACLE_LOGICAL=1` cut the runner at `$69` (vPos 72) while the box types (C2/5DFA
 renders the glyphs before the event pass): the imps' WAITs starve for 24 frames and their blink looks out of phase with the
 port's. Under the rule (the runner's virtual beam, V = 0) the cartridge's blink is the port's frame for frame.
+
+## The colour window with a sub screen (FF 97's circle)
+
+`FF 97`'s circle (C0/232A) can run in a room that keeps BG3 on the sub screen (loc 051 / 005: TM 13, TS 04; CGWSEL 12
+adds the sub screen). Inside the window the main layers with math take the sub pixel, or the fixed colour where the sub
+screen is transparent; the PPU's halving skips that case (snes/ppu.c ppu_handlePixel, `secondLayer != 5 ||
+!addSubscreen`). Outside the window the math is prevented, so the pixel is the main screen alone: src/field.c
+`fieldColWindowApply` takes the bake's sum off again from the bake's main screen before the math and its sub screen
+(`CtFieldSceneScreens`). tools/field_colcircle_cmp.py pokes the circle in loc 005 (the blue half-height circle over
+the shop) and loc 084 (TM 04 / TS 13: black outside the circle).
+
+The NMI's COLDATA write is `E0` then `$0121` (C0/EC3D-EC45), and FD/C6F6 / C846 build channel 6's rows every frame from
+CGADSUB `$0BE0` and COLDATA `$0121` (`LDA $21 / STA $152D|$152F`, `LDA $0BE0 / STA $152C|$152E`). So the fixed colour is
+`$0121`'s channels at its intensity, the others 0. A main pixel whose layer has its CGADSUB bit (BG1-3, the OBJs of
+palettes 4-7 with bit 4, the backdrop with bit 5) takes the fixed colour added or subtracted (bit 7), halved (bit 6)
+unless CGWSEL bit 1 adds the sub screen, then clamped in 5 bits.
+
+The sprites take their own colour math the same way, with or without a colour window: a main-screen OBJ pixel of
+palettes 4-7 takes it when CGADSUB `$0BE0` has bit 4 set (C0/A412 sets `$0BE0` from the map header; op 0xF1 rewrites
+it). In loc 005 after `F1 9F 00` (`$0BE0` = 17) the lead's palette-4+ pixels take BG3's sub pixel once the circle is gone.

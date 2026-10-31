@@ -1,7 +1,6 @@
 // overlay.h - the F1 options overlay (Dear ImGui over the game's picture). C interface; src/overlay.cpp implements it
 // when third_party/imgui is present (CT_HAVE_IMGUI), src/overlay_stub.c otherwise (no overlay, F1 does nothing).
-// The host (field.c) runs it MODAL: the game stands still while it is open, and the options it edits are
-// settings.h's.
+// The host (field.c) runs it modal: the game stands still while it is open. The options it edits are settings.h's.
 #ifndef CT_OVERLAY_H
 #define CT_OVERLAY_H
 #include "SDL.h"

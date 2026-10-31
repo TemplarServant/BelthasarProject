@@ -1,7 +1,6 @@
-// oam.c — the field sprite -> OAM build, ported from Chrono Trigger and validated byte-for-byte
-// against the LakeSnes oracle (ct.exe --checkoam: 0 mismatches, 100% coverage over many frames).
+// oam.c -- the field sprite -> OAM build (disasm/notes/oam.md; `ct.exe --checkoam` compares it with the oracle).
 //
-// The pipeline (per frame), reproduced here:
+// The pipeline (per frame):
 //   C0/B276  init the per-group OAM write pointers to constants (main: default=spr28, B=spr104,
 //            C=spr4; high: $0907/$091A/$0901).
 //   C0/B2A8  iterate the Y-sorted sprite list $0E00 (chain heads) and the $0E81 next-links.
@@ -16,84 +15,25 @@
 // table when one covers it (CT_ASSET_TABLE, romview.h), else the ROM's.
 #define MR(o) CtRomByte(rom, 0x400000L, (long)(o))
 
-// C0/B309's STAGE 2 -- and it is a COPY, not a computation. That correction is the whole of this
-// routine's 2026-08-08 rewrite, and it fixed two defects that no scenario check could see.
-//
-//   B369  LDA #04 / STA $01C9        <- the PIECE COUNT: 04 (class 0) / 08 (B42D) / 0C (B510)
-//   B34F  LDX $01DB / STX $81        <- $2181 = the group's main cursor; the 4-byte bursts below then
-//                                       stream sequentially through the $2180 WRAM port
-//   B36E  LDA $7F4BC0,X / STA $80        the piece's X   (+0)
-//   B374  LDA $7F4BC1,X / STA $80        its Y           (+1)
-//   B37A  LDA $7F4BC6,X / STA $80        its tile        (+6)
-//   B380  LDA $7F4BC7,X / STA $80        its attr        (+7)
-//   B386  TXA / ADC #0008 / TAX          the next 8-byte piece record
-//   B390  DEC $01C9 / BNE ->B36E
-//
-// DEFECT 1 -- IT EMITTED ONE OAM ENTRY PER OBJECT AND THE ROM EMITS ONE PER GROUP OF FOUR PIECES.
-// C0/B309's FIRST dispatch is on the sprite CLASS, not the priority group (B316 BEQ ->B329 /
-// B31C BRL ->B3DF / B323 BRL ->B4B8 / B326 BRL ->B5AF), and each class body carries its own advance:
-// `B35D ADC #0010` for 4 pieces, `B421 ADC #0020` for 8, `B504 ADC #0030` for 12 and `B619 ADC #0060`
-// for 24, with the high-table byte count matching (ONE at B341, TWO at B3FB, THREE at B4D4, SIX at
-// B5CB -- and class 2's third destination is $7F:4B40, BELOW the record window, not $4F02, with
-// class 3's fourth at $4B41 and its last two out at $4F80/$4F81). An 8-, 12- or 24-piece sprite
-// therefore needs 2, 3 or 6 entries, and the cursors must advance by that much or the next object
-// lands on top of this one.
-// ⚠ AND THE COUNT IS NOT `(class & 3) + 1`: that arithmetic happens to fit classes 0-2 and is WRONG
-// for class 3, which is SIX groups (24 pieces), not four. The table below is read off the four arms.
-//
-// DEFECT 2 -- IT RE-DERIVED THE PLACEMENT THAT C0/B788 HAD ALREADY DONE. This used to compute
-// `finalX = objX + xoff` and `finalY = objY + yoff` and to rebuild the high byte from the X bit-8s.
-// The ROM does none of that here: C0/B788 (ctOamEmit in move.c, graded by --sweepdrain) writes the
-// placed X into the record's +0 and the CLAMPED Y into +1, and stage 2 copies them out. The Y is the
-// difference that matters -- ctOamEmit's Y half is seven hand-written clamp rules, and a plain add
-// agrees with it only while the clamp does not bind. Two models of one computation, and they disagree
-// exactly where the ROM bothered to have rules.
-//
-// WHAT THIS COSTS --checkoam, said plainly: with the values now passed through, that check no longer
-// discriminates the placement MATH (which moved to where the ROM keeps it, and is graded there). It
-// still discriminates the ADDRESSING -- which piece lands at which OAM byte, which high byte at which
-// slot, how many entries per object -- because a mis-addressed copy puts the wrong record byte at an
-// address the oracle filled differently. --sweepstage2 grades that addressing on SYNTHETIC records,
-// where every byte is distinguishable, precisely so it cannot become a memcpy grade.
-// ⭐⚠ THE TWO WALKS DISAGREE WHEN B701 REFUSES AN OBJECT, located 2026-09-11.
-//
-// ⚠ SCOPE FIRST, because the commit that found this overstated it as "live code": THIS FUNCTION
-// IS A VALIDATION MODEL, not the renderer. Nothing outside src/main.c calls it -- the production
-// field renderer rasterises from the actor list through field.c's drawSprite(), and outside
-// boot.c's clear nothing else even reads $0700. So what the defect below corrupts is what
-// --checkoam, --verifyframe and --sweepstage2 believe, not what the game draws. That makes it a
-// grading defect rather than a rendering one -- and --checkoam carries the same blindness it
-// describes: it is green because no object is ever refused in the scenarios it runs. C0/B309 opens `JSR C0/B701 / BCC ->B30F / RTS`: an object whose
-// arena release is REFUSED emits nothing at all. CtAnimDrawPass models that exactly -- it advances the
-// cursors only on the CLC arm and counts the rest in gCtDrawSkipped. THIS function does not: it walks
-// the same $0E00/$0E81 list a SECOND time and emits bytes for every object in it. So the moment any
-// object is refused, the two walks are out of step and every later object lands at the wrong cursor.
-//
-// MEASURED, on --sweepstage2 with three class-3 objects seeded: the chain links, $1700, $1B00 and the
-// whole $7F:4BC0/$7F:4F00 record windows are BYTE-IDENTICAL to the oracle's, and the ROM still emits
-// obj02 then obj06 while this emits obj02, obj04, obj06 -- the ROM refused obj04. The bytes were never
-// wrong; the object list was.
-//
-// ⚠ AND THE OBVIOUS FIX IS WRONG. Having CtAnimDrawPass publish a per-object accept flag for this
-// function to filter on would break every caller that does NOT run the draw pass first -- which is the
-// normal case: in production CtAnimDrawPass runs only under legsOn(), and main.c's three call sites
-// here run none. Calling C0/B701 again from this function is worse: it is the engine's only arena
-// RELEASE and would double-free. The ROM has ONE walk that releases and emits per object; this port
-// split it in two, and rejoining them is the fix -- a structural change to the render path with its
-// own design and its own grading, not a patch. Until then class 3 stays out of --sweepstage2's seeds
-// (the note there has the reproduction) because it is the class large enough to make the arena refuse.
+// C0/B309's stage 2: a copy of the records C0/B788 placed (X in +0, the clamped Y in +1), one OAM entry per group of
+// four pieces, the group count by sprite class (1 / 2 / 3 / 6; class 3 is 24 pieces). oam.md "C0/B309's stage 2 is a
+// copy" has the listing and the class arms.
+// Note: this function is a model for `--checkoam`, `--verifyframe` and `--sweepstage2` (only src/main.c calls it; the
+// field renderer draws through field.c's drawSprite()). Not modelled: C0/B701's refusal. The ROM emits nothing for an
+// object whose arena release is refused (`JSR C0/B701 / BCC ->B30F / RTS`), while this walk emits every object in the
+// $0E00/$0E81 list, so after a refused object every later one lands at the wrong cursor. The fix is to rejoin the
+// release and the copy into one walk, as the ROM has it (oam.md); until then class 3 stays out of --sweepstage2's seeds.
 void CtBuildFieldOAM(const uint8_t* r, uint8_t* oamMain, uint8_t* oamHigh,
                      uint8_t* wroteMain, uint8_t* wroteHigh) {
-  // The high-table DESTINATIONS per piece-group -- ctOamEmit's HIDST read from the consumer side.
-  // Class 3's six come from C0/B5CB, which PUSHES $4F81/$4F80/$4B41/$4B40/$4F01 and then loads
-  // $4F00, so the stores come back out in this order; they are the same six C0/C73A writes.
+  // The high-table destinations per piece group (ctOamEmit's HIDST, read from the consumer side). Class 3's six come
+  // from C0/B5CB, which pushes $4F81/$4F80/$4B41/$4B40/$4F01 and then loads $4F00, so the stores come out in this order.
   static const int GRP[4] = { 1, 2, 3, 6 };   // groups of four per class -- B341/B3FB/B4D4/B5CB
   static const int HIDST[4][6] = { { 0x4F00 },
                                    { 0x4F00, 0x4F01 },
                                    { 0x4F00, 0x4F01, 0x4B40 },
                                    { 0x4F00, 0x4F01, 0x4B40, 0x4B41, 0x4F80, 0x4F81 } };
   // per-group OAM write cursors (byte offsets into the 512-byte main / 32-byte high), the
-  // init constants from C0/B276 — groups [default, B, C].
+  // init constants from C0/B276 -- groups [default, B, C].
   int mainOff[3] = { 0x70, 0x1A0, 0x10 }, highOff[3] = { 0x07, 0x1A, 0x01 };
   for (int Y = 0x7E; Y >= 0; Y -= 2) {              // the Y-sorted sprite list $7E0E00 (chain heads)
     int obj = r[0x0E00 + Y];
@@ -105,14 +45,14 @@ void CtBuildFieldOAM(const uint8_t* r, uint8_t* oamMain, uint8_t* oamHigh,
       if ((base & 0x1F) || base + 0x20 > 0x540) continue;
       int prio = r[0x0F80 + idx] & 0x0C;
       int g = (prio == 0) ? 0 : (prio & 4) ? 1 : 2;  // group default / B / C
-      int cls = r[0x1201 + idx] & 3;                 // the PIECE CLASS: 0 = 4 pieces, 1 = 8, 2 = 12,
-      int ng = GRP[cls];                             //   and 3 = TWENTY-FOUR, not 16 (B5AF's `LDA #18`)
+      int cls = r[0x1201 + idx] & 3;                 // the piece class: 0 = 4 pieces, 1 = 8, 2 = 12,
+      int ng = GRP[cls];                             //   and 3 = 24, not 16 (B5AF's `LDA #18`)
       for (int e = 0; e < 4 * ng; e++) {             // B369/B42D/B510/B625's count, one 4-byte burst each
         int o = 0x10000 + ((0x4BC0 + base + e * 8) & 0xFFFF);
         int m = mainOff[g] + e * 4;                  // the port streams them straight from the cursor
         if (m + 3 < 512) {
-          oamMain[m]     = r[o + 0];                 // B36E LDA $7F4BC0,X -- the PLACED X
-          oamMain[m + 1] = r[o + 1];                 // B374 LDA $7F4BC1,X -- the CLAMPED Y
+          oamMain[m]     = r[o + 0];                 // B36E LDA $7F4BC0,X -- the placed X
+          oamMain[m + 1] = r[o + 1];                 // B374 LDA $7F4BC1,X -- the clamped Y
           oamMain[m + 2] = r[o + 6];                 // B37A LDA $7F4BC6,X
           oamMain[m + 3] = r[o + 7];                 // B380 LDA $7F4BC7,X
           if (wroteMain) wroteMain[m] = wroteMain[m + 1] = wroteMain[m + 2] = wroteMain[m + 3] = 1;
@@ -155,29 +95,13 @@ void CtDecodeSpriteAssembly(const uint8_t* r, const uint8_t* rom, int romLen, in
   }
 }
 
-// =================================================================================================
-// C0/ABA2 -- THE FIELD HEADING BUILDER, byte-exact. Eleven in-bank callers (4D46 4FAB 503D 50EA
-// 516D 51F1 5281 5326 53CA 54B6 55E6), no long calls.
-//
-// IT TAKES NO ARGUMENTS. The ROM reads four bytes its callers stage first -- $01F0 = current X,
-// $01F1 = current Y, $01F2 = target X, $01F3 = target Y (see C0/5129 at 5140/5147/514C, and op
-// 0x96 at 4F71/4F78/4F7F/4F84) -- and writes the answer to $01EE.
-//
-// ⚠ THE QUADRANT IS CHOSEN BY AN UNSIGNED BORROW, NOT A SIGNED COMPARE, and that was the whole
-// defect. `LDA $F3 / SEC / SBC $F1 / BCC` branches on the CARRY, i.e. on "target < current" as
-// UNSIGNED BYTES. This function used to take signed int8 deltas the caller had already computed,
-// and at the map wrap the two models disagree: target $00 minus current $FF BORROWS here, but
-// `(int8_t)($00 - $FF)` truncates to +1, so the two aimed 180 degrees apart. Measured in --sweepops
-// as `$01EE C=00 RO=80` at pos=(FF,7E), which negated the velocity exactly (`$01DD C=2C RO=D4`).
-//
-// It also WRITES five bytes the old version did not touch at all: $01EF, $01F6, $01F7, the 16-bit
-// pair $01F4/$01F5, and $01EE itself. Two of the four quadrant arms SWAP $01F6/$01F7 through the
-// accumulator's hidden B half (XBA), which is what folds the circle down to one octant of table.
-// Graded by --sweepaba2.
-// -------------------------------------------------------------------------------------------------
+// ---- C0/ABA2, the field heading builder (oam.md "C0/ABA2") ----
+// It reads the four bytes its callers stage ($01F0/$01F1 current X/Y, $01F2/$01F3 target X/Y) and writes $01EE.
+// Note: the quadrant is chosen by an unsigned borrow (`LDA $F3 / SEC / SBC $F1 / BCC`), not a signed compare; at the map
+// wrap the two differ by 180 degrees. Two of the four arms swap $01F6/$01F7 through the B half (XBA), which folds the
+// circle down to one octant of the table. `ct.exe --sweepaba2` checks it.
 int CtMoveDirAngle(uint8_t* r, const uint8_t* rom) {
-  // ABA2 STZ $EF, and it is LOAD-BEARING rather than housekeeping: callers re-read $EE as a 16-BIT
-  // word, so the heading's high byte has to be the zero this store puts there.
+  // ABA2 STZ $EF: callers re-read $EE as a 16-bit word, so the heading's high byte must be this zero.
   r[0x01EF] = 0x00;
   int dy = r[0x01F3] - r[0x01F1];                          // ABA4/ABA6/ABA7 LDA $F3 / SEC / SBC $F1
   if (dy >= 0) {                                           // ABA9 BCC ->ABCB  (carry set = no borrow)
@@ -187,8 +111,8 @@ int CtMoveDirAngle(uint8_t* r, const uint8_t* rom) {
       r[0x01F6] = (uint8_t)dx;                             // ABB4 STA $F6
       r[0x01EE] = 0x00;                                    // ABB6 STZ $EE
     } else {
-      // ABBA-ABC7. `EOR #FF / INC A` negates, `EB XBA` parks it in the hidden B half, $F6 takes the
-      // Y delta and then XBA brings |dX| back for $F7 -- the axes are SWAPPED, not just negated.
+      // ABBA-ABC7. `EOR #FF / INC A` negates, `EB XBA` parks it in the B half, $F6 takes the
+      // Y delta and then XBA brings |dX| back for $F7 -- the axes are swapped, not just negated.
       r[0x01F6] = (uint8_t)dy;                             // ABBE LDA $F7 / ABC0 STA $F6
       r[0x01F7] = (uint8_t)((-dx) & 0xFF);                 // ABBA/ABBC then ABC2 XBA / ABC3 STA $F7
       r[0x01EE] = 0x40;                                    // ABC5/ABC7
@@ -196,25 +120,24 @@ int CtMoveDirAngle(uint8_t* r, const uint8_t* rom) {
   } else {
     int ady = (-dy) & 0xFF;                                // ABCB EOR #FF / ABCD INC A
     r[0x01F7] = (uint8_t)ady;                              // ABCE STA $F7
-    // ABD0/ABD2/ABD3. This is dX's FIRST evaluation on this path, not a recomputation: ABA9's BCC
-    // jumped clean over ABAD..ABB2, so the +Y branch's subtraction never ran.
+    // ABD0/ABD2/ABD3: dX's first evaluation on this path (ABA9's BCC jumped over ABAD..ABB2).
     int dx = r[0x01F2] - r[0x01F0];
     if (dx < 0) {                                          // ABD5 BCS ->ABE2
       r[0x01F6] = (uint8_t)((-dx) & 0xFF);                 // ABD7/ABD9/ABDA
       r[0x01EE] = 0x80;                                    // ABDC/ABDE
     } else {
-      // ABE2-ABEC, the other swap. NOTE $01F7 IS WRITTEN TWICE ON THIS PATH: once at ABCE with
-      // |dY|, then again here with dX. A write list that records only the final value misses it.
+      // ABE2-ABEC, the other swap. Note: $01F7 is written twice on this path, at ABCE with |dY| and
+      // here with dX.
       r[0x01F6] = (uint8_t)ady;                            // ABE3 LDA $F7 / ABE5 STA $F6
       r[0x01F7] = (uint8_t)dx;                             // ABE2 XBA / ABE7 XBA / ABE8 STA $F7
       r[0x01EE] = 0xC0;                                    // ABEA/ABEC
     }
   }
-  // ABEE-AC04: the SCALE selector. `89 40 BIT #$40` is an IMMEDIATE BIT, which on the 65816 sets
-  // ONLY Z -- it does not touch N or V -- so each `BNE` is a plain "this bit is set" test.
+  // ABEE-AC04: the scale selector. `89 40 BIT #$40` is an immediate BIT, which sets only Z (not N
+  // or V), so each `BNE` is a plain "this bit is set" test.
   int f6 = r[0x01F6], f7 = r[0x01F7], ix;
   if ((f6 & 0x40) || (f7 & 0x40)) {                        // ABEE/ABF0/ABF2 and ABF4/ABF6/ABF8
-    r[0x01F4] = (uint8_t)((f6 & 0x7F) >> 2); r[0x01F5] = 0x00;   // AC30 STA $F4 -- a 16-BIT store
+    r[0x01F4] = (uint8_t)((f6 & 0x7F) >> 2); r[0x01F5] = 0x00;   // AC30 STA $F4 -- a 16-bit store
     ix = (((f7 & 0x7C) << 3) | ((f6 & 0x7F) >> 2)) & 0xFFFF;     // AC34/AC37 ASL x3 / AC3A ORA $F4
   } else if ((f6 & 0x20) || (f7 & 0x20)) {                 // ABFA..AC04
     r[0x01F4] = (uint8_t)((f6 & 0x3F) >> 1); r[0x01F5] = 0x00;   // AC50
@@ -223,8 +146,7 @@ int CtMoveDirAngle(uint8_t* r, const uint8_t* rom) {
     r[0x01F4] = (uint8_t)(f6 & 0x1F); r[0x01F5] = 0x00;    // AC0D
     ix = (((f7 & 0x1F) << 5) | (f6 & 0x1F)) & 0xFFFF;      // AC11/AC14 ASL x5 / AC19
   }
-  // `AA TAX` is governed by the INDEX width, and the callers leave X 16-BIT, so the full index
-  // moves; taking only its low byte would collapse three quarters of the table onto one row. All
+  // `AA TAX` follows the index width, and the callers leave X 16-bit, so the full index moves. All
   // three arms cap the index at $3E0 | $1F = $3FF, so the 1 KB table at $C0:F300 is never overrun.
   r[0x01EE] = (uint8_t)((r[0x01EE] + MR(0xF300 + ix)) & 0xFF);  // AC1E/AC21/AC22/AC24 (and AC3F.., AC60..)
   return r[0x01EE];

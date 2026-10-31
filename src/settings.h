@@ -1,13 +1,12 @@
 // settings.h - the player's options for Belthasar: what the F1 overlay edits and ct_settings.ini keeps.
 //
-// The options are the HOST's (window, picture, sound volume, controls, how strictly the SNES's timing is kept); the
+// The options are the host's (window, picture, sound volume, controls, how strictly the SNES's timing is kept); the
 // game's own settings (battle speed, the Config screen's button map, Stereo/Mono) stay in the game's SRAM as on the
-// cartridge. Defaults are the behaviour Belthasar had before the file existed, so a missing or partial file changes
-// nothing.
+// cartridge. The defaults are the vanilla game, so a missing or partial file changes nothing.
 //
-// HEADLESS RUNS NEVER READ THE FILE (CtSettingsLoad's `interactive` = 0: --selftest, CT_NOPACE, a dummy video driver):
-// the regression suite's outputs must not depend on what a player left in ct_settings.ini. CT_SETTINGS=<path> loads a
-// file explicitly, headless or not.
+// Note: headless runs never read the file (CtSettingsLoad's `interactive` = 0: --selftest, CT_NOPACE, a dummy video
+// driver), so the regression suite does not depend on a player's ct_settings.ini. CT_SETTINGS=<path> loads a file
+// explicitly, headless or not.
 #ifndef CT_SETTINGS_H
 #define CT_SETTINGS_H
 #include <stdint.h>

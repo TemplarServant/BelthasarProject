@@ -1,6 +1,6 @@
-// What the menu shell's open costs the CPU (menu_cost.h). Every constant is a sum of LakeSnes instruction costs, read
-// off the oracle's beam traces one instruction at a time (tools/cycle_costs.py); the comments name the instructions.
-// The Python twin tools/vwf_cost_proto.py is the same walk and is what tools/menu_init_cmp.py grades against the trace.
+// The CPU cost of the menu shell's open (menu_cost.h). Each constant is a sum of LakeSnes instruction costs
+// (tools/cycle_costs.py); the comments name the instructions. tools/vwf_cost_proto.py is the same walk in Python,
+// which tools/menu_init_cmp.py grades against the oracle's trace.
 #include "menu_cost.h"
 #include "romview.h"
 
@@ -206,7 +206,7 @@ long ct_menu_slot_scan_cycles(const uint8_t* rom, long romLen, const uint8_t* sr
 #define L_8663       10464L
 #define L_92F4       1418L
 #define L_F3CA       289874L
-#define L_9875       831482L                              // C2/9875: NOT WALKED YET (party / bag: +-1,800)
+#define L_9875       831482L                              // C2/9875: not walked (party / bag: +-1,800)
 #define L_HP         2630L
 #define L_806B       236L
 

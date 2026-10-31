@@ -1,4 +1,4 @@
-// ct_lake_state.c — CTLS wrap/unwrap for the raw LakeSnes handleState stream.
+// ct_lake_state.c -- CTLS wrap/unwrap for the raw LakeSnes handleState stream.
 #include "ct_lake_state.h"
 #include <stdio.h>
 #include <stdlib.h>

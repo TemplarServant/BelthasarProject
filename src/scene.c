@@ -1,7 +1,6 @@
-// scene.c — render a Chrono Trigger field scene in C (the project's own engine).
-// The renderer is split into LOAD (gather a scene's data — from the ROM, or from
-// ct_assets.dat) and COMPOSE (turn that data into pixels). Both data sources feed
-// the same compose path, so a .dat render is byte-identical to a ROM render.
+// scene.c -- the field scene renderer. Split into load (gather a scene's data, from the
+// ROM or from ct_assets.dat) and compose (turn it into pixels); both sources feed the
+// same compose path, so a .dat render equals a ROM render.
 //
 // scene header -> tileset L12 (8 chipsets of LZ 4bpp chips + 512 16x16 metatiles,
 // + chip animation) and L3 (2bpp + 256 metatiles) + scene palette (+ palette
@@ -97,7 +96,7 @@ static void parse_metas(const uint8_t* a, size_t alen, int count, int pal_mul, i
 }
 
 // Read `count` metatiles from a ct_assets.dat blob (4 corners x {chip u16, base u8,
-// flags u8: fx|fy<<1|prio<<2}) — the inverse of extract_assets.py's _ser_metas.
+// flags u8: fx|fy<<1|prio<<2}), the inverse of extract_assets.py's _ser_metas.
 static void deserialize_metas(const uint8_t* b, int count, Meta* out) {
   for (int t = 0; t < count; t++)
     for (int k = 0; k < 4; k++) {
@@ -110,7 +109,7 @@ static void deserialize_metas(const uint8_t* b, int count, Meta* out) {
 }
 
 // Apply a chip animation set (already-decoded animated chips + descriptors) onto the
-// static chips for 60Hz tick `frame`. Pure: no ROM access — used by both data paths.
+// static chips for 60Hz tick `frame`. Pure: no ROM access; used by both data paths.
 static void apply_chip_anim_data(uint8_t* chips, uint8_t* present, const uint8_t* animchips,
                                  int anim_chips, const uint8_t* desc, int desc_len, int frame) {
   int p = 0;
@@ -235,22 +234,16 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
                        int nchips, uint8_t pal[128][3], int prio, uint8_t bit, uint8_t* priomask,
                        const uint8_t* tprio, int tpw, int tph, int sox, int soy, int mapRing, const uint16_t* held) {
   if (!tiles || !metas || !chips) return;
-  // SNES BG layers wrap: a layer smaller than the canvas tiles to fill it
-  // (chip_x % width, chip_y % height in CTViewer). Iterate the whole canvas in
-  // metatiles and sample the layer modulo its own dimensions.
-  // (sox,soy) = this layer's SAMPLE OFFSET: canvas pixel p shows layer pixel p + (sox,soy), wrapped.
-  // It is how a layer that scrolls on its own (C0/9252/928E) is drawn on a canvas the field crops at
-  // BG1's camera. With (0,0) -- every layer of every scene before layer scroll existed -- the loops
-  // below visit exactly the cells they always did, plus one extra row and column that clip at once.
+  // SNES BG layers wrap: a layer smaller than the canvas tiles to fill it, so the canvas is walked in
+  // metatiles and the layer sampled modulo its own size.
+  // (sox,soy) = this layer's sample offset: canvas pixel p shows layer pixel p + (sox,soy), wrapped. This draws
+  // a layer that scrolls on its own (C0/9252/928E) on a canvas the field crops at BG1's camera.
   int cwm = W / 16, chm = H / 16;
   int LW = lw * 16, LH = lh * 16;
-  // ⭐ A MAP-BUILT LAYER WRAPS AT ITS TILEMAP, NOT AT ITS MAP. FD/C0D7 gives every field BG a 64x32 tilemap (BGnSC
-  // $69/$71/$79), which the PPU addresses as two 32x32 halves (x < 256 and x >= 256; snes/ppu.c ppu_getPixelForBgLayer),
-  // and C0/794E (BG2) / C0/7CE7 (BG3) fill them from the map: the first half with metatiles (0..15, 0..15); the second
-  // with metatile columns 16..31 of rows 0..15 when the layer is wider than 16 ($0BCF / $0BD3 != $10, C0/7991 / 7D28),
-  // else with rows 16..31 of columns 0..15 when it is taller ($0BD1 / $0BD5, C0/79AE / 7D45), else the first half again.
-  // So the picture repeats every 256 px down whatever the map's height, and a 16-wide, 32-tall map alternates its top
-  // and bottom halves across. (loc 1B0's BG2 is 32x32: the cartridge shows its top 16 rows on every line.)
+  // A map-built layer wraps at its 64x32 tilemap (FD/C0D7), not at its map: C0/794E (BG2) / C0/7CE7 (BG3) fill the
+  // second 32x32 half with columns 16..31 when the layer is wider than 16 (C0/7991 / 7D28), else rows 16..31 when it
+  // is taller (C0/79AE / 7D45), else the first half again. So the picture repeats every 256 px down.
+  // disasm/notes/field_bg_tilemap.md.
   if (mapRing) { LW = (lw != 16 || lh != 16) ? 512 : 256; LH = 256; }
   int ox = ((sox % LW) + LW) % LW, oy = ((soy % LH) + LH) % LH;
   int mx0 = ox / 16, my0 = oy / 16, fx0 = ox % 16, fy0 = oy % 16;
@@ -267,8 +260,7 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
       }
       int ti = tiles[mr * lw + mc];
       (void)tprio; (void)tpw; (void)tph;
-      // (A "high-bank metas = prio" rule was tried and REFUTED against the live VRAM
-      // tilemap: the real map prios at the bed are exactly the per-corner P bits.)
+      // The priority is each corner's P bit (as the VRAM tilemap holds it), not the metatile bank.
       for (int k = 0; k < 4; k++) {
         // A chip the VRAM still holds from an earlier upload (CtFieldScenePicHold) shows that metatile's corner.
         int tk = ti;
@@ -361,10 +353,10 @@ typedef struct {
   int fxLive, fxLiveOn;                // CtFieldSceneSetEffect: the field's live CGADSUB ($0BE0), over the header's byte
   int scrTM, scrTS;                   // ...and its layer designations (BL1/BL2/BL3 bits)
   int scrObjM, scrObjS;               // ...and OBJ's ($212C/$212D bit 4)
-  // The map header's layer-scroll bytes md[1..3] (ROM C0/A385-A4FB decodes them; see
+  // The map header's layer-scroll bytes md[1..3] (C0/A385-A4FB decodes them; see
   // CtSceneLayerScrollLoad) and whether this map carried them (older packs do not).
   uint8_t md1, md2, md3; int haveMdScroll;
-  // Per-layer SAMPLE OFFSET in pixels, relative to BG1 (the camera): the canvas is cropped at the
+  // Per-layer sample offset in pixels, relative to BG1 (the camera): the canvas is cropped at the
   // camera, so a layer scrolling on its own is drawn sampled at +offset. 0 = locked to the camera.
   int l2ox, l2oy, l3ox, l3oy;
   uint8_t mapBuilt;            // $1D35 & 6 as the field last passed it: bit1 BG2, bit2 BG3 built from the map (see draw_layer)
@@ -374,22 +366,22 @@ typedef struct {
   int sm_l, sm_t, sm_r, sm_b, sm_full;
   // retained chip/palette animation source: lets the field re-apply the BG animation for
   // any frame (flags waving, water, fire) instead of freezing it at the load-time frame.
-  uint8_t basePal[128][3];                 // palette BEFORE palette-anim (apply mutates in place)
+  uint8_t basePal[128][3];                 // palette before palette-anim (apply mutates in place)
   uint8_t* animChips; int nAnimChips;      // decoded animated chips (nAnimChips * 64)
   uint8_t* chipAnimDesc; int chipAnimDescLen;
   uint8_t* palAnimDesc;  int palAnimDescLen;
   uint8_t* prevChips;                      // shadow of chips12 to detect when a re-bake is needed
   int animFrame;                           // last frame applied to chips12/pal
-  uint8_t* bakeMain;                       // ...and its MAIN screen before the colour math (CtFieldSceneMainScreen)
-  uint8_t* bakeSub; uint8_t* bakeSubCov;   // ...and its SUB screen (pixels, layer bits; NULL with no sub screen) and the
+  uint8_t* bakeMain;                       // the last bake's main screen before the colour math (CtFieldSceneMainScreen)
+  uint8_t* bakeSub; uint8_t* bakeSubCov;   // ...and its sub screen (pixels, layer bits; NULL with no sub screen) and the
   int bakeBlend, bakeSubOp, bakeHalf;      //   math the bake applied with it (CtFieldSceneScreens)
-  uint8_t* bakeCov; int bakeCovW, bakeCovH; // the last CtFieldSceneBake's MAIN-screen coverage: per pixel the layer bit
+  uint8_t* bakeCov; int bakeCovW, bakeCovH; // the last CtFieldSceneBake's main-screen coverage: per pixel the layer bit
                                            //   (L1 1, L2 2, L3 4) of the pixel on top, 0 = backdrop
   uint8_t* layRgb[6]; uint8_t* layCov[6]; int layW[6], layH[6], layDirty;   // CtFieldSceneLayers, built on demand
   int bakedO[4];                           // the layer offsets the last bake drew at (l2ox l2oy l3ox l3oy then)
   uint8_t* bakeMotCov;                     // ...and the layer the pixel's picture comes from: the main screen's, else the
                                            //   sub screen's where only it shows (motion.h: what the pixel moves with)
-  // THE CHIPS THE VRAM STILL HOLDS FROM AN EARLIER UPLOAD (CtFieldScenePicHold): per layer, (2 w) x (2 h) chips, the
+  // The chips the VRAM still holds from an earlier upload (CtFieldScenePicHold): per layer, (2 w) x (2 h) chips, the
   // metatile id whose corner that chip shows, 0xFFFF = the layer's own cell (l1t..). NULL until a chip is held.
   uint16_t* held[3]; int heldN[3];
 } SceneData;
@@ -505,10 +497,10 @@ static void CtLoadSceneFromRom(const uint8_t* rom, int index, int frame,
 
 // Compose loaded scene data into a fresh RGB image (animation already baked in). If outPrio
 // is non-NULL, also returns a 1-byte/pixel mask of BG1/BG2 priority-1 pixels (the foreground
-// tiles a field engine should draw OVER sprites), cropped to match the returned image.
-// THE FIELD'S COLOUR MATH IS $0BE0, not the header's byte: the load copies the map header's byte 5 there (C0/A40B-A412
-// `LDA $7EB505 / STA $0BDF / STA $0BE0`, the same byte effect_flags holds) and channel 6's rows take it every frame (FD/C6F6);
-// op 0xF1 (C0/3D2C-3D74) and C0/21E1's entry 9 (C0/25AE) rewrite it. CtFieldSceneSetEffect hands the bake the live byte.
+// tiles a field engine should draw over sprites), cropped to match the returned image.
+// The field's colour math is $0BE0, not the header's byte: the load copies header byte 5 there (C0/A40B-A412, the
+// byte effect_flags holds) and channel 6's rows take it every frame (FD/C6F6); op 0xF1 (C0/3D2C-3D74) and C0/21E1's
+// entry 9 (C0/25AE) rewrite it. CtFieldSceneSetEffect hands the bake the live byte.
 static int sceneEffect(const SceneData* sd) { return sd->fxLiveOn ? sd->fxLive : sd->effect_flags; }
 static int gSceneLayersOff = 0;   // BL1/BL2/BL3 bits removed from both screens for one compose (see below)
 static uint8_t* gSceneMotCov;     // CtComposeScene's motion coverage, when it is asked for the coverage (CtFieldSceneBake)
@@ -522,19 +514,18 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   int ef = sceneEffect(sd);
   int blend_en = ef & 0x07, sub_op = (ef & 0x80) != 0, half = (ef & 0x40) != 0;
   if (sd->scrOn) {                                   // a battle's screen (CtFieldSceneSetScreen): its TM/TS, CGWSEL bit 1 = add
-    main_t = sd->scrTM; sub_t = sd->scrTS;           //   the SUB screen (clear: the fixed colour, the battle compositor's), and
+    main_t = sd->scrTM; sub_t = sd->scrTS;           //   the sub screen (clear: the fixed colour, the battle compositor's), and
     if (!(sd->scrCGWSEL & 0x02)) sub_t = 0;          //   CGADSUB. A BG3 on the effect's tilemap is not in scrTM/scrTS: it is the
-    blend_en = sd->scrCGADSUB & 0x07;                //   EFFECT's layer (CtBattleFxLayerCompose draws it), not the field's that
+    blend_en = sd->scrCGADSUB & 0x07;                //   effect's layer (CtBattleFxLayerCompose draws it), not the field's that
     sub_op = (sd->scrCGADSUB & 0x80) != 0;           //   this bake holds.
     half = (sd->scrCGADSUB & 0x40) != 0;
   }
   if (!blend) { main_t |= sub_t; sub_t = 0; }
-  main_t &= ~gSceneLayersOff; sub_t &= ~gSceneLayersOff;   // CtFieldSceneBakeLayersOff: layers a WINDOW takes away
+  main_t &= ~gSceneLayersOff; sub_t &= ~gSceneLayersOff;   // CtFieldSceneBakeLayersOff: layers a window takes away
   main_t &= ~sd->vramOff; sub_t &= ~sd->vramOff;           // CtFieldSceneSetVramLayers: the host draws them from VRAM
-  // CT_SCENEDBG=1: the scene's LAYER SETUP, once per compose. main_t/sub_t are the TM/TS
+  // CT_SCENEDBG=1: the scene's layer setup, once per compose. main_t/sub_t are the TM/TS
   // designations the screen_flags byte carries (bits 0-2 main, 4-6 sub; BL1=1 BL2=2 BL3=4), and
-  // has_l3 says whether the map even packs an L3. A scene whose background looks wrong is almost
-  // always one of these three numbers, and there was no way to read them without a rebuild.
+  // has_l3 says whether the map packs an L3.
   { static int t = -1; if (t < 0) { const char* e = getenv("CT_SCENEDBG"); t = (e && *e) ? 1 : 0; }
     if (t) fprintf(stderr, "scenedbg: screen=%02X effect=%02X -> main_t=%X sub_t=%X blend_en=%X "
                            "half=%d sub_op=%d | has_l3=%d L1=%dx%d L2=%dx%d L3=%dx%d | md=%02X %02X %02X "
@@ -542,9 +533,8 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
                    sd->screen_flags, sd->effect_flags, main_t, sub_t, blend_en, half, sub_op,
                    sd->has_l3, sd->w1, sd->h1, sd->w2, sd->h2, sd->w3, sd->h3,
                    sd->md1, sd->md2, sd->md3, sd->l2ox, sd->l2oy, sd->l3ox, sd->l3oy); }
-  // CT_SCENEISO=<hex>: compose ONLY these layers (1 = L1, 2 = L2, 4 = L3), main screen, sub off.
-  // The field counterpart of the oracle's PEEK_ISOBG, and the only way to ask which of a scene's
-  // layers is drawing a given thing without rebuilding.
+  // CT_SCENEISO=<hex>: compose only these layers (1 = L1, 2 = L2, 4 = L3), main screen, sub off.
+  // The field counterpart of the oracle's PEEK_ISOBG.
   { static int iso = -2; if (iso == -2) { const char* e = getenv("CT_SCENEISO"); iso = e ? (int)strtol(e, NULL, 16) : -1; }
     if (iso >= 0) { main_t = iso & 0x07; sub_t = 0; } }
 
@@ -561,23 +551,14 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   LInfo li1 = { sd->l1t, sd->w1, sd->h1, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, 0, 0, 0, sd->held[0] };
   LInfo li2 = { sd->l2t, sd->w2, sd->h2, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, sd->l2ox, sd->l2oy, (sd->mapBuilt & 0x02) != 0, sd->held[1] };
   LInfo li3 = { sd->l3t, sd->w3, sd->h3, sd->meta3, 256, sd->chips3, sd->pres3, sd->nchips3, NULL, 1, 1, sd->l3ox, sd->l3oy, (sd->mapBuilt & 0x04) != 0, sd->held[2] };
-  // ⭐ THE PRIORITY MASK IS A **LAYER-ORDER** FACT, NOT A MAIN-SCREEN ONE. main_t/sub_t are the
-  // TM/TS designations, i.e. which layers feed COLOUR MATH; the SNES priority ladder (OBJ prio-3 >
-  // BG1.1 > BG2.1 > OBJ prio-2 > BG1.0 > BG2.0 ...) is independent of them, and this compose already
-  // shows sub-screen pixels wherever the main screen is uncovered (the `mc == 0 && sc` arm below).
-  // Passing the mask only to the MAIN pass therefore lost every foreground tile of a scene that puts
-  // BG1/BG2 on the SUB screen -- scene 129 (Manoria Cathedral) has screen_flags = 0xB4, so main_t = 4
-  // (BG3 only) and sub_t = 0xB, and the whole scene reported fgpx = 0 with nothing able to occlude a
-  // sprite. Measured: the oracle's live BG1 tilemap at loc $081 has 392 priority-bit entries, the
-  // pews at metatiles (4..6, 18..19) carry them (tileset 11 metas 213/214/216/229/200/232), and the
-  // oracle draws the nuns (obj10/obj11, $0C00 = $0C01 = 0x20 = OBJ prio 2) BEHIND those pews.
+  // The priority mask follows layer order, not the main screen: the SNES priority ladder (OBJ prio 3 > BG1.1 >
+  // BG2.1 > OBJ prio 2 > ...) does not depend on TM/TS, so both passes feed it (a scene may put BG1/BG2 on the sub
+  // screen alone; disasm/notes/field_sprite_prio_and_player_gate.md).
   draw_pass(main_px, main_cov, W, H, main_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
   draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
 
-  // THE COLOUR MATH IS THE PPU'S, IN 5 BITS (snes/ppu.c ppu_handlePixel): add or subtract the sub-screen colour, halve,
-  // THEN clamp to 0..31. The palette holds conv5 values, so >> 3 recovers each channel's 5 bits exactly. The 8-bit
-  // `(d >> 1) + (s >> 1)` this used to do is off by up to 4 per channel -- every shadow BG2 half-adds over BG3 (the
-  // tent keeper, CGADSUB = $42) and every BG3 glow full-adds over BG1/BG2 (scene 130, CGADSUB = $24) came out wrong.
+  // The colour math is the PPU's, in 5 bits (snes/ppu.c ppu_handlePixel): add or subtract the sub-screen colour,
+  // halve, then clamp to 0..31. The palette holds conv5 values, so >> 3 recovers each channel's 5 bits exactly.
   uint8_t* pre = outCov ? malloc((size_t)W * H * 3) : NULL;   // the main screen as it stands before the math
   int keepSub = outCov && sub_t;                               // (and the sub screen, for a window that limits the math)
   gSceneBlend = blend_en; gSceneSubOp = sub_op; gSceneHalf = half;
@@ -600,12 +581,8 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
       }
     }
   }
-  // ...AND A MAIN-SCREEN PIXEL NO LAYER COVERS IS THE BACKDROP, CGRAM 0 (the PPU's own rule: snes/ppu.c ppu_handlePixel
-  // takes colour 0 when every layer is transparent). The compose left it at calloc's black, which is the same colour in
-  // nearly every location -- their $7E:2200 word is 0000 -- but not where a script paints it: the combat tutorial (loc
-  // 0FE, obj0 `4B 00 22 7E D8 5C` = C0/67FB: $2200 := 5CD8) shows it inside its iris (FF 90 -> C0/2214: window 1 takes
-  // BG1/BG2 off, TM $17), and the cartridge's circle is that magenta (saves/field_re/scene254_tutorial.state, CGRAM[0] =
-  // 5CD8 in `--ppuregs`). The arm above keeps its sub-screen pixels; this is the rest.
+  // A main-screen pixel no layer covers (and no sub-screen pixel shows through) is the backdrop, CGRAM 0, as in
+  // ppu_handlePixel. Scripts can paint it (loc 0FE's iris: disasm/notes/field_quad_window.md).
   for (int i = 0; i < W * H; i++)
     if (!main_cov[i] && !(sub_t && sub_cov[i])) memcpy(main_px + (size_t)i * 3, palc[0], 3);
   uint8_t* mot = NULL;
@@ -792,7 +769,7 @@ uint8_t* CtRenderFieldBase(const CtAssets* a, int index, int frame, int* outW, i
   return out;
 }
 
-// ---- mutable scene handle: lets the field engine apply scripted TILE COPIES (event ops
+// ---- mutable scene handle: lets the field engine apply scripted tile copies (event ops
 // 0xE4/0xE5 -- curtains, doors, switches) and re-bake. The ROM worker C0/AF4E copies an
 // inclusive tile rect between map positions, per layer-select flag bits (low+high tile
 // bytes; our layers are u16 so one copy each). Collision props (flag bit 3) are not
@@ -823,7 +800,7 @@ uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask) 
   else free(cov);
   return out;
 }
-// The same compose with `layersOff` (BL1 1 / BL2 2 / BL3 4) taken off BOTH screens -- what a pixel shows where a window
+// The same compose with `layersOff` (BL1 1 / BL2 2 / BL3 4) taken off both screens -- what a pixel shows where a window
 // masks those layers on the main and the sub screen (TMW/TSW): the field's iris hands window 1 to BG1 and BG2 (W12SEL $22,
 // TMW = TSW = $17), and inside it the pixel is whatever the other layers make of it. Leaves the bake's coverage alone.
 uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH) {
@@ -834,12 +811,11 @@ uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH)
   gSceneLayersOff = 0;
   return out;
 }
-// THE MAIN SCREEN OF THE LAST BAKE, BEFORE THE COLOUR MATH (same size as the bake), and how a SPRITE meets it. The bake
-// holds the map's two screens already mixed; a sprite drawn over that picture is right only where OBJ is on the main
-// screen. Where the screen setup puts OBJ on the SUB screen alone, the PPU (ppu_handlePixel) takes the main pixel -- the
-// layer on top of the main screen there -- and, when that layer has colour math, adds or subtracts the sub pixel, which is
-// the sprite wherever the sprite wins the sub screen. Returns NULL when that is not the case (OBJ on the main screen, or
-// no sub screen); else the image, and the math the bake itself applies (blend layers, subtract, half).
+// The last bake's main screen before the colour math (same size as the bake), for a sprite on the sub screen alone.
+// The bake holds both screens already mixed, which is right for a sprite only where OBJ is on the main screen. With
+// OBJ on the sub screen only, the PPU (ppu_handlePixel) takes the main pixel and, when its layer has colour math,
+// adds or subtracts the sub pixel -- the sprite, where it wins the sub screen. Returns NULL unless that is the setup;
+// else the image and the math the bake applies (blend layers, subtract, half).
 const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->bakeMain) return NULL;
@@ -854,7 +830,7 @@ const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* ha
   if (blendEn) *blendEn = be; if (subOp) *subOp = so; if (half) *half = hf;
   return sd->bakeMain;
 }
-// THE LAST BAKE'S TWO SCREENS, for a COLOUR WINDOW that limits the math (field.c fieldColWindowApply): the sub screen's
+// The last bake's two screens, for a colour window that limits the math (field.c fieldColWindowApply): the sub screen's
 // pixels (NULL when the bake had no sub screen) and its layer bits (0 = transparent), the main screen before the math, and
 // the math the bake applied everywhere (blend layers, subtract, half) -- what a pixel outside the window must lose.
 const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_t** mainPre, int* blendEn, int* subOp,
@@ -865,27 +841,17 @@ const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_
   if (blendEn) *blendEn = sd->bakeBlend; if (subOp) *subOp = sd->bakeSubOp; if (half) *half = sd->bakeHalf;
   return sd->bakeSub;
 }
-// A MOD's picture (widext.h, settings.h wideSteamMargins): a w x h metatile map in five planes drawn with this scene's
-// palette and the Steam release's tiles -- its chip sets where slotChips names one (else this scene's), its definitions of
-// the metatiles in metaIds (4 corners of u16 chip, u8 palette row, u8 flags H 1 / V 2 / priority 4 at metaCorners + 16 i)
-// over this scene's, and its pixel sheets for the pages in pageSheet (256 x 256 CGRAM indices, 0 = nothing; an index past
-// the BG palettes draws nothing). A cell v is tile v - 1, page (v - 1) >> 8 (the Steam executable's drawer, 0x54FD5C); 0
-// draws nothing, nor does a page past 1 without a sheet. The planes are the Steam release's layers, drawn from the bottom
-// up: plane 3 (BG2's low-priority tiles) and plane 2 (BG1's) mark cov BL1, under the sprites; planes 1 and 0 (the
-// priority-1 layer) mark BL2, over them; plane 4, opaque (its cells fill with colour 0 first: 0x550260), drawn with BG3,
-// marks BL3. Only the planes in planeMask (bit k = plane k) are drawn. rgb is (16 w) x (16 h) x 3, cov 1 byte a pixel
-// (0 = nothing); both are cleared first. A pixel's first byte is its CGRAM INDEX (0..127), not a colour: the caller colours
-// it with the scene's live palette (CtFieldScenePalette), so the margins follow its fades and cycles as the room does --
-// a fight's darkening through the CGRAM left them bright beside Zombor's room (087; the owner, 2026-10-23).
-// THE SHEETS' INDICES AS THE ROOM'S (steamPal). The sheets were painted with the Steam release's palette, which recoloured
-// the room; the port draws the ROM's (the owner, 2026-10-22 and 2026-10-28: not the Steam colours). Where that palette made
-// two indices one colour the ROM keeps apart, the painter took either: 06B's wings past the machine are 0x2A -- 080808 in
-// it like the machine's body 0x5A, but 000010 (the sky's) in the ROM's -- and stood navy beside the middle's black body (the
-// owner, 2026-10-28). The room's own layer uses both there (its sky and its body), so which one a pixel stands for is
-// read where the art meets the room: at the room's edge columns, a sheet's pixel beside a room's pixel of the same Steam
-// colour (the art going on from it) names that room index; each sheet index takes the room index named most (itself when
-// beside itself), and one never beside the room stays. The room's layer is the plane's: plane 3 BG2's low tiles, plane 2
-// BG1's, planes 1 and 0 the priority-1 tiles (BG1's over BG2's).
+// A mod's picture (widext.h, settings.h wideSteamMargins; docs/WIDESCREEN.md "Past a room's edge"): a w x h metatile
+// map in five planes drawn with this scene's palette and the Steam release's tiles -- its chip sets where slotChips
+// names one, its metatile definitions for metaIds (4 corners of u16 chip, u8 palette row, u8 flags H 1 / V 2 /
+// priority 4 at metaCorners + 16 i) and its pixel sheets in pageSheet (256 x 256 CGRAM indices, 0 = nothing).
+// A cell v is tile v - 1, page (v - 1) >> 8 (the Steam drawer 0x54FD5C); 0 draws nothing. Drawn bottom up: planes 3
+// (BG2 low) and 2 (BG1 low) mark cov BL1, under the sprites; planes 1 and 0 (priority 1) mark BL2, over them; plane 4,
+// opaque (colour 0 first, 0x550260), marks BL3. Only planes in planeMask are drawn; rgb and cov are cleared first.
+// A pixel's first byte is its CGRAM index (0..127), which the caller colours with the live palette.
+// The sheets' indices as the room's (steamPal): the sheets were painted with the Steam palette, which can make two
+// ROM indices one colour. At the room's edge columns, a sheet pixel beside a room pixel of the same Steam colour
+// names that room index; each sheet index takes the room index named most, and one never beside the room stays.
 static int roomIndexAt(const SceneData* sd, const uint16_t* t, int lw, int lh, int prio, int x, int y) {
   if (!t || lw <= 0 || lh <= 0) return 0;
   int mc = ((x >> 4) % lw + lw) % lw, mr = ((y >> 4) % lh + lh) % lh, ti = t[mr * lw + mc];
@@ -1089,7 +1055,7 @@ int CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3y,
   return 1;
 }
 
-// THE WIDESCREEN'S STILL BACKDROP (a mod: field.c fieldWideStill): the layers (BL2 2 / BL3 4) the bake holds to the wide
+// The widescreen's still backdrop (a mod: field.c fieldWideStill): the layers (BL2 2 / BL3 4) the bake holds to the wide
 // picture -- the 256 view's columns (canvas column vx on) drawn from canvas column vw, the picture's middle -- and mirrors
 // past them instead of repeating; 0 = none, the bake as the PPU repeats a layer. Returns 1 when that changed (re-bake).
 int CtFieldSceneSetStill(void* h, int bits, int vx, int vw) {
@@ -1116,9 +1082,7 @@ int CtFieldSceneTileDma(void* h, int vramWord, const uint8_t* bytes, int n) {
   }
   return changed;
 }
-// The BG colours: CGRAM 0-127 as the NMI uploads them, from the live page $7E:2200 (BGR555 words). Every writer of the
-// field's colours meets there -- C0/7084's load, FD/E39C's animation records, op 0x88 -- so the bake reads the page, not
-// a palette of its own. Returns 1 when a colour changed.
+// The field's live CGADSUB ($0BE0, see sceneEffect). Returns 1 when it changes the bake's input.
 int CtFieldSceneSetEffect(void* h, int cgadsub) {
   SceneData* sd = (SceneData*)h;
   if (!sd) return 0;
@@ -1138,6 +1102,9 @@ int CtFieldSceneSetScreen(void* h, int on, int cgwsel, int cgadsub, int tm, int 
   sd->scrObjM = om; sd->scrObjS = os;
   return 1;
 }
+// The BG colours: CGRAM 0-127 as the NMI uploads them, from the live page $7E:2200 (BGR555 words). Every writer of the
+// field's colours meets there -- C0/7084's load, FD/E39C's animation records, op 0x88 -- so the bake reads the page, not
+// a palette of its own. Returns 1 when a colour changed.
 int CtFieldSceneSetCgram(void* h, const uint8_t* page) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !page) return 0;
@@ -1149,15 +1116,15 @@ int CtFieldSceneSetCgram(void* h, const uint8_t* page) {
 }
 // The three maps as WRAM holds them (C0/A521-A66B's layout, lz.c ct_lz_map_to_wram): BG1 cells at $7E:3000, BG2 at
 // $3040, BG3 at $3080, each row $100 bytes apart, and the +256 bits in $30C0 (bit 0 BG1, bit 1 BG2). A door or a chest
-// opens by INCrementing a cell there (C0/0D4C, C0/1705), so a WRAM image that came from somewhere else -- a seed --
+// opens by incrementing a cell there (C0/0D4C, C0/1705), so a WRAM image that came from somewhere else -- a seed --
 // carries its open doors only in these bytes. Returns 1 when a cell changed.
 int CtFieldSceneMapFromWram(void* h, const uint8_t* s7e) {
   return CtFieldSceneMapFromWramRect(h, s7e, 0, 0, 63, 63, 7);
 }
 // ...the same over a rect of chosen layers (bit 0/1/2 = BG1/BG2/BG3): what op 0xE5's style branch re-uploads -- C0/75E9 /
-// 78EC / 7CB5 build the tilemaps from this WRAM map, after C0/1790's AF4E moved the rect in it. Reading the map rather
-// than copying inside the render's own layers matters: a location's copies park rects in rows the layers do not have
-// (loc 002's curtain at rows $12-$1C and $32-$3C of a 64-row map), and a render-side copy clipped them away.
+// 78EC / 7CB5 build the tilemaps from this WRAM map, after C0/1790's AF4E moved the rect in it. It reads the map rather
+// than copying inside the render's layers, because a copy can park rects in rows the layers do not have (loc 002's
+// curtain at rows $12-$1C and $32-$3C of a 64-row map).
 int CtFieldSceneMapFromWramRect(void* h, const uint8_t* s7e, int x0, int y0, int x1, int y1, int layers) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !s7e) return 0;
@@ -1176,12 +1143,12 @@ int CtFieldSceneMapFromWramRect(void* h, const uint8_t* s7e, int x0, int y0, int
   }
   return changed;
 }
-// THE PICTURE IS THE VRAM'S, NOT THE WRAM MAP'S. The field's tilemaps are built from the map in WRAM only at the ROM's
-// uploads: the load's fill (C0/0A50), op 0xE5's style branch (C0/179A: the layer's whole window, C0/75E9 / 78EC / 7CB5),
-// the camera streamer's edges (C0/93E1 -> C0/979B..9918 -> the twelve builders C0/8243-8442, uploaded by the NMI's
-// C0/EB91 -> C0/8445..), and the door / chest handlers' own writes. Op 0xE4 (C0/3D97) is `JSR C0/AF4E` on the WRAM map
-// and nothing else, so a chip the VRAM holds keeps its old metatile until one of those rewrites it. The layers here
-// (l1t..) follow the WRAM map; a HELD chip shows the metatile it had when the copy came. disasm/notes/field_tile_copy_e4.md.
+// The picture is the VRAM's, not the WRAM map's. The tilemaps are rebuilt from the WRAM map only at the ROM's uploads:
+// the load's fill (C0/0A50), op 0xE5's style branch (C0/179A), the camera streamer's edges (C0/93E1 -> C0/979B..9918
+// -> builders C0/8243-8442, uploaded by the NMI's C0/EB91 -> C0/8445..), and the door / chest handlers' writes. Op 0xE4
+// (C0/3D97) only runs C0/AF4E on the WRAM map, so a chip the VRAM holds keeps its old metatile until one of those
+// rewrites it. The layers (l1t..) follow the WRAM map; a held chip shows the metatile it had when the copy came.
+// disasm/notes/field_tile_copy_e4.md.
 static int picInWin(int c, int lo, int hi, int cm) {   // chip c inside [lo..hi] on a map that wraps at cm + 1 chips
   int span = (hi - lo) & 0xFF;
   return span >= cm || ((c - lo) & cm) <= span;
@@ -1214,7 +1181,7 @@ int CtFieldScenePicHold(void* h, int layer, int x0, int y0, int x1, int y1, cons
       }
   return n;
 }
-// An upload rewrote chips from the WRAM map: release the held ones OUTSIDE the chip window (the streamer builds every
+// An upload rewrote chips from the WRAM map: release the held ones outside the chip window (the streamer builds every
 // chip that enters it, C0/8243-8442; what lies outside is not on the screen), or all of them when win is NULL (a rebuild).
 // Returns the number released (the picture changed).
 int CtFieldScenePicRelease(void* h, int layer, const int* win, int cmx, int cmy) {
@@ -1264,27 +1231,13 @@ void CtFieldSceneDumpTiles(void* h, int x0, int y0, int x1, int y1) {
   }
 }
 
-// ⭐ A DOOR OPENS BY INCREMENTING ITS LAYER-1 METATILE IDS. The ROM's door machine is
-// C0/0D3E: when the player-collision commit reports a door underfoot ($0117 bit4, set by
-// C0/9D47), it clears the bit, reads the L1 metatile at the latched tile ($015B -> `LDX $5B /
-// LDA $7E3000,X`) and dispatches on its VALUE -- 0xE6 -> C0/0D78, 0xEC -> C0/0E5F, 0xEE ->
-// C0/1014, 0xFA -> C0/11C9, 0xFC -> C0/1454, anything else -> C0/16DC (not a door it knows).
-// Every one of those handlers is the same shape: `INC A / STA $7E3000,X` over a fixed little
-// block of tiles, walking X by +-1 (a COLUMN step; the index is (row << 8) | col) and by
-// -0x100 (one ROW up). So "open" is simply "closed + 1" in the metatile table, and the shape of
-// the block is what distinguishes a 1-wide door from a 2-wide one:
-//   0xE6  2 tiles  (r,c) (r-1,c)
-//   0xEC  4 tiles  (r,c) (r,c+1) (r-1,c+1) (r-1,c)
-//   0xEE  4 tiles  (r,c) (r,c-1) (r-1,c-1) (r-1,c)
-//   0xFA  6 tiles  (r,c) (r,c+1) (r-1,c+1) (r-1,c) (r-2,c) (r-2,c+1)
-//   0xFC  6 tiles  (r,c) (r,c-1) (r-1,c-1) (r-1,c) (r-2,c) (r-2,c-1)
-// It is a ONE-SHOT: the bumped ids no longer match any case, so a second step is inert and the
-// door stays open until the location reloads (measured -- walking back off the tile does not
-// close it). MEASURED on loc 004 (`--monitor 7E320A:2 --writer` walking into the top door):
-// $7E320A/320B F2->F3 F4->F5, $7E330A/330B F6->F7 F8->F9, $7E340A/340B FA->FB FC->FD at f17,
-// writer C0:1212 = inside the 0xFA handler; NOTHING in the collision planes changed.
-// The +256 bank bit lives in the top bit of our l1t word (the L1_TILE_ADD prop), and the ROM's
-// INC is an 8-bit one on the raw plane byte, so it must not carry into it.
+// C0/0D3E, the door machine: when the collision commit reports a door underfoot ($0117 bit 4, C0/9D47), it clears the
+// bit, reads the L1 metatile at the latched tile $015B and dispatches on its value (0xE6 C0/0D78, 0xEC 0E5F, 0xEE
+// 1014, 0xFA 11C9, 0xFC 1454, else C0/16DC). Each handler runs `INC A / STA $7E3000,X` over a fixed block of tiles
+// (DOOR below), so "open" is "closed + 1". The bumped ids match no case, so a second step is inert and the door stays
+// open until the location reloads; the collision planes do not change. disasm/notes/field_doors_occluders_decisionbox.md.
+// The +256 bank bit is the top byte of the l1t word, and the ROM's INC is 8-bit on the plane byte, so it must not
+// carry into it.
 int CtFieldSceneDoorOpen(void* h, int tx, int ty) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->l1t || tx < 0 || ty < 0 || tx >= sd->w1 || ty >= sd->h1) return 0;
@@ -1309,21 +1262,15 @@ int CtFieldSceneDoorOpen(void* h, int tx, int ty) {
   return 0;                                              // C0/16DC: not a door metatile
 }
 
-// THE OTHER HALF OF C0/16DC -- the TREASURE CHEST. The door dispatcher above falls straight into
-// this routine (C0/0D75 BRL ->16DC), and the two arms are the same idea with different ids and a
-// different requester: a door is asked for by the collision commit ($0117 bit4 + $015B), a chest by
-// the A-button treasure probe C0/1E4C ($0117 bit1 + $015D). The body, read verbatim:
+// C0/16DC, the treasure chest (the door dispatcher falls into it, C0/0D75 BRL). A chest is requested by the A-button
+// treasure probe C0/1E4C ($0117 bit 1 + $015D):
 //   16DC LDA $17 / BIT #02 / BNE ->16E5 / BRL ->1770      ; the request bit
 //   16E5 STZ $61 / LDA #02 / TRB $17 / JSR C0/1BA7
 //   16EE LDX $5D / LDA $7E3000,X                          ; the L1 metatile at the requested tile
 //   16F4 CMP #FE / BEQ ->1700 ; INC $61 ; CMP #E0 / BEQ ->1700 ; BRA ->1770
 //   1700 INC A / STA $7E3000,X / [1705..] re-upload the metatile to VRAM
-// So exactly TWO closed-chest ids exist, $FE and $E0, and "open" is again "closed + 1" -- ONE tile,
-// not a block (a chest is a single metatile). $0161 (0 for the $FE family, 1 for the $E0 family) is
-// the id the SFX/animation arm reads; it carries no map effect, so nothing here mirrors it.
-// MEASURED: loc 26 tile(30,37) $7E551E FE->FF and loc 14 tile(41,8) $7E3829 FE->FF, both writer
-// C0:1705 with $0161=0; loc 47 tile(12,11) $7E3B0C E0->E1, writer C0:1705, $0161=01 (C0:16FA).
-// Like the door it is a ONE-SHOT: $FF/$E1 match neither compare, so a second request is inert.
+// Two closed-chest ids exist, $FE and $E0; "open" is "closed + 1" on one metatile, and a second request is inert.
+// $0161 (0 for $FE, 1 for $E0) is read only by the SFX/animation arm. disasm/notes/field_treasure_chests.md.
 int CtFieldSceneChestOpen(void* h, int tx, int ty) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->l1t || tx < 0 || ty < 0 || tx >= sd->w1 || ty >= sd->h1) return 0;
@@ -1340,10 +1287,10 @@ void CtFieldSceneCopyTiles(void* h, int sl, int st, int el, int eb, int dl, int 
   if (rw <= 0 || rh <= 0) return;
   for (int pass = 0; pass < 3; pass++) {
     uint16_t* L; int lw, lh, bit;
-    // ROM C0/AF4E flag dispatch: bit0/1/2 = tile planes $3000/$3040/$3080 (L1/L2/L3); bits
-    // 3/4/5 = the PROP planes $30C0/$7000/$7040 (bit3's full-byte copy carries the prio bits
-    // 0-1 = tprio below; the shape/z part lands in the field's collision planes, field.c);
-    // bits 6/7 = partial $30C0 bit0/bit1-only copies (not implemented -- no user yet).
+    // C0/AF4E flag dispatch: bit0/1/2 = tile planes $3000/$3040/$3080 (L1/L2/L3); bits
+    // 3/4/5 = the prop planes $30C0/$7000/$7040 (bit3's full-byte copy carries the prio bits
+    // 0-1 = tprio below; the shape/z part lands in the field's collision planes, field.c).
+    // Not ported here: bits 6/7, the partial $30C0 bit0/bit1-only copies.
     if (pass == 0) { L = sd->l1t; lw = sd->w1; lh = sd->h1; bit = flags & 0x01; }
     else if (pass == 1) { L = sd->l2t; lw = sd->w2; lh = sd->h2; bit = flags & 0x02; }
     else { L = sd->l3t; lw = sd->w3; lh = sd->h3; bit = flags & 0x04; }
@@ -1378,11 +1325,11 @@ int CtComposeSprite(const uint8_t* blob, uint32_t blobLen, int frame, uint8_t* o
 int CtComposeSpriteBox(const uint8_t* blob, uint32_t blobLen, int frame, uint8_t* out, uint8_t* outPal, int* box) {
   return CtComposeSpriteHalves(blob, blobLen, frame, out, outPal, box, NULL);
 }
-// WHICH PRIORITY BYTE EACH UNIT TAKES -- the anim drain's attr fill, read off the four class bodies (bank C0):
+// Which priority byte each unit takes -- the anim drain's attr fill, read off the four class bodies (bank C0):
 //   class 0 (4 units), C0/CD47-CDBB and its twin C0/CE77..: per unit, `LDA $7F4804,X` (the unit's Y offset, the frame
-//     record's +0x21 + 2k byte) / `CMP #E8` / `BCC` -> `ORA $0C00,Y` (the TOP byte) when the offset is below E8
-//     unsigned -- every offset from -128 to -25 AND every non-negative one -- else `ORA $0C01,Y` (the BOTTOM byte): a
-//     unit whose offset is -24..-1, i.e. the one at the anchor's foot.
+//     record's +0x21 + 2k byte) / `CMP #E8` / `BCC` -> `ORA $0C00,Y` (the top byte) when the offset is below E8
+//     unsigned (-128..-25 and every non-negative one), else `ORA $0C01,Y` (the bottom byte): a unit whose offset is
+//     -24..-1, the one at the anchor's foot.
 //   class 1 (8 units), C0/D0F0-D114 / C0/D257-D27B / C0/D4C6..: units 0-3 `ORA $0C00,Y`, units 4-7 `ORA $0C01,Y`.
 //   class 2 (12 units), C0/DA23-DA5C / C0/DCE2.. / C0/DEE7-DF20 / C0/E0E2..: units 0-3 $0C00, units 4-11 $0C01.
 //   class 3 (24 units), C0/E4D1-E52F: `LDA #22` into all 24 attrs -- OBJ priority 2, neither byte read.
@@ -1422,11 +1369,9 @@ int CtComposeSpriteHalves(const uint8_t* blob, uint32_t blobLen, int frame, uint
         uint8_t v = tile[(fy ? 7 - y : y) * 8 + (fx ? 7 - x : x)];
         if (!v) continue;
         int px = ox + lx + x + CT_SPR_OX, py = oy + ly + y + CT_SPR_OY;
-        // ⭐ THE FIRST UNIT IS IN FRONT. Unit k is the ROM's OBJ tile t = k: its VRAM tile is $0D00 + t*2 and
-        // the OAM build copies the tiles in t order into ascending slots (oam.md, C0/CC22 decoder + C0/B330
-        // copy), and a LOWER OAM slot wins. The oracle's attract demo battle (build/_loc0AD.state f1) has Flea
-        // at slots 40..47 = tiles 080..08E. Painting later units over earlier ones hid her face under her
-        // own cape -- invisible for any frame whose units do not overlap, which is nearly all of them.
+        // The first unit is in front: unit k is the ROM's OBJ tile t = k, the OAM build copies the tiles in t order
+        // into ascending slots (oam.md, C0/CC22 decoder + C0/B330 copy), and a lower OAM slot wins. So a pixel
+        // already drawn is kept.
         if (px >= 0 && px < CT_SPR_W && py >= 0 && py < CT_SPR_H && !out[py * CT_SPR_W + px]) {
           out[py * CT_SPR_W + px] = v;
           if (half) half[py * CT_SPR_W + px] = hs;
@@ -1439,7 +1384,7 @@ int CtComposeSpriteHalves(const uint8_t* blob, uint32_t blobLen, int frame, uint
   return 1;
 }
 
-// THE FIELD'S VRAM TILEMAPS AS THE ROM WRITES THEM (C0/794E BG2, C0/7CE7 BG3, and BG1's twin), for a host that has to
+// The field's VRAM tilemaps as the ROM writes them (C0/794E BG2, C0/7CE7 BG3, and BG1's twin), for a host that has to
 // hand a translated stage the VRAM the field left: entry 3 ($7E:671F) DMA-reads BG1's tilemap rows at $6140 and keeps
 // the field's characters. FD/C0D7 gives every field BG a 64x32 tilemap ($6000 / $6800 / $7000 in words); the two
 // 32x32 halves are filled by the law draw_layer already follows (the first with metatiles (0..15, 0..15), the second
@@ -1450,7 +1395,7 @@ int CtComposeSpriteHalves(const uint8_t* blob, uint32_t blobLen, int frame, uint
 static void vram_tilemap_layer(uint16_t* vram, int base, const uint16_t* tiles, int lw, int lh, const uint8_t* asm8, int nmeta, int halves) {
   if (!tiles || !asm8) return;
   // The builders walk all 64 rows into $7E:C800 (C0/794E: rows 0-31, then C0/7976 / 7991 / 79AE for the second
-  // half); the ENTRY uploads one half (C0/7F62, $0800 bytes) or both (C0/7F77, $1000) -- BG1 always one (C0/0A9F),
+  // half); the entry uploads one half (C0/7F62, $0800 bytes) or both (C0/7F77, $1000) -- BG1 always one (C0/0A9F),
   // BG2 both with $1D35 bit1 (C0/0AB4), BG3 both with bit2 (C0/0AE1). A half not uploaded keeps what VRAM held (the
   // credits' text tilemap on the attract's 06B) until the streamer's rows reach it.
   for (int half = 0; half < halves; half++)

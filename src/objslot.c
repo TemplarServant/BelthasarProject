@@ -1,9 +1,6 @@
 // objslot.c -- FD/E39C, the palette-effect record service. See objslot.h.
 //
-// MOVED HERE VERBATIM from battle.c (battleObjSlotFrame / battleObjSlotMode4 / battleObjSlotMode5 /
-// battleFleePalRange), where it was derived and graded against the attract's run-off and Zombor flash. Only the
-// memory changed hands (h->mem -> io->s) and the battle's one-factor palette view moved behind io->onRange, so
-// the field's VM pass can tick the SAME body the battle does instead of a second transcription.
+// The battle and the field's VM pass run this one body; the battle's one-factor palette view hangs off io->onRange.
 #include "objslot.h"
 #include "romview.h"
 #include <stdio.h>
@@ -85,26 +82,26 @@ static void objslotMode5(CtObjSlotIo* io, uint8_t* r) {
   }
   r[7] = (uint8_t)a;                                               // 3DE5D8
   // 3DE5ED `LDA $0526,Y / BNE / JSR FD/E64F`, then DEC A / BNE down the chain: 1 -> E7C0, 2 -> E73A, 3 -> E6A1,
-  // 4 -> E779, 5 -> E6D1, anything else -> E708 (CtObjSlotSubMask). MEASURED: Marle's vanish in Guardia Castle 600
-  // (scene 122, `2E 56 10 70 0F 08` right after `5A 10`) is sub-mode 6 -- R alone -- and the port drew nothing for it.
+  // 4 -> E779, 5 -> E6D1, anything else -> E708 (CtObjSlotSubMask). Example: Marle's vanish in Guardia Castle 600
+  // (scene 122, `2E 56 10 70 0F 08` right after `5A 10`) is sub-mode 6, R alone.
   objslotPalRange(io, r[1], r[2], a, r[6] ? (CT_OBJSLOT_KIND_SUB | CtObjSlotSubMask(r[6])) : 0);
   objslotTrace(io, r, NULL, a, "");
 }
 
 // FD/E82C's sub-modes 1-6 (FD/E87F-E8A7: `DEC A / BNE` down the chain), each over `cnt` words from X = dst * 2 with
-// `$4202` = the acc k: every arm moves its components TOWARD WHITE as E8D7 does -- `AND` the component, `STA` it, `EOR`
+// `$4202` = the acc k: every arm moves its components toward white as E8D7 does -- `AND` the component, `STA` it, `EOR`
 // the component's full mask into `$4203`, `CLC / ADC $4217`: c + ((k * (max - c)) >> 8) -- and writes the live page
-// from the BASE page ($7E:2000), byte for byte as the ROM stores:
-//   1 = E962  R: the LOW byte only, `(base lo & E0) | R'` (`STA $7E2200,X`, 8-bit) -- the high byte is left as it was
+// from the base page ($7E:2000), byte for byte as the ROM stores:
+//   1 = E962  R: the low byte only, `(base lo & E0) | R'` (`STA $7E2200,X`, 8-bit) -- the high byte is left as it was
 //   2 = E98F  G: the word, `(base & 7C1F) | G' << 5`
 //   3 = EA5C  R and G: the word `G' << 5 | R'` -- `AND #001F` leaves nothing of the base's blue, so it is 0 (the yellow
-//             of Arc Impulse, T68: records 8/9 `40 10 38 .. 03` / `40 48 38 .. 03`, oracle c1003-c1018)
-//   4 = E935  B: the HIGH byte only, `(base hi & 03) | B'` (`STA $7E2201,X`) -- the low byte is left as it was
+//             of Arc Impulse, T68: records 8/9 `40 10 38 .. 03` / `40 48 38 .. 03`)
+//   4 = E935  B: the high byte only, `(base hi & 03) | B'` (`STA $7E2201,X`) -- the low byte is left as it was
 //   5 = E9CA  R and B: the word, `(base & 03E0) | B' << 10 | R'` (`XBA` carries B' into the high byte)
 //   6+ = EA11 B and G: the word `B' << 10 | G' << 5` -- `AND #7C00`: nothing of the base's red, it is 0
 // (B' / G' / R' as E8D7's: B on the high byte's bits 2-6, `AND #7C`, `EOR #7C`; G on `(w & 03E0) >> 2`, `EOR #F8`, the
-// sum `AND #F8`, `ASL ASL`; R on `lo & 1F`, `EOR #1F`.) Fire Sword 2 (T3E) runs sub-mode 1 over CGRAM $10-$7F (oracle
-// c1038-c1085: the red arena).
+// sum `AND #F8`, `ASL ASL`; R on `lo & 1F`, `EOR #1F`.) Fire Sword 2 (T3E) runs sub-mode 1 over CGRAM $10-$7F (the red
+// arena).
 static void objslotWhiteSub(CtObjSlotIo* io, int dst, int cnt, int k, int sub) {
   uint8_t* s = io->s;
   for (int w = dst; w < dst + cnt && w < 256; w++) {
@@ -130,7 +127,7 @@ static void objslotWhiteSub(CtObjSlotIo* io, int dst, int cnt, int k, int sub) {
   if (io->onRange) io->onRange(io->ctx, dst, cnt, k, CT_OBJSLOT_KIND_WHITE | (sub > 6 ? 6 : sub));
 }
 
-// FD/E82C, mode 4: the fade toward WHITE. The acc walks as mode 5's does, with the two exits swapped -- a borrow
+// FD/E82C, mode 4: the fade toward white. The acc walks as mode 5's does, with the two exits swapped -- a borrow
 // below 0 (FD/E851 BCC -> E8AC) turns the record off and copies the base page back without storing the acc, a
 // carry past FF (FD/E83D BCS -> E844) turns it off at the limit -- then `STA $4202` and the sub-mode $0526: 0 =
 // FD/E8D7 (every component), 1 = E962 (red), 2 = E98F (green), 3 = EA5C, 4 = E935 (blue), 5 = E9CA, else EA11.
@@ -186,7 +183,7 @@ static void objslotMode8(CtObjSlotIo* io, const uint8_t* r) {
   int sel = romByte(io, r[11], (r[3] + (r[9] | (r[10] << 8))) & 0xFFFF);
   objslotTableCopy(io, r, (r[6] | (r[7] << 8)) + sel * ((r[2] << 1) & 0xFF));
 }
-// FD/E4E8, mode 3: colours ci..ci+cc of BOTH pages ($7E:2000 base, $7E:2200 live) rotate up one -- each takes the one
+// FD/E4E8, mode 3: colours ci..ci+cc of both pages ($7E:2000 base, $7E:2200 live) rotate up one -- each takes the one
 // below it, colour ci the old ci+cc. X = ci*2 + (cc*2 & FF) down to ci*2, DEX DEX / CPX $10.
 static void objslotMode3(CtObjSlotIo* io, const uint8_t* r) {
   uint8_t* s = io->s;

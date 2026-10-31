@@ -14,8 +14,8 @@ void CtMacSetWindowAspect(SDL_Window* window, int width, int height) {
     if (width > 0 && height > 0) {
         nsWindow.contentAspectRatio = NSMakeSize(width, height);
     } else {
-        // Unit increments clear the ratio (NSWindow's documented reset). A zero ratio
-        // made the frame restored on leaving fullscreen NaN tall, and AppKit threw.
+        // Unit increments clear the ratio (NSWindow's documented reset). Note: a zero ratio
+        // makes the frame restored on leaving fullscreen NaN tall, and AppKit throws.
         nsWindow.contentResizeIncrements = NSMakeSize(1.0, 1.0);
     }
 }

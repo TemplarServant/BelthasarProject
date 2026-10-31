@@ -61,7 +61,7 @@ int ctXlatBadBytes(CtXlat* x, int len, uint8_t b1, uint8_t b2, uint8_t b3) {
   return CT_XLAT_BADBYTES;
 }
 
-// ---- a translated stage inside a host --------------------------------------------------------------------------
+// ---- A translated stage inside a host ----
 struct CtXlatStage {
   Snes* hw;
   struct Apu* ownApu;      // the hardware's own SPC, parked while the host's is borrowed
@@ -69,7 +69,7 @@ struct CtXlatStage {
   uint32_t frame0, stopFrame;   // stopFrame: snes_runFrame's `frame`, taken when the run leaves the vblank
   int inFrame;                  // 0 = still in the vblank the last stop was in (snes_runFrame's first loop)
   int done;
-  int rule;                     // CtXlatStageSetRule: run under CLAUDE.md's exception (logical frames, phase 0)
+  int rule;                     // CtXlatStageSetRule: run under the timing rule (logical frames, phase 0)
   int (*prog)(CtXlat*);         // the translated program: CtXlat_seq_c3 ($C3 entries) or CtXlat_gwarp_fd (the warp)
 };
 
@@ -88,20 +88,15 @@ int CtXlatStageHas(uint8_t seqId) {
   return 0;
 }
 
-// The hook of a hosted run: stop exactly where snes_runFrame stops (snes/snes.c) -- its two loops, checked at the same
+// The hook of a hosted run: stop exactly where snes_runFrame stops (snes/snes.c), its two loops checked at the same
 // instruction boundaries: `while (inVblank)` runs the rest of the vblank the last stop was in, then `frame = frames;
 // while (!inVblank && frame == frames)` runs to the next start of vblank (or to a frame a DMA skipped it in).
-// ⭐ NOT "inVblank && frames moved": the counter wraps at the end of line 261 and inVblank drops one step (2 master
-// cycles) later, at v=0 h=0 -- an instruction boundary on that step read as a new frame, 225 lines early, and the host
-// showed the frame before again (the next stop then runs a frame and 225 lines). Measured on the attract: 51 of the
-// 562 stops of a run through the race and entry 3 fell there; on entry 3 each one is a whole-picture repeat against
-// the cartridge's `--peek`, which runs snes_runFrame (the Blackbird's palace 4 px behind on stage frames 43, 45, 47,
-// 81, 121, ...), and WHICH frames hit that step moved with any change of the stage's cycles -- FD/E39C's tick of the
-// colour records the field hands over (disasm/notes/sequence_table.md 11.12).
-// CT_XLAT_SEEDTRACE=1: every entry into C3/02DD (the seed, CLAUDE.md's one exception) on the port's translated
-// hardware -- the stage (the field's and the world's calls are native: wipe.c prints the same line) -- with every input the routine folds into $0386: A and
-// the carry (ROL A), X (TXA), $0008, $00F0/$00F2/$00F4, the open bus the CMP $2137 compares, and $0351 (the virtual
-// $213C). The cartridge's side is `--cputrace` with CPUTRACE_FROM=C302DD under CT_ORACLE_VIRTUAL_BEAM=1.
+// Note: "inVblank && frames moved" is not the same test: the counter wraps at the end of line 261 and inVblank drops 2
+// master cycles later, so a boundary on that step would read as a new frame 225 lines early (sequence_table.md 11.12).
+// CT_XLAT_SEEDTRACE=1: every entry into C3/02DD on the translated hardware (the field's and the world's calls are native:
+// wipe.c prints the same line), with every input the routine folds into $0386: A and the carry (ROL A), X (TXA), $0008,
+// $00F0/$00F2/$00F4, the open bus the CMP $2137 compares, and $0351 (the virtual $213C). The cartridge's side is
+// `--cputrace` with CPUTRACE_FROM=C302DD under CT_ORACLE_VIRTUAL_BEAM=1.
 static int seedTraceOn(void) { static int on = -1; if (on < 0) on = getenv("CT_XLAT_SEEDTRACE") ? 1 : 0; return on; }
 static void seedTrace(const CtXlat* x, const char* who) {
   const Cpu* c = x->cpu;
@@ -178,12 +173,10 @@ CtXlatStage* CtXlatStageOpen(const uint8_t* rom, long romLen, const uint8_t* wra
 
 int CtXlatStageFrame(CtXlatStage* st) {
   if (!st || st->done) return st ? st->done : -1;
-  // THE RULE (CLAUDE.md's exception, the zelda3 model): the stage's C3/02DD reads the VIRTUAL beam exactly as the
-  // oracle's does (g_ctVirtualBeam = 2: virtual only while the CPU stands inside C3/02DD-0306 -- the translation keeps
-  // c->pc exact at every instruction, X_BOUNDARY). Every other beam read of the stage stays real.
-  // ...and runs by LOGICAL frames with its NMI-off stretches at phase 0 (snes.c snes_logicalResume -- the oracle's
-  // CT_ORACLE_LOGICAL): a main-loop iteration that overruns its frame holds the beam at line 224 until the CPU waits
-  // (the race's C3/03xx-05xx iterations, released at 7E:5214), rolled back to real time past one frame of CPU work.
+  // The timing rule (CLAUDE.md, the zelda3 model): the stage's C3/02DD reads the virtual beam as the oracle's does
+  // (g_ctVirtualBeam = 2: virtual only while the CPU is inside C3/02DD-0306; the translation keeps c->pc exact at every
+  // instruction). Every other beam read of the stage stays real. With st->rule it also runs by logical frames with its
+  // NMI-off stretches at phase 0 (snes.c snes_logicalResume, the oracle's CT_ORACLE_LOGICAL).
   int vbWas = g_ctVirtualBeam; g_ctVirtualBeam = 2;
   int lfWas = g_ctLogicalFrames; if (st->rule) snes_logicalResume(1);
   int r = st->prog(&st->x);
@@ -213,8 +206,8 @@ int CtXlatStageFrame(CtXlatStage* st) {
 
 static Snes* g_callHw;      // one hardware for every call: the ROM, a PPU whose counters the routine latches, no APU use
 
-// ---- the field's HDMA table builder FD/C2C1 (seq_xlat.h: CtXlatHdmaBuild) ---------------------------------------------
-// The translation, kept in ct.exe only (CT_XLAT_HDMA_REF) as the reference --hdmafuzz grades the native builder against
+// ---- The field's HDMA table builder FD/C2C1 (seq_xlat.h: CtXlatHdmaBuild) ----
+// The translation, kept in ct.exe only (CT_XLAT_HDMA_REF) as the reference --hdmafuzz compares the native builder with
 // (src/hdma_table.c, the one every caller runs). Belthasar does not link it.
 #ifdef CT_XLAT_HDMA_REF
 int CtXlatHdmaBuild(const uint8_t* rom, long romLen, uint8_t* wram128) {

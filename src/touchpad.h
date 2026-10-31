@@ -1,11 +1,11 @@
-// touchpad.h - the on-screen VIRTUAL GAMEPAD (a player option, settings.h `touchPad`; on by default on Android only).
+// touchpad.h -- the on-screen virtual gamepad (a player option, settings.h `touchPad`; on by default on Android only).
 //
-// A HOST feature, like the keyboard and the controller: the fingers on the screen become the SNES controller's twelve
+// A host feature, like the keyboard and the controller: fingers on the screen become the SNES controller's twelve
 // buttons (settings.h CT_BTN_*), which field.c folds into the same pad word the keyboard and a physical pad produce
-// (fieldKeyPad: the level; its edges the same way the left stick's are made). Nothing here reaches the game in any
-// other way. It is drawn over the picture by the overlay (overlay.h CtOverlayTouchDraw) and hidden while a physical
-// controller is in use (from its first press until the next touch). A headless run never sees a finger, and the option is off by default off Android, so the
-// desktop game and every regression run are unchanged.
+// (fieldKeyPad). Nothing here reaches the game any other way. The overlay draws it over the picture (overlay.h
+// CtOverlayTouchDraw); it hides while a physical controller is in use (from its first press until the next touch).
+// Headless runs never see a finger and the option is off by default outside Android, so desktop and regression runs
+// are unaffected.
 //
 // Layout (landscape; the picture sits in the middle, the pad in the side bars): the d-pad bottom left, A/B/X/Y as on
 // the SNES pad (A right, B bottom, X top, Y left) bottom right, L and R in the top corners with Select under L and
@@ -45,7 +45,7 @@ typedef struct CtTouchDraw {
 int      CtTouchPadEnabled(int padInUse);
 // The drawable's size, in pixels (the layout is made from it). Call before the events and the draw.
 void     CtTouchPadSetOutput(int w, int h);
-// SDL_FINGERDOWN / SDL_FINGERMOTION / SDL_FINGERUP: returns the buttons a NEW touch went down on (CT_TOUCH_MENU for
+// SDL_FINGERDOWN / SDL_FINGERMOTION / SDL_FINGERUP: returns the buttons a new touch went down on (CT_TOUCH_MENU for
 // the options button), 0 otherwise.
 uint32_t CtTouchPadEvent(const SDL_Event* e);
 uint32_t CtTouchPadButtons(void);   // the buttons held now (1 << CT_BTN_*)

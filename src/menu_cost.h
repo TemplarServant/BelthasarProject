@@ -1,13 +1,10 @@
-// What the menu shell's OPEN costs the CPU -- the NMI-off stretch from the caller's C0/0B4E (C0/0B5D, the `STA $4200`
-// that turns the NMI off) to C2/8087 (the one that turns it back on) -- priced the way the logical oracle counts it
-// (CLAUDE.md, NMI-off loads): the stretch starts at phase 0, so C cycles of it cross floor(C / CT_FRAME_CPU_CYCLES)
-// frame boundaries, and the scheduler's first scan S0 is that many frames after the JSL frame C.
-//
-// Every instruction is LakeSnes's cost (the trace's base per PC, tools/cycle_costs.py); the control flow is the ROM's,
-// walked over the state it reads. Validated cycle for cycle against the oracle's beam traces (tools/menu_init_cmp.py,
-// tools/menu_init_legs.py; disasm/notes/menu_shell_timing.md section 9). What it does NOT walk, said where it is used:
-// C2/9875's data-dependent branches (+-1,800 cycles), the five sound posts' wait on the SPC's echo (the APU's phase:
-// +-200 idle, up to ~25,000 with a song playing), and the DMA legs' 8-cycle sync jitter (a few tens).
+// The CPU cost of the menu shell's open: the NMI-off stretch from C0/0B5D (the caller's C0/0B4E turns the NMI off)
+// to C2/8087 (it turns it back on). Under the NMI-off load rule (CLAUDE.md) the stretch starts at phase 0, so C cycles
+// cross floor(C / CT_FRAME_CPU_CYCLES) frame boundaries, and the scheduler's first scan S0 is that many frames after C.
+// Instruction costs are LakeSnes's (tools/cycle_costs.py); the control flow is the ROM's, walked over the state it
+// reads. Checked by tools/menu_init_cmp.py and tools/menu_init_legs.py (disasm/notes/menu_shell_timing.md sec. 9).
+// Not walked: C2/9875's data-dependent branches (+-1,800 cycles), the five sound posts' wait on the SPC echo (+-200
+// idle, up to ~25,000 with a song playing) and the DMA legs' sync jitter (a few tens).
 #ifndef CT_MENU_COST_H
 #define CT_MENU_COST_H
 #include <stdint.h>

@@ -111,3 +111,41 @@ attract's 0AD (saves/attract_cena_inicial.state, --monitor 7F3415:12,7F3469:10,7
 The port kept the copy aside and never ran the routine (the starfield stood still for ~520 frames, the audit's item 2);
 battle.c battleFieldScrollTick is it now, and the arena reads the field's layer offsets from the copy while the fight runs
 (field.c, CtSceneLayerOffsetsOf).
+
+## The fight's NMI starts on the third tick
+
+The module's tick 1 is the field's C0/1895-18A4 (after C0/024C's staging, the entry frame): `JSL C0/2C41 / LDA #80 /
+TSB $53 / JSR C0/00DE / LDA #80 / TRB $53 / JSR C0/EC60`: the layer drift, then FD/C2C1 (which flips $0153 bit 0) and
+FD/E39C, under the field's own NMI. Tick 2 is C1/0000's first frame: D1/F1B0 installs the fight's NMI D1/E77C and IRQ
+D1/FE97, zeroes $7C (D1/F253) and drifts once (D1/F1D7 `JSL CD/0C89`); its NMI is still the field's. Only from tick 3
+does D1/E77C run ($7C++, the drift, the bank-CD service's FD/E39C). Measured on the rule's cartridge entering the 07D
+fight (`--monitor 7E0520,7E007C,7E0153,7E0500 --writer` from fr/rule_s6452): c6610 `$0153 = 01 (C0:18A4)` and colour
+record 0 stepped (FD:E3B3); c6611 the vectors (D1:F1D7), `$7C = 00 (D1:F256)`, the record not stepped; c6612 `$7C = 01
+(D1:E7EC)` and the record stepped. Running the fight's NMI from tick 1 puts $7C two ahead for the whole fight (CD/0B16's
+shake indexes C0:FE00 with it), the colour records one step ahead, and leaves $0153 at 00, so the field's IRQ never
+takes the tiles after the return.
+
+Both early NMIs are the field's C0/EA63, which reaches C0/EC15 `JSL C2/8002` whatever $0152 says: the pad latch and in
+it C2/85AE, the play clock. From power-on into the 0AD fight (`--monitor 7E0400 --writer`, `--hookpc` C2/85AE / C0/1770
+/ C0/1890 / C0/18A4 / C0/18A7) the clock ticks at the head of each of the four iterations after op D8 (op D8's, C0/1770's
+bit-5 half, the iteration it returns into at C0/00A7, C0/188C's staging that waits at C0/18A4), the last in the frame
+D1/F24D zeroes $7E; none from tick 3 on until the band's seed. C0/0C70 seeds the $01F8 cursor from that clock
+(field_f8_cursor_play_clock.md).
+
+From tick 3, D1/E7DA `JSL CD/0C95` = `LDA $7E / ASL / TAX / JSR ($0C83,X)`: with $7E = 1 or 2 that is CD/088D, the
+service that ends in `JSL C2/8002` (CD/091A with $CD02 set, CD/09C6 without). $7E is 0 (CD/09F1, no latch) until the
+boot's C1/0034 `JSL CD/0003` (CD/0399 `LDA #01 / STA $7E`), which lands the frame before the band's seed (CD:0512). The
+rule's 0AD fight from c3898: $7C++ from f5, $7E = 01 at f34 (CD:039D), `$CA1E = FF` at f35 (CD:0512) and the first
+C2:85BC tick at f35.
+
+## The exit tail's NMI (D1/F4C0)
+
+CD/043E `JSL C0/000B` (C0/1BE6's upload of the field's sample set) and CD/0444 run inside the battle, so its main loop
+sits in the SPC handshake while its NMI keeps coming. That NMI is not the fight's: CD/0418-0420 install D1/F4C0 before
+the upload. D1/F4C0 (dis.py 11F4C0) uploads the CGRAM page from $7E:2200 (CD/09CE), runs C0/0005 -> C0/0AFF (FD/C2C1
+twice with $53 bit 7, FD/C1EE: the field's HDMA tables and channels), INIDISP from $45, the scrolls from $2C70..,
+`JSL CD/0C89` -> C0/2C41 with no $CD02 gate, and `JSL FD/FFF7` = FD/E39C (the objslot records), and has no `$7C++`.
+Measured on the 0AD fight (`--hookpc` + `--monitor 7E2C74:4`): C0/1BE6 at c4306, CD/0444 at c4321, C0/18B9's ack at
+c4322, and $2C74 += 2 every frame from c4306 through c4322 (C0:2CD6), the ack's own frame included. The 0AD tail's
+`--cputrace` shows C0:0AFF, C0:2C41 and FD:E39C once in each of its seven frames; in the 07D fight $7C holds 9D from
+c7280 to the ack while the field's colour records at $0520 step every frame.

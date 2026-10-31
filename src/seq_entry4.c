@@ -1,19 +1,12 @@
-// seq_entry4.c -- SEQUENCE ENTRY 4 (`FF 24`), native: Lavos falls through space onto the planet (65,000,000 BC).
+// seq_entry4.c -- sequence entry 4 (`FF 24`): Lavos falls through space onto the planet (65,000,000 BC).
 //
-// Scene 301 (the Tyranno Lair's top): after the Black Tyranno, obj21 fn3 sets glb[236] bit 7 (`65 07 EC`), fades and calls
-// `FF 24`; the teardown reboots into 301 itself, whose obj0 fn1 now hides Azala and the Tyranno, and the scene goes on
-// (disasm/notes/sequence_table.md sec. 15). The setup $7E:53BB has no arm on $0384: page A `$552A` adds the tasks `3749 3754
-// 579B 56A9 347A` and the hooks `380B 5654`, waits 77 frames, writes TM and counts r0 down; page B `$5568` counts its spans,
-// adds `5855` (the orbit) and `55F9` (its turn), and calls `564D` (page A to `$5635`) and `5640` (page A to `$5604`: the
-// planet's sprite `56EB`, then `34E3`, the fade that ENDs). No song marker.
-//
-// Stage 1 of the native port (as seq_entry3.c): the logic over the WRAM image, byte for byte with the cartridge -- the two
-// scripts and their calls, the fades, the tasks that write the pages' registers ($56A9, $5855, $55F9), and the starfield
-// ($5777 in the setup, task $579B every frame), which draws from the overlay's RNG C3/02DD: what it leaves in `$0386` is the
-// field's afterwards. The picture (the mode-7 registers $5654, the planet's sprite $56EB through C3/0D5E, the setup's VRAM
-// packets and tables) is stage 2.
+// Scene 301, after the Black Tyranno (disasm/notes/sequence_table.md sec. 15: the scripts $552A / $5568 and their tasks).
+// This file is the logic over the WRAM image: the two scripts and their calls, the fades, the tasks that write the pages'
+// registers ($56A9, $5855, $55F9), and the starfield ($5777 in the setup, task $579B every frame), which draws from the
+// overlay's RNG C3/02DD: what it leaves in `$0386` is the field's afterwards. The picture (the mode-7 registers $5654,
+// the planet's sprite $56EB, the setup's VRAM packets and tables) is seq_entry4pic.c.
 #include "seq_entry4.h"
-#include "seq_entry4pic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_entry4pic.h"   // the picture, when the host draws it (io->pic)
 #include "seq_racepic.h"
 #include <string.h>
 
@@ -22,14 +15,13 @@ static void wr(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v
 
 int CtEntry4StageHas(uint8_t operand) { return (operand & 0x1F) == 4 && !(operand & 0x40); }
 
-// MEASURED: `CT_CALLROM_NONMI=1 ct.exe --callrom 7E53BB --pokewram 0384=24 --regdb 00 --m8 --x16` from the cartridge right
-// after the setup (saves/tyranno_re/ff24_pre_f3100.state + 46 frames: the overlay whole in WRAM): 65279 ops, 1938002 cycles
-// (56840 of them refresh) -- the VRAM packets, the mode-7 tile conversion $37CA and the 128 stars of $5777.
+// The setup's cycles, from `CT_CALLROM_NONMI=1 ct.exe --callrom 7E53BB --pokewram 0384=24 --regdb 00 --m8 --x16` on a
+// state with the overlay in WRAM: the VRAM packets, the mode-7 tile conversion $37CA and the 128 stars of $5777.
 long CtEntry4StageSetupCycles(void) { return 1938002L; }
 
 // $7E:3443 -> C3/02DD, the overlay's RNG (M = 8): `ROL A / ADC $0386 / STA $0386 / TXA / ADC $0386 / ADC $0008 / CMP $2137 /
 // ADC $213C / SBC $213D / ADC $0386 / ADC $00F0 / EOR $00F2 / ADC $00F4 / SBC $213D / STA $0386`, the carry threaded through.
-// The beam counters are the rule's VIRTUAL BEAM on both sides (CLAUDE.md; snes/snes.c snes_readBBus): $213C = $0351, $213D =
+// The beam counters are the timing rule's virtual beam on both sides (CLAUDE.md; snes/snes.c snes_readBBus): $213C = $0351, $213D =
 // 00. `CMP $2137` latches the counters and reads the open bus -- the operand's last byte, 21 -- so it only sets the carry.
 uint8_t CtSeqRng02DD8(uint8_t* w, uint8_t a, int* c, unsigned x) {
   unsigned t;

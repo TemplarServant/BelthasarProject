@@ -1,7 +1,7 @@
 // present_vk.c - present.h's Vulkan backend (built when third_party/vulkan has the Khronos headers: CT_HAVE_VULKAN).
 // No SDK and nothing linked: vkGetInstanceProcAddr comes from the driver's vulkan-1 through SDL, everything else from
 // it. A frame: the 256x224 picture goes through a host-visible staging buffer into an image, the swapchain image is
-// cleared black and the picture BLITTED into the placed rectangle (nearest or linear), then a render pass that LOADS
+// cleared black and the picture blitted into the placed rectangle (nearest or linear), then a render pass that loads
 // the result lets the F1 overlay (ImGui's Vulkan backend) draw on top, and the image is presented. One frame in flight.
 #ifdef CT_HAVE_VULKAN
 #define VK_NO_PROTOTYPES
@@ -227,7 +227,7 @@ int CtVkStart(SDL_Window* win, int vsync, int picW, int picH, CtVk** out) {
       VkFormatProperties fp; vkGetPhysicalDeviceFormatProperties(v->phys, f, &fp);
       if (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) { v->fmt = f; break; } }
     if (v->fmt == VK_FORMAT_UNDEFINED) { fprintf(stderr, "[video] Vulkan: no blittable swapchain format\n"); goto fail; } }
-  { VkAttachmentDescription a = { 0 };                    // the overlay's pass: it LOADS the picture the blit put there
+  { VkAttachmentDescription a = { 0 };                    // the overlay's pass: it loads the picture the blit put there
     a.format = v->fmt; a.samples = VK_SAMPLE_COUNT_1_BIT; a.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     a.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE; a.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     a.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; a.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;

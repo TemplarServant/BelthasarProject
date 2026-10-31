@@ -262,11 +262,10 @@ static void opt(const CtSeqPic* p, const Line* L, int layer, int* lx, int* ly) {
   if (v & valid) *ly = (v & 0x3FF) + (y - p->vofs[layer]);
 }
 
-// THE OFFSET PER TILE PAST THE SCREEN'S EDGE (mode 2; a stage's art past its edge, a mod): the offsets row is read on past
-// the 32 columns as the hardware reads it in the middle -- at the column's place in BG3's map, which wraps at 32 entries --
-// so a wave the stage scrolls through BG3's hofs (entry 3's FF 23 and the attract's FF 63: a triangle of 32 entries) goes on
-// into the sides with the middle's motion. x is the screen column, y the line; *mx / *my the layer's place (unwrapped, as
-// g_seqPicArt takes it). 1 = an offset applied.
+// Offset per tile past the screen's edge (mode 2; the widescreen mod): the offsets row is read past the 32 columns as the
+// hardware reads it in the middle, at the column's place in BG3's map (which wraps at 32 entries), so a wave scrolled
+// through BG3's hofs (entry 3's FF 23, the attract's FF 63) goes on into the sides. x is the screen column, y the line;
+// *mx / *my the layer's place (unwrapped, as g_seqPicArt takes it). Returns 1 when an offset applied.
 static int floorDiv8(int v) { return v >= 0 ? v / 8 : -((7 - v) / 8); }
 static int optSigned(uint16_t v) { int s = v & 0x3FF; return s >= 512 ? s - 1024 : s; }
 static int optSide(const CtSeqPic* p, const Line* L, int layer, int x, int y, int* mx, int* my) {
@@ -301,8 +300,6 @@ static int m7Pixel(const CtSeqPic* p, const Line* L, int x, int layer, int pri) 
   return px;
 }
 
-// The colour of one screen (main or sub) at x: the first opaque layer in the mode's order; returns its layer (0-3 a BG, 4 an
-// OBJ of palettes 4-7, 6 one of palettes 0-3, 5 the backdrop).
 // One BG layer's pixel at x of the line (y), at the priority cp: the stage's art, offset per tile, mode 7, the fetch.
 static int bgLayer(const CtSeqPic* p, const Line* L, int x, int y, int cl, int cp, int sub) {
   int px = 0;
@@ -329,6 +326,8 @@ static int bgLayer(const CtSeqPic* p, const Line* L, int x, int y, int cl, int c
   }
   return px;
 }
+// The colour of one screen (main or sub) at x: the first opaque layer in the mode's order; returns its layer (0-3 a BG, 4 an
+// OBJ of palettes 4-7, 6 one of palettes 0-3, 5 the backdrop).
 static int pixel(const CtSeqPic* p, const Line* L, int x, int y, int sub, int* rr, int* gg, int* bb) {
   int layer = 5, px = 0;
   for (int i = 0; i < kCount[L->actMode]; i++) {
@@ -471,11 +470,10 @@ void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t en, CtSeqPicRe
   if (g_seqPicArt && g_seqPicWideSide > 0) { int z = 0; g_seqPicArt(p, -1, &z, 0, 0); } // (the scene adjustments' art: a new frame, a mod)
   if (rd) { hdmaInit(ch, en, w, rd, ctx); hdmaRun(p, ch, en, w, rd, ctx, 0); }
   if (g_seqPicWideSide > 0 && g_seqPicWideOut && rgb) {
-    // THE WIDESCREEN'S PICTURE ON EVERY CORE (a mod: the vanilla picture is drawn as below, a line at a time). Twice the
-    // columns at 21:9 and a stage's art past its edge cost ~13 ms a frame drawn alone (entry 3, the owner: "very slow").
-    // The lines' setup and the HDMA walk run in the line's order and keep each line's registers; the pixels of all the
-    // lines are then drawn at once, each worker on its own copy of the picture (the memories copied once a frame, a
-    // line's registers before its pixels). HDMA writes registers only (no data port), so the copies hold the frame.
+    // The widescreen's picture on every core (a mod; the vanilla picture is drawn below, a line at a time). The lines'
+    // setup and the HDMA walk run in line order and keep each line's registers; the pixels of all the lines are then drawn
+    // in parallel, each worker on its own copy of the picture (the memories copied once a frame, a line's registers before
+    // its pixels). HDMA writes registers only (no data port), so the copies hold the frame.
     static Line Ls[225];
     static struct { uint8_t r[0x40]; uint16_t hofs[4], vofs[4]; int16_t m7[8]; uint8_t fix[3], mosaicStart; } regs[225];
     for (int line = 1; line <= 224; line++) {
@@ -525,7 +523,7 @@ void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t en, CtSeqPicRe
   if (!(p->r[0x00] & 0x80)) { p->oamAdr = p->oamAdrWritten; p->oamInHigh = p->oamInHighWritten; p->oamSecond = 0; }   // the vblank
 }
 
-// ---- a stage's data ports ----
+// ---- A stage's data ports ----
 static void vramPortWrite(CtSeqStagePic* sp, int high, uint8_t v) {
   if (sp->vmain & 0x0C) {
     static int said = 0;

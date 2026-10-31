@@ -1,33 +1,15 @@
-// ============================================================================
-// sound/driver.h -- the sound processor's whole program as native C game code: the boot ROM ($FFC0, the IPL), the
-// cartridge's sound driver (Square's "Akao", block 0 of the $C7 upload, ARAM $0200-$1DEE) -- its boot, its main loop and
-// command poll, the tick (the shadow flush, the status ports, the fades), the sequencer with its tempo accumulators, the
-// 60 sequence events $C4-$FF and their look-ahead, the per-track and global slides, the per-voice vibrato / tremolo /
-// pan sweep and the volume and pitch output, the command queue and the commands -- and the upload session with its
-// receivers (the two-processor protocol, token by token).
+// sound/driver.h -- the sound processor's program as native C: the boot ROM ($FFC0, the IPL) and the cartridge's
+// sound driver (Akao, block 0 of the $C7 upload, ARAM $0200-$1DEE) with its tick, sequencer, events, slides, voices,
+// commands and upload session. The map and each routine's reading: disasm/notes/audio_spc_driver.md (listing:
+// `python tools/spc700dis.py driver --follow 0200 --table 1554:60,1608:60,1680:16,16A0:16,16C0:32,1544:8`).
+// src/sound/lockstep.c compares it against the original on the vendored SPC700, instruction by instruction.
 //
-// Derived routine by routine from our own listing (`python tools/spc700dis.py driver --follow 0200 --table
-// 1554:60,1608:60,1680:16,16A0:16,16C0:32,1544:8`); the map and each routine's reading are in
-// disasm/notes/audio_spc_driver.md. Validated instruction by instruction against the original running on the vendored
-// SPC700 (src/sound/lockstep.c): the same instructions at the same SPC cycles, the same port, S-DSP and timer accesses
-// with the same values at the same cycles, the same RAM.
-//
-// THE STATE. The program's state lives in SndDrv::m, laid out as the sound processor keeps it in its RAM (the direct
-// page, the per-track arrays at $0110-$018F and $F200-$F6FF, the fades and the command queue at $F15F-$F1B1, the sample
-// directory and instrument tables at $1E00-$1FFF, the song state saved at $F800-$FF8F), so the lockstep compares it byte
-// for byte; driver.c names every field it uses (the D_ / T_ / P_ constants). The same 64 KB is the S-DSP's memory (the
-// samples, the directory, the echo buffer): the machine (sound/machine.h) gives it to the mixer.
-//
-// THE TIME. Every routine marks the driver's address as it runs (SndClockAt): the walker charges the instructions from
-// the last mark with the listing's cycles (sound/timing.h, fixed per instruction; a branch taken costs its own), so the
-// program's SPC700 cycle count is the original's, instruction for instruction. Each access the outside sees (a port, a
-// timer, an S-DSP register, a RAM byte the S-DSP reads) happens at the cycle the original makes it.
-//
-// THE OUTSIDE goes through SndDrvHost: the S-DSP's registers (dspWrite / dspRead), the four ports each way (portRead
-// the CPU's, portWrite the driver's), the three timers (timerRead) and the control registers ($F1, $FA-$FC), the RAM
-// stores the S-DSP may read (ramWrite, before the byte lands). The machine runs the program in a coroutine and stops it
-// at an instruction boundary (SndClock.want).
-// ============================================================================
+// State: SndDrv::m, in the sound processor's own RAM layout (so the lockstep compares it byte for byte); driver.c names
+// each field it uses (D_ / T_ / P_). The same 64 KB is the S-DSP's memory, given to the mixer by sound/machine.h.
+// Time: each routine marks the driver's address as it runs (SndClockAt) and the walker charges the instructions since
+// the last mark from the cost table (sound/timing.h), so every access the outside sees lands on the original's cycle.
+// The outside: SndDrvHost (S-DSP registers, ports, timers, control registers, the RAM stores the S-DSP may read). The
+// machine runs the program in a coroutine and stops it at an instruction boundary (SndClock.want).
 #ifndef CT_SOUND_DRIVER_H
 #define CT_SOUND_DRIVER_H
 

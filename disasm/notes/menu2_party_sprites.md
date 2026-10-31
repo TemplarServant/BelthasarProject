@@ -138,3 +138,56 @@ saves/lock_ayla.state               $2980 = 03 05 06, $7F01DF = 0x04   (the §4 
 * **Where the CHR is DMA'd from in ROM.** Not traced — and not needed: the port never reads menu VRAM,
   it composes the same sprite asset the field draws, which the asset pipeline extracted from the ROM.
   The equality above is what ties the two together.
+
+## The menu sprite animator (C2/F643, C2/F657, C2/F69B)
+
+C2/F643 spawns one task in slot 0x28 (`LDA #F657 / LDX #0028 / JSR C2/8249`). C2/F657 is its body: it sets
+D = $1800 and walks the nine sprite blocks, D += 0x40 until D == $1A40, once per frame.
+
+```
+2F662  LDA $00 / BMI ->next            ; +0x00 = charId, bit7 = no character in this block
+2F666  LDA $18 / BMI ->next            ; +0x18 bit7 = block disabled
+2F66A  LDA $11 / CMP $12 / BNE ->adv   ; +0x11 = requested anim, +0x12 = the one playing
+2F670  CMP #00 / BEQ ->draw            ; both 0 -> this block is not animating
+2F674  DEC $13 / BPL ->draw            ; +0x13 = the frame countdown (signed test)
+2F678  LDA $0D73 / CMP $0D75 / BCS ->draw ; a per-frame budget on how many blocks may advance
+2F680  JSR C2/F69B                     ; advance
+2F683  LDA $18 / BNE ->next / JSR C2/F871   ; emit this block's OAM
+```
+
+C2/F69B is the advance:
+
+```
+2F69B  INC $16                         ; +0x16 = the frame index inside the animation
+2F69D  LDA $11 / CMP $12 / STA $12     ; commit the request; Z = "it did not change"
+2F6A3  BEQ ->2F6F7                     ;   unchanged -> keep walking the same table
+2F6A5  STZ $16                         ;   changed -> restart at frame 0 and re-point the tables
+2F6A7  LDA $17 / ASL A / TAX / LDA $14 / JSR ($F6D8,X)   ; kind -> [0, v, 2v, 3v] over +0x14
+2F6B4  LDA $11 / AND #007F / ASL A / ASL A / STA $1E     ; animId * 4
+2F6BD  ADC $1B / ADC $0A / STA $1B     ; pose table     = resolve(+0x14) + animId*4 + word(+0x0A)
+2F6C3  LDA $1E / CLC / ADC $0C / STA $1E ; duration table =             animId*4 + word(+0x0C)
+2F6F7  LDY $16 / LDA [$1E],Y           ; the frame's duration
+2F6FB  BEQ ->2F6E0                     ;   0 terminates: bit7 of $11 -> restart at +0x21, else
+                                       ;   restart at 0; if already 0 the animation is empty
+2F6FD  STA $13                         ; reload the countdown
+2F6FF  LDA [$1B],Y / CMP $03 / BEQ ->2F750 / STA $03     ; +0x03 = the assembly frame; the DMA that
+                                       ;   follows uploads that frame's tiles
+2F750  SEP #30 / DEC $13 / RTS         ; both exits decrement again, so a pose lasts `duration`
+                                       ;   frames, not duration+1
+```
+
+The tables are the character's ordinary sprite animation set (CT_ASSET_SPRITEANIM carries them byte for byte). In the
+oracle's live blocks Lucca's pointers resolve to $E4:39A0 (poses) and $E4:AA24 (durations), whose bytes are
+`0A 0B 0C 0D 0E 0F` / `07 07 07 07 07 07`: CT_ASSET_SPRITEANIM[2] anim 1's D-facing column and its delays. The same
+holds for Crono (E4/312C = 04 05 06 07 08 09), Frog (E4/427C) and anim 0x0B (Lucca E4/39C8 = 01 87 4A /
+E4/AA4C = 0A 05 0F). The menu plays the character's walk cycle facing down, so block+0x03 is the assembly-frame index
+the field sprite composer takes, and anim 0 frame 0 is the standing frame.
+
+Blocks 0-6 are the characters' own ($1800 + 0x40 * charId, C2/F626). Block 7 ($19C0) is a copy whose character is set
+at run time: the Tech screen's caster (C2/BA09: `LDA $9A90 / ... PEA $19C0 / PLD / CMP $00 / BEQ / STA $00 / JSR
+C2/F422`). Block +0x21 is the loop point: an animation whose request has bit 7 (C2/B4E6's $19D1 = 90) restarts there at
+its end (2F6E0 `LDA $11 / BPL / LDA $21 / STA $16`) instead of at frame 0.
+
+In the port the machine runs in menu.c (g_mspr) instead of at $7E:1800, because the menu runs over a live field WRAM
+whose $1800 array is the field's per-object table (CtObjSceneDefaults writes $1800,X) and must resume unchanged. The
+VRAM DMA at 2F707 is replaced by composing the frame on the host.

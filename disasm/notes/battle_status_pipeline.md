@@ -1035,3 +1035,39 @@ Left as it was: C1/850E (an unready enemy entry with no PC pending) runs C1/881C
 runs the whole tail there (it clears $B186 bit 0 and sweeps). A no-action enemy turn runs its eval before C1/883D / C1/B223
 (the port's order, which the pinned traces carry). A counter's action (C1/8780) is followed by C1/8787's C1/B223 in the ROM,
 not in the port.
+
+## The twelve status handlers (C1/B92D)
+
+Y = the combatant, X = Y * $80 (its block). Each handler re-arms its flag and timer, clears its own $B186 bit and counts
+the expiries down from 10; the tenth ends the status. Per array:
+
+```
+0  C1/8876 +1E bit 7 STOP      timer $B0D4 (60)   10th: +1E &= 7F, flag 0                      $B186 &= 0FFF
+1  C1/88C5 +1E bit 6 POISON    alive and poisoned: flag 1, timer $B0DF + the block's +37, damage maxHP /
+                               ((+37 >> 1) + 8) shown and applied through action 7F; no count       &= 17FF
+2  C1/8975 +1E bit 5 SLOW      timer $B0EA (90)   10th: flag 0; the slow bit stays (only BD6F / E575 read it)  &= 1BFF
+3  C1/89B9 +20 bit 7 HASTE     timer $B0F5 (110)  10th: +20 &= 7F, flag 0                      &= 1DFF
+4  C1/8A05 +20 bit 6           timer $B100 (90)   10th: +20 &= BF, flag 0                      &= 1EFF
+5  C1/8A51 +21 bit 6 MAGIC WALL timer $B10B (60)  10th: +21 &= BF, flag 0                      &= 1F7F
+6, 7, 11  RTS: no re-arm and no $B186 clear (nothing arms 6/7: C1/E070 jumps out)
+8  C1/8A9F +1E bit 4           timer $B12C (30; Haste /2, Slow x2); with the bit, 1 HP off (C1/EBF8 + C1/EC7F, no
+                               action) every period; no count                                  &= 1FEF
+9  C1/8B10 +21|+26 bit 5       timer $B137 (25; +25 bit 7 /2 -- the +20 read is overwritten --, Slow x2); every 10th:
+                               alive -> 5 MP restored through action 7F (kind 2, flag C0); no end   &= 1FF7
+10 C1/8BB9 +21 bit 2 PROTECT   timer $B142 (60)   10th: +21 &= FB, flag 0 (armed by C1/B0B6's bit 0; E006 has no arm)  &= 1FFB
+```
+
+## The cursor pass reads the FF turn-order entry (C1/82A2)
+
+The cursor pass does not skip an FF entry of the turn order: it reads the flag array 255 bytes further on. On GATO's
+fight the array-4 cursor reads $AFE2 + FF = $B0E1 (array 1's reload base for combatant 2, staged 96), sees bit 7 and
+dispatches array 4's handler for "combatant FF" (its `STA $AFE2,Y` writes $B0E1 = 01, its `STA $AF53,Y` $B052 = 00).
+Every other array's FF read lands on a byte without bit 7 in the staged image, and after that one pass so does this one.
+
+## The lifeline's message timing (CD/01B3)
+
+After the post (frame 0) each frame is a CD/3E75 (the NMI, then C1/10E3, the menu pass on the $993A request), except
+CD/027F's two plain waits: frame 2 raises the box (`$CCEC = 10 / INC $CA24`), CD/020A takes frames 3-18, the dwell runs
+from frame 19 for CD/01A5's count ($53 = CD/019D[$2991 >> 3 & 7], A0 by default), one frame each, cut by a held A
+(`LDA $F8 / BPL`); then the close (`STZ $CCEC / STZ $CCED / INC $CA24`), 16 more frames and the RTL on the 16th.
+The lifeline fixture measures post f799, box f801, close f977 (= 18 + 160), return f993.

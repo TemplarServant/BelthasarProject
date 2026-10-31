@@ -113,3 +113,24 @@ natively (palette DMA + HDMA + anim). For a perfect IMAGE, capture/stitch live f
   empty). It lacks an ocean-blue color 0, confirming the sea colour is the separate backdrop/BG2.
 - The exit/object records (desc[0x15/0x16]) decompress cleanly but the per-record layout is unparsed
   (needed for M3-D location entry).
+
+## The tilemap rebuild's direct-page words (C2/09C5)
+
+The per-layer rebuild C2/09C5 (called with `$00` = 1, 2) leaves its working words in `$00-$1B` and the scroll
+shadows when it returns. They are read later: C3/02DD (the seed, `ADC $0008`) folds `$0008` into `$0386` when the
+world's window object calls it later in the same pass (the attract's 1F5 leg: the first seed call reads the last word
+C2/0A55 stored). The port writes them in `owRebuildScratch` (src/world.c). All are 16-bit (09CC REP #20; the tables
+are bank $C2 words), X = (layer - 1) * 2:
+
+```
+09DB-09E7  $20,X = $E3,X << 3 ; $26,X = $E7,X << 3
+09E9-09F9  $14 / $16 / $10 = C2:0556 / C2:055C / C2:0562 [X]
+09FB-0A06  $08 = $E3,X >> 1 when $E3,X is odd, else ($E3,X >> 1) - 1, and -1 -> $5F
+0A08-0A13  $0A = the same from $E7,X, -1 -> $3F
+0A15-0A29  $0C = ($20,X - (bit 3 ? 8 : 16)) & $1FF ; 0A2B-0A3F  $0E = ($26,X - (bit 3 ? 8 : 16)) & $FF
+0A41       $02 = 18, then 18 rows of:
+  0A6C  $00 = 16 ; $18 = $08 + $16 ; $1A = $0A << 6 ; $04 = $0A * 96 ; $06 = ($0E & $F0) >> 2 ; and 16 columns of
+        0A90-0AA7  $04 += $60 (>= $1800 -> 0) ; $06 = ($06 + 4) & $3F ; DEC $00
+  0ADC  $12 = ($0C >> 3, + $3E0 when >= $20) + $10   (then the row's two DMAs)
+  0A4C  $08 += 1 (>= $60 -> 0) ; 0A57  $0C = ($0C + $10) & $1FF ; 0A62  DEC $02
+```

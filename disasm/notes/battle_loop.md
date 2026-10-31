@@ -963,3 +963,41 @@ ran the next head on the victory's frame (CtBattleTick, `!r` after the victory's
 playthrough's leg 20, the first forest ambush): `$0027` stops at DE on f3005; the port's went on to DF, and since `$0027` is never
 reset between fights, the second ambush's turn scanner (C1/82A2 / C1/8313, odd iterations) ran two frames off the cartridge's --
 Crono's command window 4 frames late, the enemies' due turns ahead of it.
+
+## The RNG routine C1/AF22
+
+C1/AF22 returns a number in [X, A), where X (the caller's X) is a base, not always 0. Besides the value it
+leaves state behind, and three of its early exits do not advance the cursor `$26`:
+
+```
+AF22  SEP #10 / STX $25            the caller's X, saved 8-bit: the base
+AF28  LDX $2C / PHX                $2C is saved and restored at AF76 (the one scratch word that survives a draw)
+AF2F  CPX #FF / BEQ ->AF73         base $FF -> return A untouched, without drawing
+AF35  STA $B31E                    the count, stashed
+AF38  LDA $2989 / BIT #20 / BEQ    the no-random mode:
+AF3F    TXA / BRA ->AF73             return the base, without drawing
+AF45  CMP #00 / BEQ ->AF73         count 0     -> return 0, without drawing
+AF49  CMP $25 / BEQ ->AF73         count==base -> return count, without drawing
+AF4D  LDX $26                      the cursor
+AF4F  SEC / SBC $25                the divisor is (A - X), not A
+AF52  CMP #FF / BNE ->AF5C
+AF56    LDA $FDBA61,X / BRA ->AF73 a span of $FF -> the raw table byte, no divide, no INC $26
+AF5C  STA $2A / STZ $2B
+AF60  LDA $FDBA61,X / TAX / STX $28 / STZ $29
+AF69  JSR C1/C92A                  the modulo is the engine's divide
+AF6C  LDA $32 / CLC / ADC $25      the result is the remainder plus X, 8-bit, carry discarded
+AF71  INC $26                      the cursor advances only on this path
+AF73  REP #10 / PLX / STX $2C
+```
+
+The value comes from the divide's remainder `$32`, not from a plain modulo: C1/C92A takes a 32-bit dividend
+(`$28` low, `$2E` high), and AF60-AF67 set only `$28`, so `$2E` enters the divide holding whatever the previous
+divide left there. `ct.exe --sweeprng` sweeps `$2E` against the ROM.
+
+C1/C92A is entered with a clear carry: AF4F's `SEC / SBC $25` sets it, but AF52's `CMP #FF` clears it again on
+the way past, so the divide's first `ROL $28` shifts in a zero.
+
+The ROM's callers pass a count (C1/E15E `ADC #01`, E240/C063 the same), so count 0 never occurs at a real call
+site. Most call sites enter with X = 0 (C1/DC64's `TDC / TAX` pattern); the one known site with another base
+is C1/D677 in the target re-validation C1/D63F (`LDX #0003 / LDA #0B / JSR C1/AF22`, a random living seat in
+3..$0A; `battleTargetRevalidate`).

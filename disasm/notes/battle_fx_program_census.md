@@ -529,3 +529,173 @@ work, the tail, the IRQ, HDMA per frame) or a rule for NMI-on stretches (user de
   mode 18 = (80, 80) (tried, not committed: the interpreter is another lane's) Flare is 577 / 577 and Shock 485 / 476
   (the build's 9). Modes 12-17 are absent too: 12 C1/767D (RTS: $A2B0/$A2B2 as they were), 13-15 C1/767E/7686/768E
   (the midpoint of role 0 and role 3 / 1 / 2), 16 C1/76D8, 17 C1/774E.
+
+## The window-shape routines in detail (ops 8A/89/AB/8B, 97, A1/B8/DA)
+
+All of them write the window buffer that is not on screen (`$7C & 1`: odd -> $C4E1.., even -> $C161..; HDMA channel 7
+shows the other one, CD/0AEE), one line record [W1L W1R W2L W2R] per line. Handlers run with M = 8, X = 16 and B = 0
+(the runner's `ASL A / TAX` dispatch, CD/16A8, needs it), so a `LDA [$40] / TAX` is the whole operand byte.
+
+### The shape window (op 8B k, CD/2FB7 -> CD/3189)
+
+Two shape records k = 0 / 1: centre ($CAA6+k x, $CAA8+k y), radius $CAA4+k, shape number $CAD1+k (0..5). Op 8A
+(CD/2FED) sets one (X = b0 & 1, shape = b0 >> 4), op 89 (CD/2FBC) steps one (X = the whole b0; x += b1, y += b2 capped
+at D3, radius += b3), op AB (CD/24F3) clamps bound points 0 and 1 (x 08..F8, y 08..D4) and centres record 0 (or record
+1 with b bit 7) on point b & 7F.
+
+Op 8B: `STA $CAAA`, then CD/31AA builds the circle's half-chords and returns with the carry clear, drawing nothing,
+when `$CAA4,k & 7F` is 0 (the buffer keeps what it held). CD/31AA (X 8-bit) is the midpoint circle of radius r over one
+octant, in 8 bits: `STA $49 / TAX / STZ $51 / TDC / TAY / DEC A`, then at 31C1 `STA $47 / TXA / CMP $51 / BCC ->31E6`
+(x < y: done), `STA $B800,Y / INY`, $49 := $49 + ((2y) EOR FF), `INC $51`, and `CMP $47 / BCC ->31C1` (no wrap below
+the value at the loop head), else `DEX` and $49 += 2x. Then `JMP (CD:319E)[$CAD1,k]`, one of six shapes (a table
+builder and a placer each); `ASL A` (8-bit) drops bit 7 of the shape number, and 6..7F index code bytes past the table:
+
+```
+0 CD/33B5 = 31FE + 35A5    1 CD/33BB = 3273 + 352D    2 CD/33C1 = 3273 + 347D
+3 CD/33C7 = 31FE + 33D9    4 CD/33CD = 3337 + 35A5    5 CD/33D3 = 3337 + 33D9
+```
+
+The table builders (X 8-bit): each row is [cx - h, cx + h] (`SBC` floored at 0, `ADC` capped at FF), stored at
+$B900+X / $B901+X with X from FE down by two (the upper half, the equator written highest) and, on rows that go through
+`STA $2180`, streamed from $BA00 up (the lower half). The first octant's rows take h = $B800,y for y = 0..n-1; then
+`STZ $B800,n` and, walking y = n-1 down to 1, a row only where $B800,y differs from $B800,y-1 (`CMP $B7FF,Y / BEQ`),
+with h = $47 (from $B800,n-1 - 1, `DEC $47` every step). 31FE (shapes 0 3): every row both ways. 3273 (1 2): $4F counts
+the rows from 0 and the odd ones skip the $2180 stream, so the lower half has half the rows. 3337 (4 5): h doubled.
+
+The placers (`REP #10`, then M = 16) copy the table's rows around its centre $BA00 (row index 80) into the window lines
+from the shape's top, clipped at line 0 (`$49 += -($4F)`) and at line DE. r and cy are the whole bytes $CAA4,k /
+$CAA8,k (bit 7 of the radius stays). 35A5 (0 4): the whole circle, rows 80-r .. 80+r. 352D / 347D (1 2): the lower
+half at half height, rows 80-r .. 80+r/2; 347D (shape 2) then fills lines 0 .. cy-1 with the equator word at $BA00 (a
+do-while to X = cy*4 + w2: with cy = 0 the 16-bit X goes all the way round). 33D9 (3 5): every row onto two lines, rows
+80-r .. 80+r from line cy - 2r (also a do-while).
+
+CD/3616, the placers' copy: `$4B := (E7C7 - 3 * ($4B - Y))`, Y += B900, X += the buffer, `JSL CE/E7C8` = `JSR E7CC /
+RTL` with E7CC `JMP ($004B)`, into the unrolled copy that ends at CE/E7C7 (RTS): 256 pairs `LDA $2k,Y / STA $4k,X` (six
+bytes each, k = 255 at CE/E1C7 down to k = 0 at CE/E7C1; CE/E1C1 is not one). Entering 3*d bytes before the RTS runs
+the last d/2 pairs: word k of the table (two bytes a line) to line k of the window (four bytes a line), k = d/2-1 .. 0,
+16-bit (the indexed operands carry into bank $7F). The entry is outside that block when d > 512 (a radius with bit 7)
+or "negative" (the shape's top below line DE and the bottom trim exceeding it): the ROM would then run code that is not
+the copy. None of the techs run (Haste, Napalm, Mega Bomb, Area Bomb, Black Hole up to its op 88 02) meets it; the port
+reports a stop.
+
+### The half-plane (op 97, CD/30BE -> CE/EA7E)
+
+Op 97 b0 b1 b2: X = the slot, +1 with b2 bit 1 (window 2's angle $CA78/$CA88). b2 bit 7: `$CA77,X := b0` and nothing
+else. Else the angle += b1 into $CA77,X and $CAA3; the segment is CE:F28E[angle] (x, y) -> $CA9B/$CA9C and the screen's
+centre (80, 70) -> $CA9D/$CA9E, swapped when $CA9E < $CA9C so the top point comes first; CD/3134 stores their deltas
+($CA9F = sign(x2 - x1), $CAA0 the same for y, $CAA1 |dx|, $CAA2 |dy|), `$4F = $CA9B / $51 = $CA9C` and JSL CE/EA7E with
+A = b2 & 7F. Either arm ends `LDY $40 / INY / INY / STY $40`.
+
+CE/EA7E fills window w's half-plane on the side of the segment the angle $CAA3 faces (`a & 2` picks W2; the code exists
+twice, at bases 0x380 apart, for the two buffers). PHA / TAY / STY $45 (16-bit, B = 0), then:
+
+```
+E885  every one of the 224 lines: angle < 80 -> R := FF; angle >= 80 -> L := 00 and INC $45
+      (so $45 = the byte the edge below writes: L for angle < 80, R for >= 80)
+EA8D  $47 = $51 * 4 + $45 (the segment's first line)
+EAA4  angle >= 80 and $51 != 0, the lines above it: $4F == FF -> their R := FF and line 223-k's L := FF;
+      $4F == 0 -> `00FF` (empty); else R := $4F
+EAF9  the edge: dx = $CAA1, dy = $CAA2; X = $4F; per line `LDA $45 / CMP $49 / BCC / SBC $49 / INX (DEX when
+      $CA9F < 0)` until below dy, `ADC $47` (8-bit), the byte := X; dy lines. With dy == 0 nothing, and X keeps dy.
+EB4F  PLA / AND #02: angle >= 80 -> the lower half's R := ~ the upper half's (line 223-k from line k, k < 112);
+      angle 0 -> lines 112..223 `00FF`; else the lines below the edge (to line 224, `CPY #0380+w`): the last X FF ->
+      `00FF`, 0 -> L := 0 and `STZ R,X` (X from 0, the ROM's own index), else L := X; then the upper half's L := ~ the
+      lower half's (line k from line 223-k).
+```
+
+### The triangle fill (ops A1, DA: CD/3685; op B8: CD/3952)
+
+CD/3685 (JSR from CD/367C, which sets DB = 0 around it) fills window pair `$CC64 & 1` of the buffer being drawn with
+the triangle v = $12..$17 = x0 y0 x1 y1 x2 y2 (CD/38B6 = the same base table CD:38AA as D1/F9AF). All in DP scratch,
+which the battle NMI restores (D1/E7A9 MVN $00-$2A -> $CC65, D1/E885 back); only the buffer and $CC64 stay.
+
+```
+sort  3685/3693/36A1: points 0-1, 1-2, 0-1 swapped (16-bit, x with y) when y >= the next one's
+36AF  y0 == y1 (flat top): x0 >= x1 swaps 0-1, then 3777: X = x0<<8 (+= slope 0->2), Y = x1<<8 (+= slope 1->2),
+      y2-y0 lines
+36C6  else x1 >= x2 swaps 1-2 (their y may now be out of order); y1 == y2 (flat bottom, 37BF): X = Y = x0<<8,
+      X += slope 0->1, Y += slope 0->2 for y2-y0 lines
+36DD  general: s03 = slope 0->1, s05 = slope 0->2 (their flags $00 / A); same flag and s03 >= s05 (16-bit, CPY)
+      swaps points 1-2 and the two slopes (370B-3723); X = Y = x0<<8 and
+        y2 >= y1 (3725): y1-y0 lines X += s03, Y += s05, then y2-y1 lines X += slope 1->2, Y += s05   (37FE)
+        y2 <  y1 (3750): y2-y0 lines X += s03, Y += s05, then y1-y2 lines X += s03, Y += slope 2->1   (3854)
+```
+
+The slopes are CD/38E5: an 8.8 x-step through the divider, with the flag in A: 0 on the add path, `LDA #01` on the
+negated one. Each line is `TXA / ADC / TAX / STA $217F / TYA / ADC / TAY / STA $217F / LDA $217F / LDA $217F`: the
+16-bit stores put X>>8 then Y>>8 through WMDATA ($2180; the low bytes go to APU port 3) and the two reads step over the
+other pair; one `REP #21` (carry clear) per section, the carry chaining through the ADCs after it; a zero count skips.
+CD/38B6 leaves two direct-page words above the NMI's $00-$2A: `ASL / ASL / STA $45` = y0*4 and `STA $47` = ($7C&1)*2.
+
+The wedge, CD/3952 (JSR from CD/3924, op B8's fill; CD/3924-3951 is CD/3657-3684 byte for byte but for the JSR), is the
+same routine with three differences (CD/396A-3A30 = 3685-374D, 3A33-3A78 = 3777-37BC, 3A7B-3AB7 = 37BF-37FB, 3ABA-3B0F =
+37FE-3853, instruction for instruction):
+
+- CD/3952-3969: point 2 is replaced before the sort by the corner of points 0 and 1: y0 < y1 -> (x1, y0), else
+  (x0, y1), a right triangle whose hypotenuse is 0-1;
+- CD/3A0A: the general path has no `BCC 3750`; it always takes the y2 >= y1 arm (the counts wrap if y2 < y1);
+- CD/3B10 (the writer's head) sets WMADD to the pair's line 0 (no + y0*4), `STA $45` (8-bit) = y0, `STA $47` =
+  ($7C&1)*2, and fills lines 0..y0-1 first with the start pair X>>8, Y>>8 (the band above the triangle, from the top of
+  the screen down to its apex). $45 ends 0.
+
+### Window pair clears (op 88 sub-ops, CD/29DA -> D1/FBD2)
+
+Sub-op 0 (D1/FCF4) empties the whole buffer being drawn (`FF 00` on every line). Sub-ops 1 / 2 (D1/FC38 / D1/FC96)
+empty one window's pair: `LDA $7C / AND #01` picks the buffer, then `REP #20 / SEP #10 / LDX #70 / LDA #00FF` and eight
+16-bit stores 0x70 apart (`STA $C4DD,X` .. `$C7ED,X`, or `$C4DF,X` .. `$C7EF,X`) for X = 70, 6C .. 04: the line records
+at +4 .. +0x380 (lines 0-223), bytes 0-1 (W1) or 2-3 (W2). Sub-op 3 (D1/FBDA) is FC38's twin with `LDA #FF00`: the W1
+pair set to `00 FF` on lines 0-223, window 1 covering the whole line (odd -> `STA $C4DD,X` .., even -> `STA $C15D,X`
+..). No PC action's program reaches sub-op 3.
+
+### The per-line COLDATA ramp (CD/2D51-2DCA)
+
+Shared by 80.00 (CD/2D4A: `STZ $CD04` first, $45 = 4), 80.0E (CD/2D44: $45 = 4) and 80.13 (CD/2D39: $45 = 14).
+`LDA $CD04 / BEQ / DEC $CD04`, then `$47 := $CD04`; `SEP #10 / TDC / TAX / TAY` and sixteen records up (`INX x2 / INY
+x4 / CPY #40 / BNE`), `DEX x2`, sixteen down (`DEX x2 / INY x4 / CPY #80 / BNE`), `REP #10 / RTS`. Each record Y:
+$BB06,Y = $BB86,Y = $BC06,Y = $45; $49 = X - $47 (0 on a borrow); $BB07,Y = $49 | 80, $BB87,Y = $49 | 40,
+$BC07,Y = $49 | 20 (the B / G / R intensity). The records are HDMA channel 5's four-byte units (CGWSEL CGADSUB COLDATA
+SETINI, one a line; the table $C948 reads `E0 05 BB | C0 05 BB | B0 2F C0 ..` in Aura Whirl), so $45 lands in CGADSUB:
+04 = BG3's colour math (80.00, 80.0E), 14 = BG3's and the sprites' (80.13).
+Note for disassembly: the loop ends `C0 80 D0 CE` = CPY #80 (8-bit index) / BNE 2D96, then `C2 10 60` = REP #10 / RTS.
+Decoding CPY #80 as 16-bit misreads the tail as `DEC $10C2`, a write the ROM never makes.
+
+## The 3-D objects (ops A2 A3 A5 A6 A7 A8 BA BC BE)
+
+The object block $CAD4..$CAFD (42 bytes) holds two objects interleaved: object 0 at the even address, object 1 at the
+odd one. A2 o x y z (CD/278E) initialises one ($CAD4 x, $CAD6 y, the three radii $CADA/$CADC/$CADE := z, the vertex
+angles $CAE4/$CAE6/$CAE8 := C0/15/6A, the scale angles $CAE0/$CAE2 := 40). A5 k / A6 k (CD/2690 / CD/26C0) save /
+restore the block at $CB0E + CD:26B0[k] (0000 002A 0054 007E 00A8 00D2 00FC 0126). A7 o a b c (CD/2660) sets the
+rotation $CAF6/$CAF8/$CAFA, `STZ $CAD8,X`, $CAFC,X := FF. BC o da db dc dz (CD/1E45) steps the rotation and $CAD8
+with no projection. DP $00-$2A is the battle NMI's scratch (D1/E7A9 saves it to $CC65, D1/E885 puts it back; the
+runner runs inside that NMI), so of the direct page only $45-$51 outlive a handler.
+
+CD/3C8F (X/Y 8-bit) turns the point ($CB06, $CB08, $CB0A) = (x, y, z) by the angle $4B about y, then $49 about x, then
+$4D about z, all 8-bit (S = CD/3C58: CE:F48E[a] times |y|, the product's high byte negated when exactly one of a >= 80
+and y < 0 holds; C = CD/3C55 = S of the angle + 40; the adds and subtracts wrap):
+
+```
+$CAFE = C(b,x) + S(b,z)          $CB02 = S(b,-x) + C(b,z)       (b = $4B; -x = `EOR #FF / INC A`)
+$CB00 = C(a,y) - S(a,$CB02)      $CB02 = S(a,y) + C(a,$CB02)    (a = $49; y = the old $CB00, still in Y at
+$CB00 = C(c,$CB00) + S(c,$CAFE)  $CAFE = C(c,$CAFE) - S(c,y')    CD/3D17 / CD/3D68; c = $4D)
+```
+
+$47 holds each first product and is left as the last one, S(c, y').
+
+A8 o dx dy dz dr da db dc ds (CD/27CA, `SEP #10`: X = o, 8-bit) steps object o (`CLC / ADC [$40],Y` each: $CAD4 += dx,
+$CAD6 += dy, $CAD8 += dz, the three radii += dr, the rotation += da/db/dc, the scale $CAFC += ds), then CD/2843 and
+`REP #30 / $40 += 8` (ten bytes). CD/2843, per vertex i (radius $CADA+2i, angle $CAE4+2i): `$47 := radius`, CD/28A1
+(`$CB08 := CD/3D90(angle + 40)`, `$CB06 := CD/3D90(angle)`, `$CB0A := $CAD8`, `$49/$4B/$4D := $CAF6/$CAF8/$CAFA`,
+`$21 := $CAFC` with no reader here, CD/3C8F), then vertex i = ($CAFE + $CAD4, $CB00 + $CAD6) into $CAEA+4i / $CAEC+4i
+(8-bit stores: $CB07/$CB09/$CB0B keep their high bytes). CD/3D90 is `CE:F48E[a] LSR` times the radius, the $4217 byte,
+negated when a >= 80. Op A1 draws what A8 leaves.
+
+BA o / BE o (CD/1E91 / CD/1E27, 16-bit X = o): the spin of object o around a model. BE: $4F := 20, $51 := $CAD8,X. BA:
+$4F := o << 4 (8-bit), `STZ $51`, then the rotation stepped (`INC $CAF8,X / INC $CAF6,X` x2 `/ INC $CAFA,X`). Both go
+on at CD/1EAA: for vertex i = 0, 1, 2, CD/1EF7 indexes the model table D1:EC5F at `i*4 + $4F` (8-bit) for (x, y, z):
+`$CB06 := [0]`, `$CB08 := [1]`, `$CB0A := [2] + $51` (each `TAY / STY`, 16-bit, the high bytes 0), `$49/$4B/$4D :=
+$CAF6/$CAF8/$CAFA,X` (also `STY`, so $4A/$4C/$4E := 0; and `$21 := $CAFC,X`), `SEP #10 / JSR CD/3C8F / REP #10`, and
+vertex i = ($CAFE + $CAD4,X, $CB00 + $CAD6,X) into $CAEA+4i / $CAEC+4i. Then `JMP CD/2173` (op AE's body, same operand):
+`$CC64 := o & 1` = the window and X = o & 1; the six vertex bytes pulled toward the centre by the scale $CAFC,X (CD/211B,
+the x's with $47 = $CAD4,X, the y's with $47 = $CAD6,X) into $12..$17, `STZ $0020`, `JMP CD/367C`: the triangle filled
+into window pair $CC64 of the buffer being drawn. CD/211B: `TAY / STY $45 / STZ $48`, `REP #20`, d = v - c into $49;
+d >= 0: c + (d * $21 >> 8), else c - (|d| * $21 >> 8), 16-bit into $4B, the low byte returned.

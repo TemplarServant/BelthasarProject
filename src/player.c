@@ -1,23 +1,19 @@
-// player.c -- CtPlayerControl / CtPlayerDpadIntent: the CT field player's input->velocity half (see
-// player.h). Ported from C0/881E (per-frame player controller) + C0/88EE/8902 (d-pad dispatch) +
-// C0/9175 (accumulator->velocity with screen-edge clamp), reverse-engineered via --watchwrite. The
-// $9FF7 table sets FACING (not velocity); velocity is the accumulator $1D2E/$1D30 -> $1D32/$1D33.
+// player.c -- the field player's input -> velocity half (player.h): the joypad poll C2/84F0 + C2/8545, the
+// controller C0/881E, the d-pad dispatch C0/88EE/8902 and the edge clamp C0/9175. The $9FF7 table sets the
+// facing, not the velocity; velocity is the accumulator $1D2E/$1D30 -> $1D32/$1D33.
 #include "player.h"
 #include "collision.h"
 
-// C2/8555 -- ONE decode pass. `x` is the ROM's X (0, 2 or 4), stepping the raw word $F0,X and the
-// decoded word $F6,X together. Y is 0 for all three passes (C2/854C `LDY #00`, never touched again),
-// so every mask read is the plain $7E2993-$299A config byte.
+// C2/8555, one decode pass. `x` is the ROM's X (0, 2 or 4) for the raw word $F0,X and the decoded word
+// $F6,X. Y is 0 for all three passes (C2/854C `LDY #00`), so each mask is the plain $7E2993-$299A byte.
 static void ctJoyDecodePass(uint8_t* r, int x) {
-  // 28559/2855C etc. The masks in the ROM's own order; the first term rotates furthest right, so it
-  // lands in bit 0 and $2993 -- the LAST term -- ends up in bit 7.
+  // The masks in the ROM's order: the first term rotates furthest and lands in bit 0, $2993 in bit 7.
   static const int MASK[8] = { 0x2998, 0x2996, 0x2997, 0x2994, 0x2999, 0x299A, 0x2995, 0x2993 };
   uint8_t res = 0;                                        // 28555 STZ $F6,X
   for (int b = 0; b < 8; b++) {
     uint8_t raw = r[0x00F0 + x];                          // 28557 LDA $F0,X (re-read every term)
     uint8_t m = r[MASK[b]];
-    // `AND m` then `CMP m`: A = raw & m <= m always, so carry (A >= m) is set iff EVERY bit of the
-    // mask is held. That is what lets one entry mean a button COMBINATION.
+    // `AND m / CMP m`: carry is set only if every bit of the mask is held (a button combination).
     int carry = ((raw & m) >= m);
     res = (uint8_t)((res >> 1) | (carry ? 0x80 : 0));     // 2855F ROR $F6,X
   }
@@ -37,8 +33,8 @@ void CtJoypadPoll(uint8_t* r, uint16_t hw) {
   int edge = held & ~prev & 0xFFFF;                       // 28527 LDA $F2 / EOR $FE / AND $F2 -- 16-bit
   r[0x00F0] = (uint8_t)edge;      r[0x00F1] = (uint8_t)(edge >> 8);      // 2852D STA $F0
   r[0x00F4] = (uint8_t)edge;      r[0x00F5] = (uint8_t)(edge >> 8);      // 2852F STA $F4
-  // 28531-28542, the AUTOREPEAT. X is 8-bit from here (28531 SEP #10) but A stays 16-bit, so the
-  // `TSB $F4` at 2853E ORs the whole held-and-still-held WORD into $F4/$F5.
+  // 28531-28542 autorepeat. X is 8-bit from 28531 (SEP #10) but A stays 16-bit, so `TSB $F4` at 2853E
+  // ORs the whole still-held word into $F4/$F5.
   int rep = held & prev & 0xFFFF;                         // 28535 LDA $F2 / 28537 AND $FE
   int xr;
   if (rep == 0) xr = r[0x00FC];                           // 28539 BEQ ->28540 LDX $FC
@@ -52,8 +48,7 @@ void CtJoypadPoll(uint8_t* r, uint16_t hw) {
   }
   r[0x00FD] = (uint8_t)xr;                                // 28542 STX $FD
   // ---- C2/8545: $00F0-$00F5 -> the decoded $00F6-$00FB ----------------------------------------
-  // Two JSRs and a fall-through = three passes. Writing this as a loop rather than three calls is
-  // the same code the ROM reaches three ways.
+  // Two JSRs and a fall-through: three passes.
   for (int x = 0; x <= 4; x += 2) ctJoyDecodePass(r, x);
 }
 
@@ -71,13 +66,12 @@ uint16_t CtJoypadHeldWord(const uint8_t* r, uint16_t hw) {
   return (uint16_t)(res | (f3 << 8));                                        // 285A7: $F9 := $F3
 }
 
-// C2/84D2's third routine (`JSR 85AE` after 84EC and 8545, the two CtJoypadPoll is): the play clock. It lives with them
-// because every NMI that runs the latch runs it -- the field's, the world's and the fight's (battle.c).
-// The play-clock tick — ROM C2/85AE (writer PC C2:85BC), byte-for-byte:
+// C2/85AE, the play clock: the third routine of C2/84D2 (`JSR 85AE` after 84EC and 8545, which are
+// CtJoypadPoll), so every NMI that runs the latch runs it (field, world map and battle).
 //   SEP #30; D=$0400; LDA $07 BNE rts;            <- $0407 != 0 pauses the clock
 //   X=0: INC $00,X; CMP $C285D0,X; BCC rts;       <- limits C2/85D0 = 3C 3C 0A 06 0A 0A
-//        STZ $00,X; INX; CPX #06; BCC loop;       <- ripple-carry through the six digits
-//   LDA #01; STA $06                              <- overflow flag (menu shows the 99:59 cap)
+//        STZ $00,X; INX; CPX #06; BCC loop;       <- ripple carry through the six digits
+//   LDA #01; STA $06                              <- overflow flag (the menu shows the 99:59 cap)
 void CtMenuClockTick(uint8_t* mem) {
   static const uint8_t lim[6] = { 60, 60, 10, 6, 10, 10 };
   if (!mem || mem[0x407]) return;
@@ -104,9 +98,9 @@ void CtPlayerDpadIntent(uint8_t* ram, uint8_t dpadNib, int strong) {
   }
 }
 
-// C0/9175 screen/map-edge clamps (carry SET on the ROM RTS = that edge BLOCKS the axis -> nonzero).
-// X = the player's actor index ($0197). Transcribed byte-exact from C0/5B63-5B8C; 9175 dispatches
-// DOWN ($1D30>0) -> 5B63, UP ($1D30<0) -> 5B71, RIGHT ($1D2E>0) -> 5B79, LEFT ($1D2E<0) -> 5B86.
+// C0/9175 screen/map edge tests (C0/5B63-5B8C): carry set on RTS = the edge blocks that axis (returns
+// nonzero). X = the player's actor index ($0197). 9175 dispatches down ($1D30 > 0) -> 5B63, up -> 5B71,
+// right ($1D2E > 0) -> 5B79, left -> 5B86.
 static int edgeDown (const uint8_t* r, int X) { return r[0x1881 + X] >= (uint8_t)(r[0x1D1D] + 1); }   // 5B63: CMP $1881,X vs $1D1D+1
 static int edgeUp   (const uint8_t* r, int X) { return (uint8_t)(r[0x1D1C] + 1) >= r[0x1881 + X]; }   // 5B71: A=$1D1C+1 CMP $1881,X
 static int edgeRight(const uint8_t* r, int X) { return r[0x1801 + X] >= r[0x1D1B]; }                  // 5B79: CMP $1801,X vs $1D1B

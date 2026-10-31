@@ -1,4 +1,4 @@
-// seq_endingpic.h -- the ending's picture, native (stage 2). See seq_endingpic.c.
+// seq_endingpic.h -- the ending's picture. See seq_endingpic.c.
 #ifndef CT_SEQ_ENDINGPIC_H
 #define CT_SEQ_ENDINGPIC_H
 #include <stdint.h>

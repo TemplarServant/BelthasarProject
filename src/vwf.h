@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-// Both run on the 128 KB WRAM image (`$7E` at offset 0) and keep ALL their state where the ROM keeps it: the direct page
+// Both run on the 128 KB WRAM image (`$7E` at offset 0) and keep all their state where the ROM keeps it: the direct page
 // `$0200-$02A1` (D = $0200). The caller's block is the ROM's: `$020C` the string's id, `$020D-$020F` the long pointer to
 // the strings' pointer table, `$0210-$0212` the tile strip's long address, `$0213` the glyphs a call may draw, `$0214`
 // the mode (2 = a 4 bpp strip, pen from x 0; `& 0F` = 0 a 2 bpp strip; bit 7 = pen from x 0), `$02A1` the hex switch of

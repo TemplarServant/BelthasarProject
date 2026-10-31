@@ -1,18 +1,10 @@
-// ============================================================================
-// mixer.h -- the port's own S-DSP: the console's eight-voice sound mixer
-//
-// The SNES's sound hardware (the S-DSP) as a component the port owns: BRR sample decoding, the Gaussian interpolation,
-// the ADSR/GAIN envelopes, the noise generator, pitch modulation, the echo with its 8-tap FIR, the main and echo
-// volumes. It is a refactor of the vendored snes/dsp.c (LakeSnes, MIT) and outputs SAMPLE-EXACT what it outputs (proven
-// by `ct.exe --mixreplay`, tools/mixer_replay.py). The model, stage by stage: disasm/notes/audio_mixer.md.
-//
-// What it is NOT: no SPC700, no timers, no port polling. Whoever drives it -- today's driver running on the vendored
-// SPC700, tomorrow the native driver (step 2) -- writes the S-DSP's 128 registers through ct_mixer_write (the sink) or
-// the voice-level calls below, and pulls samples with ct_mixer_render. The 32,040 Hz sample clock is the mixer's own.
-//
-// Sound RAM: the 64 KB the mixer reads its sample directory, the BRR blocks and the echo buffer from (and writes the
-// echo buffer into, as the hardware does) is the owner's memory, given by pointer. The mixer never allocates.
-// ============================================================================
+// mixer.h -- the port's own S-DSP, the console's eight-voice sound mixer: BRR decoding, the Gaussian interpolation, the
+// ADSR/GAIN envelopes, noise, pitch modulation, the echo with its 8-tap FIR, the main and echo volumes. A refactor of
+// the vendored snes/dsp.c (LakeSnes, MIT) with the same output sample for sample (`ct.exe --mixreplay`,
+// tools/mixer_replay.py). The model, stage by stage: disasm/notes/audio_mixer.md.
+// No SPC700, timers or ports: the driver (sound/machine.h) writes the 128 registers through ct_mixer_write or the
+// voice-level calls and pulls samples with ct_mixer_render. The 64 KB sound RAM (directory, BRR blocks, echo buffer)
+// is the owner's, given by pointer; the mixer never allocates.
 #ifndef CT_SOUND_MIXER_H
 #define CT_SOUND_MIXER_H
 
@@ -87,15 +79,14 @@ uint8_t ct_mixer_read(const CtMixer* m, uint8_t reg);
 // Run `frames` samples (32,040 Hz stereo frames) into out[2*i] = left, out[2*i+1] = right. out may be NULL (run silent).
 void    ct_mixer_render(CtMixer* m, int16_t* out, int frames);
 
-// --- the host's clock: the SPC's exact samples per displayed frame ---------------------------------------------------
+// ---- the host's clock: the SPC's exact samples per displayed frame ----
 // The S-DSP makes a sample every 32 APU cycles; the APU runs 32,040 x 32 cycles a second against the master clock's
 // 1364 x 262 x 60 cycles. An even field is 1364 x 262 master cycles, an odd one 4 cycles shorter (line 240's short
-// line, snes.c; memory spc-phase-sensitivity), so a frame holds 534 samples or, now and then, 533. The clock counts in
-// exact integers: no drift.
+// line, snes.c), so a frame holds 534 samples or, now and then, 533. The clock counts in integers, so it does not drift.
 typedef struct CtMixerClock { uint64_t master; } CtMixerClock;
 int     ct_mixer_clock_frame(CtMixerClock* c, int oddFrame);   // samples this frame holds (advances the clock)
 
-// --- voice-level operations: a thin layer over the same registers ----------------------------------------------------
+// ---- voice-level operations: a thin layer over the same registers ----
 void ct_mixer_voice_source(CtMixer* m, int v, uint8_t srcn);
 void ct_mixer_voice_pitch(CtMixer* m, int v, uint16_t pitch);                 // 14 bits
 void ct_mixer_voice_volume(CtMixer* m, int v, int8_t l, int8_t r);

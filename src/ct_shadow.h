@@ -1,10 +1,9 @@
-// ct_shadow.h — the routine-level shadow (docs/SHADOW_PROPOSAL.md).
+// ct_shadow.h -- the routine-level shadow (docs/SHADOW_PROPOSAL.md).
 //
-// The oracle plays alone. Each time its CPU arrives at the entry of a REGISTERED ROM routine, the harness copies the
-// oracle's WRAM, runs our C function for that routine on the copy, lets the oracle run the routine to its return, and
-// compares the two: all 128 KB of WRAM (less the stack bytes the routine pushed, and the ranges an entry declares
-// with its reason) and the registers the caller reads. The port's main loop is not involved, so the coverage is
-// wherever the oracle goes.
+// The oracle plays alone. Each time its CPU reaches the entry of a registered ROM routine, the harness copies the
+// oracle's WRAM, runs the C function for that routine on the copy, lets the oracle run the routine to its return,
+// and compares all 128 KB of WRAM (less the stack bytes the routine pushed and the ranges an entry declares) and
+// the registers the caller reads. The port's main loop is not involved; coverage is wherever the oracle goes.
 //
 // A call is not compared, and is counted apart, when
 //   - the oracle takes an interrupt inside it (`interrupted`: the handler writes WRAM the C function never sees);

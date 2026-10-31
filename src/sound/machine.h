@@ -1,18 +1,13 @@
-// ============================================================================
 // sound/machine.h -- the console's sound processor as the game runs it: the sound program in C (sound/driver.h: the
 // boot ROM, the cartridge's driver, its upload receivers) on its own clock, the three timers, the four ports each way
 // and the S-DSP (sound/mixer.h) over the same 64 KB of RAM. No SPC700: the program is C, timed by the listing's cycles.
 //
-// THE CLOCK is the SPC700's cycle count since power-on (apu.c's `cycles`). The host runs it like snes/apu.c's
-// apu_runCycles: SndMachineRun(n) runs every instruction that starts before now + n and stops at the first one that
-// starts at or after it (the program, a coroutine, gives the time back there), returning the cycles run. Between two
-// runs the host reads the ports the program wrote and writes the ones it reads: the order is the vendored core's, so a
-// handshake costs the same SPC time to the cycle.
-//
-// THE SOUND: the S-DSP makes a sample every 32 cycles (at cycles 0, 32, 64, ...); each run renders those before the
-// stop and hands them to the sink, in order. The mixer is brought up to an access's cycle before every S-DSP access and
-// every store the S-DSP may read, as the hardware interleaves them.
-// ============================================================================
+// The clock is the SPC700's cycle count since power-on (apu.c's `cycles`). SndMachineRun(n) works like snes/apu.c's
+// apu_runCycles: it runs every instruction that starts before now + n, stops at the first one that starts at or after
+// it (the program, a coroutine, yields there) and returns the cycles run. Between runs the host reads and writes the
+// ports in the vendored core's order, so a handshake costs the same SPC time.
+// The sound: the S-DSP makes a sample every 32 cycles; each run renders those before the stop and hands them to the
+// sink in order. The mixer is brought up to an access's cycle before every S-DSP access and every store it may read.
 #ifndef CT_SOUND_MACHINE_H
 #define CT_SOUND_MACHINE_H
 
@@ -28,11 +23,10 @@ typedef struct SndTimer {
   uint64_t next;        // the cycle of the next prescaler step (every 128 cycles; timer 2 every 16)
 } SndTimer;
 
-// THE SAVESTATE: a coroutine's stack cannot be written down, so the machine keeps a restore point -- its whole state at
-// the main loop's top ($0299, between two passes: nothing of the program's is pending), or power-on -- and the host's
-// inputs since (its port writes and its runs). Loading one is the restore point taken back and the inputs replayed:
-// the program goes the same way to the same instruction, cycle for cycle. A new restore point is taken at the loop's
-// top once the record has grown.
+// The savestate: a coroutine's stack cannot be written down, so the machine keeps a restore point (its whole state at
+// the main loop's top $0299, where nothing of the program's is pending, or power-on) and the host's inputs since (port
+// writes and runs). Loading takes the restore point back and replays the inputs, which leads the program to the same
+// instruction on the same cycle. A new restore point is taken at the loop's top once the record has grown.
 typedef struct SndLogEntry { uint64_t t; uint8_t kind, k, v; } SndLogEntry;   // 'W' port k = v; 'R' a run to cycle t
 typedef struct SndRestore {
   int kind;             // 0 power-on, 1 the main loop's top
@@ -70,7 +64,7 @@ typedef struct SndMachine {
   int replaying;
 } SndMachine;
 
-// The state a machine is handed at its main loop's top ($0299) -- a running driver's (src/audio.c's seeding from an
+// The state a machine is handed at its main loop's top ($0299), a running driver's (src/audio.c's seeding from an
 // oracle state, the lockstep): the cycle, the ports, the timers, the RAM and the S-DSP.
 typedef struct SndMachineState {
   uint64_t cycles;

@@ -1,26 +1,22 @@
-// ct_lake_state.h — wrapped LakeSnes oracle savestate (CTLS).
+// ct_lake_state.h -- wrapped LakeSnes oracle savestate (CTLS).
 //
 // On-disk formats accepted by the harness:
 //
-//   1) CTLS (preferred, written by every new save path):
+//   1) CTLS (written by every save path):
 //        magic[4]      = 'C','T','L','S'
 //        version u32LE = 1
 //        length  u32LE = payload bytes
 //        crc32   u32LE = IEEE CRC-32 of the payload
 //        payload[...]  = raw snes_handleState stream (same as legacy)
 //
-//   2) Legacy (all existing pinned .state files): the bare handleState stream
-//      with no header. Detected by size + the 11 leading 0/1 bool bytes.
-//      Load still works (with a one-line notice) so the regression suite and
-//      RE captures keep running without a mass re-encode.
+//   2) Legacy (older pinned .state files): the bare handleState stream with no header, detected by size and
+//      the 11 leading 0/1 bool bytes. Loaded with a one-line notice.
 //
-// A truncated, foreign, or CRC-mismatched CTLS file FAILS loudly — it never
-// feeds silent zeros into snes_handleState. Legacy files that fail the sniff
-// also FAIL (instead of loading as an all-zero machine).
+// A truncated, foreign or CRC-mismatched CTLS file fails with an error, as does a legacy file that fails the
+// sniff; neither is loaded as an all-zero machine.
 //
-// NOTE: this is NOT the LakeSnes upstream LSSF format (snes_saveState) and NOT
-// Belthasar's CTFS CtScene snapshot. Payload layout is unchanged from the
-// historical ct.exe raw stream.
+// Note: this is neither the upstream LakeSnes LSSF format (snes_saveState) nor Belthasar's CTFS CtScene
+// snapshot.
 #ifndef CT_LAKE_STATE_H
 #define CT_LAKE_STATE_H
 
@@ -40,7 +36,7 @@ enum {
   CT_LAKE_FMT_WRAPPED = 1
 };
 
-/* IEEE CRC-32 (poly 0xEDB88320), init/xor 0xFFFFFFFF — matches zlib/Python binascii.crc32. */
+/* IEEE CRC-32 (poly 0xEDB88320), init/xor 0xFFFFFFFF; matches zlib/Python binascii.crc32. */
 uint32_t CtLakeCrc32(const uint8_t* data, int len);
 
 /* Parse a file image into a malloc'd payload (caller frees *out).

@@ -23,7 +23,7 @@ void CtSettingsDefaults(CtSettings* s) {
   s->fullscreen = 0; s->windowScale = 2; s->scaleMode = CT_SCALE_FIT; s->aspect = CT_ASPECT_PIXEL;
   s->linearFilter = 0; s->renderScale = 1; s->vsync = 1; s->renderDriver[0] = 0; s->backend = 0;
   s->volume = 100; s->mute = 0;
-  // the keyboard Belthasar always had (field.c fieldKeyPad): the arrows; A = Z, B = X, X = A, Y = S, L = D, R = C,
+  // the default keyboard (field.c fieldKeyPad): the arrows; A = Z, B = X, X = A, Y = S, L = D, R = C,
   // Select = Backspace, Start = Enter (and the keypad's Enter)
   static const int k0[CT_BTN_COUNT] = {
     SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
@@ -31,7 +31,7 @@ void CtSettingsDefaults(CtSettings* s) {
     SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_RETURN };
   for (int b = 0; b < CT_BTN_COUNT; b++) { s->keys[b][0] = k0[b]; s->keys[b][1] = 0; }
   s->keys[CT_BTN_START][1] = SDL_SCANCODE_KP_ENTER;
-  // a controller by POSITION, as the SNES pad's face buttons sit: bottom = B, right = A, left = Y, top = X
+  // a controller by position, as the SNES pad's face buttons sit: bottom = B, right = A, left = Y, top = X
   static const int p0[CT_BTN_COUNT] = {
     SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN, SDL_CONTROLLER_BUTTON_DPAD_LEFT,
     SDL_CONTROLLER_BUTTON_DPAD_RIGHT,
@@ -86,7 +86,7 @@ static void setKey(CtSettings* s, const char* sec, const char* key, const char* 
     else if (!strcmp(key, "filter")) s->linearFilter = !strcmp(val, "linear");
     else if (!strcmp(key, "render_scale")) s->renderScale = clampi(iv, 1, 4);
     else if (!strcmp(key, "interpolation")) s->interpolate = iv != 0;
-    else if (!strcmp(key, "wide_room_wrap")) {}                       // (an option removed 2026-10-23: read, ignored)
+    else if (!strcmp(key, "wide_room_wrap")) {}                       // (a retired option: read, ignored)
     else if (!strcmp(key, "steam_margins")) s->wideSteamMargins = iv != 0;
     else if (!strcmp(key, "fill_bottom_lines")) s->fillBottomLines = iv != 0;
     else if (!strcmp(key, "scene_adjustments")) s->sceneAdjust = iv != 0;

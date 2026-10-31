@@ -257,3 +257,127 @@ Dir: `%TEMP%/claude/C--Users-…-9e84b785-…/scratchpad/`
   `0x1EBF8`; apply pre-pass `0x1EC39` (0x20-zero) / HP write `0x1EC99`; status roll `0x1E9D5` (§HEADLINE).
 - Method: force miss = target evade (block+0x3B) high; observe = `--monitor "AE94:1,A3D1:1,6130:2,0026:1"`;
   glyph = OAM tiles 0x19A/0x19B pal0; pixel-verify = `tools/_gen_battlefx.py --verify` (119/119).
+
+## The software multiply and divide (C1/C90B, C1/C92A)
+
+The battle engine has no other multiplier. Every caller stages 16-bit operands in the direct-page words $28 and $2A
+(DP = 0) and reads the result from $2C. The port keeps both as routines (battleMul16, battleDiv32) rather than as C
+arithmetic because they leave five direct-page words changed and C1/DC64 chains them: the multiply's high word stays
+in $2E and the divide takes it as the middle word of a 48-bit register.
+
+C1/C90B, the 16-step shift-add multiply, $28 x $2A -> $2C (low) / $2E (high):
+
+```
+C90D LDX #0010 / C910 STZ $2C / C912 STZ $2E
+C914 ROR $2A                     shift a multiplier bit out into the carry
+C916 BCC ->C91F                  clear -> no add this step
+C918 CLC / LDA $28 / ADC $2E / STA $2E
+C91F ROR $2E / C921 ROR $2C      shift the 32-bit accumulator right through the carry
+C923 DEX / BNE ->C914
+C926 TDC / C927 SEP #20 / C929 RTS
+```
+
+- It destroys $2A: the multiplier is rotated out a bit at a time and the accumulator's carries rotate in behind it.
+- The carry comes in from the caller (`REP #20 / LDX / STZ / STZ` leave it alone), so the first `ROR $2A` shifts in
+  whatever the caller's last compare left. It never reaches a tested bit within sixteen steps, so the product is
+  unaffected; only $2A's final value carries it. The carry out is returned, and the caller's next instruction may
+  read it.
+
+C1/C92A, the 32-step restoring divide, $28 (with $2E above it) / $2A -> quotient $2C, remainder $32:
+
+```
+C92D STZ $2C / C92F STZ $32        $2E is not cleared: it is the middle word (in C1/DC64 the multiply's high half)
+C931 LDA $28 / BEQ ->C957          a zero dividend returns with $2C = 0
+C935 LDA $2A / BEQ ->C957          and so does a zero divisor (no trap, no hang)
+C939 LDX #0020
+C93C ROL $28 / ROL $2E / ROL $32   shift the 48-bit register left one bit
+C942 SEC / LDA $32 / SBC $2A / STA $32
+C949 BCS ->C952                    no borrow -> keep the subtraction
+C94B LDA $32 / ADC $2A / STA $32 / C951 CLC     otherwise restore it
+C952 ROL $2C                       the quotient bit is the carry
+C954 DEX / BNE ->C93C
+```
+
+`PHP` / `PLP` bracket the routine, so the caller's carry is restored on exit; the divide leaks no flag.
+
+### C1/DC64 on these routines
+
+The caller stages hit in $16 and evade in $18; the routine returns the verdict in $16, the roll in $18 and zero in
+$AE4F.
+
+```
+DC64  LDA $16 / CMP $18 / BCC ->DC72        hit < evade -> no clamp (the carry left here is what C1/C90B's
+                                             first `ROR $2A` shifts in)
+DC6A  LDA #63 / STA $16 / LDA #64 / STA $18 the clamp writes both back: hit := 99, evade := 100
+DC72  TDC / LDA $16 / TAX / STX $28         $28 = hit, zero-extended
+DC78  LDX #0064 / STX $2A                   $2A = 100
+DC7D  JSR C1/C90B                           $2C = hit*100 ($2E its high half, $2A destroyed)
+DC80  LDX $2C / STX $28                     the product becomes the dividend
+DC84  LDA $18 / TAX / STX $2A               over evade
+DC89  JSR C1/C92A                           $2C = the percentage ($2E carried in)
+DC8C  LDX $2C / STX $16                     16-bit, so $17 takes the quotient's high byte
+DC92  LDA #64 / JSR C1/AF22 / STA $18       roll = rand % 100 on the main $26 stream
+DC99  LDA $16 / CMP $18 / BCC ->DCA5        hitPct < roll -> miss
+DC9F  $16 = 1 (hit)      DCA5  $16 = 0 (miss)      DCA8  $AE4F = 0
+```
+
+- $17 is left holding the quotient's high byte: DC8E's store is 16-bit and the verdict is 8-bit.
+  `ct.exe --sweephitroll` compares it.
+- The divide never sees a zero divisor on this path: `hit >= evade` always holds when evade is 0, so the clamp has
+  already replaced it with 100.
+- The roll is drawn on every physical action, the clamped always-hit case included.
+
+## The staged block bases (C1/E9A8, C1/E9C5) and the stat fetch (C1/D174)
+
+The two staging halves are identical eight-instruction routines that differ only in the destination, and each is a
+fall-through target:
+
+```
+C1/E9A3  TDC / LDA $B18B / TAX          the attacker's combatant index
+C1/E9A8    STX $2A / LDA #80 / TAX / STX $28 / JSR C1/C90B / LDX $2C / STX $B1F4 / RTS
+
+C1/E9B8  TDC / LDA $AD8D / DEC A / TAX  the target list's count, minus one
+         LDA $AD8E,X / STA $B1FD / TAX  the last entry: the current target
+C1/E9C5    STX $2A / LDA #80 / TAX / STX $28 / JSR C1/C90B / LDX $2C / STX $B1F6 / RTS
+```
+
+A base is `index * 0x80`, computed through the engine's multiply, so `$5E2D + base` is battleBlock(idx). Other readers
+agree: C1/E9D8's `LDX $B1F4 / LDA $5E57,X` is `battleBlock(atk) + 0x2A`.
+
+The port stages only the E9A8/E9C5 half: the caller passes the target index it already has, because the targeting
+list `$AD8E[$AD8D - 1]` (mirrored by C1/AC14) is not maintained live (battle_enemy_move_target.md I.4). It also stages
+both bases at the point C1/D174 reads them, while the ROM stages the attacker's well before the target's; the values
+at that point are the same and nothing in the port reads the words in between.
+
+Tool note: `--monitor --writer` reports the last writer per region per frame, so watching `7EB1F4:4` attributes both
+words to $B1F6's store. Monitor them as two regions.
+
+C1/D174 fetches the two stats the roll compares:
+
+```
+D174  TDC / TAX / STX $16 / STX $18      both zeroed 16-bit, so $17/$19 go too
+D17A  LDA $AEE9 / REP #20 / CLC / ADC $B1F4 / TAX / LDA $5E2D,X / STA $16
+D18D  LDA $AEEA / REP #20 / CLC / ADC $B1F6 / TAX / LDA $5E2D,X / STA $18
+```
+
+The offsets come from the staged header ($AEE9 = 0x3A, $AEEA = 0x3B for a physical weapon). There is no fallback for
+a zero offset: it reads the block's +0 like any other.
+
+## The status terms of the hit roll (C1/DE9E, C1/DEF0)
+
+They run between C1/D174's fetch and C1/DC64 (the D306 tail: `JSR C1/D174 / JSR C1/DE9E / JSR C1/DEF0 / JSR C1/DC64`)
+and work on $16 (hit) and $18 (evade) through the engine's multiply and divide.
+
+- DE9E, the attacker ($B1F4): +1E & 05 (blind or chaos) -> hit = hit * 5 / 20 + 1; else +1E & 40 (poison) ->
+  hit * 15 / 20 + 1.
+- DEF0, the target ($B1F6): (+20 | +25) & 40 -> evade = min(evade * 5 / 2, FF); else & 01 -> evade * 2; else by +1E:
+  & 82 (stop, sleep) -> evade * 4 / 20 + 1; else & 05 (blind, chaos) -> * 10 / 20 + 1; else & 20 (slow) ->
+  * 15 / 20 + 1 and then also & 40 (poison) -> * 10 / 20 + 1 (the & 82 / & 05 arms branch past the poison test).
+- DFD3, the level term, every time: attacker level (+12) >= target level -> diff / 20 (C1/C92A, entered with the SBC's
+  carry set), then `LDX #0002 / JSR C1/C92A`. The 2 never reaches $2A, so that is / 20 again, with the first divide's
+  $2E (the carry rotated in: 8000) as its middle word. Then `LDA $2C / CLC / ADC $18 / BCC skip / LDA #FF / STA $18`:
+  the sum is stored only as FF on a carry; without one $18 is unchanged. Below a 20-level lead the first quotient is 0
+  and the second divide returns at once ($2C = 0): no change.
+
+Each `x * n / 20 + 1` is `$28 = x, $2A = n, C1/C90B; $28 = $2C, $2A = 14, C1/C92A; + 1` (16-bit, the low byte kept);
+the divide is entered with the multiply's carry.

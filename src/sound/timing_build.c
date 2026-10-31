@@ -1,4 +1,3 @@
-// ============================================================================
 // sound/timing_build.c -- SndTimingBuild (timing.h): the per-address cost table of the driver's code, measured on the
 // vendored SPC700. ct.exe and the tools only (it links snes/spc.c); the game reads the table from the asset container.
 //
@@ -6,7 +5,6 @@
 // which cycle touches which register, which cycles write), then 64 times over random registers, flags and memory (the
 // instruction's own bytes kept) to see a conditional branch both ways. A cycle is one call of the core's bus (a read, a
 // write or an idle), as apu.c clocks it.
-// ============================================================================
 #include "sound/timing.h"
 
 #include <stdlib.h>
@@ -105,7 +103,7 @@ int SndTimingBuild(SndTiming* t, const uint8_t* image, uint16_t lo, uint16_t hi)
   return 1;
 }
 
-// --- the asset (timing.h SndTimingExport) ----------------------------------------------------------------------------
+// ---- the asset (timing.h SndTimingExport) ----
 // The program's reach: from block 0's entry, from each word of its six PUSH/RET dispatch tables (tools/spc700dis.py
 // DISPATCH: the sequence events, the look-ahead's, commands $10-$1F and the routines before them, commands $80-$8F /
 // $F0-$FF, the upload kinds) and from the boot ROM's $FFC0 -- branches, jumps and calls followed, the fall-through but

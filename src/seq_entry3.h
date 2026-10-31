@@ -9,7 +9,7 @@
 int CtEntry3StageHas(uint8_t operand);
 // The setup's own cost in master cycles, NMI off (`--callrom 7E671F`, CT_CALLROM_NONMI=1; seq_entry3.c).
 long CtEntry3StageSetupCycles(uint8_t operand);   // by the arm ($0384 bit 6)
-// THE STAGE, its logic (stage 1), as CtEndingStage*: Open (C3:0000 + $7E:3000 + the setup $7E:671F), one NMI a frame,
+// The stage's logic, as CtEndingStage*: Open (C3:0000 + $7E:3000 + the setup $7E:671F), one NMI a frame,
 // the teardown. Frame returns 1 once the script ENDed, 2 on the soft reset, else 0.
 int  CtEntry3StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
 int  CtEntry3StageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);

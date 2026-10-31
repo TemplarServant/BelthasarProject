@@ -1,6 +1,6 @@
-// seq_gwarp.h -- THE GATE WARP, native: op 0xFF $80..$8F's program in bank $FD (C0/3FE4-3FFC `JML $FD:FFF1 / FFEB / FFE8 /
+// seq_gwarp.h -- the gate warp: op 0xFF $80..$8F's program in bank $FD (C0/3FE4-3FFC `JML $FD:FFF1 / FFEB / FFE8 /
 // FFE5` -> FD/DA00, DA5F, DABE, DB1D), its logic over the 128 KB WRAM and its picture through the native compositor
-// (seq_pic.h). Replaces the translated program (src/xlat/gwarp_fd.c on the vendored CPU / PPU) in the playable host.
+// (seq_pic.h). src/xlat/gwarp_fd.c, the translated program, remains as a reference.
 // disasm/notes/gate_warp_fd_family.md sec. 11.
 #ifndef CT_SEQ_GWARP_H
 #define CT_SEQ_GWARP_H

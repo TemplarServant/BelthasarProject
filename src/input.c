@@ -1,10 +1,9 @@
-// input.c -- CtReadJoypad: the CT per-frame joypad read (see input.h). Ported + validated byte-exact
-// vs the oracle (--checkjoy). The end-to-end bit flow (verified against the vendored LakeSnes
-// snes_doAutoJoypad + the ROM C2/8500..85AD):
+// input.c -- CtReadJoypad, the per-frame joypad read (see input.h; checked by --checkjoy). The bit flow
+// (LakeSnes snes_doAutoJoypad, then C2/8500-85AD):
 //   currentState (logical bits B=0x01..R=0x800)
 //     --auto-joypad 16-bit reversal (bit N -> portAutoRead bit 15-N)--> $4218/$4219 (the standard
 //       SNES JOY1 layout: $4218 = {A7,X6,L5,R4,0,0,0,0}; $4219 = {B7,Y6,Sel5,St4,Up3,Dn2,Lf1,Rt0})
-//     --C2/8500: $F2 = ($4218&$F0) | ($4219>>4)  (so $F2 holds A/X/L/R + B/Y/Sel/St; NOT the d-pad)
+//     --C2/8500: $F2 = ($4218&$F0) | ($4219>>4)  (so $F2 holds A/X/L/R + B/Y/Sel/St, not the d-pad)
 //                $F3 = $4219 & $0F               (the d-pad nibble Up/Down/Left/Right)
 //                $FE/$FF = previous $F2/$F3 ; $F0=$F4 = ($F2 ^ $FE) & $F2 (newly pressed)
 //     --C2/8545: $F6 = remapped-newly-pressed via the live WRAM masks $2993-$299A ; $F7 = $F1
@@ -16,7 +15,7 @@ void CtReadJoypad(uint8_t* ram, uint16_t held) {
   for (int i = 0; i < 16; i++) { port |= (uint16_t)((cs & 1u) << (15 - i)); cs >>= 1; }
   uint8_t r4218 = (uint8_t)(port & 0xFF), r4219 = (uint8_t)(port >> 8);
 
-  // (2) C2/84FE-8500: $FE/$FF = the PREVIOUS frame's $F2/$F3 (LDX $F2 ; STX $FE, 16-bit X).
+  // (2) C2/84FE-8500: $FE/$FF = the previous frame's $F2/$F3 (LDX $F2 ; STX $FE, 16-bit X).
   uint8_t prevF2 = ram[0xF2], prevF3 = ram[0xF3];
 
   // (3) C2/8502-8517: build the held byte $F2 (+ folded B/Y/Sel/St) and the d-pad nibble $F3.
@@ -36,8 +35,8 @@ void CtReadJoypad(uint8_t* ram, uint16_t held) {
   ram[0xF4] = f0; ram[0xF5] = f1;
 
   // (6) C2/8545 (sub $8555): $F6 = remapped newly-pressed. STZ $F6; 8x { LDA $F0; AND mask; CMP mask;
-  // ROR $F6 } over the live remap masks $2993-$299A (read with DBR=$7E), in this exact order; AND-then
-  // -CMP-same-mask sets carry iff (src & mask) == mask. Then $F7 = $F1.
+  // ROR $F6 } over the remap masks $2993-$299A (DBR = $7E), in this order; AND then CMP with the same
+  // mask sets carry iff (src & mask) == mask. Then $F7 = $F1.
   static const uint16_t MASK[8] = { 0x2998, 0x2996, 0x2997, 0x2994, 0x2999, 0x299A, 0x2995, 0x2993 };
   uint8_t src = ram[0xF0], f6 = 0;
   for (int b = 0; b < 8; b++) {

@@ -1,14 +1,13 @@
-// ct_world -- M3-B/C interactive OVERWORLD viewer. Renders the live world map (BG2 base +
-// BG1 land/structures) from a WRAM+VRAM dump of the oracle standing on the overworld, then
-// WALKS the player with the byte-exact C mover + camera (src/world.c, validated by
-// ct.exe --checkowmove / --checkowcam):
+// ct_world -- interactive overworld viewer. Renders the world map (BG2 base + BG1 land and structures)
+// from a WRAM+VRAM dump of the oracle on the overworld, or from the asset blob, and walks the player
+// with the C mover and camera of src/world.c (checked by ct.exe --checkowmove / --checkowcam).
 //
-//   Arrows : walk (8px-quantized steps, real terrain collision; the world is a TORUS)
+//   Arrows : walk (8 px steps, terrain collision; the world wraps)
 //   C      : toggle free-camera mode (pan without the player; Shift dashes)
 //   Esc    : quit
 //
 // Usage: ct_world[.exe] [--assets ct_assets.dat | --wram f --vram f] [--selftest]
-//   --assets runs ENTIRELY from the packed CT_ASSET_WORLD blob (no ROM, no savestate dumps);
+//   --assets runs from the packed CT_ASSET_WORLD blob alone (no ROM, no savestate dumps);
 //   the dump mode defaults: saves/ow_w0.live.wram / saves/ow_w0.live.vram (produce with:
 //   python tools/recipes.py make ow_nav_w0 ; ct.exe <rom> --peek build/recipes/ow_nav_w0.state saves/ow_w0.live --frames 1)
 // --selftest uses the dummy video driver, scrolls a scripted path, prints an FNV of the final
@@ -107,8 +106,8 @@ int main(int argc, char** argv) {
   PAL_REFRESH(0, 256)
   CtWorldCam cam;
   CtWorldMover mv;
-  static CtWorldStream stm;                             // the streamed 64x32 tilemaps (the PPU truth)
-  if (datMode) {                                        // fresh state at the packed spawn (the C2 loader way)
+  static CtWorldStream stm;                             // the streamed 64x32 tilemaps, as in VRAM
+  if (datMode) {                                        // fresh state at the packed spawn, as the C2 loader does
     memset(&cam, 0, sizeof(cam));
     CtWorldEnter(&cam, &mv, spawnX >> 3, spawnY >> 3);
     CtWorldTilemapBuild(&stm, wram, &cam);
@@ -134,7 +133,7 @@ int main(int argc, char** argv) {
   uint8_t* view = malloc((size_t)VIEWW * VIEWH * 3);
   int running = 1, frame = 0, freeCam = 0;
   Uint32 frameT0 = SDL_GetTicks();
-  uint16_t entryLatch = 0xFFFF;                   // the $1B32 model (M3-D): latched at boundaries
+  uint16_t entryLatch = 0xFFFF;                   // $1B32, latched at step boundaries
   int entryFlash = 0;
   while (running) {
     SDL_Event ev;
@@ -175,19 +174,19 @@ int main(int argc, char** argv) {
         entryFlash = 20;
       }
     }
-    CtWorldStreamFrame(&stm, &cam, wram, dx, dy);   // scroll + rebuild the VRAM tilemaps (byte-exact)
-    if (frame % 10 == 9) {                          // sea palette cycling (every 10 frames, RE'd live):
+    CtWorldStreamFrame(&stm, &cam, wram, dx, dy);   // scroll + stream the VRAM tilemaps
+    if (frame % 10 == 9) {                          // sea palette cycling, every 10 frames:
       uint16_t t0 = cgw[0x24];                      // rotate-left CGRAM[24..27] and [28..2B], swap [2D]/[2E]
       cgw[0x24] = cgw[0x25]; cgw[0x25] = cgw[0x26]; cgw[0x26] = cgw[0x27]; cgw[0x27] = t0;
       t0 = cgw[0x28];
       cgw[0x28] = cgw[0x29]; cgw[0x29] = cgw[0x2A]; cgw[0x2A] = cgw[0x2B]; cgw[0x2B] = t0;
       t0 = cgw[0x2D]; cgw[0x2D] = cgw[0x2E]; cgw[0x2E] = t0;
-      // (the engine also flashes CGRAM[20] one tick in four -- colour 0 is transparent on
-      // hardware (backdrop+HDMA shows through), so it is intentionally NOT applied here)
+      // The engine also flashes CGRAM[20] one tick in four; colour 0 is transparent (the backdrop
+      // shows through), so it is not applied here.
       PAL_REFRESH(0x20, 0x30)
     }
-    // Compose the view the PPU way: per pixel through the STREAMED 64x32 tilemaps (BG2 under BG1),
-    // 4bpp char fetch + palette. The tilemap is rebuilt by the streamer as the camera moves.
+    // Compose the view per pixel through the streamed 64x32 tilemaps (BG2 under BG1), 4bpp char
+    // fetch and palette.
     for (int y = 0; y < VIEWH; y++) {
       uint8_t* dst = view + (size_t)y * VIEWW * 3;
       for (int x = 0; x < VIEWW; x++) {
@@ -211,7 +210,7 @@ int main(int argc, char** argv) {
         dst[x * 3] = rr; dst[x * 3 + 1] = gg; dst[x * 3 + 2] = bb;
       }
     }
-    if (!freeCam && entryLatch != 0xFFFF) {         // "location here" banner strip (name text = later)
+    if (!freeCam && entryLatch != 0xFFFF) {         // "location here" banner strip (no name text)
       for (int y = 4; y < 16; y++)
         for (int x = 88; x < 168; x++) {
           size_t o = ((size_t)y * VIEWW + x) * 3;
@@ -224,7 +223,7 @@ int main(int argc, char** argv) {
       for (size_t i = 0; i < (size_t)VIEWW * VIEWH * 3; i++)
         view[i] = (uint8_t)(view[i] / 2 + 128);
     }
-    if (!freeCam) {                                 // player marker (sprite compositor = later milestone):
+    if (!freeCam) {                                 // player marker (no sprites drawn):
       int sxp = ((mv.posX - cam.bg1h) % MAPW + MAPW) % MAPW;     // a 12x14 box anchored at the pos point
       int syp = ((mv.posY - cam.bg1v) % MAPH + MAPH) % MAPH;
       for (int y = -14; y < 0; y++)

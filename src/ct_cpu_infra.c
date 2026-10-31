@@ -1,4 +1,4 @@
-// ct_cpu_infra.c — see ct_cpu_infra.h.
+// ct_cpu_infra.c -- see ct_cpu_infra.h.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,15 +23,14 @@ uint8_t* CtReadFile(const char* path, int* outLen) {
 }
 
 Snes* CtOracleCreate(const uint8_t* rom, int len, int* outType) {
-  long rl = len;                                               // the supported dump only (rom_verify.h)
+  long rl = len;                                               // only the supported dump (rom_verify.h)
   if (!(rom = CtRomVerify(rom, &rl, "the oracle's ROM"))) return NULL;
   len = (int)rl;
   Snes* s = snes_init();
   if (!snes_loadRom(s, rom, len)) { snes_free(s); return NULL; }
-  CtRomApplyMemPatch(s->cart->rom, (long)s->cart->romSize);    // a measuring tool's instrumentation, after the check
+  CtRomApplyMemPatch(s->cart->rom, (long)s->cart->romSize);    // a measuring tool's patch, after the check
   if (outType) *outType = s->cart->type;
-  // CT_ORACLE_SRAM=<file>: the cartridge's battery RAM at power-on (e.g. saves/ct_real_save.srm), so a boot drive
-  // reaches the load screen with the same saves the port's CT_SRAM gives it.
+  // CT_ORACLE_SRAM=<file>: the battery RAM at power-on (e.g. saves/ct_real_save.srm), the oracle's side of CT_SRAM.
   { const char* sp = getenv("CT_ORACLE_SRAM");
     if (sp && *sp && s->cart->ram && s->cart->ramSize > 0) {
       FILE* f = fopen(sp, "rb");
@@ -42,7 +41,7 @@ Snes* CtOracleCreate(const uint8_t* rom, int len, int* outType) {
 }
 
 // CT_ORACLE_PADLOG=<file>: the pad of every frame the oracle runs, run-length, in the `--btnscript` grammar
-// (`hexbtn:frames,...`) -- how a heuristic drive (--navworld, a pathfinder) becomes a fixed recipe (tools/recipes.py).
+// (`hexbtn:frames,...`), so a heuristic drive (--navworld, a pathfinder) can become a fixed recipe (tools/recipes.py).
 static FILE* s_padLog; static int s_padBtn = -1, s_padRun;
 static void padLogFlush(void) {
   if (s_padLog && s_padRun) { fprintf(s_padLog, "%s%X:%d", ftell(s_padLog) ? "," : "", s_padBtn, s_padRun); fflush(s_padLog); }
@@ -169,12 +168,11 @@ void CtPortCopyWramFromOracle(const Snes* s) {
 
 uint32_t* g_ctPcHist = NULL;   // CT_CALLROM_PCHIST: PC -> execution count (see below)
 
-// --- Call ONE ROM routine (see the header for the return-detection argument) ---
+// --- Call one ROM routine (return detection: see the header) ---
 #define CT_CALL_SENTINEL 0xFFFDu   // RTS lands PC on SENTINEL+1; never executed
 
-// Mirrors snes/cpu.c cpu_pushByte (stack in bank 0, post-decrement, emulation-mode page
-// wrap). Deliberately calls snes_cpuWrite and NOT cpu->write: our own setup pushes must
-// not show up in the routine's write log.
+// Mirrors snes/cpu.c cpu_pushByte (stack in bank 0, post-decrement, emulation-mode page wrap). Calls
+// snes_cpuWrite, not cpu->write, so the setup pushes stay out of the routine's write log.
 static void ctPush8(Snes* s, uint8_t v) {
   snes_cpuWrite(s, s->cpu->sp, v);
   s->cpu->sp--;
@@ -183,25 +181,20 @@ static void ctPush8(Snes* s, uint8_t v) {
 
 int CtOracleCallRoutine(Snes* s, const CtCallSetup* in, CtCallResult* out) {
   Cpu* c = s->cpu;
-  // No interrupt may be serviced mid-routine: we drive cpu_runOpcode directly rather than
-  // snes_runFrame, so nothing NEW is raised, but a loaded savestate can carry one pending.
+  // No interrupt may be serviced mid-routine. Driving cpu_runOpcode raises none, but a loaded state may carry one.
   c->irqWanted = c->nmiWanted = c->intWanted = c->resetWanted = false;
   c->waiting = c->stopped = false;
-  // FORCE NATIVE MODE. Every 65816 routine in CT runs native, but a machine that has only
-  // been reset (no --from state, no frames run) is still in EMULATION mode, where the stack
-  // is pinned to page 1 and m/x are forced to 8-bit -- the setup below would be silently
-  // overridden and the routine would never return. Found by this mode's own self-test:
-  // all six handlers reported NORETURN with identical registers.
+  // Force native mode. A machine that has only been reset is still in emulation mode, where the stack is
+  // pinned to page 1 and m/x are forced 8-bit, so the setup below would be overridden.
   if (c->e) { c->e = false; c->sp = 0x01FF; }
 
   if (in->dp != CT_CALL_KEEP) c->dp = (uint16_t)in->dp;
   if (in->db != CT_CALL_KEEP) c->db = (uint8_t)in->db;
   c->a = in->a; c->x = in->x; c->y = in->y;
-  c->mf = in->m8 ? true : false;          // NOTE the SNES sense: mf/xf SET = 8-bit
+  c->mf = in->m8 ? true : false;          // mf/xf set = 8-bit
   c->xf = in->x8 ? true : false;
   c->c  = in->carryIn ? true : false;
-  // The 65816 clears the index HIGH BYTES the moment X is set (SEP #10 semantics). Mirror
-  // that, else a 16-bit value handed to an 8-bit-index routine would survive illegally.
+  // The 65816 clears the index high bytes when x is set (SEP #10).
   if (c->xf) { c->x &= 0xFF; c->y &= 0xFF; }
 
   uint16_t sp0 = c->sp;                    // BEFORE the push: the return-detection anchor
@@ -209,15 +202,13 @@ int CtOracleCallRoutine(Snes* s, const CtCallSetup* in, CtCallResult* out) {
   ctPush8(s, (uint8_t)(CT_CALL_SENTINEL >> 8));
   ctPush8(s, (uint8_t)(CT_CALL_SENTINEL & 0xFF));
 
-  // ctParseAddr("C0/5535") yields the 24-bit SNES address 0xC05535, NOT a flat ROM offset.
-  // (Assuming flat here sent the CPU to bank $80 and cost this mode's first two self-tests.)
+  // `addr` is a 24-bit SNES address (ctParseAddr("C0/5535") = 0xC05535), not a flat ROM offset.
   uint8_t bank = (uint8_t)(in->addr >> 16);
   c->k = bank ? bank : 0xC0;                   // bare 16-bit -> bank $C0
   c->pc = (uint16_t)in->addr;
 
-  // CT_CALLROM_PCHIST: count how many times each PC in the routine's own bank executes. A cost
-  // model of a ROM loop is a claim about which instructions run how often, and this is the way to
-  // check that claim instruction by instruction instead of arguing with a total.
+  // CT_CALLROM_PCHIST: count how many times each PC in the routine's bank executes, to check a cost model
+  // instruction by instruction.
   int pcHist = getenv("CT_CALLROM_PCHIST") != NULL;
   int noNmi = in->noNmi || getenv("CT_CALLROM_NONMI") != NULL;
   if (pcHist) { if (!g_ctPcHist) g_ctPcHist = (uint32_t*)calloc(0x10000, sizeof(uint32_t));
@@ -226,17 +217,13 @@ int CtOracleCallRoutine(Snes* s, const CtCallSetup* in, CtCallResult* out) {
   int ops = 0, returned = 0;
   uint64_t cyc0 = s->cycles;      // the oracle's master clock, charged per access
   extern long g_cycTagCycles[8];   // snes.c: bucket 4 = the 40-cycle DRAM refresh a scanline takes
-  long ref0 = g_cycTagCycles[4];   // (the CPU never gets those, so a listing model must not be charged them)
+  long ref0 = g_cycTagCycles[4];   // (not CPU work, so a listing model must not be charged them)
   for (; ops < maxOps; ops++) {
     if (pcHist && g_ctPcHist) g_ctPcHist[c->pc]++;
-    // CT_CALLROM_NONMI: keep the vblank NMI out of the measurement. A routine that runs longer
-    // than a frame takes the handler mid-way, and its ~440 opcodes then read as if they were the
-    // routine's own -- which is exactly what made a cycle-exact model of C3/0557 look 8% short.
+    // CT_CALLROM_NONMI: keep the vblank NMI out of the measurement of a routine longer than a frame.
     if (noNmi) { c->nmiWanted = c->irqWanted = c->intWanted = false; }
     cpu_runOpcode(c);
-    // The return address is on the stack for the whole routine, so sp < sp0 throughout;
-    // only the final RTS/RTL pops it back. Checking AFTER the opcode means the RTS is the
-    // last thing executed and the sentinel itself never runs.
+    // Only the final RTS/RTL brings sp back to sp0; checked after the opcode, so the sentinel never runs.
     if (c->sp == sp0) { ops++; returned = 1; break; }
   }
   packRegs(s, &out->regs);

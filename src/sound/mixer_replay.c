@@ -5,7 +5,7 @@
 // state, their own copy of the RAM, and the run's register writes and RAM changes at the APU cycle they came at: the
 // S-DSP makes a sample at every APU cycle divisible by 32, so an event at cycle W lands after the samples of the cycles
 // before W (apu.c: apu_cycle runs before the access). The reference's stream is checked against the live run's own (the
-// capture's 'H' hashes) -- the replay is the run's sound -- and every sample of the mixer against the reference's.
+// capture's 'H' hashes), and every sample of the mixer against the reference's.
 // Prints `mixer: N samples identical / M` (tools/mixer_replay.py; disasm/notes/audio_mixer.md sec. 9).
 #include <stdio.h>
 #include <stdlib.h>
@@ -197,7 +197,7 @@ int CtMixerReplayMain(const char* path) {
   return ok ? 0 : 1;
 }
 
-// ---- --mixfuzz <cases> [seed]: the stages no game run reaches ------------------------------------------------------
+// ---- --mixfuzz <cases> [seed]: the stages no game run reaches ----
 // The game's driver never selects GAIN (it parks every $x7 at $A0 and keys ADSR) and no run saturates the output, so
 // random cases drive both mixers from power-on over random sound RAM (any byte stream is BRR: every shift, filter, end
 // and loop flag), random registers (GAIN and ADSR, loud volumes, FIR taps, EDL, noise rates) and random writes, key-ons

@@ -1,12 +1,8 @@
-// menu.c — the X-button menu module, PHASE 1 (mode-1 main screen: panels + TIME/G, wait for B).
+// menu.c -- the menu program (bank C2): the X-button menu and its sub-screens, the save and load screens, the
+// shop and the exchange (menu.h; disasm/notes/menu_entry.md and the menu2_*.md dossiers).
 //
-// Ports the ROM menu's DATA layer byte-for-byte (every address pinned — see menu.h provenance)
-// and lays the first screen out like the oracle capture (m1_gato_menu.raw: left column PC
-// panels, TIME/G box bottom-left, portrait top-right). The PIXELS are composed from the field's
-// already-RE'd window chrome + 8x8 menu font via the host hooks — the ROM menu's own BG tile
-// sources are an OPEN question (menu_entry.md: sub-screen VRAM DMA provenance untraced), so
-// byte-exact menu pixels are deliberately out of phase-1 scope; the deliverable is the SYSTEM
-// (entry gates, canonical data, layout, exit restore — those ARE pinned).
+// The menu's data layer reads and writes the ROM's own RAM; the pictures are composed from captured chrome and the
+// host's font and sprite hooks.
 #include <string.h>
 #include "romview.h"
 #include <stdio.h>
@@ -16,12 +12,12 @@
 #include "scene.h"         // CT_SPR_OX / CT_SPR_OY: the sprite composer's canvas origin (the exchange's figure)
 #include "vwf.h"           // CtVwfBegin / CtVwfRun: C2/57DF / C2/5823, the exchange prompt's proportional text
 #include "tables/menu_icons.h"   // captured OBJ ribbon icons (6 base + 6 selected-highlight, 16x16 RGBA)
-#include "tables/menu_chrome.h"  // BYTE-EXACT BG2 chrome: marble desktop + dark-blue window panels + ribbon box
+#include "tables/menu_chrome.h"  // BG2 chrome: marble desktop + dark-blue window panels + ribbon box
 #include "tables/menu_shop.h"    // the SHOP screen ($0C): its BG2 chrome, narrow digits and text palettes (captured)
 #include "tables/menu_loader.h"  // the LOAD screen (mode 0 / screen 0x0E): its BG2 plane + the two ROM
                                //   string tables it shows (chapter title, era name)
-#include "tables/menu_wingrad.h"  // the ROM's WINDOW-GRADIENT lists ($FF:BBF2), run through C2/86DD below
-#include "tables/menu_desc.h"   // the ROM's STORED item/equip description strings (CC/2EB1, C2/F2F3)
+#include "tables/menu_wingrad.h"  // the ROM's window-gradient lists ($FF:BBF2), run through C2/86DD below
+#include "tables/menu_desc.h"   // the ROM's stored item/equip description strings (CC/2EB1, C2/F2F3)
 #include "tables/menu_arrow.h"   // the ribbon selection cursor arrow (OBJ tile 0x22, 16x16, pal7)
 #include "tables/menu_saveform.h" // Save-screen (opt5) BG palette: the slot buttons' grey-marble CGRAM
 #include "tables/menu_opt0.h"     // opt0 Equip/Status detail: element plaques + 48x48 portrait + equip icons
@@ -29,15 +25,14 @@
 #include "tables/menu_itemoverlay.h" // the Item target overlay's BG2 window cells ($FF:C0A6, captured from VRAM)
 #include "tables/menu_itemdetail.h" // Item screen: the grey selection hand cursor (OBJ tile 0x20, pal0, RGBA)
 #include "tables/menu_tech.h"     // Tech screen Single/Dual/Triple category tabs (BG1 tiles 0x164-0x16F)
-#include "tables/menu_romdata.h" // BAKED menu ROM data (item/tech names, tech tables, config, categories) -- ROM-free
-#include "tables/menu_itemuse.h" // BAKED item-menu Use/Organize data ($7700 props + $CC effect tables) -- ROM-free
-#include "tables/menu_equip.h"   // BAKED EQUIP data: the $7A00/$7B00/$7C00 item pages + the bonus/stat tables
-#include "tables/menu_techrom.h" // BAKED TECH data: the 37-group boundary/mask tables + the MP index page
+#include "tables/menu_romdata.h" // baked menu ROM data (item/tech names, tech tables, config, categories)
+#include "tables/menu_itemuse.h" // baked item-menu Use/Organize data ($7700 props + $CC effect tables)
+#include "tables/menu_equip.h"   // baked equip data: the $7A00/$7B00/$7C00 item pages + the bonus/stat tables
+#include "tables/menu_techrom.h" // baked tech data: the 37-group boundary/mask tables + the MP index page
 #include "ct_vm.h"   // CtGetName (the engine's $7E2C23 name-buffer analogue)
 
-// Byte at a ROM FILE OFFSET, served from the baked menu_romdata.h tables (item/tech names, tech range/MP/
-// maxcnt, config) so the menu needs NO runtime ROM. Offsets outside the baked ranges return 0. (This is a
-// re-impl, not an emulator: the tables were extracted once from the ROM into the source; see the header.)
+// Byte at a ROM file offset, served from the baked menu_romdata.h tables (item/tech names, tech range/MP/maxcnt,
+// config), so the menu needs no runtime ROM. Offsets outside the baked ranges return 0.
 static uint8_t mnuRom(long off) {
   if (off >= (long)CTROMCC_BASE     && off < (long)CTROMCC_BASE     + (long)sizeof ctRomCC)     return ctRomCC[off - (long)CTROMCC_BASE];
   if (off >= (long)CTROMC2_BASE     && off < (long)CTROMC2_BASE     + (long)sizeof ctRomC2)     return ctRomC2[off - (long)CTROMC2_BASE];
@@ -48,9 +43,8 @@ static uint8_t mnuRom(long off) {
   if (off >= (long)CTCFGDEFAULTS_BASE && off < (long)CTCFGDEFAULTS_BASE + (long)sizeof ctCfgDefaults) return ctCfgDefaults[off - (long)CTCFGDEFAULTS_BASE];
   return 0;
 }
-// An equipped item's menu icon = BYTE 0 of its $CC:0B5E name record (0x20 sword..0x29 accessory), so the
-// weapon slot shows the weapon TYPE (Crono's Wood Sword id1 -> 0x20 sword; Marle's Bronze Bow id0x11 -> 0x21
-// bow). Returns the 8x8 icon tile (pal0) for that item, or NULL for an unknown byte.
+// An equipped item's menu icon is byte 0 of its $CC:0B5E name record (0x20 sword .. 0x29 accessory), so the weapon
+// slot shows the weapon type. Returns the 8x8 icon tile (pal0), or NULL for an unknown byte.
 static const uint8_t* mEquipIcon(int itemId) {
   int t = mnuRom((long)CTROMCC_BASE + (long)itemId * 11);   // 11-byte stride; byte 0 = icon tile id
   return (t >= 0x20 && t <= 0x29) ? gen_opt0_icon_tiles[t - 0x20] : NULL;
@@ -59,26 +53,23 @@ static const uint8_t* mEquipIcon(int itemId) {
 #define MW 256
 #define MH 224
 
-// Alpha-blit an [w x hh] RGBA8888 bitmap (fwd decl -- defined with the party sprites; used earlier too).
+// Alpha-blit an [w x hh] RGBA8888 bitmap (defined with the party sprites).
 static void mBlitRGBA(uint8_t* fb, const unsigned char* rgba, int w, int hh, int x0, int y0);
 
-// ----------------------------------------------------- BYTE-EXACT BG2 chrome (menu_chrome.h)
-// The menu background is the ROM's mode-1 BG2 layer: a grey marble desktop with dark-blue 9-slice
-// window panels and the bright dark-blue ribbon box, ALL captured from the oracle (tiles 0x300-0x3EF
-// + CGRAM palettes + the per-screen tilemap). Replaying a tilemap reproduces it pixel-for-pixel
-// (verified vs PEEK_ISOBG=1). This REPLACES the old field-dialogue-window + flat-purple-box stand-in
-// (which was invented chrome — the wrong window, wrong colour, no marble, no border).
-// mode: 0 = marble + panels but SKIP the ribbon-box tiles (so preview content draws between them and
-//          the box sits on top afterwards); 1 = ONLY the ribbon box (redraw over content); 2 = all.
-// Char-select context: the caller sets the party $2980 mem + the SELECTED char (cursor) so the chrome can tone
-// the party boxes by selection (C2/9E76, mChromeApplyCharSel). Cleared to (NULL,-1) = no per-selection toning.
+// ---- BG2 chrome (menu_chrome.h) ----
+// The menu background is the mode-1 BG2 layer: a grey marble desktop, dark-blue 9-slice window panels and the
+// ribbon box, captured from the oracle (tiles 0x300-0x3EF, CGRAM palettes, the per-screen tilemaps) and replayed.
+// mode: 0 = marble + panels without the ribbon-box tiles (content draws between, the box goes on top later);
+//       1 = only the ribbon box; 2 = everything.
+// Char-select context: the party ($2980) and the selected char, so the chrome tones the party boxes by selection
+// (C2/9E76, mChromeApplyCharSel). (NULL, -1) = no toning.
 static const uint8_t* g_charSelMem = NULL;
 static int g_charSelChar = -1;
 void CtMenuSetCharSel(const uint8_t* mem, int selChar) { g_charSelMem = mem; g_charSelChar = selChar; }
-// THE MEMBER WINDOW (the Equip screen, C2/A051 / C2/A1B2): its three panels are the ROSTER LIST C2/816A packed, from
-// the scroll $0413 on -- $0D5F[$0413 + row] the charId, $0D68[..] its $2980 slot -- over the list's length $85 (FF/F813:
-// the active party, or the whole roster once the story reaches 49). -1 = the three active slots in order (the screens
-// whose own window is not ported: the Tech screen's $041A).
+// The member window (the Equip screen, C2/A051 / C2/A1B2): its three panels are C2/816A's roster list from the scroll
+// $0413 on -- $0D5F[$0413 + row] the charId, $0D68[..] its $2980 slot -- over the list's length $85 (FF/F813: the
+// active party, or the whole roster from storyline 49). -1 = the three active slots in order (the screens whose own
+// window is not ported: the Tech screen's $041A).
 static int mPanelScroll = -1;
 void CtMenuSetPanelWindow(int scroll) { mPanelScroll = scroll; }
 static int mPanelRowSlot(const uint8_t* mem, int row) {
@@ -91,8 +82,8 @@ static int mRowChar(const uint8_t* mem, int row, int fallback) {
   int sl = mPanelRowSlot(mem, row);
   return (mem && sl >= 0 && sl < 9) ? (mem[0x2980 + sl] & 7) : fallback;
 }
-// The member panel the cursor is on ($0412): the window's row holding the selected character (with no window, the first of
-// $2980..$2982 -- mPanelRowSlot's rows are the slots then).
+// The member panel the cursor is on ($0412): the window row holding the selected character (with no window, the first
+// of $2980..$2982).
 static int mCharSelSlot(void) {
   if (!g_charSelMem) return -1;
   for (int k = 0; k < 3; k++) {
@@ -103,11 +94,10 @@ static int mCharSelSlot(void) {
   }
   return -1;
 }
-// C2/9E76 -- the member column's selection: for panels k = 0..2, C2/EC93 over six rows from 2 + 6k and twelve columns
-// from 2, on BG1 ($2E84 + 0x180k) AND BG2 (+$1000): attr = (attr & 0F) | (k == $0412 ? 00 : 10). The cursor's panel
-// keeps its palette, every other takes palette | 4 (the dim rows of CGRAM); the box's right frame column (14) is
-// outside the twelve and stays. MEASURED on the oracle's BG2 map (the Equip select, Crono then Marle): exactly this.
-// This replaces a colour formula fitted per row to the captures (mCsFill, removed): the tone is the palette row.
+// C2/9E76, the member column's selection: for panels k = 0..2, C2/EC93 over six rows from 2 + 6k and twelve columns
+// from 2, on BG1 ($2E84 + 0x180k) and BG2 (+$1000): attr = (attr & 0F) | (k == $0412 ? 00 : 10). The cursor's panel
+// keeps its palette, the others take palette | 4 (the dim CGRAM rows); the box's right frame column (14) is outside
+// the twelve and stays.
 static const uint16_t* mChromeApplyCharSel(const uint16_t* tm, uint16_t* scratch, int selSlot) {
   memcpy(scratch, tm, sizeof(uint16_t) * CT_MENU_CHROME_TMW * CT_MENU_CHROME_TMH);
   for (int k = 0; k < 3; k++)
@@ -122,26 +112,14 @@ static const uint16_t* mChromeApplyCharSel(const uint16_t* tm, uint16_t* scratch
 // SNES 5-bit -> 8-bit channel expand (c8 = (c5<<3)|(c5>>2)).
 static int mExp5(int c5) { if (c5 < 0) c5 = 0; if (c5 > 31) c5 = 31; return (c5 << 3) | (c5 >> 2); }
 
-// ===================== THE WINDOW GRADIENT IS GENERATED, NOT BAKED (C2/86DD) =====================
-// The dark menu windows are shaded by an HDMA channel over $2131/$2132 (CGADSUB + COLDATA): a grey
-// fixed colour ADDED on the way down each window and SUBTRACTED on the way out -- ONE 16-step ramp
-// +8..-7 in 5-BIT colour space, RESET and HEIGHT-NORMALISED per window. `ct.exe --hdma` on the
-// oracle reads it straight off the hardware: the status screen is one 192px window (12 lines/step)
-// and the Form screen is FOUR 48px windows (3 lines/step, restarting at lines 16/64/112/160).
-//
-// C2/86DD is the generator. It walks a WINDOW LIST of 2-byte [kind, height] entries (0x80 = end;
-// kind 0 = a FLAT band carrying the neutral pair, kind 1 = a RAMP) and emits HDMA line counts:
-//     $A019 = height * 16 ; per step: $A01B += $A019 ; lines = hi($A01B) ; $A01C = 0
-// so each of the 16 steps gets height/16 lines and the remainder is CARRIED -- which is what makes
-// 32 -> 2, 48 -> 3, 80 -> 5, 192 -> 12 fall out of one routine instead of three baked tables. The
-// lists themselves are ROM data at $FF:BBF2 (ctMenuWinList, per ribbon option).
-//
-// This REPLACES three baked tables that were each one instance of this machine: ctMenuWinGrad (the
-// status screen's 192 ramp, which every un-special-cased screen was wrongly painted with -- so the
-// Tech/Config/Form windows faded to black down the screen instead of restarting per box),
-// ctMenuItemGrad (the Item list) and ctMenuSaveGrad5 (the Save list). The generator reproduces
-// ctMenuSaveGrad5 -- which was derived pixel-exactly from oracle captures -- at all 224 rows with
-// ZERO mismatches, which is what proves the transcription.
+// ---- The window gradient (C2/86DD; disasm/notes/menu2_window_gradient.md) ----
+// The dark windows are shaded by an HDMA channel over $2131/$2132 (CGADSUB + COLDATA): a grey fixed colour added on
+// the way down each window and subtracted on the way out, one 16-step ramp +8..-7 in 5-bit colour, restarted and
+// height-normalised per window (the status screen: one 192 px window, 12 lines a step; the Form screen: four 48 px
+// windows, 3 lines a step from lines 16/64/112/160).
+// C2/86DD walks a window list of [kind, height] pairs (0x80 = end; kind 0 = a flat band, 1 = a ramp) and emits the
+// HDMA line counts: $A019 = height * 16; per step $A01B += $A019, lines = hi($A01B), $A01C = 0, so the remainder is
+// carried. The lists are ROM data at $FF:BBF2 (ctMenuWinList, per ribbon option).
 static void mWinRamp(const uint8_t* lst, int8_t* d5) {
   int y = 0, acc = 0;
   for (int i = 0; i < 16 && y < MH; i += 2) {
@@ -153,7 +131,7 @@ static void mWinRamp(const uint8_t* lst, int8_t* d5) {
       int step = h * 16;                             // C2/8720: $A019 = height * 16
       for (int s = 0; s < 16; s++) {
         acc = (acc + step) & 0xFFFF;                 // C2/8733: $A01B += $A019
-        int n = acc >> 8;                            // C2/873D: the line count is the INTEGER part
+        int n = acc >> 8;                            // C2/873D: the line count is the integer part
         acc &= 0x00FF;                               // C2/8743: STZ $A01C -- keep the fraction
         for (int k = 0; k < n && y < MH; k++) d5[y++] = (int8_t)(8 - s);
       }
@@ -161,7 +139,7 @@ static void mWinRamp(const uint8_t* lst, int8_t* d5) {
   }
   while (y < MH) d5[y++] = 0;
 }
-// The ramp for one ribbon OPTION, built on demand and memoised (the lists are static ROM data).
+// The ramp for one ribbon option, built on demand and memoised.
 const int8_t* mWinGrad(int opt) {
   static int8_t cache[CT_MENU_WINLIST_N][MH];
   static int built[CT_MENU_WINLIST_N];
@@ -169,30 +147,21 @@ const int8_t* mWinGrad(int opt) {
   if (!built[opt]) { mWinRamp(ctMenuWinList[opt], cache[opt]); built[opt] = 1; }
   return cache[opt];
 }
-// Public: the generated per-scanline ramp, so --wingradtest can grade it against the HDMA
-// bands `ct.exe --hdma` reads off the oracle's own hardware registers.
+// Public, for --wingradtest (graded against the bands `ct.exe --hdma` reads off the oracle).
 const int8_t* CtMenuWinGradRamp(int opt) { return mWinGrad(opt); }
-// ⭐ C2/CC4F's PER-PANEL DIM, applied to the captured chrome instead of frozen into it.
-//     2CC78  LDA $0F02,X / AND #00C0 / BEQ ->next     ; LOCKED (0x40) or EMPTY (0x80)
+// C2/CC4F's per-panel dim, applied to the captured chrome:
+//     2CC78  LDA $0F02,X / AND #00C0 / BEQ ->next     ; locked (0x40) or empty (0x80)
 //     2CC80  TXA / JSR C2/CCB3 / LDX $04 / STX $61
-//     2CC88  LDX #0006 / LDA $02 / JSR C2/EC93        ; SIX tile ROWS (C2/EC93 adds 0x40 per pass)
-//     2CC90  LDA $04 / ADC #1000 / STA $61 / (again)  ; the map's other 32x32 page, which we do not model
+//     2CC88  LDX #0006 / LDA $02 / JSR C2/EC93        ; six tile rows (C2/EC93 adds 0x40 per pass)
+//     2CC90  LDA $04 / ADC #1000 / STA $61 / (again)  ; the map's other 32x32 page, not modelled
 //     2CCA0  LDA $04 / ADC #0180 / STA $04            ; 0x180 bytes = 6 rows = the next panel
-// and C2/ECC2 writes only the tilemap ATTRIBUTE byte, so a dimmed panel's words differ from a bright
-// one's by the palette nibble alone. That is exactly what our two captures disagree on: at rows 18-19
-// ctMenuChromeRibbonTM[4] holds 13E2/13E4... where ctMenuChromeEnteredTM[4] holds 03E2/03E4... -- the
-// same tiles, palette 4 against palette 0. The ribbon capture came from a TWO-member party, so its
-// panel 2 was empty and C2/CC4F had dimmed it; replaying that map dims panel 2 for every party.
-// GEOMETRY, confirmed on two different rosters: panel r covers tile rows 2 + 6r .. 7 + 6r, columns
-// 8..23. With ONE member the oracle dims panel 1 and the visible part is rows 8..11 (rows 12-13 sit
-// under the ribbon box) at x64..191; with THREE it dims nothing and our frozen panel-2 dim shows at
-// rows 18-19, same columns. Both match this block exactly.
-// Only the FORM views run it (C2/CA3F, the screen and its ribbon hover); Equip/Status tones its
-// panels through the char-select instead, and Tech dims nothing.
+// C2/ECC2 writes only the attribute byte, so a dim panel differs from a bright one by the palette nibble alone. Panel
+// r covers tile rows 2 + 6r .. 7 + 6r, columns 8..23. The ribbon capture came from a two-member party (panel 2 dim),
+// so the live array decides instead. Only the Form views run it (C2/CA3F, the screen and its ribbon hover);
+// Equip/Status tones its panels through the char select, and Tech dims nothing.
 static const uint8_t* g_formPanelDim = 0;   /* C2/CD2B's $7E:0F02 array, or NULL = leave the map alone */
 void CtMenuSetFormPanelDim(const uint8_t* panel9) { g_formPanelDim = panel9; }
-// Rewrite the three panel blocks' palette from the live entries. Returns `tm` unchanged when there is
-// nothing to say, so every other screen is bit-for-bit untouched.
+// Rewrite the three panel blocks' palette from the live entries. Returns `tm` unchanged when there is nothing to do.
 static const uint16_t* mChromeApplyPanelDim(const uint16_t* tm, uint16_t* scratch) {
   if (!g_formPanelDim) return tm;
   memcpy(scratch, tm, sizeof(uint16_t) * CT_MENU_CHROME_TMW * CT_MENU_CHROME_TMH);
@@ -202,22 +171,20 @@ static const uint16_t* mChromeApplyPanelDim(const uint16_t* tm, uint16_t* scratc
       for (int tx = 8; tx <= 23; tx++) {
         uint16_t* e = &scratch[ty * CT_MENU_CHROME_TMW + tx];
         int t = *e & 0x3FF;
-        // Only the WINDOW's own tiles: the ribbon BOX (0x3A4-0x3AC) and the marble are laid
-        // OVER this map afterwards and keep their own palettes -- C2/ECC2 writes the attribute
-        // blindly, but in the ROM the box is restored on top of the dimmed panel.
+        // Only the window's own tiles: the ribbon box (0x3A4-0x3AC) and the marble are laid over this map afterwards
+        // and keep their palettes (C2/ECC2 writes the attribute blindly; the ROM restores the box on top).
         if (!((t >= 0x3DC && t <= 0x3EF) || (t >= 0x300 && t <= 0x313))) continue;
         *e = (uint16_t)((*e & ~0x1C00) | (dim ? (4 << 10) : 0));
       }
   }
   return scratch;
 }
-// THE RIBBON'S COLOUR WINDOW 2. The ribbon's builder (C2/9B92: $FF:BD2E programs HDMA channel 1 = mode 4 onto
-// $2126-$2129 from $9080, and the NMI thunk copies $9750 there) keeps colour math off inside window 2 -- the command box,
-// x 64..191 on lines 96..143 -- through the table raw at FF/BAAA ([lines, WH0, WH1, WH2, WH3] entries from line 0, the
-// colour window being W1 XOR W2; MEASURED on the oracle: $9750 = $9080 = those bytes on the hover). A screen whose build
-// leaves $0D13 alone keeps that channel for its build frame (the Config's C2/BF3D -> C2/C3B5: $0D13 is first written by
-// substate 1, C2/BF47): its window tiles under the box draw without the ramp that one frame (MEASURED: the tour's
-// f907, W2 = 64..191 there and 80..0 from f908).
+// The ribbon's colour window 2. The ribbon's builder (C2/9B92: $FF:BD2E programs HDMA channel 1, mode 4, onto
+// $2126-$2129 from $9080; the NMI thunk copies $9750 there) keeps colour math off inside window 2 -- the command box,
+// x 64..191 on lines 96..143 -- through the table at FF/BAAA ([lines, WH0, WH1, WH2, WH3] from line 0; the colour
+// window is W1 XOR W2). A screen whose build leaves $0D13 alone keeps that channel for its build frame (Config: C2/BF3D
+// -> C2/C3B5; $0D13 is first written by substate 1, C2/BF47), so its window tiles under the box draw without the ramp
+// that one frame. disasm/notes/menu2_config_toggles.md.
 static int mRibbonW2On;
 static int16_t mRibbonW2[MH][2];
 void CtMenuChromeRibbonWindow(const CtMenuHost* h, int on) {
@@ -231,21 +198,17 @@ void CtMenuChromeRibbonWindow(const CtMenuHost* h, int on) {
   }
   mRibbonW2On = 1;
 }
-// THE WINDOW COLOUR (Config's cell 6, and every open: C2/983F `LDA $2991 / AND #07 / STA $0D8C / JMP C2/C511`).
+// The window colour (Config's cell 6, and every open: C2/983F `LDA $2991 / AND #07 / STA $0D8C / JMP C2/C511`).
 // C2/C511 MVNs 0x281 bytes from FF/(9E10 + v * 0x280) to $7E:8800; C2/962E makes plane 3 of each of the 20 tiles the
 // OR of planes 0-2 (every inked pixel takes colours 8-15); the display list C2/C548 (`C0 3D 00 88 7E 80 02`) uploads
-// them to VRAM word 3DC0 -- tiles 0x3DC-0x3EF, the 9-slice window's frame and fill. C2/ED08 then MVNs the 16 bytes
-// FF/(B210 + v * 16) onto CGRAM row ($0D48 & 1C) / 4, colours 8-15 ($7E:9490 + ..), and C2/9839 `LDX #0010 / STX
-// $0D47` makes that ROW 0. MEASURED (menu_audit_cmp.py's config drive, the logical oracle): VRAM 3DC0.. and $7E:9490..
-// are exactly those bytes at colours 0 and 2, and no other CGRAM row moves there. The captures ARE colour 0 -- the 20
-// tiles and row 0's colours 8-15 byte-identical to this decode.
-// THE DIM ROW is not the colour's: C2/A0E7 (`LDA $9480,X / LSR A / AND #3DEF / STA $0000,Y`, X from $51 = 0 to 0x30,
-// Y = $9500) halves CGRAM row 0 and colours 0-7 of row 1 into row 4 / row 5's first half, and only four sites run it:
-// the Equip tab's builder (C2/A0E2), the Form tab's (C2/CA27), the Form screen's build (C2/CB71) and the shop's
-// (C2/DB46) -- the views whose maps carry palette 4. MEASURED (the wincolour drive, colour 3): row 4 = row 0 >> 1 from
-// the open's Equip build on, zero before it (C2/940D's fill); in the config drive the colour change moved row 0 and
-// not row 4. So row 4's colours 8-15 are half of the colour of the LAST A0E7 (`dimV`), which the caller tracks; its
-// colours 0-7 and row 5's are halves of fixed colours, already in the captures.
+// them to VRAM word 3DC0 -- tiles 0x3DC-0x3EF, the window's frame and fill. C2/ED08 then MVNs FF/(B210 + v * 16) onto
+// CGRAM row ($0D48 & 1C) / 4, colours 8-15, and C2/9839 `LDX #0010 / STX $0D47` makes that row 0. The captures are
+// colour 0.
+// The dim row is separate: C2/A0E7 (`LDA $9480,X / LSR A / AND #3DEF / STA $0000,Y`, X = 0..0x30, Y = $9500) halves
+// CGRAM row 0 and colours 0-7 of row 1 into row 4 / the first half of row 5. Only four builders run it: Equip
+// (C2/A0E2), the Form tab (C2/CA27), the Form screen (C2/CB71) and the shop (C2/DB46), the views whose maps use
+// palette 4. So row 4's colours 8-15 are half of the colour of the last A0E7 (`dimV`, tracked by the caller); its
+// colours 0-7 and row 5's are halves of fixed colours, already in the captures. disasm/notes/menu2_config_toggles.md.
 static int mWinLoaded, mWinColour = -1, mWinDim = -1;   // tiles 0x3DC-0x3EF + row 0's colours 8-15 = the ROM's colour
 static uint8_t mWinTile[20][64], mWinRow[8][3], mWinDimRow[8][3];
 void CtMenuWindowColourLoad(const CtMenuHost* h, int v, int dimV) {
@@ -285,13 +248,12 @@ static const uint8_t* mChromeGlyph(int ti) {
   int w = ti - (0x3DC - CT_MENU_CHROME_TILE0);
   return (mWinLoaded && w >= 0 && w < 20) ? mWinTile[w] : ctMenuChromeTile[ti];
 }
-// THE SAVE SLOTS IN THEIR OWN COLOURS. The open's graphics build lays all eight colour sets as tiles 0x300-0x39F (C2/9724:
-// FF/9E10, 0x1400 bytes, C2/962E's plane 3 over 0xA4 tiles); C2/D266 reads each VALID save's window colour
-// (`LDA $300591,X / AND #07 / STA $0D79,Y` -- the save's own $2991); C2/D329 draws the slot with `$0D8C` = that colour:
+// The Save slots in their own colours. The open's graphics build lays all eight colour sets as tiles 0x300-0x39F
+// (C2/9724: FF/9E10, 0x1400 bytes, C2/962E's plane 3 over 0xA4 tiles); C2/D266 reads each valid save's window colour
+// (`LDA $300591,X / AND #07 / STA $0D79,Y`, the save's own $2991); C2/D329 draws the slot with `$0D8C` = that colour:
 // C2/ECDB -> C2/EDF6's tile base `$0D47` = colour * 20 (C2/ECE4), palette row slot + 1 (`$0D48` = ($79 + 1) * 4 | 3),
 // and C2/ED08 puts FF/B210 + colour * 16 on that row's colours 8-15. An empty slot keeps 0. So a slot's buttons are
-// tiles 0x300 + 20 v and row (slot + 1)'s colours 8-15 of colour v. MEASURED (owsavecol drive: colour 3 set in Config,
-// slot 1 saved on the overworld): `$0D79` 00 -> 03, row 1's colours 8-15 = FF/B210 + 48.
+// tiles 0x300 + 20 v and row (slot + 1)'s colours 8-15 of colour v.
 static int mSlotColour[3];
 static uint8_t mSlotTile[8][20][64], mSlotRow[8][8][3];
 static int mSlotSetOk[8];
@@ -342,16 +304,16 @@ static const uint8_t* mChromeInk(const uint8_t (*pal)[16][3], int pl, int v) {
   }
   return pal[pl][v];
 }
-// THE WINDOWED HALF COLOUR MATH (`math=07 half=1` inside W1 = 16..239): on a line of this band the PPU adds the fixed
-// colour to the layer's own colour, clamps at 0, halves, and only then caps at 31 -- one ALU pass, so a white border
-// (31) + 8 reads 19, not the 15 a halve of the capped sum gives (MEASURED, owsave f180: (156,156,148) where the port
-// had (123,123,123)). The boot Load screen's scroll chrome has always done this; the X menu's Save list sets the band.
+// The windowed half colour math (`math=07 half=1` inside W1 = 16..239): on a line of this band the PPU adds the fixed
+// colour to the layer's colour, clamps at 0, halves, and only then caps at 31 -- one ALU pass, so a white border (31)
+// + 8 reads 19, not the 15 that halving the capped sum gives. The boot Load screen's scroll chrome and the X menu's
+// Save list use it.
 static uint8_t mHalfBand[MH];
 static uint8_t* mChromeZero;   // when set, mChromeTMPal2L marks the pixels its tiles leave at colour 0 (the layers below show)
 static void mChromeTMPal2L(uint8_t* fb, const uint16_t* tm, int mode, const uint8_t (*pal)[16][3],
                            const int8_t* d5, int csTone) {
-  // d5 = the per-scanline 5-bit COLDATA delta mWinGrad() generated for this screen's window list.
-  // (csTone is kept in the signature for the callers; the member boxes' tone is C2/9E76's palette rows now.)
+  // d5 = the per-line 5-bit COLDATA delta mWinGrad() generated for this screen's window list.
+  // csTone is unused (the member boxes' tone comes from C2/9E76's palette rows).
   (void)csTone;
   if (!d5) d5 = mWinGrad(0);
   for (int ty = 0; ty < CT_MENU_CHROME_TMH; ty++)
@@ -365,9 +327,9 @@ static void mChromeTMPal2L(uint8_t* fb, const uint16_t* tm, int mode, const uint
       if (ti < 0 || ti >= CT_MENU_CHROME_NTILE) continue;
       const uint8_t* g = mSlotGlyph(pal, ti, pl);
       if (!g) g = mChromeGlyph(ti);
-      // The whole dark WINDOW -- 9-slice FRAME bevel (0x3DC-0x3E7) + panel FILL (0x3E8-0x3EF) + Save
-      // buttons (0x300-0x313) -- carries the HDMA colour-math ramp (mWinGrad); the marble desktop and
-      // the ribbon box stay flat (the ROM keeps them outside the colour WINDOW, HDMA ch1 -> $2126).
+      // The whole dark window -- the frame bevel (0x3DC-0x3E7), the panel fill (0x3E8-0x3EF) and the Save buttons
+      // (0x300-0x313) -- takes the colour-math ramp (mWinGrad); the marble and the ribbon box stay flat (the ROM
+      // keeps them outside the colour window, HDMA ch1 -> $2126).
       int isWin  = (tile >= 0x3DC && tile <= 0x3EF) || (tile >= 0x300 && tile <= 0x313);
       for (int yy = 0; yy < 8; yy++)
         for (int xx = 0; xx < 8; xx++) {
@@ -377,12 +339,11 @@ static void mChromeTMPal2L(uint8_t* fb, const uint16_t* tm, int mode, const uint
             const uint8_t* C = mChromeInk(pal, pl, v);
             int r = C[0], gg = C[1], b = C[2];
             if (isWin && !(mRibbonW2On && px >= mRibbonW2[py][0] && px <= mRibbonW2[py][1])) {
-              // The hardware model: COLDATA carries a 5-BIT intensity and CGADSUB adds or subtracts it
-              // from the 5-bit palette colour, so the composed pixel is conv5(clamp(v5 + d5)). Palette
-              // entries are stored as conv5(v5), so >>3 recovers v5 exactly.
+              // COLDATA carries a 5-bit intensity that CGADSUB adds to or subtracts from the 5-bit palette colour:
+              // conv5(clamp(v5 + d5)). Palette entries are stored as conv5(v5), so >> 3 recovers v5.
               int dd = d5[py];
               int c0 = (r >> 3) + dd, c1 = (gg >> 3) + dd, c2 = (b >> 3) + dd;
-              if (mHalfBand[py] && px >= 16 && px <= 239) {  // clamp at 0, HALVE, then cap (the band's order)
+              if (mHalfBand[py] && px >= 16 && px <= 239) {  // clamp at 0, halve, then cap (the band's order)
                 c0 = (c0 < 0 ? 0 : c0) >> 1; c1 = (c1 < 0 ? 0 : c1) >> 1; c2 = (c2 < 0 ? 0 : c2) >> 1;
               }
               c0 = c0 < 0 ? 0 : c0 > 31 ? 31 : c0;
@@ -400,76 +361,62 @@ static void mChromeTMPal2(uint8_t* fb, const uint16_t* tm, int mode, const uint8
   mChromeTMPal2L(fb, tm, mode, pal, d5, 0);
 }
 static void mChromeTMPal(uint8_t* fb, const uint16_t* tm, int mode, const uint8_t (*pal)[16][3]) { mChromeTMPal2(fb, tm, mode, pal, NULL); }
-// Public: draw the byte-exact chrome for a menu screen. screen 0 = ribbon (opt picks the per-option
-// layout); screen 1..6 = the entered sub-screen. mode as in mChromeTMPal. The Save screen (opt 5) reloads
-// CGRAM so its slot-button palettes (pal1/2/3) are the grey-marble ctMenuChromeSavePal, NOT the opt0
-// status CGRAM baked into ctMenuChromePal (where they are black/cyan/orange -> our old orange slot 3).
-
-// The char-select party-box selection tone is C2/9E76's palette-row rewrite (mChromeApplyCharSel), reading the party
-// $2980 + the cursor char set via CtMenuSetCharSel.
-
+// Draw the chrome for a menu screen. screen 0 = the ribbon (opt picks the per-option layout); 1..6 = the entered
+// sub-screen; mode as in mChromeTMPal. The Save screen (opt 5) uses ctMenuChromeSavePal, the grey-marble palettes of
+// its slot buttons (pal1/2/3). The char-select boxes are toned by C2/9E76's palette rows (mChromeApplyCharSel).
 void CtMenuChrome(uint8_t* fb, int screen, int opt, int mode) {
   if (!fb) return;
   if (opt < 0) opt = 0; else if (opt > 5) opt = 5;
   int si = screen - 1; if (si < 0) si = 0; else if (si > 5) si = 5;
   const uint16_t* tm = (screen == 0) ? ctMenuChromeRibbonTM[opt] : ctMenuChromeEnteredTM[si];
   const uint8_t (*pal)[16][3] = (opt == 5) ? ctMenuChromeSavePal : ctMenuChromePal;
-  // WHICH window list: the ROM sets $7E:9D99 from the RIBBON HOVER and never rewrites it on entry
-  // (measured -- entering Equip/Tech/Config/Form/Save leaves the list alone), so an entered screen N
-  // uses option N-1's list. Those two are always the same option here anyway; deriving it from the
-  // screen keeps a stale menuOpt from painting the wrong partition.
+  // The window list: the ROM sets $7E:9D99 from the ribbon hover and does not rewrite it on entry, so an entered
+  // screen N uses option N-1's list.
   int li = (screen > 0) ? (screen - 1) : opt;
-  // The char-select (entered screen 1 AND its ribbon opt0 PREVIEW) tones its LEFT party-column boxes
-  // BY SELECTION (bright box = the cursor's member) via csTone; both views use the same list so the
-  // background is identical when you enter from the ribbon.
+  // The char select (entered screen 1 and its ribbon opt-0 preview) tones its party-column boxes by selection; both
+  // views use the same list.
   int charSel = (screen == 1) || (screen == 0 && opt == 0);
-  // The FORM views re-apply C2/CC4F over the captured map (see mChromeApplyPanelDim); the member select (and its
-  // ribbon preview) re-applies C2/9E76 (mChromeApplyCharSel); everything else passes the map through untouched.
+  // The Form views re-apply C2/CC4F over the captured map (mChromeApplyPanelDim); the member select and its ribbon
+  // preview re-apply C2/9E76 (mChromeApplyCharSel); every other map passes through.
   { static uint16_t scratch[CT_MENU_CHROME_TMW * CT_MENU_CHROME_TMH];
     const uint16_t* use = ((screen == 5) || (screen == 0 && opt == 4)) ? mChromeApplyPanelDim(tm, scratch)
                         : (charSel && g_charSelMem) ? mChromeApplyCharSel(tm, scratch, mCharSelSlot()) : tm;
-    // The ribbon's builder lays its command box AFTER the member panels are toned: $FF:BD2E's `02` copies the box
-    // (16 x 6 cells) into (8,12) over the map C2/9E76 has recoloured, so the box keeps its own palette even where its
-    // rows fall in the SELECTED panel's (C2/9E76 clears palette bit 2 there). MEASURED: Lucca or Frog as $0412 left
-    // the box's cells in rows 12-13 / 14-17 orange (equip1 / equip2 f221+); Crono's rows never reach the box.
+    // The ribbon's builder lays its command box after the member panels are toned: $FF:BD2E's `02` copies the box
+    // (16 x 6 cells) into (8,12) over the map C2/9E76 recoloured, so the box keeps its own palette even inside the
+    // selected panel's rows (where C2/9E76 clears palette bit 2).
     if (screen == 0 && use == scratch)
       for (int r = 12; r < 18; r++)
         for (int c = 8; c < 24; c++) scratch[r * CT_MENU_CHROME_TMW + c] = tm[r * CT_MENU_CHROME_TMW + c];
     mChromeTMPal2L(fb, use, mode, pal, mWinGrad(li), 0); }
 }
 
-// The ENTERED Equip/Status DETAIL chrome: after A on a character, the ROM redraws the left column to
-// three boxes -- [char stat][slot-type "Weapon"][item list] -- + one tall right box (portrait+gear+stats).
-// This is a DIFFERENT BG2 tilemap than the char-SELECT view (ctMenuChromeEnteredTM[0]); captured byte-
-// exact from the oracle (word 0x6000, _gen_menuchrome_equip.py). mode 0 = draw window+marble (no ribbon box).
+// The entered Equip/Status detail chrome: after A on a character the left column becomes three boxes -- [char stat]
+// [slot type "Weapon"] [item list] -- plus one tall right box (portrait, gear, stats). A different BG2 tilemap from
+// the char select's (ctMenuChromeEnteredTM[0]), captured at word 0x6000 (_gen_menuchrome_equip.py). Mode 0.
 void CtMenuChromeEquip(uint8_t* fb) {
   if (!fb) return;
   mChromeTMPal(fb, ctMenuChromeEquipTM, 0, ctMenuChromePal);
 }
-// The CANDIDATE-LIST chrome (ROM substate 3, C2/9CA5) -- a DIFFERENT BG2 layout from the gear panel's.
-// Entering it, C2/A41A runs $FF:BEA4 (through C2/A4AF) and $FF:BEEC; both set `$61 = $3E00` (the BG2
-// buffer) and issue the interpreter's `02` BLOCK COPY (C2/EF05):
+// The candidate-list chrome (substate 3, C2/9CA5), a different BG2 layout from the gear panel's. Entering it,
+// C2/A41A runs $FF:BEA4 (through C2/A4AF) and $FF:BEEC; both set `$61 = $3E00` (the BG2 buffer) and issue the
+// interpreter's `02` block copy (C2/EF05):
 //     $FF:BEA4   (col 2, row 12) 12w x 14h -> (col 2, row  8)   the item-list box climbs 4 tile rows
 //     $FF:BEEC   (col 2, row 32) 28w x  4h -> (col 2, row 22)   the description bar, from the backup
-// so the [slot-type "Weapon"] box is swallowed and the right box shortens with it (no EXP/NEXT). The
-// 32 px is the same delta the ROM writes into the list scrollbar's sprite Y base $0D93 (0x62 in
-// substate 2 -> 0x42 in substate 3, read by C2/8BE9). Captured byte-exact off the oracle (word 0x6000,
-// _gen_menuchrome_equiplist.py); the capture's rows 8-21 cols 2-13 ARE the gear chrome's rows 12-25,
-// which is the block copy confirmed, and rows 22-25 come from the off-screen backup we cannot see.
-// The gear panel's window runs from line 16 to line 207: its bottom tile rows 26-27 (y >= 208) are the marble desktop.
-#define CT_MENU_EQUIP_MARBLE_Y  (26 * 8)   /* top of the bottom marble strip (ours 224-fb) */
+// so the [slot type] box is swallowed and the right box shortens with it (no EXP/NEXT). The 32 px is the same delta
+// the ROM writes into the list scrollbar's Y base $0D93 (0x62 in substate 2 -> 0x42 in substate 3, read by C2/8BE9).
+// Captured at word 0x6000 (_gen_menuchrome_equiplist.py).
+// The gear panel's window runs from line 16 to 207: its bottom tile rows 26-27 (y >= 208) are the marble desktop.
+#define CT_MENU_EQUIP_MARBLE_Y  (26 * 8)   /* top of the bottom marble strip */
 // One band of a captured chrome tilemap (`tm`: tile rows rowLo..rowHi, columns colLo..colHi) drawn shifted down by
-// yShift and clipped to screen rows [clipTop, clipBot), the window tiles taking the HDMA ramp of the DESTINATION line.
+// yShift and clipped to screen rows [clipTop, clipBot), the window tiles taking the ramp of the destination line.
 // `csDim` >= 0 re-tones rows 2-7 (a member box) by C2/9E76's palette | 4; -1 keeps the map's own palettes.
 static const int8_t* mChromeRowsGrad;   // the window ramp mChromeRowsTM paints with (0 = option 0's list)
 static void mChromeRowsTM(uint8_t* fb, const uint16_t* tm, int rowLo, int rowHi, int colLo, int colHi, int yShift,
                           int csDim, int clipTop, int clipBot);
-// THE SETTLED CANDIDATE LIST'S WINDOW RAMP. MEASURED on the oracle's own HDMA registers (ct.exe --hdma, party3_field
-// + an Iron Blade, the logical oracle): through the climb the colour-math bands are option 0's list (flat 16, one
-// 192-line ramp in 12-line steps); once the list has opened, the same ramp stops at line 176 and the description bar
-// gets a ramp of its OWN -- lines 177-208, 2-line steps 8 .. 0 .. -7, i.e. C2/86DD's generator run over a 32-line RAMP
-// (C2/A41A re-points the band table after the loop: $9694 = $969A, $9696 = $9300, $9698 = $0025). In this port's
-// line numbering (the HDMA line - 1) that is y 176..207.
+// The settled candidate list's window ramp. Through the climb the colour-math bands are option 0's list (flat 16, one
+// 192-line ramp in 12-line steps); once the list is open the ramp stops at line 176 and the description bar gets its
+// own, lines 177-208 in 2-line steps 8 .. -7 (C2/86DD over a 32-line ramp; C2/A41A re-points the band table after the
+// loop: $9694 = $969A, $9696 = $9300, $9698 = $0025). In this port's numbering (HDMA line - 1) that is y 176..207.
 static const int8_t* mWinGradEquipList(void) {
   static int8_t g[MH]; static int built;
   if (!built) {
@@ -497,7 +444,7 @@ static void mChromeRowsTM(uint8_t* fb, const uint16_t* tm, int rowLo, int rowHi,
           if (px >= MW || py < clipTop || py >= clipBot) continue;   // clip to the box window
           const uint8_t* C = mChromeInk(ctMenuChromePal, pl, v);
           int r = C[0], gg = C[1], b = C[2];
-          if (isWin) {                                    // the ramp at the DEST scanline
+          if (isWin) {                                    // the ramp at the destination line
             int dd = (mChromeRowsGrad ? mChromeRowsGrad : mWinGrad(0))[py];   // (screen 1 keeps option 0's list)
             int c0 = (r >> 3) + dd, c1 = (gg >> 3) + dd, c2 = (b >> 3) + dd;
             c0 = c0 < 0 ? 0 : c0 > 31 ? 31 : c0;
@@ -519,12 +466,12 @@ int CtMenuPanelData(const uint8_t* mem, int slot, CtMenuPanel* out) {
   if (id & 0x80) return 0;                           // bit7 = empty slot
   const uint8_t* sh = mem + 0x2600 + (size_t)(id & 7) * 0x50;   // the char sheet
   out->charId = id & 7;
-  out->hp    = sh[3] | (sh[4] << 8);                 // +3 curHP (dossier-pinned)
-  out->hpMax = sh[0x3F] | (sh[0x40] << 8);           // +0x3F: the EFFECTIVE max (string 06 prints $9ACF; +5 is
+  out->hp    = sh[3] | (sh[4] << 8);                 // +3 curHP
+  out->hpMax = sh[0x3F] | (sh[0x40] << 8);           // +0x3F: the effective max (string 06 prints $9ACF; +5 is
                                                      //   the base -- a Silver/Gold Earring's +25/50% is only here)
   out->mp    = sh[7] | (sh[8] << 8);                 // +7 curMP
   out->mpMax = sh[9] | (sh[10] << 8);                // +9 maxMP
-  out->lv    = sh[0x12];                             // +0x12 LEVEL (pinned by elimination, menu.h)
+  out->lv    = sh[0x12];                             // +0x12 level
   out->name  = CtGetName(out->charId);
   return 1;
 }
@@ -532,8 +479,8 @@ int CtMenuPanelData(const uint8_t* mem, int slot, CtMenuPanel* out) {
 // (The play clock, C2/85AE, is player.c's CtMenuClockTick: the third routine of the pad latch C2/84D2.)
 
 // -------------------------------------------------------------- text helpers
-// ASCII -> CT charset code (the menu font asset is indexed by CT code; same mapping the
-// name-entry keyboard grid uses: 'A'..=0xA0, 'a'..=0xBA, '0'..=0xD4, ':'=0xE3, '/'=0xE0).
+// ASCII -> CT charset code (the menu font is indexed by CT code; the name-entry grid's mapping: 'A' = 0xA0,
+// 'a' = 0xBA, '0' = 0xD4, ':' = 0xE3, '/' = 0xE0).
 static int mCode(char a) {
   if (a >= 'A' && a <= 'Z') return 0xA0 + (a - 'A');
   if (a >= 'a' && a <= 'z') return 0xBA + (a - 'a');
@@ -543,22 +490,20 @@ static int mCode(char a) {
                case '%': return 0xED; case '&': return 0xE4;
                case '(': return 0xE5; case ')': return 0xE6; case '\'': return 0xE7;
                case ',': return 0xE9; case '=': return 0xEA; case '-': return 0xEB;
-               case '#': return 0xF3; }   // the CT mapped charset,
-                                          // assets/text.py's own table (0xEC '+' is what the
-                                          // equip bonus line "Magic +2" needs)
+               case '#': return 0xF3; }   // the CT charset (assets/text.py's table; 0xEC '+' serves the
+                                          // equip bonus line "Magic +2")
   return -1;                                         // space / unmapped: skip 8px
 }
-// When mDim != 0 the text/number helpers draw through the DIM glyph (non-focused party panel, pal4).
-// Default 0 (bright pal0) so every OTHER caller is unaffected; mCharPanel sets/clears it around a panel.
+// When mDim != 0 the text/number helpers draw through the dim glyph (non-focused party panel, pal4). Default 0
+// (bright pal0); mCharPanel sets and clears it around a panel.
 static int mDim = 0;
 static int mNavHandOk = 1;   // C2/E954's $0D9B gate for the Item screen's nav hand (CtMenuSetNavHandShown, below)
-// ---- C2/A5C3 / C2/A5E7 -- THE CANDIDATE LIST'S LIVE PREVIEW (menu2_equip_change.md section 2.16). While the list's
-// cursor is on a candidate, the ROM patches that id into the SHEET COPY's gear byte ($9A90 + $0D26 -- the live sheet is
-// untouched until the commit), recomputes it (C2/916E; the Third Eye's `ASL $9B21`) and compares every row of C2/A642 =
-// Atk +3D, Def +3E, Power +36, Speed +38, Evade +3B, Magic +39, Stamina +37, Hit +3A, M.Def +3C (and the max-HP word
-// into $0D57) against the current value: $0D4D+row = 00 unchanged / 08 higher (BG palette 2) / 1C lower (palette 7),
-// and the rows are redrawn with the NEW values in those palettes. MEASURED (party3_field, an Iron Blade over Crono's
-// Wood Sword): the panel's Attack reads 13 in (0,255,255) where it read 11 in white.
+// ---- C2/A5C3 / C2/A5E7: the candidate list's live preview (menu2_equip_change.md sec. 2.16) ----
+// While the list's cursor is on a candidate, the ROM patches that id into the sheet copy's gear byte ($9A90 + $0D26;
+// the live sheet is untouched until the commit), recomputes it (C2/916E; the Third Eye's `ASL $9B21`) and compares
+// every row of C2/A642 -- Atk +3D, Def +3E, Power +36, Speed +38, Evade +3B, Magic +39, Stamina +37, Hit +3A, M.Def
+// +3C (and the max-HP word into $0D57) -- with the current value: $0D4D+row = 00 unchanged / 08 higher (BG palette 2)
+// / 1C lower (palette 7). The rows are redrawn with the new values in those palettes.
 static int mEqPrevOn = 0;
 static uint8_t mEqPrevNew[11], mEqPrevOld[11];   // CtMenuRecalcDerived's 11 bytes: +36..+3C, +3D, +3E, +3F/+40
 static void mEqPrevSet(const CtMenuHost* h, int charId, int gearSlot, int candId) {
@@ -576,17 +521,15 @@ static int mEqPrevDim(int k) {                                      // C2/A609: 
   return mEqPrevNew[k] > mEqPrevOld[k] ? 5 : 2;                    // palette 2 (cyan) / palette 7 (= dim2's tones)
 }
 static int mEqPrevVal(const uint8_t* sh, int k) { return mEqPrevOn ? mEqPrevNew[k] : sh[0x36 + k]; }
-// A top clip line (ours-y): mText/mNumR/mBlitIndexed SKIP glyphs/blits whose top is above it. Used by the
-// equip entry PUSH so a stat box scrolled off the top of the window doesn't draw its text over the outer
-// marble. Default 0 = no clip (every other caller unaffected). mCode('\0')==-1 so trailing NUL is safe.
+// A top clip line: mText/mNumR/mBlitIndexed skip glyphs and blits whose top is above it (the equip entry push, so a
+// stat box scrolled off the window's top does not draw over the marble). 0 = no clip.
 static int mClipTop = 0;
-// The matching BOTTOM clip line (ours-y, exclusive). The ROM masks BG1 to the window boxes, so text the
-// tilemap still holds does not show when a box shrinks: the candidate list's substate-3 chrome ends the
-// right box at tile row 21 (y176) and the ROM's own EXP/NEXT stay in the BG1 buffer, unseen (measured:
-// $7E:0345E/$7E:0349E hold "EXP"/"NEXT" in BOTH substates). Default MH = no clip.
+// The matching bottom clip line (exclusive). The ROM masks BG1 to the window boxes, so text the tilemap still holds
+// does not show when a box shrinks: the candidate list's chrome ends the right box at tile row 21 (y176) while EXP/NEXT
+// stay in the BG1 buffer ($7E:0345E/$7E:0349E). MH = no clip.
 static int mClipBot = MH;
-// mDim 6 / 7 = BG1 palette 1 / 5 of the menu's CGRAM (ctMenuChromePal rows 1 / 5, the text's colours 5-7: a 2bpp
-// glyph laid as 4bpp with plane 2 = plane 0 | plane 1, pixel v -> colour 4 + v): C2/A1EF's `$0D5D` = 4 -- a member's
+// mDim 6 / 7 = BG1 palette 1 / 5 of the menu CGRAM (ctMenuChromePal rows 1 / 5, the text's colours 5-7: a 2bpp glyph
+// laid as 4bpp with plane 2 = plane 0 | plane 1, pixel v -> colour 4 + v): C2/A1EF's `$0D5D` = 4 -- a member's
 // current HP at or under a tenth of the maximum -- and that row dimmed (C2/9E76, palette | 4).
 static void mGlyphPalRow(const CtMenuHost* h, uint8_t* fb, int code, int x, int y, int row) {
   if (!h->menuFont2bpp) return;
@@ -613,25 +556,24 @@ static void mText(const CtMenuHost* h, uint8_t* fb, const char* s, int x, int y)
     if (c >= 0) mGlyphSel(h, fb, c, x, y);
   }
 }
-// One raw glyph CODE in mText's palette (mDim) -- for a ROM string's bytes that are not ASCII (an item record's icon).
+// One raw glyph code in mText's palette (mDim), for a ROM string's non-ASCII bytes (an item record's icon).
 static void mCodeAt(const CtMenuHost* h, uint8_t* fb, int code, int x, int y) {
   if (y < mClipTop || y >= mClipBot) return;
   mGlyphSel(h, fb, code & 0xFF, x, y);
 }
 static void mNumR(const CtMenuHost* h, uint8_t* fb, int v, int xRight, int y);
-// C2/F0D1 -- the menu string's code 0C [cap, addr16]: the byte in two digits (C2/F114 fmt 11), or, once it has reached
-// FF:CF33[cap], tile 2F TWICE (the two stars) in the same attr. The strings name the cap per field: LV (FF:C4ED
-// string 01, FF:C535 string 04, FF:C7DF string 17) cap 7; the seven stats of strings 04 / 05 / 09 -- Power +0x36 cap
-// 0, Stamina +0x37 cap 2, Speed +0x38 cap 1, Magic +0x39 cap 5, Hit +0x3A cap 3, Evade +0x3B cap 4, M.Def +0x3C cap 6
-// (kStatCap, by offset - 0x36). FF:CF33 = 63 10 63 63 63 63 63 63: Speed stars at 16, the rest and the level at 99.
-// MEASURED (itemtab3 drive: Crono's Speed poked to 0x10): the ribbon's Status preview shows two stars, not "16".
+// C2/F0D1, the menu string's code 0C [cap, addr16]: the byte in two digits (C2/F114 fmt 11), or, once it reaches
+// FF:CF33[cap], tile 2F twice (two stars) in the same attr. The strings name the cap per field: LV (FF:C4ED string 01,
+// FF:C535 string 04, FF:C7DF string 17) cap 7; the seven stats of strings 04 / 05 / 09 -- Power +0x36 cap 0, Stamina
+// +0x37 cap 2, Speed +0x38 cap 1, Magic +0x39 cap 5, Hit +0x3A cap 3, Evade +0x3B cap 4, M.Def +0x3C cap 6 (kStatCap,
+// by offset - 0x36). FF:CF33 = 63 10 63 63 63 63 63 63: Speed stars at 16, the rest and the level at 99.
 static const uint8_t kStatCap[7] = { 0, 2, 1, 5, 3, 4, 6 };
 static void mStatCap(const CtMenuHost* h, uint8_t* fb, int v, int cap, int xRight, int y) {
   int lim = (h->rom && h->romLen > 0x3FCF33L + 8) ? CtRomByte(h->rom, 0x400000L, (long)(0x3FCF33L + (cap & 7))) : 0x100;
   if (v >= lim) { mCodeAt(h, fb, 0x2F, xRight - 16, y); mCodeAt(h, fb, 0x2F, xRight - 8, y); }   // 2F0FA-2F107
   else mNumR(h, fb, v, xRight, y);
 }
-// Right-aligned decimal (the oracle panels right-align every number field).
+// Right-aligned decimal (every number field in the panels is right-aligned).
 static void mNumR(const CtMenuHost* h, uint8_t* fb, int v, int xRight, int y) {
   if (y < mClipTop || y >= mClipBot) return;           // whole row outside the box window -> clip
   char b[12]; int n = 0;
@@ -644,11 +586,9 @@ static void mNumR(const CtMenuHost* h, uint8_t* fb, int v, int xRight, int y) {
 }
 
 // ------------------------------------------------------------------- compose
-// Layout constants re-measured off the CORRECT oracle main screen (opt0 ribbon, saves/menu_open_gato2,
-// with the fb decode fixed): the left column is three 12-tile (96px) panels each 6 tiles (48px) tall
-// stacked from tile row 2 (y16 in the 240-fb = y8 in our 224 render), then the TIME/G box at tile rows
-// 20-25 (y152 ours). Panel text rows sit at box+8/+16/+24 (name / HP / MP, 8px pitch). The old 56px
-// pitch pushed Marle's MP row under the ribbon box.
+// Layout of the main screen (opt0 ribbon): the left column is three 12-tile (96 px) panels, each 6 tiles (48 px)
+// tall, stacked from tile row 2 (y8 in the 224-line frame), then the TIME/G box at tile rows 20-25 (y152). Panel
+// text rows sit at box+8/+16/+24 (name / HP / MP).
 #define MP_X   16                                    /* panel column: tile col 2 = x16 */
 #define MP_W   96                                    /* 12 tiles */
 #define MP_H   48                                    /* 6 tiles */
@@ -658,10 +598,10 @@ static void mNumR(const CtMenuHost* h, uint8_t* fb, int v, int xRight, int y) {
 #define MT_W   96
 #define MT_H   48
 
-// ---------------------------------------------------------------- ribbon (PHASE 2A)
-// The 6-icon command row + selection marker. All positions/tiles are the LITERAL oracle OAM (verified
-// this pass: mribbon.raw.oam == slots0-5 X=80+i*16,Y=112 pal0 size1; selected slot tile=base+0x20;
-// arrows slots6/7 tile 0x22 pal7 X=81+opt*16 Y=96 vflip/Y=128) — menu_phase2.md §3(A)(B).
+// ---------------------------------------------------------------- ribbon
+// The six-icon command row and its selection marker, at the ROM's OAM: icons in slots 0-5 at X = 80+i*16, Y = 112,
+// pal0, size 1, the selected one tile base+0x20; the arrows in slots 6/7, tile 0x22 pal7, X = 81+opt*16, Y = 96
+// (vflip) / 128 (menu_phase2.md sec. 3(A)(B)).
 #define RIB_X0    80                                  // first icon screen X (16px pitch: 80/96/.../160)
 #define RIB_Y    112                                  // icon row screen Y (all six)
 #define RIB_PITCH 16
@@ -675,8 +615,8 @@ static void mBlitIcon(uint8_t* fb, const uint8_t* rgba, int x0, int y0) {   // 1
         memcpy(fb + ((size_t)dy * MW + dx) * 3, p, 3);
     }
 }
-// The ribbon selection arrow (name-cursor triangle asset $FF/9D70): [w u8][h u8]+RGBA, `vflip` for the
-// upper ▼. Same one-tile-two-flips trick the OAM uses (slot7 vflip=1 above, slot6 vflip=0 below).
+// The ribbon selection arrow (name-cursor triangle asset $FF/9D70): [w u8][h u8]+RGBA, `vflip` for the upper arrow
+// (one tile, two flips, as the OAM: slot 7 vflip=1 above, slot 6 vflip=0 below).
 static void mBlitTri(uint8_t* fb, const uint8_t* spr, int x0, int y0, int vflip) {
   if (!spr) return;
   int w = spr[0], hh = spr[1]; const uint8_t* px = spr + 2;
@@ -688,66 +628,58 @@ static void mBlitTri(uint8_t* fb, const uint8_t* spr, int x0, int y0, int vflip)
         memcpy(fb + ((size_t)dy * MW + dx) * 3, p, 3);
     }
 }
-// Draw the ribbon OVER the byte-exact chrome: the ribbon BOX is now the real $3A4-$3AC dark-blue BG2
-// tileset (drawn by CtMenuChrome mode 1, redrawn on top of the preview content), so this only lays the
-// 6 command icons (selected slot uses the +0x20 highlight variant) + the two straddling arrows.
+// Draw the ribbon over the chrome: the box is the BG2 tiles $3A4-$3AC (CtMenuChrome mode 1, redrawn over the
+// preview content); this lays the six command icons (the selected one the +0x20 variant) and the two arrows.
 static void mDrawRibbon(const CtMenuHost* h, uint8_t* fb, int menuOpt) {
   if (menuOpt < 0) menuOpt = 0; else if (menuOpt >= RIB_N) menuOpt = RIB_N - 1;
-  CtMenuChrome(fb, 0, menuOpt, 1);                   // the real dark-blue ribbon box, on top of content
+  CtMenuChrome(fb, 0, menuOpt, 1);                   // the ribbon box, on top of content
   // (A) the six command icons (selected = highlight tile base+0x20 = ctMenuIconSel[i]).
   for (int i = 0; i < RIB_N; i++)
     mBlitIcon(fb, (i == menuOpt ? ctMenuIconSel[i] : ctMenuIconBase[i]), RIB_X0 + i * RIB_PITCH, RIB_Y);
-  // (B) the two cursor arrows straddling the selected icon = the oracle OBJ sprite tile 0x22 (16x16,
-  // menu_arrow.h), at the LITERAL OAM positions: both X = 81 + opt*16; the lower ▲ at Y=128 (as-is), the
-  // upper ▼ at Y=96 (vertically flipped). The ▲ sits in rows 1-12 of its 16x16 cell, so the tip lands 1px
-  // off the icon -- close, as the ROM draws it (the old name-cursor triangle was the wrong graphic + too far).
+  // (B) the two arrows around the selected icon: OBJ tile 0x22 (16x16, menu_arrow.h), both at X = 81 + opt*16; the
+  // lower one at Y = 128 as is, the upper one at Y = 96 flipped. The arrow sits in rows 1-12 of its cell, so the tip
+  // lands 1 px off the icon.
   {
     int ax = RIB_X0 + 1 + menuOpt * RIB_PITCH;                   // OAM X = 81 + opt*16
     for (int j = 0; j < 16; j++)
       for (int i = 0; i < 16; i++) {
-        const uint8_t* pt = ctMenuArrow + ((size_t)j * 16 + i) * 4;         // ▼ top (v-flip): read row 15-j
+        const uint8_t* pt = ctMenuArrow + ((size_t)j * 16 + i) * 4;         // top arrow (v-flip): read row 15-j
         const uint8_t* pf = ctMenuArrow + ((size_t)(15 - j) * 16 + i) * 4;
         int dx = ax + i;
         if (dx < 0 || dx >= MW) continue;
-        if (pf[3]) { int dy = 96 + j; if (dy >= 0 && dy < MH) memcpy(fb + ((size_t)dy * MW + dx) * 3, pf, 3); }  // ▼ @Y96 flipped
-        if (pt[3]) { int dy = 128 + j; if (dy >= 0 && dy < MH) memcpy(fb + ((size_t)dy * MW + dx) * 3, pt, 3); } // ▲ @Y128
+        if (pf[3]) { int dy = 96 + j; if (dy >= 0 && dy < MH) memcpy(fb + ((size_t)dy * MW + dx) * 3, pf, 3); }  // down arrow @Y96 flipped
+        if (pt[3]) { int dy = 128 + j; if (dy >= 0 && dy < MH) memcpy(fb + ((size_t)dy * MW + dx) * 3, pt, 3); } // up arrow @Y128
       }
   }
   (void)mBlitTri;
 }
 
-// ---------------------------------------------------------- ITEM screen (PHASE 3 part 1)
-// The item-name table: ROM $CC/0B5E (HiROM file offset 0x0C0B5E), FIXED 11-byte records,
-// name(id) = decode(CtRomByte(rom, 0x400000L, (long)(0x0C0B5E + id*11 .. +11))). Base+stride derived + ROM-verified via
-// assets/text.py item_names() (base 0xC0B5E, 11-byte stride): id 189=Tonic, 200=Shelter,
-// 214(0xD6)=Pendant — all three round-trip byte-for-byte. The records use CT's "mapped" text
-// encoding (assets/text.py _font8): 0xA0-0xB9='A'-'Z', 0xBA-0xD3='a'-'z', 0xD4-0xDD='0'-'9',
-// 0xE7='\'' 0xE8='.', 0xEF & 0xFF = space, 0x20-0x2F = an equip type icon (no menu-font glyph ->
-// rendered as a space). Records are space-padded (no explicit terminator: a consumable's leading
-// byte is 0xFF and the tail is 0xEF), so decode all 11 then strip leading+trailing spaces.
-#define ROM_ITEM_NAMES 0x0C0B5Eu   /* SNES $CC/0B5E — item-name table base. ROM-CODE-DERIVED
-                                      (menu_open_items.md 2): the pointer-table builder C2/98ED
-                                      ($7E7D00[id] = 0x0B5E + id*11, `ADC #$000B` / `CPY #$01E4`
-                                      = 0xF2 entries) + the fetch C2/F2E2 (`LDA #$CC0B` = bank
-                                      $CC, 11-byte record). ONE uniform table, key items included
-                                      -- the old "packed variable-length from ~$CC/1486" was a
-                                      text search landing 1 byte into record 213. */
-#define ROM_ITEM_STRIDE 11         /* fixed record width (shared by items AND techs) */
-// TECH tables (SCREEN 3, pinned this pass from the ROM tech-menu builders — see CtMenuRenderTech):
-#define ROM_TECH_NAMES  0x0C15C4u  /* SNES $CC/15C4 — single-tech NAME table; name = base + techId*11
-                                      (techId 1=Cyclone..8=Luminaire), the SAME mapped table the item
-                                      names continue (0xC0B5E + 242*11 == 0xC15C4). C2/BDD9 LDA #15C4. */
-#define ROM_TECH_MP     0x0C253Bu  /* SNES $CC/253B — tech MP cost, 1 byte/techId. C2/BC22 LDA $CC253B,X.
+// ---------------------------------------------------------- Item screen
+// The item-name table: ROM $CC/0B5E (file offset 0x0C0B5E), fixed 11-byte records, name(id) = the 11 bytes at
+// 0x0C0B5E + id*11. CT encoding (assets/text.py _font8): 0xA0-0xB9 'A'-'Z', 0xBA-0xD3 'a'-'z', 0xD4-0xDD '0'-'9',
+// 0xE7 '\'', 0xE8 '.', 0xEF and 0xFF space, 0x20-0x2F an equip-type icon (no menu-font glyph -> a space). Records are
+// space-padded with no terminator (a consumable's leading byte is 0xFF, the tail 0xEF), so all 11 are decoded and
+// leading and trailing spaces stripped.
+#define ROM_ITEM_NAMES 0x0C0B5Eu   /* SNES $CC/0B5E, the item-name table (menu_open_items.md 2): the pointer-table
+                                      builder C2/98ED ($7E7D00[id] = 0x0B5E + id*11, `ADC #$000B` / `CPY #$01E4`
+                                      = 0xF2 entries) and the fetch C2/F2E2 (`LDA #$CC0B` = bank $CC, 11-byte
+                                      record). One uniform table, key items included. */
+#define ROM_ITEM_STRIDE 11         /* fixed record width (items and techs) */
+// Tech tables (screen 3, see CtMenuRenderTech):
+#define ROM_TECH_NAMES  0x0C15C4u  /* SNES $CC/15C4, the single-tech name table; name = base + techId*11
+                                      (1 = Cyclone .. 8 = Luminaire), the item table continued
+                                      (0xC0B5E + 242*11 == 0xC15C4). C2/BDD9 LDA #15C4. */
+#define ROM_TECH_MP     0x0C253Bu  /* SNES $CC/253B, tech MP cost, 1 byte per techId. C2/BC22 LDA $CC253B,X.
                                       ids 1..8 = 2,2,2,4,8,10,12,20. */
-#define ROM_TECH_RANGE  0x02BD40u  /* SNES $C2/BD40 — per-char cumulative tech-id boundary (C2/BD11/BD17
-                                      builder): char X's single techs = ids [tbl[X], tbl[X+1]).
-                                      = 01,09,11,19,21,29,31,39 (Crono id0 -> ids 1..8). */
-#define ROM_TECH_MAXCNT 0x03FF951u /* SNES $FF/F951 — per-char single-tech "add" threshold (FF/F893). */
+#define ROM_TECH_RANGE  0x02BD40u  /* SNES $C2/BD40, per-char cumulative tech-id boundary (C2/BD11/BD17):
+                                      char X's single techs = ids [tbl[X], tbl[X+1]) =
+                                      01,09,11,19,21,29,31,39 (Crono id0 -> ids 1..8). */
+#define ROM_TECH_MAXCNT 0x03FF951u /* SNES $FF/F951, per-char single-tech "add" threshold (FF/F893). */
 
-// Decode one CT "mapped" fixed-width (11-byte) name record at file offset `off` into `out` (see the
-// item-table comment for the encoding). Records are space-padded, so strip leading + trailing spaces.
+// Decode one fixed-width (11-byte) CT name record at file offset `off` into `out` (encoding: see the item table
+// above), stripping leading and trailing spaces.
 static int mMapName(const uint8_t* rom, long romLen, size_t off, char* out, int cap) {
-  (void)rom; (void)romLen;                          // ROM-free: name bytes come from the baked ctRomCC
+  (void)rom; (void)romLen;                          // the name bytes come from the baked ctRomCC
   if (out && cap > 0) out[0] = 0;
   if (cap < 2) return 0;
   char tmp[ROM_ITEM_STRIDE + 1]; int n = 0;
@@ -758,11 +690,11 @@ static int mMapName(const uint8_t* rom, long romLen, size_t off, char* out, int 
     else if (c >= 0xD4 && c <= 0xDD) ch = (char)('0' + c - 0xD4);
     else if (c == 0xE7)              ch = '\'';
     else if (c == 0xE8)              ch = '.';
-    else                             ch = ' ';   // 0xEF/0xFF pad, 0x20-0x2F (equip/STAR icon), unmapped
+    else                             ch = ' ';   // 0xEF/0xFF pad, 0x20-0x2F (equip/star icon), unmapped
     tmp[n++] = ch;
   }
   tmp[n] = 0;
-  int s = 0; while (tmp[s] == ' ') s++;           // strip leading (0xFF lead byte / 0x2F STAR icon -> space)
+  int s = 0; while (tmp[s] == ' ') s++;           // strip leading (0xFF lead byte / 0x2F star icon -> space)
   int e = n; while (e > s && tmp[e - 1] == ' ') e--;   // strip trailing 0xEF padding
   int w = 0; for (int i = s; i < e && w < cap - 1; i++) out[w++] = tmp[i];
   out[w] = 0;
@@ -775,11 +707,10 @@ int CtMenuItemName(const uint8_t* rom, long romLen, int id, char* out, int cap) 
   return mMapName(rom, romLen, ROM_ITEM_NAMES + (size_t)id * ROM_ITEM_STRIDE, out, cap);
 }
 
-// The item CATEGORY label (WEAPON/HELMET/ARMOR/ACCESSORY/ITEM) shown after the count on each item row.
-// ROM pointer table $FF/B310 + id*2 (file 0x3FB310) -> a NUL-terminated CT-mapped string in bank $FF
-// (file 0x3F0000 + ptr). Derived from the ROM table (id 0xD6 Pendant -> "ITEM"); not a hardcoded range.
+// The item category label (WEAPON/HELMET/ARMOR/ACCESSORY/ITEM) shown after the count on each item row: the pointer
+// table $FF/B310 + id*2 (file 0x3FB310) -> a NUL-terminated CT string in bank $FF (file 0x3F0000 + ptr).
 static int mCatName(const uint8_t* rom, long romLen, int id, char* out, int cap) {
-  (void)rom; (void)romLen;                          // ROM-free: resolved at build into ctItemCat (menu_romdata.h)
+  (void)rom; (void)romLen;                          // resolved at build time into ctItemCat (menu_romdata.h)
   if (out && cap > 0) out[0] = 0;
   if (cap < 2 || id < 0 || id > 255) return 0;
   const char* s = ctItemCat[id]; int w = 0;
@@ -788,45 +719,39 @@ static int mCatName(const uint8_t* rom, long romLen, int id, char* out, int cap)
   return w;
 }
 
-// SCREEN 3: decode single-tech `techId`'s name from ROM $CC/15C4 + techId*11 (techId 1=Cyclone). The
-// elemental techs carry a leading 0x2F "STAR" icon byte the decoder folds to a space (then stripped).
+// Screen 3: decode single tech `techId`'s name from ROM $CC/15C4 + techId*11 (1 = Cyclone). The elemental techs
+// carry a leading 0x2F star icon that the decoder folds to a space (then stripped).
 int CtMenuTechName(const uint8_t* rom, long romLen, int techId, char* out, int cap) {
   if (out && cap > 0) out[0] = 0;
   if (techId < 0 || techId > 0xFF) return 0;
   return mMapName(rom, romLen, ROM_TECH_NAMES + (size_t)techId * ROM_ITEM_STRIDE, out, cap);
 }
 
-// Layout measured off the oracle Item capture (menu_open_gato2 + Right + A): a full-width HEADER
-// window across the top ([ITEM icon] then "Use/Move"), then a tall LIST window with one row per
-// held item. Positions are layout-faithful (chrome/font are the port's reused assets, not the
-// ROM menu's own tiles — same "not pixel-pinned" standard as the main screen above).
+// The Item screen's layout: a full-width header window across the top ([Item icon] then "Use/Move"), then a tall
+// list window with one row per held item.
 #define MI_HX  8
 #define MI_HY  8
 #define MI_HW  240
 #define MI_HH  32
 #define MI_LY  72                                  /* item-list window top = BG2 tile row 10 (y72) */
-#define MI_ROW0 (MI_LY + 16)                       /* first item baseline y88 (oracle-measured; +4 vs the old 84) */
-#define MI_ROWH 12                                 /* row pitch = ROM nav-graph list pitch (Y=87+12*row), NOT 16 */
+#define MI_ROW0 (MI_LY + 16)                       /* first item baseline y88 */
+#define MI_ROWH 12                                 /* row pitch = the nav graph's list pitch (Y = 87 + 12*row) */
 
-// The item LIST is DIRECT-INDEXED (ROM C2/AE43): visible row r = inventory slot ($0416 scroll + r), for
-// 10 rows, and an empty slot (id 0) draws a BLANK row (C2/B04B `BEQ` blank path) -- the list is NOT
-// compacted, so a used-up item leaves a gap until Organize. Returns the extent = 1 + highest non-empty
-// slot (so the cursor clamps to the last real item), ids[]/cnts[] are the raw $2400/$2500 slots.
-// ⭐ THE ITEM SCREEN'S CURSOR GRAPH, not arithmetic. The ROM copies FF/B53E -> $7E:9380 when the
-// screen is built (the slot the Config screen fills from FF/B5A0) and C2/E964 `LDA $9380,X / STA
-// $0770` places the hand sprite at record[cell]'s first TWO bytes. Verified on the oracle's own Item
-// capture: its live $7E:9380 is byte-identical to FF/B53E for all 15 records, and its cursor OAM
-// $0770 = (0x18, 0x57) = record 0. The hand's INK starts +3 inside the sprite, so record 0 (24, 87)
-// inks at our y90 -- MEASURED, oracle ink y90..98 -- which is where the hand-rolled `MI_ROW0 + row*
-// MI_ROWH - 2` put it ONE ROW HIGH (ours inked y89..97: identical shape, identical x, off by one).
+// The item list is direct-indexed (C2/AE43): visible row r = inventory slot ($0416 scroll + r) for 10 rows, and an
+// empty slot (id 0) draws a blank row (C2/B04B `BEQ`), so a used-up item leaves a gap until Organize. Returns the
+// extent = 1 + the highest non-empty slot (the cursor clamps to the last real item); ids[]/cnts[] are the raw
+// $2400/$2500 slots.
+// The Item screen's cursor graph: the build copies FF/B53E -> $7E:9380 (the Config screen fills the same place from
+// FF/B5A0), and C2/E964 `LDA $9380,X / STA $0770` places the hand sprite at record[cell]'s first two bytes. The
+// hand's ink starts 3 px inside the sprite, so record 0 (24, 87) inks at y90.
 #define ROM_ITEM_NAV 0x3FB53Eu                              /* FF/B53E -> $7E:9380 (menu_romdata.h) */
 #define MI_NAVX(c)  mnuRom((long)ROM_ITEM_NAV + (long)(c) * 6)
 #define MI_NAVY(c)  mnuRom((long)ROM_ITEM_NAV + (long)(c) * 6 + 1)
 #define MI_ROWS 10                                          /* visible list rows (window $0DDB=0..$0DDC=9) */
-// THE ONE-ROW SLIDE's picture, one for every list (C2/EB9B + C2/EB1F; menu2_equip_change.md section 11): the list is a
-// layer of 16-px slots shown 12 lines of each per 12-line band of an HDMA V-scroll table, and each step moves every band
-// $0DAB lines, so its rows -- the incoming one in its extra slot included -- slide as ONE strip, cut to the list's own
-// band lines. The rows are drawn apart here at their static places and shown shifted: fb(y) = strip(y + o).
+// The one-row slide, shared by every list (C2/EB9B + C2/EB1F; menu2_equip_change.md sec. 11): the list is a layer of
+// 16 px slots shown 12 lines each per 12-line band of an HDMA V-scroll table, and each step moves every band $0DAB
+// lines, so the rows (the incoming one in its extra slot too) slide as one strip, cut to the list's band lines. The
+// rows are drawn at their static places and shown shifted: fb(y) = strip(y + o).
 static uint8_t mListStrip[MH * MW * 3];
 static void mListStripClear(void) {                 // (1,2,3) cannot be a PPU colour: (v<<3)|(v>>2) is 0 or >= 8
   for (int i = 0; i < MH * MW; i++) { mListStrip[i * 3] = 1; mListStrip[i * 3 + 1] = 2; mListStrip[i * 3 + 2] = 3; }
@@ -843,14 +768,14 @@ static void mListStripBlit(uint8_t* fb, int y0, int y1, int o) {
   }
 }
 static void mCharPanel(const CtMenuHost* h, uint8_t* fb, int x, int y, const CtMenuPanel* p, int textInset, int dim);
-static void mHandCursor(const CtMenuHost* h, uint8_t* fb, int x, int y);   // (defined below; used by the Use overlay)
-static void mGlyph(const CtMenuHost* h, uint8_t* fb, int code, int x, int y);  // (defined below)
+static void mHandCursor(const CtMenuHost* h, uint8_t* fb, int x, int y);
+static void mGlyph(const CtMenuHost* h, uint8_t* fb, int code, int x, int y);
 static void mBlitSprAnchored(uint8_t* fb, const uint8_t* blob, int cx, int feetY, int dim);
-static const uint8_t* mPartyBlob(const CtMenuHost* h, int charId);         // (both defined below)
-static void mBlitPartySpr(const CtMenuHost* h, uint8_t* fb, int charId, int cx, int feetY, int dim);  // (below: the blob at its ANIMATION pose, canvas-anchored)
+static const uint8_t* mPartyBlob(const CtMenuHost* h, int charId);
+static void mBlitPartySpr(const CtMenuHost* h, uint8_t* fb, int charId, int cx, int feetY, int dim);  // the blob at its animation pose, canvas-anchored
 static void mBlitIndexed(uint8_t* fb, const uint8_t* idx, int w, int hh, int x0, int y0, const uint32_t* pal);
-static const uint32_t* mDimPal(const uint32_t* pal);      // (both defined below; used by the target-select 4th row)
-static const uint8_t gen_opt0_icon_def[8 * 8];            // (defined below; the shield/DEF icon)
+static const uint32_t* mDimPal(const uint32_t* pal);
+static const uint8_t gen_opt0_icon_def[8 * 8];            // the shield/DEF icon
 static int mInventoryRaw(const uint8_t* mem, int* ids, int* cnts, int cap) {
   int extent = 0;
   for (int i = 0; i < cap && i < 0xF2; i++) {
@@ -861,26 +786,14 @@ static int mInventoryRaw(const uint8_t* mem, int* ids, int* cnts, int cap) {
   return extent;
 }
 
-// The item DESCRIPTION shown in the 2nd box. ⭐ THE ROM STORES IT; it does not build it.
-// C2/F2F3, the description stager, is unambiguous:
+// The item description shown in the second box is stored in the ROM. C2/F2F3, the description stager:
 //    2F308 STA $020C                      the item id
 //    2F317 LDX #2EB1 / STX $020D
 //    2F31D LDA #CC   / STA $020F          -> the 24-bit source $CC:2EB1
 //    2F32D JSR C2/FA49                    -> render
-// so $CC:2EB1 is a table of 16-bit local pointers into bank $CC indexed by item id, and
-// src/data/menu_desc.h is that table decoded (tools/_gen_menudesc.py).
-//
-// ⚠ THIS USED TO BE GENERATED, and its own comment named the wrong routine: it claimed C2/B0AB
-// builds the string, but C2/B0AB reads the item RECORD ($CC:0000 stride 11, $CC:1BB5) -- it stages
-// the EFFECT, not the text. What the generator produced was fabricated wherever the two disagree,
-// and they disagree a lot: the ROM's tabs are `"Power" +1` WITH quotes, its stat words are
-// Vigor/Strike/Magic/Speed (not Power/Stamina/Hit/M.Def), its amounts are +1 AND +2, and it has
-// whole lines the generator had no kind for at all -- "Restores Status", "Revives an ally",
-// "Recovers HP/MP at Save Pts.", `Recovers from "?"`, "Cuts magic hits by 1/3".
-//
-// An EMPTY entry is the ROM's ANSWER, not a gap: 137 of the 242 ids describe nothing, which is why
-// the Pendant's box is blank. So no field-usable test is needed here -- the table already says so.
-// Returns 1 if a description was written.
+// so $CC:2EB1 is a table of 16-bit pointers into bank $CC indexed by item id; src/data/menu_desc.h is that table
+// decoded (tools/_gen_menudesc.py). An empty entry means the item has no description (137 of the 242 ids, e.g.
+// the Pendant). disasm/notes/menu_item_descriptions.md. Returns 1 if a description was written.
 static int mItemDesc(int id, char* out, int cap) {
   if (out && cap) out[0] = 0;
   if (!out || cap <= 0 || id < 0 || id >= (int)(sizeof ctItemDesc / sizeof ctItemDesc[0])) return 0;
@@ -899,8 +812,8 @@ int CtMenuStrLen(int kind, int id) {
   if (kind == 1) return (id >= 0 && id < (int)(sizeof ctTechDesc / sizeof ctTechDesc[0])) ? (int)strlen(ctTechDesc[id]) : 0;
   return CtMenuItemDescLen(id);
 }
-// Alpha-blit an RGBA bitmap flipped VERTICALLY (for the scrollbar UP arrow = the down-arrow tile V-flipped,
-// ROM attr 0x30 vs 0xB0). Same format as mBlitRGBA.
+// Alpha-blit an RGBA bitmap flipped vertically (the scrollbar's up arrow = the down-arrow tile V-flipped, ROM attr
+// 0x30 vs 0xB0). Same format as mBlitRGBA.
 static void mBlitRGBAFlipV(uint8_t* fb, const unsigned char* rgba, int w, int hh, int x0, int y0) {
   for (int j = 0; j < hh; j++)
     for (int i = 0; i < w; i++) {
@@ -910,57 +823,52 @@ static void mBlitRGBAFlipV(uint8_t* fb, const unsigned char* rgba, int w, int hh
     }
 }
 
-// Item screen (ITEM, C2/AA34). `cell` = the ROM's unified cursor $0054: list rows 0x00-0x09 (window-
-// relative), "Use/Move" label = 0x0A, "Organize" = 0x0B, target party members = 0x0C..0x0E. `scroll` =
-// $0416 (top slot). `pickedSlot` = $0F00 abs slot lifted for Move (-1 = none). `targetMode` = the Use
-// target-select overlay is up ($0D13 bit2). `partyN` = active party size ($0073). `pinnedBlinkOn` = this
-// frame's phase of the picked-item hand's 4-on/4-off blink (ROM $0DA0 bit0; ignored if pickedSlot < 0).
-// one list row (C2/AE65): slot `slot`'s icon, name, ":" count and category at text line y -- empty slots draw nothing
+// One list row (C2/AE65): slot `slot`'s icon, name, ":" count and category at text line y; empty slots draw nothing.
 static void mItemRow(const CtMenuHost* h, uint8_t* fb, const int* ids, const int* cnts, int slot, int y) {
   if (slot < 0 || slot >= 0xF2) return;
   int id = ids[slot];
   if (id == 0) return;                                    // empty slot -> blank row (C2/B04B BEQ)
   char nm[16];
-  CtMenuItemName(h->rom, h->romLen, id, nm, sizeof nm);   // a blank record (ids 1B-1D ..) draws no name: MEASURED,
-                                                          //   itemscroll -- the port printed "Item 1B" there
-  // FIELD-USABLE items (Tonic, ...) render YELLOW; the rest white (ROM: $7700[id]&0x02 -> BG palette #2,
-  // C2/AE83). Only the item entry (name) is coloured -- the ":" separator and count stay white.
+  CtMenuItemName(h->rom, h->romLen, id, nm, sizeof nm);   // a blank record (ids 1B-1D ..) draws no name
+  // Field-usable items (Tonic, ...) draw yellow, the rest white ($7700[id] & 0x02 -> BG palette 2, C2/AE83). Only
+  // the name is coloured; the ":" and the count stay white.
   mDim = CtMenuItemUsable(id) ? 3 : 0;
-  if (h->rom && h->romLen > 0x0C0B5EL + 11L * id)         // C2/B05A-B061: the WHOLE 11-byte record $CC:0B5E + 11 id
-    mCodeAt(h, fb, CtRomByte(h->rom, 0x400000L, (long)(0x0C0B5EL + 11L * id)), 40, y);  //   from x40 in the row's attr -- byte 0 = the type icon
+  if (h->rom && h->romLen > 0x0C0B5EL + 11L * id)         // C2/B05A-B061: the whole 11-byte record $CC:0B5E + 11 id
+    mCodeAt(h, fb, CtRomByte(h->rom, 0x400000L, (long)(0x0C0B5EL + 11L * id)), 40, y);  //   from x40 in the row's attr; byte 0 = the type icon
                                                           //   (a weapon's sword 0x20 ..; FF = a blank tile)
   mText(h, fb, nm, 48, y);                                // name at x48 (yellow if usable)
   mDim = 0;
-  if (h->drawGlyph) h->drawGlyph(fb, 0x2D, 128, y);       // ": count CATEGORY" -- under target-select the overlay
+  if (h->drawGlyph) h->drawGlyph(fb, 0x2D, 128, y);       // ": count CATEGORY"; under target select the overlay
   mNumR(h, fb, cnts[slot], 152, y);                       //   covers these columns (CtMenuRenderItemOverlay); on
   char cat[16];                                           //   C2/AF42's two build frames they are still on screen
   if (mCatName(h->rom, h->romLen, id, cat, sizeof cat)) mText(h, fb, cat, 160, y);  // category at x160
 }
 #define MI_BAND0 84                                        /* the list's first band line (channel 3, BG1 V: 40 + 44) */
-#define MI_LISTTOP 88   /* ...but BG1 is on from line 88 only: channel 4's TM table ($212C) is 12 (BG2 + OBJ) on lines
-                          72-87 and 13 on 88-207 -- MEASURED (ct.exe --hdma, itemscroll): the slide's first rows cut there */
+#define MI_LISTTOP 88   /* but BG1 is on from line 88 only: channel 4's TM table ($212C) is 12 (BG2 + OBJ) on lines
+                          72-87 and 13 on 88-207, so the slide's first rows cut there */
+// The Item screen (C2/AA34); the parameters are described in menu.h.
 void CtMenuRenderItem(const CtMenuHost* h, uint8_t* fb, int cell, int scroll,
                       int pickedSlot, int targetMode, int partyN, int pinnedBlinkOn, int barBlinkOn,
                       int descId, int descN, int slideO) {
   if (!h || !fb) return;
-  /* background = the byte-exact BG2 chrome, laid by the caller (CtMenuChrome) */
-  // header window (BG2 chrome): the ITEM ribbon icon + the two action labels -- "Use/Move" (the list/move
-  // context) and "Organize" (the sort). The one the cursor sits on (or its active context) is bright.
+  // the background (the BG2 chrome) is laid by the caller (CtMenuChrome)
+  // The header window: the Item ribbon icon and the two action labels, "Use/Move" (the list/move context) and
+  // "Organize" (the sort). Both labels stay white; the hand marks the selected one.
   int onLabels = (cell == 0x0A || cell == 0x0B);
-  mBlitIcon(fb, ctMenuIconSel[1], MI_HX + 16, MI_HY + 16);  // the SELECTED (orange) Item icon; oracle orange @our(24,24)
-  mText(h, fb, "Use/Move", MI_HX + 48, MI_HY + 24);        // BOTH labels always white (oracle) -- the ☞ hand,
-  mText(h, fb, "Organize", MI_HX + 144, MI_HY + 24);       //   not a dim, marks which one is selected (labels row)
-  if (onLabels && mNavHandOk)                              // ☞ hand on the selected label (labels row, C2/AA4A): the
-    mBlitRGBA(fb, itemCursorRGBA, ITEMCURSOR_W, ITEMCURSOR_H,  // nav graph FF/B53E's own record, like the list rows'
-              MI_NAVX(cell), MI_NAVY(cell));                // (0x0A = (40,31), 0x0B = (136,31); MEASURED OAM $0770 40,31)
+  mBlitIcon(fb, ctMenuIconSel[1], MI_HX + 16, MI_HY + 16);  // the selected (orange) Item icon at (24,24)
+  mText(h, fb, "Use/Move", MI_HX + 48, MI_HY + 24);
+  mText(h, fb, "Organize", MI_HX + 144, MI_HY + 24);
+  if (onLabels && mNavHandOk)                              // the hand on the selected label (C2/AA4A), from nav
+    mBlitRGBA(fb, itemCursorRGBA, ITEMCURSOR_W, ITEMCURSOR_H,  // graph FF/B53E's record like the list rows
+              MI_NAVX(cell), MI_NAVY(cell));                // (0x0A = (40,31), 0x0B = (136,31))
 
-  // the DESCRIPTION box (2nd box): C2/F2F3's line -- item `descId` ($0D77), the first `descN` characters C2/FA49's
-  // string task has typed (one a frame from the C2/F2F3 frame on; the caller runs the task)
+  // The description box: C2/F2F3's line -- item `descId` ($0D77), the first `descN` characters C2/FA49's string
+  // task has typed (one a frame from the C2/F2F3 frame on; the caller runs the task).
   { char desc[48];                        // >= the ROM table's longest line (35 chars + NUL)
     if (descN > 0 && mItemDesc(descId, desc, sizeof desc)) {
       if (descN < (int)strlen(desc)) desc[descN] = 0;
-      if (h->vwfDraw) h->vwfDraw(fb, desc, 24, 60, ctLoaderVwfTone);   // C2/FA49 is a VWF render (the shop's too);
-                                                          // MEASURED: its glyphs on lines 60-67 (tour f455)
+      if (h->vwfDraw) h->vwfDraw(fb, desc, 24, 60, ctLoaderVwfTone);   // C2/FA49 is a VWF render (the shop's too),
+                                                          // lines 60-67
       else mText(h, fb, desc, 24, 60);
     } }
 
@@ -977,10 +885,9 @@ void CtMenuRenderItem(const CtMenuHost* h, uint8_t* fb, int cell, int scroll,
       mItemRow(h, fb, ids, cnts, scroll + r, y);
   }
   if (!targetMode) {
-    // Draw the PINNED hand FIRST, then the nav cursor ON TOP -- so the steady nav (fixed) hand has display
-    // priority over the blinking pinned hand when they land on the same row.
-    // the PINNED item's BLINKING hand (Move source $0F00 = a SEPARATE OAM sprite $0774, ROM C2/89FA): a
-    // second ☞ anchored to the picked row, blinking 4-on/4-off, offset (+2,-1) from the nav cursor.
+    // The pinned hand first, then the nav hand on top, so the steady nav hand wins when both land on the same row.
+    // The pinned item's blinking hand (the Move source $0F00, a separate OAM sprite $0774, C2/89FA): anchored to
+    // the picked row, 4 on / 4 off, offset (+2,-1) from the nav hand.
     if (pickedSlot >= 0 && pinnedBlinkOn) {
       int prow = pickedSlot - scroll;
       int dy = slideO ? (slideO > 0 ? 12 - slideO : -12 - slideO) : 0;   // $0D9E: +-12 less $0D22 a step (C2/ACD0)
@@ -988,57 +895,35 @@ void CtMenuRenderItem(const CtMenuHost* h, uint8_t* fb, int cell, int scroll,
         mBlitRGBA(fb, itemCursorRGBA, ITEMCURSOR_W, ITEMCURSOR_H,
                   MI_NAVX(prow) + 2, MI_NAVY(prow) - 1 + dy);
     }
-    // the steady nav cursor (☞) on the current list row: record[cell] of FF/B53E, verbatim.
+    // the steady nav hand on the current list row: record[cell] of FF/B53E.
     if (!onLabels && cell >= 0 && cell < MI_ROWS && mNavHandOk)
       mBlitRGBA(fb, itemCursorRGBA, ITEMCURSOR_W, ITEMCURSOR_H, MI_NAVX(cell), MI_NAVY(cell));
-    // THE SCROLLBAR (ROM C2/8BB8, task slot 4) is ONE widget of TWO sprites that MOVE -- the up- and
-    // down-triangle ARE the thumb. Both sit at the same X ($0D92 = 0xE8 = 232), 8 px apart in Y, and the
-    // pair's Y is an 8.8 fixed-point ramp: $0D93 + (($0D95 * $0D98.w) >> 8), where the Item screen's
-    // C2/ADD0 writes Ybase $0D93 = 0x50 and C2/EA81 derives the scroll max $0D94 = 0xE8 (242 slots minus
-    // the 10 visible) and the step $0D98 = 0x0072 (= 0x6800 / 0xE8, a 104-px track). The up arrow is
-    // suppressed iff the scroll is 0, the down arrow iff it is at the max -- so at the very top only the
-    // down triangle shows, and the pair slides down the track as the list scrolls. They blink TOGETHER,
-    // 8 frames on / 8 off ($0D96, a 3-bit down counter toggling $0D97 bit0) -- a different period from
-    // the pinned hand's 4/4, which is why this takes its own phase.
-    // ⭐ IT IS THE RIBBON'S OWN TILE, AND OAM Y IS OUR Y. Read straight off the oracle's OAM on its
-    // Item capture: slot 31 = (X 232, Y 88, tile 022, attr B0) -- a 16x16 OBJ, OBJ palette 0, VFLIP,
-    // with the up arrow parked at Y 224 because the scroll is 0. Tile 0x22 is the same graphic the
-    // ribbon cursor uses (menu_arrow.h, ROM FF/9D70): an UP triangle in rows 1..12, so the ROM's
-    // unflipped attr 30 is the up arrow and its vflipped B0 is the down one -- and OBJ pal 0 resolves
-    // to the same three inks pal 7 does (41,41,41 / 107,99,99 / 255,255,255; compare itemCursorPal's
-    // entries 13/14/15), which is why one baked bitmap serves both places.
-    // TWO DEFECTS THIS REPLACES: (1) the sprite was an 8x8 crop that cut the tile's DARK OUTLINE away
-    // -- the crop even kept the outline's colours but with alpha 0 -- so we drew a bare white
-    // triangle where the ROM draws an outlined one; (2) the placement subtracted 8 from the OAM Y,
-    // confusing the peek buffer's 8-line overscan HEAD (our y = buffer row - 8, i.e. our y already IS
-    // the scanline) with an OAM offset, and put the whole widget eleven rows high.
-    // ⭐ NOT ON THE RIBBON'S HOVER. The scrollbar is the Item SCREEN's own widget (C2/8BB8, task
-    // slot 4), and C2/8C0B parks BOTH sprites when $0D94 -- the scroll max -- is zero. On the
-    // oracle's opt-1 hover $0D92..$0D9A are ALL ZERO and its OAM carries only the six ribbon icons;
-    // on the entered screen the same bytes read E8 50 E8 00 06 01 72 and the down arrow is live.
-    // This engine does not stage $0D92..$0D9A, so `cell < 0` -- the preview marker the Item, Form
-    // and Save previews already use -- stands in for that gate, and it is stated rather than left
-    // to look like a rendering choice. We used to draw the arrow on the hover, always.
-    // (the seeds are C2/ADD0's: $0D92/93 = E8/50, C2/EA81 with 0x6800 over 242 - 10 -> $0D94 E8, $0D98 0072)
+    // The scrollbar (C2/8BB8, task slot 4): two sprites that move -- the up and down arrows are the thumb. Both sit
+    // at X $0D92 = 0xE8 (232), 8 px apart, and the pair's Y is an 8.8 ramp $0D93 + (($0D95 * $0D98.w) >> 8): C2/ADD0
+    // writes Ybase $0D93 = 0x50, and C2/EA81 derives the scroll max $0D94 = 0xE8 (242 slots - 10 visible) and the step
+    // $0D98 = 0x0072 (0x6800 / 0xE8, a 104 px track). The up arrow hides at scroll 0, the down arrow at the max. They
+    // blink together, 8 frames on / 8 off ($0D96 toggling $0D97 bit 0), apart from the pinned hand's 4/4. The tile is
+    // the ribbon arrow's (0x22, a 16x16 OBJ; attr 30 = up, B0 = down, vflipped), and OBJ pal 0 has pal 7's three inks.
+    // C2/8C0B parks both sprites when $0D94 is zero, as on the ribbon's hover; the port does not stage $0D92..$0D9A,
+    // so `cell < 0` (the preview marker) stands in for that gate. disasm/notes/menu2_item_rest.md.
     if (barBlinkOn && cell >= 0) CtMenuRenderScrollbar(h, fb);
   }
 
-  // ---- target-select (C2/B17F): the hand on the target's nav record (cells 0x0C-0x0E: (120, 99 + 40k)) from the A on
-  // (C2/B18B $54 := 0C) -- through C2/AF42's two build frames as well; the overlay itself is CtMenuRenderItemOverlay's.
+  // Target select (C2/B17F): the hand on the target's nav record (cells 0x0C-0x0E: (120, 99 + 40k)) from the A on
+  // (C2/B18B $54 := 0C), through C2/AF42's two build frames too; the overlay itself is CtMenuRenderItemOverlay's.
   if (targetMode && cell >= 0x0C && cell < 0x0C + 3 && mNavHandOk)
     mBlitRGBA(fb, itemCursorRGBA, ITEMCURSOR_W, ITEMCURSOR_H, MI_NAVX(cell), MI_NAVY(cell));
 }
 
-// ---- THE TARGET OVERLAY (C2/B17F -> C2/AF42) IS OFFSET-PER-TILE. C2/AFB5 writes BG3 buffer rows 0-1 from column 15 --
-// 0x6090 (H: BG1 and BG2 + 144) and 0x60AF (V: + 175) -- and FC37 uploads them to map rows 62-63, the rows BG3 V 496
-// (channel 5, FF/B8F4) fetches on the lines channel 2 (FF/BAD8) puts in mode 2: 80-207. So screen columns 16-28
-// (x 128..231) there show BG1/BG2 at (x + 144, y + 176): the window $FF:C0A6 built at (2,32) 14 x 16 (its cells are
-// menu_itemoverlay.h) and the three member panels C2/AFED writes into BG1 from row 30, five rows apart (the panel
-// string at (3,3): text x 136, name rows y 88 + 40k), all bright. Column 29 stays the list box's own border. The
-// party's sprites stand at C2:B045's words (centre E4, feet 78/A0/C8 -- the Form's convention, C2/CE6E). MEASURED on
-// the itemuse drive (tools/menu_audit_cmp.py): --hdma shows mode 2 and BG3 V 496 on lines 81-208 and TM 13; the OAM
-// has the sprites at those words and the hand at (120,99). `shown` = the HP/MP C2/AFED last drew (it redraws on the
-// build's second frame and in C2/B31C, not when C2/8E2D changes the sheet); `pop*` = C2/9016's digits (below).
+// ---- The target overlay (C2/B17F -> C2/AF42), offset-per-tile ----
+// C2/AFB5 writes BG3 buffer rows 0-1 from column 15 -- 0x6090 (H: BG1 and BG2 + 144) and 0x60AF (V: + 175) -- and FC37
+// uploads them to map rows 62-63, the rows BG3 V 496 (channel 5, FF/B8F4) fetches on the lines channel 2 (FF/BAD8)
+// puts in mode 2: 80-207. So screen columns 16-28 (x 128..231) there show BG1/BG2 at (x + 144, y + 176): the window
+// $FF:C0A6 built at (2,32) 14 x 16 (menu_itemoverlay.h) and the three member panels C2/AFED writes into BG1 from row
+// 30, five rows apart (text x 136, name rows y 88 + 40k), all bright. Column 29 stays the list box's border. The
+// party's sprites stand at C2:B045's words (centre E4, feet 78/A0/C8, the Form's convention, C2/CE6E). `shown` = the
+// HP/MP C2/AFED last drew (it redraws on the build's second frame and in C2/B31C, not when C2/8E2D changes the
+// sheet); `pop*` = C2/9016's digits (below). disasm/notes/menu2_item_rest.md.
 static void mItemPopDigits(const CtMenuHost* h, uint8_t* fb, int value, int positions, int cx, int y, long palOff);
 static void mPanelAtkDefOne(const CtMenuHost* h, uint8_t* fb, int textInset, int y, int charId, int dim);
 static void mItemOverlayWindow(const CtMenuHost* h, uint8_t* fb);
@@ -1082,13 +967,12 @@ void CtMenuRenderItemOverlay(const CtMenuHost* h, uint8_t* fb, int tgt, const ui
     mBlitPartySpr(h, fb, p.charId, (w >> 8) & 0xFF, w & 0xFF, 0);
   }
   if (multiBits >= 0) {
-    // AN ALL-PARTY ITEM: C2/8AD5's task (slot 6, in place of the pinned hand's) and no nav hand. Every frame C2/8AFD steps
-    // three 2-bit counters $0DA3 / $0DA4 / $0DA5 (seeded 3 / 1 / 2) and toggles bit k of $0DA0 (seeded 02) when counter k
-    // wraps; a hand (tile 20, attr 30) is drawn for each member whose bit is CLEAR, at its nav cell's x + 2 and the SAME y:
-    // C2/8B85 runs with A 16-bit, so its `LDA $9381,X / DEC A / XBA` is overwritten by the `LDA $9380,X` that follows (the
-    // pinned hand's C2/89FA, in 8-bit, does keep its y - 1). The nav hand ($0770) is still up on the task's first frame
-    // and gone after ($0D9B, above). MEASURED (menu_audit_cmp.py itemall, a Lapis; the oracle's OAM 28-31): f173
-    // 78 63 / 7A 63 / -- / 7A B3, then from f174 no nav hand and members 0 + 1 + 2, 0 + 1, 1, 1, none, 2, 0 + 2 ...
+    // An all-party item: C2/8AD5's task (slot 6, in place of the pinned hand's) and no nav hand. Every frame C2/8AFD
+    // steps three 2-bit counters $0DA3 / $0DA4 / $0DA5 (seeded 3 / 1 / 2) and toggles bit k of $0DA0 (seeded 02) when
+    // counter k wraps; a hand (tile 20, attr 30) is drawn for each member whose bit is clear, at its nav cell's x + 2
+    // and the same y: C2/8B85 runs with A 16-bit, so its `LDA $9381,X / DEC A / XBA` is overwritten by the following
+    // `LDA $9380,X` (the pinned hand's C2/89FA, in 8-bit, keeps its y - 1). The nav hand ($0770) is still up on the
+    // task's first frame and gone after ($0D9B, above).
     for (int k = 0; k < 3; k++) {
       CtMenuPanel p;
       if ((multiBits >> k) & 1) continue;
@@ -1109,18 +993,13 @@ void CtMenuRenderItemOverlay(const CtMenuHost* h, uint8_t* fb, int tgt, const ui
     }
   }
 }
-// THE EQUIPMENT INFO PANEL (Item substate 5: C2/AB2F -> C2/AE91 on A over a picked weapon / helm / armour / accessory).
-// C2/AE91 = C2/AFB5 (the overlay's window, mItemOverlayWindow) + C2/AEB6 + C2/AF0B + the list $FF:C0D5: base $3600, clear
-// 0x400 bytes, string $22 of $FF:C457 at (4, 2) with $88 = 80 (a line break = one row). String $22 (FF:C880): "Can be
-// used" / "by" + tile 2D; goto +0x188 (row 6, col 4) and `05 xxxx` the 6-byte names C2/AEB6 copied to $9890 -- two to a
-// row, FF between, up to seven; goto +0x318 (row 12, col 12) `03 4D 0D 21 7E` the value $7E:0D4D (fmt 21: three digits,
-// leading blanks); goto +0x308 (row 12, col 4) `04 90 99` the label C2/AF0B copied to $9990 from C2:AF3A[type] (C2/8881:
-// C2:88A8's thresholds 5A / 7B / 94 / BC -> weapon, helm, armour, accessory): "Attack" + 2D, "Defense" + 2D, "Defense" + 2D,
-// eleven blanks. C2/AEB6's names: $7A00[id] & $29AF (the roster), bit 7 = character 0, each from $2C23 + id * 6.
-// C2/AF0B's value: $7C00[id] (built for ids below 0x94 only: an accessory reads 0). The text layer is the window's, so a
-// map (col, row) shows at x = 8 col - 144, y = 8 row - 176 (mod 256) -- (4, 2) = (144, 96). MEASURED (iteminfo drive, an
-// Iron Blade): ink rows 96 / 104 / 128 / 176, first column 144, the value's last digit ending at x 230; `$7A00[02]` = 80,
-// `$29AF` = E8, `$7C00[02]` = 7 -> "Crono", "Attack: 7".
+// The equipment info panel (Item substate 5: C2/AB2F -> C2/AE91 on A over a picked weapon / helm / armour /
+// accessory). C2/AE91 = C2/AFB5 (the overlay's window) + C2/AEB6 + C2/AF0B + the list $FF:C0D5: string $22 of
+// $FF:C457 (FF:C880) at (4, 2): "Can be used" / "by" + tile 2D, then at row 6 the 6-byte names C2/AEB6 copied
+// ($7A00[id] & $29AF, bit 7 = character 0; two to a row), at (12, 12) the value $7E:0D4D (C2/AF0B: $7C00[id], built
+// for ids below 0x94 only, so an accessory reads 0; three digits, leading blanks) and at (4, 12) the label from
+// C2:AF3A[type] (C2/8881: thresholds 5A / 7B / 94 / BC -> "Attack", "Defense", "Defense", blanks). Map (col, row)
+// shows at x = 8 col - 144, y = 8 row - 176 (mod 256). disasm/notes/menu2_item_rest.md sec. 7.
 void CtMenuRenderItemInfo(const CtMenuHost* h, uint8_t* fb, int itemId) {
   if (!h || !fb || !h->mem || itemId < 0 || itemId > 0xF1) return;
   mItemOverlayWindow(h, fb);
@@ -1143,10 +1022,10 @@ void CtMenuRenderItemInfo(const CtMenuHost* h, uint8_t* fb, int itemId) {
 #undef IIY
 }
 // C2/9093: one member's number as OBJ digits -- positions `positions`..0 of its BCD value (C2/F13F), leading zeros
-// skipped (position 0 always drawn), the first drawn one at the centre + C2:90F8[position] (FC F8 F4 F0), then 8 px
-// apart; tile 0x174 + digit (FF/F7D9 laid FF/9390's 2bpp digits there as 4bpp with plane 2 = plane 0 | plane 1, so a
-// pixel is colour 4 + (p0 + 2 * p1): OBJ palette 0's colours 5-7, which the CALLER loads -- `pal` = the ROM offset of
-// its four-colour MVN into $9588, `palOff`: C2/8F55 (a restore) FF/CB9C, C2/B2A7 (a Tab) FF/CBAC), attr 31.
+// skipped (position 0 always drawn), the first drawn at the centre + C2:90F8[position] (FC F8 F4 F0), then 8 px apart;
+// tile 0x174 + digit (FF/F7D9 laid FF/9390's 2bpp digits there as 4bpp with plane 2 = plane 0 | plane 1, so a pixel
+// is colour 4 + (p0 + 2 * p1): OBJ palette 0's colours 5-7, which the caller loads -- `palOff` = the ROM offset of
+// its four-colour MVN into $9588: C2/8F55 (a restore) FF/CB9C, C2/B2A7 (a Tab) FF/CBAC), attr 31.
 static void mItemPopDigits(const CtMenuHost* h, uint8_t* fb, int value, int positions, int cx, int y, long palOff) {
   if (!h->rom || h->romLen < 0x3F9390L + 160 || palOff < 0 || h->romLen < palOff + 8) return;
   int dig[4] = { value % 10, (value / 10) % 10, (value / 100) % 10, (value / 1000) % 10 };
@@ -1174,50 +1053,34 @@ static void mItemPopDigits(const CtMenuHost* h, uint8_t* fb, int value, int posi
   }
 }
 
-// The party-exchange SWAP, byte-exact ROM C2/C70C. $0F00/$0F01 = the two picked SLOT indices (0..2); the
-// routine swaps the two active-party bytes in place. This is the Form screen's one intentional RAM write.
+// The party-exchange swap, C2/C70C. $0F00/$0F01 = the two picked roster slots; the two bytes are swapped in place.
 //   C2/C70F  LDX $0F00 ;  C2/C712  LDA $2980,X ;  C2/C715  STA $00        (tmp = party[a])
 //   C2/C717  LDY $0F01 ;  C2/C71A  LDA $2980,Y ;  C2/C71D  STA $2980,X    (party[a] = party[b])
 //   C2/C720  LDA $00   ;  C2/C722  STA $2980,Y                            (party[b] = tmp)
-// The indices are ROSTER SLOTS (the panel ENTRY values), and the ROM's range is the whole roster:
-// C2/C70F's X and Y are 8-bit and index $2980..$2988 uniformly, so a reserve<->active exchange is the
-// same two-byte swap. Screen 5 can never select a reserve ($0D36 = 0xFF for the whole X-menu, so cells
-// 3..5 hold 0x80), but clamping to 0..2 documented a rule the ROM does not have.
+// X and Y are 8-bit and index $2980..$2988 uniformly, so a reserve <-> active exchange is the same swap (screen 5
+// never selects a reserve: $0D36 = 0xFF in the X menu, so cells 3..5 hold 0x80).
 void CtMenuFormSwap(uint8_t* mem, int a, int b) {
   if (!mem || a < 0 || a > 8 || b < 0 || b > 8) return;
-  uint8_t t = mem[0x2980 + a];                       // party $2980 (C2/C712 LDA $2980,X / STA $00)
+  uint8_t t = mem[0x2980 + a];                       // C2/C712 LDA $2980,X / STA $00
   mem[0x2980 + a] = mem[0x2980 + b];                 // C2/C71A LDA $2980,Y / C2/C71D STA $2980,X
   mem[0x2980 + b] = t;                               // C2/C720 LDA $00     / C2/C722 STA $2980,Y
 }
 
-// ---- The FORM screen's ENTRY GATE (ROM C2/C627) + the roster builder it depends on (C2/CD2B) ----
-//
-// disasm/notes/menu_open_items.md §3.1/§3.2. Screen 5's OWN substate-0 handler decides whether the
-// screen may open at all, and on every oracle state this repo owns it REFUSES:
-//
+// ---- The Form screen's entry gate (C2/C627) and the roster builder behind it (C2/CD2B) ----
+// disasm/notes/menu_open_items.md sec. 3.1/3.2. Screen 5's substate-0 handler decides whether the screen opens:
 //   C2/C62B  LDA $0F0B / CLC / ADC $0F0C / CMP #$02
-//   C2/C634  BCS ->C2/C63D      ; ($0F0B + $0F0C) >= 2 -> OPEN (picker init C2/C649)
-//   C2/C636  STZ $67            ; else REFUSE: screen back to 0 ...
+//   C2/C634  BCS ->C2/C63D      ; ($0F0B + $0F0C) >= 2 -> open (picker init C2/C649)
+//   C2/C636  STZ $67            ; else refuse: screen back to 0 ...
 //   C2/C638  INC $68            ;   ... and $0068 = 1, the ribbon's idle substate
-//
-// Observed refusal + writer PC (menu_open_items.md §3.1): $0067 goes 05 (C2:9A83, the A-handler) then
-// straight back to 00 (C2:C638) on the very next frame. That -- not a "task-spawned slide-in overlay"
-// -- is why every earlier dossier recorded Form as "never settles headlessly".
-//
-// The two counts come from the roster builder C2/CD2B:
-//   $0F0B = active members that are NOT LOCKED. Per slot: skip if $2980+i has bit7 (empty); else
-//           count it, then UN-count it when $7F01DF & $FF/F9BB[charId] -- the party-LOCK bitfield
-//           masked by FF/F9BB = 80 40 20 10 08 04 02 01, i.e. 0x80 >> charId.
-//   $0F0C = non-empty RESERVE slots $2983..$2988 -- but the whole reserve scan is gated on
-//           `LDA $0D36 / BNE` (C2/CD72), and $0D36 is NON-ZERO on every state measured
-//           (menu_open_gato2 FF, bedslide 07, out_s8 C0, truce_market 04), so in practice the scan
-//           is skipped and $0F0C stays 0. Both branches are implemented; neither is assumed.
-//
-// Worked example, storyline 08 (Crono+Marle), matching the oracle byte for byte: slot0 Crono id 0 ->
-// counted, then $7F01DF(0x80) & 0x80 != 0 = LOCKED -> un-counted; slot1 Marle id 1 -> 0x80 & 0x40 == 0
-// = free -> counted; slot2 empty. $0F0B = 1, $0F0C = 0, sum 1 < 2 -> REFUSE.
-#define MFORM_LOCKMASK(id) ((uint8_t)(0x80u >> ((id) & 7)))   // ROM FF/F9BB[id], verified byte-for-byte
-#define MFORM_INSET  56    /* the Form panel's text column: MP_X + 56 = x 72 = the ROM's tile col 9 */
+// On a refusal $0067 goes 05 (C2:9A83, the A handler) and back to 00 (C2:C638) on the next frame.
+// The two counts come from C2/CD2B:
+//   $0F0B = active members not locked: per slot, skip if $2980+i has bit 7 (empty); else count it, and un-count it
+//           when $7F01DF & $FF/F9BB[charId] (the party-lock bitfield; FF/F9BB = 80 40 20 10 08 04 02 01).
+//   $0F0C = non-empty reserve slots $2983..$2988, scanned only when $0D36 == 0 (C2/CD72 `LDA $0D36 / BNE`).
+// Example, storyline 08 (Crono + Marle): Crono is counted then locked by $7F01DF = 0x80; Marle is free; slot 2 is
+// empty. $0F0B = 1, $0F0C = 0, sum 1 < 2 -> refuse.
+#define MFORM_LOCKMASK(id) ((uint8_t)(0x80u >> ((id) & 7)))   // FF/F9BB[id]
+#define MFORM_INSET  56    /* the Form panel's text column: MP_X + 56 = x 72 = tile col 9 */
 
 void CtMenuFormRoster(const uint8_t* mem, const uint8_t* glb, int* activeFree, int* reserveN) {
   int free_ = 0, res = 0;
@@ -1226,8 +1089,8 @@ void CtMenuFormRoster(const uint8_t* mem, const uint8_t* glb, int* activeFree, i
       uint8_t a = mem[0x2980 + i];
       if (a & 0x80) continue;                          // C2/CD4F BMI: empty slot, no panel entry
       free_++;                                         // C2/CD51 INC $0F0B
-      uint8_t lock = glb ? glb[0x01DF] : 0;            // C2/CD55 LDA $7F01DF (our $7F0000 flag page)
-      if (lock & MFORM_LOCKMASK(a)) free_--;           // C2/CD59-CD5F: LOCKED -> DEC $0F0B
+      uint8_t lock = glb ? glb[0x01DF] : 0;            // C2/CD55 LDA $7F01DF (the $7F0000 flag page)
+      if (lock & MFORM_LOCKMASK(a)) free_--;           // C2/CD59-CD5F: locked -> DEC $0F0B
     }
     if (mem[0x0D36] == 0)                              // C2/CD72 LDA $0D36 / BNE: skip the reserve scan
       for (int x = 3; x < 9; x++)                      // C2/CD81-CD8D: $2983..$2988
@@ -1237,67 +1100,57 @@ void CtMenuFormRoster(const uint8_t* mem, const uint8_t* glb, int* activeFree, i
   if (reserveN)   *reserveN   = res;
 }
 
-// C2/CD2B's own output: the 9-entry PANEL ARRAY $7E:0F02..$0F0A. 0x80 = an empty slot, 0x40|i = a
-// member LOCKED by the story ($7F:01DF & (0x80 >> charId)), i = selectable. The picker needs this and
-// not just the counts, because the cursor must skip LOCKED members too -- resting on one would let the
-// player pick an exchange the ROM forbids.
-// ⚠ $0D36 is forced NON-ZERO for the whole X-menu (C2/989E `LDA #FF / STA $0D36` at menu-open), so
-// C2/CD72 always skips the reserve scan and entries 3..8 are always 0x80. Reserves belong to a
-// DIFFERENT menu program -- mode 5 / screen $07 (C2/C7A6), which the field opens on the Y button gated
-// on storyline >= 0x49 (C0/1985 -> C0/19CE `LDA #05 / JSL C2/8000`). Reading whatever the field happened
-// to leave in $0D36 would count reserves this screen never shows.
+// C2/CD2B's output: the 9-entry panel array $7E:0F02..$0F0A. 0x80 = an empty slot, 0x40|i = a member locked by the
+// story ($7F:01DF & (0x80 >> charId)), i = selectable. The picker skips locked members too.
+// $0D36 is 0xFF for the whole X menu (C2/989E `LDA #FF / STA $0D36` at the open), so C2/CD72 skips the reserve scan
+// and entries 3..8 stay 0x80. Reserves belong to menu mode 5 / screen $07 (C2/C7A6), which the field opens on Y from
+// storyline 0x49 (C0/1985 -> C0/19CE `LDA #05 / JSL C2/8000`).
 void CtMenuFormPanels(const uint8_t* mem, const uint8_t* glb, uint8_t* panel9) {
   if (!panel9) return;
   for (int i = 0; i < 9; i++) panel9[i] = 0x80;
   if (!mem) return;
-  // C2/CD43-CD6A runs TWO cursors: $00 is the roster slot and Y is the PANEL POSITION, and Y is only
-  // advanced for a slot that is not empty (C2/CD4F BMI skips the STA/INY). So the list is COMPACTED --
-  // the VALUE stored is the roster slot, the POSITION is the count of occupied slots seen so far. The
-  // two agree only when the empty slots are trailing, which is every capture this repo owns; field-VM
-  // op 0xD6 (C0/3A07) is what punches a non-trailing hole, writing #80 into a slot IN PLACE.
+  // C2/CD43-CD6A runs two cursors: $00 is the roster slot and Y the panel position, advanced only for an occupied
+  // slot (C2/CD4F BMI skips the STA/INY). So the list is compacted: the value is the roster slot, the position the
+  // count of occupied slots so far. Field op 0xD6 (C0/3A07) can leave a hole by writing #80 into a slot in place.
   int y = 0;
   for (int i = 0; i < 3; i++) {
     uint8_t a = mem[0x2980 + i];
-    if (a & 0x80) continue;                            // C2/CD4F BMI: empty -- Y is NOT advanced
+    if (a & 0x80) continue;                            // C2/CD4F BMI: empty, Y not advanced
     uint8_t lock = glb ? glb[0x01DF] : 0;
     panel9[y++] = (uint8_t)((lock & MFORM_LOCKMASK(a)) ? (0x40 | i) : i); // C2/CD64: value = slot, position = Y
   }
 }
 
-// C2/C632: the gate proper. 1 = the ROM would OPEN screen 5; 0 = it refuses and bounces to the ribbon.
+// C2/C632: the gate. 1 = the ROM opens screen 5; 0 = it refuses and returns to the ribbon.
 int CtMenuFormCanOpen(const uint8_t* mem, const uint8_t* glb) {
   int f = 0, r = 0;
   CtMenuFormRoster(mem, glb, &f, &r);
   return (f + r) >= 2;
 }
 
-// The SAVE screen's ENTRY GATE (C2/CEDC + C2/9875, menu_open_items.md 4.1). At menu-open C2/9875
-// computes the save-availability flag $0D34 from the LOCATION word $0100:
+// The Save screen's entry gate (C2/CEDC + C2/9875, menu_open_items.md 4.1). At the menu open C2/9875 computes the
+// save flag $0D34 from the location word $0100:
 //   $0100 >= 0x1F0 (the overworld)      -> $0D34 = 0      (save allowed; C2/98A4 CMP #$01F0 / BCS)
 //   field map with $7F01CE bit15 set    -> $0D34 = 0      (a save point; C2/98AC LDA $7F01CE / BMI)
 //   field map otherwise                 -> $0D34 = 0xFFFF (C2/98B2 DEC $0D34, from the STZ)
-// Screen 6's substate-0 handler C2/CEDC then refuses -- STZ $67 / $68 = 1, back to the ribbon --
-// when bit6 of the 8-bit OR ($0D34 | $0294 | $0299 | $029E) is set (0xFF has bit6). The three extra
-// block bytes were 00 on every state measured but are READ, not assumed. $0D34 is recomputed here
-// rather than read from WRAM because C2/9875 overwrites it unconditionally at every menu-open --
-// this IS the menu-open computation, and loc/$7F01CE cannot change while the field is frozen.
+// C2/CEDC then refuses (STZ $67 / $68 = 1, back to the ribbon) when bit 6 of the 8-bit OR ($0D34 | $0294 | $0299 |
+// $029E) is set. $0D34 is computed here rather than read, since C2/9875 rewrites it at every open and the location
+// cannot change while the field is frozen.
 int CtMenuSaveCanOpen(const uint8_t* mem, const uint8_t* glb) {
   if (!mem) return 0;
   int loc = mem[0x0100] | (mem[0x0101] << 8);            // C2/98A1 LDA $0100 (the location word)
   int savePt = glb ? (glb[0x01CF] & 0x80) : 0;           // C2/98AC $7F01CE bit15 = byte $01CF bit7
   int d34 = (loc >= 0x01F0) ? 0x00 : (savePt ? 0x00 : 0xFF);
   int v = d34 | mem[0x0294] | mem[0x0299] | mem[0x029E]; // C2/CEDC LDA $0D34 / ORA / ORA / ORA
-  return (v & 0x40) == 0;                                // C2/CEE8 AND #$40 / BEQ -> OPEN
+  return (v & 0x40) == 0;                                // C2/CEE8 AND #$40 / BEQ -> open
 }
 
-// ================= ITEM screen Use / Move / Organize (byte-exact ROM, see [[ct-field-item-menu-use]]) =====
-// Field-menu USABLE gate (C2/AB14): $7E7700[id] bit1 (0x02). Consumables only (id >= 0xBC). Not-usable
-// items (equipment, key items, battle-only Heal/Revive/Shelter) make the A-press inert.
-// C2/9969, the last step of C2/9875's $7700 build at every menu open: `LDA $0D34 / BEQ / LDA #02 / TRB $77C8` -- off a save
-// point ($0D34 != 0, CtMenuSaveCanOpen's rule) the Shelter (C8) loses its field-usable bit. ctItemProp holds the table
-// before that step (tools/gen/menu_itemuse.py puts C8's bit back from $CC), so the step is applied here, live: the user,
-// 2026-10-11 (translated from Portuguese), "I can't use Shelter on top of the save point" -- the bake had been taken
-// off a save point and kept the Shelter unusable everywhere.
+// ---- Item screen Use / Move / Organize (the ct-field-item-menu-use notes) ----
+// Field-menu usable gate (C2/AB14): $7E7700[id] bit 1 (0x02). Consumables only (id >= 0xBC); the rest (equipment, key
+// items, the battle-only Heal/Revive/Shelter) make the A press do nothing.
+// C2/9969, the last step of C2/9875's $7700 build at every open: `LDA $0D34 / BEQ / LDA #02 / TRB $77C8` -- off a
+// save point ($0D34 != 0, CtMenuSaveCanOpen's rule) the Shelter (C8) loses its field-usable bit. ctItemProp holds
+// the table before that step (tools/gen/menu_itemuse.py takes C8's bit from $CC), so the step is applied here.
 static int g_mItemShelterGate = 0;                       // 1 = $0D34 == 0 at the last menu open
 void CtMenuItemOpenGate(const uint8_t* mem, const uint8_t* glb) {
   if (!mem) { g_mItemShelterGate = 0; return; }
@@ -1312,10 +1165,10 @@ int CtMenuItemUsable(int id) {
   return (p & 0x02) ? 1 : 0;
 }
 
-// Apply a consumable's field effect to ONE char sheet ($7E2600 + charId*0x50). Byte-exact vs the heal
-// path C2/8E82 (HP) / C2/8EAB (MP): amt capped at 999, added to the current pool, then clamped to the
-// EFFECTIVE max (+0x3F HP / +0x41 MP). FULL restores set the pool straight to its max. A Tab is not this
-// routine's (C2/B200's own loop; CtMenuItemTabApply = C2/B2E0). The caller consumes the count separately (C2/87D5).
+// Apply a consumable's field effect to one char sheet ($7E2600 + charId*0x50), as the heal paths C2/8E82 (HP) and
+// C2/8EAB (MP): the amount (HP: capped at 999) is added to the current pool and clamped to the max (+0x3F effective
+// max HP / +0x09 max MP); full restores set the pool to its max. A Tab is C2/B200's own loop (CtMenuItemTabApply = C2/B2E0). The caller
+// consumes the count separately (C2/87D5).
 static void mItemApplyOne(uint8_t* mem, int idx, int charId) {
   uint8_t* sh = mem + 0x2600 + (size_t)(charId & 7) * 0x50;
   int kind = ctItemFxKind[idx], amt = ctItemFxAmt[idx], pool = ctItemFxPool[idx];
@@ -1326,11 +1179,8 @@ static void mItemApplyOne(uint8_t* mem, int idx, int charId) {
     sh[3] = nv & 0xFF; sh[4] = (nv >> 8) & 0xFF;
   }
   if (kind == ITFX_MP || (kind == ITFX_FULL && (pool & 2))) {          // MP pool
-    // +7 curMP, and the cap is +0x09 -- C2/8EBF/C2/8EC4, NOT the +0x41 this used to read. In a live
-    // sheet +0x41 holds 00 FF / FF FF / 00 04 (it is not a pool at all), so every MP item was clamping
-    // to nonsense; CtMenuItemTargetMask a few lines up was already reading sh[9], so the file
-    // contradicted itself. And there is NO 999 clamp on the MP arm: C2/8EAB has no `CMP #03E7`, unlike
-    // the HP applier C2/8E82. (disasm/notes/menu2_tech_effect.md §5.3, both measured on the oracle.)
+    // +7 curMP, capped at +0x09 (C2/8EBF/C2/8EC4). The MP arm has no 999 clamp: C2/8EAB has no `CMP #03E7`, unlike
+    // the HP applier C2/8E82 (disasm/notes/menu2_tech_effect.md sec. 5.3).
     int cur = sh[7] | (sh[8] << 8), mx = sh[9] | (sh[10] << 8);
     int nv = (kind == ITFX_FULL) ? mx : cur + amt;
     if (nv > mx) nv = mx;
@@ -1338,7 +1188,7 @@ static void mItemApplyOne(uint8_t* mem, int idx, int charId) {
   }
 }
 
-// ======== THE TABS (C2/B200 -> C2/B228's loop -> C2/B2A7 -> C2/B2E0 -> C2/B31C) ========
+// ---- The Tabs (C2/B200 -> C2/B228's loop -> C2/B2A7 -> C2/B2E0 -> C2/B31C) ----
 // C2/B0E9 dispatches on the item's effect type; the sixth entry, C2/B200, is the Tabs': `$0DBD` = 1 for id CD (Power
 // Tab), 6 for CE (Magic Tab), 2 for anything else there (CF, Speed Tab), then C2/AF42's overlay and C2/B228's loop --
 // its own, not C2/B1A5's: the validity is C2/B275, the A runs C2/B2A7 (the pop-up) then C2/B2E0 (the stat) then C2/B31C.
@@ -1369,11 +1219,10 @@ static void mSheet9137(uint8_t* sh) {
   int cur = sh[3] | (sh[4] << 8), mx = d[9] | (d[10] << 8);
   if (cur > mx) { sh[3] = (uint8_t)(mx & 0xFF); sh[4] = (uint8_t)(mx >> 8); }
 }
-// C2/B2E0, after C2/8F6C's pop-up (C2/B2D6 returns only when C2/9016 is over): with M = 16 `INC $000B,X` -- the WORD at
-// sheet + 0x0B + FF:CF2B[X] (the stat the recompute starts from) --, then the byte at sheet + 0x2F + C2:B315[X] (60 00 02
-// 01 03 04 05: Power 0x2F, Speed 0x31, Magic 0x34) + 1 unless it is already 0x63, then C2/8820 + C2/9137. MEASURED (the
-// itemtab drive, a Power Tab on Crono, the logical oracle): $260B 07 -> 08, $262F + 1, $2636 and Attack $263D re-derived,
-// all at f253 with the count's C2/87D5 -- 42 frames after the A, the restores' spacing.
+// C2/B2E0, after C2/8F6C's pop-up (C2/B2D6 returns only when C2/9016 is over): with M = 16 `INC $000B,X` -- the word at
+// sheet + 0x0B + FF:CF2B[X], the stat the recompute starts from -- then the byte at sheet + 0x2F + C2:B315[X] (60 00 02
+// 01 03 04 05: Power 0x2F, Speed 0x31, Magic 0x34) + 1 unless it is already 0x63, then C2/8820 + C2/9137. It lands 42
+// frames after the A, with the count's C2/87D5, like the restores.
 void CtMenuItemTabApply(const uint8_t* rom, long romLen, uint8_t* mem, int tgtSlot, int x) {
   if (!rom || romLen < 0x3FCF3AL || !mem || x < 1 || x > 6 || tgtSlot < 0 || tgtSlot > 2) return;
   int pid = mem[0x2980 + tgtSlot];
@@ -1387,9 +1236,9 @@ void CtMenuItemTabApply(const uint8_t* rom, long romLen, uint8_t* mem, int tgtSl
   mSheet9137(sh);                                                      // C2/B30E JSR C2/8820 / C2/B311 JSR C2/9137
 }
 
-// C2/8E2D -- the EFFECT half of a use (C2/8F55 runs it on the A; C2/B31C consumes 42+ frames later). `popAmt[k]` = the
+// C2/8E2D, the effect half of a use (C2/8F55 runs it on the A; C2/B31C consumes 42+ frames later). `popAmt[k]` = the
 // numbers C2/9016 floats over party slot k: [0] HP = the item's amount capped at 999 (C2/8E82 `CMP #03E7`) or the max
-// when it restores to full ($0DBF bit 6) -- NOT the HP actually gained --, [1] MP = its amount or the max (C2/8EAB);
+// when it restores to full ($0DBF bit 6) -- not the HP actually gained --, [1] MP = its amount or the max (C2/8EAB);
 // -1 = none. Returns $0F5D: bit 0 = an HP number, bit 1 = an MP number.
 int CtMenuItemApply(uint8_t* mem, int absSlot, int targetSlot, int popAmt[3][2]) {
   for (int k = 0; k < 3; k++) popAmt[k][0] = popAmt[k][1] = -1;
@@ -1425,9 +1274,9 @@ void CtMenuItemConsume(uint8_t* mem, int absSlot) {
   mem[0x2500 + absSlot] = c & 0xFF;
   if (c == 0) mem[0x2400 + absSlot] = 0;
 }
-// USE a consumable from the item menu: apply its effect to `targetSlot` (0..2 party slot) or the whole
-// party (all-party items), then decrement + zero the source slot in place. `absSlot` = the inventory slot
-// holding the item ($0F00). Returns 1 if consumed. Byte-exact: heal C2/8E82 + consume C2/87D5 (STZ id at 0).
+// Use a consumable from the item menu: apply its effect to `targetSlot` (party slot 0..2) or the whole party
+// (all-party items), then decrement the source slot and zero it in place at 0. `absSlot` = the inventory slot holding
+// the item ($0F00). Returns 1 if consumed. Heal C2/8E82 + consume C2/87D5.
 int CtMenuItemUse(uint8_t* mem, int absSlot, int targetSlot) {
   if (!mem || absSlot < 0 || absSlot >= 0xF2) return 0;
   int id = mem[0x2400 + absSlot];
@@ -1445,24 +1294,20 @@ int CtMenuItemUse(uint8_t* mem, int absSlot, int targetSlot) {
   int c = mem[0x2500 + absSlot];                                      // consume 1 (C2/87D5, $04CB=1)
   if (c > 0) c--;
   mem[0x2500 + absSlot] = c & 0xFF;
-  if (c == 0) mem[0x2400 + absSlot] = 0;                              // count 0 -> zero the id slot IN PLACE
+  if (c == 0) mem[0x2400 + absSlot] = 0;                              // count 0 -> zero the id slot in place
   return 1;
 }
 
-// ==================== EQUIP CHANGE (screen 1, substate 3) ==============================
-// Derived in disasm/notes/menu2_equip_change.md. Screen 1 is a FOUR-substate machine, not two:
-// C2/9C29 = { C2/9C31 build, C2/9C39 char-select, C2/9C70 gear-slot select, C2/9CA5 CANDIDATE LIST }.
-// A on a gear row is not a no-op in the ROM -- C2/9C88 enters the list when the candidate count
-// $0FC6 is non-zero and BUZZES (id $01, C2/9C8D JMP C2/EACC) when it is zero, which is exactly why
-// every capture in this repo (all of them carry consumables only) looked like "nothing happens".
+// ---- Equip change (screen 1, substate 3; disasm/notes/menu2_equip_change.md) ----
+// C2/9C29 = { C2/9C31 build, C2/9C39 char select, C2/9C70 gear-slot select, C2/9CA5 candidate list }. A on a gear
+// row enters the list when the candidate count $0FC6 is non-zero and buzzes (id $01, C2/9C8D JMP C2/EACC) when it is
+// zero.
 
-// C2/87FA -- find the slot holding `id` with a NON-ZERO count. Returns the slot or -1.
+// C2/87FA: find the slot holding `id` with a non-zero count. Returns the slot or -1.
 //   87FA LDX #00 / 87FC CMP $2400,X / BNE / 8801 LDA $2500,X / BNE found / 8806 LDA $04C9 / 8809 INX / BNE loop
-//   880C SEC / RTS                      -- X is 8-bit (both callers SEP #30): ALL 256 slots, not the bag's $F2
+//   880C SEC / RTS                      -- X is 8-bit (both callers SEP #30): all 256 slots, not the bag's $F2
 //   880E STX $04C7 / 8811 STZ $04C8 / 8814 CLC / RTS
-// THE FOUND ARM RECORDS THE SLOT: $04C7 = the slot, $04C8 = 0. The port had left both writes out; the routine-level
-// shadow caught it on the first equip change it graded (`ct.exe --shadow`, C2/87D5 from the Equip screen: 7E:04C7
-// oracle 13 port 00, docs/SHADOW_PROPOSAL.md).
+// The found arm records the slot: $04C7 = the slot, $04C8 = 0.
 static int mInvFind(uint8_t* mem, int id) {
   for (int x = 0; x < 0x100; x++)
     if (mem[0x2400 + x] == (uint8_t)id && mem[0x2500 + x]) { mem[0x04C7] = (uint8_t)x; mem[0x04C8] = 0; return x; }
@@ -1471,16 +1316,16 @@ static int mInvFind(uint8_t* mem, int id) {
 
 int CtMenuInvAdd(uint8_t* mem, int id, int qty) {            // C2/8791
   if (!mem || !id) return 0;                                 // C2/8795: id 0 -> nothing, A = 0
-  if (id == 0x5A || id == 0x7B || id == 0x94) return id;     // C2/879A/879E/87A2: the three "none"
-                                                             // sentinels are NEVER added -- and THAT is
-                                                             // the engine's whole unequip story. A keeps the id.
+  if (id == 0x5A || id == 0x7B || id == 0x94) return id;     // C2/879A/879E/87A2: the three "none" sentinels
+                                                             // are never added -- the engine's whole unequip
+                                                             // rule. A keeps the id.
   int x = mInvFind(mem, id);                                 // C2/87A6
   if (x < 0) {                                               // C2/87AB: first slot with id 0, from X = 0 (87FA's
     for (x = 0; x < 0x100 && mem[0x2400 + x]; x++) {}        //   loop wrapped there) to the 8-bit X's wrap
-    if (x >= 0x100) return 0xFF;                             // C2/87B3 INVENTORY FULL
+    if (x >= 0x100) return 0xFF;                             // C2/87B3 inventory full
     mem[0x2400 + x] = (uint8_t)id; mem[0x2500 + x] = 0;      // C2/87B7
   }
-  int n = (mem[0x2500 + x] + qty) & 0xFF;                    // C2/87C0 LDA / CLC / ADC $04CB -- EIGHT-bit
+  int n = (mem[0x2500 + x] + qty) & 0xFF;                    // C2/87C0 LDA / CLC / ADC $04CB, 8-bit
   mem[0x2500 + x] = (uint8_t)(n >= 0x63 ? 0x63 : n);         // C2/87C7 CMP #63 / BCC: the stack cap is 99
   return 0;
 }
@@ -1490,7 +1335,7 @@ int CtMenuInvRemove(uint8_t* mem, int id, int qty) {         // C2/87D5
   int x = mInvFind(mem, id);
   if (x < 0) return 0xFF;                                    // not held
   int n = mem[0x2500 + x] - qty;
-  if (n < 0) return 0xFE;                                    // C2/87E5 borrow -> NOT enough, no write
+  if (n < 0) return 0xFE;                                    // C2/87E5 borrow -> not enough, no write
   mem[0x2500 + x] = (uint8_t)n;
   if (n == 0) mem[0x2400 + x] = 0;                           // C2/87EE STZ $2400,X
   return 0;
@@ -1498,30 +1343,26 @@ int CtMenuInvRemove(uint8_t* mem, int id, int qty) {         // C2/87D5
 
 int CtMenuEquipCandidates(const uint8_t* mem, int gearSlot, int charId, uint8_t* cand, uint8_t* cnt) {
   if (!mem || !cand || !cnt || gearSlot < 0 || gearSlot > 3) return 0;
-  int lo = ctEqRange[gearSlot * 2], hi = ctEqRange[gearSlot * 2 + 1];   // C2/89DC, INTERLEAVED [lo,hi)
+  int lo = ctEqRange[gearSlot * 2], hi = ctEqRange[gearSlot * 2 + 1];   // C2/89DC, interleaved [lo,hi)
   int bit = 0x80 >> (charId & 7);                                       // FF/F9BB
   int n = 0;
-  for (int i = 0; i < 0xF2; i++) {                                      // C2/8953: walk the WHOLE bag
+  for (int i = 0; i < 0xF2; i++) {                                      // C2/8953: walk the whole bag
     int id = mem[0x2400 + i];
     if (!id || id < lo || id >= hi) continue;
-    if (!(ctEqMask[id] & bit)) continue;                                // C2/93AF: equippable by THIS char
+    if (!(ctEqMask[id] & bit)) continue;                                // C2/93AF: equippable by this char
     cand[n] = (uint8_t)id; cnt[n] = mem[0x2500 + i]; n++;
   }
   cand[n] = 0;
-  // C2/899C's selection sort, written out the way the ROM's two loops actually run.
-  //   outer  289A2: LDY $0F00,X / BEQ done            -- a ZERO ID ends the list
+  // C2/899C's selection sort, as the ROM's two loops run:
+  //   outer  289A2: LDY $0F00,X / BEQ done            -- a zero id ends the list
   //          289A7: LDA $7C00,Y / STA $00             -- the running key
   //   inner  289AA: INX / LDY $0F00,X / LDA $7C00,Y
-  //          289B1: BEQ ->289D6                       -- ** a ZERO KEY ENDS THE INNER SCAN **
+  //          289B1: BEQ ->289D6                       -- a zero key ends the inner scan
   //          289B3: CMP $00 / BCC ->289AA             -- smaller: skip
   //          289B7: STA $00 + swap                    -- >= : it becomes the running key
-  // `BCC skips the smaller` makes each pass leave the MAXIMUM of the tail at the front: the sort is
-  // DESCENDING, so the strongest piece is row 0. Measured twice on the oracle (a bag of Iron Blade 7 /
-  // SteelSaber 15 / Red Katana 30 comes back 05,03,02; armour 5D/69/60 comes back 69 60 5D = 4B,20,10).
-  // ⚠ $7C00 is only BUILT for ids 0x00..0x93 (C2/994C stops at #94), so every ACCESSORY key is 0 and
-  // the inner scan aborts on its first element -- accessory rows keep raw bag order. Reading ctEqPower
-  // past its 148 entries for an accessory id would be an out-of-bounds read, which is why the key goes
-  // through eqKey() instead.
+  // Each pass leaves the maximum of the tail at the front, so the sort is descending (the strongest piece is row 0).
+  // Note: $7C00 is built only for ids 0x00..0x93 (C2/994C stops at #94), so every accessory key is 0 and the inner
+  // scan stops at once: accessory rows keep bag order. The key is read as 0 for those ids (ctEqPower has 148 entries).
   for (int a = 0; a < n; a++) {
     if (!cand[a]) break;
     int key = (cand[a] < 0x94) ? ctEqPower[cand[a]] : 0;
@@ -1564,10 +1405,10 @@ void CtMenuRecalcDerived(const uint8_t* sheet, uint8_t* out11) {        // C2/91
   for (int k = 6; k >= 0; k--) {                                        // 7 capped stats
     int y = ctEqStatOff[k] & 7;
     int v = sheet[0x0B + y] + bon[y];
-    if (v > ctEqStatCap[k]) v = ctEqStatCap[k];                         // NOTE: the cap is indexed by k
+    if (v > ctEqStatCap[k]) v = ctEqStatCap[k];                         // Note: the cap is indexed by k
     out11[y] = (uint8_t)v;
   }
-  int atk;                                                              // C2/91DB, per CHARACTER CLASS
+  int atk;                                                              // C2/91DB, per character class
   switch (sheet[0] & 7) {
     case 1: case 2: atk = (2 * (out11[4] + wpnPow)) / 3;                              break;  // Marle, Lucca
     case 5:         atk = (16 * out11[0] + ctEqAyla[sheet[0x12] % 100]) / 9;          break;  // Ayla
@@ -1575,14 +1416,14 @@ void CtMenuRecalcDerived(const uint8_t* sheet, uint8_t* out11) {        // C2/91
   }
   out11[7] = (uint8_t)(atk > 255 ? 255 : atk);                          // +0x3D Attack
   { int df = out11[1] + defSum; out11[8] = (uint8_t)(df > 255 ? 255 : df); }   // +0x3E Defence
-  if (sheet[0x2A] == 0xA8) out11[5] = (uint8_t)(out11[5] << 1);         // C2/9142: Third Eye DOUBLES Evade,
-                                                                        // in the CALLER, i.e. after the cap
+  if (sheet[0x2A] == 0xA8) out11[5] = (uint8_t)(out11[5] << 1);         // C2/9142: the Third Eye doubles Evade,
+                                                                        // in the caller, i.e. after the cap
   out11[9] = (uint8_t)(hpMax & 0xFF); out11[10] = (uint8_t)(hpMax >> 8);
   (void)curHP;
 }
 
-// Write the 11 derived bytes back where the ROM's C2/9137 puts them: the 7 stats at +0x36..+0x3C,
-// Attack +0x3D, Defence +0x3E, the effective max HP word +0x3F/+0x40 -- and clamp curHP (+0x03) to it.
+// Write the 11 derived bytes back where C2/9137 puts them: the 7 stats at +0x36..+0x3C, Attack +0x3D, Defence +0x3E,
+// the effective max HP word +0x3F/+0x40 -- and clamp curHP (+0x03) to it.
 void CtMenuEquipWriteBack(uint8_t* mem, int charId) {
   if (!mem) return;
   uint8_t* sh = mem + 0x2600 + (size_t)(charId & 7) * 0x50;
@@ -1595,20 +1436,18 @@ void CtMenuEquipWriteBack(uint8_t* mem, int charId) {
   mem[0x0D39 + (charId & 7) * 2] = 0;
 }
 
-// THE MENU OPEN'S BAG AND SHEET PASS -- C2/8139 `JSR C2/9875`, inside the shell's init chain (menu_shell_timing.md
-// section 2.2, "item tables / stat blocks"):
+// The menu open's bag and sheet pass: C2/8139 `JSR C2/9875`, in the shell's init chain (menu_shell_timing.md
+// sec. 2.2):
 //   C2/9878 JSR C2/9988: every bag slot whose count is 0, or whose id is 0, $5A, $7B, $94 (the three "none"
-//            sentinels) or >= $F2, is zeroed -- id AND count;
+//            sentinels) or >= $F2, is zeroed, id and count;
 //   C2/9977 JSR C2/99B2: for charId 0..6, C2/8816 (the sheet -> the $9A90 working copy, $6F = the sheet) and C2/9137
 //            (C2/916E's recalc, then `$9A93 -> +$03` and the 11 derived bytes $9B1C -> +$36..+$40).
-// So EVERY menu opens with each sheet's derived block -- +$3F/+$40, the effective max HP the item appliers clamp to
-// (C2/8E9E `CMP $003F,Y`) -- recomputed from the sheet itself. Outside the menu that word holds something else: the
-// oracle's party3_field.state has Crono at 25/96 HP with +$3F = 1029 until C2:9160 writes 0060 at f35. Without this
-// pass a Tonic clamped to the stale word and healed past the maximum (user report 2026-09-24).
-// C2/9895-98B2, the head of C2/9875 (A 16-bit): `STZ $0D32 / STZ $0D34`, `$0D36 = FFFF`, then on a field map ($0100 < $01F0)
-// `DEC $0D32` -- FFFF -- and, off a save point ($7F01CE bit 15 clear), `DEC $0D34` too. $0D32 picks the song screen $07's
-// C2/CB96 keeps (the field's $29AE, the overworld's $02AE); $0D36 is the Form's reserve gate (screen $07 sets it to $71).
-// MEASURED (the rule's cartridge, gato_wait): `$0D32 = FF` by C2:98AC at C+13 (f49).
+// So every menu opens with each sheet's derived block recomputed, including +$3F/+$40, the effective max HP the item
+// appliers clamp to (C2/8E9E `CMP $003F,Y`); outside the menu that word can hold something else.
+// C2/9895-98B2, the head of C2/9875 (A 16-bit): `STZ $0D32 / STZ $0D34`, `$0D36 = FFFF`, then on a field map ($0100 <
+// $01F0) `DEC $0D32` -- FFFF -- and, off a save point ($7F01CE bit 15 clear), `DEC $0D34` too. $0D32 picks the song
+// screen $07's C2/CB96 keeps (the field's $29AE, the overworld's $02AE); $0D36 is the Form's reserve gate (screen $07
+// sets it to $71).
 void CtMenuOpenFlags(uint8_t* mem, const uint8_t* glb) {
   if (!mem) return;
   mem[0x0D32] = mem[0x0D33] = 0; mem[0x0D34] = mem[0x0D35] = 0;      // 29895 / 29898
@@ -1634,28 +1473,16 @@ int CtMenuEquipApply(uint8_t* mem, uint8_t* glb, int charId, int gearSlot, int n
   uint8_t* sh = mem + 0x2600 + (size_t)(charId & 7) * 0x50;
   int off = ctEqSheetOff[gearSlot];                                     // C2/A4AB
   int old = sh[off];
-  CtMenuInvAdd(mem, old, 1);           // C2/9CCE -- the FULL return is IGNORED, exactly like the ROM
+  CtMenuInvAdd(mem, old, 1);           // C2/9CCE: the "full" return is ignored, as in the ROM
   sh[off] = (uint8_t)newId;
   CtMenuInvRemove(mem, newId, 1);      // C2/9CD9
-  if (gearSlot == 0 && glb && (charId & 7) < 6) glb[0x00B4 + (charId & 7)] = 0;   // C2/9CFC: a WEAPON change
+  if (gearSlot == 0 && glb && (charId & 7) < 6) glb[0x00B4 + (charId & 7)] = 0;   // C2/9CFC: a weapon change
   CtMenuEquipWriteBack(mem, charId);   // the tail: recompute + rewrite +0x03/+0x36..+0x40 + the HP scale
   return 1;
 }
 
-// The bottom-bar line the ROM shows for the highlighted candidate: its BONUS SET, decoded the same way
-// C2/92C4 applies it (mask walked from bit7, FF/CF2C naming the stat). Oracle-confirmed: the Red Katana
-// ($7B00 = 5 -> CC/29D7[5] = 0x0204 -> mask 0x04, amount 2 -> stat offset 3) prints "Magic +2".
-// The GEAR description line, and it comes from the SAME stored table as an item's -- one id space,
-// one $CC:2EB1. See mItemDesc for the derivation.
-// ⚠ THIS USED TO BE SYNTHESISED from the equipment BONUS MASK (ctEqBonusIdx/ctEqBonusSet) with a
-// hand-written stat vocabulary "Power/Stamina/Speed/Magic/Hit/Evade/M.Def". The ROM says
-// Vigor/Strike/Magic/Speed and gives amounts the mask alone cannot produce -- e.g. id $96 is
-// "Strike +2" and $98 is "Vigor +2" where the synthesiser wrote "Hit +2" and "Power +2". The mask
-// is still the right source for the EFFECT (the equip screen's stat deltas read it); it was only
-// ever wrong as a source of TEXT.
-// Returns the length written, 0 if this id has no line.
-// The baked table's shape, for --desctest's anti-vacuity line: the entry count and how many of
-// them the ROM actually fills. ctItemDesc lives in this translation unit only.
+// The stored-description table's shape, for --desctest: the entry count and how many the ROM fills. ctItemDesc lives
+// in this translation unit only.
 int CtMenuDescTable(int* nonEmptyOut) {
   int n = (int)(sizeof ctItemDesc / sizeof ctItemDesc[0]), ne = 0;
   for (int k = 0; k < n; k++) if (ctItemDesc[k][0]) ne++;
@@ -1663,6 +1490,9 @@ int CtMenuDescTable(int* nonEmptyOut) {
   return n;
 }
 
+// The gear description line: the same stored table as an item's ($CC:2EB1, one id space; see mItemDesc). Its words
+// are the ROM's (Vigor/Strike/Magic/Speed); the bonus mask (ctEqBonusIdx/ctEqBonusSet) is the source of the effect,
+// not of the text. Returns the length written, 0 if this id has no line.
 int CtMenuEquipDesc(int id, char* out, int cap) {
   if (out && cap > 0) out[0] = 0;
   if (!out || cap <= 0 || id < 0 || id >= (int)(sizeof ctItemDesc / sizeof ctItemDesc[0])) return 0;
@@ -1671,24 +1501,22 @@ int CtMenuEquipDesc(int id, char* out, int cap) {
   return (int)strlen(out);
 }
 
-// C2/B870 -- $7E:0DBC, the TARGET VALIDITY MASK the Item screen's overlay recomputes EVERY frame:
-// bit1 = this target's HP can still be restored, bit0 = its MP can. A with the mask ZERO is refused
-// (C2/B1B5 `LDA $0DBC / BNE` -> C2/B1BA `JSR C2/EACC`, the buzz) and the item is NOT consumed.
-// Note the ROM's own asymmetry, reproduced here: the HP test is a 16-BIT compare of the sheet's +3
-// against its EFFECTIVE max +0x3F, the MP test an 8-BIT compare of +7 against +9.
-// The HP/MP/all-party bits come from the same baked effect tables CtMenuItemUse already applies (the
-// ROM reads them out of $0DBD, which C2/B31C rebuilds from the item record) -- a re-expression of the
-// validated data, not a second source.
 // C2/E92D, at the top of every frame: all OAM hidden, then `LDA #FF / TRB $0D9B / BNE` -- the nav hand ($0770 at $54's
-// record) is drawn only when $0D9B was 0, and $0D9B is cleared. C2/8AFD (an all-party item's hands) sets it to 20 on each
-// run, so the nav hand is gone on every frame after one -- and back a frame late after the B, whose frame still ran it.
+// record) is drawn only when $0D9B was 0, and $0D9B is cleared. C2/8AFD (an all-party item's hands) sets it to 20 on
+// each run, so the nav hand is gone on every frame after one, and back a frame late after the B, whose frame still ran
+// it.
 void CtMenuSetNavHandShown(int on) { mNavHandOk = on; }
-// $0DBD bit 3 (the item's scope, $CC:1BB5): an ALL-PARTY item. C2/B19B `LDA $0DBD / AND #08 / BEQ / JSR C2/8AD5`.
+// $0DBD bit 3 (the item's scope, $CC:1BB5): an all-party item. C2/B19B `LDA $0DBD / AND #08 / BEQ / JSR C2/8AD5`.
 int CtMenuItemAllParty(const uint8_t* mem, int absSlot) {
   if (!mem || absSlot < 0 || absSlot >= 0xF2) return 0;
   int idx = mem[0x2400 + absSlot] - ITFX_BASE;
   return (idx >= 0 && idx < ITFX_N) ? ctItemFxAll[idx] : 0;
 }
+// C2/B870: $7E:0DBC, the target validity mask the Item overlay recomputes every frame: bit 1 = this target's HP can be
+// restored, bit 0 = its MP can. A with the mask zero is refused (C2/B1B5 `LDA $0DBC / BNE` -> C2/B1BA `JSR C2/EACC`,
+// the buzz) and nothing is consumed. Note the ROM's asymmetry: the HP test is a 16-bit compare of +3 against the
+// effective max +0x3F, the MP test an 8-bit compare of +7 against +9. The HP/MP/all-party bits come from the baked
+// effect tables CtMenuItemUse applies (the ROM reads them from $0DBD, rebuilt by C2/B31C from the item record).
 int CtMenuItemTargetMask(const uint8_t* mem, int absSlot, int tgtSlot) {
   if (!mem || absSlot < 0 || absSlot >= 0xF2) return 0;
   int id = mem[0x2400 + absSlot];
@@ -1716,23 +1544,19 @@ int CtMenuItemTargetMask(const uint8_t* mem, int absSlot, int tgtSlot) {
   return 0;
 }
 
-// =============== THE FIELD RESTORE, C2/8F55 -- SHARED by a TECH cast and an ITEM use ============
-// Derived + adversarially re-verified in disasm/notes/menu2_tech_effect.md. A whole-ROM scan finds
-// exactly TWO callers of C2/8F55: C2/B1BF (the Item screen) and C2/B4FC (the Tech screen), and the
-// only thing that differs between them inside it is one byte, $0DBF.
+// ---- The field restore, C2/8F55, shared by a tech cast and an item use (disasm/notes/menu2_tech_effect.md) ----
+// C2/8F55 has two callers, C2/B1BF (the Item screen) and C2/B4FC (the Tech screen); inside it only $0DBF differs.
 
-// C2/8ECC -- THE AMOUNT, six 16-bit words ($22/$24/$26 = HP for party index 0/1/2, $28/$2A/$2C = MP).
-// Two arms, selected by $0DBF bit7:
-//   set   (every ITEM: $0DBF is the constant $B2 for an HP item / $8A for an MP item, C2/B17F)
-//         -> FLAT, the same value for all six: ($0DBF & 0x7F) * ($0DC0 & 0x0F)   <- FOUR bits here
-//   clear (every TECH: $0DBF is the caster's DERIVED MAGIC, sheet +0x39, C2/B469)
-//         -> magic-scaled with a PER-TARGET spread, the six rolls consumed in REVERSE:
+// C2/8ECC, the amount: six words ($22/$24/$26 = HP for party index 0/1/2, $28/$2A/$2C = MP). $0DBF bit 7 picks the arm:
+//   set   (every item: $0DBF is the constant $B2 for an HP item / $8A for an MP item, C2/B17F)
+//         -> flat, the same for all six: ($0DBF & 0x7F) * ($0DC0 & 0x0F)            <- four bits here
+//   clear (every tech: $0DBF is the caster's derived Magic, sheet +0x39, C2/B469)
+//         -> magic-scaled with a per-target spread, the six rolls taken in reverse:
 //            amount[k] = ((($0DBF + 1) & 0xFF) * rnd[cur + (5 - k)]) >> 8  +  $0DBF * ($0DC0 & 0x1F)
-//            rnd = the 256-byte permutation at C0/FE00, cursor $7E:0D00, and the index is NOT masked
-//            -- at cursor >= 0xFB the ROM over-reads into C0/FF00, which is why the baked table
-//            carries that tail.                                              <- FIVE bits here
-// $0DC0 bit7 NEGATES every amount (C2/8F41's BIT is 16-bit, so it tests $0DC0, not $0DBF) -- the
-// damage arm; no field tech or item reaches it, but it is the routine's own shape.
+//            rnd = the 256-byte permutation at C0/FE00, cursor $7E:0D00; the index is not masked, so at
+//            cursor >= 0xFB the ROM reads on into C0/FF00 (the baked table carries that tail).  <- five bits here
+// $0DC0 bit 7 negates every amount (C2/8F41's BIT is 16-bit, so it tests $0DC0, not $0DBF): the damage arm, which no
+// field tech or item reaches.
 void CtMenuRestoreAmounts(int amtSrc, int nib, unsigned cur, int* out6) {
   if (!out6) return;
   if (amtSrc & 0x80) {                                        // C2/8EDA, the flat arm
@@ -1741,7 +1565,7 @@ void CtMenuRestoreAmounts(int amtSrc, int nib, unsigned cur, int* out6) {
   } else {                                                    // C2/8EF9, the magic + RNG arm
     int base = amtSrc * (nib & 0x1F);
     for (int k = 0; k < 6; k++) {
-      unsigned ix = cur + (unsigned)(5 - k);                  // NO & 0xFF -- the over-read is the ROM's
+      unsigned ix = cur + (unsigned)(5 - k);                  // no & 0xFF: the over-read is the ROM's
       int r = ctTechRng[ix < sizeof ctTechRng ? ix : (ix % sizeof ctTechRng)];
       out6[k] = ((((amtSrc + 1) & 0xFF) * r) >> 8) + base;
     }
@@ -1749,16 +1573,15 @@ void CtMenuRestoreAmounts(int amtSrc, int nib, unsigned cur, int* out6) {
   if (nib & 0x80) for (int i = 0; i < 6; i++) out6[i] = (-out6[i]) & 0xFFFF;   // C2/8F41
 }
 
-// C2/8E82 (HP) / C2/8EAB (MP), one pool of one character. `full` = $0DC0 bit6 -> the amount IS the max.
-// The two routines differ in exactly two places and both matter: the HP one clamps the shown amount to
-// 999 (`CMP #03E7`) and the MP one does NOT, and the MP maximum is the sheet's +0x09/+0x0A -- never
-// +0x41, which is not a pool at all. Returns what would be DISPLAYED (the raw number, pre-cap).
+// C2/8E82 (HP) / C2/8EAB (MP), one pool of one character. `full` = $0DC0 bit 6 -> the amount is the max. The two
+// differ in two places: the HP one clamps the shown amount to 999 (`CMP #03E7`) and the MP one does not, and the MP
+// maximum is the sheet's +0x09/+0x0A. Returns what is displayed (before the clamp to the max).
 static int mPoolApply(uint8_t* mem, int charId, int mp, int amount, int full) {
   uint8_t* sh = mem + 0x2600 + (size_t)(charId & 7) * 0x50;
   int curO = mp ? 7 : 3, maxO = mp ? 9 : 0x3F;
   int cur = sh[curO] | (sh[curO + 1] << 8), mx = sh[maxO] | (sh[maxO + 1] << 8);
   int shown = full ? mx : amount;
-  if (!mp && shown > 999) shown = 999;                        // C2/8E97 -- HP ONLY
+  if (!mp && shown > 999) shown = 999;                        // C2/8E97, HP only
   int nv = cur + shown;
   if (nv > mx) nv = mx;
   if (nv < 0) nv = 0;
@@ -1766,10 +1589,10 @@ static int mPoolApply(uint8_t* mem, int charId, int mp, int amount, int full) {
   return shown;
 }
 
-// The nine ids FF/F82E marks usable outside battle -- 09 0C 0F 1A 1D 21 24 27 29, all SINGLE techs, so
-// no double and no triple is EVER field-castable (C2/B401 `LDA $7700,X / BMI`). ⚠ It is not enough to
-// bake the nine: FF/F876's "next tech to learn" marker writes (prop & 0x1E) | 0x40 over the same byte,
-// i.e. bit7 CLEAR, so a tech the character has not learned yet is listed (dim) and refused.
+// The nine ids FF/F82E marks usable outside battle -- 09 0C 0F 1A 1D 21 24 27 29, all single techs, so no double or
+// triple is field-castable (C2/B401 `LDA $7700,X / BMI`). Note: FF/F876's "next tech to learn" marker writes
+// (prop & 0x1E) | 0x40 over the same byte, i.e. bit 7 clear, so a tech the character has not learned yet is listed
+// (dim) and refused.
 int CtMenuTechFieldUsable(const uint8_t* mem, int charId, int techId) {
   static const int kNine[9] = { 0x09, 0x0C, 0x0F, 0x1A, 0x1D, 0x21, 0x24, 0x27, 0x29 };
   int ok = 0;
@@ -1780,19 +1603,13 @@ int CtMenuTechFieldUsable(const uint8_t* mem, int charId, int techId) {
   return nxt[charId & 7] != (uint8_t)techId;
 }
 
-// C2/B3E6's gate ladder + C2/8F55's effect. Returns 1 when the tech was cast (the caller then plays
-// the 10-frame pre-roll, the chime cmd $19 id $06/$07 and the popup), 0 when it is REFUSED (the caller
-// plays the buzz id $01). shown6 receives what the popup would float: [0..2] HP per party index,
-// [3..5] MP. `rngCur` is $7E:0D00, which the menu advances once per FRAME -- for the whole menu, not
-// just this screen.
-// C2/B870 again, but for a TECH: the same 2-bit validity mask over the same pools, with the HP/MP
-// bits coming from the tech's own $0DBD (ctTechFx) instead of an item record -- plus C2/B839's extra
-// rule, which the item path has no counterpart for: once the caster's MP has fallen below the cost,
-// $0DBC is STZ'd, so every further A buzzes.
-// $C2:B519[charId] -- the caster POSE the cast arms in $19E1. SEVEN entries, one per character: a
-// five-entry read would run off the end for AYLA (charId 5), who owns the field-usable tech $29.
+// $C2:B519[charId]: the caster pose the cast arms in $19E1. Seven entries, one per character (Ayla, charId 5, owns
+// the field-usable tech $29).
 int ctTechCastPoseByte(int charId) { return ctTechCastPose[charId & 7]; }
 
+// C2/B870 for a tech: the same two-bit validity mask over the same pools, with the HP/MP bits from the tech's $0DBD
+// (ctTechFx), plus C2/B839's rule (the item path has none): once the caster's MP is below the cost, $0DBC is STZ'd and
+// every further A buzzes.
 int CtMenuTechTargetMask(const uint8_t* mem, int casterCharId, int techId, int tab, int tgtSlot) {
   if (!mem || techId < 0 || techId >= 0x75) return 0;
   const uint8_t* csh = mem + 0x2600 + (size_t)(casterCharId & 7) * 0x50;
@@ -1814,6 +1631,10 @@ int CtMenuTechTargetMask(const uint8_t* mem, int casterCharId, int techId, int t
   return 0;
 }
 
+// C2/B3E6's gate ladder + C2/8F55's effect. Returns 1 when the tech was cast (the caller then plays the 10-frame
+// pre-roll, the chime cmd $19 id $06/$07 and the popup), 0 when it is refused (the caller plays buzz id $01). shown6
+// receives what the popup floats: [0..2] HP per party index, [3..5] MP. `rngCur` is $7E:0D00, which the menu advances
+// once per frame (the whole menu, not just this screen).
 int CtMenuTechUse(uint8_t* mem, int casterCharId, int techId, int tab, int tgtSlot,
                   unsigned rngCur, int* shown6) {
   if (shown6) for (int i = 0; i < 6; i++) shown6[i] = -1;
@@ -1823,8 +1644,8 @@ int CtMenuTechUse(uint8_t* mem, int casterCharId, int techId, int tab, int tgtSl
   int cost = CtMenuTechMp(casterCharId, techId, tab, csh[0x2A]);       // C2/B427 -> C2/BC22
   if (csh[7] < cost) return 0;                                         // C2/B42D, an 8-bit compare
   int fx = ctTechFx[techId], nib = ctTechNib[techId];                  // $0DBD / $0DC0
-  int amt[6]; CtMenuRestoreAmounts(csh[0x39], nib, rngCur, amt);       // $0DBF = the DERIVED magic
-  int start = (fx & 0x08) ? 0 : tgtSlot, count = 1;                    // C2/8E2D: bit3 = ALL PARTY
+  int amt[6]; CtMenuRestoreAmounts(csh[0x39], nib, rngCur, amt);       // $0DBF = the derived Magic
+  int start = (fx & 0x08) ? 0 : tgtSlot, count = 1;                    // C2/8E2D: bit 3 = all party
   if (fx & 0x08) { count = 0; for (int k = 0; k < 3; k++) if (!(mem[0x2980 + k] & 0x80)) count++; }
   for (int i = 0; i < count; i++) {
     int slot = start + i;
@@ -1837,28 +1658,28 @@ int CtMenuTechUse(uint8_t* mem, int casterCharId, int techId, int tab, int tgtSl
   return 1;                                                            // (the MP is C2/B50C's, after the popup)
 }
 // C2/B502-B516, after C2/8F55 has returned (the popup over): `LDA $0007,X / SEC / SBC $0F4F / STA $0007,X` on the
-// caster's live sheet -- 8-BIT, no borrow. MEASURED: Frog's MP 17 -> 16 at f303, 52 frames after the A (techcast).
+// caster's live sheet, 8-bit, no borrow.
 void CtMenuTechPay(uint8_t* mem, int casterCharId, int techId, int tab) {
   if (!mem || techId < 0) return;
   uint8_t* csh = mem + 0x2600 + (size_t)(casterCharId & 7) * 0x50;
   csh[7] = (uint8_t)((csh[7] - CtMenuTechMp(casterCharId, techId, tab, csh[0x2A])) & 0xFF);
 }
 
-// MOVE: swap two inventory slots (ids AND counts), byte-exact ROM C2/AAE3. a = $0F00 (lifted), b = $0D26
-// (destination). Empty slots participate normally (a 0 is left behind; the list is not compacted).
+// Move: swap two inventory slots (ids and counts), C2/AAE3. a = $0F00 (lifted), b = $0D26 (destination). Empty slots
+// take part normally (a 0 is left behind; the list is not compacted).
 void CtMenuItemSwap(uint8_t* mem, int a, int b) {
   if (!mem || a < 0 || a >= 0xF2 || b < 0 || b >= 0xF2 || a == b) return;
   uint8_t ti = mem[0x2400 + a]; mem[0x2400 + a] = mem[0x2400 + b]; mem[0x2400 + b] = ti;  // swap ids  (C2/AAE3)
   uint8_t tc = mem[0x2500 + a]; mem[0x2500 + a] = mem[0x2500 + b]; mem[0x2500 + b] = tc;  // swap counts (C2/AAF1)
 }
 
-// ORGANIZE: rebuild $2400/$2500 into the canonical order, MERGING dup stacks (cap 99) and COMPACTING out
-// empties. Byte-exact ROM C2/AB62: accumulate presence/count per id, then emit consumables (BC..CF, non-
-// key) -> key items (bit3, ascending) -> weapons(00-59) -> helmets(5A-7A) -> armor(7B-93) -> accessories
-// (94-BB), ascending id within each range; zero-fill the tail.
+// Organize: rebuild $2400/$2500 in the ROM's order, merging duplicate stacks (cap 99) and compacting out empties
+// (C2/AB62): accumulate presence/count per id, then emit consumables (BC..CF, non-key) -> key items (bit 3,
+// ascending) -> weapons (00-59) -> helmets (5A-7A) -> armor (7B-93) -> accessories (94-BB), ascending id within each
+// range; zero-fill the tail.
 static void mOrgEmit(uint8_t* mem, int* present, int* cnt, int* py, int gstart, int glen) {
   for (int id = gstart; id < gstart + glen && id <= 0xF2; id++) {
-    if (!present[id] || (ctItemProp[id] & 0x08)) continue;            // skip absent + key items (bit3)
+    if (!present[id] || (ctItemProp[id] & 0x08)) continue;            // skip absent and key items (bit 3)
     if (*py < 0xF2) { mem[0x2400 + *py] = (uint8_t)id; mem[0x2500 + *py] = (uint8_t)cnt[id]; (*py)++; }
     present[id] = 0;
   }
@@ -1872,7 +1693,7 @@ void CtMenuItemOrganize(uint8_t* mem) {
   }
   int y = 0;
   mOrgEmit(mem, present, cnt, &y, ctOrgStart[0], ctOrgLen[0]);        // group0 consumables (non-key)
-  for (int id = 0; id <= 0xF1; id++)                                  // KEY-item pass (bit3 set), ascending
+  for (int id = 0; id <= 0xF1; id++)                                  // key-item pass (bit 3 set), ascending
     if (present[id] && (ctItemProp[id] & 0x08)) {
       if (y < 0xF2) { mem[0x2400 + y] = (uint8_t)id; mem[0x2500 + y] = (uint8_t)cnt[id]; y++; }
       present[id] = 0;
@@ -1881,30 +1702,27 @@ void CtMenuItemOrganize(uint8_t* mem) {
   for (; y < 0xF2; y++) { mem[0x2400 + y] = 0; mem[0x2500 + y] = 0; } // zero-fill the tail
 }
 
-// A titled "not implemented" placeholder for the sub-screens this phase does not build (Save 6).
+// A titled "not implemented" placeholder for an unexpected sub-screen id.
 void CtMenuRenderPlaceholder(const CtMenuHost* h, uint8_t* fb, int screen) {
   static const char* nm[7] = { "", "EQUIP", "ITEM", "TECH", "CONFIG", "FORM", "SAVE" };
   if (!fb) return;
-  /* background = the byte-exact BG2 chrome, laid by the caller (CtMenuChrome) */
+  // the background (the BG2 chrome) is laid by the caller (CtMenuChrome)
   if (h && h->drawWin) h->drawWin(fb, MI_HX, MI_HY, MI_HW, MI_HH);
   mText(h, fb, (screen >= 1 && screen <= 6) ? nm[screen] : "?", MI_HX + 12, MI_HY + 8);
   if (h && h->drawWin) h->drawWin(fb, MI_HX, MI_LY, MI_HW, MH - MI_LY - 8);
   mText(h, fb, "Not Implemented", MI_HX + 40, MI_LY + 60);
 }
 
-// One character panel (name / LV / HP cur|max / MP cur|max) at (x,y) from an already-read CtMenuPanel.
-// Shared by the party-panel column (CtMenuRender / char-select) and the status DETAIL header so the
-// three screens draw identical panel geometry (oracle: name x+8/y+8, LV right-aligned, HP y+20, MP y+32,
-// '/' at x+96, cur/max ones-digit ending x+96 / x+136).
-// `textInset` = px from the panel-x to the text column (8 on the main screen; 24 on Tech, where the
-// standing sprite occupies the panel's left 16px). `dim` = draw the panel dim grey (non-focused member).
+// One character panel (name / LV / HP cur|max / MP cur|max) at (x,y) from a CtMenuPanel. Shared by the party column
+// (CtMenuRender / char select) and the status detail header, so they draw the same geometry.
+// `textInset` = px from the panel x to the text column (8 on the main screen; 24 on Tech, where the standing sprite
+// takes the panel's left 16 px). `dim` = draw the panel dim (non-focused member).
 static int mPanelHpMaxDim = -1;                      // >= 0: the max HP's own palette (the Equip preview's $0D57)
 static void mCharPanel(const CtMenuHost* h, uint8_t* fb, int x, int y, const CtMenuPanel* p, int textInset, int dim) {
   int x0 = x + textInset;
   // C2/A1EF (every panel builder: C2/A216, C2/AFED's B002, the Tech screen's BA32 / BEEF): `$0D5D` = 4 when
-  // `$0D38[char]` (C2/813C: the effective max / 10) >= the current HP -- string 06 prints the current HP in that
-  // palette (BG1 palette 1, red; palette 5 when C2/9E76 dims the panel). MEASURED (a Gold Earring poked on Crono,
-  // HP 5): the ribbon's panel reads 5/144 with the 5 in (255,33,33) / (57,0,0).
+  // `$0D38[char]` (C2/813C: the effective max / 10) >= the current HP; string 06 prints the current HP in that
+  // palette (BG1 palette 1, red; palette 5 when C2/9E76 dims the panel).
   int lowHp = 0;
   if (h->mem) {
     int sc = h->mem[0x0D38 + 2 * (p->charId & 7)] | (h->mem[0x0D39 + 2 * (p->charId & 7)] << 8);
@@ -1914,11 +1732,8 @@ static void mCharPanel(const CtMenuHost* h, uint8_t* fb, int x, int y, const CtM
   mText(h, fb, p->name, x0, y + 16);                 // row +16 (BG1 tile row 3): name ...... LV n
   mText(h, fb, "LV", x0 + 48, y + 16);
   mStatCap(h, fb, p->lv, 7, x0 + 80, y + 16);        // string 01: `LV` + code 0C cap 7
-  // The numeric fields are TILE-aligned, and they were 4 px right of the ROM's on every screen.
-  // Measured on the oracle status capture (scratchpad/menu/or_opt0.png, Crono HP 70/70 at x0 = 24):
-  // the current value is right-aligned to x0+48 (digits land on x 56/64), the "/" starts AT x0+48
-  // (x 72) and the maximum is right-aligned to x0+80 (digits on x 88/96). Cross-correlating our HP
-  // row against that capture peaks at exactly -4 px with a PERFECT 35/35 ink overlap.
+  // The numeric fields are tile-aligned: the current value right-aligned to x0+48, the "/" at x0+48 and the maximum
+  // right-aligned to x0+80.
   mText(h, fb, "HP", x0, y + 24);                    // row +24: HP cur / max
   if (lowHp) mDim = dim ? 7 : 6;                     // string 06: `PAL $0D5D` before the current HP ..
   mNumR(h, fb, p->hp, x0 + 48, y + 24);
@@ -1934,18 +1749,12 @@ static void mCharPanel(const CtMenuHost* h, uint8_t* fb, int x, int y, const CtM
   mDim = 0;
 }
 
-// The 3 party panels down the left column (name/LV/HP/MP each). Shared by every screen that shows the
-// party column; the TIME/G box (mTimeGold) is drawn SEPARATELY because not every screen has it.
-// `focusChar` < 0 means NO PANEL IS DIMMED. The dim is not a property of the party column: it belongs
-// to the Equip/Status char-SELECT, which tones the panel it is standing on. The TECH screen has a
-// char-select cursor too and dims NOTHING -- MEASURED on the oracle with a three-member party, both
-// on the ribbon's opt-2 HOVER and on the entered screen, and with the cursor moved: all three panels
-// ink (255,255,255). This port dimmed the non-cursor two on Tech from an assumption written into the
-// call site as if it were derived ("char-select: the cursor member bright, others dim"); with a SOLO
-// party -- the only one the Tech captures used to have -- there is no second panel to give it away.
+// The three party panels down the left column. The TIME/G box (mTimeGold) is drawn separately, since not every screen
+// has it. `focusChar` < 0 dims no panel: the dim belongs to the Equip/Status char select, which tones every panel but
+// the one it stands on. The Tech screen has a char-select cursor too and dims nothing.
 static void mPartyPanels(const CtMenuHost* h, uint8_t* fb, int textInset, int focusChar) {
-  for (int row = 0; row < 3; row++) {              // the FOCUSED member is bright; the others dim (pal4). Focus =
-    int y = 8 + row * MP_PITCH;                     // the ribbon lead, or the char-select CURSOR char (follows it).
+  for (int row = 0; row < 3; row++) {              // focus = the ribbon lead, or the char-select cursor's char:
+    int y = 8 + row * MP_PITCH;                     //   it stays bright, the others dim (pal4)
     CtMenuPanel p;
     if (!CtMenuPanelData(h->mem, mPanelRowSlot(h->mem, row), &p)) continue;
     mCharPanel(h, fb, MP_X, y, &p, textInset, focusChar >= 0 && p.charId != focusChar);
@@ -1961,37 +1770,18 @@ static void mBlitRGBA(uint8_t* fb, const unsigned char* rgba, int w, int hh, int
         memcpy(fb + ((size_t)dy * MW + dx) * 3, p, 3);
     }
 }
-// ================= THE PARTY-PANEL STANDING SPRITE, FOR ALL SEVEN CHARACTERS =================
-// It is the character's own FIELD sprite -- not a menu-specific graphic, and not a captured bitmap.
-// MEASURED, not assumed: decode the menu's OBJ tiles straight out of an oracle --peek capture (VRAM
-// $4000 word base, 4bpp, the OAM entries for that panel) and compare against CT_ASSET_SPRITE[charId]
-// composed by CtComposeSprite. Every pixel carries the SAME COLOUR INDEX -- 414/414 for Crono,
-// 300/300 Marle, 327/327 Lucca, 286/286 Frog -- and the menu's OBJ palette equals the sprite asset's
-// own palette at all twelve indices those frames use. So the host composes the frame and passes it in
-// h->partySpr[charId]; nothing about the art needs baking.
-//
-// THE STANDING FRAME per character, read off the oracle by matching every composed frame's ink mask
-// against the decoded OBJ pixels (charId -> sprite -> frame):
-//     Crono 0 -> 0,  Marle 1 -> 1,  Lucca 2 -> 1,  Robo 3 -> 0,
-//     Frog  4 -> 1,  Ayla  5 -> 2,  Magus 6 -> 0
-// which is exactly CT_ASSET_SPRITEANIM[charId] byte 3 for all seven -- so the host looks it up in that
-// table rather than carrying a list of constants. (Robo, Ayla and Magus were captured on spliced
-// states; the ROM's own C2/CD2B/C2/CDE3 path drew them once their ids were in $7E:2980.)
-//
-// ANCHORING is by the sprite's own OPAQUE BOX against two numbers the ROM supplies per screen -- a
-// CENTRE x and a FEET y -- because the ROM's per-character frame SHAPE varies (Crono assembles as a
-// 16x64 column of four 16x16 sprites, Lucca and Frog as a 2x2 of them) and that assembler, C2/F657
-// over the $7E:1800 records, is not ported. Measured:
-//     Tech  (menu_open_gato2, ribbon opt 2): Crono ink x 20..35 y 21..55, Marle x 22..34 y 71..103
-//                                            -> centre x 28, feet y 56 / 104 = 56 + 48*panel
-//     Form  (com_jogo_salvo, opt 4):         ink centred on x 168, feet 56 / 104 / 152 (CtMenuFormGeom)
-//
-// A LOCKED or EMPTY panel's sprite is drawn DIM, and the dim is the same half-math the rest of the
-// menu uses: the oracle's OBJ palette for the locked panel is the asset palette HALVED IN 5-BIT SPACE
-// at all twelve indices (12/12, measured on _av_form1's locked Crono against sprite 0's own palette).
-#define MP_SPR_CX_TECH 28   /* Tech-screen sprite centre x (measured) */
-// The ONE placement computation, shared by the blitter and by the probe that grades it: the opaque
-// box, then the blob's top-left such that the box is centred on `cx` and its bottom row is feetY-1.
+// ---- The party-panel standing sprite (disasm/notes/menu2_party_sprites.md) ----
+// It is the character's own field sprite: the menu's OBJ tiles decode to the same colour index at every pixel as
+// CT_ASSET_SPRITE[charId] composed by CtComposeSprite, and the OBJ palette equals the asset's at the twelve indices the
+// frames use. The host composes the frame into h->partySpr[charId]. The standing frame (charId -> frame: Crono 0,
+// Marle 1, Lucca 1, Robo 0, Frog 1, Ayla 2, Magus 0) is CT_ASSET_SPRITEANIM[charId] byte 3.
+// Anchoring is by the sprite's opaque box against two numbers the ROM gives per screen, a centre x and a feet y,
+// because the frame shape varies (Crono assembles as a 16x64 column of 16x16 sprites, Lucca and Frog as a 2x2) and the
+// assembler (C2/F657 over the $7E:1800 records) is not ported. Tech: centre x 28, feet 56 + 48*panel; Form: centre
+// 168, feet 56 / 104 / 152 (CtMenuFormGeom). A locked or empty panel's sprite is dim: its palette halved in 5-bit.
+#define MP_SPR_CX_TECH 28   /* Tech-screen sprite centre x */
+// The placement, shared by the blitter and by the probe that grades it: the opaque box, then the blob's top-left such
+// that the box is centred on `cx` and its bottom row is feetY-1.
 static int mSprPlace(const uint8_t* blob, int cx, int feetY, int* ox, int* oy,
                      int* ix0o, int* ix1o, int* iy0o, int* iy1o) {
   if (!blob) return 0;
@@ -2005,16 +1795,16 @@ static int mSprPlace(const uint8_t* blob, int cx, int feetY, int* ox, int* oy,
         if (j < iy0) iy0 = j; if (j > iy1) iy1 = j;
       }
   if (ix1 < ix0) return 0;
-  if (ox) *ox = cx - (ix0 + ix1 + 1) / 2;      // X = the sprite CENTRE
-  if (oy) *oy = feetY - 1 - iy1;               // Y = the FEET line, one row below the last ink row
+  if (ox) *ox = cx - (ix0 + ix1 + 1) / 2;      // X = the sprite centre
+  if (oy) *oy = feetY - 1 - iy1;               // Y = the feet line, one row below the last ink row
   if (ix0o) *ix0o = ix0; if (ix1o) *ix1o = ix1;
   if (iy0o) *iy0o = iy0; if (iy1o) *iy1o = iy1;
   return 1;
 }
 // The party art carries each pixel's OBJ colour index in its alpha byte (field.c's compose). Colours 1-12 are the
-// character's own ($E4, FF/F628 halves them for a dim), 13-15 its WEAPON's: C2/F5ED loads them from $D1 by the sheet's
-// +0x29 when a screen runs C2/F5A7, and until then they hold what the menu's init left (black, the art's own). A caller
-// sets mSprWpn (three BGR555 words) around the blit when the weapon colours are loaded.
+// character's own ($E4; FF/F628 halves them for a dim), 13-15 its weapon's: C2/F5ED loads them from $D1 by the sheet's
+// +0x29 when a screen runs C2/F5A7, and until then they hold what the menu's init left (black, the art's own). A
+// caller sets mSprWpn (three BGR555 words) around the blit when the weapon colours are loaded.
 static const uint16_t* mSprWpn = NULL;
 static void mBlitSprAnchored(uint8_t* fb, const uint8_t* blob, int cx, int feetY, int dim) {
   int w, hh, x0, y0;
@@ -2038,11 +1828,9 @@ static void mBlitSprAnchored(uint8_t* fb, const uint8_t* blob, int cx, int feetY
       else { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; }
     }
 }
-// The SCREEN BOX a party sprite lands in, computed exactly the way mBlitSprAnchored places it, so a
-// probe grades the frame choice, the crop and the anchor together instead of restating them.
-// It reports the STANDING frame's box on purpose: that frame is the animator's reference -- every
-// animated pose is placed as an offset from it (mBlitPartySpr) -- and a probe that followed the
-// live pose would make its own signature depend on the animation PHASE.
+// The screen box a party sprite lands in, computed as mBlitSprAnchored places it, so a probe grades the frame choice,
+// the crop and the anchor together. It reports the standing frame's box on purpose: every animated pose is placed as
+// an offset from it (mBlitPartySpr), and a probe that followed the live pose would depend on the animation phase.
 int CtMenuSprBox(const CtMenuHost* h, int charId, int cx, int feetY, int* bx0, int* bx1, int* by0, int* by1) {
   const uint8_t* blob = (h && charId >= 0 && charId < 7) ? h->partySpr[charId] : NULL;
   int x0, y0, ix0, ix1, iy0, iy1;
@@ -2051,66 +1839,24 @@ int CtMenuSprBox(const CtMenuHost* h, int charId, int cx, int feetY, int* bx0, i
   if (by0) *by0 = y0 + iy0; if (by1) *by1 = y0 + iy1;
   return 1;
 }
-// ================================================================ THE MENU SPRITE ANIMATOR
-// C2/F643 spawns ONE task in slot 0x28 (`LDA #F657 / LDX #0028 / JSR C2/8249`) and C2/F657 is its
-// body: set D = $1800 and walk the nine sprite blocks, D += 0x40 until D == $1A40, once per frame.
-//
-//   2F662  LDA $00 / BMI ->next            ; +0x00 = charId, bit7 = no character in this block
-//   2F666  LDA $18 / BMI ->next            ; +0x18 bit7 = block disabled
-//   2F66A  LDA $11 / CMP $12 / BNE ->adv   ; +0x11 = REQUESTED anim, +0x12 = the one PLAYING
-//   2F670  CMP #00 / BEQ ->draw            ; both 0 -> this block is not animating at all
-//   2F674  DEC $13 / BPL ->draw            ; +0x13 = the frame countdown (SIGNED test)
-//   2F678  LDA $0D73 / CMP $0D75 / BCS ->draw ; a per-frame BUDGET on how many blocks may advance
-//   2F680  JSR C2/F69B                     ; advance
-//   2F683  LDA $18 / BNE ->next / JSR C2/F871   ; emit this block's OAM
-//
-// and C2/F69B is the advance:
-//
-//   2F69B  INC $16                         ; +0x16 = the frame index inside the animation
-//   2F69D  LDA $11 / CMP $12 / STA $12     ; commit the request; Z = "it did not change"
-//   2F6A3  BEQ ->2F6F7                     ;   unchanged -> keep walking the same table
-//   2F6A5  STZ $16                         ;   CHANGED -> restart at frame 0 and re-point the tables
-//   2F6A7  LDA $17 / ASL A / TAX / LDA $14 / JSR ($F6D8,X)   ; kind -> [0, v, 2v, 3v] over +0x14
-//   2F6B4  LDA $11 / AND #007F / ASL A / ASL A / STA $1E     ; animId * 4
-//   2F6BD  ADC $1B / ADC $0A / STA $1B     ; POSE table  = resolve(+0x14) + animId*4 + word(+0x0A)
-//   2F6C3  LDA $1E / CLC / ADC $0C / STA $1E ; DURATION table =            animId*4 + word(+0x0C)
-//   2F6F7  LDY $16 / LDA [$1E],Y           ; the frame's DURATION
-//   2F6FB  BEQ ->2F6E0                     ;   0 terminates: bit7 of $11 -> restart at +0x21, else
-//                                          ;   restart at 0, and if already 0 the animation is empty
-//   2F6FD  STA $13                         ; reload the countdown
-//   2F6FF  LDA [$1B],Y / CMP $03 / BEQ ->2F750 / STA $03     ; +0x03 = the ASSEMBLY FRAME, and the
-//                                          ;   DMA that follows uploads that frame's tiles
-//   2F750  SEP #30 / DEC $13 / RTS         ; ⭐ BOTH exits decrement again, so a pose lasts exactly
-//                                          ;   `duration` frames, not duration+1
-//
-// ⭐ WHAT THE TABLES ARE. They are not a menu asset: they are the character's ORDINARY sprite
-// animation set, and CT_ASSET_SPRITEANIM already carries them byte for byte. Read out of the
-// oracle's own live blocks, Lucca's pointers resolve to $E4:39A0 (poses) and $E4:AA24 (durations),
-// and those ROM bytes are `0A 0B 0C 0D 0E 0F` / `07 07 07 07 07 07` -- exactly CT_ASSET_SPRITEANIM
-// [2] anim 1's D-facing column and its delays. Same for Crono (E4/312C = 04 05 06 07 08 09), Frog
-// (E4/427C) and for anim 0x0B (Lucca E4/39C8 = 01 87 4A / E4/AA4C = 0A 05 0F). The menu therefore
-// plays the character's WALK CYCLE FACING DOWN, which is why block+0x03 is the same assembly-frame
-// index the field sprite composer takes, and why anim 0 frame 0 IS the standing frame the host
-// already bakes.
-//
-// WHERE THE STATE LIVES. The ROM keeps it in $7E:1800 + charId*0x40. We keep it host-side instead:
-// our menu runs OVER a live field WRAM that has to resume byte-identically (the --menutest
-// "resume byte-identical" assertion), and $7E:1800 is the FIELD's per-object array in this engine
-// (CtObjSceneDefaults writes $1800,X). The MACHINE below is the ROM's, byte for byte; only the
-// storage moved, and it is stated here rather than left to be discovered.
-//
-// NOT MODELLED, and named: (1) [MODELLED since 2026-09-24, see CtMenuSprTick: one new pose per frame]; (2) the bit7 loop-point $21, which only matters for an
-// anim id with bit7 set, and the menu's two callers ask for 1 and 0x0B; (3) the VRAM DMA at 2F707,
-// which is how the ROM gets the frame's tiles on screen -- we compose the frame instead.
-typedef struct { uint8_t want, cur, count, frame, pose, shown, loop; int chr; } CtMenuSprBlk;   // shown = ON SCREEN
-// Blocks 0-6 are the characters' own ($1800 + 0x40 * charId, C2/F626); BLOCK 7 ($19C0) is a COPY whose character is set
-// at run time -- the Tech screen's caster (C2/BA09: `LDA $9A90 / ... PEA $19C0 / PLD / CMP $00 / BEQ / STA $00 / JSR
-// C2/F422`). `loop` = block +0x21: an animation whose request has bit 7 (C2/B4E6's $19D1 = 90) restarts there at its
-// end (2F6E0 `LDA $11 / BPL / LDA $21 / STA $16`) instead of at frame 0.
+// ---- The menu sprite animator (disasm/notes/menu2_party_sprites.md, "The menu sprite animator") ----
+// C2/F643 spawns one task (slot 0x28, C2/F657) that walks the nine sprite blocks at $1800 + 0x40*n once a frame;
+// C2/F69B advances a block: a changed request ($11 != $12) restarts at frame 0 and re-points the pose / duration tables,
+// a zero duration ends the animation (restart at +0x21 when the request has bit 7, else at 0), and both exits
+// decrement the countdown again, so a pose lasts `duration` frames. The tables are the character's ordinary sprite
+// animation set (CT_ASSET_SPRITEANIM): the menu plays the walk cycle facing down, so block+0x03 is the field
+// composer's assembly frame and anim 0 frame 0 is the standing frame.
+// The state is kept here (g_mspr) instead of at $7E:1800, which is the field's per-object array in this engine
+// (CtObjSceneDefaults writes $1800,X) and must resume unchanged after the menu.
+// Not modelled: the VRAM DMA at 2F707 (the host composes the frame instead).
+typedef struct { uint8_t want, cur, count, frame, pose, shown, loop; int chr; } CtMenuSprBlk;   // shown = on screen
+// Blocks 0-6 are the characters' own ($1800 + 0x40 * charId, C2/F626); block 7 ($19C0) is a copy whose character is
+// set at run time, the Tech screen's caster (C2/BA09). `loop` = block +0x21, the restart point of a request with
+// bit 7 (C2/B4E6's $19D1 = 90; 2F6E0 `LDA $11 / BPL / LDA $21 / STA $16`).
 static CtMenuSprBlk g_mspr[8];
 
-// CT_ASSET_SPRITEANIM: [nAnims u8] then per anim [n u8] + n x {U,D,L,R asm u8, delay u8}. Returns the
-// frame array for `ai` (and its count), or NULL. Same walk field.c's animFrames does.
+// CT_ASSET_SPRITEANIM: [nAnims u8] then per anim [n u8] + n x {U,D,L,R asm u8, delay u8}. Returns the frame array for
+// `ai` (and its count), or NULL. The same walk as field.c's animFrames.
 static const uint8_t* msprFrames(const CtMenuHost* h, int c, int ai, int* n) {
   *n = 0;
   if (!h || c < 0 || c > 6) return NULL;
@@ -2125,25 +1871,25 @@ static const uint8_t* msprFrames(const CtMenuHost* h, int c, int ai, int* n) {
   *n = p[0];
   return p + 1;
 }
-#define MSPR_D     1   /* the D (facing-down) column of a {U,D,L,R,delay} record -- the menu's facing */
+#define MSPR_D     1   /* the D (facing-down) column of a {U,D,L,R,delay} record, the menu's facing */
 #define MSPR_DELAY 4
 
 int CtMenuSprPose(const CtMenuHost* h, int charId) {
   if (charId < 0 || charId > 6) return 0;
   (void)h;
-  { const char* f = getenv("CT_FORMPOSE");   /* DEBUG: pin an ANIMATING block to one frame */
+  { const char* f = getenv("CT_FORMPOSE");   /* debug: pin an animating block to one frame */
     if (f && g_mspr[charId].cur) return atoi(f); }
   return g_mspr[charId].pose;
 }
 int CtMenuSprShown(int charId) {
   if (charId < 0 || charId > 6) return 0;
-  { const char* f = getenv("CT_FORMPOSE");   /* DEBUG: pin an ANIMATING block to one frame */
+  { const char* f = getenv("CT_FORMPOSE");   /* debug: pin an animating block to one frame */
     if (f && g_mspr[charId].cur) return atoi(f); }
   return g_mspr[charId].shown;
 }
 void CtMenuSprReset(const CtMenuHost* h) {
   for (int c = 0; c < 7; c++) {
-    int n = 0; const uint8_t* fr = msprFrames(h, c, 0, &n);      // anim 0 = the STANDING pose
+    int n = 0; const uint8_t* fr = msprFrames(h, c, 0, &n);      // anim 0 = the standing pose
     g_mspr[c].want = g_mspr[c].cur = 0;
     g_mspr[c].count = 0; g_mspr[c].frame = 0;
     g_mspr[c].pose = (fr && n > 0) ? fr[MSPR_D] : 0;
@@ -2166,48 +1912,43 @@ void CtMenuSprRequest7(int animId, int loop) {
 }
 int CtMenuSprChar7(void) { return g_mspr[7].chr; }
 int CtMenuSprShown7(void) { return g_mspr[7].shown; }
-// C2/C997: `LDA $2980,X / BMI ->rts / ... TAX / TYA / STA $1811,X` -- the roster byte for CELL x names
-// the character whose block gets the request; bit7 (an empty cell) writes nothing.
+// C2/C997: `LDA $2980,X / BMI ->rts / ... TAX / TYA / STA $1811,X` -- the roster byte for cell x names the character
+// whose block gets the request; bit 7 (an empty cell) writes nothing.
 static void msprRequestCell(const CtMenuHost* h, int cell, int animId) {
   if (!h || !h->mem || cell < 0 || cell > 8) return;
   int e = h->mem[0x2980 + cell];
   if (e & 0x80) return;                                          // 2C99B BMI
   g_mspr[e & 7].want = (uint8_t)animId;
 }
-// C2/C973: everyone still, the CURSOR's member walking, the PICKED member on anim 0x0B.
+// C2/C973: everyone still, the cursor's member walking, the picked member on anim 0x0B.
 //   2C975  LDA #08 / STA $00 / LDY #00 / (loop) LDX $00 / JSR C2/C997 / DEC $00 / BPL
-//   2C984  LDY #01 / LDX $0F0D / JSR C2/C997          ; $0F0D = the cursor CELL
-//   2C98C  LDA $0F00 / BPL / LDY #0B / LDX $0F00 / JSR C2/C997   ; $0F00 = the picked CELL, FF = none
-// ⭐ INDEXED BY THE CELL, NOT BY THE PANEL ROW. C2/C997 reads $2980 with the cell, while the panel
-// row shows C2/CD2B's COMPACTED entry -- on a party with a leading hole the two disagree, and this
-// reproduces the ROM's own indexing rather than "the character under the hand". No oracle state this
-// repo owns has such a hole, so that case is unverified either way; being byte-faithful is the
-// choice that does not invent a rule.
+//   2C984  LDY #01 / LDX $0F0D / JSR C2/C997          ; $0F0D = the cursor cell
+//   2C98C  LDA $0F00 / BPL / LDY #0B / LDX $0F00 / JSR C2/C997   ; $0F00 = the picked cell, FF = none
+// Indexed by the cell, not the panel row: C2/C997 reads $2980 with the cell, while the panel row shows C2/CD2B's
+// compacted entry, so on a party with a leading hole the two differ (not checked against the oracle).
 void CtMenuSprFormAnims(const CtMenuHost* h, int cursorCell, int pickedCell) {
   for (int x = 8; x >= 0; x--) msprRequestCell(h, x, 0);
   msprRequestCell(h, cursorCell, 1);
   if (pickedCell >= 0) msprRequestCell(h, pickedCell, 0x0B);
 }
-// The shop's writer: C2/DD7C `JSR C2/F626` (Y = charId * 0x40) then `STA $1811,Y` -- by CHARACTER, not by cell.
+// The shop's writer: C2/DD7C `JSR C2/F626` (Y = charId * 0x40) then `STA $1811,Y`, by character, not by cell.
 void CtMenuSprRequest(int charId, int animId) {
   if (charId < 0 || charId > 6) return;
   g_mspr[charId].want = (uint8_t)animId;
 }
 void CtMenuSprTick(const CtMenuHost* h) {
-  if (getenv("CT_SPRDBG")) {   /* DEBUG: the block state this frame, per character */
+  if (getenv("CT_SPRDBG")) {   /* debug: the block state this frame, per character */
     for (int c = 0; c < 7; c++) if (g_mspr[c].want || g_mspr[c].cur)
       fprintf(stderr, "[mspr] c%d want=%02X cur=%02X frame=%d count=%d pose=%02X\n",
               c, g_mspr[c].want, g_mspr[c].cur, g_mspr[c].frame, (int8_t)g_mspr[c].count, g_mspr[c].pose);
   }
-  // THE UPLOAD BUDGET (2F65D STZ $0D73 / 2F678 CMP $0D75 / BCS): a block advances only while $0D73 < $0D75, and a
-  // NEW pose's tile upload (C2/F75C, reached when the frame byte differs, 2F701) adds the block's own $1802 byte to
-  // $0D73 (2F820 LDA $02 / 2F826 ADC $0D73) -- 01 for every PC block (oracle, the shop's $1802/$1842). $0D75 is the
-  // SCREEN's: 7 in the shop's build (C2/DC26) and 1 on every frame of its Buy/Sell substate (C2/D548), 2 from the Form
-  // tab's builder (C2/CA39), 1 / 2 in the Item overlay (C2/AF64 / AF72 / B86B / B34F), 2 for the Tech list (C2/B9E6),
-  // 0 after the open's fill. So $0D75 new poses a frame, in block (charId) order; a blocked block keeps the count it
-  // already decremented and retries next frame. MEASURED on the Form (formswap drive, --monitor $0D73): 02 on the swap
-  // frame, both members' new poses in it, under $0D75 = 02 -- the one-a-frame this used to assume put Frog's a frame
-  // late (0x20 per upload was a misreading of 2F826).
+  // The upload budget (2F65D STZ $0D73 / 2F678 CMP $0D75 / BCS): a block advances only while $0D73 < $0D75, and a new
+  // pose's tile upload (C2/F75C, reached when the frame byte differs, 2F701) adds the block's $1802 byte to $0D73
+  // (2F820 LDA $02 / 2F826 ADC $0D73), 01 for every PC block. $0D75 is the screen's: 7 in the shop's build (C2/DC26)
+  // and 1 on every frame of its Buy/Sell substate (C2/D548), 2 from the Form tab's builder (C2/CA39), 1 / 2 in the
+  // Item overlay (C2/AF64 / AF72 / B86B / B34F), 2 for the Tech list (C2/B9E6), 0 after the open's fill. So $0D75 new
+  // poses a frame, in block (charId) order; a blocked block keeps the count it already decremented and retries next
+  // frame.
   int spent = 0, budget = (h && h->mem) ? h->mem[0x0D75] : 1;
   for (int c = 0; c < 8; c++) {
     CtMenuSprBlk* b = &g_mspr[c];
@@ -2228,50 +1969,46 @@ void CtMenuSprTick(const CtMenuHost* h) {
     if (!fr || n <= 0) continue;
     int dead = 0, guard = 0;
     for (;;) {                                                   // 2F6F7 LDY $16 / LDA [$1E],Y
-      // The ROM's table ends in a 0 duration; ours is length-counted, so "past the end" IS that 0.
+      // The ROM's table ends in a 0 duration; ours is length-counted, so "past the end" is that 0.
       if (b->frame < n && fr[(size_t)b->frame * 5 + MSPR_DELAY]) break;
       if ((b->cur & 0x80) && ++guard < 4) { b->frame = b->loop; continue; }   // 2F6E0 BPL / LDA $21 / STA $16
       if (b->frame != 0) { b->frame = 0; continue; }              // 2F6EE STZ $16 (restart)
       b->frame--; dead = 1; break;                                // 2F6F2 DEC $16 / RTS (empty anim)
     }
-    if (dead) continue;                                           //   -- and NO extra DEC $13
+    if (dead) continue;                                           //   -- and no extra DEC $13
     b->count = fr[(size_t)b->frame * 5 + MSPR_DELAY];             // 2F6FD STA $13
     if (fr[(size_t)b->frame * 5 + MSPR_D] != b->pose) spent++;    // 2F701 CMP $03 / BEQ: a new pose is uploaded
     b->pose  = fr[(size_t)b->frame * 5 + MSPR_D];                 // 2F705 STA $03
     b->count--;                                                   // 2F752 DEC $13
   }
-  // THE PICTURE SHOWS THE POSE OF THIS TICK: the new pose's OAM (C2/F871) and its tiles (C2/F75C's queue) both go out
-  // in this frame's NMI. MEASURED on the logical oracle at the cartridge's own display offset (tools/shop_equip_cmp.py,
-  // thumbnail P+2): every pose change of the shop's party lands on the port's frame of the tick. (A one-frame lag here,
-  // tuned at the old P+1 alignment, put every change a frame late.)
+  // The picture shows this tick's pose: the new pose's OAM (C2/F871) and its tiles (C2/F75C's queue) both go out in
+  // this frame's NMI.
   for (int c = 0; c < 8; c++) g_mspr[c].shown = g_mspr[c].pose;
 }
 
 static const uint8_t* mPartyBlob(const CtMenuHost* h, int charId) {
   return (charId >= 0 && charId < 7) ? h->partySpr[charId] : NULL;
 }
-// Draw a party sprite AT ITS CURRENT ANIMATION POSE. mSprPlace anchors a blob by its own ink
-// box -- centre at cx, bottom at feetY-1 -- which is calibrated for the STANDING frame and is
-// the wrong thing to do frame by frame: the ROM anchors the OBJ block to the compose CANVAS and
-// lets the artwork move inside it, so re-centring every frame on its own ink makes the
-// character jitter. So the pose's blob is placed with the standing frame's anchor plus the
-// difference of the two crops:
-//     dx = (cropX + w/2)   - (standCropX + standW/2)        [ink CENTRES, mSprPlace's rounding]
-//     dy = (cropY + h)     - (standCropY + standH)          [ink BOTTOMS]
-// With no animator hook, or while the pose IS the standing frame, this is exactly the old path.
+// Draw a party sprite at its current animation pose. mSprPlace anchors a blob by its own ink box (centre at cx, bottom
+// at feetY-1), which suits the standing frame; the ROM anchors the OBJ block to the compose canvas and lets the art
+// move inside it, so re-centring every frame on its own ink would make the character jitter. The pose's blob is
+// placed with the standing frame's anchor plus the difference of the two crops:
+//     dx = (cropX + w/2)   - (standCropX + standW/2)        [ink centres, mSprPlace's rounding]
+//     dy = (cropY + h)     - (standCropY + standH)          [ink bottoms]
+// With no animator hook, or at the standing frame, this is the plain anchored blit.
 static void mBlitPartySprPose(const CtMenuHost* h, uint8_t* fb, int charId, int pose, int cx, int feetY, int dim);
 static void mBlitPartySpr(const CtMenuHost* h, uint8_t* fb, int charId, int cx, int feetY, int dim) {
   mBlitPartySprPose(h, fb, charId, -1, cx, feetY, dim);
 }
-// ... at an explicit assembly frame `pose` (-1 = the animator's, the pose ON SCREEN): a block the ROM drives by hand,
-// like the Tech caster's block 7 while `$19D1` = 90 holds `$19E1`'s frame (C2/B4E6).
+// The same at an explicit assembly frame `pose` (-1 = the animator's pose on screen): for a block the ROM drives by
+// hand, like the Tech caster's block 7 while `$19D1` = 90 holds `$19E1`'s frame (C2/B4E6).
 static void mBlitPartySprPose(const CtMenuHost* h, uint8_t* fb, int charId, int pose, int cx, int feetY, int dim) {
   const uint8_t* blob = mPartyBlob(h, charId);
   int dx = 0, dy = 0;
   if (h->partySprFrame && charId >= 0 && charId < 7) {
     int n = 0; const uint8_t* fr = msprFrames(h, charId, 0, &n);      // anim 0 = standing
     int stand = (fr && n > 0) ? fr[MSPR_D] : -1;
-    if (pose < 0) pose = CtMenuSprShown(charId);                    // the pose ON SCREEN (one frame behind)
+    if (pose < 0) pose = CtMenuSprShown(charId);                    // the pose on screen
     if (stand >= 0 && pose != stand) {
       int fx = 0, fy = 0, sx = 0, sy = 0;
       const uint8_t* pb = h->partySprFrame(charId, pose, &fx, &fy);
@@ -2285,15 +2022,15 @@ static void mBlitPartySprPose(const CtMenuHost* h, uint8_t* fb, int charId, int 
   }
   mBlitSprAnchored(fb, blob, cx + dx, feetY + dy, dim);
 }
-// The Form panel geometry, in ONE place so a probe grades what the renderer uses instead of restating
-// it: the text column and the sprite anchor C2/CE6E gives each panel.
+// The Form panel geometry, in one place so a probe grades what the renderer uses: the text column and the sprite
+// anchor C2/CE6E gives each panel.
 void CtMenuFormGeom(int panel, int* textX, int* feetY, int* centreX) {
-  if (textX)   *textX   = MP_X + MFORM_INSET;        // x 72 = the ROM's tile col 9 (measured)
+  if (textX)   *textX   = MP_X + MFORM_INSET;        // x 72 = tile col 9
   if (feetY)   *feetY   = 56 + panel * MP_PITCH;     // C2/CE6E[$12 + 2*panel] low byte: 56 / 104 / 152
   if (centreX) *centreX = 168;                       //   ... high byte, 0xA8, the same for all three
 }
-// The FORM screen's three panels: the panel array is COMPACTED, so row r shows roster slot pan[r]&0x3F,
-// and a locked entry (bit6) takes the dim.
+// The Form screen's three panels: the panel array is compacted, so row r shows roster slot pan[r]&0x3F, and a locked
+// entry (bit 6) is dim.
 static void mFormSprites(const CtMenuHost* h, uint8_t* fb, const uint8_t* pan) {
   if (!h || !h->mem) return;
   for (int r = 0; r < 3; r++) {
@@ -2303,7 +2040,7 @@ static void mFormSprites(const CtMenuHost* h, uint8_t* fb, const uint8_t* pan) {
     mBlitPartySpr(h, fb, cid, cx, feet, (pan[r] & 0x40) ? 1 : 0);
   }
 }
-// The TECH screen's three panels (the sprite sits LEFT of the text there, centre x 28).
+// The Tech screen's three panels (the sprite sits left of the text there, centre x 28).
 static void mPartySprites(const CtMenuHost* h, uint8_t* fb) {
   for (int row = 0; row < 3; row++) {                   // (the window's rows: $041A on the Tech screen)
     CtMenuPanel p;
@@ -2311,8 +2048,8 @@ static void mPartySprites(const CtMenuHost* h, uint8_t* fb) {
     mBlitPartySpr(h, fb, p.charId, MP_SPR_CX_TECH, 56 + row * MP_PITCH, 0);
   }
 }
-// The Tech-screen Single/Dual/Triple category TABS (top-right, BG1 tiles 0x164-0x16F). Tab `active`
-// (0/1/2) is drawn in the cream SELECTED palette, the others gray. Each tab = a 2x2 group of 8x8 tiles.
+// The Tech screen's Single/Dual/Triple tabs (top right, BG1 tiles 0x164-0x16F). Tab `active` (0/1/2) is drawn in the
+// cream selected palette, the others grey. Each tab is a 2x2 group of 8x8 tiles.
 static void mTechTabs(uint8_t* fb, int active) {
   for (int t = 0; t < 3; t++) {
     int sel = (t == active) ? 0 : 1;
@@ -2331,13 +2068,11 @@ static void mTechTabs(uint8_t* fb, int active) {
     }
   }
 }
-// The "MP Used" 4th label on each occupied party panel (Tech). Its value = the highlighted tech's MP
-// cost, shown only when the cursor is inside the list (mpUsed >= 0 on slot `mpSlot`); blank otherwise.
-// One PANEL's "MP Used" row: the label plus, when mpUsed >= 0, that participant's own cost. The Dual
-// list draws two of these with DIFFERENT numbers (C2/BC22 recomputes $9890 per panel).
-// string 0x20's last row, `MP Used <PAL $0D5E><NUM $9890 f19>`: C2/BA2F sets `$0D5E` = 4 (BG1 palette 1, red) when the
-// member's current MP -- `LDA $9A97 / CMP $9890`, 8-bit -- is below the cost; C2/BBB9 runs it for every participant of a
-// Dual / Triple with its own cost (C2/BC22), the builds (C2/B5E6, C2/BA88) with `$9890` = 0.
+// One panel's "MP Used" row (Tech): the label and, when mpUsed >= 0, that participant's own cost; a Dual list draws two
+// with different numbers (C2/BC22 recomputes $9890 per panel). String 0x20's last row, `MP Used <PAL $0D5E><NUM $9890
+// f19>`: C2/BA2F sets `$0D5E` = 4 (BG1 palette 1, red) when the member's current MP (`LDA $9A97 / CMP $9890`, 8-bit) is
+// below the cost; C2/BBB9 runs it for every participant of a Dual / Triple with its own cost (C2/BC22), the builds
+// (C2/B5E6, C2/BA88) with `$9890` = 0.
 static void mTechMpUsedOne(const CtMenuHost* h, uint8_t* fb, int panel, int mpUsed, int curMp) {
   int y = 8 + panel * MP_PITCH + 40;                 // the 4th text row (name/HP/MP at +16/+24/+32)
   mText(h, fb, "MP Used", 40, y);
@@ -2348,91 +2083,77 @@ static void mTechMpUsedOne(const CtMenuHost* h, uint8_t* fb, int panel, int mpUs
   }
 }
 
-// NO DIM here either -- the same measurement as mPartyPanels: on the Tech screen the oracle inks
-// every panel's "MP Used" at (255,255,255), lead or not, on the hover and on the entered screen.
-// This used to dim every row but the lead's, which is the same assumption the panel text carried.
+// The Tech screen's "MP Used" rows draw undimmed for every panel, lead or not.
 static void mTechMpUsed(const CtMenuHost* h, uint8_t* fb, int mpSlot, int mpUsed) {
   for (int slot = 0; slot < 3; slot++) {                 // (rows of the window)
     CtMenuPanel p;
     if (!CtMenuPanelData(h->mem, mPanelRowSlot(h->mem, slot), &p)) continue;
-    int y = 8 + slot * MP_PITCH + 40;                // the 4th text row (after name/HP/MP at +16/+24/+32)
+    int y = 8 + slot * MP_PITCH + 40;                // the 4th text row (name/HP/MP at +16/+24/+32)
     mText(h, fb, "MP Used", 40, y);
     if (slot == mpSlot && mpUsed >= 0) mNumR(h, fb, mpUsed, 120, y);
   }
 }
-// The TIME / G box (bottom-left of the main screen). Display = the C2/F28E rule: HH:MM from the digit
-// pairs $0404-05 / $0402-03 (tens*10+units, C2/F2CC), capped 99:59 when $0406 != 0.
+// The TIME / G box (bottom left of the main screen), as C2/F28E: HH:MM from the digit pairs $0404-05 / $0402-03
+// (tens*10+units, C2/F2CC), capped at 99:59 when $0406 != 0.
 static void mTimeGold(const CtMenuHost* h, uint8_t* fb) {
   const uint8_t* m = h->mem;
   int hh = m[0x405] * 10 + m[0x404], mm = m[0x403] * 10 + m[0x402];
   if (m[0x406]) { hh = 99; mm = 59; }                // overflow cap (C2/F290-F296 default 63/3B)
-  mText(h, fb, "TIME", MT_X + 8, MT_Y + 24);         // TIME row (oracle our-y 176)
-  // ⭐ THE SEPARATOR IS TILE 0x2D, NOT THE CHARSET ':' (0xE3). C2/F28E builds the clock straight into
-  // the tilemap and writes the middle cell itself:
-  //     2F2B2  LDA $7D / AND #FF00 / ORA #002D / STA $0000,X
-  // The two are DIFFERENT glyphs in the same font -- 0xE3 is the charset colon the battle submenu
-  // strips use -- and the oracle inks 0x2D one pixel right and one down from where mCode(':') put
-  // 0xE3 (ours x82..83 on rows 176/177/180/181, the oracle x83..84 on rows 177/178/180/181; every
-  // other pixel of the row, `TIME` and all four digits, already matched). The Save screen and the
-  // boot Load screen already drew this tile directly; this box was the straggler.
+  mText(h, fb, "TIME", MT_X + 8, MT_Y + 24);         // TIME row (y 176)
+  // The separator is tile 0x2D, not the charset ':' (0xE3): C2/F28E builds the clock into the tilemap and writes the
+  // middle cell itself (2F2B2 `LDA $7D / AND #FF00 / ORA #002D / STA $0000,X`). The two are different glyphs.
   { char t[3]; t[2] = 0;
     t[0] = (char)('0' + hh / 10); t[1] = (char)('0' + hh % 10);
     mText(h, fb, t, MT_X + 48, MT_Y + 24);
     mGlyph(h, fb, 0x2D, MT_X + 64, MT_Y + 24);
     t[0] = (char)('0' + mm / 10); t[1] = (char)('0' + mm % 10);
     mText(h, fb, t, MT_X + 72, MT_Y + 24); }
-  int gold = m[0x2C53] | (m[0x2C54] << 8) | (m[0x2C55] << 16);   // $7E2C53 24-bit LE (pinned)
-  mNumR(h, fb, gold, MT_X + 80, MT_Y + 40);          // gold row (oracle our-y 192), value ...G right side
+  int gold = m[0x2C53] | (m[0x2C54] << 8) | (m[0x2C55] << 16);   // $7E2C53 24-bit LE
+  mNumR(h, fb, gold, MT_X + 80, MT_Y + 40);          // gold row (y 192), the value then G on the right
   mText(h, fb, "G", MT_X + 80, MT_Y + 40);
 }
 
 static void mDetailRight(const CtMenuHost* h, uint8_t* fb, int charId, int equipSel);  // opt0 detail (below)
 static void mPanelAtkDef(const CtMenuHost* h, uint8_t* fb, int textInset, int focusChar);  // party-panel 4th row
 
-// The ribbon MAIN SCREEN — self-contained. The ROM shows the currently-SELECTED option's own screen
-// live behind the floating icon box (the "background switches per selection" the oracle does), so:
-//   1) lay the byte-exact BG2 chrome for THIS option (marble + that option's window panels), box skipped;
+// The ribbon main screen. The ROM shows the selected option's own screen live behind the floating icon box, so:
+//   1) lay the BG2 chrome for this option (marble + that option's window panels), box skipped;
 //   2) draw the option's preview content between the panels;
-//   3) redraw the dark-blue ribbon box on top + the 6 icons + the straddling cursor arrows.
+//   3) redraw the ribbon box on top, with the six icons and the two arrows.
 void CtMenuRender(const CtMenuHost* h, uint8_t* fb, int menuOpt) {
   if (!h || !fb) return;
   if (menuOpt < 0) menuOpt = 0; else if (menuOpt > 5) menuOpt = 5;
   int lead = h->mem ? (h->mem[0x2980] & 7) : 0;      // (2) the selected option's screen, live:
   CtMenuChrome(fb, 0, menuOpt, 0);                   // (1) marble + this option's panels (ribbon box later)
-                                                     //   (the char-select context is set by the caller, so the
-                                                     //    opt0 preview's bright box tracks the persisted cursor)
-  // opt0 (Equip/Status) is a FULL sub-screen behind the ribbon overlay, and it tracks the PERSISTED cursor
-  // member (oracle: after entering Marle's Equip + backing out to the ribbon, her box stays bright + her detail
-  // stays on the right -- it does NOT revert to the lead). The caller sets g_charSelChar to that member.
+                                                     //   (the caller sets the char-select context, so the opt-0
+                                                     //    preview's bright box follows the kept cursor)
+  // opt0 (Equip/Status) is a full sub-screen behind the ribbon, and it follows the kept cursor member: after Marle's
+  // Equip and B back to the ribbon, her box stays bright and her detail stays on the right. The caller sets
+  // g_charSelChar to that member.
   int selCh = (g_charSelChar >= 0) ? g_charSelChar : lead;
   switch (menuOpt) {
     case 0: mPartyPanels(h, fb, 8, selCh); mPanelAtkDef(h, fb, 8, selCh); mTimeGold(h, fb); mDetailRight(h, fb, selCh, -1); break;  // Equip/Status
-    case 1: CtMenuRenderItem(h, fb, -1, 0, -1, 0, 0, 1, 1, 0, 0, 0); break; // Item preview: NO cursor (item not entered yet)
+    case 1: CtMenuRenderItem(h, fb, -1, 0, -1, 0, 0, 1, 1, 0, 0, 0); break; // Item preview: no cursor (not entered yet)
     case 2: mPartyPanels(h, fb, 24, -1); mPartySprites(h, fb);
             mTechTabs(fb, (h->mem && h->mem[0x0418] < 3) ? h->mem[0x0418] : 0);   // $0418: 0 after a ribbon move (C2/9A5C),
             mTechMpUsed(h, fb, -1, -1); break;   // the screen's last tab after its B (C2/9B71 -> C2/B960 redraws no tab)
     case 3: CtMenuRenderConfig(h, fb, -1, 1, 0, -1, -1); break;   // Config preview: no hand, no bottom bar
-    // Form: the ribbon HOVER, so NO hand -- the dossier's measured identity is that the entered screen
-    // is this frame PLUS one hand sprite, which means the preview is this frame WITHOUT it (the same
-    // convention the Item preview already uses with cell = -1).
+    // Form: the ribbon hover has no hand (the entered screen is this frame plus one hand sprite; cell = -1 as for the
+    // Item preview).
     case 4: CtMenuRenderForm(h, fb, -1, -1, NULL, 0); break;
-    case 5: CtMenuRenderSave(h, fb, -1); break;              // Save preview: NO cursor -- the oracle hover
-                                                             //   draws every row BRIGHT and NO hand (g_opt5
-                                                             //   OAM = ribbon sprites only)
+    case 5: CtMenuRenderSave(h, fb, -1); break;              // Save preview: no cursor -- the hover draws every row
+                                                             //   bright and no hand
   }
   (void)lead;
-  mDrawRibbon(h, fb, menuOpt);                       // (3) real dark-blue ribbon box + icons + arrows
+  mDrawRibbon(h, fb, menuOpt);                       // (3) ribbon box + icons + arrows
 }
 
-// ------------------------------------------------------- SCREEN 1 = EQUIP/STATUS (PHASE 3 part 2)
-// Char sheet $7E2600 + charId*0x50. Offsets byte-verified this pass on saves/menu_open_gato2: decoded
-// each equipped-item id via the $CC name table + its equip TYPE-icon byte, cross-checked Crono/Marle/
-// Lucca, and read the DISPLAYED values straight off the BG1 tilemap (bypassing the per-window HDMA).
+// ------------------------------------------------------- Screen 1 = Equip/Status
+// Char sheet $7E2600 + charId*0x50.
 #define SH_STRIDE   0x50
-#define SH_STATS    0x36   /* 7 EFFECTIVE stats (base + equipment), Power,Stamina,Speed,Magic,Hit,Evade,M.Def
-                            * -- the DERIVED block the ROM status page displays (0x0B is the naked base). e.g.
-                            * Crono 0x38 SPD=0x0D=13 (base 12 + Wood Sword +1), Marle 0x3A HIT=0x0A=10 (base 8
-                            * + Bronze Bow +2). Recomputed by the ROM on equip; we bake it (read-only gear). */
+#define SH_STATS    0x36   /* 7 effective stats (base + equipment), Power,Stamina,Speed,Magic,Hit,Evade,M.Def --
+                            * the derived block the status page displays (0x0B is the base). e.g. Crono 0x38
+                            * SPD = 13 (base 12 + Wood Sword +1). Recomputed by C2/916E (CtMenuRecalcDerived). */
 #define SH_LEVEL    0x12
 #define SH_XP       0x13   /* EXP, 3-byte LE */
 #define SH_HELM     0x27   /* equipped Helm id      (name-record icon byte 0x27) */
@@ -2444,10 +2165,9 @@ void CtMenuRender(const CtMenuHost* h, uint8_t* fb, int menuOpt) {
 // stat indices within +0x0B: 0 Power, 1 Stamina, 2 Speed, 3 Magic, 4 Hit, 5 Evade, 6 M.Def
 enum { ST_PWR = 0, ST_STAM, ST_SPD, ST_MAG, ST_HIT, ST_EV, ST_MDEF };
 
-// The party-panel SELECTION cursor = the real ROM hand sprite (☞, $FF/9CF0), the SAME hand the name-
-// entry grid uses (h->handCursor, [w u8][h u8] + RGBA; alpha 0 = transparent). (x,y) = the sprite top-
-// left. Falls back to a plain white triangle only when the asset is absent (headless without assets).
-// (mHandCursorFlip: the same 16 x 16 OBJ with its attribute's H flip, bit 6 -- mirrored inside its box.)
+// The party-panel selection cursor: the ROM hand sprite ($FF/9CF0), the same hand the name-entry grid uses
+// (h->handCursor, [w u8][h u8] + RGBA; alpha 0 = transparent). (x,y) = the sprite's top left. A plain white triangle
+// stands in only when the asset is absent. (mHandFlip: the same 16 x 16 OBJ with its attribute's H flip, bit 6.)
 static int mHandFlip;
 static void mHandCursor(const CtMenuHost* h, uint8_t* fb, int x, int y) {
   const uint8_t* s = h ? h->handCursor : NULL;
@@ -2474,13 +2194,12 @@ static void mHandCursor(const CtMenuHost* h, uint8_t* fb, int x, int y) {
   }
 }
 
-// (a) CHARACTER-SELECT (the ENTERED Equip/Status screen, oracle menu_open_gato2 + A): the ribbon box is
-// gone, so it is byte-for-byte the opt0 layout -- party panels + ATK/DEF + TIME/G + the SELECTED member's
-// FULL right detail (element plaque, portrait, name/LEVEL, 4 equips, 7 stats, EXP/NEXT) -- plus the ☞ hand
-// on the selected active-party SLOT (0..2). The picker cursor is the ROM's $0054/$0412 (caller-cycled).
+// (a) Character select (the entered Equip/Status screen): the opt0 layout without the ribbon box -- party panels,
+// ATK/DEF, TIME/G and the selected member's full right detail (element plaque, portrait, name/level, 4 equips, 7
+// stats, EXP/NEXT) -- plus the hand on the selected active-party slot (0..2). The cursor is $0054/$0412.
 void CtMenuRenderCharSelect(const CtMenuHost* h, uint8_t* fb, int selSlot, int dimSlot, int hand) {
   if (!h || !fb) return;
-  /* background = the byte-exact BG2 chrome, laid by the caller (CtMenuChrome) */
+  // the background (the BG2 chrome) is laid by the caller (CtMenuChrome)
   // selSlot / dimSlot are window ROWS ($0412): the member is the window's (mPanelRowSlot)
   int selChar = (h->mem && selSlot >= 0 && selSlot < 3) ? mRowChar(h->mem, selSlot, 0) : 0;
   // The panels' dim is C2/9E76's (BG1 AND BG2), which reads $0412 BEFORE C2/9D17 stores the new cursor: it follows the
@@ -2490,7 +2209,7 @@ void CtMenuRenderCharSelect(const CtMenuHost* h, uint8_t* fb, int selSlot, int d
   mPanelAtkDef(h, fb, 8, dimChar);                     // the ATK/DEF 4th panel row (Equip main screen)
   mTimeGold(h, fb);
   mDetailRight(h, fb, selChar, -1);                    // the selected member's full detail (all equips bright)
-  if (hand && selSlot >= 0 && selSlot < 3)             // ☞ hand at oracle mo_A (8,35) for slot0, pitch 48
+  if (hand && selSlot >= 0 && selSlot < 3)             // the hand at (8,35) for slot 0, pitch 48
     mHandCursor(h, fb, 8, 8 + selSlot * MP_PITCH + 27);
 }
 
@@ -2507,13 +2226,12 @@ static void mBlitIndexed(uint8_t* fb, const uint8_t* idx, int w, int hh, int x0,
       }
     }
 }
-// C2/EC38 + C2/A273: THE DETAIL'S PORTRAIT AND ELEMENT PLAQUE, straight from the ROM. The menu's BG1 characters hold the
-// seven portraits from tile 0x201 (FF/0000 on, 36 tiles = 0x480 bytes a character) and the four plaques from tile 0x100
-// (FF/D5E4 on, 12 tiles = 0x180 each) -- MEASURED: the oracle's VRAM holds all of them byte for byte. C2/EC38 lays the
-// portrait as tile 0x200 + FF:CE70[id], 6x6 in row order from BG1 (15,3) = (120,24), palette 3 = the 16 colours at the
-// FF:CE78[id] pointer; C2/A273 takes x = C2:A2C6[id] and lays the word at FF:CE88+x (the tile, palette 6) 6x2 from (22,3)
-// = (176,24), palette 6 = the colours at the FF:CE92+x pointer. Robo, Ayla and id 7 get word 0000: tiles 0-11, which the
-// oracle's VRAM holds blank -- no plaque. Colour 0 is BG1's transparent.
+// C2/EC38 + C2/A273: the detail's portrait and element plaque, from the ROM. The menu's BG1 characters hold the seven
+// portraits from tile 0x201 (FF/0000 on, 36 tiles = 0x480 bytes a character) and the four plaques from tile 0x100
+// (FF/D5E4 on, 12 tiles = 0x180 each). C2/EC38 lays the portrait as tile 0x200 + FF:CE70[id], 6x6 in row order from
+// BG1 (15,3) = (120,24), palette 3 = the 16 colours at the FF:CE78[id] pointer; C2/A273 takes x = C2:A2C6[id] and lays
+// the word at FF:CE88+x (the tile, palette 6) 6x2 from (22,3) = (176,24), palette 6 = the colours at the FF:CE92+x
+// pointer. Robo, Ayla and id 7 get word 0000: tiles 0-11, which are blank, so no plaque. Colour 0 is BG1's transparent.
 static void mRomTiles4(uint8_t* fb, const CtMenuHost* h, long src, int cols, int rows, int x0, int y0, long palSrc) {
   if (!h->rom || src < 0 || src + 32L * cols * rows > h->romLen || palSrc < 0 || palSrc + 32 > h->romLen) return;
   uint8_t pal[16][3];
@@ -2547,14 +2265,12 @@ static void mDetailArt(const CtMenuHost* h, uint8_t* fb, int charId) {
   long ep = CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE92 + x)) | (CtRomByte(h->rom, 0x400000L, (long)(FF + 0xCE93 + x)) << 8);
   if ((w & 0x3FF) >= 0x100) mRomTiles4(fb, h, FF + 0xD5E4 + 32L * ((w & 0x3FF) - 0x100), 6, 2, 176, 24, FF + ep);
 }
-// The opt0 (Equip/Status) DETAIL in the RIGHT window: the portrait and plaque (mDetailArt), then name (176,48), LEVEL
-// (176,64 val x232), the 4 equipped items (8x8 type-icon x136 + name x144, y 80/96/112/128), the 7 stats two-column
-// (labels x120/x176, values x168/x232) at y144/160/176 + M.DEF y192, EXP y200, NEXT y208.
-static const int eqRowY[4] = { 80, 92, 104, 116 };  // equip rows: a clean 12px sub-tile pitch (oracle gear
-                                                    // rows y88/100/112/124 in the fb; the old 105/118 drifted
-                                                    // 1-2px low -- ink-runs matched but the pixels were off)
-// The opt0/char-select/Equip RIGHT detail. equipSel = the Equip-screen slot cursor (0..3): that slot's item
-// stays BRIGHT, the other three go DIM (pal4). equipSel < 0 = read-only detail, all four bright.
+// The opt0 (Equip/Status) detail in the right window: the portrait and plaque (mDetailArt), then name (176,48), LEVEL
+// (176,64, value x232), the 4 equipped items (8x8 type icon x136 + name x144), the 7 stats in two columns (labels
+// x120/x176, values x168/x232), then EXP and NEXT.
+static const int eqRowY[4] = { 80, 92, 104, 116 };  // equip rows, 12 px pitch
+// equipSel = the Equip screen's slot cursor (0..3): that slot's item stays bright, the other three dim (pal4).
+// equipSel < 0 = all four bright.
 static void mDetailRight(const CtMenuHost* h, uint8_t* fb, int charId, int equipSel) {
   if (!h || !h->mem) return;
   const uint8_t* sh = h->mem + 0x2600 + (size_t)(charId & 7) * SH_STRIDE;
@@ -2562,28 +2278,27 @@ static void mDetailRight(const CtMenuHost* h, uint8_t* fb, int charId, int equip
   mText(h, fb, CtGetName(charId & 7), 176, 48);      // name (below the plaque)
   mText(h, fb, "LEVEL", 176, 64);  mStatCap(h, fb, sh[SH_LEVEL], 7, 232, 64);   // string 04: code 0C cap 7
   int eq[4] = { sh[SH_WEAPON], sh[SH_HELM], sh[SH_ARMOR], sh[SH_ACCESSORY] };
-  // On the Equip screen the NON-cursor rows dim the type-icon too (oracle: icon idx1/2/3 -> the same muted
-  // grey ramp as the dim text): pal0 {282018,909088,F8F8F8} -> {49,66,74 / 90,107,107 / 140,148,148}.
+  // On the Equip screen the non-cursor rows dim the type icon too (icon indices 1/2/3 take the dim text's grey ramp):
+  // pal0 {282018,909088,F8F8F8} -> {49,66,74 / 90,107,107 / 140,148,148}.
   static const uint32_t eqIconDimPal[16] = { 0x00000000, 0xFF4A4231, 0xFF6B6B5A, 0xFF94948C, 0xFF000000,
     0xFF4A4231, 0xFF6B6B5A, 0xFF94948C, 0xFF7B7373, 0xFFE7FFFF, 0xFF73736B, 0xFF635A5A, 0xFF4A4239, 0xFF423931, 0xFF393129, 0xFF101018 };
   for (int i = 0; i < 4; i++) {
     int y = eqRowY[i];
     int rowDim = (equipSel >= 0 && i != equipSel);     // non-cursor Equip row -> dim icon + text
-    const uint8_t* ic = eq[i] ? mEquipIcon(eq[i]) : NULL;   // icon = the item's own type byte (weapon shows its type)
+    const uint8_t* ic = eq[i] ? mEquipIcon(eq[i]) : NULL;   // the item's own type icon
     if (ic) mBlitIndexed(fb, ic, 8, 8, 136, y, rowDim ? eqIconDimPal : gen_opt0_pal0);   // type-icon (x136)
     char nm[16] = "";
     if (eq[i] && !CtMenuItemName(h->rom, h->romLen, eq[i], nm, sizeof nm)) snprintf(nm, sizeof nm, "%02X", eq[i]);
-    mDim = rowDim ? 2 : 0;                             // Equip: the non-cursor slots use the LIGHTER dim2
+    mDim = rowDim ? 2 : 0;                             // Equip: the non-cursor slots use the lighter dim2
     mText(h, fb, nm, 144, y);                          // equipped-item name (x144)
     mDim = 0;
   }
-  const uint8_t* st = sh + SH_STATS;                 // stats: oracle-measured rows (label col x120 + right
-                                                     // col SPD/EV/STAM x176 cross-validated; 12px pitch top)
+  const uint8_t* st = sh + SH_STATS;                 // stats: label column x120, right column x176, 12 px pitch
   // (under the candidate list's preview each value is the NEW one, in C2/A5E7's palette for its row)
   #define ST_NUM(i, x, y) do { mDim = mEqPrevDim(i); mStatCap(h, fb, mEqPrevOn ? mEqPrevNew[i] : st[i], kStatCap[i], x, y); \
                                mDim = 0; } while (0)
-  mText(h, fb, "PWR.", 120, 132);  ST_NUM(ST_PWR, 168, 132);   // labels carry a trailing '.' (oracle),
-  mText(h, fb, "SPD.", 176, 132);  ST_NUM(ST_SPD, 232, 132);   // except HIT; effective stats (derived block)
+  mText(h, fb, "PWR.", 120, 132);  ST_NUM(ST_PWR, 168, 132);   // labels carry a trailing '.', except HIT;
+  mText(h, fb, "SPD.", 176, 132);  ST_NUM(ST_SPD, 232, 132);   // the values are the effective stats
   mText(h, fb, "HIT", 120, 144);   ST_NUM(ST_HIT, 168, 144);
   mText(h, fb, "EV.",  176, 144);  ST_NUM(ST_EV, 232, 144);
   mText(h, fb, "MAG.", 120, 156);  ST_NUM(ST_MAG, 168, 156);
@@ -2596,15 +2311,15 @@ static void mDetailRight(const CtMenuHost* h, uint8_t* fb, int charId, int equip
   mText(h, fb, "NEXT",120, 192);   mNumR(h, fb, next, 232, 192);
 }
 
-// The Equip/Status party-panel 4th row (BG1 row6): [weapon icon 0x20] ATTACK [shield icon 0x2E] DEFENSE.
-// ATTACK = char sheet +0x3D, DEFENSE = +0x3E (byte-verified vs the oracle: Crono 8/16, Marle 8/14). The
-// Tech screen draws "MP Used" in this row instead (mTechMpUsed); the Status detail draws nothing here.
-static const uint8_t gen_opt0_icon_def[8*8] = {   // BG1 tile 0x2E (shield), extracted from oracle VRAM
+// The Equip/Status party panel's 4th row (BG1 row 6): [weapon icon 0x20] attack [shield icon 0x2E] defence, the
+// sheet's +0x3D / +0x3E. The Tech screen draws "MP Used" in this row instead (mTechMpUsed); the Status detail draws
+// nothing here.
+static const uint8_t gen_opt0_icon_def[8*8] = {   // BG1 tile 0x2E (shield), from the oracle's VRAM
   3,3,3,3,3,3,2,1, 3,2,3,2,2,3,2,1, 3,2,3,2,2,3,2,1, 3,3,3,3,3,3,2,1,
   3,2,3,2,2,3,2,1, 3,2,3,2,2,3,2,1, 1,3,3,3,3,2,1,0, 0,1,1,1,1,1,0,0 };
-// A dimmed panel's icons: they are BG1 text tiles (palette 0) like its letters, and the ROM dims a panel by moving its
-// cells to palette | 4 (C2/9E76 / C2/EC93) -- so the icons take CGRAM row 4, the same row as the dim text. `pal` keeps
-// index 0's transparency; the colours are ctMenuChromePal[4] (the menu's CGRAM), as 0xAABBGGRR.
+// A dim panel's icons: they are BG1 text tiles (palette 0) like its letters, and the ROM dims a panel by moving its
+// cells to palette | 4 (C2/9E76 / C2/EC93), so the icons take CGRAM row 4 like the dim text. `pal` keeps index 0's
+// transparency; the colours are ctMenuChromePal[4] (the menu's CGRAM), as 0xAABBGGRR.
 static const uint32_t* mDimPal(const uint32_t* pal) {
   static uint32_t d[16];
   for (int i = 0; i < 16; i++) {
@@ -2613,20 +2328,19 @@ static const uint32_t* mDimPal(const uint32_t* pal) {
   }
   return d;
 }
-// The party panel's FOURTH text row, at x0 = MP_X + textInset: weapon-type icon at x0+8, attack
-// right-aligned to x0+40, armour icon at x0+48, defence right-aligned to x0+80. Those four offsets
-// are the ROM's own tile columns 10 / 11-13 / 15 / 16-18 (menu2_form_screen.md 4.4) and reproduce the
-// oracle status capture's ink runs EXACTLY at x0 = 24; the Form screen draws the same row at x0 = 72.
+// The party panel's 4th text row at x0 = MP_X + textInset: weapon-type icon at x0+8, attack right-aligned to x0+40,
+// armour icon at x0+48, defence right-aligned to x0+80 -- the ROM's tile columns 10 / 11-13 / 15 / 16-18
+// (menu2_form_screen.md 4.4). The Form screen draws the same row at x0 = 72.
 static void mPanelAtkDefOne(const CtMenuHost* h, uint8_t* fb, int textInset, int y, int charId, int dim) {
   const uint8_t* sh = h->mem + 0x2600 + (size_t)(charId & 7) * SH_STRIDE;
   int x0 = MP_X + textInset;
   mDim = dim;
   const uint32_t* ipal = mDim ? mDimPal(gen_opt0_pal0) : gen_opt0_pal0;  // icons dim with the text
-  const uint8_t* wic = mEquipIcon(sh[SH_WEAPON]);  // weapon-TYPE icon (Marle's bow, not a sword)
+  const uint8_t* wic = mEquipIcon(sh[SH_WEAPON]);  // weapon-type icon (Marle's bow, not a sword)
   if (wic) mBlitIndexed(fb, wic, 8, 8, x0 + 8, y, ipal);                 // weapon icon (attack)
-  mNumR(h, fb, sh[0x3D], x0 + 40, y);               // ATTACK  (sheet +0x3D)
-  mBlitIndexed(fb, gen_opt0_icon_def, 8, 8, x0 + 48, y, ipal);           // shield icon (defense)
-  mNumR(h, fb, sh[0x3E], x0 + 80, y);               // DEFENSE (sheet +0x3E)
+  mNumR(h, fb, sh[0x3D], x0 + 40, y);               // attack  (sheet +0x3D)
+  mBlitIndexed(fb, gen_opt0_icon_def, 8, 8, x0 + 48, y, ipal);           // shield icon (defence)
+  mNumR(h, fb, sh[0x3E], x0 + 80, y);               // defence (sheet +0x3E)
   mDim = 0;
 }
 static void mPanelAtkDef(const CtMenuHost* h, uint8_t* fb, int textInset, int focusChar) {
@@ -2638,15 +2352,13 @@ static void mPanelAtkDef(const CtMenuHost* h, uint8_t* fb, int textInset, int fo
   }
 }
 
-// ---------------------------------------------------- EQUIP screen (A on a party member, C2/9C29 slot-select)
-// After picking a character the OTHER party panels collapse and a slot-type LABEL panel (Weapon/Helmet/Armor/
-// Accessory) rises into the 2nd left panel; the ☞ hand moves to the RIGHT onto the cursor slot's equipped
-// item (that item BRIGHT, the other 3 DIM). Oracle: menu_open_gato2 + `100:2,0:6,100:2,0:N` then Down=0x20 /
-// Up=0x10 cycles the slot (label + bright item + hand move). Layout measured off the 4 slot captures.
-// C2/A38B: the slot's label = the 10-byte record C2/A3BA + slot*10, written by C2/EF65 (the 8x8 menu font, not the VWF)
-// from BG1 cell $3086 = column 3 (x 24) of the label row; the records carry their own spaces -- "  Weapon  ",
-// "  Helmet  ", "  Armor   ", "Accessory" -- so Weapon/Helmet/Armor start at x 40 and Accessory at x 24 (MEASURED:
-// "Helmet" at x 40 on the tour's gear panel; a centring formula had put it at 39).
+// ---------------------------------------------------- Equip screen (A on a party member, C2/9C29 slot select)
+// After picking a character the other party panels collapse, a slot-type label panel (Weapon/Helmet/Armor/Accessory)
+// rises into the second left panel, and the hand moves right onto the cursor slot's equipped item (that item bright,
+// the other three dim).
+// C2/A38B: the slot's label = the 10-byte record C2/A3BA + slot*10, written by C2/EF65 (the 8x8 menu font, not the
+// VWF) from BG1 cell $3086 = column 3 (x 24) of the label row; the records carry their own spaces ("  Weapon  ",
+// "  Helmet  ", "  Armor   ", "Accessory"), so Weapon/Helmet/Armor start at x 40 and Accessory at x 24.
 static void mSlotLabel(const CtMenuHost* h, uint8_t* fb, int slot, int y) {
   if (!h || !h->rom || h->romLen < 0x2A3BA + 40 || !h->drawGlyph) return;
   if (y < mClipTop || y >= mClipBot) return;
@@ -2656,16 +2368,16 @@ static void mSlotLabel(const CtMenuHost* h, uint8_t* fb, int slot, int y) {
     if (r[k] != 0xFF && r[k] != 0xEF) h->drawGlyph(fb, r[k], 24 + 8 * k, y);
   }
 }
-// One char panel (name/HP/MP) at the TOP + its ATK/DEF row, built from a charId (the Equip screen shows only
-// the picked member, not the 3-slot party column).
+// One char panel (name/HP/MP) at the top and its ATK/DEF row, from a charId (the Equip screen shows only the picked
+// member, not the party column).
 static void mEquipCharPanel(const CtMenuHost* h, uint8_t* fb, int charId, int yOff, int dim) {
   const uint8_t* sh = h->mem + 0x2600 + (size_t)(charId & 7) * SH_STRIDE;
   CtMenuPanel p;                                       // build the panel from the char sheet
   p.charId = charId & 7; p.name = CtGetName(p.charId); p.lv = sh[0x12];
   p.hp = sh[3] | (sh[4] << 8); p.hpMax = sh[0x3F] | (sh[0x40] << 8);   // +0x3F (string 06)
   p.mp = sh[7] | (sh[8] << 8); p.mpMax = sh[9] | (sh[10] << 8);
-  // the candidate list's preview: string 09 `goto 0114 / PAL $0D57 / NUM $9B25 f22` -- the NEW effective max over the
-  // panel's, in C2/A61F's colour ($9B25 against $9ACF, 16-bit: 00 same / 08 higher / 1C lower)
+  // The candidate list's preview: string 09 `goto 0114 / PAL $0D57 / NUM $9B25 f22` -- the new effective max over
+  // the panel's, in C2/A61F's colour ($9B25 against $9ACF, 16-bit: 00 same / 08 higher / 1C lower).
   if (mEqPrevOn && !dim) {
     int nw = mEqPrevNew[9] | (mEqPrevNew[10] << 8), od = mEqPrevOld[9] | (mEqPrevOld[10] << 8);
     p.hpMax = nw;
@@ -2675,7 +2387,7 @@ static void mEquipCharPanel(const CtMenuHost* h, uint8_t* fb, int charId, int yO
   mPanelHpMaxDim = -1;
   int y = 8 + 40 + yOff;                               // row6 = the ATK/DEF row (weapon icon + ATK, shield + DEF)
   const uint32_t* ipal = dim ? mDimPal(gen_opt0_pal0) : gen_opt0_pal0;
-  const uint8_t* wic = mEquipIcon(sh[SH_WEAPON]);      // weapon-TYPE icon (per equipped weapon)
+  const uint8_t* wic = mEquipIcon(sh[SH_WEAPON]);      // weapon-type icon (per equipped weapon)
   mDim = dim;
   if (wic) mBlitIndexed(fb, wic, 8, 8, 32, y, ipal);
   if (!dim) mDim = mEqPrevDim(7);
@@ -2683,76 +2395,68 @@ static void mEquipCharPanel(const CtMenuHost* h, uint8_t* fb, int charId, int yO
   mDim = dim;
   mBlitIndexed(fb, gen_opt0_icon_def,    8, 8, 72, y, ipal);
   if (!dim) mDim = mEqPrevDim(8);
-  mNumR(h, fb, dim ? sh[0x3E] : mEqPrevVal(sh, 8), 104, y);        // Defense
+  mNumR(h, fb, dim ? sh[0x3E] : mEqPrevVal(sh, 8), 104, y);        // Defence
   mDim = 0;
 }
-// ---- THE CANDIDATE LIST, the one list the ROM draws in BOTH gear substates -----------------------
-// C2/A569 writes the 8 rows into the BG1 buffer at `$7E:4FC6 + row*0x80` and NEITHER substate rewrites
-// them (the two oracle captures hold byte-identical rows); what moves is the WINDOW. $7E:4FC6 is BG1
-// map row 7 col 3 ($7E:4E00 -> VRAM word $6800, descriptor $C2:FC1B) = x24, and the box the list lives
-// in climbs 32 px when substate 3 opens (the $FF:BEA4 block copy + the $0D93 scrollbar-Y delta), so:
-//     substate 2 (gear select)   rows at y = 108 + row*12    [oracle eq_spare peek: 108/120/132]
-//     substate 3 (candidate list) rows at y =  76 + row*12    [oracle divergence_equip: 76]
-// ONE origin + the ROM's own 32 px, not two measured constants. Row pitch 12 = the nav graph's own
-// list cells 4..11 ($7E:9380: y 75,87,...,159), which is also where the hand sits in substate 3.
+// ---- The candidate list, drawn by the ROM in both gear substates ----
+// C2/A569 writes the 8 rows into the BG1 buffer at `$7E:4FC6 + row*0x80` and neither substate rewrites them; what
+// moves is the window. $7E:4FC6 is BG1 map row 7 col 3 ($7E:4E00 -> VRAM word $6800, descriptor $C2:FC1B) = x24, and
+// the list's box climbs 32 px when substate 3 opens (the $FF:BEA4 block copy and the $0D93 scrollbar-Y delta):
+//     substate 2 (gear select)   rows at y = 108 + row*12
+//     substate 3 (candidate list) rows at y =  76 + row*12
+// Row pitch 12 = the nav graph's list cells 4..11 ($7E:9380: y 75,87,...,159), where the hand sits in substate 3.
 #define CT_MENU_EQ_LIST_Y     76   /* substate-3 row 0 (the list box top, tile row 8, + 12) */
 #define CT_MENU_EQ_LIST_RISE  32   /* $FF:BEA4's 4-tile-row block copy == $0D93 0x62 -> 0x42 */
-/* The substate-3 right box ends at chrome tile row 21 (y168..175) -- see ctMenuChromeEquipListTM. */
+/* The substate-3 right box ends at chrome tile row 21 (y168..175), see ctMenuChromeEquipListTM. */
 #define CT_MENU_EQ_LIST_DETAIL_BOT (22 * 8)
 static void mEquipCandRows(const CtMenuHost* h, uint8_t* fb, const uint8_t* cand, const uint8_t* cnt,
                            int n, int cell, int scroll, int yOff, int hand) {
   if (!cand || !cnt) return;
   long rl = h->romLen; const uint8_t* rom = h->rom;
-  for (int row = 0; row < 8; row++) {                       // up to EIGHT visible rows ($0DD8 = page 8),
+  for (int row = 0; row < 8; row++) {                       // up to eight visible rows ($0DD8 = page 8),
     int i = scroll + row;                                   //   scrolled by $0FC8
     if (i >= n) break;
     char nm[16] = ""; CtMenuItemName(rom, rl, cand[i], nm, sizeof nm);
-    mText(h, fb, nm, 24, CT_MENU_EQ_LIST_Y + yOff + row * 12);   // the NAME only: C2/A59A has no count ($0F62,
-                                                                  //   C2/8953's, is never drawn -- menu_equip_list_no_count.md)
+    mText(h, fb, nm, 24, CT_MENU_EQ_LIST_Y + yOff + row * 12);   // the name only: C2/A59A draws no count ($0F62,
+                                                                  //   C2/8953's, is never shown; menu_equip_list_no_count.md)
   }
-  // ☞ on the highlighted candidate, AT ITS NAV RECORD: C2/A321's $FF:BE6D loads the graph $FF:B731 = a length byte
-  // (0x48, twelve records) then [x, y, up, down, left, right]; cells 4-11 are the list's rows, (8, 75 + 12 * row) --
-  // one line above the row's text origin (MEASURED, equiplist f188-f250: the hand's rows 78-86 on the cartridge,
-  // 79-87 when it was placed from the text's 76).
+  // The hand on the highlighted candidate, at its nav record: C2/A321's $FF:BE6D loads the graph $FF:B731 = a length
+  // byte (0x48, twelve records) then [x, y, up, down, left, right]; cells 4-11 are the list's rows, (8, 75 + 12 * row),
+  // one line above the row's text origin.
   if (hand && rom && rl > 0x3FB732L + 12 * 6) { int row = cell - scroll;
     if (row >= 0 && row < 8) { long r = 0x3FB732L + (long)(4 + row) * 6;
                                mHandCursor(h, fb, CtRomByte(rom, 0x400000L, (long)(r)), CtRomByte(rom, 0x400000L, (long)(r + 1)) + yOff); } }
 }
-// `stage` = where the panel's own build stands. 0: the gear select (substate 2). 1: C2/A321's frame, the last of the
-// entry slide -- the left column built (BE6D's copies, uploaded by FBE3/FBFF), the right detail still the member
-// select's (all four rows bright), no hand (the loop's INC $0D9B still holds it) and no list yet. 2: the next frame,
-// C2/9C5E-9C67 -- the list drawn (C2/A569, FC1B) and the hand on cell 0 of the nav graph BE6D loaded; the rows dim on
-// the frame after, when substate 2's C2/A3E2 first runs. MEASURED (tour): the left settled at f165 with no hand, the
-// hand at f166, the dim rows at f167.
+// `stage` = where the panel's build stands. 0: the gear select (substate 2). 1: C2/A321's frame, the last of the entry
+// slide -- the left column built (BE6D's copies, uploaded by FBE3/FBFF), the right detail still the member select's
+// (all four rows bright), no hand (the loop's INC $0D9B still holds it) and no list yet. 2: the next frame, C2/9C5E-9C67
+// -- the list drawn (C2/A569, FC1B) and the hand on cell 0 of the nav graph BE6D loaded; the rows dim on the frame
+// after, when substate 2's C2/A3E2 first runs.
 void CtMenuRenderEquip(const CtMenuHost* h, uint8_t* fb, int charId, int slot, int stage,
                        const uint8_t* cand, const uint8_t* cnt, int n) {
   if (!h || !fb) return;
   if (slot < 0) slot = 0; else if (slot > 3) slot = 3;
-  /* background = the byte-exact BG2 chrome, laid by the caller (CtMenuChrome) */
+  // the background (the BG2 chrome) is laid by the caller (CtMenuChrome)
   mEquipCharPanel(h, fb, charId, 0, 0);                // only the picked member's panel (others collapsed)
-  // (the Equip screen has NO TIME/G box -- oracle bottom-left is empty here, unlike char-select)
+  // (the Equip screen has no TIME/G box, unlike the char select)
   mSlotLabel(h, fb, slot, 80);                         // the slot-type label (C2/A38B)
-  // C2/9C61 builds (C2/8953) AND DRAWS (C2/A569) the candidate list while the cursor is still on the
-  // gear rows -- the ROM shows you what you could put in the slot you are standing on. No hand here:
-  // the cursor ($54 = 0..3) is on the gear rows, nav cells 0..3. The list is BG3, and BG3 shows on lines 73-200 only
-  // through HDMA channel 3 (the TM table at $9180: 72 lines TM 13, then TM 17), which C2/9ECD turns on every frame of
-  // the gear select (`LDA #4D / STA $0D13`, C2/9EE6); C2/A321's build left $0D13 = C5. So on C2/9C5E's frame (stage 2)
-  // the rows are in VRAM but their layer is off, and they show with the dims, from C2/9ECD's first frame (MEASURED,
-  // equiplist: $0D13 45 -> 4D at f117, the rows written and uploaded at f116, TM 13 -> 17 on the scan after f117).
+  // C2/9C61 builds (C2/8953) and draws (C2/A569) the candidate list while the cursor is still on the gear rows (nav
+  // cells 0..3), so no hand here. The list is BG3, which shows on lines 73-200 only through HDMA channel 3 (the TM
+  // table at $9180: 72 lines TM 13, then TM 17); C2/9ECD turns it on every frame of the gear select (`LDA #4D / STA
+  // $0D13`, C2/9EE6), while C2/A321's build left $0D13 = C5. So on C2/9C5E's frame (stage 2) the rows are in VRAM but
+  // their layer is off; they show with the dims, from C2/9ECD's first frame.
   if (stage == 0) mEquipCandRows(h, fb, cand, cnt, n, -1, 0, CT_MENU_EQ_LIST_RISE, 0);
-  mDetailRight(h, fb, charId, stage ? -1 : slot);      // full detail w/ the cursor slot bright, others dim
-  if (stage != 1) mHandCursor(h, fb, 120, eqRowY[slot] - 1);   // ☞ on the cursor slot's item (oracle hand core y82/94, pitch 12)
+  mDetailRight(h, fb, charId, stage ? -1 : slot);      // full detail, the cursor slot bright, the others dim
+  if (stage != 1) mHandCursor(h, fb, 120, eqRowY[slot] - 1);   // the hand on the cursor slot's item (pitch 12)
 }
-// THE LIST BOX'S CLIMB, substate 2 -> 3 (C2/A41A -> C2/A4AF). On A over a gear row the ROM clears the list rows and
-// runs a loop of passes, one per frame (C2/A518 then `JSR C2/821E` while `$96A3 < 0x20`): each adds 4 to the two
-// offset-per-tile tables it laid (`$5CC2` = the left column's 11 columns from $60FF, `$5D42` = 27 columns from $402F)
-// and to `$96A3`, and takes 4 off the band's line `$96A0` (0x70). Eight passes, 4 px each -- the [slot-type label]
-// [list] column climbs 32 px, in under the picked member's box (which stays on top: what passes y64 is hidden), and
-// the description bar climbs behind it from the bottom of the window; then the loop exits and C2/A463 draws the list
-// (C2/A569) with the hand. MEASURED (party3_field + an Iron Blade in the bag, A seen at f141): the column's top rule at
-// y97 -> 93, 89 .. 69 over f142-f148, y65 and the list + hand at f149, the bar's top rule at 177 from then on; the
-// right-hand detail does not move. `s` = the pass count * 4 (4..28); the background is the gear panel's chrome.
-static uint8_t mSlideTxt[MH * MW * 3];                  // (below: the BG1 layer the slides move and cut per line)
+// The list box's climb, substate 2 -> 3 (C2/A41A -> C2/A4AF). On A over a gear row the ROM clears the list rows and
+// runs one pass per frame (C2/A518 then `JSR C2/821E` while `$96A3 < 0x20`): each adds 4 to the two offset-per-tile
+// tables it laid (`$5CC2` = the left column's 11 columns from $60FF, `$5D42` = 27 columns from $402F) and to `$96A3`,
+// and takes 4 off the band's line `$96A0` (0x70). Eight passes of 4 px: the [slot label][list] column climbs 32 px in
+// under the picked member's box (which stays on top: what passes y64 is hidden), and the description bar climbs behind
+// it from the window's bottom; then C2/A463 draws the list (C2/A569) with the hand. The right-hand detail does not
+// move. `s` = the pass count * 4 (4..28); the background is the gear panel's chrome.
+static uint8_t mSlideTxt[MH * MW * 3];                  // the BG1 layer the slides move and cut per line (below)
 static void mSlideTxtClear(void);
 static void mSlideTxtBlit(uint8_t* fb, int srcOff, int y0, int y1);
 static void mSlideTxtBlitX(uint8_t* fb, int srcOff, int y0, int y1, int x0, int x1);
@@ -2761,33 +2465,29 @@ void CtMenuRenderEquipListRise(const CtMenuHost* h, uint8_t* fb, int charId, int
   if (slot < 0) slot = 0; else if (slot > 3) slot = 3;
   if (s < 0) s = 0; else if (s > CT_MENU_EQ_LIST_RISE) s = CT_MENU_EQ_LIST_RISE;
   mChromeRowsTM(fb, ctMenuChromeEquipTM, 8, 25, 2, 13, -s, -1, 64, CT_MENU_EQUIP_MARBLE_Y);   // the column, list cleared
-  // the slot-type label rides it and goes under the box LINE BY LINE: the band's lines from 64 show the column, the
-  // lines above show the member's box (MEASURED, equiplist f185 / f254: s = 20, the label at 60..67 and its rows 64-67
-  // on screen; a whole-row clip had dropped it a frame early on the way up and shown it a frame late on the way down)
+  // the slot-type label rides it and goes under the box line by line: the band's lines from 64 show the column, the
+  // lines above show the member's box
   mSlideTxtClear(); mSlotLabel(h, mSlideTxt, slot, 80); mSlideTxtBlit(fb, s, 64, CT_MENU_EQUIP_MARBLE_Y);
-  if (s < CT_MENU_EQ_LIST_RISE) {                              // (settled, the list's own render draws these two --
-    mEquipCharPanel(h, fb, charId, 0, 0);                       //  once: a glyph does not clear its cell, so a second
-    mDetailRight(h, fb, charId, slot);                          //  pass would leave the old digits under the preview's)
+  if (s < CT_MENU_EQ_LIST_RISE) {                              // (when settled the list's own render draws these
+    mEquipCharPanel(h, fb, charId, 0, 0);                       //  two, once: a glyph does not clear its cell, so a
+    mDetailRight(h, fb, charId, slot);                          //  second pass would leave old digits under the new)
   }                                                             // the picked member's box on top; the detail stays put
   if (gearHand) mHandCursor(h, fb, 120, eqRowY[slot] - 1);   // the gear hand (not while the list holds the cursor)
   // the description bar: the candidate list chrome's tile rows 22-25 (C2/A41A's $FF:BEEC block copy puts them there
-  // from the off-screen backup), climbing from the window's bottom -- its top at 176 + (32 - s); once the loop has
-  // exited (s = 32) the bar has its own ramp (mWinGradEquipList)
+  // from the off-screen backup), climbing from the window's bottom, its top at 176 + (32 - s); once the loop has exited
+  // (s = 32) the bar has its own ramp (mWinGradEquipList)
   if (s >= CT_MENU_EQ_LIST_RISE) mChromeRowsGrad = mWinGradEquipList();
   mChromeRowsTM(fb, ctMenuChromeEquipListTM, 22, 25, 2, 29, CT_MENU_EQ_LIST_RISE - s, -1, 16, CT_MENU_EQUIP_MARBLE_Y);
   mChromeRowsGrad = 0;
 }
-// THE CANDIDATE LIST with the cursor in it (ROM substate 3). Same rows, risen by the ROM's 32 px, the
-// hand on the highlighted row, and the bottom bar carrying its bonus line (C2/A44A -> C2/F2F3). The
-// right-hand detail is CLIPPED to the shortened right box: the ROM leaves "EXP"/"NEXT" in the BG1
-// buffer and lets the window mask them (measured in both captures), so EXP y184 / NEXT y192 vanish.
-// THE ONE-ROW SLIDE (C2/EB9B + C2/EB1F, the list's own copy of the channel-6 BG3-V table). The list is a BG3 buffer of
-// 16-px slots -- the eight rows at slots 0-7, the row coming in drawn at slot 8 ($53C6) -- shown 12 lines of each slot
-// per 12-line band (V + 4 a band). C2/EB9B copies the bands with one more below (V + 4) and one above (mapped to slot
-// 8 too), and each step C2/EB1F rebuilds the live table with every V + $0DAB and the first band $0DAB lines shorter:
-// MEASURED (ct.exe --hdma, equippage's Down): lines 72-80 at V 1EE, bands of 12 from 81, 3 lines at V 00E before 168 --
-// the rows, the incoming one included, moved $0DAB px as one strip, cut to the list's lines 72-167. So: the rows as
-// the static list draws them, the incoming one appended below (Down) or above (Up), drawn apart and shifted.
+// The candidate list with the cursor in it (substate 3): the same rows risen 32 px, the hand on the highlighted row,
+// and the bottom bar with its line (C2/A44A -> C2/F2F3). The right-hand detail is clipped to the shortened right box:
+// the ROM leaves "EXP"/"NEXT" in the BG1 buffer and the window masks them.
+// The one-row slide (C2/EB9B + C2/EB1F, the list's own copy of the channel-6 BG3-V table): the list is a BG3 buffer of
+// 16 px slots -- the eight rows at slots 0-7, the incoming row at slot 8 ($53C6) -- shown 12 lines of each slot per
+// 12-line band (V + 4 a band). C2/EB9B copies the bands with one more below (V + 4) and one above (mapped to slot 8
+// too), and each step C2/EB1F rebuilds the live table with every V + $0DAB and the first band $0DAB lines shorter, so
+// the rows, the incoming one included, move $0DAB px as one strip, cut to the list's lines 72-167.
 #define CT_MENU_EQ_LIST_BAND0 72       /* the list's first band line (the channel-6 table: 72 lines at 1F0 first) */
 static void mEqListSlideRows(const CtMenuHost* h, uint8_t* fb, const uint8_t* cand, const uint8_t* cnt, int n,
                              int scroll, int slideO) {
@@ -2819,9 +2519,8 @@ void CtMenuRenderEquipList(const CtMenuHost* h, uint8_t* fb, int charId, int gea
     mEqListSlideRows(h, fb, cand, cnt, n, scroll, slideO);
     mEquipCandRows(h, fb, cand, cnt, 0, cell, scroll, 0, hand);
   } else mEquipCandRows(h, fb, cand, cnt, n, cell, scroll, 0, hand);
-  // the bottom bar: C2/A5DF's C2/F2F3 -- the description of $0D77 (the last id it staged), typed by C2/FA49's string
-  // task one character a frame in the VWF, as the Item screen's (MEASURED: hpprev, a Gold Earring, "Max HP up by 50%"
-  // growing from f208 on lines 188-199; the port had printed the whole line at once in the 8x8 font)
+  // the bottom bar: C2/A5DF's C2/F2F3, the description of $0D77 (the last id it staged), typed by C2/FA49's string
+  // task one character a frame in the VWF, as on the Item screen
   { char d[40];
     if (descN > 0 && h->mem && CtMenuEquipDesc(h->mem[0x0D77], d, sizeof d) > 0) {   // 35 + NUL
       if (descN < (int)strlen(d)) d[descN] = 0;
@@ -2830,29 +2529,15 @@ void CtMenuRenderEquipList(const CtMenuHost* h, uint8_t* fb, int charId, int gea
     } }
 }
 
-// ---- C2/A71E + C2/A7B7: THE GEAR PANEL'S ENTRY SLIDE (menu2_shell_exit.md 2.11). Nothing is moved as a picture. On A
-// over a member, C2/A71E builds the gear panel's left column OFF-SCREEN ($FF:BE26 through C2/ED31: BG1 rows 32-63
-// cleared and string 7 "Weapon" at (5,42); BG2 rows 22-25 backed up to 54-57, the label window at (2,40) 12x4, the list
-// window at (2,44) 12x14 -- the same cells the built panel's rows 8-25 hold) and uploads it (FBEA, FC06). Then BG mode 2's
-// OFFSET-PER-TILE brings it in: screen column c (c >= 1) takes the V scroll of BOTH BG1 and BG2 from entry c-1 of the BG3
-// map row its line's BG3 V scroll points at (LakeSnes ppu_handleOPT; bits 13/14 = BG1/BG2, value & 0x3FF), and
-// $5CC2/$5D42 are entries 1-12 (screen columns 2-13) of rows 59 and 61. Each of the 24 steps (one per frame, FC45 uploads
-// rows 58-61) C2/A7B7 adds 6 to $5CC2 (from 0x606F) and $0DAB to $5D42 (0x61FF: the lines' own map line), and rewrites the
-// channel-6 BG3-V table at $969A (C2/AA19 entries from line 16), which the NMI's thunk $9690 copies to $9303 in the same
-// vblank ($0D13 = E5, bit 7):
-//     $22 lines at 0x1E0 (row 61: the party column)     $24 lines at 0x1F0 (row 63, never written: the TIME box)
-//     $26 lines at 0x1D0 (row 59: the new column)        16 lines at 0x1F0
-// with $22 = 0x90, $24 = 0x30, $26 = 0 at the start and, each step, $26 += 6 while $24 (then $22) gives 6 back. After step
-// k the new column fills lines 208 - 6k .. 207 and shows map line 320 (row 40, the label window's top) at its first line:
-// it rises 6 px a frame, rigid, over the TIME box and then the lower panels. After $0D25 = (3 - $0412) * 8 steps $0DAB
-// becomes 6 and the party column scrolls up with it, so the picked member's box ends at the top and the boxes above it
-// go under line 16 (lines 0-15 are mode 1, no offsets). The cursor is off for the whole loop (INC $0D9B each step, the
-// hand's one-shot suppress C2/E956). MEASURED (tour, logical oracle): $5CC2 = 606F on the A frame, 6075 .. 60FF over the
-// next 24; row 59 = 0000 60A5 x12 0000.. and row 61 = 0000 61FF x12 0000.. at step 9; the table 11+127 lines 0x1E0, 54
-// lines 0x1D0, 16 lines 0x1F0 there. Step 24's frame is also C2/A321's (the built panel, drawn by CtMenuRenderEquip).
+// ---- C2/A71E + C2/A7B7: the gear panel's entry slide (disasm/notes/menu2_shell_exit.md, "The gear panel's entry
+// slide") ----
+// C2/A71E builds the gear panel's left column off-screen and uploads it; BG mode 2's offset-per-tile brings it in:
+// each of 24 steps C2/A7B7 adds 6 to $5CC2 (row 59, the new column) and $0DAB to $5D42 (row 61, the party column) and
+// rewrites the channel-6 BG3-V table, so the new column rises 6 px a frame over the TIME box and the lower panels;
+// after $0D25 = (3 - $0412) * 8 steps the party column scrolls up with it. The cursor is off for the whole loop.
 // `k` = the steps done (1..23), `selSlot` = $0412, `dimSlot` = the member C2/9E76 last left bright. The caller lays the
 // member select's chrome (CtMenuChrome screen 1).
-// mSlideTxt: a BG1 layer drawn apart, so it can be moved and cut per line (defined above CtMenuRenderEquipListRise)
+// mSlideTxt: a BG1 layer drawn apart, so it can be moved and cut per line (declared above CtMenuRenderEquipListRise).
 static void mSlideTxtClear(void) {                      // (1,2,3) cannot be a PPU colour: (v<<3)|(v>>2) is 0 or >= 8
   for (int i = 0; i < MH * MW; i++) { mSlideTxt[i * 3] = 1; mSlideTxt[i * 3 + 1] = 2; mSlideTxt[i * 3 + 2] = 3; }
 }
@@ -2880,12 +2565,11 @@ static void mSlideTxtBlit(uint8_t* fb, int srcOff, int y0, int y1) {
     }
   }
 }
-// C2/9DAF: C2/A216 writes the incoming member's panel into the off-screen slot, C2/9EB0 tones its box dim (Y = 100C), the
-// column is block-copied (C2/EF05, BG1 and BG2) so that it and the new box form one strip, and each of twelve steps adds
-// $0D22 (+-4) to the column's offset-per-tile V ($5D42, row 61: screen columns 2-13) and yields -- the column slides 4 px
-// a frame, rigid, cut to lines 16-159 (the TIME box below is row 63's, still). The dim, $0412 / $71, the blip and the
-// right-hand detail (C2/A22F) wait for the twelfth step. MEASURED (equiproster: $7F:0000 = 49, four members): Frog's
-// panel bright and Marle's coming in dim through f171-f181, 4 px a frame; Marle bright and her detail at f182.
+// C2/9DAF: C2/A216 writes the incoming member's panel into the off-screen slot, C2/9EB0 tones its box dim (Y = 100C),
+// the column is block-copied (C2/EF05, BG1 and BG2) so that it and the new box form one strip, and each of twelve steps
+// adds $0D22 (+-4) to the column's offset-per-tile V ($5D42, row 61: screen columns 2-13) and yields: the column slides
+// 4 px a frame, rigid, cut to lines 16-159 (the TIME box below is row 63's, still). The dim, $0412 / $71, the blip and
+// the right-hand detail (C2/A22F) wait for the twelfth step.
 void CtMenuRenderEquipMemberSlide(const CtMenuHost* h, uint8_t* fb, int oldScroll, int dir, int o, int dimRow,
                                   int handRow, int detailChar) {
   if (!h || !fb || !h->mem) return;
@@ -2917,24 +2601,24 @@ void CtMenuRenderEquipMemberSlide(const CtMenuHost* h, uint8_t* fb, int oldScrol
 // C2/B5C8: the incoming member's panel into BG1 (C2/BAFC its sprite block, C2/BA2F its "MP Used"), the BG1 column
 // block-copied beside it (C2/EF05 from (5,2), 10 x 18), then twelve steps of $0D22 (+-4): $0D30 -= $0D22 (the OAM Y the
 // party sprites are drawn with), $0DAB, the offset-per-tile word $24 += $0D22 into $5D44 / $5DC4 (bit 13 alone: BG1,
-// not BG2 -- the boxes stay while the text moves), $0D95 +-1, a yield; the twelfth settles and C2/B54D goes on.
+// not BG2, so the boxes stay while the text moves), $0D95 +-1, a yield; the twelfth settles and C2/B54D goes on.
 void CtMenuRenderTechMemberSlide(const CtMenuHost* h, uint8_t* fb, int oldScroll, int dir, int o, int handRow) {
   if (!h || !fb || !h->mem) return;
   int keep = mPanelScroll;
   mPanelScroll = oldScroll < 0 ? 0 : oldScroll;
   int d = dir > 0 ? o : -o;
   const uint16_t* tm = ctMenuChromeEnteredTM[2];
-  // THE LAYERS' BAND NARROWS FOR THE SLIDE: C2/B5C8 switches the HDMA set ($0D13 = 6B) and the TM table it enables shows
-  // BG1 and OBJ on lines 24-151 only (MEASURED, ct.exe --hdma through equiproster's Tech scroll: TM 17 on the trace's lines
-  // 25-152 and 02 -- BG2 alone -- above and below, against 17-160 on every settled frame). So lines 16-23 and 152-159 are
-  // the boxes alone, and in between the column's boxes carry the moved text and sprites.
+  // The layers' band narrows for the slide: C2/B5C8 switches the HDMA set ($0D13 = 6B), and the TM table it enables
+  // shows BG1 and OBJ on lines 24-151 only (TM 17 there, 02 -- BG2 alone -- above and below, against 17 on lines 16-160
+  // when settled). So lines 16-23 and 152-159 are the boxes alone, and in between the boxes carry the moved text and
+  // sprites.
   const int8_t* gk = mChromeRowsGrad; mChromeRowsGrad = mWinGrad(2);   // (the Tech screen's window ramp: option 2's)
   mChromeRowsTM(fb, tm, 2, 2, 0, 31, 0, -1, 16, 24);
   mChromeRowsTM(fb, tm, 18, 19, 0, 31, 0, -1, 152, 160);
   mChromeRowsTM(fb, tm, 2, 19, 2, 14, 0, -1, 24, 152);
   mChromeRowsGrad = gk;
-  // BG1 (columns 3-14: $5D44's twelve words, bit 13 = BG1 only) and the sprites ($0D30 = -d on their OAM Y) move together:
-  // the old window's panels and "MP Used" and the incoming member's, drawn apart
+  // BG1 (columns 3-14: $5D44's twelve words, bit 13 = BG1 only) and the sprites ($0D30 = -d on their OAM Y) move
+  // together: the old window's panels and "MP Used" and the incoming member's, drawn apart
   mSlideTxtClear();
   int base = dir > 0 ? 0 : MP_PITCH;
   for (int row = dir > 0 ? 0 : -1; row <= (dir > 0 ? 3 : 2); row++) {
@@ -2980,19 +2664,13 @@ void CtMenuRenderEquipEntry(const CtMenuHost* h, uint8_t* fb, int selSlot, int d
   mSlotLabel(h, mSlideTxt, 0, 80);                      // string 7 at (5,42) = the Weapon record's cells from column 3
   mSlideTxtBlit(fb, 64 - topA, topA, topA + b26);
 }
-// ---- C2/A85C: THE WAY BACK, the same machine run the other way. B (or LEFT) on the gear select yields at once (the
-// picture stands); the next frame builds in the buffers only ($FF:BE5B: BG2's member box at (2,2) block-copied row by
-// row over rows 8-25, which C2/EF05's top-down copy turns into four copies of it; BG1 rows 9-10 cleared, C2/A1B2 writes
-// the three member panels; FBEA); the frame after is the setup and shows: OPT rows 61-62 cleared, C2/9E76 (the member
-// boxes toned for $0412, and ITS record FBFF uploads BG2 rows 2-27), the channel-6 table C2:AA06 (16 lines FFFF, 48 of
-// 0x1E0, 144 of 0x1D0, 16 of 0x1F0), $5CC2 = 0x60FF (the gear column where it stands, BG1 and BG2 now), $5D42 = 0x6000 |
-// (48 * $0412 - 1) (the party column scrolled so that $0412's box is the top one), FC45, FBE3, and a 16-bit DEC $0D9A that
-// also sets $0D9B -- the hand's one-shot suppress, so the hand is gone on this frame already. Then 24 steps (C2/A970):
-// $5CC2 -= 6, $5D42 -= $0DAB (6 for $0D25 = 8 * $0412 steps, 0 for the lead), and the table rewritten as 16 FFFF, $22 of
-// 0x1E0, 0xC0 - $22 of 0x1D0, 16 of 0x1F0 with $22 = 0x30 + 6 per step: the gear column sinks 6 px a frame, cut at line
-// 207, while the party column (rows 2-25: the four boxes, BG1's panels and the member select's TIME/gold, never cleared)
-// opens above it. The right side keeps the gear panel's detail. MEASURED (tour, logical oracle): $5CC2 = 60FF on the setup
-// frame, 60F9 .. 606F over the next 24; OAM $0770 parked (Y E0) from the setup frame on.
+// ---- C2/A85C: the way back, the entry slide's machine run the other way (disasm/notes/menu2_shell_exit.md, "The gear
+// panel's way back") ----
+// B (or Left) on the gear select yields at once; the next frame builds in the buffers only; the frame after is the setup
+// ($5CC2 = 0x60FF, $5D42 = 0x6000 | (48 * $0412 - 1), C2/9E76's tone, the hand suppressed). Then 24 steps (C2/A970):
+// $5CC2 -= 6, $5D42 -= $0DAB (6 for $0D25 = 8 * $0412 steps, 0 for the lead), and the channel-6 table rewritten with
+// $22 = 0x30 + 6 per step: the gear column sinks 6 px a frame, cut at line 207, while the party column opens above it.
+// The right side keeps the gear panel's detail.
 // `j` = the steps done (0 = the setup frame .. 23; the 24th is also C2/A2CD's rebuild, drawn as the member select).
 void CtMenuRenderEquipExit(const CtMenuHost* h, uint8_t* fb, int charId, int slot, int selSlot, int j) {
   if (!h || !fb || !h->mem) return;
@@ -3030,28 +2708,24 @@ void CtMenuRenderEquipExit(const CtMenuHost* h, uint8_t* fb, int charId, int slo
   mSlideTxtBlit(fb, 64 - topA, topA, CT_MENU_EQUIP_MARBLE_Y);
 }
 
-// ---------------------------------------------------- SCREEN 5 = FORM / PARTY-EXCHANGE (C2/C621)
-// The 3 active-party panels + the exchange picker. `cursor` = the slot the hand rests on (ROM $0054);
-// `picked` = the first-picked slot (-1 = none). The reserve roster + the exact ROM slide-in overlay/icon-
-// grid pixels are DEFERRED (documented boundary — the overlay never settles headless, so this is a layout-
-// faithful approximation, the menu standard: reuse chrome/font, validate the swap on $2980). See CtMenuFormSwap.
-// C2/C649 -- WHERE THE FORM PICKER'S CURSOR STARTS. One routine in the ROM, so one here:
+// ---------------------------------------------------- Screen 5 = Form / party exchange (C2/C621)
+// The three active-party panels and the exchange picker. `cursor` = the slot the hand rests on ($0054); `picked` = the
+// first-picked slot (-1 = none). See CtMenuRenderForm in menu.h and CtMenuFormSwap.
+// C2/C649, where the Form picker's cursor starts:
 //     2C649  LDA $0F02,X / AND #C0 / BNE ->loop / STX $54
-// over C2/CD2B's compacted panel array, i.e. skip every cell that is LOCKED (0x40) or EMPTY
-// (0x80). With Crono locked by $7F01DF the screen therefore opens with the hand on cell 1, which
-// is exactly what the oracle's own entered-Form capture shows: cursor OAM $0770 = (0x38, 0x53) =
-// nav record 1, not record 0.
+// over C2/CD2B's compacted panel array: skip every cell that is locked (0x40) or empty (0x80). With Crono locked by
+// $7F01DF the screen opens with the hand on cell 1 (cursor OAM $0770 = (0x38, 0x53) = nav record 1).
 int CtMenuFormEntryCell(const uint8_t* mem, const uint8_t* glb) {
   uint8_t fp[9];
   CtMenuFormPanels(mem, glb, fp);
   for (int k = 0; k < 3; k++) if (!(fp[k] & 0xC0)) return k;
   return 0;
 }
-// ---------------------------------------------------- SCREEN 7 = THE EXCHANGE WITH RESERVES (C2/C7A6)
+// ---------------------------------------------------- Screen 7 = the exchange with reserves (C2/C7A6)
 // Menu mode 5 (C2/808F[5] = $07), opened by the field's Y button at storyline >= 0x49 (C0/1985 -> C0/19CE) and by the
-// script op `C8 00` (C0/0D04 -> C0/19C7), both with $71 = 0. It is the Form screen's own machinery (C2/C6B9, C2/C805,
+// script op `C8 00` (C0/0D04 -> C0/19C7), both with $71 = 0. It is the Form screen's machinery (C2/C6B9, C2/C805,
 // C2/C70C are shared) run with $0D36 = $71 = 0, so C2/CD2B scans the reserves and the graph is the two-column one.
-// These run on the menu's WRAM as the ROM does: the bytes are the state (disasm/notes/menu2_form_screen.md 2.3-2.11).
+// These run on the menu's WRAM, as the ROM does (disasm/notes/menu2_form_screen.md 2.3-2.11).
 
 // C2/CD2B: `$0F02..$0F0A = 80`, `STZ $0F0B`; the actives compacted from $0F02 (`slot | 40` when $7F01DF & FF/F9BB[id]
 // locks the character, which also takes it out of $0F0B); with $0D36 = 0 the reserves $2983..$2988 compacted from $0F05
@@ -3077,8 +2751,8 @@ void CtMenuExchRoster(uint8_t* mem, const uint8_t* glb) {
   }
   mem[0x0F0C] = (uint8_t)r;                                        // 2CD96 STY $0F0C
 }
-// C2/C649 (screen 7 enters it with X = 0, C2/C7BE): the first panel entry with neither LOCKED nor EMPTY, over all nine
-// -- so with every active member locked the hand starts on the reserve column -- then both picks to FF and `INC $68`.
+// C2/C649 (screen 7 enters it with X = 0, C2/C7BE): the first panel entry that is neither locked nor empty, over all
+// nine (with every active member locked the hand starts on the reserve column), then both picks to FF and `INC $68`.
 void CtMenuExchEntry(uint8_t* mem) {
   if (!mem) return;
   int x = 0;
@@ -3093,17 +2767,17 @@ void CtMenuExchGraph(uint8_t* mem, const uint8_t* rom, long romLen) {
   if (!mem || !rom || romLen < 0x3FB77A + 43) return;
   CtRomCopy(mem + 0x9380, rom, romLen, 0x3FB77B, 42);
 }
-// THE EXCHANGE'S BG3 WAVE. C2/C7AC's C2/CE86 (at P) runs `JSL FF/F677` and queues two VRAM DMAs through C2/8385 (C2/CE96:
-// $7E:B000 -> VRAM $7000, $600 bytes, BG3's characters; $FF:FC14: $7E:4E00 -> VRAM $6800, $1000 bytes, BG3's map), and its
-// C2/CE9D sets BG3SC = $68, clears $0F10-$0F11, copies $FF:D57A (12 bytes) to $0F12 and spawns the task C2/CECE: `$0D13 |= 10`,
-// two frames, `JSL FF/F716`, again. The picture: BG3 at VOFS $0D0E, HOFS by HDMA, an indirect table at $9200 -- fourteen
-// `90 40 92` (16 lines each, repeat) -- so line y reads the word at $9240 + 2 * (y & 15). MEASURED (the rule's cartridge, the
-// recipe of menu_exchange_cmp): F716 at f86 = P, then every second frame through the close's fade and `$2141` wait (f248),
-// none from the `11` post's JSLs on; `$0D0E = 01FF` at f86 (FF:F69A).
-// FF/F677: C3/0002 decompresses $FF:E8DC to $7E:B000; `$0D0E = 01FF`; the map at $7E:4E00: six rows of 32, each 16 words
-// from $FF:F6F2[k] counting up and the same 16 again (`MVN` of the row's first $20 bytes), then `MVN` $4E00 -> $4F80, $680
-// bytes -- a forward copy over itself, so the six rows repeat to the map's end; $FF:F706 (16 bytes) to $94B0 (CGRAM 24-31,
-// BG3's palettes 6 and 7) and $FF:F6FE (8 bytes) to $9100.
+// The exchange's BG3 wave. C2/C7AC's C2/CE86 (at P) runs `JSL FF/F677` and queues two VRAM DMAs through C2/8385
+// (C2/CE96: $7E:B000 -> VRAM $7000, $600 bytes, BG3's characters; $FF:FC14: $7E:4E00 -> VRAM $6800, $1000 bytes, BG3's
+// map); its C2/CE9D sets BG3SC = $68, clears $0F10-$0F11, copies $FF:D57A (12 bytes) to $0F12 and spawns the task
+// C2/CECE: `$0D13 |= 10`, two frames, `JSL FF/F716`, again. BG3 scrolls at VOFS $0D0E, HOFS by HDMA through an indirect
+// table at $9200 -- fourteen `90 40 92` (16 lines each, repeat) -- so line y reads the word at $9240 + 2 * (y & 15).
+// FF/F716 runs at P and then every second frame through the close's fade and `$2141` wait, none from the `11` post's
+// JSLs on (disasm/notes/menu2_form_screen.md 2.11).
+// FF/F677: C3/0002 decompresses $FF:E8DC to $7E:B000; `$0D0E = 01FF`; the map at $7E:4E00: six rows of 32, each 16
+// words from $FF:F6F2[k] counting up and the same 16 again (`MVN` of the row's first $20 bytes), then `MVN` $4E00 ->
+// $4F80, $680 bytes -- a forward copy over itself, so the six rows repeat to the map's end; $FF:F706 (16 bytes) to
+// $94B0 (CGRAM 24-31, BG3's palettes 6 and 7) and $FF:F6FE (8 bytes) to $9100.
 void CtMenuExchWaveInit(uint8_t* m, const uint8_t* rom, long romLen) {
   if (!m || !rom || romLen < 0x3FF7D8) return;
   { static uint8_t out[0x10000]; size_t n = ct_lz_decompress_bounded(rom, (size_t)romLen, out, sizeof out, 0x3FE8DC);
@@ -3123,25 +2797,24 @@ void CtMenuExchWaveInit(uint8_t* m, const uint8_t* rom, long romLen) {
   m[0x0F10] = 0; m[0x0F11] = 0;                                    // 2CEA8 STZ $0F10 (16-bit)
   CtRomCopy(m + 0x0F12, rom, romLen, 0x3FD57A, 12);                          // 2CEB4-2CEBD MVN $7E,$FF
 }
-// THE PROMPT'S TEXT (C2/C9E5, substate 0 at S0: C2/CA6D-CAD5). The string -- 4, "Who'll you" 05 "replace?", or 5 when `$0D7C`
-// (16-bit) is set, "Can't" 05 "do that." -- from the table $FF:CF3B, drawn by C2/F905 into the 4bpp strip $7E:5E00: `$0214 = 81`,
-// `$0210-$0212 = $0DC5 / 7E`, JSL C2/57DF, then JSL C2/5823 with `$0213 = 20` again while it stops on the line break `05`
-// (`$0215`), each time 4 added to `$0211` -- the next line $400 bytes on (C2/F923-F93F). C2/FBB4 lays each line's tiles in
-// BG1's map buffer ($7E:2E00 = VRAM $5800): at (6, 21) eight from $0100 over eight from $0110, at (6, 23) from $0121 / $0131
-// (`AND #33EF`, the lower row `ORA #10`) -- the strip's tiles, VRAM $1000 on (C2/CAD9's DMA). MEASURED (the rule's cartridge,
-// --monitor --writer): the strip's bytes written at f52 = S0 by C2:5F9F / 5FD7, after a clear at f43; the map words read
-// back from the cartridge's VRAM 0100-0107 / 0110-0117 / 0121-0128 / 0131-0138 at (6..13, 21..24).
-// THE PROMPT'S FIGURE (C2/C9E5: C2/CA9E-CAB7 with D = $19C0, block 7): C2/F422 with `$00 = 48`, `$01 = 01` -- the type-1
-// table's record 0x48 (C2/F55C[1] = $E4:F023, 5 bytes a record: the $E4:F000 header index 7 + 48 = 0x4F) -- `$0E-$0F = CA 20`
-// (y 202, x 32), `$1A = 20` (attr: priority 2, palette 0). C2/F871 places each 16 x 16 unit at (x + dx, y + dy) of the
-// assembly's offsets (MEASURED, the cartridge's OAM: (53, 160) E8, (24, 174) EA, (24, 158) EC, (24, 190) EE -- the block's
-// $19E2.. = 15 D6 / F8 E4 / F8 D4 / F8 F4), the frame the block's +3 names (0); the tiles go up at P (f86, the task C2/F657).
+// The prompt's text (C2/C9E5, substate 0 at S0: C2/CA6D-CAD5). The string -- 4, "Who'll you" 05 "replace?", or 5 when
+// `$0D7C` (16-bit) is set, "Can't" 05 "do that." -- from the table $FF:CF3B, drawn by C2/F905 into the 4bpp strip
+// $7E:5E00: `$0214 = 81`, `$0210-$0212 = $0DC5 / 7E`, JSL C2/57DF, then JSL C2/5823 with `$0213 = 20` again while it
+// stops on the line break `05` (`$0215`), each time 4 added to `$0211` (the next line $400 bytes on, C2/F923-F93F).
+// C2/FBB4 lays each line's tiles in BG1's map buffer ($7E:2E00 = VRAM $5800): at (6, 21) eight from $0100 over eight
+// from $0110, at (6, 23) from $0121 / $0131 (`AND #33EF`, the lower row `ORA #10`) -- the strip's tiles, VRAM $1000 on
+// (C2/CAD9's DMA).
+// The prompt's figure (C2/C9E5: C2/CA9E-CAB7 with D = $19C0, block 7): C2/F422 with `$00 = 48`, `$01 = 01` -- the
+// type-1 table's record 0x48 (C2/F55C[1] = $E4:F023, 5 bytes a record: the $E4:F000 header index 7 + 48 = 0x4F) --
+// `$0E-$0F = CA 20` (y 202, x 32), `$1A = 20` (attr: priority 2, palette 0). C2/F871 places each 16 x 16 unit at
+// (x + dx, y + dy) of the assembly's offsets ($19E2.. = 15 D6 / F8 E4 / F8 D4 / F8 F4), the frame the block's +3 names
+// (0); the tiles go up at P (the task C2/F657).
 #define MEXCH_FIG_SPR 0x4F
 static int mExchFigOn;
 void CtMenuExchFigure(int on) { mExchFigOn = on; }
 void CtMenuExchPrompt(uint8_t* m, const uint8_t* rom, long romLen) {
   if (!m || !rom || romLen < 0x3FD010) return;
-  memset(m + 0x5E00, 0, 0x800);                                    // (the strip as the init left it: zero, f43)
+  memset(m + 0x5E00, 0, 0x800);                                    // (the strip as the init left it: zero)
   m[0x020C] = (m[0x0D7C] | m[0x0D7D]) ? 5 : 4;                     // 2CA72-2CA7B
   m[0x0DC5] = 0x00; m[0x0DC6] = 0x5E;                              // 2CA7E-2CA81
   m[0x020D] = 0x3B; m[0x020E] = 0xCF; m[0x020F] = 0xFF;            // 2CA84-2CA8C
@@ -3181,11 +2854,11 @@ void CtMenuExchWaveTick(uint8_t* m, const uint8_t* rom, long romLen) {
     c = 0; x += 4; y += 2;
   }
 }
-// THE TABLE THE PICTURE READS. The cartridge's frame shows what its NMI uploaded -- the OAM, BG3's VOFS ($0D0E), INIDISP, the
-// colour math's double-buffered tables: the main thread's work of the frame before -- but the HDMA reads $9240 while the frame
-// is drawn, after this frame's main thread (the rule's CPU runs before line 0) has stepped the task. So the port's picture of a
-// frame, whose NMI-fed parts are that frame's state, takes BG3's HOFS from the step the NEXT frame makes when one is due
-// (CtMenuExchWaveNext, from field.c's schedule of the task).
+// The table the picture reads. A frame shows what its NMI uploaded -- the OAM, BG3's VOFS ($0D0E), INIDISP, the colour
+// math's double-buffered tables: the main thread's work of the frame before -- but the HDMA reads $9240 while the frame
+// is drawn, after this frame's main thread (the rule's CPU runs before line 0) has stepped the task. So the port's
+// picture of a frame takes BG3's HOFS from the step the next frame makes when one is due (CtMenuExchWaveNext, from
+// field.c's schedule of the task).
 static int mExchWaveNext;
 void CtMenuExchWaveNext(int due) { mExchWaveNext = due; }
 static void mExchWaveTable(const uint8_t* m, const uint8_t* rom, long romLen, uint8_t* out) {
@@ -3201,9 +2874,9 @@ static void mExchWaveTable(const uint8_t* m, const uint8_t* rom, long romLen, ui
     c = 0; x += 4; y += 2;
   }
 }
-// C2/C9AE -- the re-drive when the landed entry is not selectable: a LEFT/RIGHT press hops to the other column when the
-// side it is on has nobody selectable (`$0F0B` / `$0F0C` = 0), else the graph is walked once more along UP (bit 3 of $5A)
-// or DOWN (anything else, a LEFT/RIGHT included): C2/C9CD-C9E0.
+// C2/C9AE, the re-drive when the landed entry is not selectable: a Left/Right press hops to the other column when the
+// side it is on has nobody selectable (`$0F0B` / `$0F0C` = 0); otherwise the graph is walked once more along Up (bit 3
+// of $5A) or Down (anything else, Left/Right included): C2/C9CD-C9E0.
 static void mExchRedrive(uint8_t* m) {
   if (m[0x5A] & 0x03) {                                            // 2C9AE-2C9B2
     if (m[0x54] < 3) { if (!m[0x0F0B]) { m[0x54] = (uint8_t)(m[0x54] + 3); return; } }   // 2C9B4-2C9CA
@@ -3214,12 +2887,12 @@ static void mExchRedrive(uint8_t* m) {
   m[0x54] = (uint8_t)(v & 0x0F);
 }
 // C2/E9E2 + C2/C805, one call per input frame: `dir` is the pad latch's auto-repeat byte $F5 (bit 0 R, 1 L, 2 D, 3 U).
-// E9E2: $81 = $54; the FIRST set bit picks the neighbour (R, L, D, U in that order: 2E9F4's LSR loop); a neighbour with
-// bit 7 sets $5A bit 7 (SCROLL) and lands on its low bits. C805: the reserve scroll C2/C85B (only with five reserves or
-// more), then the validity loop -- C2/C819 `$0F0B | $0F0C` both 0 -> $54 = 0 and the entry is 40; else the entry under the
-// cursor ($0F02 + $54, + the scroll $80 on the reserve column) re-drives (C2/C9AE) while it is LOCKED or EMPTY -- and
-// finally $0F0D = the entry, $7F = $54, $56 = 1 on the reserve column. Returns 1 when the cursor moved ($81 != $54: the
-// blip C2/EAC2 of C2/C7EA / C2/C6C6).
+// E9E2: $81 = $54; the first set bit picks the neighbour (R, L, D, U in that order: 2E9F4's LSR loop); a neighbour with
+// bit 7 sets $5A bit 7 (scroll) and lands on its low bits. C805: the reserve scroll C2/C85B (only with five reserves or
+// more), then the validity loop -- C2/C819: `$0F0B | $0F0C` both 0 -> $54 = 0 and the entry is 40; else the entry under
+// the cursor ($0F02 + $54, + the scroll $80 on the reserve column) re-drives (C2/C9AE) while it is locked or empty --
+// and finally $0F0D = the entry, $7F = $54, $56 = 1 on the reserve column. Returns 1 when the cursor moved ($81 != $54:
+// the blip C2/EAC2 of C2/C7EA / C2/C6C6).
 int CtMenuExchMove(uint8_t* m, int dir) {
   if (!m) return 0;
   m[0x81] = m[0x54];                                               // 2E9E5
@@ -3240,15 +2913,15 @@ int CtMenuExchMove(uint8_t* m, int dir) {
   CtMenuExchValidate(m);
   return m[0x81] != m[0x54];
 }
-// C2/C805 alone -- what the screen's build (C2/CAF3) runs on the entry cell, with no move before it.
+// C2/C805 alone: what the screen's build (C2/CAF3) runs on the entry cell, with no move before it.
 void CtMenuExchValidate(uint8_t* m) {
   if (!m) return;
   m[0x0D9E] = 0;                                                   // 2C808
   if (m[0x0F0C] >= 5 && (m[0x5A] & 0x80)) {                        // 2C80B-2C816: C2/C85B
-    if (m[0x5A] & 0x08) {                                          //   UP off the top of the reserve column
+    if (m[0x5A] & 0x08) {                                          //   Up off the top of the reserve column
       m[0x54] = 3;
       if (m[0x80]) { m[0x80]--; m[0x0D9E] = 0xD0; }                //   (C2/C8BA's redraw is the picture's)
-    } else {                                                       //   DOWN off its bottom
+    } else {                                                       //   Down off its bottom
       int lim = m[0x0F0C] - 3;
       m[0x54] = 6;
       if (m[0x80] + 1 < lim) { m[0x80]++; m[0x0D9E] = 0x30; }
@@ -3267,8 +2940,8 @@ void CtMenuExchValidate(uint8_t* m) {
   m[0x56] = 0; m[0x7F] = m[0x54];                                  // 2C848-2C84C
   if (m[0x54] >= 3) m[0x56] = 1;                                   // 2C84E-2C852
 }
-// C2/C674 (screen 7's A, C2/C7F7: refused while $0F0D carries LOCKED): the first pick. $0DA8 = the scroll, $54 = $0D9C =
-// $7F, $0F00 = $0F0D. Returns 0 when refused (no blip: C2/C7FA's BVS goes straight to the RTS).
+// C2/C674 (screen 7's A, C2/C7F7: refused while $0F0D carries the lock bit): the first pick. $0DA8 = the scroll, $54 =
+// $0D9C = $7F, $0F00 = $0F0D. Returns 0 when refused (no blip: C2/C7FA's BVS goes straight to the RTS).
 int CtMenuExchPick(uint8_t* m) {
   if (!m || (m[0x0F0D] & 0x40)) return 0;                          // 2C7F7 BIT $0F0D / BVS
   m[0x0DA8] = m[0x80];                                             // 2C677
@@ -3276,10 +2949,10 @@ int CtMenuExchPick(uint8_t* m) {
   m[0x0F00] = m[0x0F0D];                                           // 2C6A8-2C6AB
   return 1;
 }
-// C2/C6D0 + C2/C6DE-C70A (the second-pick substate, C2/C6B9, shared with the Form screen): A on a selectable entry stores
-// it in $0F01 and runs THE SWAP C2/C70C over $2980..$2988 (then C2/816A, C2/CD2B -- the roster rebuilt from the new
-// party -- and the panels' redraw); A on a LOCKED one, or B, cancels. Either way the picks go back to FF and the cursor to
-// $7F. Returns 1 when the swap ran.
+// C2/C6D0 + C2/C6DE-C70A (the second-pick substate, C2/C6B9, shared with the Form screen): A on a selectable entry
+// stores it in $0F01 and runs the swap C2/C70C over $2980..$2988 (then C2/816A, C2/CD2B -- the roster rebuilt from the
+// new party -- and the panels' redraw); A on a locked one, or B, cancels. Either way the picks go back to FF and the
+// cursor to $7F. Returns 1 when the swap ran.
 int CtMenuExchSecond(uint8_t* m, const uint8_t* glb, int a) {
   if (!m) return 0;
   int swapped = 0;
@@ -3296,20 +2969,19 @@ int CtMenuExchSecond(uint8_t* m, const uint8_t* glb, int a) {
   return swapped;
 }
 
-// SCREEN $07's PICTURE, from the menu's own WRAM:
-//   BG2  the captured chrome (ctMenuChromeExchTM: the two columns and the prompt box), the window ramp of list 0 -- `--hdma`
-//        on the cartridge reads one 192-line ramp from line 17, 12 lines a step, as the status screen's -- and C2/CC4F's dim
-//        re-applied over the three active panels' rows (2 + 6r .. 7 + 6r, tile columns 2-15; C2/CC4F walks $0F02..$0F04
-//        only, so the reserve column never dims);
-//   BG1  each panel at C2/C784's (column, row): column 3 for the actives, 0x13 for the reserves, row (index & 7) * 6 + 2 --
-//        the Form's rows, so its y (a first pick's C2/C688-C6A5 does not blank the reserve panel: C2/EF05 is a rectangle COPY,
-//        `MVN` row by row from the panel at (0x13, row) to (2, 0x20) -- off screen -- and the panel stays: MEASURED, Robo's
-//        panel on the cartridge's picture from the pick, f148, to the swap, f190);
-//   OBJ  the members at C2/CDE3's places, C2/CE6E[$02]: the actives from index 0 (x 116, feet 56 + 48r), the reserves from 6
-//        (x 140) for the window's four rows from the scroll $80; the hand at the graph's cell $54 ($7E:9380), and the picked
-//        cell's second hand ($0D9C, +2 / -1) on the blink's visible half, as the Form's.
-//   BG3  the wave (CtMenuExchWaveInit / Tick), BG1 the prompt's text (CtMenuExchPrompt), OBJ the prompt's figure (block 7,
-//        CtMenuExchFigure) -- 2026-10-18; tools/menu_exchange_pic_cmp.py grades the picture pixel for pixel.
+// Screen $07's picture, from the menu's WRAM:
+//   BG2  the captured chrome (ctMenuChromeExchTM: the two columns and the prompt box), the window ramp of list 0 (one
+//        192-line ramp from line 17, 12 lines a step, as the status screen's), and C2/CC4F's dim re-applied over the
+//        three active panels' rows (2 + 6r .. 7 + 6r, tile columns 2-15; C2/CC4F walks $0F02..$0F04 only, so the
+//        reserve column never dims);
+//   BG1  each panel at C2/C784's (column, row): column 3 for the actives, 0x13 for the reserves, row (index & 7) * 6 + 2,
+//        the Form's rows. A first pick's C2/C688-C6A5 does not blank the reserve panel: C2/EF05 is a rectangle copy
+//        (`MVN` row by row from the panel at (0x13, row) to (2, 0x20), off screen), and the panel stays;
+//   OBJ  the members at C2/CDE3's places, C2/CE6E[$02]: the actives from index 0 (x 116, feet 56 + 48r), the reserves
+//        from 6 (x 140) for the window's four rows from the scroll $80; the hand at the graph's cell $54 ($7E:9380), and
+//        the picked cell's second hand ($0D9C, +2 / -1) on the blink's visible half, as on the Form screen;
+//   BG3  the wave (CtMenuExchWaveInit / Tick); BG1 the prompt's text (CtMenuExchPrompt); OBJ the prompt's figure (block
+//        7, CtMenuExchFigure). tools/menu_exchange_pic_cmp.py compares the picture with the oracle's.
 void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
   if (!h || !fb || !h->mem) return;
   const uint8_t* m = h->mem;
@@ -3329,10 +3001,10 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
     memset(zero, 1, sizeof zero); mChromeZero = zero;            // (a cell BG2 does not draw is transparent too)
     mChromeTMPal2L(fb, scratch, 0, ctMenuChromePal, mWinGrad(0), 0);
     mChromeZero = NULL;
-    // BG3, the wave (CtMenuExchWaveInit / Tick): where BG2's windows leave colour 0. Its map $7E:4E00 (32 x 32, VRAM $6800),
-    // its 2bpp characters $7E:B000 (VRAM $7000), CGRAM from $7E:9480; line y at VOFS $0D0E + 1 and HOFS $9240[y & 15] (the HDMA).
-    // (TMW = 04 masks BG3 by window 2 alone, W34SEL's -- and window 2 is empty here, 255..0; window 1, 16..239, is the colour
-    // math's: the oracle's --hdma on the screen.)
+    // BG3, the wave (CtMenuExchWaveInit / Tick), where BG2's windows leave colour 0. Its map $7E:4E00 (32 x 32, VRAM
+    // $6800), its 2bpp characters $7E:B000 (VRAM $7000), CGRAM from $7E:9480; line y at VOFS $0D0E + 1 and HOFS
+    // $9240[y & 15] (the HDMA). (TMW = 04 masks BG3 by window 2 alone, which is empty here, 255..0; window 1, 16..239,
+    // is the colour math's.)
     if (m[0x0D0E] | m[0x0D0F]) {
       int vofs = (m[0x0D0E] | (m[0x0D0F] << 8)) & 0x3FF;
       uint8_t tbl[32]; mExchWaveTable(m, h->rom, h->romLen, tbl);    // (the HDMA's table: the next main-thread step's)
@@ -3358,8 +3030,8 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
         }
       }
     } }
-  // BG1, the prompt's text (CtMenuExchPrompt): the map buffer's cells (6..13, 21..24) whose tile is the strip's ($0100-$013F,
-  // $7E:5E00 + 32 per tile, 4bpp), in BG1's palette (CGRAM 0 on: the menu's palettes).
+  // BG1, the prompt's text (CtMenuExchPrompt): the map buffer's cells (6..13, 21..24) whose tile is the strip's
+  // ($0100-$013F, $7E:5E00 + 32 per tile, 4bpp), in BG1's palette (CGRAM 0 on: the menu's palettes).
   for (int r = 21; r <= 24; r++)
     for (int c = 6; c <= 13; c++) {                                   // (the cells C2/FBB4 lays; the init cleared the rest)
       int e = m[0x2E00 + (r * 32 + c) * 2] | (m[0x2E01 + (r * 32 + c) * 2] << 8), t = e & 0x3FF, pl = (e >> 10) & 7;
@@ -3410,10 +3082,10 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
     mPanelAtkDefOne(h, fb, 0x13 * 8 - MP_X, y + 40, p.charId, 0);
     mBlitPartySpr(h, fb, p.charId, 140, 56 + k * MP_PITCH, 0);      // C2/CE6E[6 + 2k]
   }
-  // The hand: the graph's (x, y), its attribute $58-$59 with bit 6 (H flip) set when C2/C805 left $56 != 0 -- the reserve
-  // column (C2/E964-E977 `LDA $56 / BEQ / LDA #40 / TSB $0773`): it points left there. MEASURED, the cartridge's OAM slot 28
-  // on the reserve column: (232, 35) tile 20 attr 70. The picked cell's second hand takes the word the first had at the pick
-  // (C2/8A31 `LDA $0772 / STA $0DA1`, C2/8A8B `LDX $0DA1 / STX $0776`): flipped when the pick was on the reserve column.
+  // The hand: the graph's (x, y), its attribute $58-$59 with bit 6 (H flip) set when C2/C805 left $56 != 0 -- the
+  // reserve column (C2/E964-E977 `LDA $56 / BEQ / LDA #40 / TSB $0773`): it points left there. The picked cell's second
+  // hand takes the word the first had at the pick (C2/8A31 `LDA $0772 / STA $0DA1`, C2/8A8B `LDX $0DA1 / STX $0776`):
+  // flipped when the pick was on the reserve column.
   int c = m[0x54] & 0x0F; if (c > 6) c = 6;
   mHandFlip = m[0x56] != 0;
   mHandCursor(h, fb, m[0x9380 + c * 6], m[0x9381 + c * 6]);
@@ -3428,25 +3100,16 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
 void CtMenuRenderForm(const CtMenuHost* h, uint8_t* fb, int cursor, int picked, const uint8_t* panel9,
                       int pickBlink) {
   if (!h || !fb) return;
-  /* background = the byte-exact BG2 chrome, laid by the caller (CtMenuChrome) */
-  // MEASURED, not inferred: the entered-Form BG1 tilemap is BYTE-IDENTICAL to the ribbon's opt-4 hover
-  // (0 differing tiles out of 896) and the BG2 map differs only in rows 12-17 x cols 8-23 -- exactly
-  // where the ribbon icon box was. So the Form frame IS the frame we already draw for opt 4, minus the
-  // box: there is no slide-in overlay to settle and no separate card layout. (The old comment here said
-  // the opposite; it was written before anyone got the screen to open.)
-  // A panel is DIM when its entry is locked or empty ((panel & 0xC0) != 0) -- NOT "not the lead", which
-  // is what the lead-bright call this replaces was doing.
-  // THE FORM LAYOUT IS ITS OWN, and it is not the Tech screen's. Measured on the oracle Form capture
-  // (scratchpad/menu/_av_form1.png): the panel text starts at x = 72 (tile col 9) on every panel, not
-  // at the Tech screen's x = 40 or the status screen's x = 24 -- so the inset is 56. At x = 40 the hand
-  // cursor (x 56..71, the ROM's own $7E:9380 nav column) sat ON TOP of the name.
-  // THE DIM IS PER PANEL, and it is not "everyone but one". C2/CC4F loops $0F02,X for X = 0..2 and acts
-  // only where `AND #00C0` is non-zero -- LOCKED (bit6) or EMPTY (bit7). Three unlocked members are all
-  // three BRIGHT; the old code picked the first selectable member and dimmed the other two.
-  // The panel array is COMPACTED (C2/CD2B), so row r shows roster slot panel9[r] & 0x3F.
+  // the background (the BG2 chrome) is laid by the caller (CtMenuChrome)
+  // The entered-Form BG1 tilemap equals the ribbon's opt-4 hover, and the BG2 map differs only in rows 12-17 x cols
+  // 8-23, where the ribbon icon box was: the Form frame is the opt-4 frame minus the box.
+  // The panel text starts at x = 72 (tile col 9) on every panel (inset 56); the hand (x 56..71, the $7E:9380 nav
+  // column) sits left of it.
+  // The dim is per panel: C2/CC4F loops $0F02,X for X = 0..2 and acts only where `AND #00C0` is non-zero, locked
+  // (bit 6) or empty (bit 7). The panel array is compacted (C2/CD2B), so row r shows roster slot panel9[r] & 0x3F.
   { uint8_t local[9]; const uint8_t* pan = panel9;
-    if (!pan) { CtMenuFormPanels(h->mem, h->glb, local); pan = local; }  // ribbon HOVER: build it here, WITH
-                                                                         //   the locks -- C2/CA3F runs C2/CC4F too
+    if (!pan) { CtMenuFormPanels(h->mem, h->glb, local); pan = local; }  // ribbon hover: build it here, with the
+                                                                         //   locks (C2/CA3F runs C2/CC4F too)
     for (int r = 0; r < 3; r++) {
       if (pan[r] & 0x80) continue;                                        // empty panel: nothing drawn
       CtMenuPanel p;
@@ -3457,74 +3120,42 @@ void CtMenuRenderForm(const CtMenuHost* h, uint8_t* fb, int cursor, int picked, 
       mPanelAtkDefOne(h, fb, tx - MP_X, y + 40, p.charId, dim);           // the 4th row (tile row 6n+6)
     }
     mFormSprites(h, fb, pan); }                      // the standing sprites, at C2/CE6E's own anchor
-  // The Exchange icon is the HIGHLIGHT variant of the ribbon's swap-arrows icon (ribbon tile base
-  // + 0x20), the coloured one -- not the grey unselected face. The oracle's entered-Form frame inks
-  // it in red/yellow/green/blue where ours drew the same shape in greys; the Item screen already
-  // reached for its own ctMenuIconSel[1] for exactly this reason. Position and the "Exchange" run
-  // was already right: the text's ink box is x104..165 on rows 184..191 on BOTH sides, identical
-  // run for run. The icon itself sat SIXTEEN PIXELS LEFT of the ROM's: same 14x14 shape, same
-  // rows 177..190, ink x73..86 where the oracle inks x89..102 -- so the blit origin is MI_HX + 80
-  // (tile column 11), leaving the icon flush against the text at column 13. It is a BG widget,
-  // not an OBJ (this screen's OAM carries only the hand and the three party sprites), and
-  // menu_phase2.md is explicit that a BG position on these screens has to be read off the
-  // FRAMEBUFFER -- the per-window HDMA scroll makes tilemap*8 + scroll meaningless here.
+  // The Exchange icon is the highlight variant of the ribbon's swap-arrows icon (tile base + 0x20), the coloured one.
+  // It is a BG widget, at tile column 11 (MI_HX + 80), flush against the text at column 13.
   mBlitIcon(fb, ctMenuIconSel[4], MI_HX + 80, 176);
-  mText(h, fb, "Exchange", MI_HX + 96, 184);         // oracle "Exchange" E-stroke = (x104, our-y 184)
-  // ⭐ CORRECTION (2026-09-07): the picked member gets a SECOND HAND, and dropping it was the
-  // mistake -- not drawing it. The note this replaces called it invention because the ROM marks the
-  // pick with the character's SPRITE POSE (anim 0x0B, C2/C973), which it does; what it missed is
-  // that the ROM does BOTH, and that the second hand BLINKS, so a single capture in the off phase
-  // shows nothing. Read straight off the oracle's entered-Form screen with a member picked:
-  //   OAM slot 29 = (X 0x3A = 58, Y 0x52 = 82, tile 020) -- the same hand tile as slot 28's
-  //     (56, 83), i.e. (+2, -1) from the nav cursor, which is exactly the offset the old code had.
-  //   $7E:0774 (its OAM staging word) alternates 3A52 <-> 00E0 (parked at Y=224) every FOUR frames,
-  //     in step with $7E:0DA0 toggling 0/1 -- the same 4-on/4-off counter the Item screen's pinned
-  //     row hand already uses. Visible on the $0DA0 == 0 half (writer C2:8A8B places it, C2:E942
-  //     parks it).
+  mText(h, fb, "Exchange", MI_HX + 96, 184);
+  // The picked member gets a second hand as well as its sprite pose (anim 0x0B, C2/C973): OAM slot 29 at (+2, -1) from
+  // the nav hand, its staging word $7E:0774 alternating with the parked 00E0 every four frames in step with $7E:0DA0
+  // (the counter the Item screen's pinned hand uses). Visible on the $0DA0 == 0 half (C2:8A8B places it, C2:E942 parks
+  // it).
   if (picked >= 0 && picked < 3 && pickBlink)
     mHandCursor(h, fb, 56 + 2, 35 + picked * 48 - 1);
-  // The anchor is the nav record, read out of the oracle's live $7E:9380 on its own entered-Form
-  // capture: the three party cells are (0x38, 0x23), (0x38, 0x53), (0x38, 0x83) = (56, 35 + 48*r),
-  // and C2/CB18 (`LDA #38 / STA $9380 / STA $9386 / STA $938C`) is where that x comes from. The
-  // table is BUILT rather than copied from ROM here -- the four reserve cells at x = 0xE8 carry
-  // neighbours that depend on the roster -- so the base is cited from the oracle's RAM, not baked.
-  // We used 36, one row low; the hand's ink sits +2 inside the sprite either way (oracle record y
-  // 83 -> ink y85..96, measured).
+  // The anchor is the nav record: the three party cells of $7E:9380 are (0x38, 0x23), (0x38, 0x53), (0x38, 0x83) =
+  // (56, 35 + 48*r), the x from C2/CB18 (`LDA #38 / STA $9380 / STA $9386 / STA $938C`). The table is built at run
+  // time (the four reserve cells at x = 0xE8 carry roster-dependent neighbours), so the port does not bake it.
   if (cursor >= 0 && cursor < 3) mHandCursor(h, fb, 56, 35 + cursor * 48);
 }
 
-// The bottom-bar VWF run, defined with the Config screen below (both bars go through C2/F943's
-// renderer). Declared here because the Tech bar is the first caller in file order.
+// The bottom-bar VWF run, defined with the Config screen below (both bars go through C2/F943's renderer); the Tech bar
+// is the first caller in file order.
 static void mBarVwf(const CtMenuHost* h, uint8_t* fb, const char* s, int x, int y,
                     const uint8_t tone[4][3]);
-// ---------------------------------------------------------- SCREEN 3 = TECH (PHASE 3 part 3)
-// Read-only, SINGLE techs. The ROM's tech-list builder (C2/BD00) reads the per-char learned bitfield
-// from the menu buffer $7E7F00[charId] (MSB = the char's first tech) and walks the tech-id range from
-// the boundary table $C2/BD40; each set bit -> a learned tech id, whose NAME comes from $CC/15C4 and
-// MP from $CC/253B. The $7E7F00 buffer is COMPUTED at menu-open by FF/F850 from the persistent seed
-// $7E2837+charId (a raw field capture has $7F00 = 0 scratch, so we compute the bitfield on the fly from
-// $2837 the same way FF/F850 does — VALIDATED byte-exact against the oracle's $7F00 = 0x80 for Crono).
+// ---------------------------------------------------------- Screen 3 = Tech (menu2_tech_screen.md)
+// One list machine over a 37-entry tech-group space. C2/BD40 is a 38-byte cumulative id boundary: groups 0-6 = the
+// seven characters' 8 single techs (ids $01..$38), 7-21 = the fifteen character pairs with 3 double techs each
+// ($39..$65), 22-36 = the fifteen triples with 1 each ($66..$74). The tabs "1 2 3" are Single/Double/Triple, and
+// C2/BD65 is the (firstGroup, count) window each one selects. Names come from $CC/15C4, single costs from $CC/253B.
 
-// Per-char SINGLE-tech learned bitfield (MSB = first tech), as FF/F850 computes it at menu-open: the
-// persistent seed $7E2837+charId plus the next tech while the learned count is below the char's cap.
-// The forced-learn flags ($7F01E0, bank $7F) are 0 in this era, so only the threshold path is taken.
-// ==================== THE TECH SCREEN'S GROUP MACHINE (menu2_tech_screen.md) ====================
-// Screen 3 is ONE list machine over a 37-entry "tech GROUP" space, not three screens. C2/BD40 is a
-// 38-byte cumulative id boundary: groups 0-6 = the seven characters' 8 SINGLE techs (ids $01..$38),
-// 7-21 = the fifteen character PAIRS with 3 DOUBLE techs each ($39..$65), 22-36 = the fifteen TRIPLES
-// with 1 each ($66..$74). The three tabs "1 2 3" ARE Single/Double/Triple, and C2/BD65 is the
-// (firstGroup, count) window each one selects.
-
-// FF/F863 + FF/F876 + C2/B979 -- the MENU's tech bitfield $7E:7F00[37], built at menu-open from the
-// persistent $7E:2837. A group is copied only when EVERY member is in the roster (the ROM leaves the
-// others stale; 0 is the only value this engine can honestly produce), and then one NOT-YET-LEARNED
-// tech per character is added so the screen can show it DIM: `dim37[c]` carries that tech's index.
+// FF/F863 + FF/F876 + C2/B979: the menu's tech bitfield $7E:7F00[37], built at the open from the persistent $7E:2837.
+// A group is copied only when every member is in the roster (the ROM leaves the others stale; the port writes 0), and
+// then one not-yet-learned tech per character is added so the screen can show it dim: nextIdx7[c] carries that
+// tech's id.
 void CtMenuTechBits(const uint8_t* mem, uint8_t* bits37, uint8_t* nextIdx7) {
   if (!bits37) return;
   for (int g = 0; g < 37; g++) bits37[g] = 0;
   for (int k = 0; k < 7; k++) if (nextIdx7) nextIdx7[k] = 0xFF;
   if (!mem) return;
-  int absent = 0xFE;                                   // FF/F865: bit per charId, set = NOT in the roster
+  int absent = 0xFE;                                   // FF/F865: bit per charId, set = not in the roster
   for (int slot = 0; slot < 9; slot++) {
     int cch = mem[0x2980 + slot];
     if (!(cch & 0x80)) absent &= ~(0x80 >> (cch & 7));
@@ -3538,18 +3169,14 @@ void CtMenuTechBits(const uint8_t* mem, uint8_t* bits37, uint8_t* nextIdx7) {
     for (;;) { int b = a & 1; a >>= 1; if (b) break; if (--n == 0) break; }
     if (n < ctTechNextCap[cch] && n < 8) {
       bits37[cch] = (uint8_t)(bits37[cch] | (0x80 >> n));
-      if (nextIdx7) nextIdx7[cch] = (uint8_t)(ctTechBound[cch] + n);   // the tech id that is only PREVIEWED
+      if (nextIdx7) nextIdx7[cch] = (uint8_t)(ctTechBound[cch] + n);   // the tech id that is only previewed
     }
   }
   for (int k = 0; k < 5; k++) bits37[32 + k] = mem[0x2857 + k];        // C2/B979's MVN (the rock triples)
 }
 
-// C2/BC22 + C2/BC59 -- what this tech costs THIS character. A SINGLE indexes CC/253B by the tech id;
-// a DOUBLE/TRIPLE indexes it through $7E:1607 + charId*64 + techId, so the same tech shows a different
-// number in each participant's panel. The accessory halves it: $A2 once, $A3 twice, both rounding UP.
-// CC/3A09 + id*2 -- the tech's own DESCRIPTION, dictionary-decoded at bake time. Returns the length
-// written; ids 0x76..0x78 are the Single/Double/Triple TAB names, which is what the bar shows when no
-// row is highlighted.
+// CC/3A09 + id*2: the tech's description, decoded at bake time. Returns the length written; ids 0x76..0x78 are the
+// Single/Double/Triple tab names, which the bar shows when no row is highlighted.
 int CtMenuTechDesc(int techId, char* out, int cap) {
   if (out && cap > 0) out[0] = 0;
   if (!out || cap < 2 || techId < 0 || techId >= (int)(sizeof ctTechDesc / sizeof ctTechDesc[0])) return 0;
@@ -3559,6 +3186,9 @@ int CtMenuTechDesc(int techId, char* out, int cap) {
   return n;
 }
 
+// C2/BC22 + C2/BC59: what this tech costs this character. A single indexes CC/253B by the tech id; a double/triple
+// indexes it through $7E:1607 + charId*64 + techId, so the same tech shows a different number in each participant's
+// panel. The accessory halves it: $A2 once, $A3 twice, both rounding up.
 int CtMenuTechMp(int charId, int techId, int tab, int accessoryId) {
   int ix = techId;
   if (tab != 0) {
@@ -3581,7 +3211,7 @@ int CtMenuTechList(const CtMenuHost* h, int charId, int tab, int* techId, int* m
   int first = ctTechTabWin[tab * 2], cnt = ctTechTabWin[tab * 2 + 1];
   int mask = 0x80 >> (charId & 7), n = 0;
   for (int g = first; g < first + cnt && g < 37; g++) {               // C2/BCCD: only the groups this
-    if (!(ctTechGroupMask[g] & mask)) continue;                       //   character actually belongs to
+    if (!(ctTechGroupMask[g] & mask)) continue;                       //   character belongs to
     int b = bits[g];
     // C2/BD00's do-while: `id != BD40[g+1]` is what makes group 36 emit exactly one id (BD40[37] = 0).
     for (int id = ctTechBound[g]; ; ) {
@@ -3602,13 +3232,6 @@ int CtMenuTechList(const CtMenuHost* h, int charId, int tab, int* techId, int* m
   return n;
 }
 
-// Fill techId[]/mp[] with the character's LEARNED single techs, in menu (learn) order; returns count.
-// Mirrors C2/BD00: for tech ids in [BD40[charId], BD40[charId+1]), the k-th id is learned iff bit
-// (0x80>>k) of the learned bitfield is set (the ASL $01 / BCC scan).
-
-// DETAIL: the read-only SINGLE-tech list for `charId`. Char panel + portrait + the "Single" category
-// header, then one row per LEARNED single tech (name + MP cost). Deferred (marked): Double/Triple techs,
-// USING a tech, tech descriptions, the "Sk Pts / Need" tech-point readout, and MP-halving gear (C2/BC59).
 // The hand's nav cell when it is not the list row's: C2/B471 moves $54 to cell 8 on the list's A, and that frame's
 // picture is still the list (C2/BE79 has only yielded) with the hand already on the target cell. -1 = the list row.
 static int g_techHandCell = -1;
@@ -3618,17 +3241,14 @@ void CtMenuTechListRan(int ran) { g_techListRan = ran; }
 void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int row, int scroll,
                       int selSlot, int fresh, int barId, int barX, int barN) {
   if (!h || !fb) return;
-  /* background = the byte-exact BG2 chrome, laid by the caller (CtMenuChrome) */
-  // BOTH party panels + standing sprites + the Single/Dual/Triple tabs. No portrait top-right (that was
-  // the invented mPortrait -- the oracle draws the tabs there), no Single/MP headers.
+  // the background (the BG2 chrome) is laid by the caller (CtMenuChrome)
+  // The party panels, the standing sprites and the Single/Dual/Triple tabs (top right, where there is no portrait).
   if (tab < 0) tab = 0; else if (tab > 2) tab = 2;
   int tids[64], mps[64], grp[64], dim[64];
   int n = CtMenuTechList(h, charId, tab, tids, mps, grp, dim, 64);
-  // THE LEFT COLUMN IS THE PARTICIPANT LIST, not the party. Measured on the oracle with a spliced
-  // Aura Whirl (saves/tech_double.state): the Dual list draws CRONO and MARLE -- the two set bits of
-  // CC/2963[group] -- each with its OWN "MP Used" (Crono 2, Marle 1, straight out of C2/BC22's
-  // per-character $7E:1607 index), and Lucca's panel is BLANK even though she is in the party. On a
-  // Single list only the one participant is drawn. Outside the list (selSlot >= 0) it IS the party.
+  // In the list the left column is the participant list, not the party: a Dual list draws the two set bits of
+  // CC/2963[group], each with its own "MP Used" (C2/BC22's per-character $7E:1607 index), and leaves the other panels
+  // blank; a Single list draws the one participant. Outside the list (selSlot >= 0) it is the party.
   int part[3], np = 0;
   if (row >= 0 && row < n) {
     part[np++] = charId & 7;                                    // C2/BBD6: panel 0 = the selected char
@@ -3642,15 +3262,14 @@ void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int
       for (int s2 = 0; s2 < 9; s2++) if (h->mem && (h->mem[0x2980 + s2] & 7) == part[i]   // (a reserve caster's
                                         && !(h->mem[0x2980 + s2] & 0x80)) { slot = s2; break; }  //  slot too)
       if (slot < 0 || !CtMenuPanelData(h->mem, slot, &pp)) continue;
-      mCharPanel(h, fb, MP_X, 8 + i * MP_PITCH, &pp, 24, 0);    // every participant draws BRIGHT
+      mCharPanel(h, fb, MP_X, 8 + i * MP_PITCH, &pp, 24, 0);    // every participant draws bright
       mTechMpUsedOne(h, fb, i, mps[row < n ? row : 0] >= 0
                      ? CtMenuTechMp(part[i], tids[row], tab,
                                     h->mem[0x2600 + (size_t)part[i] * 0x50 + 0x2A]) : -1, pp.mp);
-      // panel 0's sprite is BLOCK 7, the caster's copy (C2/BA09; MEASURED $19C0 = 04 / $19CE = 381C = feet 0x38, centre
-      // 0x1C on Frog's list). A Dual / Triple PARTNER's is its OWN block: C2/BBA7's loop runs C2/BAFC for participant i --
-      // `STA $1800,Y` (the char), `STZ $1818,Y` (+0x18 = 0: C2/F657 emits its OAM), +0x0F = 1C, +0x0E = C2:BB1A[i] (38 /
-      // 68 / 98) -- while the caster's own block and the other members' stay at +0x18 = 40 (not drawn). MEASURED
-      // (menu_audit_cmp.py techdual, Aura Whirl): block 1 (Marle) at 681C with +0x18 = 00, block 0 and block 2 at 40.
+      // Panel 0's sprite is block 7, the caster's copy (C2/BA09: $19CE = 381C = feet 0x38, centre 0x1C). A Dual /
+      // Triple partner's is its own block: C2/BBA7's loop runs C2/BAFC for participant i -- `STA $1800,Y` (the char),
+      // `STZ $1818,Y` (+0x18 = 0: C2/F657 emits its OAM), +0x0F = 1C, +0x0E = C2:BB1A[i] (38 / 68 / 98) -- while the
+      // caster's own block and the other members' stay at +0x18 = 40 (not drawn).
       if (h->rom && h->romLen > 0x2BB1A + 3) {
         if (i == 0 && CtMenuSprChar7() == part[0])
           mBlitPartySprPose(h, fb, part[0], CtMenuSprShown7(), 0x1C, CtRomByte(h->rom, 0x400000L, (long)(0x2BB1A)), 0);
@@ -3658,10 +3277,10 @@ void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int
           mBlitPartySprPose(h, fb, part[i], CtMenuSprShown(part[i]), 0x1C, CtRomByte(h->rom, 0x400000L, (long)(0x2BB1A + i)), 0);
       }
     }
-    // C2/BDEB (every frame of the list, C2/B724): on the SINGLE tab, with the highlighted tech the not-learned one
-    // ($7700 bit6 -- the list's dim entry), C2/ED31 FF:C026 prints string #$21 at (5,9): "Skill Pts", a line down "Need "
-    // and the word at the caster's sheet + $2D (C2/F011 -> C2/F114 fmt $42: five cells, right-aligned) -- the TP still
-    // needed. MEASURED (techreserve: Marle's list, the dim Aura): "Skill Pts" / "Need    10" under her panel.
+    // C2/BDEB (every frame of the list, C2/B724): on the Single tab, with the highlighted tech the not-learned one
+    // ($7700 bit 6, the list's dim entry), C2/ED31 FF:C026 prints string #$21 at (5,9): "Skill Pts", a line down "Need "
+    // and the word at the caster's sheet + $2D (C2/F011 -> C2/F114 fmt $42: five cells, right-aligned), the TP still
+    // needed.
     if (tab == 0 && row >= 0 && row < n && dim[row] && h->mem && g_techListRan) {
       const uint8_t* sh = h->mem + 0x2600 + (size_t)(charId & 7) * 0x50;
       mText(h, fb, "Skill Pts", 40, 72);
@@ -3669,70 +3288,54 @@ void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int
       mNumR(h, fb, sh[0x2D] | (sh[0x2E] << 8), 120, 88);
     }
   } else {
-    mPartyPanels(h, fb, 24, -1);                     // char-select: the Tech screen dims NO panel (measured)
+    mPartyPanels(h, fb, 24, -1);                     // char select: the Tech screen dims no panel
     mPartySprites(h, fb);
     mTechMpUsed(h, fb, -1, -1);                      // the "MP Used" label, no value
   }
-  mTechTabs(fb, tab);                                // $7E:0418, not a hard-coded 0
-  // The list is EIGHT rows (C2/BD73 `LDA #0008`) at x144, y = 60 + 12*row, scrolled by $7E:0F4A; a row
-  // past the end draws blank (C2/BDA6). The "next to learn" tech is present but DIM (C2/BDC0's $0C).
-  // NAME ONLY: the oracle's row carries no number -- the cost lives in the panels' "MP Used".
+  mTechTabs(fb, tab);                                // $7E:0418
+  // The list is eight rows (C2/BD73 `LDA #0008`) at x144, y = 60 + 12*row, scrolled by $7E:0F4A; a row past the end
+  // draws blank (C2/BDA6). The next-to-learn tech is present but dim (C2/BDC0's $0C). Names only: the cost is in the
+  // panels' "MP Used".
   for (int i = 0; i < 8 && !fresh; i++) {         // (the build frame, C2/B979, has no list yet: C2/BC6F draws it
     int k = scroll + i;                              //  on substate 2's first frame, the $84 = FF it left)
     if (k >= n) break;
     char nm[16] = "";
     if (!CtMenuTechName(h->rom, h->romLen, tids[k], nm, sizeof nm))
       snprintf(nm, sizeof nm, "Tech %d", tids[k]);   // ROM absent: show the tech id
-    // C2/BDB2 picks the row's TEXT ATTRIBUTE from the per-tech flag byte $7E7700 + techId and hands
-    // it to the C2/EF65 blitter in DP $7E:
-    //     2BDC0 LDX #0C / LDA $7700,Y / BIT #40 / BNE ->store      ; bit6 = the NEXT-TO-LEARN tech
-    //     2BDC9 LDX #00 / BIT #80 / BEQ ->store                    ; bit7 = usable OUTSIDE battle
+    // C2/BDB2 picks the row's text attribute from the per-tech flag byte $7E7700 + techId and hands it to the C2/EF65
+    // blitter in DP $7E:
+    //     2BDC0 LDX #0C / LDA $7700,Y / BIT #40 / BNE ->store      ; bit6 = the next-to-learn tech
+    //     2BDC9 LDX #00 / BIT #80 / BEQ ->store                    ; bit7 = usable outside battle
     //     2BDCF BIT $78 / BMI ->store / LDX #08
-    // 0x0C / 0x08 / 0x00 are BG tilemap palette bits (attr bits 2-3), i.e. three brightnesses.
-    // Bit6 is set by FF/F8AE (`LDA $7701,X / AND #1E / ORA #40`) on exactly the tech CtMenuTechBits
-    // already computes as the preview -- the same FF/F876 next-to-learn arm -- so `dim[k]` IS that
-    // gate; what was wrong was the RAMP. MEASURED on the oracle's own Cyclone row (--peek
-    // saves/truce_market.state, X + Right x2 + A): body (140,148,148) over shadow (49,66,74) =
-    // drawGlyphDim2, where we inked (123,123,123) over (8,16,16) = the dark drawGlyphDim. Same
-    // glyphs, same places -- 133 body + 95 shadow pixels on BOTH sides, only recoloured.
-    // attr 0x08: the nine techs FF/F830-F84B marks usable outside battle (ids 09 0C 0F 1A 1D 21 24 27 29) draw the
-    // third, bright way while DP $78 bit7 is clear ($78 = FF only for a RESERVE caster, which the X menu's three-member
-    // column never loads). MEASURED: Frog's Slurp in that yellow on the tour (f816-f845), Cyclone white.
+    // 0x0C / 0x08 / 0x00 are BG tilemap palette bits (attr bits 2-3), three brightnesses. Bit 6 is set by FF/F8AE (`LDA
+    // $7701,X / AND #1E / ORA #40`) on the tech CtMenuTechBits computes as the preview (FF/F876), so `dim[k]` is that
+    // gate; it draws in drawGlyphDim2's tones. Attr 0x08: the nine techs FF/F830-F84B marks usable outside battle (ids
+    // 09 0C 0F 1A 1D 21 24 27 29) draw the third, bright way while DP $78 bit 7 is clear ($78 = FF only for a reserve
+    // caster, which the X menu's three-member column never loads).
     mDim = dim[k] ? 2 : (h->mem && h->mem[0x0071] < h->mem[0x0073]                     // 2BDCF BIT $78 / BMI
                          && CtMenuTechFieldUsable(h->mem, charId, tids[k])) ? 3 : 0;
     mText(h, fb, nm, 144, 60 + i * 12);
     mDim = 0;
   }
-  // the list cursor, when the list is entered, AT ITS NAV RECORD: the screen's graph $FF:B7A5 (a length byte, 0x54 =
-  // fourteen records, then [x, y, up, down, left, right]); cells 0-7 = the rows, (128, 59 + 12 i) -- a line above the
-  // text's origin (MEASURED: techcast f171-f210, the hand's rows one higher than the port had them)
+  // the list cursor, when the list is entered, at its nav record: the screen's graph $FF:B7A5 (a length byte, 0x54 =
+  // fourteen records, then [x, y, up, down, left, right]); cells 0-7 = the rows, (128, 59 + 12 i), a line above the
+  // text's origin
   { int i = row - scroll;
     if (g_techHandCell >= 0) i = g_techHandCell;              // (C2/B471's frame: $54 is already the target cell)
     if (row >= 0 && i >= 0 && i < 14 && row < n && h->rom && h->romLen > 0x3FB7A6L + 14 * 6)
       mHandCursor(h, fb, CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + i * 6)), CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + i * 6 + 1))); }
-  // CHAR-SELECT (selSlot >= 0): the hand rests on a party panel instead, and the list is a PREVIEW.
-  // This screen has no right-hand detail column -- the oracle draws the three tabs there.
+  // Char select (selSlot >= 0): the hand rests on a party panel instead, and the list is a preview. There is no
+  // right-hand detail column; the three tabs fill it.
   if (selSlot >= 0 && selSlot < 3) mHandCursor(h, fb, 8, 8 + selSlot * MP_PITCH + 27);
-  // The DESCRIPTION BAR (C2/BE16 / C2/BE33): the highlighted tech's own string, x24 / text top y180 --
-  // both measured off the oracle's ink. The strings are dictionary-compressed at CC/3A09 + id*2 and are
-  // baked decoded; 0x76..0x78 are the tab names, which is what the bar shows with no row highlighted.
-  // ⭐ TWO ROM PATHS, TWO COLUMNS -- and BOTH render through the variable-width font, not the 8x8
-  // menu font. Each stages the run into the text buffer at $7E:5340 and calls C2/FA49 -> JSL C2:0003:
+  // The description bar (C2/BE16 / C2/BE33): the highlighted tech's string, text top y180; 0x76..0x78 are the tab
+  // names, which the bar shows with no row highlighted. Both paths render through the VWF, staging the run into the
+  // buffer at $7E:5340 and calling C2/FA49 -> JSL C2:0003:
   //     C2/BE33 (description): LDX #5344 / STX $0DC5 ; LDA #01 / STA $0DC9 ; LDA $0F4C
   //     C2/BE16 (tab name):    LDX #5356 / STX $0DC5 ; LDA #0A / STA $0DC9 ; LDA $0418 / ADC #76
-  // $0DC5 is a byte offset into that buffer, two bytes per 8-px cell, and C2/FA81 starts the pen at
-  // $0DD2 = 8, so the ink lands at x = ($0DC5 - ($0DC5 & FFC0)) * 4 + 8. CALIBRATED on the oracle's
-  // own RAM, two screens, three runs (--peek saves/truce_market.state, read $0DC5/$0DC1 out of the
-  // capture's WRAM and the ink out of its pixels):
-  //     Tech tab name    $0DC5 5356 -> cell 11 -> 8*11 + 8 =  96   oracle ink starts  96
-  //     Tech description $0DC5 5344 -> cell  2 -> 8* 2 + 8 =  24   oracle ink starts  24
-  //     Config name      $0DC5 4E0A -> cell  5 -> 8* 5 + 8 =  48   oracle ink starts  48
-  // (the Config VALUE's cell 11, from $0DC1 = 0x0C past 4E0A, lands on 96 the same way). The tab
-  // name was drawing at the DESCRIPTION's x, in the 8x8 font: `Single Tech` inked 24..109 where the
-  // ROM inks 96..158. Ink tone is ctLoaderVwfTone -- oracle body (231,231,231) / shadow (24,24,24).
-  // WHICH line and HOW MUCH of it is C2/FA49's string task's: `barId` = $0D77 (a tech id from C2/BE33 at x 24, one
-  // character a step, or $76 + tab from C2/BE16 at x 96, TEN a step -- $0DC9), `barN` = the characters typed so far.
-  // MEASURED: "Single Tec" on the first char-select frame (f753), the h on the next.
+  // $0DC5 is a byte offset into that buffer, two bytes per 8 px cell, and C2/FA81 starts the pen at $0DD2 = 8, so the
+  // ink lands at x = ($0DC5 - ($0DC5 & FFC0)) * 4 + 8: the description at 24, the tab name at 96 (menu_phase2.md,
+  // menu2_tech_screen.md). `barId` = $0D77 (a tech id from C2/BE33 at x 24, one character a step, or $76 + tab from
+  // C2/BE16 at x 96, ten a step: $0DC9), `barN` = the characters typed so far.
   if (!fresh && barN > 0 && barId >= 0 && barId < (int)(sizeof ctTechDesc / sizeof ctTechDesc[0])) {
     char line[40]; int k = 0;
     for (const char* p = ctTechDesc[barId]; *p && k < barN && k < (int)sizeof line - 1; p++) line[k++] = *p;
@@ -3741,15 +3344,14 @@ void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int
   }
 }
 
-// THE TECH TARGET OVERLAY (substate 4, C2/B48E), as C2/BE79 builds it: the caster's panel on the left (C2/BA2F at
+// The tech target overlay (substate 4, C2/B48E), as C2/BE79 builds it: the caster's panel on the left (C2/BA2F at
 // $2ECA, his "MP Used", his sprite in block 7 at C2/BAFC's (0x1C, 0x38)), and in the list's window the whole party --
 // C2/BEDC: C2/A1EF's panel at $3662 + 0x100 k (name/LV, HP, MP: text rows 64/72/80 + 32 k), the member's sprite at
-// C2:BF2F[k] (feet 58/78/98, centre E4). The hand is nav cell 8 + tgt of $FF:B7A5 ((120, 71 + 32 tgt)); the list rows are
-// not drawn. `shown` = the HP/MP C2/BEDC last drew (the redraw after a cast is C2/BE79's, not the heal's frame);
+// C2:BF2F[k] (feet 58/78/98, centre E4). The hand is nav cell 8 + tgt of $FF:B7A5 ((120, 71 + 32 tgt)); the list rows
+// are not drawn. `shown` = the HP/MP C2/BEDC last drew (the redraw after a cast is C2/BE79's, not the heal's frame);
 // `casterMp` likewise the caster panel's MP. `castPose` >= 0 = block 7's fixed frame ($19D1 = 90, $19E1 =
-// C2:B519[charId]); the popup = C2/9016's number at each member's anchor ($0F57 = the block's $180E = C2:BF2F[k]) minus
-// FF/CEBA[popCurve]. MEASURED on the techcast drive (Frog's Slurp on Crono, the logical oracle): OAM 92-95 Frog at
-// (12/28, 24/40), 64-83 the party at x 212/228, the hand's OAM (120, 71).
+// C2:B519[charId]); the popup = C2/9016's number at each member's anchor ($0F57 = the block's $180E = C2:BF2F[k])
+// minus FF/CEBA[popCurve].
 void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int row, int tgt,
                             const uint16_t shown[3][2], int casterMp, int castPose,
                             int popCurve, int popPool, const int popAmt[3][2], int barId, int barX, int barN) {
@@ -3800,39 +3402,33 @@ void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int ta
   }
 }
 
-// ---------------------------------------------------------- SCREEN 4 = CONFIG (PHASE 3 part 4)
-// Read-only. The ROM config handler C2/BF35 draws a grid of icon toggles + a bottom bar with the
-// highlighted setting's name+value. The name/value bar is computed by C2/C4BC:
-//   name string    = masterTable[cursor]                       (first 12 entries = the 12 names)
+// ---------------------------------------------------------- Screen 4 = Config (menu2_config_toggles.md)
+// C2/BF35 draws a grid of icon toggles and a bottom bar with the highlighted setting's name and value, computed by
+// C2/C4BC:
+//   name string    = masterTable[cursor]                       (the first 12 entries are the names)
 //   value string   = masterTable[ $0D86[cellRam[cursor]] + cellBase[cursor] ]   (-> $0DCF)
-// where masterTable = the 16-bit-LE pointer table at FF/D3FE (bank-FF-relative pointers into FF/D462+),
-// cellRam = C2/C4F9 (per-cell offset into the $0D86 config bytes), cellBase = C2/C505 (per-cell value-
-// string base). Every value index was byte-validated against the oracle's live $0DCF (saves/menu_open_
-// gato2: cursor0 $0DCF=0x28 -> "On" == the recon's "Stereo On"; cells 0-9 all matched). We render a
-// layout-faithful TEXT LIST instead of the exact icon grid (the setting ICONS are compressed OBJ tiles
-// with the per-state OBJ-palette-0 hazard; the menu standard is layout-faithful, not pixel-exact).
-#define ROM_CFG_CELLRAM  0x02C4F9u   /* C2/C4F9 — per-cell offset into the unpacked config bytes (12) */
-#define ROM_CFG_CELLBASE 0x02C505u   /* C2/C505 — per-cell value-string base index (12) */
-#define ROM_CFG_STRTAB   0x03FD3FEu  /* FF/D3FE — master string pointer table (16-bit LE, bank-FF rel) */
-#define ROM_CFG_STRBANK  0x3F0000u   /* bank FF file base — string @ STRBANK + tableEntry */
-#define CFG_PACKED       0x2990      /* $7E2990-92 — the PERSISTENT PACKED config (3 bytes, save data) */
-#define CFG_WORK         0x0D86      /* $7E0D86-91 — the 12 WORKING bytes (C2/92F4 unpack; menu-lifetime) */
-#define CFG_MIRROR       0x0F09      /* $7E0F09-12 — the checkbox mirror; +4/+5/+6 are the SUB-MODE flags */
-#define CFG_BTN_LIVE     0x0408      /* $7E0408-10 — the CUSTOM button map (9 bytes, save record 2) */
-#define CFG_BTN_WORK     0x0F00      /* $7E0F00-08 — the editor's working copy (C2/C11D MVN) */
-#define CFG_BTN_MERGED   0x2993      /* $7E2993-9B — the LIVE merged map the game reads (C2/C54F) */
-#define ROM_CFG_NAV      0x3FB5A0u   /* FF/B5A0 — the 21x6 cursor graph, copied to $7E:9380 */
-#define ROM_CFG_DEFAULT  0x02FCA6u   /* C2/FCA6 — 12 new-game bytes -> $2990..$299B (+3 = C2/FCA9 -> $0408) */
-#define ROM_CFG_BTNCYCLE 0x02C207u   /* C2/C207 — the assignable-button cycle order, FF-terminated (7) */
-#define ROM_CFG_ROWIDX   0x02C2BDu  /* C2/C2BD — row -> map index (identity 00..07) */
-#define ROM_CFG_CONFLICT 0x02C2C5u   /* C2/C2C5 — per-row conflict-list pointer table (16-bit LE, bank C2) */
-#define CFG_NAV_RAM      0x9380      /* $7E9380 — where the screen builder puts the nav table */
+// masterTable = the 16-bit LE pointer table at FF/D3FE (bank-FF pointers into FF/D462+), cellRam = C2/C4F9 (per-cell
+// offset into the $0D86 config bytes), cellBase = C2/C505 (per-cell value-string base). The port draws the settings
+// as a text list rather than the ROM's icon grid.
+#define ROM_CFG_CELLRAM  0x02C4F9u   /* C2/C4F9, per-cell offset into the unpacked config bytes (12) */
+#define ROM_CFG_CELLBASE 0x02C505u   /* C2/C505, per-cell value-string base index (12) */
+#define ROM_CFG_STRTAB   0x03FD3FEu  /* FF/D3FE, master string pointer table (16-bit LE, bank-FF rel) */
+#define ROM_CFG_STRBANK  0x3F0000u   /* bank FF file base: string @ STRBANK + tableEntry */
+#define CFG_PACKED       0x2990      /* $7E2990-92, the persistent packed config (3 bytes, save data) */
+#define CFG_WORK         0x0D86      /* $7E0D86-91, the 12 working bytes (C2/92F4 unpack; menu lifetime) */
+#define CFG_MIRROR       0x0F09      /* $7E0F09-12, the checkbox mirror; +4/+5/+6 are the sub-mode flags */
+#define CFG_BTN_LIVE     0x0408      /* $7E0408-10, the custom button map (9 bytes, save record 2) */
+#define CFG_BTN_WORK     0x0F00      /* $7E0F00-08, the editor's working copy (C2/C11D MVN) */
+#define CFG_BTN_MERGED   0x2993      /* $7E2993-9B, the live merged map the game reads (C2/C54F) */
+#define ROM_CFG_NAV      0x3FB5A0u   /* FF/B5A0, the 21x6 cursor graph, copied to $7E:9380 */
+#define ROM_CFG_DEFAULT  0x02FCA6u   /* C2/FCA6, 12 new-game bytes -> $2990..$299B (+3 = C2/FCA9 -> $0408) */
+#define ROM_CFG_BTNCYCLE 0x02C207u   /* C2/C207, the assignable-button cycle order, FF-terminated (7) */
+#define ROM_CFG_ROWIDX   0x02C2BDu  /* C2/C2BD, row -> map index (identity 00..07) */
+#define ROM_CFG_CONFLICT 0x02C2C5u   /* C2/C2C5, per-row conflict-list pointer table (16-bit LE, bank C2) */
+#define CFG_NAV_RAM      0x9380      /* $7E9380, where the screen builder puts the nav table */
 
-// Unpack the persistent packed config $7E2990-92 into the 12 working bytes $0D86..$0D91, EXACTLY as the
-// ROM's menu-open routine C2/92F4 does (the working $0D86 copy is transient — zero/garbage in a raw field
-// capture that never opened the menu — so we recompute it from the persistent source, like the Tech
-// bitfield recomputes from $2837). Byte-validated: $2990-92 = C4 A0 01 (identical in gato_t0.raw.wram AND
-// menu_open_gato2.state) -> 00 00 00 01 01 04 00 00 01 01 04 00, matching the live $0D86.
+// Unpack the packed config $7E2990-92 into the 12 working bytes as C2/92F4 does, into `out`: the fallback for a
+// caller that renders before the menu has opened (the working copy at $0D86 is not set up then).
 static void mCfgUnpack(const uint8_t* mem, uint8_t out[12]) {
   for (int i = 0; i < 12; i++) out[i] = 0;
   if (!mem) return;
@@ -3851,9 +3447,9 @@ static void mCfgUnpack(const uint8_t* mem, uint8_t out[12]) {
   out[0x0B] = 0;                 // $0D91 = not in packed source (stays 0 -> "Battle Speed" blank)
 }
 
-// Decode one config string: masterTable[strIdx] -> a NUL-terminated CT "mapped" string at FF/D462+.
+// Decode one config string: masterTable[strIdx] -> a NUL-terminated CT string at FF/D462+.
 static int mCfgStr(const uint8_t* rom, long romLen, int strIdx, char* out, int cap) {
-  (void)rom; (void)romLen;                           // ROM-free: config strings baked into ctRomCfg
+  (void)rom; (void)romLen;                           // the config strings are baked into ctRomCfg
   if (out && cap > 0) out[0] = 0;
   if (cap < 2 || strIdx < 0) return 0;
   long pe = (long)ROM_CFG_STRTAB + (long)strIdx * 2;
@@ -3867,8 +3463,7 @@ static int mCfgStr(const uint8_t* rom, long romLen, int strIdx, char* out, int c
     if      (c >= 0xA0 && c <= 0xB9) ch = (char)('A' + c - 0xA0);
     else if (c >= 0xBA && c <= 0xD3) ch = (char)('a' + c - 0xBA);
     else if (c >= 0xD4 && c <= 0xDD) ch = (char)('0' + c - 0xD4);
-    else if (c == 0xDF)             ch = '?';        // the font's '?' -- "Save Menu Cursor?" (cells 2-4; it was skipped
-                                                     //   as a "cursor icon": MEASURED the oracle's bar draws the '?')
+    else if (c == 0xDF)             ch = '?';        // the font's '?' ("Save Menu Cursor?", cells 2-4)
     else if (c == 0xE0)             ch = '/';
     else if (c == 0xE7)             ch = '\'';
     else if (c == 0xE8)             ch = '.';
@@ -3883,13 +3478,13 @@ static int mCfgStr(const uint8_t* rom, long romLen, int strIdx, char* out, int c
 int CtMenuConfigItem(const CtMenuHost* h, int idx, char* name, int nameCap, char* val, int valCap) {
   if (name && nameCap > 0) name[0] = 0;
   if (val && valCap > 0) val[0] = 0;
-  if (!h || idx < 0 || idx >= CT_MENU_CONFIG_COUNT) return 0;   // ROM-free: tables baked into menu_romdata.h
+  if (!h || idx < 0 || idx >= CT_MENU_CONFIG_COUNT) return 0;   // the tables are baked into menu_romdata.h
   mCfgStr(NULL, 0, idx, name, nameCap);              // name = masterTable[idx] (C2/C4BC cursor name)
   { int off  = mnuRom(ROM_CFG_CELLRAM + idx) & 0x0F; // which config byte (C2/C4F9[cursor], 0..0x0B)
     int base = mnuRom(ROM_CFG_CELLBASE + idx);       // value-string base  (C2/C505[cursor])
-    // The LIVE working byte, not a re-derivation: C2/C4BC reads `$0D86,Y`, and those twelve bytes are
-    // the ONLY copy the screen edits (the packed $2990-92 is written once, by the B-exit pack C2/934F).
-    // Falling back to the packed bytes keeps a caller that renders without ever opening the menu honest.
+    // The live working byte: C2/C4BC reads `$0D86,Y`, and those twelve bytes are the only copy the screen edits (the
+    // packed $2990-92 is written once, by the B-exit pack C2/934F). The packed bytes are the fallback for a caller
+    // that renders without opening the menu.
     uint8_t fallback[12]; int cv;
     if (h->mem && (h->mem[CFG_WORK] | h->mem[CFG_WORK + 1] | h->mem[CFG_WORK + 5] | h->mem[CFG_WORK + 6]
                    | h->mem[CFG_WORK + 9] | h->mem[CFG_WORK + 10] | h->mem[CFG_WORK + 3])) cv = h->mem[CFG_WORK + off];
@@ -3899,14 +3494,12 @@ int CtMenuConfigItem(const CtMenuHost* h, int idx, char* name, int nameCap, char
   return 1;
 }
 
-// ======================= CONFIG (screen 4) — THE TOGGLE MACHINE =========================
-// Derived end to end in disasm/notes/menu2_config_toggles.md. Screen 4 is a 21-cell 2-D cursor
-// machine over 12 settings packed into three saved bytes; every frame substate 1 (C2/BF45) runs the
-// cursor mover C2/E9E2, decodes A/B (C2/E984), and calls C2/BFD4, which does
-// `LDA $54 / STA $0417 / ASL A / TAX / JSR ($BFFF,X)` -- a 12-entry indirect jump table, one routine
-// per cell 0-11. Nine cells are `INC A / AND #01` two-state toggles; $0D8B/$0D8C/$0D90 are 8-step
-// wrapping cycles driven by LEFT/RIGHT through the shared C2/C164 (`AND #07`); $0D8A is a 3-option row
-// reached through a sub-cursor (substate 3); $0D87 opens the Control-Pad button editor (substate 2).
+// ---- Config (screen 4), the toggle machine (disasm/notes/menu2_config_toggles.md) ----
+// A 21-cell cursor machine over 12 settings packed into three saved bytes. Every frame substate 1 (C2/BF45) runs the
+// cursor mover C2/E9E2, decodes A/B (C2/E984), and calls C2/BFD4: `LDA $54 / STA $0417 / ASL A / TAX / JSR
+// ($BFFF,X)`, a 12-entry jump table, one routine per cell 0-11. Nine cells are `INC A / AND #01` two-state toggles;
+// $0D8B/$0D8C/$0D90 are 8-step wrapping cycles driven by Left/Right through the shared C2/C164 (`AND #07`); $0D8A is
+// a 3-option row reached through a sub-cursor (substate 3); $0D87 opens the Control-Pad button editor (substate 2).
 
 void CtMenuConfigUnpack(uint8_t* mem) {                 // C2/92F4, from the menu open C2/8133
   if (!mem) return;
@@ -3941,14 +3534,14 @@ static unsigned cfgLabelOff(int row) {
   return (unsigned)mnuRom(0x02C5A7u + (unsigned)row * 2) | ((unsigned)mnuRom(0x02C5A8u + (unsigned)row * 2) << 8);
 }
 static void cfgPutWord(uint8_t* mem, unsigned a, unsigned w) { mem[a] = (uint8_t)w; mem[a + 1] = (uint8_t)(w >> 8); }
-// C2/C5B3 -- a single-bit mask -> its glyph word: SEC, then INX INX / ROL A until the carry comes out (8-bit A), and
-// the word at FF/D554,X (A0 'A', B7 'X', AB 'L', B1 'R', A1 'B', B8 'Y', B2 'S' for bits 7..1).
+// C2/C5B3: a single-bit mask -> its glyph word: SEC, then INX INX / ROL A until the carry comes out (8-bit A), and the
+// word at FF/D554,X (A0 'A', B7 'X', AB 'L', B1 'R', A1 'B', B8 'Y', B2 'S' for bits 7..1).
 static unsigned cfgMaskGlyph(int mask) {
   unsigned a = (unsigned)mask & 0xFF, c = 1, x = 0xFFFE;
   do { x = (x + 2) & 0xFFFF; unsigned out = a >> 7; a = ((a << 1) | c) & 0xFF; c = out; } while (!c);
   return (unsigned)mnuRom(0x3FD554u + x) | ((unsigned)mnuRom(0x3FD555u + x) << 8);
 }
-// C2/C57A -- the six labels from the LIVE map $2993+0..5, and the two words after each blanked (00FF).
+// C2/C57A: the six labels from the live map $2993+0..5, and the two words after each blanked (00FF).
 static void cfgLabels(uint8_t* mem) {
   for (int row = 0; row < 6; row++) {
     unsigned y = CFG_LABEL_BUF + cfgLabelOff(row);
@@ -3956,9 +3549,9 @@ static void cfgLabels(uint8_t* mem) {
     cfgPutWord(mem, y + 2, 0x00FF); cfgPutWord(mem, y + 4, 0x00FF);
   }
 }
-// C2/C5C7 (the tail of an assignment, C2/C237 JMP) -- every row whose WORKING mask differs from the committed map
-// ($0408.. copied to $9890.., the row being edited forced to FF so it always differs) gets tile 31 (the arrow) and
-// the working mask's glyph after its label; the others get FFFF twice.
+// C2/C5C7 (the tail of an assignment, C2/C237 JMP): every row whose working mask differs from the committed map
+// ($0408.. copied to $9890.., the row being edited forced to FF so it always differs) gets tile 31 (the arrow) and the
+// working mask's glyph after its label; the others get FFFF twice.
 static void cfgMarkChanges(uint8_t* mem, int editRow) {
   for (int i = 0; i < 8; i++) mem[0x9890 + i] = mem[CFG_BTN_LIVE + i];   // C2/C5CA MVN, 8 bytes
   mem[0x9890 + editRow] = 0xFF;                                         // C2/C5E3
@@ -4002,11 +3595,11 @@ int CtMenuListPage(uint8_t* mem, int pageBits, int* cell) {
   return 1;
 }
 
-// C2/8BB8 -- the scrollbar task (slot 4) draws two OBJ sprites, the up and the down triangle (tile 22, attr 30 and B0 =
-// V-flipped), both at X = $0D92, the up at Y = $0D93 + hi($0D95 x $0D98) + lo($0D95 x $0D99) (8-bit adds, the carry
-// kept) and the down 8 below; only in the blink's on phase ($0D97 bit0, stepped by the task), with $0D9A clear and a
-// range ($0D94 != 0); no up at scroll 0, no down once $0D95 >= $0D94. Each screen seeds the bytes (C2/ADD0, C2/A45D,
-// C2/A41A, C2/BA4F, C2/BB50 through C2/EA81); the caller draws this while the task lives.
+// C2/8BB8: the scrollbar task (slot 4) draws two OBJ sprites, the up and the down triangle (tile 22, attr 30 and B0 =
+// V-flipped), both at X = $0D92, the up one at Y = $0D93 + hi($0D95 x $0D98) + lo($0D95 x $0D99) (8-bit adds, the
+// carry kept) and the down one 8 below; only in the blink's on phase ($0D97 bit 0, stepped by the task), with $0D9A
+// clear and a range ($0D94 != 0); no up arrow at scroll 0, no down arrow once $0D95 >= $0D94. Each screen seeds the
+// bytes (C2/ADD0, C2/A45D, C2/A41A, C2/BA4F, C2/BB50 through C2/EA81); the caller draws this while the task lives.
 void CtMenuRenderScrollbar(const CtMenuHost* h, uint8_t* fb) {
   if (!h || !h->mem || !fb) return;
   const uint8_t* m = h->mem;
@@ -4018,8 +3611,7 @@ void CtMenuRenderScrollbar(const CtMenuHost* h, uint8_t* fb) {
   a += ((s * m[0x0D99]) & 0xFF) + c;                    // ADC $4216: lo(scroll x step.hi)
   c = a >> 8; a &= 0xFF;
   int x = m[0x0D92], yUp = (int)a, yDn = (int)((a + 8 + c) & 0xFF);   // 28C07 ADC #08
-  // OAM 30 (the up arrow) is IN FRONT of OAM 31 where the two overlap (the lower index wins): painted last. MEASURED
-  // (equippage, both shown): the rows they share carry the up arrow's two outline rows, not the down arrow's.
+  // OAM 30 (the up arrow) is in front of OAM 31 where the two overlap (the lower index wins), so it is painted last.
   if (s < m[0x0D94]) mBlitRGBAFlipV(fb, ctMenuArrow, 16, 16, x, yDn); // 28C1A / 28C1F: OAM 31
   if (s) mBlitRGBA(fb, ctMenuArrow, 16, 16, x, yUp);                  // 28C10 / 28C15: OAM 30
 }
@@ -4040,9 +3632,9 @@ void CtMenuRosterLists(uint8_t* mem) {
   mem[0x0085] = (uint8_t)n; mem[0x0086] = 0;             // FF/F82A STX $85 / STZ $86
 }
 
-// C2/C3E4 -- the ten checkboxes into the tilemap buffer: for i = 9..0 the 2x2 block at C2:C41B[i] (+0, +2, +40, +42)
+// C2/C3E4: the ten checkboxes into the tilemap buffer: for i = 9..0 the 2x2 block at C2:C41B[i] (+0, +2, +40, +42)
 // gets tiles $1530.. + 4 * ((C2:C42F[i] ^ $0F09[i]) & 1). Run by C2/BFD4 after the cell's handler and by the screen
-// build (C2/C340) -- NOT by the substate-3 / substate-2 handlers, so leaving the 3-option row (C2/BFC5 clears $0F0D)
+// build (C2/C340), not by the substate-3 / substate-2 handlers, so leaving the 3-option row (C2/BFC5 clears $0F0D)
 // shows the old mark until the next frame's C2/BFD4 redraws it.
 static unsigned cfgBoxAddr(int i) {
   return (unsigned)mnuRom(0x02C41Bu + (unsigned)i * 2) | ((unsigned)mnuRom(0x02C41Cu + (unsigned)i * 2) << 8);
@@ -4064,7 +3656,7 @@ void CtMenuConfigRebuildLive(uint8_t* mem) {            // C2/C54F = C2/C555 + C
   cfgLabels(mem);                                       // C2/C552 JMP C2/C57A
 }
 
-void CtMenuConfigDefaults(uint8_t* mem) {               // C2/95D4..C2/960A (a NEW GAME)
+void CtMenuConfigDefaults(uint8_t* mem) {               // C2/95D4..C2/960A (a new game)
   if (!mem) return;
   for (int i = 0; i < 12; i++) mem[CFG_PACKED + i] = mnuRom(ROM_CFG_DEFAULT + i);
   for (int i = 0; i < 9; i++)  mem[CFG_BTN_LIVE + i] = mnuRom(ROM_CFG_DEFAULT + 3 + i);
@@ -4075,7 +3667,7 @@ void CtMenuConfigBuild(uint8_t* mem) {                  // C2/C3B5 (nav copy) + 
   for (int i = 0; i < CT_MENU_CONFIG_CELLS * 6; i++)    // FF/B5A0 -> $7E:9380, verbatim
     mem[CFG_NAV_RAM + i] = mnuRom(ROM_CFG_NAV + i);
   for (int i = 0; i < 10; i++) mem[CFG_MIRROR + i] = mem[CFG_WORK + i];   // $0D86..$0D8F -> $0F09..$0F12
-  mem[CFG_MIRROR + 4] = 0; mem[CFG_MIRROR + 5] = 0; mem[CFG_MIRROR + 6] = 0;  // the three SUB-MODE flags
+  mem[CFG_MIRROR + 4] = 0; mem[CFG_MIRROR + 5] = 0; mem[CFG_MIRROR + 6] = 0;  // the three sub-mode flags
   mem[0x0D1F] = 0;                                      // the cursor freeze (cell 6's edit mode) starts clear
   cfgCheckboxes(mem);                                   // C2/C340 JSR C2/C3E4
   CtMenuConfigRebuildLive(mem);
@@ -4096,10 +3688,10 @@ void CtMenuConfigCellPos(const uint8_t* mem, int cell, int* x, int* y) {
   if (x) *x = cx; if (y) *y = cy;
 }
 
-// C2/C164 — cycle a byte 0..7 with LEFT/RIGHT, wrapping both ways. UP/DOWN fall through to the nav
-// table (`$5A & 3 == 0` -> the routine does nothing), which is how cells 10/11 let Up/Down swap strips.
+// C2/C164: cycle a byte 0..7 with Left/Right, wrapping both ways. Up/Down fall through to the nav table (`$5A & 3 ==
+// 0` -> the routine does nothing), which is how cells 10/11 let Up/Down swap strips.
 static void cfgCycle(uint8_t* mem, int addr, int dirBits, CtMenuConfigIO* io) {
-  int d = dirBits & 3;                                   // bit0 = RIGHT, bit1 = LEFT
+  int d = dirBits & 3;                                   // bit0 = Right, bit1 = Left
   if (!d) return;
   int v = mem[addr];
   v = (d & 1) ? (v + 1) : (v - 1);                       // C2/C16F..C175
@@ -4107,16 +3699,16 @@ static void cfgCycle(uint8_t* mem, int addr, int dirBits, CtMenuConfigIO* io) {
   io->blip = 1;                                          // C2/C17F
 }
 
-// C2/C26C — the conflict pass: every row in `row`'s list that currently holds the NEW mask inherits the
-// OLD (live) one, and $04 records the last row that had to give it up.
+// C2/C26C: the conflict pass. Every row in `row`'s list that holds the new mask inherits the old (live) one, and $04
+// records the last row that had to give it up.
 static void cfgConflict(uint8_t* mem, int row, int newMask, int* lastSwapped) {
   int y = mnuRom(ROM_CFG_ROWIDX + row);                  // C2/C23A: row -> map index (identity 00..07)
   mem[CFG_BTN_WORK + y] = (uint8_t)newMask;              // the assignment
-  int oldMask = mem[CFG_BTN_MERGED + y];                 // C2/C247 LDA $2993,Y = the LIVE mask it had
+  int oldMask = mem[CFG_BTN_MERGED + y];                 // C2/C247 LDA $2993,Y = the live mask it had
   unsigned pe = ROM_CFG_CONFLICT + (unsigned)row * 2;
   unsigned lp = (unsigned)mnuRom(pe) | ((unsigned)mnuRom(pe + 1) << 8);   // a bank-C2 pointer
   int len = mnuRom(0x020000u + lp);                      // list = [len, rows...]
-  for (int i = len - 1; i >= 0; i--) {                   // C2/C26C walks it DOWNWARD (LDX $02 / DEX / BPL)
+  for (int i = len - 1; i >= 0; i--) {                   // C2/C26C walks it downward (LDX $02 / DEX / BPL)
     int r2 = mnuRom(0x020000u + lp + 1 + (unsigned)i);
     if (mem[CFG_BTN_WORK + r2] == (uint8_t)newMask) {
       mem[CFG_BTN_WORK + r2] = (uint8_t)oldMask;
@@ -4125,9 +3717,9 @@ static void cfgConflict(uint8_t* mem, int row, int newMask, int* lastSwapped) {
   }
 }
 
-// C2/C20F — assign `newMask` to `row`, settle the conflicts twice, then repair the two page slots.
+// C2/C20F: assign `newMask` to `row`, settle the conflicts twice, then repair the two page slots.
 static void cfgAssign(uint8_t* mem, int row, int newMask) {
-  for (int i = 0; i < 9; i++) mem[CFG_BTN_WORK + i] = mem[CFG_BTN_LIVE + i];   // RESET working from LIVE
+  for (int i = 0; i < 9; i++) mem[CFG_BTN_WORK + i] = mem[CFG_BTN_LIVE + i];   // reset the working copy from the live map
   int last = 0;                                          // $04
   cfgConflict(mem, row, newMask, &last);                 // pass 1
   cfgConflict(mem, last, mem[CFG_BTN_WORK + last], &last);   // pass 2: re-settle the row that gave way
@@ -4141,8 +3733,8 @@ static void cfgAssign(uint8_t* mem, int row, int newMask) {
   cfgMarkChanges(mem, row);                              // C2/C237 JMP C2/C5C7
 }
 
-// C2/BFFF — the 12-entry cell -> handler table, inlined as one switch. $54 <= 11 is guaranteed while
-// the substate is 1 (cells 12-20 live only inside substates 3 and 2, which never reach C2/BFD4).
+// C2/BFFF: the 12-entry cell -> handler table, as one switch. $54 <= 11 holds while the substate is 1 (cells 12-20
+// live only inside substates 3 and 2, which never reach C2/BFD4).
 static void cfgCellDispatch(uint8_t* mem, int* cell, int* sub, int a, int b, int dirBits,
                             CtMenuConfigIO* io) {
   mem[0x0417] = (uint8_t)*cell;                          // C2/BFDA STA $0417 = the cell the bar describes
@@ -4171,8 +3763,8 @@ static void cfgCellDispatch(uint8_t* mem, int* cell, int* sub, int a, int b, int
                                         io->winLoad = 1; }                      // C2/C13D JSR C2/C511, every frame
              if (a || b) {                                                      // A or B toggles edit mode
                mem[CFG_MIRROR + 6] ^= 1;
-               // C2/C157 STX $93A4 -- the ROM REWRITES cell 6's OWN nav record so the hand jumps beside
-               // the colour strip while editing and back to the grid slot when it is done.
+               // C2/C157 STX $93A4: the ROM rewrites cell 6's own nav record, so the hand moves beside the colour
+               // strip while editing and back to the grid slot after.
                mem[CFG_NAV_RAM + 6 * 6 + 0] = (uint8_t)(mem[CFG_MIRROR + 6] ? 0x88 : 0x38);
                mem[CFG_NAV_RAM + 6 * 6 + 1] = (uint8_t)(mem[CFG_MIRROR + 6] ? 0x37 : 0x3B);
                io->blip = 1;                                                    // C2/C15A
@@ -4187,69 +3779,69 @@ static void cfgCellDispatch(uint8_t* mem, int* cell, int* sub, int a, int b, int
                mem[CFG_WORK + 0x01] = v; mem[CFG_MIRROR + 1] = v;
                if (v) { *cell = 15; *sub = 2;                                    // became Custom -> the editor
                         for (int i = 0; i < 9; i++) mem[CFG_BTN_WORK + i] = mem[CFG_BTN_LIVE + i]; }
-             } else if (mem[0x007F] == 8 && (dirBits & 1)) {                     // C2/C0EE: RIGHT, twice
+             } else if (mem[0x007F] == 8 && (dirBits & 1)) {                     // C2/C0EE: Right, twice
                if (mem[CFG_WORK + 0x01]) { *cell = 15; *sub = 2;
                         for (int i = 0; i < 9; i++) mem[CFG_BTN_WORK + i] = mem[CFG_BTN_LIVE + i]; }
                else { *cell = 3; mem[0x0417] = 3; }                              // Standard -> hop to cell 3
              }
-             CtMenuConfigRebuildLive(mem);                                       // C2/C128, ALWAYS
+             CtMenuConfigRebuildLive(mem);                                       // C2/C128, always
              break; }
     default: break;
   }
-  mem[0x007F] = mem[0x0417];                             // C2/BFE4: $7F = $0417 AFTER the handler ran
+  mem[0x007F] = mem[0x0417];                             // C2/BFE4: $7F = $0417 after the handler ran
   cfgCheckboxes(mem);                                    // C2/BFEC JSR C2/C3E4
-  if (a) io->blip = 1;                                   // C2/BFFA: a blip on EVERY A press, whatever it did
+  if (a) io->blip = 1;                                   // C2/BFFA: a blip on every A press, whatever it did
 }
 
 int CtMenuConfigFrame(uint8_t* mem, int* cell, int* sub, CtMenuConfigIO* io) {
   if (!mem || !cell || !sub || !io) return 0;
   io->blip = 0; io->apuStereo = -1;
-  int prevCell = *cell;                                  // C2/E9E5 STA $81 -- the cell BEFORE the mover
+  int prevCell = *cell;                                  // C2/E9E5 STA $81: the cell before the mover
   int dirBits  = (io->dir >= 0 && io->dir <= 3) ? (1 << io->dir) : 0;   // the ROM's $5A
-  // ---- C2/E9E2: the cursor moves FIRST, unless cell 6's edit mode froze it ($0D1F, C2/EA01)
+  // ---- C2/E9E2: the cursor moves first, unless cell 6's edit mode froze it ($0D1F, C2/EA01)
   if (io->dir >= 0 && mem[0x0D1F] == 0) *cell = CtMenuConfigNav(mem, *cell, io->dir);
   mem[0x0D1F] = 0;                                       // C2/EA1A STZ $0D1F
   mem[0x0D1E] = (uint8_t)(io->dir < 0 ? 0x80 : io->dir);
-  // ---- C2/E98D: the frame a SUBSTATE CHANGES eats its own button, which is why entering a sub-mode
-  //      never immediately re-fires the A that opened it.
+  // ---- C2/E98D: the frame a substate changes eats its own button, so entering a sub-mode never re-fires the A
+  //      that opened it.
   int a = io->a, b = io->b;
   if (mem[0x0D17] != (uint8_t)*sub) { a = 0; b = 0; }
   mem[0x0D17] = (uint8_t)*sub;
 
-  if (*sub == 3) {                                       // C2/BF9F -- the Battle-Gauge 3-option row
+  if (*sub == 3) {                                       // C2/BF9F: the Battle-Gauge 3-option row
     if (a || b) { mem[CFG_MIRROR + 4] = 0; *cell = mem[0x0417]; *sub = 1; io->blip = 1; }   // C2/BFC5
-    else if (*cell != prevCell) {                        // C2/BFAF: THE VALUE IS THE CURSOR CELL - 12
+    else if (*cell != prevCell) {                        // C2/BFAF: the value is the cursor cell - 12
       mem[CFG_WORK + 0x04] = (uint8_t)(*cell - 12); io->blip = 1;
     }
     return 0;
   }
-  if (*sub == 2) {                                       // C2/BF6D -- the Control-Pad button editor
-    if ((dirBits & 2) || b) {                            // LEFT or B: commit working -> live and leave
+  if (*sub == 2) {                                       // C2/BF6D: the Control-Pad button editor
+    if ((dirBits & 2) || b) {                            // Left or B: commit working -> live and leave
       for (int i = 0; i < 9; i++) mem[CFG_BTN_LIVE + i] = mem[CFG_BTN_WORK + i];
       io->blip = 1; *cell = mem[0x0417]; *sub = 1;       // $0417 is still 8 -> back to the Control Pad cell
       CtMenuConfigRebuildLive(mem);
       return 0;
     }
-    if (io->start) {                                     // C2/C188: START restores the ROM defaults
+    if (io->start) {                                     // C2/C188: Start restores the ROM defaults
       io->blip = 1;
       for (int i = 0; i < 9; i++) {
         mem[CFG_BTN_LIVE + i] = mnuRom(ROM_CFG_DEFAULT + 3 + i);
         mem[CFG_BTN_WORK + i] = mnuRom(ROM_CFG_DEFAULT + 3 + i);
       }
       CtMenuConfigRebuildLive(mem);
-    } else if (dirBits & 0x0C) {                         // C2/C1AC: a ROW CHANGE commits working -> live
+    } else if (dirBits & 0x0C) {                         // C2/C1AC: a row change commits working -> live
       io->blip = 1;
       for (int i = 0; i < 9; i++) mem[CFG_BTN_LIVE + i] = mem[CFG_BTN_WORK + i];
       CtMenuConfigRebuildLive(mem);
     }
     { int row = *cell - 15;                              // C2/C1C6
       if (row >= 0 && row < 6) {
-        int x = mem[0x0051];                             // C2/C1CC LDX $51 -- measured 0, ported as written
+        int x = mem[0x0051];                             // C2/C1CC LDX $51 (0 in practice, kept as written)
         int m;
         while ((m = mnuRom(ROM_CFG_BTNCYCLE + (unsigned)x)) != 0xFF && !(m & mem[CFG_BTN_WORK + row])) x++;
-        if (m != 0xFF && io->dir >= 0 && io->dir < 2) {   // C2/C1E1: UP/DOWN never re-assign
-          if (io->dir == 1) { x--; if (x < 0) x = 6; }    // LEFT  (C2/C1EF DEX / BPL / LDX #06)
-          else              { x++; if (x >= 7) x = 0; }   // RIGHT (C2/C1E8 INX / CPX #07 -> LDX #01 then DEX)
+        if (m != 0xFF && io->dir >= 0 && io->dir < 2) {   // C2/C1E1: Up/Down never re-assign
+          if (io->dir == 1) { x--; if (x < 0) x = 6; }    // Left  (C2/C1EF DEX / BPL / LDX #06)
+          else              { x++; if (x >= 7) x = 0; }   // Right (C2/C1E8 INX / CPX #07 -> LDX #01 then DEX)
           cfgAssign(mem, row, mnuRom(ROM_CFG_BTNCYCLE + (unsigned)x));
           io->blip = 1;                                   // C2/C1FD
         }
@@ -4262,45 +3854,29 @@ int CtMenuConfigFrame(uint8_t* mem, int* cell, int* sub, CtMenuConfigIO* io) {
     return 1;                                                 // C2/BF6A JMP C2/9A98 (back to the ribbon)
   }
   cfgCellDispatch(mem, cell, sub, a, b, dirBits, io);         // C2/BF52 JSR C2/BFD4
-  if (*cell != prevCell) io->blip = 1;                        // C2/BF5B: a blip when the cursor MOVED
+  if (*cell != prevCell) io->blip = 1;                        // C2/BF5B: a blip when the cursor moved
   return 0;
 }
 
-// Draw a "12345678" number strip (n digits, 8px pitch) at (sx,sy): all dim (pal3), then the CURRENT
-// value cv (1..n) redrawn bright (pal0) -- the oracle highlights the selected step.
-// The NON-selected entries of a value strip are the LIGHT dim ramp (drawGlyphDim2), not the dark one.
-// Measured on the oracle's own Config screen (--peek saves/truce_market.state, X + Right x3 + A) --
-// its dim digits ink body (140,148,148) over shadow (49,66,74), which is drawMenuGlyphDim2's palette
-// byte for byte; ours drew (123,123,123) over (8,16,16), the dark drawGlyphDim. The glyphs and their
-// positions were already right: the diff over that row was 191 body + 139 shadow pixels on BOTH
-// sides, the same counts, only recoloured.
+// Draw a "12345678" number strip (n digits, 8 px pitch) at (sx,sy): all in the light dim ramp (drawGlyphDim2), then
+// the current value cv (1..n) redrawn bright (pal0).
 static void mCfgStrip(const CtMenuHost* h, uint8_t* fb, int sx, int sy, int cv, int n) {
   mDim = 2;
   for (int d = 1; d <= n; d++) { char s[2] = { (char)('0' + d), 0 }; mText(h, fb, s, sx + (d - 1) * 8, sy); }
   mDim = 0;
   if (cv >= 1 && cv <= n) { char s[2] = { (char)('0' + cv), 0 }; mText(h, fb, s, sx + (cv - 1) * 8, sy); }
 }
-// CONFIG (opt3): the two-panel oracle layout (byte-exact from menu-visual-re). LEFT = a 2-col x 5-row
-// grid of 16x16 setting icons each with a checkbox; RIGHT = a category-icon value panel (number strips
-// with the current step bright, Fast/Slow, Off/1/2, and the Control-Pad button map). The 12 settings'
-// names+values come from CtMenuConfigItem (unchanged data layer). All coords are our 256x224 space.
-// The Config bottom bar's two runs. `C2/C4BC` stages the cell into $0DCE and the composed value
-// index into $0DCF and then `JSR C2/F943`, which renders the NAME through the same VWF the Save
-// screen uses (`JSL C2:0003`) and then places the VALUE on a TILE boundary past it:
+// Config (opt3): the two-panel layout. Left = a 2-col x 5-row grid of 16x16 setting icons, each with a checkbox; right =
+// a value panel (number strips with the current step bright, Fast/Slow, Off/1/2, and the Control-Pad button map). The
+// 12 settings' names and values come from CtMenuConfigItem.
+// The bottom bar's two runs: C2/C4BC stages the cell into $0DCE and the value index into $0DCF and calls C2/F943,
+// which renders the name through the VWF (`JSL C2:0003`) and places the value on a tile boundary past it:
 //     2F9ED  LDA $0DD2 / AND #F8 / LSR A / LSR A / INC A / INC A / STA $0DC1
-// i.e. take the pen the name left, round it DOWN to a tile, and skip on. MEASURED on four cursor
-// cells of the oracle's own Config screen (--peek saves/truce_market.state, X + Right x3 + A, then
-// N x Down), label ink -> value ink:
-//     48..84  -> 96      48..114 -> 128      48..157 -> 168      48..161 -> 176
-// every one of them (pen & ~7) + 16, so the skip is TWO tiles. (Round-up + one tile fits the same
-// four -- the pen never lands on a boundary in them -- so the ROM's own AND #F8 decides it.)
-// The two runs are DIFFERENT COLOURS, sampled off that capture: the name is the plain menu ramp
-// (body 231,231,231 / shadow 24,24,24 / mid 49,49,49 = ctLoaderVwfTone exactly) and the value is
-// YELLOW (body 255,255,0 / shadow 33,33,0) -- the ramp drawMenuGlyphYellow already carries, mid
-// 140,74,0 included, which is where the fourth entry below comes from rather than from a guess.
+// i.e. the pen the name left, rounded down to a tile, plus two tiles (menu_phase2.md). The name is the plain menu
+// ramp (ctLoaderVwfTone) and the value yellow (drawMenuGlyphYellow's ramp: body 255,255,0 / shadow 33,33,0 / mid
+// 140,74,0).
 static const uint8_t ctMenuVwfYellow[4][3] = { {0,0,0}, {33,33,0}, {140,74,0}, {255,255,0} };
-// Both renderers ink from the y they are handed, so the bar keeps the row mText already matched
-// (oracle ink rows 196..204 in its 240-line frame = 188..196 here).
+// Both renderers ink from the y they are handed (the bar's ink rows 188..196).
 static void mBarVwf(const CtMenuHost* h, uint8_t* fb, const char* s, int x, int y,
                     const uint8_t tone[4][3]) {
   if (h->vwfDraw) { h->vwfDraw(fb, s, x, y, tone); return; }
@@ -4320,22 +3896,18 @@ void CtMenuRenderConfig(const CtMenuHost* h, uint8_t* fb, int cell, int sub, int
   if (!h || !fb) return;
   (void)sub;                                   /* the substate only decides which panel the hand is on,
                                                   and the cell id already carries that (12-14 / 15-20) */
-  /* background = the byte-exact BG2 chrome, laid by the caller (CtMenuChrome) */
-  // cell < 0 = the ribbon's opt-3 HOVER: the grid is there, but NO hand and NO bottom bar. MEASURED
-  // on the oracle's own hover (--peek saves/battle_re/party3_field.state, X + Right x3, no A): the
-  // bar row is bare chrome -- no icon at x24, no name, no value -- and there is no hand sprite on
-  // cell 0. That is the same convention the Item, Form and Save previews already use (cell/cursor
-  // -1 = no cursor), and it is what the ROM's own state says: the bar is $0417 and the two strings
-  // it renders are staged by C2/C4BC, which the SCREEN's handler runs -- the ribbon has not entered
-  // it yet. We drew cell 0's hand and Stereo/On on the hover.
+  // the background (the BG2 chrome) is laid by the caller (CtMenuChrome)
+  // cell < 0 = the ribbon's opt-3 hover: the grid is there, but no hand and no bottom bar (the bar is $0417, and its
+  // two strings are staged by C2/C4BC, which the screen's handler runs; the ribbon has not entered it yet). Cell/cursor
+  // -1 = no cursor, as on the Item, Form and Save previews.
   int hover = (cell < 0);
   if (cell < 0) cell = 0;
   else if (cell >= CT_MENU_CONFIG_CELLS) cell = CT_MENU_CONFIG_CELLS - 1;
-  // The BOTTOM BAR describes $0417, not the cursor: the sub-modes leave it on the cell you came from
-  // (5, 7 or 8) while the cursor sits on 10/11, 12-14 or 15-20 (C2/BFDA / C2/C0B0 / C2/C0AE).
+  // The bottom bar describes $0417, not the cursor: the sub-modes leave it on the cell you came from (5, 7 or 8)
+  // while the cursor sits on 10/11, 12-14 or 15-20 (C2/BFDA / C2/C0B0 / C2/C0AE).
   int bar = (h->mem && cell > 11) ? (h->mem[0x0417] & 0x0F) : cell;
   if (bar >= CT_MENU_CONFIG_COUNT) bar = CT_MENU_CONFIG_COUNT - 1;
-  // -- LEFT grid: 10 cells (cursors 0-9). Col A icon x24/box x40, col B icon x72/box x88; rows y{24..152}.
+  // -- left grid: 10 cells (cursors 0-9). Col A icon x24/box x40, col B icon x72/box x88; rows y{24..152}.
   static const uint8_t* const icon[10] = {
     CFG_ICON_STEREO, CFG_ICON_BATTLEMODE, CFG_ICON_SAVEMENU, CFG_ICON_SAVEBATTLE, CFG_ICON_SAVESKILL,
     CFG_ICON_BATTLESPEED, CFG_ICON_WINDOWCOLOR, CFG_ICON_BATTLEGAUGE, CFG_ICON_CONTROLPAD, CFG_ICON_SKILLINFO };
@@ -4344,11 +3916,10 @@ void CtMenuRenderConfig(const CtMenuHost* h, uint8_t* fb, int cell, int sub, int
     int col = c / 5, iy = rowY[c % 5];
     int ix = col ? 72 : 24, bx = col ? 88 : 40;
     mBlitRGBA(fb, icon[c], 16, 16, ix, iy);
-    // CHECKBOX (C2/C3E4): tile = $1530 + 4*((C2C42F[i] ^ $0F09[i]) & 1), so it is the MIRROR that
-    // decides, not the setting -- and the mirror slot for grid cells 5/6/7 is a SUB-MODE FLAG, not a
-    // value (C2/C43A zeroes $0F0D/$0F0E/$0F0F right after the copy). Slot 0's polarity is 1 because
-    // "Stereo On" IS the zero value. cfgBox maps the grid slot to the ROM's checkbox index (C2/C41B's
-    // tilemap addresses put them in that order).
+    // Checkbox (C2/C3E4): tile = $1530 + 4*((C2C42F[i] ^ $0F09[i]) & 1), so the mirror decides, not the setting, and
+    // the mirror slot for grid cells 5/6/7 is a sub-mode flag (C2/C43A zeroes $0F0D/$0F0E/$0F0F after the copy).
+    // Slot 0's polarity is 1 because "Stereo On" is the zero value. cfgBox maps the grid slot to the ROM's checkbox
+    // index (the order of C2/C41B's tilemap addresses).
     static const int cfgBox[10] = { 0, 3, 2, 7, 8, 5, 6, 4, 1, 9 };
     static const int cfgPol[10] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 };   /* C2/C42F */
     int bi = cfgBox[c];
@@ -4357,7 +3928,7 @@ void CtMenuRenderConfig(const CtMenuHost* h, uint8_t* fb, int cell, int sub, int
                   on = (((unsigned)h->mem[a] | ((unsigned)h->mem[a + 1] << 8)) - 0x1530u) >> 2 & 1; }
     mBlitRGBA(fb, on ? CFG_CHECKBOX_CHECKED : CFG_CHECKBOX_EMPTY, 16, 16, bx, iy);
   }
-  // -- RIGHT value panel: category icons (x120) + value rows. Read the multi-value settings' values.
+  // -- right value panel: category icons (x120) + value rows. Read the multi-value settings' values.
   char v5[12], v6[12], v7[12], v8[12], v10[12], v11[12], junk[24];
   CtMenuConfigItem(h, 5, junk, sizeof junk, v5, sizeof v5);   // Battle Speed
   CtMenuConfigItem(h, 6, junk, sizeof junk, v6, sizeof v6);   // Window Color
@@ -4372,13 +3943,10 @@ void CtMenuRenderConfig(const CtMenuHost* h, uint8_t* fb, int cell, int sub, int
   mBlitRGBA(fb, CFG_FACE_LEFT,  16, 8, 136, 24);             // faces flank the Battle-Gauge-Speed strip
   mBlitRGBA(fb, CFG_FACE_RIGHT, 16, 8, 216, 24);
   mCfgStrip(h, fb, 152, 24, atoi(v10), 8);                   // Battle Gauge Speed
-  mText(h, fb, "Fast", 144, 32); mText(h, fb, "Slow", 192, 32);  // Battle Speed (marker deferred, RE flag)
+  mText(h, fb, "Fast", 144, 32); mText(h, fb, "Slow", 192, 32);  // Battle Speed (no marker: not ported)
   mCfgStrip(h, fb, 152, 40, atoi(v11), 8);                   // Battle Mes. Speed
   mCfgStrip(h, fb, 152, 56, atoi(v6), 8);                    // Window Color
-  // Battle Gauge: Off / 1 / 2. The row sits at y80, not y72 -- MEASURED: with the dim ramp fixed the
-  // three runs matched the oracle's x spans and per-row pixel counts EXACTLY (145..213/18, 144..214/14,
-  // ... 189..189/1) and were the only thing left in the diff, uniformly eight rows high. The icon
-  // beside it (y76) was already right and never appeared in the diff.
+  // Battle Gauge: Off / 1 / 2 on row y80 (its icon at y76).
   { int bg = atoi(v7);
     mDim = (bg != 0) ? 2 : 0; mText(h, fb, "Off", 144, 80); mDim = 0;   // same light dim ramp as
     mDim = (bg != 1) ? 2 : 0; mText(h, fb, "1", 184, 80); mDim = 0;     //   mCfgStrip above
@@ -4387,19 +3955,14 @@ void CtMenuRenderConfig(const CtMenuHost* h, uint8_t* fb, int cell, int sub, int
   static const char* const bmL[6] = { "Confirm", "Cancel", "Menu", "Dash", "Map", "Warp" };
   // The right column is the ROM's own buffer: the three words C2/C57A / C2/C5C7 keep at $2E00 + C2:C5A7[row] (the
   // live map's glyph, then the arrow and the working glyph after an assignment), tiles 26-28 of the row.
-  for (int i = 0; i < 6; i++) { int by = 100 + i * 12;   // oracle button-map = 12px sub-tile pitch from y100
+  for (int i = 0; i < 6; i++) { int by = 100 + i * 12;   // the button map, 12 px pitch from y100
     mText(h, fb, bmL[i], 144, by);
     if (h->mem) for (int k = 0; k < 3; k++) {
       unsigned a = CFG_LABEL_BUF + cfgLabelOff(i) + (unsigned)k * 2;
       mCodeAt(h, fb, h->mem[a], 208 + k * 8, by);      // (tile FF, C2/C57A's 00FF, is the font's blank)
     } }
-  // -- HAND CURSOR, placed from the cell's own nav record: the first two bytes of a record ARE the
-  // cursor position (C2/E964 `LDA $9380,X / STA $0770`). MEASURED against the oracle's own config
-  // screen (--peek of saves/menu_open_gato2 + 2 x Right + A): its hand occupies y30..38 for cell 0,
-  // whose record says y = 0x1B = 27, so the record IS the anchor and mHandCursor's sprite sits +3
-  // inside it. The placement this replaced (icon-y minus 5) drew the hand EIGHT PIXELS HIGH on every
-  // config cell -- a defect the flat 12-row list could never have shown. Now the hand follows the
-  // cursor into the strips, the Off/1/2 row and the button editor for free.
+  // -- the hand, placed from the cell's own nav record: its first two bytes are the cursor position (C2/E964 `LDA
+  // $9380,X / STA $0770`), and mHandCursor's sprite inks 3 px inside it.
   if (!hover) { int hx, hy; CtMenuConfigCellPos(h->mem, cell, &hx, &hy); mHandCursor(h, fb, hx, hy); }
   // -- bottom bar: the setting $0417 describes -- its icon + name + value.
   if (hover || fresh) return;                         // the hover and the build frame (C2/C3B5): bare bar row
@@ -4410,8 +3973,8 @@ void CtMenuRenderConfig(const CtMenuHost* h, uint8_t* fb, int cell, int sub, int
       if (((unsigned)mnuRom(0x3FD562L + c * 2) | ((unsigned)mnuRom(0x3FD563L + c * 2) << 8)) == want) {
         mBlitRGBA(fb, icon[c], 16, 16, 24, 184); break; } }
   char nm[24], vl[12]; CtMenuConfigItem(h, bar, nm, sizeof nm, vl, sizeof vl);
-  // C2/F943's task types the NAME one character a frame and then the VALUE (nameN / valN typed so far; -1 = whole);
-  // the value's column comes from the WHOLE name's pen ($0DC1 from $0DD2 after the name's terminator)
+  // C2/F943's task types the name one character a frame and then the value (nameN / valN typed so far; -1 = whole);
+  // the value's column comes from the whole name's pen ($0DC1 from $0DD2 after the name's terminator)
   int pen = MI_HX + 40 + (h->vwfWidth ? h->vwfWidth(nm) : (int)strlen(nm) * 8);
   if (nameN >= 0 && nameN < (int)strlen(nm)) nm[nameN] = 0;
   if (valN >= 0 && valN < (int)strlen(vl)) vl[valN] = 0;
@@ -4419,47 +3982,28 @@ void CtMenuRenderConfig(const CtMenuHost* h, uint8_t* fb, int cell, int sub, int
   if (vl[0]) mBarVwf(h, fb, vl, (pen & ~7) + 16, 188, ctMenuVwfYellow);
 }
 
-// -------------------------------------------------------------- SCREEN 6 = SAVE (PHASE 3 part 6)
-// The SRAM SAVE-FILE layout below is ROM-pinned; the empty-vs-used test is FF/F9C4, the summary reader is
-// C2/D19F, both running with DB=$30 (PEA $3030/PLB/PLB @ FF/F9C9) = CT's SRAM save-file image. Per-slot
-// base = slot*0x800 within bank $30.
-//   NOTE the CART SIZE: CT ships 8 KB of SRAM, so bank $30 wraps every 0x2000 and the ROM's $30:7FF8
-//     signature address physically lands at 0x1FF8 -- verified on a real saved game (the snes9x SRA
-//     block of saves/com_jogo_salvo.state has 0xE41B at 0x1FF8, and 0x6060 at 0x7FF8). Slot bases
-//     0/0x800/0x1000 fit inside those 8 KB; the reader masks by the image length it is given.
-//   VALIDITY (FF/F9C4):  X = (slot & 3)*2; signature word $30:7FF8,X == 0xE41B (FF/F9D8 CMP #E41B) AND
-//     checksum word $30:7FF0,X == the computed checksum (FF/FBE7). Result $00 := 0x0000 valid / 0x8080
-//     bad-signature / 0x4040 bad-checksum; the Save handler C2/D171 `LDA $00 / BEQ ->D17F` treats 0 = USED
-//     (sets $0D49,X, reads the summary C2/D19F) else EMPTY (LDA #1A / STA $020C / JSR C2/D296 = 'N' marker).
-//   SUMMARY (C2/D19F, MVN from bank $30, per-slot base $7B):  party/leader $30:0580 (member char ids, the
-//     $4202 x0x50 multiplier operand; bit7 = empty member); char sheet base 0x0200 inside the slot --
-//     C2/D1D3 `LDA #$0200 / ADC $7B / ADC $4216` then C2/D1DD `LDA $300012,X` = $30:(0212 + slotBase +
-//     id*0x50) = LEVEL at +0x0200+id*0x50+0x12; leader name $30:05B0 + id*6 (C2/D1F4 x6); gold $30:059C
-//     (C2/D21B word, CAPPED at 0x3E7 before display); location/area $30:05F3 & 0x1FF (C2/D22C 9-bit map
-//     id); play-time $30:05E0 (C2/D23F clock block); two further words +0x059E (C2/D247) and +0x0793
-//     (C2/D24E) are copied by the ROM but not modelled in CtMenuSaveSummary.
-// Our field engine models ONLY $7E WRAM (CtSceneMem7E) and has NO SRAM persistence -> h->sram is NULL ->
-// every slot fails the signature test and reads EMPTY, which MATCHES the oracle's fresh menu_open_gato2
-// state (three no-data 'N' slots, scratchpad sav1.png). The DEFERRED save-WRITE boundary is on the header.
-// ⭐ THE SLOT BASES ARE A ROM TABLE, NOT A STRIDE OF 0x800. FF/FBD3 is
-//   `LDA $79 / AND #0003 / ASL A / TAX / LDA $FFFBE1,X / STA $7B / RTS`, and the table at $FF:FBE1
-//   reads `00 60 00 6A 00 74` = **$30:6000 / $30:6A00 / $30:7400** -- a stride of $0A00, which is
-//   also exactly what the checksum spans (FF/FBE7's LDY #$09FE). CT's HiROM SRAM window is
-//   $30:6000-7FFF, so the image offsets are 0x0000 / 0x0A00 / 0x1400 and the signature/checksum
-//   tables at $30:7FF0/$7FF8 land at 0x1FF0/0x1FF8 -- nothing collides.
-//   This file used to say `slot*0x800`, which is right ONLY for slot 0. It never showed because
-//   h->sram was always NULL; a real save-WRITE would have read slots 1 and 2 from the wrong place.
+// -------------------------------------------------------------- Screen 6 = Save (disasm/notes/save_write.md)
+// The validity test is FF/F9C4 and the summary reader C2/D19F, both with DB = $30 (PEA $3030/PLB/PLB at FF/F9C9), the
+// 8 KB SRAM at $30:6000-7FFF (bank $30 wraps every 0x2000, so $30:7FF8 is image offset 0x1FF8).
+//   Validity: X = (slot & 3)*2; signature word $30:7FF8,X == 0xE41B (FF/F9D8) and checksum word $30:7FF0,X == FF/FBE7's
+//     sum. $00 := 0x0000 valid / 0x8080 bad signature / 0x4040 bad checksum; C2/D171 `LDA $00 / BEQ ->D17F` reads the
+//     summary on 0 (sets $0D49,X, C2/D19F), else draws the no-data marker (LDA #1A / STA $020C / JSR C2/D296).
+//   Summary (C2/D19F, slot base $7B): party $+0x0580 (bit 7 = empty member); level at +0x0200+id*0x50+0x12 (C2/D1D3
+//     `LDA #$0200 / ADC $7B / ADC $4216`, C2/D1DD `LDA $300012,X`); leader name +0x05B0+id*6 (C2/D1F4); the save
+//     number +0x059C (C2/D21B, capped at 0x3E7); location +0x05F3 & 0x1FF (C2/D22C); play time +0x05E0 (C2/D23F). Not
+//     modelled in CtMenuSaveSummary: the words +0x059E (C2/D247) and +0x0793 (C2/D24E) the ROM also copies.
+// The slot bases are a ROM table: FF/FBD3 `LDA $79 / AND #0003 / ASL A / TAX / LDA $FFFBE1,X / STA $7B / RTS`, and
+// $FF:FBE1 = `00 60 00 6A 00 74` = $30:6000 / $6A00 / $7400, a stride of $0A00 (the span FF/FBE7's LDY #$09FE sums).
 static const unsigned CT_SAVE_SLOT_BASE[CT_MENU_SAVE_SLOTS] = { 0x0000u, 0x0A00u, 0x1400u };
 #define CT_SAVE_SLOT_SPAN 0x0A00u          /* FF/FBE7: the checksum covers a whole slot */
 
-// The PACK -- the record table at $FF:FA7B, 8 x {srcAddr:2, srcBank:1, len:2}, raw bytes
+// The pack: the record table at $FF:FA7B, 8 x {srcAddr:2, srcBank:1, len:2}, raw bytes
 //   00 24 7E B0 05 | 23 2C 7E 33 00 | 00 04 7E 10 00 | 00 01 00 10 00 |
 //   00 00 7F 00 02 | 7E 02 00 02 00 | 90 02 00 11 00 | 7C 2C 7E 1E 00
-// copied into $7E:9890 by FF/FA1A and then walked five bytes at a time (FF/FA4B `ADC #0005`,
-// FF/FA4F `CMP #0028` = 8 records). Each record patches the source bank into a `MVN $30,$xx / RTL`
-// trampoline the routine builds at $7E:9690 (FF/FA0E `LDA #3054` / FF/FA14 `LDA #6B7E`) and MVNs
-// len bytes to the slot, with Y running on CONSECUTIVELY -- so record k lands at base + the sum of
-// the preceding lengths. Bank $00's low addresses are the $7E mirror, so every source is WRAM.
+// copied into $7E:9890 by FF/FA1A and walked five bytes at a time (FF/FA4B `ADC #0005`, FF/FA4F `CMP #0028` = 8
+// records). Each record patches the source bank into a `MVN $30,$xx / RTL` trampoline the routine builds at $7E:9690
+// (FF/FA0E `LDA #3054` / FF/FA14 `LDA #6B7E`) and MVNs len bytes to the slot, Y running on consecutively, so record k
+// lands at base + the sum of the preceding lengths. Bank $00's low addresses are the $7E mirror: every source is WRAM.
 static const struct { unsigned short addr; unsigned char bank; unsigned short len; }
 CT_SAVE_RECS[8] = {
   { 0x2400, 0x7E, 0x05B0 },   // slot+0x0000  inventory + char sheets + party
@@ -4472,17 +4016,13 @@ CT_SAVE_RECS[8] = {
   { 0x2C7C, 0x7E, 0x001E },   // slot+0x0816  (total 0x0834 bytes)
 };
 
-// FF/FBE7, verbatim. Raw bytes 08 8B C2 30 F4 30 30 AB AB A5 7B 85 00 A0 FE 09 A9 00 00 18 71 00
-// 88 88 10 FA AB 28 60:
+// FF/FBE7. Raw bytes 08 8B C2 30 F4 30 30 AB AB A5 7B 85 00 A0 FE 09 A9 00 00 18 71 00 88 88 10 FA AB 28 60:
 //     PHP / PHB / REP #30 / PEA $3030 / PLB / PLB      ; DB = $30
 //     LDA $7B / STA $00                                 ; the slot base
 //     LDY #09FE / LDA #0000
-//     CLC                                               ; ⭐ ONCE, OUTSIDE the loop
-//     ADC ($00),Y / DEY / DEY / BPL -> the ADC          ; so the CARRY PROPAGATES between words
-// ⚠ THE CLC IS NOT IN THE LOOP and the walk goes DOWNWARD. A plain carry-less word sum gives
-// 0x6A4D on the reference save where the ROM stored 0x6B8C; running it the ROM's way -- carry in,
-// from $09FE down to 0 -- reproduces 0x6B8C exactly. Proven against saves/com_jogo_salvo.state,
-// a real game saved by the ROM itself.
+//     CLC                                               ; once, outside the loop
+//     ADC ($00),Y / DEY / DEY / BPL -> the ADC          ; so the carry propagates between words
+// Note: the CLC is outside the loop and the walk goes downward, from $09FE to 0, with the carry kept.
 static unsigned ctSaveChecksum(const unsigned char* slot) {
   unsigned a = 0, c = 0;
   for (int y = (int)CT_SAVE_SLOT_SPAN - 2; y >= 0; y -= 2) {
@@ -4494,9 +4034,7 @@ static unsigned ctSaveChecksum(const unsigned char* slot) {
   return a;
 }
 
-// Exposed so a check can run the ROM's checksum over a ROM-MADE save file and compare it with the
-// word the ROM itself stored -- grading the algorithm against the cartridge, not against our own
-// output (which would agree with any algorithm, right or wrong).
+// Exposed so a check can run the ROM's checksum over a save the ROM made and compare it with the word the ROM stored.
 unsigned CtMenuSaveChecksum(const unsigned char* sram, int slot) {
   if (!sram || slot < 0 || slot >= CT_MENU_SAVE_SLOTS) return 0;
   return ctSaveChecksum(sram + CT_SAVE_SLOT_BASE[slot]);
@@ -4507,12 +4045,9 @@ unsigned CtMenuSaveSlotBase(int slot) {
 
 int CtMenuSaveWrite(unsigned char* sram, long sramLen, int slot, unsigned char* wram) {
   if (!sram || !wram || sramLen < 0x2000 || slot < 0 || slot >= CT_MENU_SAVE_SLOTS) return 0;
-  // ⭐ THE COUNTER IS BUMPED BEFORE THE PACK, AND IT LANDS INSIDE THE SAVE. FF/F9FE `LDA $79 /
-  // STA $0414`, then FF/FA05 `LDA $299C / INC A / BEQ ->FA0E / STA $299C` -- a SATURATING increment
-  // (a result of 0, i.e. a wrap, is discarded). $7E:299C sits inside record 0 at slot offset
-  // +0x059C, which is exactly the field the summary reader C2/D21B shows as "Save #". Doing the
-  // increment after the MVNs -- or not at all -- packs a stale number: every save would report the
-  // same one. Measured on the oracle: `f269 7E299C=0100*(FF:FA0E)`, 0 -> 1 during the save.
+  // The counter is bumped before the pack, and it lands inside the save: FF/F9FE `LDA $79 / STA $0414`, then FF/FA05
+  // `LDA $299C / INC A / BEQ ->FA0E / STA $299C`, a saturating increment (a wrap to 0 is discarded). $7E:299C is in
+  // record 0 at slot offset +0x059C, the field C2/D21B shows as "Save #".
   wram[0x0414] = (unsigned char)slot;                 // FF/F9FE-FA00
   {
     unsigned n = (unsigned)wram[0x299C] | ((unsigned)wram[0x299D] << 8);
@@ -4534,34 +4069,24 @@ int CtMenuSaveWrite(unsigned char* sram, long sramLen, int slot, unsigned char* 
   sram[0x1FF8 + slot * 2] = 0x1B;                                  // FF/FA5C LDA #E41B
   sram[0x1FF9 + slot * 2] = 0xE4;                                  // FF/FA5F STA $30:7FF8,X
   sram[0x1FE0] = (unsigned char)slot;                              // FF/FA65 LDA $79 / STA $30:7FE0
-  // FF/FA6B `LDA $30:7FE1 / CMP $299E / BNE / INC A / STA $30:7FE1` -- PORTED 2026-09-11. $299E is now
-  // derived: it has exactly TWO real sites in the whole ROM, C2/E66A's `LDA $30:7FE1 / STA $299E` on the
-  // loader's NEW GAME row and this compare. (An operand scan over banks $C0-$FF turned up a third at
-  // C1/33BC; it is a FALSE POSITIVE -- the scan does not respect instruction boundaries and matched the
-  // `9C` of `LDX $9C / STZ $9829,X`. Disassembling it is what settled the derivation.)
-  //
-  // So the pair is a PLAYTHROUGH counter with an idempotence guard: picking NEW GAME photographs the
-  // SRAM byte into $299E, and a save advances the SRAM byte only while it still MATCHES the photograph.
-  // The first save of a playthrough bumps it; every later save in the same playthrough finds
-  // $30:7FE1 != $299E and leaves it alone. That is the whole mechanism -- not a per-save counter
-  // (that is $299C, incremented at FF/FA05 with its own wrap guard).
+  // FF/FA6B `LDA $30:7FE1 / CMP $299E / BNE / INC A / STA $30:7FE1`. $299E has two sites in the ROM: C2/E66A's `LDA
+  // $30:7FE1 / STA $299E` on the loader's New Game row, and this compare. So the pair is a playthrough counter with
+  // an idempotence guard: New Game copies the SRAM byte into $299E, and a save advances the SRAM byte only while it
+  // still matches, so only the first save of a playthrough bumps it. (The per-save counter is $299C, FF/FA05.)
   if (sram[0x1FE1] == wram[0x299E])                                // FF/FA6F CMP $299E / FA72 BNE
     sram[0x1FE1] = (unsigned char)(sram[0x1FE1] + 1);              // FA74 INC A / FA75 STA $30:7FE1
-  return (int)off;                                    // bytes packed -- 0x0834 when the table is intact
+  return (int)off;                                    // bytes packed: 0x0834 when the table is intact
 }
 
-// ---- FF/F9C4 -- THE SLOT VALIDITY GATE, verbatim ------------------------------------------------
+// ---- FF/F9C4, the slot validity gate ----
 //   PHX/PHB/PHP / REP #30 / PEA $3030 / PLB / PLB      ; DB = $30 (the SRAM window)
 //   JSR FF/FBD3                                        ; $7B = the slot base
 //   LDA $79 / AND #0003 / ASL A / TAX
-//   LDA $7FF8,X / CMP #E41B / BNE -> A = $8080         ; bad SIGNATURE
-//   JSR FF/FBE7 / CMP $7FF0,X / BNE -> A = $4040       ; bad CHECKSUM
-//   -> A = $0000                                       ; USED
-// ⚠ This is the FULL gate -- signature AND checksum. CtMenuSaveSlot (the read-only summary view)
-// deliberately stops at the signature; the BOOT SCAN below is the ROM path that also runs FF/FBE7,
-// so it is spelled out here rather than folded into the summary reader.
-// The 8 KB cart mirrors bank $30 every 0x2000, so $7FF8/$7FF0 land at 0x1FF8/0x1FF0 (measured on a
-// real saved game -- see the mask note in CtMenuSaveSlot).
+//   LDA $7FF8,X / CMP #E41B / BNE -> A = $8080         ; bad signature
+//   JSR FF/FBE7 / CMP $7FF0,X / BNE -> A = $4040       ; bad checksum
+//   -> A = $0000                                       ; used
+// This is the full gate, signature and checksum; CtMenuSaveSlot (the summary view) stops at the signature. The 8 KB
+// cart mirrors bank $30 every 0x2000, so $7FF8/$7FF0 land at 0x1FF8/0x1FF0.
 int CtMenuSaveSlotValid(const unsigned char* sram, long sramLen, int slot) {
   if (!sram || sramLen < 0x2000 || slot < 0 || slot >= CT_MENU_SAVE_SLOTS) return 0;
   size_t mask = (size_t)sramLen - 1;
@@ -4570,28 +4095,24 @@ int CtMenuSaveSlotValid(const unsigned char* sram, long sramLen, int slot) {
   if ((sram[sigOff] | (sram[sigOff + 1] << 8)) != 0xE41B) return 0;        // -> $8080
   unsigned sum = ctSaveChecksum(sram + CT_SAVE_SLOT_BASE[slot]);           // FF/F9E0 JSR FF/FBE7
   if (sum != (unsigned)(sram[sumOff] | (sram[sumOff + 1] << 8))) return 0; // -> $4040
-  return 1;                                                               // -> $0000 = USED
+  return 1;                                                               // -> $0000 = used
 }
 
-// ---- FF/FAA3 -- THE LOAD, the exact inverse of FF/F9FB ------------------------------------------
-// It walks THE SAME table. FF/FAB2 copies $FF:FA7B (8 x {addr:2, bank:1, len:2}) to $7E:9890,
-// FF/FABE `JSR FF/FBD3` puts the slot base in A and `TAX` makes it the MVN **source** index, and the
-// trampoline it builds at $7E:9690 is `LDA #3054 / STA $9690` + `LDA #6B30 / STA $9692` = the bytes
-// `54 30 30 6B` = `MVN $30,$30 / RTL`. Per record FF/FAC6 `LDA $9892,Y / STA $9691` patches only the
-// **destination** bank, so the source bank stays $30 = SRAM; Y = the record's destination address
-// (FF/FACE), A = len-1 (FF/FAD3 `DEC A`). X runs on across the records exactly as it does in the
-// writer, which is why record k reads from base + the sum of the preceding lengths -- the same
-// layout the writer produced. The cursor advances by 5 to 0x28 (FF/FAE2/FAE6) = 8 records.
-// ⚠ FF/FAA3 DOES NOT VALIDATE. The signature/checksum gate is FF/F9C4, run by the caller: the load
-// screen only lets the cursor rest on an occupied row (C2/E743) before its `JSL FF/FAA3` at C2/E657.
-// ⚠ AND IT DOES NOT REBOOT. C2/E694's tail `JMP C2/8320` ends `JML $C0:0000` -- the field engine's
-// re-entry, which re-reads the $0100 this load just overwrote. That reboot is the caller's job.
+// ---- FF/FAA3, the load, the inverse of FF/F9FB ----
+// It walks the same table: FF/FAB2 copies $FF:FA7B (8 x {addr:2, bank:1, len:2}) to $7E:9890, FF/FABE `JSR FF/FBD3`
+// puts the slot base in A and `TAX` makes it the MVN source index, and the trampoline it builds at $7E:9690 is `LDA
+// #3054 / STA $9690` + `LDA #6B30 / STA $9692` = `54 30 30 6B` = `MVN $30,$30 / RTL`. Per record FF/FAC6 `LDA
+// $9892,Y / STA $9691` patches only the destination bank, so the source bank stays $30 = SRAM; Y = the record's
+// destination address (FF/FACE), A = len-1 (FF/FAD3 `DEC A`). X runs on across the records as in the writer, so record
+// k reads from base + the sum of the preceding lengths. The cursor advances by 5 to 0x28 (FF/FAE2/FAE6) = 8 records.
+// Note: FF/FAA3 does not validate (FF/F9C4 is the caller's: the load screen lets the cursor rest only on an occupied
+// row, C2/E743, before its `JSL FF/FAA3` at C2/E657), and it does not reboot (C2/E694's tail `JMP C2/8320` ends `JML
+// $C0:0000`, the field engine's re-entry, which re-reads the $0100 this load overwrote).
 int CtMenuSaveLoad(const unsigned char* sram, long sramLen, int slot, unsigned char* wram) {
   if (!sram || !wram || sramLen < 0x2000 || slot < 0 || slot >= CT_MENU_SAVE_SLOTS) return 0;
   unsigned base = CT_SAVE_SLOT_BASE[slot], off = 0;
-  // ...AND THE SCRATCH IT LEAVES, byte for byte (its one caller, C2/E657, runs with D = 0). The routine-level shadow
-  // found it read: D1/E7A1's `MVN $7E,$7E` copies $0000-$002A to $CC65 in the next fight, so the $00 this load leaves
-  // reaches the battle (docs/SHADOW_PROPOSAL.md).
+  // The scratch it leaves (its one caller, C2/E657, runs with D = 0): D1/E7A1's `MVN $7E,$7E` copies $0000-$002A to
+  // $CC65 in the next fight, so the $00 this load leaves reaches the battle.
   //   FF/FAA6-FAB0  $9690 = 54 30 / $9692 = 30 6B         the `MVN $30,$dd / RTL` trampoline ($9691 patched per record)
   //   FF/FAB2-FABB  MVN FF:FA7B -> $9890, $28 bytes      the 8-record table, five bytes each: addr, bank, len
   //   FF/FBD3-FBDE  $7B = FF/FBE1[slot] = $6000 + base   the slot's base in the battery RAM's bank $30
@@ -4613,15 +4134,14 @@ int CtMenuSaveLoad(const unsigned char* sram, long sramLen, int slot, unsigned c
   return (int)off;                                    // 0x0834 with the ROM's table intact
 }
 
-// ---- C2/95BB -- the LIGHT wipe (flags + clock + the $2990 config block) -------------------------
-// Run by BOTH boot-scan arms. Byte-for-byte:
+// ---- C2/95BB, the light wipe (flags + clock + the $2990 config block) ----
+// Run by both boot-scan arms:
 //   $7F:0000-01FF = 0                         (the story flags; 95BF-95CF)
 //   $7E:0400-04FF = 0                         (the play-clock page; 95D3-95DF)
 //   $7E:2990-29AF = 0                         (95E2-95EE)
 //   $7E:2990 += 12 bytes from $C2:FCA6        (95F1-95FA) = 84 A0 01 80 08 40 08 02 04 10 20 40
 //   $7E:0408 +=  9 bytes from $C2:FCA9        (95FD-9606) = 80 08 40 08 02 04 10 20 40
-// ⭐ $2990 = 0x84 is exactly the pre-confirm byte the ATB-selector dossier measured on the earliest
-// new-game state (bit6 clear until the Battle-Mode screen sets it).
+// $2990 = 0x84 has bit 6 clear until the Battle-Mode screen sets it.
 static const unsigned char CT_WIPE_FCA6[12] = { 0x84,0xA0,0x01,0x80,0x08,0x40,0x08,0x02,0x04,0x10,0x20,0x40 };
 void CtMenuNewGameWipeLight(unsigned char* wram) {
   if (!wram) return;
@@ -4632,15 +4152,15 @@ void CtMenuNewGameWipeLight(unsigned char* wram) {
   memcpy(wram + 0x0408, CT_WIPE_FCA6 + 3, 9);         // $C2:FCA9 == FCA6+3, 9 bytes
 }
 
-// ---- C2/956E -- the FULL new-game wipe ----------------------------------------------------------
+// ---- C2/956E, the full new-game wipe ----
 //   JSR C2/95BB                                       (the light wipe above)
 //   $7E:2400-25FF = 0                                 (9574-9580)
 //   $7E:2600     += 0x280 bytes from $CC:0000         (9583-958C) -- the char-sheet template
 //   $7E:2C53/2C54 = 0                                 (958F-9592) -- gold
 //   $7E:2980-2988 = 0x80, $7E:29AF = 0x80             (9595-95A7)
 //   $7E:2C7C-2C99 = 0                                 (95AA-95B6)
-// `charBase` is the caller's baked $CC:0000 image (field.c's ctCharBase); NULL leaves $2600 alone,
-// which is what a host that seeds the sheets itself wants.
+// `charBase` is the caller's baked $CC:0000 image (field.c's ctCharBase); NULL leaves $2600 alone, for a host that
+// seeds the sheets itself.
 void CtMenuNewGameWipe(unsigned char* wram, const unsigned char* charBase, long charBaseLen) {
   if (!wram) return;
   CtMenuNewGameWipeLight(wram);                       // 9571 JSR C2/95BB
@@ -4649,22 +4169,20 @@ void CtMenuNewGameWipe(unsigned char* wram, const unsigned char* charBase, long 
   wram[0x2C53] = wram[0x2C54] = 0;                    // 958F-9592  (gold)
   memset(wram + 0x2980, 0x80, 9);                     // 9595 STA $2980 (#0080) then 959E-95A7 MVN
                                                       //   $2980 -> $2981 x8: the 0x80 propagates over
-                                                      //   $2981..$2988, so all nine roster slots read EMPTY
+                                                      //   $2981..$2988, so all nine roster slots read empty
   wram[0x29AF] = 0x80; wram[0x29B0] = 0x00;           // 959B STA $29AF (the same 16-bit #0080)
   memset(wram + 0x2C7C, 0, 0x1E);                     // 95AA-95B6
 }
 
-// ---- C2/8D6A -- THE BOOT SRAM SCAN, leaf 9 of the $C2 gate --------------------------------------
-// The FIRST thing the game does after the sound driver is up: `C0/0057 LDA #09 / JSL $C2:8004`,
-// and leaf 9 of the gate's table at $C2:8C5B is C2/8D6A:
+// ---- C2/8D6A, the boot SRAM scan, leaf 9 of the $C2 gate ----
+// Run right after the sound driver is up: `C0/0057 LDA #09 / JSL $C2:8004`; leaf 9 of the table at $C2:8C5B:
 //   STZ $79 ; loop: JSL FF/F9C4 / ORA #00 / BEQ -> 8D85 ; INC $79 / CMP #03 / BCC loop
 //   all three invalid:  JSR C2/956E ; A = 0x00
 //   at least one valid: JSR C2/95BB ; A = 0x02
 //   STA $7F0061
-// ⭐⭐ SO `$7F0061` IS THE CART'S OWN VERDICT: 0 = blank cart, 2 = the cart holds >= 1 valid save.
-// (1 is the third value, written later by C2/804B / C2/E662 = "a new game has been started".)
-// It is what scene 0's boot script branches on, and what decides whether the mode-0 shell draws the
-// load screen or short-circuits into a new game -- see CtMenuLoaderShellMode0.
+// So $7F0061 is the cart's verdict: 0 = blank cart, 2 = at least one valid save (1, written later by C2/804B /
+// C2/E662, means a new game was started). Scene 0's boot script branches on it, and it decides whether the mode-0
+// shell draws the load screen or goes straight into a new game.
 int CtMenuSaveBootScan(const unsigned char* sram, long sramLen,
                        unsigned char* wram, const unsigned char* charBase, long charBaseLen) {
   int any = 0;
@@ -4677,83 +4195,55 @@ int CtMenuSaveSlot(const CtMenuHost* h, int slot, CtMenuSaveSummary* out) {
   if (out) memset(out, 0, sizeof *out);
   if (!h || slot < 0 || slot >= CT_MENU_SAVE_SLOTS) return 0;
   const uint8_t* sr = h->sram;
-  // No SRAM image -> no valid save (our engine's reality; also the oracle's fresh state). The signature
-  // read is the FF/F9C4 gate; with sr==NULL there is nothing to sign, so the slot is EMPTY.
+  // No SRAM image -> no valid save; the signature read is the FF/F9C4 gate.
   if (!sr || h->sramLen < 0x2000) return 0;
-  // ADDRESS MIRRORING. The ROM reads $30:7FF8, but the CART HAS 8 KB of SRAM (the header's ramsize;
-  // the oracle prints "ramsize: 8192"), so bank $30's addresses wrap every 0x2000 and $7FF8 lands at
-  // 0x1FF8. Measured on a real saved game (saves/com_jogo_salvo.state, the snes9x SRA block): the
-  // 0xE41B signature sits at 0x1FF8 and NOT at 0x7FF8 -- reading 0x7FF8 straight returned 0x6060,
-  // i.e. every slot would have read EMPTY forever. Mask to the image we were actually handed.
+  // The ROM reads $30:7FF8, but the cart has 8 KB of SRAM, so bank $30's addresses wrap every 0x2000 and $7FF8 lands
+  // at 0x1FF8. Mask to the image given.
   size_t mask = (size_t)h->sramLen - 1;                             // 8 KB image -> 0x1FFF
   size_t sigOff = (0x7FF8u + (size_t)(slot & 3) * 2) & mask;        // FF/F9D8: $30:7FF8 + (slot&3)*2
   int sig = sr[sigOff] | (sr[sigOff + 1] << 8);
-  if (sig != 0xE41B) return 0;                                      // bad signature -> EMPTY (0x8080)
-  // (the FF/FBE7 checksum is not recomputed here — signature presence is the used/empty gate for the
-  //  read-only view; a real save-WRITE would maintain both, see the CtMenuRenderSave boundary note.)
-  size_t base = CT_SAVE_SLOT_BASE[slot];             // the ROM's own table (FF/FBE1), not slot*0x800
+  if (sig != 0xE41B) return 0;                                      // bad signature -> empty (0x8080)
+  // Not checked here: the FF/FBE7 checksum (the summary view gates on the signature; CtMenuSaveSlotValid is the full
+  // gate).
+  size_t base = CT_SAVE_SLOT_BASE[slot];             // the ROM's table (FF/FBE1)
   int leader = sr[base + 0x0580];                                  // C2/D1C1 $30:0580 = party slot0 (leader)
   if (leader & 0x80) return 0;                                     // empty leader -> treat slot as empty
   if (out) {
     out->used     = 1;
     out->leaderId = leader & 7;
     out->lv       = sr[base + 0x0200 + (size_t)(leader & 7) * 0x50 + 0x12]; // C2/D1D3 sheet base +0x0200,
-                                                                   //   C2/D1DD +0x12 = LEVEL
-    // GOLD is the 24-bit value at +0x05E0 -- the head of the 10-byte block C2/D238 MVNs -- NOT the
-    // +0x059C word menu.h used to call gold. Measured on a real saved game
-    // (saves/com_jogo_salvo.state): the screen reads "1105G", +0x05E0 = 1105 and the live WRAM gold
-    // $7E2C53 = 1105, while +0x059C = 1 and the screen's bottom window reads "Save # 1".
+                                                                   //   C2/D1DD +0x12 = level
+    // Gold is the 24-bit value at +0x05E0, the head of the 10-byte block C2/D238 MVNs (+0x059C is the save number).
     out->gold     = sr[base + 0x05E0] | (sr[base + 0x05E1] << 8) | (sr[base + 0x05E2] << 16);
-    out->saveNo   = sr[base + 0x059C] | (sr[base + 0x059D] << 8);  // C2/D21B, ROM-capped at 999
+    out->saveNo   = sr[base + 0x059C] | (sr[base + 0x059D] << 8);  // C2/D21B, capped at 999
     if (out->saveNo > 0x3E7) out->saveNo = 0x3E7;                  //   (CMP #$03E8 / BCC / LDA #$03E7)
     out->locId    = (sr[base + 0x05F3] | (sr[base + 0x05F4] << 8)) & 0x1FF;  // C2/D22C $30:05F3 & 0x1FF
-    // PLAY CLOCK: the digits that follow gold inside the same MVN block. Matched against the one
-    // saved game we have (screen "TIME 08:43": +0x05E7 = 8, +0x05E6 = 4, +0x05E5 = 3) -- one sample,
-    // so this is a MATCH, not a byte-exact derivation; +0x05E3/+0x05E4 are still unidentified.
+    // The play clock: the digits after gold in the same MVN block (+0x05E7 hours, +0x05E6/+0x05E5 minute digits),
+    // matched against one saved game only; +0x05E3/+0x05E4 are not identified.
     out->hh       = sr[base + 0x05E7];
     out->mm       = sr[base + 0x05E6] * 10 + sr[base + 0x05E5];
   }
   return 1;
 }
 
-// Draw the SAVE screen (read-only). Header (ribbon Save icon idx5 + "Save") + 3 numbered slot rows; each
-// row = its number + the summary (leader/LV/time) if used, else the oracle's right-side "Empty" marker.
-// `cursor` (0..2) gets the hand marker. B (field.c) exits to the ribbon (C2/CEEC STZ $0067 -> C2/9A98);
-// A (the save-WRITE) is DEFERRED — see the boundary note in menu.h. All slots empty in our SRAM-less engine.
-// THE OVERWRITE PROMPT (screen 6 sub-state 2). It is not the field's decision box and not a new
-// screen: the ROM's generic display-list interpreter C2/ED31 runs $FF:C16F to open it (back up the
-// 28x12-tile BG2 chrome region, draw an 8x10-tile window at tile (22,2) = px (176,16), re-arm three
-// HDMA channels) and $FF:C191 to close it. The TEXT is never drawn at prompt time -- it is written
-// into the BG1 buffer when the SLOT LIST is built (C2/D0E5 -> $FF:C138) and is merely INVISIBLE,
-// because a per-scanline $212C HDMA keeps BG1 off for lines 0..128; the prompt frame simply stops
-// running that channel.
-//
-// ⭐ THE STRING IS FIVE LINES, NOT FOUR. $FF:C787 reads
+// The Save screen's overwrite prompt (screen 6 sub-state 2; disasm/notes/menu2_save_rest.md). The display-list
+// interpreter C2/ED31 runs $FF:C16F to open it (back up the 28x12-tile BG2 chrome region, draw an 8x10-tile window at
+// tile (22,2) = px (176,16), re-arm three HDMA channels) and $FF:C191 to close it. The text is written into the BG1
+// buffer when the slot list is built (C2/D0E5 -> $FF:C138) and kept invisible by a per-line $212C HDMA that holds BG1
+// off for lines 0..128; the prompt frame stops running that channel. $FF:C787 is five lines:
 //     0A 20 "Erase" 01 "old" 01 "save?" 01 FF FF "Yes" 01 FF FF "No" 0A 00
-// -- 01 breaks the line, so `Erase` / `old` / `save?` each get their OWN row and the two answers are
-// indented. This port used to wrap it as "Erase" / "old save?", which ran the question off the
-// window's right edge. MEASURED off the oracle's own prompt frame (--peek saves/com_jogo_salvo.state,
-// X + Right x5 + A + A on a used slot), ink row and first ink column of each run:
-//     "Erase" (188, 28)   "old" (188, 40)   "save?" (188, 52)   "Yes" (200, 64)   "No" (200, 80)
-// The question rows are 12 px apart and the answers 16 -- the ROM's own line spacing, not a guess.
-//
-// THE HAND is the same $7E:9380 nav graph the slot list uses. Records 3 and 4 of the SAVE screen's
-// live table read (184, 63) and (184, 79) -- `B8 3F 04 04 03 03` / `B8 4F 03 03 04 04` -- and the
-// oracle's cursor OAM slot 28 on the prompt frame is (184, 63) exactly, i.e. the record IS the
-// sprite position (OAM Y is our y). The port used to place it at (176, 55) / (176, 71).
-//
-// THE WINDOW is C2/ED31's op 04 from $FF:C16F (mRomWindowCells below), in the window colour's tiles and
-// out of the colour math under its own W2. (2026-09-25: it used to be a captured colour-0 picture,
-// src/data/menu_saveprompt.h -- right only for window colour 0.)
+// (01 breaks the line; the answers are indented), inked at "Erase" (188, 28), "old" (188, 40), "save?" (188, 52),
+// "Yes" (200, 64), "No" (200, 80). The hand is on records 3 and 4 of the slot list's $7E:9380 graph, (184, 63) and
+// (184, 79) (`B8 3F 04 04 03 03` / `B8 4F 03 03 04 04`). The window is C2/ED31's op 04 from $FF:C16F
+// (mRomWindowCells), in the window colour's tiles and out of the colour math under its own W2.
 // `sel` is $54: 3 = Yes, 4 = No, anything else = the prompt is not up.
-// A MENU WINDOW as C2/ED31's op 04 lays it (C2/EDAA = C2/EDB0 + C2/EE7F), into a BG map of CT_MENU_CHROME_TMW cells a row.
-// `a` = the op's six bytes: C2/EDD3 turns the first into the tile base `$0D47` -- bit 7 set: ((a << 2) & FF) * 5 with the
-// ASLs' carry (0x8B -> 0xDC: the window colour's own tiles 0x3DC-0x3EF), clear: `$0D8C` & 7 times 20 (a Save slot's
-// colour set) -- and the second is its high byte `$0D48`; then x, y, w, h in cells. C2/EDF6's frame: the top row t,
-// (t+1, t+2) repeated, t | 3; the sides t' / t'+1 with t' ^= 3 each row (from (t | 3) + 1); the bottom row like the top
-// from (t' | 3) + 1. C2/EE7F's fill: C2:EEF5[4 (r & 3) + (c & 3)] + the base's low byte, the pattern of four rows
-// repeated (C2/EF2B's MVN). MEASURED: the Save prompt ($FF:C16F: `04 8B 03 16 02 08 0A`) is exactly the oracle's BG2
-// map words at (22..29, 2..11) -- 03DC 03DD 03DE .. 03DF / 03E0 03E8 03E9 03EC .. 03E1 / .. / 03E4 03E5 .. 03E7.
+// A menu window as C2/ED31's op 04 lays it (C2/EDAA = C2/EDB0 + C2/EE7F), into a BG map of CT_MENU_CHROME_TMW cells a
+// row. `a` = the op's six bytes: C2/EDD3 turns the first into the tile base `$0D47` -- bit 7 set: ((a << 2) & FF) * 5
+// with the ASLs' carry (0x8B -> 0xDC: the window colour's own tiles 0x3DC-0x3EF), clear: `$0D8C` & 7 times 20 (a Save
+// slot's colour set) -- and the second is its high byte `$0D48`; then x, y, w, h in cells. C2/EDF6's frame: the top
+// row t, (t+1, t+2) repeated, t | 3; the sides t' / t'+1 with t' ^= 3 each row (from (t | 3) + 1); the bottom row like
+// the top from (t' | 3) + 1. C2/EE7F's fill: C2:EEF5[4 (r & 3) + (c & 3)] + the base's low byte, the pattern of four
+// rows repeated (C2/EF2B's MVN).
 static void mRomWindowCells(const CtMenuHost* h, uint16_t* tm, const uint8_t* a, int d8C) {
   int A = (a[0] & 0x80) ? a[0] : (d8C & 7);
   int a1 = (A << 2) & 0xFF;                                   // ASL / ASL / STA $00
@@ -4782,17 +4272,16 @@ static void mRomWindowCells(const CtMenuHost* h, uint16_t* tm, const uint8_t* a,
 static int mSavePromptOn = 0, svLastCursor = -1, mSaveHoverPanel = -1;
 void CtMenuSavePromptUp(int on) { mSavePromptOn = on; }
 // B off the Save screen (C2/9A98 -> C2/9B71 -> C2:9B83[5] = C2/D0DB) only sets $0D13 = 19: nothing is redrawn, so the
-// ribbon's Save preview IS the screen's last picture -- the rows (bright: the preview's HDMA has no band channel), no
-// hand, and the summary panel of the slot the cursor left. A preview BUILT by the ribbon (its row loop C2/D10D leaves
-// `$79` = 3, which C2/D36C draws as no panel) has none. `slot` = that panel's slot, -1 = a built preview. MEASURED
-// (owsavecol: slot 1 saved, B at 640): the hover shows "Present / TIME 00:02 / 600G / Save # 1" and the party.
+// ribbon's Save preview is the screen's last picture -- the rows (bright: the preview's HDMA has no band channel), no
+// hand, and the summary panel of the slot the cursor left. A preview built by the ribbon (its row loop C2/D10D leaves
+// `$79` = 3, which C2/D36C draws as no panel) has none. `slot` = that panel's slot, -1 = a built preview.
 void CtMenuSetSaveHoverPanel(int slot) { mSaveHoverPanel = slot; }
 void CtMenuRenderSavePrompt(const CtMenuHost* h, uint8_t* fb, int sel) {
   if (!h || !fb || (sel != 3 && sel != 4)) return;
-  // $FF:C16F through C2/ED31 (C2/D4BB): op 08 (the BG2 buffer $3E00), op 02 (the backup of (2, 2) 28 x 12), op 04 -- the
-  // window. It is BG2, like the Save chrome, so it takes the chrome's own ramp and, on the non-cursor rows' lines, the
-  // band's half colour math (C2/D4BB leaves the band where the list's cursor put it); its cells are the window colour's
-  // (C2/C511 / C2/ED08). The port used to blit a colour-0 picture of it.
+  // $FF:C16F through C2/ED31 (C2/D4BB): op 08 (the BG2 buffer $3E00), op 02 (the backup of (2, 2) 28 x 12), op 04,
+  // the window. It is BG2, like the Save chrome, so it takes the chrome's ramp and, on the non-cursor rows' lines, the
+  // band's half colour math (C2/D4BB leaves the band where the list's cursor put it); its cells are the window
+  // colour's (C2/C511 / C2/ED08).
   static uint16_t tm[CT_MENU_CHROME_TMW * CT_MENU_CHROME_TMH];
   memset(tm, 0, sizeof tm);
   if (h->rom && h->romLen > 0x3FC16FL + 17 && CtRomByte(h->rom, 0x400000L, (long)(0x3FC16FL + 10)) == 0x04)
@@ -4801,11 +4290,10 @@ void CtMenuRenderSavePrompt(const CtMenuHost* h, uint8_t* fb, int sel) {
   if (svLastCursor >= 0)
     for (int i = 0; i < CT_MENU_SAVE_SLOTS; i++)
       if (i != svLastCursor) for (int yy = 16 + i * 32; yy < 48 + i * 32; yy++) mHalfBand[yy] = 1;
-  // ...but NOT under the prompt: C2/D4BB sets $0D13 = 75 (C2/D4D5 puts back 59), switching on HDMA channel 5 -> $2129
-  // (window 2's right edge) from FF/BAE3's table (`10 00 50 EF 01 00`: lines 16-95 = 0xEF), and the Save screen's
+  // ...but not under the prompt: C2/D4BB sets $0D13 = 75 (C2/D4D5 puts back 59), switching on HDMA channel 5 ->
+  // $2129 (window 2's right edge) from FF/BAE3's table (`10 00 50 EF 01 00`: lines 16-95 = 0xEF), and the Save screen's
   // register record (FF:BCE6 = $2123..$212F: W1 16..239, W2 left FF:BCEB = 0xB0, $212B = 08 -> the colour window is W1
-  // XOR W2) takes x 176..239 of those lines out of the colour math -- the ramp and the band. MEASURED (ct.exe --hdma on
-  // the prompt, owsave2 f580): `W2=176..239` on lines 17-96, `W2=176..0` above.
+  // XOR W2) takes x 176..239 of those lines out of the colour math, the ramp and the band.
   int w2On = mRibbonW2On; int16_t w2Save[MH][2]; memcpy(w2Save, mRibbonW2, sizeof w2Save);
   if (h->rom && h->romLen > 0x3FBCEBL) {
     for (int y = 0; y < MH; y++) { mRibbonW2[y][0] = 1; mRibbonW2[y][1] = 0; }
@@ -4827,41 +4315,32 @@ void CtMenuRenderSavePrompt(const CtMenuHost* h, uint8_t* fb, int sel) {
   mHandCursor(h, fb, 184, (sel == 3) ? 63 : 79);       // $7E:9380 records 3 / 4
 }
 
-// fwd: both live with the boot Load screen further down, and this screen draws the same two glyphs.
+// Forward declarations: both live with the boot Load screen further down, and this screen draws the same glyphs.
 static void mBlit16(uint8_t* fb, const uint32_t blob[16][16], int x0, int y0);
 static void mGlyph(const CtMenuHost* h, uint8_t* fb, int code, int x, int y);
-// The Save screen's two VWF fields. `C2/D296` (slot rows) and `C2/D3AD` (the era caption) render
-// through the ROM's variable-width font -- C2/F90C -> the C2/5DC4 glyph emitter, whose per-glyph
-// ADVANCE is the byte at C2/60E6 + (code - 0xA0):
+// The Save screen's VWF fields. `C2/D296` (slot rows) and `C2/D3AD` (the era caption) render through the ROM's
+// variable-width font: C2/F90C -> the C2/5DC4 glyph emitter, whose per-glyph advance is the byte at C2/60E6 + (code -
+// 0xA0):
 //     25E21 SEC / LDA $35 / SBC #A0 / TAX / 25E27 CLC / LDA $C260E6,X / ADC $34 / STA $34
-// over the 24-byte 12-px glyphs at C2/2060 + code*24. CT_ASSET_FONT already carries that exact
-// table (its first 64 width bytes are byte-identical to C2/60E6), so the metrics were never the
-// problem -- the X-menu host simply never handed this renderer the font.
-// ⭐ LEFT-ALIGNED AT THE FIELD, NOT CENTRED: CtMenuLoaderChapter / CtMenuLoaderEra return the
-// ROM's own PRE-PADDED strings and the padding IS the centring, which is why the boot Load screen
-// draws them left-aligned too. Measured against the oracle's ink, three strings, three exact hits
-// (spaces advance 4 px):
-//     "   The Millennial Fair"   80 + 3*4 =  92   oracle ink starts  92
-//     "          No data"        80 + 10*4 = 120  oracle ink starts 120
-//     "  Present"                32 + 2*4 =  40   oracle ink starts  40
-// Centring them a second time put the title at 86 and "No data" at 101 -- the padding counted twice.
+// over the 24-byte 12 px glyphs at C2/2060 + code*24 (CT_ASSET_FONT carries the same table). The strings from
+// CtMenuLoaderChapter / CtMenuLoaderEra are the ROM's pre-padded ones, and the padding is the centring, so they are
+// drawn left-aligned at the field (spaces advance 4 px).
 static void svVwf(const CtMenuHost* h, uint8_t* fb, const char* s, int x0, int y) {
   if (!s || !*s) return;
   if (h->vwfWidth && h->vwfDraw) { h->vwfDraw(fb, s, x0, y, ctLoaderVwfTone); return; }
-  mText(h, fb, s, x0, y);        // no VWF on this host -> the 8x8 menu font, the usual substitution
+  mText(h, fb, s, x0, y);        // no VWF on this host -> the 8x8 menu font
 }
 static uint8_t svSnap[MH * MW * 3];
 void CtMenuRenderSave(const CtMenuHost* h, uint8_t* fb, int cursor) {
   if (!h || !fb) return;
   svLastCursor = cursor;
   int panelSlot = cursor >= 0 ? cursor : mSaveHoverPanel;   // the summary panel's slot (the hover's: the one left)
-  /* background = the byte-exact BG2 chrome, laid by the caller (CtMenuChrome) */
-  /* cursor < 0 = the ribbon HOVER PREVIEW: every row bright, no hand (oracle g_opt5) */
+  // the background (the BG2 chrome) is laid by the caller (CtMenuChrome)
+  // cursor < 0 = the ribbon's hover preview: every row bright, no hand
   if (cursor >= CT_MENU_SAVE_SLOTS) cursor = CT_MENU_SAVE_SLOTS - 1;
-  // The two NON-cursor slot rows are in the ROM's windowed HALF colour math band, which it moves with the cursor
-  // (cur1/cur2/cur3 captures: VRAM and CGRAM byte-identical across cursor positions -- only the hand's OAM Y changes --
-  // yet the rows swap brightness; --hdma: `math=07 half=1` on the non-cursor rows' 32 lines, W1 = 16..239). So the
-  // chrome is laid again with the band (mChromeTMPal2L), and the text below takes the same math.
+  // The two non-cursor slot rows are in the ROM's windowed half colour math band, which it moves with the cursor
+  // (`math=07 half=1` on the non-cursor rows' 32 lines, W1 = 16..239), so the chrome is laid again with the band
+  // (mChromeTMPal2L), and the text below takes the same math.
   if (cursor >= 0) {
     memset(mHalfBand, 0, sizeof mHalfBand);
     for (int i = 0; i < CT_MENU_SAVE_SLOTS; i++)
@@ -4870,66 +4349,41 @@ void CtMenuRenderSave(const CtMenuHost* h, uint8_t* fb, int cursor) {
     memset(mHalfBand, 0, sizeof mHalfBand);
     memcpy(svSnap, fb, sizeof svSnap);
   }
-  // The 3 slot BUTTONS are the byte-exact BG2 chrome (special beveled tiles 0x300-0x313 at tile rows
-  // 2-5/6-9/10-13 = y 8/40/72, each 32px tall, cols 2-29) -- laid by CtMenuChrome. We only draw the
-  // per-slot TEXT on top: the slot number (left) + the summary (leader/LV/time) or the "No data" marker.
-  // The bottom panels are the CURSOR SLOT's, exactly as they are on the boot Load screen, and they
-  // stay blank while the cursor sits on an empty one -- carried out of the loop below.
+  // The three slot buttons are the BG2 chrome (beveled tiles 0x300-0x313 at tile rows 2-5/6-9/10-13 = y 8/40/72, each
+  // 32 px tall, cols 2-29), laid by CtMenuChrome; only the per-slot text is drawn here: the slot number and the chapter
+  // title or "No data". The bottom panels are the cursor slot's, as on the boot Load screen, and stay blank while the
+  // cursor sits on an empty one.
   CtMenuSaveSummary cur; int curUsed = 0; memset(&cur, 0, sizeof cur);
   for (int i = 0; i < CT_MENU_SAVE_SLOTS; i++) {
     int y = 16 + i * 32;                                  // slot i button top = BG2 tile rows 2/6/10 (y16/48/80)
     mDim = 4;                                             // Save text = the entered-Save BG3 palette 4 (231 body)
     char num[2] = { (char)('1' + i), 0 };
-    // ⭐ THE SLOT NUMBER IS VWF TOO, AND IT IS CENTRED IN THE BUTTON'S FIRST FOUR TILES. It used to
-    // be an 8x8 mText at x24: the wrong glyph (the menu font's '1' has a base serif and is 7 rows;
-    // the ROM's is a plain 8-row bar) in the wrong place. MEASURED on the oracle's own Save screen,
-    // ink box per digit, against the same digits rendered through this VWF at a known pen:
-    //     '1' advance 4 -> oracle ink x30..32     16 + (32 - 4) / 2 = 30
-    //     '2' advance 7 -> oracle ink x28..33     16 + (32 - 7) / 2 = 28
-    //     '3' advance 7 -> oracle ink x28..33     16 + (32 - 7) / 2 = 28
-    // three digits, three exact hits, and the advances are the ROM's own C2/60E6 bytes. The field is
-    // x[16,48) -- the first four of the button's tiles -- centred with the SAME expression the row
-    // text uses in x[80,208).
+    // The slot number is VWF too, centred in the button's first four tiles, x[16,48), with the expression the row text
+    // uses in x[80,208) (the advances are C2/60E6's).
     { int nw = h->vwfWidth ? h->vwfWidth(num) : (int)strlen(num) * 8;
       svVwf(h, fb, num, 16 + (32 - nw) / 2, y + 12); }
     CtMenuSaveSummary s;
-    // ⭐ THE SLOT ROW IS THE CHAPTER TITLE, not the leader. `C2/D26D-D288` reads the SAVE FILE's
-    // storyline byte (slot+0x0603 = record 4 = $7F:0000), walks the threshold table FF/D024 for the
-    // largest index whose entry it is >=, and draws string FF/D03E[X] -- index 0x1A being "No data".
-    // That is the SAME pair CtMenuLoaderChapter already ports for the boot Load screen, and the same
-    // 16-tile field: `C2/D296` renders through the VWF (C2/F90C) into the buffer at $0DC5.
-    // What stood here drew the leader's name, LV and play time INSIDE the slot button -- three fields
-    // the ROM puts in the bottom panels instead, and none of them in the row.
-    // MEASURED, oracle --peek save screens (ow_w0 storyline 03 and com_jogo_salvo storyline 0x15,
-    // both 256x240, so oracle y - 8 = ours): the row text inks at y+12 -- the same baseline the
-    // "No data" marker already used -- and it is CENTRED in the x[80,208) field:
-    //     "The Millennial Fair"  ink x  92..193      80 + (128 - 104)/2 =  92
-    //     "The Queen is Gone"    ink x  88..191      80 + (128 - 112)/2 =  88
-    //     "No data"              ink x 120..163      80 + (128 -  48)/2 = 120
-    // three strings, three exact hits, so the field and the centring are derived rather than fitted.
+    // The slot row is the chapter title: `C2/D26D-D288` reads the save file's storyline byte (slot+0x0603 = record 4 =
+    // $7F:0000), walks the threshold table FF/D024 for the largest index whose entry it is >=, and draws string
+    // FF/D03E[X] (index 0x1A = "No data"), the pair CtMenuLoaderChapter ports for the boot Load screen. `C2/D296`
+    // renders it through the VWF (C2/F90C) into the buffer at $0DC5, at y+12, in the x[80,208) field.
     int used = CtMenuSaveSlot(h, i, &s) && CtMenuSaveSlotValid(h->sram, h->sramLen, i);
     int story = used ? h->sram[CtMenuSaveSlotBase(i) + 0x0603] : 0;   // C2/D276 LDA $300603,X
     svVwf(h, fb, CtMenuLoaderChapter(story, used), 80, y + 12);
     if (used && i == panelSlot) { cur = s; curUsed = 1; }
     mDim = 0;
-    // Hand anchored so the rendered INK box lands on the oracle's (x8..23, y31..42 + 32*i) -- the
-    // sprite's opaque pixels sit at local (x0..15, y2..13) in the ROM FF/9CF0 tile, so top-left =
-    // (MI_HX, y+13). Verified against the ink box, not the OAM word (menu_open_items.md 4.2).
-    if (cursor >= 0 && i == cursor && !mSavePromptOn) mHandCursor(h, fb, MI_HX, y + 13);   // (the prompt holds the ONE
+    // The hand's ink box lands at (x8..23, y31..42 + 32*i): the sprite's opaque pixels sit at local (x0..15, y2..13)
+    // in the FF/9CF0 tile, so the top left is (MI_HX, y+13) (menu_open_items.md 4.2).
+    if (cursor >= 0 && i == cursor && !mSavePromptOn) mHandCursor(h, fb, MI_HX, y + 13);   // (the prompt holds the
                                                                                             //  nav hand: $54 = 3 / 4)
   }
-  // ⭐ THE TWO BOTTOM PANELS, which this screen drew NOTHING into. They are the same fields the boot
-  // Load screen already renders (CtMenuRenderLoader), from the same save-file offsets, at the same x
-  // -- and, measured across both oracle captures, NINE PIXELS HIGHER in y:
+  // The two bottom panels: the fields the boot Load screen renders (CtMenuRenderLoader), from the same save-file
+  // offsets and x, nine pixels higher:
   //            era      TIME     gold     Save #   party row 0/1/2
   //   Load     149      169      185      201      145 / 169 / 193
   //   Save     140      160      176      192      136 / 160 / 184
-  // (oracle ink rows 148/168/184/200 and 144/168/192, minus the 8-line overscan offset between the
-  // 256x240 peek frame and this 256x224 one, which the panel's own top border pins: oracle y136..140
-  // vs ours y128..132.) The era caption is C2/D3AD: $98C2 = savefile+0x05F3 & 0x1FF -> the FF/D296
-  // nibble table -> FF/D396[era], which CtMenuLoaderEra already ports; centred in x[32,104):
-  //     "Present"      ink x 40..83     32 + (72 - 56)/2 = 40
-  //     "Middle Ages"  ink x 32..97     32 + (72 - 72)/2 = 32
+  // The era caption is C2/D3AD: $98C2 = savefile+0x05F3 & 0x1FF -> the FF/D296 nibble table -> FF/D396[era]
+  // (CtMenuLoaderEra), pre-padded for the x[32,104) field.
   if (h->sramPanel && panelSlot >= 0) {       // the panel C2/D32C last drew: after a save it is a frame behind the rows
     CtMenuHost hp = *h; hp.sram = h->sramPanel;
     memset(&cur, 0, sizeof cur);
@@ -4950,7 +4404,7 @@ void CtMenuRenderSave(const CtMenuHost* h, uint8_t* fb, int cursor) {
     mText(h, fb, "Save", 24, 192);
     mGlyph(h, fb, 0xEE, 64, 192);                                    // the ROM's '#' tile
     mNumR(h, fb, cur.saveNo, 104, 192);
-    // ...and the saved PARTY (C2/D1C1 reads slot+0x0580, C2/D1D3 the sheet at slot+0x0200 + id*0x50).
+    // ...and the saved party (C2/D1C1 reads slot+0x0580, C2/D1D3 the sheet at slot+0x0200 + id*0x50).
     { const uint8_t* sr = h->sramPanel ? h->sramPanel : h->sram; unsigned base = CtMenuSaveSlotBase(panelSlot);
       static const int PY[3] = { 136, 160, 184 };
       for (int j = 0; j < 3; j++) {
@@ -4965,10 +4419,9 @@ void CtMenuRenderSave(const CtMenuHost* h, uint8_t* fb, int cursor) {
         mText(h, fb, "MP", 192, py + 8);   mNumR(h, fb, sheet[7] | (sheet[8] << 8), 232, py + 8);
       } }
   }
-  // The band's TEXT: `math=07` has BG3 in the mask, so a non-cursor row's text takes the fixed colour (the list's own
-  // ramp, mWinGrad(5)) before the halve -- the Load screen's order (clamp at 0, halve, cap). The text is what differs
-  // from the chrome laid above. MEASURED (owsave f180, three empty slots): "No data" 28 + 3 -> 15 (123), a subtract
-  // line's 28 - 1 -> 13 (107), the shadow 3 + 1 -> 2 (16); a bare halve had given 14 / 14 / 1.
+  // The band's text: `math=07` has BG3 in the mask, so a non-cursor row's text takes the fixed colour (the list's
+  // ramp, mWinGrad(5)) before the halve, in the Load screen's order (clamp at 0, halve, cap). The text is what differs
+  // from the chrome laid above.
   if (cursor >= 0) {
     const int8_t* d5 = mWinGrad(5);
     for (int i = 0; i < CT_MENU_SAVE_SLOTS; i++) {
@@ -4989,25 +4442,21 @@ void CtMenuRenderSave(const CtMenuHost* h, uint8_t* fb, int cursor) {
   }
 }
 
-// ================================================================================================
-// THE LOAD SCREEN -- menu MODE 0, screen $0E (ROM handler C2/E60B, builder C2/E7C3).
-// disasm/notes/boot_loader.md has the whole chain; the parts this file implements:
-//
-//   rows            cursor $0054 = 0..2 the three SLOT buttons, 3 = "New Game".  The buttons are BG2
-//                   tile rows 2-5 / 6-9 / 10-13 (y16/48/80, 32 px each) and "New Game" is the BG3
-//                   text row above them; the two bottom windows are rows 16-25.
-//   occupancy       $0D49+row: nonzero = the row may hold the cursor.  Slots come from the FF/F9C4
-//                   gate (C2/D10D's per-slot scan); $0D4C -- the New Game row -- is 0xFF except on
-//                   the New-Game+ path (C2/E67A `STZ $0D4C`), which this port does not have.
-//   cursor settle   C2/E743: while the row under $0054 is EMPTY, step (DEX, or INX INX DEX = +1 when
-//                   $005A bit3 says the press was UP) and AND #03.  So the cursor SKIPS empty slots.
-//   default row     C2/E7CF: $79 = $30:7FE0, the LAST SLOT SAVED; if all three slots are empty
-//                   ($0D49|$0D4A|$0D4B == 0) $79 = 3 = New Game.  Then $0054 = $79.
+// ---- The load screen: menu mode 0, screen $0E (C2/E60B, builder C2/E7C3; disasm/notes/boot_loader.md) ----
+//   rows            cursor $0054 = 0..2 the three slot buttons, 3 = "New Game". The buttons are BG2 tile rows 2-5 /
+//                   6-9 / 10-13 (y16/48/80, 32 px each) and "New Game" is the BG3 text row above them; the two
+//                   bottom windows are rows 16-25.
+//   occupancy       $0D49+row: nonzero = the row may hold the cursor. Slots come from the FF/F9C4 gate (C2/D10D's
+//                   per-slot scan); $0D4C, the New Game row, is 0xFF except on the New-Game+ path (C2/E67A `STZ
+//                   $0D4C`). Not ported: the New-Game+ path.
+//   cursor settle   C2/E743: while the row under $0054 is empty, step (DEX, or INX INX DEX = +1 when $005A bit 3
+//                   says the press was Up) and AND #03, so the cursor skips empty slots.
+//   default row     C2/E7CF: $79 = $30:7FE0, the last slot saved; if all three slots are empty ($0D49|$0D4A|$0D4B ==
+//                   0) $79 = 3 = New Game. Then $0054 = $79.
 //   chapter / era   the two ROM string tables baked in menu_loader.h (citations there).
-// ================================================================================================
 
-// C2/E7C3's occupancy scan, as the four bytes the ROM keeps at $0D49..$0D4C.
-// Returns the number of OCCUPIED save slots (0..3).
+// C2/E7C3's occupancy scan, as the four bytes the ROM keeps at $0D49..$0D4C. Returns the number of occupied save
+// slots (0..3).
 int CtMenuLoaderOccupancy(const CtMenuHost* h, unsigned char* occ) {
   int n = 0;
   for (int s = 0; s < CT_MENU_SAVE_SLOTS; s++) {
@@ -5015,78 +4464,70 @@ int CtMenuLoaderOccupancy(const CtMenuHost* h, unsigned char* occ) {
     if (occ) occ[s] = (unsigned char)(used ? 1 : 0);
     n += used;
   }
-  if (occ) occ[3] = 0xFF;                    // $0D4C -- "New Game" is always selectable here
+  if (occ) occ[3] = 0xFF;                    // $0D4C: "New Game" is always selectable here
   return n;
 }
 
-// ---- THE SCREEN'S OWN NODE GRAPH, read out of the oracle at $7E:9380 -------------------------
-// C2/EA27 turns the row into the node offset (`AND #00FF / ASL / PHA / ASL / ADC $01,S / TAX` =
-// row*2 + row*4 = row*6), so the nodes are SIX bytes: +0 the hand's OAM X, +1 its OAM Y, then the
-// four neighbours the direction dispatch reads -- C2/EA36 `LDA $9382,Y` (+2), EA3B (+3), EA40 (+4),
-// EA45 (+5). C2/E9E5 picks the direction by scanning $F5 (the NEW-PRESS d-pad byte) for its LOWEST
-// set bit -- Right=0x01 -> 0, Left=0x02 -> 1, Down=0x04 -> 2, Up=0x08 -> 3 -- and the jump table at
-// $C2:EA1F (`45 EA 40 EA 3B EA 36 EA`) maps 0->+5, 1->+4, 2->+3, 3->+2. So +2 is UP and +3 is DOWN.
-//
-// Dumped live (`--read wram:9380+64` on the load screen):
+// ---- The screen's node graph ($7E:9380) ----
+// C2/EA27 turns the row into the node offset (`AND #00FF / ASL / PHA / ASL / ADC $01,S / TAX` = row*6), so nodes are
+// six bytes: +0 the hand's OAM X, +1 its OAM Y, then the four neighbours the direction dispatch reads (C2/EA36 `LDA
+// $9382,Y` (+2), EA3B (+3), EA40 (+4), EA45 (+5)). C2/E9E5 picks the direction from the lowest set bit of $F5 (the
+// new-press d-pad byte) -- Right 0x01 -> 0, Left 0x02 -> 1, Down 0x04 -> 2, Up 0x08 -> 3 -- and the jump table at
+// $C2:EA1F (`45 EA 40 EA 3B EA 36 EA`) maps 0->+5, 1->+4, 2->+3, 3->+2. So +2 is Up and +3 is Down:
 //   node0  slot 0     X 8  Y  53   Up 3  Dn 1  Lf 0  Rt 0
 //   node1  slot 1     X 8  Y  85   Up 0  Dn 2  Lf 1  Rt 1
 //   node2  slot 2     X 8  Y 117   Up 1  Dn 3  Lf 2  Rt 2
 //   node3  New Game   X 8  Y  21   Up 2  Dn 0  Lf 3  Rt 3
-//   (nodes 4/5 are the New-Game+ prompt pair, (184,87)/(184,103) -- not this port's path)
-// ⭐ It is a FOUR-NODE VERTICAL RING -- New Game is the row ABOVE slot 0, and Up/Down wrap right
-// through it. Left/Right are SELF on every node, i.e. INERT, exactly like the ATB selector's list.
+//   (nodes 4/5 are the New-Game+ prompt pair, (184,87)/(184,103), not ported)
+// A four-node vertical ring: New Game is the row above slot 0, and Up/Down wrap through it. Left/Right stay put.
 static const unsigned char CT_LOADER_NODE[4][6] = {
   { 8,  53, 3, 1, 0, 0 },
   { 8,  85, 0, 2, 1, 1 },
   { 8, 117, 1, 3, 2, 2 },
   { 8,  21, 2, 0, 3, 3 },
 };
-// The neighbour a direction press moves to. `dir`: 0 Right, 1 Left, 2 Down, 3 Up (the ROM's own
-// index, from the $F5 scan) -- the node byte is +5-dir.
+// The neighbour a direction press moves to. `dir`: 0 Right, 1 Left, 2 Down, 3 Up (the ROM's index from the $F5
+// scan); the node byte is +5-dir.
 int CtMenuLoaderNeighbour(int row, int dir) {
   if (row < 0 || row > 3 || dir < 0 || dir > 3) return row;
   return CT_LOADER_NODE[row][5 - dir] & 3;
 }
-// The hand's OAM position for a row, straight out of the node (+0 X, +1 Y).
+// The hand's OAM position for a row, from the node (+0 X, +1 Y).
 void CtMenuLoaderHandOam(int row, int* x, int* y) {
   if (row < 0 || row > 3) row = 0;
   if (x) *x = CT_LOADER_NODE[row][0];
   if (y) *y = CT_LOADER_NODE[row][1];
 }
 
-// C2/E743, the cursor settle -- it runs AFTER the graph move and walks off any EMPTY row.
+// C2/E743, the cursor settle: it runs after the graph move and walks off any empty row.
 //     E746 LDX $54 / LDA $0D49,X / BNE -> done
-//     E74D LDA $5A / AND #08 / BNE ->E755      ; the press was UP -> skip the INX INX
+//     E74D LDA $5A / AND #08 / BNE ->E755      ; the press was Up -> skip the INX INX
 //     E753 INX / INX
 //     E755 DEX / TXA / AND #03 / STA $54 / BRA ->E746
-// ⭐ So the step is MINUS ONE ON UP and PLUS ONE otherwise -- `up` here is $5A bit3, the same byte
-// C2/E9F2 latched from $F5. Getting this backwards is not cosmetic: with one save on the cart the
-// valid rows are {slot 0, New Game} and the wrong sign makes Up-from-New-Game and Down-from-slot-0
-// both dead ends, so the cursor can leave the save row but never come back (measured on the oracle:
-// row 0 -Up-> 3, row 3 -Up-> 0, row 0 -Down-> 3, row 3 -Down-> 0 -- it toggles, both ways).
+// So the step is -1 on Up and +1 otherwise; `up` is $5A bit 3, the byte C2/E9F2 latched from $F5.
 int CtMenuLoaderStep(const CtMenuHost* h, int row, int up) {
   unsigned char occ[4];
   CtMenuLoaderOccupancy(h, occ);
   int x = row & 3;
   for (int guard = 0; guard < 8; guard++) {            // the ROM's loop is unbounded; $0D4C != 0
     if (occ[x]) return x;                              //   guarantees it terminates within 4 steps
-    x = up ? ((x + 3) & 3) : ((x + 1) & 3);            // E753-E755: DEX on UP, INX INX DEX otherwise
+    x = up ? ((x + 3) & 3) : ((x + 1) & 3);            // E753-E755: DEX on Up, INX INX DEX otherwise
   }
   return 3;
 }
 
-// C2/E7CF-E7E6: the row the screen OPENS on.
+// C2/E7CF-E7E6: the row the screen opens on.
 int CtMenuLoaderDefaultRow(const CtMenuHost* h) {
   unsigned char occ[4];
   int n = CtMenuLoaderOccupancy(h, occ);
-  if (!n) return 3;                          // E7DE BNE / E7E0 LDA #03 -- nothing to load
+  if (!n) return 3;                          // E7DE BNE / E7E0 LDA #03: nothing to load
   int last = (h && h->sram && h->sramLen >= 0x2000) ? h->sram[0x1FE0] : 0;   // E7CF LDA $307FE0
   if (last < 0 || last > 3) last = 0;
   return occ[last] ? last : CtMenuLoaderStep(h, last, 0);
 }
 
-// The chapter title a slot shows: C2/D266's storyline -> C2/D27C's threshold walk.  `storyline` is
-// the slot's own $+0x0603 byte.  An EMPTY slot takes C2/D28D's arm -> index 26 = "No data".
+// The chapter title a slot shows: C2/D266's storyline -> C2/D27C's threshold walk. `storyline` is the slot's own
+// $+0x0603 byte. An empty slot takes C2/D28D's arm -> index 26 = "No data".
 const char* CtMenuLoaderChapter(int storyline, int used) {
   if (!used) return ctLoaderChapter[CT_LOADER_CHAPTERS - 1];   // C2/D28D LDA #1A
   int x = 26;                                                  // C2/D27C LDX #1A
@@ -5098,36 +4539,23 @@ const char* CtMenuLoaderEra(int locId) {
   return ctLoaderEra[ctLoaderEraOf[locId & 0x1FF] & 7];
 }
 
-// ---- THE PER-SCANLINE CHROME COMPOSER ---------------------------------------------------------
-// Every other menu screen replays its BG2 plane FLAT -- tile row R at y = R*8 -- and that is right
-// for them. This screen is not flat: `--hdma` shows BG2VOFS ($2110) driven per scanline in three
-// bands (the vS=503 `--ppuregs` reports is only what the register holds at the frame boundary), so
-// the map line a scanline shows is `(y + vofs(y)) & 0x1FF` over the 32x64 map. That is what lets the
-// ROM draw FOUR bars out of three button blocks:
-//
-//   band 1  y   0.. 39  vofs 0x00FF  -> the SECOND screen's rows 1-4 = the "New Game" bar, y9..40
+// ---- The per-line chrome composer (disasm/notes/boot_loader.md) ----
+// The other menu screens replay their BG2 plane flat (tile row R at y = R*8). This screen drives BG2VOFS ($2110) per
+// line in three bands, so the map line a scanline shows is `(y + vofs(y)) & 0x1FF` over the 32x64 map, and four bars
+// come out of three button blocks:
+//   band 1  y   0.. 39  vofs 0x00FF  -> the second screen's rows 1-4 = the "New Game" bar, y9..40
 //   band 2  y  40..135  vofs 0x01E7  -> first-screen rows 2-5 / 6-9 / 10-13 = the three save slots
 //                                       at y41..72 / y73..104 / y105..136
 //   band 3  y 136..215  vofs 0x01F7  -> rows 16-25 = the two bottom windows, y137..216
-//
-// Verified against the oracle: the two rows whose BRIGHTNESS SWAPS when the cursor moves between
-// New Game and slot 0 are its framebuffer y16..47 and y48..79, i.e. exactly these y9..40 and
-// y41..72 plus the 7-line offset of the oracle's 240-line frame.
-// ⭐ AND ITS OWN COLOUR MATH. `ct.exe --hdma`'s scanline trace prints the truth line by line, and it
-// is the documented window-gradient law (C2/86DD: +8 at the top of a window down to -7 at its
-// bottom, 16 steps, RESET AND HEIGHT-NORMALISED PER WINDOW) over THIS screen's partition -- the four
-// 32-line rows and the 80-line bottom pair, not the X-menu's ribbon list:
-//
-//   lines   0..  8   math=00                     no colour math at all
+// The colour math is the window-gradient law (C2/86DD: +8 at a window's top down to -7 at its bottom, 16 steps,
+// normalised per window) over this screen's partition, not the X menu's ribbon list:
+//   lines   0..  8   math=00                     no colour math
 //   lines   9.. 40   fixed 8,7,6..0 then 1..7     one step every 2 lines   (the New Game row)
 //   lines  41.. 72 / 73..104 / 105..136           the same ramp            (slots 0, 1, 2)
-//   lines 137..216   the same ramp in 5-LINE steps                         (the two bottom windows)
-//
-// ⭐ and the "dim" of the non-cursor rows is not a second pass: the trace shows the CURSOR's row (and
-// the bottom windows) running `math=02 half=0` -- plain add/subtract on BG2 -- while the other three
-// run `math=07 half=1`, the same gradient with the halve and with BG1/BG3 also in the mask. So the
-// gradient is composed here and the halve is applied over the whole band afterwards, which is where
-// the text (BG1/BG3, in that same mask) picks it up too.
+//   lines 137..216   the same ramp in 5-line steps                         (the two bottom windows)
+// The non-cursor rows run `math=07 half=1` (the same gradient with the halve, BG1/BG3 also in the mask), the cursor's
+// row and the bottom windows `math=02 half=0`. So the gradient is composed here and the halve applied over the whole
+// band afterwards, where the text (BG1/BG3) picks it up too.
 static uint8_t ldrSnap[MW * MH * 3];   /* the chrome as composed, so the text's halve can be told apart */
 #define CT_LDR_WIN0   9      /* the first row's top; the four rows are 32 lines each */
 #define CT_LDR_WINBOT 137    /* the two bottom windows, 80 lines, one band */
@@ -5140,8 +4568,8 @@ static int ldrGrad(int y) {
   if (k > 15) k = 15;
   return 8 - k;                                        // +8 at the top .. -7 at the bottom
 }
-// The visual row a scanline belongs to, as a CURSOR row (3 = New Game on top, then slots 0/1/2),
-// or -1 for the bottom windows and the dead lines above the list.
+// The visual row a scanline belongs to, as a cursor row (3 = New Game on top, then slots 0/1/2), or -1 for the bottom
+// windows and the dead lines above the list.
 static int ldrRowOfLine(int y) {
   if (y < CT_LDR_WIN0 || y >= CT_LDR_WINBOT) return -1;
   int r = (y - CT_LDR_WIN0) / 32;                       // 0 = the New Game bar
@@ -5151,7 +4579,7 @@ static void mChromeTMScroll(uint8_t* fb, const uint16_t* tm, const uint8_t (*pal
                             int cursor) {
   memset(fb, 0, (size_t)MW * MH * 3);                  // index 0 / unmapped tiles = backdrop black
   for (int py = 0; py < MH; py++) {
-    int v = ctMenuLoaderBand[CT_MENU_LOADER_NBAND - 1].vofs;   // past the table the register HOLDS
+    int v = ctMenuLoaderBand[CT_MENU_LOADER_NBAND - 1].vofs;   // past the table the register holds
     for (int b = 0; b < CT_MENU_LOADER_NBAND; b++)
       if (py >= ctMenuLoaderBand[b].y0 && py <= ctMenuLoaderBand[b].y1) { v = ctMenuLoaderBand[b].vofs; break; }
     int ml = (py + v) & 0x1FF;                         // 32x64 map = 512 lines, second screen at +32 rows
@@ -5175,14 +4603,11 @@ static void mChromeTMScroll(uint8_t* fb, const uint16_t* tm, const uint8_t (*pal
         int val = g[gy * 8 + gx];
         const uint8_t* Pv = (val >= 8) ? mChromeInk(pal, pl, val) : P[val];   // (the slot's own row, C2/ED08)
         int r = Pv[0], gg = Pv[1], b2 = Pv[2];
-        if (isWin) {                                    // COLDATA carries a 5-BIT intensity and
+        if (isWin) {                                    // COLDATA carries a 5-bit intensity and
           int dd = ldrGrad(py);                         //   CGADSUB adds/subtracts it in 5 bits
           int c0 = (r >> 3) + dd, c1 = (gg >> 3) + dd, c2 = (b2 >> 3) + dd;
-          // ⚠ ORDER. The sum is CLAMPED AT ZERO, then HALVED when this row is not the
-          // cursor's (`math=07 half=1`), and only then capped at 31 -- the halve is part of
-          // the same ALU pass, not something applied to an already-clamped colour. Clamping
-          // to 31 first and halving afterwards is measurably too dark: on the top line of
-          // each dimmed row the oracle reads (156,156,148) where that order gives 123.
+          // Note the order: the sum is clamped at zero, then halved when this row is not the cursor's (`math=07
+          // half=1`), and only then capped at 31 -- one ALU pass.
           if (c0 < 0) c0 = 0; if (c1 < 0) c1 = 0; if (c2 < 0) c2 = 0;
           if (dim) { c0 >>= 1; c1 >>= 1; c2 >>= 1; }
           if (c0 > 31) c0 = 31; if (c1 > 31) c1 = 31; if (c2 > 31) c2 = 31;
@@ -5195,13 +4620,13 @@ static void mChromeTMScroll(uint8_t* fb, const uint16_t* tm, const uint8_t (*pal
   }
 }
 
-// The four rows the screen actually draws, in the geometry the bands above produce. Row 3 (New Game)
-// is band 1's bar; rows 0-2 (the save slots) are band 2's three blocks.
+// The four rows the screen draws, in the geometry the bands above produce. Row 3 (New Game) is band 1's bar; rows
+// 0-2 (the save slots) are band 2's three blocks.
 #define CT_LDR_ROW_H 32
 static int ldrRowTop(int row) { return (row == 3) ? 9 : 41 + 32 * (row & 3); }
 
-// The screen's BG2 chrome: the same tiles and gradient every other menu screen uses, composed
-// through this screen's own per-scanline scroll.
+// The screen's BG2 chrome: the same tiles and gradient as the other menu screens, through this screen's per-line
+// scroll.
 void CtMenuChromeLoaderAt(uint8_t* fb, int cursor) {
   if (!fb) return;
   mChromeTMScroll(fb, ctMenuChromeLoaderTM, ctMenuChromeLoaderPal, cursor);
@@ -5223,59 +4648,47 @@ static void mBlit16(uint8_t* fb, const uint32_t blob[16][16], int x0, int y0) {
   }
 }
 
-// Draw ONE glyph by its raw CT font index. Two cells on this screen do not use the code the
-// ASCII mapping would pick: the clock's separator is tile 0x2D (not ':' = 0xE3) and the Save
-// line's hash is 0xEE (not '#' = 0xF3) -- read straight off the oracle's BG1 tilemap,
-// `0B3 0A8 0AC 0A4 000 0D4 0DC 02D 0D8 0D7` and `0B2 0BA 0CF 0BE 0EF 0EE 0EF ...`.
+// Draw one glyph by its raw CT font index. Two cells on this screen do not use the code the ASCII mapping would pick:
+// the clock's separator is tile 0x2D (not ':' = 0xE3) and the Save line's hash is 0xEE (not '#' = 0xF3), as in the
+// BG1 tilemap `0B3 0A8 0AC 0A4 000 0D4 0DC 02D 0D8 0D7` and `0B2 0BA 0CF 0BE 0EF 0EE 0EF ...`.
 static void mGlyph(const CtMenuHost* h, uint8_t* fb, int code, int x, int y) {
   if (h->drawGlyph) h->drawGlyph(fb, code, x, y);
 }
 
-// The two PROPORTIONAL fields: the slot description and the era name. Measured against the tiles
-// the ROM renders them into -- same glyphs, same advances as the engine's dialogue VWF -- and
-// ⭐ NOT CENTRED: the pen starts at the block's LEFT EDGE and the ROM string's OWN LEADING
-// SPACES position it -- '  The Queen is Gone' (2 spaces, 4 px each) inks at x8, '          No
-// data' (10) at x40, 'Middle Ages' (none) at x0, which is what the oracle's tiles measure. The
-// strings are therefore baked VERBATIM. (Stripping them and centring on a tile fits those same
-// three points by accident -- and breaks on any string whose padding is not symmetric.) The
-// glyph top sits
-// 4 px into the 16 px block (the strips' ink starts at strip row 4 and the glyph's own ink
-// starts at its row 0). Falls back to the 8x8 menu font when the host has no VWF.
+// The two proportional fields, the slot description and the era name, in the dialogue VWF's glyphs and advances. They
+// are not centred: the pen starts at the block's left edge and the ROM string's own leading spaces position it
+// ('  The Queen is Gone', 2 spaces of 4 px, inks at x8), so the strings are baked verbatim. The glyph top sits 4 px
+// into the 16 px block. Falls back to the 8x8 menu font when the host has no VWF.
 static void ldrVwf(const CtMenuHost* h, uint8_t* fb, const char* s, int x0, int ncols, int y) {
   if (!h->vwfWidth || !h->vwfDraw) { mText(h, fb, s, x0, y); return; }
   (void)ncols;
   h->vwfDraw(fb, s, x0, y, ctLoaderVwfTone);
 }
 
-// Draw the LOAD screen. `cursor` 0..2 = a save slot, 3 = New Game.
-//
-// Every y below is a BG map row put through its layer's OWN band table -- the text layers are
-// scrolled too, and not by the same amounts as BG2 ($210E BG1VOFS: 40 lines @ $FFFF then $01F7;
-// $2112 BG3VOFS: 40 @ $01F1, 96 @ $01E7, 80 @ $01F7). Inverting `map_line = (y + vofs) & 0x1FF`
-// for the row a field sits on gives:
+// Draw the load screen. `cursor` 0..2 = a save slot, 3 = New Game.
+// Every y below is a BG map row put through its layer's own band table; the text layers are scrolled too, by other
+// amounts than BG2 ($210E BG1VOFS: 40 lines @ $FFFF then $01F7; $2112 BG3VOFS: 40 @ $01F1, 96 @ $01E7, 80 @ $01F7).
+// Inverting `map_line = (y + vofs) & 0x1FF` for the row a field sits on gives:
 //   BG3 row  1  ("New Game")      band 1, vofs 497 -> y  23
-//   BG3 rows 3+4i / 4+4i (slots)  band 2, vofs 487 -> y  48 + 32i  and +8
+//   BG3 rows 3+4i / 4+4i (slots)  band 2, vofs 487 -> y  49 + 32i  and +8
 //   BG3 rows 17,18 (era)          band 3, vofs 503 -> y 145, 153
 //   BG1 rows 20 / 22 / 24         band 3, vofs 503 -> y 169 / 185 / 201   (TIME / gold / Save #)
 //   BG1 rows 17,18 / 20,21 / 23,24 (party)          -> y 145,153 / 169,177 / 193,201
-// The ROM draws the slot descriptions and the era through its VWF (C2/EF65); ours are the engine's
-// 8x8 menu font, the same substitution every ported menu screen makes.
+// The slot descriptions and the era go through the VWF (C2/EF65 in the ROM; ldrVwf here).
 void CtMenuRenderLoader(const CtMenuHost* h, uint8_t* fb, int cursor) {
   if (!h || !fb) return;
   if (cursor < 0) cursor = 0; else if (cursor > 3) cursor = 3;
   // The boot Load screen's rows are the Save screen's: C2/D266 reads each valid save's colour into $0D79 and C2/D329
-  // draws the slot in it (tiles 0x300 + 20 v, row slot + 1). MEASURED (saves/field_re/colsave3.srm, slot 1 saved in
-  // colour 3, booted on the oracle with CT_ORACLE_SRAM): $0D79 = 03 00 00 and the slot's bricks on screen $0E.
+  // draws the slot in it (tiles 0x300 + 20 v, row slot + 1).
   CtMenuSaveSlotColours(h, NULL);
-  CtMenuChromeLoaderAt(fb, cursor);        // the chrome finishes its own colour math per scanline
-  memcpy(ldrSnap, fb, sizeof ldrSnap);     // ...so only what the TEXT writes still needs halving
+  CtMenuChromeLoaderAt(fb, cursor);        // the chrome finishes its own colour math per line
+  memcpy(ldrSnap, fb, sizeof ldrSnap);     // ...so only what the text writes still needs halving
   mDim = 0;
   mText(h, fb, "New Game", 104, 23);                  // BG3 row 1, cols 13-20
   CtMenuSaveSummary cur; int curUsed = 0; memset(&cur, 0, sizeof cur);
   for (int i = 0; i < CT_MENU_SAVE_SLOTS; i++) {
-    // BG3 rows 3 / 7 / 11 inverted through BG3's band 2 (vofs 487): (24 - 487) & 0x1FF = 49,
-    // not 48 -- the modulo, not the subtraction. Measured: the oracle's description inks at
-    // screen y53 (block top + 4), and at 48 ours sat one pixel high on every slot row.
+    // BG3 rows 3 / 7 / 11 inverted through BG3's band 2 (vofs 487): (24 - 487) & 0x1FF = 49 (the modulo, not the
+    // subtraction).
     int y = 49 + i * 32;
     mBlit16(fb, ctLoaderNumeral[i], 24, y);           // BG3 tiles at cols 3-4, rows 3-4 of the row
     CtMenuSaveSummary s;
@@ -5284,8 +4697,8 @@ void CtMenuRenderLoader(const CtMenuHost* h, uint8_t* fb, int cursor) {
     ldrVwf(h, fb, CtMenuLoaderChapter(story, used), 80, 16, y + 4);   // BG3 cols 10-25, 16 tiles
     if (used && i == cursor) { cur = s; curUsed = 1; }
   }
-  // The bottom-left SUMMARY window and the party window are the CURSOR SLOT's, and they are blank
-  // while the cursor sits on New Game or an empty slot.
+  // The bottom-left summary window and the party window are the cursor slot's, blank while the cursor sits on New
+  // Game or an empty slot.
   if (curUsed) {
     ldrVwf(h, fb, CtMenuLoaderEra(cur.locId), 32, 9, 149);            // BG3 rows 17-18, cols 4-12
     mText(h, fb, "TIME", 24, 169);                                   // BG1 row 20, cols 3-6
@@ -5315,24 +4728,20 @@ void CtMenuRenderLoader(const CtMenuHost* h, uint8_t* fb, int cursor) {
       mText(h, fb, "MP", 192, y + 8);   mNumR(h, fb, sheet[7] | (sheet[8] << 8), 232, y + 8);
     }
   }
-  // The hand, straight out of the node table: OAM (8, 53/85/117/21). The SNES renders an OBJ one
-  // scanline BELOW its OAM Y (ct-field-sprite-pos) and this blob's opaque pixels start at local +2,
-  // so a top-left of OAM_Y+1 puts the ink where the oracle's is -- measured, its row-0 hand inks the
-  // framebuffer's y63..74, i.e. screen y56..67 = 53 + 1 + 2 .. +13.
+  // The hand, from the node table: OAM (8, 53/85/117/21). An OBJ renders one line below its OAM Y
+  // (ct-field-sprite-pos), so the top left is OAM_Y + 1.
   { int hx, hy; CtMenuLoaderHandOam(cursor, &hx, &hy); mHandCursor(h, fb, hx, hy + 1); }
-  // ...and the windowed HALF COLOR MATH band the ROM moves with the cursor: every row but the
-  // cursor's is halved in 5-bit space (the same transform CtMenuRenderSave measured on the Save
-  // screen's slot list). All FOUR rows are in the window -- the New Game bar dims too.
+  // ...and the windowed half colour math band the ROM moves with the cursor: every row but the cursor's is halved in
+  // 5-bit space (as on the Save screen's slot list). All four rows are in the window; the New Game bar dims too.
   for (int i = 0; i < 4; i++) {
     if (i == cursor) continue;
     int y0 = ldrRowTop(i);
     for (int yy = y0; yy < y0 + CT_LDR_ROW_H && yy < MH; yy++)
       for (int xx = 16; xx <= 239 && xx < MW; xx++) {
         size_t o = ((size_t)yy * MW + xx) * 3;
-        if (!memcmp(fb + o, ldrSnap + o, 3)) continue;      // chrome: already math'd above
-        // `math=07` puts BG1/BG3 in the mask too, so the TEXT on a non-cursor row takes the SAME
-        // gradient before the halve -- not a bare halve. Same order as the chrome: clamp at 0,
-        // halve, then cap at 31.
+        if (!memcmp(fb + o, ldrSnap + o, 3)) continue;      // chrome: its math is done above
+        // `math=07` puts BG1/BG3 in the mask too, so the text on a non-cursor row takes the same gradient before the
+        // halve, in the chrome's order: clamp at 0, halve, then cap at 31.
         for (int c = 0; c < 3; c++) {
           int v = (fb[o + c] >> 3) + ldrGrad(yy);
           if (v < 0) v = 0;
@@ -5344,19 +4753,17 @@ void CtMenuRenderLoader(const CtMenuHost* h, uint8_t* fb, int cursor) {
   }
 }
 
-// =====================================================================================================
-// THE SHOP -- menu mode 2, screen $0C (disasm/notes/shop_screen.md). Opened by event op 0xC8 $80-$BF
-// (C0/0D09: X = operand & $3F -> $0A01 -> $71 = the shop number). The substate table C2/D519 is
-// { D52B build, D546 Buy/Sell, D58B buy list, D645 sell list, D690 sell qty, D618 buy qty, D6C3/D715/D778
-// the equip sub-mode }; 0-5 are here. Field names are the ROM's RAM (see CtMenuShop in menu.h).
-// The item data the ROM builds at every menu open (C2/98B7: $7700 flags, $7800 price, $7A00 equip mask,
-// for ids 0..$F1) is read straight from the record it copies: C2/88AD.
-// =====================================================================================================
+// ---- The shop: menu mode 2, screen $0C (disasm/notes/shop_screen.md) ----
+// Opened by event op 0xC8 $80-$BF (C0/0D09: X = operand & $3F -> $0A01 -> $71 = the shop number). The substate table
+// C2/D519 is { D52B build, D546 Buy/Sell, D58B buy list, D645 sell list, D690 sell qty, D618 buy qty, D6C3/D715/D778
+// the equip sub-mode }. Field names are the ROM's RAM (see CtMenuShop in menu.h). The item data the ROM builds at
+// every menu open (C2/98B7: $7700 flags, $7800 price, $7A00 equip mask, for ids 0..$F1) is read from the record it
+// copies (C2/88AD).
 static const uint8_t kShopClassLim[4]   = { 0x5A, 0x7B, 0x94, 0xBC };           // C2/88A8
 static const uint8_t kShopClassStart[5] = { 0x00, 0x5A, 0x7B, 0x94, 0xBC };     // C2/88A7
-// C2/894F / C2/DE1D: the sheet offset of an item's CLASS (weapon/armor/helm/accessory). The ROM indexes it with
-// the class byte $04CC, and class 4 (consumables and key items) reads ONE BYTE PAST the four-entry table --
-// the `08` that is C2/8953's PHP -- so a consumable is compared against sheet +8 (current MP, high byte).
+// C2/894F / C2/DE1D: the sheet offset of an item's class (weapon/armor/helm/accessory). The ROM indexes it with the
+// class byte $04CC, and class 4 (consumables and key items) reads one byte past the four-entry table -- the `08` that
+// is C2/8953's PHP -- so a consumable is compared against sheet +8 (current MP, high byte).
 static const uint8_t kShopSheetOff[5]   = { 0x29, 0x28, 0x27, 0x2A, 0x08 };
 static int mShopClass(int id, int* idx) {                                        // C2/8881
   int c = 0;
@@ -5386,7 +4793,7 @@ static int mShopEqMask(const uint8_t* rom, long romLen, int id) {               
   return a < 0 ? 0 : CtRomByte(rom, 0x400000L, (long)(a + 3));                                                 //  (measured: Tonic, $1811 stays 0)
 }
 // C2/DB9F: price = ceil(P * M / 256) with M = word $7F:01CD (0x0100 in every game state), >= 1, and 65000 when
-// the product reaches 2^24. `INC $3F` is a 16-bit INC, so ceil() of 0xFFFF.xx wraps to 0 -- and then becomes 1.
+// the product reaches 2^24. `INC $3F` is a 16-bit INC, so ceil() of 0xFFFF.xx wraps to 0, and then becomes 1.
 int CtMenuShopBuyPrice(const uint8_t* rom, long romLen, const uint8_t* glb, int id) {
   uint32_t p = (uint32_t)mShopRawPrice(rom, romLen, id);
   uint32_t m = glb ? (uint32_t)(glb[0x1CD] | (glb[0x1CE] << 8)) : 0x100u;       // C2/DBA2 LDA $7F01CD
@@ -5398,7 +4805,7 @@ int CtMenuShopBuyPrice(const uint8_t* rom, long romLen, const uint8_t* glb, int 
   return (int)r;
 }
 int CtMenuShopSellPrice(const uint8_t* rom, long romLen, int id) {              // C2/DF51 LSR / ADC $51
-  int p = mShopRawPrice(rom, romLen, id);                                        //   (the RAW price: no $01CD)
+  int p = mShopRawPrice(rom, romLen, id);                                        //   (the raw price: no $01CD)
   return ((p >> 1) + (p & 1)) & 0xFFFF;
 }
 static uint32_t mShopGold(const uint8_t* mem) {
@@ -5444,15 +4851,15 @@ static void mShopNmi(CtMenuShop* s) {
   if (s->upQ & SHOP_UP_FBCE) memcpy(s->v1, s->b1, sizeof s->v1);
   if (s->upQ & SHOP_UP_FBE3) memcpy(s->v1[2], s->b1[2], 25 * sizeof s->v1[0]);
   if (s->upQ & (SHOP_UP_FBCE | SHOP_UP_FBE3)) {         // the list rows (5-20) go up with them: C2/DD02 redraws them in
-    s->shownBuyScroll = s->buyScroll;                    //   the buffer on a page and C2/D7E7 yields -- the upload is the
-    s->shownSellScroll = s->sellScroll;                  //   next frame's C2/D7F1 (MEASURED: shopscroll, the page's rows a
-  }                                                      //   frame late on the cartridge)
+    s->shownBuyScroll = s->buyScroll;                    //   the buffer on a page and C2/D7E7 yields; the upload is the
+    s->shownSellScroll = s->sellScroll;                  //   next frame's C2/D7F1
+  }
   if (s->upQ & SHOP_UP_FBF1) memcpy(s->v1[24], s->b1[24], 24 * sizeof s->v1[0]);
   if (s->upQ & SHOP_UP_FC1B) memcpy(s->v3, s->b3, sizeof s->v3);
   s->upQ = 0;
 }
-// C2/E058 -> C2/EC93: `n` cells of rows 24/25 from roster member `k`'s column ($3404 + 8k): attr = (attr & 0x0F) | hi
-// -- hi 0x10 dims a member (palette | 4, priority off), hi 0 keeps the palette's low bits and clears the priority.
+// C2/E058 -> C2/EC93: `n` cells of rows 24/25 from roster member `k`'s column ($3404 + 8k): attr = (attr & 0x0F) | hi;
+// hi 0x10 dims a member (palette | 4, priority off), hi 0 keeps the palette's low bits and clears the priority.
 static void mShopMask(CtMenuShop* s, int k, int n, int hi) {
   for (int r = 24; r <= 25; r++)
     for (int i = 0; i < n; i++) {
@@ -5460,10 +4867,10 @@ static void mShopMask(CtMenuShop* s, int k, int n, int hi) {
       if (col < 32) mShopB1Attr(s, r, col, ((s->b1[r][col] >> 8) & 0x0F) | hi);
     }
 }
-// C2/DE21 + C2/DE56 -- the panel cells of roster member `k`: the "E" over it (tile 38, the tile byte alone) when
+// C2/DE21 + C2/DE56: the panel cells of roster member `k`. The "E" over it (tile 38, the tile byte alone) when
 // $1056[$71] is set, then per row the attr 21 equal / 3D lower / 29 higher on both cells, the tens cell 0x6E + v/10 and
-// the second cell v%100 (v >= 10) or 0x64 + v -- attr bit0 makes both tile numbers 0x100 higher. $4204/$4205 keep the
-// dividend between the two divides, so v%100 is the remainder of the SAME v.
+// the second cell v%100 (v >= 10) or 0x64 + v; attr bit 0 makes both tile numbers 0x100 higher. $4204/$4205 keep the
+// dividend between the two divides, so v%100 is the remainder of the same v.
 static void mShopPanel(CtMenuShop* s, int k, int eqFlag, int newAtk, int oldAtk, int newDef, int oldDef) {
   int col = 2 + 4 * k;
   if (eqFlag) mShopB1(s, 2, col, (s->b1[2][col] & 0xFF00) | 0x38);             // 2DE2D STA $2E84,Y
@@ -5475,14 +4882,13 @@ static void mShopPanel(CtMenuShop* s, int k, int eqFlag, int newAtk, int oldAtk,
     mShopB1(s, 24 + rr, col + 2, (attr << 8) | ((q >= 1 ? nv % 100 : 0x64 + nv) & 0xFF));   // 2DE94 STA $3408,Y
   }
 }
-// FF/F628 -- a member's sprite palette: colours 1-12 copied from bank $E4 ($02 high byte 0) or halved per channel
+// FF/F628: a member's sprite palette, colours 1-12 copied from bank $E4 ($02 high byte 0) or halved per channel
 // ((c >> 1) & 0x3DEF, $02 high byte != 0). The port's sprite art carries the palette applied; sprDim selects the halving.
 static void mShopSprPal(CtMenuShop* s, int charId, int dim) { s->sprDim[charId & 7] = (uint8_t)(dim ? 1 : 0); }
 // C2/F2F3: the description line of item `id`, redrawn only when the id differs from the last one ($0D77) or a redraw is
-// forced ($0D78 bit7). C2/FA49 clears the line and starts the string task (task slot 8, C2/FA9F): its C2/0009 step runs
-// later in the same frame and once per frame after, one DECODED character each -- a dictionary code costs one frame per
-// character it expands to ("Power +6" = 6 codes, 8 frames, measured $0217 = 1..8 from the E162 frame) -- and it ends on
-// the step that reads the terminator ($0215 = 0).
+// forced ($0D78 bit 7). C2/FA49 clears the line and starts the string task (task slot 8, C2/FA9F): its C2/0009 step runs
+// later in the same frame and once per frame after, one decoded character each (a dictionary code costs one frame per
+// character it expands to), and it ends on the step that reads the terminator ($0215 = 0).
 static void mShopDesc(CtMenuShop* s, int id) {
   if (!(s->descForce & 0x80) && id == s->descCur) return;                        // 2F2F8 BIT $0D78 / CMP $0D77
   s->descCur = id; s->descForce = 0;                                             // STA $0D77 / STZ $0D78
@@ -5496,7 +4902,7 @@ static void mShopDescTick(CtMenuShop* s) {
   else s->descRun = 0;                                                           // the terminator: $0215 = 0
 }
 // C2/F5A7's second loop: for charId 0..6, colours 13-15 of OBJ palette charId+1 = three words at $D1:(4B00 +
-// 6 * CD6CEC[weapon]) through C2/F5ED, the weapon = the sheet's +0x29 NOW.
+// 6 * CD6CEC[weapon]) through C2/F5ED, the weapon being the sheet's +0x29 at that moment.
 static void mShopWeaponPal(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom, long romLen) {
   for (int c = 0; c < 7; c++) {
     int wpn = mem[0x2600 + c * 0x50 + 0x29];
@@ -5505,7 +4911,7 @@ static void mShopWeaponPal(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom
   }
   s->wpnOn = 1;
 }
-// C2/E072 -- the party members 0..$85-1 (`nParty`): the panel cells masked with `hi` and the palette dimmed, except the
+// C2/E072: the party members 0..$85-1 (`nParty`): the panel cells masked with `hi` and the palette dimmed, except the
 // member $71 (`keep`), which gets hi 0 and its own palette.
 static void mShopDimParty(CtMenuShop* s, int keep, int hi) {
   for (int k = 0; k < s->nParty && k < s->nRoster; k++) {
@@ -5515,8 +4921,8 @@ static void mShopDimParty(CtMenuShop* s, int keep, int hi) {
   }
 }
 
-// C2/DCDA -- the Owned count of every listed id, verbatim: a hit whose count is 0 CONTINUES the scan, but with A
-// now holding that 0, so it goes on matching EMPTY slots instead of the id.
+// C2/DCDA: the Owned count of every listed id. A hit whose count is 0 continues the scan, but with A now holding that
+// 0, so it goes on matching empty slots instead of the id.
 static void mShopOwned(CtMenuShop* s, const uint8_t* mem) {
   for (int y = 0; y < 32 && s->list[y]; y++) {                                   // 2DCE0 LDA $1000,Y / BEQ
     int a = s->list[y], x = 0;
@@ -5534,7 +4940,7 @@ static void mShopOwned(CtMenuShop* s, const uint8_t* mem) {
     }
   }
 }
-// C2/8900 -- # Equipped: every roster member (up to 7) whose sheet byte at the class offset IS the item.
+// C2/8900: # Equipped, every roster member (up to 7) whose sheet byte at the class offset is the item.
 static void mShopEquipped(CtMenuShop* s, const uint8_t* mem) {
   int off = kShopSheetOff[s->cls];                                               // 28906 LDA $C2894F,X
   s->equipped = 0;                                                               // 2890E STZ $0D82
@@ -5545,13 +4951,13 @@ static void mShopEquipped(CtMenuShop* s, const uint8_t* mem) {
     if (mem[0x2600 + c * 0x50 + off] == (uint8_t)s->curId) { s->eqBy[k] = 1; s->equipped++; }
   }
 }
-// C2/DD7C -- the Owned/Equipped box and the party panel for the item $04C9. Per roster member: the current
-// Attack/Defense ($9ACD/$9ACE -> $9B23/$9B24), anim 0; if the item is equippable by that member (C2/93A8:
-// $7A00[id] & FF/F9BB[charId]) anim 0x0B, the item placed at the class offset of a COPY of the sheet and
-// C2/916E recomputes the pair.
+// C2/DD7C: the Owned/Equipped box and the party panel for the item $04C9. Per roster member: the current Attack/Defense
+// ($9ACD/$9ACE -> $9B23/$9B24), anim 0; if the item is equippable by that member (C2/93A8: $7A00[id] &
+// FF/F9BB[charId]) anim 0x0B, the item placed at the class offset of a copy of the sheet and C2/916E recomputes the
+// pair.
 static void mShopBox(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom, long romLen) {
   for (int c = 2; c < 30; c++) mShopB1(s, 2, c, 0x2000);                         // 2DD7F $2E84..$2EBB = 2000
-  s->boxOwned = s->curMax1 & 0xFF;                                               // what 2DDC1 prints ($04CA NOW)
+  s->boxOwned = s->curMax1 & 0xFF;                                               // what 2DDC1 prints ($04CA now)
   s->cls = mShopClass(s->curId, NULL);                                           // 2DDA3 JSR C2/8881
   mShopEquipped(s, mem);                                                         // 2DDA6 JSR C2/8900
   int off = kShopSheetOff[s->cls];                                               // 2DDB0 LDA $C2DE1D,X
@@ -5573,7 +4979,7 @@ static void mShopBox(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom, long
     mShopPanel(s, k, s->eqBy[k], s->atkNew[k], s->atkOld[k], s->defNew[k], s->defOld[k]);   // 2DE0D JSR C2/DE21
   }
 }
-// C2/DD40 via C2/EA81 -- the page params of the list on screen: 8 rows, the last live cell, the scroll range.
+// C2/DD40 via C2/EA81: the page params of the list on screen: 8 rows, the last live cell, the scroll range.
 static void mShopPageFrom(CtMenuShop* s, int n, int first) {                    // C2/EA81, $00 = 8 rows
   int m = n < 8 ? n : 8;                                                         // 2EA93 BCS / STY $00: min(n, 8)
   s->firstCell = first;                                                          // $0DDB
@@ -5589,8 +4995,8 @@ static void mShopSellWindow(CtMenuShop* s, uint8_t* mem) {
   if (s->sellScroll > s->scrollMax) s->sellScroll = s->scrollMax;               // 2DF1C $57 / CMP $1043
   mem[0x0DD9] = mem[0x0D95] = (uint8_t)s->sellScroll;                          // 2DF26
 }
-// C2/DECC -- the SELL list: the bag in slot order, skipping id 0, ids >= $F2 and every id whose $7700 has bit 2
-// (accessories, key items and a handful of others). $5700,Y is stored BEFORE the skip test, as the ROM does.
+// C2/DECC: the sell list. The bag in slot order, skipping id 0, ids >= $F2 and every id whose $7700 has bit 2
+// (accessories, key items and a few others). $5700,Y is stored before the skip test, as the ROM does.
 static void mShopSellList(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom, long romLen) {
   memset(s->sellId, 0, 6);
   int y = 0;
@@ -5603,7 +5009,7 @@ static void mShopSellList(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom,
   s->nSell = y; s->sellId[y] = 0;
 }
 
-static void mShopNavLoad(CtMenuShop* s, const uint8_t* rom, long romLen, long rec);   // (below, beside the graph step)
+static void mShopNavLoad(CtMenuShop* s, const uint8_t* rom, long romLen, long rec);   // (below, with the graph step)
 void CtMenuShopOpen(CtMenuShop* s, const uint8_t* mem, const uint8_t* glb, const uint8_t* rom, long romLen, int shopNo) {
   if (!s) return;
   memset(s, 0, sizeof *s);
@@ -5649,25 +5055,25 @@ void CtMenuShopOpen(CtMenuShop* s, const uint8_t* mem, const uint8_t* glb, const
   if (mem) mShopBox(s, mem, rom, romLen);                                        //  JSR C2/DD7C
   s->curMax1 = 0;                                                                // STZ $04CA
   s->arrowRun = 1;                                                               // C2/8A98's task, $E0 = 2
-  s->arrowOn = 0; s->arrowCtr = 0;                                               // measured: $0DA0 = $0DA3 = 0
-  s->d0b = 0xFF;                                                                 // measured on the open: $0D0A/$0D0B = FFFF
+  s->arrowOn = 0; s->arrowCtr = 0;                                               // $0DA0 = $0DA3 = 0
+  s->d0b = 0xFF;                                                                 // on the open: $0D0A/$0D0B = FFFF
   s->upQ |= SHOP_UP_FBCE;                                                        // C2/DB7F LDX #FBCE / JSR C2/8385
   mShopNmi(s);
 }
 
-// C2/8B69: the blink, run by the ▼ task while $E0 != 0 -- 8 frames per phase, drawn when $0DA0 bit0 = 0.
+// C2/8B69: the blink, run by the down-arrow task while $E0 != 0: 8 frames per phase, drawn when $0DA0 bit 0 = 0.
 static void mShopArrowTick(CtMenuShop* s) {
   if (!s->arrowRun) return;
   s->arrowCtr = (s->arrowCtr & 7) - 1;                                           // TRB $0DA3 (F8) / DEC
   if (s->arrowCtr < 0) { s->arrowCtr = 0xFF; s->arrowOn ^= 1; }                  // BPL / EOR #01
-  // arrowOn holds $0DA0 bit0: 1 = HIDDEN (the task skips its OAM write on BCS)
+  // arrowOn holds $0DA0 bit 0: 1 = hidden (the task skips its OAM write on BCS)
 }
-// C2/E9E2 (inside C2/E984, the head of EVERY handler): $81 = $54, then one step over the node graph $9380 (s->nav,
-// 6 bytes per cell: x, y, up, dn, lf, rt). The LOWEST set bit of the d-pad's new presses picks the byte (Right, Left,
-// Down, Up = +5, +4, +3, +2); $54 = that byte & 0x7F, and bit7 is an EDGE ($5A bit7: the byte names the cell itself).
-// The shop's graph ($FF:B63E): cells 0-7 the list rows (0x80 / 0x87 at the ends), 8/9 Buy/Sell, 10 the quantity, 11 the
-// ▼, 12-18 the party row; the equip sub-mode's ($FF:B6B1): 0-3 the gear rows (wrapping), 4-11 the candidate list
-// (0x84 / 0x8B). Returns 1 on an edge.
+// C2/E9E2 (inside C2/E984, the head of every handler): $81 = $54, then one step over the node graph $9380 (s->nav, 6
+// bytes per cell: x, y, up, dn, lf, rt). The lowest set bit of the d-pad's new presses picks the byte (Right, Left,
+// Down, Up = +5, +4, +3, +2); $54 = that byte & 0x7F, and bit 7 marks an edge ($5A bit 7: the byte names the cell
+// itself). The shop's graph ($FF:B63E): cells 0-7 the list rows (0x80 / 0x87 at the ends), 8/9 Buy/Sell, 10 the
+// quantity, 11 the down arrow, 12-18 the party row; the equip sub-mode's ($FF:B6B1): 0-3 the gear rows (wrapping),
+// 4-11 the candidate list (0x84 / 0x8B). Returns 1 on an edge.
 static int mShopGraphStep(CtMenuShop* s, const CtMenuShopIn* in) {
   s->prevCell = s->cell;                                                         // 2E9E7 STA $81
   int b = in->right ? 5 : in->left ? 4 : in->down ? 3 : in->up ? 2 : -1;        // 2E9F4 LSR / BCS: the lowest bit
@@ -5676,15 +5082,15 @@ static int mShopGraphStep(CtMenuShop* s, const CtMenuShopIn* in) {
   s->cell = v & 0x7F;                                                            // 2EA48 STA $54 / TRB $54
   return (v & 0x80) ? 1 : 0;                                                     // 2EA4C TSB $5A
 }
-// $FF:B63D / $FF:B6B0 -- a node-graph record: a byte count, then the cells (C2/ED31's `0E` copy, C2/F364: `DEC A /
-// MVN` = exactly that many bytes over $9380 -- 0x72 = 19 cells, 0x48 = 12 cells, the rest of $9380 untouched).
+// $FF:B63D / $FF:B6B0, a node-graph record: a byte count, then the cells (C2/ED31's `0E` copy, C2/F364: `DEC A / MVN`
+// = that many bytes over $9380: 0x72 = 19 cells, 0x48 = 12 cells, the rest of $9380 untouched).
 static void mShopNavLoad(CtMenuShop* s, const uint8_t* rom, long romLen, long rec) {
   if (!rom || romLen <= rec + 1) return;
   int n = CtRomByte(rom, 0x400000L, (long)(rec));
   for (int i = 0; i < n && i < (int)sizeof s->nav; i++) ((uint8_t*)s->nav)[i] = CtRomByte(rom, 0x400000L, (long)(rec + 1 + i));
 }
-// C2/EA53 on a list: no scroll range -> an edge WRAPS (Down -> $0DDB, Up -> $0DDC) and a cell past the last item
-// returns to $0DDB; a scroll range -> report the edge (the caller scrolls by one row).
+// C2/EA53 on a list: with no scroll range an edge wraps (Down -> $0DDB, Up -> $0DDC) and a cell past the last item
+// returns to $0DDB; with a scroll range the edge is reported (the caller scrolls by one row).
 static int mShopListWrap(CtMenuShop* s, const CtMenuShopIn* in, int edge) {
   if (!s->scrollMax) {                                                           // 2EA53 LDA $57 / BEQ
     if (edge) s->cell = in->down ? s->firstCell : s->lastCell;                   // 2EA6A AND #04
@@ -5708,7 +5114,7 @@ static int mShopPageKey(CtMenuShop* s, const CtMenuShopIn* in, int* scroll) {
   *scroll = a; s->prevCell = 0xFF;                                               // 293FD .. $81 = FF
   return 1;
 }
-// C2/D7F1 / C2/D8D4: the row under the cursor becomes $04C9/$04CA; a NEW row re-runs C2/DD7C; a moved cursor blips.
+// C2/D7F1 / C2/D8D4: the row under the cursor becomes $04C9/$04CA; a new row re-runs C2/DD7C; a moved cursor blips.
 static void mShopRowUpdate(CtMenuShop* s, const uint8_t* mem, const uint8_t* rom, long romLen, CtMenuShopOut* o, int sell) {
   int x = (s->cell + (sell ? s->sellScroll : s->buyScroll)) & 0xFF;
   if (sell) { s->sellRow = s->cell; s->curMax1 = s->sellCnt[x]; s->curId = s->sellId[x]; }
@@ -5728,7 +5134,7 @@ static void mShopEdgeScroll(CtMenuShop* s, const CtMenuShopIn* in, CtMenuShopOut
   s->sbPos = *sc;                                                                // 2D863 / 2D946 STA $0D95
   mShopSfx(o, 0x00);                                                             // 2D878 JSR C2/EAC2
 }
-// C2/DA01 -- the quantity picker (table C2/DA35 = Right, Left, Down, Up). bound = $04CA = max + 1.
+// C2/DA01: the quantity picker (table C2/DA35 = Right, Left, Down, Up). bound = $04CA = max + 1.
 static void mShopPicker(CtMenuShop* s, const CtMenuShopIn* in, CtMenuShopOut* o) {
   int q0 = s->qty, q = s->qty, b = s->curMax1;
   if (in->right)     { if (q + 1 < b) q = q + 1; }                               // DA3D
@@ -5741,10 +5147,10 @@ static void mShopPicker(CtMenuShop* s, const CtMenuShopIn* in, CtMenuShopOut* o)
   if (q != q0) mShopSfx(o, 0x00);                                                // C2/DA1E: $04CB != $83
 }
 
-// ---- THE EQUIP SUB-MODE (substates 6-8) ----------------------------------------------------------------------------
-// The string writer C2/EF65 -> C2/EF97 into the BG1 buffer: glyph + the attr byte $7E; an FF glyph (a blank) also goes to
-// the cell ABOVE while $88 bit7 is clear. $7E is 0 on every path here (measured on each equip state: A59A's $7D = 2000 is
-// undone by its own STZ $7D), so these rows carry attr 0 and the palette code 06 sets.
+// ---- The equip sub-mode (substates 6-8) ----
+// The string writer C2/EF65 -> C2/EF97 into the BG1 buffer: glyph + the attr byte $7E; an FF glyph (a blank) also goes
+// to the cell above while $88 bit 7 is clear. $7E is 0 on every path here (A59A's $7D = 2000 is undone by its own STZ
+// $7D), so these rows carry attr 0 and the palette code 06 sets.
 static void mShopGlyph(CtMenuShop* s, int* pos, int c, int attr, int flag88) {
   int row = *pos / 32, col = *pos % 32;
   if (!(flag88 & 0x80) && c == 0xFF) mShopB1(s, row - 1, col, (attr << 8) | 0xFF);   // 2EFA5 STA $7DFFC0,X
@@ -5811,7 +5217,7 @@ static void mShopGearRows(CtMenuShop* s, const uint8_t* rom, long romLen) {
     for (int k = 0; k < 11; k++) mShopGlyph(s, &pos, (rom && rec + k < romLen) ? CtRomByte(rom, 0x400000L, (long)(rec + k)) : 0xFF, 0, 0x0B);
   }
 }
-// C2/A3ED X=3624: rows 32+2i / 33+2i, eleven cells from column 18 -- attr 00 on the gear row $0077, 1C on the others.
+// C2/A3ED X=3624: rows 32+2i / 33+2i, eleven cells from column 18; attr 00 on the gear row $0077, 1C on the others.
 static void mShopGearHi(CtMenuShop* s) {
   for (int i = 0; i < 4; i++)
     for (int r = 0; r < 2; r++)
@@ -5930,9 +5336,10 @@ static void mShopEquipBack8(CtMenuShop* s, const uint8_t* mem, const uint8_t* ro
   s->sub = 7; s->cell = s->slot;
 }
 // C2/9F05, the list cursor: L/R pages (C2/93BF), a wrap or a scroll by one row past an edge (C2/EA53), refused at the
-// first row and past the last candidate -- with C2/EB9B's one-row slide (shop_screen.md section 15; the loop in CtMenuShopFrame).
+// first row and past the last candidate, with C2/EB9B's one-row slide (shop_screen.md sec. 15; the loop is in
+// CtMenuShopFrame).
 static int mShopPageKey(CtMenuShop* s, const CtMenuShopIn* in, int* scroll);
-// C2/A59A into slot 8 ($53C6: BG3 row 23): the row coming in during a slide -- candidate `i`.
+// C2/A59A into slot 8 ($53C6: BG3 row 23): the row coming in during a slide, candidate `i`.
 static void mShopEqRow8(CtMenuShop* s, const uint8_t* rom, long romLen, int i) {
   int id = (i >= 0 && i < 0xF3) ? s->eqCand[i] : 0;
   for (int k = 0; k < 10; k++) {
@@ -6018,7 +5425,7 @@ void CtMenuShopFrame(CtMenuShop* s, uint8_t* mem, const uint8_t* glb, const uint
     mShopNmi(s);
     return;
   }
-  // C2/D82B's loop (C2/D880): one C2/EB1F step a frame and a yield -- no input; the fourth step leaves it (C2/D995 shifts
+  // C2/D82B's loop (C2/D880): one C2/EB1F step a frame and a yield, no input; the fourth step leaves it (C2/D995 shifts
   // the buffer a slot, $9694 = $9710) and the handler goes on into C2/D7F1: the row, the description, the box.
   if (s->eqSlideStep > 0) {                                                      // C2/9F90's loop in the equip list
     int dir = s->eqSlideO > 0 ? 1 : -1;
@@ -6052,17 +5459,17 @@ void CtMenuShopFrame(CtMenuShop* s, uint8_t* mem, const uint8_t* glb, const uint
   s->d17 = s->sub;
   mShopFrameSub(s, mem, rom, romLen, in, o);
   // B on Buy/Sell (o->close): C2/D553 BVS -> C2/D588 JMP C2/82B2 -> `LDA #FF / JSR C2/8255`, which zeroes the status
-  // byte $B0,X of all eight slots before the scan (C2/81CF-81E1) reaches the ones after slot 1 -- the blink and the
-  // string task do not step on the B frame. MEASURED (logical oracle, shopsell's close at f591): $00E0 = 00 by C2:8263,
-  // $0DA0 / $0DA3 unchanged (01 / 00) through the fade-out -- the step that frame would have toggled the arrow.
+  // byte $B0,X of all eight slots before the scan (C2/81CF-81E1) reaches the ones after slot 1, so the blink and the
+  // string task do not step on the B frame.
   if (!o->close) {
     mShopArrowTick(s);                                                           // task slot 6 runs after slot 1:
     mShopDescTick(s);                                                            //   a STZ $E0 this frame stops it now;
   }
   mShopNmi(s);                                                                   // task slot 8
 }
-// The frame C2/D52B spawns the ▼ task (C2/8A98, just before C2/83B2 spawns the fade-in = the shell's P): the scheduler
-// reaches slot 6 after slot 1 in that same frame, so the blink's first step is P's, a frame before the first handler call.
+// The frame C2/D52B spawns the down-arrow task (C2/8A98, just before C2/83B2 spawns the fade-in = the shell's P): the
+// scheduler reaches slot 6 after slot 1 in that same frame, so the blink's first step is P's, a frame before the first
+// handler call.
 void CtMenuShopSpawnFrame(CtMenuShop* s) {
   if (s) mShopArrowTick(s);
 }
@@ -6070,7 +5477,7 @@ void CtMenuShopSpawnFrame(CtMenuShop* s) {
 static void mShopFrameSub(CtMenuShop* s, uint8_t* mem, const uint8_t* rom, long romLen, const CtMenuShopIn* in,
                           CtMenuShopOut* o) {
   switch (s->sub) {
-    case 1: {                                                                    // C2/D546 -- Buy / Sell
+    case 1: {                                                                    // C2/D546: Buy / Sell
       mem[0x0D75] = 1;                                                           // 2D546 LDA #01 / STA $0D75
       mShopGraphStep(s, in);                                                     // C2/E984 -> C2/E9E2 (L/R: 8 <-> 9)
       if (in->a) {                                                               // 2D551 BMI
@@ -6182,7 +5589,7 @@ static void mShopFrameSub(CtMenuShop* s, uint8_t* mem, const uint8_t* rom, long 
       int sell = (s->sub == 4);
       if (in->a) {
         if (!sell) {                                                             // C2/D62A
-          CtMenuInvAdd(mem, s->curId, s->qty);                                   // C2/8791 (FULL is ignored)
+          CtMenuInvAdd(mem, s->curId, s->qty);                                   // C2/8791 (the "full" return is ignored)
           mShopGoldSub(mem, s->total);                                           // C2/FDBB
           mShopOwned(s, mem);                                                    // C2/DCDA
         } else {                                                                 // C2/D6A2
@@ -6202,7 +5609,7 @@ static void mShopFrameSub(CtMenuShop* s, uint8_t* mem, const uint8_t* rom, long 
       }
       return;
     }
-    case 6: {                                                                    // C2/D6C3 -- the party row
+    case 6: {                                                                    // C2/D6C3: the party row
       mShopGraphStep(s, in);                                                     // L/R along cells 12.. (wrap at $85)
       if (in->a) {                                                               // 2D6DD
         mShopSfx(o, 0x00);
@@ -6225,7 +5632,7 @@ static void mShopFrameSub(CtMenuShop* s, uint8_t* mem, const uint8_t* rom, long 
       if (s->cell != s->prevCell) mShopSfx(o, 0x00);                             // 2D6D3 CMP $54 / JSR C2/EAC2
       return;
     }
-    case 7: {                                                                    // C2/D715 -- the gear rows
+    case 7: {                                                                    // C2/D715: the gear rows
       mShopGraphStep(s, in);
       if (in->a) {                                                               // 2D72F
         s->cell = s->prevCell;                                                   // $54 = $81
@@ -6251,7 +5658,7 @@ static void mShopFrameSub(CtMenuShop* s, uint8_t* mem, const uint8_t* rom, long 
       if (s->cell != s->prevCell) mShopSfx(o, 0x00);
       return;
     }
-    case 8: {                                                                    // C2/D778 -- the candidate list
+    case 8: {                                                                    // C2/D778: the candidate list
       int edge = mShopGraphStep(s, in);
       if (in->a) {                                                               // 2D792: the commit, then C2/D7BB
         mShopEquipCommit(s, mem, rom, romLen, o);
@@ -6268,13 +5675,12 @@ static void mShopFrameSub(CtMenuShop* s, uint8_t* mem, const uint8_t* rom, long 
   }
 }
 
-// ---- THE SHOP'S PICTURE ----------------------------------------------------------------------------
-// BG2 = the captured window chrome (menu_shop.h) under the window-gradient list FF/BC53. BG1 = the ROM's text
-// buffer $7E:2E00 (32x64 words, VRAM $5800), written here at the ROM's own addresses and composed LINE BY LINE
-// the way the PPU shows it (L = the 1-based scanline, our row y = L - 1). The per-line registers come from the six HDMA
-// tables C2:C213 installs from the ROM (`0C` sets a channel, `0E` copies its table, count byte first), and the NMI
-// enables $0D13 & 7F of them (C2/8442): $2F = channels 0/1/2/3/5 on every screen but the equip sub-mode, $55 =
-// channels 0/2/4/6 there (C2/E0D7). Measured with `--hdma` + HDMA_TRACE_BG on both sets:
+// ---- The shop's picture (disasm/notes/shop_screen.md) ----
+// BG2 = the captured window chrome (menu_shop.h) under the window-gradient list FF/BC53. BG1 = the ROM's text buffer
+// $7E:2E00 (32x64 words, VRAM $5800), written at the ROM's addresses and composed line by line as the PPU shows it
+// (L = the 1-based scanline, our row y = L - 1). The per-line registers come from the six HDMA tables C2:C213 installs
+// (`0C` sets a channel, `0E` copies its table, count byte first); the NMI enables $0D13 & 7F of them (C2/8442): $2F =
+// channels 0/1/2/3/5 on every screen but the equip sub-mode, $55 = channels 0/2/4/6 there (C2/E0D7):
 //   * BG1 V scroll: ch1 $FF:B8A4 (L1-48 207, 49-60 499, 61-72 503, 73-84 507, 85-96 -1, 97-108 3, ..., 133-144 15,
 //     145-160 63, 161-176 367, 177- -1 -- the list's 16-line row pairs at a 12-line pitch) or ch4 $FF:B9CA (215, 219,
 //     223, 227, 227, 231, 235, 239 over the same bands: buffer rows 33-47, the gear and stat rows);
@@ -6284,7 +5690,7 @@ static void mShopFrameSub(CtMenuShop* s, uint8_t* mem, const uint8_t* rom, long 
 //   * BG mode 2 on L41-152 (ch5 $FF:BB33, main set only), whose offset-per-tile row (BG3 at V 480 = $5D40..) gives
 //     screen column c the entry c-1: entries 1-11 = 61FF (C2/DB49: STA $5D42 + a 20-byte MVN; the left column shows
 //     buffer line y), entries 13-28 = 216F (C2/DF8C: STA $5D5A + a 30-byte MVN) while the quantity window is up
-//     (C2/DF76; C2/DFCF zeroes them) -- the window is buffer rows 55-61 brought over the list.
+//     (C2/DF76; C2/DFCF zeroes them): the window is buffer rows 55-61 brought over the list.
 #define SHOP_DESC_X 24
 #define SHOP_DESC_Y 20
 #define SHOP_HDMA_BG1V_MAIN  0x3FB8A4L
@@ -6313,7 +5719,7 @@ static void sbPut(ShopBg1* b, int col, int row, int word) {
 static void sbCodes(ShopBg1* b, int col, int row, const uint8_t* codes, int n, int attr) {
   for (int i = 0; i < n; i++) sbPut(b, col + i, row, (attr << 8) | codes[i]);
 }
-// C2/F114: `digits` cells, right-aligned, leading zeros BLANK (the fmt's bit7 is clear in every shop call).
+// C2/F114: `digits` cells, right-aligned, leading zeros blank (the fmt's bit 7 is clear in every shop call).
 static void sbNum(ShopBg1* b, int col, int row, uint32_t v, int digits, int attr) {
   int d[10], n = 0;
   do { d[n++] = (int)(v % 10); v /= 10; } while (v && n < 10);
@@ -6374,9 +5780,9 @@ static int shopBg1V(const CtMenuHost* h, const CtMenuShop* s, int L, int col, in
     if (e >= 1 && e <= 11) return 0x1FF;
     if (qtyOpen && e >= 13 && e <= 28) return 0x16F;                          // C2/DF8F STA $5D5A + MVN 30 B
   }
-  // C2/EB1F's live table over the list's bands (lines 48-143, MEASURED with ct.exe --hdma: 9 lines at +3, bands of 12,
-  // 3 lines of a ninth band at the bottom): row space u = y - 48 + $0DAB -- band k shows slot k's line u - 12k, and the
-  // band past either end is slot 8 (C2/EB9B's extra entries: V7 + 4 below, V0 + 16n - 4 above -- the same buffer lines)
+  // C2/EB1F's live table over the list's bands (lines 48-143: 9 lines at +3, bands of 12, 3 lines of a ninth band at
+  // the bottom): row space u = y - 48 + $0DAB; band k shows slot k's line u - 12k, and the band past either end is slot
+  // 8 (C2/EB9B's extra entries: V7 + 4 below, V0 + 16n - 4 above, the same buffer lines)
   if (s->slideO && !s->equipHdma && L - 1 >= 48 && L - 1 < 144) {
     int u = L - 1 - 48 + s->slideO, k = u >= 0 ? u / 12 : -1, t = u - 12 * k;
     if (k < 0 || k > 7) k = 8;
@@ -6404,7 +5810,7 @@ static void shopCellLine(const CtMenuHost* h, uint8_t* fb, int y, int x0, uint16
     d[0] = P[v][0]; d[1] = P[v][1]; d[2] = P[v][2];
   }
 }
-// prio = the tilemap word's priority bit (bit 13) to draw: mode 1 stacks OBJ prio 2 BETWEEN BG1 prio 0 and prio 1.
+// prio = the tilemap word's priority bit (bit 13) to draw: mode 1 stacks OBJ prio 2 between BG1 prio 0 and prio 1.
 static void shopDrawBg1(const CtMenuHost* h, uint8_t* fb, const CtMenuShop* s, const ShopBg1* b, int qtyOpen, int prio) {
   if (!h->menuFont2bpp) return;
   for (int y = 0; y < MH; y++) {
@@ -6426,9 +5832,9 @@ static void shopDrawBg3(const CtMenuHost* h, uint8_t* fb, const CtMenuShop* s) {
     if (!s->equipHdma && shopHdma(h, SHOP_HDMA_MODE_MAIN, 1, L) == 0x02) continue;
     int line = (L + shopHdma(h, s->equipHdma ? SHOP_HDMA_BG3V_EQUIP : SHOP_HDMA_BG3V_MAIN, 2, L)) & 0x1FF;
     if (s->eqSlideO && s->equipHdma && y >= 48 && y < 144) {                    // C2/EB1F's table over the list's
-      int u = y - 48 + s->eqSlideO, k = u >= 0 ? u / 12 : -1, t = u - 12 * k;   //   bands (MEASURED, shopeqscroll:
-      if (k < 0 || k > 7) k = 8;                                                //   9 lines at 006 .. 3 at 026 before
-      int vk = shopHdma(h, SHOP_HDMA_BG3V_EQUIP, 2, 48 + 12 * (k > 7 ? 7 : k) + 1) + (k > 7 ? 4 : 0);   //   line 144)
+      int u = y - 48 + s->eqSlideO, k = u >= 0 ? u / 12 : -1, t = u - 12 * k;   //   bands (9 lines at 006 .. 3 at
+      if (k < 0 || k > 7) k = 8;                                                //   026 before line 144)
+      int vk = shopHdma(h, SHOP_HDMA_BG3V_EQUIP, 2, 48 + 12 * (k > 7 ? 7 : k) + 1) + (k > 7 ? 4 : 0);
       line = (48 + 12 * k + t + 1 + vk) & 0x1FF;
     }
     int row = line >> 3;
@@ -6436,8 +5842,8 @@ static void shopDrawBg3(const CtMenuHost* h, uint8_t* fb, const CtMenuShop* s) {
     for (int col = 0; col < 32; col++) shopCellLine(h, fb, y, col * 8, s->v3[row][col], line & 7);
   }
 }
-// The hand rides the LIVE node graph $9380 (s->nav: $FF:B63E, or $FF:B6B1 in the gear rows and the list) and is
-// drawn at the node's (x, y), as the Item screen's is.
+// The hand rides the live node graph $9380 (s->nav: $FF:B63E, or $FF:B6B1 in the gear rows and the list) and is drawn
+// at the node's (x, y), as on the Item screen.
 static void shopNode(const CtMenuShop* s, int cell, int* x, int* y) {
   *x = (cell >= 0 && cell < 19) ? s->nav[cell][0] : 0;
   *y = (cell >= 0 && cell < 19) ? s->nav[cell][1] : 0;
@@ -6445,18 +5851,17 @@ static void shopNode(const CtMenuShop* s, int cell, int* x, int* y) {
 
 void CtMenuRenderShop(const CtMenuHost* h, uint8_t* fb, const CtMenuShop* s) {
   if (!h || !fb || !s) return;
-  // the BACKDROP first (CGRAM 0, black): the chrome's map leaves columns 31-32 transparent, and the PPU shows the backdrop
-  // there -- MEASURED (shopscroll): the list's scrollbar arrow reaches x 252, and on its off frames the cartridge shows
-  // black where the port kept the last frame's pixels
+  // The backdrop first (CGRAM 0, black): the chrome's map leaves columns 31-32 transparent, and the PPU shows the
+  // backdrop there (where the list's scrollbar arrow reaches x 252 on its off frames).
   memset(fb, 0, (size_t)MW * MH * 3);
   int bg2v = (0xFF | (s->d0b << 8)) & 0x1FF;                                     // C2/85D6: $0D0A/$0D0B -> $2110
   mChromeTMPal2(fb, bg2v == 0xFF ? ctMenuChromeShopEquipTM : ctMenuChromeShopTM, 2, ctMenuChromePal,
                 mWinGrad(CT_MENU_WINLIST_SHOP));                                 // (line y + 256: map rows 32-59)
   static ShopBg1 b; memset(&b, 0, sizeof b);
-  // C2/DACA's display list $FF:C213 draws string $3C at (3,6): it INCLUDES $36 "Buy  Sell" there, then goes to
-  // (3,9) for the gold {$2C53 fmt 63} + "G", (2,13) "# Owned" and (2,16) "# Equipped". The label is then rewritten
-  // by the list entries: $34 "  Buy    " (C2C1), $35 "  Sell   " (C2CB), $33 " Equip   " (C2D5, the equip sub-mode),
-  // back to $36 (C2B0) -- all at (3,6).
+  // C2/DACA's display list $FF:C213 draws string $3C at (3,6): it includes $36 "Buy  Sell" there, then goes to (3,9)
+  // for the gold {$2C53 fmt 63} + "G", (2,13) "# Owned" and (2,16) "# Equipped". The label is then rewritten by the
+  // list entries: $34 "  Buy    " (C2C1), $35 "  Sell   " (C2CB), $33 " Equip   " (C2D5, the equip sub-mode), back to
+  // $36 (C2B0), all at (3,6).
   sbRomStr(&b, h, s, sbRomStrAddr(h, 0x3C), 3, 6, 0);
   if (s->sub == 2 || s->sub == 5) sbRomStr(&b, h, s, sbRomStrAddr(h, 0x34), 3, 6, 0);
   if (s->sub == 3 || s->sub == 4) sbRomStr(&b, h, s, sbRomStrAddr(h, 0x35), 3, 6, 0);
@@ -6469,7 +5874,7 @@ void CtMenuRenderShop(const CtMenuHost* h, uint8_t* fb, const CtMenuShop* s) {
   // They stay in the buffer under the quantity window, which is how the ROM keeps them.
   int showSell = (s->sub == 3 || s->sub == 4);
   if (s->sub >= 2 && s->sub <= 5) {
-    // during C2/D82B's slide the buffer still holds the OLD window, and the row coming in sits in slot 8 ($335C, C2/DD20)
+    // during C2/D82B's slide the buffer still holds the old window, and the incoming row sits in slot 8 ($335C, C2/DD20)
     int sdir = s->slideO > 0 ? 1 : s->slideO < 0 ? -1 : 0;
     for (int r = 0; r < (sdir ? 9 : 8); r++) {
       int x = r + (sdir ? (showSell ? s->sellScroll : s->buyScroll) : (showSell ? s->shownSellScroll : s->shownBuyScroll)) - sdir;
@@ -6495,11 +5900,11 @@ void CtMenuRenderShop(const CtMenuHost* h, uint8_t* fb, const CtMenuShop* s) {
   }
   // The rows the ROM writes once and reads back, as VRAM holds them (CtMenuShop.v1): row 2 (the "E" markers) and rows
   // 24/25 (the party panel: C2/DC1E's icons, C2/DE21's numbers, C2/EC93's dims), rows 32-47 (the equip sub-mode's gear
-  // and stat rows -- shown only by the equip set's bands).
+  // and stat rows, shown only by the equip set's bands).
   for (int c = 0; c < 32; c++) { b.w[2][c] = s->v1[2][c]; b.w[24][c] = s->v1[24][c]; b.w[25][c] = s->v1[25][c]; }
   for (int r = 32; r < CT_SHOP_BG1_ROWS; r++) for (int c = 0; c < 32; c++) b.w[r][c] = s->v1[r][c];
   shopDrawBg1(h, fb, s, &b, qtyOpen, 0);                                         // BG1 prio 0 (the shield cells)
-  // The DESCRIPTION (C2/F2F3 -> C2/FA49 into the BG3 buffer $4E84; mShopDesc / mShopDescTick): the ROM's stored line
+  // The description (C2/F2F3 -> C2/FA49 into the BG3 buffer $4E84; mShopDesc / mShopDescTick): the ROM's stored line
   // ($CC:2EB1) in the BG3 menu text palette, as many characters as the string task has typed.
   if (s->descCur && s->descN > 0) {
     char desc[48];
@@ -6509,9 +5914,9 @@ void CtMenuRenderShop(const CtMenuHost* h, uint8_t* fb, const CtMenuShop* s) {
       else { mDim = 4; mText(h, fb, desc, SHOP_DESC_X, SHOP_DESC_Y); mDim = 0; }
     }
   }
-  // OBJ prio 2: the party (C2/DC1E: block x = C2/DC74[k] = 0x20 * (k + 1), y = 0xC0; oracle OAM attr 22/24; FF/F628's
-  // halved palette on a dimmed member), then BG1 prio 1 (every text cell, attr 20/21/29/3D) OVER them, then OBJ prio 3:
-  // the hand (attr 30) and the ▼ (B0), then BG3's priority-1 text.
+  // OBJ prio 2: the party (C2/DC1E: block x = C2/DC74[k] = 0x20 * (k + 1), y = 0xC0; OAM attr 22/24; FF/F628's halved
+  // palette on a dimmed member), then BG1 prio 1 (every text cell, attr 20/21/29/3D) over them, then OBJ prio 3: the
+  // hand (attr 30) and the down arrow (B0), then BG3's priority-1 text.
   for (int k = 0; k < s->nRoster && k < 7; k++) {
     int c = s->roster[k] & 7;
     mSprWpn = s->wpnOn ? s->wpnPal[c] : NULL;                                    // C2/F5A7 has run: its weapon colours
@@ -6519,7 +5924,7 @@ void CtMenuRenderShop(const CtMenuHost* h, uint8_t* fb, const CtMenuShop* s) {
     mSprWpn = NULL;
   }
   shopDrawBg1(h, fb, s, &b, qtyOpen, 1);
-  // the lists' scrollbar (C2/8BB8, OAM 30 / 31, priority 3) -- behind the hand and the ▼, the lower OAM entries
+  // the lists' scrollbar (C2/8BB8, OAM 30 / 31, priority 3), behind the hand and the down arrow (lower OAM entries)
   if (s->sbTask) CtMenuRenderScrollbar(h, fb);
   int hx, hy;
   shopNode(s, s->cell, &hx, &hy);

@@ -1,4 +1,4 @@
-// launcher.c - see launcher.h. Windows and Linux (macOS has src/macos_paths.m, Android src/android.c).
+// launcher.c -- see launcher.h. Windows and Linux (macOS has src/macos_paths.m, Android src/android.c).
 #include "launcher.h"
 #include "rom_verify.h"
 #include "assets.h"       // CtAssetsFileRomFree: a ROM-free container needs no dump beside it
@@ -53,7 +53,7 @@ static int romFreeAssets(const char* dir) {
   return CtAssetsFileRomFree(p);
 }
 #ifdef CT_DATAFREE
-static int tablesThere(const char* dir) {          // inside ct_assets.dat (today's setup), or an earlier setup's ct_tables.dat,
+static int tablesThere(const char* dir) {          // inside ct_assets.dat (the current setup), or an earlier ct_tables.dat,
   char p[1200];                                    // made for this build: an older version's data runs the setup again
   snprintf(p, sizeof p, "%sct_assets.dat", dir);
   if (!CtDataPackFileHasTables(p)) snprintf(p, sizeof p, "%sct_tables.dat", dir);
@@ -139,8 +139,8 @@ static int writable(const char* dir) {
   return ok;
 }
 
-// The data folder: CT_DATA_DIR; else the executable's own folder -- the game, its data, the save and the options travel
-// together (the owner's decision, 2026-10-25: no per-user folder). Its first start takes an older version's files.
+// The data folder: CT_DATA_DIR; else the executable's own folder, so the game, its data, the save and the options
+// travel together (no per-user folder). Its first start takes an older version's files.
 static int dataFolder(CtLauncher* L) {
   const char* env = getenv("CT_DATA_DIR");
   if (env && *env) {

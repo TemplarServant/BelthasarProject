@@ -1,4 +1,4 @@
-// widext.c - ct_wide.dat, the Steam release's widescreen margins (widext.h; written by tools/steam_wide.py).
+// widext.c -- ct_wide.dat, the Steam release's widescreen margins (widext.h; written by tools/steam_wide.py).
 #include "widext.h"
 
 #include <stdio.h>
@@ -72,7 +72,7 @@ static void widextLoad(void) {
     if (loc < WIDEXT_LOCATIONS && !g_ext[loc].planes) g_ext[loc] = e;
     else { free(p); free(ids); free(corners); }
   }
-  // the special scenes' images ("SPCL" after the locations: a reader of before stops ahead of them)
+  // the special scenes' images ("SPCL" after the locations, so an older reader stops before them)
   if (o + 8 <= len && !memcmp(d + o, "SPCL", 4)) {
     uint32_t n = rd32(d + o + 4);
     o += 8;

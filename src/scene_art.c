@@ -1,5 +1,6 @@
-// scene_art.c -- THE SCENE ADJUSTMENTS' NEW ART (a mod; scene_art.h). Nothing here runs unless the player turned the option
-// on with the widescreen: the host sets seq_pic.h's g_seqPicArt for the stage, the grading harnesses never do.
+// scene_art.c -- the scene adjustments' new art (a mod; scene_art.h, docs/WIDESCREEN.md "Scene adjustments" and "The Steam
+// release's art for a special scene"). Nothing here runs unless the player turned the option on with the widescreen: the
+// host sets seq_pic.h's g_seqPicArt for the stage, the grading harnesses never do.
 #include "scene_art.h"
 #include "widext.h"
 #include <string.h>
@@ -10,7 +11,7 @@
 typedef struct { int16_t du, dy, su, sy; uint8_t w, h, flip; } CtArtStamp;
 #include "art/entry3_sides.h"
 
-// ENTRY 3. The machine as the field laid it out: 256 x 256 CGRAM indices (0 = see-through) in the field's own columns u. The
+// Entry 3. The machine as the field laid it out: 256 x 256 CGRAM indices (0 = see-through) in the field's own columns u. The
 // stage's BG1 map shows the field's row r one word to the right ((r, c) at display column c + 1; its column 31 at the next
 // row's display column 0); its tiles are 4bpp.
 static uint8_t g_e3Orig[256][256];
@@ -59,12 +60,12 @@ static void entry3Build(const CtSeqPic* p) {
       if (kE3Px[i + 1]) ((uint8_t*)g_e3Art)[n] = (kE3Px[i + 1] & 15) ? kE3Px[i + 1] : 0;
 }
 
-// THE STEAM RELEASE'S ART FOR IT (the Steam margins, a mod: settings.h wideSteamMargins, from the player's ct_wide.dat):
-// the machine's field location 06B (where the story calls `FF 23`) has margins whose cells are tiles that release added
-// for this scene -- its three sheets cgext107_0-2 (pages 2-4): the wings' pointed ends past the machine (plane 2, BG1's
-// low layer), the sky's glow on (plane 0, the field's BG1 rows 3-4 the stage shows through BG2 above line 70) and the
-// planet (plane 3, BG2's: not drawn -- see the planet below). Its column c is the room's metatile column c - x, x = (w - 16) / 2. A cell of the room's own
-// metatiles (the sky's, rows 0-2) is left to the rules below. NULL = not drawn.
+// The Steam release's art for it (the Steam margins, a mod: settings.h wideSteamMargins, from the player's ct_wide.dat):
+// the field location 06B (where the story calls `FF 23`) has margins whose cells are tiles of three sheets cgext107_0-2
+// (pages 2-4): the wings' ends past the machine (plane 2, BG1's low layer), the sky's glow (plane 0, the field's BG1 rows
+// 3-4 the stage shows through BG2 above line 70) and the planet (plane 3: not drawn, see below). Its column c is the
+// room's metatile column c - x, x = (w - 16) / 2. A cell of the room's own metatiles (the sky's, rows 0-2) is left to the
+// rules below. NULL = not drawn.
 static const CtWideExt* g_e3Steam;
 static CtWideExt g_e3SteamExt;
 static int g_e3Own = 1;                                               // the scene adjustments' own art
@@ -88,18 +89,12 @@ static int bandRow(int x, int y) {
   if (b <= 0 && y >= 80) b = steamPx(0, x, y - 16, 0x82);
   return b > 0 ? b : 0;
 }
-// THE ROUND PLANET (the Steam release's art): its glow (plane 0's cells, sheet 0) bends down towards the sides, over the
-// planet; the same cells two pages on (sheet 2) are the air's band under the glow, palette 1's 1-3 -- the stage's own CGRAM
-// 0x11-0x13, the same colours -- ADDED to what lies under it: the Steam picture's light blue under the glow's white line is
-// the band plus the planet, (65,82,115) + (8,56,112) = the screenshot's (73,138,227) -- the owner 2026-10-25: "should
-// be shown correctly", not dropped and not drawn flat. The stage shows the sky's map
-// above line 70 only (HDMA channel 3), so in the sides the bend is laid at the sky's own rows on every line -- the row of
-// line l is l + the sky lines' V scroll -- and the planet shows only below it. Past the art's own columns (a 21:9 side is
-// wider than its 96) the bend goes on (the owner, 2026-10-25: at 21:9 "the atmosphere's curve does not go on"): the glow's
-// lowest row, the middle's and the art's, lies on one curve -- 70 in the middle, 74 at the 256, 78 at 76 columns out --
-// the planet's limb, fitted each frame as Q(x) = q0 + q2 (x - 127.5)^2; past the art's last column whose glow its cells do
-// not cut (from ~80 columns out its lowest rows fall past the cells' and stay at 79: a flat edge) a column is that column
-// lowered by Q(x) - Q(that column).
+// The round planet (WIDESCREEN.md has the full account): the glow (plane 0, sheet 0) bends down towards the sides; the same
+// cells two pages on (sheet 2) are the air's band under it, palette 1's 1-3, added to what lies under it. The stage shows
+// the sky's map above line 70 only, so in the sides the bend is laid at the sky's own rows on every line (row = line + the
+// sky lines' V scroll). Past the art's own columns the bend follows the planet's limb, fitted each frame as
+// Q(x) = q0 + q2 (x - 127.5)^2: past the art's last column whose glow its cells do not cut, a column is that column lowered
+// by Q(x) - Q(that column).
 static int g_e3SkyVofs;
 // The planet's map and V scroll (its lines', below the switch): under the band on a sky line the planet is read as it would
 // lie there, so the band's first row, where the middle's glow ends above line 70, is not the band over the night's black.
@@ -120,11 +115,10 @@ static int horizonIndex(int v) {
   }
   return v;
 }
-// THE GLOW WHOLE (the Steam release shows the field 06B, where the sky's glow -- its map's rows 6-9, y 48-79 -- shows
-// whole, the art's band drawn against it): the stage switches BG2 from the sky's map to the planet's at line 70 (HDMA
-// channel 3), cutting the glow's last rows off, and the art's band at its inner columns ends those rows lower -- a step at
-// the 256. With the sides drawn, the glow's rows go on below the switch line over the planet, the middle's too (the sky's
-// map at its own row: the line plus the sky lines' V scroll), so middle and sides are one band, as on Steam.
+// The glow whole: the stage switches BG2 from the sky's map to the planet's at line 70 (HDMA channel 3), cutting the
+// glow's last rows (map rows 6-9, y 48-79) off, while the Steam art is drawn against the whole glow. With the sides drawn,
+// the glow's rows go on below the switch line over the planet, the middle's too (the sky's map at the line plus the sky
+// lines' V scroll), so middle and sides are one band.
 static int skyMapPixel(const CtSeqPic* p, int col, int ys) {
   const unsigned chr = (unsigned)(p->r[0x0B] >> 4) << 12;
   uint16_t e = p->vram[(0x6000 + (unsigned)(ys >> 3) * 32 + (unsigned)((col >> 3) & 31)) & 0x7FFF];
@@ -132,9 +126,8 @@ static int skyMapPixel(const CtSeqPic* p, int col, int ys) {
   return c ? (int)((e >> 10) & 7) * 16 + c : 0;
 }
 // The glow's index at the side's column x and sky row ys (> 0), 0 = none there, -1 = not a sheet's cell; *band the air's
-// band index there (0 = none), under the glow. The glow's lowest row -- a dark one under its white line -- gives way to
-// the band, which lies under it there too: drawn, it stood as a pixel's gap between the white and the band (the owner,
-// 2026-10-25: "1 pixel extra between the horizon's upper and lower parts").
+// band index there (0 = none), under the glow. The glow's lowest row (a dark one under its white line) gives way to the
+// band, which lies under it there too; drawn, it would leave a pixel's gap between the white and the band.
 static int horizonPx(int x, int ys, int* band) {
   int xe = x, dy = 0;
   if (x < g_e3Clip[0] || x > g_e3Clip[1]) {
@@ -173,19 +166,16 @@ static int glowBottom(int x) {
   return b;
 }
 
-// THE BAND UNDER THE MIDDLE'S GLOW (the owner, 2026-10-25: "the band in the middle too"). The art has no cells over the
-// 256 (the stage draws its own glow there), so the band the art lays under its innermost column's glow -- its rows from
-// that glow's lowest (which gives way to it, as in the sides), 5 of them -- goes on under the middle's glow, from each
-// column's own lowest glow row: the middle's glow bends as the art's does (its lowest row 74 at the edges, 70 in the
-// middle), and at the 256 the two meet, both ending at 74.
+// The band under the middle's glow. The art has no cells over the 256, so the band under its innermost column's glow
+// (5 rows from that glow's lowest) goes on under the middle's glow, from each column's own lowest glow row: the middle's
+// glow bends as the art's does (74 at the edges, 70 in the middle), and the two meet at the 256.
 static uint8_t g_e3Prof[2][8];                                        // (the band's rows under the glow, left / right)
 static int g_e3ProfN[2];
 static int8_t g_e3MidGb[256];                                         // (the middle's lowest glow row, a column; -1 none)
-// THE MIDDLE GLOW'S TOP ON THE CURVE (the owner, 2026-10-25: in the flash "the middle stays straight"). The stage's glow
-// starts at its map's row 6 in every column, while its lowest row bends (74 at the edges, 70 in the middle) and the art's
-// glow keeps one thickness along its bend: in the flash, which whitens the glow's dark top rows, the middle stood as a
-// flat block over the sides' curve. Its rows above the lowest row less the art's thickness (its innermost column's, the
-// sky's rows not counted) are the sky, so its top follows the bottom's curve and meets the art's at the 256.
+// The middle glow's top on the curve. The stage's glow starts at its map's row 6 in every column while its lowest row
+// bends, and the art's glow keeps one thickness; in the flash (which whitens the glow's dark top rows) the middle would
+// stand as a flat block. Its rows above the lowest row less the art's thickness (its innermost column's) are drawn as sky,
+// so its top follows the bottom's curve and meets the art's at the 256.
 static int g_e3Thick[2];
 static void bandProfile(int side, int x) {
   int gb = glowBottom(x), n = 0, top = 48;
@@ -234,11 +224,11 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
     else { g_e3PlanetSc = p->r[0x08]; g_e3PlanetVofs = p->vofs[1]; }
     return -1;
   }
-  // THE SKY: above line 70 BG2 is the field's map $6000 (HDMA channel 3 switches BG2SC $60 -> $6A there), one screen
+  // The sky: above line 70 BG2 is the field's map $6000 (HDMA channel 3 switches BG2SC $60 -> $6A there), one screen
   // wide: the red moon in its rows 0-3, columns 14-22, over tile $101's sky. Past the 256 that map would repeat the moon
   // on both sides; there the sky's rows take the moonless column 0 (the night's own tile).
   // Below, the planet (and the sky's glow): BG2's maps are one screen wide too, so a side shows the screen's own columns
-  // mirrored about its edge -- no seam where the 256 end, where a repeat broke the clouds.
+  // mirrored about its edge, so there is no seam where the 256 end.
   if (layer == 1) {
     int hs = p->hofs[1] & 0x3FF, x;
     if (hs >= 512) hs -= 1024;
@@ -283,9 +273,9 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
   return col < 0 || !g_e3Own ? 0 : g_e3Art[y][col];                // (the adjustments' own art, when on)
 }
 
-// ENTRY 6 (`FF 26`, the Epoch into Lavos's shell). Its BG1 in mode 1 is one screen -- the cockpit's dashboard on the lower
-// lines (the tunnel above them is mode 7, which the art is not asked for), the Epoch in the dive -- so the sides showed the
-// dashboard three times. Past the 256 its BG1 shows nothing but, with the Steam margins on, the Steam release's cockpit walls
+// Entry 6 (`FF 26`, the Epoch into Lavos's shell). Its BG1 in mode 1 is one screen -- the cockpit's dashboard on the lower
+// lines (the tunnel above them is mode 7, which the art is not asked for), the Epoch in the dive -- so the sides would show
+// the dashboard three times. Past the 256 its BG1 shows nothing but, with the Steam margins on, the Steam release's cockpit walls
 // (40_kokscr_ext, halved to the SNES's pixels by tools/steam_wide.py: the left wall its columns 0-95, the right 160-255, rows
 // 96-175, standing on the picture's bottom row beside the dashboard -- their canopy's edge meets the dashboard's at row 168).
 static const uint8_t* g_e6Img;

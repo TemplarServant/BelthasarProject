@@ -1,17 +1,13 @@
-// ============================================================================
 // sound/lockstep.c -- the sound machine against the original on the vendored SPC700 and S-DSP, instruction by
 // instruction (lockstep.h).
 //
-// THE ORIGINAL'S SIDE: four hooks on the vendored core (snes/apu.c) queue what it does as it does it -- each instruction
-// about to run (its address and cycle), each S-DSP write, each read of an S-DSP register, a port or a timer, each write of
-// a port or a control register (the SPC700's dummy read before a store is dropped: the store is the access). The host
-// runs the original first, then the machine to the same time (src/audio.c); the machine's trace and observer take the
-// queue's events in order and every field must be equal. At the run's end the queue is empty, both stopped on the same
-// cycle, the ports equal.
-//
-// A mismatch is reported (the events before it on both sides) and the machine waits for the original's next $0299 to
-// join again with its state, so a run counts every stretch.
-// ============================================================================
+// The original's side: four hooks on the vendored core (snes/apu.c) queue what it does (each instruction about to run,
+// each S-DSP write, each read of an S-DSP register, a port or a timer, each write of a port or a control register; the
+// SPC700's dummy read before a store is dropped). The host runs the original first, then the machine to the same time
+// (src/audio.c); the machine's trace and observer take the queue's events in order and every field must be equal. At
+// the run's end the queue is empty, both stopped on the same cycle, the ports equal.
+// A mismatch is reported (the events before it on both sides) and the machine rejoins with the original's state at its
+// next $0299, so a run counts every stretch.
 #include "sound/lockstep.h"
 #include "sound/machine.h"
 #include "sound/mixer_dsp.h"
@@ -114,7 +110,7 @@ static void sPush(LsS* s, const int16_t* lr, int n, int taint) {
 }
 static void sDrop(LsS* s, long n) { if (n > s->n) n = s->n; s->head += n; s->n -= n; s->first += (uint64_t)n; if (!s->n) s->head = 0; }
 
-// --- the mismatch ----------------------------------------------------------------------------------------------------
+// ---- the mismatch ----
 static void mismatch(LsSession* s, const char* what, const LsEv* v, const LsEv* m) {
   g_mismatch++;
   if (g_details++ < 4) {
@@ -157,7 +153,7 @@ static void cmp(LsSession* s, const LsEv* m) {
   if (v.k == 'O') g_ops++; else g_acc++;
 }
 
-// --- the machine's side ----------------------------------------------------------------------------------------------
+// ---- the machine's side ----
 static void ramCmp(LsSession* s, const uint8_t* a, uint32_t cyc);
 static void mTrace(void* c, uint16_t pc, uint64_t cyc) {
   LsSession* s = (LsSession*)c;
@@ -175,10 +171,9 @@ static void mObs(void* c, char k, uint8_t a, uint8_t v, uint64_t io) {
 }
 // The S-DSP reading the driver's own working RAM (the direct page and page 1, the fades, the queue, the state arrays and
 // the save area at $F15F-$FFFF): a voice's directory entry or BRR block there, or the echo buffer over it. The original
-// driver writes that RAM at its cycles while the S-DSP reads it; the C program writes its state between two marks --
-// the one place the machine is not exact. No game data does it: a voice keyed on an instrument whose sample is not
-// loaded (its directory entry zero: the direct page played as a sample), an echo buffer set over the driver's RAM by a
-// raw S-DSP write (command FD) -- the fuzz's constructed songs and random commands.
+// writes that RAM on its cycles while the S-DSP reads it; the C program writes its state between two marks, so this is
+// the one place the machine is not exact. No game data does it, only the fuzz (a voice keyed on an instrument whose
+// sample is not loaded; an echo buffer moved over the driver's RAM by command FD).
 static int drvRam(unsigned a) { a &= 0xFFFF; return a < 0x200 || a >= 0xF15F; }
 static int dspRam(unsigned a) { return a >= 0x1E00 && a < 0xF15F; }   // the stores compared: the samples' and the directory's
 static void mRamObs(void* c, uint16_t adr, uint8_t v, uint64_t io) {
@@ -261,7 +256,7 @@ static void join(LsSession* s) {
   g_joins++;
 }
 
-// --- the original's side ---------------------------------------------------------------------------------------------
+// ---- the original's side ----
 static void push(LsSession* s, char k, uint8_t a, uint8_t v, uint16_t pc, uint32_t cyc) {
   LsEv e = { k, a, v, pc, cyc };
   qPush(&s->q, e);
@@ -337,7 +332,7 @@ static void writeHook(Apu* apu, uint16_t adr, uint8_t val) {
   else if (adr == 0xF1 || (adr >= 0xFA && adr <= 0xFC)) push(s, 'C', (uint8_t)adr, val, s->curPc, apu->cycles);
 }
 
-// --- the host's points -----------------------------------------------------------------------------------------------
+// ---- the host's points ----
 static void atExit(void) {
   if (!g_reported) CtSndLockstepReport();
   if (g_out) fclose(g_out);

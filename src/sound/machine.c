@@ -18,8 +18,8 @@ static int envVoiceMask(void) {
 }
 static int envKonTrace(void) { static int k = -1; if (k < 0) k = getenv("CT_DSP_KONTRACE") ? 1 : 0; return k; }
 
-// --- the S-DSP: brought up to an access's cycle (apu.c: the S-DSP steps at each cycle divisible by 32, before the
-// access made on the next cycle) ---------------------------------------------------------------------------------------
+// ---- the S-DSP: brought up to an access's cycle ----
+// (apu.c: the S-DSP steps at each cycle divisible by 32, before the access made on the next cycle)
 static void mixTo(SndMachine* m, uint64_t count) {
   int16_t buf[256 * 2];
   while (m->mixed < count) {
@@ -37,7 +37,7 @@ static void mixTo(SndMachine* m, uint64_t count) {
 }
 static void mixToIo(SndMachine* m) { mixTo(m, (m->d.clk.io + 31) / 32); }
 
-// --- the timers: the prescaler steps at the cycles before `upto` (apu.c apu_cycle) ----------------------------------
+// ---- the timers: the prescaler steps at the cycles before `upto` (apu.c apu_cycle) ----
 static void tAdv(SndTimer* t, int i, uint64_t upto) {
   uint64_t per = i == 2 ? 16 : 128;
   if (t->next >= upto) return;
@@ -49,7 +49,7 @@ static void tAdv(SndTimer* t, int i, uint64_t upto) {
   }
 }
 
-// --- the program's outside --------------------------------------------------------------------------------------------
+// ---- the program's outside ----
 #define OBS(k, a, v) do { if (m->obs) m->obs(m->obsCtx, (k), (uint8_t)(a), (uint8_t)(v), m->d.clk.io); } while (0)
 static void hDspWrite(void* c, uint8_t reg, uint8_t val) {
   SndMachine* m = (SndMachine*)c;
@@ -110,7 +110,7 @@ static void hStuck(void* c) {   // nothing more runs: the time passes
 
 static void progMain(void* p) { SndDrvProgram(&((SndMachine*)p)->d); }
 
-// --- the savestate's restore point and record (machine.h SndRestore) -------------------------------------------------
+// ---- the savestate's restore point and record (machine.h SndRestore) ----
 static void logPush(SndMachine* m, uint8_t kind, uint64_t t, uint8_t k, uint8_t v) {
   if (m->logN == m->logCap) {
     long cap = m->logCap ? m->logCap * 2 : 256;

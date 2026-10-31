@@ -1,21 +1,15 @@
-// seq_entry6.c -- SEQUENCE ENTRY 6 (`FF 26`), native: the Epoch flies into Lavos's shell.
+// seq_entry6.c -- sequence entry 6 (`FF 26`): the Epoch flies into Lavos's shell.
 //
-// Scene 432 (loc 1B0, the Epoch's cockpit; the time gauge's 1999 A.D. from the world map) -- obj10's question, and with
-// glb[186] bit 7 (`16 BA 80 06`) obj11 fn3: the party's lines, `CHANGELOC 1DA` staged, `FF 26`. The teardown reboots into
-// 1DA, Lavos's outer shell (disasm/notes/sequence_table.md sec. 17). The setup $7E:78DD puts page A at $7C73 and page B at
-// $7CF3; page B drives it all: the dive (page A's r0-r2 from the tasks $7F35 / $7F12), the swap of the task list ($7EE8 /
-// $7ED1 copy one from $D2:0000 and the overlay's tables), the hooks that reset page A's registers ($7A35 / $79F8), page B's
-// r6 from the divide $32E2 ($8205 -> $7FC4), the palette records ($82F5, $831F), the SPC's marker (`F5 04`) and the END
-// ($34E3).
-//
-// Stage 1 of the native port (as seq_entry4.c): the logic over the WRAM image, byte for byte with the cartridge. The picture
-// is stage 2: the setup's packets and tables, mode 7 ($8278 on the main thread, $824A, $81C4, $82D1's $357B), the Epoch's
-// shake, the lightning and the sprites ($7F7D, $8079, $835B, $7FCB, $7BF2, $7F58) -- the shake's and the lightning's draws
-// call C3/02DD with A 16 bits wide, whose `CMP $2137` / `SBC $213D` read $2138 (OAM data) and $213E as words: PPU state the
-// stage-1 port does not hold. Nothing the logic reads comes from them (page B's r5 and $0386 are theirs alone).
+// Scene 432 (loc 1B0); the teardown reboots into 1DA, Lavos's outer shell (disasm/notes/sequence_table.md sec. 17). Page B
+// ($7CF3) drives it all: the dive, the task-list swaps ($7EE8 / $7ED1), the hooks that reset page A ($7A35 / $79F8), the
+// divide $32E2, the palette records, the SPC's marker (`F5 04`) and the END ($34E3).
+// This file is the logic over the WRAM image. The picture is seq_entry6pic.c: the setup's packets and
+// tables, mode 7 ($8278 on the main thread, $824A, $81C4, $82D1's $357B), the Epoch's shake, the lightning and the sprites
+// ($7F7D, $8079, $835B, $7FCB, $7BF2, $7F58). The shake's and the lightning's draws call C3/02DD with a 16-bit A, which
+// reads PPU state ($2138, $213E); nothing the logic reads comes from them (page B's r5 and $0386 are theirs alone).
 #include "seq_entry6.h"
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
-#include "seq_entry6pic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_entry6pic.h"   // the picture, when the host draws it (io->pic)
 #include "seq_racepic.h"
 #include "objslot.h"
 #include <string.h>
@@ -25,9 +19,8 @@ static void wr(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v
 
 int CtEntry6StageHas(uint8_t operand) { return (operand & 0x1F) == 6 && !(operand & 0x40); }
 
-// MEASURED: `CT_CALLROM_NONMI=1 ct.exe --callrom 7E78DD --pokewram 0384=26 --regdb 00 --m8 --x16` from the cartridge inside
-// the opening (saves/lavos_re/ff26_pre_f2760.state + 26 frames: the overlay whole in WRAM): 199528 ops, 5216178 cycles
-// (152960 of them refresh) -- the packets and the mode-7 tables above all.
+// The setup's cycles, from `CT_CALLROM_NONMI=1 ct.exe --callrom 7E78DD --pokewram 0384=26 --regdb 00 --m8 --x16` on a
+// state inside the opening with the overlay in WRAM: the packets and the mode-7 tables above all.
 long CtEntry6StageSetupCycles(void) { return 5216178L; }
 
 static int s_songHold;

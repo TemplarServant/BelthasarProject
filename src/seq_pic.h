@@ -1,15 +1,11 @@
-// seq_pic.h -- THE SEQUENCE STAGES' PICTURE, native (the user's decision, 2026-10-17: a native compositor, not the vendored
-// PPU -- src/seq_ppu.c stays for the translated attract stages until they go native too).
+// seq_pic.h -- the sequence stages' picture: a native compositor rather than the vendored PPU (src/seq_ppu.c remains for
+// the translated stages). disasm/notes/seq_picture.md.
 //
-// A $C3 sequence stage draws by writing the display registers ($2100-$213F) in its NMI and per scanline through HDMA, and by
-// filling VRAM, CGRAM and OAM. Its native port fills a CtSeqPic the same way -- the arrays directly, the registers through
-// CtSeqPicWrite with the hardware's latches (the scroll and mode-7 pairs, COLDATA's channel bits) -- and CtSeqPicFrame draws
-// the frame a line at a time: the HDMA tables (walked as the hardware walks them) rewrite the registers between the lines,
-// and each line is composed from what they hold then. What a line shows is the PPU's: snes/ppu.c is the oracle's PPU and
-// the picture it draws is the truth, so the composition follows its rules (layer order by mode, the 2/4/8 bpp fetch, the
-// offset-per-tile modes, mode 7's start and step, the windows, the colour math and its half, the sprites' 32 / 34 limits) --
-// written here over the register bytes, with no bus, no ports and no clock.
-// disasm/notes/seq_picture.md.
+// A $C3 stage draws by writing the display registers ($2100-$213F) in its NMI and per line through HDMA, and by filling
+// VRAM, CGRAM and OAM. Its port fills a CtSeqPic the same way (the arrays directly, the registers through CtSeqPicWrite
+// with the hardware's latches), and CtSeqPicFrame draws a line at a time, the HDMA tables rewriting the registers between
+// lines. The composition follows snes/ppu.c, the oracle's PPU (layer order by mode, 2/4/8 bpp, offset per tile, mode 7,
+// windows, colour math, the sprites' 32 / 34 limits), over the register bytes with no bus and no clock.
 #ifndef CT_SEQ_PIC_H
 #define CT_SEQ_PIC_H
 
@@ -54,24 +50,24 @@ uint8_t CtSeqPicReg(CtSeqPic* p, uint8_t adr);
 // The frame: the HDMA's init and first transfer, then lines 1..224 each drawn and followed by its HDMA transfer. rgb is
 // 256 x 224 RGB888 (may be NULL).
 void CtSeqPicFrame(CtSeqPic* p, const CtSeqPicHdma ch[8], uint8_t hdmaen, CtSeqPicRead rd, void* ctx, uint8_t* rgb);
-// THE PORT'S WIDESCREEN (a host mod, src/settings.h; never set by a grading harness): g_seqPicWideSide > 0 draws that many
+// The widescreen (a host mod, src/settings.h; never set by a grading harness): g_seqPicWideSide > 0 draws that many
 // columns each side of the 256 into g_seqPicWideOut (RGB, 256 + 2 * side wide, row = line - 1; its middle is left to the
 // caller), as snes/ppu.c's g_ppuWideSide does for the vendored PPU: the layers at their own place past the screen's edge (BG
 // at x + scroll, mode 7 along its matrix), no sprite of their own, and every window read as ppu.c's ppu_winTest reads it
 // while the sides are drawn (a curtain crosses the whole picture). 0 = the hardware's picture, byte for byte.
 extern int g_seqPicWideSide;
-// The layers (bit n = BG n+1) the sides leave out: a stage's SCENE layer, whose map is one screen wide, would show the same
+// The layers (bit n = BG n+1) the sides leave out: a stage's scene layer, whose map is one screen wide, would show the same
 // picture again past each edge (entry 3's BG1, the machinery over the ocean, BG1SC 00) -- a background layer runs on.
 extern int g_seqPicWideSkip;
 // ... in the BG modes whose bits are set (bit n = mode n), 0 = in every mode: a stage whose phases change mode (the endings:
 // the world in mode 7 and the clouds in mode 1 go on into the sides, the planet and the credits in mode 4 do not).
 extern int g_seqPicWideSkipModes;
 extern uint8_t* g_seqPicWideOut;
-// Sprites only on the SUB screen as a texture laid over the picture (snes/ppu.c's gate warp tunnel): 1 = the sides take the
+// Sprites only on the sub screen as a texture laid over the picture (snes/ppu.c's gate warp tunnel): 1 = the sides take the
 // screen's pattern, 256 columns along. 0 (every native stage: their sub-screen sprites are text and objects -- the endings'
-// credits and "The End", entry 7's line -- which stood three times): no sprite past the 256.
+// credits and "The End", entry 7's line -- which would appear three times): no sprite past the 256.
 extern int g_seqPicWideSubTexture;
-// A SCENE'S NEW ART PAST ITS EDGE (the scene adjustments, a mod: scene_art.h; never set by a grading harness): while the sides
+// A scene's new art past its edge (the scene adjustments, a mod: scene_art.h; never set by a grading harness): while the sides
 // are drawn, a BG layer's pixel (modes 0-4) is asked of g_seqPicArt first, at the layer's own place before it wraps -- mx = x
 // + its H scroll as a signed 10-bit value, my = y + its V scroll (0-1023), the mosaic applied -- and pri the pass's priority.
 // It returns a CGRAM index (0 = nothing there at that priority), 0x10000 | a BGR15 colour (art of its own colours, still under
@@ -81,7 +77,7 @@ extern int g_seqPicWideSubTexture;
 typedef int (*CtSeqPicArtFn)(const CtSeqPic* p, int layer, int* mx, int my, int pri);
 extern CtSeqPicArtFn g_seqPicArt;
 
-// A STAGE's picture: the compositor's state plus what the stage's code sets around it -- the HDMA channels it programmed, HDMAEN,
+// A stage's picture: the compositor's state plus what the stage's code sets around it -- the HDMA channels it programmed, HDMAEN,
 // and the data ports' addresses ($2116 / $2115 VRAM, $2121 CGRAM) its DMAs go through.
 typedef struct CtSeqStagePic {
   CtSeqPic p;

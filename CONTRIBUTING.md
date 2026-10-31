@@ -85,12 +85,33 @@ run the full suite. Any cached oracle output, including your own tools' caches, 
   you are in.
 - **Cite the ROM in comments.** A block that ports a routine names it in bank/address form (`C0/5A46`, `CD/0340`)
   and, where one exists, the dossier (`disasm/notes/field_tick.md`). State what RAM it reads and writes.
+- **Keep comments short and useful.** See [Comments](#comments) below.
 - **Keep ROM state in ROM addresses.** When the ROM keeps something in work RAM, the engine keeps it in the same WRAM
   byte, not in a host-side copy that can drift.
 - **English is the project's language** for code, comments, notes and tool output (preferred, not enforced).
 - **Commit messages** start with the area (`field:`, `battle:`, `menu:`, `world:`, `audio:`, `regress:`, `notes:`,
   `tools:`, `frontend:`) and say what the game does now, for example:
   `field VM: op 0xDA with no follower ends the visit (C0/3463 INX / CLC)`.
+
+### Comments
+
+A comment is for the next person who changes the code. It says what the code cannot say by itself: which ROM routine
+a block ports, a non-obvious quirk the port must keep, a contract the caller relies on.
+
+- **Cite the ROM.** Name the routine a function ports (`C0/9AD3`) and, on lines that mirror single instructions, the
+  instruction address (`// 9AED`). These references are what let a reviewer check the port against the disassembly.
+- **Explain why, not what.** `x = (x - 2) & 0xFF;` needs no comment; a carry that the ROM inherits from an earlier
+  `CPX` does.
+- **No history.** Leave out what the code used to do, when or how a bug was found, dates, test tallies and quotes.
+  That belongs in the commit message and in `disasm/notes/`.
+- **Long derivations go to a dossier.** If an explanation runs past about eight lines (a disassembly trace, a table of
+  measurements, a case analysis), put it in the relevant `disasm/notes/*.md` and leave a one-line pointer, for
+  example `// Tie-break and gates: disasm/notes/battle_ai_interp.md sec. 2.`
+- **Plain ASCII, plain tone.** No emoji or decorative symbols, no capitals for emphasis, no banners. Write `sec.`
+  for a section and `->` for an arrow. Prefix a real hazard with `Note:` and keep it to one or two sentences.
+- **File headers** say in a few lines what the module is, which ROM routines it ports and which dossier describes
+  them. Usage text belongs in `--help` output and `docs/DEBUG_SURFACE.md`.
+- **Declarations in headers** describe the contract: arguments, return value, side effects on WRAM.
 
 ## Reporting a divergence
 

@@ -1,4 +1,4 @@
-// ct_shadow.c — see ct_shadow.h and docs/SHADOW_PROPOSAL.md.
+// ct_shadow.c -- the routine-level shadow; see ct_shadow.h and docs/SHADOW_PROPOSAL.md.
 #include <stdlib.h>
 #include "romview.h"
 #include <string.h>
@@ -20,11 +20,9 @@
 
 // ---- The registry ----------------------------------------------------------------------------------------------
 
-// C1/AF22, THE BATTLE RNG (battle.c battleRngBase; --sweeprng grades it offline). Entered `JSR C1/AF22` with A 8-bit
-// = the count and X = the base (AF22 SEP #10 / STX $25: only X's low byte is read). Its direct-page bytes are the
-// battle's, D = 0, and its absolutes ($B31E, $2989) are bank $7E's: the C function's convention.
-//   AF73 REP #10 / AF75 PLX / AF76 STX $2C / AF78 RTS -- X comes back 16-bit holding the $2C AF28 saved, and A's low
-//   byte holds the draw.
+// C1/AF22, the battle RNG (battle.c battleRngBase; --sweeprng). Entered `JSR C1/AF22` with A 8-bit = the count and
+// X = the base (AF22 SEP #10 / STX $25: only X's low byte is read); D = 0, absolutes ($B31E, $2989) in bank $7E.
+// AF73 REP #10 / PLX / STX $2C / RTS: X comes back 16-bit holding the $2C saved at AF28; A's low byte is the draw.
 static int rngGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) { (void)e; (void)w; return in->dp == 0x0000 && in->db == 0x7E; }
 static int rngRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                   CtShadowRegs* out) {
@@ -35,17 +33,13 @@ static int rngRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long r
   return CT_SH_RETURNS;
 }
 
-// THE FIELD-SCRIPT OPCODE HANDLERS (move.c g_ctVmOps, CtFieldRunnerOne; --sweepops grades them offline). The runner
-// C0/5A93 latches the object index (5A9C `STX $6D`, DP = $0100 -> $016D), then reaches the handler through
-// `5AAA AND #00FF / 5AAD ASL A / 5AAE TAX / 5AB1 JSR ($5D6E,X)`: D = $0100, X = the opcode doubled, Y = the IP of
-// the opcode byte at $7F:2001+Y. The handler hands back the new IP in X (committed at 5ABF) and the carry (1 = keep
-// spending the visit, 0 = yield, tested at 5AB4). The guard asks that X carry THIS handler's opcode and that the byte
-// at the IP be it: some handlers are also subroutines of others with the same X and Y (op B6 at C0/354F runs op 95's
-// body at C0/5410, op B5 op 94's at C0/5215), and such a call is part of the caller's handler, graded at its entry,
-// not this one's -- it is skipped rather than graded under the wrong convention.
-// C3/0002's workspace ($0308-$0316), which --sweepops excludes because ct_lz_decompress keeps none of the ROM's scratch,
-// is not excluded here: the liveness watch measures it dead on the live calls (ops 82 / 83 on the attract: every
-// differing byte rewritten by the cartridge before any read).
+// The field-script opcode handlers (move.c g_ctVmOps, CtFieldRunnerOne; --sweepops). The runner C0/5A93 latches the
+// object index (5A9C `STX $6D` -> $016D), then `5AAA AND #00FF / ASL A / TAX / JSR ($5D6E,X)`: D = $0100, X = the
+// opcode doubled, Y = the IP of the opcode byte at $7F:2001+Y. The handler returns the new IP in X (committed at
+// 5ABF) and the carry (1 = keep spending the visit, 0 = yield; 5AB4). The guard requires that X and the byte at the
+// IP both be this handler's opcode: some handlers are subroutines of others with the same X and Y (op B6 at C0/354F
+// runs op 95's body at C0/5410, op B5 op 94's at C0/5215), and those calls belong to the caller's grade.
+// C3/0002's workspace ($0308-$0316) is not excluded here: the liveness watch finds it dead on the live calls.
 static int vmGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   return in->dp == 0x0100 && in->x == e->arg * 2 && in->y < 0xDFFF && w[0x12001 + in->y] == e->arg;
 }
@@ -60,9 +54,8 @@ static int vmRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long ro
   return CT_SH_RETURNS;
 }
 
-// C0/ACFD, THE VELOCITY + PRIORITY BUILDER (move.c CtBuildVelocityPriority; --sweepacfd). Entered with X = the object
-// index and D = $0100 (the VM handlers' `LDX $6D / ... / JSR C0/ACFD`); it reads the heading its caller staged at
-// $01EE. Graded on WRAM alone: its callers reload what they need.
+// C0/ACFD, the velocity + priority builder (move.c CtBuildVelocityPriority; --sweepacfd). Entered with X = the object
+// index and D = $0100; it reads the heading its caller staged at $01EE. Graded on WRAM alone (callers reload).
 static int acfdGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; (void)w; return in->dp == 0x0100 && in->db == 0x00 && in->x < 0x80 && !(in->x & 1);
 }
@@ -73,9 +66,8 @@ static int acfdRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long 
   return CT_SH_RETURNS;
 }
 
-// C1/DC64, THE PHYSICAL TO-HIT ROLL (battle.c battleHitCore; --sweephitroll). The caller stages hit in $16 and evade
-// in $18; the routine hands back its verdict in $16, the roll in $18 and zero in $AE4F -- all WRAM. Its draw is a
-// JSR C1/AF22, which the shadow grades on its own as well.
+// C1/DC64, the physical to-hit roll (battle.c battleHitCore; --sweephitroll). In: hit $16, evade $18. Out: the
+// verdict in $16, the roll in $18, zero in $AE4F. Its draw (JSR C1/AF22) is graded on its own as well.
 static int battleGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; (void)w; return in->dp == 0x0000 && in->db == 0x7E;
 }
@@ -86,12 +78,10 @@ static int hitRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long r
   return CT_SH_RETURNS;
 }
 
-// THE ENEMY AI (battle.c aiWalk / aiCond / aiCommit; --sweepaieval). The walk C1/AFD2 is entered with A = the enemy's
-// AI id (C1/8C0C's TDC leaves B = 0); each condition handler is reached by the walker's `ASL A / TAX / JSR ($B80D,X)`
-// (B006 / B021) with X = the op doubled and the cursor $B1D2 on its op byte; the commit C1/8C3E is a condition's JSR
-// (condition 00 is `JSR C1/8C3E / RTS`). Every one of them returns: the sweep's stop at C1/8C53 is where IT cuts the
-// comparison, inside the commit, not where the cartridge's call ends -- so the shadow runs the C whole (the
-// *Whole entry points), commit included. What the C does not port is flagged and counted `unported`.
+// The enemy AI (battle.c aiWalk / aiCond / aiCommit; --sweepaieval). The walk C1/AFD2 is entered with A = the AI id
+// (B = 0); each condition handler via `ASL A / TAX / JSR ($B80D,X)` (B006 / B021) with X = the op doubled and the
+// cursor $B1D2 on its op byte; the commit C1/8C3E is a condition's JSR. The sweep stops inside the commit (C1/8C53),
+// but the cartridge's calls return, so the shadow runs the *Whole entry points, commit included.
 static int aiWalkRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                      CtShadowRegs* out) {
   (void)e; (void)romLen; (void)out;
@@ -114,10 +104,9 @@ static int aiCommitRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, l
   return CtBattleAiCommitSweep(w, rom, &unp) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
 }
 
-// C2/8791 AND C2/87D5, THE INVENTORY'S ADD AND REMOVE (menu.c CtMenuInvAdd / CtMenuInvRemove). Both take the item in
-// $04C9 and the count in $04CB, `PHX / PHP / SEP #30` on entry and `PLP / PLX / RTS` on the way out, so any width
-// enters and X comes back as it was; A's low byte is the verdict (0 done, $FF not held / bag full, $FE not enough).
-// Their absolutes ($2400,X / $2500,X) are bank $7E's.
+// C2/8791 and C2/87D5, inventory add and remove (menu.c CtMenuInvAdd / CtMenuInvRemove). Item in $04C9, count in
+// $04CB; `PHX / PHP / SEP #30 ... PLP / PLX / RTS`, so any width enters and X is preserved. A's low byte is the
+// verdict (0 done, $FF not held / bag full, $FE not enough). Absolutes ($2400,X / $2500,X) are in bank $7E.
 static int invGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; (void)w; return in->db == 0x7E;
 }
@@ -131,8 +120,8 @@ static int invRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long r
 
 // ---- The routines the --sweep* modes grade offline (src/main.c), each at its live entry ---------------------------
 
-// THE FIELD'S PER-OBJECT ROUTINES. Each opens with `LDX $6D` (C0/9E84 `LDY $6D`): the object is the one the caller
-// latched in $016D (D = $0100), not a register, so the adapters read it there.
+// The field's per-object routines. Each opens with `LDX $6D` (C0/9E84 `LDY $6D`): the object is the one latched in
+// $016D (D = $0100), so the adapters read it there.
 static int fieldGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; (void)w; return in->dp == 0x0100 && in->db == 0x00;
 }
@@ -163,14 +152,13 @@ static int timerRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long
                     CtShadowRegs* out) {
   (void)e; (void)in; (void)out; CtAnimTimerTick(w, rom, (int)romLen, w[0x016D]); return CT_SH_RETURNS;
 }
-// C0/8A6D, the lead's tile collision (CtPlayerCollide): run by C0/881E's `JSR C0/8A6D` (C0/8847) on the DP $1D00, the
-// feelers on the WRAM planes $7E:30C0 / $7E:7000 / $7E:7040 (ct.exe installs no host tile fetch).
+// C0/8A6D, the lead's tile collision (CtPlayerCollide), called from C0/8847 with D = $1D00. The feelers read the WRAM
+// planes $7E:30C0 / $7E:7000 / $7E:7040 (ct.exe installs no host tile fetch).
 static int collGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; (void)w; return in->dp == 0x1D00 && in->db == 0x00;
 }
-// C0/9C5C's positional exit, C0/9CA1 -> 9D2C: the exit table at $E5:0000 stages the destination $0112-$0116 and the
-// latch $0117 bit 7 (with $1D52 its scratch). The port stages exits in the field host (field.c, the exit and door list),
-// not in CtCollisionCommit (collision.h), so those bytes are not this entry's to grade.
+// C0/9C5C's positional exit (C0/9CA1 -> 9D2C) stages the destination $0112-$0116 and the latch $0117 bit 7 ($1D52 is
+// its scratch). The port stages exits in the field host (field.c), not in CtCollisionCommit, so they are skipped.
 static const CtShadowSkip s_collSkip[] = {
   { 0x0112, 0x0117, "C0/9CA1's positional exit staging: the field host's" },
   { 0x1D52, 0x1D52, "C0/9CA1's scratch" },
@@ -199,10 +187,9 @@ static int snapRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long 
   (void)e; (void)rom; (void)romLen; return carryOut(in, out, ctSweepSnapCall(w, w[0x016D]));
 }
 
-// THE BATTLE'S ARITHMETIC AND BOOKKEEPING (D = 0, DB = $7E: battleGuard).
-// C1/C90B the 16x16 multiply (CtBattleMul16Probe -> the carry out; `REP #20 / LDX #0010`, so X 16-bit) and C1/C92A the
-// 32/16 divide (CtBattleDiv32Probe; `PHP / REP #30 ... PLP`, so the carry comes back as it went in) -- --sweepmuldiv,
-// all WRAM.
+// The battle's arithmetic and bookkeeping (D = 0, DB = $7E: battleGuard).
+// C1/C90B the 16x16 multiply (CtBattleMul16Probe, returns the carry; X 16-bit) and C1/C92A the 32/16 divide
+// (CtBattleDiv32Probe; `PHP ... PLP`, so the carry is preserved). --sweepmuldiv.
 static int mulRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                   CtShadowRegs* out) {
   (void)e; (void)rom; (void)romLen; return carryOut(in, out, CtBattleMul16Probe(w, in->p & 1));
@@ -235,11 +222,10 @@ static int techPassRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, l
   (void)e; (void)romLen; (void)in; (void)out; CtBattleTechPass(w, rom, w[0x101E0]); return CT_SH_RETURNS;
 }
 
-// CD/16A6, THE BATTLE EFFECT PROGRAM'S PER-OP DISPATCH (battle.c CtBattleFxProgOpMem; --sweepfxops/fx80/fxmisc/fx3d):
-// `STX $43 / ASL / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43 / RTS`, with A = the op and $40-$42 the op's
-// address in bank $D1. The C runs the op from the ROM and hands back the $40 the handler leaves; the adapter stores
-// it, and $43/$44 = the slot, as the dispatch does. One entry grades every ported effect op on the calls the fights
-// make; what the C does not port (a STOP) is `unported`. Needs the battle ROM loaded (CtBattleLoadRom).
+// CD/16A6, the battle effect program's per-op dispatch (battle.c CtBattleFxProgOpMem; --sweepfxops/fx80/fxmisc/fx3d):
+// `STX $43 / ASL / TAX / LDY $40 / INY / STY $40 / JSR ($16B5,X) / LDX $43 / RTS`, with A = the op and $40-$42 its
+// address in bank $D1. The adapter stores the returned $40 and $43/$44 = the slot, as the dispatch does. An op the C
+// does not port (a STOP) is `unported`. Needs the battle ROM loaded (CtBattleLoadRom).
 static int fxGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   int at = w[0x40] | (w[0x41] << 8);
@@ -255,11 +241,10 @@ static int fxRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long ro
   return CT_SH_RETURNS;
 }
 
-// FF/FAA3, THE SAVE LOAD (menu.c CtMenuSaveLoad; --loadcheck grades its records on a real save). Entered by JSL (the
-// load screen's C2/E657) with DB = $7E; FF/FBD3 takes the slot from $79 & 3 (D-relative) and its base from FF/FBE1
-// into $7B. It builds an MVN stub at $9690 and stages its 8-record table at $9890 (MVN from FF/FA7B), then copies each
-// record out of the battery RAM ($30:6000 + the slot's base) through the stub -- the C copies the same records from the
-// oracle's own SRAM; the stub, the table, $7B and $00 are scratch the liveness watch measures.
+// FF/FAA3, the save load (menu.c CtMenuSaveLoad; --loadcheck). Entered by JSL from C2/E657 with DB = $7E; FF/FBD3
+// takes the slot from $79 & 3 (D-relative) and its base from FF/FBE1 into $7B. It builds an MVN stub at $9690 and a
+// record table at $9890, then copies each record out of battery RAM ($30:6000 + base). The C copies the same records
+// from the oracle's SRAM; the stub, table, $7B and $00 are scratch left to the liveness watch.
 static Snes* s_snes;
 static int loadGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; return in->db == 0x7E && (w[(in->dp + 0x79) & 0xFFFF] & 3) < 3;
@@ -272,28 +257,27 @@ static int loadRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long 
   return CtMenuSaveLoad(s_snes->cart->ram, (long)s_snes->cart->ramSize, slot, w) ? CT_SH_RETURNS : CT_SH_UNPORTED;
 }
 
-// C1/2D9F, THE IDLE WALK'S DISPATCH (battle.c battleIdleWalk via CtBattleIdleWalkProbe): `STZ $9912 / LDA $A4 /
-// BEQ (the PCs) / JMP C1/3234 (the enemy groups)`, from C1/10A9 every other frame; a publish runs the gather C1/1C4A
-// into the sprite mirror. The enemy groups' state is the WRAM's (S4); the PC group is still the host's (unported).
+// C1/2D9F, the idle walk's dispatch (battle.c battleIdleWalk via CtBattleIdleWalkProbe): `STZ $9912 / LDA $A4 / BEQ
+// (PCs) / JMP C1/3234 (enemy groups)`, from C1/10A9 every other frame; a publish runs the gather C1/1C4A into the
+// sprite mirror. Not ported: the PC group (still the host's).
 static int idleWalkRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                        CtShadowRegs* out) {
   (void)e; (void)rom; (void)romLen; (void)in; (void)out;
   return CtBattleIdleWalkProbe(w) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
 }
 
-// C1/3714, THE MODE MACHINE (battle.c battleModeMachine3714 via CtBattleModeMachineProbe): per enemy slot the cadence
-// $9897, the requested target $5E15 -> $9752 and the class handler C1/3760[CC/FBAB[mode]], from C1/10B5 and C1/10DC.
+// C1/3714, the mode machine (battle.c battleModeMachine3714 via CtBattleModeMachineProbe): per enemy slot the cadence
+// $9897, the requested target $5E15 -> $9752 and the class handler C1/3760[CC/FBAB[mode]]; from C1/10B5 and C1/10DC.
 static int modeMachineRun(const CtShadowEntry* e, uint8_t* w, const uint8_t* rom, long romLen, const CtShadowRegs* in,
                           CtShadowRegs* out) {
   (void)e; (void)rom; (void)romLen; (void)in; (void)out;
   return CtBattleModeMachineProbe(w) < 0 ? CT_SH_UNPORTED : CT_SH_RETURNS;
 }
 
-// C2/57DF AND C2/5823, THE PROPORTIONAL TEXT (vwf.c CtVwfBegin / CtVwfRun), entered by JSL (C2:0003 / C2:0009 jump to
-// them; C2/6965 calls them straight). Both `PHP / REP #20 / PHD` and set D = $0200 themselves, so any m enters; 57DF's
-// `LDX #0200` is three bytes, so x is 16-bit. Their absolutes ($0231, $0237-$023A) are the direct page's bytes when DB
-// maps the low WRAM. A comes back 0000 (57DF `LDA #0000 ... LDA #00`; 5823 `LDA #00 / XBA` with B = 0); X and Y are
-// left as the last step had them and no caller reads them.
+// C2/57DF and C2/5823, the proportional text (vwf.c CtVwfBegin / CtVwfRun), entered by JSL (via C2:0003 / C2:0009, or
+// from C2/6965). Both `PHP / REP #20 / PHD` and set D = $0200, so any m enters; 57DF's `LDX #0200` needs x 16-bit.
+// Absolutes ($0231, $0237-$023A) are direct-page bytes when DB maps low WRAM. A returns 0000; X and Y are not read
+// by any caller.
 static int vwfGuard(const CtShadowEntry* e, const uint8_t* w, const CtShadowRegs* in) {
   (void)e; (void)w; return in->db == 0x7E || !(in->db & 0x40);
 }
@@ -385,14 +369,12 @@ static void addDetail(const char* fmtd) {
   if (s_nDetail < SH_DETAILS) { strncpy(s_detail[s_nDetail], fmtd, sizeof s_detail[0] - 1); s_nDetail++; }
 }
 
-// THE LIVENESS WATCH (docs/SHADOW_PROPOSAL.md, S3). A call whose registers match but whose WRAM differs in at most
-// SH_REC_ADDRS bytes is not graded at once: the harness watches those bytes on the ORACLE, through every access that
-// reaches WRAM -- the CPU's (cpu->read / cpu->write, WMDATA through its latch) and the DMA's and HDMA's (dma.c's
-// g_dmaBusHook: their A-bus side and a B-bus WMDATA). If the cartridge's next access to each of them is a write, the
-// difference is dead scratch -- nothing ever read what our C left there -- and the call counts `dead`, its addresses
-// listed on the report. If the cartridge READS one first (a read-modify-write included, a DMA source included), the
-// value mattered: the call counts `mismatched`, naming the reader. A wider difference, or a register's, is graded at
-// once. Calls whose bytes were never touched again by the end of the run are `unresolved`.
+// The liveness watch (docs/SHADOW_PROPOSAL.md, S3). A call whose registers match but whose WRAM differs in at most
+// SH_REC_ADDRS bytes is not graded at once: those bytes are watched on the oracle through every WRAM access (CPU
+// reads/writes, WMDATA through its latch, DMA/HDMA via g_dmaBusHook). If the next access to each is a write, the
+// difference is dead scratch and the call counts `dead`; if one is read first (read-modify-write and DMA source
+// included), it counts `mismatched`, naming the reader. A wider or register difference is graded at once. Bytes
+// never touched again by the end of the run leave the call `unresolved`.
 #define SH_WATCH_TOP SH_WRAM
 #define SH_REC 65536
 #define SH_REC_ADDRS 96
@@ -545,10 +527,9 @@ static void finish(Snes* s, ShActive* a, uint32_t pc) {
   }
 }
 
-// THE CENSUS (docs/SHADOW_PROPOSAL.md, S3): every routine the run calls -- the target of each JSR / JSL / JSR (abs,X)
-// the oracle executes, counted at the instruction fetched right after it (an interrupt taken in between clears the
-// mark, so a handler is never counted as the call's target). It measures what real play runs against what the shadow
-// grades: the share of the calls whose target is a registered entry, and the routines called most that are not.
+// The census (docs/SHADOW_PROPOSAL.md, S3): the target of each JSR / JSL / JSR (abs,X) the oracle executes, counted
+// at the next instruction fetched (an interrupt in between clears the mark). It reports the share of calls whose
+// target is a registered entry, and the most-called routines that are not.
 #define CEN_SLOTS (1 << 16)
 static int s_censusTop;                          // 0 = off
 static uint32_t s_cenKey[CEN_SLOTS]; static long s_cenCnt[CEN_SLOTS];
@@ -678,8 +659,7 @@ void CtShadowReport(FILE* f) {
   }
   for (int i = 0; i < s_nDetail; i++) fprintf(f, "  %s\n", s_detail[i]);
   if (s_overflow) fprintf(f, "  %ld call(s) past the nesting depth %d, not compared\n", s_overflow, SH_DEPTH);
-  // The dead scratch, per entry: the direct-page bytes our C leaves otherwise, which the cartridge rewrote before any
-  // read.
+  // The dead scratch, per entry: bytes the C leaves differently, which the cartridge rewrote before any read.
   for (int i = 0; i < s_n; i++) {
     if (!s_stats[i].dead) continue;
     char line[2048]; int o = snprintf(line, sizeof line, "  dead scratch %06X:", s_entries[i].addr);
@@ -692,7 +672,7 @@ void CtShadowReport(FILE* f) {
     }
     fprintf(f, "%s\n", line);
   }
-  // The ranges not compared, said out loud whether or not anything differed there.
+  // The ranges not compared, listed whether or not anything differed there.
   { const CtShadowSkip* seen[8]; int ns = 0;
     for (int i = 0; i < s_n; i++)
       for (const CtShadowSkip* sk = s_entries[i].skip; sk && sk->why; sk++) {

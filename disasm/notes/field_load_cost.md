@@ -865,3 +865,28 @@ and the field cursor `$01F8` it seeds at every load). Five gaps, each the ROM's:
   window wave `$1DF9` to `$7F:1D26` -- what C0/01FF puts back at the reload. MEASURED: `$7F1D26` 42 -> 00 by C0:01A4 at
   f9191; the port kept the stale 42, its reload walk read a live wave (`pass: $1DF9 / $1DFD`) and charged the estimate.
   (The page's MVN C0/0918 is not made: the port keeps the field's page live under the menu.)
+
+## C0/78EC, BG2's tilemap build: the arms and their costs
+
+C0/78EC (from C0/0A50's `JSR C0/78EC` at C0/0AAB to its return) builds rows with C0/79CF (sixteen cells, four WMDATA
+bytes each). The arm is chosen by `$1D35` bit 1 and `$0BC9` bit 7:
+
+- standard: 32 rows from (`$1D0A`, `$1D0E`). The entry camera is always even (C0/7506/7553 shift left), so this arm has
+  a single cost, 327,358 cycles, which PASS_REST includes (src/field_cost.c B78_STD).
+- C0/794E (`$1D35` bit 1): 32 rows at column 0, then by `$0BCF` / `$0BD1`: 7976 (both $10) the same 32 again, 7991
+  (`$0BCF` != $10) 32 at column $20, 79AE (`$0BD1` != $10) rows 32-63 and `$1D85 := 2`. Loc 0AD's 794E + 7976 costs
+  652,856 cycles.
+- C0/792F (`$0BC9` bit 7): rows `$1D16..$1D18` at column `$1D12`, which C0/74B1 sets from the camera.
+
+A row costs by its parity and its first column's parity (C0/79CF's two tests): 10,010 / 10,028 from an even column,
+10,220 / 10,394 from an odd one (a half cell, fifteen cells, a half: 7A2A / 7B12). The standard and 794E + 7976 figures
+come from `--cputrace` beam traces (non-refresh cycles, the hub and loc 0AD); the other arms are priced instruction by
+instruction from the cost of an executed instruction with the same key (tools/ctlib/costtab.py lin_rom).
+
+C0/87F1's half-camera BG2 row C0/8365 (`$0BC9` bit 7, C0/8806 BPL not taken): +12 against the standard when its
+C0/7BA9 row is odd; an even row is 460 cycles less (C0/7BAD's BEQ taken goes straight into the 15-row loop at C0/7BB2,
+where the odd arm runs C0/7C45's half row, 418, and two BRLs). Traced on the Tyranno Lair's reload after Lavos's fall
+(ff24_handoff_f27 f1735, `$5A` = 04): 9,344 cycles for the call.
+
+The pass's remainder PASS_REST (874,897) is the mean of three traces' remainders once the walked legs are taken out:
+874,914 / 874,876 / 874,902 on loc $082 / $005 / $078; the spread is the DMA legs' sync to the master clock.

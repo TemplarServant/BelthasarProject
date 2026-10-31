@@ -1,11 +1,10 @@
-// objslot.h -- FD/E39C, the twelve 12-byte palette-effect records at $7E:0520, as ONE service.
+// objslot.h -- FD/E39C, the twelve 12-byte palette-effect records at $7E:0520, as one service.
 //
 // The ROM ticks the same table from every mode that has one: the field's VM pass (C0/00CD `JSL FD/FFF7`),
 // the battle's frame service (CD/09BF), the load and entry loops (C0/00E6, C0/1793, ...). The records are
 // armed by whoever owns the mode -- the field's op 0x88 (C0/4919 / C0/4970), the battle's staged fades
-// (CD/0C48) -- and each record walks its own accumulator and writes the LIVE CGRAM page $7E:2200 (the one
-// the NMI uploads) from the BASE page $7E:2000. Before this module the battle carried the only port and the
-// field had none, so every `88 4x` / `88 5x` in a scene script armed nothing and drew nothing.
+// (CD/0C48) -- and each record walks its own accumulator and writes the live CGRAM page $7E:2200 (the one
+// the NMI uploads) from the base page $7E:2000.
 #pragma once
 #include <stdint.h>
 
@@ -19,13 +18,13 @@ typedef struct CtObjSlotIo {
   int frame;               // the frame number the trace prints
   // 1 = also run modes 1, 2, 3 and 8 (FD/E437, E532, E4E8, E485: the location's own colour animation, which FD/E292
   // loads into records 0-5, and op 0x88's `88 20` / `88 30` rotations). The field's VM pass sets it; the battle's
-  // service leaves it 0 -- its records tick as before, since the battle's palettes are not graded against these arms.
+  // service leaves it 0 (the battle's palettes are not checked against these modes).
   int colourModes;
   const uint8_t* rom;      // the ROM image (modes 1 and 8 read their colours from bank $F6, mode 8 its frame list
   long romLen;             //   from bank $FD); NULL = those two write nothing
 } CtObjSlotIo;
 
-// FD/E5ED's sub-mode dispatch (mode 5, the record's +6): WHICH 5-bit components FD/E64F's `(acc * c) >> 8` scales, the
+// FD/E5ED's sub-mode dispatch (mode 5, the record's +6): which 5-bit components FD/E64F's `(acc * c) >> 8` scales, the
 // others copied from the base page as they are. Bits: 1 = R, 2 = G, 4 = B. 0 = FD/E64F (all three), 1 = E7C0 (B, G),
 // 2 = E73A (B, R), 3 = E6A1 (B), 4 = E779 (R, G), 5 = E6D1 (G), 6 and above = E708 (R).
 int CtObjSlotSubMask(int sub);

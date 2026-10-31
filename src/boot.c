@@ -1,6 +1,6 @@
-// boot.c — Chrono Trigger reset/boot path (C reimplementation).
+// boot.c -- the reset/boot path.
 //
-// Reset flow (verified from the ROM; see disasm/notes/reset.md):
+// Reset flow (disasm/notes/reset.md):
 //   $00:FF00  78        SEI
 //   $00:FF01  18        CLC
 //   $00:FF02  FB        XCE              ; enter 65816 native mode
@@ -9,10 +9,7 @@
 //   Native vectors: NMI -> $00:FF10 -> JML $00:0500
 //                   IRQ -> $00:FF14 -> JML $00:0504   (handlers relocated to RAM)
 //
-// TODO(M1): disassemble from $FD:C000 and translate the init sequence
-// (WRAM clear, PPU/DMA/register setup, initial data load) into native C here,
-// replacing the copy-stub one routine at a time and validating WRAM parity
-// against the oracle after every frame.
+// Not ported: the rest of the init from $FD:C000 (initial data load); CtBootRunFrame copies the oracle's WRAM.
 #include "ct_cpu_infra.h"
 #include "boot.h"
 
@@ -21,9 +18,8 @@ void CtBootRunFrame(Snes* oracle) {
   CtPortCopyWramFromOracle(oracle);
 }
 
-// Port of $FD:C000..$C0D3. The original points the direct page at $4200 then
-// $2100 and uses short stores; we issue the equivalent absolute register writes
-// in the exact same order/values (including the write-twice scroll/Mode-7 regs).
+// $FD:C000..$C0D3. The ROM points the direct page at $4200 then $2100 and uses short stores; these are the
+// equivalent absolute register writes in the same order and values (including the write-twice scroll/Mode-7 regs).
 void CtBootHwInit(CtRegWrite w, void* ctx) {
   // --- CPU registers (original D=$4200) ---
   w(ctx, 0x420D, 0x01);                               // MEMSEL: enable FastROM
@@ -72,19 +68,19 @@ void CtBootHwInit(CtRegWrite w, void* ctx) {
   w(ctx, 0x2133, 0x00);                               // SETINI
 }
 
-// DMA fill-with-zero of a WRAM region — the net effect of the $2DF1 routine,
-// which DMAs the PPU multiply result ($2134, with M7A=M7B=0 => 0) into WRAM.
+// Zero-fill of a WRAM region: the net effect of the $2DF1 routine, which DMAs the PPU multiply result
+// ($2134, with M7A=M7B=0 => 0) into WRAM.
 static void ctDmaClear(uint8_t* ram, uint8_t bank, uint16_t adr, uint32_t count) {
   uint32_t base = ((uint32_t)(bank & 1) << 16) | adr;   // 7E -> ram[0..], 7F -> ram[0x10000..]
   for (uint32_t i = 0; i < count; i++) ram[(base + i) & 0x1FFFF] = 0x00;
 }
 
 void CtBootInitMain(uint8_t* ram) {
-  // $C0:0B64 / $0B75 — relocate the NMI/IRQ handlers as JML trampolines in low RAM
+  // $C0:0B64 / $0B75: relocate the NMI/IRQ handlers as JML trampolines in low RAM
   ram[0x0500] = 0x5C; ram[0x0501] = 0x63; ram[0x0502] = 0xEA; ram[0x0503] = 0xC0; // NMI: JML $C0EA63
   ram[0x0504] = 0x5C; ram[0x0505] = 0xCC; ram[0x0506] = 0xEC; ram[0x0507] = 0xC0; // IRQ: JML $C0ECCC
-  // $C0:0B4E — SEI; INIDISP=$80; NMITIMEN/MDMAEN/HDMAEN=0 (registers; handled by reg-init path)
-  // $2DF1 x3 — clear the work-RAM regions (params live at $014B-$014F; the first
+  // $C0:0B4E: SEI; INIDISP=$80; NMITIMEN/MDMAEN/HDMAEN=0 (registers: the reg-init path)
+  // $2DF1 x3: clear the work-RAM regions (params live at $014B-$014F; the first
   // clear wipes them, they are re-set between calls):
   ctDmaClear(ram, 0x7E, 0x0000, 0x0500);  // $7E:0000-04FF
   ctDmaClear(ram, 0x7E, 0x0700, 0xE900);  // $7E:0700-EFFF

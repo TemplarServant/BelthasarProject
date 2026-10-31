@@ -1,17 +1,12 @@
-// seq_entry3.c -- SEQUENCE ENTRY 3 (`FF 23` from the story, `FF 63` in the attract), native: the night panorama.
+// seq_entry3.c -- sequence entry 3 (`FF 23` from the story, `FF 63` in the attract): the night panorama.
 //
-// Scenes 102-107 share one controller (obj0 fn0's continuation): with `$7F0057` bit 2 (the attract) it stages loc 1B1 and
-// calls `FF 63`; with the storyline at D3 it stages the Epoch's world `DD F6 03 91 35` and calls `FF 23` -- the red moon
-// over the lit skyline (disasm/notes/sequence_table.md sec. 7.2 / 14). `$0384` bit 6 picks the scripts in the setup
-// $7E:671F (`LDA $0384 / BIT #0040`): the story's page A `$6902` adds the tasks and waits, page B `$693A` counts seven
-// spans, adds the fade `$34E3` and ENDs 64 frames later. No song marker, no inline call.
-//
-// Stage 1 of the native port (as seq_ending.c): the logic over the WRAM image, byte for byte with the cartridge -- the two
-// scripts, the fades, the palette-record service the task chain waits on ($37FA = FD/E39C), the chain itself ($6A51 ->
-// $6A74 -> $6A97, each waiting for record 0's fade to end) and the task that writes page B's registers ($69AF). The
-// picture (the mode-2 offsets $73C6 / $6A23, the HDMA, the hooks, the setup's DMAs) is stage 2.
+// The red moon over the lit skyline (disasm/notes/sequence_table.md sec. 7.2 / 14). `$0384` bit 6 picks the scripts in
+// the setup $7E:671F. This file is the logic over the WRAM image: the two scripts, the fades, the palette-record service
+// ($37FA = FD/E39C), the task chain that waits on record 0 ($6A51 -> $6A74 -> $6A97) and the task that writes page B's
+// registers ($69AF). The picture (the mode-2 offsets $73C6 / $6A23, the HDMA, the hooks, the setup's DMAs) is
+// seq_entry3pic.c.
 #include "seq_entry3.h"
-#include "seq_entry3pic.h"   // the picture (stage 2), when the host draws it (io->pic)
+#include "seq_entry3pic.h"   // the picture, when the host draws it (io->pic)
 #include "seq_racepic.h"
 #include "objslot.h"
 #include <string.h>
@@ -21,16 +16,15 @@ static void wr(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v
 
 int CtEntry3StageHas(uint8_t operand) { return (operand & 0x1F) == 3; }   // `FF 23` (the story) and `FF 63` (the attract)
 
-// MEASURED in place on the rule's cartridge, $7E:671F -> $7E:300D: the attract's arm (`FF 63`, `ct.exe --racepiccmp`
-// RACEPICCMP_SPAN=7E671F,7E300D from its hand-off, power-on f8793) 114098; the story's (`FF 23`, `--cputrace` CPUTRACE_BEAM
-// from saves/blackbird_re/ff23_handoff_f25.state, f18) 113324. (A `--callrom 7E671F` run outside the opening read 120000 for
-// the story's: the arm's cost there, not in place.) The story's opens in 17 frames, the attract's in 18 (field.c
-// seqOpeningHold: the two straddle a boundary by ~400 cycles each side).
+// The setup's master cycles, $7E:671F -> $7E:300D, taken in place on the oracle under the timing rule: the attract's arm
+// (`FF 63`) with `ct.exe --racepiccmp` RACEPICCMP_SPAN=7E671F,7E300D, the story's (`FF 23`) with `--cputrace`
+// CPUTRACE_BEAM. Note: `--callrom 7E671F` outside the opening reads a different cost. The two arms sit a few hundred
+// cycles either side of a frame boundary, so the story's opens in 17 frames, the attract's in 18 (field.c seqOpeningHold).
 long CtEntry3StageSetupCycles(uint8_t operand) { return (operand & 0x40) ? 114098L : 113324L; }
 
 // $7E:37FA -- the palette records' frame (`LDX $4202 / STX $F0 / JSL FD/FFF7 / LDX $F0 / STX $4202`): FD/E39C over the
-// twelve records at $0520, whose record 0 the task chain below waits on. ⚠ $4202 / $4203 are write-only: the `LDX` reads the
-// open bus, the instruction's last byte ($42), so `$F0` = $4242 -- the cartridge's (the oracle measured, ff23_handoff_f25).
+// twelve records at $0520, whose record 0 the task chain below waits on. Note: $4202 / $4203 are write-only, so the `LDX`
+// reads the open bus, the instruction's last byte ($42): `$F0` = $4242, as on the oracle.
 static void entry3Objslot(uint8_t* w, const CtRaceIo* io) {
   CtObjSlotIo o; memset(&o, 0, sizeof o);
   o.s = w; o.colourModes = 1; o.rom = io ? io->rom : NULL; o.romLen = io ? io->romLen : 0;
@@ -117,7 +111,7 @@ static unsigned entry3Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo
       CtSeqCurtain01E4(w, slot, io);                                  //   table by the call's parity (684A LDA $0351 / LSR A)
       if (io && io->pic) io->pic->ch[0].aAdr = (w[0x0351] & 1) ? 0x688A : 0x6891;   // STX $4302
       return t;
-    default:                                                          // 73C6, 6A23: the picture's (stage 2)
+    default:                                                          // 73C6, 6A23: the picture's
       if (io && io->pic) CtEntry3PicTask(io->pic, w, t, io);
       return t;
   }
@@ -128,8 +122,8 @@ static unsigned entry3Hook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo
 int CtEntry3StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (!CtEntry3StageHas(operand)) return -1;
   if (CtSeqStageBegin(w, operand, io) < 0) return -1;
-  // $7E:671F -- the setup, both arms of its `BIT #0040` (the story's `FF 23`, the attract's `FF 63`). Its DMAs (the field's BG1 rows into $7E:1680, the tilemaps) and the
-  // PPU are the picture's (seq_entry3pic.c, when the host draws); what the logic reads, in order:
+  // $7E:671F -- the setup, both arms of its `BIT #0040` (the story's `FF 23`, the attract's `FF 63`). Its DMAs (the field's
+  // BG1 rows into $7E:1680, the tilemaps) and the PPU are the picture's (seq_entry3pic.c); what the logic reads, in order:
   if (io && io->pic) CtEntry3PicSetupA(io->pic, w);                   // 671F-6772
   if (!(operand & 0x40)) { wr(w, 0x0A20, 0x6902); wr(w, 0x0B20, 0x693A); }   // 6777-678E: the story's scripts,
   else { wr(w, 0x0A20, 0x6898); wr(w, 0x0B20, 0x68A1); }              //   6785 the attract's (`BIT #0040`)

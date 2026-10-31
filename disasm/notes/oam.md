@@ -332,3 +332,92 @@ already byte-exact (`--verifyframe`) with that one narrow stub.
    in C and retires the last OAM copy-stub (the attr `0x30`) as a side effect.
 2. Port the stateful Y-bucket sort (`$0E00`/`$0E81`). Each step shrinks the copy-stub toward
    `g_run_without_emu` (oracle fully retired for the field sprite path).
+
+## --sweepstage2 and class 3
+
+`--sweepstage2` (src/main.c, runSweepStage2) grades CtBuildFieldOAM but does not seed class 3, so `GRP[3] = 6`
+(24 pieces, six groups of four, B5AF `LDA #18`) is ungraded there; a mutation of GRP to { 1, 2, 3, 4 } passes it.
+`--sweepdraw` carries class 3 in its CLSPAT (with `T = cls + 1`, which is inert for class 3).
+
+Seeding class 3 in the stage-2 sweep gives mismatches that are not transcription defects:
+
+- The harness's `T = cls + 1` seed is not the cause: it feeds $1B00, which class 3's gate C0/C73A never tests.
+  Most of the red cases go away when one class-3 object is seeded per case instead of three.
+- The ROM's per-group OAM budget is small, and the object loop does not check it (only the hide tail carries the
+  bound; C0/B2D3 / B2E9 / B2FF): group 0 is $0770..$089F (76 entries), group B $08A0..$08FF (24) and group C
+  $0710..$076F (24). One class-3 sprite (24 pieces) fills group B, so a seed with two group-B objects makes the ROM
+  write past $08FF into the high table at $0900, which the port's `m + 3 < 512` backstop declines to do. That
+  mismatch is an over-subscribed seed.
+- The records agree: $7F:4BC0[0..0x280] and $7F:4F00[0..0x90] match between port and oracle on a failing case, so
+  the class-3 emitter (C0/C73A, ctOamEmitClass3) and the B701 arms agree.
+- The copy agrees: C0/B62A-B64F is `LDA $7F4BC0,X / $4BC1 / $4BC6 / $4BC7` through the $2180 port, `ADC #0008` per
+  piece, 24 iterations, as in CtBuildFieldOAM. The three high arms (B5CB / B6AA / B653) read the same six sources
+  and differ only in cursor ($0181 / $0185 / $0189 = $0907 / $091A / $0901), which the port's highOff
+  { 0x07, 0x1A, 0x01 } matches.
+
+What is left is ordering: the harness runs all the B701 releases first (CtAnimDrawPass) and then the copy, while
+the ROM's B309 interleaves release and copy per object. A release that rewrites a later object's $1700,X is
+invisible with one class-3 object and fatal with two; the first divergence is always the second class-3 object's
+first main byte. To reproduce, restore a 6-row CLSPAT with the T table (1/2/3/6) and a per-group capacity guard.
+
+## C0/B309's stage 2 is a copy, and CtBuildFieldOAM's walk does not see B701's refusal
+
+**The copy.** C0/B309's stage 2 copies records that C0/B788 (ctOamEmit in move.c, `--sweepdrain`) already placed; it
+computes nothing:
+
+```
+B369  LDA #04 / STA $01C9        the piece count: 04 (class 0) / 08 (B42D) / 0C (B510)
+B34F  LDX $01DB / STX $81        $2181 = the group's main cursor; the bursts stream through the $2180 port
+B36E  LDA $7F4BC0,X / STA $80    the piece's X   (+0, placed)
+B374  LDA $7F4BC1,X / STA $80    its Y           (+1, clamped)
+B37A  LDA $7F4BC6,X / STA $80    its tile        (+6)
+B380  LDA $7F4BC7,X / STA $80    its attr        (+7)
+B386  TXA / ADC #0008 / TAX      the next 8-byte piece record
+B390  DEC $01C9 / BNE ->B36E
+```
+
+The Y in +1 is the clamped one (ctOamEmit's clamp rules); a plain `objY + yoff` agrees with it only while the clamp
+does not bind, so stage 2 must copy rather than recompute.
+
+**One entry per group of four pieces.** C0/B309's first dispatch is on the sprite class (B316 BEQ ->B329 / B31C BRL
+->B3DF / B323 BRL ->B4B8 / B326 BRL ->B5AF), and each class body carries its own advance: `B35D ADC #0010` for 4
+pieces, `B421 ADC #0020` for 8, `B504 ADC #0030` for 12 and `B619 ADC #0060` for 24, with one, two, three and six
+high-table bytes (B341, B3FB, B4D4, B5CB). The group count is 1 / 2 / 3 / 6, not `(class & 3) + 1`: class 3 is 24
+pieces (B5AF `LDA #18`). Class 2's third high destination is $7F:4B40 (below the record window), class 3's fourth
+$4B41 and its last two $4F80 / $4F81; C0/B5CB pushes $4F81/$4F80/$4B41/$4B40/$4F01 and loads $4F00, the same six
+C0/C73A writes.
+
+**What `--checkoam` checks.** With the values passed through, `--checkoam` checks the addressing (which piece lands at
+which OAM byte, which high byte at which slot, how many entries per object), not the placement math, which
+`--sweepdrain` covers where the ROM keeps it. `--sweepstage2` checks the addressing on synthetic records in which
+every byte is distinguishable.
+
+**CtBuildFieldOAM is a model, not the renderer.** Only src/main.c calls it (`--checkoam`, `--verifyframe`,
+`--sweepstage2`); the field renderer draws from the actor list through field.c's drawSprite(). C0/B309 opens with
+`JSR C0/B701 / BCC ->B30F / RTS`: an object whose arena release is refused emits nothing. CtAnimDrawPass models that
+(it advances the cursors only on the CLC arm and counts the rest in gCtDrawSkipped), but CtBuildFieldOAM walks the
+$0E00/$0E81 list a second time and emits every object. Once any object is refused, every later object lands at the
+wrong cursor. On `--sweepstage2` with three class-3 objects seeded, the chain links, $1700, $1B00 and the
+$7F:4BC0 / $7F:4F00 windows match the oracle, yet the ROM emits obj02 then obj06 while the model emits obj02, obj04,
+obj06 (the ROM refused obj04).
+
+A per-object accept flag published by CtAnimDrawPass would break every caller that does not run the draw pass first
+(main.c's call sites run none), and calling C0/B701 again from the model would release the arena twice. The ROM has
+one walk that releases and emits per object; the fix is to rejoin the two walks, a structural change to the render
+path. Until then class 3 stays out of `--sweepstage2`'s seeds (see "--sweepstage2 and class 3" above).
+
+## C0/ABA2, the field heading builder
+
+Eleven in-bank callers (4D46 4FAB 503D 50EA 516D 51F1 5281 5326 53CA 54B6 55E6), no long calls. It takes no arguments:
+it reads the four bytes its callers stage first ($01F0 = current X, $01F1 = current Y, $01F2 = target X, $01F3 = target
+Y; C0/5129 at 5140/5147/514C, op 0x96 at 4F71/4F78/4F7F/4F84) and writes the heading to $01EE.
+
+The quadrant is chosen by an unsigned borrow, not a signed compare: `LDA $F3 / SEC / SBC $F1 / BCC` branches on
+"target < current" as unsigned bytes. At the map wrap a signed delta disagrees: target $00 minus current $FF borrows,
+while `(int8_t)($00 - $FF)` is +1, so the two would aim 180 degrees apart.
+
+It writes $01EF (`STZ $EF`: callers re-read $EE as a 16-bit word), $01F6, $01F7, the 16-bit pair $01F4/$01F5 and $01EE.
+Two of the four quadrant arms swap $01F6/$01F7 through the accumulator's B half (XBA), which folds the circle down to
+one octant of the table. On the -Y / +X path $01F7 is written twice (|dY| at ABCE, then dX at ABE8). The scale
+selector `BIT #$40` is an immediate BIT, which sets only Z. `TAX` moves the full 16-bit index (the callers leave X
+16-bit); every arm caps it at $3FF, inside the 1 KB table at $C0:F300. `ct.exe --sweepaba2` checks the routine.
